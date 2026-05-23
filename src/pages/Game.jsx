@@ -57,6 +57,58 @@ const calcTotal = (p) => Math.floor(
 
 const calcExpNext = (lv) => (Math.floor((lv - 1) / 10) + 1) * 100
 
+// ★ 熟練度ボーナス計算（Equipment.jsxと同じロジック）
+const calcProfBonus = (prof) => {
+  if (!prof) return {}
+  const awakening = prof.awakening || 0
+  const lv = prof.prof_lv + awakening * 20
+  const bonus = Math.floor(lv / 10)
+  const weapon = prof.weapons
+  if (!weapon) return {}
+  if (weapon.weapon_type === 'staff') return { matk: bonus }
+  if (weapon.weapon_type === 'bow') return { atk: bonus, spd: bonus }
+  return { atk: bonus }
+}
+
+// ★ 装備ボーナス＋熟練度ボーナスを合算して実効ステータスを返す
+const calcEffectiveStats = (profile, equipment, proficiency) => {
+  const bonus = { atk:0, def:0, matk:0, mdef:0, spd:0, hp:0, mp:0 }
+
+  for (const item of equipment) {
+    if (!item.equipped || !item.weapons) continue
+    const w = item.weapons
+    bonus.atk  += w.atk_bonus  || 0
+    bonus.def  += w.def_bonus  || 0
+    bonus.matk += w.matk_bonus || 0
+    bonus.mdef += w.mdef_bonus || 0
+    bonus.spd  += w.spd_bonus  || 0
+    bonus.hp   += w.hp_bonus   || 0
+    bonus.mp   += w.mp_bonus   || 0
+
+    // 武器スロットの場合、熟練度ボーナスも加算
+    if (item.slot === 'weapon') {
+      const prof = proficiency.find(p => p.weapon_id === w.id)
+      if (prof) {
+        const pb = calcProfBonus({ ...prof, weapons: w })
+        bonus.atk  += pb.atk  || 0
+        bonus.matk += pb.matk || 0
+        bonus.spd  += pb.spd  || 0
+      }
+    }
+  }
+
+  return {
+    atk:    profile.atk  + bonus.atk,
+    def:    profile.def  + bonus.def,
+    matk:   profile.matk + bonus.matk,
+    mdef:   profile.mdef + bonus.mdef,
+    spd:    profile.spd  + bonus.spd,
+    hp_max: profile.hp_max + bonus.hp,
+    mp_max: profile.mp_max + bonus.mp,
+    bonus, // 差分を表示用に保持
+  }
+}
+
 export default function Game() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
@@ -71,6 +123,8 @@ export default function Game() {
   const [selectedArea, setSelectedArea] = useState(1)
   const [regenRemaining, setRegenRemaining] = useState(0)
   const [innMessage, setInnMessage] = useState('')
+  const [equipment, setEquipment] = useState([])       // ★ 追加
+  const [proficiency, setProficiency] = useState([])   // ★ 追加
 
   useEffect(() => { fetchProfile() }, [])
 
@@ -99,6 +153,19 @@ export default function Game() {
     setPendingPoints(data.pending_stat_points || 0)
     const unlocked = data.unlocked_areas || [1]
     if (!unlocked.includes(selectedArea)) setSelectedArea(unlocked[0])
+
+    // ★ 装備・熟練度を取得
+    const { data: eq } = await supabase
+      .from('player_equipment')
+      .select('*, weapons(*)')
+      .eq('player_id', user.id)
+    setEquipment(eq || [])
+
+    const { data: prof } = await supabase
+      .from('proficiency')
+      .select('*, weapons(*)')
+      .eq('player_id', user.id)
+    setProficiency(prof || [])
   }
 
   const doRegen = async () => {
@@ -116,10 +183,13 @@ export default function Game() {
   const doBattle = async () => {
     if (!canAct || loading) return
     const hpCurrent = profile.hp_current ?? profile.hp_max
-    if (hpCurrent <= 0) return // 瀕死中は戦闘不可
+    if (hpCurrent <= 0) return
     setLoading(true)
     setScene('battle')
     setBattleLogs([])
+
+    // ★ 実効ステータスを計算
+    const eff = calcEffectiveStats(profile, equipment, proficiency)
 
     const area = AREAS.find(a => a.id === selectedArea)
     const bossRate = profile.boss_encounter_rate || 0
@@ -139,19 +209,30 @@ export default function Game() {
       logs.push({ text:`${enemy.name}が現れた！`, color:'#88ccff' })
     }
 
+    // ★ 装備ボーナスがあればログに表示
+    const bonusParts = []
+    if (eff.bonus.atk  > 0) bonusParts.push(`ATK+${eff.bonus.atk}`)
+    if (eff.bonus.def  > 0) bonusParts.push(`DEF+${eff.bonus.def}`)
+    if (eff.bonus.matk > 0) bonusParts.push(`MATK+${eff.bonus.matk}`)
+    if (eff.bonus.mdef > 0) bonusParts.push(`MDEF+${eff.bonus.mdef}`)
+    if (eff.bonus.spd  > 0) bonusParts.push(`SPD+${eff.bonus.spd}`)
+    if (bonusParts.length > 0) {
+      logs.push({ text:`🗡 装備ボーナス: ${bonusParts.join(' ')}`, color:'#44ccff' })
+    }
+
     while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
-      const dmgToEnemy = Math.max(1, profile.atk - Math.floor(enemy.def / 2) + Math.floor(Math.random() * 4))
+      // ★ eff.atk / eff.def を使用
+      const dmgToEnemy = Math.max(1, eff.atk - Math.floor(enemy.def / 2) + Math.floor(Math.random() * 4))
       enemyHp -= dmgToEnemy
       logs.push({ text:`${turn}ターン目: あなたの攻撃！ ${enemy.name}に${dmgToEnemy}ダメージ！`, color:'#ffcc00' })
       if (enemyHp <= 0) break
 
-      const dmgToPlayer = Math.max(1, enemy.atk - Math.floor(profile.def / 2) + Math.floor(Math.random() * 3))
+      const dmgToPlayer = Math.max(1, enemy.atk - Math.floor(eff.def / 2) + Math.floor(Math.random() * 3))
       playerHp -= dmgToPlayer
       logs.push({ text:`${turn}ターン目: ${enemy.name}の反撃！ あなたに${dmgToPlayer}ダメージ…`, color:'#ff6644' })
       turn++
     }
 
-    // HPは0以下にしない
     playerHp = Math.max(0, playerHp)
 
     const win = enemyHp <= 0
@@ -171,6 +252,25 @@ export default function Game() {
     }
 
     setBattleLogs(logs)
+
+    // ★ 武器の熟練度更新（装備中の武器スロットのみ）
+    const equippedWeapon = equipment.find(e => e.slot === 'weapon' && e.equipped)
+    if (equippedWeapon) {
+      const prof = proficiency.find(p => p.weapon_id === equippedWeapon.weapons.id)
+      if (prof) {
+        const newExp = prof.prof_exp + 1
+        const newLv = newExp >= 100 ? prof.prof_lv + 1 : prof.prof_lv
+        const finalExp = newExp >= 100 ? 0 : newExp
+        await supabase.from('proficiency').update({
+          prof_exp: finalExp,
+          prof_lv: newLv,
+        }).eq('id', prof.id)
+        if (newLv > prof.prof_lv) {
+          logs.push({ text:`⚔ 武器熟練度UP！ ${equippedWeapon.weapons.name} LV${newLv}`, color:'#aa44ff' })
+          setBattleLogs([...logs])
+        }
+      }
+    }
 
     const newBossRate = isBossEncounter ? 0 : bossRate + 0.5
     let newUnlockedAreas = [...(profile.unlocked_areas || [1])]
@@ -280,6 +380,9 @@ export default function Game() {
   const allocatedPoints = Object.values(statPoints).reduce((a, b) => a + b, 0)
   const total = calcTotal(profile)
 
+  // ★ 表示用の実効ステータス
+  const eff = calcEffectiveStats(profile, equipment, proficiency)
+
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'900px', margin:'0 auto' }}>
@@ -287,6 +390,10 @@ export default function Game() {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
           <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={() => nav('/equipment')}
+              style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+              🗡 装備
+            </button>
             <button onClick={() => nav('/ranking')}
               style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
               🏆 ランキング
@@ -334,12 +441,13 @@ export default function Game() {
               <div style={{ height:'100%', width:`${regenPct}%`, background:'linear-gradient(90deg,#003333,#44ccff)', transition:'width 0.2s' }} />
             </div>
 
+            {/* ★ ステータス表示：装備ボーナスを(+N)で表示 */}
             <div style={{ fontSize:'11px', display:'grid', gridTemplateColumns:'1fr', gap:'2px', color:'#446688', marginBottom:'8px' }}>
-              <span>攻撃力: <span style={{color:'#ffcc00'}}>{profile.atk}</span></span>
-              <span>防御力: <span style={{color:'#88aaff'}}>{profile.def}</span></span>
-              <span>特殊攻撃力: <span style={{color:'#cc44ff'}}>{profile.matk}</span></span>
-              <span>特殊防御力: <span style={{color:'#44ccff'}}>{profile.mdef}</span></span>
-              <span>素早さ: <span style={{color:'#ff8844'}}>{profile.spd}</span></span>
+              <StatLine label="攻撃力" base={profile.atk} bonus={eff.bonus.atk} color="#ffcc00" />
+              <StatLine label="防御力" base={profile.def} bonus={eff.bonus.def} color="#88aaff" />
+              <StatLine label="特殊攻撃力" base={profile.matk} bonus={eff.bonus.matk} color="#cc44ff" />
+              <StatLine label="特殊防御力" base={profile.mdef} bonus={eff.bonus.mdef} color="#44ccff" />
+              <StatLine label="素早さ" base={profile.spd} bonus={eff.bonus.spd} color="#ff8844" />
               <span>ゴールド: <span style={{color:'#ffcc00'}}>{profile.gold}</span></span>
             </div>
 
@@ -514,5 +622,15 @@ function StatBar({ label, val, pct, color }) {
         <div style={{ height:'100%', width:`${pct}%`, background:`linear-gradient(90deg,#001,${color})` }} />
       </div>
     </>
+  )
+}
+
+// ★ 装備ボーナスを (+N) 付きで表示するコンポーネント
+function StatLine({ label, base, bonus, color }) {
+  return (
+    <span>
+      {label}: <span style={{color}}>{base + bonus}</span>
+      {bonus > 0 && <span style={{color:'#44ccff', fontSize:'10px'}}> (+{bonus})</span>}
+    </span>
   )
 }
