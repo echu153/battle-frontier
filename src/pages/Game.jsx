@@ -57,7 +57,21 @@ const calcTotal = (p) => Math.floor(
 
 const calcExpNext = (lv) => (Math.floor((lv - 1) / 10) + 1) * 100
 
-// ★ 熟練度ボーナス計算（Equipment.jsxと同じロジック）
+// 武器種グループ定義（新しい武器種はここに追加するだけでOK）
+const WEAPON_TYPE_GROUP = {
+  sword:   'physical',  // 物理系
+  axe:     'physical',
+  spear:   'physical',
+  bow:     'physical',  // 物理系（素早さも影響）
+  staff:   'magical',   // 魔法系
+  wand:    'magical',
+  tome:    'magical',
+}
+
+// 武器種から攻撃グループを取得
+const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'
+
+// 熟練度ボーナス計算
 const calcProfBonus = (prof) => {
   if (!prof) return {}
   const awakening = prof.awakening || 0
@@ -65,7 +79,8 @@ const calcProfBonus = (prof) => {
   const bonus = Math.floor(lv / 10)
   const weapon = prof.weapons
   if (!weapon) return {}
-  if (weapon.weapon_type === 'staff') return { matk: bonus }
+  const group = getWeaponGroup(weapon.weapon_type)
+  if (group === 'magical') return { matk: bonus }
   if (weapon.weapon_type === 'bow') return { atk: bonus, spd: bonus }
   return { atk: bonus }
 }
@@ -209,25 +224,24 @@ export default function Game() {
       logs.push({ text:`${enemy.name}が現れた！`, color:'#88ccff' })
     }
 
-    // ★ 装備ボーナスがあればログに表示
-    const bonusParts = []
-    if (eff.bonus.atk  > 0) bonusParts.push(`ATK+${eff.bonus.atk}`)
-    if (eff.bonus.def  > 0) bonusParts.push(`DEF+${eff.bonus.def}`)
-    if (eff.bonus.matk > 0) bonusParts.push(`MATK+${eff.bonus.matk}`)
-    if (eff.bonus.mdef > 0) bonusParts.push(`MDEF+${eff.bonus.mdef}`)
-    if (eff.bonus.spd  > 0) bonusParts.push(`SPD+${eff.bonus.spd}`)
-    if (bonusParts.length > 0) {
-      logs.push({ text:`🗡 装備ボーナス: ${bonusParts.join(' ')}`, color:'#44ccff' })
-    }
+    // 装備中武器の種類を取得して攻撃タイプを決定
+    const equippedWeaponItem = equipment.find(e => e.slot === 'weapon' && e.equipped)
+    const weaponType = equippedWeaponItem?.weapons?.weapon_type || 'sword'
+    const weaponGroup = getWeaponGroup(weaponType)
+    const isMagical = weaponGroup === 'magical'
 
     while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
-      // ★ eff.atk / eff.def を使用
-      const dmgToEnemy = Math.max(1, eff.atk - Math.floor(enemy.def / 2) + Math.floor(Math.random() * 4))
+      // 魔法系：MATK vs MDEF　物理系：ATK vs DEF
+      const playerAtk = isMagical ? eff.matk : eff.atk
+      const playerDef = isMagical ? eff.mdef : eff.def
+      const enemyDef  = isMagical ? Math.floor((enemy.mdef || 0) / 2) : Math.floor(enemy.def / 2)
+
+      const dmgToEnemy = Math.max(1, playerAtk - enemyDef + Math.floor(Math.random() * 4))
       enemyHp -= dmgToEnemy
       logs.push({ text:`${turn}ターン目: あなたの攻撃！ ${enemy.name}に${dmgToEnemy}ダメージ！`, color:'#ffcc00' })
       if (enemyHp <= 0) break
 
-      const dmgToPlayer = Math.max(1, enemy.atk - Math.floor(eff.def / 2) + Math.floor(Math.random() * 3))
+      const dmgToPlayer = Math.max(1, enemy.atk - Math.floor(playerDef / 2) + Math.floor(Math.random() * 3))
       playerHp -= dmgToPlayer
       logs.push({ text:`${turn}ターン目: ${enemy.name}の反撃！ あなたに${dmgToPlayer}ダメージ…`, color:'#ff6644' })
       turn++
@@ -253,8 +267,8 @@ export default function Game() {
 
     setBattleLogs(logs)
 
-    // ★ 武器の熟練度更新（装備中の武器スロットのみ）
-    const equippedWeapon = equipment.find(e => e.slot === 'weapon' && e.equipped)
+    // 武器の熟練度更新（装備中の武器スロットのみ）
+    const equippedWeapon = equippedWeaponItem
     if (equippedWeapon) {
       const prof = proficiency.find(p => p.weapon_id === equippedWeapon.weapons.id)
       if (prof) {
