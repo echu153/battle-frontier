@@ -6,6 +6,12 @@ const SLOT_LABELS = { weapon:'武器', armor:'防具', accessory:'装飾品' }
 const RARITY_COLORS = { common:'#88ccff', rare:'#44ff88', epic:'#cc44ff', legendary:'#ffcc00' }
 const RARITY_LABELS = { common:'並', rare:'珍', epic:'秘', legendary:'伝' }
 
+const WEAPON_TYPE_GROUP = {
+  sword: 'physical', axe: 'physical', spear: 'physical', bow: 'physical',
+  staff: 'magical', wand: 'magical', tome: 'magical',
+}
+const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'
+
 const calcProfBonus = (prof) => {
   if (!prof) return {}
   const awakening = prof.awakening || 0
@@ -13,7 +19,8 @@ const calcProfBonus = (prof) => {
   const bonus = Math.floor(lv / 10)
   const weapon = prof.weapon
   if (!weapon) return {}
-  if (weapon.weapon_type === 'staff') return { matk: bonus }
+  const group = getWeaponGroup(weapon.weapon_type)
+  if (group === 'magical') return { matk: bonus }
   if (weapon.weapon_type === 'bow') return { atk: bonus, spd: bonus }
   return { atk: bonus }
 }
@@ -51,6 +58,7 @@ export default function Equipment() {
 
   const equip = async (item) => {
     setLoading(true)
+
     // 同スロットの装備を外す
     await supabase.from('player_equipment')
       .update({ equipped: false })
@@ -62,6 +70,26 @@ export default function Equipment() {
     await supabase.from('player_equipment')
       .update({ equipped: true })
       .eq('id', item.id)
+
+    // 武器スロットの場合、proficiencyデータがなければ自動作成
+    if (item.slot === 'weapon') {
+      const { data: existing } = await supabase
+        .from('proficiency')
+        .select('id')
+        .eq('player_id', profile.id)
+        .eq('weapon_id', item.weapons.id)
+        .single()
+
+      if (!existing) {
+        await supabase.from('proficiency').insert({
+          player_id: profile.id,
+          weapon_id: item.weapons.id,
+          prof_exp: 0,
+          prof_lv: 1,
+          awakening: 0,
+        })
+      }
+    }
 
     await fetchAll()
     setLoading(false)
