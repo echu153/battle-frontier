@@ -55,6 +55,8 @@ const calcTotal = (p) => Math.floor(
   p.atk + p.def + p.matk + p.mdef + p.spd
 )
 
+const calcExpNext = (lv) => (Math.floor((lv - 1) / 10) + 1) * 100
+
 export default function Game() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
@@ -101,8 +103,9 @@ export default function Game() {
 
   const doRegen = async () => {
     if (!profile) return
-    const newHp = Math.min(profile.hp_max, Math.floor((profile.hp_current || profile.hp_max) + profile.hp_max * 0.1))
-    const newMp = Math.min(profile.mp_max, Math.floor((profile.mp_current || profile.mp_max) + profile.mp_max * 0.1))
+    const current = profile.hp_current ?? profile.hp_max
+    const newHp = Math.min(profile.hp_max, Math.floor(current + profile.hp_max * 0.1))
+    const newMp = Math.min(profile.mp_max, Math.floor((profile.mp_current ?? profile.mp_max) + profile.mp_max * 0.1))
     await supabase.from('profiles').update({
       hp_current: newHp, mp_current: newMp,
       last_regen_at: new Date().toISOString(),
@@ -112,6 +115,8 @@ export default function Game() {
 
   const doBattle = async () => {
     if (!canAct || loading) return
+    const hpCurrent = profile.hp_current ?? profile.hp_max
+    if (hpCurrent <= 0) return // 瀕死中は戦闘不可
     setLoading(true)
     setScene('battle')
     setBattleLogs([])
@@ -124,7 +129,7 @@ export default function Game() {
       : { ...area.enemies[Math.floor(Math.random() * area.enemies.length)] }
 
     const logs = []
-    let playerHp = profile.hp_current || profile.hp_max
+    let playerHp = hpCurrent
     let enemyHp = enemy.hp
     let turn = 1
 
@@ -146,6 +151,9 @@ export default function Game() {
       turn++
     }
 
+    // HPは0以下にしない
+    playerHp = Math.max(0, playerHp)
+
     const win = enemyHp <= 0
     const expGained = isBossEncounter ? 13 : Math.floor(Math.random() * 4) + 8
     const goldGained = win ? enemy.gold : 0
@@ -156,6 +164,10 @@ export default function Game() {
     } else {
       logs.push({ text:`敗北…`, color:'#ff4444' })
       logs.push({ text:`EXP + ${expGained}`, color:'#ff6644' })
+    }
+
+    if (playerHp === 0) {
+      logs.push({ text:`⚠ 瀕死状態！宿屋で回復してください。`, color:'#ff4444' })
     }
 
     setBattleLogs(logs)
@@ -182,7 +194,7 @@ export default function Game() {
     while (newExp >= newExpNext) {
       newExp -= newExpNext
       newLv++
-      newExpNext = newLv * 100
+      newExpNext = calcExpNext(newLv)
       newPendingPoints++
       statUpdates = {
         hp_max: (statUpdates.hp_max || profile.hp_max) + growth.hp,
@@ -212,7 +224,8 @@ export default function Game() {
   }
 
   const useInn = async () => {
-    const cost = profile.lv * 3
+    const isDying = (profile.hp_current ?? profile.hp_max) <= 0
+    const cost = isDying ? profile.lv * 30 : profile.lv * 3
     if (profile.gold < cost) return
     await supabase.from('profiles').update({
       hp_current: profile.hp_max,
@@ -251,8 +264,9 @@ export default function Game() {
     <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
   )
 
-  const hpCurrent = profile.hp_current ?? profile.hp_max
-  const mpCurrent = profile.mp_current ?? profile.mp_max
+  const hpCurrent = Math.max(0, profile.hp_current ?? profile.hp_max)
+  const mpCurrent = Math.max(0, profile.mp_current ?? profile.mp_max)
+  const isDying = hpCurrent <= 0
   const hpPct = Math.min(100, (hpCurrent / profile.hp_max) * 100)
   const mpPct = Math.min(100, (mpCurrent / profile.mp_max) * 100)
   const expPct = Math.min(100, (profile.exp / profile.exp_next) * 100)
@@ -260,7 +274,9 @@ export default function Game() {
   const regenPct = ((REGEN_SECONDS - regenRemaining) / REGEN_SECONDS) * 100
   const unlockedAreas = profile.unlocked_areas || [1]
   const availableAreas = AREAS.filter(a => unlockedAreas.includes(a.id))
-  const innCost = profile.lv * 3
+  const isDyingCost = profile.lv * 30
+  const normalCost = profile.lv * 3
+  const innCost = isDying ? isDyingCost : normalCost
   const allocatedPoints = Object.values(statPoints).reduce((a, b) => a + b, 0)
   const total = calcTotal(profile)
 
@@ -285,7 +301,12 @@ export default function Game() {
         <div style={{ display:'grid', gridTemplateColumns:'220px 1fr', gap:'12px' }}>
 
           {/* ステータス */}
-          <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'10px', alignSelf:'start' }}>
+          <div style={{ border:`1px solid ${isDying ? '#660000' : '#0044aa'}`, background:'#001040', padding:'10px', alignSelf:'start' }}>
+            {isDying && (
+              <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'4px', background:'#1a0000' }}>
+                ⚠ 瀕死状態
+              </div>
+            )}
             <div style={{ color:'#ffcc00', fontSize:'12px', borderBottom:'1px dashed #003366', paddingBottom:'4px', marginBottom:'8px' }}>
               {profile.username}
             </div>
@@ -295,7 +316,7 @@ export default function Game() {
               総合力: <span style={{color:'#44ff88', fontWeight:'bold'}}>{total}</span>
             </div>
 
-            <StatBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color="#00cc44" />
+            <StatBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying ? '#ff2200' : '#00cc44'} />
             <StatBar label="MP" val={`${mpCurrent}/${profile.mp_max}`} pct={mpPct} color="#4488ff" />
 
             <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginTop:'6px' }}>
@@ -378,6 +399,13 @@ export default function Game() {
             {scene === 'town' && (
               <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'8px' }}>
                 <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
+
+                {isDying && (
+                  <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'10px', border:'1px solid #660000', padding:'8px', background:'#1a0000' }}>
+                    ⚠ 瀕死状態です。宿屋で回復してから出撃してください。
+                  </div>
+                )}
+
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
                   <span style={{ color:'#446688' }}>次の行動まで</span>
                   <span style={{ color: canAct ? '#44ff88' : '#ffcc00' }}>
@@ -398,9 +426,9 @@ export default function Game() {
                   </select>
                 </div>
 
-                <button onClick={doBattle} disabled={!canAct || loading}
-                  style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct ? '#ffcc00' : '#003366'}`, color: canAct ? '#ffcc00' : '#446688', cursor: canAct ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
-                  {canAct ? `⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！` : '⏳ 待機中...'}
+                <button onClick={doBattle} disabled={!canAct || loading || isDying}
+                  style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct && !isDying ? '#ffcc00' : '#003366'}`, color: canAct && !isDying ? '#ffcc00' : '#446688', cursor: canAct && !isDying ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
+                  {isDying ? '💀 瀕死中（出撃不可）' : canAct ? `⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！` : '⏳ 待機中...'}
                 </button>
 
                 <button onClick={() => { setScene('inn'); setInnMessage('') }}
@@ -418,8 +446,18 @@ export default function Game() {
                 ) : (
                   <>
                     <div style={{ color:'#88ccff', fontSize:'12px', lineHeight:'2', marginBottom:'16px' }}>
-                      一泊 <span style={{color:'#ffcc00'}}>{innCost} ゴールド</span> でございます。<br/>
-                      ゆっくりお休みになりますか？
+                      {isDying ? (
+                        <>
+                          これはひどいお姿で…。<br/>
+                          特別なお手当が必要でございます。<br/>
+                          <span style={{color:'#ffcc00'}}>{innCost} ゴールド</span> になりますが、よろしいですか？
+                        </>
+                      ) : (
+                        <>
+                          一泊 <span style={{color:'#ffcc00'}}>{innCost} ゴールド</span> でございます。<br/>
+                          ゆっくりお休みになりますか？
+                        </>
+                      )}
                     </div>
                     <div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
                       所持金: <span style={{color:'#ffcc00'}}>{profile.gold}G</span>
