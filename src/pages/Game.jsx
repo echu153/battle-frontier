@@ -7,28 +7,25 @@ const REGEN_SECONDS = 180
 
 const AREAS = [
   {
-    id: 1,
-    name: '始まりの森',
+    id: 1, name: '始まりの森',
     enemies: [
-      { name:'スライム',   hp:20, atk:8,  def:2, gold:5  },
-      { name:'コウモリ',   hp:25, atk:10, def:2, gold:6  },
-      { name:'毒キノコ',   hp:40, atk:15, def:3, gold:8  },
+      { name:'スライム',   hp:20,  atk:8,   def:2,  gold:5   },
+      { name:'コウモリ',   hp:25,  atk:10,  def:2,  gold:6   },
+      { name:'毒キノコ',   hp:40,  atk:15,  def:3,  gold:8   },
     ],
     boss: { name:'ビッグスライム', hp:500, atk:40, def:10, gold:100, isBoss:true },
   },
   {
-    id: 2,
-    name: '荒廃した草原',
+    id: 2, name: '荒廃した草原',
     enemies: [
-      { name:'ゴブリン',   hp:80,  atk:35, def:8,  gold:20 },
-      { name:'野良犬',     hp:100, atk:45, def:10, gold:25 },
-      { name:'盗賊',       hp:120, atk:55, def:12, gold:30 },
+      { name:'ゴブリン',   hp:80,  atk:35,  def:8,  gold:20  },
+      { name:'野良犬',     hp:100, atk:45,  def:10, gold:25  },
+      { name:'盗賊',       hp:120, atk:55,  def:12, gold:30  },
     ],
     boss: { name:'盗賊団のリーダー', hp:2000, atk:120, def:30, gold:500, isBoss:true },
   },
   {
-    id: 3,
-    name: '古代の洞窟',
+    id: 3, name: '古代の洞窟',
     enemies: [
       { name:'コボルト',   hp:200, atk:100, def:25, gold:60  },
       { name:'スケルトン', hp:250, atk:120, def:30, gold:80  },
@@ -38,25 +35,53 @@ const AREAS = [
   },
 ]
 
-const JOB_GROWTH = {
-  '戦士':    { hp:6, mp:1, atk:2, def:2, matk:0, mdef:1, spd:0 },
-  '弓使い':  { hp:4, mp:2, atk:2, def:1, matk:1, mdef:1, spd:2 },
-  '魔法使い':{ hp:3, mp:5, atk:0, def:1, matk:3, mdef:1, spd:1 },
-  '僧侶':    { hp:4, mp:4, atk:0, def:1, matk:2, mdef:3, spd:0 },
-}
-
-// クラスの基本ステータス（LV1時点）
+// 初期職LV1ステータス（総合力35統一）
 const JOB_BASE = {
-  '戦士':    { hp_max:60, mp_max:10, atk:8,  def:6,  matk:2, mdef:4,  spd:3 },
-  '弓使い':  { hp_max:50, mp_max:20, atk:7,  def:4,  matk:4, mdef:4,  spd:8 },
-  '魔法使い':{ hp_max:40, mp_max:50, atk:3,  def:3,  matk:12,mdef:5,  spd:5 },
-  '僧侶':    { hp_max:50, mp_max:40, atk:3,  def:4,  matk:8, mdef:10, spd:3 },
+  '戦士':    { hp_max:80,  mp_max:10, atk:10, def:8,  matk:1,  mdef:3,  spd:5  },
+  '弓使い':  { hp_max:60,  mp_max:15, atk:8,  def:4,  matk:2,  mdef:3,  spd:10 },
+  '魔法使い':{ hp_max:45,  mp_max:50, atk:2,  def:2,  matk:14, mdef:4,  spd:4  },
+  '僧侶':    { hp_max:55,  mp_max:45, atk:2,  def:3,  matk:7,  mdef:12, spd:3  },
+  // 上位職LV1ステータス（総合力50統一）
+  '侍':      { hp_max:100, mp_max:15, atk:13, def:10, matk:4,  mdef:4,  spd:8  },
+  '狂戦士':  { hp_max:110, mp_max:10, atk:16, def:8,  matk:4,  mdef:4,  spd:4  },
+  '狩人':    { hp_max:80,  mp_max:20, atk:13, def:6,  matk:4,  mdef:4,  spd:13 },
+  '暗殺者':  { hp_max:70,  mp_max:20, atk:10, def:4,  matk:4,  mdef:4,  spd:18 },
+  '元素使い':{ hp_max:55,  mp_max:70, atk:5,  def:2,  matk:17, mdef:5,  spd:4  },
+  '死霊使い':{ hp_max:60,  mp_max:80, atk:4,  def:4,  matk:12, mdef:4,  spd:8  },
+  '司祭':    { hp_max:70,  mp_max:60, atk:4,  def:8,  matk:8,  mdef:12, spd:4  },
+  '賢者':    { hp_max:60,  mp_max:65, atk:4,  def:4,  matk:12, mdef:16, spd:3  },
 }
 
-// 初期職一覧
-const INITIAL_CLASSES = ['戦士', '弓使い', '魔法使い', '僧侶']
+// 初期職レベルアップ時（総合力+6統一）
+const JOB_GROWTH = {
+  '戦士':    { hp:20, mp:5, atk:2, def:2, matk:0, mdef:1, spd:1 },
+  '弓使い':  { hp:15, mp:5, atk:2, def:1, matk:0, mdef:1, spd:2 },
+  '魔法使い':{ hp:10, mp:15,atk:0, def:1, matk:3, mdef:1, spd:1 },
+  '僧侶':    { hp:15, mp:15,atk:0, def:1, matk:1, mdef:2, spd:1 },
+  // 上位職レベルアップ時（総合力+7、3レベルごとボーナス別管理）
+  '侍':      { hp:20, mp:5, atk:3, def:2, matk:0, mdef:1, spd:1 },
+  '狂戦士':  { hp:20, mp:5, atk:4, def:1, matk:0, mdef:0, spd:0 },
+  '狩人':    { hp:10, mp:5, atk:3, def:1, matk:0, mdef:0, spd:3 },
+  '暗殺者':  { hp:10, mp:5, atk:2, def:1, matk:0, mdef:0, spd:4 },
+  '元素使い':{ hp:10, mp:10,atk:0, def:0, matk:4, mdef:1, spd:0 },
+  '死霊使い':{ hp:10, mp:10,atk:0, def:0, matk:3, mdef:1, spd:2 },
+  '司祭':    { hp:10, mp:10,atk:0, def:2, matk:1, mdef:3, spd:0 },
+  '賢者':    { hp:10, mp:10,atk:0, def:1, matk:2, mdef:3, spd:0 },
+}
 
-// 上位職と解放条件
+// 上位職の3レベルごとボーナス（+0項目が+1になる順番）
+const JOB_LEVEL3_BONUS = {
+  '侍':      ['matk'],
+  '狂戦士':  ['matk', 'mdef', 'spd'],
+  '狩人':    ['matk', 'mdef'],
+  '暗殺者':  ['matk', 'mdef'],
+  '元素使い':['atk', 'def', 'spd'],
+  '死霊使い':['atk', 'def'],
+  '司祭':    ['atk', 'spd'],
+  '賢者':    ['atk', 'spd'],
+}
+
+const INITIAL_CLASSES = ['戦士', '弓使い', '魔法使い', '僧侶']
 const ADVANCED_CLASSES = {
   '侍':      { requires: '戦士' },
   '狂戦士':  { requires: '戦士' },
@@ -133,20 +158,35 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
   }
 }
 
-// クラスLVからステータスを計算する
+// クラスLVからステータスを計算
 const calcClassStats = (className, lv) => {
   const base = JOB_BASE[className]
   const growth = JOB_GROWTH[className]
   if (!base || !growth) return null
-  return {
-    hp_max: base.hp_max + growth.hp * (lv - 1),
-    mp_max: base.mp_max + growth.mp * (lv - 1),
-    atk:    base.atk   + growth.atk * (lv - 1),
-    def:    base.def   + growth.def * (lv - 1),
-    matk:   base.matk  + growth.matk * (lv - 1),
-    mdef:   base.mdef  + growth.mdef * (lv - 1),
-    spd:    base.spd   + growth.spd  * (lv - 1),
+  const bonusSlots = JOB_LEVEL3_BONUS[className] || []
+  let stats = {
+    hp_max: base.hp_max, mp_max: base.mp_max,
+    atk: base.atk, def: base.def, matk: base.matk, mdef: base.mdef, spd: base.spd,
   }
+  for (let i = 1; i < lv; i++) {
+    stats.hp_max += growth.hp
+    stats.mp_max += growth.mp
+    stats.atk    += growth.atk
+    stats.def    += growth.def
+    stats.matk   += growth.matk
+    stats.mdef   += growth.mdef
+    stats.spd    += growth.spd
+    // 3レベルごとボーナス
+    if ((i) % 3 === 0 && bonusSlots.length > 0) {
+      const bonusIndex = Math.floor((i) / 3 - 1) % bonusSlots.length
+      const bonusStat = bonusSlots[bonusIndex]
+      stats[bonusStat] += 1
+      // MP優先で調整（MP-5、なければHP-10）
+      if (growth.mp > 0) stats.mp_max -= 5
+      else stats.hp_max -= 10
+    }
+  }
+  return stats
 }
 
 export default function Game() {
@@ -194,18 +234,11 @@ export default function Game() {
     setPendingPoints(data.pending_stat_points || 0)
     const unlocked = data.unlocked_areas || [1]
     if (!unlocked.includes(selectedArea)) setSelectedArea(unlocked[0])
-    const { data: eq } = await supabase
-      .from('player_equipment').select('*, weapons(*)')
-      .eq('player_id', user.id)
+    const { data: eq } = await supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', user.id)
     setEquipment(eq || [])
-    const { data: prof } = await supabase
-      .from('proficiency').select('*, weapons(*)')
-      .eq('player_id', user.id)
+    const { data: prof } = await supabase.from('proficiency').select('*, weapons(*)').eq('player_id', user.id)
     setProficiency(prof || [])
-    const { data: cl } = await supabase
-      .from('class_levels')
-      .select('*')
-      .eq('player_id', user.id)
+    const { data: cl } = await supabase.from('class_levels').select('*').eq('player_id', user.id)
     setClassLevels(cl || [])
   }
 
@@ -224,52 +257,30 @@ export default function Game() {
   const doChangeClass = async (targetClass) => {
     setLoading(true)
     setTempleMessage('')
-
-    // 現在のクラスのLV・EXPをclass_levelsに保存
     const currentClassData = classLevels.find(cl => cl.class_name === profile.class)
     if (currentClassData) {
       await supabase.from('class_levels').update({
-        lv: profile.lv,
-        exp: profile.exp,
+        lv: profile.lv, exp: profile.exp,
       }).eq('id', currentClassData.id)
     }
-
-    // 転職先のクラスデータを取得
     const targetClassData = classLevels.find(cl => cl.class_name === targetClass)
     const targetLv = targetClassData ? targetClassData.lv : 1
     const targetExp = targetClassData ? targetClassData.exp : 0
-
-    // 転職先のステータスを計算
     const newStats = calcClassStats(targetClass, targetLv)
     if (!newStats) { setLoading(false); return }
-
-    // class_levelsに転職先データがなければ作成
     if (!targetClassData) {
       await supabase.from('class_levels').insert({
-        player_id: profile.id,
-        class_name: targetClass,
-        lv: 1,
-        exp: 0,
+        player_id: profile.id, class_name: targetClass, lv: 1, exp: 0,
       })
     }
-
-    // profilesを更新
     await supabase.from('profiles').update({
-      class: targetClass,
-      lv: targetLv,
-      exp: targetExp,
+      class: targetClass, lv: targetLv, exp: targetExp,
       exp_next: calcExpNext(targetLv),
-      hp_max: newStats.hp_max,
-      mp_max: newStats.mp_max,
-      hp_current: newStats.hp_max,
-      mp_current: newStats.mp_max,
-      atk: newStats.atk,
-      def: newStats.def,
-      matk: newStats.matk,
-      mdef: newStats.mdef,
-      spd: newStats.spd,
+      hp_max: newStats.hp_max, mp_max: newStats.mp_max,
+      hp_current: newStats.hp_max, mp_current: newStats.mp_max,
+      atk: newStats.atk, def: newStats.def,
+      matk: newStats.matk, mdef: newStats.mdef, spd: newStats.spd,
     }).eq('id', profile.id)
-
     await fetchProfile()
     setTempleMessage(`${targetClass}に転職しました！`)
     setLoading(false)
@@ -282,7 +293,6 @@ export default function Game() {
     setLoading(true)
     setScene('battle')
     setBattleLogs([])
-
     const eff = calcEffectiveStats(profile, equipment, proficiency)
     const area = AREAS.find(a => a.id === selectedArea)
     const bossRate = profile.boss_encounter_rate || 0
@@ -290,23 +300,18 @@ export default function Game() {
     const enemy = isBossEncounter
       ? { ...area.boss }
       : { ...area.enemies[Math.floor(Math.random() * area.enemies.length)] }
-
     const logs = []
     let playerHp = hpCurrent
     let enemyHp = enemy.hp
     let turn = 1
-
     if (isBossEncounter) {
       logs.push({ text:`⚠ ボス出現！ ${enemy.name}が現れた！`, color:'#ff4444' })
     } else {
       logs.push({ text:`${enemy.name}が現れた！`, color:'#88ccff' })
     }
-
     const equippedWeaponItem = equipment.find(e => e.slot === 'weapon' && e.equipped)
     const weaponType = equippedWeaponItem?.weapons?.weapon_type || 'sword'
-    const weaponGroup = getWeaponGroup(weaponType)
-    const isMagical = weaponGroup === 'magical'
-
+    const isMagical = getWeaponGroup(weaponType) === 'magical'
     while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
       const playerAtk = isMagical ? eff.matk : eff.atk
       const playerDef = isMagical ? eff.mdef : eff.def
@@ -320,12 +325,10 @@ export default function Game() {
       logs.push({ text:`${turn}ターン目: ${enemy.name}の反撃！ あなたに${dmgToPlayer}ダメージ…`, color:'#ff6644' })
       turn++
     }
-
     playerHp = Math.max(0, playerHp)
     const win = enemyHp <= 0
     const expGained = isBossEncounter ? 13 : Math.floor(Math.random() * 4) + 8
     const goldGained = win ? enemy.gold : 0
-
     if (win) {
       logs.push({ text:`${enemy.name}を倒した！`, color:'#44ff88' })
       logs.push({ text:`EXP + ${expGained}　Gold + ${goldGained}`, color:'#ffcc00' })
@@ -333,16 +336,11 @@ export default function Game() {
       logs.push({ text:`敗北…`, color:'#ff4444' })
       logs.push({ text:`EXP + ${expGained}`, color:'#ff6644' })
     }
-
-    if (playerHp === 0) {
-      logs.push({ text:`⚠ 瀕死状態！宿屋で回復してください。`, color:'#ff4444' })
-    }
-
+    if (playerHp === 0) logs.push({ text:`⚠ 瀕死状態！宿屋で回復してください。`, color:'#ff4444' })
     setBattleLogs(logs)
 
-    const equippedWeapon = equippedWeaponItem
-    if (equippedWeapon) {
-      const prof = proficiency.find(p => p.weapon_id === equippedWeapon.weapons.id)
+    if (equippedWeaponItem) {
+      const prof = proficiency.find(p => p.weapon_id === equippedWeaponItem.weapons.id)
       if (prof) {
         const profExpGained = Math.floor(Math.random() * 4) + 8
         let totalExp = prof.prof_exp + profExpGained
@@ -354,14 +352,14 @@ export default function Game() {
           if (newProfLv >= 100) {
             newProfLv = 1
             newAwakening++
-            logs.push({ text:`✨ ${equippedWeapon.weapons.name} が覚醒！ +${newAwakening}になった！`, color:'#ffcc00' })
+            logs.push({ text:`✨ ${equippedWeaponItem.weapons.name} が覚醒！ +${newAwakening}になった！`, color:'#ffcc00' })
           }
         }
         await supabase.from('proficiency').update({
           prof_exp: totalExp, prof_lv: newProfLv, awakening: newAwakening,
         }).eq('id', prof.id)
         if (newProfLv > prof.prof_lv || newAwakening > (prof.awakening || 0)) {
-          logs.push({ text:`⚔ 武器熟練度UP！ ${equippedWeapon.weapons.name} LV${newProfLv}`, color:'#aa44ff' })
+          logs.push({ text:`⚔ 武器熟練度UP！ ${equippedWeaponItem.weapons.name} LV${newProfLv}`, color:'#aa44ff' })
         }
         setBattleLogs([...logs])
       }
@@ -384,6 +382,7 @@ export default function Game() {
     let newExpNext = profile.exp_next
     let newPendingPoints = profile.pending_stat_points || 0
     const growth = JOB_GROWTH[profile.class] || JOB_GROWTH['戦士']
+    const bonusSlots = JOB_LEVEL3_BONUS[profile.class] || []
     let statUpdates = {}
 
     while (newExp >= newExpNext) {
@@ -391,14 +390,23 @@ export default function Game() {
       newLv++
       newExpNext = calcExpNext(newLv)
       newPendingPoints++
+      const base = statUpdates
       statUpdates = {
-        hp_max: (statUpdates.hp_max || profile.hp_max) + growth.hp,
-        mp_max: (statUpdates.mp_max || profile.mp_max) + growth.mp,
-        atk:    (statUpdates.atk    || profile.atk)    + growth.atk,
-        def:    (statUpdates.def    || profile.def)    + growth.def,
-        matk:   (statUpdates.matk   || profile.matk)   + growth.matk,
-        mdef:   (statUpdates.mdef   || profile.mdef)   + growth.mdef,
-        spd:    (statUpdates.spd    || profile.spd)    + growth.spd,
+        hp_max: (base.hp_max || profile.hp_max) + growth.hp,
+        mp_max: (base.mp_max || profile.mp_max) + growth.mp,
+        atk:    (base.atk    || profile.atk)    + growth.atk,
+        def:    (base.def    || profile.def)    + growth.def,
+        matk:   (base.matk   || profile.matk)   + growth.matk,
+        mdef:   (base.mdef   || profile.mdef)   + growth.mdef,
+        spd:    (base.spd    || profile.spd)    + growth.spd,
+      }
+      // 3レベルごとボーナス（上位職のみ）
+      if (bonusSlots.length > 0 && (newLv - 1) % 3 === 0) {
+        const bonusIndex = Math.floor((newLv - 1) / 3 - 1) % bonusSlots.length
+        const bonusStat = bonusSlots[bonusIndex]
+        statUpdates[bonusStat] = (statUpdates[bonusStat] || 0) + 1
+        if (growth.mp > 0) statUpdates.mp_max = (statUpdates.mp_max || profile.mp_max) - 5
+        else statUpdates.hp_max = (statUpdates.hp_max || profile.hp_max) - 10
       }
       logs.push({ text:`★ LEVEL UP！ LV${newLv} になった！ ステータスポイント+1`, color:'#cc44ff' })
       setBattleLogs([...logs])
@@ -413,7 +421,6 @@ export default function Game() {
       last_action_at: new Date().toISOString(),
       ...statUpdates,
     }).eq('id', profile.id)
-
     await fetchProfile()
     setLoading(false)
   }
@@ -423,8 +430,7 @@ export default function Game() {
     const cost = isDying ? profile.lv * 30 : profile.lv * 3
     if (profile.gold < cost) return
     await supabase.from('profiles').update({
-      hp_current: profile.hp_max,
-      mp_current: profile.mp_max,
+      hp_current: profile.hp_max, mp_current: profile.mp_max,
       gold: profile.gold - cost,
     }).eq('id', profile.id)
     await fetchProfile()
@@ -474,62 +480,41 @@ export default function Game() {
   const total = calcTotal(profile)
   const eff = calcEffectiveStats(profile, equipment, proficiency)
 
-  // 転職可能クラス一覧を計算
   const availableClasses = INITIAL_CLASSES.filter(c => c !== profile.class).map(c => {
     const cl = classLevels.find(x => x.class_name === c)
-    const lv = cl ? cl.lv : 1
-    const canChange = profile.lv >= 30
-    return { name: c, lv, canChange, type: 'initial' }
+    return { name: c, lv: cl ? cl.lv : 1, canChange: profile.lv >= 30 }
   })
-
-  // 上位職（初期職LV100以上で解放）
   const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, { requires }]) => {
     const reqCl = classLevels.find(x => x.class_name === requires)
     const reqLv = reqCl ? reqCl.lv : 0
-    const canChange = reqLv >= 100 && profile.lv >= 30
     const cl = classLevels.find(x => x.class_name === name)
-    const lv = cl ? cl.lv : 1
-    return { name, lv, canChange, requires, reqLv, type: 'advanced' }
+    return { name, lv: cl ? cl.lv : 1, canChange: reqLv >= 100 && profile.lv >= 30, requires, reqLv }
   })
 
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'900px', margin:'0 auto' }}>
-
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
           <div style={{ display:'flex', gap:'8px' }}>
             <button onClick={() => nav('/equipment')}
-              style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-              🗡 装備
-            </button>
+              style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡 装備</button>
             <button onClick={() => nav('/ranking')}
-              style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-              🏆 ランキング
-            </button>
+              style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏆 ランキング</button>
             <button onClick={logout}
-              style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-              ログアウト
-            </button>
+              style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ログアウト</button>
           </div>
         </div>
 
         <div style={{ display:'grid', gridTemplateColumns:'220px 1fr', gap:'12px' }}>
-
           <div style={{ border:`1px solid ${isDying ? '#660000' : '#0044aa'}`, background:'#001040', padding:'10px', alignSelf:'start' }}>
             {isDying && (
-              <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'4px', background:'#1a0000' }}>
-                ⚠ 瀕死状態
-              </div>
+              <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'4px', background:'#1a0000' }}>⚠ 瀕死状態</div>
             )}
-            <div style={{ color:'#ffcc00', fontSize:'12px', borderBottom:'1px dashed #003366', paddingBottom:'4px', marginBottom:'8px' }}>
-              {profile.username}
-            </div>
+            <div style={{ color:'#ffcc00', fontSize:'12px', borderBottom:'1px dashed #003366', paddingBottom:'4px', marginBottom:'8px' }}>{profile.username}</div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>クラス: <span style={{color:'#88ccff'}}>{profile.class}</span></div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>LV: <span style={{color:'#ffcc00'}}>{profile.lv}</span></div>
-            <div style={{ fontSize:'11px', color:'#446688', marginBottom:'6px' }}>
-              総合力: <span style={{color:'#44ff88', fontWeight:'bold'}}>{total}</span>
-            </div>
+            <div style={{ fontSize:'11px', color:'#446688', marginBottom:'6px' }}>総合力: <span style={{color:'#44ff88', fontWeight:'bold'}}>{total}</span></div>
             <StatBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying ? '#ff2200' : '#00cc44'} />
             <StatBar label="MP" val={`${mpCurrent}/${profile.mp_max}`} pct={mpPct} color="#4488ff" />
             <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginTop:'6px' }}>
@@ -554,10 +539,7 @@ export default function Game() {
               <span>ゴールド: <span style={{color:'#ffcc00'}}>{profile.gold}</span></span>
             </div>
             {pendingPoints > 0 && (
-              <button onClick={() => {
-                setShowStatPanel(true)
-                setStatPoints({ hp:0, mp:0, atk:0, def:0, matk:0, mdef:0, spd:0 })
-              }}
+              <button onClick={() => { setShowStatPanel(true); setStatPoints({ hp:0, mp:0, atk:0, def:0, matk:0, mdef:0, spd:0 }) }}
                 style={{ width:'100%', padding:'6px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
                 ★ ステータスを振り分ける（{pendingPoints}pt）
               </button>
@@ -567,40 +549,26 @@ export default function Game() {
           <div>
             {showStatPanel && (
               <div style={{ border:'1px solid #cc44ff', background:'#0a0020', padding:'12px', marginBottom:'8px' }}>
-                <div style={{ color:'#cc44ff', fontSize:'13px', marginBottom:'6px' }}>
-                  ステータスポイント振り分け（残り {pendingPoints - allocatedPoints}pt）
-                </div>
+                <div style={{ color:'#cc44ff', fontSize:'13px', marginBottom:'6px' }}>ステータスポイント振り分け（残り {pendingPoints - allocatedPoints}pt）</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'10px' }}>
                   {Object.entries(STAT_LABELS).map(([stat, label]) => (
-                    <div key={stat} style={{
-                      display:'flex', alignItems:'center', justifyContent:'space-between',
-                      border:`1px solid ${(statPoints[stat]||0) > 0 ? '#cc44ff' : '#003366'}`,
-                      background: (statPoints[stat]||0) > 0 ? '#1a0030' : '#000818',
-                      padding:'6px 8px',
-                    }}>
+                    <div key={stat} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', border:`1px solid ${(statPoints[stat]||0) > 0 ? '#cc44ff' : '#003366'}`, background:(statPoints[stat]||0) > 0 ? '#1a0030' : '#000818', padding:'6px 8px' }}>
                       <span style={{ color:'#88ccff', fontSize:'10px' }}>{label}</span>
                       <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
-                        <button onClick={() => {
-                          if ((statPoints[stat]||0) > 0) setStatPoints(p => ({ ...p, [stat]: p[stat] - 1 }))
-                        }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>-</button>
+                        <button onClick={() => { if ((statPoints[stat]||0) > 0) setStatPoints(p => ({ ...p, [stat]: p[stat] - 1 })) }}
+                          style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>-</button>
                         <span style={{ color:'#cc44ff', fontSize:'11px', minWidth:'16px', textAlign:'center' }}>{statPoints[stat]||0}</span>
-                        <button onClick={() => {
-                          if (allocatedPoints < pendingPoints) setStatPoints(p => ({ ...p, [stat]: (p[stat]||0) + 1 }))
-                        }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>+</button>
+                        <button onClick={() => { if (allocatedPoints < pendingPoints) setStatPoints(p => ({ ...p, [stat]: (p[stat]||0) + 1 })) }}
+                          style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>+</button>
                       </div>
                     </div>
                   ))}
                 </div>
                 <div style={{ display:'flex', gap:'8px' }}>
                   <button onClick={() => setShowStatPanel(false)}
-                    style={{ flex:1, padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-                    後で振り分ける
-                  </button>
-                  <button onClick={confirmStatPoints}
-                    disabled={allocatedPoints !== pendingPoints}
-                    style={{ flex:2, padding:'8px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', opacity: allocatedPoints !== pendingPoints ? 0.4 : 1 }}>
-                    決定する
-                  </button>
+                    style={{ flex:1, padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>後で振り分ける</button>
+                  <button onClick={confirmStatPoints} disabled={allocatedPoints !== pendingPoints}
+                    style={{ flex:2, padding:'8px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', opacity: allocatedPoints !== pendingPoints ? 0.4 : 1 }}>決定する</button>
                 </div>
               </div>
             )}
@@ -615,9 +583,7 @@ export default function Game() {
                 )}
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
                   <span style={{ color:'#446688' }}>次の行動まで</span>
-                  <span style={{ color: canAct ? '#44ff88' : '#ffcc00' }}>
-                    {canAct ? '▶ 出撃可能！' : `${remaining.toFixed(1)}秒`}
-                  </span>
+                  <span style={{ color: canAct ? '#44ff88' : '#ffcc00' }}>{canAct ? '▶ 出撃可能！' : `${remaining.toFixed(1)}秒`}</span>
                 </div>
                 <div style={{ background:'#001028', height:'6px', border:'1px solid #002244', marginBottom:'12px' }}>
                   <div style={{ height:'100%', width:`${timerPct}%`, background: canAct ? '#44ff88' : 'linear-gradient(90deg,#003366,#0088ff)', transition:'width 0.2s' }} />
@@ -655,8 +621,7 @@ export default function Game() {
                   <>
                     <div style={{ color:'#88ccff', fontSize:'12px', lineHeight:'2', marginBottom:'16px' }}>
                       {isDying ? (
-                        <>これはひどいお姿で…。特別なお手当が必要でございます。<br/>
-                          <span style={{color:'#ffcc00'}}>{innCost} ゴールド</span> になりますが、よろしいですか？</>
+                        <>これはひどいお姿で…。特別なお手当が必要でございます。<br/><span style={{color:'#ffcc00'}}>{innCost} ゴールド</span> になりますが、よろしいですか？</>
                       ) : (
                         <>一泊 <span style={{color:'#ffcc00'}}>{innCost} ゴールド</span> でございます。<br/>ゆっくりお休みになりますか？</>
                       )}
@@ -666,14 +631,9 @@ export default function Game() {
                       {profile.gold < innCost && <span style={{color:'#ff4444'}}> （ゴールドが足りません）</span>}
                     </div>
                     <div style={{ display:'flex', gap:'8px' }}>
-                      <button onClick={backToTown}
-                        style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
-                        街に戻る
-                      </button>
+                      <button onClick={backToTown} style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
                       <button onClick={useInn} disabled={profile.gold < innCost}
-                        style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor: profile.gold < innCost ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'12px', opacity: profile.gold < innCost ? 0.4 : 1 }}>
-                        利用する
-                      </button>
+                        style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor: profile.gold < innCost ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'12px', opacity: profile.gold < innCost ? 0.4 : 1 }}>利用する</button>
                     </div>
                   </>
                 )}
@@ -687,13 +647,11 @@ export default function Game() {
                   現在のクラス: <span style={{color:'#88ccff'}}>{profile.class}</span> LV<span style={{color:'#ffcc00'}}>{profile.lv}</span>
                   　（転職にはLV30以上が必要）
                 </div>
-
                 {templeMessage && (
                   <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'10px', marginBottom:'12px', border:'1px solid #44ff88' }}>
                     {templeMessage}
                   </div>
                 )}
-
                 <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 初期職 ──</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
                   {availableClasses.map(c => (
@@ -703,16 +661,12 @@ export default function Game() {
                           <div style={{ color: c.canChange ? '#ccaa00' : '#446688', fontSize:'12px' }}>{c.name}</div>
                           <div style={{ color:'#446688', fontSize:'10px' }}>LV {c.lv}</div>
                         </div>
-                        <button onClick={() => doChangeClass(c.name)}
-                          disabled={!c.canChange || loading}
-                          style={{ padding:'4px 8px', background: c.canChange ? '#1a1000' : '#001', border:`1px solid ${c.canChange ? '#886600' : '#002244'}`, color: c.canChange ? '#ccaa00' : '#334455', cursor: c.canChange ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
-                          転職
-                        </button>
+                        <button onClick={() => doChangeClass(c.name)} disabled={!c.canChange || loading}
+                          style={{ padding:'4px 8px', background: c.canChange ? '#1a1000' : '#001', border:`1px solid ${c.canChange ? '#886600' : '#002244'}`, color: c.canChange ? '#ccaa00' : '#334455', cursor: c.canChange ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
                       </div>
                     </div>
                   ))}
                 </div>
-
                 <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 上位職（初期職LV100で解放）──</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
                   {advancedAvailable.map(c => (
@@ -722,20 +676,14 @@ export default function Game() {
                           <div style={{ color: c.canChange ? '#ff8800' : '#446688', fontSize:'12px' }}>{c.name}</div>
                           <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/100</div>
                         </div>
-                        <button onClick={() => doChangeClass(c.name)}
-                          disabled={!c.canChange || loading}
-                          style={{ padding:'4px 8px', background: c.canChange ? '#1a0800' : '#001', border:`1px solid ${c.canChange ? '#664400' : '#002244'}`, color: c.canChange ? '#ff8800' : '#334455', cursor: c.canChange ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
-                          転職
-                        </button>
+                        <button onClick={() => doChangeClass(c.name)} disabled={!c.canChange || loading}
+                          style={{ padding:'4px 8px', background: c.canChange ? '#1a0800' : '#001', border:`1px solid ${c.canChange ? '#664400' : '#002244'}`, color: c.canChange ? '#ff8800' : '#334455', cursor: c.canChange ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
                       </div>
                     </div>
                   ))}
                 </div>
-
                 <button onClick={backToTown}
-                  style={{ width:'100%', padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
-                  街に戻る
-                </button>
+                  style={{ width:'100%', padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
               </div>
             )}
 
@@ -745,16 +693,12 @@ export default function Game() {
                 {loading && <div style={{ color:'#446688', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
                 <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
                   {battleLogs.map((l, i) => (
-                    <div key={i} style={{ color: l.color, fontSize:'12px', lineHeight:'2', borderBottom:'1px solid #001428', padding:'2px 0' }}>
-                      {l.text}
-                    </div>
+                    <div key={i} style={{ color: l.color, fontSize:'12px', lineHeight:'2', borderBottom:'1px solid #001428', padding:'2px 0' }}>{l.text}</div>
                   ))}
                 </div>
                 {!loading && (
                   <button onClick={backToTown}
-                    style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>
-                    🏰 街に戻る
-                  </button>
+                    style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>
                 )}
               </div>
             )}
