@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
 const WAIT_SECONDS = 20
-const REGEN_SECONDS = 180 // 3分
+const REGEN_SECONDS = 180
 
 const AREAS = [
   {
@@ -46,8 +46,14 @@ const JOB_GROWTH = {
 }
 
 const STAT_LABELS = {
-  hp:'HP', mp:'MP', atk:'攻撃力', def:'防御力', matk:'特殊攻撃力', mdef:'特殊防御力', spd:'素早さ'
+  hp:'HP (+10)', mp:'MP (+5)', atk:'攻撃力 (+1)', def:'防御力 (+1)',
+  matk:'特殊攻撃力 (+1)', mdef:'特殊防御力 (+1)', spd:'素早さ (+1)'
 }
+
+const calcTotal = (p) => Math.floor(
+  (p.hp_max / 10) + (p.mp_max / 5) +
+  p.atk + p.def + p.matk + p.mdef + p.spd
+)
 
 export default function Game() {
   const nav = useNavigate()
@@ -69,21 +75,15 @@ export default function Game() {
   useEffect(() => {
     if (!profile) return
     const id = setInterval(() => {
-      // 行動タイマー
       const elapsed = (Date.now() - new Date(profile.last_action_at).getTime()) / 1000
       const rem = Math.max(0, WAIT_SECONDS - elapsed)
       setRemaining(rem)
       setCanAct(rem === 0)
 
-      // 自然回復タイマー
       const regenElapsed = (Date.now() - new Date(profile.last_regen_at).getTime()) / 1000
       const regenRem = Math.max(0, REGEN_SECONDS - regenElapsed)
       setRegenRemaining(regenRem)
-
-      // 自然回復実行
-      if (regenRem === 0) {
-        doRegen()
-      }
+      if (regenRem === 0) doRegen()
     }, 200)
     return () => clearInterval(id)
   }, [profile])
@@ -95,6 +95,8 @@ export default function Game() {
     if (!data) { nav('/create'); return }
     setProfile(data)
     setPendingPoints(data.pending_stat_points || 0)
+    const unlocked = data.unlocked_areas || [1]
+    if (!unlocked.includes(selectedArea)) setSelectedArea(unlocked[0])
   }
 
   const doRegen = async () => {
@@ -102,8 +104,7 @@ export default function Game() {
     const newHp = Math.min(profile.hp_max, Math.floor((profile.hp_current || profile.hp_max) + profile.hp_max * 0.1))
     const newMp = Math.min(profile.mp_max, Math.floor((profile.mp_current || profile.mp_max) + profile.mp_max * 0.1))
     await supabase.from('profiles').update({
-      hp_current: newHp,
-      mp_current: newMp,
+      hp_current: newHp, mp_current: newMp,
       last_regen_at: new Date().toISOString(),
     }).eq('id', profile.id)
     await fetchProfile()
@@ -197,10 +198,7 @@ export default function Game() {
     }
 
     await supabase.from('profiles').update({
-      exp: newExp,
-      exp_next: newExpNext,
-      lv: newLv,
-      gold: newGold,
+      exp: newExp, exp_next: newExpNext, lv: newLv, gold: newGold,
       hp_current: playerHp,
       boss_encounter_rate: newBossRate,
       unlocked_areas: newUnlockedAreas,
@@ -223,10 +221,7 @@ export default function Game() {
     }).eq('id', profile.id)
     await fetchProfile()
     setInnMessage('HPとMPが回復しました！')
-    setTimeout(() => {
-      setInnMessage('')
-      setScene('town')
-    }, 1500)
+    setTimeout(() => { setInnMessage(''); setScene('town') }, 1500)
   }
 
   const confirmStatPoints = async () => {
@@ -235,11 +230,11 @@ export default function Game() {
     const updates = {
       hp_max: profile.hp_max + (statPoints.hp || 0) * 10,
       mp_max: profile.mp_max + (statPoints.mp || 0) * 5,
-      atk:    profile.atk   + (statPoints.atk || 0),
-      def:    profile.def   + (statPoints.def || 0),
+      atk:    profile.atk   + (statPoints.atk  || 0),
+      def:    profile.def   + (statPoints.def  || 0),
       matk:   profile.matk  + (statPoints.matk || 0),
       mdef:   profile.mdef  + (statPoints.mdef || 0),
-      spd:    profile.spd   + (statPoints.spd || 0),
+      spd:    profile.spd   + (statPoints.spd  || 0),
       pending_stat_points: 0,
     }
     await supabase.from('profiles').update(updates).eq('id', profile.id)
@@ -249,15 +244,8 @@ export default function Game() {
     setShowStatPanel(false)
   }
 
-  const backToTown = () => {
-    setScene('town')
-    setBattleLogs([])
-  }
-
-  const logout = async () => {
-    await supabase.auth.signOut()
-    nav('/login')
-  }
+  const backToTown = () => { setScene('town'); setBattleLogs([]) }
+  const logout = async () => { await supabase.auth.signOut(); nav('/login') }
 
   if (!profile) return (
     <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
@@ -271,8 +259,10 @@ export default function Game() {
   const timerPct = ((WAIT_SECONDS - remaining) / WAIT_SECONDS) * 100
   const regenPct = ((REGEN_SECONDS - regenRemaining) / REGEN_SECONDS) * 100
   const unlockedAreas = profile.unlocked_areas || [1]
+  const availableAreas = AREAS.filter(a => unlockedAreas.includes(a.id))
   const innCost = profile.lv * 3
   const allocatedPoints = Object.values(statPoints).reduce((a, b) => a + b, 0)
+  const total = calcTotal(profile)
 
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
@@ -280,7 +270,16 @@ export default function Game() {
 
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
-          <button onClick={logout} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ログアウト</button>
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={() => nav('/ranking')}
+              style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+              🏆 ランキング
+            </button>
+            <button onClick={logout}
+              style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+              ログアウト
+            </button>
+          </div>
         </div>
 
         <div style={{ display:'grid', gridTemplateColumns:'220px 1fr', gap:'12px' }}>
@@ -291,7 +290,10 @@ export default function Game() {
               {profile.username}
             </div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>クラス: <span style={{color:'#88ccff'}}>{profile.class}</span></div>
-            <div style={{ fontSize:'11px', color:'#446688', marginBottom:'6px' }}>LV: <span style={{color:'#ffcc00'}}>{profile.lv}</span></div>
+            <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>LV: <span style={{color:'#ffcc00'}}>{profile.lv}</span></div>
+            <div style={{ fontSize:'11px', color:'#446688', marginBottom:'6px' }}>
+              総合力: <span style={{color:'#44ff88', fontWeight:'bold'}}>{total}</span>
+            </div>
 
             <StatBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color="#00cc44" />
             <StatBar label="MP" val={`${mpCurrent}/${profile.mp_max}`} pct={mpPct} color="#4488ff" />
@@ -303,7 +305,6 @@ export default function Game() {
               <div style={{ height:'100%', width:`${expPct}%`, background:'linear-gradient(90deg,#331100,#cc8800)', transition:'width 0.4s' }} />
             </div>
 
-            {/* 自然回復タイマー */}
             <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginBottom:'2px' }}>
               <span>自然回復まで</span>
               <span style={{color:'#44ccff'}}>{regenRemaining > 0 ? `${Math.ceil(regenRemaining)}秒` : '回復中...'}</span>
@@ -334,30 +335,28 @@ export default function Game() {
 
           {/* 右カラム */}
           <div>
-
-            {/* ステータス振り分けパネル */}
             {showStatPanel && (
               <div style={{ border:'1px solid #cc44ff', background:'#0a0020', padding:'12px', marginBottom:'8px' }}>
                 <div style={{ color:'#cc44ff', fontSize:'13px', marginBottom:'6px' }}>
                   ステータスポイント振り分け（残り {pendingPoints - allocatedPoints}pt）
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'10px' }}>
-                  {Object.keys(STAT_LABELS).map(stat => (
+                  {Object.entries(STAT_LABELS).map(([stat, label]) => (
                     <div key={stat} style={{
                       display:'flex', alignItems:'center', justifyContent:'space-between',
                       border:`1px solid ${(statPoints[stat]||0) > 0 ? '#cc44ff' : '#003366'}`,
                       background: (statPoints[stat]||0) > 0 ? '#1a0030' : '#000818',
                       padding:'6px 8px',
                     }}>
-                      <span style={{ color:'#88ccff', fontSize:'11px' }}>{STAT_LABELS[stat]}</span>
-                      <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+                      <span style={{ color:'#88ccff', fontSize:'10px' }}>{label}</span>
+                      <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
                         <button onClick={() => {
                           if ((statPoints[stat]||0) > 0) setStatPoints(p => ({ ...p, [stat]: p[stat] - 1 }))
-                        }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 6px', fontFamily:'monospace' }}>-</button>
+                        }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>-</button>
                         <span style={{ color:'#cc44ff', fontSize:'11px', minWidth:'16px', textAlign:'center' }}>{statPoints[stat]||0}</span>
                         <button onClick={() => {
                           if (allocatedPoints < pendingPoints) setStatPoints(p => ({ ...p, [stat]: (p[stat]||0) + 1 }))
-                        }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 6px', fontFamily:'monospace' }}>+</button>
+                        }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>+</button>
                       </div>
                     </div>
                   ))}
@@ -376,11 +375,9 @@ export default function Game() {
               </div>
             )}
 
-            {/* 街 */}
             {scene === 'town' && (
               <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'8px' }}>
                 <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
-
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
                   <span style={{ color:'#446688' }}>次の行動まで</span>
                   <span style={{ color: canAct ? '#44ff88' : '#ffcc00' }}>
@@ -391,22 +388,13 @@ export default function Game() {
                   <div style={{ height:'100%', width:`${timerPct}%`, background: canAct ? '#44ff88' : 'linear-gradient(90deg,#003366,#0088ff)', transition:'width 0.2s' }} />
                 </div>
 
-                {/* エリア選択プルダウン */}
                 <div style={{ marginBottom:'10px' }}>
                   <div style={{ color:'#446688', fontSize:'11px', marginBottom:'4px' }}>エリア選択</div>
-                  <select
-                    value={selectedArea}
-                    onChange={e => setSelectedArea(Number(e.target.value))}
-                    style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'6px', fontFamily:'monospace', fontSize:'12px' }}
-                  >
-                    {AREAS.map(area => {
-                      const unlocked = unlockedAreas.includes(area.id)
-                      return (
-                        <option key={area.id} value={area.id} disabled={!unlocked}>
-                          {unlocked ? area.name : `🔒 ${area.name}`}
-                        </option>
-                      )
-                    })}
+                  <select value={selectedArea} onChange={e => setSelectedArea(Number(e.target.value))}
+                    style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'6px', fontFamily:'monospace', fontSize:'12px' }}>
+                    {availableAreas.map(area => (
+                      <option key={area.id} value={area.id}>{area.name}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -422,11 +410,9 @@ export default function Game() {
               </div>
             )}
 
-            {/* 宿屋 */}
             {scene === 'inn' && (
               <div style={{ border:'1px solid #0088aa', background:'#001030', padding:'20px', textAlign:'center' }}>
                 <div style={{ color:'#00aacc', fontSize:'14px', marginBottom:'16px' }}>🏨 宿屋</div>
-
                 {innMessage ? (
                   <div style={{ color:'#44ff88', fontSize:'14px', padding:'20px' }}>{innMessage}</div>
                 ) : (
@@ -454,7 +440,6 @@ export default function Game() {
               </div>
             )}
 
-            {/* バトル */}
             {scene === 'battle' && (
               <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
                 <div style={{ color:'#ff6644', fontSize:'13px', marginBottom:'10px' }}>⚔ バトル！</div>

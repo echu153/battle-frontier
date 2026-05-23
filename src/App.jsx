@@ -4,6 +4,7 @@ import { supabase } from './supabase'
 import Login from './pages/Login'
 import CharCreate from './pages/CharCreate'
 import Game from './pages/Game'
+import Ranking from './pages/Ranking'
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -38,6 +39,7 @@ function App() {
         <Route path="/login" element={!session ? <Login /> : <Navigate to={hasChar ? '/game' : '/create'} />} />
         <Route path="/create" element={session && !hasChar ? <CharCreate /> : <Navigate to={!session ? '/login' : '/game'} />} />
         <Route path="/game" element={session && hasChar ? <Game /> : <Navigate to={!session ? '/login' : '/create'} />} />
+        <Route path="/ranking" element={session ? <Ranking /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>
