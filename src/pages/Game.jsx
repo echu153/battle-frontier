@@ -183,11 +183,9 @@ const calcClassStats = (className, lv) => {
   return stats
 }
 
-// スキル発動処理
 const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs) => {
   const result = { dmg: 0, heal: 0, log: '', newEnemyBuffs: { ...enemyBuffs }, newPlayerBuffs: { ...playerBuffs } }
   const randMult = (min, max) => min + Math.random() * (max - min)
-
   switch (skill.name) {
     case '体当たり':
       result.dmg = Math.floor(eff.atk * randMult(1.1, 1.2))
@@ -207,7 +205,7 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs) => {
       result.log = `🛡 防御態勢！ 4ターンの間防御力と特殊防御力が上昇した！`
       break
     case '応急手当':
-      result.heal = Math.floor(profile.matk * randMult(1.1, 1.2))
+      result.heal = Math.floor(eff.matk * randMult(1.1, 1.2))
       result.log = `💊 応急手当！ HPを${result.heal}回復した！`
       break
     case '狙撃':
@@ -331,8 +329,11 @@ export default function Game() {
     const current = profile.hp_current ?? profile.hp_max
     const newHp = Math.min(profile.hp_max, Math.floor(current + profile.hp_max * 0.1))
     const newMp = Math.min(profile.mp_max, Math.floor((profile.mp_current ?? profile.mp_max) + profile.mp_max * 0.1))
+    // HP満タンになったら瀕死フラグ解除
+    const newIsDying = newHp >= profile.hp_max ? false : profile.is_dying
     await supabase.from('profiles').update({
       hp_current: newHp, mp_current: newMp,
+      is_dying: newIsDying,
       last_regen_at: new Date().toISOString(),
     }).eq('id', profile.id)
     await fetchProfile()
@@ -359,6 +360,7 @@ export default function Game() {
       hp_max: newStats.hp_max, mp_max: newStats.mp_max,
       hp_current: newStats.hp_max, mp_current: newStats.mp_max,
       atk: newStats.atk, def: newStats.def, matk: newStats.matk, mdef: newStats.mdef, spd: newStats.spd,
+      is_dying: false,
     }).eq('id', profile.id)
     await fetchProfile()
     setTempleMessage(`${targetClass}に転職しました！`)
@@ -369,8 +371,8 @@ export default function Game() {
     if (!canAct || loading) return
     const hpCurrent = profile.hp_current ?? profile.hp_max
     if (hpCurrent <= 0) return
-    // ★ 瀕死後HP満タンでないと戦闘不可
-    if (hpCurrent < profile.hp_max) return
+    // ★ 瀕死フラグ中はHP満タンでないと戦闘不可
+    if (profile.is_dying && hpCurrent < profile.hp_max) return
     setLoading(true)
     setScene('battle')
     setBattleLogs([])
@@ -387,6 +389,7 @@ export default function Game() {
     let enemyHp = enemy.hp
     let turn = 1
     let skillIndex = 0
+    let skillUseCount = 0
     let playerBuffs = {}
     let enemyBuffs = {}
 
@@ -400,14 +403,19 @@ export default function Game() {
     const weaponType = equippedWeaponItem?.weapons?.weapon_type || 'sword'
     const isMagical = getWeaponGroup(weaponType) === 'magical'
 
+    // スキルセットを使用回数込みで展開
+    const expandedSkillSet = []
+    for (const ss of skillSets) {
+      const count = ss.use_count || 1
+      for (let i = 0; i < count; i++) expandedSkillSet.push(ss)
+    }
+
     while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
-      // バフ適用
       const playerDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
       const playerMdef = eff.mdef * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
       const playerMatk = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1)
       const playerSpd  = eff.spd  * (playerBuffs.spdUp  ? playerBuffs.spdUp.rate  : 1)
       const effWithBuff = { ...eff, def: playerDef, mdef: playerMdef, matk: playerMatk, spd: playerSpd }
-
       const enemyDefRate  = enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1
       const enemyMdefRate = enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1
 
@@ -417,10 +425,10 @@ export default function Game() {
         logs.push({ text:`🙏 祈祷の効果でHPが${playerBuffs.regenHeal.amount}回復した！`, color:'#44ff88' })
       }
 
-      // スキル発動
+      // スキル発動（use_count対応）
       let skillUsed = false
-      if (skillSets.length > 0) {
-        const currentSkill = skillSets[skillIndex % skillSets.length]
+      if (expandedSkillSet.length > 0) {
+        const currentSkill = expandedSkillSet[skillIndex % expandedSkillSet.length]
         if (currentSkill && currentSkill.skills && playerMp >= currentSkill.skills.mp_cost) {
           playerMp -= currentSkill.skills.mp_cost
           const result = executeSkill(currentSkill.skills, effWithBuff, profile, enemy, enemyBuffs, playerBuffs)
@@ -434,7 +442,6 @@ export default function Game() {
         }
       }
 
-      // スキルが使えなかった場合は通常攻撃
       if (!skillUsed) {
         const baseAtk = isMagical ? effWithBuff.matk : effWithBuff.atk
         const enemyDefVal = isMagical
@@ -443,21 +450,18 @@ export default function Game() {
         const dmg = Math.max(1, baseAtk - enemyDefVal + Math.floor(Math.random() * 4))
         enemyHp -= dmg
         logs.push({ text:`${turn}ターン目: あなたの攻撃！ ${enemy.name}に${dmg}ダメージ！`, color:'#ffcc00' })
-        if (skillSets.length > 0) skillIndex++
+        if (expandedSkillSet.length > 0) skillIndex++
       }
 
       if (enemyHp <= 0) break
 
-      // 敵の攻撃
       const defVal = isMagical ? Math.floor(playerMdef / 2) : Math.floor(playerDef / 2)
       const dmgToPlayer = Math.max(1, enemy.atk - defVal + Math.floor(Math.random() * 3))
       playerHp -= dmgToPlayer
       logs.push({ text:`${turn}ターン目: ${enemy.name}の反撃！ あなたに${dmgToPlayer}ダメージ…`, color:'#ff6644' })
 
-      // バフターン減少
       Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns > 0) playerBuffs[k].turns-- })
       Object.keys(enemyBuffs).forEach(k => { if (enemyBuffs[k]?.turns > 0) enemyBuffs[k].turns-- })
-
       turn++
     }
 
@@ -474,7 +478,12 @@ export default function Game() {
       logs.push({ text:`EXP + ${expGained}`, color:'#ff6644' })
     }
 
-    if (playerHp === 0) logs.push({ text:`⚠ 瀕死状態！宿屋でHP全回復してください。`, color:'#ff4444' })
+    // ★ HP0になったら瀕死フラグを立てる
+    let newIsDying = profile.is_dying || false
+    if (playerHp === 0) {
+      newIsDying = true
+      logs.push({ text:`⚠ 瀕死状態！宿屋でHP全回復してください。`, color:'#ff4444' })
+    }
     setBattleLogs(logs)
 
     // ドロップ処理
@@ -535,8 +544,7 @@ export default function Game() {
     const { data: classSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class)
     const { data: learnedSkills } = await supabase.from('player_skills').select('skill_id').eq('player_id', profile.id)
     const learnedIds = (learnedSkills || []).map(s => s.skill_id)
-    let newLvForCheck = profile.lv
-    const toLearn = (classSkills || []).filter(s => s.required_lv <= newLvForCheck && !learnedIds.includes(s.id))
+    const toLearn = (classSkills || []).filter(s => s.required_lv <= profile.lv && !learnedIds.includes(s.id))
     for (const skill of toLearn) {
       await supabase.from('player_skills').insert({ player_id: profile.id, skill_id: skill.id })
       logs.push({ text:`⚡ スキル「${skill.name}」を習得した！`, color:'#cc44ff' })
@@ -591,6 +599,7 @@ export default function Game() {
     await supabase.from('profiles').update({
       exp: newExp, exp_next: newExpNext, lv: newLv, gold: newGold,
       hp_current: playerHp, mp_current: playerMp,
+      is_dying: newIsDying,
       boss_encounter_rate: newBossRate,
       unlocked_areas: newUnlockedAreas,
       pending_stat_points: newPendingPoints,
@@ -602,12 +611,12 @@ export default function Game() {
   }
 
   const useInn = async () => {
-    const isDying = (profile.hp_current ?? profile.hp_max) <= 0
-    const cost = isDying ? profile.lv * 30 : profile.lv * 3
+    const cost = profile.is_dying ? profile.lv * 30 : profile.lv * 3
     if (profile.gold < cost) return
     await supabase.from('profiles').update({
       hp_current: profile.hp_max, mp_current: profile.mp_max,
       gold: profile.gold - cost,
+      is_dying: false,
     }).eq('id', profile.id)
     await fetchProfile()
     setInnMessage('HPとMPが回復しました！')
@@ -643,9 +652,8 @@ export default function Game() {
 
   const hpCurrent = Math.max(0, profile.hp_current ?? profile.hp_max)
   const mpCurrent = Math.max(0, profile.mp_current ?? profile.mp_max)
-  const isDying = hpCurrent <= 0
-  // ★ HP満タンでないと戦闘不可
-  const canBattle = hpCurrent >= profile.hp_max
+  const isDying = profile.is_dying || false
+  const canBattle = !isDying || hpCurrent >= profile.hp_max
   const hpPct = Math.min(100, (hpCurrent / profile.hp_max) * 100)
   const mpPct = Math.min(100, (mpCurrent / profile.mp_max) * 100)
   const expPct = Math.min(100, (profile.exp / profile.exp_next) * 100)
@@ -683,13 +691,12 @@ export default function Game() {
 
         <div style={{ display:'grid', gridTemplateColumns:'220px 1fr', gap:'12px' }}>
           <div style={{ border:`1px solid ${isDying ? '#660000' : '#0044aa'}`, background:'#001040', padding:'10px', alignSelf:'start' }}>
-            {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'4px', background:'#1a0000' }}>⚠ 瀕死状態</div>}
-            {!isDying && !canBattle && <div style={{ color:'#ff8800', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #664400', padding:'4px', background:'#1a0800' }}>⚠ HP全回復まで出撃不可</div>}
+            {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'4px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
             <div style={{ color:'#ffcc00', fontSize:'12px', borderBottom:'1px dashed #003366', paddingBottom:'4px', marginBottom:'8px' }}>{profile.username}</div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>クラス: <span style={{color:'#88ccff'}}>{profile.class}</span></div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>LV: <span style={{color:'#ffcc00'}}>{profile.lv}</span></div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'6px' }}>総合力: <span style={{color:'#44ff88', fontWeight:'bold'}}>{total}</span></div>
-            <StatBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying ? '#ff2200' : canBattle ? '#00cc44' : '#ff8800'} />
+            <StatBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying ? '#ff2200' : '#00cc44'} />
             <StatBar label="MP" val={`${mpCurrent}/${profile.mp_max}`} pct={mpPct} color="#4488ff" />
             <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginTop:'6px' }}>
               <span>経験値</span><span style={{color:'#cc8800'}}>{profile.exp}/{profile.exp_next}</span>
@@ -747,7 +754,6 @@ export default function Game() {
               <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'8px' }}>
                 <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
                 {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'10px', border:'1px solid #660000', padding:'8px', background:'#1a0000' }}>⚠ 瀕死状態です。宿屋でHP全回復してください。</div>}
-                {!isDying && !canBattle && <div style={{ color:'#ff8800', fontSize:'11px', textAlign:'center', marginBottom:'10px', border:'1px solid #664400', padding:'8px', background:'#1a0800' }}>⚠ HPが最大値まで回復しないと出撃できません。</div>}
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
                   <span style={{ color:'#446688' }}>次の行動まで</span>
                   <span style={{ color: canAct ? '#44ff88' : '#ffcc00' }}>{canAct ? '▶ 出撃可能！' : `${remaining.toFixed(1)}秒`}</span>
@@ -763,7 +769,7 @@ export default function Game() {
                 </div>
                 <button onClick={doBattle} disabled={!canAct || loading || !canBattle}
                   style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct && canBattle ? '#ffcc00' : '#003366'}`, color: canAct && canBattle ? '#ffcc00' : '#446688', cursor: canAct && canBattle ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
-                  {isDying ? '💀 瀕死中（出撃不可）' : !canBattle ? '💔 HP回復中（出撃不可）' : canAct ? `⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！` : '⏳ 待機中...'}
+                  {isDying && !canBattle ? '💀 瀕死中（HP全回復まで出撃不可）' : canAct ? `⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！` : '⏳ 待機中...'}
                 </button>
                 <button onClick={() => { setScene('inn'); setInnMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🏨 宿屋へ</button>
                 <button onClick={() => { setScene('temple'); setTempleMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿へ</button>

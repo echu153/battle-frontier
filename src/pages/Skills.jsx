@@ -23,31 +23,22 @@ export default function Skills() {
   const fetchAll = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
-
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     setProfile(p)
-
-    // クラスに対応したスキルを取得
     const { data: skills } = await supabase
       .from('skills').select('*')
       .eq('class_name', p.class)
       .order('required_lv')
     setAllSkills(skills || [])
-
-    // 習得済みスキル
     const { data: ps } = await supabase
       .from('player_skills').select('*, skills(*)')
       .eq('player_id', user.id)
     setPlayerSkills(ps || [])
-
-    // スキルセット
     const { data: ss } = await supabase
       .from('skill_sets').select('*, skills(*)')
       .eq('player_id', user.id)
       .order('slot_order')
     setSkillSets(ss || [])
-
-    // レベルに応じたスキル自動習得チェック
     await checkAndLearnSkills(user.id, p, skills || [], ps || [])
   }
 
@@ -55,51 +46,37 @@ export default function Skills() {
     const learnedIds = learned.map(ps => ps.skill_id)
     const toLearn = skills.filter(s => s.required_lv <= p.lv && !learnedIds.includes(s.id))
     for (const skill of toLearn) {
-      await supabase.from('player_skills').insert({
-        player_id: userId,
-        skill_id: skill.id,
-      })
+      await supabase.from('player_skills').insert({ player_id: userId, skill_id: skill.id })
     }
     if (toLearn.length > 0) {
-      const { data: ps } = await supabase
-        .from('player_skills').select('*, skills(*)')
-        .eq('player_id', userId)
+      const { data: ps } = await supabase.from('player_skills').select('*, skills(*)').eq('player_id', userId)
       setPlayerSkills(ps || [])
     }
   }
 
   const setSkillToSlot = async (skillId, slotOrder) => {
     setLoading(true)
-    // 同じスキルが他のスロットにあれば削除
-    await supabase.from('skill_sets')
-      .delete()
-      .eq('player_id', profile.id)
-      .eq('skill_id', skillId)
-
-    // スロットに設定
+    await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('skill_id', skillId)
     const existing = skillSets.find(ss => ss.slot_order === slotOrder)
     if (existing) {
-      await supabase.from('skill_sets')
-        .update({ skill_id: skillId })
-        .eq('player_id', profile.id)
-        .eq('slot_order', slotOrder)
+      await supabase.from('skill_sets').update({ skill_id: skillId, use_count: 1 }).eq('player_id', profile.id).eq('slot_order', slotOrder)
     } else {
-      await supabase.from('skill_sets').insert({
-        player_id: profile.id,
-        skill_id: skillId,
-        slot_order: slotOrder,
-      })
+      await supabase.from('skill_sets').insert({ player_id: profile.id, skill_id: skillId, slot_order: slotOrder, use_count: 1 })
     }
+    await fetchAll()
+    setLoading(false)
+  }
+
+  const updateUseCount = async (slotOrder, useCount) => {
+    setLoading(true)
+    await supabase.from('skill_sets').update({ use_count: useCount }).eq('player_id', profile.id).eq('slot_order', slotOrder)
     await fetchAll()
     setLoading(false)
   }
 
   const removeFromSlot = async (slotOrder) => {
     setLoading(true)
-    await supabase.from('skill_sets')
-      .delete()
-      .eq('player_id', profile.id)
-      .eq('slot_order', slotOrder)
+    await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('slot_order', slotOrder)
     await fetchAll()
     setLoading(false)
   }
@@ -113,7 +90,6 @@ export default function Skills() {
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'700px', margin:'0 auto' }}>
-
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
           <button onClick={() => nav('/game')}
@@ -142,6 +118,15 @@ export default function Skills() {
                         {set.skills.name}
                       </span>
                       <span style={{ color:'#446688', fontSize:'10px' }}>MP{set.skills.mp_cost}</span>
+                      {/* 使用回数プルダウン */}
+                      <select
+                        value={set.use_count || 1}
+                        onChange={e => updateUseCount(slot, Number(e.target.value))}
+                        style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'2px' }}>
+                        {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                          <option key={n} value={n}>{n}回</option>
+                        ))}
+                      </select>
                       <button onClick={() => removeFromSlot(slot)} disabled={loading}
                         style={{ padding:'2px 6px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
                         外す
@@ -187,7 +172,7 @@ export default function Skills() {
                       ))}
                     </select>
                   )}
-                  {inSet && <span style={{ color:'#0088ff', fontSize:'10px' }}>スロット{inSet.slot_order}</span>}
+                  {inSet && <span style={{ color:'#0088ff', fontSize:'10px' }}>スロット{inSet.slot_order}（{inSet.use_count || 1}回）</span>}
                   {!learned && <span style={{ color:'#446688', fontSize:'10px' }}>LV{skill.required_lv}で習得</span>}
                 </div>
               </div>
