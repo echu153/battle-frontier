@@ -3,11 +3,29 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
 const CLASSES = [
-  { id:'戦士',    icon:'⚔️',  hp:120, mp:20,  atk:15, def:10, matk:5,  mdef:8,  spd:8,  desc:'高HP・高防御の前衛', weaponName:'木の剣' },
-  { id:'弓使い',  icon:'🏹',  hp:90,  mp:40,  atk:12, def:6,  matk:8,  mdef:6,  spd:15, desc:'素早さ特化のバランス型', weaponName:'短弓' },
-  { id:'魔法使い',icon:'🔮',  hp:60,  mp:100, atk:5,  def:3,  matk:20, mdef:10, spd:10, desc:'高魔力・強力な魔法攻撃', weaponName:'木の杖' },
-  { id:'僧侶',    icon:'✨',  hp:80,  mp:80,  atk:6,  def:6,  matk:15, mdef:15, spd:9,  desc:'回復・魔法防御が高い', weaponName:'聖なる杖' },
+  {
+    id:'戦士', icon:'⚔️',
+    hp_max:80, mp_max:10, atk:10, def:8, matk:1, mdef:3, spd:5,
+    desc:'高HP・高防御の前衛', weaponName:'木の剣'
+  },
+  {
+    id:'弓使い', icon:'🏹',
+    hp_max:60, mp_max:15, atk:8, def:4, matk:2, mdef:3, spd:10,
+    desc:'素早さ特化のバランス型', weaponName:'短弓'
+  },
+  {
+    id:'魔法使い', icon:'🔮',
+    hp_max:45, mp_max:50, atk:2, def:2, matk:14, mdef:4, spd:4,
+    desc:'高魔力・強力な魔法攻撃', weaponName:'木の杖'
+  },
+  {
+    id:'僧侶', icon:'✨',
+    hp_max:55, mp_max:45, atk:2, def:3, matk:7, mdef:12, spd:3,
+    desc:'回復・魔法防御が高い', weaponName:'聖なる杖'
+  },
 ]
+
+const ALL_INITIAL_CLASSES = ['戦士', '弓使い', '魔法使い', '僧侶']
 
 export default function CharCreate() {
   const nav = useNavigate()
@@ -35,14 +53,23 @@ export default function CharCreate() {
         id: user.id,
         username: username.trim(),
         class: selectedClass,
-        hp: c.hp, hp_max: c.hp,
-        mp: c.mp, mp_max: c.mp,
-        hp_current: c.hp,
-        mp_current: c.mp,
+        hp_max: c.hp_max,
+        mp_max: c.mp_max,
+        hp_current: c.hp_max,
+        mp_current: c.mp_max,
         atk: c.atk, def: c.def,
         matk: c.matk, mdef: c.mdef, spd: c.spd,
       })
       if (pErr) throw pErr
+
+      // class_levelsに全初期職のデータを登録
+      const classLevelData = ALL_INITIAL_CLASSES.map(cls => ({
+        player_id: user.id,
+        class_name: cls,
+        lv: cls === selectedClass ? 1 : 1,
+        exp: 0,
+      }))
+      await supabase.from('class_levels').insert(classLevelData)
 
       // 初期武器を取得
       const { data: weapon } = await supabase
@@ -63,6 +90,9 @@ export default function CharCreate() {
         await supabase.from('proficiency').insert({
           player_id: user.id,
           weapon_id: weapon.id,
+          prof_exp: 0,
+          prof_lv: 1,
+          awakening: 0,
         })
       }
 
@@ -114,8 +144,8 @@ export default function CharCreate() {
             <div style={{ background:'#000818', border:'1px solid #002244', padding:'10px', fontSize:'11px' }}>
               <div style={{ color:'#88ccff', marginBottom:'6px' }}>{selectedJob.desc}</div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'4px', color:'#446688' }}>
-                <span>HP: <span style={{color:'#44ff88'}}>{selectedJob.hp}</span></span>
-                <span>MP: <span style={{color:'#4488ff'}}>{selectedJob.mp}</span></span>
+                <span>HP: <span style={{color:'#44ff88'}}>{selectedJob.hp_max}</span></span>
+                <span>MP: <span style={{color:'#4488ff'}}>{selectedJob.mp_max}</span></span>
                 <span>攻撃力: <span style={{color:'#ffcc00'}}>{selectedJob.atk}</span></span>
                 <span>防御力: <span style={{color:'#88aaff'}}>{selectedJob.def}</span></span>
                 <span>特殊攻撃: <span style={{color:'#cc44ff'}}>{selectedJob.matk}</span></span>
