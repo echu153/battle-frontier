@@ -7,6 +7,8 @@ import Game from './pages/Game'
 import Ranking from './pages/Ranking'
 import Equipment from './pages/Equipment'
 import Skills from './pages/Skills'
+import Shop from './pages/Shop'
+import Smithy from './pages/Smithy'
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -44,6 +46,8 @@ function App() {
         <Route path="/ranking" element={session ? <Ranking /> : <Navigate to="/login" />} />
         <Route path="/equipment" element={session ? <Equipment /> : <Navigate to="/login" />} />
         <Route path="/skills" element={session ? <Skills /> : <Navigate to="/login" />} />
+        <Route path="/shop" element={session ? <Shop /> : <Navigate to="/login" />} />
+        <Route path="/smithy" element={session ? <Smithy /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>

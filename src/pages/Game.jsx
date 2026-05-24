@@ -9,32 +9,32 @@ const AREAS = [
   {
     id: 1, name: '始まりの森',
     enemies: [
-      { name:'スライム',   hp:20,  atk:8,   def:2,  gold:5   },
-      { name:'コウモリ',   hp:25,  atk:10,  def:2,  gold:6   },
-      { name:'毒キノコ',   hp:40,  atk:15,  def:3,  gold:8   },
+      { name:'スライム',   hp:30,  atk:8,   def:3,  matk:0,  mdef:3,  spd:3,  type:'physical' },
+      { name:'コウモリ',   hp:37,  atk:10,  def:3,  matk:0,  mdef:3,  spd:15, type:'physical' },
+      { name:'毒キノコ',   hp:60,  atk:3,   def:4,  matk:12, mdef:7,  spd:2,  type:'magical'  },
     ],
-    boss: { name:'ビッグスライム', hp:500, atk:40, def:10, gold:100, isBoss:true },
+    boss: { name:'ビッグスライム', hp:500, atk:28, def:22, matk:5, mdef:12, spd:8, gold:100, isBoss:true, type:'physical' },
     commonDrops: ['木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス'],
     bossDrops: ['スライムの指輪','蒼粘剣'],
   },
   {
     id: 2, name: '荒廃した草原',
     enemies: [
-      { name:'ゴブリン',   hp:80,  atk:35,  def:8,  gold:20  },
-      { name:'野良犬',     hp:100, atk:45,  def:10, gold:25  },
-      { name:'盗賊',       hp:120, atk:55,  def:12, gold:30  },
+      { name:'ゴブリン',   hp:160, atk:35,  def:16, matk:0,  mdef:10, spd:10, type:'physical' },
+      { name:'野良犬',     hp:200, atk:45,  def:20, matk:0,  mdef:10, spd:20, type:'physical' },
+      { name:'盗賊',       hp:240, atk:55,  def:24, matk:10, mdef:16, spd:12, type:'physical' },
     ],
-    boss: { name:'盗賊団のリーダー', hp:2000, atk:120, def:30, gold:500, isBoss:true },
+    boss: { name:'盗賊団のリーダー', hp:2000, atk:84, def:30, matk:20, mdef:22, spd:15, gold:500, isBoss:true, type:'physical' },
     commonDrops: [], bossDrops: [],
   },
   {
     id: 3, name: '古代の洞窟',
     enemies: [
-      { name:'コボルト',   hp:200, atk:100, def:25, gold:60  },
-      { name:'スケルトン', hp:250, atk:120, def:30, gold:80  },
-      { name:'ゴーレム',   hp:300, atk:150, def:40, gold:100 },
+      { name:'コボルト',   hp:400, atk:100, def:50, matk:0,  mdef:30, spd:12, type:'physical' },
+      { name:'スケルトン', hp:500, atk:120, def:60, matk:30, mdef:40, spd:10, type:'physical' },
+      { name:'ゴーレム',   hp:600, atk:150, def:80, matk:0,  mdef:40, spd:3,  type:'physical' },
     ],
-    boss: { name:'古代の番人', hp:8000, atk:300, def:80, gold:2000, isBoss:true },
+    boss: { name:'古代の番人', hp:8000, atk:210, def:80, matk:80, mdef:60, spd:10, gold:2000, isBoss:true, type:'magical' },
     commonDrops: [], bossDrops: [],
   },
 ]
@@ -69,7 +69,12 @@ const JOB_GROWTH = {
   '賢者':    { hp:10, mp:10, atk:0, def:1, matk:2, mdef:3, spd:0 },
 }
 
+// 初期職3レベルごとボーナス
 const JOB_LEVEL3_BONUS = {
+  '戦士':    ['matk'],
+  '弓使い':  ['matk'],
+  '魔法使い':['atk'],
+  '僧侶':    ['atk'],
   '侍':      ['matk'],
   '狂戦士':  ['matk','mdef','spd'],
   '狩人':    ['matk','mdef'],
@@ -97,10 +102,34 @@ const STAT_LABELS = {
   matk:'特殊攻撃力 (+1)', mdef:'特殊防御力 (+1)', spd:'素早さ (+1)'
 }
 
+// ランク計算
+const getStatRank = (val, type) => {
+  let thresholds
+  if (type === 'hp') thresholds = [450, 1200, 2400, 4500, 7500, 12000, 18000, 27000]
+  else if (type === 'mp') thresholds = [225, 600, 1200, 2250, 3750, 6000, 9000, 13500]
+  else thresholds = [45, 120, 240, 450, 750, 1200, 1800, 2700]
+  const ranks = ['F','E','D','C','B','A','S','SS','SSS']
+  const colors = ['#888888','#6699cc','#ff8844','#44bb44','#4488ff','#ff4444','#ffcc00','#ffcc00','#ffcc00']
+  for (let i = 0; i < thresholds.length; i++) {
+    if (val <= thresholds[i]) return { rank: ranks[i], color: colors[i] }
+  }
+  return { rank: 'SSS', color: '#ffcc00' }
+}
+
 const calcTotal = (p) => Math.floor(
   (p.hp_max / 10) + (p.mp_max / 5) +
   p.atk + p.def + p.matk + p.mdef + p.spd
 )
+
+const getTotalRank = (total) => {
+  const thresholds = [200, 500, 1000, 2000, 4000, 7000, 11000, 16000]
+  const ranks = ['F','E','D','C','B','A','S','SS','SSS']
+  const colors = ['#888888','#6699cc','#ff8844','#44bb44','#4488ff','#ff4444','#ffcc00','#ffcc00','#ffcc00']
+  for (let i = 0; i < thresholds.length; i++) {
+    if (total <= thresholds[i]) return { rank: ranks[i], color: colors[i] }
+  }
+  return { rank: 'SSS', color: '#ffcc00' }
+}
 
 const calcExpNext = (lv) => (Math.floor((lv - 1) / 10) + 1) * 100
 
@@ -176,11 +205,18 @@ const calcClassStats = (className, lv) => {
     if (i % 3 === 0 && bonusSlots.length > 0) {
       const bonusIndex = Math.floor(i / 3 - 1) % bonusSlots.length
       stats[bonusSlots[bonusIndex]] += 1
-      if (growth.mp > 0) stats.mp_max -= 5
-      else stats.hp_max -= 10
     }
   }
   return stats
+}
+
+// 素早さ追加行動確率計算
+const calcExtraActionRate = (mySpd, enemySpd) => {
+  if (mySpd <= enemySpd) return 0
+  const diff = mySpd - enemySpd
+  const rawRate = (diff / enemySpd) * 50
+  if (rawRate <= 50) return rawRate
+  return 50 + (rawRate - 50) * 0.5
 }
 
 const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs) => {
@@ -287,6 +323,7 @@ export default function Game() {
   const [classLevels, setClassLevels] = useState([])
   const [templeMessage, setTempleMessage] = useState('')
   const [skillSets, setSkillSets] = useState([])
+  const [playerItem, setPlayerItem] = useState(null)
 
   useEffect(() => { fetchProfile() }, [])
 
@@ -322,6 +359,8 @@ export default function Game() {
     setClassLevels(cl || [])
     const { data: ss } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', user.id).order('slot_order')
     setSkillSets(ss || [])
+    const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id).eq('equipped', true).single()
+    setPlayerItem(pi || null)
   }
 
   const doRegen = async () => {
@@ -329,7 +368,6 @@ export default function Game() {
     const current = profile.hp_current ?? profile.hp_max
     const newHp = Math.min(profile.hp_max, Math.floor(current + profile.hp_max * 0.1))
     const newMp = Math.min(profile.mp_max, Math.floor((profile.mp_current ?? profile.mp_max) + profile.mp_max * 0.1))
-    // HP満タンになったら瀕死フラグ解除
     const newIsDying = newHp >= profile.hp_max ? false : profile.is_dying
     await supabase.from('profiles').update({
       hp_current: newHp, mp_current: newMp,
@@ -371,7 +409,6 @@ export default function Game() {
     if (!canAct || loading) return
     const hpCurrent = profile.hp_current ?? profile.hp_max
     if (hpCurrent <= 0) return
-    // ★ 瀕死フラグ中はHP満タンでないと戦闘不可
     if (profile.is_dying && hpCurrent < profile.hp_max) return
     setLoading(true)
     setScene('battle')
@@ -389,9 +426,24 @@ export default function Game() {
     let enemyHp = enemy.hp
     let turn = 1
     let skillIndex = 0
-    let skillUseCount = 0
     let playerBuffs = {}
     let enemyBuffs = {}
+    let itemUsed = false
+    let currentItem = playerItem ? { ...playerItem } : null
+
+    // 魔よけのお守り処理
+    if (isBossEncounter && currentItem && currentItem.items.effect === 'boss_avoid') {
+      logs.push({ text:`🧿 魔よけのお守りが光り、ボスとの戦闘を避けた！`, color:'#cc44ff' })
+      setBattleLogs([...logs])
+      await supabase.from('player_items').delete().eq('id', currentItem.id)
+      await supabase.from('profiles').update({
+        boss_encounter_rate: 0,
+        last_action_at: new Date().toISOString(),
+      }).eq('id', profile.id)
+      await fetchProfile()
+      setLoading(false)
+      return
+    }
 
     if (isBossEncounter) {
       logs.push({ text:`⚠ ボス出現！ ${enemy.name}が現れた！`, color:'#ff4444' })
@@ -403,19 +455,24 @@ export default function Game() {
     const weaponType = equippedWeaponItem?.weapons?.weapon_type || 'sword'
     const isMagical = getWeaponGroup(weaponType) === 'magical'
 
-    // スキルセットを使用回数込みで展開
     const expandedSkillSet = []
     for (const ss of skillSets) {
       const count = ss.use_count || 1
       for (let i = 0; i < count; i++) expandedSkillSet.push(ss)
     }
 
+    // 素早さ比率計算
+    const playerSpd = eff.spd
+    const enemySpd = enemy.spd || 5
+    const playerExtraRate = calcExtraActionRate(playerSpd, enemySpd)
+    const enemyExtraRate = calcExtraActionRate(enemySpd, playerSpd)
+
     while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
       const playerDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
       const playerMdef = eff.mdef * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
       const playerMatk = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1)
-      const playerSpd  = eff.spd  * (playerBuffs.spdUp  ? playerBuffs.spdUp.rate  : 1)
-      const effWithBuff = { ...eff, def: playerDef, mdef: playerMdef, matk: playerMatk, spd: playerSpd }
+      const playerSpdBuff = eff.spd * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1)
+      const effWithBuff = { ...eff, def: playerDef, mdef: playerMdef, matk: playerMatk, spd: playerSpdBuff }
       const enemyDefRate  = enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1
       const enemyMdefRate = enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1
 
@@ -425,40 +482,82 @@ export default function Game() {
         logs.push({ text:`🙏 祈祷の効果でHPが${playerBuffs.regenHeal.amount}回復した！`, color:'#44ff88' })
       }
 
-      // スキル発動（use_count対応）
-      let skillUsed = false
-      if (expandedSkillSet.length > 0) {
-        const currentSkill = expandedSkillSet[skillIndex % expandedSkillSet.length]
-        if (currentSkill && currentSkill.skills && playerMp >= currentSkill.skills.mp_cost) {
-          playerMp -= currentSkill.skills.mp_cost
-          const result = executeSkill(currentSkill.skills, effWithBuff, profile, enemy, enemyBuffs, playerBuffs)
-          enemyHp -= result.dmg
-          playerHp = Math.min(profile.hp_max, playerHp + result.heal)
-          playerBuffs = result.newPlayerBuffs
-          enemyBuffs = result.newEnemyBuffs
-          logs.push({ text:`${turn}ターン目: ${result.log}`, color:'#88ccff' })
-          skillUsed = true
-          skillIndex++
+      // アイテム自動使用チェック
+      if (currentItem && !itemUsed) {
+        const threshold = currentItem.use_threshold || 50
+        const effect = currentItem.items.effect
+        if (effect === 'hp_pct' && playerHp / profile.hp_max * 100 <= threshold) {
+          const healAmt = Math.floor(profile.hp_max * currentItem.items.value / 100)
+          playerHp = Math.min(profile.hp_max, playerHp + healAmt)
+          logs.push({ text:`🧪 ${currentItem.items.name}を使用！ HPが${healAmt}回復した！`, color:'#44ff88' })
+          itemUsed = true
+          await supabase.from('player_items').delete().eq('id', currentItem.id)
+          currentItem = null
+        } else if (effect === 'mp_pct' && playerMp / profile.mp_max * 100 <= threshold) {
+          const healAmt = Math.floor(profile.mp_max * currentItem.items.value / 100)
+          playerMp = Math.min(profile.mp_max, playerMp + healAmt)
+          logs.push({ text:`🧪 ${currentItem.items.name}を使用！ MPが${healAmt}回復した！`, color:'#4488ff' })
+          itemUsed = true
+          await supabase.from('player_items').delete().eq('id', currentItem.id)
+          currentItem = null
         }
       }
 
-      if (!skillUsed) {
-        const baseAtk = isMagical ? effWithBuff.matk : effWithBuff.atk
-        const enemyDefVal = isMagical
-          ? Math.floor((enemy.mdef || 0) / 2 * enemyMdefRate)
-          : Math.floor(enemy.def / 2 * enemyDefRate)
-        const dmg = Math.max(1, baseAtk - enemyDefVal + Math.floor(Math.random() * 4))
-        enemyHp -= dmg
-        logs.push({ text:`${turn}ターン目: あなたの攻撃！ ${enemy.name}に${dmg}ダメージ！`, color:'#ffcc00' })
-        if (expandedSkillSet.length > 0) skillIndex++
+      // プレイヤー攻撃
+      const doPlayerAttack = () => {
+        let skillUsed = false
+        if (expandedSkillSet.length > 0) {
+          const currentSkill = expandedSkillSet[skillIndex % expandedSkillSet.length]
+          if (currentSkill && currentSkill.skills && playerMp >= currentSkill.skills.mp_cost) {
+            playerMp -= currentSkill.skills.mp_cost
+            const result = executeSkill(currentSkill.skills, effWithBuff, profile, enemy, enemyBuffs, playerBuffs)
+            enemyHp -= result.dmg
+            playerHp = Math.min(profile.hp_max, playerHp + result.heal)
+            playerBuffs = result.newPlayerBuffs
+            enemyBuffs = result.newEnemyBuffs
+            logs.push({ text:`${turn}ターン目: ${result.log}`, color:'#88ccff' })
+            skillUsed = true
+            skillIndex++
+          }
+        }
+        if (!skillUsed) {
+          const baseAtk = isMagical ? effWithBuff.matk : effWithBuff.atk
+          const enemyDefVal = isMagical
+            ? Math.floor((enemy.mdef || 0) / 2 * enemyMdefRate)
+            : Math.floor(enemy.def / 2 * enemyDefRate)
+          const dmg = Math.max(1, baseAtk - enemyDefVal + Math.floor(Math.random() * 4))
+          enemyHp -= dmg
+          logs.push({ text:`${turn}ターン目: あなたの攻撃！ ${enemy.name}に${dmg}ダメージ！`, color:'#ffcc00' })
+          if (expandedSkillSet.length > 0) skillIndex++
+        }
       }
 
+      // 敵攻撃
+      const doEnemyAttack = () => {
+        const isEnemyMagical = enemy.type === 'magical'
+        const enemyAtk = isEnemyMagical ? (enemy.matk || 0) : enemy.atk
+        const defVal = isEnemyMagical ? Math.floor(playerMdef / 2) : Math.floor(playerDef / 2)
+        const dmgToPlayer = Math.max(1, enemyAtk - defVal + Math.floor(Math.random() * 3))
+        playerHp -= dmgToPlayer
+        logs.push({ text:`${turn}ターン目: ${enemy.name}の反撃！ あなたに${dmgToPlayer}ダメージ…`, color:'#ff6644' })
+      }
+
+      doPlayerAttack()
       if (enemyHp <= 0) break
 
-      const defVal = isMagical ? Math.floor(playerMdef / 2) : Math.floor(playerDef / 2)
-      const dmgToPlayer = Math.max(1, enemy.atk - defVal + Math.floor(Math.random() * 3))
-      playerHp -= dmgToPlayer
-      logs.push({ text:`${turn}ターン目: ${enemy.name}の反撃！ あなたに${dmgToPlayer}ダメージ…`, color:'#ff6644' })
+      // プレイヤー素早さ追加行動
+      if (playerExtraRate > 0 && Math.random() * 100 < playerExtraRate) {
+        doPlayerAttack()
+        if (enemyHp <= 0) break
+      }
+
+      doEnemyAttack()
+      if (playerHp <= 0) break
+
+      // 敵素早さ追加行動
+      if (enemyExtraRate > 0 && Math.random() * 100 < enemyExtraRate) {
+        doEnemyAttack()
+      }
 
       Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns > 0) playerBuffs[k].turns-- })
       Object.keys(enemyBuffs).forEach(k => { if (enemyBuffs[k]?.turns > 0) enemyBuffs[k].turns-- })
@@ -478,7 +577,6 @@ export default function Game() {
       logs.push({ text:`EXP + ${expGained}`, color:'#ff6644' })
     }
 
-    // ★ HP0になったら瀕死フラグを立てる
     let newIsDying = profile.is_dying || false
     if (playerHp === 0) {
       newIsDying = true
@@ -585,12 +683,11 @@ export default function Game() {
         mdef:   (base.mdef   || profile.mdef)   + growth.mdef,
         spd:    (base.spd    || profile.spd)    + growth.spd,
       }
-      if (bonusSlots.length > 0 && (newLv - 1) % 3 === 0) {
-        const bonusIndex = Math.floor((newLv - 1) / 3 - 1) % bonusSlots.length
+      // 3レベルごとボーナス（HPそのまま）
+      if (bonusSlots.length > 0 && newLv % 3 === 0) {
+        const bonusIndex = Math.floor(newLv / 3 - 1) % bonusSlots.length
         const bonusStat = bonusSlots[bonusIndex]
         statUpdates[bonusStat] = (statUpdates[bonusStat] || 0) + 1
-        if (growth.mp > 0) statUpdates.mp_max = (statUpdates.mp_max || profile.mp_max) - 5
-        else statUpdates.hp_max = (statUpdates.hp_max || profile.hp_max) - 10
       }
       logs.push({ text:`★ LEVEL UP！ LV${newLv} になった！ ステータスポイント+1`, color:'#cc44ff' })
       setBattleLogs([...logs])
@@ -615,8 +712,7 @@ export default function Game() {
     if (profile.gold < cost) return
     await supabase.from('profiles').update({
       hp_current: profile.hp_max, mp_current: profile.mp_max,
-      gold: profile.gold - cost,
-      is_dying: false,
+      gold: profile.gold - cost, is_dying: false,
     }).eq('id', profile.id)
     await fetchProfile()
     setInnMessage('HPとMPが回復しました！')
@@ -665,6 +761,7 @@ export default function Game() {
   const allocatedPoints = Object.values(statPoints).reduce((a, b) => a + b, 0)
   const total = calcTotal(profile)
   const eff = calcEffectiveStats(profile, equipment, proficiency)
+  const totalRank = getTotalRank(total)
   const availableClasses = INITIAL_CLASSES.filter(c => c !== profile.class).map(c => {
     const cl = classLevels.find(x => x.class_name === c)
     return { name: c, lv: cl ? cl.lv : 1, canChange: profile.lv >= 30 }
@@ -695,7 +792,10 @@ export default function Game() {
             <div style={{ color:'#ffcc00', fontSize:'12px', borderBottom:'1px dashed #003366', paddingBottom:'4px', marginBottom:'8px' }}>{profile.username}</div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>クラス: <span style={{color:'#88ccff'}}>{profile.class}</span></div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>LV: <span style={{color:'#ffcc00'}}>{profile.lv}</span></div>
-            <div style={{ fontSize:'11px', color:'#446688', marginBottom:'6px' }}>総合力: <span style={{color:'#44ff88', fontWeight:'bold'}}>{total}</span></div>
+            <div style={{ fontSize:'11px', color:'#446688', marginBottom:'6px', display:'flex', justifyContent:'space-between' }}>
+              <span>総合力: <span style={{color:'#44ff88', fontWeight:'bold'}}>{total}</span></span>
+              <span style={{color: totalRank.color, fontWeight:'bold'}}>{totalRank.rank}</span>
+            </div>
             <StatBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying ? '#ff2200' : '#00cc44'} />
             <StatBar label="MP" val={`${mpCurrent}/${profile.mp_max}`} pct={mpPct} color="#4488ff" />
             <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginTop:'6px' }}>
@@ -712,11 +812,11 @@ export default function Game() {
               <div style={{ height:'100%', width:`${regenPct}%`, background:'linear-gradient(90deg,#003333,#44ccff)', transition:'width 0.2s' }} />
             </div>
             <div style={{ fontSize:'11px', display:'grid', gridTemplateColumns:'1fr', gap:'2px', color:'#446688', marginBottom:'8px' }}>
-              <StatLine label="攻撃力" base={profile.atk} bonus={eff.bonus.atk} color="#ffcc00" />
-              <StatLine label="防御力" base={profile.def} bonus={eff.bonus.def} color="#88aaff" />
-              <StatLine label="特殊攻撃力" base={profile.matk} bonus={eff.bonus.matk} color="#cc44ff" />
-              <StatLine label="特殊防御力" base={profile.mdef} bonus={eff.bonus.mdef} color="#44ccff" />
-              <StatLine label="素早さ" base={profile.spd} bonus={eff.bonus.spd} color="#ff8844" />
+              <StatLine label="攻撃力" base={profile.atk} bonus={eff.bonus.atk} color="#ffcc00" statType="atk" />
+              <StatLine label="防御力" base={profile.def} bonus={eff.bonus.def} color="#88aaff" statType="def" />
+              <StatLine label="特殊攻撃力" base={profile.matk} bonus={eff.bonus.matk} color="#cc44ff" statType="matk" />
+              <StatLine label="特殊防御力" base={profile.mdef} bonus={eff.bonus.mdef} color="#44ccff" statType="mdef" />
+              <StatLine label="素早さ" base={profile.spd} bonus={eff.bonus.spd} color="#ff8844" statType="spd" />
               <span>ゴールド: <span style={{color:'#ffcc00'}}>{profile.gold}</span></span>
             </div>
             {pendingPoints > 0 && (
@@ -772,7 +872,9 @@ export default function Game() {
                   {isDying && !canBattle ? '💀 瀕死中（HP全回復まで出撃不可）' : canAct ? `⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！` : '⏳ 待機中...'}
                 </button>
                 <button onClick={() => { setScene('inn'); setInnMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🏨 宿屋へ</button>
-                <button onClick={() => { setScene('temple'); setTempleMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿へ</button>
+                <button onClick={() => { setScene('temple'); setTempleMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>⛩ 神殿へ</button>
+                <button onClick={() => nav('/shop')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🛒 商店へ</button>
+                <button onClick={() => nav('/smithy')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋へ</button>
               </div>
             )}
 
@@ -873,11 +975,15 @@ function StatBar({ label, val, pct, color }) {
   )
 }
 
-function StatLine({ label, base, bonus, color }) {
+function StatLine({ label, base, bonus, color, statType }) {
+  const rank = getStatRank(base + bonus, statType)
   return (
-    <span>
-      {label}: <span style={{color}}>{base + bonus}</span>
-      {bonus > 0 && <span style={{color:'#44ccff', fontSize:'10px'}}> (+{bonus})</span>}
-    </span>
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+      <span>
+        {label}: <span style={{color}}>{base + bonus}</span>
+        {bonus > 0 && <span style={{color:'#44ccff', fontSize:'10px'}}> (+{bonus})</span>}
+      </span>
+      <span style={{ color: rank.color, fontSize:'10px', fontWeight:'bold' }}>{rank.rank}</span>
+    </div>
   )
 }

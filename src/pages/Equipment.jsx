@@ -25,11 +25,26 @@ const calcProfBonus = (prof) => {
   return { atk: bonus }
 }
 
+const getStatRank = (val, type) => {
+  let thresholds
+  if (type === 'hp') thresholds = [450, 1200, 2400, 4500, 7500, 12000, 18000, 27000]
+  else if (type === 'mp') thresholds = [225, 600, 1200, 2250, 3750, 6000, 9000, 13500]
+  else thresholds = [45, 120, 240, 450, 750, 1200, 1800, 2700]
+  const ranks = ['F','E','D','C','B','A','S','SS','SSS']
+  const colors = ['#888888','#6699cc','#ff8844','#44bb44','#4488ff','#ff4444','#ffcc00','#ffcc00','#ffcc00']
+  for (let i = 0; i < thresholds.length; i++) {
+    if (val <= thresholds[i]) return { rank: ranks[i], color: colors[i] }
+  }
+  return { rank: 'SSS', color: '#ffcc00' }
+}
+
 export default function Equipment() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
   const [equipment, setEquipment] = useState([])
   const [proficiency, setProficiency] = useState([])
+  const [playerItem, setPlayerItem] = useState(null)
+  const [allItems, setAllItems] = useState([])
   const [tab, setTab] = useState('weapon')
   const [loading, setLoading] = useState(false)
 
@@ -48,6 +63,12 @@ export default function Equipment() {
       .from('proficiency').select('*, weapons(*)')
       .eq('player_id', user.id)
     setProficiency(prof || [])
+    const { data: pi } = await supabase
+      .from('player_items').select('*, items(*)')
+      .eq('player_id', user.id)
+    setAllItems(pi || [])
+    const equipped = (pi || []).find(i => i.equipped)
+    setPlayerItem(equipped || null)
   }
 
   const equip = async (item) => {
@@ -60,7 +81,6 @@ export default function Equipment() {
     await supabase.from('player_equipment')
       .update({ equipped: true })
       .eq('id', item.id)
-    // 武器スロットの場合、proficiencyデータがなければ自動作成
     if (item.slot === 'weapon') {
       const { data: existing } = await supabase
         .from('proficiency').select('id')
@@ -69,8 +89,7 @@ export default function Equipment() {
         .single()
       if (!existing) {
         await supabase.from('proficiency').insert({
-          player_id: profile.id,
-          weapon_id: item.weapons.id,
+          player_id: profile.id, weapon_id: item.weapons.id,
           prof_exp: 0, prof_lv: 1, awakening: 0,
         })
       }
@@ -86,6 +105,24 @@ export default function Equipment() {
     setLoading(false)
   }
 
+  const setItemSlot = async (itemId) => {
+    setLoading(true)
+    // 既存の装備アイテムを外す
+    await supabase.from('player_items').update({ equipped: false }).eq('player_id', profile.id)
+    if (itemId) {
+      await supabase.from('player_items').update({ equipped: true }).eq('id', itemId)
+    }
+    await fetchAll()
+    setLoading(false)
+  }
+
+  const setItemThreshold = async (itemId, threshold) => {
+    setLoading(true)
+    await supabase.from('player_items').update({ use_threshold: threshold }).eq('id', itemId)
+    await fetchAll()
+    setLoading(false)
+  }
+
   if (!profile) return (
     <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
   )
@@ -96,7 +133,6 @@ export default function Equipment() {
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'700px', margin:'0 auto' }}>
-
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
           <button onClick={() => nav('/game')}
@@ -121,11 +157,11 @@ export default function Equipment() {
                         {equipped.weapons.name}
                       </div>
                       <div style={{ fontSize:'10px', marginTop:'2px' }}>
-                        {equipped.weapons.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>A+{equipped.weapons.atk_bonus} </span>}
-                        {equipped.weapons.def_bonus  > 0 && <span style={{color:'#88aaff'}}>B+{equipped.weapons.def_bonus} </span>}
-                        {equipped.weapons.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>MA+{equipped.weapons.matk_bonus} </span>}
-                        {equipped.weapons.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>MB+{equipped.weapons.mdef_bonus} </span>}
-                        {equipped.weapons.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>S+{equipped.weapons.spd_bonus} </span>}
+                        {equipped.weapons.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻撃力+{equipped.weapons.atk_bonus} </span>}
+                        {equipped.weapons.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防御力+{equipped.weapons.def_bonus} </span>}
+                        {equipped.weapons.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>特殊攻撃力+{equipped.weapons.matk_bonus} </span>}
+                        {equipped.weapons.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>特殊防御力+{equipped.weapons.mdef_bonus} </span>}
+                        {equipped.weapons.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>素早さ+{equipped.weapons.spd_bonus} </span>}
                         {equipped.weapons.hp_bonus   > 0 && <span style={{color:'#44ff88'}}>HP+{equipped.weapons.hp_bonus} </span>}
                         {equipped.weapons.mp_bonus   > 0 && <span style={{color:'#4488ff'}}>MP+{equipped.weapons.mp_bonus} </span>}
                         {equipped.weapons.hp_bonus_pct > 0 && <span style={{color:'#44ff88'}}>HP+{equipped.weapons.hp_bonus_pct}% </span>}
@@ -138,93 +174,163 @@ export default function Equipment() {
                 </div>
               )
             })}
+
+            {/* アイテムスロット */}
+            <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px', marginTop:'12px' }}>持ち物</div>
+            <div style={{ border:'1px solid #003366', background:'#001028', padding:'8px', marginBottom:'6px' }}>
+              <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>アイテム（1個）</div>
+              {playerItem ? (
+                <>
+                  <div style={{ color:'#44ff88', fontSize:'11px' }}>{playerItem.items.name}</div>
+                  <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>残り{playerItem.quantity}個</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:'4px', marginTop:'4px' }}>
+                    <span style={{ color:'#446688', fontSize:'10px' }}>使用:</span>
+                    <select value={playerItem.use_threshold || 50}
+                      onChange={e => setItemThreshold(playerItem.id, Number(e.target.value))}
+                      style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'1px' }}>
+                      {[10,20,30,40,50,60,70,80,90,100].map(n => (
+                        <option key={n} value={n}>{n}%以下</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button onClick={() => setItemSlot(null)} disabled={loading}
+                    style={{ marginTop:'4px', padding:'2px 6px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                    外す
+                  </button>
+                </>
+              ) : (
+                <div style={{ color:'#334455', fontSize:'11px' }}>なし</div>
+              )}
+            </div>
           </div>
 
-          {/* 所持装備 */}
+          {/* 右カラム */}
           <div>
+            {/* タブ */}
             <div style={{ display:'flex', gap:'4px', marginBottom:'8px' }}>
-              {slots.map(slot => (
-                <button key={slot} onClick={() => setTab(slot)}
+              {[...slots, 'item'].map(s => (
+                <button key={s} onClick={() => setTab(s)}
                   style={{ padding:'4px 10px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
-                    background: tab === slot ? '#001840' : '#000818',
-                    border: `1px solid ${tab === slot ? '#ffcc00' : '#003366'}`,
-                    color: tab === slot ? '#ffcc00' : '#446688' }}>
-                  {SLOT_LABELS[slot]}
+                    background: tab === s ? '#001840' : '#000818',
+                    border: `1px solid ${tab === s ? '#ffcc00' : '#003366'}`,
+                    color: tab === s ? '#ffcc00' : '#446688' }}>
+                  {s === 'item' ? 'アイテム' : SLOT_LABELS[s]}
                 </button>
               ))}
             </div>
 
-            {filteredEquipment.length === 0 && (
-              <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>所持していません</div>
+            {/* アイテムタブ */}
+            {tab === 'item' && (
+              <div>
+                {allItems.length === 0 && (
+                  <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>所持していません</div>
+                )}
+                {allItems.map(pi => (
+                  <div key={pi.id} style={{
+                    border: `1px solid ${pi.equipped ? '#0044aa' : '#002244'}`,
+                    background: pi.equipped ? '#001028' : '#000818',
+                    padding:'10px', marginBottom:'6px',
+                  }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
+                      <span style={{ color:'#44ff88', fontSize:'12px' }}>{pi.items.name}</span>
+                      <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+                        <span style={{ color:'#446688', fontSize:'10px' }}>×{pi.quantity}</span>
+                        {pi.equipped
+                          ? <span style={{ color:'#0088ff', fontSize:'10px' }}>セット中</span>
+                          : <button onClick={() => setItemSlot(pi.id)} disabled={loading}
+                              style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                              セットする
+                            </button>
+                        }
+                      </div>
+                    </div>
+                    <div style={{ color:'#446688', fontSize:'10px' }}>{pi.items.description}</div>
+                    {pi.equipped && pi.items.effect !== 'boss_avoid' && (
+                      <div style={{ display:'flex', alignItems:'center', gap:'4px', marginTop:'4px' }}>
+                        <span style={{ color:'#446688', fontSize:'10px' }}>使用タイミング:</span>
+                        <select value={pi.use_threshold || 50}
+                          onChange={e => setItemThreshold(pi.id, Number(e.target.value))}
+                          style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'1px' }}>
+                          {[10,20,30,40,50,60,70,80,90,100].map(n => (
+                            <option key={n} value={n}>{n}%以下で使用</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
 
-            {filteredEquipment.map(item => {
-              const w = item.weapons
-              // 熟練度は武器のみ表示
-              const prof = tab === 'weapon' ? proficiency.find(p => p.weapon_id === w.id) : null
-              const profBonus = calcProfBonus(prof ? { ...prof, weapon: w } : null)
-              const profPct = prof ? Math.min(100, (prof.prof_exp / 100) * 100) : 0
+            {/* 装備タブ */}
+            {tab !== 'item' && (
+              <div>
+                {filteredEquipment.length === 0 && (
+                  <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>所持していません</div>
+                )}
+                {filteredEquipment.map(item => {
+                  const w = item.weapons
+                  const prof = tab === 'weapon' ? proficiency.find(p => p.weapon_id === w.id) : null
+                  const profBonus = calcProfBonus(prof ? { ...prof, weapon: w } : null)
+                  const profPct = prof ? Math.min(100, (prof.prof_exp / 100) * 100) : 0
 
-              return (
-                <div key={item.id} style={{
-                  border: `1px solid ${item.equipped ? '#0044aa' : '#002244'}`,
-                  background: item.equipped ? '#001028' : '#000818',
-                  padding:'10px', marginBottom:'6px',
-                }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
-                    <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-                      <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>
-                        {RARITY_LABELS[w.rarity]}
-                      </span>
-                      <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>{w.name}</span>
-                    </div>
-                    {item.equipped
-                      ? <button onClick={() => unequip(item)} disabled={loading}
-                          style={{ padding:'2px 8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
-                          外す
-                        </button>
-                      : <button onClick={() => equip(item)} disabled={loading}
-                          style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
-                          装備する
-                        </button>
-                    }
-                  </div>
-
-                  <div style={{ fontSize:'10px', color:'#446688', marginBottom:'4px' }}>
-                    {w.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>A+{w.atk_bonus} </span>}
-                    {w.atk_bonus  < 0 && <span style={{color:'#ff4444'}}>A{w.atk_bonus} </span>}
-                    {w.def_bonus  > 0 && <span style={{color:'#88aaff'}}>B+{w.def_bonus} </span>}
-                    {w.def_bonus  < 0 && <span style={{color:'#ff4444'}}>B{w.def_bonus} </span>}
-                    {w.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>MA+{w.matk_bonus} </span>}
-                    {w.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>MB+{w.mdef_bonus} </span>}
-                    {w.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>S+{w.spd_bonus} </span>}
-                    {w.spd_bonus  < 0 && <span style={{color:'#ff4444'}}>S{w.spd_bonus} </span>}
-                    {w.hp_bonus   > 0 && <span style={{color:'#44ff88'}}>HP+{w.hp_bonus} </span>}
-                    {w.mp_bonus   > 0 && <span style={{color:'#4488ff'}}>MP+{w.mp_bonus} </span>}
-                    {w.hp_bonus_pct > 0 && <span style={{color:'#44ff88'}}>HP+{w.hp_bonus_pct}% </span>}
-                    {w.mp_bonus_pct > 0 && <span style={{color:'#4488ff'}}>MP+{w.mp_bonus_pct}% </span>}
-                  </div>
-
-                  {/* 熟練度は武器のみ */}
-                  {tab === 'weapon' && prof && (
-                    <div>
-                      <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginBottom:'2px' }}>
-                        <span>熟練度 LV{prof.prof_lv}{prof.awakening > 0 && <span style={{color:'#ffcc00'}}> +{prof.awakening}</span>}</span>
-                        <span>{prof.prof_exp}/100</span>
+                  return (
+                    <div key={item.id} style={{
+                      border: `1px solid ${item.equipped ? '#0044aa' : '#002244'}`,
+                      background: item.equipped ? '#001028' : '#000818',
+                      padding:'10px', marginBottom:'6px',
+                    }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
+                        <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+                          <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>
+                            {RARITY_LABELS[w.rarity]}
+                          </span>
+                          <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>{w.name}</span>
+                        </div>
+                        {item.equipped
+                          ? <button onClick={() => unequip(item)} disabled={loading}
+                              style={{ padding:'2px 8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
+                          : <button onClick={() => equip(item)} disabled={loading}
+                              style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>装備する</button>
+                        }
                       </div>
-                      <div style={{ background:'#001028', height:'4px', border:'1px solid #002244', marginBottom:'2px' }}>
-                        <div style={{ height:'100%', width:`${profPct}%`, background:'linear-gradient(90deg,#220044,#aa44ff)' }} />
+
+                      <div style={{ fontSize:'10px', color:'#446688', marginBottom:'4px' }}>
+                        {w.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻撃力+{w.atk_bonus} </span>}
+                        {w.atk_bonus  < 0 && <span style={{color:'#ff4444'}}>攻撃力{w.atk_bonus} </span>}
+                        {w.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防御力+{w.def_bonus} </span>}
+                        {w.def_bonus  < 0 && <span style={{color:'#ff4444'}}>防御力{w.def_bonus} </span>}
+                        {w.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>特殊攻撃力+{w.matk_bonus} </span>}
+                        {w.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>特殊防御力+{w.mdef_bonus} </span>}
+                        {w.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>素早さ+{w.spd_bonus} </span>}
+                        {w.spd_bonus  < 0 && <span style={{color:'#ff4444'}}>素早さ{w.spd_bonus} </span>}
+                        {w.hp_bonus   > 0 && <span style={{color:'#44ff88'}}>HP+{w.hp_bonus} </span>}
+                        {w.mp_bonus   > 0 && <span style={{color:'#4488ff'}}>MP+{w.mp_bonus} </span>}
+                        {w.hp_bonus_pct > 0 && <span style={{color:'#44ff88'}}>HP+{w.hp_bonus_pct}% </span>}
+                        {w.mp_bonus_pct > 0 && <span style={{color:'#4488ff'}}>MP+{w.mp_bonus_pct}% </span>}
                       </div>
-                      {Object.keys(profBonus).length > 0 && (
-                        <div style={{ fontSize:'10px', color:'#aa44ff' }}>
-                          熟練度ボーナス: {Object.entries(profBonus).map(([k,v]) => `${k.toUpperCase()}+${v}`).join(' ')}
+
+                      {tab === 'weapon' && prof && (
+                        <div>
+                          <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginBottom:'2px' }}>
+                            <span>熟練度 LV{prof.prof_lv}{prof.awakening > 0 && <span style={{color:'#ffcc00'}}> +{prof.awakening}</span>}</span>
+                            <span>{prof.prof_exp}/100</span>
+                          </div>
+                          <div style={{ background:'#001028', height:'4px', border:'1px solid #002244', marginBottom:'2px' }}>
+                            <div style={{ height:'100%', width:`${profPct}%`, background:'linear-gradient(90deg,#220044,#aa44ff)' }} />
+                          </div>
+                          {Object.keys(profBonus).length > 0 && (
+                            <div style={{ fontSize:'10px', color:'#aa44ff' }}>
+                              熟練度ボーナス: {Object.entries(profBonus).map(([k,v]) => `${k === 'atk' ? '攻撃力' : k === 'matk' ? '特殊攻撃力' : '素早さ'}+${v}`).join(' ')}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
-              )
-            })}
+                  )
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
