@@ -6,6 +6,7 @@ import CharCreate from './pages/CharCreate'
 import Game from './pages/Game'
 import Ranking from './pages/Ranking'
 import Equipment from './pages/Equipment'
+import Skills from './pages/Skills'
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -42,6 +43,7 @@ function App() {
         <Route path="/game" element={session && hasChar ? <Game /> : <Navigate to={!session ? '/login' : '/create'} />} />
         <Route path="/ranking" element={session ? <Ranking /> : <Navigate to="/login" />} />
         <Route path="/equipment" element={session ? <Equipment /> : <Navigate to="/login" />} />
+        <Route path="/skills" element={session ? <Skills /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>

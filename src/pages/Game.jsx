@@ -14,6 +14,8 @@ const AREAS = [
       { name:'毒キノコ',   hp:40,  atk:15,  def:3,  gold:8   },
     ],
     boss: { name:'ビッグスライム', hp:500, atk:40, def:10, gold:100, isBoss:true },
+    commonDrops: ['木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス'],
+    bossDrops: ['スライムの指輪','蒼粘剣'],
   },
   {
     id: 2, name: '荒廃した草原',
@@ -23,6 +25,7 @@ const AREAS = [
       { name:'盗賊',       hp:120, atk:55,  def:12, gold:30  },
     ],
     boss: { name:'盗賊団のリーダー', hp:2000, atk:120, def:30, gold:500, isBoss:true },
+    commonDrops: [], bossDrops: [],
   },
   {
     id: 3, name: '古代の洞窟',
@@ -32,16 +35,15 @@ const AREAS = [
       { name:'ゴーレム',   hp:300, atk:150, def:40, gold:100 },
     ],
     boss: { name:'古代の番人', hp:8000, atk:300, def:80, gold:2000, isBoss:true },
+    commonDrops: [], bossDrops: [],
   },
 ]
 
-// 初期職LV1ステータス（総合力35統一）
 const JOB_BASE = {
   '戦士':    { hp_max:80,  mp_max:10, atk:10, def:8,  matk:1,  mdef:3,  spd:5  },
   '弓使い':  { hp_max:60,  mp_max:15, atk:8,  def:4,  matk:2,  mdef:3,  spd:10 },
   '魔法使い':{ hp_max:45,  mp_max:50, atk:2,  def:2,  matk:14, mdef:4,  spd:4  },
   '僧侶':    { hp_max:55,  mp_max:45, atk:2,  def:3,  matk:7,  mdef:12, spd:3  },
-  // 上位職LV1ステータス（総合力50統一）
   '侍':      { hp_max:100, mp_max:15, atk:13, def:10, matk:4,  mdef:4,  spd:8  },
   '狂戦士':  { hp_max:110, mp_max:10, atk:16, def:8,  matk:4,  mdef:4,  spd:4  },
   '狩人':    { hp_max:80,  mp_max:20, atk:13, def:6,  matk:4,  mdef:4,  spd:13 },
@@ -52,45 +54,42 @@ const JOB_BASE = {
   '賢者':    { hp_max:60,  mp_max:65, atk:4,  def:4,  matk:12, mdef:16, spd:3  },
 }
 
-// 初期職レベルアップ時（総合力+6統一）
 const JOB_GROWTH = {
-  '戦士':    { hp:20, mp:5, atk:2, def:2, matk:0, mdef:1, spd:1 },
-  '弓使い':  { hp:15, mp:5, atk:2, def:1, matk:0, mdef:1, spd:2 },
-  '魔法使い':{ hp:10, mp:15,atk:0, def:1, matk:3, mdef:1, spd:1 },
-  '僧侶':    { hp:15, mp:15,atk:0, def:1, matk:1, mdef:2, spd:1 },
-  // 上位職レベルアップ時（総合力+7、3レベルごとボーナス別管理）
-  '侍':      { hp:20, mp:5, atk:3, def:2, matk:0, mdef:1, spd:1 },
-  '狂戦士':  { hp:20, mp:5, atk:4, def:1, matk:0, mdef:0, spd:0 },
-  '狩人':    { hp:10, mp:5, atk:3, def:1, matk:0, mdef:0, spd:3 },
-  '暗殺者':  { hp:10, mp:5, atk:2, def:1, matk:0, mdef:0, spd:4 },
-  '元素使い':{ hp:10, mp:10,atk:0, def:0, matk:4, mdef:1, spd:0 },
-  '死霊使い':{ hp:10, mp:10,atk:0, def:0, matk:3, mdef:1, spd:2 },
-  '司祭':    { hp:10, mp:10,atk:0, def:2, matk:1, mdef:3, spd:0 },
-  '賢者':    { hp:10, mp:10,atk:0, def:1, matk:2, mdef:3, spd:0 },
+  '戦士':    { hp:20, mp:5,  atk:2, def:2, matk:0, mdef:1, spd:1 },
+  '弓使い':  { hp:15, mp:5,  atk:2, def:1, matk:0, mdef:1, spd:2 },
+  '魔法使い':{ hp:10, mp:15, atk:0, def:1, matk:3, mdef:1, spd:1 },
+  '僧侶':    { hp:15, mp:15, atk:0, def:1, matk:1, mdef:2, spd:1 },
+  '侍':      { hp:20, mp:5,  atk:3, def:2, matk:0, mdef:1, spd:1 },
+  '狂戦士':  { hp:20, mp:5,  atk:4, def:1, matk:0, mdef:0, spd:0 },
+  '狩人':    { hp:10, mp:5,  atk:3, def:1, matk:0, mdef:0, spd:3 },
+  '暗殺者':  { hp:10, mp:5,  atk:2, def:1, matk:0, mdef:0, spd:4 },
+  '元素使い':{ hp:10, mp:10, atk:0, def:0, matk:4, mdef:1, spd:0 },
+  '死霊使い':{ hp:10, mp:10, atk:0, def:0, matk:3, mdef:1, spd:2 },
+  '司祭':    { hp:10, mp:10, atk:0, def:2, matk:1, mdef:3, spd:0 },
+  '賢者':    { hp:10, mp:10, atk:0, def:1, matk:2, mdef:3, spd:0 },
 }
 
-// 上位職の3レベルごとボーナス（+0項目が+1になる順番）
 const JOB_LEVEL3_BONUS = {
   '侍':      ['matk'],
-  '狂戦士':  ['matk', 'mdef', 'spd'],
-  '狩人':    ['matk', 'mdef'],
-  '暗殺者':  ['matk', 'mdef'],
-  '元素使い':['atk', 'def', 'spd'],
-  '死霊使い':['atk', 'def'],
-  '司祭':    ['atk', 'spd'],
-  '賢者':    ['atk', 'spd'],
+  '狂戦士':  ['matk','mdef','spd'],
+  '狩人':    ['matk','mdef'],
+  '暗殺者':  ['matk','mdef'],
+  '元素使い':['atk','def','spd'],
+  '死霊使い':['atk','def'],
+  '司祭':    ['atk','spd'],
+  '賢者':    ['atk','spd'],
 }
 
-const INITIAL_CLASSES = ['戦士', '弓使い', '魔法使い', '僧侶']
+const INITIAL_CLASSES = ['戦士','弓使い','魔法使い','僧侶']
 const ADVANCED_CLASSES = {
-  '侍':      { requires: '戦士' },
-  '狂戦士':  { requires: '戦士' },
-  '狩人':    { requires: '弓使い' },
-  '暗殺者':  { requires: '弓使い' },
-  '元素使い':{ requires: '魔法使い' },
-  '死霊使い':{ requires: '魔法使い' },
-  '司祭':    { requires: '僧侶' },
-  '賢者':    { requires: '僧侶' },
+  '侍':      { requires:'戦士' },
+  '狂戦士':  { requires:'戦士' },
+  '狩人':    { requires:'弓使い' },
+  '暗殺者':  { requires:'弓使い' },
+  '元素使い':{ requires:'魔法使い' },
+  '死霊使い':{ requires:'魔法使い' },
+  '司祭':    { requires:'僧侶' },
+  '賢者':    { requires:'僧侶' },
 }
 
 const STAT_LABELS = {
@@ -106,8 +105,8 @@ const calcTotal = (p) => Math.floor(
 const calcExpNext = (lv) => (Math.floor((lv - 1) / 10) + 1) * 100
 
 const WEAPON_TYPE_GROUP = {
-  sword: 'physical', axe: 'physical', spear: 'physical', bow: 'physical',
-  staff: 'magical', wand: 'magical', tome: 'magical',
+  sword:'physical', axe:'physical', spear:'physical', bow:'physical',
+  staff:'magical', wand:'magical', tome:'magical',
 }
 const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'
 
@@ -136,6 +135,8 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
     bonus.spd  += w.spd_bonus  || 0
     bonus.hp   += w.hp_bonus   || 0
     bonus.mp   += w.mp_bonus   || 0
+    if (w.hp_bonus_pct > 0) bonus.hp += Math.floor(profile.hp_max * w.hp_bonus_pct / 100)
+    if (w.mp_bonus_pct > 0) bonus.mp += Math.floor(profile.mp_max * w.mp_bonus_pct / 100)
     if (item.slot === 'weapon') {
       const prof = proficiency.find(p => p.weapon_id === w.id)
       if (prof) {
@@ -158,16 +159,12 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
   }
 }
 
-// クラスLVからステータスを計算
 const calcClassStats = (className, lv) => {
   const base = JOB_BASE[className]
   const growth = JOB_GROWTH[className]
   if (!base || !growth) return null
   const bonusSlots = JOB_LEVEL3_BONUS[className] || []
-  let stats = {
-    hp_max: base.hp_max, mp_max: base.mp_max,
-    atk: base.atk, def: base.def, matk: base.matk, mdef: base.mdef, spd: base.spd,
-  }
+  let stats = { ...base }
   for (let i = 1; i < lv; i++) {
     stats.hp_max += growth.hp
     stats.mp_max += growth.mp
@@ -176,17 +173,101 @@ const calcClassStats = (className, lv) => {
     stats.matk   += growth.matk
     stats.mdef   += growth.mdef
     stats.spd    += growth.spd
-    // 3レベルごとボーナス
-    if ((i) % 3 === 0 && bonusSlots.length > 0) {
-      const bonusIndex = Math.floor((i) / 3 - 1) % bonusSlots.length
-      const bonusStat = bonusSlots[bonusIndex]
-      stats[bonusStat] += 1
-      // MP優先で調整（MP-5、なければHP-10）
+    if (i % 3 === 0 && bonusSlots.length > 0) {
+      const bonusIndex = Math.floor(i / 3 - 1) % bonusSlots.length
+      stats[bonusSlots[bonusIndex]] += 1
       if (growth.mp > 0) stats.mp_max -= 5
       else stats.hp_max -= 10
     }
   }
   return stats
+}
+
+// スキル発動処理
+const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs) => {
+  const result = { dmg: 0, heal: 0, log: '', newEnemyBuffs: { ...enemyBuffs }, newPlayerBuffs: { ...playerBuffs } }
+  const randMult = (min, max) => min + Math.random() * (max - min)
+
+  switch (skill.name) {
+    case '体当たり':
+      result.dmg = Math.floor(eff.atk * randMult(1.1, 1.2))
+      result.log = `⚔ 体当たり！ ${enemy.name}に${result.dmg}ダメージ！`
+      break
+    case '強撃':
+      result.dmg = Math.floor(eff.atk * randMult(1.3, 1.4))
+      result.log = `💥 強撃！ ${enemy.name}に${result.dmg}ダメージ！`
+      break
+    case '防御崩し':
+      result.dmg = Math.floor(eff.atk * 1.2)
+      result.newEnemyBuffs.defDown = { turns: 4, rate: 0.8 }
+      result.log = `🗡 防御崩し！ ${enemy.name}に${result.dmg}ダメージ！ 防御力が低下した！`
+      break
+    case '防御態勢':
+      result.newPlayerBuffs.defUp = { turns: 4, rate: 1.5 }
+      result.log = `🛡 防御態勢！ 4ターンの間防御力と特殊防御力が上昇した！`
+      break
+    case '応急手当':
+      result.heal = Math.floor(profile.matk * randMult(1.1, 1.2))
+      result.log = `💊 応急手当！ HPを${result.heal}回復した！`
+      break
+    case '狙撃':
+      result.dmg = Math.floor(eff.spd * randMult(1.1, 1.2))
+      result.log = `🏹 狙撃！ ${enemy.name}に${result.dmg}ダメージ！`
+      break
+    case '駆け足':
+      result.newPlayerBuffs.spdUp = { turns: 5, rate: 1.5 }
+      result.log = `💨 駆け足！ 5ターンの間素早さが上昇した！`
+      break
+    case '貫通射撃':
+      result.dmg = Math.floor(eff.atk * randMult(1.2, 1.3))
+      result.log = `🏹 貫通射撃！ ${enemy.name}の防御を貫いて${result.dmg}ダメージ！`
+      break
+    case '疾風矢':
+      result.dmg = Math.floor(eff.atk * 1.0 + eff.spd * 0.4)
+      result.log = `💨 疾風矢！ ${enemy.name}に${result.dmg}ダメージ！`
+      break
+    case 'ファイア':
+      result.dmg = Math.floor(eff.matk * randMult(1.3, 1.5))
+      result.log = `🔥 ファイア！ ${enemy.name}に${result.dmg}の魔法ダメージ！`
+      break
+    case '精神統一':
+      result.newPlayerBuffs.matkUp = { turns: 5, rate: 1.5 }
+      result.log = `✨ 精神統一！ 5ターンの間特殊攻撃力が上昇した！`
+      break
+    case 'サンダー':
+      result.dmg = Math.floor(eff.matk * randMult(1.4, 1.6))
+      result.log = `⚡ サンダー！ ${enemy.name}に${result.dmg}の魔法ダメージ！`
+      break
+    case 'アイスランス':
+      result.dmg = Math.floor(eff.matk * randMult(1.6, 1.9))
+      result.log = `❄ アイスランス！ ${enemy.name}に${result.dmg}の魔法ダメージ！`
+      break
+    case 'ライト':
+      result.dmg = Math.floor(eff.matk * randMult(1.3, 1.5))
+      result.log = `✨ ライト！ ${enemy.name}に${result.dmg}の魔法ダメージ！`
+      break
+    case 'ヒール':
+      result.heal = Math.floor(profile.hp_max * 0.1 + eff.matk * randMult(1.1, 1.2))
+      result.log = `💚 ヒール！ HPを${result.heal}回復した！`
+      break
+    case 'プロテク':
+      result.newPlayerBuffs.defUp = { turns: 3, rate: 1.6 }
+      result.log = `🛡 プロテク！ 3ターンの間防御力と特殊防御力が上昇した！`
+      break
+    case '祈祷':
+      result.newPlayerBuffs.regenHeal = { turns: 4, amount: Math.floor(profile.hp_max * 0.1) }
+      result.log = `🙏 祈祷！ 4ターンの間毎ターンHPが回復するようになった！`
+      break
+    case 'ライトニング':
+      result.dmg = Math.floor(eff.matk * randMult(1.5, 1.7))
+      result.newEnemyBuffs.mdefDown = { turns: 3, rate: 0.7 }
+      result.log = `⚡ ライトニング！ ${enemy.name}に${result.dmg}の魔法ダメージ！ 特殊防御力が低下した！`
+      break
+    default:
+      result.dmg = Math.max(1, eff.atk)
+      result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
+  }
+  return result
 }
 
 export default function Game() {
@@ -207,6 +288,7 @@ export default function Game() {
   const [proficiency, setProficiency] = useState([])
   const [classLevels, setClassLevels] = useState([])
   const [templeMessage, setTempleMessage] = useState('')
+  const [skillSets, setSkillSets] = useState([])
 
   useEffect(() => { fetchProfile() }, [])
 
@@ -240,6 +322,8 @@ export default function Game() {
     setProficiency(prof || [])
     const { data: cl } = await supabase.from('class_levels').select('*').eq('player_id', user.id)
     setClassLevels(cl || [])
+    const { data: ss } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', user.id).order('slot_order')
+    setSkillSets(ss || [])
   }
 
   const doRegen = async () => {
@@ -259,9 +343,7 @@ export default function Game() {
     setTempleMessage('')
     const currentClassData = classLevels.find(cl => cl.class_name === profile.class)
     if (currentClassData) {
-      await supabase.from('class_levels').update({
-        lv: profile.lv, exp: profile.exp,
-      }).eq('id', currentClassData.id)
+      await supabase.from('class_levels').update({ lv: profile.lv, exp: profile.exp }).eq('id', currentClassData.id)
     }
     const targetClassData = classLevels.find(cl => cl.class_name === targetClass)
     const targetLv = targetClassData ? targetClassData.lv : 1
@@ -269,17 +351,14 @@ export default function Game() {
     const newStats = calcClassStats(targetClass, targetLv)
     if (!newStats) { setLoading(false); return }
     if (!targetClassData) {
-      await supabase.from('class_levels').insert({
-        player_id: profile.id, class_name: targetClass, lv: 1, exp: 0,
-      })
+      await supabase.from('class_levels').insert({ player_id: profile.id, class_name: targetClass, lv: 1, exp: 0 })
     }
     await supabase.from('profiles').update({
       class: targetClass, lv: targetLv, exp: targetExp,
       exp_next: calcExpNext(targetLv),
       hp_max: newStats.hp_max, mp_max: newStats.mp_max,
       hp_current: newStats.hp_max, mp_current: newStats.mp_max,
-      atk: newStats.atk, def: newStats.def,
-      matk: newStats.matk, mdef: newStats.mdef, spd: newStats.spd,
+      atk: newStats.atk, def: newStats.def, matk: newStats.matk, mdef: newStats.mdef, spd: newStats.spd,
     }).eq('id', profile.id)
     await fetchProfile()
     setTempleMessage(`${targetClass}に転職しました！`)
@@ -290,45 +369,103 @@ export default function Game() {
     if (!canAct || loading) return
     const hpCurrent = profile.hp_current ?? profile.hp_max
     if (hpCurrent <= 0) return
+    // ★ 瀕死後HP満タンでないと戦闘不可
+    if (hpCurrent < profile.hp_max) return
     setLoading(true)
     setScene('battle')
     setBattleLogs([])
+
     const eff = calcEffectiveStats(profile, equipment, proficiency)
     const area = AREAS.find(a => a.id === selectedArea)
     const bossRate = profile.boss_encounter_rate || 0
     const isBossEncounter = Math.random() * 100 < bossRate
-    const enemy = isBossEncounter
-      ? { ...area.boss }
-      : { ...area.enemies[Math.floor(Math.random() * area.enemies.length)] }
+    const enemy = isBossEncounter ? { ...area.boss } : { ...area.enemies[Math.floor(Math.random() * area.enemies.length)] }
+
     const logs = []
     let playerHp = hpCurrent
+    let playerMp = profile.mp_current ?? profile.mp_max
     let enemyHp = enemy.hp
     let turn = 1
+    let skillIndex = 0
+    let playerBuffs = {}
+    let enemyBuffs = {}
+
     if (isBossEncounter) {
       logs.push({ text:`⚠ ボス出現！ ${enemy.name}が現れた！`, color:'#ff4444' })
     } else {
       logs.push({ text:`${enemy.name}が現れた！`, color:'#88ccff' })
     }
+
     const equippedWeaponItem = equipment.find(e => e.slot === 'weapon' && e.equipped)
     const weaponType = equippedWeaponItem?.weapons?.weapon_type || 'sword'
     const isMagical = getWeaponGroup(weaponType) === 'magical'
+
     while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
-      const playerAtk = isMagical ? eff.matk : eff.atk
-      const playerDef = isMagical ? eff.mdef : eff.def
-      const enemyDef  = isMagical ? Math.floor((enemy.mdef || 0) / 2) : Math.floor(enemy.def / 2)
-      const dmgToEnemy = Math.max(1, playerAtk - enemyDef + Math.floor(Math.random() * 4))
-      enemyHp -= dmgToEnemy
-      logs.push({ text:`${turn}ターン目: あなたの攻撃！ ${enemy.name}に${dmgToEnemy}ダメージ！`, color:'#ffcc00' })
+      // バフ適用
+      const playerDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
+      const playerMdef = eff.mdef * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
+      const playerMatk = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1)
+      const playerSpd  = eff.spd  * (playerBuffs.spdUp  ? playerBuffs.spdUp.rate  : 1)
+      const effWithBuff = { ...eff, def: playerDef, mdef: playerMdef, matk: playerMatk, spd: playerSpd }
+
+      const enemyDefRate  = enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1
+      const enemyMdefRate = enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1
+
+      // 祈祷の毎ターン回復
+      if (playerBuffs.regenHeal && playerBuffs.regenHeal.turns > 0) {
+        playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.regenHeal.amount)
+        logs.push({ text:`🙏 祈祷の効果でHPが${playerBuffs.regenHeal.amount}回復した！`, color:'#44ff88' })
+      }
+
+      // スキル発動
+      let skillUsed = false
+      if (skillSets.length > 0) {
+        const currentSkill = skillSets[skillIndex % skillSets.length]
+        if (currentSkill && currentSkill.skills && playerMp >= currentSkill.skills.mp_cost) {
+          playerMp -= currentSkill.skills.mp_cost
+          const result = executeSkill(currentSkill.skills, effWithBuff, profile, enemy, enemyBuffs, playerBuffs)
+          enemyHp -= result.dmg
+          playerHp = Math.min(profile.hp_max, playerHp + result.heal)
+          playerBuffs = result.newPlayerBuffs
+          enemyBuffs = result.newEnemyBuffs
+          logs.push({ text:`${turn}ターン目: ${result.log}`, color:'#88ccff' })
+          skillUsed = true
+          skillIndex++
+        }
+      }
+
+      // スキルが使えなかった場合は通常攻撃
+      if (!skillUsed) {
+        const baseAtk = isMagical ? effWithBuff.matk : effWithBuff.atk
+        const enemyDefVal = isMagical
+          ? Math.floor((enemy.mdef || 0) / 2 * enemyMdefRate)
+          : Math.floor(enemy.def / 2 * enemyDefRate)
+        const dmg = Math.max(1, baseAtk - enemyDefVal + Math.floor(Math.random() * 4))
+        enemyHp -= dmg
+        logs.push({ text:`${turn}ターン目: あなたの攻撃！ ${enemy.name}に${dmg}ダメージ！`, color:'#ffcc00' })
+        if (skillSets.length > 0) skillIndex++
+      }
+
       if (enemyHp <= 0) break
-      const dmgToPlayer = Math.max(1, enemy.atk - Math.floor(playerDef / 2) + Math.floor(Math.random() * 3))
+
+      // 敵の攻撃
+      const defVal = isMagical ? Math.floor(playerMdef / 2) : Math.floor(playerDef / 2)
+      const dmgToPlayer = Math.max(1, enemy.atk - defVal + Math.floor(Math.random() * 3))
       playerHp -= dmgToPlayer
       logs.push({ text:`${turn}ターン目: ${enemy.name}の反撃！ あなたに${dmgToPlayer}ダメージ…`, color:'#ff6644' })
+
+      // バフターン減少
+      Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns > 0) playerBuffs[k].turns-- })
+      Object.keys(enemyBuffs).forEach(k => { if (enemyBuffs[k]?.turns > 0) enemyBuffs[k].turns-- })
+
       turn++
     }
+
     playerHp = Math.max(0, playerHp)
     const win = enemyHp <= 0
     const expGained = isBossEncounter ? 13 : Math.floor(Math.random() * 4) + 8
     const goldGained = win ? enemy.gold : 0
+
     if (win) {
       logs.push({ text:`${enemy.name}を倒した！`, color:'#44ff88' })
       logs.push({ text:`EXP + ${expGained}　Gold + ${goldGained}`, color:'#ffcc00' })
@@ -336,9 +473,38 @@ export default function Game() {
       logs.push({ text:`敗北…`, color:'#ff4444' })
       logs.push({ text:`EXP + ${expGained}`, color:'#ff6644' })
     }
-    if (playerHp === 0) logs.push({ text:`⚠ 瀕死状態！宿屋で回復してください。`, color:'#ff4444' })
+
+    if (playerHp === 0) logs.push({ text:`⚠ 瀕死状態！宿屋でHP全回復してください。`, color:'#ff4444' })
     setBattleLogs(logs)
 
+    // ドロップ処理
+    if (win) {
+      const dropList = isBossEncounter ? area.bossDrops : area.commonDrops
+      let droppedItems = []
+      if (isBossEncounter && dropList.length === 2) {
+        const drop0 = Math.random() * 100 < 3
+        const drop1 = Math.random() * 100 < 3
+        if (drop0 && drop1) droppedItems = [dropList[Math.random() < 0.5 ? 0 : 1]]
+        else if (drop0) droppedItems = [dropList[0]]
+        else if (drop1) droppedItems = [dropList[1]]
+      } else {
+        for (const itemName of dropList) {
+          if (Math.random() * 100 < 3) droppedItems.push(itemName)
+        }
+      }
+      for (const itemName of droppedItems) {
+        const { data: weapon } = await supabase.from('weapons').select('id, slot').eq('name', itemName).single()
+        if (weapon) {
+          await supabase.from('player_equipment').insert({
+            player_id: profile.id, weapon_id: weapon.id, slot: weapon.slot, equipped: false,
+          })
+          logs.push({ text:`💎 ${itemName} を入手した！`, color:'#ffcc00' })
+        }
+      }
+    }
+    setBattleLogs([...logs])
+
+    // 熟練度更新
     if (equippedWeaponItem) {
       const prof = proficiency.find(p => p.weapon_id === equippedWeaponItem.weapons.id)
       if (prof) {
@@ -365,6 +531,18 @@ export default function Game() {
       }
     }
 
+    // スキル自動習得チェック
+    const { data: classSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class)
+    const { data: learnedSkills } = await supabase.from('player_skills').select('skill_id').eq('player_id', profile.id)
+    const learnedIds = (learnedSkills || []).map(s => s.skill_id)
+    let newLvForCheck = profile.lv
+    const toLearn = (classSkills || []).filter(s => s.required_lv <= newLvForCheck && !learnedIds.includes(s.id))
+    for (const skill of toLearn) {
+      await supabase.from('player_skills').insert({ player_id: profile.id, skill_id: skill.id })
+      logs.push({ text:`⚡ スキル「${skill.name}」を習得した！`, color:'#cc44ff' })
+    }
+    if (toLearn.length > 0) setBattleLogs([...logs])
+
     const newBossRate = isBossEncounter ? 0 : bossRate + 0.5
     let newUnlockedAreas = [...(profile.unlocked_areas || [1])]
     if (win && enemy.isBoss && !newUnlockedAreas.includes(selectedArea + 1)) {
@@ -384,7 +562,6 @@ export default function Game() {
     const growth = JOB_GROWTH[profile.class] || JOB_GROWTH['戦士']
     const bonusSlots = JOB_LEVEL3_BONUS[profile.class] || []
     let statUpdates = {}
-
     while (newExp >= newExpNext) {
       newExp -= newExpNext
       newLv++
@@ -400,7 +577,6 @@ export default function Game() {
         mdef:   (base.mdef   || profile.mdef)   + growth.mdef,
         spd:    (base.spd    || profile.spd)    + growth.spd,
       }
-      // 3レベルごとボーナス（上位職のみ）
       if (bonusSlots.length > 0 && (newLv - 1) % 3 === 0) {
         const bonusIndex = Math.floor((newLv - 1) / 3 - 1) % bonusSlots.length
         const bonusStat = bonusSlots[bonusIndex]
@@ -414,7 +590,7 @@ export default function Game() {
 
     await supabase.from('profiles').update({
       exp: newExp, exp_next: newExpNext, lv: newLv, gold: newGold,
-      hp_current: playerHp,
+      hp_current: playerHp, mp_current: playerMp,
       boss_encounter_rate: newBossRate,
       unlocked_areas: newUnlockedAreas,
       pending_stat_points: newPendingPoints,
@@ -468,6 +644,8 @@ export default function Game() {
   const hpCurrent = Math.max(0, profile.hp_current ?? profile.hp_max)
   const mpCurrent = Math.max(0, profile.mp_current ?? profile.mp_max)
   const isDying = hpCurrent <= 0
+  // ★ HP満タンでないと戦闘不可
+  const canBattle = hpCurrent >= profile.hp_max
   const hpPct = Math.min(100, (hpCurrent / profile.hp_max) * 100)
   const mpPct = Math.min(100, (mpCurrent / profile.mp_max) * 100)
   const expPct = Math.min(100, (profile.exp / profile.exp_next) * 100)
@@ -479,7 +657,6 @@ export default function Game() {
   const allocatedPoints = Object.values(statPoints).reduce((a, b) => a + b, 0)
   const total = calcTotal(profile)
   const eff = calcEffectiveStats(profile, equipment, proficiency)
-
   const availableClasses = INITIAL_CLASSES.filter(c => c !== profile.class).map(c => {
     const cl = classLevels.find(x => x.class_name === c)
     return { name: c, lv: cl ? cl.lv : 1, canChange: profile.lv >= 30 }
@@ -497,25 +674,22 @@ export default function Game() {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
           <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={() => nav('/equipment')}
-              style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡 装備</button>
-            <button onClick={() => nav('/ranking')}
-              style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏆 ランキング</button>
-            <button onClick={logout}
-              style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ログアウト</button>
+            <button onClick={() => nav('/equipment')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡 装備</button>
+            <button onClick={() => nav('/skills')} style={{ background:'none', border:'1px solid #cc44ff', color:'#cc44ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>⚡ スキル</button>
+            <button onClick={() => nav('/ranking')} style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏆 ランキング</button>
+            <button onClick={logout} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ログアウト</button>
           </div>
         </div>
 
         <div style={{ display:'grid', gridTemplateColumns:'220px 1fr', gap:'12px' }}>
           <div style={{ border:`1px solid ${isDying ? '#660000' : '#0044aa'}`, background:'#001040', padding:'10px', alignSelf:'start' }}>
-            {isDying && (
-              <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'4px', background:'#1a0000' }}>⚠ 瀕死状態</div>
-            )}
+            {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'4px', background:'#1a0000' }}>⚠ 瀕死状態</div>}
+            {!isDying && !canBattle && <div style={{ color:'#ff8800', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #664400', padding:'4px', background:'#1a0800' }}>⚠ HP全回復まで出撃不可</div>}
             <div style={{ color:'#ffcc00', fontSize:'12px', borderBottom:'1px dashed #003366', paddingBottom:'4px', marginBottom:'8px' }}>{profile.username}</div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>クラス: <span style={{color:'#88ccff'}}>{profile.class}</span></div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>LV: <span style={{color:'#ffcc00'}}>{profile.lv}</span></div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'6px' }}>総合力: <span style={{color:'#44ff88', fontWeight:'bold'}}>{total}</span></div>
-            <StatBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying ? '#ff2200' : '#00cc44'} />
+            <StatBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying ? '#ff2200' : canBattle ? '#00cc44' : '#ff8800'} />
             <StatBar label="MP" val={`${mpCurrent}/${profile.mp_max}`} pct={mpPct} color="#4488ff" />
             <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginTop:'6px' }}>
               <span>経験値</span><span style={{color:'#cc8800'}}>{profile.exp}/{profile.exp_next}</span>
@@ -555,20 +729,16 @@ export default function Game() {
                     <div key={stat} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', border:`1px solid ${(statPoints[stat]||0) > 0 ? '#cc44ff' : '#003366'}`, background:(statPoints[stat]||0) > 0 ? '#1a0030' : '#000818', padding:'6px 8px' }}>
                       <span style={{ color:'#88ccff', fontSize:'10px' }}>{label}</span>
                       <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
-                        <button onClick={() => { if ((statPoints[stat]||0) > 0) setStatPoints(p => ({ ...p, [stat]: p[stat] - 1 })) }}
-                          style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>-</button>
+                        <button onClick={() => { if ((statPoints[stat]||0) > 0) setStatPoints(p => ({ ...p, [stat]: p[stat] - 1 })) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>-</button>
                         <span style={{ color:'#cc44ff', fontSize:'11px', minWidth:'16px', textAlign:'center' }}>{statPoints[stat]||0}</span>
-                        <button onClick={() => { if (allocatedPoints < pendingPoints) setStatPoints(p => ({ ...p, [stat]: (p[stat]||0) + 1 })) }}
-                          style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>+</button>
+                        <button onClick={() => { if (allocatedPoints < pendingPoints) setStatPoints(p => ({ ...p, [stat]: (p[stat]||0) + 1 })) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>+</button>
                       </div>
                     </div>
                   ))}
                 </div>
                 <div style={{ display:'flex', gap:'8px' }}>
-                  <button onClick={() => setShowStatPanel(false)}
-                    style={{ flex:1, padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>後で振り分ける</button>
-                  <button onClick={confirmStatPoints} disabled={allocatedPoints !== pendingPoints}
-                    style={{ flex:2, padding:'8px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', opacity: allocatedPoints !== pendingPoints ? 0.4 : 1 }}>決定する</button>
+                  <button onClick={() => setShowStatPanel(false)} style={{ flex:1, padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>後で振り分ける</button>
+                  <button onClick={confirmStatPoints} disabled={allocatedPoints !== pendingPoints} style={{ flex:2, padding:'8px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', opacity: allocatedPoints !== pendingPoints ? 0.4 : 1 }}>決定する</button>
                 </div>
               </div>
             )}
@@ -576,11 +746,8 @@ export default function Game() {
             {scene === 'town' && (
               <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'8px' }}>
                 <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
-                {isDying && (
-                  <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'10px', border:'1px solid #660000', padding:'8px', background:'#1a0000' }}>
-                    ⚠ 瀕死状態です。宿屋で回復してから出撃してください。
-                  </div>
-                )}
+                {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'10px', border:'1px solid #660000', padding:'8px', background:'#1a0000' }}>⚠ 瀕死状態です。宿屋でHP全回復してください。</div>}
+                {!isDying && !canBattle && <div style={{ color:'#ff8800', fontSize:'11px', textAlign:'center', marginBottom:'10px', border:'1px solid #664400', padding:'8px', background:'#1a0800' }}>⚠ HPが最大値まで回復しないと出撃できません。</div>}
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
                   <span style={{ color:'#446688' }}>次の行動まで</span>
                   <span style={{ color: canAct ? '#44ff88' : '#ffcc00' }}>{canAct ? '▶ 出撃可能！' : `${remaining.toFixed(1)}秒`}</span>
@@ -590,25 +757,16 @@ export default function Game() {
                 </div>
                 <div style={{ marginBottom:'10px' }}>
                   <div style={{ color:'#446688', fontSize:'11px', marginBottom:'4px' }}>エリア選択</div>
-                  <select value={selectedArea} onChange={e => setSelectedArea(Number(e.target.value))}
-                    style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'6px', fontFamily:'monospace', fontSize:'12px' }}>
-                    {availableAreas.map(area => (
-                      <option key={area.id} value={area.id}>{area.name}</option>
-                    ))}
+                  <select value={selectedArea} onChange={e => setSelectedArea(Number(e.target.value))} style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'6px', fontFamily:'monospace', fontSize:'12px' }}>
+                    {availableAreas.map(area => <option key={area.id} value={area.id}>{area.name}</option>)}
                   </select>
                 </div>
-                <button onClick={doBattle} disabled={!canAct || loading || isDying}
-                  style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct && !isDying ? '#ffcc00' : '#003366'}`, color: canAct && !isDying ? '#ffcc00' : '#446688', cursor: canAct && !isDying ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
-                  {isDying ? '💀 瀕死中（出撃不可）' : canAct ? `⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！` : '⏳ 待機中...'}
+                <button onClick={doBattle} disabled={!canAct || loading || !canBattle}
+                  style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct && canBattle ? '#ffcc00' : '#003366'}`, color: canAct && canBattle ? '#ffcc00' : '#446688', cursor: canAct && canBattle ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
+                  {isDying ? '💀 瀕死中（出撃不可）' : !canBattle ? '💔 HP回復中（出撃不可）' : canAct ? `⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！` : '⏳ 待機中...'}
                 </button>
-                <button onClick={() => { setScene('inn'); setInnMessage('') }}
-                  style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
-                  🏨 宿屋へ
-                </button>
-                <button onClick={() => { setScene('temple'); setTempleMessage('') }}
-                  style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
-                  ⛩ 神殿へ
-                </button>
+                <button onClick={() => { setScene('inn'); setInnMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🏨 宿屋へ</button>
+                <button onClick={() => { setScene('temple'); setTempleMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿へ</button>
               </div>
             )}
 
@@ -620,11 +778,8 @@ export default function Game() {
                 ) : (
                   <>
                     <div style={{ color:'#88ccff', fontSize:'12px', lineHeight:'2', marginBottom:'16px' }}>
-                      {isDying ? (
-                        <>これはひどいお姿で…。特別なお手当が必要でございます。<br/><span style={{color:'#ffcc00'}}>{innCost} ゴールド</span> になりますが、よろしいですか？</>
-                      ) : (
-                        <>一泊 <span style={{color:'#ffcc00'}}>{innCost} ゴールド</span> でございます。<br/>ゆっくりお休みになりますか？</>
-                      )}
+                      {isDying ? <>これはひどいお姿で…。特別なお手当が必要でございます。<br/><span style={{color:'#ffcc00'}}>{innCost} ゴールド</span> になりますが、よろしいですか？</>
+                        : <>一泊 <span style={{color:'#ffcc00'}}>{innCost} ゴールド</span> でございます。<br/>ゆっくりお休みになりますか？</>}
                     </div>
                     <div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
                       所持金: <span style={{color:'#ffcc00'}}>{profile.gold}G</span>
@@ -632,8 +787,7 @@ export default function Game() {
                     </div>
                     <div style={{ display:'flex', gap:'8px' }}>
                       <button onClick={backToTown} style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
-                      <button onClick={useInn} disabled={profile.gold < innCost}
-                        style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor: profile.gold < innCost ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'12px', opacity: profile.gold < innCost ? 0.4 : 1 }}>利用する</button>
+                      <button onClick={useInn} disabled={profile.gold < innCost} style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor: profile.gold < innCost ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'12px', opacity: profile.gold < innCost ? 0.4 : 1 }}>利用する</button>
                     </div>
                   </>
                 )}
@@ -644,14 +798,9 @@ export default function Game() {
               <div style={{ border:'1px solid #886600', background:'#001020', padding:'16px' }}>
                 <div style={{ color:'#ccaa00', fontSize:'14px', marginBottom:'4px' }}>⛩ 神殿</div>
                 <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
-                  現在のクラス: <span style={{color:'#88ccff'}}>{profile.class}</span> LV<span style={{color:'#ffcc00'}}>{profile.lv}</span>
-                  　（転職にはLV30以上が必要）
+                  現在のクラス: <span style={{color:'#88ccff'}}>{profile.class}</span> LV<span style={{color:'#ffcc00'}}>{profile.lv}</span>　（転職にはLV30以上が必要）
                 </div>
-                {templeMessage && (
-                  <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'10px', marginBottom:'12px', border:'1px solid #44ff88' }}>
-                    {templeMessage}
-                  </div>
-                )}
+                {templeMessage && <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'10px', marginBottom:'12px', border:'1px solid #44ff88' }}>{templeMessage}</div>}
                 <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 初期職 ──</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
                   {availableClasses.map(c => (
@@ -682,8 +831,7 @@ export default function Game() {
                     </div>
                   ))}
                 </div>
-                <button onClick={backToTown}
-                  style={{ width:'100%', padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
+                <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
               </div>
             )}
 
@@ -696,10 +844,7 @@ export default function Game() {
                     <div key={i} style={{ color: l.color, fontSize:'12px', lineHeight:'2', borderBottom:'1px solid #001428', padding:'2px 0' }}>{l.text}</div>
                   ))}
                 </div>
-                {!loading && (
-                  <button onClick={backToTown}
-                    style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>
-                )}
+                {!loading && <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>}
               </div>
             )}
           </div>
