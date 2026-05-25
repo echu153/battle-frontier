@@ -25,17 +25,11 @@ const calcProfBonus = (prof) => {
   return { atk: bonus }
 }
 
-const getStatRank = (val, type) => {
-  let thresholds
-  if (type === 'hp') thresholds = [450, 1200, 2400, 4500, 7500, 12000, 18000, 27000]
-  else if (type === 'mp') thresholds = [225, 600, 1200, 2250, 3750, 6000, 9000, 13500]
-  else thresholds = [45, 120, 240, 450, 750, 1200, 1800, 2700]
-  const ranks = ['F','E','D','C','B','A','S','SS','SSS']
-  const colors = ['#888888','#6699cc','#ff8844','#44bb44','#4488ff','#ff4444','#ffcc00','#ffcc00','#ffcc00']
-  for (let i = 0; i < thresholds.length; i++) {
-    if (val <= thresholds[i]) return { rank: ranks[i], color: colors[i] }
-  }
-  return { rank: 'SSS', color: '#ffcc00' }
+const getProfPrefix = (profLv) => {
+  if (profLv >= 300) return '【極】'
+  if (profLv >= 200) return '【真】'
+  if (profLv >= 100) return '【改】'
+  return ''
 }
 
 export default function Equipment() {
@@ -43,7 +37,6 @@ export default function Equipment() {
   const [profile, setProfile] = useState(null)
   const [equipment, setEquipment] = useState([])
   const [proficiency, setProficiency] = useState([])
-  const [playerItem, setPlayerItem] = useState(null)
   const [allItems, setAllItems] = useState([])
   const [tab, setTab] = useState('weapon')
   const [loading, setLoading] = useState(false)
@@ -67,8 +60,6 @@ export default function Equipment() {
       .from('player_items').select('*, items(*)')
       .eq('player_id', user.id)
     setAllItems(pi || [])
-    const equipped = (pi || []).find(i => i.equipped)
-    setPlayerItem(equipped || null)
   }
 
   const equip = async (item) => {
@@ -107,7 +98,6 @@ export default function Equipment() {
 
   const setItemSlot = async (itemId) => {
     setLoading(true)
-    // 既存の装備アイテムを外す
     await supabase.from('player_items').update({ equipped: false }).eq('player_id', profile.id)
     if (itemId) {
       await supabase.from('player_items').update({ equipped: true }).eq('id', itemId)
@@ -129,6 +119,7 @@ export default function Equipment() {
 
   const slots = ['weapon', 'armor', 'accessory']
   const filteredEquipment = equipment.filter(e => e.slot === tab)
+  const equippedItem = allItems.find(i => i.equipped)
 
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
@@ -177,22 +168,25 @@ export default function Equipment() {
 
             {/* アイテムスロット */}
             <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px', marginTop:'12px' }}>持ち物</div>
-            <div style={{ border:'1px solid #003366', background:'#001028', padding:'8px', marginBottom:'6px' }}>
+            <div style={{ border:'1px solid #003366', background:'#001028', padding:'8px' }}>
               <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>アイテム（1個）</div>
-              {playerItem ? (
+              {equippedItem ? (
                 <>
-                  <div style={{ color:'#44ff88', fontSize:'11px' }}>{playerItem.items.name}</div>
-                  <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>残り{playerItem.quantity}個</div>
-                  <div style={{ display:'flex', alignItems:'center', gap:'4px', marginTop:'4px' }}>
-                    <span style={{ color:'#446688', fontSize:'10px' }}>使用:</span>
-                    <select value={playerItem.use_threshold || 50}
-                      onChange={e => setItemThreshold(playerItem.id, Number(e.target.value))}
-                      style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'1px' }}>
-                      {[10,20,30,40,50,60,70,80,90,100].map(n => (
-                        <option key={n} value={n}>{n}%以下</option>
-                      ))}
-                    </select>
-                  </div>
+                  <div style={{ color:'#44ff88', fontSize:'11px' }}>{equippedItem.items.name}</div>
+                  <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>残り{equippedItem.quantity}個</div>
+                  {/* ポーション系のみ使用タイミング設定表示 */}
+                  {(equippedItem.items.effect === 'hp_pct' || equippedItem.items.effect === 'mp_pct') && (
+                    <div style={{ display:'flex', alignItems:'center', gap:'4px', marginTop:'4px' }}>
+                      <span style={{ color:'#446688', fontSize:'10px' }}>使用:</span>
+                      <select value={equippedItem.use_threshold || 50}
+                        onChange={e => setItemThreshold(equippedItem.id, Number(e.target.value))}
+                        style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'1px' }}>
+                        {[10,20,30,40,50,60,70,80,90,100].map(n => (
+                          <option key={n} value={n}>{n}%以下</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <button onClick={() => setItemSlot(null)} disabled={loading}
                     style={{ marginTop:'4px', padding:'2px 6px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
                     外す
@@ -206,7 +200,6 @@ export default function Equipment() {
 
           {/* 右カラム */}
           <div>
-            {/* タブ */}
             <div style={{ display:'flex', gap:'4px', marginBottom:'8px' }}>
               {[...slots, 'item'].map(s => (
                 <button key={s} onClick={() => setTab(s)}
@@ -244,8 +237,9 @@ export default function Equipment() {
                         }
                       </div>
                     </div>
-                    <div style={{ color:'#446688', fontSize:'10px' }}>{pi.items.description}</div>
-                    {pi.equipped && pi.items.effect !== 'boss_avoid' && (
+                    <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>{pi.items.description}</div>
+                    {/* ポーション系のみ使用タイミング設定 */}
+                    {pi.equipped && (pi.items.effect === 'hp_pct' || pi.items.effect === 'mp_pct') && (
                       <div style={{ display:'flex', alignItems:'center', gap:'4px', marginTop:'4px' }}>
                         <span style={{ color:'#446688', fontSize:'10px' }}>使用タイミング:</span>
                         <select value={pi.use_threshold || 50}
@@ -273,6 +267,7 @@ export default function Equipment() {
                   const prof = tab === 'weapon' ? proficiency.find(p => p.weapon_id === w.id) : null
                   const profBonus = calcProfBonus(prof ? { ...prof, weapon: w } : null)
                   const profPct = prof ? Math.min(100, (prof.prof_exp / 100) * 100) : 0
+                  const profPrefix = prof ? getProfPrefix(prof.prof_lv) : ''
 
                   return (
                     <div key={item.id} style={{
@@ -285,7 +280,9 @@ export default function Equipment() {
                           <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>
                             {RARITY_LABELS[w.rarity]}
                           </span>
-                          <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>{w.name}</span>
+                          <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>
+                            {profPrefix}{w.name}
+                          </span>
                         </div>
                         {item.equipped
                           ? <button onClick={() => unequip(item)} disabled={loading}
@@ -313,7 +310,7 @@ export default function Equipment() {
                       {tab === 'weapon' && prof && (
                         <div>
                           <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginBottom:'2px' }}>
-                            <span>熟練度 LV{prof.prof_lv}{prof.awakening > 0 && <span style={{color:'#ffcc00'}}> +{prof.awakening}</span>}</span>
+                            <span>{profPrefix}熟練度 LV{prof.prof_lv}</span>
                             <span>{prof.prof_exp}/100</span>
                           </div>
                           <div style={{ background:'#001028', height:'4px', border:'1px solid #002244', marginBottom:'2px' }}>
@@ -321,7 +318,10 @@ export default function Equipment() {
                           </div>
                           {Object.keys(profBonus).length > 0 && (
                             <div style={{ fontSize:'10px', color:'#aa44ff' }}>
-                              熟練度ボーナス: {Object.entries(profBonus).map(([k,v]) => `${k === 'atk' ? '攻撃力' : k === 'matk' ? '特殊攻撃力' : '素早さ'}+${v}`).join(' ')}
+                              熟練度ボーナス: {Object.entries(profBonus).map(([k,v]) => {
+                                const label = k === 'atk' ? '攻撃力' : k === 'matk' ? '特殊攻撃力' : k === 'def' ? '防御力' : k === 'mdef' ? '特殊防御力' : '素早さ'
+                                return `${label}+${v}`
+                              }).join(' ')}
                             </div>
                           )}
                         </div>

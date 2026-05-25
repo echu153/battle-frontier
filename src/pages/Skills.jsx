@@ -39,19 +39,24 @@ export default function Skills() {
       .eq('player_id', user.id)
       .order('slot_order')
     setSkillSets(ss || [])
+
+    // レベル達成済みスキルを自動習得
     await checkAndLearnSkills(user.id, p, skills || [], ps || [])
   }
 
   const checkAndLearnSkills = async (userId, p, skills, learned) => {
     const learnedIds = learned.map(ps => ps.skill_id)
     const toLearn = skills.filter(s => s.required_lv <= p.lv && !learnedIds.includes(s.id))
+    if (toLearn.length === 0) return
     for (const skill of toLearn) {
-      await supabase.from('player_skills').insert({ player_id: userId, skill_id: skill.id })
+      await supabase.from('player_skills').insert({
+        player_id: userId, skill_id: skill.id,
+      })
     }
-    if (toLearn.length > 0) {
-      const { data: ps } = await supabase.from('player_skills').select('*, skills(*)').eq('player_id', userId)
-      setPlayerSkills(ps || [])
-    }
+    const { data: ps } = await supabase
+      .from('player_skills').select('*, skills(*)')
+      .eq('player_id', userId)
+    setPlayerSkills(ps || [])
   }
 
   const setSkillToSlot = async (skillId, slotOrder) => {
@@ -59,9 +64,12 @@ export default function Skills() {
     await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('skill_id', skillId)
     const existing = skillSets.find(ss => ss.slot_order === slotOrder)
     if (existing) {
-      await supabase.from('skill_sets').update({ skill_id: skillId, use_count: 1 }).eq('player_id', profile.id).eq('slot_order', slotOrder)
+      await supabase.from('skill_sets').update({ skill_id: skillId, use_count: 1 })
+        .eq('player_id', profile.id).eq('slot_order', slotOrder)
     } else {
-      await supabase.from('skill_sets').insert({ player_id: profile.id, skill_id: skillId, slot_order: slotOrder, use_count: 1 })
+      await supabase.from('skill_sets').insert({
+        player_id: profile.id, skill_id: skillId, slot_order: slotOrder, use_count: 1,
+      })
     }
     await fetchAll()
     setLoading(false)
@@ -69,7 +77,8 @@ export default function Skills() {
 
   const updateUseCount = async (slotOrder, useCount) => {
     setLoading(true)
-    await supabase.from('skill_sets').update({ use_count: useCount }).eq('player_id', profile.id).eq('slot_order', slotOrder)
+    await supabase.from('skill_sets').update({ use_count: useCount })
+      .eq('player_id', profile.id).eq('slot_order', slotOrder)
     await fetchAll()
     setLoading(false)
   }
@@ -118,9 +127,7 @@ export default function Skills() {
                         {set.skills.name}
                       </span>
                       <span style={{ color:'#446688', fontSize:'10px' }}>MP{set.skills.mp_cost}</span>
-                      {/* 使用回数プルダウン */}
-                      <select
-                        value={set.use_count || 1}
+                      <select value={set.use_count || 1}
                         onChange={e => updateUseCount(slot, Number(e.target.value))}
                         style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'2px' }}>
                         {[1,2,3,4,5,6,7,8,9,10].map(n => (

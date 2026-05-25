@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
-const WAIT_SECONDS = 20
-const REGEN_SECONDS = 180
+const WAIT_SECONDS = 10
+const REGEN_SECONDS = 60
 
 const AREAS = [
   {
@@ -14,7 +14,7 @@ const AREAS = [
       { name:'毒キノコ',   hp:60,  atk:3,   def:4,  matk:12, mdef:7,  spd:2,  type:'magical',  gold:8  },
     ],
     boss: { name:'ビッグスライム', hp:500, atk:28, def:22, matk:5, mdef:12, spd:8, gold:100, isBoss:true, type:'physical' },
-    commonDrops: ['木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス'],
+    commonDrops: ['木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス','ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
     bossDrops: ['スライムの指輪','蒼粘剣'],
   },
   {
@@ -139,7 +139,6 @@ const WEAPON_TYPE_GROUP = {
 }
 const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'
 
-// 熟練度名前プレフィックス
 const getProfPrefix = (profLv) => {
   if (profLv >= 300) return '【極】'
   if (profLv >= 200) return '【真】'
@@ -147,12 +146,9 @@ const getProfPrefix = (profLv) => {
   return ''
 }
 
-// 熟練度ボーナス計算（新仕様）
 const calcProfBonus = (prof, weapon) => {
   if (!prof || !weapon) return {}
   const profLv = prof.prof_lv || 1
-
-  // 武器のボーナス値を取得
   const bonuses = {
     atk:  weapon.atk_bonus  || 0,
     def:  weapon.def_bonus  || 0,
@@ -160,34 +156,22 @@ const calcProfBonus = (prof, weapon) => {
     mdef: weapon.mdef_bonus || 0,
     spd:  weapon.spd_bonus  || 0,
   }
-
-  // 倍率計算
   let multiplier = 1
   if (profLv >= 300) multiplier = 4
   else if (profLv >= 200) multiplier = 3
   else if (profLv >= 100) multiplier = 2
-
-  // 倍率適用後のボーナス
   const scaledBonuses = {}
   for (const [k, v] of Object.entries(bonuses)) {
     scaledBonuses[k] = v * multiplier
   }
-
-  // 10LVごとに一番高いボーナスに+1%
   const pctBonus = Math.floor(profLv / 10)
-
-  // %対象外（既に%上昇しているステータスは除外）、最大値のステータスを探す
-  // 固定値ボーナスの中で最大のものを探す
   const fixedBonuses = Object.entries(scaledBonuses).filter(([, v]) => v > 0)
   if (fixedBonuses.length > 0 && pctBonus > 0) {
     const maxVal = Math.max(...fixedBonuses.map(([, v]) => v))
     const maxKeys = fixedBonuses.filter(([, v]) => v === maxVal).map(([k]) => k)
-    // 同値の場合ランダム
     const targetKey = maxKeys[Math.floor(Math.random() * maxKeys.length)]
     scaledBonuses[targetKey] = Math.floor(scaledBonuses[targetKey] * (1 + pctBonus / 100))
   }
-
-  // 0以外を返す
   const result = {}
   for (const [k, v] of Object.entries(scaledBonuses)) {
     if (v > 0) result[k] = v
@@ -410,8 +394,8 @@ export default function Game() {
   const doRegen = async () => {
     if (!profile) return
     const current = profile.hp_current ?? profile.hp_max
-    const newHp = Math.min(profile.hp_max, Math.floor(current + profile.hp_max * 0.1))
-    const newMp = Math.min(profile.mp_max, Math.floor((profile.mp_current ?? profile.mp_max) + profile.mp_max * 0.1))
+    const newHp = Math.min(profile.hp_max, Math.floor(current + profile.hp_max * 0.2))
+    const newMp = Math.min(profile.mp_max, Math.floor((profile.mp_current ?? profile.mp_max) + profile.mp_max * 0.2))
     const newIsDying = newHp >= profile.hp_max ? false : profile.is_dying
     await supabase.from('profiles').update({
       hp_current: newHp, mp_current: newMp,
@@ -475,7 +459,7 @@ export default function Game() {
     let currentItem = playerItem ? { ...playerItem } : null
     let itemUsed = false
 
-    // 魔よけのお守り処理
+    // 魔よけのお守り処理（HP%条件なしでボス遭遇時に自動発動）
     if (isBossEncounter && currentItem && currentItem.items.effect === 'boss_avoid') {
       logs.push({ text:`🧿 魔よけのお守りが光り、ボスとの戦闘を避けた！`, color:'#cc44ff' })
       setBattleLogs([...logs])
@@ -511,42 +495,36 @@ export default function Game() {
     const enemyExtraRate = calcExtraActionRate(enemySpd, playerSpd)
 
     const doPlayerAttack = (isExtra = false) => {
+      const playerDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
+      const playerMdef = eff.mdef * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
+      const playerMatk = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1)
+      const playerSpdBuff = eff.spd * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1)
+      const effWithBuff = { ...eff, def: playerDef, mdef: playerMdef, matk: playerMatk, spd: playerSpdBuff }
+      const enemyDefRate  = enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1
+      const enemyMdefRate = enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1
+      const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
       let skillUsed = false
       if (expandedSkillSet.length > 0) {
         const currentSkill = expandedSkillSet[skillIndex % expandedSkillSet.length]
         if (currentSkill && currentSkill.skills && playerMp >= currentSkill.skills.mp_cost) {
           playerMp -= currentSkill.skills.mp_cost
-          const playerDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
-          const playerMdef = eff.mdef * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
-          const playerMatk = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1)
-          const playerSpdBuff = eff.spd * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1)
-          const effWithBuff = { ...eff, def: playerDef, mdef: playerMdef, matk: playerMatk, spd: playerSpdBuff }
           const result = executeSkill(currentSkill.skills, effWithBuff, profile, enemy, enemyBuffs, playerBuffs)
           enemyHp -= result.dmg
           playerHp = Math.min(profile.hp_max, playerHp + result.heal)
           playerBuffs = result.newPlayerBuffs
           enemyBuffs = result.newEnemyBuffs
-          const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
           logs.push({ text:`${prefix}${result.log}`, color:'#88ccff' })
           skillUsed = true
           skillIndex++
         }
       }
       if (!skillUsed) {
-        const playerDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
-        const playerMdef = eff.mdef * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
-        const playerMatk = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1)
-        const playerSpdBuff = eff.spd * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1)
-        const effWithBuff = { ...eff, def: playerDef, mdef: playerMdef, matk: playerMatk, spd: playerSpdBuff }
-        const enemyDefRate  = enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1
-        const enemyMdefRate = enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1
         const baseAtk = isMagical ? effWithBuff.matk : effWithBuff.atk
         const enemyDefVal = isMagical
           ? Math.floor((enemy.mdef || 0) / 2 * enemyMdefRate)
           : Math.floor(enemy.def / 2 * enemyDefRate)
         const dmg = Math.max(1, baseAtk - enemyDefVal + Math.floor(Math.random() * 4))
         enemyHp -= dmg
-        const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
         logs.push({ text:`${prefix}あなたの攻撃！ ${enemy.name}に${dmg}ダメージ！`, color:'#ffcc00' })
         if (expandedSkillSet.length > 0) skillIndex++
       }
@@ -565,13 +543,12 @@ export default function Game() {
     }
 
     while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
-      // 祈祷の毎ターン回復
       if (playerBuffs.regenHeal && playerBuffs.regenHeal.turns > 0) {
         playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.regenHeal.amount)
         logs.push({ text:`🙏 祈祷の効果でHPが${playerBuffs.regenHeal.amount}回復した！`, color:'#44ff88' })
       }
 
-      // アイテム自動使用
+      // ポーション系アイテム自動使用
       if (currentItem && !itemUsed) {
         const threshold = currentItem.use_threshold || 50
         const effect = currentItem.items.effect
@@ -595,7 +572,6 @@ export default function Game() {
       doPlayerAttack(false)
       if (enemyHp <= 0) break
 
-      // プレイヤー追加行動
       if (playerExtraRate > 0 && Math.random() * 100 < playerExtraRate) {
         doPlayerAttack(true)
         if (enemyHp <= 0) break
@@ -604,7 +580,6 @@ export default function Game() {
       doEnemyAttack(false)
       if (playerHp <= 0) break
 
-      // 敵追加行動
       if (enemyExtraRate > 0 && Math.random() * 100 < enemyExtraRate) {
         doEnemyAttack(true)
       }
@@ -634,7 +609,6 @@ export default function Game() {
     }
     setBattleLogs(logs)
 
-    // ドロップ処理（雑魚：3%でランダム1個、ボス：各3%）
     if (win) {
       const dropList = isBossEncounter ? area.bossDrops : area.commonDrops
       let droppedItems = []
@@ -645,7 +619,6 @@ export default function Game() {
         else if (drop0) droppedItems = [dropList[0]]
         else if (drop1) droppedItems = [dropList[1]]
       } else if (!isBossEncounter && dropList.length > 0) {
-        // 雑魚：3%でランダム1個
         if (Math.random() * 100 < 3) {
           droppedItems = [dropList[Math.floor(Math.random() * dropList.length)]]
         }
@@ -662,7 +635,6 @@ export default function Game() {
     }
     setBattleLogs([...logs])
 
-    // 熟練度更新
     if (equippedWeaponItem) {
       const prof = proficiency.find(p => p.weapon_id === equippedWeaponItem.weapons.id)
       if (prof) {
@@ -752,8 +724,11 @@ export default function Game() {
   }
 
   const useInn = async () => {
-    const cost = profile.is_dying ? profile.lv * 30 : profile.lv * 3
-    if (profile.gold < cost) return
+    const isDying = profile.is_dying || false
+    const normalCost = profile.lv * 2
+    const dyingCost = profile.lv * 15
+    const cost = isDying ? Math.min(dyingCost, profile.gold) : normalCost
+    if (profile.gold < normalCost && !isDying) return
     await supabase.from('profiles').update({
       hp_current: profile.hp_max, mp_current: profile.mp_max,
       gold: profile.gold - cost, is_dying: false,
@@ -801,7 +776,7 @@ export default function Game() {
   const regenPct = ((REGEN_SECONDS - regenRemaining) / REGEN_SECONDS) * 100
   const unlockedAreas = profile.unlocked_areas || [1]
   const availableAreas = AREAS.filter(a => unlockedAreas.includes(a.id))
-  const innCost = isDying ? profile.lv * 30 : profile.lv * 3
+  const innCost = isDying ? Math.min(profile.lv * 15, profile.gold) : profile.lv * 2
   const allocatedPoints = Object.values(statPoints).reduce((a, b) => a + b, 0)
   const total = calcTotal(profile)
   const eff = calcEffectiveStats(profile, equipment, proficiency)
@@ -930,16 +905,24 @@ export default function Game() {
                 ) : (
                   <>
                     <div style={{ color:'#88ccff', fontSize:'12px', lineHeight:'2', marginBottom:'16px' }}>
-                      {isDying ? <>これはひどいお姿で…。特別なお手当が必要でございます。<br/><span style={{color:'#ffcc00'}}>{innCost} ゴールド</span> になりますが、よろしいですか？</>
-                        : <>一泊 <span style={{color:'#ffcc00'}}>{innCost} ゴールド</span> でございます。<br/>ゆっくりお休みになりますか？</>}
+                      {isDying ? (
+                        <>これはひどいお姿で…。特別なお手当が必要でございます。<br/>
+                        <span style={{color:'#ffcc00'}}>{profile.lv * 15}G</span> のところ、
+                        所持金 <span style={{color:'#ffcc00'}}>{innCost}G</span> で承ります。</>
+                      ) : (
+                        <>一泊 <span style={{color:'#ffcc00'}}>{innCost}G</span> でございます。<br/>ゆっくりお休みになりますか？</>
+                      )}
                     </div>
                     <div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
                       所持金: <span style={{color:'#ffcc00'}}>{profile.gold}G</span>
-                      {profile.gold < innCost && <span style={{color:'#ff4444'}}> （ゴールドが足りません）</span>}
+                      {!isDying && profile.gold < innCost && <span style={{color:'#ff4444'}}> （ゴールドが足りません）</span>}
                     </div>
                     <div style={{ display:'flex', gap:'8px' }}>
                       <button onClick={backToTown} style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
-                      <button onClick={useInn} disabled={profile.gold < innCost} style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor: profile.gold < innCost ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'12px', opacity: profile.gold < innCost ? 0.4 : 1 }}>利用する</button>
+                      <button onClick={useInn} disabled={!isDying && profile.gold < innCost}
+                        style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor: (!isDying && profile.gold < innCost) ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'12px', opacity: (!isDying && profile.gold < innCost) ? 0.4 : 1 }}>
+                        利用する
+                      </button>
                     </div>
                   </>
                 )}
