@@ -9,9 +9,9 @@ const AREAS = [
   {
     id: 1, name: '始まりの森',
     enemies: [
-      { name:'スライム',   hp:30,  atk:8,   def:3,  matk:0,  mdef:3,  spd:3,  type:'physical' },
-      { name:'コウモリ',   hp:37,  atk:10,  def:3,  matk:0,  mdef:3,  spd:15, type:'physical' },
-      { name:'毒キノコ',   hp:60,  atk:3,   def:4,  matk:12, mdef:7,  spd:2,  type:'magical'  },
+      { name:'スライム',   hp:30,  atk:8,   def:3,  matk:0,  mdef:3,  spd:3,  type:'physical', gold:5  },
+      { name:'コウモリ',   hp:37,  atk:10,  def:3,  matk:0,  mdef:3,  spd:15, type:'physical', gold:6  },
+      { name:'毒キノコ',   hp:60,  atk:3,   def:4,  matk:12, mdef:7,  spd:2,  type:'magical',  gold:8  },
     ],
     boss: { name:'ビッグスライム', hp:500, atk:28, def:22, matk:5, mdef:12, spd:8, gold:100, isBoss:true, type:'physical' },
     commonDrops: ['木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス'],
@@ -20,22 +20,24 @@ const AREAS = [
   {
     id: 2, name: '荒廃した草原',
     enemies: [
-      { name:'ゴブリン',   hp:160, atk:35,  def:16, matk:0,  mdef:10, spd:10, type:'physical' },
-      { name:'野良犬',     hp:200, atk:45,  def:20, matk:0,  mdef:10, spd:20, type:'physical' },
-      { name:'盗賊',       hp:240, atk:55,  def:24, matk:10, mdef:16, spd:12, type:'physical' },
+      { name:'ゴブリン',   hp:160, atk:35,  def:16, matk:0,  mdef:10, spd:10, type:'physical', gold:20 },
+      { name:'野良犬',     hp:200, atk:45,  def:20, matk:0,  mdef:10, spd:20, type:'physical', gold:25 },
+      { name:'盗賊',       hp:240, atk:55,  def:24, matk:10, mdef:16, spd:12, type:'physical', gold:30 },
     ],
     boss: { name:'盗賊団のリーダー', hp:2000, atk:84, def:30, matk:20, mdef:22, spd:15, gold:500, isBoss:true, type:'physical' },
-    commonDrops: [], bossDrops: [],
+    commonDrops: ['ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
+    bossDrops: [],
   },
   {
     id: 3, name: '古代の洞窟',
     enemies: [
-      { name:'コボルト',   hp:400, atk:100, def:50, matk:0,  mdef:30, spd:12, type:'physical' },
-      { name:'スケルトン', hp:500, atk:120, def:60, matk:30, mdef:40, spd:10, type:'physical' },
-      { name:'ゴーレム',   hp:600, atk:150, def:80, matk:0,  mdef:40, spd:3,  type:'physical' },
+      { name:'コボルト',   hp:400, atk:100, def:50, matk:0,  mdef:30, spd:12, type:'physical', gold:60  },
+      { name:'スケルトン', hp:500, atk:120, def:60, matk:30, mdef:40, spd:10, type:'physical', gold:80  },
+      { name:'ゴーレム',   hp:600, atk:150, def:80, matk:0,  mdef:40, spd:3,  type:'physical', gold:100 },
     ],
     boss: { name:'古代の番人', hp:8000, atk:210, def:80, matk:80, mdef:60, spd:10, gold:2000, isBoss:true, type:'magical' },
-    commonDrops: [], bossDrops: [],
+    commonDrops: [],
+    bossDrops: [],
   },
 ]
 
@@ -69,7 +71,6 @@ const JOB_GROWTH = {
   '賢者':    { hp:10, mp:10, atk:0, def:1, matk:2, mdef:3, spd:0 },
 }
 
-// 初期職3レベルごとボーナス
 const JOB_LEVEL3_BONUS = {
   '戦士':    ['matk'],
   '弓使い':  ['matk'],
@@ -102,7 +103,6 @@ const STAT_LABELS = {
   matk:'特殊攻撃力 (+1)', mdef:'特殊防御力 (+1)', spd:'素早さ (+1)'
 }
 
-// ランク計算
 const getStatRank = (val, type) => {
   let thresholds
   if (type === 'hp') thresholds = [450, 1200, 2400, 4500, 7500, 12000, 18000, 27000]
@@ -139,17 +139,60 @@ const WEAPON_TYPE_GROUP = {
 }
 const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'
 
-const calcProfBonus = (prof) => {
-  if (!prof) return {}
-  const awakening = prof.awakening || 0
-  const lv = prof.prof_lv + awakening * 20
-  const bonus = Math.floor(lv / 10)
-  const weapon = prof.weapons
-  if (!weapon) return {}
-  const group = getWeaponGroup(weapon.weapon_type)
-  if (group === 'magical') return { matk: bonus }
-  if (weapon.weapon_type === 'bow') return { atk: bonus, spd: bonus }
-  return { atk: bonus }
+// 熟練度名前プレフィックス
+const getProfPrefix = (profLv) => {
+  if (profLv >= 300) return '【極】'
+  if (profLv >= 200) return '【真】'
+  if (profLv >= 100) return '【改】'
+  return ''
+}
+
+// 熟練度ボーナス計算（新仕様）
+const calcProfBonus = (prof, weapon) => {
+  if (!prof || !weapon) return {}
+  const profLv = prof.prof_lv || 1
+
+  // 武器のボーナス値を取得
+  const bonuses = {
+    atk:  weapon.atk_bonus  || 0,
+    def:  weapon.def_bonus  || 0,
+    matk: weapon.matk_bonus || 0,
+    mdef: weapon.mdef_bonus || 0,
+    spd:  weapon.spd_bonus  || 0,
+  }
+
+  // 倍率計算
+  let multiplier = 1
+  if (profLv >= 300) multiplier = 4
+  else if (profLv >= 200) multiplier = 3
+  else if (profLv >= 100) multiplier = 2
+
+  // 倍率適用後のボーナス
+  const scaledBonuses = {}
+  for (const [k, v] of Object.entries(bonuses)) {
+    scaledBonuses[k] = v * multiplier
+  }
+
+  // 10LVごとに一番高いボーナスに+1%
+  const pctBonus = Math.floor(profLv / 10)
+
+  // %対象外（既に%上昇しているステータスは除外）、最大値のステータスを探す
+  // 固定値ボーナスの中で最大のものを探す
+  const fixedBonuses = Object.entries(scaledBonuses).filter(([, v]) => v > 0)
+  if (fixedBonuses.length > 0 && pctBonus > 0) {
+    const maxVal = Math.max(...fixedBonuses.map(([, v]) => v))
+    const maxKeys = fixedBonuses.filter(([, v]) => v === maxVal).map(([k]) => k)
+    // 同値の場合ランダム
+    const targetKey = maxKeys[Math.floor(Math.random() * maxKeys.length)]
+    scaledBonuses[targetKey] = Math.floor(scaledBonuses[targetKey] * (1 + pctBonus / 100))
+  }
+
+  // 0以外を返す
+  const result = {}
+  for (const [k, v] of Object.entries(scaledBonuses)) {
+    if (v > 0) result[k] = v
+  }
+  return result
 }
 
 const calcEffectiveStats = (profile, equipment, proficiency) => {
@@ -169,9 +212,11 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
     if (item.slot === 'weapon') {
       const prof = proficiency.find(p => p.weapon_id === w.id)
       if (prof) {
-        const pb = calcProfBonus({ ...prof, weapons: w })
+        const pb = calcProfBonus(prof, w)
         bonus.atk  += pb.atk  || 0
+        bonus.def  += pb.def  || 0
         bonus.matk += pb.matk || 0
+        bonus.mdef += pb.mdef || 0
         bonus.spd  += pb.spd  || 0
       }
     }
@@ -210,7 +255,6 @@ const calcClassStats = (className, lv) => {
   return stats
 }
 
-// 素早さ追加行動確率計算
 const calcExtraActionRate = (mySpd, enemySpd) => {
   if (mySpd <= enemySpd) return 0
   const diff = mySpd - enemySpd
@@ -428,8 +472,8 @@ export default function Game() {
     let skillIndex = 0
     let playerBuffs = {}
     let enemyBuffs = {}
-    let itemUsed = false
     let currentItem = playerItem ? { ...playerItem } : null
+    let itemUsed = false
 
     // 魔よけのお守り処理
     if (isBossEncounter && currentItem && currentItem.items.effect === 'boss_avoid') {
@@ -461,28 +505,73 @@ export default function Game() {
       for (let i = 0; i < count; i++) expandedSkillSet.push(ss)
     }
 
-    // 素早さ比率計算
     const playerSpd = eff.spd
     const enemySpd = enemy.spd || 5
     const playerExtraRate = calcExtraActionRate(playerSpd, enemySpd)
     const enemyExtraRate = calcExtraActionRate(enemySpd, playerSpd)
 
-    while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
+    const doPlayerAttack = (isExtra = false) => {
+      let skillUsed = false
+      if (expandedSkillSet.length > 0) {
+        const currentSkill = expandedSkillSet[skillIndex % expandedSkillSet.length]
+        if (currentSkill && currentSkill.skills && playerMp >= currentSkill.skills.mp_cost) {
+          playerMp -= currentSkill.skills.mp_cost
+          const playerDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
+          const playerMdef = eff.mdef * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
+          const playerMatk = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1)
+          const playerSpdBuff = eff.spd * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1)
+          const effWithBuff = { ...eff, def: playerDef, mdef: playerMdef, matk: playerMatk, spd: playerSpdBuff }
+          const result = executeSkill(currentSkill.skills, effWithBuff, profile, enemy, enemyBuffs, playerBuffs)
+          enemyHp -= result.dmg
+          playerHp = Math.min(profile.hp_max, playerHp + result.heal)
+          playerBuffs = result.newPlayerBuffs
+          enemyBuffs = result.newEnemyBuffs
+          const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+          logs.push({ text:`${prefix}${result.log}`, color:'#88ccff' })
+          skillUsed = true
+          skillIndex++
+        }
+      }
+      if (!skillUsed) {
+        const playerDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
+        const playerMdef = eff.mdef * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
+        const playerMatk = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1)
+        const playerSpdBuff = eff.spd * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1)
+        const effWithBuff = { ...eff, def: playerDef, mdef: playerMdef, matk: playerMatk, spd: playerSpdBuff }
+        const enemyDefRate  = enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1
+        const enemyMdefRate = enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1
+        const baseAtk = isMagical ? effWithBuff.matk : effWithBuff.atk
+        const enemyDefVal = isMagical
+          ? Math.floor((enemy.mdef || 0) / 2 * enemyMdefRate)
+          : Math.floor(enemy.def / 2 * enemyDefRate)
+        const dmg = Math.max(1, baseAtk - enemyDefVal + Math.floor(Math.random() * 4))
+        enemyHp -= dmg
+        const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+        logs.push({ text:`${prefix}あなたの攻撃！ ${enemy.name}に${dmg}ダメージ！`, color:'#ffcc00' })
+        if (expandedSkillSet.length > 0) skillIndex++
+      }
+    }
+
+    const doEnemyAttack = (isExtra = false) => {
       const playerDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
       const playerMdef = eff.mdef * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
-      const playerMatk = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1)
-      const playerSpdBuff = eff.spd * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1)
-      const effWithBuff = { ...eff, def: playerDef, mdef: playerMdef, matk: playerMatk, spd: playerSpdBuff }
-      const enemyDefRate  = enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1
-      const enemyMdefRate = enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1
+      const isEnemyMagical = enemy.type === 'magical'
+      const enemyAtk = isEnemyMagical ? (enemy.matk || 0) : enemy.atk
+      const defVal = isEnemyMagical ? Math.floor(playerMdef / 2) : Math.floor(playerDef / 2)
+      const dmgToPlayer = Math.max(1, enemyAtk - defVal + Math.floor(Math.random() * 3))
+      playerHp -= dmgToPlayer
+      const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+      logs.push({ text:`${prefix}${enemy.name}の攻撃！ あなたに${dmgToPlayer}ダメージ…`, color:'#ff6644' })
+    }
 
+    while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
       // 祈祷の毎ターン回復
       if (playerBuffs.regenHeal && playerBuffs.regenHeal.turns > 0) {
         playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.regenHeal.amount)
         logs.push({ text:`🙏 祈祷の効果でHPが${playerBuffs.regenHeal.amount}回復した！`, color:'#44ff88' })
       }
 
-      // アイテム自動使用チェック
+      // アイテム自動使用
       if (currentItem && !itemUsed) {
         const threshold = currentItem.use_threshold || 50
         const effect = currentItem.items.effect
@@ -503,60 +592,21 @@ export default function Game() {
         }
       }
 
-      // プレイヤー攻撃
-      const doPlayerAttack = () => {
-        let skillUsed = false
-        if (expandedSkillSet.length > 0) {
-          const currentSkill = expandedSkillSet[skillIndex % expandedSkillSet.length]
-          if (currentSkill && currentSkill.skills && playerMp >= currentSkill.skills.mp_cost) {
-            playerMp -= currentSkill.skills.mp_cost
-            const result = executeSkill(currentSkill.skills, effWithBuff, profile, enemy, enemyBuffs, playerBuffs)
-            enemyHp -= result.dmg
-            playerHp = Math.min(profile.hp_max, playerHp + result.heal)
-            playerBuffs = result.newPlayerBuffs
-            enemyBuffs = result.newEnemyBuffs
-            logs.push({ text:`${turn}ターン目: ${result.log}`, color:'#88ccff' })
-            skillUsed = true
-            skillIndex++
-          }
-        }
-        if (!skillUsed) {
-          const baseAtk = isMagical ? effWithBuff.matk : effWithBuff.atk
-          const enemyDefVal = isMagical
-            ? Math.floor((enemy.mdef || 0) / 2 * enemyMdefRate)
-            : Math.floor(enemy.def / 2 * enemyDefRate)
-          const dmg = Math.max(1, baseAtk - enemyDefVal + Math.floor(Math.random() * 4))
-          enemyHp -= dmg
-          logs.push({ text:`${turn}ターン目: あなたの攻撃！ ${enemy.name}に${dmg}ダメージ！`, color:'#ffcc00' })
-          if (expandedSkillSet.length > 0) skillIndex++
-        }
-      }
-
-      // 敵攻撃
-      const doEnemyAttack = () => {
-        const isEnemyMagical = enemy.type === 'magical'
-        const enemyAtk = isEnemyMagical ? (enemy.matk || 0) : enemy.atk
-        const defVal = isEnemyMagical ? Math.floor(playerMdef / 2) : Math.floor(playerDef / 2)
-        const dmgToPlayer = Math.max(1, enemyAtk - defVal + Math.floor(Math.random() * 3))
-        playerHp -= dmgToPlayer
-        logs.push({ text:`${turn}ターン目: ${enemy.name}の反撃！ あなたに${dmgToPlayer}ダメージ…`, color:'#ff6644' })
-      }
-
-      doPlayerAttack()
+      doPlayerAttack(false)
       if (enemyHp <= 0) break
 
-      // プレイヤー素早さ追加行動
+      // プレイヤー追加行動
       if (playerExtraRate > 0 && Math.random() * 100 < playerExtraRate) {
-        doPlayerAttack()
+        doPlayerAttack(true)
         if (enemyHp <= 0) break
       }
 
-      doEnemyAttack()
+      doEnemyAttack(false)
       if (playerHp <= 0) break
 
-      // 敵素早さ追加行動
+      // 敵追加行動
       if (enemyExtraRate > 0 && Math.random() * 100 < enemyExtraRate) {
-        doEnemyAttack()
+        doEnemyAttack(true)
       }
 
       Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns > 0) playerBuffs[k].turns-- })
@@ -567,7 +617,7 @@ export default function Game() {
     playerHp = Math.max(0, playerHp)
     const win = enemyHp <= 0
     const expGained = isBossEncounter ? 13 : Math.floor(Math.random() * 4) + 8
-    const goldGained = win ? enemy.gold : 0
+    const goldGained = win ? (enemy.gold || 0) : 0
 
     if (win) {
       logs.push({ text:`${enemy.name}を倒した！`, color:'#44ff88' })
@@ -584,19 +634,20 @@ export default function Game() {
     }
     setBattleLogs(logs)
 
-    // ドロップ処理
+    // ドロップ処理（雑魚：3%でランダム1個、ボス：各3%）
     if (win) {
       const dropList = isBossEncounter ? area.bossDrops : area.commonDrops
       let droppedItems = []
-      if (isBossEncounter && dropList.length === 2) {
-        const drop0 = Math.random() * 100 < 3
-        const drop1 = Math.random() * 100 < 3
+      if (isBossEncounter && dropList.length > 0) {
+        const drop0 = dropList.length > 0 && Math.random() * 100 < 3
+        const drop1 = dropList.length > 1 && Math.random() * 100 < 3
         if (drop0 && drop1) droppedItems = [dropList[Math.random() < 0.5 ? 0 : 1]]
         else if (drop0) droppedItems = [dropList[0]]
         else if (drop1) droppedItems = [dropList[1]]
-      } else {
-        for (const itemName of dropList) {
-          if (Math.random() * 100 < 3) droppedItems.push(itemName)
+      } else if (!isBossEncounter && dropList.length > 0) {
+        // 雑魚：3%でランダム1個
+        if (Math.random() * 100 < 3) {
+          droppedItems = [dropList[Math.floor(Math.random() * dropList.length)]]
         }
       }
       for (const itemName of droppedItems) {
@@ -618,27 +669,22 @@ export default function Game() {
         const profExpGained = Math.floor(Math.random() * 4) + 8
         let totalExp = prof.prof_exp + profExpGained
         let newProfLv = prof.prof_lv
-        let newAwakening = prof.awakening || 0
         while (totalExp >= 100) {
           totalExp -= 100
           newProfLv++
-          if (newProfLv >= 100) {
-            newProfLv = 1
-            newAwakening++
-            logs.push({ text:`✨ ${equippedWeaponItem.weapons.name} が覚醒！ +${newAwakening}になった！`, color:'#ffcc00' })
-          }
         }
         await supabase.from('proficiency').update({
-          prof_exp: totalExp, prof_lv: newProfLv, awakening: newAwakening,
+          prof_exp: totalExp, prof_lv: newProfLv,
         }).eq('id', prof.id)
-        if (newProfLv > prof.prof_lv || newAwakening > (prof.awakening || 0)) {
-          logs.push({ text:`⚔ 武器熟練度UP！ ${equippedWeaponItem.weapons.name} LV${newProfLv}`, color:'#aa44ff' })
+        if (newProfLv > prof.prof_lv) {
+          const prefix = getProfPrefix(newProfLv)
+          logs.push({ text:`⚔ 武器熟練度UP！ ${prefix}${equippedWeaponItem.weapons.name} LV${newProfLv}`, color:'#aa44ff' })
+          setBattleLogs([...logs])
         }
-        setBattleLogs([...logs])
       }
     }
 
-    // スキル自動習得チェック
+    // スキル自動習得
     const { data: classSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class)
     const { data: learnedSkills } = await supabase.from('player_skills').select('skill_id').eq('player_id', profile.id)
     const learnedIds = (learnedSkills || []).map(s => s.skill_id)
@@ -683,11 +729,9 @@ export default function Game() {
         mdef:   (base.mdef   || profile.mdef)   + growth.mdef,
         spd:    (base.spd    || profile.spd)    + growth.spd,
       }
-      // 3レベルごとボーナス（HPそのまま）
       if (bonusSlots.length > 0 && newLv % 3 === 0) {
         const bonusIndex = Math.floor(newLv / 3 - 1) % bonusSlots.length
-        const bonusStat = bonusSlots[bonusIndex]
-        statUpdates[bonusStat] = (statUpdates[bonusStat] || 0) + 1
+        statUpdates[bonusSlots[bonusIndex]] = (statUpdates[bonusSlots[bonusIndex]] || 0) + 1
       }
       logs.push({ text:`★ LEVEL UP！ LV${newLv} になった！ ステータスポイント+1`, color:'#cc44ff' })
       setBattleLogs([...logs])
