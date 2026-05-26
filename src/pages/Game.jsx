@@ -380,10 +380,7 @@ export default function Game() {
     if (!data) { nav('/create'); return }
     setProfile(data)
     setPendingPoints(data.pending_stat_points || 0)
-const unlocked = data.unlocked_areas || [1]
-if (!unlocked.includes(selectedArea) && selectedArea === 1) {
-  setSelectedArea(unlocked[0])
-}
+
     const { data: eq } = await supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', user.id)
     setEquipment(eq || [])
     const { data: prof } = await supabase.from('proficiency').select('*, weapons(*)').eq('player_id', user.id)
