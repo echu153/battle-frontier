@@ -15,8 +15,10 @@ const PRESET_AVATARS = [
   { id:'priest',    label:'僧侶',       url:`${SUPABASE_URL}/storage/v1/object/public/avatars/priest.png` },
 ]
 
-const RARITY_COLORS = { common:'#44ff88', rare:'#4488ff', epic:'#cc44ff', legendary:'#ffcc00' }
-
+const RARITY_COLORS = {
+  f:'#888888', e:'#6699cc', d:'#ff8844', c:'#44bb44',
+  b:'#4488ff', a:'#ff4444', s:'#ffcc00', ss:'#ffcc00', sss:'#ffcc00'
+}
 const getStatRank = (val, type) => {
   let thresholds
   if (type === 'hp') thresholds = [450,1200,2400,4500,7500,12000,18000,27000]

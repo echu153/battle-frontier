@@ -3,8 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
 const SLOT_LABELS = { weapon:'武器', armor:'防具', accessory:'装飾品' }
-const RARITY_COLORS = { common:'#44ff88', rare:'#4488ff', epic:'#cc44ff', legendary:'#ffcc00' }
-const RARITY_LABELS = { common:'Common', rare:'Rare', epic:'Epic', legendary:'Legendary' }
+const RARITY_COLORS = {
+  f:'#888888', e:'#6699cc', d:'#ff8844', c:'#44bb44',
+  b:'#4488ff', a:'#ff4444', s:'#ffcc00', ss:'#ffcc00', sss:'#ffcc00'
+}
+const RARITY_LABELS = {
+  f:'F', e:'E', d:'D', c:'C', b:'B', a:'A', s:'S', ss:'SS', sss:'SSS'
+}
 
 // 強化コスト
 const ENHANCE_COST = [0,100,200,400,800,1500,3000,5000,8000,12000,20000,35000,60000,100000,150000,200000,300000]
