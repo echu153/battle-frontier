@@ -50,48 +50,48 @@ const AREAS = [
 ]
 
 const JOB_BASE = {
-  '戦士':    { hp_max:80,  mp_max:10, atk:10, def:8,  matk:1,  mdef:3,  spd:5  },
-  '弓使い':  { hp_max:60,  mp_max:15, atk:8,  def:4,  matk:2,  mdef:3,  spd:10 },
-  '魔法使い':{ hp_max:45,  mp_max:50, atk:2,  def:2,  matk:14, mdef:4,  spd:4  },
-  '僧侶':    { hp_max:55,  mp_max:45, atk:2,  def:3,  matk:7,  mdef:12, spd:3  },
-  '侍':      { hp_max:100, mp_max:15, atk:13, def:10, matk:4,  mdef:4,  spd:8  },
-  '狂戦士':  { hp_max:110, mp_max:10, atk:16, def:8,  matk:4,  mdef:4,  spd:4  },
-  '狩人':    { hp_max:80,  mp_max:20, atk:13, def:6,  matk:4,  mdef:4,  spd:13 },
-  '暗殺者':  { hp_max:70,  mp_max:20, atk:10, def:4,  matk:4,  mdef:4,  spd:18 },
-  '元素使い':{ hp_max:55,  mp_max:70, atk:5,  def:2,  matk:17, mdef:5,  spd:4  },
-  '死霊使い':{ hp_max:60,  mp_max:80, atk:4,  def:4,  matk:12, mdef:4,  spd:8  },
-  '司祭':    { hp_max:70,  mp_max:60, atk:4,  def:8,  matk:8,  mdef:12, spd:4  },
-  '賢者':    { hp_max:60,  mp_max:65, atk:4,  def:4,  matk:12, mdef:16, spd:3  },
+  '戦士':      { hp_max:80,  mp_max:10, atk:10, def:8,  matk:1,  mdef:3,  spd:5  },
+  '弓使い':    { hp_max:60,  mp_max:15, atk:8,  def:4,  matk:2,  mdef:3,  spd:10 },
+  '魔法使い':  { hp_max:45,  mp_max:50, atk:2,  def:2,  matk:14, mdef:4,  spd:4  },
+  '僧侶':      { hp_max:55,  mp_max:45, atk:2,  def:3,  matk:7,  mdef:12, spd:3  },
+  '侍':        { hp_max:100, mp_max:15, atk:13, def:10, matk:4,  mdef:4,  spd:8  },
+  '狂戦士':    { hp_max:110, mp_max:10, atk:16, def:8,  matk:4,  mdef:4,  spd:4  },
+  '狩人':      { hp_max:80,  mp_max:20, atk:13, def:6,  matk:4,  mdef:4,  spd:13 },
+  '暗殺者':    { hp_max:70,  mp_max:20, atk:10, def:4,  matk:4,  mdef:4,  spd:18 },
+  '元素使い':  { hp_max:55,  mp_max:70, atk:5,  def:2,  matk:17, mdef:5,  spd:4  },
+  '死霊使い':  { hp_max:60,  mp_max:80, atk:4,  def:4,  matk:12, mdef:4,  spd:8  },
+  '聖職者':    { hp_max:70,  mp_max:60, atk:4,  def:8,  matk:8,  mdef:12, spd:4  },
+  '異端審問官':{ hp_max:60,  mp_max:65, atk:4,  def:4,  matk:12, mdef:16, spd:3  },
 }
 
 const JOB_GROWTH = {
-  '戦士':    { hp:20, mp:5,  atk:2, def:2, matk:0, mdef:1, spd:1 },
-  '弓使い':  { hp:15, mp:5,  atk:2, def:1, matk:0, mdef:1, spd:2 },
-  '魔法使い':{ hp:10, mp:15, atk:0, def:1, matk:3, mdef:1, spd:1 },
-  '僧侶':    { hp:15, mp:15, atk:0, def:1, matk:1, mdef:2, spd:1 },
-  '侍':      { hp:20, mp:5,  atk:3, def:2, matk:0, mdef:1, spd:1 },
-  '狂戦士':  { hp:20, mp:5,  atk:4, def:1, matk:0, mdef:0, spd:0 },
-  '狩人':    { hp:10, mp:5,  atk:3, def:1, matk:0, mdef:0, spd:3 },
-  '暗殺者':  { hp:10, mp:5,  atk:2, def:1, matk:0, mdef:0, spd:4 },
-  '元素使い':{ hp:10, mp:10, atk:0, def:0, matk:4, mdef:1, spd:0 },
-  '死霊使い':{ hp:10, mp:10, atk:0, def:0, matk:3, mdef:1, spd:2 },
-  '司祭':    { hp:10, mp:10, atk:0, def:2, matk:1, mdef:3, spd:0 },
-  '賢者':    { hp:10, mp:10, atk:0, def:1, matk:2, mdef:3, spd:0 },
+  '戦士':      { hp:20, mp:5,  atk:2, def:2, matk:0, mdef:1, spd:1 },
+  '弓使い':    { hp:15, mp:5,  atk:2, def:1, matk:0, mdef:1, spd:2 },
+  '魔法使い':  { hp:10, mp:15, atk:0, def:1, matk:3, mdef:1, spd:1 },
+  '僧侶':      { hp:15, mp:15, atk:0, def:1, matk:1, mdef:2, spd:1 },
+  '侍':        { hp:20, mp:5,  atk:3, def:2, matk:0, mdef:1, spd:1 },
+  '狂戦士':    { hp:20, mp:5,  atk:4, def:1, matk:0, mdef:0, spd:0 },
+  '狩人':      { hp:10, mp:5,  atk:3, def:1, matk:0, mdef:0, spd:3 },
+  '暗殺者':    { hp:10, mp:5,  atk:2, def:1, matk:0, mdef:0, spd:4 },
+  '元素使い':  { hp:10, mp:10, atk:0, def:0, matk:4, mdef:1, spd:0 },
+  '死霊使い':  { hp:10, mp:10, atk:0, def:0, matk:3, mdef:1, spd:2 },
+  '聖職者':    { hp:10, mp:10, atk:0, def:2, matk:1, mdef:3, spd:0 },
+  '異端審問官':{ hp:10, mp:10, atk:0, def:1, matk:2, mdef:3, spd:0 },
 }
 
 const JOB_LEVEL3_BONUS = {
-  '戦士':    ['matk'],
-  '弓使い':  ['matk'],
-  '魔法使い':['atk'],
-  '僧侶':    ['atk'],
-  '侍':      ['matk'],
-  '狂戦士':  ['matk','mdef','spd'],
-  '狩人':    ['matk','mdef'],
-  '暗殺者':  ['matk','mdef'],
-  '元素使い':['atk','def','spd'],
-  '死霊使い':['atk','def'],
-  '司祭':    ['atk','spd'],
-  '賢者':    ['atk','spd'],
+  '戦士':      ['matk'],
+  '弓使い':    ['matk'],
+  '魔法使い':  ['atk'],
+  '僧侶':      ['atk'],
+  '侍':        ['matk'],
+  '狂戦士':    ['matk','mdef','spd'],
+  '狩人':      ['matk','mdef'],
+  '暗殺者':    ['matk','mdef'],
+  '元素使い':  ['atk','def','spd'],
+  '死霊使い':  ['atk','def'],
+  '聖職者':    ['atk','spd'],
+  '異端審問官':['atk','spd'],
 }
 
 const INITIAL_CLASSES = ['戦士','弓使い','魔法使い','僧侶']
@@ -308,10 +308,11 @@ const applyEquipmentEffects = (equipment, profile, playerBuffs, logs) => {
 }
 
 const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArtifact) => {
-  const result = { dmg:0, heal:0, log:'', newEnemyBuffs:{ ...enemyBuffs }, newPlayerBuffs:{ ...playerBuffs } }
+  const result = { dmg:0, heal:0, log:'', newEnemyBuffs:{ ...enemyBuffs }, newPlayerBuffs:{ ...playerBuffs }, selfDmg:0, bonusCritRate:0 }
   const randMult = (min, max) => min + Math.random()*(max-min)
   const am = isArtifact ? 1.2 : 1.0
   switch (skill.name) {
+    // 初期職
     case '体当たり':    result.dmg = Math.floor(eff.atk*randMult(1.1,1.2)*am); result.log = `⚔ 体当たり！ ${enemy.name}に${result.dmg}ダメージ！`; break
     case '強撃':        result.dmg = Math.floor(eff.atk*randMult(1.3,1.4)*am); result.log = `💥 強撃！ ${enemy.name}に${result.dmg}ダメージ！`; break
     case '防御崩し':    result.dmg = Math.floor(eff.atk*1.2*am); result.newEnemyBuffs.defDown={turns:4,rate:0.8}; result.log = `🗡 防御崩し！ ${enemy.name}に${result.dmg}ダメージ！ 防御力が低下した！`; break
@@ -331,125 +332,45 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     case '祈祷':        result.newPlayerBuffs.regenHeal={turns:4,amount:Math.floor(profile.hp_max*0.1)}; result.log = `🙏 祈祷！ 4ターンの間毎ターンHPが回復するようになった！`; break
     case 'ライトニング':result.dmg = Math.floor(eff.matk*randMult(1.5,1.7)*am); result.newEnemyBuffs.mdefDown={turns:3,rate:0.7}; result.log = `⚡ ライトニング！ ${enemy.name}に${result.dmg}の魔法ダメージ！ 特殊防御力が低下した！`; break
     // 侍
-    case '居合斬':
-      result.dmg = Math.floor((eff.atk*1.1 + eff.spd*0.4)*am)
-      result.log = `⚔ 居合斬！ ${enemy.name}に${result.dmg}ダメージ！`; break
-    case '断空':
-      result.dmg = Math.floor(eff.atk*1.5*am*(1+0.3))
-      result.log = `⚔ 断空！ ${enemy.name}の防御を断ち切り${result.dmg}ダメージ！`; break
-    case '明鏡止水':
-      result.newPlayerBuffs.atkUp = { turns:4, rate:1.6 }
-      result.newPlayerBuffs.matkUp = { turns:4, rate:1.6 }
-      result.log = `✨ 明鏡止水！ 4ターンの間攻撃力・特殊攻撃力が1.6倍！`; break
-    case '月影':
-      result.dmg = Math.floor(eff.atk*2.0*am)
-      result.log = `🌙 月影！ ${enemy.name}に${result.dmg}の強烈なダメージ！`; break
+    case '居合斬':      result.dmg = Math.floor((eff.atk*1.1+eff.spd*0.4)*am); result.log = `⚔ 居合斬！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '断空':        result.dmg = Math.floor(eff.atk*1.5*am*1.3); result.log = `⚔ 断空！ ${enemy.name}の防御を断ち切り${result.dmg}ダメージ！`; break
+    case '明鏡止水':    result.newPlayerBuffs.atkUp={turns:4,rate:1.6}; result.newPlayerBuffs.matkUp={turns:4,rate:1.6}; result.log = `✨ 明鏡止水！ 4ターンの間攻撃力・特殊攻撃力が大幅上昇！`; break
+    case '月影':        result.dmg = Math.floor(eff.atk*2.0*am); result.log = `🌙 月影！ ${enemy.name}に${result.dmg}の強烈なダメージ！`; break
     // 狂戦士
-    case 'マッドラッシュ':
-      result.dmg = Math.floor(eff.atk*1.4*am)
-      result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}ダメージ！`; break
-    case 'すてみ':
-      result.dmg = Math.floor(eff.atk*1.6*am)
-      result.selfDmg = Math.floor(result.dmg*0.2)
-      result.log = `💢 すてみ！ ${enemy.name}に${result.dmg}ダメージ！ 自分も${result.selfDmg}ダメージ！`; break
-    case 'ブラッティロア':
-      result.newPlayerBuffs.bloodRage = { turns:4, healRate:0.3 }
-      result.log = `🩸 ブラッティロア！ 4ターンの間、与えたダメージの30%を回復！`; break
-    case 'フルブレイカー':
-      result.dmg = Math.floor(eff.atk*1.8*am*(1+0.3))
-      result.log = `💥 フルブレイカー！ ${enemy.name}に${result.dmg}の壊滅的ダメージ！`; break
+    case 'マッドラッシュ': result.dmg = Math.floor(eff.atk*1.4*am); result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case 'すてみ':      result.dmg = Math.floor(eff.atk*1.6*am); result.selfDmg = Math.floor(result.dmg*0.2); result.log = `💢 すてみ！ ${enemy.name}に${result.dmg}ダメージ！ 自分も${result.selfDmg}ダメージ！`; break
+    case 'ブラッティロア': result.newPlayerBuffs.bloodRage={turns:4,healRate:0.3}; result.log = `🩸 ブラッティロア！ 4ターンの間、与えたダメージの30%を回復！`; break
+    case 'フルブレイカー': result.dmg = Math.floor(eff.atk*1.8*am*1.3); result.log = `💥 フルブレイカー！ ${enemy.name}に${result.dmg}の壊滅的ダメージ！`; break
     // 狩人
-    case '毒矢':
-      result.dmg = Math.floor(eff.atk*1.1*am)
-      result.newEnemyBuffs.poison = { turns:4, dmgRate:0.03 }
-      result.log = `🏹 毒矢！ ${enemy.name}に${result.dmg}ダメージ！ 毒状態に！`; break
-    case '三連射':
-      result.dmg = Math.floor(eff.atk*0.5*am)*3
-      result.log = `🏹 三連射！ ${enemy.name}に${Math.floor(eff.atk*0.5*am)}×3=${result.dmg}ダメージ！`; break
-    case '狩猟本能':
-      result.newPlayerBuffs.atkUp = { turns:4, rate:1.5 }
-      result.newPlayerBuffs.spdUp = { turns:4, rate:1.5 }
-      result.log = `🌲 狩猟本能！ 4ターンの間、攻撃力・素早さが1.5倍！`; break
-    case '絶影狙撃':
-      result.dmg = Math.floor(eff.atk*1.7*am)
-      result.newEnemyBuffs.spdDown = { turns:3, rate:0.7 }
-      result.log = `🏹 絶影狙撃！ ${enemy.name}に${result.dmg}ダメージ！ 素早さが低下！`; break
+    case '毒矢':        result.dmg = Math.floor(eff.atk*1.1*am); result.newEnemyBuffs.poison={turns:4,dmgRate:0.03}; result.log = `🏹 毒矢！ ${enemy.name}に${result.dmg}ダメージ！ 毒状態に！`; break
+    case '三連射':      result.dmg = Math.floor(eff.atk*0.5*am)*3; result.log = `🏹 三連射！ ${enemy.name}に${Math.floor(eff.atk*0.5*am)}×3=${result.dmg}ダメージ！`; break
+    case '狩猟本能':    result.newPlayerBuffs.atkUp={turns:4,rate:1.5}; result.newPlayerBuffs.spdUp={turns:4,rate:1.5}; result.log = `🌲 狩猟本能！ 4ターンの間、攻撃力・素早さが大幅上昇！`; break
+    case '絶影狙撃':    result.dmg = Math.floor(eff.atk*1.7*am); result.newEnemyBuffs.spdDown={turns:3,rate:0.7}; result.log = `🏹 絶影狙撃！ ${enemy.name}に${result.dmg}ダメージ！ 素早さが低下！`; break
     // 暗殺者
-    case '瞬歩瞬殺':
-      result.dmg = Math.floor((eff.atk*1.0 + eff.spd*0.5)*am)
-      result.log = `🌙 瞬歩瞬殺！ ${enemy.name}に${result.dmg}ダメージ！`; break
-    case '鬼影閃':
-      result.dmg = Math.floor(eff.atk*1.5*am)
-      result.newPlayerBuffs.spdUp = { turns:2, rate:1.2 }
-      result.log = `🌙 鬼影閃！ ${enemy.name}に${result.dmg}ダメージ！ 素早さUP！`; break
-    case '影歩き':
-      result.newPlayerBuffs.spdUp = { turns:4, rate:1.5 }
-      result.newPlayerBuffs.evasion = { turns:4, rate:0.1 }
-      result.log = `🌙 影歩き！ 4ターンの間、素早さ1.5倍・回避率+10%！`; break
-    case '急所突き':
-      result.dmg = Math.floor(eff.atk*1.7*am)
-      result.bonusCritRate = 20
-      result.log = `🌙 急所突き！ ${enemy.name}に${result.dmg}ダメージ！ クリティカル確率大幅UP！`; break
+    case '瞬歩瞬殺':    result.dmg = Math.floor((eff.atk*1.0+eff.spd*0.5)*am); result.log = `🌙 瞬歩瞬殺！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '鬼影閃':      result.dmg = Math.floor(eff.atk*1.5*am); result.newPlayerBuffs.spdUp={turns:2,rate:1.2}; result.log = `🌙 鬼影閃！ ${enemy.name}に${result.dmg}ダメージ！ 素早さUP！`; break
+    case '影歩き':      result.newPlayerBuffs.spdUp={turns:4,rate:1.5}; result.newPlayerBuffs.evasion={turns:4,rate:0.1}; result.log = `🌙 影歩き！ 4ターンの間、素早さ大幅上昇・回避率+10%！`; break
+    case '急所突き':    result.dmg = Math.floor(eff.atk*1.7*am); result.bonusCritRate=20; result.log = `🌙 急所突き！ ${enemy.name}に${result.dmg}ダメージ！ クリティカル確率大幅UP！`; break
     // 元素使い
-    case 'アクアショット':
-      result.dmg = Math.floor(eff.matk*1.4*am)
-      result.newEnemyBuffs.spdDown = { turns:2, rate:0.9 }
-      result.log = `🌊 アクアショット！ ${enemy.name}に${result.dmg}の魔法ダメージ！ 素早さ低下！`; break
-    case 'アースクエイク':
-      result.dmg = Math.floor(eff.matk*randMult(1.6,1.8)*am)
-      result.log = `🌊 アースクエイク！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
-    case 'ライトニングチェイン':
-      result.newPlayerBuffs.matkUp = { turns:2, rate:1.2 }
-      result.log = `⚡ ライトニングチェイン！ 2ターンの間、特殊攻撃力1.2倍！`; break
-    case 'フレイムバースト':
-      result.dmg = Math.floor(eff.matk*randMult(2.0,2.2)*am)
-      result.log = `🔥 フレイムバースト！ ${enemy.name}に${result.dmg}の爆炎ダメージ！`; break
+    case 'アクアショット':   result.dmg = Math.floor(eff.matk*1.4*am); result.newEnemyBuffs.spdDown={turns:2,rate:0.9}; result.log = `🌊 アクアショット！ ${enemy.name}に${result.dmg}の魔法ダメージ！ 素早さ低下！`; break
+    case 'アースクエイク':   result.dmg = Math.floor(eff.matk*randMult(1.6,1.8)*am); result.log = `🌊 アースクエイク！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
+    case 'ライトニングチェイン': result.newPlayerBuffs.matkUp={turns:2,rate:1.2}; result.log = `⚡ ライトニングチェイン！ 2ターンの間、特殊攻撃力が上昇！`; break
+    case 'フレイムバースト':  result.dmg = Math.floor(eff.matk*randMult(2.0,2.2)*am); result.log = `🔥 フレイムバースト！ ${enemy.name}に${result.dmg}の爆炎ダメージ！`; break
     // 死霊使い
-    case '骸骨召喚':
-      result.dmg = Math.floor(eff.matk*0.7*am)
-      result.newPlayerBuffs.skeletonDmg = { turns:2, dmg:result.dmg }
-      result.log = `💀 骸骨召喚！ ${enemy.name}に${result.dmg}ダメージ！ 2ターン持続！`; break
-    case 'ソウルドレイン':
-      result.dmg = Math.floor(eff.matk*1.5*am)
-      result.heal = Math.floor(result.dmg*0.2)
-      result.log = `💀 ソウルドレイン！ ${enemy.name}に${result.dmg}ダメージ！ HPを${result.heal}回復！`; break
-    case '腐敗霧':
-      result.newEnemyBuffs.defDown = { turns:4, rate:0.7 }
-      result.newEnemyBuffs.mdefDown = { turns:4, rate:0.7 }
-      result.log = `💀 腐敗霧！ 4ターンの間、対象の防御力・特殊防御力-30%！`; break
-    case '幽世ノ門':
-      result.newEnemyBuffs.dmgDown = { turns:3, rate:0.8 }
-      result.newEnemyBuffs.spdDown = { turns:3, rate:0.9 }
-      result.newEnemyBuffs.maxHpDown = { turns:3, rate:0.9 }
-      result.log = `💀 幽世ノ門！ 3ターンの間、与ダメ-20%・最大HP-10%・素早さ-10%！`; break
+    case '骸骨召喚':    result.dmg = Math.floor(eff.matk*0.7*am); result.newPlayerBuffs.skeletonDmg={turns:2,dmg:result.dmg}; result.log = `💀 骸骨召喚！ ${enemy.name}に${result.dmg}ダメージ！ 2ターン持続！`; break
+    case 'ソウルドレイン': result.dmg = Math.floor(eff.matk*1.5*am); result.heal = Math.floor(result.dmg*0.2); result.log = `💀 ソウルドレイン！ ${enemy.name}に${result.dmg}ダメージ！ HPを${result.heal}回復！`; break
+    case '腐敗霧':      result.newEnemyBuffs.defDown={turns:4,rate:0.7}; result.newEnemyBuffs.mdefDown={turns:4,rate:0.7}; result.log = `💀 腐敗霧！ 4ターンの間、対象の防御力・特殊防御力-30%！`; break
+    case '幽世ノ門':    result.newEnemyBuffs.dmgDown={turns:3,rate:0.8}; result.newEnemyBuffs.spdDown={turns:3,rate:0.9}; result.log = `💀 幽世ノ門！ 3ターンの間、対象を弱体化！`; break
     // 聖職者
-    case 'ホーリーライト':
-      result.dmg = Math.floor(eff.matk*1.5*am)
-      result.log = `✨ ホーリーライト！ ${enemy.name}に${result.dmg}の聖なるダメージ！`; break
-    case '奇跡':
-      result.newPlayerBuffs.regenHeal = { turns:4, amount:Math.floor(profile.hp_max*0.15) }
-      result.log = `✨ 奇跡！ 4ターンの間、毎ターン最大HP15%回復！`; break
-    case '祈りの結界':
-      result.newPlayerBuffs.dmgReduce = { turns:4, rate:0.7 }
-      result.log = `✨ 祈りの結界！ 4ターンの間、受けるダメージ-30%！`; break
-    case '神罰執行':
-      result.dmg = Math.floor(eff.matk*1.8*am)
-      result.newEnemyBuffs.healDown = { turns:3, rate:0.5 }
-      result.log = `✨ 神罰執行！ ${enemy.name}に${result.dmg}ダメージ！ 回復量-50%！`; break
+    case 'ホーリーライト': result.dmg = Math.floor(eff.matk*1.5*am); result.log = `✨ ホーリーライト！ ${enemy.name}に${result.dmg}の聖なるダメージ！`; break
+    case '奇跡':        result.newPlayerBuffs.regenHeal={turns:4,amount:Math.floor(profile.hp_max*0.15)}; result.log = `✨ 奇跡！ 4ターンの間、毎ターン最大HP15%回復！`; break
+    case '祈りの結界':  result.newPlayerBuffs.dmgReduce={turns:4,rate:0.7}; result.log = `✨ 祈りの結界！ 4ターンの間、受けるダメージ-30%！`; break
+    case '神罰執行':    result.dmg = Math.floor(eff.matk*1.8*am); result.newEnemyBuffs.healDown={turns:3,rate:0.5}; result.log = `✨ 神罰執行！ ${enemy.name}に${result.dmg}ダメージ！ 回復量-50%！`; break
     // 異端審問官
-    case '粛清':
-      result.dmg = Math.floor((eff.atk*0.4 + eff.matk*1.4)*am)
-      result.log = `⚖ 粛清！ ${enemy.name}に${result.dmg}ダメージ！`; break
-    case '狂信':
-      result.newPlayerBuffs.statusImmune = { turns:4 }
-      result.log = `⚖ 狂信！ 4ターンの間、ステータス減少を受けない！`; break
-    case '聖なる裁き':
-      result.dmg = Math.floor(eff.matk*1.7*am)
-      result.log = `⚖ 聖なる裁き！ ${enemy.name}に${result.dmg}の裁きのダメージ！`; break
-    case '断罪':
-      result.dmg = Math.floor((eff.atk*1.0 + eff.matk*1.6)*am)
-      result.log = `⚖ 断罪！ ${enemy.name}に${result.dmg}の断罪ダメージ！`; break
-    
+    case '粛清':        result.dmg = Math.floor((eff.atk*0.4+eff.matk*1.4)*am); result.log = `⚖ 粛清！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '狂信':        result.newPlayerBuffs.statusImmune={turns:4}; result.log = `⚖ 狂信！ 4ターンの間、ステータス減少を無効化！`; break
+    case '聖なる裁き':  result.dmg = Math.floor(eff.matk*1.7*am); result.log = `⚖ 聖なる裁き！ ${enemy.name}に${result.dmg}の裁きのダメージ！`; break
+    case '断罪':        result.dmg = Math.floor((eff.atk*1.0+eff.matk*1.6)*am); result.log = `⚖ 断罪！ ${enemy.name}に${result.dmg}の断罪ダメージ！`; break
     default: result.dmg = Math.max(1,eff.atk*am); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
   }
   return result
@@ -572,12 +493,8 @@ export default function Game() {
 
     const { data: latest } = await supabase.from('profiles').select('last_action_at, hp_current, hp_max, is_dying').eq('id', profile.id).single()
     const serverElapsed = (Date.now() - new Date(latest.last_action_at).getTime()) / 1000
-    if (serverElapsed < WAIT_SECONDS) {
-      setLoading(false); setScene('town'); await fetchProfile(); return
-    }
-    if (latest.is_dying && latest.hp_current < latest.hp_max) {
-      setLoading(false); setScene('town'); await fetchProfile(); return
-    }
+    if (serverElapsed < WAIT_SECONDS) { setLoading(false); setScene('town'); await fetchProfile(); return }
+    if (latest.is_dying && latest.hp_current < latest.hp_max) { setLoading(false); setScene('town'); await fetchProfile(); return }
 
     const eff = calcEffectiveStats(profile, equipment, proficiency)
     const area = AREAS.find(a => a.id === selectedArea)
@@ -593,14 +510,29 @@ export default function Game() {
     let playerBuffs = {}, enemyBuffs = {}
     let currentItem = playerItem ? { ...playerItem } : null
     let itemUsed = false
+    let prevSkillName = null
 
     const equippedWeaponItem = equipment.find(e => e.slot==='weapon' && e.equipped)
     const isArtifact = equippedWeaponItem?.bonus_effect === 'artifact'
 
+    // パッシブスキル一覧取得
+    const passiveNames = skillSets.filter(ss => ss.skills?.type === 'パッシブ').map(ss => ss.skills.name)
+    const hasShingan    = passiveNames.includes('心眼')
+    const hasBerserk    = passiveNames.includes('バーサク')
+    const hasTakaNoMe   = passiveNames.includes('鷹ノ目')
+    const hasKakushin   = passiveNames.includes('執行本能')
+    const hasShinkoka   = passiveNames.includes('神聖加護')
+
+    // パッシブ補正値
+    const passiveCritBonus = hasShingan ? 5 : 0
+    const passiveDmgMult   = (hasShingan ? 1.05 : 1.0) * (hasBerserk ? 1.2 : 1.0) * (hasKakushin ? 1.1 : 1.0)
+    const passiveHealMult  = (hasShinkoka ? 1.2 : 1.0) * (hasKakushin ? 0.7 : 1.0)
+    const passiveMatkMult  = hasShinkoka ? 1.1 : 1.0
+
     if (isBossEncounter && currentItem && currentItem.items.effect === 'boss_avoid') {
       logs.push({ text:`🧿 魔よけのお守りが光り、ボスとの戦闘を避けた！`, color:'#cc44ff' })
       setBattleLogs([...logs])
-      const newQty = (currentItem.quantity||1) - 1
+      const newQty = (currentItem.quantity||1)-1
       if (newQty <= 0) await supabase.from('player_items').delete().eq('id', currentItem.id)
       else await supabase.from('player_items').update({ quantity:newQty }).eq('id', currentItem.id)
       await supabase.from('profiles').update({ boss_encounter_rate:0, last_action_at:new Date().toISOString() }).eq('id', profile.id)
@@ -614,42 +546,65 @@ export default function Game() {
     if (isArtifact) logs.push({ text:`⚔ アーティファクト発動！ 消費MP2倍・与ダメージ1.2倍！`, color:'#ffcc00' })
     playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
 
+    // 鷹ノ目パッシブ（素早さ補正）
+    const effectiveSpdForCalc = hasTakaNoMe ? Math.floor(eff.spd * 1.2) : eff.spd
     const weaponType = equippedWeaponItem?.weapons?.weapon_type || 'sword'
     const isMagical = getWeaponGroup(weaponType) === 'magical'
     const expandedSkillSet = []
     for (const ss of skillSets) {
+      if (ss.skills?.type === 'パッシブ') continue
       const count = ss.use_count || 1
       for (let i = 0; i < count; i++) expandedSkillSet.push(ss)
     }
 
-    const playerSpd = eff.spd, enemySpd = enemy.spd||5
+    const playerSpd = effectiveSpdForCalc
+    const enemySpd = enemy.spd||5
     const playerExtraRate = calcExtraActionRate(playerSpd, enemySpd)
     const enemyExtraRate  = calcExtraActionRate(enemySpd, playerSpd)
-    const playerCritRate  = calcCritRate(playerSpd, enemySpd)
+    const playerCritRate  = calcCritRate(playerSpd, enemySpd) + passiveCritBonus
     const enemyCritRate   = calcCritRate(enemySpd, playerSpd)
 
     const doPlayerAttack = (isExtra=false) => {
-      const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
-      const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1)
-      const pMatk = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1)
-      const pAtk  = eff.atk  * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1)
-      const pSpd  = eff.spd  * (playerBuffs.spdUp  ? playerBuffs.spdUp.rate  : 1)
+      const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
+      const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1)
+      const pMatk  = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult
+      const pAtk   = eff.atk  * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1)
+      const pSpd   = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1)
       const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
       const eDefRate  = enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1
       const eMdefRate = enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
       const isCrit = Math.random()*100 < playerCritRate
       const critMult = isCrit ? 1.5 : 1.0
+
       let skillUsed = false
       if (expandedSkillSet.length > 0) {
         const cs = expandedSkillSet[skillIndex % expandedSkillSet.length]
         const mpCost = isArtifact ? (cs?.skills?.mp_cost||0)*2 : (cs?.skills?.mp_cost||0)
         if (cs && cs.skills && playerMp >= mpCost) {
           playerMp -= mpCost
+
+          // 元素共鳴チェック
+          const hasGensoKyomei = passiveNames.includes('元素共鳴')
+          const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? 1.1 : 1.0
+          prevSkillName = cs.skills.name
+
           const res = executeSkill(cs.skills, effBuff, profile, enemy, enemyBuffs, playerBuffs, isArtifact)
-          const finalDmg = Math.floor(res.dmg*critMult)
+          let finalDmg = Math.floor(res.dmg * critMult * passiveDmgMult * gensoMult)
+
+          // すてみ自傷
+          if (res.selfDmg > 0) {
+            playerHp = Math.max(0, playerHp - res.selfDmg)
+          }
+          // bloodRage回復
+          if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
+            const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
+            playerHp = Math.min(profile.hp_max, playerHp + rageCure)
+            logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
+          }
           enemyHp -= finalDmg
-          playerHp = Math.min(profile.hp_max, playerHp+res.heal)
+          const healAmt = Math.floor(res.heal * passiveHealMult)
+          playerHp = Math.min(profile.hp_max, playerHp + healAmt)
           playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
           const critText = isCrit ? ' 💥クリティカル！' : ''
           logs.push({ text:`${prefix}${res.log}${critText}`, color:isCrit?'#ff4444':'#88ccff' })
@@ -660,7 +615,13 @@ export default function Game() {
         const baseAtk = isMagical ? effBuff.matk : effBuff.atk
         const eDefVal = isMagical ? Math.floor((enemy.mdef||0)/2*eMdefRate) : Math.floor(enemy.def/2*eDefRate)
         const baseDmg = Math.max(1, baseAtk-eDefVal+Math.floor(Math.random()*4))
-        const finalDmg = Math.floor(baseDmg*critMult*(isArtifact?1.2:1.0))
+        const finalDmg = Math.floor(baseDmg*critMult*(isArtifact?1.2:1.0)*passiveDmgMult)
+        // bloodRage回復
+        if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
+          const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
+          playerHp = Math.min(profile.hp_max, playerHp + rageCure)
+          logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
+        }
         enemyHp -= finalDmg
         const critText = isCrit ? ' 💥クリティカル！' : ''
         logs.push({ text:`${prefix}あなたの攻撃！ ${enemy.name}に${finalDmg}ダメージ！${critText}`, color:isCrit?'#ff4444':'#ffcc00' })
@@ -671,12 +632,14 @@ export default function Game() {
     const doEnemyAttack = (isExtra=false) => {
       const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
       const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1)
+      const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
+      const berserkDmgRate = hasBerserk ? 1.1 : 1.0
       const isEM = enemy.type === 'magical'
       const eAtk = isEM ? (enemy.matk||0) : enemy.atk
       const defVal = isEM ? Math.floor(pMdef/2) : Math.floor(pDef/2)
       const isCrit = Math.random()*100 < enemyCritRate
       const baseDmg = Math.max(1, eAtk-defVal+Math.floor(Math.random()*3))
-      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0))
+      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate)
       playerHp -= finalDmg
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
       const critText = isCrit ? ' 💥クリティカル！' : ''
@@ -684,14 +647,35 @@ export default function Game() {
     }
 
     while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
+      // 骸の壁（戦闘開始と5ターンごと）
+      if (passiveNames.includes('骸の壁') && (turn === 1 || turn % 5 === 0)) {
+        playerBuffs.dmgReduce = { turns:1, rate:0.7 }
+        logs.push({ text:`💀 骸の壁発動！ このターン受けるダメージ-30%！`, color:'#cc44ff' })
+      }
+      // 毒ダメージ
+      if (enemyBuffs.poison?.turns > 0) {
+        const poisonDmg = Math.floor(enemy.hp * enemyBuffs.poison.dmgRate)
+        enemyHp -= poisonDmg
+        logs.push({ text:`☠ 毒ダメージ！ ${enemy.name}に${poisonDmg}ダメージ！`, color:'#44ff44' })
+        if (enemyHp <= 0) break
+      }
+      // 骸骨持続ダメージ
+      if (playerBuffs.skeletonDmg?.turns > 0) {
+        enemyHp -= playerBuffs.skeletonDmg.dmg
+        logs.push({ text:`💀 骸骨の持続ダメージ！ ${enemy.name}に${playerBuffs.skeletonDmg.dmg}ダメージ！`, color:'#cc44ff' })
+        if (enemyHp <= 0) break
+      }
+      // 回復系バフ
       if (playerBuffs.regenHeal?.turns > 0) {
-        playerHp = Math.min(profile.hp_max, playerHp+playerBuffs.regenHeal.amount)
-        logs.push({ text:`💚 回復効果でHPが${playerBuffs.regenHeal.amount}回復した！`, color:'#44ff88' })
+        const healAmt = Math.floor(playerBuffs.regenHeal.amount * passiveHealMult)
+        playerHp = Math.min(profile.hp_max, playerHp + healAmt)
+        logs.push({ text:`💚 回復効果でHPが${healAmt}回復した！`, color:'#44ff88' })
       }
       if (playerBuffs.delayHeal && turn === playerBuffs.delayHeal.triggerTurn) {
-        playerHp = Math.min(profile.hp_max, playerHp+playerBuffs.delayHeal.amount)
+        playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.delayHeal.amount)
         logs.push({ text:`💚 装備効果でHPが${playerBuffs.delayHeal.amount}回復した！`, color:'#44ff88' })
       }
+      // アイテム自動使用
       if (currentItem && !itemUsed) {
         const threshold = currentItem.use_threshold||50
         const effect = currentItem.items.effect
@@ -841,7 +825,6 @@ export default function Game() {
       }
       logs.push({ text:`★ LEVEL UP！ LV${newLv} になった！ ステータスポイント+1`, color:'#cc44ff' })
       setBattleLogs([...logs])
-
       const { data: lvupSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class).eq('required_lv', newLv)
       const { data: alreadyLearned } = await supabase.from('player_skills').select('skill_id').eq('player_id', profile.id)
       const alreadyIds = (alreadyLearned||[]).map(s => s.skill_id)
@@ -930,7 +913,6 @@ export default function Game() {
     return { name, lv:cl?cl.lv:1, canChange:reqLv>=100&&profile.lv>=30, requires, reqLv }
   })
 
-  // 共通UIパーツ
   const StatPanel = () => (
     <div style={{ border:'1px solid #cc44ff', background:'#0a0020', padding:'12px', marginBottom:'8px' }}>
       <div style={{ color:'#cc44ff', fontSize:'13px', marginBottom:'6px' }}>ステータスポイント振り分け（残り {pendingPoints-allocatedPoints}pt）</div>
@@ -1066,7 +1048,7 @@ export default function Game() {
               {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width:'48px', height:'48px', objectFit:'cover', flexShrink:0 }} />}
               <div style={{ flex:1 }}>
                 <div style={{ color:'#ffcc00', fontSize:'13px' }}>{profile.username}</div>
-                <div style={{ fontSize:'11px', color:'#446688' }}>{profile.class} <span style={{color:'#ffcc00'}}>LV{profile.lv}</span> 　<span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span></div>
+                <div style={{ fontSize:'11px', color:'#446688' }}>{profile.class} <span style={{color:'#ffcc00'}}>LV{profile.lv}</span>　<span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span></div>
                 <div style={{ fontSize:'10px', color:'#446688' }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
               </div>
             </div>
@@ -1194,7 +1176,6 @@ export default function Game() {
 
           <div>
             {showStatPanel && <StatPanel />}
-
             {scene==='town' && (
               <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'8px' }}>
                 <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
