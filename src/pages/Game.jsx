@@ -264,7 +264,7 @@ const calcExtraActionRate = (mySpd, enemySpd) => {
 
 // クリティカル確率計算
 const calcCritRate = (mySpd, enemySpd) => {
-  const base = 100 / 24
+  const base = 100 / 48  // 24→48に変更（確率半分）
   if (mySpd <= enemySpd) return base
   const bonus = Math.min(5, (mySpd - enemySpd) / enemySpd * 2 * 100)
   return base + bonus

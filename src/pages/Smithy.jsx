@@ -129,19 +129,19 @@ export default function Smithy() {
   const slots = ['weapon', 'armor', 'accessory']
 
   // 強化倍率計算
-  const getEnhancedStats = (weapon, plus) => {
-    if (!plus || plus === 0) return weapon
-    const mult = Math.pow(1.2, plus)
-    return {
-      atk_bonus:  Math.floor((weapon.atk_bonus  || 0) * mult),
-      def_bonus:  Math.floor((weapon.def_bonus  || 0) * mult),
-      matk_bonus: Math.floor((weapon.matk_bonus || 0) * mult),
-      mdef_bonus: Math.floor((weapon.mdef_bonus || 0) * mult),
-      spd_bonus:  Math.floor((weapon.spd_bonus  || 0) * mult),
-      hp_bonus:   Math.floor((weapon.hp_bonus   || 0) * mult),
-      mp_bonus:   Math.floor((weapon.mp_bonus   || 0) * mult),
-    }
+const getEnhancedStats = (weapon, plus) => {
+  if (!plus || plus === 0) return weapon
+  const mult = Math.pow(1.2, plus)
+  return {
+    atk_bonus:  Math.max(weapon.atk_bonus  > 0 ? 1 : 0, Math.ceil((weapon.atk_bonus  || 0) * mult)),
+    def_bonus:  Math.max(weapon.def_bonus  > 0 ? 1 : 0, Math.ceil((weapon.def_bonus  || 0) * mult)),
+    matk_bonus: Math.max(weapon.matk_bonus > 0 ? 1 : 0, Math.ceil((weapon.matk_bonus || 0) * mult)),
+    mdef_bonus: Math.max(weapon.mdef_bonus > 0 ? 1 : 0, Math.ceil((weapon.mdef_bonus || 0) * mult)),
+    spd_bonus:  Math.max(weapon.spd_bonus  > 0 ? 1 : 0, Math.ceil((weapon.spd_bonus  || 0) * mult)),
+    hp_bonus:   Math.max(weapon.hp_bonus   > 0 ? 1 : 0, Math.ceil((weapon.hp_bonus   || 0) * mult)),
+    mp_bonus:   Math.max(weapon.mp_bonus   > 0 ? 1 : 0, Math.ceil((weapon.mp_bonus   || 0) * mult)),
   }
+}
 
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
