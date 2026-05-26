@@ -96,14 +96,14 @@ const JOB_LEVEL3_BONUS = {
 
 const INITIAL_CLASSES = ['戦士','弓使い','魔法使い','僧侶']
 const ADVANCED_CLASSES = {
-  '侍':      { requires:'戦士' },
-  '狂戦士':  { requires:'戦士' },
-  '狩人':    { requires:'弓使い' },
-  '暗殺者':  { requires:'弓使い' },
-  '元素使い':{ requires:'魔法使い' },
-  '死霊使い':{ requires:'魔法使い' },
-  '司祭':    { requires:'僧侶' },
-  '賢者':    { requires:'僧侶' },
+  '侍':        { requires:'戦士' },
+  '狂戦士':    { requires:'戦士' },
+  '狩人':      { requires:'弓使い' },
+  '暗殺者':    { requires:'弓使い' },
+  '元素使い':  { requires:'魔法使い' },
+  '死霊使い':  { requires:'魔法使い' },
+  '聖職者':    { requires:'僧侶' },
+  '異端審問官':{ requires:'僧侶' },
 }
 
 const STAT_LABELS = {
@@ -330,6 +330,126 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     case 'プロテク':    result.newPlayerBuffs.defUp={turns:3,rate:1.6}; result.log = `🛡 プロテク！ 3ターンの間防御力と特殊防御力が上昇した！`; break
     case '祈祷':        result.newPlayerBuffs.regenHeal={turns:4,amount:Math.floor(profile.hp_max*0.1)}; result.log = `🙏 祈祷！ 4ターンの間毎ターンHPが回復するようになった！`; break
     case 'ライトニング':result.dmg = Math.floor(eff.matk*randMult(1.5,1.7)*am); result.newEnemyBuffs.mdefDown={turns:3,rate:0.7}; result.log = `⚡ ライトニング！ ${enemy.name}に${result.dmg}の魔法ダメージ！ 特殊防御力が低下した！`; break
+    // 侍
+    case '居合斬':
+      result.dmg = Math.floor((eff.atk*1.1 + eff.spd*0.4)*am)
+      result.log = `⚔ 居合斬！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '断空':
+      result.dmg = Math.floor(eff.atk*1.5*am*(1+0.3))
+      result.log = `⚔ 断空！ ${enemy.name}の防御を断ち切り${result.dmg}ダメージ！`; break
+    case '明鏡止水':
+      result.newPlayerBuffs.atkUp = { turns:4, rate:1.6 }
+      result.newPlayerBuffs.matkUp = { turns:4, rate:1.6 }
+      result.log = `✨ 明鏡止水！ 4ターンの間攻撃力・特殊攻撃力が1.6倍！`; break
+    case '月影':
+      result.dmg = Math.floor(eff.atk*2.0*am)
+      result.log = `🌙 月影！ ${enemy.name}に${result.dmg}の強烈なダメージ！`; break
+    // 狂戦士
+    case 'マッドラッシュ':
+      result.dmg = Math.floor(eff.atk*1.4*am)
+      result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case 'すてみ':
+      result.dmg = Math.floor(eff.atk*1.6*am)
+      result.selfDmg = Math.floor(result.dmg*0.2)
+      result.log = `💢 すてみ！ ${enemy.name}に${result.dmg}ダメージ！ 自分も${result.selfDmg}ダメージ！`; break
+    case 'ブラッティロア':
+      result.newPlayerBuffs.bloodRage = { turns:4, healRate:0.3 }
+      result.log = `🩸 ブラッティロア！ 4ターンの間、与えたダメージの30%を回復！`; break
+    case 'フルブレイカー':
+      result.dmg = Math.floor(eff.atk*1.8*am*(1+0.3))
+      result.log = `💥 フルブレイカー！ ${enemy.name}に${result.dmg}の壊滅的ダメージ！`; break
+    // 狩人
+    case '毒矢':
+      result.dmg = Math.floor(eff.atk*1.1*am)
+      result.newEnemyBuffs.poison = { turns:4, dmgRate:0.03 }
+      result.log = `🏹 毒矢！ ${enemy.name}に${result.dmg}ダメージ！ 毒状態に！`; break
+    case '三連射':
+      result.dmg = Math.floor(eff.atk*0.5*am)*3
+      result.log = `🏹 三連射！ ${enemy.name}に${Math.floor(eff.atk*0.5*am)}×3=${result.dmg}ダメージ！`; break
+    case '狩猟本能':
+      result.newPlayerBuffs.atkUp = { turns:4, rate:1.5 }
+      result.newPlayerBuffs.spdUp = { turns:4, rate:1.5 }
+      result.log = `🌲 狩猟本能！ 4ターンの間、攻撃力・素早さが1.5倍！`; break
+    case '絶影狙撃':
+      result.dmg = Math.floor(eff.atk*1.7*am)
+      result.newEnemyBuffs.spdDown = { turns:3, rate:0.7 }
+      result.log = `🏹 絶影狙撃！ ${enemy.name}に${result.dmg}ダメージ！ 素早さが低下！`; break
+    // 暗殺者
+    case '瞬歩瞬殺':
+      result.dmg = Math.floor((eff.atk*1.0 + eff.spd*0.5)*am)
+      result.log = `🌙 瞬歩瞬殺！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '鬼影閃':
+      result.dmg = Math.floor(eff.atk*1.5*am)
+      result.newPlayerBuffs.spdUp = { turns:2, rate:1.2 }
+      result.log = `🌙 鬼影閃！ ${enemy.name}に${result.dmg}ダメージ！ 素早さUP！`; break
+    case '影歩き':
+      result.newPlayerBuffs.spdUp = { turns:4, rate:1.5 }
+      result.newPlayerBuffs.evasion = { turns:4, rate:0.1 }
+      result.log = `🌙 影歩き！ 4ターンの間、素早さ1.5倍・回避率+10%！`; break
+    case '急所突き':
+      result.dmg = Math.floor(eff.atk*1.7*am)
+      result.bonusCritRate = 20
+      result.log = `🌙 急所突き！ ${enemy.name}に${result.dmg}ダメージ！ クリティカル確率大幅UP！`; break
+    // 元素使い
+    case 'アクアショット':
+      result.dmg = Math.floor(eff.matk*1.4*am)
+      result.newEnemyBuffs.spdDown = { turns:2, rate:0.9 }
+      result.log = `🌊 アクアショット！ ${enemy.name}に${result.dmg}の魔法ダメージ！ 素早さ低下！`; break
+    case 'アースクエイク':
+      result.dmg = Math.floor(eff.matk*randMult(1.6,1.8)*am)
+      result.log = `🌊 アースクエイク！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
+    case 'ライトニングチェイン':
+      result.newPlayerBuffs.matkUp = { turns:2, rate:1.2 }
+      result.log = `⚡ ライトニングチェイン！ 2ターンの間、特殊攻撃力1.2倍！`; break
+    case 'フレイムバースト':
+      result.dmg = Math.floor(eff.matk*randMult(2.0,2.2)*am)
+      result.log = `🔥 フレイムバースト！ ${enemy.name}に${result.dmg}の爆炎ダメージ！`; break
+    // 死霊使い
+    case '骸骨召喚':
+      result.dmg = Math.floor(eff.matk*0.7*am)
+      result.newPlayerBuffs.skeletonDmg = { turns:2, dmg:result.dmg }
+      result.log = `💀 骸骨召喚！ ${enemy.name}に${result.dmg}ダメージ！ 2ターン持続！`; break
+    case 'ソウルドレイン':
+      result.dmg = Math.floor(eff.matk*1.5*am)
+      result.heal = Math.floor(result.dmg*0.2)
+      result.log = `💀 ソウルドレイン！ ${enemy.name}に${result.dmg}ダメージ！ HPを${result.heal}回復！`; break
+    case '腐敗霧':
+      result.newEnemyBuffs.defDown = { turns:4, rate:0.7 }
+      result.newEnemyBuffs.mdefDown = { turns:4, rate:0.7 }
+      result.log = `💀 腐敗霧！ 4ターンの間、対象の防御力・特殊防御力-30%！`; break
+    case '幽世ノ門':
+      result.newEnemyBuffs.dmgDown = { turns:3, rate:0.8 }
+      result.newEnemyBuffs.spdDown = { turns:3, rate:0.9 }
+      result.newEnemyBuffs.maxHpDown = { turns:3, rate:0.9 }
+      result.log = `💀 幽世ノ門！ 3ターンの間、与ダメ-20%・最大HP-10%・素早さ-10%！`; break
+    // 聖職者
+    case 'ホーリーライト':
+      result.dmg = Math.floor(eff.matk*1.5*am)
+      result.log = `✨ ホーリーライト！ ${enemy.name}に${result.dmg}の聖なるダメージ！`; break
+    case '奇跡':
+      result.newPlayerBuffs.regenHeal = { turns:4, amount:Math.floor(profile.hp_max*0.15) }
+      result.log = `✨ 奇跡！ 4ターンの間、毎ターン最大HP15%回復！`; break
+    case '祈りの結界':
+      result.newPlayerBuffs.dmgReduce = { turns:4, rate:0.7 }
+      result.log = `✨ 祈りの結界！ 4ターンの間、受けるダメージ-30%！`; break
+    case '神罰執行':
+      result.dmg = Math.floor(eff.matk*1.8*am)
+      result.newEnemyBuffs.healDown = { turns:3, rate:0.5 }
+      result.log = `✨ 神罰執行！ ${enemy.name}に${result.dmg}ダメージ！ 回復量-50%！`; break
+    // 異端審問官
+    case '粛清':
+      result.dmg = Math.floor((eff.atk*0.4 + eff.matk*1.4)*am)
+      result.log = `⚖ 粛清！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '狂信':
+      result.newPlayerBuffs.statusImmune = { turns:4 }
+      result.log = `⚖ 狂信！ 4ターンの間、ステータス減少を受けない！`; break
+    case '聖なる裁き':
+      result.dmg = Math.floor(eff.matk*1.7*am)
+      result.log = `⚖ 聖なる裁き！ ${enemy.name}に${result.dmg}の裁きのダメージ！`; break
+    case '断罪':
+      result.dmg = Math.floor((eff.atk*1.0 + eff.matk*1.6)*am)
+      result.log = `⚖ 断罪！ ${enemy.name}に${result.dmg}の断罪ダメージ！`; break
+    
     default: result.dmg = Math.max(1,eff.atk*am); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
   }
   return result

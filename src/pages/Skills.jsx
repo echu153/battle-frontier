@@ -39,23 +39,17 @@ export default function Skills() {
       .eq('player_id', user.id)
       .order('slot_order')
     setSkillSets(ss || [])
-
-    // レベル達成済みスキルを自動習得
     await checkAndLearnSkills(user.id, p, skills || [], ps || [])
   }
 
   const checkAndLearnSkills = async (userId, p, skills, learned) => {
     const learnedIds = learned.map(ps => ps.skill_id)
-    const toLearn = skills.filter(s => s.required_lv <= p.lv && !learnedIds.includes(s.id))
+    const toLearn = skills.filter(s => s.required_lv <= p.lv && !learnedIds.includes(s.id) && s.type !== 'パッシブ' || (s.type === 'パッシブ' && s.required_lv <= p.lv && !learnedIds.includes(s.id)))
     if (toLearn.length === 0) return
     for (const skill of toLearn) {
-      await supabase.from('player_skills').insert({
-        player_id: userId, skill_id: skill.id,
-      })
+      await supabase.from('player_skills').insert({ player_id: userId, skill_id: skill.id })
     }
-    const { data: ps } = await supabase
-      .from('player_skills').select('*, skills(*)')
-      .eq('player_id', userId)
+    const { data: ps } = await supabase.from('player_skills').select('*, skills(*)').eq('player_id', userId)
     setPlayerSkills(ps || [])
   }
 
@@ -64,12 +58,9 @@ export default function Skills() {
     await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('skill_id', skillId)
     const existing = skillSets.find(ss => ss.slot_order === slotOrder)
     if (existing) {
-      await supabase.from('skill_sets').update({ skill_id: skillId, use_count: 1 })
-        .eq('player_id', profile.id).eq('slot_order', slotOrder)
+      await supabase.from('skill_sets').update({ skill_id: skillId, use_count: 1 }).eq('player_id', profile.id).eq('slot_order', slotOrder)
     } else {
-      await supabase.from('skill_sets').insert({
-        player_id: profile.id, skill_id: skillId, slot_order: slotOrder, use_count: 1,
-      })
+      await supabase.from('skill_sets').insert({ player_id: profile.id, skill_id: skillId, slot_order: slotOrder, use_count: 1 })
     }
     await fetchAll()
     setLoading(false)
@@ -77,8 +68,7 @@ export default function Skills() {
 
   const updateUseCount = async (slotOrder, useCount) => {
     setLoading(true)
-    await supabase.from('skill_sets').update({ use_count: useCount })
-      .eq('player_id', profile.id).eq('slot_order', slotOrder)
+    await supabase.from('skill_sets').update({ use_count: useCount }).eq('player_id', profile.id).eq('slot_order', slotOrder)
     await fetchAll()
     setLoading(false)
   }
@@ -95,22 +85,35 @@ export default function Skills() {
   )
 
   const learnedIds = playerSkills.map(ps => ps.skill_id)
+  const passiveSkills = allSkills.filter(s => s.type === 'パッシブ' && learnedIds.includes(s.id))
+  const activeSkills = allSkills.filter(s => s.type !== 'パッシブ')
 
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'700px', margin:'0 auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
-          <button onClick={() => nav('/game')}
-            style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-            ← 街に戻る
-          </button>
+          <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
         </div>
 
         <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'4px' }}>⚡ スキル</div>
         <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
           クラス: <span style={{color:'#88ccff'}}>{profile.class}</span>　LV: <span style={{color:'#ffcc00'}}>{profile.lv}</span>
         </div>
+
+        {/* パッシブスキル表示 */}
+        {passiveSkills.length > 0 && (
+          <div style={{ border:'1px solid #ff8844', background:'#0a0800', padding:'10px', marginBottom:'12px' }}>
+            <div style={{ color:'#ff8844', fontSize:'12px', marginBottom:'6px' }}>⚡ パッシブスキル（常時発動）</div>
+            {passiveSkills.map(skill => (
+              <div key={skill.id} style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'4px', fontSize:'11px' }}>
+                <span style={{ fontSize:'9px', padding:'1px 4px', color:'#ff8844', border:'1px solid #ff8844' }}>パッシブ</span>
+                <span style={{ color:'#ffcc00' }}>{skill.name}</span>
+                <span style={{ color:'#446688', fontSize:'10px' }}>{skill.description}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* スキルセット */}
         <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'12px' }}>
@@ -123,21 +126,14 @@ export default function Skills() {
                   <span style={{ color:'#446688', fontSize:'11px', minWidth:'20px' }}>{slot}.</span>
                   {set ? (
                     <>
-                      <span style={{ color: TYPE_COLORS[set.skills.type] || '#88ccff', fontSize:'11px', flex:1 }}>
-                        {set.skills.name}
-                      </span>
+                      <span style={{ color: TYPE_COLORS[set.skills.type] || '#88ccff', fontSize:'11px', flex:1 }}>{set.skills.name}</span>
                       <span style={{ color:'#446688', fontSize:'10px' }}>MP{set.skills.mp_cost}</span>
-                      <select value={set.use_count || 1}
-                        onChange={e => updateUseCount(slot, Number(e.target.value))}
+                      <select value={set.use_count || 1} onChange={e => updateUseCount(slot, Number(e.target.value))}
                         style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'2px' }}>
-                        {[1,2,3,4,5,6,7,8,9,10].map(n => (
-                          <option key={n} value={n}>{n}回</option>
-                        ))}
+                        {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}回</option>)}
                       </select>
                       <button onClick={() => removeFromSlot(slot)} disabled={loading}
-                        style={{ padding:'2px 6px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
-                        外す
-                      </button>
+                        style={{ padding:'2px 6px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
                     </>
                   ) : (
                     <span style={{ color:'#334455', fontSize:'11px' }}>未設定</span>
@@ -148,35 +144,25 @@ export default function Skills() {
           </div>
         </div>
 
-        {/* 習得済みスキル一覧 */}
+        {/* 習得済みスキル一覧（アクティブのみ） */}
         <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>習得済みスキル</div>
-        {allSkills.map(skill => {
+        {activeSkills.map(skill => {
           const learned = learnedIds.includes(skill.id)
           const inSet = skillSets.find(ss => ss.skill_id === skill.id)
           return (
-            <div key={skill.id} style={{
-              border: `1px solid ${learned ? '#0044aa' : '#002244'}`,
-              background: learned ? '#001028' : '#000818',
-              padding:'10px', marginBottom:'6px',
-              opacity: learned ? 1 : 0.5,
-            }}>
+            <div key={skill.id} style={{ border:`1px solid ${learned ? '#0044aa' : '#002244'}`, background: learned ? '#001028' : '#000818', padding:'10px', marginBottom:'6px', opacity: learned ? 1 : 0.5 }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
                 <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-                  <span style={{ fontSize:'9px', padding:'1px 4px', color: TYPE_COLORS[skill.type], border:`1px solid ${TYPE_COLORS[skill.type]}` }}>
-                    {skill.type}
-                  </span>
+                  <span style={{ fontSize:'9px', padding:'1px 4px', color: TYPE_COLORS[skill.type], border:`1px solid ${TYPE_COLORS[skill.type]}` }}>{skill.type}</span>
                   <span style={{ color: learned ? '#88ccff' : '#446688', fontSize:'12px' }}>{skill.name}</span>
                 </div>
                 <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
                   <span style={{ color:'#446688', fontSize:'10px' }}>MP{skill.mp_cost}</span>
                   {learned && !inSet && (
-                    <select onChange={e => { if (e.target.value) setSkillToSlot(skill.id, Number(e.target.value)) }}
-                      defaultValue=""
+                    <select onChange={e => { if (e.target.value) setSkillToSlot(skill.id, Number(e.target.value)) }} defaultValue=""
                       style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'2px' }}>
                       <option value="">セットする</option>
-                      {[1,2,3,4,5].map(slot => (
-                        <option key={slot} value={slot}>スロット{slot}</option>
-                      ))}
+                      {[1,2,3,4,5].map(slot => <option key={slot} value={slot}>スロット{slot}</option>)}
                     </select>
                   )}
                   {inSet && <span style={{ color:'#0088ff', fontSize:'10px' }}>スロット{inSet.slot_order}（{inSet.use_count || 1}回）</span>}
