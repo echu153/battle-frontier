@@ -32,6 +32,24 @@ const getProfPrefix = (profLv) => {
   return ''
 }
 
+const getEffectLabel = (effect) => {
+  const labels = {
+    'open_atk_10_2t':  '【開幕2T・攻撃力+10%】',
+    'open_atk_20_1t':  '【開幕1T・攻撃力+20%】',
+    'open_def_10_2t':  '【開幕2T・防御力+10%】',
+    'open_def_20_1t':  '【開幕1T・防御力+20%】',
+    'open_matk_10_2t': '【開幕2T・特殊攻撃力+10%】',
+    'open_matk_20_1t': '【開幕1T・特殊攻撃力+20%】',
+    'open_mdef_10_2t': '【開幕2T・特殊防御力+10%】',
+    'open_mdef_20_1t': '【開幕1T・特殊防御力+20%】',
+    'open_spd_10_2t':  '【開幕2T・素早さ+10%】',
+    'open_spd_20_1t':  '【開幕1T・素早さ+20%】',
+    'delay_heal_10':   '【3T後・HP10%回復】',
+    'regen_heal_5_3t': '【開幕3T・毎T HP5%回復】',
+  }
+  return labels[effect] || effect
+}
+
 export default function Equipment() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
@@ -133,8 +151,6 @@ export default function Equipment() {
         </div>
 
         <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:'12px' }}>
-
-          {/* 装備中スロット */}
           <div>
             <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>装備中</div>
             {slots.map(slot => {
@@ -145,7 +161,7 @@ export default function Equipment() {
                   {equipped ? (
                     <>
                       <div style={{ color: RARITY_COLORS[equipped.weapons.rarity], fontSize:'11px' }}>
-                        {equipped.weapons.name}
+                        {getProfPrefix(proficiency.find(p => p.weapon_id === equipped.weapons.id)?.prof_lv || 0)}{equipped.weapons.name}
                       </div>
                       <div style={{ fontSize:'10px', marginTop:'2px' }}>
                         {equipped.weapons.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻撃力+{equipped.weapons.atk_bonus} </span>}
@@ -153,11 +169,25 @@ export default function Equipment() {
                         {equipped.weapons.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>特殊攻撃力+{equipped.weapons.matk_bonus} </span>}
                         {equipped.weapons.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>特殊防御力+{equipped.weapons.mdef_bonus} </span>}
                         {equipped.weapons.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>素早さ+{equipped.weapons.spd_bonus} </span>}
+                        {equipped.weapons.spd_bonus_pct > 0 && <span style={{color:'#ff8844'}}>素早さ+{equipped.weapons.spd_bonus_pct}% </span>}
                         {equipped.weapons.hp_bonus   > 0 && <span style={{color:'#44ff88'}}>HP+{equipped.weapons.hp_bonus} </span>}
                         {equipped.weapons.mp_bonus   > 0 && <span style={{color:'#4488ff'}}>MP+{equipped.weapons.mp_bonus} </span>}
                         {equipped.weapons.hp_bonus_pct > 0 && <span style={{color:'#44ff88'}}>HP+{equipped.weapons.hp_bonus_pct}% </span>}
                         {equipped.weapons.mp_bonus_pct > 0 && <span style={{color:'#4488ff'}}>MP+{equipped.weapons.mp_bonus_pct}% </span>}
                       </div>
+                      {equipped.bonus_effect && <div style={{color:'#ffaa00', fontSize:'10px'}}>{getEffectLabel(equipped.bonus_effect)}</div>}
+                      {(equipped.bonus_atk > 0 || equipped.bonus_def > 0 || equipped.bonus_matk > 0 || equipped.bonus_mdef > 0 || equipped.bonus_spd > 0 || equipped.bonus_hp > 0 || equipped.bonus_mp > 0) && (
+                        <div style={{fontSize:'10px', color:'#ffaa00'}}>
+                          ボーナス:
+                          {equipped.bonus_atk  > 0 && ` 攻撃力+${equipped.bonus_atk}`}
+                          {equipped.bonus_def  > 0 && ` 防御力+${equipped.bonus_def}`}
+                          {equipped.bonus_matk > 0 && ` 特殊攻撃力+${equipped.bonus_matk}`}
+                          {equipped.bonus_mdef > 0 && ` 特殊防御力+${equipped.bonus_mdef}`}
+                          {equipped.bonus_spd  > 0 && ` 素早さ+${equipped.bonus_spd}`}
+                          {equipped.bonus_hp   > 0 && ` HP+${equipped.bonus_hp}`}
+                          {equipped.bonus_mp   > 0 && ` MP+${equipped.bonus_mp}`}
+                        </div>
+                      )}
                     </>
                   ) : (
                     <div style={{ color:'#334455', fontSize:'11px' }}>なし</div>
@@ -166,7 +196,6 @@ export default function Equipment() {
               )
             })}
 
-            {/* アイテムスロット */}
             <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px', marginTop:'12px' }}>持ち物</div>
             <div style={{ border:'1px solid #003366', background:'#001028', padding:'8px' }}>
               <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>アイテム（1個）</div>
@@ -174,7 +203,6 @@ export default function Equipment() {
                 <>
                   <div style={{ color:'#44ff88', fontSize:'11px' }}>{equippedItem.items.name}</div>
                   <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>残り{equippedItem.quantity}個</div>
-                  {/* ポーション系のみ使用タイミング設定表示 */}
                   {(equippedItem.items.effect === 'hp_pct' || equippedItem.items.effect === 'mp_pct') && (
                     <div style={{ display:'flex', alignItems:'center', gap:'4px', marginTop:'4px' }}>
                       <span style={{ color:'#446688', fontSize:'10px' }}>使用:</span>
@@ -198,7 +226,6 @@ export default function Equipment() {
             </div>
           </div>
 
-          {/* 右カラム */}
           <div>
             <div style={{ display:'flex', gap:'4px', marginBottom:'8px' }}>
               {[...slots, 'item'].map(s => (
@@ -212,18 +239,11 @@ export default function Equipment() {
               ))}
             </div>
 
-            {/* アイテムタブ */}
             {tab === 'item' && (
               <div>
-                {allItems.length === 0 && (
-                  <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>所持していません</div>
-                )}
+                {allItems.length === 0 && <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>所持していません</div>}
                 {allItems.map(pi => (
-                  <div key={pi.id} style={{
-                    border: `1px solid ${pi.equipped ? '#0044aa' : '#002244'}`,
-                    background: pi.equipped ? '#001028' : '#000818',
-                    padding:'10px', marginBottom:'6px',
-                  }}>
+                  <div key={pi.id} style={{ border:`1px solid ${pi.equipped ? '#0044aa' : '#002244'}`, background: pi.equipped ? '#001028' : '#000818', padding:'10px', marginBottom:'6px' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
                       <span style={{ color:'#44ff88', fontSize:'12px' }}>{pi.items.name}</span>
                       <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
@@ -231,14 +251,11 @@ export default function Equipment() {
                         {pi.equipped
                           ? <span style={{ color:'#0088ff', fontSize:'10px' }}>セット中</span>
                           : <button onClick={() => setItemSlot(pi.id)} disabled={loading}
-                              style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
-                              セットする
-                            </button>
+                              style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>セットする</button>
                         }
                       </div>
                     </div>
                     <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>{pi.items.description}</div>
-                    {/* ポーション系のみ使用タイミング設定 */}
                     {pi.equipped && (pi.items.effect === 'hp_pct' || pi.items.effect === 'mp_pct') && (
                       <div style={{ display:'flex', alignItems:'center', gap:'4px', marginTop:'4px' }}>
                         <span style={{ color:'#446688', fontSize:'10px' }}>使用タイミング:</span>
@@ -256,39 +273,29 @@ export default function Equipment() {
               </div>
             )}
 
-            {/* 装備タブ */}
             {tab !== 'item' && (
               <div>
-                {filteredEquipment.length === 0 && (
-                  <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>所持していません</div>
-                )}
+                {filteredEquipment.length === 0 && <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>所持していません</div>}
                 {filteredEquipment.map(item => {
                   const w = item.weapons
                   const prof = tab === 'weapon' ? proficiency.find(p => p.weapon_id === w.id) : null
                   const profBonus = calcProfBonus(prof ? { ...prof, weapon: w } : null)
                   const profPct = prof ? Math.min(100, (prof.prof_exp / 100) * 100) : 0
                   const profPrefix = prof ? getProfPrefix(prof.prof_lv) : ''
+                  const hasBonus = item.bonus_atk > 0 || item.bonus_def > 0 || item.bonus_matk > 0 || item.bonus_mdef > 0 || item.bonus_spd > 0 || item.bonus_hp > 0 || item.bonus_mp > 0
 
                   return (
-                    <div key={item.id} style={{
-                      border: `1px solid ${item.equipped ? '#0044aa' : '#002244'}`,
-                      background: item.equipped ? '#001028' : '#000818',
-                      padding:'10px', marginBottom:'6px',
-                    }}>
+                    <div key={item.id} style={{ border:`1px solid ${item.equipped ? '#0044aa' : '#002244'}`, background: item.equipped ? '#001028' : '#000818', padding:'10px', marginBottom:'6px' }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
                         <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
                           <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>
                             {RARITY_LABELS[w.rarity]}
                           </span>
-                          <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>
-                            {profPrefix}{w.name}
-                          </span>
+                          <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>{profPrefix}{w.name}</span>
                         </div>
                         {item.equipped
-                          ? <button onClick={() => unequip(item)} disabled={loading}
-                              style={{ padding:'2px 8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
-                          : <button onClick={() => equip(item)} disabled={loading}
-                              style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>装備する</button>
+                          ? <button onClick={() => unequip(item)} disabled={loading} style={{ padding:'2px 8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
+                          : <button onClick={() => equip(item)} disabled={loading} style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>装備する</button>
                         }
                       </div>
 
@@ -301,11 +308,30 @@ export default function Equipment() {
                         {w.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>特殊防御力+{w.mdef_bonus} </span>}
                         {w.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>素早さ+{w.spd_bonus} </span>}
                         {w.spd_bonus  < 0 && <span style={{color:'#ff4444'}}>素早さ{w.spd_bonus} </span>}
+                        {w.spd_bonus_pct > 0 && <span style={{color:'#ff8844'}}>素早さ+{w.spd_bonus_pct}% </span>}
                         {w.hp_bonus   > 0 && <span style={{color:'#44ff88'}}>HP+{w.hp_bonus} </span>}
                         {w.mp_bonus   > 0 && <span style={{color:'#4488ff'}}>MP+{w.mp_bonus} </span>}
                         {w.hp_bonus_pct > 0 && <span style={{color:'#44ff88'}}>HP+{w.hp_bonus_pct}% </span>}
                         {w.mp_bonus_pct > 0 && <span style={{color:'#4488ff'}}>MP+{w.mp_bonus_pct}% </span>}
                       </div>
+
+                      {hasBonus && (
+                        <div style={{ fontSize:'10px', color:'#ffaa00', marginBottom:'4px' }}>
+                          ボーナス:
+                          {item.bonus_atk  > 0 && ` 攻撃力+${item.bonus_atk}`}
+                          {item.bonus_def  > 0 && ` 防御力+${item.bonus_def}`}
+                          {item.bonus_matk > 0 && ` 特殊攻撃力+${item.bonus_matk}`}
+                          {item.bonus_mdef > 0 && ` 特殊防御力+${item.bonus_mdef}`}
+                          {item.bonus_spd  > 0 && ` 素早さ+${item.bonus_spd}`}
+                          {item.bonus_hp   > 0 && ` HP+${item.bonus_hp}`}
+                          {item.bonus_mp   > 0 && ` MP+${item.bonus_mp}`}
+                        </div>
+                      )}
+                      {item.bonus_effect && (
+                        <div style={{ fontSize:'10px', color:'#ffaa00', marginBottom:'4px' }}>
+                          {getEffectLabel(item.bonus_effect)}
+                        </div>
+                      )}
 
                       {tab === 'weapon' && prof && (
                         <div>

@@ -15,7 +15,9 @@ const AREAS = [
     ],
     boss: { name:'ビッグスライム', hp:500, atk:28, def:22, matk:5, mdef:12, spd:8, gold:100, isBoss:true, type:'physical' },
     commonDrops: ['木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス','ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
+    rareDrops: ['ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
     bossDrops: ['スライムの指輪','蒼粘剣'],
+    bossRareDrops: [],
   },
   {
     id: 2, name: '荒廃した草原',
@@ -26,7 +28,9 @@ const AREAS = [
     ],
     boss: { name:'盗賊団のリーダー', hp:2000, atk:84, def:30, matk:20, mdef:22, spd:15, gold:500, isBoss:true, type:'physical' },
     commonDrops: ['ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
-    bossDrops: [],
+    rareDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本'],
+    bossDrops: ['略奪者の短剣','影踏みのブーツ'],
+    bossRareDrops: [],
   },
   {
     id: 3, name: '古代の洞窟',
@@ -37,7 +41,9 @@ const AREAS = [
     ],
     boss: { name:'古代の番人', hp:8000, atk:210, def:80, matk:80, mdef:60, spd:10, gold:2000, isBoss:true, type:'magical' },
     commonDrops: [],
+    rareDrops: [],
     bossDrops: [],
+    bossRareDrops: [],
   },
 ]
 
@@ -131,7 +137,11 @@ const getTotalRank = (total) => {
   return { rank: 'SSS', color: '#ffcc00' }
 }
 
-const calcExpNext = (lv) => (Math.floor((lv - 1) / 10) + 1) * 100
+// 経験値計算式変更（10レベルごとに+10）
+const calcExpNext = (lv) => {
+  const tier = Math.floor((lv - 1) / 10)
+  return 100 + tier * 10
+}
 
 const WEAPON_TYPE_GROUP = {
   sword:'physical', axe:'physical', spear:'physical', bow:'physical',
@@ -184,15 +194,16 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
   for (const item of equipment) {
     if (!item.equipped || !item.weapons) continue
     const w = item.weapons
-    bonus.atk  += w.atk_bonus  || 0
-    bonus.def  += w.def_bonus  || 0
-    bonus.matk += w.matk_bonus || 0
-    bonus.mdef += w.mdef_bonus || 0
-    bonus.spd  += w.spd_bonus  || 0
-    bonus.hp   += w.hp_bonus   || 0
-    bonus.mp   += w.mp_bonus   || 0
+    bonus.atk  += (w.atk_bonus  || 0) + (item.bonus_atk  || 0)
+    bonus.def  += (w.def_bonus  || 0) + (item.bonus_def  || 0)
+    bonus.matk += (w.matk_bonus || 0) + (item.bonus_matk || 0)
+    bonus.mdef += (w.mdef_bonus || 0) + (item.bonus_mdef || 0)
+    bonus.spd  += (w.spd_bonus  || 0) + (item.bonus_spd  || 0)
+    bonus.hp   += (w.hp_bonus   || 0) + (item.bonus_hp   || 0)
+    bonus.mp   += (w.mp_bonus   || 0) + (item.bonus_mp   || 0)
     if (w.hp_bonus_pct > 0) bonus.hp += Math.floor(profile.hp_max * w.hp_bonus_pct / 100)
     if (w.mp_bonus_pct > 0) bonus.mp += Math.floor(profile.mp_max * w.mp_bonus_pct / 100)
+    if (w.spd_bonus_pct > 0) bonus.spd += Math.floor(profile.spd * w.spd_bonus_pct / 100)
     if (item.slot === 'weapon') {
       const prof = proficiency.find(p => p.weapon_id === w.id)
       if (prof) {
@@ -247,89 +258,110 @@ const calcExtraActionRate = (mySpd, enemySpd) => {
   return 50 + (rawRate - 50) * 0.5
 }
 
+// ランダムボーナス生成
+const generateDropBonus = (weapon) => {
+  const statKeys = ['atk_bonus','def_bonus','matk_bonus','mdef_bonus','spd_bonus','hp_bonus','mp_bonus']
+  const eligible = statKeys.filter(k => (weapon[k] || 0) > 0)
+  if (eligible.length === 0) return { bonus_effect: null }
+
+  // 90%ステータス・10%特殊能力
+  const isSpecial = Math.random() < 0.1
+  if (isSpecial) {
+    const effects = [
+      'open_atk_10_2t', 'open_atk_20_1t',
+      'open_def_10_2t', 'open_def_20_1t',
+      'open_matk_10_2t','open_matk_20_1t',
+      'open_mdef_10_2t','open_mdef_20_1t',
+      'open_spd_10_2t', 'open_spd_20_1t',
+      'delay_heal_10', 'regen_heal_5_3t',
+    ]
+    const effect = effects[Math.floor(Math.random() * effects.length)]
+    return { bonus_effect: effect }
+  }
+
+  // ステータスボーナス
+  const targetKey = eligible[Math.floor(Math.random() * eligible.length)]
+  const baseVal = weapon[targetKey] || 0
+  const maxBonus = Math.max(1, Math.floor(baseVal * 0.5))
+  const bonusVal = Math.floor(Math.random() * maxBonus) + 1
+  const bonusMap = {
+    atk_bonus:  { bonus_atk:  bonusVal },
+    def_bonus:  { bonus_def:  bonusVal },
+    matk_bonus: { bonus_matk: bonusVal },
+    mdef_bonus: { bonus_mdef: bonusVal },
+    spd_bonus:  { bonus_spd:  bonusVal },
+    hp_bonus:   { bonus_hp:   bonusVal },
+    mp_bonus:   { bonus_mp:   bonusVal },
+  }
+  return { ...bonusMap[targetKey], bonus_effect: null }
+}
+
+// 特殊能力の表示名
+const getEffectLabel = (effect) => {
+  const labels = {
+    'open_atk_10_2t':  '【開幕2T・攻撃力+10%】',
+    'open_atk_20_1t':  '【開幕1T・攻撃力+20%】',
+    'open_def_10_2t':  '【開幕2T・防御力+10%】',
+    'open_def_20_1t':  '【開幕1T・防御力+20%】',
+    'open_matk_10_2t': '【開幕2T・特殊攻撃力+10%】',
+    'open_matk_20_1t': '【開幕1T・特殊攻撃力+20%】',
+    'open_mdef_10_2t': '【開幕2T・特殊防御力+10%】',
+    'open_mdef_20_1t': '【開幕1T・特殊防御力+20%】',
+    'open_spd_10_2t':  '【開幕2T・素早さ+10%】',
+    'open_spd_20_1t':  '【開幕1T・素早さ+20%】',
+    'delay_heal_10':   '【3T後・HP10%回復】',
+    'regen_heal_5_3t': '【開幕3T・毎T HP5%回復】',
+  }
+  return labels[effect] || effect
+}
+
 const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs) => {
   const result = { dmg: 0, heal: 0, log: '', newEnemyBuffs: { ...enemyBuffs }, newPlayerBuffs: { ...playerBuffs } }
   const randMult = (min, max) => min + Math.random() * (max - min)
   switch (skill.name) {
-    case '体当たり':
-      result.dmg = Math.floor(eff.atk * randMult(1.1, 1.2))
-      result.log = `⚔ 体当たり！ ${enemy.name}に${result.dmg}ダメージ！`
-      break
-    case '強撃':
-      result.dmg = Math.floor(eff.atk * randMult(1.3, 1.4))
-      result.log = `💥 強撃！ ${enemy.name}に${result.dmg}ダメージ！`
-      break
-    case '防御崩し':
-      result.dmg = Math.floor(eff.atk * 1.2)
-      result.newEnemyBuffs.defDown = { turns: 4, rate: 0.8 }
-      result.log = `🗡 防御崩し！ ${enemy.name}に${result.dmg}ダメージ！ 防御力が低下した！`
-      break
-    case '防御態勢':
-      result.newPlayerBuffs.defUp = { turns: 4, rate: 1.5 }
-      result.log = `🛡 防御態勢！ 4ターンの間防御力と特殊防御力が上昇した！`
-      break
-    case '応急手当':
-      result.heal = Math.floor(eff.matk * randMult(1.1, 1.2))
-      result.log = `💊 応急手当！ HPを${result.heal}回復した！`
-      break
-    case '狙撃':
-      result.dmg = Math.floor(eff.spd * randMult(1.1, 1.2))
-      result.log = `🏹 狙撃！ ${enemy.name}に${result.dmg}ダメージ！`
-      break
-    case '駆け足':
-      result.newPlayerBuffs.spdUp = { turns: 5, rate: 1.5 }
-      result.log = `💨 駆け足！ 5ターンの間素早さが上昇した！`
-      break
-    case '貫通射撃':
-      result.dmg = Math.floor(eff.atk * randMult(1.2, 1.3))
-      result.log = `🏹 貫通射撃！ ${enemy.name}の防御を貫いて${result.dmg}ダメージ！`
-      break
-    case '疾風矢':
-      result.dmg = Math.floor(eff.atk * 1.0 + eff.spd * 0.4)
-      result.log = `💨 疾風矢！ ${enemy.name}に${result.dmg}ダメージ！`
-      break
-    case 'ファイア':
-      result.dmg = Math.floor(eff.matk * randMult(1.3, 1.5))
-      result.log = `🔥 ファイア！ ${enemy.name}に${result.dmg}の魔法ダメージ！`
-      break
-    case '精神統一':
-      result.newPlayerBuffs.matkUp = { turns: 5, rate: 1.5 }
-      result.log = `✨ 精神統一！ 5ターンの間特殊攻撃力が上昇した！`
-      break
-    case 'サンダー':
-      result.dmg = Math.floor(eff.matk * randMult(1.4, 1.6))
-      result.log = `⚡ サンダー！ ${enemy.name}に${result.dmg}の魔法ダメージ！`
-      break
-    case 'アイスランス':
-      result.dmg = Math.floor(eff.matk * randMult(1.6, 1.9))
-      result.log = `❄ アイスランス！ ${enemy.name}に${result.dmg}の魔法ダメージ！`
-      break
-    case 'ライト':
-      result.dmg = Math.floor(eff.matk * randMult(1.3, 1.5))
-      result.log = `✨ ライト！ ${enemy.name}に${result.dmg}の魔法ダメージ！`
-      break
-    case 'ヒール':
-      result.heal = Math.floor(profile.hp_max * 0.1 + eff.matk * randMult(1.1, 1.2))
-      result.log = `💚 ヒール！ HPを${result.heal}回復した！`
-      break
-    case 'プロテク':
-      result.newPlayerBuffs.defUp = { turns: 3, rate: 1.6 }
-      result.log = `🛡 プロテク！ 3ターンの間防御力と特殊防御力が上昇した！`
-      break
-    case '祈祷':
-      result.newPlayerBuffs.regenHeal = { turns: 4, amount: Math.floor(profile.hp_max * 0.1) }
-      result.log = `🙏 祈祷！ 4ターンの間毎ターンHPが回復するようになった！`
-      break
-    case 'ライトニング':
-      result.dmg = Math.floor(eff.matk * randMult(1.5, 1.7))
-      result.newEnemyBuffs.mdefDown = { turns: 3, rate: 0.7 }
-      result.log = `⚡ ライトニング！ ${enemy.name}に${result.dmg}の魔法ダメージ！ 特殊防御力が低下した！`
-      break
-    default:
-      result.dmg = Math.max(1, eff.atk)
-      result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
+    case '体当たり': result.dmg = Math.floor(eff.atk * randMult(1.1, 1.2)); result.log = `⚔ 体当たり！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '強撃': result.dmg = Math.floor(eff.atk * randMult(1.3, 1.4)); result.log = `💥 強撃！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '防御崩し': result.dmg = Math.floor(eff.atk * 1.2); result.newEnemyBuffs.defDown = { turns: 4, rate: 0.8 }; result.log = `🗡 防御崩し！ ${enemy.name}に${result.dmg}ダメージ！ 防御力が低下した！`; break
+    case '防御態勢': result.newPlayerBuffs.defUp = { turns: 4, rate: 1.5 }; result.log = `🛡 防御態勢！ 4ターンの間防御力と特殊防御力が上昇した！`; break
+    case '応急手当': result.heal = Math.floor(eff.matk * randMult(1.1, 1.2)); result.log = `💊 応急手当！ HPを${result.heal}回復した！`; break
+    case '狙撃': result.dmg = Math.floor(eff.spd * randMult(1.1, 1.2)); result.log = `🏹 狙撃！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '駆け足': result.newPlayerBuffs.spdUp = { turns: 5, rate: 1.5 }; result.log = `💨 駆け足！ 5ターンの間素早さが上昇した！`; break
+    case '貫通射撃': result.dmg = Math.floor(eff.atk * randMult(1.2, 1.3)); result.log = `🏹 貫通射撃！ ${enemy.name}の防御を貫いて${result.dmg}ダメージ！`; break
+    case '疾風矢': result.dmg = Math.floor(eff.atk * 1.0 + eff.spd * 0.4); result.log = `💨 疾風矢！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case 'ファイア': result.dmg = Math.floor(eff.matk * randMult(1.3, 1.5)); result.log = `🔥 ファイア！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
+    case '精神統一': result.newPlayerBuffs.matkUp = { turns: 5, rate: 1.5 }; result.log = `✨ 精神統一！ 5ターンの間特殊攻撃力が上昇した！`; break
+    case 'サンダー': result.dmg = Math.floor(eff.matk * randMult(1.4, 1.6)); result.log = `⚡ サンダー！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
+    case 'アイスランス': result.dmg = Math.floor(eff.matk * randMult(1.6, 1.9)); result.log = `❄ アイスランス！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
+    case 'ライト': result.dmg = Math.floor(eff.matk * randMult(1.3, 1.5)); result.log = `✨ ライト！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
+    case 'ヒール': result.heal = Math.floor(profile.hp_max * 0.1 + eff.matk * randMult(1.1, 1.2)); result.log = `💚 ヒール！ HPを${result.heal}回復した！`; break
+    case 'プロテク': result.newPlayerBuffs.defUp = { turns: 3, rate: 1.6 }; result.log = `🛡 プロテク！ 3ターンの間防御力と特殊防御力が上昇した！`; break
+    case '祈祷': result.newPlayerBuffs.regenHeal = { turns: 4, amount: Math.floor(profile.hp_max * 0.1) }; result.log = `🙏 祈祷！ 4ターンの間毎ターンHPが回復するようになった！`; break
+    case 'ライトニング': result.dmg = Math.floor(eff.matk * randMult(1.5, 1.7)); result.newEnemyBuffs.mdefDown = { turns: 3, rate: 0.7 }; result.log = `⚡ ライトニング！ ${enemy.name}に${result.dmg}の魔法ダメージ！ 特殊防御力が低下した！`; break
+    default: result.dmg = Math.max(1, eff.atk); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
   }
   return result
+}
+
+// 装備ボーナス特殊能力を戦闘開始時に適用
+const applyEquipmentEffects = (equipment, profile, playerBuffs, logs) => {
+  const newBuffs = { ...playerBuffs }
+  for (const item of equipment) {
+    if (!item.equipped || !item.bonus_effect) continue
+    const effect = item.bonus_effect
+    if (effect === 'open_atk_10_2t')  { newBuffs.atkUp  = { turns: 2, rate: 1.1 }; logs.push({ text:`✨ 装備効果発動！ 2ターンの間攻撃力+10%！`, color:'#ffcc00' }) }
+    if (effect === 'open_atk_20_1t')  { newBuffs.atkUp  = { turns: 1, rate: 1.2 }; logs.push({ text:`✨ 装備効果発動！ 1ターンの間攻撃力+20%！`, color:'#ffcc00' }) }
+    if (effect === 'open_def_10_2t')  { newBuffs.defUp  = { turns: 2, rate: 1.1 }; logs.push({ text:`✨ 装備効果発動！ 2ターンの間防御力+10%！`, color:'#88aaff' }) }
+    if (effect === 'open_def_20_1t')  { newBuffs.defUp  = { turns: 1, rate: 1.2 }; logs.push({ text:`✨ 装備効果発動！ 1ターンの間防御力+20%！`, color:'#88aaff' }) }
+    if (effect === 'open_matk_10_2t') { newBuffs.matkUp = { turns: 2, rate: 1.1 }; logs.push({ text:`✨ 装備効果発動！ 2ターンの間特殊攻撃力+10%！`, color:'#cc44ff' }) }
+    if (effect === 'open_matk_20_1t') { newBuffs.matkUp = { turns: 1, rate: 1.2 }; logs.push({ text:`✨ 装備効果発動！ 1ターンの間特殊攻撃力+20%！`, color:'#cc44ff' }) }
+    if (effect === 'open_mdef_10_2t') { newBuffs.mdefUp = { turns: 2, rate: 1.1 }; logs.push({ text:`✨ 装備効果発動！ 2ターンの間特殊防御力+10%！`, color:'#44ccff' }) }
+    if (effect === 'open_mdef_20_1t') { newBuffs.mdefUp = { turns: 1, rate: 1.2 }; logs.push({ text:`✨ 装備効果発動！ 1ターンの間特殊防御力+20%！`, color:'#44ccff' }) }
+    if (effect === 'open_spd_10_2t')  { newBuffs.spdUp  = { turns: 2, rate: 1.1 }; logs.push({ text:`✨ 装備効果発動！ 2ターンの間素早さ+10%！`, color:'#ff8844' }) }
+    if (effect === 'open_spd_20_1t')  { newBuffs.spdUp  = { turns: 1, rate: 1.2 }; logs.push({ text:`✨ 装備効果発動！ 1ターンの間素早さ+20%！`, color:'#ff8844' }) }
+    if (effect === 'regen_heal_5_3t') { newBuffs.regenHeal = { turns: 3, amount: Math.floor(profile.hp_max * 0.05) }; logs.push({ text:`✨ 装備効果発動！ 3ターンの間毎ターンHP5%回復！`, color:'#44ff88' }) }
+    if (effect === 'delay_heal_10')   { newBuffs.delayHeal = { triggerTurn: 3, amount: Math.floor(profile.hp_max * 0.1) }; logs.push({ text:`✨ 装備効果発動！ 3ターン後にHP10%回復！`, color:'#44ff88' }) }
+  }
+  return newBuffs
 }
 
 export default function Game() {
@@ -459,15 +491,11 @@ export default function Game() {
     let currentItem = playerItem ? { ...playerItem } : null
     let itemUsed = false
 
-    // 魔よけのお守り処理（HP%条件なしでボス遭遇時に自動発動）
     if (isBossEncounter && currentItem && currentItem.items.effect === 'boss_avoid') {
       logs.push({ text:`🧿 魔よけのお守りが光り、ボスとの戦闘を避けた！`, color:'#cc44ff' })
       setBattleLogs([...logs])
       await supabase.from('player_items').delete().eq('id', currentItem.id)
-      await supabase.from('profiles').update({
-        boss_encounter_rate: 0,
-        last_action_at: new Date().toISOString(),
-      }).eq('id', profile.id)
+      await supabase.from('profiles').update({ boss_encounter_rate: 0, last_action_at: new Date().toISOString() }).eq('id', profile.id)
       await fetchProfile()
       setLoading(false)
       return
@@ -478,6 +506,9 @@ export default function Game() {
     } else {
       logs.push({ text:`${enemy.name}が現れた！`, color:'#88ccff' })
     }
+
+    // 装備ボーナス特殊能力を戦闘開始時に適用
+    playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
 
     const equippedWeaponItem = equipment.find(e => e.slot === 'weapon' && e.equipped)
     const weaponType = equippedWeaponItem?.weapons?.weapon_type || 'sword'
@@ -496,10 +527,11 @@ export default function Game() {
 
     const doPlayerAttack = (isExtra = false) => {
       const playerDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
-      const playerMdef = eff.mdef * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
+      const playerMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1)
       const playerMatk = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1)
+      const playerAtkBuff = eff.atk * (playerBuffs.atkUp ? playerBuffs.atkUp.rate : 1)
       const playerSpdBuff = eff.spd * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1)
-      const effWithBuff = { ...eff, def: playerDef, mdef: playerMdef, matk: playerMatk, spd: playerSpdBuff }
+      const effWithBuff = { ...eff, atk: playerAtkBuff, def: playerDef, mdef: playerMdef, matk: playerMatk, spd: playerSpdBuff }
       const enemyDefRate  = enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1
       const enemyMdefRate = enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
@@ -532,7 +564,7 @@ export default function Game() {
 
     const doEnemyAttack = (isExtra = false) => {
       const playerDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
-      const playerMdef = eff.mdef * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
+      const playerMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1)
       const isEnemyMagical = enemy.type === 'magical'
       const enemyAtk = isEnemyMagical ? (enemy.matk || 0) : enemy.atk
       const defVal = isEnemyMagical ? Math.floor(playerMdef / 2) : Math.floor(playerDef / 2)
@@ -543,12 +575,17 @@ export default function Game() {
     }
 
     while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
+      // 祈祷・継続回復
       if (playerBuffs.regenHeal && playerBuffs.regenHeal.turns > 0) {
         playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.regenHeal.amount)
-        logs.push({ text:`🙏 祈祷の効果でHPが${playerBuffs.regenHeal.amount}回復した！`, color:'#44ff88' })
+        logs.push({ text:`💚 回復効果でHPが${playerBuffs.regenHeal.amount}回復した！`, color:'#44ff88' })
+      }
+      // 遅延回復
+      if (playerBuffs.delayHeal && turn === playerBuffs.delayHeal.triggerTurn) {
+        playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.delayHeal.amount)
+        logs.push({ text:`💚 装備効果でHPが${playerBuffs.delayHeal.amount}回復した！`, color:'#44ff88' })
       }
 
-      // ポーション系アイテム自動使用
       if (currentItem && !itemUsed) {
         const threshold = currentItem.use_threshold || 50
         const effect = currentItem.items.effect
@@ -571,15 +608,12 @@ export default function Game() {
 
       doPlayerAttack(false)
       if (enemyHp <= 0) break
-
       if (playerExtraRate > 0 && Math.random() * 100 < playerExtraRate) {
         doPlayerAttack(true)
         if (enemyHp <= 0) break
       }
-
       doEnemyAttack(false)
       if (playerHp <= 0) break
-
       if (enemyExtraRate > 0 && Math.random() * 100 < enemyExtraRate) {
         doEnemyAttack(true)
       }
@@ -609,27 +643,44 @@ export default function Game() {
     }
     setBattleLogs(logs)
 
+    // ドロップ処理（レアドロップ枠対応）
     if (win) {
-      const dropList = isBossEncounter ? area.bossDrops : area.commonDrops
       let droppedItems = []
-      if (isBossEncounter && dropList.length > 0) {
-        const drop0 = dropList.length > 0 && Math.random() * 100 < 3
-        const drop1 = dropList.length > 1 && Math.random() * 100 < 3
-        if (drop0 && drop1) droppedItems = [dropList[Math.random() < 0.5 ? 0 : 1]]
-        else if (drop0) droppedItems = [dropList[0]]
-        else if (drop1) droppedItems = [dropList[1]]
-      } else if (!isBossEncounter && dropList.length > 0) {
-        if (Math.random() * 100 < 3) {
-          droppedItems = [dropList[Math.floor(Math.random() * dropList.length)]]
+      if (isBossEncounter) {
+        const dropList = area.bossDrops || []
+        if (dropList.length > 0) {
+          const drop0 = Math.random() * 100 < 3
+          const drop1 = dropList.length > 1 && Math.random() * 100 < 3
+          if (drop0 && drop1) droppedItems = [dropList[Math.random() < 0.5 ? 0 : 1]]
+          else if (drop0) droppedItems = [dropList[0]]
+          else if (drop1) droppedItems = [dropList[1]]
+        }
+      } else {
+        const commonDrops = area.commonDrops || []
+        const rareDrops = area.rareDrops || []
+        if (commonDrops.length > 0 && Math.random() * 100 < 3) {
+          // レアドロップ判定（さらに10%）
+          if (rareDrops.length > 0 && Math.random() * 100 < 10) {
+            droppedItems = [rareDrops[Math.floor(Math.random() * rareDrops.length)]]
+          } else {
+            droppedItems = [commonDrops[Math.floor(Math.random() * commonDrops.length)]]
+          }
         }
       }
+
       for (const itemName of droppedItems) {
-        const { data: weapon } = await supabase.from('weapons').select('id, slot').eq('name', itemName).single()
+        const { data: weapon } = await supabase.from('weapons').select('*').eq('name', itemName).single()
         if (weapon) {
+          const bonusData = generateDropBonus(weapon)
           await supabase.from('player_equipment').insert({
-            player_id: profile.id, weapon_id: weapon.id, slot: weapon.slot, equipped: false,
+            player_id: profile.id,
+            weapon_id: weapon.id,
+            slot: weapon.slot,
+            equipped: false,
+            ...bonusData,
           })
-          logs.push({ text:`💎 ${itemName} を入手した！`, color:'#ffcc00' })
+          const isRare = area.rareDrops?.includes(itemName)
+          logs.push({ text:`${isRare ? '💎✨' : '💎'} ${itemName} を入手した！`, color: isRare ? '#44ff88' : '#ffcc00' })
         }
       }
     }
@@ -641,13 +692,8 @@ export default function Game() {
         const profExpGained = Math.floor(Math.random() * 4) + 8
         let totalExp = prof.prof_exp + profExpGained
         let newProfLv = prof.prof_lv
-        while (totalExp >= 100) {
-          totalExp -= 100
-          newProfLv++
-        }
-        await supabase.from('proficiency').update({
-          prof_exp: totalExp, prof_lv: newProfLv,
-        }).eq('id', prof.id)
+        while (totalExp >= 100) { totalExp -= 100; newProfLv++ }
+        await supabase.from('proficiency').update({ prof_exp: totalExp, prof_lv: newProfLv }).eq('id', prof.id)
         if (newProfLv > prof.prof_lv) {
           const prefix = getProfPrefix(newProfLv)
           logs.push({ text:`⚔ 武器熟練度UP！ ${prefix}${equippedWeaponItem.weapons.name} LV${newProfLv}`, color:'#aa44ff' })
@@ -656,7 +702,6 @@ export default function Game() {
       }
     }
 
-    // スキル自動習得
     const { data: classSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class)
     const { data: learnedSkills } = await supabase.from('player_skills').select('skill_id').eq('player_id', profile.id)
     const learnedIds = (learnedSkills || []).map(s => s.skill_id)
@@ -800,6 +845,7 @@ export default function Game() {
           <div style={{ display:'flex', gap:'8px' }}>
             <button onClick={() => nav('/equipment')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡 装備</button>
             <button onClick={() => nav('/skills')} style={{ background:'none', border:'1px solid #cc44ff', color:'#cc44ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>⚡ スキル</button>
+            <button onClick={() => nav('/profile')} style={{ background:'none', border:'1px solid #44ff88', color:'#44ff88', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>👤 プロフィール</button>
             <button onClick={() => nav('/ranking')} style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏆 ランキング</button>
             <button onClick={logout} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ログアウト</button>
           </div>
@@ -905,13 +951,9 @@ export default function Game() {
                 ) : (
                   <>
                     <div style={{ color:'#88ccff', fontSize:'12px', lineHeight:'2', marginBottom:'16px' }}>
-                      {isDying ? (
-                        <>これはひどいお姿で…。特別なお手当が必要でございます。<br/>
-                        <span style={{color:'#ffcc00'}}>{profile.lv * 15}G</span> のところ、
-                        所持金 <span style={{color:'#ffcc00'}}>{innCost}G</span> で承ります。</>
-                      ) : (
-                        <>一泊 <span style={{color:'#ffcc00'}}>{innCost}G</span> でございます。<br/>ゆっくりお休みになりますか？</>
-                      )}
+                      {isDying ? <>これはひどいお姿で…。特別なお手当が必要でございます。<br/>
+                        <span style={{color:'#ffcc00'}}>{profile.lv * 15}G</span> のところ、所持金 <span style={{color:'#ffcc00'}}>{innCost}G</span> で承ります。</>
+                        : <>一泊 <span style={{color:'#ffcc00'}}>{innCost}G</span> でございます。<br/>ゆっくりお休みになりますか？</>}
                     </div>
                     <div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
                       所持金: <span style={{color:'#ffcc00'}}>{profile.gold}G</span>

@@ -1,0 +1,214 @@
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { supabase } from '../supabase'
+
+const RARITY_COLORS = { common:'#88ccff', rare:'#44ff88', epic:'#cc44ff', legendary:'#ffcc00' }
+const RARITY_LABELS = { common:'並', rare:'珍', epic:'秘', legendary:'伝' }
+
+const getStatRank = (val, type) => {
+  let thresholds
+  if (type === 'hp') thresholds = [450, 1200, 2400, 4500, 7500, 12000, 18000, 27000]
+  else if (type === 'mp') thresholds = [225, 600, 1200, 2250, 3750, 6000, 9000, 13500]
+  else thresholds = [45, 120, 240, 450, 750, 1200, 1800, 2700]
+  const ranks = ['F','E','D','C','B','A','S','SS','SSS']
+  const colors = ['#888888','#6699cc','#ff8844','#44bb44','#4488ff','#ff4444','#ffcc00','#ffcc00','#ffcc00']
+  for (let i = 0; i < thresholds.length; i++) {
+    if (val <= thresholds[i]) return { rank: ranks[i], color: colors[i] }
+  }
+  return { rank: 'SSS', color: '#ffcc00' }
+}
+
+const getTotalRank = (total) => {
+  const thresholds = [200, 500, 1000, 2000, 4000, 7000, 11000, 16000]
+  const ranks = ['F','E','D','C','B','A','S','SS','SSS']
+  const colors = ['#888888','#6699cc','#ff8844','#44bb44','#4488ff','#ff4444','#ffcc00','#ffcc00','#ffcc00']
+  for (let i = 0; i < thresholds.length; i++) {
+    if (total <= thresholds[i]) return { rank: ranks[i], color: colors[i] }
+  }
+  return { rank: 'SSS', color: '#ffcc00' }
+}
+
+const calcTotal = (p) => Math.floor(
+  (p.hp_max / 10) + (p.mp_max / 5) +
+  p.atk + p.def + p.matk + p.mdef + p.spd
+)
+
+const getProfPrefix = (profLv) => {
+  if (profLv >= 300) return '【極】'
+  if (profLv >= 200) return '【真】'
+  if (profLv >= 100) return '【改】'
+  return ''
+}
+
+const getEffectLabel = (effect) => {
+  const labels = {
+    'open_atk_10_2t':  '【開幕2T・攻撃力+10%】',
+    'open_atk_20_1t':  '【開幕1T・攻撃力+20%】',
+    'open_def_10_2t':  '【開幕2T・防御力+10%】',
+    'open_def_20_1t':  '【開幕1T・防御力+20%】',
+    'open_matk_10_2t': '【開幕2T・特殊攻撃力+10%】',
+    'open_matk_20_1t': '【開幕1T・特殊攻撃力+20%】',
+    'open_mdef_10_2t': '【開幕2T・特殊防御力+10%】',
+    'open_mdef_20_1t': '【開幕1T・特殊防御力+20%】',
+    'open_spd_10_2t':  '【開幕2T・素早さ+10%】',
+    'open_spd_20_1t':  '【開幕1T・素早さ+20%】',
+    'delay_heal_10':   '【3T後・HP10%回復】',
+    'regen_heal_5_3t': '【開幕3T・毎T HP5%回復】',
+  }
+  return labels[effect] || effect
+}
+
+const TYPE_COLORS = {
+  '物理攻撃': '#ffcc00', '魔法攻撃': '#cc44ff',
+  '回復': '#44ff88', '強化': '#44ccff', 'パッシブ': '#ff8844',
+}
+
+export default function Profile() {
+  const nav = useNavigate()
+  const { playerId } = useParams()
+  const [profile, setProfile] = useState(null)
+  const [equipment, setEquipment] = useState([])
+  const [proficiency, setProficiency] = useState([])
+  const [skillSets, setSkillSets] = useState([])
+  const [isOwn, setIsOwn] = useState(false)
+
+  useEffect(() => { fetchAll() }, [playerId])
+
+  const fetchAll = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { nav('/login'); return }
+
+    const targetId = playerId || user.id
+    setIsOwn(targetId === user.id)
+
+    const { data: p } = await supabase.from('profiles').select('*').eq('id', targetId).single()
+    if (!p) { nav('/game'); return }
+    setProfile(p)
+
+    const { data: eq } = await supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', targetId)
+    setEquipment(eq || [])
+
+    const { data: prof } = await supabase.from('proficiency').select('*, weapons(*)').eq('player_id', targetId)
+    setProficiency(prof || [])
+
+    const { data: ss } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', targetId).order('slot_order')
+    setSkillSets(ss || [])
+  }
+
+  if (!profile) return (
+    <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
+  )
+
+  const total = calcTotal(profile)
+  const totalRank = getTotalRank(total)
+  const slots = ['weapon', 'armor', 'accessory']
+
+  return (
+    <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
+      <div style={{ maxWidth:'700px', margin:'0 auto' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
+          <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
+          <button onClick={() => nav(isOwn ? '/game' : '/ranking')}
+            style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+            ← {isOwn ? '街に戻る' : 'ランキングへ'}
+          </button>
+        </div>
+
+        <div style={{ color:'#44ff88', fontSize:'14px', marginBottom:'12px' }}>👤 {profile.username}</div>
+
+        {/* 基本情報 */}
+        <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'12px' }}>
+          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>基本情報</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', fontSize:'11px' }}>
+            <span style={{color:'#446688'}}>クラス: <span style={{color:'#88ccff'}}>{profile.class}</span></span>
+            <span style={{color:'#446688'}}>LV: <span style={{color:'#ffcc00'}}>{profile.lv}</span></span>
+            <span style={{color:'#446688'}}>総合力: <span style={{color:'#44ff88'}}>{total}</span> <span style={{color: totalRank.color}}>【{totalRank.rank}】</span></span>
+            <span style={{color:'#446688'}}>ゴールド: <span style={{color:'#ffcc00'}}>{profile.gold}G</span></span>
+          </div>
+        </div>
+
+        {/* ステータス */}
+        <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'12px' }}>
+          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>ステータス</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px', fontSize:'11px' }}>
+            {[
+              { label:'HP', val: profile.hp_max, type:'hp', color:'#00cc44' },
+              { label:'MP', val: profile.mp_max, type:'mp', color:'#4488ff' },
+              { label:'攻撃力', val: profile.atk, type:'atk', color:'#ffcc00' },
+              { label:'防御力', val: profile.def, type:'def', color:'#88aaff' },
+              { label:'特殊攻撃力', val: profile.matk, type:'matk', color:'#cc44ff' },
+              { label:'特殊防御力', val: profile.mdef, type:'mdef', color:'#44ccff' },
+              { label:'素早さ', val: profile.spd, type:'spd', color:'#ff8844' },
+            ].map(s => {
+              const rank = getStatRank(s.val, s.type)
+              return (
+                <div key={s.label} style={{ display:'flex', justifyContent:'space-between', color:'#446688' }}>
+                  <span>{s.label}: <span style={{color: s.color}}>{s.val}</span></span>
+                  <span style={{color: rank.color, fontSize:'10px'}}>{rank.rank}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* 装備中 */}
+        <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'12px' }}>
+          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>装備中</div>
+          {slots.map(slot => {
+            const equipped = equipment.find(e => e.slot === slot && e.equipped)
+            const slotLabel = { weapon:'武器', armor:'防具', accessory:'装飾品' }[slot]
+            return (
+              <div key={slot} style={{ display:'flex', gap:'8px', marginBottom:'6px', fontSize:'11px' }}>
+                <span style={{ color:'#446688', minWidth:'50px' }}>{slotLabel}:</span>
+                {equipped ? (
+                  <div>
+                    <span style={{ color: RARITY_COLORS[equipped.weapons.rarity] }}>
+                      {getProfPrefix(proficiency.find(p => p.weapon_id === equipped.weapons.id)?.prof_lv || 0)}{equipped.weapons.name}
+                    </span>
+                    <span style={{ color:'#334455', fontSize:'10px', marginLeft:'6px' }}>
+                      {equipped.weapons.atk_bonus  > 0 && `攻撃力+${equipped.weapons.atk_bonus} `}
+                      {equipped.weapons.def_bonus  > 0 && `防御力+${equipped.weapons.def_bonus} `}
+                      {equipped.weapons.matk_bonus > 0 && `特殊攻撃力+${equipped.weapons.matk_bonus} `}
+                      {equipped.weapons.mdef_bonus > 0 && `特殊防御力+${equipped.weapons.mdef_bonus} `}
+                      {equipped.weapons.spd_bonus  > 0 && `素早さ+${equipped.weapons.spd_bonus} `}
+                    </span>
+                    {equipped.bonus_effect && <span style={{color:'#ffaa00', fontSize:'10px', marginLeft:'4px'}}>{getEffectLabel(equipped.bonus_effect)}</span>}
+                    {(equipped.bonus_atk > 0 || equipped.bonus_def > 0 || equipped.bonus_matk > 0 || equipped.bonus_mdef > 0 || equipped.bonus_spd > 0) && (
+                      <span style={{color:'#ffaa00', fontSize:'10px', marginLeft:'4px'}}>
+                        ボーナス:
+                        {equipped.bonus_atk  > 0 && ` 攻撃力+${equipped.bonus_atk}`}
+                        {equipped.bonus_def  > 0 && ` 防御力+${equipped.bonus_def}`}
+                        {equipped.bonus_matk > 0 && ` 特殊攻撃力+${equipped.bonus_matk}`}
+                        {equipped.bonus_mdef > 0 && ` 特殊防御力+${equipped.bonus_mdef}`}
+                        {equipped.bonus_spd  > 0 && ` 素早さ+${equipped.bonus_spd}`}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <span style={{ color:'#334455' }}>なし</span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* スキルセット */}
+        <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
+          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>スキルセット</div>
+          {skillSets.length === 0 ? (
+            <div style={{ color:'#334455', fontSize:'11px' }}>未設定</div>
+          ) : (
+            skillSets.map(ss => (
+              <div key={ss.id} style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'4px', fontSize:'11px' }}>
+                <span style={{ color:'#446688', minWidth:'20px' }}>{ss.slot_order}.</span>
+                <span style={{ color: TYPE_COLORS[ss.skills.type] || '#88ccff' }}>{ss.skills.name}</span>
+                <span style={{ color:'#446688', fontSize:'10px' }}>×{ss.use_count || 1}</span>
+                <span style={{ color:'#446688', fontSize:'10px' }}>MP{ss.skills.mp_cost}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
