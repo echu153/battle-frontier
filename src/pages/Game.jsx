@@ -903,6 +903,7 @@ export default function Game() {
   const charLv = profile.char_lv || profile.lv
   const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
   const cap = CLASS_LEVEL_CAP[profile.class] || 100
+const isAtCap = currentClassLv >= cap
 
   const availableClasses = INITIAL_CLASSES.filter(c=>c!==profile.class).map(c=>{
     const cl = classLevels.find(x=>x.class_name===c)
