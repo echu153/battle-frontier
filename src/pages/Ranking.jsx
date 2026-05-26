@@ -31,8 +31,8 @@ export default function Ranking() {
       if (user) setCurrentUserId(user.id)
       const { data } = await supabase
         .from('profiles')
-.select('id, username, lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, avatar_url')        .order('lv', { ascending: false })
-        .limit(50)
+.select('id, username, lv, char_lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, avatar_url')
+.order('char_lv', { ascending: false })        .limit(50)
       const sorted = (data || []).sort((a, b) => calcTotal(b) - calcTotal(a))
       setPlayers(sorted)
       setLoading(false)
@@ -96,8 +96,7 @@ export default function Ranking() {
   {p.username}{isMe && ' (自分)'}
 </span>
                   <span style={{ color:'#446688', fontSize:'12px', textAlign:'center' }}>{JOB_ICONS[p.class] || '？'}</span>
-                  <span style={{ color:'#ffcc00', fontSize:'12px', textAlign:'center' }}>{p.lv}</span>
-                  <span style={{ color:'#44ff88', fontSize:'12px', textAlign:'right', fontWeight:'bold' }}>{total}</span>
+<span style={{ color:'#ffcc00', fontSize:'12px', textAlign:'center' }}>{p.char_lv || p.lv}</span>                  <span style={{ color:'#44ff88', fontSize:'12px', textAlign:'right', fontWeight:'bold' }}>{total}</span>
                   <span style={{ color: totalRank.color, fontSize:'11px', textAlign:'center', fontWeight:'bold' }}>{totalRank.rank}</span>
                 </div>
               )
