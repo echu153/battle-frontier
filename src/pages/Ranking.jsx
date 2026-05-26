@@ -91,8 +91,7 @@ export default function Ranking() {
 <span style={{ display:'flex', alignItems:'center', gap:'6px', color: isMe ? '#44ff88' : '#88ccff', fontSize:'12px' }}>
   {p.avatar_url && (
     <img src={p.avatar_url} alt="avatar"
-      style={{ width:'24px', height:'24px', objectFit:'cover', border:`1px solid ${isMe ? '#44ff88' : '#446688'}` }} />
-  )}
+style={{ width:'24px', height:'24px', objectFit:'cover' }}  )}
   {p.username}{isMe && ' (自分)'}
 </span>
                   <span style={{ color:'#446688', fontSize:'12px', textAlign:'center' }}>{JOB_ICONS[p.class] || '？'}</span>

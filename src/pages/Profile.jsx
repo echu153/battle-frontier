@@ -144,8 +144,7 @@ export default function Profile() {
           <div style={{ position:'relative' }}>
             {profile.avatar_url ? (
               <img src={profile.avatar_url} alt="avatar"
-                style={{ width:'80px', height:'80px', objectFit:'cover', border:'2px solid #ffcc00' }} />
-            ) : (
+style={{ width:'80px', height:'80px', objectFit:'cover' }}            ) : (
               <div style={{ width:'80px', height:'80px', border:'2px solid #446688', background:'#001028', display:'flex', alignItems:'center', justifyContent:'center', color:'#446688', fontSize:'24px' }}>
                 👤
               </div>

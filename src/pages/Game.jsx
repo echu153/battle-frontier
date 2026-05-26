@@ -900,8 +900,7 @@ export default function Game() {
         <div style={{ borderBottom:'1px dashed #003366', paddingBottom:'8px', marginBottom:'8px' }}>
   {profile.avatar_url && (
     <img src={profile.avatar_url} alt="avatar"
-      style={{ width:'60px', height:'60px', objectFit:'cover', border:'1px solid #ffcc00', display:'block', margin:'0 auto 6px' }} />
-  )}
+style={{ width:'60px', height:'60px', objectFit:'cover', display:'block', margin:'0 auto 6px' }}  )}
   <div style={{ color:'#ffcc00', fontSize:'12px', textAlign:'center' }}>{profile.username}</div>
 </div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>クラス: <span style={{color:'#88ccff'}}>{profile.class}</span></div>
