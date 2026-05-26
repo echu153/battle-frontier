@@ -357,6 +357,12 @@ export default function Game() {
   const [playerItem, setPlayerItem] = useState(null)
 
   useEffect(() => { fetchProfile() }, [])
+  // ページがフォーカスされたときに再取得
+useEffect(() => {
+  const onFocus = () => { fetchProfile() }
+  window.addEventListener('focus', onFocus)
+  return () => window.removeEventListener('focus', onFocus)
+}, [])
 
   useEffect(() => {
     if (!profile) return
