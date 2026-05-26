@@ -897,7 +897,13 @@ export default function Game() {
         <div style={{ display:'grid', gridTemplateColumns:'220px 1fr', gap:'12px' }}>
           <div style={{ border:`1px solid ${isDying ? '#660000' : '#0044aa'}`, background:'#001040', padding:'10px', alignSelf:'start' }}>
             {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'4px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
-            <div style={{ color:'#ffcc00', fontSize:'12px', borderBottom:'1px dashed #003366', paddingBottom:'4px', marginBottom:'8px' }}>{profile.username}</div>
+        <div style={{ borderBottom:'1px dashed #003366', paddingBottom:'8px', marginBottom:'8px' }}>
+  {profile.avatar_url && (
+    <img src={profile.avatar_url} alt="avatar"
+      style={{ width:'60px', height:'60px', objectFit:'cover', border:'1px solid #ffcc00', display:'block', margin:'0 auto 6px' }} />
+  )}
+  <div style={{ color:'#ffcc00', fontSize:'12px', textAlign:'center' }}>{profile.username}</div>
+</div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>クラス: <span style={{color:'#88ccff'}}>{profile.class}</span></div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>LV: <span style={{color:'#ffcc00'}}>{profile.lv}</span></div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'6px', display:'flex', justifyContent:'space-between' }}>

@@ -31,8 +31,7 @@ export default function Ranking() {
       if (user) setCurrentUserId(user.id)
       const { data } = await supabase
         .from('profiles')
-        .select('id, username, lv, class, hp_max, mp_max, atk, def, matk, mdef, spd')
-        .order('lv', { ascending: false })
+.select('id, username, lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, avatar_url')        .order('lv', { ascending: false })
         .limit(50)
       const sorted = (data || []).sort((a, b) => calcTotal(b) - calcTotal(a))
       setPlayers(sorted)
@@ -89,9 +88,13 @@ export default function Ranking() {
                   onMouseLeave={e => e.currentTarget.style.background = isMe ? '#001830' : i === 0 ? '#1a1000' : 'transparent'}
                 >
                   <span style={{ color: i < 3 ? '#ffcc00' : '#446688', fontSize:'12px' }}>{medal}</span>
-                  <span style={{ color: isMe ? '#44ff88' : '#88ccff', fontSize:'12px' }}>
-                    {p.username}{isMe && ' (自分)'}
-                  </span>
+<span style={{ display:'flex', alignItems:'center', gap:'6px', color: isMe ? '#44ff88' : '#88ccff', fontSize:'12px' }}>
+  {p.avatar_url && (
+    <img src={p.avatar_url} alt="avatar"
+      style={{ width:'24px', height:'24px', objectFit:'cover', border:`1px solid ${isMe ? '#44ff88' : '#446688'}` }} />
+  )}
+  {p.username}{isMe && ' (自分)'}
+</span>
                   <span style={{ color:'#446688', fontSize:'12px', textAlign:'center' }}>{JOB_ICONS[p.class] || '？'}</span>
                   <span style={{ color:'#ffcc00', fontSize:'12px', textAlign:'center' }}>{p.lv}</span>
                   <span style={{ color:'#44ff88', fontSize:'12px', textAlign:'right', fontWeight:'bold' }}>{total}</span>
