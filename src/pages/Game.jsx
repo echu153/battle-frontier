@@ -366,7 +366,7 @@ export default function Game() {
   const [pendingPoints, setPendingPoints] = useState(0)
   const [statPoints, setStatPoints] = useState({})
   const [showStatPanel, setShowStatPanel] = useState(false)
-  const [selectedArea, setSelectedArea] = useState(1)
+const [selectedArea, setSelectedArea] = useState(null)
   const [regenRemaining, setRegenRemaining] = useState(0)
   const [innMessage, setInnMessage] = useState('')
   const [equipment, setEquipment] = useState([])
