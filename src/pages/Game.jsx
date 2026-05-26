@@ -5,6 +5,11 @@ import { supabase } from '../supabase'
 const WAIT_SECONDS = 10
 const REGEN_SECONDS = 60
 
+const ARTIFACT_BASE_NAMES = [
+  '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
+  '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたハンマー'
+]
+
 const AREAS = [
   {
     id: 1, name: '始まりの森',
@@ -137,7 +142,6 @@ const getTotalRank = (total) => {
   return { rank: 'SSS', color: '#ffcc00' }
 }
 
-// 経験値計算式変更（10レベルごとに+10）
 const calcExpNext = (lv) => {
   const tier = Math.floor((lv - 1) / 10)
   return 100 + tier * 10
@@ -258,45 +262,59 @@ const calcExtraActionRate = (mySpd, enemySpd) => {
   return 50 + (rawRate - 50) * 0.5
 }
 
+// クリティカル確率計算
+const calcCritRate = (mySpd, enemySpd) => {
+  const base = 100 / 24
+  if (mySpd <= enemySpd) return base
+  const bonus = Math.min(5, (mySpd - enemySpd) / enemySpd * 2 * 100)
+  return base + bonus
+}
+
+// レアリティ別ボーナス数
+const RARITY_BONUS_COUNT = { common: 1, rare: 2, epic: 3, legendary: 4 }
+
 // ランダムボーナス生成
 const generateDropBonus = (weapon) => {
   const statKeys = ['atk_bonus','def_bonus','matk_bonus','mdef_bonus','spd_bonus','hp_bonus','mp_bonus']
   const eligible = statKeys.filter(k => (weapon[k] || 0) > 0)
-  if (eligible.length === 0) return { bonus_effect: null }
+  if (eligible.length === 0) return {}
 
-  // 90%ステータス・10%特殊能力
-  const isSpecial = Math.random() < 0.1
-  if (isSpecial) {
-    const effects = [
-      'open_atk_10_2t', 'open_atk_20_1t',
-      'open_def_10_2t', 'open_def_20_1t',
-      'open_matk_10_2t','open_matk_20_1t',
-      'open_mdef_10_2t','open_mdef_20_1t',
-      'open_spd_10_2t', 'open_spd_20_1t',
-      'delay_heal_10', 'regen_heal_5_3t',
-    ]
-    const effect = effects[Math.floor(Math.random() * effects.length)]
-    return { bonus_effect: effect }
-  }
+  const bonusCount = RARITY_BONUS_COUNT[weapon.rarity] || 1
+  const result = {}
 
-  // ステータスボーナス
-  const targetKey = eligible[Math.floor(Math.random() * eligible.length)]
-  const baseVal = weapon[targetKey] || 0
-  const maxBonus = Math.max(1, Math.floor(baseVal * 0.5))
-  const bonusVal = Math.floor(Math.random() * maxBonus) + 1
-  const bonusMap = {
-    atk_bonus:  { bonus_atk:  bonusVal },
-    def_bonus:  { bonus_def:  bonusVal },
-    matk_bonus: { bonus_matk: bonusVal },
-    mdef_bonus: { bonus_mdef: bonusVal },
-    spd_bonus:  { bonus_spd:  bonusVal },
-    hp_bonus:   { bonus_hp:   bonusVal },
-    mp_bonus:   { bonus_mp:   bonusVal },
+  // アーティファクト系はボーナスなし（古びた系のみ）
+  if (ARTIFACT_BASE_NAMES.includes(weapon.name)) return {}
+
+  for (let i = 0; i < bonusCount; i++) {
+    const isSpecial = Math.random() < 0.1
+    if (isSpecial && i === 0) {
+      const effects = [
+        'open_atk_10_2t','open_atk_20_1t','open_def_10_2t','open_def_20_1t',
+        'open_matk_10_2t','open_matk_20_1t','open_mdef_10_2t','open_mdef_20_1t',
+        'open_spd_10_2t','open_spd_20_1t','delay_heal_10','regen_heal_5_3t',
+      ]
+      result.bonus_effect = effects[Math.floor(Math.random() * effects.length)]
+    } else {
+      const targetKey = eligible[Math.floor(Math.random() * eligible.length)]
+      const baseVal = weapon[targetKey] || 0
+      const maxBonus = Math.max(1, Math.floor(baseVal * 0.5))
+      const bonusVal = Math.floor(Math.random() * maxBonus) + 1
+      const bonusMap = {
+        atk_bonus:  'bonus_atk',
+        def_bonus:  'bonus_def',
+        matk_bonus: 'bonus_matk',
+        mdef_bonus: 'bonus_mdef',
+        spd_bonus:  'bonus_spd',
+        hp_bonus:   'bonus_hp',
+        mp_bonus:   'bonus_mp',
+      }
+      const bonusKey = bonusMap[targetKey]
+      result[bonusKey] = (result[bonusKey] || 0) + bonusVal
+    }
   }
-  return { ...bonusMap[targetKey], bonus_effect: null }
+  return result
 }
 
-// 特殊能力の表示名
 const getEffectLabel = (effect) => {
   const labels = {
     'open_atk_10_2t':  '【開幕2T・攻撃力+10%】',
@@ -311,38 +329,11 @@ const getEffectLabel = (effect) => {
     'open_spd_20_1t':  '【開幕1T・素早さ+20%】',
     'delay_heal_10':   '【3T後・HP10%回復】',
     'regen_heal_5_3t': '【開幕3T・毎T HP5%回復】',
+    'artifact':        '【消費MP2倍・与ダメージ1.2倍】',
   }
   return labels[effect] || effect
 }
 
-const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs) => {
-  const result = { dmg: 0, heal: 0, log: '', newEnemyBuffs: { ...enemyBuffs }, newPlayerBuffs: { ...playerBuffs } }
-  const randMult = (min, max) => min + Math.random() * (max - min)
-  switch (skill.name) {
-    case '体当たり': result.dmg = Math.floor(eff.atk * randMult(1.1, 1.2)); result.log = `⚔ 体当たり！ ${enemy.name}に${result.dmg}ダメージ！`; break
-    case '強撃': result.dmg = Math.floor(eff.atk * randMult(1.3, 1.4)); result.log = `💥 強撃！ ${enemy.name}に${result.dmg}ダメージ！`; break
-    case '防御崩し': result.dmg = Math.floor(eff.atk * 1.2); result.newEnemyBuffs.defDown = { turns: 4, rate: 0.8 }; result.log = `🗡 防御崩し！ ${enemy.name}に${result.dmg}ダメージ！ 防御力が低下した！`; break
-    case '防御態勢': result.newPlayerBuffs.defUp = { turns: 4, rate: 1.5 }; result.log = `🛡 防御態勢！ 4ターンの間防御力と特殊防御力が上昇した！`; break
-    case '応急手当': result.heal = Math.floor(eff.matk * randMult(1.1, 1.2)); result.log = `💊 応急手当！ HPを${result.heal}回復した！`; break
-    case '狙撃': result.dmg = Math.floor(eff.spd * randMult(1.1, 1.2)); result.log = `🏹 狙撃！ ${enemy.name}に${result.dmg}ダメージ！`; break
-    case '駆け足': result.newPlayerBuffs.spdUp = { turns: 5, rate: 1.5 }; result.log = `💨 駆け足！ 5ターンの間素早さが上昇した！`; break
-    case '貫通射撃': result.dmg = Math.floor(eff.atk * randMult(1.2, 1.3)); result.log = `🏹 貫通射撃！ ${enemy.name}の防御を貫いて${result.dmg}ダメージ！`; break
-    case '疾風矢': result.dmg = Math.floor(eff.atk * 1.0 + eff.spd * 0.4); result.log = `💨 疾風矢！ ${enemy.name}に${result.dmg}ダメージ！`; break
-    case 'ファイア': result.dmg = Math.floor(eff.matk * randMult(1.3, 1.5)); result.log = `🔥 ファイア！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
-    case '精神統一': result.newPlayerBuffs.matkUp = { turns: 5, rate: 1.5 }; result.log = `✨ 精神統一！ 5ターンの間特殊攻撃力が上昇した！`; break
-    case 'サンダー': result.dmg = Math.floor(eff.matk * randMult(1.4, 1.6)); result.log = `⚡ サンダー！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
-    case 'アイスランス': result.dmg = Math.floor(eff.matk * randMult(1.6, 1.9)); result.log = `❄ アイスランス！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
-    case 'ライト': result.dmg = Math.floor(eff.matk * randMult(1.3, 1.5)); result.log = `✨ ライト！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
-    case 'ヒール': result.heal = Math.floor(profile.hp_max * 0.1 + eff.matk * randMult(1.1, 1.2)); result.log = `💚 ヒール！ HPを${result.heal}回復した！`; break
-    case 'プロテク': result.newPlayerBuffs.defUp = { turns: 3, rate: 1.6 }; result.log = `🛡 プロテク！ 3ターンの間防御力と特殊防御力が上昇した！`; break
-    case '祈祷': result.newPlayerBuffs.regenHeal = { turns: 4, amount: Math.floor(profile.hp_max * 0.1) }; result.log = `🙏 祈祷！ 4ターンの間毎ターンHPが回復するようになった！`; break
-    case 'ライトニング': result.dmg = Math.floor(eff.matk * randMult(1.5, 1.7)); result.newEnemyBuffs.mdefDown = { turns: 3, rate: 0.7 }; result.log = `⚡ ライトニング！ ${enemy.name}に${result.dmg}の魔法ダメージ！ 特殊防御力が低下した！`; break
-    default: result.dmg = Math.max(1, eff.atk); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
-  }
-  return result
-}
-
-// 装備ボーナス特殊能力を戦闘開始時に適用
 const applyEquipmentEffects = (equipment, profile, playerBuffs, logs) => {
   const newBuffs = { ...playerBuffs }
   for (const item of equipment) {
@@ -362,6 +353,34 @@ const applyEquipmentEffects = (equipment, profile, playerBuffs, logs) => {
     if (effect === 'delay_heal_10')   { newBuffs.delayHeal = { triggerTurn: 3, amount: Math.floor(profile.hp_max * 0.1) }; logs.push({ text:`✨ 装備効果発動！ 3ターン後にHP10%回復！`, color:'#44ff88' }) }
   }
   return newBuffs
+}
+
+const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArtifact) => {
+  const result = { dmg: 0, heal: 0, log: '', newEnemyBuffs: { ...enemyBuffs }, newPlayerBuffs: { ...playerBuffs } }
+  const randMult = (min, max) => min + Math.random() * (max - min)
+  const artifactMult = isArtifact ? 1.2 : 1.0
+  switch (skill.name) {
+    case '体当たり': result.dmg = Math.floor(eff.atk * randMult(1.1, 1.2) * artifactMult); result.log = `⚔ 体当たり！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '強撃': result.dmg = Math.floor(eff.atk * randMult(1.3, 1.4) * artifactMult); result.log = `💥 強撃！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '防御崩し': result.dmg = Math.floor(eff.atk * 1.2 * artifactMult); result.newEnemyBuffs.defDown = { turns: 4, rate: 0.8 }; result.log = `🗡 防御崩し！ ${enemy.name}に${result.dmg}ダメージ！ 防御力が低下した！`; break
+    case '防御態勢': result.newPlayerBuffs.defUp = { turns: 4, rate: 1.5 }; result.log = `🛡 防御態勢！ 4ターンの間防御力と特殊防御力が上昇した！`; break
+    case '応急手当': result.heal = Math.floor(eff.matk * randMult(1.1, 1.2)); result.log = `💊 応急手当！ HPを${result.heal}回復した！`; break
+    case '狙撃': result.dmg = Math.floor(eff.spd * randMult(1.1, 1.2) * artifactMult); result.log = `🏹 狙撃！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '駆け足': result.newPlayerBuffs.spdUp = { turns: 5, rate: 1.5 }; result.log = `💨 駆け足！ 5ターンの間素早さが上昇した！`; break
+    case '貫通射撃': result.dmg = Math.floor(eff.atk * randMult(1.2, 1.3) * artifactMult); result.log = `🏹 貫通射撃！ ${enemy.name}の防御を貫いて${result.dmg}ダメージ！`; break
+    case '疾風矢': result.dmg = Math.floor((eff.atk * 1.0 + eff.spd * 0.4) * artifactMult); result.log = `💨 疾風矢！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case 'ファイア': result.dmg = Math.floor(eff.matk * randMult(1.3, 1.5) * artifactMult); result.log = `🔥 ファイア！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
+    case '精神統一': result.newPlayerBuffs.matkUp = { turns: 5, rate: 1.5 }; result.log = `✨ 精神統一！ 5ターンの間特殊攻撃力が上昇した！`; break
+    case 'サンダー': result.dmg = Math.floor(eff.matk * randMult(1.4, 1.6) * artifactMult); result.log = `⚡ サンダー！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
+    case 'アイスランス': result.dmg = Math.floor(eff.matk * randMult(1.6, 1.9) * artifactMult); result.log = `❄ アイスランス！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
+    case 'ライト': result.dmg = Math.floor(eff.matk * randMult(1.3, 1.5) * artifactMult); result.log = `✨ ライト！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
+    case 'ヒール': result.heal = Math.floor(profile.hp_max * 0.1 + eff.matk * randMult(1.1, 1.2)); result.log = `💚 ヒール！ HPを${result.heal}回復した！`; break
+    case 'プロテク': result.newPlayerBuffs.defUp = { turns: 3, rate: 1.6 }; result.log = `🛡 プロテク！ 3ターンの間防御力と特殊防御力が上昇した！`; break
+    case '祈祷': result.newPlayerBuffs.regenHeal = { turns: 4, amount: Math.floor(profile.hp_max * 0.1) }; result.log = `🙏 祈祷！ 4ターンの間毎ターンHPが回復するようになった！`; break
+    case 'ライトニング': result.dmg = Math.floor(eff.matk * randMult(1.5, 1.7) * artifactMult); result.newEnemyBuffs.mdefDown = { turns: 3, rate: 0.7 }; result.log = `⚡ ライトニング！ ${enemy.name}に${result.dmg}の魔法ダメージ！ 特殊防御力が低下した！`; break
+    default: result.dmg = Math.max(1, eff.atk * artifactMult); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
+  }
+  return result
 }
 
 export default function Game() {
@@ -491,6 +510,10 @@ export default function Game() {
     let currentItem = playerItem ? { ...playerItem } : null
     let itemUsed = false
 
+    // アーティファクト武器チェック
+    const equippedWeaponItem = equipment.find(e => e.slot === 'weapon' && e.equipped)
+    const isArtifact = equippedWeaponItem?.bonus_effect === 'artifact'
+
     if (isBossEncounter && currentItem && currentItem.items.effect === 'boss_avoid') {
       logs.push({ text:`🧿 魔よけのお守りが光り、ボスとの戦闘を避けた！`, color:'#cc44ff' })
       setBattleLogs([...logs])
@@ -507,10 +530,12 @@ export default function Game() {
       logs.push({ text:`${enemy.name}が現れた！`, color:'#88ccff' })
     }
 
-    // 装備ボーナス特殊能力を戦闘開始時に適用
+    if (isArtifact) {
+      logs.push({ text:`⚔ アーティファクト発動！ 消費MP2倍・与ダメージ1.2倍！`, color:'#ffcc00' })
+    }
+
     playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
 
-    const equippedWeaponItem = equipment.find(e => e.slot === 'weapon' && e.equipped)
     const weaponType = equippedWeaponItem?.weapons?.weapon_type || 'sword'
     const isMagical = getWeaponGroup(weaponType) === 'magical'
 
@@ -524,6 +549,8 @@ export default function Game() {
     const enemySpd = enemy.spd || 5
     const playerExtraRate = calcExtraActionRate(playerSpd, enemySpd)
     const enemyExtraRate = calcExtraActionRate(enemySpd, playerSpd)
+    const playerCritRate = calcCritRate(playerSpd, enemySpd)
+    const enemyCritRate = calcCritRate(enemySpd, playerSpd)
 
     const doPlayerAttack = (isExtra = false) => {
       const playerDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
@@ -535,17 +562,23 @@ export default function Game() {
       const enemyDefRate  = enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1
       const enemyMdefRate = enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+      const isCrit = Math.random() * 100 < playerCritRate
+      const critMult = isCrit ? 1.5 : 1.0
+
       let skillUsed = false
       if (expandedSkillSet.length > 0) {
         const currentSkill = expandedSkillSet[skillIndex % expandedSkillSet.length]
-        if (currentSkill && currentSkill.skills && playerMp >= currentSkill.skills.mp_cost) {
-          playerMp -= currentSkill.skills.mp_cost
-          const result = executeSkill(currentSkill.skills, effWithBuff, profile, enemy, enemyBuffs, playerBuffs)
-          enemyHp -= result.dmg
+        const mpCost = isArtifact ? (currentSkill?.skills?.mp_cost || 0) * 2 : (currentSkill?.skills?.mp_cost || 0)
+        if (currentSkill && currentSkill.skills && playerMp >= mpCost) {
+          playerMp -= mpCost
+          const result = executeSkill(currentSkill.skills, effWithBuff, profile, enemy, enemyBuffs, playerBuffs, isArtifact)
+          const finalDmg = Math.floor(result.dmg * critMult)
+          enemyHp -= finalDmg
           playerHp = Math.min(profile.hp_max, playerHp + result.heal)
           playerBuffs = result.newPlayerBuffs
           enemyBuffs = result.newEnemyBuffs
-          logs.push({ text:`${prefix}${result.log}`, color:'#88ccff' })
+          const critText = isCrit ? ' 💥クリティカル！' : ''
+          logs.push({ text:`${prefix}${result.log}${critText}`, color: isCrit ? '#ff4444' : '#88ccff' })
           skillUsed = true
           skillIndex++
         }
@@ -555,9 +588,11 @@ export default function Game() {
         const enemyDefVal = isMagical
           ? Math.floor((enemy.mdef || 0) / 2 * enemyMdefRate)
           : Math.floor(enemy.def / 2 * enemyDefRate)
-        const dmg = Math.max(1, baseAtk - enemyDefVal + Math.floor(Math.random() * 4))
-        enemyHp -= dmg
-        logs.push({ text:`${prefix}あなたの攻撃！ ${enemy.name}に${dmg}ダメージ！`, color:'#ffcc00' })
+        const baseDmg = Math.max(1, baseAtk - enemyDefVal + Math.floor(Math.random() * 4))
+        const finalDmg = Math.floor(baseDmg * critMult * (isArtifact ? 1.2 : 1.0))
+        enemyHp -= finalDmg
+        const critText = isCrit ? ' 💥クリティカル！' : ''
+        logs.push({ text:`${prefix}あなたの攻撃！ ${enemy.name}に${finalDmg}ダメージ！${critText}`, color: isCrit ? '#ff4444' : '#ffcc00' })
         if (expandedSkillSet.length > 0) skillIndex++
       }
     }
@@ -568,19 +603,20 @@ export default function Game() {
       const isEnemyMagical = enemy.type === 'magical'
       const enemyAtk = isEnemyMagical ? (enemy.matk || 0) : enemy.atk
       const defVal = isEnemyMagical ? Math.floor(playerMdef / 2) : Math.floor(playerDef / 2)
-      const dmgToPlayer = Math.max(1, enemyAtk - defVal + Math.floor(Math.random() * 3))
-      playerHp -= dmgToPlayer
+      const isCrit = Math.random() * 100 < enemyCritRate
+      const baseDmg = Math.max(1, enemyAtk - defVal + Math.floor(Math.random() * 3))
+      const finalDmg = Math.floor(baseDmg * (isCrit ? 1.5 : 1.0))
+      playerHp -= finalDmg
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
-      logs.push({ text:`${prefix}${enemy.name}の攻撃！ あなたに${dmgToPlayer}ダメージ…`, color:'#ff6644' })
+      const critText = isCrit ? ' 💥クリティカル！' : ''
+      logs.push({ text:`${prefix}${enemy.name}の攻撃！ あなたに${finalDmg}ダメージ…${critText}`, color: isCrit ? '#ff2200' : '#ff6644' })
     }
 
     while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
-      // 祈祷・継続回復
       if (playerBuffs.regenHeal && playerBuffs.regenHeal.turns > 0) {
         playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.regenHeal.amount)
         logs.push({ text:`💚 回復効果でHPが${playerBuffs.regenHeal.amount}回復した！`, color:'#44ff88' })
       }
-      // 遅延回復
       if (playerBuffs.delayHeal && turn === playerBuffs.delayHeal.triggerTurn) {
         playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.delayHeal.amount)
         logs.push({ text:`💚 装備効果でHPが${playerBuffs.delayHeal.amount}回復した！`, color:'#44ff88' })
@@ -643,7 +679,7 @@ export default function Game() {
     }
     setBattleLogs(logs)
 
-    // ドロップ処理（レアドロップ枠対応）
+    // ドロップ処理
     if (win) {
       let droppedItems = []
       if (isBossEncounter) {
@@ -659,7 +695,6 @@ export default function Game() {
         const commonDrops = area.commonDrops || []
         const rareDrops = area.rareDrops || []
         if (commonDrops.length > 0 && Math.random() * 100 < 3) {
-          // レアドロップ判定（さらに10%）
           if (rareDrops.length > 0 && Math.random() * 100 < 10) {
             droppedItems = [rareDrops[Math.floor(Math.random() * rareDrops.length)]]
           } else {
@@ -668,24 +703,31 @@ export default function Game() {
         }
       }
 
+      // アーティファクトドロップ（勝利時0.1%）
+      if (Math.random() * 100 < 0.1) {
+        const artifactName = ARTIFACT_BASE_NAMES[Math.floor(Math.random() * ARTIFACT_BASE_NAMES.length)]
+        droppedItems.push(artifactName)
+      }
+
       for (const itemName of droppedItems) {
         const { data: weapon } = await supabase.from('weapons').select('*').eq('name', itemName).single()
         if (weapon) {
-          const bonusData = generateDropBonus(weapon)
+          const isArtifactDrop = ARTIFACT_BASE_NAMES.includes(weapon.name)
+          const bonusData = isArtifactDrop ? {} : generateDropBonus(weapon)
           await supabase.from('player_equipment').insert({
-            player_id: profile.id,
-            weapon_id: weapon.id,
-            slot: weapon.slot,
-            equipped: false,
+            player_id: profile.id, weapon_id: weapon.id, slot: weapon.slot, equipped: false,
             ...bonusData,
           })
           const isRare = area.rareDrops?.includes(itemName)
-          logs.push({ text:`${isRare ? '💎✨' : '💎'} ${itemName} を入手した！`, color: isRare ? '#44ff88' : '#ffcc00' })
+          const color = isArtifactDrop ? '#ffcc00' : isRare ? '#44ff88' : '#ffcc00'
+          const prefix = isArtifactDrop ? '🌟' : isRare ? '💎✨' : '💎'
+          logs.push({ text:`${prefix} ${itemName} を入手した！`, color })
         }
       }
     }
     setBattleLogs([...logs])
 
+    // 熟練度更新
     if (equippedWeaponItem) {
       const prof = proficiency.find(p => p.weapon_id === equippedWeaponItem.weapons.id)
       if (prof) {
@@ -702,6 +744,7 @@ export default function Game() {
       }
     }
 
+    // スキル自動習得
     const { data: classSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class)
     const { data: learnedSkills } = await supabase.from('player_skills').select('skill_id').eq('player_id', profile.id)
     const learnedIds = (learnedSkills || []).map(s => s.skill_id)

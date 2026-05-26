@@ -3,8 +3,30 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
 const SLOT_LABELS = { weapon:'武器', armor:'防具', accessory:'装飾品' }
-const RARITY_COLORS = { common:'#88ccff', rare:'#44ff88', epic:'#cc44ff', legendary:'#ffcc00' }
-const RARITY_LABELS = { common:'並', rare:'珍', epic:'秘', legendary:'伝' }
+const RARITY_COLORS = {
+  common:'#44ff88', rare:'#4488ff', epic:'#cc44ff', legendary:'#ffcc00'
+}
+const RARITY_LABELS = {
+  common:'Common', rare:'Rare', epic:'Epic', legendary:'Legendary'
+}
+
+const ARTIFACT_BASE_NAMES = [
+  '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
+  '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたハンマー'
+]
+
+const ARTIFACT_EVOLVED = {
+  '古びた剣':     '黒星ノ断剣',
+  '古びた短剣':   '血哭ノ短刃',
+  '古びた弓':     '月影ノ断弓',
+  '古びた斧':     '奈落ノ処刑斧',
+  '古びた刀':     '斬月ノ終刀',
+  '古びた銃':     '虚無ノ閃砲',
+  '古びた杖':     '星喰ノ導杖',
+  '古びた魔導書': '終焉ノ魔書',
+  '古びた槍':     '冥哭ノ長槍',
+  '古びたハンマー':'鬼神ノ断槌',
+}
 
 const WEAPON_TYPE_GROUP = {
   sword:'physical', axe:'physical', spear:'physical', bow:'physical',
@@ -14,8 +36,7 @@ const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physica
 
 const calcProfBonus = (prof) => {
   if (!prof) return {}
-  const awakening = prof.awakening || 0
-  const lv = prof.prof_lv + awakening * 20
+  const lv = prof.prof_lv
   const bonus = Math.floor(lv / 10)
   const weapon = prof.weapon
   if (!weapon) return {}
@@ -46,6 +67,7 @@ const getEffectLabel = (effect) => {
     'open_spd_20_1t':  '【開幕1T・素早さ+20%】',
     'delay_heal_10':   '【3T後・HP10%回復】',
     'regen_heal_5_3t': '【開幕3T・毎T HP5%回復】',
+    'artifact':        '【消費MP2倍・与ダメージ1.2倍】',
   }
   return labels[effect] || effect
 }
@@ -58,6 +80,7 @@ export default function Equipment() {
   const [allItems, setAllItems] = useState([])
   const [tab, setTab] = useState('weapon')
   const [loading, setLoading] = useState(false)
+  const [awakenMessage, setAwakenMessage] = useState('')
 
   useEffect(() => { fetchAll() }, [])
 
@@ -131,6 +154,28 @@ export default function Equipment() {
     setLoading(false)
   }
 
+  const doAwaken = async (item) => {
+    setLoading(true)
+    const evolvedName = ARTIFACT_EVOLVED[item.weapons.name]
+    if (!evolvedName) { setLoading(false); return }
+
+    // 進化後の武器データを取得
+    const { data: evolvedWeapon } = await supabase
+      .from('weapons').select('*').eq('name', evolvedName).single()
+    if (!evolvedWeapon) { setLoading(false); return }
+
+    // player_equipmentの武器IDを進化後に変更・特殊能力付与
+    await supabase.from('player_equipment').update({
+      weapon_id: evolvedWeapon.id,
+      bonus_effect: 'artifact',
+    }).eq('id', item.id)
+
+    setAwakenMessage(`✨ ${evolvedName} に覚醒した！`)
+    setTimeout(() => setAwakenMessage(''), 3000)
+    await fetchAll()
+    setLoading(false)
+  }
+
   if (!profile) return (
     <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
   )
@@ -150,6 +195,12 @@ export default function Equipment() {
           </button>
         </div>
 
+        {awakenMessage && (
+          <div style={{ color:'#ffcc00', fontSize:'14px', textAlign:'center', padding:'12px', border:'1px solid #ffcc00', marginBottom:'12px', background:'#1a1000' }}>
+            {awakenMessage}
+          </div>
+        )}
+
         <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:'12px' }}>
           <div>
             <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>装備中</div>
@@ -163,6 +214,9 @@ export default function Equipment() {
                       <div style={{ color: RARITY_COLORS[equipped.weapons.rarity], fontSize:'11px' }}>
                         {getProfPrefix(proficiency.find(p => p.weapon_id === equipped.weapons.id)?.prof_lv || 0)}{equipped.weapons.name}
                       </div>
+                      <div style={{ fontSize:'9px', color: RARITY_COLORS[equipped.weapons.rarity], marginBottom:'2px' }}>
+                        {RARITY_LABELS[equipped.weapons.rarity]}
+                      </div>
                       <div style={{ fontSize:'10px', marginTop:'2px' }}>
                         {equipped.weapons.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻撃力+{equipped.weapons.atk_bonus} </span>}
                         {equipped.weapons.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防御力+{equipped.weapons.def_bonus} </span>}
@@ -170,24 +224,10 @@ export default function Equipment() {
                         {equipped.weapons.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>特殊防御力+{equipped.weapons.mdef_bonus} </span>}
                         {equipped.weapons.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>素早さ+{equipped.weapons.spd_bonus} </span>}
                         {equipped.weapons.spd_bonus_pct > 0 && <span style={{color:'#ff8844'}}>素早さ+{equipped.weapons.spd_bonus_pct}% </span>}
-                        {equipped.weapons.hp_bonus   > 0 && <span style={{color:'#44ff88'}}>HP+{equipped.weapons.hp_bonus} </span>}
-                        {equipped.weapons.mp_bonus   > 0 && <span style={{color:'#4488ff'}}>MP+{equipped.weapons.mp_bonus} </span>}
                         {equipped.weapons.hp_bonus_pct > 0 && <span style={{color:'#44ff88'}}>HP+{equipped.weapons.hp_bonus_pct}% </span>}
                         {equipped.weapons.mp_bonus_pct > 0 && <span style={{color:'#4488ff'}}>MP+{equipped.weapons.mp_bonus_pct}% </span>}
                       </div>
                       {equipped.bonus_effect && <div style={{color:'#ffaa00', fontSize:'10px'}}>{getEffectLabel(equipped.bonus_effect)}</div>}
-                      {(equipped.bonus_atk > 0 || equipped.bonus_def > 0 || equipped.bonus_matk > 0 || equipped.bonus_mdef > 0 || equipped.bonus_spd > 0 || equipped.bonus_hp > 0 || equipped.bonus_mp > 0) && (
-                        <div style={{fontSize:'10px', color:'#ffaa00'}}>
-                          ボーナス:
-                          {equipped.bonus_atk  > 0 && ` 攻撃力+${equipped.bonus_atk}`}
-                          {equipped.bonus_def  > 0 && ` 防御力+${equipped.bonus_def}`}
-                          {equipped.bonus_matk > 0 && ` 特殊攻撃力+${equipped.bonus_matk}`}
-                          {equipped.bonus_mdef > 0 && ` 特殊防御力+${equipped.bonus_mdef}`}
-                          {equipped.bonus_spd  > 0 && ` 素早さ+${equipped.bonus_spd}`}
-                          {equipped.bonus_hp   > 0 && ` HP+${equipped.bonus_hp}`}
-                          {equipped.bonus_mp   > 0 && ` MP+${equipped.bonus_mp}`}
-                        </div>
-                      )}
                     </>
                   ) : (
                     <div style={{ color:'#334455', fontSize:'11px' }}>なし</div>
@@ -282,6 +322,8 @@ export default function Equipment() {
                   const profBonus = calcProfBonus(prof ? { ...prof, weapon: w } : null)
                   const profPct = prof ? Math.min(100, (prof.prof_exp / 100) * 100) : 0
                   const profPrefix = prof ? getProfPrefix(prof.prof_lv) : ''
+                  const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
+                  const canAwaken = isArtifactBase && prof && prof.prof_lv >= 300
                   const hasBonus = item.bonus_atk > 0 || item.bonus_def > 0 || item.bonus_matk > 0 || item.bonus_mdef > 0 || item.bonus_spd > 0 || item.bonus_hp > 0 || item.bonus_mp > 0
 
                   return (
@@ -293,10 +335,18 @@ export default function Equipment() {
                           </span>
                           <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>{profPrefix}{w.name}</span>
                         </div>
-                        {item.equipped
-                          ? <button onClick={() => unequip(item)} disabled={loading} style={{ padding:'2px 8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
-                          : <button onClick={() => equip(item)} disabled={loading} style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>装備する</button>
-                        }
+                        <div style={{ display:'flex', gap:'4px' }}>
+                          {canAwaken && (
+                            <button onClick={() => doAwaken(item)} disabled={loading}
+                              style={{ padding:'2px 8px', background:'#1a0800', border:'1px solid #ffcc00', color:'#ffcc00', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                              ✨ 覚醒
+                            </button>
+                          )}
+                          {item.equipped
+                            ? <button onClick={() => unequip(item)} disabled={loading} style={{ padding:'2px 8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
+                            : <button onClick={() => equip(item)} disabled={loading} style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>装備する</button>
+                          }
+                        </div>
                       </div>
 
                       <div style={{ fontSize:'10px', color:'#446688', marginBottom:'4px' }}>
