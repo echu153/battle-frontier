@@ -442,6 +442,13 @@ useEffect(() => {
     if (hpCurrent <= 0) return
     if (profile.is_dying && hpCurrent < profile.hp_max) return
     setLoading(true); setScene('battle'); setBattleLogs([])
+const { data: latest } = await supabase.from('profiles').select('last_action_at').eq('id', profile.id).single()
+const serverElapsed = (Date.now() - new Date(latest.last_action_at).getTime()) / 1000
+if (serverElapsed < WAIT_SECONDS) {
+  setLoading(false)
+  setScene('town')
+  return
+}
 
     const eff = calcEffectiveStats(profile, equipment, proficiency)
     const area = AREAS.find(a => a.id === selectedArea)
