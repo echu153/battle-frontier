@@ -366,7 +366,7 @@ export default function Game() {
   const [pendingPoints, setPendingPoints] = useState(0)
   const [statPoints, setStatPoints] = useState({})
   const [showStatPanel, setShowStatPanel] = useState(false)
-const [selectedArea, setSelectedArea] = useState(null)
+ const [selectedArea, setSelectedArea] = useState(1)
   const [regenRemaining, setRegenRemaining] = useState(0)
   const [innMessage, setInnMessage] = useState('')
   const [equipment, setEquipment] = useState([])
@@ -385,6 +385,15 @@ const [selectedArea, setSelectedArea] = useState(null)
   }, [])
 
   useEffect(() => { fetchProfile() }, [])
+  useEffect(() => {
+  if (!profile) return
+  const unlocked = profile.unlocked_areas || [1]
+  setSelectedArea(prev => {
+    if (prev === 1 && !unlocked.includes(1)) return unlocked[0]
+    if (!unlocked.includes(prev)) return unlocked[0]
+    return prev
+  })
+}, [profile?.unlocked_areas?.join(',')])
 
   useEffect(() => {
     const onFocus = () => { fetchProfile() }
