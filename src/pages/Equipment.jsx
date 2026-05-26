@@ -9,6 +9,7 @@ const RARITY_COLORS = {
 const RARITY_LABELS = {
   f:'F', e:'E', d:'D', c:'C', b:'B', a:'A', s:'S', ss:'SS', sss:'SSS'
 }
+const SLOT_LABELS = { weapon:'武器', armor:'防具', accessory:'装飾品' }
 
 const ARTIFACT_BASE_NAMES = [
   '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
