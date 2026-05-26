@@ -444,13 +444,20 @@ export default function Game() {
     setLoading(true); setScene('battle'); setBattleLogs([])
 
     // サーバー側で最新のlast_action_atを確認
-    const { data: latest } = await supabase.from('profiles').select('last_action_at').eq('id', profile.id).single()
-    const serverElapsed = (Date.now() - new Date(latest.last_action_at).getTime()) / 1000
-    if (serverElapsed < WAIT_SECONDS) {
-      setLoading(false)
-      setScene('town')
-      return
-    }
+const { data: latest } = await supabase.from('profiles').select('last_action_at, hp_current, hp_max, is_dying').eq('id', profile.id).single()
+const serverElapsed = (Date.now() - new Date(latest.last_action_at).getTime()) / 1000
+if (serverElapsed < WAIT_SECONDS) {
+  setLoading(false)
+  setScene('town')
+  await fetchProfile()
+  return
+}
+if (latest.is_dying && latest.hp_current < latest.hp_max) {
+  setLoading(false)
+  setScene('town')
+  await fetchProfile()
+  return
+}
 
     const eff = calcEffectiveStats(profile, equipment, proficiency)
     const area = AREAS.find(a => a.id === selectedArea)
