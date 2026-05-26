@@ -136,8 +136,8 @@ export default function Barber() {
         <div style={{ border:'1px solid #003366', background:'#001028', padding:'12px', marginBottom:'12px', textAlign:'center' }}>
           <div style={{ color:'#446688', fontSize:'11px', marginBottom:'8px' }}>現在のアイコン</div>
           {profile.avatar_url ? (
-            <img src={profile.avatar_url} alt="current"
-style={{ width:'80px', height:'80px', objectFit:'cover' }}
+<img src={profile.avatar_url} alt="current"
+              style={{ width:'80px', height:'80px', objectFit:'cover' }} />
           ) : (
             <div style={{ width:'80px', height:'80px', border:'2px solid #446688', background:'#001028', display:'flex', alignItems:'center', justifyContent:'center', color:'#446688', fontSize:'24px', margin:'0 auto' }}>
               👤

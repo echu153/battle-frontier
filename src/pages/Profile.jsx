@@ -143,8 +143,9 @@ export default function Profile() {
         <div style={{ display:'flex', gap:'16px', alignItems:'center', marginBottom:'16px' }}>
           <div style={{ position:'relative' }}>
             {profile.avatar_url ? (
-              <img src={profile.avatar_url} alt="avatar"
-style={{ width:'80px', height:'80px', objectFit:'cover' }}            ) : (
+<img src={profile.avatar_url} alt="avatar"
+                style={{ width:'80px', height:'80px', objectFit:'cover' }} />
+            ) : (
               <div style={{ width:'80px', height:'80px', border:'2px solid #446688', background:'#001028', display:'flex', alignItems:'center', justifyContent:'center', color:'#446688', fontSize:'24px' }}>
                 👤
               </div>
