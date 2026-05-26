@@ -672,15 +672,6 @@ export default function Game() {
       }
     }
 
-    const { data: classSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class)
-    const { data: learnedSkills } = await supabase.from('player_skills').select('skill_id').eq('player_id', profile.id)
-    const learnedIds = (learnedSkills||[]).map(s => s.skill_id)
-    const toLearn = (classSkills||[]).filter(s => s.required_lv <= profile.lv && !learnedIds.includes(s.id))
-    for (const skill of toLearn) {
-      await supabase.from('player_skills').insert({ player_id:profile.id, skill_id:skill.id })
-      logs.push({ text:`⚡ スキル「${skill.name}」を習得した！`, color:'#cc44ff' })
-    }
-    if (toLearn.length > 0) setBattleLogs([...logs])
 
     const newBossRate = isBossEncounter ? 0 : bossRate+0.5
     let newUnlockedAreas = [...(profile.unlocked_areas||[1])]
@@ -719,6 +710,17 @@ export default function Game() {
       logs.push({ text:`★ LEVEL UP！ LV${newLv} になった！ ステータスポイント+1`, color:'#cc44ff' })
       setBattleLogs([...logs])
     }
+    // レベルアップ時にスキル即時習得
+const { data: lvupSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class).eq('required_lv', newLv)
+const { data: alreadyLearned } = await supabase.from('player_skills').select('skill_id').eq('player_id', profile.id)
+const alreadyIds = (alreadyLearned||[]).map(s => s.skill_id)
+for (const skill of (lvupSkills||[])) {
+  if (!alreadyIds.includes(skill.id)) {
+    await supabase.from('player_skills').insert({ player_id:profile.id, skill_id:skill.id })
+    logs.push({ text:`⚡ スキル「${skill.name}」を習得した！`, color:'#cc44ff' })
+    setBattleLogs([...logs])
+  }
+}
 
     await supabase.from('profiles').update({
       exp:newExp, exp_next:newExpNext, lv:newLv, gold:newGold,
