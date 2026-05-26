@@ -366,7 +366,7 @@ export default function Game() {
   const [pendingPoints, setPendingPoints] = useState(0)
   const [statPoints, setStatPoints] = useState({})
   const [showStatPanel, setShowStatPanel] = useState(false)
- const [selectedArea, setSelectedArea] = useState(1)
+  const [selectedArea, setSelectedArea] = useState(1)
   const [regenRemaining, setRegenRemaining] = useState(0)
   const [innMessage, setInnMessage] = useState('')
   const [equipment, setEquipment] = useState([])
@@ -441,25 +441,21 @@ export default function Game() {
 
   const doChangeClass = async (targetClass) => {
     setLoading(true); setTempleMessage('')
-    // 現在のクラスレベルを保存
     const currentClassData = classLevels.find(cl => cl.class_name === profile.class)
     if (currentClassData) {
       await supabase.from('class_levels').update({ lv:profile.lv, exp:profile.exp }).eq('id', currentClassData.id)
     }
-    // 転職先のクラスレベルを取得
     const targetClassData = classLevels.find(cl => cl.class_name === targetClass)
     const targetLv = targetClassData ? targetClassData.lv : 1
     const targetExp = targetClassData ? targetClassData.exp : 0
     if (!targetClassData) {
       await supabase.from('class_levels').insert({ player_id:profile.id, class_name:targetClass, lv:1, exp:0 })
     }
-    // char_lv再計算
     const { data: allCl } = await supabase.from('class_levels').select('*').eq('player_id', profile.id)
     const updatedCls = (allCl||[]).map(cl => cl.class_name === profile.class ? { ...cl, lv:profile.lv } : cl)
     const targetExists = updatedCls.find(cl => cl.class_name === targetClass)
     if (!targetExists) updatedCls.push({ class_name:targetClass, lv:1 })
     const newCharLv = updatedCls.reduce((sum, cl) => sum + (cl.lv||1), 0)
-    // ステータスはそのまま、クラス・レベルのみ変更
     await supabase.from('profiles').update({
       class:targetClass, lv:targetLv, exp:targetExp, exp_next:calcExpNext(targetLv),
       char_lv:newCharLv,
@@ -481,7 +477,6 @@ export default function Game() {
     if (serverElapsed < WAIT_SECONDS) { setLoading(false); setScene('town'); await fetchProfile(); return }
     if (latest.is_dying && latest.hp_current < latest.hp_max) { setLoading(false); setScene('town'); await fetchProfile(); return }
 
-    // レベルキャップチェック
     const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
     const cap = CLASS_LEVEL_CAP[profile.class] || 100
     const isAtCap = currentClassLv >= cap
@@ -777,7 +772,6 @@ export default function Game() {
       }
     }
 
-    // レベルアップ処理（キャップに達していない場合のみ）
     let newExp = profile.exp + expGained
     let newGold = profile.gold + goldGained
     let newLv = profile.lv
@@ -819,10 +813,9 @@ export default function Game() {
           }
         }
       }
-      // キャップちょうどに達した場合
       if (newLv >= cap) {
         newExp = 0; newExpNext = calcExpNext(cap)
-        logs.push({ text:`🎯 ${profile.class}がレベルキャップ(LV${cap})に到達した！`, color:'#ffcc00' })
+        logs.push({ text:`🎯 ${profile.class}がレベルキャップ(LV${cap})に到達！`, color:'#ffcc00' })
         setBattleLogs([...logs])
       }
     }
@@ -836,7 +829,6 @@ export default function Game() {
       ...statUpdates,
     }).eq('id', profile.id)
 
-    // class_levelsも更新
     const currentClassData = classLevels.find(cl => cl.class_name === profile.class)
     if (currentClassData && !isAtCap) {
       await supabase.from('class_levels').update({ lv:newLv, exp:newExp }).eq('id', currentClassData.id)
@@ -903,7 +895,7 @@ export default function Game() {
   const charLv = profile.char_lv || profile.lv
   const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
   const cap = CLASS_LEVEL_CAP[profile.class] || 100
-const isAtCap = currentClassLv >= cap
+  const isAtCap = currentClassLv >= cap
 
   const availableClasses = INITIAL_CLASSES.filter(c=>c!==profile.class).map(c=>{
     const cl = classLevels.find(x=>x.class_name===c)
@@ -915,243 +907,6 @@ const isAtCap = currentClassLv >= cap
     const cl = classLevels.find(x=>x.class_name===name)
     return { name, lv:cl?cl.lv:1, canChange:reqLv>=100&&profile.lv>=30, requires, reqLv }
   })
-
-  const StatPanel = () => (
-    <div style={{ border:'1px solid #cc44ff', background:'#0a0020', padding:'12px', marginBottom:'8px' }}>
-      <div style={{ color:'#cc44ff', fontSize:'13px', marginBottom:'6px' }}>ステータスポイント振り分け（残り {pendingPoints-allocatedPoints}pt）</div>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'10px' }}>
-        {Object.entries(STAT_LABELS).map(([stat,label])=>(
-          <div key={stat} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', border:`1px solid ${(statPoints[stat]||0)>0?'#cc44ff':'#003366'}`, background:(statPoints[stat]||0)>0?'#1a0030':'#000818', padding:'6px 8px' }}>
-            <span style={{ color:'#88ccff', fontSize:'10px' }}>{label}</span>
-            <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
-              <button onClick={()=>{ if((statPoints[stat]||0)>0) setStatPoints(p=>({...p,[stat]:p[stat]-1})) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>-</button>
-              <span style={{ color:'#cc44ff', fontSize:'11px', minWidth:'16px', textAlign:'center' }}>{statPoints[stat]||0}</span>
-              <button onClick={()=>{ if(allocatedPoints<pendingPoints) setStatPoints(p=>({...p,[stat]:(p[stat]||0)+1})) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>+</button>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div style={{ display:'flex', gap:'8px' }}>
-        <button onClick={()=>setShowStatPanel(false)} style={{ flex:1, padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>後で</button>
-        <button onClick={confirmStatPoints} disabled={allocatedPoints!==pendingPoints} style={{ flex:2, padding:'8px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', opacity:allocatedPoints!==pendingPoints?0.4:1 }}>決定する</button>
-      </div>
-    </div>
-  )
-
-  const BattleScene = () => (
-    <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
-      <div style={{ color:'#ff6644', fontSize:'13px', marginBottom:'10px' }}>⚔ バトル！</div>
-      {loading && <div style={{ color:'#446688', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
-      <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
-        {battleLogs.map((l,i)=>(
-          <div key={i} style={{ color:l.color, fontSize:'12px', lineHeight:'2', borderBottom:'1px solid #001428', padding:'2px 0' }}>{l.text}</div>
-        ))}
-      </div>
-      {!loading && <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>}
-    </div>
-  )
-
-  const TempleScene = () => (
-    <div style={{ border:'1px solid #886600', background:'#001020', padding:'16px' }}>
-      <div style={{ color:'#ccaa00', fontSize:'14px', marginBottom:'4px' }}>⛩ 神殿</div>
-      <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
-        現在のクラス: <span style={{color:'#88ccff'}}>{profile.class}</span> LV<span style={{color:'#ffcc00'}}>{currentClassLv}</span>／{cap}　（転職にはLV30以上が必要）
-      </div>
-      {templeMessage && <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'10px', marginBottom:'12px', border:'1px solid #44ff88' }}>{templeMessage}</div>}
-      <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 初期職（LV100キャップ）──</div>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
-        {availableClasses.map(c=>(
-          <div key={c.name} style={{ border:`1px solid ${c.canChange?'#886600':'#002244'}`, background:'#001028', padding:'8px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-              <div>
-                <div style={{ color:c.canChange?'#ccaa00':'#446688', fontSize:'12px' }}>{c.name}</div>
-                <div style={{ color:'#446688', fontSize:'10px' }}>LV {c.lv} / 100</div>
-              </div>
-              <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
-                style={{ padding:'4px 8px', background:c.canChange?'#1a1000':'#001', border:`1px solid ${c.canChange?'#886600':'#002244'}`, color:c.canChange?'#ccaa00':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 上位職（LV300キャップ・初期職LV100で解放）──</div>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
-        {advancedAvailable.map(c=>(
-          <div key={c.name} style={{ border:`1px solid ${c.canChange?'#664400':'#002244'}`, background:'#001028', padding:'8px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-              <div>
-                <div style={{ color:c.canChange?'#ff8800':'#446688', fontSize:'12px' }}>{c.name}</div>
-                <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/100　クラスLV{c.lv}/300</div>
-              </div>
-              <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
-                style={{ padding:'4px 8px', background:c.canChange?'#1a0800':'#001', border:`1px solid ${c.canChange?'#664400':'#002244'}`, color:c.canChange?'#ff8800':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
-            </div>
-          </div>
-        ))}
-      </div>
-      <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
-    </div>
-  )
-
-  const InnScene = () => (
-    <div style={{ border:'1px solid #0088aa', background:'#001030', padding:'20px', textAlign:'center' }}>
-      <div style={{ color:'#00aacc', fontSize:'14px', marginBottom:'16px' }}>🏨 宿屋</div>
-      {innMessage ? (
-        <div style={{ color:'#44ff88', fontSize:'14px', padding:'20px' }}>{innMessage}</div>
-      ) : (
-        <>
-          <div style={{ color:'#88ccff', fontSize:'12px', lineHeight:'2', marginBottom:'16px' }}>
-            {isDying
-              ? <>これはひどいお姿で…。特別なお手当が必要でございます。<br/><span style={{color:'#ffcc00'}}>{profile.lv*15}G</span> のところ、所持金 <span style={{color:'#ffcc00'}}>{innCost}G</span> で承ります。</>
-              : <>一泊 <span style={{color:'#ffcc00'}}>{innCost}G</span> でございます。<br/>ゆっくりお休みになりますか？</>}
-          </div>
-          <div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
-            所持金: <span style={{color:'#ffcc00'}}>{profile.gold}G</span>
-            {!isDying && profile.gold<innCost && <span style={{color:'#ff4444'}}> （ゴールドが足りません）</span>}
-          </div>
-          <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={backToTown} style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
-            <button onClick={useInn} disabled={!isDying&&profile.gold<innCost}
-              style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor:(!isDying&&profile.gold<innCost)?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', opacity:(!isDying&&profile.gold<innCost)?0.4:1 }}>
-              利用する
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  )
-
-  // キャラクター情報部分（共通）
-  const CharInfo = ({ mobile }) => (
-    <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', ...(mobile ? { marginBottom:'8px' } : { alignSelf:'start' }) }}>
-      {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:mobile?'6px':'8px', border:'1px solid #660000', padding:'4px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
-      {mobile ? (
-        <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
-          {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width:'48px', height:'48px', objectFit:'cover', flexShrink:0 }} />}
-          <div style={{ flex:1 }}>
-            <div style={{ color:'#ffcc00', fontSize:'13px' }}>{profile.username}</div>
-            <div style={{ fontSize:'11px', color:'#446688' }}>
-              <span style={{color:'#88ccff'}}>{profile.class}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／{cap}
-            </div>
-            <div style={{ fontSize:'11px', color:'#446688' }}>
-              キャラクターLV: <span style={{color:'#ffcc00'}}>{charLv}</span>　<span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span>
-            </div>
-            <div style={{ fontSize:'10px', color:'#446688' }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
-          </div>
-        </div>
-      ) : (
-        <div style={{ borderBottom:'1px dashed #003366', paddingBottom:'8px', marginBottom:'8px' }}>
-          {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width:'60px', height:'60px', objectFit:'cover', display:'block', margin:'0 auto 6px' }} />}
-          <div style={{ color:'#ffcc00', fontSize:'12px', textAlign:'center' }}>{profile.username}</div>
-        </div>
-      )}
-      {!mobile && <>
-        <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>
-          クラス: <span style={{color:'#88ccff'}}>{profile.class}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／<span style={{color:'#446688'}}>{cap}</span>
-        </div>
-        <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>
-          キャラクターLV: <span style={{color:'#ffcc00'}}>{charLv}</span>
-        </div>
-        <div style={{ fontSize:'11px', color:'#446688', marginBottom:'6px', display:'flex', justifyContent:'space-between' }}>
-          <span>総合力: <span style={{color:'#44ff88', fontWeight:'bold'}}>{total}</span></span>
-          <span style={{color:totalRank.color, fontWeight:'bold'}}>{totalRank.rank}</span>
-        </div>
-      </>}
-      {mobile ? (
-        <>
-          <MiniBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying?'#ff2200':'#00cc44'} />
-          <MiniBar label="MP" val={`${mpCurrent}/${profile.mp_max}`} pct={mpPct} color="#4488ff" />
-          <MiniBar label="EXP" val={`${profile.exp}/${profile.exp_next}`} pct={expPct} color="#cc8800" />
-          <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#446688', marginBottom:'2px' }}>
-            <span>自然回復</span><span style={{color:'#44ccff'}}>{regenRemaining>0?`${Math.ceil(regenRemaining)}秒`:'回復中...'}</span>
-          </div>
-          <div style={{ background:'#001028', height:'3px', border:'1px solid #002244', marginBottom:'8px' }}>
-            <div style={{ height:'100%', width:`${regenPct}%`, background:'linear-gradient(90deg,#003333,#44ccff)' }} />
-          </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'2px', fontSize:'10px', marginBottom:'6px' }}>
-            <StatMini label="攻撃" base={profile.atk} bonus={eff.bonus.atk} color="#ffcc00" type="atk" />
-            <StatMini label="防御" base={profile.def} bonus={eff.bonus.def} color="#88aaff" type="def" />
-            <StatMini label="特攻" base={profile.matk} bonus={eff.bonus.matk} color="#cc44ff" type="matk" />
-            <StatMini label="特防" base={profile.mdef} bonus={eff.bonus.mdef} color="#44ccff" type="mdef" />
-            <StatMini label="速さ" base={profile.spd} bonus={eff.bonus.spd} color="#ff8844" type="spd" />
-          </div>
-        </>
-      ) : (
-        <>
-          <StatBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying?'#ff2200':'#00cc44'} />
-          <StatBar label="MP" val={`${mpCurrent}/${profile.mp_max}`} pct={mpPct} color="#4488ff" />
-          <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginTop:'6px' }}>
-            <span>経験値</span><span style={{color:'#cc8800'}}>{profile.exp}/{profile.exp_next}</span>
-          </div>
-          <div style={{ background:'#001028', height:'5px', border:'1px solid #002244', marginBottom:'4px' }}>
-            <div style={{ height:'100%', width:`${expPct}%`, background:'linear-gradient(90deg,#331100,#cc8800)', transition:'width 0.4s' }} />
-          </div>
-          <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginBottom:'2px' }}>
-            <span>自然回復まで</span>
-            <span style={{color:'#44ccff'}}>{regenRemaining>0?`${Math.ceil(regenRemaining)}秒`:'回復中...'}</span>
-          </div>
-          <div style={{ background:'#001028', height:'4px', border:'1px solid #002244', marginBottom:'8px' }}>
-            <div style={{ height:'100%', width:`${regenPct}%`, background:'linear-gradient(90deg,#003333,#44ccff)', transition:'width 0.2s' }} />
-          </div>
-          <div style={{ fontSize:'11px', display:'grid', gridTemplateColumns:'1fr', gap:'2px', color:'#446688', marginBottom:'8px' }}>
-            <StatLine label="攻撃力"     base={profile.atk}  bonus={eff.bonus.atk}  color="#ffcc00" statType="atk" />
-            <StatLine label="防御力"     base={profile.def}  bonus={eff.bonus.def}  color="#88aaff" statType="def" />
-            <StatLine label="特殊攻撃力" base={profile.matk} bonus={eff.bonus.matk} color="#cc44ff" statType="matk" />
-            <StatLine label="特殊防御力" base={profile.mdef} bonus={eff.bonus.mdef} color="#44ccff" statType="mdef" />
-            <StatLine label="素早さ"     base={profile.spd}  bonus={eff.bonus.spd}  color="#ff8844" statType="spd" />
-            <span>ゴールド: <span style={{color:'#ffcc00'}}>{profile.gold}</span></span>
-          </div>
-        </>
-      )}
-      {pendingPoints > 0 && (
-        <button onClick={()=>{ setShowStatPanel(true); setStatPoints({hp:0,mp:0,atk:0,def:0,matk:0,mdef:0,spd:0}) }}
-          style={{ width:'100%', padding:'6px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-          ★ ステータスを振り分ける（{pendingPoints}pt）
-        </button>
-      )}
-    </div>
-  )
-
-  const TownScene = () => (
-    <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'8px' }}>
-      <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
-      {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'6px', background:'#1a0000' }}>⚠ 瀕死状態です。宿屋でHP全回復してください。</div>}
-      {isAtCap && <div style={{ color:'#ff8844', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #664400', padding:'4px', background:'#1a0800' }}>⚠ {profile.class}はレベルキャップ(LV{cap})に達しています</div>}
-      <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
-        <span style={{ color:'#446688' }}>次の行動まで</span>
-        <span style={{ color:canAct?'#44ff88':'#ffcc00' }}>{canAct?'▶ 出撃可能！':`${remaining.toFixed(1)}秒`}</span>
-      </div>
-      <div style={{ background:'#001028', height:'6px', border:'1px solid #002244', marginBottom:'10px' }}>
-        <div style={{ height:'100%', width:`${timerPct}%`, background:canAct?'#44ff88':'linear-gradient(90deg,#003366,#0088ff)', transition:'width 0.2s' }} />
-      </div>
-      <div style={{ marginBottom:'8px' }}>
-        {!isMobile && <div style={{ color:'#446688', fontSize:'11px', marginBottom:'4px' }}>エリア選択</div>}
-        <select value={selectedArea} onChange={e=>setSelectedArea(Number(e.target.value))} style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:isMobile?'8px':'6px', fontFamily:'monospace', fontSize:'12px' }}>
-          {availableAreas.map(area=><option key={area.id} value={area.id}>{area.name}</option>)}
-        </select>
-      </div>
-      <button onClick={doBattle} disabled={!canAct||loading||!canBattle}
-        style={{ width:'100%', padding:isMobile?'14px':'12px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
-        {isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
-      </button>
-      {isMobile ? (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-          <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋</button>
-          <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿</button>
-          <button onClick={()=>nav('/shop')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🛒 商店</button>
-          <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋</button>
-          <button onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', gridColumn:'1/-1' }}>✂ 美容院</button>
-        </div>
-      ) : (
-        <>
-          <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🏨 宿屋へ</button>
-          <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>⛩ 神殿へ</button>
-          <button onClick={()=>nav('/shop')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🛒 商店へ</button>
-          <button onClick={()=>nav('/smithy')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>⚒ 鍛冶屋へ</button>
-          <button onClick={()=>nav('/barber')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院へ</button>
-        </>
-      )}
-    </div>
-  )
 
   // ===== スマホレイアウト =====
   if (isMobile) {
@@ -1176,13 +931,185 @@ const isAtCap = currentClassLv >= cap
           </div>
         )}
         {showMenu && <div onClick={()=>setShowMenu(false)} style={{ position:'fixed', inset:0, zIndex:150 }} />}
+
         <div style={{ padding:'8px 12px' }}>
-          <CharInfo mobile={true} />
-          {showStatPanel && <StatPanel />}
-          {scene==='town' && <TownScene />}
-          {scene==='inn' && <InnScene />}
-          {scene==='temple' && <TempleScene />}
-          {scene==='battle' && <BattleScene />}
+          {/* キャラ情報 */}
+          <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', marginBottom:'8px' }}>
+            {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'6px', border:'1px solid #660000', padding:'3px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
+            <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
+              {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width:'48px', height:'48px', objectFit:'cover', flexShrink:0 }} />}
+              <div style={{ flex:1 }}>
+                <div style={{ color:'#ffcc00', fontSize:'13px' }}>{profile.username}</div>
+                <div style={{ fontSize:'11px', color:'#446688' }}>
+                  <span style={{color:'#88ccff'}}>{profile.class}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／{cap}
+                </div>
+                <div style={{ fontSize:'11px', color:'#446688' }}>
+                  キャラクターLV: <span style={{color:'#ffcc00'}}>{charLv}</span>　<span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span>
+                </div>
+                <div style={{ fontSize:'10px', color:'#446688' }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
+              </div>
+            </div>
+            <MiniBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying?'#ff2200':'#00cc44'} />
+            <MiniBar label="MP" val={`${mpCurrent}/${profile.mp_max}`} pct={mpPct} color="#4488ff" />
+            <MiniBar label="EXP" val={`${profile.exp}/${profile.exp_next}`} pct={expPct} color="#cc8800" />
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#446688', marginBottom:'2px' }}>
+              <span>自然回復</span><span style={{color:'#44ccff'}}>{regenRemaining>0?`${Math.ceil(regenRemaining)}秒`:'回復中...'}</span>
+            </div>
+            <div style={{ background:'#001028', height:'3px', border:'1px solid #002244', marginBottom:'8px' }}>
+              <div style={{ height:'100%', width:`${regenPct}%`, background:'linear-gradient(90deg,#003333,#44ccff)' }} />
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'2px', fontSize:'10px', marginBottom:'6px' }}>
+              <StatMini label="攻撃" base={profile.atk} bonus={eff.bonus.atk} color="#ffcc00" type="atk" />
+              <StatMini label="防御" base={profile.def} bonus={eff.bonus.def} color="#88aaff" type="def" />
+              <StatMini label="特攻" base={profile.matk} bonus={eff.bonus.matk} color="#cc44ff" type="matk" />
+              <StatMini label="特防" base={profile.mdef} bonus={eff.bonus.mdef} color="#44ccff" type="mdef" />
+              <StatMini label="速さ" base={profile.spd} bonus={eff.bonus.spd} color="#ff8844" type="spd" />
+            </div>
+            {pendingPoints > 0 && (
+              <button onClick={()=>{ setShowStatPanel(true); setStatPoints({hp:0,mp:0,atk:0,def:0,matk:0,mdef:0,spd:0}) }}
+                style={{ width:'100%', padding:'6px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                ★ ステータスを振り分ける（{pendingPoints}pt）
+              </button>
+            )}
+          </div>
+
+          {/* ステータス振り分け */}
+          {showStatPanel && (
+            <div style={{ border:'1px solid #cc44ff', background:'#0a0020', padding:'12px', marginBottom:'8px' }}>
+              <div style={{ color:'#cc44ff', fontSize:'13px', marginBottom:'6px' }}>ステータスポイント振り分け（残り {pendingPoints-allocatedPoints}pt）</div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'10px' }}>
+                {Object.entries(STAT_LABELS).map(([stat,label])=>(
+                  <div key={stat} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', border:`1px solid ${(statPoints[stat]||0)>0?'#cc44ff':'#003366'}`, background:(statPoints[stat]||0)>0?'#1a0030':'#000818', padding:'6px 8px' }}>
+                    <span style={{ color:'#88ccff', fontSize:'10px' }}>{label}</span>
+                    <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
+                      <button onClick={()=>{ if((statPoints[stat]||0)>0) setStatPoints(p=>({...p,[stat]:p[stat]-1})) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>-</button>
+                      <span style={{ color:'#cc44ff', fontSize:'11px', minWidth:'16px', textAlign:'center' }}>{statPoints[stat]||0}</span>
+                      <button onClick={()=>{ if(allocatedPoints<pendingPoints) setStatPoints(p=>({...p,[stat]:(p[stat]||0)+1})) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>+</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display:'flex', gap:'8px' }}>
+                <button onClick={()=>setShowStatPanel(false)} style={{ flex:1, padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>後で</button>
+                <button onClick={confirmStatPoints} disabled={allocatedPoints!==pendingPoints} style={{ flex:2, padding:'8px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', opacity:allocatedPoints!==pendingPoints?0.4:1 }}>決定する</button>
+              </div>
+            </div>
+          )}
+
+          {/* 街 */}
+          {scene==='town' && (
+            <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
+              <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
+              {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'6px', background:'#1a0000' }}>⚠ 瀕死状態です。宿屋でHP全回復してください。</div>}
+              {isAtCap && <div style={{ color:'#ff8844', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #664400', padding:'4px', background:'#1a0800' }}>⚠ {profile.class}はレベルキャップ(LV{cap})に達しています</div>}
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
+                <span style={{ color:'#446688' }}>次の行動まで</span>
+                <span style={{ color:canAct?'#44ff88':'#ffcc00' }}>{canAct?'▶ 出撃可能！':`${remaining.toFixed(1)}秒`}</span>
+              </div>
+              <div style={{ background:'#001028', height:'6px', border:'1px solid #002244', marginBottom:'10px' }}>
+                <div style={{ height:'100%', width:`${timerPct}%`, background:canAct?'#44ff88':'linear-gradient(90deg,#003366,#0088ff)', transition:'width 0.2s' }} />
+              </div>
+              <select value={selectedArea} onChange={e=>setSelectedArea(Number(e.target.value))} style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
+                {availableAreas.map(area=><option key={area.id} value={area.id}>{area.name}</option>)}
+              </select>
+              <button onClick={doBattle} disabled={!canAct||loading||!canBattle}
+                style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
+                {isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
+              </button>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋</button>
+                <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿</button>
+                <button onClick={()=>nav('/shop')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🛒 商店</button>
+                <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋</button>
+                <button onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', gridColumn:'1/-1' }}>✂ 美容院</button>
+              </div>
+            </div>
+          )}
+
+          {/* 宿屋 */}
+          {scene==='inn' && (
+            <div style={{ border:'1px solid #0088aa', background:'#001030', padding:'20px', textAlign:'center' }}>
+              <div style={{ color:'#00aacc', fontSize:'14px', marginBottom:'16px' }}>🏨 宿屋</div>
+              {innMessage ? (
+                <div style={{ color:'#44ff88', fontSize:'14px', padding:'20px' }}>{innMessage}</div>
+              ) : (
+                <>
+                  <div style={{ color:'#88ccff', fontSize:'12px', lineHeight:'2', marginBottom:'16px' }}>
+                    {isDying
+                      ? <>これはひどいお姿で…。<br/><span style={{color:'#ffcc00'}}>{profile.lv*15}G</span> のところ、所持金 <span style={{color:'#ffcc00'}}>{innCost}G</span> で承ります。</>
+                      : <>一泊 <span style={{color:'#ffcc00'}}>{innCost}G</span> でございます。<br/>ゆっくりお休みになりますか？</>}
+                  </div>
+                  <div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
+                    所持金: <span style={{color:'#ffcc00'}}>{profile.gold}G</span>
+                    {!isDying && profile.gold<innCost && <span style={{color:'#ff4444'}}> （不足）</span>}
+                  </div>
+                  <div style={{ display:'flex', gap:'8px' }}>
+                    <button onClick={backToTown} style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>戻る</button>
+                    <button onClick={useInn} disabled={!isDying&&profile.gold<innCost}
+                      style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor:(!isDying&&profile.gold<innCost)?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', opacity:(!isDying&&profile.gold<innCost)?0.4:1 }}>
+                      利用する
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* 神殿 */}
+          {scene==='temple' && (
+            <div style={{ border:'1px solid #886600', background:'#001020', padding:'16px' }}>
+              <div style={{ color:'#ccaa00', fontSize:'14px', marginBottom:'4px' }}>⛩ 神殿</div>
+              <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
+                現在: <span style={{color:'#88ccff'}}>{profile.class}</span> LV<span style={{color:'#ffcc00'}}>{currentClassLv}</span>／{cap}　（転職にはLV30以上が必要）
+              </div>
+              {templeMessage && <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'10px', marginBottom:'12px', border:'1px solid #44ff88' }}>{templeMessage}</div>}
+              <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 初期職（LV100キャップ）──</div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
+                {availableClasses.map(c=>(
+                  <div key={c.name} style={{ border:`1px solid ${c.canChange?'#886600':'#002244'}`, background:'#001028', padding:'8px' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <div>
+                        <div style={{ color:c.canChange?'#ccaa00':'#446688', fontSize:'12px' }}>{c.name}</div>
+                        <div style={{ color:'#446688', fontSize:'10px' }}>LV {c.lv} / 100</div>
+                      </div>
+                      <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
+                        style={{ padding:'4px 8px', background:c.canChange?'#1a1000':'#001', border:`1px solid ${c.canChange?'#886600':'#002244'}`, color:c.canChange?'#ccaa00':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 上位職（LV300キャップ・初期職LV100で解放）──</div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
+                {advancedAvailable.map(c=>(
+                  <div key={c.name} style={{ border:`1px solid ${c.canChange?'#664400':'#002244'}`, background:'#001028', padding:'8px' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <div>
+                        <div style={{ color:c.canChange?'#ff8800':'#446688', fontSize:'12px' }}>{c.name}</div>
+                        <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/100</div>
+                      </div>
+                      <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
+                        style={{ padding:'4px 8px', background:c.canChange?'#1a0800':'#001', border:`1px solid ${c.canChange?'#664400':'#002244'}`, color:c.canChange?'#ff8800':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
+            </div>
+          )}
+
+          {/* バトル */}
+          {scene==='battle' && (
+            <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
+              <div style={{ color:'#ff6644', fontSize:'13px', marginBottom:'10px' }}>⚔ バトル！</div>
+              {loading && <div style={{ color:'#446688', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
+              <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
+                {battleLogs.map((l,i)=>(
+                  <div key={i} style={{ color:l.color, fontSize:'12px', lineHeight:'2', borderBottom:'1px solid #001428', padding:'2px 0' }}>{l.text}</div>
+                ))}
+              </div>
+              {!loading && <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>}
+            </div>
+          )}
         </div>
       </div>
     )
@@ -1202,14 +1129,191 @@ const isAtCap = currentClassLv >= cap
             <button onClick={logout} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ログアウト</button>
           </div>
         </div>
+
         <div style={{ display:'grid', gridTemplateColumns:'220px 1fr', gap:'12px' }}>
-          <CharInfo mobile={false} />
+          {/* PC左カラム */}
+          <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', alignSelf:'start' }}>
+            {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'4px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
+            <div style={{ borderBottom:'1px dashed #003366', paddingBottom:'8px', marginBottom:'8px' }}>
+              {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width:'60px', height:'60px', objectFit:'cover', display:'block', margin:'0 auto 6px' }} />}
+              <div style={{ color:'#ffcc00', fontSize:'12px', textAlign:'center' }}>{profile.username}</div>
+            </div>
+            <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>
+              クラス: <span style={{color:'#88ccff'}}>{profile.class}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／<span style={{color:'#446688'}}>{cap}</span>
+            </div>
+            <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>
+              キャラクターLV: <span style={{color:'#ffcc00'}}>{charLv}</span>
+            </div>
+            <div style={{ fontSize:'11px', color:'#446688', marginBottom:'6px', display:'flex', justifyContent:'space-between' }}>
+              <span>総合力: <span style={{color:'#44ff88', fontWeight:'bold'}}>{total}</span></span>
+              <span style={{color:totalRank.color, fontWeight:'bold'}}>{totalRank.rank}</span>
+            </div>
+            <StatBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying?'#ff2200':'#00cc44'} />
+            <StatBar label="MP" val={`${mpCurrent}/${profile.mp_max}`} pct={mpPct} color="#4488ff" />
+            <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginTop:'6px' }}>
+              <span>経験値</span><span style={{color:'#cc8800'}}>{profile.exp}/{profile.exp_next}</span>
+            </div>
+            <div style={{ background:'#001028', height:'5px', border:'1px solid #002244', marginBottom:'4px' }}>
+              <div style={{ height:'100%', width:`${expPct}%`, background:'linear-gradient(90deg,#331100,#cc8800)', transition:'width 0.4s' }} />
+            </div>
+            <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginBottom:'2px' }}>
+              <span>自然回復まで</span>
+              <span style={{color:'#44ccff'}}>{regenRemaining>0?`${Math.ceil(regenRemaining)}秒`:'回復中...'}</span>
+            </div>
+            <div style={{ background:'#001028', height:'4px', border:'1px solid #002244', marginBottom:'8px' }}>
+              <div style={{ height:'100%', width:`${regenPct}%`, background:'linear-gradient(90deg,#003333,#44ccff)', transition:'width 0.2s' }} />
+            </div>
+            <div style={{ fontSize:'11px', display:'grid', gridTemplateColumns:'1fr', gap:'2px', color:'#446688', marginBottom:'8px' }}>
+              <StatLine label="攻撃力"     base={profile.atk}  bonus={eff.bonus.atk}  color="#ffcc00" statType="atk" />
+              <StatLine label="防御力"     base={profile.def}  bonus={eff.bonus.def}  color="#88aaff" statType="def" />
+              <StatLine label="特殊攻撃力" base={profile.matk} bonus={eff.bonus.matk} color="#cc44ff" statType="matk" />
+              <StatLine label="特殊防御力" base={profile.mdef} bonus={eff.bonus.mdef} color="#44ccff" statType="mdef" />
+              <StatLine label="素早さ"     base={profile.spd}  bonus={eff.bonus.spd}  color="#ff8844" statType="spd" />
+              <span>ゴールド: <span style={{color:'#ffcc00'}}>{profile.gold}</span></span>
+            </div>
+            {pendingPoints > 0 && (
+              <button onClick={()=>{ setShowStatPanel(true); setStatPoints({hp:0,mp:0,atk:0,def:0,matk:0,mdef:0,spd:0}) }}
+                style={{ width:'100%', padding:'6px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                ★ ステータスを振り分ける（{pendingPoints}pt）
+              </button>
+            )}
+          </div>
+
+          {/* PC右カラム */}
           <div>
-            {showStatPanel && <StatPanel />}
-            {scene==='town' && <TownScene />}
-            {scene==='inn' && <InnScene />}
-            {scene==='temple' && <TempleScene />}
-            {scene==='battle' && <BattleScene />}
+            {showStatPanel && (
+              <div style={{ border:'1px solid #cc44ff', background:'#0a0020', padding:'12px', marginBottom:'8px' }}>
+                <div style={{ color:'#cc44ff', fontSize:'13px', marginBottom:'6px' }}>ステータスポイント振り分け（残り {pendingPoints-allocatedPoints}pt）</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'10px' }}>
+                  {Object.entries(STAT_LABELS).map(([stat,label])=>(
+                    <div key={stat} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', border:`1px solid ${(statPoints[stat]||0)>0?'#cc44ff':'#003366'}`, background:(statPoints[stat]||0)>0?'#1a0030':'#000818', padding:'6px 8px' }}>
+                      <span style={{ color:'#88ccff', fontSize:'10px' }}>{label}</span>
+                      <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
+                        <button onClick={()=>{ if((statPoints[stat]||0)>0) setStatPoints(p=>({...p,[stat]:p[stat]-1})) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>-</button>
+                        <span style={{ color:'#cc44ff', fontSize:'11px', minWidth:'16px', textAlign:'center' }}>{statPoints[stat]||0}</span>
+                        <button onClick={()=>{ if(allocatedPoints<pendingPoints) setStatPoints(p=>({...p,[stat]:(p[stat]||0)+1})) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>+</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display:'flex', gap:'8px' }}>
+                  <button onClick={()=>setShowStatPanel(false)} style={{ flex:1, padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>後で</button>
+                  <button onClick={confirmStatPoints} disabled={allocatedPoints!==pendingPoints} style={{ flex:2, padding:'8px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', opacity:allocatedPoints!==pendingPoints?0.4:1 }}>決定する</button>
+                </div>
+              </div>
+            )}
+
+            {scene==='town' && (
+              <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'8px' }}>
+                <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
+                {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'10px', border:'1px solid #660000', padding:'8px', background:'#1a0000' }}>⚠ 瀕死状態です。宿屋でHP全回復してください。</div>}
+                {isAtCap && <div style={{ color:'#ff8844', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #664400', padding:'4px', background:'#1a0800' }}>⚠ {profile.class}はレベルキャップ(LV{cap})に達しています</div>}
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
+                  <span style={{ color:'#446688' }}>次の行動まで</span>
+                  <span style={{ color:canAct?'#44ff88':'#ffcc00' }}>{canAct?'▶ 出撃可能！':`${remaining.toFixed(1)}秒`}</span>
+                </div>
+                <div style={{ background:'#001028', height:'6px', border:'1px solid #002244', marginBottom:'12px' }}>
+                  <div style={{ height:'100%', width:`${timerPct}%`, background:canAct?'#44ff88':'linear-gradient(90deg,#003366,#0088ff)', transition:'width 0.2s' }} />
+                </div>
+                <div style={{ marginBottom:'10px' }}>
+                  <div style={{ color:'#446688', fontSize:'11px', marginBottom:'4px' }}>エリア選択</div>
+                  <select value={selectedArea} onChange={e=>setSelectedArea(Number(e.target.value))} style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'6px', fontFamily:'monospace', fontSize:'12px' }}>
+                    {availableAreas.map(area=><option key={area.id} value={area.id}>{area.name}</option>)}
+                  </select>
+                </div>
+                <button onClick={doBattle} disabled={!canAct||loading||!canBattle}
+                  style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
+                  {isDying&&!canBattle?'💀 瀕死中（HP全回復まで出撃不可）':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
+                </button>
+                <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🏨 宿屋へ</button>
+                <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>⛩ 神殿へ</button>
+                <button onClick={()=>nav('/shop')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🛒 商店へ</button>
+                <button onClick={()=>nav('/smithy')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>⚒ 鍛冶屋へ</button>
+                <button onClick={()=>nav('/barber')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院へ</button>
+              </div>
+            )}
+
+            {scene==='inn' && (
+              <div style={{ border:'1px solid #0088aa', background:'#001030', padding:'20px', textAlign:'center' }}>
+                <div style={{ color:'#00aacc', fontSize:'14px', marginBottom:'16px' }}>🏨 宿屋</div>
+                {innMessage ? (
+                  <div style={{ color:'#44ff88', fontSize:'14px', padding:'20px' }}>{innMessage}</div>
+                ) : (
+                  <>
+                    <div style={{ color:'#88ccff', fontSize:'12px', lineHeight:'2', marginBottom:'16px' }}>
+                      {isDying
+                        ? <>これはひどいお姿で…。特別なお手当が必要でございます。<br/><span style={{color:'#ffcc00'}}>{profile.lv*15}G</span> のところ、所持金 <span style={{color:'#ffcc00'}}>{innCost}G</span> で承ります。</>
+                        : <>一泊 <span style={{color:'#ffcc00'}}>{innCost}G</span> でございます。<br/>ゆっくりお休みになりますか？</>}
+                    </div>
+                    <div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
+                      所持金: <span style={{color:'#ffcc00'}}>{profile.gold}G</span>
+                      {!isDying && profile.gold<innCost && <span style={{color:'#ff4444'}}> （ゴールドが足りません）</span>}
+                    </div>
+                    <div style={{ display:'flex', gap:'8px' }}>
+                      <button onClick={backToTown} style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
+                      <button onClick={useInn} disabled={!isDying&&profile.gold<innCost}
+                        style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor:(!isDying&&profile.gold<innCost)?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', opacity:(!isDying&&profile.gold<innCost)?0.4:1 }}>
+                        利用する
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {scene==='temple' && (
+              <div style={{ border:'1px solid #886600', background:'#001020', padding:'16px' }}>
+                <div style={{ color:'#ccaa00', fontSize:'14px', marginBottom:'4px' }}>⛩ 神殿</div>
+                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
+                  現在のクラス: <span style={{color:'#88ccff'}}>{profile.class}</span> LV<span style={{color:'#ffcc00'}}>{currentClassLv}</span>／{cap}　（転職にはLV30以上が必要）
+                </div>
+                {templeMessage && <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'10px', marginBottom:'12px', border:'1px solid #44ff88' }}>{templeMessage}</div>}
+                <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 初期職（LV100キャップ）──</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
+                  {availableClasses.map(c=>(
+                    <div key={c.name} style={{ border:`1px solid ${c.canChange?'#886600':'#002244'}`, background:'#001028', padding:'8px' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <div>
+                          <div style={{ color:c.canChange?'#ccaa00':'#446688', fontSize:'12px' }}>{c.name}</div>
+                          <div style={{ color:'#446688', fontSize:'10px' }}>LV {c.lv} / 100</div>
+                        </div>
+                        <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
+                          style={{ padding:'4px 8px', background:c.canChange?'#1a1000':'#001', border:`1px solid ${c.canChange?'#886600':'#002244'}`, color:c.canChange?'#ccaa00':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 上位職（LV300キャップ・初期職LV100で解放）──</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
+                  {advancedAvailable.map(c=>(
+                    <div key={c.name} style={{ border:`1px solid ${c.canChange?'#664400':'#002244'}`, background:'#001028', padding:'8px' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <div>
+                          <div style={{ color:c.canChange?'#ff8800':'#446688', fontSize:'12px' }}>{c.name}</div>
+                          <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/100　クラスLV{c.lv}/300</div>
+                        </div>
+                        <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
+                          style={{ padding:'4px 8px', background:c.canChange?'#1a0800':'#001', border:`1px solid ${c.canChange?'#664400':'#002244'}`, color:c.canChange?'#ff8800':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
+              </div>
+            )}
+
+            {scene==='battle' && (
+              <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
+                <div style={{ color:'#ff6644', fontSize:'13px', marginBottom:'10px' }}>⚔ バトル！</div>
+                {loading && <div style={{ color:'#446688', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
+                <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
+                  {battleLogs.map((l,i)=>(
+                    <div key={i} style={{ color:l.color, fontSize:'12px', lineHeight:'2', borderBottom:'1px solid #001428', padding:'2px 0' }}>{l.text}</div>
+                  ))}
+                </div>
+                {!loading && <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>}
+              </div>
+            )}
           </div>
         </div>
       </div>
