@@ -17,7 +17,6 @@ const getTotalRank = (total) => {
   return { rank: 'SSS', color: '#ffcc00' }
 }
 
-const JOB_ICONS = { '戦士':'⚔️', '弓使い':'🏹', '魔法使い':'🔮', '僧侶':'✨', '侍':'🗡', '狂戦士':'💢', '狩人':'🌲', '暗殺者':'🌙', '元素使い':'🌊', '死霊使い':'💀', '司祭':'🙏', '賢者':'📖' }
 
 export default function Ranking() {
   const nav = useNavigate()
@@ -95,8 +94,7 @@ export default function Ranking() {
   )}
   {p.username}{isMe && ' (自分)'}
 </span>
-                  <span style={{ color:'#446688', fontSize:'12px', textAlign:'center' }}>{JOB_ICONS[p.class] || '？'}</span>
-<span style={{ color:'#ffcc00', fontSize:'12px', textAlign:'center' }}>{p.char_lv || p.lv}</span>                  <span style={{ color:'#44ff88', fontSize:'12px', textAlign:'right', fontWeight:'bold' }}>{total}</span>
+<span style={{ color:'#88ccff', fontSize:'11px', textAlign:'center' }}>{p.class}</span><span style={{ color:'#ffcc00', fontSize:'12px', textAlign:'center' }}>{p.char_lv || p.lv}</span>                  <span style={{ color:'#44ff88', fontSize:'12px', textAlign:'right', fontWeight:'bold' }}>{total}</span>
                   <span style={{ color: totalRank.color, fontSize:'11px', textAlign:'center', fontWeight:'bold' }}>{totalRank.rank}</span>
                 </div>
               )
