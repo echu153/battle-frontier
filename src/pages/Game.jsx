@@ -569,6 +569,7 @@ export default function Game() {
           prevSkillName = cs.skills.name
           const res = executeSkill(cs.skills, effBuff, profile, enemy, enemyBuffs, playerBuffs, isArtifact)
           let finalDmg = Math.floor(res.dmg * critMult * passiveDmgMult * gensoMult)
+          const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
           if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
             const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
@@ -580,7 +581,7 @@ export default function Game() {
           playerHp = Math.min(profile.hp_max, playerHp + healAmt)
           playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
           const critText = isCrit ? ' 💥クリティカル！' : ''
-          logs.push({ text:`${prefix}${res.log}${critText}`, color:isCrit?'#ff4444':'#88ccff' })
+          logs.push({ text:`${prefix}${resLog}${critText}`, color:isCrit?'#ff4444':'#88ccff' })
           skillUsed = true; skillIndex++
         }
       }
