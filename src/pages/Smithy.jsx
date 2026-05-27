@@ -109,19 +109,21 @@ export default function Smithy() {
     setLoading(false)
   }
 
-  // 装備3つから強化石を作成
-  const craftStoneFromEquipment = async (rarity) => {
+  const craftStoneFromSelectedItems = async (selectedIds) => {
     setLoading(true)
-    const sameRarityItems = equipment.filter(e => e.weapons.rarity === rarity && !e.equipped)
-    if (sameRarityItems.length < 3) {
-      showMessage(`同ランク(${RARITY_LABELS[rarity]})の装備が3つ必要です！（所持${sameRarityItems.length}個）`, '#ff4444')
+    const selected = selectedIds.map(id => equipment.find(e => e.id === id)).filter(Boolean)
+    if (selected.length !== 3) {
+      showMessage('3つ選択してください！', '#ff4444')
       setLoading(false); return
     }
-    // 素材3つ消費
-    for (let i = 0; i < 3; i++) {
-      await supabase.from('player_equipment').delete().eq('id', sameRarityItems[i].id)
+    const rarity = selected[0].weapons.rarity
+    if (!selected.every(e => e.weapons.rarity === rarity)) {
+      showMessage('同じランクの装備を3つ選択してください！', '#ff4444')
+      setLoading(false); return
     }
-    // 強化石を付与
+    for (const item of selected) {
+      await supabase.from('player_equipment').delete().eq('id', item.id)
+    }
     const stoneName = STONE_NAMES[rarity]
     const { data: stoneItem } = await supabase.from('items').select('*').eq('name', stoneName).single()
     if (stoneItem) {
@@ -137,7 +139,6 @@ export default function Smithy() {
     setLoading(false)
   }
 
-  // 強化石3つから上位強化石を作成
   const craftStoneFromStones = async (rarity) => {
     setLoading(true)
     const stoneIdx = STONE_RANKS.indexOf(rarity)
@@ -152,13 +153,11 @@ export default function Smithy() {
       showMessage(`${stoneName}が3つ必要です！（所持${existing?.quantity||0}個）`, '#ff4444')
       setLoading(false); return
     }
-    // 強化石3つ消費
     if ((existing.quantity||0) - 3 <= 0) {
       await supabase.from('player_items').delete().eq('id', existing.id)
     } else {
       await supabase.from('player_items').update({ quantity: (existing.quantity||0)-3 }).eq('id', existing.id)
     }
-    // 上位強化石を付与
     const nextRarity = STONE_RANKS[stoneIdx + 1]
     const nextStoneName = STONE_NAMES[nextRarity]
     const { data: nextStoneItem } = await supabase.from('items').select('*').eq('name', nextStoneName).single()
@@ -206,16 +205,11 @@ export default function Smithy() {
     }
   }
 
-  // 強化石所持数
   const getStoneCount = (rarity) => {
     const stoneName = STONE_NAMES[rarity]
-    const { data: _ } = { data: null }
     const found = playerItems.find(pi => pi.items?.name === stoneName)
     return found?.quantity || 0
   }
-
-  // ランク別装備数
-  const getRarityCount = (rarity) => equipment.filter(e => e.weapons.rarity === rarity && !e.equipped).length
 
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
@@ -350,28 +344,13 @@ export default function Smithy() {
             {craftTab === 'equipment' && (
               <div>
                 <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
-                  同ランクの装備3つ→強化石1つに加工できます（装備中は使用不可）
+                  同ランクの装備を3つ選択して強化石に加工できます（装備中は選択不可）
                 </div>
-                {STONE_RANKS.map(rarity => {
-                  const count = getRarityCount(rarity)
-                  const canCraft = count >= 3
-                  return (
-                    <div key={rarity} style={{ border:`1px solid ${canCraft ? '#446600' : '#002244'}`, background:'#001028', padding:'10px', marginBottom:'6px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                      <div>
-                        <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[rarity], border:`1px solid ${RARITY_COLORS[rarity]}`, marginRight:'8px' }}>
-                          {RARITY_LABELS[rarity]}
-                        </span>
-                        <span style={{ color:'#88ccff', fontSize:'12px' }}>ランク装備 ×3</span>
-                        <span style={{ color: canCraft ? '#44ff88' : '#ff4444', fontSize:'10px', marginLeft:'8px' }}>（所持{count}個）</span>
-                        <span style={{ color:'#446688', fontSize:'10px', marginLeft:'8px' }}>→ {STONE_NAMES[rarity]}</span>
-                      </div>
-                      <button onClick={() => craftStoneFromEquipment(rarity)} disabled={!canCraft || loading}
-                        style={{ padding:'4px 10px', background: canCraft ? '#1a1400' : '#001', border:`1px solid ${canCraft ? '#aa8800' : '#002244'}`, color: canCraft ? '#ffcc00' : '#334455', cursor: canCraft ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
-                        加工する
-                      </button>
-                    </div>
-                  )
-                })}
+                <CraftSelector
+                  equipment={equipment}
+                  loading={loading}
+                  onCraft={craftStoneFromSelectedItems}
+                />
               </div>
             )}
 
@@ -454,6 +433,98 @@ export default function Smithy() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function CraftSelector({ equipment, loading, onCraft }) {
+  const [selected, setSelected] = useState([])
+  const unequipped = equipment.filter(e => !e.equipped)
+
+  const toggle = (id) => {
+    if (selected.includes(id)) {
+      setSelected(selected.filter(s => s !== id))
+      return
+    }
+    if (selected.length >= 3) return
+    if (selected.length > 0) {
+      const firstItem = unequipped.find(e => e.id === selected[0])
+      const thisItem = unequipped.find(e => e.id === id)
+      if (firstItem?.weapons.rarity !== thisItem?.weapons.rarity) return
+    }
+    setSelected([...selected, id])
+  }
+
+  const selectedRarity = selected.length > 0 ? unequipped.find(e => e.id === selected[0])?.weapons.rarity : null
+
+  const RARITY_COLORS_LOCAL = {
+    f:'#888888', e:'#6699cc', d:'#ff8844', c:'#44bb44',
+    b:'#4488ff', a:'#ff4444', s:'#ffcc00', ss:'#ffcc00', sss:'#ffcc00'
+  }
+  const RARITY_LABELS_LOCAL = {
+    f:'F', e:'E', d:'D', c:'C', b:'B', a:'A', s:'S', ss:'SS', sss:'SSS'
+  }
+
+  return (
+    <div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px', padding:'8px', border:'1px solid #003366', background:'#001028' }}>
+        <div style={{ fontSize:'11px', color:'#446688' }}>
+          選択中: <span style={{color: selected.length===3?'#44ff88':'#ffcc00'}}>{selected.length}/3</span>
+          {selectedRarity && <span style={{color: RARITY_COLORS_LOCAL[selectedRarity], marginLeft:'8px'}}>{RARITY_LABELS_LOCAL[selectedRarity]}ランク</span>}
+          {selectedRarity && <span style={{color:'#446688', marginLeft:'8px'}}>→ {STONE_NAMES[selectedRarity]}</span>}
+        </div>
+        <div style={{ display:'flex', gap:'6px' }}>
+          <button onClick={() => setSelected([])} disabled={selected.length===0}
+            style={{ padding:'4px 8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+            クリア
+          </button>
+          <button onClick={() => { onCraft(selected); setSelected([]) }} disabled={selected.length!==3 || loading}
+            style={{ padding:'4px 10px', background: selected.length===3?'#1a1400':'#001', border:`1px solid ${selected.length===3?'#aa8800':'#002244'}`, color: selected.length===3?'#ffcc00':'#334455', cursor: selected.length===3?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
+            加工する
+          </button>
+        </div>
+      </div>
+
+      {unequipped.length === 0 && (
+        <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>加工できる装備がありません</div>
+      )}
+
+      {unequipped.map(item => {
+        const w = item.weapons
+        const isSelected = selected.includes(item.id)
+        const isDiffRarity = selected.length > 0 && !isSelected &&
+          unequipped.find(e => e.id === selected[0])?.weapons.rarity !== w.rarity
+        const isDisabled = (!isSelected && selected.length >= 3) || isDiffRarity
+
+        return (
+          <div key={item.id}
+            onClick={() => !isDisabled && toggle(item.id)}
+            style={{
+              border:`2px solid ${isSelected ? RARITY_COLORS_LOCAL[w.rarity] : '#002244'}`,
+              background: isSelected ? '#1a1200' : '#001028',
+              padding:'8px', marginBottom:'4px',
+              cursor: isDisabled ? 'not-allowed' : 'pointer',
+              opacity: isDisabled ? 0.4 : 1,
+              display:'flex', justifyContent:'space-between', alignItems:'center'
+            }}>
+            <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+              {isSelected && <span style={{color:'#ffcc00', fontSize:'12px'}}>✓</span>}
+              <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS_LOCAL[w.rarity], border:`1px solid ${RARITY_COLORS_LOCAL[w.rarity]}` }}>
+                {RARITY_LABELS_LOCAL[w.rarity]}
+              </span>
+              <span style={{ color: RARITY_COLORS_LOCAL[w.rarity], fontSize:'12px' }}>{w.name}</span>
+              {item.enhance_plus > 0 && <span style={{color:'#ffcc00', fontSize:'10px'}}>+{item.enhance_plus}</span>}
+            </div>
+            <div style={{ fontSize:'10px', color:'#446688' }}>
+              {w.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻+{w.atk_bonus} </span>}
+              {w.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防+{w.def_bonus} </span>}
+              {w.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>特攻+{w.matk_bonus} </span>}
+              {w.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>特防+{w.mdef_bonus} </span>}
+              {w.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>速+{w.spd_bonus} </span>}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
