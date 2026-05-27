@@ -19,9 +19,9 @@ const AREAS = [
       { name:'毒キノコ',   hp:60,  atk:3,   def:4,  matk:12, mdef:7,  spd:2,  type:'magical',  gold:8  },
     ],
     boss: { name:'ビッグスライム', hp:500, atk:28, def:22, matk:5, mdef:12, spd:8, gold:100, isBoss:true, type:'physical' },
-    commonDrops: ['木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス','ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
-    rareDrops: ['ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
-    bossDrops: ['スライムの指輪','蒼粘剣'],
+commonDrops: ['ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書','強化石(F)'],
+rareDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本'],
+bossDrops: ['略奪者の短剣','影踏みのブーツ'],
   },
   {
     id: 2, name: '荒廃した草原',
@@ -62,6 +62,7 @@ const JOB_BASE = {
   '死霊使い':  { hp_max:60,  mp_max:80, atk:4,  def:4,  matk:12, mdef:4,  spd:8  },
   '聖職者':    { hp_max:70,  mp_max:60, atk:4,  def:8,  matk:8,  mdef:12, spd:4  },
   '異端審問官':{ hp_max:60,  mp_max:65, atk:4,  def:4,  matk:12, mdef:16, spd:3  },
+  '賢者':    { hp_max:65,  mp_max:70, atk:3,  def:3,  matk:15, mdef:14, spd:4  },
 }
 
 const JOB_GROWTH = {
@@ -77,6 +78,7 @@ const JOB_GROWTH = {
   '死霊使い':  { hp:10, mp:10, atk:0, def:0, matk:3, mdef:1, spd:2 },
   '聖職者':    { hp:10, mp:10, atk:0, def:2, matk:1, mdef:3, spd:0 },
   '異端審問官':{ hp:10, mp:10, atk:0, def:1, matk:2, mdef:3, spd:0 },
+  '賢者':    { hp:10, mp:12, atk:0, def:1, matk:3, mdef:3, spd:0 },
 }
 
 const JOB_LEVEL3_BONUS = {
@@ -92,6 +94,7 @@ const JOB_LEVEL3_BONUS = {
   '死霊使い':  ['atk','def'],
   '聖職者':    ['atk','spd'],
   '異端審問官':['atk','spd'],
+  '賢者':    ['atk','spd'],
 }
 
 const INITIAL_CLASSES = ['戦士','弓使い','魔法使い','僧侶']
@@ -351,6 +354,26 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     case '狂信':        result.newPlayerBuffs.statusImmune={turns:4}; result.log = `⚖ 狂信！ 4ターンの間、ステータス減少を無効化！`; break
     case '聖なる裁き':  result.dmg = Math.floor(eff.matk*1.7*am); result.log = `⚖ 聖なる裁き！ ${enemy.name}に${result.dmg}の裁きのダメージ！`; break
     case '断罪':        result.dmg = Math.floor((eff.atk*1.0+eff.matk*1.6)*am); result.log = `⚖ 断罪！ ${enemy.name}に${result.dmg}の断罪ダメージ！`; break
+    case 'ディスペル': {
+  const buffKeys = Object.keys(enemyBuffs).filter(k => enemyBuffs[k]?.turns > 0)
+  if (buffKeys.length > 0) {
+    const removeKey = buffKeys[Math.floor(Math.random()*buffKeys.length)]
+    result.newEnemyBuffs[removeKey] = { turns:0, rate:1 }
+    result.log = `✨ ディスペル！ ${enemy.name}のバフを1つ消去した！`
+  } else {
+    result.log = `✨ ディスペル！ しかし消去するバフがなかった！`
+  }
+  break
+}
+case '氷の障壁':
+  result.newPlayerBuffs.dmgReduce = { turns:2, rate:0.5 }
+  result.log = `❄ 氷の障壁！ 2ターンの間、受けるダメージ50%減！`; break
+case 'メテオストライク': {
+  const rand = Math.random()*100
+  const hits = rand < 20 ? 1 : rand < 60 ? 2 : rand < 90 ? 3 : 4
+  result.dmg = Math.floor(eff.matk*0.8*am) * hits
+  result.log = `☄ メテオストライク！ ${hits}回ヒット！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
+}
     default: result.dmg = Math.max(1,eff.atk*am); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
   }
   return result
@@ -507,11 +530,14 @@ export default function Game() {
     const hasTakaNoMe   = passiveNames.includes('鷹ノ目')
     const hasKakushin   = passiveNames.includes('執行本能')
     const hasShinkoka   = passiveNames.includes('神聖加護')
+    const hasTenki = passiveNames.includes('天啓')
 
     const passiveCritBonus = hasShingan ? 5 : 0
     const passiveDmgMult   = (hasShingan ? 1.05 : 1.0) * (hasBerserk ? 1.2 : 1.0) * (hasKakushin ? 1.1 : 1.0)
     const passiveHealMult  = (hasShinkoka ? 1.2 : 1.0) * (hasKakushin ? 0.7 : 1.0)
     const passiveMatkMult  = hasShinkoka ? 1.1 : 1.0
+    const passiveMpCostMult = hasTenki ? 0.9 : 1.0
+const passiveMatkMultTenki = hasTenki ? 1.1 : 1.0
 
     if (isBossEncounter && currentItem && currentItem.items.effect === 'boss_avoid') {
       logs.push({ text:`🧿 魔よけのお守りが光り、ボスとの戦闘を避けた！`, color:'#cc44ff' })
@@ -550,7 +576,7 @@ export default function Game() {
     const doPlayerAttack = (isExtra=false) => {
       const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
       const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1)
-      const pMatk  = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult
+      const pMatk  = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki
       const pAtk   = eff.atk  * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1)
       const pSpd   = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1)
       const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
@@ -562,7 +588,7 @@ export default function Game() {
       let skillUsed = false
       if (expandedSkillSet.length > 0) {
         const cs = expandedSkillSet[skillIndex % expandedSkillSet.length]
-        const mpCost = isArtifact ? (cs?.skills?.mp_cost||0)*2 : (cs?.skills?.mp_cost||0)
+        const mpCost = Math.floor((isArtifact ? (cs?.skills?.mp_cost||0)*2 : (cs?.skills?.mp_cost||0)) * passiveMpCostMult)
         if (cs && cs.skills && playerMp >= mpCost) {
           playerMp -= mpCost
           const hasGensoKyomei = passiveNames.includes('元素共鳴')
@@ -732,19 +758,33 @@ export default function Game() {
         droppedItems.push(ARTIFACT_BASE_NAMES[Math.floor(Math.random()*ARTIFACT_BASE_NAMES.length)])
       }
       for (const itemName of droppedItems) {
-        const { data: weapon } = await supabase.from('weapons').select('*').eq('name', itemName).single()
-        if (weapon) {
-          const isArtifactDrop = ARTIFACT_BASE_NAMES.includes(weapon.name)
-          const bonusData = isArtifactDrop ? {} : generateDropBonus(weapon)
-          await supabase.from('player_equipment').insert({
-            player_id:profile.id, weapon_id:weapon.id, slot:weapon.slot, equipped:false, ...bonusData,
-          })
-          const isRareDrop = area.rareDrops?.includes(itemName)
-          const color = isArtifactDrop ? '#ffcc00' : isRareDrop ? '#44ff88' : '#ffcc00'
-          const prefix = isArtifactDrop ? '🌟' : isRareDrop ? '💎✨' : '💎'
-          logs.push({ text:`${prefix} ${itemName} を入手した！`, color })
-        }
+  // 強化石の場合はitemsテーブルから付与
+  if (itemName.startsWith('強化石')) {
+    const { data: stoneItem } = await supabase.from('items').select('*').eq('name', itemName).single()
+    if (stoneItem) {
+      const { data: existing } = await supabase.from('player_items').select('*').eq('player_id', profile.id).eq('item_id', stoneItem.id).single().catch(() => ({ data: null }))
+      if (existing) {
+        await supabase.from('player_items').update({ quantity: (existing.quantity||1)+1 }).eq('id', existing.id)
+      } else {
+        await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: 1, equipped: false })
       }
+      logs.push({ text:`💎 ${itemName} を入手した！`, color:'#6699cc' })
+    }
+    continue
+  }
+  const { data: weapon } = await supabase.from('weapons').select('*').eq('name', itemName).single()
+  if (weapon) {
+    const isArtifactDrop = ARTIFACT_BASE_NAMES.includes(weapon.name)
+    const bonusData = isArtifactDrop ? {} : generateDropBonus(weapon)
+    await supabase.from('player_equipment').insert({
+      player_id:profile.id, weapon_id:weapon.id, slot:weapon.slot, equipped:false, ...bonusData,
+    })
+    const isRareDrop = area.rareDrops?.includes(itemName)
+    const color = isArtifactDrop ? '#ffcc00' : isRareDrop ? '#44ff88' : '#ffcc00'
+    const prefix = isArtifactDrop ? '🌟' : isRareDrop ? '💎✨' : '💎'
+    logs.push({ text:`${prefix} ${itemName} を入手した！`, color })
+  }
+}
     }
     setBattleLogs([...logs])
 
@@ -903,12 +943,21 @@ const dyingCost = charLv*15
     const cl = classLevels.find(x=>x.class_name===c)
     return { name:c, lv:cl?cl.lv:1, canChange:profile.lv>=30 }
   })
-  const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name,{requires}])=>{
-    const reqCl = classLevels.find(x=>x.class_name===requires)
-    const reqLv = reqCl?reqCl.lv:0
-    const cl = classLevels.find(x=>x.class_name===name)
-    return { name, lv:cl?cl.lv:1, canChange:reqLv>=100&&profile.lv>=30, requires, reqLv }
-  })
+const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, req])=>{
+  const requires = req.requires
+  const requiresLv = req.requiresLv || 100
+  const requires2 = req.requires2
+  const requires2Lv = req.requires2Lv || 0
+  const reqCl = classLevels.find(x=>x.class_name===requires)
+  const reqLv = reqCl?reqCl.lv:0
+  const req2Cl = requires2 ? classLevels.find(x=>x.class_name===requires2) : null
+  const req2Lv = req2Cl?req2Cl.lv:0
+  const cl = classLevels.find(x=>x.class_name===name)
+  const canChange = requires2
+    ? reqLv>=requiresLv && req2Lv>=requires2Lv && profile.lv>=30
+    : reqLv>=requiresLv && profile.lv>=30
+  return { name, lv:cl?cl.lv:1, canChange, requires, reqLv, requiresLv, requires2, req2Lv, requires2Lv }
+})
 
   // ===== スマホレイアウト =====
   if (isMobile) {
@@ -1292,8 +1341,11 @@ const dyingCost = charLv*15
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                         <div>
                           <div style={{ color:c.canChange?'#ff8800':'#446688', fontSize:'12px' }}>{c.name}</div>
-                          <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/100　クラスLV{c.lv}/300</div>
-                        </div>
+<div style={{ color:'#446688', fontSize:'10px' }}>
+  {c.requires} LV{c.reqLv}/{c.requiresLv}
+  {c.requires2 && `　${c.requires2} LV${c.req2Lv}/${c.requires2Lv}`}
+  　クラスLV{c.lv}/300
+</div>                        </div>
                         <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
                           style={{ padding:'4px 8px', background:c.canChange?'#1a0800':'#001', border:`1px solid ${c.canChange?'#664400':'#002244'}`, color:c.canChange?'#ff8800':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
                       </div>

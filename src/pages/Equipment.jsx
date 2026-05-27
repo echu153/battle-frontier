@@ -9,7 +9,7 @@ const RARITY_COLORS = {
 const RARITY_LABELS = {
   f:'F', e:'E', d:'D', c:'C', b:'B', a:'A', s:'S', ss:'SS', sss:'SSS'
 }
-const SLOT_LABELS = { weapon:'武器', armor:'防具', accessory:'装飾品' }
+const SLOT_LABELS = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }
 
 const ARTIFACT_BASE_NAMES = [
   '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
@@ -106,6 +106,7 @@ export default function Equipment() {
 
   const equip = async (item) => {
     setLoading(true)
+    // accessory2スロットは既存のaccessoryと独立して管理
     await supabase.from('player_equipment')
       .update({ equipped: false })
       .eq('player_id', profile.id)
@@ -138,6 +139,22 @@ export default function Equipment() {
     setLoading(false)
   }
 
+  const changeSlot = async (item, newSlot) => {
+    setLoading(true)
+    // 変更先スロットの装備を外す
+    await supabase.from('player_equipment')
+      .update({ equipped: false })
+      .eq('player_id', profile.id)
+      .eq('slot', newSlot)
+      .eq('equipped', true)
+    // スロットを変更して装備
+    await supabase.from('player_equipment')
+      .update({ slot: newSlot, equipped: true })
+      .eq('id', item.id)
+    await fetchAll()
+    setLoading(false)
+  }
+
   const setItemSlot = async (itemId) => {
     setLoading(true)
     await supabase.from('player_items').update({ equipped: false }).eq('player_id', profile.id)
@@ -159,18 +176,13 @@ export default function Equipment() {
     setLoading(true)
     const evolvedName = ARTIFACT_EVOLVED[item.weapons.name]
     if (!evolvedName) { setLoading(false); return }
-
-    // 進化後の武器データを取得
     const { data: evolvedWeapon } = await supabase
       .from('weapons').select('*').eq('name', evolvedName).single()
     if (!evolvedWeapon) { setLoading(false); return }
-
-    // player_equipmentの武器IDを進化後に変更・特殊能力付与
     await supabase.from('player_equipment').update({
       weapon_id: evolvedWeapon.id,
       bonus_effect: 'artifact',
     }).eq('id', item.id)
-
     setAwakenMessage(`✨ ${evolvedName} に覚醒した！`)
     setTimeout(() => setAwakenMessage(''), 3000)
     await fetchAll()
@@ -181,7 +193,7 @@ export default function Equipment() {
     <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
   )
 
-  const slots = ['weapon', 'armor', 'accessory']
+  const slots = ['weapon', 'armor', 'accessory', 'accessory2']
   const filteredEquipment = equipment.filter(e => e.slot === tab)
   const equippedItem = allItems.find(i => i.equipped)
 
@@ -203,6 +215,7 @@ export default function Equipment() {
         )}
 
         <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:'12px' }}>
+          {/* 左カラム：装備中 */}
           <div>
             <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>装備中</div>
             {slots.map(slot => {
@@ -267,11 +280,12 @@ export default function Equipment() {
             </div>
           </div>
 
+          {/* 右カラム：所持装備 */}
           <div>
-            <div style={{ display:'flex', gap:'4px', marginBottom:'8px' }}>
+            <div style={{ display:'flex', gap:'4px', marginBottom:'8px', flexWrap:'wrap' }}>
               {[...slots, 'item'].map(s => (
                 <button key={s} onClick={() => setTab(s)}
-                  style={{ padding:'4px 10px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
+                  style={{ padding:'4px 8px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
                     background: tab === s ? '#001840' : '#000818',
                     border: `1px solid ${tab === s ? '#ffcc00' : '#003366'}`,
                     color: tab === s ? '#ffcc00' : '#446688' }}>
@@ -289,11 +303,14 @@ export default function Equipment() {
                       <span style={{ color:'#44ff88', fontSize:'12px' }}>{pi.items.name}</span>
                       <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
                         <span style={{ color:'#446688', fontSize:'10px' }}>×{pi.quantity}</span>
-                        {pi.equipped
-                          ? <span style={{ color:'#0088ff', fontSize:'10px' }}>セット中</span>
-                          : <button onClick={() => setItemSlot(pi.id)} disabled={loading}
-                              style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>セットする</button>
-                        }
+                        {pi.items.effect === 'enhance_stone' ? (
+                          <span style={{ color:'#aa8800', fontSize:'10px' }}>強化素材</span>
+                        ) : pi.equipped ? (
+                          <span style={{ color:'#0088ff', fontSize:'10px' }}>セット中</span>
+                        ) : (
+                          <button onClick={() => setItemSlot(pi.id)} disabled={loading}
+                            style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>セットする</button>
+                        )}
                       </div>
                     </div>
                     <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>{pi.items.description}</div>
@@ -326,6 +343,7 @@ export default function Equipment() {
                   const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
                   const canAwaken = isArtifactBase && prof && prof.prof_lv >= 300
                   const hasBonus = item.bonus_atk > 0 || item.bonus_def > 0 || item.bonus_matk > 0 || item.bonus_mdef > 0 || item.bonus_spd > 0 || item.bonus_hp > 0 || item.bonus_mp > 0
+                  const isAccessory = tab === 'accessory'
 
                   return (
                     <div key={item.id} style={{ border:`1px solid ${item.equipped ? '#0044aa' : '#002244'}`, background: item.equipped ? '#001028' : '#000818', padding:'10px', marginBottom:'6px' }}>
@@ -343,10 +361,19 @@ export default function Equipment() {
                               ✨ 覚醒
                             </button>
                           )}
-                          {item.equipped
-                            ? <button onClick={() => unequip(item)} disabled={loading} style={{ padding:'2px 8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
-                            : <button onClick={() => equip(item)} disabled={loading} style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>装備する</button>
-                          }
+                          {item.equipped ? (
+                            <button onClick={() => unequip(item)} disabled={loading}
+                              style={{ padding:'2px 8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
+                          ) : (
+                            <>
+                              <button onClick={() => equip(item)} disabled={loading}
+                                style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>装備①</button>
+                              {isAccessory && (
+                                <button onClick={() => changeSlot(item, 'accessory2')} disabled={loading}
+                                  style={{ padding:'2px 8px', background:'#001840', border:'1px solid #4466aa', color:'#88aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>装備②</button>
+                              )}
+                            </>
+                          )}
                         </div>
                       </div>
 
