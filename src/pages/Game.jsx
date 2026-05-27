@@ -800,7 +800,7 @@ export default function Game() {
           const bonusIndex = Math.floor(newLv/3-1)%bonusSlots.length
           statUpdates[bonusSlots[bonusIndex]] = (statUpdates[bonusSlots[bonusIndex]]||0)+1
         }
-        logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${newLv}！ キャラクターLV${newCharLv}！ ステータスポイント+1`, color:'#cc44ff' })
+       logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${newLv}！ ステータスポイント+1`, color:'#cc44ff' })
         setBattleLogs([...logs])
         const { data: lvupSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class).eq('required_lv', newLv)
         const { data: alreadyLearned } = await supabase.from('player_skills').select('skill_id').eq('player_id', profile.id)
@@ -840,8 +840,8 @@ export default function Game() {
 
   const useInn = async () => {
     const isDying = profile.is_dying||false
-    const normalCost = profile.lv*2
-    const dyingCost = profile.lv*15
+const normalCost = charLv*2
+const dyingCost = charLv*15
     const cost = isDying ? Math.min(dyingCost, profile.gold) : normalCost
     if (profile.gold < normalCost && !isDying) return
     await supabase.from('profiles').update({
