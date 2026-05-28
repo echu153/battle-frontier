@@ -946,10 +946,16 @@ export default function Game() {
 
     setLoading(true); setScene('battle'); setBattleLogs([])
 
-    const { data: latest } = await supabase.from('profiles').select('last_action_at, hp_current, hp_max, is_dying').eq('id', profile.id).single()
-    const serverElapsed = (Date.now() - new Date(latest.last_action_at).getTime()) / 1000
-    if (serverElapsed < WAIT_SECONDS) { setLoading(false); setScene('town'); await fetchProfile(); return }
-    if (latest.is_dying && latest.hp_current < latest.hp_max) { setLoading(false); setScene('town'); await fetchProfile(); return }
+    // Atomic lock: last_action_atが古い場合のみUPDATE（複数端末同時出撃を防ぐ）
+    const lockTime = new Date(Date.now() - WAIT_SECONDS * 1000).toISOString()
+    const { data: locked } = await supabase.from('profiles')
+      .update({ last_action_at: new Date().toISOString() })
+      .eq('id', profile.id)
+      .lt('last_action_at', lockTime)
+      .select('id')
+    if (!locked || locked.length === 0) {
+      setLoading(false); setScene('town'); await fetchProfile(); return
+    }
 
     const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
     const cap = CLASS_LEVEL_CAP[profile.class] || 100
