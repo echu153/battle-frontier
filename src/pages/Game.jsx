@@ -776,6 +776,11 @@ export default function Game() {
       return
     }
 
+    // 出撃と共通の10秒クールダウン（サーバー側チェック）
+    const { data: latestForDungeon } = await supabase.from('profiles').select('last_action_at').eq('id', profile.id).single()
+    const dungeonElapsed = (Date.now() - new Date(latestForDungeon.last_action_at).getTime()) / 1000
+    if (dungeonElapsed < WAIT_SECONDS) { setLoading(false); return }
+
     setScene('battle'); setBattleLogs([])
 
     const DUNGEON_ENEMIES = {
@@ -883,6 +888,7 @@ export default function Game() {
     } catch {
       try { await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:1 }) } catch {}
     }
+    await supabase.from('profiles').update({ last_action_at: new Date().toISOString() }).eq('id', profile.id)
     setDungeonAttempts(newCount)
     setBattleLogs(logs)
     await fetchProfile()
