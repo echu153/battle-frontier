@@ -771,7 +771,7 @@ export default function Game() {
       return
     }
     if (serverCount >= 5) {
-      setDungeonAttempts(serverCount)
+      await suspendAccount('特殊ダンジョンを1日6回以上利用')
       setLoading(false)
       return
     }
@@ -1749,7 +1749,7 @@ export default function Game() {
                 style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
                 {isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
               </button>
-              <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAttempts>=5||loading||isBanned}
+              <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAttempts>5||loading||isBanned}
                 style={{ width:'100%', padding:'12px', background:'#0a001a', border:`1px solid ${dungeonAttempts>=5||isBanned?'#333':'#cc44ff'}`, color:dungeonAttempts>=5||isBanned?'#333':'#cc44ff', cursor:dungeonAttempts>=5||isBanned?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'13px', marginBottom:'10px', opacity:dungeonAttempts>=5||isBanned?0.4:1 }}>
                 ⚔ 特殊ダンジョン　<span style={{fontSize:'11px',color:dungeonAttempts>=5?'#333':'#446688'}}>残り{5-dungeonAttempts}/5</span>
               </button>
