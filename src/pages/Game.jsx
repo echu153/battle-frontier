@@ -776,7 +776,9 @@ export default function Game() {
       const expGained = Math.floor(50 + Math.random() * 51)
       const currentClassLvD = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
       const capD = CLASS_LEVEL_CAP[profile.class] || 100
-      if (currentClassLvD < capD) {
+      if (profile.exp_frozen) {
+        logs.push({ text:`EXP +${expGained}（調査中につき停止）`, color:'#446688' })
+      } else if (currentClassLvD < capD) {
         let newExp = profile.exp + expGained
         let newLv = profile.lv
         let newExpNext = profile.exp_next
@@ -1324,7 +1326,8 @@ export default function Game() {
       }
     }
 
-    let newExp = profile.exp + expGained
+    const frozenExp = profile.exp_frozen
+    let newExp = frozenExp ? profile.exp : profile.exp + expGained
     let newGold = profile.gold + goldGained
     let newLv = profile.lv
     let newExpNext = profile.exp_next
@@ -1334,7 +1337,12 @@ export default function Game() {
     let statUpdates = {}
     let newCharLv = profile.char_lv || 1
 
-    if (!isAtCap) {
+    if (frozenExp && expGained > 0) {
+      logs.push({ text:`EXP +${expGained}（調査中につき停止）`, color:'#446688' })
+      setBattleLogs([...logs])
+    }
+
+    if (!isAtCap && !frozenExp) {
       while (newExp >= newExpNext && newLv < cap) {
         newExp -= newExpNext; newLv++; newExpNext = calcExpNext(newLv); newPendingPoints++
         newCharLv++
@@ -1382,7 +1390,7 @@ export default function Game() {
     }).eq('id', profile.id)
 
     const currentClassData = classLevels.find(cl => cl.class_name === profile.class)
-    if (currentClassData && !isAtCap) {
+    if (currentClassData && !isAtCap && !frozenExp) {
       await supabase.from('class_levels').update({ lv:newLv, exp:newExp }).eq('id', currentClassData.id)
     }
 
