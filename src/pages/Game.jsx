@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
@@ -655,6 +655,7 @@ export default function Game() {
   const [showAnnouncements, setShowAnnouncements] = useState(false)
   const [announcements, setAnnouncements] = useState([])
   const [openAnnouncementId, setOpenAnnouncementId] = useState(null)
+  const expTrackerRef = useRef({ start: null, total: 0 })
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768)
@@ -868,6 +869,15 @@ export default function Game() {
     const hpCurrent = profile.hp_current ?? profile.hp_max
     if (hpCurrent <= 0) return
     if (profile.is_dying && hpCurrent < profile.hp_max) return
+    if (profile.battle_ban_until && new Date(profile.battle_ban_until) > new Date()) {
+      const banEnd = new Date(profile.battle_ban_until)
+      const diffMs = banEnd - new Date()
+      const diffH = Math.floor(diffMs / 3600000)
+      const diffM = Math.ceil((diffMs % 3600000) / 60000)
+      setBattleLogs([{ text:`⛔ 異常な行動が検出されました。出撃禁止中（残り${diffH}時間${diffM}分）`, color:'#ff4444' }])
+      setScene('battle')
+      return
+    }
     setLoading(true); setScene('battle'); setBattleLogs([])
 
     const { data: latest } = await supabase.from('profiles').select('last_action_at, hp_current, hp_max, is_dying').eq('id', profile.id).single()
@@ -1190,6 +1200,26 @@ export default function Game() {
       : Math.floor(Math.random()*4)+8
     const goldGained = (win && !papiaEscaped) ? (enemy.gold||0) : 0
 
+    // 不正検知：特殊ダンジョン・パピア以外で1分間に100EXP以上取得→12時間BAN
+    if (!isPapiaEncounter && expGained > 0) {
+      const now = Date.now()
+      const tracker = expTrackerRef.current
+      if (!tracker.start || now - tracker.start > 60000) {
+        expTrackerRef.current = { start: now, total: expGained }
+      } else {
+        expTrackerRef.current = { ...tracker, total: tracker.total + expGained }
+      }
+      if (expTrackerRef.current.total >= 100) {
+        const banUntil = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString()
+        await supabase.from('profiles').update({ battle_ban_until: banUntil }).eq('id', profile.id)
+        expTrackerRef.current = { start: null, total: 0 }
+        setBattleLogs([{ text:`⛔ 異常な行動が検出されました。12時間の出撃禁止が適用されました。`, color:'#ff4444' }])
+        await fetchProfile()
+        setLoading(false)
+        return
+      }
+    }
+
     if (!papiaEscaped) {
       if (win) {
         logs.push({ text:`${enemy.name}を倒した！`, color:'#44ff88' })
@@ -1436,7 +1466,14 @@ export default function Game() {
   const hpCurrent = Math.max(0, profile.hp_current??profile.hp_max)
   const mpCurrent = Math.max(0, profile.mp_current??profile.mp_max)
   const isDying = profile.is_dying||false
-  const canBattle = !isDying || hpCurrent >= profile.hp_max
+  const isBanned = profile.battle_ban_until && new Date(profile.battle_ban_until) > new Date()
+  const banRemaining = isBanned ? (() => {
+    const diffMs = new Date(profile.battle_ban_until) - new Date()
+    const h = Math.floor(diffMs / 3600000)
+    const m = Math.ceil((diffMs % 3600000) / 60000)
+    return `${h}時間${m}分`
+  })() : null
+  const canBattle = !isBanned && (!isDying || hpCurrent >= profile.hp_max)
   const hpPct = Math.min(100,(hpCurrent/profile.hp_max)*100)
   const mpPct = Math.min(100,(mpCurrent/profile.mp_max)*100)
   const expPct = Math.min(100,(profile.exp/profile.exp_next)*100)
@@ -1628,7 +1665,8 @@ export default function Game() {
           {scene==='town' && (
             <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
               <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
-              {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'6px', background:'#1a0000' }}>⚠ 瀕死状態です。宿屋でHP全回復してください。</div>}
+              {isBanned && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #880000', padding:'8px', background:'#200000' }}>⛔ 出撃禁止中（残り{banRemaining}）<br/><span style={{color:'#884444',fontSize:'10px'}}>異常な行動が検出されました</span></div>}
+              {isDying && !isBanned && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'6px', background:'#1a0000' }}>⚠ 瀕死状態です。宿屋でHP全回復してください。</div>}
               {isAtCap && <div style={{ color:'#ff8844', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #664400', padding:'4px', background:'#1a0800' }}>⚠ {profile.class}はレベルキャップ(LV{cap})に達しています</div>}
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
                 <span style={{ color:'#446688' }}>次の行動まで</span>
@@ -1642,10 +1680,10 @@ export default function Game() {
               </select>
               <button onClick={doBattle} disabled={!canAct||loading||!canBattle}
                 style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
-                {isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
+                {isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
               </button>
-              <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAttempts>=5||loading}
-                style={{ width:'100%', padding:'12px', background:'#0a001a', border:`1px solid ${dungeonAttempts>=5?'#333':'#cc44ff'}`, color:dungeonAttempts>=5?'#333':'#cc44ff', cursor:dungeonAttempts>=5?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'13px', marginBottom:'10px', opacity:dungeonAttempts>=5?0.4:1 }}>
+              <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAttempts>=5||loading||isBanned}
+                style={{ width:'100%', padding:'12px', background:'#0a001a', border:`1px solid ${dungeonAttempts>=5||isBanned?'#333':'#cc44ff'}`, color:dungeonAttempts>=5||isBanned?'#333':'#cc44ff', cursor:dungeonAttempts>=5||isBanned?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'13px', marginBottom:'10px', opacity:dungeonAttempts>=5||isBanned?0.4:1 }}>
                 ⚔ 特殊ダンジョン　<span style={{fontSize:'11px',color:dungeonAttempts>=5?'#333':'#446688'}}>残り{5-dungeonAttempts}/5</span>
               </button>
               {showDungeonPanel && (
@@ -1834,7 +1872,7 @@ export default function Game() {
                 </div>
                 <button onClick={doBattle} disabled={!canAct||loading||!canBattle}
                   style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
-                  {isDying&&!canBattle?'💀 瀕死中（HP全回復まで出撃不可）':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
+                  {isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中（HP全回復まで出撃不可）':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
                 </button>
                 <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAttempts>=5||loading}
                   style={{ width:'100%', padding:'10px', background:'#0a001a', border:`1px solid ${dungeonAttempts>=5?'#333':'#cc44ff'}`, color:dungeonAttempts>=5?'#333':'#cc44ff', cursor:dungeonAttempts>=5?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px', opacity:dungeonAttempts>=5?0.4:1 }}>
