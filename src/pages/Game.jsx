@@ -1392,7 +1392,10 @@ export default function Game() {
           <div key={a.id} style={{ marginBottom:'8px', border:'1px solid #002244', background:'#000818' }}>
             <button onClick={()=>setOpenAnnouncementId(openAnnouncementId===a.id?null:a.id)}
               style={{ width:'100%', padding:'10px 12px', background:'none', border:'none', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-              <span>{a.title}</span>
+              <span>
+                {a.title}
+                <span style={{ color:'#446688', fontSize:'10px', marginLeft:'8px' }}>{new Date(a.created_at).toLocaleDateString('ja-JP')}</span>
+              </span>
               <span style={{ color:'#446688', fontSize:'10px' }}>{openAnnouncementId===a.id?'▲':'▼'}</span>
             </button>
             {openAnnouncementId===a.id && (
