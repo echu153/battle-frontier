@@ -19,9 +19,9 @@ const AREAS = [
       { name:'毒キノコ',   hp:60,  atk:3,   def:4,  matk:12, mdef:7,  spd:2,  type:'magical',  gold:8  },
     ],
     boss: { name:'ビッグスライム', hp:500, atk:28, def:22, matk:5, mdef:12, spd:8, gold:100, isBoss:true, type:'physical' },
-commonDrops: ['ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書','強化石(F)'],
-rareDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本'],
-bossDrops: ['略奪者の短剣','影踏みのブーツ'],
+    commonDrops: ['木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス','ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
+    rareDrops: ['ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
+    bossDrops: ['スライムの指輪','蒼粘剣'],
   },
   {
     id: 2, name: '荒廃した草原',
@@ -31,7 +31,7 @@ bossDrops: ['略奪者の短剣','影踏みのブーツ'],
       { name:'盗賊',       hp:240, atk:55,  def:24, matk:10, mdef:16, spd:12, type:'physical', gold:30 },
     ],
     boss: { name:'盗賊団のリーダー', hp:2000, atk:84, def:30, matk:20, mdef:22, spd:15, gold:500, isBoss:true, type:'physical' },
-    commonDrops: ['ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
+    commonDrops: ['ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書','強化石(F)'],
     rareDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本'],
     bossDrops: ['略奪者の短剣','影踏みのブーツ'],
   },
@@ -62,7 +62,7 @@ const JOB_BASE = {
   '死霊使い':  { hp_max:60,  mp_max:80, atk:4,  def:4,  matk:12, mdef:4,  spd:8  },
   '聖職者':    { hp_max:70,  mp_max:60, atk:4,  def:8,  matk:8,  mdef:12, spd:4  },
   '異端審問官':{ hp_max:60,  mp_max:65, atk:4,  def:4,  matk:12, mdef:16, spd:3  },
-  '賢者':    { hp_max:65,  mp_max:70, atk:3,  def:3,  matk:15, mdef:14, spd:4  },
+  '賢者':      { hp_max:65,  mp_max:70, atk:3,  def:3,  matk:15, mdef:14, spd:4  },
 }
 
 const JOB_GROWTH = {
@@ -78,7 +78,7 @@ const JOB_GROWTH = {
   '死霊使い':  { hp:10, mp:10, atk:0, def:0, matk:3, mdef:1, spd:2 },
   '聖職者':    { hp:10, mp:10, atk:0, def:2, matk:1, mdef:3, spd:0 },
   '異端審問官':{ hp:10, mp:10, atk:0, def:1, matk:2, mdef:3, spd:0 },
-  '賢者':    { hp:10, mp:12, atk:0, def:1, matk:3, mdef:3, spd:0 },
+  '賢者':      { hp:10, mp:12, atk:0, def:1, matk:3, mdef:3, spd:0 },
 }
 
 const JOB_LEVEL3_BONUS = {
@@ -94,7 +94,7 @@ const JOB_LEVEL3_BONUS = {
   '死霊使い':  ['atk','def'],
   '聖職者':    ['atk','spd'],
   '異端審問官':['atk','spd'],
-  '賢者':    ['atk','spd'],
+  '賢者':      ['atk','spd'],
 }
 
 const INITIAL_CLASSES = ['戦士','弓使い','魔法使い','僧侶']
@@ -113,7 +113,7 @@ const ADVANCED_CLASSES = {
 const CLASS_LEVEL_CAP = {
   '戦士':100, '弓使い':100, '魔法使い':100, '僧侶':100,
   '侍':300, '狂戦士':300, '狩人':300, '暗殺者':300,
-  '元素使い':300, '死霊使い':300, '聖職者':300, '異端審問官':300,'賢者':300,
+  '元素使い':300, '死霊使い':300, '聖職者':300, '異端審問官':300, '賢者':300,
 }
 
 const STAT_LABELS = {
@@ -355,25 +355,23 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     case '聖なる裁き':  result.dmg = Math.floor(eff.matk*1.7*am); result.log = `⚖ 聖なる裁き！ ${enemy.name}に${result.dmg}の裁きのダメージ！`; break
     case '断罪':        result.dmg = Math.floor((eff.atk*1.0+eff.matk*1.6)*am); result.log = `⚖ 断罪！ ${enemy.name}に${result.dmg}の断罪ダメージ！`; break
     case 'ディスペル': {
-  const buffKeys = Object.keys(enemyBuffs).filter(k => enemyBuffs[k]?.turns > 0)
-  if (buffKeys.length > 0) {
-    const removeKey = buffKeys[Math.floor(Math.random()*buffKeys.length)]
-    result.newEnemyBuffs[removeKey] = { turns:0, rate:1 }
-    result.log = `✨ ディスペル！ ${enemy.name}のバフを1つ消去した！`
-  } else {
-    result.log = `✨ ディスペル！ しかし消去するバフがなかった！`
-  }
-  break
-}
-case '氷の障壁':
-  result.newPlayerBuffs.dmgReduce = { turns:2, rate:0.5 }
-  result.log = `❄ 氷の障壁！ 2ターンの間、受けるダメージ50%減！`; break
-case 'メテオストライク': {
-  const rand = Math.random()*100
-  const hits = rand < 20 ? 1 : rand < 60 ? 2 : rand < 90 ? 3 : 4
-  result.dmg = Math.floor(eff.matk*0.8*am) * hits
-  result.log = `☄ メテオストライク！ ${hits}回ヒット！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
-}
+      const buffKeys = Object.keys(enemyBuffs).filter(k => enemyBuffs[k]?.turns > 0)
+      if (buffKeys.length > 0) {
+        const removeKey = buffKeys[Math.floor(Math.random()*buffKeys.length)]
+        result.newEnemyBuffs[removeKey] = { turns:0, rate:1 }
+        result.log = `✨ ディスペル！ ${enemy.name}のバフを1つ消去した！`
+      } else {
+        result.log = `✨ ディスペル！ しかし消去するバフがなかった！`
+      }
+      break
+    }
+    case '氷の障壁':    result.newPlayerBuffs.dmgReduce={turns:2,rate:0.5}; result.log = `❄ 氷の障壁！ 2ターンの間、受けるダメージ50%減！`; break
+    case 'メテオストライク': {
+      const rand = Math.random()*100
+      const hits = rand < 20 ? 1 : rand < 60 ? 2 : rand < 90 ? 3 : 4
+      result.dmg = Math.floor(eff.matk*0.8*am) * hits
+      result.log = `☄ メテオストライク！ ${hits}回ヒット！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
+    }
     default: result.dmg = Math.max(1,eff.atk*am); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
   }
   return result
@@ -530,14 +528,14 @@ export default function Game() {
     const hasTakaNoMe   = passiveNames.includes('鷹ノ目')
     const hasKakushin   = passiveNames.includes('執行本能')
     const hasShinkoka   = passiveNames.includes('神聖加護')
-    const hasTenki = passiveNames.includes('天啓')
+    const hasTenki      = passiveNames.includes('天啓')
 
-    const passiveCritBonus = hasShingan ? 5 : 0
-    const passiveDmgMult   = (hasShingan ? 1.05 : 1.0) * (hasBerserk ? 1.2 : 1.0) * (hasKakushin ? 1.1 : 1.0)
-    const passiveHealMult  = (hasShinkoka ? 1.2 : 1.0) * (hasKakushin ? 0.7 : 1.0)
-    const passiveMatkMult  = hasShinkoka ? 1.1 : 1.0
-    const passiveMpCostMult = hasTenki ? 0.9 : 1.0
-const passiveMatkMultTenki = hasTenki ? 1.1 : 1.0
+    const passiveCritBonus   = hasShingan ? 5 : 0
+    const passiveDmgMult     = (hasShingan ? 1.05 : 1.0) * (hasBerserk ? 1.2 : 1.0) * (hasKakushin ? 1.1 : 1.0)
+    const passiveHealMult    = (hasShinkoka ? 1.2 : 1.0) * (hasKakushin ? 0.7 : 1.0)
+    const passiveMatkMult    = hasShinkoka ? 1.1 : 1.0
+    const passiveMpCostMult  = hasTenki ? 0.9 : 1.0
+    const passiveMatkMultTenki = hasTenki ? 1.1 : 1.0
 
     if (isBossEncounter && currentItem && currentItem.items.effect === 'boss_avoid') {
       logs.push({ text:`🧿 魔よけのお守りが光り、ボスとの戦闘を避けた！`, color:'#cc44ff' })
@@ -758,33 +756,36 @@ const passiveMatkMultTenki = hasTenki ? 1.1 : 1.0
         droppedItems.push(ARTIFACT_BASE_NAMES[Math.floor(Math.random()*ARTIFACT_BASE_NAMES.length)])
       }
       for (const itemName of droppedItems) {
-  // 強化石の場合はitemsテーブルから付与
-  if (itemName.startsWith('強化石')) {
-    const { data: stoneItem } = await supabase.from('items').select('*').eq('name', itemName).single()
-    if (stoneItem) {
-      const { data: existing } = await supabase.from('player_items').select('*').eq('player_id', profile.id).eq('item_id', stoneItem.id).single().catch(() => ({ data: null }))
-      if (existing) {
-        await supabase.from('player_items').update({ quantity: (existing.quantity||1)+1 }).eq('id', existing.id)
-      } else {
-        await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: 1, equipped: false })
+        if (itemName.startsWith('強化石')) {
+          const { data: stoneItem } = await supabase.from('items').select('*').eq('name', itemName).single()
+          if (stoneItem) {
+            let existing = null
+            try {
+              const res = await supabase.from('player_items').select('*').eq('player_id', profile.id).eq('item_id', stoneItem.id).single()
+              existing = res.data
+            } catch {}
+            if (existing) {
+              await supabase.from('player_items').update({ quantity: (existing.quantity||1)+1 }).eq('id', existing.id)
+            } else {
+              await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: 1, equipped: false })
+            }
+            logs.push({ text:`💎 ${itemName} を入手した！`, color:'#6699cc' })
+          }
+          continue
+        }
+        const { data: weapon } = await supabase.from('weapons').select('*').eq('name', itemName).single()
+        if (weapon) {
+          const isArtifactDrop = ARTIFACT_BASE_NAMES.includes(weapon.name)
+          const bonusData = isArtifactDrop ? {} : generateDropBonus(weapon)
+          await supabase.from('player_equipment').insert({
+            player_id:profile.id, weapon_id:weapon.id, slot:weapon.slot, equipped:false, ...bonusData,
+          })
+          const isRareDrop = area.rareDrops?.includes(itemName)
+          const color = isArtifactDrop ? '#ffcc00' : isRareDrop ? '#44ff88' : '#ffcc00'
+          const prefix = isArtifactDrop ? '🌟' : isRareDrop ? '💎✨' : '💎'
+          logs.push({ text:`${prefix} ${itemName} を入手した！`, color })
+        }
       }
-      logs.push({ text:`💎 ${itemName} を入手した！`, color:'#6699cc' })
-    }
-    continue
-  }
-  const { data: weapon } = await supabase.from('weapons').select('*').eq('name', itemName).single()
-  if (weapon) {
-    const isArtifactDrop = ARTIFACT_BASE_NAMES.includes(weapon.name)
-    const bonusData = isArtifactDrop ? {} : generateDropBonus(weapon)
-    await supabase.from('player_equipment').insert({
-      player_id:profile.id, weapon_id:weapon.id, slot:weapon.slot, equipped:false, ...bonusData,
-    })
-    const isRareDrop = area.rareDrops?.includes(itemName)
-    const color = isArtifactDrop ? '#ffcc00' : isRareDrop ? '#44ff88' : '#ffcc00'
-    const prefix = isArtifactDrop ? '🌟' : isRareDrop ? '💎✨' : '💎'
-    logs.push({ text:`${prefix} ${itemName} を入手した！`, color })
-  }
-}
     }
     setBattleLogs([...logs])
 
@@ -842,7 +843,7 @@ const passiveMatkMultTenki = hasTenki ? 1.1 : 1.0
           const bonusIndex = Math.floor(newLv/3-1)%bonusSlots.length
           statUpdates[bonusSlots[bonusIndex]] = (statUpdates[bonusSlots[bonusIndex]]||0)+1
         }
-       logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${newLv}！ ステータスポイント+1`, color:'#cc44ff' })
+        logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${newLv}！ ステータスポイント+1`, color:'#cc44ff' })
         setBattleLogs([...logs])
         const { data: lvupSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class).eq('required_lv', newLv)
         const { data: alreadyLearned } = await supabase.from('player_skills').select('skill_id').eq('player_id', profile.id)
@@ -882,8 +883,9 @@ const passiveMatkMultTenki = hasTenki ? 1.1 : 1.0
 
   const useInn = async () => {
     const isDying = profile.is_dying||false
-const normalCost = charLv*2
-const dyingCost = charLv*15
+    const charLvForCost = profile.char_lv || profile.lv
+    const normalCost = charLvForCost*2
+    const dyingCost = charLvForCost*15
     const cost = isDying ? Math.min(dyingCost, profile.gold) : normalCost
     if (profile.gold < normalCost && !isDying) return
     await supabase.from('profiles').update({
@@ -929,12 +931,12 @@ const dyingCost = charLv*15
   const regenPct = ((REGEN_SECONDS-regenRemaining)/REGEN_SECONDS)*100
   const unlockedAreas = profile.unlocked_areas||[1]
   const availableAreas = AREAS.filter(a=>unlockedAreas.includes(a.id))
-  const innCost = isDying ? Math.min(profile.lv*15,profile.gold) : profile.lv*2
+  const charLv = profile.char_lv || profile.lv
+  const innCost = isDying ? Math.min(charLv*15,profile.gold) : charLv*2
   const allocatedPoints = Object.values(statPoints).reduce((a,b)=>a+b,0)
   const total = calcTotal(profile)
   const eff = calcEffectiveStats(profile, equipment, proficiency)
   const totalRank = getTotalRank(total)
-  const charLv = profile.char_lv || profile.lv
   const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
   const cap = CLASS_LEVEL_CAP[profile.class] || 100
   const isAtCap = currentClassLv >= cap
@@ -943,21 +945,87 @@ const dyingCost = charLv*15
     const cl = classLevels.find(x=>x.class_name===c)
     return { name:c, lv:cl?cl.lv:1, canChange:profile.lv>=30 }
   })
-const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, req])=>{
-  const requires = req.requires
-  const requiresLv = req.requiresLv || 100
-  const requires2 = req.requires2
-  const requires2Lv = req.requires2Lv || 0
-  const reqCl = classLevels.find(x=>x.class_name===requires)
-  const reqLv = reqCl?reqCl.lv:0
-  const req2Cl = requires2 ? classLevels.find(x=>x.class_name===requires2) : null
-  const req2Lv = req2Cl?req2Cl.lv:0
-  const cl = classLevels.find(x=>x.class_name===name)
-  const canChange = requires2
-    ? reqLv>=requiresLv && req2Lv>=requires2Lv && profile.lv>=30
-    : reqLv>=requiresLv && profile.lv>=30
-  return { name, lv:cl?cl.lv:1, canChange, requires, reqLv, requiresLv, requires2, req2Lv, requires2Lv }
-})
+  const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, req])=>{
+    const requires = req.requires
+    const requiresLv = req.requiresLv || 100
+    const requires2 = req.requires2
+    const requires2Lv = req.requires2Lv || 0
+    const reqCl = classLevels.find(x=>x.class_name===requires)
+    const reqLv = reqCl?reqCl.lv:0
+    const req2Cl = requires2 ? classLevels.find(x=>x.class_name===requires2) : null
+    const req2Lv = req2Cl?req2Cl.lv:0
+    const cl = classLevels.find(x=>x.class_name===name)
+    const canChange = requires2
+      ? reqLv>=requiresLv && req2Lv>=requires2Lv && profile.lv>=30
+      : reqLv>=requiresLv && profile.lv>=30
+    return { name, lv:cl?cl.lv:1, canChange, requires, reqLv, requiresLv, requires2, req2Lv, requires2Lv }
+  })
+
+  const normalAdvanced = advancedAvailable.filter(c => !c.requires2)
+  const specialAdvanced = advancedAvailable.filter(c => c.requires2)
+
+  // 神殿JSX（PC/スマホ共通）
+  const TempleContent = () => (
+    <div style={{ border:'1px solid #886600', background:'#001020', padding:'16px' }}>
+      <div style={{ color:'#ccaa00', fontSize:'14px', marginBottom:'4px' }}>⛩ 神殿</div>
+      <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
+        現在のクラス: <span style={{color:'#88ccff'}}>{profile.class}</span> LV<span style={{color:'#ffcc00'}}>{currentClassLv}</span>／{cap}　（転職にはLV30以上が必要）
+      </div>
+      {templeMessage && <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'10px', marginBottom:'12px', border:'1px solid #44ff88' }}>{templeMessage}</div>}
+
+      <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 初期職（LV100キャップ）──</div>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
+        {availableClasses.map(c=>(
+          <div key={c.name} style={{ border:`1px solid ${c.canChange?'#886600':'#002244'}`, background:'#001028', padding:'8px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div>
+                <div style={{ color:c.canChange?'#ccaa00':'#446688', fontSize:'12px' }}>{c.name}</div>
+                <div style={{ color:'#446688', fontSize:'10px' }}>LV {c.lv} / 100</div>
+              </div>
+              <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
+                style={{ padding:'4px 8px', background:c.canChange?'#1a1000':'#001', border:`1px solid ${c.canChange?'#886600':'#002244'}`, color:c.canChange?'#ccaa00':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 上位職（LV300キャップ・初期職LV100で解放）──</div>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
+        {normalAdvanced.map(c=>(
+          <div key={c.name} style={{ border:`1px solid ${c.canChange?'#664400':'#002244'}`, background:'#001028', padding:'8px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div>
+                <div style={{ color:c.canChange?'#ff8800':'#446688', fontSize:'12px' }}>{c.name}</div>
+                <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/{c.requiresLv}　クラスLV{c.lv}/300</div>
+              </div>
+              <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
+                style={{ padding:'4px 8px', background:c.canChange?'#1a0800':'#001', border:`1px solid ${c.canChange?'#664400':'#002244'}`, color:c.canChange?'#ff8800':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ color:'#cc88ff', fontSize:'11px', marginBottom:'6px' }}>── 特殊上位職（LV300キャップ・複合条件で解放）──</div>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
+        {specialAdvanced.map(c=>(
+          <div key={c.name} style={{ border:`1px solid ${c.canChange?'#664488':'#002244'}`, background:'#001028', padding:'8px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div>
+                <div style={{ color:c.canChange?'#cc88ff':'#446688', fontSize:'12px' }}>{c.name}</div>
+                <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/{c.requiresLv}</div>
+                <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires2} LV{c.req2Lv}/{c.requires2Lv}</div>
+                <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{c.lv}/300</div>
+              </div>
+              <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
+                style={{ padding:'4px 8px', background:c.canChange?'#1a0830':'#001', border:`1px solid ${c.canChange?'#664488':'#002244'}`, color:c.canChange?'#cc88ff':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
+    </div>
+  )
 
   // ===== スマホレイアウト =====
   if (isMobile) {
@@ -984,7 +1052,6 @@ const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, req])=>{
         {showMenu && <div onClick={()=>setShowMenu(false)} style={{ position:'fixed', inset:0, zIndex:150 }} />}
 
         <div style={{ padding:'8px 12px' }}>
-          {/* キャラ情報 */}
           <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', marginBottom:'8px' }}>
             {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'6px', border:'1px solid #660000', padding:'3px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
@@ -1024,7 +1091,6 @@ const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, req])=>{
             )}
           </div>
 
-          {/* ステータス振り分け */}
           {showStatPanel && (
             <div style={{ border:'1px solid #cc44ff', background:'#0a0020', padding:'12px', marginBottom:'8px' }}>
               <div style={{ color:'#cc44ff', fontSize:'13px', marginBottom:'6px' }}>ステータスポイント振り分け（残り {pendingPoints-allocatedPoints}pt）</div>
@@ -1047,7 +1113,6 @@ const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, req])=>{
             </div>
           )}
 
-          {/* 街 */}
           {scene==='town' && (
             <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
               <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
@@ -1077,7 +1142,6 @@ const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, req])=>{
             </div>
           )}
 
-          {/* 宿屋 */}
           {scene==='inn' && (
             <div style={{ border:'1px solid #0088aa', background:'#001030', padding:'20px', textAlign:'center' }}>
               <div style={{ color:'#00aacc', fontSize:'14px', marginBottom:'16px' }}>🏨 宿屋</div>
@@ -1087,10 +1151,9 @@ const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, req])=>{
                 <>
                   <div style={{ color:'#88ccff', fontSize:'12px', lineHeight:'2', marginBottom:'16px' }}>
                     {isDying
-                      ? <>これはひどいお姿で…。<br/><span style={{color:'#ffcc00'}}>{profile.lv*15}G</span> のところ、所持金 <span style={{color:'#ffcc00'}}>{innCost}G</span> で承ります。</>
+                      ? <>これはひどいお姿で…。<br/><span style={{color:'#ffcc00'}}>{charLv*15}G</span> のところ、所持金 <span style={{color:'#ffcc00'}}>{innCost}G</span> で承ります。</>
                       : <>一泊 <span style={{color:'#ffcc00'}}>{innCost}G</span> でございます。<br/>ゆっくりお休みになりますか？</>}
-                  </div>
-                  <div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
+                  </div><div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
                     所持金: <span style={{color:'#ffcc00'}}>{profile.gold}G</span>
                     {!isDying && profile.gold<innCost && <span style={{color:'#ff4444'}}> （不足）</span>}
                   </div>
@@ -1106,49 +1169,8 @@ const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, req])=>{
             </div>
           )}
 
-          {/* 神殿 */}
-          {scene==='temple' && (
-            <div style={{ border:'1px solid #886600', background:'#001020', padding:'16px' }}>
-              <div style={{ color:'#ccaa00', fontSize:'14px', marginBottom:'4px' }}>⛩ 神殿</div>
-              <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
-                現在: <span style={{color:'#88ccff'}}>{profile.class}</span> LV<span style={{color:'#ffcc00'}}>{currentClassLv}</span>／{cap}　（転職にはLV30以上が必要）
-              </div>
-              {templeMessage && <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'10px', marginBottom:'12px', border:'1px solid #44ff88' }}>{templeMessage}</div>}
-              <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 初期職（LV100キャップ）──</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
-                {availableClasses.map(c=>(
-                  <div key={c.name} style={{ border:`1px solid ${c.canChange?'#886600':'#002244'}`, background:'#001028', padding:'8px' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                      <div>
-                        <div style={{ color:c.canChange?'#ccaa00':'#446688', fontSize:'12px' }}>{c.name}</div>
-                        <div style={{ color:'#446688', fontSize:'10px' }}>LV {c.lv} / 100</div>
-                      </div>
-                      <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
-                        style={{ padding:'4px 8px', background:c.canChange?'#1a1000':'#001', border:`1px solid ${c.canChange?'#886600':'#002244'}`, color:c.canChange?'#ccaa00':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 上位職（LV300キャップ・初期職LV100で解放）──</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
-                {advancedAvailable.map(c=>(
-                  <div key={c.name} style={{ border:`1px solid ${c.canChange?'#664400':'#002244'}`, background:'#001028', padding:'8px' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                      <div>
-                        <div style={{ color:c.canChange?'#ff8800':'#446688', fontSize:'12px' }}>{c.name}</div>
-                        <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/100</div>
-                      </div>
-                      <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
-                        style={{ padding:'4px 8px', background:c.canChange?'#1a0800':'#001', border:`1px solid ${c.canChange?'#664400':'#002244'}`, color:c.canChange?'#ff8800':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
-            </div>
-          )}
+          {scene==='temple' && <TempleContent />}
 
-          {/* バトル */}
           {scene==='battle' && (
             <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
               <div style={{ color:'#ff6644', fontSize:'13px', marginBottom:'10px' }}>⚔ バトル！</div>
@@ -1293,7 +1315,7 @@ const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, req])=>{
                   <>
                     <div style={{ color:'#88ccff', fontSize:'12px', lineHeight:'2', marginBottom:'16px' }}>
                       {isDying
-                        ? <>これはひどいお姿で…。特別なお手当が必要でございます。<br/><span style={{color:'#ffcc00'}}>{profile.lv*15}G</span> のところ、所持金 <span style={{color:'#ffcc00'}}>{innCost}G</span> で承ります。</>
+                        ? <>これはひどいお姿で…。特別なお手当が必要でございます。<br/><span style={{color:'#ffcc00'}}>{charLv*15}G</span> のところ、所持金 <span style={{color:'#ffcc00'}}>{innCost}G</span> で承ります。</>
                         : <>一泊 <span style={{color:'#ffcc00'}}>{innCost}G</span> でございます。<br/>ゆっくりお休みになりますか？</>}
                     </div>
                     <div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
@@ -1312,49 +1334,7 @@ const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, req])=>{
               </div>
             )}
 
-            {scene==='temple' && (
-              <div style={{ border:'1px solid #886600', background:'#001020', padding:'16px' }}>
-                <div style={{ color:'#ccaa00', fontSize:'14px', marginBottom:'4px' }}>⛩ 神殿</div>
-                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
-                  現在のクラス: <span style={{color:'#88ccff'}}>{profile.class}</span> LV<span style={{color:'#ffcc00'}}>{currentClassLv}</span>／{cap}　（転職にはLV30以上が必要）
-                </div>
-                {templeMessage && <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'10px', marginBottom:'12px', border:'1px solid #44ff88' }}>{templeMessage}</div>}
-                <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 初期職（LV100キャップ）──</div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
-                  {availableClasses.map(c=>(
-                    <div key={c.name} style={{ border:`1px solid ${c.canChange?'#886600':'#002244'}`, background:'#001028', padding:'8px' }}>
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                        <div>
-                          <div style={{ color:c.canChange?'#ccaa00':'#446688', fontSize:'12px' }}>{c.name}</div>
-                          <div style={{ color:'#446688', fontSize:'10px' }}>LV {c.lv} / 100</div>
-                        </div>
-                        <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
-                          style={{ padding:'4px 8px', background:c.canChange?'#1a1000':'#001', border:`1px solid ${c.canChange?'#886600':'#002244'}`, color:c.canChange?'#ccaa00':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 上位職（LV300キャップ・初期職LV100で解放）──</div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
-                  {advancedAvailable.map(c=>(
-                    <div key={c.name} style={{ border:`1px solid ${c.canChange?'#664400':'#002244'}`, background:'#001028', padding:'8px' }}>
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                        <div>
-                          <div style={{ color:c.canChange?'#ff8800':'#446688', fontSize:'12px' }}>{c.name}</div>
-<div style={{ color:'#446688', fontSize:'10px' }}>
-  {c.requires} LV{c.reqLv}/{c.requiresLv}
-  {c.requires2 && `　${c.requires2} LV${c.req2Lv}/${c.requires2Lv}`}
-  　クラスLV{c.lv}/300
-</div>                        </div>
-                        <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
-                          style={{ padding:'4px 8px', background:c.canChange?'#1a0800':'#001', border:`1px solid ${c.canChange?'#664400':'#002244'}`, color:c.canChange?'#ff8800':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
-              </div>
-            )}
+            {scene==='temple' && <TempleContent />}
 
             {scene==='battle' && (
               <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
