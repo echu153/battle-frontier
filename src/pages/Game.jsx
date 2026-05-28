@@ -751,8 +751,23 @@ export default function Game() {
   }
 
   const doDungeon = async (type) => {
-    if (dungeonAttempts >= 5 || loading) return
-    setLoading(true); setScene('battle'); setBattleLogs([])
+    if (loading) return
+    setLoading(true)
+
+    // stateではなくDBから直接カウント取得（state操作による回避を防ぐ）
+    const today = new Date().toISOString().slice(0, 10)
+    let serverCount = 0
+    try {
+      const { data: da } = await supabase.from('dungeon_attempts').select('count').eq('player_id', profile.id).eq('date', today).single()
+      serverCount = da?.count || 0
+    } catch {}
+    if (serverCount >= 5) {
+      setDungeonAttempts(serverCount)
+      setLoading(false)
+      return
+    }
+
+    setScene('battle'); setBattleLogs([])
 
     const DUNGEON_ENEMIES = {
       exp:   { name:'かもすけ', hp:1, atk:1, def:1, matk:1, mdef:1, spd:1, type:'physical' },
@@ -769,8 +784,7 @@ export default function Game() {
     logs.push({ text:`1ターン目: あなたの攻撃！ ${dungeonEnemy.name}に${dmg}ダメージ！`, color:'#ffcc00' })
     logs.push({ text:`${dungeonEnemy.name}を倒した！`, color:'#44ff88' })
 
-    const today = new Date().toISOString().slice(0, 10)
-    const newCount = dungeonAttempts + 1
+    const newCount = serverCount + 1
 
     if (type === 'exp') {
       const expGained = Math.floor(50 + Math.random() * 51)
