@@ -630,6 +630,7 @@ export default function Game() {
   const [skillSets, setSkillSets] = useState([])
   const [playerItem, setPlayerItem] = useState(null)
   const [dungeonAttempts, setDungeonAttempts] = useState(0)
+  const [showDungeonPanel, setShowDungeonPanel] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [showMenu, setShowMenu] = useState(false)
 
@@ -1580,28 +1581,28 @@ export default function Game() {
                 style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
                 {isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
               </button>
-              <div style={{ border:'1px solid #440088', background:'#0a001a', padding:'10px', marginBottom:'10px' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
-                  <div style={{ color:'#cc44ff', fontSize:'12px' }}>⚔ 特殊ダンジョン</div>
-                  <div style={{ fontSize:'11px', color: dungeonAttempts >= 5 ? '#ff4444' : '#44ff88' }}>残り {5-dungeonAttempts} / 5</div>
+              <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAttempts>=5||loading}
+                style={{ width:'100%', padding:'12px', background:'#0a001a', border:`1px solid ${dungeonAttempts>=5?'#333':'#cc44ff'}`, color:dungeonAttempts>=5?'#333':'#cc44ff', cursor:dungeonAttempts>=5?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'13px', marginBottom:'10px', opacity:dungeonAttempts>=5?0.4:1 }}>
+                ⚔ 特殊ダンジョン　<span style={{fontSize:'11px',color:dungeonAttempts>=5?'#333':'#446688'}}>残り{5-dungeonAttempts}/5</span>
+              </button>
+              {showDungeonPanel && (
+                <div style={{ border:'1px solid #440088', background:'#0a001a', padding:'10px', marginBottom:'10px' }}>
+                  <div style={{ color:'#cc44ff', fontSize:'11px', marginBottom:'8px' }}>ダンジョンを選択</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                    {[
+                      { type:'exp',   label:'経験値ダンジョン' },
+                      { type:'gold',  label:'ゴールドダンジョン' },
+                      { type:'stone', label:'強化石ダンジョン' },
+                      { type:'prof',  label:'熟練度ダンジョン' },
+                    ].map(d => (
+                      <button key={d.type} onClick={() => { doDungeon(d.type); setShowDungeonPanel(false) }}
+                        style={{ padding:'10px', background:'#001020', border:'1px solid #440088', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                  {[
-                    { type:'exp',   label:'経験値',   enemy:'かもすけ', desc:'EXP +50〜100',  color:'#cc8800' },
-                    { type:'gold',  label:'ゴールド', enemy:'かねすけ', desc:'Gold +LV×10〜15',color:'#ffcc00' },
-                    { type:'stone', label:'強化石',   enemy:'いしすけ', desc:'強化石 1個',     color:'#6699cc' },
-                    { type:'prof',  label:'熟練度',   enemy:'かかし',   desc:'熟練度+50〜100', color:'#aa44ff' },
-                  ].map(d => (
-                    <button key={d.type} onClick={() => doDungeon(d.type)}
-                      disabled={dungeonAttempts >= 5 || loading}
-                      style={{ padding:'8px', background: dungeonAttempts>=5 ? '#0a0a0a' : '#0a001a', border:`1px solid ${dungeonAttempts>=5?'#222':d.color}`, color: dungeonAttempts>=5 ? '#333' : d.color, cursor: dungeonAttempts>=5 ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'10px', textAlign:'left', opacity: dungeonAttempts>=5 ? 0.4 : 1 }}>
-                      <div>{d.label}</div>
-                      <div style={{ color: dungeonAttempts>=5?'#222':'#446688', fontSize:'9px' }}>{d.enemy}</div>
-                      <div style={{ fontSize:'9px' }}>{d.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              )}
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                 <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋</button>
                 <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿</button>
@@ -1769,28 +1770,28 @@ export default function Game() {
                   style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
                   {isDying&&!canBattle?'💀 瀕死中（HP全回復まで出撃不可）':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
                 </button>
-                <div style={{ border:'1px solid #440088', background:'#0a001a', padding:'10px', marginBottom:'8px' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
-                    <div style={{ color:'#cc44ff', fontSize:'12px' }}>⚔ 特殊ダンジョン</div>
-                    <div style={{ fontSize:'11px', color: dungeonAttempts >= 5 ? '#ff4444' : '#44ff88' }}>残り {5-dungeonAttempts} / 5回</div>
+                <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAttempts>=5||loading}
+                  style={{ width:'100%', padding:'10px', background:'#0a001a', border:`1px solid ${dungeonAttempts>=5?'#333':'#cc44ff'}`, color:dungeonAttempts>=5?'#333':'#cc44ff', cursor:dungeonAttempts>=5?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px', opacity:dungeonAttempts>=5?0.4:1 }}>
+                  ⚔ 特殊ダンジョン　<span style={{fontSize:'11px',color:dungeonAttempts>=5?'#333':'#446688'}}>残り{5-dungeonAttempts}/5</span>
+                </button>
+                {showDungeonPanel && (
+                  <div style={{ border:'1px solid #440088', background:'#0a001a', padding:'10px', marginBottom:'8px' }}>
+                    <div style={{ color:'#cc44ff', fontSize:'11px', marginBottom:'8px' }}>ダンジョンを選択</div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                      {[
+                        { type:'exp',   label:'経験値ダンジョン' },
+                        { type:'gold',  label:'ゴールドダンジョン' },
+                        { type:'stone', label:'強化石ダンジョン' },
+                        { type:'prof',  label:'熟練度ダンジョン' },
+                      ].map(d => (
+                        <button key={d.type} onClick={() => { doDungeon(d.type); setShowDungeonPanel(false) }}
+                          style={{ padding:'10px', background:'#001020', border:'1px solid #440088', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                    {[
-                      { type:'exp',   label:'経験値ダンジョン', enemy:'かもすけ', desc:'EXP +50〜100',   color:'#cc8800' },
-                      { type:'gold',  label:'ゴールドダンジョン', enemy:'かねすけ', desc:'Gold +LV×10〜15', color:'#ffcc00' },
-                      { type:'stone', label:'強化石ダンジョン',  enemy:'いしすけ', desc:'強化石 1個',      color:'#6699cc' },
-                      { type:'prof',  label:'熟練度ダンジョン',  enemy:'かかし',   desc:'熟練度 +50〜100', color:'#aa44ff' },
-                    ].map(d => (
-                      <button key={d.type} onClick={() => doDungeon(d.type)}
-                        disabled={dungeonAttempts >= 5 || loading}
-                        style={{ padding:'8px', background: dungeonAttempts>=5 ? '#0a0a0a' : '#0a001a', border:`1px solid ${dungeonAttempts>=5?'#222':d.color}`, color: dungeonAttempts>=5 ? '#333' : d.color, cursor: dungeonAttempts>=5 ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', textAlign:'left', opacity: dungeonAttempts>=5 ? 0.4 : 1 }}>
-                        <div>{d.label}</div>
-                        <div style={{ color: dungeonAttempts>=5?'#222':'#446688', fontSize:'10px' }}>{d.enemy}</div>
-                        <div style={{ fontSize:'10px' }}>{d.desc}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                )}
                 <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🏨 宿屋へ</button>
                 <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>⛩ 神殿へ</button>
                 <button onClick={()=>nav('/shop')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🛒 商店へ</button>
