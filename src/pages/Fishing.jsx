@@ -290,19 +290,23 @@ export default function Fishing() {
   }
 
   // 釣り開始
-  const startFishing = async () => {
-    if (!profile || session) return
-    setLoading(true)
-    const { data: sess } = await supabase.from('fishing_sessions').insert({
-      player_id: profile.id,
-      location: selectedLocation,
-      started_at: new Date().toISOString(),
-      is_active: true,
-    }).select().single()
-    setSession(sess)
-    showMessage(`🎣 ${selectedLocation}で釣りを開始しました！`)
-    setLoading(false)
+const startFishing = async () => {
+  if (!profile || session) return
+  setLoading(true)
+  const { data: sess, error } = await supabase.from('fishing_sessions').insert({
+    player_id: profile.id,
+    location: selectedLocation,
+    started_at: new Date().toISOString(),
+    is_active: true,
+  }).select().single()
+  if (error) {
+    showMessage('釣り開始に失敗しました', '#ff4444')
+    setLoading(false); return
   }
+  setSession(sess)
+  showMessage(`🎣 ${selectedLocation}で釣りを開始しました！`)
+  setLoading(false)
+}
 
   // 釣り終了（結果を計算してDBに保存）
   const endFishing = async () => {

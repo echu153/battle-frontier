@@ -660,6 +660,13 @@ const fetchAnnouncements = async () => {
     setSkillSets(ss || [])
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id).eq('equipped', true).single()
     setPlayerItem(pi || null)
+    // 釣り中チェック
+const { data: fishSess } = await supabase.from('fishing_sessions')
+  .select('*').eq('player_id', user.id).eq('is_active', true).single()
+  .catch(() => ({ data: null }))
+if (fishSess) {
+  setScene('fishing_active')
+}
   }
 
   const doRegen = async () => {
@@ -1427,7 +1434,13 @@ if (showAnnouncements) return (
               </div>
             </div>
           )}
-
+{scene==='fishing_active' && (
+  <div style={{ border:'1px solid #44aaff', background:'#001040', padding:'16px', textAlign:'center' }}>
+    <div style={{ color:'#44aaff', fontSize:'14px', marginBottom:'8px' }}>🎣 釣り中...</div>
+    <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>釣り場で釣りを終了してから戦闘できます</div>
+    <button onClick={()=>nav('/fishing')} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>
+  </div>
+)}
           {scene==='town' && (
             <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
               <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
@@ -1594,7 +1607,13 @@ if (showAnnouncements) return (
                 </div>
               </div>
             )}
-
+{scene==='fishing_active' && (
+  <div style={{ border:'1px solid #44aaff', background:'#001040', padding:'16px', textAlign:'center' }}>
+    <div style={{ color:'#44aaff', fontSize:'14px', marginBottom:'8px' }}>🎣 釣り中...</div>
+    <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>釣り場で釣りを終了してから戦闘できます</div>
+    <button onClick={()=>nav('/fishing')} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>
+  </div>
+)}
             {scene==='town' && (
               <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'8px' }}>
                 <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
