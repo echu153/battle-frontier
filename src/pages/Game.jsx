@@ -556,7 +556,7 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
 // ============================================================
 // 敵スキル実行（BOSSと一部雑魚）
 // ============================================================
-const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileHpMax, playerBuffs, enemyBuffs, logs) => {
+const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileHpMax, playerBuffs, enemyBuffs, logs, eff) => {
   let dmgToPlayer = 0
   let healEnemy = 0
   const newPlayerBuffs = { ...playerBuffs }
@@ -564,14 +564,18 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
 
   switch (skill.type) {
     case 'physical': {
-      const rawDmg = Math.floor(enemy.atk * skill.mult)
+      const pDef = (eff?.def || 0) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1)
+      const defVal = Math.floor(pDef / 2)
+      const rawDmg = Math.max(1, Math.floor(enemy.atk * skill.mult) - defVal)
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
       dmgToPlayer = Math.floor(rawDmg * dmgReduceRate * (0.9 + Math.random() * 0.2))
       logs.push({ text:`⚔ ${enemy.name}の「${skill.name}」！ あなたに${dmgToPlayer}ダメージ！`, color:'#ff4444' })
       break
     }
     case 'magical': {
-      const rawDmg = Math.floor((enemy.matk||enemy.atk) * skill.mult)
+      const pMdef = (eff?.mdef || 0) * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1)
+      const defVal = Math.floor(pMdef / 2)
+      const rawDmg = Math.max(1, Math.floor((enemy.matk||enemy.atk) * skill.mult) - defVal)
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
       dmgToPlayer = Math.floor(rawDmg * dmgReduceRate * (0.9 + Math.random() * 0.2))
       logs.push({ text:`✨ ${enemy.name}の「${skill.name}」！ あなたに${dmgToPlayer}の魔法ダメージ！`, color:'#cc44ff' })
@@ -582,7 +586,9 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
       break
     }
     case 'physical_multi': {
-      const perHit = Math.floor(enemy.atk * skill.mult)
+      const pDef = (eff?.def || 0) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1)
+      const defVal = Math.floor(pDef / 2)
+      const perHit = Math.max(1, Math.floor(enemy.atk * skill.mult) - defVal)
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
       dmgToPlayer = Math.floor(perHit * (skill.hits||1) * dmgReduceRate * (0.9 + Math.random() * 0.2))
       logs.push({ text:`⚔ ${enemy.name}の「${skill.name}」！ ${perHit}×${skill.hits}回＝${dmgToPlayer}ダメージ！`, color:'#ff4444' })
@@ -956,7 +962,7 @@ export default function Game() {
       const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
       const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1)
       const pMatk  = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki
-      const pAtk   = eff.atk  * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1)
+      const pAtk   = eff.atk  * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1)
       const pSpd   = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1)
       const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
       const eDefRate  = (enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1) * (enemyBuffs.defUp  ? enemyBuffs.defUp.rate  : 1)
@@ -1020,7 +1026,7 @@ export default function Game() {
     }
 
     const doEnemyAttack = (isExtra=false) => {
-      const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1)
+      const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
       const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1)
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
       const berserkDmgRate = hasBerserk ? 1.1 : 1.0
@@ -1037,7 +1043,7 @@ export default function Game() {
       // プレイヤーの回避判定（素早さバフ/デバフ考慮）
       const effectivePlayerSpd = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * playerSpdDebuff
       const effectiveEnemySpd = enemySpd * enemySpdBuff
-      const evasionRate = calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0)
+      const evasionRate = calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0)
       if (evasionRate > 0 && Math.random()*100 < evasionRate) {
         const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
         logs.push({ text:`${prefix}${enemy.name}の攻撃！ しかし回避した！`, color:'#44ff88' })
@@ -1059,14 +1065,14 @@ export default function Game() {
       if (healSkill && enemyHp / enemyMaxHp < 0.5) {
         if (!bossHealUsed) {
           // 1回目は確定
-          const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs)
+          const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
           enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
           bossHealUsed = true
           bossHealCooldown = Math.floor(Math.random()*3)+2
           return
         } else if (bossHealCooldown <= 0) {
           // 2回目以降は2〜4ターンごと
-          const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs)
+          const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
           enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
           bossHealCooldown = Math.floor(Math.random()*3)+2
           return
@@ -1076,7 +1082,7 @@ export default function Game() {
       const nonHealSkills = enemy.skills.filter(s => s.type !== 'heal')
       if (nonHealSkills.length === 0) return
       const skill = nonHealSkills[Math.floor(Math.random()*nonHealSkills.length)]
-      const result = executeEnemySkill(skill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs)
+      const result = executeEnemySkill(skill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
       playerHp -= result.dmgToPlayer
       enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
       Object.assign(playerBuffs, result.newPlayerBuffs)
