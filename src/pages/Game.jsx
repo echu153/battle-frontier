@@ -10,6 +10,20 @@ const ARTIFACT_BASE_NAMES = [
   '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたハンマー'
 ]
 
+// パピア
+const PAPIA = {
+  name:'パピア', hp:3, atk:1, def:1, matk:1, mdef:1, spd:10000,
+  type:'physical', gold:0, isPapia:true,
+}
+const PAPIA_TURNS = [
+  'パピアは驚いている',
+  'パピアはあたふたしている',
+  '逃走準備',
+  '次のターン逃げられそうだ',
+  'ああ、逃げられる！',
+  '逃走',
+]
+
 // ============================================================
 // エリア定義
 // ============================================================
@@ -545,14 +559,14 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
     case 'physical': {
       const rawDmg = Math.floor(enemy.atk * skill.mult)
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
-      dmgToPlayer = Math.floor(rawDmg * dmgReduceRate)
+      dmgToPlayer = Math.floor(rawDmg * dmgReduceRate * (0.9 + Math.random() * 0.2))
       logs.push({ text:`⚔ ${enemy.name}の「${skill.name}」！ あなたに${dmgToPlayer}ダメージ！`, color:'#ff4444' })
       break
     }
     case 'magical': {
       const rawDmg = Math.floor((enemy.matk||enemy.atk) * skill.mult)
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
-      dmgToPlayer = Math.floor(rawDmg * dmgReduceRate)
+      dmgToPlayer = Math.floor(rawDmg * dmgReduceRate * (0.9 + Math.random() * 0.2))
       logs.push({ text:`✨ ${enemy.name}の「${skill.name}」！ あなたに${dmgToPlayer}の魔法ダメージ！`, color:'#cc44ff' })
       if (skill.debuff === 'mdefDown') {
         newPlayerBuffs.mdefDown = { turns: skill.debuffTurns||2, rate: skill.debuffRate||0.8 }
@@ -563,7 +577,7 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
     case 'physical_multi': {
       const perHit = Math.floor(enemy.atk * skill.mult)
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
-      dmgToPlayer = Math.floor(perHit * (skill.hits||1) * dmgReduceRate)
+      dmgToPlayer = Math.floor(perHit * (skill.hits||1) * dmgReduceRate * (0.9 + Math.random() * 0.2))
       logs.push({ text:`⚔ ${enemy.name}の「${skill.name}」！ ${perHit}×${skill.hits}回＝${dmgToPlayer}ダメージ！`, color:'#ff4444' })
       break
     }
@@ -615,6 +629,7 @@ export default function Game() {
   const [templeMessage, setTempleMessage] = useState('')
   const [skillSets, setSkillSets] = useState([])
   const [playerItem, setPlayerItem] = useState(null)
+  const [dungeonAttempts, setDungeonAttempts] = useState(0)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [showMenu, setShowMenu] = useState(false)
 
@@ -664,6 +679,11 @@ export default function Game() {
     setSkillSets(ss || [])
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id).eq('equipped', true).single()
     setPlayerItem(pi || null)
+    const today = new Date().toISOString().slice(0, 10)
+    try {
+      const { data: da } = await supabase.from('dungeon_attempts').select('count').eq('player_id', user.id).eq('date', today).single()
+      setDungeonAttempts(da?.count || 0)
+    } catch { setDungeonAttempts(0) }
   }
 
   const doRegen = async () => {
@@ -705,6 +725,120 @@ export default function Game() {
     setLoading(false)
   }
 
+  const doDungeon = async (type) => {
+    if (dungeonAttempts >= 5 || loading) return
+    setLoading(true); setScene('battle'); setBattleLogs([])
+
+    const DUNGEON_ENEMIES = {
+      exp:   { name:'かもすけ', hp:1, atk:1, def:1, matk:1, mdef:1, spd:1, type:'physical' },
+      gold:  { name:'かねすけ', hp:1, atk:1, def:1, matk:1, mdef:1, spd:1, type:'physical' },
+      stone: { name:'いしすけ', hp:1, atk:1, def:1, matk:1, mdef:1, spd:1, type:'physical' },
+      prof:  { name:'かかし',   hp:1, atk:1, def:1, matk:1, mdef:1, spd:1, type:'physical' },
+    }
+    const dungeonEnemy = DUNGEON_ENEMIES[type]
+    const logs = []
+    logs.push({ text:`✨ 特殊ダンジョン: ${dungeonEnemy.name}が現れた！`, color:'#cc44ff' })
+
+    const eff = calcEffectiveStats(profile, equipment, proficiency)
+    const dmg = Math.max(1, Math.floor(eff.atk * (0.9 + Math.random() * 0.2)))
+    logs.push({ text:`1ターン目: あなたの攻撃！ ${dungeonEnemy.name}に${dmg}ダメージ！`, color:'#ffcc00' })
+    logs.push({ text:`${dungeonEnemy.name}を倒した！`, color:'#44ff88' })
+
+    const today = new Date().toISOString().slice(0, 10)
+    const newCount = dungeonAttempts + 1
+
+    if (type === 'exp') {
+      const expGained = Math.floor(50 + Math.random() * 51)
+      const currentClassLvD = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
+      const capD = CLASS_LEVEL_CAP[profile.class] || 100
+      if (currentClassLvD < capD) {
+        let newExp = profile.exp + expGained
+        let newLv = profile.lv
+        let newExpNext = profile.exp_next
+        let newPendingPoints = profile.pending_stat_points || 0
+        let newCharLv = profile.char_lv || 1
+        const growth = JOB_GROWTH[profile.class] || JOB_GROWTH['戦士']
+        const bonusSlots = JOB_LEVEL3_BONUS[profile.class] || []
+        let statUpdates = {}
+        while (newExp >= newExpNext && newLv < capD) {
+          newExp -= newExpNext; newLv++; newExpNext = calcExpNext(newLv); newPendingPoints++; newCharLv++
+          statUpdates = {
+            hp_max:(statUpdates.hp_max||profile.hp_max)+growth.hp, mp_max:(statUpdates.mp_max||profile.mp_max)+growth.mp,
+            atk:(statUpdates.atk||profile.atk)+growth.atk, def:(statUpdates.def||profile.def)+growth.def,
+            matk:(statUpdates.matk||profile.matk)+growth.matk, mdef:(statUpdates.mdef||profile.mdef)+growth.mdef,
+            spd:(statUpdates.spd||profile.spd)+growth.spd,
+          }
+          if (bonusSlots.length > 0 && newLv%3===0) {
+            const bi = Math.floor(newLv/3-1)%bonusSlots.length
+            statUpdates[bonusSlots[bi]] = (statUpdates[bonusSlots[bi]]||0)+1
+          }
+          logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${newLv}！`, color:'#cc44ff' })
+        }
+        await supabase.from('profiles').update({
+          exp:newExp, exp_next:newExpNext, lv:newLv,
+          pending_stat_points:newPendingPoints, char_lv:newCharLv, ...statUpdates,
+        }).eq('id', profile.id)
+        const clData = classLevels.find(cl => cl.class_name === profile.class)
+        if (clData) await supabase.from('class_levels').update({ lv:newLv, exp:newExp }).eq('id', clData.id)
+        logs.push({ text:`EXP +${expGained}`, color:'#cc8800' })
+      } else {
+        logs.push({ text:`⚠ レベルキャップに達しています（EXP +0）`, color:'#ff8844' })
+      }
+    } else if (type === 'gold') {
+      const goldGained = Math.floor((profile.char_lv || profile.lv) * 10 * (1.0 + Math.random() * 0.5))
+      await supabase.from('profiles').update({ gold: profile.gold + goldGained }).eq('id', profile.id)
+      logs.push({ text:`Gold +${goldGained}`, color:'#ffcc00' })
+    } else if (type === 'stone') {
+      const r = Math.random() * 100
+      const stoneName = r < 10 ? '強化石(F)' : r < 25 ? '強化石(E)' : r < 55 ? '強化石(D)' : r < 80 ? '強化石(C)' : r < 95 ? '強化石(B)' : '強化石(A)'
+      const { data: stoneItem } = await supabase.from('items').select('*').eq('name', stoneName).single()
+      if (stoneItem) {
+        let existing = null
+        try { const res = await supabase.from('player_items').select('*').eq('player_id', profile.id).eq('item_id', stoneItem.id).single(); existing = res.data } catch {}
+        if (existing) {
+          await supabase.from('player_items').update({ quantity:(existing.quantity||1)+1 }).eq('id', existing.id)
+        } else {
+          await supabase.from('player_items').insert({ player_id:profile.id, item_id:stoneItem.id, quantity:1, equipped:false })
+        }
+      }
+      logs.push({ text:`💎 ${stoneName} を入手！`, color:'#6699cc' })
+    } else if (type === 'prof') {
+      const profGained = Math.floor(50 + Math.random() * 51)
+      const eqWeapon = equipment.find(e => e.slot==='weapon' && e.equipped)
+      if (eqWeapon) {
+        const prof = proficiency.find(p => p.weapon_id===eqWeapon.weapons.id)
+        if (prof) {
+          let totalExp = prof.prof_exp + profGained
+          let newProfLv = prof.prof_lv
+          while (totalExp >= 100) { totalExp -= 100; newProfLv++ }
+          await supabase.from('proficiency').update({ prof_exp:totalExp, prof_lv:newProfLv }).eq('id', prof.id)
+          if (newProfLv > prof.prof_lv) logs.push({ text:`⚔ 武器熟練度UP！ ${getProfPrefix(newProfLv)}${eqWeapon.weapons.name} LV${newProfLv}`, color:'#aa44ff' })
+          logs.push({ text:`⚔ 武器熟練度 +${profGained}`, color:'#aa44ff' })
+        } else {
+          logs.push({ text:`武器熟練度なし`, color:'#446688' })
+        }
+      } else {
+        logs.push({ text:`武器が装備されていません`, color:'#446688' })
+      }
+    }
+
+    // dungeon_attempts更新
+    try {
+      const { data: da } = await supabase.from('dungeon_attempts').select('*').eq('player_id', profile.id).eq('date', today).single()
+      if (da) {
+        await supabase.from('dungeon_attempts').update({ count: newCount }).eq('id', da.id)
+      } else {
+        await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:1 })
+      }
+    } catch {
+      try { await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:1 }) } catch {}
+    }
+    setDungeonAttempts(newCount)
+    setBattleLogs(logs)
+    await fetchProfile()
+    setLoading(false)
+  }
+
   const doBattle = async () => {
     if (!canAct || loading) return
     const hpCurrent = profile.hp_current ?? profile.hp_max
@@ -725,7 +859,12 @@ export default function Game() {
     const area = AREAS.find(a => a.id === selectedArea)
     const bossRate = profile.boss_encounter_rate || 0
     const isBossEncounter = Math.random()*100 < bossRate
-    const enemy = isBossEncounter ? { ...area.boss } : { ...area.enemies[Math.floor(Math.random()*area.enemies.length)] }
+    const isPapiaEncounter = !isBossEncounter && Math.random()*100 < 1
+    const enemy = isPapiaEncounter
+      ? { ...PAPIA }
+      : isBossEncounter
+        ? { ...area.boss }
+        : { ...area.enemies[Math.floor(Math.random()*area.enemies.length)] }
     const enemyMaxHp = enemy.hp
 
     const logs = []
@@ -740,6 +879,7 @@ export default function Game() {
     // BOSS回復管理
     let bossHealUsed = false
     let bossHealCooldown = 0
+    let papiaEscaped = false
 
     const equippedWeaponItem = equipment.find(e => e.slot==='weapon' && e.equipped)
     const isArtifact = equippedWeaponItem?.bonus_effect === 'artifact'
@@ -813,9 +953,9 @@ export default function Game() {
       const isCrit = Math.random()*100 < playerCritRate
       const critMult = isCrit ? 1.5 : 1.0
 
-      // 敵の回避判定（プレイヤーの命中ボーナスで相殺）
-      const effectiveEnemyEvasion = Math.max(0, enemyEvasionRate - playerHitBonus)
-      if (effectiveEnemyEvasion > 0 && Math.random()*100 < effectiveEvasionRate(effectiveEnemyEvasion)) {
+      // 敵の回避判定（プレイヤーの命中ボーナスで相殺、パピアは+50%）
+      const effectiveEnemyEvasion = Math.max(0, enemyEvasionRate - playerHitBonus) + (enemy.isPapia ? 50 : 0)
+      if (effectiveEnemyEvasion > 0 && Math.random()*100 < effectiveEnemyEvasion) {
         logs.push({ text:`${prefix}${enemy.name}に攻撃！ しかし回避された！`, color:'#446688' })
         if (expandedSkillSet.length > 0) skillIndex++
         return
@@ -831,7 +971,8 @@ export default function Game() {
           const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? 1.1 : 1.0
           prevSkillName = cs.skills.name
           const res = executeSkill(cs.skills, effBuff, profile, enemy, enemyBuffs, playerBuffs, isArtifact)
-          let finalDmg = Math.floor(res.dmg * critMult * passiveDmgMult * gensoMult)
+          let finalDmg = Math.floor(res.dmg * critMult * passiveDmgMult * gensoMult * (0.9 + Math.random() * 0.2))
+          if (enemy.isPapia) finalDmg = 1
           const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
           if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
@@ -852,7 +993,8 @@ export default function Game() {
         const baseAtk = isMagical ? effBuff.matk : effBuff.atk
         const eDefVal = isMagical ? Math.floor((enemy.mdef||0)/2*eMdefRate) : Math.floor(enemy.def/2*eDefRate)
         const baseDmg = Math.max(1, baseAtk-eDefVal+Math.floor(Math.random()*4))
-        const finalDmg = Math.floor(baseDmg*critMult*(isArtifact?1.2:1.0)*passiveDmgMult)
+        let finalDmg = Math.floor(baseDmg*critMult*(isArtifact?1.2:1.0)*passiveDmgMult*(0.9+Math.random()*0.2))
+        if (enemy.isPapia) finalDmg = 1
         if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
           const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
           playerHp = Math.min(profile.hp_max, playerHp + rageCure)
@@ -890,7 +1032,7 @@ export default function Game() {
         return
       }
 
-      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate)
+      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*(0.9+Math.random()*0.2))
       playerHp -= finalDmg
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
       const critText = isCrit ? ' 💥クリティカル！' : ''
@@ -985,7 +1127,15 @@ export default function Game() {
       }
 
       // 敵のターン：スキルを持つ敵はスキルを使う確率
-      if (enemy.skills && enemy.skills.length > 0) {
+      if (enemy.isPapia) {
+        const papiaMsg = PAPIA_TURNS[turn - 1] || '逃走'
+        if (turn >= 6) {
+          logs.push({ text:`${turn}ターン目: ${papiaMsg}！ パピアは逃げた！`, color:'#ff8844' })
+          papiaEscaped = true
+          break
+        }
+        logs.push({ text:`${turn}ターン目: ${papiaMsg}`, color:'#ff8844' })
+      } else if (enemy.skills && enemy.skills.length > 0) {
         if (Math.random() < 0.4) {
           doEnemySkillAttack()
         } else {
@@ -995,7 +1145,7 @@ export default function Game() {
         doEnemyAttack(false)
       }
       if (playerHp <= 0) break
-      if (enemyExtraRate > 0 && Math.random()*100 < enemyExtraRate) doEnemyAttack(true)
+      if (enemyExtraRate > 0 && !enemy.isPapia && Math.random()*100 < enemyExtraRate) doEnemyAttack(true)
 
       // バフ/デバフのターン減少
       Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns > 0) playerBuffs[k].turns-- })
@@ -1006,20 +1156,26 @@ export default function Game() {
 
     playerHp = Math.max(0, playerHp)
     const win = enemyHp <= 0
-    const expGained = isAtCap ? 0 : (isBossEncounter ? 13 : Math.floor(Math.random()*4)+8)
-    const goldGained = win ? (enemy.gold||0) : 0
+    const expGained = isAtCap ? 0
+      : papiaEscaped ? 0
+      : isPapiaEncounter ? 200
+      : isBossEncounter ? 13
+      : Math.floor(Math.random()*4)+8
+    const goldGained = (win && !papiaEscaped) ? (enemy.gold||0) : 0
 
-    if (win) {
-      logs.push({ text:`${enemy.name}を倒した！`, color:'#44ff88' })
-      if (isAtCap) {
-        logs.push({ text:`⚠ ${profile.class}はレベルキャップに達しています。経験値は入りません。`, color:'#ff8844' })
-        logs.push({ text:`Gold + ${goldGained}`, color:'#ffcc00' })
+    if (!papiaEscaped) {
+      if (win) {
+        logs.push({ text:`${enemy.name}を倒した！`, color:'#44ff88' })
+        if (isAtCap) {
+          logs.push({ text:`⚠ ${profile.class}はレベルキャップに達しています。経験値は入りません。`, color:'#ff8844' })
+          logs.push({ text:`Gold + ${goldGained}`, color:'#ffcc00' })
+        } else {
+          logs.push({ text:`EXP + ${expGained}　Gold + ${goldGained}`, color:'#ffcc00' })
+        }
       } else {
-        logs.push({ text:`EXP + ${expGained}　Gold + ${goldGained}`, color:'#ffcc00' })
+        logs.push({ text:`敗北…`, color:'#ff4444' })
+        if (!isAtCap) logs.push({ text:`EXP + ${expGained}`, color:'#ff6644' })
       }
-    } else {
-      logs.push({ text:`敗北…`, color:'#ff4444' })
-      if (!isAtCap) logs.push({ text:`EXP + ${expGained}`, color:'#ff6644' })
     }
 
     let newIsDying = profile.is_dying || false
@@ -1029,7 +1185,7 @@ export default function Game() {
     }
     setBattleLogs(logs)
 
-    if (win) {
+    if (win && !isPapiaEncounter) {
       let droppedItems = []
       if (isBossEncounter) {
         const dropList = area.bossDrops || []
@@ -1424,6 +1580,28 @@ export default function Game() {
                 style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
                 {isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
               </button>
+              <div style={{ border:'1px solid #440088', background:'#0a001a', padding:'10px', marginBottom:'10px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+                  <div style={{ color:'#cc44ff', fontSize:'12px' }}>⚔ 特殊ダンジョン</div>
+                  <div style={{ fontSize:'11px', color: dungeonAttempts >= 5 ? '#ff4444' : '#44ff88' }}>残り {5-dungeonAttempts} / 5</div>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                  {[
+                    { type:'exp',   label:'経験値',   enemy:'かもすけ', desc:'EXP +50〜100',  color:'#cc8800' },
+                    { type:'gold',  label:'ゴールド', enemy:'かねすけ', desc:'Gold +LV×10〜15',color:'#ffcc00' },
+                    { type:'stone', label:'強化石',   enemy:'いしすけ', desc:'強化石 1個',     color:'#6699cc' },
+                    { type:'prof',  label:'熟練度',   enemy:'かかし',   desc:'熟練度+50〜100', color:'#aa44ff' },
+                  ].map(d => (
+                    <button key={d.type} onClick={() => doDungeon(d.type)}
+                      disabled={dungeonAttempts >= 5 || loading}
+                      style={{ padding:'8px', background: dungeonAttempts>=5 ? '#0a0a0a' : '#0a001a', border:`1px solid ${dungeonAttempts>=5?'#222':d.color}`, color: dungeonAttempts>=5 ? '#333' : d.color, cursor: dungeonAttempts>=5 ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'10px', textAlign:'left', opacity: dungeonAttempts>=5 ? 0.4 : 1 }}>
+                      <div>{d.label}</div>
+                      <div style={{ color: dungeonAttempts>=5?'#222':'#446688', fontSize:'9px' }}>{d.enemy}</div>
+                      <div style={{ fontSize:'9px' }}>{d.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                 <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋</button>
                 <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿</button>
@@ -1591,6 +1769,28 @@ export default function Game() {
                   style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
                   {isDying&&!canBattle?'💀 瀕死中（HP全回復まで出撃不可）':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
                 </button>
+                <div style={{ border:'1px solid #440088', background:'#0a001a', padding:'10px', marginBottom:'8px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+                    <div style={{ color:'#cc44ff', fontSize:'12px' }}>⚔ 特殊ダンジョン</div>
+                    <div style={{ fontSize:'11px', color: dungeonAttempts >= 5 ? '#ff4444' : '#44ff88' }}>残り {5-dungeonAttempts} / 5回</div>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                    {[
+                      { type:'exp',   label:'経験値ダンジョン', enemy:'かもすけ', desc:'EXP +50〜100',   color:'#cc8800' },
+                      { type:'gold',  label:'ゴールドダンジョン', enemy:'かねすけ', desc:'Gold +LV×10〜15', color:'#ffcc00' },
+                      { type:'stone', label:'強化石ダンジョン',  enemy:'いしすけ', desc:'強化石 1個',      color:'#6699cc' },
+                      { type:'prof',  label:'熟練度ダンジョン',  enemy:'かかし',   desc:'熟練度 +50〜100', color:'#aa44ff' },
+                    ].map(d => (
+                      <button key={d.type} onClick={() => doDungeon(d.type)}
+                        disabled={dungeonAttempts >= 5 || loading}
+                        style={{ padding:'8px', background: dungeonAttempts>=5 ? '#0a0a0a' : '#0a001a', border:`1px solid ${dungeonAttempts>=5?'#222':d.color}`, color: dungeonAttempts>=5 ? '#333' : d.color, cursor: dungeonAttempts>=5 ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', textAlign:'left', opacity: dungeonAttempts>=5 ? 0.4 : 1 }}>
+                        <div>{d.label}</div>
+                        <div style={{ color: dungeonAttempts>=5?'#222':'#446688', fontSize:'10px' }}>{d.enemy}</div>
+                        <div style={{ fontSize:'10px' }}>{d.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🏨 宿屋へ</button>
                 <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>⛩ 神殿へ</button>
                 <button onClick={()=>nav('/shop')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🛒 商店へ</button>
