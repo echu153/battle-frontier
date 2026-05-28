@@ -620,7 +620,7 @@ export default function Game() {
   const [pendingPoints, setPendingPoints] = useState(0)
   const [statPoints, setStatPoints] = useState({})
   const [showStatPanel, setShowStatPanel] = useState(false)
-  const [selectedArea, setSelectedArea] = useState(1)
+  const [selectedArea, setSelectedArea] = useState(() => Number(localStorage.getItem('selectedArea') || 1))
   const [regenRemaining, setRegenRemaining] = useState(0)
   const [innMessage, setInnMessage] = useState('')
   const [equipment, setEquipment] = useState([])
@@ -1615,7 +1615,7 @@ export default function Game() {
               <div style={{ background:'#001028', height:'6px', border:'1px solid #002244', marginBottom:'10px' }}>
                 <div style={{ height:'100%', width:`${timerPct}%`, background:canAct?'#44ff88':'linear-gradient(90deg,#003366,#0088ff)', transition:'width 0.2s' }} />
               </div>
-              <select value={selectedArea} onChange={e=>setSelectedArea(Number(e.target.value))} style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
+              <select value={selectedArea} onChange={e=>{ const v=Number(e.target.value); setSelectedArea(v); localStorage.setItem('selectedArea',v) }} style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
                 {availableAreas.map(area=><option key={area.id} value={area.id}>{area.name}</option>)}
               </select>
               <button onClick={doBattle} disabled={!canAct||loading||!canBattle}
@@ -1806,7 +1806,7 @@ export default function Game() {
                 </div>
                 <div style={{ marginBottom:'10px' }}>
                   <div style={{ color:'#446688', fontSize:'11px', marginBottom:'4px' }}>エリア選択</div>
-                  <select value={selectedArea} onChange={e=>setSelectedArea(Number(e.target.value))} style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'6px', fontFamily:'monospace', fontSize:'12px' }}>
+                  <select value={selectedArea} onChange={e=>{ const v=Number(e.target.value); setSelectedArea(v); localStorage.setItem('selectedArea',v) }} style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'6px', fontFamily:'monospace', fontSize:'12px' }}>
                     {availableAreas.map(area=><option key={area.id} value={area.id}>{area.name}</option>)}
                   </select>
                 </div>
