@@ -341,8 +341,10 @@ const calcEnhancedStat = (base, plus) => {
 
 const calcEffectiveStats = (profile, equipment, proficiency) => {
   const bonus = { atk:0, def:0, matk:0, mdef:0, spd:0, hp:0, mp:0 }
-  let matkPct = 0 // 虚無の杖のmatk_bonus_pct対応
-  let hitBonus = 0 // アクアクラウンのhit_bonus対応
+  let matkPct = 0
+  let hitBonus = 0
+  let critBonus = 0
+  let evasionBonus = 0
   for (const item of equipment) {
     if (!item.equipped || !item.weapons) continue
     const w = item.weapons
@@ -362,6 +364,9 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
     if (w.spd_bonus_pct > 0) bonus.spd += Math.floor(profile.spd   * w.spd_bonus_pct/100)
     if (w.matk_bonus_pct > 0) matkPct  += w.matk_bonus_pct
     if (w.hit_bonus > 0) hitBonus += w.hit_bonus
+    hitBonus    += item.bonus_hit     || 0
+    critBonus   += item.bonus_crit    || 0
+    evasionBonus += item.bonus_evasion || 0
     if (item.slot === 'weapon') {
       const prof = proficiency.find(p => p.weapon_id === w.id)
       if (prof) {
@@ -386,6 +391,8 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
     mp_max: profile.mp_max + bonus.mp,
     bonus,
     hitBonus,
+    critBonus,
+    evasionBonus,
   }
 }
 
@@ -935,7 +942,7 @@ export default function Game() {
     const enemySpd = enemy.spd||5
     const playerExtraRate = calcExtraActionRate(playerSpd, enemySpd)
     const enemyExtraRate  = calcExtraActionRate(enemySpd, playerSpd)
-    const playerCritRate  = calcCritRate(playerSpd, enemySpd) + passiveCritBonus
+    const playerCritRate  = calcCritRate(playerSpd, enemySpd) + passiveCritBonus + (eff.critBonus || 0)
     const enemyCritRate   = calcCritRate(enemySpd, playerSpd)
 
     // プレイヤーの回避率（敵が攻撃するとき）
@@ -1030,7 +1037,7 @@ export default function Game() {
       // プレイヤーの回避判定（素早さバフ/デバフ考慮）
       const effectivePlayerSpd = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * playerSpdDebuff
       const effectiveEnemySpd = enemySpd * enemySpdBuff
-      const evasionRate = calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd)
+      const evasionRate = calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0)
       if (evasionRate > 0 && Math.random()*100 < evasionRate) {
         const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
         logs.push({ text:`${prefix}${enemy.name}の攻撃！ しかし回避した！`, color:'#44ff88' })

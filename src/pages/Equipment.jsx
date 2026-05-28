@@ -16,6 +16,15 @@ const ARTIFACT_BASE_NAMES = [
   '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたハンマー'
 ]
 
+const RARITY_ORDER = ['f','e','d','c','b','a','s','ss','sss']
+
+const sortEquipment = (items, key) => [...items].sort((a, b) => {
+  if (key === 'rarity_asc')  return RARITY_ORDER.indexOf(a.weapons.rarity) - RARITY_ORDER.indexOf(b.weapons.rarity)
+  if (key === 'rarity_desc') return RARITY_ORDER.indexOf(b.weapons.rarity) - RARITY_ORDER.indexOf(a.weapons.rarity)
+  if (key === 'obtained_desc') return new Date(b.obtained_at) - new Date(a.obtained_at)
+  return new Date(a.obtained_at) - new Date(b.obtained_at)
+})
+
 const ARTIFACT_EVOLVED = {
   '古びた剣':'黒星ノ断剣','古びた短剣':'血哭ノ短刃','古びた弓':'月影ノ断弓',
   '古びた斧':'奈落ノ処刑斧','古びた刀':'斬月ノ終刀','古びた銃':'虚無ノ閃砲',
@@ -88,6 +97,7 @@ export default function Equipment() {
   const [tab, setTab] = useState('weapon')
   const [loading, setLoading] = useState(false)
   const [awakenMessage, setAwakenMessage] = useState('')
+  const [sortKey, setSortKey] = useState(() => localStorage.getItem('equipSortKey') || 'obtained_asc')
 
   useEffect(() => { fetchAll() }, [])
 
@@ -170,7 +180,7 @@ export default function Equipment() {
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
   const slots = ['weapon', 'armor', 'accessory', 'accessory2']
-  const filteredEquipment = equipment.filter(e => e.slot === tab)
+  const filteredEquipment = sortEquipment(equipment.filter(e => e.slot === tab), sortKey)
   const equippedItem = allItems.find(i => i.equipped)
 
   return (
@@ -249,7 +259,7 @@ export default function Equipment() {
 
           {/* 右カラム：所持装備 */}
           <div>
-            <div style={{ display:'flex', gap:'4px', marginBottom:'8px', flexWrap:'wrap' }}>
+            <div style={{ display:'flex', gap:'4px', marginBottom:'6px', flexWrap:'wrap' }}>
               {[...slots, 'item'].map(s => (
                 <button key={s} onClick={() => setTab(s)}
                   style={{ padding:'4px 8px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
@@ -260,6 +270,19 @@ export default function Equipment() {
                 </button>
               ))}
             </div>
+
+            {tab !== 'item' && (
+              <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', fontSize:'11px' }}>
+                <span style={{color:'#446688'}}>並び替え:</span>
+                <select value={sortKey} onChange={e => { const v=e.target.value; setSortKey(v); localStorage.setItem('equipSortKey',v) }}
+                  style={{ background:'#001028', border:'1px solid #003366', color:'#88ccff', fontFamily:'monospace', fontSize:'11px', padding:'2px 4px' }}>
+                  <option value="obtained_asc">入手順（古い順）</option>
+                  <option value="obtained_desc">入手順（新しい順）</option>
+                  <option value="rarity_asc">レアリティ（低い順）</option>
+                  <option value="rarity_desc">レアリティ（高い順）</option>
+                </select>
+              </div>
+            )}
 
             {tab === 'item' && (
               <div>
@@ -308,7 +331,7 @@ export default function Equipment() {
                   const profPct = prof ? Math.min(100, (prof.prof_exp / 100) * 100) : 0
                   const profPrefix = prof ? getProfPrefix(prof.prof_lv) : ''
                   const canAwaken = isArtifactBase && prof && prof.prof_lv >= 300
-                  const hasBonus = item.bonus_atk > 0 || item.bonus_def > 0 || item.bonus_matk > 0 || item.bonus_mdef > 0 || item.bonus_spd > 0 || item.bonus_hp > 0 || item.bonus_mp > 0
+                  const hasBonus = item.bonus_atk > 0 || item.bonus_def > 0 || item.bonus_matk > 0 || item.bonus_mdef > 0 || item.bonus_spd > 0 || item.bonus_hp > 0 || item.bonus_mp > 0 || (item.bonus_crit||0) > 0 || (item.bonus_evasion||0) > 0 || (item.bonus_hit||0) > 0
                   const isAccessory = tab === 'accessory'
 
                   return (
@@ -366,6 +389,9 @@ export default function Equipment() {
                           {item.bonus_spd  > 0 && ` 素早さ+${item.bonus_spd}`}
                           {item.bonus_hp   > 0 && ` HP+${item.bonus_hp}`}
                           {item.bonus_mp   > 0 && ` MP+${item.bonus_mp}`}
+                          {(item.bonus_crit||0) > 0 && ` クリティカル率+${item.bonus_crit}%`}
+                          {(item.bonus_evasion||0) > 0 && ` 回避率+${item.bonus_evasion}%`}
+                          {(item.bonus_hit||0) > 0 && ` 命中率+${item.bonus_hit}%`}
                         </div>
                       )}
                       {item.bonus_effect && <div style={{ fontSize:'10px', color:'#ffaa00', marginBottom:'4px' }}>{getEffectLabel(item.bonus_effect)}</div>}

@@ -31,6 +31,90 @@ const STONE_NAMES = {
   b:'強化石(B)', a:'強化石(A)', s:'強化石(S)', ss:'強化石(SS)', sss:'強化石(SSS)'
 }
 
+const RARITY_ORDER = ['f','e','d','c','b','a','s','ss','sss']
+const RARITY_BONUS_CONFIG = {
+  f:   { slots:1, min:1,  max:5  },
+  e:   { slots:1, min:1,  max:8  },
+  d:   { slots:2, min:1,  max:12 },
+  c:   { slots:2, min:2,  max:18 },
+  b:   { slots:3, min:3,  max:25 },
+  a:   { slots:3, min:5,  max:35 },
+  s:   { slots:4, min:5,  max:45 },
+  ss:  { slots:4, min:8,  max:55 },
+  sss: { slots:4, min:10, max:60 },
+}
+const BONUS_TYPES_BASE = ['atk','def','matk','mdef','spd','hp','mp','effect']
+const BONUS_TYPES_HIGH = ['atk','def','matk','mdef','spd','hp','mp','effect','crit','evasion','hit']
+const EFFECT_POOL = [
+  'open_atk_10_2t','open_atk_20_1t','open_def_10_2t','open_def_20_1t',
+  'open_matk_10_2t','open_matk_20_1t','open_mdef_10_2t','open_mdef_20_1t',
+  'open_spd_10_2t','open_spd_20_1t','delay_heal_10','regen_heal_5_3t',
+]
+const RE_EVAL_SHEETS = { f:1, e:2, d:5, c:10, b:30, a:50, s:150, ss:300, sss:1000 }
+
+const getEffectLabel = (effect) => {
+  const labels = {
+    'open_atk_10_2t':'【開幕2T・攻撃力+10%】','open_atk_20_1t':'【開幕1T・攻撃力+20%】',
+    'open_def_10_2t':'【開幕2T・防御力+10%】','open_def_20_1t':'【開幕1T・防御力+20%】',
+    'open_matk_10_2t':'【開幕2T・特殊攻撃力+10%】','open_matk_20_1t':'【開幕1T・特殊攻撃力+20%】',
+    'open_mdef_10_2t':'【開幕2T・特殊防御力+10%】','open_mdef_20_1t':'【開幕1T・特殊防御力+20%】',
+    'open_spd_10_2t':'【開幕2T・素早さ+10%】','open_spd_20_1t':'【開幕1T・素早さ+20%】',
+    'delay_heal_10':'【3T後・HP10%回復】','regen_heal_5_3t':'【開幕3T・毎T HP5%回復】',
+    'artifact':'【消費MP2倍・与ダメージ1.2倍】',
+  }
+  return labels[effect] || effect
+}
+
+const generateBonusSlots = (rarity) => {
+  const config = RARITY_BONUS_CONFIG[rarity]
+  const pool = ['a','s','ss','sss'].includes(rarity) ? BONUS_TYPES_HIGH : BONUS_TYPES_BASE
+  const usedTypes = new Set()
+  const slots = []
+  for (let i = 0; i < config.slots; i++) {
+    const available = pool.filter(t => !usedTypes.has(t))
+    const type = available[Math.floor(Math.random() * available.length)]
+    usedTypes.add(type)
+    if (type === 'effect') {
+      slots.push({ type, value: EFFECT_POOL[Math.floor(Math.random() * EFFECT_POOL.length)] })
+    } else if (type === 'crit' || type === 'evasion' || type === 'hit') {
+      slots.push({ type, value: 1.0 + Math.floor(Math.random() * 9) * 0.5 })
+    } else {
+      slots.push({ type, value: Math.floor(Math.random() * (config.max - config.min + 1)) + config.min })
+    }
+  }
+  return slots
+}
+
+const slotsToColumns = (slots) => {
+  const cols = {
+    bonus_atk:0, bonus_def:0, bonus_matk:0, bonus_mdef:0,
+    bonus_spd:0, bonus_hp:0, bonus_mp:0, bonus_effect:null,
+    bonus_crit:0, bonus_evasion:0, bonus_hit:0,
+    bonus_slots_json: JSON.stringify(slots),
+  }
+  for (const s of slots) {
+    if (s.type==='atk') cols.bonus_atk=s.value
+    else if (s.type==='def') cols.bonus_def=s.value
+    else if (s.type==='matk') cols.bonus_matk=s.value
+    else if (s.type==='mdef') cols.bonus_mdef=s.value
+    else if (s.type==='spd') cols.bonus_spd=s.value
+    else if (s.type==='hp') cols.bonus_hp=s.value
+    else if (s.type==='mp') cols.bonus_mp=s.value
+    else if (s.type==='effect') cols.bonus_effect=s.value
+    else if (s.type==='crit') cols.bonus_crit=s.value
+    else if (s.type==='evasion') cols.bonus_evasion=s.value
+    else if (s.type==='hit') cols.bonus_hit=s.value
+  }
+  return cols
+}
+
+const sortEquipment = (items, key) => [...items].sort((a, b) => {
+  if (key === 'rarity_asc')  return RARITY_ORDER.indexOf(a.weapons.rarity) - RARITY_ORDER.indexOf(b.weapons.rarity)
+  if (key === 'rarity_desc') return RARITY_ORDER.indexOf(b.weapons.rarity) - RARITY_ORDER.indexOf(a.weapons.rarity)
+  if (key === 'obtained_desc') return new Date(b.obtained_at) - new Date(a.obtained_at)
+  return new Date(a.obtained_at) - new Date(b.obtained_at)
+})
+
 // 強化後ステータス計算（1.5倍）
 const calcEnhancedStats = (weapon, plus) => {
   if (!plus || plus <= 0) return weapon
@@ -57,6 +141,7 @@ export default function Smithy() {
   const [messageColor, setMessageColor] = useState('#44ff88')
   const [selectedItem, setSelectedItem] = useState(null)
   const [craftTab, setCraftTab] = useState('equipment')
+  const [sortKey, setSortKey] = useState(() => localStorage.getItem('equipSortKey') || 'obtained_asc')
 
   useEffect(() => { fetchAll() }, [])
 
@@ -193,6 +278,47 @@ export default function Smithy() {
     setLoading(false)
   }
 
+  const doReEval = async (item) => {
+    setLoading(true)
+    const rarity = item.weapons.rarity
+    const needed = RE_EVAL_SHEETS[rarity]
+    const sheetItem = playerItems.find(pi => pi.items?.name === '再評価依頼書')
+    const owned = sheetItem?.quantity || 0
+    if (owned < needed) { showMessage(`再評価依頼書が足りません！（所持${owned}枚・必要${needed}枚）`, '#ff4444'); setLoading(false); return }
+    const newSlots = generateBonusSlots(rarity)
+    await supabase.from('player_equipment').update(slotsToColumns(newSlots)).eq('id', item.id)
+    const newQty = owned - needed
+    if (newQty <= 0) await supabase.from('player_items').delete().eq('id', sheetItem.id)
+    else await supabase.from('player_items').update({ quantity: newQty }).eq('id', sheetItem.id)
+    showMessage(`✨ ${item.weapons.name} のボーナスを再評価しました！`, '#ffcc00')
+    await fetchAll()
+    setLoading(false)
+  }
+
+  const doReAppraise = async (item) => {
+    setLoading(true)
+    const rarity = item.weapons.rarity
+    const needed = RE_EVAL_SHEETS[rarity]
+    const sheetItem = playerItems.find(pi => pi.items?.name === '再鑑定依頼書')
+    const owned = sheetItem?.quantity || 0
+    if (owned < needed) { showMessage(`再鑑定依頼書が足りません！（所持${owned}枚・必要${needed}枚）`, '#ff4444'); setLoading(false); return }
+    if (!item.bonus_slots_json) { showMessage('まず再評価を行ってください', '#ff4444'); setLoading(false); return }
+    const existingSlots = JSON.parse(item.bonus_slots_json)
+    const config = RARITY_BONUS_CONFIG[rarity]
+    const newSlots = existingSlots.map(s => {
+      if (s.type === 'effect') return { type:'effect', value: EFFECT_POOL[Math.floor(Math.random()*EFFECT_POOL.length)] }
+      if (s.type==='crit'||s.type==='evasion'||s.type==='hit') return { type:s.type, value: 1.0+Math.floor(Math.random()*9)*0.5 }
+      return { type:s.type, value: Math.floor(Math.random()*(config.max-config.min+1))+config.min }
+    })
+    await supabase.from('player_equipment').update(slotsToColumns(newSlots)).eq('id', item.id)
+    const newQty = owned - needed
+    if (newQty <= 0) await supabase.from('player_items').delete().eq('id', sheetItem.id)
+    else await supabase.from('player_items').update({ quantity: newQty }).eq('id', sheetItem.id)
+    showMessage(`🔍 ${item.weapons.name} のボーナス値を再鑑定しました！`, '#88ccff')
+    await fetchAll()
+    setLoading(false)
+  }
+
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
   const slots = ['weapon', 'armor', 'accessory', 'accessory2']
@@ -210,8 +336,8 @@ export default function Smithy() {
 
         {message && <div style={{ color: messageColor, fontSize:'12px', padding:'8px', border:`1px solid ${messageColor}`, marginBottom:'12px', textAlign:'center' }}>{message}</div>}
 
-        <div style={{ display:'flex', gap:'4px', marginBottom:'12px' }}>
-          {[{id:'enhance', label:'強化'}, {id:'craft', label:'加工'}, {id:'sell', label:'売却'}].map(t => (
+        <div style={{ display:'flex', gap:'4px', marginBottom:'8px', flexWrap:'wrap' }}>
+          {[{id:'enhance', label:'強化'}, {id:'craft', label:'加工'}, {id:'reeval', label:'再評価'}, {id:'sell', label:'売却'}].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{ padding:'6px 14px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
                 background: tab === t.id ? '#001840' : '#000818',
@@ -222,6 +348,19 @@ export default function Smithy() {
           ))}
         </div>
 
+        {(tab === 'enhance' || tab === 'reeval' || tab === 'sell') && (
+          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px', fontSize:'11px' }}>
+            <span style={{color:'#446688'}}>並び替え:</span>
+            <select value={sortKey} onChange={e => { const v=e.target.value; setSortKey(v); localStorage.setItem('equipSortKey',v) }}
+              style={{ background:'#001028', border:'1px solid #003366', color:'#88ccff', fontFamily:'monospace', fontSize:'11px', padding:'2px 4px' }}>
+              <option value="obtained_asc">入手順（古い順）</option>
+              <option value="obtained_desc">入手順（新しい順）</option>
+              <option value="rarity_asc">レアリティ（低い順）</option>
+              <option value="rarity_desc">レアリティ（高い順）</option>
+            </select>
+          </div>
+        )}
+
         {/* 強化タブ */}
         {tab === 'enhance' && (
           <div>
@@ -229,7 +368,7 @@ export default function Smithy() {
               同じ名前の装備または同ランクの強化石を素材に使って強化できます。※古びた○○は強化不可
             </div>
             {slots.map(slot => {
-              const slotItems = equipment.filter(e => e.slot === slot)
+              const slotItems = sortEquipment(equipment.filter(e => e.slot === slot), sortKey)
               if (slotItems.length === 0) return null
               return (
                 <div key={slot} style={{ marginBottom:'12px' }}>
@@ -360,12 +499,85 @@ export default function Smithy() {
           </div>
         )}
 
+        {/* 再評価タブ */}
+        {tab === 'reeval' && (
+          <div>
+            <div style={{ display:'flex', gap:'16px', marginBottom:'8px', fontSize:'11px' }}>
+              <span style={{color:'#446688'}}>再評価依頼書: <span style={{color:'#ffcc00'}}>{playerItems.find(pi=>pi.items?.name==='再評価依頼書')?.quantity||0}枚</span></span>
+              <span style={{color:'#446688'}}>再鑑定依頼書: <span style={{color:'#88ccff'}}>{playerItems.find(pi=>pi.items?.name==='再鑑定依頼書')?.quantity||0}枚</span></span>
+            </div>
+            <div style={{ color:'#446688', fontSize:'10px', marginBottom:'12px' }}>再評価：全ボーナス再抽選　再鑑定：種類固定で値のみ再抽選（要：再評価済み）　古びた○○は対象外</div>
+            {slots.map(slot => {
+              const slotItems = sortEquipment(equipment.filter(e => e.slot === slot), sortKey)
+              if (slotItems.length === 0) return null
+              return (
+                <div key={slot} style={{ marginBottom:'12px' }}>
+                  <div style={{ color:'#aa6644', fontSize:'11px', marginBottom:'6px' }}>── {SLOT_LABELS[slot]} ──</div>
+                  {slotItems.map(item => {
+                    const w = item.weapons
+                    const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
+                    const rarity = w.rarity
+                    const needed = RE_EVAL_SHEETS[rarity]
+                    const evalOwned = playerItems.find(pi=>pi.items?.name==='再評価依頼書')?.quantity||0
+                    const appOwned = playerItems.find(pi=>pi.items?.name==='再鑑定依頼書')?.quantity||0
+                    const canEval = !isArtifactBase && evalOwned >= needed
+                    const canApp = !isArtifactBase && !!item.bonus_slots_json && appOwned >= needed
+                    const hasBonus = item.bonus_atk>0||item.bonus_def>0||item.bonus_matk>0||item.bonus_mdef>0||item.bonus_spd>0||item.bonus_hp>0||item.bonus_mp>0||(item.bonus_crit||0)>0||(item.bonus_evasion||0)>0||(item.bonus_hit||0)>0||item.bonus_effect
+                    return (
+                      <div key={item.id} style={{ border:'1px solid #002244', background:'#001028', padding:'10px', marginBottom:'6px', opacity: isArtifactBase ? 0.5 : 1 }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+                          <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+                            <span style={{ fontSize:'9px', padding:'1px 4px', color:RARITY_COLORS[rarity], border:`1px solid ${RARITY_COLORS[rarity]}` }}>{RARITY_LABELS[rarity]}</span>
+                            <span style={{ color:RARITY_COLORS[rarity], fontSize:'12px' }}>{w.name}{(item.enhance_plus||0)>0?` +${item.enhance_plus}`:''}</span>
+                            {item.equipped && <span style={{color:'#0088ff',fontSize:'10px'}}>装備中</span>}
+                            {isArtifactBase && <span style={{color:'#446688',fontSize:'10px'}}>対象外</span>}
+                          </div>
+                          {!isArtifactBase && (
+                            <div style={{ display:'flex', gap:'4px' }}>
+                              <button onClick={() => doReEval(item)} disabled={!canEval||loading}
+                                style={{ padding:'3px 8px', background:canEval?'#1a0800':'#001', border:`1px solid ${canEval?'#aa6644':'#002244'}`, color:canEval?'#aa6644':'#334455', cursor:canEval?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
+                                再評価 {needed}枚
+                              </button>
+                              <button onClick={() => doReAppraise(item)} disabled={!canApp||loading}
+                                style={{ padding:'3px 8px', background:canApp?'#001840':'#001', border:`1px solid ${canApp?'#4466aa':'#002244'}`, color:canApp?'#88aaff':'#334455', cursor:canApp?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
+                                再鑑定 {needed}枚
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        {hasBonus ? (
+                          <div style={{ fontSize:'10px', color:'#ffaa00' }}>
+                            ボーナス:
+                            {item.bonus_atk>0 && ` 攻撃力+${item.bonus_atk}`}
+                            {item.bonus_def>0 && ` 防御力+${item.bonus_def}`}
+                            {item.bonus_matk>0 && ` 特殊攻撃力+${item.bonus_matk}`}
+                            {item.bonus_mdef>0 && ` 特殊防御力+${item.bonus_mdef}`}
+                            {item.bonus_spd>0 && ` 素早さ+${item.bonus_spd}`}
+                            {item.bonus_hp>0 && ` HP+${item.bonus_hp}`}
+                            {item.bonus_mp>0 && ` MP+${item.bonus_mp}`}
+                            {(item.bonus_crit||0)>0 && ` クリティカル率+${item.bonus_crit}%`}
+                            {(item.bonus_evasion||0)>0 && ` 回避率+${item.bonus_evasion}%`}
+                            {(item.bonus_hit||0)>0 && ` 命中率+${item.bonus_hit}%`}
+                            {item.bonus_effect && ` ${getEffectLabel(item.bonus_effect)}`}
+                          </div>
+                        ) : (
+                          !isArtifactBase && <div style={{fontSize:'10px',color:'#334455'}}>ボーナスなし（再評価で付与）</div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         {/* 売却タブ */}
         {tab === 'sell' && (
           <div>
             <div style={{ color:'#446688', fontSize:'11px', marginBottom:'8px' }}>装備中のアイテムは売却できません</div>
             {slots.map(slot => {
-              const slotItems = equipment.filter(e => e.slot === slot)
+              const slotItems = sortEquipment(equipment.filter(e => e.slot === slot), sortKey)
               if (slotItems.length === 0) return null
               return (
                 <div key={slot} style={{ marginBottom:'12px' }}>
