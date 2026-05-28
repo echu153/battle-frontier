@@ -191,6 +191,12 @@ export default function Fishing() {
   const [message, setMessage] = useState('')
   const [messageColor, setMessageColor] = useState('#44ff88')
   const [tab, setTab] = useState('fishing')
+  const [now, setNow] = useState(Date.now())
+
+useEffect(() => {
+  const id = setInterval(() => setNow(Date.now()), 1000)
+  return () => clearInterval(id)
+}, [])
   const [encLocation, setEncLocation] = useState('日本海')
 
   useEffect(() => { fetchAll() }, [])
@@ -349,9 +355,9 @@ export default function Fishing() {
     setLoading(false)
   }
 
-  const getElapsedText = () => {
-    if (!profile?.fishing_started_at) return ''
-    const elapsed = Math.floor((Date.now() - new Date(profile.fishing_started_at).getTime()) / 1000)
+const getElapsedText = () => {
+  if (!profile?.fishing_started_at) return ''
+  const elapsed = Math.floor((now - new Date(profile.fishing_started_at).getTime()) / 1000)
     const h = Math.floor(elapsed / 3600)
     const m = Math.floor((elapsed % 3600) / 60)
     const s = elapsed % 60
@@ -360,9 +366,9 @@ export default function Fishing() {
     return `${s}秒`
   }
 
-  const getEstimatedCount = () => {
-    if (!profile?.fishing_started_at) return 0
-    const elapsed = (Date.now() - new Date(profile.fishing_started_at).getTime()) / 1000
+ const getEstimatedCount = () => {
+  if (!profile?.fishing_started_at) return 0
+  const elapsed = (now - new Date(profile.fishing_started_at).getTime()) / 1000
     const avg = (MIN_INTERVAL + MAX_INTERVAL) / 2
     return Math.floor(elapsed / avg)
   }
