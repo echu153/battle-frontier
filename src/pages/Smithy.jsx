@@ -11,6 +11,11 @@ const RARITY_LABELS = {
   f:'F', e:'E', d:'D', c:'C', b:'B', a:'A', s:'S', ss:'SS', sss:'SSS'
 }
 
+const ARTIFACT_BASE_NAMES = [
+  '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
+  '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたハンマー'
+]
+
 const ENHANCE_COST = [0,100,200,400,800,1500,3000,5000,8000,12000,20000,35000,60000,100000,150000,200000,300000]
 const ENHANCE_RATE = { 6:70, 7:60, 8:50, 9:40, 10:30, 11:20, 12:10, 13:5, 14:3, 15:1, 16:0.1 }
 const MATERIAL_COUNT = (plus) => {
@@ -24,6 +29,21 @@ const STONE_RANKS = ['f','e','d','c','b','a','s','ss','sss']
 const STONE_NAMES = {
   f:'強化石(F)', e:'強化石(E)', d:'強化石(D)', c:'強化石(C)',
   b:'強化石(B)', a:'強化石(A)', s:'強化石(S)', ss:'強化石(SS)', sss:'強化石(SSS)'
+}
+
+// 強化後ステータス計算（1.5倍）
+const calcEnhancedStats = (weapon, plus) => {
+  if (!plus || plus <= 0) return weapon
+  const mult = Math.pow(1.5, plus)
+  return {
+    atk_bonus:  weapon.atk_bonus  > 0 ? Math.ceil(weapon.atk_bonus  * mult) : weapon.atk_bonus,
+    def_bonus:  weapon.def_bonus  > 0 ? Math.ceil(weapon.def_bonus  * mult) : weapon.def_bonus,
+    matk_bonus: weapon.matk_bonus > 0 ? Math.ceil(weapon.matk_bonus * mult) : weapon.matk_bonus,
+    mdef_bonus: weapon.mdef_bonus > 0 ? Math.ceil(weapon.mdef_bonus * mult) : weapon.mdef_bonus,
+    spd_bonus:  weapon.spd_bonus  > 0 ? Math.ceil(weapon.spd_bonus  * mult) : weapon.spd_bonus,
+    hp_bonus:   weapon.hp_bonus   > 0 ? Math.ceil(weapon.hp_bonus   * mult) : weapon.hp_bonus,
+    mp_bonus:   weapon.mp_bonus   > 0 ? Math.ceil(weapon.mp_bonus   * mult) : weapon.mp_bonus,
+  }
 }
 
 export default function Smithy() {
@@ -45,13 +65,9 @@ export default function Smithy() {
     if (!user) { nav('/login'); return }
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     setProfile(p)
-    const { data: eq } = await supabase
-      .from('player_equipment').select('*, weapons(*)')
-      .eq('player_id', user.id).order('obtained_at')
+    const { data: eq } = await supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', user.id).order('obtained_at')
     setEquipment(eq || [])
-    const { data: pi } = await supabase
-      .from('player_items').select('*, items(*)')
-      .eq('player_id', user.id)
+    const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id)
     setPlayerItems(pi || [])
   }
 
@@ -71,14 +87,11 @@ export default function Smithy() {
     const found = playerItems.find(pi => pi.items?.name === stoneName)
     if (!found) return
     const newQty = (found.quantity || 0) - count
-    if (newQty <= 0) {
-      await supabase.from('player_items').delete().eq('id', found.id)
-    } else {
-      await supabase.from('player_items').update({ quantity: newQty }).eq('id', found.id)
-    }
+    if (newQty <= 0) await supabase.from('player_items').delete().eq('id', found.id)
+    else await supabase.from('player_items').update({ quantity: newQty }).eq('id', found.id)
   }
 
-  const doEnhance = async (item, useStones = false) => {
+  const doEnhance = async (item) => {
     setLoading(true)
     const currentPlus = item.enhance_plus || 0
     const nextPlus = currentPlus + 1
@@ -86,41 +99,25 @@ export default function Smithy() {
     const materialCount = MATERIAL_COUNT(currentPlus)
     const rarity = item.weapons.rarity
 
-    if (profile.gold < cost) {
-      showMessage('ゴールドが足りません！', '#ff4444')
-      setLoading(false); return
-    }
+    if (profile.gold < cost) { showMessage('ゴールドが足りません！', '#ff4444'); setLoading(false); return }
 
-    // 同名装備の所持数
-    const sameItems = equipment.filter(e =>
-      e.weapons.name === item.weapons.name && e.id !== item.id && !e.equipped
-    )
-    // 強化石の所持数
+    const sameItems = equipment.filter(e => e.weapons.name === item.weapons.name && e.id !== item.id && !e.equipped)
     const stoneCount = getStoneCount(rarity)
-
-    // 素材の組み合わせを計算（同名装備 + 強化石で補完）
     const usableSame = sameItems.length
     const totalAvailable = usableSame + stoneCount
+
     if (totalAvailable < materialCount) {
       showMessage(`素材が足りません！（同名装備${usableSame}個 + 強化石(${RARITY_LABELS[rarity]})${stoneCount}個 = ${totalAvailable}個、${materialCount}個必要）`, '#ff4444')
       setLoading(false); return
     }
 
-    // ゴールド消費
     await supabase.from('profiles').update({ gold: profile.gold - cost }).eq('id', profile.id)
 
-    // 同名装備を優先消費、足りなければ強化石で補完
     const useEquipCount = Math.min(usableSame, materialCount)
     const useStoneCount = materialCount - useEquipCount
+    for (let i = 0; i < useEquipCount; i++) await supabase.from('player_equipment').delete().eq('id', sameItems[i].id)
+    if (useStoneCount > 0) await consumeStones(rarity, useStoneCount)
 
-    for (let i = 0; i < useEquipCount; i++) {
-      await supabase.from('player_equipment').delete().eq('id', sameItems[i].id)
-    }
-    if (useStoneCount > 0) {
-      await consumeStones(rarity, useStoneCount)
-    }
-
-    // 成功判定
     let success = true
     if (nextPlus >= 6) {
       const rate = ENHANCE_RATE[nextPlus] || ENHANCE_RATE[16]
@@ -146,27 +143,16 @@ export default function Smithy() {
   const craftStoneFromSelectedItems = async (selectedIds) => {
     setLoading(true)
     const selected = selectedIds.map(id => equipment.find(e => e.id === id)).filter(Boolean)
-    if (selected.length !== 3) {
-      showMessage('3つ選択してください！', '#ff4444')
-      setLoading(false); return
-    }
+    if (selected.length !== 3) { showMessage('3つ選択してください！', '#ff4444'); setLoading(false); return }
     const rarity = selected[0].weapons.rarity
-    if (!selected.every(e => e.weapons.rarity === rarity)) {
-      showMessage('同じランクの装備を3つ選択してください！', '#ff4444')
-      setLoading(false); return
-    }
-    for (const item of selected) {
-      await supabase.from('player_equipment').delete().eq('id', item.id)
-    }
+    if (!selected.every(e => e.weapons.rarity === rarity)) { showMessage('同じランクの装備を3つ選択してください！', '#ff4444'); setLoading(false); return }
+    for (const item of selected) await supabase.from('player_equipment').delete().eq('id', item.id)
     const stoneName = STONE_NAMES[rarity]
     const { data: stoneItem } = await supabase.from('items').select('*').eq('name', stoneName).single()
     if (stoneItem) {
       const existing = playerItems.find(pi => pi.item_id === stoneItem.id)
-      if (existing) {
-        await supabase.from('player_items').update({ quantity: (existing.quantity||1)+1 }).eq('id', existing.id)
-      } else {
-        await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: 1, equipped: false })
-      }
+      if (existing) await supabase.from('player_items').update({ quantity: (existing.quantity||1)+1 }).eq('id', existing.id)
+      else await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: 1, equipped: false })
     }
     showMessage(`✨ ${stoneName} を1つ作成した！`, '#ffcc00')
     await fetchAll()
@@ -176,32 +162,20 @@ export default function Smithy() {
   const craftStoneFromStones = async (rarity) => {
     setLoading(true)
     const stoneIdx = STONE_RANKS.indexOf(rarity)
-    if (stoneIdx >= STONE_RANKS.length - 1) {
-      showMessage('これ以上ランクアップできません！', '#ff4444')
-      setLoading(false); return
-    }
+    if (stoneIdx >= STONE_RANKS.length - 1) { showMessage('これ以上ランクアップできません！', '#ff4444'); setLoading(false); return }
     const stoneName = STONE_NAMES[rarity]
     const { data: stoneItem } = await supabase.from('items').select('*').eq('name', stoneName).single()
     const existing = playerItems.find(pi => pi.item_id === stoneItem?.id)
-    if (!existing || (existing.quantity||0) < 3) {
-      showMessage(`${stoneName}が3つ必要です！（所持${existing?.quantity||0}個）`, '#ff4444')
-      setLoading(false); return
-    }
-    if ((existing.quantity||0) - 3 <= 0) {
-      await supabase.from('player_items').delete().eq('id', existing.id)
-    } else {
-      await supabase.from('player_items').update({ quantity: (existing.quantity||0)-3 }).eq('id', existing.id)
-    }
+    if (!existing || (existing.quantity||0) < 3) { showMessage(`${stoneName}が3つ必要です！（所持${existing?.quantity||0}個）`, '#ff4444'); setLoading(false); return }
+    if ((existing.quantity||0) - 3 <= 0) await supabase.from('player_items').delete().eq('id', existing.id)
+    else await supabase.from('player_items').update({ quantity: (existing.quantity||0)-3 }).eq('id', existing.id)
     const nextRarity = STONE_RANKS[stoneIdx + 1]
     const nextStoneName = STONE_NAMES[nextRarity]
     const { data: nextStoneItem } = await supabase.from('items').select('*').eq('name', nextStoneName).single()
     if (nextStoneItem) {
       const nextExisting = playerItems.find(pi => pi.item_id === nextStoneItem.id)
-      if (nextExisting) {
-        await supabase.from('player_items').update({ quantity: (nextExisting.quantity||1)+1 }).eq('id', nextExisting.id)
-      } else {
-        await supabase.from('player_items').insert({ player_id: profile.id, item_id: nextStoneItem.id, quantity: 1, equipped: false })
-      }
+      if (nextExisting) await supabase.from('player_items').update({ quantity: (nextExisting.quantity||1)+1 }).eq('id', nextExisting.id)
+      else await supabase.from('player_items').insert({ player_id: profile.id, item_id: nextStoneItem.id, quantity: 1, equipped: false })
     }
     showMessage(`✨ ${nextStoneName} を1つ作成した！`, '#ffcc00')
     await fetchAll()
@@ -219,47 +193,22 @@ export default function Smithy() {
     setLoading(false)
   }
 
-  if (!profile) return (
-    <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
-  )
+  if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
   const slots = ['weapon', 'armor', 'accessory', 'accessory2']
-
-  const getEnhancedStats = (weapon, plus) => {
-    if (!plus || plus === 0) return weapon
-    const mult = Math.pow(1.2, plus)
-    return {
-      atk_bonus:  Math.max(weapon.atk_bonus  > 0 ? 1 : 0, Math.ceil((weapon.atk_bonus  || 0) * mult)),
-      def_bonus:  Math.max(weapon.def_bonus  > 0 ? 1 : 0, Math.ceil((weapon.def_bonus  || 0) * mult)),
-      matk_bonus: Math.max(weapon.matk_bonus > 0 ? 1 : 0, Math.ceil((weapon.matk_bonus || 0) * mult)),
-      mdef_bonus: Math.max(weapon.mdef_bonus > 0 ? 1 : 0, Math.ceil((weapon.mdef_bonus || 0) * mult)),
-      spd_bonus:  Math.max(weapon.spd_bonus  > 0 ? 1 : 0, Math.ceil((weapon.spd_bonus  || 0) * mult)),
-      hp_bonus:   Math.max(weapon.hp_bonus   > 0 ? 1 : 0, Math.ceil((weapon.hp_bonus   || 0) * mult)),
-      mp_bonus:   Math.max(weapon.mp_bonus   > 0 ? 1 : 0, Math.ceil((weapon.mp_bonus   || 0) * mult)),
-    }
-  }
 
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'700px', margin:'0 auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
-          <button onClick={() => nav('/game')}
-            style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-            ← 街に戻る
-          </button>
+          <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
         </div>
 
         <div style={{ color:'#aa6644', fontSize:'14px', marginBottom:'4px' }}>⚒ 鍛冶屋</div>
-        <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
-          所持金: <span style={{color:'#ffcc00'}}>{profile.gold}G</span>
-        </div>
+        <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>所持金: <span style={{color:'#ffcc00'}}>{profile.gold}G</span></div>
 
-        {message && (
-          <div style={{ color: messageColor, fontSize:'12px', padding:'8px', border:`1px solid ${messageColor}`, marginBottom:'12px', textAlign:'center' }}>
-            {message}
-          </div>
-        )}
+        {message && <div style={{ color: messageColor, fontSize:'12px', padding:'8px', border:`1px solid ${messageColor}`, marginBottom:'12px', textAlign:'center' }}>{message}</div>}
 
         <div style={{ display:'flex', gap:'4px', marginBottom:'12px' }}>
           {[{id:'enhance', label:'強化'}, {id:'craft', label:'加工'}, {id:'sell', label:'売却'}].map(t => (
@@ -277,7 +226,7 @@ export default function Smithy() {
         {tab === 'enhance' && (
           <div>
             <div style={{ color:'#446688', fontSize:'11px', marginBottom:'8px' }}>
-              同じ名前の装備または同ランクの強化石を素材に使って強化できます。
+              同じ名前の装備または同ランクの強化石を素材に使って強化できます。※古びた○○は強化不可
             </div>
             {slots.map(slot => {
               const slotItems = equipment.filter(e => e.slot === slot)
@@ -287,6 +236,7 @@ export default function Smithy() {
                   <div style={{ color:'#aa6644', fontSize:'11px', marginBottom:'6px' }}>── {SLOT_LABELS[slot]} ──</div>
                   {slotItems.map(item => {
                     const w = item.weapons
+                    const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
                     const plus = item.enhance_plus || 0
                     const nextPlus = plus + 1
                     const cost = ENHANCE_COST[nextPlus] || ENHANCE_COST[ENHANCE_COST.length - 1]
@@ -294,27 +244,27 @@ export default function Smithy() {
                     const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped).length
                     const stoneCount = getStoneCount(w.rarity)
                     const totalMaterials = sameCount + stoneCount
-                    const canEnhance = profile.gold >= cost && totalMaterials >= materialCount
+                    const canEnhance = !isArtifactBase && profile.gold >= cost && totalMaterials >= materialCount
                     const successRate = nextPlus >= 6 ? (ENHANCE_RATE[nextPlus] || 0.1) : 100
-                    const enhanced = getEnhancedStats(w, plus)
+                    const enhanced = calcEnhancedStats(w, plus)
+                    const nextEnhanced = isArtifactBase ? w : calcEnhancedStats(w, nextPlus)
                     const isSelected = selectedItem?.id === item.id
 
                     return (
-                      <div key={item.id} style={{ border:`1px solid ${isSelected ? '#aa6644' : '#002244'}`, background: isSelected ? '#1a0800' : '#001028', padding:'10px', marginBottom:'6px' }}>
+                      <div key={item.id} style={{ border:`1px solid ${isSelected ? '#aa6644' : '#002244'}`, background: isSelected ? '#1a0800' : '#001028', padding:'10px', marginBottom:'6px', opacity: isArtifactBase ? 0.5 : 1 }}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
                           <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-                            <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>
-                              {RARITY_LABELS[w.rarity]}
-                            </span>
-                            <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>
-                              {w.name}{plus > 0 ? ` +${plus}` : ''}
-                            </span>
+                            <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>{RARITY_LABELS[w.rarity]}</span>
+                            <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>{w.name}{plus > 0 ? ` +${plus}` : ''}</span>
                             {item.equipped && <span style={{ color:'#0088ff', fontSize:'10px' }}>装備中</span>}
+                            {isArtifactBase && <span style={{ color:'#446688', fontSize:'10px' }}>強化不可</span>}
                           </div>
-                          <button onClick={() => setSelectedItem(isSelected ? null : item)}
-                            style={{ padding:'3px 8px', background:'#001', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
-                            {isSelected ? '閉じる' : '強化する'}
-                          </button>
+                          {!isArtifactBase && (
+                            <button onClick={() => setSelectedItem(isSelected ? null : item)}
+                              style={{ padding:'3px 8px', background:'#001', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                              {isSelected ? '閉じる' : '強化する'}
+                            </button>
+                          )}
                         </div>
 
                         <div style={{ fontSize:'10px', color:'#446688', marginBottom:'4px' }}>
@@ -332,20 +282,20 @@ export default function Smithy() {
                             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'4px' }}>
                               強化先: <span style={{color:'#ffcc00'}}>{w.name} +{nextPlus}</span>
                             </div>
-                            <div style={{ fontSize:'10px', color:'#446688', marginBottom:'2px' }}>
-                              必要G: <span style={{color:'#ffcc00'}}>{cost.toLocaleString()}G</span>
+                            <div style={{ fontSize:'10px', color:'#88ccff', marginBottom:'4px' }}>
+                              強化後ステータス:
+                              {nextEnhanced.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}> 攻撃力+{nextEnhanced.atk_bonus}</span>}
+                              {nextEnhanced.def_bonus  > 0 && <span style={{color:'#88aaff'}}> 防御力+{nextEnhanced.def_bonus}</span>}
+                              {nextEnhanced.matk_bonus > 0 && <span style={{color:'#cc44ff'}}> 特殊攻撃力+{nextEnhanced.matk_bonus}</span>}
+                              {nextEnhanced.mdef_bonus > 0 && <span style={{color:'#44ccff'}}> 特殊防御力+{nextEnhanced.mdef_bonus}</span>}
+                              {nextEnhanced.spd_bonus  > 0 && <span style={{color:'#ff8844'}}> 素早さ+{nextEnhanced.spd_bonus}</span>}
                             </div>
-                            <div style={{ fontSize:'10px', color:'#446688', marginBottom:'2px' }}>
-                              必要素材: <span style={{color:'#aa6644'}}>{materialCount}個</span>（いずれかの組み合わせで）
-                            </div>
-                            <div style={{ fontSize:'10px', color:'#446688', marginBottom:'2px' }}>
-                              　同名装備: <span style={{color: sameCount >= materialCount ? '#44ff88' : '#ffcc00'}}>{sameCount}個</span>
-                            </div>
+                            <div style={{ fontSize:'10px', color:'#446688', marginBottom:'2px' }}>必要G: <span style={{color:'#ffcc00'}}>{cost.toLocaleString()}G</span></div>
+                            <div style={{ fontSize:'10px', color:'#446688', marginBottom:'2px' }}>必要素材: <span style={{color:'#aa6644'}}>{materialCount}個</span></div>
+                            <div style={{ fontSize:'10px', color:'#446688', marginBottom:'2px' }}>　同名装備: <span style={{color: sameCount >= materialCount ? '#44ff88' : '#ffcc00'}}>{sameCount}個</span></div>
                             <div style={{ fontSize:'10px', color:'#446688', marginBottom:'4px' }}>
-                              　{STONE_NAMES[w.rarity]}: <span style={{color: stoneCount >= materialCount ? '#44ff88' : stoneCount > 0 ? '#ffcc00' : '#446688'}}>{stoneCount}個</span>
-                              <span style={{color: totalMaterials >= materialCount ? '#44ff88' : '#ff4444', marginLeft:'8px'}}>
-                                （合計 {totalMaterials}/{materialCount}）
-                              </span>
+                              　{STONE_NAMES[w.rarity]}: <span style={{color: stoneCount > 0 ? '#ffcc00' : '#446688'}}>{stoneCount}個</span>
+                              <span style={{color: totalMaterials >= materialCount ? '#44ff88' : '#ff4444', marginLeft:'8px'}}>（合計 {totalMaterials}/{materialCount}）</span>
                             </div>
                             <div style={{ fontSize:'10px', color:'#446688', marginBottom:'8px' }}>
                               成功率: <span style={{color: successRate >= 50 ? '#44ff88' : successRate >= 20 ? '#ffcc00' : '#ff4444'}}>{successRate}%</span>
@@ -380,21 +330,15 @@ export default function Smithy() {
                 </button>
               ))}
             </div>
-
             {craftTab === 'equipment' && (
               <div>
-                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
-                  同ランクの装備を3つ選択して強化石に加工できます（装備中は選択不可）
-                </div>
+                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>同ランクの装備を3つ選択して強化石に加工できます（装備中は選択不可）</div>
                 <CraftSelector equipment={equipment} loading={loading} onCraft={craftStoneFromSelectedItems} />
               </div>
             )}
-
             {craftTab === 'stone' && (
               <div>
-                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
-                  同ランクの強化石3つ→1つ上のランクの強化石1つに加工できます
-                </div>
+                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>同ランクの強化石3つ→1つ上のランクの強化石1つに加工できます</div>
                 {STONE_RANKS.slice(0, -1).map(rarity => {
                   const count = getStoneCount(rarity)
                   const canCraft = count >= 3
@@ -407,9 +351,7 @@ export default function Smithy() {
                         <span style={{ color:'#446688', fontSize:'10px', marginLeft:'8px' }}>→ {STONE_NAMES[nextRarity]}</span>
                       </div>
                       <button onClick={() => craftStoneFromStones(rarity)} disabled={!canCraft || loading}
-                        style={{ padding:'4px 10px', background: canCraft ? '#1a1400' : '#001', border:`1px solid ${canCraft ? '#aa8800' : '#002244'}`, color: canCraft ? '#ffcc00' : '#334455', cursor: canCraft ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
-                        加工する
-                      </button>
+                        style={{ padding:'4px 10px', background: canCraft ? '#1a1400' : '#001', border:`1px solid ${canCraft ? '#aa8800' : '#002244'}`, color: canCraft ? '#ffcc00' : '#334455', cursor: canCraft ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>加工する</button>
                     </div>
                   )
                 })}
@@ -436,20 +378,14 @@ export default function Smithy() {
                       <div key={item.id} style={{ border:`1px solid ${item.equipped ? '#003366' : '#002244'}`, background: item.equipped ? '#001040' : '#001028', padding:'10px', marginBottom:'6px', opacity: item.equipped ? 0.5 : 1 }}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
                           <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-                            <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>
-                              {RARITY_LABELS[w.rarity]}
-                            </span>
-                            <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>
-                              {w.name}{plus > 0 ? ` +${plus}` : ''}
-                            </span>
+                            <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>{RARITY_LABELS[w.rarity]}</span>
+                            <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>{w.name}{plus > 0 ? ` +${plus}` : ''}</span>
                             {item.equipped && <span style={{ color:'#446688', fontSize:'10px' }}>（装備中）</span>}
                           </div>
                           <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
                             <span style={{ color:'#ffcc00', fontSize:'11px' }}>{sellPrice}G</span>
                             <button onClick={() => sellItem(item)} disabled={item.equipped || loading}
-                              style={{ padding:'3px 8px', background: item.equipped ? '#001' : '#1a0800', border:`1px solid ${item.equipped ? '#002244' : '#aa6644'}`, color: item.equipped ? '#334455' : '#aa6644', cursor: item.equipped ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'10px' }}>
-                              売却
-                            </button>
+                              style={{ padding:'3px 8px', background: item.equipped ? '#001' : '#1a0800', border:`1px solid ${item.equipped ? '#002244' : '#aa6644'}`, color: item.equipped ? '#334455' : '#aa6644', cursor: item.equipped ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'10px' }}>売却</button>
                           </div>
                         </div>
                         <div style={{ fontSize:'10px', color:'#446688' }}>
@@ -476,18 +412,8 @@ function CraftSelector({ equipment, loading, onCraft }) {
   const [selected, setSelected] = useState([])
   const unequipped = equipment.filter(e => !e.equipped)
 
-  const RARITY_COLORS_LOCAL = {
-    f:'#888888', e:'#6699cc', d:'#ff8844', c:'#44bb44',
-    b:'#4488ff', a:'#ff4444', s:'#ffcc00', ss:'#ffcc00', sss:'#ffcc00'
-  }
-  const RARITY_LABELS_LOCAL = {
-    f:'F', e:'E', d:'D', c:'C', b:'B', a:'A', s:'S', ss:'SS', sss:'SSS'
-  }
-
   const toggle = (id) => {
-    if (selected.includes(id)) {
-      setSelected(selected.filter(s => s !== id)); return
-    }
+    if (selected.includes(id)) { setSelected(selected.filter(s => s !== id)); return }
     if (selected.length >= 3) return
     if (selected.length > 0) {
       const firstItem = unequipped.find(e => e.id === selected[0])
@@ -504,18 +430,14 @@ function CraftSelector({ equipment, loading, onCraft }) {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px', padding:'8px', border:'1px solid #003366', background:'#001028' }}>
         <div style={{ fontSize:'11px', color:'#446688' }}>
           選択中: <span style={{color: selected.length===3?'#44ff88':'#ffcc00'}}>{selected.length}/3</span>
-          {selectedRarity && <span style={{color: RARITY_COLORS_LOCAL[selectedRarity], marginLeft:'8px'}}>{RARITY_LABELS_LOCAL[selectedRarity]}ランク</span>}
+          {selectedRarity && <span style={{color: RARITY_COLORS[selectedRarity], marginLeft:'8px'}}>{RARITY_LABELS[selectedRarity]}ランク</span>}
           {selectedRarity && <span style={{color:'#446688', marginLeft:'8px'}}>→ {STONE_NAMES[selectedRarity]}</span>}
         </div>
         <div style={{ display:'flex', gap:'6px' }}>
           <button onClick={() => setSelected([])} disabled={selected.length===0}
-            style={{ padding:'4px 8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
-            クリア
-          </button>
+            style={{ padding:'4px 8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>クリア</button>
           <button onClick={() => { onCraft(selected); setSelected([]) }} disabled={selected.length!==3 || loading}
-            style={{ padding:'4px 10px', background: selected.length===3?'#1a1400':'#001', border:`1px solid ${selected.length===3?'#aa8800':'#002244'}`, color: selected.length===3?'#ffcc00':'#334455', cursor: selected.length===3?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
-            加工する
-          </button>
+            style={{ padding:'4px 10px', background: selected.length===3?'#1a1400':'#001', border:`1px solid ${selected.length===3?'#aa8800':'#002244'}`, color: selected.length===3?'#ffcc00':'#334455', cursor: selected.length===3?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>加工する</button>
         </div>
       </div>
       {unequipped.length === 0 && <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>加工できる装備がありません</div>}
@@ -526,13 +448,11 @@ function CraftSelector({ equipment, loading, onCraft }) {
         const isDisabled = (!isSelected && selected.length >= 3) || isDiffRarity
         return (
           <div key={item.id} onClick={() => !isDisabled && toggle(item.id)}
-            style={{ border:`2px solid ${isSelected ? RARITY_COLORS_LOCAL[w.rarity] : '#002244'}`, background: isSelected ? '#1a1200' : '#001028', padding:'8px', marginBottom:'4px', cursor: isDisabled ? 'not-allowed' : 'pointer', opacity: isDisabled ? 0.4 : 1, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            style={{ border:`2px solid ${isSelected ? RARITY_COLORS[w.rarity] : '#002244'}`, background: isSelected ? '#1a1200' : '#001028', padding:'8px', marginBottom:'4px', cursor: isDisabled ? 'not-allowed' : 'pointer', opacity: isDisabled ? 0.4 : 1, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
               {isSelected && <span style={{color:'#ffcc00', fontSize:'12px'}}>✓</span>}
-              <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS_LOCAL[w.rarity], border:`1px solid ${RARITY_COLORS_LOCAL[w.rarity]}` }}>
-                {RARITY_LABELS_LOCAL[w.rarity]}
-              </span>
-              <span style={{ color: RARITY_COLORS_LOCAL[w.rarity], fontSize:'12px' }}>{w.name}</span>
+              <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>{RARITY_LABELS[w.rarity]}</span>
+              <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>{w.name}</span>
               {item.enhance_plus > 0 && <span style={{color:'#ffcc00', fontSize:'10px'}}>+{item.enhance_plus}</span>}
             </div>
             <div style={{ fontSize:'10px', color:'#446688' }}>

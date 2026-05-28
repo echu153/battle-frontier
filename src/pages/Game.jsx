@@ -315,6 +315,16 @@ const calcProfBonus = (prof, weapon) => {
   return result
 }
 
+const ARTIFACT_BASE_NAMES_SET = new Set([
+  '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
+  '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたハンマー'
+])
+
+const calcEnhancedStat = (base, plus) => {
+  if (!plus || plus <= 0 || base <= 0) return base
+  return Math.ceil(base * Math.pow(1.5, plus))
+}
+
 const calcEffectiveStats = (profile, equipment, proficiency) => {
   const bonus = { atk:0, def:0, matk:0, mdef:0, spd:0, hp:0, mp:0 }
   let matkPct = 0 // 虚無の杖のmatk_bonus_pct対応
@@ -322,13 +332,17 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
   for (const item of equipment) {
     if (!item.equipped || !item.weapons) continue
     const w = item.weapons
-    bonus.atk  += (w.atk_bonus||0)  + (item.bonus_atk||0)
-    bonus.def  += (w.def_bonus||0)  + (item.bonus_def||0)
-    bonus.matk += (w.matk_bonus||0) + (item.bonus_matk||0)
-    bonus.mdef += (w.mdef_bonus||0) + (item.bonus_mdef||0)
-    bonus.spd  += (w.spd_bonus||0)  + (item.bonus_spd||0)
-    bonus.hp   += (w.hp_bonus||0)   + (item.bonus_hp||0)
-    bonus.mp   += (w.mp_bonus||0)   + (item.bonus_mp||0)
+    const plus = item.enhance_plus || 0
+    // enhance_plusによる強化倍率を適用（古びた○○は除外）
+    const isArtifactBase = ARTIFACT_BASE_NAMES_SET.has(w.name)
+    const mult = (plus > 0 && !isArtifactBase) ? Math.pow(1.5, plus) : 1
+    bonus.atk  += Math.ceil((w.atk_bonus||0)  * mult) + (item.bonus_atk||0)
+    bonus.def  += Math.ceil((w.def_bonus||0)  * mult) + (item.bonus_def||0)
+    bonus.matk += Math.ceil((w.matk_bonus||0) * mult) + (item.bonus_matk||0)
+    bonus.mdef += Math.ceil((w.mdef_bonus||0) * mult) + (item.bonus_mdef||0)
+    bonus.spd  += Math.ceil((w.spd_bonus||0)  * mult) + (item.bonus_spd||0)
+    bonus.hp   += Math.ceil((w.hp_bonus||0)   * mult) + (item.bonus_hp||0)
+    bonus.mp   += Math.ceil((w.mp_bonus||0)   * mult) + (item.bonus_mp||0)
     if (w.hp_bonus_pct > 0)  bonus.hp  += Math.floor(profile.hp_max * w.hp_bonus_pct/100)
     if (w.mp_bonus_pct > 0)  bonus.mp  += Math.floor(profile.mp_max * w.mp_bonus_pct/100)
     if (w.spd_bonus_pct > 0) bonus.spd += Math.floor(profile.spd   * w.spd_bonus_pct/100)
@@ -603,9 +617,6 @@ export default function Game() {
   const [playerItem, setPlayerItem] = useState(null)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [showMenu, setShowMenu] = useState(false)
-  const [showAnnouncements, setShowAnnouncements] = useState(false)
-const [announcements, setAnnouncements] = useState([])
-const [openAnnouncementId, setOpenAnnouncementId] = useState(null)
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768)
@@ -614,13 +625,6 @@ const [openAnnouncementId, setOpenAnnouncementId] = useState(null)
   }, [])
 
   useEffect(() => { fetchProfile() }, [])
-  useEffect(() => { fetchAnnouncements() }, [])
-
-const fetchAnnouncements = async () => {
-  const { data } = await supabase.from('announcements')
-    .select('*').eq('is_active', true).order('created_at', { ascending: false })
-  setAnnouncements(data || [])
-}
 
   useEffect(() => {
     const onFocus = () => { fetchProfile() }
@@ -660,7 +664,6 @@ const fetchAnnouncements = async () => {
     setSkillSets(ss || [])
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id).eq('equipped', true).single()
     setPlayerItem(pi || null)
-
   }
 
   const doRegen = async () => {
@@ -1210,38 +1213,13 @@ const fetchAnnouncements = async () => {
 
   const backToTown = () => { setScene('town'); setBattleLogs([]) }
   const logout = async () => { await supabase.auth.signOut(); nav('/login') }
-if (showAnnouncements) return (
-  <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-    <div style={{ background:'#001040', border:'1px solid #ff8844', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'80vh', overflowY:'auto', fontFamily:'monospace' }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', borderBottom:'1px solid #003366', paddingBottom:'8px' }}>
-        <div style={{ color:'#ff8844', fontSize:'14px' }}>📢 お知らせ</div>
-        <button onClick={()=>{ setShowAnnouncements(false); setOpenAnnouncementId(null) }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>✕ 閉じる</button>
-      </div>
-      {announcements.length === 0 && <div style={{ color:'#446688', fontSize:'12px' }}>お知らせはありません</div>}
-      {announcements.map(a => (
-        <div key={a.id} style={{ marginBottom:'8px', border:'1px solid #002244', background:'#000818' }}>
-          <button onClick={()=>setOpenAnnouncementId(openAnnouncementId===a.id?null:a.id)}
-            style={{ width:'100%', padding:'10px 12px', background:'none', border:'none', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <span>{a.title}</span>
-            <span style={{ color:'#446688', fontSize:'10px' }}>{openAnnouncementId===a.id?'▲':'▼'}</span>
-          </button>
-          {openAnnouncementId===a.id && (
-            <div style={{ padding:'12px', borderTop:'1px solid #002244', color:'#88ccff', fontSize:'11px', lineHeight:'1.8', whiteSpace:'pre-wrap' }}>
-              {a.content}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  </div>
-)
+
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
   const hpCurrent = Math.max(0, profile.hp_current??profile.hp_max)
   const mpCurrent = Math.max(0, profile.mp_current??profile.mp_max)
   const isDying = profile.is_dying||false
-const isFishing = profile.is_fishing || false
-const canBattle = (!isDying || hpCurrent >= profile.hp_max) && !isFishing
+  const canBattle = !isDying || hpCurrent >= profile.hp_max
   const hpPct = Math.min(100,(hpCurrent/profile.hp_max)*100)
   const mpPct = Math.min(100,(mpCurrent/profile.mp_max)*100)
   const expPct = Math.min(100,(profile.exp/profile.exp_next)*100)
@@ -1345,10 +1323,7 @@ const canBattle = (!isDying || hpCurrent >= profile.hp_max) && !isFishing
     return (
       <div style={{ minHeight:'100vh', background:'#000820', fontFamily:'monospace' }}>
         <div style={{ background:'#000820', borderBottom:'1px solid #003366', padding:'6px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:100 }}>
-<div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-  <div style={{ color:'#ffcc00', fontSize:'13px', letterSpacing:'2px' }}>BATTLE FRONTIER</div>
-  <button onClick={()=>setShowAnnouncements(true)} style={{ background:'none', border:'1px solid #ff8844', color:'#ff8844', padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>📢</button>
-</div>
+          <div style={{ color:'#ffcc00', fontSize:'13px', letterSpacing:'2px' }}>BATTLE FRONTIER</div>
           <div style={{ display:'flex', gap:'6px' }}>
             <button onClick={()=>nav('/equipment')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡</button>
             <button onClick={()=>nav('/skills')} style={{ background:'none', border:'1px solid #cc44ff', color:'#cc44ff', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>⚡</button>
@@ -1429,13 +1404,7 @@ const canBattle = (!isDying || hpCurrent >= profile.hp_max) && !isFishing
               </div>
             </div>
           )}
-{scene==='fishing_active' && (
-  <div style={{ border:'1px solid #44aaff', background:'#001040', padding:'16px', textAlign:'center' }}>
-    <div style={{ color:'#44aaff', fontSize:'14px', marginBottom:'8px' }}>🎣 釣り中...</div>
-    <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>釣り場で釣りを終了してから戦闘できます</div>
-    <button onClick={()=>nav('/fishing')} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>
-  </div>
-)}
+
           {scene==='town' && (
             <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
               <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
@@ -1453,7 +1422,7 @@ const canBattle = (!isDying || hpCurrent >= profile.hp_max) && !isFishing
               </select>
               <button onClick={doBattle} disabled={!canAct||loading||!canBattle}
                 style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
-{isFishing?'🎣 釣り中（釣り場で終了してください）':isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
+                {isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
               </button>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                 <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋</button>
@@ -1518,10 +1487,7 @@ const canBattle = (!isDying || hpCurrent >= profile.hp_max) && !isFishing
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'900px', margin:'0 auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
-<div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-  <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
-  <button onClick={()=>setShowAnnouncements(true)} style={{ background:'none', border:'1px solid #ff8844', color:'#ff8844', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📢 お知らせ</button>
-</div>
+          <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
           <div style={{ display:'flex', gap:'8px' }}>
             <button onClick={()=>nav('/equipment')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡 装備</button>
             <button onClick={()=>nav('/skills')} style={{ background:'none', border:'1px solid #cc44ff', color:'#cc44ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>⚡ スキル</button>
@@ -1602,13 +1568,7 @@ const canBattle = (!isDying || hpCurrent >= profile.hp_max) && !isFishing
                 </div>
               </div>
             )}
-{scene==='fishing_active' && (
-  <div style={{ border:'1px solid #44aaff', background:'#001040', padding:'16px', textAlign:'center' }}>
-    <div style={{ color:'#44aaff', fontSize:'14px', marginBottom:'8px' }}>🎣 釣り中...</div>
-    <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>釣り場で釣りを終了してから戦闘できます</div>
-    <button onClick={()=>nav('/fishing')} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>
-  </div>
-)}
+
             {scene==='town' && (
               <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'8px' }}>
                 <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
@@ -1629,7 +1589,7 @@ const canBattle = (!isDying || hpCurrent >= profile.hp_max) && !isFishing
                 </div>
                 <button onClick={doBattle} disabled={!canAct||loading||!canBattle}
                   style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
-{isFishing?'🎣 釣り中（釣り場で終了してください）':isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
+                  {isDying&&!canBattle?'💀 瀕死中（HP全回復まで出撃不可）':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
                 </button>
                 <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🏨 宿屋へ</button>
                 <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>⛩ 神殿へ</button>

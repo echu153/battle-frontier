@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 
@@ -19,6 +19,12 @@ const RARITY_COLORS = {
   f:'#888888', e:'#6699cc', d:'#ff8844', c:'#44bb44',
   b:'#4488ff', a:'#ff4444', s:'#ffcc00', ss:'#ffcc00', sss:'#ffcc00'
 }
+
+const ARTIFACT_BASE_NAMES = [
+  '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
+  '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたハンマー'
+]
+
 const getStatRank = (val, type) => {
   let thresholds
   if (type === 'hp') thresholds = [450,1200,2400,4500,7500,12000,18000,27000]
@@ -62,6 +68,24 @@ const getEffectLabel = (effect) => {
     'artifact':'【消費MP2倍・与ダメージ1.2倍】',
   }
   return labels[effect] || effect
+}
+
+// 強化後ステータス計算（1.5倍）
+const calcEnhancedStats = (weapon, plus) => {
+  if (!plus || plus <= 0) return weapon
+  const isArtifactBase = ARTIFACT_BASE_NAMES.includes(weapon.name)
+  if (isArtifactBase) return weapon
+  const mult = Math.pow(1.5, plus)
+  return {
+    ...weapon,
+    atk_bonus:  weapon.atk_bonus  > 0 ? Math.ceil(weapon.atk_bonus  * mult) : weapon.atk_bonus,
+    def_bonus:  weapon.def_bonus  > 0 ? Math.ceil(weapon.def_bonus  * mult) : weapon.def_bonus,
+    matk_bonus: weapon.matk_bonus > 0 ? Math.ceil(weapon.matk_bonus * mult) : weapon.matk_bonus,
+    mdef_bonus: weapon.mdef_bonus > 0 ? Math.ceil(weapon.mdef_bonus * mult) : weapon.mdef_bonus,
+    spd_bonus:  weapon.spd_bonus  > 0 ? Math.ceil(weapon.spd_bonus  * mult) : weapon.spd_bonus,
+    hp_bonus:   weapon.hp_bonus   > 0 ? Math.ceil(weapon.hp_bonus   * mult) : weapon.hp_bonus,
+    mp_bonus:   weapon.mp_bonus   > 0 ? Math.ceil(weapon.mp_bonus   * mult) : weapon.mp_bonus,
+  }
 }
 
 const TYPE_COLORS = { '物理攻撃':'#ffcc00','魔法攻撃':'#cc44ff','回復':'#44ff88','強化':'#44ccff','パッシブ':'#ff8844' }
@@ -108,13 +132,11 @@ export default function Profile() {
     setLoading(false)
   }
 
-  if (!profile) return (
-    <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
-  )
+  if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
   const total = calcTotal(profile)
   const totalRank = getTotalRank(total)
-  const slots = ['weapon','armor','accessory']
+  const slots = ['weapon','armor','accessory','accessory2']
 
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
@@ -124,9 +146,7 @@ export default function Profile() {
           <div style={{ display:'flex', gap:'8px' }}>
             {isOwn && (
               <button onClick={() => nav('/barber')}
-                style={{ background:'none', border:'1px solid #ff88cc', color:'#ff88cc', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-                ✂ 美容院
-              </button>
+                style={{ background:'none', border:'1px solid #ff88cc', color:'#ff88cc', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>✂ 美容院</button>
             )}
             <button onClick={() => nav(isOwn ? '/game' : '/ranking')}
               style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
@@ -136,27 +156,20 @@ export default function Profile() {
         </div>
 
         {message && (
-          <div style={{ color:'#44ff88', fontSize:'12px', textAlign:'center', padding:'8px', border:'1px solid #44ff88', marginBottom:'12px' }}>
-            {message}
-          </div>
+          <div style={{ color:'#44ff88', fontSize:'12px', textAlign:'center', padding:'8px', border:'1px solid #44ff88', marginBottom:'12px' }}>{message}</div>
         )}
 
-        {/* アバター表示 */}
+        {/* アバター */}
         <div style={{ display:'flex', gap:'16px', alignItems:'center', marginBottom:'16px' }}>
           <div style={{ position:'relative' }}>
             {profile.avatar_url ? (
-<img src={profile.avatar_url} alt="avatar"
-                style={{ width:'80px', height:'80px', objectFit:'cover' }} />
+              <img src={profile.avatar_url} alt="avatar" style={{ width:'80px', height:'80px', objectFit:'cover' }} />
             ) : (
-              <div style={{ width:'80px', height:'80px', border:'2px solid #446688', background:'#001028', display:'flex', alignItems:'center', justifyContent:'center', color:'#446688', fontSize:'24px' }}>
-                👤
-              </div>
+              <div style={{ width:'80px', height:'80px', border:'2px solid #446688', background:'#001028', display:'flex', alignItems:'center', justifyContent:'center', color:'#446688', fontSize:'24px' }}>👤</div>
             )}
             {isOwn && (
               <button onClick={() => setShowAvatarPanel(!showAvatarPanel)}
-                style={{ position:'absolute', bottom:'-8px', right:'-8px', background:'#001840', border:'1px solid #ffcc00', color:'#ffcc00', cursor:'pointer', fontFamily:'monospace', fontSize:'9px', padding:'2px 4px' }}>
-                変更
-              </button>
+                style={{ position:'absolute', bottom:'-8px', right:'-8px', background:'#001840', border:'1px solid #ffcc00', color:'#ffcc00', cursor:'pointer', fontFamily:'monospace', fontSize:'9px', padding:'2px 4px' }}>変更</button>
             )}
           </div>
           <div>
@@ -167,31 +180,24 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* アバター変更パネル（自分のみ） */}
+        {/* アバター変更パネル */}
         {isOwn && showAvatarPanel && (
           <div style={{ border:'1px solid #ffcc00', background:'#0a0800', padding:'12px', marginBottom:'12px' }}>
             <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>アイコンを選ぶ</div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'6px', marginBottom:'10px' }}>
               {PRESET_AVATARS.map(a => (
                 <div key={a.id} onClick={() => setSelectedAvatar(a.url)}
-                  style={{ cursor:'pointer', border:`2px solid ${selectedAvatar === a.url ? '#ffcc00' : '#003366'}`,
-                    background: selectedAvatar === a.url ? '#1a1000' : '#000818', padding:'4px', textAlign:'center' }}>
-                  <img src={a.url} alt={a.label}
-                    style={{ width:'100%', aspectRatio:'1', objectFit:'cover' }}
-                    onError={e => { e.target.style.display='none' }} />
+                  style={{ cursor:'pointer', border:`2px solid ${selectedAvatar === a.url ? '#ffcc00' : '#003366'}`, background: selectedAvatar === a.url ? '#1a1000' : '#000818', padding:'4px', textAlign:'center' }}>
+                  <img src={a.url} alt={a.label} style={{ width:'100%', aspectRatio:'1', objectFit:'cover' }} onError={e => { e.target.style.display='none' }} />
                   <div style={{ color: selectedAvatar === a.url ? '#ffcc00' : '#446688', fontSize:'9px', marginTop:'2px' }}>{a.label}</div>
                 </div>
               ))}
             </div>
             <div style={{ display:'flex', gap:'8px' }}>
               <button onClick={() => setShowAvatarPanel(false)}
-                style={{ flex:1, padding:'6px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-                キャンセル
-              </button>
+                style={{ flex:1, padding:'6px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>キャンセル</button>
               <button onClick={saveAvatar} disabled={loading}
-                style={{ flex:2, padding:'6px', background:'#1a1000', border:'1px solid #ffcc00', color:'#ffcc00', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-                決定する
-              </button>
+                style={{ flex:2, padding:'6px', background:'#1a1000', border:'1px solid #ffcc00', color:'#ffcc00', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>決定する</button>
             </div>
           </div>
         )}
@@ -225,30 +231,46 @@ export default function Profile() {
           <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>装備中</div>
           {slots.map(slot => {
             const equipped = equipment.find(e => e.slot === slot && e.equipped)
-            const slotLabel = { weapon:'武器', armor:'防具', accessory:'装飾品' }[slot]
-            return (
+            const slotLabel = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }[slot]
+            if (!equipped) return (
               <div key={slot} style={{ display:'flex', gap:'8px', marginBottom:'6px', fontSize:'11px' }}>
-                <span style={{ color:'#446688', minWidth:'50px' }}>{slotLabel}:</span>
-                {equipped ? (
-                  <div>
-                    <span style={{ color: RARITY_COLORS[equipped.weapons.rarity] }}>
-                      {getProfPrefix(proficiency.find(p => p.weapon_id === equipped.weapons.id)?.prof_lv || 0)}{equipped.weapons.name}
+                <span style={{ color:'#446688', minWidth:'60px' }}>{slotLabel}:</span>
+                <span style={{ color:'#334455' }}>なし</span>
+              </div>
+            )
+            const plus = equipped.enhance_plus || 0
+            const isArtifactBase = ARTIFACT_BASE_NAMES.includes(equipped.weapons.name)
+            const enhW = calcEnhancedStats(equipped.weapons, plus)
+            const profLv = proficiency.find(p => p.weapon_id === equipped.weapons.id)?.prof_lv || 0
+            return (
+              <div key={slot} style={{ marginBottom:'8px', borderBottom:'1px solid #002244', paddingBottom:'6px' }}>
+                <div style={{ display:'flex', gap:'8px', fontSize:'11px', marginBottom:'2px' }}>
+                  <span style={{ color:'#446688', minWidth:'60px' }}>{slotLabel}:</span>
+                  <span style={{ color: RARITY_COLORS[equipped.weapons.rarity] }}>
+                    {getProfPrefix(profLv)}{equipped.weapons.name}
+                    {plus > 0 && !isArtifactBase && <span style={{color:'#ffcc00'}}> +{plus}</span>}
+                  </span>
+                </div>
+                <div style={{ fontSize:'10px', color:'#446688', marginLeft:'68px' }}>
+                  {enhW.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻撃力+{enhW.atk_bonus} </span>}
+                  {enhW.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防御力+{enhW.def_bonus} </span>}
+                  {enhW.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>特殊攻撃力+{enhW.matk_bonus} </span>}
+                  {enhW.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>特殊防御力+{enhW.mdef_bonus} </span>}
+                  {enhW.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>素早さ+{enhW.spd_bonus} </span>}
+                  {equipped.weapons.matk_bonus_pct > 0 && <span style={{color:'#cc44ff'}}>特殊攻撃力+{equipped.weapons.matk_bonus_pct}% </span>}
+                  {equipped.weapons.hit_bonus > 0 && <span style={{color:'#ffaa44'}}>命中+{equipped.weapons.hit_bonus}% </span>}
+                  {(equipped.bonus_atk > 0 || equipped.bonus_def > 0 || equipped.bonus_matk > 0 || equipped.bonus_mdef > 0 || equipped.bonus_spd > 0) && (
+                    <span style={{color:'#ffaa00'}}>
+                      ボーナス:
+                      {equipped.bonus_atk  > 0 && ` 攻撃力+${equipped.bonus_atk}`}
+                      {equipped.bonus_def  > 0 && ` 防御力+${equipped.bonus_def}`}
+                      {equipped.bonus_matk > 0 && ` 特殊攻撃力+${equipped.bonus_matk}`}
+                      {equipped.bonus_mdef > 0 && ` 特殊防御力+${equipped.bonus_mdef}`}
+                      {equipped.bonus_spd  > 0 && ` 素早さ+${equipped.bonus_spd}`}
                     </span>
-                    {equipped.bonus_effect && <span style={{color:'#ffaa00', fontSize:'10px', marginLeft:'4px'}}>{getEffectLabel(equipped.bonus_effect)}</span>}
-                    {(equipped.bonus_atk > 0 || equipped.bonus_def > 0 || equipped.bonus_matk > 0 || equipped.bonus_mdef > 0 || equipped.bonus_spd > 0) && (
-                      <span style={{color:'#ffaa00', fontSize:'10px', marginLeft:'4px'}}>
-                        ボーナス:
-                        {equipped.bonus_atk  > 0 && ` 攻撃力+${equipped.bonus_atk}`}
-                        {equipped.bonus_def  > 0 && ` 防御力+${equipped.bonus_def}`}
-                        {equipped.bonus_matk > 0 && ` 特殊攻撃力+${equipped.bonus_matk}`}
-                        {equipped.bonus_mdef > 0 && ` 特殊防御力+${equipped.bonus_mdef}`}
-                        {equipped.bonus_spd  > 0 && ` 素早さ+${equipped.bonus_spd}`}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <span style={{ color:'#334455' }}>なし</span>
-                )}
+                  )}
+                  {equipped.bonus_effect && <span style={{color:'#ffaa00'}}> {getEffectLabel(equipped.bonus_effect)}</span>}
+                </div>
               </div>
             )
           })}
