@@ -10,6 +10,9 @@ const ARTIFACT_BASE_NAMES = [
   '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたハンマー'
 ]
 
+// ============================================================
+// エリア定義
+// ============================================================
 const AREAS = [
   {
     id: 1, name: '始まりの森',
@@ -18,7 +21,7 @@ const AREAS = [
       { name:'コウモリ',   hp:37,  atk:10,  def:3,  matk:0,  mdef:3,  spd:15, type:'physical', gold:6  },
       { name:'毒キノコ',   hp:60,  atk:3,   def:4,  matk:12, mdef:7,  spd:2,  type:'magical',  gold:8  },
     ],
-    boss: { name:'ビッグスライム', hp:500, atk:28, def:22, matk:5, mdef:12, spd:8, gold:100, isBoss:true, type:'physical' },
+    boss: { name:'ビッグスライム', hp:500, atk:28, def:28, matk:5, mdef:30, spd:15, gold:50, isBoss:true, type:'physical' },
     commonDrops: ['木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス','ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
     rareDrops: ['ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
     bossDrops: ['スライムの指輪','蒼粘剣'],
@@ -26,29 +29,148 @@ const AREAS = [
   {
     id: 2, name: '荒廃した草原',
     enemies: [
-      { name:'ゴブリン',   hp:160, atk:35,  def:16, matk:0,  mdef:10, spd:10, type:'physical', gold:20 },
-      { name:'野良犬',     hp:200, atk:45,  def:20, matk:0,  mdef:10, spd:20, type:'physical', gold:25 },
-      { name:'盗賊',       hp:240, atk:55,  def:24, matk:10, mdef:16, spd:12, type:'physical', gold:30 },
+      { name:'ゴブリン', hp:160, atk:35, def:20, matk:0,  mdef:28, spd:40, type:'physical', gold:20 },
+      { name:'野良犬',   hp:200, atk:45, def:24, matk:0,  mdef:25, spd:45, type:'physical', gold:25 },
+      { name:'盗賊',     hp:240, atk:55, def:28, matk:10, mdef:35, spd:42, type:'physical', gold:30 },
     ],
-    boss: { name:'盗賊団のリーダー', hp:2000, atk:84, def:30, matk:20, mdef:22, spd:15, gold:500, isBoss:true, type:'physical' },
-    commonDrops: ['ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書','強化石(F)'],
+    boss: { name:'盗賊団のリーダー', hp:2000, atk:84, def:38, matk:20, mdef:55, spd:65, gold:250, isBoss:true, type:'physical' },
+    commonDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','強化石(F)'],
     rareDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本'],
     bossDrops: ['略奪者の短剣','影踏みのブーツ'],
   },
   {
     id: 3, name: '古代の洞窟',
     enemies: [
-      { name:'コボルト',   hp:400, atk:100, def:50, matk:0,  mdef:30, spd:12, type:'physical', gold:60  },
-      { name:'スケルトン', hp:500, atk:120, def:60, matk:30, mdef:40, spd:10, type:'physical', gold:80  },
-      { name:'ゴーレム',   hp:600, atk:150, def:80, matk:0,  mdef:40, spd:3,  type:'physical', gold:100 },
+      { name:'コボルト',   hp:400, atk:100, def:55, matk:0,  mdef:60,  spd:100, type:'physical', gold:60  },
+      { name:'スケルトン', hp:500, atk:120, def:65, matk:30, mdef:75,  spd:110, type:'physical', gold:80  },
+      { name:'ゴーレム',   hp:600, atk:150, def:85, matk:0,  mdef:65,  spd:120, type:'physical', gold:100 },
     ],
-    boss: { name:'古代の番人', hp:8000, atk:210, def:80, matk:80, mdef:60, spd:10, gold:2000, isBoss:true, type:'magical' },
+    boss: { name:'古代の番人', hp:8000, atk:210, def:90, matk:80, mdef:110, spd:175, gold:1000, isBoss:true, type:'magical' },
+    commonDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本'],
+    rareDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本'],
+    bossDrops: ['古代魔導コア','虚無の杖'],
+  },
+  {
+    id: 4, name: '蒼海の入り江',
+    enemies: [
+      { name:'深海魚人', hp:900,  atk:200, def:220, matk:40,  mdef:200, spd:200, type:'physical', gold:150 },
+      { name:'海賊',     hp:1000, atk:230, def:240, matk:20,  mdef:180, spd:240, type:'physical', gold:180 },
+      { name:'毒クラゲ', hp:800,  atk:80,  def:180, matk:180, mdef:240, spd:210, type:'magical',  gold:160 },
+    ],
+    boss: {
+      name:'シーサーペント', hp:20000, atk:380, def:360, matk:150, mdef:400, spd:360, gold:2500, isBoss:true, type:'physical',
+      skills: [
+        { name:'海嵐の一撃', type:'physical', mult:1.6 },
+        { name:'深海波動',   type:'magical',  mult:1.5 },
+        { name:'潮流操作',   type:'debuff',   effect:'spdDown', rate:0.7, turns:3 },
+        { name:'海流回復',   type:'heal',     rate:0.2 },
+      ],
+    },
+    commonDrops: ['重鋼剣','双牙短剣','疾風の弓','蒼木の杖','精霊魔導典'],
+    rareDrops: ['蒼海の大剣','海狼短剣','蒼潮の弓','海晶の杖','海霊詠唱録'],
+    bossDrops: ['海竜の鱗','アクアクラウン'],
+  },
+  {
+    id: 5, name: '巨峰山脈',
+    enemies: [
+      { name:'山岳ゴブリン', hp:1500, atk:320, def:340, matk:0,   mdef:300, spd:380, type:'physical', gold:250 },
+      { name:'岩石ゴーレム', hp:2000, atk:380, def:440, matk:0,   mdef:280, spd:400, type:'physical', gold:300 },
+      { name:'グリフィン',   hp:1800, atk:350, def:360, matk:60,  mdef:340, spd:450, type:'physical', gold:280 },
+    ],
+    boss: {
+      name:'雷鷲サンダーロック', hp:45000, atk:600, def:560, matk:250, mdef:600, spd:675, gold:6000, isBoss:true, type:'physical',
+      skills: [
+        { name:'雷爪乱舞', type:'physical_multi', mult:0.7, hits:3 },
+        { name:'雷光閃',   type:'magical',  mult:1.8 },
+        { name:'嵐の加護', type:'buff',     effect:'atkSpdUp', atkRate:1.3, spdRate:1.2, turns:3 },
+        { name:'雷鳴回復', type:'heal',     rate:0.2 },
+      ],
+    },
+    commonDrops: [],
+    rareDrops: [],
+    bossDrops: [],
+  },
+  {
+    id: 6, name: '白銀の霊峰',
+    enemies: [
+      {
+        name:'雪男',       hp:2500, atk:500, def:520, matk:0,   mdef:440, spd:650, type:'physical', gold:400,
+        skills: [
+          { name:'雪崩拳',       type:'physical', mult:1.4 },
+          { name:'凍てつく咆哮', type:'debuff',   effect:'atkDown', rate:0.85, turns:2 },
+        ],
+      },
+      {
+        name:'氷河ドラゴン', hp:3000, atk:550, def:560, matk:150, mdef:560, spd:700, type:'physical', gold:450,
+        skills: [
+          { name:'氷河ブレス', type:'magical',  mult:1.5 },
+          { name:'凍結の鱗',   type:'buff',     effect:'defUp', rate:1.25, turns:2 },
+        ],
+      },
+      {
+        name:'霜の精霊',   hp:2200, atk:200, def:400, matk:400, mdef:640, spd:750, type:'magical', gold:420,
+        skills: [
+          { name:'霜の矢',   type:'magical',  mult:1.3 },
+          { name:'冷気まとい', type:'buff',   effect:'mdefUp', rate:1.3, turns:2 },
+        ],
+      },
+    ],
+    boss: {
+      name:'氷霊フロストバーン', hp:90000, atk:850, def:800, matk:600, mdef:1000, spd:1100, gold:12500, isBoss:true, type:'magical',
+      skills: [
+        { name:'氷柱連打', type:'physical_multi', mult:0.6, hits:4 },
+        { name:'絶対零度', type:'magical',  mult:2.0 },
+        { name:'氷の鎧',   type:'buff',     effect:'defMdefUp', defRate:1.4, mdefRate:1.4, turns:3 },
+        { name:'氷結回復', type:'heal',     rate:0.25 },
+      ],
+    },
+    commonDrops: [],
+    rareDrops: [],
+    bossDrops: [],
+  },
+  {
+    id: 7, name: '煉獄火山',
+    enemies: [
+      {
+        name:'炎の精霊',   hp:3500, atk:700, def:640, matk:500, mdef:760, spd:1000, type:'magical', gold:600,
+        skills: [
+          { name:'火炎弾', type:'magical',  mult:1.5 },
+          { name:'炎の衣', type:'buff',     effect:'matkUp', rate:1.25, turns:2 },
+        ],
+      },
+      {
+        name:'溶岩ゴーレム', hp:5000, atk:850, def:900, matk:0, mdef:640, spd:1100, type:'physical', gold:700,
+        skills: [
+          { name:'溶岩拳',   type:'physical', mult:1.6 },
+          { name:'岩盤防御', type:'buff',     effect:'defUp', rate:1.35, turns:2 },
+        ],
+      },
+      {
+        name:'ファイアドレイク', hp:4000, atk:780, def:760, matk:300, mdef:800, spd:1200, type:'physical', gold:650,
+        skills: [
+          { name:'炎爪連撃', type:'physical_multi', mult:0.8, hits:2 },
+          { name:'業火ブレス', type:'magical',  mult:1.7 },
+        ],
+      },
+    ],
+    boss: {
+      name:'深紅のサラマンダー', hp:180000, atk:1200, def:1200, matk:900, mdef:1500, spd:1800, gold:25000, isBoss:true, type:'physical',
+      skills: [
+        { name:'溶岩爪撃',   type:'physical', mult:2.0 },
+        { name:'業火放射',   type:'magical',  mult:2.2, debuff:'mdefDown', debuffRate:0.8, debuffTurns:3 },
+        { name:'煉獄の覇気', type:'buff',     effect:'atkMatkUp', atkRate:1.4, matkRate:1.4, turns:3 },
+        { name:'炎の再生',   type:'heal',     rate:0.25 },
+      ],
+    },
     commonDrops: [],
     rareDrops: [],
     bossDrops: [],
   },
 ]
 
+// ============================================================
+// クラス定義
+// ============================================================
 const JOB_BASE = {
   '戦士':      { hp_max:80,  mp_max:10, atk:10, def:8,  matk:1,  mdef:3,  spd:5  },
   '弓使い':    { hp_max:60,  mp_max:15, atk:8,  def:4,  matk:2,  mdef:3,  spd:10 },
@@ -121,6 +243,9 @@ const STAT_LABELS = {
   matk:'特殊攻撃力 (+1)', mdef:'特殊防御力 (+1)', spd:'素早さ (+1)'
 }
 
+// ============================================================
+// ユーティリティ
+// ============================================================
 const getStatRank = (val, type) => {
   let thresholds
   if (type === 'hp') thresholds = [450,1200,2400,4500,7500,12000,18000,27000]
@@ -152,7 +277,7 @@ const calcExpNext = (lv) => {
 }
 
 const WEAPON_TYPE_GROUP = {
-  sword:'physical', axe:'physical', spear:'physical', bow:'physical',
+  sword:'physical', axe:'physical', spear:'physical', bow:'physical', dagger:'physical',
   staff:'magical', wand:'magical', tome:'magical',
 }
 const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'
@@ -192,6 +317,8 @@ const calcProfBonus = (prof, weapon) => {
 
 const calcEffectiveStats = (profile, equipment, proficiency) => {
   const bonus = { atk:0, def:0, matk:0, mdef:0, spd:0, hp:0, mp:0 }
+  let matkPct = 0 // 虚無の杖のmatk_bonus_pct対応
+  let hitBonus = 0 // アクアクラウンのhit_bonus対応
   for (const item of equipment) {
     if (!item.equipped || !item.weapons) continue
     const w = item.weapons
@@ -205,6 +332,8 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
     if (w.hp_bonus_pct > 0)  bonus.hp  += Math.floor(profile.hp_max * w.hp_bonus_pct/100)
     if (w.mp_bonus_pct > 0)  bonus.mp  += Math.floor(profile.mp_max * w.mp_bonus_pct/100)
     if (w.spd_bonus_pct > 0) bonus.spd += Math.floor(profile.spd   * w.spd_bonus_pct/100)
+    if (w.matk_bonus_pct > 0) matkPct  += w.matk_bonus_pct
+    if (w.hit_bonus > 0) hitBonus += w.hit_bonus
     if (item.slot === 'weapon') {
       const prof = proficiency.find(p => p.weapon_id === w.id)
       if (prof) {
@@ -217,16 +346,25 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
       }
     }
   }
+  const baseMatk = profile.matk + bonus.matk
+  const finalMatk = matkPct > 0 ? Math.floor(baseMatk * (1 + matkPct/100)) : baseMatk
   return {
     atk:    profile.atk  + bonus.atk,
     def:    profile.def  + bonus.def,
-    matk:   profile.matk + bonus.matk,
+    matk:   finalMatk,
     mdef:   profile.mdef + bonus.mdef,
     spd:    profile.spd  + bonus.spd,
     hp_max: profile.hp_max + bonus.hp,
     mp_max: profile.mp_max + bonus.mp,
     bonus,
+    hitBonus,
   }
+}
+
+// 回避率計算（防御側SPD > 攻撃側SPDのとき回避率UP、最大10%）
+const calcEvasionRate = (defenderSpd, attackerSpd) => {
+  if (defenderSpd <= attackerSpd) return 0
+  return Math.min(10, (defenderSpd - attackerSpd) / attackerSpd * 10)
 }
 
 const calcExtraActionRate = (mySpd, enemySpd) => {
@@ -299,6 +437,9 @@ const applyEquipmentEffects = (equipment, profile, playerBuffs, logs) => {
   return newBuffs
 }
 
+// ============================================================
+// プレイヤースキル実行
+// ============================================================
 const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArtifact) => {
   const result = { dmg:0, heal:0, log:'', newEnemyBuffs:{ ...enemyBuffs }, newPlayerBuffs:{ ...playerBuffs }, selfDmg:0, bonusCritRate:0 }
   const randMult = (min, max) => min + Math.random()*(max-min)
@@ -377,6 +518,69 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
   return result
 }
 
+// ============================================================
+// 敵スキル実行（BOSSと一部雑魚）
+// ============================================================
+const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileHpMax, playerBuffs, enemyBuffs, logs) => {
+  let dmgToPlayer = 0
+  let healEnemy = 0
+  const newPlayerBuffs = { ...playerBuffs }
+  const newEnemyBuffs = { ...enemyBuffs }
+
+  switch (skill.type) {
+    case 'physical': {
+      const rawDmg = Math.floor(enemy.atk * skill.mult)
+      const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
+      dmgToPlayer = Math.floor(rawDmg * dmgReduceRate)
+      logs.push({ text:`⚔ ${enemy.name}の「${skill.name}」！ あなたに${dmgToPlayer}ダメージ！`, color:'#ff4444' })
+      break
+    }
+    case 'magical': {
+      const rawDmg = Math.floor((enemy.matk||enemy.atk) * skill.mult)
+      const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
+      dmgToPlayer = Math.floor(rawDmg * dmgReduceRate)
+      logs.push({ text:`✨ ${enemy.name}の「${skill.name}」！ あなたに${dmgToPlayer}の魔法ダメージ！`, color:'#cc44ff' })
+      if (skill.debuff === 'mdefDown') {
+        newPlayerBuffs.mdefDown = { turns: skill.debuffTurns||2, rate: skill.debuffRate||0.8 }
+        logs.push({ text:`特殊防御力が低下した！`, color:'#cc44ff' })
+      }
+      break
+    }
+    case 'physical_multi': {
+      const perHit = Math.floor(enemy.atk * skill.mult)
+      const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
+      dmgToPlayer = Math.floor(perHit * (skill.hits||1) * dmgReduceRate)
+      logs.push({ text:`⚔ ${enemy.name}の「${skill.name}」！ ${perHit}×${skill.hits}回＝${dmgToPlayer}ダメージ！`, color:'#ff4444' })
+      break
+    }
+    case 'heal': {
+      healEnemy = Math.floor(enemyMaxHp * skill.rate)
+      logs.push({ text:`💚 ${enemy.name}の「${skill.name}」！ HPが${healEnemy}回復した！`, color:'#44ff88' })
+      break
+    }
+    case 'debuff': {
+      if (skill.effect === 'spdDown') newPlayerBuffs.spdDown = { turns: skill.turns||2, rate: skill.rate||0.8 }
+      if (skill.effect === 'atkDown') newPlayerBuffs.atkDown = { turns: skill.turns||2, rate: skill.rate||0.8 }
+      logs.push({ text:`⬇ ${enemy.name}の「${skill.name}」！ あなたのステータスが低下した！`, color:'#ff8844' })
+      break
+    }
+    case 'buff': {
+      if (skill.effect === 'defUp')     newEnemyBuffs.defUp    = { turns: skill.turns||2, rate: skill.rate||1.25 }
+      if (skill.effect === 'mdefUp')    newEnemyBuffs.mdefUp   = { turns: skill.turns||2, rate: skill.rate||1.25 }
+      if (skill.effect === 'atkSpdUp')  { newEnemyBuffs.atkUp  = { turns: skill.turns||2, rate: skill.atkRate||1.3 }; newEnemyBuffs.spdUp = { turns: skill.turns||2, rate: skill.spdRate||1.2 } }
+      if (skill.effect === 'defMdefUp') { newEnemyBuffs.defUp  = { turns: skill.turns||2, rate: skill.defRate||1.4 }; newEnemyBuffs.mdefUp = { turns: skill.turns||2, rate: skill.mdefRate||1.4 } }
+      if (skill.effect === 'atkMatkUp') { newEnemyBuffs.atkUp  = { turns: skill.turns||2, rate: skill.atkRate||1.4 }; newEnemyBuffs.matkUp = { turns: skill.turns||2, rate: skill.matkRate||1.4 } }
+      if (skill.effect === 'matkUp')    newEnemyBuffs.matkUp   = { turns: skill.turns||2, rate: skill.rate||1.25 }
+      logs.push({ text:`⬆ ${enemy.name}の「${skill.name}」！ ${enemy.name}のステータスが上昇した！`, color:'#ffaa00' })
+      break
+    }
+  }
+  return { dmgToPlayer, healEnemy, newPlayerBuffs, newEnemyBuffs }
+}
+
+// ============================================================
+// メインコンポーネント
+// ============================================================
 export default function Game() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
@@ -508,6 +712,7 @@ export default function Game() {
     const bossRate = profile.boss_encounter_rate || 0
     const isBossEncounter = Math.random()*100 < bossRate
     const enemy = isBossEncounter ? { ...area.boss } : { ...area.enemies[Math.floor(Math.random()*area.enemies.length)] }
+    const enemyMaxHp = enemy.hp
 
     const logs = []
     let playerHp = hpCurrent
@@ -518,6 +723,9 @@ export default function Game() {
     let currentItem = playerItem ? { ...playerItem } : null
     let itemUsed = false
     let prevSkillName = null
+    // BOSS回復管理
+    let bossHealUsed = false
+    let bossHealCooldown = 0
 
     const equippedWeaponItem = equipment.find(e => e.slot==='weapon' && e.equipped)
     const isArtifact = equippedWeaponItem?.bonus_effect === 'artifact'
@@ -571,6 +779,13 @@ export default function Game() {
     const playerCritRate  = calcCritRate(playerSpd, enemySpd) + passiveCritBonus
     const enemyCritRate   = calcCritRate(enemySpd, playerSpd)
 
+    // プレイヤーの回避率（敵が攻撃するとき）
+    const playerEvasionRate = calcEvasionRate(effectiveSpdForCalc, enemySpd)
+    // 敵の回避率（プレイヤーが攻撃するとき）
+    const enemyEvasionRate  = calcEvasionRate(enemySpd, effectiveSpdForCalc)
+    // プレイヤーの命中ボーナス（アクアクラウンなど）
+    const playerHitBonus = eff.hitBonus || 0
+
     const doPlayerAttack = (isExtra=false) => {
       const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
       const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1)
@@ -578,11 +793,20 @@ export default function Game() {
       const pAtk   = eff.atk  * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1)
       const pSpd   = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1)
       const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
-      const eDefRate  = enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1
-      const eMdefRate = enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1
+      const eDefRate  = (enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1) * (enemyBuffs.defUp  ? enemyBuffs.defUp.rate  : 1)
+      const eMdefRate = (enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1) * (enemyBuffs.mdefUp ? enemyBuffs.mdefUp.rate : 1)
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
       const isCrit = Math.random()*100 < playerCritRate
       const critMult = isCrit ? 1.5 : 1.0
+
+      // 敵の回避判定（プレイヤーの命中ボーナスで相殺）
+      const effectiveEnemyEvasion = Math.max(0, enemyEvasionRate - playerHitBonus)
+      if (effectiveEnemyEvasion > 0 && Math.random()*100 < effectiveEvasionRate(effectiveEnemyEvasion)) {
+        logs.push({ text:`${prefix}${enemy.name}に攻撃！ しかし回避された！`, color:'#446688' })
+        if (expandedSkillSet.length > 0) skillIndex++
+        return
+      }
+
       let skillUsed = false
       if (expandedSkillSet.length > 0) {
         const cs = expandedSkillSet[skillIndex % expandedSkillSet.length]
@@ -628,20 +852,67 @@ export default function Game() {
     }
 
     const doEnemyAttack = (isExtra=false) => {
-      const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
-      const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1)
+      const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1)
+      const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1)
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
       const berserkDmgRate = hasBerserk ? 1.1 : 1.0
       const isEM = enemy.type === 'magical'
-      const eAtk = isEM ? (enemy.matk||0) : enemy.atk
+      const eAtk = isEM
+        ? (enemy.matk||0) * (enemyBuffs.matkUp ? enemyBuffs.matkUp.rate : 1)
+        : enemy.atk * (enemyBuffs.atkUp ? enemyBuffs.atkUp.rate : 1)
       const defVal = isEM ? Math.floor(pMdef/2) : Math.floor(pDef/2)
       const isCrit = Math.random()*100 < enemyCritRate
       const baseDmg = Math.max(1, eAtk-defVal+Math.floor(Math.random()*3))
+      const enemySpdBuff = enemyBuffs.spdUp ? enemyBuffs.spdUp.rate : 1
+      const playerSpdDebuff = playerBuffs.spdDown ? playerBuffs.spdDown.rate : 1
+
+      // プレイヤーの回避判定（素早さバフ/デバフ考慮）
+      const effectivePlayerSpd = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * playerSpdDebuff
+      const effectiveEnemySpd = enemySpd * enemySpdBuff
+      const evasionRate = calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd)
+      if (evasionRate > 0 && Math.random()*100 < evasionRate) {
+        const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+        logs.push({ text:`${prefix}${enemy.name}の攻撃！ しかし回避した！`, color:'#44ff88' })
+        return
+      }
+
       const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate)
       playerHp -= finalDmg
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
       const critText = isCrit ? ' 💥クリティカル！' : ''
       logs.push({ text:`${prefix}${enemy.name}の攻撃！ あなたに${finalDmg}ダメージ…${critText}`, color:isCrit?'#ff2200':'#ff6644' })
+    }
+
+    // 敵スキル使用（BOSSおよび⑥⑦雑魚）
+    const doEnemySkillAttack = () => {
+      if (!enemy.skills || enemy.skills.length === 0) return
+      // BOSS回復処理
+      const healSkill = enemy.skills.find(s => s.type === 'heal')
+      if (healSkill && enemyHp / enemyMaxHp < 0.5) {
+        if (!bossHealUsed) {
+          // 1回目は確定
+          const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs)
+          enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
+          bossHealUsed = true
+          bossHealCooldown = Math.floor(Math.random()*3)+2
+          return
+        } else if (bossHealCooldown <= 0) {
+          // 2回目以降は2〜4ターンごと
+          const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs)
+          enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
+          bossHealCooldown = Math.floor(Math.random()*3)+2
+          return
+        }
+      }
+      // 攻撃/バフ/デバフスキル
+      const nonHealSkills = enemy.skills.filter(s => s.type !== 'heal')
+      if (nonHealSkills.length === 0) return
+      const skill = nonHealSkills[Math.floor(Math.random()*nonHealSkills.length)]
+      const result = executeEnemySkill(skill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs)
+      playerHp -= result.dmgToPlayer
+      enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
+      Object.assign(playerBuffs, result.newPlayerBuffs)
+      Object.assign(enemyBuffs, result.newEnemyBuffs)
     }
 
     while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
@@ -692,16 +963,30 @@ export default function Game() {
           currentItem = null
         }
       }
+
       doPlayerAttack(false)
       if (enemyHp <= 0) break
       if (playerExtraRate > 0 && Math.random()*100 < playerExtraRate) {
         doPlayerAttack(true); if (enemyHp <= 0) break
       }
-      doEnemyAttack(false)
+
+      // 敵のターン：スキルを持つ敵はスキルを使う確率
+      if (enemy.skills && enemy.skills.length > 0) {
+        if (Math.random() < 0.4) {
+          doEnemySkillAttack()
+        } else {
+          doEnemyAttack(false)
+        }
+      } else {
+        doEnemyAttack(false)
+      }
       if (playerHp <= 0) break
       if (enemyExtraRate > 0 && Math.random()*100 < enemyExtraRate) doEnemyAttack(true)
+
+      // バフ/デバフのターン減少
       Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns > 0) playerBuffs[k].turns-- })
       Object.keys(enemyBuffs).forEach(k =>  { if (enemyBuffs[k]?.turns  > 0) enemyBuffs[k].turns-- })
+      if (bossHealCooldown > 0) bossHealCooldown--
       turn++
     }
 
@@ -760,10 +1045,7 @@ export default function Game() {
           const { data: stoneItem } = await supabase.from('items').select('*').eq('name', itemName).single()
           if (stoneItem) {
             let existing = null
-            try {
-              const res = await supabase.from('player_items').select('*').eq('player_id', profile.id).eq('item_id', stoneItem.id).single()
-              existing = res.data
-            } catch {}
+            try { const res = await supabase.from('player_items').select('*').eq('player_id', profile.id).eq('item_id', stoneItem.id).single(); existing = res.data } catch {}
             if (existing) {
               await supabase.from('player_items').update({ quantity: (existing.quantity||1)+1 }).eq('id', existing.id)
             } else {
@@ -964,7 +1246,6 @@ export default function Game() {
   const normalAdvanced = advancedAvailable.filter(c => !c.requires2)
   const specialAdvanced = advancedAvailable.filter(c => c.requires2)
 
-  // 神殿JSX（PC/スマホ共通）
   const TempleContent = () => (
     <div style={{ border:'1px solid #886600', background:'#001020', padding:'16px' }}>
       <div style={{ color:'#ccaa00', fontSize:'14px', marginBottom:'4px' }}>⛩ 神殿</div>
@@ -972,7 +1253,6 @@ export default function Game() {
         現在のクラス: <span style={{color:'#88ccff'}}>{profile.class}</span> LV<span style={{color:'#ffcc00'}}>{currentClassLv}</span>／{cap}　（転職にはLV30以上が必要）
       </div>
       {templeMessage && <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'10px', marginBottom:'12px', border:'1px solid #44ff88' }}>{templeMessage}</div>}
-
       <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 初期職（LV100キャップ）──</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
         {availableClasses.map(c=>(
@@ -988,7 +1268,6 @@ export default function Game() {
           </div>
         ))}
       </div>
-
       <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 上位職（LV300キャップ・初期職LV100で解放）──</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
         {normalAdvanced.map(c=>(
@@ -1004,7 +1283,6 @@ export default function Game() {
           </div>
         ))}
       </div>
-
       <div style={{ color:'#cc88ff', fontSize:'11px', marginBottom:'6px' }}>── 特殊上位職（LV300キャップ・複合条件で解放）──</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
         {specialAdvanced.map(c=>(
@@ -1022,7 +1300,6 @@ export default function Game() {
           </div>
         ))}
       </div>
-
       <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
     </div>
   )
@@ -1045,6 +1322,7 @@ export default function Game() {
           <div style={{ position:'fixed', top:'40px', right:'12px', background:'#001040', border:'1px solid #446688', zIndex:200, minWidth:'120px' }}>
             <button onClick={()=>{ nav('/shop'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🛒 商店</button>
             <button onClick={()=>{ nav('/smithy'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚒ 鍛冶屋</button>
+            <button onClick={()=>{ nav('/fishing'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎣 釣り場</button>
             <button onClick={()=>{ nav('/barber'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>✂ 美容院</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
           </div>
@@ -1137,7 +1415,8 @@ export default function Game() {
                 <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿</button>
                 <button onClick={()=>nav('/shop')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🛒 商店</button>
                 <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋</button>
-                <button onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', gridColumn:'1/-1' }}>✂ 美容院</button>
+                <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場</button>
+                <button onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院</button>
               </div>
             </div>
           )}
@@ -1153,7 +1432,8 @@ export default function Game() {
                     {isDying
                       ? <>これはひどいお姿で…。<br/><span style={{color:'#ffcc00'}}>{charLv*15}G</span> のところ、所持金 <span style={{color:'#ffcc00'}}>{innCost}G</span> で承ります。</>
                       : <>一泊 <span style={{color:'#ffcc00'}}>{innCost}G</span> でございます。<br/>ゆっくりお休みになりますか？</>}
-                  </div><div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
+                  </div>
+                  <div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
                     所持金: <span style={{color:'#ffcc00'}}>{profile.gold}G</span>
                     {!isDying && profile.gold<innCost && <span style={{color:'#ff4444'}}> （不足）</span>}
                   </div>
@@ -1199,12 +1479,12 @@ export default function Game() {
             <button onClick={()=>nav('/skills')} style={{ background:'none', border:'1px solid #cc44ff', color:'#cc44ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>⚡ スキル</button>
             <button onClick={()=>nav('/profile')} style={{ background:'none', border:'1px solid #44ff88', color:'#44ff88', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>👤 プロフィール</button>
             <button onClick={()=>nav('/ranking')} style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏆 ランキング</button>
+            <button onClick={()=>nav('/fishing')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🎣 釣り</button>
             <button onClick={logout} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ログアウト</button>
           </div>
         </div>
 
         <div style={{ display:'grid', gridTemplateColumns:'220px 1fr', gap:'12px' }}>
-          {/* PC左カラム */}
           <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', alignSelf:'start' }}>
             {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'4px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
             <div style={{ borderBottom:'1px dashed #003366', paddingBottom:'8px', marginBottom:'8px' }}>
@@ -1252,7 +1532,6 @@ export default function Game() {
             )}
           </div>
 
-          {/* PC右カラム */}
           <div>
             {showStatPanel && (
               <div style={{ border:'1px solid #cc44ff', background:'#0a0020', padding:'12px', marginBottom:'8px' }}>
@@ -1302,6 +1581,7 @@ export default function Game() {
                 <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>⛩ 神殿へ</button>
                 <button onClick={()=>nav('/shop')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🛒 商店へ</button>
                 <button onClick={()=>nav('/smithy')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>⚒ 鍛冶屋へ</button>
+                <button onClick={()=>nav('/fishing')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🎣 釣り場へ</button>
                 <button onClick={()=>nav('/barber')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院へ</button>
               </div>
             )}
@@ -1354,6 +1634,11 @@ export default function Game() {
     </div>
   )
 }
+
+// ============================================================
+// サブコンポーネント
+// ============================================================
+function effectiveEvasionRate(rate) { return rate }
 
 function StatBar({ label, val, pct, color }) {
   return (
