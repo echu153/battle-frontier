@@ -1478,12 +1478,25 @@ export default function Game() {
     const charLvForCost = profile.char_lv || profile.lv
     const normalCost = charLvForCost*2
     const dyingCost = charLvForCost*15
-    const cost = isDying ? Math.min(dyingCost, profile.gold) : normalCost
-    if (profile.gold < normalCost && !isDying) return
-    await supabase.from('profiles').update({
-      hp_current:profile.hp_max, mp_current:profile.mp_max,
-      gold:profile.gold-cost, is_dying:false,
-    }).eq('id', profile.id)
+
+    // ★ サーバーから最新のゴールドを取得（複数タブ同時利用対策）
+    const { data: serverProfile } = await supabase.from('profiles').select('gold, hp_max, mp_max').eq('id', profile.id).single()
+    if (!serverProfile) return
+    const serverCost = isDying ? Math.min(dyingCost, serverProfile.gold) : normalCost
+    if (!isDying && serverProfile.gold < normalCost) return
+
+    // ★ 楽観ロック: ゴールドが読み取り時と同じ場合のみ更新（別タブが先に利用してたら失敗）
+    const { data: locked } = await supabase.from('profiles').update({
+      hp_current: serverProfile.hp_max,
+      mp_current: serverProfile.mp_max,
+      gold: serverProfile.gold - serverCost,
+      is_dying: false,
+    }).eq('id', profile.id).eq('gold', serverProfile.gold).select('id')
+
+    if (!locked || locked.length === 0) {
+      await fetchProfile()
+      return
+    }
     await fetchProfile()
     setInnMessage('HPとMPが回復しました！')
     setTimeout(() => { setInnMessage(''); setScene('town') }, 1500)
