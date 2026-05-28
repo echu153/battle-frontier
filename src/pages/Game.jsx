@@ -781,10 +781,14 @@ export default function Game() {
       return
     }
 
-    // 出撃と共通の10秒クールダウン（サーバー側チェック）
-    const { data: latestForDungeon } = await supabase.from('profiles').select('last_action_at').eq('id', profile.id).single()
+    // 出撃と共通の10秒クールダウン＋釣り中チェック（サーバー側）
+    const { data: latestForDungeon } = await supabase.from('profiles').select('last_action_at, is_fishing').eq('id', profile.id).single()
     const dungeonElapsed = (Date.now() - new Date(latestForDungeon.last_action_at).getTime()) / 1000
     if (dungeonElapsed < WAIT_SECONDS) { setLoading(false); return }
+    if (latestForDungeon.is_fishing) {
+      setBattleLogs([{ text:'🎣 釣り中は特殊ダンジョンに入れません。先に釣りを終了してください。', color:'#ff8844' }])
+      setScene('battle'); setLoading(false); return
+    }
 
     setScene('battle'); setBattleLogs([])
 
@@ -946,12 +950,13 @@ export default function Game() {
 
     setLoading(true); setScene('battle'); setBattleLogs([])
 
-    // Atomic lock: last_action_atが古い場合のみUPDATE（複数端末同時出撃を防ぐ）
+    // Atomic lock: last_action_atが古い場合のみUPDATE（複数端末同時出撃・釣り中出撃を防ぐ）
     const lockTime = new Date(Date.now() - WAIT_SECONDS * 1000).toISOString()
     const { data: locked } = await supabase.from('profiles')
       .update({ last_action_at: new Date().toISOString() })
       .eq('id', profile.id)
       .lt('last_action_at', lockTime)
+      .eq('is_fishing', false)
       .select('id')
     if (!locked || locked.length === 0) {
       setLoading(false); setScene('town'); await fetchProfile(); return
