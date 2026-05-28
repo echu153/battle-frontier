@@ -74,12 +74,17 @@ const generateBonusSlots = (rarity) => {
     const available = pool.filter(t => !usedTypes.has(t))
     const type = available[Math.floor(Math.random() * available.length)]
     usedTypes.add(type)
+    const baseVal = Math.floor(Math.random() * (config.max - config.min + 1)) + config.min
     if (type === 'effect') {
       slots.push({ type, value: EFFECT_POOL[Math.floor(Math.random() * EFFECT_POOL.length)] })
     } else if (type === 'crit' || type === 'evasion' || type === 'hit') {
       slots.push({ type, value: 1.0 + Math.floor(Math.random() * 9) * 0.5 })
+    } else if (type === 'hp') {
+      slots.push({ type, value: baseVal * 10 })
+    } else if (type === 'mp') {
+      slots.push({ type, value: baseVal * 5 })
     } else {
-      slots.push({ type, value: Math.floor(Math.random() * (config.max - config.min + 1)) + config.min })
+      slots.push({ type, value: baseVal })
     }
   }
   return slots
@@ -308,7 +313,10 @@ export default function Smithy() {
     const newSlots = existingSlots.map(s => {
       if (s.type === 'effect') return { type:'effect', value: EFFECT_POOL[Math.floor(Math.random()*EFFECT_POOL.length)] }
       if (s.type==='crit'||s.type==='evasion'||s.type==='hit') return { type:s.type, value: 1.0+Math.floor(Math.random()*9)*0.5 }
-      return { type:s.type, value: Math.floor(Math.random()*(config.max-config.min+1))+config.min }
+      const baseVal = Math.floor(Math.random()*(config.max-config.min+1))+config.min
+      if (s.type==='hp') return { type:'hp', value: baseVal*10 }
+      if (s.type==='mp') return { type:'mp', value: baseVal*5 }
+      return { type:s.type, value: baseVal }
     })
     await supabase.from('player_equipment').update(slotsToColumns(newSlots)).eq('id', item.id)
     const newQty = owned - needed
