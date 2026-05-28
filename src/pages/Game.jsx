@@ -603,6 +603,9 @@ export default function Game() {
   const [playerItem, setPlayerItem] = useState(null)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [showMenu, setShowMenu] = useState(false)
+  const [showAnnouncements, setShowAnnouncements] = useState(false)
+const [announcements, setAnnouncements] = useState([])
+const [openAnnouncementId, setOpenAnnouncementId] = useState(null)
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768)
@@ -611,6 +614,13 @@ export default function Game() {
   }, [])
 
   useEffect(() => { fetchProfile() }, [])
+  useEffect(() => { fetchAnnouncements() }, [])
+
+const fetchAnnouncements = async () => {
+  const { data } = await supabase.from('announcements')
+    .select('*').eq('is_active', true).order('created_at', { ascending: false })
+  setAnnouncements(data || [])
+}
 
   useEffect(() => {
     const onFocus = () => { fetchProfile() }
@@ -1199,7 +1209,31 @@ export default function Game() {
 
   const backToTown = () => { setScene('town'); setBattleLogs([]) }
   const logout = async () => { await supabase.auth.signOut(); nav('/login') }
-
+if (showAnnouncements) return (
+  <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ background:'#001040', border:'1px solid #ff8844', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'80vh', overflowY:'auto', fontFamily:'monospace' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', borderBottom:'1px solid #003366', paddingBottom:'8px' }}>
+        <div style={{ color:'#ff8844', fontSize:'14px' }}>📢 お知らせ</div>
+        <button onClick={()=>{ setShowAnnouncements(false); setOpenAnnouncementId(null) }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>✕ 閉じる</button>
+      </div>
+      {announcements.length === 0 && <div style={{ color:'#446688', fontSize:'12px' }}>お知らせはありません</div>}
+      {announcements.map(a => (
+        <div key={a.id} style={{ marginBottom:'8px', border:'1px solid #002244', background:'#000818' }}>
+          <button onClick={()=>setOpenAnnouncementId(openAnnouncementId===a.id?null:a.id)}
+            style={{ width:'100%', padding:'10px 12px', background:'none', border:'none', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <span>{a.title}</span>
+            <span style={{ color:'#446688', fontSize:'10px' }}>{openAnnouncementId===a.id?'▲':'▼'}</span>
+          </button>
+          {openAnnouncementId===a.id && (
+            <div style={{ padding:'12px', borderTop:'1px solid #002244', color:'#88ccff', fontSize:'11px', lineHeight:'1.8', whiteSpace:'pre-wrap' }}>
+              {a.content}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  </div>
+)
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
   const hpCurrent = Math.max(0, profile.hp_current??profile.hp_max)
@@ -1309,7 +1343,10 @@ export default function Game() {
     return (
       <div style={{ minHeight:'100vh', background:'#000820', fontFamily:'monospace' }}>
         <div style={{ background:'#000820', borderBottom:'1px solid #003366', padding:'6px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:100 }}>
-          <div style={{ color:'#ffcc00', fontSize:'13px', letterSpacing:'2px' }}>BATTLE FRONTIER</div>
+<div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+  <div style={{ color:'#ffcc00', fontSize:'13px', letterSpacing:'2px' }}>BATTLE FRONTIER</div>
+  <button onClick={()=>setShowAnnouncements(true)} style={{ background:'none', border:'1px solid #ff8844', color:'#ff8844', padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>📢</button>
+</div>
           <div style={{ display:'flex', gap:'6px' }}>
             <button onClick={()=>nav('/equipment')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡</button>
             <button onClick={()=>nav('/skills')} style={{ background:'none', border:'1px solid #cc44ff', color:'#cc44ff', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>⚡</button>
@@ -1473,7 +1510,10 @@ export default function Game() {
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'900px', margin:'0 auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
-          <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
+<div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+  <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
+  <button onClick={()=>setShowAnnouncements(true)} style={{ background:'none', border:'1px solid #ff8844', color:'#ff8844', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📢 お知らせ</button>
+</div>
           <div style={{ display:'flex', gap:'8px' }}>
             <button onClick={()=>nav('/equipment')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡 装備</button>
             <button onClick={()=>nav('/skills')} style={{ background:'none', border:'1px solid #cc44ff', color:'#cc44ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>⚡ スキル</button>
