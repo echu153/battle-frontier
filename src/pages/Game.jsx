@@ -651,7 +651,7 @@ export default function Game() {
   const [templeMessage, setTempleMessage] = useState('')
   const [skillSets, setSkillSets] = useState([])
   const [playerItem, setPlayerItem] = useState(null)
-  const [dungeonAttempts, setDungeonAttempts] = useState(0)
+  const [dungeonAttempts, setDungeonAttempts] = useState(5)
   const [showDungeonPanel, setShowDungeonPanel] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [showMenu, setShowMenu] = useState(false)
@@ -672,8 +672,13 @@ export default function Game() {
 
   useEffect(() => {
     const onFocus = () => { fetchProfile() }
+    const onVisibility = () => { if (document.visibilityState === 'visible') fetchProfile() }
     window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [])
 
   useEffect(() => {
