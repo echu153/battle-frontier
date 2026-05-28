@@ -625,6 +625,9 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
   return { dmgToPlayer, healEnemy, newPlayerBuffs, newEnemyBuffs }
 }
 
+// JST日付文字列（ダンジョン0時リセット用）
+const getJSTDateStr = () => new Date(Date.now() + 9*60*60*1000).toISOString().slice(0, 10)
+
 // ============================================================
 // メインコンポーネント
 // ============================================================
@@ -656,6 +659,7 @@ export default function Game() {
   const [announcements, setAnnouncements] = useState([])
   const [openAnnouncementId, setOpenAnnouncementId] = useState(null)
   const expTrackerRef = useRef({ start: null, total: 0 })
+  const battleCountTrackerRef = useRef({ start: null, count: 0 })
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768)
@@ -704,7 +708,7 @@ export default function Game() {
     setSkillSets(ss || [])
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id).eq('equipped', true).single()
     setPlayerItem(pi || null)
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getJSTDateStr()
     try {
       const { data: da } = await supabase.from('dungeon_attempts').select('count').eq('player_id', user.id).eq('date', today).single()
       setDungeonAttempts(da?.count || 0)
@@ -755,12 +759,17 @@ export default function Game() {
     setLoading(true)
 
     // stateではなくDBから直接カウント取得（state操作による回避を防ぐ）
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getJSTDateStr()
     let serverCount = 0
     try {
       const { data: da } = await supabase.from('dungeon_attempts').select('count').eq('player_id', profile.id).eq('date', today).single()
       serverCount = da?.count || 0
     } catch {}
+    if (serverCount >= 6) {
+      await suspendAccount('特殊ダンジョンを1日6回以上利用')
+      setLoading(false)
+      return
+    }
     if (serverCount >= 5) {
       setDungeonAttempts(serverCount)
       setLoading(false)
@@ -880,8 +889,25 @@ export default function Game() {
     setLoading(false)
   }
 
-  const doBattle = async () => {
+  const suspendAccount = async (reason) => {
+    await supabase.from('profiles').update({
+      is_suspended: true,
+      suspension_reason: reason,
+    }).eq('id', profile.id)
+    setBattleLogs([{ text:`⛔ 不正行為が検出されました。アカウントを停止します。`, color:'#ff4444' }])
+    setScene('battle')
+    setTimeout(async () => { await supabase.auth.signOut() }, 3000)
+  }
+
+  const doBattle = async (e) => {
     if (!canAct || loading) return
+    // 自動操作検知（isTrusted=falseは人間の操作ではない）
+    if (e && !e.isTrusted) { await suspendAccount('自動操作が検出されました'); return }
+    // 釣り中は出撃不可
+    if (profile.is_fishing) {
+      setBattleLogs([{ text:'🎣 釣り中は出撃できません。先に釣りを終了してください。', color:'#ff8844' }])
+      setScene('battle'); return
+    }
     const hpCurrent = profile.hp_current ?? profile.hp_max
     if (hpCurrent <= 0) return
     if (profile.is_dying && hpCurrent < profile.hp_max) return
@@ -894,6 +920,19 @@ export default function Game() {
       setScene('battle')
       return
     }
+    // 出撃回数カウント（1分間7回以上でアカウント停止）
+    const nowBattle = Date.now()
+    const bTracker = battleCountTrackerRef.current
+    if (!bTracker.start || nowBattle - bTracker.start > 60000) {
+      battleCountTrackerRef.current = { start: nowBattle, count: 1 }
+    } else {
+      battleCountTrackerRef.current = { ...bTracker, count: bTracker.count + 1 }
+    }
+    if (battleCountTrackerRef.current.count >= 7) {
+      await suspendAccount('1分間に7回以上出撃')
+      return
+    }
+
     setLoading(true); setScene('battle'); setBattleLogs([])
 
     const { data: latest } = await supabase.from('profiles').select('last_action_at, hp_current, hp_max, is_dying').eq('id', profile.id).single()
@@ -1700,7 +1739,7 @@ export default function Game() {
               <select value={selectedArea} onChange={e=>{ const v=Number(e.target.value); setSelectedArea(v); localStorage.setItem('selectedArea',v) }} style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
                 {availableAreas.map(area=><option key={area.id} value={area.id}>{area.name}</option>)}
               </select>
-              <button onClick={doBattle} disabled={!canAct||loading||!canBattle}
+              <button onClick={(e)=>doBattle(e)} disabled={!canAct||loading||!canBattle}
                 style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
                 {isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
               </button>
@@ -1892,7 +1931,7 @@ export default function Game() {
                     {availableAreas.map(area=><option key={area.id} value={area.id}>{area.name}</option>)}
                   </select>
                 </div>
-                <button onClick={doBattle} disabled={!canAct||loading||!canBattle}
+                <button onClick={(e)=>doBattle(e)} disabled={!canAct||loading||!canBattle}
                   style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
                   {isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中（HP全回復まで出撃不可）':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
                 </button>

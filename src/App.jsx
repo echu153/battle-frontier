@@ -16,6 +16,8 @@ import Fishing from './pages/Fishing'
 function App() {
   const [session, setSession] = useState(undefined)
   const [hasChar, setHasChar] = useState(undefined)
+  const [suspended, setSuspended] = useState(false)
+  const [suspensionReason, setSuspensionReason] = useState('')
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -26,18 +28,42 @@ function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
       setSession(s)
       if (s) checkChar(s.user.id)
-      else setHasChar(false)
+      else { setHasChar(false) }
     })
     return () => subscription.unsubscribe()
   }, [])
 
   const checkChar = async (userId) => {
-    const { data } = await supabase.from('profiles').select('id').eq('id', userId).single()
+    const { data } = await supabase.from('profiles').select('id, is_suspended, suspension_reason').eq('id', userId).single()
+    if (data?.is_suspended) {
+      setSuspended(true)
+      setSuspensionReason(data.suspension_reason || '')
+      await supabase.auth.signOut()
+      return
+    }
     setHasChar(!!data)
   }
 
   if (session === undefined || hasChar === undefined) {
     return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
+  }
+
+  if (suspended) {
+    return (
+      <div style={{ minHeight:'100vh', background:'#000820', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'monospace' }}>
+        <div style={{ border:'1px solid #880000', background:'#1a0000', padding:'32px', maxWidth:'400px', textAlign:'center' }}>
+          <div style={{ color:'#ff4444', fontSize:'18px', letterSpacing:'2px', marginBottom:'16px' }}>⛔ アカウント停止</div>
+          <div style={{ color:'#cc4444', fontSize:'13px', lineHeight:'1.8', marginBottom:'16px' }}>
+            不正行為を確認したため現在アカウントを停止しています。<br />管理者までご連絡ください。
+          </div>
+          {suspensionReason && (
+            <div style={{ color:'#884444', fontSize:'11px', border:'1px solid #440000', padding:'8px', background:'#110000' }}>
+              理由: {suspensionReason}
+            </div>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
