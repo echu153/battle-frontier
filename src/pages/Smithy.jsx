@@ -189,25 +189,67 @@ export default function Smithy() {
     const materialCount = MATERIAL_COUNT(currentPlus)
     const rarity = item.weapons.rarity
 
+    // ローカルチェック（UX用）
     if (profile.gold < cost) { showMessage('ゴールドが足りません！', '#ff4444'); setLoading(false); return }
 
-    const sameItems = equipment.filter(e => e.weapons.name === item.weapons.name && e.id !== item.id && !e.equipped)
-    const stoneCount = getStoneCount(rarity)
-    const usableSame = sameItems.length
-    const totalAvailable = usableSame + stoneCount
+    // ★ サーバーから最新状態を取得（複数タブ同時実行・stale state対策）
+    const { data: { user } } = await supabase.auth.getUser()
+    const [{ data: serverProfile }, { data: serverEquip }, { data: serverPItems }] = await Promise.all([
+      supabase.from('profiles').select('gold').eq('id', user.id).single(),
+      supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', user.id),
+      supabase.from('player_items').select('*, items(*)').eq('player_id', user.id),
+    ])
 
-    if (totalAvailable < materialCount) {
-      showMessage(`素材が足りません！（同名装備${usableSame}個 + 強化石(${RARITY_LABELS[rarity]})${stoneCount}個 = ${totalAvailable}個、${materialCount}個必要）`, '#ff4444')
+    if (!serverProfile || serverProfile.gold < cost) {
+      showMessage('ゴールドが足りません！', '#ff4444'); setLoading(false); return
+    }
+
+    const stoneName = STONE_NAMES[rarity]
+    const serverStoneItem = serverPItems?.find(pi => pi.items?.name === stoneName)
+    const serverStoneCount = serverStoneItem?.quantity || 0
+    const serverSameItems = (serverEquip || []).filter(e =>
+      e.weapons?.name === item.weapons.name && e.id !== item.id && !e.equipped
+    )
+    const serverTotalAvailable = serverSameItems.length + serverStoneCount
+
+    if (serverTotalAvailable < materialCount) {
+      showMessage(`素材が足りません！（同名装備${serverSameItems.length}個 + 強化石(${RARITY_LABELS[rarity]})${serverStoneCount}個 = ${serverTotalAvailable}個、${materialCount}個必要）`, '#ff4444')
       setLoading(false); return
     }
 
-    await supabase.from('profiles').update({ gold: profile.gold - cost }).eq('id', profile.id)
+    // ★ 楽観ロック: ゴールドが読み取り時と同じ値の場合のみ消費（別タブが先に消費してたら失敗）
+    const { data: goldLocked } = await supabase.from('profiles')
+      .update({ gold: serverProfile.gold - cost })
+      .eq('id', profile.id)
+      .eq('gold', serverProfile.gold)
+      .select('id')
+    if (!goldLocked || goldLocked.length === 0) {
+      showMessage('処理が競合しました。もう一度お試しください。', '#ff4444')
+      await fetchAll(); setLoading(false); return
+    }
 
-    const useEquipCount = Math.min(usableSame, materialCount)
+    // 同名装備を消費
+    const useEquipCount = Math.min(serverSameItems.length, materialCount)
     const useStoneCount = materialCount - useEquipCount
-    for (let i = 0; i < useEquipCount; i++) await supabase.from('player_equipment').delete().eq('id', sameItems[i].id)
-    if (useStoneCount > 0) await consumeStones(rarity, useStoneCount)
+    for (let i = 0; i < useEquipCount; i++) {
+      await supabase.from('player_equipment').delete().eq('id', serverSameItems[i].id)
+    }
 
+    // ★ 楽観ロック: 石が読み取り時と同じ数の場合のみ消費
+    if (useStoneCount > 0 && serverStoneItem) {
+      const newQty = serverStoneCount - useStoneCount
+      const { data: stoneLocked } = newQty <= 0
+        ? await supabase.from('player_items').delete().eq('id', serverStoneItem.id).eq('quantity', serverStoneCount).select('id')
+        : await supabase.from('player_items').update({ quantity: newQty }).eq('id', serverStoneItem.id).eq('quantity', serverStoneCount).select('id')
+      if (!stoneLocked || stoneLocked.length === 0) {
+        // 石の消費失敗 → ゴールドを返金して中断
+        await supabase.from('profiles').update({ gold: serverProfile.gold }).eq('id', profile.id)
+        showMessage('素材の消費に失敗しました。もう一度お試しください。', '#ff4444')
+        await fetchAll(); setLoading(false); return
+      }
+    }
+
+    // 強化実行
     let success = true
     if (nextPlus >= 6) {
       const rate = ENHANCE_RATE[nextPlus] || ENHANCE_RATE[16]
