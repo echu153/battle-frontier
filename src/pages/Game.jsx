@@ -660,13 +660,7 @@ const fetchAnnouncements = async () => {
     setSkillSets(ss || [])
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id).eq('equipped', true).single()
     setPlayerItem(pi || null)
-    // 釣り中チェック
-const { data: fishSess } = await supabase.from('fishing_sessions')
-  .select('*').eq('player_id', user.id).eq('is_active', true).single()
-  .catch(() => ({ data: null }))
-if (fishSess) {
-  setScene('fishing_active')
-}
+
   }
 
   const doRegen = async () => {
