@@ -562,13 +562,14 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
   const newPlayerBuffs = { ...playerBuffs }
   const newEnemyBuffs = { ...enemyBuffs }
 
+  const enemyDmgDown = enemyBuffs.dmgDown?.turns > 0 ? enemyBuffs.dmgDown.rate : 1.0
   switch (skill.type) {
     case 'physical': {
       const pDef = (eff?.def || 0) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1)
       const defVal = Math.floor(pDef / 2)
       const rawDmg = Math.max(1, Math.floor(enemy.atk * skill.mult) - defVal)
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
-      dmgToPlayer = Math.floor(rawDmg * dmgReduceRate * (0.9 + Math.random() * 0.2))
+      dmgToPlayer = Math.floor(rawDmg * enemyDmgDown * dmgReduceRate * (0.9 + Math.random() * 0.2))
       logs.push({ text:`⚔ ${enemy.name}の「${skill.name}」！ あなたに${dmgToPlayer}ダメージ！`, color:'#ff4444' })
       break
     }
@@ -577,7 +578,7 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
       const defVal = Math.floor(pMdef / 2)
       const rawDmg = Math.max(1, Math.floor((enemy.matk||enemy.atk) * skill.mult) - defVal)
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
-      dmgToPlayer = Math.floor(rawDmg * dmgReduceRate * (0.9 + Math.random() * 0.2))
+      dmgToPlayer = Math.floor(rawDmg * enemyDmgDown * dmgReduceRate * (0.9 + Math.random() * 0.2))
       logs.push({ text:`✨ ${enemy.name}の「${skill.name}」！ あなたに${dmgToPlayer}の魔法ダメージ！`, color:'#cc44ff' })
       if (skill.debuff === 'mdefDown') {
         newPlayerBuffs.mdefDown = { turns: skill.debuffTurns||2, rate: skill.debuffRate||0.8 }
@@ -590,19 +591,24 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
       const defVal = Math.floor(pDef / 2)
       const perHit = Math.max(1, Math.floor(enemy.atk * skill.mult) - defVal)
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
-      dmgToPlayer = Math.floor(perHit * (skill.hits||1) * dmgReduceRate * (0.9 + Math.random() * 0.2))
+      dmgToPlayer = Math.floor(perHit * (skill.hits||1) * enemyDmgDown * dmgReduceRate * (0.9 + Math.random() * 0.2))
       logs.push({ text:`⚔ ${enemy.name}の「${skill.name}」！ ${perHit}×${skill.hits}回＝${dmgToPlayer}ダメージ！`, color:'#ff4444' })
       break
     }
     case 'heal': {
-      healEnemy = Math.floor(enemyMaxHp * skill.rate)
+      const healDownRate = enemyBuffs.healDown?.turns > 0 ? enemyBuffs.healDown.rate : 1.0
+      healEnemy = Math.floor(enemyMaxHp * skill.rate * healDownRate)
       logs.push({ text:`💚 ${enemy.name}の「${skill.name}」！ HPが${healEnemy}回復した！`, color:'#44ff88' })
       break
     }
     case 'debuff': {
-      if (skill.effect === 'spdDown') newPlayerBuffs.spdDown = { turns: skill.turns||2, rate: skill.rate||0.8 }
-      if (skill.effect === 'atkDown') newPlayerBuffs.atkDown = { turns: skill.turns||2, rate: skill.rate||0.8 }
-      logs.push({ text:`⬇ ${enemy.name}の「${skill.name}」！ あなたのステータスが低下した！`, color:'#ff8844' })
+      if (playerBuffs.statusImmune?.turns > 0) {
+        logs.push({ text:`🛡 ${enemy.name}の「${skill.name}」！ しかし狂信で無効化した！`, color:'#ffcc00' })
+      } else {
+        if (skill.effect === 'spdDown') newPlayerBuffs.spdDown = { turns: skill.turns||2, rate: skill.rate||0.8 }
+        if (skill.effect === 'atkDown') newPlayerBuffs.atkDown = { turns: skill.turns||2, rate: skill.rate||0.8 }
+        logs.push({ text:`⬇ ${enemy.name}の「${skill.name}」！ あなたのステータスが低下した！`, color:'#ff8844' })
+      }
       break
     }
     case 'buff': {
@@ -989,7 +995,9 @@ export default function Game() {
           const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? 1.1 : 1.0
           prevSkillName = cs.skills.name
           const res = executeSkill(cs.skills, effBuff, profile, enemy, enemyBuffs, playerBuffs, isArtifact)
-          let finalDmg = Math.floor(res.dmg * critMult * passiveDmgMult * gensoMult * (0.9 + Math.random() * 0.2))
+          const finalCrit = isCrit || (res.bonusCritRate > 0 && Math.random()*100 < playerCritRate + res.bonusCritRate)
+          const finalCritMult = finalCrit ? 1.5 : 1.0
+          let finalDmg = Math.floor(res.dmg * finalCritMult * passiveDmgMult * gensoMult * (0.9 + Math.random() * 0.2))
           if (enemy.isPapia) finalDmg = 1
           const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
@@ -1002,8 +1010,8 @@ export default function Game() {
           const healAmt = Math.floor(res.heal * passiveHealMult)
           playerHp = Math.min(profile.hp_max, playerHp + healAmt)
           playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
-          const critText = isCrit ? ' 💥クリティカル！' : ''
-          logs.push({ text:`${prefix}${resLog}${critText}`, color:isCrit?'#ff4444':'#88ccff' })
+          const critText = finalCrit ? ' 💥クリティカル！' : ''
+          logs.push({ text:`${prefix}${resLog}${critText}`, color:finalCrit?'#ff4444':'#88ccff' })
           skillUsed = true; skillIndex++
         }
       }
@@ -1050,7 +1058,8 @@ export default function Game() {
         return
       }
 
-      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*(0.9+Math.random()*0.2))
+      const enemyDmgDownRate = enemyBuffs.dmgDown?.turns > 0 ? enemyBuffs.dmgDown.rate : 1.0
+      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(0.9+Math.random()*0.2))
       playerHp -= finalDmg
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
       const critText = isCrit ? ' 💥クリティカル！' : ''
