@@ -1029,9 +1029,10 @@ export default function Game() {
   }
 
   const doRetraining = async () => {
-    if (retrainingCount >= 5) return
+    const currentCount = (profile.retraining || {})[profile.class] || 0
+    if (currentCount >= 5) return
     setLoading(true)
-    const newRetraining = { ...(profile.retraining || {}), [profile.class]: retrainingCount + 1 }
+    const newRetraining = { ...(profile.retraining || {}), [profile.class]: currentCount + 1 }
     const newPending = (profile.pending_stat_points || 0) + 10
     await supabase.from('profiles').update({
       retraining: newRetraining,
@@ -1044,7 +1045,7 @@ export default function Game() {
     await fetchProfile()
     setRetrainingModal(false)
     setSelectedCarrySkill(null)
-    const stars = '★'.repeat(retrainingCount + 1)
+    const stars = '★'.repeat(currentCount + 1)
     setTempleMessage(`再修練完了！ ${profile.class}${stars} レベルキャップ+100・ステータスポイント+10！`)
     setLoading(false)
   }
