@@ -854,6 +854,11 @@ export default function Game() {
   const [openGuideId, setOpenGuideId] = useState(null)
   const [openAnnouncementId, setOpenAnnouncementId] = useState(null)
   const [pendingClassChange, setPendingClassChange] = useState(null)
+  const [hasNewAnnouncements, setHasNewAnnouncements] = useState(false)
+  const [newAnnouncementPopup, setNewAnnouncementPopup] = useState(false)
+  const [seenAnnouncementIds, setSeenAnnouncementIds] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('bf_seenAnnouncements') || '[]') } catch { return [] }
+  })
   const expTrackerRef = useRef({ start: null, total: 0 })
   const battleCountTrackerRef = useRef({ start: null, count: 0 })
 
@@ -1804,7 +1809,23 @@ export default function Game() {
 
   const fetchAnnouncements = async () => {
     const { data } = await supabase.from('announcements').select('*').eq('is_active', true).order('created_at', { ascending: false })
-    setAnnouncements(data || [])
+    const fetched = data || []
+    setAnnouncements(fetched)
+    try {
+      const seen = JSON.parse(localStorage.getItem('bf_seenAnnouncements') || '[]')
+      setSeenAnnouncementIds(seen)
+      const hasNew = fetched.some(a => !seen.includes(a.id))
+      if (hasNew) {
+        setHasNewAnnouncements(true)
+        setNewAnnouncementPopup(true)
+      }
+    } catch {}
+  }
+
+  const markAllAnnouncementsSeen = () => {
+    const ids = announcements.map(a => a.id)
+    try { localStorage.setItem('bf_seenAnnouncements', JSON.stringify(ids)) } catch {}
+    setHasNewAnnouncements(false)
   }
 
   const GUIDE_SECTIONS = [
@@ -1921,6 +1942,36 @@ export default function Game() {
     </div>
   )
 
+  if (newAnnouncementPopup) return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.88)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
+      <div style={{ background:'#001040', border:'2px solid #ff8844', padding:'28px 24px', maxWidth:'420px', width:'100%', textAlign:'center' }}>
+        <div style={{ color:'#ff8844', fontSize:'22px', marginBottom:'8px' }}>📢</div>
+        <div style={{ color:'#ff8844', fontSize:'15px', marginBottom:'16px', letterSpacing:'2px' }}>新着お知らせ</div>
+        <div style={{ marginBottom:'20px', textAlign:'left' }}>
+          {announcements.filter(a => !seenAnnouncementIds.includes(a.id)).map(a => (
+            <div key={a.id} style={{ marginBottom:'6px', padding:'8px 10px', background:'#000818', border:'1px solid #332200' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                <span style={{ color:'#ff8844', fontSize:'9px', padding:'1px 4px', border:'1px solid #ff8844' }}>NEW</span>
+                <span style={{ color:'#88ccff', fontSize:'12px' }}>{a.title}</span>
+              </div>
+              <div style={{ color:'#446688', fontSize:'10px', marginTop:'3px' }}>{new Date(a.created_at).toLocaleDateString('ja-JP')}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display:'flex', gap:'10px', justifyContent:'center' }}>
+          <button onClick={()=>{ setNewAnnouncementPopup(false); setShowAnnouncements(true); markAllAnnouncementsSeen() }}
+            style={{ background:'#1a0800', border:'1px solid #ff8844', color:'#ff8844', padding:'8px 20px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            詳しく見る
+          </button>
+          <button onClick={()=>{ setNewAnnouncementPopup(false); markAllAnnouncementsSeen() }}
+            style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'8px 20px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            閉じる
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   if (showAnnouncements) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ background:'#001040', border:'1px solid #ff8844', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'80vh', overflowY:'auto', fontFamily:'monospace' }}>
@@ -1929,23 +1980,29 @@ export default function Game() {
           <button onClick={()=>{ setShowAnnouncements(false); setOpenAnnouncementId(null) }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>✕ 閉じる</button>
         </div>
         {announcements.length === 0 && <div style={{ color:'#446688', fontSize:'12px' }}>お知らせはありません</div>}
-        {announcements.map(a => (
-          <div key={a.id} style={{ marginBottom:'8px', border:'1px solid #002244', background:'#000818' }}>
-            <button onClick={()=>setOpenAnnouncementId(openAnnouncementId===a.id?null:a.id)}
-              style={{ width:'100%', padding:'10px 12px', background:'none', border:'none', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-              <span style={{ display:'flex', flexDirection:'column', gap:'2px' }}>
-                <span>{a.title}</span>
-                <span style={{ color:'#446688', fontSize:'10px' }}>{new Date(a.created_at).toLocaleDateString('ja-JP')}</span>
-              </span>
-              <span style={{ color:'#446688', fontSize:'10px' }}>{openAnnouncementId===a.id?'▲':'▼'}</span>
-            </button>
-            {openAnnouncementId===a.id && (
-              <div style={{ padding:'12px', borderTop:'1px solid #002244', color:'#88ccff', fontSize:'11px', lineHeight:'1.8', whiteSpace:'pre-wrap', textAlign:'left' }}>
-                {a.content}
-              </div>
-            )}
-          </div>
-        ))}
+        {announcements.map(a => {
+          const isNew = !seenAnnouncementIds.includes(a.id)
+          return (
+            <div key={a.id} style={{ marginBottom:'8px', border:`1px solid ${isNew?'#443300':'#002244'}`, background:'#000818' }}>
+              <button onClick={()=>setOpenAnnouncementId(openAnnouncementId===a.id?null:a.id)}
+                style={{ width:'100%', padding:'10px 12px', background:'none', border:'none', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ display:'flex', flexDirection:'column', gap:'2px' }}>
+                  <span style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                    {isNew && <span style={{ color:'#ff8844', fontSize:'9px', padding:'1px 4px', border:'1px solid #ff8844' }}>NEW</span>}
+                    <span>{a.title}</span>
+                  </span>
+                  <span style={{ color:'#446688', fontSize:'10px' }}>{new Date(a.created_at).toLocaleDateString('ja-JP')}</span>
+                </span>
+                <span style={{ color:'#446688', fontSize:'10px' }}>{openAnnouncementId===a.id?'▲':'▼'}</span>
+              </button>
+              {openAnnouncementId===a.id && (
+                <div style={{ padding:'12px', borderTop:'1px solid #002244', color:'#88ccff', fontSize:'11px', lineHeight:'1.8', whiteSpace:'pre-wrap', textAlign:'left' }}>
+                  {a.content}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -2068,7 +2125,9 @@ export default function Game() {
         <div style={{ background:'#000820', borderBottom:'1px solid #003366', padding:'6px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:100 }}>
           <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
             <div style={{ color:'#ffcc00', fontSize:'13px', letterSpacing:'2px' }}>BATTLE FRONTIER</div>
-            <button onClick={()=>setShowAnnouncements(true)} style={{ background:'none', border:'1px solid #ff8844', color:'#ff8844', padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>📢</button>
+            <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen() }} style={{ background:'none', border:`1px solid ${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, color:`${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', position:'relative' }}>
+              📢{hasNewAnnouncements && <span style={{ marginLeft:'2px', background:'#ff4400', color:'#fff', fontSize:'7px', padding:'1px 3px', borderRadius:'2px', verticalAlign:'middle' }}>NEW</span>}
+            </button>
           </div>
           <div style={{ display:'flex', gap:'6px' }}>
             <button onClick={()=>nav('/equipment')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡</button>
@@ -2260,7 +2319,9 @@ export default function Game() {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
             <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
-            <button onClick={()=>setShowAnnouncements(true)} style={{ background:'none', border:'1px solid #ff8844', color:'#ff8844', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📢 お知らせ</button>
+            <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen() }} style={{ background:'none', border:`1px solid ${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, color:`${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', position:'relative' }}>
+              📢 お知らせ{hasNewAnnouncements && <span style={{ marginLeft:'4px', background:'#ff4400', color:'#fff', fontSize:'8px', padding:'1px 4px', borderRadius:'2px', verticalAlign:'middle' }}>NEW</span>}
+            </button>
             <button onClick={()=>setShowGuide(true)} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📖 ガイド</button>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
