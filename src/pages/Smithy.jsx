@@ -147,6 +147,7 @@ export default function Smithy() {
   const [selectedItem, setSelectedItem] = useState(null)
   const [craftTab, setCraftTab] = useState('equipment')
   const [sortKey, setSortKey] = useState(() => localStorage.getItem('equipSortKey') || 'obtained_asc')
+  const [craftConfirm, setCraftConfirm] = useState(null) // { type:'equipment'|'stone', items?, selectedIds?, rarity }
 
   useEffect(() => { fetchAll() }, [])
 
@@ -373,8 +374,73 @@ export default function Smithy() {
 
   const slots = ['weapon', 'armor', 'accessory', 'accessory2']
 
+  const handleCraftConfirm = () => {
+    if (!craftConfirm) return
+    const c = craftConfirm
+    setCraftConfirm(null)
+    if (c.type === 'equipment') craftStoneFromSelectedItems(c.selectedIds)
+    else craftStoneFromStones(c.rarity)
+  }
+
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
+
+      {/* 加工確認ダイアログ */}
+      {craftConfirm && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.88)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
+          <div style={{ background:'#001040', border:'1px solid #aa8800', padding:'24px', maxWidth:'400px', width:'100%' }}>
+            <div style={{ color:'#ffcc00', fontSize:'14px', marginBottom:'16px', textAlign:'center', letterSpacing:'2px' }}>加工確認</div>
+
+            {craftConfirm.type === 'equipment' && (
+              <>
+                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'10px' }}>以下の装備を消費して強化石に加工します</div>
+                <div style={{ marginBottom:'12px' }}>
+                  {craftConfirm.items.map(item => (
+                    <div key={item.id} style={{ color:'#88ccff', fontSize:'11px', padding:'5px 8px', borderBottom:'1px solid #002244', display:'flex', alignItems:'center', gap:'6px' }}>
+                      <span style={{ fontSize:'9px', padding:'1px 4px', color:RARITY_COLORS[item.weapons.rarity], border:`1px solid ${RARITY_COLORS[item.weapons.rarity]}` }}>{RARITY_LABELS[item.weapons.rarity]}</span>
+                      <span>{item.weapons.name}{(item.enhance_plus||0)>0?` +${item.enhance_plus}`:''}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ textAlign:'center', color:'#446688', fontSize:'11px', marginBottom:'4px' }}>↓</div>
+                <div style={{ textAlign:'center', color:'#ffcc00', fontSize:'13px', marginBottom:'16px' }}>
+                  {STONE_NAMES[craftConfirm.rarity]} × 1
+                </div>
+              </>
+            )}
+
+            {craftConfirm.type === 'stone' && (() => {
+              const nextRarity = STONE_RANKS[STONE_RANKS.indexOf(craftConfirm.rarity)+1]
+              return (
+                <>
+                  <div style={{ marginBottom:'12px' }}>
+                    <div style={{ color:'#88ccff', fontSize:'12px', padding:'6px 8px', borderBottom:'1px solid #002244' }}>
+                      {STONE_NAMES[craftConfirm.rarity]} × 3
+                    </div>
+                  </div>
+                  <div style={{ textAlign:'center', color:'#446688', fontSize:'11px', marginBottom:'4px' }}>↓</div>
+                  <div style={{ textAlign:'center', color:'#ffcc00', fontSize:'13px', marginBottom:'16px' }}>
+                    {STONE_NAMES[nextRarity]} × 1
+                  </div>
+                </>
+              )
+            })()}
+
+            <div style={{ color:'#446688', fontSize:'10px', textAlign:'center', marginBottom:'16px' }}>上記を消費して加工します。よろしいですか？</div>
+
+            <div style={{ display:'flex', gap:'10px', justifyContent:'center' }}>
+              <button onClick={handleCraftConfirm} disabled={loading}
+                style={{ background:'#1a1000', border:'1px solid #aa8800', color:'#ffcc00', padding:'8px 24px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+                加工する
+              </button>
+              <button onClick={() => setCraftConfirm(null)}
+                style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'8px 24px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ maxWidth:'700px', margin:'0 auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
@@ -387,7 +453,7 @@ export default function Smithy() {
         {message && <div style={{ color: messageColor, fontSize:'12px', padding:'8px', border:`1px solid ${messageColor}`, marginBottom:'12px', textAlign:'center' }}>{message}</div>}
 
         <div style={{ display:'flex', gap:'4px', marginBottom:'8px', flexWrap:'wrap' }}>
-          {[{id:'enhance', label:'強化'}, {id:'craft', label:'加工'}, {id:'reeval', label:'再評価'}, {id:'sell', label:'売却'}].map(t => (
+          {[{id:'enhance', label:'強化'}, {id:'craft', label:'加工'}, {id:'reeval', label:'再評価/再鑑定'}, {id:'sell', label:'売却'}].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{ padding:'6px 14px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
                 background: tab === t.id ? '#001840' : '#000818',
@@ -398,7 +464,7 @@ export default function Smithy() {
           ))}
         </div>
 
-        {(tab === 'enhance' || tab === 'reeval' || tab === 'sell') && (
+        {(tab === 'enhance' || tab === 'craft' || tab === 'reeval' || tab === 'sell') && (
           <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px', fontSize:'11px' }}>
             <span style={{color:'#446688'}}>並び替え:</span>
             <select value={sortKey} onChange={e => { const v=e.target.value; setSortKey(v); localStorage.setItem('equipSortKey',v) }}
@@ -521,8 +587,36 @@ export default function Smithy() {
             </div>
             {craftTab === 'equipment' && (
               <div>
-                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>同ランクの装備を3つ選択して強化石に加工できます（装備中は選択不可）</div>
-                <CraftSelector equipment={equipment} loading={loading} onCraft={craftStoneFromSelectedItems} />
+                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'10px' }}>同ランクの装備を3つ選択して強化石に加工できます（装備中は選択不可）</div>
+
+                {/* ランクボタン：ランダム3選択 */}
+                <div style={{ border:'1px solid #002244', background:'#000818', padding:'10px', marginBottom:'12px' }}>
+                  <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>ランク指定でランダムに3つ選んで加工</div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
+                    {RARITY_ORDER.map(rarity => {
+                      const avail = sortEquipment(equipment.filter(e => !e.equipped && e.weapons.rarity === rarity), sortKey)
+                      const canPick = avail.length >= 3
+                      return (
+                        <button key={rarity} onClick={() => {
+                          const shuffled = [...avail].sort(() => Math.random() - 0.5)
+                          const picked = shuffled.slice(0, 3)
+                          setCraftConfirm({ type:'equipment', items:picked, selectedIds:picked.map(i=>i.id), rarity })
+                        }} disabled={!canPick}
+                          style={{ padding:'5px 9px', background:canPick?'#0d1a00':'#001', border:`1px solid ${canPick?RARITY_COLORS[rarity]:'#002244'}`, color:canPick?RARITY_COLORS[rarity]:'#334455', cursor:canPick?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
+                          {RARITY_LABELS[rarity]} <span style={{fontSize:'9px'}}>({avail.length})</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* 手動選択 */}
+                <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>または手動で3つ選択:</div>
+                <CraftSelector equipment={equipment} loading={loading} sortKey={sortKey} onRequestCraft={(ids) => {
+                  const items = ids.map(id => equipment.find(e => e.id === id)).filter(Boolean)
+                  const rarity = items[0]?.weapons.rarity
+                  setCraftConfirm({ type:'equipment', items, selectedIds:ids, rarity })
+                }} />
               </div>
             )}
             {craftTab === 'stone' && (
@@ -539,7 +633,7 @@ export default function Smithy() {
                         <span style={{ color: canCraft ? '#44ff88' : '#ff4444', fontSize:'10px', marginLeft:'8px' }}>（所持{count}個）</span>
                         <span style={{ color:'#446688', fontSize:'10px', marginLeft:'8px' }}>→ {STONE_NAMES[nextRarity]}</span>
                       </div>
-                      <button onClick={() => craftStoneFromStones(rarity)} disabled={!canCraft || loading}
+                      <button onClick={() => setCraftConfirm({ type:'stone', rarity })} disabled={!canCraft || loading}
                         style={{ padding:'4px 10px', background: canCraft ? '#1a1400' : '#001', border:`1px solid ${canCraft ? '#aa8800' : '#002244'}`, color: canCraft ? '#ffcc00' : '#334455', cursor: canCraft ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>加工する</button>
                     </div>
                   )
@@ -670,9 +764,9 @@ export default function Smithy() {
   )
 }
 
-function CraftSelector({ equipment, loading, onCraft }) {
+function CraftSelector({ equipment, loading, sortKey, onRequestCraft }) {
   const [selected, setSelected] = useState([])
-  const unequipped = equipment.filter(e => !e.equipped)
+  const unequipped = sortEquipment(equipment.filter(e => !e.equipped), sortKey || 'obtained_asc')
 
   const toggle = (id) => {
     if (selected.includes(id)) { setSelected(selected.filter(s => s !== id)); return }
@@ -698,7 +792,7 @@ function CraftSelector({ equipment, loading, onCraft }) {
         <div style={{ display:'flex', gap:'6px' }}>
           <button onClick={() => setSelected([])} disabled={selected.length===0}
             style={{ padding:'4px 8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>クリア</button>
-          <button onClick={() => { onCraft(selected); setSelected([]) }} disabled={selected.length!==3 || loading}
+          <button onClick={() => { onRequestCraft(selected); setSelected([]) }} disabled={selected.length!==3 || loading}
             style={{ padding:'4px 10px', background: selected.length===3?'#1a1400':'#001', border:`1px solid ${selected.length===3?'#aa8800':'#002244'}`, color: selected.length===3?'#ffcc00':'#334455', cursor: selected.length===3?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>加工する</button>
         </div>
       </div>
