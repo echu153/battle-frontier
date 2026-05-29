@@ -251,9 +251,18 @@ const ADVANCED_CLASSES = {
 
 const CLASS_LEVEL_CAP = {
   '戦士':100, '弓使い':100, '魔法使い':100, '僧侶':100, '格闘家':100,
-  '侍':300, '狂戦士':300, '狩人':300, '暗殺者':300,
-  '元素使い':300, '死霊使い':300, '聖職者':300, '異端審問官':300, '賢者':300,
-  'サイキッカー':300, '体術師':300, '魔銃士':300,
+  '侍':100, '狂戦士':100, '狩人':100, '暗殺者':100,
+  '元素使い':100, '死霊使い':100, '聖職者':100, '異端審問官':100, '賢者':100,
+  'サイキッカー':100, '体術師':100, '魔銃士':100,
+}
+const getEffectiveCap = (className, retraining) => {
+  const base = CLASS_LEVEL_CAP[className] || 100
+  const count = (retraining || {})[className] || 0
+  return base + count * 100
+}
+const getRetrainingStars = (className, retraining) => {
+  const count = (retraining || {})[className] || 0
+  return '★'.repeat(count)
 }
 
 const STAT_LABELS = {
@@ -290,8 +299,9 @@ const getTotalRank = (total) => {
 }
 
 const calcExpNext = (lv) => {
-  const tier = Math.floor((lv-1)/10)
-  return Math.min(200, 100 + tier * 10)
+  const lvInBlock = (lv - 1) % 100
+  const tier = Math.floor(lvInBlock / 10)
+  return 100 + tier * 10
 }
 
 const WEAPON_TYPE_GROUP = {
@@ -499,16 +509,16 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       result.log = `🗡 防御崩し！ ${enemy.name}に${result.dmg}ダメージ！${defBreakHit ? ' 防御力が低下した！' : ''}`
       break
     }
-    case '防御態勢':    result.newPlayerBuffs.defUp={turns:4,rate:1.3}; result.log = `🛡 防御態勢！ 4ターンの間防御力と特殊防御力が+30%上昇した！`; break
+    case '防御態勢':    result.newPlayerBuffs.defUp={turns:4,rate:1.3}; result.log = `🛡 防御態勢！ 4ターンの間防御力と特殊防御力が上昇した！`; break
     case '応急手当':    result.heal = Math.floor(profile.hp_max*0.15); result.log = `💊 応急手当！ HPを${result.heal}回復した！`; break
     case 'シールドアタック': result.dmg = Math.floor((eff.atk*0.8+eff.def*0.4)*am); result.log = `🛡 シールドアタック！ ${enemy.name}に${result.dmg}ダメージ！`; break
     case '狙撃':        result.dmg = Math.floor(eff.spd*1.2*am); result.log = `🏹 狙撃！ ${enemy.name}に${result.dmg}ダメージ！`; break
-    case '駆け足':      result.newPlayerBuffs.spdUp={turns:4,rate:1.3}; result.log = `💨 駆け足！ 4ターンの間素早さが+30%上昇した！`; break
+    case '駆け足':      result.newPlayerBuffs.spdUp={turns:4,rate:1.3}; result.log = `💨 駆け足！ 4ターンの間素早さが上昇した！`; break
     case '貫通射撃': {
       const edr_p = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
       const defVal_p = Math.floor((enemy.def||0)*edr_p*0.8/2)
       result.dmg = Math.max(1, Math.floor(eff.atk*1.2*am) - defVal_p)
-      result.log = `🏹 貫通射撃！ ${enemy.name}の防御を20%貫いて${result.dmg}ダメージ！`; break
+      result.log = `🏹 貫通射撃！ ${enemy.name}の防御を貫いて${result.dmg}ダメージ！`; break
     }
     case '疾風矢':      result.dmg = Math.floor((eff.atk*1.0+eff.spd*0.5)*am); result.log = `💨 疾風矢！ ${enemy.name}に${result.dmg}ダメージ！`; break
     case '剛射':        result.dmg = Math.floor(eff.atk*1.2*am); result.log = `🏹 剛射！ ${enemy.name}に${result.dmg}ダメージ！`; break
@@ -523,7 +533,7 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       result.log = `🔥 ファイア！ ${enemy.name}に${result.dmg}の魔法ダメージ！${burnHit ? ' やけど状態！' : ''}`
       break
     }
-    case '精神統一':    result.newPlayerBuffs.matkUp={turns:4,rate:1.3}; result.log = `✨ 精神統一！ 4ターンの間特殊攻撃力が+30%上昇した！`; break
+    case '精神統一':    result.newPlayerBuffs.matkUp={turns:4,rate:1.3}; result.log = `✨ 精神統一！ 4ターンの間特殊攻撃力が上昇した！`; break
     case 'サンダー': {
       result.dmg = Math.floor(eff.matk*1.4*am)
       const pHit = Math.random()*100 < 20
@@ -563,7 +573,7 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       result.log = `⚔ 断空！ ${enemy.name}の防御を断ち切り${result.dmg}ダメージ！${bleedHit2 ? ' 出血状態！' : ''}`
       break
     }
-    case '明鏡止水':    result.newPlayerBuffs.atkUp={turns:4,rate:1.5}; result.newPlayerBuffs.hitBonus={turns:4,value:5}; result.log = `✨ 明鏡止水！ 4ターンの間攻撃力が上昇し命中率+5%！`; break
+    case '明鏡止水':    result.newPlayerBuffs.atkUp={turns:4,rate:1.5}; result.newPlayerBuffs.hitBonus={turns:4,value:5}; result.log = `✨ 明鏡止水！ 4ターンの間攻撃力が上昇し命中率UP！`; break
     case '月影': {
       result.dmg = Math.floor(eff.atk*2.0*am)
       const bleedHit6 = Math.random()*100 < 40
@@ -578,12 +588,12 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       break
     }
     case 'すてみ':      result.dmg = Math.floor(eff.atk*1.7*am); result.selfDmg = Math.floor(result.dmg*0.2); result.log = `💢 すてみ！ ${enemy.name}に${result.dmg}ダメージ！ 自分も${result.selfDmg}ダメージ！`; break
-    case 'ブラッティロア': result.newPlayerBuffs.atkUp={turns:4,rate:1.1}; result.newPlayerBuffs.bloodRage={turns:4,healRate:0.3}; result.log = `🩸 ブラッティロア！ 4ターンの間、攻撃力+10%・与えたダメージの30%を回復！`; break
+    case 'ブラッティロア': result.newPlayerBuffs.atkUp={turns:4,rate:1.1}; result.newPlayerBuffs.bloodRage={turns:4,healRate:0.3}; result.log = `🩸 ブラッティロア！ 4ターンの間、攻撃力UP・与えたダメージを回復！`; break
     case 'フルブレイカー': {
       const edr_fb = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
       const defVal_fb = Math.floor((enemy.def||0)*edr_fb*0.7/2)
       result.dmg = Math.max(1, Math.floor(eff.atk*1.9*am) - defVal_fb)
-      result.log = `💥 フルブレイカー！ ${enemy.name}に${result.dmg}の壊滅的ダメージ！ 防御30%無視！`; break
+      result.log = `💥 フルブレイカー！ ${enemy.name}に${result.dmg}の壊滅的ダメージ！ 防御無視！`; break
     }
     case '毒矢': {
       result.dmg = Math.floor(eff.atk*1.1*am)
@@ -605,17 +615,18 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     case '鬼影閃': {
       let kiDmg = Math.floor(eff.atk*1.5*am)
       const hasShadowWalk = playerBuffs.evasion?.turns > 0
+      let bonusDmg = 0
       if (hasShadowWalk) {
-        const bonusDmg = Math.floor(eff.spd*0.3*am)
+        bonusDmg = Math.floor(eff.spd*0.3*am)
         kiDmg += bonusDmg
       }
       result.dmg = kiDmg
       const bleedHit4 = Math.random()*100 < 20
       if (bleedHit4) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
-      result.log = `🌙 鬼影閃！ ${enemy.name}に${result.dmg}ダメージ！${hasShadowWalk ? ' 影歩き追撃！' : ''}${bleedHit4 ? ' 出血！' : ''}`
+      result.log = `🌙 鬼影閃！ ${enemy.name}に${result.dmg}ダメージ！${hasShadowWalk ? ` 影歩き追撃(+${bonusDmg})！` : ''}${bleedHit4 ? ' 出血！' : ''}`
       break
     }
-    case '影歩き':      result.newPlayerBuffs.spdUp={turns:4,rate:1.5}; result.newPlayerBuffs.evasion={turns:4,rate:0.05}; result.log = `🌙 影歩き！ 4ターンの間、素早さ大幅上昇・回避率+5%！`; break
+    case '影歩き':      result.newPlayerBuffs.spdUp={turns:4,rate:1.5}; result.newPlayerBuffs.evasion={turns:4,rate:0.05}; result.log = `🌙 影歩き！ 4ターンの間、素早さ大幅上昇・回避率UP！`; break
     case '急所突き':    result.dmg = Math.floor(eff.atk*1.8*am); result.bonusCritRate=30; result.log = `🌙 急所突き！ ${enemy.name}に${result.dmg}ダメージ！ クリティカル確率大幅UP！`; break
     case 'アクアショット': {
       result.dmg = Math.floor(eff.matk*1.4*am)
@@ -651,17 +662,17 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     }
     case '骸骨召喚':    result.dmg = Math.floor(eff.matk*0.7*am); result.newPlayerBuffs.skeletonDmg={turns:2,dmg:result.dmg}; result.log = `💀 骸骨召喚！ ${enemy.name}に${result.dmg}ダメージ！ 2ターン持続！`; break
     case 'ソウルドレイン': result.dmg = Math.floor(eff.matk*1.4*am); result.heal = Math.floor(result.dmg*0.2); result.log = `💀 ソウルドレイン！ ${enemy.name}に${result.dmg}ダメージ！ HPを${result.heal}回復！`; break
-    case '腐敗霧':      result.newEnemyBuffs.defDown={turns:4,rate:0.7}; result.newEnemyBuffs.mdefDown={turns:4,rate:0.7}; result.newEnemyBuffs.severePoisoin={turns:5,dmgRate:0.05}; result.log = `💀 腐敗霧！ 4ターンの間、対象の防御力・特殊防御力-30%！ 猛毒状態！`; break
+    case '腐敗霧':      result.newEnemyBuffs.defDown={turns:4,rate:0.7}; result.newEnemyBuffs.mdefDown={turns:4,rate:0.7}; result.newEnemyBuffs.severePoisoin={turns:5,dmgRate:0.05}; result.log = `💀 腐敗霧！ 4ターンの間、対象の防御力・特殊防御力低下！ 猛毒状態！`; break
     case '幽世ノ門': {
       const curseDmgAmt = Math.floor(eff.matk*0.3*am)
       result.newEnemyBuffs.curseDmg = { turns:3, dmg:curseDmgAmt }
       result.newEnemyBuffs.dmgDown = { turns:3, rate:0.8 }
       result.newEnemyBuffs.spdDown = { turns:3, rate:0.8 }
-      result.log = `💀 幽世ノ門！ 3ターンの間、呪縛ダメージ・与ダメ-20%・素早さ-20%！`; break
+      result.log = `💀 幽世ノ門！ 3ターンの間、呪縛ダメージ・与ダメ低下・素早さ低下！`; break
     }
     case 'ホーリーライト': result.dmg = Math.floor(eff.matk*1.5*am); result.log = `✨ ホーリーライト！ ${enemy.name}に${result.dmg}の聖なるダメージ！`; break
     case '奇跡':        result.newPlayerBuffs.regenHeal={turns:4,amount:Math.floor(profile.hp_max*0.10+eff.matk*0.2)}; result.log = `✨ 奇跡！ 4ターンの間、毎ターンHPが回復！`; break
-    case '祈りの結界':  result.newPlayerBuffs.dmgReduce={turns:4,rate:0.7}; result.log = `✨ 祈りの結界！ 4ターンの間、受けるダメージ-30%！`; break
+    case '祈りの結界':  result.newPlayerBuffs.dmgReduce={turns:4,rate:0.7}; result.log = `✨ 祈りの結界！ 4ターンの間、受けるダメージ軽減！`; break
     case '神罰執行': {
       result.dmg = Math.floor(eff.matk*1.8*am)
       const healDownHit = Math.random()*100 < 50
@@ -700,7 +711,7 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       }
       break
     }
-    case '氷の障壁':    result.newPlayerBuffs.dmgReduce={turns:2,rate:0.6}; result.newPlayerBuffs.critResist={turns:2,value:20}; result.log = `❄ 氷の障壁！ 2ターンの間、受けるダメージ-40%・クリティカル抵抗+20%！`; break
+    case '氷の障壁':    result.newPlayerBuffs.dmgReduce={turns:2,rate:0.6}; result.newPlayerBuffs.critResist={turns:2,value:20}; result.log = `❄ 氷の障壁！ 2ターンの間、受けるダメージ大幅軽減・クリティカル抵抗UP！`; break
     case 'メテオストライク': {
       const rand = Math.random()*100
       const hits = rand < 20 ? 1 : rand < 60 ? 2 : rand < 90 ? 3 : 4
@@ -889,6 +900,9 @@ export default function Game() {
   const [openAnnouncementId, setOpenAnnouncementId] = useState(null)
   const [pendingClassChange, setPendingClassChange] = useState(null)
   const [hasNewAnnouncements, setHasNewAnnouncements] = useState(false)
+  const [retrainingModal, setRetrainingModal] = useState(false)
+  const [selectedCarrySkill, setSelectedCarrySkill] = useState(null)
+  const [retrainingSkills, setRetrainingSkills] = useState([])
   const [newAnnouncementPopup, setNewAnnouncementPopup] = useState(false)
   const [seenAnnouncementIds, setSeenAnnouncementIds] = useState(() => {
     try { return JSON.parse(localStorage.getItem('bf_seenAnnouncements') || '[]') } catch { return [] }
@@ -1001,6 +1015,40 @@ export default function Game() {
     setLoading(false)
   }
 
+  const openRetrainingModal = async () => {
+    // 現在のクラスの習得済みスキルを取得（持ち越し済み除く）
+    const { data: ps } = await supabase.from('player_skills')
+      .select('*, skills(*)')
+      .eq('player_id', profile.id)
+    const classSkills = (ps || []).filter(s =>
+      s.skills?.class_name === profile.class && !s.is_carried_over
+    )
+    setRetrainingSkills(classSkills)
+    setSelectedCarrySkill(null)
+    setRetrainingModal(true)
+  }
+
+  const doRetraining = async () => {
+    if (retrainingCount >= 5) return
+    setLoading(true)
+    const newRetraining = { ...(profile.retraining || {}), [profile.class]: retrainingCount + 1 }
+    const newPending = (profile.pending_stat_points || 0) + 10
+    await supabase.from('profiles').update({
+      retraining: newRetraining,
+      pending_stat_points: newPending,
+    }).eq('id', profile.id)
+    if (selectedCarrySkill) {
+      await supabase.from('player_skills').update({ is_carried_over: true })
+        .eq('player_id', profile.id).eq('skill_id', selectedCarrySkill)
+    }
+    await fetchProfile()
+    setRetrainingModal(false)
+    setSelectedCarrySkill(null)
+    const stars = '★'.repeat(retrainingCount + 1)
+    setTempleMessage(`再修練完了！ ${profile.class}${stars} レベルキャップ+100・ステータスポイント+10！`)
+    setLoading(false)
+  }
+
   const doDungeon = async (type) => {
     if (loading) return
     setLoading(true)
@@ -1054,7 +1102,7 @@ export default function Game() {
     if (type === 'exp') {
       const expGained = Math.floor(50 + Math.random() * 51)
       const currentClassLvD = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
-      const capD = CLASS_LEVEL_CAP[profile.class] || 100
+      const capD = getEffectiveCap(profile.class, profile.retraining)
       if (profile.exp_frozen) {
         logs.push({ text:`EXP +${expGained}（調査中につき停止）`, color:'#446688' })
       } else if (currentClassLvD < capD) {
@@ -1210,7 +1258,7 @@ export default function Game() {
     }
 
     const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
-    const cap = CLASS_LEVEL_CAP[profile.class] || 100
+    const cap = getEffectiveCap(profile.class, profile.retraining)
     const isAtCap = currentClassLv >= cap
 
     const eff = calcEffectiveStats(profile, equipment, proficiency)
@@ -1349,11 +1397,11 @@ export default function Game() {
           const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? 1.1 : 1.0
           prevSkillName = cs.skills.name
           const res = executeSkill(cs.skills, {...effBuff, lastMpCost:mpCost}, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
-          const finalCrit = isCrit || (res.bonusCritRate > 0 && Math.random()*100 < playerCritRate + res.bonusCritRate)
+          const finalCrit = res.dmg > 0 && (isCrit || (res.bonusCritRate > 0 && Math.random()*100 < playerCritRate + res.bonusCritRate))
           const finalCritMult = finalCrit ? 1.5 : 1.0
           const tosoMult = (hasTosoHonno && playerHp <= profile.hp_max * 0.5) ? 1.1 : 1.0
           let finalDmg = Math.floor(res.dmg * finalCritMult * passiveDmgMult * gensoMult * tosoMult * (0.9 + Math.random() * 0.2))
-          if (enemy.isPapia) finalDmg = 1
+          if (enemy.isPapia && res.dmg > 0) finalDmg = 1
           const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
           if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
@@ -1987,6 +2035,41 @@ export default function Game() {
     </div>
   )
 
+  if (retrainingModal) return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ background:'#001020', border:'1px solid #ffaa44', padding:'16px', maxWidth:'500px', width:'100%', maxHeight:'80vh', overflowY:'auto', fontFamily:'monospace' }}>
+        <div style={{ color:'#ffaa44', fontSize:'14px', marginBottom:'4px' }}>🔄 再修練</div>
+        <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
+          持ち越すスキルを1つ選んでください。<br/>
+          選んだスキルは他のクラスでも使えるようになります。
+        </div>
+        <div style={{ marginBottom:'12px' }}>
+          {retrainingSkills.length === 0 ? (
+            <div style={{ color:'#446688', fontSize:'11px', textAlign:'center', padding:'12px' }}>習得済みスキルがありません</div>
+          ) : (
+            retrainingSkills.map(ps => (
+              <div key={ps.skill_id} onClick={()=>setSelectedCarrySkill(selectedCarrySkill===ps.skill_id?null:ps.skill_id)}
+                style={{ padding:'8px 10px', marginBottom:'4px', border:`1px solid ${selectedCarrySkill===ps.skill_id?'#ffaa44':'#002244'}`, background:selectedCarrySkill===ps.skill_id?'#1a0800':'#000818', cursor:'pointer' }}>
+                <div style={{ color:selectedCarrySkill===ps.skill_id?'#ffaa44':'#88ccff', fontSize:'12px' }}>{ps.skills?.name}</div>
+                <div style={{ color:'#446688', fontSize:'10px' }}>LV{ps.skills?.required_lv} / {ps.skills?.type}</div>
+              </div>
+            ))
+          )}
+        </div>
+        <div style={{ display:'flex', gap:'8px' }}>
+          <button onClick={()=>{ setRetrainingModal(false); setSelectedCarrySkill(null) }}
+            style={{ flex:1, padding:'10px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            キャンセル
+          </button>
+          <button onClick={doRetraining} disabled={loading}
+            style={{ flex:1, padding:'10px', background:'#1a0800', border:'1px solid #ffaa44', color:'#ffaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            {selectedCarrySkill ? '再修練する' : 'スキルなしで再修練'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   if (showGuide) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ background:'#001040', border:'1px solid #44aaff', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'80vh', overflowY:'auto', fontFamily:'monospace', textAlign:'left' }}>
@@ -2104,8 +2187,9 @@ export default function Game() {
   const eff = calcEffectiveStats(profile, equipment, proficiency)
   const totalRank = getTotalRank(total)
   const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
-  const cap = CLASS_LEVEL_CAP[profile.class] || 100
+  const cap = getEffectiveCap(profile.class, profile.retraining)
   const isAtCap = currentClassLv >= cap
+  const retrainingCount = (profile.retraining || {})[profile.class] || 0
 
   const availableClasses = INITIAL_CLASSES.map(c=>{
     const cl = classLevels.find(x=>x.class_name===c)
@@ -2134,9 +2218,36 @@ export default function Game() {
     <div style={{ border:'1px solid #886600', background:'#001020', padding:'16px' }}>
       <div style={{ color:'#ccaa00', fontSize:'14px', marginBottom:'4px' }}>⛩ 神殿</div>
       <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
-        現在のクラス: <span style={{color:'#88ccff'}}>{profile.class}</span> LV<span style={{color:'#ffcc00'}}>{currentClassLv}</span>／{cap}
+        現在のクラス: <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{getRetrainingStars(profile.class, profile.retraining)}</span> LV<span style={{color:'#ffcc00'}}>{currentClassLv}</span>／{cap}
       </div>
       {templeMessage && <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'10px', marginBottom:'12px', border:'1px solid #44ff88' }}>{templeMessage}</div>}
+      {/* 再修練セクション */}
+      <div style={{ border:'1px solid #664400', background:'#0a0800', padding:'12px', marginBottom:'12px' }}>
+        <div style={{ color:'#ffaa44', fontSize:'12px', marginBottom:'6px' }}>🔄 再修練</div>
+        <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px', lineHeight:'1.6' }}>
+          レベルキャップ到達時に再修練できます。<br/>
+          再修練するとキャップ+100・ステータスポイント+10・スキル1つを持ち越せます。<br/>
+          上限5回まで（★★★★★）
+        </div>
+        <div style={{ color:'#446688', fontSize:'11px', marginBottom:'8px' }}>
+          再修練回数: <span style={{color:'#ffcc00', letterSpacing:'2px'}}>{getRetrainingStars(profile.class, profile.retraining) || 'なし'}</span>
+          <span style={{color:'#446688'}}> ({retrainingCount}/5)</span>
+        </div>
+        {retrainingCount < 5 ? (
+          isAtCap ? (
+            <button onClick={openRetrainingModal} disabled={loading}
+              style={{ width:'100%', padding:'10px', background:'#1a0800', border:'1px solid #ffaa44', color:'#ffaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              🔄 再修練する
+            </button>
+          ) : (
+            <div style={{ color:'#446688', fontSize:'11px', textAlign:'center', padding:'8px', border:'1px solid #002244' }}>
+              レベルキャップ（LV{cap}）到達で解放
+            </div>
+          )
+        ) : (
+          <div style={{ color:'#ffcc00', fontSize:'11px', textAlign:'center', padding:'8px' }}>★★★★★ 最大まで再修練済み</div>
+        )}
+      </div>
       <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 初期職（LV100キャップ）──</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
         {availableClasses.map(c=>{
@@ -2159,7 +2270,7 @@ export default function Game() {
           )
         })}
       </div>
-      <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 上位職（LV300キャップ・初期職LV100で解放）──</div>
+      <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 上位職（初期職LV100で解放）──</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
         {normalAdvanced.map(c=>{
           const isCurrent = c.name === profile.class
@@ -2170,7 +2281,7 @@ export default function Game() {
                 <div style={{ color:isCurrent?'#88aabb':c.canChange?'#ff8800':'#446688', fontSize:'12px' }}>
                   {c.name}{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}
                 </div>
-                <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/{c.requiresLv}　クラスLV{c.lv}/300</div>
+                <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/{c.requiresLv}　クラスLV{c.lv}/{getEffectiveCap(c.name, profile.retraining)}</div>
               </div>
               <button onClick={()=>setPendingClassChange(c.name)} disabled={isCurrent||!c.canChange||loading}
                 style={{ padding:'4px 8px', background:isCurrent?'#001':c.canChange?'#1a0800':'#001', border:`1px solid ${isCurrent?'#334455':c.canChange?'#664400':'#002244'}`, color:isCurrent?'#334455':c.canChange?'#ff8800':'#334455', cursor:isCurrent||!c.canChange?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
@@ -2181,7 +2292,7 @@ export default function Game() {
           )
         })}
       </div>
-      <div style={{ color:'#cc88ff', fontSize:'11px', marginBottom:'6px' }}>── 特殊上位職（LV300キャップ・複合条件で解放）──</div>
+      <div style={{ color:'#cc88ff', fontSize:'11px', marginBottom:'6px' }}>── 特殊上位職（複合条件で解放）──</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
         {specialAdvanced.map(c=>{
           const isCurrent = c.name === profile.class
@@ -2194,7 +2305,7 @@ export default function Game() {
                 </div>
                 <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/{c.requiresLv}</div>
                 <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires2} LV{c.req2Lv}/{c.requires2Lv}</div>
-                <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{c.lv}/300</div>
+                <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{c.lv}/{getEffectiveCap(c.name, profile.retraining)}</div>
               </div>
               <button onClick={()=>setPendingClassChange(c.name)} disabled={isCurrent||!c.canChange||loading}
                 style={{ padding:'4px 8px', background:isCurrent?'#001':c.canChange?'#1a0830':'#001', border:`1px solid ${isCurrent?'#334455':c.canChange?'#664488':'#002244'}`, color:isCurrent?'#334455':c.canChange?'#cc88ff':'#334455', cursor:isCurrent||!c.canChange?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
@@ -2248,7 +2359,7 @@ export default function Game() {
               <div style={{ flex:1 }}>
                 <div style={{ color:'#ffcc00', fontSize:'13px' }}>{profile.username}</div>
                 <div style={{ fontSize:'11px', color:'#446688' }}>
-                  <span style={{color:'#88ccff'}}>{profile.class}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／{cap}
+                  <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{getRetrainingStars(profile.class, profile.retraining)}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／{cap}
                 </div>
                 <div style={{ fontSize:'11px', color:'#446688' }}>
                   キャラクターLV: <span style={{color:'#ffcc00'}}>{charLv}</span>　<span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span>

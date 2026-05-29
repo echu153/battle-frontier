@@ -244,15 +244,16 @@ useEffect(() => {
       profile.fishing_started_at,
       now
     )
-    // caught_fishに保存（session_idなし）
-    for (const item of results) {
-      await supabase.from('caught_fish').insert({
+    // caught_fishに保存（bulk insert）
+    if (results.length > 0) {
+      const insertData = results.map(item => ({
         player_id: profile.id,
         fish_name: item.name,
         fish_rank: item.rank,
         location: item.location || profile.fishing_location,
         caught_at: new Date().toISOString(),
-      })
+      }))
+      await supabase.from('caught_fish').insert(insertData)
     }
     // profilesのフラグをリセット
     await supabase.from('profiles').update({
