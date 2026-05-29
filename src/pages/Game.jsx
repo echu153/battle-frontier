@@ -291,7 +291,7 @@ const getTotalRank = (total) => {
 
 const calcExpNext = (lv) => {
   const tier = Math.floor((lv-1)/10)
-  return 100 + tier * 10
+  return Math.min(200, 100 + tier * 10)
 }
 
 const WEAPON_TYPE_GROUP = {
