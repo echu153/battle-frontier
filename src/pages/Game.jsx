@@ -601,8 +601,12 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     }
     case 'アースクエイク': {
       result.dmg = Math.floor(eff.matk*randMult(1.6,1.8)*am)
-      const stunHit = Math.random()*100 < 10
-      if (stunHit) result.newEnemyBuffs.stun = { turns:1 }
+      const stunResist = enemyBuffs.stunResist ?? 1.0
+      const stunHit = Math.random()*100 < 10 * stunResist
+      if (stunHit) {
+        result.newEnemyBuffs.stun = { turns:1 }
+        result.newEnemyBuffs.stunResist = stunResist * 0.5
+      }
       result.log = `🌊 アースクエイク！ ${enemy.name}に${result.dmg}の魔法ダメージ！${stunHit ? ' スタン！' : ''}`
       break
     }
@@ -777,6 +781,7 @@ export default function Game() {
   const [showGuide, setShowGuide] = useState(false)
   const [openGuideId, setOpenGuideId] = useState(null)
   const [openAnnouncementId, setOpenAnnouncementId] = useState(null)
+  const [pendingClassChange, setPendingClassChange] = useState(null)
   const expTrackerRef = useRef({ start: null, total: 0 })
   const battleCountTrackerRef = useRef({ start: null, count: 0 })
 
@@ -1793,6 +1798,26 @@ export default function Game() {
     },
   ]
 
+  if (pendingClassChange) return (
+    <div style={{ minHeight:'100vh', background:'#000820', display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
+      <div style={{ background:'#001040', border:'1px solid #ccaa00', padding:'32px', maxWidth:'360px', width:'100%', textAlign:'center' }}>
+        <div style={{ color:'#ccaa00', fontSize:'18px', marginBottom:'8px' }}>⛩</div>
+        <div style={{ color:'#ccaa00', fontSize:'15px', marginBottom:'16px', letterSpacing:'2px' }}>{pendingClassChange}に転職します！</div>
+        <div style={{ color:'#446688', fontSize:'11px', marginBottom:'24px' }}>よろしいですか？</div>
+        <div style={{ display:'flex', gap:'12px', justifyContent:'center' }}>
+          <button onClick={async ()=>{ await doChangeClass(pendingClassChange); setPendingClassChange(null) }} disabled={loading}
+            style={{ padding:'10px 24px', background:'#1a1000', border:'1px solid #ccaa00', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            {loading ? '処理中...' : '転職する'}
+          </button>
+          <button onClick={()=>setPendingClassChange(null)} disabled={loading}
+            style={{ padding:'10px 24px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            キャンセル
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   if (showGuide) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ background:'#001040', border:'1px solid #44aaff', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'80vh', overflowY:'auto', fontFamily:'monospace', textAlign:'left' }}>
@@ -1916,7 +1941,7 @@ export default function Game() {
                 <div style={{ color:c.canChange?'#ccaa00':'#446688', fontSize:'12px' }}>{c.name}</div>
                 <div style={{ color:'#446688', fontSize:'10px' }}>LV {c.lv} / 100</div>
               </div>
-              <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
+              <button onClick={()=>setPendingClassChange(c.name)} disabled={!c.canChange||loading}
                 style={{ padding:'4px 8px', background:c.canChange?'#1a1000':'#001', border:`1px solid ${c.canChange?'#886600':'#002244'}`, color:c.canChange?'#ccaa00':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
             </div>
           </div>
@@ -1931,7 +1956,7 @@ export default function Game() {
                 <div style={{ color:c.canChange?'#ff8800':'#446688', fontSize:'12px' }}>{c.name}</div>
                 <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/{c.requiresLv}　クラスLV{c.lv}/300</div>
               </div>
-              <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
+              <button onClick={()=>setPendingClassChange(c.name)} disabled={!c.canChange||loading}
                 style={{ padding:'4px 8px', background:c.canChange?'#1a0800':'#001', border:`1px solid ${c.canChange?'#664400':'#002244'}`, color:c.canChange?'#ff8800':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
             </div>
           </div>
@@ -1948,7 +1973,7 @@ export default function Game() {
                 <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires2} LV{c.req2Lv}/{c.requires2Lv}</div>
                 <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{c.lv}/300</div>
               </div>
-              <button onClick={()=>doChangeClass(c.name)} disabled={!c.canChange||loading}
+              <button onClick={()=>setPendingClassChange(c.name)} disabled={!c.canChange||loading}
                 style={{ padding:'4px 8px', background:c.canChange?'#1a0830':'#001', border:`1px solid ${c.canChange?'#664488':'#002244'}`, color:c.canChange?'#cc88ff':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
             </div>
           </div>
