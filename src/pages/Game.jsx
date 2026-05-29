@@ -904,6 +904,13 @@ export default function Game() {
     if (!data) { nav('/create'); return }
     setProfile(data)
     setPendingPoints(data.pending_stat_points || 0)
+    // selectedAreaがこのアカウントで解放済みかチェック（別アカウントのlocalStorage値を弾く）
+    const unlocked = data.unlocked_areas || [1]
+    const savedArea = Number(localStorage.getItem('selectedArea') || 1)
+    if (!unlocked.includes(savedArea)) {
+      setSelectedArea(1)
+      localStorage.setItem('selectedArea', 1)
+    }
     const { data: eq } = await supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', user.id)
     setEquipment(eq || [])
     const { data: prof } = await supabase.from('proficiency').select('*, weapons(*)').eq('player_id', user.id)
@@ -1119,6 +1126,11 @@ export default function Game() {
     if (!canAct || loading) return
     // 自動操作検知（isTrusted=falseは人間の操作ではない）
     if (e && !e.isTrusted) { await suspendAccount('自動操作が検出されました'); return }
+    // 未解放エリアへのアクセスガード（localStorage汚染対策）
+    const unlockedAreas = profile.unlocked_areas || [1]
+    if (!unlockedAreas.includes(selectedArea)) {
+      setSelectedArea(1); localStorage.setItem('selectedArea', 1); return
+    }
     // 釣り中は出撃不可
     if (profile.is_fishing) {
       setBattleLogs([{ text:'🎣 釣り中は出撃できません。先に釣りを終了してください。', color:'#ff8844' }])
