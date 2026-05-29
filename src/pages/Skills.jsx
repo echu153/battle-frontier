@@ -59,6 +59,9 @@ export default function Skills() {
   }
 
   const setSkillToSlot = async (skillId, slotOrder) => {
+    // 現在のクラス以外のスキルはセット不可（UIをすり抜けた場合も防止）
+    const skillData = playerSkills.find(ps => ps.skill_id === skillId)?.skills
+    if (skillData && skillData.class_name !== profile.class) return
     setLoading(true)
     await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('skill_id', skillId)
     const existing = skillSets.find(ss => ss.slot_order === slotOrder)
