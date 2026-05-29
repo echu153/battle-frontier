@@ -2227,8 +2227,8 @@ export default function Game() {
         現在のクラス: <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{getRetrainingStars(profile.class, profile.retraining)}</span> LV<span style={{color:'#ffcc00'}}>{currentClassLv}</span>／{cap}
       </div>
       {templeMessage && <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'10px', marginBottom:'12px', border:'1px solid #44ff88' }}>{templeMessage}</div>}
-      {/* 再修練セクション */}
-      <div style={{ border:'1px solid #664400', background:'#0a0800', padding:'12px', marginBottom:'12px' }}>
+      {/* 再修練セクション：キャップ到達時のみ表示 */}
+      {isAtCap && retrainingCount < 5 && <div style={{ border:'1px solid #664400', background:'#0a0800', padding:'12px', marginBottom:'12px' }}>
         <div style={{ color:'#ffaa44', fontSize:'12px', marginBottom:'6px' }}>🔄 再修練</div>
         <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px', lineHeight:'1.6' }}>
           レベルキャップ到達時に再修練できます。<br/>
@@ -2239,24 +2239,14 @@ export default function Game() {
           再修練回数: <span style={{color:'#ffcc00', letterSpacing:'2px'}}>{getRetrainingStars(profile.class, profile.retraining) || 'なし'}</span>
           <span style={{color:'#446688'}}> ({retrainingCount}/5)</span>
         </div>
-        {retrainingMessage && isAtCap && retrainingCount < 5 && (
+        {retrainingMessage && (
           <div style={{ color:'#ffaa44', fontSize:'12px', textAlign:'center', padding:'8px', border:'1px solid #ffaa44', marginBottom:'8px' }}>{retrainingMessage}</div>
         )}
-        {retrainingCount < 5 ? (
-          isAtCap ? (
-            <button onClick={openRetrainingModal} disabled={loading}
-              style={{ width:'100%', padding:'10px', background:'#1a0800', border:'1px solid #ffaa44', color:'#ffaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
-              🔄 再修練する
-            </button>
-          ) : (
-            <div style={{ color:'#446688', fontSize:'11px', textAlign:'center', padding:'8px', border:'1px solid #002244' }}>
-              レベルキャップ（LV{cap}）到達で解放
-            </div>
-          )
-        ) : (
-          <div style={{ color:'#ffcc00', fontSize:'11px', textAlign:'center', padding:'8px' }}>★★★★★ 最大まで再修練済み</div>
-        )}
-      </div>
+        <button onClick={openRetrainingModal} disabled={loading}
+          style={{ width:'100%', padding:'10px', background:'#1a0800', border:'1px solid #ffaa44', color:'#ffaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+          🔄 再修練する
+        </button>
+      </div>}
       <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 初期職（LV100キャップ）──</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
         {availableClasses.map(c=>{
@@ -2268,7 +2258,7 @@ export default function Game() {
                 <div style={{ color:isCurrent?'#88aabb':c.canChange?'#ccaa00':'#446688', fontSize:'12px' }}>
                   {c.name}{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}
                 </div>
-                <div style={{ color:'#446688', fontSize:'10px' }}>LV {c.lv} / 100</div>
+                <div style={{ color:'#446688', fontSize:'10px' }}>LV {c.lv} / {getEffectiveCap(c.name, profile.retraining)}</div>
               </div>
               <button onClick={()=>setPendingClassChange(c.name)} disabled={isCurrent||loading}
                 style={{ padding:'4px 8px', background:isCurrent?'#001':'#1a1000', border:`1px solid ${isCurrent?'#334455':c.canChange?'#886600':'#002244'}`, color:isCurrent?'#334455':c.canChange?'#ccaa00':'#334455', cursor:isCurrent?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
