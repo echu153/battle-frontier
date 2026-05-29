@@ -2037,9 +2037,9 @@ export default function Game() {
   const cap = CLASS_LEVEL_CAP[profile.class] || 100
   const isAtCap = currentClassLv >= cap
 
-  const availableClasses = INITIAL_CLASSES.filter(c=>c!==profile.class).map(c=>{
+  const availableClasses = INITIAL_CLASSES.map(c=>{
     const cl = classLevels.find(x=>x.class_name===c)
-    return { name:c, lv:cl?cl.lv:1, canChange:true }
+    return { name:c, lv:cl?cl.lv:1, canChange: c !== profile.class }
   })
   const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, req])=>{
     const requires = req.requires
@@ -2051,9 +2051,9 @@ export default function Game() {
     const req2Cl = requires2 ? classLevels.find(x=>x.class_name===requires2) : null
     const req2Lv = req2Cl?req2Cl.lv:0
     const cl = classLevels.find(x=>x.class_name===name)
-    const canChange = requires2
+    const canChange = name !== profile.class && (requires2
       ? reqLv>=requiresLv && req2Lv>=requires2Lv
-      : reqLv>=requiresLv
+      : reqLv>=requiresLv)
     return { name, lv:cl?cl.lv:1, canChange, requires, reqLv, requiresLv, requires2, req2Lv, requires2Lv }
   })
 
@@ -2069,50 +2069,71 @@ export default function Game() {
       {templeMessage && <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'10px', marginBottom:'12px', border:'1px solid #44ff88' }}>{templeMessage}</div>}
       <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 初期職（LV100キャップ）──</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
-        {availableClasses.map(c=>(
-          <div key={c.name} style={{ border:`1px solid ${c.canChange?'#886600':'#002244'}`, background:'#001028', padding:'8px' }}>
+        {availableClasses.map(c=>{
+          const isCurrent = c.name === profile.class
+          return (
+          <div key={c.name} style={{ border:`1px solid ${isCurrent?'#445566':c.canChange?'#886600':'#002244'}`, background:isCurrent?'#001828':'#001028', padding:'8px' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div>
-                <div style={{ color:c.canChange?'#ccaa00':'#446688', fontSize:'12px' }}>{c.name}</div>
+                <div style={{ color:isCurrent?'#88aabb':c.canChange?'#ccaa00':'#446688', fontSize:'12px' }}>
+                  {c.name}{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}
+                </div>
                 <div style={{ color:'#446688', fontSize:'10px' }}>LV {c.lv} / 100</div>
               </div>
-              <button onClick={()=>setPendingClassChange(c.name)} disabled={!c.canChange||loading}
-                style={{ padding:'4px 8px', background:c.canChange?'#1a1000':'#001', border:`1px solid ${c.canChange?'#886600':'#002244'}`, color:c.canChange?'#ccaa00':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
+              <button onClick={()=>setPendingClassChange(c.name)} disabled={isCurrent||loading}
+                style={{ padding:'4px 8px', background:isCurrent?'#001':'#1a1000', border:`1px solid ${isCurrent?'#334455':c.canChange?'#886600':'#002244'}`, color:isCurrent?'#334455':c.canChange?'#ccaa00':'#334455', cursor:isCurrent?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                {isCurrent?'現在':'転職'}
+              </button>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
       <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 上位職（LV300キャップ・初期職LV100で解放）──</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
-        {normalAdvanced.map(c=>(
-          <div key={c.name} style={{ border:`1px solid ${c.canChange?'#664400':'#002244'}`, background:'#001028', padding:'8px' }}>
+        {normalAdvanced.map(c=>{
+          const isCurrent = c.name === profile.class
+          return (
+          <div key={c.name} style={{ border:`1px solid ${isCurrent?'#445566':c.canChange?'#664400':'#002244'}`, background:isCurrent?'#001828':'#001028', padding:'8px' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div>
-                <div style={{ color:c.canChange?'#ff8800':'#446688', fontSize:'12px' }}>{c.name}</div>
+                <div style={{ color:isCurrent?'#88aabb':c.canChange?'#ff8800':'#446688', fontSize:'12px' }}>
+                  {c.name}{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}
+                </div>
                 <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/{c.requiresLv}　クラスLV{c.lv}/300</div>
               </div>
-              <button onClick={()=>setPendingClassChange(c.name)} disabled={!c.canChange||loading}
-                style={{ padding:'4px 8px', background:c.canChange?'#1a0800':'#001', border:`1px solid ${c.canChange?'#664400':'#002244'}`, color:c.canChange?'#ff8800':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
+              <button onClick={()=>setPendingClassChange(c.name)} disabled={isCurrent||!c.canChange||loading}
+                style={{ padding:'4px 8px', background:isCurrent?'#001':c.canChange?'#1a0800':'#001', border:`1px solid ${isCurrent?'#334455':c.canChange?'#664400':'#002244'}`, color:isCurrent?'#334455':c.canChange?'#ff8800':'#334455', cursor:isCurrent||!c.canChange?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                {isCurrent?'現在':'転職'}
+              </button>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
       <div style={{ color:'#cc88ff', fontSize:'11px', marginBottom:'6px' }}>── 特殊上位職（LV300キャップ・複合条件で解放）──</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
-        {specialAdvanced.map(c=>(
-          <div key={c.name} style={{ border:`1px solid ${c.canChange?'#664488':'#002244'}`, background:'#001028', padding:'8px' }}>
+        {specialAdvanced.map(c=>{
+          const isCurrent = c.name === profile.class
+          return (
+          <div key={c.name} style={{ border:`1px solid ${isCurrent?'#445566':c.canChange?'#664488':'#002244'}`, background:isCurrent?'#001828':'#001028', padding:'8px' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div>
-                <div style={{ color:c.canChange?'#cc88ff':'#446688', fontSize:'12px' }}>{c.name}</div>
+                <div style={{ color:isCurrent?'#88aabb':c.canChange?'#cc88ff':'#446688', fontSize:'12px' }}>
+                  {c.name}{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}
+                </div>
                 <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/{c.requiresLv}</div>
                 <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires2} LV{c.req2Lv}/{c.requires2Lv}</div>
                 <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{c.lv}/300</div>
               </div>
-              <button onClick={()=>setPendingClassChange(c.name)} disabled={!c.canChange||loading}
-                style={{ padding:'4px 8px', background:c.canChange?'#1a0830':'#001', border:`1px solid ${c.canChange?'#664488':'#002244'}`, color:c.canChange?'#cc88ff':'#334455', cursor:c.canChange?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>転職</button>
+              <button onClick={()=>setPendingClassChange(c.name)} disabled={isCurrent||!c.canChange||loading}
+                style={{ padding:'4px 8px', background:isCurrent?'#001':c.canChange?'#1a0830':'#001', border:`1px solid ${isCurrent?'#334455':c.canChange?'#664488':'#002244'}`, color:isCurrent?'#334455':c.canChange?'#cc88ff':'#334455', cursor:isCurrent||!c.canChange?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                {isCurrent?'現在':'転職'}
+              </button>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
       <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
     </div>
@@ -2128,6 +2149,7 @@ export default function Game() {
             <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen() }} style={{ background:'none', border:`1px solid ${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, color:`${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', position:'relative' }}>
               📢{hasNewAnnouncements && <span style={{ marginLeft:'2px', background:'#ff4400', color:'#fff', fontSize:'7px', padding:'1px 3px', borderRadius:'2px', verticalAlign:'middle' }}>NEW</span>}
             </button>
+            <button onClick={()=>setShowGuide(true)} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>📖</button>
           </div>
           <div style={{ display:'flex', gap:'6px' }}>
             <button onClick={()=>nav('/equipment')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡</button>
