@@ -490,49 +490,60 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     return Math.min(Math.floor((enemy.def||0)*edr/2), Math.floor((enemy.mdef||0)*emr/2))
   }
   switch (skill.name) {
-    case '体当たり':    result.dmg = Math.floor(eff.atk*randMult(1.1,1.2)*am); result.log = `⚔ 体当たり！ ${enemy.name}に${result.dmg}ダメージ！`; break
-    case '強撃':        result.dmg = Math.floor(eff.atk*randMult(1.3,1.4)*am); result.log = `💥 強撃！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '体当たり':    result.dmg = Math.floor(eff.atk*1.2*am); result.log = `⚔ 体当たり！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '強撃':        result.dmg = Math.floor(eff.atk*1.4*am); result.log = `💥 強撃！ ${enemy.name}に${result.dmg}ダメージ！`; break
     case '防御崩し': {
-      result.dmg = Math.floor(eff.atk*1.2*am)
+      result.dmg = Math.floor(eff.atk*1.3*am)
       const defBreakHit = Math.random()*100 < 30
       if (defBreakHit) result.newEnemyBuffs.defDown={turns:4,rate:0.8}
       result.log = `🗡 防御崩し！ ${enemy.name}に${result.dmg}ダメージ！${defBreakHit ? ' 防御力が低下した！' : ''}`
       break
     }
-    case '防御態勢':    result.newPlayerBuffs.defUp={turns:4,rate:1.2}; result.log = `🛡 防御態勢！ 4ターンの間防御力と特殊防御力が上昇した！`; break
-    case '応急手当':    result.heal = Math.floor(eff.matk*randMult(1.1,1.2)); result.log = `💊 応急手当！ HPを${result.heal}回復した！`; break
-    case '狙撃':        result.dmg = Math.floor(eff.spd*randMult(1.1,1.2)*am); result.log = `🏹 狙撃！ ${enemy.name}に${result.dmg}ダメージ！`; break
-    case '駆け足':      result.newPlayerBuffs.spdUp={turns:4,rate:1.2}; result.log = `💨 駆け足！ 4ターンの間素早さが上昇した！`; break
-    case '貫通射撃':    result.dmg = Math.floor(eff.atk*randMult(1.2,1.3)*am); result.log = `🏹 貫通射撃！ ${enemy.name}の防御を貫いて${result.dmg}ダメージ！`; break
-    case '疾風矢':      result.dmg = Math.floor((eff.atk*1.0+eff.spd*0.4)*am); result.log = `💨 疾風矢！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '防御態勢':    result.newPlayerBuffs.defUp={turns:4,rate:1.3}; result.log = `🛡 防御態勢！ 4ターンの間防御力と特殊防御力が+30%上昇した！`; break
+    case '応急手当':    result.heal = Math.floor(profile.hp_max*0.15); result.log = `💊 応急手当！ HPを${result.heal}回復した！`; break
+    case 'シールドアタック': result.dmg = Math.floor((eff.atk*0.8+eff.def*0.4)*am); result.log = `🛡 シールドアタック！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '狙撃':        result.dmg = Math.floor(eff.spd*1.2*am); result.log = `🏹 狙撃！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '駆け足':      result.newPlayerBuffs.spdUp={turns:4,rate:1.3}; result.log = `💨 駆け足！ 4ターンの間素早さが+30%上昇した！`; break
+    case '貫通射撃': {
+      const edr_p = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
+      const defVal_p = Math.floor((enemy.def||0)*edr_p*0.8/2)
+      result.dmg = Math.max(1, Math.floor(eff.atk*1.2*am) - defVal_p)
+      result.log = `🏹 貫通射撃！ ${enemy.name}の防御を20%貫いて${result.dmg}ダメージ！`; break
+    }
+    case '疾風矢':      result.dmg = Math.floor((eff.atk*1.0+eff.spd*0.5)*am); result.log = `💨 疾風矢！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '剛射':        result.dmg = Math.floor(eff.atk*1.2*am); result.log = `🏹 剛射！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case 'マジックアロー': {
+      const mad = Math.floor(eff.matk*0.7*am)
+      result.dmg = mad*2; result.log = `🔮 マジックアロー！ ${enemy.name}に${mad}×2=${result.dmg}の魔法ダメージ！`; break
+    }
     case 'ファイア': {
-      result.dmg = Math.floor(eff.matk*randMult(1.3,1.5)*am)
+      result.dmg = Math.floor(eff.matk*1.3*am)
       const burnHit = Math.random()*100 < 20
       if (burnHit) result.newEnemyBuffs.burn = { turns:5, dmgRate:0.02 }
       result.log = `🔥 ファイア！ ${enemy.name}に${result.dmg}の魔法ダメージ！${burnHit ? ' やけど状態！' : ''}`
       break
     }
-    case '精神統一':    result.newPlayerBuffs.matkUp={turns:4,rate:1.2}; result.log = `✨ 精神統一！ 4ターンの間特殊攻撃力が上昇した！`; break
+    case '精神統一':    result.newPlayerBuffs.matkUp={turns:4,rate:1.3}; result.log = `✨ 精神統一！ 4ターンの間特殊攻撃力が+30%上昇した！`; break
     case 'サンダー': {
-      result.dmg = Math.floor(eff.matk*randMult(1.4,1.6)*am)
+      result.dmg = Math.floor(eff.matk*1.4*am)
       const pHit = Math.random()*100 < 20
       if (pHit && !(enemyBuffs.paralysis?.turns > 0)) result.newEnemyBuffs.paralysis = { turns:5, skipRate:0.25, spdRate:0.8 }
       result.log = `⚡ サンダー！ ${enemy.name}に${result.dmg}の魔法ダメージ！${pHit && !(enemyBuffs.paralysis?.turns > 0) ? ' 麻痺した！' : ''}`
       break
     }
     case 'アイスランス': {
-      result.dmg = Math.floor(eff.matk*randMult(1.6,1.9)*am)
+      result.dmg = Math.floor(eff.matk*1.6*am)
       const slowHit = Math.random()*100 < 40
       if (slowHit) result.newEnemyBuffs.spdDown = { turns:3, rate:0.5 }
       result.log = `❄ アイスランス！ ${enemy.name}に${result.dmg}の魔法ダメージ！${slowHit ? ' スロー状態！' : ''}`
       break
     }
-    case 'ライト':      result.dmg = Math.floor(eff.matk*randMult(1.3,1.5)*am); result.log = `✨ ライト！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
-    case 'ヒール':      result.heal = Math.floor(profile.hp_max*0.1+eff.matk*randMult(1.1,1.2)); result.log = `💚 ヒール！ HPを${result.heal}回復した！`; break
+    case 'ライト':      result.dmg = Math.floor(eff.matk*1.3*am); result.log = `✨ ライト！ ${enemy.name}に${result.dmg}の魔法ダメージ！`; break
+    case 'ヒール':      result.heal = Math.floor(profile.hp_max*0.15+eff.matk*0.2); result.log = `💚 ヒール！ HPを${result.heal}回復した！`; break
     case 'プロテク':    result.newPlayerBuffs.defUp={turns:4,rate:1.2}; result.log = `🛡 プロテク！ 4ターンの間防御力と特殊防御力が上昇した！`; break
     case '祈祷':        result.newPlayerBuffs.regenHeal={turns:4,amount:Math.floor(profile.hp_max*0.1)}; result.log = `🙏 祈祷！ 4ターンの間毎ターンHPが回復するようになった！`; break
     case 'ライトニング': {
-      result.dmg = Math.floor(eff.matk*randMult(1.5,1.7)*am)
+      result.dmg = Math.floor(eff.matk*1.5*am)
       const mdefHit = Math.random()*100 < 30
       if (mdefHit) result.newEnemyBuffs.mdefDown={turns:3,rate:0.7}
       result.log = `⚡ ライトニング！ ${enemy.name}に${result.dmg}の魔法ダメージ！${mdefHit ? ' 特殊防御力が低下した！' : ''}`

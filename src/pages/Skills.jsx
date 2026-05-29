@@ -27,12 +27,12 @@ export default function Skills() {
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     setProfile(p)
 
-    // 現在のクラスのスキル（パッシブ含む全て）
-    const { data: skills } = await supabase
-      .from('skills').select('*')
-      .eq('class_name', p.class)
-      .order('required_lv')
-    setAllSkills(skills || [])
+    // 現在のクラスのスキル（パッシブ含む全て）+ 共通スキル
+    const [{ data: skills }, { data: commonSkills }] = await Promise.all([
+      supabase.from('skills').select('*').eq('class_name', p.class).order('required_lv'),
+      supabase.from('skills').select('*').eq('class_name', '共通').order('required_lv'),
+    ])
+    setAllSkills([...(commonSkills||[]), ...(skills||[])])
 
     // 全習得済みスキル
     const { data: ps } = await supabase
@@ -46,9 +46,9 @@ export default function Skills() {
       .order('slot_order')
     setSkillSets(ss || [])
 
-    // 現在のクラスのスキルで未習得のものを自動習得
+    // 現在のクラスのスキル（共通含む）で未習得のものを自動習得
     const learnedIds = (ps||[]).map(s => s.skill_id)
-    const toLearn = (skills||[]).filter(s => s.required_lv <= p.lv && !learnedIds.includes(s.id))
+    const toLearn = [...(commonSkills||[]), ...(skills||[])].filter(s => s.required_lv <= p.lv && !learnedIds.includes(s.id))
     for (const skill of toLearn) {
       await supabase.from('player_skills').insert({ player_id: user.id, skill_id: skill.id })
     }
@@ -61,7 +61,7 @@ export default function Skills() {
   const setSkillToSlot = async (skillId, slotOrder) => {
     // 現在のクラス以外のスキルはセット不可（UIをすり抜けた場合も防止）
     const skillData = playerSkills.find(ps => ps.skill_id === skillId)?.skills
-    if (skillData && skillData.class_name !== profile.class) return
+    if (skillData && skillData.class_name !== profile.class && skillData.class_name !== '共通') return
     setLoading(true)
     await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('skill_id', skillId)
     const existing = skillSets.find(ss => ss.slot_order === slotOrder)
@@ -184,13 +184,16 @@ export default function Skills() {
             {Object.entries(skillsByClass).map(([className, skills]) => (
               <div key={className} style={{ marginBottom:'16px' }}>
                 <div style={{ color:'#88ccff', fontSize:'12px', borderBottom:'1px solid #003366', paddingBottom:'4px', marginBottom:'8px' }}>
-                  {className}
-                  {className !== profile.class && <span style={{ color:'#446688', fontSize:'10px', marginLeft:'8px' }}>（現在のクラスでは使用不可）</span>}
+                  {className === '共通' ? '共通スキル' : className}
+                  {className === '共通'
+                    ? <span style={{ color:'#44ff88', fontSize:'10px', marginLeft:'8px' }}>（全クラス使用可能）</span>
+                    : className !== profile.class && <span style={{ color:'#446688', fontSize:'10px', marginLeft:'8px' }}>（現在のクラスでは使用不可）</span>
+                  }
                 </div>
                 {skills.map(skill => {
                   const inSet = skillSets.find(ss => ss.skill_id === skill.id)
                   return (
-                    <SkillCard key={skill.id} skill={skill} learned={true} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={className === profile.class} />
+                    <SkillCard key={skill.id} skill={skill} learned={true} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={className === profile.class || className === '共通'} />
                   )
                 })}
               </div>
