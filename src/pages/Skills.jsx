@@ -169,7 +169,7 @@ export default function Skills() {
               const learned = learnedIds.includes(skill.id)
               const inSet = skillSets.find(ss => ss.skill_id === skill.id)
               return (
-                <SkillCard key={skill.id} skill={skill} learned={learned} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} />
+                <SkillCard key={skill.id} skill={skill} learned={learned} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={true} />
               )
             })}
           </div>
@@ -182,11 +182,12 @@ export default function Skills() {
               <div key={className} style={{ marginBottom:'16px' }}>
                 <div style={{ color:'#88ccff', fontSize:'12px', borderBottom:'1px solid #003366', paddingBottom:'4px', marginBottom:'8px' }}>
                   {className}
+                  {className !== profile.class && <span style={{ color:'#446688', fontSize:'10px', marginLeft:'8px' }}>（現在のクラスでは使用不可）</span>}
                 </div>
                 {skills.map(skill => {
                   const inSet = skillSets.find(ss => ss.skill_id === skill.id)
                   return (
-                    <SkillCard key={skill.id} skill={skill} learned={true} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} />
+                    <SkillCard key={skill.id} skill={skill} learned={true} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={className === profile.class} />
                   )
                 })}
               </div>
@@ -198,7 +199,7 @@ export default function Skills() {
   )
 }
 
-function SkillCard({ skill, learned, inSet, skillSets, loading, onSet }) {
+function SkillCard({ skill, learned, inSet, skillSets, loading, onSet, canSet }) {
   return (
     <div style={{ border:`1px solid ${learned ? '#0044aa' : '#002244'}`, background: learned ? '#001028' : '#000818', padding:'10px', marginBottom:'6px', opacity: learned ? 1 : 0.5 }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
@@ -208,7 +209,7 @@ function SkillCard({ skill, learned, inSet, skillSets, loading, onSet }) {
         </div>
         <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
           {skill.type !== 'パッシブ' && <span style={{ color:'#446688', fontSize:'10px' }}>MP{skill.mp_cost}</span>}
-          {learned && !inSet && (
+          {learned && !inSet && canSet && (
             <select onChange={e => { if (e.target.value) onSet(skill.id, Number(e.target.value)) }} defaultValue=""
               style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'2px' }}>
               <option value="">セットする</option>
