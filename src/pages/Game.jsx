@@ -1982,7 +1982,7 @@ export default function Game() {
 
   const availableClasses = INITIAL_CLASSES.filter(c=>c!==profile.class).map(c=>{
     const cl = classLevels.find(x=>x.class_name===c)
-    return { name:c, lv:cl?cl.lv:1, canChange:profile.lv>=30 }
+    return { name:c, lv:cl?cl.lv:1, canChange:true }
   })
   const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, req])=>{
     const requires = req.requires
@@ -1995,8 +1995,8 @@ export default function Game() {
     const req2Lv = req2Cl?req2Cl.lv:0
     const cl = classLevels.find(x=>x.class_name===name)
     const canChange = requires2
-      ? reqLv>=requiresLv && req2Lv>=requires2Lv && profile.lv>=30
-      : reqLv>=requiresLv && profile.lv>=30
+      ? reqLv>=requiresLv && req2Lv>=requires2Lv
+      : reqLv>=requiresLv
     return { name, lv:cl?cl.lv:1, canChange, requires, reqLv, requiresLv, requires2, req2Lv, requires2Lv }
   })
 
@@ -2007,7 +2007,7 @@ export default function Game() {
     <div style={{ border:'1px solid #886600', background:'#001020', padding:'16px' }}>
       <div style={{ color:'#ccaa00', fontSize:'14px', marginBottom:'4px' }}>⛩ 神殿</div>
       <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
-        現在のクラス: <span style={{color:'#88ccff'}}>{profile.class}</span> LV<span style={{color:'#ffcc00'}}>{currentClassLv}</span>／{cap}　（転職にはLV30以上が必要）
+        現在のクラス: <span style={{color:'#88ccff'}}>{profile.class}</span> LV<span style={{color:'#ffcc00'}}>{currentClassLv}</span>／{cap}
       </div>
       {templeMessage && <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'10px', marginBottom:'12px', border:'1px solid #44ff88' }}>{templeMessage}</div>}
       <div style={{ color:'#ccaa00', fontSize:'11px', marginBottom:'6px' }}>── 初期職（LV100キャップ）──</div>
