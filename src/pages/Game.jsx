@@ -2328,7 +2328,7 @@ export default function Game() {
             </div>
           )}
 
-          {scene==='temple' && <TempleContent />}
+          {scene==='temple' && TempleContent()}
 
           {scene==='battle' && (
             <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
@@ -2523,7 +2523,7 @@ export default function Game() {
               </div>
             )}
 
-            {scene==='temple' && <TempleContent />}
+            {scene==='temple' && TempleContent()}
 
             {scene==='battle' && (
               <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
