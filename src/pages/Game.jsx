@@ -255,10 +255,28 @@ const CLASS_LEVEL_CAP = {
   '元素使い':100, '死霊使い':100, '聖職者':100, '異端審問官':100, '賢者':100,
   'サイキッカー':100, '体術師':100, '魔銃士':100,
 }
-const getEffectiveCap = (className, retraining) => {
-  const base = CLASS_LEVEL_CAP[className] || 100
-  const count = (retraining || {})[className] || 0
-  return base + count * 100
+const getEffectiveCap = (className) => CLASS_LEVEL_CAP[className] || 100
+
+const calcLv20Bonus = (className) => {
+  const growth = JOB_GROWTH[className] || JOB_GROWTH['戦士']
+  const bonusSlots = JOB_LEVEL3_BONUS[className] || []
+  const bonus = {
+    hp_max: growth.hp * 19,
+    mp_max: growth.mp * 19,
+    atk:    growth.atk * 19,
+    def:    growth.def * 19,
+    matk:   growth.matk * 19,
+    mdef:   growth.mdef * 19,
+    spd:    growth.spd * 19,
+  }
+  for (let lv = 3; lv <= 20; lv += 3) {
+    if (bonusSlots.length > 0) {
+      const bi = Math.floor(lv / 3 - 1) % bonusSlots.length
+      const stat = bonusSlots[bi]
+      bonus[stat] = (bonus[stat] || 0) + 1
+    }
+  }
+  return bonus
 }
 const getRetrainingStars = (className, retraining) => {
   const count = (retraining || {})[className] || 0
@@ -1032,16 +1050,36 @@ export default function Game() {
   }
 
   const doRetraining = async () => {
-    const targetClass = retrainingClass || profile.class  // 開いた時点のクラスを使用
+    const targetClass = retrainingClass || profile.class
     const currentCount = (profile.retraining || {})[targetClass] || 0
     if (currentCount >= 5) return
     setLoading(true)
+
+    // LV20ボーナス計算
+    const bonus = calcLv20Bonus(targetClass)
+
+    // レベルリセット・ステータスボーナス付与
     const newRetraining = { ...(profile.retraining || {}), [targetClass]: currentCount + 1 }
-    const newPending = (profile.pending_stat_points || 0) + 10
+    const newCharLv = Math.max(1, (profile.char_lv || 1) - (profile.lv - 1))
     await supabase.from('profiles').update({
       retraining: newRetraining,
-      pending_stat_points: newPending,
+      lv: 1,
+      exp: 0,
+      exp_next: calcExpNext(1),
+      char_lv: newCharLv,
+      hp_max:  profile.hp_max  + bonus.hp_max,
+      mp_max:  profile.mp_max  + bonus.mp_max,
+      atk:     profile.atk     + bonus.atk,
+      def:     profile.def     + bonus.def,
+      matk:    profile.matk    + bonus.matk,
+      mdef:    profile.mdef    + bonus.mdef,
+      spd:     profile.spd     + bonus.spd,
     }).eq('id', profile.id)
+
+    // class_levelsもリセット
+    const clData = classLevels.find(cl => cl.class_name === targetClass)
+    if (clData) await supabase.from('class_levels').update({ lv:1, exp:0 }).eq('id', clData.id)
+
     if (selectedCarrySkill) {
       await supabase.from('player_skills').update({ is_carried_over: true })
         .eq('player_id', profile.id).eq('skill_id', selectedCarrySkill)
@@ -1051,7 +1089,7 @@ export default function Game() {
     setSelectedCarrySkill(null)
     setRetrainingClass(null)
     const stars = '★'.repeat(currentCount + 1)
-    setRetrainingMessage(`再修練完了！ ${targetClass}${stars} レベルキャップ+100・ステータスポイント+10！`)
+    setRetrainingMessage(`再修練完了！ ${targetClass}${stars} LV1にリセット・LV20分のステータス永続付与！`)
     setLoading(false)
   }
 
@@ -1108,7 +1146,7 @@ export default function Game() {
     if (type === 'exp') {
       const expGained = Math.floor(50 + Math.random() * 51)
       const currentClassLvD = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
-      const capD = getEffectiveCap(profile.class, profile.retraining)
+      const capD = getEffectiveCap(profile.class)
       if (profile.exp_frozen) {
         logs.push({ text:`EXP +${expGained}（調査中につき停止）`, color:'#446688' })
       } else if (currentClassLvD < capD) {
@@ -1264,7 +1302,7 @@ export default function Game() {
     }
 
     const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
-    const cap = getEffectiveCap(profile.class, profile.retraining)
+    const cap = getEffectiveCap(profile.class)
     const isAtCap = currentClassLv >= cap
 
     const eff = calcEffectiveStats(profile, equipment, proficiency)
@@ -2193,7 +2231,7 @@ export default function Game() {
   const eff = calcEffectiveStats(profile, equipment, proficiency)
   const totalRank = getTotalRank(total)
   const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
-  const cap = getEffectiveCap(profile.class, profile.retraining)
+  const cap = getEffectiveCap(profile.class)
   const isAtCap = currentClassLv >= cap
   const retrainingCount = (profile.retraining || {})[profile.class] || 0
 
@@ -2232,7 +2270,7 @@ export default function Game() {
         <div style={{ color:'#ffaa44', fontSize:'12px', marginBottom:'6px' }}>🔄 再修練</div>
         <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px', lineHeight:'1.6' }}>
           レベルキャップ到達時に再修練できます。<br/>
-          再修練するとキャップ+100・ステータスポイント+10・スキル1つを持ち越せます。<br/>
+          再修練するとLV1にリセット・LV20分のステータス永続付与・スキル1つを持ち越せます。<br/>
           上限5回まで（★★★★★）
         </div>
         <div style={{ color:'#446688', fontSize:'11px', marginBottom:'8px' }}>
@@ -2258,7 +2296,7 @@ export default function Game() {
                 <div style={{ color:isCurrent?'#88aabb':c.canChange?'#ccaa00':'#446688', fontSize:'12px' }}>
                   {c.name}{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}
                 </div>
-                <div style={{ color:'#446688', fontSize:'10px' }}>LV {c.lv} / {getEffectiveCap(c.name, profile.retraining)}</div>
+                <div style={{ color:'#446688', fontSize:'10px' }}>LV {c.lv} / {getEffectiveCap(c.name)}</div>
               </div>
               <button onClick={()=>setPendingClassChange(c.name)} disabled={isCurrent||loading}
                 style={{ padding:'4px 8px', background:isCurrent?'#001':'#1a1000', border:`1px solid ${isCurrent?'#334455':c.canChange?'#886600':'#002244'}`, color:isCurrent?'#334455':c.canChange?'#ccaa00':'#334455', cursor:isCurrent?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
@@ -2280,7 +2318,7 @@ export default function Game() {
                 <div style={{ color:isCurrent?'#88aabb':c.canChange?'#ff8800':'#446688', fontSize:'12px' }}>
                   {c.name}{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}
                 </div>
-                <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/{c.requiresLv}　クラスLV{c.lv}/{getEffectiveCap(c.name, profile.retraining)}</div>
+                <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/{c.requiresLv}　クラスLV{c.lv}/{getEffectiveCap(c.name)}</div>
               </div>
               <button onClick={()=>setPendingClassChange(c.name)} disabled={isCurrent||!c.canChange||loading}
                 style={{ padding:'4px 8px', background:isCurrent?'#001':c.canChange?'#1a0800':'#001', border:`1px solid ${isCurrent?'#334455':c.canChange?'#664400':'#002244'}`, color:isCurrent?'#334455':c.canChange?'#ff8800':'#334455', cursor:isCurrent||!c.canChange?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
@@ -2304,7 +2342,7 @@ export default function Game() {
                 </div>
                 <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/{c.requiresLv}</div>
                 <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires2} LV{c.req2Lv}/{c.requires2Lv}</div>
-                <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{c.lv}/{getEffectiveCap(c.name, profile.retraining)}</div>
+                <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{c.lv}/{getEffectiveCap(c.name)}</div>
               </div>
               <button onClick={()=>setPendingClassChange(c.name)} disabled={isCurrent||!c.canChange||loading}
                 style={{ padding:'4px 8px', background:isCurrent?'#001':c.canChange?'#1a0830':'#001', border:`1px solid ${isCurrent?'#334455':c.canChange?'#664488':'#002244'}`, color:isCurrent?'#334455':c.canChange?'#cc88ff':'#334455', cursor:isCurrent||!c.canChange?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
