@@ -39,7 +39,7 @@ export default function Skills() {
       .eq('player_id', user.id).eq('is_carried_over', true)
     const carriedSkills = (carriedPs||[]).map(ps => ps.skills).filter(Boolean)
 
-    setAllSkills([...(commonSkills||[]), ...(skills||[])])
+    setAllSkills([...(skills||[])])
 
     // 全習得済みスキル
     const { data: ps } = await supabase
