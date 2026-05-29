@@ -32,7 +32,14 @@ export default function Skills() {
       supabase.from('skills').select('*').eq('class_name', p.class).order('required_lv'),
       supabase.from('skills').select('*').eq('class_name', '共通').order('required_lv'),
     ])
-    setAllSkills([...(commonSkills||[]), ...(skills||[])])
+
+    // 持ち越しスキルを取得
+    const { data: carriedPs } = await supabase
+      .from('player_skills').select('*, skills(*)')
+      .eq('player_id', user.id).eq('is_carried_over', true)
+    const carriedSkills = (carriedPs||[]).map(ps => ps.skills).filter(Boolean)
+
+    setAllSkills([...(commonSkills||[]), ...(skills||[]), ...carriedSkills])
 
     // 全習得済みスキル
     const { data: ps } = await supabase
@@ -59,9 +66,10 @@ export default function Skills() {
   }
 
   const setSkillToSlot = async (skillId, slotOrder) => {
-    // 現在のクラス以外のスキルはセット不可（UIをすり抜けた場合も防止）
-    const skillData = playerSkills.find(ps => ps.skill_id === skillId)?.skills
-    if (skillData && skillData.class_name !== profile.class && skillData.class_name !== '共通') return
+    // 現在のクラス・共通・持ち越し以外のスキルはセット不可
+    const playerSkillData = playerSkills.find(ps => ps.skill_id === skillId)
+    const skillData = playerSkillData?.skills
+    if (skillData && skillData.class_name !== profile.class && skillData.class_name !== '共通' && !playerSkillData?.is_carried_over) return
     setLoading(true)
     await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('skill_id', skillId)
     const existing = skillSets.find(ss => ss.slot_order === slotOrder)
@@ -93,6 +101,7 @@ export default function Skills() {
   )
 
   const learnedIds = playerSkills.map(ps => ps.skill_id)
+  const carriedSkillIds = playerSkills.filter(ps => ps.is_carried_over).map(ps => ps.skill_id)
 
   // クラス別にグループ化
   const skillsByClass = {}
@@ -187,13 +196,15 @@ export default function Skills() {
                   {className === '共通' ? '共通スキル' : className}
                   {className === '共通'
                     ? <span style={{ color:'#44ff88', fontSize:'10px', marginLeft:'8px' }}>（全クラス使用可能）</span>
-                    : className !== profile.class && <span style={{ color:'#446688', fontSize:'10px', marginLeft:'8px' }}>（現在のクラスでは使用不可）</span>
+                    : skills.some(s => carriedSkillIds.includes(s.id))
+                      ? <span style={{ color:'#ffaa44', fontSize:'10px', marginLeft:'8px' }}>（再修練持ち越し）</span>
+                      : className !== profile.class && <span style={{ color:'#446688', fontSize:'10px', marginLeft:'8px' }}>（現在のクラスでは使用不可）</span>
                   }
                 </div>
                 {skills.map(skill => {
                   const inSet = skillSets.find(ss => ss.skill_id === skill.id)
                   return (
-                    <SkillCard key={skill.id} skill={skill} learned={true} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={className === profile.class || className === '共通'} />
+                    <SkillCard key={skill.id} skill={skill} learned={true} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={className === profile.class || className === '共通' || carriedSkillIds.includes(skill.id)} />
                   )
                 })}
               </div>
