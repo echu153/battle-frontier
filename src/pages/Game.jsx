@@ -1222,7 +1222,7 @@ export default function Game() {
 
     const logs = []
     let playerHp = hpCurrent
-    let playerMp = profile.mp_max
+    let playerMp = profile.mp_current ?? profile.mp_max
     let enemyHp = enemy.hp
     let turn = 1, skillIndex = 0
     let playerBuffs = {}, enemyBuffs = {}
@@ -1793,7 +1793,7 @@ export default function Game() {
 
     await supabase.from('profiles').update({
       exp:newExp, exp_next:newExpNext, lv:newLv, gold:newGold,
-      hp_current:playerHp, is_dying:newIsDying,
+      hp_current:playerHp, mp_current:playerMp, is_dying:newIsDying,
       boss_encounter_rate:newBossRate, unlocked_areas:newUnlockedAreas,
       pending_stat_points:newPendingPoints, last_action_at:new Date().toISOString(),
       char_lv:newCharLv,
