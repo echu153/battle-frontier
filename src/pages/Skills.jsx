@@ -138,22 +138,26 @@ export default function Skills() {
         </div>
 
         {/* パッシブスキル */}
-        {passiveSkills.length > 0 && (
+        {currentClassPassive.length > 0 && (
           <div style={{ border:'1px solid #ff8844', background:'#0a0800', padding:'10px', marginBottom:'12px' }}>
             <div style={{ color:'#ff8844', fontSize:'12px', marginBottom:'2px' }}>⚡ パッシブスキル</div>
             <div style={{ color:'#664422', fontSize:'10px', marginBottom:'8px' }}>1つまでセット可。セット中のものが戦闘で発動する。</div>
-            {passiveSkills.map(skill => {
+            {currentClassPassive.map(skill => {
+              const learned = learnedIds.includes(skill.id)
               const isEquipped = !!skillSets.find(ss => ss.skill_id === skill.id && ss.skills?.type === 'パッシブ')
               return (
-                <div key={skill.id} style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'6px', padding:'6px', background: isEquipped ? '#1a0a00' : 'transparent', border: isEquipped ? '1px solid #ff8844' : '1px solid transparent' }}>
+                <div key={skill.id} style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'6px', padding:'6px', opacity: learned ? 1 : 0.45, background: isEquipped ? '#1a0a00' : 'transparent', border: isEquipped ? '1px solid #ff8844' : '1px solid transparent' }}>
                   <span style={{ fontSize:'9px', padding:'1px 4px', color:'#ff8844', border:'1px solid #ff8844', flexShrink:0 }}>パッシブ</span>
-                  <span style={{ color:'#ffcc00', fontSize:'11px', flex:1 }}>{skill.name}</span>
-                  <span style={{ color:'#446688', fontSize:'10px' }}>{skill.class_name}</span>
+                  <span style={{ color: learned ? '#ffcc00' : '#446688', fontSize:'11px', flex:1 }}>{skill.name}</span>
                   <span style={{ color:'#446688', fontSize:'10px', flex:2 }}>{skill.description}</span>
-                  <button onClick={() => setPassiveSkill(skill.id)} disabled={loading}
-                    style={{ padding:'2px 8px', background: isEquipped ? '#3a1500' : '#001', border:`1px solid ${isEquipped ? '#ff8844' : '#446688'}`, color: isEquipped ? '#ff8844' : '#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', flexShrink:0 }}>
-                    {isEquipped ? '解除' : 'セット'}
-                  </button>
+                  {learned ? (
+                    <button onClick={() => setPassiveSkill(skill.id)} disabled={loading}
+                      style={{ padding:'2px 8px', background: isEquipped ? '#3a1500' : '#001', border:`1px solid ${isEquipped ? '#ff8844' : '#446688'}`, color: isEquipped ? '#ff8844' : '#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', flexShrink:0 }}>
+                      {isEquipped ? '解除' : 'セット'}
+                    </button>
+                  ) : (
+                    <span style={{ color:'#446688', fontSize:'10px', flexShrink:0 }}>LV{skill.required_lv}で習得</span>
+                  )}
                 </div>
               )
             })}
