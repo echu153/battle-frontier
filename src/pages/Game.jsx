@@ -669,7 +669,7 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       result.log = `✨ 神罰執行！ ${enemy.name}に${result.dmg}ダメージ！${healDownHit ? ' 回復封じ！' : ''}`
       break
     }
-    case '粛清':        result.dmg = Math.floor((eff.matk*1.3+eff.def*0.3)*am); result.log = `⚖ 粛清！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '粛清':        result.dmg = Math.floor((eff.matk*1.3+eff.mdef*0.3)*am); result.log = `⚖ 粛清！ ${enemy.name}に${result.dmg}ダメージ！`; break
     case '狂信':        result.newPlayerBuffs.statusImmune={turns:4}; result.log = `⚖ 狂信！ 4ターンの間、ステータス減少を無効化！`; break
     case '聖なる裁き': {
       result.dmg = Math.floor(eff.matk*1.7*am)
@@ -678,7 +678,7 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       result.log = `⚖ 聖なる裁き！ ${enemy.name}に${result.dmg}の裁きのダメージ！${sealHit1 ? ' 回復封じ！' : ''}` ; break
     }
     case '断罪': {
-      result.dmg = Math.floor((eff.matk*1.6+eff.def*1.0)*am)
+      result.dmg = Math.floor((eff.matk*1.6+eff.mdef*1.0)*am)
       const sealHit2 = Math.random()*100 < 30
       if (sealHit2) result.newEnemyBuffs.healDown={turns:3,rate:0.0}
       result.log = `⚖ 断罪！ ${enemy.name}に${result.dmg}の断罪ダメージ！${sealHit2 ? ' 回復封じ！' : ''}`
@@ -1314,7 +1314,13 @@ export default function Game() {
 
       // 敵の回避判定（プレイヤーの命中ボーナスで相殺、パピアは+50%）
       const buffHitBonus = playerBuffs.hitBonus?.turns > 0 ? playerBuffs.hitBonus.value : 0
-      const effectiveEnemyEvasion = Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus) + (enemy.isPapia ? 50 : 0)
+      // 次のスキルが絶影狙撃（必中）なら回避無効
+      const peekIdx = playerBuffs.berserk?.turns > 0 && playerBuffs.berserk.lockedSkill
+        ? expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk.lockedSkill)
+        : (skillIndex % (expandedSkillSet.length || 1))
+      const nextSkillName = expandedSkillSet.length > 0 ? expandedSkillSet[Math.max(0, peekIdx)]?.skills?.name : null
+      const isSureHit = nextSkillName === '絶影狙撃'
+      const effectiveEnemyEvasion = isSureHit ? 0 : Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus) + (enemy.isPapia ? 50 : 0)
       if (effectiveEnemyEvasion > 0 && Math.random()*100 < effectiveEnemyEvasion) {
         logs.push({ text:`${prefix}${enemy.name}に攻撃！ しかし回避された！`, color:'#446688' })
         if (expandedSkillSet.length > 0) skillIndex++
