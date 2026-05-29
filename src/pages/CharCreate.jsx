@@ -7,9 +7,10 @@ const CLASSES = [
   { id:'弓使い',  icon:'🏹', hp_max:60,  mp_max:15, atk:8,  def:4,  matk:2,  mdef:3,  spd:10, desc:'素早さ特化のバランス型', weaponName:'短弓' },
   { id:'魔法使い',icon:'🔮', hp_max:45,  mp_max:50, atk:2,  def:2,  matk:14, mdef:4,  spd:4,  desc:'高魔力・強力な魔法攻撃', weaponName:'木の杖' },
   { id:'僧侶',    icon:'✨', hp_max:55,  mp_max:45, atk:2,  def:3,  matk:7,  mdef:12, spd:3,  desc:'回復・魔法防御が高い',   weaponName:'聖なる杖' },
+  { id:'格闘家',  icon:'👊', hp_max:70,  mp_max:10, atk:11, def:5,  matk:1,  mdef:3,  spd:8,  desc:'素手で戦う打撃特化の格闘家', weaponName:'木の剣' },
 ]
 
-const ALL_INITIAL_CLASSES = ['戦士','弓使い','魔法使い','僧侶']
+const ALL_INITIAL_CLASSES = ['戦士','弓使い','魔法使い','僧侶','格闘家']
 
 // Supabaseプロジェクト設定（supabase.jsから取得）
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL

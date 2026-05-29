@@ -233,7 +233,7 @@ const JOB_LEVEL3_BONUS = {
   '賢者':      ['atk','spd'],
 }
 
-const INITIAL_CLASSES = ['戦士','弓使い','魔法使い','僧侶']
+const INITIAL_CLASSES = ['戦士','弓使い','魔法使い','僧侶','格闘家']
 const ADVANCED_CLASSES = {
   '侍':        { requires:'戦士' },
   '狂戦士':    { requires:'戦士' },
@@ -244,12 +244,16 @@ const ADVANCED_CLASSES = {
   '聖職者':    { requires:'僧侶' },
   '異端審問官':{ requires:'僧侶' },
   '賢者':      { requires:'僧侶', requires2:'魔法使い', requires2Lv:50, requiresLv:50 },
+  'サイキッカー': { requires:'格闘家' },
+  '体術師':    { requires:'格闘家' },
+  '魔銃士':    { requires:'弓使い', requiresLv:50, requires2:'魔法使い', requires2Lv:50 },
 }
 
 const CLASS_LEVEL_CAP = {
-  '戦士':100, '弓使い':100, '魔法使い':100, '僧侶':100,
+  '戦士':100, '弓使い':100, '魔法使い':100, '僧侶':100, '格闘家':100,
   '侍':300, '狂戦士':300, '狩人':300, '暗殺者':300,
   '元素使い':300, '死霊使い':300, '聖職者':300, '異端審問官':300, '賢者':300,
+  'サイキッカー':300, '体術師':300, '魔銃士':300,
 }
 
 const STAT_LABELS = {
@@ -475,10 +479,16 @@ const applyEquipmentEffects = (equipment, profile, playerBuffs, logs) => {
 // ============================================================
 // プレイヤースキル実行
 // ============================================================
-const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArtifact) => {
+const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkill = '') => {
   const result = { dmg:0, heal:0, log:'', newEnemyBuffs:{ ...enemyBuffs }, newPlayerBuffs:{ ...playerBuffs }, selfDmg:0, bonusCritRate:0 }
   const randMult = (min, max) => min + Math.random()*(max-min)
   const am = isArtifact ? 1.2 : 1.0
+  // 敵DEF・MDEF の低い方で軽減する計算（ハイブリッドスキル用）
+  const calcMinDef = () => {
+    const edr = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
+    const emr = (enemyBuffs.mdefDown?.rate||1)*(enemyBuffs.mdefUp?.rate||1)
+    return Math.min(Math.floor((enemy.def||0)*edr/2), Math.floor((enemy.mdef||0)*emr/2))
+  }
   switch (skill.name) {
     case '体当たり':    result.dmg = Math.floor(eff.atk*randMult(1.1,1.2)*am); result.log = `⚔ 体当たり！ ${enemy.name}に${result.dmg}ダメージ！`; break
     case '強撃':        result.dmg = Math.floor(eff.atk*randMult(1.3,1.4)*am); result.log = `💥 強撃！ ${enemy.name}に${result.dmg}ダメージ！`; break
@@ -668,6 +678,68 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       if (meteoBurnHit) result.newEnemyBuffs.burn = { turns:5, dmgRate:0.02 }
       result.log = `☄ メテオストライク！ ${hits}回ヒット！ ${enemy.name}に${result.dmg}の魔法ダメージ！${meteoBurnHit ? ' やけど状態！' : ''}`
       break
+    }
+    // ── 格闘家 ──
+    case '打撃':   result.dmg = Math.floor(eff.atk*1.2*am); result.log = `👊 打撃！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '連打':   result.dmg = Math.floor(eff.atk*0.4*am)*3; result.log = `👊 連打！ ${enemy.name}に${Math.floor(eff.atk*0.4*am)}×3=${result.dmg}ダメージ！`; break
+    case '残心':   result.newPlayerBuffs.spdUp={turns:4,rate:1.1}; result.newPlayerBuffs.hitBonus={turns:4,value:10}; result.log = `🧘 残心！ 4ターンの間、命中・素早さが上昇！`; break
+    case '鉄拳': {
+      const edr_k = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
+      const defVal_k = Math.floor((enemy.def||0)*edr_k*0.8/2)
+      result.dmg = Math.max(1, Math.floor(eff.atk*1.3*am) - defVal_k)
+      result.log = `👊 鉄拳！ ${enemy.name}に${result.dmg}ダメージ！ 防御貫通！`; break
+    }
+    case '爆裂拳': {
+      result.dmg = Math.floor(eff.atk*1.4*am)
+      const sr_ep = enemyBuffs.stunResist ?? 1.0
+      const sh_ep = Math.random()*100 < 20 * sr_ep
+      if (sh_ep) { result.newEnemyBuffs.stun={turns:1}; result.newEnemyBuffs.stunResist=sr_ep*0.5 }
+      result.log = `💥 爆裂拳！ ${enemy.name}に${result.dmg}ダメージ！${sh_ep?' スタン！':''}`; break
+    }
+    // ── サイキッカー ──
+    case 'サイコショット': {
+      result.dmg = Math.max(1, Math.floor((eff.atk*1.0+eff.matk*0.3)*am) - calcMinDef())
+      result.log = `🔮 サイコショット！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    }
+    case 'マインドブレイク': {
+      result.dmg = Math.max(1, Math.floor((eff.atk*1.0+eff.matk*0.5)*am) - calcMinDef())
+      result.log = `🔮 マインドブレイク！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    }
+    case '精神集中': result.newPlayerBuffs.atkUp={turns:2,rate:1.6}; result.newPlayerBuffs.matkUp={turns:2,rate:1.6}; result.log = `🔮 精神集中！ 2ターンの間、攻撃力・特殊攻撃力が大幅上昇！`; break
+    case 'サイコブラスト': {
+      result.dmg = Math.max(1, Math.floor((eff.atk*1.5+eff.matk*0.7)*am) - calcMinDef())
+      result.log = `🔮 サイコブラスト！ ${enemy.name}に${result.dmg}の念動力ダメージ！`; break
+    }
+    // ── 体術師 ──
+    case '半月蹴り':   result.dmg = Math.floor(eff.atk*1.3*am); result.log = `🦵 半月蹴り！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '五連殺': {
+      const d1 = Math.floor(eff.atk*0.3*am)
+      result.dmg = d1*5; result.log = `🦵 五連殺！ ${enemy.name}に${d1}×5=${result.dmg}ダメージ！`; break
+    }
+    case '破衝掌':     result.dmg = Math.floor(eff.atk*1.7*am); result.log = `🦵 破衝掌！ ${enemy.name}に${result.dmg}の衝撃ダメージ！`; break
+    case '飛天三角蹴り': {
+      const h1 = Math.floor(eff.atk*0.4*am)
+      if (Math.random() < 0.2) { result.dmg=0; result.log=`🦵 飛天三角蹴り！ 1撃目が外れた！`; break }
+      const h2 = Math.floor(eff.atk*0.7*am)
+      if (Math.random() < 0.2) { result.dmg=h1; result.log=`🦵 飛天三角蹴り！ ${h1}ダメージ → 2撃目が外れた！`; break }
+      const h3 = Math.floor(eff.atk*1.1*am)
+      result.dmg = h1+h2+h3; result.log=`🦵 飛天三角蹴り！ ${h1}→${h2}→${h3}！ 合計${result.dmg}ダメージ！`; break
+    }
+    // ── 魔銃士 ──
+    case '魔弾': {
+      result.dmg = Math.max(1, Math.floor((eff.atk*0.7+eff.matk*0.7)*am) - calcMinDef())
+      result.log = `🔫 魔弾！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    }
+    case '連装銃撃': {
+      const hitDmg = Math.max(1, Math.floor((eff.atk*0.2+eff.matk*0.2)*am))
+      result.dmg = Math.max(1, hitDmg*4 - calcMinDef())
+      result.log = `🔫 連装銃撃！ ${enemy.name}に${hitDmg}×4=${result.dmg}ダメージ！`; break
+    }
+    case '強化装填':   result.newPlayerBuffs.atkUp={turns:3,rate:1.5}; result.newPlayerBuffs.matkUp={turns:3,rate:1.5}; result.log = `🔫 強化装填！ 3ターンの間、攻撃力・特殊攻撃力が大幅上昇！`; break
+    case 'キャノネスチュームビンド': {
+      const cannonMult = prevSkill === 'キャノネスチュームビンド' ? 1.1 : 1.0
+      result.dmg = Math.max(1, Math.floor((eff.atk*1.0+eff.matk*1.0)*am*cannonMult) - calcMinDef())
+      result.log = `🔫 キャノネスチュームビンド！ ${enemy.name}に${result.dmg}の魔法ダメージ！${cannonMult>1.0?' 連続使用で威力上昇！':''}`; break
     }
     default: result.dmg = Math.max(1,eff.atk*am); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
   }
@@ -1126,6 +1198,9 @@ export default function Game() {
     const hasKakushin   = passiveNames.includes('執行本能')
     const hasShinkoka   = passiveNames.includes('神聖加護')
     const hasTenki      = passiveNames.includes('天啓')
+    const hasRokkan     = passiveNames.includes('第六感')
+    const hasSeimitsu   = passiveNames.includes('精密照準')
+    const hasTosoHonno  = passiveNames.includes('闘争本能')
 
     const passiveCritBonus   = hasShingan ? 5 : 0
     const passiveDmgMult     = (hasShingan ? 1.05 : 1.0) * (hasBerserk ? 1.2 : 1.0) * (hasKakushin ? 1.1 : 1.0)
@@ -1133,6 +1208,7 @@ export default function Game() {
     const passiveMatkMult    = hasShinkoka ? 1.1 : 1.0
     const passiveMpCostMult  = hasTenki ? 0.9 : 1.0
     const passiveMatkMultTenki = hasTenki ? 1.1 : 1.0
+    const passiveHitBonus    = (hasRokkan ? 5 : 0) + (hasSeimitsu ? 5 : 0)
 
     if (isBossEncounter && currentItem && currentItem.items.effect === 'boss_avoid') {
       logs.push({ text:`🧿 魔よけのお守りが光り、ボスとの戦闘を避けた！`, color:'#cc44ff' })
@@ -1173,7 +1249,7 @@ export default function Game() {
     // 敵の回避率（プレイヤーが攻撃するとき）
     const enemyEvasionRate  = calcEvasionRate(enemySpd, effectiveSpdForCalc)
     // プレイヤーの命中ボーナス（アクアクラウンなど）
-    const playerHitBonus = eff.hitBonus || 0
+    const playerHitBonus = (eff.hitBonus || 0) + passiveHitBonus
 
     const doPlayerAttack = (isExtra=false) => {
       const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
@@ -1191,7 +1267,8 @@ export default function Game() {
       const critMult = isCrit ? 1.5 : 1.0
 
       // 敵の回避判定（プレイヤーの命中ボーナスで相殺、パピアは+50%）
-      const effectiveEnemyEvasion = Math.max(0, enemyEvasionRate - playerHitBonus) + (enemy.isPapia ? 50 : 0)
+      const buffHitBonus = playerBuffs.hitBonus?.turns > 0 ? playerBuffs.hitBonus.value : 0
+      const effectiveEnemyEvasion = Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus) + (enemy.isPapia ? 50 : 0)
       if (effectiveEnemyEvasion > 0 && Math.random()*100 < effectiveEnemyEvasion) {
         logs.push({ text:`${prefix}${enemy.name}に攻撃！ しかし回避された！`, color:'#446688' })
         if (expandedSkillSet.length > 0) skillIndex++
@@ -1212,10 +1289,11 @@ export default function Game() {
           const hasGensoKyomei = passiveNames.includes('元素共鳴')
           const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? 1.1 : 1.0
           prevSkillName = cs.skills.name
-          const res = executeSkill(cs.skills, effBuff, profile, enemy, enemyBuffs, playerBuffs, isArtifact)
+          const res = executeSkill(cs.skills, effBuff, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
           const finalCrit = isCrit || (res.bonusCritRate > 0 && Math.random()*100 < playerCritRate + res.bonusCritRate)
           const finalCritMult = finalCrit ? 1.5 : 1.0
-          let finalDmg = Math.floor(res.dmg * finalCritMult * passiveDmgMult * gensoMult * (0.9 + Math.random() * 0.2))
+          const tosoMult = (hasTosoHonno && playerHp <= profile.hp_max * 0.5) ? 1.1 : 1.0
+          let finalDmg = Math.floor(res.dmg * finalCritMult * passiveDmgMult * gensoMult * tosoMult * (0.9 + Math.random() * 0.2))
           if (enemy.isPapia) finalDmg = 1
           const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
