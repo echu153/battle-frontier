@@ -97,6 +97,7 @@ export default function Equipment() {
   const [tab, setTab] = useState('weapon')
   const [loading, setLoading] = useState(false)
   const [awakenMessage, setAwakenMessage] = useState('')
+  const [confirmReset, setConfirmReset] = useState(null)
   const [sortKey, setSortKey] = useState(() => localStorage.getItem('equipSortKey') || 'obtained_asc')
 
   useEffect(() => { fetchAll() }, [])
@@ -161,6 +162,35 @@ export default function Equipment() {
     setLoading(true)
     await supabase.from('player_items').update({ use_threshold: threshold }).eq('id', itemId)
     await fetchAll()
+    setLoading(false)
+  }
+
+  const useStatReset = async (pi) => {
+    setLoading(true)
+    const spent = profile.stat_point_spent || {}
+    const totalSpent = (spent.hp||0)+(spent.mp||0)+(spent.atk||0)+(spent.def||0)+(spent.matk||0)+(spent.mdef||0)+(spent.spd||0)
+    const newHpMax = profile.hp_max - (spent.hp||0)*10
+    const newMpMax = profile.mp_max - (spent.mp||0)*5
+    await supabase.from('profiles').update({
+      hp_max: newHpMax,
+      mp_max: newMpMax,
+      atk:  profile.atk  - (spent.atk ||0),
+      def:  profile.def  - (spent.def  ||0),
+      matk: profile.matk - (spent.matk ||0),
+      mdef: profile.mdef - (spent.mdef ||0),
+      spd:  profile.spd  - (spent.spd  ||0),
+      hp_current: Math.min(profile.hp_current ?? profile.hp_max, newHpMax),
+      mp_current: Math.min(profile.mp_current ?? profile.mp_max, newMpMax),
+      pending_stat_points: (profile.pending_stat_points||0) + totalSpent,
+      stat_point_spent: {},
+    }).eq('id', profile.id)
+    if (pi.quantity > 1) {
+      await supabase.from('player_items').update({ quantity: pi.quantity - 1 }).eq('id', pi.id)
+    } else {
+      await supabase.from('player_items').delete().eq('id', pi.id)
+    }
+    await fetchAll()
+    setConfirmReset(null)
     setLoading(false)
   }
 
@@ -295,6 +325,9 @@ export default function Equipment() {
                         <span style={{ color:'#446688', fontSize:'10px' }}>×{pi.quantity}</span>
                         {(pi.items.effect === 'enhance_stone' || pi.items.name?.includes('依頼書')) ? (
                           <span style={{ color:'#aa8800', fontSize:'10px' }}>強化素材</span>
+                        ) : pi.items.effect === 'stat_reset' ? (
+                          <button onClick={() => setConfirmReset(pi)} disabled={loading}
+                            style={{ padding:'2px 8px', background:'#200010', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
                         ) : pi.equipped ? (
                           <span style={{ color:'#0088ff', fontSize:'10px' }}>セット中</span>
                         ) : (
@@ -423,6 +456,23 @@ export default function Equipment() {
           </div>
         </div>
       </div>
+
+      {/* 記憶除去装置 確認ダイアログ */}
+      {confirmReset && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}>
+          <div style={{ background:'#0a0020', border:'1px solid #cc44ff', padding:'24px', maxWidth:'320px', width:'90%', fontFamily:'monospace' }}>
+            <div style={{ color:'#cc44ff', fontSize:'14px', marginBottom:'12px' }}>⚠ 記憶除去装置を使用しますか？</div>
+            <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'16px', lineHeight:'1.6' }}>
+              振り分けたステータスポイントがすべてリセットされ、再度割り振りできるようになります。<br/>
+              <span style={{ color:'#ff8844' }}>この操作は取り消せません。</span>
+            </div>
+            <div style={{ display:'flex', gap:'8px' }}>
+              <button onClick={() => setConfirmReset(null)} style={{ flex:1, padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>キャンセル</button>
+              <button onClick={() => useStatReset(confirmReset)} disabled={loading} style={{ flex:1, padding:'8px', background:'#200010', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>使用する</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

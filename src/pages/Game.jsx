@@ -1849,6 +1849,7 @@ export default function Game() {
     const total = Object.values(statPoints).reduce((a,b)=>a+b,0)
     if (total <= 0) return
     const remaining = pendingPoints - total
+    const prev = profile.stat_point_spent || {}
     const updates = {
       hp_max: profile.hp_max+(statPoints.hp||0)*10,
       mp_max: profile.mp_max+(statPoints.mp||0)*5,
@@ -1858,6 +1859,15 @@ export default function Game() {
       mdef:   profile.mdef +(statPoints.mdef ||0),
       spd:    profile.spd  +(statPoints.spd  ||0),
       pending_stat_points: Math.max(0, remaining),
+      stat_point_spent: {
+        hp:   (prev.hp  ||0)+(statPoints.hp  ||0),
+        mp:   (prev.mp  ||0)+(statPoints.mp  ||0),
+        atk:  (prev.atk ||0)+(statPoints.atk ||0),
+        def:  (prev.def ||0)+(statPoints.def ||0),
+        matk: (prev.matk||0)+(statPoints.matk||0),
+        mdef: (prev.mdef||0)+(statPoints.mdef||0),
+        spd:  (prev.spd ||0)+(statPoints.spd ||0),
+      },
     }
     await supabase.from('profiles').update(updates).eq('id', profile.id)
     await fetchProfile()
