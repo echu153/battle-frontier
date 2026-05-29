@@ -293,7 +293,7 @@ export default function Equipment() {
                       <span style={{ color:'#44ff88', fontSize:'12px' }}>{pi.items.name}</span>
                       <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
                         <span style={{ color:'#446688', fontSize:'10px' }}>×{pi.quantity}</span>
-                        {pi.items.effect === 'enhance_stone' ? (
+                        {(pi.items.effect === 'enhance_stone' || pi.items.name?.includes('依頼書')) ? (
                           <span style={{ color:'#aa8800', fontSize:'10px' }}>強化素材</span>
                         ) : pi.equipped ? (
                           <span style={{ color:'#0088ff', fontSize:'10px' }}>セット中</span>
