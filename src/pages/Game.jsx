@@ -903,6 +903,8 @@ export default function Game() {
   const [retrainingModal, setRetrainingModal] = useState(false)
   const [selectedCarrySkill, setSelectedCarrySkill] = useState(null)
   const [retrainingSkills, setRetrainingSkills] = useState([])
+  const [retrainingClass, setRetrainingClass] = useState(null)
+  const [retrainingMessage, setRetrainingMessage] = useState('')
   const [newAnnouncementPopup, setNewAnnouncementPopup] = useState(false)
   const [seenAnnouncementIds, setSeenAnnouncementIds] = useState(() => {
     try { return JSON.parse(localStorage.getItem('bf_seenAnnouncements') || '[]') } catch { return [] }
@@ -1016,23 +1018,25 @@ export default function Game() {
   }
 
   const openRetrainingModal = async () => {
-    // 現在のクラスの習得済みスキルを取得（持ち越し済み除く）
+    const targetClass = profile.class  // モーダルを開いた時点のクラスを記録
     const { data: ps } = await supabase.from('player_skills')
       .select('*, skills(*)')
       .eq('player_id', profile.id)
     const classSkills = (ps || []).filter(s =>
-      s.skills?.class_name === profile.class && !s.is_carried_over
+      s.skills?.class_name === targetClass && !s.is_carried_over
     )
+    setRetrainingClass(targetClass)
     setRetrainingSkills(classSkills)
     setSelectedCarrySkill(null)
     setRetrainingModal(true)
   }
 
   const doRetraining = async () => {
-    const currentCount = (profile.retraining || {})[profile.class] || 0
+    const targetClass = retrainingClass || profile.class  // 開いた時点のクラスを使用
+    const currentCount = (profile.retraining || {})[targetClass] || 0
     if (currentCount >= 5) return
     setLoading(true)
-    const newRetraining = { ...(profile.retraining || {}), [profile.class]: currentCount + 1 }
+    const newRetraining = { ...(profile.retraining || {}), [targetClass]: currentCount + 1 }
     const newPending = (profile.pending_stat_points || 0) + 10
     await supabase.from('profiles').update({
       retraining: newRetraining,
@@ -1045,8 +1049,9 @@ export default function Game() {
     await fetchProfile()
     setRetrainingModal(false)
     setSelectedCarrySkill(null)
+    setRetrainingClass(null)
     const stars = '★'.repeat(currentCount + 1)
-    setTempleMessage(`再修練完了！ ${profile.class}${stars} レベルキャップ+100・ステータスポイント+10！`)
+    setRetrainingMessage(`再修練完了！ ${targetClass}${stars} レベルキャップ+100・ステータスポイント+10！`)
     setLoading(false)
   }
 
@@ -2234,6 +2239,9 @@ export default function Game() {
           再修練回数: <span style={{color:'#ffcc00', letterSpacing:'2px'}}>{getRetrainingStars(profile.class, profile.retraining) || 'なし'}</span>
           <span style={{color:'#446688'}}> ({retrainingCount}/5)</span>
         </div>
+        {retrainingMessage && isAtCap && retrainingCount < 5 && (
+          <div style={{ color:'#ffaa44', fontSize:'12px', textAlign:'center', padding:'8px', border:'1px solid #ffaa44', marginBottom:'8px' }}>{retrainingMessage}</div>
+        )}
         {retrainingCount < 5 ? (
           isAtCap ? (
             <button onClick={openRetrainingModal} disabled={loading}
