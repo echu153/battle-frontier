@@ -774,6 +774,8 @@ export default function Game() {
   const [showMenu, setShowMenu] = useState(false)
   const [showAnnouncements, setShowAnnouncements] = useState(false)
   const [announcements, setAnnouncements] = useState([])
+  const [showGuide, setShowGuide] = useState(false)
+  const [openGuideId, setOpenGuideId] = useState(null)
   const [openAnnouncementId, setOpenAnnouncementId] = useState(null)
   const expTrackerRef = useRef({ start: null, total: 0 })
   const battleCountTrackerRef = useRef({ start: null, count: 0 })
@@ -1722,6 +1724,93 @@ export default function Game() {
     setAnnouncements(data || [])
   }
 
+  const GUIDE_SECTIONS = [
+    {
+      id: 'basics', title: '⚔ 基本の進め方',
+      content: `① エリアを選んで「出撃」ボタンを押すと自動で戦闘が始まる
+② 勝利するとEXP・Goldを獲得。レベルアップでステータスが上昇する
+③ レベルアップするとステータスポイントが1pt貰える（街の画面から割り振り）
+④ クールダウン（10秒）が終わったら再び出撃できる
+⑤ ボスを倒すと次のエリアが解放される`,
+    },
+    {
+      id: 'class', title: '🎭 クラスシステム',
+      content: `初期クラスは戦士・弓使い・魔法使い・僧侶の4種類。
+
+● 各クラスのレベルキャップはLV100
+● 神殿でLV30以上になると他のクラスに転職できる
+● 各クラスのレベルの合計がキャラクターレベルになる
+● LV100に達したクラスから上位クラスに転職可能（侍・暗殺者・元素使い など）
+● 上位クラスのレベルキャップはLV300`,
+    },
+    {
+      id: 'skills', title: '⚡ スキル',
+      content: `● レベルアップで自動習得。スキルページでスロット（最大5個）にセット
+● 戦闘ではスロット順に上から繰り返し使用する
+● パッシブスキルはスロットにセットすると常時発動（攻撃には使わない）
+● MPが足りないとスキルが発動しないので、宿屋でMP補充しておこう`,
+    },
+    {
+      id: 'equipment', title: '🗡 装備・強化',
+      content: `● 戦闘でドロップした武器は「装備」ページで確認・装備できる
+● 鍛冶屋では強化石を使って武器を強化（攻撃力などが1.5倍ずつ上昇）
+● 強化石はエリア2以降の敵からドロップ、または特殊ダンジョン（石）で入手
+● 武器を使い続けると熟練度が上がりボーナスが付く`,
+    },
+    {
+      id: 'inn', title: '🏨 宿屋・回復',
+      content: `● 戦闘でHPが0になると「瀕死状態」になり出撃不可になる
+● 宿屋でHP・MPを全回復（キャラLV×2Gのコスト）
+● 瀕死状態の回復は所持金全額（上限あり）
+● 時間経過でも自然回復するが、瀕死状態は宿屋でしか治せない`,
+    },
+    {
+      id: 'dungeon', title: '✨ 特殊ダンジョン',
+      content: `● 街の画面から「特殊ダンジョン」を選択（1日5回まで）
+● EXP / Gold / 強化石 / 武器熟練度 の4種類から選べる
+● クールダウン中や釣り中は入れない
+● リセットは毎日0時（日本時間）`,
+    },
+    {
+      id: 'fishing', title: '🎣 釣り',
+      content: `● 釣りページで竿を垂らして魚を釣ることができる
+● 釣り中は出撃・特殊ダンジョンに入れない
+● 釣った魚はプロフィールページで確認できる`,
+    },
+    {
+      id: 'shop', title: '🛒 その他のページ',
+      content: `● 商店：回復アイテムや補助アイテムを購入できる（解放エリアで品揃えが変わる）
+● 床屋：キャラクターの見た目を変更できる
+● ランキング：全プレイヤーのキャラLVランキングを確認できる
+● プロフィール：自分や他のプレイヤーの詳細ステータスを確認できる`,
+    },
+  ]
+
+  if (showGuide) return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ background:'#001040', border:'1px solid #44aaff', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'80vh', overflowY:'auto', fontFamily:'monospace' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', borderBottom:'1px solid #003366', paddingBottom:'8px' }}>
+          <div style={{ color:'#44aaff', fontSize:'14px' }}>📖 初心者ガイド</div>
+          <button onClick={()=>{ setShowGuide(false); setOpenGuideId(null) }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>✕ 閉じる</button>
+        </div>
+        {GUIDE_SECTIONS.map(sec => (
+          <div key={sec.id} style={{ marginBottom:'6px', border:'1px solid #002244', background:'#000818' }}>
+            <button onClick={()=>setOpenGuideId(openGuideId===sec.id?null:sec.id)}
+              style={{ width:'100%', padding:'10px 12px', background:'none', border:'none', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <span>{sec.title}</span>
+              <span style={{ color:'#446688', fontSize:'10px' }}>{openGuideId===sec.id?'▲':'▼'}</span>
+            </button>
+            {openGuideId===sec.id && (
+              <div style={{ padding:'12px', borderTop:'1px solid #002244', color:'#88ccff', fontSize:'11px', lineHeight:'2.0', whiteSpace:'pre-wrap' }}>
+                {sec.content}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+
   if (showAnnouncements) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ background:'#001040', border:'1px solid #ff8844', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'80vh', overflowY:'auto', fontFamily:'monospace' }}>
@@ -2062,6 +2151,7 @@ export default function Game() {
           <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
             <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
             <button onClick={()=>setShowAnnouncements(true)} style={{ background:'none', border:'1px solid #ff8844', color:'#ff8844', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📢 お知らせ</button>
+            <button onClick={()=>setShowGuide(true)} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📖 ガイド</button>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
             <button onClick={()=>nav('/equipment')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡 装備</button>
