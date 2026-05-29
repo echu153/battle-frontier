@@ -2148,7 +2148,7 @@ export default function Game() {
           )
         })}
       </div>
-      <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
+      <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001', border:'1px solid #ffcc00', color:'#ffcc00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
     </div>
   )
 
@@ -2339,7 +2339,7 @@ export default function Game() {
                   <div key={i} style={{ color:l.color, fontSize:'12px', lineHeight:'2', borderBottom:'1px solid #001428', padding:'2px 0' }}>{l.text}</div>
                 ))}
               </div>
-              {!loading && <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>}
+              {!loading && <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #ffcc00', color:'#ffcc00', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>}
             </div>
           )}
         </div>
@@ -2512,7 +2512,7 @@ export default function Game() {
                       {!isDying && profile.gold<innCost && <span style={{color:'#ff4444'}}> （ゴールドが足りません）</span>}
                     </div>
                     <div style={{ display:'flex', gap:'8px' }}>
-                      <button onClick={backToTown} style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
+                      <button onClick={backToTown} style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #ffcc00', color:'#ffcc00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>
                       <button onClick={useInn} disabled={!isDying&&profile.gold<innCost}
                         style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor:(!isDying&&profile.gold<innCost)?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', opacity:(!isDying&&profile.gold<innCost)?0.4:1 }}>
                         利用する
@@ -2534,7 +2534,7 @@ export default function Game() {
                     <div key={i} style={{ color:l.color, fontSize:'12px', lineHeight:'2', borderBottom:'1px solid #001428', padding:'2px 0' }}>{l.text}</div>
                   ))}
                 </div>
-                {!loading && <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>}
+                {!loading && <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #ffcc00', color:'#ffcc00', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>}
               </div>
             )}
           </div>
