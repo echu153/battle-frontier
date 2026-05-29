@@ -149,7 +149,7 @@ export default function Profile() {
                 style={{ background:'none', border:'1px solid #ff88cc', color:'#ff88cc', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>✂ 美容院</button>
             )}
             <button onClick={() => nav(isOwn ? '/game' : '/ranking')}
-              style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+              style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
               ← {isOwn ? '街に戻る' : 'ランキングへ'}
             </button>
           </div>
