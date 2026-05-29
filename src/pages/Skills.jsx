@@ -27,7 +27,7 @@ export default function Skills() {
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     setProfile(p)
 
-    // 現在のクラスのスキル
+    // 現在のクラスのスキル（パッシブ含む全て）
     const { data: skills } = await supabase
       .from('skills').select('*')
       .eq('class_name', p.class)
@@ -56,21 +56,6 @@ export default function Skills() {
       const { data: ps2 } = await supabase.from('player_skills').select('*, skills(*)').eq('player_id', user.id)
       setPlayerSkills(ps2 || [])
     }
-  }
-
-  const setPassiveSkill = async (skillId) => {
-    setLoading(true)
-    // 既存のパッシブを全て外す
-    const existingPassives = skillSets.filter(ss => ss.skills?.type === 'パッシブ')
-    for (const ep of existingPassives) {
-      await supabase.from('skill_sets').delete().eq('id', ep.id)
-    }
-    // 同じスキルをセット中なら解除のみ（トグル）
-    if (!existingPassives.find(ep => ep.skill_id === skillId)) {
-      await supabase.from('skill_sets').insert({ player_id: profile.id, skill_id: skillId, slot_order: 0, use_count: 1 })
-    }
-    await fetchAll()
-    setLoading(false)
   }
 
   const setSkillToSlot = async (skillId, slotOrder) => {
@@ -106,15 +91,6 @@ export default function Skills() {
 
   const learnedIds = playerSkills.map(ps => ps.skill_id)
 
-  // 習得済みの全スキル（パッシブ含む）
-  const allLearnedSkills = playerSkills.map(ps => ps.skills).filter(Boolean)
-  const passiveSkills = allLearnedSkills.filter(s => s.type === 'パッシブ')
-  const activeLearnedSkills = allLearnedSkills.filter(s => s.type !== 'パッシブ')
-
-  // 現在のクラスのスキル（未習得含む）
-  const currentClassPassive = allSkills.filter(s => s.type === 'パッシブ')
-  const currentClassActive = allSkills.filter(s => s.type !== 'パッシブ')
-
   // クラス別にグループ化
   const skillsByClass = {}
   for (const ps of playerSkills) {
@@ -137,36 +113,10 @@ export default function Skills() {
           クラス: <span style={{color:'#88ccff'}}>{profile.class}</span>　LV: <span style={{color:'#ffcc00'}}>{profile.lv}</span>
         </div>
 
-        {/* パッシブスキル */}
-        {currentClassPassive.length > 0 && (
-          <div style={{ border:'1px solid #ff8844', background:'#0a0800', padding:'10px', marginBottom:'12px' }}>
-            <div style={{ color:'#ff8844', fontSize:'12px', marginBottom:'2px' }}>⚡ パッシブスキル</div>
-            <div style={{ color:'#664422', fontSize:'10px', marginBottom:'8px' }}>1つまでセット可。セット中のものが戦闘で発動する。</div>
-            {currentClassPassive.map(skill => {
-              const learned = learnedIds.includes(skill.id)
-              const isEquipped = !!skillSets.find(ss => ss.skill_id === skill.id && ss.skills?.type === 'パッシブ')
-              return (
-                <div key={skill.id} style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'6px', padding:'6px', opacity: learned ? 1 : 0.45, background: isEquipped ? '#1a0a00' : 'transparent', border: isEquipped ? '1px solid #ff8844' : '1px solid transparent' }}>
-                  <span style={{ fontSize:'9px', padding:'1px 4px', color:'#ff8844', border:'1px solid #ff8844', flexShrink:0 }}>パッシブ</span>
-                  <span style={{ color: learned ? '#ffcc00' : '#446688', fontSize:'11px', flex:1 }}>{skill.name}</span>
-                  <span style={{ color:'#446688', fontSize:'10px', flex:2 }}>{skill.description}</span>
-                  {learned ? (
-                    <button onClick={() => setPassiveSkill(skill.id)} disabled={loading}
-                      style={{ padding:'2px 8px', background: isEquipped ? '#3a1500' : '#001', border:`1px solid ${isEquipped ? '#ff8844' : '#446688'}`, color: isEquipped ? '#ff8844' : '#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', flexShrink:0 }}>
-                      {isEquipped ? '解除' : 'セット'}
-                    </button>
-                  ) : (
-                    <span style={{ color:'#446688', fontSize:'10px', flexShrink:0 }}>LV{skill.required_lv}で習得</span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-
         {/* スキルセット */}
         <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'12px' }}>
-          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>スキルセット（最大5個・上から順に発動）</div>
+          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'4px' }}>スキルセット（最大5個・上から順に発動）</div>
+          <div style={{ color:'#336688', fontSize:'10px', marginBottom:'8px' }}>パッシブスキルをセットすると常時発動する</div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:'4px' }}>
             {[1,2,3,4,5].map(slot => {
               const set = skillSets.find(ss => ss.slot_order === slot)
@@ -177,11 +127,17 @@ export default function Skills() {
                     <>
                       <span style={{ color: TYPE_COLORS[set.skills.type] || '#88ccff', fontSize:'11px', flex:1 }}>{set.skills.name}</span>
                       <span style={{ color:'#446688', fontSize:'10px' }}>{set.skills.class_name}</span>
-                      <span style={{ color:'#446688', fontSize:'10px' }}>MP{set.skills.mp_cost}</span>
-                      <select value={set.use_count || 1} onChange={e => updateUseCount(slot, Number(e.target.value))}
-                        style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'2px' }}>
-                        {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}回</option>)}
-                      </select>
+                      {set.skills.type !== 'パッシブ' ? (
+                        <>
+                          <span style={{ color:'#446688', fontSize:'10px' }}>MP{set.skills.mp_cost}</span>
+                          <select value={set.use_count || 1} onChange={e => updateUseCount(slot, Number(e.target.value))}
+                            style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'2px' }}>
+                            {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}回</option>)}
+                          </select>
+                        </>
+                      ) : (
+                        <span style={{ color:'#ff8844', fontSize:'10px' }}>常時発動</span>
+                      )}
                       <button onClick={() => removeFromSlot(slot)} disabled={loading}
                         style={{ padding:'2px 6px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
                     </>
@@ -206,10 +162,10 @@ export default function Skills() {
           </button>
         </div>
 
-        {/* 現在のクラスのスキル */}
+        {/* 現在のクラスのスキル（パッシブ含む） */}
         {activeTab === 'current' && (
           <div>
-            {currentClassActive.map(skill => {
+            {allSkills.map(skill => {
               const learned = learnedIds.includes(skill.id)
               const inSet = skillSets.find(ss => ss.skill_id === skill.id)
               return (
@@ -227,7 +183,7 @@ export default function Skills() {
                 <div style={{ color:'#88ccff', fontSize:'12px', borderBottom:'1px solid #003366', paddingBottom:'4px', marginBottom:'8px' }}>
                   {className}
                 </div>
-                {skills.filter(s => s.type !== 'パッシブ').map(skill => {
+                {skills.map(skill => {
                   const inSet = skillSets.find(ss => ss.skill_id === skill.id)
                   return (
                     <SkillCard key={skill.id} skill={skill} learned={true} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} />
@@ -251,7 +207,7 @@ function SkillCard({ skill, learned, inSet, skillSets, loading, onSet }) {
           <span style={{ color: learned ? '#88ccff' : '#446688', fontSize:'12px' }}>{skill.name}</span>
         </div>
         <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-          <span style={{ color:'#446688', fontSize:'10px' }}>MP{skill.mp_cost}</span>
+          {skill.type !== 'パッシブ' && <span style={{ color:'#446688', fontSize:'10px' }}>MP{skill.mp_cost}</span>}
           {learned && !inSet && (
             <select onChange={e => { if (e.target.value) onSet(skill.id, Number(e.target.value)) }} defaultValue=""
               style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'2px' }}>
@@ -259,19 +215,13 @@ function SkillCard({ skill, learned, inSet, skillSets, loading, onSet }) {
               {[1,2,3,4,5].map(slot => <option key={slot} value={slot}>スロット{slot}</option>)}
             </select>
           )}
-          {inSet && <span style={{ color:'#0088ff', fontSize:'10px' }}>スロット{inSet.slot_order}（{inSet.use_count || 1}回）</span>}
+          {inSet && <span style={{ color: skill.type === 'パッシブ' ? '#ff8844' : '#0088ff', fontSize:'10px' }}>
+            {skill.type === 'パッシブ' ? `スロット${inSet.slot_order}（常時発動）` : `スロット${inSet.slot_order}（${inSet.use_count || 1}回）`}
+          </span>}
           {!learned && <span style={{ color:'#446688', fontSize:'10px' }}>LV{skill.required_lv}で習得</span>}
         </div>
       </div>
       <div style={{ color:'#446688', fontSize:'10px' }}>{skill.description}</div>
     </div>
   )
-}
-
-const TYPE_COLORS_EXPORT = {
-  '物理攻撃': '#ffcc00',
-  '魔法攻撃': '#cc44ff',
-  '回復':     '#44ff88',
-  '強化':     '#44ccff',
-  'パッシブ': '#ff8844',
 }
