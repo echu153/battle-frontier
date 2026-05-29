@@ -1788,7 +1788,8 @@ export default function Game() {
 
   const confirmStatPoints = async () => {
     const total = Object.values(statPoints).reduce((a,b)=>a+b,0)
-    if (total !== pendingPoints) return
+    if (total <= 0) return
+    const remaining = pendingPoints - total
     const updates = {
       hp_max: profile.hp_max+(statPoints.hp||0)*10,
       mp_max: profile.mp_max+(statPoints.mp||0)*5,
@@ -1797,11 +1798,11 @@ export default function Game() {
       matk:   profile.matk +(statPoints.matk ||0),
       mdef:   profile.mdef +(statPoints.mdef ||0),
       spd:    profile.spd  +(statPoints.spd  ||0),
-      pending_stat_points:0,
+      pending_stat_points: Math.max(0, remaining),
     }
     await supabase.from('profiles').update(updates).eq('id', profile.id)
     await fetchProfile()
-    setPendingPoints(0); setStatPoints({}); setShowStatPanel(false)
+    setPendingPoints(Math.max(0, remaining)); setStatPoints({}); setShowStatPanel(false)
   }
 
   const backToTown = () => { setScene('town'); setBattleLogs([]) }
@@ -2227,7 +2228,7 @@ export default function Game() {
               </div>
               <div style={{ display:'flex', gap:'8px' }}>
                 <button onClick={()=>setShowStatPanel(false)} style={{ flex:1, padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>後で</button>
-                <button onClick={confirmStatPoints} disabled={allocatedPoints!==pendingPoints} style={{ flex:2, padding:'8px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', opacity:allocatedPoints!==pendingPoints?0.4:1 }}>決定する</button>
+                <button onClick={confirmStatPoints} disabled={allocatedPoints===0||loading} style={{ flex:2, padding:'8px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', opacity:allocatedPoints===0?0.4:1 }}>決定する{pendingPoints-allocatedPoints>0?`（残り${pendingPoints-allocatedPoints}pt）`:''}</button>
               </div>
             </div>
           )}
@@ -2422,7 +2423,7 @@ export default function Game() {
                 </div>
                 <div style={{ display:'flex', gap:'8px' }}>
                   <button onClick={()=>setShowStatPanel(false)} style={{ flex:1, padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>後で</button>
-                  <button onClick={confirmStatPoints} disabled={allocatedPoints!==pendingPoints} style={{ flex:2, padding:'8px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', opacity:allocatedPoints!==pendingPoints?0.4:1 }}>決定する</button>
+                  <button onClick={confirmStatPoints} disabled={allocatedPoints===0||loading} style={{ flex:2, padding:'8px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', opacity:allocatedPoints===0?0.4:1 }}>決定する{pendingPoints-allocatedPoints>0?`（残り${pendingPoints-allocatedPoints}pt）`:''}</button>
                 </div>
               </div>
             )}
