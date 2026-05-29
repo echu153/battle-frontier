@@ -557,13 +557,13 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       break
     }
     case '断空': {
-      result.dmg = Math.floor(eff.atk*1.5*am*1.3)
+      result.dmg = Math.floor(eff.atk*1.6*am)
       const bleedHit2 = Math.random()*100 < 30
       if (bleedHit2) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
       result.log = `⚔ 断空！ ${enemy.name}の防御を断ち切り${result.dmg}ダメージ！${bleedHit2 ? ' 出血状態！' : ''}`
       break
     }
-    case '明鏡止水':    result.newPlayerBuffs.atkUp={turns:4,rate:1.6}; result.newPlayerBuffs.matkUp={turns:4,rate:1.6}; result.log = `✨ 明鏡止水！ 4ターンの間攻撃力・特殊攻撃力が大幅上昇！`; break
+    case '明鏡止水':    result.newPlayerBuffs.atkUp={turns:4,rate:1.5}; result.newPlayerBuffs.hitBonus={turns:4,value:5}; result.log = `✨ 明鏡止水！ 4ターンの間攻撃力が上昇し命中率+5%！`; break
     case '月影': {
       result.dmg = Math.floor(eff.atk*2.0*am)
       const bleedHit6 = Math.random()*100 < 40
@@ -572,47 +572,51 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       break
     }
     case 'マッドラッシュ': {
-      result.dmg = Math.floor(eff.atk*1.4*am)
+      result.dmg = Math.floor(eff.atk*1.7*am)
       result.newPlayerBuffs.berserk = { turns:3, lockedSkill:'マッドラッシュ' }
       result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}ダメージ！ 狂乱状態になった！`
       break
     }
-    case 'すてみ':      result.dmg = Math.floor(eff.atk*1.6*am); result.selfDmg = Math.floor(result.dmg*0.2); result.log = `💢 すてみ！ ${enemy.name}に${result.dmg}ダメージ！ 自分も${result.selfDmg}ダメージ！`; break
-    case 'ブラッティロア': result.newPlayerBuffs.bloodRage={turns:4,healRate:0.3}; result.log = `🩸 ブラッティロア！ 4ターンの間、与えたダメージの30%を回復！`; break
-    case 'フルブレイカー': result.dmg = Math.floor(eff.atk*1.8*am*1.3); result.log = `💥 フルブレイカー！ ${enemy.name}に${result.dmg}の壊滅的ダメージ！`; break
+    case 'すてみ':      result.dmg = Math.floor(eff.atk*1.7*am); result.selfDmg = Math.floor(result.dmg*0.2); result.log = `💢 すてみ！ ${enemy.name}に${result.dmg}ダメージ！ 自分も${result.selfDmg}ダメージ！`; break
+    case 'ブラッティロア': result.newPlayerBuffs.atkUp={turns:4,rate:1.1}; result.newPlayerBuffs.bloodRage={turns:4,healRate:0.3}; result.log = `🩸 ブラッティロア！ 4ターンの間、攻撃力+10%・与えたダメージの30%を回復！`; break
+    case 'フルブレイカー': {
+      const edr_fb = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
+      const defVal_fb = Math.floor((enemy.def||0)*edr_fb*0.7/2)
+      result.dmg = Math.max(1, Math.floor(eff.atk*1.9*am) - defVal_fb)
+      result.log = `💥 フルブレイカー！ ${enemy.name}に${result.dmg}の壊滅的ダメージ！ 防御30%無視！`; break
+    }
     case '毒矢': {
       result.dmg = Math.floor(eff.atk*1.1*am)
-      const poisonHit = Math.random()*100 < 70
+      const poisonHit = Math.random()*100 < 90
       if (poisonHit) result.newEnemyBuffs.poison = { turns:4, dmgRate:0.03 }
       result.log = `🏹 毒矢！ ${enemy.name}に${result.dmg}ダメージ！${poisonHit ? ' 毒状態に！' : ''}`
       break
     }
     case '三連射':      result.dmg = Math.floor(eff.atk*0.5*am)*3; result.log = `🏹 三連射！ ${enemy.name}に${Math.floor(eff.atk*0.5*am)}×3=${result.dmg}ダメージ！`; break
-    case '狩猟本能':    result.newPlayerBuffs.atkUp={turns:4,rate:1.5}; result.newPlayerBuffs.spdUp={turns:4,rate:1.5}; result.log = `🌲 狩猟本能！ 4ターンの間、攻撃力・素早さが大幅上昇！`; break
-    case '絶影狙撃': {
-      result.dmg = Math.floor(eff.atk*1.7*am)
-      const slowHit2 = Math.random()*100 < 50
-      if (slowHit2) result.newEnemyBuffs.spdDown={turns:3,rate:0.7}
-      result.log = `🏹 絶影狙撃！ ${enemy.name}に${result.dmg}ダメージ！${slowHit2 ? ' 素早さが低下！' : ''}`
-      break
-    }
+    case '狩猟本能':    result.newPlayerBuffs.atkUp={turns:4,rate:1.3}; result.newPlayerBuffs.spdUp={turns:4,rate:1.3}; result.log = `🌲 狩猟本能！ 4ターンの間、攻撃力・素早さが上昇！`; break
+    case '絶影狙撃':    result.dmg = Math.floor(eff.atk*2.0*am); result.log = `🏹 絶影狙撃！ 必中！ ${enemy.name}に${result.dmg}ダメージ！`; break
     case '瞬歩瞬殺': {
       result.dmg = Math.floor((eff.atk*1.0+eff.spd*0.5)*am)
-      const bleedHit3 = Math.random()*100 < 30
+      const bleedHit3 = Math.random()*100 < 40
       if (bleedHit3) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
       result.log = `🌙 瞬歩瞬殺！ ${enemy.name}に${result.dmg}ダメージ！${bleedHit3 ? ' 出血状態！' : ''}`
       break
     }
     case '鬼影閃': {
-      result.dmg = Math.floor(eff.atk*1.5*am)
-      result.newPlayerBuffs.spdUp={turns:2,rate:1.2}
+      let kiDmg = Math.floor(eff.atk*1.5*am)
+      const hasShadowWalk = playerBuffs.evasion?.turns > 0
+      if (hasShadowWalk) {
+        const bonusDmg = Math.floor(eff.spd*0.3*am)
+        kiDmg += bonusDmg
+      }
+      result.dmg = kiDmg
       const bleedHit4 = Math.random()*100 < 20
       if (bleedHit4) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
-      result.log = `🌙 鬼影閃！ ${enemy.name}に${result.dmg}ダメージ！ 素早さUP！${bleedHit4 ? ' 出血！' : ''}`
+      result.log = `🌙 鬼影閃！ ${enemy.name}に${result.dmg}ダメージ！${hasShadowWalk ? ' 影歩き追撃！' : ''}${bleedHit4 ? ' 出血！' : ''}`
       break
     }
-    case '影歩き':      result.newPlayerBuffs.spdUp={turns:4,rate:1.5}; result.newPlayerBuffs.evasion={turns:4,rate:0.1}; result.log = `🌙 影歩き！ 4ターンの間、素早さ大幅上昇・回避率+10%！`; break
-    case '急所突き':    result.dmg = Math.floor(eff.atk*1.7*am); result.bonusCritRate=20; result.log = `🌙 急所突き！ ${enemy.name}に${result.dmg}ダメージ！ クリティカル確率大幅UP！`; break
+    case '影歩き':      result.newPlayerBuffs.spdUp={turns:4,rate:1.5}; result.newPlayerBuffs.evasion={turns:4,rate:0.05}; result.log = `🌙 影歩き！ 4ターンの間、素早さ大幅上昇・回避率+5%！`; break
+    case '急所突き':    result.dmg = Math.floor(eff.atk*1.8*am); result.bonusCritRate=30; result.log = `🌙 急所突き！ ${enemy.name}に${result.dmg}ダメージ！ クリティカル確率大幅UP！`; break
     case 'アクアショット': {
       result.dmg = Math.floor(eff.matk*1.4*am)
       const aquaSlowHit = Math.random()*100 < 55
@@ -621,9 +625,9 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       break
     }
     case 'アースクエイク': {
-      result.dmg = Math.floor(eff.matk*randMult(1.6,1.8)*am)
+      result.dmg = Math.floor(eff.matk*1.6*am)
       const stunResist = enemyBuffs.stunResist ?? 1.0
-      const stunHit = Math.random()*100 < 10 * stunResist
+      const stunHit = Math.random()*100 < 15 * stunResist
       if (stunHit) {
         result.newEnemyBuffs.stun = { turns:1 }
         result.newEnemyBuffs.stunResist = stunResist * 0.5
@@ -639,34 +643,45 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       break
     }
     case 'フレイムバースト': {
-      result.dmg = Math.floor(eff.matk*randMult(2.0,2.2)*am)
+      result.dmg = Math.floor(eff.matk*1.9*am)
       const fbBurnHit = Math.random()*100 < 55
       if (fbBurnHit) result.newEnemyBuffs.burn = { turns:5, dmgRate:0.02 }
       result.log = `🔥 フレイムバースト！ ${enemy.name}に${result.dmg}の爆炎ダメージ！${fbBurnHit ? ' やけど状態！' : ''}`
       break
     }
     case '骸骨召喚':    result.dmg = Math.floor(eff.matk*0.7*am); result.newPlayerBuffs.skeletonDmg={turns:2,dmg:result.dmg}; result.log = `💀 骸骨召喚！ ${enemy.name}に${result.dmg}ダメージ！ 2ターン持続！`; break
-    case 'ソウルドレイン': result.dmg = Math.floor(eff.matk*1.5*am); result.heal = Math.floor(result.dmg*0.2); result.log = `💀 ソウルドレイン！ ${enemy.name}に${result.dmg}ダメージ！ HPを${result.heal}回復！`; break
+    case 'ソウルドレイン': result.dmg = Math.floor(eff.matk*1.4*am); result.heal = Math.floor(result.dmg*0.2); result.log = `💀 ソウルドレイン！ ${enemy.name}に${result.dmg}ダメージ！ HPを${result.heal}回復！`; break
     case '腐敗霧':      result.newEnemyBuffs.defDown={turns:4,rate:0.7}; result.newEnemyBuffs.mdefDown={turns:4,rate:0.7}; result.newEnemyBuffs.severePoisoin={turns:5,dmgRate:0.05}; result.log = `💀 腐敗霧！ 4ターンの間、対象の防御力・特殊防御力-30%！ 猛毒状態！`; break
-    case '幽世ノ門':    result.newEnemyBuffs.dmgDown={turns:3,rate:0.8}; result.newEnemyBuffs.spdDown={turns:3,rate:0.9}; result.log = `💀 幽世ノ門！ 3ターンの間、対象を弱体化！`; break
+    case '幽世ノ門': {
+      const curseDmgAmt = Math.floor(eff.matk*0.3*am)
+      result.newEnemyBuffs.curseDmg = { turns:3, dmg:curseDmgAmt }
+      result.newEnemyBuffs.dmgDown = { turns:3, rate:0.8 }
+      result.newEnemyBuffs.spdDown = { turns:3, rate:0.8 }
+      result.log = `💀 幽世ノ門！ 3ターンの間、呪縛ダメージ・与ダメ-20%・素早さ-20%！`; break
+    }
     case 'ホーリーライト': result.dmg = Math.floor(eff.matk*1.5*am); result.log = `✨ ホーリーライト！ ${enemy.name}に${result.dmg}の聖なるダメージ！`; break
-    case '奇跡':        result.newPlayerBuffs.regenHeal={turns:4,amount:Math.floor(profile.hp_max*0.15)}; result.log = `✨ 奇跡！ 4ターンの間、毎ターン最大HP15%回復！`; break
+    case '奇跡':        result.newPlayerBuffs.regenHeal={turns:4,amount:Math.floor(profile.hp_max*0.10+eff.matk*0.2)}; result.log = `✨ 奇跡！ 4ターンの間、毎ターンHPが回復！`; break
     case '祈りの結界':  result.newPlayerBuffs.dmgReduce={turns:4,rate:0.7}; result.log = `✨ 祈りの結界！ 4ターンの間、受けるダメージ-30%！`; break
     case '神罰執行': {
       result.dmg = Math.floor(eff.matk*1.8*am)
-      const healDownHit = Math.random()*100 < 40
+      const healDownHit = Math.random()*100 < 50
       if (healDownHit) result.newEnemyBuffs.healDown={turns:3,rate:0.5}
-      result.log = `✨ 神罰執行！ ${enemy.name}に${result.dmg}ダメージ！${healDownHit ? ' 回復量-50%！' : ''}`
+      result.log = `✨ 神罰執行！ ${enemy.name}に${result.dmg}ダメージ！${healDownHit ? ' 回復封じ！' : ''}`
       break
     }
-    case '粛清':        result.dmg = Math.floor((eff.atk*0.4+eff.matk*1.4)*am); result.log = `⚖ 粛清！ ${enemy.name}に${result.dmg}ダメージ！`; break
+    case '粛清':        result.dmg = Math.floor((eff.matk*1.3+eff.def*0.3)*am); result.log = `⚖ 粛清！ ${enemy.name}に${result.dmg}ダメージ！`; break
     case '狂信':        result.newPlayerBuffs.statusImmune={turns:4}; result.log = `⚖ 狂信！ 4ターンの間、ステータス減少を無効化！`; break
-    case '聖なる裁き':  result.dmg = Math.floor(eff.matk*1.7*am); result.log = `⚖ 聖なる裁き！ ${enemy.name}に${result.dmg}の裁きのダメージ！`; break
+    case '聖なる裁き': {
+      result.dmg = Math.floor(eff.matk*1.7*am)
+      const sealHit1 = Math.random()*100 < 20
+      if (sealHit1) result.newEnemyBuffs.healDown={turns:3,rate:0.0}
+      result.log = `⚖ 聖なる裁き！ ${enemy.name}に${result.dmg}の裁きのダメージ！${sealHit1 ? ' 回復封じ！' : ''}` ; break
+    }
     case '断罪': {
-      result.dmg = Math.floor((eff.atk*1.0+eff.matk*1.6)*am)
-      const bleedHit5 = Math.random()*100 < 30
-      if (bleedHit5) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
-      result.log = `⚖ 断罪！ ${enemy.name}に${result.dmg}の断罪ダメージ！${bleedHit5 ? ' 出血！' : ''}`
+      result.dmg = Math.floor((eff.matk*1.6+eff.def*1.0)*am)
+      const sealHit2 = Math.random()*100 < 30
+      if (sealHit2) result.newEnemyBuffs.healDown={turns:3,rate:0.0}
+      result.log = `⚖ 断罪！ ${enemy.name}に${result.dmg}の断罪ダメージ！${sealHit2 ? ' 回復封じ！' : ''}`
       break
     }
     case 'ディスペル': {
@@ -680,14 +695,17 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       }
       break
     }
-    case '氷の障壁':    result.newPlayerBuffs.dmgReduce={turns:2,rate:0.5}; result.log = `❄ 氷の障壁！ 2ターンの間、受けるダメージ50%減！`; break
+    case '氷の障壁':    result.newPlayerBuffs.dmgReduce={turns:2,rate:0.6}; result.newPlayerBuffs.critResist={turns:2,value:20}; result.log = `❄ 氷の障壁！ 2ターンの間、受けるダメージ-40%・クリティカル抵抗+20%！`; break
     case 'メテオストライク': {
       const rand = Math.random()*100
       const hits = rand < 20 ? 1 : rand < 60 ? 2 : rand < 90 ? 3 : 4
-      result.dmg = Math.floor(eff.matk*0.8*am) * hits
-      const meteoBurnHit = Math.random()*100 < 5
-      if (meteoBurnHit) result.newEnemyBuffs.burn = { turns:5, dmgRate:0.02 }
-      result.log = `☄ メテオストライク！ ${hits}回ヒット！ ${enemy.name}に${result.dmg}の魔法ダメージ！${meteoBurnHit ? ' やけど状態！' : ''}`
+      const hitDmg = Math.floor(eff.matk*0.8*am)
+      result.dmg = hitDmg * hits
+      let meteoBurned = false
+      for (let h = 0; h < hits; h++) {
+        if (Math.random()*100 < 5) { meteoBurned = true; result.newEnemyBuffs.burn = { turns:5, dmgRate:0.02 }; break }
+      }
+      result.log = `☄ メテオストライク！ ${hits}回ヒット！ ${enemy.name}に${result.dmg}の魔法ダメージ！${meteoBurned ? ' やけど状態！' : ''}`
       break
     }
     // ── 格闘家 ──
@@ -1270,7 +1288,7 @@ export default function Game() {
     const playerExtraRate = calcExtraActionRate(playerSpd, enemySpd)
     const enemyExtraRate  = calcExtraActionRate(enemySpd, playerSpd)
     const playerCritRate  = calcCritRate(playerSpd, enemySpd) + passiveCritBonus + (eff.critBonus || 0)
-    const enemyCritRate   = calcCritRate(enemySpd, playerSpd)
+    const enemyCritRate   = Math.max(0, calcCritRate(enemySpd, playerSpd) - (playerBuffs.critResist?.turns > 0 ? (playerBuffs.critResist.value||0) : 0))
 
     // プレイヤーの回避率（敵が攻撃するとき）
     const playerEvasionRate = calcEvasionRate(effectiveSpdForCalc, enemySpd)
@@ -1449,6 +1467,11 @@ export default function Game() {
         if (enemyHp <= 0) break
         enemyBuffs.bleed.lastTurn = (enemyBuffs.bleed.lastTurn || 0) + 1
         if (enemyBuffs.bleed.lastTurn >= 3) delete enemyBuffs.bleed
+      }
+      if (enemyBuffs.curseDmg?.turns > 0) {
+        enemyHp -= enemyBuffs.curseDmg.dmg
+        logs.push({ text:`💀 呪縛ダメージ！ ${enemy.name}に${enemyBuffs.curseDmg.dmg}ダメージ！`, color:'#cc44ff' })
+        if (enemyHp <= 0) break
       }
       if (enemyBuffs.poison?.turns > 0) {
         const poisonDmg = Math.floor(enemy.hp * enemyBuffs.poison.dmgRate)
