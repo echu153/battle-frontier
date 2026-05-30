@@ -910,6 +910,29 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
 // JST日付文字列（ダンジョン0時リセット用）
 const getJSTDateStr = () => new Date(Date.now() + 9*60*60*1000).toISOString().slice(0, 10)
 
+// パピア出現率アップイベント時間帯（JST）: 8:00 / 12:00 / 16:00 / 22:00 から30分
+const PAPIA_EVENT_HOURS = [8, 12, 16, 22]
+const getPapiaEventStatus = () => {
+  const jstNow = new Date(Date.now() + 9*60*60*1000)
+  const h = jstNow.getUTCHours()
+  const m = jstNow.getUTCMinutes()
+  const totalMin = h * 60 + m
+  for (const startH of PAPIA_EVENT_HOURS) {
+    const startMin = startH * 60
+    const endMin = startMin + 30
+    if (totalMin >= startMin && totalMin < endMin) {
+      const remaining = endMin - totalMin - 1
+      const remainSec = 60 - jstNow.getUTCSeconds()
+      return { active: true, remainingMin: remaining, remainingSec: remainSec }
+    }
+  }
+  // 次のイベント開始まで
+  const allMins = PAPIA_EVENT_HOURS.map(h => h * 60)
+  const nextMin = allMins.find(m => m > totalMin) ?? (allMins[0] + 24*60)
+  const untilNext = nextMin - totalMin
+  return { active: false, untilNextMin: untilNext }
+}
+
 // ============================================================
 // メインコンポーネント
 // ============================================================
@@ -1337,7 +1360,8 @@ export default function Game() {
     const area = AREAS.find(a => a.id === selectedArea)
     const bossRate = profile.boss_encounter_rate || 0
     const isBossEncounter = Math.random()*100 < bossRate
-    const isPapiaEncounter = !isBossEncounter && Math.random()*100 < 1
+    const papiaRate = getPapiaEventStatus().active ? 2 : 1
+    const isPapiaEncounter = !isBossEncounter && Math.random()*100 < papiaRate
     const enemy = isPapiaEncounter
       ? { ...PAPIA }
       : isBossEncounter
@@ -2251,6 +2275,7 @@ export default function Game() {
   const mpCurrent = Math.max(0, profile.mp_current??profile.mp_max)
   const isDying = profile.is_dying||false
   const isBanned = profile.battle_ban_until && new Date(profile.battle_ban_until) > new Date()
+  const papiaEvent = getPapiaEventStatus()
   const banRemaining = isBanned ? (() => {
     const diffMs = new Date(profile.battle_ban_until) - new Date()
     const h = Math.floor(diffMs / 3600000)
@@ -2507,6 +2532,12 @@ export default function Game() {
               <select value={selectedArea} onChange={e=>{ const v=Number(e.target.value); setSelectedArea(v); localStorage.setItem('selectedArea',v) }} style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
                 {availableAreas.map(area=><option key={area.id} value={area.id}>{area.name}</option>)}
               </select>
+              {papiaEvent.active && (
+                <div style={{ background:'#1a0a00', border:'1px solid #ffaa00', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
+                  <span style={{ color:'#ffaa00' }}>🌟 パピア出現率アップ中！</span>
+                  <span style={{ color:'#446688', marginLeft:'8px' }}>残り{papiaEvent.remainingMin}分{papiaEvent.remainingSec}秒</span>
+                </div>
+              )}
               <button onClick={(e)=>doBattle(e)} disabled={!canAct||loading||!canBattle}
                 style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
                 {isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
@@ -2704,6 +2735,12 @@ export default function Game() {
                     {availableAreas.map(area=><option key={area.id} value={area.id}>{area.name}</option>)}
                   </select>
                 </div>
+                {papiaEvent.active && (
+                  <div style={{ background:'#1a0a00', border:'1px solid #ffaa00', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
+                    <span style={{ color:'#ffaa00' }}>🌟 パピア出現率アップ中！</span>
+                    <span style={{ color:'#446688', marginLeft:'8px' }}>残り{papiaEvent.remainingMin}分{papiaEvent.remainingSec}秒</span>
+                  </div>
+                )}
                 <button onClick={(e)=>doBattle(e)} disabled={!canAct||loading||!canBattle}
                   style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
                   {isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中（HP全回復まで出撃不可）':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
