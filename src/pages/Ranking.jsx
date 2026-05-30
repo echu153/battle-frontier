@@ -99,10 +99,10 @@ export default function Ranking() {
                   {/* 名前・クラス */}
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ color: isMe ? '#44ff88' : '#88ccff', fontSize:'12px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                      {p.username}{stars && <span style={{color:'#ffcc00'}}>{stars}</span>}{isMe && <span style={{color:'#44ff88', fontSize:'10px'}}> (自分)</span>}
+                      {p.username}{isMe && <span style={{color:'#44ff88', fontSize:'10px'}}> (自分)</span>}
                     </div>
                     <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>
-                      {p.class} <span style={{color:'#ffcc00'}}>LV{p.char_lv || p.lv}</span>
+                      {p.class}<span style={{color:'#ffcc00'}}>{stars}</span> <span style={{color:'#ffcc00'}}>LV{p.char_lv || p.lv}</span>
                     </div>
                   </div>
 
