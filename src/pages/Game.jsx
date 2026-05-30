@@ -1238,7 +1238,9 @@ export default function Game() {
     setLoading(false)
   }
 
+  const DEV_ACCOUNTS = ['おれおれお']
   const suspendAccount = async (reason) => {
+    if (DEV_ACCOUNTS.includes(profile.username)) return  // 開発用アカウントはBAN対象外
     await supabase.from('profiles').update({
       is_suspended: true,
       suspension_reason: reason,
@@ -1265,7 +1267,7 @@ export default function Game() {
     const hpCurrent = profile.hp_current ?? profile.hp_max
     if (hpCurrent <= 0) return
     if (profile.is_dying && hpCurrent < profile.hp_max) return
-    if (profile.battle_ban_until && new Date(profile.battle_ban_until) > new Date()) {
+    if (!DEV_ACCOUNTS.includes(profile.username) && profile.battle_ban_until && new Date(profile.battle_ban_until) > new Date()) {
       const banEnd = new Date(profile.battle_ban_until)
       const diffMs = banEnd - new Date()
       const diffH = Math.floor(diffMs / 3600000)
