@@ -1084,7 +1084,10 @@ export default function Game() {
     const updatedCls = (allCl||[]).map(cl => cl.class_name === profile.class ? { ...cl, lv:profile.lv } : cl)
     const targetExists = updatedCls.find(cl => cl.class_name === targetClass)
     if (!targetExists) updatedCls.push({ class_name:targetClass, lv:1 })
-    const newCharLv = updatedCls.reduce((sum, cl) => sum + (cl.lv||1), 0)
+    const newCharLv = updatedCls.reduce((sum, cl) => {
+      if (cl.class_name === targetClass) return sum + (cl.lv || 1)
+      return cl.lv > 1 ? sum + cl.lv : sum
+    }, 0)
     await supabase.from('profiles').update({
       class:targetClass, lv:targetLv, exp:targetExp, exp_next:calcExpNext(targetLv),
       char_lv:newCharLv,
