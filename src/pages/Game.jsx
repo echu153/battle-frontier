@@ -912,8 +912,18 @@ const getJSTDateStr = () => new Date(Date.now() + 9*60*60*1000).toISOString().sl
 
 // パピア出現率アップイベント時間帯（JST）: 8:00 / 12:00 / 16:00 / 22:00 から30分
 const PAPIA_EVENT_HOURS = [8, 12, 16, 22]
+// テスト用：2026-05-30 23:52〜2026-05-31 00:22（UTC: 14:52〜15:22）
+const PAPIA_TEST_END = new Date('2026-05-31T15:22:00Z').getTime()
 const getPapiaEventStatus = () => {
-  const jstNow = new Date(Date.now() + 9*60*60*1000)
+  const now = Date.now()
+  // テストイベント判定（期限まで有効）
+  if (now < PAPIA_TEST_END) {
+    const remainMs = PAPIA_TEST_END - now
+    const remainingMin = Math.floor(remainMs / 60000)
+    const remainingSec = Math.floor((remainMs % 60000) / 1000)
+    return { active: true, remainingMin, remainingSec }
+  }
+  const jstNow = new Date(now + 9*60*60*1000)
   const h = jstNow.getUTCHours()
   const m = jstNow.getUTCMinutes()
   const totalMin = h * 60 + m
@@ -926,7 +936,6 @@ const getPapiaEventStatus = () => {
       return { active: true, remainingMin: remaining, remainingSec: remainSec }
     }
   }
-  // 次のイベント開始まで
   const allMins = PAPIA_EVENT_HOURS.map(h => h * 60)
   const nextMin = allMins.find(m => m > totalMin) ?? (allMins[0] + 24*60)
   const untilNext = nextMin - totalMin
