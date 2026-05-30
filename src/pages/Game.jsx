@@ -2292,6 +2292,18 @@ export default function Game() {
 
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
+  // メンテナンス中チェック
+  const maintenanceAnnouncement = announcements.find(a => a.title === 'MAINTENANCE')
+  if (maintenanceAnnouncement) return (
+    <div style={{ minHeight:'100vh', background:'#000820', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'monospace' }}>
+      <div style={{ textAlign:'center', padding:'32px', border:'1px solid #ffcc00', background:'#001020', maxWidth:'400px' }}>
+        <div style={{ fontSize:'32px', marginBottom:'16px' }}>🔧</div>
+        <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'2px', marginBottom:'12px' }}>メンテナンス中</div>
+        <div style={{ color:'#88ccff', fontSize:'12px', lineHeight:'1.8', whiteSpace:'pre-wrap' }}>{maintenanceAnnouncement.content}</div>
+      </div>
+    </div>
+  )
+
   const hpCurrent = Math.max(0, profile.hp_current??profile.hp_max)
   const mpCurrent = Math.max(0, profile.mp_current??profile.mp_max)
   const isDying = profile.is_dying||false
