@@ -427,7 +427,7 @@ export default function Equipment() {
                       )}
                       {item.bonus_effect && <div style={{ fontSize:'10px', color:'#ffaa00', marginBottom:'4px' }}>{getEffectLabel(item.bonus_effect)}</div>}
 
-                      {tab === 'weapon' && prof && (
+                      {tab === 'weapon' && prof && item.equipped && (
                         <div>
                           <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginBottom:'2px' }}>
                             <span>{profPrefix}熟練度 LV{prof.prof_lv}</span>
