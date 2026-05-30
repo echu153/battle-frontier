@@ -291,11 +291,37 @@ const STAT_LABELS = {
 // ============================================================
 // ユーティリティ
 // ============================================================
+// ★ ステータスのF~SSSランク閾値（見直し時はここを変更）
+const DEF_STAT_THRESHOLDS = [45, 120, 240, 450, 750, 1200, 1800, 2700]
+// ★ 防御ランクに対応するダメージ軽減率(%) F=0%〜SSS=30%（見直し時はここを変更）
+const DEF_REDUCTION_RATES = [0, 4, 8, 11, 15, 19, 23, 26, 30]
+
+// 防御値からダメージ軽減率(0〜1)を線形補間で算出
+const calcDefReduction = (defVal) => {
+  if (defVal <= 0) return 0
+  const thresholds = [0, ...DEF_STAT_THRESHOLDS]
+  const rates = DEF_REDUCTION_RATES
+  if (defVal >= thresholds[thresholds.length - 1]) return rates[rates.length - 1] / 100
+  for (let i = 1; i < thresholds.length; i++) {
+    if (defVal <= thresholds[i]) {
+      const progress = (defVal - thresholds[i-1]) / (thresholds[i] - thresholds[i-1])
+      return (rates[i-1] + (rates[i] - rates[i-1]) * progress) / 100
+    }
+  }
+  return rates[rates.length - 1] / 100
+}
+
+// ATK²/(ATK+DEF) 比率式ベースダメージ
+const calcRatioDmg = (atk, enemyDef, mult, am) => {
+  const adjDef = Math.max(0, enemyDef)
+  return Math.floor((atk * atk / Math.max(1, atk + adjDef)) * mult * am)
+}
+
 const getStatRank = (val, type) => {
   let thresholds
   if (type === 'hp') thresholds = [450,1200,2400,4500,7500,12000,18000,27000]
   else if (type === 'mp') thresholds = [225,600,1200,2250,3750,6000,9000,13500]
-  else thresholds = [45,120,240,450,750,1200,1800,2700]
+  else thresholds = DEF_STAT_THRESHOLDS
   const ranks = ['F','E','D','C','B','A','S','SS','SSS']
   const colors = ['#888888','#6699cc','#ff8844','#44bb44','#4488ff','#ff4444','#ffcc00','#ffcc00','#ffcc00']
   for (let i = 0; i < thresholds.length; i++) {
@@ -1446,7 +1472,16 @@ export default function Game() {
           const finalCrit = res.dmg > 0 && (isCrit || (res.bonusCritRate > 0 && Math.random()*100 < playerCritRate + res.bonusCritRate))
           const finalCritMult = finalCrit ? 1.5 : 1.0
           const tosoMult = (hasTosoHonno && playerHp <= profile.hp_max * 0.5) ? 1.1 : 1.0
-          let finalDmg = Math.floor(res.dmg * finalCritMult * passiveDmgMult * gensoMult * tosoMult * (0.9 + Math.random() * 0.2))
+          // ②DEFスケーリング：物理=ATK/(ATK+敵DEF)、魔法=MATK/(MATK+敵MDEF)
+          let defScale = 1.0
+          if (res.dmg > 0) {
+            const sType = cs.skills?.type
+            const adjED  = Math.max(1, Math.floor((enemy.def ||0)*eDefRate))
+            const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate))
+            if (sType === '物理攻撃') defScale = effBuff.atk  / (effBuff.atk  + adjED)
+            else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + adjEMD)
+          }
+          let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * (0.9 + Math.random() * 0.2))
           if (enemy.isPapia && res.dmg > 0) finalDmg = 1
           const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
@@ -1466,8 +1501,9 @@ export default function Game() {
       }
       if (!skillUsed) {
         const baseAtk = isMagical ? effBuff.matk : effBuff.atk
-        const eDefVal = isMagical ? Math.floor((enemy.mdef||0)/2*eMdefRate) : Math.floor(enemy.def/2*eDefRate)
-        const baseDmg = Math.max(1, baseAtk-eDefVal+Math.floor(Math.random()*4))
+        const eDefVal = isMagical ? Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate)) : Math.max(1, Math.floor(enemy.def*eDefRate))
+        // ②通常攻撃: ATK²/(ATK+敵DEF)
+        const baseDmg = Math.max(1, Math.floor(baseAtk*baseAtk/Math.max(1,baseAtk+eDefVal))+Math.floor(Math.random()*4))
         let finalDmg = Math.floor(baseDmg*critMult*(isArtifact?1.2:1.0)*passiveDmgMult*(0.9+Math.random()*0.2))
         if (enemy.isPapia) finalDmg = 1
         if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
@@ -1492,9 +1528,10 @@ export default function Game() {
       const eAtk = isEM
         ? (enemy.matk||0) * (enemyBuffs.matkUp ? enemyBuffs.matkUp.rate : 1) * burnDebuffE
         : enemy.atk * (enemyBuffs.atkUp ? enemyBuffs.atkUp.rate : 1) * burnDebuffE
-      const defVal = isEM ? Math.floor(pMdef/2) : Math.floor(pDef/2)
       const isCrit = Math.random()*100 < enemyCritRate
-      const baseDmg = Math.max(1, eAtk-defVal+Math.floor(Math.random()*3))
+      // ②敵攻撃: eATK²/(eATK+プレイヤーDEF)
+      const defForCalc = isEM ? Math.max(1, pMdef) : Math.max(1, pDef)
+      const baseDmg = Math.max(1, Math.floor(eAtk*eAtk/Math.max(1,eAtk+defForCalc))+Math.floor(Math.random()*3))
       const enemySpdBuff = enemyBuffs.spdUp ? enemyBuffs.spdUp.rate : 1
       const playerSpdDebuff = playerBuffs.spdDown ? playerBuffs.spdDown.rate : 1
 
@@ -1509,7 +1546,9 @@ export default function Game() {
       }
 
       const enemyDmgDownRate = enemyBuffs.dmgDown?.turns > 0 ? enemyBuffs.dmgDown.rate : 1.0
-      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(0.9+Math.random()*0.2))
+      // ③プレイヤーDEFランクによるボーナス軽減
+      const playerDefRankReduction = calcDefReduction(isEM ? eff.mdef : eff.def)
+      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*(0.9+Math.random()*0.2))
       playerHp -= finalDmg
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
       const critText = isCrit ? ' 💥クリティカル！' : ''
