@@ -1117,13 +1117,15 @@ export default function Game() {
     // LV20ボーナス計算
     const bonus = calcLv20Bonus(targetClass)
 
-    // レベルリセット・ステータスボーナス付与（char_lvはそのまま維持）
+    // レベルリセット・ステータスボーナス付与
     const newRetraining = { ...(profile.retraining || {}), [targetClass]: currentCount + 1 }
+    const newCharLv = Math.max(1, (profile.char_lv || 1) - (profile.lv - 1))
     await supabase.from('profiles').update({
       retraining: newRetraining,
       lv: 1,
       exp: 0,
       exp_next: calcExpNext(1),
+      char_lv: newCharLv,
       hp_max:  profile.hp_max  + bonus.hp_max,
       mp_max:  profile.mp_max  + bonus.mp_max,
       atk:     profile.atk     + bonus.atk,
