@@ -257,19 +257,21 @@ const CLASS_LEVEL_CAP = {
 }
 const getEffectiveCap = (className) => CLASS_LEVEL_CAP[className] || 100
 
-const calcLv20Bonus = (className) => {
+// LV1からupToLevelまでのステータス上昇量を計算
+const calcLvBonus = (className, upToLevel) => {
   const growth = JOB_GROWTH[className] || JOB_GROWTH['戦士']
   const bonusSlots = JOB_LEVEL3_BONUS[className] || []
+  const levels = upToLevel - 1
   const bonus = {
-    hp_max: growth.hp * 19,
-    mp_max: growth.mp * 19,
-    atk:    growth.atk * 19,
-    def:    growth.def * 19,
-    matk:   growth.matk * 19,
-    mdef:   growth.mdef * 19,
-    spd:    growth.spd * 19,
+    hp_max: growth.hp * levels,
+    mp_max: growth.mp * levels,
+    atk:    growth.atk * levels,
+    def:    growth.def * levels,
+    matk:   growth.matk * levels,
+    mdef:   growth.mdef * levels,
+    spd:    growth.spd * levels,
   }
-  for (let lv = 3; lv <= 20; lv += 3) {
+  for (let lv = 3; lv <= upToLevel; lv += 3) {
     if (bonusSlots.length > 0) {
       const bi = Math.floor(lv / 3 - 1) % bonusSlots.length
       const stat = bonusSlots[bi]
@@ -278,6 +280,7 @@ const calcLv20Bonus = (className) => {
   }
   return bonus
 }
+const calcLv20Bonus = (className) => calcLvBonus(className, 20)
 const getRetrainingStars = (className, retraining) => {
   const count = (retraining || {})[className] || 0
   return '★'.repeat(count)
@@ -1117,23 +1120,23 @@ export default function Game() {
     if (currentCount >= 5) return
     setLoading(true)
 
-    // LV20ボーナス計算
-    const bonus = calcLv20Bonus(targetClass)
+    // 現LVまでのステータスを引いてLV20ボーナスを足す（案B）
+    const currentLvStats = calcLvBonus(targetClass, profile.lv)
+    const lv20Stats      = calcLvBonus(targetClass, 20)
+    const statKeys = ['hp_max','mp_max','atk','def','matk','mdef','spd']
+    const statUpdates = {}
+    for (const k of statKeys) {
+      statUpdates[k] = profile[k] - (currentLvStats[k] || 0) + (lv20Stats[k] || 0)
+    }
 
-    // レベルリセット・ステータスボーナス付与（char_lvはそのまま維持）
+    // レベルリセット（char_lvはそのまま維持）
     const newRetraining = { ...(profile.retraining || {}), [targetClass]: currentCount + 1 }
     await supabase.from('profiles').update({
       retraining: newRetraining,
       lv: 1,
       exp: 0,
       exp_next: calcExpNext(1),
-      hp_max:  profile.hp_max  + bonus.hp_max,
-      mp_max:  profile.mp_max  + bonus.mp_max,
-      atk:     profile.atk     + bonus.atk,
-      def:     profile.def     + bonus.def,
-      matk:    profile.matk    + bonus.matk,
-      mdef:    profile.mdef    + bonus.mdef,
-      spd:     profile.spd     + bonus.spd,
+      ...statUpdates,
     }).eq('id', profile.id)
 
     // class_levelsもリセット
