@@ -852,20 +852,23 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
   const enemyDmgDown = enemyBuffs.dmgDown?.turns > 0 ? enemyBuffs.dmgDown.rate : 1.0
   switch (skill.type) {
     case 'physical': {
-      const pDef = (eff?.def || 0) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1)
-      const defVal = Math.floor(pDef / 2)
-      const rawDmg = Math.max(1, Math.floor(enemy.atk * skill.mult) - defVal)
+      const pDef = Math.max(1, (eff?.def || 0) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1))
+      const base = Math.floor(enemy.atk * enemy.atk / Math.max(1, enemy.atk + pDef))
+      const rawDmg = Math.max(1, Math.floor(base * skill.mult))
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
-      dmgToPlayer = Math.floor(rawDmg * enemyDmgDown * dmgReduceRate * (0.9 + Math.random() * 0.2))
+      const defRankRed = calcDefReduction(eff?.def || 0)
+      dmgToPlayer = Math.floor(rawDmg * enemyDmgDown * dmgReduceRate * (1 - defRankRed) * (0.9 + Math.random() * 0.2))
       logs.push({ text:`⚔ ${enemy.name}の「${skill.name}」！ あなたに${dmgToPlayer}ダメージ！`, color:'#ff4444' })
       break
     }
     case 'magical': {
-      const pMdef = (eff?.mdef || 0) * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1)
-      const defVal = Math.floor(pMdef / 2)
-      const rawDmg = Math.max(1, Math.floor((enemy.matk||enemy.atk) * skill.mult) - defVal)
+      const pMdef = Math.max(1, (eff?.mdef || 0) * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1))
+      const eMatk = enemy.matk || enemy.atk
+      const base = Math.floor(eMatk * eMatk / Math.max(1, eMatk + pMdef))
+      const rawDmg = Math.max(1, Math.floor(base * skill.mult))
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
-      dmgToPlayer = Math.floor(rawDmg * enemyDmgDown * dmgReduceRate * (0.9 + Math.random() * 0.2))
+      const defRankRed = calcDefReduction(eff?.mdef || 0)
+      dmgToPlayer = Math.floor(rawDmg * enemyDmgDown * dmgReduceRate * (1 - defRankRed) * (0.9 + Math.random() * 0.2))
       logs.push({ text:`✨ ${enemy.name}の「${skill.name}」！ あなたに${dmgToPlayer}の魔法ダメージ！`, color:'#cc44ff' })
       if (skill.debuff === 'mdefDown') {
         newPlayerBuffs.mdefDown = { turns: skill.debuffTurns||2, rate: skill.debuffRate||0.8 }
@@ -874,11 +877,12 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
       break
     }
     case 'physical_multi': {
-      const pDef = (eff?.def || 0) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1)
-      const defVal = Math.floor(pDef / 2)
-      const perHit = Math.max(1, Math.floor(enemy.atk * skill.mult) - defVal)
+      const pDef = Math.max(1, (eff?.def || 0) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1))
+      const base = Math.floor(enemy.atk * enemy.atk / Math.max(1, enemy.atk + pDef))
+      const perHit = Math.max(1, Math.floor(base * skill.mult))
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
-      dmgToPlayer = Math.floor(perHit * (skill.hits||1) * enemyDmgDown * dmgReduceRate * (0.9 + Math.random() * 0.2))
+      const defRankRed = calcDefReduction(eff?.def || 0)
+      dmgToPlayer = Math.floor(perHit * (skill.hits||1) * enemyDmgDown * dmgReduceRate * (1 - defRankRed) * (0.9 + Math.random() * 0.2))
       logs.push({ text:`⚔ ${enemy.name}の「${skill.name}」！ ${perHit}×${skill.hits}回＝${dmgToPlayer}ダメージ！`, color:'#ff4444' })
       break
     }
@@ -917,17 +921,8 @@ const getJSTDateStr = () => new Date(Date.now() + 9*60*60*1000).toISOString().sl
 
 // パピア出現率アップイベント時間帯（JST）: 8:00 / 12:00 / 16:00 / 22:00 から30分
 const PAPIA_EVENT_HOURS = [8, 12, 16, 22]
-// テスト用：2026-05-30 23:52〜2026-05-31 00:22（UTC: 14:52〜15:22）
-const PAPIA_TEST_END = new Date('2026-05-30T15:22:00Z').getTime()
 const getPapiaEventStatus = () => {
   const now = Date.now()
-  // テストイベント判定（期限まで有効）
-  if (now < PAPIA_TEST_END) {
-    const remainMs = PAPIA_TEST_END - now
-    const remainingMin = Math.floor(remainMs / 60000)
-    const remainingSec = Math.floor((remainMs % 60000) / 1000)
-    return { active: true, remainingMin, remainingSec }
-  }
   const jstNow = new Date(now + 9*60*60*1000)
   const h = jstNow.getUTCHours()
   const m = jstNow.getUTCMinutes()
