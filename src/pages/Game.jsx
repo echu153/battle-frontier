@@ -832,6 +832,11 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     }
     default: result.dmg = Math.max(1,eff.atk*am); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
   }
+  // パピアは状態異常・ステータス減少免疫
+  if (enemy.isPapia) {
+    const immuneKeys = ['defDown','mdefDown','atkDown','matkDown','spdDown','poison','bleed','burn','stun','paralysis','healDown','dmgDown','severePoisoin','curseDmg']
+    immuneKeys.forEach(k => { result.newEnemyBuffs[k] = enemyBuffs[k] })
+  }
   return result
 }
 
