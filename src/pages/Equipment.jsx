@@ -225,35 +225,32 @@ export default function Equipment() {
           <div style={{ color:'#ffcc00', fontSize:'14px', textAlign:'center', padding:'12px', border:'1px solid #ffcc00', marginBottom:'12px', background:'#1a1000' }}>{awakenMessage}</div>
         )}
 
-        <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:'12px' }}>
-          {/* 左カラム：装備中 */}
-          <div>
-            <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>装備中</div>
+        {/* 装備中セクション（横並び） */}
+        <div style={{ marginBottom:'12px' }}>
+          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'6px' }}>装備中</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'6px' }}>
             {slots.map(slot => {
               const equipped = equipment.find(e => e.slot === slot && e.equipped)
               const plus = equipped?.enhance_plus || 0
               const enhW = equipped ? calcEnhancedStats(equipped.weapons, plus) : null
               return (
-                <div key={slot} style={{ border:'1px solid #003366', background:'#001028', padding:'8px', marginBottom:'6px' }}>
-                  <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>{SLOT_LABELS[slot]}</div>
+                <div key={slot} style={{ border:'1px solid #003366', background:'#001028', padding:'8px' }}>
+                  <div style={{ color:'#446688', fontSize:'10px', marginBottom:'3px' }}>{SLOT_LABELS[slot]}</div>
                   {equipped ? (
                     <>
-                      <div style={{ color: RARITY_COLORS[equipped.weapons.rarity], fontSize:'11px' }}>
+                      <div style={{ color: RARITY_COLORS[equipped.weapons.rarity], fontSize:'11px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                         {getProfPrefix(proficiency.find(p => p.weapon_id === equipped.weapons.id)?.prof_lv || 0)}{equipped.weapons.name}
                         {plus > 0 && <span style={{color:'#ffcc00'}}> +{plus}</span>}
                       </div>
-                      <div style={{ fontSize:'9px', color: RARITY_COLORS[equipped.weapons.rarity], marginBottom:'2px' }}>{RARITY_LABELS[equipped.weapons.rarity]}</div>
-                      <div style={{ fontSize:'10px', marginTop:'2px' }}>
-                        {enhW.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻撃力+{enhW.atk_bonus} </span>}
-                        {enhW.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防御力+{enhW.def_bonus} </span>}
-                        {enhW.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>特殊攻撃力+{enhW.matk_bonus} </span>}
-                        {enhW.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>特殊防御力+{enhW.mdef_bonus} </span>}
-                        {enhW.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>素早さ+{enhW.spd_bonus} </span>}
-                        {equipped.weapons.spd_bonus_pct > 0 && <span style={{color:'#ff8844'}}>素早さ+{equipped.weapons.spd_bonus_pct}% </span>}
-                        {equipped.weapons.hp_bonus_pct  > 0 && <span style={{color:'#44ff88'}}>HP+{equipped.weapons.hp_bonus_pct}% </span>}
-                        {equipped.weapons.mp_bonus_pct  > 0 && <span style={{color:'#4488ff'}}>MP+{equipped.weapons.mp_bonus_pct}% </span>}
+                      <div style={{ fontSize:'9px', color: RARITY_COLORS[equipped.weapons.rarity] }}>{RARITY_LABELS[equipped.weapons.rarity]}</div>
+                      <div style={{ fontSize:'9px', marginTop:'2px', lineHeight:'1.4' }}>
+                        {enhW.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻+{enhW.atk_bonus} </span>}
+                        {enhW.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防+{enhW.def_bonus} </span>}
+                        {enhW.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>魔攻+{enhW.matk_bonus} </span>}
+                        {enhW.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>魔防+{enhW.mdef_bonus} </span>}
+                        {enhW.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>速+{enhW.spd_bonus} </span>}
                       </div>
-                      {equipped.bonus_effect && <div style={{color:'#ffaa00', fontSize:'10px'}}>{getEffectLabel(equipped.bonus_effect)}</div>}
+                      {equipped.bonus_effect && <div style={{color:'#ffaa00', fontSize:'9px'}}>{getEffectLabel(equipped.bonus_effect)}</div>}
                     </>
                   ) : (
                     <div style={{ color:'#334455', fontSize:'11px' }}>なし</div>
@@ -261,34 +258,34 @@ export default function Equipment() {
                 </div>
               )
             })}
+          </div>
 
-            <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px', marginTop:'12px' }}>持ち物</div>
-            <div style={{ border:'1px solid #003366', background:'#001028', padding:'8px' }}>
-              <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>アイテム（1個）</div>
+          {/* 持ち物 */}
+          <div style={{ border:'1px solid #003366', background:'#001028', padding:'8px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <span style={{ color:'#446688', fontSize:'10px' }}>持ち物</span>
               {equippedItem ? (
-                <>
-                  <div style={{ color:'#44ff88', fontSize:'11px' }}>{equippedItem.items.name}</div>
-                  <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>残り{equippedItem.quantity}個</div>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                  <span style={{ color:'#44ff88', fontSize:'11px' }}>{equippedItem.items.name}</span>
+                  <span style={{ color:'#446688', fontSize:'10px' }}>×{equippedItem.quantity}</span>
                   {(equippedItem.items.effect === 'hp_pct' || equippedItem.items.effect === 'mp_pct') && (
-                    <div style={{ display:'flex', alignItems:'center', gap:'4px', marginTop:'4px' }}>
-                      <span style={{ color:'#446688', fontSize:'10px' }}>使用:</span>
-                      <select value={equippedItem.use_threshold || 50} onChange={e => setItemThreshold(equippedItem.id, Number(e.target.value))}
-                        style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'1px' }}>
-                        {[10,20,30,40,50,60,70,80,90,100].map(n => <option key={n} value={n}>{n}%以下</option>)}
-                      </select>
-                    </div>
+                    <select value={equippedItem.use_threshold || 50} onChange={e => setItemThreshold(equippedItem.id, Number(e.target.value))}
+                      style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'1px' }}>
+                      {[10,20,30,40,50,60,70,80,90,100].map(n => <option key={n} value={n}>{n}%以下</option>)}
+                    </select>
                   )}
                   <button onClick={() => setItemSlot(null)} disabled={loading}
-                    style={{ marginTop:'4px', padding:'2px 6px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
-                </>
+                    style={{ padding:'2px 6px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
+                </div>
               ) : (
-                <div style={{ color:'#334455', fontSize:'11px' }}>なし</div>
+                <span style={{ color:'#334455', fontSize:'11px' }}>なし</span>
               )}
             </div>
           </div>
+        </div>
 
-          {/* 右カラム：所持装備 */}
-          <div>
+        {/* 所持装備 */}
+        <div>
             <div style={{ display:'flex', gap:'4px', marginBottom:'6px', flexWrap:'wrap' }}>
               {[...slots, 'item'].map(s => (
                 <button key={s} onClick={() => setTab(s)}
@@ -453,7 +450,6 @@ export default function Equipment() {
                 })}
               </div>
             )}
-          </div>
         </div>
       </div>
 

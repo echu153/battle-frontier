@@ -17,7 +17,6 @@ const getTotalRank = (total) => {
   return { rank: 'SSS', color: '#ffcc00' }
 }
 
-
 export default function Ranking() {
   const nav = useNavigate()
   const [players, setPlayers] = useState([])
@@ -30,8 +29,9 @@ export default function Ranking() {
       if (user) setCurrentUserId(user.id)
       const { data } = await supabase
         .from('profiles')
-.select('id, username, lv, char_lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, avatar_url')
-.order('char_lv', { ascending: false })        .limit(50)
+        .select('id, username, lv, char_lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, avatar_url, retraining')
+        .order('char_lv', { ascending: false })
+        .limit(50)
       const sorted = (data || []).sort((a, b) => calcTotal(b) - calcTotal(a))
       setPlayers(sorted)
       setLoading(false)
@@ -39,63 +39,78 @@ export default function Ranking() {
     init()
   }, [])
 
+  const getStars = (p) => {
+    const count = (p.retraining || {})[p.class] || 0
+    return '★'.repeat(count)
+  }
+
   return (
-    <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
+    <div style={{ minHeight:'100vh', background:'#000820', padding:'12px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'600px', margin:'0 auto' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'16px' }}>
-          <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
+          <div style={{ color:'#ffcc00', fontSize:'14px', letterSpacing:'2px' }}>BATTLE FRONTIER</div>
           <button onClick={() => nav('/game')}
             style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-            ← 街に戻る
+            ← 戻る
           </button>
         </div>
 
-        <div style={{ color:'#ffcc00', fontSize:'14px', marginBottom:'12px', textAlign:'center', letterSpacing:'2px' }}>
+        <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'10px', textAlign:'center', letterSpacing:'2px' }}>
           🏆 総合力ランキング
         </div>
 
         {loading ? (
           <div style={{ color:'#446688', textAlign:'center' }}>読み込み中...</div>
         ) : (
-          <div style={{ border:'1px solid #0044aa', background:'#001040' }}>
-            <div style={{ display:'grid', gridTemplateColumns:'40px 1fr 50px 50px 70px 50px', padding:'8px 12px', borderBottom:'1px solid #003366', fontSize:'10px', color:'#446688' }}>
-              <span>順位</span>
-              <span>名前</span>
-              <span style={{textAlign:'center'}}>クラス</span>
-              <span style={{textAlign:'center'}}>LV</span>
-              <span style={{textAlign:'right'}}>総合力</span>
-              <span style={{textAlign:'center'}}>ランク</span>
-            </div>
-
+          <div>
             {players.map((p, i) => {
               const total = calcTotal(p)
               const totalRank = getTotalRank(total)
-              const medal = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}`
+              const medal = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
               const isMe = p.id === currentUserId
+              const stars = getStars(p)
               return (
                 <div key={p.id}
                   onClick={() => nav(`/profile/${p.id}`)}
                   style={{
-                    display:'grid', gridTemplateColumns:'40px 1fr 50px 50px 70px 50px',
-                    padding:'8px 12px',
-                    borderBottom:'1px solid #001428',
-                    background: isMe ? '#001830' : i === 0 ? '#1a1000' : 'transparent',
+                    display:'flex', alignItems:'center', gap:'8px',
+                    padding:'8px 10px',
+                    marginBottom:'4px',
+                    border:`1px solid ${isMe ? '#0066cc' : '#001a33'}`,
+                    background: isMe ? '#001830' : i === 0 ? '#1a1000' : '#000e1a',
                     cursor:'pointer',
-                    transition:'background 0.2s',
+                    borderRadius:'2px',
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#001840'}
-                  onMouseLeave={e => e.currentTarget.style.background = isMe ? '#001830' : i === 0 ? '#1a1000' : 'transparent'}
                 >
-                  <span style={{ color: i < 3 ? '#ffcc00' : '#446688', fontSize:'12px' }}>{medal}</span>
-<span style={{ display:'flex', alignItems:'center', gap:'6px', color: isMe ? '#44ff88' : '#88ccff', fontSize:'12px' }}>
-  {p.avatar_url && (
-<img src={p.avatar_url} alt="avatar"
-      style={{ width:'24px', height:'24px', objectFit:'cover' }} />
-  )}
-  {p.username}{isMe && ' (自分)'}
-</span>
-<span style={{ color:'#88ccff', fontSize:'11px', textAlign:'center' }}>{p.class}</span><span style={{ color:'#ffcc00', fontSize:'12px', textAlign:'center' }}>{p.char_lv || p.lv}</span>                  <span style={{ color:'#44ff88', fontSize:'12px', textAlign:'right', fontWeight:'bold' }}>{total}</span>
-                  <span style={{ color: totalRank.color, fontSize:'11px', textAlign:'center', fontWeight:'bold' }}>{totalRank.rank}</span>
+                  {/* 順位 */}
+                  <div style={{ minWidth:'28px', textAlign:'center' }}>
+                    {medal
+                      ? <span style={{ fontSize:'16px' }}>{medal}</span>
+                      : <span style={{ color:'#446688', fontSize:'11px' }}>{i+1}</span>
+                    }
+                  </div>
+
+                  {/* アバター */}
+                  {p.avatar_url
+                    ? <img src={p.avatar_url} alt="avatar" style={{ width:'36px', height:'36px', objectFit:'cover', flexShrink:0 }} />
+                    : <div style={{ width:'36px', height:'36px', background:'#001428', border:'1px solid #003366', flexShrink:0 }} />
+                  }
+
+                  {/* 名前・クラス */}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ color: isMe ? '#44ff88' : '#88ccff', fontSize:'12px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {p.username}{stars && <span style={{color:'#ffcc00'}}>{stars}</span>}{isMe && <span style={{color:'#44ff88', fontSize:'10px'}}> (自分)</span>}
+                    </div>
+                    <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>
+                      {p.class} <span style={{color:'#ffcc00'}}>LV{p.char_lv || p.lv}</span>
+                    </div>
+                  </div>
+
+                  {/* 総合力・ランク */}
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ color:'#44ff88', fontSize:'13px', fontWeight:'bold' }}>{total}</div>
+                    <div style={{ color: totalRank.color, fontSize:'11px', fontWeight:'bold' }}>{totalRank.rank}</div>
+                  </div>
                 </div>
               )
             })}
