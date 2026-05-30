@@ -1884,6 +1884,13 @@ export default function Game() {
           const color = isArtifactDrop ? '#ffcc00' : isRareDrop ? '#44ff88' : '#ffcc00'
           const prefix = isArtifactDrop ? '🌟' : isRareDrop ? '💎✨' : '💎'
           logs.push({ text:`${prefix} ${itemName} を入手した！`, color })
+          // 古びた装備を初めて入手した時だけ説明テロップ
+          if (isArtifactDrop) {
+            const hasExisting = equipment.some(e => ARTIFACT_BASE_NAMES.includes(e.weapons?.name))
+            if (!hasExisting) {
+              logs.push({ text:`📜 古びた装備を手に入れました！使い続ければまた別の使い道があるのかも…`, color:'#ffaa44' })
+            }
+          }
         }
       }
     }
