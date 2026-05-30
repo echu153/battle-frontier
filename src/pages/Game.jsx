@@ -913,7 +913,7 @@ const getJSTDateStr = () => new Date(Date.now() + 9*60*60*1000).toISOString().sl
 // パピア出現率アップイベント時間帯（JST）: 8:00 / 12:00 / 16:00 / 22:00 から30分
 const PAPIA_EVENT_HOURS = [8, 12, 16, 22]
 // テスト用：2026-05-30 23:52〜2026-05-31 00:22（UTC: 14:52〜15:22）
-const PAPIA_TEST_END = new Date('2026-05-31T15:22:00Z').getTime()
+const PAPIA_TEST_END = new Date('2026-05-30T15:22:00Z').getTime()
 const getPapiaEventStatus = () => {
   const now = Date.now()
   // テストイベント判定（期限まで有効）
