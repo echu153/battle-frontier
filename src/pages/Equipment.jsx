@@ -34,7 +34,7 @@ const ARTIFACT_EVOLVED = {
 
 const WEAPON_TYPE_GROUP = {
   sword:'physical', axe:'physical', spear:'physical', bow:'physical', dagger:'physical',
-  knuckle:'physical', gun:'physical',
+  knuckle:'physical', gun:'physical', katana:'physical',
   staff:'magical', wand:'magical', tome:'magical', orb:'magical',
 }
 const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'

@@ -138,9 +138,9 @@ const AREAS = [
         { name:'氷結回復', type:'heal',     rate:0.25 },
       ],
     },
-    commonDrops: [],
-    rareDrops: [],
-    bossDrops: [],
+    commonDrops: ['氷刃の剣','霜穿の槍','吹雪の弓','氷晶の杖','凍月刀'],
+    rareDrops:   ['白銀の大剣','氷河長槍','極雪の弓','霜嵐の杖','凍蒼の刀'],
+    bossDrops:   ['絶零の魔導砲','フロストバーンの聖鎧'],
   },
   {
     id: 7, name: '煉獄火山',
@@ -350,7 +350,7 @@ const calcExpNext = (lv) => {
 
 const WEAPON_TYPE_GROUP = {
   sword:'physical', axe:'physical', spear:'physical', bow:'physical', dagger:'physical',
-  knuckle:'physical', gun:'physical',
+  knuckle:'physical', gun:'physical', katana:'physical',
   staff:'magical', wand:'magical', tome:'magical', orb:'magical',
 }
 const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'
