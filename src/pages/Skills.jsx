@@ -54,8 +54,12 @@ export default function Skills() {
     setSkillSets(ss || [])
 
     // 現在のクラスのスキル（共通含む）で未習得のものを自動習得
+    // 再修練済みクラスはLV問わず全スキル解放
     const learnedIds = (ps||[]).map(s => s.skill_id)
-    const toLearn = [...(commonSkills||[]), ...(skills||[])].filter(s => s.required_lv <= p.lv && !learnedIds.includes(s.id))
+    const retrainingCount = ((p.retraining || {})[p.class] || 0)
+    const toLearn = [...(commonSkills||[]), ...(skills||[])].filter(s =>
+      (retrainingCount > 0 || s.required_lv <= p.lv) && !learnedIds.includes(s.id)
+    )
     for (const skill of toLearn) {
       await supabase.from('player_skills').insert({ player_id: user.id, skill_id: skill.id })
     }
