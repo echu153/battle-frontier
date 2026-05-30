@@ -87,9 +87,9 @@ const AREAS = [
   {
     id: 5, name: '巨峰山脈',
     enemies: [
-      { name:'山岳ゴブリン', hp:1500, atk:320, def:340, matk:0,   mdef:300, spd:380, type:'physical', gold:250 },
-      { name:'岩石ゴーレム', hp:2000, atk:380, def:440, matk:0,   mdef:280, spd:400, type:'physical', gold:300 },
-      { name:'グリフィン',   hp:1800, atk:350, def:360, matk:60,  mdef:340, spd:450, type:'physical', gold:280 },
+      { name:'山岳ゴブリン', hp:1500, atk:640, def:510, matk:0,   mdef:450, spd:380, type:'physical', gold:250 },
+      { name:'岩石ゴーレム', hp:2000, atk:760, def:660, matk:0,   mdef:420, spd:400, type:'physical', gold:300 },
+      { name:'グリフィン',   hp:1800, atk:700, def:540, matk:120, mdef:510, spd:450, type:'physical', gold:280 },
     ],
     boss: {
       name:'雷鷲サンダーロック', hp:45000, atk:600, def:560, matk:250, mdef:600, spd:675, gold:6000, isBoss:true, type:'physical',
