@@ -100,9 +100,9 @@ const AREAS = [
         { name:'雷鳴回復', type:'heal',     rate:0.2 },
       ],
     },
-    commonDrops: [],
-    rareDrops: [],
-    bossDrops: [],
+    commonDrops: ['山岳の斧','岩砕の拳','霞散弾銃','嵐のオーブ','峰岳の兜','岩石鎧','山岳の靴'],
+    rareDrops:   ['雷砕斧','鷹爪の拳','雷鳴銃','雷晶オーブ','嵐の兜','雷鷲鎧','疾風の靴'],
+    bossDrops:   ['雷鷲の爪牙','嵐の重装甲'],
   },
   {
     id: 6, name: '白銀の霊峰',
@@ -350,7 +350,8 @@ const calcExpNext = (lv) => {
 
 const WEAPON_TYPE_GROUP = {
   sword:'physical', axe:'physical', spear:'physical', bow:'physical', dagger:'physical',
-  staff:'magical', wand:'magical', tome:'magical',
+  knuckle:'physical', gun:'physical',
+  staff:'magical', wand:'magical', tome:'magical', orb:'magical',
 }
 const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'
 
