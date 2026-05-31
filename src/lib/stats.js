@@ -16,18 +16,23 @@ export const ARTIFACT_BASE_NAMES_SET = new Set([
   '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたハンマー'
 ])
 
-// 熟練度ボーナス：物理武器→ATK / 特殊武器→MATK
-// 上昇値 = floor(元ステータス × (LV×1% + floor(LV/100)×50%))
+// 熟練度ボーナス：武器の固定ボーナス各種に倍率をかける
+// 倍率 = LV×1% + floor(LV/100)×50%（LV300で+450%）
+// 対象：atk/def/matk/mdef/spd/hp/mp の固定ボーナスのみ（%ボーナスは対象外）
 export const calcProfBonus = (prof, weapon) => {
   if (!prof || !weapon) return {}
   const profLv = prof.prof_lv || 0
-  const isMagical = getWeaponGroup(weapon.weapon_type) === 'magical'
-  const baseStat = isMagical ? (weapon.matk_bonus||0) : (weapon.atk_bonus||0)
-  if (baseStat <= 0) return {}
   const rate = profLv * 0.01 + Math.floor(profLv/100) * 0.5
-  const gain = Math.floor(baseStat * rate)
-  if (gain <= 0) return {}
-  return isMagical ? { matk: gain } : { atk: gain }
+  if (rate <= 0) return {}
+  const result = {}
+  const atk  = Math.floor((weapon.atk_bonus ||0) * rate); if (atk  > 0) result.atk  = atk
+  const def  = Math.floor((weapon.def_bonus ||0) * rate); if (def  > 0) result.def  = def
+  const matk = Math.floor((weapon.matk_bonus||0) * rate); if (matk > 0) result.matk = matk
+  const mdef = Math.floor((weapon.mdef_bonus||0) * rate); if (mdef > 0) result.mdef = mdef
+  const spd  = Math.floor((weapon.spd_bonus ||0) * rate); if (spd  > 0) result.spd  = spd
+  const hp   = Math.floor((weapon.hp_bonus  ||0) * rate); if (hp   > 0) result.hp   = hp
+  const mp   = Math.floor((weapon.mp_bonus  ||0) * rate); if (mp   > 0) result.mp   = mp
+  return result
 }
 
 // 装備＋熟練度込みの実効ステータス
@@ -67,6 +72,8 @@ export const calcEffectiveStats = (profile, equipment, proficiency) => {
         bonus.matk += pb.matk || 0
         bonus.mdef += pb.mdef || 0
         bonus.spd  += pb.spd  || 0
+        bonus.hp   += pb.hp   || 0
+        bonus.mp   += pb.mp   || 0
       }
     }
   }

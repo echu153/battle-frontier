@@ -46,13 +46,17 @@ const calcProfBonus = (prof) => {
   const weapon = prof.weapon
   if (!weapon) return {}
   const lv = prof.prof_lv || 0
-  const isMagical = getWeaponGroup(weapon.weapon_type) === 'magical'
-  const baseStat = isMagical ? (weapon.matk_bonus||0) : (weapon.atk_bonus||0)
-  if (baseStat <= 0) return {}
   const rate = lv * 0.01 + Math.floor(lv/100) * 0.5
-  const gain = Math.floor(baseStat * rate)
-  if (gain <= 0) return {}
-  return isMagical ? { matk: gain } : { atk: gain }
+  if (rate <= 0) return {}
+  const result = {}
+  const atk  = Math.floor((weapon.atk_bonus ||0) * rate); if (atk  > 0) result.atk  = atk
+  const def  = Math.floor((weapon.def_bonus ||0) * rate); if (def  > 0) result.def  = def
+  const matk = Math.floor((weapon.matk_bonus||0) * rate); if (matk > 0) result.matk = matk
+  const mdef = Math.floor((weapon.mdef_bonus||0) * rate); if (mdef > 0) result.mdef = mdef
+  const spd  = Math.floor((weapon.spd_bonus ||0) * rate); if (spd  > 0) result.spd  = spd
+  const hp   = Math.floor((weapon.hp_bonus  ||0) * rate); if (hp   > 0) result.hp   = hp
+  const mp   = Math.floor((weapon.mp_bonus  ||0) * rate); if (mp   > 0) result.mp   = mp
+  return result
 }
 
 const getProfPrefix = (profLv) => {
@@ -446,7 +450,7 @@ export default function Equipment() {
                           {Object.keys(profBonus).length > 0 && (
                             <div style={{ fontSize:'10px', color:'#aa44ff' }}>
                               熟練度ボーナス: {Object.entries(profBonus).map(([k,v]) => {
-                                const label = k==='atk'?'攻撃力':k==='matk'?'特殊攻撃力':k==='def'?'防御力':k==='mdef'?'特殊防御力':'素早さ'
+                                const label = k==='atk'?'攻撃力':k==='matk'?'特殊攻撃力':k==='def'?'防御力':k==='mdef'?'特殊防御力':k==='hp'?'HP':k==='mp'?'MP':'素早さ'
                                 return `${label}+${v}`
                               }).join(' ')}
                             </div>
