@@ -991,6 +991,7 @@ export default function Game() {
   })
   const expTrackerRef = useRef({ start: null, total: 0 })
   const battleCountTrackerRef = useRef({ start: null, count: 0 })
+  const regenningRef = useRef(false)
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768)
@@ -1041,14 +1042,15 @@ export default function Game() {
       setSelectedArea(1)
       localStorage.setItem('selectedArea', 1)
     }
+    // クエリ失敗時(null)は既存ステートを保持し、正常な空配列のみ反映する
     const { data: eq } = await supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', user.id)
-    setEquipment(eq || [])
+    if (Array.isArray(eq)) setEquipment(eq)
     const { data: prof } = await supabase.from('proficiency').select('*, weapons(*)').eq('player_id', user.id)
-    setProficiency(prof || [])
+    if (Array.isArray(prof)) setProficiency(prof)
     const { data: cl } = await supabase.from('class_levels').select('*').eq('player_id', user.id)
-    setClassLevels(cl || [])
+    if (Array.isArray(cl)) setClassLevels(cl)
     const { data: ss } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', user.id).order('slot_order')
-    setSkillSets(ss || [])
+    if (Array.isArray(ss)) setSkillSets(ss)
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id).eq('equipped', true).single()
     setPlayerItem(pi || null)
     const today = getJSTDateStr()
@@ -1060,15 +1062,21 @@ export default function Game() {
 
   const doRegen = async () => {
     if (!profile) return
-    const current = profile.hp_current ?? profile.hp_max
-    const newHp = Math.min(profile.hp_max, Math.floor(current+profile.hp_max*0.2))
-    const newMp = Math.min(profile.mp_max, Math.floor((profile.mp_current??profile.mp_max)+profile.mp_max*0.2))
-    const newIsDying = newHp >= profile.hp_max ? false : profile.is_dying
-    await supabase.from('profiles').update({
-      hp_current:newHp, mp_current:newMp, is_dying:newIsDying,
-      last_regen_at:new Date().toISOString(),
-    }).eq('id', profile.id)
-    await fetchProfile()
+    if (regenningRef.current) return  // 多重起動ガード
+    regenningRef.current = true
+    try {
+      const current = profile.hp_current ?? profile.hp_max
+      const newHp = Math.min(profile.hp_max, Math.floor(current+profile.hp_max*0.2))
+      const newMp = Math.min(profile.mp_max, Math.floor((profile.mp_current??profile.mp_max)+profile.mp_max*0.2))
+      const newIsDying = newHp >= profile.hp_max ? false : profile.is_dying
+      await supabase.from('profiles').update({
+        hp_current:newHp, mp_current:newMp, is_dying:newIsDying,
+        last_regen_at:new Date().toISOString(),
+      }).eq('id', profile.id)
+      await fetchProfile()
+    } finally {
+      regenningRef.current = false
+    }
   }
 
   const doChangeClass = async (targetClass) => {
