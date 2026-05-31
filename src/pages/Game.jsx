@@ -399,6 +399,7 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
   let hitBonus = 0
   let critBonus = 0
   let evasionBonus = 0
+  let critResist = 0
   for (const item of equipment) {
     if (!item.equipped || !item.weapons) continue
     const w = item.weapons
@@ -418,6 +419,8 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
     if (w.spd_bonus_pct > 0) bonus.spd += Math.floor(profile.spd   * w.spd_bonus_pct/100)
     if (w.matk_bonus_pct > 0) matkPct  += w.matk_bonus_pct
     if (w.hit_bonus > 0) hitBonus += w.hit_bonus
+    critBonus   += w.crit_bonus  || 0   // 武器固有クリティカル率
+    critResist  += w.crit_resist || 0   // 武器固有クリティカル抵抗
     hitBonus    += item.bonus_hit     || 0
     critBonus   += item.bonus_crit    || 0
     evasionBonus += item.bonus_evasion || 0
@@ -449,6 +452,7 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
     hitBonus,
     critBonus,
     evasionBonus,
+    critResist,
   }
 }
 
@@ -1454,7 +1458,7 @@ export default function Game() {
     const playerExtraRate = calcExtraActionRate(playerSpd, enemySpd)
     const enemyExtraRate  = calcExtraActionRate(enemySpd, playerSpd)
     const playerCritRate  = calcCritRate(playerSpd, enemySpd) + passiveCritBonus + (eff.critBonus || 0)
-    const enemyCritRate   = Math.max(0, calcCritRate(enemySpd, playerSpd) - (playerBuffs.critResist?.turns > 0 ? (playerBuffs.critResist.value||0) : 0))
+    const enemyCritRate   = Math.max(0, calcCritRate(enemySpd, playerSpd) - (eff.critResist||0) - (playerBuffs.critResist?.turns > 0 ? (playerBuffs.critResist.value||0) : 0))
 
     // プレイヤーの回避率（敵が攻撃するとき）
     const playerEvasionRate = calcEvasionRate(effectiveSpdForCalc, enemySpd)

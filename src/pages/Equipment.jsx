@@ -419,6 +419,8 @@ export default function Equipment() {
                         {w.mp_bonus_pct  > 0 && <span style={{color:'#4488ff'}}>MP+{w.mp_bonus_pct}% </span>}
                         {w.matk_bonus_pct > 0 && <span style={{color:'#cc44ff'}}>特殊攻撃力+{w.matk_bonus_pct}% </span>}
                         {w.hit_bonus     > 0 && <span style={{color:'#ffaa44'}}>命中+{w.hit_bonus}% </span>}
+                        {w.crit_bonus    > 0 && <span style={{color:'#ff6688'}}>クリ率+{w.crit_bonus}% </span>}
+                        {w.crit_resist   > 0 && <span style={{color:'#66ccff'}}>クリ抵抗+{w.crit_resist}% </span>}
                       </div>
 
                       {hasBonus && (
