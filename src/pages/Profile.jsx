@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { calcEffectiveTotal } from '../lib/stats'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -134,7 +135,7 @@ export default function Profile() {
 
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
-  const total = calcTotal(profile)
+  const total = calcEffectiveTotal(profile, equipment, proficiency)
   const totalRank = getTotalRank(total)
   const slots = ['weapon','armor','accessory','accessory2']
 

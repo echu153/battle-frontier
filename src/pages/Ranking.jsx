@@ -1,21 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-
-const calcTotal = (p) => Math.floor(
-  (p.hp_max / 10) + (p.mp_max / 5) +
-  p.atk + p.def + p.matk + p.mdef + p.spd
-)
-
-const getTotalRank = (total) => {
-  const thresholds = [200, 500, 1000, 2000, 4000, 7000, 11000, 16000]
-  const ranks = ['F','E','D','C','B','A','S','SS','SSS']
-  const colors = ['#888888','#6699cc','#ff8844','#44bb44','#4488ff','#ff4444','#ffcc00','#ffcc00','#ffcc00']
-  for (let i = 0; i < thresholds.length; i++) {
-    if (total <= thresholds[i]) return { rank: ranks[i], color: colors[i] }
-  }
-  return { rank: 'SSS', color: '#ffcc00' }
-}
+import { calcEffectiveTotal, getTotalRank } from '../lib/stats'
 
 export default function Ranking() {
   const nav = useNavigate()
@@ -32,7 +18,25 @@ export default function Ranking() {
         .select('id, username, lv, char_lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, avatar_url, retraining')
         .order('char_lv', { ascending: false })
         .limit(50)
-      const sorted = (data || []).sort((a, b) => calcTotal(b) - calcTotal(a))
+      const list = data || []
+      const ids = list.map(p => p.id)
+      // 50人分の装備中装備と熟練度をまとめて取得（in句で2クエリ）
+      let eqs = [], profs = []
+      if (ids.length > 0) {
+        const [{ data: eqData }, { data: profData }] = await Promise.all([
+          supabase.from('player_equipment').select('*, weapons(*)').in('player_id', ids).eq('equipped', true),
+          supabase.from('proficiency').select('player_id, equipment_id, prof_lv').in('player_id', ids),
+        ])
+        eqs = eqData || []
+        profs = profData || []
+      }
+      // プレイヤーごとに装備＋熟練度込みの総合力を算出
+      const withTotal = list.map(p => {
+        const eq = eqs.filter(e => e.player_id === p.id)
+        const pf = profs.filter(x => x.player_id === p.id)
+        return { ...p, _total: calcEffectiveTotal(p, eq, pf) }
+      })
+      const sorted = withTotal.sort((a, b) => b._total - a._total)
       setPlayers(sorted)
       setLoading(false)
     }
@@ -64,7 +68,7 @@ export default function Ranking() {
         ) : (
           <div>
             {players.map((p, i) => {
-              const total = calcTotal(p)
+              const total = p._total
               const totalRank = getTotalRank(total)
               const medal = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
               const isMe = p.id === currentUserId
