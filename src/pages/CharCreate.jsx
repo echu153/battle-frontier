@@ -64,7 +64,7 @@ export default function CharCreate() {
           player_id: user.id, weapon_id: weapon.id, slot: 'weapon', equipped: true,
         }).select('id').single()
         await supabase.from('proficiency').insert({
-          player_id: user.id, weapon_id: weapon.id, equipment_id: eqRow?.id, prof_exp: 0, prof_lv: 1, awakening: 0,
+          player_id: user.id, weapon_id: weapon.id, equipment_id: eqRow?.id, prof_exp: 0, prof_lv: 0, awakening: 0,
         })
       }
       nav('/game')

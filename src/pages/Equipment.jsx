@@ -45,7 +45,7 @@ const calcProfBonus = (prof) => {
   if (!prof) return {}
   const weapon = prof.weapon
   if (!weapon) return {}
-  const lv = prof.prof_lv || 1
+  const lv = prof.prof_lv || 0
   const isMagical = getWeaponGroup(weapon.weapon_type) === 'magical'
   const baseStat = isMagical ? (weapon.matk_bonus||0) : (weapon.atk_bonus||0)
   if (baseStat <= 0) return {}
@@ -134,7 +134,7 @@ export default function Equipment() {
       // 装備インスタンス(item.id)ごとに熟練度を管理
       const { data: existing } = await supabase.from('proficiency').select('id').eq('player_id', profile.id).eq('equipment_id', item.id).maybeSingle()
       if (!existing) {
-        await supabase.from('proficiency').insert({ player_id: profile.id, weapon_id: item.weapons.id, equipment_id: item.id, prof_exp: 0, prof_lv: 1, awakening: 0 })
+        await supabase.from('proficiency').insert({ player_id: profile.id, weapon_id: item.weapons.id, equipment_id: item.id, prof_exp: 0, prof_lv: 0, awakening: 0 })
       }
     }
     await fetchAll()
@@ -208,7 +208,7 @@ export default function Equipment() {
     if (!evolvedWeapon) { setLoading(false); return }
     await supabase.from('player_equipment').update({ weapon_id: evolvedWeapon.id, bonus_effect: 'artifact' }).eq('id', item.id)
     // 覚醒後は熟練度をLV1・EXP0にリセット（この装備インスタンス）
-    await supabase.from('proficiency').update({ prof_lv: 1, prof_exp: 0 }).eq('player_id', profile.id).eq('equipment_id', item.id)
+    await supabase.from('proficiency').update({ prof_lv: 0, prof_exp: 0 }).eq('player_id', profile.id).eq('equipment_id', item.id)
     setAwakenMessage(`✨ ${evolvedName} に覚醒した！`)
     setTimeout(() => setAwakenMessage(''), 3000)
     await fetchAll()

@@ -369,7 +369,7 @@ const getProfPrefix = (profLv) => {
 // 上昇値 = floor(元ステータス × (LV×1% + floor(LV/100)×50%))
 const calcProfBonus = (prof, weapon) => {
   if (!prof || !weapon) return {}
-  const profLv = prof.prof_lv || 1
+  const profLv = prof.prof_lv || 0
   const isMagical = getWeaponGroup(weapon.weapon_type) === 'magical'
   const baseStat = isMagical ? (weapon.matk_bonus||0) : (weapon.atk_bonus||0)
   if (baseStat <= 0) return {}
