@@ -39,16 +39,20 @@ const WEAPON_TYPE_GROUP = {
 }
 const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'
 
+// 熟練度ボーナス：物理武器→ATK / 特殊武器→MATK（Game.jsxと同一ロジック）
+// 上昇値 = floor(元ステータス × (LV×1% + floor(LV/100)×50%))
 const calcProfBonus = (prof) => {
   if (!prof) return {}
-  const lv = prof.prof_lv
-  const bonus = Math.floor(lv / 10)
   const weapon = prof.weapon
   if (!weapon) return {}
-  const group = getWeaponGroup(weapon.weapon_type)
-  if (group === 'magical') return { matk: bonus }
-  if (weapon.weapon_type === 'bow') return { atk: bonus, spd: bonus }
-  return { atk: bonus }
+  const lv = prof.prof_lv || 1
+  const isMagical = getWeaponGroup(weapon.weapon_type) === 'magical'
+  const baseStat = isMagical ? (weapon.matk_bonus||0) : (weapon.atk_bonus||0)
+  if (baseStat <= 0) return {}
+  const rate = lv * 0.01 + Math.floor(lv/100) * 0.5
+  const gain = Math.floor(baseStat * rate)
+  if (gain <= 0) return {}
+  return isMagical ? { matk: gain } : { atk: gain }
 }
 
 const getProfPrefix = (profLv) => {
@@ -203,6 +207,8 @@ export default function Equipment() {
     const { data: evolvedWeapon } = await supabase.from('weapons').select('*').eq('name', evolvedName).single()
     if (!evolvedWeapon) { setLoading(false); return }
     await supabase.from('player_equipment').update({ weapon_id: evolvedWeapon.id, bonus_effect: 'artifact' }).eq('id', item.id)
+    // 覚醒後は熟練度をLV1・EXP0にリセット（この装備インスタンス）
+    await supabase.from('proficiency').update({ prof_lv: 1, prof_exp: 0 }).eq('player_id', profile.id).eq('equipment_id', item.id)
     setAwakenMessage(`✨ ${evolvedName} に覚醒した！`)
     setTimeout(() => setAwakenMessage(''), 3000)
     await fetchAll()

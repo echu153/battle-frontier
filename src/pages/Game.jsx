@@ -365,30 +365,18 @@ const getProfPrefix = (profLv) => {
   return ''
 }
 
+// 熟練度ボーナス：物理武器→ATK / 特殊武器→MATK
+// 上昇値 = floor(元ステータス × (LV×1% + floor(LV/100)×50%))
 const calcProfBonus = (prof, weapon) => {
   if (!prof || !weapon) return {}
   const profLv = prof.prof_lv || 1
-  const bonuses = {
-    atk: weapon.atk_bonus||0, def: weapon.def_bonus||0,
-    matk: weapon.matk_bonus||0, mdef: weapon.mdef_bonus||0, spd: weapon.spd_bonus||0,
-  }
-  let multiplier = 1
-  if (profLv >= 300) multiplier = 4
-  else if (profLv >= 200) multiplier = 3
-  else if (profLv >= 100) multiplier = 2
-  const scaledBonuses = {}
-  for (const [k,v] of Object.entries(bonuses)) scaledBonuses[k] = v * multiplier
-  const pctBonus = Math.floor(profLv/10)
-  const fixedBonuses = Object.entries(scaledBonuses).filter(([,v]) => v > 0)
-  if (fixedBonuses.length > 0 && pctBonus > 0) {
-    const maxVal = Math.max(...fixedBonuses.map(([,v]) => v))
-    const maxKeys = fixedBonuses.filter(([,v]) => v === maxVal).map(([k]) => k)
-    const targetKey = maxKeys[Math.floor(Math.random()*maxKeys.length)]
-    scaledBonuses[targetKey] = Math.floor(scaledBonuses[targetKey]*(1+pctBonus/100))
-  }
-  const result = {}
-  for (const [k,v] of Object.entries(scaledBonuses)) { if (v > 0) result[k] = v }
-  return result
+  const isMagical = getWeaponGroup(weapon.weapon_type) === 'magical'
+  const baseStat = isMagical ? (weapon.matk_bonus||0) : (weapon.atk_bonus||0)
+  if (baseStat <= 0) return {}
+  const rate = profLv * 0.01 + Math.floor(profLv/100) * 0.5
+  const gain = Math.floor(baseStat * rate)
+  if (gain <= 0) return {}
+  return isMagical ? { matk: gain } : { atk: gain }
 }
 
 const ARTIFACT_BASE_NAMES_SET = new Set([
@@ -1279,7 +1267,8 @@ export default function Game() {
         if (prof) {
           let totalExp = prof.prof_exp + profGained
           let newProfLv = prof.prof_lv
-          while (totalExp >= 100) { totalExp -= 100; newProfLv++ }
+          while (totalExp >= 100 && newProfLv < 300) { totalExp -= 100; newProfLv++ }
+          if (newProfLv >= 300) totalExp = 0
           await supabase.from('proficiency').update({ prof_exp:totalExp, prof_lv:newProfLv }).eq('id', prof.id)
           if (newProfLv > prof.prof_lv) logs.push({ text:`⚔ 武器熟練度UP！ ${getProfPrefix(newProfLv)}${eqWeapon.weapons.name} LV${newProfLv}`, color:'#aa44ff' })
           logs.push({ text:`⚔ 武器熟練度 +${profGained}`, color:'#aa44ff' })
@@ -1910,7 +1899,8 @@ export default function Game() {
         const profExpGained = Math.floor(Math.random()*4)+8
         let totalExp = prof.prof_exp+profExpGained
         let newProfLv = prof.prof_lv
-        while (totalExp >= 100) { totalExp -= 100; newProfLv++ }
+        while (totalExp >= 100 && newProfLv < 300) { totalExp -= 100; newProfLv++ }
+        if (newProfLv >= 300) totalExp = 0
         await supabase.from('proficiency').update({ prof_exp:totalExp, prof_lv:newProfLv }).eq('id', prof.id)
         if (newProfLv > prof.prof_lv) {
           logs.push({ text:`⚔ 武器熟練度UP！ ${getProfPrefix(newProfLv)}${equippedWeaponItem.weapons.name} LV${newProfLv}`, color:'#aa44ff' })
