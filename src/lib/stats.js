@@ -13,7 +13,7 @@ export const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || '
 
 export const ARTIFACT_BASE_NAMES_SET = new Set([
   '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
-  '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたハンマー'
+  '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたオーブ'
 ])
 
 // 熟練度ボーナス：武器の固定ボーナス各種に倍率をかける

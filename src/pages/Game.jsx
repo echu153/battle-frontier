@@ -7,7 +7,7 @@ const REGEN_SECONDS = 60
 
 const ARTIFACT_BASE_NAMES = [
   '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
-  '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたハンマー'
+  '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたオーブ'
 ]
 
 // パピア
@@ -385,7 +385,7 @@ const calcProfBonus = (prof, weapon) => {
 
 const ARTIFACT_BASE_NAMES_SET = new Set([
   '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
-  '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたハンマー'
+  '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたオーブ'
 ])
 
 const calcEnhancedStat = (base, plus) => {
