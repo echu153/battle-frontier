@@ -430,7 +430,7 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
     critBonus   += item.bonus_crit    || 0
     evasionBonus += item.bonus_evasion || 0
     if (item.slot === 'weapon') {
-      const prof = proficiency.find(p => p.weapon_id === w.id)
+      const prof = proficiency.find(p => p.equipment_id === item.id)
       if (prof) {
         const pb = calcProfBonus(prof, w)
         bonus.atk  += pb.atk  || 0
@@ -1275,7 +1275,7 @@ export default function Game() {
       const profGained = Math.floor(50 + Math.random() * 51)
       const eqWeapon = equipment.find(e => e.slot==='weapon' && e.equipped)
       if (eqWeapon) {
-        const prof = proficiency.find(p => p.weapon_id===eqWeapon.weapons.id)
+        const prof = proficiency.find(p => p.equipment_id===eqWeapon.id)
         if (prof) {
           let totalExp = prof.prof_exp + profGained
           let newProfLv = prof.prof_lv
@@ -1905,7 +1905,7 @@ export default function Game() {
     setBattleLogs([...logs])
 
     if (equippedWeaponItem) {
-      const prof = proficiency.find(p => p.weapon_id===equippedWeaponItem.weapons.id)
+      const prof = proficiency.find(p => p.equipment_id===equippedWeaponItem.id)
       if (prof) {
         const profExpGained = Math.floor(Math.random()*4)+8
         let totalExp = prof.prof_exp+profExpGained

@@ -60,11 +60,11 @@ export default function CharCreate() {
       await supabase.from('class_levels').insert(classLevelData)
       const { data: weapon } = await supabase.from('weapons').select('id').eq('name', c.weaponName).single()
       if (weapon) {
-        await supabase.from('player_equipment').insert({
+        const { data: eqRow } = await supabase.from('player_equipment').insert({
           player_id: user.id, weapon_id: weapon.id, slot: 'weapon', equipped: true,
-        })
+        }).select('id').single()
         await supabase.from('proficiency').insert({
-          player_id: user.id, weapon_id: weapon.id, prof_exp: 0, prof_lv: 1, awakening: 0,
+          player_id: user.id, weapon_id: weapon.id, equipment_id: eqRow?.id, prof_exp: 0, prof_lv: 1, awakening: 0,
         })
       }
       nav('/game')

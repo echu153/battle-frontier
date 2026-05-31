@@ -127,9 +127,10 @@ export default function Equipment() {
     await supabase.from('player_equipment').update({ equipped: false }).eq('player_id', profile.id).eq('slot', item.slot).eq('equipped', true)
     await supabase.from('player_equipment').update({ equipped: true }).eq('id', item.id)
     if (item.slot === 'weapon') {
-      const { data: existing } = await supabase.from('proficiency').select('id').eq('player_id', profile.id).eq('weapon_id', item.weapons.id).single()
+      // 装備インスタンス(item.id)ごとに熟練度を管理
+      const { data: existing } = await supabase.from('proficiency').select('id').eq('player_id', profile.id).eq('equipment_id', item.id).maybeSingle()
       if (!existing) {
-        await supabase.from('proficiency').insert({ player_id: profile.id, weapon_id: item.weapons.id, prof_exp: 0, prof_lv: 1, awakening: 0 })
+        await supabase.from('proficiency').insert({ player_id: profile.id, weapon_id: item.weapons.id, equipment_id: item.id, prof_exp: 0, prof_lv: 1, awakening: 0 })
       }
     }
     await fetchAll()
@@ -240,7 +241,7 @@ export default function Equipment() {
                   {equipped ? (
                     <>
                       <div style={{ color: RARITY_COLORS[equipped.weapons.rarity], fontSize:'11px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                        {getProfPrefix(proficiency.find(p => p.weapon_id === equipped.weapons.id)?.prof_lv || 0)}{equipped.weapons.name}
+                        {getProfPrefix(proficiency.find(p => p.equipment_id === equipped.id)?.prof_lv || 0)}{equipped.weapons.name}
                         {plus > 0 && <span style={{color:'#ffcc00'}}> +{plus}</span>}
                       </div>
                       <div style={{ fontSize:'9px', color: RARITY_COLORS[equipped.weapons.rarity] }}>{RARITY_LABELS[equipped.weapons.rarity]}</div>
@@ -357,7 +358,7 @@ export default function Equipment() {
                   const plus = item.enhance_plus || 0
                   const enhW = calcEnhancedStats(w, plus)
                   const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
-                  const prof = tab === 'weapon' ? proficiency.find(p => p.weapon_id === w.id) : null
+                  const prof = tab === 'weapon' ? proficiency.find(p => p.equipment_id === item.id) : null
                   const profBonus = calcProfBonus(prof ? { ...prof, weapon: w } : null)
                   const profPct = prof ? Math.min(100, (prof.prof_exp / 100) * 100) : 0
                   const profPrefix = prof ? getProfPrefix(prof.prof_lv) : ''
