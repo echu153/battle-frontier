@@ -204,6 +204,30 @@ export default function Profile() {
           </div>
         )}
 
+        {/* 再修練 */}
+        {(() => {
+          const retrain = profile.retraining || {}
+          const entries = Object.entries(retrain).filter(([,c]) => c > 0).sort((a,b) => b[1]-a[1])
+          const totalCount = entries.reduce((s,[,c]) => s+c, 0)
+          return (
+            <div style={{ border:'1px solid #664400', background:'#0a0800', padding:'12px', marginBottom:'12px' }}>
+              <div style={{ color:'#ffaa44', fontSize:'12px', marginBottom:'8px' }}>🔄 再修練（合計{totalCount}回）</div>
+              {entries.length === 0 ? (
+                <div style={{ color:'#334455', fontSize:'11px' }}>まだ再修練していません</div>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                  {entries.map(([cls, count]) => (
+                    <div key={cls} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'11px' }}>
+                      <span style={{ color:'#88ccff' }}>{cls}</span>
+                      <span style={{ color:'#ffcc00', letterSpacing:'2px' }}>{'★'.repeat(count)}<span style={{ color:'#664400' }}>{'☆'.repeat(5-count)}</span> <span style={{ color:'#446688', letterSpacing:'0' }}>({count}/5)</span></span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
         {/* ステータス */}
         <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>ステータス</div>
