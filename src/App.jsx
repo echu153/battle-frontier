@@ -12,6 +12,7 @@ import Smithy from './pages/Smithy'
 import Profile from './pages/Profile'
 import Barber from './pages/Barber'
 import Fishing from './pages/Fishing'
+import Casino from './pages/Casino'
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -81,6 +82,7 @@ function App() {
         <Route path="/profile/:playerId" element={session ? <Profile /> : <Navigate to="/login" />} />
         <Route path="/barber" element={session ? <Barber /> : <Navigate to="/login" />} />
         <Route path="/fishing" element={session ? <Fishing /> : <Navigate to="/login" />} />
+        <Route path="/casino" element={session ? <Casino /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>
