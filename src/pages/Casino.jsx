@@ -80,6 +80,7 @@ export default function Casino() {
   // ハイ&ロー：カードを引く
   const hiloDeal = async () => {
     if (loading || !profile) return
+    if (profile.is_fishing) { showMessage('🎣 釣り中は賭博場で遊べません', '#ff8844'); return }
     const bet = Math.floor(betAmount)
     if (!bet || bet < MIN_BET) { showMessage(`ベットは${MIN_BET}メダルからです`, '#ff4444'); return }
     if (bet > MAX_BET) { showMessage(`ベットは${MAX_BET}メダルまでです`, '#ff4444'); return }
@@ -153,6 +154,7 @@ export default function Casino() {
   // スロット：レバーON（サーバーで結果確定→リール回転開始）
   const slotLever = async () => {
     if (loading || slotPhase==='spinning' || !profile) return
+    if (profile.is_fishing) { showMessage('🎣 釣り中は賭博場で遊べません', '#ff8844'); return }
     const bet = Math.floor(slotBet)
     if (slotMode==='normal') {
       if (!bet || bet < MIN_BET) { showMessage(`ベットは${MIN_BET}メダルからです`, '#ff4444'); return }
@@ -210,6 +212,12 @@ export default function Casino() {
         <div style={{ border:'1px dashed #ff8844', background:'#1a0800', color:'#ff8844', fontSize:'11px', padding:'8px', marginBottom:'12px', textAlign:'center' }}>
           🚧 賭博場は現在テスト中です。仕様や倍率は予告なく変更される場合があります 🚧
         </div>
+
+        {profile.is_fishing && (
+          <div style={{ border:'1px solid #44aaff', background:'#001028', color:'#44aaff', fontSize:'12px', padding:'10px', marginBottom:'12px', textAlign:'center' }}>
+            🎣 釣り中は賭博場で遊べません。先に釣りを終了してください。
+          </div>
+        )}
 
         <div style={{ color:'#ffaa00', fontSize:'14px', marginBottom:'4px' }}>🎰 賭博場</div>
         <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px', display:'flex', gap:'16px' }}>
