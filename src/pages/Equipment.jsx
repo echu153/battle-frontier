@@ -9,7 +9,7 @@ const RARITY_COLORS = {
 const RARITY_LABELS = {
   f:'F', e:'E', d:'D', c:'C', b:'B', a:'A', s:'S', ss:'SS', sss:'SSS'
 }
-const SLOT_LABELS = { weapon:'武器', armor:'防具', accessory:'装飾品', accessory2:'装飾品' }
+const SLOT_LABELS = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }
 
 const ARTIFACT_BASE_NAMES = [
   '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
@@ -395,10 +395,10 @@ export default function Equipment() {
                           ) : (
                             <>
                               <button onClick={() => equip(item)} disabled={loading}
-                                style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>装備①</button>
+                                style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>{isAccessory ? '装飾品①' : '装備'}</button>
                               {isAccessory && (
                                 <button onClick={() => changeSlot(item, 'accessory2')} disabled={loading}
-                                  style={{ padding:'2px 8px', background:'#001840', border:'1px solid #4466aa', color:'#88aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>装備②</button>
+                                  style={{ padding:'2px 8px', background:'#001840', border:'1px solid #4466aa', color:'#88aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>装飾品②</button>
                               )}
                             </>
                           )}
