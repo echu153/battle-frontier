@@ -45,6 +45,19 @@ export default function Casino() {
     setLoading(false)
   }
 
+  // 【一時テスト用】メダル直接書き換えがブロックされるか確認
+  const testCheat = async () => {
+    setLoading(true)
+    const { error } = await supabase.from('profiles').update({ medals: 99999 }).eq('id', profile.id)
+    if (error) {
+      showMessage(`✅ ブロック成功！不正対策OK（${error.message}）`, '#44ff88')
+    } else {
+      showMessage('❌ 改ざんできてしまった！要調査', '#ff4444')
+    }
+    await fetchProfile()
+    setLoading(false)
+  }
+
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
   return (
@@ -78,6 +91,12 @@ export default function Casino() {
             </button>
           ))}
         </div>
+
+        {/* 【一時テスト用・確認後に削除】 */}
+        <button onClick={testCheat} disabled={loading}
+          style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a0010', border:'1px dashed #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+          🧪 不正対策テスト（メダル直接書き換えを試す）
+        </button>
 
         {tab==='exchange' && (
           <div style={{ border:'1px solid #886600', background:'#0a0800', padding:'16px' }}>
