@@ -253,7 +253,7 @@ export default function Profile() {
                     {plus > 0 && !isArtifactBase && <span style={{color:'#ffcc00'}}> +{plus}</span>}
                   </span>
                 </div>
-                <div style={{ fontSize:'10px', color:'#446688', marginLeft:'68px' }}>
+                <div style={{ fontSize:'10px', marginLeft:'68px' }}>
                   {enhW.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻撃力+{enhW.atk_bonus} </span>}
                   {enhW.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防御力+{enhW.def_bonus} </span>}
                   {enhW.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>特殊攻撃力+{enhW.matk_bonus} </span>}
@@ -261,19 +261,19 @@ export default function Profile() {
                   {enhW.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>素早さ+{enhW.spd_bonus} </span>}
                   {equipped.weapons.matk_bonus_pct > 0 && <span style={{color:'#cc44ff'}}>特殊攻撃力+{equipped.weapons.matk_bonus_pct}% </span>}
                   {equipped.weapons.hit_bonus > 0 && <span style={{color:'#ffaa44'}}>命中+{equipped.weapons.hit_bonus}% </span>}
-                  {(equipped.bonus_atk > 0 || equipped.bonus_def > 0 || equipped.bonus_matk > 0 || equipped.bonus_mdef > 0 || equipped.bonus_spd > 0) && (
-                    <span style={{color:'#ffaa00'}}>
-                      ボーナス:
-                      {equipped.bonus_atk  > 0 && ` 攻撃力+${equipped.bonus_atk}`}
-                      {equipped.bonus_def  > 0 && ` 防御力+${equipped.bonus_def}`}
-                      {equipped.bonus_matk > 0 && ` 特殊攻撃力+${equipped.bonus_matk}`}
-                      {equipped.bonus_mdef > 0 && ` 特殊防御力+${equipped.bonus_mdef}`}
-                      {equipped.bonus_spd  > 0 && ` 素早さ+${equipped.bonus_spd}`}
-                    </span>
-                  )}
-                  {equipped.bonus_effect && equipped.bonus_effect !== 'artifact' && <span style={{color:'#ffaa00'}}> {getEffectLabel(equipped.bonus_effect)}</span>}
                 </div>
-                {equipped.bonus_effect === 'artifact' && <div style={{ fontSize:'10px', color:'#44ccff', marginLeft:'68px', marginTop:'2px' }}>【特殊能力】{getEffectLabel(equipped.bonus_effect)}</div>}
+                {(equipped.bonus_atk > 0 || equipped.bonus_def > 0 || equipped.bonus_matk > 0 || equipped.bonus_mdef > 0 || equipped.bonus_spd > 0 || (equipped.bonus_effect && equipped.bonus_effect !== 'artifact')) && (
+                  <div style={{ fontSize:'10px', color:'#ffaa00', marginLeft:'68px' }}>
+                    ボーナス:
+                    {equipped.bonus_atk  > 0 && ` 攻撃力+${equipped.bonus_atk}`}
+                    {equipped.bonus_def  > 0 && ` 防御力+${equipped.bonus_def}`}
+                    {equipped.bonus_matk > 0 && ` 特殊攻撃力+${equipped.bonus_matk}`}
+                    {equipped.bonus_mdef > 0 && ` 特殊防御力+${equipped.bonus_mdef}`}
+                    {equipped.bonus_spd  > 0 && ` 素早さ+${equipped.bonus_spd}`}
+                    {equipped.bonus_effect && equipped.bonus_effect !== 'artifact' && ` ${getEffectLabel(equipped.bonus_effect)}`}
+                  </div>
+                )}
+                {equipped.bonus_effect === 'artifact' && <div style={{ fontSize:'10px', color:'#44ccff', marginLeft:'68px' }}>【特殊能力】{getEffectLabel(equipped.bonus_effect)}</div>}
               </div>
             )
           })}
