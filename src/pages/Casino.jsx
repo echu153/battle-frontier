@@ -76,10 +76,35 @@ export default function Casino() {
 
   useEffect(() => { initCasino() }, [])
 
-  // 賭博場を開いた時：進行中のハイロー/スロット状態をリセット（リログ対策・表示ズレ防止）
+  // 賭博場を開いた時：サーバーの進行中状態を復元（リロードしてもAT/ダブルアップ等を継続）
   const initCasino = async () => {
-    try { await supabase.rpc('casino_reset') } catch {}
     await fetchProfile()
+    await restoreCasinoState()
+  }
+
+  const restoreCasinoState = async () => {
+    try {
+      const { data } = await supabase.rpc('casino_state')
+      if (!data) return
+      const s = data.slot
+      if (s && s.mode) {
+        setSlotMode(s.mode)
+        setAtGames(s.at_games || 0); setCzGames(s.cz_games || 0); setTokuGames(s.toku_games || 0)
+        if (s.mode !== 'normal' && s.at_bet) setSlotBet(s.at_bet)
+      }
+      const h = data.hilo
+      if (h) {
+        if (h.phase === 'pick') {
+          setHiloGame({ card1:h.card1, mult_high:h.mult_high, mult_low:h.mult_low })
+          setLastBet(h.bet); setCard2(null); setHiloPhase('pick')
+        } else if (h.phase === 'double') {
+          setPot(h.pot); setStreak(h.streak); setDoubleCard(null); setHiloPhase('double')
+        }
+        setTab('hilo')
+      } else if (s && s.mode && s.mode !== 'normal') {
+        setTab('slot')
+      }
+    } catch {}
   }
 
   const loadDaily = async () => {
@@ -448,8 +473,7 @@ export default function Casino() {
         </div>
 
         <div style={{ border:'1px dashed #ff8844', background:'#1a0800', color:'#ff8844', fontSize:'11px', padding:'8px', marginBottom:'12px', textAlign:'center' }}>
-          🚧 賭博場はテスト中です。仕様や倍率は予告なく変更される場合があります。<br/>
-          ⚠ ページをリロードすると進行中のゲーム（AT・ハイロー等）はリセットされます 🚧
+          🚧 賭博場はテスト中です。仕様や倍率は予告なく変更される場合があります 🚧
         </div>
 
         {profile.is_fishing && (
