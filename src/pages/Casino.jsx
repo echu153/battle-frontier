@@ -5,7 +5,8 @@ import { supabase } from '../supabase'
 const EXCHANGE_RATE = 100 // 100G = 1メダル（SQLのrateと一致させること）
 const EXCHANGE_OPTIONS = [1, 5, 10, 50, 100, 1000]
 const MAX_BET = 1000 // SQLのmax_betと一致させること
-const BET_PRESETS = [1, 5, 10, 50, 100, 500, 1000]
+const MIN_BET = 10
+const BET_PRESETS = [10, 50, 100, 500, 1000]
 // ランク1〜13 → カード表示（2が最弱・Aが最強）
 const RANK_LABELS = ['', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
 
@@ -62,7 +63,7 @@ export default function Casino() {
   const hiloDeal = async () => {
     if (loading || !profile) return
     const bet = Math.floor(betAmount)
-    if (!bet || bet <= 0) { showMessage('ベット額を入力してください', '#ff4444'); return }
+    if (!bet || bet < MIN_BET) { showMessage(`ベットは${MIN_BET}メダルからです`, '#ff4444'); return }
     if (bet > MAX_BET) { showMessage(`ベットは${MAX_BET}メダルまでです`, '#ff4444'); return }
     if ((profile.medals||0) < bet) { showMessage('メダルが足りません！', '#ff4444'); return }
     setLoading(true)
@@ -206,7 +207,7 @@ export default function Casino() {
 
             {/* ベット設定 */}
             <div style={{ marginBottom:'12px', opacity: hiloPhase==='bet'?1:0.5, pointerEvents: hiloPhase==='bet'?'auto':'none' }}>
-              <div style={{ color:'#446688', fontSize:'11px', marginBottom:'6px' }}>ベット額（最大{MAX_BET}）</div>
+              <div style={{ color:'#446688', fontSize:'11px', marginBottom:'6px' }}>ベット額（{MIN_BET}〜{MAX_BET}）</div>
               <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'6px' }}>
                 {BET_PRESETS.map(n => (
                   <button key={n} onClick={()=>setBetAmount(n)}
@@ -215,8 +216,8 @@ export default function Casino() {
                   </button>
                 ))}
               </div>
-              <input type="number" min="1" max={MAX_BET} value={betAmount}
-                onChange={e=>setBetAmount(Math.min(MAX_BET, Math.max(1, Math.floor(Number(e.target.value)||0))))}
+              <input type="number" min={MIN_BET} max={MAX_BET} value={betAmount}
+                onChange={e=>setBetAmount(Math.min(MAX_BET, Math.max(MIN_BET, Math.floor(Number(e.target.value)||0))))}
                 style={{ width:'100%', background:'#001028', border:'1px solid #886600', color:'#ffaa00', fontFamily:'monospace', fontSize:'13px', padding:'8px', boxSizing:'border-box' }} />
             </div>
 
@@ -275,13 +276,13 @@ export default function Casino() {
                 )}
                 <div style={{ textAlign:'center', padding:'10px', marginBottom:'10px', border:'1px solid #44ff88', color:'#44ff88', fontSize:'14px' }}>
                   🎉 現在の持ち分: <span style={{ fontSize:'18px', fontWeight:'bold' }}>{pot.toLocaleString()}</span> メダル<br/>
-                  <span style={{ fontSize:'11px', color:'#88ccaa' }}>倍々チャンス {streak}/5</span>
+                  <span style={{ fontSize:'11px', color:'#88ccaa' }}>ダブルアップ {streak}/5</span>
                 </div>
                 <button onClick={hiloTake} disabled={loading}
                   style={{ width:'100%', padding:'10px', marginBottom:'8px', background:'#001a0a', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>
                   💰 確定して {pot.toLocaleString()} メダル受け取る
                 </button>
-                <div style={{ color:'#446688', fontSize:'10px', textAlign:'center', marginBottom:'6px' }}>▼ 倍々チャンス（当たれば2倍・7か逆で全没収）</div>
+                <div style={{ color:'#446688', fontSize:'10px', textAlign:'center', marginBottom:'6px' }}>▼ ダブルアップ（当たれば2倍・7か逆で全没収）</div>
                 <div style={{ display:'flex', gap:'8px' }}>
                   <button onClick={()=>hiloDouble('high')} disabled={loading}
                     style={{ flex:1, padding:'12px', background:'#1a0008', border:'1px solid #ff6688', color:'#ff6688', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>
@@ -307,15 +308,25 @@ export default function Casino() {
                     </div>
                   </div>
                 )}
-                <div style={{ textAlign:'center', padding:'10px', marginBottom:'10px', fontSize:'15px',
-                  color: (finalResult.type==='take'||finalResult.type==='maxed')?'#44ff88':finalResult.type==='push'?'#ffcc00':'#ff4444',
-                  border:`1px solid ${(finalResult.type==='take'||finalResult.type==='maxed')?'#44ff88':finalResult.type==='push'?'#ffcc00':'#ff4444'}` }}>
-                  {finalResult.type==='take' && `💰 ${finalResult.pot.toLocaleString()}メダル獲得！`}
-                  {finalResult.type==='maxed' && `👑 5連勝達成！ ${finalResult.pot.toLocaleString()}メダル獲得！`}
-                  {finalResult.type==='push' && `🤝 引き分け 賭け金返却`}
-                  {finalResult.type==='lose' && `😭 ハズレ… 没収`}
-                  {finalResult.type==='bust' && `💥 7が出てバスト！ 没収`}
-                </div>
+                {finalResult.type==='maxed' ? (
+                  <div style={{ textAlign:'center', padding:'20px 10px', marginBottom:'10px',
+                    border:'3px double #ffcc00', background:'linear-gradient(180deg,#1a1400,#0a0800)', color:'#ffcc00' }}>
+                    <div style={{ fontSize:'28px', marginBottom:'4px' }}>🎊👑🎊</div>
+                    <div style={{ fontSize:'18px', fontWeight:'bold', letterSpacing:'2px', marginBottom:'4px' }}>5連勝 ダブルアップ制覇！</div>
+                    <div style={{ fontSize:'13px', color:'#fff0a0', marginBottom:'8px' }}>✨ G R A N D   W I N ✨</div>
+                    <div style={{ fontSize:'24px', fontWeight:'bold', color:'#ffee44' }}>🎫 {finalResult.pot.toLocaleString()} メダル獲得！</div>
+                    <div style={{ fontSize:'20px', marginTop:'6px' }}>🎉🎰🎉🎰🎉</div>
+                  </div>
+                ) : (
+                  <div style={{ textAlign:'center', padding:'10px', marginBottom:'10px', fontSize:'15px',
+                    color: finalResult.type==='take'?'#44ff88':finalResult.type==='push'?'#ffcc00':'#ff4444',
+                    border:`1px solid ${finalResult.type==='take'?'#44ff88':finalResult.type==='push'?'#ffcc00':'#ff4444'}` }}>
+                    {finalResult.type==='take' && `💰 ${finalResult.pot.toLocaleString()}メダル獲得！`}
+                    {finalResult.type==='push' && `🤝 引き分け 賭け金返却`}
+                    {finalResult.type==='lose' && `😭 ハズレ… 没収`}
+                    {finalResult.type==='bust' && `💥 7が出てバスト！ 没収`}
+                  </div>
+                )}
                 <button onClick={hiloReset} disabled={loading}
                   style={{ width:'100%', padding:'12px', background:'#1a1000', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>
                   もう一度
