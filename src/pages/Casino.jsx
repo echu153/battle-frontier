@@ -26,7 +26,8 @@ export default function Casino() {
   const [pot, setPot] = useState(0)                  // 現在の持ち分
   const [streak, setStreak] = useState(0)            // 倍々連勝数
   const [doubleCard, setDoubleCard] = useState(null) // 倍々でめくったカード
-  const [finalResult, setFinalResult] = useState(null) // { type, pot }
+  const [finalResult, setFinalResult] = useState(null) // { type, pot, lost }
+  const [lastBet, setLastBet] = useState(0)
 
   useEffect(() => { fetchProfile() }, [])
 
@@ -70,6 +71,7 @@ export default function Casino() {
     const { data, error } = await supabase.rpc('hilo_deal', { bet })
     if (error) { showMessage(`エラー: ${error.message}`, '#ff4444'); setLoading(false); return }
     setHiloGame(data)
+    setLastBet(bet)
     setCard2(null); setPot(0); setStreak(0); setDoubleCard(null); setFinalResult(null)
     setHiloPhase('pick')
     await fetchProfile()
@@ -87,7 +89,8 @@ export default function Casino() {
       setPot(data.pot); setStreak(0); setDoubleCard(null)
       setHiloPhase('double')
     } else {
-      setFinalResult({ type: data.result, pot: data.pot })
+      // push（返却）または lose（賭け金没収）
+      setFinalResult({ type: data.result, pot: data.pot, lost: data.result==='lose' ? lastBet : 0 })
       setHiloPhase('result')
     }
     await fetchProfile()
@@ -120,7 +123,8 @@ export default function Casino() {
       setFinalResult({ type: 'maxed', pot: data.pot })
       setHiloPhase('result')
     } else {
-      setFinalResult({ type: data.result, pot: 0 })
+      // bust または lose：その時点の持ち分を全没収
+      setFinalResult({ type: data.result, pot: 0, lost: pot })
       setHiloPhase('result')
     }
     await fetchProfile()
@@ -323,8 +327,8 @@ export default function Casino() {
                     border:`1px solid ${finalResult.type==='take'?'#44ff88':finalResult.type==='push'?'#ffcc00':'#ff4444'}` }}>
                     {finalResult.type==='take' && `💰 ${finalResult.pot.toLocaleString()}メダル獲得！`}
                     {finalResult.type==='push' && `🤝 引き分け 賭け金返却`}
-                    {finalResult.type==='lose' && `😭 ハズレ… 没収`}
-                    {finalResult.type==='bust' && `💥 7が出てバスト！ 没収`}
+                    {finalResult.type==='lose' && `😭 ハズレ… ${finalResult.lost.toLocaleString()}メダル没収`}
+                    {finalResult.type==='bust' && `💥 7が出てバスト！ ${finalResult.lost.toLocaleString()}メダル没収`}
                   </div>
                 )}
                 <button onClick={hiloReset} disabled={loading}
