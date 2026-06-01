@@ -1431,7 +1431,7 @@ export default function Game() {
       ? { text:`⚠ ボス出現！ ${enemy.name}が現れた！`, color:'#ff4444' }
       : { text:`${enemy.name}が現れた！`, color:'#88ccff' }
     )
-    if (isArtifact) logs.push({ text:`⚔ アーティファクト発動！ 消費MP2倍・与ダメージ1.2倍！`, color:'#ffcc00' })
+
     playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
 
     const effectiveSpdForCalc = hasTakaNoMe ? Math.floor(eff.spd * 1.2) : eff.spd
