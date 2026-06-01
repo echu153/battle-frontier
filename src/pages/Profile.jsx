@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { calcEffectiveTotal } from '../lib/stats'
+import { calcEffectiveStats, calcEffectiveTotal } from '../lib/stats'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -135,6 +135,7 @@ export default function Profile() {
 
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
+  const eff = calcEffectiveStats(profile, equipment, proficiency)
   const total = calcEffectiveTotal(profile, equipment, proficiency)
   const totalRank = getTotalRank(total)
   const slots = ['weapon','armor','accessory','accessory2']
@@ -208,13 +209,13 @@ export default function Profile() {
           <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>ステータス</div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px', fontSize:'11px' }}>
             {[
-              { label:'HP', val:profile.hp_max, type:'hp', color:'#00cc44' },
-              { label:'MP', val:profile.mp_max, type:'mp', color:'#4488ff' },
-              { label:'攻撃力', val:profile.atk, type:'atk', color:'#ffcc00' },
-              { label:'防御力', val:profile.def, type:'def', color:'#88aaff' },
-              { label:'特殊攻撃力', val:profile.matk, type:'matk', color:'#cc44ff' },
-              { label:'特殊防御力', val:profile.mdef, type:'mdef', color:'#44ccff' },
-              { label:'素早さ', val:profile.spd, type:'spd', color:'#ff8844' },
+              { label:'HP', val:eff.hp_max, type:'hp', color:'#00cc44' },
+              { label:'MP', val:eff.mp_max, type:'mp', color:'#4488ff' },
+              { label:'攻撃力', val:eff.atk, type:'atk', color:'#ffcc00' },
+              { label:'防御力', val:eff.def, type:'def', color:'#88aaff' },
+              { label:'特殊攻撃力', val:eff.matk, type:'matk', color:'#cc44ff' },
+              { label:'特殊防御力', val:eff.mdef, type:'mdef', color:'#44ccff' },
+              { label:'素早さ', val:eff.spd, type:'spd', color:'#ff8844' },
             ].map(s => {
               const rank = getStatRank(s.val, s.type)
               return (
