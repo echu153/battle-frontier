@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import papiaIcon from '../assets/papia.png'
 
 const WAIT_SECONDS = 10
 const REGEN_SECONDS = 60
@@ -966,6 +967,7 @@ export default function Game() {
   const [canAct, setCanAct] = useState(false)
   const [scene, setScene] = useState('town')
   const [battleLogs, setBattleLogs] = useState([])
+  const [currentEnemy, setCurrentEnemy] = useState(null)
   const [loading, setLoading] = useState(false)
   const [pendingPoints, setPendingPoints] = useState(0)
   const [statPoints, setStatPoints] = useState({})
@@ -1362,7 +1364,20 @@ export default function Game() {
       return
     }
 
-    setLoading(true); setScene('battle'); setBattleLogs([])
+    const eff = calcEffectiveStats(profile, equipment, proficiency)
+    const area = AREAS.find(a => a.id === selectedArea)
+    const bossRate = profile.boss_encounter_rate || 0
+    const isBossEncounter = Math.random()*100 < bossRate
+    const papiaRate = getPapiaEventStatus().active ? 2 : 1
+    const isPapiaEncounter = !isBossEncounter && Math.random()*100 < papiaRate
+    const enemy = isPapiaEncounter
+      ? { ...PAPIA }
+      : isBossEncounter
+        ? { ...area.boss }
+        : { ...area.enemies[Math.floor(Math.random()*area.enemies.length)] }
+    const enemyMaxHp = enemy.hp
+
+    setLoading(true); setScene('battle'); setBattleLogs([]); setCurrentEnemy(enemy)
 
     // Atomic lock: last_action_atが古い場合のみUPDATE（複数端末同時出撃・釣り中出撃を防ぐ）
     const lockTime = new Date(Date.now() - WAIT_SECONDS * 1000).toISOString()
@@ -1379,19 +1394,6 @@ export default function Game() {
     const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
     const cap = getEffectiveCap(profile.class)
     const isAtCap = currentClassLv >= cap
-
-    const eff = calcEffectiveStats(profile, equipment, proficiency)
-    const area = AREAS.find(a => a.id === selectedArea)
-    const bossRate = profile.boss_encounter_rate || 0
-    const isBossEncounter = Math.random()*100 < bossRate
-    const papiaRate = getPapiaEventStatus().active ? 2 : 1
-    const isPapiaEncounter = !isBossEncounter && Math.random()*100 < papiaRate
-    const enemy = isPapiaEncounter
-      ? { ...PAPIA }
-      : isBossEncounter
-        ? { ...area.boss }
-        : { ...area.enemies[Math.floor(Math.random()*area.enemies.length)] }
-    const enemyMaxHp = enemy.hp
 
     const logs = []
     let playerHp = hpCurrent
@@ -2670,6 +2672,11 @@ export default function Game() {
           {scene==='battle' && (
             <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
               <div style={{ color:'#ff6644', fontSize:'13px', marginBottom:'10px' }}>⚔ バトル！</div>
+              {currentEnemy?.isPapia && (
+                <div style={{ textAlign:'center', marginBottom:'10px' }}>
+                  <img src={papiaIcon} alt="パピア" style={{ width:'80px', height:'80px', objectFit:'contain', imageRendering:'pixelated' }} />
+                </div>
+              )}
               {loading && <div style={{ color:'#446688', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
               <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
                 {battleLogs.map((l,i)=>(
@@ -2872,6 +2879,11 @@ export default function Game() {
             {scene==='battle' && (
               <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
                 <div style={{ color:'#ff6644', fontSize:'13px', marginBottom:'10px' }}>⚔ バトル！</div>
+                {currentEnemy?.isPapia && (
+                  <div style={{ textAlign:'center', marginBottom:'10px' }}>
+                    <img src={papiaIcon} alt="パピア" style={{ width:'80px', height:'80px', objectFit:'contain', imageRendering:'pixelated' }} />
+                  </div>
+                )}
                 {loading && <div style={{ color:'#446688', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
                 <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
                   {battleLogs.map((l,i)=>(
