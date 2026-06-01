@@ -1089,17 +1089,8 @@ export default function Game() {
     if (!targetClassData) {
       await supabase.from('class_levels').insert({ player_id:profile.id, class_name:targetClass, lv:1, exp:0 })
     }
-    const { data: allCl } = await supabase.from('class_levels').select('*').eq('player_id', profile.id)
-    const updatedCls = (allCl||[]).map(cl => cl.class_name === profile.class ? { ...cl, lv:profile.lv } : cl)
-    const targetExists = updatedCls.find(cl => cl.class_name === targetClass)
-    if (!targetExists) updatedCls.push({ class_name:targetClass, lv:1 })
-    const newCharLv = updatedCls.reduce((sum, cl) => {
-      if (cl.class_name === targetClass) return sum + (cl.lv || 1)
-      return cl.lv > 1 ? sum + cl.lv : sum
-    }, 0)
     await supabase.from('profiles').update({
       class:targetClass, lv:targetLv, exp:targetExp, exp_next:calcExpNext(targetLv),
-      char_lv:newCharLv,
     }).eq('id', profile.id)
     await fetchProfile()
     setTempleMessage(`${targetClass}に転職しました！`)
