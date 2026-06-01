@@ -19,9 +19,13 @@ export default function Casino() {
   const [exchangeAmount, setExchangeAmount] = useState(1)
   // ハイ&ロー状態
   const [betAmount, setBetAmount] = useState(10)
-  const [hiloPhase, setHiloPhase] = useState('bet') // bet → pick → result
+  const [hiloPhase, setHiloPhase] = useState('bet') // bet → pick → double → result
   const [hiloGame, setHiloGame] = useState(null)     // { card1, mult_high, mult_low }
-  const [hiloResult, setHiloResult] = useState(null) // { card1, card2, result, payout }
+  const [card2, setCard2] = useState(null)           // メイン勝負の2枚目
+  const [pot, setPot] = useState(0)                  // 現在の持ち分
+  const [streak, setStreak] = useState(0)            // 倍々連勝数
+  const [doubleCard, setDoubleCard] = useState(null) // 倍々でめくったカード
+  const [finalResult, setFinalResult] = useState(null) // { type, pot }
 
   useEffect(() => { fetchProfile() }, [])
 
@@ -65,24 +69,64 @@ export default function Casino() {
     const { data, error } = await supabase.rpc('hilo_deal', { bet })
     if (error) { showMessage(`エラー: ${error.message}`, '#ff4444'); setLoading(false); return }
     setHiloGame(data)
-    setHiloResult(null)
+    setCard2(null); setPot(0); setStreak(0); setDoubleCard(null); setFinalResult(null)
     setHiloPhase('pick')
+    await fetchProfile()
     setLoading(false)
   }
 
-  // ハイ&ロー：High/Lowを選んで勝負
+  // ハイ&ロー：メインのHigh/Low勝負
   const hiloPick = async (choice) => {
     if (loading) return
     setLoading(true)
     const { data, error } = await supabase.rpc('hilo_pick', { choice })
     if (error) { showMessage(`エラー: ${error.message}`, '#ff4444'); setLoading(false); return }
-    setHiloResult(data)
+    setCard2(data.card2)
+    if (data.result === 'win') {
+      setPot(data.pot); setStreak(0); setDoubleCard(null)
+      setHiloPhase('double')
+    } else {
+      setFinalResult({ type: data.result, pot: data.pot })
+      setHiloPhase('result')
+    }
+    await fetchProfile()
+    setLoading(false)
+  }
+
+  // 倍々チャンス：確定して受け取る
+  const hiloTake = async () => {
+    if (loading) return
+    setLoading(true)
+    const { data, error } = await supabase.rpc('hilo_take')
+    if (error) { showMessage(`エラー: ${error.message}`, '#ff4444'); setLoading(false); return }
+    setFinalResult({ type: 'take', pot: data.pot })
     setHiloPhase('result')
     await fetchProfile()
     setLoading(false)
   }
 
-  const hiloReset = () => { setHiloPhase('bet'); setHiloGame(null); setHiloResult(null) }
+  // 倍々チャンス：High/Lowを宣言してめくる
+  const hiloDouble = async (choice) => {
+    if (loading) return
+    setLoading(true)
+    const { data, error } = await supabase.rpc('hilo_double', { choice })
+    if (error) { showMessage(`エラー: ${error.message}`, '#ff4444'); setLoading(false); return }
+    setDoubleCard(data.card)
+    if (data.result === 'win' && !data.finished) {
+      setPot(data.pot); setStreak(data.streak)
+    } else if (data.result === 'win' && data.finished) {
+      setPot(data.pot); setStreak(data.streak)
+      setFinalResult({ type: 'maxed', pot: data.pot })
+      setHiloPhase('result')
+    } else {
+      setFinalResult({ type: data.result, pot: 0 })
+      setHiloPhase('result')
+    }
+    await fetchProfile()
+    setLoading(false)
+  }
+
+  const hiloReset = () => { setHiloPhase('bet'); setHiloGame(null); setCard2(null); setPot(0); setStreak(0); setDoubleCard(null); setFinalResult(null) }
 
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
@@ -176,22 +220,24 @@ export default function Casino() {
                 style={{ width:'100%', background:'#001028', border:'1px solid #886600', color:'#ffaa00', fontFamily:'monospace', fontSize:'13px', padding:'8px', boxSizing:'border-box' }} />
             </div>
 
-            {/* カード表示エリア */}
-            <div style={{ display:'flex', justifyContent:'center', gap:'16px', alignItems:'center', margin:'16px 0' }}>
-              <div style={{ textAlign:'center' }}>
-                <div style={{ color:'#446688', fontSize:'9px', marginBottom:'4px' }}>1枚目</div>
-                <div style={{ width:'64px', height:'88px', border:'2px solid #ffaa00', borderRadius:'6px', background:'#000', display:'flex', alignItems:'center', justifyContent:'center', color:'#ffcc00', fontSize:'28px', fontWeight:'bold' }}>
-                  {hiloGame ? RANK_LABELS[hiloGame.card1] : '?'}
+            {/* カード表示エリア（メイン勝負）。倍々フェーズでは倍々カードを表示 */}
+            {hiloPhase !== 'double' && !(hiloPhase==='result' && (finalResult?.type==='take'||finalResult?.type==='maxed'||finalResult?.type==='bust'||finalResult?.type==='lose') && doubleCard) && (
+              <div style={{ display:'flex', justifyContent:'center', gap:'16px', alignItems:'center', margin:'16px 0' }}>
+                <div style={{ textAlign:'center' }}>
+                  <div style={{ color:'#446688', fontSize:'9px', marginBottom:'4px' }}>1枚目</div>
+                  <div style={{ width:'64px', height:'88px', border:'2px solid #ffaa00', borderRadius:'6px', background:'#000', display:'flex', alignItems:'center', justifyContent:'center', color:'#ffcc00', fontSize:'28px', fontWeight:'bold' }}>
+                    {hiloGame ? RANK_LABELS[hiloGame.card1] : '?'}
+                  </div>
+                </div>
+                <div style={{ color:'#446688', fontSize:'20px' }}>VS</div>
+                <div style={{ textAlign:'center' }}>
+                  <div style={{ color:'#446688', fontSize:'9px', marginBottom:'4px' }}>2枚目</div>
+                  <div style={{ width:'64px', height:'88px', border:'2px solid #446688', borderRadius:'6px', background:'#000', display:'flex', alignItems:'center', justifyContent:'center', color:'#88ccff', fontSize:'28px', fontWeight:'bold' }}>
+                    {card2 ? RANK_LABELS[card2] : '?'}
+                  </div>
                 </div>
               </div>
-              <div style={{ color:'#446688', fontSize:'20px' }}>VS</div>
-              <div style={{ textAlign:'center' }}>
-                <div style={{ color:'#446688', fontSize:'9px', marginBottom:'4px' }}>2枚目</div>
-                <div style={{ width:'64px', height:'88px', border:'2px solid #446688', borderRadius:'6px', background:'#000', display:'flex', alignItems:'center', justifyContent:'center', color:'#88ccff', fontSize:'28px', fontWeight:'bold' }}>
-                  {hiloResult ? RANK_LABELS[hiloResult.card2] : '?'}
-                </div>
-              </div>
-            </div>
+            )}
 
             {/* 操作エリア */}
             {hiloPhase==='bet' && (
@@ -214,14 +260,61 @@ export default function Casino() {
               </div>
             )}
 
-            {hiloPhase==='result' && hiloResult && (
+            {/* 倍々チャンス */}
+            {hiloPhase==='double' && (
               <div>
+                {doubleCard && (
+                  <div style={{ display:'flex', justifyContent:'center', margin:'12px 0' }}>
+                    <div style={{ textAlign:'center' }}>
+                      <div style={{ color:'#446688', fontSize:'9px', marginBottom:'4px' }}>めくったカード</div>
+                      <div style={{ width:'64px', height:'88px', border:'2px solid #44ff88', borderRadius:'6px', background:'#000', display:'flex', alignItems:'center', justifyContent:'center', color:'#44ff88', fontSize:'28px', fontWeight:'bold' }}>
+                        {RANK_LABELS[doubleCard]}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div style={{ textAlign:'center', padding:'10px', marginBottom:'10px', border:'1px solid #44ff88', color:'#44ff88', fontSize:'14px' }}>
+                  🎉 現在の持ち分: <span style={{ fontSize:'18px', fontWeight:'bold' }}>{pot.toLocaleString()}</span> メダル<br/>
+                  <span style={{ fontSize:'11px', color:'#88ccaa' }}>倍々チャンス {streak}/5</span>
+                </div>
+                <button onClick={hiloTake} disabled={loading}
+                  style={{ width:'100%', padding:'10px', marginBottom:'8px', background:'#001a0a', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>
+                  💰 確定して {pot.toLocaleString()} メダル受け取る
+                </button>
+                <div style={{ color:'#446688', fontSize:'10px', textAlign:'center', marginBottom:'6px' }}>▼ 倍々チャンス（当たれば2倍・7か逆で全没収）</div>
+                <div style={{ display:'flex', gap:'8px' }}>
+                  <button onClick={()=>hiloDouble('high')} disabled={loading}
+                    style={{ flex:1, padding:'12px', background:'#1a0008', border:'1px solid #ff6688', color:'#ff6688', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>
+                    ▲ High<br/><span style={{ fontSize:'10px' }}>(8〜A)</span>
+                  </button>
+                  <button onClick={()=>hiloDouble('low')} disabled={loading}
+                    style={{ flex:1, padding:'12px', background:'#000818', border:'1px solid #66aaff', color:'#66aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>
+                    ▼ Low<br/><span style={{ fontSize:'10px' }}>(2〜6)</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {hiloPhase==='result' && finalResult && (
+              <div>
+                {(finalResult.type==='bust'||finalResult.type==='lose'||finalResult.type==='maxed'||finalResult.type==='take') && doubleCard && (
+                  <div style={{ display:'flex', justifyContent:'center', margin:'12px 0' }}>
+                    <div style={{ textAlign:'center' }}>
+                      <div style={{ color:'#446688', fontSize:'9px', marginBottom:'4px' }}>めくったカード</div>
+                      <div style={{ width:'64px', height:'88px', border:'2px solid #446688', borderRadius:'6px', background:'#000', display:'flex', alignItems:'center', justifyContent:'center', color:'#88ccff', fontSize:'28px', fontWeight:'bold' }}>
+                        {RANK_LABELS[doubleCard]}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div style={{ textAlign:'center', padding:'10px', marginBottom:'10px', fontSize:'15px',
-                  color: hiloResult.result==='win'?'#44ff88':hiloResult.result==='push'?'#ffcc00':'#ff4444',
-                  border:`1px solid ${hiloResult.result==='win'?'#44ff88':hiloResult.result==='push'?'#ffcc00':'#ff4444'}` }}>
-                  {hiloResult.result==='win' && `🎉 勝利！ +${hiloResult.payout - hiloResult.bet}メダル（払戻${hiloResult.payout}）`}
-                  {hiloResult.result==='push' && `🤝 引き分け 賭け金${hiloResult.bet}メダル返却`}
-                  {hiloResult.result==='lose' && `😭 敗北… -${hiloResult.bet}メダル`}
+                  color: (finalResult.type==='take'||finalResult.type==='maxed')?'#44ff88':finalResult.type==='push'?'#ffcc00':'#ff4444',
+                  border:`1px solid ${(finalResult.type==='take'||finalResult.type==='maxed')?'#44ff88':finalResult.type==='push'?'#ffcc00':'#ff4444'}` }}>
+                  {finalResult.type==='take' && `💰 ${finalResult.pot.toLocaleString()}メダル獲得！`}
+                  {finalResult.type==='maxed' && `👑 5連勝達成！ ${finalResult.pot.toLocaleString()}メダル獲得！`}
+                  {finalResult.type==='push' && `🤝 引き分け 賭け金返却`}
+                  {finalResult.type==='lose' && `😭 ハズレ… 没収`}
+                  {finalResult.type==='bust' && `💥 7が出てバスト！ 没収`}
                 </div>
                 <button onClick={hiloReset} disabled={loading}
                   style={{ width:'100%', padding:'12px', background:'#1a1000', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>
