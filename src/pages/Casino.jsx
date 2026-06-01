@@ -38,10 +38,12 @@ export default function Casino() {
   const [slotStopped, setSlotStopped] = useState([false,false,false])
   const [slotMode, setSlotMode] = useState('normal')  // normal / at（次ゲームの状態）
   const [atGames, setAtGames] = useState(0)            // AT残りゲーム数
-  const [navStep, setNavStep] = useState(0)            // ナビ押し順の進行
+  const [navStep, setNavStep] = useState(0)            // ナビ押し順の進行（演出用）
   const [atTotalWin, setAtTotalWin] = useState(0)      // AT中の累計払い出し
+  const [atResult, setAtResult] = useState(null)       // { success, payout }
   const spinRef = useRef(null)
   const slotStoppedRef = useRef([false,false,false])
+  const pressOrderRef = useRef([])
 
   useEffect(() => { slotStoppedRef.current = slotStopped }, [slotStopped])
   useEffect(() => () => { if (spinRef.current) clearInterval(spinRef.current) }, [])
@@ -166,6 +168,8 @@ export default function Casino() {
     setSlotResult(data)
     setSlotStopped([false,false,false])
     setNavStep(0)
+    setAtResult(null)
+    pressOrderRef.current = []
     setSlotPhase('spinning')
     if (spinRef.current) clearInterval(spinRef.current)
     spinRef.current = setInterval(() => {
@@ -174,30 +178,40 @@ export default function Casino() {
     setLoading(false)
   }
 
-  // スロット：リールを止める
-  const slotStop = (idx) => {
+  // スロット：リールを止める（どのボタンも押せる。AT中は押し順が違うと失敗）
+  const slotStop = async (idx) => {
     if (slotPhase!=='spinning' || slotStopped[idx] || !slotResult) return
-    // ATゲーム中はナビの押し順を厳守（違う順は無効）
-    if (slotResult.is_at_game && slotResult.nav) {
-      if (idx !== slotResult.nav[navStep]) return
-      setNavStep(s => s + 1)
-    }
+    pressOrderRef.current = [...pressOrderRef.current, idx]
+    if (slotResult.is_at_game) setNavStep(s => s + 1)
     const nextStopped = slotStopped.map((v,i) => i===idx ? true : v)
     setSlotStopped(nextStopped)
     setSlotDisplay(prev => prev.map((v,i) => i===idx ? slotResult.reels[i] : v))
     if (nextStopped.every(Boolean)) {
       if (spinRef.current) { clearInterval(spinRef.current); spinRef.current = null }
-      setSlotPhase('done')
-      setSlotMode(slotResult.mode)
-      setAtGames(slotResult.at_games)
-      // AT累計払い出しの集計
-      if (slotResult.is_at_game) setAtTotalWin(w => w + slotResult.payout)
-      if (slotResult.at_triggered) setAtTotalWin(0)
-      fetchProfile()
+      if (slotResult.is_at_game) {
+        // 押し順をサーバーで判定
+        setLoading(true)
+        const { data, error } = await supabase.rpc('slot_at_resolve', { press_order: pressOrderRef.current })
+        if (error) { showMessage(`エラー: ${error.message}`, '#ff4444'); setLoading(false); return }
+        setAtResult({ success: data.success, payout: data.payout })
+        setSlotMode(data.mode)
+        setAtGames(data.at_games)
+        if (data.success) setAtTotalWin(w => w + data.payout)
+        else setSlotDisplay([2,2,5]) // こぼし演出（揃わなかった見た目）
+        setSlotPhase('done')
+        await fetchProfile()
+        setLoading(false)
+      } else {
+        setSlotPhase('done')
+        setSlotMode(slotResult.mode)
+        setAtGames(slotResult.at_games)
+        if (slotResult.at_triggered) setAtTotalWin(0)
+        fetchProfile()
+      }
     }
   }
 
-  const slotReset = () => { setSlotPhase('idle'); setSlotResult(null); setSlotStopped([false,false,false]); setNavStep(0) }
+  const slotReset = () => { setSlotPhase('idle'); setSlotResult(null); setSlotStopped([false,false,false]); setNavStep(0); setAtResult(null); pressOrderRef.current = [] }
 
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
@@ -495,14 +509,15 @@ export default function Casino() {
                       </div>
                     )}
                     <div style={{ textAlign:'center', padding:'10px', marginBottom:'10px', fontSize:'15px',
-                      color: slotResult.payout>0?'#44ff88':'#ff4444', border:`1px solid ${slotResult.payout>0?'#44ff88':'#ff4444'}` }}>
-                      {slotResult.is_at_game ? `🔔 ナビ成功！ +${slotResult.payout.toLocaleString()}枚！`
+                      color: slotResult.is_at_game ? (atResult?.success?'#44ff88':'#ff4444') : (slotResult.payout>0?'#44ff88':'#ff4444'),
+                      border:`1px solid ${slotResult.is_at_game ? (atResult?.success?'#44ff88':'#ff4444') : (slotResult.payout>0?'#44ff88':'#ff4444')}` }}>
+                      {slotResult.is_at_game ? (atResult?.success ? `🔔 ナビ成功！ +${atResult.payout.toLocaleString()}枚！` : `💢 ナビ失敗… こぼした！（払い出しなし）`)
                         : slotResult.mult>=250 ? `🎊7️⃣7️⃣7️⃣ 大当たり！🎊 ${slotResult.payout.toLocaleString()}メダル！`
                         : slotResult.payout>slotResult.bet ? `🎉 当たり！ ${slotResult.payout.toLocaleString()}メダル獲得！（×${slotResult.mult}）`
                         : slotResult.payout>0 ? `🍒 賭け金返却（×${slotResult.mult}）`
                         : `😭 ハズレ… ${slotResult.bet.toLocaleString()}メダル没収`}
                     </div>
-                    {slotResult.is_at_game && slotResult.mode==='normal' && (
+                    {slotResult.is_at_game && slotMode==='normal' && (
                       <div style={{ textAlign:'center', padding:'8px', marginBottom:'10px', border:'1px solid #ffcc00', color:'#ffcc00', fontSize:'13px' }}>
                         🎉 AT終了！ 今回の合計 {atTotalWin.toLocaleString()}枚獲得！
                       </div>
