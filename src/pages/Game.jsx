@@ -2235,7 +2235,7 @@ export default function Game() {
 
   if (newAnnouncementPopup) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.88)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
-      <div style={{ background:'#001040', border:'2px solid #ff8844', padding:'28px 24px', maxWidth:'420px', width:'100%', textAlign:'center' }}>
+      <div style={{ background:'#001040', border:'2px solid #ff8844', padding:'28px 24px', maxWidth:'420px', width:'100%', maxHeight:'90vh', overflowY:'auto', textAlign:'center' }}>
         <div style={{ color:'#ff8844', fontSize:'22px', marginBottom:'8px' }}>📢</div>
         <div style={{ color:'#ff8844', fontSize:'15px', marginBottom:'16px', letterSpacing:'2px' }}>新着お知らせ</div>
         <div style={{ marginBottom:'20px', textAlign:'left' }}>
@@ -2259,17 +2259,24 @@ export default function Game() {
             閉じる
           </button>
         </div>
+        <div style={{ marginTop:'16px', borderTop:'1px solid #003366', paddingTop:'12px' }}>
+          <button onClick={logout}
+            style={{ background:'none', border:'1px solid #884444', color:'#cc6666', padding:'5px 16px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+            ログアウト
+          </button>
+        </div>
       </div>
     </div>
   )
 
   if (showAnnouncements) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ background:'#001040', border:'1px solid #ff8844', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'80vh', overflowY:'auto', fontFamily:'monospace' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', borderBottom:'1px solid #003366', paddingBottom:'8px' }}>
+      <div style={{ background:'#001040', border:'1px solid #ff8844', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'80vh', display:'flex', flexDirection:'column', fontFamily:'monospace' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', borderBottom:'1px solid #003366', paddingBottom:'8px', flexShrink:0 }}>
           <div style={{ color:'#ff8844', fontSize:'14px' }}>📢 お知らせ</div>
           <button onClick={()=>{ setShowAnnouncements(false); setOpenAnnouncementId(null) }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>✕ 閉じる</button>
         </div>
+        <div style={{ overflowY:'auto' }}>
         {announcements.length === 0 && <div style={{ color:'#446688', fontSize:'12px' }}>お知らせはありません</div>}
         {announcements.map(a => {
           const isNew = !seenAnnouncementIds.includes(a.id)
@@ -2294,6 +2301,7 @@ export default function Game() {
             </div>
           )
         })}
+        </div>
       </div>
     </div>
   )
@@ -2308,6 +2316,12 @@ export default function Game() {
         <div style={{ fontSize:'32px', marginBottom:'16px' }}>🔧</div>
         <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'2px', marginBottom:'12px' }}>メンテナンス中</div>
         <div style={{ color:'#88ccff', fontSize:'12px', lineHeight:'1.8', whiteSpace:'pre-wrap' }}>{maintenanceAnnouncement.content}</div>
+        <div style={{ marginTop:'20px', borderTop:'1px solid #003366', paddingTop:'14px' }}>
+          <button onClick={logout}
+            style={{ background:'none', border:'1px solid #884444', color:'#cc6666', padding:'6px 18px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+            ログアウト
+          </button>
+        </div>
       </div>
     </div>
   )
