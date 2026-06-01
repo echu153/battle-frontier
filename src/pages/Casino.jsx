@@ -850,7 +850,7 @@ export default function Casino() {
                   </>
                 )}
 
-                <button onClick={slotLever} disabled={loading || (slotMode==='normal' && (profile.medals||0) < slotBet) || (slotMode==='at' && (profile.medals||0) < (slotResult?.bet||0))}
+                <button onClick={slotLever} disabled={loading || (slotMode==='normal' && (profile.medals||0) < slotBet)}
                   style={{ width:'100%', padding:'14px', background: navMode?'#2a0018':'#1a1000', border:`1px solid ${accent}`, color: accent, cursor:'pointer', fontFamily:'monospace', fontSize:'15px', letterSpacing:'2px' }}>
                   {slotMode==='cz' ? `⚡ CZ レバーON（残り${czGames}G）`
                     : slotMode==='at' ? `🔥 AT レバーON（残り${atGames}G）`
