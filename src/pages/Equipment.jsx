@@ -221,8 +221,8 @@ export default function Equipment() {
 
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
-  const slots = ['weapon', 'armor', 'accessory', 'accessory2']
-  const filteredEquipment = sortEquipment(equipment.filter(e => e.slot === tab), sortKey)
+  const slots = ['weapon', 'armor', 'accessory']
+  const filteredEquipment = sortEquipment(equipment.filter(e => tab === 'accessory' ? (e.slot === 'accessory' || e.slot === 'accessory2') : e.slot === tab), sortKey)
   const equippedItem = allItems.find(i => i.equipped)
 
   return (
@@ -305,7 +305,7 @@ export default function Equipment() {
                     background: tab === s ? '#001840' : '#000818',
                     border: `1px solid ${tab === s ? '#ffcc00' : '#003366'}`,
                     color: tab === s ? '#ffcc00' : '#446688' }}>
-                  {s === 'item' ? 'アイテム' : SLOT_LABELS[s]}
+                  {s === 'item' ? 'アイテム' : s === 'accessory' ? '装飾品' : SLOT_LABELS[s]}
                 </button>
               ))}
             </div>
