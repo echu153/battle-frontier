@@ -334,7 +334,9 @@ export default function Smithy() {
     const owned = sheetItem?.quantity || 0
     if (owned < needed) { showMessage(`再評価依頼書が足りません！（所持${owned}枚・必要${needed}枚）`, '#ff4444'); setLoading(false); return }
     const newSlots = generateBonusSlots(rarity)
-    await supabase.from('player_equipment').update(slotsToColumns(newSlots)).eq('id', item.id)
+    const cols = slotsToColumns(newSlots)
+    if (item.bonus_effect === 'artifact') cols.bonus_effect = 'artifact'
+    await supabase.from('player_equipment').update(cols).eq('id', item.id)
     const newQty = owned - needed
     if (newQty <= 0) await supabase.from('player_items').delete().eq('id', sheetItem.id)
     else await supabase.from('player_items').update({ quantity: newQty }).eq('id', sheetItem.id)
@@ -659,7 +661,7 @@ export default function Smithy() {
                   <div style={{ color:'#aa6644', fontSize:'11px', marginBottom:'6px' }}>── {SLOT_LABELS[slot]} ──</div>
                   {slotItems.map(item => {
                     const w = item.weapons
-                    const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name) || item.bonus_effect === 'artifact'
+                    const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
                     const rarity = w.rarity
                     const needed = RE_EVAL_SHEETS[rarity]
                     const evalOwned = playerItems.find(pi=>pi.items?.name==='再評価依頼書')?.quantity||0
