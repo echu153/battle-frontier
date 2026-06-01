@@ -225,7 +225,7 @@ export default function Casino() {
   const slotStop = async (idx) => {
     if (slotPhase!=='spinning' || slotStopped[idx] || !slotResult) return
     pressOrderRef.current = [...pressOrderRef.current, idx]
-    if (slotResult.is_at_game) setNavStep(s => s + 1)
+    if (slotResult.pending) setNavStep(s => s + 1)
     const nextStopped = slotStopped.map((v,i) => i===idx ? true : v)
     setSlotStopped(nextStopped)
     setSlotDisplay(prev => prev.map((v,i) => i===idx ? slotResult.reels[i] : v))
