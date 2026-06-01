@@ -339,7 +339,7 @@ const calcTotal = (p) => Math.floor((p.hp_max/10)+(p.mp_max/5)+p.atk+p.def+p.mat
 // EXP凍結中か（手動のexp_frozen、または期限付きのexp_frozen_until）
 const expIsFrozen = (p) => !!(p && (p.exp_frozen || (p.exp_frozen_until && new Date(p.exp_frozen_until) > new Date())))
 // オートクリッカー検知：直近サンプル数と、間隔のばらつき許容幅(ms)
-const AUTOCLICK_SAMPLES = 12
+const AUTOCLICK_SAMPLES = 90  // 約15分相当（通常出撃CD10秒 × 90回）連続で規則的ならBOT確認
 const AUTOCLICK_SPREAD_MS = 1000
 
 const getTotalRank = (total) => {
@@ -1024,6 +1024,7 @@ export default function Game() {
   const battleCountTrackerRef = useRef({ start: null, count: 0 })
   const sortieTimesRef = useRef([])  // オートクリッカー検知：出撃時刻の履歴
   const botCheckTimerRef = useRef(null)  // BOT確認チャレンジの60秒タイマー
+  const botCheckActiveRef = useRef(false)  // チャレンジ中フラグ（ボタン押下で解除＝停止を確実に防ぐ）
   const regenningRef = useRef(false)
 
   useEffect(() => {
@@ -1347,16 +1348,19 @@ export default function Game() {
   const triggerBotCheck = () => {
     const top = Math.floor(15 + Math.random()*65)   // 15〜80vh
     const left = Math.floor(5 + Math.random()*65)   // 5〜70vw
+    botCheckActiveRef.current = true
     setBotCheck({ top, left })
     if (botCheckTimerRef.current) clearTimeout(botCheckTimerRef.current)
     botCheckTimerRef.current = setTimeout(async () => {
       botCheckTimerRef.current = null
+      if (!botCheckActiveRef.current) return  // 既にボタンが押されていれば停止しない
+      botCheckActiveRef.current = false
       setBotCheck(null)
       await suspendAccount('BOT確認ボタンを1分以内に押せなかった')
     }, 60000)
   }
-  const passBotCheck = (e) => {
-    if (e && !e.isTrusted) return  // 機械クリックは無効
+  const passBotCheck = () => {
+    botCheckActiveRef.current = false  // 先にフラグを落として停止を確実に無効化
     if (botCheckTimerRef.current) { clearTimeout(botCheckTimerRef.current); botCheckTimerRef.current = null }
     setBotCheck(null)
     sortieTimesRef.current = []  // 履歴リセットして再判定を回避

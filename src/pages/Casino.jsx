@@ -69,6 +69,7 @@ export default function Casino() {
   const sortieStreakRef = useRef(0)     // カジノで遊ばず簡易出撃が連続した回数
   const [botCheck, setBotCheck] = useState(null)  // BOT確認チャレンジ {top,left} or null
   const botCheckTimerRef = useRef(null) // BOT確認チャレンジの60秒タイマー
+  const botCheckActiveRef = useRef(false) // チャレンジ中フラグ（ボタン押下で解除＝停止を確実に防ぐ）
   const [showSettle, setShowSettle] = useState(false)
   const [sortieMsg, setSortieMsg] = useState('')
   const [now, setNow] = useState(Date.now())
@@ -177,16 +178,19 @@ export default function Casino() {
   const triggerBotCheck = () => {
     const top = Math.floor(15 + Math.random()*65)   // 15〜80vh
     const left = Math.floor(5 + Math.random()*65)   // 5〜70vw
+    botCheckActiveRef.current = true
     setBotCheck({ top, left })
     if (botCheckTimerRef.current) clearTimeout(botCheckTimerRef.current)
     botCheckTimerRef.current = setTimeout(async () => {
       botCheckTimerRef.current = null
+      if (!botCheckActiveRef.current) return  // 既にボタンが押されていれば停止しない
+      botCheckActiveRef.current = false
       setBotCheck(null)
       await suspendAccount('BOT確認ボタンを1分以内に押せなかった')
     }, 60000)
   }
-  const passBotCheck = (e) => {
-    if (e && !e.isTrusted) return  // 機械クリックは無効
+  const passBotCheck = () => {
+    botCheckActiveRef.current = false  // 先にフラグを落として停止を確実に無効化
     if (botCheckTimerRef.current) { clearTimeout(botCheckTimerRef.current); botCheckTimerRef.current = null }
     setBotCheck(null)
     sortieTimesRef.current = []  // 履歴リセットして再判定を回避
