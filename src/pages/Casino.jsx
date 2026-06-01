@@ -40,7 +40,10 @@ export default function Casino() {
   const [atGames, setAtGames] = useState(0)            // AT残りゲーム数
   const [navStep, setNavStep] = useState(0)            // ナビ押し順の進行（演出用）
   const [atTotalWin, setAtTotalWin] = useState(0)      // AT中の累計払い出し
-  const [atResult, setAtResult] = useState(null)       // { success, payout }
+  const [atResult, setAtResult] = useState(null)       // { success, payout } / CZは{success,czWon,kind:'cz'}
+  const [czGames, setCzGames] = useState(0)            // CZ残りゲーム数
+  const [tokuGames, setTokuGames] = useState(0)        // 特化ゾーン残りゲーム数
+  const [tokuAdded, setTokuAdded] = useState(null)     // 直近の上乗せ量
   const spinRef = useRef(null)
   const slotStoppedRef = useRef([false,false,false])
   const pressOrderRef = useRef([])
@@ -169,12 +172,27 @@ export default function Casino() {
     setSlotStopped([false,false,false])
     setNavStep(0)
     setAtResult(null)
+    setTokuAdded(null)
     pressOrderRef.current = []
     setSlotPhase('spinning')
     if (spinRef.current) clearInterval(spinRef.current)
     spinRef.current = setInterval(() => {
       setSlotDisplay(prev => prev.map((v,idx) => (slotStoppedRef.current[idx] ? v : Math.floor(Math.random()*SLOT_SYMBOLS.length))))
     }, 80)
+    setLoading(false)
+  }
+
+  // 特化ゾーン：上乗せ（無料・レバーのみ）
+  const slotToku = async () => {
+    if (loading) return
+    setLoading(true)
+    const { data, error } = await supabase.rpc('slot_toku')
+    if (error) { showMessage(`エラー: ${error.message}`, '#ff4444'); setLoading(false); return }
+    setTokuAdded(data.added)
+    setAtGames(data.at_games)
+    setTokuGames(data.toku_games)
+    setSlotMode(data.mode)
+    setAtTotalWin(w => w)  // 据え置き
     setLoading(false)
   }
 
@@ -188,30 +206,38 @@ export default function Casino() {
     setSlotDisplay(prev => prev.map((v,i) => i===idx ? slotResult.reels[i] : v))
     if (nextStopped.every(Boolean)) {
       if (spinRef.current) { clearInterval(spinRef.current); spinRef.current = null }
-      if (slotResult.is_at_game) {
-        // 押し順をサーバーで判定
+      if (slotResult.pending) {
+        // CZ/AT のナビ判定をサーバーで
         setLoading(true)
         const { data, error } = await supabase.rpc('slot_at_resolve', { press_order: pressOrderRef.current })
         if (error) { showMessage(`エラー: ${error.message}`, '#ff4444'); setLoading(false); return }
-        setAtResult({ success: data.success, payout: data.payout })
         setSlotMode(data.mode)
-        setAtGames(data.at_games)
-        if (data.success) setAtTotalWin(w => w + data.payout)
-        else setSlotDisplay([2,2,5]) // こぼし演出（揃わなかった見た目）
+        if (!data.success) setSlotDisplay([2,2,5]) // こぼし演出
+        if (data.kind === 'cz') {
+          setAtResult({ kind:'cz', success:data.success, czWon:data.at_won })
+          setCzGames(data.cz_games)
+          if (data.at_won) { setAtGames(data.at_games); setAtTotalWin(0) }
+        } else {
+          setAtResult({ kind:'at', success:data.success, payout:data.payout, toku:data.toku_triggered })
+          setAtGames(data.at_games)
+          if (data.success) setAtTotalWin(w => w + data.payout)
+        }
         setSlotPhase('done')
         await fetchProfile()
         setLoading(false)
       } else {
+        // 通常スピン
         setSlotPhase('done')
         setSlotMode(slotResult.mode)
-        setAtGames(slotResult.at_games)
-        if (slotResult.at_triggered) setAtTotalWin(0)
+        setCzGames(slotResult.cz_games || 0)
+        setAtGames(slotResult.at_games || 0)
+        if (slotResult.at_entered) setAtTotalWin(0)
         fetchProfile()
       }
     }
   }
 
-  const slotReset = () => { setSlotPhase('idle'); setSlotResult(null); setSlotStopped([false,false,false]); setNavStep(0); setAtResult(null); pressOrderRef.current = [] }
+  const slotReset = () => { setSlotPhase('idle'); setSlotResult(null); setSlotStopped([false,false,false]); setNavStep(0); setAtResult(null); setTokuAdded(null); pressOrderRef.current = [] }
 
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
@@ -426,52 +452,70 @@ export default function Casino() {
           </div>
         )}
 
-        {tab==='slot' && (
-          <div style={{ border:`1px solid ${slotMode==='at'?'#ff4488':'#886600'}`, background: slotMode==='at'?'#1a0014':'#0a0800', padding:'16px' }}>
+        {tab==='slot' && (() => {
+          const navMode = slotMode==='cz' || slotMode==='at'
+          const accent = slotMode==='at' ? '#ff4488' : slotMode==='cz' ? '#44ddff' : slotMode==='toku' ? '#ffcc00' : '#886600'
+          const bg = slotMode==='at' ? '#1a0014' : slotMode==='cz' ? '#001824' : slotMode==='toku' ? '#1a1400' : '#0a0800'
+          return (
+          <div style={{ border:`1px solid ${accent}`, background: bg, padding:'16px' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
-              <div style={{ color: slotMode==='at'?'#ff4488':'#ffaa00', fontSize:'13px' }}>🎰 スロット</div>
-              {slotMode==='at' && (
-                <div style={{ color:'#ff88bb', fontSize:'12px', fontWeight:'bold' }}>🔥 AT中 残り{atGames}G</div>
-              )}
+              <div style={{ color: accent, fontSize:'13px' }}>🎰 スロット</div>
+              {slotMode==='cz'   && <div style={{ color:'#88e0ff', fontSize:'12px', fontWeight:'bold' }}>⚡ CZ中 残り{czGames}G</div>}
+              {slotMode==='at'   && <div style={{ color:'#ff88bb', fontSize:'12px', fontWeight:'bold' }}>🔥 AT中 残り{atGames}G</div>}
+              {slotMode==='toku' && <div style={{ color:'#ffee44', fontSize:'12px', fontWeight:'bold' }}>💫 特化ゾーン 残り{tokuGames}G</div>}
             </div>
-            {slotMode==='normal' ? (
+            {slotMode==='normal' && (
               <div style={{ color:'#446688', fontSize:'10px', marginBottom:'12px', lineHeight:'1.7' }}>
                 レバーを引いて3つのストップボタンで止めよう。<br/>
-                7️⃣7️⃣7️⃣=×250（AT確定！）/ ⭐×60 / 🔔×25 / 🍇×16 / 🍒×12 / 🍋×12 / 左🍒=賭け金返却
+                7️⃣7️⃣7️⃣=×250（AT直撃！）/ ⭐×60 / 🔔×25 / 🍇×16 / 🍒×12 / 🍋×12 / 左🍒=返却。<br/>
+                たまに <span style={{color:'#44ddff'}}>⚡CZ</span> 突入！ナビ成功でAT当選を狙え！
               </div>
-            ) : (
+            )}
+            {slotMode==='cz' && (
+              <div style={{ color:'#88e0ff', fontSize:'10px', marginBottom:'12px', lineHeight:'1.7' }}>
+                ⚡ チャンスゾーン！ ナビ（①②③）の順に押すとAT当選抽選！5G以内に当てろ！
+              </div>
+            )}
+            {slotMode==='at' && (
               <div style={{ color:'#ff88bb', fontSize:'10px', marginBottom:'12px', lineHeight:'1.7' }}>
-                🔥 アシストタイム中！ ナビ（①②③）の順にボタンを押すと確定で出玉！<br/>
+                🔥 アシストタイム！ ナビ通り押すと出玉。たまに💫特化ゾーンで上乗せ！<br/>
                 AT累計獲得: <span style={{color:'#ffcc00'}}>{atTotalWin.toLocaleString()}枚</span>
               </div>
             )}
+            {slotMode==='toku' && (
+              <div style={{ color:'#ffee44', fontSize:'10px', marginBottom:'12px', lineHeight:'1.7' }}>
+                💫 特化ゾーン！ レバーを引くたびにATゲーム数を上乗せ！
+              </div>
+            )}
 
-            {/* リール表示（ATスピン中はナビ番号を表示） */}
-            <div style={{ display:'flex', justifyContent:'center', gap:'8px', margin:'16px 0' }}>
-              {[0,1,2].map(i => {
-                const navOrder = (slotResult?.is_at_game && slotResult?.nav) ? slotResult.nav.indexOf(i)+1 : 0
-                return (
-                  <div key={i} style={{ position:'relative', width:'72px', height:'96px', border:`3px solid ${slotStopped[i]?'#ffcc00':(slotMode==='at'||slotResult?.is_at_game)?'#ff4488':'#664400'}`, borderRadius:'8px', background:'#000', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'44px' }}>
-                    {SLOT_SYMBOLS[slotDisplay[i]]}
-                    {slotPhase==='spinning' && slotResult?.is_at_game && navOrder>0 && !slotStopped[i] && (
-                      <div style={{ position:'absolute', top:'-10px', left:'50%', transform:'translateX(-50%)', background:'#ff4488', color:'#fff', fontSize:'13px', fontWeight:'bold', borderRadius:'50%', width:'22px', height:'22px', display:'flex', alignItems:'center', justifyContent:'center',
-                      boxShadow: navOrder===navStep+1 ? '0 0 8px #ff88bb' : 'none', opacity: navOrder===navStep+1?1:0.5 }}>
-                        {navOrder}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            {/* リール表示 */}
+            {slotMode!=='toku' && (
+              <div style={{ display:'flex', justifyContent:'center', gap:'8px', margin:'16px 0' }}>
+                {[0,1,2].map(i => {
+                  const navOrder = (slotResult?.pending && slotResult?.nav) ? slotResult.nav.indexOf(i)+1 : 0
+                  return (
+                    <div key={i} style={{ position:'relative', width:'72px', height:'96px', border:`3px solid ${slotStopped[i]?'#ffcc00':(navMode?accent:'#664400')}`, borderRadius:'8px', background:'#000', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'44px' }}>
+                      {SLOT_SYMBOLS[slotDisplay[i]]}
+                      {slotPhase==='spinning' && slotResult?.pending && navOrder>0 && !slotStopped[i] && (
+                        <div style={{ position:'absolute', top:'-10px', left:'50%', transform:'translateX(-50%)', background:accent, color:'#000', fontSize:'13px', fontWeight:'bold', borderRadius:'50%', width:'22px', height:'22px', display:'flex', alignItems:'center', justifyContent:'center',
+                        boxShadow: navOrder===navStep+1 ? `0 0 8px ${accent}` : 'none', opacity: navOrder===navStep+1?1:0.5 }}>
+                          {navOrder}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
 
             {/* ストップボタン */}
-            {slotPhase==='spinning' && (
+            {slotPhase==='spinning' && slotMode!=='toku' && (
               <div style={{ display:'flex', gap:'8px', marginBottom:'8px' }}>
                 {['左','中','右'].map((label,i) => {
-                  const isNext = slotResult?.is_at_game && slotResult?.nav && slotResult.nav[navStep]===i
+                  const isNext = slotResult?.pending && slotResult?.nav && slotResult.nav[navStep]===i
                   return (
                     <button key={i} onClick={()=>slotStop(i)} disabled={slotStopped[i]}
-                      style={{ flex:1, padding:'14px', background: slotStopped[i]?'#001':(isNext?'#3a0020':'#1a1000'), border:`1px solid ${slotStopped[i]?'#002244':(isNext?'#ff88bb':'#ffaa00')}`, color: slotStopped[i]?'#334455':(isNext?'#ff88bb':'#ffaa00'), cursor: slotStopped[i]?'default':'pointer', fontFamily:'monospace', fontSize:'14px', fontWeight:'bold' }}>
+                      style={{ flex:1, padding:'14px', background: slotStopped[i]?'#001':(isNext?'#3a0020':'#1a1000'), border:`1px solid ${slotStopped[i]?'#002244':(isNext?accent:'#ffaa00')}`, color: slotStopped[i]?'#334455':(isNext?accent:'#ffaa00'), cursor: slotStopped[i]?'default':'pointer', fontFamily:'monospace', fontSize:'14px', fontWeight:'bold' }}>
                       {slotStopped[i]?'■':`STOP ${label}`}
                     </button>
                   )
@@ -479,8 +523,25 @@ export default function Casino() {
               </div>
             )}
 
-            {/* ベット＆レバー */}
-            {slotPhase!=='spinning' && (
+            {/* 特化ゾーン操作 */}
+            {slotMode==='toku' && (
+              <div style={{ margin:'16px 0' }}>
+                {tokuAdded !== null && (
+                  <div style={{ textAlign:'center', padding:'20px', marginBottom:'12px', border:'3px double #ffcc00', background:'linear-gradient(180deg,#1a1400,#0a0800)' }}>
+                    <div style={{ fontSize:'14px', color:'#ffee44', marginBottom:'4px' }}>💫 上乗せ 💫</div>
+                    <div style={{ fontSize:'34px', fontWeight:'bold', color:'#ffee44' }}>+{tokuAdded}G</div>
+                    <div style={{ fontSize:'12px', color:'#ccaa44', marginTop:'4px' }}>AT残り {atGames}G</div>
+                  </div>
+                )}
+                <button onClick={slotToku} disabled={loading}
+                  style={{ width:'100%', padding:'16px', background:'#2a2000', border:'1px solid #ffcc00', color:'#ffee44', cursor:'pointer', fontFamily:'monospace', fontSize:'15px', letterSpacing:'2px' }}>
+                  💫 上乗せ抽選！（残り{tokuGames}G）
+                </button>
+              </div>
+            )}
+
+            {/* ベット＆レバー（通常/CZ/AT） */}
+            {slotPhase!=='spinning' && slotMode!=='toku' && (
               <div>
                 {slotMode==='normal' && (
                   <div style={{ opacity: slotPhase==='idle'?1:0.6 }}>
@@ -501,23 +562,58 @@ export default function Casino() {
 
                 {slotPhase==='done' && slotResult && (
                   <>
-                    {slotResult.at_triggered && (
+                    {/* CZ突入演出 */}
+                    {slotResult.cz_entered && (
+                      <div style={{ textAlign:'center', padding:'16px', marginBottom:'10px', border:'3px double #44ddff', background:'linear-gradient(180deg,#001828,#000810)', color:'#88e0ff' }}>
+                        <div style={{ fontSize:'24px', marginBottom:'4px' }}>⚡⚡⚡</div>
+                        <div style={{ fontSize:'18px', fontWeight:'bold', letterSpacing:'2px' }}>CZ 突入！</div>
+                        <div style={{ fontSize:'12px', color:'#aae8ff', marginTop:'4px' }}>ナビ成功でAT当選を狙え！</div>
+                      </div>
+                    )}
+                    {/* AT直撃演出 */}
+                    {slotResult.at_entered && (
                       <div style={{ textAlign:'center', padding:'16px', marginBottom:'10px', border:'3px double #ff4488', background:'linear-gradient(180deg,#2a0018,#0a0008)', color:'#ff88bb' }}>
                         <div style={{ fontSize:'24px', marginBottom:'4px' }}>🔥⚡🔥</div>
-                        <div style={{ fontSize:'18px', fontWeight:'bold', letterSpacing:'2px' }}>AT GET！！</div>
+                        <div style={{ fontSize:'18px', fontWeight:'bold', letterSpacing:'2px' }}>AT 直撃！！</div>
                         <div style={{ fontSize:'12px', color:'#ffccdd', marginTop:'4px' }}>アシストタイム {atGames}ゲーム突入！</div>
                       </div>
                     )}
+                    {/* CZ当選/特化突入演出 */}
+                    {atResult?.kind==='cz' && atResult.czWon && (
+                      <div style={{ textAlign:'center', padding:'16px', marginBottom:'10px', border:'3px double #ff4488', background:'linear-gradient(180deg,#2a0018,#0a0008)', color:'#ff88bb' }}>
+                        <div style={{ fontSize:'24px', marginBottom:'4px' }}>🎉🔥🎉</div>
+                        <div style={{ fontSize:'18px', fontWeight:'bold', letterSpacing:'2px' }}>AT 当選！！</div>
+                        <div style={{ fontSize:'12px', color:'#ffccdd', marginTop:'4px' }}>アシストタイム {atGames}ゲーム突入！</div>
+                      </div>
+                    )}
+                    {atResult?.kind==='at' && atResult.toku && (
+                      <div style={{ textAlign:'center', padding:'16px', marginBottom:'10px', border:'3px double #ffcc00', background:'linear-gradient(180deg,#1a1400,#0a0800)', color:'#ffee44' }}>
+                        <div style={{ fontSize:'24px', marginBottom:'4px' }}>💫✨💫</div>
+                        <div style={{ fontSize:'18px', fontWeight:'bold', letterSpacing:'2px' }}>特化ゾーン 突入！</div>
+                        <div style={{ fontSize:'12px', color:'#ddcc88', marginTop:'4px' }}>ゲーム数を大量上乗せ！</div>
+                      </div>
+                    )}
+
+                    {/* 結果メッセージ */}
                     <div style={{ textAlign:'center', padding:'10px', marginBottom:'10px', fontSize:'15px',
-                      color: slotResult.is_at_game ? (atResult?.success?'#44ff88':'#ff4444') : (slotResult.payout>0?'#44ff88':'#ff4444'),
-                      border:`1px solid ${slotResult.is_at_game ? (atResult?.success?'#44ff88':'#ff4444') : (slotResult.payout>0?'#44ff88':'#ff4444')}` }}>
-                      {slotResult.is_at_game ? (atResult?.success ? `🔔 ナビ成功！ +${atResult.payout.toLocaleString()}枚！` : `💢 ナビ失敗… こぼした！（払い出しなし）`)
+                      color: slotResult.pending ? (atResult?.success?'#44ff88':'#ff4444') : (slotResult.payout>0?'#44ff88':'#ff4444'),
+                      border:`1px solid ${slotResult.pending ? (atResult?.success?'#44ff88':'#ff4444') : (slotResult.payout>0?'#44ff88':'#ff4444')}` }}>
+                      {slotResult.kind==='cz' ? (atResult?.success ? (atResult.czWon ? `🔔 ナビ成功！` : `🔔 ナビ成功！ …AT当選ならず`) : `💢 ナビ失敗… こぼした！`)
+                        : slotResult.kind==='at' ? (atResult?.success ? `🔔 ナビ成功！ +${atResult.payout.toLocaleString()}枚！` : `💢 ナビ失敗… こぼした！（払い出しなし）`)
                         : slotResult.mult>=250 ? `🎊7️⃣7️⃣7️⃣ 大当たり！🎊 ${slotResult.payout.toLocaleString()}メダル！`
                         : slotResult.payout>slotResult.bet ? `🎉 当たり！ ${slotResult.payout.toLocaleString()}メダル獲得！（×${slotResult.mult}）`
                         : slotResult.payout>0 ? `🍒 賭け金返却（×${slotResult.mult}）`
                         : `😭 ハズレ… ${slotResult.bet.toLocaleString()}メダル没収`}
                     </div>
-                    {slotResult.is_at_game && slotMode==='normal' && (
+
+                    {/* CZ失敗 */}
+                    {slotResult.kind==='cz' && atResult && !atResult.czWon && slotMode==='normal' && (
+                      <div style={{ textAlign:'center', padding:'8px', marginBottom:'10px', border:'1px solid #446688', color:'#446688', fontSize:'13px' }}>
+                        ⚡ CZ失敗… また次回！
+                      </div>
+                    )}
+                    {/* AT終了 */}
+                    {slotResult.kind==='at' && slotMode==='normal' && (
                       <div style={{ textAlign:'center', padding:'8px', marginBottom:'10px', border:'1px solid #ffcc00', color:'#ffcc00', fontSize:'13px' }}>
                         🎉 AT終了！ 今回の合計 {atTotalWin.toLocaleString()}枚獲得！
                       </div>
@@ -526,13 +622,16 @@ export default function Casino() {
                 )}
 
                 <button onClick={slotLever} disabled={loading || (slotMode==='normal' && (profile.medals||0) < slotBet) || (slotMode==='at' && (profile.medals||0) < (slotResult?.bet||0))}
-                  style={{ width:'100%', padding:'14px', background: slotMode==='at'?'#2a0018':'#1a1000', border:`1px solid ${slotMode==='at'?'#ff4488':'#ffaa00'}`, color: slotMode==='at'?'#ff88bb':'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'15px', letterSpacing:'2px' }}>
-                  {slotMode==='at' ? `🔥 AT レバーON（残り${atGames}G）` : `🎰 レバーON（${slotBet}メダル）`}
+                  style={{ width:'100%', padding:'14px', background: navMode?'#2a0018':'#1a1000', border:`1px solid ${accent}`, color: accent, cursor:'pointer', fontFamily:'monospace', fontSize:'15px', letterSpacing:'2px' }}>
+                  {slotMode==='cz' ? `⚡ CZ レバーON（残り${czGames}G）`
+                    : slotMode==='at' ? `🔥 AT レバーON（残り${atGames}G）`
+                    : `🎰 レバーON（${slotBet}メダル）`}
                 </button>
               </div>
             )}
           </div>
-        )}
+          )
+        })()}
       </div>
     </div>
   )
