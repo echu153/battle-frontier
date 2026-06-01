@@ -315,16 +315,6 @@ export default function Smithy() {
     setLoading(false)
   }
 
-  const sellItem = async (item) => {
-    if (item.equipped) return
-    setLoading(true)
-    const sellPrice = item.weapons.sell_price || 0
-    await supabase.from('player_equipment').delete().eq('id', item.id)
-    await supabase.from('profiles').update({ gold: profile.gold + sellPrice }).eq('id', profile.id)
-    showMessage(`${item.weapons.name}を${sellPrice}Gで売却しました！`)
-    await fetchAll()
-    setLoading(false)
-  }
 
   const doReEval = async (item) => {
     setLoading(true)
@@ -455,7 +445,7 @@ export default function Smithy() {
         {message && <div style={{ color: messageColor, fontSize:'12px', padding:'8px', border:`1px solid ${messageColor}`, marginBottom:'12px', textAlign:'center' }}>{message}</div>}
 
         <div style={{ display:'flex', gap:'4px', marginBottom:'8px', flexWrap:'wrap' }}>
-          {[{id:'enhance', label:'強化'}, {id:'craft', label:'加工'}, {id:'reeval', label:'再評価/再鑑定'}, {id:'sell', label:'売却'}].map(t => (
+          {[{id:'enhance', label:'強化'}, {id:'craft', label:'加工'}, {id:'reeval', label:'再評価/再鑑定'}].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{ padding:'6px 14px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
                 background: tab === t.id ? '#001840' : '#000818',
@@ -466,7 +456,7 @@ export default function Smithy() {
           ))}
         </div>
 
-        {(tab === 'enhance' || tab === 'craft' || tab === 'reeval' || tab === 'sell') && (
+        {(tab === 'enhance' || tab === 'craft' || tab === 'reeval') && (
           <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px', fontSize:'11px' }}>
             <span style={{color:'#446688'}}>並び替え:</span>
             <select value={sortKey} onChange={e => { const v=e.target.value; setSortKey(v); localStorage.setItem('equipSortKey',v) }}
@@ -718,49 +708,6 @@ export default function Smithy() {
           </div>
         )}
 
-        {/* 売却タブ */}
-        {tab === 'sell' && (
-          <div>
-            <div style={{ color:'#446688', fontSize:'11px', marginBottom:'8px' }}>装備中のアイテムは売却できません</div>
-            {slots.map(slot => {
-              const slotItems = sortEquipment(equipment.filter(e => e.slot === slot), sortKey)
-              if (slotItems.length === 0) return null
-              return (
-                <div key={slot} style={{ marginBottom:'12px' }}>
-                  <div style={{ color:'#aa6644', fontSize:'11px', marginBottom:'6px' }}>── {SLOT_LABELS[slot]} ──</div>
-                  {slotItems.map(item => {
-                    const w = item.weapons
-                    const plus = item.enhance_plus || 0
-                    const sellPrice = w.sell_price || 0
-                    return (
-                      <div key={item.id} style={{ border:`1px solid ${item.equipped ? '#003366' : '#002244'}`, background: item.equipped ? '#001040' : '#001028', padding:'10px', marginBottom:'6px', opacity: item.equipped ? 0.5 : 1 }}>
-                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
-                          <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-                            <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>{RARITY_LABELS[w.rarity]}</span>
-                            <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>{w.name}{plus > 0 ? ` +${plus}` : ''}</span>
-                            {item.equipped && <span style={{ color:'#446688', fontSize:'10px' }}>（装備中）</span>}
-                          </div>
-                          <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-                            <span style={{ color:'#ffcc00', fontSize:'11px' }}>{sellPrice}G</span>
-                            <button onClick={() => sellItem(item)} disabled={item.equipped || loading}
-                              style={{ padding:'3px 8px', background: item.equipped ? '#001' : '#1a0800', border:`1px solid ${item.equipped ? '#002244' : '#aa6644'}`, color: item.equipped ? '#334455' : '#aa6644', cursor: item.equipped ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'10px' }}>売却</button>
-                          </div>
-                        </div>
-                        <div style={{ fontSize:'10px', color:'#446688' }}>
-                          {w.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻撃力+{w.atk_bonus} </span>}
-                          {w.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防御力+{w.def_bonus} </span>}
-                          {w.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>特殊攻撃力+{w.matk_bonus} </span>}
-                          {w.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>特殊防御力+{w.mdef_bonus} </span>}
-                          {w.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>素早さ+{w.spd_bonus} </span>}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })}
-          </div>
-        )}
       </div>
     </div>
   )
