@@ -72,6 +72,18 @@ export default function Casino() {
     setProfile(p)
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id)
     setPlayerItems(pi || [])
+    // 未清算の戦果をlocalStorageから復元
+    try {
+      const saved = localStorage.getItem('bf_sortie_' + p.id)
+      if (saved) { const parsed = JSON.parse(saved); if (parsed && parsed.count > 0) setSortiePending(parsed) }
+    } catch {}
+  }
+
+  const savePending = (pend) => {
+    try {
+      if (pend.count > 0) localStorage.setItem('bf_sortie_' + profile.id, JSON.stringify(pend))
+      else localStorage.removeItem('bf_sortie_' + profile.id)
+    } catch {}
   }
 
   const showMessage = (msg, color = '#ffaa00') => {
@@ -299,12 +311,16 @@ export default function Casino() {
     }
     if (Math.random()*100 < 0.1) drops.push(ARTIFACT_BASE_NAMES[Math.floor(Math.random()*ARTIFACT_BASE_NAMES.length)])
 
-    setSortiePending(prev => ({
-      count: prev.count + 1,
-      exp: prev.exp + expGain,
-      gold: prev.gold + goldGain,
-      drops: [...prev.drops, ...drops],
-    }))
+    setSortiePending(prev => {
+      const next = {
+        count: prev.count + 1,
+        exp: prev.exp + expGain,
+        gold: prev.gold + goldGain,
+        drops: [...prev.drops, ...drops],
+      }
+      savePending(next)
+      return next
+    })
     await fetchProfile()
     setLoading(false)
   }
@@ -364,6 +380,7 @@ export default function Casino() {
     }
 
     setSortiePending({ count:0, exp:0, gold:0, drops:[] })
+    savePending({ count:0 })
     setShowSettle(false)
     await fetchProfile()
     setLoading(false)
@@ -630,15 +647,20 @@ export default function Casino() {
               <div style={{ display:'flex', justifyContent:'center', gap:'8px', margin:'16px 0' }}>
                 {[0,1,2].map(i => {
                   const navOrder = (slotResult?.pending && slotResult?.nav) ? slotResult.nav.indexOf(i)+1 : 0
+                  const isNextReel = slotResult?.pending && slotResult?.nav && slotResult.nav[navStep]===i && !slotStopped[i]
                   return (
-                    <div key={i} style={{ position:'relative', width:'72px', height:'96px', border:`3px solid ${slotStopped[i]?'#ffcc00':(navMode?accent:'#664400')}`, borderRadius:'8px', background:'#000', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'44px' }}>
+                    <div key={i} style={{ position:'relative', width:'72px', height:'96px',
+                      border:`3px solid ${slotStopped[i]?'#ffcc00':(isNextReel?'#ffffff':(navMode?accent:'#664400'))}`, borderRadius:'8px', background:'#000', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'44px',
+                      boxShadow: isNextReel ? `0 0 14px ${accent}` : 'none' }}>
                       {SLOT_SYMBOLS[slotDisplay[i]]}
                       {slotPhase==='spinning' && slotResult?.pending && navOrder>0 && !slotStopped[i] && (
-                        <div style={{ position:'absolute', top:'-10px', left:'50%', transform:'translateX(-50%)', background:accent, color:'#000', fontSize:'13px', fontWeight:'bold', borderRadius:'50%', width:'22px', height:'22px', display:'flex', alignItems:'center', justifyContent:'center',
-                        boxShadow: navOrder===navStep+1 ? `0 0 8px ${accent}` : 'none', opacity: navOrder===navStep+1?1:0.5 }}>
+                        <div style={{ position:'absolute', top:'-12px', left:'50%', transform:'translateX(-50%)',
+                          background: isNextReel?'#ffffff':'#222', color: isNextReel?accent:'#888', fontSize:isNextReel?'16px':'12px', fontWeight:'bold', borderRadius:'50%', width:isNextReel?'28px':'20px', height:isNextReel?'28px':'20px', display:'flex', alignItems:'center', justifyContent:'center',
+                          boxShadow: isNextReel ? `0 0 10px ${accent}` : 'none' }}>
                           {navOrder}
                         </div>
                       )}
+                      {isNextReel && <div style={{ position:'absolute', bottom:'-18px', left:'50%', transform:'translateX(-50%)', color:accent, fontSize:'16px' }}>▲</div>}
                     </div>
                   )
                 })}
@@ -649,11 +671,11 @@ export default function Casino() {
             {slotPhase==='spinning' && slotMode!=='toku' && (
               <div style={{ display:'flex', gap:'8px', marginBottom:'8px' }}>
                 {['左','中','右'].map((label,i) => {
-                  const isNext = slotResult?.pending && slotResult?.nav && slotResult.nav[navStep]===i
+                  const isNext = slotResult?.pending && slotResult?.nav && slotResult.nav[navStep]===i && !slotStopped[i]
                   return (
                     <button key={i} onClick={()=>slotStop(i)} disabled={slotStopped[i]}
-                      style={{ flex:1, padding:'14px', background: slotStopped[i]?'#001':(isNext?'#3a0020':'#1a1000'), border:`1px solid ${slotStopped[i]?'#002244':(isNext?accent:'#ffaa00')}`, color: slotStopped[i]?'#334455':(isNext?accent:'#ffaa00'), cursor: slotStopped[i]?'default':'pointer', fontFamily:'monospace', fontSize:'14px', fontWeight:'bold' }}>
-                      {slotStopped[i]?'■':`STOP ${label}`}
+                      style={{ flex:1, padding:'14px', background: slotStopped[i]?'#001':(isNext?accent:'#1a1000'), border:`2px solid ${slotStopped[i]?'#002244':(isNext?'#ffffff':'#ffaa00')}`, color: slotStopped[i]?'#334455':(isNext?'#000':'#ffaa00'), cursor: slotStopped[i]?'default':'pointer', fontFamily:'monospace', fontSize:'14px', fontWeight:'bold', boxShadow: isNext?`0 0 12px ${accent}`:'none' }}>
+                      {slotStopped[i]?'■':(isNext?`▶ ${label} ◀`:`STOP ${label}`)}
                     </button>
                   )
                 })}
