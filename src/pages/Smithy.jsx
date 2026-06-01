@@ -659,7 +659,7 @@ export default function Smithy() {
                   <div style={{ color:'#aa6644', fontSize:'11px', marginBottom:'6px' }}>── {SLOT_LABELS[slot]} ──</div>
                   {slotItems.map(item => {
                     const w = item.weapons
-                    const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
+                    const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name) || item.bonus_effect === 'artifact'
                     const rarity = w.rarity
                     const needed = RE_EVAL_SHEETS[rarity]
                     const evalOwned = playerItems.find(pi=>pi.items?.name==='再評価依頼書')?.quantity||0
