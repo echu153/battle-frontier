@@ -308,9 +308,9 @@ export default function Casino() {
           setCzGames(data.cz_games)
           if (data.at_won) { setAtGames(data.at_games); setAtTotalWin(0) }
         } else {
-          setAtResult({ kind:'at', success:data.success, payout:data.payout, toku:data.toku_triggered })
+          setAtResult({ kind:'at', success:data.success, payout:data.payout, toku:data.toku_triggered, bonus:data.bonus||0, added:data.added||0 })
           setAtGames(data.at_games)
-          if (data.success) setAtTotalWin(w => w + data.payout)
+          if (data.success) setAtTotalWin(w => w + data.payout + (data.bonus||0))
         }
         setSlotPhase('done')
         await fetchProfile()
@@ -818,8 +818,8 @@ export default function Casino() {
                     {atResult?.kind==='at' && atResult.toku && (
                       <div style={{ textAlign:'center', padding:'16px', marginBottom:'10px', border:'3px double #ffcc00', background:'linear-gradient(180deg,#1a1400,#0a0800)', color:'#ffee44' }}>
                         <div style={{ fontSize:'24px', marginBottom:'4px' }}>💫✨💫</div>
-                        <div style={{ fontSize:'18px', fontWeight:'bold', letterSpacing:'2px' }}>特化ゾーン 突入！</div>
-                        <div style={{ fontSize:'12px', color:'#ddcc88', marginTop:'4px' }}>ゲーム数を大量上乗せ！</div>
+                        <div style={{ fontSize:'18px', fontWeight:'bold', letterSpacing:'2px' }}>上乗せ！</div>
+                        <div style={{ fontSize:'14px', color:'#fff0a0', marginTop:'4px' }}>+{atResult.added}G ＆ +{(atResult.bonus||0).toLocaleString()}メダル！</div>
                       </div>
                     )}
 
