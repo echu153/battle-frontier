@@ -36,6 +36,10 @@ export default function Casino() {
   const [slotResult, setSlotResult] = useState(null)   // { reels, mult, payout }
   const [slotDisplay, setSlotDisplay] = useState([0,0,0])
   const [slotStopped, setSlotStopped] = useState([false,false,false])
+  const [slotMode, setSlotMode] = useState('normal')  // normal / at（次ゲームの状態）
+  const [atGames, setAtGames] = useState(0)            // AT残りゲーム数
+  const [navStep, setNavStep] = useState(0)            // ナビ押し順の進行
+  const [atTotalWin, setAtTotalWin] = useState(0)      // AT中の累計払い出し
   const spinRef = useRef(null)
   const slotStoppedRef = useRef([false,false,false])
 
@@ -150,16 +154,17 @@ export default function Casino() {
   const slotLever = async () => {
     if (loading || slotPhase==='spinning' || !profile) return
     const bet = Math.floor(slotBet)
-    if (!bet || bet < MIN_BET) { showMessage(`ベットは${MIN_BET}メダルからです`, '#ff4444'); return }
-    if (bet > MAX_BET) { showMessage(`ベットは${MAX_BET}メダルまでです`, '#ff4444'); return }
-    if ((profile.medals||0) < bet) { showMessage('メダルが足りません！', '#ff4444'); return }
+    if (slotMode==='normal') {
+      if (!bet || bet < MIN_BET) { showMessage(`ベットは${MIN_BET}メダルからです`, '#ff4444'); return }
+      if (bet > MAX_BET) { showMessage(`ベットは${MAX_BET}メダルまでです`, '#ff4444'); return }
+    }
     setLoading(true)
     const { data, error } = await supabase.rpc('slot_spin', { bet })
     if (error) { showMessage(`エラー: ${error.message}`, '#ff4444'); setLoading(false); return }
     setSlotResult(data)
     setSlotStopped([false,false,false])
+    setNavStep(0)
     setSlotPhase('spinning')
-    // 全リール回転アニメーション
     if (spinRef.current) clearInterval(spinRef.current)
     spinRef.current = setInterval(() => {
       setSlotDisplay(prev => prev.map((v,idx) => (slotStoppedRef.current[idx] ? v : Math.floor(Math.random()*SLOT_SYMBOLS.length))))
@@ -170,17 +175,27 @@ export default function Casino() {
   // スロット：リールを止める
   const slotStop = (idx) => {
     if (slotPhase!=='spinning' || slotStopped[idx] || !slotResult) return
+    // ATゲーム中はナビの押し順を厳守（違う順は無効）
+    if (slotResult.is_at_game && slotResult.nav) {
+      if (idx !== slotResult.nav[navStep]) return
+      setNavStep(s => s + 1)
+    }
     const nextStopped = slotStopped.map((v,i) => i===idx ? true : v)
     setSlotStopped(nextStopped)
     setSlotDisplay(prev => prev.map((v,i) => i===idx ? slotResult.reels[i] : v))
     if (nextStopped.every(Boolean)) {
       if (spinRef.current) { clearInterval(spinRef.current); spinRef.current = null }
       setSlotPhase('done')
+      setSlotMode(slotResult.mode)
+      setAtGames(slotResult.at_games)
+      // AT累計払い出しの集計
+      if (slotResult.is_at_game) setAtTotalWin(w => w + slotResult.payout)
+      if (slotResult.at_triggered) setAtTotalWin(0)
       fetchProfile()
     }
   }
 
-  const slotReset = () => { setSlotPhase('idle'); setSlotResult(null); setSlotStopped([false,false,false]) }
+  const slotReset = () => { setSlotPhase('idle'); setSlotResult(null); setSlotStopped([false,false,false]); setNavStep(0) }
 
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
@@ -390,65 +405,106 @@ export default function Casino() {
         )}
 
         {tab==='slot' && (
-          <div style={{ border:'1px solid #886600', background:'#0a0800', padding:'16px' }}>
-            <div style={{ color:'#ffaa00', fontSize:'13px', marginBottom:'8px' }}>🎰 スロット</div>
-            <div style={{ color:'#446688', fontSize:'10px', marginBottom:'12px', lineHeight:'1.7' }}>
-              レバーを引いて、3つのストップボタンでリールを止めよう。<br/>
-              7️⃣7️⃣7️⃣=×250 / ⭐×60 / 🔔×25 / 🍇×16 / 🍒×12 / 🍋×12 / 左🍒=賭け金返却
+          <div style={{ border:`1px solid ${slotMode==='at'?'#ff4488':'#886600'}`, background: slotMode==='at'?'#1a0014':'#0a0800', padding:'16px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
+              <div style={{ color: slotMode==='at'?'#ff4488':'#ffaa00', fontSize:'13px' }}>🎰 スロット</div>
+              {slotMode==='at' && (
+                <div style={{ color:'#ff88bb', fontSize:'12px', fontWeight:'bold' }}>🔥 AT中 残り{atGames}G</div>
+              )}
             </div>
+            {slotMode==='normal' ? (
+              <div style={{ color:'#446688', fontSize:'10px', marginBottom:'12px', lineHeight:'1.7' }}>
+                レバーを引いて3つのストップボタンで止めよう。<br/>
+                7️⃣7️⃣7️⃣=×250（AT確定！）/ ⭐×60 / 🔔×25 / 🍇×16 / 🍒×12 / 🍋×12 / 左🍒=賭け金返却
+              </div>
+            ) : (
+              <div style={{ color:'#ff88bb', fontSize:'10px', marginBottom:'12px', lineHeight:'1.7' }}>
+                🔥 アシストタイム中！ ナビ（①②③）の順にボタンを押すと確定で出玉！<br/>
+                AT累計獲得: <span style={{color:'#ffcc00'}}>{atTotalWin.toLocaleString()}枚</span>
+              </div>
+            )}
 
-            {/* リール表示 */}
+            {/* リール表示（ATスピン中はナビ番号を表示） */}
             <div style={{ display:'flex', justifyContent:'center', gap:'8px', margin:'16px 0' }}>
-              {[0,1,2].map(i => (
-                <div key={i} style={{ width:'72px', height:'96px', border:`3px solid ${slotStopped[i]?'#ffcc00':'#664400'}`, borderRadius:'8px', background:'#000', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'44px' }}>
-                  {SLOT_SYMBOLS[slotDisplay[i]]}
-                </div>
-              ))}
+              {[0,1,2].map(i => {
+                const navOrder = (slotResult?.is_at_game && slotResult?.nav) ? slotResult.nav.indexOf(i)+1 : 0
+                return (
+                  <div key={i} style={{ position:'relative', width:'72px', height:'96px', border:`3px solid ${slotStopped[i]?'#ffcc00':(slotMode==='at'||slotResult?.is_at_game)?'#ff4488':'#664400'}`, borderRadius:'8px', background:'#000', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'44px' }}>
+                    {SLOT_SYMBOLS[slotDisplay[i]]}
+                    {slotPhase==='spinning' && slotResult?.is_at_game && navOrder>0 && !slotStopped[i] && (
+                      <div style={{ position:'absolute', top:'-10px', left:'50%', transform:'translateX(-50%)', background:'#ff4488', color:'#fff', fontSize:'13px', fontWeight:'bold', borderRadius:'50%', width:'22px', height:'22px', display:'flex', alignItems:'center', justifyContent:'center',
+                      boxShadow: navOrder===navStep+1 ? '0 0 8px #ff88bb' : 'none', opacity: navOrder===navStep+1?1:0.5 }}>
+                        {navOrder}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
 
             {/* ストップボタン */}
             {slotPhase==='spinning' && (
               <div style={{ display:'flex', gap:'8px', marginBottom:'8px' }}>
-                {['左','中','右'].map((label,i) => (
-                  <button key={i} onClick={()=>slotStop(i)} disabled={slotStopped[i]}
-                    style={{ flex:1, padding:'14px', background: slotStopped[i]?'#001':'#1a1000', border:`1px solid ${slotStopped[i]?'#002244':'#ffaa00'}`, color: slotStopped[i]?'#334455':'#ffaa00', cursor: slotStopped[i]?'default':'pointer', fontFamily:'monospace', fontSize:'14px', fontWeight:'bold' }}>
-                    {slotStopped[i]?'■':`STOP ${label}`}
-                  </button>
-                ))}
+                {['左','中','右'].map((label,i) => {
+                  const isNext = slotResult?.is_at_game && slotResult?.nav && slotResult.nav[navStep]===i
+                  return (
+                    <button key={i} onClick={()=>slotStop(i)} disabled={slotStopped[i]}
+                      style={{ flex:1, padding:'14px', background: slotStopped[i]?'#001':(isNext?'#3a0020':'#1a1000'), border:`1px solid ${slotStopped[i]?'#002244':(isNext?'#ff88bb':'#ffaa00')}`, color: slotStopped[i]?'#334455':(isNext?'#ff88bb':'#ffaa00'), cursor: slotStopped[i]?'default':'pointer', fontFamily:'monospace', fontSize:'14px', fontWeight:'bold' }}>
+                      {slotStopped[i]?'■':`STOP ${label}`}
+                    </button>
+                  )
+                })}
               </div>
             )}
 
             {/* ベット＆レバー */}
             {slotPhase!=='spinning' && (
               <div>
-                <div style={{ opacity: slotPhase==='idle'?1:0.6 }}>
-                  <div style={{ color:'#446688', fontSize:'11px', marginBottom:'6px' }}>ベット額（{MIN_BET}〜{MAX_BET}）</div>
-                  <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'6px' }}>
-                    {BET_PRESETS.map(n => (
-                      <button key={n} onClick={()=>setSlotBet(n)}
-                        style={{ padding:'4px 8px', background: slotBet===n?'#1a1000':'#000818', border:`1px solid ${slotBet===n?'#ffaa00':'#003366'}`, color: slotBet===n?'#ffaa00':'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                  <input type="number" min={MIN_BET} max={MAX_BET} value={slotBet}
-                    onChange={e=>setSlotBet(Math.min(MAX_BET, Math.max(MIN_BET, Math.floor(Number(e.target.value)||0))))}
-                    style={{ width:'100%', background:'#001028', border:'1px solid #886600', color:'#ffaa00', fontFamily:'monospace', fontSize:'13px', padding:'8px', boxSizing:'border-box', marginBottom:'10px' }} />
-                </div>
-
-                {slotPhase==='done' && slotResult && (
-                  <div style={{ textAlign:'center', padding:'10px', marginBottom:'10px', fontSize:'15px',
-                    color: slotResult.payout>0?'#44ff88':'#ff4444', border:`1px solid ${slotResult.payout>0?'#44ff88':'#ff4444'}` }}>
-                    {slotResult.mult>=250 ? `🎊7️⃣7️⃣7️⃣ 大当たり！🎊 ${slotResult.payout.toLocaleString()}メダル獲得！`
-                      : slotResult.payout>slotBet ? `🎉 当たり！ ${slotResult.payout.toLocaleString()}メダル獲得！（×${slotResult.mult}）`
-                      : slotResult.payout>0 ? `🍒 賭け金返却（×${slotResult.mult}）`
-                      : `😭 ハズレ… ${slotBet.toLocaleString()}メダル没収`}
+                {slotMode==='normal' && (
+                  <div style={{ opacity: slotPhase==='idle'?1:0.6 }}>
+                    <div style={{ color:'#446688', fontSize:'11px', marginBottom:'6px' }}>ベット額（{MIN_BET}〜{MAX_BET}）</div>
+                    <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'6px' }}>
+                      {BET_PRESETS.map(n => (
+                        <button key={n} onClick={()=>setSlotBet(n)}
+                          style={{ padding:'4px 8px', background: slotBet===n?'#1a1000':'#000818', border:`1px solid ${slotBet===n?'#ffaa00':'#003366'}`, color: slotBet===n?'#ffaa00':'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                    <input type="number" min={MIN_BET} max={MAX_BET} value={slotBet}
+                      onChange={e=>setSlotBet(Math.min(MAX_BET, Math.max(MIN_BET, Math.floor(Number(e.target.value)||0))))}
+                      style={{ width:'100%', background:'#001028', border:'1px solid #886600', color:'#ffaa00', fontFamily:'monospace', fontSize:'13px', padding:'8px', boxSizing:'border-box', marginBottom:'10px' }} />
                   </div>
                 )}
 
-                <button onClick={slotLever} disabled={loading || (profile.medals||0) < slotBet}
-                  style={{ width:'100%', padding:'14px', background:'#1a1000', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'15px', letterSpacing:'2px' }}>
-                  🎰 レバーON（{slotBet}メダル）
+                {slotPhase==='done' && slotResult && (
+                  <>
+                    {slotResult.at_triggered && (
+                      <div style={{ textAlign:'center', padding:'16px', marginBottom:'10px', border:'3px double #ff4488', background:'linear-gradient(180deg,#2a0018,#0a0008)', color:'#ff88bb' }}>
+                        <div style={{ fontSize:'24px', marginBottom:'4px' }}>🔥⚡🔥</div>
+                        <div style={{ fontSize:'18px', fontWeight:'bold', letterSpacing:'2px' }}>AT GET！！</div>
+                        <div style={{ fontSize:'12px', color:'#ffccdd', marginTop:'4px' }}>アシストタイム {atGames}ゲーム突入！</div>
+                      </div>
+                    )}
+                    <div style={{ textAlign:'center', padding:'10px', marginBottom:'10px', fontSize:'15px',
+                      color: slotResult.payout>0?'#44ff88':'#ff4444', border:`1px solid ${slotResult.payout>0?'#44ff88':'#ff4444'}` }}>
+                      {slotResult.is_at_game ? `🔔 ナビ成功！ +${slotResult.payout.toLocaleString()}枚！`
+                        : slotResult.mult>=250 ? `🎊7️⃣7️⃣7️⃣ 大当たり！🎊 ${slotResult.payout.toLocaleString()}メダル！`
+                        : slotResult.payout>slotResult.bet ? `🎉 当たり！ ${slotResult.payout.toLocaleString()}メダル獲得！（×${slotResult.mult}）`
+                        : slotResult.payout>0 ? `🍒 賭け金返却（×${slotResult.mult}）`
+                        : `😭 ハズレ… ${slotResult.bet.toLocaleString()}メダル没収`}
+                    </div>
+                    {slotResult.is_at_game && slotResult.mode==='normal' && (
+                      <div style={{ textAlign:'center', padding:'8px', marginBottom:'10px', border:'1px solid #ffcc00', color:'#ffcc00', fontSize:'13px' }}>
+                        🎉 AT終了！ 今回の合計 {atTotalWin.toLocaleString()}枚獲得！
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <button onClick={slotLever} disabled={loading || (slotMode==='normal' && (profile.medals||0) < slotBet) || (slotMode==='at' && (profile.medals||0) < (slotResult?.bet||0))}
+                  style={{ width:'100%', padding:'14px', background: slotMode==='at'?'#2a0018':'#1a1000', border:`1px solid ${slotMode==='at'?'#ff4488':'#ffaa00'}`, color: slotMode==='at'?'#ff88bb':'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'15px', letterSpacing:'2px' }}>
+                  {slotMode==='at' ? `🔥 AT レバーON（残り${atGames}G）` : `🎰 レバーON（${slotBet}メダル）`}
                 </button>
               </div>
             )}
