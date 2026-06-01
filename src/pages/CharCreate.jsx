@@ -52,6 +52,7 @@ export default function CharCreate() {
         hp_current: c.hp_max, mp_current: c.mp_max,
         atk: c.atk, def: c.def, matk: c.matk, mdef: c.mdef, spd: c.spd,
         avatar_url: selectedAvatar,
+        char_lv: 1,
       })
       if (pErr) throw pErr
       const classLevelData = ALL_INITIAL_CLASSES.map(cls => ({

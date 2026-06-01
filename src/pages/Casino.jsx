@@ -13,6 +13,11 @@ const PRIZES = [
   { key:'stoneA', name:'強化石(A)', price:10000, limit:1, today:true },
 ]
 const SORTIE_WAIT = 30 // 賭博場出撃のクールダウン秒（通常出撃と共通のlast_action_atで管理）
+// EXP凍結中か（手動のexp_frozen、または期限付きのexp_frozen_until）
+const expIsFrozen = (p) => !!(p && (p.exp_frozen || (p.exp_frozen_until && new Date(p.exp_frozen_until) > new Date())))
+const AUTOCLICK_SAMPLES = 12   // オートクリッカー検知：直近サンプル数
+const AUTOCLICK_SPREAD_MS = 1200 // 出撃間隔のばらつき許容幅(ms)。これ未満なら機械的連打とみなす
+const SORTIE_STREAK_LIMIT = 10  // カジノで遊ばず簡易出撃が連続したらEXP凍結する回数
 const AREA_PASS_EFFECT = { 2:'casino_area_2', 3:'casino_area_3', 4:'casino_area_4', 5:'casino_area_5', 6:'casino_area_6', 7:'casino_area_7' }
 
 const EXCHANGE_RATE = 100 // 100G = 1メダル（SQLのrateと一致させること）
@@ -59,6 +64,11 @@ export default function Casino() {
   const [playerItems, setPlayerItems] = useState([])
   const [sortieArea, setSortieArea] = useState(1)
   const [sortiePending, setSortiePending] = useState({ count:0, exp:0, gold:0, drops:[] })
+  const DEV_ACCOUNTS = ['おれおれお']
+  const sortieTimesRef = useRef([])     // オートクリッカー検知：簡易出撃時刻の履歴
+  const sortieStreakRef = useRef(0)     // カジノで遊ばず簡易出撃が連続した回数
+  const [botCheck, setBotCheck] = useState(null)  // BOT確認チャレンジ {top,left} or null
+  const botCheckTimerRef = useRef(null) // BOT確認チャレンジの60秒タイマー
   const [showSettle, setShowSettle] = useState(false)
   const [sortieMsg, setSortieMsg] = useState('')
   const [now, setNow] = useState(Date.now())
@@ -156,6 +166,45 @@ export default function Casino() {
     setTimeout(() => setMessage(''), 3000)
   }
 
+  const suspendAccount = async (reason) => {
+    if (DEV_ACCOUNTS.includes(profile.username)) return  // 開発用アカウントは対象外
+    await supabase.from('profiles').update({ is_suspended: true, suspension_reason: reason }).eq('id', profile.id)
+    showMessage('⛔ 不正行為が検出されました。アカウントを停止します。', '#ff4444')
+    setTimeout(async () => { await supabase.auth.signOut() }, 3000)
+  }
+
+  // BOT確認チャレンジ：ランダム位置にボタンを出し、60秒以内に押さなければ停止措置
+  const triggerBotCheck = () => {
+    const top = Math.floor(15 + Math.random()*65)   // 15〜80vh
+    const left = Math.floor(5 + Math.random()*65)   // 5〜70vw
+    setBotCheck({ top, left })
+    if (botCheckTimerRef.current) clearTimeout(botCheckTimerRef.current)
+    botCheckTimerRef.current = setTimeout(async () => {
+      botCheckTimerRef.current = null
+      setBotCheck(null)
+      await suspendAccount('BOT確認ボタンを1分以内に押せなかった')
+    }, 60000)
+  }
+  const passBotCheck = (e) => {
+    if (e && !e.isTrusted) return  // 機械クリックは無効
+    if (botCheckTimerRef.current) { clearTimeout(botCheckTimerRef.current); botCheckTimerRef.current = null }
+    setBotCheck(null)
+    sortieTimesRef.current = []  // 履歴リセットして再判定を回避
+  }
+  useEffect(() => () => { if (botCheckTimerRef.current) clearTimeout(botCheckTimerRef.current) }, [])
+
+  const botCheckOverlay = botCheck && (
+    <div style={{ position:'fixed', inset:0, zIndex:99999, background:'rgba(0,0,0,0.88)' }}>
+      <div style={{ position:'absolute', top:'24px', left:0, right:0, textAlign:'center', color:'#ffcc00', fontFamily:'monospace', fontSize:'13px', padding:'0 16px' }}>
+        ⚠ 自動操作の疑いがあります。<br/>1分以内に下のボタンを押してください（未操作の場合アカウントを停止します）
+      </div>
+      <button onClick={passBotCheck}
+        style={{ position:'absolute', top:`${botCheck.top}vh`, left:`${botCheck.left}vw`, padding:'14px 22px', background:'#1a0000', border:'2px solid #ff4444', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', whiteSpace:'nowrap' }}>
+        🤖 私はBOTではありません
+      </button>
+    </div>
+  )
+
   const exchange = async (medalCount) => {
     if (loading || !profile) return
     const goldCost = medalCount * EXCHANGE_RATE
@@ -176,6 +225,7 @@ export default function Casino() {
   const hiloDeal = async () => {
     if (loading || !profile) return
     if (profile.is_fishing) { showMessage('🎣 釣り中は賭博場で遊べません', '#ff8844'); return }
+    sortieStreakRef.current = 0  // カジノで遊んだので簡易出撃の連続カウントをリセット
     const bet = Math.floor(betAmount)
     if (!bet || bet < MIN_BET) { showMessage(`ベットは${MIN_BET}メダルからです`, '#ff4444'); return }
     if (bet > MAX_BET) { showMessage(`ベットは${MAX_BET}メダルまでです`, '#ff4444'); return }
@@ -250,6 +300,7 @@ export default function Casino() {
   const slotLever = async () => {
     if (loading || slotPhase==='spinning' || !profile) return
     if (profile.is_fishing) { showMessage('🎣 釣り中は賭博場で遊べません', '#ff8844'); return }
+    sortieStreakRef.current = 0  // カジノで遊んだので簡易出撃の連続カウントをリセット
     const bet = Math.floor(slotBet)
     if (slotMode==='normal') {
       if (!bet || bet < MIN_BET) { showMessage(`ベットは${MIN_BET}メダルからです`, '#ff4444'); return }
@@ -346,6 +397,7 @@ export default function Casino() {
   // 簡易出撃：1回出撃（ボス/パピア無し・必ず勝利）
   const doSortie = async (e) => {
     if (loading || !profile) return
+    if (botCheck) return  // BOT確認チャレンジ中は出撃不可
     if (e && !e.isTrusted) return
     if (profile.is_fishing) { setSortieMsg('🎣 釣り中は出撃できません'); setTimeout(()=>setSortieMsg(''),2500); return }
     if (profile.battle_ban_until && new Date(profile.battle_ban_until) > new Date()) { setSortieMsg('⛔ 異常な行動を検出。出撃禁止中です'); setTimeout(()=>setSortieMsg(''),2500); return }
@@ -363,10 +415,38 @@ export default function Casino() {
       setLoading(false); return
     }
 
+    // オートクリッカー検知①：出撃間隔が異常に規則的（一定間隔の機械的連打）なら12時間出撃禁止
+    if (!DEV_ACCOUNTS.includes(profile.username)) {
+      const times = sortieTimesRef.current
+      times.push(Date.now())
+      if (times.length > AUTOCLICK_SAMPLES) times.shift()
+      if (times.length >= AUTOCLICK_SAMPLES) {
+        const intervals = times.slice(1).map((t,i) => t - times[i])
+        const spread = Math.max(...intervals) - Math.min(...intervals)
+        if (spread < AUTOCLICK_SPREAD_MS) {
+          triggerBotCheck()
+          setLoading(false); return
+        }
+      }
+    }
+
+    // オートクリッカー検知②：カジノで遊ばず簡易出撃だけが連続したら12時間EXP凍結（出撃自体は継続可）
+    let justFrozen = false
+    if (!DEV_ACCOUNTS.includes(profile.username) && !expIsFrozen(profile)) {
+      sortieStreakRef.current += 1
+      if (sortieStreakRef.current >= SORTIE_STREAK_LIMIT) {
+        const frozenUntil = new Date(Date.now() + 12*3600*1000).toISOString()
+        await supabase.from('profiles').update({ exp_frozen_until: frozenUntil }).eq('id', profile.id)
+        sortieStreakRef.current = 0
+        justFrozen = true
+        setSortieMsg('⚠ 簡易出撃ばかりが連続しています。12時間EXPの獲得を停止します'); setTimeout(()=>setSortieMsg(''),5000)
+      }
+    }
+
     const area = AREAS.find(a => a.id === sortieArea) || AREAS[0]
     const cap = getEffectiveCap(profile.class)
     const isAtCap = profile.lv >= cap
-    const frozen = profile.exp_frozen
+    const frozen = expIsFrozen(profile) || justFrozen
     const expGain = (isAtCap || frozen) ? 0 : Math.floor(Math.random()*4) + 8
     const zako = area.enemies[Math.floor(Math.random()*area.enemies.length)]
     const goldGain = zako?.gold || 0
@@ -403,7 +483,7 @@ export default function Casino() {
     setLoading(true)
     const cap = getEffectiveCap(profile.class)
     const isAtCap = profile.lv >= cap
-    const frozen = profile.exp_frozen
+    const frozen = expIsFrozen(profile)
     const growth = JOB_GROWTH[profile.class] || JOB_GROWTH['戦士']
     const bonusSlots = JOB_LEVEL3_BONUS[profile.class] || []
 
@@ -467,6 +547,7 @@ export default function Casino() {
 
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
+      {botCheckOverlay}
       <div style={{ maxWidth:'700px', margin:'0 auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>

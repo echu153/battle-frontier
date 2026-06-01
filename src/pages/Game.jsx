@@ -336,6 +336,12 @@ const getStatRank = (val, type) => {
 
 const calcTotal = (p) => Math.floor((p.hp_max/10)+(p.mp_max/5)+p.atk+p.def+p.matk+p.mdef+p.spd)
 
+// EXP凍結中か（手動のexp_frozen、または期限付きのexp_frozen_until）
+const expIsFrozen = (p) => !!(p && (p.exp_frozen || (p.exp_frozen_until && new Date(p.exp_frozen_until) > new Date())))
+// オートクリッカー検知：直近サンプル数と、間隔のばらつき許容幅(ms)
+const AUTOCLICK_SAMPLES = 12
+const AUTOCLICK_SPREAD_MS = 1000
+
 const getTotalRank = (total) => {
   const thresholds = [200,500,1000,2000,4000,7000,11000,16000]
   const ranks = ['F','E','D','C','B','A','S','SS','SSS']
@@ -968,6 +974,7 @@ export default function Game() {
   const [scene, setScene] = useState('town')
   const [battleLogs, setBattleLogs] = useState([])
   const [currentEnemy, setCurrentEnemy] = useState(null)
+  const [botCheck, setBotCheck] = useState(null)  // BOT確認チャレンジ {top,left} or null
   const [loading, setLoading] = useState(false)
   const [pendingPoints, setPendingPoints] = useState(0)
   const [statPoints, setStatPoints] = useState({})
@@ -1003,6 +1010,8 @@ export default function Game() {
   })
   const expTrackerRef = useRef({ start: null, total: 0 })
   const battleCountTrackerRef = useRef({ start: null, count: 0 })
+  const sortieTimesRef = useRef([])  // オートクリッカー検知：出撃時刻の履歴
+  const botCheckTimerRef = useRef(null)  // BOT確認チャレンジの60秒タイマー
   const regenningRef = useRef(false)
 
   useEffect(() => {
@@ -1221,7 +1230,7 @@ export default function Game() {
       const expGained = Math.floor(50 + Math.random() * 51)
       const currentClassLvD = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
       const capD = getEffectiveCap(profile.class)
-      if (profile.exp_frozen) {
+      if (expIsFrozen(profile)) {
         logs.push({ text:`EXP +${expGained}（調査中につき停止）`, color:'#446688' })
       } else if (currentClassLvD < capD) {
         let newExp = profile.exp + expGained
@@ -1325,8 +1334,41 @@ export default function Game() {
     setTimeout(async () => { await supabase.auth.signOut() }, 3000)
   }
 
+  // BOT確認チャレンジ：ランダム位置にボタンを出し、60秒以内に押さなければ停止措置
+  const triggerBotCheck = () => {
+    const top = Math.floor(15 + Math.random()*65)   // 15〜80vh
+    const left = Math.floor(5 + Math.random()*65)   // 5〜70vw
+    setBotCheck({ top, left })
+    if (botCheckTimerRef.current) clearTimeout(botCheckTimerRef.current)
+    botCheckTimerRef.current = setTimeout(async () => {
+      botCheckTimerRef.current = null
+      setBotCheck(null)
+      await suspendAccount('BOT確認ボタンを1分以内に押せなかった')
+    }, 60000)
+  }
+  const passBotCheck = (e) => {
+    if (e && !e.isTrusted) return  // 機械クリックは無効
+    if (botCheckTimerRef.current) { clearTimeout(botCheckTimerRef.current); botCheckTimerRef.current = null }
+    setBotCheck(null)
+    sortieTimesRef.current = []  // 履歴リセットして再判定を回避
+  }
+  useEffect(() => () => { if (botCheckTimerRef.current) clearTimeout(botCheckTimerRef.current) }, [])
+
+  const botCheckOverlay = botCheck && (
+    <div style={{ position:'fixed', inset:0, zIndex:99999, background:'rgba(0,0,0,0.88)' }}>
+      <div style={{ position:'absolute', top:'24px', left:0, right:0, textAlign:'center', color:'#ffcc00', fontFamily:'monospace', fontSize:'13px', padding:'0 16px' }}>
+        ⚠ 自動操作の疑いがあります。<br/>1分以内に下のボタンを押してください（未操作の場合アカウントを停止します）
+      </div>
+      <button onClick={passBotCheck}
+        style={{ position:'absolute', top:`${botCheck.top}vh`, left:`${botCheck.left}vw`, padding:'14px 22px', background:'#1a0000', border:'2px solid #ff4444', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', whiteSpace:'nowrap' }}>
+        🤖 私はBOTではありません
+      </button>
+    </div>
+  )
+
   const doBattle = async (e) => {
     if (!canAct || loading) return
+    if (botCheck) return  // BOT確認チャレンジ中は出撃不可
     // 自動操作検知（isTrusted=falseは人間の操作ではない）
     if (e && !e.isTrusted) { await suspendAccount('自動操作が検出されました'); return }
     // 未解放エリアへのアクセスガード（localStorage汚染対策）
@@ -1389,6 +1431,21 @@ export default function Game() {
       .select('id')
     if (!locked || locked.length === 0) {
       setLoading(false); setScene('town'); await fetchProfile(); return
+    }
+
+    // オートクリッカー検知：出撃間隔が異常に規則的（一定間隔の機械的連打）なら12時間出撃禁止
+    if (!DEV_ACCOUNTS.includes(profile.username)) {
+      const times = sortieTimesRef.current
+      times.push(Date.now())
+      if (times.length > AUTOCLICK_SAMPLES) times.shift()
+      if (times.length >= AUTOCLICK_SAMPLES) {
+        const intervals = times.slice(1).map((t,i) => t - times[i])
+        const spread = Math.max(...intervals) - Math.min(...intervals)
+        if (spread < AUTOCLICK_SPREAD_MS) {
+          triggerBotCheck()
+          setLoading(false); return
+        }
+      }
     }
 
     const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
@@ -1935,7 +1992,7 @@ export default function Game() {
       }
     }
 
-    const frozenExp = profile.exp_frozen
+    const frozenExp = expIsFrozen(profile)
     let newExp = frozenExp ? profile.exp : profile.exp + expGained
     let newGold = profile.gold + goldGained
     let newLv = profile.lv
@@ -2487,6 +2544,7 @@ export default function Game() {
   if (isMobile) {
     return (
       <div style={{ minHeight:'100vh', background:'#000820', fontFamily:'monospace' }}>
+        {botCheckOverlay}
         <div style={{ background:'#000820', borderBottom:'1px solid #003366', padding:'6px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:100 }}>
           <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
             <div style={{ color:'#ffcc00', fontSize:'13px', letterSpacing:'2px' }}>BATTLE FRONTIER</div>
@@ -2694,6 +2752,7 @@ export default function Game() {
   // ===== PCレイアウト =====
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
+      {botCheckOverlay}
       <div style={{ maxWidth:'900px', margin:'0 auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>

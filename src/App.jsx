@@ -18,7 +18,6 @@ function App() {
   const [session, setSession] = useState(undefined)
   const [hasChar, setHasChar] = useState(undefined)
   const [suspended, setSuspended] = useState(false)
-  const [suspensionReason, setSuspensionReason] = useState('')
 
   // 強制リロード機構：app_config.reload_tokenが変わったら全員のページを1回リロード
   useEffect(() => {
@@ -57,7 +56,6 @@ function App() {
     const { data } = await supabase.from('profiles').select('id, is_suspended, suspension_reason').eq('id', userId).single()
     if (data?.is_suspended) {
       setSuspended(true)
-      setSuspensionReason(data.suspension_reason || '')
       await supabase.auth.signOut()
       return
     }
@@ -73,14 +71,9 @@ function App() {
       <div style={{ minHeight:'100vh', background:'#000820', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'monospace' }}>
         <div style={{ border:'1px solid #880000', background:'#1a0000', padding:'32px', maxWidth:'400px', textAlign:'center' }}>
           <div style={{ color:'#ff4444', fontSize:'18px', letterSpacing:'2px', marginBottom:'16px' }}>⛔ アカウント停止</div>
-          <div style={{ color:'#cc4444', fontSize:'13px', lineHeight:'1.8', marginBottom:'16px' }}>
+          <div style={{ color:'#cc4444', fontSize:'13px', lineHeight:'1.8' }}>
             不正行為を確認したため現在アカウントを停止しています。<br />管理者までご連絡ください。
           </div>
-          {suspensionReason && (
-            <div style={{ color:'#884444', fontSize:'11px', border:'1px solid #440000', padding:'8px', background:'#110000' }}>
-              理由: {suspensionReason}
-            </div>
-          )}
         </div>
       </div>
     )
