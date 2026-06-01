@@ -668,7 +668,7 @@ export default function Smithy() {
                     const appOwned = playerItems.find(pi=>pi.items?.name==='再鑑定依頼書')?.quantity||0
                     const canEval = !isArtifactBase && evalOwned >= needed
                     const canApp = !isArtifactBase && !!item.bonus_slots_json && appOwned >= needed
-                    const hasBonus = item.bonus_atk>0||item.bonus_def>0||item.bonus_matk>0||item.bonus_mdef>0||item.bonus_spd>0||item.bonus_hp>0||item.bonus_mp>0||(item.bonus_crit||0)>0||(item.bonus_evasion||0)>0||(item.bonus_hit||0)>0||item.bonus_effect
+                    const hasBonus = item.bonus_atk>0||item.bonus_def>0||item.bonus_matk>0||item.bonus_mdef>0||item.bonus_spd>0||item.bonus_hp>0||item.bonus_mp>0||(item.bonus_crit||0)>0||(item.bonus_evasion||0)>0||(item.bonus_hit||0)>0||(item.bonus_effect&&item.bonus_effect!=='artifact')
                     return (
                       <div key={item.id} style={{ border:'1px solid #002244', background:'#001028', padding:'10px', marginBottom:'6px', opacity: isArtifactBase ? 0.5 : 1 }}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
@@ -704,11 +704,12 @@ export default function Smithy() {
                             {(item.bonus_crit||0)>0 && ` クリティカル率+${item.bonus_crit}%`}
                             {(item.bonus_evasion||0)>0 && ` 回避率+${item.bonus_evasion}%`}
                             {(item.bonus_hit||0)>0 && ` 命中率+${item.bonus_hit}%`}
-                            {item.bonus_effect && ` ${getEffectLabel(item.bonus_effect)}`}
+                            {item.bonus_effect && item.bonus_effect !== 'artifact' && ` ${getEffectLabel(item.bonus_effect)}`}
                           </div>
                         ) : (
                           !isArtifactBase && <div style={{fontSize:'10px',color:'#334455'}}>ボーナスなし（再評価で付与）</div>
                         )}
+                        {item.bonus_effect === 'artifact' && <div style={{fontSize:'10px',color:'#44ccff',marginTop:'2px'}}>【特殊能力】{getEffectLabel(item.bonus_effect)}</div>}
                       </div>
                     )
                   })}

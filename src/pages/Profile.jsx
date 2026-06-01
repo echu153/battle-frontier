@@ -271,8 +271,9 @@ export default function Profile() {
                       {equipped.bonus_spd  > 0 && ` 素早さ+${equipped.bonus_spd}`}
                     </span>
                   )}
-                  {equipped.bonus_effect && <span style={{color:'#ffaa00'}}> {getEffectLabel(equipped.bonus_effect)}</span>}
+                  {equipped.bonus_effect && equipped.bonus_effect !== 'artifact' && <span style={{color:'#ffaa00'}}> {getEffectLabel(equipped.bonus_effect)}</span>}
                 </div>
+                {equipped.bonus_effect === 'artifact' && <div style={{ fontSize:'10px', color:'#44ccff', marginLeft:'68px', marginTop:'2px' }}>【特殊能力】{getEffectLabel(equipped.bonus_effect)}</div>}
               </div>
             )
           })}

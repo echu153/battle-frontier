@@ -263,7 +263,8 @@ export default function Equipment() {
                         {enhW.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>魔防+{enhW.mdef_bonus} </span>}
                         {enhW.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>速+{enhW.spd_bonus} </span>}
                       </div>
-                      {equipped.bonus_effect && <div style={{color:'#ffaa00', fontSize:'9px'}}>{getEffectLabel(equipped.bonus_effect)}</div>}
+                      {equipped.bonus_effect && equipped.bonus_effect !== 'artifact' && <div style={{color:'#ffaa00', fontSize:'9px'}}>{getEffectLabel(equipped.bonus_effect)}</div>}
+                      {equipped.bonus_effect === 'artifact' && <div style={{color:'#44ccff', fontSize:'9px'}}>【特殊能力】{getEffectLabel(equipped.bonus_effect)}</div>}
                     </>
                   ) : (
                     <div style={{ color:'#334455', fontSize:'11px' }}>なし</div>
@@ -374,7 +375,7 @@ export default function Equipment() {
                   const profPct = prof ? Math.min(100, (prof.prof_exp / 100) * 100) : 0
                   const profPrefix = prof ? getProfPrefix(prof.prof_lv) : ''
                   const canAwaken = isArtifactBase && prof && prof.prof_lv >= 300
-                  const hasBonus = item.bonus_atk > 0 || item.bonus_def > 0 || item.bonus_matk > 0 || item.bonus_mdef > 0 || item.bonus_spd > 0 || item.bonus_hp > 0 || item.bonus_mp > 0 || (item.bonus_crit||0) > 0 || (item.bonus_evasion||0) > 0 || (item.bonus_hit||0) > 0
+                  const hasBonus = item.bonus_atk > 0 || item.bonus_def > 0 || item.bonus_matk > 0 || item.bonus_mdef > 0 || item.bonus_spd > 0 || item.bonus_hp > 0 || item.bonus_mp > 0 || (item.bonus_crit||0) > 0 || (item.bonus_evasion||0) > 0 || (item.bonus_hit||0) > 0 || (item.bonus_effect && item.bonus_effect !== 'artifact')
                   const isAccessory = tab === 'accessory'
 
                   return (
@@ -439,7 +440,8 @@ export default function Equipment() {
                           {(item.bonus_hit||0) > 0 && ` 命中率+${item.bonus_hit}%`}
                         </div>
                       )}
-                      {item.bonus_effect && <div style={{ fontSize:'10px', color:'#ffaa00', marginBottom:'4px' }}>{getEffectLabel(item.bonus_effect)}</div>}
+                      {item.bonus_effect && item.bonus_effect !== 'artifact' && <div style={{ fontSize:'10px', color:'#ffaa00', marginBottom:'4px' }}>{getEffectLabel(item.bonus_effect)}</div>}
+                      {item.bonus_effect === 'artifact' && <div style={{ fontSize:'10px', color:'#44ccff', marginBottom:'4px' }}>【特殊能力】{getEffectLabel(item.bonus_effect)}</div>}
 
                       {tab === 'weapon' && prof && item.equipped && (
                         <div>
