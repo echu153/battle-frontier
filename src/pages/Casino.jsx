@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
 const EXCHANGE_RATE = 100 // 100G = 1メダル（SQLのrateと一致させること）
-const EXCHANGE_OPTIONS = [1, 5, 10, 50, 100]
+const EXCHANGE_OPTIONS = [1, 5, 10, 50, 100, 1000]
 
 export default function Casino() {
   const nav = useNavigate()
@@ -12,6 +12,7 @@ export default function Casino() {
   const [message, setMessage] = useState('')
   const [messageColor, setMessageColor] = useState('#ffaa00')
   const [tab, setTab] = useState('exchange')
+  const [exchangeAmount, setExchangeAmount] = useState(1)
 
   useEffect(() => { fetchProfile() }, [])
 
@@ -86,19 +87,24 @@ export default function Casino() {
               レート: <span style={{color:'#ffcc00'}}>{EXCHANGE_RATE}G</span> = <span style={{color:'#ffaa00'}}>🎫 1メダル</span><br/>
               ※ メダルからGoldへの払い戻しはできません
             </div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-              {EXCHANGE_OPTIONS.map(n => {
-                const cost = n * EXCHANGE_RATE
-                const canBuy = profile.gold >= cost
-                return (
-                  <button key={n} onClick={()=>exchange(n)} disabled={!canBuy || loading}
-                    style={{ padding:'10px', background: canBuy?'#1a1000':'#001', border:`1px solid ${canBuy?'#ffaa00':'#002244'}`, color: canBuy?'#ffaa00':'#334455', cursor: canBuy?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>
-                    🎫 {n}メダル<br/>
-                    <span style={{ fontSize:'10px', color: canBuy?'#ccaa66':'#334455' }}>{cost.toLocaleString()}G</span>
+            {(() => {
+              const cost = exchangeAmount * EXCHANGE_RATE
+              const canBuy = profile.gold >= cost
+              return (
+                <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                  <select value={exchangeAmount} onChange={e=>setExchangeAmount(Number(e.target.value))}
+                    style={{ flex:1, background:'#001028', border:'1px solid #886600', color:'#ffaa00', fontFamily:'monospace', fontSize:'12px', padding:'8px' }}>
+                    {EXCHANGE_OPTIONS.map(n => (
+                      <option key={n} value={n}>🎫 {n.toLocaleString()}メダル （{(n*EXCHANGE_RATE).toLocaleString()}G）</option>
+                    ))}
+                  </select>
+                  <button onClick={()=>exchange(exchangeAmount)} disabled={!canBuy || loading}
+                    style={{ padding:'8px 16px', background: canBuy?'#1a1000':'#001', border:`1px solid ${canBuy?'#ffaa00':'#002244'}`, color: canBuy?'#ffaa00':'#334455', cursor: canBuy?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'12px', whiteSpace:'nowrap' }}>
+                    両替する
                   </button>
-                )
-              })}
-            </div>
+                </div>
+              )
+            })()}
           </div>
         )}
       </div>
