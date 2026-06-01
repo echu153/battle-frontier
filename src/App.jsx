@@ -20,6 +20,25 @@ function App() {
   const [suspended, setSuspended] = useState(false)
   const [suspensionReason, setSuspensionReason] = useState('')
 
+  // 強制リロード機構：app_config.reload_tokenが変わったら全員のページを1回リロード
+  useEffect(() => {
+    const KEY = 'bf_reloadToken'
+    const check = async () => {
+      const { data } = await supabase.from('app_config').select('reload_token').eq('id', 1).single()
+      if (!data) return
+      const token = String(data.reload_token)
+      const stored = localStorage.getItem(KEY)
+      if (stored === null) { localStorage.setItem(KEY, token); return }
+      if (stored !== token) {
+        localStorage.setItem(KEY, token)
+        window.location.reload()
+      }
+    }
+    check()
+    const id = setInterval(check, 60000)
+    return () => clearInterval(id)
+  }, [])
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
