@@ -448,7 +448,8 @@ export default function Casino() {
         </div>
 
         <div style={{ border:'1px dashed #ff8844', background:'#1a0800', color:'#ff8844', fontSize:'11px', padding:'8px', marginBottom:'12px', textAlign:'center' }}>
-          🚧 賭博場は現在テスト中です。仕様や倍率は予告なく変更される場合があります 🚧
+          🚧 賭博場はテスト中です。仕様や倍率は予告なく変更される場合があります。<br/>
+          ⚠ ページをリロードすると進行中のゲーム（AT・ハイロー等）はリセットされます 🚧
         </div>
 
         {profile.is_fishing && (
