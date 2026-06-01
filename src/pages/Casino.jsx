@@ -62,7 +62,13 @@ export default function Casino() {
   useEffect(() => () => { if (spinRef.current) clearInterval(spinRef.current) }, [])
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id) }, [])
 
-  useEffect(() => { fetchProfile() }, [])
+  useEffect(() => { initCasino() }, [])
+
+  // 賭博場を開いた時：進行中のハイロー/スロット状態をリセット（リログ対策・表示ズレ防止）
+  const initCasino = async () => {
+    try { await supabase.rpc('casino_reset') } catch {}
+    await fetchProfile()
+  }
 
   const fetchProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser()
