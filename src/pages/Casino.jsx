@@ -1,8 +1,11 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { AREAS, JOB_GROWTH, JOB_LEVEL3_BONUS, calcExpNext, getEffectiveCap, generateDropBonus, ARTIFACT_BASE_NAMES } from './Game'
 
 const SLOT_SYMBOLS = ['7️⃣', '⭐', '🔔', '🍇', '🍒', '🍋']
+const SORTIE_WAIT = 30 // 賭博場出撃のクールダウン秒（通常出撃と共通のlast_action_atで管理）
+const AREA_PASS_EFFECT = { 2:'casino_area_2', 3:'casino_area_3', 4:'casino_area_4', 5:'casino_area_5', 6:'casino_area_6', 7:'casino_area_7' }
 
 const EXCHANGE_RATE = 100 // 100G = 1メダル（SQLのrateと一致させること）
 const EXCHANGE_OPTIONS = [1, 5, 10, 50, 100, 1000]
@@ -44,12 +47,20 @@ export default function Casino() {
   const [czGames, setCzGames] = useState(0)            // CZ残りゲーム数
   const [tokuGames, setTokuGames] = useState(0)        // 特化ゾーン残りゲーム数
   const [tokuAdded, setTokuAdded] = useState(null)     // 直近の上乗せ量
+  // 簡易出撃状態
+  const [playerItems, setPlayerItems] = useState([])
+  const [sortieArea, setSortieArea] = useState(1)
+  const [sortiePending, setSortiePending] = useState({ count:0, exp:0, gold:0, drops:[] })
+  const [showSettle, setShowSettle] = useState(false)
+  const [sortieMsg, setSortieMsg] = useState('')
+  const [now, setNow] = useState(Date.now())
   const spinRef = useRef(null)
   const slotStoppedRef = useRef([false,false,false])
   const pressOrderRef = useRef([])
 
   useEffect(() => { slotStoppedRef.current = slotStopped }, [slotStopped])
   useEffect(() => () => { if (spinRef.current) clearInterval(spinRef.current) }, [])
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id) }, [])
 
   useEffect(() => { fetchProfile() }, [])
 
@@ -59,6 +70,8 @@ export default function Casino() {
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     if (!p) { nav('/game'); return }
     setProfile(p)
+    const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id)
+    setPlayerItems(pi || [])
   }
 
   const showMessage = (msg, color = '#ffaa00') => {
@@ -239,6 +252,130 @@ export default function Casino() {
 
   const slotReset = () => { setSlotPhase('idle'); setSlotResult(null); setSlotStopped([false,false,false]); setNavStep(0); setAtResult(null); setTokuAdded(null); pressOrderRef.current = [] }
 
+  // 簡易出撃：エリア解放判定
+  const isAreaUnlocked = (areaId) => {
+    if (areaId === 1) return true
+    const eff = AREA_PASS_EFFECT[areaId]
+    return playerItems.some(pi => pi.items?.effect === eff && (pi.quantity||0) > 0)
+  }
+
+  // 簡易出撃：クールダウン残り秒
+  const sortieRemain = () => {
+    if (!profile?.last_action_at) return 0
+    const elapsed = (now - new Date(profile.last_action_at).getTime()) / 1000
+    return Math.max(0, Math.ceil(SORTIE_WAIT - elapsed))
+  }
+
+  // 簡易出撃：1回出撃（ボス/パピア無し・必ず勝利）
+  const doSortie = async (e) => {
+    if (loading || !profile) return
+    if (e && !e.isTrusted) return
+    if (profile.is_fishing) { setSortieMsg('🎣 釣り中は出撃できません'); setTimeout(()=>setSortieMsg(''),2500); return }
+    if (!isAreaUnlocked(sortieArea)) { setSortieMsg('このエリアの出撃許可証を持っていません'); setTimeout(()=>setSortieMsg(''),2500); return }
+    if (sortieRemain() > 0) { setSortieMsg(`次の出撃まで ${sortieRemain()}秒`); setTimeout(()=>setSortieMsg(''),1500); return }
+    setLoading(true)
+    // 共通の last_action_at で30秒ロック（不正対策）
+    const lockTime = new Date(Date.now() - SORTIE_WAIT * 1000).toISOString()
+    const { data: locked } = await supabase.from('profiles')
+      .update({ last_action_at: new Date().toISOString() })
+      .eq('id', profile.id).lt('last_action_at', lockTime).eq('is_fishing', false).select('id')
+    if (!locked || locked.length === 0) { setLoading(false); await fetchProfile(); return }
+
+    const area = AREAS.find(a => a.id === sortieArea) || AREAS[0]
+    const cap = getEffectiveCap(profile.class)
+    const isAtCap = profile.lv >= cap
+    const frozen = profile.exp_frozen
+    const expGain = (isAtCap || frozen) ? 0 : Math.floor(Math.random()*4) + 8
+    const zako = area.enemies[Math.floor(Math.random()*area.enemies.length)]
+    const goldGain = zako?.gold || 0
+
+    // ドロップ（通常の非ボスと同じ確率）
+    const drops = []
+    const commonDrops = area.commonDrops || []
+    const rareDrops = area.rareDrops || []
+    if (commonDrops.length > 0 && Math.random()*100 < 3) {
+      if (rareDrops.length > 0 && Math.random()*100 < 10) drops.push(rareDrops[Math.floor(Math.random()*rareDrops.length)])
+      else drops.push(commonDrops[Math.floor(Math.random()*commonDrops.length)])
+    }
+    if (Math.random()*100 < 0.1) drops.push(ARTIFACT_BASE_NAMES[Math.floor(Math.random()*ARTIFACT_BASE_NAMES.length)])
+
+    setSortiePending(prev => ({
+      count: prev.count + 1,
+      exp: prev.exp + expGain,
+      gold: prev.gold + goldGain,
+      drops: [...prev.drops, ...drops],
+    }))
+    await fetchProfile()
+    setLoading(false)
+  }
+
+  // 簡易出撃：清算（蓄積した戦果をまとめて反映）
+  const settleSortie = async () => {
+    if (loading) return
+    const pend = sortiePending
+    if (pend.count === 0) { setShowSettle(false); return }
+    setLoading(true)
+    const cap = getEffectiveCap(profile.class)
+    const isAtCap = profile.lv >= cap
+    const frozen = profile.exp_frozen
+    const growth = JOB_GROWTH[profile.class] || JOB_GROWTH['戦士']
+    const bonusSlots = JOB_LEVEL3_BONUS[profile.class] || []
+
+    let newExp = profile.exp + (frozen ? 0 : pend.exp)
+    let newLv = profile.lv
+    let newExpNext = profile.exp_next
+    let newPending = profile.pending_stat_points || 0
+    let newCharLv = profile.char_lv || 1
+    let stat = { hp_max:profile.hp_max, mp_max:profile.mp_max, atk:profile.atk, def:profile.def, matk:profile.matk, mdef:profile.mdef, spd:profile.spd }
+    const learnedSkillNames = []
+
+    if (!isAtCap && !frozen) {
+      while (newExp >= newExpNext && newLv < cap) {
+        newExp -= newExpNext; newLv++; newExpNext = calcExpNext(newLv); newPending++; newCharLv++
+        stat = { hp_max:stat.hp_max+growth.hp, mp_max:stat.mp_max+growth.mp, atk:stat.atk+growth.atk, def:stat.def+growth.def, matk:stat.matk+growth.matk, mdef:stat.mdef+growth.mdef, spd:stat.spd+growth.spd }
+        if (bonusSlots.length > 0 && newLv%3===0) { const bi = Math.floor(newLv/3-1)%bonusSlots.length; stat[bonusSlots[bi]] = (stat[bonusSlots[bi]]||0)+1 }
+        // レベルアップでスキル習得
+        const { data: lvupSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class).eq('required_lv', newLv)
+        const { data: learned } = await supabase.from('player_skills').select('skill_id').eq('player_id', profile.id)
+        const learnedIds = (learned||[]).map(s => s.skill_id)
+        for (const sk of (lvupSkills||[])) {
+          if (!learnedIds.includes(sk.id)) { await supabase.from('player_skills').insert({ player_id:profile.id, skill_id:sk.id }); learnedSkillNames.push(sk.name) }
+        }
+      }
+      if (newLv >= cap) { newExp = 0; newExpNext = calcExpNext(cap) }
+    }
+
+    await supabase.from('profiles').update({
+      exp:newExp, exp_next:newExpNext, lv:newLv, gold: profile.gold + pend.gold,
+      pending_stat_points:newPending, char_lv:newCharLv, ...stat,
+    }).eq('id', profile.id)
+    // class_levels も同期
+    const { data: cl } = await supabase.from('class_levels').select('id').eq('player_id', profile.id).eq('class_name', profile.class).maybeSingle()
+    if (cl && !isAtCap && !frozen) await supabase.from('class_levels').update({ lv:newLv, exp:newExp }).eq('id', cl.id)
+
+    // ドロップ付与
+    for (const name of pend.drops) {
+      const { data: weapon } = await supabase.from('weapons').select('*').eq('name', name).single()
+      if (weapon) {
+        const isArti = ARTIFACT_BASE_NAMES.includes(weapon.name)
+        const bonusData = isArti ? {} : generateDropBonus(weapon)
+        await supabase.from('player_equipment').insert({ player_id:profile.id, weapon_id:weapon.id, slot:weapon.slot, equipped:false, ...bonusData })
+      }
+    }
+
+    setSortiePending({ count:0, exp:0, gold:0, drops:[] })
+    setShowSettle(false)
+    await fetchProfile()
+    setLoading(false)
+    showMessage(`清算完了！ EXP+${pend.exp} Gold+${pend.gold}${pend.drops.length?` ドロップ${pend.drops.length}個`:''}${learnedSkillNames.length?` スキル習得:${learnedSkillNames.join('・')}`:''}`, '#44ff88')
+  }
+
+  // 街に戻る：未清算があれば清算を促す
+  const tryLeave = () => {
+    if (sortiePending.count > 0) { setShowSettle(true); return }
+    nav('/game')
+  }
+
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
   return (
@@ -246,7 +383,7 @@ export default function Casino() {
       <div style={{ maxWidth:'700px', margin:'0 auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
-          <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
+          <button onClick={tryLeave} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
         </div>
 
         <div style={{ border:'1px dashed #ff8844', background:'#1a0800', color:'#ff8844', fontSize:'11px', padding:'8px', marginBottom:'12px', textAlign:'center' }}>
@@ -632,7 +769,85 @@ export default function Casino() {
           </div>
           )
         })()}
+
+        {/* ⚔ 簡易出撃パネル（常設・タブ非依存） */}
+        {(() => {
+          const remain = sortieRemain()
+          const unlocked = isAreaUnlocked(sortieArea)
+          const availableAreas = AREAS.filter(a => isAreaUnlocked(a.id))
+          return (
+            <div style={{ border:'1px solid #335577', background:'#001020', padding:'14px', marginTop:'16px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
+                <div style={{ color:'#66aaff', fontSize:'13px' }}>⚔ 簡易出撃</div>
+                {sortiePending.count > 0 && (
+                  <button onClick={()=>setShowSettle(true)} style={{ background:'#1a1000', border:'1px solid #ffcc00', color:'#ffcc00', padding:'3px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                    📋 戦果({sortiePending.count})
+                  </button>
+                )}
+              </div>
+              <div style={{ color:'#446688', fontSize:'10px', marginBottom:'10px', lineHeight:'1.6' }}>
+                ボス・パピアなし／必ず勝利。{SORTIE_WAIT}秒に1回出撃でき、戦果は貯まります。街に戻る前に清算してください。
+              </div>
+
+              <div style={{ marginBottom:'8px' }}>
+                <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>出撃エリア</div>
+                <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+                  {AREAS.map(a => {
+                    const ok = isAreaUnlocked(a.id)
+                    const sel = sortieArea === a.id
+                    return (
+                      <button key={a.id} onClick={()=> ok && setSortieArea(a.id)} disabled={!ok}
+                        style={{ padding:'4px 8px', background: sel?'#001840':'#000818', border:`1px solid ${sel?'#66aaff':(ok?'#335577':'#222')}`, color: sel?'#66aaff':(ok?'#88aacc':'#445'), cursor: ok?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
+                        {ok ? `${a.id}.${a.name}` : `🔒${a.id}`}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {sortieMsg && <div style={{ color:'#ff8844', fontSize:'11px', textAlign:'center', marginBottom:'6px' }}>{sortieMsg}</div>}
+
+              <button onClick={doSortie} disabled={loading || !unlocked || remain>0 || profile.is_fishing}
+                style={{ width:'100%', padding:'12px', background: (remain>0||!unlocked)?'#001':'#001830', border:`1px solid ${(remain>0||!unlocked)?'#223':'#0088cc'}`, color: (remain>0||!unlocked)?'#445':'#00aaff', cursor:(loading||remain>0||!unlocked)?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'1px' }}>
+                {!unlocked ? '🔒 出撃許可証が必要' : remain>0 ? `⏳ 次の出撃まで ${remain}秒` : `⚔ 出撃する（エリア${sortieArea}）`}
+              </button>
+            </div>
+          )
+        })()}
       </div>
+
+      {/* 清算モーダル */}
+      {showSettle && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
+          <div style={{ background:'#001020', border:'1px solid #ffcc00', padding:'20px', maxWidth:'420px', width:'100%' }}>
+            <div style={{ color:'#ffcc00', fontSize:'15px', marginBottom:'12px', textAlign:'center' }}>📋 出撃の戦果（清算）</div>
+            {sortiePending.count === 0 ? (
+              <div style={{ color:'#446688', fontSize:'12px', textAlign:'center', padding:'12px' }}>戦果はありません</div>
+            ) : (
+              <div style={{ fontSize:'12px', color:'#88ccff', lineHeight:'2', marginBottom:'12px' }}>
+                <div>出撃回数: <span style={{color:'#ffcc00'}}>{sortiePending.count}回</span></div>
+                <div>獲得EXP: <span style={{color:'#44ff88'}}>{sortiePending.exp.toLocaleString()}</span></div>
+                <div>獲得Gold: <span style={{color:'#ffcc00'}}>{sortiePending.gold.toLocaleString()}</span></div>
+                <div>ドロップ: <span style={{color:'#44ff88'}}>{sortiePending.drops.length}個</span></div>
+                {sortiePending.drops.length > 0 && (
+                  <div style={{ fontSize:'10px', color:'#88aacc', lineHeight:'1.6' }}>
+                    {Object.entries(sortiePending.drops.reduce((m,n)=>{m[n]=(m[n]||0)+1;return m},{})).map(([n,c])=>`${n}${c>1?`×${c}`:''}`).join('、')}
+                  </div>
+                )}
+              </div>
+            )}
+            <div style={{ display:'flex', gap:'8px' }}>
+              <button onClick={()=>setShowSettle(false)} disabled={loading}
+                style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>戻る</button>
+              {sortiePending.count > 0
+                ? <button onClick={settleSortie} disabled={loading}
+                    style={{ flex:2, padding:'10px', background:'#1a1000', border:'1px solid #ffcc00', color:'#ffcc00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>清算して受け取る</button>
+                : <button onClick={()=>{ setShowSettle(false); nav('/game') }}
+                    style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088cc', color:'#00aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>街に戻る</button>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

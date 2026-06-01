@@ -5,7 +5,7 @@ import { supabase } from '../supabase'
 const WAIT_SECONDS = 10
 const REGEN_SECONDS = 60
 
-const ARTIFACT_BASE_NAMES = [
+export const ARTIFACT_BASE_NAMES = [
   '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
   '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたオーブ'
 ]
@@ -27,7 +27,7 @@ const PAPIA_TURNS = [
 // ============================================================
 // エリア定義
 // ============================================================
-const AREAS = [
+export const AREAS = [
   {
     id: 1, name: '始まりの森',
     enemies: [
@@ -201,7 +201,7 @@ const JOB_BASE = {
   '賢者':      { hp_max:65,  mp_max:70, atk:3,  def:3,  matk:15, mdef:14, spd:4  },
 }
 
-const JOB_GROWTH = {
+export const JOB_GROWTH = {
   '戦士':      { hp:20, mp:5,  atk:2, def:2, matk:0, mdef:1, spd:1 },
   '弓使い':    { hp:15, mp:5,  atk:2, def:1, matk:0, mdef:1, spd:2 },
   '魔法使い':  { hp:10, mp:15, atk:0, def:1, matk:3, mdef:1, spd:1 },
@@ -217,7 +217,7 @@ const JOB_GROWTH = {
   '賢者':      { hp:10, mp:12, atk:0, def:1, matk:3, mdef:3, spd:0 },
 }
 
-const JOB_LEVEL3_BONUS = {
+export const JOB_LEVEL3_BONUS = {
   '戦士':      ['matk'],
   '弓使い':    ['matk'],
   '魔法使い':  ['atk'],
@@ -255,7 +255,7 @@ const CLASS_LEVEL_CAP = {
   '元素使い':100, '死霊使い':100, '聖職者':100, '異端審問官':100, '賢者':100,
   'サイキッカー':100, '体術師':100, '魔銃士':100,
 }
-const getEffectiveCap = (className) => CLASS_LEVEL_CAP[className] || 100
+export const getEffectiveCap = (className) => CLASS_LEVEL_CAP[className] || 100
 
 // LV1からupToLevelまでのステータス上昇量を計算
 const calcLvBonus = (className, upToLevel) => {
@@ -345,7 +345,7 @@ const getTotalRank = (total) => {
   return { rank:'SSS', color:'#ffcc00' }
 }
 
-const calcExpNext = (lv) => {
+export const calcExpNext = (lv) => {
   const lvInBlock = (lv - 1) % 100
   const tier = Math.floor(lvInBlock / 10)
   return 100 + tier * 10
@@ -479,7 +479,7 @@ const calcCritRate = (mySpd, enemySpd) => {
 
 const RARITY_BONUS_COUNT = { f:1, e:1, d:2, c:2, b:3, a:3, s:4, ss:4, sss:4 }
 
-const generateDropBonus = (weapon) => {
+export const generateDropBonus = (weapon) => {
   const statKeys = ['atk_bonus','def_bonus','matk_bonus','mdef_bonus','spd_bonus','hp_bonus','mp_bonus']
   const eligible = statKeys.filter(k => (weapon[k]||0) > 0)
   if (eligible.length === 0) return {}
