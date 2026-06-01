@@ -709,7 +709,6 @@ export default function Smithy() {
                         ) : (
                           !isArtifactBase && <div style={{fontSize:'10px',color:'#334455'}}>ボーナスなし（再評価で付与）</div>
                         )}
-                        {item.bonus_effect === 'artifact' && <div style={{fontSize:'10px',color:'#44ccff',marginTop:'2px'}}>【特殊能力】{getEffectLabel(item.bonus_effect)}</div>}
                       </div>
                     )
                   })}
