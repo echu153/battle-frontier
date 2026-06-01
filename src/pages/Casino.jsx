@@ -291,7 +291,11 @@ export default function Casino() {
     const { data: locked } = await supabase.from('profiles')
       .update({ last_action_at: new Date().toISOString() })
       .eq('id', profile.id).lt('last_action_at', lockTime).eq('is_fishing', false).select('id')
-    if (!locked || locked.length === 0) { setLoading(false); await fetchProfile(); return }
+    if (!locked || locked.length === 0) {
+      await fetchProfile()
+      setSortieMsg('⏳ クールダウン中です（街の出撃と共通）'); setTimeout(()=>setSortieMsg(''),2500)
+      setLoading(false); return
+    }
 
     const area = AREAS.find(a => a.id === sortieArea) || AREAS[0]
     const cap = getEffectiveCap(profile.class)
