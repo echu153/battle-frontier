@@ -222,6 +222,7 @@ export default function Equipment() {
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
   const slots = ['weapon', 'armor', 'accessory']
+  const equippedSlots = ['weapon', 'armor', 'accessory', 'accessory2']
   const filteredEquipment = sortEquipment(equipment.filter(e => tab === 'accessory' ? (e.slot === 'accessory' || e.slot === 'accessory2') : e.slot === tab), sortKey)
   const equippedItem = allItems.find(i => i.equipped)
 
@@ -241,7 +242,7 @@ export default function Equipment() {
         <div style={{ marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'6px' }}>装備中</div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'6px' }}>
-            {slots.map(slot => {
+            {equippedSlots.map(slot => {
               const equipped = equipment.find(e => e.slot === slot && e.equipped)
               const plus = equipped?.enhance_plus || 0
               const enhW = equipped ? calcEnhancedStats(equipped.weapons, plus) : null
@@ -394,7 +395,7 @@ export default function Equipment() {
                               style={{ padding:'2px 8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
                           ) : (
                             <>
-                              <button onClick={() => equip(item)} disabled={loading}
+                              <button onClick={() => isAccessory ? changeSlot(item, 'accessory') : equip(item)} disabled={loading}
                                 style={{ padding:'2px 8px', background:'#001840', border:'1px solid #0044aa', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>{isAccessory ? '装飾品①' : '装備'}</button>
                               {isAccessory && (
                                 <button onClick={() => changeSlot(item, 'accessory2')} disabled={loading}
