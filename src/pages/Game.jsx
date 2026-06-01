@@ -940,6 +940,17 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
 // JST日付文字列（ダンジョン0時リセット用）
 const getJSTDateStr = () => new Date(Date.now() + 9*60*60*1000).toISOString().slice(0, 10)
 
+// デイリーダンジョン：種類ごとに1日5回。type→DB列名／表示名／一覧
+const DUNGEON_DAILY_LIMIT = 5
+const DUNGEON_TYPE_COL = { exp:'cnt_exp', gold:'cnt_gold', stone:'cnt_stone', prof:'cnt_prof' }
+const DUNGEON_TYPE_LABEL = { exp:'経験値', gold:'ゴールド', stone:'強化石', prof:'熟練度' }
+const DUNGEON_LIST = [
+  { type:'exp',   label:'経験値ダンジョン' },
+  { type:'gold',  label:'ゴールドダンジョン' },
+  { type:'stone', label:'強化石ダンジョン' },
+  { type:'prof',  label:'熟練度ダンジョン' },
+]
+
 // パピア出現率アップイベント時間帯（JST）: 8:00 / 12:00 / 16:00 / 22:00 から30分
 const PAPIA_EVENT_HOURS = [8, 12, 16, 22]
 const getPapiaEventStatus = () => {
@@ -988,7 +999,8 @@ export default function Game() {
   const [templeMessage, setTempleMessage] = useState('')
   const [skillSets, setSkillSets] = useState([])
   const [playerItem, setPlayerItem] = useState(null)
-  const [dungeonAttempts, setDungeonAttempts] = useState(5)
+  // 種類ごとの当日選択回数。読み込み完了まではlimit(=disabled)で初期化
+  const [dungeonCounts, setDungeonCounts] = useState({ exp:DUNGEON_DAILY_LIMIT, gold:DUNGEON_DAILY_LIMIT, stone:DUNGEON_DAILY_LIMIT, prof:DUNGEON_DAILY_LIMIT })
   const [showDungeonPanel, setShowDungeonPanel] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [showMenu, setShowMenu] = useState(false)
@@ -1076,9 +1088,9 @@ export default function Game() {
     setPlayerItem(pi || null)
     const today = getJSTDateStr()
     try {
-      const { data: da } = await supabase.from('dungeon_attempts').select('count').eq('player_id', user.id).eq('date', today).single()
-      setDungeonAttempts(da?.count || 0)
-    } catch { setDungeonAttempts(0) }
+      const { data: da } = await supabase.from('dungeon_attempts').select('cnt_exp,cnt_gold,cnt_stone,cnt_prof').eq('player_id', user.id).eq('date', today).single()
+      setDungeonCounts({ exp:da?.cnt_exp||0, gold:da?.cnt_gold||0, stone:da?.cnt_stone||0, prof:da?.cnt_prof||0 })
+    } catch { setDungeonCounts({ exp:0, gold:0, stone:0, prof:0 }) }
   }
 
   const doRegen = async () => {
@@ -1182,18 +1194,16 @@ export default function Game() {
 
     // stateではなくDBから直接カウント取得（state操作による回避を防ぐ）
     const today = getJSTDateStr()
-    let serverCount = 0
+    const col = DUNGEON_TYPE_COL[type]
+    let dungeonRow = null
     try {
-      const { data: da } = await supabase.from('dungeon_attempts').select('count').eq('player_id', profile.id).eq('date', today).single()
-      serverCount = da?.count || 0
+      const { data: da } = await supabase.from('dungeon_attempts').select('*').eq('player_id', profile.id).eq('date', today).single()
+      dungeonRow = da
     } catch {}
-    if (serverCount >= 6) {
-      await suspendAccount('特殊ダンジョンを1日6回以上利用')
-      setLoading(false)
-      return
-    }
-    if (serverCount >= 5) {
-      await suspendAccount('特殊ダンジョンを1日6回以上利用')
+    const typeCount = dungeonRow?.[col] || 0
+    // 当日分(5回)使い切った後の選択＝6回目以上＝グリッチとみなし即停止
+    if (typeCount >= DUNGEON_DAILY_LIMIT) {
+      await suspendAccount(`デイリーダンジョン(${DUNGEON_TYPE_LABEL[type]})を1日${DUNGEON_DAILY_LIMIT+1}回以上選択`)
       setLoading(false)
       return
     }
@@ -1203,7 +1213,7 @@ export default function Game() {
     const dungeonElapsed = (Date.now() - new Date(latestForDungeon.last_action_at).getTime()) / 1000
     if (dungeonElapsed < WAIT_SECONDS) { setLoading(false); return }
     if (latestForDungeon.is_fishing) {
-      setBattleLogs([{ text:'🎣 釣り中は特殊ダンジョンに入れません。先に釣りを終了してください。', color:'#ff8844' }])
+      setBattleLogs([{ text:'🎣 釣り中はデイリーダンジョンに入れません。先に釣りを終了してください。', color:'#ff8844' }])
       setScene('battle'); setLoading(false); return
     }
 
@@ -1217,14 +1227,14 @@ export default function Game() {
     }
     const dungeonEnemy = DUNGEON_ENEMIES[type]
     const logs = []
-    logs.push({ text:`✨ 特殊ダンジョン: ${dungeonEnemy.name}が現れた！`, color:'#cc44ff' })
+    logs.push({ text:`✨ デイリーダンジョン: ${dungeonEnemy.name}が現れた！`, color:'#cc44ff' })
 
     const eff = calcEffectiveStats(profile, equipment, proficiency)
     const dmg = Math.max(1, Math.floor(eff.atk * (0.9 + Math.random() * 0.2)))
     logs.push({ text:`1ターン目: あなたの攻撃！ ${dungeonEnemy.name}に${dmg}ダメージ！`, color:'#ffcc00' })
     logs.push({ text:`${dungeonEnemy.name}を倒した！`, color:'#44ff88' })
 
-    const newCount = serverCount + 1
+    const newCount = typeCount + 1
 
     if (type === 'exp') {
       const expGained = Math.floor(50 + Math.random() * 51)
@@ -1304,19 +1314,18 @@ export default function Game() {
       }
     }
 
-    // dungeon_attempts更新
+    // dungeon_attempts更新（種類ごとの列を加算）
     try {
-      const { data: da } = await supabase.from('dungeon_attempts').select('*').eq('player_id', profile.id).eq('date', today).single()
-      if (da) {
-        await supabase.from('dungeon_attempts').update({ count: newCount }).eq('id', da.id)
+      if (dungeonRow) {
+        await supabase.from('dungeon_attempts').update({ [col]: newCount }).eq('id', dungeonRow.id)
       } else {
-        await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:1 })
+        await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:0, [col]:1 })
       }
     } catch {
-      try { await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:1 }) } catch {}
+      try { await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:0, [col]:1 }) } catch {}
     }
     await supabase.from('profiles').update({ last_action_at: new Date().toISOString() }).eq('id', profile.id)
-    setDungeonAttempts(newCount)
+    setDungeonCounts(prev => ({ ...prev, [type]: newCount }))
     setBattleLogs(logs)
     await fetchProfile()
     setLoading(false)
@@ -1860,7 +1869,7 @@ export default function Game() {
       : Math.floor(Math.random()*4)+8
     const goldGained = (win && !papiaEscaped) ? (enemy.gold||0) : 0
 
-    // 不正検知：特殊ダンジョン・パピア以外で1分間に100EXP以上取得→12時間BAN
+    // 不正検知：デイリーダンジョン・パピア以外で1分間に100EXP以上取得→12時間BAN
     if (!isPapiaEncounter && expGained > 0) {
       const now = Date.now()
       const tracker = expTrackerRef.current
@@ -2065,6 +2074,8 @@ export default function Game() {
   }
 
   const useInn = async () => {
+    if (loading) return  // 連打・二重実行ガード
+    setLoading(true)
     const isDying = profile.is_dying||false
     const charLvForCost = profile.char_lv || profile.lv
     const normalCost = charLvForCost*2
@@ -2072,9 +2083,9 @@ export default function Game() {
 
     // ★ サーバーから最新のゴールドを取得（複数タブ同時利用対策）
     const { data: serverProfile } = await supabase.from('profiles').select('gold, hp_max, mp_max').eq('id', profile.id).single()
-    if (!serverProfile) return
+    if (!serverProfile) { setLoading(false); return }
     const serverCost = isDying ? Math.min(dyingCost, serverProfile.gold) : normalCost
-    if (!isDying && serverProfile.gold < normalCost) return
+    if (!isDying && serverProfile.gold < normalCost) { setLoading(false); return }
 
     // ★ 楽観ロック: ゴールドが読み取り時と同じ場合のみ更新（別タブが先に利用してたら失敗）
     const { data: locked } = await supabase.from('profiles').update({
@@ -2086,9 +2097,11 @@ export default function Game() {
 
     if (!locked || locked.length === 0) {
       await fetchProfile()
+      setLoading(false)
       return
     }
     await fetchProfile()
+    setLoading(false)
     setInnMessage('HPとMPが回復しました！')
     setTimeout(() => { setInnMessage(''); setScene('town') }, 1500)
   }
@@ -2176,7 +2189,7 @@ export default function Game() {
       id: 'equipment', title: '🗡 装備・強化',
       content: `● 戦闘でドロップした武器は「装備」ページで確認・装備できる
 ● 鍛冶屋では同名の武器か強化石を使って武器を強化
-● 強化石はエリア2以降の敵からドロップ、特殊ダンジョン（石）や武器の加工でも入手できる
+● 強化石はエリア2以降の敵からドロップ、デイリーダンジョン（石）や武器の加工でも入手できる
 ● 武器を使い続けると熟練度が上がりボーナスが付く
 ● 鍛冶屋で「再評価」すると、付与された特殊効果を別の効果に変更できる
 ● 「再鑑定」では武器についているボーナスステータスを振り直せる`,
@@ -2189,15 +2202,15 @@ export default function Game() {
 ● 時間経過でも自然回復する（瀕死状態も回復する）`,
     },
     {
-      id: 'dungeon', title: '✨ 特殊ダンジョン',
-      content: `● 街の画面から「特殊ダンジョン」を選択（1日5回まで）
-● EXP / Gold / 強化石 / 武器熟練度 の4種類から選べる
+      id: 'dungeon', title: '✨ デイリーダンジョン',
+      content: `● 街の画面から「デイリーダンジョン」を選択
+● EXP / Gold / 強化石 / 武器熟練度 の4種類、それぞれ1日5回まで
 ● リセットは毎日0時（日本時間）`,
     },
     {
       id: 'fishing', title: '🎣 釣り',
       content: `● 釣りページで竿を垂らして魚を釣ることができる
-● 釣り中は出撃・特殊ダンジョンに入れない
+● 釣り中は出撃・デイリーダンジョンに入れない
 ● はじめて釣った魚は図鑑に登録され、永続的なステータスボーナスが獲得できる
 ● 同じ魚を釣っても2回目以降は図鑑登録・ステータスボーナスはない`,
     },
@@ -2407,6 +2420,8 @@ export default function Game() {
   const regenPct = ((REGEN_SECONDS-regenRemaining)/REGEN_SECONDS)*100
   const unlockedAreas = profile.unlocked_areas||[1]
   const availableAreas = AREAS.filter(a=>unlockedAreas.includes(a.id))
+  // デイリーダンジョン：全種使い切ったらパネル自体を開けない／残り合計
+  const dungeonAllUsedUp = DUNGEON_LIST.every(d => (dungeonCounts[d.type]||0) >= DUNGEON_DAILY_LIMIT)
   const charLv = profile.char_lv || profile.lv
   const innCost = isDying ? Math.min(charLv*15,profile.gold) : charLv*2
   const allocatedPoints = Object.values(statPoints).reduce((a,b)=>a+b,0)
@@ -2661,25 +2676,24 @@ export default function Game() {
                 style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
                 {isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
               </button>
-              <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAttempts>=5||loading||isBanned}
-                style={{ width:'100%', padding:'12px', background:'#0a001a', border:`1px solid ${dungeonAttempts>=5||isBanned?'#333':'#cc44ff'}`, color:dungeonAttempts>=5||isBanned?'#333':'#cc44ff', cursor:dungeonAttempts>=5||isBanned?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'13px', marginBottom:'10px', opacity:dungeonAttempts>=5||isBanned?0.4:1 }}>
-                ⚔ 特殊ダンジョン　<span style={{fontSize:'11px',color:dungeonAttempts>=5?'#333':'#446688'}}>残り{5-dungeonAttempts}/5</span>
+              <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAllUsedUp||loading||isBanned}
+                style={{ width:'100%', padding:'12px', background:'#0a001a', border:`1px solid ${dungeonAllUsedUp||isBanned?'#333':'#cc44ff'}`, color:dungeonAllUsedUp||isBanned?'#333':'#cc44ff', cursor:dungeonAllUsedUp||isBanned?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'13px', marginBottom:'10px', opacity:dungeonAllUsedUp||isBanned?0.4:1 }}>
+                ⚔ デイリーダンジョン
               </button>
               {showDungeonPanel && (
                 <div style={{ border:'1px solid #440088', background:'#0a001a', padding:'10px', marginBottom:'10px' }}>
-                  <div style={{ color:'#cc44ff', fontSize:'11px', marginBottom:'8px' }}>ダンジョンを選択</div>
+                  <div style={{ color:'#cc44ff', fontSize:'11px', marginBottom:'8px' }}>ダンジョンを選択（各{DUNGEON_DAILY_LIMIT}回/日）</div>
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                    {[
-                      { type:'exp',   label:'経験値ダンジョン' },
-                      { type:'gold',  label:'ゴールドダンジョン' },
-                      { type:'stone', label:'強化石ダンジョン' },
-                      { type:'prof',  label:'熟練度ダンジョン' },
-                    ].map(d => (
-                      <button key={d.type} onClick={() => { doDungeon(d.type); setShowDungeonPanel(false) }}
-                        style={{ padding:'10px', background:'#001020', border:'1px solid #440088', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-                        {d.label}
+                    {DUNGEON_LIST.map(d => {
+                      const used = dungeonCounts[d.type]||0
+                      const full = used >= DUNGEON_DAILY_LIMIT
+                      return (
+                      <button key={d.type} disabled={full||loading} onClick={() => { doDungeon(d.type); setShowDungeonPanel(false) }}
+                        style={{ padding:'10px', background:'#001020', border:`1px solid ${full?'#333':'#440088'}`, color:full?'#333':'#cc44ff', cursor:full?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'11px', opacity:full?0.4:1 }}>
+                        {d.label}<br/><span style={{fontSize:'10px',color:full?'#333':'#446688'}}>残り{DUNGEON_DAILY_LIMIT-used}/{DUNGEON_DAILY_LIMIT}</span>
                       </button>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -2715,8 +2729,8 @@ export default function Game() {
                   </div>
                   <div style={{ display:'flex', gap:'8px' }}>
                     <button onClick={backToTown} style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>戻る</button>
-                    <button onClick={useInn} disabled={!isDying&&profile.gold<innCost}
-                      style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor:(!isDying&&profile.gold<innCost)?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', opacity:(!isDying&&profile.gold<innCost)?0.4:1 }}>
+                    <button onClick={useInn} disabled={loading||(!isDying&&profile.gold<innCost)}
+                      style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor:(loading||(!isDying&&profile.gold<innCost))?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', opacity:(loading||(!isDying&&profile.gold<innCost))?0.4:1 }}>
                       利用する
                     </button>
                   </div>
@@ -2871,25 +2885,24 @@ export default function Game() {
                   style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
                   {isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中（HP全回復まで出撃不可）':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
                 </button>
-                <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAttempts>=5||loading}
-                  style={{ width:'100%', padding:'10px', background:'#0a001a', border:`1px solid ${dungeonAttempts>=5?'#333':'#cc44ff'}`, color:dungeonAttempts>=5?'#333':'#cc44ff', cursor:dungeonAttempts>=5?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px', opacity:dungeonAttempts>=5?0.4:1 }}>
-                  ⚔ 特殊ダンジョン　<span style={{fontSize:'11px',color:dungeonAttempts>=5?'#333':'#446688'}}>残り{5-dungeonAttempts}/5</span>
+                <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAllUsedUp||loading}
+                  style={{ width:'100%', padding:'10px', background:'#0a001a', border:`1px solid ${dungeonAllUsedUp?'#333':'#cc44ff'}`, color:dungeonAllUsedUp?'#333':'#cc44ff', cursor:dungeonAllUsedUp?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px', opacity:dungeonAllUsedUp?0.4:1 }}>
+                  ⚔ デイリーダンジョン
                 </button>
                 {showDungeonPanel && (
                   <div style={{ border:'1px solid #440088', background:'#0a001a', padding:'10px', marginBottom:'8px' }}>
-                    <div style={{ color:'#cc44ff', fontSize:'11px', marginBottom:'8px' }}>ダンジョンを選択</div>
+                    <div style={{ color:'#cc44ff', fontSize:'11px', marginBottom:'8px' }}>ダンジョンを選択（各{DUNGEON_DAILY_LIMIT}回/日）</div>
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                      {[
-                        { type:'exp',   label:'経験値ダンジョン' },
-                        { type:'gold',  label:'ゴールドダンジョン' },
-                        { type:'stone', label:'強化石ダンジョン' },
-                        { type:'prof',  label:'熟練度ダンジョン' },
-                      ].map(d => (
-                        <button key={d.type} onClick={() => { doDungeon(d.type); setShowDungeonPanel(false) }}
-                          style={{ padding:'10px', background:'#001020', border:'1px solid #440088', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-                          {d.label}
+                      {DUNGEON_LIST.map(d => {
+                        const used = dungeonCounts[d.type]||0
+                        const full = used >= DUNGEON_DAILY_LIMIT
+                        return (
+                        <button key={d.type} disabled={full||loading} onClick={() => { doDungeon(d.type); setShowDungeonPanel(false) }}
+                          style={{ padding:'10px', background:'#001020', border:`1px solid ${full?'#333':'#440088'}`, color:full?'#333':'#cc44ff', cursor:full?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'11px', opacity:full?0.4:1 }}>
+                          {d.label}<br/><span style={{fontSize:'10px',color:full?'#333':'#446688'}}>残り{DUNGEON_DAILY_LIMIT-used}/{DUNGEON_DAILY_LIMIT}</span>
                         </button>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -2923,8 +2936,8 @@ export default function Game() {
                     </div>
                     <div style={{ display:'flex', gap:'8px' }}>
                       <button onClick={backToTown} style={{ flex:1, padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 街に戻る</button>
-                      <button onClick={useInn} disabled={!isDying&&profile.gold<innCost}
-                        style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor:(!isDying&&profile.gold<innCost)?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', opacity:(!isDying&&profile.gold<innCost)?0.4:1 }}>
+                      <button onClick={useInn} disabled={loading||(!isDying&&profile.gold<innCost)}
+                        style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor:(loading||(!isDying&&profile.gold<innCost))?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', opacity:(loading||(!isDying&&profile.gold<innCost))?0.4:1 }}>
                         利用する
                       </button>
                     </div>
