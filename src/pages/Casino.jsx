@@ -4,6 +4,14 @@ import { supabase } from '../supabase'
 import { AREAS, JOB_GROWTH, JOB_LEVEL3_BONUS, calcExpNext, getEffectiveCap, generateDropBonus, ARTIFACT_BASE_NAMES } from './Game'
 
 const SLOT_SYMBOLS = ['7️⃣', '⭐', '🔔', '🍇', '🍒', '🍋']
+const PRIZES = [
+  { key:'stoneF', name:'強化石(F)', price:100,   limit:5, today:false },
+  { key:'stoneE', name:'強化石(E)', price:300,   limit:5, today:false },
+  { key:'stoneD', name:'強化石(D)', price:900,   limit:5, today:false },
+  { key:'stoneC', name:'強化石(C)', price:2700,  limit:5, today:false },
+  { key:'stoneB', name:'強化石(B)', price:5000,  limit:1, today:true },
+  { key:'stoneA', name:'強化石(A)', price:10000, limit:1, today:true },
+]
 const SORTIE_WAIT = 30 // 賭博場出撃のクールダウン秒（通常出撃と共通のlast_action_atで管理）
 const AREA_PASS_EFFECT = { 2:'casino_area_2', 3:'casino_area_3', 4:'casino_area_4', 5:'casino_area_5', 6:'casino_area_6', 7:'casino_area_7' }
 
@@ -54,6 +62,9 @@ export default function Casino() {
   const [showSettle, setShowSettle] = useState(false)
   const [sortieMsg, setSortieMsg] = useState('')
   const [now, setNow] = useState(Date.now())
+  // 景品
+  const [dailyNet, setDailyNet] = useState(0)
+  const [dailyCounts, setDailyCounts] = useState({})
   const spinRef = useRef(null)
   const slotStoppedRef = useRef([false,false,false])
   const pressOrderRef = useRef([])
@@ -68,6 +79,26 @@ export default function Casino() {
   const initCasino = async () => {
     try { await supabase.rpc('casino_reset') } catch {}
     await fetchProfile()
+    await loadDaily()
+  }
+
+  const loadDaily = async () => {
+    const { data } = await supabase.rpc('casino_daily_get')
+    if (data) { setDailyNet(data.net || 0); setDailyCounts(data.counts || {}) }
+  }
+
+  const exchangePrize = async (prize) => {
+    if (loading) return
+    const used = dailyCounts[prize.key] || 0
+    if (used >= prize.limit) { showMessage('本日の交換上限です', '#ff4444'); return }
+    if ((profile.medals||0) < prize.price) { showMessage('メダルが足りません', '#ff4444'); return }
+    if (prize.today && dailyNet < prize.price) { showMessage('当日獲得メダルが足りません', '#ff4444'); return }
+    setLoading(true)
+    const { data, error } = await supabase.rpc('casino_exchange_prize', { prize_key: prize.key })
+    if (error) { showMessage(`交換失敗: ${error.message}`, '#ff4444'); setLoading(false); return }
+    await fetchProfile(); await loadDaily()
+    showMessage(`🎁 ${prize.name} を交換しました！`, '#44ff88')
+    setLoading(false)
   }
 
   const fetchProfile = async () => {
@@ -427,6 +458,7 @@ export default function Casino() {
         <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px', display:'flex', gap:'16px' }}>
           <span>所持金: <span style={{color:'#ffcc00'}}>{profile.gold.toLocaleString()}G</span></span>
           <span>メダル: <span style={{color:'#ffaa00'}}>🎫 {(profile.medals||0).toLocaleString()}</span></span>
+          <span>当日獲得: <span style={{color:'#44ff88'}}>{dailyNet.toLocaleString()}</span></span>
         </div>
 
         {message && (
@@ -436,7 +468,7 @@ export default function Casino() {
         )}
 
         <div style={{ display:'flex', gap:'4px', marginBottom:'12px', flexWrap:'wrap' }}>
-          {[{id:'exchange',label:'💰 両替所'},{id:'hilo',label:'🃏 ハイ&ロー'},{id:'slot',label:'🎰 スロット'}].map(t=>(
+          {[{id:'exchange',label:'💰 両替所'},{id:'hilo',label:'🃏 ハイ&ロー'},{id:'slot',label:'🎰 スロット'},{id:'prize',label:'🎁 景品'}].map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)}
               style={{ padding:'6px 14px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
                 background: tab===t.id?'#1a1000':'#000818',
@@ -801,6 +833,41 @@ export default function Casino() {
           </div>
           )
         })()}
+
+        {tab==='prize' && (
+          <div style={{ border:'1px solid #886600', background:'#0a0800', padding:'16px' }}>
+            <div style={{ color:'#ffaa00', fontSize:'13px', marginBottom:'8px' }}>🎁 景品交換所</div>
+            <div style={{ color:'#446688', fontSize:'10px', marginBottom:'12px', lineHeight:'1.7' }}>
+              交換上限は毎日午前5時にリセット。<br/>
+              <span style={{color:'#44ff88'}}>当日獲得</span>マークの景品は「その日にゲームで稼いだメダル」が必要です（両替分は対象外）。
+            </div>
+            {PRIZES.map(p => {
+              const used = dailyCounts[p.key] || 0
+              const remain = p.limit - used
+              const enoughMedals = (profile.medals||0) >= p.price
+              const enoughToday = !p.today || dailyNet >= p.price
+              const canBuy = remain > 0 && enoughMedals && enoughToday
+              return (
+                <div key={p.key} style={{ border:`1px solid ${p.today?'#446644':'#003366'}`, background:'#001028', padding:'10px', marginBottom:'6px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <div>
+                      <div style={{ color:'#88ccff', fontSize:'12px' }}>
+                        {p.name}
+                        {p.today && <span style={{ color:'#44ff88', fontSize:'9px', marginLeft:'6px', border:'1px solid #44ff88', padding:'1px 4px' }}>当日獲得</span>}
+                      </div>
+                      <div style={{ color:'#ffaa00', fontSize:'11px', marginTop:'2px' }}>🎫 {p.price.toLocaleString()}</div>
+                      <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>本日 残り{remain}/{p.limit}個</div>
+                    </div>
+                    <button onClick={()=>exchangePrize(p)} disabled={!canBuy || loading}
+                      style={{ padding:'8px 14px', background: canBuy?'#1a1000':'#001', border:`1px solid ${canBuy?'#ffaa00':'#002244'}`, color: canBuy?'#ffaa00':'#334455', cursor: canBuy?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap' }}>
+                      {remain<=0 ? '上限' : !enoughMedals ? 'メダル不足' : !enoughToday ? '当日不足' : '交換'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* ⚔ 簡易出撃パネル（常設・タブ非依存） */}
         {(() => {
