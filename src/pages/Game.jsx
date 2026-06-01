@@ -663,13 +663,13 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       const hasShadowWalk = playerBuffs.evasion?.turns > 0
       let bonusDmg = 0
       if (hasShadowWalk) {
-        bonusDmg = Math.floor(eff.spd*0.3*am)
+        bonusDmg = Math.floor(eff.spd*0.3*am*(0.85+Math.random()*0.3))
         kiDmg += bonusDmg
       }
       result.dmg = kiDmg
       const bleedHit4 = Math.random()*100 < 20
       if (bleedHit4) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
-      result.log = `🌙 鬼影閃！ ${enemy.name}に${result.dmg}ダメージ！${hasShadowWalk ? ` 影歩き追撃(+${bonusDmg})！` : ''}${bleedHit4 ? ' 出血！' : ''}`
+      result.log = `🌙 鬼影閃！ ${enemy.name}に${result.dmg}ダメージ！${hasShadowWalk ? ` 追撃で${bonusDmg}ダメージ！` : ''}${bleedHit4 ? ' 出血！' : ''}`
       break
     }
     case '影歩き':      result.newPlayerBuffs.spdUp={turns:4,rate:1.5}; result.newPlayerBuffs.evasion={turns:4,rate:0.05}; result.log = `🌙 影歩き！ 4ターンの間、素早さ大幅上昇・回避率UP！`; break
