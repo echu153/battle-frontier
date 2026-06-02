@@ -147,16 +147,16 @@ export const calcEffectiveStats = (profile, equipment, proficiency) => {
       }
     }
   }
-  const baseMatk = profile.matk + bonus.matk
+  const baseMatk = profile.matk + bonus.matk + (profile.museum_matk || 0)
   const finalMatk = matkPct > 0 ? Math.floor(baseMatk * (1 + matkPct/100)) : baseMatk
   return {
-    atk:    profile.atk  + bonus.atk,
-    def:    profile.def  + bonus.def,
+    atk:    profile.atk  + bonus.atk  + (profile.museum_atk || 0),
+    def:    profile.def  + bonus.def  + (profile.museum_def || 0),
     matk:   finalMatk,
-    mdef:   profile.mdef + bonus.mdef,
-    spd:    profile.spd  + bonus.spd,
-    hp_max: profile.hp_max + bonus.hp,
-    mp_max: profile.mp_max + bonus.mp,
+    mdef:   profile.mdef + bonus.mdef + (profile.museum_mdef || 0),
+    spd:    profile.spd  + bonus.spd  + (profile.museum_spd || 0),
+    hp_max: profile.hp_max + bonus.hp + (profile.museum_hp || 0),
+    mp_max: profile.mp_max + bonus.mp + (profile.museum_mp || 0),
     bonus,
     hitBonus:     hitBonus     + gemAcc.hitBonus,
     critBonus:    critBonus    + gemAcc.critBonus,

@@ -476,16 +476,16 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
       }
     }
   }
-  const baseMatk = profile.matk + bonus.matk
+  const baseMatk = profile.matk + bonus.matk + (profile.museum_matk || 0)
   const finalMatk = matkPct > 0 ? Math.floor(baseMatk * (1 + matkPct/100)) : baseMatk
   return {
-    atk:    profile.atk  + bonus.atk,
-    def:    profile.def  + bonus.def,
+    atk:    profile.atk  + bonus.atk  + (profile.museum_atk || 0),
+    def:    profile.def  + bonus.def  + (profile.museum_def || 0),
     matk:   finalMatk,
-    mdef:   profile.mdef + bonus.mdef,
-    spd:    profile.spd  + bonus.spd,
-    hp_max: profile.hp_max + bonus.hp,
-    mp_max: profile.mp_max + bonus.mp,
+    mdef:   profile.mdef + bonus.mdef + (profile.museum_mdef || 0),
+    spd:    profile.spd  + bonus.spd  + (profile.museum_spd || 0),
+    hp_max: profile.hp_max + bonus.hp + (profile.museum_hp || 0),
+    mp_max: profile.mp_max + bonus.mp + (profile.museum_mp || 0),
     bonus,
     hitBonus,
     critBonus,
@@ -2673,6 +2673,7 @@ export default function Game() {
             <button onClick={()=>{ nav('/fishing'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎣 釣り場</button>
             <button onClick={()=>{ nav('/barber'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>✂ 美容院</button>
             <button onClick={()=>{ nav('/casino'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎰 賭博場</button>
+            <button onClick={()=>{ nav('/museum'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🏛 博物館</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
           </div>
         )}
@@ -2795,6 +2796,7 @@ export default function Game() {
                 <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場</button>
                 <button onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院</button>
                 <button onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場</button>
+                <button onClick={()=>nav('/museum')} style={{ padding:'10px', background:'#001020', border:'1px solid #ccaa44', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏛 博物館</button>
               </div>
             </div>
           )}
@@ -3002,7 +3004,8 @@ export default function Game() {
                 <button onClick={()=>nav('/smithy')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>⚒ 鍛冶屋へ</button>
                 <button onClick={()=>nav('/fishing')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🎣 釣り場へ</button>
                 <button onClick={()=>nav('/barber')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>✂ 美容院へ</button>
-                <button onClick={()=>nav('/casino')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場へ</button>
+                <button onClick={()=>nav('/casino')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🎰 賭博場へ</button>
+                <button onClick={()=>nav('/museum')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #ccaa44', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏛 博物館へ</button>
               </div>
             )}
 
