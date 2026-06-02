@@ -334,7 +334,7 @@ const AUTOCLICK_SAMPLES = 90  // 約15分相当（通常出撃CD10秒 × 90回�
 const AUTOCLICK_SPREAD_MS = 1000
 
 const getTotalRank = (total) => {
-  const thresholds = [200,500,1000,2000,4000,7000,11000,16000]
+  const thresholds = [250,600,1200,2500,5000,8500,14000,20000]
   const ranks = ['F','E','D','C','B','A','S','SS','SSS']
   const colors = ['#888888','#6699cc','#ff8844','#44bb44','#4488ff','#ff4444','#ffcc00','#ffcc00','#ffcc00']
   for (let i = 0; i < thresholds.length; i++) {
