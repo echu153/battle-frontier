@@ -75,7 +75,7 @@ const MUSEUM_GROUPS = [
       '山岳の斧','岩砕の拳','霞散弾銃','嵐のオーブ','峰岳の兜','岩石鎧','山岳の靴','岩石の護符',
       '雷砕斧','鷹爪の拳','雷鳴銃','雷晶オーブ','嵐の兜','雷鷲鎧','疾風の靴','峰岳の守護輪',
     ],
-    completeBonus: { matk:20, mdef:20, hp_max:100 },
+    completeBonus: { def:20, mdef:20, hp_max:100 },
     areaMultiplier: 3,
   },
   {
@@ -84,7 +84,7 @@ const MUSEUM_GROUPS = [
       '氷刃の剣','霜穿の槍','吹雪の弓','氷晶の杖','凍月刀','氷晶の護符',
       '白銀の大剣','氷河長槍','極雪の弓','霜嵐の杖','凍蒼の刀','霜の宝珠',
     ],
-    completeBonus: { def:30, mdef:30 },
+    completeBonus: { def:30, mdef:30, mp_max:50 },
     areaMultiplier: 4,
   },
   {
@@ -118,10 +118,11 @@ const getMuseumStat = (name, weaponType, slot) => {
 const getEnhanceTier = (plus) => plus >= 9 ? 2 : plus >= 5 ? 1 : 0
 const TIER_LABELS = ['未強化', '+5以上', '+9以上']
 const TIER_COLORS = ['#88ccff', '#44ff88', '#ffcc00']
+const COMPLETE_BONUS_MULT = [1, 3, 5]
 
 const getBonusAmount = (name, groupId, enhancePlus) => {
   const tier = getEnhanceTier(enhancePlus)
-  if (BOSS_DROPS.has(name)) return [5, 8, 14][tier]
+  if (BOSS_DROPS.has(name)) return [8, 13, 20][tier]
   if (RARE_DROPS.has(name)) return [2, 3, 6][tier]
   const mult = MUSEUM_GROUPS.find(g => g.id === groupId)?.areaMultiplier || 1
   return [1, 2, 4][tier] * mult
@@ -210,22 +211,33 @@ export default function Museum() {
     setLoading(false)
   }
 
-  const claimCompleteBonus = async (group) => {
+  const claimCompleteBonus = async (group, tier) => {
     if (loading) return
     setLoading(true)
-    const donatedNames = new Set(donations.map(d => d.weapon_name))
-    const allDonated = group.items.every(i => donatedNames.has(i))
-    if (!allDonated) { showMsg('まだ全ての装備を寄贈していません', '#ff4444'); setLoading(false); return }
+    const tierMap = {}
+    for (const d of donations) {
+      if (!tierMap[d.weapon_name]) tierMap[d.weapon_name] = new Set()
+      tierMap[d.weapon_name].add(d.enhance_tier)
+    }
+    const allOk = group.items.every(i => {
+      const tiers = tierMap[i]
+      if (!tiers) return false
+      if (tier === 0) return tiers.size > 0
+      if (tier === 1) return tiers.has(1) || tiers.has(2)
+      return tiers.has(2)
+    })
+    if (!allOk) { showMsg('条件を満たしていません', '#ff4444'); setLoading(false); return }
+    const mult = COMPLETE_BONUS_MULT[tier]
     const updates = {}
     for (const [stat, val] of Object.entries(group.completeBonus)) {
       const col = museumCol(stat)
-      updates[col] = (profile[col] || 0) + val
+      updates[col] = (profile[col] || 0) + val * mult
     }
     await supabase.from('profiles').update(updates).eq('id', profile.id)
-    await supabase.from('museum_complete_bonuses').insert({ player_id: profile.id, group_id: group.id })
+    await supabase.from('museum_complete_bonuses').insert({ player_id: profile.id, group_id: `${group.id}__${tier}` })
     await fetchAll()
-    const bonusText = Object.entries(group.completeBonus).map(([k,v]) => `${STAT_LABELS[k]}+${v}`).join(' ')
-    showMsg(`🏆 ${group.name} コンプリート！ ${bonusText}`)
+    const bonusText = Object.entries(group.completeBonus).map(([k,v]) => `${STAT_LABELS[k]}+${v * mult}`).join(' ')
+    showMsg(`🏆 ${group.name}（${TIER_LABELS[tier]}コンプ）！ ${bonusText}`)
     setLoading(false)
   }
 
@@ -344,10 +356,9 @@ export default function Museum() {
               const donated = group.items.filter(i => donatedNames.has(i))
               const total = group.items.length
               const isComplete = donated.length === total
-              const isClaimed = !!completeBonuses.find(cb => cb.group_id === group.id)
+              const tierClaimed = [0,1,2].map(t => !!completeBonuses.find(cb => cb.group_id === `${group.id}__${t}`))
               const pct = Math.round(donated.length / total * 100)
               const isExpanded = expandedGroup === group.id
-              const bonusText = Object.entries(group.completeBonus).map(([k,v]) => `${STAT_LABELS[k]}+${v}`).join(' ')
               return (
                 <div key={group.id} style={{ marginBottom:'8px', border:`1px solid ${isComplete ? group.color+'88' : '#001428'}`, background:'#000c1c' }}>
                   <div onClick={() => setExpandedGroup(isExpanded ? null : group.id)}
@@ -356,6 +367,7 @@ export default function Museum() {
                       <span style={{ color:group.color, fontSize:'12px' }}>{group.name}</span>
                       <span style={{ color: isComplete ? '#44ff88' : '#446688', fontSize:'11px', marginLeft:'8px' }}>{donated.length}/{total}</span>
                       {isComplete && <span style={{ color:'#44ff88', fontSize:'10px', marginLeft:'6px' }}>✓ コンプ</span>}
+                      {tierClaimed[2] && <span style={{ color:'#ffcc00', fontSize:'10px', marginLeft:'4px' }}>★MAX</span>}
                     </div>
                     <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
                       <div style={{ width:'60px', height:'6px', background:'#001428', borderRadius:'3px' }}>
@@ -366,16 +378,33 @@ export default function Museum() {
                   </div>
 
                   <div style={{ padding:'0 12px 10px' }}>
-                    <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>
-                      コンプリートボーナス: <span style={{ color:'#ccaa44' }}>{bonusText}</span>
-                    </div>
-                    {isComplete && !isClaimed && (
-                      <button onClick={() => claimCompleteBonus(group)} disabled={loading}
-                        style={{ padding:'4px 12px', background:'#001840', border:'1px solid #ccaa44', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
-                        ボーナス受取
-                      </button>
-                    )}
-                    {isClaimed && <span style={{ color:'#446688', fontSize:'10px' }}>✓ 受取済み</span>}
+                    <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>コンプリートボーナス</div>
+                    {[0,1,2].map(t => {
+                      const mult = COMPLETE_BONUS_MULT[t]
+                      const bonusText = Object.entries(group.completeBonus).map(([k,v]) => `${STAT_LABELS[k]}+${v * mult}`).join(' ')
+                      const allOk = group.items.every(i => {
+                        const tiers = donatedTierMap[i]
+                        if (!tiers) return false
+                        if (t === 0) return tiers.size > 0
+                        if (t === 1) return tiers.has(1) || tiers.has(2)
+                        return tiers.has(2)
+                      })
+                      return (
+                        <div key={t} style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                          <span style={{ color:TIER_COLORS[t], fontSize:'10px', minWidth:'50px' }}>{TIER_LABELS[t]}</span>
+                          <span style={{ color:'#ccaa44', fontSize:'10px', flex:1 }}>{bonusText}</span>
+                          {tierClaimed[t]
+                            ? <span style={{ color:'#446688', fontSize:'10px' }}>✓ 受取済み</span>
+                            : allOk
+                              ? <button onClick={() => claimCompleteBonus(group, t)} disabled={loading}
+                                  style={{ padding:'2px 8px', background:'#001840', border:`1px solid ${TIER_COLORS[t]}`, color:TIER_COLORS[t], cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                                  受取
+                                </button>
+                              : <span style={{ color:'#334455', fontSize:'10px' }}>未達成</span>
+                          }
+                        </div>
+                      )
+                    })}
                   </div>
 
                   {isExpanded && (
