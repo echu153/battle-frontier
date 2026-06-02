@@ -314,9 +314,9 @@ const calcRatioDmg = (atk, enemyDef, mult, am) => {
 
 const getStatRank = (val, type) => {
   let thresholds
-  if (type === 'hp') thresholds = [450,1200,2400,4500,7500,12000,18000,27000]
-  else if (type === 'mp') thresholds = [225,600,1200,2250,3750,6000,9000,13500]
-  else thresholds = DEF_STAT_THRESHOLDS
+  if (type === 'hp') thresholds = [550,1500,3000,5500,9000,15000,22000,33000]
+  else if (type === 'mp') thresholds = [280,750,1500,2800,4500,7500,11000,16500]
+  else thresholds = [55,150,300,550,950,1500,2200,3300]
   const ranks = ['F','E','D','C','B','A','S','SS','SSS']
   const colors = ['#888888','#6699cc','#ff8844','#44bb44','#4488ff','#ff4444','#ffcc00','#ffcc00','#ffcc00']
   for (let i = 0; i < thresholds.length; i++) {
