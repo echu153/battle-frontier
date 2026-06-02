@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue } from './Game'
+import { gemAllowedSlots, gemSlotCategory, GEM_SLOT_LABEL } from '../lib/stats'
+
+const SLOT_LABELS_FULL = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }
+const gemDisplayName = (gemType, rank) => `${GEM_DATA[gemType]?.name || gemType}(${rank})`
+const gemBonusText = (gemType, rank) => {
+  const g = GEM_DATA[gemType]; if (!g) return ''
+  const v = gemEffectValue(gemType, rank)
+  return g.pct ? `${g.label} +${v}%` : `${g.label} +${v}`
+}
 
 const RARITY_COLORS = {
   f:'#888888', e:'#6699cc', d:'#ff8844', c:'#44bb44',
@@ -108,6 +118,8 @@ export default function Equipment() {
   const [awakenMessage, setAwakenMessage] = useState('')
   const [confirmReset, setConfirmReset] = useState(null)
   const [sortKey, setSortKey] = useState(() => localStorage.getItem('equipSortKey') || 'obtained_asc')
+  const [gems, setGems] = useState([])
+  const [embedTarget, setEmbedTarget] = useState(null)  // 埋め込み先の装備id
 
   useEffect(() => { fetchAll() }, [])
 
@@ -128,6 +140,57 @@ export default function Equipment() {
       .from('player_items').select('*, items(*)')
       .eq('player_id', user.id)
     setAllItems(pi || [])
+    const { data: g } = await supabase.from('player_gems').select('*').eq('player_id', user.id)
+    setGems(g || [])
+  }
+
+  // 宝石：同種3個→上位ランク1個に合成
+  const combineGem = async (gemRow) => {
+    if (loading) return
+    const i = GEM_RANKS.indexOf(gemRow.rank)
+    if (i < 0 || i >= GEM_RANKS.length - 1) return
+    setLoading(true)
+    const { data: cur } = await supabase.from('player_gems').select('*').eq('id', gemRow.id).single()
+    if (!cur || cur.quantity < 3) { await fetchAll(); setLoading(false); return }
+    const remain = cur.quantity - 3
+    if (remain <= 0) await supabase.from('player_gems').delete().eq('id', cur.id)
+    else await supabase.from('player_gems').update({ quantity: remain }).eq('id', cur.id)
+    const nextRank = GEM_RANKS[i + 1]
+    const { data: ex } = await supabase.from('player_gems').select('*').eq('player_id', profile.id).eq('gem_type', cur.gem_type).eq('rank', nextRank).maybeSingle()
+    if (ex) await supabase.from('player_gems').update({ quantity: (ex.quantity || 1) + 1 }).eq('id', ex.id)
+    else await supabase.from('player_gems').insert({ player_id: profile.id, gem_type: cur.gem_type, rank: nextRank, quantity: 1 })
+    await fetchAll(); setLoading(false)
+  }
+
+  // 宝石を在庫へ戻す（取り外し・上書き時の共通処理）
+  const returnGemToStock = async (gemType, rank) => {
+    const { data: ex } = await supabase.from('player_gems').select('*').eq('player_id', profile.id).eq('gem_type', gemType).eq('rank', rank).maybeSingle()
+    if (ex) await supabase.from('player_gems').update({ quantity: (ex.quantity || 1) + 1 }).eq('id', ex.id)
+    else await supabase.from('player_gems').insert({ player_id: profile.id, gem_type: gemType, rank, quantity: 1 })
+  }
+
+  // 宝石を選択中の装備ソケットに埋め込む
+  const embedGem = async (gemRow) => {
+    if (loading || !embedTarget) return
+    const target = equipment.find(e => e.id === embedTarget)
+    if (!target) return
+    if (!gemAllowedSlots(gemRow.gem_type).includes(gemSlotCategory(target.slot))) return  // 部位制限
+    setLoading(true)
+    if (target.gem_type && target.gem_rank) await returnGemToStock(target.gem_type, target.gem_rank)
+    const remain = (gemRow.quantity || 1) - 1
+    if (remain <= 0) await supabase.from('player_gems').delete().eq('id', gemRow.id)
+    else await supabase.from('player_gems').update({ quantity: remain }).eq('id', gemRow.id)
+    await supabase.from('player_equipment').update({ gem_type: gemRow.gem_type, gem_rank: gemRow.rank }).eq('id', target.id)
+    await fetchAll(); setLoading(false)
+  }
+
+  // 装備から宝石を取り外して在庫へ
+  const unembedGem = async (eq) => {
+    if (loading || !eq.gem_type) return
+    setLoading(true)
+    await returnGemToStock(eq.gem_type, eq.gem_rank)
+    await supabase.from('player_equipment').update({ gem_type: null, gem_rank: null }).eq('id', eq.id)
+    await fetchAll(); setLoading(false)
   }
 
   const equip = async (item) => {
@@ -301,18 +364,18 @@ export default function Equipment() {
         {/* 所持装備 */}
         <div>
             <div style={{ display:'flex', gap:'4px', marginBottom:'6px', flexWrap:'wrap' }}>
-              {[...slots, 'item'].map(s => (
+              {[...slots, 'item', 'gem'].map(s => (
                 <button key={s} onClick={() => setTab(s)}
                   style={{ padding:'4px 8px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
                     background: tab === s ? '#001840' : '#000818',
                     border: `1px solid ${tab === s ? '#ffcc00' : '#003366'}`,
                     color: tab === s ? '#ffcc00' : '#446688' }}>
-                  {s === 'item' ? 'アイテム' : s === 'accessory' ? '装飾品' : SLOT_LABELS[s]}
+                  {s === 'item' ? 'アイテム' : s === 'gem' ? '宝石' : s === 'accessory' ? '装飾品' : SLOT_LABELS[s]}
                 </button>
               ))}
             </div>
 
-            {tab !== 'item' && (
+            {tab !== 'item' && tab !== 'gem' && (
               <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', fontSize:'11px' }}>
                 <span style={{color:'#446688'}}>並び替え:</span>
                 <select value={sortKey} onChange={e => { const v=e.target.value; setSortKey(v); localStorage.setItem('equipSortKey',v) }}
@@ -362,7 +425,7 @@ export default function Equipment() {
               </div>
             )}
 
-            {tab !== 'item' && (
+            {tab !== 'item' && tab !== 'gem' && (
               <div>
                 {filteredEquipment.length === 0 && <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>所持していません</div>}
                 {filteredEquipment.map(item => {
@@ -462,6 +525,62 @@ export default function Equipment() {
                           )}
                         </div>
                       )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {tab === 'gem' && (
+              <div>
+                <div style={{ color:'#ff66cc', fontSize:'11px', marginBottom:'6px' }}>装備ソケット（埋め込み先を選択）</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
+                  {equippedSlots.map(slot => {
+                    const eq = equipment.find(e => e.slot === slot && e.equipped)
+                    const selected = eq && embedTarget === eq.id
+                    return (
+                      <div key={slot} onClick={() => eq && setEmbedTarget(selected ? null : eq.id)}
+                        style={{ border:`1px solid ${selected?'#ff66cc':'#003366'}`, background: selected?'#1a0014':'#001028', padding:'8px', cursor: eq?'pointer':'default', opacity: eq?1:0.5 }}>
+                        <div style={{ color:'#446688', fontSize:'10px' }}>{SLOT_LABELS_FULL[slot]}</div>
+                        {eq ? (
+                          <>
+                            <div style={{ color:'#88ccff', fontSize:'10px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{eq.weapons.name}</div>
+                            {eq.gem_type ? (
+                              <div style={{ fontSize:'10px', color:'#ff66cc', marginTop:'2px' }}>
+                                💍 {gemBonusText(eq.gem_type, eq.gem_rank)}
+                                <button onClick={(ev)=>{ ev.stopPropagation(); unembedGem(eq) }} disabled={loading}
+                                  style={{ marginLeft:'4px', padding:'1px 6px', background:'#200010', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'9px' }}>外す</button>
+                              </div>
+                            ) : <div style={{ fontSize:'10px', color:'#334455', marginTop:'2px' }}>ソケット空</div>}
+                          </>
+                        ) : <div style={{ fontSize:'10px', color:'#334455' }}>未装備</div>}
+                      </div>
+                    )
+                  })}
+                </div>
+                {embedTarget && <div style={{ color:'#ff66cc', fontSize:'10px', marginBottom:'8px' }}>↑選択中のソケットに、下の宝石「埋め込み」で装着できます（既存の宝石は在庫へ戻ります）</div>}
+
+                <div style={{ color:'#ff66cc', fontSize:'11px', marginBottom:'6px' }}>所持宝石（同じ宝石3個で1ランクUP）</div>
+                {gems.length === 0 && <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>宝石を所持していません（宝石ダンジョンで入手）</div>}
+                {[...gems].sort((a,b)=> (GEM_TYPES.indexOf(a.gem_type)-GEM_TYPES.indexOf(b.gem_type)) || (GEM_RANKS.indexOf(a.rank)-GEM_RANKS.indexOf(b.rank))).map(gm => {
+                  const canCombine = (gm.quantity||0) >= 3 && GEM_RANKS.indexOf(gm.rank) < GEM_RANKS.length-1
+                  const allowed = gemAllowedSlots(gm.gem_type)
+                  const targetEq = embedTarget ? equipment.find(e => e.id === embedTarget) : null
+                  const canEmbedHere = targetEq && allowed.includes(gemSlotCategory(targetEq.slot))
+                  return (
+                    <div key={gm.id} style={{ border:'1px solid #002244', background:'#000818', padding:'8px', marginBottom:'6px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <div>
+                        <span style={{ color:'#ff66cc', fontSize:'12px' }}>{gemDisplayName(gm.gem_type, gm.rank)}</span>
+                        <span style={{ color:'#446688', fontSize:'10px' }}> ×{gm.quantity}</span>
+                        <div style={{ color:'#88ccff', fontSize:'10px' }}>{gemBonusText(gm.gem_type, gm.rank)}</div>
+                        <div style={{ color:'#557799', fontSize:'9px' }}>装着可: {allowed.map(s=>GEM_SLOT_LABEL[s]).join('・')}</div>
+                      </div>
+                      <div style={{ display:'flex', gap:'6px' }}>
+                        <button onClick={()=>embedGem(gm)} disabled={loading || !canEmbedHere}
+                          style={{ padding:'3px 8px', background: canEmbedHere?'#1a0014':'#0a0010', border:`1px solid ${canEmbedHere?'#ff66cc':'#442233'}`, color: canEmbedHere?'#ff66cc':'#553344', cursor: canEmbedHere?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>埋め込み</button>
+                        <button onClick={()=>combineGem(gm)} disabled={loading || !canCombine}
+                          style={{ padding:'3px 8px', background: canCombine?'#001840':'#000c18', border:`1px solid ${canCombine?'#0088ff':'#223344'}`, color: canCombine?'#88ccff':'#334455', cursor: canCombine?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>合成</button>
+                      </div>
                     </div>
                   )
                 })}

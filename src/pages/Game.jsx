@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import papiaIcon from '../assets/papia.png'
+import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue } from '../lib/stats'
+// Equipment.jsx 等が './Game' から参照しているため再export
+export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue } from '../lib/stats'
 
 const WAIT_SECONDS = 10
 const REGEN_SECONDS = 60
@@ -407,8 +410,36 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
   let critBonus = 0
   let evasionBonus = 0
   let critResist = 0
+  let defPen = 0   // 防御貫通%（宝石）
+  let mdefPen = 0  // 魔法防御貫通%（宝石）
+  let critDmg = 0  // クリティカル威力%（宝石）
   for (const item of equipment) {
     if (!item.equipped || !item.weapons) continue
+    // 埋め込み宝石の効果
+    if (item.gem_type && item.gem_rank) {
+      const g = GEM_DATA[item.gem_type]
+      const v = gemEffectValue(item.gem_type, item.gem_rank)
+      if (g) {
+        switch (g.effect) {
+          case 'hp':   bonus.hp += v; break
+          case 'mp':   bonus.mp += v; break
+          case 'atk':  bonus.atk += v; break
+          case 'def':  bonus.def += v; break
+          case 'matk': bonus.matk += v; break
+          case 'mdef': bonus.mdef += v; break
+          case 'spd':  bonus.spd += v; break
+          case 'atk_matk': bonus.atk += v; bonus.matk += v; break
+          case 'def_mdef': bonus.def += v; bonus.mdef += v; break
+          case 'def_pen':     defPen += v; break
+          case 'mdef_pen':    mdefPen += v; break
+          case 'crit':        critBonus += v; break
+          case 'crit_resist': critResist += v; break
+          case 'hit':         hitBonus += v; break
+          case 'evasion':     evasionBonus += v; break
+          case 'crit_dmg':    critDmg += v; break
+        }
+      }
+    }
     const w = item.weapons
     const plus = item.enhance_plus || 0
     // enhance_plusによる強化倍率を適用（古びた○○は除外）
@@ -460,6 +491,9 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
     critBonus,
     evasionBonus,
     critResist,
+    defPen:  Math.min(PEN_CAP, defPen/100),   // 0〜0.8 の係数
+    mdefPen: Math.min(PEN_CAP, mdefPen/100),
+    critDmg: critDmg/100,  // クリティカル威力の加算分（係数）
   }
 }
 
@@ -942,13 +976,14 @@ const getJSTDateStr = () => new Date(Date.now() + 9*60*60*1000).toISOString().sl
 
 // デイリーダンジョン：種類ごとに1日5回。type→DB列名／表示名／一覧
 const DUNGEON_DAILY_LIMIT = 5
-const DUNGEON_TYPE_COL = { exp:'cnt_exp', gold:'cnt_gold', stone:'cnt_stone', prof:'cnt_prof' }
-const DUNGEON_TYPE_LABEL = { exp:'経験値', gold:'ゴールド', stone:'強化石', prof:'熟練度' }
+const DUNGEON_TYPE_COL = { exp:'cnt_exp', gold:'cnt_gold', stone:'cnt_stone', prof:'cnt_prof', gem:'cnt_gem' }
+const DUNGEON_TYPE_LABEL = { exp:'経験値', gold:'ゴールド', stone:'強化石', prof:'熟練度', gem:'宝石' }
 const DUNGEON_LIST = [
   { type:'exp',   label:'経験値ダンジョン' },
   { type:'gold',  label:'ゴールドダンジョン' },
   { type:'stone', label:'強化石ダンジョン' },
   { type:'prof',  label:'熟練度ダンジョン' },
+  { type:'gem',   label:'宝石ダンジョン' },
 ]
 
 // パピア出現率アップイベント時間帯（JST）: 8:00 / 12:00 / 16:00 / 22:00 から30分
@@ -1000,7 +1035,7 @@ export default function Game() {
   const [skillSets, setSkillSets] = useState([])
   const [playerItem, setPlayerItem] = useState(null)
   // 種類ごとの当日選択回数。読み込み完了まではlimit(=disabled)で初期化
-  const [dungeonCounts, setDungeonCounts] = useState({ exp:DUNGEON_DAILY_LIMIT, gold:DUNGEON_DAILY_LIMIT, stone:DUNGEON_DAILY_LIMIT, prof:DUNGEON_DAILY_LIMIT })
+  const [dungeonCounts, setDungeonCounts] = useState({ exp:DUNGEON_DAILY_LIMIT, gold:DUNGEON_DAILY_LIMIT, stone:DUNGEON_DAILY_LIMIT, prof:DUNGEON_DAILY_LIMIT, gem:DUNGEON_DAILY_LIMIT })
   const [showDungeonPanel, setShowDungeonPanel] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [showMenu, setShowMenu] = useState(false)
@@ -1089,9 +1124,9 @@ export default function Game() {
     setPlayerItem(pi || null)
     const today = getJSTDateStr()
     try {
-      const { data: da } = await supabase.from('dungeon_attempts').select('cnt_exp,cnt_gold,cnt_stone,cnt_prof').eq('player_id', user.id).eq('date', today).single()
-      setDungeonCounts({ exp:da?.cnt_exp||0, gold:da?.cnt_gold||0, stone:da?.cnt_stone||0, prof:da?.cnt_prof||0 })
-    } catch { setDungeonCounts({ exp:0, gold:0, stone:0, prof:0 }) }
+      const { data: da } = await supabase.from('dungeon_attempts').select('cnt_exp,cnt_gold,cnt_stone,cnt_prof,cnt_gem').eq('player_id', user.id).eq('date', today).single()
+      setDungeonCounts({ exp:da?.cnt_exp||0, gold:da?.cnt_gold||0, stone:da?.cnt_stone||0, prof:da?.cnt_prof||0, gem:da?.cnt_gem||0 })
+    } catch { setDungeonCounts({ exp:0, gold:0, stone:0, prof:0, gem:0 }) }
   }
 
   const doRegen = async () => {
@@ -1227,6 +1262,7 @@ export default function Game() {
       gold:  { name:'かねすけ', hp:1, atk:1, def:1, matk:1, mdef:1, spd:1, type:'physical' },
       stone: { name:'いしすけ', hp:1, atk:1, def:1, matk:1, mdef:1, spd:1, type:'physical' },
       prof:  { name:'かかし',   hp:1, atk:1, def:1, matk:1, mdef:1, spd:1, type:'physical' },
+      gem:   { name:'たますけ', hp:1, atk:1, def:1, matk:1, mdef:1, spd:1, type:'physical' },
     }
     const dungeonEnemy = DUNGEON_ENEMIES[type]
     const logs = []
@@ -1315,6 +1351,21 @@ export default function Game() {
       } else {
         logs.push({ text:`武器が装備されていません`, color:'#446688' })
       }
+    } else if (type === 'gem') {
+      // ランダムでFランク宝石を1個獲得
+      const gemType = GEM_TYPES[Math.floor(Math.random()*GEM_TYPES.length)]
+      try {
+        const { data: existing } = await supabase.from('player_gems')
+          .select('*').eq('player_id', profile.id).eq('gem_type', gemType).eq('rank', 'F').single()
+        if (existing) {
+          await supabase.from('player_gems').update({ quantity:(existing.quantity||1)+1 }).eq('id', existing.id)
+        } else {
+          await supabase.from('player_gems').insert({ player_id:profile.id, gem_type:gemType, rank:'F', quantity:1 })
+        }
+      } catch {
+        try { await supabase.from('player_gems').insert({ player_id:profile.id, gem_type:gemType, rank:'F', quantity:1 }) } catch {}
+      }
+      logs.push({ text:`💍 宝石「${GEM_DATA[gemType].name}(F)」を入手！`, color:'#ff66cc' })
     }
 
     // dungeon_attempts更新（種類ごとの列を加算）
@@ -1553,11 +1604,12 @@ export default function Game() {
       const paralysisSpdP = playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1.0
       const pSpd   = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * paralysisSpdP
       const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
-      const eDefRate  = (enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1) * (enemyBuffs.defUp  ? enemyBuffs.defUp.rate  : 1)
-      const eMdefRate = (enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1) * (enemyBuffs.mdefUp ? enemyBuffs.mdefUp.rate : 1)
+      // 宝石の防御貫通/魔法防御貫通（敵DEF/MDEFを%無視）を倍率に折り込む
+      const eDefRate  = (enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1) * (enemyBuffs.defUp  ? enemyBuffs.defUp.rate  : 1) * (1 - (eff.defPen || 0))
+      const eMdefRate = (enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1) * (enemyBuffs.mdefUp ? enemyBuffs.mdefUp.rate : 1) * (1 - (eff.mdefPen || 0))
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
       const isCrit = Math.random()*100 < playerCritRate
-      const critMult = isCrit ? 1.5 : 1.0
+      const critMult = isCrit ? (1.5 + (eff.critDmg||0)) : 1.0
 
       // 敵の回避判定（プレイヤーの命中ボーナスで相殺、パピアは+50%）
       const buffHitBonus = playerBuffs.hitBonus?.turns > 0 ? playerBuffs.hitBonus.value : 0
@@ -1592,7 +1644,7 @@ export default function Game() {
           prevSkillName = cs.skills.name
           const res = executeSkill(cs.skills, {...effBuff, lastMpCost:mpCost}, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
           const finalCrit = res.dmg > 0 && (isCrit || (res.bonusCritRate > 0 && Math.random()*100 < playerCritRate + res.bonusCritRate))
-          const finalCritMult = finalCrit ? 1.5 : 1.0
+          const finalCritMult = finalCrit ? (1.5 + (eff.critDmg||0)) : 1.0
           const tosoMult = (hasTosoHonno && playerHp <= profile.hp_max * 0.5) ? 1.1 : 1.0
           // ②DEFスケーリング：物理=ATK/(ATK+敵DEF)、魔法=MATK/(MATK+敵MDEF)
           let defScale = 1.0

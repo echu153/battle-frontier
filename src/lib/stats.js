@@ -16,6 +16,71 @@ export const ARTIFACT_BASE_NAMES_SET = new Set([
   '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたオーブ'
 ])
 
+// ===== 宝石（ジェム）=====
+export const GEM_RANKS = ['F','E','D','C','B','A','S','SS','SSS']
+export const GEM_DATA = {
+  peridot:    { name:'ペリドット',     effect:'hp',        base:80, label:'HP' },
+  lapis:      { name:'ラピスラズリ',   effect:'mp',        base:40, label:'MP' },
+  ruby:       { name:'ルビー',         effect:'atk',       base:10, label:'攻撃' },
+  sapphire:   { name:'サファイア',     effect:'def',       base:10, label:'防御' },
+  amethyst:   { name:'アメジスト',     effect:'matk',      base:10, label:'特殊攻撃' },
+  emerald:    { name:'エメラルド',     effect:'mdef',      base:10, label:'特殊防御' },
+  topaz:      { name:'トパーズ',       effect:'spd',       base:10, label:'素早さ' },
+  rosequartz: { name:'ローズクォーツ', effect:'atk_matk',  base:5,  label:'攻撃+特殊攻撃' },
+  turquoise:  { name:'ターコイズ',     effect:'def_mdef',  base:5,  label:'防御+特殊防御' },
+  morganite:  { name:'モルガナイト',   effect:'def_pen',   base:0.5, label:'防御貫通',     pct:true },
+  kunzite:    { name:'クンツァイト',   effect:'mdef_pen',  base:0.5, label:'魔法防御貫通', pct:true },
+  citrine:    { name:'シトリン',       effect:'crit',      base:0.5, label:'クリティカル率',   pct:true },
+  onyx:       { name:'オニキス',       effect:'crit_resist', base:0.5, label:'クリティカル抵抗', pct:true },
+  opal:       { name:'オパール',       effect:'hit',       base:0.5, label:'命中率', pct:true },
+  moonstone:  { name:'ムーンストーン', effect:'evasion',   base:0.5, label:'回避率', pct:true },
+  petalite:   { name:'ペタライト',     effect:'crit_dmg',  base:0.5, label:'クリティカル威力', pct:true },
+}
+export const GEM_TYPES = Object.keys(GEM_DATA)
+export const PEN_CAP = 0.8
+// 装飾品①②はカテゴリ 'accessory' に統一
+export const gemSlotCategory = (slot) => slot === 'accessory2' ? 'accessory' : slot
+// 宝石を装着できる部位カテゴリ。%系=装飾品のみ／HP・MP=防具+装飾品／攻撃系=武器+装飾品／防御系=防具+装飾品
+export const gemAllowedSlots = (gemType) => {
+  const g = GEM_DATA[gemType]; if (!g) return []
+  if (g.pct) return ['accessory']
+  if (g.effect === 'hp' || g.effect === 'mp') return ['armor','accessory']
+  if (['atk','matk','atk_matk','spd'].includes(g.effect)) return ['weapon','accessory']
+  if (['def','mdef','def_mdef'].includes(g.effect)) return ['armor','accessory']
+  return ['accessory']
+}
+export const GEM_SLOT_LABEL = { weapon:'武器', armor:'防具', accessory:'装飾品' }
+export const gemEffectValue = (gemType, rank) => {
+  const g = GEM_DATA[gemType]; if (!g) return 0
+  const i = GEM_RANKS.indexOf(rank); if (i < 0) return 0
+  const v = g.base * Math.pow(1.5, i)
+  return g.pct ? Math.round(v * 10) / 10 : Math.round(v)
+}
+// 装備に埋め込まれた宝石の効果を bonus / 各種補正へ加算
+const applyGemBonus = (item, acc) => {
+  if (!item.gem_type || !item.gem_rank) return
+  const g = GEM_DATA[item.gem_type]; if (!g) return
+  const v = gemEffectValue(item.gem_type, item.gem_rank)
+  switch (g.effect) {
+    case 'hp':   acc.bonus.hp += v; break
+    case 'mp':   acc.bonus.mp += v; break
+    case 'atk':  acc.bonus.atk += v; break
+    case 'def':  acc.bonus.def += v; break
+    case 'matk': acc.bonus.matk += v; break
+    case 'mdef': acc.bonus.mdef += v; break
+    case 'spd':  acc.bonus.spd += v; break
+    case 'atk_matk': acc.bonus.atk += v; acc.bonus.matk += v; break
+    case 'def_mdef': acc.bonus.def += v; acc.bonus.mdef += v; break
+    case 'def_pen':     acc.defPen += v; break
+    case 'mdef_pen':    acc.mdefPen += v; break
+    case 'crit':        acc.critBonus += v; break
+    case 'crit_resist': acc.critResist += v; break
+    case 'hit':         acc.hitBonus += v; break
+    case 'evasion':     acc.evasionBonus += v; break
+    case 'crit_dmg':    acc.critDmg += v; break
+  }
+}
+
 // 熟練度ボーナス：武器の固定ボーナス各種に倍率をかける
 // 倍率 = LV×1% + floor(LV/100)×50%（LV300で+450%）
 // 対象：atk/def/matk/mdef/spd/hp/mp の固定ボーナスのみ（%ボーナスは対象外）
@@ -43,8 +108,10 @@ export const calcEffectiveStats = (profile, equipment, proficiency) => {
   let critBonus = 0
   let evasionBonus = 0
   let critResist = 0
+  const gemAcc = { bonus, defPen:0, mdefPen:0, critDmg:0, critBonus:0, critResist:0, hitBonus:0, evasionBonus:0 }
   for (const item of equipment) {
     if (!item.equipped || !item.weapons) continue
+    applyGemBonus(item, gemAcc)
     const w = item.weapons
     const plus = item.enhance_plus || 0
     const isArtifactBase = ARTIFACT_BASE_NAMES_SET.has(w.name)
@@ -91,10 +158,13 @@ export const calcEffectiveStats = (profile, equipment, proficiency) => {
     hp_max: profile.hp_max + bonus.hp,
     mp_max: profile.mp_max + bonus.mp,
     bonus,
-    hitBonus,
-    critBonus,
-    evasionBonus,
-    critResist,
+    hitBonus:     hitBonus     + gemAcc.hitBonus,
+    critBonus:    critBonus    + gemAcc.critBonus,
+    evasionBonus: evasionBonus + gemAcc.evasionBonus,
+    critResist:   critResist   + gemAcc.critResist,
+    defPen:  Math.min(PEN_CAP, gemAcc.defPen/100),
+    mdefPen: Math.min(PEN_CAP, gemAcc.mdefPen/100),
+    critDmg: gemAcc.critDmg/100,
   }
 }
 

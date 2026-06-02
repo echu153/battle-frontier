@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { calcEffectiveStats, calcEffectiveTotal } from '../lib/stats'
+import { calcEffectiveStats, calcEffectiveTotal, GEM_DATA, gemEffectValue } from '../lib/stats'
+
+const gemBonusText = (gemType, rank) => {
+  const g = GEM_DATA[gemType]; if (!g) return ''
+  const v = gemEffectValue(gemType, rank)
+  return g.pct ? `${g.label} +${v}%` : `${g.label} +${v}`
+}
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -20,6 +26,7 @@ const RARITY_COLORS = {
   f:'#888888', e:'#6699cc', d:'#ff8844', c:'#44bb44',
   b:'#4488ff', a:'#ff4444', s:'#ffcc00', ss:'#ffcc00', sss:'#ffcc00'
 }
+const RARITY_LABELS = { f:'F', e:'E', d:'D', c:'C', b:'B', a:'A', s:'S', ss:'SS', sss:'SSS' }
 
 const ARTIFACT_BASE_NAMES = [
   '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
@@ -252,16 +259,17 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* 装備中 */}
+        {/* 装備中（カード式） */}
         <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'12px' }}>
-          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>装備中</div>
+          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px', textAlign:'center' }}>装備中</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
           {slots.map(slot => {
             const equipped = equipment.find(e => e.slot === slot && e.equipped)
             const slotLabel = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }[slot]
             if (!equipped) return (
-              <div key={slot} style={{ display:'flex', gap:'8px', marginBottom:'6px', fontSize:'11px' }}>
-                <span style={{ color:'#446688', minWidth:'60px' }}>{slotLabel}:</span>
-                <span style={{ color:'#334455' }}>なし</span>
+              <div key={slot} style={{ border:'1px solid #002a55', background:'#000c1e', padding:'10px', textAlign:'center' }}>
+                <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>{slotLabel}</div>
+                <div style={{ color:'#334455', fontSize:'11px' }}>なし</div>
               </div>
             )
             const plus = equipped.enhance_plus || 0
@@ -269,38 +277,42 @@ export default function Profile() {
             const enhW = calcEnhancedStats(equipped.weapons, plus)
             const profLv = proficiency.find(p => p.weapon_id === equipped.weapons.id)?.prof_lv || 0
             return (
-              <div key={slot} style={{ marginBottom:'8px', borderBottom:'1px solid #002244', paddingBottom:'6px' }}>
-                <div style={{ display:'flex', gap:'8px', fontSize:'11px', marginBottom:'2px' }}>
-                  <span style={{ color:'#446688', minWidth:'60px' }}>{slotLabel}:</span>
-                  <span style={{ color: RARITY_COLORS[equipped.weapons.rarity] }}>
-                    {getProfPrefix(profLv)}{equipped.weapons.name}
-                    {plus > 0 && !isArtifactBase && <span style={{color:'#ffcc00'}}> +{plus}</span>}
-                  </span>
+              <div key={slot} style={{ border:'1px solid #002a55', background:'#000c1e', padding:'10px', textAlign:'center' }}>
+                <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>{slotLabel}</div>
+                <div style={{ color: RARITY_COLORS[equipped.weapons.rarity], fontSize:'12px', marginBottom:'4px' }}>
+                  【{RARITY_LABELS[equipped.weapons.rarity]}】{getProfPrefix(profLv)}{equipped.weapons.name}
+                  {plus > 0 && !isArtifactBase && <span style={{color:'#ffcc00'}}> +{plus}</span>}
                 </div>
-                <div style={{ fontSize:'10px', marginLeft:'68px' }}>
-                  {enhW.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻撃力+{enhW.atk_bonus} </span>}
-                  {enhW.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防御力+{enhW.def_bonus} </span>}
-                  {enhW.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>特殊攻撃力+{enhW.matk_bonus} </span>}
-                  {enhW.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>特殊防御力+{enhW.mdef_bonus} </span>}
-                  {enhW.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>素早さ+{enhW.spd_bonus} </span>}
-                  {equipped.weapons.matk_bonus_pct > 0 && <span style={{color:'#cc44ff'}}>特殊攻撃力+{equipped.weapons.matk_bonus_pct}% </span>}
+                {(enhW.atk_bonus>0 || enhW.def_bonus>0 || enhW.matk_bonus>0 || enhW.mdef_bonus>0 || enhW.spd_bonus>0 || equipped.weapons.matk_bonus_pct>0 || equipped.weapons.hit_bonus>0) && (
+                <div style={{ fontSize:'10px', marginBottom:'2px' }}>
+                  {enhW.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻+{enhW.atk_bonus} </span>}
+                  {enhW.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防+{enhW.def_bonus} </span>}
+                  {enhW.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>魔攻+{enhW.matk_bonus} </span>}
+                  {enhW.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>魔防+{enhW.mdef_bonus} </span>}
+                  {enhW.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>速+{enhW.spd_bonus} </span>}
+                  {equipped.weapons.matk_bonus_pct > 0 && <span style={{color:'#cc44ff'}}>魔攻+{equipped.weapons.matk_bonus_pct}% </span>}
                   {equipped.weapons.hit_bonus > 0 && <span style={{color:'#ffaa44'}}>命中+{equipped.weapons.hit_bonus}% </span>}
                 </div>
+                )}
                 {(equipped.bonus_atk > 0 || equipped.bonus_def > 0 || equipped.bonus_matk > 0 || equipped.bonus_mdef > 0 || equipped.bonus_spd > 0 || (equipped.bonus_effect && equipped.bonus_effect !== 'artifact')) && (
-                  <div style={{ fontSize:'10px', color:'#ffaa00', marginLeft:'68px' }}>
+                  <div style={{ fontSize:'10px', color:'#ffaa00', marginBottom:'2px' }}>
                     ボーナス:
-                    {equipped.bonus_atk  > 0 && ` 攻撃力+${equipped.bonus_atk}`}
-                    {equipped.bonus_def  > 0 && ` 防御力+${equipped.bonus_def}`}
-                    {equipped.bonus_matk > 0 && ` 特殊攻撃力+${equipped.bonus_matk}`}
-                    {equipped.bonus_mdef > 0 && ` 特殊防御力+${equipped.bonus_mdef}`}
-                    {equipped.bonus_spd  > 0 && ` 素早さ+${equipped.bonus_spd}`}
+                    {equipped.bonus_atk  > 0 && ` 攻+${equipped.bonus_atk}`}
+                    {equipped.bonus_def  > 0 && ` 防+${equipped.bonus_def}`}
+                    {equipped.bonus_matk > 0 && ` 魔攻+${equipped.bonus_matk}`}
+                    {equipped.bonus_mdef > 0 && ` 魔防+${equipped.bonus_mdef}`}
+                    {equipped.bonus_spd  > 0 && ` 速+${equipped.bonus_spd}`}
                     {equipped.bonus_effect && equipped.bonus_effect !== 'artifact' && ` ${getEffectLabel(equipped.bonus_effect)}`}
                   </div>
                 )}
-                {equipped.bonus_effect === 'artifact' && <div style={{ fontSize:'10px', color:'#44ccff', marginLeft:'68px' }}>【特殊能力】{getEffectLabel(equipped.bonus_effect)}</div>}
+                {equipped.bonus_effect === 'artifact' && <div style={{ fontSize:'10px', color:'#44ccff', marginBottom:'2px' }}>【特殊能力】{getEffectLabel(equipped.bonus_effect)}</div>}
+                <div style={{ fontSize:'10px', color: equipped.gem_type ? '#ff66cc' : '#445566' }}>
+                  💍 {equipped.gem_type ? gemBonusText(equipped.gem_type, equipped.gem_rank) : 'ソケット: 空'}
+                </div>
               </div>
             )
           })}
+          </div>
         </div>
 
         {/* スキルセット */}
