@@ -663,11 +663,14 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     }
     case 'マッドラッシュ': {
       result.dmg = Math.floor(eff.atk*1.8*am)
-      if (!playerBuffs.berserk || playerBuffs.berserk.turns <= 0) {
+      if (playerBuffs.berserk?.turns > 0) {
+        result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}の物理ダメージ！（狂乱中）`
+      } else if (!playerBuffs.berserkUsed) {
         result.newPlayerBuffs.berserk = { turns:3, lockedSkill:'マッドラッシュ' }
+        result.newPlayerBuffs.berserkUsed = true
         result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}の物理ダメージ！ 狂乱状態になった！`
       } else {
-        result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}の物理ダメージ！（狂乱中）`
+        result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}の物理ダメージ！`
       }
       break
     }
