@@ -388,6 +388,8 @@ export default function Equipment() {
                         <span style={{ color:'#446688', fontSize:'10px' }}>×{pi.quantity}</span>
                         {(pi.items.effect === 'enhance_stone' || pi.items.name?.includes('依頼書')) ? (
                           <span style={{ color:'#aa8800', fontSize:'10px' }}>強化素材</span>
+                        ) : pi.items.effect?.startsWith('casino_area') ? (
+                          <span style={{ color:'#cc44ff', fontSize:'10px' }}>大切なもの</span>
                         ) : pi.items.effect === 'stat_reset' ? (
                           <button onClick={() => setConfirmReset(pi)} disabled={loading}
                             style={{ padding:'2px 8px', background:'#200010', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
