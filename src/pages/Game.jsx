@@ -1088,27 +1088,36 @@ export default function Game() {
   const fetchProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
-    const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+    const [{ data }, { data: cl }] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', user.id).single(),
+      supabase.from('class_levels').select('*').eq('player_id', user.id),
+    ])
     if (!data) { nav('/create'); return }
+    if (Array.isArray(cl)) setClassLevels(cl)
     // クラス成長分を毎回再計算してステータスを上書き（JOB_GROWTH変更が全員に反映される）
+    // 全クラスのレベルアップ分を合算する（転職で積み上げたステータスも反映）
     const _base = getBaseClassStats(data.class)
-    const _lvBonus = calcLvBonus(data.class, data.lv)
+    const _statKeys = ['hp_max','mp_max','atk','def','matk','mdef','spd']
+    const _allClassBonus = Object.fromEntries(_statKeys.map(k => [k, 0]))
+    for (const clRow of (Array.isArray(cl) ? cl : [])) {
+      const b = calcLvBonus(clRow.class_name, clRow.lv)
+      for (const k of _statKeys) _allClassBonus[k] += (b[k] || 0)
+    }
     const _spent = data.stat_point_spent || {}
     // リトレーニングごとにLV20分のボーナスを永続付与
-    const _statKeys = ['hp_max','mp_max','atk','def','matk','mdef','spd']
     const _rtBonus = Object.fromEntries(_statKeys.map(k => [k, 0]))
     for (const [cls, cnt] of Object.entries(data.retraining || {})) {
       const lv20 = calcLvBonus(cls, 20)
       for (const k of _statKeys) _rtBonus[k] += (lv20[k] || 0) * cnt
     }
     const _computed = {
-      hp_max: _base.hp_max + _lvBonus.hp_max + (_spent.hp  ||0)*10 + _rtBonus.hp_max,
-      mp_max: _base.mp_max + _lvBonus.mp_max + (_spent.mp  ||0)*5  + _rtBonus.mp_max,
-      atk:    _base.atk   + _lvBonus.atk    + (_spent.atk ||0)     + _rtBonus.atk,
-      def:    _base.def   + _lvBonus.def    + (_spent.def  ||0)    + _rtBonus.def,
-      matk:   _base.matk  + _lvBonus.matk   + (_spent.matk||0)     + _rtBonus.matk,
-      mdef:   _base.mdef  + _lvBonus.mdef   + (_spent.mdef||0)     + _rtBonus.mdef,
-      spd:    _base.spd   + _lvBonus.spd    + (_spent.spd  ||0)    + _rtBonus.spd,
+      hp_max: _base.hp_max + _allClassBonus.hp_max + (_spent.hp  ||0)*10 + _rtBonus.hp_max,
+      mp_max: _base.mp_max + _allClassBonus.mp_max + (_spent.mp  ||0)*5  + _rtBonus.mp_max,
+      atk:    _base.atk   + _allClassBonus.atk    + (_spent.atk ||0)     + _rtBonus.atk,
+      def:    _base.def   + _allClassBonus.def    + (_spent.def  ||0)    + _rtBonus.def,
+      matk:   _base.matk  + _allClassBonus.matk   + (_spent.matk||0)     + _rtBonus.matk,
+      mdef:   _base.mdef  + _allClassBonus.mdef   + (_spent.mdef||0)     + _rtBonus.mdef,
+      spd:    _base.spd   + _allClassBonus.spd    + (_spent.spd  ||0)    + _rtBonus.spd,
     }
     setProfile({ ...data, ..._computed })
     setPendingPoints(data.pending_stat_points || 0)
@@ -1124,8 +1133,6 @@ export default function Game() {
     if (Array.isArray(eq)) setEquipment(eq)
     const { data: prof } = await supabase.from('proficiency').select('*, weapons(*)').eq('player_id', user.id)
     if (Array.isArray(prof)) setProficiency(prof)
-    const { data: cl } = await supabase.from('class_levels').select('*').eq('player_id', user.id)
-    if (Array.isArray(cl)) setClassLevels(cl)
     const { data: ss } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', user.id).order('slot_order')
     if (Array.isArray(ss)) setSkillSets(ss)
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id).eq('equipped', true).single()
