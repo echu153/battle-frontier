@@ -1128,8 +1128,10 @@ export default function Game() {
     await supabase.from('profiles').update({
       class:targetClass, lv:targetLv, exp:targetExp, exp_next:calcExpNext(targetLv),
     }).eq('id', profile.id)
+    // 転職時は装備中スキルを全て外す（前クラスのスキルが使えてしまう不具合対策）
+    await supabase.from('skill_sets').delete().eq('player_id', profile.id)
     await fetchProfile()
-    setTempleMessage(`${targetClass}に転職しました！`)
+    setTempleMessage(`${targetClass}に転職しました！（セット中のスキルは全て外れました）`)
     setLoading(false)
   }
 
