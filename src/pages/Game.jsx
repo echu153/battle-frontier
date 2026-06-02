@@ -190,52 +190,40 @@ export const AREAS = [
 // クラス定義
 // ============================================================
 const JOB_BASE = {
-  '戦士':      { hp_max:80,  mp_max:10, atk:10, def:8,  matk:1,  mdef:3,  spd:5  },
-  '弓使い':    { hp_max:60,  mp_max:15, atk:8,  def:4,  matk:2,  mdef:3,  spd:10 },
-  '魔法使い':  { hp_max:45,  mp_max:50, atk:2,  def:2,  matk:14, mdef:4,  spd:4  },
-  '僧侶':      { hp_max:55,  mp_max:45, atk:2,  def:3,  matk:7,  mdef:12, spd:3  },
-  '侍':        { hp_max:100, mp_max:15, atk:13, def:10, matk:4,  mdef:4,  spd:8  },
-  '狂戦士':    { hp_max:110, mp_max:10, atk:16, def:8,  matk:4,  mdef:4,  spd:4  },
-  '狩人':      { hp_max:80,  mp_max:20, atk:13, def:6,  matk:4,  mdef:4,  spd:13 },
-  '暗殺者':    { hp_max:70,  mp_max:20, atk:10, def:4,  matk:4,  mdef:4,  spd:18 },
-  '元素使い':  { hp_max:55,  mp_max:70, atk:5,  def:2,  matk:17, mdef:5,  spd:4  },
-  '死霊使い':  { hp_max:60,  mp_max:80, atk:4,  def:4,  matk:12, mdef:4,  spd:8  },
-  '聖職者':    { hp_max:70,  mp_max:60, atk:4,  def:8,  matk:8,  mdef:12, spd:4  },
-  '異端審問官':{ hp_max:60,  mp_max:65, atk:4,  def:4,  matk:12, mdef:16, spd:3  },
-  '賢者':      { hp_max:65,  mp_max:70, atk:3,  def:3,  matk:15, mdef:14, spd:4  },
+  '戦士':    { hp_max:80, mp_max:10, atk:10, def:8,  matk:1,  mdef:3,  spd:5  },
+  '弓使い':  { hp_max:60, mp_max:15, atk:8,  def:4,  matk:2,  mdef:3,  spd:10 },
+  '魔法使い':{ hp_max:45, mp_max:50, atk:2,  def:2,  matk:14, mdef:4,  spd:4  },
+  '僧侶':    { hp_max:55, mp_max:45, atk:2,  def:3,  matk:7,  mdef:12, spd:3  },
+  '格闘家':  { hp_max:70, mp_max:10, atk:10, def:6,  matk:2,  mdef:5,  spd:7  },
+}
+// 上位クラスはJOB_BASEを持たず、requires元の基本クラスのJOB_BASEを引き継ぐ
+const getBaseClassStats = (className) => {
+  if (JOB_BASE[className]) return JOB_BASE[className]
+  const adv = ADVANCED_CLASSES[className]
+  return JOB_BASE[adv?.requires] || JOB_BASE['戦士']
 }
 
 export const JOB_GROWTH = {
-  '戦士':      { hp:20, mp:5,  atk:2, def:2, matk:0, mdef:1, spd:1 },
-  '弓使い':    { hp:15, mp:5,  atk:2, def:1, matk:0, mdef:1, spd:2 },
-  '魔法使い':  { hp:10, mp:15, atk:0, def:1, matk:3, mdef:1, spd:1 },
-  '僧侶':      { hp:15, mp:15, atk:0, def:1, matk:1, mdef:2, spd:1 },
-  '侍':        { hp:20, mp:5,  atk:3, def:2, matk:0, mdef:1, spd:1 },
-  '狂戦士':    { hp:20, mp:5,  atk:4, def:1, matk:0, mdef:0, spd:0 },
-  '狩人':      { hp:10, mp:5,  atk:3, def:1, matk:0, mdef:0, spd:3 },
-  '暗殺者':    { hp:10, mp:5,  atk:2, def:1, matk:0, mdef:0, spd:4 },
-  '元素使い':  { hp:10, mp:10, atk:0, def:0, matk:4, mdef:1, spd:0 },
-  '死霊使い':  { hp:10, mp:10, atk:0, def:0, matk:3, mdef:1, spd:2 },
-  '聖職者':    { hp:10, mp:10, atk:0, def:2, matk:1, mdef:3, spd:0 },
-  '異端審問官':{ hp:10, mp:10, atk:0, def:1, matk:2, mdef:3, spd:0 },
-  '賢者':      { hp:10, mp:12, atk:0, def:1, matk:3, mdef:3, spd:0 },
+  '戦士':      { hp:20, mp:5,  atk:1, def:2, matk:0, mdef:1, spd:1 },
+  '弓使い':    { hp:10, mp:5,  atk:2, def:1, matk:0, mdef:1, spd:2 },
+  '魔法使い':  { hp:10, mp:10, atk:0, def:1, matk:2, mdef:1, spd:1 },
+  '僧侶':      { hp:10, mp:5,  atk:0, def:2, matk:1, mdef:2, spd:1 },
+  '侍':        { hp:20, mp:5,  atk:2, def:1, matk:1, mdef:1, spd:2 },
+  '狂戦士':    { hp:20, mp:5,  atk:3, def:1, matk:1, mdef:1, spd:1 },
+  '狩人':      { hp:20, mp:5,  atk:2, def:1, matk:1, mdef:1, spd:2 },
+  '暗殺者':    { hp:10, mp:5,  atk:2, def:1, matk:1, mdef:1, spd:3 },
+  '元素使い':  { hp:10, mp:10, atk:1, def:1, matk:3, mdef:1, spd:1 },
+  '死霊使い':  { hp:10, mp:10, atk:1, def:1, matk:2, mdef:2, spd:1 },
+  '聖職者':    { hp:10, mp:10, atk:0, def:2, matk:2, mdef:2, spd:1 },
+  '異端審問官':{ hp:10, mp:10, atk:0, def:2, matk:2, mdef:2, spd:1 },
+  '賢者':      { hp:10, mp:10, atk:1, def:1, matk:2, mdef:2, spd:1 },
+  '格闘家':    { hp:10, mp:5,  atk:2, def:1, matk:0, mdef:2, spd:1 },
+  'サイキッカー':{ hp:10, mp:5, atk:2, def:1, matk:2, mdef:1, spd:2 },
+  '体術師':    { hp:20, mp:5,  atk:2, def:1, matk:1, mdef:1, spd:2 },
+  '魔銃士':    { hp:10, mp:5,  atk:2, def:1, matk:2, mdef:1, spd:2 },
 }
 
-export const JOB_LEVEL3_BONUS = {
-  '戦士':      ['matk'],
-  '弓使い':    ['matk'],
-  '魔法使い':  ['atk'],
-  '僧侶':      ['atk'],
-  '侍':        ['matk'],
-  '狂戦士':    ['matk','mdef','spd'],
-  '狩人':      ['matk','mdef'],
-  '暗殺者':    ['matk','mdef'],
-  '元素使い':  ['atk','def','spd'],
-  '死霊使い':  ['atk','def'],
-  '聖職者':    ['atk','spd'],
-  '異端審問官':['atk','spd'],
-  '賢者':      ['atk','spd'],
-}
+export const JOB_LEVEL3_BONUS = {}
 
 const INITIAL_CLASSES = ['戦士','弓使い','魔法使い','僧侶','格闘家']
 const ADVANCED_CLASSES = {
@@ -1102,7 +1090,27 @@ export default function Game() {
     if (!user) { nav('/login'); return }
     const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     if (!data) { nav('/create'); return }
-    setProfile(data)
+    // クラス成長分を毎回再計算してステータスを上書き（JOB_GROWTH変更が全員に反映される）
+    const _base = getBaseClassStats(data.class)
+    const _lvBonus = calcLvBonus(data.class, data.lv)
+    const _spent = data.stat_point_spent || {}
+    // リトレーニングごとにLV20分のボーナスを永続付与
+    const _statKeys = ['hp_max','mp_max','atk','def','matk','mdef','spd']
+    const _rtBonus = Object.fromEntries(_statKeys.map(k => [k, 0]))
+    for (const [cls, cnt] of Object.entries(data.retraining || {})) {
+      const lv20 = calcLvBonus(cls, 20)
+      for (const k of _statKeys) _rtBonus[k] += (lv20[k] || 0) * cnt
+    }
+    const _computed = {
+      hp_max: _base.hp_max + _lvBonus.hp_max + (_spent.hp  ||0)*10 + _rtBonus.hp_max,
+      mp_max: _base.mp_max + _lvBonus.mp_max + (_spent.mp  ||0)*5  + _rtBonus.mp_max,
+      atk:    _base.atk   + _lvBonus.atk    + (_spent.atk ||0)     + _rtBonus.atk,
+      def:    _base.def   + _lvBonus.def    + (_spent.def  ||0)    + _rtBonus.def,
+      matk:   _base.matk  + _lvBonus.matk   + (_spent.matk||0)     + _rtBonus.matk,
+      mdef:   _base.mdef  + _lvBonus.mdef   + (_spent.mdef||0)     + _rtBonus.mdef,
+      spd:    _base.spd   + _lvBonus.spd    + (_spent.spd  ||0)    + _rtBonus.spd,
+    }
+    setProfile({ ...data, ..._computed })
     setPendingPoints(data.pending_stat_points || 0)
     // selectedAreaがこのアカウントで解放済みかチェック（別アカウントのlocalStorage値を弾く）
     const unlocked = data.unlocked_areas || [1]
@@ -1190,23 +1198,13 @@ export default function Game() {
     if (currentCount >= 5) return
     setLoading(true)
 
-    // 現LVまでのステータスを引いてLV20ボーナスを足す（案B）
-    const currentLvStats = calcLvBonus(targetClass, profile.lv)
-    const lv20Stats      = calcLvBonus(targetClass, 20)
-    const statKeys = ['hp_max','mp_max','atk','def','matk','mdef','spd']
-    const statUpdates = {}
-    for (const k of statKeys) {
-      statUpdates[k] = profile[k] - (currentLvStats[k] || 0) + (lv20Stats[k] || 0)
-    }
-
-    // レベルリセット（char_lvはそのまま維持）
+    // レベルリセット（char_lvはそのまま維持）、ステータスはfetchProfile時に自動再計算される
     const newRetraining = { ...(profile.retraining || {}), [targetClass]: currentCount + 1 }
     await supabase.from('profiles').update({
       retraining: newRetraining,
       lv: 1,
       exp: 0,
       exp_next: calcExpNext(1),
-      ...statUpdates,
     }).eq('id', profile.id)
 
     // class_levelsもリセット
@@ -1287,26 +1285,13 @@ export default function Game() {
         let newExpNext = profile.exp_next
         let newPendingPoints = profile.pending_stat_points || 0
         let newCharLv = profile.char_lv || 1
-        const growth = JOB_GROWTH[profile.class] || JOB_GROWTH['戦士']
-        const bonusSlots = JOB_LEVEL3_BONUS[profile.class] || []
-        let statUpdates = {}
         while (newExp >= newExpNext && newLv < capD) {
           newExp -= newExpNext; newLv++; newExpNext = calcExpNext(newLv); newPendingPoints++; newCharLv++
-          statUpdates = {
-            hp_max:(statUpdates.hp_max||profile.hp_max)+growth.hp, mp_max:(statUpdates.mp_max||profile.mp_max)+growth.mp,
-            atk:(statUpdates.atk||profile.atk)+growth.atk, def:(statUpdates.def||profile.def)+growth.def,
-            matk:(statUpdates.matk||profile.matk)+growth.matk, mdef:(statUpdates.mdef||profile.mdef)+growth.mdef,
-            spd:(statUpdates.spd||profile.spd)+growth.spd,
-          }
-          if (bonusSlots.length > 0 && newLv%3===0) {
-            const bi = Math.floor(newLv/3-1)%bonusSlots.length
-            statUpdates[bonusSlots[bi]] = (statUpdates[bonusSlots[bi]]||0)+1
-          }
           logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${newLv}！`, color:'#cc44ff' })
         }
         await supabase.from('profiles').update({
           exp:newExp, exp_next:newExpNext, lv:newLv,
-          pending_stat_points:newPendingPoints, char_lv:newCharLv, ...statUpdates,
+          pending_stat_points:newPendingPoints, char_lv:newCharLv,
         }).eq('id', profile.id)
         const clData = classLevels.find(cl => cl.class_name === profile.class)
         if (clData) await supabase.from('class_levels').update({ lv:newLv, exp:newExp }).eq('id', clData.id)
@@ -2065,9 +2050,6 @@ export default function Game() {
     let newLv = profile.lv
     let newExpNext = profile.exp_next
     let newPendingPoints = profile.pending_stat_points||0
-    const growth = JOB_GROWTH[profile.class]||JOB_GROWTH['戦士']
-    const bonusSlots = JOB_LEVEL3_BONUS[profile.class]||[]
-    let statUpdates = {}
     let newCharLv = profile.char_lv || 1
 
     if (frozenExp && expGained > 0) {
@@ -2079,20 +2061,6 @@ export default function Game() {
       while (newExp >= newExpNext && newLv < cap) {
         newExp -= newExpNext; newLv++; newExpNext = calcExpNext(newLv); newPendingPoints++
         newCharLv++
-        const base = statUpdates
-        statUpdates = {
-          hp_max: (base.hp_max||profile.hp_max)+growth.hp,
-          mp_max: (base.mp_max||profile.mp_max)+growth.mp,
-          atk:    (base.atk   ||profile.atk)  +growth.atk,
-          def:    (base.def   ||profile.def)  +growth.def,
-          matk:   (base.matk  ||profile.matk) +growth.matk,
-          mdef:   (base.mdef  ||profile.mdef) +growth.mdef,
-          spd:    (base.spd   ||profile.spd)  +growth.spd,
-        }
-        if (bonusSlots.length > 0 && newLv%3===0) {
-          const bonusIndex = Math.floor(newLv/3-1)%bonusSlots.length
-          statUpdates[bonusSlots[bonusIndex]] = (statUpdates[bonusSlots[bonusIndex]]||0)+1
-        }
         logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${newLv}！ ステータスポイント+1`, color:'#cc44ff' })
         setBattleLogs([...logs])
         const { data: lvupSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class).eq('required_lv', newLv)
@@ -2119,7 +2087,6 @@ export default function Game() {
       boss_encounter_rate:newBossRate, unlocked_areas:newUnlockedAreas,
       pending_stat_points:newPendingPoints, last_action_at:new Date().toISOString(),
       char_lv:newCharLv,
-      ...statUpdates,
     }).eq('id', profile.id)
 
     const currentClassData = classLevels.find(cl => cl.class_name === profile.class)
@@ -2170,13 +2137,6 @@ export default function Game() {
     const remaining = pendingPoints - total
     const prev = profile.stat_point_spent || {}
     const updates = {
-      hp_max: profile.hp_max+(statPoints.hp||0)*10,
-      mp_max: profile.mp_max+(statPoints.mp||0)*5,
-      atk:    profile.atk  +(statPoints.atk ||0),
-      def:    profile.def  +(statPoints.def  ||0),
-      matk:   profile.matk +(statPoints.matk ||0),
-      mdef:   profile.mdef +(statPoints.mdef ||0),
-      spd:    profile.spd  +(statPoints.spd  ||0),
       pending_stat_points: Math.max(0, remaining),
       stat_point_spent: {
         hp:   (prev.hp  ||0)+(statPoints.hp  ||0),

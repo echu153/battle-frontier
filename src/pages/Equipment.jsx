@@ -242,18 +242,7 @@ export default function Equipment() {
     setLoading(true)
     const spent = profile.stat_point_spent || {}
     const totalSpent = (spent.hp||0)+(spent.mp||0)+(spent.atk||0)+(spent.def||0)+(spent.matk||0)+(spent.mdef||0)+(spent.spd||0)
-    const newHpMax = profile.hp_max - (spent.hp||0)*10
-    const newMpMax = profile.mp_max - (spent.mp||0)*5
     await supabase.from('profiles').update({
-      hp_max: newHpMax,
-      mp_max: newMpMax,
-      atk:  profile.atk  - (spent.atk ||0),
-      def:  profile.def  - (spent.def  ||0),
-      matk: profile.matk - (spent.matk ||0),
-      mdef: profile.mdef - (spent.mdef ||0),
-      spd:  profile.spd  - (spent.spd  ||0),
-      hp_current: Math.min(profile.hp_current ?? profile.hp_max, newHpMax),
-      mp_current: Math.min(profile.mp_current ?? profile.mp_max, newMpMax),
       pending_stat_points: (profile.pending_stat_points||0) + totalSpent,
       stat_point_spent: {},
     }).eq('id', profile.id)
