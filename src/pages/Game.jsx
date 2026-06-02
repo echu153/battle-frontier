@@ -2706,9 +2706,7 @@ export default function Game() {
                   <div style={{ color:isCurrent?'#88aabb':canChange?'#ffcc00':'#446688', fontSize:'12px' }}>
                     ギャンブラー{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}
                   </div>
-                  <div style={{ color: hasGamblerProof?'#44ff88':'#446688', fontSize:'10px' }}>
-                    {hasGamblerProof ? '🎫 ギャンブラーの証：所持' : '🔒 ギャンブラーの証が必要（賭博場の景品）'}
-                  </div>
+                  <div style={{ color:'#446688', fontSize:'10px' }}>ギャンブラーの証が必要</div>
                   <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{cl?cl.lv:1}/{getEffectiveCap('ギャンブラー')}</div>
                 </div>
                 <button onClick={()=>setPendingClassChange('ギャンブラー')} disabled={isCurrent||!canChange||loading}

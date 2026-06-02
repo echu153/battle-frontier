@@ -15,7 +15,7 @@ const PRIZES = [
   { key:'fortuneRod',name:'フォーチュンロッド',price:50000, limit:1, today:false, type:'equip', desc:'MATK+40 MDEF+10  特殊: クリティカル確率+5%' },
   { key:'royalArmor',name:'ロイヤルアーマー', price:50000, limit:1, today:false, type:'equip', desc:'DEF+30 MDEF+20  特殊: クリティカル抵抗+10%' },
   { key:'luckyRing',    name:'幸運の指輪',       price:50000,  limit:1, today:false, type:'equip', desc:'全能力値+10  特殊: 回避率+5%（重複不可）' },
-  { key:'gamblerProof', name:'ギャンブラーの証', price:100000, limit:1, today:false, type:'keyitem', desc:'ギャンブラーに転職できる証' },
+  { key:'gamblerProof', name:'ギャンブラーの証', price:100000, limit:1, today:false, type:'keyitem', desc:'ギャンブラーに転職できる証。1度きりの交換。' },
 ]
 const SORTIE_WAIT = 30 // 賭博場出撃のクールダウン秒（通常出撃と共通のlast_action_atで管理）
 // EXP凍結中か（手動のexp_frozen、または期限付きのexp_frozen_until）
@@ -990,7 +990,7 @@ export default function Casino() {
                       <div style={{ color:'#ffaa00', fontSize:'11px', marginTop:'2px' }}>🎫 {p.price.toLocaleString()}</div>
                       {p.desc && <div style={{ color:'#557799', fontSize:'10px', marginTop:'2px' }}>{p.desc}</div>}
                       <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>
-                        {p.type==='equip' ? '1度きりの交換' : `本日 残り${remain}/${p.limit}個`}
+                        {(p.type==='equip' || p.type==='keyitem') ? '1度きりの交換' : `本日 残り${remain}/${p.limit}個`}
                       </div>
                     </div>
                     <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
