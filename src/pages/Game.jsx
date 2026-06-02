@@ -348,8 +348,10 @@ const getTotalRank = (total) => {
 
 export const calcExpNext = (lv) => {
   const lvInBlock = (lv - 1) % 100
-  const tier = Math.floor(lvInBlock / 10)
-  return 100 + tier * 10
+  if (lvInBlock < 9)  return 80   // LV1〜9
+  if (lvInBlock < 29) return 100  // LV10〜29
+  if (lvInBlock < 59) return 120  // LV30〜59
+  return 140                      // LV60〜100
 }
 
 const WEAPON_TYPE_GROUP = {
@@ -1162,7 +1164,11 @@ export default function Game() {
     const _allClassBonus = Object.fromEntries(_statKeys.map(k => [k, 0]))
     for (const clRow of (Array.isArray(cl) ? cl : [])) {
       const b = calcLvBonus(clRow.class_name, clRow.lv)
-      for (const k of _statKeys) _allClassBonus[k] += (b[k] || 0)
+      const isCurrentClass = clRow.class_name === data.class
+      const retrainCount = (data.retraining || {})[clRow.class_name] || 0
+      // 現在クラス: 100%　非現在クラス: 50% + 再修練★×10%（最大100%）
+      const rate = isCurrentClass ? 1.0 : Math.min(1.0, 0.5 + retrainCount * 0.1)
+      for (const k of _statKeys) _allClassBonus[k] += Math.floor((b[k] || 0) * rate)
     }
     const _spent = data.stat_point_spent || {}
     // リトレーニングごとにLV20分のボーナスを永続付与
@@ -1180,8 +1186,10 @@ export default function Game() {
       mdef:   _base.mdef  + _allClassBonus.mdef   + (_spent.mdef||0)     + _rtBonus.mdef,
       spd:    _base.spd   + _allClassBonus.spd    + (_spent.spd  ||0)    + _rtBonus.spd,
     }
+    // exp_nextも現在のLVから再計算して同期
+    _computed.exp_next = calcExpNext(data.lv)
     // DBにも書き戻す（Profile・Rankingページが正しい値を読めるようにする）
-    const _needsUpdate = _statKeys.some(k => data[k] !== _computed[k])
+    const _needsUpdate = [..._statKeys, 'exp_next'].some(k => data[k] !== _computed[k])
     if (_needsUpdate) {
       await supabase.from('profiles').update(_computed).eq('id', user.id)
     }
