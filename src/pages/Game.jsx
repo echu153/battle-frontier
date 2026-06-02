@@ -795,7 +795,7 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     case '氷の障壁':    result.newPlayerBuffs.dmgReduce={turns:2,rate:0.6}; result.newPlayerBuffs.critResist={turns:2,value:20}; result.log = `❄ 氷の障壁！ 2ターンの間、受けるダメージ大幅軽減・クリティカル抵抗UP！`; break
     case 'メテオストライク': {
       const rand = Math.random()*100
-      const hits = rand < 20 ? 1 : rand < 60 ? 2 : rand < 90 ? 3 : 4
+      const hits = rand < 10 ? 1 : rand < 50 ? 2 : rand < 90 ? 3 : 4
       let meteoBurned = false
       const hitDmgs = []
       for (let h = 0; h < hits; h++) {
