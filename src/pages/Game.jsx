@@ -665,12 +665,9 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       result.dmg = Math.floor(eff.atk*1.8*am)
       if (playerBuffs.berserk?.turns > 0) {
         result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}の物理ダメージ！（狂乱中）`
-      } else if (!playerBuffs.berserkUsed) {
-        result.newPlayerBuffs.berserk = { turns:3, lockedSkill:'マッドラッシュ' }
-        result.newPlayerBuffs.berserkUsed = true
-        result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}の物理ダメージ！ 狂乱状態になった！`
       } else {
-        result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}の物理ダメージ！`
+        result.newPlayerBuffs.berserk = { turns:3, lockedSkill:'マッドラッシュ' }
+        result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}の物理ダメージ！ 狂乱状態になった！`
       }
       break
     }
@@ -1970,8 +1967,14 @@ export default function Game() {
       if (playerHp <= 0) break
 
       // バフ/デバフのターン減少
+      const berserkWasActive = playerBuffs.berserk?.turns > 0
       Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns > 0) playerBuffs[k].turns-- })
       Object.keys(enemyBuffs).forEach(k =>  { if (enemyBuffs[k]?.turns  > 0) enemyBuffs[k].turns-- })
+      // 狂乱解除時：skillIndexをマッドラッシュの次に進める
+      if (berserkWasActive && playerBuffs.berserk?.turns === 0 && expandedSkillSet.length > 0) {
+        const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk.lockedSkill)
+        if (lockedIdx >= 0) skillIndex = lockedIdx + 1
+      }
       // オールイン：バフ期間終了後にデバフ移行
       if (playerBuffs.allinActive?.turns === 0) {
         delete playerBuffs.allinActive
