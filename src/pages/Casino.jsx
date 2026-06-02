@@ -14,7 +14,8 @@ const PRIZES = [
   { key:'goldBlade', name:'ゴールドブレード', price:50000, limit:1, today:false, type:'equip', desc:'ATK+30 DEF+10 MDEF+10  特殊: クリティカル確率+5%' },
   { key:'fortuneRod',name:'フォーチュンロッド',price:50000, limit:1, today:false, type:'equip', desc:'MATK+40 MDEF+10  特殊: クリティカル確率+5%' },
   { key:'royalArmor',name:'ロイヤルアーマー', price:50000, limit:1, today:false, type:'equip', desc:'DEF+30 MDEF+20  特殊: クリティカル抵抗+10%' },
-  { key:'luckyRing', name:'幸運の指輪',       price:50000, limit:1, today:false, type:'equip', desc:'全能力値+10  特殊: 回避率+5%（重複不可）' },
+  { key:'luckyRing',    name:'幸運の指輪',       price:50000,  limit:1, today:false, type:'equip', desc:'全能力値+10  特殊: 回避率+5%（重複不可）' },
+  { key:'gamblerProof', name:'ギャンブラーの証', price:100000, limit:1, today:false, type:'keyitem', desc:'ギャンブラーに転職できる証' },
 ]
 const SORTIE_WAIT = 30 // 賭博場出撃のクールダウン秒（通常出撃と共通のlast_action_atで管理）
 // EXP凍結中か（手動のexp_frozen、または期限付きのexp_frozen_until）
@@ -128,8 +129,11 @@ export default function Casino() {
     if (data) { setDailyNet(data.net || 0); setDailyCounts(data.counts || {}) }
   }
 
-  const equipPrizeOwned = (prize) =>
-    prize.type === 'equip' && playerEquipment.some(pe => pe.weapons?.name === prize.name)
+  const equipPrizeOwned = (prize) => {
+    if (prize.type === 'equip') return playerEquipment.some(pe => pe.weapons?.name === prize.name)
+    if (prize.type === 'keyitem') return playerItems.some(pi => pi.items?.effect === 'gambler_proof' && (pi.quantity||0) > 0)
+    return false
+  }
 
   const exchangePrize = async (prize) => {
     if (loading) return

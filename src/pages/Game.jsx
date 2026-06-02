@@ -221,6 +221,7 @@ export const JOB_GROWTH = {
   'サイキッカー':{ hp:10, mp:5, atk:2, def:1, matk:2, mdef:1, spd:2 },
   '体術師':    { hp:20, mp:5,  atk:2, def:1, matk:1, mdef:1, spd:2 },
   '魔銃士':    { hp:10, mp:5,  atk:2, def:1, matk:2, mdef:1, spd:2 },
+  'ギャンブラー':{ hp:10, mp:10, atk:1, def:2, matk:1, mdef:2, spd:1 },
 }
 
 export const JOB_LEVEL3_BONUS = {}
@@ -239,6 +240,7 @@ const ADVANCED_CLASSES = {
   'サイキッカー': { requires:'格闘家' },
   '体術師':    { requires:'格闘家' },
   '魔銃士':    { requires:'弓使い', requiresLv:50, requires2:'魔法使い', requires2Lv:50 },
+  'ギャンブラー':{ requiresItem:'gambler_proof' },
 }
 
 const CLASS_LEVEL_CAP = {
@@ -246,6 +248,7 @@ const CLASS_LEVEL_CAP = {
   '侍':100, '狂戦士':100, '狩人':100, '暗殺者':100,
   '元素使い':100, '死霊使い':100, '聖職者':100, '異端審問官':100, '賢者':100,
   'サイキッカー':100, '体術師':100, '魔銃士':100,
+  'ギャンブラー':100,
 }
 export const getEffectiveCap = (className) => CLASS_LEVEL_CAP[className] || 100
 
@@ -881,6 +884,34 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       result.dmg = Math.floor((eff.atk*1.0+eff.matk*1.0)*am*cannonMult)
       result.log = `🔫 キャノネスチュームビンド！ ${enemy.name}に${result.dmg}の特殊ダメージ！${cannonMult>1.0?' 連続使用で威力上昇！':''}`; break
     }
+    // ── ギャンブラー ──
+    case 'ジャグリング': {
+      const h1=Math.floor((eff.atk*0.2+eff.matk*0.2)*am*r()), h2=Math.floor((eff.atk*0.2+eff.matk*0.2)*am*r()), h3=Math.floor((eff.atk*0.2+eff.matk*0.2)*am*r())
+      result.dmg = h1+h2+h3
+      result.log = `🎭 ジャグリング！ ${enemy.name}に${h1}、${h2}、${h3}の混合ダメージ！`; break
+    }
+    case 'ラッキーダイス': {
+      const statVal = Math.max(eff.atk, eff.matk)
+      const roll = 0.7 + Math.random() * 1.3
+      result.dmg = Math.floor(statVal * roll * am)
+      result.log = `🎲 ラッキーダイス！ ${enemy.name}に${result.dmg}のダメージ！（${roll.toFixed(2)}倍）`; break
+    }
+    case 'ギャンブルボディ': result.log = `🎭 ギャンブルボディ【パッシブ】 被ダメージがランダムに変動（常時自動発動）`; break
+    case 'オールイン': {
+      if (playerBuffs.allinDebuff?.turns > 0) { result.log = `💸 オールイン！ 反動中のため使用できない！`; break }
+      result.newPlayerBuffs.atkUp = { turns:4, rate:1.5 }
+      result.newPlayerBuffs.matkUp = { turns:4, rate:1.5 }
+      result.newPlayerBuffs.spdUp = { turns:4, rate:1.5 }
+      result.newPlayerBuffs.dmgReduce = { turns:4, rate:0.67 }
+      result.newPlayerBuffs.allinActive = { turns:4 }
+      result.log = `💸 オールイン！ 4ターンの間、全ステータスが大幅上昇！`; break
+    }
+    case 'ジャックポット': {
+      result.dmg = Math.floor((eff.atk + eff.matk) * am)
+      const jackpot = Math.random()*100 < 5
+      if (jackpot) result.dmg *= 2
+      result.log = `🎰 ジャックポット！ ${enemy.name}に${result.dmg}のダメージ！${jackpot ? ' 💥 JACKPOT！ ダメージ2倍！！' : ''}`; break
+    }
     default: result.dmg = Math.max(1,eff.atk*am); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
   }
   // パピアは状態異常・ステータス減少免疫
@@ -1028,6 +1059,7 @@ export default function Game() {
   const [proficiency, setProficiency] = useState([])
   const [classLevels, setClassLevels] = useState([])
   const [templeMessage, setTempleMessage] = useState('')
+  const [hasGamblerProof, setHasGamblerProof] = useState(false)
   const [skillSets, setSkillSets] = useState([])
   const [playerItem, setPlayerItem] = useState(null)
   // 種類ごとの当日選択回数。読み込み完了まではlimit(=disabled)で初期化
@@ -1096,12 +1128,14 @@ export default function Game() {
   const fetchProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
-    const [{ data }, { data: cl }] = await Promise.all([
+    const [{ data }, { data: cl }, { data: gpCheck }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('class_levels').select('*').eq('player_id', user.id),
+      supabase.from('player_items').select('id, items!inner(effect)').eq('player_id', user.id).eq('items.effect', 'gambler_proof').maybeSingle(),
     ])
     if (!data) { nav('/create'); return }
     if (Array.isArray(cl)) setClassLevels(cl)
+    setHasGamblerProof(!!gpCheck)
     // クラス成長分を毎回再計算してステータスを上書き（JOB_GROWTH変更が全員に反映される）
     // 全クラスのレベルアップ分を合算する（転職で積み上げたステータスも反映）
     const _base = getBaseClassStats(data.class)
@@ -1558,6 +1592,7 @@ export default function Game() {
     const passiveMpCostMult  = hasTenki ? 0.9 : 1.0
     const passiveMatkMultTenki = hasTenki ? 1.1 : 1.0
     const passiveHitBonus    = (hasRokkan ? 5 : 0) + (hasSeimitsu ? 5 : 0)
+    const hasGambleBody      = passiveNames.includes('ギャンブルボディ')
 
     if (isBossEncounter && currentItem && currentItem.items.effect === 'boss_avoid') {
       logs.push({ text:`🧿 魔よけのお守りが光り、ボスとの戦闘を避けた！`, color:'#cc44ff' })
@@ -1661,7 +1696,8 @@ export default function Game() {
             if (sType === '物理攻撃') defScale = effBuff.atk  / (effBuff.atk  + adjED)
             else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + adjEMD)
           }
-          let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * (0.9 + Math.random() * 0.2))
+          const allinDebuffOutMult = playerBuffs.allinDebuff?.turns > 0 ? 0.7 : 1.0
+          let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * (0.9 + Math.random() * 0.2))
           if (enemy.isPapia && res.dmg > 0) finalDmg = 1
           const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
@@ -1673,6 +1709,13 @@ export default function Game() {
           enemyHp -= finalDmg
           const healAmt = Math.floor(res.heal * passiveHealMult)
           playerHp = Math.min(profile.hp_max, playerHp + healAmt)
+          // オールインデバフ中はバフ系スキルを無効化
+          if (playerBuffs.allinDebuff?.turns > 0) {
+            const blockedKeys = ['atkUp','matkUp','spdUp','dmgReduce','regenHeal','hitBonus','evasion','bloodRage','statusImmune']
+            const hadBuff = blockedKeys.some(k => res.newPlayerBuffs[k] !== playerBuffs[k] && res.newPlayerBuffs[k] !== undefined)
+            for (const k of blockedKeys) { if (res.newPlayerBuffs[k] !== playerBuffs[k]) res.newPlayerBuffs[k] = playerBuffs[k] }
+            if (hadBuff) logs.push({ text:`💸 オールインの反動中！ バフが効かない！`, color:'#ff4444' })
+          }
           playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
           const critText = finalCrit ? ' 💥クリティカル！' : ''
           logs.push({ text:`${prefix}${resLog}${critText}`, color:finalCrit?'#ff4444':'#88ccff' })
@@ -1728,7 +1771,9 @@ export default function Game() {
       const enemyDmgDownRate = enemyBuffs.dmgDown?.turns > 0 ? enemyBuffs.dmgDown.rate : 1.0
       // ③プレイヤーDEFランクによるボーナス軽減
       const playerDefRankReduction = calcDefReduction(isEM ? eff.mdef : eff.def)
-      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*(0.9+Math.random()*0.2))
+      const gambleBodyMult = hasGambleBody ? (0.7 + Math.random() * 0.6) : 1.0
+      const allinDebuffInMult = playerBuffs.allinDebuff?.turns > 0 ? 1.3 : 1.0
+      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*(0.9+Math.random()*0.2))
       playerHp -= finalDmg
       if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
@@ -1921,6 +1966,14 @@ export default function Game() {
       // バフ/デバフのターン減少
       Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns > 0) playerBuffs[k].turns-- })
       Object.keys(enemyBuffs).forEach(k =>  { if (enemyBuffs[k]?.turns  > 0) enemyBuffs[k].turns-- })
+      // オールイン：バフ期間終了後にデバフ移行
+      if (playerBuffs.allinActive?.turns === 0) {
+        delete playerBuffs.allinActive
+        delete playerBuffs.atkUp; delete playerBuffs.matkUp; delete playerBuffs.spdUp; delete playerBuffs.dmgReduce
+        playerBuffs.allinDebuff = { turns:2, rate:0.7 }
+        logs.push({ text:`💸 オールインの効果が切れた！ 2ターンの間全ステータスが低下し、バフが使えない！`, color:'#ff4444' })
+        setBattleLogs([...logs])
+      }
       if (bossHealCooldown > 0) bossHealCooldown--
       turn++
     }
@@ -2639,6 +2692,33 @@ export default function Game() {
           </div>
           )
         })}
+      </div>
+      <div style={{ color:'#ffcc00', fontSize:'11px', marginBottom:'6px' }}>── 証明書職（アイテムで解放）──</div>
+      <div style={{ marginBottom:'12px' }}>
+        {(() => {
+          const isCurrent = profile.class === 'ギャンブラー'
+          const cl = classLevels.find(x=>x.class_name==='ギャンブラー')
+          const canChange = !isCurrent && hasGamblerProof
+          return (
+            <div style={{ border:`1px solid ${isCurrent?'#445566':canChange?'#886600':'#002244'}`, background:isCurrent?'#001828':'#001028', padding:'8px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <div>
+                  <div style={{ color:isCurrent?'#88aabb':canChange?'#ffcc00':'#446688', fontSize:'12px' }}>
+                    ギャンブラー{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}
+                  </div>
+                  <div style={{ color: hasGamblerProof?'#44ff88':'#446688', fontSize:'10px' }}>
+                    {hasGamblerProof ? '🎫 ギャンブラーの証：所持' : '🔒 ギャンブラーの証が必要（賭博場の景品）'}
+                  </div>
+                  <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{cl?cl.lv:1}/{getEffectiveCap('ギャンブラー')}</div>
+                </div>
+                <button onClick={()=>setPendingClassChange('ギャンブラー')} disabled={isCurrent||!canChange||loading}
+                  style={{ padding:'4px 8px', background:isCurrent?'#001':canChange?'#1a1000':'#001', border:`1px solid ${isCurrent?'#334455':canChange?'#886600':'#002244'}`, color:isCurrent?'#334455':canChange?'#ffcc00':'#334455', cursor:isCurrent||!canChange?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                  {isCurrent?'現在':'転職'}
+                </button>
+              </div>
+            </div>
+          )
+        })()}
       </div>
       <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 街に戻る</button>
     </div>
