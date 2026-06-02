@@ -829,17 +829,17 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     }
     // ── サイキッカー ──
     case 'サイコショット': {
-      result.dmg = Math.max(1, Math.floor((eff.atk*1.0+eff.matk*0.3)*am) - calcMinDef())
+      result.dmg = Math.floor((eff.atk*1.0+eff.matk*0.3)*am)
       result.log = `🔮 サイコショット！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
     case 'マインドブレイク': {
-      result.dmg = Math.max(1, Math.floor((eff.atk*1.0+eff.matk*0.5)*am) - calcMinDef())
+      result.dmg = Math.floor((eff.atk*1.0+eff.matk*0.5)*am)
       result.log = `🔮 マインドブレイク！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
     case '第六感':    result.log = `🔮 第六感【パッシブ】 命中率+5%（常時自動発動）`; break
     case '精神集中': result.newPlayerBuffs.atkUp={turns:2,rate:1.6}; result.newPlayerBuffs.matkUp={turns:2,rate:1.6}; result.log = `🔮 精神集中！ 2ターンの間、攻撃力・特殊攻撃力が大幅上昇！`; break
     case 'サイコブラスト': {
-      result.dmg = Math.max(1, Math.floor((eff.atk*1.5+eff.matk*0.7)*am) - calcMinDef())
+      result.dmg = Math.floor((eff.atk*1.5+eff.matk*0.7)*am)
       result.log = `🔮 サイコブラスト！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
     // ── 体術師 ──
@@ -861,11 +861,11 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     }
     // ── 魔銃士 ──
     case '魔弾': {
-      result.dmg = Math.max(1, Math.floor((eff.atk*0.7+eff.matk*0.7)*am) - calcMinDef())
+      result.dmg = Math.floor((eff.atk*0.7+eff.matk*0.7)*am)
       result.log = `🔫 魔弾！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
     case '連装銃撃': {
-      const gs = Array.from({length:4}, ()=>Math.max(1, Math.floor((eff.atk*0.2+eff.matk*0.2)*am*r()) - Math.floor(calcMinDef()/4)))
+      const gs = Array.from({length:4}, ()=>Math.floor((eff.atk*0.2+eff.matk*0.2)*am*r()))
       result.dmg = gs.reduce((a,b)=>a+b,0)
       result.log = `🔫 連装銃撃！ ${enemy.name}に${gs.map(d=>`${d}の特殊ダメージ`).join('！')}！`; break
     }
@@ -873,7 +873,7 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     case '強化装填':   result.newPlayerBuffs.atkUp={turns:3,rate:1.5}; result.newPlayerBuffs.matkUp={turns:3,rate:1.5}; result.log = `🔫 強化装填！ 3ターンの間、攻撃力・特殊攻撃力が大幅上昇！`; break
     case 'キャノネスチュームビンド': {
       const cannonMult = prevSkill === 'キャノネスチュームビンド' ? 1.1 : 1.0
-      result.dmg = Math.max(1, Math.floor((eff.atk*1.0+eff.matk*1.0)*am*cannonMult) - calcMinDef())
+      result.dmg = Math.floor((eff.atk*1.0+eff.matk*1.0)*am*cannonMult)
       result.log = `🔫 キャノネスチュームビンド！ ${enemy.name}に${result.dmg}の特殊ダメージ！${cannonMult>1.0?' 連続使用で威力上昇！':''}`; break
     }
     default: result.dmg = Math.max(1,eff.atk*am); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
