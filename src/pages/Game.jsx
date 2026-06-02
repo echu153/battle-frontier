@@ -333,7 +333,7 @@ const calcTotal = (p) => Math.floor((p.hp_max/10)+(p.mp_max/5)+p.atk+p.def+p.mat
 // EXP凍結中か（手動のexp_frozen、または期限付きのexp_frozen_until）
 const expIsFrozen = (p) => !!(p && (p.exp_frozen || (p.exp_frozen_until && new Date(p.exp_frozen_until) > new Date())))
 // オートクリッカー検知：直近サンプル数と、間隔のばらつき許容幅(ms)
-const AUTOCLICK_SAMPLES = 90  // 約15分相当（通常出撃CD10秒 × 90回）連続で規則的ならBOT確認
+const AUTOCLICK_SAMPLES = 60  // 約10分相当（通常出撃CD10秒 × 60回）連続で規則的ならBOT確認
 const AUTOCLICK_SPREAD_MS = 1000
 
 const getTotalRank = (total) => {
@@ -1083,7 +1083,6 @@ export default function Game() {
   const [seenAnnouncementIds, setSeenAnnouncementIds] = useState(() => {
     try { return JSON.parse(localStorage.getItem('bf_seenAnnouncements') || '[]') } catch { return [] }
   })
-  const expTrackerRef = useRef({ start: null, total: 0 })
   const battleCountTrackerRef = useRef({ start: null, count: 0 })
   const sortieTimesRef = useRef([])  // オートクリッカー検知：出撃時刻の履歴
   const botCheckTimerRef = useRef(null)  // BOT確認チャレンジの60秒タイマー
@@ -1987,25 +1986,6 @@ export default function Game() {
       : Math.floor(Math.random()*4)+8
     const goldGained = (win && !papiaEscaped) ? (enemy.gold||0) : 0
 
-    // 不正検知：デイリーダンジョン・パピア以外で1分間に100EXP以上取得→12時間BAN
-    if (!isPapiaEncounter && expGained > 0) {
-      const now = Date.now()
-      const tracker = expTrackerRef.current
-      if (!tracker.start || now - tracker.start > 60000) {
-        expTrackerRef.current = { start: now, total: expGained }
-      } else {
-        expTrackerRef.current = { ...tracker, total: tracker.total + expGained }
-      }
-      if (expTrackerRef.current.total >= 100) {
-        const banUntil = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString()
-        await supabase.from('profiles').update({ battle_ban_until: banUntil }).eq('id', profile.id)
-        expTrackerRef.current = { start: null, total: 0 }
-        setBattleLogs([{ text:`⛔ 異常な行動が検出されました。12時間の出撃禁止が適用されました。`, color:'#ff4444' }])
-        await fetchProfile()
-        setLoading(false)
-        return
-      }
-    }
 
     if (!papiaEscaped) {
       if (win) {
