@@ -1310,25 +1310,20 @@ export default function Game() {
 
   const useExpDungeonTicket = async () => {
     if (loading || !expDungeonTicket) return
-    if (dungeonCounts.exp <= 0) { setBattleLogs([{ text:'経験値ダンジョンの残り回数がすでに最大です', color:'#ff8844' }]); return }
     setLoading(true)
-    const today = new Date().toLocaleDateString('ja-JP',{timeZone:'Asia/Tokyo'}).replace(/\//g,'-')
-    // dungeon_attemptsのcnt_expを1減らす
-    const { data: da } = await supabase.from('dungeon_attempts').select('*').eq('player_id', profile.id).eq('date', today).single()
-    if (da) {
-      const newCnt = Math.max(0, (da.cnt_exp || 0) - 1)
-      await supabase.from('dungeon_attempts').update({ cnt_exp: newCnt }).eq('id', da.id)
-      setDungeonCounts(prev => ({ ...prev, exp: newCnt }))
+    const { data, error } = await supabase.rpc('use_exp_dungeon_ticket', { p_player_id: profile.id })
+    if (error || !data?.ok) {
+      setBattleLogs([{ text:`📜 ${data?.error || '使用できませんでした'}`, color:'#ff8844' }])
+      setScene('battle')
+      setLoading(false)
+      return
     }
-    // チケットを1枚消費
-    const newQty = expDungeonTicket.quantity - 1
-    if (newQty <= 0) {
-      await supabase.from('player_items').delete().eq('id', expDungeonTicket.id)
-      setExpDungeonTicket(null)
-    } else {
-      await supabase.from('player_items').update({ quantity: newQty }).eq('id', expDungeonTicket.id)
-      setExpDungeonTicket({ ...expDungeonTicket, quantity: newQty })
-    }
+    // 残り枚数をstateに反映
+    const remaining = data.remaining_tickets
+    if (remaining <= 0) setExpDungeonTicket(null)
+    else setExpDungeonTicket(prev => ({ ...prev, quantity: remaining }))
+    // ダンジョン回数を更新
+    setDungeonCounts(prev => ({ ...prev, exp: Math.max(0, prev.exp - 1) }))
     setBattleLogs([{ text:'📜 経験値ダンジョン使用回数券を使用！ 挑戦回数が1回回復した！', color:'#cc44ff' }])
     setScene('battle')
     setLoading(false)
