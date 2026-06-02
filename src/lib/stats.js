@@ -82,12 +82,27 @@ const applyGemBonus = (item, acc) => {
 }
 
 // 熟練度ボーナス：武器の固定ボーナス各種に倍率をかける
-// 倍率 = LV×1% + floor(LV/100)×50%（LV300で+450%）
+// LV1〜300:   LV×1% + floor(LV/100)×50%（LV300で450%）
+// LV301〜499: +1%/10LV
+// LV500〜999: +1%/20LV
+// LV1000〜:   +1%/100LV
 // 対象：atk/def/matk/mdef/spd/hp/mp の固定ボーナスのみ（%ボーナスは対象外）
 export const calcProfBonus = (prof, weapon) => {
   if (!prof || !weapon) return {}
   const profLv = prof.prof_lv || 0
-  const rate = profLv * 0.01 + Math.floor(profLv/100) * 0.5
+  let rate
+  if (profLv <= 300) {
+    rate = profLv * 0.01 + Math.floor(profLv / 100) * 0.5
+  } else {
+    const base = 300 * 0.01 + Math.floor(300 / 100) * 0.5  // 4.5
+    const lv300 = Math.min(profLv, 500) - 300
+    const lv500 = Math.max(0, Math.min(profLv, 1000) - 500)
+    const lv1000 = Math.max(0, profLv - 1000)
+    rate = base
+      + Math.floor(lv300 / 10)  * 0.01
+      + Math.floor(lv500 / 20)  * 0.01
+      + Math.floor(lv1000 / 100) * 0.01
+  }
   if (rate <= 0) return {}
   const result = {}
   const atk  = Math.floor((weapon.atk_bonus ||0) * rate); if (atk  > 0) result.atk  = atk

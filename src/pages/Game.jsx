@@ -360,18 +360,31 @@ const WEAPON_TYPE_GROUP = {
 const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'
 
 const getProfPrefix = (profLv) => {
-  if (profLv >= 300) return '【極】'
-  if (profLv >= 200) return '【真】'
-  if (profLv >= 100) return '【改】'
+  if (profLv >= 1000) return '【神】'
+  if (profLv >= 500)  return '【覇】'
+  if (profLv >= 300)  return '【極】'
+  if (profLv >= 200)  return '【真】'
+  if (profLv >= 100)  return '【改】'
   return ''
 }
 
-// 熟練度ボーナス：物理武器→ATK / 特殊武器→MATK
-// 上昇値 = floor(元ステータス × (LV×1% + floor(LV/100)×50%))
+// 熟練度ボーナス（stats.jsと同一ロジック）
 const calcProfBonus = (prof, weapon) => {
   if (!prof || !weapon) return {}
   const profLv = prof.prof_lv || 0
-  const rate = profLv * 0.01 + Math.floor(profLv/100) * 0.5
+  let rate
+  if (profLv <= 300) {
+    rate = profLv * 0.01 + Math.floor(profLv / 100) * 0.5
+  } else {
+    const base = 4.5
+    const lv300 = Math.min(profLv, 500) - 300
+    const lv500 = Math.max(0, Math.min(profLv, 1000) - 500)
+    const lv1000 = Math.max(0, profLv - 1000)
+    rate = base
+      + Math.floor(lv300 / 10)   * 0.01
+      + Math.floor(lv500 / 20)   * 0.01
+      + Math.floor(lv1000 / 100) * 0.01
+  }
   if (rate <= 0) return {}
   const result = {}
   const atk  = Math.floor((weapon.atk_bonus ||0) * rate); if (atk  > 0) result.atk  = atk
@@ -1382,8 +1395,8 @@ export default function Game() {
         if (prof) {
           let totalExp = prof.prof_exp + profGained
           let newProfLv = prof.prof_lv
-          while (totalExp >= 100 && newProfLv < 300) { totalExp -= 100; newProfLv++ }
-          if (newProfLv >= 300) totalExp = 0
+          while (totalExp >= 100) { totalExp -= 100; newProfLv++ }
+
           await supabase.from('proficiency').update({ prof_exp:totalExp, prof_lv:newProfLv }).eq('id', prof.id)
           if (newProfLv > prof.prof_lv) logs.push({ text:`⚔ 武器熟練度UP！ ${getProfPrefix(newProfLv)}${eqWeapon.weapons.name} LV${newProfLv}`, color:'#aa44ff' })
           logs.push({ text:`⚔ 武器熟練度 +${profGained}`, color:'#aa44ff' })
