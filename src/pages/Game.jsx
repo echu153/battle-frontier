@@ -1547,7 +1547,7 @@ export default function Game() {
     const hasTosoHonno  = passiveNames.includes('闘争本能')
 
     const passiveCritBonus   = hasShingan ? 5 : 0
-    const passiveDmgMult     = (hasShingan ? 1.05 : 1.0) * (hasBerserk ? 1.2 : 1.0) * (hasKakushin ? 1.1 : 1.0)
+    const passiveDmgMult     = (hasShingan ? 1.05 : 1.0) * (hasBerserk ? 1.1 : 1.0) * (hasKakushin ? 1.1 : 1.0) * (hasRokkan ? 1.05 : 1.0)
     const passiveHealMult    = (hasShinkoka ? 1.2 : 1.0) * (hasKakushin ? 0.7 : 1.0)
     const passiveMatkMult    = hasShinkoka ? 1.1 : 1.0
     const passiveMpCostMult  = hasTenki ? 0.9 : 1.0
@@ -1640,7 +1640,8 @@ export default function Game() {
         if (cs && cs.skills && playerMp >= mpCost) {
           playerMp -= mpCost
           const hasGensoKyomei = passiveNames.includes('元素共鳴')
-          const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? 1.1 : 1.0
+          const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? 1.15 : 1.0
+          const seimitsuMult = (hasSeimitsu && prevSkillName && prevSkillName === cs.skills.name) ? 1.1 : 1.0
           prevSkillName = cs.skills.name
           const res = executeSkill(cs.skills, {...effBuff, lastMpCost:mpCost}, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
           const finalCrit = res.dmg > 0 && (isCrit || (res.bonusCritRate > 0 && Math.random()*100 < playerCritRate + res.bonusCritRate))
@@ -1655,7 +1656,7 @@ export default function Game() {
             if (sType === '物理攻撃') defScale = effBuff.atk  / (effBuff.atk  + adjED)
             else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + adjEMD)
           }
-          let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * (0.9 + Math.random() * 0.2))
+          let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * (0.9 + Math.random() * 0.2))
           if (enemy.isPapia && res.dmg > 0) finalDmg = 1
           const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
@@ -1724,6 +1725,7 @@ export default function Game() {
       const playerDefRankReduction = calcDefReduction(isEM ? eff.mdef : eff.def)
       const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*(0.9+Math.random()*0.2))
       playerHp -= finalDmg
+      if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
       const critText = isCrit ? ' 💥クリティカル！' : ''
       logs.push({ text:`${prefix}${enemy.name}の攻撃！ あなたに${finalDmg}ダメージ…${critText}`, color:isCrit?'#ff2200':'#ff6644' })
@@ -1763,8 +1765,8 @@ export default function Game() {
 
     while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
       if (passiveNames.includes('骸の壁') && (turn === 1 || turn % 5 === 0)) {
-        playerBuffs.dmgReduce = { turns:1, rate:0.7 }
-        logs.push({ text:`💀 骸の壁発動！ このターン受けるダメージ-30%！`, color:'#cc44ff' })
+        playerBuffs.dmgReduce = { turns:999, rate:0.7, isGainoKabe:true }
+        logs.push({ text:`💀 骸の壁発動！ 次に攻撃を受けるまで被ダメ-30%！`, color:'#cc44ff' })
       }
       // --- 状態異常ターン開始処理 ---
       // 敵への持続ダメージ
