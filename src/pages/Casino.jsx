@@ -965,6 +965,7 @@ export default function Casino() {
               交換上限は毎日午前5時にリセット。<br/>
               <span style={{color:'#44ff88'}}>当日獲得</span>マークの景品は「その日にゲームで稼いだメダル」が必要です（両替分は対象外）。
             </div>
+            <div style={{ textAlign:'left' }}>
             {PRIZES.map(p => {
               const used = dailyCounts[p.key] || 0
               const remain = p.limit - used
@@ -998,6 +999,7 @@ export default function Casino() {
                 </div>
               )
             })}
+            </div>
           </div>
         )}
 
