@@ -1119,6 +1119,11 @@ export default function Game() {
       mdef:   _base.mdef  + _allClassBonus.mdef   + (_spent.mdef||0)     + _rtBonus.mdef,
       spd:    _base.spd   + _allClassBonus.spd    + (_spent.spd  ||0)    + _rtBonus.spd,
     }
+    // DBにも書き戻す（Profile・Rankingページが正しい値を読めるようにする）
+    const _needsUpdate = _statKeys.some(k => data[k] !== _computed[k])
+    if (_needsUpdate) {
+      await supabase.from('profiles').update(_computed).eq('id', user.id)
+    }
     setProfile({ ...data, ..._computed })
     setPendingPoints(data.pending_stat_points || 0)
     // selectedAreaがこのアカウントで解放済みかチェック（別アカウントのlocalStorage値を弾く）
