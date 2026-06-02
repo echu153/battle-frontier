@@ -64,7 +64,7 @@ export default function Casino() {
   const [playerItems, setPlayerItems] = useState([])
   const [sortieArea, setSortieArea] = useState(1)
   const [sortiePending, setSortiePending] = useState({ count:0, exp:0, gold:0, drops:[] })
-  const DEV_ACCOUNTS = ['おれおれお']
+  const DEV_ACCOUNTS = []  // 停止・BAN対象外アカウント（現在なし。おれおれおも対象に含める）
   const sortieTimesRef = useRef([])     // オートクリッカー検知：簡易出撃時刻の履歴
   const sortieStreakRef = useRef(0)     // カジノで遊ばず簡易出撃が連続した回数
   const [botCheck, setBotCheck] = useState(null)  // BOT確認チャレンジ {top,left} or null

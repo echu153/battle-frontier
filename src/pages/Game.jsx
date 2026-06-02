@@ -1332,7 +1332,7 @@ export default function Game() {
     setLoading(false)
   }
 
-  const DEV_ACCOUNTS = ['おれおれお']
+  const DEV_ACCOUNTS = []  // 停止・BAN対象外アカウント（現在なし。おれおれおも対象に含める）
   const suspendAccount = async (reason) => {
     if (DEV_ACCOUNTS.includes(profile.username)) return  // 開発用アカウントはBAN対象外
     await supabase.from('profiles').update({
