@@ -1084,6 +1084,7 @@ export default function Game() {
   const [hasGamblerProof, setHasGamblerProof] = useState(false)
   const [skillSets, setSkillSets] = useState([])
   const [playerItem, setPlayerItem] = useState(null)
+  const [expDungeonTicket, setExpDungeonTicket] = useState(null)  // { id, quantity }
   // 種類ごとの当日選択回数。読み込み完了まではlimit(=disabled)で初期化
   const [dungeonCounts, setDungeonCounts] = useState({ exp:DUNGEON_DAILY_LIMIT, gold:DUNGEON_DAILY_LIMIT, stone:DUNGEON_DAILY_LIMIT, prof:DUNGEON_DAILY_LIMIT, gem:DUNGEON_DAILY_LIMIT })
   const [showDungeonPanel, setShowDungeonPanel] = useState(false)
@@ -1149,11 +1150,13 @@ export default function Game() {
   const fetchProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
-    const [{ data }, { data: cl }, { data: gpCheck }] = await Promise.all([
+    const [{ data }, { data: cl }, { data: gpCheck }, { data: ticketRow }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('class_levels').select('*').eq('player_id', user.id),
       supabase.from('player_items').select('id, items!inner(effect)').eq('player_id', user.id).eq('items.effect', 'gambler_proof').maybeSingle(),
+      supabase.from('player_items').select('id, quantity, items!inner(effect)').eq('player_id', user.id).eq('items.effect', 'exp_dungeon_ticket').maybeSingle(),
     ])
+    setExpDungeonTicket(ticketRow ? { id: ticketRow.id, quantity: ticketRow.quantity } : null)
     if (!data) { nav('/create'); return }
     if (Array.isArray(cl)) setClassLevels(cl)
     setHasGamblerProof(!!gpCheck)
@@ -1302,6 +1305,32 @@ export default function Game() {
     setRetrainingClass(null)
     const stars = '★'.repeat(currentCount + 1)
     setRetrainingMessage(`再修練完了！ ${targetClass}${stars} LV1にリセット・LV20分のステータス永続付与！`)
+    setLoading(false)
+  }
+
+  const useExpDungeonTicket = async () => {
+    if (loading || !expDungeonTicket) return
+    if (dungeonCounts.exp <= 0) { setBattleLogs([{ text:'経験値ダンジョンの残り回数がすでに最大です', color:'#ff8844' }]); return }
+    setLoading(true)
+    const today = new Date().toLocaleDateString('ja-JP',{timeZone:'Asia/Tokyo'}).replace(/\//g,'-')
+    // dungeon_attemptsのcnt_expを1減らす
+    const { data: da } = await supabase.from('dungeon_attempts').select('*').eq('player_id', profile.id).eq('date', today).single()
+    if (da) {
+      const newCnt = Math.max(0, (da.cnt_exp || 0) - 1)
+      await supabase.from('dungeon_attempts').update({ cnt_exp: newCnt }).eq('id', da.id)
+      setDungeonCounts(prev => ({ ...prev, exp: newCnt }))
+    }
+    // チケットを1枚消費
+    const newQty = expDungeonTicket.quantity - 1
+    if (newQty <= 0) {
+      await supabase.from('player_items').delete().eq('id', expDungeonTicket.id)
+      setExpDungeonTicket(null)
+    } else {
+      await supabase.from('player_items').update({ quantity: newQty }).eq('id', expDungeonTicket.id)
+      setExpDungeonTicket({ ...expDungeonTicket, quantity: newQty })
+    }
+    setBattleLogs([{ text:'📜 経験値ダンジョン使用回数券を使用！ 挑戦回数が1回回復した！', color:'#cc44ff' }])
+    setScene('battle')
     setLoading(false)
   }
 
@@ -2877,6 +2906,14 @@ export default function Game() {
                       )
                     })}
                   </div>
+                  {expDungeonTicket && (
+                    <div style={{ marginTop:'8px', borderTop:'1px solid #330066', paddingTop:'8px' }}>
+                      <button onClick={useExpDungeonTicket} disabled={loading || dungeonCounts.exp <= 0}
+                        style={{ width:'100%', padding:'8px', background:'#001020', border:`1px solid ${dungeonCounts.exp <= 0 ? '#333' : '#cc44ff'}`, color: dungeonCounts.exp <= 0 ? '#333' : '#cc44ff', cursor: dungeonCounts.exp <= 0 ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'10px', opacity: dungeonCounts.exp <= 0 ? 0.4 : 1 }}>
+                        📜 経験値ダンジョン使用回数券を使う（残り{expDungeonTicket.quantity}枚）
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
