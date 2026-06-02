@@ -23,6 +23,8 @@ export default function Shop() {
     const { data: it } = await supabase.from('items').select('*')
       .lte('unlock_area', maxArea)
       .not('name', 'like', '強化石%')  // 強化石を除外
+      .not('name', 'like', '%許可証%')  // エリア許可証を除外
+      .neq('name', 'ギャンブラーの証')  // ギャンブラーの証を除外
       .order('id')
     setItems(it || [])
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id)
