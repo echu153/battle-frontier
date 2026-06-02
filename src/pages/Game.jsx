@@ -2665,11 +2665,11 @@ export default function Game() {
               <div style={{ height:'100%', width:`${regenPct}%`, background:'linear-gradient(90deg,#003333,#44ccff)' }} />
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'2px', fontSize:'10px', marginBottom:'6px' }}>
-              <StatMini label="攻撃" base={profile.atk} bonus={eff.bonus.atk} color="#ffcc00" type="atk" />
-              <StatMini label="防御" base={profile.def} bonus={eff.bonus.def} color="#88aaff" type="def" />
-              <StatMini label="特攻" base={profile.matk} bonus={eff.bonus.matk} color="#cc44ff" type="matk" />
-              <StatMini label="特防" base={profile.mdef} bonus={eff.bonus.mdef} color="#44ccff" type="mdef" />
-              <StatMini label="速さ" base={profile.spd} bonus={eff.bonus.spd} color="#ff8844" type="spd" />
+              <StatMini label="攻撃" base={eff.atk  - eff.bonus.atk}  bonus={eff.bonus.atk}  color="#ffcc00" type="atk" />
+              <StatMini label="防御" base={eff.def  - eff.bonus.def}  bonus={eff.bonus.def}  color="#88aaff" type="def" />
+              <StatMini label="特攻" base={eff.matk - eff.bonus.matk} bonus={eff.bonus.matk} color="#cc44ff" type="matk" />
+              <StatMini label="特防" base={eff.mdef - eff.bonus.mdef} bonus={eff.bonus.mdef} color="#44ccff" type="mdef" />
+              <StatMini label="速さ" base={eff.spd  - eff.bonus.spd}  bonus={eff.bonus.spd}  color="#ff8844" type="spd" />
             </div>
             {pendingPoints > 0 && (
               <button onClick={()=>{ setShowStatPanel(true); setStatPoints({hp:0,mp:0,atk:0,def:0,matk:0,mdef:0,spd:0}) }}
@@ -2871,11 +2871,11 @@ export default function Game() {
               <div style={{ height:'100%', width:`${regenPct}%`, background:'linear-gradient(90deg,#003333,#44ccff)', transition:'width 0.2s' }} />
             </div>
             <div style={{ fontSize:'11px', display:'grid', gridTemplateColumns:'1fr', gap:'2px', color:'#446688', marginBottom:'8px' }}>
-              <StatLine label="攻撃力"     base={profile.atk}  bonus={eff.bonus.atk}  color="#ffcc00" statType="atk" />
-              <StatLine label="防御力"     base={profile.def}  bonus={eff.bonus.def}  color="#88aaff" statType="def" />
-              <StatLine label="特殊攻撃力" base={profile.matk} bonus={eff.bonus.matk} color="#cc44ff" statType="matk" />
-              <StatLine label="特殊防御力" base={profile.mdef} bonus={eff.bonus.mdef} color="#44ccff" statType="mdef" />
-              <StatLine label="素早さ"     base={profile.spd}  bonus={eff.bonus.spd}  color="#ff8844" statType="spd" />
+              <StatLine label="攻撃力"     base={eff.atk  - eff.bonus.atk}  bonus={eff.bonus.atk}  color="#ffcc00" statType="atk" />
+              <StatLine label="防御力"     base={eff.def  - eff.bonus.def}  bonus={eff.bonus.def}  color="#88aaff" statType="def" />
+              <StatLine label="特殊攻撃力" base={eff.matk - eff.bonus.matk} bonus={eff.bonus.matk} color="#cc44ff" statType="matk" />
+              <StatLine label="特殊防御力" base={eff.mdef - eff.bonus.mdef} bonus={eff.bonus.mdef} color="#44ccff" statType="mdef" />
+              <StatLine label="素早さ"     base={eff.spd  - eff.bonus.spd}  bonus={eff.bonus.spd}  color="#ff8844" statType="spd" />
               <span>ゴールド: <span style={{color:'#ffcc00'}}>{profile.gold}</span></span>
             </div>
             {pendingPoints > 0 && (
