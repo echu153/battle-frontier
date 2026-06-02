@@ -1547,7 +1547,7 @@ export default function Game() {
     const hasTosoHonno  = passiveNames.includes('闘争本能')
 
     const passiveCritBonus   = hasShingan ? 5 : 0
-    const passiveDmgMult     = (hasShingan ? 1.05 : 1.0) * (hasBerserk ? 1.1 : 1.0) * (hasKakushin ? 1.1 : 1.0) * (hasRokkan ? 1.05 : 1.0)
+    const passiveDmgMult     = (hasShingan ? 1.05 : 1.0) * (hasBerserk ? 1.15 : 1.0) * (hasKakushin ? 1.1 : 1.0) * (hasRokkan ? 1.05 : 1.0)
     const passiveHealMult    = (hasShinkoka ? 1.2 : 1.0) * (hasKakushin ? 0.7 : 1.0)
     const passiveMatkMult    = hasShinkoka ? 1.1 : 1.0
     const passiveMpCostMult  = hasTenki ? 0.9 : 1.0
