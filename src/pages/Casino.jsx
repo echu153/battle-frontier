@@ -976,7 +976,7 @@ export default function Casino() {
               return (
                 <div key={p.key} style={{ border:`1px solid ${borderColor}`, background:'#001028', padding:'10px', marginBottom:'6px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                    <div>
+                    <div style={{ flex:1 }}>
                       <div style={{ color:'#88ccff', fontSize:'12px' }}>
                         {p.name}
                         {p.today && <span style={{ color:'#44ff88', fontSize:'9px', marginLeft:'6px', border:'1px solid #44ff88', padding:'1px 4px' }}>当日獲得</span>}
@@ -984,7 +984,9 @@ export default function Casino() {
                       </div>
                       <div style={{ color:'#ffaa00', fontSize:'11px', marginTop:'2px' }}>🎫 {p.price.toLocaleString()}</div>
                       {p.desc && <div style={{ color:'#557799', fontSize:'10px', marginTop:'2px' }}>{p.desc}</div>}
-                      <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>本日 残り{remain}/{p.limit}個</div>
+                      <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>
+                        {p.type==='equip' ? '1度きりの交換' : `本日 残り${remain}/${p.limit}個`}
+                      </div>
                     </div>
                     <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
                       <button onClick={()=>exchangePrize(p)} disabled={!canBuy || loading}
