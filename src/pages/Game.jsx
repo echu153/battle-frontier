@@ -360,8 +360,9 @@ const WEAPON_TYPE_GROUP = {
 const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'
 
 const getProfPrefix = (profLv) => {
+  if (profLv >= 2000) return '【伝説】'
   if (profLv >= 1000) return '【神】'
-  if (profLv >= 500)  return '【覇】'
+  if (profLv >= 600)  return '【覇】'
   if (profLv >= 300)  return '【極】'
   if (profLv >= 200)  return '【真】'
   if (profLv >= 100)  return '【改】'
@@ -377,13 +378,15 @@ const calcProfBonus = (prof, weapon) => {
     rate = profLv * 0.01 + Math.floor(profLv / 100) * 0.5
   } else {
     const base = 4.5
-    const lv300 = Math.min(profLv, 500) - 300
-    const lv500 = Math.max(0, Math.min(profLv, 1000) - 500)
-    const lv1000 = Math.max(0, profLv - 1000)
+    const lv300  = Math.min(profLv, 600) - 300
+    const lv600  = Math.max(0, Math.min(profLv, 1000) - 600)
+    const lv1000 = Math.max(0, Math.min(profLv, 2000) - 1000)
+    const lv2000 = Math.max(0, profLv - 2000)
     rate = base
-      + Math.floor(lv300 / 10)   * 0.01
-      + Math.floor(lv500 / 20)   * 0.01
-      + Math.floor(lv1000 / 100) * 0.01
+      + Math.floor(lv300  / 10)  * 0.01
+      + Math.floor(lv600  / 20)  * 0.01
+      + Math.floor(lv1000 / 50)  * 0.01
+      + Math.floor(lv2000 / 100) * 0.01
   }
   if (rate <= 0) return {}
   const result = {}

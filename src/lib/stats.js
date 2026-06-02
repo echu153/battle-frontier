@@ -82,10 +82,11 @@ const applyGemBonus = (item, acc) => {
 }
 
 // 熟練度ボーナス：武器の固定ボーナス各種に倍率をかける
-// LV1〜300:   LV×1% + floor(LV/100)×50%（LV300で450%）
-// LV301〜499: +1%/10LV
-// LV500〜999: +1%/20LV
-// LV1000〜:   +1%/100LV
+// LV1〜300:    LV×1% + floor(LV/100)×50%（LV300で450%）
+// LV301〜600:  +1%/10LV
+// LV601〜1000: +1%/20LV
+// LV1001〜2000:+1%/50LV
+// LV2001〜:    +1%/100LV
 // 対象：atk/def/matk/mdef/spd/hp/mp の固定ボーナスのみ（%ボーナスは対象外）
 export const calcProfBonus = (prof, weapon) => {
   if (!prof || !weapon) return {}
@@ -94,14 +95,16 @@ export const calcProfBonus = (prof, weapon) => {
   if (profLv <= 300) {
     rate = profLv * 0.01 + Math.floor(profLv / 100) * 0.5
   } else {
-    const base = 300 * 0.01 + Math.floor(300 / 100) * 0.5  // 4.5
-    const lv300 = Math.min(profLv, 500) - 300
-    const lv500 = Math.max(0, Math.min(profLv, 1000) - 500)
-    const lv1000 = Math.max(0, profLv - 1000)
+    const base = 4.5  // LV300時点
+    const lv300 = Math.min(profLv, 600) - 300
+    const lv600 = Math.max(0, Math.min(profLv, 1000) - 600)
+    const lv1000 = Math.max(0, Math.min(profLv, 2000) - 1000)
+    const lv2000 = Math.max(0, profLv - 2000)
     rate = base
-      + Math.floor(lv300 / 10)  * 0.01
-      + Math.floor(lv500 / 20)  * 0.01
-      + Math.floor(lv1000 / 100) * 0.01
+      + Math.floor(lv300  / 10)  * 0.01
+      + Math.floor(lv600  / 20)  * 0.01
+      + Math.floor(lv1000 / 50)  * 0.01
+      + Math.floor(lv2000 / 100) * 0.01
   }
   if (rate <= 0) return {}
   const result = {}
