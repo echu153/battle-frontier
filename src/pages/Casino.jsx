@@ -243,6 +243,7 @@ export default function Casino() {
     if (loading || !profile) return
     if (profile.is_fishing) { showMessage('🎣 釣り中は賭博場で遊べません', '#ff8844'); return }
     await supabase.from('profiles').update({ sortie_streak: 0 }).eq('id', profile.id)
+    setProfile(p => ({ ...p, sortie_streak: 0 }))
     const bet = Math.floor(betAmount)
     if (!bet || bet < MIN_BET) { showMessage(`ベットは${MIN_BET}メダルからです`, '#ff4444'); return }
     if (bet > MAX_BET) { showMessage(`ベットは${MAX_BET}メダルまでです`, '#ff4444'); return }
@@ -318,6 +319,7 @@ export default function Casino() {
     if (loading || slotPhase==='spinning' || !profile) return
     if (profile.is_fishing) { showMessage('🎣 釣り中は賭博場で遊べません', '#ff8844'); return }
     await supabase.from('profiles').update({ sortie_streak: 0 }).eq('id', profile.id)
+    setProfile(p => ({ ...p, sortie_streak: 0 }))
     const bet = Math.floor(slotBet)
     if (slotMode==='normal') {
       if (!bet || bet < MIN_BET) { showMessage(`ベットは${MIN_BET}メダルからです`, '#ff4444'); return }
@@ -454,10 +456,12 @@ export default function Casino() {
       if (newStreak >= SORTIE_STREAK_LIMIT) {
         const frozenUntil = new Date(Date.now() + 12*3600*1000).toISOString()
         await supabase.from('profiles').update({ exp_frozen_until: frozenUntil, sortie_streak: 0 }).eq('id', profile.id)
+        setProfile(p => ({ ...p, exp_frozen_until: frozenUntil, sortie_streak: 0 }))
         justFrozen = true
         setSortieMsg('⚠ 簡易出撃ばかりが連続しています。12時間EXPの獲得を停止します'); setTimeout(()=>setSortieMsg(''),5000)
       } else {
         await supabase.from('profiles').update({ sortie_streak: newStreak }).eq('id', profile.id)
+        setProfile(p => ({ ...p, sortie_streak: newStreak }))
       }
     }
 
