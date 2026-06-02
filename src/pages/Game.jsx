@@ -836,7 +836,7 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       result.dmg = Math.max(1, Math.floor((eff.atk*1.0+eff.matk*0.5)*am) - calcMinDef())
       result.log = `🔮 マインドブレイク！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
-    case '第六感':    result.newPlayerBuffs.hitBonus={turns:99,value:5}; result.log = `🔮 第六感！ 命中率+5%！`; break
+    case '第六感':    result.log = `🔮 第六感【パッシブ】 命中率+5%（常時自動発動）`; break
     case '精神集中': result.newPlayerBuffs.atkUp={turns:2,rate:1.6}; result.newPlayerBuffs.matkUp={turns:2,rate:1.6}; result.log = `🔮 精神集中！ 2ターンの間、攻撃力・特殊攻撃力が大幅上昇！`; break
     case 'サイコブラスト': {
       result.dmg = Math.max(1, Math.floor((eff.atk*1.5+eff.matk*0.7)*am) - calcMinDef())
@@ -849,15 +849,7 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       result.dmg = ds.reduce((a,b)=>a+b,0)
       result.log = `🦵 五連殺！ ${enemy.name}に${ds.map(d=>`${d}の物理ダメージ`).join('！')}！`; break
     }
-    case '闘争本能': {
-      if (playerHp <= profile.hp_max * 0.5) {
-        result.newPlayerBuffs.atkUp = { turns:3, rate:1.1 }
-        result.log = `🔥 闘争本能！ HP50%以下！ 3ターンの間、与ダメージ+10%！`
-      } else {
-        result.log = `🔥 闘争本能！ HP50%を超えているため効果なし。`
-      }
-      break
-    }
+    case '闘争本能': result.log = `🔥 闘争本能【パッシブ】 HP50%以下の間、与ダメージ+10%（常時自動発動）`; break
     case '破衝掌':     result.dmg = Math.floor(eff.atk*1.7*am); result.log = `🦵 破衝掌！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
     case '飛天三角蹴り': {
       const h1 = Math.floor(eff.atk*0.4*am*r())
@@ -877,7 +869,7 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       result.dmg = gs.reduce((a,b)=>a+b,0)
       result.log = `🔫 連装銃撃！ ${enemy.name}に${gs.map(d=>`${d}の特殊ダメージ`).join('！')}！`; break
     }
-    case '精密照準':   result.newPlayerBuffs.hitBonus={turns:99,value:5}; result.log = `🔫 精密照準！ 命中率+5%！`; break
+    case '精密照準':   result.log = `🔫 精密照準【パッシブ】 命中率+5%（常時自動発動）`; break
     case '強化装填':   result.newPlayerBuffs.atkUp={turns:3,rate:1.5}; result.newPlayerBuffs.matkUp={turns:3,rate:1.5}; result.log = `🔫 強化装填！ 3ターンの間、攻撃力・特殊攻撃力が大幅上昇！`; break
     case 'キャノネスチュームビンド': {
       const cannonMult = prevSkill === 'キャノネスチュームビンド' ? 1.1 : 1.0
