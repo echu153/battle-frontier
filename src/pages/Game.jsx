@@ -6,7 +6,7 @@ import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue } from '../lib/
 // Equipment.jsx 等が './Game' から参照しているため再export
 export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue } from '../lib/stats'
 
-const WAIT_SECONDS = 10
+export const WAIT_SECONDS = 10
 const REGEN_SECONDS = 60
 
 export const ARTIFACT_BASE_NAMES = [
@@ -295,7 +295,7 @@ const DEF_STAT_THRESHOLDS = [45, 120, 240, 450, 750, 1200, 1800, 2700]
 const DEF_REDUCTION_RATES = [0, 4, 8, 11, 15, 19, 23, 26, 30]
 
 // 防御値からダメージ軽減率(0〜1)を線形補間で算出
-const calcDefReduction = (defVal) => {
+export const calcDefReduction = (defVal) => {
   if (defVal <= 0) return 0
   const thresholds = [0, ...DEF_STAT_THRESHOLDS]
   const rates = DEF_REDUCTION_RATES
@@ -412,7 +412,7 @@ const calcEnhancedStat = (base, plus) => {
   return Math.ceil(base * Math.pow(1.5, plus))
 }
 
-const calcEffectiveStats = (profile, equipment, proficiency) => {
+export const calcEffectiveStats = (profile, equipment, proficiency) => {
   const bonus = { atk:0, def:0, matk:0, mdef:0, spd:0, hp:0, mp:0 }
   let matkPct = 0
   let hitBonus = 0
@@ -507,12 +507,12 @@ const calcEffectiveStats = (profile, equipment, proficiency) => {
 }
 
 // 回避率計算（防御側SPD > 攻撃側SPDのとき回避率UP、最大10%）
-const calcEvasionRate = (defenderSpd, attackerSpd) => {
+export const calcEvasionRate = (defenderSpd, attackerSpd) => {
   if (defenderSpd <= attackerSpd) return 0
   return Math.min(10, (defenderSpd - attackerSpd) / attackerSpd * 10)
 }
 
-const calcExtraActionRate = (mySpd, enemySpd) => {
+export const calcExtraActionRate = (mySpd, enemySpd) => {
   if (mySpd <= enemySpd) return 0
   const diff = mySpd - enemySpd
   const rawRate = (diff/enemySpd)*50
@@ -520,7 +520,7 @@ const calcExtraActionRate = (mySpd, enemySpd) => {
   return 50 + (rawRate-50)*0.5
 }
 
-const calcCritRate = (mySpd, enemySpd) => {
+export const calcCritRate = (mySpd, enemySpd) => {
   const base = 100/48
   if (mySpd <= enemySpd) return base
   const bonus = Math.min(5, (mySpd-enemySpd)/enemySpd*2*100)
@@ -561,7 +561,7 @@ export const generateDropBonus = (weapon) => {
   return result
 }
 
-const applyEquipmentEffects = (equipment, profile, playerBuffs, logs) => {
+export const applyEquipmentEffects = (equipment, profile, playerBuffs, logs) => {
   const newBuffs = { ...playerBuffs }
   for (const item of equipment) {
     if (!item.equipped || !item.bonus_effect) continue
@@ -585,7 +585,7 @@ const applyEquipmentEffects = (equipment, profile, playerBuffs, logs) => {
 // ============================================================
 // プレイヤースキル実行
 // ============================================================
-const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkill = '') => {
+export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkill = '') => {
   const result = { dmg:0, heal:0, log:'', newEnemyBuffs:{ ...enemyBuffs }, newPlayerBuffs:{ ...playerBuffs }, selfDmg:0, bonusCritRate:0 }
   const randMult = (min, max) => min + Math.random()*(max-min)
   const am = isArtifact ? 1.2 : 1.0
@@ -1098,6 +1098,7 @@ export default function Game() {
   const [pendingClassChange, setPendingClassChange] = useState(null)
   const [hasNewAnnouncements, setHasNewAnnouncements] = useState(false)
   const [retrainingModal, setRetrainingModal] = useState(false)
+  const [raidStatus, setRaidStatus] = useState(null) // null | 'active' | 'pre' (30分前)
   const [selectedCarrySkill, setSelectedCarrySkill] = useState(null)
   const [retrainingSkills, setRetrainingSkills] = useState([])
   const [retrainingClass, setRetrainingClass] = useState(null)
@@ -1146,6 +1147,21 @@ export default function Game() {
     }, 200)
     return () => clearInterval(id)
   }, [profile])
+
+  // レイドボス状態チェック（60秒ごと）
+  useEffect(() => {
+    const checkRaid = async () => {
+      const jstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
+      const h = jstNow.getHours(), m = jstNow.getMinutes()
+      const { data } = await supabase.rpc('spawn_raid_boss_if_needed')
+      if (data?.status === 'active') setRaidStatus('active')
+      else if (h === 20 && m >= 30) setRaidStatus('pre')
+      else setRaidStatus(null)
+    }
+    checkRaid()
+    const id = setInterval(checkRaid, 60000)
+    return () => clearInterval(id)
+  }, [])
 
   const fetchProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -2789,6 +2805,7 @@ export default function Game() {
             <button onClick={()=>{ nav('/barber'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>✂ 美容院</button>
             <button onClick={()=>{ nav('/casino'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎰 賭博場</button>
             <button onClick={()=>{ nav('/fishing'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎣 釣り場</button>
+            <button onClick={()=>{ nav('/raid'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚔ レイドボス</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
           </div>
         )}
@@ -2876,6 +2893,17 @@ export default function Game() {
                 <div style={{ background:'#1a0a00', border:'1px solid #ffaa00', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
                   <span style={{ color:'#ffaa00' }}>🌟 パピア出現率アップ中！</span>
                   <span style={{ color:'#446688', marginLeft:'8px' }}>残り{papiaEvent.remainingMin}分{papiaEvent.remainingSec}秒</span>
+                </div>
+              )}
+              {raidStatus === 'active' && (
+                <div onClick={()=>nav('/raid')} style={{ background:'#1a0000', border:'1px solid #ff4422', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px', cursor:'pointer' }}>
+                  <span style={{ color:'#ff6644' }}>⚔ レイドボス出現中！</span>
+                  <span style={{ color:'#446688', marginLeft:'8px', fontSize:'10px' }}>タップして参加する →</span>
+                </div>
+              )}
+              {raidStatus === 'pre' && (
+                <div style={{ background:'#100a00', border:'1px solid #886622', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
+                  <span style={{ color:'#cc8844' }}>⚠ まもなくレイドボスが出現します！</span>
                 </div>
               )}
               <button onClick={(e)=>doBattle(e)} disabled={!canAct||loading||!canBattle}
@@ -3094,6 +3122,17 @@ export default function Game() {
                   <div style={{ background:'#1a0a00', border:'1px solid #ffaa00', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
                     <span style={{ color:'#ffaa00' }}>🌟 パピア出現率アップ中！</span>
                     <span style={{ color:'#446688', marginLeft:'8px' }}>残り{papiaEvent.remainingMin}分{papiaEvent.remainingSec}秒</span>
+                  </div>
+                )}
+                {raidStatus === 'active' && (
+                  <div onClick={()=>nav('/raid')} style={{ background:'#1a0000', border:'1px solid #ff4422', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px', cursor:'pointer' }}>
+                    <span style={{ color:'#ff6644' }}>⚔ レイドボス出現中！</span>
+                    <span style={{ color:'#446688', marginLeft:'8px', fontSize:'10px' }}>タップして参加する →</span>
+                  </div>
+                )}
+                {raidStatus === 'pre' && (
+                  <div style={{ background:'#100a00', border:'1px solid #886622', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
+                    <span style={{ color:'#cc8844' }}>⚠ まもなくレイドボスが出現します！</span>
                   </div>
                 )}
                 <button onClick={(e)=>doBattle(e)} disabled={!canAct||loading||!canBattle}

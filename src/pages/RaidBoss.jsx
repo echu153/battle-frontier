@@ -1,0 +1,699 @@
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from '../supabase'
+import { getWeaponGroup } from '../lib/stats'
+import {
+  WAIT_SECONDS,
+  calcEffectiveStats,
+  calcEvasionRate,
+  calcExtraActionRate,
+  calcCritRate,
+  calcDefReduction,
+  applyEquipmentEffects,
+  executeSkill,
+} from './Game'
+
+const POLL_MS = 5000
+const BOSS_NAME = '黒龍ヴァルゼノク'
+const BOSS_DEF  = 1000
+const BOSS_MDEF = 1000
+const BOSS_SPD  = 1200
+
+const TIER_INFO = [
+  { pct: 30, label: '貢献度30%以上', gold: 40000, stone: '強化石(B)', gemCount: 3, color: '#ffcc00' },
+  { pct: 10, label: '貢献度10%以上', gold: 25000, stone: '強化石(C)', gemCount: 2, color: '#44aaff' },
+  { pct:  3, label: '貢献度3%以上',  gold: 15000, stone: '強化石(D)', gemCount: 2, color: '#44ff88' },
+  { pct:  0, label: '参加',          gold:  5000, stone: '強化石(F)', gemCount: 1, color: '#888888' },
+]
+
+function getTier(pct) { return TIER_INFO.find(t => pct >= t.pct) || TIER_INFO[TIER_INFO.length - 1] }
+function hpColor(r) { return r > 0.5 ? '#44ff88' : r > 0.25 ? '#ffcc00' : '#ff4444' }
+function fmt(n) { return Number(n).toLocaleString() }
+
+function jstNow() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
+}
+
+function Countdown({ targetIso }) {
+  const [left, setLeft] = useState('')
+  useEffect(() => {
+    const tick = () => {
+      const diff = new Date(targetIso) - Date.now()
+      if (diff <= 0) { setLeft('まもなく'); return }
+      const h = Math.floor(diff / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      const s = Math.floor((diff % 60000) / 1000)
+      setLeft(`${h > 0 ? h + '時間' : ''}${m}分${s}秒`)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [targetIso])
+  return <span style={{ color: '#ffcc44' }}>{left}</span>
+}
+
+// ボス統計（ターンごとに変化）
+function getBossForTurn(t) {
+  const atkBase = 100 + (t - 1) * 300
+  const defBase = 1000 + (t - 1) * 100
+  const mult = t >= 8 ? 4.0 : t >= 4 ? 1.5 : 1.0
+  return {
+    name: BOSS_NAME,
+    atk:  Math.floor(atkBase * mult),
+    matk: Math.floor(atkBase * mult),
+    def:  Math.floor(defBase * mult),
+    mdef: Math.floor(defBase * mult),
+    spd:  BOSS_SPD,
+    type: 'physical',
+  }
+}
+
+// レイドバトルシミュレーション（最大10ターン）
+function simulateRaidBattle(eff, equipment, skillSets, profile) {
+  const logs = []
+  let playerHp = Math.max(1, profile.hp_current ?? profile.hp_max)
+  let playerMp = profile.mp_current ?? profile.mp_max
+  let totalDamage = 0
+  let skillIndex = 0
+  let prevSkillName = null
+  let playerBuffs = {}
+  let playerDied = false
+
+  const equippedWeapon = equipment.find(e => e.slot === 'weapon' && e.equipped)
+  const isArtifact = equippedWeapon?.bonus_effect === 'artifact'
+  const weaponType = equippedWeapon?.weapons?.weapon_type || 'sword'
+  const isMagical = getWeaponGroup(weaponType) === 'magical'
+
+  const passiveNames = skillSets.filter(ss => ss.skills?.type === 'パッシブ').map(ss => ss.skills.name)
+  const expandedSkillSet = []
+  for (const ss of skillSets) {
+    if (ss.skills?.type === 'パッシブ') continue
+    const count = ss.use_count || 1
+    for (let i = 0; i < count; i++) expandedSkillSet.push(ss)
+  }
+
+  const hasShingan    = passiveNames.includes('心眼')
+  const hasBerserk    = passiveNames.includes('バーサク')
+  const hasKakushin   = passiveNames.includes('執行本能')
+  const hasShinkoka   = passiveNames.includes('神聖加護')
+  const hasTenki      = passiveNames.includes('天啓')
+  const hasRokkan     = passiveNames.includes('第六感')
+  const hasSeimitsu   = passiveNames.includes('精密照準')
+  const hasTosoHonno  = passiveNames.includes('闘争本能')
+  const hasTakaNoMe   = passiveNames.includes('鷹ノ目')
+  const hasGensoKyomei = passiveNames.includes('元素共鳴')
+  const hasGambleBody = passiveNames.includes('ギャンブルボディ')
+
+  const passiveCritBonus  = hasShingan ? 5 : 0
+  const passiveDmgMult    = (hasShingan ? 1.05 : 1.0) * (hasBerserk ? 1.15 : 1.0) * (hasKakushin ? 1.1 : 1.0) * (hasRokkan ? 1.05 : 1.0)
+  const passiveHealMult   = (hasShinkoka ? 1.2 : 1.0) * (hasKakushin ? 0.7 : 1.0)
+  const passiveMatkMult   = hasShinkoka ? 1.1 : 1.0
+  const passiveMpCostMult = hasTenki ? 0.9 : 1.0
+  const passiveMatkMultTenki = hasTenki ? 1.1 : 1.0
+  const passiveHitBonus   = (hasRokkan ? 5 : 0) + (hasSeimitsu ? 5 : 0)
+  const effectiveSpdForCalc = hasTakaNoMe ? Math.floor(eff.spd * 1.2) : eff.spd
+
+  const playerCritRate  = calcCritRate(effectiveSpdForCalc, BOSS_SPD) + passiveCritBonus + (eff.critBonus || 0)
+  const bossCritRate    = Math.max(0, calcCritRate(BOSS_SPD, effectiveSpdForCalc))
+  const playerHitBonus  = (eff.hitBonus || 0) + passiveHitBonus
+  const playerEvasion   = calcEvasionRate(effectiveSpdForCalc, BOSS_SPD) + (eff.evasionBonus || 0)
+  const playerExtraRate = calcExtraActionRate(effectiveSpdForCalc, BOSS_SPD)
+  const bossExtraRate   = calcExtraActionRate(BOSS_SPD, effectiveSpdForCalc)
+
+  playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
+
+  logs.push({ text: `⚠ ${BOSS_NAME}が現れた！`, color: '#ff4444' })
+
+  for (let turn = 1; turn <= 10; turn++) {
+    // バフ段階のアナウンス
+    if (turn === 4) logs.push({ text: `━━ ${BOSS_NAME}が覚醒した！全ステータス1.5倍！ ━━`, color: '#ff8844' })
+    if (turn === 8) logs.push({ text: `━━ ${BOSS_NAME}が暴走状態に！全ステータス4倍！ ━━`, color: '#ff2222' })
+
+    // ターン10: 滅びの一撃（強制終了）
+    if (turn === 10) {
+      logs.push({ text: `${turn}ターン目: ${BOSS_NAME}の「滅びの咆哮」！`, color: '#ff0000' })
+      logs.push({ text: `999,999の壊滅ダメージ！（なんとか生き延びた…HP→1）`, color: '#ff4444' })
+      break
+    }
+
+    const boss = getBossForTurn(turn)
+    const enemyBuffs = {} // ボスはデバフ無効なので常に空
+
+    // ========== プレイヤー攻撃 ==========
+    const doPlayerAttack = (isExtra = false) => {
+      const pAtk  = eff.atk  * (playerBuffs.atkUp?.rate  || 1) * (playerBuffs.atkDown?.rate || 1) * (playerBuffs.burn?.turns > 0 ? 0.9 : 1)
+      const pMatk = eff.matk * (playerBuffs.matkUp?.rate || 1) * passiveMatkMult * passiveMatkMultTenki * (playerBuffs.burn?.turns > 0 ? 0.9 : 1)
+      const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1)
+      const pMdef = eff.mdef * (playerBuffs.mdefUp?.rate || 1) * (playerBuffs.defUp?.rate || 1)
+      const pSpd  = effectiveSpdForCalc * (playerBuffs.spdUp?.rate || 1) * (playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1)
+      const effBuff = { ...eff, atk: pAtk, def: pDef, mdef: pMdef, matk: pMatk, spd: pSpd }
+
+      const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+      const isCrit = Math.random() * 100 < playerCritRate
+      const critMult = isCrit ? (1.5 + (eff.critDmg || 0)) : 1.0
+
+      // 狂乱: 指定スキルに固定
+      if (playerBuffs.berserk?.turns > 0 && playerBuffs.berserk.lockedSkill) {
+        const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk.lockedSkill)
+        if (lockedIdx >= 0) skillIndex = lockedIdx
+      }
+      let skillUsed = false
+      if (expandedSkillSet.length > 0) {
+        const cs = expandedSkillSet[skillIndex % expandedSkillSet.length]
+        let mpCost = Math.floor((isArtifact ? (cs?.skills?.mp_cost || 0) * 2 : (cs?.skills?.mp_cost || 0)) * passiveMpCostMult)
+        if (cs?.skills?.name === 'マナボルト') mpCost = Math.max(1, Math.floor(playerMp * 0.1))
+        if (cs && cs.skills && playerMp >= mpCost) {
+          playerMp -= mpCost
+          const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? 1.15 : 1.0
+          const seimitsuMult = (hasSeimitsu && prevSkillName && prevSkillName === cs.skills.name) ? 1.1 : 1.0
+          prevSkillName = cs.skills.name
+          const res = executeSkill(cs.skills, { ...effBuff, lastMpCost: mpCost }, profile, boss, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
+          const finalCrit = res.dmg > 0 && (isCrit || (res.bonusCritRate > 0 && Math.random() * 100 < playerCritRate + res.bonusCritRate))
+          const finalCritMult = finalCrit ? (1.5 + (eff.critDmg || 0)) : 1.0
+          const tosoMult = (hasTosoHonno && playerHp <= profile.hp_max * 0.5) ? 1.1 : 1.0
+          let defScale = 1.0
+          if (res.dmg > 0) {
+            const sType = cs.skills?.type
+            if (sType === '物理攻撃') defScale = effBuff.atk / (effBuff.atk + BOSS_DEF)
+            else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + BOSS_MDEF)
+          }
+          let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * (0.9 + Math.random() * 0.2))
+          if (res.selfDmg > 0) playerHp = Math.max(1, playerHp - res.selfDmg)
+          const isHealBlocked = playerBuffs.healBlock?.turns > 0
+          if (!isHealBlocked && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
+            const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
+            playerHp = Math.min(profile.hp_max, playerHp + rageCure)
+            logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
+          }
+          totalDamage += finalDmg
+          if (!isHealBlocked) {
+            const healAmt = Math.floor(res.heal * passiveHealMult)
+            playerHp = Math.min(profile.hp_max, playerHp + healAmt)
+          } else if (res.heal > 0) {
+            logs.push({ text: `回復封印中！ 回復効果が無効化された！`, color: '#aa22ff' })
+          }
+          // ボスにはデバフ・状態異常無効（newEnemyBuffsは捨てる）
+          playerBuffs = { ...playerBuffs, ...res.newPlayerBuffs }
+          const critText = finalCrit ? ' 💥クリティカル！' : ''
+          const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
+          logs.push({ text: `${prefix}${resLog}${critText}`, color: finalCrit ? '#ff4444' : '#88ccff' })
+          skillUsed = true
+          skillIndex++
+        }
+      }
+      if (!skillUsed) {
+        const baseAtk = isMagical ? effBuff.matk : effBuff.atk
+        const eDef = isMagical ? BOSS_MDEF : BOSS_DEF
+        const baseDmg = Math.max(1, Math.floor(baseAtk * baseAtk / Math.max(1, baseAtk + eDef)) + Math.floor(Math.random() * 4))
+        const tosoMult = (hasTosoHonno && playerHp <= profile.hp_max * 0.5) ? 1.1 : 1.0
+        let finalDmg = Math.floor(baseDmg * critMult * (isArtifact ? 1.2 : 1.0) * passiveDmgMult * tosoMult * (0.9 + Math.random() * 0.2))
+        if (!playerBuffs.healBlock?.turns && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
+          const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
+          playerHp = Math.min(profile.hp_max, playerHp + rageCure)
+          logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
+        }
+        totalDamage += finalDmg
+        const critText = isCrit ? ' 💥クリティカル！' : ''
+        logs.push({ text: `${prefix}あなたの攻撃！ ${BOSS_NAME}に${fmt(finalDmg)}ダメージ！${critText}`, color: isCrit ? '#ff4444' : '#ffcc00' })
+        if (expandedSkillSet.length > 0) skillIndex++
+      }
+    }
+
+    // ========== ボス攻撃（HPは変動するが結果をDBに保存しない） ==========
+    const doBossAttack = (isExtra = false) => {
+      const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1)
+      const pMdef = eff.mdef * (playerBuffs.mdefUp?.rate || 1) * (playerBuffs.defUp?.rate || 1)
+      const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
+      const berserkDmgRate = hasBerserk ? 1.1 : 1.0
+      const eAtk = boss.atk
+      const defForCalc = Math.max(1, pDef)
+      const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+
+      // ターン4: 特殊スキル「暗黒侵食」（ダメージ＋回復封印3ターン）
+      if (turn === 4 && !isExtra) {
+        const specialDmg = Math.max(1, Math.floor(eAtk * eAtk / Math.max(1, eAtk + defForCalc) * 1.3 * (0.9 + Math.random() * 0.2)))
+        playerHp -= specialDmg
+        playerBuffs.healBlock = { turns: 3 }
+        logs.push({ text: `${prefix}${BOSS_NAME}の「暗黒侵食」！ ${fmt(specialDmg)}ダメージ！ 3ターンの間回復が封印された！`, color: '#aa22ff' })
+        if (playerHp <= 0) { playerHp = 0; logs.push({ text: `力尽きた…（バトル終了）`, color: '#ff4444' }); playerDied = true }
+        return
+      }
+
+      const isCrit = Math.random() * 100 < bossCritRate
+      const baseDmg = Math.max(1, Math.floor(eAtk * eAtk / Math.max(1, eAtk + defForCalc)) + Math.floor(Math.random() * 3))
+      // プレイヤー回避
+      const evasionRate = playerEvasion + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0)
+      if (evasionRate > 0 && Math.random() * 100 < evasionRate) {
+        logs.push({ text: `${prefix}${BOSS_NAME}の攻撃！ しかし回避した！`, color: '#44ff88' })
+        return
+      }
+      const playerDefRankReduction = calcDefReduction(pDef)
+      const gambleBodyMult = hasGambleBody ? (0.7 + Math.random() * 0.6) : 1.0
+      const finalDmg = Math.floor(baseDmg * (isCrit ? 1.5 : 1.0) * dmgReduceRate * berserkDmgRate * (1 - playerDefRankReduction) * gambleBodyMult * (0.9 + Math.random() * 0.2))
+      playerHp -= finalDmg
+      if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
+      const critText = isCrit ? ' 💥クリティカル！' : ''
+      logs.push({ text: `${prefix}${BOSS_NAME}の攻撃！ あなたに${fmt(finalDmg)}ダメージ…${critText}`, color: isCrit ? '#ff2200' : '#ff6644' })
+      if (playerHp <= 0) {
+        playerHp = 0
+        logs.push({ text: `力尽きた…（バトル終了）`, color: '#ff4444' })
+        playerDied = true
+      }
+    }
+
+    // SPD差による行動順
+    const playerFirst = effectiveSpdForCalc >= BOSS_SPD
+    if (playerFirst) {
+      doPlayerAttack()
+      if (Math.random() * 100 < playerExtraRate) doPlayerAttack(true)
+      doBossAttack()
+      if (Math.random() * 100 < bossExtraRate) doBossAttack(true)
+    } else {
+      doBossAttack()
+      if (Math.random() * 100 < bossExtraRate) doBossAttack(true)
+      doPlayerAttack()
+      if (Math.random() * 100 < playerExtraRate) doPlayerAttack(true)
+    }
+
+    if (playerDied) break
+
+    // バフターン減算
+    const berserkWasActive = playerBuffs.berserk?.turns > 0
+    for (const k of Object.keys(playerBuffs)) {
+      if (playerBuffs[k]?.turns > 0) playerBuffs[k] = { ...playerBuffs[k], turns: playerBuffs[k].turns - 1 }
+    }
+    // 狂乱解除時：skillIndexをマッドラッシュの次に進める
+    if (berserkWasActive && (playerBuffs.berserk?.turns ?? 0) === 0 && expandedSkillSet.length > 0) {
+      const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk?.lockedSkill)
+      if (lockedIdx >= 0) skillIndex = lockedIdx + 1
+    }
+    // リジェネ・遅延ヒール（回復封印中は無効）
+    const isHealBlockedTick = playerBuffs.healBlock?.turns > 0
+    if (playerBuffs.regenHeal?.turns > 0) {
+      if (!isHealBlockedTick) {
+        playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.regenHeal.amount)
+        logs.push({ text: `💚 リジェネ！ HPが${playerBuffs.regenHeal.amount}回復！`, color: '#44ff88' })
+      }
+    }
+    if (playerBuffs.delayHeal?.triggerTurn === turn) {
+      if (!isHealBlockedTick) {
+        playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.delayHeal.amount)
+        logs.push({ text: `💚 ${playerBuffs.delayHeal.amount}HP回復！`, color: '#44ff88' })
+      }
+    }
+  }
+
+  logs.push({ text: `──────────────────`, color: '#223344' })
+  logs.push({ text: `合計 ${fmt(totalDamage)} ダメージを与えた！`, color: '#ffcc44' })
+
+  return { logs, totalDamage, playerDied }
+}
+
+export default function RaidBoss() {
+  const nav = useNavigate()
+  const [profile, setProfile] = useState(null)
+  const [equipment, setEquipment] = useState([])
+  const [proficiency, setProficiency] = useState([])
+  const [skillSets, setSkillSets] = useState([])
+  const [boss, setBoss] = useState(undefined)
+  const [nextSpawn, setNextSpawn] = useState(null)
+  const [participants, setParticipants] = useState([])
+  const [myPart, setMyPart] = useState(null)
+  const [scene, setScene] = useState('boss') // 'boss' | 'battle'
+  const [battling, setBattling] = useState(false)
+  const [battleLogs, setBattleLogs] = useState([])
+  const [claiming, setClaiming] = useState(false)
+  const [reward, setReward] = useState(null)
+  const [claimError, setClaimError] = useState(null)
+  const [remaining, setRemaining] = useState(0) // 共有CDの残り秒数
+  const pollRef = useRef(null)
+  const cdRef = useRef(null)
+  const logsEndRef = useRef(null)
+
+  useEffect(() => {
+    init()
+    return () => { clearInterval(pollRef.current); clearInterval(cdRef.current) }
+  }, [])
+
+  // バトルログの末尾に自動スクロール
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [battleLogs])
+
+  // 共有CDカウントダウン
+  useEffect(() => {
+    clearInterval(cdRef.current)
+    if (remaining > 0) {
+      cdRef.current = setInterval(() => {
+        setRemaining(prev => {
+          if (prev <= 0.2) { clearInterval(cdRef.current); return 0 }
+          return prev - 0.2
+        })
+      }, 200)
+    }
+  }, [remaining])
+
+  const init = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { nav('/login'); return }
+
+    const [{ data: prof }, { data: eq }, { data: prof2 }, { data: ss }] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', user.id).single(),
+      supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', user.id),
+      supabase.from('proficiency').select('*, weapons(*)').eq('player_id', user.id),
+      supabase.from('skill_sets').select('*, skills(*)').eq('player_id', user.id).order('slot_order'),
+    ])
+
+    if (!prof) { nav('/create'); return }
+    setProfile(prof)
+    setEquipment(eq || [])
+    setProficiency(prof2 || [])
+    setSkillSets(ss || [])
+
+    // 共有CD残り計算
+    if (prof.last_action_at) {
+      const elapsed = (Date.now() - new Date(prof.last_action_at).getTime()) / 1000
+      setRemaining(Math.max(0, WAIT_SECONDS - elapsed))
+    }
+
+    await fetchBoss(user.id)
+    pollRef.current = setInterval(() => fetchBoss(user.id), POLL_MS)
+  }
+
+  const fetchBoss = async (playerId) => {
+    const { data } = await supabase.rpc('spawn_raid_boss_if_needed')
+    if (!data) return
+
+    if (data.status === 'waiting') {
+      setBoss(false)
+      setNextSpawn(data.next_spawn)
+      return
+    }
+
+    setBoss(data)
+
+    if (data.id) {
+      const { data: parts } = await supabase
+        .from('raid_participants')
+        .select('player_id, damage_dealt, attack_count, last_attack_at, reward_claimed, profiles(username)')
+        .eq('raid_id', data.id)
+        .order('damage_dealt', { ascending: false })
+
+      setParticipants(parts || [])
+      setMyPart((parts || []).find(p => p.player_id === playerId) || null)
+    }
+  }
+
+  const handleAttack = async () => {
+    if (!boss || !profile || remaining > 0 || battling) return
+    setBattling(true)
+    setBattleLogs([])
+    setScene('battle')
+
+    const eff = calcEffectiveStats(profile, equipment, proficiency)
+    const { logs, totalDamage } = simulateRaidBattle(eff, equipment, skillSets, profile)
+    setBattleLogs(logs)
+
+    if (totalDamage > 0) {
+      const { data, error } = await supabase.rpc('attack_raid_boss', {
+        p_raid_id: boss.id,
+        p_damage: totalDamage,
+      })
+
+      if (error || data?.error) {
+        if (data?.error !== 'cooldown') {
+          setBattleLogs(prev => [...prev, { text: data?.error || 'エラーが発生しました', color: '#ff4444' }])
+        }
+      } else {
+        setBoss(prev => ({ ...prev, hp_current: data.hp_current, status: data.status }))
+        setRemaining(WAIT_SECONDS)
+        // HP/MP全回復
+        await supabase.from('profiles').update({
+          hp_current: eff.hp_max,
+          mp_current: eff.mp_max,
+        }).eq('id', profile.id)
+        setProfile(prev => ({ ...prev, hp_current: eff.hp_max, mp_current: eff.mp_max }))
+        await fetchBoss(profile.id)
+      }
+    } else {
+      setRemaining(WAIT_SECONDS)
+    }
+
+    setBattling(false)
+  }
+
+  const handleClaim = async () => {
+    if (!boss || !myPart || myPart.reward_claimed || claiming) return
+    setClaiming(true)
+    setClaimError(null)
+    const { data, error } = await supabase.rpc('claim_raid_rewards', { p_raid_id: boss.id })
+    if (error || data?.error) {
+      setClaimError(data?.error || 'エラーが発生しました')
+    } else {
+      setReward(data)
+      await fetchBoss(profile.id)
+    }
+    setClaiming(false)
+  }
+
+  const totalEff = participants.reduce((s, p) => s + Number(p.damage_dealt) + Number(p.attack_count || 0) * 500, 0) || 1
+  const myEff = myPart ? Number(myPart.damage_dealt) + Number(myPart.attack_count || 0) * 500 : 0
+  const myContribPct = myEff / totalEff * 100
+  const myTier = getTier(myContribPct)
+  const hpRatio = boss ? boss.hp_current / boss.hp_max : 0
+  const canAct = remaining <= 0
+
+  const jst = jstNow()
+  const isPreSpawn = boss === false && jst.getHours() === 20 && jst.getMinutes() >= 30
+  const getPreSpawnTarget = () => {
+    if (nextSpawn) return nextSpawn
+    const t = jstNow(); t.setHours(21, 0, 0, 0)
+    return t.toISOString()
+  }
+
+  const base = { minHeight: '100vh', background: '#000820', color: '#aaccff', fontFamily: 'monospace', padding: '16px', boxSizing: 'border-box' }
+
+  if (boss === undefined) {
+    return <div style={{ ...base, textAlign: 'center', paddingTop: '40vh', color: '#0088ff' }}>読み込み中...</div>
+  }
+
+  return (
+    <div style={base}>
+      {/* ヘッダー */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+        <button onClick={() => nav('/game')} style={{ background: 'none', border: '1px solid #0088ff', color: '#0088ff', padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>← 戻る</button>
+        <div style={{ color: '#ff4444', fontSize: '18px', letterSpacing: '2px' }}>⚔ レイドボス</div>
+      </div>
+
+      {/* スポーン待ち */}
+      {boss === false && (
+        <div style={{ border: '1px solid #002244', background: '#000e30', padding: '32px', textAlign: 'center', maxWidth: '480px', margin: '0 auto' }}>
+          <div style={{ fontSize: '40px', marginBottom: '16px' }}>🌑</div>
+          {isPreSpawn ? (
+            <>
+              <div style={{ color: '#ffcc44', fontSize: '14px', marginBottom: '8px' }}>⚠ まもなくレイドボスが出現します！</div>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', margin: '12px 0' }}><Countdown targetIso={getPreSpawnTarget()} /></div>
+            </>
+          ) : (
+            <>
+              <div style={{ color: '#446688', fontSize: '14px', marginBottom: '8px' }}>現在レイドボスは出現していません</div>
+              <div style={{ color: '#778899', fontSize: '12px' }}>次の出現: {nextSpawn ? <Countdown targetIso={nextSpawn} /> : '毎日21:00 JST'}</div>
+            </>
+          )}
+          <div style={{ color: '#335566', fontSize: '11px', lineHeight: '1.8', marginTop: '16px' }}>
+            毎日21:00（日本時間）にレイドボスが出現します。<br />全プレイヤーで協力して討伐しましょう！<br />貢献度に応じてリワードが変わります。
+          </div>
+          <RewardTable />
+        </div>
+      )}
+
+      {/* バトルシーン */}
+      {boss && scene === 'battle' && (
+        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+          {/* コンパクトHPバー */}
+          <div style={{ border: '1px solid #440000', background: '#0a0010', padding: '12px', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#446688', marginBottom: '4px' }}>
+              <span style={{ color: '#ff4444' }}>{BOSS_NAME}</span>
+              <span>{fmt(boss.hp_current)} / {fmt(boss.hp_max)}</span>
+            </div>
+            <div style={{ height: '8px', background: '#111122', border: '1px solid #223344', borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${hpRatio * 100}%`, background: hpColor(hpRatio), transition: 'width 0.4s ease' }} />
+            </div>
+          </div>
+
+          {/* バトルログ */}
+          <div style={{ border: '1px solid #112233', background: '#000515', padding: '12px', marginBottom: '16px', minHeight: '200px', maxHeight: '420px', overflowY: 'auto' }}>
+            {battling && battleLogs.length === 0 && (
+              <div style={{ color: '#446688', fontSize: '12px' }}>バトル開始中...</div>
+            )}
+            {battleLogs.map((l, i) => (
+              <div key={i} style={{ color: l.color, fontSize: '12px', lineHeight: '1.8' }}>{l.text}</div>
+            ))}
+            <div ref={logsEndRef} />
+          </div>
+
+          {/* 戻るボタン（バトル終了後） */}
+          {!battling && (
+            <button
+              onClick={() => setScene('boss')}
+              style={{ width: '100%', padding: '12px', background: '#001020', border: '1px solid #0088ff', color: '#0088ff', cursor: 'pointer', fontFamily: 'monospace', fontSize: '13px' }}
+            >
+              ← 戻る
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ボスメイン画面 */}
+      {boss && scene === 'boss' && (
+        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+
+          {/* ボスカード */}
+          <div style={{ border: `1px solid ${boss.status === 'active' ? '#660000' : '#446600'}`, background: '#0a0010', padding: '20px', marginBottom: '16px' }}>
+            <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+              <img src="/raid-boss.png" alt={BOSS_NAME}
+                style={{ width: '80px', height: '80px', objectFit: 'contain', imageRendering: 'pixelated' }}
+                onError={e => { e.target.style.display = 'none' }} />
+              <div style={{ color: '#ff4444', fontSize: '16px', letterSpacing: '2px', marginTop: '8px' }}>{BOSS_NAME}</div>
+            </div>
+            {boss.status === 'active' && boss.spawned_at && (() => {
+              const expireAt = new Date(new Date(boss.spawned_at).getTime() + 30 * 60 * 1000)
+              return (
+                <div style={{ color: '#ffcc44', fontSize: '11px', marginBottom: '8px' }}>
+                  ⏱ 残り時間: <Countdown targetIso={expireAt.toISOString()} />
+                </div>
+              )
+            })()}
+            {boss.status === 'defeated' && (
+              <div style={{ color: '#44ff44', fontSize: '12px', marginBottom: '8px' }}>
+                ✓ 討伐完了 ({new Date(boss.defeated_at).toLocaleTimeString('ja-JP')})
+              </div>
+            )}
+            {boss.status === 'expired' && (
+              <div style={{ color: '#886644', fontSize: '12px', marginBottom: '8px' }}>
+                ⌛ 時間切れ（討伐失敗）
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#446688', marginBottom: '4px' }}>
+              <span>HP</span><span>{fmt(boss.hp_current)} / {fmt(boss.hp_max)}</span>
+            </div>
+            <div style={{ height: '16px', background: '#111122', border: '1px solid #223344', borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${hpRatio * 100}%`, background: hpColor(hpRatio), transition: 'width 0.4s ease' }} />
+            </div>
+            <div style={{ fontSize: '10px', color: '#335566', textAlign: 'right', marginTop: '4px' }}>
+              {participants.length}人参加中 | 総ダメージ: {fmt(participants.reduce((s, p) => s + Number(p.damage_dealt), 0))}
+            </div>
+          </div>
+
+          {/* 挑戦ボタン・CDバー */}
+          {boss.status === 'active' && scene === 'boss' && (
+            <div style={{ border: '1px solid #002244', background: '#000e20', padding: '16px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                <span style={{ color: '#446688' }}>次の挑戦まで</span>
+                <span style={{ color: canAct ? '#44ff88' : '#ffcc00' }}>{canAct ? '▶ 挑戦可能！' : `${remaining.toFixed(1)}秒`}</span>
+              </div>
+              <div style={{ background: '#001028', height: '6px', border: '1px solid #002244', marginBottom: '12px' }}>
+                <div style={{ height: '100%', width: `${((WAIT_SECONDS - remaining) / WAIT_SECONDS) * 100}%`, background: canAct ? '#44ff88' : 'linear-gradient(90deg,#003366,#0088ff)', transition: 'width 0.2s' }} />
+              </div>
+              <button
+                onClick={handleAttack}
+                disabled={!canAct || battling}
+                style={{
+                  width: '100%', padding: '14px',
+                  background: canAct ? '#1a0000' : '#001020',
+                  border: `1px solid ${canAct ? '#ff4444' : '#003366'}`,
+                  color: canAct ? '#ff6666' : '#446688',
+                  cursor: canAct ? 'pointer' : 'not-allowed',
+                  fontFamily: 'monospace', fontSize: '14px', letterSpacing: '2px',
+                }}
+              >
+                {canAct ? `⚔ ${BOSS_NAME}に挑戦する！` : '準備中...'}
+              </button>
+            </div>
+          )}
+
+          {/* リワード受け取り */}
+          {boss.status === 'defeated' && myPart && (
+            <div style={{ border: '1px solid #224422', background: '#001a00', padding: '16px', marginBottom: '16px' }}>
+              <div style={{ color: '#44ff88', fontSize: '13px', marginBottom: '12px' }}>🎁 リワード</div>
+              {reward ? (
+                <div style={{ fontSize: '12px', lineHeight: '2.2' }}>
+                  <div style={{ color: '#ffcc44' }}>貢献度: {reward.contribution_pct}%</div>
+                  <div style={{ color: '#ffcc00' }}>Gold: +{fmt(reward.gold)}</div>
+                  <div style={{ color: '#6699cc' }}>{reward.stone} × {reward.stone_count}</div>
+                  <div style={{ color: '#ff66cc' }}>宝石(F) × {reward.gem_count}個（ランダム種類）</div>
+                  <div style={{ color: '#44ff88', marginTop: '4px' }}>✓ 受け取り完了！</div>
+                </div>
+              ) : myPart.reward_claimed ? (
+                <div style={{ color: '#446688', fontSize: '12px' }}>✓ 既に受け取り済みです</div>
+              ) : (
+                <>
+                  <div style={{ fontSize: '12px', color: '#aaaaaa', marginBottom: '10px', lineHeight: '1.8' }}>
+                    予定リワード: Gold {fmt(myTier.gold)} / {myTier.stone} / 宝石F×{myTier.gemCount}個
+                  </div>
+                  {claimError && <div style={{ color: '#ff4444', fontSize: '12px', marginBottom: '8px' }}>{claimError}</div>}
+                  <button onClick={handleClaim} disabled={claiming}
+                    style={{ padding: '8px 24px', background: '#002200', border: '1px solid #44ff88', color: '#44ff88', cursor: 'pointer', fontFamily: 'monospace', fontSize: '13px' }}>
+                    {claiming ? '処理中...' : '受け取る'}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* 参加者リスト */}
+          {participants.length > 0 && (
+            <div style={{ border: '1px solid #002244', background: '#000e20', padding: '16px', marginBottom: '16px' }}>
+              <div style={{ color: '#446688', fontSize: '12px', marginBottom: '10px' }}>参加者 ({participants.length}人)</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                <thead>
+                  <tr style={{ color: '#335566', borderBottom: '1px solid #112233' }}>
+                    <th style={{ textAlign: 'left', padding: '4px 6px' }}>#</th>
+                    <th style={{ textAlign: 'left', padding: '4px 6px' }}>プレイヤー</th>
+                    <th style={{ textAlign: 'right', padding: '4px 6px' }}>ダメージ</th>
+                    <th style={{ textAlign: 'right', padding: '4px 6px' }}>出撃</th>
+                    <th style={{ textAlign: 'right', padding: '4px 6px' }}>貢献</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {participants.map((p, i) => {
+                    const eff2 = Number(p.damage_dealt) + Number(p.attack_count || 0) * 500
+                    const pct = eff2 / totalEff * 100
+                    const tier = getTier(pct)
+                    const isMe = profile && p.player_id === profile.id
+                    return (
+                      <tr key={p.player_id} style={{ borderBottom: '1px solid #0a1a2a', background: isMe ? '#001122' : 'transparent' }}>
+                        <td style={{ padding: '5px 6px', color: i === 0 ? '#ffcc00' : '#335566' }}>{i === 0 ? '👑' : i + 1}</td>
+                        <td style={{ padding: '5px 6px', color: isMe ? '#aaddff' : '#778899' }}>{p.profiles?.username || '???'}{isMe ? ' (自分)' : ''}</td>
+                        <td style={{ padding: '5px 6px', textAlign: 'right', color: '#cc8844' }}>{fmt(p.damage_dealt)}</td>
+                        <td style={{ padding: '5px 6px', textAlign: 'right', color: '#668866' }}>{p.attack_count || 0}回</td>
+                        <td style={{ padding: '5px 6px', textAlign: 'right', color: tier.color }}>{pct.toFixed(1)}%</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <RewardTable />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RewardTable() {
+  return (
+    <div style={{ border: '1px solid #112233', background: '#000810', padding: '14px', marginTop: '16px' }}>
+      <div style={{ color: '#335566', fontSize: '11px', marginBottom: '8px' }}>討伐報酬（出撃回数ボーナスあり）</div>
+      {TIER_INFO.map(t => (
+        <div key={t.pct} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', padding: '3px 0', borderBottom: '1px solid #0a1220' }}>
+          <span style={{ color: t.color }}>{t.label}</span>
+          <span style={{ color: '#446688' }}>Gold {fmt(t.gold)} / {t.stone} / 宝石F×{t.gemCount}</span>
+        </div>
+      ))}
+      <div style={{ color: '#334455', fontSize: '10px', marginTop: '6px' }}>※ 出撃1回につき500の有効スコアが加算されます</div>
+    </div>
+  )
+}
