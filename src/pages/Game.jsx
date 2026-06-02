@@ -663,8 +663,12 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     }
     case 'マッドラッシュ': {
       result.dmg = Math.floor(eff.atk*1.8*am)
-      result.newPlayerBuffs.berserk = { turns:3, lockedSkill:'マッドラッシュ' }
-      result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}の物理ダメージ！ 狂乱状態になった！`
+      if (!playerBuffs.berserk || playerBuffs.berserk.turns <= 0) {
+        result.newPlayerBuffs.berserk = { turns:3, lockedSkill:'マッドラッシュ' }
+        result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}の物理ダメージ！ 狂乱状態になった！`
+      } else {
+        result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}の物理ダメージ！（狂乱中）`
+      }
       break
     }
     case 'すてみ':      result.dmg = Math.floor(eff.atk*1.8*am); result.selfDmg = Math.floor(result.dmg*0.2); result.log = `💢 すてみ！ ${enemy.name}に${result.dmg}の物理ダメージ！ 自分も${result.selfDmg}ダメージ！`; break
