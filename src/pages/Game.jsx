@@ -2066,6 +2066,23 @@ export default function Game() {
       }
     }
 
+    // 3ターン以内のボス撃破で次エリアの簡易出撃許可証を付与（一度きり）
+    if (win && isBossEncounter && turn <= 3) {
+      const passArea = selectedArea
+      if (passArea >= 2 && passArea <= 7) {
+        const passEffect = `casino_area_${passArea}`
+        const { data: passItem } = await supabase.from('items').select('*').eq('effect', passEffect).maybeSingle()
+        if (passItem) {
+          const { data: existing } = await supabase.from('player_items').select('id').eq('player_id', profile.id).eq('item_id', passItem.id).maybeSingle()
+          if (!existing) {
+            await supabase.from('player_items').insert({ player_id: profile.id, item_id: passItem.id, quantity: 1, equipped: false })
+            logs.push({ text:`🎫 ${passItem.name} を入手！（${turn}ターン以内クリア報酬）`, color:'#ffcc00' })
+            setBattleLogs([...logs])
+          }
+        }
+      }
+    }
+
     const frozenExp = expIsFrozen(profile)
     let newExp = frozenExp ? profile.exp : profile.exp + expGained
     let newGold = profile.gold + goldGained
