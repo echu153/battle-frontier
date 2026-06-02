@@ -659,17 +659,17 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       break
     }
     case 'マッドラッシュ': {
-      result.dmg = Math.floor(eff.atk*1.7*am)
+      result.dmg = Math.floor(eff.atk*1.8*am)
       result.newPlayerBuffs.berserk = { turns:3, lockedSkill:'マッドラッシュ' }
       result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}の物理ダメージ！ 狂乱状態になった！`
       break
     }
-    case 'すてみ':      result.dmg = Math.floor(eff.atk*1.7*am); result.selfDmg = Math.floor(result.dmg*0.2); result.log = `💢 すてみ！ ${enemy.name}に${result.dmg}の物理ダメージ！ 自分も${result.selfDmg}ダメージ！`; break
+    case 'すてみ':      result.dmg = Math.floor(eff.atk*1.8*am); result.selfDmg = Math.floor(result.dmg*0.2); result.log = `💢 すてみ！ ${enemy.name}に${result.dmg}の物理ダメージ！ 自分も${result.selfDmg}ダメージ！`; break
     case 'ブラッティロア': result.newPlayerBuffs.atkUp={turns:4,rate:1.1}; result.newPlayerBuffs.bloodRage={turns:4,healRate:0.3}; result.log = `🩸 ブラッティロア！ 4ターンの間、攻撃力UP・与えたダメージを回復！`; break
     case 'フルブレイカー': {
       const edr_fb = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
       const defVal_fb = Math.floor((enemy.def||0)*edr_fb*0.7/2)
-      result.dmg = Math.max(1, Math.floor(eff.atk*1.9*am) - defVal_fb)
+      result.dmg = Math.max(1, Math.floor(eff.atk*2.0*am) - defVal_fb)
       result.log = `💥 フルブレイカー！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
     }
     case '毒矢': {
@@ -778,7 +778,7 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
     }
     case 'マナボルト': {
       const consumed = eff.lastMpCost || 0
-      result.dmg = consumed * 3
+      result.dmg = consumed * 4
       result.log = `✨ マナボルト！ MP${consumed}を消費して${result.dmg}の特殊ダメージ！`; break
     }
     case 'ディスペル': {
@@ -799,7 +799,7 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       let meteoBurned = false
       const hitDmgs = []
       for (let h = 0; h < hits; h++) {
-        hitDmgs.push(Math.floor(eff.matk*0.8*am*r()))
+        hitDmgs.push(Math.floor(eff.matk*0.7*am*r()))
         if (!meteoBurned && Math.random()*100 < 5) { meteoBurned = true; result.newEnemyBuffs.burn = { turns:5, dmgRate:0.02 } }
       }
       result.dmg = hitDmgs.reduce((a,b)=>a+b,0)
@@ -843,19 +843,24 @@ const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArt
       result.log = `🔮 サイコブラスト！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
     // ── 体術師 ──
-    case '半月蹴り':   result.dmg = Math.floor(eff.atk*1.3*am); result.log = `🦵 半月蹴り！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
+    case '半月蹴り':   result.dmg = Math.floor(eff.atk*1.4*am); result.log = `🦵 半月蹴り！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
     case '五連殺': {
       const ds = Array.from({length:5}, ()=>Math.floor(eff.atk*0.3*am*r()))
       result.dmg = ds.reduce((a,b)=>a+b,0)
       result.log = `🦵 五連殺！ ${enemy.name}に${ds.map(d=>`${d}の物理ダメージ`).join('！')}！`; break
     }
     case '闘争本能': result.log = `🔥 闘争本能【パッシブ】 HP50%以下の間、与ダメージ+10%（常時自動発動）`; break
-    case '破衝掌':     result.dmg = Math.floor(eff.atk*1.7*am); result.log = `🦵 破衝掌！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
+    case '破衝掌': {
+      const edr_hs = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
+      const defVal_hs = Math.floor((enemy.def||0)*edr_hs*0.7/2)
+      result.dmg = Math.max(1, Math.floor(eff.atk*1.7*am) - defVal_hs)
+      result.log = `🦵 破衝掌！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
+    }
     case '飛天三角蹴り': {
       const h1 = Math.floor(eff.atk*0.4*am*r())
-      if (Math.random() < 0.2) { result.dmg=0; result.log=`🦵 飛天三角蹴り！ 1撃目が外れた！`; break }
+      if (Math.random() < 0.05) { result.dmg=0; result.log=`🦵 飛天三角蹴り！ 1撃目が外れた！`; break }
       const h2 = Math.floor(eff.atk*0.7*am*r())
-      if (Math.random() < 0.2) { result.dmg=h1; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！ 2撃目が外れた！`; break }
+      if (Math.random() < 0.05) { result.dmg=h1; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！ 2撃目が外れた！`; break }
       const h3 = Math.floor(eff.atk*1.1*am*r())
       result.dmg = h1+h2+h3; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！${h2}の物理ダメージ！${h3}の物理ダメージ！`; break
     }
