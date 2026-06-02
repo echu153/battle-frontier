@@ -5,12 +5,16 @@ import { AREAS, JOB_GROWTH, JOB_LEVEL3_BONUS, calcExpNext, getEffectiveCap, gene
 
 const SLOT_SYMBOLS = ['7️⃣', '⭐', '🔔', '🍇', '🍒', '🍋']
 const PRIZES = [
-  { key:'stoneF', name:'強化石(F)', price:100,   limit:5, today:false },
-  { key:'stoneE', name:'強化石(E)', price:300,   limit:5, today:false },
-  { key:'stoneD', name:'強化石(D)', price:900,   limit:5, today:false },
-  { key:'stoneC', name:'強化石(C)', price:2700,  limit:5, today:false },
-  { key:'stoneB', name:'強化石(B)', price:5000,  limit:1, today:true },
-  { key:'stoneA', name:'強化石(A)', price:10000, limit:1, today:true },
+  { key:'stoneF',    name:'強化石(F)',         price:100,   limit:5, today:false },
+  { key:'stoneE',    name:'強化石(E)',         price:300,   limit:5, today:false },
+  { key:'stoneD',    name:'強化石(D)',         price:900,   limit:5, today:false },
+  { key:'stoneC',    name:'強化石(C)',         price:2700,  limit:5, today:false },
+  { key:'stoneB',    name:'強化石(B)',         price:5000,  limit:1, today:true  },
+  { key:'stoneA',    name:'強化石(A)',         price:10000, limit:1, today:true  },
+  { key:'goldBlade', name:'ゴールドブレード', price:50000, limit:1, today:false, type:'equip', desc:'ATK+30 DEF+10 MDEF+10  特殊: クリティカル確率+5%' },
+  { key:'fortuneRod',name:'フォーチュンロッド',price:50000, limit:1, today:false, type:'equip', desc:'MATK+40 MDEF+10  特殊: クリティカル確率+5%' },
+  { key:'royalArmor',name:'ロイヤルアーマー', price:50000, limit:1, today:false, type:'equip', desc:'DEF+30 MDEF+20  特殊: クリティカル抵抗+10%' },
+  { key:'luckyRing', name:'幸運の指輪',       price:50000, limit:1, today:false, type:'equip', desc:'全能力値+10  特殊: 回避率+5%（重複不可）' },
 ]
 const SORTIE_WAIT = 30 // 賭博場出撃のクールダウン秒（通常出撃と共通のlast_action_atで管理）
 // EXP凍結中か（手動のexp_frozen、または期限付きのexp_frozen_until）
@@ -77,6 +81,7 @@ export default function Casino() {
   const [dailyNet, setDailyNet] = useState(0)
   const [dailyCounts, setDailyCounts] = useState({})
   const [prizeQty, setPrizeQty] = useState({})
+  const [playerEquipment, setPlayerEquipment] = useState([])
   const spinRef = useRef(null)
   const slotStoppedRef = useRef([false,false,false])
   const pressOrderRef = useRef([])
@@ -123,19 +128,22 @@ export default function Casino() {
     if (data) { setDailyNet(data.net || 0); setDailyCounts(data.counts || {}) }
   }
 
+  const equipPrizeOwned = (prize) =>
+    prize.type === 'equip' && playerEquipment.some(pe => pe.weapons?.name === prize.name)
+
   const exchangePrize = async (prize) => {
     if (loading) return
-    const qty = prizeQty[prize.key] || 1
+    const qty = 1
     const used = dailyCounts[prize.key] || 0
     if (used + qty > prize.limit) { showMessage('本日の交換上限を超えています', '#ff4444'); return }
-    if ((profile.medals||0) < prize.price*qty) { showMessage('メダルが足りません', '#ff4444'); return }
-    if (prize.today && dailyNet < prize.price*qty) { showMessage('当日獲得メダルが足りません', '#ff4444'); return }
+    if ((profile.medals||0) < prize.price) { showMessage('メダルが足りません', '#ff4444'); return }
+    if (prize.today && dailyNet < prize.price) { showMessage('当日獲得メダルが足りません', '#ff4444'); return }
     setLoading(true)
     const { data, error } = await supabase.rpc('casino_exchange_prize', { prize_key: prize.key, qty })
     if (error) { showMessage(`交換失敗: ${error.message}`, '#ff4444'); setLoading(false); return }
     setPrizeQty(q => ({ ...q, [prize.key]: 1 }))
     await fetchProfile()
-    showMessage(`🎁 ${prize.name} を${qty}個交換しました！`, '#44ff88')
+    showMessage(`🎁 ${prize.name} を交換しました！`, '#44ff88')
     setLoading(false)
   }
 
@@ -147,6 +155,8 @@ export default function Casino() {
     setProfile(p)
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id)
     setPlayerItems(pi || [])
+    const { data: pe } = await supabase.from('player_equipment').select('*, weapons(name)').eq('player_id', user.id)
+    setPlayerEquipment(pe || [])
     // 未清算の戦果をlocalStorageから復元
     try {
       const saved = localStorage.getItem('bf_sortie_' + p.id)
@@ -958,31 +968,28 @@ export default function Casino() {
             {PRIZES.map(p => {
               const used = dailyCounts[p.key] || 0
               const remain = p.limit - used
-              const qty = Math.min(prizeQty[p.key] || 1, Math.max(1, remain))
-              const enoughMedals = (profile.medals||0) >= p.price*qty
-              const enoughToday = !p.today || dailyNet >= p.price*qty
-              const canBuy = remain > 0 && enoughMedals && enoughToday
+              const enoughMedals = (profile.medals||0) >= p.price
+              const enoughToday = !p.today || dailyNet >= p.price
+              const alreadyOwned = equipPrizeOwned(p)
+              const canBuy = remain > 0 && enoughMedals && enoughToday && !alreadyOwned
+              const borderColor = p.type==='equip' ? '#664400' : p.today ? '#446644' : '#003366'
               return (
-                <div key={p.key} style={{ border:`1px solid ${p.today?'#446644':'#003366'}`, background:'#001028', padding:'10px', marginBottom:'6px' }}>
+                <div key={p.key} style={{ border:`1px solid ${borderColor}`, background:'#001028', padding:'10px', marginBottom:'6px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                     <div>
                       <div style={{ color:'#88ccff', fontSize:'12px' }}>
                         {p.name}
                         {p.today && <span style={{ color:'#44ff88', fontSize:'9px', marginLeft:'6px', border:'1px solid #44ff88', padding:'1px 4px' }}>当日獲得</span>}
+                        {p.type==='equip' && <span style={{ color:'#ffaa44', fontSize:'9px', marginLeft:'6px', border:'1px solid #ffaa44', padding:'1px 4px' }}>装備</span>}
                       </div>
-                      <div style={{ color:'#ffaa00', fontSize:'11px', marginTop:'2px' }}>🎫 {p.price.toLocaleString()} / 個</div>
+                      <div style={{ color:'#ffaa00', fontSize:'11px', marginTop:'2px' }}>🎫 {p.price.toLocaleString()}</div>
+                      {p.desc && <div style={{ color:'#557799', fontSize:'10px', marginTop:'2px' }}>{p.desc}</div>}
                       <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>本日 残り{remain}/{p.limit}個</div>
                     </div>
                     <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-                      {remain > 1 && (
-                        <select value={prizeQty[p.key] || 1} onChange={e=>setPrizeQty(q=>({ ...q, [p.key]: Number(e.target.value) }))}
-                          style={{ background:'#001028', border:'1px solid #886600', color:'#ffaa00', fontFamily:'monospace', fontSize:'11px', padding:'6px' }}>
-                          {Array.from({length: remain}, (_,k)=>k+1).map(n => <option key={n} value={n}>{n}個</option>)}
-                        </select>
-                      )}
                       <button onClick={()=>exchangePrize(p)} disabled={!canBuy || loading}
                         style={{ padding:'8px 14px', background: canBuy?'#1a1000':'#001', border:`1px solid ${canBuy?'#ffaa00':'#002244'}`, color: canBuy?'#ffaa00':'#334455', cursor: canBuy?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap' }}>
-                        {remain<=0 ? '上限' : !enoughMedals ? 'メダル不足' : !enoughToday ? '当日不足' : '交換'}
+                        {alreadyOwned ? '所持済み' : remain<=0 ? '上限' : !enoughMedals ? 'メダル不足' : !enoughToday ? '当日不足' : '交換'}
                       </button>
                     </div>
                   </div>
