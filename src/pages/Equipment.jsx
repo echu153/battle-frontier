@@ -199,7 +199,7 @@ export default function Equipment() {
       else await supabase.from('player_gems').insert({ player_id: profile.id, gem_type: op.gemType, rank: op.toRank, quantity: op.count })
     }
     await fetchAll()
-    setBulkPreview(null)
+    setBulkPreview({ done: true })
     setLoading(false)
   }
 
@@ -653,41 +653,29 @@ export default function Equipment() {
           <div style={{ background:'#000e20', border:'1px solid #0088ff', padding:'20px', maxWidth:'360px', width:'90%', fontFamily:'monospace', maxHeight:'80vh', overflowY:'auto' }}>
             <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'14px' }}>✨ 一括合成の確認</div>
 
-            <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>合成内容</div>
-            {bulkPreview.ops.map((op, i) => (
-              <div key={i} style={{ fontSize:'11px', color:'#aaccff', padding:'3px 0', borderBottom:'1px solid #112233' }}>
-                {GEM_DATA[op.gemType]?.name}({op.fromRank}) ×{op.count * 3}
-                <span style={{ color:'#446688' }}> → </span>
-                {GEM_DATA[op.gemType]?.name}({op.toRank}) ×{op.count}
-              </div>
-            ))}
-
-            <div style={{ display:'flex', gap:'10px', marginTop:'14px' }}>
-              <div style={{ flex:1 }}>
-                <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>合成前</div>
-                {bulkPreview.before.sort((a,b)=>GEM_TYPES.indexOf(a.gem_type)-GEM_TYPES.indexOf(b.gem_type)||GEM_RANKS.indexOf(a.rank)-GEM_RANKS.indexOf(b.rank)).map((g,i) => (
-                  <div key={i} style={{ fontSize:'10px', color:'#778899', lineHeight:'1.7' }}>
-                    {GEM_DATA[g.gem_type]?.name}({g.rank}) ×{g.quantity}
+            {bulkPreview.done ? (
+              <>
+                <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'16px 0' }}>✓ 合成が完了しました！</div>
+                <button onClick={()=>setBulkPreview(null)} style={{ width:'100%', padding:'8px', background:'#001840', border:'1px solid #0088ff', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>閉じる</button>
+              </>
+            ) : (
+              <>
+                <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>合成内容</div>
+                {bulkPreview.ops.map((op, i) => (
+                  <div key={i} style={{ fontSize:'11px', color:'#aaccff', padding:'3px 0', borderBottom:'1px solid #112233' }}>
+                    {GEM_DATA[op.gemType]?.name}({op.fromRank}) ×{op.count * 3}
+                    <span style={{ color:'#446688' }}> → </span>
+                    {GEM_DATA[op.gemType]?.name}({op.toRank}) ×{op.count}
                   </div>
                 ))}
-              </div>
-              <div style={{ color:'#0088ff', fontSize:'18px', alignSelf:'center' }}>→</div>
-              <div style={{ flex:1 }}>
-                <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>合成後</div>
-                {bulkPreview.after.sort((a,b)=>GEM_TYPES.indexOf(a.gem_type)-GEM_TYPES.indexOf(b.gem_type)||GEM_RANKS.indexOf(a.rank)-GEM_RANKS.indexOf(b.rank)).map((g,i) => (
-                  <div key={i} style={{ fontSize:'10px', color:'#ff66cc', lineHeight:'1.7' }}>
-                    {GEM_DATA[g.gem_type]?.name}({g.rank}) ×{g.quantity}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ display:'flex', gap:'8px', marginTop:'16px' }}>
-              <button onClick={()=>setBulkPreview(null)} style={{ flex:1, padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>キャンセル</button>
-              <button onClick={executeBulkSynthesis} disabled={loading} style={{ flex:2, padding:'8px', background:'#001840', border:'1px solid #0088ff', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-                {loading ? '合成中...' : '合成する'}
-              </button>
-            </div>
+                <div style={{ display:'flex', gap:'8px', marginTop:'16px' }}>
+                  <button onClick={()=>setBulkPreview(null)} style={{ flex:1, padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>キャンセル</button>
+                  <button onClick={executeBulkSynthesis} disabled={loading} style={{ flex:2, padding:'8px', background:'#001840', border:'1px solid #0088ff', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                    {loading ? '合成中...' : '合成する'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
