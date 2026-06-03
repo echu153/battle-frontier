@@ -1161,7 +1161,7 @@ export default function Game() {
         if (data?.id) {
           const { data: parts } = await supabase
             .from('raid_participants')
-            .select('player_id, damage_dealt, attack_count, profiles(username)')
+            .select('player_id, damage_dealt, attack_count, reward_claimed, profiles(username)')
             .eq('raid_id', data.id)
             .order('damage_dealt', { ascending: false })
             .limit(5)
@@ -3195,7 +3195,8 @@ export default function Game() {
                   const parts = raidBossData?.participants || []
                   const hpRatio = b ? b.hp_current / b.hp_max : 0
                   const totalDmg = parts.reduce((s,p) => s + Number(p.damage_dealt), 0)
-                  if ((raidStatus === 'defeated' || raidStatus === 'expired') && isSeen) return null
+                  const hasUnclaimed = raidStatus === 'defeated' && parts.some(p => p.player_id === profile?.id && !p.reward_claimed)
+                  if ((raidStatus === 'defeated' || raidStatus === 'expired') && isSeen && !hasUnclaimed) return null
                   return (
                     <div style={{ border:'1px solid #440000', background:'#0a0010', padding:'10px', marginBottom:'8px' }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
@@ -3227,7 +3228,12 @@ export default function Game() {
                           <button onClick={()=>nav('/raid')} style={{ width:'100%', padding:'6px', background:'#1a0000', border:'1px solid #ff4422', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>参加する →</button>
                         </>
                       )}
-                      {raidStatus === 'defeated' && b && (
+                      {hasUnclaimed && (
+                        <div onClick={()=>nav('/raid')} style={{ background:'#1a0a00', border:'1px solid #ffaa00', padding:'6px 8px', marginBottom:'6px', cursor:'pointer', borderRadius:'2px' }}>
+                          <span style={{ color:'#ffaa00', fontSize:'11px' }}>🎁 未受け取りの報酬があります →</span>
+                        </div>
+                      )}
+                    {raidStatus === 'defeated' && b && !hasUnclaimed && (
                         <div style={{ fontSize:'10px', color:'#446688' }}>
                           <span style={{ color:'#44ff88' }}>✓ 討伐完了</span>　総ダメージ: {totalDmg.toLocaleString()}
                           {parts.length > 0 && <div style={{ marginTop:'4px' }}>MVP: 👑 {parts[0].profiles?.username}</div>}
