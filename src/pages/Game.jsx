@@ -1174,7 +1174,7 @@ export default function Game() {
       }
     }
     checkRaid()
-    const id = setInterval(checkRaid, 60000)
+    const id = setInterval(checkRaid, 30000) // 30秒ごと（21時スポーン検知を早める）
     return () => clearInterval(id)
   }, [])
 
@@ -2910,45 +2910,66 @@ export default function Game() {
                   <span style={{ color:'#446688', marginLeft:'8px' }}>残り{papiaEvent.remainingMin}分{papiaEvent.remainingSec}秒</span>
                 </div>
               )}
-              {(raidStatus === 'active' || raidStatus === 'defeated' || raidStatus === 'expired') && raidBossData && (() => {
-                const b = raidBossData.boss
-                const parts = raidBossData.participants
-                const hpRatio = b.hp_current / b.hp_max
+              {(() => {
+                const raidSeenKey = raidBossData ? `bf_raid_seen_${raidBossData.boss.id}` : null
+                const isSeen = raidSeenKey && localStorage.getItem(raidSeenKey)
+                const b = raidBossData?.boss
+                const parts = raidBossData?.participants || []
+                const hpRatio = b ? b.hp_current / b.hp_max : 0
                 const totalDmg = parts.reduce((s,p) => s + Number(p.damage_dealt), 0)
-                const borderColor = raidStatus === 'active' ? '#660000' : raidStatus === 'defeated' ? '#224400' : '#442200'
-                const statusLabel = raidStatus === 'active' ? '⚔ 出現中' : raidStatus === 'defeated' ? '✓ 討伐完了' : '⌛ 時間切れ'
-                const statusColor = raidStatus === 'active' ? '#ff6644' : raidStatus === 'defeated' ? '#44ff88' : '#886644'
+                if ((raidStatus === 'defeated' || raidStatus === 'expired') && isSeen) return null
                 return (
-                  <div style={{ border:`1px solid ${borderColor}`, background:'#0a0010', padding:'10px', marginBottom:'8px', cursor: raidStatus==='active' ? 'pointer' : 'default' }} onClick={()=>{ if(raidStatus==='active') nav('/raid') }}>
+                  <div style={{ border:'1px solid #440000', background:'#0a0010', padding:'10px', marginBottom:'8px' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
-                      <span style={{ color:'#ff4444', fontSize:'11px', letterSpacing:'1px' }}>黒龍ヴァルゼノク</span>
-                      <span style={{ color: statusColor, fontSize:'10px' }}>{statusLabel}{raidStatus==='active'?' →':''}</span>
+                      <span style={{ color:'#ff4444', fontSize:'11px', letterSpacing:'1px' }}>⚔ レイドボス</span>
+                      {(raidStatus === 'defeated' || raidStatus === 'expired') && raidSeenKey && (
+                        <span style={{ color:'#446688', fontSize:'10px', cursor:'pointer' }}
+                          onClick={()=>{ localStorage.setItem(raidSeenKey,'1'); setRaidStatus(null); setRaidBossData(null) }}>× 閉じる</span>
+                      )}
                     </div>
-                    <div style={{ height:'6px', background:'#111122', border:'1px solid #223344', borderRadius:'2px', overflow:'hidden', marginBottom:'6px' }}>
-                      <div style={{ height:'100%', width:`${Math.max(0,hpRatio)*100}%`, background: hpRatio>0.5?'#44ff88':hpRatio>0.25?'#ffcc00':'#ff4444' }} />
-                    </div>
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#446688', marginBottom: parts.length>0?'6px':'0' }}>
-                      <span>HP: {Number(b.hp_current).toLocaleString()} / {Number(b.hp_max).toLocaleString()}</span>
-                      <span>総ダメージ: {totalDmg.toLocaleString()}</span>
-                    </div>
-                    {parts.length > 0 && (
-                      <div style={{ borderTop:'1px solid #112233', paddingTop:'5px' }}>
-                        {parts.slice(0,3).map((p,i) => (
-                          <div key={p.player_id} style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#556677', lineHeight:'1.7' }}>
-                            <span>{i===0?'👑':i+1+'.'} {p.profiles?.username}</span>
-                            <span style={{ color:'#cc8844' }}>{Number(p.damage_dealt).toLocaleString()}</span>
+                    {raidStatus === 'active' && b && (
+                      <>
+                        <div style={{ height:'6px', background:'#111122', border:'1px solid #223344', borderRadius:'2px', overflow:'hidden', marginBottom:'5px' }}>
+                          <div style={{ height:'100%', width:`${Math.max(0,hpRatio)*100}%`, background: hpRatio>0.5?'#44ff88':hpRatio>0.25?'#ffcc00':'#ff4444' }} />
+                        </div>
+                        <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#446688', marginBottom: parts.length>0?'6px':'0' }}>
+                          <span>HP: {Number(b.hp_current).toLocaleString()} / {Number(b.hp_max).toLocaleString()}</span>
+                          <span>総ダメージ: {totalDmg.toLocaleString()}</span>
+                        </div>
+                        {parts.length > 0 && (
+                          <div style={{ borderTop:'1px solid #112233', paddingTop:'4px', marginBottom:'6px' }}>
+                            {parts.slice(0,3).map((p,i) => (
+                              <div key={p.player_id} style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#556677', lineHeight:'1.7' }}>
+                                <span>{i===0?'👑':i+1+'.'} {p.profiles?.username}</span>
+                                <span style={{ color:'#cc8844' }}>{Number(p.damage_dealt).toLocaleString()}</span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        )}
+                        <button onClick={()=>nav('/raid')} style={{ width:'100%', padding:'6px', background:'#1a0000', border:'1px solid #ff4422', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>参加する →</button>
+                      </>
+                    )}
+                    {raidStatus === 'defeated' && b && (
+                      <div style={{ fontSize:'10px', color:'#446688' }}>
+                        <span style={{ color:'#44ff88' }}>✓ 討伐完了</span>　総ダメージ: {totalDmg.toLocaleString()}
+                        {parts.length > 0 && <div style={{ marginTop:'4px' }}>MVP: 👑 {parts[0].profiles?.username}</div>}
+                      </div>
+                    )}
+                    {raidStatus === 'expired' && (
+                      <div style={{ fontSize:'10px', color:'#886644' }}>⌛ 時間切れ（討伐失敗）</div>
+                    )}
+                    {(raidStatus === 'pre') && (
+                      <div style={{ fontSize:'10px', color:'#cc8844' }}>⚠ まもなく出現します！</div>
+                    )}
+                    {(!raidStatus || raidStatus === null) && (
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <span style={{ fontSize:'10px', color:'#335566' }}>毎日21:00 JST 出現</span>
+                        <button onClick={()=>nav('/raid')} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'3px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>確認する</button>
                       </div>
                     )}
                   </div>
                 )
               })()}
-              {raidStatus === 'pre' && (
-                <div style={{ background:'#100a00', border:'1px solid #886622', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
-                  <span style={{ color:'#cc8844' }}>⚠ まもなくレイドボスが出現します！</span>
-                </div>
-              )}
               <button onClick={(e)=>doBattle(e)} disabled={!canAct||loading||!canBattle}
                 style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
                 {isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
@@ -3167,45 +3188,66 @@ export default function Game() {
                     <span style={{ color:'#446688', marginLeft:'8px' }}>残り{papiaEvent.remainingMin}分{papiaEvent.remainingSec}秒</span>
                   </div>
                 )}
-                {(raidStatus === 'active' || raidStatus === 'defeated' || raidStatus === 'expired') && raidBossData && (() => {
-                  const b = raidBossData.boss
-                  const parts = raidBossData.participants
-                  const hpRatio = b.hp_current / b.hp_max
+                {(() => {
+                  const raidSeenKey = raidBossData ? `bf_raid_seen_${raidBossData.boss.id}` : null
+                  const isSeen = raidSeenKey && localStorage.getItem(raidSeenKey)
+                  const b = raidBossData?.boss
+                  const parts = raidBossData?.participants || []
+                  const hpRatio = b ? b.hp_current / b.hp_max : 0
                   const totalDmg = parts.reduce((s,p) => s + Number(p.damage_dealt), 0)
-                  const borderColor = raidStatus === 'active' ? '#660000' : raidStatus === 'defeated' ? '#224400' : '#442200'
-                  const statusLabel = raidStatus === 'active' ? '⚔ 出現中' : raidStatus === 'defeated' ? '✓ 討伐完了' : '⌛ 時間切れ'
-                  const statusColor = raidStatus === 'active' ? '#ff6644' : raidStatus === 'defeated' ? '#44ff88' : '#886644'
+                  if ((raidStatus === 'defeated' || raidStatus === 'expired') && isSeen) return null
                   return (
-                    <div style={{ border:`1px solid ${borderColor}`, background:'#0a0010', padding:'10px', marginBottom:'8px', cursor: raidStatus==='active' ? 'pointer' : 'default' }} onClick={()=>{ if(raidStatus==='active') nav('/raid') }}>
+                    <div style={{ border:'1px solid #440000', background:'#0a0010', padding:'10px', marginBottom:'8px' }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
-                        <span style={{ color:'#ff4444', fontSize:'11px', letterSpacing:'1px' }}>黒龍ヴァルゼノク</span>
-                        <span style={{ color: statusColor, fontSize:'10px' }}>{statusLabel}{raidStatus==='active'?' →':''}</span>
+                        <span style={{ color:'#ff4444', fontSize:'11px', letterSpacing:'1px' }}>⚔ レイドボス</span>
+                        {(raidStatus === 'defeated' || raidStatus === 'expired') && raidSeenKey && (
+                          <span style={{ color:'#446688', fontSize:'10px', cursor:'pointer' }}
+                            onClick={()=>{ localStorage.setItem(raidSeenKey,'1'); setRaidStatus(null); setRaidBossData(null) }}>× 閉じる</span>
+                        )}
                       </div>
-                      <div style={{ height:'6px', background:'#111122', border:'1px solid #223344', borderRadius:'2px', overflow:'hidden', marginBottom:'6px' }}>
-                        <div style={{ height:'100%', width:`${Math.max(0,hpRatio)*100}%`, background: hpRatio>0.5?'#44ff88':hpRatio>0.25?'#ffcc00':'#ff4444' }} />
-                      </div>
-                      <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#446688', marginBottom: parts.length>0?'6px':'0' }}>
-                        <span>HP: {Number(b.hp_current).toLocaleString()} / {Number(b.hp_max).toLocaleString()}</span>
-                        <span>総ダメージ: {totalDmg.toLocaleString()}</span>
-                      </div>
-                      {parts.length > 0 && (
-                        <div style={{ borderTop:'1px solid #112233', paddingTop:'5px' }}>
-                          {parts.slice(0,3).map((p,i) => (
-                            <div key={p.player_id} style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#556677', lineHeight:'1.7' }}>
-                              <span>{i===0?'👑':i+1+'.'} {p.profiles?.username}</span>
-                              <span style={{ color:'#cc8844' }}>{Number(p.damage_dealt).toLocaleString()}</span>
+                      {raidStatus === 'active' && b && (
+                        <>
+                          <div style={{ height:'6px', background:'#111122', border:'1px solid #223344', borderRadius:'2px', overflow:'hidden', marginBottom:'5px' }}>
+                            <div style={{ height:'100%', width:`${Math.max(0,hpRatio)*100}%`, background: hpRatio>0.5?'#44ff88':hpRatio>0.25?'#ffcc00':'#ff4444' }} />
+                          </div>
+                          <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#446688', marginBottom: parts.length>0?'6px':'0' }}>
+                            <span>HP: {Number(b.hp_current).toLocaleString()} / {Number(b.hp_max).toLocaleString()}</span>
+                            <span>総ダメージ: {totalDmg.toLocaleString()}</span>
+                          </div>
+                          {parts.length > 0 && (
+                            <div style={{ borderTop:'1px solid #112233', paddingTop:'4px', marginBottom:'6px' }}>
+                              {parts.slice(0,3).map((p,i) => (
+                                <div key={p.player_id} style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#556677', lineHeight:'1.7' }}>
+                                  <span>{i===0?'👑':i+1+'.'} {p.profiles?.username}</span>
+                                  <span style={{ color:'#cc8844' }}>{Number(p.damage_dealt).toLocaleString()}</span>
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          )}
+                          <button onClick={()=>nav('/raid')} style={{ width:'100%', padding:'6px', background:'#1a0000', border:'1px solid #ff4422', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>参加する →</button>
+                        </>
+                      )}
+                      {raidStatus === 'defeated' && b && (
+                        <div style={{ fontSize:'10px', color:'#446688' }}>
+                          <span style={{ color:'#44ff88' }}>✓ 討伐完了</span>　総ダメージ: {totalDmg.toLocaleString()}
+                          {parts.length > 0 && <div style={{ marginTop:'4px' }}>MVP: 👑 {parts[0].profiles?.username}</div>}
+                        </div>
+                      )}
+                      {raidStatus === 'expired' && (
+                        <div style={{ fontSize:'10px', color:'#886644' }}>⌛ 時間切れ（討伐失敗）</div>
+                      )}
+                      {raidStatus === 'pre' && (
+                        <div style={{ fontSize:'10px', color:'#cc8844' }}>⚠ まもなく出現します！</div>
+                      )}
+                      {(!raidStatus || raidStatus === null) && (
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                          <span style={{ fontSize:'10px', color:'#335566' }}>毎日21:00 JST 出現</span>
+                          <button onClick={()=>nav('/raid')} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'3px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>確認する</button>
                         </div>
                       )}
                     </div>
                   )
                 })()}
-                {raidStatus === 'pre' && (
-                  <div style={{ background:'#100a00', border:'1px solid #886622', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
-                    <span style={{ color:'#cc8844' }}>⚠ まもなくレイドボスが出現します！</span>
-                  </div>
-                )}
                 <button onClick={(e)=>doBattle(e)} disabled={!canAct||loading||!canBattle}
                   style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
                   {isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中（HP全回復まで出撃不可）':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
