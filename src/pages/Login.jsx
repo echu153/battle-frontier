@@ -1,5 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabase } from '../supabase'
+
+const toJa = (msg = '') => {
+  if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) return 'メールアドレスまたはパスワードが違います'
+  if (msg.includes('Email not confirmed')) return 'メールアドレスが確認されていません。確認メールをご確認ください'
+  if (msg.includes('User already registered')) return 'このメールアドレスは既に登録されています'
+  if (msg.includes('Password should be at least') || msg.includes('password should be at least')) return 'パスワードは6文字以上にしてください'
+  if (msg.includes('same password') || msg.includes('different from the old') || msg.includes('New password should be different')) return '以前と同じパスワードは使用できません'
+  if (msg.includes('Unable to validate email address') || msg.includes('invalid email')) return '無効なメールアドレスです'
+  if (msg.includes('rate limit') || msg.includes('too many requests') || msg.includes('over_email_send_rate_limit')) return 'しばらく時間をおいてから再試行してください'
+  if (msg.includes('Token has expired') || msg.includes('token has expired')) return 'リンクの有効期限が切れています。もう一度リセットメールを送ってください'
+  if (msg.includes('Auth session missing') || msg.includes('session_not_found')) return 'セッションが見つかりません。ログインしなおしてください'
+  if (msg.includes('Email address cannot be used') || msg.includes('email address not authorized')) return 'このメールアドレスは使用できません'
+  return 'エラーが発生しました: ' + msg
+}
 
 export default function Login({ isPasswordRecovery = false }) {
   const [email, setEmail] = useState('')
@@ -23,7 +37,7 @@ export default function Login({ isPasswordRecovery = false }) {
     const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
       redirectTo: siteUrl + '/login',
     })
-    if (error) setError('送信に失敗しました: ' + error.message)
+    if (error) setError(toJa(error.message))
     else setMessage('パスワードリセットメールを送りました！メールを確認してください。')
     setLoading(false)
   }
@@ -34,7 +48,7 @@ export default function Login({ isPasswordRecovery = false }) {
     if (newPassword.length < 6) { setError('パスワードは6文字以上にしてください'); return }
     setLoading(true); setError('')
     const { error } = await supabase.auth.updateUser({ password: newPassword })
-    if (error) { setError(error.message) }
+    if (error) { setError(toJa(error.message)) }
     else { setMessage('パスワードを変更しました！ログインしてください。'); await supabase.auth.signOut() }
     setLoading(false)
   }
@@ -52,14 +66,7 @@ export default function Login({ isPasswordRecovery = false }) {
         if (error) throw error
       }
     } catch (err) {
-      const msg = err.message || ''
-      if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) setError('メールアドレスまたはパスワードが違います')
-      else if (msg.includes('Email not confirmed')) setError('メールアドレスが確認されていません。確認メールをご確認ください')
-      else if (msg.includes('User already registered')) setError('このメールアドレスは既に登録されています')
-      else if (msg.includes('Password should be at least')) setError('パスワードは6文字以上にしてください')
-      else if (msg.includes('Unable to validate email address')) setError('無効なメールアドレスです')
-      else if (msg.includes('rate limit') || msg.includes('too many requests')) setError('しばらく時間をおいてから再試行してください')
-      else setError('エラーが発生しました: ' + msg)
+      setError(toJa(err.message || ''))
     }
     setLoading(false)
   }
