@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from './supabase'
 import Login from './pages/Login'
 import CharCreate from './pages/CharCreate'
@@ -21,6 +21,7 @@ function App() {
   const [hasChar, setHasChar] = useState(undefined)
   const [suspended, setSuspended] = useState(false)
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false)
+  const recoveryRef = useRef(false)
 
   // 強制リロード機構：app_config.reload_tokenが変わったら全員のページを1回リロード
   useEffect(() => {
@@ -48,11 +49,24 @@ function App() {
       else setHasChar(false)
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
-      if (event === 'PASSWORD_RECOVERY') { setIsPasswordRecovery(true); return }
-      setIsPasswordRecovery(false)
+      if (event === 'PASSWORD_RECOVERY') {
+        recoveryRef.current = true
+        setIsPasswordRecovery(true)
+        setSession(s)
+        return
+      }
+      if (event === 'SIGNED_OUT') {
+        recoveryRef.current = false
+        setIsPasswordRecovery(false)
+        setSession(null)
+        setHasChar(false)
+        return
+      }
+      // PASSWORD_RECOVERY後のSIGNED_INなどは無視
+      if (recoveryRef.current) return
       setSession(s)
       if (s) checkChar(s.user.id)
-      else { setHasChar(false) }
+      else setHasChar(false)
     })
     return () => subscription.unsubscribe()
   }, [])
