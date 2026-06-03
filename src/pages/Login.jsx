@@ -38,7 +38,14 @@ export default function Login({ isPasswordRecovery = false }) {
         if (error) throw error
       }
     } catch (err) {
-      setError(err.message)
+      const msg = err.message || ''
+      if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) setError('メールアドレスまたはパスワードが違います')
+      else if (msg.includes('Email not confirmed')) setError('メールアドレスが確認されていません。確認メールをご確認ください')
+      else if (msg.includes('User already registered')) setError('このメールアドレスは既に登録されています')
+      else if (msg.includes('Password should be at least')) setError('パスワードは6文字以上にしてください')
+      else if (msg.includes('Unable to validate email address')) setError('無効なメールアドレスです')
+      else if (msg.includes('rate limit') || msg.includes('too many requests')) setError('しばらく時間をおいてから再試行してください')
+      else setError('エラーが発生しました: ' + msg)
     }
     setLoading(false)
   }
