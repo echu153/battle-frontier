@@ -149,11 +149,11 @@ export default function Exchange() {
 
   return (
     <div style={base}>
-      {/* ヘッダー */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-        <button onClick={() => nav('/game')} style={{ background: 'none', border: '1px solid #0088ff', color: '#0088ff', padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>← 戻る</button>
-        <div style={{ color: '#88ccff', fontSize: '16px', letterSpacing: '2px' }}>🔄 交換所</div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
+        <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
+        <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
       </div>
+      <div style={{ color:'#ff6644', fontSize:'14px', marginBottom:'12px' }}>🔄 交換所</div>
 
       {/* タブ */}
       <div style={{ display: 'flex', gap: '0', marginBottom: '16px', borderBottom: '1px solid #002244', maxWidth: '600px', margin: '0 auto 16px' }}>

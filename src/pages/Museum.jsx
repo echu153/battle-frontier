@@ -273,19 +273,18 @@ export default function Museum() {
 
   return (
     <div style={{ minHeight:'100vh', background:'#000820', color:'#cccccc', fontFamily:'monospace', fontSize:'13px' }}>
-      <div style={{ padding:'12px 16px', borderBottom:'1px solid #002244', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-        <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街へ</button>
-        <div style={{ color:'#ccaa44', fontSize:'14px', letterSpacing:'2px' }}>🏛 博物館</div>
-        <div style={{ width:'60px' }} />
-      </div>
-
-      {message && (
-        <div style={{ padding:'8px 16px', background:'#001428', borderBottom:'1px solid #002244', color:message.color, fontSize:'12px', textAlign:'center' }}>
-          {message.text}
+      <div style={{ padding:'16px', maxWidth:'600px', margin:'0 auto' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
+          <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
+          <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
         </div>
-      )}
-
-      <div style={{ padding:'12px 16px', maxWidth:'600px', margin:'0 auto' }}>
+        <div style={{ color:'#ccaa44', fontSize:'14px', marginBottom:'12px' }}>🏛 博物館</div>
+        {message && (
+          <div style={{ color:message.color, fontSize:'12px', padding:'8px', border:'1px solid #002244', marginBottom:'12px', textAlign:'center' }}>
+            {message.text}
+          </div>
+        )}
+        <div>
         <div style={{ display:'flex', gap:'4px', marginBottom:'12px' }}>
           {[{ id:'donate', label:'🎁 寄贈' }, { id:'collection', label:'📋 コレクション' }].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
@@ -469,6 +468,7 @@ export default function Museum() {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   )

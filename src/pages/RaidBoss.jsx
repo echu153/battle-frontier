@@ -479,37 +479,52 @@ export default function RaidBoss() {
 
   return (
     <div style={base}>
-      {/* ヘッダー */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-        <button onClick={() => nav('/game')} style={{ background: 'none', border: '1px solid #0088ff', color: '#0088ff', padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>← 戻る</button>
-        <div style={{ color: '#ff4444', fontSize: '18px', letterSpacing: '2px' }}>⚔ レイドボス</div>
-      </div>
+      <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
+          <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
+          <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
+        </div>
+        <div style={{ color:'#ff4444', fontSize:'14px', marginBottom:'16px' }}>⚔ レイドボス</div>
 
       {/* スポーン待ち */}
       {boss === false && (
-        <div style={{ border: '1px solid #002244', background: '#000e30', padding: '32px', textAlign: 'center', maxWidth: '480px', margin: '0 auto' }}>
-          <div style={{ fontSize: '40px', marginBottom: '16px' }}>🌑</div>
+        <div>
           {isPreSpawn ? (
-            <>
-              <div style={{ color: '#ffcc44', fontSize: '14px', marginBottom: '8px' }}>⚠ まもなくレイドボスが出現します！</div>
-              <div style={{ fontSize: '24px', fontWeight: 'bold', margin: '12px 0' }}><Countdown targetIso={getPreSpawnTarget()} /></div>
-            </>
+            <div style={{ border: '1px solid #440000', background: '#0a0010', padding: '16px', marginBottom: '16px', textAlign: 'center' }}>
+              <div style={{ color: '#ffcc44', fontSize: '13px', marginBottom: '8px' }}>⚠ まもなくレイドボスが出現します！</div>
+              <div style={{ fontSize: '22px', fontWeight: 'bold' }}><Countdown targetIso={getPreSpawnTarget()} /></div>
+            </div>
           ) : (
-            <>
-              <div style={{ color: '#446688', fontSize: '14px', marginBottom: '8px' }}>現在レイドボスは出現していません</div>
-              <div style={{ color: '#778899', fontSize: '12px' }}>次の出現: {nextSpawn ? <Countdown targetIso={nextSpawn} /> : '毎日21:00 JST'}</div>
-            </>
+            <div style={{ border: '1px solid #002244', background: '#000e20', padding: '12px', marginBottom: '16px' }}>
+              <div style={{ color: '#446688', fontSize: '12px', marginBottom: '4px' }}>現在レイドボスは出現していません</div>
+              <div style={{ color: '#556677', fontSize: '11px' }}>次の出現: {nextSpawn ? <Countdown targetIso={nextSpawn} /> : '毎日21:00 JST'}</div>
+            </div>
           )}
-          <div style={{ color: '#335566', fontSize: '11px', lineHeight: '1.8', marginTop: '16px' }}>
-            毎日21:00（日本時間）にレイドボスが出現します。<br />全プレイヤーで協力して討伐しましょう！<br />貢献度に応じてリワードが変わります。
+
+          {/* 次回出現ボス */}
+          <div style={{ border: '1px solid #440000', background: '#0a0010', padding: '14px', marginBottom: '16px' }}>
+            <div style={{ color: '#446688', fontSize: '10px', marginBottom: '8px' }}>次回出現ボス</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+              <img src="/raid-boss.png" alt={BOSS_NAME}
+                style={{ width: '48px', height: '48px', objectFit: 'contain', imageRendering: 'pixelated' }}
+                onError={e => { e.target.style.display = 'none' }} />
+              <div>
+                <div style={{ color: '#ff4444', fontSize: '14px', letterSpacing: '1px' }}>{BOSS_NAME}</div>
+                <div style={{ color: '#446688', fontSize: '10px', marginTop: '2px' }}>毎日21:00〜21:30 JST出現 / HP 500,000</div>
+              </div>
+            </div>
+            <div style={{ fontSize: '10px', color: '#335566', lineHeight: '1.8' }}>
+              全プレイヤーで協力して討伐！貢献度に応じてリワードが変わります。
+            </div>
           </div>
+
           <RewardTable />
         </div>
       )}
 
       {/* バトルシーン */}
       {boss && scene === 'battle' && (
-        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+        <div>
           {/* コンパクトHPバー */}
           <div style={{ border: '1px solid #440000', background: '#0a0010', padding: '12px', marginBottom: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#446688', marginBottom: '4px' }}>
@@ -546,7 +561,7 @@ export default function RaidBoss() {
 
       {/* ボスメイン画面 */}
       {boss && scene === 'boss' && (
-        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+        <div>
 
           {/* ボスカード */}
           <div style={{ border: `1px solid ${boss.status === 'active' ? '#660000' : '#446600'}`, background: '#0a0010', padding: '20px', marginBottom: '16px' }}>
@@ -681,6 +696,7 @@ export default function RaidBoss() {
           <RewardTable />
         </div>
       )}
+      </div>
     </div>
   )
 }
