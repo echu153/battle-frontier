@@ -257,16 +257,27 @@ export default function Smithy() {
       success = Math.random() * 100 < rate
     }
 
+    let resultPlus = currentPlus
     if (success) {
       await supabase.from('player_equipment').update({ enhance_plus: nextPlus }).eq('id', item.id)
+      resultPlus = nextPlus
       showMessage(`✨ 強化成功！ ${item.weapons.name} が +${nextPlus} になった！`, '#ffcc00')
     } else if (nextPlus >= 11) {
       const newPlus = Math.max(0, currentPlus - 1)
       await supabase.from('player_equipment').update({ enhance_plus: newPlus }).eq('id', item.id)
+      resultPlus = newPlus
       showMessage(`💔 強化失敗… ${item.weapons.name} が +${newPlus} に下落した…`, '#ff4444')
     } else {
       showMessage(`💔 強化失敗… ${item.weapons.name} は変化しなかった`, '#ff6644')
     }
+
+    await supabase.from('enhance_logs').insert({
+      player_id: user.id,
+      weapon_name: item.weapons.name,
+      from_plus: currentPlus,
+      to_plus: resultPlus,
+      success,
+    })
 
     await fetchAll()
     setSelectedItem(null)
