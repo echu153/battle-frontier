@@ -222,6 +222,8 @@ export const JOB_GROWTH = {
   '体術師':    { hp:20, mp:5,  atk:2, def:1, matk:1, mdef:1, spd:2 },
   '魔銃士':    { hp:10, mp:5,  atk:2, def:1, matk:2, mdef:1, spd:2 },
   'ギャンブラー':{ hp:10, mp:10, atk:1, def:2, matk:1, mdef:2, spd:1 },
+  '魔法剣士':  { hp:15, mp:8,  atk:1, def:1, matk:1, mdef:1, spd:1 },
+  '聖騎士':    { hp:20, mp:8,  atk:1, def:2, matk:0, mdef:2, spd:0 },
 }
 
 export const JOB_LEVEL3_BONUS = {}
@@ -241,6 +243,8 @@ const ADVANCED_CLASSES = {
   '体術師':    { requires:'格闘家' },
   '魔銃士':    { requires:'弓使い', requiresLv:50, requires2:'魔法使い', requires2Lv:50 },
   'ギャンブラー':{ requiresItem:'gambler_proof' },
+  '魔法剣士':  { requires:'戦士', requiresLv:50, requires2:'魔法使い', requires2Lv:50 },
+  '聖騎士':    { requires:'戦士', requiresLv:50, requires2:'僧侶',    requires2Lv:50 },
 }
 
 const CLASS_LEVEL_CAP = {
@@ -249,6 +253,7 @@ const CLASS_LEVEL_CAP = {
   '元素使い':100, '死霊使い':100, '聖職者':100, '異端審問官':100, '賢者':100,
   'サイキッカー':100, '体術師':100, '魔銃士':100,
   'ギャンブラー':100,
+  '魔法剣士':100, '聖騎士':100,
 }
 export const getEffectiveCap = (className) => CLASS_LEVEL_CAP[className] || 100
 
@@ -933,6 +938,71 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       const jackpot = Math.random()*100 < 5
       if (jackpot) result.dmg *= 2
       result.log = `🎰 ジャックポット！ ${enemy.name}に${result.dmg}のダメージ！${jackpot ? ' 💥 JACKPOT！ ダメージ2倍！！' : ''}`; break
+    }
+    // ── 魔法剣士 ──
+    case '雷光斬': {
+      result.dmg = Math.floor((eff.atk*1.0 + eff.matk*0.3)*am)
+      const raiHit = Math.random()*100 < 30
+      if (raiHit && !(enemyBuffs.paralysis?.turns > 0)) result.newEnemyBuffs.paralysis = { turns:3, skipRate:0.25, spdRate:0.8 }
+      result.log = `⚡⚔ 雷光斬！ ${enemy.name}に${result.dmg}のダメージ！${raiHit && !(enemyBuffs.paralysis?.turns > 0) ? ' 麻痺した！' : ''}`
+      break
+    }
+    case '閃光': {
+      const flashCount = prevSkill === '閃光' ? Math.min((playerBuffs.flashCombo?.count||0)+1, 2) : 0
+      const flashMult = flashCount > 0 ? Math.pow(1.15, flashCount) : 1.0
+      result.dmg = Math.floor((eff.atk*0.6 + eff.matk*0.6)*am*flashMult)
+      result.newPlayerBuffs.flashCombo = { count: flashCount > 0 ? flashCount : 1 }
+      const comboText = flashCount > 0 ? ` 連続${flashCount+1}回（×${flashMult.toFixed(2)}）！` : ''
+      result.log = `✨⚔ 閃光！ ${enemy.name}に${result.dmg}のダメージ！${comboText}`
+      break
+    }
+    case '魔導剣術': result.log = `⚔ 魔導剣術【パッシブ】 特殊攻撃力の30%を攻撃力に変換（常時発動）`; break
+    case '魔剣開放': {
+      if (playerBuffs.spellBladeSealed?.turns > 0) {
+        result.log = `⚔ 魔剣開放！ バフ不可状態のため発動できない！`; break
+      }
+      result.newPlayerBuffs.atkUp  = { turns:4, rate:2.0 }
+      result.newPlayerBuffs.matkUp = { turns:4, rate:2.0 }
+      result.newPlayerBuffs.spellBladeExhaust = { turns:4 }
+      result.log = `⚔💥 魔剣開放！ 4ターンの間、攻撃力・特殊攻撃力が2倍！ その後4ターンバフ不可状態！`
+      break
+    }
+    case 'エレメンタルエッジ': {
+      result.dmg = Math.floor((eff.atk*1.4 + eff.matk*0.7)*am)
+      const elemHit = Math.random()*100 < 30
+      if (elemHit) {
+        const which = Math.floor(Math.random()*3)
+        let statusName = ''
+        if (which === 0) { result.newEnemyBuffs.burn = { turns:5, dmgRate:0.02 }; statusName = 'やけど' }
+        else if (which === 1 && !(enemyBuffs.paralysis?.turns > 0)) { result.newEnemyBuffs.paralysis = { turns:3, skipRate:0.25, spdRate:0.8 }; statusName = '麻痺' }
+        else { const sr = enemyBuffs.stunResist??1.0; result.newEnemyBuffs.stun={turns:1}; result.newEnemyBuffs.stunResist=sr*0.5; statusName='スタン' }
+        result.log = `⚔✨ エレメンタルエッジ！ ${enemy.name}に${result.dmg}のダメージ！ ${statusName}状態！`
+      } else {
+        result.log = `⚔✨ エレメンタルエッジ！ ${enemy.name}に${result.dmg}のダメージ！`
+      }
+      break
+    }
+    // ── 聖騎士 ──
+    case 'ホーリーエッジ': {
+      result.dmg = Math.floor((eff.atk*1.3 + eff.matk*0.3)*am)
+      result.log = `✨⚔ ホーリーエッジ！ ${enemy.name}に${result.dmg}のダメージ！`; break
+    }
+    case 'ディバインスマイト': {
+      result.dmg = Math.floor((eff.atk*1.0 + eff.matk*0.5)*am)
+      const dmgDownHit = Math.random()*100 < 30
+      if (dmgDownHit) result.newEnemyBuffs.dmgDown = { turns:3, rate:0.85 }
+      result.log = `✨⚔ ディバインスマイト！ ${enemy.name}に${result.dmg}のダメージ！${dmgDownHit ? ' 3Tの間、相手の与ダメ-15%！' : ''}`
+      break
+    }
+    case '聖騎士の心得': result.log = `🛡 聖騎士の心得【パッシブ】 防御力・特殊防御力が1.2倍（常時発動）`; break
+    case '聖域展開': {
+      result.newPlayerBuffs.regenHeal = { turns:4, amount:Math.floor(profile.hp_max*0.05) }
+      result.newPlayerBuffs.holyField = { turns:4, rate:1.5 }
+      result.log = `✨ 聖域展開！ 4ターンの間、毎ターン最大HP5%回復・防御力と特殊防御力1.5倍！`; break
+    }
+    case '神聖覚醒': {
+      result.newPlayerBuffs.holyAwakening = { turns:5, defMult:0.4 }
+      result.log = `✨ 神聖覚醒！ 5ターンの間、攻撃ごとに防御力・特殊防御力に基づく追加ダメージを与える！`; break
     }
     default: result.dmg = Math.max(1,eff.atk*am); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
   }
@@ -1674,7 +1744,9 @@ export default function Game() {
     const passiveMpCostMult  = hasTenki ? 0.9 : 1.0
     const passiveMatkMultTenki = hasTenki ? 1.1 : 1.0
     const passiveHitBonus    = (hasRokkan ? 5 : 0) + (hasSeimitsu ? 5 : 0)
-    const hasGambleBody      = passiveNames.includes('ギャンブルボディ')
+    const hasGambleBody       = passiveNames.includes('ギャンブルボディ')
+    const hasMadokenJutsu     = passiveNames.includes('魔導剣術')
+    const hasHolyKnightPassive= passiveNames.includes('聖騎士の心得')
 
     if (isBossEncounter && currentItem && currentItem.items.effect === 'boss_avoid') {
       logs.push({ text:`🧿 魔よけのお守りが光り、ボスとの戦闘を避けた！`, color:'#cc44ff' })
@@ -1718,11 +1790,14 @@ export default function Game() {
     const playerHitBonus = (eff.hitBonus || 0) + passiveHitBonus
 
     const doPlayerAttack = (isExtra=false) => {
-      const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
-      const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1)
+      const holyFieldDef = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
+      const holyKnightMult = hasHolyKnightPassive ? 1.2 : 1.0
+      const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDef * holyKnightMult
+      const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDef * holyKnightMult
       const burnDebuffP = playerBuffs.burn?.turns > 0 ? 0.9 : 1.0
-      const pMatk  = eff.matk * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP
-      const pAtk   = eff.atk  * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP
+      const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * 0.3) : 0
+      const pMatk  = (eff.matk - madokenBonus) * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP
+      const pAtk   = (eff.atk + madokenBonus)  * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP
       const paralysisSpdP = playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1.0
       const pSpd   = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * paralysisSpdP
       const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
@@ -1795,6 +1870,13 @@ export default function Game() {
           }
           const healAmt = Math.floor(res.heal * passiveHealMult)
           playerHp = Math.min(profile.hp_max, playerHp + healAmt)
+          // 魔剣開放の反動中はバフ系スキルを無効化
+          if (playerBuffs.spellBladeSealed?.turns > 0) {
+            const blockedKeys2 = ['atkUp','matkUp','spdUp','dmgReduce','regenHeal','hitBonus','evasion','bloodRage','statusImmune','holyField','holyAwakening','flashCombo','spellBladeExhaust']
+            const hadBuff2 = blockedKeys2.some(k => res.newPlayerBuffs[k] !== playerBuffs[k] && res.newPlayerBuffs[k] !== undefined)
+            for (const k of blockedKeys2) { if (res.newPlayerBuffs[k] !== playerBuffs[k]) res.newPlayerBuffs[k] = playerBuffs[k] }
+            if (hadBuff2) logs.push({ text:`⚔ 魔剣開放の反動中！ バフが効かない！`, color:'#ff4444' })
+          }
           // オールインデバフ中はバフ系スキルを無効化
           if (playerBuffs.allinDebuff?.turns > 0) {
             const blockedKeys = ['atkUp','matkUp','spdUp','dmgReduce','regenHeal','hitBonus','evasion','bloodRage','statusImmune']
@@ -1805,6 +1887,13 @@ export default function Game() {
           playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
           const critText = finalCrit ? ' 💥クリティカル！' : ''
           logs.push({ text:`${prefix}${resLog}${critText}`, color:finalCrit?'#ff4444':'#88ccff' })
+          // 神聖覚醒：攻撃ごとに追加ダメージ
+          if (playerBuffs.holyAwakening?.turns > 0 && finalDmg > 0) {
+            const holyBonusDmg = Math.floor((pDef * playerBuffs.holyAwakening.defMult + pMdef * playerBuffs.holyAwakening.defMult))
+            enemyHp -= holyBonusDmg
+            logs.push({ text:`✨ 神聖覚醒の追加ダメージ！ ${enemy.name}に${holyBonusDmg}ダメージ！`, color:'#ffeeaa' })
+            if (enemyHp <= 0) { skillUsed = true; skillIndex++; return }
+          }
           skillUsed = true; skillIndex++
         }
       }
@@ -1832,8 +1921,10 @@ export default function Game() {
     }
 
     const doEnemyAttack = (isExtra=false) => {
-      const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1)
-      const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1)
+      const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
+      const holyKnightMultE = hasHolyKnightPassive ? 1.2 : 1.0
+      const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDefE * holyKnightMultE
+      const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
       const berserkDmgRate = hasBerserk ? 1.1 : 1.0
       const isEM = enemy.type === 'magical'
@@ -2061,6 +2152,12 @@ export default function Game() {
       if (berserkWasActive && playerBuffs.berserk?.turns === 0 && expandedSkillSet.length > 0) {
         const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk.lockedSkill)
         if (lockedIdx >= 0) skillIndex = lockedIdx + 1
+      }
+      // 魔剣開放：バフ期間終了後にバフ不可状態移行
+      if (playerBuffs.spellBladeExhaust?.turns === 0) {
+        delete playerBuffs.spellBladeExhaust
+        playerBuffs.spellBladeSealed = { turns:4 }
+        logs.push({ text:`⚔ 魔剣開放の反動！ 4ターンの間バフ不可状態になった！`, color:'#ff4444' })
       }
       // オールイン：バフ期間終了後にデバフ移行
       if (playerBuffs.allinActive?.turns === 0) {
