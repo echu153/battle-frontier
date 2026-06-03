@@ -886,16 +886,17 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     case '闘争本能': result.log = `🔥 闘争本能【パッシブ】 HP50%以下の間、与ダメージ+10%（常時自動発動）`; break
     case '破衝掌': {
       const edr_hs = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
-      const defVal_hs = Math.floor((enemy.def||0)*edr_hs*0.7/2)
+      const defVal_hs = Math.floor((enemy.def||0)*edr_hs*0.3/2)
       result.dmg = Math.max(1, Math.floor(eff.atk*1.7*am) - defVal_hs)
       result.log = `🦵 破衝掌！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
     }
     case '飛天三角蹴り': {
-      const h1 = Math.floor(eff.atk*0.4*am*r())
       if (Math.random() < 0.05) { result.dmg=0; result.log=`🦵 飛天三角蹴り！ 1撃目が外れた！`; break }
-      const h2 = Math.floor(eff.atk*0.7*am*r())
+      const h1 = Math.floor(eff.atk*0.5*am*r())
       if (Math.random() < 0.05) { result.dmg=h1; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！ 2撃目が外れた！`; break }
-      const h3 = Math.floor(eff.atk*1.1*am*r())
+      const h2 = Math.floor(eff.atk*0.8*am*r())
+      if (Math.random() < 0.05) { result.dmg=h1+h2; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！${h2}の物理ダメージ！ 3撃目が外れた！`; break }
+      const h3 = Math.floor(eff.atk*1.2*am*r())
       result.dmg = h1+h2+h3; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！${h2}の物理ダメージ！${h3}の物理ダメージ！`; break
     }
     // ── 魔銃士 ──
