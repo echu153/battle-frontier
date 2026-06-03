@@ -16,8 +16,19 @@ const ARTIFACT_BASE_NAMES = [
   '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたオーブ'
 ]
 
-const ENHANCE_COST = [0,100,200,400,800,1500,3000,5000,8000,12000,20000,35000,60000,100000,150000,200000,300000]
-const ENHANCE_RATE = { 6:70, 7:60, 8:50, 9:40, 10:30, 11:20, 12:10, 13:5, 14:3, 15:1, 16:0.1 }
+// ランク別強化費用 [+0〜+16]（SSを基準に倍率適用）
+const ENHANCE_COST_BY_RANK = {
+  f:   [0,    100,    500,   1000,   3000,   5000,   7500,  10000,  13000,  16000,  20000,  24000,  30000,  35000,  40000,  45000,  50000],
+  e:   [0,    200,   1000,   2000,   6000,  10000,  15000,  20000,  26000,  32000,  40000,  48000,  60000,  70000,  80000,  90000, 100000],
+  d:   [0,    500,   2500,   5000,  15000,  25000,  37500,  50000,  65000,  80000, 100000, 120000, 150000, 175000, 200000, 225000, 250000],
+  c:   [0,   1000,   5000,  10000,  30000,  50000,  75000, 100000, 130000, 160000, 200000, 240000, 300000, 350000, 400000, 450000, 500000],
+  b:   [0,   2000,  10000,  20000,  60000, 100000, 150000, 200000, 260000, 320000, 400000, 480000, 600000, 700000, 800000, 900000,1000000],
+  a:   [0,   4000,  20000,  40000, 120000, 200000, 300000, 400000, 520000, 640000, 800000, 960000,1200000,1400000,1600000,1800000,2000000],
+  s:   [0,   7000,  35000,  70000, 210000, 350000, 525000, 700000, 910000,1120000,1400000,1680000,2100000,2450000,2800000,3150000,3500000],
+  ss:  [0,  10000,  50000, 100000, 300000, 500000, 750000,1000000,1300000,1600000,2000000,2400000,3000000,3500000,4000000,4500000,5000000],
+  sss: [0,  20000, 100000, 200000, 600000,1000000,1500000,2000000,2600000,3200000,4000000,4800000,6000000,7000000,8000000,9000000,10000000],
+}
+const ENHANCE_RATE = { 3:90, 4:80, 5:70, 6:50, 7:40, 8:30, 9:20, 10:10, 11:5, 12:3, 13:2, 14:1, 15:0.5, 16:0.1 }
 const MATERIAL_COUNT = (plus) => {
   if (plus <= 5) return 1
   if (plus <= 10) return 2
@@ -186,9 +197,10 @@ export default function Smithy() {
     setLoading(true)
     const currentPlus = item.enhance_plus || 0
     const nextPlus = currentPlus + 1
-    const cost = ENHANCE_COST[nextPlus] || ENHANCE_COST[ENHANCE_COST.length - 1]
-    const materialCount = MATERIAL_COUNT(currentPlus)
     const rarity = item.weapons.rarity
+    const rankCosts = ENHANCE_COST_BY_RANK[rarity] || ENHANCE_COST_BY_RANK.ss
+    const cost = rankCosts[nextPlus] || rankCosts[rankCosts.length - 1]
+    const materialCount = MATERIAL_COUNT(currentPlus)
 
     // ローカルチェック（UX用）
     if (profile.gold < cost) { showMessage('ゴールドが足りません！', '#ff4444'); setLoading(false); return }
@@ -252,8 +264,8 @@ export default function Smithy() {
 
     // 強化実行
     let success = true
-    if (nextPlus >= 6) {
-      const rate = ENHANCE_RATE[nextPlus] || ENHANCE_RATE[16]
+    if (ENHANCE_RATE[nextPlus] !== undefined) {
+      const rate = ENHANCE_RATE[nextPlus]
       success = Math.random() * 100 < rate
     }
 
@@ -497,13 +509,14 @@ export default function Smithy() {
                     const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
                     const plus = item.enhance_plus || 0
                     const nextPlus = plus + 1
-                    const cost = ENHANCE_COST[nextPlus] || ENHANCE_COST[ENHANCE_COST.length - 1]
+                    const rankCosts = ENHANCE_COST_BY_RANK[w.rarity] || ENHANCE_COST_BY_RANK.ss
+                    const cost = rankCosts[nextPlus] || rankCosts[rankCosts.length - 1]
                     const materialCount = MATERIAL_COUNT(plus)
                     const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped).length
                     const stoneCount = getStoneCount(w.rarity)
                     const totalMaterials = sameCount + stoneCount
                     const canEnhance = !isArtifactBase && profile.gold >= cost && totalMaterials >= materialCount
-                    const successRate = nextPlus >= 6 ? (ENHANCE_RATE[nextPlus] || 0.1) : 100
+                    const successRate = ENHANCE_RATE[nextPlus] !== undefined ? ENHANCE_RATE[nextPlus] : 100
                     const enhanced = calcEnhancedStats(w, plus)
                     const nextEnhanced = isArtifactBase ? w : calcEnhancedStats(w, nextPlus)
                     const isSelected = selectedItem?.id === item.id
