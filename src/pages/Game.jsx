@@ -222,8 +222,8 @@ export const JOB_GROWTH = {
   '体術師':    { hp:20, mp:5,  atk:2, def:1, matk:1, mdef:1, spd:2 },
   '魔銃士':    { hp:10, mp:5,  atk:2, def:1, matk:2, mdef:1, spd:2 },
   'ギャンブラー':{ hp:10, mp:10, atk:1, def:2, matk:1, mdef:2, spd:1 },
-  '魔法剣士':  { hp:15, mp:8,  atk:1, def:1, matk:1, mdef:1, spd:1 },
-  '聖騎士':    { hp:20, mp:8,  atk:1, def:2, matk:0, mdef:2, spd:0 },
+  '魔法剣士':  { hp:10, mp:10, atk:2, def:1, matk:2, mdef:1, spd:1 },
+  '聖騎士':    { hp:20, mp:5,  atk:1, def:2, matk:1, mdef:2, spd:1 },
 }
 
 export const JOB_LEVEL3_BONUS = {}
@@ -948,7 +948,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       break
     }
     case '閃光': {
-      const flashCount = prevSkill === '閃光' ? Math.min((playerBuffs.flashCombo?.count||0)+1, 2) : 0
+      const flashCount = prevSkill === '閃光' ? Math.min((playerBuffs.flashCombo?.count||0)+1, 3) : 0
       const flashMult = flashCount > 0 ? Math.pow(1.15, flashCount) : 1.0
       result.dmg = Math.floor((eff.atk*0.6 + eff.matk*0.6)*am*flashMult)
       result.newPlayerBuffs.flashCombo = { count: flashCount > 0 ? flashCount : 1 }
@@ -968,14 +968,20 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       break
     }
     case 'エレメンタルエッジ': {
-      result.dmg = Math.floor((eff.atk*1.4 + eff.matk*0.7)*am)
+      result.dmg = Math.floor((eff.atk*1.3 + eff.matk*0.6)*am)
       const elemHit = Math.random()*100 < 30
       if (elemHit) {
-        const which = Math.floor(Math.random()*3)
+        // やけど40%・麻痺40%・スタン20% の重み付き抽選
+        const elemRoll = Math.random()*100
         let statusName = ''
-        if (which === 0) { result.newEnemyBuffs.burn = { turns:5, dmgRate:0.02 }; statusName = 'やけど' }
-        else if (which === 1 && !(enemyBuffs.paralysis?.turns > 0)) { result.newEnemyBuffs.paralysis = { turns:3, skipRate:0.25, spdRate:0.8 }; statusName = '麻痺' }
-        else { const sr = enemyBuffs.stunResist??1.0; result.newEnemyBuffs.stun={turns:1}; result.newEnemyBuffs.stunResist=sr*0.5; statusName='スタン' }
+        if (elemRoll < 40) {
+          result.newEnemyBuffs.burn = { turns:5, dmgRate:0.02 }; statusName = 'やけど'
+        } else if (elemRoll < 80) {
+          if (!(enemyBuffs.paralysis?.turns > 0)) result.newEnemyBuffs.paralysis = { turns:3, skipRate:0.25, spdRate:0.8 }
+          statusName = '麻痺'
+        } else {
+          const sr = enemyBuffs.stunResist??1.0; result.newEnemyBuffs.stun={turns:1}; result.newEnemyBuffs.stunResist=sr*0.5; statusName='スタン'
+        }
         result.log = `⚔✨ エレメンタルエッジ！ ${enemy.name}に${result.dmg}のダメージ！ ${statusName}状態！`
       } else {
         result.log = `⚔✨ エレメンタルエッジ！ ${enemy.name}に${result.dmg}のダメージ！`
