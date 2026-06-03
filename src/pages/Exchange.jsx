@@ -33,7 +33,7 @@ function WeaponCard({ weapon, bonusEffect }) {
   const effectDesc = BONUS_EFFECT_DESC[bonusEffect] || null
 
   return (
-    <div style={{ border: `1px solid #002244`, background: '#000818', padding: '10px', marginBottom: '10px' }}>
+    <div style={{ border: `1px solid #002244`, background: '#001028', padding: '10px', marginBottom: '10px' }}>
       <div style={{ color: '#446688', fontSize: '10px', marginBottom: '4px' }}>
         {SLOT_LABELS[weapon.slot] || weapon.slot}
       </div>
@@ -215,7 +215,7 @@ export default function Exchange() {
             return (
               <div key={item.id} style={{
                 border: `1px solid ${alreadyDone ? '#1a2222' : canAfford ? '#224433' : '#002244'}`,
-                background: alreadyDone ? '#080f0f' : '#000e20',
+                background: alreadyDone ? '#080f0f' : '#001028',
                 padding: '14px',
               }}>
                 {/* 装備カード */}
