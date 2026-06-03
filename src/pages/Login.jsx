@@ -65,6 +65,10 @@ export default function Login() {
           </span>
         </div>
       </div>
+      <div style={{ marginTop:'24px', border:'1px solid #224400', background:'#0a1400', padding:'12px 16px', maxWidth:'320px', fontSize:'11px', color:'#88aa66', lineHeight:'1.8' }}>
+        📩 トノサキ・ガルシアへ<br />
+        登録したメアド（jgから始まるやつ）にパスワード再発行メールを送りました。メールを確認して登録しなおしてください。
+      </div>
     </div>
   )
 }

@@ -1098,7 +1098,8 @@ export default function Game() {
   const [pendingClassChange, setPendingClassChange] = useState(null)
   const [hasNewAnnouncements, setHasNewAnnouncements] = useState(false)
   const [retrainingModal, setRetrainingModal] = useState(false)
-  const [raidStatus, setRaidStatus] = useState(null) // null | 'active' | 'pre' (30分前)
+  const [raidStatus, setRaidStatus] = useState(null) // null | 'active' | 'pre' | 'defeated' | 'expired'
+  const [raidBossData, setRaidBossData] = useState(null) // { boss, participants }
   const [selectedCarrySkill, setSelectedCarrySkill] = useState(null)
   const [retrainingSkills, setRetrainingSkills] = useState([])
   const [retrainingClass, setRetrainingClass] = useState(null)
@@ -1154,9 +1155,23 @@ export default function Game() {
       const jstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
       const h = jstNow.getHours(), m = jstNow.getMinutes()
       const { data } = await supabase.rpc('spawn_raid_boss_if_needed')
-      if (data?.status === 'active') setRaidStatus('active')
-      else if (h === 20 && m >= 30) setRaidStatus('pre')
-      else setRaidStatus(null)
+      const status = data?.status
+      if (status === 'active' || status === 'defeated' || status === 'expired') {
+        setRaidStatus(status)
+        if (data?.id) {
+          const { data: parts } = await supabase
+            .from('raid_participants')
+            .select('player_id, damage_dealt, attack_count, profiles(username)')
+            .eq('raid_id', data.id)
+            .order('damage_dealt', { ascending: false })
+            .limit(5)
+          setRaidBossData({ boss: data, participants: parts || [] })
+        }
+      } else if (h === 20 && m >= 30) {
+        setRaidStatus('pre'); setRaidBossData(null)
+      } else {
+        setRaidStatus(null); setRaidBossData(null)
+      }
     }
     checkRaid()
     const id = setInterval(checkRaid, 60000)
@@ -2895,12 +2910,40 @@ export default function Game() {
                   <span style={{ color:'#446688', marginLeft:'8px' }}>残り{papiaEvent.remainingMin}分{papiaEvent.remainingSec}秒</span>
                 </div>
               )}
-              {raidStatus === 'active' && (
-                <div onClick={()=>nav('/raid')} style={{ background:'#1a0000', border:'1px solid #ff4422', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px', cursor:'pointer' }}>
-                  <span style={{ color:'#ff6644' }}>⚔ レイドボス出現中！</span>
-                  <span style={{ color:'#446688', marginLeft:'8px', fontSize:'10px' }}>タップして参加する →</span>
-                </div>
-              )}
+              {(raidStatus === 'active' || raidStatus === 'defeated' || raidStatus === 'expired') && raidBossData && (() => {
+                const b = raidBossData.boss
+                const parts = raidBossData.participants
+                const hpRatio = b.hp_current / b.hp_max
+                const totalDmg = parts.reduce((s,p) => s + Number(p.damage_dealt), 0)
+                const borderColor = raidStatus === 'active' ? '#660000' : raidStatus === 'defeated' ? '#224400' : '#442200'
+                const statusLabel = raidStatus === 'active' ? '⚔ 出現中' : raidStatus === 'defeated' ? '✓ 討伐完了' : '⌛ 時間切れ'
+                const statusColor = raidStatus === 'active' ? '#ff6644' : raidStatus === 'defeated' ? '#44ff88' : '#886644'
+                return (
+                  <div style={{ border:`1px solid ${borderColor}`, background:'#0a0010', padding:'10px', marginBottom:'8px', cursor: raidStatus==='active' ? 'pointer' : 'default' }} onClick={()=>{ if(raidStatus==='active') nav('/raid') }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+                      <span style={{ color:'#ff4444', fontSize:'11px', letterSpacing:'1px' }}>黒龍ヴァルゼノク</span>
+                      <span style={{ color: statusColor, fontSize:'10px' }}>{statusLabel}{raidStatus==='active'?' →':''}</span>
+                    </div>
+                    <div style={{ height:'6px', background:'#111122', border:'1px solid #223344', borderRadius:'2px', overflow:'hidden', marginBottom:'6px' }}>
+                      <div style={{ height:'100%', width:`${Math.max(0,hpRatio)*100}%`, background: hpRatio>0.5?'#44ff88':hpRatio>0.25?'#ffcc00':'#ff4444' }} />
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#446688', marginBottom: parts.length>0?'6px':'0' }}>
+                      <span>HP: {Number(b.hp_current).toLocaleString()} / {Number(b.hp_max).toLocaleString()}</span>
+                      <span>総ダメージ: {totalDmg.toLocaleString()}</span>
+                    </div>
+                    {parts.length > 0 && (
+                      <div style={{ borderTop:'1px solid #112233', paddingTop:'5px' }}>
+                        {parts.slice(0,3).map((p,i) => (
+                          <div key={p.player_id} style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#556677', lineHeight:'1.7' }}>
+                            <span>{i===0?'👑':i+1+'.'} {p.profiles?.username}</span>
+                            <span style={{ color:'#cc8844' }}>{Number(p.damage_dealt).toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
               {raidStatus === 'pre' && (
                 <div style={{ background:'#100a00', border:'1px solid #886622', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
                   <span style={{ color:'#cc8844' }}>⚠ まもなくレイドボスが出現します！</span>
@@ -3124,12 +3167,40 @@ export default function Game() {
                     <span style={{ color:'#446688', marginLeft:'8px' }}>残り{papiaEvent.remainingMin}分{papiaEvent.remainingSec}秒</span>
                   </div>
                 )}
-                {raidStatus === 'active' && (
-                  <div onClick={()=>nav('/raid')} style={{ background:'#1a0000', border:'1px solid #ff4422', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px', cursor:'pointer' }}>
-                    <span style={{ color:'#ff6644' }}>⚔ レイドボス出現中！</span>
-                    <span style={{ color:'#446688', marginLeft:'8px', fontSize:'10px' }}>タップして参加する →</span>
-                  </div>
-                )}
+                {(raidStatus === 'active' || raidStatus === 'defeated' || raidStatus === 'expired') && raidBossData && (() => {
+                  const b = raidBossData.boss
+                  const parts = raidBossData.participants
+                  const hpRatio = b.hp_current / b.hp_max
+                  const totalDmg = parts.reduce((s,p) => s + Number(p.damage_dealt), 0)
+                  const borderColor = raidStatus === 'active' ? '#660000' : raidStatus === 'defeated' ? '#224400' : '#442200'
+                  const statusLabel = raidStatus === 'active' ? '⚔ 出現中' : raidStatus === 'defeated' ? '✓ 討伐完了' : '⌛ 時間切れ'
+                  const statusColor = raidStatus === 'active' ? '#ff6644' : raidStatus === 'defeated' ? '#44ff88' : '#886644'
+                  return (
+                    <div style={{ border:`1px solid ${borderColor}`, background:'#0a0010', padding:'10px', marginBottom:'8px', cursor: raidStatus==='active' ? 'pointer' : 'default' }} onClick={()=>{ if(raidStatus==='active') nav('/raid') }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+                        <span style={{ color:'#ff4444', fontSize:'11px', letterSpacing:'1px' }}>黒龍ヴァルゼノク</span>
+                        <span style={{ color: statusColor, fontSize:'10px' }}>{statusLabel}{raidStatus==='active'?' →':''}</span>
+                      </div>
+                      <div style={{ height:'6px', background:'#111122', border:'1px solid #223344', borderRadius:'2px', overflow:'hidden', marginBottom:'6px' }}>
+                        <div style={{ height:'100%', width:`${Math.max(0,hpRatio)*100}%`, background: hpRatio>0.5?'#44ff88':hpRatio>0.25?'#ffcc00':'#ff4444' }} />
+                      </div>
+                      <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#446688', marginBottom: parts.length>0?'6px':'0' }}>
+                        <span>HP: {Number(b.hp_current).toLocaleString()} / {Number(b.hp_max).toLocaleString()}</span>
+                        <span>総ダメージ: {totalDmg.toLocaleString()}</span>
+                      </div>
+                      {parts.length > 0 && (
+                        <div style={{ borderTop:'1px solid #112233', paddingTop:'5px' }}>
+                          {parts.slice(0,3).map((p,i) => (
+                            <div key={p.player_id} style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#556677', lineHeight:'1.7' }}>
+                              <span>{i===0?'👑':i+1+'.'} {p.profiles?.username}</span>
+                              <span style={{ color:'#cc8844' }}>{Number(p.damage_dealt).toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
                 {raidStatus === 'pre' && (
                   <div style={{ background:'#100a00', border:'1px solid #886622', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
                     <span style={{ color:'#cc8844' }}>⚠ まもなくレイドボスが出現します！</span>
