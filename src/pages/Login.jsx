@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
-export default function Login() {
+export default function Login({ isPasswordRecovery = false }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isRegister, setIsRegister] = useState(false)
@@ -9,18 +9,10 @@ export default function Login() {
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // パスワードリセットモード
-  const [isReset, setIsReset] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [newPassword2, setNewPassword2] = useState('')
 
-  useEffect(() => {
-    // リセットリンクからの遷移を検知
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') setIsReset(true)
-    })
-    return () => subscription.unsubscribe()
-  }, [])
+  const isReset = isPasswordRecovery
 
   const handleReset = async (e) => {
     e.preventDefault()
@@ -29,7 +21,7 @@ export default function Login() {
     setLoading(true); setError('')
     const { error } = await supabase.auth.updateUser({ password: newPassword })
     if (error) { setError(error.message) }
-    else { setMessage('パスワードを変更しました！ログインしてください。'); setIsReset(false) }
+    else { setMessage('パスワードを変更しました！ログインしてください。'); await supabase.auth.signOut() }
     setLoading(false)
   }
 

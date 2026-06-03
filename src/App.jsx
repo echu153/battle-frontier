@@ -20,6 +20,7 @@ function App() {
   const [session, setSession] = useState(undefined)
   const [hasChar, setHasChar] = useState(undefined)
   const [suspended, setSuspended] = useState(false)
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false)
 
   // 強制リロード機構：app_config.reload_tokenが変わったら全員のページを1回リロード
   useEffect(() => {
@@ -46,7 +47,9 @@ function App() {
       if (session) checkChar(session.user.id)
       else setHasChar(false)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'PASSWORD_RECOVERY') { setIsPasswordRecovery(true); return }
+      setIsPasswordRecovery(false)
       setSession(s)
       if (s) checkChar(s.user.id)
       else { setHasChar(false) }
@@ -84,7 +87,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={!session ? <Login /> : <Navigate to={hasChar ? '/game' : '/create'} />} />
+        <Route path="/login" element={isPasswordRecovery || !session ? <Login isPasswordRecovery={isPasswordRecovery} /> : <Navigate to={hasChar ? '/game' : '/create'} />} />
         <Route path="/create" element={session && !hasChar ? <CharCreate /> : <Navigate to={!session ? '/login' : '/game'} />} />
         <Route path="/game" element={session && hasChar ? <Game /> : <Navigate to={!session ? '/login' : '/create'} />} />
         <Route path="/ranking" element={session ? <Ranking /> : <Navigate to="/login" />} />
