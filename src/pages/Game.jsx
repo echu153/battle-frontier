@@ -2926,7 +2926,10 @@ export default function Game() {
                 const parts = raidBossData?.participants || []
                 const hpRatio = b ? b.hp_current / b.hp_max : 0
                 const totalDmg = parts.reduce((s,p) => s + Number(p.damage_dealt), 0)
+                const todayJst = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)
+                const waitingSeen = localStorage.getItem(`bf_raid_waiting_seen_${todayJst}`)
                 if ((raidStatus === 'defeated' || raidStatus === 'expired') && isSeen) return null
+                if ((!raidStatus || raidStatus === null) && waitingSeen) return null
                 return (
                   <div style={{ border:'1px solid #440000', background:'#0a0010', padding:'10px', marginBottom:'8px' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
@@ -2970,12 +2973,16 @@ export default function Game() {
                     {(raidStatus === 'pre') && (
                       <div style={{ fontSize:'10px', color:'#cc8844' }}>⚠ まもなく出現します！</div>
                     )}
-                    {(!raidStatus || raidStatus === null) && (
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                        <span style={{ fontSize:'10px', color:'#335566' }}>毎日21:00 JST 出現</span>
-                        <button onClick={()=>nav('/raid')} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'3px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>確認する</button>
-                      </div>
-                    )}
+                    {(!raidStatus || raidStatus === null) && (() => {
+                      const todayJst = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)
+                      if (localStorage.getItem(`bf_raid_waiting_seen_${todayJst}`)) return null
+                      return (
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                          <span style={{ fontSize:'10px', color:'#335566' }}>毎日21:00 JST 出現</span>
+                          <button onClick={()=>{ const d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10); localStorage.setItem(`bf_raid_waiting_seen_${d}`,'1'); nav('/raid') }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'3px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>確認する</button>
+                        </div>
+                      )
+                    })()}
                   </div>
                 )
               })()}
@@ -3206,7 +3213,10 @@ export default function Game() {
                   const hpRatio = b ? b.hp_current / b.hp_max : 0
                   const totalDmg = parts.reduce((s,p) => s + Number(p.damage_dealt), 0)
                   const hasUnclaimed = raidStatus === 'defeated' && parts.some(p => p.player_id === profile?.id && !p.reward_claimed)
+                  const todayJst2 = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)
+                  const waitingSeen2 = localStorage.getItem(`bf_raid_waiting_seen_${todayJst2}`)
                   if ((raidStatus === 'defeated' || raidStatus === 'expired') && isSeen && !hasUnclaimed) return null
+                  if ((!raidStatus || raidStatus === null) && waitingSeen2) return null
                   return (
                     <div style={{ border:'1px solid #440000', background:'#0a0010', padding:'10px', marginBottom:'8px' }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
@@ -3255,12 +3265,16 @@ export default function Game() {
                       {raidStatus === 'pre' && (
                         <div style={{ fontSize:'10px', color:'#cc8844' }}>⚠ まもなく出現します！</div>
                       )}
-                      {(!raidStatus || raidStatus === null) && (
-                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                          <span style={{ fontSize:'10px', color:'#335566' }}>毎日21:00 JST 出現</span>
-                          <button onClick={()=>nav('/raid')} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'3px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>確認する</button>
-                        </div>
-                      )}
+                      {(!raidStatus || raidStatus === null) && (() => {
+                        const todayJst = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)
+                        if (localStorage.getItem(`bf_raid_waiting_seen_${todayJst}`)) return null
+                        return (
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                            <span style={{ fontSize:'10px', color:'#335566' }}>毎日21:00 JST 出現</span>
+                            <button onClick={()=>{ const d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10); localStorage.setItem(`bf_raid_waiting_seen_${d}`,'1'); nav('/raid') }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'3px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>確認する</button>
+                          </div>
+                        )
+                      })()}
                     </div>
                   )
                 })()}
