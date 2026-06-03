@@ -120,6 +120,7 @@ export default function Equipment() {
   const [sortKey, setSortKey] = useState(() => localStorage.getItem('equipSortKey') || 'obtained_asc')
   const [gems, setGems] = useState([])
   const [embedTarget, setEmbedTarget] = useState(null)  // 埋め込み先の装備id
+  const [bulkPreview, setBulkPreview] = useState(null)  // 一括合成プレビュー
 
   useEffect(() => { fetchAll() }, [])
 
@@ -142,6 +143,64 @@ export default function Equipment() {
     setAllItems(pi || [])
     const { data: g } = await supabase.from('player_gems').select('*').eq('player_id', user.id)
     setGems(g || [])
+  }
+
+  // 一括合成：合成可能なものをすべてシミュレート（カスケード対応）
+  const calcBulkSynthesis = () => {
+    // 現在の所持数をコピー: { gemType: { rank: quantity } }
+    const map = {}
+    for (const gm of gems) {
+      if (!map[gm.gem_type]) map[gm.gem_type] = {}
+      map[gm.gem_type][gm.rank] = (map[gm.gem_type][gm.rank] || 0) + (gm.quantity || 0)
+    }
+    const before = Object.entries(map).flatMap(([gt, ranks]) =>
+      Object.entries(ranks).filter(([,q]) => q > 0).map(([r, q]) => ({ gem_type: gt, rank: r, quantity: q }))
+    )
+    const ops = [] // { gemType, fromRank, toRank, count }
+    // 低ランクから順に合成（カスケード）
+    for (const gemType of Object.keys(map)) {
+      for (let ri = 0; ri < GEM_RANKS.length - 1; ri++) {
+        const rank = GEM_RANKS[ri]
+        const nextRank = GEM_RANKS[ri + 1]
+        const qty = map[gemType][rank] || 0
+        const n = Math.floor(qty / 3)
+        if (n > 0) {
+          map[gemType][rank] -= n * 3
+          map[gemType][nextRank] = (map[gemType][nextRank] || 0) + n
+          ops.push({ gemType, fromRank: rank, toRank: nextRank, count: n })
+        }
+      }
+    }
+    const after = Object.entries(map).flatMap(([gt, ranks]) =>
+      Object.entries(ranks).filter(([,q]) => q > 0).map(([r, q]) => ({ gem_type: gt, rank: r, quantity: q }))
+    )
+    return { ops, before, after }
+  }
+
+  const openBulkPreview = () => {
+    const result = calcBulkSynthesis()
+    if (result.ops.length === 0) return
+    setBulkPreview(result)
+  }
+
+  const executeBulkSynthesis = async () => {
+    if (!bulkPreview || loading) return
+    setLoading(true)
+    for (const op of bulkPreview.ops) {
+      // fromRankを消費
+      const fromRow = gems.find(g => g.gem_type === op.gemType && g.rank === op.fromRank)
+      if (!fromRow) continue
+      const newQty = (fromRow.quantity || 0) - op.count * 3
+      if (newQty <= 0) await supabase.from('player_gems').delete().eq('id', fromRow.id)
+      else await supabase.from('player_gems').update({ quantity: newQty }).eq('id', fromRow.id)
+      // toRankを付与（既存があればupdate、なければinsert）
+      const toRow = gems.find(g => g.gem_type === op.gemType && g.rank === op.toRank)
+      if (toRow) await supabase.from('player_gems').update({ quantity: (toRow.quantity || 0) + op.count }).eq('id', toRow.id)
+      else await supabase.from('player_gems').insert({ player_id: profile.id, gem_type: op.gemType, rank: op.toRank, quantity: op.count })
+    }
+    await fetchAll()
+    setBulkPreview(null)
+    setLoading(false)
   }
 
   // 宝石：同種3個→上位ランク1個に合成
@@ -551,7 +610,15 @@ export default function Equipment() {
                 </div>
                 {embedTarget && <div style={{ color:'#ff66cc', fontSize:'10px', marginBottom:'8px' }}>↑選択中のソケットに、下の宝石「埋め込み」で装着できます（既存の宝石は在庫へ戻ります）</div>}
 
-                <div style={{ color:'#ff66cc', fontSize:'11px', marginBottom:'6px' }}>所持宝石（同じ宝石3個で1ランクUP）</div>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+                  <div style={{ color:'#ff66cc', fontSize:'11px' }}>所持宝石（同じ宝石3個で1ランクUP）</div>
+                  {gems.some(gm => (gm.quantity||0) >= 3 && GEM_RANKS.indexOf(gm.rank) < GEM_RANKS.length-1) && (
+                    <button onClick={openBulkPreview} disabled={loading}
+                      style={{ padding:'3px 10px', background:'#001840', border:'1px solid #0088ff', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                      ✨ 一括合成
+                    </button>
+                  )}
+                </div>
                 {gems.length === 0 && <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>宝石を所持していません（宝石ダンジョンで入手）</div>}
                 {[...gems].sort((a,b)=> (GEM_TYPES.indexOf(a.gem_type)-GEM_TYPES.indexOf(b.gem_type)) || (GEM_RANKS.indexOf(a.rank)-GEM_RANKS.indexOf(b.rank))).map(gm => {
                   const canCombine = (gm.quantity||0) >= 3 && GEM_RANKS.indexOf(gm.rank) < GEM_RANKS.length-1
@@ -579,6 +646,51 @@ export default function Equipment() {
             )}
         </div>
       </div>
+
+      {/* 一括合成 確認モーダル */}
+      {bulkPreview && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}>
+          <div style={{ background:'#000e20', border:'1px solid #0088ff', padding:'20px', maxWidth:'360px', width:'90%', fontFamily:'monospace', maxHeight:'80vh', overflowY:'auto' }}>
+            <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'14px' }}>✨ 一括合成の確認</div>
+
+            <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>合成内容</div>
+            {bulkPreview.ops.map((op, i) => (
+              <div key={i} style={{ fontSize:'11px', color:'#aaccff', padding:'3px 0', borderBottom:'1px solid #112233' }}>
+                {GEM_DATA[op.gemType]?.name}({op.fromRank}) ×{op.count * 3}
+                <span style={{ color:'#446688' }}> → </span>
+                {GEM_DATA[op.gemType]?.name}({op.toRank}) ×{op.count}
+              </div>
+            ))}
+
+            <div style={{ display:'flex', gap:'10px', marginTop:'14px' }}>
+              <div style={{ flex:1 }}>
+                <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>合成前</div>
+                {bulkPreview.before.sort((a,b)=>GEM_TYPES.indexOf(a.gem_type)-GEM_TYPES.indexOf(b.gem_type)||GEM_RANKS.indexOf(a.rank)-GEM_RANKS.indexOf(b.rank)).map((g,i) => (
+                  <div key={i} style={{ fontSize:'10px', color:'#778899', lineHeight:'1.7' }}>
+                    {GEM_DATA[g.gem_type]?.name}({g.rank}) ×{g.quantity}
+                  </div>
+                ))}
+              </div>
+              <div style={{ color:'#0088ff', fontSize:'18px', alignSelf:'center' }}>→</div>
+              <div style={{ flex:1 }}>
+                <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>合成後</div>
+                {bulkPreview.after.sort((a,b)=>GEM_TYPES.indexOf(a.gem_type)-GEM_TYPES.indexOf(b.gem_type)||GEM_RANKS.indexOf(a.rank)-GEM_RANKS.indexOf(b.rank)).map((g,i) => (
+                  <div key={i} style={{ fontSize:'10px', color:'#ff66cc', lineHeight:'1.7' }}>
+                    {GEM_DATA[g.gem_type]?.name}({g.rank}) ×{g.quantity}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display:'flex', gap:'8px', marginTop:'16px' }}>
+              <button onClick={()=>setBulkPreview(null)} style={{ flex:1, padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>キャンセル</button>
+              <button onClick={executeBulkSynthesis} disabled={loading} style={{ flex:2, padding:'8px', background:'#001840', border:'1px solid #0088ff', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                {loading ? '合成中...' : '合成する'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 記憶除去装置 確認ダイアログ */}
       {confirmReset && (
