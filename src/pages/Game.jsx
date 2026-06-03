@@ -772,7 +772,11 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       break
     }
     case '骸骨召喚':    result.dmg = Math.floor(eff.matk*0.7*am); result.newPlayerBuffs.skeletonDmg={turns:2,dmg:result.dmg}; result.log = `💀 骸骨召喚！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 2ターン持続！`; break
-    case 'ソウルドレイン': result.dmg = Math.floor(eff.matk*1.4*am); result.heal = Math.floor(result.dmg*0.2); result.log = `💀 ソウルドレイン！ ${enemy.name}に${result.dmg}の特殊ダメージ！ HPを${result.heal}回復！`; break
+    case 'ソウルドレイン': {
+      result.dmg = Math.floor(eff.matk*1.4*am)
+      result.heal = Math.min(Math.floor(result.dmg*0.2), Math.floor(profile.hp_max*0.2))
+      result.log = `💀 ソウルドレイン！ ${enemy.name}に${result.dmg}の特殊ダメージ！ HPを${result.heal}回復！`; break
+    }
     case '腐敗霧':      result.newEnemyBuffs.defDown={turns:4,rate:0.7}; result.newEnemyBuffs.mdefDown={turns:4,rate:0.7}; result.newEnemyBuffs.severePoisoin={turns:5,dmgRate:0.05}; result.log = `💀 腐敗霧！ 4ターンの間、対象の防御力・特殊防御力低下！ 猛毒状態！`; break
     case '幽世ノ門': {
       const curseDmgAmt = Math.floor(eff.matk*0.3*am)
@@ -1865,7 +1869,7 @@ export default function Game() {
           const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
           if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
-            const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
+            const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
             playerHp = Math.min(profile.hp_max, playerHp + rageCure)
             logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
           }
