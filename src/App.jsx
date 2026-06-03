@@ -15,6 +15,7 @@ import Fishing from './pages/Fishing'
 import Casino from './pages/Casino'
 import Museum from './pages/Museum'
 import RaidBoss from './pages/RaidBoss'
+import Exchange from './pages/Exchange'
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -116,6 +117,7 @@ function App() {
         <Route path="/casino" element={session ? <Casino /> : <Navigate to="/login" />} />
         <Route path="/museum" element={session ? <Museum /> : <Navigate to="/login" />} />
         <Route path="/raid" element={session ? <RaidBoss /> : <Navigate to="/login" />} />
+        <Route path="/exchange" element={session ? <Exchange /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>

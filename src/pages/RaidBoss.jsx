@@ -621,7 +621,9 @@ export default function RaidBoss() {
                   <div style={{ color: '#ffcc44' }}>貢献度: {reward.contribution_pct}%</div>
                   <div style={{ color: '#ffcc00' }}>Gold: +{fmt(reward.gold)}</div>
                   <div style={{ color: '#6699cc' }}>{reward.stone} × {reward.stone_count}</div>
-                  <div style={{ color: '#ff66cc' }}>宝石(F) × {reward.gem_count}個（ランダム種類）</div>
+                  <div style={{ color: '#ff66cc' }}>宝石({reward.gem_rank}) × {reward.gem_count}個（ランダム種類）</div>
+                  <div style={{ color: '#cc8844' }}>黒龍の鱗 × {reward.scale_count}個</div>
+                  {reward.got_gyaku && <div style={{ color: '#ffcc00' }}>⭐ 黒龍の逆鱗 × 1個（レアドロップ！）</div>}
                   <div style={{ color: '#44ff88', marginTop: '4px' }}>✓ 受け取り完了！</div>
                 </div>
               ) : myPart.reward_claimed ? (
