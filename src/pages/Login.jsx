@@ -11,8 +11,22 @@ export default function Login({ isPasswordRecovery = false }) {
 
   const [newPassword, setNewPassword] = useState('')
   const [newPassword2, setNewPassword2] = useState('')
+  const [isForgot, setIsForgot] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
 
   const isReset = isPasswordRecovery
+
+  const handleForgot = async (e) => {
+    e.preventDefault()
+    setLoading(true); setError(''); setMessage('')
+    const siteUrl = window.location.origin
+    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+      redirectTo: siteUrl + '/login',
+    })
+    if (error) setError('送信に失敗しました: ' + error.message)
+    else setMessage('パスワードリセットメールを送りました！メールを確認してください。')
+    setLoading(false)
+  }
 
   const handleReset = async (e) => {
     e.preventDefault()
@@ -76,6 +90,26 @@ export default function Login({ isPasswordRecovery = false }) {
               </button>
             </form>
           </>
+        ) : isForgot ? (
+          <>
+            <div style={{ color:'#88ccff', textAlign:'center', marginBottom:'20px' }}>パスワードをリセット</div>
+            <form onSubmit={handleForgot} style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+              <input type="email" placeholder="登録したメールアドレス" value={forgotEmail}
+                onChange={e => setForgotEmail(e.target.value)} style={inputStyle} required />
+              {error && <div style={{ color:'#ff4444', fontSize:'12px' }}>⚠ {error}</div>}
+              {message && <div style={{ color:'#44ff88', fontSize:'12px' }}>✓ {message}</div>}
+              <button type="submit" disabled={loading}
+                style={{ background:'#001840', border:'1px solid #ffcc00', color:'#ffcc00', padding:'10px', cursor:'pointer', fontFamily:'monospace' }}>
+                {loading ? '送信中...' : 'リセットメールを送る'}
+              </button>
+            </form>
+            <div style={{ marginTop:'16px', textAlign:'center', fontSize:'12px' }}>
+              <span style={{ color:'#0088ff', cursor:'pointer' }}
+                onClick={() => { setIsForgot(false); setError(''); setMessage('') }}>
+                ← ログインに戻る
+              </span>
+            </div>
+          </>
         ) : (
           <>
             <div style={{ color:'#88ccff', textAlign:'center', marginBottom:'20px' }}>
@@ -93,12 +127,20 @@ export default function Login({ isPasswordRecovery = false }) {
                 {loading ? '処理中...' : (isRegister ? '登録する' : 'ログイン')}
               </button>
             </form>
-            <div style={{ marginTop:'16px', textAlign:'center', fontSize:'12px' }}>
+            <div style={{ marginTop:'12px', textAlign:'center', fontSize:'12px' }}>
               <span style={{ color:'#0088ff', cursor:'pointer' }}
                 onClick={() => { setIsRegister(!isRegister); setError(''); setMessage('') }}>
                 {isRegister ? '→ ログインはこちら' : '→ アカウント作成はこちら'}
               </span>
             </div>
+            {!isRegister && (
+              <div style={{ marginTop:'8px', textAlign:'center', fontSize:'12px' }}>
+                <span style={{ color:'#446688', cursor:'pointer' }}
+                  onClick={() => { setIsForgot(true); setError(''); setMessage('') }}>
+                  パスワードを忘れた方はこちら
+                </span>
+              </div>
+            )}
             <div style={{ marginTop:'16px', border:'1px solid #224400', background:'#0a1400', padding:'10px 12px', fontSize:'11px', color:'#88aa66', lineHeight:'1.8' }}>
               📩 トノサキ・ガルシアへ<br />
               登録したメアド（jgから始まるやつ）にパスワード再発行メールを送りました。メールを確認して登録しなおしてください。
