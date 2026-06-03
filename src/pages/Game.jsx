@@ -3279,14 +3279,16 @@ export default function Game() {
                     </div>
                   </div>
                 )}
-                <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🏨 宿屋へ</button>
-                <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>⛩ 神殿へ</button>
-                <button onClick={()=>nav('/shop')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🛒 商店へ</button>
-                <button onClick={()=>nav('/smithy')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>⚒ 鍛冶屋へ</button>
-                <button onClick={()=>nav('/museum')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #ccaa44', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🏛 博物館へ</button>
-                <button onClick={()=>nav('/barber')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>✂ 美容院へ</button>
-                <button onClick={()=>nav('/casino')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>🎰 賭博場へ</button>
-                <button onClick={()=>nav('/fishing')} style={{ width:'100%', padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                  <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋へ</button>
+                  <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿へ</button>
+                  <button onClick={()=>nav('/shop')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🛒 商店へ</button>
+                  <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋へ</button>
+                  <button onClick={()=>nav('/museum')} style={{ padding:'10px', background:'#001020', border:'1px solid #ccaa44', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏛 博物館へ</button>
+                  <button onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院へ</button>
+                  <button onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場へ</button>
+                  <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>
+                </div>
               </div>
             )}
 
