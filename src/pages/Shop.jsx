@@ -41,15 +41,16 @@ export default function Shop() {
     const totalCost = item.buy_price * qty
     if (profile.gold < totalCost) return
     setLoading(true)
-    const existing = playerItems.find(pi => pi.item_id === item.id)
-    if (existing) {
-      await supabase.from('player_items').update({ quantity: existing.quantity + qty }).eq('id', existing.id)
-    } else {
-      await supabase.from('player_items').insert({
-        player_id: profile.id, item_id: item.id, quantity: qty, equipped: false,
-      })
+    const { data, error } = await supabase.rpc('buy_item_from_shop', {
+      p_item_id: item.id,
+      p_quantity: qty,
+    })
+    if (error || !data?.ok) {
+      setMessage('購入に失敗しました')
+      setTimeout(() => setMessage(''), 2000)
+      setLoading(false)
+      return
     }
-    await supabase.from('profiles').update({ gold: profile.gold - totalCost }).eq('id', profile.id)
     setMessage(`${item.name}を${qty}個購入しました！（${totalCost}G）`)
     setTimeout(() => setMessage(''), 2000)
     await fetchAll()

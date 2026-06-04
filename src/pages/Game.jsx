@@ -1516,28 +1516,22 @@ export default function Game() {
       if (expIsFrozen(profile)) {
         logs.push({ text:`EXP +${expGained}（調査中につき停止）`, color:'#446688' })
       } else if (currentClassLvD < capD) {
-        let newExp = profile.exp + expGained
-        let newLv = profile.lv
-        let newExpNext = profile.exp_next
-        let newPendingPoints = profile.pending_stat_points || 0
-        let newCharLv = profile.char_lv || 1
-        while (newExp >= newExpNext && newLv < capD) {
-          newExp -= newExpNext; newLv++; newExpNext = calcExpNext(newLv); newPendingPoints++; newCharLv++
-          logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${newLv}！`, color:'#cc44ff' })
+        // レベルアップ表示はクライアントで計算、DB更新はRPC経由
+        let dispExp = profile.exp + expGained
+        let dispLv = profile.lv
+        let dispExpNext = profile.exp_next
+        while (dispExp >= dispExpNext && dispLv < capD) {
+          dispExp -= dispExpNext; dispLv++; dispExpNext = calcExpNext(dispLv)
+          logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${dispLv}！`, color:'#cc44ff' })
         }
-        await supabase.from('profiles').update({
-          exp:newExp, exp_next:newExpNext, lv:newLv,
-          pending_stat_points:newPendingPoints, char_lv:newCharLv,
-        }).eq('id', profile.id)
-        const clData = classLevels.find(cl => cl.class_name === profile.class)
-        if (clData) await supabase.from('class_levels').update({ lv:newLv, exp:newExp }).eq('id', clData.id)
+        await supabase.rpc('apply_dungeon_reward', { p_type:'exp', p_claimed_exp:expGained })
         logs.push({ text:`EXP +${expGained}`, color:'#cc8800' })
       } else {
         logs.push({ text:`⚠ レベルキャップに達しています（EXP +0）`, color:'#ff8844' })
       }
     } else if (type === 'gold') {
       const goldGained = Math.floor((profile.char_lv || profile.lv) * 10 * (1.0 + Math.random() * 0.5))
-      await supabase.from('profiles').update({ gold: profile.gold + goldGained }).eq('id', profile.id)
+      await supabase.rpc('apply_dungeon_reward', { p_type:'gold', p_claimed_gold:goldGained })
       logs.push({ text:`Gold +${goldGained}`, color:'#ffcc00' })
     } else if (type === 'stone') {
       const r = Math.random() * 100
@@ -1600,7 +1594,7 @@ export default function Game() {
     setLoading(false)
   }
 
-  const DEV_ACCOUNTS = []  // 停止・BAN対象外アカウント（現在なし。おれおれおも対象に含める）
+  const DEV_ACCOUNTS = ['おれおれお']  // 開発者アカウント：不正検知対象外
   const suspendAccount = async (reason) => {
     if (DEV_ACCOUNTS.includes(profile.username)) return  // 開発用アカウントはBAN対象外
     await supabase.from('profiles').update({
