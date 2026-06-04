@@ -1253,8 +1253,9 @@ export default function Game() {
   })
   const battleCountTrackerRef = useRef({ start: null, count: 0 })
   const sortieTimesRef = useRef([])  // オートクリッカー検知：出撃時刻の履歴
-  const botCheckTimerRef = useRef(null)  // BOT確認チャレンジの60秒タイマー
-  const botCheckActiveRef = useRef(false)  // チャレンジ中フラグ（ボタン押下で解除＝停止を確実に防ぐ）
+  const botCheckTimerRef = useRef(null)  // BOT確認チャレンジのタイマー
+  const botCheckActiveRef = useRef(false)  // チャレンジ中フラグ
+  const botCheckDeadlineRef = useRef(null)  // タイマー一時停止用：期限の絶対時刻
   const regenningRef = useRef(false)
 
   useEffect(() => {
@@ -1656,28 +1657,64 @@ export default function Game() {
     setTimeout(async () => { await supabase.auth.signOut() }, 3000)
   }
 
-  // BOT確認チャレンジ：ランダム位置にボタンを出し、60秒以内に押さなければ停止措置
+  const BOT_CHECK_MS = 3 * 60 * 1000  // 3分
+
+  // BOT確認チャレンジ：ランダム位置にボタンを出し、3分以内に押さなければ停止措置
   const triggerBotCheck = () => {
-    const top = Math.floor(15 + Math.random()*65)   // 15〜80vh
-    const left = Math.floor(5 + Math.random()*65)   // 5〜70vw
+    const top = Math.floor(15 + Math.random()*65)
+    const left = Math.floor(5 + Math.random()*65)
     botCheckActiveRef.current = true
+    botCheckDeadlineRef.current = Date.now() + BOT_CHECK_MS
     setBotCheck({ top, left })
     if (botCheckTimerRef.current) clearTimeout(botCheckTimerRef.current)
     botCheckTimerRef.current = setTimeout(async () => {
       botCheckTimerRef.current = null
-      if (!botCheckActiveRef.current) return  // 既にボタンが押されていれば停止しない
+      if (!botCheckActiveRef.current) return
       botCheckActiveRef.current = false
       setBotCheck(null)
-      await suspendAccount('BOT確認ボタンを1分以内に押せなかった')
-    }, 60000)
+      await suspendAccount('BOT確認ボタンを3分以内に押せなかった')
+    }, BOT_CHECK_MS)
   }
   const passBotCheck = () => {
-    botCheckActiveRef.current = false  // 先にフラグを落として停止を確実に無効化
+    botCheckActiveRef.current = false
     if (botCheckTimerRef.current) { clearTimeout(botCheckTimerRef.current); botCheckTimerRef.current = null }
+    botCheckDeadlineRef.current = null
     setBotCheck(null)
-    sortieTimesRef.current = []  // 履歴リセットして再判定を回避
+    sortieTimesRef.current = []
   }
-  useEffect(() => () => { if (botCheckTimerRef.current) clearTimeout(botCheckTimerRef.current) }, [])
+  // タブ非アクティブ時にBOTタイマーを一時停止・復帰
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!botCheckActiveRef.current) return
+      if (document.hidden) {
+        // 非アクティブ：タイマー停止、残り時間を保存
+        if (botCheckTimerRef.current) {
+          clearTimeout(botCheckTimerRef.current)
+          botCheckTimerRef.current = null
+        }
+      } else {
+        // 復帰：残り時間で再セット
+        const remaining = (botCheckDeadlineRef.current || 0) - Date.now()
+        if (remaining > 0) {
+          botCheckTimerRef.current = setTimeout(async () => {
+            botCheckTimerRef.current = null
+            if (!botCheckActiveRef.current) return
+            botCheckActiveRef.current = false
+            setBotCheck(null)
+            await suspendAccount('BOT確認ボタンを3分以内に押せなかった')
+          }, remaining)
+        } else if (botCheckActiveRef.current) {
+          // 期限切れ（長時間放置）でも停止しない：ユーザーが戻ってきたのでキャンセル扱い
+          passBotCheck()
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      if (botCheckTimerRef.current) clearTimeout(botCheckTimerRef.current)
+    }
+  }, [])
 
   const botCheckOverlay = botCheck && (
     <div style={{ position:'fixed', inset:0, zIndex:99999, background:'rgba(0,0,0,0.88)' }}>
@@ -1694,8 +1731,6 @@ export default function Game() {
   const doBattle = async (e) => {
     if (!canAct || loading) return
     if (botCheck) return  // BOT確認チャレンジ中は出撃不可
-    // 自動操作検知（isTrusted=falseは人間の操作ではない）
-    if (e && !e.isTrusted) { await suspendAccount('自動操作が検出されました'); return }
     // 未解放エリアへのアクセスガード（localStorage汚染対策）
     const unlockedAreas = profile.unlocked_areas || [1]
     if (!unlockedAreas.includes(selectedArea)) {
@@ -1726,21 +1761,11 @@ export default function Game() {
     } else {
       battleCountTrackerRef.current = { ...bTracker, count: bTracker.count + 1 }
     }
-    if (battleCountTrackerRef.current.count >= 7) {
-      await suspendAccount('1分間に7回以上出撃')
+    if (battleCountTrackerRef.current.count >= 15) {
+      await suspendAccount('1分間に15回以上出撃')
       return
     }
 
-    // 街に戻らず連続出撃10回でEXP12時間停止（F5連打対策）
-    if (!DEV_ACCOUNTS.includes(profile.username)) {
-      const newConsec = (profile.consecutive_battle_count || 0) + 1
-      const consecUpdate = { consecutive_battle_count: newConsec }
-      if (newConsec >= 10) {
-        consecUpdate.exp_frozen_until = new Date(Date.now() + 12 * 3600 * 1000).toISOString()
-        consecUpdate.consecutive_battle_count = 0
-      }
-      await supabase.from('profiles').update(consecUpdate).eq('id', profile.id)
-    }
 
     const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
     const area = AREAS.find(a => a.id === selectedArea)
