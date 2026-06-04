@@ -620,6 +620,8 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
   const result = { dmg:0, heal:0, log:'', newEnemyBuffs:{ ...enemyBuffs }, newPlayerBuffs:{ ...playerBuffs }, selfDmg:0, bonusCritRate:0 }
   const randMult = (min, max) => min + Math.random()*(max-min)
   const am = isArtifact ? 1.2 : 1.0
+  // 再修練強化：現在クラスがそのスキルのクラスと一致する場合のみ、再修練回数ぶん段階強化が乗る
+  const rt = (profile?.class === skill?.class_name) ? ((profile?.retraining||{})[skill?.class_name]||0) : 0
   // 敵DEF・MDEF の低い方で軽減する計算（ハイブリッドスキル用）
   const calcMinDef = () => {
     const edr = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
@@ -689,7 +691,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       break
     }
     case '居合斬': {
-      result.dmg = Math.floor((eff.atk*1.1+eff.spd*0.4)*am)
+      result.dmg = Math.floor((eff.atk*(rt>=1?1.3:1.1)+eff.spd*0.4)*am)
       const bleedHit1 = Math.random()*100 < 20
       if (bleedHit1) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
       result.log = `⚔ 居合斬！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleedHit1 ? ` ${enemy.name}は出血した！` : ''}`
@@ -697,21 +699,21 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     case '断空': {
       const edr_dk = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
-      const defVal_dk = Math.floor((enemy.def||0)*edr_dk*0.7/2)
+      const defVal_dk = Math.floor((enemy.def||0)*edr_dk*(rt>=2?0.5:0.7)/2)
       result.dmg = Math.max(1, Math.floor(eff.atk*1.6*am) - defVal_dk)
       result.log = `⚔ 断空！ ${enemy.name}の防御を断ち切り${result.dmg}の物理ダメージ！`
       break
     }
-    case '明鏡止水':    result.newPlayerBuffs.atkUp={turns:4,rate:1.5}; result.newPlayerBuffs.hitBonus={turns:4,value:5}; result.log = `✨ 明鏡止水！ 4ターンの間攻撃力が上昇し命中率UP！`; break
+    case '明鏡止水':    result.newPlayerBuffs.atkUp={turns:4,rate:1.5}; result.newPlayerBuffs.hitBonus={turns:4,value:rt>=4?15:5}; result.log = `✨ 明鏡止水！ 4ターンの間攻撃力が上昇し命中率UP！`; break
     case '月影': {
-      result.dmg = Math.floor(eff.atk*2.0*am)
+      result.dmg = Math.floor(eff.atk*(rt>=5?2.2:2.0)*am)
       const bleedHit6 = Math.random()*100 < 40
       if (bleedHit6) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
       result.log = `🌙 月影！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleedHit6 ? ` ${enemy.name}は出血した！` : ''}`
       break
     }
     case 'マッドラッシュ': {
-      result.dmg = Math.floor(eff.atk*1.8*am)
+      result.dmg = Math.floor(eff.atk*(rt>=1?1.9:1.8)*am)
       if (playerBuffs.berserk?.turns > 0) {
         result.log = `💢 マッドラッシュ！ ${enemy.name}に${result.dmg}の物理ダメージ！（狂乱中）`
       } else {
@@ -720,31 +722,32 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       }
       break
     }
-    case 'すてみ':      result.dmg = Math.floor(eff.atk*1.8*am); result.selfDmg = Math.floor(result.dmg*0.2); result.log = `💢 すてみ！ ${enemy.name}に${result.dmg}の物理ダメージ！ 自分も${result.selfDmg}ダメージ！`; break
-    case 'ブラッティロア': result.newPlayerBuffs.atkUp={turns:4,rate:1.1}; result.newPlayerBuffs.bloodRage={turns:4,healRate:0.3}; result.log = `🩸 ブラッティロア！ 4ターンの間、攻撃力UP・与えたダメージを回復！`; break
+    case 'すてみ':      result.dmg = Math.floor(eff.atk*1.8*am); result.selfDmg = Math.floor(result.dmg*(rt>=2?0.05:0.2)); result.log = `💢 すてみ！ ${enemy.name}に${result.dmg}の物理ダメージ！ 自分も${result.selfDmg}ダメージ！`; break
+    case 'ブラッティロア': result.newPlayerBuffs.atkUp={turns:4,rate:rt>=4?1.3:1.1}; result.newPlayerBuffs.bloodRage={turns:4,healRate:0.3}; result.log = `🩸 ブラッティロア！ 4ターンの間、攻撃力UP・与えたダメージを回復！`; break
     case 'フルブレイカー': {
       const edr_fb = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
-      const defVal_fb = Math.floor((enemy.def||0)*edr_fb*0.7/2)
+      const defVal_fb = Math.floor((enemy.def||0)*edr_fb*(rt>=5?0.5:0.7)/2)
       result.dmg = Math.max(1, Math.floor(eff.atk*2.0*am) - defVal_fb)
       result.log = `💥 フルブレイカー！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
     }
     case '毒矢': {
       result.dmg = Math.floor(eff.atk*1.1*am)
-      const poisonHit = Math.random()*100 < 90
+      const poisonHit = Math.random()*100 < (rt>=1?100:90)
       if (poisonHit) result.newEnemyBuffs.poison = { turns:4, dmgRate:0.03 }
       result.log = `🏹 毒矢！ ${enemy.name}に${result.dmg}の物理ダメージ！${poisonHit ? ' 毒状態に！' : ''}`
       break
     }
     case '三連射': {
-      const s1=Math.floor(eff.atk*0.5*am*r()), s2=Math.floor(eff.atk*0.5*am*r()), s3=Math.floor(eff.atk*0.5*am*r())
+      const tlMult = rt>=2?0.6:0.5
+      const s1=Math.floor(eff.atk*tlMult*am*r()), s2=Math.floor(eff.atk*tlMult*am*r()), s3=Math.floor(eff.atk*tlMult*am*r())
       result.dmg = s1+s2+s3
       result.log = `🏹 三連射！ ${enemy.name}に${s1}の物理ダメージ！${s2}の物理ダメージ！${s3}の物理ダメージ！`; break
     }
-    case '狩猟本能':    result.newPlayerBuffs.atkUp={turns:4,rate:1.3}; result.newPlayerBuffs.spdUp={turns:4,rate:1.3}; result.log = `🌲 狩猟本能！ 4ターンの間、攻撃力・素早さが上昇！`; break
-    case '絶影狙撃':    result.dmg = Math.floor(eff.atk*2.0*am); result.log = `🏹 絶影狙撃！ 必中！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
+    case '狩猟本能':    { const huntRate = rt>=4?1.5:1.3; result.newPlayerBuffs.atkUp={turns:4,rate:huntRate}; result.newPlayerBuffs.spdUp={turns:4,rate:huntRate}; result.log = `🌲 狩猟本能！ 4ターンの間、攻撃力・素早さが上昇！`; break }
+    case '絶影狙撃':    result.dmg = Math.floor(eff.atk*(rt>=5?2.2:2.0)*am); result.log = `🏹 絶影狙撃！ 必中！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
     case '瞬歩瞬殺': {
       result.dmg = Math.floor((eff.atk*1.0+eff.spd*0.5)*am)
-      const bleedHit3 = Math.random()*100 < 50
+      const bleedHit3 = Math.random()*100 < (rt>=1?100:50)
       if (bleedHit3) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
       result.log = `🌙 瞬歩瞬殺！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleedHit3 ? ` ${enemy.name}は出血した！` : ''}`
       break
@@ -758,15 +761,28 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
         kiDmg += bonusDmg
       }
       result.dmg = kiDmg
-      const bleedHit4 = Math.random()*100 < 40
+      const bleedHit4 = Math.random()*100 < (rt>=2?80:40)
       if (bleedHit4) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
       result.log = `🌙 鬼影閃！ ${enemy.name}に${result.dmg}の物理ダメージ！${hasShadowWalk ? ` 追撃で${bonusDmg}ダメージ！` : ''}${bleedHit4 ? ` ${enemy.name}は出血した！` : ''}`
       break
     }
-    case '影歩き':      result.newPlayerBuffs.spdUp={turns:4,rate:1.5}; result.newPlayerBuffs.evasion={turns:4,rate:0.05}; result.log = `🌙 影歩き！ 4ターンの間、素早さ大幅上昇・回避率UP！`; break
-    case '急所突き':    result.dmg = Math.floor(eff.atk*1.8*am); result.bonusCritRate=30; result.log = `🌙 急所突き！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
+    case '影歩き':      { const swT = rt>=4?8:4; result.newPlayerBuffs.spdUp={turns:swT,rate:1.5}; result.newPlayerBuffs.evasion={turns:swT,rate:0.05}; result.log = `🌙 影歩き！ ${swT}ターンの間、素早さ大幅上昇・回避率UP！`; break }
+    case '急所突き': {
+      result.dmg = Math.floor(eff.atk*1.8*am); result.bonusCritRate=30
+      let kyushoBleed = ''
+      if (rt>=5) {
+        const stacks = enemyBuffs.bleed?.stacks || 0
+        if (stacks > 0) {
+          const bonusRate = Math.min(stacks*0.2, 1.0)
+          result.dmg += Math.floor(result.dmg * bonusRate)
+          result.newEnemyBuffs.bleed = undefined  // 出血スタック全削除
+          kyushoBleed = ` 出血${stacks}スタックを消費して追撃！`
+        }
+      }
+      result.log = `🌙 急所突き！ ${enemy.name}に${result.dmg}の物理ダメージ！${kyushoBleed}`; break
+    }
     case 'アクアショット': {
-      result.dmg = Math.floor(eff.matk*1.4*am)
+      result.dmg = Math.floor(eff.matk*(rt>=1?1.6:1.4)*am)
       const aquaSlowHit = Math.random()*100 < 55
       if (aquaSlowHit) result.newEnemyBuffs.spdDown={turns:2,rate:0.9}
       result.log = `🌊 アクアショット！ ${enemy.name}に${result.dmg}の特殊ダメージ！${aquaSlowHit ? ' 素早さ低下！' : ''}`
@@ -775,7 +791,9 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     case 'アースクエイク': {
       result.dmg = Math.floor(eff.matk*1.6*am)
       const stunResist = enemyBuffs.stunResist ?? 1.0
-      const stunHit = Math.random()*100 < 15 * stunResist
+      // 再修練強化：元素使い(2段)/賢者(1段)でスタン確率30%
+      const eqStunBoost = (skill.class_name==='元素使い' && rt>=2) || (skill.class_name==='賢者' && rt>=1)
+      const stunHit = Math.random()*100 < (eqStunBoost?30:15) * stunResist
       if (stunHit) {
         result.newEnemyBuffs.stun = { turns:1 }
         result.newEnemyBuffs.stunResist = stunResist * 0.5
@@ -784,7 +802,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       break
     }
     case 'ライトニングボルト': {
-      result.dmg = Math.floor(eff.matk*1.5*am)
+      result.dmg = Math.floor(eff.matk*(rt>=4?1.7:1.5)*am)
       const paralysisHit = Math.random()*100 < 30
       if (paralysisHit && !(enemyBuffs.paralysis?.turns > 0)) result.newEnemyBuffs.paralysis = { turns:5, skipRate:0.25, spdRate:0.8 }
       result.log = `⚡ ライトニングボルト！ ${enemy.name}に${result.dmg}の特殊ダメージ！${paralysisHit && !(enemyBuffs.paralysis?.turns > 0) ? ' 麻痺した！' : ''}`
@@ -792,53 +810,59 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     case 'フレイムバースト': {
       result.dmg = Math.floor(eff.matk*1.9*am)
-      const fbBurnHit = Math.random()*100 < 55
+      const fbBurnHit = Math.random()*100 < (rt>=5?80:55)
       if (fbBurnHit) result.newEnemyBuffs.burn = { turns:5, dmgRate:0.02 }
       result.log = `🔥 フレイムバースト！ ${enemy.name}に${result.dmg}の特殊ダメージ！${fbBurnHit ? ' やけど状態！' : ''}`
       break
     }
-    case '骸骨召喚':    result.dmg = Math.floor(eff.matk*0.7*am); result.newPlayerBuffs.skeletonDmg={turns:2,dmg:result.dmg}; result.log = `💀 骸骨召喚！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 2ターン持続！`; break
+    case '骸骨召喚':    result.dmg = Math.floor(eff.matk*(rt>=1?0.8:0.7)*am); result.newPlayerBuffs.skeletonDmg={turns:2,dmg:result.dmg}; result.log = `💀 骸骨召喚！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 2ターン持続！`; break
     case 'ソウルドレイン': {
-      result.dmg = Math.floor(eff.matk*1.4*am)
+      result.dmg = Math.floor(eff.matk*(rt>=2?1.6:1.4)*am)
       result.heal = Math.min(Math.floor(result.dmg*0.2), Math.floor(profile.hp_max*0.2))
       result.log = `💀 ソウルドレイン！ ${enemy.name}に${result.dmg}の特殊ダメージ！ HPを${result.heal}回復！`; break
     }
-    case '腐敗霧':      result.newEnemyBuffs.defDown={turns:4,rate:0.7}; result.newEnemyBuffs.mdefDown={turns:4,rate:0.7}; result.newEnemyBuffs.severePoisoin={turns:5,dmgRate:0.05}; result.log = `💀 腐敗霧！ 4ターンの間、対象の防御力・特殊防御力低下！ 猛毒状態！`; break
+    case '腐敗霧':      { const fhRate = rt>=4?0.6:0.7; result.newEnemyBuffs.defDown={turns:4,rate:fhRate}; result.newEnemyBuffs.mdefDown={turns:4,rate:fhRate}; result.newEnemyBuffs.severePoisoin={turns:5,dmgRate:0.05}; result.log = `💀 腐敗霧！ 4ターンの間、対象の防御力・特殊防御力低下！ 猛毒状態！`; break }
     case '幽世ノ門': {
       const curseDmgAmt = Math.floor(eff.matk*0.3*am)
-      result.newEnemyBuffs.curseDmg = { turns:3, dmg:curseDmgAmt }
-      result.newEnemyBuffs.dmgDown = { turns:3, rate:0.8 }
-      result.newEnemyBuffs.spdDown = { turns:3, rate:0.8 }
+      const ywT = rt>=5?5:3
+      result.newEnemyBuffs.curseDmg = { turns:ywT, dmg:curseDmgAmt }
+      result.newEnemyBuffs.dmgDown = { turns:ywT, rate:0.8 }
+      result.newEnemyBuffs.spdDown = { turns:ywT, rate:0.8 }
       result.log = `💀 幽世ノ門！ 3ターンの間、呪縛ダメージ・与ダメ低下・素早さ低下！`; break
     }
-    case 'ホーリーライト': result.dmg = Math.floor(eff.matk*1.5*am); result.log = `✨ ホーリーライト！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
-    case '奇跡':        result.newPlayerBuffs.regenHeal={turns:4,amount:Math.floor(profile.hp_max*0.10+eff.matk*0.2)}; result.log = `✨ 奇跡！ 4ターンの間、毎ターンHPが回復！`; break
-    case '祈りの結界':  result.newPlayerBuffs.dmgReduce={turns:4,rate:0.7}; result.log = `✨ 祈りの結界！ 4ターンの間、受けるダメージ軽減！`; break
+    case 'ホーリーライト': {
+      result.dmg = Math.floor(eff.matk*1.5*am)
+      let hlSeal = ''
+      if (rt>=1 && Math.random()*100 < 30) { result.newEnemyBuffs.healDown={turns:3,rate:0.5}; hlSeal = ' 回復阻害！' }
+      result.log = `✨ ホーリーライト！ ${enemy.name}に${result.dmg}の特殊ダメージ！${hlSeal}`; break
+    }
+    case '奇跡':        result.newPlayerBuffs.regenHeal={turns:4,amount:Math.floor(profile.hp_max*(rt>=2?0.15:0.10)+eff.matk*0.2)}; result.log = `✨ 奇跡！ 4ターンの間、毎ターンHPが回復！`; break
+    case '祈りの結界':  result.newPlayerBuffs.dmgReduce={turns:rt>=4?6:4,rate:0.7}; result.log = `✨ 祈りの結界！ ${rt>=4?6:4}ターンの間、受けるダメージ軽減！`; break
     case '神罰執行': {
-      result.dmg = Math.floor(eff.matk*1.8*am)
+      result.dmg = Math.floor(eff.matk*(rt>=5?2.0:1.8)*am)
       const healDownHit = Math.random()*100 < 50
       if (healDownHit) result.newEnemyBuffs.healDown={turns:3,rate:0.5}
       result.log = `✨ 神罰執行！ ${enemy.name}に${result.dmg}の特殊ダメージ！${healDownHit ? ' 回復封じ！' : ''}`
       break
     }
-    case '粛清':        result.dmg = Math.floor((eff.matk*1.3+eff.mdef*0.3)*am); result.log = `⚖ 粛清！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
-    case '狂信':        result.newPlayerBuffs.statusImmune={turns:4}; result.log = `⚖ 狂信！ 4ターンの間、ステータス減少を無効化！`; break
+    case '粛清':        result.dmg = Math.floor((eff.matk*(rt>=1?1.4:1.3)+eff.mdef*(rt>=1?0.4:0.3))*am); result.log = `⚖ 粛清！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
+    case '狂信':        result.newPlayerBuffs.statusImmune={turns:4}; if (rt>=2) result.newPlayerBuffs.matkUp={turns:4,rate:1.3}; result.log = `⚖ 狂信！ 4ターンの間、ステータス減少を無効化！${rt>=2?' 特殊攻撃力上昇！':''}`; break
     case '聖なる裁き': {
-      result.dmg = Math.floor(eff.matk*1.7*am)
+      result.dmg = Math.floor(eff.matk*(rt>=4?1.9:1.7)*am)
       const sealHit1 = Math.random()*100 < 20
       if (sealHit1) result.newEnemyBuffs.healDown={turns:3,rate:0.0}
       result.log = `⚖ 聖なる裁き！ ${enemy.name}に${result.dmg}の特殊ダメージ！${sealHit1 ? ' 回復封じ！' : ''}` ; break
     }
     case '断罪': {
       result.dmg = Math.floor((eff.matk*1.6+eff.mdef*1.0)*am)
-      const sealHit2 = Math.random()*100 < 30
+      const sealHit2 = Math.random()*100 < (rt>=5?60:30)
       if (sealHit2) result.newEnemyBuffs.healDown={turns:3,rate:0.0}
       result.log = `⚖ 断罪！ ${enemy.name}に${result.dmg}の特殊ダメージ！${sealHit2 ? ' 回復封じ！' : ''}`
       break
     }
     case 'マナボルト': {
       const consumed = eff.lastMpCost || 0
-      result.dmg = consumed * 4
+      result.dmg = consumed * (rt>=2?6:4)
       result.log = `✨ マナボルト！ MP${consumed}を消費して${result.dmg}の特殊ダメージ！`; break
     }
     case 'ディスペル': {
@@ -852,10 +876,13 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       }
       break
     }
-    case '氷の障壁':    result.newPlayerBuffs.dmgReduce={turns:2,rate:0.6}; result.newPlayerBuffs.critResist={turns:2,value:20}; result.log = `❄ 氷の障壁！ 2ターンの間、受けるダメージ大幅軽減・クリティカル抵抗UP！`; break
+    case '氷の障壁':    { const ibT = rt>=4?3:2; result.newPlayerBuffs.dmgReduce={turns:ibT,rate:0.6}; result.newPlayerBuffs.critResist={turns:ibT,value:20}; result.log = `❄ 氷の障壁！ ${ibT}ターンの間、受けるダメージ大幅軽減・クリティカル抵抗UP！`; break }
     case 'メテオストライク': {
       const rand = Math.random()*100
-      const hits = rand < 10 ? 1 : rand < 50 ? 2 : rand < 90 ? 3 : 4
+      // 再修練5段で2〜5発（2:30% 3:40% 4:20% 5:10%）、通常は1〜4発（1:10% 2:40% 3:40% 4:10%）
+      const hits = rt>=5
+        ? (rand < 30 ? 2 : rand < 70 ? 3 : rand < 90 ? 4 : 5)
+        : (rand < 10 ? 1 : rand < 50 ? 2 : rand < 90 ? 3 : 4)
       let meteoBurned = false
       const hitDmgs = []
       for (let h = 0; h < hits; h++) {
@@ -889,45 +916,53 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     // ── サイキッカー ──
     case 'サイコショット': {
-      result.dmg = Math.floor((eff.atk*1.0+eff.matk*0.3)*am)
+      result.dmg = Math.floor((eff.atk*(rt>=1?1.1:1.0)+eff.matk*(rt>=1?0.4:0.3))*am)
       result.log = `🔮 サイコショット！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
     case 'マインドブレイク': {
       result.dmg = Math.floor((eff.atk*1.0+eff.matk*0.5)*am)
+      if (rt>=2) result.useMinDef = true  // 敵DEF・MDEFの低い方で軽減
       result.log = `🔮 マインドブレイク！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
     case '第六感':    result.log = `🔮 第六感【パッシブ】 命中率+5%（常時自動発動）`; break
-    case '精神集中': result.newPlayerBuffs.atkUp={turns:2,rate:1.6}; result.newPlayerBuffs.matkUp={turns:2,rate:1.6}; result.log = `🔮 精神集中！ 2ターンの間、攻撃力・特殊攻撃力が大幅上昇！`; break
+    case '精神集中': { const ssT = rt>=4?3:2; const ssR = rt>=4?1.8:1.6; result.newPlayerBuffs.atkUp={turns:ssT,rate:ssR}; result.newPlayerBuffs.matkUp={turns:ssT,rate:ssR}; result.log = `🔮 精神集中！ ${ssT}ターンの間、攻撃力・特殊攻撃力が大幅上昇！`; break }
     case 'サイコブラスト': {
-      result.dmg = Math.floor((eff.atk*1.5+eff.matk*0.7)*am)
+      result.dmg = Math.floor((eff.atk*(rt>=5?1.6:1.5)+eff.matk*(rt>=5?0.8:0.7))*am)
       result.log = `🔮 サイコブラスト！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
     // ── 体術師 ──
-    case '半月蹴り':   result.dmg = Math.floor(eff.atk*1.4*am); result.log = `🦵 半月蹴り！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
+    case '半月蹴り':   result.dmg = Math.floor(eff.atk*1.4*am); if (rt>=1) result.newPlayerBuffs.spdUp={turns:4,rate:1.2}; result.log = `🦵 半月蹴り！ ${enemy.name}に${result.dmg}の物理ダメージ！${rt>=1?' 素早さ上昇！':''}`; break
     case '五連殺': {
       const ds = Array.from({length:5}, ()=>Math.floor(eff.atk*0.3*am*r()))
       result.dmg = ds.reduce((a,b)=>a+b,0)
+      if (rt>=2) {
+        let added = 0
+        for (let i=0;i<5;i++) { if (Math.random()*100 < 20) added++ }
+        if (added > 0) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+added), lastTurn:0 } }
+      }
       result.log = `🦵 五連殺！ ${enemy.name}に${ds.map(d=>`${d}の物理ダメージ`).join('！')}！`; break
     }
     case '闘争本能': result.log = `🔥 闘争本能【パッシブ】 HP50%以下の間、与ダメージ+10%（常時自動発動）`; break
     case '破衝掌': {
       const edr_hs = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
-      const defVal_hs = Math.floor((enemy.def||0)*edr_hs*0.7/2)
+      const defVal_hs = Math.floor((enemy.def||0)*edr_hs*(rt>=4?0.5:0.7)/2)
       result.dmg = Math.max(1, Math.floor(eff.atk*1.7*am) - defVal_hs)
       result.log = `🦵 破衝掌！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
     }
     case '飛天三角蹴り': {
-      if (Math.random() < 0.05) { result.dmg=0; result.log=`🦵 飛天三角蹴り！ 1撃目が外れた！`; break }
+      const htMiss = rt>=5 ? 0 : 0.05  // 再修練5段でスキル内ミス撤廃（通常回避は別途）
+      if (Math.random() < htMiss) { result.dmg=0; result.log=`🦵 飛天三角蹴り！ 1撃目が外れた！`; break }
       const h1 = Math.floor(eff.atk*0.5*am*r())
-      if (Math.random() < 0.05) { result.dmg=h1; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！ 2撃目が外れた！`; break }
+      if (Math.random() < htMiss) { result.dmg=h1; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！ 2撃目が外れた！`; break }
       const h2 = Math.floor(eff.atk*0.8*am*r())
-      if (Math.random() < 0.05) { result.dmg=h1+h2; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！${h2}の物理ダメージ！ 3撃目が外れた！`; break }
+      if (Math.random() < htMiss) { result.dmg=h1+h2; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！${h2}の物理ダメージ！ 3撃目が外れた！`; break }
       const h3 = Math.floor(eff.atk*1.2*am*r())
       result.dmg = h1+h2+h3; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！${h2}の物理ダメージ！${h3}の物理ダメージ！`; break
     }
     // ── 魔銃士 ──
     case '魔弾': {
-      result.dmg = Math.floor((eff.atk*0.7+eff.matk*0.7)*am)
+      const mdMult = rt>=1?0.8:0.7
+      result.dmg = Math.floor((eff.atk*mdMult+eff.matk*mdMult)*am)
       result.log = `🔫 魔弾！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
     case '連装銃撃': {
@@ -936,51 +971,63 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.log = `🔫 連装銃撃！ ${enemy.name}に${gs.map(d=>`${d}の特殊ダメージ`).join('！')}！`; break
     }
     case '精密照準':   result.log = `🔫 精密照準【パッシブ】 命中率+5%（常時自動発動）`; break
-    case '強化装填':   result.newPlayerBuffs.atkUp={turns:3,rate:1.5}; result.newPlayerBuffs.matkUp={turns:3,rate:1.5}; result.log = `🔫 強化装填！ 3ターンの間、攻撃力・特殊攻撃力が大幅上昇！`; break
+    case '強化装填':   { const klT = rt>=4?5:3; result.newPlayerBuffs.atkUp={turns:klT,rate:1.5}; result.newPlayerBuffs.matkUp={turns:klT,rate:1.5}; result.log = `🔫 強化装填！ ${klT}ターンの間、攻撃力・特殊攻撃力が大幅上昇！`; break }
     case 'キャノネスチュームビンド': {
-      const cannonMult = prevSkill === 'キャノネスチュームビンド' ? 1.1 : 1.0
+      let cannonStack
+      if (rt>=5) {
+        // 連続使用で×1.1が最大3重複
+        cannonStack = prevSkill === 'キャノネスチュームビンド' ? Math.min((playerBuffs.cannonCombo?.count||0)+1, 3) : 0
+        result.newPlayerBuffs.cannonCombo = { count: cannonStack }
+      } else {
+        cannonStack = prevSkill === 'キャノネスチュームビンド' ? 1 : 0
+      }
+      const cannonMult = Math.pow(1.1, cannonStack)
       result.dmg = Math.floor((eff.atk*1.0+eff.matk*1.0)*am*cannonMult)
-      result.log = `🔫 キャノネスチュームビンド！ ${enemy.name}に${result.dmg}の特殊ダメージ！${cannonMult>1.0?' 連続使用で威力上昇！':''}`; break
+      result.log = `🔫 キャノネスチュームビンド！ ${enemy.name}に${result.dmg}の特殊ダメージ！${cannonMult>1.0?` 連続使用で威力上昇（×${cannonMult.toFixed(2)}）！`:''}`; break
     }
     // ── ギャンブラー ──
     case 'ジャグリング': {
-      const h1=Math.floor((eff.atk*0.2+eff.matk*0.2)*am*r()), h2=Math.floor((eff.atk*0.2+eff.matk*0.2)*am*r()), h3=Math.floor((eff.atk*0.2+eff.matk*0.2)*am*r())
-      result.dmg = h1+h2+h3
-      result.log = `🎭 ジャグリング！ ${enemy.name}に${h1}、${h2}、${h3}の混合ダメージ！`; break
+      const jugN = rt>=1?4:3
+      const jugHits = Array.from({length:jugN}, ()=>Math.floor((eff.atk*0.2+eff.matk*0.2)*am*r()))
+      result.dmg = jugHits.reduce((a,b)=>a+b,0)
+      result.log = `🎭 ジャグリング！ ${enemy.name}に${jugHits.join('、')}の混合ダメージ！`; break
     }
     case 'ラッキーダイス': {
       const statVal = Math.max(eff.atk, eff.matk)
-      const roll = 0.7 + Math.random() * 1.3
+      const roll = (rt>=2?0.9:0.7) + Math.random() * 1.3
       result.dmg = Math.floor(statVal * roll * am)
       result.log = `🎲 ラッキーダイス！ ${enemy.name}に${result.dmg}のダメージ！（${roll.toFixed(2)}倍）`; break
     }
     case 'ギャンブルボディ': result.log = `🎭 ギャンブルボディ【パッシブ】 被ダメージがランダムに変動（常時自動発動）`; break
     case 'オールイン': {
       if (playerBuffs.allinDebuff?.turns > 0) { result.log = `💸 オールイン！ 反動中のため使用できない！`; break }
-      result.newPlayerBuffs.atkUp = { turns:4, rate:1.5 }
-      result.newPlayerBuffs.matkUp = { turns:4, rate:1.5 }
-      result.newPlayerBuffs.spdUp = { turns:4, rate:1.5 }
-      result.newPlayerBuffs.dmgReduce = { turns:4, rate:0.67 }
-      result.newPlayerBuffs.allinActive = { turns:4 }
-      result.log = `💸 オールイン！ 4ターンの間、全ステータスが大幅上昇！`; break
+      const aiT = rt>=4?6:4
+      result.newPlayerBuffs.atkUp = { turns:aiT, rate:1.5 }
+      result.newPlayerBuffs.matkUp = { turns:aiT, rate:1.5 }
+      result.newPlayerBuffs.spdUp = { turns:aiT, rate:1.5 }
+      result.newPlayerBuffs.dmgReduce = { turns:aiT, rate:0.67 }
+      result.newPlayerBuffs.allinActive = { turns:aiT, reactTurns:aiT }
+      result.log = `💸 オールイン！ ${aiT}ターンの間、全ステータスが大幅上昇！`; break
     }
     case 'ジャックポット': {
       result.dmg = Math.floor((eff.atk + eff.matk) * am)
-      const jackpot = Math.random()*100 < 5
+      const jackpot = Math.random()*100 < (rt>=5?10:5)
       if (jackpot) result.dmg *= 2
       result.log = `🎰 ジャックポット！ ${enemy.name}に${result.dmg}のダメージ！${jackpot ? ' 💥 JACKPOT！ ダメージ2倍！！' : ''}`; break
     }
     // ── 魔法剣士 ──
     case '雷光斬': {
-      result.dmg = Math.floor((eff.atk*1.0 + eff.matk*0.3)*am)
+      result.dmg = Math.floor((eff.atk*(rt>=1?1.1:1.0) + eff.matk*(rt>=1?0.4:0.3))*am)
       const raiHit = Math.random()*100 < 30
       if (raiHit && !(enemyBuffs.paralysis?.turns > 0)) result.newEnemyBuffs.paralysis = { turns:3, skipRate:0.25, spdRate:0.8 }
       result.log = `⚡⚔ 雷光斬！ ${enemy.name}に${result.dmg}のダメージ！${raiHit && !(enemyBuffs.paralysis?.turns > 0) ? ' 麻痺した！' : ''}`
       break
     }
     case '閃光': {
-      const flashCount = prevSkill === '閃光' ? Math.min((playerBuffs.flashCombo?.count||0)+1, 3) : 0
-      const flashMult = flashCount > 0 ? Math.pow(1.15, flashCount) : 1.0
+      const flashMax = rt>=2?4:3
+      const flashStep = rt>=2?1.2:1.15
+      const flashCount = prevSkill === '閃光' ? Math.min((playerBuffs.flashCombo?.count||0)+1, flashMax) : 0
+      const flashMult = flashCount > 0 ? Math.pow(flashStep, flashCount) : 1.0
       result.dmg = Math.floor((eff.atk*0.6 + eff.matk*0.6)*am*flashMult)
       result.newPlayerBuffs.flashCombo = { count: flashCount > 0 ? flashCount : 1 }
       const comboText = flashCount > 0 ? ` 連続${flashCount+1}回（×${flashMult.toFixed(2)}）！` : ''
@@ -994,12 +1041,13 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       }
       result.newPlayerBuffs.atkUp  = { turns:4, rate:2.0 }
       result.newPlayerBuffs.matkUp = { turns:4, rate:2.0 }
-      result.newPlayerBuffs.spellBladeExhaust = { turns:4 }
-      result.log = `⚔💥 魔剣開放！ 4ターンの間、攻撃力・特殊攻撃力が2倍！ その後4ターンバフ不可状態！`
+      const sealAfter = rt>=4?2:4
+      result.newPlayerBuffs.spellBladeExhaust = { turns:4, sealTurns:sealAfter }
+      result.log = `⚔💥 魔剣開放！ 4ターンの間、攻撃力・特殊攻撃力が2倍！ その後${sealAfter}ターンバフ不可状態！`
       break
     }
     case 'エレメンタルエッジ': {
-      result.dmg = Math.floor((eff.atk*1.3 + eff.matk*0.6)*am)
+      result.dmg = Math.floor((eff.atk*(rt>=5?1.5:1.3) + eff.matk*0.6)*am)
       const elemHit = Math.random()*100 < 30
       if (elemHit) {
         // やけど40%・麻痺40%・スタン20% の重み付き抽選
@@ -1021,24 +1069,25 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     // ── 聖騎士 ──
     case 'ホーリーエッジ': {
-      result.dmg = Math.floor((eff.atk*1.3 + eff.matk*0.3)*am)
+      result.dmg = Math.floor((eff.atk*(rt>=1?1.4:1.3) + eff.matk*(rt>=1?0.4:0.3))*am)
       result.log = `✨⚔ ホーリーエッジ！ ${enemy.name}に${result.dmg}のダメージ！`; break
     }
     case 'ディバインスマイト': {
       result.dmg = Math.floor((eff.atk*1.0 + eff.matk*0.5)*am)
-      const dmgDownHit = Math.random()*100 < 30
+      const dmgDownHit = Math.random()*100 < (rt>=2?50:30)
       if (dmgDownHit) result.newEnemyBuffs.dmgDown = { turns:3, rate:0.85 }
       result.log = `✨⚔ ディバインスマイト！ ${enemy.name}に${result.dmg}のダメージ！${dmgDownHit ? ' 3Tの間、相手の与ダメ-15%！' : ''}`
       break
     }
     case '聖騎士の心得': result.log = `🛡 聖騎士の心得【パッシブ】 防御力・特殊防御力が1.2倍（常時発動）`; break
     case '聖域展開': {
-      result.newPlayerBuffs.regenHeal = { turns:4, amount:Math.floor(profile.hp_max*0.05) }
+      const seikiHeal = rt>=4?0.10:0.05
+      result.newPlayerBuffs.regenHeal = { turns:4, amount:Math.floor(profile.hp_max*seikiHeal) }
       result.newPlayerBuffs.holyField = { turns:4, rate:1.5 }
-      result.log = `✨ 聖域展開！ 4ターンの間、毎ターン最大HP5%回復・防御力と特殊防御力1.5倍！`; break
+      result.log = `✨ 聖域展開！ 4ターンの間、毎ターン最大HP${Math.round(seikiHeal*100)}%回復・防御力と特殊防御力1.5倍！`; break
     }
     case '神聖覚醒': {
-      result.newPlayerBuffs.holyAwakening = { turns:5, defMult:0.4 }
+      result.newPlayerBuffs.holyAwakening = { turns:5, defMult:rt>=5?0.6:0.4 }
       result.log = `✨ 神聖覚醒！ 5ターンの間、攻撃ごとに防御力・特殊防御力に基づく追加ダメージを与える！`; break
     }
     default: result.dmg = Math.max(1,eff.atk*am); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
@@ -1897,13 +1946,19 @@ export default function Game() {
     const hasTosoHonno  = passiveNames.includes('闘争本能')
     const hasOnmi       = passiveNames.includes('隠身')
 
+    // 再修練3段でパッシブ強化（現在クラス一致＆再修練3回以上＆そのパッシブをセット中）
+    const rtCur = (profile.retraining||{})[profile.class]||0
+    const pe = (cls) => profile.class === cls && rtCur >= 3
+
     const passiveCritBonus   = hasShingan ? 5 : 0
-    const passiveDmgMult     = (hasShingan ? 1.05 : 1.0) * (hasBerserk ? 1.15 : 1.0) * (hasKakushin ? 1.1 : 1.0) * (hasRokkan ? 1.05 : 1.0)
-    const passiveHealMult    = (hasShinkoka ? 1.2 : 1.0) * (hasKakushin ? 0.7 : 1.0)
+    const passiveCritDmgBonus = (hasOnmi && pe('暗殺者')) ? 0.2 : 0  // 隠身強化：クリ威力+20%
+    const passiveDmgMult     = (hasShingan ? (pe('侍')?1.10:1.05) : 1.0) * (hasBerserk ? (pe('狂戦士')?1.20:1.15) : 1.0) * (hasKakushin ? (pe('異端審問官')?1.15:1.1) : 1.0) * (hasRokkan ? (pe('サイキッカー')?1.10:1.05) : 1.0)
+    const passiveHealMult    = (hasShinkoka ? (pe('聖職者')?1.4:1.2) : 1.0) * (hasKakushin ? 0.7 : 1.0)
     const passiveMatkMult    = hasShinkoka ? 1.1 : 1.0
     const passiveMpCostMult  = hasTenki ? 0.9 : 1.0
-    const passiveMatkMultTenki = hasTenki ? 1.1 : 1.0
-    const passiveHitBonus    = (hasRokkan ? 5 : 0) + (hasSeimitsu ? 5 : 0)
+    const passiveMatkMultTenki = hasTenki ? (pe('賢者')?1.3:1.1) : 1.0
+    const passiveHitBonus    = (hasRokkan ? 5 : 0) + (hasSeimitsu ? 5 : 0) + ((hasTakaNoMe && pe('狩人')) ? 10 : 0)
+    const passiveHealReflect = (hasShinkoka && pe('聖職者'))  // 神聖加護強化：回復量の50%を敵に
     const hasGambleBody       = passiveNames.includes('ギャンブルボディ')
     const hasMadokenJutsu     = passiveNames.includes('魔導剣術')
     const hasHolyKnightPassive= passiveNames.includes('聖騎士の心得')
@@ -1952,11 +2007,12 @@ export default function Game() {
     const doPlayerAttack = (isExtra=false) => {
       playerAttacking = true
       const holyFieldDef = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
-      const holyKnightMult = hasHolyKnightPassive ? 1.2 : 1.0
-      const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDef * holyKnightMult
-      const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDef * holyKnightMult
+      const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?1.3:1.2) : 1.0
+      const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
+      const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDef * holyKnightMult * kabeDefP
+      const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDef * holyKnightMult * kabeDefP
       const burnDebuffP = playerBuffs.burn?.turns > 0 ? 0.9 : 1.0
-      const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * 0.3) : 0
+      const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * (pe('魔法剣士')?0.6:0.3)) : 0
       const pMatk  = (eff.matk - madokenBonus) * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP
       const pAtk   = (eff.atk + madokenBonus)  * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP
       const paralysisSpdP = playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1.0
@@ -1967,7 +2023,7 @@ export default function Game() {
       const eMdefRate = (enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1) * (enemyBuffs.mdefUp ? enemyBuffs.mdefUp.rate : 1) * (1 - (eff.mdefPen || 0))
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
       const isCrit = Math.random()*100 < playerCritRate
-      const critMult = isCrit ? (1.5 + (eff.critDmg||0)) : 1.0
+      const critMult = isCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
 
       // 敵の回避判定（プレイヤーの命中ボーナスで相殺、パピアは+50%）
       const buffHitBonus = playerBuffs.hitBonus?.turns > 0 ? playerBuffs.hitBonus.value : 0
@@ -1977,7 +2033,9 @@ export default function Game() {
         : (skillIndex % (expandedSkillSet.length || 1))
       const nextSkillName = expandedSkillSet.length > 0 ? expandedSkillSet[Math.max(0, peekIdx)]?.skills?.name : null
       const isSureHit = nextSkillName === '絶影狙撃'
-      const effectiveEnemyEvasion = isSureHit ? 0 : Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus) + (enemy.isPapia ? 50 : 0)
+      // 連装銃撃の再修練強化：このスキルの命中+10%
+      const skillExtraHit = (nextSkillName === '連装銃撃' && profile.class === '魔銃士' && rtCur >= 2) ? 10 : 0
+      const effectiveEnemyEvasion = isSureHit ? 0 : Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit) + (enemy.isPapia ? 50 : 0)
       if (effectiveEnemyEvasion > 0 && Math.random()*100 < effectiveEnemyEvasion) {
         logs.push({ text:`${prefix}${enemy.name}に攻撃！ しかし回避された！`, color:'#446688' })
         if (expandedSkillSet.length > 0) skillIndex++
@@ -1998,20 +2056,21 @@ export default function Game() {
         if (cs && cs.skills && playerMp >= mpCost) {
           playerMp -= mpCost
           const hasGensoKyomei = passiveNames.includes('元素共鳴')
-          const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? 1.15 : 1.0
-          const seimitsuMult = (hasSeimitsu && prevSkillName && prevSkillName === cs.skills.name) ? 1.1 : 1.0
+          const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? (pe('元素使い')?1.25:1.15) : 1.0
+          // 精密照準：再修練3段で「同スキル連続使用時×1.1」が付く（素の精密照準は命中+5のみ）
+          const seimitsuMult = (hasSeimitsu && pe('魔銃士') && prevSkillName && prevSkillName === cs.skills.name) ? 1.1 : 1.0
           prevSkillName = cs.skills.name
           const res = executeSkill(cs.skills, {...effBuff, lastMpCost:mpCost}, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
           const finalCrit = res.dmg > 0 && (isCrit || (res.bonusCritRate > 0 && Math.random()*100 < playerCritRate + res.bonusCritRate))
-          const finalCritMult = finalCrit ? (1.5 + (eff.critDmg||0)) : 1.0
-          const tosoMult = (hasTosoHonno && playerHp <= profile.hp_max * 0.5) ? 1.1 : 1.0
+          const finalCritMult = finalCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
+          const tosoMult = (hasTosoHonno && playerHp <= profile.hp_max * 0.5) ? (pe('体術師')?1.25:1.1) : 1.0
           // ②DEFスケーリング：物理=ATK/(ATK+敵DEF)、魔法=MATK/(MATK+敵MDEF)
           let defScale = 1.0
           if (res.dmg > 0) {
             const sType = cs.skills?.type
             const adjED  = Math.max(1, Math.floor((enemy.def ||0)*eDefRate))
             const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate))
-            if (cs.skills?.name === 'サイコブラスト') {
+            if (cs.skills?.name === 'サイコブラスト' || res.useMinDef) {
               // ハイブリッド：敵DEF・MDEFの低い方で軽減
               defScale = effBuff.matk / (effBuff.matk + Math.min(adjED, adjEMD))
             } else if (sType === '物理攻撃') defScale = effBuff.atk  / (effBuff.atk  + adjED)
@@ -2030,6 +2089,11 @@ export default function Game() {
           }
           const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult)
           playerHp = Math.min(profile.hp_max, playerHp + healAmt)
+          if (passiveHealReflect && healAmt > 0) {
+            const reflectDmg = Math.floor(healAmt * 0.5)
+            enemyHp -= reflectDmg
+            logs.push({ text:`✨ 神聖加護の反射！ ${enemy.name}に${reflectDmg}ダメージ！`, color:'#ffdd44' })
+          }
           // 魔剣開放の反動中はバフ系スキルを無効化
           if (playerBuffs.spellBladeSealed?.turns > 0) {
             const blockedKeys2 = ['atkUp','matkUp','spdUp','dmgReduce','regenHeal','hitBonus','evasion','bloodRage','statusImmune','holyField','holyAwakening','flashCombo','spellBladeExhaust']
@@ -2093,9 +2157,10 @@ export default function Game() {
 
     const doEnemyAttack = (isExtra=false) => {
       const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
-      const holyKnightMultE = hasHolyKnightPassive ? 1.2 : 1.0
-      const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDefE * holyKnightMultE
-      const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE
+      const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?1.3:1.2) : 1.0
+      const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
+      const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDefE * holyKnightMultE * kabeDefE
+      const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE * kabeDefE
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
       const berserkDmgRate = hasBerserk ? 1.1 : 1.0
       const isEM = enemy.type === 'magical'
@@ -2123,7 +2188,7 @@ export default function Game() {
       const enemyDmgDownRate = enemyBuffs.dmgDown?.turns > 0 ? enemyBuffs.dmgDown.rate : 1.0
       // ③プレイヤーDEFランクによるボーナス軽減
       const playerDefRankReduction = calcDefReduction(isEM ? eff.mdef : eff.def)
-      const gambleBodyMult = hasGambleBody ? (0.7 + Math.random() * 0.6) : 1.0
+      const gambleBodyMult = hasGambleBody ? (0.7 + Math.random() * (pe('ギャンブラー')?0.4:0.6)) : 1.0
       const allinDebuffInMult = playerBuffs.allinDebuff?.turns > 0 ? 1.3 : 1.0
       const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*(0.9+Math.random()*0.2))
       playerHp -= finalDmg
@@ -2268,6 +2333,11 @@ export default function Game() {
         const healAmt = Math.floor(playerBuffs.regenHeal.amount * passiveHealMult)
         playerHp = Math.min(profile.hp_max, playerHp + healAmt)
         logs.push({ text:`💚 回復効果でHPが${healAmt}回復した！`, color:'#44ff88' })
+        if (passiveHealReflect && healAmt > 0) {
+          const reflectDmg = Math.floor(healAmt * 0.5)
+          enemyHp -= reflectDmg
+          logs.push({ text:`✨ 神聖加護の反射！ ${enemy.name}に${reflectDmg}ダメージ！`, color:'#ffdd44' })
+        }
       }
       if (!isHealSealed && playerBuffs.delayHeal && turn === playerBuffs.delayHeal.triggerTurn) {
         playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.delayHeal.amount)
@@ -2386,16 +2456,18 @@ export default function Game() {
       }
       // 魔剣開放：バフ期間終了後にバフ不可状態移行
       if (playerBuffs.spellBladeExhaust?.turns === 0) {
+        const sealT = playerBuffs.spellBladeExhaust.sealTurns || 4
         delete playerBuffs.spellBladeExhaust
-        playerBuffs.spellBladeSealed = { turns:4 }
-        logs.push({ text:`⚔ 魔剣開放の反動！ 4ターンの間バフ不可状態になった！`, color:'#ff4444' })
+        playerBuffs.spellBladeSealed = { turns:sealT }
+        logs.push({ text:`⚔ 魔剣開放の反動！ ${sealT}ターンの間バフ不可状態になった！`, color:'#ff4444' })
       }
       // オールイン：バフ期間終了後にデバフ移行
       if (playerBuffs.allinActive?.turns === 0) {
+        const reactT = playerBuffs.allinActive.reactTurns || 2
         delete playerBuffs.allinActive
         delete playerBuffs.atkUp; delete playerBuffs.matkUp; delete playerBuffs.spdUp; delete playerBuffs.dmgReduce
-        playerBuffs.allinDebuff = { turns:2, rate:0.7 }
-        logs.push({ text:`💸 オールインの効果が切れた！ 2ターンの間全ステータスが低下し、バフが使えない！`, color:'#ff4444' })
+        playerBuffs.allinDebuff = { turns:reactT, rate:0.7 }
+        logs.push({ text:`💸 オールインの効果が切れた！ ${reactT}ターンの間全ステータスが低下し、バフが使えない！`, color:'#ff4444' })
         setBattleLogs([...logs])
       }
       if (bossHealCooldown > 0) bossHealCooldown--
@@ -3087,6 +3159,7 @@ export default function Game() {
         <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px', lineHeight:'1.6' }}>
           レベルキャップ到達時に再修練できます。<br/>
           再修練するとLV1にリセット・スキル1つを持ち越せます。<br/>
+          再修練するごとに、そのクラスのスキルが上から1つずつ段階強化されます（そのクラスでプレイ中のみ有効）。<br/>
           上限5回まで（★★★★★）。5回到達でこのクラスのレベル上限が300に解放されます。
         </div>
         <div style={{ color:'#446688', fontSize:'11px', marginBottom:'8px' }}>
