@@ -28,6 +28,11 @@ export default function Login({ isPasswordRecovery = false }) {
   const [isForgot, setIsForgot] = useState(false)
   const [forgotEmail, setForgotEmail] = useState('')
 
+  const [showContact, setShowContact] = useState(false)
+  const [contactForm, setContactForm] = useState({ category: 'bug', body: '', email: '' })
+  const [contactSent, setContactSent] = useState(false)
+  const [contactLoading, setContactLoading] = useState(false)
+
   const isReset = isPasswordRecovery
 
   const handleForgot = async (e) => {
@@ -71,7 +76,71 @@ export default function Login({ isPasswordRecovery = false }) {
     setLoading(false)
   }
 
+  const submitContact = async () => {
+    if (!contactForm.body.trim()) return
+    setContactLoading(true)
+    await supabase.from('contact_messages').insert({
+      player_id: null,
+      player_name: contactForm.email.trim() || '（未ログイン）',
+      category: contactForm.category,
+      body: contactForm.body.trim(),
+    })
+    setContactSent(true)
+    setContactLoading(false)
+  }
+
   const inputStyle = { background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace' }
+
+  if (showContact) return (
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#000820' }}>
+      <div style={{ border:'1px solid #446688', background:'#001040', padding:'30px', width:'320px', fontFamily:'monospace' }}>
+        <div style={{ color:'#ffcc00', textAlign:'center', fontSize:'20px', marginBottom:'20px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
+        <div style={{ color:'#88ccff', fontSize:'14px', marginBottom:'12px' }}>📩 お問い合わせ</div>
+        {contactSent ? (
+          <>
+            <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'20px 0' }}>送信しました。ありがとうございます。</div>
+            <button onClick={()=>{ setShowContact(false); setContactSent(false); setContactForm({ category:'bug', body:'', email:'' }) }}
+              style={{ width:'100%', padding:'10px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>戻る</button>
+          </>
+        ) : (
+          <>
+            <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px', lineHeight:'1.6' }}>
+              不具合・アカウント停止への異議・その他ご意見をお送りください。
+            </div>
+            <div style={{ marginBottom:'10px' }}>
+              <div style={{ color:'#446688', fontSize:'11px', marginBottom:'4px' }}>カテゴリ</div>
+              <select value={contactForm.category} onChange={e=>setContactForm(f=>({...f, category:e.target.value}))}
+                style={{ width:'100%', padding:'8px', background:'#001040', border:'1px solid #446688', color:'#88ccff', fontFamily:'monospace', fontSize:'12px' }}>
+                <option value="bug">不具合報告</option>
+                <option value="ban_appeal">アカウント停止への異議</option>
+                <option value="other">その他</option>
+              </select>
+            </div>
+            <div style={{ marginBottom:'10px' }}>
+              <div style={{ color:'#446688', fontSize:'11px', marginBottom:'4px' }}>メールアドレス（任意・返信希望の場合）</div>
+              <input type="email" value={contactForm.email} onChange={e=>setContactForm(f=>({...f, email:e.target.value}))}
+                placeholder="example@mail.com"
+                style={{ ...inputStyle, width:'100%', boxSizing:'border-box' }} />
+            </div>
+            <div style={{ marginBottom:'12px' }}>
+              <div style={{ color:'#446688', fontSize:'11px', marginBottom:'4px' }}>内容</div>
+              <textarea value={contactForm.body} onChange={e=>setContactForm(f=>({...f, body:e.target.value}))}
+                rows={5} placeholder="詳しく教えてください..."
+                style={{ width:'100%', padding:'8px', background:'#001040', border:'1px solid #446688', color:'#ccddff', fontFamily:'monospace', fontSize:'12px', resize:'vertical', boxSizing:'border-box' }} />
+            </div>
+            <div style={{ display:'flex', gap:'8px' }}>
+              <button onClick={()=>setShowContact(false)}
+                style={{ flex:1, padding:'10px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>戻る</button>
+              <button onClick={submitContact} disabled={contactLoading || !contactForm.body.trim()}
+                style={{ flex:1, padding:'10px', background:'#001840', border:'1px solid #88ccff', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', opacity: contactForm.body.trim() ? 1 : 0.4 }}>
+                {contactLoading ? '送信中...' : '送信する'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
 
   return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#000820' }}>
@@ -148,6 +217,11 @@ export default function Login({ isPasswordRecovery = false }) {
                 </span>
               </div>
             )}
+            <div style={{ marginTop:'12px', textAlign:'center', fontSize:'12px' }}>
+              <span style={{ color:'#446688', cursor:'pointer' }} onClick={() => setShowContact(true)}>
+                📩 お問い合わせはこちら
+              </span>
+            </div>
           </>
         )}
       </div>
