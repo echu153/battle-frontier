@@ -1371,7 +1371,9 @@ export default function Game() {
     if (_needsUpdate) {
       await supabase.from('profiles').update(_computed).eq('id', user.id)
     }
-    setProfile({ ...data, ..._computed })
+    // ログイン時にセッションをまたいだ連続出撃カウントをリセット
+    await supabase.from('profiles').update({ consecutive_battle_count: 0 }).eq('id', user.id)
+    setProfile({ ...data, ..._computed, consecutive_battle_count: 0 })
     setPendingPoints(data.pending_stat_points || 0)
     // selectedAreaがこのアカウントで解放済みかチェック（別アカウントのlocalStorage値を弾く）
     const unlocked = data.unlocked_areas || [1]
@@ -1782,6 +1784,7 @@ export default function Game() {
         return
       }
       await supabase.from('profiles').update({ consecutive_battle_count: newConsec }).eq('id', profile.id)
+      setProfile(p => ({ ...p, consecutive_battle_count: newConsec }))
     }
 
     const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
