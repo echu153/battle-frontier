@@ -52,7 +52,9 @@ export default function Titles() {
       supabase.from('player_items').select('id, items!inner(effect)').eq('player_id', user.id).eq('items.effect', 'mp_pct_infinite'),
     ])
 
+    const BASE_CLASSES = ['戦士','弓使い','魔法使い','僧侶','格闘家']
     const classLevelTotal = (classLevels || []).reduce((s, cl) => s + (cl.lv || 0), 0)
+    const advancedClassCount = (classLevels || []).filter(cl => !BASE_CLASSES.includes(cl.class_name)).length
     const retrainingTotal = Object.values(p?.retraining || {}).reduce((s, v) => s + v, 0)
     const maxUnlockedArea = Math.max(...(p?.unlocked_areas || [1]))
 
@@ -61,6 +63,7 @@ export default function Titles() {
     setPlayerTitles(pt || [])
     setCondData({
       classLevelTotal,
+      advancedClassCount,
       retrainingTotal,
       maxUnlockedArea,
       jobChangeCount: p?.job_change_count || 0,
@@ -83,6 +86,7 @@ export default function Titles() {
       case 'class_level_total': return condData.classLevelTotal >= v
       case 'char_lv':           return (profile.char_lv || profile.lv || 0) >= v
       case 'job_change':        return condData.jobChangeCount >= v
+      case 'advanced_class_count': return condData.advancedClassCount >= v
       case 'retraining':        return condData.retrainingTotal >= v
       case 'area':              return condData.maxUnlockedArea >= v
       case 'boss_kill':         return condData.bossKillCount >= v
@@ -107,6 +111,7 @@ export default function Titles() {
       case 'class_level_total': return `${condData.classLevelTotal.toLocaleString()}/${v.toLocaleString()}`
       case 'char_lv':           return `キャラクターLV ${(profile.char_lv||profile.lv||0).toLocaleString()}/${v.toLocaleString()}`
       case 'job_change':        return `${condData.jobChangeCount}/${v}`
+      case 'advanced_class_count': return `上位クラス ${condData.advancedClassCount}/${v}種`
       case 'retraining':        return `${condData.retrainingTotal}/${v}`
       case 'area':              return `現在エリア${condData.maxUnlockedArea - 1}突破`
       case 'boss_kill':         return `${condData.bossKillCount.toLocaleString()}/${v.toLocaleString()}`
