@@ -3001,7 +3001,10 @@ export default function Game() {
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
               {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width:'48px', height:'48px', objectFit:'cover', flexShrink:0 }} />}
               <div style={{ flex:1 }}>
-                <div style={{ color:'#ffcc00', fontSize:'13px' }}>{profile.username}</div>
+                <div style={{ color:'#ffcc00', fontSize:'13px' }}>
+                  {profile.display_title && <span style={{ color:'#aaaaff', fontSize:'11px', marginRight:'4px' }}>{profile.display_title}</span>}
+                  {profile.username}
+                </div>
                 <div style={{ fontSize:'11px', color:'#446688' }}>
                   <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{getRetrainingStars(profile.class, profile.retraining)}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／{cap}
                 </div>
@@ -3275,7 +3278,10 @@ export default function Game() {
             {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'4px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
             <div style={{ borderBottom:'1px dashed #003366', paddingBottom:'8px', marginBottom:'8px' }}>
               {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width:'60px', height:'60px', objectFit:'cover', display:'block', margin:'0 auto 6px' }} />}
-              <div style={{ color:'#ffcc00', fontSize:'12px', textAlign:'center' }}>{profile.username}</div>
+              <div style={{ color:'#ffcc00', fontSize:'12px', textAlign:'center' }}>
+                {profile.display_title && <span style={{ color:'#aaaaff', fontSize:'10px', marginRight:'4px' }}>{profile.display_title}</span>}
+                {profile.username}
+              </div>
             </div>
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>
               クラス: <span style={{color:'#88ccff'}}>{profile.class}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／<span style={{color:'#446688'}}>{cap}</span>
