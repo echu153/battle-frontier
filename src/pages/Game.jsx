@@ -1983,11 +1983,6 @@ export default function Game() {
           if (enemy.isPapia && res.dmg > 0) finalDmg = 1
           const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
-          if (playerAttacking && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-            const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
-            playerHp = Math.min(profile.hp_max, playerHp + rageCure)
-            logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
-          }
           enemyHp -= finalDmg
           if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
             enemyBuffs.healDown = { turns: 2, rate: 0.9 }
@@ -2012,6 +2007,11 @@ export default function Game() {
           playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
           const critText = finalCrit ? ' 💥クリティカル！' : ''
           logs.push({ text:`${prefix}${resLog}${critText}`, color:finalCrit?'#ff4444':'#88ccff' })
+          if (playerAttacking && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
+            const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
+            playerHp = Math.min(profile.hp_max, playerHp + rageCure)
+            logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
+          }
           // 神聖覚醒：攻撃ごとに追加ダメージ
           if (playerBuffs.holyAwakening?.turns > 0 && finalDmg > 0) {
             const holyBonusDmg = Math.floor((pDef * playerBuffs.holyAwakening.defMult + pMdef * playerBuffs.holyAwakening.defMult))
@@ -2030,11 +2030,6 @@ export default function Game() {
         const enemyDmgReduceMult2 = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
         let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.2:1.0)*passiveDmgMult*enemyDmgReduceMult2*(0.9+Math.random()*0.2))
         if (enemy.isPapia) finalDmg = 1
-        if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
-          playerHp = Math.min(profile.hp_max, playerHp + rageCure)
-          logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
-        }
         enemyHp -= finalDmg
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
           enemyBuffs.healDown = { turns: 2, rate: 0.9 }
@@ -2042,6 +2037,11 @@ export default function Game() {
         }
         const critText = isCrit ? ' 💥クリティカル！' : ''
         logs.push({ text:`${prefix}あなたの攻撃！ ${enemy.name}に${finalDmg}ダメージ！${critText}`, color:isCrit?'#ff4444':'#ffcc00' })
+        if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
+          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
+          playerHp = Math.min(profile.hp_max, playerHp + rageCure)
+          logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
+        }
         if (expandedSkillSet.length > 0) skillIndex++
       }
       playerAttacking = false
@@ -2151,14 +2151,6 @@ export default function Game() {
         enemyHp -= burnDmg
         logs.push({ text:`🔥 やけどダメージ！ ${enemy.name}に${burnDmg}ダメージ！`, color:'#ff6622' })
         if (enemyHp <= 0) break
-      }
-      if (enemyBuffs.bleed) {
-        const bleedDmg = Math.floor(enemyMaxHp * 0.01 * enemyBuffs.bleed.stacks)
-        enemyHp -= bleedDmg
-        logs.push({ text:`🩸 出血ダメージ！ ${enemy.name}に${bleedDmg}ダメージ（${enemyBuffs.bleed.stacks}スタック）！`, color:'#ff4466' })
-        if (enemyHp <= 0) break
-        enemyBuffs.bleed.lastTurn = (enemyBuffs.bleed.lastTurn || 0) + 1
-        if (enemyBuffs.bleed.lastTurn >= 3) delete enemyBuffs.bleed
       }
       if (enemyBuffs.curseDmg?.turns > 0) {
         enemyHp -= enemyBuffs.curseDmg.dmg
@@ -2306,6 +2298,16 @@ export default function Game() {
         }
       }
       if (playerHp <= 0) break
+
+      // 敵出血ダメージ（敵ターン終了時）
+      if (enemyBuffs.bleed) {
+        const bleedDmg = Math.floor(enemyMaxHp * 0.01 * enemyBuffs.bleed.stacks)
+        enemyHp -= bleedDmg
+        logs.push({ text:`🩸 出血ダメージ！ ${enemy.name}に${bleedDmg}ダメージ（${enemyBuffs.bleed.stacks}スタック）！`, color:'#ff4466' })
+        if (enemyHp <= 0) break
+        enemyBuffs.bleed.lastTurn = (enemyBuffs.bleed.lastTurn || 0) + 1
+        if (enemyBuffs.bleed.lastTurn >= 3) delete enemyBuffs.bleed
+      }
 
       // バフ/デバフのターン減少
       const berserkWasActive = playerBuffs.berserk?.turns > 0
