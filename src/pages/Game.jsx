@@ -1242,6 +1242,7 @@ export default function Game() {
   const [hasNewAnnouncements, setHasNewAnnouncements] = useState(false)
   const [retrainingModal, setRetrainingModal] = useState(false)
   const [raidStatus, setRaidStatus] = useState(null) // null | 'active' | 'pre' | 'defeated' | 'expired'
+  const [raidPreCountdown, setRaidPreCountdown] = useState('')
   const [raidBossData, setRaidBossData] = useState(null) // { boss, participants }
   const [selectedCarrySkill, setSelectedCarrySkill] = useState(null)
   const [retrainingSkills, setRetrainingSkills] = useState([])
@@ -1292,6 +1293,23 @@ export default function Game() {
     }, 200)
     return () => clearInterval(id)
   }, [profile])
+
+  // レイドボス出現前カウントダウン（preステータス中、1秒ごと更新）
+  useEffect(() => {
+    if (raidStatus !== 'pre') { setRaidPreCountdown(''); return }
+    const update = () => {
+      const jstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
+      const spawn = new Date(jstNow)
+      spawn.setHours(21, 0, 0, 0)
+      const diff = Math.max(0, spawn - jstNow)
+      const m = Math.floor(diff / 60000)
+      const s = Math.floor((diff % 60000) / 1000)
+      setRaidPreCountdown(`${m}:${String(s).padStart(2,'0')}`)
+    }
+    update()
+    const id = setInterval(update, 1000)
+    return () => clearInterval(id)
+  }, [raidStatus])
 
   // レイドボス状態チェック（60秒ごと）
   useEffect(() => {
@@ -3283,7 +3301,7 @@ export default function Game() {
                       <div style={{ fontSize:'10px', color:'#886644' }}>⌛ 時間切れ（討伐失敗）</div>
                     )}
                     {(raidStatus === 'pre') && (
-                      <div style={{ fontSize:'10px', color:'#cc8844' }}>⚠ まもなく出現します！</div>
+                      <div style={{ fontSize:'10px', color:'#cc8844' }}>⚠ まもなく出現します！{raidPreCountdown ? ` 出現まで ${raidPreCountdown}` : ''}</div>
                     )}
                     {(!raidStatus || raidStatus === null) && (() => {
                       const todayJst = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)
@@ -3578,7 +3596,7 @@ export default function Game() {
                         <div style={{ fontSize:'10px', color:'#886644' }}>⌛ 時間切れ（討伐失敗）</div>
                       )}
                       {raidStatus === 'pre' && (
-                        <div style={{ fontSize:'10px', color:'#cc8844' }}>⚠ まもなく出現します！</div>
+                        <div style={{ fontSize:'10px', color:'#cc8844' }}>⚠ まもなく出現します！{raidPreCountdown ? ` 出現まで ${raidPreCountdown}` : ''}</div>
                       )}
                       {(!raidStatus || raidStatus === null) && (() => {
                         const todayJst = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)

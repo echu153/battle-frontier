@@ -22,7 +22,7 @@ const SORTIE_WAIT = 30 // 賭博場出撃のクールダウン秒（通常出撃
 const expIsFrozen = (p) => !!(p && (p.exp_frozen || (p.exp_frozen_until && new Date(p.exp_frozen_until) > new Date())))
 const AUTOCLICK_SAMPLES = 12   // オートクリッカー検知：直近サンプル数
 const AUTOCLICK_SPREAD_MS = 1200 // 出撃間隔のばらつき許容幅(ms)。これ未満なら機械的連打とみなす
-const SORTIE_STREAK_LIMIT = 15  // カジノで遊ばず簡易出撃が連続したらEXP凍結する回数
+const SORTIE_STREAK_LIMIT = 20  // カジノで遊ばず簡易出撃が連続したらBOTチャレンジ発動する回数
 const AREA_PASS_EFFECT = { 2:'casino_area_2', 3:'casino_area_3', 4:'casino_area_4', 5:'casino_area_5', 6:'casino_area_6', 7:'casino_area_7' }
 
 const EXCHANGE_RATE = 100 // 100G = 1メダル（SQLのrateと一致させること）
@@ -464,20 +464,16 @@ export default function Casino() {
       }
     }
 
-    // オートクリッカー検知②：カジノで遊ばず簡易出撃だけが連続したら12時間EXP凍結（出撃自体は継続可）
-    let justFrozen = false
-    if (!DEV_ACCOUNTS.includes(profile.username) && !expIsFrozen(profile)) {
-      const newStreak = (profile.sortie_streak || 0) + 1
-      if (newStreak >= SORTIE_STREAK_LIMIT) {
-        const frozenUntil = new Date(Date.now() + 12*3600*1000).toISOString()
-        await supabase.from('profiles').update({ exp_frozen_until: frozenUntil, sortie_streak: 0 }).eq('id', profile.id)
-        setProfile(p => ({ ...p, exp_frozen_until: frozenUntil, sortie_streak: 0 }))
-        justFrozen = true
-        setSortieMsg('⚠ 簡易出撃ばかりが連続しています。12時間EXPの獲得を停止します'); setTimeout(()=>setSortieMsg(''),5000)
-      } else {
-        await supabase.from('profiles').update({ sortie_streak: newStreak }).eq('id', profile.id)
-        setProfile(p => ({ ...p, sortie_streak: newStreak }))
-      }
+    // 簡易出撃連続検知：カジノで遊ばず連続SORTIE_STREAK_LIMIT回でBOTチャレンジ発動
+    const newStreak = (profile.sortie_streak || 0) + 1
+    if (newStreak >= SORTIE_STREAK_LIMIT) {
+      await supabase.from('profiles').update({ sortie_streak: 0 }).eq('id', profile.id)
+      setProfile(p => ({ ...p, sortie_streak: 0 }))
+      triggerBotCheck()
+      setLoading(false); return
+    } else {
+      await supabase.from('profiles').update({ sortie_streak: newStreak }).eq('id', profile.id)
+      setProfile(p => ({ ...p, sortie_streak: newStreak }))
     }
 
     const area = AREAS.find(a => a.id === sortieArea) || AREAS[0]
