@@ -1821,8 +1821,9 @@ export default function Game() {
 
     // Atomic lock: last_action_atが古い場合のみUPDATE（複数端末同時出撃・釣り中出撃を防ぐ）
     const lockTime = new Date(Date.now() - WAIT_SECONDS * 1000).toISOString()
+    const now = new Date().toISOString()
     const { data: locked } = await supabase.from('profiles')
-      .update({ last_action_at: new Date().toISOString() })
+      .update({ last_action_at: now })
       .eq('id', profile.id)
       .lt('last_action_at', lockTime)
       .eq('is_fishing', false)
@@ -1830,6 +1831,7 @@ export default function Game() {
     if (!locked || locked.length === 0) {
       setLoading(false); setScene('town'); await fetchProfile(); return
     }
+    setProfile(p => ({ ...p, last_action_at: now }))
 
     // オートクリッカー検知：出撃間隔が異常に規則的（一定間隔の機械的連打）なら12時間出撃禁止
     {
