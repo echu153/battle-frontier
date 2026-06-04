@@ -1367,20 +1367,14 @@ export default function Game() {
       for (const k of _statKeys) _allClassBonus[k] += Math.floor((b[k] || 0) * rate)
     }
     const _spent = data.stat_point_spent || {}
-    // リトレーニングごとにLV20分のボーナスを永続付与
-    const _rtBonus = Object.fromEntries(_statKeys.map(k => [k, 0]))
-    for (const [cls, cnt] of Object.entries(data.retraining || {})) {
-      const lv20 = calcLvBonus(cls, 20)
-      for (const k of _statKeys) _rtBonus[k] += (lv20[k] || 0) * cnt
-    }
     const _computed = {
-      hp_max: _base.hp_max + _allClassBonus.hp_max + (_spent.hp  ||0)*10 + _rtBonus.hp_max,
-      mp_max: _base.mp_max + _allClassBonus.mp_max + (_spent.mp  ||0)*5  + _rtBonus.mp_max,
-      atk:    _base.atk   + _allClassBonus.atk    + (_spent.atk ||0)     + _rtBonus.atk,
-      def:    _base.def   + _allClassBonus.def    + (_spent.def  ||0)    + _rtBonus.def,
-      matk:   _base.matk  + _allClassBonus.matk   + (_spent.matk||0)     + _rtBonus.matk,
-      mdef:   _base.mdef  + _allClassBonus.mdef   + (_spent.mdef||0)     + _rtBonus.mdef,
-      spd:    _base.spd   + _allClassBonus.spd    + (_spent.spd  ||0)    + _rtBonus.spd,
+      hp_max: _base.hp_max + _allClassBonus.hp_max + (_spent.hp  ||0)*10,
+      mp_max: _base.mp_max + _allClassBonus.mp_max + (_spent.mp  ||0)*5,
+      atk:    _base.atk   + _allClassBonus.atk    + (_spent.atk ||0),
+      def:    _base.def   + _allClassBonus.def    + (_spent.def  ||0),
+      matk:   _base.matk  + _allClassBonus.matk   + (_spent.matk||0),
+      mdef:   _base.mdef  + _allClassBonus.mdef   + (_spent.mdef||0),
+      spd:    _base.spd   + _allClassBonus.spd    + (_spent.spd  ||0),
     }
     // exp_nextも現在のLVから再計算して同期
     _computed.exp_next = calcExpNext(data.lv)
@@ -1506,7 +1500,7 @@ export default function Game() {
     setSelectedCarrySkill(null)
     setRetrainingClass(null)
     const stars = '★'.repeat(currentCount + 1)
-    setRetrainingMessage(`再修練完了！ ${targetClass}${stars} LV1にリセット・LV20分のステータス永続付与！`)
+    setRetrainingMessage(`再修練完了！ ${targetClass}${stars} LV1にリセット！`)
     setLoading(false)
   }
 
@@ -2686,7 +2680,7 @@ export default function Game() {
 ● 宝石：装備のソケットに埋め込めば、さらにステータスを底上げできる
 ● デイリーダンジョン：とてもお得なので、毎日忘れずにこなそう
 
-クラス育成のコツとして、転職してもステータスは下がらないが、再修練は一時的にステータスが下がる。伸ばしたいなら、まずは色々なクラスへの転職を繰り返すのがおすすめだ。
+クラス育成のコツとして、転職しても再修練してもステータスポイントは引き継がれる。スキルを持ち越したいなら再修練を活用しよう。
 
 すぐには強くなれない。あらゆる手段を少しずつ積み重ねて、着実に強くなっていこう。`,
     },
@@ -3015,7 +3009,7 @@ export default function Game() {
         <div style={{ color:'#ffaa44', fontSize:'12px', marginBottom:'6px' }}>🔄 再修練</div>
         <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px', lineHeight:'1.6' }}>
           レベルキャップ到達時に再修練できます。<br/>
-          再修練するとLV1にリセット・LV20分のステータス永続付与・スキル1つを持ち越せます。<br/>
+          再修練するとLV1にリセット・スキル1つを持ち越せます。<br/>
           上限5回まで（★★★★★）
         </div>
         <div style={{ color:'#446688', fontSize:'11px', marginBottom:'8px' }}>
