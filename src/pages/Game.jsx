@@ -680,14 +680,14 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.dmg = Math.floor((eff.atk*1.1+eff.spd*0.4)*am)
       const bleedHit1 = Math.random()*100 < 20
       if (bleedHit1) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
-      result.log = `⚔ 居合斬！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleedHit1 ? ' 出血状態！' : ''}`
+      result.log = `⚔ 居合斬！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleedHit1 ? ` ${enemy.name}は出血した！` : ''}`
       break
     }
     case '断空': {
       result.dmg = Math.floor(eff.atk*1.6*am)
       const bleedHit2 = Math.random()*100 < 30
       if (bleedHit2) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
-      result.log = `⚔ 断空！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleedHit2 ? ' 出血状態！' : ''}`
+      result.log = `⚔ 断空！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleedHit2 ? ` ${enemy.name}は出血した！` : ''}`
       break
     }
     case '明鏡止水':    result.newPlayerBuffs.atkUp={turns:4,rate:1.5}; result.newPlayerBuffs.hitBonus={turns:4,value:5}; result.log = `✨ 明鏡止水！ 4ターンの間攻撃力が上昇し命中率UP！`; break
@@ -695,7 +695,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.dmg = Math.floor(eff.atk*2.0*am)
       const bleedHit6 = Math.random()*100 < 40
       if (bleedHit6) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
-      result.log = `🌙 月影！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleedHit6 ? ' 出血！' : ''}`
+      result.log = `🌙 月影！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleedHit6 ? ` ${enemy.name}は出血した！` : ''}`
       break
     }
     case 'マッドラッシュ': {
@@ -734,7 +734,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.dmg = Math.floor((eff.atk*1.0+eff.spd*0.5)*am)
       const bleedHit3 = Math.random()*100 < 40
       if (bleedHit3) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
-      result.log = `🌙 瞬歩瞬殺！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleedHit3 ? ' 出血状態！' : ''}`
+      result.log = `🌙 瞬歩瞬殺！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleedHit3 ? ` ${enemy.name}は出血した！` : ''}`
       break
     }
     case '鬼影閃': {
@@ -748,7 +748,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.dmg = kiDmg
       const bleedHit4 = Math.random()*100 < 20
       if (bleedHit4) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
-      result.log = `🌙 鬼影閃！ ${enemy.name}に${result.dmg}の物理ダメージ！${hasShadowWalk ? ` 追撃で${bonusDmg}ダメージ！` : ''}${bleedHit4 ? ' 出血！' : ''}`
+      result.log = `🌙 鬼影閃！ ${enemy.name}に${result.dmg}の物理ダメージ！${hasShadowWalk ? ` 追撃で${bonusDmg}ダメージ！` : ''}${bleedHit4 ? ` ${enemy.name}は出血した！` : ''}`
       break
     }
     case '影歩き':      result.newPlayerBuffs.spdUp={turns:4,rate:1.5}; result.newPlayerBuffs.evasion={turns:4,rate:0.05}; result.log = `🌙 影歩き！ 4ターンの間、素早さ大幅上昇・回避率UP！`; break
@@ -2005,8 +2005,8 @@ export default function Game() {
             if (hadBuff) logs.push({ text:`💸 オールインの反動中！ バフが効かない！`, color:'#ff4444' })
           }
           playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
-          const critText = finalCrit ? ' 💥クリティカル！' : ''
-          logs.push({ text:`${prefix}${resLog}${critText}`, color:finalCrit?'#ff4444':'#88ccff' })
+          const critText = finalCrit ? '💥クリティカル！ ' : ''
+          logs.push({ text:`${prefix}${critText}${resLog}`, color:finalCrit?'#ffff00':'#88ccff' })
           if (playerAttacking && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
             const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
             playerHp = Math.min(profile.hp_max, playerHp + rageCure)
@@ -2035,8 +2035,8 @@ export default function Game() {
           enemyBuffs.healDown = { turns: 2, rate: 0.9 }
           logs.push({ text: `🗡 ヴァルブレイカーの効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
         }
-        const critText = isCrit ? ' 💥クリティカル！' : ''
-        logs.push({ text:`${prefix}あなたの攻撃！ ${enemy.name}に${finalDmg}ダメージ！${critText}`, color:isCrit?'#ff4444':'#ffcc00' })
+        const critText = isCrit ? '💥クリティカル！ ' : ''
+        logs.push({ text:`${prefix}${critText}あなたの攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
         if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
           const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
           playerHp = Math.min(profile.hp_max, playerHp + rageCure)
