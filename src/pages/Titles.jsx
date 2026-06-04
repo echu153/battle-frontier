@@ -212,11 +212,11 @@ export default function Titles() {
               style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'4px', marginBottom:'6px' }}
             >
               <option value=''>（なし）</option>
-              <optgroup label='汎用称号'>
+              <optgroup label='★汎用称号★'>
                 {genericTitles.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
               </optgroup>
               {acquiredEarned.length > 0 && (
-                <optgroup label='獲得済み称号'>
+                <optgroup label='★獲得済み称号★'>
                   {acquiredEarned.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                 </optgroup>
               )}
