@@ -155,7 +155,8 @@ export default function Titles() {
   const setDisplayTitle = async (titleText) => {
     if (loading) return
     setLoading(true)
-    await supabase.from('profiles').update({ display_title: titleText || null }).eq('id', profile.id)
+    const { error } = await supabase.from('profiles').update({ display_title: titleText || null }).eq('id', profile.id)
+    if (error) { showMsg(`エラー: ${error.message}`, '#ff4444'); setLoading(false); return }
     await fetchAll()
     setLoading(false)
   }
@@ -163,7 +164,8 @@ export default function Titles() {
   const setAbilityTitle = async (titleId) => {
     if (loading) return
     setLoading(true)
-    await supabase.from('profiles').update({ ability_title_id: titleId || null }).eq('id', profile.id)
+    const { error } = await supabase.from('profiles').update({ ability_title_id: titleId || null }).eq('id', profile.id)
+    if (error) { showMsg(`エラー: ${error.message}`, '#ff4444'); setLoading(false); return }
     await fetchAll()
     setLoading(false)
   }
@@ -243,6 +245,30 @@ export default function Titles() {
             </select>
           </div>
         </div>
+
+        {/* 獲得可能な称号 */}
+        {(() => {
+          const claimable = earnedTitles.filter(t => checkCondition(t) && !isAcquired(t.id))
+          if (claimable.length === 0) return null
+          return (
+            <div style={{ border:'1px solid #44aa44', background:'#001a08', padding:'12px', marginBottom:'16px' }}>
+              <div style={{ color:'#44ff88', fontSize:'12px', marginBottom:'8px' }}>🎉 獲得可能な称号 ({claimable.length}件)</div>
+              {claimable.map(title => (
+                <div key={title.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 0', borderBottom:'1px solid #002244' }}>
+                  <div>
+                    <span style={{ color:'#88ff88', fontSize:'12px', marginRight:'8px' }}>{title.name}</span>
+                    <span style={{ color:'#887700', fontSize:'9px' }}>{bonusText(title)}</span>
+                    {title.bonus_item_name && <span style={{ color:'#ffaa44', fontSize:'9px', marginLeft:'6px' }}>＋{title.bonus_item_name}</span>}
+                  </div>
+                  <button onClick={() => claimTitle(title)} disabled={loading}
+                    style={{ padding:'4px 14px', background:'#001a08', border:'1px solid #44aa44', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                    獲得
+                  </button>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
 
         {/* 実績称号リスト */}
         <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'10px', letterSpacing:'2px' }}>⬡ 実績称号一覧</div>
