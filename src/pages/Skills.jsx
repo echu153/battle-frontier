@@ -19,6 +19,7 @@ export default function Skills() {
   const [skillSets, setSkillSets] = useState([])
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('current')
+  const [setMessage, setSetMessage] = useState('')
 
   useEffect(() => { fetchAll() }, [])
 
@@ -75,6 +76,15 @@ export default function Skills() {
     const playerSkillData = playerSkills.find(ps => ps.skill_id === skillId)
     const skillData = playerSkillData?.skills
     if (skillData && skillData.class_name !== profile.class && skillData.class_name !== '共通' && !playerSkillData?.is_carried_over) return
+    // パッシブは1つまで：別スロットに既にパッシブがある場合はセット不可
+    if (skillData?.type === 'パッシブ') {
+      const otherPassive = skillSets.find(ss => ss.skills?.type === 'パッシブ' && ss.skill_id !== skillId && ss.slot_order !== slotOrder)
+      if (otherPassive) {
+        setSetMessage(`パッシブは1つまでです（現在：${otherPassive.skills.name}）。先に外してください。`)
+        return
+      }
+    }
+    setSetMessage('')
     setLoading(true)
     await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('skill_id', skillId)
     const existing = skillSets.find(ss => ss.slot_order === slotOrder)
@@ -133,7 +143,8 @@ export default function Skills() {
         {/* スキルセット */}
         <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'4px' }}>スキルセット（最大5個・上から順に発動）</div>
-          <div style={{ color:'#336688', fontSize:'10px', marginBottom:'8px' }}>パッシブスキルをセットすると常時発動する</div>
+          <div style={{ color:'#336688', fontSize:'10px', marginBottom:'8px' }}>パッシブスキルをセットすると常時発動する（パッシブは1つまで）</div>
+          {setMessage && <div style={{ color:'#ff8844', fontSize:'10px', marginBottom:'8px', border:'1px solid #884422', padding:'6px' }}>{setMessage}</div>}
           <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:'4px' }}>
             {[1,2,3,4,5].map(slot => {
               const set = skillSets.find(ss => ss.slot_order === slot)
