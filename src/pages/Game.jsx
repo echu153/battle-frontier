@@ -1999,7 +1999,10 @@ export default function Game() {
             const sType = cs.skills?.type
             const adjED  = Math.max(1, Math.floor((enemy.def ||0)*eDefRate))
             const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate))
-            if (sType === '物理攻撃') defScale = effBuff.atk  / (effBuff.atk  + adjED)
+            if (cs.skills?.name === 'サイコブラスト') {
+              // ハイブリッド：敵DEF・MDEFの低い方で軽減
+              defScale = effBuff.matk / (effBuff.matk + Math.min(adjED, adjEMD))
+            } else if (sType === '物理攻撃') defScale = effBuff.atk  / (effBuff.atk  + adjED)
             else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + adjEMD)
           }
           const allinDebuffOutMult = playerBuffs.allinDebuff?.turns > 0 ? 0.7 : 1.0
