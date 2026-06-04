@@ -104,6 +104,9 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
   const hasGensoKyomei = passiveNames.includes('元素共鳴')
   const hasGambleBody = passiveNames.includes('ギャンブルボディ')
   const hasOnmi       = passiveNames.includes('隠身')
+  const hasMadokenJutsu = passiveNames.includes('魔導剣術')
+  const hasHolyKnightPassive = passiveNames.includes('聖騎士の心得')
+  const hasGainoKabe  = passiveNames.includes('骸の壁')
 
   // 再修練3段でパッシブ強化（現在クラス一致＆再修練3回以上＆そのパッシブをセット中）
   const rtCur = (profile.retraining || {})[profile.class] || 0
@@ -132,6 +135,11 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
   logs.push({ text: `⚠ ${BOSS_NAME}が現れた！`, color: '#ff4444' })
 
   for (let turn = 1; turn <= 10; turn++) {
+    // 骸の壁：ターン1と5の倍数で被ダメ-30%バリア
+    if (hasGainoKabe && (turn === 1 || turn % 5 === 0)) {
+      playerBuffs.dmgReduce = { turns: 999, rate: 0.7, isGainoKabe: true }
+      logs.push({ text: `💀 骸の壁発動！ 次に攻撃を受けるまで被ダメ-30%！`, color: '#cc44ff' })
+    }
     // バフ段階のアナウンス
     if (turn === 4) logs.push({ text: `━━ ${BOSS_NAME}が覚醒した！全ステータス1.5倍！ ━━`, color: '#ff8844' })
     if (turn === 8) logs.push({ text: `━━ ${BOSS_NAME}が暴走状態に！全ステータス4倍！ ━━`, color: '#ff2222' })
@@ -148,10 +156,13 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
 
     // ========== プレイヤー攻撃 ==========
     const doPlayerAttack = (isExtra = false) => {
-      const pAtk  = eff.atk  * (playerBuffs.atkUp?.rate  || 1) * (playerBuffs.atkDown?.rate || 1) * (playerBuffs.burn?.turns > 0 ? 0.9 : 1)
-      const pMatk = eff.matk * (playerBuffs.matkUp?.rate || 1) * passiveMatkMult * passiveMatkMultTenki * (playerBuffs.burn?.turns > 0 ? 0.9 : 1)
-      const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1)
-      const pMdef = eff.mdef * (playerBuffs.mdefUp?.rate || 1) * (playerBuffs.defUp?.rate || 1)
+      const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * (pe('魔法剣士')?0.6:0.3)) : 0
+      const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?1.3:1.2) : 1.0
+      const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
+      const pAtk  = (eff.atk + madokenBonus) * (playerBuffs.atkUp?.rate  || 1) * (playerBuffs.atkDown?.rate || 1) * (playerBuffs.burn?.turns > 0 ? 0.9 : 1)
+      const pMatk = (eff.matk - madokenBonus) * (playerBuffs.matkUp?.rate || 1) * passiveMatkMult * passiveMatkMultTenki * (playerBuffs.burn?.turns > 0 ? 0.9 : 1)
+      const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1) * holyKnightMult * kabeDefP
+      const pMdef = eff.mdef * (playerBuffs.mdefUp?.rate || 1) * (playerBuffs.defUp?.rate || 1) * holyKnightMult * kabeDefP
       const pSpd  = effectiveSpdForCalc * (playerBuffs.spdUp?.rate || 1) * (playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1)
       const effBuff = { ...eff, atk: pAtk, def: pDef, mdef: pMdef, matk: pMatk, spd: pSpd }
 
@@ -234,8 +245,10 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
 
     // ========== ボス攻撃（HPは変動するが結果をDBに保存しない） ==========
     const doBossAttack = (isExtra = false) => {
-      const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1)
-      const pMdef = eff.mdef * (playerBuffs.mdefUp?.rate || 1) * (playerBuffs.defUp?.rate || 1)
+      const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?1.3:1.2) : 1.0
+      const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
+      const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1) * holyKnightMultE * kabeDefE
+      const pMdef = eff.mdef * (playerBuffs.mdefUp?.rate || 1) * (playerBuffs.defUp?.rate || 1) * holyKnightMultE * kabeDefE
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
       const berserkDmgRate = hasBerserk ? 1.1 : 1.0
       const eAtk = boss.atk
@@ -261,7 +274,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
         return
       }
       const playerDefRankReduction = calcDefReduction(pDef)
-      const gambleBodyMult = hasGambleBody ? (0.7 + Math.random() * 0.6) : 1.0
+      const gambleBodyMult = hasGambleBody ? (0.7 + Math.random() * (pe('ギャンブラー')?0.4:0.6)) : 1.0
       const finalDmg = Math.floor(baseDmg * (isCrit ? 1.5 : 1.0) * dmgReduceRate * berserkDmgRate * (1 - playerDefRankReduction) * gambleBodyMult * (0.9 + Math.random() * 0.2))
       playerHp -= finalDmg
       if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
