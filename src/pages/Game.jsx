@@ -1786,7 +1786,7 @@ export default function Game() {
 
     const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
     const area = AREAS.find(a => a.id === selectedArea)
-    const bossRate = DEV_ACCOUNTS.includes(profile.username) ? 100 : (profile.boss_encounter_rate || 0)
+    const bossRate = profile.boss_encounter_rate || 0
     const isBossEncounter = Math.random()*100 < bossRate
     const papiaRate = getPapiaEventStatus().active ? 2 : 1
     const isPapiaEncounter = !isBossEncounter && Math.random()*100 < papiaRate
