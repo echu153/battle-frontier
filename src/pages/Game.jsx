@@ -1769,15 +1769,16 @@ export default function Game() {
     }
 
 
-    // 街に戻らず連続出撃10回でEXP12時間停止（F5連打＋オートクリック対策）
+    // 街に戻らず連続出撃10回でBOTチャレンジ発動（F5連打＋オートクリック対策）
     if (!DEV_ACCOUNTS.includes(profile.username)) {
       const newConsec = (profile.consecutive_battle_count || 0) + 1
-      const consecUpdate = { consecutive_battle_count: newConsec }
       if (newConsec >= 10) {
-        consecUpdate.exp_frozen_until = new Date(Date.now() + 12 * 3600 * 1000).toISOString()
-        consecUpdate.consecutive_battle_count = 0
+        await supabase.from('profiles').update({ consecutive_battle_count: 0 }).eq('id', profile.id)
+        triggerBotCheck()
+        setLoading(false)
+        return
       }
-      await supabase.from('profiles').update(consecUpdate).eq('id', profile.id)
+      await supabase.from('profiles').update({ consecutive_battle_count: newConsec }).eq('id', profile.id)
     }
 
     const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
