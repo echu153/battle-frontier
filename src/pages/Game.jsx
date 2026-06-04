@@ -1667,9 +1667,9 @@ export default function Game() {
     setTimeout(async () => { await supabase.auth.signOut() }, 3000)
   }
 
-  const BOT_CHECK_MS = 3 * 60 * 1000  // 3分
+  const BOT_CHECK_MS = 5 * 60 * 1000  // 5分
 
-  // BOT確認チャレンジ：ランダム位置にボタンを出し、3分以内に押さなければ停止措置
+  // BOT確認チャレンジ：ランダム位置にボタンを出し、5分以内に押さなければ停止措置
   const triggerBotCheck = () => {
     const top = Math.floor(15 + Math.random()*65)
     const left = Math.floor(5 + Math.random()*65)
@@ -1682,7 +1682,7 @@ export default function Game() {
       if (!botCheckActiveRef.current) return
       botCheckActiveRef.current = false
       setBotCheck(null)
-      await suspendAccount('BOT確認ボタンを3分以内に押せなかった')
+      await suspendAccount('BOT確認ボタンを5分以内に押せなかった')
     }, BOT_CHECK_MS)
   }
   const passBotCheck = () => {
@@ -1711,7 +1711,7 @@ export default function Game() {
             if (!botCheckActiveRef.current) return
             botCheckActiveRef.current = false
             setBotCheck(null)
-            await suspendAccount('BOT確認ボタンを3分以内に押せなかった')
+            await suspendAccount('BOT確認ボタンを5分以内に押せなかった')
           }, remaining)
         } else if (botCheckActiveRef.current) {
           // 期限切れ（長時間放置）でも停止しない：ユーザーが戻ってきたのでキャンセル扱い
