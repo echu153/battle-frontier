@@ -2005,8 +2005,12 @@ export default function Game() {
             if (hadBuff) logs.push({ text:`💸 オールインの反動中！ バフが効かない！`, color:'#ff4444' })
           }
           playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
-          const critText = finalCrit ? '💥クリティカル！ ' : ''
-          logs.push({ text:`${prefix}${critText}${resLog}`, color:finalCrit?'#ffff00':'#88ccff' })
+          const critInsert = finalCrit ? '💥クリティカル！ ' : ''
+          const dmgIdx = resLog.indexOf(enemy.name + 'に')
+          const logWithCrit = critInsert
+            ? (dmgIdx >= 0 ? resLog.slice(0, dmgIdx) + critInsert + resLog.slice(dmgIdx) : resLog + ' ' + critInsert)
+            : resLog
+          logs.push({ text:`${prefix}${logWithCrit}`, color:finalCrit?'#ffff00':'#88ccff' })
           if (playerAttacking && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
             const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
             playerHp = Math.min(profile.hp_max, playerHp + rageCure)
