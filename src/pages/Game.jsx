@@ -2605,8 +2605,7 @@ export default function Game() {
         const profExpGained = Math.floor(Math.random()*4)+8
         let totalExp = prof.prof_exp+profExpGained
         let newProfLv = prof.prof_lv
-        while (totalExp >= 100 && newProfLv < 300) { totalExp -= 100; newProfLv++ }
-        if (newProfLv >= 300) totalExp = 0
+        while (totalExp >= 100) { totalExp -= 100; newProfLv++ }
         await supabase.from('proficiency').update({ prof_exp:totalExp, prof_lv:newProfLv }).eq('id', prof.id)
         if (newProfLv > prof.prof_lv) {
           logs.push({ text:`⚔ 武器熟練度UP！ ${getProfPrefix(newProfLv)}${equippedWeaponItem.weapons.name} LV${newProfLv}`, color:'#aa44ff' })
