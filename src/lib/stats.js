@@ -118,8 +118,8 @@ export const calcProfBonus = (prof, weapon) => {
   return result
 }
 
-// 装備＋熟練度込みの実効ステータス
-export const calcEffectiveStats = (profile, equipment, proficiency) => {
+// 装備＋熟練度込みの実効ステータス（titleBonus は ability_title のボーナスオブジェクト or null）
+export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus = null) => {
   const bonus = { atk:0, def:0, matk:0, mdef:0, spd:0, hp:0, mp:0 }
   let matkPct = 0
   let hitBonus = 0
@@ -167,14 +167,15 @@ export const calcEffectiveStats = (profile, equipment, proficiency) => {
   }
   const baseMatk = profile.matk + bonus.matk + (profile.museum_matk || 0)
   const finalMatk = matkPct > 0 ? Math.floor(baseMatk * (1 + matkPct/100)) : baseMatk
+  const tb = titleBonus || {}
   return {
-    atk:    profile.atk  + bonus.atk  + (profile.museum_atk || 0),
-    def:    profile.def  + bonus.def  + (profile.museum_def || 0),
-    matk:   finalMatk,
-    mdef:   profile.mdef + bonus.mdef + (profile.museum_mdef || 0),
-    spd:    profile.spd  + bonus.spd  + (profile.museum_spd || 0),
-    hp_max: profile.hp_max + bonus.hp + (profile.museum_hp || 0),
-    mp_max: profile.mp_max + bonus.mp + (profile.museum_mp || 0),
+    atk:    profile.atk  + bonus.atk  + (profile.museum_atk || 0) + (tb.atk_bonus || 0),
+    def:    profile.def  + bonus.def  + (profile.museum_def || 0) + (tb.def_bonus || 0),
+    matk:   finalMatk + (tb.matk_bonus || 0),
+    mdef:   profile.mdef + bonus.mdef + (profile.museum_mdef || 0) + (tb.mdef_bonus || 0),
+    spd:    profile.spd  + bonus.spd  + (profile.museum_spd || 0) + (tb.spd_bonus || 0),
+    hp_max: profile.hp_max + bonus.hp + (profile.museum_hp || 0) + (tb.hp_bonus || 0),
+    mp_max: profile.mp_max + bonus.mp + (profile.museum_mp || 0) + (tb.mp_bonus || 0),
     bonus,
     hitBonus:     hitBonus     + gemAcc.hitBonus,
     critBonus:    critBonus    + gemAcc.critBonus,
@@ -187,6 +188,10 @@ export const calcEffectiveStats = (profile, equipment, proficiency) => {
 }
 
 export const calcTotal = (p) => Math.floor((p.hp_max/10)+(p.mp_max/5)+p.atk+p.def+p.matk+p.mdef+p.spd)
+export const calcEffectiveTotal = (profile, equipment, proficiency, titleBonus = null) => {
+  const s = calcEffectiveStats(profile, equipment, proficiency, titleBonus)
+  return Math.floor((s.hp_max/10)+(s.mp_max/5)+s.atk+s.def+s.matk+s.mdef+s.spd)
+}
 
 export const getTotalRank = (total) => {
   const thresholds = [250,600,1200,2500,5000,8500,14000,20000]
@@ -198,6 +203,3 @@ export const getTotalRank = (total) => {
   return { rank:'SSS', color:'#ffcc00' }
 }
 
-// 装備＋熟練度込みの総合力
-export const calcEffectiveTotal = (profile, equipment, proficiency) =>
-  calcTotal(calcEffectiveStats(profile, equipment, proficiency))

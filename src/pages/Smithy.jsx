@@ -290,6 +290,11 @@ export default function Smithy() {
       to_plus: resultPlus,
       success,
     })
+    const { data: pr } = await supabase.from('profiles').select('enhance_success_count,enhance_fail_count').eq('id', user.id).single()
+    if (pr) {
+      if (success) await supabase.from('profiles').update({ enhance_success_count: (pr.enhance_success_count||0)+1 }).eq('id', user.id)
+      else await supabase.from('profiles').update({ enhance_fail_count: (pr.enhance_fail_count||0)+1 }).eq('id', user.id)
+    }
 
     await fetchAll()
     setSelectedItem(null)

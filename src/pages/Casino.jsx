@@ -36,6 +36,7 @@ const RANK_LABELS = ['', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q',
 export default function Casino() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
+  const prevMedalsRef = useRef(null)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [messageColor, setMessageColor] = useState('#ffaa00')
@@ -155,6 +156,20 @@ export default function Casino() {
     if (!user) { nav('/login'); return }
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     if (!p) { nav('/game'); return }
+    // メダル増加分を当日累計として追跡し称号用に保存
+    if (prevMedalsRef.current !== null && p.medals > prevMedalsRef.current) {
+      const gained = p.medals - prevMedalsRef.current
+      const todayKey = `bf_medal_day_${user.id}`
+      const stored = JSON.parse(localStorage.getItem(todayKey) || '{"date":"","total":0}')
+      const todayJST = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toDateString()
+      const todayTotal = stored.date === todayJST ? stored.total + gained : gained
+      localStorage.setItem(todayKey, JSON.stringify({ date: todayJST, total: todayTotal }))
+      if (todayTotal > (p.gambling_medal_max_daily || 0)) {
+        await supabase.from('profiles').update({ gambling_medal_max_daily: todayTotal }).eq('id', user.id)
+        p.gambling_medal_max_daily = todayTotal
+      }
+    }
+    prevMedalsRef.current = p.medals
     setProfile(p)
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id)
     setPlayerItems(pi || [])
@@ -472,6 +487,9 @@ export default function Casino() {
     const expGain = (isAtCap || frozen) ? 0 : Math.floor(Math.random()*4) + 8
     const zako = area.enemies[Math.floor(Math.random()*area.enemies.length)]
     const goldGain = zako?.gold || 0
+    if (goldGain >= 5000 && (profile.gambling_gold_max_single || 0) < goldGain) {
+      await supabase.from('profiles').update({ gambling_gold_max_single: goldGain }).eq('id', profile.id)
+    }
 
     // ドロップ（通常の非ボスと同じ確率）
     const drops = []

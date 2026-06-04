@@ -105,6 +105,7 @@ export default function Profile() {
   const [equipment, setEquipment] = useState([])
   const [proficiency, setProficiency] = useState([])
   const [skillSets, setSkillSets] = useState([])
+  const [abilityTitle, setAbilityTitle] = useState(null)
   const [isOwn, setIsOwn] = useState(false)
   const [showAvatarPanel, setShowAvatarPanel] = useState(false)
   const [selectedAvatar, setSelectedAvatar] = useState(null)
@@ -128,6 +129,12 @@ export default function Profile() {
     setProficiency(prof || [])
     const { data: ss } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', targetId).order('slot_order')
     setSkillSets(ss || [])
+    if (p?.ability_title_id) {
+      const { data: at } = await supabase.from('titles').select('*').eq('id', p.ability_title_id).single()
+      setAbilityTitle(at || null)
+    } else {
+      setAbilityTitle(null)
+    }
   }
 
   const saveAvatar = async () => {
@@ -142,8 +149,8 @@ export default function Profile() {
 
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
-  const eff = calcEffectiveStats(profile, equipment, proficiency)
-  const total = calcEffectiveTotal(profile, equipment, proficiency)
+  const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
+  const total = calcEffectiveTotal(profile, equipment, proficiency, abilityTitle)
   const totalRank = getTotalRank(total)
   const slots = ['weapon','armor','accessory','accessory2']
 
@@ -153,6 +160,10 @@ export default function Profile() {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
           <div style={{ display:'flex', gap:'8px' }}>
+            {isOwn && (
+              <button onClick={() => nav('/titles')}
+                style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>⬡ 称号</button>
+            )}
             {isOwn && (
               <button onClick={() => nav('/barber')}
                 style={{ background:'none', border:'1px solid #ff88cc', color:'#ff88cc', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>✂ 美容院</button>
@@ -182,7 +193,10 @@ export default function Profile() {
             )}
           </div>
           <div>
-            <div style={{ color:'#44ff88', fontSize:'16px', marginBottom:'4px' }}>{profile.username}</div>
+            <div style={{ color:'#44ff88', fontSize:'16px', marginBottom:'4px' }}>
+              {profile.display_title && <span style={{ color:'#ffcc00', fontSize:'13px', marginRight:'4px' }}>{profile.display_title}</span>}
+              {profile.username}
+            </div>
             <div style={{ color:'#446688', fontSize:'11px' }}>クラス: <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{('★'.repeat((profile.retraining||{})[profile.class]||0))}</span></div>
             <div style={{ color:'#446688', fontSize:'11px' }}>LV: <span style={{color:'#ffcc00'}}>{profile.lv}</span></div>
             <div style={{ color:'#446688', fontSize:'11px' }}>総合力: <span style={{color:'#44ff88'}}>{total}</span> <span style={{color: totalRank.color}}>【{totalRank.rank}】</span></div>

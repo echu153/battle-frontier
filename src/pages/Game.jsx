@@ -427,7 +427,7 @@ const calcEnhancedStat = (base, plus) => {
   return Math.ceil(base * Math.pow(1.5, plus))
 }
 
-export const calcEffectiveStats = (profile, equipment, proficiency) => {
+export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus = null) => {
   const bonus = { atk:0, def:0, matk:0, mdef:0, spd:0, hp:0, mp:0 }
   let matkPct = 0
   let hitBonus = 0
@@ -502,14 +502,15 @@ export const calcEffectiveStats = (profile, equipment, proficiency) => {
   }
   const baseMatk = profile.matk + bonus.matk + (profile.museum_matk || 0)
   const finalMatk = matkPct > 0 ? Math.floor(baseMatk * (1 + matkPct/100)) : baseMatk
+  const tb = titleBonus || {}
   return {
-    atk:    profile.atk  + bonus.atk  + (profile.museum_atk || 0),
-    def:    profile.def  + bonus.def  + (profile.museum_def || 0),
-    matk:   finalMatk,
-    mdef:   profile.mdef + bonus.mdef + (profile.museum_mdef || 0),
-    spd:    profile.spd  + bonus.spd  + (profile.museum_spd || 0),
-    hp_max: profile.hp_max + bonus.hp + (profile.museum_hp || 0),
-    mp_max: profile.mp_max + bonus.mp + (profile.museum_mp || 0),
+    atk:    profile.atk  + bonus.atk  + (profile.museum_atk || 0) + (tb.atk_bonus || 0),
+    def:    profile.def  + bonus.def  + (profile.museum_def || 0) + (tb.def_bonus || 0),
+    matk:   finalMatk + (tb.matk_bonus || 0),
+    mdef:   profile.mdef + bonus.mdef + (profile.museum_mdef || 0) + (tb.mdef_bonus || 0),
+    spd:    profile.spd  + bonus.spd  + (profile.museum_spd || 0) + (tb.spd_bonus || 0),
+    hp_max: profile.hp_max + bonus.hp + (profile.museum_hp || 0) + (tb.hp_bonus || 0),
+    mp_max: profile.mp_max + bonus.mp + (profile.museum_mp || 0) + (tb.mp_bonus || 0),
     bonus,
     hitBonus,
     critBonus,
@@ -1175,6 +1176,7 @@ export default function Game() {
   const [hasGamblerProof, setHasGamblerProof] = useState(false)
   const [skillSets, setSkillSets] = useState([])
   const [playerItem, setPlayerItem] = useState(null)
+  const [abilityTitle, setAbilityTitle] = useState(null)
   const [expDungeonTicket, setExpDungeonTicket] = useState(null)  // { id, quantity }
   // 種類ごとの当日選択回数。読み込み完了まではlimit(=disabled)で初期化
   const [dungeonCounts, setDungeonCounts] = useState({ exp:DUNGEON_DAILY_LIMIT, gold:DUNGEON_DAILY_LIMIT, stone:DUNGEON_DAILY_LIMIT, prof:DUNGEON_DAILY_LIMIT, gem:DUNGEON_DAILY_LIMIT })
@@ -1336,6 +1338,12 @@ export default function Game() {
     if (Array.isArray(ss)) setSkillSets(ss)
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id).eq('equipped', true).single()
     setPlayerItem(pi || null)
+    if (data?.ability_title_id) {
+      const { data: at } = await supabase.from('titles').select('*').eq('id', data.ability_title_id).single()
+      setAbilityTitle(at || null)
+    } else {
+      setAbilityTitle(null)
+    }
     const today = getJSTDateStr()
     try {
       const { data: da } = await supabase.from('dungeon_attempts').select('cnt_exp,cnt_gold,cnt_stone,cnt_prof,cnt_gem').eq('player_id', user.id).eq('date', today).single()
@@ -1376,6 +1384,7 @@ export default function Game() {
     }
     await supabase.from('profiles').update({
       class:targetClass, lv:targetLv, exp:targetExp, exp_next:calcExpNext(targetLv),
+      job_change_count: (profile.job_change_count || 0) + 1,
     }).eq('id', profile.id)
     // 転職時は装備中スキルを全て外す（前クラスのスキルが使えてしまう不具合対策）
     await supabase.from('skill_sets').delete().eq('player_id', profile.id)
@@ -1493,7 +1502,7 @@ export default function Game() {
     const logs = []
     logs.push({ text:`✨ デイリーダンジョン: ${dungeonEnemy.name}が現れた！`, color:'#cc44ff' })
 
-    const eff = calcEffectiveStats(profile, equipment, proficiency)
+    const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
     const dmg = Math.max(1, Math.floor(eff.atk * (0.9 + Math.random() * 0.2)))
     logs.push({ text:`1ターン目: あなたの攻撃！ ${dungeonEnemy.name}に${dmg}ダメージ！`, color:'#ffcc00' })
     logs.push({ text:`${dungeonEnemy.name}を倒した！`, color:'#44ff88' })
@@ -1684,7 +1693,7 @@ export default function Game() {
       return
     }
 
-    const eff = calcEffectiveStats(profile, equipment, proficiency)
+    const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
     const area = AREAS.find(a => a.id === selectedArea)
     const bossRate = profile.boss_encounter_rate || 0
     const isBossEncounter = Math.random()*100 < bossRate
@@ -2406,6 +2415,7 @@ export default function Game() {
       boss_encounter_rate:newBossRate, unlocked_areas:newUnlockedAreas,
       pending_stat_points:newPendingPoints, last_action_at:new Date().toISOString(),
       char_lv:newCharLv,
+      ...(win && isBossEncounter ? { boss_kill_count: (profile.boss_kill_count || 0) + 1 } : {}),
     }).eq('id', profile.id)
 
     const currentClassData = classLevels.find(cl => cl.class_name === profile.class)
