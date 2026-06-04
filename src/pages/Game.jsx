@@ -3260,6 +3260,12 @@ export default function Game() {
                 const waitingSeen = localStorage.getItem(`bf_raid_waiting_seen_${todayJst}`)
                 if ((raidStatus === 'defeated' || raidStatus === 'expired') && isSeen) return null
                 if ((!raidStatus || raidStatus === null) && waitingSeen) return null
+                if (raidStatus === 'pre') return (
+                  <div style={{ background:'#1a0a00', border:'1px solid #ff4444', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
+                    <span style={{ color:'#ff8844' }}>⚔ レイドボスまもなく出現！</span>
+                    {raidPreCountdown && <span style={{ color:'#446688', marginLeft:'8px' }}>出現まで {raidPreCountdown}</span>}
+                  </div>
+                )
                 return (
                   <div style={{ border:'1px solid #440000', background:'#0a0010', padding:'10px', marginBottom:'8px' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
@@ -3299,12 +3305,6 @@ export default function Game() {
                     )}
                     {raidStatus === 'expired' && (
                       <div style={{ fontSize:'10px', color:'#886644' }}>⌛ 時間切れ（討伐失敗）</div>
-                    )}
-                    {(raidStatus === 'pre') && (
-                      <div style={{ background:'#1a0a00', border:'1px solid #ff4444', padding:'6px 10px', marginBottom:'4px', textAlign:'center', fontSize:'11px' }}>
-                        <span style={{ color:'#ff8844' }}>⚔ レイドボスまもなく出現！</span>
-                        {raidPreCountdown && <span style={{ color:'#446688', marginLeft:'8px' }}>出現まで {raidPreCountdown}</span>}
-                      </div>
                     )}
                     {(!raidStatus || raidStatus === null) && (() => {
                       const todayJst = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)
@@ -3553,6 +3553,12 @@ export default function Game() {
                   const waitingSeen2 = localStorage.getItem(`bf_raid_waiting_seen_${todayJst2}`)
                   if ((raidStatus === 'defeated' || raidStatus === 'expired') && isSeen && !hasUnclaimed) return null
                   if ((!raidStatus || raidStatus === null) && waitingSeen2) return null
+                  if (raidStatus === 'pre') return (
+                    <div style={{ background:'#1a0a00', border:'1px solid #ff4444', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
+                      <span style={{ color:'#ff8844' }}>⚔ レイドボスまもなく出現！</span>
+                      {raidPreCountdown && <span style={{ color:'#446688', marginLeft:'8px' }}>出現まで {raidPreCountdown}</span>}
+                    </div>
+                  )
                   return (
                     <div style={{ border:'1px solid #440000', background:'#0a0010', padding:'10px', marginBottom:'8px' }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
@@ -3597,12 +3603,6 @@ export default function Game() {
                       )}
                       {raidStatus === 'expired' && (
                         <div style={{ fontSize:'10px', color:'#886644' }}>⌛ 時間切れ（討伐失敗）</div>
-                      )}
-                      {raidStatus === 'pre' && (
-                        <div style={{ background:'#1a0a00', border:'1px solid #ff4444', padding:'6px 10px', marginBottom:'4px', textAlign:'center', fontSize:'11px' }}>
-                        <span style={{ color:'#ff8844' }}>⚔ レイドボスまもなく出現！</span>
-                        {raidPreCountdown && <span style={{ color:'#446688', marginLeft:'8px' }}>出現まで {raidPreCountdown}</span>}
-                      </div>
                       )}
                       {(!raidStatus || raidStatus === null) && (() => {
                         const todayJst = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)
