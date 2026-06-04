@@ -900,7 +900,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     case '闘争本能': result.log = `🔥 闘争本能【パッシブ】 HP50%以下の間、与ダメージ+10%（常時自動発動）`; break
     case '破衝掌': {
       const edr_hs = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
-      const defVal_hs = Math.floor((enemy.def||0)*edr_hs*0.3/2)
+      const defVal_hs = Math.floor((enemy.def||0)*edr_hs*0.7/2)
       result.dmg = Math.max(1, Math.floor(eff.atk*1.7*am) - defVal_hs)
       result.log = `🦵 破衝掌！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
     }
