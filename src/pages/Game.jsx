@@ -732,7 +732,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     case '絶影狙撃':    result.dmg = Math.floor(eff.atk*2.0*am); result.log = `🏹 絶影狙撃！ 必中！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
     case '瞬歩瞬殺': {
       result.dmg = Math.floor((eff.atk*1.0+eff.spd*0.5)*am)
-      const bleedHit3 = Math.random()*100 < 40
+      const bleedHit3 = Math.random()*100 < 50
       if (bleedHit3) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
       result.log = `🌙 瞬歩瞬殺！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleedHit3 ? ` ${enemy.name}は出血した！` : ''}`
       break
@@ -746,7 +746,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
         kiDmg += bonusDmg
       }
       result.dmg = kiDmg
-      const bleedHit4 = Math.random()*100 < 20
+      const bleedHit4 = Math.random()*100 < 40
       if (bleedHit4) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
       result.log = `🌙 鬼影閃！ ${enemy.name}に${result.dmg}の物理ダメージ！${hasShadowWalk ? ` 追撃で${bonusDmg}ダメージ！` : ''}${bleedHit4 ? ` ${enemy.name}は出血した！` : ''}`
       break
@@ -1883,6 +1883,7 @@ export default function Game() {
     const hasRokkan     = passiveNames.includes('第六感')
     const hasSeimitsu   = passiveNames.includes('精密照準')
     const hasTosoHonno  = passiveNames.includes('闘争本能')
+    const hasOnmi       = passiveNames.includes('隠身')
 
     const passiveCritBonus   = hasShingan ? 5 : 0
     const passiveDmgMult     = (hasShingan ? 1.05 : 1.0) * (hasBerserk ? 1.15 : 1.0) * (hasKakushin ? 1.1 : 1.0) * (hasRokkan ? 1.05 : 1.0)
@@ -2097,7 +2098,7 @@ export default function Game() {
       // プレイヤーの回避判定（素早さバフ/デバフ考慮）
       const effectivePlayerSpd = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * playerSpdDebuff
       const effectiveEnemySpd = enemySpd * enemySpdBuff
-      const evasionRate = calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0)
+      const evasionRate = calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0) + (hasOnmi ? 5 : 0)
       if (evasionRate > 0 && Math.random()*100 < evasionRate) {
         const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
         logs.push({ text:`${prefix}${enemy.name}の攻撃！ しかし回避した！`, color:'#44ff88' })
