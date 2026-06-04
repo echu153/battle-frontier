@@ -176,6 +176,7 @@ export default function Admin() {
                     <span style={{ color: log.gold_gained > 1000 ? '#ff4444' : '#88ccff' }}>Gold +{log.gold_gained}</span>
                     <span style={{ color: log.exp_gained > 200 ? '#ff4444' : '#88ccff' }}>EXP +{log.exp_gained}</span>
                   </div>
+                  {log.reason && <div style={{ marginTop:'4px', color:'#ff6644', fontSize:'11px' }}>⚠ {log.reason}</div>}
                 </div>
               ))
             }

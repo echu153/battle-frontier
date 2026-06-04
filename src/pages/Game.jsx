@@ -1651,7 +1651,16 @@ export default function Game() {
     await supabase.from('profiles').update({
       is_suspended: true,
       suspension_reason: reason,
+      suspicious_flag: true,
     }).eq('id', profile.id)
+    await supabase.from('battle_logs').insert({
+      player_id: profile.id,
+      area_id: selectedArea,
+      is_boss: false, is_papia: false, win: false,
+      exp_gained: 0, gold_gained: 0,
+      suspicious: true,
+      reason,
+    })
     setBattleLogs([{ text:`⛔ 不正行為が検出されました。アカウントを停止します。`, color:'#ff4444' }])
     setScene('battle')
     setTimeout(async () => { await supabase.auth.signOut() }, 3000)
@@ -1773,7 +1782,13 @@ export default function Game() {
     if (!DEV_ACCOUNTS.includes(profile.username)) {
       const newConsec = (profile.consecutive_battle_count || 0) + 1
       if (newConsec >= 10) {
-        await supabase.from('profiles').update({ consecutive_battle_count: 0 }).eq('id', profile.id)
+        await supabase.from('profiles').update({ consecutive_battle_count: 0, suspicious_flag: true }).eq('id', profile.id)
+        await supabase.from('battle_logs').insert({
+          player_id: profile.id, area_id: selectedArea,
+          is_boss: false, is_papia: false, win: false,
+          exp_gained: 0, gold_gained: 0,
+          suspicious: true, reason: '街に戻らず連続10回出撃（BOTチャレンジ発動）',
+        })
         triggerBotCheck()
         setLoading(false)
         return
