@@ -477,7 +477,7 @@ export default function Casino() {
     }
 
     const area = AREAS.find(a => a.id === sortieArea) || AREAS[0]
-    const cap = getEffectiveCap(profile.class)
+    const cap = getEffectiveCap(profile.class, profile.retraining)
     const isAtCap = profile.lv >= cap
     const frozen = expIsFrozen(profile) || justFrozen
     const expGain = (isAtCap || frozen) ? 0 : Math.floor(Math.random()*4) + 8
@@ -517,7 +517,7 @@ export default function Casino() {
     const pend = sortiePending
     if (pend.count === 0) { setShowSettle(false); return }
     setLoading(true)
-    const cap = getEffectiveCap(profile.class)
+    const cap = getEffectiveCap(profile.class, profile.retraining)
     const isAtCap = profile.lv >= cap
     const frozen = expIsFrozen(profile)
     const growth = JOB_GROWTH[profile.class] || JOB_GROWTH['戦士']

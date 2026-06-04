@@ -268,7 +268,12 @@ const CLASS_LEVEL_CAP = {
   'ギャンブラー':100,
   '魔法剣士':100, '聖騎士':100,
 }
-export const getEffectiveCap = (className) => CLASS_LEVEL_CAP[className] || 100
+// 再修練5回でそのクラスのレベルキャップが300に解放される
+export const getEffectiveCap = (className, retraining) => {
+  const cnt = (retraining || {})[className] || 0
+  if (cnt >= 5) return 300
+  return CLASS_LEVEL_CAP[className] || 100
+}
 
 // LV1からupToLevelまでのステータス上昇量を計算
 const calcLvBonus = (className, upToLevel) => {
@@ -365,11 +370,18 @@ const getTotalRank = (total) => {
 }
 
 export const calcExpNext = (lv) => {
+  // LV100超（再修練でキャップ300になったクラス）の必要経験値
+  if (lv >= 100) {
+    if (lv <= 150) return 150  // LV100〜150
+    if (lv <= 200) return 160  // LV151〜200
+    if (lv <= 250) return 170  // LV201〜250
+    return 180                 // LV251〜300
+  }
   const lvInBlock = (lv - 1) % 100
   if (lvInBlock < 9)  return 80   // LV1〜9
   if (lvInBlock < 29) return 100  // LV10〜29
   if (lvInBlock < 59) return 120  // LV30〜59
-  return 140                      // LV60〜100
+  return 140                      // LV60〜99
 }
 
 const WEAPON_TYPE_GROUP = {
@@ -1581,7 +1593,7 @@ export default function Game() {
     if (type === 'exp') {
       const expGained = Math.floor(50 + Math.random() * 51)
       const currentClassLvD = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
-      const capD = getEffectiveCap(profile.class)
+      const capD = getEffectiveCap(profile.class, profile.retraining)
       if (expIsFrozen(profile)) {
         logs.push({ text:`EXP +${expGained}（調査中につき停止）`, color:'#446688' })
       } else if (currentClassLvD < capD) {
@@ -1847,7 +1859,7 @@ export default function Game() {
     }
 
     const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
-    const cap = getEffectiveCap(profile.class)
+    const cap = getEffectiveCap(profile.class, profile.retraining)
     const isAtCap = currentClassLv >= cap
 
     const logs = []
@@ -3035,7 +3047,7 @@ export default function Game() {
   const total = calcTotal(eff)
   const totalRank = getTotalRank(total)
   const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
-  const cap = getEffectiveCap(profile.class)
+  const cap = getEffectiveCap(profile.class, profile.retraining)
   const isAtCap = currentClassLv >= cap
   const retrainingCount = (profile.retraining || {})[profile.class] || 0
 
@@ -3075,7 +3087,7 @@ export default function Game() {
         <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px', lineHeight:'1.6' }}>
           レベルキャップ到達時に再修練できます。<br/>
           再修練するとLV1にリセット・スキル1つを持ち越せます。<br/>
-          上限5回まで（★★★★★）
+          上限5回まで（★★★★★）。5回到達でこのクラスのレベル上限が300に解放されます。
         </div>
         <div style={{ color:'#446688', fontSize:'11px', marginBottom:'8px' }}>
           再修練回数: <span style={{color:'#ffcc00', letterSpacing:'2px'}}>{getRetrainingStars(profile.class, profile.retraining) || 'なし'}</span>
@@ -3100,7 +3112,7 @@ export default function Game() {
                 <div style={{ color:isCurrent?'#88aabb':c.canChange?'#ccaa00':'#446688', fontSize:'12px' }}>
                   {c.name}{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}
                 </div>
-                <div style={{ color:'#446688', fontSize:'10px' }}>LV {c.lv} / {getEffectiveCap(c.name)}</div>
+                <div style={{ color:'#446688', fontSize:'10px' }}>LV {c.lv} / {getEffectiveCap(c.name, profile.retraining)}</div>
               </div>
               <button onClick={()=>setPendingClassChange(c.name)} disabled={isCurrent||loading}
                 style={{ padding:'4px 8px', background:isCurrent?'#001':'#1a1000', border:`1px solid ${isCurrent?'#334455':c.canChange?'#886600':'#002244'}`, color:isCurrent?'#334455':c.canChange?'#ccaa00':'#334455', cursor:isCurrent?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
@@ -3122,7 +3134,7 @@ export default function Game() {
                 <div style={{ color:isCurrent?'#88aabb':c.canChange?'#ff8800':'#446688', fontSize:'12px' }}>
                   {c.name}{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}
                 </div>
-                <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/{c.requiresLv}　クラスLV{c.lv}/{getEffectiveCap(c.name)}</div>
+                <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/{c.requiresLv}　クラスLV{c.lv}/{getEffectiveCap(c.name, profile.retraining)}</div>
               </div>
               <button onClick={()=>setPendingClassChange(c.name)} disabled={isCurrent||!c.canChange||loading}
                 style={{ padding:'4px 8px', background:isCurrent?'#001':c.canChange?'#1a0800':'#001', border:`1px solid ${isCurrent?'#334455':c.canChange?'#664400':'#002244'}`, color:isCurrent?'#334455':c.canChange?'#ff8800':'#334455', cursor:isCurrent||!c.canChange?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
@@ -3146,7 +3158,7 @@ export default function Game() {
                 </div>
                 <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires} LV{c.reqLv}/{c.requiresLv}</div>
                 <div style={{ color:'#446688', fontSize:'10px' }}>{c.requires2} LV{c.req2Lv}/{c.requires2Lv}</div>
-                <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{c.lv}/{getEffectiveCap(c.name)}</div>
+                <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{c.lv}/{getEffectiveCap(c.name, profile.retraining)}</div>
               </div>
               <button onClick={()=>setPendingClassChange(c.name)} disabled={isCurrent||!c.canChange||loading}
                 style={{ padding:'4px 8px', background:isCurrent?'#001':c.canChange?'#1a0830':'#001', border:`1px solid ${isCurrent?'#334455':c.canChange?'#664488':'#002244'}`, color:isCurrent?'#334455':c.canChange?'#cc88ff':'#334455', cursor:isCurrent||!c.canChange?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
@@ -3171,7 +3183,7 @@ export default function Game() {
                     ギャンブラー{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}
                   </div>
                   <div style={{ color:'#446688', fontSize:'10px' }}>ギャンブラーの証が必要</div>
-                  <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{cl?cl.lv:1}/{getEffectiveCap('ギャンブラー')}</div>
+                  <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{cl?cl.lv:1}/{getEffectiveCap('ギャンブラー', profile.retraining)}</div>
                 </div>
                 <button onClick={()=>setPendingClassChange('ギャンブラー')} disabled={isCurrent||!canChange||loading}
                   style={{ padding:'4px 8px', background:isCurrent?'#001':canChange?'#1a1000':'#001', border:`1px solid ${isCurrent?'#334455':canChange?'#886600':'#002244'}`, color:isCurrent?'#334455':canChange?'#ffcc00':'#334455', cursor:isCurrent||!canChange?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
