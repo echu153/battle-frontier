@@ -104,7 +104,7 @@ export const AREAS = [
       { name:'グリフィン',   hp:1800, atk:700, def:540, matk:120, mdef:510, spd:450, type:'physical', gold:280 },
     ],
     boss: {
-      name:'雷鷲サンダーロック', hp:35000, atk:800, def:660, matk:250, mdef:600, spd:1175, gold:6000, isBoss:true, type:'physical',
+      name:'雷鷲サンダーロック', hp:35000, atk:800, def:1160, matk:250, mdef:1100, spd:1175, gold:6000, isBoss:true, type:'physical',
       skills: [
         { name:'雷爪乱舞', type:'physical_multi', mult:0.7, hits:3 },
         { name:'雷光閃',   type:'physical', mult:1.8, paralysisRate:0.3 },
@@ -144,7 +144,7 @@ export const AREAS = [
       },
     ],
     boss: {
-      name:'氷霊フロストバーン', hp:60000, atk:850, def:1200, matk:1800, mdef:1300, spd:1400, gold:12500, isBoss:true, type:'magical',
+      name:'氷霊フロストバーン', hp:60000, atk:850, def:1900, matk:1800, mdef:2000, spd:1400, gold:12500, isBoss:true, type:'magical',
       skills: [
         { name:'氷柱連打',   type:'magical_multi', mult:0.5, hits:4 },
         { name:'絶対零度',   type:'magical',  mult:2.2, stunRate:0.3 },
@@ -184,7 +184,7 @@ export const AREAS = [
       },
     ],
     boss: {
-      name:'深紅のサラマンダー', hp:100000, atk:2000, def:2000, matk:900, mdef:1500, spd:2100, gold:25000, isBoss:true, type:'physical',
+      name:'深紅のサラマンダー', hp:100000, atk:2000, def:3000, matk:900, mdef:2500, spd:2100, gold:25000, isBoss:true, type:'physical',
       skills: [
         { name:'溶岩爪撃',   type:'physical', mult:2.0, burnRate:0.3 },
         { name:'業火放射',   type:'magical',  mult:2.2, debuff:'mdefDown', debuffRate:0.8, debuffTurns:3 },
@@ -1744,7 +1744,7 @@ export default function Game() {
 
     const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
     const area = AREAS.find(a => a.id === selectedArea)
-    const bossRate = profile.boss_encounter_rate || 0
+    const bossRate = 100
     const isBossEncounter = Math.random()*100 < bossRate
     const papiaRate = getPapiaEventStatus().active ? 2 : 1
     const isPapiaEncounter = !isBossEncounter && Math.random()*100 < papiaRate
