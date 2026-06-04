@@ -1647,9 +1647,8 @@ export default function Game() {
     setLoading(false)
   }
 
-  const DEV_ACCOUNTS = ['おれおれお']  // 開発者アカウント：不正検知対象外
+  const DEV_ACCOUNTS = ['おれおれお']  // 開発者アカウント
   const suspendAccount = async (reason) => {
-    if (DEV_ACCOUNTS.includes(profile.username)) return  // 開発用アカウントはBAN対象外
     await supabase.from('profiles').update({
       is_suspended: true,
       suspension_reason: reason,
@@ -1757,7 +1756,7 @@ export default function Game() {
     const hpCurrent = profile.hp_current ?? profile.hp_max
     if (hpCurrent <= 0) return
     if (profile.is_dying && hpCurrent < profile.hp_max) return
-    if (!DEV_ACCOUNTS.includes(profile.username) && profile.battle_ban_until && new Date(profile.battle_ban_until) > new Date()) {
+    if (profile.battle_ban_until && new Date(profile.battle_ban_until) > new Date()) {
       const banEnd = new Date(profile.battle_ban_until)
       const diffMs = banEnd - new Date()
       const diffH = Math.floor(diffMs / 3600000)
@@ -1769,7 +1768,7 @@ export default function Game() {
 
 
     // 街に戻らず連続出撃10回でBOTチャレンジ発動（F5連打＋オートクリック対策）
-    if (!DEV_ACCOUNTS.includes(profile.username)) {
+    if (true) {
       const newConsec = (profile.consecutive_battle_count || 0) + 1
       if (newConsec >= 10) {
         await supabase.from('profiles').update({ consecutive_battle_count: 0, suspicious_flag: true }).eq('id', profile.id)
@@ -1815,7 +1814,7 @@ export default function Game() {
     }
 
     // オートクリッカー検知：出撃間隔が異常に規則的（一定間隔の機械的連打）なら12時間出撃禁止
-    if (!DEV_ACCOUNTS.includes(profile.username)) {
+    {
       const times = sortieTimesRef.current
       times.push(Date.now())
       if (times.length > AUTOCLICK_SAMPLES) times.shift()
