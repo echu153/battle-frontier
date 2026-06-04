@@ -1731,6 +1731,8 @@ export default function Game() {
   const doBattle = async (e) => {
     if (!canAct || loading) return
     if (botCheck) return  // BOT確認チャレンジ中は出撃不可
+    // 自動操作検知（isTrusted=falseはSelenium等ブラウザ自動化ツールの特徴）
+    if (e && !e.isTrusted) { await suspendAccount('自動操作が検出されました'); return }
     // 未解放エリアへのアクセスガード（localStorage汚染対策）
     const unlockedAreas = profile.unlocked_areas || [1]
     if (!unlockedAreas.includes(selectedArea)) {
@@ -1761,11 +1763,22 @@ export default function Game() {
     } else {
       battleCountTrackerRef.current = { ...bTracker, count: bTracker.count + 1 }
     }
-    if (battleCountTrackerRef.current.count >= 15) {
-      await suspendAccount('1分間に15回以上出撃')
+    if (battleCountTrackerRef.current.count >= 8) {
+      await suspendAccount('1分間に8回以上出撃')
       return
     }
 
+
+    // 街に戻らず連続出撃10回でEXP12時間停止（F5連打＋オートクリック対策）
+    if (!DEV_ACCOUNTS.includes(profile.username)) {
+      const newConsec = (profile.consecutive_battle_count || 0) + 1
+      const consecUpdate = { consecutive_battle_count: newConsec }
+      if (newConsec >= 10) {
+        consecUpdate.exp_frozen_until = new Date(Date.now() + 12 * 3600 * 1000).toISOString()
+        consecUpdate.consecutive_battle_count = 0
+      }
+      await supabase.from('profiles').update(consecUpdate).eq('id', profile.id)
+    }
 
     const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
     const area = AREAS.find(a => a.id === selectedArea)
