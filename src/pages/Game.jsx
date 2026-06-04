@@ -184,7 +184,7 @@ export const AREAS = [
       },
     ],
     boss: {
-      name:'深紅のサラマンダー', hp:100000, atk:2000, def:2300, matk:900, mdef:1500, spd:2100, gold:25000, isBoss:true, type:'physical',
+      name:'深紅のサラマンダー', hp:100000, atk:2000, def:2000, matk:900, mdef:1500, spd:2100, gold:25000, isBoss:true, type:'physical',
       skills: [
         { name:'溶岩爪撃',   type:'physical', mult:2.0, burnRate:0.3 },
         { name:'業火放射',   type:'magical',  mult:2.2, debuff:'mdefDown', debuffRate:0.8, debuffTurns:3 },
