@@ -269,6 +269,25 @@ const CLASS_LEVEL_CAP = {
   '魔法剣士':100, '聖騎士':100,
 }
 // 再修練5回でそのクラスのレベルキャップが300に解放される
+// 再修練強化の表示用説明（上から1段ずつ＝再修練1回ごとに解放）
+export const RETRAINING_ENHANCEMENTS = {
+  '侍': ['居合斬：倍率 ATK×1.3＋SPD×0.4', '断空：防御無視 50%', '心眼：与ダメ+5%（合計+10%）', '明鏡止水：命中+15', '月影：倍率 ATK×2.2'],
+  '狂戦士': ['マッドラッシュ：倍率 ATK×1.9', 'すてみ：反動 5%', 'バーサク：与ダメ+5%（合計+20%）', 'ブラッティロア：攻撃力上昇 ×1.3', 'フルブレイカー：防御無視 50%'],
+  '狩人': ['毒矢：毒付与 100%', '三連射：倍率 ATK×0.6/hit', '鷹ノ目：命中+10', '狩猟本能：攻撃・素早さ ×1.5', '絶影狙撃：倍率 ATK×2.2'],
+  '暗殺者': ['瞬歩瞬殺：出血確率 100%', '鬼影閃：出血確率 80%', '隠身：クリティカル威力+20%', '影歩き：効果8ターン', '急所突き：出血スタック×20%追撃（最大100%）→出血消費'],
+  '元素使い': ['アクアショット：倍率 MATK×1.6', 'アースクエイク：スタン30%', '元素共鳴：与ダメ+25%', 'ライトニングボルト：倍率 MATK×1.7', 'フレイムバースト：やけど80%'],
+  '死霊使い': ['骸骨召喚：倍率 MATK×0.8', 'ソウルドレイン：倍率 MATK×1.6', '骸の壁：バリア中 防御・特防×1.2', '腐敗霧：防御・特防低下 ×0.6', '幽世ノ門：効果5ターン'],
+  '聖職者': ['ホーリーライト：30%で回復阻害50%', '奇跡：毎ターン最大HP15%回復', '神聖加護：回復×1.4＋回復量の50%を敵に', '祈りの結界：6ターン', '神罰執行：倍率 MATK×2.0'],
+  '異端審問官': ['粛清：倍率 MATK×1.4＋MDEF×0.4', '狂信：特殊攻撃×1.3 追加', '執行本能：与ダメ+15%', '聖なる裁き：倍率 MATK×1.9', '断罪：回復封じ 60%'],
+  '賢者': ['アースクエイク：スタン30%', 'マナボルト：消費MP×6', '天啓：MATK×1.3', '氷の障壁：3ターン', 'メテオストライク：2〜5ヒット（2:30/3:40/4:20/5:10%）'],
+  '聖騎士': ['ホーリーエッジ：倍率 ATK×1.4＋MATK×0.4', 'ディバインスマイト：与ダメ低下付与 50%', '聖騎士の心得：防御・特防×1.3', '聖域展開：毎ターン最大HP10%回復', '神聖覚醒：追加ダメージ 防御・特防の60%'],
+  '魔法剣士': ['雷光斬：倍率 ATK×1.1＋MATK×0.4', '閃光：連続強化×1.2（最大4重複）', '魔導剣術：変換率60%', '魔剣開放：反動2ターンに短縮', 'エレメンタルエッジ：倍率 ATK×1.5＋MATK×0.6'],
+  '魔銃士': ['魔弾：倍率 ATK×0.8＋MATK×0.8', '連装銃撃：命中+10', '精密照準：同スキル連続で威力×1.1', '強化装填：5ターン', 'キャノネスチュームビンド：連続強化×1.1が最大3重複'],
+  'サイキッカー': ['サイコショット：倍率 ATK×1.1＋MATK×0.4', 'マインドブレイク：防御・特防の低い方を参照', '第六感：与ダメ+5%（合計+10%）', '精神集中：×1.8・3ターン', 'サイコブラスト：倍率 ATK×1.6＋MATK×0.8'],
+  '体術師': ['半月蹴り：使用時 素早さ×1.2（4T）', '五連殺：各ヒット20%で出血', '闘争本能：HP50%以下で与ダメ+25%', '破衝掌：防御無視 50%', '飛天三角蹴り：スキル内ミス判定を撤廃'],
+  'ギャンブラー': ['ジャグリング：4ヒット', 'ラッキーダイス：×0.9〜2.2', 'ギャンブルボディ：被ダメ ×0.7〜1.1', 'オールイン：効果・反動6ターン', 'ジャックポット：2倍確率10%'],
+}
+
 export const getEffectiveCap = (className, retraining) => {
   const cnt = (retraining || {})[className] || 0
   if (cnt >= 5) return 300
@@ -3152,6 +3171,19 @@ export default function Game() {
       <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
         現在のクラス: <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{getRetrainingStars(profile.class, profile.retraining)}</span> LV<span style={{color:'#ffcc00'}}>{currentClassLv}</span>／{cap}
       </div>
+      {RETRAINING_ENHANCEMENTS[profile.class] && (
+        <div style={{ border:'1px solid #443300', background:'#0a0800', padding:'10px', marginBottom:'12px' }}>
+          <div style={{ color:'#ffaa44', fontSize:'11px', marginBottom:'6px' }}>⚡ 再修練による強化（{retrainingCount}/5 発動中）</div>
+          {RETRAINING_ENHANCEMENTS[profile.class].map((desc, i) => {
+            const active = i < retrainingCount
+            return (
+              <div key={i} style={{ fontSize:'10px', lineHeight:'1.7', color: active ? '#88ffaa' : '#445566' }}>
+                {active ? '✔' : '✖'} <span style={{color:'#ccaa00'}}>{'★'.repeat(i+1)}</span> {desc}
+              </div>
+            )
+          })}
+        </div>
+      )}
       {templeMessage && <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'10px', marginBottom:'12px', border:'1px solid #44ff88' }}>{templeMessage}</div>}
       {/* 再修練セクション：キャップ到達時のみ表示 */}
       {isAtCap && retrainingCount < 5 && <div style={{ border:'1px solid #664400', background:'#0a0800', padding:'12px', marginBottom:'12px' }}>

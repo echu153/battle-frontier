@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { RETRAINING_ENHANCEMENTS } from './Game'
 
 const TYPE_COLORS = {
   '物理攻撃': '#ffcc00',
@@ -215,6 +216,26 @@ export default function Skills() {
             ))}
           </div>
         )}
+
+        {RETRAINING_ENHANCEMENTS[profile.class] && (() => {
+          const rtCount = (profile.retraining || {})[profile.class] || 0
+          return (
+            <div style={{ marginTop:'20px', border:'1px solid #443300', background:'#0a0800', padding:'12px' }}>
+              <div style={{ color:'#ffaa44', fontSize:'12px', marginBottom:'8px' }}>⚡ {profile.class}の再修練強化（{rtCount}/5 発動中）</div>
+              <div style={{ color:'#445566', fontSize:'10px', marginBottom:'8px', lineHeight:'1.6' }}>
+                神殿で再修練するごとに、上から1つずつ永続強化されます。このクラスでプレイ中のみ有効。
+              </div>
+              {RETRAINING_ENHANCEMENTS[profile.class].map((desc, i) => {
+                const active = i < rtCount
+                return (
+                  <div key={i} style={{ fontSize:'11px', lineHeight:'1.9', color: active ? '#88ffaa' : '#556677' }}>
+                    {active ? '✔' : '✖'} <span style={{ color:'#ccaa00' }}>{'★'.repeat(i+1)}</span> {desc}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
       </div>
     </div>
   )
