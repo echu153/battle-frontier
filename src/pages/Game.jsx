@@ -104,7 +104,7 @@ export const AREAS = [
       { name:'グリフィン',   hp:1800, atk:700, def:540, matk:120, mdef:510, spd:450, type:'physical', gold:280 },
     ],
     boss: {
-      name:'雷鷲サンダーロック', hp:35000, atk:700, def:1160, matk:250, mdef:1100, spd:1175, gold:6000, isBoss:true, type:'physical',
+      name:'雷鷲サンダーロック', hp:35000, atk:850, def:1160, matk:250, mdef:1100, spd:1175, gold:6000, isBoss:true, type:'physical',
       skills: [
         { name:'雷爪乱舞', type:'physical_multi', mult:0.7, hits:3 },
         { name:'雷光閃',   type:'physical', mult:1.8, paralysisRate:0.3 },
