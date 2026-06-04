@@ -2752,7 +2752,7 @@ export default function Game() {
   }
 
   const backToTown = () => {
-    setScene('town'); setBattleLogs([])
+    setScene('town'); setBattleLogs([]); setLoading(false)
     if (profile?.id) supabase.from('profiles').update({ consecutive_battle_count: 0 }).eq('id', profile.id)
   }
   const logout = async () => { await supabase.auth.signOut(); nav('/login') }
@@ -3589,7 +3589,7 @@ export default function Game() {
                   <div key={i} style={{ color:l.color, fontSize:'12px', lineHeight:'2', borderBottom:'1px solid #001428', padding:'2px 0' }}>{l.text}</div>
                 ))}
               </div>
-              {!loading && <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>}
+              <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>
             </div>
           )}
         </div>
@@ -3879,7 +3879,7 @@ export default function Game() {
                     <div key={i} style={{ color:l.color, fontSize:'12px', lineHeight:'2', borderBottom:'1px solid #001428', padding:'2px 0' }}>{l.text}</div>
                   ))}
                 </div>
-                {!loading && <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>}
+                <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>
               </div>
             )}
           </div>
