@@ -83,7 +83,7 @@ export const AREAS = [
       { name:'毒クラゲ', hp:800,  atk:80,  def:180, matk:180, mdef:240, spd:210, type:'magical',  gold:160 },
     ],
     boss: {
-      name:'シーサーペント', hp:20000, atk:380, def:360, matk:150, mdef:400, spd:360, gold:2500, isBoss:true, type:'physical',
+      name:'シーサーペント', hp:18000, atk:680, def:360, matk:550, mdef:400, spd:360, gold:2500, isBoss:true, type:'physical',
       skills: [
         { name:'海嵐の一撃', type:'physical', mult:1.6 },
         { name:'深海波動',   type:'magical',  mult:1.5 },
@@ -104,13 +104,14 @@ export const AREAS = [
       { name:'グリフィン',   hp:1800, atk:700, def:540, matk:120, mdef:510, spd:450, type:'physical', gold:280 },
     ],
     boss: {
-      name:'雷鷲サンダーロック', hp:45000, atk:600, def:560, matk:250, mdef:600, spd:675, gold:6000, isBoss:true, type:'physical',
+      name:'雷鷲サンダーロック', hp:35000, atk:1100, def:660, matk:250, mdef:600, spd:1175, gold:6000, isBoss:true, type:'physical',
       skills: [
         { name:'雷爪乱舞', type:'physical_multi', mult:0.7, hits:3 },
-        { name:'雷光閃',   type:'magical',  mult:1.8 },
-        { name:'嵐の加護', type:'buff',     effect:'atkSpdUp', atkRate:1.3, spdRate:1.2, turns:3 },
-        { name:'雷鳴回復', type:'heal',     rate:0.2 },
+        { name:'雷光閃',   type:'physical', mult:1.8, paralysisRate:0.3 },
+        { name:'嵐の加護', type:'buff',     effect:'atkSpdUp', atkRate:1.5, spdRate:1.5, turns:3 },
+        { name:'雷鳴',     type:'heal',     rate:0.2 },
       ],
+      specialMove: { name:'天穿雷撃', type:'physical', mult:2.5, defDownRate:0.9, turns:3 },
     },
     commonDrops: ['山岳の斧','岩砕の拳','霞散弾銃','嵐のオーブ','峰岳の兜','岩石鎧','山岳の靴','岩石の護符'],
     rareDrops:   ['雷砕斧','鷹爪の拳','雷鳴銃','雷晶オーブ','嵐の兜','雷鷲鎧','疾風の靴','峰岳の守護輪'],
@@ -143,13 +144,14 @@ export const AREAS = [
       },
     ],
     boss: {
-      name:'氷霊フロストバーン', hp:90000, atk:850, def:800, matk:600, mdef:1000, spd:1100, gold:12500, isBoss:true, type:'magical',
+      name:'氷霊フロストバーン', hp:60000, atk:850, def:1200, matk:1800, mdef:1300, spd:1400, gold:12500, isBoss:true, type:'magical',
       skills: [
-        { name:'氷柱連打', type:'physical_multi', mult:0.6, hits:4 },
-        { name:'絶対零度', type:'magical',  mult:2.0 },
-        { name:'氷の鎧',   type:'buff',     effect:'defMdefUp', defRate:1.4, mdefRate:1.4, turns:3 },
-        { name:'氷結回復', type:'heal',     rate:0.25 },
+        { name:'氷柱連打',   type:'magical_multi', mult:0.5, hits:4 },
+        { name:'絶対零度',   type:'magical',  mult:2.2, stunRate:0.3 },
+        { name:'氷の鎧',     type:'buff',     effect:'defMdefUp', defRate:1.4, mdefRate:1.4, turns:3 },
+        { name:'氷獄の恩寵', type:'heal',     rate:0.25, regenRate:0.03, regenTurns:4 },
       ],
+      specialMove: { name:'氷棺葬送', type:'magical', mult:2.5, stun:true },
     },
     commonDrops: ['氷刃の剣','霜穿の槍','吹雪の弓','氷晶の杖','凍月刀','氷晶の護符'],
     rareDrops:   ['白銀の大剣','氷河長槍','極雪の弓','霜嵐の杖','凍蒼の刀','霜の宝珠'],
@@ -182,13 +184,14 @@ export const AREAS = [
       },
     ],
     boss: {
-      name:'深紅のサラマンダー', hp:180000, atk:1200, def:1200, matk:900, mdef:1500, spd:1800, gold:25000, isBoss:true, type:'physical',
+      name:'深紅のサラマンダー', hp:100000, atk:2000, def:2300, matk:900, mdef:1500, spd:2100, gold:25000, isBoss:true, type:'physical',
       skills: [
-        { name:'溶岩爪撃',   type:'physical', mult:2.0 },
+        { name:'溶岩爪撃',   type:'physical', mult:2.0, burnRate:0.3 },
         { name:'業火放射',   type:'magical',  mult:2.2, debuff:'mdefDown', debuffRate:0.8, debuffTurns:3 },
-        { name:'煉獄の覇気', type:'buff',     effect:'atkMatkUp', atkRate:1.4, matkRate:1.4, turns:3 },
-        { name:'炎の再生',   type:'heal',     rate:0.25 },
+        { name:'煉獄の覇気', type:'buff',     effect:'atkMatkUp', atkRate:1.8, matkRate:1.8, turns:5 },
+        { name:'火焔転生',   type:'heal',     rate:0.3, dmgReduceRate:0.7, dmgReduceTurns:2 },
       ],
+      specialMove: { name:'炎獄の審判', type:'physical', mult:2.5, burn:true, healSealTurns:4 },
     },
     commonDrops: ['業火の短剣','炎のワンド','煉獄魔導書','炎の兜','溶岩鎧','紅蓮の靴','溶岩の指輪'],
     rareDrops:   ['サラマンダーブレード','フェニックスワンド','煉獄のコデックス','溶鉄のクラウン','ドレイクアーマー','ヴァルカンブーツ','業炎の指輪'],
@@ -1055,6 +1058,26 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
       const defRankRed = calcDefReduction(eff?.def || 0)
       dmgToPlayer = Math.floor(rawDmg * enemyDmgDown * dmgReduceRate * (1 - defRankRed) * (0.9 + Math.random() * 0.2))
       logs.push({ text:`⚔ ${enemy.name}の「${skill.name}」！ あなたに${dmgToPlayer}ダメージ！`, color:'#ff4444' })
+      if (skill.paralysisRate && Math.random() < skill.paralysisRate && !(newPlayerBuffs.paralysis?.turns > 0)) {
+        newPlayerBuffs.paralysis = { turns:5, skipRate:0.25, spdRate:0.8 }
+        logs.push({ text:`⚡ 麻痺した！`, color:'#ffaa00' })
+      }
+      if (skill.burnRate && Math.random() < skill.burnRate && !(newPlayerBuffs.burn?.turns > 0)) {
+        newPlayerBuffs.burn = { turns:3 }
+        logs.push({ text:`🔥 やけど状態になった！`, color:'#ff6622' })
+      }
+      if (skill.burn && !(newPlayerBuffs.burn?.turns > 0)) {
+        newPlayerBuffs.burn = { turns:3 }
+        logs.push({ text:`🔥 やけど状態になった！`, color:'#ff6622' })
+      }
+      if (skill.defDownRate) {
+        newPlayerBuffs.defDown = { turns: skill.turns||3, rate: skill.defDownRate }
+        logs.push({ text:`🛡 防御力が低下した！`, color:'#ff8844' })
+      }
+      if (skill.healSealTurns) {
+        newPlayerBuffs.healSeal = { turns: skill.healSealTurns }
+        logs.push({ text:`🚫 ${skill.healSealTurns}ターンの間回復が封じられた！`, color:'#ff4488' })
+      }
       break
     }
     case 'magical': {
@@ -1070,6 +1093,25 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
         newPlayerBuffs.mdefDown = { turns: skill.debuffTurns||2, rate: skill.debuffRate||0.8 }
         logs.push({ text:`特殊防御力が低下した！`, color:'#cc44ff' })
       }
+      if (skill.stunRate && Math.random() < skill.stunRate && !(newPlayerBuffs.stun?.turns > 0)) {
+        newPlayerBuffs.stun = { turns:1 }
+        logs.push({ text:`💫 スタン！ 次のターン行動不能！`, color:'#ffaa00' })
+      }
+      if (skill.stun) {
+        newPlayerBuffs.stun = { turns:1 }
+        logs.push({ text:`💫 スタン！ 次のターン行動不能！`, color:'#ffaa00' })
+      }
+      break
+    }
+    case 'magical_multi': {
+      const pMdef2 = Math.max(1, (eff?.mdef || 0) * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1))
+      const eMatk2 = enemy.matk || enemy.atk
+      const base2 = Math.floor(eMatk2 * eMatk2 / Math.max(1, eMatk2 + pMdef2))
+      const perHit2 = Math.max(1, Math.floor(base2 * skill.mult))
+      const dmgReduceRate2 = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
+      const defRankRed2 = calcDefReduction(eff?.mdef || 0)
+      dmgToPlayer = Math.floor(perHit2 * (skill.hits||1) * enemyDmgDown * dmgReduceRate2 * (1 - defRankRed2) * (0.9 + Math.random() * 0.2))
+      logs.push({ text:`✨ ${enemy.name}の「${skill.name}」！ ${perHit2}×${skill.hits}回＝${dmgToPlayer}の魔法ダメージ！`, color:'#cc44ff' })
       break
     }
     case 'physical_multi': {
@@ -1086,6 +1128,14 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
       const healDownRate = enemyBuffs.healDown?.turns > 0 ? enemyBuffs.healDown.rate : 1.0
       healEnemy = Math.floor(enemyMaxHp * skill.rate * healDownRate)
       logs.push({ text:`💚 ${enemy.name}の「${skill.name}」！ HPが${healEnemy}回復した！`, color:'#44ff88' })
+      if (skill.regenRate && skill.regenTurns) {
+        newEnemyBuffs.regen = { turns: skill.regenTurns, rate: skill.regenRate }
+        logs.push({ text:`✨ ${skill.regenTurns}ターンの間毎ターンHP${Math.floor(skill.regenRate*100)}%回復！`, color:'#44ff88' })
+      }
+      if (skill.dmgReduceRate && skill.dmgReduceTurns) {
+        newEnemyBuffs.dmgReduce = { turns: skill.dmgReduceTurns, rate: skill.dmgReduceRate }
+        logs.push({ text:`🛡 ${skill.dmgReduceTurns}ターンの間ダメージを軽減！`, color:'#ffaa00' })
+      }
       break
     }
     case 'debuff': {
@@ -1748,8 +1798,9 @@ export default function Game() {
     let itemUsed = false
     let prevSkillName = null
     // BOSS回復管理
-    let bossHealUsed = false
+    let bossHealCount = 0
     let bossHealCooldown = 0
+    let bossSpecialUsed = false
     let papiaEscaped = false
 
     const equippedWeaponItem = equipment.find(e => e.slot==='weapon' && e.equipped)
@@ -1883,7 +1934,8 @@ export default function Game() {
             else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + adjEMD)
           }
           const allinDebuffOutMult = playerBuffs.allinDebuff?.turns > 0 ? 0.7 : 1.0
-          let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * (0.9 + Math.random() * 0.2))
+          const enemyDmgReduceMult = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
+          let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * (0.9 + Math.random() * 0.2))
           if (enemy.isPapia && res.dmg > 0) finalDmg = 1
           const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
@@ -1897,7 +1949,7 @@ export default function Game() {
             enemyBuffs.healDown = { turns: 2, rate: 0.9 }
             logs.push({ text: `🗡 ヴァルブレイカーの効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
           }
-          const healAmt = Math.floor(res.heal * passiveHealMult)
+          const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult)
           playerHp = Math.min(profile.hp_max, playerHp + healAmt)
           // 魔剣開放の反動中はバフ系スキルを無効化
           if (playerBuffs.spellBladeSealed?.turns > 0) {
@@ -1931,7 +1983,8 @@ export default function Game() {
         const eDefVal = isMagical ? Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate)) : Math.max(1, Math.floor(enemy.def*eDefRate))
         // ②通常攻撃: ATK²/(ATK+敵DEF)
         const baseDmg = Math.max(1, Math.floor(baseAtk*baseAtk/Math.max(1,baseAtk+eDefVal))+Math.floor(Math.random()*4))
-        let finalDmg = Math.floor(baseDmg*critMult*(isArtifact?1.2:1.0)*passiveDmgMult*(0.9+Math.random()*0.2))
+        const enemyDmgReduceMult2 = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
+        let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.2:1.0)*passiveDmgMult*enemyDmgReduceMult2*(0.9+Math.random()*0.2))
         if (enemy.isPapia) finalDmg = 1
         if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
           const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
@@ -1994,23 +2047,35 @@ export default function Game() {
     // 敵スキル使用（BOSSおよび⑥⑦雑魚）
     const doEnemySkillAttack = () => {
       if (!enemy.skills || enemy.skills.length === 0) return
-      // BOSS回復処理
+      // BOSS回復処理（最大2回）
       const healSkill = enemy.skills.find(s => s.type === 'heal')
-      if (healSkill && enemyHp / enemyMaxHp < 0.5) {
-        if (!bossHealUsed) {
+      if (healSkill && bossHealCount < 2 && enemyHp / enemyMaxHp < 0.5) {
+        if (bossHealCount === 0) {
           // 1回目は確定
           const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
           enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
-          bossHealUsed = true
+          Object.assign(enemyBuffs, result.newEnemyBuffs)
+          bossHealCount++
           bossHealCooldown = Math.floor(Math.random()*3)+2
           return
         } else if (bossHealCooldown <= 0) {
-          // 2回目以降は2〜4ターンごと
+          // 2回目は2〜4ターンごと
           const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
           enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
+          Object.assign(enemyBuffs, result.newEnemyBuffs)
+          bossHealCount++
           bossHealCooldown = Math.floor(Math.random()*3)+2
           return
         }
+      }
+      // 大技：HP10%以下で1回限り
+      if (enemy.specialMove && !bossSpecialUsed && enemyHp / enemyMaxHp <= 0.1) {
+        bossSpecialUsed = true
+        logs.push({ text:`💥 ${enemy.name}の「${enemy.specialMove.name}」！！`, color:'#ff0000' })
+        const result = executeEnemySkill(enemy.specialMove, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
+        playerHp -= result.dmgToPlayer
+        Object.assign(playerBuffs, result.newPlayerBuffs)
+        return
       }
       // 攻撃/バフ/デバフスキル
       const nonHealSkills = enemy.skills.filter(s => s.type !== 'heal')
@@ -2055,6 +2120,11 @@ export default function Game() {
         logs.push({ text:`💀 呪縛ダメージ！ ${enemy.name}に${enemyBuffs.curseDmg.dmg}ダメージ！`, color:'#cc44ff' })
         if (enemyHp <= 0) break
       }
+      if (enemyBuffs.regen?.turns > 0) {
+        const regenAmt = Math.floor(enemyMaxHp * enemyBuffs.regen.rate)
+        enemyHp = Math.min(enemyMaxHp, enemyHp + regenAmt)
+        logs.push({ text:`💚 ${enemy.name}のリジェネ！ HPが${regenAmt}回復した！`, color:'#44ff88' })
+      }
       if (enemyBuffs.poison?.turns > 0) {
         const poisonDmg = Math.floor(enemy.hp * enemyBuffs.poison.dmgRate)
         enemyHp -= poisonDmg
@@ -2087,16 +2157,20 @@ export default function Game() {
         logs.push({ text:`💀 骸骨の持続ダメージ！ ${enemy.name}に${playerBuffs.skeletonDmg.dmg}ダメージ！`, color:'#cc44ff' })
         if (enemyHp <= 0) break
       }
-      if (playerBuffs.regenHeal?.turns > 0) {
+      const isHealSealed = playerBuffs.healSeal?.turns > 0
+      if (isHealSealed) {
+        logs.push({ text:`🚫 回復封じ中！ 回復効果が無効化された！`, color:'#ff4488' })
+      }
+      if (!isHealSealed && playerBuffs.regenHeal?.turns > 0) {
         const healAmt = Math.floor(playerBuffs.regenHeal.amount * passiveHealMult)
         playerHp = Math.min(profile.hp_max, playerHp + healAmt)
         logs.push({ text:`💚 回復効果でHPが${healAmt}回復した！`, color:'#44ff88' })
       }
-      if (playerBuffs.delayHeal && turn === playerBuffs.delayHeal.triggerTurn) {
+      if (!isHealSealed && playerBuffs.delayHeal && turn === playerBuffs.delayHeal.triggerTurn) {
         playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.delayHeal.amount)
         logs.push({ text:`💚 装備効果でHPが${playerBuffs.delayHeal.amount}回復した！`, color:'#44ff88' })
       }
-      if (currentItem) {
+      if (!isHealSealed && currentItem) {
         const threshold = currentItem.use_threshold||50
         const effect = currentItem.items.effect
         const isInfinite = effect === 'hp_pct_infinite' || effect === 'mp_pct_infinite'
@@ -2177,7 +2251,7 @@ export default function Game() {
         }
         if (!enemySkipped) {
           if (enemy.skills && enemy.skills.length > 0) {
-            if (Math.random() < 0.4) doEnemySkillAttack()
+            if (Math.random() < 0.9) doEnemySkillAttack()
             else doEnemyAttack(false)
           } else {
             doEnemyAttack(false)
