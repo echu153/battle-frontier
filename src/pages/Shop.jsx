@@ -45,8 +45,9 @@ export default function Shop() {
       p_item_id: item.id,
       p_quantity: qty,
     })
+    console.log('[Shop] buy result:', data, error)
     if (error || !data?.ok) {
-      setMessage('購入に失敗しました')
+      setMessage(`購入失敗: ${error?.message || JSON.stringify(data)}`)
       setTimeout(() => setMessage(''), 2000)
       setLoading(false)
       return
