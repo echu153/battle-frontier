@@ -57,38 +57,30 @@ export default function Admin() {
 
   const flash = (text) => { setMsg(text); setTimeout(() => setMsg(''), 3000) }
 
-  const freezeExp = async (id, hours = 12) => {
-    await supabase.from('profiles').update({
-      exp_frozen_until: new Date(Date.now() + hours * 3600000).toISOString()
-    }).eq('id', id)
-    flash(`EXP凍結（${hours}h）`)
-    fetchAll()
+  const adminUpdate = async (id, data, successMsg) => {
+    const { error } = await supabase.from('profiles').update(data).eq('id', id)
+    if (error) { flash(`❌ エラー: ${error.message}`); return false }
+    flash(successMsg)
+    await fetchAll()
+    return true
   }
 
-  const unfreezeExp = async (id) => {
-    await supabase.from('profiles').update({ exp_frozen_until: null, exp_frozen: false }).eq('id', id)
-    flash('EXP凍結解除')
-    fetchAll()
-  }
+  const freezeExp = (id, hours = 12) =>
+    adminUpdate(id, { exp_frozen_until: new Date(Date.now() + hours * 3600000).toISOString() }, `EXP停止（${hours}h）`)
 
-  const clearFlag = async (id) => {
-    await supabase.from('profiles').update({ suspicious_flag: false }).eq('id', id)
-    flash('フラグ解除')
-    fetchAll()
-  }
+  const unfreezeExp = (id) =>
+    adminUpdate(id, { exp_frozen_until: null, exp_frozen: false }, 'EXP停止解除')
+
+  const clearFlag = (id) =>
+    adminUpdate(id, { suspicious_flag: false }, 'フラグ解除')
 
   const banPlayer = async (id) => {
     if (!confirm('このプレイヤーを停止しますか？')) return
-    await supabase.from('profiles').update({ is_suspended: true, suspension_reason: '管理者による停止' }).eq('id', id)
-    flash('停止しました')
-    fetchAll()
+    adminUpdate(id, { is_suspended: true, suspension_reason: '管理者による停止' }, '停止しました')
   }
 
-  const unbanPlayer = async (id) => {
-    await supabase.from('profiles').update({ is_suspended: false, suspension_reason: null }).eq('id', id)
-    flash('停止解除しました')
-    fetchAll()
-  }
+  const unbanPlayer = (id) =>
+    adminUpdate(id, { is_suspended: false, suspension_reason: null }, '停止解除しました')
 
   const PlayerCard = ({ p }) => (
     <div style={S.card}>
