@@ -2804,7 +2804,7 @@ export default function Game() {
   const charLv = profile.char_lv || profile.lv
   const innCost = isDying ? Math.min(charLv*15,profile.gold) : charLv*2
   const allocatedPoints = Object.values(statPoints).reduce((a,b)=>a+b,0)
-  const eff = calcEffectiveStats(profile, equipment, proficiency)
+  const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
   const total = calcTotal(eff)
   const totalRank = getTotalRank(total)
   const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv

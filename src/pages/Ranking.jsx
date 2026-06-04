@@ -15,13 +15,12 @@ export default function Ranking() {
       if (user) setCurrentUserId(user.id)
       const { data } = await supabase
         .from('profiles')
-        .select('id, username, lv, char_lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, avatar_url, retraining')
+        .select('id, username, lv, char_lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, avatar_url, retraining, museum_atk, museum_def, museum_matk, museum_mdef, museum_spd, museum_hp, museum_mp, ability_title_id')
         .order('char_lv', { ascending: false })
         .limit(50)
       const list = data || []
       const ids = list.map(p => p.id)
-      // 50人分の装備中装備と熟練度をまとめて取得（in句で2クエリ）
-      let eqs = [], profs = []
+      let eqs = [], profs = [], titleMap = {}
       if (ids.length > 0) {
         const [{ data: eqData }, { data: profData }] = await Promise.all([
           supabase.from('player_equipment').select('*, weapons(*)').in('player_id', ids).eq('equipped', true),
@@ -30,11 +29,16 @@ export default function Ranking() {
         eqs = eqData || []
         profs = profData || []
       }
-      // プレイヤーごとに装備＋熟練度込みの総合力を算出
+      const titleIds = [...new Set(list.map(p => p.ability_title_id).filter(Boolean))]
+      if (titleIds.length > 0) {
+        const { data: titlesData } = await supabase.from('titles').select('*').in('id', titleIds)
+        for (const t of (titlesData || [])) titleMap[t.id] = t
+      }
       const withTotal = list.map(p => {
         const eq = eqs.filter(e => e.player_id === p.id)
         const pf = profs.filter(x => x.player_id === p.id)
-        return { ...p, _total: calcEffectiveTotal(p, eq, pf) }
+        const tb = p.ability_title_id ? titleMap[p.ability_title_id] : null
+        return { ...p, _total: calcEffectiveTotal(p, eq, pf, tb) }
       })
       const sorted = withTotal.sort((a, b) => b._total - a._total)
       setPlayers(sorted)
