@@ -1843,6 +1843,8 @@ export default function Game() {
     let bossHealCount = 0
     let bossHealCooldown = 0
     let bossSpecialUsed = false
+    let bossBuff1Used = false  // HP70%以下で発動
+    let bossBuff2Used = false  // HP30%以下で発動
     let papiaEscaped = false
     let playerAttacking = false  // bloodRage：直接攻撃中のみtrue
 
@@ -2126,8 +2128,33 @@ export default function Game() {
         Object.assign(playerBuffs, result.newPlayerBuffs)
         return
       }
-      // 攻撃/バフ/デバフスキル
-      const nonHealSkills = enemy.skills.filter(s => s.type !== 'heal')
+      // バフスキル：HP閾値で自動発動（ランダム選択から除外）
+      const buffSkills = enemy.skills.filter(s => s.type === 'buff')
+      if (buffSkills.length > 0) {
+        const hpRate = enemyHp / enemyMaxHp
+        if (!bossBuff2Used && hpRate <= 0.3) {
+          bossBuff1Used = true
+          bossBuff2Used = true
+          const buffSkill = buffSkills[buffSkills.length > 1 ? 1 : 0]
+          logs.push({ text:`⚡ ${enemy.name}の「${buffSkill.name}」！`, color:'#ff8844' })
+          const result = executeEnemySkill(buffSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
+          playerHp -= result.dmgToPlayer
+          Object.assign(playerBuffs, result.newPlayerBuffs)
+          Object.assign(enemyBuffs, result.newEnemyBuffs)
+          return
+        } else if (!bossBuff1Used && hpRate <= 0.7) {
+          bossBuff1Used = true
+          const buffSkill = buffSkills[0]
+          logs.push({ text:`⚡ ${enemy.name}の「${buffSkill.name}」！`, color:'#ff8844' })
+          const result = executeEnemySkill(buffSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
+          playerHp -= result.dmgToPlayer
+          Object.assign(playerBuffs, result.newPlayerBuffs)
+          Object.assign(enemyBuffs, result.newEnemyBuffs)
+          return
+        }
+      }
+      // 攻撃/デバフスキル
+      const nonHealSkills = enemy.skills.filter(s => s.type !== 'heal' && s.type !== 'buff')
       if (nonHealSkills.length === 0) return
       const skill = nonHealSkills[Math.floor(Math.random()*nonHealSkills.length)]
       const result = executeEnemySkill(skill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
