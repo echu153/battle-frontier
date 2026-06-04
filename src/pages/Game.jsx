@@ -1863,8 +1863,10 @@ export default function Game() {
     let bossHealCount = 0
     let bossHealCooldown = 0
     let bossSpecialUsed = false
-    let bossBuff1Used = false  // HP70%以下で発動
-    let bossBuff2Used = false  // HP30%以下で発動
+    let bossBuff1Used = false   // HP70%以下で発動
+    let bossBuff2Used = false   // HP30%以下で発動
+    let bossHeal1Used = false   // HP60%以下で発動
+    let bossHeal2Used = false   // HP30%以下で発動
     let papiaEscaped = false
     let playerAttacking = false  // bloodRage：直接攻撃中のみtrue
 
@@ -2118,24 +2120,21 @@ export default function Game() {
     // 敵スキル使用（BOSSおよび⑥⑦雑魚）
     const doEnemySkillAttack = () => {
       if (!enemy.skills || enemy.skills.length === 0) return
-      // BOSS回復処理（最大2回）
+      // BOSS回復処理：HP60%以下で1回目、HP30%以下で2回目の自動発動
       const healSkill = enemy.skills.find(s => s.type === 'heal')
-      if (healSkill && bossHealCount < 2 && enemyHp / enemyMaxHp < 0.5) {
-        if (bossHealCount === 0) {
-          // 1回目は確定
+      if (healSkill) {
+        const hpRate = enemyHp / enemyMaxHp
+        if (!bossHeal2Used && hpRate <= 0.3) {
+          bossHealCount = 2; bossHeal1Used = true; bossHeal2Used = true
           const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
           enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
           Object.assign(enemyBuffs, result.newEnemyBuffs)
-          bossHealCount++
-          bossHealCooldown = Math.floor(Math.random()*3)+2
           return
-        } else if (bossHealCooldown <= 0) {
-          // 2回目は2〜4ターンごと
+        } else if (!bossHeal1Used && hpRate <= 0.6) {
+          bossHealCount = 1; bossHeal1Used = true
           const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
           enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
           Object.assign(enemyBuffs, result.newEnemyBuffs)
-          bossHealCount++
-          bossHealCooldown = Math.floor(Math.random()*3)+2
           return
         }
       }
