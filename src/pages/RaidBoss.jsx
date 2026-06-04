@@ -714,7 +714,7 @@ function RewardTable() {
             <span style={{ color: '#ffcc00' }}>Gold {fmt(t.gold)}</span>
           </div>
           <div style={{ color: '#446688', marginTop: '2px' }}>
-            強化石{t.stones.map(s=>`(${s})`).join('・')}×3　宝石{t.gemRank}×{t.gemCount}　鱗×{t.scaleCount}　逆鱗{t.rareChance}
+            強化石{t.stones.map(s=>`(${s})`).join('・')}×3　宝石{t.gemRank}×{t.gemCount}　通常素材×{t.scaleCount}{t.tier !== 'D' ? `　レア素材${t.rareChance}` : ''}
           </div>
         </div>
       ))}
