@@ -104,7 +104,7 @@ export const AREAS = [
       { name:'グリフィン',   hp:1800, atk:700, def:540, matk:120, mdef:510, spd:450, type:'physical', gold:280 },
     ],
     boss: {
-      name:'雷鷲サンダーロック', hp:35000, atk:900, def:1160, matk:250, mdef:1100, spd:1175, gold:6000, isBoss:true, type:'physical',
+      name:'雷鷲サンダーロック', hp:35000, atk:700, def:1160, matk:250, mdef:1100, spd:1175, gold:6000, isBoss:true, type:'physical',
       skills: [
         { name:'雷爪乱舞', type:'physical_multi', mult:0.7, hits:3 },
         { name:'雷光閃',   type:'physical', mult:1.8, paralysisRate:0.3 },
@@ -1856,6 +1856,7 @@ export default function Game() {
     let bossHealCooldown = 0
     let bossSpecialUsed = false
     let papiaEscaped = false
+    let playerAttacking = false  // bloodRage：直接攻撃中のみtrue
 
     const equippedWeaponItem = equipment.find(e => e.slot==='weapon' && e.equipped)
     const isArtifact = equippedWeaponItem?.bonus_effect === 'artifact'
@@ -1924,6 +1925,7 @@ export default function Game() {
     const playerHitBonus = (eff.hitBonus || 0) + passiveHitBonus
 
     const doPlayerAttack = (isExtra=false) => {
+      playerAttacking = true
       const holyFieldDef = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
       const holyKnightMult = hasHolyKnightPassive ? 1.2 : 1.0
       const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDef * holyKnightMult
@@ -1993,7 +1995,7 @@ export default function Game() {
           if (enemy.isPapia && res.dmg > 0) finalDmg = 1
           const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
-          if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
+          if (playerAttacking && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
             const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
             playerHp = Math.min(profile.hp_max, playerHp + rageCure)
             logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
@@ -2054,6 +2056,7 @@ export default function Game() {
         logs.push({ text:`${prefix}あなたの攻撃！ ${enemy.name}に${finalDmg}ダメージ！${critText}`, color:isCrit?'#ff4444':'#ffcc00' })
         if (expandedSkillSet.length > 0) skillIndex++
       }
+      playerAttacking = false
     }
 
     const doEnemyAttack = (isExtra=false) => {
