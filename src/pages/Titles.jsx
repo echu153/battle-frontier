@@ -81,6 +81,7 @@ export default function Titles() {
     const v = title.condition_value
     switch (title.condition_type) {
       case 'class_level_total': return condData.classLevelTotal >= v
+      case 'char_lv':           return (profile.char_lv || profile.lv || 0) >= v
       case 'job_change':        return condData.jobChangeCount >= v
       case 'retraining':        return condData.retrainingTotal >= v
       case 'area':              return condData.maxUnlockedArea >= v
@@ -104,6 +105,7 @@ export default function Titles() {
     const v = title.condition_value
     switch (title.condition_type) {
       case 'class_level_total': return `${condData.classLevelTotal.toLocaleString()}/${v.toLocaleString()}`
+      case 'char_lv':           return `キャラクターLV ${(profile.char_lv||profile.lv||0).toLocaleString()}/${v.toLocaleString()}`
       case 'job_change':        return `${condData.jobChangeCount}/${v}`
       case 'retraining':        return `${condData.retrainingTotal}/${v}`
       case 'area':              return `現在エリア${condData.maxUnlockedArea - 1}突破`
