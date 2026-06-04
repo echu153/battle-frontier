@@ -33,8 +33,7 @@ export default function Admin() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
     const { data: me, error } = await supabase.from('profiles').select('id, is_admin').eq('id', user.id).maybeSingle()
-    console.log('[Admin] me:', me, 'error:', error)
-    if (!me?.is_admin) { setMsg(`アクセス拒否: me=${JSON.stringify(me)} err=${JSON.stringify(error)}`); setLoading(false); return }
+    if (!me?.is_admin) { nav('/game'); return }
     await fetchAll()
     setLoading(false)
   }
