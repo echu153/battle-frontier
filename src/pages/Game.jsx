@@ -684,10 +684,10 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       break
     }
     case '断空': {
-      result.dmg = Math.floor(eff.atk*1.6*am)
-      const bleedHit2 = Math.random()*100 < 30
-      if (bleedHit2) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
-      result.log = `⚔ 断空！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleedHit2 ? ` ${enemy.name}は出血した！` : ''}`
+      const edr_dk = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
+      const defVal_dk = Math.floor((enemy.def||0)*edr_dk*0.7/2)
+      result.dmg = Math.max(1, Math.floor(eff.atk*1.6*am) - defVal_dk)
+      result.log = `⚔ 断空！ ${enemy.name}の防御を断ち切り${result.dmg}の物理ダメージ！`
       break
     }
     case '明鏡止水':    result.newPlayerBuffs.atkUp={turns:4,rate:1.5}; result.newPlayerBuffs.hitBonus={turns:4,value:5}; result.log = `✨ 明鏡止水！ 4ターンの間攻撃力が上昇し命中率UP！`; break
