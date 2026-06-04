@@ -1993,7 +1993,7 @@ export default function Game() {
           if (enemy.isPapia && res.dmg > 0) finalDmg = 1
           const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
-          if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
+          if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
             const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
             playerHp = Math.min(profile.hp_max, playerHp + rageCure)
             logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
@@ -2040,8 +2040,8 @@ export default function Game() {
         const enemyDmgReduceMult2 = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
         let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.2:1.0)*passiveDmgMult*enemyDmgReduceMult2*(0.9+Math.random()*0.2))
         if (enemy.isPapia) finalDmg = 1
-        if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
-          const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
+        if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
+          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
           playerHp = Math.min(profile.hp_max, playerHp + rageCure)
           logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
         }
