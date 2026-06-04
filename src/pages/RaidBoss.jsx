@@ -20,10 +20,10 @@ const BOSS_MDEF = 1000
 const BOSS_SPD  = 1200
 
 const TIER_INFO = [
-  { pct: 30, label: '貢献度30%以上', gold: 40000, stone: '強化石(B)', gemCount: 3, color: '#ffcc00' },
-  { pct: 10, label: '貢献度10%以上', gold: 25000, stone: '強化石(C)', gemCount: 2, color: '#44aaff' },
-  { pct:  3, label: '貢献度3%以上',  gold: 15000, stone: '強化石(D)', gemCount: 2, color: '#44ff88' },
-  { pct:  0, label: '参加',          gold:  5000, stone: '強化石(F)', gemCount: 1, color: '#888888' },
+  { pct: 30, tier: 'A', label: '貢献度30%以上', gold: 50000, stones: ['B','C','D'], gemCount: 3, gemRank: 'D', scaleCount: '5',    rareChance: '10%', color: '#ffcc00' },
+  { pct: 10, tier: 'B', label: '貢献度10%以上', gold: 30000, stones: ['C','D','E'], gemCount: 2, gemRank: 'E', scaleCount: '3~4',  rareChance: '5%',  color: '#44aaff' },
+  { pct:  3, tier: 'C', label: '貢献度3%以上',  gold: 10000, stones: ['D','E','F'], gemCount: 1, gemRank: 'F', scaleCount: '2~3',  rareChance: '1%',  color: '#44ff88' },
+  { pct:  0, tier: 'D', label: '参加',           gold:  5000, stones: ['E','F'],    gemCount: 1, gemRank: 'F', scaleCount: '1~2',  rareChance: '0%',  color: '#888888' },
 ]
 
 function getTier(pct) { return TIER_INFO.find(t => pct >= t.pct) || TIER_INFO[TIER_INFO.length - 1] }
@@ -633,9 +633,11 @@ export default function RaidBoss() {
               <div style={{ color: '#44ff88', fontSize: '13px', marginBottom: '12px' }}>🎁 リワード</div>
               {reward ? (
                 <div style={{ fontSize: '12px', lineHeight: '2.2' }}>
-                  <div style={{ color: '#ffcc44' }}>貢献度: {reward.contribution_pct}%</div>
+                  <div style={{ color: '#ffcc44' }}>{reward.tier}ティア　貢献度: {reward.contribution_pct}%</div>
                   <div style={{ color: '#ffcc00' }}>Gold: +{fmt(reward.gold)}</div>
-                  <div style={{ color: '#6699cc' }}>{reward.stone} × {reward.stone_count}</div>
+                  <div style={{ color: '#6699cc' }}>
+                    {(reward.stones || []).map(s => `強化石(${s})×3`).join('　')}
+                  </div>
                   <div style={{ color: '#ff66cc' }}>宝石({reward.gem_rank}) × {reward.gem_count}個（ランダム種類）</div>
                   <div style={{ color: '#cc8844' }}>黒龍の鱗 × {reward.scale_count}個</div>
                   {reward.got_gyaku && <div style={{ color: '#ffcc00' }}>⭐ 黒龍の逆鱗 × 1個（レアドロップ！）</div>}
@@ -646,7 +648,7 @@ export default function RaidBoss() {
               ) : (
                 <>
                   <div style={{ fontSize: '12px', color: '#aaaaaa', marginBottom: '10px', lineHeight: '1.8' }}>
-                    予定リワード: Gold {fmt(myTier.gold)} / {myTier.stone} / 宝石F×{myTier.gemCount}個
+                    予定リワード: {myTier.tier}ティア / Gold {fmt(myTier.gold)} / 強化石{myTier.stones.map(s=>`(${s})`).join('・')}×3 / 宝石{myTier.gemRank}×{myTier.gemCount}
                   </div>
                   {claimError && <div style={{ color: '#ff4444', fontSize: '12px', marginBottom: '8px' }}>{claimError}</div>}
                   <button onClick={handleClaim} disabled={claiming}
@@ -704,14 +706,19 @@ export default function RaidBoss() {
 function RewardTable() {
   return (
     <div style={{ border: '1px solid #112233', background: '#000810', padding: '14px', marginTop: '16px' }}>
-      <div style={{ color: '#335566', fontSize: '11px', marginBottom: '8px' }}>討伐報酬（出撃回数ボーナスあり）</div>
+      <div style={{ color: '#335566', fontSize: '11px', marginBottom: '8px' }}>討伐報酬</div>
       {TIER_INFO.map(t => (
-        <div key={t.pct} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', padding: '3px 0', borderBottom: '1px solid #0a1220' }}>
-          <span style={{ color: t.color }}>{t.label}</span>
-          <span style={{ color: '#446688' }}>Gold {fmt(t.gold)} / {t.stone} / 宝石F×{t.gemCount}</span>
+        <div key={t.pct} style={{ fontSize: '11px', padding: '4px 0', borderBottom: '1px solid #0a1220' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: t.color }}>{t.tier}ティア　{t.label}</span>
+            <span style={{ color: '#ffcc00' }}>Gold {fmt(t.gold)}</span>
+          </div>
+          <div style={{ color: '#446688', marginTop: '2px' }}>
+            強化石{t.stones.map(s=>`(${s})`).join('・')}×3　宝石{t.gemRank}×{t.gemCount}　鱗×{t.scaleCount}　逆鱗{t.rareChance}
+          </div>
         </div>
       ))}
-      <div style={{ color: '#334455', fontSize: '10px', marginTop: '6px' }}>※ 出撃1回につき500の有効スコアが加算されます</div>
+      <div style={{ color: '#334455', fontSize: '10px', marginTop: '6px' }}>※ 出撃5回以上で最低Cティア保証</div>
     </div>
   )
 }
