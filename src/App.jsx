@@ -17,6 +17,7 @@ import Museum from './pages/Museum'
 import RaidBoss from './pages/RaidBoss'
 import Exchange from './pages/Exchange'
 import Titles from './pages/Titles'
+import Admin from './pages/Admin'
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -120,6 +121,7 @@ function App() {
         <Route path="/raid" element={session ? <RaidBoss /> : <Navigate to="/login" />} />
         <Route path="/exchange" element={session ? <Exchange /> : <Navigate to="/login" />} />
         <Route path="/titles" element={session ? <Titles /> : <Navigate to="/login" />} />
+        <Route path="/admin" element={session ? <Admin /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>

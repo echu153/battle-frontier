@@ -1544,13 +1544,7 @@ export default function Game() {
       const stoneName = r < 10 ? '強化石(F)' : r < 25 ? '強化石(E)' : r < 55 ? '強化石(D)' : r < 80 ? '強化石(C)' : r < 95 ? '強化石(B)' : '強化石(A)'
       const { data: stoneItem } = await supabase.from('items').select('*').eq('name', stoneName).single()
       if (stoneItem) {
-        let existing = null
-        try { const res = await supabase.from('player_items').select('*').eq('player_id', profile.id).eq('item_id', stoneItem.id).single(); existing = res.data } catch {}
-        if (existing) {
-          await supabase.from('player_items').update({ quantity:(existing.quantity||1)+1 }).eq('id', existing.id)
-        } else {
-          await supabase.from('player_items').insert({ player_id:profile.id, item_id:stoneItem.id, quantity:1, equipped:false })
-        }
+        await supabase.rpc('upsert_player_item', { p_player_id: profile.id, p_item_id: stoneItem.id })
       }
       logs.push({ text:`💎 ${stoneName} を入手！`, color:'#6699cc' })
     } else if (type === 'prof') {
@@ -1693,6 +1687,17 @@ export default function Game() {
       return
     }
 
+    // 街に戻らず連続出撃10回でEXP12時間停止（F5連打対策）
+    if (!DEV_ACCOUNTS.includes(profile.username)) {
+      const newConsec = (profile.consecutive_battle_count || 0) + 1
+      const consecUpdate = { consecutive_battle_count: newConsec }
+      if (newConsec >= 10) {
+        consecUpdate.exp_frozen_until = new Date(Date.now() + 12 * 3600 * 1000).toISOString()
+        consecUpdate.consecutive_battle_count = 0
+      }
+      await supabase.from('profiles').update(consecUpdate).eq('id', profile.id)
+    }
+
     const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
     const area = AREAS.find(a => a.id === selectedArea)
     const bossRate = profile.boss_encounter_rate || 0
@@ -1782,8 +1787,8 @@ export default function Game() {
       logs.push({ text:`🧿 魔よけのお守りが光り、ボスとの戦闘を避けた！`, color:'#cc44ff' })
       setBattleLogs([...logs])
       const newQty = (currentItem.quantity||1)-1
-      if (newQty <= 0) await supabase.from('player_items').delete().eq('id', currentItem.id)
-      else await supabase.from('player_items').update({ quantity:newQty }).eq('id', currentItem.id)
+      if (newQty <= 0) await supabase.from('player_items').delete().eq('id', currentItem.id).gt('quantity', 0)
+      else await supabase.from('player_items').update({ quantity:newQty }).eq('id', currentItem.id).gte('quantity', currentItem.quantity)
       await supabase.from('profiles').update({ boss_encounter_rate:0, last_action_at:new Date().toISOString() }).eq('id', profile.id)
       await fetchProfile(); setLoading(false); return
     }
@@ -2114,8 +2119,8 @@ export default function Game() {
             } else {
               itemUsed = true
               const newQty = (currentItem.quantity||1)-1
-              if (newQty <= 0) await supabase.from('player_items').delete().eq('id', currentItem.id)
-              else await supabase.from('player_items').update({ quantity:newQty }).eq('id', currentItem.id)
+              if (newQty <= 0) await supabase.from('player_items').delete().eq('id', currentItem.id).gt('quantity', 0)
+              else await supabase.from('player_items').update({ quantity:newQty }).eq('id', currentItem.id).gte('quantity', currentItem.quantity)
               currentItem = null
             }
           } else if ((effect==='mp_pct' || effect==='mp_pct_infinite') && playerMp/profile.mp_max*100 <= threshold) {
@@ -2293,13 +2298,7 @@ export default function Game() {
         if (itemName.startsWith('強化石') || MATERIAL_NAMES.includes(itemName)) {
           const { data: stoneItem } = await supabase.from('items').select('*').eq('name', itemName).single()
           if (stoneItem) {
-            let existing = null
-            try { const res = await supabase.from('player_items').select('*').eq('player_id', profile.id).eq('item_id', stoneItem.id).single(); existing = res.data } catch {}
-            if (existing) {
-              await supabase.from('player_items').update({ quantity: (existing.quantity||1)+1 }).eq('id', existing.id)
-            } else {
-              await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: 1, equipped: false })
-            }
+            await supabase.rpc('upsert_player_item', { p_player_id: profile.id, p_item_id: stoneItem.id })
             const isMat = MATERIAL_NAMES.includes(itemName)
             logs.push({ text:`${isMat ? '✨' : '💎'} ${itemName} を入手した！`, color: isMat ? '#44ffaa' : '#6699cc' })
           }
@@ -2409,19 +2408,18 @@ export default function Game() {
       }
     }
 
-    await supabase.from('profiles').update({
-      exp:newExp, exp_next:newExpNext, lv:newLv, gold:newGold,
-      hp_current:playerHp, mp_current:playerMp, is_dying:newIsDying,
-      boss_encounter_rate:newBossRate, unlocked_areas:newUnlockedAreas,
-      pending_stat_points:newPendingPoints, last_action_at:new Date().toISOString(),
-      char_lv:newCharLv,
-      ...(win && isBossEncounter ? { boss_kill_count: (profile.boss_kill_count || 0) + 1 } : {}),
-    }).eq('id', profile.id)
-
-    const currentClassData = classLevels.find(cl => cl.class_name === profile.class)
-    if (currentClassData && !isAtCap && !frozenExp) {
-      await supabase.from('class_levels').update({ lv:newLv, exp:newExp }).eq('id', currentClassData.id)
-    }
+    // ① サーバー側でGold・EXPを検証してから適用（クライアント改ざん対策）
+    const { data: rpcResult } = await supabase.rpc('apply_battle_result', {
+      p_area_id: selectedArea,
+      p_is_boss: isBossEncounter,
+      p_is_papia: isPapiaEncounter,
+      p_papia_escaped: papiaEscaped || false,
+      p_win: win,
+      p_claimed_exp: expGained,
+      p_claimed_gold: goldGained,
+      p_hp_current: playerHp,
+      p_mp_current: playerMp,
+    })
 
     await fetchProfile()
     setLoading(false)
@@ -2482,7 +2480,10 @@ export default function Game() {
     setPendingPoints(Math.max(0, remaining)); setStatPoints({}); setShowStatPanel(false)
   }
 
-  const backToTown = () => { setScene('town'); setBattleLogs([]) }
+  const backToTown = () => {
+    setScene('town'); setBattleLogs([])
+    if (profile?.id) supabase.from('profiles').update({ consecutive_battle_count: 0 }).eq('id', profile.id)
+  }
   const logout = async () => { await supabase.auth.signOut(); nav('/login') }
 
   const fetchAnnouncements = async () => {
