@@ -510,7 +510,7 @@ export default function RaidBoss() {
                 onError={e => { e.target.style.display = 'none' }} />
               <div>
                 <div style={{ color: '#ff4444', fontSize: '14px', letterSpacing: '1px' }}>{BOSS_NAME}</div>
-                <div style={{ color: '#446688', fontSize: '10px', marginTop: '2px' }}>毎日21:00〜21:30 JST出現 / HP 500,000</div>
+                <div style={{ color: '#446688', fontSize: '10px', marginTop: '2px' }}>毎日21:00〜21:30 JST出現 / HP 1,000,000</div>
               </div>
             </div>
             <div style={{ fontSize: '10px', color: '#335566', lineHeight: '1.8' }}>
