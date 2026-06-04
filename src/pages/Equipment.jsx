@@ -121,6 +121,7 @@ export default function Equipment() {
   const [gems, setGems] = useState([])
   const [embedTarget, setEmbedTarget] = useState(null)  // 埋め込み先の装備id
   const [bulkPreview, setBulkPreview] = useState(null)  // 一括合成プレビュー
+  const [craftMsg, setCraftMsg] = useState('')
 
   useEffect(() => { fetchAll() }, [])
 
@@ -143,6 +144,35 @@ export default function Equipment() {
     setAllItems(pi || [])
     const { data: g } = await supabase.from('player_gems').select('*').eq('player_id', user.id)
     setGems(g || [])
+  }
+
+  const HP_RECIPE = ['森の生命液','荒野の薬草','古代の精髄']
+  const MP_RECIPE = ['蒼海の精気','雷鳴の精気','霜の精気']
+
+  const getMaterialQty = (name) => {
+    const pi = allItems.find(i => i.items?.name === name)
+    return pi?.quantity || 0
+  }
+
+  const hasInfinitePotion = (effect) => allItems.some(i => i.items?.effect === effect)
+
+  const craftPotion = async (recipe, potionEffect) => {
+    if (loading) return
+    setLoading(true)
+    setCraftMsg('')
+    const { data: potionItem } = await supabase.from('items').select('*').eq('effect', potionEffect).single()
+    if (!potionItem) { setLoading(false); return }
+    for (const matName of recipe) {
+      const pi = allItems.find(i => i.items?.name === matName)
+      if (!pi) { setLoading(false); return }
+      if (pi.quantity > 1) await supabase.from('player_items').update({ quantity: pi.quantity - 1 }).eq('id', pi.id)
+      else await supabase.from('player_items').delete().eq('id', pi.id)
+    }
+    await supabase.from('player_items').insert({ player_id: profile.id, item_id: potionItem.id, quantity: 1, equipped: false })
+    await fetchAll()
+    setCraftMsg(`✨ ${potionItem.name} を作成した！`)
+    setTimeout(() => setCraftMsg(''), 3000)
+    setLoading(false)
   }
 
   // 一括合成：合成可能なものをすべてシミュレート（カスケード対応）
@@ -412,13 +442,13 @@ export default function Equipment() {
         {/* 所持装備 */}
         <div>
             <div style={{ display:'flex', gap:'4px', marginBottom:'6px', flexWrap:'wrap' }}>
-              {[...slots, 'item', 'gem'].map(s => (
+              {[...slots, 'item', 'gem', 'treasure'].map(s => (
                 <button key={s} onClick={() => setTab(s)}
                   style={{ padding:'4px 8px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
                     background: tab === s ? '#001840' : '#000818',
                     border: `1px solid ${tab === s ? '#ffcc00' : '#003366'}`,
                     color: tab === s ? '#ffcc00' : '#446688' }}>
-                  {s === 'item' ? 'アイテム' : s === 'gem' ? '宝石' : s === 'accessory' ? '装飾品' : SLOT_LABELS[s]}
+                  {s === 'item' ? 'アイテム' : s === 'gem' ? '宝石' : s === 'treasure' ? 'お宝' : s === 'accessory' ? '装飾品' : SLOT_LABELS[s]}
                 </button>
               ))}
             </div>
@@ -438,8 +468,8 @@ export default function Equipment() {
 
             {tab === 'item' && (
               <div>
-                {allItems.length === 0 && <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>所持していません</div>}
-                {allItems.map(pi => (
+                {allItems.filter(i => i.items?.effect !== 'hp_pct_infinite' && i.items?.effect !== 'mp_pct_infinite').length === 0 && <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>所持していません</div>}
+                {allItems.filter(i => i.items?.effect !== 'hp_pct_infinite' && i.items?.effect !== 'mp_pct_infinite').map(pi => (
                   <div key={pi.id} style={{ border:`1px solid ${pi.equipped ? '#0044aa' : '#002244'}`, background: pi.equipped ? '#001028' : '#000818', padding:'10px', marginBottom:'6px' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
                       <span style={{ color:'#44ff88', fontSize:'12px' }}>{pi.items.name}</span>
@@ -461,7 +491,7 @@ export default function Equipment() {
                       </div>
                     </div>
                     <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>{pi.items.description}</div>
-                    {pi.equipped && (pi.items.effect === 'hp_pct' || pi.items.effect === 'mp_pct') && (
+                    {pi.equipped && (pi.items.effect === 'hp_pct' || pi.items.effect === 'mp_pct' || pi.items.effect === 'hp_pct_infinite' || pi.items.effect === 'mp_pct_infinite') && (
                       <div style={{ display:'flex', alignItems:'center', gap:'4px', marginTop:'4px' }}>
                         <span style={{ color:'#446688', fontSize:'10px' }}>使用タイミング:</span>
                         <select value={pi.use_threshold || 50} onChange={e => setItemThreshold(pi.id, Number(e.target.value))}
@@ -639,6 +669,115 @@ export default function Equipment() {
                         <button onClick={()=>combineGem(gm)} disabled={loading || !canCombine}
                           style={{ padding:'3px 8px', background: canCombine?'#001840':'#000c18', border:`1px solid ${canCombine?'#0088ff':'#223344'}`, color: canCombine?'#88ccff':'#334455', cursor: canCombine?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>合成</button>
                       </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {tab === 'treasure' && (
+              <div>
+                {craftMsg && (
+                  <div style={{ color:'#44ffaa', fontSize:'13px', textAlign:'center', padding:'10px', border:'1px solid #44ffaa', marginBottom:'12px', background:'#001a0a' }}>{craftMsg}</div>
+                )}
+                <div style={{ color:'#ffcc00', fontSize:'11px', marginBottom:'10px' }}>素材を集めることで無限ポーションを作成できます</div>
+
+                {/* HP無限ポーション */}
+                {(() => {
+                  const canCraft = HP_RECIPE.every(n => getMaterialQty(n) >= 1)
+                  const alreadyHave = hasInfinitePotion('hp_pct_infinite')
+                  const pi = allItems.find(i => i.items?.effect === 'hp_pct_infinite')
+                  if (alreadyHave) return (
+                    <div style={{ border:'2px solid #44ff88', background:'#001a0a', padding:'12px', marginBottom:'10px' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+                        <div style={{ color:'#44ff88', fontSize:'14px', fontWeight:'bold' }}>不滅の霊薬</div>
+                        <span style={{ color:'#44ff88', fontSize:'10px', border:'1px solid #44ff88', padding:'1px 6px' }}>✓ 作成済み</span>
+                      </div>
+                      <div style={{ color:'#88ccaa', fontSize:'10px', marginBottom:'10px' }}>HP20%回復・使用後5Tクールダウン・消費なし</div>
+                      <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+                        {pi?.equipped
+                          ? <><span style={{ color:'#0088ff', fontSize:'10px' }}>セット中</span>
+                              <button onClick={() => setItemSlot(null)} disabled={loading} style={{ padding:'3px 10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
+                              <select value={pi.use_threshold || 50} onChange={e => setItemThreshold(pi.id, Number(e.target.value))}
+                                style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'2px' }}>
+                                {[10,20,30,40,50,60,70,80,90,100].map(n => <option key={n} value={n}>{n}%以下で使用</option>)}
+                              </select>
+                            </>
+                          : <button onClick={() => setItemSlot(pi.id)} disabled={loading} style={{ padding:'3px 14px', background:'#001840', border:'1px solid #0088ff', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>セットする</button>
+                        }
+                      </div>
+                    </div>
+                  )
+                  return (
+                    <div style={{ border:`1px solid ${canCraft ? '#44ffaa' : '#002244'}`, background:'#000818', padding:'12px', marginBottom:'10px' }}>
+                      <div style={{ color:'#44ff88', fontSize:'13px', marginBottom:'6px' }}>不滅の霊薬</div>
+                      <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px' }}>HP20%回復・使用後5Tクールダウン・消費なし</div>
+                      <div style={{ fontSize:'10px', marginBottom:'10px' }}>
+                        {HP_RECIPE.map(n => {
+                          const qty = getMaterialQty(n)
+                          return <span key={n} style={{ color: qty >= 1 ? '#44ff88' : '#ff4444', marginRight:'10px' }}>{n} {qty}/1</span>
+                        })}
+                      </div>
+                      <button onClick={() => craftPotion(HP_RECIPE, 'hp_pct_infinite')} disabled={loading || !canCraft}
+                        style={{ padding:'4px 14px', background: canCraft ? '#001a08' : '#000810', border:`1px solid ${canCraft ? '#44ffaa' : '#224433'}`, color: canCraft ? '#44ffaa' : '#334433', cursor: canCraft ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>
+                        {loading ? '作成中...' : '作成する'}
+                      </button>
+                    </div>
+                  )
+                })()}
+
+                {/* MP無限ポーション */}
+                {(() => {
+                  const canCraft = MP_RECIPE.every(n => getMaterialQty(n) >= 1)
+                  const alreadyHave = hasInfinitePotion('mp_pct_infinite')
+                  const pi = allItems.find(i => i.items?.effect === 'mp_pct_infinite')
+                  if (alreadyHave) return (
+                    <div style={{ border:'2px solid #4488ff', background:'#00101a', padding:'12px', marginBottom:'10px' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+                        <div style={{ color:'#4488ff', fontSize:'14px', fontWeight:'bold' }}>魔泉の霊薬</div>
+                        <span style={{ color:'#4488ff', fontSize:'10px', border:'1px solid #4488ff', padding:'1px 6px' }}>✓ 作成済み</span>
+                      </div>
+                      <div style={{ color:'#8899cc', fontSize:'10px', marginBottom:'10px' }}>MP20%回復・使用後5Tクールダウン・消費なし</div>
+                      <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+                        {pi?.equipped
+                          ? <><span style={{ color:'#0088ff', fontSize:'10px' }}>セット中</span>
+                              <button onClick={() => setItemSlot(null)} disabled={loading} style={{ padding:'3px 10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
+                              <select value={pi.use_threshold || 50} onChange={e => setItemThreshold(pi.id, Number(e.target.value))}
+                                style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'2px' }}>
+                                {[10,20,30,40,50,60,70,80,90,100].map(n => <option key={n} value={n}>{n}%以下で使用</option>)}
+                              </select>
+                            </>
+                          : <button onClick={() => setItemSlot(pi.id)} disabled={loading} style={{ padding:'3px 14px', background:'#001840', border:'1px solid #0088ff', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>セットする</button>
+                        }
+                      </div>
+                    </div>
+                  )
+                  return (
+                    <div style={{ border:`1px solid ${canCraft ? '#44aaff' : '#002244'}`, background:'#000818', padding:'12px', marginBottom:'10px' }}>
+                      <div style={{ color:'#4488ff', fontSize:'13px', marginBottom:'6px' }}>魔泉の霊薬</div>
+                      <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px' }}>MP20%回復・使用後5Tクールダウン・消費なし</div>
+                      <div style={{ fontSize:'10px', marginBottom:'10px' }}>
+                        {MP_RECIPE.map(n => {
+                          const qty = getMaterialQty(n)
+                          return <span key={n} style={{ color: qty >= 1 ? '#44ff88' : '#ff4444', marginRight:'10px' }}>{n} {qty}/1</span>
+                        })}
+                      </div>
+                      <button onClick={() => craftPotion(MP_RECIPE, 'mp_pct_infinite')} disabled={loading || !canCraft}
+                        style={{ padding:'4px 14px', background: canCraft ? '#00101a' : '#000810', border:`1px solid ${canCraft ? '#44aaff' : '#223344'}`, color: canCraft ? '#44aaff' : '#334455', cursor: canCraft ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>
+                        {loading ? '作成中...' : '作成する'}
+                      </button>
+                    </div>
+                  )
+                })()}
+
+                {/* 素材一覧 */}
+                <div style={{ color:'#446688', fontSize:'11px', marginTop:'12px', marginBottom:'6px' }}>所持素材</div>
+                {[...HP_RECIPE, ...MP_RECIPE].map(n => {
+                  const qty = getMaterialQty(n)
+                  return (
+                    <div key={n} style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color: qty > 0 ? '#aaccff' : '#334455', padding:'3px 0', borderBottom:'1px solid #001122' }}>
+                      <span>{n}</span>
+                      <span>×{qty}</span>
                     </div>
                   )
                 })}

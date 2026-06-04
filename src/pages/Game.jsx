@@ -31,6 +31,10 @@ const PAPIA_TURNS = [
 // ============================================================
 // エリア定義
 // ============================================================
+const MATERIAL_NAMES = ['森の生命液','荒野の薬草','古代の精髄','蒼海の精気','雷鳴の精気','霜の精気']
+const HP_MATERIAL_NAMES = ['森の生命液','荒野の薬草','古代の精髄']
+const MP_MATERIAL_NAMES = ['蒼海の精気','雷鳴の精気','霜の精気']
+
 export const AREAS = [
   {
     id: 1, name: '始まりの森',
@@ -43,6 +47,7 @@ export const AREAS = [
     commonDrops: ['木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス','ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
     rareDrops: ['ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
     bossDrops: ['スライムの指輪','蒼粘剣'],
+    materialDrops: ['森の生命液'],
   },
   {
     id: 2, name: '荒廃した草原',
@@ -55,6 +60,7 @@ export const AREAS = [
     commonDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','強化石(F)','戦士の指輪'],
     rareDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','略奪の腕輪'],
     bossDrops: ['略奪者の短剣','影踏みのブーツ'],
+    materialDrops: ['荒野の薬草'],
   },
   {
     id: 3, name: '古代の洞窟',
@@ -67,6 +73,7 @@ export const AREAS = [
     commonDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','古代の護符'],
     rareDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','秘術の首飾り'],
     bossDrops: ['古代魔導コア','虚無の杖'],
+    materialDrops: ['古代の精髄'],
   },
   {
     id: 4, name: '蒼海の入り江',
@@ -87,6 +94,7 @@ export const AREAS = [
     commonDrops: ['重鋼剣','双牙短剣','疾風の弓','蒼木の杖','精霊魔導典','海流の腕輪'],
     rareDrops: ['蒼海の大剣','海狼短剣','蒼潮の弓','海晶の杖','海霊詠唱録','蒼海の護符'],
     bossDrops: ['海竜の鱗','アクアクラウン'],
+    materialDrops: ['蒼海の精気'],
   },
   {
     id: 5, name: '巨峰山脈',
@@ -107,6 +115,7 @@ export const AREAS = [
     commonDrops: ['山岳の斧','岩砕の拳','霞散弾銃','嵐のオーブ','峰岳の兜','岩石鎧','山岳の靴','岩石の護符'],
     rareDrops:   ['雷砕斧','鷹爪の拳','雷鳴銃','雷晶オーブ','嵐の兜','雷鷲鎧','疾風の靴','峰岳の守護輪'],
     bossDrops:   ['雷鷲の爪牙','嵐の重装甲'],
+    materialDrops: ['雷鳴の精気'],
   },
   {
     id: 6, name: '白銀の霊峰',
@@ -145,6 +154,7 @@ export const AREAS = [
     commonDrops: ['氷刃の剣','霜穿の槍','吹雪の弓','氷晶の杖','凍月刀','氷晶の護符'],
     rareDrops:   ['白銀の大剣','氷河長槍','極雪の弓','霜嵐の杖','凍蒼の刀','霜の宝珠'],
     bossDrops:   ['絶零の魔導砲','フロストバーンの聖鎧'],
+    materialDrops: ['霜の精気'],
   },
   {
     id: 7, name: '煉獄火山',
@@ -2078,27 +2088,42 @@ export default function Game() {
         playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.delayHeal.amount)
         logs.push({ text:`💚 装備効果でHPが${playerBuffs.delayHeal.amount}回復した！`, color:'#44ff88' })
       }
-      if (currentItem && !itemUsed) {
+      if (currentItem) {
         const threshold = currentItem.use_threshold||50
         const effect = currentItem.items.effect
-        if (effect==='hp_pct' && playerHp/profile.hp_max*100 <= threshold) {
-          const healAmt = Math.floor(profile.hp_max*currentItem.items.value/100)
-          playerHp = Math.min(profile.hp_max, playerHp+healAmt)
-          logs.push({ text:`🧪 ${currentItem.items.name}を使用！ HPが${healAmt}回復した！`, color:'#44ff88' })
-          itemUsed = true
-          const newQty = (currentItem.quantity||1)-1
-          if (newQty <= 0) await supabase.from('player_items').delete().eq('id', currentItem.id)
-          else await supabase.from('player_items').update({ quantity:newQty }).eq('id', currentItem.id)
-          currentItem = null
-        } else if (effect==='mp_pct' && playerMp/profile.mp_max*100 <= threshold) {
-          const healAmt = Math.floor(profile.mp_max*currentItem.items.value/100)
-          playerMp = Math.min(profile.mp_max, playerMp+healAmt)
-          logs.push({ text:`🧪 ${currentItem.items.name}を使用！ MPが${healAmt}回復した！`, color:'#4488ff' })
-          itemUsed = true
-          const newQty = (currentItem.quantity||1)-1
-          if (newQty <= 0) await supabase.from('player_items').delete().eq('id', currentItem.id)
-          else await supabase.from('player_items').update({ quantity:newQty }).eq('id', currentItem.id)
-          currentItem = null
+        const isInfinite = effect === 'hp_pct_infinite' || effect === 'mp_pct_infinite'
+        const onCooldown = (playerBuffs.potionCooldown?.turns || 0) > 0
+        const canUse = isInfinite ? !onCooldown : !itemUsed
+        if (canUse) {
+          if ((effect==='hp_pct' || effect==='hp_pct_infinite') && playerHp/profile.hp_max*100 <= threshold) {
+            const healAmt = Math.floor(profile.hp_max*currentItem.items.value/100)
+            playerHp = Math.min(profile.hp_max, playerHp+healAmt)
+            logs.push({ text:`🧪 ${currentItem.items.name}を使用！ HPが${healAmt}回復した！`, color:'#44ff88' })
+            if (isInfinite) {
+              playerBuffs.potionCooldown = { turns:5 }
+              logs.push({ text:`⏳ 5ターンのクールダウンが入った！`, color:'#aaaaaa' })
+            } else {
+              itemUsed = true
+              const newQty = (currentItem.quantity||1)-1
+              if (newQty <= 0) await supabase.from('player_items').delete().eq('id', currentItem.id)
+              else await supabase.from('player_items').update({ quantity:newQty }).eq('id', currentItem.id)
+              currentItem = null
+            }
+          } else if ((effect==='mp_pct' || effect==='mp_pct_infinite') && playerMp/profile.mp_max*100 <= threshold) {
+            const healAmt = Math.floor(profile.mp_max*currentItem.items.value/100)
+            playerMp = Math.min(profile.mp_max, playerMp+healAmt)
+            logs.push({ text:`🧪 ${currentItem.items.name}を使用！ MPが${healAmt}回復した！`, color:'#4488ff' })
+            if (isInfinite) {
+              playerBuffs.potionCooldown = { turns:5 }
+              logs.push({ text:`⏳ 5ターンのクールダウンが入った！`, color:'#aaaaaa' })
+            } else {
+              itemUsed = true
+              const newQty = (currentItem.quantity||1)-1
+              if (newQty <= 0) await supabase.from('player_items').delete().eq('id', currentItem.id)
+              else await supabase.from('player_items').update({ quantity:newQty }).eq('id', currentItem.id)
+              currentItem = null
+            }
+          }
         }
       }
 
@@ -2239,8 +2264,24 @@ export default function Game() {
       if (Math.random()*100 < 0.1) {
         droppedItems.push(ARTIFACT_BASE_NAMES[Math.floor(Math.random()*ARTIFACT_BASE_NAMES.length)])
       }
+      // 素材ドロップ（0.1%）：素材所持中 or 無限ポーション所持中はドロップしない
+      const matDrops = area.materialDrops || []
+      if (matDrops.length > 0 && Math.random()*100 < 0.1) {
+        const matName = matDrops[0]
+        const isHpMat = HP_MATERIAL_NAMES.includes(matName)
+        const potionEffect = isHpMat ? 'hp_pct_infinite' : 'mp_pct_infinite'
+        const { data: matItemRow } = await supabase.from('items').select('id').eq('name', matName).single()
+        const { data: potionItemRow } = await supabase.from('items').select('id').eq('effect', potionEffect).single()
+        const hasMat = matItemRow
+          ? (await supabase.from('player_items').select('id').eq('player_id', profile.id).eq('item_id', matItemRow.id).maybeSingle()).data
+          : null
+        const hasPotion = potionItemRow
+          ? (await supabase.from('player_items').select('id').eq('player_id', profile.id).eq('item_id', potionItemRow.id).maybeSingle()).data
+          : null
+        if (!hasMat && !hasPotion) droppedItems.push(matName)
+      }
       for (const itemName of droppedItems) {
-        if (itemName.startsWith('強化石')) {
+        if (itemName.startsWith('強化石') || MATERIAL_NAMES.includes(itemName)) {
           const { data: stoneItem } = await supabase.from('items').select('*').eq('name', itemName).single()
           if (stoneItem) {
             let existing = null
@@ -2250,7 +2291,8 @@ export default function Game() {
             } else {
               await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: 1, equipped: false })
             }
-            logs.push({ text:`💎 ${itemName} を入手した！`, color:'#6699cc' })
+            const isMat = MATERIAL_NAMES.includes(itemName)
+            logs.push({ text:`${isMat ? '✨' : '💎'} ${itemName} を入手した！`, color: isMat ? '#44ffaa' : '#6699cc' })
           }
           continue
         }
