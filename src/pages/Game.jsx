@@ -1764,18 +1764,6 @@ export default function Game() {
       setScene('battle')
       return
     }
-    // 出撃回数カウント（1分間7回以上でアカウント停止）
-    const nowBattle = Date.now()
-    const bTracker = battleCountTrackerRef.current
-    if (!bTracker.start || nowBattle - bTracker.start > 60000) {
-      battleCountTrackerRef.current = { start: nowBattle, count: 1 }
-    } else {
-      battleCountTrackerRef.current = { ...bTracker, count: bTracker.count + 1 }
-    }
-    if (battleCountTrackerRef.current.count >= 8) {
-      await suspendAccount('1分間に8回以上出撃')
-      return
-    }
 
 
     // 街に戻らず連続出撃10回でBOTチャレンジ発動（F5連打＋オートクリック対策）
