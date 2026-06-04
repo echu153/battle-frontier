@@ -94,14 +94,17 @@ export default function Exchange() {
     const [{ data: prof }, { data: shop }, { data: recs }, { data: mats }] = await Promise.all([
       supabase.from('profiles').select('id').eq('id', user.id).single(),
       supabase.from('exchange_shop').select('*').eq('active', true).order('sort_order'),
-      supabase.from('exchange_records').select('shop_id').eq('player_id', user.id),
+      supabase.from('exchange_records').select('shop_id, exchange_count').eq('player_id', user.id),
       supabase.from('player_items').select('quantity, items(name)').eq('player_id', user.id),
     ])
 
     if (!prof) { nav('/create'); return }
     const items = shop || []
     setShopItems(items)
-    setRecords((recs || []).map(r => r.shop_id))
+    // shop_id → 交換済み回数のマップ
+    const recMap = {}
+    for (const r of (recs || [])) recMap[r.shop_id] = (recMap[r.shop_id] || 0) + (r.exchange_count || 1)
+    setRecords(recMap)
 
     const matMap = {}
     for (const m of (mats || [])) {
@@ -208,7 +211,10 @@ export default function Exchange() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {tabItems.map(item => {
             const costs = item.cost_items
-            const alreadyDone = records.includes(item.id)
+            const doneCount = records[item.id] || 0
+            const isUnlimited = item.max_per_player == null
+            const alreadyDone = !isUnlimited && doneCount >= item.max_per_player
+            const remaining = isUnlimited ? null : item.max_per_player - doneCount
             const canAfford = !alreadyDone && costs.every(c => (materials[c.item_name] || 0) >= c.quantity)
             const weapon = weaponMap[item.reward_weapon_name]
 
@@ -240,8 +246,12 @@ export default function Exchange() {
                   </div>
                 </div>
 
-                {item.max_per_player === 1 && (
-                  <div style={{ color: '#335566', fontSize: '10px', marginBottom: '8px' }}>※ 1回限り</div>
+                {isUnlimited ? (
+                  <div style={{ color: '#335566', fontSize: '10px', marginBottom: '8px' }}>※ 何度でも交換可（{doneCount}回交換済み）</div>
+                ) : (
+                  <div style={{ color: alreadyDone ? '#ff4444' : '#335566', fontSize: '10px', marginBottom: '8px' }}>
+                    ※ {item.max_per_player}回まで（残り{remaining}回）
+                  </div>
                 )}
 
                 <button
