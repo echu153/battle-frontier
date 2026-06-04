@@ -109,7 +109,7 @@ export const AREAS = [
         { name:'雷爪乱舞', type:'physical_multi', mult:0.7, hits:3 },
         { name:'雷光閃',   type:'physical', mult:1.8, paralysisRate:0.3 },
         { name:'嵐の加護', type:'buff',     effect:'atkSpdUp', atkRate:1.5, spdRate:1.5, turns:3 },
-        { name:'雷鳴',     type:'heal',     rate:0.2 },
+        { name:'雷鳴',     type:'heal',     rate:0.1 },
       ],
       specialMove: { name:'天穿雷撃', type:'physical', mult:2.5, defDownRate:0.9, turns:3 },
     },
