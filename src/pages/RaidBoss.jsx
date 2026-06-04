@@ -427,12 +427,15 @@ export default function RaidBoss() {
       } else {
         setBoss(prev => ({ ...prev, hp_current: data.hp_current, status: data.status }))
         setRemaining(WAIT_SECONDS)
-        // HP/MP全回復
+        // HP/MP全回復 + 出撃EXP+10
+        const newExp = (profile.exp || 0) + 10
         await supabase.from('profiles').update({
           hp_current: eff.hp_max,
           mp_current: eff.mp_max,
+          exp: newExp,
         }).eq('id', profile.id)
-        setProfile(prev => ({ ...prev, hp_current: eff.hp_max, mp_current: eff.mp_max }))
+        setProfile(prev => ({ ...prev, hp_current: eff.hp_max, mp_current: eff.mp_max, exp: newExp }))
+        setBattleLogs(prev => [...prev, { text: 'EXP +10（出撃報酬）', color: '#44ff88' }])
         await fetchBoss(profile.id)
       }
     } else {
