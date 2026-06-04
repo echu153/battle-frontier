@@ -1233,6 +1233,10 @@ export default function Game() {
   const [showDungeonPanel, setShowDungeonPanel] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [showMenu, setShowMenu] = useState(false)
+  const [showContact, setShowContact] = useState(false)
+  const [contactForm, setContactForm] = useState({ category: 'bug', body: '' })
+  const [contactSent, setContactSent] = useState(false)
+  const [contactLoading, setContactLoading] = useState(false)
   const [showAnnouncements, setShowAnnouncements] = useState(false)
   const [announcements, setAnnouncements] = useState([])
   const [showGuide, setShowGuide] = useState(false)
@@ -2647,6 +2651,19 @@ export default function Game() {
   }
   const logout = async () => { await supabase.auth.signOut(); nav('/login') }
 
+  const submitContact = async () => {
+    if (!contactForm.body.trim()) return
+    setContactLoading(true)
+    await supabase.from('contact_messages').insert({
+      player_id: profile.id,
+      player_name: profile.name,
+      category: contactForm.category,
+      body: contactForm.body.trim(),
+    })
+    setContactSent(true)
+    setContactLoading(false)
+  }
+
   const fetchAnnouncements = async () => {
     const { data } = await supabase.from('announcements').select('*').eq('is_active', true).order('created_at', { ascending: false })
     const fetched = data || []
@@ -2785,6 +2802,50 @@ export default function Game() {
             キャンセル
           </button>
         </div>
+      </div>
+    </div>
+  )
+
+  if (showContact) return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ background:'#001020', border:'1px solid #446688', padding:'20px', maxWidth:'460px', width:'100%', fontFamily:'monospace' }}>
+        <div style={{ color:'#88ccff', fontSize:'14px', marginBottom:'12px' }}>📩 お問い合わせ</div>
+        {contactSent ? (
+          <>
+            <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'20px 0' }}>送信しました。ありがとうございます。</div>
+            <button onClick={()=>{ setShowContact(false); setContactSent(false); setContactForm({ category:'bug', body:'' }) }}
+              style={{ width:'100%', padding:'10px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>閉じる</button>
+          </>
+        ) : (
+          <>
+            <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px', lineHeight:'1.6' }}>
+              不具合・アカウント停止への異議・その他ご意見をお送りください。
+            </div>
+            <div style={{ marginBottom:'10px' }}>
+              <div style={{ color:'#446688', fontSize:'11px', marginBottom:'4px' }}>カテゴリ</div>
+              <select value={contactForm.category} onChange={e=>setContactForm(f=>({...f, category:e.target.value}))}
+                style={{ width:'100%', padding:'8px', background:'#001040', border:'1px solid #446688', color:'#88ccff', fontFamily:'monospace', fontSize:'12px' }}>
+                <option value="bug">不具合報告</option>
+                <option value="ban_appeal">アカウント停止への異議</option>
+                <option value="other">その他</option>
+              </select>
+            </div>
+            <div style={{ marginBottom:'12px' }}>
+              <div style={{ color:'#446688', fontSize:'11px', marginBottom:'4px' }}>内容</div>
+              <textarea value={contactForm.body} onChange={e=>setContactForm(f=>({...f, body:e.target.value}))}
+                rows={6} placeholder="詳しく教えてください..."
+                style={{ width:'100%', padding:'8px', background:'#001040', border:'1px solid #446688', color:'#ccddff', fontFamily:'monospace', fontSize:'12px', resize:'vertical', boxSizing:'border-box' }} />
+            </div>
+            <div style={{ display:'flex', gap:'8px' }}>
+              <button onClick={()=>setShowContact(false)}
+                style={{ flex:1, padding:'10px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>キャンセル</button>
+              <button onClick={submitContact} disabled={contactLoading || !contactForm.body.trim()}
+                style={{ flex:1, padding:'10px', background:'#001840', border:'1px solid #88ccff', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', opacity: contactForm.body.trim() ? 1 : 0.4 }}>
+                {contactLoading ? '送信中...' : '送信する'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -3152,6 +3213,7 @@ export default function Game() {
             <button onClick={()=>{ nav('/fishing'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎣 釣り場</button>
             <button onClick={()=>{ nav('/exchange'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔄 交換所</button>
             <button onClick={()=>{ nav('/raid'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚔ レイドボス</button>
+            <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
           </div>
         )}

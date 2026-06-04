@@ -148,10 +148,6 @@ export default function Login({ isPasswordRecovery = false }) {
                 </span>
               </div>
             )}
-            <div style={{ marginTop:'16px', border:'1px solid #224400', background:'#0a1400', padding:'10px 12px', fontSize:'11px', color:'#88aa66', lineHeight:'1.8' }}>
-              📩 トノサキ・ガルシアへ<br />
-              パスワード再設定できるようにしたんで↑押して自分で再設定してください。これまで送ってた怪しいメールは無視してください。
-            </div>
           </>
         )}
       </div>
