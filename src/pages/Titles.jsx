@@ -6,6 +6,7 @@ const CATEGORY_LABELS = {
   level:'レベル到達', job:'転職・再修練', area:'エリア突破',
   boss:'ボス撃破', raid:'レイドボス', gambling:'賭博',
   treasure:'お宝・錬金', museum:'博物館', enhance:'強化',
+  class_retraining:'クラス再修練',
 }
 
 const GENERIC_TITLES_KEY = 'generic'
@@ -92,6 +93,7 @@ export default function Titles() {
       case 'gambling_gold':     return condData.gamblingGoldMax >= v
       case 'treasure_hp_or_mp': return condData.hasHpPotion || condData.hasMpPotion
       case 'treasure_both':     return condData.hasHpPotion && condData.hasMpPotion
+      case 'class_retraining':  return ((profile.retraining || {})[title.condition_extra] || 0) >= title.condition_value
       case 'generic':           return true
       default:                  return false
     }
@@ -114,6 +116,7 @@ export default function Titles() {
       case 'gambling_gold':     return `${condData.gamblingGoldMax.toLocaleString()}/${v.toLocaleString()}`
       case 'treasure_hp_or_mp': return condData.hasHpPotion || condData.hasMpPotion ? '作成済み' : '未作成'
       case 'treasure_both':     return `HP:${condData.hasHpPotion?'✓':'✗'} MP:${condData.hasMpPotion?'✓':'✗'}`
+      case 'class_retraining':  return `${title.condition_extra} 再修練 ${(profile.retraining||{})[title.condition_extra]||0}/${title.condition_value}回`
       default: return null
     }
   }
