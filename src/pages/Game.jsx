@@ -3301,7 +3301,10 @@ export default function Game() {
                       <div style={{ fontSize:'10px', color:'#886644' }}>⌛ 時間切れ（討伐失敗）</div>
                     )}
                     {(raidStatus === 'pre') && (
-                      <div style={{ fontSize:'10px', color:'#cc8844' }}>⚠ まもなく出現します！{raidPreCountdown ? ` 出現まで ${raidPreCountdown}` : ''}</div>
+                      <div style={{ background:'#1a0a00', border:'1px solid #ff4444', padding:'6px 10px', marginBottom:'4px', textAlign:'center', fontSize:'11px' }}>
+                        <span style={{ color:'#ff8844' }}>⚔ レイドボスまもなく出現！</span>
+                        {raidPreCountdown && <span style={{ color:'#446688', marginLeft:'8px' }}>出現まで {raidPreCountdown}</span>}
+                      </div>
                     )}
                     {(!raidStatus || raidStatus === null) && (() => {
                       const todayJst = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)
@@ -3596,7 +3599,10 @@ export default function Game() {
                         <div style={{ fontSize:'10px', color:'#886644' }}>⌛ 時間切れ（討伐失敗）</div>
                       )}
                       {raidStatus === 'pre' && (
-                        <div style={{ fontSize:'10px', color:'#cc8844' }}>⚠ まもなく出現します！{raidPreCountdown ? ` 出現まで ${raidPreCountdown}` : ''}</div>
+                        <div style={{ background:'#1a0a00', border:'1px solid #ff4444', padding:'6px 10px', marginBottom:'4px', textAlign:'center', fontSize:'11px' }}>
+                        <span style={{ color:'#ff8844' }}>⚔ レイドボスまもなく出現！</span>
+                        {raidPreCountdown && <span style={{ color:'#446688', marginLeft:'8px' }}>出現まで {raidPreCountdown}</span>}
+                      </div>
                       )}
                       {(!raidStatus || raidStatus === null) && (() => {
                         const todayJst = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)
