@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { petStats, speciesEmoji, getSkill } from '../constants/pets'
+import { petStats, speciesEmoji, getSkill, PET_ITEMS, DUNGEON_ITEMS } from '../constants/pets'
 
 // ============================================================
 // 不思議のダンジョン風プロトタイプ（Phase 1：クライアントのみ・報酬なし）
@@ -15,7 +15,7 @@ import { petStats, speciesEmoji, getSkill } from '../constants/pets'
 
 const FLOORS = 10
 // 区画グリッド（部屋スロット）
-const RC = 3, RR = 2, CW = 7, CH = 6
+const RC = 3, RR = 2, CW = 9, CH = 9  // 区画を広げ、大きい部屋も出るように
 const MAP_W = RC * CW, MAP_H = RR * CH
 // 表示ビューポート（プレイヤー中心）
 const VW = 11, VH = 9
@@ -135,7 +135,7 @@ export default function Dungeon() {
   const [status, setStatus] = useState('exploring') // exploring | cleared | dead
   const [reward, setReward] = useState(null)
   const [selectedSkill, setSelectedSkill] = useState('tackle') // ダンジョン内で選択中のスキル
-  const [escapeCount, setEscapeCount] = useState(0)
+  const [inventory, setInventory] = useState({}) // 持ち物 { item_key: qty }
 
   // 探索の集計（不正対策のためサーバーへ渡す素の値）
   const runIdRef = useRef(null)
@@ -182,8 +182,8 @@ export default function Dungeon() {
         setPetHp(st.maxHp)
         startRun(ap.id)
       }
-      const { data: esc } = await supabase.from('pet_items').select('qty').eq('owner_id', user.id).eq('item_key', 'escape').maybeSingle()
-      setEscapeCount(esc?.qty || 0)
+      const { data: its } = await supabase.from('pet_items').select('item_key, qty').eq('owner_id', user.id)
+      setInventory(Object.fromEntries((its || []).map((r) => [r.item_key, r.qty])))
       setAllowed(true)
     })()
   }, [nav, startRun])
@@ -209,17 +209,21 @@ export default function Dungeon() {
     let curPetHp = petHp
     let enemies = s.enemies
     let player = s.player
+    let fullCost = 0
 
-    // 敵への体当たり＝選択中スキルが発動
+    // 敵への体当たり＝選択中スキルが発動（コスト分の満腹度を消費）
     const target = enemies.find((e) => e.x === nx && e.y === ny)
     if (target) {
       const es = enemyStatsFor(floorNum)
       const sk = getSkill(selectedSkill)
+      const cost = sk.cost || 0
+      if (cost > fullness) { addLog(`🍖 満腹度が足りない（${sk.name}は${cost}必要）たいあたりに切替を`); return }
+      fullCost = cost
       const hits = sk.hits || 1
       const perHit = Math.max(1, Math.round(pet.atk * (sk.mult || 1)) - es.def)
       const total = perHit * hits
       const newHp = target.hp - total
-      const skillTag = sk.id === 'tackle' ? '' : `【${sk.name}】`
+      const skillTag = selectedSkill === 'tackle' ? '' : `【${sk.name}】`
       const hitTxt = hits > 1 ? `${perHit}×${hits}=` : ''
       if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); curPetHp = Math.min(pet.maxHp, curPetHp + heal); if (heal > 0) addLog(`💚 ${heal}回復`) }
       if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; addLog(`⚔${skillTag} 敵に${hitTxt}${total}ダメージ → 撃破！`) }
@@ -244,11 +248,12 @@ export default function Dungeon() {
       }
     }
 
-    commitTurn(s, player, enemies, curPetHp)
+    commitTurn(s, player, enemies, curPetHp, fullCost)
   }
 
   // 1ターン経過の共通処理：敵の行動／満腹度・HPの増減／視界更新
-  const commitTurn = (s, player, enemies, curPetHp) => {
+  //  fullCost: このターンに消費(正)/回復(負)する満腹度
+  const commitTurn = (s, player, enemies, curPetHp, fullCost = 0) => {
     // ---- 敵のターン ----
     const es = enemyStatsFor(floorNum)
     const occ = (x, y, self) => enemies.some((e) => e !== self && e.x === x && e.y === y)
@@ -286,7 +291,7 @@ export default function Dungeon() {
     // ---- 満腹度・HP ----
     const nextTurns = turns + 1
     setTurns(nextTurns)
-    let nextFull = fullness
+    let nextFull = Math.max(0, Math.min(MAX_FULLNESS, fullness - fullCost)) // スキル消費/食料回復を反映
     if (!dead) {
       if (nextTurns % FULLNESS_EVERY === 0 && nextFull > 0) { nextFull -= 1; if (nextFull === 0) addLog('🍖 満腹度が0になった…！') }
       if (nextFull <= 0) {
@@ -306,14 +311,20 @@ export default function Dungeon() {
     setState({ ...s, player, enemies, explored })
   }
 
-  // 脱出アイテム使用：消費してその場で離脱（進捗分の報酬は精算）
-  const useEscape = async () => {
-    if (status !== 'exploring' || escapeCount < 1) return
-    const { data, error } = await supabase.rpc('pet_use_escape')
-    if (error) { addLog('🪽 脱出アイテムを持っていない'); return }
-    setEscapeCount(data?.qty ?? (escapeCount - 1))
-    setStatus('escaped'); addLog('🪽 ダンジョンから脱出した')
-    finishRun(false)
+  // 持ち物の使用（食料＝満腹回復・1ターン経過 / だっしゅつの翼＝脱出）
+  const useItem = async (key) => {
+    if (status !== 'exploring' || (inventory[key] || 0) < 1) return
+    const def = PET_ITEMS[key]
+    const { error } = await supabase.rpc('pet_consume_item', { p_key: key })
+    if (error) { addLog('アイテムを持っていない'); return }
+    setInventory((inv) => ({ ...inv, [key]: (inv[key] || 1) - 1 }))
+    if (key === 'escape') {
+      setStatus('escaped'); addLog('🪽 ダンジョンから脱出した'); finishRun(false); return
+    }
+    if (def?.fullness) {
+      addLog(`${def.emoji} ${def.name}を食べた（満腹+${def.fullness}）`)
+      commitTurn(state, state.player, state.enemies, petHp, -def.fullness) // 1ターン経過＋満腹回復
+    }
   }
 
   // 足踏み：その場で1ターン経過
@@ -421,8 +432,8 @@ export default function Dungeon() {
                 const on = selectedSkill === id
                 return (
                   <button key={id} onClick={() => setSelectedSkill(id)}
-                    style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: on ? '#cba6ff' : '#5e7fa0', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, minWidth: 92, textAlign: 'left' }}>
-                    {on ? '▶ ' : ''}{getSkill(id).name}
+                    style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: on ? '#cba6ff' : '#5e7fa0', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, minWidth: 110, textAlign: 'left' }}>
+                    {on ? '▶ ' : ''}{getSkill(id).name}{getSkill(id).cost > 0 ? ` (満腹${getSkill(id).cost})` : ''}
                   </button>
                 )
               })}
@@ -430,11 +441,17 @@ export default function Dungeon() {
           </div>
         )}
         {status === 'exploring' && (
-          <div style={{ textAlign: 'center', marginTop: 10 }}>
-            <button onClick={useEscape} disabled={escapeCount < 1}
-              style={{ background: escapeCount > 0 ? '#1a1030' : '#0a0f1a', border: `1px solid ${escapeCount > 0 ? '#cc88ff' : '#223344'}`, color: escapeCount > 0 ? '#cc88ff' : '#556677', padding: '6px 14px', cursor: escapeCount > 0 ? 'pointer' : 'default', fontFamily: 'monospace', fontSize: 12 }}>
-              🪽 脱出（所持{escapeCount}）
-            </button>
+          <div style={{ marginTop: 12, background: '#000610', border: '1px solid #113355', padding: 8 }}>
+            <div style={{ color: '#88aacc', fontSize: 11, marginBottom: 6 }}>🎒 持ち物</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {DUNGEON_ITEMS.filter((it) => (inventory[it.key] || 0) > 0).map((it) => (
+                <button key={it.key} onClick={() => useItem(it.key)}
+                  style={{ background: '#0a1424', border: '1px solid #335588', color: '#cce6ff', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
+                  {it.emoji} {it.name}×{inventory[it.key]}
+                </button>
+              ))}
+              {DUNGEON_ITEMS.every((it) => (inventory[it.key] || 0) === 0) && <span style={{ color: '#445566', fontSize: 11 }}>（持ち物なし）</span>}
+            </div>
           </div>
         )}
         {status === 'cleared' && (

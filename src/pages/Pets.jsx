@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { SPECIES, STARTERS, SKILLS, MAX_SKILL_SLOTS, PET_SHOP, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX } from '../constants/pets'
+import { SPECIES, STARTERS, SKILLS, MAX_SKILL_SLOTS, SHOP_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX } from '../constants/pets'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const PRESET_IMAGES = [
@@ -45,7 +45,11 @@ export default function Pets() {
     setLoading(true)
     const { data, error } = await supabase.rpc('pet_shop_buy', { p_key: key, p_qty: 1 })
     setLoading(false)
-    if (error) { flash(String(error.message).includes('gold') ? 'ゴールドが足りません' : '購入失敗: ' + error.message); return }
+    if (error) {
+      const m = String(error.message)
+      flash(m.includes('gold') ? 'ゴールドが足りません' : m.includes('inventory') ? `持ち物がいっぱいです（食料は${INV_MAX}個まで）` : '購入失敗: ' + m)
+      return
+    }
     flash('購入しました')
     await fetchAll()
   }
@@ -116,6 +120,7 @@ export default function Pets() {
 
   const toggleSlot = async (skillId) => {
     if (!selectedId) return
+    if (SKILLS[skillId]?.fixed) return // たいあたりは固定装備（外せない）
     const slots = Array.isArray(selected.skill_slots) ? selected.skill_slots : ['tackle']
     let next
     if (slots.includes(skillId)) {
@@ -225,7 +230,7 @@ export default function Pets() {
             ? <Btn onClick={() => !loading && doSkinship(selected)}>🤲 スキンシップ（なつき+1・あと{skinshipRemaining(selected)}回）</Btn>
             : <span style={{ background: '#0a0f1a', border: '1px solid #223344', color: '#556677', padding: '6px 12px', fontSize: 12 }}>🤲 スキンシップ済み</span>}
           {!selected.is_active && <Btn onClick={() => !loading && setActive(selected)}>このペットを選択する</Btn>}
-          {(items.rename || 0) > 0 && !renaming && <Btn onClick={() => { setRenaming(true); setRenameInput(selected.name) }}>🎫 名前変更（券{items.rename}）</Btn>}
+          {(items.rename || 0) > 0 && !renaming && <Btn onClick={() => { setRenaming(true); setRenameInput(selected.name) }}>🎫 ニックネーム変更券で改名（{items.rename}枚）</Btn>}
         </div>
         {renaming && (
           <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -240,18 +245,19 @@ export default function Pets() {
         {/* スキル（ダンジョンに持っていくスキルを最大4つ選ぶ） */}
         <div style={{ marginTop: 12, borderTop: '1px solid #223a55', paddingTop: 10 }}>
           <div style={{ color: '#aa88ff', fontSize: 12, marginBottom: 6 }}>
-            持っていくスキル（最大{MAX_SKILL_SLOTS}・ダンジョン内で切替）　{(selected.skill_slots || ['tackle']).length}/{MAX_SKILL_SLOTS}
+            持っていくスキル（たいあたり固定＋{MAX_SKILL_SLOTS - 1}つ）　{(selected.skill_slots || ['tackle']).length}/{MAX_SKILL_SLOTS}
           </div>
           <div style={{ display: 'grid', gap: 6 }}>
             {Object.entries(SKILLS).map(([id, sk]) => {
               const learned = sk.learnLv <= selected.level
-              const carried = (selected.skill_slots || ['tackle']).includes(id)
+              const carried = (selected.skill_slots || ['tackle']).includes(id) || sk.fixed
+              const clickable = learned && !sk.fixed
               return (
-                <div key={id} onClick={() => learned && !loading && toggleSlot(id)}
-                  style={{ border: `1px solid ${carried ? '#aa88ff' : '#224466'}`, background: carried ? '#170f2a' : '#000a18', padding: '6px 8px', cursor: learned ? 'pointer' : 'default', opacity: learned ? 1 : 0.45 }}>
+                <div key={id} onClick={() => clickable && !loading && toggleSlot(id)}
+                  style={{ border: `1px solid ${carried ? '#aa88ff' : '#224466'}`, background: carried ? '#170f2a' : '#000a18', padding: '6px 8px', cursor: clickable ? 'pointer' : 'default', opacity: learned ? 1 : 0.45 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: learned ? '#cce6ff' : '#667788' }}>
-                    <span>{carried ? '✓ ' : ''}{sk.name}</span>
-                    <span style={{ fontSize: 10, color: learned ? (carried ? '#aa88ff' : '#6699cc') : '#aa6644' }}>{learned ? (carried ? '装備中' : '装備する') : `Lv${sk.learnLv}で習得`}</span>
+                    <span>{carried ? '✓ ' : ''}{sk.name} <span style={{ fontSize: 10, color: '#ffaa66' }}>{sk.cost > 0 ? `満腹${sk.cost}` : '消費なし'}</span></span>
+                    <span style={{ fontSize: 10, color: learned ? (carried ? '#aa88ff' : '#6699cc') : '#aa6644' }}>{sk.fixed ? '固定装備' : learned ? (carried ? '装備中' : '装備する') : `Lv${sk.learnLv}で習得`}</span>
                   </div>
                   <div style={{ fontSize: 10, color: '#5e7fa0', marginTop: 2 }}>{sk.desc}</div>
                 </div>
@@ -282,8 +288,9 @@ export default function Pets() {
           <div style={{ color: '#ffcc44', fontSize: 14 }}>🛒 ペット商店</div>
           <div style={{ color: '#ffd866', fontSize: 12 }}>所持G: {profile.gold?.toLocaleString?.() ?? profile.gold}</div>
         </div>
+        <div style={{ color: '#5e7fa0', fontSize: 10, marginBottom: 6 }}>※食料などの持ち物は合計{INV_MAX}個まで（だっしゅつの翼は対象外）　食料 {items.onigiri || 0}/{INV_MAX}</div>
         <div style={{ display: 'grid', gap: 8 }}>
-          {PET_SHOP.map((it) => (
+          {SHOP_ITEMS.map((it) => (
             <div key={it.key} style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid #224466', background: '#000a18', padding: 8 }}>
               <div style={{ fontSize: 26 }}>{it.emoji}</div>
               <div style={{ flex: 1 }}>
