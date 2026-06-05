@@ -5,98 +5,128 @@ import { supabase } from '../supabase'
 // ============================================================
 // 不思議のダンジョン風プロトタイプ（Phase 1：クライアントのみ・報酬なし）
 // 開発者(is_admin)だけが入れる隠しコンテンツ。
-// マップは固定5フロア。クリック/ボタンで1歩移動、ターン制で敵も動く。
-// 接触で簡易戦闘、階段(>)で次フロア、5階クリアで脱出。
+//  - 部屋＋通路を自動生成。階段はどこかの部屋にある
+//  - 視界(フォグ)：通路は周囲のみ／部屋に入ると部屋全体が見える。既知地形は薄く記憶
+//  - 敵AI：ペットが見えないとランダム徘徊、見えると接近
+//  - 戦闘：体当たりで1撃ずつ殴り合う（敵からも殴られる）
 // ※報酬付与は Phase 3 で RPC を介してサーバー検証してから実装する。
 // ============================================================
 
-// タイル凡例:  # 壁 / . 床 / > 階段 / E 敵 / i アイテム / P 開始位置
-const FLOOR_MAPS = [
-  [
-    '#########',
-    '#P..#..i#',
-    '#.#.#.#.#',
-    '#.#...#.#',
-    '#.#E#.#.#',
-    '#.#.#.#.#',
-    '#...#..>#',
-    '#########',
-  ],
-  [
-    '#########',
-    '#P....E.#',
-    '#.###.#.#',
-    '#.#i#.#.#',
-    '#.#.#.#.#',
-    '#.#.#...#',
-    '#E....>.#',
-    '#########',
-  ],
-  [
-    '#########',
-    '#P.#..i.#',
-    '#..#.#E.#',
-    '##.#.#.##',
-    '#..E.#..#',
-    '#.##.##.#',
-    '#i...#.>#',
-    '#########',
-  ],
-  [
-    '#########',
-    '#P..E..i#',
-    '#.#####.#',
-    '#.#...#.#',
-    '#.#.E.#.#',
-    '#.#i..#.#',
-    '#.....E>#',
-    '#########',
-  ],
-  [
-    '#########',
-    '#P..#..E#',
-    '#.#.#.#.#',
-    '#.#.i.#.#',
-    '#E#.#.#.#',
-    '#.#.#.#i#',
-    '#...E.#>#',
-    '#########',
-  ],
-]
+const FLOORS = 5
+// 区画グリッド（部屋スロット）
+const RC = 3, RR = 2, CW = 7, CH = 6
+const MAP_W = RC * CW, MAP_H = RR * CH
+// 表示ビューポート（プレイヤー中心）
+const VW = 11, VH = 9
 
-// 仮ペットステータス（Phase 2 で pets テーブルから取得する）
 const TEMP_PET = { name: 'ペット', maxHp: 40, atk: 12, def: 4 }
-// フロアごとの敵ステータス（簡易）
-const enemyStatsFor = (floor) => ({ maxHp: 14 + floor * 6, atk: 5 + floor * 2, def: floor })
+const enemyStatsFor = (floor) => ({ maxHp: 14 + floor * 5, atk: 5 + floor * 2, def: floor })
 
-function parseMap(rows) {
-  const grid = rows.map((r) => r.split(''))
-  let player = null
-  const enemies = []
-  const items = []
-  let stairs = null
-  for (let y = 0; y < grid.length; y++) {
-    for (let x = 0; x < grid[y].length; x++) {
-      const c = grid[y][x]
-      if (c === 'P') { player = { x, y }; grid[y][x] = '.' }
-      else if (c === 'E') { enemies.push({ x, y, id: `e${x}-${y}` }); grid[y][x] = '.' }
-      else if (c === 'i') { items.push({ x, y, id: `i${x}-${y}` }); grid[y][x] = '.' }
-      else if (c === '>') { stairs = { x, y } }
+const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1))
+const inBounds = (x, y) => x >= 0 && x < MAP_W && y >= 0 && y < MAP_H
+
+// ---- フロア自動生成 ----
+function generateFloor(floorNum) {
+  const grid = Array.from({ length: MAP_H }, () => Array(MAP_W).fill('#'))
+  const rooms = []
+  for (let gy = 0; gy < RR; gy++) {
+    for (let gx = 0; gx < RC; gx++) {
+      const rw = rand(3, CW - 2), rh = rand(3, CH - 2)
+      const rx = gx * CW + rand(1, CW - rw - 1)
+      const ry = gy * CH + rand(1, CH - rh - 1)
+      for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) grid[y][x] = '.'
+      rooms.push({ x: rx, y: ry, w: rw, h: rh, gx, gy, cx: Math.floor(rx + rw / 2), cy: Math.floor(ry + rh / 2) })
     }
   }
-  return { grid, player, enemies, items, stairs }
+  const roomAt = (gx, gy) => rooms.find((r) => r.gx === gx && r.gy === gy)
+  const carveH = (y, x1, x2) => { for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) grid[y][x] = '.' }
+  const carveV = (x, y1, y2) => { for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) grid[y][x] = '.' }
+  const connect = (a, b) => {
+    if (Math.random() < 0.5) { carveH(a.cy, a.cx, b.cx); carveV(b.cx, a.cy, b.cy) }
+    else { carveV(a.cx, a.cy, b.cy); carveH(b.cy, a.cx, b.cx) }
+  }
+  // 右隣・下隣を繋ぐ（グリッド全体が連結される）
+  for (const r of rooms) {
+    const right = roomAt(r.gx + 1, r.gy); if (right) connect(r, right)
+    const down = roomAt(r.gx, r.gy + 1); if (down) connect(r, down)
+  }
+
+  // 配置用：部屋内のランダム床タイル
+  const occupied = new Set()
+  const mark = (x, y) => occupied.add(x + ',' + y)
+  const isFree = (x, y) => grid[y][x] === '.' && !occupied.has(x + ',' + y)
+  const randTileInRoom = (room) => {
+    for (let t = 0; t < 30; t++) {
+      const x = rand(room.x, room.x + room.w - 1), y = rand(room.y, room.y + room.h - 1)
+      if (isFree(x, y)) return { x, y }
+    }
+    return null
+  }
+
+  // プレイヤー開始：rooms[0] の中心
+  const start = rooms[0]
+  const player = { x: start.cx, y: start.cy }; mark(player.x, player.y)
+
+  // 階段：開始部屋以外のどこかの部屋
+  const stairRoom = rooms[rand(1, rooms.length - 1)]
+  let stairs = randTileInRoom(stairRoom) || { x: stairRoom.cx, y: stairRoom.cy }
+  mark(stairs.x, stairs.y)
+
+  // 敵・アイテム配置（開始部屋は避ける）
+  const otherRooms = rooms.filter((r) => r !== start)
+  const es = enemyStatsFor(floorNum)
+  const enemies = []
+  const enemyCount = 2 + floorNum
+  for (let i = 0; i < enemyCount; i++) {
+    const room = otherRooms[rand(0, otherRooms.length - 1)]
+    const t = randTileInRoom(room)
+    if (t) { mark(t.x, t.y); enemies.push({ id: 'e' + i, x: t.x, y: t.y, hp: es.maxHp }) }
+  }
+  const items = []
+  const itemCount = rand(2, 3)
+  for (let i = 0; i < itemCount; i++) {
+    const room = rooms[rand(0, rooms.length - 1)]
+    const t = randTileInRoom(room)
+    if (t) { mark(t.x, t.y); items.push({ id: 'i' + i, x: t.x, y: t.y }) }
+  }
+
+  return { grid, rooms, player, enemies, items, stairs, explored: new Set() }
+}
+
+// ある座標が属する部屋（なければ null = 通路）
+const roomOf = (rooms, x, y) => rooms.find((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) || null
+
+// プレイヤーから見える座標集合
+function computeVisible(rooms, px, py) {
+  const vis = new Set()
+  const add = (x, y) => { if (inBounds(x, y)) vis.add(x + ',' + y) }
+  // 周囲（通路・全般）：3x3
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) add(px + dx, py + dy)
+  // 部屋にいるなら部屋全体＋外周1マス
+  const room = roomOf(rooms, px, py)
+  if (room) {
+    for (let y = room.y - 1; y <= room.y + room.h; y++)
+      for (let x = room.x - 1; x <= room.x + room.w; x++) add(x, y)
+  }
+  return vis
+}
+
+// 敵がペットを視認できるか
+function enemySeesPet(rooms, e, px, py) {
+  const er = roomOf(rooms, e.x, e.y), pr = roomOf(rooms, px, py)
+  if (er && er === pr) return true // 同じ部屋
+  return Math.max(Math.abs(e.x - px), Math.abs(e.y - py)) <= 2 // 通路で接近
 }
 
 export default function Dungeon() {
   const nav = useNavigate()
   const [allowed, setAllowed] = useState(undefined)
-  const [floorIdx, setFloorIdx] = useState(0)
-  const [state, setState] = useState(null) // { grid, player, enemies, items, stairs }
+  const [floorNum, setFloorNum] = useState(1)
+  const [state, setState] = useState(null)
   const [petHp, setPetHp] = useState(TEMP_PET.maxHp)
   const [log, setLog] = useState([])
   const [status, setStatus] = useState('exploring') // exploring | cleared | dead
 
-  // 開発者ガード
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -106,123 +136,139 @@ export default function Dungeon() {
     })()
   }, [nav])
 
-  const loadFloor = useCallback((idx) => {
-    setState(parseMap(FLOOR_MAPS[idx]))
+  const enterFloor = useCallback((num) => {
+    const f = generateFloor(num)
+    // 初期視界を記憶に反映
+    f.explored = computeVisible(f.rooms, f.player.x, f.player.y)
+    setState(f)
   }, [])
 
-  useEffect(() => { if (allowed) loadFloor(0) }, [allowed, loadFloor])
+  useEffect(() => { if (allowed) enterFloor(1) }, [allowed, enterFloor])
 
   const addLog = (msg) => setLog((l) => [msg, ...l].slice(0, 30))
 
-  // 簡易戦闘：その場で決着（ペットと敵が殴り合う）
-  const fight = (enemyStat, curPetHp) => {
-    let eHp = enemyStat.maxHp
-    let pHp = curPetHp
-    const lines = []
-    while (eHp > 0 && pHp > 0) {
-      const dmgToE = Math.max(1, TEMP_PET.atk - enemyStat.def)
-      eHp -= dmgToE
-      if (eHp <= 0) { lines.push(`→ 敵に${dmgToE}ダメージ。撃破！`); break }
-      const dmgToP = Math.max(1, enemyStat.atk - TEMP_PET.def)
-      pHp -= dmgToP
-      lines.push(`→ 敵に${dmgToE} / 被弾${dmgToP}`)
-    }
-    return { petHp: pHp, win: eHp <= 0, lines }
-  }
-
   const tryMove = (dx, dy) => {
     if (!state || status !== 'exploring') return
-    const nx = state.player.x + dx
-    const ny = state.player.y + dy
-    if (ny < 0 || ny >= state.grid.length || nx < 0 || nx >= state.grid[ny].length) return
-    if (state.grid[ny][nx] === '#') return
+    let s = state
+    const px = s.player.x, py = s.player.y
+    const nx = px + dx, ny = py + dy
+    if (!inBounds(nx, ny) || s.grid[ny][nx] === '#') return
 
-    let next = { ...state, player: { ...state.player } }
     let curPetHp = petHp
+    let enemies = s.enemies
+    let player = s.player
 
-    // 敵との接触＝戦闘
-    const enemyHere = state.enemies.find((e) => e.x === nx && e.y === ny)
-    if (enemyHere) {
-      const res = fight(enemyStatsFor(floorIdx + 1), curPetHp)
-      res.lines.forEach(addLog)
-      curPetHp = res.petHp
-      if (!res.win) {
-        setPetHp(curPetHp)
-        setStatus('dead')
-        addLog('💀 ペットは力尽きた…')
-        return
-      }
-      next.enemies = state.enemies.filter((e) => e.id !== enemyHere.id)
-      setPetHp(curPetHp)
+    // 敵への体当たり＝1撃
+    const target = enemies.find((e) => e.x === nx && e.y === ny)
+    if (target) {
+      const es = enemyStatsFor(floorNum)
+      const dmg = Math.max(1, TEMP_PET.atk - es.def)
+      const newHp = target.hp - dmg
+      if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== target.id); addLog(`⚔ 敵に${dmg}ダメージ → 撃破！`) }
+      else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔ 敵に${dmg}ダメージ（残りHP${newHp}）`) }
+      // プレイヤーはその場に留まる
     } else {
-      next.player = { x: nx, y: ny }
-    }
+      // アイテム取得（Phase1はログのみ）
+      const itemHere = s.items.find((it) => it.x === nx && it.y === ny)
+      let items = s.items
+      if (itemHere) { items = items.filter((it) => it.id !== itemHere.id); addLog('✨ アイテムを見つけた（※報酬は未実装）') }
+      player = { x: nx, y: ny }
+      s = { ...s, items }
 
-    // アイテム取得（Phase1 はログだけ）
-    const itemHere = next.items.find((it) => it.x === next.player.x && it.y === next.player.y)
-    if (itemHere) {
-      next.items = next.items.filter((it) => it.id !== itemHere.id)
-      addLog('✨ アイテムを見つけた（※報酬は未実装）')
-    }
-
-    // 階段
-    if (state.stairs && next.player.x === state.stairs.x && next.player.y === state.stairs.y) {
-      if (floorIdx + 1 >= FLOOR_MAPS.length) {
-        setState(next)
-        setStatus('cleared')
-        addLog('🏁 最深部を踏破！ダンジョンクリア！')
+      // 階段
+      if (player.x === s.stairs.x && player.y === s.stairs.y) {
+        if (floorNum >= FLOORS) { setStatus('cleared'); addLog('🏁 最深部を踏破！ダンジョンクリア！'); setState({ ...s, player }); return }
+        addLog(`⬇ B${floorNum + 1}Fへ降りた`)
+        setFloorNum(floorNum + 1)
+        enterFloor(floorNum + 1)
         return
       }
-      addLog(`⬇ ${floorIdx + 2}階へ降りた`)
-      setFloorIdx(floorIdx + 1)
-      loadFloor(floorIdx + 1)
-      return
     }
 
-    // 敵の移動（プレイヤーへ1歩近づく簡易AI）
-    next.enemies = next.enemies.map((e) => {
-      const tx = next.player.x, ty = next.player.y
-      const stepX = Math.sign(tx - e.x), stepY = Math.sign(ty - e.y)
-      // 横優先で動けるなら動く
-      const cand = []
-      if (stepX !== 0) cand.push({ x: e.x + stepX, y: e.y })
-      if (stepY !== 0) cand.push({ x: e.x, y: e.y + stepY })
-      for (const c of cand) {
-        if (next.grid[c.y]?.[c.x] === '.' &&
-            !next.enemies.some((o) => o !== e && o.x === c.x && o.y === c.y) &&
-            !(c.x === tx && c.y === ty)) {
-          return { ...e, x: c.x, y: c.y }
+    // ---- 敵のターン ----
+    const es = enemyStatsFor(floorNum)
+    const occ = (x, y, self) => enemies.some((e) => e !== self && e.x === x && e.y === y)
+    const isFloor = (x, y) => inBounds(x, y) && s.grid[y][x] === '.'
+    let dead = false
+    enemies = enemies.map((e) => {
+      const sees = enemySeesPet(s.rooms, e, player.x, player.y)
+      const adjacent = Math.abs(e.x - player.x) + Math.abs(e.y - player.y) === 1
+      if (sees && adjacent) {
+        // 攻撃
+        const dmg = Math.max(1, es.atk - TEMP_PET.def)
+        curPetHp -= dmg
+        addLog(`💥 敵の攻撃！ ${dmg}ダメージ`)
+        if (curPetHp <= 0) dead = true
+        return e
+      }
+      let cands
+      if (sees) {
+        // 接近：プレイヤーに近づく方向を優先
+        cands = []
+        const sx = Math.sign(player.x - e.x), sy = Math.sign(player.y - e.y)
+        if (Math.abs(player.x - e.x) >= Math.abs(player.y - e.y)) {
+          if (sx) cands.push({ x: e.x + sx, y: e.y }); if (sy) cands.push({ x: e.x, y: e.y + sy })
+        } else {
+          if (sy) cands.push({ x: e.x, y: e.y + sy }); if (sx) cands.push({ x: e.x + sx, y: e.y })
         }
+      } else {
+        // ランダム徘徊
+        cands = [{ x: e.x + 1, y: e.y }, { x: e.x - 1, y: e.y }, { x: e.x, y: e.y + 1 }, { x: e.x, y: e.y - 1 }]
+          .sort(() => Math.random() - 0.5)
+      }
+      for (const c of cands) {
+        if (isFloor(c.x, c.y) && !occ(c.x, c.y, e) && !(c.x === player.x && c.y === player.y)) return { ...e, x: c.x, y: c.y }
       }
       return e
     })
 
-    setState(next)
+    setPetHp(curPetHp)
+    if (dead) { setStatus('dead'); addLog('💀 ペットは力尽きた…') }
+
+    // 視界を更新して記憶へ追記
+    const nowVis = computeVisible(s.rooms, player.x, player.y)
+    const explored = new Set(s.explored); nowVis.forEach((k) => explored.add(k))
+    setState({ ...s, player, enemies, explored })
   }
 
-  const restart = () => {
-    setFloorIdx(0)
-    setPetHp(TEMP_PET.maxHp)
-    setLog([])
-    setStatus('exploring')
-    loadFloor(0)
-  }
+  const restart = () => { setFloorNum(1); setPetHp(TEMP_PET.maxHp); setLog([]); setStatus('exploring'); enterFloor(1) }
 
   if (allowed === undefined) return <Center>読み込み中...</Center>
   if (!allowed) return <Center>このページは開発中です（権限がありません）<br /><Btn onClick={() => nav('/game')}>🏰 街に戻る</Btn></Center>
   if (!state) return <Center>生成中...</Center>
 
-  // 描画用グリッド合成
-  const render = state.grid.map((row, y) => row.map((cell, x) => {
-    if (state.player.x === x && state.player.y === y) return { ch: '🐾', kind: 'player' }
-    if (state.enemies.some((e) => e.x === x && e.y === y)) return { ch: '👹', kind: 'enemy' }
-    if (state.items.some((it) => it.x === x && it.y === y)) return { ch: '✨', kind: 'item' }
-    if (state.stairs && state.stairs.x === x && state.stairs.y === y) return { ch: '▼', kind: 'stairs' }
-    if (cell === '#') return { ch: '', kind: 'wall' }
-    return { ch: '', kind: 'floor' }
-  }))
+  const visible = computeVisible(state.rooms, state.player.x, state.player.y)
+  const isVisible = (x, y) => visible.has(x + ',' + y)
+  const isExplored = (x, y) => state.explored.has(x + ',' + y)
 
-  const adj = (x, y) => Math.abs(x - state.player.x) + Math.abs(y - state.player.y) === 1
+  // ビューポート描画（プレイヤー中心）
+  const ox = state.player.x - Math.floor(VW / 2)
+  const oy = state.player.y - Math.floor(VH / 2)
+  const cellAt = (x, y) => {
+    if (!inBounds(x, y)) return { ch: '', bg: '#000208' }
+    const vis = isVisible(x, y)
+    if (!vis && !isExplored(x, y)) return { ch: '', bg: '#000208' } // 未踏
+    const wall = state.grid[y][x] === '#'
+    if (!vis) {
+      // 記憶（薄い地形＋階段のみ）
+      if (!wall && state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: '#0a1428', dim: true }
+      return { ch: '', bg: wall ? '#0a1224' : '#0a1830' }
+    }
+    // 現在視界：エンティティ優先
+    if (state.player.x === x && state.player.y === y) return { ch: '🐾', bg: '#0c2a55' }
+    const e = state.enemies.find((o) => o.x === x && o.y === y)
+    if (e) return { ch: '👹', bg: '#0c2a55' }
+    const it = state.items.find((o) => o.x === x && o.y === y)
+    if (it) return { ch: '✨', bg: '#0c2a55' }
+    if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: '#0c2a55' }
+    return { ch: '', bg: wall ? '#13284f' : '#0c2a55' }
+  }
+
+  const adjClick = (vx, vy) => {
+    const x = ox + vx, y = oy + vy
+    const dx = x - state.player.x, dy = y - state.player.y
+    if (Math.abs(dx) + Math.abs(dy) === 1) tryMove(dx, dy)
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: '#000820', color: '#88ccff', fontFamily: 'monospace', padding: '16px' }}>
@@ -233,61 +279,42 @@ export default function Dungeon() {
         </div>
 
         <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 8 }}>
-          <span>B{floorIdx + 1}F</span>
-          <span style={{ color: petHp > TEMP_PET.maxHp * 0.3 ? '#44ff88' : '#ff5555' }}>
-            {TEMP_PET.name} HP {petHp}/{TEMP_PET.maxHp}
-          </span>
+          <span>B{floorNum}F</span>
+          <span style={{ color: petHp > TEMP_PET.maxHp * 0.3 ? '#44ff88' : '#ff5555' }}>{TEMP_PET.name} HP {petHp}/{TEMP_PET.maxHp}</span>
         </div>
 
-        {/* マップ */}
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${state.grid[0].length}, 1fr)`, gap: 2, background: '#001030', padding: 6, border: '1px solid #113355' }}>
-          {render.map((row, y) => row.map((c, x) => {
-            const bg = c.kind === 'wall' ? '#0a1530' : '#0c2a55'
-            const clickable = status === 'exploring' && c.kind !== 'wall' && adj(x, y)
+        {/* マップ（ビューポート） */}
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 2, background: '#000208', padding: 6, border: '1px solid #113355' }}>
+          {Array.from({ length: VH }).map((_, vy) => Array.from({ length: VW }).map((_, vx) => {
+            const x = ox + vx, y = oy + vy
+            const c = cellAt(x, y)
+            const clickable = status === 'exploring' && isVisible(x, y) && inBounds(x, y) && state.grid[y]?.[x] !== '#' &&
+              Math.abs(x - state.player.x) + Math.abs(y - state.player.y) === 1
             return (
-              <div key={`${x}-${y}`}
-                onClick={() => { if (clickable) tryMove(x - state.player.x, y - state.player.y) }}
-                style={{
-                  aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 16, background: bg,
-                  outline: clickable ? '1px solid #2266bb' : 'none',
-                  cursor: clickable ? 'pointer' : 'default',
-                }}>
+              <div key={`${vx}-${vy}`} onClick={() => clickable && adjClick(vx, vy)}
+                style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, opacity: c.dim ? 0.5 : 1, outline: clickable ? '1px solid #2266bb' : 'none', cursor: clickable ? 'pointer' : 'default' }}>
                 {c.ch}
               </div>
             )
           }))}
         </div>
 
-        {/* 方向ボタン */}
         {status === 'exploring' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 48px)', gap: 4, justifyContent: 'center', marginTop: 12 }}>
-            <span />
-            <Btn onClick={() => tryMove(0, -1)}>▲</Btn>
-            <span />
-            <Btn onClick={() => tryMove(-1, 0)}>◀</Btn>
-            <span />
-            <Btn onClick={() => tryMove(1, 0)}>▶</Btn>
-            <span />
-            <Btn onClick={() => tryMove(0, 1)}>▼</Btn>
-            <span />
+            <span /><Btn onClick={() => tryMove(0, -1)}>▲</Btn><span />
+            <Btn onClick={() => tryMove(-1, 0)}>◀</Btn><span /><Btn onClick={() => tryMove(1, 0)}>▶</Btn>
+            <span /><Btn onClick={() => tryMove(0, 1)}>▼</Btn><span />
           </div>
         )}
-
         {status === 'cleared' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>
-            🏁 ダンジョンクリア！<br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={() => nav('/game')}>街に戻る</Btn>
-          </div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={() => nav('/game')}>街に戻る</Btn></div>
         )}
         {status === 'dead' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>
-            💀 ペットは力尽きた…<br /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={() => nav('/game')}>街に戻る</Btn>
-          </div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>💀 ペットは力尽きた…<br /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={() => nav('/game')}>街に戻る</Btn></div>
         )}
 
-        {/* ログ */}
         <div style={{ marginTop: 16, background: '#000610', border: '1px solid #113355', padding: 8, height: 140, overflowY: 'auto', fontSize: 11 }}>
-          {log.length === 0 ? <span style={{ color: '#335577' }}>マスをクリック、または矢印で移動。👹に触れると戦闘、▼で次の階へ。</span>
+          {log.length === 0 ? <span style={{ color: '#335577' }}>隣のマスをクリック、または矢印で移動。部屋に入ると視界が開ける。👹に触れると戦闘、▼で次の階へ。</span>
             : log.map((l, i) => <div key={i} style={{ color: i === 0 ? '#aaddff' : '#5588bb' }}>{l}</div>)}
         </div>
       </div>
