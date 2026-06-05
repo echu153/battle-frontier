@@ -101,7 +101,7 @@ export const AREAS = [
     enemies: [
       { name:'山岳ゴブリン', hp:1500, atk:640, def:510, matk:0,   mdef:450, spd:380, type:'physical', gold:250 },
       { name:'岩石ゴーレム', hp:2000, atk:760, def:660, matk:0,   mdef:420, spd:400, type:'physical', gold:300 },
-      { name:'グリフィン',   hp:1800, atk:700, def:540, matk:120, mdef:510, spd:450, type:'physical', gold:280 },
+      { name:'グリフォン',   hp:1800, atk:700, def:540, matk:120, mdef:510, spd:450, type:'physical', gold:280 },
     ],
     boss: {
       name:'雷鷲サンダーロック', hp:35000, atk:750, def:960, matk:250, mdef:900, spd:1175, gold:6000, isBoss:true, type:'physical',
@@ -2042,7 +2042,7 @@ export default function Game() {
       // 宝石の防御貫通/魔法防御貫通（敵DEF/MDEFを%無視）を倍率に折り込む
       const eDefRate  = (enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1) * (enemyBuffs.defUp  ? enemyBuffs.defUp.rate  : 1) * (1 - (eff.defPen || 0))
       const eMdefRate = (enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1) * (enemyBuffs.mdefUp ? enemyBuffs.mdefUp.rate : 1) * (1 - (eff.mdefPen || 0))
-      const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+      const prefix = isExtra ? `${profile.username} の追加攻撃！ ` : `${turn}ターン目: ${profile.username} の`
       const isCrit = Math.random()*100 < playerCritRate
       const critMult = isCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
 
@@ -2058,7 +2058,7 @@ export default function Game() {
       const skillExtraHit = (nextSkillName === '連装銃撃' && profile.class === '魔銃士' && rtCur >= 2) ? 10 : 0
       const effectiveEnemyEvasion = isSureHit ? 0 : Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit) + (enemy.isPapia ? 50 : 0)
       if (effectiveEnemyEvasion > 0 && Math.random()*100 < effectiveEnemyEvasion) {
-        logs.push({ text:`${prefix}${enemy.name}に攻撃！ しかし回避された！`, color:'#446688' })
+        logs.push({ text:`${prefix}攻撃！ しかし${enemy.name}に回避された！`, color:'#446688' })
         if (expandedSkillSet.length > 0) skillIndex++
         return
       }
@@ -2165,7 +2165,7 @@ export default function Game() {
           logs.push({ text: `🗡 ヴァルブレイカーの効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
         }
         const critText = isCrit ? '💥クリティカル！ ' : ''
-        logs.push({ text:`${prefix}${critText}あなたの攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
+        logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
         if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
           const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
           playerHp = Math.min(profile.hp_max, playerHp + rageCure)
@@ -2492,6 +2492,8 @@ export default function Game() {
         setBattleLogs([...logs])
       }
       if (bossHealCooldown > 0) bossHealCooldown--
+      // 毎ターン終了時のHPスナップショット（表示用）
+      logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:profile.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
       turn++
     }
 
@@ -3629,7 +3631,7 @@ export default function Game() {
               {loading && <div style={{ color:'#446688', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
               <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
                 {battleLogs.map((l,i)=>(
-                  <div key={i} style={{ color:l.color, fontSize:'12px', lineHeight:'2', borderBottom:'1px solid #001428', padding:'2px 0' }}>{l.text}</div>
+                  <BattleLogLine key={i} l={l} />
                 ))}
               </div>
               <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>
@@ -3925,7 +3927,7 @@ export default function Game() {
                 {loading && <div style={{ color:'#446688', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
                 <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
                   {battleLogs.map((l,i)=>(
-                    <div key={i} style={{ color:l.color, fontSize:'12px', lineHeight:'2', borderBottom:'1px solid #001428', padding:'2px 0' }}>{l.text}</div>
+                    <BattleLogLine key={i} l={l} />
                   ))}
                 </div>
                 <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>
@@ -3980,6 +3982,78 @@ function MiniBar({ label, val, pct, color }) {
       </div>
     </>
   )
+}
+
+const BUFF_LABELS = {
+  atkUp:'⚔攻↑', atkDown:'⚔攻↓', defUp:'🛡防↑', defDown:'🛡防↓',
+  mdefUp:'🔮魔防↑', mdefDown:'🔮魔防↓', matkUp:'🔮魔攻↑',
+  spdUp:'💨速↑', spdDown:'💨速↓',
+  burn:'🔥火傷', paralysis:'⚡麻痺', stun:'💫気絶',
+  poison:'🟢毒', severePoisoin:'☠猛毒',
+  healDown:'💉回復↓', dmgDown:'⬇被ダメ↓', dmgReduce:'🛡軽減',
+  regenHeal:'💚再生', skeletonDmg:'💀骸骨',
+  berserk:'😡狂乱', holyField:'✨聖域', holyAwakening:'✨神聖覚醒',
+  critResist:'クリ耐', hitBonus:'🎯命中↑', evasion:'💨回避↑',
+  allinActive:'🎲全賭け', allinDebuff:'💸反動',
+  spellBladeExhaust:'⚔魔剣', spellBladeSealed:'🚫バフ封',
+  flashCombo:'⚡閃光連撃', cannonCombo:'🔫連装',
+  statusImmune:'🔰状態免疫', stunResist:'💫スタン耐',
+  curseDmg:'💜呪い', healSeal:'🚫回復封',
+  bloodRage:'🩸ブラッティロア',
+}
+function extractStatuses(buffs) {
+  const out = []
+  for (const k of Object.keys(buffs || {})) {
+    const b = buffs[k]
+    if (!b) continue
+    const active = (b.turns > 0) || (k === 'bleed' && b.stacks > 0)
+    if (!active) continue
+    // 出血はスタック数表示
+    if (k === 'bleed') {
+      out.push({ label: `🩸出血×${b.stacks}`, color: '#ff8866' })
+      continue
+    }
+    const label = BUFF_LABELS[k] || k
+    const positive = /↑|軽減|聖域|命中↑|全賭け|魔剣|ブラッティロア|再生|骸骨|覚醒|回避↑|閃光連撃|連装|状態免疫|スタン耐/.test(label)
+    out.push({ label, color: positive ? '#66ddaa' : '#ff8866' })
+  }
+  return out
+}
+
+function BattleLogLine({ l }) {
+  if (l.type === 'hp') {
+    const pPct = Math.max(0, Math.min(100, (l.playerHp / l.playerMax) * 100))
+    const ePct = Math.max(0, Math.min(100, (l.enemyHp / l.enemyMax) * 100))
+    const statusRow = (list, align) => (
+      <div style={{ display:'flex', flexWrap:'wrap', gap:'3px', justifyContent:align, minHeight:'14px', marginBottom:'2px' }}>
+        {(list || []).map((s,idx)=>(
+          <span key={idx} style={{ fontSize:'9px', color:s.color, background:'#0e1c30', border:'1px solid #244', borderRadius:'3px', padding:'0 3px', whiteSpace:'nowrap' }}>{s.label}</span>
+        ))}
+      </div>
+    )
+    const col = (name, cur, max, pct, color, status, align) => (
+      <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', justifyContent:'flex-end' }}>
+        {statusRow(status, align)}
+        <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#b8d0e8', gap:'4px' }}>
+          <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</span>
+          <span style={{ color, flexShrink:0, fontWeight:'bold' }}>{Math.max(0,cur).toLocaleString()} / {max.toLocaleString()}</span>
+        </div>
+        <div style={{ background:'#13243a', height:'6px', border:'1px solid #2a456a' }}>
+          <div style={{ height:'100%', width:`${pct}%`, background:`linear-gradient(90deg,#0a3,${color})` }} />
+        </div>
+      </div>
+    )
+    return (
+      <div style={{ borderBottom:'1px solid #24405e', padding:'6px 6px', background:'#16263c', borderRadius:'3px', margin:'2px 0' }}>
+        <div style={{ fontSize:'9px', color:'#7fa8d0', marginBottom:'3px', textAlign:'center' }}>━ {l.turn}ターン終了時 ━</div>
+        <div style={{ display:'flex', gap:'12px', alignItems:'flex-end' }}>
+          {col(l.playerName, l.playerHp, l.playerMax, pPct, '#33dd66', l.playerStatus, 'flex-start')}
+          {col(l.enemyName, l.enemyHp, l.enemyMax, ePct, '#ff6655', l.enemyStatus, 'flex-end')}
+        </div>
+      </div>
+    )
+  }
+  return <div style={{ color:l.color, fontSize:'12px', lineHeight:'2', borderBottom:'1px solid #001428', padding:'2px 0', textAlign:'left' }}>{l.text}</div>
 }
 
 function StatMini({ label, base, bonus, color, type }) {
