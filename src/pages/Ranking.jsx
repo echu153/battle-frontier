@@ -100,6 +100,11 @@ export default function Ranking() {
           ))}
         </div>
 
+        {/* 見出し */}
+        <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'10px', textAlign:'center', letterSpacing:'2px' }}>
+          {tab === 'total' ? '🏆 総合力ランキング' : '🏛 寄贈数ランキング'}
+        </div>
+
         {loading ? (
           <div style={{ color:'#446688', textAlign:'center' }}>読み込み中...</div>
         ) : tab === 'total' ? (
