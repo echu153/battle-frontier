@@ -135,6 +135,7 @@ export default function Dungeon() {
   const [status, setStatus] = useState('exploring') // exploring | cleared | dead
   const [reward, setReward] = useState(null)
   const [selectedSkill, setSelectedSkill] = useState('tackle') // ダンジョン内で選択中のスキル
+  const [escapeCount, setEscapeCount] = useState(0)
 
   // 探索の集計（不正対策のためサーバーへ渡す素の値）
   const runIdRef = useRef(null)
@@ -181,6 +182,8 @@ export default function Dungeon() {
         setPetHp(st.maxHp)
         startRun(ap.id)
       }
+      const { data: esc } = await supabase.from('pet_items').select('qty').eq('owner_id', user.id).eq('item_key', 'escape').maybeSingle()
+      setEscapeCount(esc?.qty || 0)
       setAllowed(true)
     })()
   }, [nav, startRun])
@@ -303,6 +306,16 @@ export default function Dungeon() {
     setState({ ...s, player, enemies, explored })
   }
 
+  // 脱出アイテム使用：消費してその場で離脱（進捗分の報酬は精算）
+  const useEscape = async () => {
+    if (status !== 'exploring' || escapeCount < 1) return
+    const { data, error } = await supabase.rpc('pet_use_escape')
+    if (error) { addLog('🪽 脱出アイテムを持っていない'); return }
+    setEscapeCount(data?.qty ?? (escapeCount - 1))
+    setStatus('escaped'); addLog('🪽 ダンジョンから脱出した')
+    finishRun(false)
+  }
+
   // 足踏み：その場で1ターン経過
   const stepInPlace = () => {
     if (!state || status !== 'exploring') return
@@ -416,11 +429,22 @@ export default function Dungeon() {
             </div>
           </div>
         )}
+        {status === 'exploring' && (
+          <div style={{ textAlign: 'center', marginTop: 10 }}>
+            <button onClick={useEscape} disabled={escapeCount < 1}
+              style={{ background: escapeCount > 0 ? '#1a1030' : '#0a0f1a', border: `1px solid ${escapeCount > 0 ? '#cc88ff' : '#223344'}`, color: escapeCount > 0 ? '#cc88ff' : '#556677', padding: '6px 14px', cursor: escapeCount > 0 ? 'pointer' : 'default', fontFamily: 'monospace', fontSize: 12 }}>
+              🪽 脱出（所持{escapeCount}）
+            </button>
+          </div>
+        )}
         {status === 'cleared' && (
           <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<RewardPanel reward={reward} pet={pet} /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
         {status === 'dead' && (
           <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>💀 ペットは力尽きた…<RewardPanel reward={reward} pet={pet} /><br /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
+        )}
+        {status === 'escaped' && (
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#cc88ff' }}>🪽 ダンジョンから脱出した<RewardPanel reward={reward} pet={pet} /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
 
         <div style={{ marginTop: 16, background: '#000610', border: '1px solid #113355', padding: 8, height: 140, overflowY: 'auto', fontSize: 11 }}>

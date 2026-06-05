@@ -53,6 +53,12 @@ export const SKILLS = {
 export const learnedSkills = (level) => Object.entries(SKILLS).filter(([, s]) => s.learnLv <= (level || 1)).map(([id, s]) => ({ id, ...s }))
 export const getSkill = (id) => SKILLS[id] || SKILLS.tackle
 
+// ペット商店の品揃え（価格はサーバーRPC pet_item_price と一致させること）
+export const PET_SHOP = [
+  { key: 'escape', name: 'だっしゅつの翼', price: 500,   emoji: '🪽', desc: 'ダンジョンからいつでも脱出できる（使い切り）' },
+  { key: 'rename', name: 'ニックネーム変更券', price: 10000, emoji: '🎫', desc: 'ペットの名前を変更できる' },
+]
+
 export function speciesLabel(pet) {
   return (SPECIES[pet.species] || {}).label || '???'
 }

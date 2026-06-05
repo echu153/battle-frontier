@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { SPECIES, STARTERS, SKILLS, MAX_SKILL_SLOTS, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX } from '../constants/pets'
+import { SPECIES, STARTERS, SKILLS, MAX_SKILL_SLOTS, PET_SHOP, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX } from '../constants/pets'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const PRESET_IMAGES = [
@@ -19,6 +19,9 @@ export default function Pets() {
   const [naming, setNaming] = useState(null) // 命名中のスターター種族 {id,label,...}
   const [nick, setNick] = useState('')
   const [periodStart, setPeriodStart] = useState(null) // 現在のスキンシップ時間帯の開始時刻
+  const [items, setItems] = useState({}) // 所持アイテム { key: qty }
+  const [renaming, setRenaming] = useState(false)
+  const [renameInput, setRenameInput] = useState('')
 
   useEffect(() => { fetchAll() }, [])
 
@@ -34,6 +37,27 @@ export default function Pets() {
     if (files) setUploaded(files.map((f) => `${SUPABASE_URL}/storage/v1/object/public/avatars/${user.id}/${f.name}`))
     const { data: ps } = await supabase.rpc('pet_period_start')
     if (ps) setPeriodStart(ps)
+    const { data: its } = await supabase.from('pet_items').select('item_key, qty').eq('owner_id', user.id)
+    if (its) setItems(Object.fromEntries(its.map((r) => [r.item_key, r.qty])))
+  }
+
+  const buyItem = async (key) => {
+    setLoading(true)
+    const { data, error } = await supabase.rpc('pet_shop_buy', { p_key: key, p_qty: 1 })
+    setLoading(false)
+    if (error) { flash(String(error.message).includes('gold') ? 'ゴールドが足りません' : '購入失敗: ' + error.message); return }
+    flash('購入しました')
+    await fetchAll()
+  }
+
+  const doRename = async () => {
+    setLoading(true)
+    const { error } = await supabase.rpc('pet_use_rename', { p_pet_id: selectedId, p_name: renameInput })
+    setLoading(false)
+    if (error) { flash(String(error.message).includes('ticket') ? '変更券がありません' : '変更失敗: ' + error.message); return }
+    setRenaming(false); setRenameInput('')
+    flash('名前を変更しました')
+    await fetchAll()
   }
 
   // 現在の時間帯のスキンシップ残り回数（2回まで）
@@ -201,7 +225,16 @@ export default function Pets() {
             ? <Btn onClick={() => !loading && doSkinship(selected)}>🤲 スキンシップ（なつき+1・あと{skinshipRemaining(selected)}回）</Btn>
             : <span style={{ background: '#0a0f1a', border: '1px solid #223344', color: '#556677', padding: '6px 12px', fontSize: 12 }}>🤲 スキンシップ済み</span>}
           {!selected.is_active && <Btn onClick={() => !loading && setActive(selected)}>このペットを選択する</Btn>}
+          {(items.rename || 0) > 0 && !renaming && <Btn onClick={() => { setRenaming(true); setRenameInput(selected.name) }}>🎫 名前変更（券{items.rename}）</Btn>}
         </div>
+        {renaming && (
+          <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input value={renameInput} onChange={(e) => setRenameInput(e.target.value)} maxLength={12} placeholder={selected.name}
+              style={{ padding: 6, background: '#000818', border: '1px solid #335588', color: '#cce6ff', fontFamily: 'monospace', fontSize: 13 }} />
+            <Btn onClick={() => !loading && doRename()}>券を使って変更</Btn>
+            <Btn onClick={() => { setRenaming(false); setRenameInput('') }}>やめる</Btn>
+          </div>
+        )}
         <div style={{ color: '#557799', fontSize: 10, marginTop: 4 }}>※スキンシップは1日2回（5:00 / 17:00 にリセット）</div>
 
         {/* スキル（ダンジョンに持っていくスキルを最大4つ選ぶ） */}
@@ -241,6 +274,29 @@ export default function Pets() {
           画像をアップロード<input type="file" accept="image/*" onChange={uploadImage} style={{ display: 'none' }} />
         </label>
         {selected.image_url && <Btn onClick={() => !loading && setImage(null)}>画像をはずす</Btn>}
+      </div>
+
+      {/* ペット商店 */}
+      <div style={{ marginTop: 20, borderTop: '1px solid #335588', paddingTop: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div style={{ color: '#ffcc44', fontSize: 14 }}>🛒 ペット商店</div>
+          <div style={{ color: '#ffd866', fontSize: 12 }}>所持G: {profile.gold?.toLocaleString?.() ?? profile.gold}</div>
+        </div>
+        <div style={{ display: 'grid', gap: 8 }}>
+          {PET_SHOP.map((it) => (
+            <div key={it.key} style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid #224466', background: '#000a18', padding: 8 }}>
+              <div style={{ fontSize: 26 }}>{it.emoji}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: '#cce6ff', fontSize: 13 }}>{it.name} <span style={{ color: '#6699cc', fontSize: 10 }}>所持{items[it.key] || 0}</span></div>
+                <div style={{ color: '#5e7fa0', fontSize: 10 }}>{it.desc}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ color: '#ffd866', fontSize: 12, marginBottom: 4 }}>{it.price.toLocaleString()}G</div>
+                <Btn onClick={() => !loading && buyItem(it.key)}>購入</Btn>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </Wrap>
   )
