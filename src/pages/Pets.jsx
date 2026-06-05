@@ -16,6 +16,8 @@ export default function Pets() {
   const [uploaded, setUploaded] = useState([])
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
+  const [naming, setNaming] = useState(null) // 命名中のスターター種族 {id,label,...}
+  const [nick, setNick] = useState('')
 
   useEffect(() => { fetchAll() }, [])
 
@@ -33,14 +35,16 @@ export default function Pets() {
 
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 2500) }
 
-  const pickStarter = async (sp) => {
+  const pickStarter = async (sp, name) => {
     setLoading(true)
+    const finalName = (name || '').trim() || sp.label
     const { error } = await supabase.from('pets').insert({
-      owner_id: profile.id, species: sp.id, name: sp.label, level: 1, exp: 0, affection: 0, is_active: true,
+      owner_id: profile.id, species: sp.id, name: finalName, level: 1, exp: 0, affection: 0, is_active: true,
     })
     setLoading(false)
     if (error) { flash('作成に失敗: ' + error.message); return }
-    flash(`${sp.label} を仲間にした！`)
+    setNaming(null)
+    flash(`${finalName} を仲間にした！`)
     await fetchAll()
   }
 
@@ -50,7 +54,7 @@ export default function Pets() {
     await supabase.from('pets').update({ is_active: false }).eq('owner_id', profile.id)
     await supabase.from('pets').update({ is_active: true }).eq('id', pet.id)
     setLoading(false)
-    flash(`${pet.name} を派遣ペットにした`)
+    flash(`${pet.name} を選択した`)
     await fetchAll()
   }
 
@@ -81,6 +85,25 @@ export default function Pets() {
 
   // スターター未所持
   if (pets.length === 0) {
+    // 命名ステップ
+    if (naming) {
+      const st = petStats({ species: naming.id, level: 1 })
+      return (
+        <Wrap nav={nav} msg={msg}>
+          <h3 style={{ color: '#aa88ff', margin: '12px 0' }}>名前をつけよう</h3>
+          <div style={{ border: '1px solid #335588', background: '#001026', padding: 16, textAlign: 'center' }}>
+            <div style={{ fontSize: 56 }}>{naming.emoji}</div>
+            <div style={{ color: '#6699cc', fontSize: 11, margin: '6px 0' }}>{naming.label}　HP{st.maxHp} / 攻{st.atk} / 守{st.def}</div>
+            <input value={nick} onChange={(e) => setNick(e.target.value)} maxLength={12} placeholder={naming.label}
+              style={{ width: '70%', padding: 8, margin: '10px 0', background: '#000818', border: '1px solid #335588', color: '#cce6ff', fontFamily: 'monospace', textAlign: 'center', fontSize: 14 }} />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 6 }}>
+              <Btn onClick={() => { setNaming(null); setNick('') }}>もどる</Btn>
+              <Btn onClick={() => !loading && pickStarter(naming, nick)}>この名前で決定</Btn>
+            </div>
+          </div>
+        </Wrap>
+      )
+    }
     return (
       <Wrap nav={nav} msg={msg}>
         <h3 style={{ color: '#aa88ff', margin: '12px 0' }}>最初の相棒を選ぼう</h3>
@@ -93,7 +116,7 @@ export default function Pets() {
                 <div style={{ fontSize: 40 }}>{sp.emoji}</div>
                 <div style={{ color: '#cce6ff', marginTop: 4 }}>{sp.label}</div>
                 <div style={{ color: '#6699cc', fontSize: 11, margin: '6px 0' }}>HP{st.maxHp} / 攻{st.atk} / 守{st.def}</div>
-                <Btn onClick={() => !loading && pickStarter(sp)}>選ぶ</Btn>
+                <Btn onClick={() => { setNaming(sp); setNick(sp.label) }}>選ぶ</Btn>
               </div>
             )
           })}
@@ -114,7 +137,7 @@ export default function Pets() {
         {pets.map((p) => (
           <div key={p.id} onClick={() => setSelectedId(p.id)}
             style={{ border: `2px solid ${p.id === selected.id ? '#aa88ff' : '#224466'}`, background: p.is_active ? '#101a30' : '#000a18', padding: 6, textAlign: 'center', cursor: 'pointer', position: 'relative' }}>
-            {p.is_active && <span style={{ position: 'absolute', top: 2, right: 4, fontSize: 9, color: '#44ff88' }}>派遣中</span>}
+            {p.is_active && <span style={{ position: 'absolute', top: 2, right: 4, fontSize: 9, color: '#44ff88' }}>選択中</span>}
             <Portrait pet={p} size={44} />
             <div style={{ color: '#cce6ff', fontSize: 11, marginTop: 2 }}>{p.name}</div>
             <div style={{ color: '#6699cc', fontSize: 10 }}>Lv{p.level}</div>
@@ -133,7 +156,7 @@ export default function Pets() {
             <div style={{ color: '#ffaacc', fontSize: 11, marginTop: 2 }}>なつき {selected.affection}/{AFFECTION_MAX}（ステータス変換 +{conv}%）</div>
           </div>
         </div>
-        {!selected.is_active && <div style={{ marginTop: 10 }}><Btn onClick={() => !loading && setActive(selected)}>このペットを派遣する</Btn></div>}
+        {!selected.is_active && <div style={{ marginTop: 10 }}><Btn onClick={() => !loading && setActive(selected)}>このペットを選択する</Btn></div>}
       </div>
 
       {/* 画像設定 */}

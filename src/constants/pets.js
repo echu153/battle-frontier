@@ -32,10 +32,12 @@ export function petStats(pet) {
   }
 }
 
-// なつき度によるプレイヤーへのステータス変換率（0%〜最大30%）
-// なつき100で派遣ペットのステータスの30%がプレイヤーに加算される想定（実適用はPhase2後半）
+// なつき度によるプレイヤーへのステータス変換率の上限（後で調整しやすいよう定数化）
+export const CONVERSION_MAX = 1.00  // なつき満タンで最大100%
+// なつき度によるプレイヤーへのステータス変換率（0% 〜 CONVERSION_MAX）
+// 実適用（街/戦闘への反映）はPhase2後半
 export function affectionConversion(affection) {
-  return 0.30 * Math.min(1, (affection || 0) / AFFECTION_MAX)
+  return CONVERSION_MAX * Math.min(1, (affection || 0) / AFFECTION_MAX)
 }
 
 export function speciesLabel(pet) {
