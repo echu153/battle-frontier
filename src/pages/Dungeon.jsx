@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { petStats, speciesEmoji } from '../constants/pets'
@@ -133,6 +133,36 @@ export default function Dungeon() {
   const [fullness, setFullness] = useState(MAX_FULLNESS)
   const [log, setLog] = useState([])
   const [status, setStatus] = useState('exploring') // exploring | cleared | dead
+  const [reward, setReward] = useState(null)
+
+  // 探索の集計（不正対策のためサーバーへ渡す素の値）
+  const runIdRef = useRef(null)
+  const finishedRef = useRef(false)
+  const enemiesRef = useRef(0)
+  const floorsRef = useRef(0)
+  const itemsRef = useRef(0)
+
+  // ラン開始（選択中ペットがある場合のみ報酬対象）
+  const startRun = useCallback(async (petId) => {
+    finishedRef.current = false
+    enemiesRef.current = 0; floorsRef.current = 0; itemsRef.current = 0
+    runIdRef.current = null
+    setReward(null)
+    if (!petId) return
+    const { data, error } = await supabase.rpc('dungeon_start', { p_pet_id: petId })
+    if (!error) runIdRef.current = data
+  }, [])
+
+  // ラン精算（サーバーが報酬を計算して付与）
+  const finishRun = useCallback(async (cleared) => {
+    if (finishedRef.current || !runIdRef.current) return
+    finishedRef.current = true
+    const { data, error } = await supabase.rpc('dungeon_finish', {
+      p_run_id: runIdRef.current, p_floors: floorsRef.current,
+      p_enemies: enemiesRef.current, p_items: itemsRef.current, p_cleared: cleared,
+    })
+    if (!error && data) setReward(data)
+  }, [])
 
   useEffect(() => {
     (async () => {
@@ -140,16 +170,17 @@ export default function Dungeon() {
       if (!user) { nav('/login'); return }
       const { data } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
       if (!data?.is_admin) { setAllowed(false); return }
-      // 派遣中のペットを読み込む
+      // 選択中のペットを読み込む
       const { data: ap } = await supabase.from('pets').select('*').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
       if (ap) {
         const st = petStats(ap)
-        setPet({ name: ap.name, emoji: speciesEmoji(ap), image_url: ap.image_url, ...st })
+        setPet({ id: ap.id, name: ap.name, emoji: speciesEmoji(ap), image_url: ap.image_url, ...st })
         setPetHp(st.maxHp)
+        startRun(ap.id)
       }
       setAllowed(true)
     })()
-  }, [nav])
+  }, [nav, startRun])
 
   const enterFloor = useCallback((num) => {
     const f = generateFloor(num)
@@ -179,20 +210,21 @@ export default function Dungeon() {
       const es = enemyStatsFor(floorNum)
       const dmg = Math.max(1, pet.atk - es.def)
       const newHp = target.hp - dmg
-      if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== target.id); addLog(`⚔ 敵に${dmg}ダメージ → 撃破！`) }
+      if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; addLog(`⚔ 敵に${dmg}ダメージ → 撃破！`) }
       else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔ 敵に${dmg}ダメージ（残りHP${newHp}）`) }
       // プレイヤーはその場に留まる
     } else {
-      // アイテム取得（Phase1はログのみ）
+      // アイテム取得
       const itemHere = s.items.find((it) => it.x === nx && it.y === ny)
       let items = s.items
-      if (itemHere) { items = items.filter((it) => it.id !== itemHere.id); addLog('✨ アイテムを見つけた（※報酬は未実装）') }
+      if (itemHere) { items = items.filter((it) => it.id !== itemHere.id); itemsRef.current += 1; addLog('✨ アイテムを拾った') }
       player = { x: nx, y: ny }
       s = { ...s, items }
 
       // 階段
       if (player.x === s.stairs.x && player.y === s.stairs.y) {
-        if (floorNum >= FLOORS) { setStatus('cleared'); addLog('🏁 最深部を踏破！ダンジョンクリア！'); setState({ ...s, player }); return }
+        floorsRef.current += 1
+        if (floorNum >= FLOORS) { setStatus('cleared'); addLog('🏁 最深部を踏破！ダンジョンクリア！'); setState({ ...s, player }); finishRun(true); return }
         addLog(`⬇ B${floorNum + 1}Fへ降りた`)
         setFloorNum(floorNum + 1)
         enterFloor(floorNum + 1)
@@ -254,7 +286,7 @@ export default function Dungeon() {
     }
     setFullness(nextFull)
     setPetHp(curPetHp)
-    if (dead) { setStatus('dead'); addLog('💀 ペットは力尽きた…') }
+    if (dead) { setStatus('dead'); addLog('💀 ペットは力尽きた…'); finishRun(false) }
 
     // 視界を更新して記憶へ追記
     const nowVis = computeVisible(s.rooms, player.x, player.y)
@@ -269,7 +301,10 @@ export default function Dungeon() {
     commitTurn(state, state.player, state.enemies, petHp)
   }
 
-  const restart = () => { setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setLog([]); setStatus('exploring'); enterFloor(1) }
+  const restart = () => { setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setLog([]); setStatus('exploring'); enterFloor(1); startRun(pet.id) }
+
+  // 街に戻る（探索中なら現在の進捗で精算してから離脱）
+  const leaveToTown = async () => { await finishRun(false); nav('/game') }
 
   if (allowed === undefined) return <Center>読み込み中...</Center>
   if (!allowed) return <Center>このページは開発中です（権限がありません）<br /><Btn onClick={() => nav('/game')}>🏰 街に戻る</Btn></Center>
@@ -321,7 +356,7 @@ export default function Dungeon() {
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ color: '#aa88ff', letterSpacing: 2 }}>🕳 不思議のダンジョン <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span></div>
-          <Btn onClick={() => nav('/game')}>🏰 街</Btn>
+          <Btn onClick={leaveToTown}>🏰 街</Btn>
         </div>
 
         <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 8, flexWrap: 'wrap' }}>
@@ -357,10 +392,10 @@ export default function Dungeon() {
           </div>
         )}
         {status === 'cleared' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={() => nav('/game')}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<RewardPanel reward={reward} pet={pet} /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
         {status === 'dead' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>💀 ペットは力尽きた…<br /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={() => nav('/game')}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>💀 ペットは力尽きた…<RewardPanel reward={reward} pet={pet} /><br /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
 
         <div style={{ marginTop: 16, background: '#000610', border: '1px solid #113355', padding: 8, height: 140, overflowY: 'auto', fontSize: 11 }}>
@@ -372,6 +407,19 @@ export default function Dungeon() {
   )
 }
 
+function RewardPanel({ reward, pet }) {
+  if (!reward) {
+    if (!pet?.id) return <div style={{ color: '#5577aa', fontSize: 11, margin: '8px 0' }}>（ペット未選択のため報酬なし）</div>
+    return <div style={{ color: '#5577aa', fontSize: 11, margin: '8px 0' }}>報酬を精算中…</div>
+  }
+  return (
+    <div style={{ background: '#001026', border: '1px solid #335588', padding: 10, margin: '10px auto', maxWidth: 280, fontSize: 12, color: '#cce6ff' }}>
+      <div>獲得EXP +{reward.exp_gain}　なつき +{reward.aff_gain}</div>
+      <div style={{ marginTop: 4, color: '#88bbee' }}>Lv{reward.level}（EXP {reward.exp}） / なつき {reward.affection}/100</div>
+      {reward.leveled && <div style={{ marginTop: 4, color: '#ffcc44' }}>⬆ レベルアップ！</div>}
+    </div>
+  )
+}
 function Center({ children }) {
   return <div style={{ minHeight: '100vh', background: '#000820', color: '#88ccff', fontFamily: 'monospace', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>{children}</div>
 }
