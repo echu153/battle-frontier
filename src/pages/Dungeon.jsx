@@ -244,24 +244,32 @@ export default function Dungeon() {
   // ビューポート描画（プレイヤー中心）
   const ox = state.player.x - Math.floor(VW / 2)
   const oy = state.player.y - Math.floor(VH / 2)
+  // 配色：壁＝明るいスレート、床＝暗いネイビーで明確に区別
+  const C = {
+    unknown: '#000208',
+    floorVis: '#0d2347',   // 視界内の床（暗いネイビー）
+    wallVis: '#5a6f93',    // 視界内の壁（明るいスレート）
+    floorMem: '#0a1526',   // 記憶の床
+    wallMem: '#313c52',    // 記憶の壁
+  }
   const cellAt = (x, y) => {
-    if (!inBounds(x, y)) return { ch: '', bg: '#000208' }
+    if (!inBounds(x, y)) return { ch: '', bg: C.unknown }
     const vis = isVisible(x, y)
-    if (!vis && !isExplored(x, y)) return { ch: '', bg: '#000208' } // 未踏
+    if (!vis && !isExplored(x, y)) return { ch: '', bg: C.unknown } // 未踏
     const wall = state.grid[y][x] === '#'
     if (!vis) {
       // 記憶（薄い地形＋階段のみ）
-      if (!wall && state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: '#0a1428', dim: true }
-      return { ch: '', bg: wall ? '#0a1224' : '#0a1830' }
+      if (!wall && state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: C.floorMem, dim: true }
+      return { ch: '', bg: wall ? C.wallMem : C.floorMem }
     }
-    // 現在視界：エンティティ優先
-    if (state.player.x === x && state.player.y === y) return { ch: '🐾', bg: '#0c2a55' }
+    // 現在視界：エンティティ優先（足元は床色）
+    if (state.player.x === x && state.player.y === y) return { ch: '🐾', bg: C.floorVis }
     const e = state.enemies.find((o) => o.x === x && o.y === y)
-    if (e) return { ch: '👹', bg: '#0c2a55' }
+    if (e) return { ch: '👹', bg: C.floorVis }
     const it = state.items.find((o) => o.x === x && o.y === y)
-    if (it) return { ch: '✨', bg: '#0c2a55' }
-    if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: '#0c2a55' }
-    return { ch: '', bg: wall ? '#13284f' : '#0c2a55' }
+    if (it) return { ch: '✨', bg: C.floorVis }
+    if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: C.floorVis }
+    return { ch: '', bg: wall ? C.wallVis : C.floorVis }
   }
 
   const adjClick = (vx, vy) => {
