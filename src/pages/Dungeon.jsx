@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { petStats, speciesEmoji } from '../constants/pets'
 
 // ============================================================
 // 不思議のダンジョン風プロトタイプ（Phase 1：クライアントのみ・報酬なし）
@@ -19,7 +20,7 @@ const MAP_W = RC * CW, MAP_H = RR * CH
 // 表示ビューポート（プレイヤー中心）
 const VW = 11, VH = 9
 
-const TEMP_PET = { name: 'ペット', maxHp: 40, atk: 12, def: 4 }
+const FALLBACK_PET = { name: '仮ペット', emoji: '🐾', image_url: null, maxHp: 40, atk: 12, def: 4 }
 const MAX_FULLNESS = 100      // 満腹度の上限（100スタート）
 const HP_REGEN_EVERY = 10     // 満腹なら10ターンごとにHP+1
 const FULLNESS_EVERY = 10     // 10ターンごとに満腹度-1
@@ -124,9 +125,10 @@ function enemySeesPet(rooms, e, px, py) {
 export default function Dungeon() {
   const nav = useNavigate()
   const [allowed, setAllowed] = useState(undefined)
+  const [pet, setPet] = useState(FALLBACK_PET)
   const [floorNum, setFloorNum] = useState(1)
   const [state, setState] = useState(null)
-  const [petHp, setPetHp] = useState(TEMP_PET.maxHp)
+  const [petHp, setPetHp] = useState(FALLBACK_PET.maxHp)
   const [turns, setTurns] = useState(0)
   const [fullness, setFullness] = useState(MAX_FULLNESS)
   const [log, setLog] = useState([])
@@ -137,7 +139,15 @@ export default function Dungeon() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { nav('/login'); return }
       const { data } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
-      setAllowed(!!data?.is_admin)
+      if (!data?.is_admin) { setAllowed(false); return }
+      // 派遣中のペットを読み込む
+      const { data: ap } = await supabase.from('pets').select('*').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
+      if (ap) {
+        const st = petStats(ap)
+        setPet({ name: ap.name, emoji: speciesEmoji(ap), image_url: ap.image_url, ...st })
+        setPetHp(st.maxHp)
+      }
+      setAllowed(true)
     })()
   }, [nav])
 
@@ -167,7 +177,7 @@ export default function Dungeon() {
     const target = enemies.find((e) => e.x === nx && e.y === ny)
     if (target) {
       const es = enemyStatsFor(floorNum)
-      const dmg = Math.max(1, TEMP_PET.atk - es.def)
+      const dmg = Math.max(1, pet.atk - es.def)
       const newHp = target.hp - dmg
       if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== target.id); addLog(`⚔ 敵に${dmg}ダメージ → 撃破！`) }
       else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔ 敵に${dmg}ダメージ（残りHP${newHp}）`) }
@@ -204,7 +214,7 @@ export default function Dungeon() {
       const sees = enemySeesPet(s.rooms, e, player.x, player.y)
       const adjacent = Math.abs(e.x - player.x) + Math.abs(e.y - player.y) === 1
       if (sees && adjacent) {
-        const dmg = Math.max(1, es.atk - TEMP_PET.def)
+        const dmg = Math.max(1, es.atk - pet.def)
         curPetHp -= dmg
         addLog(`💥 敵の攻撃！ ${dmg}ダメージ`)
         if (curPetHp <= 0) dead = true
@@ -238,7 +248,7 @@ export default function Dungeon() {
       if (nextFull <= 0) {
         curPetHp -= 1; addLog('🥀 空腹で1ダメージ')
         if (curPetHp <= 0) dead = true
-      } else if (nextTurns % HP_REGEN_EVERY === 0 && curPetHp < TEMP_PET.maxHp) {
+      } else if (nextTurns % HP_REGEN_EVERY === 0 && curPetHp < pet.maxHp) {
         curPetHp += 1
       }
     }
@@ -259,7 +269,7 @@ export default function Dungeon() {
     commitTurn(state, state.player, state.enemies, petHp)
   }
 
-  const restart = () => { setFloorNum(1); setPetHp(TEMP_PET.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setLog([]); setStatus('exploring'); enterFloor(1) }
+  const restart = () => { setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setLog([]); setStatus('exploring'); enterFloor(1) }
 
   if (allowed === undefined) return <Center>読み込み中...</Center>
   if (!allowed) return <Center>このページは開発中です（権限がありません）<br /><Btn onClick={() => nav('/game')}>🏰 街に戻る</Btn></Center>
@@ -291,7 +301,7 @@ export default function Dungeon() {
       return { ch: '', bg: wall ? C.wallMem : C.floorMem }
     }
     // 現在視界：エンティティ優先（足元は床色）
-    if (state.player.x === x && state.player.y === y) return { ch: '🐾', bg: C.floorVis }
+    if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: C.floorVis }
     const e = state.enemies.find((o) => o.x === x && o.y === y)
     if (e) return { ch: '👹', bg: C.floorVis }
     const it = state.items.find((o) => o.x === x && o.y === y)
@@ -316,7 +326,10 @@ export default function Dungeon() {
 
         <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 8, flexWrap: 'wrap' }}>
           <span>B{floorNum}F</span>
-          <span style={{ color: petHp > TEMP_PET.maxHp * 0.3 ? '#44ff88' : '#ff5555' }}>{TEMP_PET.name} HP {petHp}/{TEMP_PET.maxHp}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: petHp > pet.maxHp * 0.3 ? '#44ff88' : '#ff5555' }}>
+            {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 16, height: 16, objectFit: 'cover', borderRadius: 3 }} /> : <span>{pet.emoji}</span>}
+            {pet.name} HP {petHp}/{pet.maxHp}
+          </span>
           <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
         </div>
 
@@ -330,7 +343,7 @@ export default function Dungeon() {
             return (
               <div key={`${vx}-${vy}`} onClick={() => clickable && adjClick(vx, vy)}
                 style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default' }}>
-                {c.ch}
+                {c.img ? <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : c.ch}
               </div>
             )
           }))}

@@ -3373,6 +3373,9 @@ export default function Game() {
             <button onClick={()=>{ nav('/exchange'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔄 交換所</button>
             <button onClick={()=>{ nav('/raid'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚔ レイドボス</button>
             {profile?.is_admin && (
+              <button onClick={()=>{ nav('/pets'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🐾 ペット[開発]</button>
+            )}
+            {profile?.is_admin && (
               <button onClick={()=>{ nav('/dungeon'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🕳 ダンジョン[開発]</button>
             )}
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
