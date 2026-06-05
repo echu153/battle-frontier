@@ -22,7 +22,7 @@ const VW = 11, VH = 9
 const TEMP_PET = { name: 'ペット', maxHp: 40, atk: 12, def: 4 }
 const MAX_FULLNESS = 100      // 満腹度の上限（100スタート）
 const HP_REGEN_EVERY = 10     // 満腹なら10ターンごとにHP+1
-const FULLNESS_EVERY = 20     // 20ターンごとに満腹度-1
+const FULLNESS_EVERY = 10     // 10ターンごとに満腹度-1
 const enemyStatsFor = (floor) => ({ maxHp: 14 + floor * 5, atk: 5 + floor * 2, def: floor })
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1))
