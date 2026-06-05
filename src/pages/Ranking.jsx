@@ -7,6 +7,7 @@ export default function Ranking() {
   const nav = useNavigate()
   const [players, setPlayers] = useState([])
   const [museumPlayers, setMuseumPlayers] = useState([])
+  const [medalPlayers, setMedalPlayers] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState(null)
   const [tab, setTab] = useState('total')
@@ -64,6 +65,15 @@ export default function Ranking() {
         .filter(p => p.username)
       setMuseumPlayers(museumList)
 
+      // 累計獲得メダルランキング（両替除く）
+      const { data: medalData } = await supabase
+        .from('profiles')
+        .select('id, username, lv, char_lv, class, avatar_url, retraining, total_medals_earned')
+        .gt('total_medals_earned', 0)
+        .order('total_medals_earned', { ascending: false })
+        .limit(50)
+      setMedalPlayers(medalData || [])
+
       setLoading(false)
     }
     init()
@@ -87,7 +97,7 @@ export default function Ranking() {
 
         {/* タブ切り替え */}
         <div style={{ display:'flex', gap:'6px', marginBottom:'12px' }}>
-          {[{ id:'total', label:'🏆 総合力' }, { id:'museum', label:'🏛 寄贈数' }].map(t => (
+          {[{ id:'total', label:'🏆 総合力' }, { id:'museum', label:'🏛 寄贈数' }, { id:'medal', label:'🎫 メダル' }].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{
                 flex:1, padding:'8px', fontFamily:'monospace', fontSize:'12px', cursor:'pointer',
@@ -102,7 +112,7 @@ export default function Ranking() {
 
         {/* 見出し */}
         <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'10px', textAlign:'center', letterSpacing:'2px' }}>
-          {tab === 'total' ? '🏆 総合力ランキング' : '🏛 寄贈数ランキング'}
+          {tab === 'total' ? '🏆 総合力ランキング' : tab === 'museum' ? '🏛 寄贈数ランキング' : '🎫 累計獲得メダルランキング'}
         </div>
 
         {loading ? (
@@ -167,7 +177,7 @@ export default function Ranking() {
               </div>
             )}
           </div>
-        ) : (
+        ) : tab === 'museum' ? (
           <div>
             {museumPlayers.map((p, i) => {
               const medal = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
@@ -222,6 +232,64 @@ export default function Ranking() {
             {museumPlayers.length === 0 && (
               <div style={{ color:'#334455', padding:'20px', textAlign:'center', fontSize:'12px' }}>
                 まだ寄贈したプレイヤーがいません
+              </div>
+            )}
+          </div>
+        ) : (
+          <div>
+            {medalPlayers.map((p, i) => {
+              const medal = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
+              const isMe = p.id === currentUserId
+              const stars = getStars(p)
+              return (
+                <div key={p.id}
+                  onClick={() => nav(`/profile/${p.id}`)}
+                  style={{
+                    display:'flex', alignItems:'center', gap:'8px',
+                    padding:'8px 10px',
+                    marginBottom:'4px',
+                    border:`1px solid ${isMe ? '#0066cc' : '#001a33'}`,
+                    background: isMe ? '#001830' : i === 0 ? '#1a1000' : '#000e1a',
+                    cursor:'pointer',
+                    borderRadius:'2px',
+                  }}
+                >
+                  {/* 順位 */}
+                  <div style={{ minWidth:'28px', textAlign:'center' }}>
+                    {medal
+                      ? <span style={{ fontSize:'16px' }}>{medal}</span>
+                      : <span style={{ color:'#446688', fontSize:'11px' }}>{i+1}</span>
+                    }
+                  </div>
+
+                  {/* アバター */}
+                  {p.avatar_url
+                    ? <img src={p.avatar_url} alt="avatar" style={{ width:'36px', height:'36px', objectFit:'cover', flexShrink:0 }} />
+                    : <div style={{ width:'36px', height:'36px', background:'#001428', border:'1px solid #003366', flexShrink:0 }} />
+                  }
+
+                  {/* 名前・クラス */}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ color: isMe ? '#44ff88' : '#88ccff', fontSize:'12px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {p.username}{isMe && <span style={{color:'#44ff88', fontSize:'10px'}}> (自分)</span>}
+                    </div>
+                    <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>
+                      {p.class}<span style={{color:'#ffcc00'}}>{stars}</span> <span style={{color:'#ffcc00'}}>LV{p.char_lv || p.lv}</span>
+                    </div>
+                  </div>
+
+                  {/* 累計獲得メダル */}
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ color:'#ffaa00', fontSize:'15px', fontWeight:'bold' }}>🎫 {(p.total_medals_earned || 0).toLocaleString()}</div>
+                    <div style={{ color:'#886644', fontSize:'10px' }}>累計獲得</div>
+                  </div>
+                </div>
+              )
+            })}
+
+            {medalPlayers.length === 0 && (
+              <div style={{ color:'#334455', padding:'20px', textAlign:'center', fontSize:'12px' }}>
+                まだメダルを獲得したプレイヤーがいません
               </div>
             )}
           </div>

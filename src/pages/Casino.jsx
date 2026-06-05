@@ -37,6 +37,7 @@ export default function Casino() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
   const prevMedalsRef = useRef(null)
+  const skipMedalGainRef = useRef(false)  // 両替によるメダル増加は累計獲得に含めない
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [messageColor, setMessageColor] = useState('#ffaa00')
@@ -157,7 +158,7 @@ export default function Casino() {
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     if (!p) { nav('/game'); return }
     // メダル増加分を当日累計として追跡し称号用に保存
-    if (prevMedalsRef.current !== null && p.medals > prevMedalsRef.current) {
+    if (prevMedalsRef.current !== null && p.medals > prevMedalsRef.current && !skipMedalGainRef.current) {
       const gained = p.medals - prevMedalsRef.current
       const todayKey = `bf_medal_day_${user.id}`
       const stored = JSON.parse(localStorage.getItem(todayKey) || '{"date":"","total":0}')
@@ -168,7 +169,12 @@ export default function Casino() {
         await supabase.from('profiles').update({ gambling_medal_max_daily: todayTotal }).eq('id', user.id)
         p.gambling_medal_max_daily = todayTotal
       }
+      // 累計獲得メダル（両替除く）をランキング用に加算
+      const newTotal = (p.total_medals_earned || 0) + gained
+      await supabase.from('profiles').update({ total_medals_earned: newTotal }).eq('id', user.id)
+      p.total_medals_earned = newTotal
     }
+    skipMedalGainRef.current = false  // フラグは1回限り
     prevMedalsRef.current = p.medals
     setProfile(p)
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id)
@@ -248,6 +254,7 @@ export default function Casino() {
       setLoading(false)
       return
     }
+    skipMedalGainRef.current = true  // この増加分は両替なので累計獲得に含めない
     await fetchProfile()
     showMessage(`💰 ${goldCost}Gを ${data.gained}メダルに両替しました！`, '#ffcc00')
     setLoading(false)
