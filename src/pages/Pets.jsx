@@ -58,6 +58,19 @@ export default function Pets() {
     await fetchAll()
   }
 
+  const doSkinship = async (pet) => {
+    setLoading(true)
+    const { data, error } = await supabase.rpc('pet_skinship', { p_pet_id: pet.id })
+    setLoading(false)
+    if (error) {
+      if (String(error.message).includes('limit')) flash('この時間帯はもうスキンシップ済み（5:00 / 17:00 にリセット）')
+      else flash('失敗: ' + error.message)
+      return
+    }
+    flash(`${pet.name} と触れ合った！ なつき+1（この時間帯あと${data.remaining}回）`)
+    await fetchAll()
+  }
+
   const setImage = async (url) => {
     if (!selectedId) return
     setLoading(true)
@@ -156,7 +169,11 @@ export default function Pets() {
             <div style={{ color: '#ffaacc', fontSize: 11, marginTop: 2 }}>なつき {selected.affection}/{AFFECTION_MAX}（ステータス変換 +{conv}%）</div>
           </div>
         </div>
-        {!selected.is_active && <div style={{ marginTop: 10 }}><Btn onClick={() => !loading && setActive(selected)}>このペットを選択する</Btn></div>}
+        <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Btn onClick={() => !loading && doSkinship(selected)}>🤲 スキンシップ（なつき+1）</Btn>
+          {!selected.is_active && <Btn onClick={() => !loading && setActive(selected)}>このペットを選択する</Btn>}
+        </div>
+        <div style={{ color: '#557799', fontSize: 10, marginTop: 4 }}>※スキンシップは1日2回（5:00 / 17:00 にリセット）</div>
       </div>
 
       {/* 画像設定 */}
