@@ -1342,6 +1342,7 @@ export default function Game() {
   const botCheckActiveRef = useRef(false)  // チャレンジ中フラグ
   const botCheckDeadlineRef = useRef(null)  // タイマー一時停止用：期限の絶対時刻
   const regenningRef = useRef(false)
+  const innBusyRef = useRef(false)  // 宿屋利用の二重実行ガード（連打対策）
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768)
@@ -2697,7 +2698,8 @@ export default function Game() {
   }
 
   const useInn = async () => {
-    if (loading) return  // 連打・二重実行ガード
+    if (loading || innBusyRef.current) return  // 連打・二重実行ガード（refで同期的に即ブロック）
+    innBusyRef.current = true
     setLoading(true)
     const isDying = profile.is_dying||false
     const charLvForCost = profile.char_lv || profile.lv
@@ -2706,9 +2708,9 @@ export default function Game() {
 
     // ★ サーバーから最新のゴールドを取得（複数タブ同時利用対策）
     const { data: serverProfile } = await supabase.from('profiles').select('gold, hp_max, mp_max').eq('id', profile.id).single()
-    if (!serverProfile) { setLoading(false); return }
+    if (!serverProfile) { setLoading(false); innBusyRef.current = false; return }
     const serverCost = isDying ? Math.min(dyingCost, serverProfile.gold) : normalCost
-    if (!isDying && serverProfile.gold < normalCost) { setLoading(false); return }
+    if (!isDying && serverProfile.gold < normalCost) { setLoading(false); innBusyRef.current = false; return }
 
     // ★ 楽観ロック: ゴールドが読み取り時と同じ場合のみ更新（別タブが先に利用してたら失敗）
     const { data: locked } = await supabase.from('profiles').update({
@@ -2721,12 +2723,13 @@ export default function Game() {
     if (!locked || locked.length === 0) {
       await fetchProfile()
       setLoading(false)
+      innBusyRef.current = false
       return
     }
     await fetchProfile()
     setLoading(false)
     setInnMessage('HPとMPが回復しました！')
-    setTimeout(() => { setInnMessage(''); setScene('town') }, 1500)
+    setTimeout(() => { setInnMessage(''); setScene('town'); innBusyRef.current = false }, 1500)
   }
 
   const confirmStatPoints = async () => {
