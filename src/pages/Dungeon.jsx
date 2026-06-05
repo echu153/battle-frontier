@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { petStats, speciesEmoji } from '../constants/pets'
+import { petStats, speciesEmoji, getSkill } from '../constants/pets'
 
 // ============================================================
 // 不思議のダンジョン風プロトタイプ（Phase 1：クライアントのみ・報酬なし）
@@ -20,7 +20,7 @@ const MAP_W = RC * CW, MAP_H = RR * CH
 // 表示ビューポート（プレイヤー中心）
 const VW = 11, VH = 9
 
-const FALLBACK_PET = { name: '仮ペット', emoji: '🐾', image_url: null, maxHp: 40, atk: 12, def: 4 }
+const FALLBACK_PET = { name: '仮ペット', emoji: '🐾', image_url: null, maxHp: 40, atk: 12, def: 4, activeSkill: 'tackle' }
 const MAX_FULLNESS = 100      // 満腹度の上限（100スタート）
 const HP_REGEN_EVERY = 10     // 満腹なら10ターンごとにHP+1
 const FULLNESS_EVERY = 10     // 10ターンごとに満腹度-1
@@ -174,7 +174,7 @@ export default function Dungeon() {
       const { data: ap } = await supabase.from('pets').select('*').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
       if (ap) {
         const st = petStats(ap)
-        setPet({ id: ap.id, name: ap.name, emoji: speciesEmoji(ap), image_url: ap.image_url, ...st })
+        setPet({ id: ap.id, name: ap.name, emoji: speciesEmoji(ap), image_url: ap.image_url, activeSkill: ap.active_skill || 'tackle', ...st })
         setPetHp(st.maxHp)
         startRun(ap.id)
       }
@@ -204,14 +204,20 @@ export default function Dungeon() {
     let enemies = s.enemies
     let player = s.player
 
-    // 敵への体当たり＝1撃
+    // 敵への体当たり＝選択中スキルが発動
     const target = enemies.find((e) => e.x === nx && e.y === ny)
     if (target) {
       const es = enemyStatsFor(floorNum)
-      const dmg = Math.max(1, pet.atk - es.def)
-      const newHp = target.hp - dmg
-      if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; addLog(`⚔ 敵に${dmg}ダメージ → 撃破！`) }
-      else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔ 敵に${dmg}ダメージ（残りHP${newHp}）`) }
+      const sk = getSkill(pet.activeSkill)
+      const hits = sk.hits || 1
+      const perHit = Math.max(1, Math.round(pet.atk * (sk.mult || 1)) - es.def)
+      const total = perHit * hits
+      const newHp = target.hp - total
+      const skillTag = sk.id === 'tackle' ? '' : `【${sk.name}】`
+      const hitTxt = hits > 1 ? `${perHit}×${hits}=` : ''
+      if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); curPetHp = Math.min(pet.maxHp, curPetHp + heal); if (heal > 0) addLog(`💚 ${heal}回復`) }
+      if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; addLog(`⚔${skillTag} 敵に${hitTxt}${total}ダメージ → 撃破！`) }
+      else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔${skillTag} 敵に${hitTxt}${total}ダメージ（残りHP${newHp}）`) }
       // プレイヤーはその場に留まる
     } else {
       // アイテム取得
@@ -366,6 +372,7 @@ export default function Dungeon() {
             {pet.name} HP {petHp}/{pet.maxHp}
           </span>
           <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
+          <span style={{ color: '#aa88ff' }}>⚡{getSkill(pet.activeSkill).name}</span>
         </div>
 
         {/* マップ（ビューポート） */}

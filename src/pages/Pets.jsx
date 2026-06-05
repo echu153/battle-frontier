@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { SPECIES, STARTERS, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX } from '../constants/pets'
+import { SPECIES, STARTERS, SKILLS, learnedSkills, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX } from '../constants/pets'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const PRESET_IMAGES = [
@@ -87,6 +87,15 @@ export default function Pets() {
     await supabase.from('pets').update({ image_url: url }).eq('id', selectedId)
     setLoading(false)
     flash('画像を設定した')
+    await fetchAll()
+  }
+
+  const setSkill = async (skillId) => {
+    if (!selectedId) return
+    setLoading(true)
+    await supabase.from('pets').update({ active_skill: skillId }).eq('id', selectedId)
+    setLoading(false)
+    flash(`スキルを「${SKILLS[skillId].name}」に変更した`)
     await fetchAll()
   }
 
@@ -186,6 +195,27 @@ export default function Pets() {
           {!selected.is_active && <Btn onClick={() => !loading && setActive(selected)}>このペットを選択する</Btn>}
         </div>
         <div style={{ color: '#557799', fontSize: 10, marginTop: 4 }}>※スキンシップは1日2回（5:00 / 17:00 にリセット）</div>
+
+        {/* スキル（体当たりで発動する選択中スキル） */}
+        <div style={{ marginTop: 12, borderTop: '1px solid #223a55', paddingTop: 10 }}>
+          <div style={{ color: '#aa88ff', fontSize: 12, marginBottom: 6 }}>スキル（体当たりで発動・1つ選択）</div>
+          <div style={{ display: 'grid', gap: 6 }}>
+            {Object.entries(SKILLS).map(([id, sk]) => {
+              const learned = sk.learnLv <= selected.level
+              const active = (selected.active_skill || 'tackle') === id
+              return (
+                <div key={id} onClick={() => learned && !active && !loading && setSkill(id)}
+                  style={{ border: `1px solid ${active ? '#aa88ff' : '#224466'}`, background: active ? '#170f2a' : '#000a18', padding: '6px 8px', cursor: learned && !active ? 'pointer' : 'default', opacity: learned ? 1 : 0.45 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: learned ? '#cce6ff' : '#667788' }}>
+                    <span>{active ? '▶ ' : ''}{sk.name}</span>
+                    <span style={{ fontSize: 10, color: learned ? '#6699cc' : '#aa6644' }}>{learned ? (active ? '選択中' : '選択可') : `Lv${sk.learnLv}で習得`}</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: '#5e7fa0', marginTop: 2 }}>{sk.desc}</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
       {/* 画像設定 */}
