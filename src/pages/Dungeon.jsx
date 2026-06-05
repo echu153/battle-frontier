@@ -20,6 +20,9 @@ const MAP_W = RC * CW, MAP_H = RR * CH
 const VW = 11, VH = 9
 
 const TEMP_PET = { name: 'ペット', maxHp: 40, atk: 12, def: 4 }
+const MAX_FULLNESS = 100      // 満腹度の上限（100スタート）
+const HP_REGEN_EVERY = 10     // 満腹なら10ターンごとにHP+1
+const FULLNESS_EVERY = 20     // 20ターンごとに満腹度-1
 const enemyStatsFor = (floor) => ({ maxHp: 14 + floor * 5, atk: 5 + floor * 2, def: floor })
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1))
@@ -124,6 +127,8 @@ export default function Dungeon() {
   const [floorNum, setFloorNum] = useState(1)
   const [state, setState] = useState(null)
   const [petHp, setPetHp] = useState(TEMP_PET.maxHp)
+  const [turns, setTurns] = useState(0)
+  const [fullness, setFullness] = useState(MAX_FULLNESS)
   const [log, setLog] = useState([])
   const [status, setStatus] = useState('exploring') // exploring | cleared | dead
 
@@ -185,6 +190,11 @@ export default function Dungeon() {
       }
     }
 
+    commitTurn(s, player, enemies, curPetHp)
+  }
+
+  // 1ターン経過の共通処理：敵の行動／満腹度・HPの増減／視界更新
+  const commitTurn = (s, player, enemies, curPetHp) => {
     // ---- 敵のターン ----
     const es = enemyStatsFor(floorNum)
     const occ = (x, y, self) => enemies.some((e) => e !== self && e.x === x && e.y === y)
@@ -194,7 +204,6 @@ export default function Dungeon() {
       const sees = enemySeesPet(s.rooms, e, player.x, player.y)
       const adjacent = Math.abs(e.x - player.x) + Math.abs(e.y - player.y) === 1
       if (sees && adjacent) {
-        // 攻撃
         const dmg = Math.max(1, es.atk - TEMP_PET.def)
         curPetHp -= dmg
         addLog(`💥 敵の攻撃！ ${dmg}ダメージ`)
@@ -203,7 +212,6 @@ export default function Dungeon() {
       }
       let cands
       if (sees) {
-        // 接近：プレイヤーに近づく方向を優先
         cands = []
         const sx = Math.sign(player.x - e.x), sy = Math.sign(player.y - e.y)
         if (Math.abs(player.x - e.x) >= Math.abs(player.y - e.y)) {
@@ -212,7 +220,6 @@ export default function Dungeon() {
           if (sy) cands.push({ x: e.x, y: e.y + sy }); if (sx) cands.push({ x: e.x + sx, y: e.y })
         }
       } else {
-        // ランダム徘徊
         cands = [{ x: e.x + 1, y: e.y }, { x: e.x - 1, y: e.y }, { x: e.x, y: e.y + 1 }, { x: e.x, y: e.y - 1 }]
           .sort(() => Math.random() - 0.5)
       }
@@ -222,6 +229,20 @@ export default function Dungeon() {
       return e
     })
 
+    // ---- 満腹度・HP ----
+    const nextTurns = turns + 1
+    setTurns(nextTurns)
+    let nextFull = fullness
+    if (!dead) {
+      if (nextTurns % FULLNESS_EVERY === 0 && nextFull > 0) { nextFull -= 1; if (nextFull === 0) addLog('🍖 満腹度が0になった…！') }
+      if (nextFull <= 0) {
+        curPetHp -= 1; addLog('🥀 空腹で1ダメージ')
+        if (curPetHp <= 0) dead = true
+      } else if (nextTurns % HP_REGEN_EVERY === 0 && curPetHp < TEMP_PET.maxHp) {
+        curPetHp += 1
+      }
+    }
+    setFullness(nextFull)
     setPetHp(curPetHp)
     if (dead) { setStatus('dead'); addLog('💀 ペットは力尽きた…') }
 
@@ -231,7 +252,14 @@ export default function Dungeon() {
     setState({ ...s, player, enemies, explored })
   }
 
-  const restart = () => { setFloorNum(1); setPetHp(TEMP_PET.maxHp); setLog([]); setStatus('exploring'); enterFloor(1) }
+  // 足踏み：その場で1ターン経過
+  const stepInPlace = () => {
+    if (!state || status !== 'exploring') return
+    addLog('🚶 足踏みした')
+    commitTurn(state, state.player, state.enemies, petHp)
+  }
+
+  const restart = () => { setFloorNum(1); setPetHp(TEMP_PET.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setLog([]); setStatus('exploring'); enterFloor(1) }
 
   if (allowed === undefined) return <Center>読み込み中...</Center>
   if (!allowed) return <Center>このページは開発中です（権限がありません）<br /><Btn onClick={() => nav('/game')}>🏰 街に戻る</Btn></Center>
@@ -286,9 +314,10 @@ export default function Dungeon() {
           <Btn onClick={() => nav('/game')}>🏰 街</Btn>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 8 }}>
+        <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 8, flexWrap: 'wrap' }}>
           <span>B{floorNum}F</span>
           <span style={{ color: petHp > TEMP_PET.maxHp * 0.3 ? '#44ff88' : '#ff5555' }}>{TEMP_PET.name} HP {petHp}/{TEMP_PET.maxHp}</span>
+          <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
         </div>
 
         {/* マップ（ビューポート） */}
@@ -310,7 +339,7 @@ export default function Dungeon() {
         {status === 'exploring' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 48px)', gap: 4, justifyContent: 'center', marginTop: 12 }}>
             <span /><Btn onClick={() => tryMove(0, -1)}>▲</Btn><span />
-            <Btn onClick={() => tryMove(-1, 0)}>◀</Btn><span /><Btn onClick={() => tryMove(1, 0)}>▶</Btn>
+            <Btn onClick={() => tryMove(-1, 0)}>◀</Btn><Btn onClick={stepInPlace}>足踏</Btn><Btn onClick={() => tryMove(1, 0)}>▶</Btn>
             <span /><Btn onClick={() => tryMove(0, 1)}>▼</Btn><span />
           </div>
         )}
