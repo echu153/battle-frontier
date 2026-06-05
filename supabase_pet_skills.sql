@@ -6,3 +6,5 @@
 -- ============================================================
 
 alter table pets add column if not exists active_skill text not null default 'tackle';
+-- 持っていくスキル（最大4・コード MAX_SKILL_SLOTS と対応）。既定は たいあたり のみ
+alter table pets add column if not exists skill_slots jsonb not null default '["tackle"]'::jsonb;

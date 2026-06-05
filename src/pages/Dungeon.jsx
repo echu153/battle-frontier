@@ -20,7 +20,7 @@ const MAP_W = RC * CW, MAP_H = RR * CH
 // 表示ビューポート（プレイヤー中心）
 const VW = 11, VH = 9
 
-const FALLBACK_PET = { name: '仮ペット', emoji: '🐾', image_url: null, maxHp: 40, atk: 12, def: 4, activeSkill: 'tackle' }
+const FALLBACK_PET = { name: '仮ペット', emoji: '🐾', image_url: null, maxHp: 40, atk: 12, def: 4, skillSlots: ['tackle'] }
 const MAX_FULLNESS = 100      // 満腹度の上限（100スタート）
 const HP_REGEN_EVERY = 10     // 満腹なら10ターンごとにHP+1
 const FULLNESS_EVERY = 10     // 10ターンごとに満腹度-1
@@ -134,6 +134,7 @@ export default function Dungeon() {
   const [log, setLog] = useState([])
   const [status, setStatus] = useState('exploring') // exploring | cleared | dead
   const [reward, setReward] = useState(null)
+  const [selectedSkill, setSelectedSkill] = useState('tackle') // ダンジョン内で選択中のスキル
 
   // 探索の集計（不正対策のためサーバーへ渡す素の値）
   const runIdRef = useRef(null)
@@ -174,7 +175,9 @@ export default function Dungeon() {
       const { data: ap } = await supabase.from('pets').select('*').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
       if (ap) {
         const st = petStats(ap)
-        setPet({ id: ap.id, name: ap.name, emoji: speciesEmoji(ap), image_url: ap.image_url, activeSkill: ap.active_skill || 'tackle', ...st })
+        const slots = Array.isArray(ap.skill_slots) && ap.skill_slots.length ? ap.skill_slots : ['tackle']
+        setPet({ id: ap.id, name: ap.name, emoji: speciesEmoji(ap), image_url: ap.image_url, skillSlots: slots, ...st })
+        setSelectedSkill(slots[0])
         setPetHp(st.maxHp)
         startRun(ap.id)
       }
@@ -208,7 +211,7 @@ export default function Dungeon() {
     const target = enemies.find((e) => e.x === nx && e.y === ny)
     if (target) {
       const es = enemyStatsFor(floorNum)
-      const sk = getSkill(pet.activeSkill)
+      const sk = getSkill(selectedSkill)
       const hits = sk.hits || 1
       const perHit = Math.max(1, Math.round(pet.atk * (sk.mult || 1)) - es.def)
       const total = perHit * hits
@@ -372,7 +375,7 @@ export default function Dungeon() {
             {pet.name} HP {petHp}/{pet.maxHp}
           </span>
           <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
-          <span style={{ color: '#aa88ff' }}>⚡{getSkill(pet.activeSkill).name}</span>
+          <span style={{ color: '#aa88ff' }}>⚡{getSkill(selectedSkill).name}</span>
         </div>
 
         {/* マップ（ビューポート） */}
@@ -392,10 +395,25 @@ export default function Dungeon() {
         </div>
 
         {status === 'exploring' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 48px)', gap: 4, justifyContent: 'center', marginTop: 12 }}>
-            <span /><Btn onClick={() => tryMove(0, -1)}>▲</Btn><span />
-            <Btn onClick={() => tryMove(-1, 0)}>◀</Btn><Btn onClick={stepInPlace}>足踏</Btn><Btn onClick={() => tryMove(1, 0)}>▶</Btn>
-            <span /><Btn onClick={() => tryMove(0, 1)}>▼</Btn><span />
+          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'center', marginTop: 12 }}>
+            {/* 十字キー */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gap: 4 }}>
+              <span /><Btn onClick={() => tryMove(0, -1)}>▲</Btn><span />
+              <Btn onClick={() => tryMove(-1, 0)}>◀</Btn><Btn onClick={stepInPlace}>足踏</Btn><Btn onClick={() => tryMove(1, 0)}>▶</Btn>
+              <span /><Btn onClick={() => tryMove(0, 1)}>▼</Btn><span />
+            </div>
+            {/* 十字の隣にスキル（選択中を体当たりで発動） */}
+            <div style={{ display: 'grid', gap: 4 }}>
+              {(pet.skillSlots || ['tackle']).map((id) => {
+                const on = selectedSkill === id
+                return (
+                  <button key={id} onClick={() => setSelectedSkill(id)}
+                    style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: on ? '#cba6ff' : '#5e7fa0', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, minWidth: 92, textAlign: 'left' }}>
+                    {on ? '▶ ' : ''}{getSkill(id).name}
+                  </button>
+                )
+              })}
+            </div>
           </div>
         )}
         {status === 'cleared' && (

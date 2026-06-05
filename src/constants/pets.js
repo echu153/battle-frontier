@@ -41,12 +41,14 @@ export function affectionConversion(affection) {
 }
 
 // ペット専用スキル（体当たり時に「選択中スキル」が発動する）
+// ※現状は全種族で共通の習得テーブル。将来は種族別にする予定（フラムは暫定でこのまま）
 // Lvで自動習得。mult=攻撃倍率, hits=攻撃回数, lifesteal=与ダメ回復率
+export const MAX_SKILL_SLOTS = 4  // ダンジョンに持っていけるスキル数
 export const SKILLS = {
   tackle:      { name: 'たいあたり',   learnLv: 1,  mult: 1.0, hits: 1, desc: '通常の体当たり' },
   powerStrike: { name: 'ヘビーアタック', learnLv: 3,  mult: 1.7, hits: 1, desc: '強めの一撃（1.7倍）' },
   doubleHit:   { name: 'にれんだ',     learnLv: 6,  mult: 0.75, hits: 2, desc: '2回攻撃（各0.75倍）' },
-  drain:       { name: 'すいとり',     learnLv: 10, mult: 1.0, hits: 1, lifesteal: 0.5, desc: '与ダメの半分HP回復' },
+  drain:       { name: 'すいとり',     learnLv: 10, mult: 1.0, hits: 1, lifesteal: 0.25, desc: '与ダメの1/4HP回復' },
 }
 export const learnedSkills = (level) => Object.entries(SKILLS).filter(([, s]) => s.learnLv <= (level || 1)).map(([id, s]) => ({ id, ...s }))
 export const getSkill = (id) => SKILLS[id] || SKILLS.tackle

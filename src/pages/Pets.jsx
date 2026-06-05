@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { SPECIES, STARTERS, SKILLS, learnedSkills, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX } from '../constants/pets'
+import { SPECIES, STARTERS, SKILLS, MAX_SKILL_SLOTS, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX } from '../constants/pets'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const PRESET_IMAGES = [
@@ -90,12 +90,20 @@ export default function Pets() {
     await fetchAll()
   }
 
-  const setSkill = async (skillId) => {
+  const toggleSlot = async (skillId) => {
     if (!selectedId) return
+    const slots = Array.isArray(selected.skill_slots) ? selected.skill_slots : ['tackle']
+    let next
+    if (slots.includes(skillId)) {
+      if (slots.length <= 1) { flash('スキルは最低1つ必要です'); return }
+      next = slots.filter((s) => s !== skillId)
+    } else {
+      if (slots.length >= MAX_SKILL_SLOTS) { flash(`持っていけるスキルは最大${MAX_SKILL_SLOTS}つまで`); return }
+      next = [...slots, skillId]
+    }
     setLoading(true)
-    await supabase.from('pets').update({ active_skill: skillId }).eq('id', selectedId)
+    await supabase.from('pets').update({ skill_slots: next }).eq('id', selectedId)
     setLoading(false)
-    flash(`スキルを「${SKILLS[skillId].name}」に変更した`)
     await fetchAll()
   }
 
@@ -196,19 +204,21 @@ export default function Pets() {
         </div>
         <div style={{ color: '#557799', fontSize: 10, marginTop: 4 }}>※スキンシップは1日2回（5:00 / 17:00 にリセット）</div>
 
-        {/* スキル（体当たりで発動する選択中スキル） */}
+        {/* スキル（ダンジョンに持っていくスキルを最大4つ選ぶ） */}
         <div style={{ marginTop: 12, borderTop: '1px solid #223a55', paddingTop: 10 }}>
-          <div style={{ color: '#aa88ff', fontSize: 12, marginBottom: 6 }}>スキル（体当たりで発動・1つ選択）</div>
+          <div style={{ color: '#aa88ff', fontSize: 12, marginBottom: 6 }}>
+            持っていくスキル（最大{MAX_SKILL_SLOTS}・ダンジョン内で切替）　{(selected.skill_slots || ['tackle']).length}/{MAX_SKILL_SLOTS}
+          </div>
           <div style={{ display: 'grid', gap: 6 }}>
             {Object.entries(SKILLS).map(([id, sk]) => {
               const learned = sk.learnLv <= selected.level
-              const active = (selected.active_skill || 'tackle') === id
+              const carried = (selected.skill_slots || ['tackle']).includes(id)
               return (
-                <div key={id} onClick={() => learned && !active && !loading && setSkill(id)}
-                  style={{ border: `1px solid ${active ? '#aa88ff' : '#224466'}`, background: active ? '#170f2a' : '#000a18', padding: '6px 8px', cursor: learned && !active ? 'pointer' : 'default', opacity: learned ? 1 : 0.45 }}>
+                <div key={id} onClick={() => learned && !loading && toggleSlot(id)}
+                  style={{ border: `1px solid ${carried ? '#aa88ff' : '#224466'}`, background: carried ? '#170f2a' : '#000a18', padding: '6px 8px', cursor: learned ? 'pointer' : 'default', opacity: learned ? 1 : 0.45 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: learned ? '#cce6ff' : '#667788' }}>
-                    <span>{active ? '▶ ' : ''}{sk.name}</span>
-                    <span style={{ fontSize: 10, color: learned ? '#6699cc' : '#aa6644' }}>{learned ? (active ? '選択中' : '選択可') : `Lv${sk.learnLv}で習得`}</span>
+                    <span>{carried ? '✓ ' : ''}{sk.name}</span>
+                    <span style={{ fontSize: 10, color: learned ? (carried ? '#aa88ff' : '#6699cc') : '#aa6644' }}>{learned ? (carried ? '装備中' : '装備する') : `Lv${sk.learnLv}で習得`}</span>
                   </div>
                   <div style={{ fontSize: 10, color: '#5e7fa0', marginTop: 2 }}>{sk.desc}</div>
                 </div>
