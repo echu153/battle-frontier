@@ -13,7 +13,7 @@ import { petStats, speciesEmoji } from '../constants/pets'
 // ※報酬付与は Phase 3 で RPC を介してサーバー検証してから実装する。
 // ============================================================
 
-const FLOORS = 5
+const FLOORS = 10
 // 区画グリッド（部屋スロット）
 const RC = 3, RR = 2, CW = 7, CH = 6
 const MAP_W = RC * CW, MAP_H = RR * CH
@@ -154,12 +154,12 @@ export default function Dungeon() {
   }, [])
 
   // ラン精算（サーバーが報酬を計算して付与）
-  const finishRun = useCallback(async (cleared) => {
+  const finishRun = useCallback(async (cleared, died = false) => {
     if (finishedRef.current || !runIdRef.current) return
     finishedRef.current = true
     const { data, error } = await supabase.rpc('dungeon_finish', {
       p_run_id: runIdRef.current, p_floors: floorsRef.current,
-      p_enemies: enemiesRef.current, p_items: itemsRef.current, p_cleared: cleared,
+      p_enemies: enemiesRef.current, p_items: itemsRef.current, p_cleared: cleared, p_died: died,
     })
     if (!error && data) setReward(data)
   }, [])
@@ -286,7 +286,7 @@ export default function Dungeon() {
     }
     setFullness(nextFull)
     setPetHp(curPetHp)
-    if (dead) { setStatus('dead'); addLog('💀 ペットは力尽きた…'); finishRun(false) }
+    if (dead) { setStatus('dead'); addLog('💀 ペットは力尽きた…'); finishRun(false, true) }
 
     // 視界を更新して記憶へ追記
     const nowVis = computeVisible(s.rooms, player.x, player.y)
@@ -414,7 +414,7 @@ function RewardPanel({ reward, pet }) {
   }
   return (
     <div style={{ background: '#001026', border: '1px solid #335588', padding: 10, margin: '10px auto', maxWidth: 280, fontSize: 12, color: '#cce6ff' }}>
-      <div>獲得EXP +{reward.exp_gain}　なつき +{reward.aff_gain}</div>
+      <div>獲得EXP +{reward.exp_gain}{reward.aff_delta ? `　なつき ${reward.aff_delta > 0 ? '+' : ''}${reward.aff_delta}` : ''}</div>
       <div style={{ marginTop: 4, color: '#88bbee' }}>Lv{reward.level}（EXP {reward.exp}） / なつき {reward.affection}/100</div>
       {reward.leveled && <div style={{ marginTop: 4, color: '#ffcc44' }}>⬆ レベルアップ！</div>}
     </div>

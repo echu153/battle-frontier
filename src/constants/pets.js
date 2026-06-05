@@ -17,8 +17,8 @@ export const HATCHABLE = Object.entries(SPECIES).filter(([, s]) => !s.starter).m
 
 export const AFFECTION_MAX = 100
 
-// レベルアップに必要な累計経験値（簡易：level^2 * 10）
-export const expForLevel = (lv) => lv * lv * 10
+// レベルアップに必要な累計経験値（レベル×10）
+export const expForLevel = (lv) => lv * 10
 export const MAX_LEVEL = 50
 
 // ペットの現在ステータス（種族＋レベル）
