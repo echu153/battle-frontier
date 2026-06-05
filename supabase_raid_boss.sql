@@ -243,6 +243,10 @@ DECLARE
   ];
   v_existing_gem_id  uuid;
   v_i                int;
+  v_scale_item_id    int;
+  v_scale_min        int;
+  v_scale_max        int;
+  v_scale_count      int;
 BEGIN
   v_player_id := auth.uid();
   IF v_player_id IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
@@ -261,15 +265,16 @@ BEGIN
   v_contribution := v_my_eff::float / v_total_eff::float;
 
   -- 貢献度ティアでリワード決定
-  IF v_contribution >= 0.3 THEN
-    v_gold := 40000; v_stone_name := '強化石(B)'; v_stone_count := 1; v_gem_count := 3; v_gem_rank := 'D';
-  ELSIF v_contribution >= 0.1 THEN
-    v_gold := 25000; v_stone_name := '強化石(C)'; v_stone_count := 1; v_gem_count := 2; v_gem_rank := 'E';
+  IF v_contribution >= 0.10 THEN
+    v_gold := 40000; v_stone_name := '強化石(B)'; v_stone_count := 1; v_gem_count := 3; v_gem_rank := 'D'; v_scale_min := 8; v_scale_max := 10;
+  ELSIF v_contribution >= 0.06 THEN
+    v_gold := 25000; v_stone_name := '強化石(C)'; v_stone_count := 1; v_gem_count := 2; v_gem_rank := 'E'; v_scale_min := 6; v_scale_max := 8;
   ELSIF v_contribution >= 0.03 THEN
-    v_gold := 15000; v_stone_name := '強化石(D)'; v_stone_count := 1; v_gem_count := 2; v_gem_rank := 'F';
+    v_gold := 15000; v_stone_name := '強化石(D)'; v_stone_count := 1; v_gem_count := 2; v_gem_rank := 'F'; v_scale_min := 4; v_scale_max := 6;
   ELSE
-    v_gold := 5000;  v_stone_name := '強化石(F)'; v_stone_count := 1; v_gem_count := 1; v_gem_rank := 'F';
+    v_gold := 5000;  v_stone_name := '強化石(F)'; v_stone_count := 1; v_gem_count := 1; v_gem_rank := 'F'; v_scale_min := 1; v_scale_max := 3;
   END IF;
+  v_scale_count := v_scale_min + (random() * (v_scale_max - v_scale_min))::int;
 
   -- Gold付与
   UPDATE profiles SET gold = gold + v_gold WHERE id = v_player_id;
@@ -298,6 +303,15 @@ BEGIN
     END IF;
   END LOOP;
 
+  -- 通常素材（黒龍の鱗）付与
+  SELECT id INTO v_scale_item_id FROM items WHERE name = '黒龍の鱗' LIMIT 1;
+  IF v_scale_item_id IS NOT NULL THEN
+    INSERT INTO player_items (player_id, item_id, quantity, equipped)
+    VALUES (v_player_id, v_scale_item_id, v_scale_count, false)
+    ON CONFLICT (player_id, item_id) DO UPDATE
+    SET quantity = player_items.quantity + v_scale_count;
+  END IF;
+
   -- 受け取り済みフラグ
   UPDATE raid_participants SET reward_claimed = true WHERE id = v_participant.id;
 
@@ -308,7 +322,8 @@ BEGIN
     'stone',            v_stone_name,
     'stone_count',      v_stone_count,
     'gem_count',        v_gem_count,
-    'gem_rank',         v_gem_rank
+    'gem_rank',         v_gem_rank,
+    'scale_count',      v_scale_count
   );
 END;
 $$;
