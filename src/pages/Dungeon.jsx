@@ -292,7 +292,7 @@ export default function Dungeon() {
         </div>
 
         {/* マップ（ビューポート） */}
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 2, background: '#000208', padding: 6, border: '1px solid #113355' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355' }}>
           {Array.from({ length: VH }).map((_, vy) => Array.from({ length: VW }).map((_, vx) => {
             const x = ox + vx, y = oy + vy
             const c = cellAt(x, y)
@@ -300,7 +300,7 @@ export default function Dungeon() {
               Math.abs(x - state.player.x) + Math.abs(y - state.player.y) === 1
             return (
               <div key={`${vx}-${vy}`} onClick={() => clickable && adjClick(vx, vy)}
-                style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, opacity: c.dim ? 0.5 : 1, outline: clickable ? '1px solid #2266bb' : 'none', cursor: clickable ? 'pointer' : 'default' }}>
+                style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default' }}>
                 {c.ch}
               </div>
             )
