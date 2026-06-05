@@ -18,6 +18,7 @@ export default function Pets() {
   const [loading, setLoading] = useState(false)
   const [naming, setNaming] = useState(null) // 命名中のスターター種族 {id,label,...}
   const [nick, setNick] = useState('')
+  const [periodStart, setPeriodStart] = useState(null) // 現在のスキンシップ時間帯の開始時刻
 
   useEffect(() => { fetchAll() }, [])
 
@@ -31,6 +32,15 @@ export default function Pets() {
     if (list && list.length && !selectedId) setSelectedId(list.find((x) => x.is_active)?.id || list[0].id)
     const { data: files } = await supabase.storage.from('avatars').list(`${user.id}/`)
     if (files) setUploaded(files.map((f) => `${SUPABASE_URL}/storage/v1/object/public/avatars/${user.id}/${f.name}`))
+    const { data: ps } = await supabase.rpc('pet_period_start')
+    if (ps) setPeriodStart(ps)
+  }
+
+  // 現在の時間帯のスキンシップ残り回数（2回まで）
+  const skinshipRemaining = (pet) => {
+    if (!periodStart || !pet.skinship_period_start) return 2
+    const same = new Date(pet.skinship_period_start).getTime() === new Date(periodStart).getTime()
+    return same ? Math.max(0, 2 - (pet.skinship_count || 0)) : 2
   }
 
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 2500) }
@@ -170,7 +180,9 @@ export default function Pets() {
           </div>
         </div>
         <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Btn onClick={() => !loading && doSkinship(selected)}>🤲 スキンシップ（なつき+1）</Btn>
+          {skinshipRemaining(selected) > 0
+            ? <Btn onClick={() => !loading && doSkinship(selected)}>🤲 スキンシップ（なつき+1・あと{skinshipRemaining(selected)}回）</Btn>
+            : <span style={{ background: '#0a0f1a', border: '1px solid #223344', color: '#556677', padding: '6px 12px', fontSize: 12 }}>🤲 スキンシップ済み</span>}
           {!selected.is_active && <Btn onClick={() => !loading && setActive(selected)}>このペットを選択する</Btn>}
         </div>
         <div style={{ color: '#557799', fontSize: 10, marginTop: 4 }}>※スキンシップは1日2回（5:00 / 17:00 にリセット）</div>
