@@ -141,6 +141,8 @@ export default function Dungeon() {
   // 探索の集計（不正対策のためサーバーへ渡す素の値）
   const runIdRef = useRef(null)
   const finishedRef = useRef(false)
+  const userIdRef = useRef(null)
+  const saveKey = () => (userIdRef.current ? `bf_dungeon_${userIdRef.current}` : null)
   const enemiesRef = useRef(0)
   const floorsRef = useRef(0)
   const itemsRef = useRef(0)
@@ -171,6 +173,7 @@ export default function Dungeon() {
 
   // ラン精算（サーバーが報酬を計算して付与）
   const finishRun = useCallback(async (cleared, died = false) => {
+    if (saveKey()) localStorage.removeItem(saveKey()) // 中断データを破棄
     if (finishedRef.current || !runIdRef.current) return
     finishedRef.current = true
     const { data, error } = await supabase.rpc('dungeon_finish', {
@@ -184,6 +187,7 @@ export default function Dungeon() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { nav('/login'); return }
+      userIdRef.current = user.id
       const { data } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
       if (!data?.is_admin) { setAllowed(false); return }
       // 選択中のペットを読み込む
@@ -200,7 +204,33 @@ export default function Dungeon() {
       // クリア済みダンジョン（開放判定用）
       const { data: cl } = await supabase.from('dungeon_runs').select('dungeon_id').eq('owner_id', user.id).eq('cleared', true)
       if (cl) setCleared(new Set(cl.map((r) => r.dungeon_id)))
-      setStatus('select')
+
+      // 中断していた探索を復元（リロードしても継続）
+      let restored = false
+      const raw = ap ? localStorage.getItem(`bf_dungeon_${user.id}`) : null
+      if (raw) {
+        try {
+          const sv = JSON.parse(raw)
+          if (sv?.runId && sv?.state) {
+            runIdRef.current = sv.runId
+            finishedRef.current = false
+            enemiesRef.current = sv.kills || 0
+            floorsRef.current = sv.floorsCleared || 0
+            itemsRef.current = sv.itemsCollected || 0
+            setDungeon(getDungeon(sv.dungeonId))
+            setFloorNum(sv.floorNum)
+            setPetHp(sv.petHp)
+            setFullness(sv.fullness)
+            setTurns(sv.turns)
+            setSelectedSkill(sv.selectedSkill || 'tackle')
+            if (sv.inventory) setInventory(sv.inventory)
+            setState({ ...sv.state, explored: new Set(sv.state.explored) })
+            setStatus('exploring')
+            restored = true
+          }
+        } catch { /* 壊れていたら無視 */ }
+      }
+      if (!restored) setStatus('select')
       setAllowed(true)
     })()
   }, [nav])
@@ -219,6 +249,22 @@ export default function Dungeon() {
     enterFloor(1)
     startRun(pet.id, d.id)
   }
+
+  // 探索中はlocalStorageへ保存（リロードで継続）／終了したら破棄
+  useEffect(() => {
+    const key = saveKey()
+    if (!key) return
+    if (status === 'exploring' && state && pet.id && runIdRef.current) {
+      const sv = {
+        runId: runIdRef.current, dungeonId: dungeon?.id, floorNum, petHp, fullness, turns,
+        selectedSkill, inventory, kills: enemiesRef.current, floorsCleared: floorsRef.current, itemsCollected: itemsRef.current,
+        state: { ...state, explored: [...state.explored] },
+      }
+      try { localStorage.setItem(key, JSON.stringify(sv)) } catch { /* 容量超過などは無視 */ }
+    } else if (status === 'cleared' || status === 'dead' || status === 'escaped') {
+      localStorage.removeItem(key)
+    }
+  }, [status, state, petHp, fullness, turns, selectedSkill, inventory, floorNum, dungeon, pet.id])
 
   const addLog = (msg) => setLog((l) => [msg, ...l].slice(0, 30))
 
