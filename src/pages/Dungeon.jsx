@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { petStats, speciesEmoji, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel } from '../constants/pets'
+import { petStats, speciesEmoji, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon } from '../constants/pets'
 
 // ============================================================
 // 不思議のダンジョン風プロトタイプ（Phase 1：クライアントのみ・報酬なし）
@@ -13,7 +13,6 @@ import { petStats, speciesEmoji, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel
 // ※報酬付与は Phase 3 で RPC を介してサーバー検証してから実装する。
 // ============================================================
 
-const FLOORS = 10
 // 区画グリッド（部屋スロット）
 const RC = 3, RR = 2, CW = 9, CH = 9  // 区画を広げ、大きい部屋も出るように
 const MAP_W = RC * CW, MAP_H = RR * CH
@@ -132,10 +131,12 @@ export default function Dungeon() {
   const [turns, setTurns] = useState(0)
   const [fullness, setFullness] = useState(MAX_FULLNESS)
   const [log, setLog] = useState([])
-  const [status, setStatus] = useState('exploring') // exploring | cleared | dead
+  const [status, setStatus] = useState('select') // select | exploring | cleared | dead | escaped
   const [reward, setReward] = useState(null)
   const [selectedSkill, setSelectedSkill] = useState('tackle') // ダンジョン内で選択中のスキル
   const [inventory, setInventory] = useState({}) // 持ち物 { item_key: qty }
+  const [dungeon, setDungeon] = useState(null) // 選択中のダンジョン定義
+  const [cleared, setCleared] = useState(new Set()) // クリア済みダンジョンID
 
   // 探索の集計（不正対策のためサーバーへ渡す素の値）
   const runIdRef = useRef(null)
@@ -145,13 +146,13 @@ export default function Dungeon() {
   const itemsRef = useRef(0)
 
   // ラン開始（選択中ペットがある場合のみ報酬対象）
-  const startRun = useCallback(async (petId) => {
+  const startRun = useCallback(async (petId, dungeonId = 'd10') => {
     finishedRef.current = false
     enemiesRef.current = 0; floorsRef.current = 0; itemsRef.current = 0
     runIdRef.current = null
     setReward(null)
     if (!petId) return
-    const { data, error } = await supabase.rpc('dungeon_start', { p_pet_id: petId })
+    const { data, error } = await supabase.rpc('dungeon_start', { p_pet_id: petId, p_dungeon_id: dungeonId })
     if (!error) runIdRef.current = data
   }, [])
 
@@ -193,13 +194,16 @@ export default function Dungeon() {
         setPet({ id: ap.id, species: ap.species, name: ap.name, emoji: speciesEmoji(ap), image_url: ap.image_url, skillSlots: slots, level: ap.level, exp: ap.exp, ...st })
         setSelectedSkill(slots[0])
         setPetHp(st.maxHp)
-        startRun(ap.id)
       }
       const { data: its } = await supabase.from('pet_items').select('item_key, qty').eq('owner_id', user.id)
       setInventory(Object.fromEntries((its || []).map((r) => [r.item_key, r.qty])))
+      // クリア済みダンジョン（開放判定用）
+      const { data: cl } = await supabase.from('dungeon_runs').select('dungeon_id').eq('owner_id', user.id).eq('cleared', true)
+      if (cl) setCleared(new Set(cl.map((r) => r.dungeon_id)))
+      setStatus('select')
       setAllowed(true)
     })()
-  }, [nav, startRun])
+  }, [nav])
 
   const enterFloor = useCallback((num) => {
     const f = generateFloor(num)
@@ -208,7 +212,13 @@ export default function Dungeon() {
     setState(f)
   }, [])
 
-  useEffect(() => { if (allowed) enterFloor(1) }, [allowed, enterFloor])
+  // ダンジョンを選んで開始
+  const beginDungeon = (d) => {
+    setDungeon(d)
+    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setLog([]); setReward(null); setStatus('exploring')
+    enterFloor(1)
+    startRun(pet.id, d.id)
+  }
 
   const addLog = (msg) => setLog((l) => [msg, ...l].slice(0, 30))
 
@@ -253,7 +263,7 @@ export default function Dungeon() {
       // 階段
       if (player.x === s.stairs.x && player.y === s.stairs.y) {
         floorsRef.current += 1
-        if (floorNum >= FLOORS) { setStatus('cleared'); addLog('🏁 最深部を踏破！ダンジョンクリア！'); setState({ ...s, player }); finishRun(true); return }
+        if (floorNum >= (dungeon?.floors || 10)) { setStatus('cleared'); addLog('🏁 最深部を踏破！ダンジョンクリア！'); setState({ ...s, player }); if (dungeon) setCleared((c) => new Set(c).add(dungeon.id)); finishRun(true); return }
         addLog(`⬇ B${floorNum + 1}Fへ降りた`)
         setFloorNum(floorNum + 1)
         enterFloor(floorNum + 1)
@@ -347,13 +357,54 @@ export default function Dungeon() {
     commitTurn(state, state.player, state.enemies, petHp)
   }
 
-  const restart = () => { setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setLog([]); setStatus('exploring'); enterFloor(1); startRun(pet.id) }
+  const restart = () => { if (dungeon) beginDungeon(dungeon) }
+
+  // ダンジョン選択へ戻る（探索中なら現在の進捗で精算）
+  const backToSelect = async () => { await finishRun(false); setDungeon(null); setStatus('select') }
 
   // 街に戻る（探索中なら現在の進捗で精算してから離脱）
   const leaveToTown = async () => { await finishRun(false); nav('/game') }
 
   if (allowed === undefined) return <Center>読み込み中...</Center>
   if (!allowed) return <Center>このページは開発中です（権限がありません）<br /><Btn onClick={() => nav('/game')}>🏰 街に戻る</Btn></Center>
+
+  // ダンジョン選択画面
+  if (status === 'select') {
+    return (
+      <div style={{ minHeight: '100vh', background: '#000820', color: '#88ccff', fontFamily: 'monospace', padding: 16 }}>
+        <div style={{ maxWidth: 480, margin: '0 auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ color: '#aa88ff', letterSpacing: 2 }}>🕳 ダンジョン選択 <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span></div>
+            <Btn onClick={() => nav('/game')}>🏰 街</Btn>
+          </div>
+          <div style={{ display: 'flex', gap: 10, fontSize: 12, marginBottom: 12, alignItems: 'center' }}>
+            {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4 }} /> : <span style={{ fontSize: 22 }}>{pet.emoji}</span>}
+            <span>{pet.name}　Lv{pet.level ?? 1}{pet.id ? '' : '（ペット未選択＝報酬なし）'}</span>
+          </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {DUNGEONS.map((d) => {
+              const unlocked = !d.requires || cleared.has(d.requires)
+              const isCleared = cleared.has(d.id)
+              return (
+                <div key={d.id} onClick={() => unlocked && beginDungeon(d)}
+                  style={{ border: `1px solid ${unlocked ? '#335588' : '#223344'}`, background: unlocked ? '#00102a' : '#080c14', padding: 12, cursor: unlocked ? 'pointer' : 'default', opacity: unlocked ? 1 : 0.5, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ fontSize: 30 }}>{d.emoji}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: '#cce6ff', fontSize: 14 }}>{d.name} <span style={{ color: '#6699cc', fontSize: 11 }}>全{d.floors}階</span> {isCleared && <span style={{ color: '#44ff88', fontSize: 10 }}>✓クリア済</span>}</div>
+                    <div style={{ color: unlocked ? '#6699cc' : '#aa6644', fontSize: 11, marginTop: 2 }}>
+                      {unlocked ? 'タップして挑戦' : `${getDungeon(d.requires).name} をクリアで開放`}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div style={{ color: '#557799', fontSize: 10, marginTop: 12 }}>※さらに深いダンジョンは今後のアップデートで追加予定</div>
+        </div>
+      </div>
+    )
+  }
+
   if (!state) return <Center>生成中...</Center>
 
   const visible = computeVisible(state.rooms, state.player.x, state.player.y)
@@ -401,12 +452,12 @@ export default function Dungeon() {
     <div style={{ minHeight: '100vh', background: '#000820', color: '#88ccff', fontFamily: 'monospace', padding: '16px' }}>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div style={{ color: '#aa88ff', letterSpacing: 2 }}>🕳 不思議のダンジョン <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span></div>
+          <div style={{ color: '#aa88ff', letterSpacing: 2 }}>{dungeon?.emoji || '🕳'} {dungeon?.name || 'ダンジョン'} <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span></div>
           <Btn onClick={leaveToTown}>🏰 街</Btn>
         </div>
 
         <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 8, flexWrap: 'wrap' }}>
-          <span>B{floorNum}F</span>
+          <span>B{floorNum}/{dungeon?.floors || 10}F</span>
           <span style={{ color: '#9fd' }}>Lv{pet.level}{pet.exp != null ? `（EXP ${pet.exp}/${expForLevel((pet.level || 1) + 1)}）` : ''}</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: petHp > pet.maxHp * 0.3 ? '#44ff88' : '#ff5555' }}>
             {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 16, height: 16, objectFit: 'cover', borderRadius: 3 }} /> : <span>{pet.emoji}</span>}
@@ -469,13 +520,13 @@ export default function Dungeon() {
           </div>
         )}
         {status === 'cleared' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<RewardPanel reward={reward} pet={pet} /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<RewardPanel reward={reward} pet={pet} /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
         {status === 'dead' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>💀 ペットは力尽きた…<RewardPanel reward={reward} pet={pet} /><br /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>💀 ペットは力尽きた…<RewardPanel reward={reward} pet={pet} /><br /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
         {status === 'escaped' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#cc88ff' }}>🪽 ダンジョンから脱出した<RewardPanel reward={reward} pet={pet} /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#cc88ff' }}>🪽 ダンジョンから脱出した<RewardPanel reward={reward} pet={pet} /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
 
         <div style={{ marginTop: 16, background: '#000610', border: '1px solid #113355', padding: 8, height: 140, overflowY: 'auto', fontSize: 11 }}>

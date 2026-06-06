@@ -54,6 +54,13 @@ export const SKILLS = {
 export const learnedSkills = (level) => Object.entries(SKILLS).filter(([, s]) => s.learnLv <= (level || 1)).map(([id, s]) => ({ id, ...s }))
 export const getSkill = (id) => SKILLS[id] || SKILLS.tackle
 
+// ダンジョン定義（まず2種。requires をクリアすると開放。以降は今後追加）
+export const DUNGEONS = [
+  { id: 'd10', name: '初級の洞窟', floors: 10, requires: null, emoji: '🕳' },
+  { id: 'd30', name: '深淵の遺跡', floors: 30, requires: 'd10', emoji: '🏛' },
+]
+export const getDungeon = (id) => DUNGEONS.find((d) => d.id === id) || DUNGEONS[0]
+
 // 持ち物の上限（食料など消費アイテムの合計数。※だっしゅつの翼は対象外）
 export const INV_MAX = 20
 // ペットアイテム定義（価格はサーバーRPC pet_item_price と一致させること）
