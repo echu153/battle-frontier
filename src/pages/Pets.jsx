@@ -4,9 +4,7 @@ import { supabase } from '../supabase'
 import { SPECIES, STARTERS, SKILLS, MAX_SKILL_SLOTS, SHOP_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX } from '../constants/pets'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const PRESET_IMAGES = [
-  'warrior1', 'knight1', 'samurai', 'hunter1', 'hunter2', 'wizard1', 'wizard2', 'priest',
-].map((id) => ({ id, url: `${SUPABASE_URL}/storage/v1/object/public/avatars/${id}.png` }))
+// ペット画像はペットページでアップロードしたものだけを使う（avatars/<uid>/pets/ 配下）
 
 export default function Pets() {
   const nav = useNavigate()
@@ -33,8 +31,8 @@ export default function Pets() {
     const { data: list } = await supabase.from('pets').select('*').eq('owner_id', user.id).order('created_at')
     setPets(list || [])
     if (list && list.length && !selectedId) setSelectedId(list.find((x) => x.is_active)?.id || list[0].id)
-    const { data: files } = await supabase.storage.from('avatars').list(`${user.id}/`)
-    if (files) setUploaded(files.map((f) => `${SUPABASE_URL}/storage/v1/object/public/avatars/${user.id}/${f.name}`))
+    const { data: files } = await supabase.storage.from('avatars').list(`${user.id}/pets/`)
+    if (files) setUploaded(files.filter((f) => f.name !== '.emptyFolderPlaceholder').map((f) => `${SUPABASE_URL}/storage/v1/object/public/avatars/${user.id}/pets/${f.name}`))
     const { data: ps } = await supabase.rpc('pet_period_start')
     if (ps) setPeriodStart(ps)
     const { data: its } = await supabase.from('pet_items').select('item_key, qty').eq('owner_id', user.id)
@@ -64,11 +62,11 @@ export default function Pets() {
     await fetchAll()
   }
 
-  // 現在の時間帯のスキンシップ残り回数（2回まで）
+  // 現在の時間帯(12時間)のスキンシップ残り回数（1回まで／1日2回）
   const skinshipRemaining = (pet) => {
-    if (!periodStart || !pet.skinship_period_start) return 2
+    if (!periodStart || !pet.skinship_period_start) return 1
     const same = new Date(pet.skinship_period_start).getTime() === new Date(periodStart).getTime()
-    return same ? Math.max(0, 2 - (pet.skinship_count || 0)) : 2
+    return same ? Math.max(0, 1 - (pet.skinship_count || 0)) : 1
   }
 
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 2500) }
@@ -140,7 +138,7 @@ export default function Pets() {
     const file = e.target.files?.[0]; if (!file) return
     setLoading(true)
     const ext = file.name.split('.').pop()
-    const path = `${profile.id}/${Date.now()}.${ext}`
+    const path = `${profile.id}/pets/${Date.now()}.${ext}`
     const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
     if (error) { flash('アップロード失敗'); setLoading(false); return }
     const url = `${SUPABASE_URL}/storage/v1/object/public/avatars/${path}`
@@ -267,14 +265,18 @@ export default function Pets() {
         </div>
       </div>
 
-      {/* 画像設定 */}
+      {/* 画像設定（ペットページでアップロードした画像のみ） */}
       <div style={{ color: '#aa88ff', fontSize: 13, marginBottom: 6 }}>画像を設定（{selected.name}）</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(48px, 1fr))', gap: 6, marginBottom: 8 }}>
-        {[...PRESET_IMAGES.map((x) => x.url), ...uploaded].map((url) => (
-          <img key={url} src={url} alt="" onClick={() => !loading && setImage(url)}
-            style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', border: `2px solid ${selected.image_url === url ? '#aa88ff' : '#224466'}`, cursor: 'pointer' }} />
-        ))}
-      </div>
+      {uploaded.length === 0
+        ? <div style={{ color: '#557799', fontSize: 11, marginBottom: 8 }}>まだ画像がありません。下のボタンからアップロードできます。</div>
+        : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(48px, 1fr))', gap: 6, marginBottom: 8 }}>
+            {uploaded.map((url) => (
+              <img key={url} src={url} alt="" onClick={() => !loading && setImage(url)}
+                style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', border: `2px solid ${selected.image_url === url ? '#aa88ff' : '#224466'}`, cursor: 'pointer' }} />
+            ))}
+          </div>
+        )}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <label style={{ color: '#88ccff', fontSize: 12, border: '1px solid #0088ff', padding: '6px 10px', cursor: 'pointer' }}>
           画像をアップロード<input type="file" accept="image/*" onChange={uploadImage} style={{ display: 'none' }} />

@@ -43,7 +43,8 @@ begin
     v_count := v_pet.skinship_count;
   end if;
 
-  if v_count >= 2 then
+  -- 1時間帯(12時間)につき1回まで＝1日2回
+  if v_count >= 1 then
     raise exception 'skinship limit reached';
   end if;
 
@@ -53,7 +54,7 @@ begin
                   skinship_period_start = v_pstart
     where id = v_pet.id;
 
-  return json_build_object('affection', v_new_aff, 'remaining', 2 - (v_count + 1));
+  return json_build_object('affection', v_new_aff, 'remaining', 1 - (v_count + 1));
 end; $$;
 
 grant execute on function pet_period_start() to authenticated;
