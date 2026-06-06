@@ -2016,14 +2016,15 @@ export default function Game() {
     const hasHolyKnightPassive= passiveNames.includes('聖騎士の心得')
 
     if (isBossEncounter) {
-      // 魔よけのお守りは装備スロットに関係なく「所持していれば」発動する
-      // (アイテムスロットは1つしか装備できず、ポーション等を装備中だと発動しなかった不具合への対策)
+      // セット中(equipped=true)の魔よけのお守りを直接DBから取得する。
+      // playerItem(.single())は装備中アイテムが2個以上あるとnullになるため、それに依存しない
       let charm = (currentItem && currentItem.items?.effect === 'boss_avoid') ? currentItem : null
       if (!charm) {
-        const { data: ownedCharm } = await supabase.from('player_items')
-          .select('*, items!inner(effect)').eq('player_id', profile.id).eq('items.effect', 'boss_avoid')
+        const { data: equippedCharm } = await supabase.from('player_items')
+          .select('*, items!inner(effect)')
+          .eq('player_id', profile.id).eq('equipped', true).eq('items.effect', 'boss_avoid')
           .gt('quantity', 0).limit(1).maybeSingle()
-        if (ownedCharm) charm = ownedCharm
+        if (equippedCharm) charm = equippedCharm
       }
       if (charm) {
         logs.push({ text:`🧿 魔よけのお守りが光り、ボスとの戦闘を避けた！`, color:'#cc44ff' })
