@@ -2607,11 +2607,20 @@ export default function Game() {
       }
       for (const itemName of droppedItems) {
         if (itemName.startsWith('強化石') || MATERIAL_NAMES.includes(itemName)) {
-          const { data: stoneItem } = await supabase.from('items').select('*').eq('name', itemName).single()
+          const { data: stoneItem } = await supabase.from('items').select('id').eq('name', itemName).maybeSingle()
           if (stoneItem) {
-            await supabase.rpc('upsert_player_item', { p_player_id: profile.id, p_item_id: stoneItem.id })
+            // 既存所持があれば加算、無ければ新規。upsert_player_item RPC に依存せず確実に反映させる
+            const { data: own } = await supabase.from('player_items')
+              .select('id, quantity').eq('player_id', profile.id).eq('item_id', stoneItem.id).maybeSingle()
+            if (own) {
+              await supabase.from('player_items').update({ quantity: (own.quantity || 1) + 1 }).eq('id', own.id)
+            } else {
+              await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: 1, equipped: false })
+            }
             const isMat = MATERIAL_NAMES.includes(itemName)
             logs.push({ text:`${isMat ? '✨' : '💎'} ${itemName} を入手した！`, color: isMat ? '#44ffaa' : '#6699cc' })
+          } else {
+            logs.push({ text:`⚠ ${itemName} の付与に失敗しました（アイテム未登録）。運営に連絡してください`, color:'#ff8844' })
           }
           continue
         }
