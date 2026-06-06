@@ -2015,14 +2015,25 @@ export default function Game() {
     const hasMadokenJutsu     = passiveNames.includes('魔導剣術')
     const hasHolyKnightPassive= passiveNames.includes('聖騎士の心得')
 
-    if (isBossEncounter && currentItem && currentItem.items.effect === 'boss_avoid') {
-      logs.push({ text:`🧿 魔よけのお守りが光り、ボスとの戦闘を避けた！`, color:'#cc44ff' })
-      setBattleLogs([...logs])
-      const newQty = (currentItem.quantity||1)-1
-      if (newQty <= 0) await supabase.from('player_items').delete().eq('id', currentItem.id).gt('quantity', 0)
-      else await supabase.from('player_items').update({ quantity:newQty }).eq('id', currentItem.id).gte('quantity', currentItem.quantity)
-      await supabase.from('profiles').update({ boss_encounter_rate:0, last_action_at:new Date().toISOString() }).eq('id', profile.id)
-      await fetchProfile(); setLoading(false); return
+    if (isBossEncounter) {
+      // 魔よけのお守りは装備スロットに関係なく「所持していれば」発動する
+      // (アイテムスロットは1つしか装備できず、ポーション等を装備中だと発動しなかった不具合への対策)
+      let charm = (currentItem && currentItem.items?.effect === 'boss_avoid') ? currentItem : null
+      if (!charm) {
+        const { data: ownedCharm } = await supabase.from('player_items')
+          .select('*, items!inner(effect)').eq('player_id', profile.id).eq('items.effect', 'boss_avoid')
+          .gt('quantity', 0).limit(1).maybeSingle()
+        if (ownedCharm) charm = ownedCharm
+      }
+      if (charm) {
+        logs.push({ text:`🧿 魔よけのお守りが光り、ボスとの戦闘を避けた！`, color:'#cc44ff' })
+        setBattleLogs([...logs])
+        const newQty = (charm.quantity||1)-1
+        if (newQty <= 0) await supabase.from('player_items').delete().eq('id', charm.id).gt('quantity', 0)
+        else await supabase.from('player_items').update({ quantity:newQty }).eq('id', charm.id).gte('quantity', charm.quantity)
+        await supabase.from('profiles').update({ boss_encounter_rate:0, last_action_at:new Date().toISOString() }).eq('id', profile.id)
+        await fetchProfile(); setLoading(false); return
+      }
     }
 
     logs.push(isBossEncounter
