@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { petStats, speciesEmoji, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, AREA_ENEMIES, areaForFloor, dungeonEnemyStats } from '../constants/pets'
+import { petStats, speciesEmoji, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats } from '../constants/pets'
 
 // ============================================================
 // 不思議のダンジョン風プロトタイプ（Phase 1：クライアントのみ・報酬なし）
@@ -77,7 +77,7 @@ function generateFloor(floorNum, dungeon) {
   // 敵・アイテム配置（開始部屋は避ける）
   const otherRooms = rooms.filter((r) => r !== start)
   const areaId = areaForFloor(dungeon, floorNum)
-  const pool = AREA_ENEMIES[areaId] || AREA_ENEMIES[1]
+  const pool = enemiesForFloor(dungeon, floorNum)
   const es = dungeonEnemyStats(floorNum, areaId)
   const enemies = []
   const enemyCount = Math.min(8, 3 + Math.floor(floorNum / 3))
@@ -87,7 +87,8 @@ function generateFloor(floorNum, dungeon) {
     if (t) {
       mark(t.x, t.y)
       const kind = pool[rand(0, pool.length - 1)]
-      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, hp: es.maxHp, maxHp: es.maxHp, atk: es.atk, def: es.def, mdef: es.mdef })
+      const m = kind.statMult ?? 1.0
+      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: kind.image || null, hp: Math.round(es.maxHp * m), maxHp: Math.round(es.maxHp * m), atk: Math.round(es.atk * m), def: Math.round(es.def * m), mdef: Math.round(es.mdef * m) })
     }
   }
   const items = []
@@ -147,7 +148,7 @@ export default function Dungeon() {
   const runIdRef = useRef(null)
   const finishedRef = useRef(false)
   const userIdRef = useRef(null)
-  const saveKey = () => (userIdRef.current ? `bf_dungeon_${userIdRef.current}` : null)
+  const saveKey = () => (userIdRef.current ? `bf_dungeon2_${userIdRef.current}` : null)
   const enemiesRef = useRef(0)
   const floorsRef = useRef(0)
   const itemsRef = useRef(0)
@@ -212,7 +213,7 @@ export default function Dungeon() {
 
       // 中断していた探索を復元（リロードしても継続）
       let restored = false
-      const raw = ap ? localStorage.getItem(`bf_dungeon_${user.id}`) : null
+      const raw = ap ? localStorage.getItem(`bf_dungeon2_${user.id}`) : null
       if (raw) {
         try {
           const sv = JSON.parse(raw)
@@ -488,7 +489,7 @@ export default function Dungeon() {
     // 現在視界：エンティティ優先（足元は床色）
     if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: C.floorVis }
     const e = state.enemies.find((o) => o.x === x && o.y === y)
-    if (e) return { ch: '👹', bg: C.floorVis }
+    if (e) return { ch: '👹', img: e.image || null, bg: C.floorVis }
     const it = state.items.find((o) => o.x === x && o.y === y)
     if (it) return { ch: '✨', bg: C.floorVis }
     if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: C.floorVis }

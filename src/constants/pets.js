@@ -5,18 +5,12 @@
 //  atkType 'phys'=物理(敵のdefで軽減) / 'spec'=特殊(敵のmdefで軽減)
 //  被ダメは敵の攻撃タイプに応じて pet.def(物理) / pet.mdef(特殊) で軽減
 export const SPECIES = {
-  // --- スターター（最初に1体選択）---
-  flame:  { label: 'フラム',  emoji: '🦎', starter: true,  atkType: 'phys', base: { hp: 40, atk: 12, def: 5,  mdef: 4 }, grow: { hp: 6, atk: 2, def: 1.2, mdef: 0.9 } },
-  aqua:   { label: 'アクー',  emoji: '🐟', starter: true,  atkType: 'spec', base: { hp: 48, atk: 12, def: 4,  mdef: 6 }, grow: { hp: 8, atk: 2, def: 0.9, mdef: 1.2 } },
-  leaf:   { label: 'リーフィ', emoji: '🐛', starter: true,  atkType: 'phys', base: { hp: 44, atk: 11, def: 5,  mdef: 5 }, grow: { hp: 7, atk: 1.8, def: 1.1, mdef: 1.1 } },
-  // --- 卵から孵る種族（入手手段は今後）---
-  spark:  { label: 'スパーク', emoji: '🐭', starter: false, atkType: 'spec', base: { hp: 38, atk: 15, def: 3,  mdef: 4 }, grow: { hp: 5, atk: 2.6, def: 0.8, mdef: 1.0 } },
-  stone:  { label: 'ストーン', emoji: '🐢', starter: false, atkType: 'phys', base: { hp: 60, atk: 8,  def: 9,  mdef: 7 }, grow: { hp: 10, atk: 1.2, def: 2.0, mdef: 1.4 } },
-  wind:   { label: 'ウィン',  emoji: '🦅', starter: false, atkType: 'phys', base: { hp: 42, atk: 13, def: 4,  mdef: 4 }, grow: { hp: 6, atk: 2.1, def: 1.0, mdef: 1.0 } },
+  flame:  { label: 'フラム',  emoji: '🦎', starter: true, atkType: 'phys', base: { hp: 40, atk: 12, def: 5,  mdef: 4 }, grow: { hp: 6, atk: 2, def: 1.2, mdef: 0.9 } },
+  aqua:   { label: 'アクー',  emoji: '🐟', starter: true, atkType: 'spec', base: { hp: 48, atk: 12, def: 4,  mdef: 6 }, grow: { hp: 8, atk: 2, def: 0.9, mdef: 1.2 } },
+  leaf:   { label: 'リーフィ', emoji: '🐛', starter: true, atkType: 'phys', base: { hp: 44, atk: 11, def: 5,  mdef: 5 }, grow: { hp: 7, atk: 1.8, def: 1.1, mdef: 1.1 } },
 }
 
-export const STARTERS = Object.entries(SPECIES).filter(([, s]) => s.starter).map(([id, s]) => ({ id, ...s }))
-export const HATCHABLE = Object.entries(SPECIES).filter(([, s]) => !s.starter).map(([id, s]) => ({ id, ...s }))
+export const STARTERS = Object.entries(SPECIES).map(([id, s]) => ({ id, ...s }))
 
 export const AFFECTION_MAX = 100
 
@@ -63,15 +57,31 @@ export const getSkill = (id) => SKILLS[id] || SKILLS.tackle
 // ダンジョン定義（まず2種。requires をクリアすると開放。以降は今後追加）
 //  areas: 出現するエリア（深いフロアほど後ろのエリアの敵が出る）
 export const DUNGEONS = [
-  { id: 'd10', name: '初級の洞窟', floors: 10, requires: null, emoji: '🕳', areas: [1, 2] },
+  {
+    id: 'd10', name: '初級の洞窟', floors: 10, requires: null, emoji: '🕳', areas: [1, 2],
+    floorTable: [
+      { from: 1,  to: 2,  enemies: [{ name: 'スライム', type: 'phys', image: '/suraimu.png',    statMult: 0.5 }] },
+      { from: 3,  to: 5,  enemies: [{ name: 'スライム', type: 'phys', image: '/suraimu.png',    statMult: 0.5 }, { name: 'コウモリ', type: 'phys', image: '/koumori.png',     statMult: 0.75 }, { name: '毒キノコ', type: 'spec', image: '/dokukinoko.png', statMult: 1.0 }] },
+      { from: 6,  to: 7,  enemies: [{ name: 'コウモリ', type: 'phys', image: '/koumori.png',    statMult: 0.75 }, { name: '毒キノコ', type: 'spec', image: '/dokukinoko.png', statMult: 1.0 }, { name: 'ゴブリン', type: 'phys', statMult: 1.0 }] },
+      { from: 8,  to: 10, enemies: [{ name: 'ゴブリン', type: 'phys', statMult: 1.0 }, { name: '野良犬', type: 'phys', statMult: 1.0 }, { name: '盗賊', type: 'phys', statMult: 1.0 }] },
+    ],
+  },
   { id: 'd30', name: '深淵の遺跡', floors: 30, requires: 'd10', emoji: '🏛', areas: [1, 2, 3, 4] },
 ]
 export const getDungeon = (id) => DUNGEONS.find((d) => d.id === id) || DUNGEONS[0]
 
+export function enemiesForFloor(dungeon, floor) {
+  if (dungeon?.floorTable) {
+    const row = dungeon.floorTable.find((r) => floor >= r.from && floor <= r.to)
+    if (row) return row.enemies
+  }
+  return AREA_ENEMIES[areaForFloor(dungeon, floor)] || AREA_ENEMIES[1]
+}
+
 // エリア①〜④の敵（既存ゲームのキャラ名を流用。type: phys=物理 / spec=特殊）
 // ステータスはダンジョン用に dungeonEnemyStats でフロア深度に応じてスケールする
 export const AREA_ENEMIES = {
-  1: [{ name: 'スライム', type: 'phys' }, { name: 'コウモリ', type: 'phys' }, { name: '毒キノコ', type: 'spec' }],
+  1: [{ name: 'スライム', type: 'phys', image: '/suraimu.png' }, { name: 'コウモリ', type: 'phys', image: '/koumori.png' }, { name: '毒キノコ', type: 'spec', image: '/dokukinoko.png' }],
   2: [{ name: 'ゴブリン', type: 'phys' }, { name: '野良犬', type: 'phys' }, { name: '盗賊', type: 'phys' }],
   3: [{ name: 'コボルト', type: 'phys' }, { name: 'スケルトン', type: 'phys' }, { name: 'ゴーレム', type: 'phys' }],
   4: [{ name: '深海魚人', type: 'phys' }, { name: '海賊', type: 'phys' }, { name: '毒クラゲ', type: 'spec' }],
