@@ -445,79 +445,88 @@ export default function Casino() {
     if (!isAreaUnlocked(sortieArea)) { setSortieMsg('このエリアの出撃許可証を持っていません'); setTimeout(()=>setSortieMsg(''),2500); return }
     if (sortieRemain() > 0) { setSortieMsg(`次の出撃まで ${sortieRemain()}秒`); setTimeout(()=>setSortieMsg(''),1500); return }
     setLoading(true)
-    // 共通の last_action_at で30秒ロック（不正対策）
-    const lockTime = new Date(Date.now() - SORTIE_WAIT * 1000).toISOString()
-    const { data: locked } = await supabase.from('profiles')
-      .update({ last_action_at: new Date().toISOString() })
-      .eq('id', profile.id).lt('last_action_at', lockTime).eq('is_fishing', false).select('id')
-    if (!locked || locked.length === 0) {
-      await fetchProfile()
-      setSortieMsg('⏳ クールダウン中です（街の出撃と共通）'); setTimeout(()=>setSortieMsg(''),2500)
-      setLoading(false); return
-    }
+    // ★ どこかで例外が出ても loading を必ず false に戻し、画面が固まる（リロードまで操作不可）のを防ぐ
+    try {
+      // 共通の last_action_at で30秒ロック（不正対策）
+      const lockTime = new Date(Date.now() - SORTIE_WAIT * 1000).toISOString()
+      const { data: locked } = await supabase.from('profiles')
+        .update({ last_action_at: new Date().toISOString() })
+        .eq('id', profile.id).lt('last_action_at', lockTime).eq('is_fishing', false).select('id')
+      if (!locked || locked.length === 0) {
+        await fetchProfile()
+        setSortieMsg('⏳ クールダウン中です（街の出撃と共通）'); setTimeout(()=>setSortieMsg(''),2500)
+        return
+      }
 
-    // オートクリッカー検知①：出撃間隔が異常に規則的（一定間隔の機械的連打）なら12時間出撃禁止
-    if (!DEV_ACCOUNTS.includes(profile.username)) {
-      const times = sortieTimesRef.current
-      times.push(Date.now())
-      if (times.length > AUTOCLICK_SAMPLES) times.shift()
-      if (times.length >= AUTOCLICK_SAMPLES) {
-        const intervals = times.slice(1).map((t,i) => t - times[i])
-        const spread = Math.max(...intervals) - Math.min(...intervals)
-        if (spread < AUTOCLICK_SPREAD_MS) {
-          triggerBotCheck()
-          setLoading(false); return
+      // オートクリッカー検知①：出撃間隔が異常に規則的（一定間隔の機械的連打）なら12時間出撃禁止
+      if (!DEV_ACCOUNTS.includes(profile.username)) {
+        const times = sortieTimesRef.current
+        times.push(Date.now())
+        if (times.length > AUTOCLICK_SAMPLES) times.shift()
+        if (times.length >= AUTOCLICK_SAMPLES) {
+          const intervals = times.slice(1).map((t,i) => t - times[i])
+          const spread = Math.max(...intervals) - Math.min(...intervals)
+          if (spread < AUTOCLICK_SPREAD_MS) {
+            triggerBotCheck()
+            return
+          }
         }
       }
-    }
 
-    // 簡易出撃連続検知：カジノで遊ばず連続SORTIE_STREAK_LIMIT回でBOTチャレンジ発動
-    const newStreak = (profile.sortie_streak || 0) + 1
-    if (newStreak >= SORTIE_STREAK_LIMIT) {
-      await supabase.from('profiles').update({ sortie_streak: 0 }).eq('id', profile.id)
-      setProfile(p => ({ ...p, sortie_streak: 0 }))
-      triggerBotCheck()
-      setLoading(false); return
-    } else {
-      await supabase.from('profiles').update({ sortie_streak: newStreak }).eq('id', profile.id)
-      setProfile(p => ({ ...p, sortie_streak: newStreak }))
-    }
-
-    const area = AREAS.find(a => a.id === sortieArea) || AREAS[0]
-    const cap = getEffectiveCap(profile.class, profile.retraining)
-    const isAtCap = profile.lv >= cap
-    const frozen = expIsFrozen(profile) || justFrozen
-    const expGain = (isAtCap || frozen) ? 0 : Math.floor(Math.random()*4) + 8
-    const zako = area.enemies[Math.floor(Math.random()*area.enemies.length)]
-    const goldGain = zako?.gold || 0
-    if (goldGain >= 5000 && (profile.gambling_gold_max_single || 0) < goldGain) {
-      await supabase.from('profiles').update({ gambling_gold_max_single: goldGain }).eq('id', profile.id)
-    }
-
-    // ドロップ（通常の非ボスと同じ確率）
-    const drops = []
-    const commonDrops = area.commonDrops || []
-    const rareDrops = area.rareDrops || []
-    if (commonDrops.length > 0 && Math.random()*100 < 3) {
-      if (rareDrops.length > 0 && Math.random()*100 < 10) drops.push(rareDrops[Math.floor(Math.random()*rareDrops.length)])
-      else drops.push(commonDrops[Math.floor(Math.random()*commonDrops.length)])
-    }
-    if (Math.random()*100 < 0.1) drops.push(ARTIFACT_BASE_NAMES[Math.floor(Math.random()*ARTIFACT_BASE_NAMES.length)])
-
-    setSortiePending(prev => {
-      const next = {
-        count: prev.count + 1,
-        exp: prev.exp + expGain,
-        gold: prev.gold + goldGain,
-        drops: [...prev.drops, ...drops],
+      // 簡易出撃連続検知：カジノで遊ばず連続SORTIE_STREAK_LIMIT回でBOTチャレンジ発動
+      const newStreak = (profile.sortie_streak || 0) + 1
+      if (newStreak >= SORTIE_STREAK_LIMIT) {
+        await supabase.from('profiles').update({ sortie_streak: 0 }).eq('id', profile.id)
+        setProfile(p => ({ ...p, sortie_streak: 0 }))
+        triggerBotCheck()
+        return
+      } else {
+        await supabase.from('profiles').update({ sortie_streak: newStreak }).eq('id', profile.id)
+        setProfile(p => ({ ...p, sortie_streak: newStreak }))
       }
-      savePending(next)
-      return next
-    })
-    // 出撃ごとに重いfetchProfile()を呼ぶと画面が固まるため、
-    // クールダウン表示に必要な last_action_at だけローカル更新する（清算時にまとめて反映）
-    setProfile(p => ({ ...p, last_action_at: new Date().toISOString() }))
-    setLoading(false)
+
+      const area = AREAS.find(a => a.id === sortieArea) || AREAS[0]
+      const enemies = area.enemies || []
+      const cap = getEffectiveCap(profile.class, profile.retraining)
+      const isAtCap = profile.lv >= cap
+      const frozen = expIsFrozen(profile) || justFrozen
+      const expGain = (isAtCap || frozen) ? 0 : Math.floor(Math.random()*4) + 8
+      const zako = enemies.length > 0 ? enemies[Math.floor(Math.random()*enemies.length)] : null
+      const goldGain = zako?.gold || 0
+      if (goldGain >= 5000 && (profile.gambling_gold_max_single || 0) < goldGain) {
+        await supabase.from('profiles').update({ gambling_gold_max_single: goldGain }).eq('id', profile.id)
+      }
+
+      // ドロップ（通常の非ボスと同じ確率）
+      const drops = []
+      const commonDrops = area.commonDrops || []
+      const rareDrops = area.rareDrops || []
+      if (commonDrops.length > 0 && Math.random()*100 < 3) {
+        if (rareDrops.length > 0 && Math.random()*100 < 10) drops.push(rareDrops[Math.floor(Math.random()*rareDrops.length)])
+        else drops.push(commonDrops[Math.floor(Math.random()*commonDrops.length)])
+      }
+      if (Math.random()*100 < 0.1) drops.push(ARTIFACT_BASE_NAMES[Math.floor(Math.random()*ARTIFACT_BASE_NAMES.length)])
+
+      setSortiePending(prev => {
+        const next = {
+          count: prev.count + 1,
+          exp: prev.exp + expGain,
+          gold: prev.gold + goldGain,
+          drops: [...prev.drops, ...drops],
+        }
+        savePending(next)
+        return next
+      })
+      // 出撃ごとに重いfetchProfile()を呼ぶと画面が固まるため、
+      // クールダウン表示に必要な last_action_at だけローカル更新する（清算時にまとめて反映）
+      setProfile(p => ({ ...p, last_action_at: new Date().toISOString() }))
+    } catch (err) {
+      console.error('簡易出撃エラー:', err)
+      setSortieMsg('⚠ 出撃処理でエラーが発生しました。もう一度お試しください')
+      setTimeout(()=>setSortieMsg(''),2500)
+    } finally {
+      setLoading(false)
+    }
   }
 
   // 簡易出撃：清算（蓄積した戦果をまとめて反映）
