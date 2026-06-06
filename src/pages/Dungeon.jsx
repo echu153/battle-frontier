@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { petStats, speciesEmoji, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon } from '../constants/pets'
+import { petStats, speciesEmoji, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, AREA_ENEMIES, areaForFloor, dungeonEnemyStats } from '../constants/pets'
 
 // ============================================================
 // 不思議のダンジョン風プロトタイプ（Phase 1：クライアントのみ・報酬なし）
@@ -19,17 +19,16 @@ const MAP_W = RC * CW, MAP_H = RR * CH
 // 表示ビューポート（プレイヤー中心）
 const VW = 11, VH = 9
 
-const FALLBACK_PET = { name: '仮ペット', emoji: '🐾', image_url: null, maxHp: 40, atk: 12, def: 4, skillSlots: ['tackle'] }
+const FALLBACK_PET = { name: '仮ペット', emoji: '🐾', image_url: null, maxHp: 40, atk: 12, def: 4, mdef: 4, atkType: 'phys', skillSlots: ['tackle'] }
 const MAX_FULLNESS = 100      // 満腹度の上限（100スタート）
 const HP_REGEN_EVERY = 10     // 満腹なら10ターンごとにHP+1
 const FULLNESS_EVERY = 10     // 10ターンごとに満腹度-1
-const enemyStatsFor = (floor) => ({ maxHp: 14 + floor * 5, atk: 5 + floor * 2, def: floor })
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1))
 const inBounds = (x, y) => x >= 0 && x < MAP_W && y >= 0 && y < MAP_H
 
 // ---- フロア自動生成 ----
-function generateFloor(floorNum) {
+function generateFloor(floorNum, dungeon) {
   const grid = Array.from({ length: MAP_H }, () => Array(MAP_W).fill('#'))
   const rooms = []
   for (let gy = 0; gy < RR; gy++) {
@@ -77,13 +76,19 @@ function generateFloor(floorNum) {
 
   // 敵・アイテム配置（開始部屋は避ける）
   const otherRooms = rooms.filter((r) => r !== start)
-  const es = enemyStatsFor(floorNum)
+  const areaId = areaForFloor(dungeon, floorNum)
+  const pool = AREA_ENEMIES[areaId] || AREA_ENEMIES[1]
+  const es = dungeonEnemyStats(floorNum, areaId)
   const enemies = []
-  const enemyCount = 2 + floorNum
+  const enemyCount = Math.min(8, 3 + Math.floor(floorNum / 3))
   for (let i = 0; i < enemyCount; i++) {
     const room = otherRooms[rand(0, otherRooms.length - 1)]
     const t = randTileInRoom(room)
-    if (t) { mark(t.x, t.y); enemies.push({ id: 'e' + i, x: t.x, y: t.y, hp: es.maxHp }) }
+    if (t) {
+      mark(t.x, t.y)
+      const kind = pool[rand(0, pool.length - 1)]
+      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, hp: es.maxHp, maxHp: es.maxHp, atk: es.atk, def: es.def, mdef: es.mdef })
+    }
   }
   const items = []
   const itemCount = rand(2, 3)
@@ -235,8 +240,8 @@ export default function Dungeon() {
     })()
   }, [nav])
 
-  const enterFloor = useCallback((num) => {
-    const f = generateFloor(num)
+  const enterFloor = useCallback((num, dg) => {
+    const f = generateFloor(num, dg)
     // 初期視界を記憶に反映
     f.explored = computeVisible(f.rooms, f.player.x, f.player.y)
     setState(f)
@@ -246,7 +251,7 @@ export default function Dungeon() {
   const beginDungeon = (d) => {
     setDungeon(d)
     setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setLog([]); setReward(null); setStatus('exploring')
-    enterFloor(1)
+    enterFloor(1, d)
     startRun(pet.id, d.id)
   }
 
@@ -283,20 +288,21 @@ export default function Dungeon() {
     // 敵への体当たり＝選択中スキルが発動（コスト分の満腹度を消費）
     const target = enemies.find((e) => e.x === nx && e.y === ny)
     if (target) {
-      const es = enemyStatsFor(floorNum)
       const sk = getSkill(selectedSkill)
       const cost = sk.cost || 0
       if (cost > fullness) { addLog(`🍖 満腹度が足りない（${sk.name}は${cost}必要）たいあたりに切替を`); return }
       fullCost = cost
       const hits = sk.hits || 1
-      const perHit = Math.max(1, Math.round(pet.atk * (sk.mult || 1)) - es.def)
+      // ペットの攻撃タイプに応じて敵の def(物理)/mdef(特殊)で軽減
+      const guard = pet.atkType === 'spec' ? (target.mdef || 0) : (target.def || 0)
+      const perHit = Math.max(1, Math.round(pet.atk * (sk.mult || 1)) - guard)
       const total = perHit * hits
       const newHp = target.hp - total
       const skillTag = selectedSkill === 'tackle' ? '' : `【${sk.name}】`
       const hitTxt = hits > 1 ? `${perHit}×${hits}=` : ''
       if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); curPetHp = Math.min(pet.maxHp, curPetHp + heal); if (heal > 0) addLog(`💚 ${heal}回復`) }
-      if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; addLog(`⚔${skillTag} 敵に${hitTxt}${total}ダメージ → 撃破！`); grantKill(floorNum) }
-      else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔${skillTag} 敵に${hitTxt}${total}ダメージ（残りHP${newHp}）`) }
+      if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total} → 撃破！`); grantKill(floorNum) }
+      else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total}（残HP${newHp}）`) }
       // プレイヤーはその場に留まる
     } else {
       // アイテム取得
@@ -312,7 +318,7 @@ export default function Dungeon() {
         if (floorNum >= (dungeon?.floors || 10)) { setStatus('cleared'); addLog('🏁 最深部を踏破！ダンジョンクリア！'); setState({ ...s, player }); if (dungeon) setCleared((c) => new Set(c).add(dungeon.id)); finishRun(true); return }
         addLog(`⬇ B${floorNum + 1}Fへ降りた`)
         setFloorNum(floorNum + 1)
-        enterFloor(floorNum + 1)
+        enterFloor(floorNum + 1, dungeon)
         return
       }
     }
@@ -324,7 +330,6 @@ export default function Dungeon() {
   //  fullCost: このターンに消費(正)/回復(負)する満腹度
   const commitTurn = (s, player, enemies, curPetHp, fullCost = 0) => {
     // ---- 敵のターン ----
-    const es = enemyStatsFor(floorNum)
     const occ = (x, y, self) => enemies.some((e) => e !== self && e.x === x && e.y === y)
     const isFloor = (x, y) => inBounds(x, y) && s.grid[y][x] === '.'
     let dead = false
@@ -332,9 +337,11 @@ export default function Dungeon() {
       const sees = enemySeesPet(s.rooms, e, player.x, player.y)
       const adjacent = Math.abs(e.x - player.x) + Math.abs(e.y - player.y) === 1
       if (sees && adjacent) {
-        const dmg = Math.max(1, es.atk - pet.def)
+        // 敵の攻撃タイプに応じて pet.def(物理)/mdef(特殊)で軽減
+        const guard = e.type === 'spec' ? (pet.mdef || 0) : (pet.def || 0)
+        const dmg = Math.max(1, (e.atk || 1) - guard)
         curPetHp -= dmg
-        addLog(`💥 敵の攻撃！ ${dmg}ダメージ`)
+        addLog(`💥 ${e.name}の攻撃！ ${dmg}ダメージ`)
         if (curPetHp <= 0) dead = true
         return e
       }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { SPECIES, STARTERS, SKILLS, MAX_SKILL_SLOTS, SHOP_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX } from '../constants/pets'
+import { SPECIES, STARTERS, SKILLS, MAX_SKILL_SLOTS, SHOP_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX, atkLabel } from '../constants/pets'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 // ペット画像はペットページでアップロードしたものだけを使う（avatars/<uid>/pets/ 配下）
@@ -160,7 +160,7 @@ export default function Pets() {
           <h3 style={{ color: '#aa88ff', margin: '12px 0' }}>名前をつけよう</h3>
           <div style={{ border: '1px solid #335588', background: '#001026', padding: 16, textAlign: 'center' }}>
             <div style={{ fontSize: 56 }}>{naming.emoji}</div>
-            <div style={{ color: '#6699cc', fontSize: 11, margin: '6px 0' }}>{naming.label}　HP{st.maxHp} / 攻{st.atk} / 守{st.def}</div>
+            <div style={{ color: '#6699cc', fontSize: 11, margin: '6px 0' }}>{naming.label}　HP{st.maxHp} / {atkLabel(naming)}{st.atk} / 防{st.def} / 特防{st.mdef}</div>
             <input value={nick} onChange={(e) => setNick(e.target.value)} maxLength={12} placeholder={naming.label}
               style={{ width: '70%', padding: 8, margin: '10px 0', background: '#000818', border: '1px solid #335588', color: '#cce6ff', fontFamily: 'monospace', textAlign: 'center', fontSize: 14 }} />
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 6 }}>
@@ -182,7 +182,7 @@ export default function Pets() {
               <div key={sp.id} style={{ border: '1px solid #335588', background: '#001026', padding: 10, textAlign: 'center' }}>
                 <div style={{ fontSize: 40 }}>{sp.emoji}</div>
                 <div style={{ color: '#cce6ff', marginTop: 4 }}>{sp.label}</div>
-                <div style={{ color: '#6699cc', fontSize: 11, margin: '6px 0' }}>HP{st.maxHp} / 攻{st.atk} / 守{st.def}</div>
+                <div style={{ color: '#6699cc', fontSize: 11, margin: '6px 0' }}>HP{st.maxHp} / {atkLabel({ species: sp.id })}{st.atk} / 防{st.def} / 特防{st.mdef}</div>
                 <Btn onClick={() => { setNaming(sp); setNick(sp.label) }}>選ぶ</Btn>
               </div>
             )
@@ -218,7 +218,7 @@ export default function Pets() {
           <Portrait pet={selected} size={64} />
           <div style={{ flex: 1 }}>
             <div style={{ color: '#cce6ff', fontSize: 15 }}>{selected.name} <span style={{ color: '#6699cc', fontSize: 11 }}>({speciesLabel(selected)})</span></div>
-            <div style={{ color: '#88bbee', fontSize: 12, marginTop: 4 }}>Lv{selected.level}　HP{sst.maxHp} / 攻{sst.atk} / 守{sst.def}</div>
+            <div style={{ color: '#88bbee', fontSize: 12, marginTop: 4 }}>Lv{selected.level}　HP{sst.maxHp} / {atkLabel(selected)}{sst.atk} / 防{sst.def} / 特防{sst.mdef}</div>
             <div style={{ color: '#6699cc', fontSize: 11, marginTop: 2 }}>EXP {selected.exp} / {need}</div>
             <div style={{ color: '#ffaacc', fontSize: 11, marginTop: 2 }}>なつき {selected.affection}/{AFFECTION_MAX}（ステータス変換 +{conv}%）</div>
           </div>

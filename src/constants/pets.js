@@ -1,15 +1,18 @@
 // ペット種族の定義とステータス計算（ペット画面・ダンジョンで共有）
 // 画像(image_url)が未設定のときは emoji を代替表示する。
 
+// ペットのステータス: hp / atk(攻撃 or 特殊攻撃) / def(防御) / mdef(特防)
+//  atkType 'phys'=物理(敵のdefで軽減) / 'spec'=特殊(敵のmdefで軽減)
+//  被ダメは敵の攻撃タイプに応じて pet.def(物理) / pet.mdef(特殊) で軽減
 export const SPECIES = {
   // --- スターター（最初に1体選択）---
-  flame:  { label: 'フラム',  emoji: '🦎', starter: true,  base: { hp: 40, atk: 12, def: 4 }, grow: { hp: 6, atk: 2, def: 1 } },
-  aqua:   { label: 'アクー',  emoji: '🐟', starter: true,  base: { hp: 48, atk: 9,  def: 6 }, grow: { hp: 8, atk: 1, def: 1 } },
-  leaf:   { label: 'リーフィ', emoji: '🐛', starter: true,  base: { hp: 44, atk: 11, def: 5 }, grow: { hp: 7, atk: 2, def: 1 } },
-  // --- 卵から孵る種族（Phase2後半で入手手段を実装）---
-  spark:  { label: 'スパーク', emoji: '🐭', starter: false, base: { hp: 38, atk: 14, def: 3 }, grow: { hp: 5, atk: 3, def: 1 } },
-  stone:  { label: 'ストーン', emoji: '🐢', starter: false, base: { hp: 60, atk: 8,  def: 9 }, grow: { hp: 10, atk: 1, def: 2 } },
-  wind:   { label: 'ウィン',  emoji: '🦅', starter: false, base: { hp: 42, atk: 13, def: 4 }, grow: { hp: 6, atk: 2, def: 1 } },
+  flame:  { label: 'フラム',  emoji: '🦎', starter: true,  atkType: 'phys', base: { hp: 40, atk: 12, def: 5,  mdef: 4 }, grow: { hp: 6, atk: 2, def: 1.2, mdef: 0.9 } },
+  aqua:   { label: 'アクー',  emoji: '🐟', starter: true,  atkType: 'spec', base: { hp: 48, atk: 12, def: 4,  mdef: 6 }, grow: { hp: 8, atk: 2, def: 0.9, mdef: 1.2 } },
+  leaf:   { label: 'リーフィ', emoji: '🐛', starter: true,  atkType: 'phys', base: { hp: 44, atk: 11, def: 5,  mdef: 5 }, grow: { hp: 7, atk: 1.8, def: 1.1, mdef: 1.1 } },
+  // --- 卵から孵る種族（入手手段は今後）---
+  spark:  { label: 'スパーク', emoji: '🐭', starter: false, atkType: 'spec', base: { hp: 38, atk: 15, def: 3,  mdef: 4 }, grow: { hp: 5, atk: 2.6, def: 0.8, mdef: 1.0 } },
+  stone:  { label: 'ストーン', emoji: '🐢', starter: false, atkType: 'phys', base: { hp: 60, atk: 8,  def: 9,  mdef: 7 }, grow: { hp: 10, atk: 1.2, def: 2.0, mdef: 1.4 } },
+  wind:   { label: 'ウィン',  emoji: '🦅', starter: false, atkType: 'phys', base: { hp: 42, atk: 13, def: 4,  mdef: 4 }, grow: { hp: 6, atk: 2.1, def: 1.0, mdef: 1.0 } },
 }
 
 export const STARTERS = Object.entries(SPECIES).filter(([, s]) => s.starter).map(([id, s]) => ({ id, ...s }))
@@ -26,11 +29,14 @@ export function petStats(pet) {
   const sp = SPECIES[pet.species] || SPECIES.flame
   const lv = pet.level || 1
   return {
-    maxHp: sp.base.hp + sp.grow.hp * (lv - 1),
-    atk:   sp.base.atk + sp.grow.atk * (lv - 1),
-    def:   sp.base.def + sp.grow.def * (lv - 1),
+    maxHp:  Math.round(sp.base.hp + sp.grow.hp * (lv - 1)),
+    atk:    Math.round(sp.base.atk + sp.grow.atk * (lv - 1)),
+    def:    Math.round(sp.base.def + sp.grow.def * (lv - 1)),
+    mdef:   Math.round(sp.base.mdef + sp.grow.mdef * (lv - 1)),
+    atkType: sp.atkType,
   }
 }
+export const atkLabel = (pet) => ((SPECIES[pet.species] || SPECIES.flame).atkType === 'spec' ? '特攻' : '攻撃')
 
 // なつき度によるプレイヤーへのステータス変換率の上限（後で調整しやすいよう定数化）
 export const CONVERSION_MAX = 1.00  // なつき満タンで最大100%
@@ -55,11 +61,40 @@ export const learnedSkills = (level) => Object.entries(SKILLS).filter(([, s]) =>
 export const getSkill = (id) => SKILLS[id] || SKILLS.tackle
 
 // ダンジョン定義（まず2種。requires をクリアすると開放。以降は今後追加）
+//  areas: 出現するエリア（深いフロアほど後ろのエリアの敵が出る）
 export const DUNGEONS = [
-  { id: 'd10', name: '初級の洞窟', floors: 10, requires: null, emoji: '🕳' },
-  { id: 'd30', name: '深淵の遺跡', floors: 30, requires: 'd10', emoji: '🏛' },
+  { id: 'd10', name: '初級の洞窟', floors: 10, requires: null, emoji: '🕳', areas: [1, 2] },
+  { id: 'd30', name: '深淵の遺跡', floors: 30, requires: 'd10', emoji: '🏛', areas: [1, 2, 3, 4] },
 ]
 export const getDungeon = (id) => DUNGEONS.find((d) => d.id === id) || DUNGEONS[0]
+
+// エリア①〜④の敵（既存ゲームのキャラ名を流用。type: phys=物理 / spec=特殊）
+// ステータスはダンジョン用に dungeonEnemyStats でフロア深度に応じてスケールする
+export const AREA_ENEMIES = {
+  1: [{ name: 'スライム', type: 'phys' }, { name: 'コウモリ', type: 'phys' }, { name: '毒キノコ', type: 'spec' }],
+  2: [{ name: 'ゴブリン', type: 'phys' }, { name: '野良犬', type: 'phys' }, { name: '盗賊', type: 'phys' }],
+  3: [{ name: 'コボルト', type: 'phys' }, { name: 'スケルトン', type: 'phys' }, { name: 'ゴーレム', type: 'phys' }],
+  4: [{ name: '深海魚人', type: 'phys' }, { name: '海賊', type: 'phys' }, { name: '毒クラゲ', type: 'spec' }],
+}
+
+// そのフロアで出現するエリアID（浅い→areas先頭、深い→後ろ）
+export function areaForFloor(dungeon, floor) {
+  const areas = dungeon?.areas || [1]
+  const idx = Math.min(areas.length - 1, Math.floor(((floor - 1) / Math.max(1, (dungeon?.floors || 10))) * areas.length))
+  return areas[idx]
+}
+
+// 敵ステータス（フロア深度＋エリア段階でスケール）。何度か挑戦してクリアする難度想定。
+//  ※数値はバランス調整ポイント。きつ/緩は係数を変えるだけ。
+export function dungeonEnemyStats(floor, areaId) {
+  const t = areaId || 1
+  return {
+    maxHp: Math.round(22 + floor * 8 + t * t * 9),
+    atk:   Math.round(7 + floor * 2.4 + t * t * 2),
+    def:   Math.round(2 + floor * 1.1 + t * 2),
+    mdef:  Math.round(2 + floor * 1.1 + t * 2),
+  }
+}
 
 // 持ち物の上限（食料など消費アイテムの合計数。※だっしゅつの翼は対象外）
 export const INV_MAX = 20
