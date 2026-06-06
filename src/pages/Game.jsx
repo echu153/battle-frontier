@@ -3477,9 +3477,11 @@ export default function Game() {
                   <div key={stat} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', border:`1px solid ${(statPoints[stat]||0)>0?'#cc44ff':'#003366'}`, background:(statPoints[stat]||0)>0?'#1a0030':'#000818', padding:'6px 8px' }}>
                     <span style={{ color:'#88ccff', fontSize:'10px' }}>{label}</span>
                     <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
+                      <button onClick={()=>{ setStatPoints(p=>({...p,[stat]:Math.max(0,(p[stat]||0)-10)})) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 4px', fontFamily:'monospace', fontSize:'10px' }}>-10</button>
                       <button onClick={()=>{ if((statPoints[stat]||0)>0) setStatPoints(p=>({...p,[stat]:p[stat]-1})) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>-</button>
                       <span style={{ color:'#cc44ff', fontSize:'11px', minWidth:'16px', textAlign:'center' }}>{statPoints[stat]||0}</span>
                       <button onClick={()=>{ if(allocatedPoints<pendingPoints) setStatPoints(p=>({...p,[stat]:(p[stat]||0)+1})) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>+</button>
+                      <button onClick={()=>{ const room=pendingPoints-allocatedPoints; if(room>0) setStatPoints(p=>({...p,[stat]:(p[stat]||0)+Math.min(10,room)})) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 4px', fontFamily:'monospace', fontSize:'10px' }}>+10</button>
                     </div>
                   </div>
                 ))}
@@ -3773,9 +3775,11 @@ export default function Game() {
                     <div key={stat} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', border:`1px solid ${(statPoints[stat]||0)>0?'#cc44ff':'#003366'}`, background:(statPoints[stat]||0)>0?'#1a0030':'#000818', padding:'6px 8px' }}>
                       <span style={{ color:'#88ccff', fontSize:'10px' }}>{label}</span>
                       <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
+                        <button onClick={()=>{ setStatPoints(p=>({...p,[stat]:Math.max(0,(p[stat]||0)-10)})) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 4px', fontFamily:'monospace', fontSize:'10px' }}>-10</button>
                         <button onClick={()=>{ if((statPoints[stat]||0)>0) setStatPoints(p=>({...p,[stat]:p[stat]-1})) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>-</button>
                         <span style={{ color:'#cc44ff', fontSize:'11px', minWidth:'16px', textAlign:'center' }}>{statPoints[stat]||0}</span>
                         <button onClick={()=>{ if(allocatedPoints<pendingPoints) setStatPoints(p=>({...p,[stat]:(p[stat]||0)+1})) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace' }}>+</button>
+                        <button onClick={()=>{ const room=pendingPoints-allocatedPoints; if(room>0) setStatPoints(p=>({...p,[stat]:(p[stat]||0)+Math.min(10,room)})) }} style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 4px', fontFamily:'monospace', fontSize:'10px' }}>+10</button>
                       </div>
                     </div>
                   ))}
