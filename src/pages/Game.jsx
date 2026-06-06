@@ -3666,7 +3666,7 @@ export default function Game() {
                   <BattleLogLine key={i} l={l} />
                 ))}
               </div>
-              <button onClick={backToTown} disabled={!canLeaveBattle} style={{ width:'100%', padding:'10px', background: canLeaveBattle?'#001840':'#000a18', border:`1px solid ${canLeaveBattle?'#0088ff':'#13405f'}`, color: canLeaveBattle?'#0088ff':'#2a4a66', cursor: canLeaveBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'13px' }}>{canLeaveBattle ? '🏰 街に戻る' : '🏰 街に戻る（少々お待ちを…）'}</button>
+              <button onClick={backToTown} disabled={!canLeaveBattle} style={{ width:'100%', padding:'10px', background: canLeaveBattle?'#001840':'#000a18', border:`1px solid ${canLeaveBattle?'#0088ff':'#13405f'}`, color: canLeaveBattle?'#0088ff':'#2a4a66', cursor: canLeaveBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>
             </div>
           )}
         </div>
@@ -3962,7 +3962,7 @@ export default function Game() {
                     <BattleLogLine key={i} l={l} />
                   ))}
                 </div>
-                <button onClick={backToTown} disabled={!canLeaveBattle} style={{ width:'100%', padding:'10px', background: canLeaveBattle?'#001840':'#000a18', border:`1px solid ${canLeaveBattle?'#0088ff':'#13405f'}`, color: canLeaveBattle?'#0088ff':'#2a4a66', cursor: canLeaveBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'13px' }}>{canLeaveBattle ? '🏰 街に戻る' : '🏰 街に戻る（少々お待ちを…）'}</button>
+                <button onClick={backToTown} disabled={!canLeaveBattle} style={{ width:'100%', padding:'10px', background: canLeaveBattle?'#001840':'#000a18', border:`1px solid ${canLeaveBattle?'#0088ff':'#13405f'}`, color: canLeaveBattle?'#0088ff':'#2a4a66', cursor: canLeaveBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>
               </div>
             )}
           </div>
