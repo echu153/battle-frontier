@@ -62,9 +62,14 @@ begin
   select * into v_pet from pets where id = v_run.pet_id and owner_id = auth.uid();
   if not found then raise exception 'pet not found'; end if;
 
+  -- 必要EXP = レベル×10。レベルアップで余剰分だけ持ち越し、また0から貯める
   v_new_exp := v_pet.exp + v_exp_gain;
   v_new_level := v_pet.level;
-  while v_new_level < 50 and v_new_exp >= (v_new_level+1)*10 loop v_new_level := v_new_level + 1; end loop;
+  while v_new_level < 50 and v_new_exp >= v_new_level * 10 loop
+    v_new_exp := v_new_exp - v_new_level * 10;
+    v_new_level := v_new_level + 1;
+  end loop;
+  if v_new_level >= 50 then v_new_exp := 0; end if; -- 最大Lvは打ち止め
 
   update pets set exp = v_new_exp, level = v_new_level where id = v_pet.id;
   update dungeon_runs set enemies_defeated = enemies_defeated + 1 where id = p_run_id;

@@ -194,7 +194,7 @@ export default function Pets() {
 
   const selected = pets.find((p) => p.id === selectedId) || pets[0]
   const sst = petStats(selected)
-  const need = expForLevel(selected.level + 1)
+  const need = expForLevel(selected.level)
   const conv = Math.round(affectionConversion(selected.affection) * 100)
 
   return (

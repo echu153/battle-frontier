@@ -458,7 +458,7 @@ export default function Dungeon() {
 
         <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 8, flexWrap: 'wrap' }}>
           <span>B{floorNum}/{dungeon?.floors || 10}F</span>
-          <span style={{ color: '#9fd' }}>Lv{pet.level}{pet.exp != null ? `（EXP ${pet.exp}/${expForLevel((pet.level || 1) + 1)}）` : ''}</span>
+          <span style={{ color: '#9fd' }}>Lv{pet.level}{pet.exp != null ? `（EXP ${pet.exp}/${expForLevel(pet.level || 1)}）` : ''}</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: petHp > pet.maxHp * 0.3 ? '#44ff88' : '#ff5555' }}>
             {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 16, height: 16, objectFit: 'cover', borderRadius: 3 }} /> : <span>{pet.emoji}</span>}
             {pet.name} HP {petHp}/{pet.maxHp}
@@ -520,13 +520,13 @@ export default function Dungeon() {
           </div>
         )}
         {status === 'cleared' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<RewardPanel reward={reward} pet={pet} /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<br /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
         {status === 'dead' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>💀 ペットは力尽きた…<RewardPanel reward={reward} pet={pet} /><br /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>💀 ペットは力尽きた…（なつき-3）<br /><br /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
         {status === 'escaped' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#cc88ff' }}>🪽 ダンジョンから脱出した<RewardPanel reward={reward} pet={pet} /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#cc88ff' }}>🪽 ダンジョンから脱出した<br /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
 
         <div style={{ marginTop: 16, background: '#000610', border: '1px solid #113355', padding: 8, height: 140, overflowY: 'auto', fontSize: 11 }}>
