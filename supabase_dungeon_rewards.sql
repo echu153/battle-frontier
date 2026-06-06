@@ -39,9 +39,36 @@ begin
   return v_id;
 end; $$;
 
--- ラン精算：サーバー側でクランプ→報酬計算→ペット更新（ランは使い切り）
---  EXPは「倒した敵」からのみ。深い階ほど敵が強い＝1体あたりEXPが増える。
---  なつき度はダンジョンでは増えない。倒された(p_died)場合のみ -3。
+-- 敵撃破ごとにEXPを即時付与（深い階ほど多い）。サーバー検証。
+create or replace function dungeon_kill(p_run_id uuid, p_floor int)
+returns json language plpgsql security definer set search_path = public as $$
+declare
+  v_run dungeon_runs%rowtype; v_pet pets%rowtype;
+  v_floor int; v_exp_gain int; v_new_exp int; v_new_level int;
+begin
+  select * into v_run from dungeon_runs where id = p_run_id;
+  if not found then raise exception 'run not found'; end if;
+  if v_run.owner_id <> auth.uid() then raise exception 'not your run'; end if;
+  if v_run.status <> 'active' then raise exception 'run not active'; end if;
+  if v_run.enemies_defeated >= 300 then raise exception 'too many kills'; end if; -- 暴走防止
+
+  v_floor := least(greatest(coalesce(p_floor,1), 1), 99);
+  v_exp_gain := 3 + v_floor;  -- 深い階ほど1体あたり多い
+
+  select * into v_pet from pets where id = v_run.pet_id and owner_id = auth.uid();
+  if not found then raise exception 'pet not found'; end if;
+
+  v_new_exp := v_pet.exp + v_exp_gain;
+  v_new_level := v_pet.level;
+  while v_new_level < 50 and v_new_exp >= (v_new_level+1)*10 loop v_new_level := v_new_level + 1; end loop;
+
+  update pets set exp = v_new_exp, level = v_new_level where id = v_pet.id;
+  update dungeon_runs set enemies_defeated = enemies_defeated + 1 where id = p_run_id;
+
+  return json_build_object('exp_gain', v_exp_gain, 'level', v_new_level, 'exp', v_new_exp, 'leveled', v_new_level > v_pet.level);
+end; $$;
+
+-- ラン精算：なつき度の処理(被撃破で-3)＆ラン終了のみ（EXPは撃破時に即時付与済み）
 drop function if exists dungeon_finish(uuid, int, int, int, boolean);
 drop function if exists dungeon_finish(uuid, int, int, int, boolean, boolean);
 create or replace function dungeon_finish(
@@ -50,53 +77,35 @@ create or replace function dungeon_finish(
 declare
   v_run    dungeon_runs%rowtype;
   v_pet    pets%rowtype;
-  v_floors int; v_enemies int; v_items int;
-  v_exp_gain int; v_aff_delta int;
-  v_new_exp int; v_new_level int; v_new_aff int;
-  v_elapsed numeric;
+  v_floors int; v_items int;
+  v_aff_delta int; v_new_aff int;
 begin
   select * into v_run from dungeon_runs where id = p_run_id;
   if not found then raise exception 'run not found'; end if;
   if v_run.owner_id <> auth.uid() then raise exception 'not your run'; end if;
   if v_run.status <> 'active' then raise exception 'run already finished'; end if;
 
-  -- 経過時間チェック（瞬間的な連打・自動化を弾く）
-  v_elapsed := extract(epoch from (now() - v_run.started_at));
-  if v_elapsed < 3 then raise exception 'too fast'; end if;
+  v_floors := least(greatest(coalesce(p_floors,0), 0), 99);
+  v_items  := least(greatest(coalesce(p_items,0),  0), 99);
 
-  -- サーバー上限でクランプ（10フロア / 敵60 / アイテム30）
-  v_floors  := least(greatest(coalesce(p_floors,0),  0), 10);
-  v_enemies := least(greatest(coalesce(p_enemies,0), 0), 60);
-  v_items   := least(greatest(coalesce(p_items,0),   0), 30);
-
-  -- EXP：敵を倒した分のみ。深い階ほど1体あたりが増える（到達深度で近似）
-  v_exp_gain := v_enemies * (3 + v_floors);
   -- なつき度：ダンジョンでは増えない。倒されたら -3
   v_aff_delta := (case when p_died then -3 else 0 end);
 
   select * into v_pet from pets where id = v_run.pet_id and owner_id = auth.uid();
   if not found then raise exception 'pet not found'; end if;
 
-  -- レベルアップ（必要累計EXP = lv * 10、上限Lv50）
-  v_new_exp   := v_pet.exp + v_exp_gain;
-  v_new_level := v_pet.level;
-  while v_new_level < 50 and v_new_exp >= (v_new_level+1)*10 loop
-    v_new_level := v_new_level + 1;
-  end loop;
   v_new_aff := greatest(0, least(100, v_pet.affection + v_aff_delta));
-
-  update pets set exp = v_new_exp, level = v_new_level, affection = v_new_aff
-    where id = v_pet.id;
+  update pets set affection = v_new_aff where id = v_pet.id;
   update dungeon_runs set status = 'finished', finished_at = now(),
-    floors_cleared = v_floors, enemies_defeated = v_enemies, items_collected = v_items
+    floors_cleared = v_floors, items_collected = v_items
     where id = p_run_id;
 
   return json_build_object(
-    'exp_gain', v_exp_gain, 'aff_delta', v_aff_delta,
-    'level', v_new_level, 'exp', v_new_exp, 'affection', v_new_aff,
-    'leveled', v_new_level > v_pet.level
+    'aff_delta', v_aff_delta, 'affection', v_new_aff,
+    'level', v_pet.level, 'exp', v_pet.exp
   );
 end; $$;
 
 grant execute on function dungeon_start(uuid) to authenticated;
+grant execute on function dungeon_kill(uuid, int) to authenticated;
 grant execute on function dungeon_finish(uuid, int, int, int, boolean, boolean) to authenticated;

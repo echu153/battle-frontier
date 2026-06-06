@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { petStats, speciesEmoji, getSkill, PET_ITEMS, DUNGEON_ITEMS } from '../constants/pets'
+import { petStats, speciesEmoji, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel } from '../constants/pets'
 
 // ============================================================
 // 不思議のダンジョン風プロトタイプ（Phase 1：クライアントのみ・報酬なし）
@@ -155,6 +155,19 @@ export default function Dungeon() {
     if (!error) runIdRef.current = data
   }, [])
 
+  // 敵撃破：EXPを即時付与（サーバー）。レベルアップでステータスも即反映
+  const grantKill = useCallback(async (floor) => {
+    if (!runIdRef.current) return
+    const { data, error } = await supabase.rpc('dungeon_kill', { p_run_id: runIdRef.current, p_floor: floor })
+    if (error || !data) return
+    addLog(`⭐ EXP+${data.exp_gain}${data.leveled ? `　Lv${data.level}にアップ！` : ''}`)
+    setPet((p) => {
+      if (!p?.species) return p
+      const st = petStats({ species: p.species, level: data.level })
+      return { ...p, level: data.level, exp: data.exp, ...st }
+    })
+  }, [])
+
   // ラン精算（サーバーが報酬を計算して付与）
   const finishRun = useCallback(async (cleared, died = false) => {
     if (finishedRef.current || !runIdRef.current) return
@@ -177,7 +190,7 @@ export default function Dungeon() {
       if (ap) {
         const st = petStats(ap)
         const slots = Array.isArray(ap.skill_slots) && ap.skill_slots.length ? ap.skill_slots : ['tackle']
-        setPet({ id: ap.id, name: ap.name, emoji: speciesEmoji(ap), image_url: ap.image_url, skillSlots: slots, ...st })
+        setPet({ id: ap.id, species: ap.species, name: ap.name, emoji: speciesEmoji(ap), image_url: ap.image_url, skillSlots: slots, level: ap.level, exp: ap.exp, ...st })
         setSelectedSkill(slots[0])
         setPetHp(st.maxHp)
         startRun(ap.id)
@@ -226,7 +239,7 @@ export default function Dungeon() {
       const skillTag = selectedSkill === 'tackle' ? '' : `【${sk.name}】`
       const hitTxt = hits > 1 ? `${perHit}×${hits}=` : ''
       if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); curPetHp = Math.min(pet.maxHp, curPetHp + heal); if (heal > 0) addLog(`💚 ${heal}回復`) }
-      if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; addLog(`⚔${skillTag} 敵に${hitTxt}${total}ダメージ → 撃破！`) }
+      if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; addLog(`⚔${skillTag} 敵に${hitTxt}${total}ダメージ → 撃破！`); grantKill(floorNum) }
       else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔${skillTag} 敵に${hitTxt}${total}ダメージ（残りHP${newHp}）`) }
       // プレイヤーはその場に留まる
     } else {
@@ -394,6 +407,7 @@ export default function Dungeon() {
 
         <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 8, flexWrap: 'wrap' }}>
           <span>B{floorNum}F</span>
+          <span style={{ color: '#9fd' }}>Lv{pet.level}{pet.exp != null ? `（EXP ${pet.exp}/${expForLevel((pet.level || 1) + 1)}）` : ''}</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: petHp > pet.maxHp * 0.3 ? '#44ff88' : '#ff5555' }}>
             {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 16, height: 16, objectFit: 'cover', borderRadius: 3 }} /> : <span>{pet.emoji}</span>}
             {pet.name} HP {petHp}/{pet.maxHp}
@@ -480,9 +494,9 @@ function RewardPanel({ reward, pet }) {
   }
   return (
     <div style={{ background: '#001026', border: '1px solid #335588', padding: 10, margin: '10px auto', maxWidth: 280, fontSize: 12, color: '#cce6ff' }}>
-      <div>獲得EXP +{reward.exp_gain}{reward.aff_delta ? `　なつき ${reward.aff_delta > 0 ? '+' : ''}${reward.aff_delta}` : ''}</div>
-      <div style={{ marginTop: 4, color: '#88bbee' }}>Lv{reward.level}（EXP {reward.exp}） / なつき {reward.affection}/100</div>
-      {reward.leveled && <div style={{ marginTop: 4, color: '#ffcc44' }}>⬆ レベルアップ！</div>}
+      <div style={{ color: '#88bbee' }}>Lv{reward.level}（EXP {reward.exp}） / なつき {reward.affection}/100</div>
+      {reward.aff_delta ? <div style={{ marginTop: 4, color: reward.aff_delta < 0 ? '#ff7777' : '#88ffaa' }}>なつき {reward.aff_delta > 0 ? '+' : ''}{reward.aff_delta}</div> : null}
+      <div style={{ marginTop: 4, color: '#7799bb', fontSize: 10 }}>※EXPは撃破ごとに付与済み</div>
     </div>
   )
 }
