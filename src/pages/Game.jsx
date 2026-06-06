@@ -3649,13 +3649,13 @@ export default function Game() {
           {scene==='battle' && (
             <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
               <div style={{ color:'#ff6644', fontSize:'13px', marginBottom:'10px' }}>⚔ バトル！</div>
-              {currentEnemy?.isPapia && (
-                <div style={{ textAlign:'center', marginBottom:'10px' }}>
-                  <img src={papiaIcon} alt="パピア" style={{ width:'50px', height:'50px', objectFit:'contain', imageRendering:'pixelated' }} />
-                </div>
-              )}
               {loading && <div style={{ color:'#446688', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
               <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
+                {currentEnemy?.isPapia && (
+                  <div style={{ textAlign:'center', marginBottom:'10px' }}>
+                    <img src={papiaIcon} alt="パピア" style={{ width:'50px', height:'50px', objectFit:'contain', imageRendering:'pixelated' }} />
+                  </div>
+                )}
                 {battleLogs.map((l,i)=>(
                   <BattleLogLine key={i} l={l} />
                 ))}
@@ -3945,13 +3945,13 @@ export default function Game() {
             {scene==='battle' && (
               <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
                 <div style={{ color:'#ff6644', fontSize:'13px', marginBottom:'10px' }}>⚔ バトル！</div>
-                {currentEnemy?.isPapia && (
-                  <div style={{ textAlign:'center', marginBottom:'10px' }}>
-                    <img src={papiaIcon} alt="パピア" style={{ width:'50px', height:'50px', objectFit:'contain', imageRendering:'pixelated' }} />
-                  </div>
-                )}
                 {loading && <div style={{ color:'#446688', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
                 <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
+                  {currentEnemy?.isPapia && (
+                    <div style={{ textAlign:'center', marginBottom:'10px' }}>
+                      <img src={papiaIcon} alt="パピア" style={{ width:'50px', height:'50px', objectFit:'contain', imageRendering:'pixelated' }} />
+                    </div>
+                  )}
                   {battleLogs.map((l,i)=>(
                     <BattleLogLine key={i} l={l} />
                   ))}
