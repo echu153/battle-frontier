@@ -47,6 +47,7 @@ export const AREAS = [
     commonDrops: ['木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス','ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
     rareDrops: ['ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書','魔導の杖','魔術教本'],
     bossDrops: ['スライムの指輪','蒼粘剣'],
+    bossSpecialDrop: { name:'ぷよぷよロッド', rate:5 },
     materialDrops: ['森の生命液'],
   },
   {
@@ -60,6 +61,7 @@ export const AREAS = [
     commonDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','強化石(F)','戦士の指輪'],
     rareDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','略奪の腕輪'],
     bossDrops: ['略奪者の短剣','影踏みのブーツ'],
+    bossSpecialDrop: { name:'怪盗の指輪', rate:5 },
     materialDrops: ['荒野の薬草'],
   },
   {
@@ -73,6 +75,7 @@ export const AREAS = [
     commonDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','古代の護符'],
     rareDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','秘術の首飾り'],
     bossDrops: ['古代魔導コア','虚無の杖'],
+    bossSpecialDrop: { name:'結晶グリーブ', rate:5 },
     materialDrops: ['古代の精髄'],
   },
   {
@@ -2565,11 +2568,15 @@ export default function Game() {
           else if (drop0) droppedItems = [dropList[0]]
           else if (drop1) droppedItems = [dropList[1]]
         }
+        // エリア固有の追加ボスドロップ（独立判定・5%）
+        if (area.bossSpecialDrop && Math.random()*100 < area.bossSpecialDrop.rate) {
+          droppedItems.push(area.bossSpecialDrop.name)
+        }
       } else {
         const commonDrops = area.commonDrops||[]
         const rareDrops = area.rareDrops||[]
         if (commonDrops.length > 0 && Math.random()*100 < 3) {
-          if (rareDrops.length > 0 && Math.random()*100 < 10) {
+          if (rareDrops.length > 0 && Math.random()*100 < 30) {
             droppedItems = [rareDrops[Math.floor(Math.random()*rareDrops.length)]]
           } else {
             droppedItems = [commonDrops[Math.floor(Math.random()*commonDrops.length)]]
