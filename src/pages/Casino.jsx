@@ -489,7 +489,7 @@ export default function Casino() {
       const enemies = area.enemies || []
       const cap = getEffectiveCap(profile.class, profile.retraining)
       const isAtCap = profile.lv >= cap
-      const frozen = expIsFrozen(profile) || justFrozen
+      const frozen = expIsFrozen(profile)
       const expGain = (isAtCap || frozen) ? 0 : Math.floor(Math.random()*4) + 8
       const zako = enemies.length > 0 ? enemies[Math.floor(Math.random()*enemies.length)] : null
       const goldGain = zako?.gold || 0
