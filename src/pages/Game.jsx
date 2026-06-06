@@ -1453,8 +1453,9 @@ export default function Game() {
       const b = calcLvBonus(clRow.class_name, clRow.lv)
       const isCurrentClass = clRow.class_name === data.class
       const retrainCount = (data.retraining || {})[clRow.class_name] || 0
-      // 現在クラス: 100%　非現在クラス: 50% + 再修練★×10%（最大100%）
-      const rate = isCurrentClass ? 1.0 : Math.min(1.0, 0.5 + retrainCount * 0.1)
+      // 現在クラス: 100% + 再修練★×10%（そのクラスでプレイ中のみ成長分が増加）
+      // 非現在クラス: 50% + 再修練★×10%（最大100%）
+      const rate = isCurrentClass ? (1.0 + retrainCount * 0.1) : Math.min(1.0, 0.5 + retrainCount * 0.1)
       for (const k of _statKeys) _allClassBonus[k] += Math.floor((b[k] || 0) * rate)
     }
     const _spent = data.stat_point_spent || {}
@@ -3287,6 +3288,7 @@ export default function Game() {
           レベルキャップ到達時に再修練できます。<br/>
           再修練するとLV1にリセット・スキル1つを持ち越せます。<br/>
           再修練するごとに、そのクラスのスキルが上から1つずつ段階強化されます（そのクラスでプレイ中のみ有効）。<br/>
+          さらに、そのクラスでプレイ中はレベル成長分のステータスが★の数×10%上昇します（★5で成長分+50%）。<br/>
           上限5回まで（★★★★★）。5回到達でこのクラスのレベル上限が300に解放されます。
         </div>
         <div style={{ color:'#446688', fontSize:'11px', marginBottom:'8px' }}>
