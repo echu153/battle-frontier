@@ -1505,12 +1505,21 @@ export default function Game() {
   const doRegen = async () => {
     if (!profile) return
     if (regenningRef.current) return  // 多重起動ガード
+    if (innBusyRef.current) return    // 宿屋利用中は回復処理と競合させない（宿屋の全回復が上書きされるのを防ぐ）
     regenningRef.current = true
     try {
-      const current = profile.hp_current ?? profile.hp_max
-      const newHp = Math.min(profile.hp_max, Math.floor(current+profile.hp_max*0.2))
-      const newMp = Math.min(profile.mp_max, Math.floor((profile.mp_current??profile.mp_max)+profile.mp_max*0.2))
-      const newIsDying = newHp >= profile.hp_max ? false : profile.is_dying
+      // ★ サーバーから最新のHP/MP/瀕死/前回回復時刻を取得（古いクロージャで上書きしないため）
+      const { data: sp } = await supabase.from('profiles')
+        .select('hp_current, mp_current, hp_max, mp_max, is_dying, last_regen_at')
+        .eq('id', profile.id).single()
+      if (!sp) return
+      // サーバー時刻基準で回復間隔をまだ満たしていなければ何もしない（宿屋直後の二重発火対策）
+      const serverElapsed = (Date.now() - new Date(sp.last_regen_at).getTime())/1000
+      if (serverElapsed < REGEN_SECONDS) { await fetchProfile(); return }
+      const current = sp.hp_current ?? sp.hp_max
+      const newHp = Math.min(sp.hp_max, Math.floor(current+sp.hp_max*0.2))
+      const newMp = Math.min(sp.mp_max, Math.floor((sp.mp_current??sp.mp_max)+sp.mp_max*0.2))
+      const newIsDying = newHp >= sp.hp_max ? false : sp.is_dying
       await supabase.from('profiles').update({
         hp_current:newHp, mp_current:newMp, is_dying:newIsDying,
         last_regen_at:new Date().toISOString(),
@@ -2731,6 +2740,7 @@ export default function Game() {
       mp_current: serverProfile.mp_max,
       gold: serverProfile.gold - serverCost,
       is_dying: false,
+      last_regen_at: new Date().toISOString(),  // 自然回復タイマーをリセット（回復直後の上書き発火を防ぐ）
     }).eq('id', profile.id).eq('gold', serverProfile.gold).select('id')
 
     if (!locked || locked.length === 0) {
