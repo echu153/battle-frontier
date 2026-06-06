@@ -346,6 +346,9 @@ export default function Casino() {
     if (slotMode==='normal') {
       if (!bet || bet < MIN_BET) { showMessage(`ベットは${MIN_BET}メダルからです`, '#ff4444'); return }
       if (bet > MAX_BET) { showMessage(`ベットは${MAX_BET}メダルまでです`, '#ff4444'); return }
+    } else if (slotMode==='at') {
+      // AT中もベットを消費する（at_bet分のメダルが必要）
+      if ((profile.medals||0) < slotBet) { showMessage('メダルが足りません！（AT中もベットを消費します）', '#ff4444'); return }
     }
     setLoading(true)
     const { data, error } = await supabase.rpc('slot_spin', { bet })
@@ -986,10 +989,10 @@ export default function Casino() {
                   </>
                 )}
 
-                <button onClick={slotLever} disabled={loading || (slotMode==='normal' && (profile.medals||0) < slotBet)}
+                <button onClick={slotLever} disabled={loading || ((slotMode==='normal'||slotMode==='at') && (profile.medals||0) < slotBet)}
                   style={{ width:'100%', padding:'14px', background: navMode?'#2a0018':'#1a1000', border:`1px solid ${accent}`, color: accent, cursor:'pointer', fontFamily:'monospace', fontSize:'15px', letterSpacing:'2px' }}>
                   {slotMode==='cz' ? `⚡ CZ レバーON（残り${czGames}G）`
-                    : slotMode==='at' ? `🔥 AT レバーON（残り${atGames}G）`
+                    : slotMode==='at' ? `🔥 AT レバーON（残り${atGames}G・${slotBet}メダル）`
                     : `🎰 レバーON（${slotBet}メダル）`}
                 </button>
               </div>
