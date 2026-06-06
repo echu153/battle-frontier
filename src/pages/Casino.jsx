@@ -147,6 +147,7 @@ export default function Casino() {
     const { data, error } = await supabase.rpc('casino_exchange_prize', { prize_key: prize.key, qty })
     if (error) { showMessage(`交換失敗: ${error.message}`, '#ff4444'); setLoading(false); return }
     setPrizeQty(q => ({ ...q, [prize.key]: 1 }))
+    skipMedalGainRef.current = true  // 景品交換によるメダル消費はランキングの収支に含めない
     await fetchProfile()
     showMessage(`🎁 ${prize.name} を交換しました！`, '#44ff88')
     setLoading(false)
@@ -157,22 +158,20 @@ export default function Casino() {
     if (!user) { nav('/login'); return }
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     if (!p) { nav('/game'); return }
-    // メダル増加分を当日累計として追跡し称号用に保存
-    if (prevMedalsRef.current !== null && p.medals > prevMedalsRef.current && !skipMedalGainRef.current) {
-      const gained = p.medals - prevMedalsRef.current
+    // メダルの増減を当日のネット収支として追跡（勝ち負けを差し引く・マイナスも含む。両替/景品交換は除外）
+    if (prevMedalsRef.current !== null && p.medals !== prevMedalsRef.current && !skipMedalGainRef.current) {
+      const delta = p.medals - prevMedalsRef.current  // 賭けの差分（負けはマイナス）
       const todayKey = `bf_medal_day_${user.id}`
       const stored = JSON.parse(localStorage.getItem(todayKey) || '{"date":"","total":0}')
       const todayJST = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toDateString()
-      const todayTotal = stored.date === todayJST ? stored.total + gained : gained
+      const todayTotal = stored.date === todayJST ? stored.total + delta : delta
       localStorage.setItem(todayKey, JSON.stringify({ date: todayJST, total: todayTotal }))
-      if (todayTotal > (p.gambling_medal_max_daily || 0)) {
+      // 1日の最高ネット収支を記録（過去の記録より高い日のみ更新。マイナスも記録対象）
+      const prevRecord = p.gambling_medal_max_daily
+      if (prevRecord === null || prevRecord === undefined || todayTotal > prevRecord) {
         await supabase.from('profiles').update({ gambling_medal_max_daily: todayTotal }).eq('id', user.id)
         p.gambling_medal_max_daily = todayTotal
       }
-      // 累計獲得メダル（両替除く）をランキング用に加算
-      const newTotal = (p.total_medals_earned || 0) + gained
-      await supabase.from('profiles').update({ total_medals_earned: newTotal }).eq('id', user.id)
-      p.total_medals_earned = newTotal
     }
     skipMedalGainRef.current = false  // フラグは1回限り
     prevMedalsRef.current = p.medals

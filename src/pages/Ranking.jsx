@@ -65,12 +65,12 @@ export default function Ranking() {
         .filter(p => p.username)
       setMuseumPlayers(museumList)
 
-      // 累計獲得メダルランキング（両替除く）
+      // メダルランキング：1日の最高ネット収支（勝ち負けを差し引いた額・両替除く。マイナスも集計）
       const { data: medalData } = await supabase
         .from('profiles')
-        .select('id, username, lv, char_lv, class, avatar_url, retraining, total_medals_earned')
-        .gt('total_medals_earned', 0)
-        .order('total_medals_earned', { ascending: false })
+        .select('id, username, lv, char_lv, class, avatar_url, retraining, gambling_medal_max_daily')
+        .not('gambling_medal_max_daily', 'is', null)
+        .order('gambling_medal_max_daily', { ascending: false })
         .limit(50)
       setMedalPlayers(medalData || [])
 
@@ -112,7 +112,7 @@ export default function Ranking() {
 
         {/* 見出し */}
         <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'10px', textAlign:'center', letterSpacing:'2px' }}>
-          {tab === 'total' ? '🏆 総合力ランキング' : tab === 'museum' ? '🏛 寄贈数ランキング' : '🎫 累計獲得メダルランキング'}
+          {tab === 'total' ? '🏆 総合力ランキング' : tab === 'museum' ? '🏛 寄贈数ランキング' : '🎫 1日最高収支メダルランキング'}
         </div>
 
         {loading ? (
@@ -278,10 +278,10 @@ export default function Ranking() {
                     </div>
                   </div>
 
-                  {/* 累計獲得メダル */}
+                  {/* 1日の最高ネット収支（マイナスもあり） */}
                   <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ color:'#ffaa00', fontSize:'15px', fontWeight:'bold' }}>🎫 {(p.total_medals_earned || 0).toLocaleString()}</div>
-                    <div style={{ color:'#886644', fontSize:'10px' }}>累計獲得</div>
+                    <div style={{ color:(p.gambling_medal_max_daily||0) < 0 ? '#ff6666' : '#ffaa00', fontSize:'15px', fontWeight:'bold' }}>🎫 {(p.gambling_medal_max_daily || 0).toLocaleString()}</div>
+                    <div style={{ color:'#886644', fontSize:'10px' }}>1日最高収支</div>
                   </div>
                 </div>
               )
