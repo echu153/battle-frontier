@@ -1344,6 +1344,8 @@ export default function Game() {
   const botCheckDeadlineRef = useRef(null)  // タイマー一時停止用：期限の絶対時刻
   const regenningRef = useRef(false)
   const innBusyRef = useRef(false)  // 宿屋利用の二重実行ガード（連打対策）
+  const [canLeaveBattle, setCanLeaveBattle] = useState(true)  // 出撃後2秒は「街に戻る」を押せない（オートクリッカー連打対策）
+  const leaveTimerRef = useRef(null)
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768)
@@ -1917,6 +1919,10 @@ export default function Game() {
     const enemyMaxHp = enemy.hp
 
     setLoading(true); setScene('battle'); setBattleLogs([]); setCurrentEnemy(enemy)
+    // 出撃直後2秒は「街に戻る」を無効化（その場連打＋オートクリッカー自動化対策）
+    setCanLeaveBattle(false)
+    if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current)
+    leaveTimerRef.current = setTimeout(() => setCanLeaveBattle(true), 2000)
 
     // Atomic lock: last_action_atが古い場合のみUPDATE（複数端末同時出撃・釣り中出撃を防ぐ）
     const lockTime = new Date(Date.now() - WAIT_SECONDS * 1000).toISOString()
@@ -3660,7 +3666,7 @@ export default function Game() {
                   <BattleLogLine key={i} l={l} />
                 ))}
               </div>
-              <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>
+              <button onClick={backToTown} disabled={!canLeaveBattle} style={{ width:'100%', padding:'10px', background: canLeaveBattle?'#001840':'#000a18', border:`1px solid ${canLeaveBattle?'#0088ff':'#13405f'}`, color: canLeaveBattle?'#0088ff':'#2a4a66', cursor: canLeaveBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'13px' }}>{canLeaveBattle ? '🏰 街に戻る' : '🏰 街に戻る（少々お待ちを…）'}</button>
             </div>
           )}
         </div>
@@ -3956,7 +3962,7 @@ export default function Game() {
                     <BattleLogLine key={i} l={l} />
                   ))}
                 </div>
-                <button onClick={backToTown} style={{ width:'100%', padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏰 街に戻る</button>
+                <button onClick={backToTown} disabled={!canLeaveBattle} style={{ width:'100%', padding:'10px', background: canLeaveBattle?'#001840':'#000a18', border:`1px solid ${canLeaveBattle?'#0088ff':'#13405f'}`, color: canLeaveBattle?'#0088ff':'#2a4a66', cursor: canLeaveBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'13px' }}>{canLeaveBattle ? '🏰 街に戻る' : '🏰 街に戻る（少々お待ちを…）'}</button>
               </div>
             )}
           </div>
