@@ -1695,9 +1695,12 @@ export default function Game() {
         logs.push({ text:`⚠ レベルキャップに達しています（EXP +0）`, color:'#ff8844' })
       }
     } else if (type === 'gold') {
-      const goldGained = Math.floor((profile.char_lv || profile.lv) * 10 * (1.0 + Math.random() * 0.5))
+      const charLvG = profile.char_lv || profile.lv
+      // 基礎: キャラLv×30〜45。キャラLv300以下は育成支援ボーナス×1.5
+      const lvBonus = charLvG <= 300 ? 1.5 : 1.0
+      const goldGained = Math.floor(charLvG * 30 * (1.0 + Math.random() * 0.5) * lvBonus)
       await supabase.rpc('apply_dungeon_reward', { p_type:'gold', p_claimed_gold:goldGained })
-      logs.push({ text:`Gold +${goldGained}`, color:'#ffcc00' })
+      logs.push({ text:`Gold +${goldGained}${lvBonus > 1 ? '（キャラLv300までボーナス ×1.5！）' : ''}`, color:'#ffcc00' })
     } else if (type === 'stone') {
       const r = Math.random() * 100
       const stoneName = r < 10 ? '強化石(F)' : r < 25 ? '強化石(E)' : r < 55 ? '強化石(D)' : r < 80 ? '強化石(C)' : r < 95 ? '強化石(B)' : '強化石(A)'
