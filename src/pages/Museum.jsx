@@ -191,6 +191,7 @@ export default function Museum() {
     const groupId = ITEM_GROUP_MAP[name]
     if (!groupId) { showMsg('この装備は寄贈できません', '#ff4444'); return }
     if (item.equipped) { showMsg('装備中は寄贈できません。先に外してください', '#ff4444'); return }
+    if (item.is_favorite) { showMsg('お気に入り装備は寄贈できません。先に★を解除してください', '#ff4444'); return }
     const tier = getEnhanceTier(item.enhance_plus || 0)
     if (donations.find(d => d.weapon_name === name && d.enhance_tier === tier)) {
       showMsg('このティアはすでに寄贈済みです', '#ff8844'); return
@@ -257,7 +258,8 @@ export default function Museum() {
   // 寄贈可能アイテム: (name, tier) ごとに1件ずつ（装備中でも表示、ボタンを「装備中」にする）
   const donatableByGroup = {}
   const seenKeys = new Set()
-  for (const item of equipment) {
+  // お気に入りは後回しにして、同(name,tier)に非お気に入りがあればそちらを寄贈候補にする
+  for (const item of [...equipment].sort((a, b) => (a.is_favorite ? 1 : 0) - (b.is_favorite ? 1 : 0))) {
     const name = item.weapons?.name
     if (!name || !ITEM_GROUP_MAP[name]) continue
     const tier = getEnhanceTier(item.enhance_plus || 0)
@@ -328,10 +330,10 @@ export default function Museum() {
                           <span style={{ color:'#44aa88', fontSize:'10px' }}>{formatBonusText(stat, amount)}</span>
                         </div>
                         <button
-                          onClick={() => !item.equipped && donate(item)}
-                          disabled={loading || item.equipped}
-                          style={{ flexShrink:0, padding:'4px 10px', background:'#001020', border:`1px solid ${item.equipped ? '#446688' : '#4488ff'}`, color: item.equipped ? '#446688' : '#4488ff', cursor: item.equipped ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'10px' }}>
-                          {item.equipped ? '装備中' : '寄贈'}
+                          onClick={() => !item.equipped && !item.is_favorite && donate(item)}
+                          disabled={loading || item.equipped || item.is_favorite}
+                          style={{ flexShrink:0, padding:'4px 10px', background:'#001020', border:`1px solid ${(item.equipped || item.is_favorite) ? '#446688' : '#4488ff'}`, color: (item.equipped || item.is_favorite) ? '#446688' : '#4488ff', cursor: (item.equipped || item.is_favorite) ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                          {item.equipped ? '装備中' : item.is_favorite ? '★お気に入り' : '寄贈'}
                         </button>
                       </div>
                     )

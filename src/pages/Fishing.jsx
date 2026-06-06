@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
-const FISH_SELL_PRICE = { f:5, e:15, d:40, c:100, b:250, a:600, s:1500, ss:4000, sss:10000 }
+const FISH_SELL_PRICE = { f:50, e:150, d:400, c:1000, b:2500, a:6000, s:15000, ss:40000, sss:100000 }
 const FISH_RANK_COLORS = {
   f:'#888888', e:'#6699cc', d:'#ff8844', c:'#44bb44',
   b:'#4488ff', a:'#ff4444', s:'#ffcc00', ss:'#ffcc00', sss:'#ffcc00'
@@ -276,7 +276,7 @@ useEffect(() => {
 
     for (const fish of fishItems) {
       const rankKey = fish.fish_rank?.toLowerCase() || 'f'
-      totalGold += FISH_SELL_PRICE[rankKey] || 5
+      totalGold += FISH_SELL_PRICE[rankKey] || 50
       const existing = records.find(r => r.fish_name === fish.fish_name)
       if (!existing) {
         await supabase.from('fishing_records').insert({

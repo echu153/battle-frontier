@@ -1687,11 +1687,21 @@ export default function Game() {
     } else if (type === 'stone') {
       const r = Math.random() * 100
       const stoneName = r < 10 ? '強化石(F)' : r < 25 ? '強化石(E)' : r < 55 ? '強化石(D)' : r < 80 ? '強化石(C)' : r < 95 ? '強化石(B)' : '強化石(A)'
-      const { data: stoneItem } = await supabase.from('items').select('*').eq('name', stoneName).single()
-      if (stoneItem) {
-        await supabase.rpc('upsert_player_item', { p_player_id: profile.id, p_item_id: stoneItem.id })
+      const { data: stoneItem } = await supabase.from('items').select('id').eq('name', stoneName).maybeSingle()
+      if (!stoneItem) {
+        // items テーブルに該当行が無いと付与されず「入手」表示だけ出てしまう不具合への対策
+        logs.push({ text:`⚠ ${stoneName} の付与に失敗しました（アイテム未登録）。運営に連絡してください`, color:'#ff8844' })
+      } else {
+        // 既存所持があれば加算、無ければ新規。upsert_player_item RPC に依存せず確実に反映させる
+        const { data: ownStone } = await supabase.from('player_items')
+          .select('id, quantity').eq('player_id', profile.id).eq('item_id', stoneItem.id).maybeSingle()
+        if (ownStone) {
+          await supabase.from('player_items').update({ quantity: (ownStone.quantity || 1) + 1 }).eq('id', ownStone.id)
+        } else {
+          await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: 1, equipped: false })
+        }
+        logs.push({ text:`💎 ${stoneName} を入手！`, color:'#6699cc' })
       }
-      logs.push({ text:`💎 ${stoneName} を入手！`, color:'#6699cc' })
     } else if (type === 'prof') {
       const profGained = Math.floor(50 + Math.random() * 51)
       const eqWeapon = equipment.find(e => e.slot==='weapon' && e.equipped)

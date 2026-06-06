@@ -514,7 +514,9 @@ export default function Casino() {
       savePending(next)
       return next
     })
-    await fetchProfile()
+    // 出撃ごとに重いfetchProfile()を呼ぶと画面が固まるため、
+    // クールダウン表示に必要な last_action_at だけローカル更新する（清算時にまとめて反映）
+    setProfile(p => ({ ...p, last_action_at: new Date().toISOString() }))
     setLoading(false)
   }
 

@@ -297,6 +297,16 @@ export default function Equipment() {
     setLoading(false)
   }
 
+  // お気に入り切替：ONにすると加工・寄贈の対象から外れる（誤操作防止）
+  const toggleFavorite = async (item) => {
+    setLoading(true)
+    const next = !item.is_favorite
+    // 楽観更新（即座にUI反映）
+    setEquipment(prev => prev.map(e => e.id === item.id ? { ...e, is_favorite: next } : e))
+    await supabase.from('player_equipment').update({ is_favorite: next }).eq('id', item.id)
+    setLoading(false)
+  }
+
   const unequip = async (item) => {
     setLoading(true)
     await supabase.from('player_equipment').update({ equipped: false }).eq('id', item.id)
@@ -530,6 +540,9 @@ export default function Equipment() {
                           {plus > 0 && !isArtifactBase && <span style={{ color:'#ffcc00', fontSize:'11px', fontWeight:'bold' }}>+{plus}</span>}
                         </div>
                         <div style={{ display:'flex', gap:'4px' }}>
+                          <button onClick={() => toggleFavorite(item)} disabled={loading}
+                            title={item.is_favorite ? 'お気に入り解除（加工・寄贈できるようになる）' : 'お気に入り登録（加工・寄贈されなくなる）'}
+                            style={{ padding:'2px 6px', background: item.is_favorite ? '#2a2000' : '#001', border:`1px solid ${item.is_favorite ? '#ffcc00' : '#334455'}`, color: item.is_favorite ? '#ffcc00' : '#445566', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{item.is_favorite ? '★' : '☆'}</button>
                           {canAwaken && (
                             <button onClick={() => doAwaken(item)} disabled={loading}
                               style={{ padding:'2px 8px', background:'#1a0800', border:'1px solid #ffcc00', color:'#ffcc00', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>✨ 覚醒</button>
