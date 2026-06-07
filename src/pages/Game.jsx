@@ -1658,6 +1658,29 @@ export default function Game() {
 
     const newCount = typeCount + 1
 
+    // EXP以外のダンジョン（gold/stone/prof/gem）に付与するおまけ経験値（8〜11）。
+    // 表示ログを積み、RPCへ渡す値を返す（適用・レベルアップはサーバー側 apply_dungeon_reward が実施）。
+    const grantBonusExpLogs = () => {
+      const bonusExp = Math.floor(8 + Math.random() * 4)  // 8〜11
+      const curClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
+      const cap = getEffectiveCap(profile.class, profile.retraining)
+      if (expIsFrozen(profile)) {
+        logs.push({ text:`EXP +${bonusExp}（調査中につき停止）`, color:'#446688' })
+        return bonusExp
+      }
+      if (curClassLv >= cap) {
+        logs.push({ text:`⚠ レベルキャップに達しています（EXP +0）`, color:'#ff8844' })
+        return 0
+      }
+      let dispExp = profile.exp + bonusExp, dispLv = profile.lv, dispExpNext = profile.exp_next
+      while (dispExp >= dispExpNext && dispLv < cap) {
+        dispExp -= dispExpNext; dispLv++; dispExpNext = calcExpNext(dispLv)
+        logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${dispLv}！`, color:'#cc44ff' })
+      }
+      logs.push({ text:`EXP +${bonusExp}`, color:'#cc8800' })
+      return bonusExp
+    }
+
     if (type === 'exp') {
       const expGained = Math.floor(50 + Math.random() * 51)
       const currentClassLvD = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
@@ -1683,8 +1706,9 @@ export default function Game() {
       // 基礎: キャラLv×30〜45。キャラLv300以下は育成支援ボーナス×1.5
       const lvBonus = charLvG <= 300 ? 1.5 : 1.0
       const goldGained = Math.floor(charLvG * 30 * (1.0 + Math.random() * 0.5) * lvBonus)
-      await supabase.rpc('apply_dungeon_reward', { p_type:'gold', p_claimed_gold:goldGained })
       logs.push({ text:`Gold +${goldGained}${lvBonus > 1 ? '（キャラLv300までボーナス ×1.5！）' : ''}`, color:'#ffcc00' })
+      const bonusExp = grantBonusExpLogs()
+      await supabase.rpc('apply_dungeon_reward', { p_type:'gold', p_claimed_gold:goldGained, p_claimed_exp:bonusExp })
     } else if (type === 'stone') {
       const r = Math.random() * 100
       const stoneName = r < 10 ? '強化石(F)' : r < 25 ? '強化石(E)' : r < 55 ? '強化石(D)' : r < 80 ? '強化石(C)' : r < 95 ? '強化石(B)' : '強化石(A)'
@@ -1737,6 +1761,13 @@ export default function Game() {
         try { await supabase.from('player_gems').insert({ player_id:profile.id, gem_type:gemType, rank:'F', quantity:1 }) } catch {}
       }
       logs.push({ text:`💍 宝石「${GEM_DATA[gemType].name}(F)」を入手！`, color:'#ff66cc' })
+    }
+
+    // gold以外のEXP以外ダンジョン（stone/prof/gem）にもおまけ経験値（8〜11）を付与
+    // ※ gold は上のRPC呼び出しに同梱済み
+    if (type === 'stone' || type === 'prof' || type === 'gem') {
+      const bonusExp = grantBonusExpLogs()
+      await supabase.rpc('apply_dungeon_reward', { p_type, p_claimed_exp: bonusExp })
     }
 
     // dungeon_attempts更新（種類ごとの列を加算）
