@@ -345,10 +345,8 @@ export default function Casino() {
     if (slotMode==='normal') {
       if (!bet || bet < MIN_BET) { showMessage(`ベットは${MIN_BET}メダルからです`, '#ff4444'); return }
       if (bet > MAX_BET) { showMessage(`ベットは${MAX_BET}メダルまでです`, '#ff4444'); return }
-    } else if (slotMode==='at') {
-      // AT中もベットを消費する（at_bet分のメダルが必要）
-      if ((profile.medals||0) < slotBet) { showMessage('メダルが足りません！（AT中もベットを消費します）', '#ff4444'); return }
     }
+    // AT中はベットを消費しない（残高チェック不要）
     setLoading(true)
     const { data, error } = await supabase.rpc('slot_spin', { bet })
     if (error) { showMessage(`エラー: ${error.message}`, '#ff4444'); setLoading(false); return }
