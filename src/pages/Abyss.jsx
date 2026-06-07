@@ -435,10 +435,17 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     if (!kit) { doEnemyAttack(false); return }
     if (enLockedSkill) { resolveSlot(enLockedSkill); return }
     const hpRate = enemyHp / enemyMaxHp
+    // 75%スキル(パッシブ枠)は閾値初回に「自動発動」し、ターンを消費しない（その後そのまま行動する）
+    if (!enUsedT75 && hpRate <= 0.75 && kit.trigger75) {
+      enUsedT75 = true
+      const t75 = (typeof kit.trigger75 === 'string') ? { name: kit.trigger75 } : kit.trigger75
+      resolveSlot(t75)
+      if (playerHp <= 0 || enemyHp <= 0) return
+    }
+    // 通常行動（大技15% > 40% > 通常）
     let slot, isSpecial = false
     if (!enUsedSpecial && hpRate <= 0.15)      { slot = kit.special;   enUsedSpecial = true; isSpecial = true }
     else if (!enUsedT40 && hpRate <= 0.40)     { slot = kit.trigger40; enUsedT40 = true }
-    else if (!enUsedT75 && hpRate <= 0.75)     { slot = kit.trigger75; enUsedT75 = true }
     else                                       { slot = (hpRate <= 0.60 && kit.normalLow) ? kit.normalLow : kit.normal }
     const def = (typeof slot === 'string') ? { name: slot } : slot
     resolveSlot(def)
