@@ -15,7 +15,7 @@ import {
   extractStatuses,
   BattleLogLine,
 } from './Game'
-import { ABYSS_FLOOR_COUNT, getAbyssFloor } from '../lib/abyss'
+import { ABYSS_FLOOR_COUNT, ABYSS_DEFINED_FLOORS, getAbyssFloor } from '../lib/abyss'
 
 const STONE_NAME = (r) => `強化石(${r})`
 const fmt = (n) => Number(n).toLocaleString()
@@ -590,7 +590,9 @@ export default function Abyss() {
   const targetFloor = status?.next_floor || 1
   const floorData = getAbyssFloor(targetFloor)
   const isAllCleared = (status?.cleared_floor || 0) >= ABYSS_FLOOR_COUNT
-  const canChallenge = !!status?.can_challenge && !isAllCleared && remaining <= 0 && !battling
+  // 次の階がまだ未実装（16階以降など）：制覇ではないが今は挑戦できない
+  const notYetAvailable = !isAllCleared && !floorData
+  const canChallenge = !!status?.can_challenge && !isAllCleared && !notYetAvailable && remaining <= 0 && !battling
 
   const handleChallenge = async () => {
     if (!floorData || !profile || battling) return
@@ -675,6 +677,11 @@ export default function Abyss() {
               <div style={{ border:'1px solid #ffcc44', background:'#1a1400', padding:'24px', textAlign:'center' }}>
                 <div style={{ color:'#ffcc44', fontSize:'15px', marginBottom:'8px' }}>👑 全{ABYSS_FLOOR_COUNT}階制覇！</div>
                 <div style={{ color:'#ccaa66', fontSize:'11px' }}>奈落の頂点に立った。新たな挑戦をお待ちください。</div>
+              </div>
+            ) : notYetAvailable ? (
+              <div style={{ border:'1px solid #6a5a9a', background:'#120c1e', padding:'24px', textAlign:'center' }}>
+                <div style={{ color:'#b0a0dd', fontSize:'14px', marginBottom:'8px' }}>🚧 {ABYSS_DEFINED_FLOORS}階まで制覇！</div>
+                <div style={{ color:'#9988bb', fontSize:'11px', lineHeight:'1.8' }}>{targetFloor}階以降は現在準備中です。<br/>続きの実装をお待ちください。</div>
               </div>
             ) : !status.can_challenge ? (
               <div style={{ border:'1px solid #aa4466', background:'#1a0a14', padding:'20px', textAlign:'center' }}>
