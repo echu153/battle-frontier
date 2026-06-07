@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { sumClaimedFishingBonus, toFishingColumns } from '../lib/fishing'
 
 const FISH_SELL_PRICE = { f:150, e:450, d:1200, c:3000, b:7500, a:18000, s:45000, ss:120000, sss:300000 }
 const FISH_RANK_COLORS = {
@@ -205,7 +206,6 @@ useEffect(() => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-    setProfile(p)
     // caught_fishを取得（player_idのみで検索）
     const { data: caught } = await supabase.from('caught_fish')
       .select('*').eq('player_id', user.id).order('caught_at')
@@ -213,6 +213,18 @@ useEffect(() => {
     const { data: recs } = await supabase.from('fishing_records')
       .select('*').eq('player_id', user.id)
     setRecords(recs || [])
+    // 旧仕様（基礎列に直接加算）で消えた釣りボーナスを、fishing_* 専用列へ一度だけ復元
+    if (p && !p.fishing_migrated) {
+      const { totals, completed } = sumClaimedFishingBonus(recs || [])
+      const updates = {
+        ...toFishingColumns(totals),
+        fishing_completed: Object.keys(completed).filter(loc => completed[loc]),
+        fishing_migrated: true,
+      }
+      await supabase.from('profiles').update(updates).eq('id', p.id)
+      Object.assign(p, updates)
+    }
+    setProfile(p)
   }
 
   const showMessage = (msg, color = '#44ff88') => {
@@ -320,9 +332,10 @@ useEffect(() => {
     if (!fishData) { setLoading(false); return }
     const bonus = calcFishBonus(fishData, rank)
     if (!bonus) { setLoading(false); return }
+    // 永続列 fishing_* へ加算（基礎列の再計算で消えないようにする）
     const updates = {}
-    for (const [key, val] of Object.entries(bonus)) {
-      updates[key] = (profile[key] || 0) + val
+    for (const [col, val] of Object.entries(toFishingColumns(bonus))) {
+      updates[col] = (profile[col] || 0) + val
     }
     await supabase.from('profiles').update(updates).eq('id', profile.id)
     await supabase.from('fishing_records').update({ bonus_claimed: true }).eq('id', record.id)
@@ -341,10 +354,13 @@ useEffect(() => {
     const claimedNames = records.filter(r => r.location === location && r.bonus_claimed).map(r => r.fish_name)
     const allClaimed = allFish.every(f => claimedNames.includes(f.name))
     if (!allClaimed) { showMessage('まだ全部の魚を釣っていません！', '#ff4444'); setLoading(false); return }
+    // コンプリートボーナスの二重取得を fishing_completed で防止（永続化で露呈するため）
+    const completedLocs = profile.fishing_completed || []
+    if (completedLocs.includes(location)) { showMessage('このコンプリートボーナスは受取済みです', '#ff8844'); setLoading(false); return }
     const bonus = COMPLETE_BONUS[location]
-    const updates = {}
-    for (const [key, val] of Object.entries(bonus)) {
-      updates[key] = (profile[key] || 0) + val
+    const updates = { fishing_completed: [...completedLocs, location] }
+    for (const [col, val] of Object.entries(toFishingColumns(bonus))) {
+      updates[col] = (profile[col] || 0) + val
     }
     await supabase.from('profiles').update(updates).eq('id', profile.id)
     await fetchAll()
@@ -547,10 +563,14 @@ const getElapsedText = () => {
                     {encRecords.length}/{encFish.length}種類釣り上げ済み
                   </div>
                 </div>
-                <button onClick={()=>claimCompleteBonus(encLocation)} disabled={!allCaught || loading}
-                  style={{ padding:'6px 10px', background: allCaught?'#1a1000':'#001', border:`1px solid ${allCaught?'#ffcc00':'#002244'}`, color: allCaught?'#ffcc00':'#334455', cursor: allCaught?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
-                  {allCaught ? '受け取る' : '未達成'}
-                </button>
+                {(profile.fishing_completed || []).includes(encLocation) ? (
+                  <span style={{ color:'#44ff88', fontSize:'10px', whiteSpace:'nowrap' }}>✓ 受取済み</span>
+                ) : (
+                  <button onClick={()=>claimCompleteBonus(encLocation)} disabled={!allCaught || loading}
+                    style={{ padding:'6px 10px', background: allCaught?'#1a1000':'#001', border:`1px solid ${allCaught?'#ffcc00':'#002244'}`, color: allCaught?'#ffcc00':'#334455', cursor: allCaught?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
+                    {allCaught ? '受け取る' : '未達成'}
+                  </button>
+                )}
               </div>
             </div>
 

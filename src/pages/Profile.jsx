@@ -160,6 +160,10 @@ export default function Profile() {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
           <div style={{ display:'flex', gap:'8px' }}>
+            {isOwn && profile.is_admin && (
+              <button onClick={() => nav('/status')}
+                style={{ background:'none', border:'1px solid #88ccff', color:'#88ccff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📊 詳細[開発]</button>
+            )}
             {isOwn && (
               <button onClick={() => nav('/titles')}
                 style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>⬡ 称号</button>

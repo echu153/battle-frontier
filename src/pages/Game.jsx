@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import papiaIcon from '../assets/papia.png'
-import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue } from '../lib/stats'
+import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue, calcDefReduction } from '../lib/stats'
 // Equipment.jsx 等が './Game' から参照しているため再export
-export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue } from '../lib/stats'
+export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue, calcDefReduction } from '../lib/stats'
 
 export const WAIT_SECONDS = 10
 const REGEN_SECONDS = 60
@@ -334,26 +334,8 @@ const STAT_LABELS = {
 // ============================================================
 // ユーティリティ
 // ============================================================
-// ★ ステータスのF~SSSランク閾値（見直し時はここを変更）
-const DEF_STAT_THRESHOLDS = [55, 150, 300, 550, 950, 1500, 2200, 3300] // 表示ランク(getStatRank)と一致
-// ★ 防御ランクに対応するダメージ軽減率(%) F=1%〜SSS=30%・均等カーブ（見直し時はここを変更）
-// 線形補間されるので、防御の成長に合わせて 1%刻みで滑らかに上昇する
-const DEF_REDUCTION_RATES = [1, 4.6, 8.3, 11.9, 15.5, 19.1, 22.8, 26.4, 30]
-
-// 防御値からダメージ軽減率(0〜1)を線形補間で算出
-export const calcDefReduction = (defVal) => {
-  if (defVal <= 0) return 0
-  const thresholds = [0, ...DEF_STAT_THRESHOLDS]
-  const rates = DEF_REDUCTION_RATES
-  if (defVal >= thresholds[thresholds.length - 1]) return rates[rates.length - 1] / 100
-  for (let i = 1; i < thresholds.length; i++) {
-    if (defVal <= thresholds[i]) {
-      const progress = (defVal - thresholds[i-1]) / (thresholds[i] - thresholds[i-1])
-      return (rates[i-1] + (rates[i] - rates[i-1]) * progress) / 100
-    }
-  }
-  return rates[rates.length - 1] / 100
-}
+// 防御ランク→被ダメージ軽減率（calcDefReduction）は ../lib/stats に集約。
+// 上部で import / 再export 済み。
 
 // ATK²/(ATK+DEF) 比率式ベースダメージ
 const calcRatioDmg = (atk, enemyDef, mult, am) => {
@@ -3437,6 +3419,9 @@ export default function Game() {
             )}
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/dungeon'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🕳 ダンジョン[開発]</button>
+            )}
+            {profile?.is_admin && (
+              <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
             )}
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
