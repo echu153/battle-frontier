@@ -200,3 +200,28 @@ BEGIN
   );
 END;
 $$;
+
+-- ============================================================
+-- 進行リセット（管理者[開発]専用・テスト用）
+-- 到達階を0に戻し、週次ロックも解除する。
+-- ============================================================
+CREATE OR REPLACE FUNCTION reset_abyss_progress()
+RETURNS json
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_player_id uuid;
+  v_is_admin  boolean;
+BEGIN
+  v_player_id := auth.uid();
+  IF v_player_id IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
+  SELECT COALESCE(is_admin, false) INTO v_is_admin FROM profiles WHERE id = v_player_id;
+  IF NOT v_is_admin THEN RETURN json_build_object('error', '権限がありません'); END IF;
+
+  INSERT INTO abyss_progress (player_id, cleared_floor, last_clear_week)
+  VALUES (v_player_id, 0, NULL)
+  ON CONFLICT (player_id) DO UPDATE
+  SET cleared_floor = 0, last_clear_week = NULL, updated_at = now();
+
+  RETURN json_build_object('success', true);
+END;
+$$;

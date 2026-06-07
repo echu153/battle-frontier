@@ -629,6 +629,7 @@ export default function Abyss() {
   const [scene, setScene] = useState('lobby')   // 'lobby' | 'battle'
   const [battleLogs, setBattleLogs] = useState([])
   const [battling, setBattling] = useState(false)
+  const [battleFloor, setBattleFloor] = useState(null)  // 戦闘中に挑んでいる階（勝利後にtargetFloorが進んでも表示がズレないよう固定）
   const [reward, setReward] = useState(null)
   const [resultMsg, setResultMsg] = useState(null)
   const [remaining, setRemaining] = useState(0)
@@ -693,6 +694,15 @@ export default function Abyss() {
     setStatus(data)
   }
 
+  const handleReset = async () => {
+    if (!profile?.is_admin) return
+    if (!window.confirm('奈落の進行状況を初期化します（1階から）。よろしいですか？')) return
+    const { data, error } = await supabase.rpc('reset_abyss_progress')
+    if (error || data?.error) { alert(data?.error || error?.message || 'リセットに失敗しました'); return }
+    setScene('lobby'); setBattleLogs([]); setReward(null); setResultMsg(null)
+    await fetchStatus()
+  }
+
   const targetFloor = status?.next_floor || 1
   const floorData = getAbyssFloor(targetFloor)
   const isAllCleared = (status?.cleared_floor || 0) >= ABYSS_FLOOR_COUNT
@@ -704,6 +714,7 @@ export default function Abyss() {
     if (!floorData || !profile || battling) return
     if (!status?.can_challenge) return
     if (remaining > 0) return
+    setBattleFloor(targetFloor)  // 戦う階を固定（勝利後にtargetFloorが進んでも表示を保つ）
     setBattling(true); setScene('battle'); setBattleLogs([]); setReward(null); setResultMsg(null)
 
     // 共有CDロック（10秒に1回まで）。並行端末/連打対策。
@@ -776,7 +787,11 @@ export default function Abyss() {
               <div style={{ color:'#7766aa', fontSize:'10px', marginTop:'4px', lineHeight:'1.7' }}>
                 1階を倒すと次の階へ。勝利すると次の月曜朝5時まで再挑戦できません。<br/>
                 敗北しても挑戦回数は減りません（勝つまで何度でも挑戦可）。
+                {profile?.is_admin && <><br/><span style={{ color:'#a060ff' }}>[開発] 管理者は週次ロックを無視して連続挑戦できます。</span></>}
               </div>
+              {profile?.is_admin && (
+                <button onClick={handleReset} style={{ marginTop:'8px', padding:'5px 10px', background:'#1a0a14', border:'1px solid #aa4466', color:'#ff6688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>🔄 進行リセット[開発]</button>
+              )}
             </div>
 
             {isAllCleared ? (
@@ -823,9 +838,12 @@ export default function Abyss() {
           </>
         )}
 
-        {scene === 'battle' && (
+        {scene === 'battle' && (() => {
+          const bf = battleFloor || targetFloor
+          const bEnemy = getAbyssFloor(bf)?.enemy
+          return (
           <div style={{ border:'1px solid #6a3a9a', background:'#140a22', padding:'12px' }}>
-            <div style={{ color:'#c08cff', fontSize:'13px', marginBottom:'10px' }}>⚔ {targetFloor}階　{e?.name} 戦</div>
+            <div style={{ color:'#c08cff', fontSize:'13px', marginBottom:'10px' }}>⚔ {bf}階　{bEnemy?.name} 戦</div>
             {battling && <div style={{ color:'#9977aa', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
             <div style={{ marginBottom:'12px', maxHeight:'46vh', overflowY:'auto' }}>
               {battleLogs.map((l,i)=>(<BattleLogLine key={i} l={l} />))}
@@ -834,13 +852,13 @@ export default function Abyss() {
 
             {reward && (
               <div style={{ border:'1px solid #ffcc44', background:'#1a1400', padding:'12px', marginBottom:'10px' }}>
-                <div style={{ color:'#ffcc44', fontSize:'13px', marginBottom:'6px' }}>🎉 {targetFloor}階クリア！ 報酬獲得</div>
+                <div style={{ color:'#ffcc44', fontSize:'13px', marginBottom:'6px' }}>🎉 {reward.floor}階クリア！ 報酬獲得</div>
                 <div style={{ fontSize:'11px', color:'#ffcc66', lineHeight:'1.9' }}>
                   <div>💰 Gold +{fmt(reward.gold)}</div>
                   {reward.stone && <div>💎 {STONE_NAME(reward.stone)} ×{reward.stone_count}</div>}
                   {reward.gem_count > 0 && <div style={{ color: GEM_RANK_COLOR[reward.gem_rank] || '#ccc' }}>💠 宝石（{reward.gem_rank}ランク）×{reward.gem_count}</div>}
                 </div>
-                <div style={{ color:'#cc9944', fontSize:'10px', marginTop:'6px' }}>次の挑戦は月曜朝5時から。次は {Math.min(targetFloor+1, ABYSS_FLOOR_COUNT)}階だ。</div>
+                <div style={{ color:'#cc9944', fontSize:'10px', marginTop:'6px' }}>{reward.floor >= ABYSS_DEFINED_FLOORS ? '現在実装ぶんはここまで。' : `次は ${reward.floor + 1}階だ。`}{!profile?.is_admin && ' 次の挑戦は月曜朝5時から。'}</div>
               </div>
             )}
             {resultMsg && (
@@ -854,7 +872,8 @@ export default function Abyss() {
               </button>
             )}
           </div>
-        )}
+          )
+        })()}
       </div>
     </div>
   )
