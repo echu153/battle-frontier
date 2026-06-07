@@ -160,10 +160,6 @@ export default function Profile() {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
           <div style={{ display:'flex', gap:'8px' }}>
-            {isOwn && profile.is_admin && (
-              <button onClick={() => nav('/status')}
-                style={{ background:'none', border:'1px solid #88ccff', color:'#88ccff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📊 詳細[開発]</button>
-            )}
             {isOwn && (
               <button onClick={() => nav('/titles')}
                 style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>⬡ 称号</button>
@@ -255,7 +251,13 @@ export default function Profile() {
 
         {/* ステータス */}
         <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'12px' }}>
-          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>ステータス</div>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
+            <div style={{ color:'#ffcc00', fontSize:'12px' }}>ステータス</div>
+            {isOwn && (
+              <button onClick={() => nav('/status')}
+                style={{ background:'none', border:'1px solid #88ccff', color:'#88ccff', padding:'3px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>📊 詳細</button>
+            )}
+          </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px', fontSize:'11px' }}>
             {[
               { label:'HP', val:eff.hp_max, type:'hp', color:'#00cc44' },
