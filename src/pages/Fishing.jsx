@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
-const FISH_SELL_PRICE = { f:500, e:1500, d:4000, c:10000, b:25000, a:60000, s:150000, ss:400000, sss:1000000 }
+const FISH_SELL_PRICE = { f:150, e:450, d:1200, c:3000, b:7500, a:18000, s:45000, ss:120000, sss:300000 }
 const FISH_RANK_COLORS = {
   f:'#888888', e:'#6699cc', d:'#ff8844', c:'#44bb44',
   b:'#4488ff', a:'#ff4444', s:'#ffcc00', ss:'#ffcc00', sss:'#ffcc00'
