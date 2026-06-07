@@ -3679,10 +3679,10 @@ export default function Game() {
                 <button onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場</button>
                 <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場</button>
                 <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所</button>
-                {profile?.is_admin && (
-                  <button onClick={()=>nav('/abyss')} style={{ padding:'10px', background:'#150a22', border:'1px solid #a060ff', color:'#c08cff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ 挑戦[開発]</button>
-                )}
               </div>
+              {profile?.is_admin && (
+                <button onClick={()=>nav('/abyss')} style={{ width:'100%', padding:'14px', marginTop:'10px', background:'#150a22', border:'1px solid #a060ff', color:'#c08cff', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦[開発]</button>
+              )}
             </div>
           )}
 
@@ -3980,10 +3980,10 @@ export default function Game() {
                   <button onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場へ</button>
                   <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>
                   <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所へ</button>
-                  {profile?.is_admin && (
-                    <button onClick={()=>nav('/abyss')} style={{ padding:'10px', background:'#150a22', border:'1px solid #a060ff', color:'#c08cff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ 挑戦[開発]</button>
-                  )}
                 </div>
+                {profile?.is_admin && (
+                  <button onClick={()=>nav('/abyss')} style={{ width:'100%', padding:'14px', marginTop:'10px', background:'#150a22', border:'1px solid #a060ff', color:'#c08cff', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦[開発]</button>
+                )}
               </div>
             )}
 
