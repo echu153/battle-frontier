@@ -72,9 +72,10 @@ const FLOOR_META = [
   { floor:7,  name:'聖域のアークライト', target:3000,  arch:'priest',
     kit:{ normal:'ホーリーエッジ', normalLow:'ディバインスマイト', trigger75:'聖域展開', trigger40:'神聖覚醒',
           special: sp('ジャッジメント', { matk:2.5 }) } },
-  { floor:8,  name:'月影のカゲツ',       target:3500,  arch:'swift',
-    kit:{ normal:'居合斬', normalLow:'断空', trigger75:'明鏡止水', trigger40:'月影',
-          special: sp('桜花乱舞', { atk:0.5, hits:5 }) } },
+  { floor:8,  name:'運命喰らいのフォルト', target:3500, arch:'balanced',
+    kit:{ normal:'ジャグリング', normalLow:'ラッキーダイス',
+          trigger75:{ name:'オールイン', noBacklash:true }, trigger40:'ジャックポット',
+          special: sp('ロイヤル・フラッシュ', { atk:2.5, critGuaranteed:true }) } },
   { floor:9,  name:'武神のレオニス',     target:4000,  arch:'monk',
     kit:{ normal:'半月蹴り', normalLow:'五連殺', trigger75:'破衝掌', trigger40:'飛天三角蹴り',
           special: sp('絶拳', { atk:2.5, stunGuaranteed:true }) } },
@@ -84,9 +85,9 @@ const FLOOR_META = [
   { floor:11, name:'血塗れのバルガス',   target:6000,  arch:'warrior',
     kit:{ normal:'すてみ', normalLow:'マッドラッシュ', trigger75:'ブラッティロア', trigger40:'フルブレイカー',
           special: sp('ハリケーンスラッシュ', { atk:2.5, persist:true }) } }, // persist=試合終了まで毎ターンこれ
-  { floor:12, name:'宵闇のノクス',       target:7000,  arch:'swift',
-    kit:{ normal:'瞬歩瞬殺', normalLow:'鬼影閃', trigger75:'影歩き', trigger40:'急所突き',
-          special: sp('断首', { atk:3.0, executeHpBelow:10 }) } }, // 与ダメ後HP10以下なら即死
+  { floor:12, name:'月影のカゲツ',       target:7000,  arch:'swift',
+    kit:{ normal:'居合斬', normalLow:'断空', trigger75:'明鏡止水', trigger40:'月影',
+          special: sp('桜花乱舞', { atk:0.5, hits:5 }) } }, // 与ダメ後HP10以下なら即死
   { floor:13, name:'四象のエレシア',     target:8000,  arch:'arcane',
     kit:{ normal:'アクアショット', normalLow:'アースクエイク', trigger75:'ライトニングボルト', trigger40:'フレイムバースト',
           special: sp('五元崩界', { matk:2.5, inflict:['paralysis','burn','stun'], debuff:{ mdef:-20 } }) } },
