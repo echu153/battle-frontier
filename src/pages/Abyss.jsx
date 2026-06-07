@@ -833,7 +833,7 @@ export default function Abyss() {
                   <div style={{ color:'#e0b0ff', fontSize:'16px', fontWeight:'bold', marginBottom:'10px' }}>{floorLabel(targetFloor)}　{e?.name}</div>
                   <div style={{ background:'#0d0618', border:'1px solid #2a1840', padding:'8px 10px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                     <span style={{ color:'#7766aa', fontSize:'11px' }}>推奨総合力</span>
-                    <span style={{ color:'#ffcc66', fontSize:'15px', fontWeight:'bold' }}>{fmt(floorData.target)}</span>
+                    <span style={{ color:'#ffcc66', fontSize:'15px', fontWeight:'bold' }}>{fmt(floorData.target)}<span style={{ fontSize:'11px', color:'#cc9944' }}> 以上</span></span>
                   </div>
                 </div>
 
