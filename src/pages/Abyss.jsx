@@ -648,7 +648,6 @@ export default function Abyss() {
   }
 
   const e = floorData?.enemy
-  const enemyTotal = e ? Math.floor((e.hp/10) + e.atk + e.def + e.matk + e.mdef + e.spd) : 0
 
   return (
     <div style={{ minHeight:'100vh', background:'#0a0612', padding:'12px', fontFamily:'monospace' }}>
@@ -688,19 +687,12 @@ export default function Abyss() {
             ) : (
               <div style={{ border:'1px solid #6a3a9a', background:'#160c26', padding:'16px' }}>
                 <div style={{ color:'#9977cc', fontSize:'10px', marginBottom:'6px' }}>次の挑戦相手</div>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'10px' }}>
-                  <span style={{ color:'#e0b0ff', fontSize:'16px', fontWeight:'bold' }}>{targetFloor}階　{e?.name}</span>
-                  <span style={{ color:'#ff8844', fontSize:'11px' }}>{e?.type === 'magical' ? '魔法型' : '物理型'}</span>
-                </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'4px', fontSize:'10px', marginBottom:'12px' }}>
-                  <Stat label="推奨総合力" v={fmt(floorData.target)} c="#ffcc66" />
-                  <Stat label="HP" v={fmt(e.hp)} c="#66dd88" />
-                  <Stat label="素早さ" v={fmt(e.spd)} c="#88ccff" />
-                  <Stat label="攻撃" v={fmt(e.atk)} c="#ff9966" />
-                  <Stat label="防御" v={fmt(e.def)} c="#99aacc" />
-                  <Stat label="特殊攻撃" v={fmt(e.matk)} c="#cc88ff" />
-                  <Stat label="特殊防御" v={fmt(e.mdef)} c="#88aadd" />
-                  <Stat label="敵総合力" v={fmt(enemyTotal)} c="#cc99dd" />
+                <div style={{ marginBottom:'12px' }}>
+                  <div style={{ color:'#e0b0ff', fontSize:'16px', fontWeight:'bold', marginBottom:'10px' }}>{targetFloor}階　{e?.name}</div>
+                  <div style={{ background:'#0d0618', border:'1px solid #2a1840', padding:'8px 10px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <span style={{ color:'#7766aa', fontSize:'11px' }}>推奨総合力</span>
+                    <span style={{ color:'#ffcc66', fontSize:'15px', fontWeight:'bold' }}>{fmt(floorData.target)}</span>
+                  </div>
                 </div>
 
                 {/* 報酬プレビュー */}
@@ -751,15 +743,6 @@ export default function Abyss() {
           </div>
         )}
       </div>
-    </div>
-  )
-}
-
-function Stat({ label, v, c }) {
-  return (
-    <div style={{ background:'#0d0618', border:'1px solid #2a1840', padding:'4px 6px', display:'flex', justifyContent:'space-between' }}>
-      <span style={{ color:'#7766aa' }}>{label}</span>
-      <span style={{ color:c, fontWeight:'bold' }}>{v}</span>
     </div>
   )
 }

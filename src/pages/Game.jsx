@@ -1299,6 +1299,7 @@ export default function Game() {
   // 種類ごとの当日選択回数。読み込み完了まではlimit(=disabled)で初期化
   const [dungeonCounts, setDungeonCounts] = useState({ exp:DUNGEON_DAILY_LIMIT, gold:DUNGEON_DAILY_LIMIT, stone:DUNGEON_DAILY_LIMIT, prof:DUNGEON_DAILY_LIMIT, gem:DUNGEON_DAILY_LIMIT })
   const [showDungeonPanel, setShowDungeonPanel] = useState(false)
+  const [showChallengePanel, setShowChallengePanel] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [showMenu, setShowMenu] = useState(false)
   const [showContact, setShowContact] = useState(false)
@@ -3681,7 +3682,15 @@ export default function Game() {
                 <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所</button>
               </div>
               {profile?.is_admin && (
-                <button onClick={()=>nav('/abyss')} style={{ width:'100%', padding:'14px', marginTop:'10px', background:'#150a22', border:'1px solid #a060ff', color:'#c08cff', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦[開発]</button>
+                <>
+                  <button onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ width:'100%', padding:'14px', marginTop:'10px', background:'#150a22', border:'1px solid #a060ff', color:'#c08cff', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦[開発]</button>
+                  {showChallengePanel && (
+                    <div style={{ border:'1px solid #6a3a9a', background:'#0d0618', padding:'10px', marginTop:'10px' }}>
+                      <div style={{ color:'#c08cff', fontSize:'11px', marginBottom:'8px' }}>挑戦するコンテンツを選択</div>
+                      <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場</button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -3982,7 +3991,15 @@ export default function Game() {
                   <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所へ</button>
                 </div>
                 {profile?.is_admin && (
-                  <button onClick={()=>nav('/abyss')} style={{ width:'100%', padding:'14px', marginTop:'10px', background:'#150a22', border:'1px solid #a060ff', color:'#c08cff', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦[開発]</button>
+                  <>
+                    <button onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ width:'100%', padding:'14px', marginTop:'10px', background:'#150a22', border:'1px solid #a060ff', color:'#c08cff', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦[開発]</button>
+                    {showChallengePanel && (
+                      <div style={{ border:'1px solid #6a3a9a', background:'#0d0618', padding:'10px', marginTop:'10px' }}>
+                        <div style={{ color:'#c08cff', fontSize:'11px', marginBottom:'8px' }}>挑戦するコンテンツを選択</div>
+                        <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場</button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
