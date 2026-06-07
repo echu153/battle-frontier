@@ -127,6 +127,16 @@ function enemySeesPet(rooms, e, px, py) {
   return Math.max(Math.abs(e.x - px), Math.abs(e.y - py)) <= 2 // 通路で接近
 }
 
+// ダメージ計算: 攻撃と防御の差が過剰だと効率が逓減する（物理=def / 特殊=mdef 共通）
+//  ・防御が攻撃を上回る → 素攻撃の10%は最低保証で通す
+//  ・差(攻撃-防御)が「攻撃の50%」までは等倍、それを超えた分は効率半減
+function calcDamage(rawAtk, guard) {
+  const d = rawAtk - guard
+  if (d <= 0) return Math.max(1, Math.round(rawAtk * 0.10))
+  const cap = rawAtk * 0.5
+  return Math.max(1, Math.round(d <= cap ? d : cap + (d - cap) * 0.5))
+}
+
 export default function Dungeon() {
   const nav = useNavigate()
   const [allowed, setAllowed] = useState(undefined)
@@ -296,7 +306,7 @@ export default function Dungeon() {
       const hits = sk.hits || 1
       // ペットの攻撃タイプに応じて敵の def(物理)/mdef(特殊)で軽減
       const guard = pet.atkType === 'spec' ? (target.mdef || 0) : (target.def || 0)
-      const perHit = Math.max(1, Math.round(pet.atk * (sk.mult || 1)) - guard)
+      const perHit = calcDamage(Math.round(pet.atk * (sk.mult || 1)), guard)
       const total = perHit * hits
       const newHp = target.hp - total
       const skillTag = selectedSkill === 'tackle' ? '' : `【${sk.name}】`
@@ -340,7 +350,7 @@ export default function Dungeon() {
       if (sees && adjacent) {
         // 敵の攻撃タイプに応じて pet.def(物理)/mdef(特殊)で軽減
         const guard = e.type === 'spec' ? (pet.mdef || 0) : (pet.def || 0)
-        const dmg = Math.max(1, (e.atk || 1) - guard)
+        const dmg = calcDamage(e.atk || 1, guard)
         curPetHp -= dmg
         addLog(`💥 ${e.name}の攻撃！ ${dmg}ダメージ`)
         if (curPetHp <= 0) dead = true
