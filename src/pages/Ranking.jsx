@@ -89,6 +89,14 @@ export default function Ranking() {
     return '★'.repeat(count)
   }
 
+  // 奈落ランキングの順位（到達階＋撃破ターンが同じなら同順位）
+  const abyssRanks = []
+  for (let i = 0; i < abyssPlayers.length; i++) {
+    const p = abyssPlayers[i], prev = abyssPlayers[i - 1]
+    const sameAsPrev = i > 0 && prev.cleared_floor === p.cleared_floor && (prev.last_clear_turns ?? -1) === (p.last_clear_turns ?? -1)
+    abyssRanks.push(sameAsPrev ? abyssRanks[i - 1] : i + 1)
+  }
+
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'12px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'600px', margin:'0 auto' }}>
@@ -301,7 +309,8 @@ export default function Ranking() {
         ) : (
           <div>
             {abyssPlayers.map((p, i) => {
-              const medal = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
+              const rank = abyssRanks[i]
+              const medal = rank === 1 ? '👑' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null
               const isMe = p.id === currentUserId
               const stars = getStars(p)
               return (
@@ -311,12 +320,12 @@ export default function Ranking() {
                     display:'flex', alignItems:'center', gap:'8px',
                     padding:'8px 10px', marginBottom:'4px',
                     border:`1px solid ${isMe ? '#0066cc' : '#2a1840'}`,
-                    background: isMe ? '#001830' : i === 0 ? '#160c26' : '#0d0a18',
+                    background: isMe ? '#001830' : rank === 1 ? '#160c26' : '#0d0a18',
                     cursor:'pointer', borderRadius:'2px',
                   }}
                 >
                   <div style={{ minWidth:'28px', textAlign:'center' }}>
-                    {medal ? <span style={{ fontSize:'16px' }}>{medal}</span> : <span style={{ color:'#7766aa', fontSize:'11px' }}>{i+1}</span>}
+                    {medal ? <span style={{ fontSize:'16px' }}>{medal}</span> : <span style={{ color:'#7766aa', fontSize:'11px' }}>{rank}</span>}
                   </div>
                   {p.avatar_url
                     ? <img src={p.avatar_url} alt="avatar" style={{ width:'36px', height:'36px', objectFit:'cover', flexShrink:0 }} />
@@ -332,7 +341,7 @@ export default function Ranking() {
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
                     <div style={{ color:'#d0a0ff', fontSize:'15px', fontWeight:'bold' }}>地下{p.cleared_floor}階</div>
-                    <div style={{ color:'#7766aa', fontSize:'10px' }}>到達</div>
+                    <div style={{ color:'#7766aa', fontSize:'10px' }}>{p.last_clear_turns ? `${p.last_clear_turns}ターン撃破` : '到達'}</div>
                   </div>
                 </div>
               )

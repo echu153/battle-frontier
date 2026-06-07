@@ -19,8 +19,11 @@ CREATE TABLE IF NOT EXISTS abyss_progress (
   cleared_floor    int  NOT NULL DEFAULT 0,   -- 撃破済み最高階（0=未挑戦）
   last_clear_week  date,                       -- 直近クリアした「奈落ウィーク」の月曜日付
   total_clears     int  NOT NULL DEFAULT 0,   -- 累計クリア回数（統計用）
+  last_clear_turns int,                        -- 直近クリア（=到達最深階）の撃破ターン数（ランキングのタイブレーク）
   updated_at       timestamptz NOT NULL DEFAULT now()
 );
+-- 既存テーブルへの追加（後付けカラム）
+ALTER TABLE abyss_progress ADD COLUMN IF NOT EXISTS last_clear_turns int;
 
 ALTER TABLE abyss_progress ENABLE ROW LEVEL SECURITY;
 
@@ -77,7 +80,8 @@ $$;
 -- フロア報酬の受け取り（勝利時にクライアントから呼ぶ）
 -- フロア順＋週次ロックをサーバ側で検証してから付与する。
 -- ============================================================
-CREATE OR REPLACE FUNCTION claim_abyss_floor(p_floor int)
+DROP FUNCTION IF EXISTS claim_abyss_floor(int);
+CREATE OR REPLACE FUNCTION claim_abyss_floor(p_floor int, p_turns int DEFAULT 0)
 RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
@@ -184,6 +188,7 @@ BEGIN
   UPDATE abyss_progress
   SET cleared_floor = p_floor,
       last_clear_week = v_week,
+      last_clear_turns = GREATEST(p_turns, 1),
       total_clears = total_clears + 1,
       updated_at = now()
   WHERE player_id = v_player_id;
@@ -237,11 +242,11 @@ LANGUAGE sql SECURITY DEFINER STABLE AS $$
   FROM (
     SELECT ap.player_id AS id, p.username, p.char_lv, p.lv, p.class,
            p.avatar_url, p.retraining,
-           ap.cleared_floor, ap.total_clears, ap.updated_at
+           ap.cleared_floor, ap.last_clear_turns, ap.total_clears, ap.updated_at
     FROM abyss_progress ap
     JOIN profiles p ON p.id = ap.player_id
     WHERE ap.cleared_floor > 0 AND COALESCE(p.is_suspended, false) = false
-    ORDER BY ap.cleared_floor DESC, ap.updated_at ASC
+    ORDER BY ap.cleared_floor DESC, ap.last_clear_turns ASC NULLS LAST, ap.updated_at ASC
     LIMIT 50
   ) t;
 $$;

@@ -614,10 +614,11 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   }
 
   const win = enemyHp <= 0
+  const turns = Math.min(turn, 50)  // 撃破にかかったターン数（ランキングのタイブレーク用）
   logs.push(win
-    ? { text:`${enemy.name}を倒した！`, color:'#44ff88' }
+    ? { text:`${enemy.name}を ${turns}ターンで倒した！`, color:'#44ff88' }
     : { text:`敗北… また挑もう。`, color:'#ff4444' })
-  return { logs, win }
+  return { logs, win, turns }
 }
 
 export default function Abyss() {
@@ -736,11 +737,11 @@ export default function Abyss() {
     setRemaining(ABYSS_CD)
 
     const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
-    const { logs, win } = simulateAbyssBattle(eff, equipment, skillSets, profile, { ...floorData.enemy }, playerItem, targetFloor)
+    const { logs, win, turns } = simulateAbyssBattle(eff, equipment, skillSets, profile, { ...floorData.enemy }, playerItem, targetFloor)
     setBattleLogs(logs)
 
     if (win) {
-      const { data, error } = await supabase.rpc('claim_abyss_floor', { p_floor: targetFloor })
+      const { data, error } = await supabase.rpc('claim_abyss_floor', { p_floor: targetFloor, p_turns: turns })
       if (error || data?.error) {
         setResultMsg((data?.error || error?.message || '報酬の受け取りに失敗しました') + '（SQL未実行の可能性: supabase_abyss.sql を実行してください）')
       } else {
