@@ -1108,7 +1108,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
 // ============================================================
 // 敵スキル実行（BOSSと一部雑魚）
 // ============================================================
-const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileHpMax, playerBuffs, enemyBuffs, logs, eff) => {
+export const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileHpMax, playerBuffs, enemyBuffs, logs, eff) => {
   let dmgToPlayer = 0
   let healEnemy = 0
   const newPlayerBuffs = { ...playerBuffs }
@@ -3462,6 +3462,9 @@ export default function Game() {
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
             )}
+            {profile?.is_admin && (
+              <button onClick={()=>{ nav('/abyss'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#c08cff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚔ 挑戦/奈落闘技場[開発]</button>
+            )}
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
           </div>
@@ -3676,6 +3679,9 @@ export default function Game() {
                 <button onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場</button>
                 <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場</button>
                 <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所</button>
+                {profile?.is_admin && (
+                  <button onClick={()=>nav('/abyss')} style={{ padding:'10px', background:'#150a22', border:'1px solid #a060ff', color:'#c08cff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ 挑戦[開発]</button>
+                )}
               </div>
             </div>
           )}
@@ -3974,6 +3980,9 @@ export default function Game() {
                   <button onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場へ</button>
                   <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>
                   <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所へ</button>
+                  {profile?.is_admin && (
+                    <button onClick={()=>nav('/abyss')} style={{ padding:'10px', background:'#150a22', border:'1px solid #a060ff', color:'#c08cff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ 挑戦[開発]</button>
+                  )}
                 </div>
               </div>
             )}
@@ -4095,7 +4104,7 @@ const BUFF_LABELS = {
   curseDmg:'💜呪い', healSeal:'🚫回復封',
   bloodRage:'🩸ブラッティロア',
 }
-function extractStatuses(buffs) {
+export function extractStatuses(buffs) {
   const out = []
   for (const k of Object.keys(buffs || {})) {
     const b = buffs[k]
@@ -4114,7 +4123,7 @@ function extractStatuses(buffs) {
   return out
 }
 
-function BattleLogLine({ l }) {
+export function BattleLogLine({ l }) {
   if (l.type === 'hp') {
     const pPct = Math.max(0, Math.min(100, (l.playerHp / l.playerMax) * 100))
     const ePct = Math.max(0, Math.min(100, (l.enemyHp / l.enemyMax) * 100))
