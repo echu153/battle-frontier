@@ -99,7 +99,28 @@ const FLOOR_META = [
           trigger75:{ name:'氷の障壁', duration:10 },
           trigger40:{ name:'メテオストライク', hits:'3-4' },
           special: sp('ジェネシス・ノヴァ', { matk:3.0 }) } },
-  // 16〜20階は後日追加
+  { floor:16, name:'断罪のイグナート',   target:12000, arch:'balanced',
+    kit:{ normal:'粛清', normalLow:'聖なる裁き',
+          trigger75:{ name:'狂信', buff:{ atkMult:2, matkMult:2 }, duration:10 }, // A＋C2倍を追加(10T)
+          trigger40:'断罪',
+          special: sp('ギルティクラウン', { matk:2.5, healBlock:true }) } }, // 以降回復不可
+  { floor:17, name:'神託のラフィエル',   target:14000, arch:'priest',
+    kit:{ normal:'ホーリーライト', normalLow:'奇跡', trigger75:'祈りの結界', trigger40:'神罰執行',
+          special: sp('天の祝福', { fullHeal:true, allStatsMult:2, thenOnlySkill:'神罰執行' }) } }, // HP全回復・全ステ2倍・以降神罰執行のみ
+  { floor:18, name:'魔弾のリオン',       target:16000, arch:'archer',
+    kit:{ normal:'連装銃撃',
+          normalLow:{ name:'キャノネスチュームビンド', comboMult:1.8 }, // 連続使用時×1.8倍
+          trigger75:{ name:'強化装填', permanent:true, effectMult:1.5 }, // 永続・効果1.5倍
+          trigger40:{ name:'影強化', convertCtoA:true, addFollowup:{ atk:2.0 } }, // C→A変換・以降全スキルにA2.0追撃
+          special: sp('ゲシュペンストハーケン', { atk:5.0, lifesteal:0.5 }) } }, // 与ダメの半分回復
+  { floor:19, name:'暗殺者えちゅ',       target:18000, arch:'swift',
+    kit:{ normal:{ name:'瞬歩瞬殺', guaranteedBleed:true },
+          normalLow:{ name:'鬼影閃', guaranteedBleed:true,
+                      note:'相手の出血スタック最大時は急所突きを自動発動(出血スタック×20%追撃・最大100%→出血消費)' },
+          trigger75:{ name:'影歩き', permanent:true, critDmgPlus:0.5 }, // 永続・クリ威力+50%
+          trigger40:{ name:'絶影', permanent:true, buff:{ atkMult:2, spdMult:2 } }, // AS永続2倍
+          special: sp('断首', { atk:3.0, executeHpBelow:10 }) } }, // 与ダメ後HP10以下なら即死
+  // 20階は後日追加
 ]
 
 export const ABYSS_FLOOR_COUNT = 20  // 全体の予定階層数（実装済みは FLOOR_META の数）
