@@ -11,7 +11,6 @@ import {
   calcDefReduction,
   applyEquipmentEffects,
   executeSkill,
-  executeEnemySkill,
   extractStatuses,
   BattleLogLine,
 } from './Game'
@@ -46,13 +45,17 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   let currentItem = playerItem ? { ...playerItem } : null
   let itemUsed = false
   let prevSkillName = null
-  let bossHealCooldown = 0
-  let bossSpecialUsed = false
-  let bossBuff1Used = false
-  let bossBuff2Used = false
-  let bossHeal1Used = false
-  let bossHeal2Used = false
   let playerAttacking = false
+
+  // ===== 敵スキルAI 状態（kit駆動） =====
+  // 敵はMP消費なしでスキル撃ち放題。HP閾値で発動スキルが1度だけ切り替わる。
+  let enUsedT75 = false, enUsedT40 = false, enUsedSpecial = false
+  let enLockedSkill = null           // persist/thenOnly でロックされたスキル（毎ターンこれ）
+  let prevEnemySkill = ''
+  // 永続強化（絶影/天の祝福/影強化 など custom大技で付与）
+  const enPerm = { atkMult:1, matkMult:1, defMult:1, mdefMult:1, spdMult:1, critDmgPlus:0, convertCtoA:false, followupAtk:0 }
+  // 敵をプレイヤーに見立てた施術用プロフィール（executeSkill 用）
+  const enemyProfile = { hp_max: enemyMaxHp, mp_max: 999999, class: '', retraining: {}, username: enemy.name }
 
   const equippedWeaponItem = equipment.find(e => e.slot === 'weapon' && e.equipped)
   const isArtifact = equippedWeaponItem?.bonus_effect === 'artifact'
@@ -282,64 +285,150 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     logs.push({ text:`${prefix}${enemy.name}の攻撃！ あなたに${finalDmg}ダメージ…${critText}`, color:isCrit?'#ff2200':'#ff6644' })
   }
 
-  const doEnemySkillAttack = () => {
-    if (!enemy.skills || enemy.skills.length === 0) return
-    const healSkill = enemy.skills.find(s => s.type === 'heal')
-    if (healSkill) {
-      const hpRate = enemyHp / enemyMaxHp
-      if (!bossHeal2Used && hpRate <= 0.3) {
-        bossHeal1Used = true; bossHeal2Used = true
-        const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
-        enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
-        Object.assign(enemyBuffs, result.newEnemyBuffs)
-        return
-      } else if (!bossHeal1Used && hpRate <= 0.6) {
-        bossHeal1Used = true
-        const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
-        enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
-        Object.assign(enemyBuffs, result.newEnemyBuffs)
-        return
-      }
+  // 敵の現在の施術ステータス（永続強化＋バフを反映）
+  const enemyCastStats = () => {
+    let atk  = enemy.atk  * enPerm.atkMult  * (enemyBuffs.atkUp?.rate  || 1) * (enemyBuffs.burn?.turns > 0 ? 0.9 : 1)
+    let matk = enemy.matk * enPerm.matkMult * (enemyBuffs.matkUp?.rate || 1) * (enemyBuffs.burn?.turns > 0 ? 0.9 : 1)
+    if (enPerm.convertCtoA) { atk += matk; matk = 0 }
+    const def  = enemy.def  * enPerm.defMult  * (enemyBuffs.defUp?.rate || 1)
+    const mdef = enemy.mdef * enPerm.mdefMult * (enemyBuffs.defUp?.rate || 1)
+    const spd  = enemy.spd  * enPerm.spdMult  * (enemyBuffs.spdUp?.rate || 1)
+    return { atk, def, matk, mdef, spd, hp_max:enemyMaxHp, mp_max:999999, critDmg:0, defPen:0, mdefPen:0, hitBonus:0, critBonus:0, evasionBonus:0, critResist:0 }
+  }
+
+  // 物理/魔法/ハイブリッドの被ダメ計算（プレイヤーDEF/MDEFで軽減）
+  const scaleDamageToPlayer = (raw, atkStat, useStat /* 'atk'|'matk'|'hybrid' */, isCrit) => {
+    let pDef, rankStat
+    if (useStat === 'hybrid') { pDef = Math.min(eff.def, eff.mdef); rankStat = Math.min(eff.def, eff.mdef) }
+    else if (useStat === 'matk') { pDef = eff.mdef; rankStat = eff.mdef }
+    else { pDef = eff.def; rankStat = eff.def }
+    const defScale = atkStat / (atkStat + Math.max(1, pDef))
+    const critMult = isCrit ? (1.5 + enPerm.critDmgPlus) : 1.0
+    const rankRed = calcDefReduction(rankStat)
+    const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
+    return Math.max(0, Math.floor(raw * defScale * critMult * (1 - rankRed) * dmgReduceRate * (0.9 + Math.random()*0.2)))
+  }
+
+  // 影強化の追撃（A2.0の物理追撃）
+  const doFollowup = () => {
+    if (enPerm.followupAtk <= 0) return
+    const eStats = enemyCastStats()
+    const raw = eStats.atk * enPerm.followupAtk
+    const dmg = scaleDamageToPlayer(raw, eStats.atk, 'atk', false)
+    playerHp -= dmg
+    logs.push({ text:`↳ ${enemy.name}の追撃！ あなたに${dmg}ダメージ！`, color:'#ff8866' })
+  }
+
+  // 既存スキル（executeSkillのswitchで定義済み）を敵が詠唱
+  const castExistingSkill = (def) => {
+    const eStats = enemyCastStats()
+    const playerTarget = { name:profile.username, def:eff.def, mdef:eff.mdef, hp:profile.hp_max, hp_max:profile.hp_max, type:'physical' }
+    // executeSkill: caster=enemy(eStats/enemyProfile), target=player。
+    // 戻り値 newPlayerBuffs=詠唱者(敵)バフ, newEnemyBuffs=対象(プレイヤー)デバフ
+    const res = executeSkill({ name:def.name }, eStats, enemyProfile, playerTarget, playerBuffs, enemyBuffs, false, prevEnemySkill)
+    prevEnemySkill = def.name
+    const isMag = enemy.type === 'magical'
+    let finalDmg = 0
+    if (res.dmg > 0) {
+      const atkStat = isMag ? eStats.matk : eStats.atk
+      const isCrit = Math.random()*100 < enemyCritRate
+      finalDmg = scaleDamageToPlayer(res.dmg, atkStat, isMag ? 'matk' : 'atk', isCrit)
+      playerHp -= finalDmg
     }
-    if (enemy.specialMove && !bossSpecialUsed && enemyHp / enemyMaxHp <= 0.1) {
-      bossSpecialUsed = true
-      logs.push({ text:`💥 ${enemy.name}の「${enemy.specialMove.name}」！！`, color:'#ff0000' })
-      const result = executeEnemySkill(enemy.specialMove, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
-      playerHp -= result.dmgToPlayer
-      Object.assign(playerBuffs, result.newPlayerBuffs)
+    if (res.selfDmg > 0) enemyHp = Math.max(0, enemyHp - res.selfDmg)
+    if (res.heal > 0) enemyHp = Math.min(enemyMaxHp, enemyHp + (enemyBuffs.healDown?.turns > 0 ? Math.floor(res.heal * enemyBuffs.healDown.rate) : res.heal))
+    enemyBuffs = res.newPlayerBuffs
+    playerBuffs = res.newEnemyBuffs
+    // 確定出血（瞬歩瞬殺/鬼影閃）
+    if (def.guaranteedBleed) {
+      const b = playerBuffs.bleed
+      playerBuffs.bleed = { stacks: Math.min(5, (b?.stacks || 0) + 1), lastTurn: 0 }
+    }
+    // 鬼影閃コンボ：出血最大時に追撃して出血消費
+    if (def.name === '鬼影閃' && (playerBuffs.bleed?.stacks || 0) >= 5) {
+      const eStats2 = enemyCastStats()
+      const bonus = scaleDamageToPlayer(eStats2.atk * (Math.min(1.0, playerBuffs.bleed.stacks * 0.2)) * 1.5, eStats2.atk, 'atk', false)
+      playerHp -= bonus
+      delete playerBuffs.bleed
+      logs.push({ text:`🩸 急所突き自動発動！ 出血を爆発させ${bonus}ダメージ！`, color:'#ff3366' })
+    }
+    const shown = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
+    logs.push({ text:`▶ ${enemy.name}の${shown}`, color: res.dmg > 0 ? '#ff7755' : '#ffaa66' })
+    doFollowup()
+  }
+
+  // HP15%大技 ＋ 影強化/絶影 など 新規(custom)スキルを敵が使用
+  const castCustomSkill = (def) => {
+    // 純バフ/変身（ダメージなし）
+    const isPureBuff = !def.atk && !def.matk
+    if (isPureBuff) {
+      if (def.fullHeal) enemyHp = enemyMaxHp
+      if (def.allStatsMult) { enPerm.atkMult*=def.allStatsMult; enPerm.matkMult*=def.allStatsMult; enPerm.defMult*=def.allStatsMult; enPerm.mdefMult*=def.allStatsMult; enPerm.spdMult*=def.allStatsMult }
+      if (def.convertCtoA) enPerm.convertCtoA = true
+      if (def.addFollowup) enPerm.followupAtk = def.addFollowup.atk
+      if (def.buff?.atkMult)  enPerm.atkMult  *= def.buff.atkMult
+      if (def.buff?.matkMult) enPerm.matkMult *= def.buff.matkMult
+      if (def.buff?.spdMult)  enPerm.spdMult  *= def.buff.spdMult
+      if (def.critDmgPlus) enPerm.critDmgPlus += def.critDmgPlus
+      logs.push({ text:`✦ ${enemy.name}の「${def.name}」！ 力が解放された！`, color:'#ff66cc' })
       return
     }
-    const buffSkills = enemy.skills.filter(s => s.type === 'buff')
-    if (buffSkills.length > 0) {
-      const hpRate = enemyHp / enemyMaxHp
-      if (!bossBuff2Used && hpRate <= 0.3) {
-        bossBuff1Used = true; bossBuff2Used = true
-        const buffSkill = buffSkills[buffSkills.length > 1 ? 1 : 0]
-        logs.push({ text:`⚡ ${enemy.name}の「${buffSkill.name}」！`, color:'#ff8844' })
-        const result = executeEnemySkill(buffSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
-        playerHp -= result.dmgToPlayer
-        Object.assign(playerBuffs, result.newPlayerBuffs)
-        Object.assign(enemyBuffs, result.newEnemyBuffs)
-        return
-      } else if (!bossBuff1Used && hpRate <= 0.7) {
-        bossBuff1Used = true
-        const buffSkill = buffSkills[0]
-        logs.push({ text:`⚡ ${enemy.name}の「${buffSkill.name}」！`, color:'#ff8844' })
-        const result = executeEnemySkill(buffSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
-        playerHp -= result.dmgToPlayer
-        Object.assign(playerBuffs, result.newPlayerBuffs)
-        Object.assign(enemyBuffs, result.newEnemyBuffs)
-        return
-      }
+    // ダメージ大技
+    const hits = def.hits || 1
+    const useStat = (def.atk && def.matk) ? 'hybrid' : (def.matk ? 'matk' : 'atk')
+    let total = 0
+    for (let h = 0; h < hits; h++) {
+      const eStats = enemyCastStats()
+      const raw = (def.atk ? eStats.atk * def.atk : 0) + (def.matk ? eStats.matk * def.matk : 0)
+      const atkStat = useStat === 'hybrid' ? (eStats.atk + eStats.matk) / 2 : (useStat === 'matk' ? eStats.matk : eStats.atk)
+      const isCrit = def.critGuaranteed || (Math.random()*100 < enemyCritRate)
+      total += scaleDamageToPlayer(raw, atkStat, useStat, isCrit)
     }
-    const nonHealSkills = enemy.skills.filter(s => s.type !== 'heal' && s.type !== 'buff')
-    if (nonHealSkills.length === 0) return
-    const skill = nonHealSkills[Math.floor(Math.random()*nonHealSkills.length)]
-    const result = executeEnemySkill(skill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff)
-    playerHp -= result.dmgToPlayer
-    enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
-    Object.assign(playerBuffs, result.newPlayerBuffs)
-    Object.assign(enemyBuffs, result.newEnemyBuffs)
+    playerHp -= total
+    if (def.lifesteal && total > 0) enemyHp = Math.min(enemyMaxHp, enemyHp + Math.floor(total * def.lifesteal))
+    logs.push({ text:`💥 ${enemy.name}の「${def.name}」！ あなたに${total}ダメージ！${def.critGuaranteed?' 💥確定クリティカル！':''}`, color:'#ff2200' })
+    // 付随効果
+    if (def.executeHpBelow && playerHp > 0 && playerHp <= def.executeHpBelow) {
+      playerHp = 0
+      logs.push({ text:`☠ ${def.name}の追い打ち！ 致命の一撃で即死した…！`, color:'#ff0000' })
+    }
+    if (def.stunGuaranteed) { playerBuffs.stun = { turns:1 }; logs.push({ text:`⚡ スタンした！ 次のターン行動できない！`, color:'#ffaa00' }) }
+    if (def.healBlock) { playerBuffs.healSeal = { turns:999 }; logs.push({ text:`🚫 ${def.name}！ 以降あなたは回復できない！`, color:'#ff4488' }) }
+    if (def.dispelPlayerBuffs) { playerBuffs = {}; logs.push({ text:`🌀 ${def.name}！ あなたの強化が全て消し去られた！`, color:'#cc66ff' }) }
+    if (def.inflict) {
+      for (const st of def.inflict) {
+        if (st === 'paralysis' && !(playerBuffs.paralysis?.turns > 0)) playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }
+        if (st === 'burn') playerBuffs.burn = { turns:5, dmgRate:0.02 }
+        if (st === 'stun') playerBuffs.stun = { turns:1 }
+      }
+      logs.push({ text:`🌫 ${def.name}の状態異常！ 麻痺・やけど・スタンが付与された！`, color:'#aa66ff' })
+    }
+    if (def.debuff?.mdef) { playerBuffs.mdefDown = { turns:5, rate: Math.max(0.1, 1 + def.debuff.mdef/100) }; logs.push({ text:`🔻 ${def.name}！ 特殊防御が低下した！`, color:'#88aaff' }) }
+    doFollowup()
+  }
+
+  // 1ターン分の敵行動（kit駆動）。kitが無ければ通常攻撃。
+  const doEnemyKitTurn = () => {
+    const kit = enemy.kit
+    if (!kit) { doEnemyAttack(false); return }
+    if (enLockedSkill) {
+      const lk = enLockedSkill
+      if (lk.custom) castCustomSkill(lk); else castExistingSkill(lk)
+      return
+    }
+    const hpRate = enemyHp / enemyMaxHp
+    let slot, isSpecial = false
+    if (!enUsedSpecial && hpRate <= 0.15)      { slot = kit.special;   enUsedSpecial = true; isSpecial = true }
+    else if (!enUsedT40 && hpRate <= 0.40)     { slot = kit.trigger40; enUsedT40 = true }
+    else if (!enUsedT75 && hpRate <= 0.75)     { slot = kit.trigger75; enUsedT75 = true }
+    else                                       { slot = (hpRate <= 0.60 && kit.normalLow) ? kit.normalLow : kit.normal }
+    const def = (typeof slot === 'string') ? { name: slot } : slot
+    if (def.custom) castCustomSkill(def); else castExistingSkill(def)
+    // 大技の「以降このスキルのみ／毎ターン使用」ロック
+    if (isSpecial) {
+      if (def.persist) enLockedSkill = def
+      else if (def.thenOnlySkill) enLockedSkill = { name: def.thenOnlySkill }
+    }
   }
 
   while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
@@ -460,13 +549,9 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       enemySkipped = true; enemyBuffs.paralysis.skipRate *= 0.5
     }
     if (!enemySkipped) {
-      if (enemy.skills && enemy.skills.length > 0) {
-        if (Math.random() < 0.9) doEnemySkillAttack()
-        else doEnemyAttack(false)
-      } else {
-        doEnemyAttack(false)
-      }
+      doEnemyKitTurn()
       if (playerHp <= 0) break
+      // 素早さによる追加行動（通常攻撃で表現）
       if (enemyExtraRate > 0 && Math.random()*100 < enemyExtraRate) doEnemyAttack(true)
     }
     if (playerHp <= 0) break
@@ -499,7 +584,6 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       playerBuffs.allinDebuff = { turns:reactT, rate:0.7 }
       logs.push({ text:`💸 オールインの効果が切れた！ ${reactT}ターンの間全ステータスが低下し、バフが使えない！`, color:'#ff4444' })
     }
-    if (bossHealCooldown > 0) bossHealCooldown--
     logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:profile.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
     turn++
   }

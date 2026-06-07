@@ -53,19 +53,19 @@ const sp = (name, opts = {}) => ({ name, custom: true, ...opts })
 const FLOOR_META = [
   { floor:1,  name:'戦士ガレス',         target:500,   arch:'warrior',
     kit:{ normal:'体当たり', normalLow:null, trigger75:'防御態勢', trigger40:'防御崩し',
-          special: sp('強撃') } },
+          special:'強撃' } },
   { floor:2,  name:'弓使いローガン',     target:800,   arch:'archer',
     kit:{ normal:'狙撃', normalLow:null, trigger75:'駆け足', trigger40:'貫通射撃',
-          special: sp('疾風矢') } },
+          special:'疾風矢' } },
   { floor:3,  name:'僧侶セレナ',         target:1100,  arch:'priest',
     kit:{ normal:'ライト', normalLow:null, trigger75:'祈祷', trigger40:'プロテク',
-          special: sp('ライトニング') } },
+          special:'ライトニング' } },
   { floor:4,  name:'魔法使いヴァルド',   target:1400,  arch:'mage',
     kit:{ normal:'ファイア', normalLow:null, trigger75:'精神統一', trigger40:'サンダー',
-          special: sp('アイスランス') } },
+          special:'アイスランス' } },
   { floor:5,  name:'格闘家ドラガ',       target:1700,  arch:'monk',
     kit:{ normal:'打撃', normalLow:null, trigger75:'残心', trigger40:'鉄拳',
-          special: sp('爆裂拳') } },
+          special:'爆裂拳' } },
   { floor:6,  name:'疾風のエレン',       target:2500,  arch:'swift',
     kit:{ normal:'毒矢', normalLow:'三連射', trigger75:'狩猟本能', trigger40:'絶影狙撃',
           special: sp('天穿狼牙', { atk:2.5 }) } },
@@ -111,14 +111,14 @@ const FLOOR_META = [
     kit:{ normal:'連装銃撃',
           normalLow:{ name:'キャノネスチュームビンド', comboMult:1.8 }, // 連続使用時×1.8倍
           trigger75:{ name:'強化装填', permanent:true, effectMult:1.5 }, // 永続・効果1.5倍
-          trigger40:{ name:'影強化', convertCtoA:true, addFollowup:{ atk:2.0 } }, // C→A変換・以降全スキルにA2.0追撃
+          trigger40:{ name:'影強化', custom:true, convertCtoA:true, addFollowup:{ atk:2.0 } }, // C→A変換・以降全スキルにA2.0追撃
           special: sp('ゲシュペンストハーケン', { atk:5.0, lifesteal:0.5 }) } }, // 与ダメの半分回復
   { floor:19, name:'暗殺者えちゅ',       target:18000, arch:'swift',
     kit:{ normal:{ name:'瞬歩瞬殺', guaranteedBleed:true },
           normalLow:{ name:'鬼影閃', guaranteedBleed:true,
                       note:'相手の出血スタック最大時は急所突きを自動発動(出血スタック×20%追撃・最大100%→出血消費)' },
           trigger75:{ name:'影歩き', permanent:true, critDmgPlus:0.5 }, // 永続・クリ威力+50%
-          trigger40:{ name:'絶影', permanent:true, buff:{ atkMult:2, spdMult:2 } }, // AS永続2倍
+          trigger40:{ name:'絶影', custom:true, permanent:true, buff:{ atkMult:2, spdMult:2 } }, // AS永続2倍
           special: sp('断首', { atk:3.0, executeHpBelow:10 }) } }, // 与ダメ後HP10以下なら即死
   // 20階は後日追加
 ]
