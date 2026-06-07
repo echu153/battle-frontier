@@ -1228,8 +1228,9 @@ const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, profileH
   return { dmgToPlayer, healEnemy, newPlayerBuffs, newEnemyBuffs }
 }
 
-// JST日付文字列（ダンジョン0時リセット用）
-const getJSTDateStr = () => new Date(Date.now() + 9*60*60*1000).toISOString().slice(0, 10)
+// デイリーダンジョンの「日付」文字列：朝5時(JST)を境にリセット
+// JST(+9h)から5h引いた基準で日付を算出 → JST05:00でロールオーバー
+const getDungeonDateStr = () => new Date(Date.now() + (9 - 5)*60*60*1000).toISOString().slice(0, 10)
 
 // デイリーダンジョン：種類ごとに1日5回。type→DB列名／表示名／一覧
 const DUNGEON_DAILY_LIMIT = 5
@@ -1484,7 +1485,7 @@ export default function Game() {
     } else {
       setAbilityTitle(null)
     }
-    const today = getJSTDateStr()
+    const today = getDungeonDateStr()
     try {
       const { data: da } = await supabase.from('dungeon_attempts').select('cnt_exp,cnt_gold,cnt_stone,cnt_prof,cnt_gem').eq('player_id', user.id).eq('date', today).single()
       setDungeonCounts({ exp:da?.cnt_exp||0, gold:da?.cnt_gold||0, stone:da?.cnt_stone||0, prof:da?.cnt_prof||0, gem:da?.cnt_gem||0 })
@@ -1614,7 +1615,7 @@ export default function Game() {
     setLoading(true)
 
     // stateではなくDBから直接カウント取得（state操作による回避を防ぐ）
-    const today = getJSTDateStr()
+    const today = getDungeonDateStr()
     const col = DUNGEON_TYPE_COL[type]
     let dungeonRow = null
     try {
