@@ -57,6 +57,8 @@ const getStatRank = (val, type) => {
 const pct1 = (v) => `${(v * 100).toFixed(1)}%`
 
 const STAT_JP = { atk:'攻撃力', def:'防御力', matk:'特殊攻撃力', mdef:'特殊防御力', spd:'素早さ', hp_max:'HP', mp_max:'MP' }
+// 内訳バケット（bd.museum 等）のキー（hp/mp）用ラベル
+const STAT_LABEL_BY_KEY = Object.fromEntries(STAT_META.map(s => [s.key, s.label]))
 
 export default function StatusDetail() {
   const nav = useNavigate()
@@ -65,6 +67,7 @@ export default function StatusDetail() {
   const [proficiency, setProficiency] = useState([])
   const [abilityTitle, setAbilityTitle] = useState(null)
   const [fishingRecords, setFishingRecords] = useState([])
+  const [museumCounts, setMuseumCounts] = useState({ donations:0, completes:0 })
 
   useEffect(() => { fetchAll() }, [])
 
@@ -73,14 +76,17 @@ export default function StatusDetail() {
     if (!user) { nav('/login'); return }
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     if (!p) { nav('/game'); return }
-    const [{ data: eq }, { data: prof }, { data: fr }] = await Promise.all([
+    const [{ data: eq }, { data: prof }, { data: fr }, { count: donCount }, { count: cbCount }] = await Promise.all([
       supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', user.id),
       supabase.from('proficiency').select('*, weapons(*)').eq('player_id', user.id),
       supabase.from('fishing_records').select('fish_name, fish_rank, location, bonus_claimed').eq('player_id', user.id),
+      supabase.from('museum_donations').select('*', { count:'exact', head:true }).eq('player_id', user.id),
+      supabase.from('museum_complete_bonuses').select('*', { count:'exact', head:true }).eq('player_id', user.id),
     ])
     setEquipment(eq || [])
     setProficiency(prof || [])
     setFishingRecords(fr || [])
+    setMuseumCounts({ donations: donCount || 0, completes: cbCount || 0 })
     // 旧仕様で消えた釣りボーナスを fishing_* 列へ一度だけ復元（Fishing.jsx と同一処理）
     if (!p.fishing_migrated) {
       const { totals, completed } = sumClaimedFishingBonus(fr || [])
@@ -117,6 +123,7 @@ export default function StatusDetail() {
 
   const fishing = sumClaimedFishingBonus(fishingRecords)
   const fishingNonZero = Object.entries(fishing.totals).filter(([,v]) => v > 0)
+  const museumNonZero = Object.entries(bd.museum).filter(([,v]) => v > 0)
 
   const box = { border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'12px' }
   const head = { color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }
@@ -201,9 +208,32 @@ export default function StatusDetail() {
           </div>
         </div>
 
-        {/* 釣りボーナス（受取済み・参考値） */}
+        {/* 博物館ボーナス */}
+        <div style={{ ...box, border:'1px solid #5a4a1a' }}>
+          <div style={{ ...head, color:'#ccaa44' }}>🏛 博物館ボーナス</div>
+          {museumNonZero.length === 0 ? (
+            <div style={{ color:'#334455', fontSize:'11px' }}>博物館ボーナスはありません</div>
+          ) : (
+            <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'8px' }}>
+              {museumNonZero.map(([k,v]) => (
+                <span key={k} style={{ fontSize:'11px', color:'#ccaa44', border:'1px solid #5a4a1a', background:'#000c1c', padding:'2px 8px' }}>
+                  {STAT_LABEL_BY_KEY[k] || k} +{v}
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ fontSize:'10px', color:'#446688', lineHeight:'1.7' }}>
+            寄贈 {museumCounts.donations} 件
+            {museumCounts.completes > 0 && `／コンプリート報酬 ${museumCounts.completes} 件`}
+            <br />
+            ※ 博物館ボーナスは専用枠で永続保存され、上の各ステータスの「博物館」内訳に反映されています。
+            未寄贈の装備は <span style={{ color:'#88ccff' }}>🏛 博物館</span> から寄贈できます。
+          </div>
+        </div>
+
+        {/* 釣りボーナス（受取済み） */}
         <div style={{ ...box, border:'1px solid #225588' }}>
-          <div style={{ ...head, color:'#44aaff' }}>🎣 釣りボーナス（受取済み・参考値）</div>
+          <div style={{ ...head, color:'#44aaff' }}>🎣 釣りボーナス（受取済み）</div>
           {fishingNonZero.length === 0 ? (
             <div style={{ color:'#334455', fontSize:'11px' }}>受取済みの釣りボーナスはありません</div>
           ) : (
