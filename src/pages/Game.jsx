@@ -1712,7 +1712,7 @@ export default function Game() {
       const charLvG = profile.char_lv || profile.lv
       // 基礎: キャラLv×30〜45。キャラLv300以下は育成支援ボーナス×1.5
       const lvBonus = charLvG <= 300 ? 1.5 : 1.0
-      const goldGained = Math.floor(charLvG * 30 * (1.0 + Math.random() * 0.5) * lvBonus)
+      const goldGained = Math.floor(charLvG * 30 * (1.0 + Math.random() * 0.5) * lvBonus * 1.5)  // デイリーダンジョン ゴールド1.5倍
       logs.push({ text:`Gold +${goldGained}${lvBonus > 1 ? '（キャラLv300までボーナス ×1.5！）' : ''}`, color:'#ffcc00' })
       const bonusExp = grantBonusExpLogs()
       await supabase.rpc('apply_dungeon_reward', { p_type:'gold', p_claimed_gold:goldGained, p_claimed_exp:bonusExp })
@@ -2569,7 +2569,7 @@ export default function Game() {
       : isPapiaEncounter ? 200
       : isBossEncounter ? 13
       : Math.floor(Math.random()*4)+8
-    const goldGained = (win && !papiaEscaped) ? (enemy.gold||0) : 0
+    const goldGained = (win && !papiaEscaped) ? Math.floor((enemy.gold||0) * 1.5) : 0  // 出撃ゴールド1.5倍
 
 
     if (!papiaEscaped) {
