@@ -42,9 +42,12 @@ DECLARE
   v_reset      timestamptz;
   v_can        boolean;
   v_next       int;
+  v_is_admin   boolean;
 BEGIN
   v_player_id := auth.uid();
   IF v_player_id IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
+
+  SELECT COALESCE(is_admin, false) INTO v_is_admin FROM profiles WHERE id = v_player_id;
 
   SELECT * INTO v_row FROM abyss_progress WHERE player_id = v_player_id;
   IF NOT FOUND THEN
@@ -57,7 +60,8 @@ BEGIN
   -- 次回リセット = 翌週の月曜5時(JST) を timestamptz に変換
   v_reset   := ((date_trunc('week', v_shifted) + interval '7 days' + interval '5 hours') AT TIME ZONE 'Asia/Tokyo');
 
-  v_can  := (v_row.last_clear_week IS NULL OR v_row.last_clear_week < v_week);
+  -- 管理者[開発]は週次ロックを無視して連続で挑戦できる（テスト用）
+  v_can  := v_is_admin OR (v_row.last_clear_week IS NULL OR v_row.last_clear_week < v_week);
   v_next := LEAST(v_row.cleared_floor + 1, 20);
 
   RETURN json_build_object(
@@ -96,10 +100,13 @@ DECLARE
   ];
   v_existing_gem_id uuid;
   v_i              int;
+  v_is_admin       boolean;
 BEGIN
   v_player_id := auth.uid();
   IF v_player_id IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
   IF p_floor < 1 OR p_floor > 20 THEN RETURN json_build_object('error', '不正なフロアです'); END IF;
+
+  SELECT COALESCE(is_admin, false) INTO v_is_admin FROM profiles WHERE id = v_player_id;
 
   -- 行ロック（並行クレーム防止）。なければ作成。
   SELECT * INTO v_row FROM abyss_progress WHERE player_id = v_player_id FOR UPDATE;
@@ -118,7 +125,8 @@ BEGIN
   v_shifted := (now() AT TIME ZONE 'Asia/Tokyo') - interval '5 hours';
   v_week    := date_trunc('week', v_shifted)::date;
   v_reset   := ((date_trunc('week', v_shifted) + interval '7 days' + interval '5 hours') AT TIME ZONE 'Asia/Tokyo');
-  IF v_row.last_clear_week IS NOT NULL AND v_row.last_clear_week >= v_week THEN
+  -- 管理者[開発]は週次ロックを無視（テスト用）
+  IF NOT v_is_admin AND v_row.last_clear_week IS NOT NULL AND v_row.last_clear_week >= v_week THEN
     RETURN json_build_object('error', '今週はすでにクリア済みです', 'reset_at', v_reset);
   END IF;
 

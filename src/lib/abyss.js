@@ -33,16 +33,24 @@ const ARCH = {
 }
 
 // 推奨総合力 target を満たす敵ステを生成（決定論的・import時に確定）
-function makeEnemy(name, target, archKey) {
+// dmgType: 'phys'(特攻→攻撃に寄せ) / 'mag'(攻撃→特攻に寄せ) / 'hybrid'(両方使うので寄せない)
+// 省略時は arch.type から判定（スキルで使わない側を使う側に全部加算する＝奈落の特別調整）
+function makeEnemy(name, target, archKey, dmgType) {
   const a = ARCH[archKey]
   const hp = Math.round(target * a.hpFrac) * 10
   const budget = target * (1 - a.hpFrac)
   const s = (k) => Math.max(1, Math.round(budget * a.w[k]))
+  let atk = s('atk'), matk = s('matk')
+  const dt = dmgType || (a.type === 'magical' ? 'mag' : 'phys')
+  if (dt === 'phys') { atk += matk; matk = 0 }        // 特殊攻撃を攻撃に全加算
+  else if (dt === 'mag') { matk += atk; atk = 0 }     // 攻撃を特殊攻撃に全加算
+  // hybrid はそのまま（両方使うスキル持ち）
   return {
     name,
     hp,
-    atk: s('atk'), def: s('def'), matk: s('matk'), mdef: s('mdef'), spd: s('spd'),
-    type: a.type,
+    atk, def: s('def'), matk, mdef: s('mdef'), spd: s('spd'),
+    // 被ダメ計算の軽減対象(DEF/MDEF)が寄せ方向と一致するよう type を補正（hybridはarch準拠）
+    type: dt === 'mag' ? 'magical' : dt === 'phys' ? 'physical' : a.type,
   }
 }
 
@@ -69,10 +77,10 @@ const FLOOR_META = [
   { floor:6,  name:'疾風のエレン',       target:2500,  arch:'swift',
     kit:{ normal:'毒矢', normalLow:'三連射', trigger75:'狩猟本能', trigger40:'絶影狙撃',
           special: sp('天穿狼牙', { atk:2.5 }) } },
-  { floor:7,  name:'聖域のアークライト', target:3000,  arch:'priest',
+  { floor:7,  name:'聖域のアークライト', target:3000,  arch:'priest', dmg:'hybrid',
     kit:{ normal:'ホーリーエッジ', normalLow:'ディバインスマイト', trigger75:'聖域展開', trigger40:'神聖覚醒',
           special: sp('ジャッジメント', { matk:2.5 }) } },
-  { floor:8,  name:'運命喰らいのフォルト', target:3500, arch:'balanced',
+  { floor:8,  name:'運命喰らいのフォルト', target:3500, arch:'balanced', dmg:'hybrid',
     kit:{ normal:'ジャグリング', normalLow:'ラッキーダイス',
           trigger75:{ name:'オールイン', noBacklash:true }, trigger40:'ジャックポット',
           special: sp('ロイヤル・フラッシュ', { atk:2.5, critGuaranteed:true }) } },
@@ -91,7 +99,7 @@ const FLOOR_META = [
   { floor:13, name:'四象のエレシア',     target:8000,  arch:'arcane',
     kit:{ normal:'アクアショット', normalLow:'アースクエイク', trigger75:'ライトニングボルト', trigger40:'フレイムバースト',
           special: sp('五元崩界', { matk:2.5, inflict:['paralysis','burn','stun'], debuff:{ mdef:-20 } }) } },
-  { floor:14, name:'念動のサイラス',     target:9000,  arch:'arcane',
+  { floor:14, name:'念動のサイラス',     target:9000,  arch:'arcane', dmg:'hybrid',
     kit:{ normal:'サイコショット', normalLow:'マインドブレイク', trigger75:'精神集中', trigger40:'サイコブラスト',
           special: sp('アカシックレコード', { atk:1.5, matk:1.5, dispelPlayerBuffs:true }) } },
   { floor:15, name:'万識のアルヴィス',   target:10000, arch:'arcane',
@@ -99,7 +107,7 @@ const FLOOR_META = [
           trigger75:{ name:'氷の障壁', duration:10 },
           trigger40:{ name:'メテオストライク', hits:'3-4' },
           special: sp('ジェネシス・ノヴァ', { matk:3.0 }) } },
-  { floor:16, name:'断罪のイグナート',   target:12000, arch:'balanced',
+  { floor:16, name:'断罪のイグナート',   target:12000, arch:'balanced', dmg:'mag',
     kit:{ normal:'粛清', normalLow:'聖なる裁き',
           trigger75:{ name:'狂信', buff:{ atkMult:2, matkMult:2 }, duration:10 }, // A＋C2倍を追加(10T)
           trigger40:'断罪',
@@ -107,7 +115,7 @@ const FLOOR_META = [
   { floor:17, name:'神託のラフィエル',   target:14000, arch:'priest',
     kit:{ normal:'ホーリーライト', normalLow:'奇跡', trigger75:'祈りの結界', trigger40:'神罰執行',
           special: sp('天の祝福', { fullHeal:true, allStatsMult:2, thenOnlySkill:'神罰執行' }) } }, // HP全回復・全ステ2倍・以降神罰執行のみ
-  { floor:18, name:'魔弾のリオン',       target:16000, arch:'archer',
+  { floor:18, name:'魔弾のリオン',       target:16000, arch:'archer', dmg:'hybrid',
     kit:{ normal:'連装銃撃',
           normalLow:{ name:'キャノネスチュームビンド', comboMult:1.8 }, // 連続使用時×1.8倍
           trigger75:{ name:'強化装填', permanent:true, effectMult:1.5 }, // 永続・効果1.5倍
@@ -155,7 +163,7 @@ export const ABYSS_FLOORS = FLOOR_META.map(m => ({
   floor: m.floor,
   name: m.name,
   target: m.target,
-  enemy: { ...makeEnemy(m.name, m.target, m.arch), kit: m.kit },
+  enemy: { ...makeEnemy(m.name, m.target, m.arch, m.dmg), kit: m.kit },
   kit: m.kit,
   reward: FLOOR_REWARD[m.floor],
 }))

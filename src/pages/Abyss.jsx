@@ -34,8 +34,10 @@ const GEM_RANK_COLOR = {
 //  ・ポーションは消費せず効果のみ適用（再挑戦のたびに失わないように）
 // 戻り値: { logs, win }
 // ============================================================
-function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerItem) {
+function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerItem, floor = 1) {
   const logs = []
+  // 奈落限定ルール: 敵は階数×2%の被ダメージ軽減（プレイヤーの与ダメに乗算）
+  const abyssEnemyDR = 1 - Math.min(0.9, floor * 0.02)
   let playerHp = profile.hp_max
   let playerMp = profile.mp_max
   let enemyHp = enemy.hp
@@ -167,8 +169,8 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
         let defScale = 1.0
         if (res.dmg > 0) {
           const sType = cs.skills?.type
-          const adjED  = Math.max(1, Math.floor((enemy.def ||0)*eDefRate))
-          const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate))
+          const adjED  = Math.max(1, Math.floor((enemy.def ||0)*eDefRate*enPerm.defMult))
+          const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate*enPerm.mdefMult))
           if (cs.skills?.name === 'サイコブラスト' || res.useMinDef) {
             defScale = effBuff.matk / (effBuff.matk + Math.min(adjED, adjEMD))
           } else if (sType === '物理攻撃') defScale = effBuff.atk  / (effBuff.atk  + adjED)
@@ -176,7 +178,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
         }
         const allinDebuffOutMult = playerBuffs.allinDebuff?.turns > 0 ? 0.7 : 1.0
         const enemyDmgReduceMult = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
-        let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * (0.9 + Math.random() * 0.2))
+        let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * abyssEnemyDR * (0.9 + Math.random() * 0.2))
         const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
         if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
         enemyHp -= finalDmg
@@ -226,10 +228,10 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     }
     if (!skillUsed) {
       const baseAtk = isMagical ? effBuff.matk : effBuff.atk
-      const eDefVal = isMagical ? Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate)) : Math.max(1, Math.floor(enemy.def*eDefRate))
+      const eDefVal = isMagical ? Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate*enPerm.mdefMult)) : Math.max(1, Math.floor(enemy.def*eDefRate*enPerm.defMult))
       const baseDmg = Math.max(1, Math.floor(baseAtk*baseAtk/Math.max(1,baseAtk+eDefVal))+Math.floor(Math.random()*4))
       const enemyDmgReduceMult2 = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
-      let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.2:1.0)*passiveDmgMult*enemyDmgReduceMult2*(0.9+Math.random()*0.2))
+      let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.2:1.0)*passiveDmgMult*enemyDmgReduceMult2*abyssEnemyDR*(0.9+Math.random()*0.2))
       enemyHp -= finalDmg
       if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
         enemyBuffs.healDown = { turns: 2, rate: 0.9 }
@@ -407,15 +409,35 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     doFollowup()
   }
 
+  // 注記付きの既存バフスキル（狂信A+C2倍10T・強化装填永続1.5倍・影歩き永続クリ威力+50%・氷の障壁10T 等）
+  const applyAnnotatedBuff = (def) => {
+    if (def.permanent) {
+      if (def.effectMult)     enPerm.atkMult  *= def.effectMult
+      if (def.critDmgPlus)    enPerm.critDmgPlus += def.critDmgPlus
+      if (def.buff?.atkMult)  enPerm.atkMult  *= def.buff.atkMult
+      if (def.buff?.matkMult) enPerm.matkMult *= def.buff.matkMult
+      if (def.buff?.spdMult)  enPerm.spdMult  *= def.buff.spdMult
+    } else {
+      const dur = def.duration || 4
+      if (def.buff?.atkMult)  enemyBuffs.atkUp  = { turns:dur, rate:def.buff.atkMult }
+      if (def.buff?.matkMult) enemyBuffs.matkUp = { turns:dur, rate:def.buff.matkMult }
+      if (def.buff?.spdMult)  enemyBuffs.spdUp  = { turns:dur, rate:def.buff.spdMult }
+      if (def.name === '氷の障壁') enemyBuffs.defUp = { turns:dur, rate:1.5 }
+    }
+    logs.push({ text:`✦ ${enemy.name}の「${def.name}」！ 力を高めた！`, color:'#ff99dd' })
+  }
+
+  const resolveSlot = (def) => {
+    if (def.custom) { castCustomSkill(def); return }
+    if (def.buff || def.permanent || def.duration) { applyAnnotatedBuff(def); return }
+    castExistingSkill(def)
+  }
+
   // 1ターン分の敵行動（kit駆動）。kitが無ければ通常攻撃。
   const doEnemyKitTurn = () => {
     const kit = enemy.kit
     if (!kit) { doEnemyAttack(false); return }
-    if (enLockedSkill) {
-      const lk = enLockedSkill
-      if (lk.custom) castCustomSkill(lk); else castExistingSkill(lk)
-      return
-    }
+    if (enLockedSkill) { resolveSlot(enLockedSkill); return }
     const hpRate = enemyHp / enemyMaxHp
     let slot, isSpecial = false
     if (!enUsedSpecial && hpRate <= 0.15)      { slot = kit.special;   enUsedSpecial = true; isSpecial = true }
@@ -423,7 +445,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     else if (!enUsedT75 && hpRate <= 0.75)     { slot = kit.trigger75; enUsedT75 = true }
     else                                       { slot = (hpRate <= 0.60 && kit.normalLow) ? kit.normalLow : kit.normal }
     const def = (typeof slot === 'string') ? { name: slot } : slot
-    if (def.custom) castCustomSkill(def); else castExistingSkill(def)
+    resolveSlot(def)
     // 大技の「以降このスキルのみ／毎ターン使用」ロック
     if (isSpecial) {
       if (def.persist) enLockedSkill = def
@@ -702,13 +724,13 @@ export default function Abyss() {
     setRemaining(WAIT_SECONDS)
 
     const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
-    const { logs, win } = simulateAbyssBattle(eff, equipment, skillSets, profile, { ...floorData.enemy }, playerItem)
+    const { logs, win } = simulateAbyssBattle(eff, equipment, skillSets, profile, { ...floorData.enemy }, playerItem, targetFloor)
     setBattleLogs(logs)
 
     if (win) {
       const { data, error } = await supabase.rpc('claim_abyss_floor', { p_floor: targetFloor })
       if (error || data?.error) {
-        setResultMsg(data?.error || '報酬の受け取りに失敗しました')
+        setResultMsg((data?.error || error?.message || '報酬の受け取りに失敗しました') + '（SQL未実行の可能性: supabase_abyss.sql を実行してください）')
       } else {
         setReward(data)
         await fetchStatus()
