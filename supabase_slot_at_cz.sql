@@ -1,9 +1,11 @@
 -- ============================================================
--- スロット：AT中はベットを消費しない（commit d6a959f の巻き戻し）
---  - AT分岐で at_bet を徴収していた処理を削除
---  - ナビ成功時の払い出し（at_bet×1.5）は据え置き
---  - 適用順序の制約なし（クライアントと前後どちらでも安全）
+-- スロット調整（この1本でOK。supabase_slot_at_nobet.sql を置き換え）
+--  ① AT中はベットを消費しない（slot_spin のAT分岐の徴収を削除）
+--  ② CZ中のAT当選率を 5% → 10% に（slot_at_resolve の cz_win_rate）
+--  ※ ナビ成功時の払い出し(at_bet×1.5)・上乗せ等は据え置き
 -- ============================================================
+
+-- ① slot_spin：AT中は徴収しない
 CREATE OR REPLACE FUNCTION public.slot_spin(bet integer)
  RETURNS json
  LANGUAGE plpgsql
@@ -78,6 +80,64 @@ BEGIN
     UPDATE profiles SET medals = medals - use_bet + payout WHERE id = uid;
     RETURN json_build_object('kind','normal','reels',reels,'mult',mult,'payout',payout,'bet',use_bet,
       'mode',v_mode,'at_games',v_at,'cz_games',v_cz,'at_entered',at_entered,'cz_entered',cz_entered,'medals',cur_medals-use_bet+payout);
+  END IF;
+END;
+$function$;
+
+
+-- ② slot_at_resolve：CZ中のAT当選率を 10% に
+CREATE OR REPLACE FUNCTION public.slot_at_resolve(press_order integer[])
+ RETURNS json
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+  uid UUID := auth.uid(); st RECORD; cur_medals INTEGER;
+  success BOOLEAN; payout INTEGER := 0; bonus INTEGER := 0; total_grant INTEGER;
+  v_at INTEGER; v_cz INTEGER;
+  cz_win_rate NUMERIC := 0.10; toku_base NUMERIC := 0.03; toku_rate NUMERIC;  -- ★CZ中AT当選率 0.05→0.10
+  at_won BOOLEAN := false; toku_trig BOOLEAN := false;
+BEGIN
+  IF uid IS NULL THEN RAISE EXCEPTION '未認証です'; END IF;
+  SELECT * INTO st FROM slot_state WHERE player_id = uid FOR UPDATE;
+  IF st IS NULL OR NOT st.at_pending THEN RAISE EXCEPTION '解決待ちのゲームがありません'; END IF;
+  success := (press_order = st.pend_nav);
+
+  IF st.mode = 'cz' THEN
+    v_cz := st.cz_games - 1;
+    IF success AND random() < cz_win_rate THEN at_won := true; END IF;
+    IF at_won THEN
+      UPDATE slot_state SET mode='at', at_games=30, cz_games=0, toku_count=0, at_pending=false, pend_nav=NULL WHERE player_id=uid;
+      RETURN json_build_object('kind','cz','success',success,'at_won',true,'mode','at','at_games',30,'cz_games',0);
+    ELSIF v_cz <= 0 THEN
+      UPDATE slot_state SET mode='normal', cz_games=0, at_bet=0, at_pending=false, pend_nav=NULL WHERE player_id=uid;
+      RETURN json_build_object('kind','cz','success',success,'at_won',false,'mode','normal','cz_games',0);
+    ELSE
+      UPDATE slot_state SET cz_games=v_cz, at_pending=false, pend_nav=NULL WHERE player_id=uid;
+      RETURN json_build_object('kind','cz','success',success,'at_won',false,'mode','cz','cz_games',v_cz);
+    END IF;
+  ELSE
+    IF success THEN payout := st.pend_payout; END IF;
+    v_at := st.at_games - 1;
+    toku_rate := toku_base * power(0.5, st.toku_count);
+    IF success AND random() < toku_rate THEN toku_trig := true; END IF;
+    IF toku_trig THEN
+      v_at := v_at + 5;
+      bonus := st.at_bet * 10;
+    END IF;
+    total_grant := payout + bonus;
+    SELECT medals INTO cur_medals FROM profiles WHERE id = uid FOR UPDATE;
+    IF total_grant > 0 THEN
+      PERFORM set_config('app.allow_medals','on',true);
+      UPDATE profiles SET medals = medals + total_grant WHERE id = uid;
+    END IF;
+    IF v_at <= 0 THEN
+      UPDATE slot_state SET mode='normal', at_games=0, at_bet=0, toku_count=0, at_pending=false, pend_nav=NULL WHERE player_id=uid;
+      RETURN json_build_object('kind','at','success',success,'payout',payout,'bonus',bonus,'added',(CASE WHEN toku_trig THEN 5 ELSE 0 END),'toku_triggered',toku_trig,'mode','normal','at_games',0,'medals',cur_medals+total_grant);
+    ELSE
+      UPDATE slot_state SET at_games=v_at, toku_count = st.toku_count + (CASE WHEN toku_trig THEN 1 ELSE 0 END), at_pending=false, pend_nav=NULL WHERE player_id=uid;
+      RETURN json_build_object('kind','at','success',success,'payout',payout,'bonus',bonus,'added',(CASE WHEN toku_trig THEN 5 ELSE 0 END),'toku_triggered',toku_trig,'mode','at','at_games',v_at,'medals',cur_medals+total_grant);
+    END IF;
   END IF;
 END;
 $function$;
