@@ -132,26 +132,26 @@ BEGIN
 
   -- フロア報酬テーブル（src/lib/abyss.js の FLOOR_REWARD と一致させること）
   CASE p_floor
-    WHEN 1  THEN v_gold:=1500;   v_stone_rank:='F'; v_stone_count:=1; v_gem_rank:='F'; v_gem_count:=2;
-    WHEN 2  THEN v_gold:=2500;   v_stone_rank:='F'; v_stone_count:=2; v_gem_rank:='F'; v_gem_count:=3;
-    WHEN 3  THEN v_gold:=4000;   v_stone_rank:='E'; v_stone_count:=1; v_gem_rank:='F'; v_gem_count:=4;
-    WHEN 4  THEN v_gold:=6000;   v_stone_rank:='E'; v_stone_count:=2; v_gem_rank:='F'; v_gem_count:=5;
-    WHEN 5  THEN v_gold:=9000;   v_stone_rank:='D'; v_stone_count:=1; v_gem_rank:='F'; v_gem_count:=6;
-    WHEN 6  THEN v_gold:=13000;  v_stone_rank:='D'; v_stone_count:=2; v_gem_rank:='F'; v_gem_count:=7;
-    WHEN 7  THEN v_gold:=18000;  v_stone_rank:='D'; v_stone_count:=3; v_gem_rank:='F'; v_gem_count:=8;
-    WHEN 8  THEN v_gold:=25000;  v_stone_rank:='C'; v_stone_count:=1; v_gem_rank:='F'; v_gem_count:=10;
-    WHEN 9  THEN v_gold:=33000;  v_stone_rank:='C'; v_stone_count:=2; v_gem_rank:='F'; v_gem_count:=12;
-    WHEN 10 THEN v_gold:=45000;  v_stone_rank:='C'; v_stone_count:=3; v_gem_rank:='F'; v_gem_count:=15;
-    WHEN 11 THEN v_gold:=60000;  v_stone_rank:='B'; v_stone_count:=1; v_gem_rank:='E'; v_gem_count:=4;
-    WHEN 12 THEN v_gold:=78000;  v_stone_rank:='B'; v_stone_count:=2; v_gem_rank:='E'; v_gem_count:=5;
-    WHEN 13 THEN v_gold:=100000; v_stone_rank:='B'; v_stone_count:=3; v_gem_rank:='E'; v_gem_count:=6;
-    WHEN 14 THEN v_gold:=125000; v_stone_rank:='A'; v_stone_count:=1; v_gem_rank:='E'; v_gem_count:=7;
-    WHEN 15 THEN v_gold:=155000; v_stone_rank:='A'; v_stone_count:=2; v_gem_rank:='E'; v_gem_count:=8;
-    WHEN 16 THEN v_gold:=190000; v_stone_rank:='A'; v_stone_count:=2; v_gem_rank:='E'; v_gem_count:=10;
-    WHEN 17 THEN v_gold:=230000; v_stone_rank:='A'; v_stone_count:=3; v_gem_rank:='E'; v_gem_count:=12;
-    WHEN 18 THEN v_gold:=280000; v_stone_rank:='A'; v_stone_count:=3; v_gem_rank:='E'; v_gem_count:=15;
-    WHEN 19 THEN v_gold:=340000; v_stone_rank:='A'; v_stone_count:=4; v_gem_rank:='E'; v_gem_count:=18;
-    WHEN 20 THEN v_gold:=420000; v_stone_rank:='A'; v_stone_count:=5; v_gem_rank:='E'; v_gem_count:=20;
+    WHEN 1  THEN v_gold:=1500;   v_stone_rank:='F'; v_stone_count:=1; v_gem_rank:='F'; v_gem_count:=1;
+    WHEN 2  THEN v_gold:=2500;   v_stone_rank:='F'; v_stone_count:=2; v_gem_rank:='F'; v_gem_count:=1;
+    WHEN 3  THEN v_gold:=4000;   v_stone_rank:='E'; v_stone_count:=1; v_gem_rank:='F'; v_gem_count:=1;
+    WHEN 4  THEN v_gold:=6000;   v_stone_rank:='E'; v_stone_count:=2; v_gem_rank:='F'; v_gem_count:=2;
+    WHEN 5  THEN v_gold:=9000;   v_stone_rank:='D'; v_stone_count:=1; v_gem_rank:='F'; v_gem_count:=2;
+    WHEN 6  THEN v_gold:=13000;  v_stone_rank:='D'; v_stone_count:=2; v_gem_rank:='F'; v_gem_count:=2;
+    WHEN 7  THEN v_gold:=18000;  v_stone_rank:='D'; v_stone_count:=3; v_gem_rank:='F'; v_gem_count:=3;
+    WHEN 8  THEN v_gold:=25000;  v_stone_rank:='C'; v_stone_count:=1; v_gem_rank:='F'; v_gem_count:=3;
+    WHEN 9  THEN v_gold:=33000;  v_stone_rank:='C'; v_stone_count:=2; v_gem_rank:='F'; v_gem_count:=3;
+    WHEN 10 THEN v_gold:=45000;  v_stone_rank:='C'; v_stone_count:=3; v_gem_rank:='F'; v_gem_count:=3;
+    WHEN 11 THEN v_gold:=60000;  v_stone_rank:='B'; v_stone_count:=1; v_gem_rank:='E'; v_gem_count:=1;
+    WHEN 12 THEN v_gold:=78000;  v_stone_rank:='B'; v_stone_count:=2; v_gem_rank:='E'; v_gem_count:=1;
+    WHEN 13 THEN v_gold:=100000; v_stone_rank:='B'; v_stone_count:=3; v_gem_rank:='E'; v_gem_count:=1;
+    WHEN 14 THEN v_gold:=125000; v_stone_rank:='A'; v_stone_count:=1; v_gem_rank:='E'; v_gem_count:=2;
+    WHEN 15 THEN v_gold:=155000; v_stone_rank:='A'; v_stone_count:=2; v_gem_rank:='E'; v_gem_count:=2;
+    WHEN 16 THEN v_gold:=190000; v_stone_rank:='A'; v_stone_count:=2; v_gem_rank:='E'; v_gem_count:=2;
+    WHEN 17 THEN v_gold:=230000; v_stone_rank:='A'; v_stone_count:=3; v_gem_rank:='E'; v_gem_count:=2;
+    WHEN 18 THEN v_gold:=280000; v_stone_rank:='A'; v_stone_count:=3; v_gem_rank:='E'; v_gem_count:=3;
+    WHEN 19 THEN v_gold:=340000; v_stone_rank:='A'; v_stone_count:=4; v_gem_rank:='E'; v_gem_count:=3;
+    WHEN 20 THEN v_gold:=420000; v_stone_rank:='A'; v_stone_count:=5; v_gem_rank:='E'; v_gem_count:=3;
   END CASE;
 
   -- Gold付与
