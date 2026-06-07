@@ -136,27 +136,28 @@ export const ABYSS_DEFINED_FLOORS = FLOOR_META.length
 
 // 階層ごとの報酬（表示用）。サーバ側 claim_abyss_floor の付与内容と一致させること。
 // stone: 強化石ランク, gem: 宝石ランク。
+// 宝石報酬は F・E ランクのみ（1〜10階=F / 11〜20階=E）。ランクを上げない代わりに個数で還元。
 const FLOOR_REWARD = {
-  1:  { gold:1500,   stone:'F', stoneCount:1, gem:'F', gemCount:1 },
-  2:  { gold:2500,   stone:'F', stoneCount:2, gem:'F', gemCount:1 },
-  3:  { gold:4000,   stone:'E', stoneCount:1, gem:'F', gemCount:2 },
-  4:  { gold:6000,   stone:'E', stoneCount:2, gem:'E', gemCount:1 },
-  5:  { gold:9000,   stone:'D', stoneCount:1, gem:'E', gemCount:1 },
-  6:  { gold:13000,  stone:'D', stoneCount:2, gem:'E', gemCount:2 },
-  7:  { gold:18000,  stone:'D', stoneCount:3, gem:'D', gemCount:1 },
-  8:  { gold:25000,  stone:'C', stoneCount:1, gem:'D', gemCount:1 },
-  9:  { gold:33000,  stone:'C', stoneCount:2, gem:'D', gemCount:2 },
-  10: { gold:45000,  stone:'C', stoneCount:3, gem:'C', gemCount:1 },
-  11: { gold:60000,  stone:'B', stoneCount:1, gem:'C', gemCount:1 },
-  12: { gold:78000,  stone:'B', stoneCount:2, gem:'C', gemCount:2 },
-  13: { gold:100000, stone:'B', stoneCount:3, gem:'B', gemCount:1 },
-  14: { gold:125000, stone:'A', stoneCount:1, gem:'B', gemCount:1 },
-  15: { gold:155000, stone:'A', stoneCount:2, gem:'B', gemCount:2 },
-  16: { gold:190000, stone:'A', stoneCount:2, gem:'A', gemCount:1 },
-  17: { gold:230000, stone:'A', stoneCount:3, gem:'A', gemCount:1 },
-  18: { gold:280000, stone:'A', stoneCount:3, gem:'A', gemCount:2 },
-  19: { gold:340000, stone:'A', stoneCount:4, gem:'A', gemCount:2 },
-  20: { gold:420000, stone:'A', stoneCount:5, gem:'A', gemCount:3 },
+  1:  { gold:1500,   stone:'F', stoneCount:1, gem:'F', gemCount:2 },
+  2:  { gold:2500,   stone:'F', stoneCount:2, gem:'F', gemCount:3 },
+  3:  { gold:4000,   stone:'E', stoneCount:1, gem:'F', gemCount:4 },
+  4:  { gold:6000,   stone:'E', stoneCount:2, gem:'F', gemCount:5 },
+  5:  { gold:9000,   stone:'D', stoneCount:1, gem:'F', gemCount:6 },
+  6:  { gold:13000,  stone:'D', stoneCount:2, gem:'F', gemCount:7 },
+  7:  { gold:18000,  stone:'D', stoneCount:3, gem:'F', gemCount:8 },
+  8:  { gold:25000,  stone:'C', stoneCount:1, gem:'F', gemCount:10 },
+  9:  { gold:33000,  stone:'C', stoneCount:2, gem:'F', gemCount:12 },
+  10: { gold:45000,  stone:'C', stoneCount:3, gem:'F', gemCount:15 },
+  11: { gold:60000,  stone:'B', stoneCount:1, gem:'E', gemCount:4 },
+  12: { gold:78000,  stone:'B', stoneCount:2, gem:'E', gemCount:5 },
+  13: { gold:100000, stone:'B', stoneCount:3, gem:'E', gemCount:6 },
+  14: { gold:125000, stone:'A', stoneCount:1, gem:'E', gemCount:7 },
+  15: { gold:155000, stone:'A', stoneCount:2, gem:'E', gemCount:8 },
+  16: { gold:190000, stone:'A', stoneCount:2, gem:'E', gemCount:10 },
+  17: { gold:230000, stone:'A', stoneCount:3, gem:'E', gemCount:12 },
+  18: { gold:280000, stone:'A', stoneCount:3, gem:'E', gemCount:15 },
+  19: { gold:340000, stone:'A', stoneCount:4, gem:'E', gemCount:18 },
+  20: { gold:420000, stone:'A', stoneCount:5, gem:'E', gemCount:20 },
 }
 
 export const ABYSS_FLOORS = FLOOR_META.map(m => ({
