@@ -225,3 +225,23 @@ BEGIN
   RETURN json_build_object('success', true);
 END;
 $$;
+
+-- ============================================================
+-- 踏破ランキング：到達階の深い順。同じ階なら先に到達した人が上位。
+-- RLSで他者の進行は読めないため SECURITY DEFINER で集計して返す。
+-- ============================================================
+CREATE OR REPLACE FUNCTION get_abyss_ranking()
+RETURNS json
+LANGUAGE sql SECURITY DEFINER STABLE AS $$
+  SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json)
+  FROM (
+    SELECT ap.player_id AS id, p.username, p.char_lv, p.lv, p.class,
+           p.avatar_url, p.retraining,
+           ap.cleared_floor, ap.total_clears, ap.updated_at
+    FROM abyss_progress ap
+    JOIN profiles p ON p.id = ap.player_id
+    WHERE ap.cleared_floor > 0 AND COALESCE(p.is_suspended, false) = false
+    ORDER BY ap.cleared_floor DESC, ap.updated_at ASC
+    LIMIT 50
+  ) t;
+$$;

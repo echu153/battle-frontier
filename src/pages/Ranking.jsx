@@ -8,6 +8,7 @@ export default function Ranking() {
   const [players, setPlayers] = useState([])
   const [museumPlayers, setMuseumPlayers] = useState([])
   const [medalPlayers, setMedalPlayers] = useState([])
+  const [abyssPlayers, setAbyssPlayers] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState(null)
   const [tab, setTab] = useState('total')
@@ -74,6 +75,10 @@ export default function Ranking() {
         .limit(50)
       setMedalPlayers(medalData || [])
 
+      // 奈落闘技場 踏破ランキング（到達階の深い順）
+      const { data: abyssData } = await supabase.rpc('get_abyss_ranking')
+      setAbyssPlayers(Array.isArray(abyssData) ? abyssData : [])
+
       setLoading(false)
     }
     init()
@@ -97,7 +102,7 @@ export default function Ranking() {
 
         {/* タブ切り替え */}
         <div style={{ display:'flex', gap:'6px', marginBottom:'12px' }}>
-          {[{ id:'total', label:'🏆 総合力' }, { id:'museum', label:'🏛 寄贈数' }, { id:'medal', label:'🎫 メダル' }].map(t => (
+          {[{ id:'total', label:'🏆 総合力' }, { id:'abyss', label:'🕯 奈落' }, { id:'museum', label:'🏛 寄贈数' }, { id:'medal', label:'🎫 メダル' }].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{
                 flex:1, padding:'8px', fontFamily:'monospace', fontSize:'12px', cursor:'pointer',
@@ -112,7 +117,7 @@ export default function Ranking() {
 
         {/* 見出し */}
         <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'10px', textAlign:'center', letterSpacing:'2px' }}>
-          {tab === 'total' ? '🏆 総合力ランキング' : tab === 'museum' ? '🏛 寄贈数ランキング' : '🎫 1日最高収支メダルランキング'}
+          {tab === 'total' ? '🏆 総合力ランキング' : tab === 'abyss' ? '🕯 奈落闘技場 踏破ランキング' : tab === 'museum' ? '🏛 寄贈数ランキング' : '🎫 1日最高収支メダルランキング'}
         </div>
 
         {loading ? (
@@ -235,7 +240,7 @@ export default function Ranking() {
               </div>
             )}
           </div>
-        ) : (
+        ) : tab === 'medal' ? (
           <div>
             {medalPlayers.map((p, i) => {
               const medal = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
@@ -290,6 +295,52 @@ export default function Ranking() {
             {medalPlayers.length === 0 && (
               <div style={{ color:'#334455', padding:'20px', textAlign:'center', fontSize:'12px' }}>
                 まだメダルを獲得したプレイヤーがいません
+              </div>
+            )}
+          </div>
+        ) : (
+          <div>
+            {abyssPlayers.map((p, i) => {
+              const medal = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
+              const isMe = p.id === currentUserId
+              const stars = getStars(p)
+              return (
+                <div key={p.id}
+                  onClick={() => nav(`/profile/${p.id}`)}
+                  style={{
+                    display:'flex', alignItems:'center', gap:'8px',
+                    padding:'8px 10px', marginBottom:'4px',
+                    border:`1px solid ${isMe ? '#0066cc' : '#2a1840'}`,
+                    background: isMe ? '#001830' : i === 0 ? '#160c26' : '#0d0a18',
+                    cursor:'pointer', borderRadius:'2px',
+                  }}
+                >
+                  <div style={{ minWidth:'28px', textAlign:'center' }}>
+                    {medal ? <span style={{ fontSize:'16px' }}>{medal}</span> : <span style={{ color:'#7766aa', fontSize:'11px' }}>{i+1}</span>}
+                  </div>
+                  {p.avatar_url
+                    ? <img src={p.avatar_url} alt="avatar" style={{ width:'36px', height:'36px', objectFit:'cover', flexShrink:0 }} />
+                    : <div style={{ width:'36px', height:'36px', background:'#100a1c', border:'1px solid #2a1840', flexShrink:0 }} />
+                  }
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ color: isMe ? '#44ff88' : '#c8a8ff', fontSize:'12px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {p.username}{isMe && <span style={{color:'#44ff88', fontSize:'10px'}}> (自分)</span>}
+                    </div>
+                    <div style={{ color:'#7766aa', fontSize:'10px', marginTop:'2px' }}>
+                      {p.class}<span style={{color:'#ffcc00'}}>{stars}</span> <span style={{color:'#ffcc00'}}>LV{p.char_lv || p.lv}</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ color:'#d0a0ff', fontSize:'15px', fontWeight:'bold' }}>地下{p.cleared_floor}階</div>
+                    <div style={{ color:'#7766aa', fontSize:'10px' }}>到達</div>
+                  </div>
+                </div>
+              )
+            })}
+
+            {abyssPlayers.length === 0 && (
+              <div style={{ color:'#334455', padding:'20px', textAlign:'center', fontSize:'12px' }}>
+                まだ奈落に挑んだプレイヤーがいません
               </div>
             )}
           </div>
