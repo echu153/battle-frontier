@@ -1300,6 +1300,13 @@ export default function Game() {
   const [dungeonCounts, setDungeonCounts] = useState({ exp:DUNGEON_DAILY_LIMIT, gold:DUNGEON_DAILY_LIMIT, stone:DUNGEON_DAILY_LIMIT, prof:DUNGEON_DAILY_LIMIT, gem:DUNGEON_DAILY_LIMIT })
   const [showDungeonPanel, setShowDungeonPanel] = useState(false)
   const [showChallengePanel, setShowChallengePanel] = useState(false)
+  const challengePanelRef = useRef(null)
+  // 挑戦パネルを開いたら、その位置まで自動スクロール（スマホで画面外に出るのを防ぐ）
+  useEffect(() => {
+    if (showChallengePanel) {
+      requestAnimationFrame(() => challengePanelRef.current?.scrollIntoView({ behavior:'smooth', block:'center' }))
+    }
+  }, [showChallengePanel])
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [showMenu, setShowMenu] = useState(false)
   const [showContact, setShowContact] = useState(false)
@@ -3685,7 +3692,7 @@ export default function Game() {
                 <>
                   <button onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ width:'100%', padding:'14px', marginTop:'10px', background:'#150a22', border:'1px solid #a060ff', color:'#c08cff', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦[開発]</button>
                   {showChallengePanel && (
-                    <div style={{ border:'1px solid #6a3a9a', background:'#0d0618', padding:'10px', marginTop:'10px' }}>
+                    <div ref={challengePanelRef} style={{ border:'1px solid #6a3a9a', background:'#0d0618', padding:'10px', marginTop:'10px' }}>
                       <div style={{ color:'#c08cff', fontSize:'11px', marginBottom:'8px' }}>挑戦するコンテンツを選択</div>
                       <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場</button>
                     </div>
@@ -3994,7 +4001,7 @@ export default function Game() {
                   <>
                     <button onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ width:'100%', padding:'14px', marginTop:'10px', background:'#150a22', border:'1px solid #a060ff', color:'#c08cff', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦[開発]</button>
                     {showChallengePanel && (
-                      <div style={{ border:'1px solid #6a3a9a', background:'#0d0618', padding:'10px', marginTop:'10px' }}>
+                      <div ref={challengePanelRef} style={{ border:'1px solid #6a3a9a', background:'#0d0618', padding:'10px', marginTop:'10px' }}>
                         <div style={{ color:'#c08cff', fontSize:'11px', marginBottom:'8px' }}>挑戦するコンテンツを選択</div>
                         <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場</button>
                       </div>
