@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { getWeaponGroup } from '../lib/stats'
 import {
-  WAIT_SECONDS,
   calcEffectiveStats,
   calcEvasionRate,
   calcExtraActionRate,
@@ -19,11 +18,7 @@ import { ABYSS_FLOOR_COUNT, ABYSS_DEFINED_FLOORS, getAbyssFloor } from '../lib/a
 const STONE_NAME = (r) => `強化石(${r})`
 const fmt = (n) => Number(n).toLocaleString()
 const floorLabel = (n) => `地下${n}階`
-
-const GEM_RANK_COLOR = {
-  F:'#888888', E:'#6699cc', D:'#ff8844', C:'#44bb44', B:'#4488ff',
-  A:'#ff4444', S:'#ffcc00', SS:'#ffcc00', SSS:'#ffcc00',
-}
+const ABYSS_CD = 5  // 奈落の挑戦クールダウン(秒)
 
 // ============================================================
 // 奈落闘技場 戦闘シミュレーション（完全PvE）
@@ -684,7 +679,7 @@ export default function Abyss() {
     }
     if (prof.last_action_at) {
       const elapsed = (Date.now() - new Date(prof.last_action_at).getTime()) / 1000
-      setRemaining(Math.max(0, WAIT_SECONDS - elapsed))
+      setRemaining(Math.max(0, ABYSS_CD - elapsed))
     }
     await fetchStatus()
   }
@@ -719,7 +714,7 @@ export default function Abyss() {
     setBattling(true); setScene('battle'); setBattleLogs([]); setReward(null); setResultMsg(null)
 
     // 共有CDロック（10秒に1回まで）。並行端末/連打対策。
-    const lockTime = new Date(Date.now() - WAIT_SECONDS * 1000).toISOString()
+    const lockTime = new Date(Date.now() - ABYSS_CD * 1000).toISOString()
     const nowIso = new Date().toISOString()
     const { data: locked } = await supabase.from('profiles')
       .update({ last_action_at: nowIso })
@@ -729,11 +724,11 @@ export default function Abyss() {
     if (!locked || locked.length === 0) {
       setBattling(false); setScene('lobby')
       const elapsed = (Date.now() - new Date(profile.last_action_at || 0).getTime()) / 1000
-      setRemaining(Math.max(1, WAIT_SECONDS - elapsed))
+      setRemaining(Math.max(1, ABYSS_CD - elapsed))
       return
     }
     setProfile(p => ({ ...p, last_action_at: nowIso }))
-    setRemaining(WAIT_SECONDS)
+    setRemaining(ABYSS_CD)
 
     const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
     const { logs, win } = simulateAbyssBattle(eff, equipment, skillSets, profile, { ...floorData.enemy }, playerItem, targetFloor)
@@ -868,7 +863,7 @@ export default function Abyss() {
                 <div style={{ fontSize:'11px', color:'#ffcc66', lineHeight:'1.9' }}>
                   <div>💰 Gold +{fmt(reward.gold)}</div>
                   {reward.stone && <div>💎 {STONE_NAME(reward.stone)} ×{reward.stone_count}</div>}
-                  {reward.gem_count > 0 && <div style={{ color: GEM_RANK_COLOR[reward.gem_rank] || '#ccc' }}>💠 宝石（{reward.gem_rank}ランク）×{reward.gem_count}</div>}
+                  {reward.gem_count > 0 && <div>💍 宝石（{reward.gem_rank}ランク）×{reward.gem_count}</div>}
                 </div>
                 <div style={{ color:'#cc9944', fontSize:'10px', marginTop:'6px' }}>{reward.floor >= ABYSS_DEFINED_FLOORS ? '現在実装ぶんはここまで。' : `次は ${floorLabel(reward.floor + 1)}だ。`}{!profile?.is_admin && ' 次の挑戦は月曜朝5時から。'}</div>
               </div>
@@ -897,7 +892,7 @@ function RewardLine({ reward }) {
     <div style={{ fontSize:'11px', color:'#ccaa66', lineHeight:'1.8' }}>
       <span>💰 {fmt(reward.gold)}G</span>
       <span style={{ marginLeft:'10px' }}>💎 {STONE_NAME(reward.stone)}×{reward.stoneCount}</span>
-      <span style={{ marginLeft:'10px', color: GEM_RANK_COLOR[reward.gem] || '#ccc' }}>💠 宝石({reward.gem})×{reward.gemCount}</span>
+      <span style={{ marginLeft:'10px' }}>💍 宝石({reward.gem})×{reward.gemCount}</span>
     </div>
   )
 }
