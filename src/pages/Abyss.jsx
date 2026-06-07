@@ -672,8 +672,6 @@ export default function Abyss() {
       supabase.from('player_items').select('*, items(*)').eq('player_id', user.id).eq('equipped', true).maybeSingle(),
     ])
     if (!prof) { nav('/create'); return }
-    // 管理者限定[開発]
-    if (!prof.is_admin) { nav('/game'); return }
     setProfile(prof)
     setEquipment(eq || [])
     setProficiency(prof2 || [])
@@ -776,7 +774,7 @@ export default function Abyss() {
       <div style={{ maxWidth:'640px', margin:'0 auto' }}>
         {/* ヘッダー */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #3a1f5a', paddingBottom:'8px', marginBottom:'12px' }}>
-          <div style={{ color:'#c08cff', fontSize:'16px', letterSpacing:'3px' }}>🕯 奈落闘技場 <span style={{ fontSize:'10px', color:'#7755aa' }}>[開発]</span></div>
+          <div style={{ color:'#c08cff', fontSize:'16px', letterSpacing:'3px' }}>🕯 奈落闘技場</div>
           <button onClick={()=>nav('/game')} style={{ background:'none', border:'1px solid #6644aa', color:'#9977cc', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏰 街に戻る</button>
         </div>
 
@@ -790,10 +788,10 @@ export default function Abyss() {
               <div style={{ color:'#7766aa', fontSize:'10px', marginTop:'4px', lineHeight:'1.7' }}>
                 地下へ1階ずつ潜っていく。各階を倒すと次の階へ。勝利すると次の月曜朝5時まで再挑戦できません。<br/>
                 敗北しても挑戦回数は減りません（勝つまで何度でも挑戦可）。
-                {profile?.is_admin && <><br/><span style={{ color:'#a060ff' }}>[開発] 管理者は週次ロックを無視して連続挑戦できます。</span></>}
+                {profile?.is_admin && <><br/><span style={{ color:'#a060ff' }}>※管理者は週次ロックを無視して連続挑戦できます。</span></>}
               </div>
               {profile?.is_admin && (
-                <button onClick={handleReset} style={{ marginTop:'8px', padding:'5px 10px', background:'#1a0a14', border:'1px solid #aa4466', color:'#ff6688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>🔄 進行リセット[開発]</button>
+                <button onClick={handleReset} style={{ marginTop:'8px', padding:'5px 10px', background:'#1a0a14', border:'1px solid #aa4466', color:'#ff6688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>🔄 進行リセット(管理者)</button>
               )}
             </div>
 
