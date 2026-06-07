@@ -22,9 +22,10 @@ const FISH_RANK_BONUS_STATS = {
   ss:  ['atk','matk','spd'],
   sss: ['hp'],
 }
-const FISH_RANK_BONUS_AMOUNT = { f:1, e:1, d:1, c:1, b:1, a:null, s:3, ss:3, sss:100 }
-const FISH_A_BONUS = { hp_max:10, mp_max:5 }
-const FISH_SSS_BONUS = { hp_max:100 }
+// 図鑑(魚ごと)ボーナスは現行の3倍（コンプリートボーナスは据え置き）
+const FISH_RANK_BONUS_AMOUNT = { f:3, e:3, d:3, c:3, b:3, a:null, s:9, ss:9, sss:300 }
+const FISH_A_BONUS = { hp_max:30, mp_max:15 }
+const FISH_SSS_BONUS = { hp_max:300 }
 
 const FISH_DATA = {
   日本海: [
