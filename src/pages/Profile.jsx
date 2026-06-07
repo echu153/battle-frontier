@@ -282,7 +282,7 @@ export default function Profile() {
         {/* 装備中（カード式） */}
         <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'12px' }}>
           <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px', textAlign:'center' }}>装備中</div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:'8px' }}>
           {slots.map(slot => {
             const equipped = equipment.find(e => e.slot === slot && e.equipped)
             const slotLabel = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }[slot]
