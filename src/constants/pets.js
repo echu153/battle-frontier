@@ -6,9 +6,9 @@
 //  被ダメは敵の攻撃タイプに応じて pet.def(物理) / pet.mdef(特殊) で軽減
 export const SPECIES = {
   // 総合力を3体で統一（HP10=1点 / 攻・防・特防=各1点 → 合計が一致）。基礎=20点(全員HP20)・成長=4.8点/Lvで全レベル同値
-  flame:  { label: 'ヴォル', emoji: '🐺', starter: true, atkType: 'phys', base: { hp: 20, atk: 10, def: 5, mdef: 3 }, grow: { hp: 6, atk: 2.4, def: 1.1, mdef: 0.7 }, evolve: { label: 'ヴォルガノフ', emoji: '🐺' } },
-  aqua:   { label: 'アルル', emoji: '🦊', starter: true, atkType: 'spec', base: { hp: 20, atk: 10, def: 2, mdef: 6 }, grow: { hp: 4, atk: 2.4, def: 0.8, mdef: 1.2 }, evolve: { label: 'アルミラ',   emoji: '🦊' } },
-  leaf:   { label: 'ドラム', emoji: '🐢', starter: true, atkType: 'phys', base: { hp: 20, atk: 6,  def: 6, mdef: 6 }, grow: { hp: 8, atk: 1.0, def: 1.5, mdef: 1.5 }, evolve: { label: 'ガルガノス', emoji: '🐢' } },
+  flame:  { label: 'ヴォル', emoji: '🐺', image: '/voru.png',  starter: true, atkType: 'phys', base: { hp: 20, atk: 10, def: 5, mdef: 3 }, grow: { hp: 6, atk: 2.4, def: 1.1, mdef: 0.7 }, evolve: { label: 'ヴォルガノフ', emoji: '🐺', image: '/voruganohu.png' } },
+  aqua:   { label: 'アルル', emoji: '🦊', image: '/aruru.png', starter: true, atkType: 'spec', base: { hp: 20, atk: 10, def: 2, mdef: 6 }, grow: { hp: 4, atk: 2.4, def: 0.8, mdef: 1.2 }, evolve: { label: 'アルミラ',   emoji: '🦊', image: '/arumira.png' } },
+  leaf:   { label: 'ドラム', emoji: '🐢', image: '/doramu.png', starter: true, atkType: 'phys', base: { hp: 20, atk: 6,  def: 6, mdef: 6 }, grow: { hp: 8, atk: 1.0, def: 1.5, mdef: 1.5 }, evolve: { label: 'ガルガノス', emoji: '🐢', image: '/garuganos.png' } },
 }
 
 export const STARTERS = Object.entries(SPECIES).map(([id, s]) => ({ id, ...s }))
@@ -156,3 +156,13 @@ export function speciesEmoji(pet) {
   if (pet?.evolved && sp.evolve) return sp.evolve.emoji || sp.emoji
   return sp.emoji || '🐾'
 }
+// 種族デフォルト画像（進化済みなら進化形イラスト）。未設定なら null
+export function speciesImage(pet) {
+  const sp = SPECIES[pet?.species] || {}
+  if (pet?.evolved && sp.evolve?.image) return sp.evolve.image
+  return sp.image || null
+}
+// 進化形イラストのパス（進化時にカスタム画像を上書きするのに使う）
+export const evolvedImage = (pet) => SPECIES[pet?.species]?.evolve?.image || null
+// 実際に表示する画像：カスタム(image_url) 優先、無ければ種族デフォルト
+export const petImage = (pet) => pet?.image_url || speciesImage(pet)

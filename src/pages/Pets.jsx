@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { SPECIES, STARTERS, SKILLS, MAX_SKILL_SLOTS, SHOP_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX, atkLabel, canEvolve, petMaxLevel, evolvedName } from '../constants/pets'
+import { SPECIES, STARTERS, SKILLS, MAX_SKILL_SLOTS, SHOP_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage } from '../constants/pets'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 // ペット画像はペットページでアップロードしたものだけを使う（avatars/<uid>/pets/ 配下）
@@ -99,6 +99,11 @@ export default function Pets() {
     if (!window.confirm(`${pet.name}（${speciesLabel(pet)}）を ${next} に進化させます。\n進化すると現在ステータスが1.5倍になり、以降はレベル100まで成長量が2倍になります。よろしいですか？`)) return
     setLoading(true)
     const { error } = await supabase.rpc('pet_evolve', { p_pet_id: pet.id })
+    if (!error) {
+      // 進化したら画像を進化後イラストに差し替える（カスタム画像も上書き。その後また変更可）
+      const evoImg = evolvedImage(pet)
+      if (evoImg) await supabase.from('pets').update({ image_url: evoImg }).eq('id', pet.id)
+    }
     setLoading(false)
     if (error) { flash('進化に失敗: ' + error.message); return }
     flash(`✨ ${pet.name} は ${next} に進化した！`)
@@ -170,7 +175,7 @@ export default function Pets() {
         <Wrap nav={nav} msg={msg}>
           <h3 style={{ color: '#aa88ff', margin: '12px 0' }}>名前をつけよう</h3>
           <div style={{ border: '1px solid #335588', background: '#001026', padding: 16, textAlign: 'center' }}>
-            <div style={{ fontSize: 56 }}>{naming.emoji}</div>
+            {naming.image ? <img src={naming.image} alt="" style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 6 }} /> : <div style={{ fontSize: 56 }}>{naming.emoji}</div>}
             <div style={{ color: '#6699cc', fontSize: 11, margin: '6px 0' }}>{naming.label}　HP{st.maxHp} / {atkLabel(naming)}{st.atk} / 防{st.def} / 特防{st.mdef}</div>
             <input value={nick} onChange={(e) => setNick(e.target.value)} maxLength={12} placeholder={naming.label}
               style={{ width: '70%', padding: 8, margin: '10px 0', background: '#000818', border: '1px solid #335588', color: '#cce6ff', fontFamily: 'monospace', textAlign: 'center', fontSize: 14 }} />
@@ -191,7 +196,7 @@ export default function Pets() {
             const st = petStats({ species: sp.id, level: 1 })
             return (
               <div key={sp.id} style={{ border: '1px solid #335588', background: '#001026', padding: 10, textAlign: 'center' }}>
-                <div style={{ fontSize: 40 }}>{sp.emoji}</div>
+                {sp.image ? <img src={sp.image} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6 }} /> : <div style={{ fontSize: 40 }}>{sp.emoji}</div>}
                 <div style={{ color: '#cce6ff', marginTop: 4 }}>{sp.label}</div>
                 <div style={{ color: '#6699cc', fontSize: 11, margin: '6px 0' }}>HP{st.maxHp} / {atkLabel({ species: sp.id })}{st.atk} / 防{st.def} / 特防{st.mdef}</div>
                 <Btn onClick={() => { setNaming(sp); setNick(sp.label) }}>選ぶ</Btn>
@@ -324,7 +329,8 @@ export default function Pets() {
 }
 
 function Portrait({ pet, size }) {
-  if (pet.image_url) return <img src={pet.image_url} alt="" style={{ width: size, height: size, objectFit: 'cover', borderRadius: 4 }} />
+  const src = petImage(pet) // カスタム画像 or 種族デフォ（進化で切替）
+  if (src) return <img src={src} alt="" style={{ width: size, height: size, objectFit: 'cover', borderRadius: 4 }} />
   return <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.7 }}>{speciesEmoji(pet)}</div>
 }
 
