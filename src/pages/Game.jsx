@@ -1805,14 +1805,14 @@ export default function Game() {
     }
     await supabase.from('profiles').update({ last_action_at: new Date().toISOString() }).eq('id', profile.id)
     setDungeonCounts(prev => ({ ...prev, [type]: newCount }))
-    await fetchProfile()
     } catch (e) {
       console.error('doDungeon error:', e)
       logs.push({ text:`⚠ 報酬処理でエラーが発生しました（${e?.message || e}）`, color:'#ff8844' })
-    } finally {
-      setBattleLogs([...logs])
-      setLoading(false)
     }
+    // 結果は fetchProfile を待たずに即表示（出撃と同じ体感速度）。プロフィール再取得は背景で実行
+    setBattleLogs([...logs])
+    setLoading(false)
+    fetchProfile().catch(() => {})
   }
 
   const DEV_ACCOUNTS = ['おれおれお']  // 開発者アカウント
