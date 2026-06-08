@@ -153,6 +153,15 @@ export default function Dungeon() {
   const [inventory, setInventory] = useState({}) // 持ち物 { item_key: qty }
   const [dungeon, setDungeon] = useState(null) // 選択中のダンジョン定義
   const [cleared, setCleared] = useState(new Set()) // クリア済みダンジョンID
+  const [shake, setShake] = useState(null) // 戦闘演出：接触時のマップ揺れ（'hit' | 'kill'）
+  const shakeTimer = useRef(null)
+  // 接触時にマップを少し震わせる（撃破時はやや大きめ）
+  const triggerShake = (kind = 'hit') => {
+    setShake(kind)
+    if (shakeTimer.current) clearTimeout(shakeTimer.current)
+    shakeTimer.current = setTimeout(() => setShake(null), kind === 'kill' ? 360 : 220)
+  }
+  useEffect(() => () => { if (shakeTimer.current) clearTimeout(shakeTimer.current) }, [])
 
   // 探索の集計（不正対策のためサーバーへ渡す素の値）
   const runIdRef = useRef(null)
@@ -312,8 +321,8 @@ export default function Dungeon() {
       const skillTag = selectedSkill === 'tackle' ? '' : `【${sk.name}】`
       const hitTxt = hits > 1 ? `${perHit}×${hits}=` : ''
       if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); curPetHp = Math.min(pet.maxHp, curPetHp + heal); if (heal > 0) addLog(`💚 ${heal}回復`) }
-      if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total} → 撃破！`); grantKill(floorNum) }
-      else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total}（残HP${newHp}）`) }
+      if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total} → 撃破！`); grantKill(floorNum); triggerShake('kill') }
+      else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total}（残HP${newHp}）`); triggerShake('hit') }
       // プレイヤーはその場に留まる
     } else {
       // アイテム取得
@@ -514,6 +523,23 @@ export default function Dungeon() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#000820', color: '#88ccff', fontFamily: 'monospace', padding: '16px' }}>
+      <style>{`
+        @keyframes bf-dungeon-shake-hit {
+          0%,100% { transform: translate(0,0); }
+          20% { transform: translate(-3px, 1px); }
+          40% { transform: translate(3px, -2px); }
+          60% { transform: translate(-2px, 2px); }
+          80% { transform: translate(2px, -1px); }
+        }
+        @keyframes bf-dungeon-shake-kill {
+          0%,100% { transform: translate(0,0) scale(1); }
+          15% { transform: translate(-6px, 2px) scale(1.015); }
+          30% { transform: translate(6px, -4px) scale(1.015); }
+          45% { transform: translate(-5px, 3px) scale(1.01); }
+          60% { transform: translate(5px, -2px) scale(1.01); }
+          80% { transform: translate(-2px, 1px) scale(1); }
+        }
+      `}</style>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ color: '#aa88ff', letterSpacing: 2 }}>{dungeon?.emoji || '🕳'} {dungeon?.name || 'ダンジョン'} <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span></div>
@@ -531,8 +557,8 @@ export default function Dungeon() {
           <span style={{ color: '#aa88ff' }}>⚡{getSkill(selectedSkill).name}</span>
         </div>
 
-        {/* マップ（ビューポート） */}
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355' }}>
+        {/* マップ（ビューポート）。接触時に少し震える戦闘演出 */}
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', willChange: 'transform', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
           {Array.from({ length: VH }).map((_, vy) => Array.from({ length: VW }).map((_, vx) => {
             const x = ox + vx, y = oy + vy
             const c = cellAt(x, y)
