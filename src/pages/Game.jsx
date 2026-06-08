@@ -278,7 +278,7 @@ export const RETRAINING_ENHANCEMENTS = {
   '狂戦士': ['マッドラッシュ：倍率 ATK×1.9', 'すてみ：反動 5%', 'バーサク：与ダメ+5%（合計+20%）', 'ブラッティロア：攻撃力上昇 ×1.3', 'フルブレイカー：防御無視 50%'],
   '狩人': ['毒矢：毒付与 100%', '三連射：倍率 ATK×0.6/hit', '鷹ノ目：命中+10（基本と合計+20）', '狩猟本能：攻撃・素早さ ×1.5', '絶影狙撃：倍率 ATK×2.2'],
   '暗殺者': ['瞬歩瞬殺：出血確率 100%', '鬼影閃：出血確率 80%', '隠身：クリティカル威力+20%', '影歩き：効果8ターン', '急所突き：出血スタック×20%追撃（最大100%）→出血消費'],
-  '元素使い': ['アクアショット：倍率 MATK×1.6', 'アースクエイク：スタン30%', '元素共鳴：与ダメ+25%', 'ライトニングボルト：倍率 MATK×1.7', 'フレイムバースト：やけど100%'],
+  '元素使い': ['アクアショット：倍率 MATK×1.6', 'アースクエイク：スタン60%', '元素共鳴：与ダメ+25%', 'ライトニングボルト：倍率 MATK×1.7', 'フレイムバースト：やけど100%'],
   '死霊使い': ['骸骨召喚：倍率 MATK×0.8', 'ソウルドレイン：倍率 MATK×1.4', '骸の壁：バリア中 防御・特防×1.2', '腐敗霧：防御・特防低下 ×0.6', '幽世ノ門：効果5ターン'],
   '聖職者': ['ホーリーライト：30%で回復阻害50%', '奇跡：毎ターン最大HP15%回復', '神聖加護：回復×1.4＋回復量の50%を敵に', '祈りの結界：6ターン', '神罰執行：倍率 MATK×2.0'],
   '異端審問官': ['粛清：倍率 MATK×1.4＋MDEF×0.4', '狂信：特殊攻撃×1.3 追加', '執行本能：与ダメ+15%', '聖なる裁き：倍率 MATK×1.9', '断罪：回復封じ 60%'],
@@ -286,7 +286,7 @@ export const RETRAINING_ENHANCEMENTS = {
   '聖騎士': ['ホーリーエッジ：倍率 ATK×1.6＋MATK×0.6', 'ディバインスマイト：与ダメ低下付与 50%', '聖騎士の心得：防御・特防×1.3', '聖域展開：毎ターン最大HP10%回復', '神聖覚醒：追撃 防御・特防の60%'],
   '魔法剣士': ['雷光斬：倍率 ATK×1.3＋MATK×0.6', '閃光：連続強化×1.2（最大4重複）', '魔導剣術：変換率60%', '魔剣開放：反動2ターンに短縮', 'エレメンタルエッジ：倍率 ATK×1.7＋MATK×0.8'],
   '魔銃士': ['魔弾：倍率 ATK×1.0＋MATK×1.0', '連装銃撃：命中+10', '精密照準：同スキル連続で威力×1.1', '強化装填：5ターン', 'キャノネスチュームビンド：連続強化×1.3が最大2重複'],
-  'サイキッカー': ['サイコショット：倍率 ATK×1.3＋MATK×0.6', 'マインドブレイク：20%でスタン', '第六感：与ダメ+5%（合計+10%）', '精神集中：×1.8・3ターン', 'サイコブラスト：倍率 ATK×1.8＋MATK×1.0'],
+  'サイキッカー': ['サイコショット：倍率 ATK×1.3＋MATK×0.6', 'マインドブレイク：40%でスタン', '第六感：与ダメ+5%（合計+10%）', '精神集中：×1.8・3ターン', 'サイコブラスト：倍率 ATK×1.8＋MATK×1.0'],
   '体術師': ['半月蹴り：次のスキルの威力×1.5', '五連殺：各ヒット20%で出血', '闘争本能：HP50%以下で与ダメ+25%', '破衝掌：防御無視 50%', '飛天三角蹴り：ミス撤廃＋各ヒットATK+0.1'],
   'ギャンブラー': ['ジャグリング：4ヒット', 'ラッキーダイス：×0.9〜2.2', 'ギャンブルボディ：被ダメ ×0.7〜1.1', 'オールイン：効果・反動6ターン', 'ジャックポット：2倍確率10%'],
 }
@@ -816,7 +816,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       const stunResist = enemyBuffs.stunResist ?? 1.0
       // 再修練強化：元素使い(2段)でスタン確率30%
       const eqStunBoost = (skill.class_name==='元素使い' && rt>=2)
-      const stunHit = Math.random()*100 < (eqStunBoost?30:15) * stunResist
+      const stunHit = Math.random()*100 < (eqStunBoost?60:30) * stunResist
       if (stunHit) {
         result.newEnemyBuffs.stun = { turns:1 }
         result.newEnemyBuffs.stunResist = stunResist * 0.5
@@ -939,7 +939,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     case '爆裂拳': {
       result.dmg = Math.floor(eff.atk*1.4*am)
       const sr_ep = enemyBuffs.stunResist ?? 1.0
-      const sh_ep = Math.random()*100 < 20 * sr_ep
+      const sh_ep = Math.random()*100 < 40 * sr_ep
       if (sh_ep) { result.newEnemyBuffs.stun={turns:1}; result.newEnemyBuffs.stunResist=sr_ep*0.5 }
       result.log = `💥 爆裂拳！ ${enemy.name}に${result.dmg}の物理ダメージ！${sh_ep?' スタン！':''}`; break
     }
@@ -953,7 +953,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       let mbStun = ''
       if (rt>=2) {
         const sr_mb = enemyBuffs.stunResist ?? 1.0
-        if (Math.random()*100 < 20 * sr_mb) { result.newEnemyBuffs.stun={turns:1}; result.newEnemyBuffs.stunResist=sr_mb*0.5; mbStun=' スタン！' }
+        if (Math.random()*100 < 40 * sr_mb) { result.newEnemyBuffs.stun={turns:1}; result.newEnemyBuffs.stunResist=sr_mb*0.5; mbStun=' スタン！' }
       }
       result.log = `🔮 マインドブレイク！ ${enemy.name}に${result.dmg}の特殊ダメージ！${mbStun}`; break
     }
