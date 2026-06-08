@@ -1250,6 +1250,7 @@ const ANNOUNCE_TABS = [
   { key:'update', label:'アップデート', icon:'🆕' },
   { key:'bug',    label:'不具合',       icon:'🛠' },
   { key:'event',  label:'イベント',     icon:'🎉' },
+  { key:'past',   label:'過去',         icon:'🗂' },
 ]
 
 // パピア出現率アップイベント時間帯（JST）: 8:00 / 12:00 / 16:00 / 22:00 から30分
@@ -3210,13 +3211,13 @@ export default function Game() {
           <button onClick={()=>{ setShowAnnouncements(false); setOpenAnnouncementId(null) }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>✕ 閉じる</button>
         </div>
         {/* カテゴリ別タブ */}
-        <div style={{ display:'flex', gap:'4px', marginBottom:'10px', flexShrink:0 }}>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'10px', flexShrink:0 }}>
           {ANNOUNCE_TABS.map(t => {
             const on = announceTab === t.key
             const hasNew = announcements.some(a => a.title !== 'MAINTENANCE' && (a.category || 'notice') === t.key && !seenAnnouncementIds.includes(a.id))
             return (
               <button key={t.key} onClick={()=>{ setAnnounceTab(t.key); setOpenAnnouncementId(null) }}
-                style={{ flex:1, minWidth:'64px', padding:'6px 2px', background: on?'#1a0c00':'#000818', border:`1px solid ${on?'#ff8844':'#223344'}`, color: on?'#ffaa66':'#557799', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', position:'relative' }}>
+                style={{ flex:'1 1 56px', minWidth:'56px', padding:'6px 2px', background: on?'#1a0c00':'#000818', border:`1px solid ${on?'#ff8844':'#223344'}`, color: on?'#ffaa66':'#557799', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', position:'relative', whiteSpace:'nowrap' }}>
                 {t.icon} {t.label}
                 {hasNew && <span style={{ position:'absolute', top:'-5px', right:'-3px', background:'#ff4400', color:'#fff', fontSize:'7px', padding:'1px 4px', borderRadius:'6px' }}>NEW</span>}
               </button>
