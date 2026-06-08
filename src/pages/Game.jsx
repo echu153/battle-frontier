@@ -1244,14 +1244,15 @@ const DUNGEON_LIST = [
   { type:'gem',   label:'宝石ダンジョン' },
 ]
 
-// お知らせのカテゴリ別タブ（DBの announcements.category と対応。未設定は 'notice' 扱い）
+// お知らせのカテゴリ別タブ（DBの announcements.category と対応）
 const ANNOUNCE_TABS = [
-  { key:'notice', label:'お知らせ',     icon:'📢' },
   { key:'update', label:'アップデート', icon:'🆕' },
   { key:'bug',    label:'不具合',       icon:'🛠' },
   { key:'event',  label:'イベント',     icon:'🎉' },
   { key:'past',   label:'過去',         icon:'🗂' },
 ]
+// カテゴリ正規化：未設定や未知カテゴリ（旧 'notice' 含む）は先頭タブに寄せて非表示化を防ぐ
+const annCat = (a) => (ANNOUNCE_TABS.some(t => t.key === a.category) ? a.category : ANNOUNCE_TABS[0].key)
 
 // パピア出現率アップイベント時間帯（JST）: 8:00 / 12:00 / 16:00 / 22:00 から30分
 const PAPIA_EVENT_HOURS = [8, 12, 16, 22]
@@ -1323,7 +1324,7 @@ export default function Game() {
   const [contactSent, setContactSent] = useState(false)
   const [contactLoading, setContactLoading] = useState(false)
   const [showAnnouncements, setShowAnnouncements] = useState(false)
-  const [announceTab, setAnnounceTab] = useState('notice')   // お知らせモーダルの選択中タブ
+  const [announceTab, setAnnounceTab] = useState('update')   // お知らせモーダルの選択中タブ
   const [announcements, setAnnouncements] = useState([])
   const [showGuide, setShowGuide] = useState(false)
   const [openGuideId, setOpenGuideId] = useState(null)
@@ -3202,7 +3203,7 @@ export default function Game() {
   )
 
   if (showAnnouncements) {
-    const tabAnns = announcements.filter(a => a.title !== 'MAINTENANCE' && (a.category || 'notice') === announceTab)
+    const tabAnns = announcements.filter(a => a.title !== 'MAINTENANCE' && annCat(a) === announceTab)
     return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ background:'#001040', border:'1px solid #ff8844', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'80vh', display:'flex', flexDirection:'column', fontFamily:'monospace' }}>
@@ -3214,7 +3215,7 @@ export default function Game() {
         <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'10px', flexShrink:0 }}>
           {ANNOUNCE_TABS.map(t => {
             const on = announceTab === t.key
-            const hasNew = announcements.some(a => a.title !== 'MAINTENANCE' && (a.category || 'notice') === t.key && !seenAnnouncementIds.includes(a.id))
+            const hasNew = announcements.some(a => a.title !== 'MAINTENANCE' && annCat(a) === t.key && !seenAnnouncementIds.includes(a.id))
             return (
               <button key={t.key} onClick={()=>{ setAnnounceTab(t.key); setOpenAnnouncementId(null) }}
                 style={{ flex:'1 1 56px', minWidth:'56px', padding:'6px 2px', background: on?'#1a0c00':'#000818', border:`1px solid ${on?'#ff8844':'#223344'}`, color: on?'#ffaa66':'#557799', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', position:'relative', whiteSpace:'nowrap' }}>
