@@ -161,7 +161,17 @@ export default function Dungeon() {
     if (shakeTimer.current) clearTimeout(shakeTimer.current)
     shakeTimer.current = setTimeout(() => setShake(null), kind === 'kill' ? 360 : 220)
   }
-  useEffect(() => () => { if (shakeTimer.current) clearTimeout(shakeTimer.current) }, [])
+  // 戦闘エフェクト（被弾点滅／体当たりの突進）。pet と enemies[id] ごとに保持
+  const [fx, setFx] = useState({ pet: null, enemies: {}, t: 0 })
+  const fxId = useRef(0)
+  const applyFx = (next) => { fxId.current += 1; setFx({ pet: null, enemies: {}, ...next, t: fxId.current }) }
+  const busyRef = useRef(false) // 体当たり〜敵反撃の演出中は入力をロック
+  const turnTimers = useRef([])
+  useEffect(() => () => {
+    if (shakeTimer.current) clearTimeout(shakeTimer.current)
+    turnTimers.current.forEach(clearTimeout)
+  }, [])
+  const BREATH_MS = 340 // 体当たり後、敵が反撃してくるまでの一呼吸
 
   // 探索の集計（不正対策のためサーバーへ渡す素の値）
   const runIdRef = useRef(null)
@@ -294,7 +304,7 @@ export default function Dungeon() {
   const addLog = (msg) => setLog((l) => [msg, ...l].slice(0, 30))
 
   const tryMove = (dx, dy) => {
-    if (!state || status !== 'exploring') return
+    if (!state || status !== 'exploring' || busyRef.current) return
     let s = state
     const px = s.player.x, py = s.player.y
     const nx = px + dx, ny = py + dy
@@ -321,9 +331,18 @@ export default function Dungeon() {
       const skillTag = selectedSkill === 'tackle' ? '' : `【${sk.name}】`
       const hitTxt = hits > 1 ? `${perHit}×${hits}=` : ''
       if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); curPetHp = Math.min(pet.maxHp, curPetHp + heal); if (heal > 0) addLog(`💚 ${heal}回復`) }
-      if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total} → 撃破！`); grantKill(floorNum); triggerShake('kill') }
+      const killed = newHp <= 0
+      if (killed) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total} → 撃破！`); grantKill(floorNum); triggerShake('kill') }
       else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total}（残HP${newHp}）`); triggerShake('hit') }
-      // プレイヤーはその場に留まる
+
+      // 体当たり演出：ペットを相手方向へ突進、被弾した敵を点滅させる
+      applyFx({ pet: { lunge: { dx, dy } }, enemies: killed ? {} : { [target.id]: { flash: true } } })
+      // 敵HPを即時反映してから、一呼吸おいて敵のターン（反撃）へ
+      setState({ ...s, player, enemies })
+      busyRef.current = true
+      const tid = setTimeout(() => commitTurn(s, player, enemies, curPetHp, fullCost), BREATH_MS)
+      turnTimers.current.push(tid)
+      return
     } else {
       // アイテム取得
       const itemHere = s.items.find((it) => it.x === nx && it.y === ny)
@@ -353,6 +372,8 @@ export default function Dungeon() {
     const occ = (x, y, self) => enemies.some((e) => e !== self && e.x === x && e.y === y)
     const isFloor = (x, y) => inBounds(x, y) && s.grid[y][x] === '.'
     let dead = false
+    const attackerFx = {} // 反撃してきた敵の突進演出
+    let petHit = false
     enemies = enemies.map((e) => {
       const sees = enemySeesPet(s.rooms, e, player.x, player.y)
       const adjacent = Math.abs(e.x - player.x) + Math.abs(e.y - player.y) === 1
@@ -362,6 +383,9 @@ export default function Dungeon() {
         const dmg = calcDamage(e.atk || 1, guard)
         curPetHp -= dmg
         addLog(`💥 ${e.name}の攻撃！ ${dmg}ダメージ`)
+        // 敵はペット方向へ突進、ペットを点滅させる
+        attackerFx[e.id] = { lunge: { dx: Math.sign(player.x - e.x), dy: Math.sign(player.y - e.y) } }
+        petHit = true
         if (curPetHp <= 0) dead = true
         return e
       }
@@ -401,6 +425,15 @@ export default function Dungeon() {
     setPetHp(curPetHp)
     if (dead) { setStatus('dead'); addLog('💀 ペットは力尽きた…'); finishRun(false, true) }
 
+    // 敵の反撃演出（突進＋ペット点滅）。被弾時はマップも軽く揺らす
+    if (Object.keys(attackerFx).length) {
+      applyFx({ pet: petHit ? { flash: true } : null, enemies: attackerFx })
+      if (petHit) triggerShake('hit')
+    } else {
+      applyFx({}) // 直前の体当たり演出をクリア
+    }
+    busyRef.current = false
+
     // 視界を更新して記憶へ追記
     const nowVis = computeVisible(s.rooms, player.x, player.y)
     const explored = new Set(s.explored); nowVis.forEach((k) => explored.add(k))
@@ -409,7 +442,7 @@ export default function Dungeon() {
 
   // 持ち物の使用（食料＝満腹回復・1ターン経過 / だっしゅつの翼＝脱出）
   const useItem = async (key) => {
-    if (status !== 'exploring' || (inventory[key] || 0) < 1) return
+    if (status !== 'exploring' || busyRef.current || (inventory[key] || 0) < 1) return
     const def = PET_ITEMS[key]
     const { error } = await supabase.rpc('pet_consume_item', { p_key: key })
     if (error) { addLog('アイテムを持っていない'); return }
@@ -425,7 +458,7 @@ export default function Dungeon() {
 
   // 足踏み：その場で1ターン経過
   const stepInPlace = () => {
-    if (!state || status !== 'exploring') return
+    if (!state || status !== 'exploring' || busyRef.current) return
     addLog('🚶 足踏みした')
     commitTurn(state, state.player, state.enemies, petHp)
   }
@@ -506,9 +539,9 @@ export default function Dungeon() {
       return { ch: '', bg: wall ? C.wallMem : C.floorMem }
     }
     // 現在視界：エンティティ優先（足元は床色）
-    if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: C.floorVis }
+    if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: C.floorVis, fx: fx.pet }
     const e = state.enemies.find((o) => o.x === x && o.y === y)
-    if (e) return { ch: '👹', img: e.image || null, bg: C.floorVis }
+    if (e) return { ch: '👹', img: e.image || null, bg: C.floorVis, fx: fx.enemies[e.id] || null }
     const it = state.items.find((o) => o.x === x && o.y === y)
     if (it) return { ch: '✨', bg: C.floorVis }
     if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: C.floorVis }
@@ -539,6 +572,16 @@ export default function Dungeon() {
           60% { transform: translate(5px, -2px) scale(1.01); }
           80% { transform: translate(-2px, 1px) scale(1); }
         }
+        @keyframes bf-flash {
+          0%,100% { opacity: 1; filter: none; }
+          20% { opacity: 0.15; }
+          45% { opacity: 1; filter: brightness(2.4) drop-shadow(0 0 4px #fff); }
+          70% { opacity: 0.3; }
+        }
+        @keyframes bf-lunge {
+          0%,100% { transform: translate(0,0); }
+          45% { transform: translate(var(--lx,0), var(--ly,0)); }
+        }
       `}</style>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -564,10 +607,20 @@ export default function Dungeon() {
             const c = cellAt(x, y)
             const clickable = status === 'exploring' && isVisible(x, y) && inBounds(x, y) && state.grid[y]?.[x] !== '#' &&
               Math.abs(x - state.player.x) + Math.abs(y - state.player.y) === 1
+            const inner = c.img ? <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : c.ch
+            const anims = []
+            if (c.fx?.lunge) anims.push('bf-lunge 0.26s ease-out')
+            if (c.fx?.flash) anims.push('bf-flash 0.42s ease-in-out')
+            const fxStyle = c.fx ? {
+              width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              animation: anims.join(', '), willChange: 'transform, opacity',
+              '--lx': c.fx.lunge ? `${Math.sign(c.fx.lunge.dx) * 40}%` : '0%',
+              '--ly': c.fx.lunge ? `${Math.sign(c.fx.lunge.dy) * 40}%` : '0%',
+            } : null
             return (
               <div key={`${vx}-${vy}`} onClick={() => clickable && adjClick(vx, vy)}
-                style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default' }}>
-                {c.img ? <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : c.ch}
+                style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible' }}>
+                {fxStyle ? <div key={`fx${fx.t}`} style={fxStyle}>{inner}</div> : inner}
               </div>
             )
           }))}
