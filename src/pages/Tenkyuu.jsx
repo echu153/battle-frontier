@@ -37,8 +37,8 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
   const logs = []
   const mods = enemy.mods || {}
 
-  // ステータス上限（過剰分5%）を適用
-  const capped = applyStatCap(effRaw, profileRaw.hp_max, mods.capOverride)
+  // ステータス上限（過剰分5%）を適用。上限は宮ごと(enemy.cap)に設定。
+  const capped = applyStatCap(effRaw, profileRaw.hp_max, enemy.cap || mods.capOverride)
   const eff = capped.eff
   const profile = { ...profileRaw, hp_max: capped.hpMax }
 
@@ -723,7 +723,7 @@ export default function Tenkyuu() {
               </div>
               <div style={{ color:'#7766aa', fontSize:'10px', marginTop:'4px', lineHeight:'1.7' }}>
                 現状最強の十二宮と戦うエンドコンテンツ。好きな宮から挑戦できる。<br/>
-                <span style={{ color:'#88ccff' }}>過剰なステータスは5%しか発揮されない（天穹の理）</span>。敵に合わせてスキルを調整しよう。<br/>
+                <span style={{ color:'#88ccff' }}>過剰なステータスは5%しか発揮されない（天穹の理）。上限は宮ごとに異なる</span>。敵に合わせてビルドとスキルを調整しよう。<br/>
                 <span style={{ color:'#cc9944' }}>※称号報酬・進捗の保存は後日実装。現状の制覇マークはこの画面内のみ。</span>
               </div>
             </div>
@@ -742,11 +742,8 @@ export default function Tenkyuu() {
                       {done && <span style={{ color:'#55cc88', fontSize:'11px' }}>✓ 制覇</span>}
                       {locked && <span style={{ color:'#9988bb', fontSize:'10px' }}>準備中</span>}
                     </div>
-                    <div style={{ color:'#aa99cc', fontSize:'10px', lineHeight:'1.7', marginBottom:'4px' }}>
+                    <div style={{ color:'#aa99cc', fontSize:'10px', lineHeight:'1.7', marginBottom:'8px' }}>
                       <span style={{ color:'#cc88dd' }}>特徴:</span> {p.feature}
-                    </div>
-                    <div style={{ color:'#8899bb', fontSize:'10px', lineHeight:'1.7', marginBottom:'8px' }}>
-                      <span style={{ color:'#88aacc' }}>攻略:</span> {p.strategy}
                     </div>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                       <span style={{ color:'#7766aa', fontSize:'10px' }}>推奨総合力 <span style={{ color:'#ffcc66', fontWeight:'bold' }}>{fmt(p.target)}</span></span>
