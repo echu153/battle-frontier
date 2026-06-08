@@ -723,7 +723,7 @@ export default function Tenkyuu() {
               </div>
               <div style={{ color:'#7766aa', fontSize:'10px', marginTop:'4px', lineHeight:'1.7' }}>
                 現状最強の十二宮と戦うエンドコンテンツ。好きな宮から挑戦できる。<br/>
-                <span style={{ color:'#88ccff' }}>過剰なステータスは5%しか発揮されない（天穹の理）。上限は宮ごとに異なる</span>。敵に合わせてビルドとスキルを調整しよう。<br/>
+                <span style={{ color:'#88ccff' }}>過剰なステータスは5%しか発揮されない（天穹の理）</span>。敵に合わせてスキルを調整しよう。<br/>
                 <span style={{ color:'#cc9944' }}>※称号報酬・進捗の保存は後日実装。現状の制覇マークはこの画面内のみ。</span>
               </div>
             </div>
