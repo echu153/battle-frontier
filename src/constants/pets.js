@@ -5,9 +5,10 @@
 //  atkType 'phys'=物理(敵のdefで軽減) / 'spec'=特殊(敵のmdefで軽減)
 //  被ダメは敵の攻撃タイプに応じて pet.def(物理) / pet.mdef(特殊) で軽減
 export const SPECIES = {
-  flame:  { label: 'フラム',  emoji: '🦎', starter: true, atkType: 'phys', base: { hp: 40, atk: 12, def: 5,  mdef: 4 }, grow: { hp: 6, atk: 2, def: 1.2, mdef: 0.9 } },
-  aqua:   { label: 'アクー',  emoji: '🐟', starter: true, atkType: 'spec', base: { hp: 48, atk: 12, def: 4,  mdef: 6 }, grow: { hp: 8, atk: 2, def: 0.9, mdef: 1.2 } },
-  leaf:   { label: 'リーフィ', emoji: '🐛', starter: true, atkType: 'phys', base: { hp: 44, atk: 11, def: 5,  mdef: 5 }, grow: { hp: 7, atk: 1.8, def: 1.1, mdef: 1.1 } },
+  // 総合力を3体で統一（HP10=1点 / 攻・防・特防=各1点 → 合計が一致）。基礎=26点・成長=4.8点/Lvで全レベル同値
+  flame:  { label: 'フラム',  emoji: '🦎', starter: true, atkType: 'phys', base: { hp: 40, atk: 14, def: 5, mdef: 3 }, grow: { hp: 6,  atk: 2.4, def: 1.1, mdef: 0.7 } },
+  aqua:   { label: 'アクー',  emoji: '🐟', starter: true, atkType: 'spec', base: { hp: 60, atk: 10, def: 4, mdef: 6 }, grow: { hp: 10, atk: 1.8, def: 0.8, mdef: 1.2 } },
+  leaf:   { label: 'リーフィ', emoji: '🐛', starter: true, atkType: 'phys', base: { hp: 50, atk: 11, def: 5, mdef: 5 }, grow: { hp: 8,  atk: 2.0, def: 1.0, mdef: 1.0 } },
 }
 
 export const STARTERS = Object.entries(SPECIES).map(([id, s]) => ({ id, ...s }))
