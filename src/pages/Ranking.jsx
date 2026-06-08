@@ -17,12 +17,18 @@ export default function Ranking() {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) setCurrentUserId(user.id)
+      // ランキング集計除外アカウント（dev/テスト用）。列が無い環境でも落ちないよう握りつぶす。
+      let excluded = new Set()
+      try {
+        const { data: exRows } = await supabase.from('profiles').select('id').eq('exclude_from_ranking', true)
+        excluded = new Set((exRows || []).map(r => r.id))
+      } catch { /* 列未追加なら除外なし */ }
       const { data } = await supabase
         .from('profiles')
         .select('id, username, lv, char_lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, avatar_url, retraining, museum_atk, museum_def, museum_matk, museum_mdef, museum_spd, museum_hp, museum_mp, ability_title_id')
         .order('char_lv', { ascending: false })
         .limit(50)
-      const list = data || []
+      const list = (data || []).filter(p => !excluded.has(p.id))
       const ids = list.map(p => p.id)
       let eqs = [], profs = [], titleMap = {}
       if (ids.length > 0) {
@@ -63,7 +69,7 @@ export default function Ranking() {
       }
       const museumList = topIds
         .map(([id, count]) => ({ ...(mMap[id] || { id, username: '???' }), _count: count }))
-        .filter(p => p.username)
+        .filter(p => p.username && !excluded.has(p.id))
       setMuseumPlayers(museumList)
 
       // メダルランキング：1日の最高ネット収支（勝ち負けを差し引いた額・両替除く。マイナスも集計）
@@ -73,11 +79,11 @@ export default function Ranking() {
         .not('gambling_medal_max_daily', 'is', null)
         .order('gambling_medal_max_daily', { ascending: false })
         .limit(50)
-      setMedalPlayers(medalData || [])
+      setMedalPlayers((medalData || []).filter(p => !excluded.has(p.id)))
 
       // 奈落闘技場 踏破ランキング（到達階の深い順）
       const { data: abyssData } = await supabase.rpc('get_abyss_ranking')
-      setAbyssPlayers(Array.isArray(abyssData) ? abyssData : [])
+      setAbyssPlayers((Array.isArray(abyssData) ? abyssData : []).filter(p => !excluded.has(p.id)))
 
       setLoading(false)
     }
