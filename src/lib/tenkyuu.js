@@ -41,6 +41,7 @@
 //  mirrorBuffs:true          プレイヤーの強化(atk/matk/spd/def/mdef/dmgReduce)を敵にも反映（第十二）
 //  mirrorHeal:true           プレイヤーの回復で敵も同量回復（第十二）
 //  counterByType:true        直前に受けた攻撃タイプ(物理/魔法)で反撃（第十二）
+//  twin:true                 敵2体。物理→カストル/特殊→ポルックスが受ける・撃破で蘇生・片方時強化（第三）
 // ============================================================
 
 // プレイヤーのステータス上限（過剰分は5%のみ適用）。現状【全宮一律】。
@@ -124,8 +125,8 @@ const PALACE_META = [
 
   { palace:3, name:'【双影】カストル＆ポルックス', arch:'balanced', dmg:'hybrid',
     feature:'物理はカストル・特殊はポルックスが受ける／片方倒すと数ターンで蘇生／片方だけだとステータス上昇',
-    mods:{ twin:true },  // ※Phase3で実装（敵2体）。現状は準備中。
-    title:'※後日設定', wip:true },
+    mods:{ twin:true },  // 敵2体。physical→カストル/magical→ポルックスが受ける・撃破で蘇生・片方時強化
+    title:'※後日設定' },
 
   { palace:4, name:'【断絶】アクベンス', arch:'tank', dmg:'phys',
     feature:'バフ解除・回復阻害が豊富／すべてのスキルが防御貫通／防御固め',

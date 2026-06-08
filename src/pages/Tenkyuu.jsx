@@ -61,6 +61,28 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
   let playerMp = profile.mp_max
   let enemyHp = enemy.hp
   const enemyMaxHp = enemy.hp
+  // 第3 双影カストル＆ポルックス: 敵2体（物理はカストル/特殊はポルックスが受ける・撃破で蘇生・片方時強化）
+  const twin = mods.twin ? {
+    c: { name:'カストル', hp:Math.round(enemyMaxHp*0.5), max:Math.round(enemyMaxHp*0.5), down:false, revive:0 },
+    p: { name:'ポルックス', hp:Math.round(enemyMaxHp*0.5), max:Math.round(enemyMaxHp*0.5), down:false, revive:0 },
+  } : null
+  if (twin) enemyHp = twin.c.hp + twin.p.hp
+  // 敵へのダメージ適用。双子時は攻撃タイプで受け手を振り分ける（physical→カストル/magical→ポルックス/both→両方/hybrid→折半）
+  const dmgEnemy = (amt, kind) => {
+    if (amt <= 0) return
+    if (!twin) { enemyHp -= amt; return }
+    const solo = (twin.c.down !== twin.p.down)  // ちょうど片方だけダウン中＝相方が硬い
+    const hit = (body, dmg) => {
+      if (body.down || dmg <= 0) return
+      body.hp -= Math.floor(dmg * (solo ? 0.7 : 1))
+      if (body.hp <= 0 && !body.down) { body.hp = 0; body.down = true; body.revive = 3; logs.push({ text:`☠ ${body.name}を撃破！ だが数ターンで蘇る…早くもう片方も！`, color:'#ffcc44' }) }
+    }
+    if (kind === 'magical') hit(twin.p, amt)
+    else if (kind === 'physical') hit(twin.c, amt)
+    else if (kind === 'both') { hit(twin.c, amt); hit(twin.p, amt) }
+    else { hit(twin.c, amt * 0.5); hit(twin.p, amt * 0.5) }
+    enemyHp = twin.c.hp + twin.p.hp
+  }
   let turn = 1, skillIndex = 0
   let playerBuffs = {}, enemyBuffs = {}
   let currentItem = playerItem ? { ...playerItem } : null
@@ -122,6 +144,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
   logs.push({ text:`✦ ${enemy.name}が天穹より降臨した！`, color:'#c8a0ff' })
   if (capped.wasCapped) logs.push({ text:`⚖ 天穹の理：過剰なステータスは5%しか発揮されない…`, color:'#88ccff' })
   if (mods.statAverage) logs.push({ text:`⚖ ${enemy.name}が天秤を掲げた…攻撃と防御が平均化された！`, color:'#aab0ff' })
+  if (twin) logs.push({ text:`⚔✦ 物理はカストル・特殊はポルックスが受ける。片方を倒しても蘇る…両方を同時に沈めろ！`, color:'#cc88dd' })
 
   playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
 
@@ -212,6 +235,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         // 第11 サダルメリク: 直前と同じスキルは威力を大きく軽減
         const sameSkillMult = (mods.sameSkillDR && cs.skills?.name === prevDmgSkillName) ? 0.3 : 1.0
         const res = executeSkill(cs.skills, {...effBuff, lastMpCost:mpCost}, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
+        const actKind = cs.skills?.type === '魔法攻撃' ? 'magical' : 'physical'  // 双子の受け手振り分け用
         const finalCrit = res.dmg > 0 && (isCrit || (res.bonusCritRate > 0 && Math.random()*100 < playerCritRate + res.bonusCritRate))
         const finalCritMult = finalCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
         const tosoMult = (hasTosoHonno && playerHp <= profile.hp_max * 0.5) ? (pe('体術師')?1.25:1.1) : 1.0
@@ -231,7 +255,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         if (res.dmg > 0) { lastPlayerHitType = cs.skills?.type === '魔法攻撃' ? 'magical' : 'physical'; prevDmgSkillName = cs.skills?.name }
         const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
         if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
-        enemyHp -= finalDmg
+        dmgEnemy(finalDmg, actKind)
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
           enemyBuffs.healDown = { turns: 2, rate: 0.9 }
           logs.push({ text: `🗡 ヴァルブレイカーの効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
@@ -241,7 +265,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         mirrorPlayerHeal(healAmt)
         if (passiveHealReflect && healAmt > 0) {
           const reflectDmg = Math.floor(healAmt * 0.5)
-          enemyHp -= reflectDmg
+          dmgEnemy(reflectDmg, actKind)
           logs.push({ text:`✨ 神聖加護の反射！ ${enemy.name}に${reflectDmg}ダメージ！`, color:'#ffdd44' })
         }
         if (playerBuffs.spellBladeSealed?.turns > 0) {
@@ -272,7 +296,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
           const fCritMult = fCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
           let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * playerDmgMult * (0.9 + Math.random()*0.2))
           fDmg = Math.max(1, fDmg)
-          enemyHp -= fDmg
+          dmgEnemy(fDmg, actKind)
           logs.push({ text:`↳ 追撃！${res.followup.label?`（${res.followup.label}）`:''} ${enemy.name}に${fDmg}ダメージ！${fCrit?' 💥クリティカル！':''}`, color: fCrit?'#ffaa00':'#ffaa66' })
         }
         if (playerAttacking && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
@@ -282,7 +306,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         }
         if (playerBuffs.holyAwakening?.turns > 0 && finalDmg > 0) {
           const holyBonusDmg = Math.floor((pDef * playerBuffs.holyAwakening.defMult + pMdef * playerBuffs.holyAwakening.defMult))
-          enemyHp -= holyBonusDmg
+          dmgEnemy(holyBonusDmg, 'physical')
           logs.push({ text:`✨ 神聖覚醒の追撃！ ${enemy.name}に${holyBonusDmg}ダメージ！`, color:'#ffeeaa' })
           if (enemyHp <= 0) { skillIndex++; playerAttacking=false; if (mods.healOnPlayerAction) doHealOnPlayerAction(); return }
         }
@@ -295,7 +319,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       const baseDmg = Math.max(1, Math.floor(baseAtk*baseAtk/Math.max(1,baseAtk+eDefVal))+Math.floor(Math.random()*4))
       const enemyDmgReduceMult2 = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
       let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.2:1.0)*passiveDmgMult*enemyDmgReduceMult2*playerDmgMult*(0.9+Math.random()*0.2))
-      enemyHp -= finalDmg
+      dmgEnemy(finalDmg, isMagical ? 'magical' : 'physical')
       if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
         enemyBuffs.healDown = { turns: 2, rate: 0.9 }
         logs.push({ text: `🗡 ヴァルブレイカーの効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
@@ -458,6 +482,47 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     doEnemyAttack(false)
   }
 
+  // 第3 双子: 片割れ(body)の攻撃。カストル=物理(atk)/ポルックス=特殊(matk)。soloで強化。
+  const doBodyAttack = (body, kind, solo) => {
+    const isMag = kind === 'magical'
+    const soloMult = solo ? 1.5 : 1.0
+    const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
+    const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?1.3:1.2) : 1.0
+    const pDef  = eff.def  * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDefE * holyKnightMultE
+    const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDefE * holyKnightMultE
+    const eAtk = (isMag ? (enemy.matk||0) : (enemy.atk||0)) * soloMult
+    const isCrit = Math.random()*100 < enemyCritRate
+    const defForCalc = isMag ? Math.max(1, pMdef) : Math.max(1, pDef)
+    const baseDmg = Math.max(1, Math.floor(eAtk*eAtk/Math.max(1,eAtk+defForCalc))+Math.floor(Math.random()*3))
+    const evasionRate = calcEvasionRate(effectiveSpdForCalc, enemy.spd) + (eff.evasionBonus||0) + (playerBuffs.evasion?.turns>0?playerBuffs.evasion.rate*100:0) + (hasOnmi?5:0)
+    if (evasionRate > 0 && Math.random()*100 < evasionRate) {
+      logs.push({ text:`${turn}ターン目: ${body.name}の攻撃！ しかし回避した！`, color:'#44ff88' }); return
+    }
+    const dmgReduceRate = playerBuffs.dmgReduce?.turns>0 ? playerBuffs.dmgReduce.rate : 1.0
+    const playerDefRankReduction = calcDefReduction(isMag ? eff.mdef : eff.def)
+    let finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*(1-playerDefRankReduction)*(0.9+Math.random()*0.2))
+    finalDmg = capPlayerDmg(finalDmg)
+    playerHp -= finalDmg
+    if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
+    logs.push({ text:`${turn}ターン目: ${body.name}の${isMag?'特殊攻撃':'攻撃'}！ あなたに${finalDmg}ダメージ…${isCrit?' 💥クリティカル！':''}${solo?' 🔥孤影の昂ぶり！':''}`, color:isCrit?'#ff2200':'#ff6644' })
+  }
+
+  // 第3 双子の1ターン: 蘇生カウント → 生存している片割れが攻撃（カストル物理/ポルックス特殊）
+  const doTwinTurn = () => {
+    for (const body of [twin.c, twin.p]) {
+      if (body.down) {
+        body.revive--
+        if (body.revive <= 0) {
+          body.down = false; body.hp = Math.round(body.max * 0.5); enemyHp = twin.c.hp + twin.p.hp
+          logs.push({ text:`💫 ${body.name}が蘇った！（HP半分で復活）`, color:'#cc88ff' })
+        }
+      }
+    }
+    const solo = (twin.c.down !== twin.p.down)
+    if (!twin.c.down) { doBodyAttack(twin.c, 'physical', solo); if (playerHp <= 0) return }
+    if (!twin.p.down) { doBodyAttack(twin.p, 'magical', solo) }
+  }
+
   // 開幕大ダメージ（白羊ハマル）
   if (mods.openingBurst) {
     const eStats = enemyCastStats()
@@ -516,17 +581,17 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
 
     // 敵への持続ダメージ（固定割合DoT＝flatDR貫通）
     if (enemyBuffs.severePoisoin?.turns > 0) {
-      const spDmg = Math.floor(enemyMaxHp * 0.05); enemyHp -= spDmg
+      const spDmg = Math.floor(enemyMaxHp * 0.05); dmgEnemy(spDmg, 'both')
       logs.push({ text:`🤢 猛毒ダメージ！ ${enemy.name}に${spDmg}ダメージ！`, color:'#aa44ff' })
       if (enemyHp <= 0) break
     }
     if (enemyBuffs.burn?.turns > 0) {
-      const burnDmg = Math.floor(enemyMaxHp * 0.02); enemyHp -= burnDmg
+      const burnDmg = Math.floor(enemyMaxHp * 0.02); dmgEnemy(burnDmg, 'both')
       logs.push({ text:`🔥 やけどダメージ！ ${enemy.name}に${burnDmg}ダメージ！`, color:'#ff6622' })
       if (enemyHp <= 0) break
     }
     if (enemyBuffs.curseDmg?.turns > 0) {
-      enemyHp -= enemyBuffs.curseDmg.dmg
+      dmgEnemy(enemyBuffs.curseDmg.dmg, 'both')
       logs.push({ text:`💀 呪縛ダメージ！ ${enemy.name}に${enemyBuffs.curseDmg.dmg}ダメージ！`, color:'#cc44ff' })
       if (enemyHp <= 0) break
     }
@@ -536,7 +601,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       logs.push({ text:`💚 ${enemy.name}のリジェネ！ HPが${regenAmt}回復した！`, color:'#44ff88' })
     }
     if (enemyBuffs.poison?.turns > 0) {
-      const poisonDmg = Math.floor(enemy.hp * enemyBuffs.poison.dmgRate); enemyHp -= poisonDmg
+      const poisonDmg = Math.floor(enemy.hp * enemyBuffs.poison.dmgRate); dmgEnemy(poisonDmg, 'both')
       logs.push({ text:`☠ 毒ダメージ！ ${enemy.name}に${poisonDmg}ダメージ！`, color:'#44ff44' })
       if (enemyHp <= 0) break
     }
@@ -564,7 +629,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       if (playerBuffs.bleed.lastTurn >= 3) delete playerBuffs.bleed
     }
     if (playerBuffs.skeletonDmg?.turns > 0) {
-      enemyHp -= playerBuffs.skeletonDmg.dmg
+      dmgEnemy(playerBuffs.skeletonDmg.dmg, 'both')
       logs.push({ text:`💀 骸骨の持続ダメージ！ ${enemy.name}に${playerBuffs.skeletonDmg.dmg}ダメージ！`, color:'#cc44ff' })
       if (enemyHp <= 0) break
     }
@@ -576,7 +641,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       logs.push({ text:`💚 回復効果でHPが${healAmt}回復した！`, color:'#44ff88' })
       mirrorPlayerHeal(healAmt)
       if (passiveHealReflect && healAmt > 0) {
-        const reflectDmg = Math.floor(healAmt * 0.5); enemyHp -= reflectDmg
+        const reflectDmg = Math.floor(healAmt * 0.5); dmgEnemy(reflectDmg, 'physical')
         logs.push({ text:`✨ 神聖加護の反射！ ${enemy.name}に${reflectDmg}ダメージ！`, color:'#ffdd44' })
       }
     }
@@ -639,20 +704,24 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       enemySkipped = true; enemyBuffs.paralysis.skipRate *= 0.5
     }
     if (!enemySkipped) {
-      doEnemyKitTurn()
-      if (playerHp <= 0) break
-      // 素早さによる追加行動（mods.extraActionCap まで連続）
-      const cap = mods.extraActionCap || 1
-      let extras = 0
-      while (extras < cap && enemyExtraRate > 0 && Math.random()*100 < enemyExtraRate) {
-        doEnemyAttack(true); extras++
+      if (twin) {
+        doTwinTurn()
+      } else {
+        doEnemyKitTurn()
         if (playerHp <= 0) break
+        // 素早さによる追加行動（mods.extraActionCap まで連続）
+        const cap = mods.extraActionCap || 1
+        let extras = 0
+        while (extras < cap && enemyExtraRate > 0 && Math.random()*100 < enemyExtraRate) {
+          doEnemyAttack(true); extras++
+          if (playerHp <= 0) break
+        }
       }
     }
     if (playerHp <= 0) break
 
     if (enemyBuffs.bleed) {
-      const bleedDmg = Math.floor(enemyMaxHp * 0.01 * enemyBuffs.bleed.stacks); enemyHp -= bleedDmg
+      const bleedDmg = Math.floor(enemyMaxHp * 0.01 * enemyBuffs.bleed.stacks); dmgEnemy(bleedDmg, 'both')
       logs.push({ text:`🩸 出血ダメージ！ ${enemy.name}に${bleedDmg}ダメージ（${enemyBuffs.bleed.stacks}スタック）！`, color:'#ff4466' })
       if (enemyHp <= 0) break
       enemyBuffs.bleed.lastTurn = (enemyBuffs.bleed.lastTurn || 0) + 1
@@ -679,7 +748,11 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       playerBuffs.allinDebuff = { turns:reactT, rate:0.7 }
       logs.push({ text:`💸 オールインの効果が切れた！ ${reactT}ターンの間全ステータスが低下し、バフが使えない！`, color:'#ff4444' })
     }
-    logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:profile.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
+    const hpEnemyName = twin
+      ? `カストル${Math.max(0,twin.c.hp)}${twin.c.down?'(蘇生中)':''}／ポルックス${Math.max(0,twin.p.hp)}${twin.p.down?'(蘇生中)':''}`
+      : enemy.name
+    const hpEnemyMax = twin ? (twin.c.max + twin.p.max) : enemyMaxHp
+    logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:profile.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:hpEnemyMax, enemyName:hpEnemyName, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
     turn++
   }
 
