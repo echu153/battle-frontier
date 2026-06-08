@@ -974,7 +974,7 @@ export default function Casino() {
                     {/* CZ失敗 */}
                     {slotResult.kind==='cz' && atResult && !atResult.czWon && slotMode==='normal' && (
                       <div style={{ textAlign:'center', padding:'8px', marginBottom:'10px', border:'1px solid #446688', color:'#446688', fontSize:'13px' }}>
-                        ⚡ CZ失敗… また次回！
+                        ⚡ CZ終了… また次回！
                       </div>
                     )}
                     {/* AT終了 */}
