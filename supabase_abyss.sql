@@ -1,14 +1,16 @@
 -- ============================================================
--- 奈落闘技場（挑戦コンテンツ）
+-- 奈落闘技場（挑戦コンテンツ）※週次リセット型に変更（2026-06）
 -- ------------------------------------------------------------
--- ・20階層のNPCと順番に対戦。1階を倒すと2階に挑める（順番制）。
--- ・1週間に1階だけ前進。勝利すると次の「月曜 朝5時(JST)」まで再挑戦不可。
--- ・撃破済みの階は報酬を再取得できない（フロア順をサーバ側で検証）。
+-- ・20階層のNPCと順番に対戦。1階を倒すと2階…と順番に登る（順番制）。
+-- ・【週内は何度でも挑戦可】負けても再挑戦でき、登れるところまで登る。
+--   同じ週内で撃破済みの階は再取得不可（フロア順をサーバ側で検証）。
+-- ・【毎週月曜 朝5時(JST)に進捗が0へリセット】＝毎週1階から登り直し。
+--   → リセット後はまた各階の報酬を獲得できる。
 -- ・報酬（Gold/強化石/宝石）はこのRPCで付与する。
 --
 -- 週の境界 = 毎週月曜 朝5時(JST)。
 --   v_shifted = (JST現在 - 5時間) として、その週(月曜始まり)の月曜日付を週キーにする。
---   → 月曜5時を境に週キーが変わる。
+--   → 月曜5時を境に週キーが変わる。進捗(last_clear_week)が前週なら今週分は0として扱う(遅延リセット)。
 --
 -- 実行はユーザー側（Supabase SQL Editor）で行う。
 -- ============================================================
@@ -43,14 +45,11 @@ DECLARE
   v_shifted    timestamp;
   v_week       date;
   v_reset      timestamptz;
-  v_can        boolean;
+  v_eff        int;     -- 今週分の有効到達階（前週以前の進捗は0扱い＝週次リセット）
   v_next       int;
-  v_is_admin   boolean;
 BEGIN
   v_player_id := auth.uid();
   IF v_player_id IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
-
-  SELECT COALESCE(is_admin, false) INTO v_is_admin FROM profiles WHERE id = v_player_id;
 
   SELECT * INTO v_row FROM abyss_progress WHERE player_id = v_player_id;
   IF NOT FOUND THEN
@@ -63,13 +62,18 @@ BEGIN
   -- 次回リセット = 翌週の月曜5時(JST) を timestamptz に変換
   v_reset   := ((date_trunc('week', v_shifted) + interval '7 days' + interval '5 hours') AT TIME ZONE 'Asia/Tokyo');
 
-  -- 管理者[開発]は週次ロックを無視して連続で挑戦できる（テスト用）
-  v_can  := v_is_admin OR (v_row.last_clear_week IS NULL OR v_row.last_clear_week < v_week);
-  v_next := LEAST(v_row.cleared_floor + 1, 20);
+  -- 進捗が今週のものなら有効。前週以前なら0（毎週リセット＝1階から登り直し）
+  IF v_row.last_clear_week IS NOT NULL AND v_row.last_clear_week >= v_week THEN
+    v_eff := v_row.cleared_floor;
+  ELSE
+    v_eff := 0;
+  END IF;
+
+  v_next := LEAST(v_eff + 1, 20);
 
   RETURN json_build_object(
-    'cleared_floor', v_row.cleared_floor,
-    'can_challenge', v_can,
+    'cleared_floor', v_eff,
+    'can_challenge', (v_eff < 20),   -- 全階制覇までは週内いつでも挑戦可
     'next_floor',    v_next,
     'reset_at',      v_reset
   );
@@ -104,13 +108,11 @@ DECLARE
   ];
   v_existing_gem_id uuid;
   v_i              int;
-  v_is_admin       boolean;
+  v_eff            int;   -- 今週分の有効到達階（前週以前は0＝週次リセット）
 BEGIN
   v_player_id := auth.uid();
   IF v_player_id IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
   IF p_floor < 1 OR p_floor > 20 THEN RETURN json_build_object('error', '不正なフロアです'); END IF;
-
-  SELECT COALESCE(is_admin, false) INTO v_is_admin FROM profiles WHERE id = v_player_id;
 
   -- 行ロック（並行クレーム防止）。なければ作成。
   SELECT * INTO v_row FROM abyss_progress WHERE player_id = v_player_id FOR UPDATE;
@@ -120,18 +122,22 @@ BEGIN
     SELECT * INTO v_row FROM abyss_progress WHERE player_id = v_player_id FOR UPDATE;
   END IF;
 
-  -- フロア順検証：次に挑めるのは cleared_floor + 1 のみ
-  IF p_floor <> v_row.cleared_floor + 1 THEN
-    RETURN json_build_object('error', '挑戦できる階ではありません');
-  END IF;
-
-  -- 週次ロック検証
+  -- 週キー算出（毎週月曜5時JST境界）
   v_shifted := (now() AT TIME ZONE 'Asia/Tokyo') - interval '5 hours';
   v_week    := date_trunc('week', v_shifted)::date;
   v_reset   := ((date_trunc('week', v_shifted) + interval '7 days' + interval '5 hours') AT TIME ZONE 'Asia/Tokyo');
-  -- 管理者[開発]は週次ロックを無視（テスト用）
-  IF NOT v_is_admin AND v_row.last_clear_week IS NOT NULL AND v_row.last_clear_week >= v_week THEN
-    RETURN json_build_object('error', '今週はすでにクリア済みです', 'reset_at', v_reset);
+
+  -- 今週分の有効到達階（前週以前の進捗は0＝週次リセット＝1階から登り直し）
+  IF v_row.last_clear_week IS NOT NULL AND v_row.last_clear_week >= v_week THEN
+    v_eff := v_row.cleared_floor;
+  ELSE
+    v_eff := 0;
+  END IF;
+
+  -- フロア順検証：次に挑めるのは「今週の到達階 + 1」のみ
+  -- 週次ロックは廃止：週内は何度でも挑戦・前進できる。撃破済みの階の再取得は本検証で防止。
+  IF p_floor <> v_eff + 1 THEN
+    RETURN json_build_object('error', '挑戦できる階ではありません');
   END IF;
 
   -- フロア報酬テーブル（src/lib/abyss.js の FLOOR_REWARD と一致させること）
@@ -245,7 +251,10 @@ LANGUAGE sql SECURITY DEFINER STABLE AS $$
            ap.cleared_floor, ap.last_clear_turns, ap.total_clears, ap.updated_at
     FROM abyss_progress ap
     JOIN profiles p ON p.id = ap.player_id
-    WHERE ap.cleared_floor > 0 AND COALESCE(p.is_suspended, false) = false
+    -- 毎週リセットのため「今週分の進捗」のみをランキング対象にする
+    WHERE ap.cleared_floor > 0
+      AND ap.last_clear_week >= date_trunc('week', (now() AT TIME ZONE 'Asia/Tokyo') - interval '5 hours')::date
+      AND COALESCE(p.is_suspended, false) = false
     ORDER BY ap.cleared_floor DESC, ap.last_clear_turns ASC NULLS LAST, ap.updated_at ASC
     LIMIT 50
   ) t;

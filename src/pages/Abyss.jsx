@@ -787,9 +787,9 @@ export default function Abyss() {
                 到達: <span style={{ color:'#ffcc66', fontWeight:'bold' }}>{(status.cleared_floor||0) > 0 ? floorLabel(status.cleared_floor) : '地上'}</span> ／ 全{ABYSS_FLOOR_COUNT}階
               </div>
               <div style={{ color:'#7766aa', fontSize:'10px', marginTop:'4px', lineHeight:'1.7' }}>
-                地下へ1階ずつ潜っていく。各階を倒すと次の階へ。勝利すると次の月曜朝5時まで再挑戦できません。<br/>
-                敗北しても挑戦回数は減りません（勝つまで何度でも挑戦可）。
-                {profile?.is_admin && <><br/><span style={{ color:'#a060ff' }}>※管理者は週次ロックを無視して連続挑戦できます。</span></>}
+                地下へ1階ずつ潜っていく。各階を倒すと次の階へ。<span style={{ color:'#b088dd' }}>週内は何度でも挑戦でき、登れるところまで登ろう。</span><br/>
+                敗北しても挑戦回数は減りません（勝つまで何度でも挑戦可）。<br/>
+                <span style={{ color:'#cc9944' }}>進行は毎週月曜 朝5時(JST)にリセット</span>され、また1階から挑戦できます（報酬も再獲得）。
               </div>
               {profile?.is_admin && (
                 <button onClick={handleReset} style={{ marginTop:'8px', padding:'5px 10px', background:'#1a0a14', border:'1px solid #aa4466', color:'#ff6688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>🔄 進行リセット(管理者)</button>
@@ -819,10 +819,10 @@ export default function Abyss() {
               </div>
             ) : !status.can_challenge ? (
               <div style={{ border:'1px solid #aa4466', background:'#1a0a14', padding:'20px', textAlign:'center' }}>
-                <div style={{ color:'#ff6688', fontSize:'13px', marginBottom:'8px' }}>⛔ 今週はすでにクリア済みです</div>
+                <div style={{ color:'#ff6688', fontSize:'13px', marginBottom:'8px' }}>🏆 今週は全階制覇！</div>
                 <div style={{ color:'#cc7799', fontSize:'11px', lineHeight:'1.8' }}>
-                  次の挑戦（{floorLabel(targetFloor)}）まで: <span style={{ color:'#ffcc66' }}>{fmtCountdown(status.reset_at)}</span><br/>
-                  <span style={{ fontSize:'10px', color:'#996688' }}>（毎週月曜 朝5時にリセット）</span>
+                  次回リセット（また1階から）まで: <span style={{ color:'#ffcc66' }}>{fmtCountdown(status.reset_at)}</span><br/>
+                  <span style={{ fontSize:'10px', color:'#996688' }}>（毎週月曜 朝5時にリセット・報酬も再獲得）</span>
                 </div>
               </div>
             ) : (
@@ -871,7 +871,7 @@ export default function Abyss() {
                   {reward.stone && <div>💎 {STONE_NAME(reward.stone)} ×{reward.stone_count}</div>}
                   {reward.gem_count > 0 && <div>💍 宝石（{reward.gem_rank}ランク）×{reward.gem_count}</div>}
                 </div>
-                <div style={{ color:'#cc9944', fontSize:'10px', marginTop:'6px' }}>{reward.floor >= ABYSS_DEFINED_FLOORS ? '現在実装ぶんはここまで。' : `次は ${floorLabel(reward.floor + 1)}だ。`}{!profile?.is_admin && ' 次の挑戦は月曜朝5時から。'}</div>
+                <div style={{ color:'#cc9944', fontSize:'10px', marginTop:'6px' }}>{reward.floor >= ABYSS_DEFINED_FLOORS ? '現在実装ぶんはここまで。進行は毎週月曜 朝5時にリセット（また1階から）。' : `次は ${floorLabel(reward.floor + 1)}だ。続けて挑戦できる！`}</div>
               </div>
             )}
             {resultMsg && (
