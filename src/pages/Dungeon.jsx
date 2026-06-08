@@ -45,9 +45,21 @@ function generateFloor(floorNum, dungeon) {
   const roomAt = (gx, gy) => rooms.find((r) => r.gx === gx && r.gy === gy)
   const carveH = (y, x1, x2) => { for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) grid[y][x] = '.' }
   const carveV = (x, y1, y2) => { for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) grid[y][x] = '.' }
+  // 通路は部屋の「間（ギャップ）」で曲げ、各部屋へは必ず1マス幅のドアで出入りする
   const connect = (a, b) => {
-    if (Math.random() < 0.5) { carveH(a.cy, a.cx, b.cx); carveV(b.cx, a.cy, b.cy) }
-    else { carveV(a.cx, a.cy, b.cy); carveH(b.cy, a.cx, b.cx) }
+    if (b.gx > a.gx) {
+      // 右隣：A右壁→ギャップで縦に曲げ→B左壁（各部屋の入口は1マス）
+      const midX = Math.floor((a.x + a.w + b.x - 1) / 2)
+      carveH(a.cy, a.cx, midX)
+      carveV(midX, a.cy, b.cy)
+      carveH(b.cy, midX, b.cx)
+    } else {
+      // 下隣：A下壁→ギャップで横に曲げ→B上壁（各部屋の入口は1マス）
+      const midY = Math.floor((a.y + a.h + b.y - 1) / 2)
+      carveV(a.cx, a.cy, midY)
+      carveH(midY, a.cx, b.cx)
+      carveV(b.cx, midY, b.cy)
+    }
   }
   // 右隣・下隣を繋ぐ（グリッド全体が連結される）
   for (const r of rooms) {
