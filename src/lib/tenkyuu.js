@@ -33,6 +33,14 @@
 //  extraActionCap:n          敵の追加攻撃の上限回数（第九）
 //  escalatingHit:perHit      敵が連続行動するほど威力上昇（第九）
 //  healOnPlayerAction:pct    プレイヤーが行動するたびに敵が回復（第十）
+//  statAverage:true          プレイヤーのatk/matk・def/mdefを平均化（第七）
+//  instakill:true            攻守の平均の偏りが大きい(一方が他方の半分未満)と即死（第七）
+//  counterFlat:true          重い一撃(敵最大HP5%超)に同ダメージで固定反撃（第七）
+//  permaBuffs:true           数ターン毎に永続バフ強化＋自己回復(healDownで阻害可)（第十一）
+//  sameSkillDR:true          直前と同じスキルの威力を大きく軽減(×0.3)（第十一）
+//  mirrorBuffs:true          プレイヤーの強化(atk/matk/spd/def/mdef/dmgReduce)を敵にも反映（第十二）
+//  mirrorHeal:true           プレイヤーの回復で敵も同量回復（第十二）
+//  counterByType:true        直前に受けた攻撃タイプ(物理/魔法)で反撃（第十二）
 // ============================================================
 
 // プレイヤーのステータス上限（過剰分は5%のみ適用）。現状【全宮一律】。
@@ -138,8 +146,8 @@ const PALACE_META = [
 
   { palace:7, name:'【天秤】エルゲルビ', arch:'balanced', dmg:'hybrid',
     feature:'攻撃と特殊攻撃・防御と特防を平均化／平均値の差が大きいと即死／重い一撃には固定ダメージで反撃',
-    mods:{ statAverage:true, instakill:true, counterFlat:true }, // ※Phase2で実装
-    title:'※後日設定', wip:true },
+    mods:{ statAverage:true, instakill:true, counterFlat:true },
+    title:'※後日設定' },
 
   { palace:8, name:'【天蠍】アンタレス', arch:'swift', dmg:'phys',
     feature:'スキルが毒を付与・毒状態の敵に追撃／最大被ダメ上限あり／回避率やや高め',
@@ -159,13 +167,13 @@ const PALACE_META = [
 
   { palace:11, name:'【宝瓶】サダルメリク', arch:'priest', dmg:'mag',
     feature:'多数の永続バフ・回復を使う／同じスキルのダメージを軽減する',
-    mods:{ permaBuffs:true, sameSkillDR:true },  // ※Phase2で実装
-    title:'※後日設定', wip:true },
+    mods:{ permaBuffs:true, sameSkillDR:true },
+    title:'※後日設定' },
 
   { palace:12, name:'【星海】アルレシャ', arch:'arcane', dmg:'hybrid',
     feature:'バフが敵にも適用される／回復すると敵も回復／直前に受けた攻撃タイプで攻撃する',
-    mods:{ mirrorBuffs:true, counterByType:true },  // ※Phase3で実装
-    title:'※後日設定', wip:true },
+    mods:{ mirrorBuffs:true, mirrorHeal:true, counterByType:true },
+    title:'※後日設定' },
 ]
 
 export const TENKYUU_PALACE_COUNT = PALACE_META.length

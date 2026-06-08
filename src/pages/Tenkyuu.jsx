@@ -42,6 +42,21 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
   const eff = capped.eff
   const profile = { ...profileRaw, hp_max: capped.hpMax }
 
+  // 第7 天秤エルゲルビ: ステ平均化＋攻守の偏りが大きいと即死
+  let instakillDoomed = false
+  if (mods.statAverage || mods.instakill) {
+    const offAvg = (eff.atk + eff.matk) / 2
+    const defAvg = (eff.def + eff.mdef) / 2
+    if (mods.instakill) {
+      const lo = Math.min(offAvg, defAvg), hi = Math.max(offAvg, defAvg)
+      if (hi > 0 && lo / hi < 0.5) instakillDoomed = true   // 一方が他方の半分未満＝偏り過ぎ
+    }
+    if (mods.statAverage) {
+      const o = Math.round(offAvg), d = Math.round(defAvg)
+      eff.atk = o; eff.matk = o; eff.def = d; eff.mdef = d
+    }
+  }
+
   let playerHp = profile.hp_max
   let playerMp = profile.mp_max
   let enemyHp = enemy.hp
@@ -64,6 +79,9 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
   let hpThreshDone = false       // hpThreshAtk を適用済みか
   let healBlockApplied = false   // healBlock を適用済みか
   let enemyActionStreak = 0      // escalatingHit 用：連続行動カウント（敵ターン開始で0）
+  let prevDmgSkillName = null    // sameSkillDR 用：直前にダメージを与えたスキル名（第11）
+  let lastPlayerHitType = enemy.type   // counterByType 用：プレイヤーが直前に与えた攻撃タイプ（第12）
+  let permaBuffStep = 0          // permaBuffs 用：永続強化の段階（第11）
 
   // mods: プレイヤー→敵 ダメージ倍率（flatDR）。固定割合DoTには掛けない（貫通させる）
   const playerDmgMult = 1 - (mods.flatDR || 0)
@@ -103,6 +121,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
 
   logs.push({ text:`✦ ${enemy.name}が天穹より降臨した！`, color:'#c8a0ff' })
   if (capped.wasCapped) logs.push({ text:`⚖ 天穹の理：過剰なステータスは5%しか発揮されない…`, color:'#88ccff' })
+  if (mods.statAverage) logs.push({ text:`⚖ ${enemy.name}が天秤を掲げた…攻撃と防御が平均化された！`, color:'#aab0ff' })
 
   playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
 
@@ -189,6 +208,9 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         const seimitsuMult = (hasSeimitsu && pe('魔銃士') && prevSkillName && prevSkillName === cs.skills.name) ? 1.1 : 1.0
         prevSkillName = cs.skills.name
         const buffsBefore = { ...enemyBuffs }
+        const pBuffsBefore = { ...playerBuffs }   // 第12 mirrorBuffs 用スナップショット
+        // 第11 サダルメリク: 直前と同じスキルは威力を大きく軽減
+        const sameSkillMult = (mods.sameSkillDR && cs.skills?.name === prevDmgSkillName) ? 0.3 : 1.0
         const res = executeSkill(cs.skills, {...effBuff, lastMpCost:mpCost}, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
         const finalCrit = res.dmg > 0 && (isCrit || (res.bonusCritRate > 0 && Math.random()*100 < playerCritRate + res.bonusCritRate))
         const finalCritMult = finalCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
@@ -205,7 +227,8 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         }
         const allinDebuffOutMult = playerBuffs.allinDebuff?.turns > 0 ? 0.7 : 1.0
         const enemyDmgReduceMult = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
-        let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * playerDmgMult * (0.9 + Math.random() * 0.2))
+        let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * playerDmgMult * sameSkillMult * (0.9 + Math.random() * 0.2))
+        if (res.dmg > 0) { lastPlayerHitType = cs.skills?.type === '魔法攻撃' ? 'magical' : 'physical'; prevDmgSkillName = cs.skills?.name }
         const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
         if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
         enemyHp -= finalDmg
@@ -215,6 +238,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         }
         const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult)
         playerHp = Math.min(profile.hp_max, playerHp + healAmt)
+        mirrorPlayerHeal(healAmt)
         if (passiveHealReflect && healAmt > 0) {
           const reflectDmg = Math.floor(healAmt * 0.5)
           enemyHp -= reflectDmg
@@ -234,12 +258,15 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         }
         playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
         stripEnemyStatuses(buffsBefore)
+        mirrorPlayerBuffs(pBuffsBefore)
         const critInsert = finalCrit ? '💥クリティカル！ ' : ''
         const dmgIdx = resLog.indexOf(enemy.name + 'に')
         const logWithCrit = critInsert
           ? (dmgIdx >= 0 ? resLog.slice(0, dmgIdx) + critInsert + resLog.slice(dmgIdx) : resLog + ' ' + critInsert)
           : resLog
         logs.push({ text:`${prefix}${logWithCrit}`, color:finalCrit?'#ffff00':'#88ccff' })
+        if (sameSkillMult < 1.0 && res.dmg > 0) logs.push({ text:`🔁 ${enemy.name}は同じ技を見切っている…威力減！`, color:'#aa88cc' })
+        maybeCounterFlat(finalDmg)
         if (res.followup && res.followup.dmg > 0) {
           const fCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0))
           const fCritMult = fCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
@@ -275,6 +302,8 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       }
       const critText = isCrit ? '💥クリティカル！ ' : ''
       logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
+      if (finalDmg > 0) lastPlayerHitType = isMagical ? 'magical' : 'physical'
+      maybeCounterFlat(finalDmg)
       if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
         const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
         playerHp = Math.min(profile.hp_max, playerHp + rageCure)
@@ -294,6 +323,32 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     if (amt <= 0) return
     enemyHp = Math.min(enemyMaxHp, enemyHp + amt)
     logs.push({ text:`💚 ${enemy.name}は${profile.username}の動きを糧に${amt}回復した！`, color:'#66ddaa' })
+  }
+
+  // 第7 天秤エルゲルビ: 重い一撃(敵最大HP5%超)に同ダメージを固定で反撃
+  const maybeCounterFlat = (dealt) => {
+    if (!mods.counterFlat || dealt <= 0 || playerHp <= 0) return
+    if (dealt > enemyMaxHp * 0.05) {
+      playerHp -= dealt
+      logs.push({ text:`⚖ 天秤の返報！ 重い一撃と同じ${dealt}ダメージが跳ね返った！`, color:'#ff5555' })
+    }
+  }
+  // 第12 星海アルレシャ: プレイヤーの回復に同調して敵も回復
+  const mirrorPlayerHeal = (amt) => {
+    if (!mods.mirrorHeal || amt <= 0 || enemyHp <= 0) return
+    enemyHp = Math.min(enemyMaxHp, enemyHp + amt)
+    logs.push({ text:`💚 ${enemy.name}も癒やしに同調して${amt}回復した！`, color:'#66ddaa' })
+  }
+  // 第12 星海アルレシャ: プレイヤーが得た強化を敵にも反映
+  const mirrorPlayerBuffs = (before) => {
+    if (!mods.mirrorBuffs) return
+    const MIR = ['atkUp','matkUp','spdUp','defUp','mdefUp','dmgReduce']
+    let any = false
+    for (const k of MIR) {
+      const a = playerBuffs[k]
+      if (a && a !== before[k]) { enemyBuffs[k] = { ...a }; any = true }
+    }
+    if (any) logs.push({ text:`✨ ${enemy.name}は${profile.username}の強化を映し取った！`, color:'#cc99ff' })
   }
 
   // 敵の現在の施術ステータス（永続強化＋バフを反映）
@@ -358,7 +413,8 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const pMdef = mods.defPen ? 1 : eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE * kabeDefE
     const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
     const berserkDmgRate = hasBerserk ? 1.1 : 1.0
-    const isEM = enemy.type === 'magical'
+    // 第12 星海アルレシャ: 直前に受けた攻撃タイプで反撃する
+    const isEM = mods.counterByType ? (lastPlayerHitType === 'magical') : (enemy.type === 'magical')
     const burnDebuffE = enemyBuffs.burn?.turns > 0 ? 0.9 : 1.0
     const eAtk = (isEM
       ? (enemy.matk||0) * enPerm.matkMult * (enemyBuffs.matkUp ? enemyBuffs.matkUp.rate : 1) * burnDebuffE
@@ -412,6 +468,12 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     logs.push({ text:`💥 ${enemy.name}の開幕奇襲！ あなたに${dmg}ダメージ！`, color:'#ff2200' })
   }
 
+  // 第7 天秤エルゲルビ: 攻守の偏りが大きいと即死
+  if (instakillDoomed) {
+    logs.push({ text:`⚖ ${enemy.name}「天秤が傾きすぎている」… 天秤の断罪で即死した！`, color:'#ff0000' })
+    playerHp = 0
+  }
+
   while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
     // ===== ターン開始: mods による敵能力スケーリング =====
     if (mods.turnScaleAtk) { const m = 1 + mods.turnScaleAtk * (turn - 1); enPerm.atkMult = m; enPerm.matkMult = m }
@@ -435,6 +497,21 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         if (playerBuffs[k] && (playerBuffs[k].turns > 0 || playerBuffs[k].turns === undefined)) { delete playerBuffs[k]; removed++ }
       }
       if (removed > 0) logs.push({ text:`🌀 ${enemy.name}がバフを${removed}つ解除した！`, color:'#cc66ff' })
+    }
+    // 第11 サダルメリク: 永続バフ強化＋自己回復（healDownで回復阻害可・バフはdispel可能なenemyBuffs）
+    if (mods.permaBuffs) {
+      const healMul = enemyBuffs.healDown?.turns > 0 ? enemyBuffs.healDown.rate : 1
+      const heal = Math.floor(enemyMaxHp * 0.03 * healMul)
+      if (heal > 0 && enemyHp < enemyMaxHp) { enemyHp = Math.min(enemyMaxHp, enemyHp + heal); logs.push({ text:`💚 ${enemy.name}は祈りでHPを${heal}回復した！`, color:'#44ddaa' }) }
+      if (turn === 1 || turn % 3 === 1) {
+        permaBuffStep++
+        const rate = 1 + 0.15 * permaBuffStep
+        enemyBuffs.atkUp  = { turns:999, rate }
+        enemyBuffs.matkUp = { turns:999, rate }
+        enemyBuffs.defUp  = { turns:999, rate }
+        enemyBuffs.mdefUp = { turns:999, rate }
+        logs.push({ text:`✦ ${enemy.name}の永続強化！ 能力が高まった（×${rate.toFixed(2)}）`, color:'#ff99dd' })
+      }
     }
 
     // 敵への持続ダメージ（固定割合DoT＝flatDR貫通）
@@ -497,6 +574,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       const healAmt = Math.floor(playerBuffs.regenHeal.amount * passiveHealMult)
       playerHp = Math.min(profile.hp_max, playerHp + healAmt)
       logs.push({ text:`💚 回復効果でHPが${healAmt}回復した！`, color:'#44ff88' })
+      mirrorPlayerHeal(healAmt)
       if (passiveHealReflect && healAmt > 0) {
         const reflectDmg = Math.floor(healAmt * 0.5); enemyHp -= reflectDmg
         logs.push({ text:`✨ 神聖加護の反射！ ${enemy.name}に${reflectDmg}ダメージ！`, color:'#ffdd44' })
@@ -518,6 +596,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
           const healAmt = Math.floor(profile.hp_max*currentItem.items.value/100)
           playerHp = Math.min(profile.hp_max, playerHp+healAmt)
           logs.push({ text:`🧪 ${currentItem.items.name}を使用！ HPが${healAmt}回復した！`, color:'#44ff88' })
+          mirrorPlayerHeal(healAmt)
           if (isInfinite) { playerBuffs.potionCooldown = { turns:5 }; logs.push({ text:`⏳ 5ターンのクールダウンが入った！`, color:'#aaaaaa' }) }
           else itemUsed = true
         } else if ((effect==='mp_pct' || effect==='mp_pct_infinite') && playerMp/profile.mp_max*100 <= threshold) {
