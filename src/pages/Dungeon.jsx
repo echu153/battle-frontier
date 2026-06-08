@@ -111,9 +111,8 @@ const roomOf = (rooms, x, y) => rooms.find((r) => x >= r.x && x < r.x + r.w && y
 function computeVisible(rooms, px, py) {
   const vis = new Set()
   const add = (x, y) => { if (inBounds(x, y)) vis.add(x + ',' + y) }
-  // 周囲（通路・全般）：ビューポート相当を広く見せる（縁の円ぼかしは上から重ねるビネットで演出）
-  const rx = Math.floor(VW / 2), ry = Math.floor(VH / 2)
-  for (let dy = -ry; dy <= ry; dy++) for (let dx = -rx; dx <= rx; dx++) add(px + dx, py + dy)
+  // 周囲（通路・全般）：自分中心の6x6相当(±3)を見せる。縁は上から重ねる円ビネットでぼかす
+  for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) add(px + dx, py + dy)
   // 部屋にいるなら部屋全体＋外周1マス
   const room = roomOf(rooms, px, py)
   if (room) {
@@ -669,10 +668,10 @@ export default function Dungeon() {
               </div>
             )
           }))}
-          {/* 通路ではビューポート全体を見せ、縁を円形にぼかすビネットだけ重ねる（プレイヤー＝中央50%） */}
+          {/* 通路では円形ビネットを重ねて視界を円に見せる（プレイヤー＝中央50%） */}
           {inCorridor && (
             <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
-              background: 'radial-gradient(ellipse 41% 50% at 50% 50%, transparent 58%, #000208 100%)' }} />
+              background: 'radial-gradient(ellipse 29% 35.4% at 50% 50%, transparent 80%, #000208 100%)' }} />
           )}
         </div>
 
