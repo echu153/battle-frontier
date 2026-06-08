@@ -481,6 +481,10 @@ export default function Dungeon() {
   const useItem = async (key) => {
     if (status !== 'exploring' || busyRef.current || (inventory[key] || 0) < 1) return
     const def = PET_ITEMS[key]
+    // だっしゅつの翼は使い切り＝消費確認をはさむ
+    if (key === 'escape') {
+      if (!window.confirm('だっしゅつの翼を使ってダンジョンから戻りますか？（1個消費します）')) return
+    }
     const { error } = await supabase.rpc('pet_consume_item', { p_key: key })
     if (error) { addLog('アイテムを持っていない'); return }
     setInventory((inv) => ({ ...inv, [key]: (inv[key] || 1) - 1 }))
@@ -656,7 +660,7 @@ export default function Dungeon() {
             } : null
             return (
               <div key={`${vx}-${vy}`} onClick={() => clickable && adjClick(vx, vy)}
-                style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible' }}>
+                style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: `0 0 0 0.6px ${c.bg}` }}>
                 {fxStyle ? <div key={`fx${fx.t}`} style={fxStyle}>{inner}</div> : inner}
               </div>
             )
