@@ -208,6 +208,15 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
           ? (dmgIdx >= 0 ? resLog.slice(0, dmgIdx) + critInsert + resLog.slice(dmgIdx) : resLog + ' ' + critInsert)
           : resLog
         logs.push({ text:`${prefix}${logWithCrit}`, color:finalCrit?'#ffff00':'#88ccff' })
+        // 追撃（影歩き/出血消費など）を別ヒットとして適用：メインとは独立したダメージ判定
+        if (res.followup && res.followup.dmg > 0) {
+          const fCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0))
+          const fCritMult = fCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
+          let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * abyssEnemyDR * (0.9 + Math.random()*0.2))
+          fDmg = Math.max(1, fDmg)
+          enemyHp -= fDmg
+          logs.push({ text:`↳ 追撃！${res.followup.label?`（${res.followup.label}）`:''} ${enemy.name}に${fDmg}ダメージ！${fCrit?' 💥クリティカル！':''}`, color: fCrit?'#ffaa00':'#ffaa66' })
+        }
         if (playerAttacking && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
           const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
           playerHp = Math.min(profile.hp_max, playerHp + rageCure)
@@ -352,6 +361,13 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     }
     const shown = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
     logs.push({ text:`▶ ${enemy.name}の${shown}`, color: res.dmg > 0 ? '#ff7755' : '#ffaa66' })
+    // executeSkill由来の追撃（敵の影歩き鬼影閃など）を別ヒットとして適用
+    if (res.followup && res.followup.dmg > 0) {
+      const fCrit = Math.random()*100 < enemyCritRate
+      const fDmg = scaleDamageToPlayer(res.followup.dmg, isMag ? eStats.matk : eStats.atk, isMag ? 'matk' : 'atk', fCrit)
+      playerHp -= fDmg
+      logs.push({ text:`↳ ${enemy.name}の追撃！${res.followup.label?`（${res.followup.label}）`:''} あなたに${fDmg}ダメージ！${fCrit?' 💥クリティカル！':''}`, color:'#ff6655' })
+    }
     doFollowup()
   }
 

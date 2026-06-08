@@ -221,6 +221,15 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
           const critText = finalCrit ? ' 💥クリティカル！' : ''
           const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           logs.push({ text: `${prefix}${resLog}${critText}`, color: finalCrit ? '#ff4444' : '#88ccff' })
+          // 追撃（影歩き/出血消費など）を別ヒットとして適用：メインとは独立したダメージ判定
+          if (res.followup && res.followup.dmg > 0) {
+            const fCrit = Math.random() * 100 < (playerCritRate + (res.bonusCritRate || 0))
+            const fCritMult = fCrit ? (1.5 + (eff.critDmg || 0) + passiveCritDmgBonus) : 1.0
+            let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * (0.9 + Math.random() * 0.2))
+            fDmg = Math.max(1, fDmg)
+            totalDamage += fDmg
+            logs.push({ text: `↳ 追撃！${res.followup.label ? `（${res.followup.label}）` : ''} ${BOSS_NAME}に${fmt(fDmg)}ダメージ！${fCrit ? ' 💥クリティカル！' : ''}`, color: fCrit ? '#ffaa00' : '#ffaa66' })
+          }
           skillUsed = true
           skillIndex++
         }

@@ -771,33 +771,29 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       break
     }
     case '鬼影閃': {
-      let kiDmg = Math.floor(eff.atk*1.5*am)
-      const hasShadowWalk = playerBuffs.evasion?.turns > 0
-      let bonusDmg = 0
-      if (hasShadowWalk) {
-        bonusDmg = Math.floor(eff.spd*0.3*am*(0.85+Math.random()*0.3))
-        kiDmg += bonusDmg
+      result.dmg = Math.floor(eff.atk*1.5*am)
+      // 影歩き(回避バフ)中は別ヒットの追撃を付与（メインとは独立してダメージ判定）
+      if (playerBuffs.evasion?.turns > 0) {
+        result.followup = { dmg: Math.floor(eff.spd*0.3*am*(0.85+Math.random()*0.3)), label:'影歩き' }
       }
-      result.dmg = kiDmg
       const bleedHit4 = Math.random()*100 < (rt>=2?80:40)
       if (bleedHit4) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
-      result.log = `🌙 鬼影閃！ ${enemy.name}に${result.dmg}の物理ダメージ！${hasShadowWalk ? ` 追撃で${bonusDmg}ダメージ！` : ''}${bleedHit4 ? ` ${enemy.name}は出血した！` : ''}`
+      result.log = `🌙 鬼影閃！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleedHit4 ? ` ${enemy.name}は出血した！` : ''}`
       break
     }
     case '影歩き':      { const swT = rt>=4?8:4; result.newPlayerBuffs.spdUp={turns:swT,rate:1.5}; result.newPlayerBuffs.evasion={turns:swT,rate:0.05}; result.log = `🌙 影歩き！ ${swT}ターンの間、素早さ大幅上昇・回避率UP！`; break }
     case '急所突き': {
       result.dmg = Math.floor(eff.atk*1.8*am); result.bonusCritRate=30
-      let kyushoBleed = ''
       if (rt>=5) {
         const stacks = enemyBuffs.bleed?.stacks || 0
         if (stacks > 0) {
           const bonusRate = Math.min(stacks*0.2, 1.0)
-          result.dmg += Math.floor(result.dmg * bonusRate)
+          // 出血スタックぶんを別ヒットの追撃として付与し、スタックを消費
+          result.followup = { dmg: Math.floor(result.dmg * bonusRate), label:`出血${stacks}消費` }
           result.newEnemyBuffs.bleed = undefined  // 出血スタック全削除
-          kyushoBleed = ` 出血${stacks}スタックを消費して追撃！`
         }
       }
-      result.log = `🌙 急所突き！ ${enemy.name}に${result.dmg}の物理ダメージ！${kyushoBleed}`; break
+      result.log = `🌙 急所突き！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
     }
     case 'アクアショット': {
       result.dmg = Math.floor(eff.matk*(rt>=1?1.6:1.4)*am)
@@ -2265,6 +2261,16 @@ export default function Game() {
             ? (dmgIdx >= 0 ? resLog.slice(0, dmgIdx) + critInsert + resLog.slice(dmgIdx) : resLog + ' ' + critInsert)
             : resLog
           logs.push({ text:`${prefix}${logWithCrit}`, color:finalCrit?'#ffff00':'#88ccff' })
+          // 追撃（影歩き/出血消費など）を別ヒットとして適用：メインとは独立したダメージ判定
+          if (res.followup && res.followup.dmg > 0) {
+            const fCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0))
+            const fCritMult = fCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
+            let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * (0.9 + Math.random()*0.2))
+            if (enemy.isPapia) fDmg = 1
+            fDmg = Math.max(1, fDmg)
+            enemyHp -= fDmg
+            logs.push({ text:`↳ 追撃！${res.followup.label?`（${res.followup.label}）`:''} ${enemy.name}に${fDmg}ダメージ！${fCrit?' 💥クリティカル！':''}`, color: fCrit?'#ffaa00':'#ffaa66' })
+          }
           if (playerAttacking && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
             const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
             playerHp = Math.min(profile.hp_max, playerHp + rageCure)
