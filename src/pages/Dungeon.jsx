@@ -365,7 +365,7 @@ export default function Dungeon() {
       if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); curPetHp = Math.min(pet.maxHp, curPetHp + heal); if (heal > 0) addLog(`💚 ${heal}回復`) }
       const killed = newHp <= 0
       if (killed) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; grantKill(floorNum, target.name); triggerShake('kill') }
-      else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total}（残HP${newHp}）`); triggerShake('hit') }
+      else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total}`); triggerShake('hit') }
 
       // 体当たり演出：ペットを相手方向へ突進、被弾した敵を点滅させる
       applyFx({ pet: { lunge: { dx, dy } }, enemies: killed ? {} : { [target.id]: { flash: true } } })
@@ -714,7 +714,12 @@ export default function Dungeon() {
           <div style={{ textAlign: 'center', marginTop: 16, color: '#cc88ff' }}>🪽 ダンジョンから脱出した<br /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
 
-        <div style={{ marginTop: 16, background: '#000610', border: '1px solid #113355', padding: 8, height: 140, overflowY: 'auto', fontSize: 11 }}>
+        {/* ログ見出し：左＝自分の行動／右＝敵の行動 */}
+        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '0 2px 4px', borderBottom: '1px solid #113355' }}>
+          <span style={{ color: '#5588bb' }}>◀ 自分のログ</span>
+          <span style={{ color: '#cc8888' }}>敵のログ ▶</span>
+        </div>
+        <div style={{ background: '#000610', border: '1px solid #113355', borderTop: 'none', padding: 8, height: 140, overflowY: 'auto', fontSize: 11 }}>
           {log.length === 0 ? <span style={{ color: '#335577' }}>隣のマスをクリック、または矢印で移動。部屋に入ると視界が開ける。👹に触れると戦闘、▼で次の階へ。</span>
             : log.map((l, i) => <div key={i} style={{ color: i === 0 ? '#aaddff' : l.side === 'right' ? '#cc8888' : '#5588bb', textAlign: l.side === 'right' ? 'right' : 'left' }}>{l.msg}</div>)}
         </div>
