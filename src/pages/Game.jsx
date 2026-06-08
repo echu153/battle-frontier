@@ -283,7 +283,7 @@ export const RETRAINING_ENHANCEMENTS = {
   '聖職者': ['ホーリーライト：30%で回復阻害50%', '奇跡：毎ターン最大HP15%回復', '神聖加護：回復×1.4＋回復量の50%を敵に', '祈りの結界：6ターン', '神罰執行：倍率 MATK×2.0'],
   '異端審問官': ['粛清：倍率 MATK×1.4＋MDEF×0.4', '狂信：特殊攻撃×1.3 追加', '執行本能：与ダメ+15%', '聖なる裁き：倍率 MATK×1.9', '断罪：回復封じ 60%'],
   '賢者': ['アースクエイク：スタン30%', 'マナボルト：消費MP×6', '天啓：MATK×1.3', '氷の障壁：3ターン', 'メテオストライク：2〜5ヒット（2:30/3:40/4:20/5:10%）'],
-  '聖騎士': ['ホーリーエッジ：倍率 ATK×1.4＋MATK×0.4', 'ディバインスマイト：与ダメ低下付与 50%', '聖騎士の心得：防御・特防×1.3', '聖域展開：毎ターン最大HP10%回復', '神聖覚醒：追加ダメージ 防御・特防の60%'],
+  '聖騎士': ['ホーリーエッジ：倍率 ATK×1.4＋MATK×0.4', 'ディバインスマイト：与ダメ低下付与 50%', '聖騎士の心得：防御・特防×1.3', '聖域展開：毎ターン最大HP10%回復', '神聖覚醒：追撃 防御・特防の60%'],
   '魔法剣士': ['雷光斬：倍率 ATK×1.1＋MATK×0.4', '閃光：連続強化×1.2（最大4重複）', '魔導剣術：変換率60%', '魔剣開放：反動2ターンに短縮', 'エレメンタルエッジ：倍率 ATK×1.5＋MATK×0.6'],
   '魔銃士': ['魔弾：倍率 ATK×0.8＋MATK×0.8', '連装銃撃：命中+10', '精密照準：同スキル連続で威力×1.1', '強化装填：5ターン', 'キャノネスチュームビンド：連続強化×1.1が最大3重複'],
   'サイキッカー': ['サイコショット：倍率 ATK×1.1＋MATK×0.4', 'マインドブレイク：防御・特防の低い方を参照', '第六感：与ダメ+5%（合計+10%）', '精神集中：×1.8・3ターン', 'サイコブラスト：倍率 ATK×1.6＋MATK×0.8'],
@@ -561,19 +561,26 @@ export const calcExtraActionRate = (mySpd, enemySpd) => {
 // F=0% ～ SSS=20%（均等カーブ）。閾値は SPD ランク（=物理/防御系）と一致。
 // ※ 第2引数(enemySpd)は後方互換のため残すが未使用。
 const CRIT_SPD_THRESHOLDS = [55, 150, 300, 550, 950, 1500, 2200, 3300]
-const CRIT_RATE_TIERS     = [0, 2.5, 5, 7.5, 10, 12.5, 15, 17.5, 20]  // F..SSS
+const CRIT_RATE_TIERS     = [0, 2.5, 5, 7.5, 10, 12.5, 15, 17.5, 20]  // F..SSS（素早さ補正ぶん）
+const CRIT_BASE_RATE = 100 / 24  // 基礎クリ率（約4.17%）。これに素早さ補正を加算する
 export const calcCritRate = (mySpd, _enemySpd) => {
-  if (!mySpd || mySpd <= 0) return 0
-  const thresholds = [0, ...CRIT_SPD_THRESHOLDS]
-  const rates = CRIT_RATE_TIERS
-  if (mySpd >= thresholds[thresholds.length - 1]) return rates[rates.length - 1]
-  for (let i = 1; i < thresholds.length; i++) {
-    if (mySpd <= thresholds[i]) {
-      const progress = (mySpd - thresholds[i - 1]) / (thresholds[i] - thresholds[i - 1])
-      return rates[i - 1] + (rates[i] - rates[i - 1]) * progress
+  // 素早さ補正（F=0% 〜 SSS=20%）を線形補間で算出
+  let spdBonus = 0
+  if (mySpd && mySpd > 0) {
+    const thresholds = [0, ...CRIT_SPD_THRESHOLDS]
+    const rates = CRIT_RATE_TIERS
+    if (mySpd >= thresholds[thresholds.length - 1]) spdBonus = rates[rates.length - 1]
+    else {
+      for (let i = 1; i < thresholds.length; i++) {
+        if (mySpd <= thresholds[i]) {
+          const progress = (mySpd - thresholds[i - 1]) / (thresholds[i] - thresholds[i - 1])
+          spdBonus = rates[i - 1] + (rates[i] - rates[i - 1]) * progress
+          break
+        }
+      }
     }
   }
-  return rates[rates.length - 1]
+  return CRIT_BASE_RATE + spdBonus  // 基礎(1/24) ＋ 素早さ補正
 }
 
 const RARITY_BONUS_COUNT = { f:1, e:1, d:2, c:2, b:3, a:3, s:4, ss:4, sss:4 }
@@ -1104,7 +1111,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     case '神聖覚醒': {
       result.newPlayerBuffs.holyAwakening = { turns:5, defMult:rt>=5?0.6:0.4 }
-      result.log = `✨ 神聖覚醒！ 5ターンの間、攻撃ごとに防御力・特殊防御力に基づく追加ダメージを与える！`; break
+      result.log = `✨ 神聖覚醒！ 5ターンの間、攻撃ごとに防御力・特殊防御力に基づく追撃を与える！`; break
     }
     default: result.dmg = Math.max(1,eff.atk*am); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
   }
@@ -2278,11 +2285,11 @@ export default function Game() {
             playerHp = Math.min(profile.hp_max, playerHp + rageCure)
             logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
           }
-          // 神聖覚醒：攻撃ごとに追加ダメージ
+          // 神聖覚醒：攻撃ごとに追撃
           if (playerBuffs.holyAwakening?.turns > 0 && finalDmg > 0) {
             const holyBonusDmg = Math.floor((pDef * playerBuffs.holyAwakening.defMult + pMdef * playerBuffs.holyAwakening.defMult))
             enemyHp -= holyBonusDmg
-            logs.push({ text:`✨ 神聖覚醒の追加ダメージ！ ${enemy.name}に${holyBonusDmg}ダメージ！`, color:'#ffeeaa' })
+            logs.push({ text:`✨ 神聖覚醒の追撃！ ${enemy.name}に${holyBonusDmg}ダメージ！`, color:'#ffeeaa' })
             if (enemyHp <= 0) { skillUsed = true; skillIndex++; return }
           }
           skillUsed = true; skillIndex++

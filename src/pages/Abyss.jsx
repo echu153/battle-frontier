@@ -225,7 +225,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
         if (playerBuffs.holyAwakening?.turns > 0 && finalDmg > 0) {
           const holyBonusDmg = Math.floor((pDef * playerBuffs.holyAwakening.defMult + pMdef * playerBuffs.holyAwakening.defMult))
           enemyHp -= holyBonusDmg
-          logs.push({ text:`✨ 神聖覚醒の追加ダメージ！ ${enemy.name}に${holyBonusDmg}ダメージ！`, color:'#ffeeaa' })
+          logs.push({ text:`✨ 神聖覚醒の追撃！ ${enemy.name}に${holyBonusDmg}ダメージ！`, color:'#ffeeaa' })
           if (enemyHp <= 0) { skillIndex++; return }
         }
         skillUsed = true; skillIndex++
