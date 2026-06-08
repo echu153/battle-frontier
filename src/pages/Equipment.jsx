@@ -339,12 +339,8 @@ export default function Equipment() {
 
   const useStatReset = async (pi) => {
     setLoading(true)
-    const spent = profile.stat_point_spent || {}
-    const totalSpent = (spent.hp||0)+(spent.mp||0)+(spent.atk||0)+(spent.def||0)+(spent.matk||0)+(spent.mdef||0)+(spent.spd||0)
-    await supabase.from('profiles').update({
-      pending_stat_points: (profile.pending_stat_points||0) + totalSpent,
-      stat_point_spent: {},
-    }).eq('id', profile.id)
+    const { data, error } = await supabase.rpc('reset_stat_points')
+    if (error || !data?.ok) { setLoading(false); setConfirmReset(null); return }
     if (pi.quantity > 1) {
       await supabase.from('player_items').update({ quantity: pi.quantity - 1 }).eq('id', pi.id)
     } else {

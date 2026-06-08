@@ -1583,20 +1583,11 @@ export default function Game() {
 
   const doChangeClass = async (targetClass) => {
     setLoading(true); setTempleMessage('')
-    const currentClassData = classLevels.find(cl => cl.class_name === profile.class)
-    if (currentClassData) {
-      await supabase.from('class_levels').update({ lv:profile.lv, exp:profile.exp }).eq('id', currentClassData.id)
+    const { data, error } = await supabase.rpc('switch_class', { p_target_class: targetClass })
+    if (error || !data?.ok) {
+      await fetchProfile()
+      setTempleMessage('転職に失敗しました'); setLoading(false); return
     }
-    const targetClassData = classLevels.find(cl => cl.class_name === targetClass)
-    const targetLv = targetClassData ? targetClassData.lv : 1
-    const targetExp = targetClassData ? targetClassData.exp : 0
-    if (!targetClassData) {
-      await supabase.from('class_levels').insert({ player_id:profile.id, class_name:targetClass, lv:1, exp:0 })
-    }
-    await supabase.from('profiles').update({
-      class:targetClass, lv:targetLv, exp:targetExp, exp_next:calcExpNext(targetLv),
-      job_change_count: (profile.job_change_count || 0) + 1,
-    }).eq('id', profile.id)
     // 転職時：新クラスで使えなくなるスキルだけセットから外す
     // （共通スキル・再修練の持ち越しスキル・新クラスのスキルはセットに残す）
     const { data: setsNow } = await supabase.from('skill_sets').select('skill_id, skills(class_name)').eq('player_id', profile.id)
@@ -1636,17 +1627,11 @@ export default function Game() {
     setLoading(true)
 
     // レベルリセット（char_lvはそのまま維持）、ステータスはfetchProfile時に自動再計算される
-    const newRetraining = { ...(profile.retraining || {}), [targetClass]: currentCount + 1 }
-    await supabase.from('profiles').update({
-      retraining: newRetraining,
-      lv: 1,
-      exp: 0,
-      exp_next: calcExpNext(1),
-    }).eq('id', profile.id)
-
-    // class_levelsもリセット
-    const clData = classLevels.find(cl => cl.class_name === targetClass)
-    if (clData) await supabase.from('class_levels').update({ lv:1, exp:0 }).eq('id', clData.id)
+    const { data, error } = await supabase.rpc('retrain_class', { p_target_class: targetClass })
+    if (error || !data?.ok) {
+      await fetchProfile()
+      setRetrainingMessage('再修練に失敗しました'); setLoading(false); return
+    }
 
     if (selectedCarrySkill) {
       await supabase.from('player_skills').update({ is_carried_over: true })
@@ -2913,23 +2898,20 @@ export default function Game() {
   const confirmStatPoints = async () => {
     const total = Object.values(statPoints).reduce((a,b)=>a+b,0)
     if (total <= 0) return
-    const remaining = pendingPoints - total
-    const prev = profile.stat_point_spent || {}
-    const updates = {
-      pending_stat_points: Math.max(0, remaining),
-      stat_point_spent: {
-        hp:   (prev.hp  ||0)+(statPoints.hp  ||0),
-        mp:   (prev.mp  ||0)+(statPoints.mp  ||0),
-        atk:  (prev.atk ||0)+(statPoints.atk ||0),
-        def:  (prev.def ||0)+(statPoints.def ||0),
-        matk: (prev.matk||0)+(statPoints.matk||0),
-        mdef: (prev.mdef||0)+(statPoints.mdef||0),
-        spd:  (prev.spd ||0)+(statPoints.spd ||0),
+    const { data, error } = await supabase.rpc('allocate_stat_points', {
+      p_alloc: {
+        hp:   statPoints.hp  ||0,
+        mp:   statPoints.mp  ||0,
+        atk:  statPoints.atk ||0,
+        def:  statPoints.def ||0,
+        matk: statPoints.matk||0,
+        mdef: statPoints.mdef||0,
+        spd:  statPoints.spd ||0,
       },
-    }
-    await supabase.from('profiles').update(updates).eq('id', profile.id)
+    })
+    if (error || !data?.ok) { await fetchProfile(); setStatPoints({}); return }
     await fetchProfile()
-    setPendingPoints(Math.max(0, remaining)); setStatPoints({}); setShowStatPanel(false)
+    setPendingPoints(data.pending_stat_points || 0); setStatPoints({}); setShowStatPanel(false)
   }
 
   const backToTown = () => {

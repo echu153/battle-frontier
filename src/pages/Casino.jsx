@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { AREAS, JOB_GROWTH, JOB_LEVEL3_BONUS, calcExpNext, getEffectiveCap, generateDropBonus, ARTIFACT_BASE_NAMES } from './Game'
+import { AREAS, getEffectiveCap, generateDropBonus, ARTIFACT_BASE_NAMES } from './Game'
 
 const SLOT_SYMBOLS = ['7️⃣', '⭐', '🔔', '🍇', '🍒', '🍋']
 const PRIZES = [
@@ -535,43 +535,19 @@ export default function Casino() {
     const pend = sortiePending
     if (pend.count === 0) { setShowSettle(false); return }
     setLoading(true)
-    const cap = getEffectiveCap(profile.class, profile.retraining)
-    const isAtCap = profile.lv >= cap
-    const frozen = expIsFrozen(profile)
-    const growth = JOB_GROWTH[profile.class] || JOB_GROWTH['戦士']
-    const bonusSlots = JOB_LEVEL3_BONUS[profile.class] || []
-
-    let newExp = profile.exp + (frozen ? 0 : pend.exp)
-    let newLv = profile.lv
-    let newExpNext = profile.exp_next
-    let newPending = profile.pending_stat_points || 0
-    let newCharLv = profile.char_lv || 1
-    let stat = { hp_max:profile.hp_max, mp_max:profile.mp_max, atk:profile.atk, def:profile.def, matk:profile.matk, mdef:profile.mdef, spd:profile.spd }
-    const learnedSkillNames = []
-
-    if (!isAtCap && !frozen) {
-      while (newExp >= newExpNext && newLv < cap) {
-        newExp -= newExpNext; newLv++; newExpNext = calcExpNext(newLv); newPending++; newCharLv++
-        stat = { hp_max:stat.hp_max+growth.hp, mp_max:stat.mp_max+growth.mp, atk:stat.atk+growth.atk, def:stat.def+growth.def, matk:stat.matk+growth.matk, mdef:stat.mdef+growth.mdef, spd:stat.spd+growth.spd }
-        if (bonusSlots.length > 0 && newLv%3===0) { const bi = Math.floor(newLv/3-1)%bonusSlots.length; stat[bonusSlots[bi]] = (stat[bonusSlots[bi]]||0)+1 }
-        // レベルアップでスキル習得
-        const { data: lvupSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class).eq('required_lv', newLv)
-        const { data: learned } = await supabase.from('player_skills').select('skill_id').eq('player_id', profile.id)
-        const learnedIds = (learned||[]).map(s => s.skill_id)
-        for (const sk of (lvupSkills||[])) {
-          if (!learnedIds.includes(sk.id)) { await supabase.from('player_skills').insert({ player_id:profile.id, skill_id:sk.id }); learnedSkillNames.push(sk.name) }
-        }
-      }
-      if (newLv >= cap) { newExp = 0; newExpNext = calcExpNext(cap) }
+    // 戦果(EXP/Gold/レベルアップ/スキル習得)はサーバ側で検証・反映する
+    const { data: settleRes, error: settleErr } = await supabase.rpc('casino_settle_sortie', {
+      p_count: pend.count,
+      p_claimed_exp: pend.exp,
+      p_claimed_gold: pend.gold,
+    })
+    if (settleErr || !settleRes?.ok) {
+      await fetchProfile()
+      setLoading(false)
+      showMessage('⚠ 清算に失敗しました。時間をおいて再度お試しください', '#ff8844')
+      return
     }
-
-    await supabase.from('profiles').update({
-      exp:newExp, exp_next:newExpNext, lv:newLv, gold: profile.gold + pend.gold,
-      pending_stat_points:newPending, char_lv:newCharLv, ...stat,
-    }).eq('id', profile.id)
-    // class_levels も同期
-    const { data: cl } = await supabase.from('class_levels').select('id').eq('player_id', profile.id).eq('class_name', profile.class).maybeSingle()
-    if (cl && !isAtCap && !frozen) await supabase.from('class_levels').update({ lv:newLv, exp:newExp }).eq('id', cl.id)
+    const learnedSkillNames = settleRes.learned || []
 
     // ドロップ付与
     for (const name of pend.drops) {
