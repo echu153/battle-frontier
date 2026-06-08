@@ -1567,10 +1567,21 @@ export default function Game() {
       class:targetClass, lv:targetLv, exp:targetExp, exp_next:calcExpNext(targetLv),
       job_change_count: (profile.job_change_count || 0) + 1,
     }).eq('id', profile.id)
-    // 転職時は装備中スキルを全て外す（前クラスのスキルが使えてしまう不具合対策）
-    await supabase.from('skill_sets').delete().eq('player_id', profile.id)
+    // 転職時：新クラスで使えなくなるスキルだけセットから外す
+    // （共通スキル・再修練の持ち越しスキル・新クラスのスキルはセットに残す）
+    const { data: setsNow } = await supabase.from('skill_sets').select('skill_id, skills(class_name)').eq('player_id', profile.id)
+    const { data: carried } = await supabase.from('player_skills').select('skill_id').eq('player_id', profile.id).eq('is_carried_over', true)
+    const carriedIds = new Set((carried || []).map(c => c.skill_id))
+    const removeSkillIds = [...new Set((setsNow || []).filter(s => {
+      const cls = s.skills?.class_name
+      const usable = cls === targetClass || cls === '共通' || carriedIds.has(s.skill_id)
+      return !usable
+    }).map(s => s.skill_id))]
+    if (removeSkillIds.length) {
+      await supabase.from('skill_sets').delete().eq('player_id', profile.id).in('skill_id', removeSkillIds)
+    }
     await fetchProfile()
-    setTempleMessage(`${targetClass}に転職しました！（セット中のスキルは全て外れました）`)
+    setTempleMessage(`${targetClass}に転職しました！（使えなくなったスキルのみセットから外れました）`)
     setLoading(false)
   }
 
