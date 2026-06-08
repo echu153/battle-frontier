@@ -1244,6 +1244,14 @@ const DUNGEON_LIST = [
   { type:'gem',   label:'宝石ダンジョン' },
 ]
 
+// お知らせのカテゴリ別タブ（DBの announcements.category と対応。未設定は 'notice' 扱い）
+const ANNOUNCE_TABS = [
+  { key:'notice', label:'お知らせ',     icon:'📢' },
+  { key:'update', label:'アップデート', icon:'🆕' },
+  { key:'bug',    label:'不具合',       icon:'🛠' },
+  { key:'event',  label:'イベント',     icon:'🎉' },
+]
+
 // パピア出現率アップイベント時間帯（JST）: 8:00 / 12:00 / 16:00 / 22:00 から30分
 const PAPIA_EVENT_HOURS = [8, 12, 16, 22]
 const getPapiaEventStatus = () => {
@@ -1314,6 +1322,7 @@ export default function Game() {
   const [contactSent, setContactSent] = useState(false)
   const [contactLoading, setContactLoading] = useState(false)
   const [showAnnouncements, setShowAnnouncements] = useState(false)
+  const [announceTab, setAnnounceTab] = useState('notice')   // お知らせモーダルの選択中タブ
   const [announcements, setAnnouncements] = useState([])
   const [showGuide, setShowGuide] = useState(false)
   const [openGuideId, setOpenGuideId] = useState(null)
@@ -3191,16 +3200,32 @@ export default function Game() {
     </div>
   )
 
-  if (showAnnouncements) return (
+  if (showAnnouncements) {
+    const tabAnns = announcements.filter(a => a.title !== 'MAINTENANCE' && (a.category || 'notice') === announceTab)
+    return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ background:'#001040', border:'1px solid #ff8844', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'80vh', display:'flex', flexDirection:'column', fontFamily:'monospace' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', borderBottom:'1px solid #003366', paddingBottom:'8px', flexShrink:0 }}>
           <div style={{ color:'#ff8844', fontSize:'14px' }}>📢 お知らせ</div>
           <button onClick={()=>{ setShowAnnouncements(false); setOpenAnnouncementId(null) }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>✕ 閉じる</button>
         </div>
+        {/* カテゴリ別タブ */}
+        <div style={{ display:'flex', gap:'4px', marginBottom:'10px', flexShrink:0 }}>
+          {ANNOUNCE_TABS.map(t => {
+            const on = announceTab === t.key
+            const hasNew = announcements.some(a => a.title !== 'MAINTENANCE' && (a.category || 'notice') === t.key && !seenAnnouncementIds.includes(a.id))
+            return (
+              <button key={t.key} onClick={()=>{ setAnnounceTab(t.key); setOpenAnnouncementId(null) }}
+                style={{ flex:1, minWidth:'64px', padding:'6px 2px', background: on?'#1a0c00':'#000818', border:`1px solid ${on?'#ff8844':'#223344'}`, color: on?'#ffaa66':'#557799', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', position:'relative' }}>
+                {t.icon} {t.label}
+                {hasNew && <span style={{ position:'absolute', top:'-5px', right:'-3px', background:'#ff4400', color:'#fff', fontSize:'7px', padding:'1px 4px', borderRadius:'6px' }}>NEW</span>}
+              </button>
+            )
+          })}
+        </div>
         <div style={{ overflowY:'auto' }}>
-        {announcements.length === 0 && <div style={{ color:'#446688', fontSize:'12px' }}>お知らせはありません</div>}
-        {announcements.map(a => {
+        {tabAnns.length === 0 && <div style={{ color:'#446688', fontSize:'12px' }}>このカテゴリのお知らせはありません</div>}
+        {tabAnns.map(a => {
           const isNew = !seenAnnouncementIds.includes(a.id)
           return (
             <div key={a.id} style={{ marginBottom:'8px', border:`1px solid ${isNew?'#443300':'#002244'}`, background:'#000818' }}>
@@ -3226,7 +3251,8 @@ export default function Game() {
         </div>
       </div>
     </div>
-  )
+    )
+  }
 
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
