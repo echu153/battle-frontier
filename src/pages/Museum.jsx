@@ -123,12 +123,15 @@ const TIER_LABELS = ['未強化', '+5以上', '+9以上']
 const TIER_COLORS = ['#88ccff', '#44ff88', '#ffcc00']
 const COMPLETE_BONUS_MULT = [1, 3, 5]
 
+// 寄贈で付与される能力の全体倍率（寄贈ボーナス・コンプリートボーナス共通）
+const MUSEUM_BONUS_MULT = 2
+
 const getBonusAmount = (name, groupId, enhancePlus) => {
   const tier = getEnhanceTier(enhancePlus)
-  if (BOSS_DROPS.has(name)) return [8, 13, 20][tier]
-  if (RARE_DROPS.has(name)) return [2, 3, 6][tier]
+  if (BOSS_DROPS.has(name)) return [8, 13, 20][tier] * MUSEUM_BONUS_MULT
+  if (RARE_DROPS.has(name)) return [2, 3, 6][tier] * MUSEUM_BONUS_MULT
   const mult = MUSEUM_GROUPS.find(g => g.id === groupId)?.areaMultiplier || 1
-  return [1, 2, 4][tier] * mult
+  return [1, 2, 4][tier] * mult * MUSEUM_BONUS_MULT
 }
 
 const museumCol = (stat) =>
@@ -231,7 +234,7 @@ export default function Museum() {
       return tiers.has(2)
     })
     if (!allOk) { showMsg('条件を満たしていません', '#ff4444'); setLoading(false); return }
-    const mult = COMPLETE_BONUS_MULT[tier]
+    const mult = COMPLETE_BONUS_MULT[tier] * MUSEUM_BONUS_MULT
     const updates = {}
     for (const [stat, val] of Object.entries(group.completeBonus)) {
       const col = museumCol(stat)
@@ -384,7 +387,7 @@ export default function Museum() {
                   <div style={{ padding:'0 12px 10px' }}>
                     <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>コンプリートボーナス</div>
                     {[0,1,2].map(t => {
-                      const mult = COMPLETE_BONUS_MULT[t]
+                      const mult = COMPLETE_BONUS_MULT[t] * MUSEUM_BONUS_MULT
                       const bonusText = Object.entries(group.completeBonus).map(([k,v]) => `${STAT_LABELS[k]}+${v * mult}`).join(' ')
                       const allOk = group.items.every(i => {
                         const tiers = donatedTierMap[i]
