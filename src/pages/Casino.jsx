@@ -959,24 +959,22 @@ export default function Casino() {
                       </div>
                     )}
 
-                    {/* 結果メッセージ */}
-                    <div style={{ textAlign:'center', padding:'10px', marginBottom:'10px', fontSize:'15px',
-                      color: slotResult.pending ? (atResult?.success?'#44ff88':'#ff4444') : (slotResult.payout>0?'#44ff88':'#ff4444'),
-                      border:`1px solid ${slotResult.pending ? (atResult?.success?'#44ff88':'#ff4444') : (slotResult.payout>0?'#44ff88':'#ff4444')}` }}>
-                      {slotResult.kind==='cz' ? (atResult?.success ? (atResult.czWon ? `🔔 ナビ成功！` : `🔔 ナビ成功！ …AT当選ならず`) : `💢 ナビ失敗… こぼした！`)
+                    {/* 結果メッセージ（CZ終了時は1メッセージに集約して矛盾表示を防ぐ） */}
+                    {(() => {
+                      const czEnded = slotResult.kind==='cz' && slotMode==='normal' && !atResult?.czWon
+                      const ok = slotResult.pending ? atResult?.success : slotResult.payout>0
+                      const col = czEnded ? '#88aacc' : (ok ? '#44ff88' : '#ff4444')
+                      return (
+                    <div style={{ textAlign:'center', padding:'10px', marginBottom:'10px', fontSize:'15px', color: col, border:`1px solid ${col}` }}>
+                      {slotResult.kind==='cz' ? (czEnded ? `⚡ CZ終了… また次回！` : (atResult?.success ? `🔔 ナビ成功！` : `💢 ナビ失敗… こぼした！`))
                         : slotResult.kind==='at' ? (atResult?.success ? `🔔 ナビ成功！ +${atResult.payout.toLocaleString()}枚！` : `💢 ナビ失敗… こぼした！（払い出しなし）`)
                         : slotResult.mult>=250 ? `🎊7️⃣7️⃣7️⃣ 大当たり！🎊 ${slotResult.payout.toLocaleString()}メダル！`
                         : slotResult.payout>slotResult.bet ? `🎉 当たり！ ${slotResult.payout.toLocaleString()}メダル獲得！（×${slotResult.mult}）`
                         : slotResult.payout>0 ? `🍒 賭け金返却（×${slotResult.mult}）`
                         : `😭 ハズレ… ${slotResult.bet.toLocaleString()}メダル没収`}
                     </div>
-
-                    {/* CZ失敗 */}
-                    {slotResult.kind==='cz' && atResult && !atResult.czWon && slotMode==='normal' && (
-                      <div style={{ textAlign:'center', padding:'8px', marginBottom:'10px', border:'1px solid #446688', color:'#446688', fontSize:'13px' }}>
-                        ⚡ CZ終了… また次回！
-                      </div>
-                    )}
+                      )
+                    })()}
                     {/* AT終了 */}
                     {slotResult.kind==='at' && slotMode==='normal' && (
                       <div style={{ textAlign:'center', padding:'8px', marginBottom:'10px', border:'1px solid #ffcc00', color:'#ffcc00', fontSize:'13px' }}>
