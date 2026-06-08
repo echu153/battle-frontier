@@ -871,7 +871,7 @@ export default function Abyss() {
                   {reward.stone && <div>💎 {STONE_NAME(reward.stone)} ×{reward.stone_count}</div>}
                   {reward.gem_count > 0 && <div>💍 宝石（{reward.gem_rank}ランク）×{reward.gem_count}</div>}
                 </div>
-                <div style={{ color:'#cc9944', fontSize:'10px', marginTop:'6px' }}>{reward.floor >= ABYSS_DEFINED_FLOORS ? '現在実装ぶんはここまで。進行は毎週月曜 朝5時にリセット（また1階から）。' : `次は ${floorLabel(reward.floor + 1)}だ。続けて挑戦できる！`}</div>
+                <div style={{ color:'#cc9944', fontSize:'10px', marginTop:'6px' }}>{reward.floor >= ABYSS_DEFINED_FLOORS ? '現在実装ぶんはここまで。進行は毎週月曜 朝5時にリセット（また1階から）。' : `次は ${floorLabel(reward.floor + 1)}だ。`}</div>
               </div>
             )}
             {resultMsg && (
