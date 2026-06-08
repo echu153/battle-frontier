@@ -62,13 +62,19 @@ export const DUNGEONS = [
     floorTable: [
       { from: 1,  to: 2,  enemies: [{ name: 'スライム', type: 'phys', image: '/suraimu.png',    statMult: 0.5 }] },
       { from: 3,  to: 5,  enemies: [{ name: 'スライム', type: 'phys', image: '/suraimu.png',    statMult: 0.5 }, { name: 'コウモリ', type: 'phys', image: '/koumori.png',     statMult: 0.75 }, { name: '毒キノコ', type: 'spec', image: '/dokukinoko.png', statMult: 1.0 }] },
-      { from: 6,  to: 7,  enemies: [{ name: 'コウモリ', type: 'phys', image: '/koumori.png',    statMult: 0.75 }, { name: '毒キノコ', type: 'spec', image: '/dokukinoko.png', statMult: 1.0 }, { name: 'ゴブリン', type: 'phys', statMult: 1.0 }] },
-      { from: 8,  to: 10, enemies: [{ name: 'ゴブリン', type: 'phys', statMult: 1.0 }, { name: '野良犬', type: 'phys', statMult: 1.0 }, { name: '盗賊', type: 'phys', statMult: 1.0 }] },
+      { from: 6,  to: 7,  enemies: [{ name: 'コウモリ', type: 'phys', image: '/koumori.png',    statMult: 0.75 }, { name: '毒キノコ', type: 'spec', image: '/dokukinoko.png', statMult: 1.0 }, { name: 'ゴブリン', type: 'phys', image: '/goburin.png', statMult: 1.0 }] },
+      { from: 8,  to: 10, enemies: [{ name: 'ゴブリン', type: 'phys', image: '/goburin.png', statMult: 1.0 }, { name: '野良犬', type: 'phys', images: ['/norainu1.png', '/norainu2.png'], statMult: 1.0 }, { name: '盗賊', type: 'phys', image: '/touzoku.png', statMult: 1.0 }] },
     ],
   },
   { id: 'd30', name: '深淵の遺跡', floors: 30, requires: 'd10', emoji: '🏛', areas: [1, 2, 3, 4] },
 ]
 export const getDungeon = (id) => DUNGEONS.find((d) => d.id === id) || DUNGEONS[0]
+
+// 敵の表示画像を決める（images配列があればランダムで1枚、無ければimage、どちらも無ければnull）
+export function pickEnemyImage(kind) {
+  if (kind?.images?.length) return kind.images[Math.floor(Math.random() * kind.images.length)]
+  return kind?.image || null
+}
 
 export function enemiesForFloor(dungeon, floor) {
   if (dungeon?.floorTable) {
@@ -82,7 +88,7 @@ export function enemiesForFloor(dungeon, floor) {
 // ステータスはダンジョン用に dungeonEnemyStats でフロア深度に応じてスケールする
 export const AREA_ENEMIES = {
   1: [{ name: 'スライム', type: 'phys', image: '/suraimu.png' }, { name: 'コウモリ', type: 'phys', image: '/koumori.png' }, { name: '毒キノコ', type: 'spec', image: '/dokukinoko.png' }],
-  2: [{ name: 'ゴブリン', type: 'phys' }, { name: '野良犬', type: 'phys' }, { name: '盗賊', type: 'phys' }],
+  2: [{ name: 'ゴブリン', type: 'phys', image: '/goburin.png' }, { name: '野良犬', type: 'phys', images: ['/norainu1.png', '/norainu2.png'] }, { name: '盗賊', type: 'phys', image: '/touzoku.png' }],
   3: [{ name: 'コボルト', type: 'phys' }, { name: 'スケルトン', type: 'phys' }, { name: 'ゴーレム', type: 'phys' }],
   4: [{ name: '深海魚人', type: 'phys' }, { name: '海賊', type: 'phys' }, { name: '毒クラゲ', type: 'spec' }],
 }

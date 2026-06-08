@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { petStats, speciesEmoji, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats } from '../constants/pets'
+import { petStats, speciesEmoji, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats, pickEnemyImage } from '../constants/pets'
 
 // ============================================================
 // 不思議のダンジョン風プロトタイプ（Phase 1：クライアントのみ・報酬なし）
@@ -90,7 +90,7 @@ function generateFloor(floorNum, dungeon) {
       mark(t.x, t.y)
       const kind = pool[rand(0, pool.length - 1)]
       const m = kind.statMult ?? 1.0
-      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: kind.image || null, hp: Math.round(es.maxHp * m), maxHp: Math.round(es.maxHp * m), atk: Math.round(es.atk * m), def: Math.round(es.def * m), mdef: Math.round(es.mdef * m) })
+      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), hp: Math.round(es.maxHp * m), maxHp: Math.round(es.maxHp * m), atk: Math.round(es.atk * m), def: Math.round(es.def * m), mdef: Math.round(es.mdef * m) })
     }
   }
   const items = []
@@ -230,7 +230,7 @@ export default function Dungeon() {
       const m = kind.statMult ?? 1.0
       spawnSeq.current += 1
       return {
-        id: 'es' + spawnSeq.current, x, y, name: kind.name, type: kind.type, image: kind.image || null,
+        id: 'es' + spawnSeq.current, x, y, name: kind.name, type: kind.type, image: pickEnemyImage(kind),
         hp: Math.round(es.maxHp * m), maxHp: Math.round(es.maxHp * m),
         atk: Math.round(es.atk * m), def: Math.round(es.def * m), mdef: Math.round(es.mdef * m),
       }
