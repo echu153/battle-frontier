@@ -61,6 +61,8 @@ function makeEnemy(name, target, archKey, dmgType) {
   def  += Math.round(freed * 0.25)           // 残りを def/mdef へ
   mdef += Math.round(freed * 0.25)
 
+  hp = hp * 2   // 体感調整：敵HPを2倍にして試合を長引かせる
+
   return {
     name,
     hp,
