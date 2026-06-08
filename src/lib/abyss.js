@@ -2,8 +2,8 @@
 // 奈落闘技場（挑戦コンテンツ）データ定義
 // ------------------------------------------------------------
 // ・20階層のNPCと対戦。1階を倒すと2階に挑めるようになる（順番制）。
-// ・1週間に1階だけ前進できる。勝利すると次の月曜朝5時(JST)まで戦闘不可。
-// ・撃破済みの階は報酬を再取得できない（サーバ側 claim_abyss_floor で検証）。
+// ・週内は何度でも挑戦でき、登れるところまで登れる。毎週月曜朝5時(JST)に進捗が0へリセット。
+// ・同じ週内で撃破済みの階は報酬を再取得できない（サーバ側 claim_abyss_floor で検証）。
 // ・報酬（Gold/強化石/宝石）の付与はサーバRPC側で行う。ここは表示用の定義。
 //
 // 敵ステータスは「推奨総合力(target)」に総合力がほぼ一致するよう生成する。
@@ -35,9 +35,11 @@ const ARCH = {
 // 推奨総合力 target を満たす敵ステを生成（決定論的・import時に確定）
 // dmgType: 'phys'(特攻→攻撃に寄せ) / 'mag'(攻撃→特攻に寄せ) / 'hybrid'(両方使うので寄せない)
 // 省略時は arch.type から判定（スキルで使わない側を使う側に全部加算する＝奈落の特別調整）
+// 火力→耐久へ振り替える割合：atk/matk をこの割合だけ削り、HP/def/mdef へ移す（総合力は概ね不変）
+const ABYSS_TANK_SHIFT = 0.18
 function makeEnemy(name, target, archKey, dmgType) {
   const a = ARCH[archKey]
-  const hp = Math.round(target * a.hpFrac) * 10
+  let hp = Math.round(target * a.hpFrac) * 10
   const budget = target * (1 - a.hpFrac)
   const s = (k) => Math.max(1, Math.round(budget * a.w[k]))
   let atk = s('atk'), matk = s('matk')
@@ -45,10 +47,24 @@ function makeEnemy(name, target, archKey, dmgType) {
   if (dt === 'phys') { atk += matk; matk = 0 }        // 特殊攻撃を攻撃に全加算
   else if (dt === 'mag') { matk += atk; atk = 0 }     // 攻撃を特殊攻撃に全加算
   // hybrid はそのまま（両方使うスキル持ち）
+  let def = s('def'), mdef = s('mdef')
+  const spd = s('spd')
+
+  // 奈落の体感調整：火力(atk/matk)を少し下げ、削った分を HP と 耐久(def/mdef) へ移す。
+  // 総合力(=hp/10+atk+def+matk+mdef+spd)はほぼ不変のまま、拮抗時に試合が長引くようにする。
+  const atkCut  = Math.round(atk  * ABYSS_TANK_SHIFT)
+  const matkCut = Math.round(matk * ABYSS_TANK_SHIFT)
+  const freed   = atkCut + matkCut          // 削った総合力ぶん
+  atk  = Math.max(1, atk  - atkCut)
+  matk = matk > 0 ? Math.max(1, matk - matkCut) : matk
+  hp  += Math.round(freed * 0.5) * 10        // 半分はHPへ（hp/10で総合力換算のため×10）
+  def  += Math.round(freed * 0.25)           // 残りを def/mdef へ
+  mdef += Math.round(freed * 0.25)
+
   return {
     name,
     hp,
-    atk, def: s('def'), matk, mdef: s('mdef'), spd: s('spd'),
+    atk, def, matk, mdef, spd,
     // 被ダメ計算の軽減対象(DEF/MDEF)が寄せ方向と一致するよう type を補正（hybridはarch準拠）
     type: dt === 'mag' ? 'magical' : dt === 'phys' ? 'physical' : a.type,
   }

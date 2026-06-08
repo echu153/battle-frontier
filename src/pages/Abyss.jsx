@@ -787,7 +787,7 @@ export default function Abyss() {
                 到達: <span style={{ color:'#ffcc66', fontWeight:'bold' }}>{(status.cleared_floor||0) > 0 ? floorLabel(status.cleared_floor) : '地上'}</span> ／ 全{ABYSS_FLOOR_COUNT}階
               </div>
               <div style={{ color:'#7766aa', fontSize:'10px', marginTop:'4px', lineHeight:'1.7' }}>
-                地下へ1階ずつ潜っていく。各階を倒すと次の階へ。<span style={{ color:'#b088dd' }}>週内は何度でも挑戦でき、登れるところまで登ろう。</span><br/>
+                地下へ1階ずつ潜っていく。各階を倒すと次の階へ。<span style={{ color:'#b088dd' }}>週内は何度でも挑戦できます。</span><br/>
                 敗北しても挑戦回数は減りません（勝つまで何度でも挑戦可）。<br/>
                 <span style={{ color:'#cc9944' }}>進行は毎週月曜 朝5時(JST)にリセット</span>され、また1階から挑戦できます（報酬も再獲得）。
               </div>
