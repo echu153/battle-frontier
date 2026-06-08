@@ -197,11 +197,11 @@ export default function Dungeon() {
   }, [])
 
   // 敵撃破：EXPを即時付与（サーバー）。レベルアップでステータスも即反映
-  const grantKill = useCallback(async (floor) => {
+  const grantKill = useCallback(async (floor, name = '敵') => {
     if (!runIdRef.current) return
     const { data, error } = await supabase.rpc('dungeon_kill', { p_run_id: runIdRef.current, p_floor: floor })
-    if (error || !data) return
-    addLog(`⭐ EXP+${data.exp_gain}${data.leveled ? `　Lv${data.level}にアップ！` : ''}`)
+    if (error || !data) { addLog(`⚔ ${name}を撃破！`); return }
+    addLog(`⚔ ${name}を撃破！ ＋EXP${data.exp_gain}${data.leveled ? `（Lv${data.level}に！）` : ''}`)
     setPet((p) => {
       if (!p?.species) return p
       const st = petStats({ species: p.species, level: data.level })
@@ -332,7 +332,8 @@ export default function Dungeon() {
     }
   }, [status, state, petHp, fullness, turns, selectedSkill, inventory, floorNum, dungeon, pet.id])
 
-  const addLog = (msg) => setLog((l) => [msg, ...l].slice(0, 30))
+  // side: 'left'=自分/全般 / 'right'=敵の行動
+  const addLog = (msg, side = 'left') => setLog((l) => [{ msg, side }, ...l].slice(0, 30))
 
   const tryMove = (dx, dy) => {
     if (!state || status !== 'exploring' || busyRef.current) return
@@ -363,7 +364,7 @@ export default function Dungeon() {
       const hitTxt = hits > 1 ? `${perHit}×${hits}=` : ''
       if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); curPetHp = Math.min(pet.maxHp, curPetHp + heal); if (heal > 0) addLog(`💚 ${heal}回復`) }
       const killed = newHp <= 0
-      if (killed) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total} → 撃破！`); grantKill(floorNum); triggerShake('kill') }
+      if (killed) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; grantKill(floorNum, target.name); triggerShake('kill') }
       else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total}（残HP${newHp}）`); triggerShake('hit') }
 
       // 体当たり演出：ペットを相手方向へ突進、被弾した敵を点滅させる
@@ -413,7 +414,7 @@ export default function Dungeon() {
         const guard = e.type === 'spec' ? (pet.mdef || 0) : (pet.def || 0)
         const dmg = calcDamage(e.atk || 1, guard)
         curPetHp -= dmg
-        addLog(`💥 ${e.name}の攻撃！ ${dmg}ダメージ`)
+        addLog(`${e.name}の攻撃！ ${dmg}ダメージ 💥`, 'right')
         // 敵はペット方向へ突進、ペットを点滅させる
         attackerFx[e.id] = { lunge: { dx: Math.sign(player.x - e.x), dy: Math.sign(player.y - e.y) } }
         petHit = true
@@ -459,7 +460,7 @@ export default function Dungeon() {
     // ---- 40ターンごとに敵が1体湧く ----
     if (!dead && nextTurns % SPAWN_EVERY === 0 && enemies.length < SPAWN_CAP) {
       const born = spawnEnemy(s, enemies, player)
-      if (born) { enemies = [...enemies, born]; addLog('👁 物音がした…新たな敵が現れた') }
+      if (born) { enemies = [...enemies, born]; addLog('物音がした…新たな敵が現れた 👁', 'right') }
     }
 
     // 敵の反撃演出（突進＋ペット点滅）。被弾時はマップも軽く揺らす
@@ -715,7 +716,7 @@ export default function Dungeon() {
 
         <div style={{ marginTop: 16, background: '#000610', border: '1px solid #113355', padding: 8, height: 140, overflowY: 'auto', fontSize: 11 }}>
           {log.length === 0 ? <span style={{ color: '#335577' }}>隣のマスをクリック、または矢印で移動。部屋に入ると視界が開ける。👹に触れると戦闘、▼で次の階へ。</span>
-            : log.map((l, i) => <div key={i} style={{ color: i === 0 ? '#aaddff' : '#5588bb' }}>{l}</div>)}
+            : log.map((l, i) => <div key={i} style={{ color: i === 0 ? '#aaddff' : l.side === 'right' ? '#cc8888' : '#5588bb', textAlign: l.side === 'right' ? 'right' : 'left' }}>{l.msg}</div>)}
         </div>
       </div>
     </div>
