@@ -127,7 +127,7 @@ export default function Profile() {
     setEquipment(eq || [])
     const { data: prof } = await supabase.from('proficiency').select('*, weapons(*)').eq('player_id', targetId)
     setProficiency(prof || [])
-    const { data: ss } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', targetId).order('slot_order')
+    const { data: ss } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', targetId).eq('set_type', 'sortie').order('slot_order')
     setSkillSets(ss || [])
     if (p?.ability_title_id) {
       const { data: at } = await supabase.from('titles').select('*').eq('id', p.ability_title_id).single()
@@ -337,18 +337,19 @@ export default function Profile() {
 
         {/* スキルセット */}
         <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
-          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>スキルセット</div>
+          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>⚔ 出撃スキルセット</div>
           {skillSets.length === 0 ? (
             <div style={{ color:'#334455', fontSize:'11px' }}>未設定</div>
           ) : (
-            skillSets.map(ss => (
-              <div key={ss.id} style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'4px', fontSize:'11px' }}>
-                <span style={{ color:'#446688', minWidth:'20px' }}>{ss.slot_order}.</span>
-                <span style={{ color: TYPE_COLORS[ss.skills.type] || '#88ccff' }}>{ss.skills.name}</span>
-                <span style={{ color:'#446688', fontSize:'10px' }}>×{ss.use_count || 1}</span>
-                <span style={{ color:'#446688', fontSize:'10px' }}>MP{ss.skills.mp_cost}</span>
-              </div>
-            ))
+            skillSets.map(ss => {
+              const isPassive = ss.skills.type === 'パッシブ'
+              return (
+                <div key={ss.id} style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'4px', fontSize:'11px' }}>
+                  <span style={{ color:'#ff8844', fontSize:'10px', minWidth:'42px' }}>{isPassive ? 'パッシブ' : ''}</span>
+                  <span style={{ color: TYPE_COLORS[ss.skills.type] || '#88ccff' }}>{ss.skills.name}</span>
+                </div>
+              )
+            })
           )}
         </div>
       </div>
