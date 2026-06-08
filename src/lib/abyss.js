@@ -96,7 +96,7 @@ const FLOOR_META = [
   { floor:7,  name:'聖域のアークライト', target:3000,  arch:'priest', dmg:'hybrid',
     kit:{ normal:'ホーリーエッジ', normalLow:'ディバインスマイト', trigger75:'聖域展開', trigger40:'神聖覚醒',
           special: sp('ジャッジメント', { matk:2.5 }) } },
-  { floor:8,  name:'運命喰らいのフォルト', target:3500, arch:'balanced', dmg:'hybrid',
+  { floor:8,  name:'賭博士バカピエロ', target:3500, arch:'balanced', dmg:'hybrid',
     kit:{ normal:'ジャグリング', normalLow:'ラッキーダイス',
           trigger75:{ name:'オールイン', noBacklash:true }, trigger40:'ジャックポット',
           special: sp('ロイヤル・フラッシュ', { atk:2.5, critGuaranteed:true }) } },
