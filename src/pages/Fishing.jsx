@@ -9,7 +9,7 @@ const FISH_RANK_COLORS = {
   b:'#4488ff', a:'#ff4444', s:'#ffcc00', ss:'#ffcc00', sss:'#ffcc00'
 }
 const FISH_RANK_LABELS = { f:'F', e:'E', d:'D', c:'C', b:'B', a:'A', s:'S', ss:'SS', sss:'SSS' }
-const FISH_RANK_RATES = { f:24.9, e:21, d:18, c:15, b:12, a:5, s:3, ss:1, sss:0.1 }
+const FISH_RANK_RATES = { f:25, e:21, d:18, c:15, b:12, a:5, s:3, ss:1, sss:0.1 }
 
 const FISH_RANK_BONUS_STATS = {
   f:   ['atk','def','matk','mdef','spd'],
