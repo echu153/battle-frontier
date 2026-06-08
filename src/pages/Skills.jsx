@@ -150,7 +150,7 @@ export default function Skills() {
     const set = curSets.find(ss => ss.slot_order === slot)
     return (
       <div key={slot} style={{ display:'flex', alignItems:'center', gap:'8px', border:`1px solid ${isPassiveSlot ? '#5a3a00' : '#002244'}`, background:'#000818', padding:'8px' }}>
-        <span style={{ color: isPassiveSlot ? '#ff8844' : '#446688', fontSize:'11px', minWidth:'20px' }}>{isPassiveSlot ? 'P' : `${slot}.`}</span>
+        <span style={{ color: isPassiveSlot ? '#ff8844' : '#446688', fontSize:'11px', minWidth:'46px' }}>{isPassiveSlot ? 'パッシブ' : `セット${slot}`}</span>
         {set ? (
           <>
             <span style={{ color: TYPE_COLORS[set.skills.type] || '#88ccff', fontSize:'11px', flex:1 }}>{set.skills.name}</span>

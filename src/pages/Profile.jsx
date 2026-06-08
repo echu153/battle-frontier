@@ -345,7 +345,7 @@ export default function Profile() {
               const isPassive = ss.skills.type === 'パッシブ'
               return (
                 <div key={ss.id} style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'4px', fontSize:'11px' }}>
-                  <span style={{ color:'#ff8844', fontSize:'10px', minWidth:'42px' }}>{isPassive ? 'パッシブ' : ''}</span>
+                  <span style={{ color: isPassive ? '#ff8844' : '#446688', fontSize:'10px', minWidth:'46px' }}>{isPassive ? 'パッシブ' : `セット${ss.slot_order}`}</span>
                   <span style={{ color: TYPE_COLORS[ss.skills.type] || '#88ccff' }}>{ss.skills.name}</span>
                 </div>
               )
