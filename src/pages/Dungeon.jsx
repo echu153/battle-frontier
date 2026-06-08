@@ -111,8 +111,8 @@ const roomOf = (rooms, x, y) => rooms.find((r) => x >= r.x && x < r.x + r.w && y
 function computeVisible(rooms, px, py) {
   const vis = new Set()
   const add = (x, y) => { if (inBounds(x, y)) vis.add(x + ',' + y) }
-  // 周囲（通路・全般）：3x3
-  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) add(px + dx, py + dy)
+  // 周囲（通路・全般）：自分＋上下左右の1マスのみ（斜めは見えない＝3x3より狭め）
+  add(px, py); add(px + 1, py); add(px - 1, py); add(px, py + 1); add(px, py - 1)
   // 部屋にいるなら部屋全体＋外周1マス
   const room = roomOf(rooms, px, py)
   if (room) {
