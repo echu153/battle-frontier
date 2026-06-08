@@ -1083,14 +1083,14 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     case 'エレメンタルエッジ': {
       result.dmg = Math.floor((eff.atk*(rt>=5?1.7:1.5) + eff.matk*0.8)*am)
-      const elemHit = Math.random()*100 < 30
+      const elemHit = Math.random()*100 < 36
       if (elemHit) {
-        // やけど40%・麻痺40%・スタン20% の重み付き抽選
+        // やけど・麻痺・スタンを均等抽選（スタン2倍化：発動率36%×1/3で各12%）
         const elemRoll = Math.random()*100
         let statusName = ''
-        if (elemRoll < 40) {
+        if (elemRoll < 33.34) {
           result.newEnemyBuffs.burn = { turns:5, dmgRate:0.02 }; statusName = 'やけど'
-        } else if (elemRoll < 80) {
+        } else if (elemRoll < 66.67) {
           if (!(enemyBuffs.paralysis?.turns > 0)) result.newEnemyBuffs.paralysis = { turns:3, skipRate:0.25, spdRate:0.8 }
           statusName = '麻痺'
         } else {
