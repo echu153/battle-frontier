@@ -784,16 +784,18 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     case '影歩き':      { const swT = rt>=4?8:4; result.newPlayerBuffs.spdUp={turns:swT,rate:1.5}; result.newPlayerBuffs.evasion={turns:swT,rate:0.05}; result.log = `🌙 影歩き！ ${swT}ターンの間、素早さ大幅上昇・回避率UP！`; break }
     case '急所突き': {
       result.dmg = Math.floor(eff.atk*1.8*am); result.bonusCritRate=30
+      let kyushoBleed = ''
       if (rt>=5) {
         const stacks = enemyBuffs.bleed?.stacks || 0
         if (stacks > 0) {
-          const bonusRate = Math.min(stacks*0.2, 1.0)
-          // 出血スタックぶんを別ヒットの追撃として付与し、スタックを消費
-          result.followup = { dmg: Math.floor(result.dmg * bonusRate), label:`出血${stacks}消費` }
+          const bonusRate = Math.min(stacks*0.2, 1.0)  // 5スタックで+100%
+          // 追撃ではなく1発のダメージに集約（出血ぶんを加算）してスタック消費
+          result.dmg += Math.floor(result.dmg * bonusRate)
           result.newEnemyBuffs.bleed = undefined  // 出血スタック全削除
+          kyushoBleed = ` 出血${stacks}スタックを消費！`
         }
       }
-      result.log = `🌙 急所突き！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
+      result.log = `🌙 急所突き！ ${enemy.name}に${result.dmg}の物理ダメージ！${kyushoBleed}`; break
     }
     case 'アクアショット': {
       result.dmg = Math.floor(eff.matk*(rt>=1?1.6:1.4)*am)
