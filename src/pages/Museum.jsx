@@ -234,7 +234,7 @@ export default function Museum() {
       return tiers.has(2)
     })
     if (!allOk) { showMsg('条件を満たしていません', '#ff4444'); setLoading(false); return }
-    const mult = COMPLETE_BONUS_MULT[tier] * MUSEUM_BONUS_MULT
+    const mult = COMPLETE_BONUS_MULT[tier]
     const updates = {}
     for (const [stat, val] of Object.entries(group.completeBonus)) {
       const col = museumCol(stat)
@@ -387,7 +387,7 @@ export default function Museum() {
                   <div style={{ padding:'0 12px 10px' }}>
                     <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>コンプリートボーナス</div>
                     {[0,1,2].map(t => {
-                      const mult = COMPLETE_BONUS_MULT[t] * MUSEUM_BONUS_MULT
+                      const mult = COMPLETE_BONUS_MULT[t]
                       const bonusText = Object.entries(group.completeBonus).map(([k,v]) => `${STAT_LABELS[k]}+${v * mult}`).join(' ')
                       const allOk = group.items.every(i => {
                         const tiers = donatedTierMap[i]
