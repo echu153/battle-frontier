@@ -20,6 +20,10 @@ const SET_TYPES = [
 ]
 const setTypeOf = (ss) => ss.set_type || 'sortie'
 
+// スロット構成：パッシブ専用スロット(0)＝1個、通常スキル枠(1〜5)＝5個
+const PASSIVE_SLOT = 0
+const ACTIVE_SLOTS = [1, 2, 3, 4, 5]
+
 export default function Skills() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
@@ -86,16 +90,18 @@ export default function Skills() {
     const playerSkillData = playerSkills.find(ps => ps.skill_id === skillId)
     const skillData = playerSkillData?.skills
     if (skillData && skillData.class_name !== profile.class && skillData.class_name !== '共通' && !playerSkillData?.is_carried_over) return
-    // パッシブは1つまで：同じセット内の別スロットに既にパッシブがある場合はセット不可
-    if (skillData?.type === 'パッシブ') {
-      const otherPassive = skillSets.find(ss => setTypeOf(ss) === selectedSet && ss.skills?.type === 'パッシブ' && ss.skill_id !== skillId && ss.slot_order !== slotOrder)
-      if (otherPassive) {
-        setSetMessage(`パッシブは1つまでです（現在：${otherPassive.skills.name}）。先に外してください。`)
-        return
-      }
-    }
+    // パッシブは専用スロット(0)のみ・1個。通常スキルはスロット1〜5のみ。
+    const isPassive = skillData?.type === 'パッシブ'
+    if (isPassive && slotOrder !== PASSIVE_SLOT) { setSetMessage('パッシブはパッシブ専用スロットにセットしてください。'); return }
+    if (!isPassive && slotOrder === PASSIVE_SLOT) { setSetMessage('パッシブ専用スロットには通常スキルをセットできません。'); return }
     setSetMessage('')
     setLoading(true)
+    // パッシブをセットするときは、旧仕様で通常スロットに残っている別パッシブも掃除（1個のみ保証）
+    if (isPassive) {
+      for (const op of curSets.filter(ss => ss.skills?.type === 'パッシブ' && ss.skill_id !== skillId)) {
+        await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('set_type', selectedSet).eq('slot_order', op.slot_order)
+      }
+    }
     // 同じスキルが現在のセット内の他スロットにあれば外す（別セットには影響しない）
     await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('set_type', selectedSet).eq('skill_id', skillId)
     const existing = skillSets.find(ss => setTypeOf(ss) === selectedSet && ss.slot_order === slotOrder)
@@ -139,6 +145,37 @@ export default function Skills() {
     skillsByClass[cls].push(ps.skills)
   }
 
+  // スロット1枠の表示（パッシブ専用スロット／通常スキル枠で共用）
+  const renderSlot = (slot, isPassiveSlot) => {
+    const set = curSets.find(ss => ss.slot_order === slot)
+    return (
+      <div key={slot} style={{ display:'flex', alignItems:'center', gap:'8px', border:`1px solid ${isPassiveSlot ? '#5a3a00' : '#002244'}`, background:'#000818', padding:'8px' }}>
+        <span style={{ color: isPassiveSlot ? '#ff8844' : '#446688', fontSize:'11px', minWidth:'20px' }}>{isPassiveSlot ? 'P' : `${slot}.`}</span>
+        {set ? (
+          <>
+            <span style={{ color: TYPE_COLORS[set.skills.type] || '#88ccff', fontSize:'11px', flex:1 }}>{set.skills.name}</span>
+            <span style={{ color:'#446688', fontSize:'10px' }}>{set.skills.class_name}</span>
+            {set.skills.type !== 'パッシブ' ? (
+              <>
+                <span style={{ color:'#446688', fontSize:'10px' }}>MP{set.skills.mp_cost}</span>
+                <select value={set.use_count || 1} onChange={e => updateUseCount(slot, Number(e.target.value))}
+                  style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'2px' }}>
+                  {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}回</option>)}
+                </select>
+              </>
+            ) : (
+              <span style={{ color:'#ff8844', fontSize:'10px' }}>常時発動</span>
+            )}
+            <button onClick={() => removeFromSlot(slot)} disabled={loading}
+              style={{ padding:'2px 6px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
+          </>
+        ) : (
+          <span style={{ color:'#334455', fontSize:'11px' }}>{isPassiveSlot ? 'パッシブ未設定' : '未設定'}</span>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'700px', margin:'0 auto' }}>
@@ -154,7 +191,7 @@ export default function Skills() {
 
         {/* スキルセット */}
         <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'12px' }}>
-          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'6px' }}>スキルセット（最大5個・上から順に発動）</div>
+          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'6px' }}>スキルセット（通常スキル最大5個＋パッシブ1個）</div>
           {/* セット種別の選択 */}
           <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'8px' }}>
             {SET_TYPES.map(st => {
@@ -170,41 +207,20 @@ export default function Skills() {
             })}
           </div>
           <div style={{ color:'#336688', fontSize:'10px', marginBottom:'8px', lineHeight:'1.6' }}>
-            パッシブスキルをセットすると常時発動する（パッシブは1つまで）。<br/>
+            パッシブは専用スロットに1個・常時発動。通常スキルは最大5個（上から順に発動）。<br/>
             <span style={{ color:'#557799' }}>状況ごとに別々のセットを組めます。</span>
             {selectedSet !== 'sortie' && <span style={{ color:'#cc9944' }}>　※このセットが空のときは「出撃」のスキルが使われます。</span>}
           </div>
           {setMessage && <div style={{ color:'#ff8844', fontSize:'10px', marginBottom:'8px', border:'1px solid #884422', padding:'6px' }}>{setMessage}</div>}
+          {/* パッシブ専用スロット */}
+          <div style={{ color:'#ff8844', fontSize:'10px', margin:'2px 0 4px' }}>🛡 パッシブ専用スロット（1個）</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:'4px', marginBottom:'10px' }}>
+            {renderSlot(PASSIVE_SLOT, true)}
+          </div>
+          {/* 通常スキル枠 */}
+          <div style={{ color:'#88ccff', fontSize:'10px', margin:'2px 0 4px' }}>⚡ 通常スキル（最大5個・上から順に発動）</div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:'4px' }}>
-            {[1,2,3,4,5].map(slot => {
-              const set = curSets.find(ss => ss.slot_order === slot)
-              return (
-                <div key={slot} style={{ display:'flex', alignItems:'center', gap:'8px', border:'1px solid #002244', background:'#000818', padding:'8px' }}>
-                  <span style={{ color:'#446688', fontSize:'11px', minWidth:'20px' }}>{slot}.</span>
-                  {set ? (
-                    <>
-                      <span style={{ color: TYPE_COLORS[set.skills.type] || '#88ccff', fontSize:'11px', flex:1 }}>{set.skills.name}</span>
-                      <span style={{ color:'#446688', fontSize:'10px' }}>{set.skills.class_name}</span>
-                      {set.skills.type !== 'パッシブ' ? (
-                        <>
-                          <span style={{ color:'#446688', fontSize:'10px' }}>MP{set.skills.mp_cost}</span>
-                          <select value={set.use_count || 1} onChange={e => updateUseCount(slot, Number(e.target.value))}
-                            style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'2px' }}>
-                            {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}回</option>)}
-                          </select>
-                        </>
-                      ) : (
-                        <span style={{ color:'#ff8844', fontSize:'10px' }}>常時発動</span>
-                      )}
-                      <button onClick={() => removeFromSlot(slot)} disabled={loading}
-                        style={{ padding:'2px 6px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>外す</button>
-                    </>
-                  ) : (
-                    <span style={{ color:'#334455', fontSize:'11px' }}>未設定</span>
-                  )}
-                </div>
-              )
-            })}
+            {ACTIVE_SLOTS.map(slot => renderSlot(slot, false))}
           </div>
         </div>
 
@@ -293,14 +309,19 @@ function SkillCard({ skill, learned, inSet, skillSets, loading, onSet, canSet })
         <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
           {skill.type !== 'パッシブ' && <span style={{ color:'#446688', fontSize:'10px' }}>MP{skill.mp_cost}</span>}
           {learned && !inSet && canSet && (
-            <select onChange={e => { if (e.target.value) onSet(skill.id, Number(e.target.value)) }} defaultValue=""
-              style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'2px' }}>
-              <option value="">セットする</option>
-              {[1,2,3,4,5].map(slot => <option key={slot} value={slot}>スロット{slot}</option>)}
-            </select>
+            skill.type === 'パッシブ' ? (
+              <button onClick={() => onSet(skill.id, PASSIVE_SLOT)} disabled={loading}
+                style={{ background:'#1a0c00', border:'1px solid #ff8844', color:'#ff8844', fontFamily:'monospace', fontSize:'10px', padding:'3px 8px', cursor:'pointer' }}>パッシブにセット</button>
+            ) : (
+              <select onChange={e => { if (e.target.value) onSet(skill.id, Number(e.target.value)) }} defaultValue=""
+                style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'10px', padding:'2px' }}>
+                <option value="">セットする</option>
+                {[1,2,3,4,5].map(slot => <option key={slot} value={slot}>スロット{slot}</option>)}
+              </select>
+            )
           )}
           {inSet && <span style={{ color: skill.type === 'パッシブ' ? '#ff8844' : '#0088ff', fontSize:'10px' }}>
-            {skill.type === 'パッシブ' ? `スロット${inSet.slot_order}（常時発動）` : `スロット${inSet.slot_order}（${inSet.use_count || 1}回）`}
+            {skill.type === 'パッシブ' ? `パッシブスロット（常時発動）` : `スロット${inSet.slot_order}（${inSet.use_count || 1}回）`}
           </span>}
           {!learned && <span style={{ color:'#446688', fontSize:'10px' }}>LV{skill.required_lv}で習得</span>}
         </div>
