@@ -120,7 +120,7 @@ const PALACE_META = [
 
   { palace:2, name:'【金牛】アルデバラン', arch:'tank', dmg:'phys',
     feature:'受け特化（防御値ではなくダメージ軽減が高い）／HPが減るほど防御上昇／行動妨害無効',
-    mods:{ flatDR:0.5, hpScaleDef:2.0, ccImmune:true, evasion:0 },
+    mods:{ flatDR:0.9, hpScaleDef:2.0, ccImmune:true, evasion:0 },
     title:'※後日設定' },
 
   { palace:3, name:'【双影】カストル＆ポルックス', arch:'balanced', dmg:'hybrid',
@@ -158,7 +158,7 @@ const PALACE_META = [
   { palace:9, name:'【蒼穹】アウストラリス', arch:'swift', dmg:'phys',
     feature:'すべて必中・素早さもかなり高い／追加攻撃の上限が4回／連続攻撃で威力が上がる',
     mods:{ alwaysHit:true, extraActionCap:4, escalatingHit:0.15 },
-    statTweak:(e)=>({ ...e, spd:Math.round(e.spd*1.4) }),
+    statTweak:(e)=>({ ...e, spd:3000 }),
     title:'※後日設定' },
 
   { palace:10, name:'【黒角】デネブ', arch:'arcane', dmg:'mag',

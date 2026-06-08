@@ -104,6 +104,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
   let prevDmgSkillName = null    // sameSkillDR 用：直前にダメージを与えたスキル名（第11）
   let lastPlayerHitType = enemy.type   // counterByType 用：プレイヤーが直前に与えた攻撃タイプ（第12）
   let permaBuffStep = 0          // permaBuffs 用：永続強化の段階（第11）
+  let openingBurstDone = false   // openingBurst 用：開幕奇襲を撃ったか（第1。敵の1ターン目に発動）
 
   // mods: プレイヤー→敵 ダメージ倍率（flatDR）。固定割合DoTには掛けない（貫通させる）
   const playerDmgMult = 1 - (mods.flatDR || 0)
@@ -363,16 +364,17 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     enemyHp = Math.min(enemyMaxHp, enemyHp + amt)
     logs.push({ text:`💚 ${enemy.name}も癒やしに同調して${amt}回復した！`, color:'#66ddaa' })
   }
-  // 第12 星海アルレシャ: プレイヤーが得た強化を敵にも反映
+  // 第12 星海アルレシャ: プレイヤーが得た強化を「すべて」敵にも反映（デバフ/状態異常は除外）
+  const MIRROR_NEG = new Set(['burn','poison','severePoisoin','bleed','paralysis','stun','healSeal','allinDebuff','allinActive','spellBladeSealed','spellBladeExhaust','defDown','mdefDown','atkDown','spdDown','curseDmg','potionCooldown','skeletonDmg','delayHeal'])
   const mirrorPlayerBuffs = (before) => {
     if (!mods.mirrorBuffs) return
-    const MIR = ['atkUp','matkUp','spdUp','defUp','mdefUp','dmgReduce']
     let any = false
-    for (const k of MIR) {
+    for (const k of Object.keys(playerBuffs)) {
+      if (MIRROR_NEG.has(k)) continue          // プレイヤーに不利な効果はコピーしない
       const a = playerBuffs[k]
-      if (a && a !== before[k]) { enemyBuffs[k] = { ...a }; any = true }
+      if (a && a !== before[k]) { enemyBuffs[k] = (a && typeof a === 'object') ? { ...a } : a; any = true }
     }
-    if (any) logs.push({ text:`✨ ${enemy.name}は${profile.username}の強化を映し取った！`, color:'#cc99ff' })
+    if (any) logs.push({ text:`✨ ${enemy.name}は${profile.username}の強化をすべて映し取った！`, color:'#cc99ff' })
   }
 
   // 敵の現在の施術ステータス（永続強化＋バフを反映）
@@ -474,8 +476,19 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     onEnemyHit()
   }
 
+  // 第1 白羊ハマル: 開幕奇襲（大ダメージ）。敵の1ターン目の行動として発動（プレイヤーが先に動けるのでバフ/デバフの猶予あり）
+  const doOpeningBurst = () => {
+    const eStats = enemyCastStats()
+    const stat = mods.openingBurst.stat === 'matk' ? eStats.matk : eStats.atk
+    const dmg = scaleDamageToPlayer(stat * mods.openingBurst.mult, stat, mods.openingBurst.stat === 'matk' ? 'matk' : 'atk', false)
+    playerHp -= dmg
+    logs.push({ text:`💥 ${enemy.name}の開幕奇襲！ あなたに${dmg}ダメージ！`, color:'#ff2200' })
+  }
+
   // 1ターン分の敵行動。Phase1の宮は kit を持たないので通常攻撃。
   const doEnemyKitTurn = () => {
+    // ハマルの開幕奇襲は敵の最初の行動で発動（＝プレイヤーが1ターン目に先に動ける）
+    if (mods.openingBurst && !openingBurstDone) { openingBurstDone = true; doOpeningBurst(); return }
     const kit = enemy.kit
     if (!kit) { doEnemyAttack(false); return }
     // （kit 駆動の宮は後続フェーズで実装）
@@ -521,16 +534,6 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const solo = (twin.c.down !== twin.p.down)
     if (!twin.c.down) { doBodyAttack(twin.c, 'physical', solo); if (playerHp <= 0) return }
     if (!twin.p.down) { doBodyAttack(twin.p, 'magical', solo) }
-  }
-
-  // 開幕大ダメージ（白羊ハマル）
-  if (mods.openingBurst) {
-    const eStats = enemyCastStats()
-    const isMag = enemy.type === 'magical'
-    const stat = mods.openingBurst.stat === 'matk' ? eStats.matk : eStats.atk
-    const dmg = scaleDamageToPlayer(stat * mods.openingBurst.mult, stat, mods.openingBurst.stat === 'matk' ? 'matk' : 'atk', false)
-    playerHp -= dmg
-    logs.push({ text:`💥 ${enemy.name}の開幕奇襲！ あなたに${dmg}ダメージ！`, color:'#ff2200' })
   }
 
   // 第7 天秤エルゲルビ: 攻守の偏りが大きいと即死
@@ -748,11 +751,11 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       playerBuffs.allinDebuff = { turns:reactT, rate:0.7 }
       logs.push({ text:`💸 オールインの効果が切れた！ ${reactT}ターンの間全ステータスが低下し、バフが使えない！`, color:'#ff4444' })
     }
-    const hpEnemyName = twin
-      ? `カストル${Math.max(0,twin.c.hp)}${twin.c.down?'(蘇生中)':''}／ポルックス${Math.max(0,twin.p.hp)}${twin.p.down?'(蘇生中)':''}`
-      : enemy.name
-    const hpEnemyMax = twin ? (twin.c.max + twin.p.max) : enemyMaxHp
-    logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:profile.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:hpEnemyMax, enemyName:hpEnemyName, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
+    const twinBars = twin ? [
+      { name:'カストル', hp:Math.max(0,twin.c.hp), max:twin.c.max, down:twin.c.down },
+      { name:'ポルックス', hp:Math.max(0,twin.p.hp), max:twin.p.max, down:twin.p.down },
+    ] : undefined
+    logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:profile.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:twin ? (twin.c.max+twin.p.max) : enemyMaxHp, enemyName:enemy.name, twin:twinBars, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
     turn++
   }
 

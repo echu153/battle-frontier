@@ -4261,8 +4261,8 @@ export function BattleLogLine({ l }) {
         ))}
       </div>
     )
-    const col = (name, cur, max, pct, color, status, align) => (
-      <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', justifyContent:'flex-end' }}>
+    const col = (key, name, cur, max, pct, color, status, align) => (
+      <div key={key} style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', justifyContent:'flex-end' }}>
         {statusRow(status, align)}
         <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#b8d0e8', gap:'4px' }}>
           <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</span>
@@ -4273,12 +4273,16 @@ export function BattleLogLine({ l }) {
         </div>
       </div>
     )
+    // 双子(第3宮)など複数の敵HPバーに対応：l.twin があれば各体を個別のバーで表示
+    const enemyCols = Array.isArray(l.twin)
+      ? l.twin.map((b, i) => col(`e${i}`, `${b.name}${b.down ? '（蘇生中）' : ''}`, b.hp, b.max, Math.max(0, Math.min(100, (b.hp / b.max) * 100)), b.down ? '#8866aa' : '#ff6655', null, 'flex-end'))
+      : col('e', l.enemyName, l.enemyHp, l.enemyMax, ePct, '#ff6655', l.enemyStatus, 'flex-end')
     return (
       <div style={{ borderBottom:'1px solid #24405e', padding:'6px 6px', background:'#16263c', borderRadius:'3px', margin:'2px 0' }}>
         <div style={{ fontSize:'9px', color:'#7fa8d0', marginBottom:'3px', textAlign:'center' }}>━ {l.turn}ターン終了時 ━</div>
         <div style={{ display:'flex', gap:'12px', alignItems:'flex-end' }}>
-          {col(l.playerName, l.playerHp, l.playerMax, pPct, '#33dd66', l.playerStatus, 'flex-start')}
-          {col(l.enemyName, l.enemyHp, l.enemyMax, ePct, '#ff6655', l.enemyStatus, 'flex-end')}
+          {col('p', l.playerName, l.playerHp, l.playerMax, pPct, '#33dd66', l.playerStatus, 'flex-start')}
+          {enemyCols}
         </div>
       </div>
     )
