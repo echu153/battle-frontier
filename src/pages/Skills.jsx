@@ -11,6 +11,15 @@ const TYPE_COLORS = {
   'パッシブ': '#ff8844',
 }
 
+// 状況別スキルセット。set_type は DB の skill_sets.set_type と対応
+const SET_TYPES = [
+  { key:'sortie',    label:'⚔ 出撃',        color:'#ffcc00' },
+  { key:'papia',     label:'🌟 パピア限定',  color:'#ffaa00' },
+  { key:'challenge', label:'🕯 挑戦',        color:'#ff6464' },
+  { key:'raid',      label:'🐉 レイド',      color:'#ff66aa' },
+]
+const setTypeOf = (ss) => ss.set_type || 'sortie'
+
 export default function Skills() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
@@ -20,6 +29,7 @@ export default function Skills() {
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('current')
   const [setMessage, setSetMessage] = useState('')
+  const [selectedSet, setSelectedSet] = useState('sortie')  // 編集中のセット種別
 
   useEffect(() => { fetchAll() }, [])
 
@@ -76,9 +86,9 @@ export default function Skills() {
     const playerSkillData = playerSkills.find(ps => ps.skill_id === skillId)
     const skillData = playerSkillData?.skills
     if (skillData && skillData.class_name !== profile.class && skillData.class_name !== '共通' && !playerSkillData?.is_carried_over) return
-    // パッシブは1つまで：別スロットに既にパッシブがある場合はセット不可
+    // パッシブは1つまで：同じセット内の別スロットに既にパッシブがある場合はセット不可
     if (skillData?.type === 'パッシブ') {
-      const otherPassive = skillSets.find(ss => ss.skills?.type === 'パッシブ' && ss.skill_id !== skillId && ss.slot_order !== slotOrder)
+      const otherPassive = skillSets.find(ss => setTypeOf(ss) === selectedSet && ss.skills?.type === 'パッシブ' && ss.skill_id !== skillId && ss.slot_order !== slotOrder)
       if (otherPassive) {
         setSetMessage(`パッシブは1つまでです（現在：${otherPassive.skills.name}）。先に外してください。`)
         return
@@ -86,12 +96,13 @@ export default function Skills() {
     }
     setSetMessage('')
     setLoading(true)
-    await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('skill_id', skillId)
-    const existing = skillSets.find(ss => ss.slot_order === slotOrder)
+    // 同じスキルが現在のセット内の他スロットにあれば外す（別セットには影響しない）
+    await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('set_type', selectedSet).eq('skill_id', skillId)
+    const existing = skillSets.find(ss => setTypeOf(ss) === selectedSet && ss.slot_order === slotOrder)
     if (existing) {
-      await supabase.from('skill_sets').update({ skill_id: skillId, use_count: 1 }).eq('player_id', profile.id).eq('slot_order', slotOrder)
+      await supabase.from('skill_sets').update({ skill_id: skillId, use_count: 1 }).eq('player_id', profile.id).eq('set_type', selectedSet).eq('slot_order', slotOrder)
     } else {
-      await supabase.from('skill_sets').insert({ player_id: profile.id, skill_id: skillId, slot_order: slotOrder, use_count: 1 })
+      await supabase.from('skill_sets').insert({ player_id: profile.id, set_type: selectedSet, skill_id: skillId, slot_order: slotOrder, use_count: 1 })
     }
     await fetchAll()
     setLoading(false)
@@ -99,14 +110,14 @@ export default function Skills() {
 
   const updateUseCount = async (slotOrder, useCount) => {
     setLoading(true)
-    await supabase.from('skill_sets').update({ use_count: useCount }).eq('player_id', profile.id).eq('slot_order', slotOrder)
+    await supabase.from('skill_sets').update({ use_count: useCount }).eq('player_id', profile.id).eq('set_type', selectedSet).eq('slot_order', slotOrder)
     await fetchAll()
     setLoading(false)
   }
 
   const removeFromSlot = async (slotOrder) => {
     setLoading(true)
-    await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('slot_order', slotOrder)
+    await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('set_type', selectedSet).eq('slot_order', slotOrder)
     await fetchAll()
     setLoading(false)
   }
@@ -117,6 +128,7 @@ export default function Skills() {
 
   const learnedIds = playerSkills.map(ps => ps.skill_id)
   const carriedSkillIds = playerSkills.filter(ps => ps.is_carried_over).map(ps => ps.skill_id)
+  const curSets = skillSets.filter(ss => setTypeOf(ss) === selectedSet)  // 編集中セットの中身
 
   // クラス別にグループ化
   const skillsByClass = {}
@@ -142,12 +154,30 @@ export default function Skills() {
 
         {/* スキルセット */}
         <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'12px' }}>
-          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'4px' }}>スキルセット（最大5個・上から順に発動）</div>
-          <div style={{ color:'#336688', fontSize:'10px', marginBottom:'8px' }}>パッシブスキルをセットすると常時発動する（パッシブは1つまで）</div>
+          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'6px' }}>スキルセット（最大5個・上から順に発動）</div>
+          {/* セット種別の選択 */}
+          <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'8px' }}>
+            {SET_TYPES.map(st => {
+              const on = selectedSet === st.key
+              const count = skillSets.filter(ss => setTypeOf(ss) === st.key).length
+              return (
+                <button key={st.key} onClick={()=>{ setSelectedSet(st.key); setSetMessage('') }}
+                  style={{ flex:'1 1 auto', minWidth:'84px', padding:'6px 4px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
+                    background:on?'#0a1630':'#000818', border:`1px solid ${on?st.color:'#223344'}`, color:on?st.color:'#557799' }}>
+                  {st.label}{count>0?`(${count})`:''}
+                </button>
+              )
+            })}
+          </div>
+          <div style={{ color:'#336688', fontSize:'10px', marginBottom:'8px', lineHeight:'1.6' }}>
+            パッシブスキルをセットすると常時発動する（パッシブは1つまで）。<br/>
+            <span style={{ color:'#557799' }}>状況ごとに別々のセットを組めます。</span>
+            {selectedSet !== 'sortie' && <span style={{ color:'#cc9944' }}>　※このセットが空のときは「出撃」のスキルが使われます。</span>}
+          </div>
           {setMessage && <div style={{ color:'#ff8844', fontSize:'10px', marginBottom:'8px', border:'1px solid #884422', padding:'6px' }}>{setMessage}</div>}
           <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:'4px' }}>
             {[1,2,3,4,5].map(slot => {
-              const set = skillSets.find(ss => ss.slot_order === slot)
+              const set = curSets.find(ss => ss.slot_order === slot)
               return (
                 <div key={slot} style={{ display:'flex', alignItems:'center', gap:'8px', border:'1px solid #002244', background:'#000818', padding:'8px' }}>
                   <span style={{ color:'#446688', fontSize:'11px', minWidth:'20px' }}>{slot}.</span>
@@ -195,7 +225,7 @@ export default function Skills() {
           <div>
             {allSkills.map(skill => {
               const learned = learnedIds.includes(skill.id)
-              const inSet = skillSets.find(ss => ss.skill_id === skill.id)
+              const inSet = curSets.find(ss => ss.skill_id === skill.id)
               return (
                 <SkillCard key={skill.id} skill={skill} learned={learned} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={true} />
               )
@@ -218,7 +248,7 @@ export default function Skills() {
                   }
                 </div>
                 {skills.map(skill => {
-                  const inSet = skillSets.find(ss => ss.skill_id === skill.id)
+                  const inSet = curSets.find(ss => ss.skill_id === skill.id)
                   return (
                     <SkillCard key={skill.id} skill={skill} learned={true} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={className === profile.class || className === '共通' || carriedSkillIds.includes(skill.id)} />
                   )

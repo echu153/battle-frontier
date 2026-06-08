@@ -1302,7 +1302,8 @@ export default function Game() {
   const [classLevels, setClassLevels] = useState([])
   const [templeMessage, setTempleMessage] = useState('')
   const [hasGamblerProof, setHasGamblerProof] = useState(false)
-  const [skillSets, setSkillSets] = useState([])
+  const [skillSets, setSkillSets] = useState([])          // 出撃(sortie)セット
+  const [papiaSkillSets, setPapiaSkillSets] = useState([]) // パピア限定セット（空なら出撃にフォールバック）
   const [playerItem, setPlayerItem] = useState(null)
   const [abilityTitle, setAbilityTitle] = useState(null)
   const [expDungeonTicket, setExpDungeonTicket] = useState(null)  // { id, quantity }
@@ -1501,7 +1502,12 @@ export default function Game() {
     const { data: prof } = await supabase.from('proficiency').select('*, weapons(*)').eq('player_id', user.id)
     if (Array.isArray(prof)) setProficiency(prof)
     const { data: ss } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', user.id).order('slot_order')
-    if (Array.isArray(ss)) setSkillSets(ss)
+    if (Array.isArray(ss)) {
+      const sortie = ss.filter(r => (r.set_type || 'sortie') === 'sortie')
+      const papia  = ss.filter(r => r.set_type === 'papia')
+      setSkillSets(sortie)
+      setPapiaSkillSets(papia.length ? papia : sortie)  // パピアセット未設定なら出撃を流用
+    }
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id).eq('equipped', true).single()
     setPlayerItem(pi || null)
     if (data?.ability_title_id) {
@@ -2040,7 +2046,9 @@ export default function Game() {
     const equippedWeaponItem = equipment.find(e => e.slot==='weapon' && e.equipped)
     const isArtifact = equippedWeaponItem?.bonus_effect === 'artifact'
 
-    const passiveNames = skillSets.filter(ss => ss.skills?.type === 'パッシブ').map(ss => ss.skills.name)
+    // 状況別スキルセット：パピア遭遇時はパピア限定セット、それ以外は出撃セット
+    const activeSkillSets = isPapiaEncounter ? papiaSkillSets : skillSets
+    const passiveNames = activeSkillSets.filter(ss => ss.skills?.type === 'パッシブ').map(ss => ss.skills.name)
     const hasShingan    = passiveNames.includes('心眼')
     const hasBerserk    = passiveNames.includes('バーサク')
     const hasTakaNoMe   = passiveNames.includes('鷹ノ目')
@@ -2102,7 +2110,7 @@ export default function Game() {
     const weaponType = equippedWeaponItem?.weapons?.weapon_type || 'sword'
     const isMagical = getWeaponGroup(weaponType) === 'magical'
     const expandedSkillSet = []
-    for (const ss of skillSets) {
+    for (const ss of activeSkillSets) {
       if (ss.skills?.type === 'パッシブ') continue
       const count = ss.use_count || 1
       for (let i = 0; i < count; i++) expandedSkillSet.push(ss)

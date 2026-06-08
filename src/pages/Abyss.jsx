@@ -676,7 +676,13 @@ export default function Abyss() {
     setProfile(prof)
     setEquipment(eq || [])
     setProficiency(prof2 || [])
-    setSkillSets(ss || [])
+    // 挑戦コンテンツ用スキルセット（challenge）。未設定なら出撃(sortie)にフォールバック
+    {
+      const all = ss || []
+      const challenge = all.filter(r => r.set_type === 'challenge')
+      const sortie = all.filter(r => (r.set_type || 'sortie') === 'sortie')
+      setSkillSets(challenge.length ? challenge : sortie)
+    }
     setPlayerItem(pi || null)
 
     if (prof.ability_title_id) {

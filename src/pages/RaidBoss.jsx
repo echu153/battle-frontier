@@ -394,7 +394,13 @@ export default function RaidBoss() {
     setProfile(prof)
     setEquipment(eq || [])
     setProficiency(prof2 || [])
-    setSkillSets(ss || [])
+    // レイド用スキルセット（raid）。未設定なら出撃(sortie)にフォールバック
+    {
+      const all = ss || []
+      const raid = all.filter(r => r.set_type === 'raid')
+      const sortie = all.filter(r => (r.set_type || 'sortie') === 'sortie')
+      setSkillSets(raid.length ? raid : sortie)
+    }
 
     // 共有CD残り計算
     if (prof.last_action_at) {
