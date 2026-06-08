@@ -543,9 +543,10 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
 }
 
 // 回避率計算（防御側SPD > 攻撃側SPDのとき回避率UP、最大10%）
+// 回避率：相手より速いほど上昇。上限20%（相手の2倍速で上限到達）
 export const calcEvasionRate = (defenderSpd, attackerSpd) => {
   if (defenderSpd <= attackerSpd) return 0
-  return Math.min(10, (defenderSpd - attackerSpd) / attackerSpd * 10)
+  return Math.min(20, (defenderSpd - attackerSpd) / attackerSpd * 20)
 }
 
 export const calcExtraActionRate = (mySpd, enemySpd) => {
@@ -556,11 +557,23 @@ export const calcExtraActionRate = (mySpd, enemySpd) => {
   return 50 + (rawRate-50)*0.5
 }
 
-export const calcCritRate = (mySpd, enemySpd) => {
-  const base = 100/48
-  if (mySpd <= enemySpd) return base
-  const bonus = Math.min(5, (mySpd-enemySpd)/enemySpd*2*100)
-  return base + bonus
+// クリティカル率：素早さ(SPD)の値で決まる。防御の軽減ボーナス(calcDefReduction)と同じ補間方式。
+// F=0% ～ SSS=20%（均等カーブ）。閾値は SPD ランク（=物理/防御系）と一致。
+// ※ 第2引数(enemySpd)は後方互換のため残すが未使用。
+const CRIT_SPD_THRESHOLDS = [55, 150, 300, 550, 950, 1500, 2200, 3300]
+const CRIT_RATE_TIERS     = [0, 2.5, 5, 7.5, 10, 12.5, 15, 17.5, 20]  // F..SSS
+export const calcCritRate = (mySpd, _enemySpd) => {
+  if (!mySpd || mySpd <= 0) return 0
+  const thresholds = [0, ...CRIT_SPD_THRESHOLDS]
+  const rates = CRIT_RATE_TIERS
+  if (mySpd >= thresholds[thresholds.length - 1]) return rates[rates.length - 1]
+  for (let i = 1; i < thresholds.length; i++) {
+    if (mySpd <= thresholds[i]) {
+      const progress = (mySpd - thresholds[i - 1]) / (thresholds[i] - thresholds[i - 1])
+      return rates[i - 1] + (rates[i] - rates[i - 1]) * progress
+    }
+  }
+  return rates[rates.length - 1]
 }
 
 const RARITY_BONUS_COUNT = { f:1, e:1, d:2, c:2, b:3, a:3, s:4, ss:4, sss:4 }
