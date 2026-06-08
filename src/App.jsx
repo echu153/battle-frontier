@@ -22,6 +22,7 @@ import Dungeon from './pages/Dungeon'
 import Pets from './pages/Pets'
 import StatusDetail from './pages/StatusDetail'
 import Abyss from './pages/Abyss'
+import Tenkyuu from './pages/Tenkyuu'
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -130,6 +131,7 @@ function App() {
         <Route path="/pets" element={session ? <Pets /> : <Navigate to="/login" />} />
         <Route path="/status" element={session ? <StatusDetail /> : <Navigate to="/login" />} />
         <Route path="/abyss" element={session ? <Abyss /> : <Navigate to="/login" />} />
+        <Route path="/tenkyuu" element={session ? <Tenkyuu /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>
