@@ -23,6 +23,8 @@ const FALLBACK_PET = { name: '仮ペット', emoji: '🐾', image_url: null, max
 const MAX_FULLNESS = 100      // 満腹度の上限（100スタート）
 const HP_REGEN_EVERY = 10     // 満腹なら10ターンごとにHP+1
 const FULLNESS_EVERY = 10     // 10ターンごとに満腹度-1
+const SPAWN_EVERY = 40        // 40ターンごとに敵が1体湧く
+const SPAWN_CAP = 12          // フロアの敵がこの数以上なら湧かせない（過密防止）
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1))
 const inBounds = (x, y) => x >= 0 && x < MAP_W && y >= 0 && y < MAP_H
@@ -166,6 +168,7 @@ export default function Dungeon() {
   const fxId = useRef(0)
   const applyFx = (next) => { fxId.current += 1; setFx({ pet: null, enemies: {}, ...next, t: fxId.current }) }
   const busyRef = useRef(false) // 体当たり〜敵反撃の演出中は入力をロック
+  const spawnSeq = useRef(0) // 湧いた敵の連番ID用
   const turnTimers = useRef([])
   useEffect(() => () => {
     if (shakeTimer.current) clearTimeout(shakeTimer.current)
@@ -205,6 +208,34 @@ export default function Dungeon() {
       return { ...p, level: data.level, exp: data.exp, ...st }
     })
   }, [])
+
+  // 40ターンごとの湧き：プレイヤーから離れた床マスに敵を1体生成
+  const spawnEnemy = (s, enemies, player) => {
+    const areaId = areaForFloor(dungeon, floorNum)
+    const pool = enemiesForFloor(dungeon, floorNum)
+    const es = dungeonEnemyStats(floorNum, areaId)
+    const rooms = s.rooms || []
+    const occupied = (x, y) => enemies.some((e) => e.x === x && e.y === y) ||
+      (player.x === x && player.y === y) || (s.stairs.x === x && s.stairs.y === y) ||
+      s.items.some((it) => it.x === x && it.y === y)
+    for (let tries = 0; tries < 40; tries++) {
+      const room = rooms[rand(0, rooms.length - 1)]
+      if (!room) break
+      const x = room.x + rand(0, room.w - 1)
+      const y = room.y + rand(0, room.h - 1)
+      if (s.grid[y]?.[x] !== '.' || occupied(x, y)) continue
+      if (Math.abs(x - player.x) + Math.abs(y - player.y) < 4) continue // 目の前には湧かせない
+      const kind = pool[rand(0, pool.length - 1)]
+      const m = kind.statMult ?? 1.0
+      spawnSeq.current += 1
+      return {
+        id: 'es' + spawnSeq.current, x, y, name: kind.name, type: kind.type, image: kind.image || null,
+        hp: Math.round(es.maxHp * m), maxHp: Math.round(es.maxHp * m),
+        atk: Math.round(es.atk * m), def: Math.round(es.def * m), mdef: Math.round(es.mdef * m),
+      }
+    }
+    return null
+  }
 
   // ラン精算（サーバーが報酬を計算して付与）
   const finishRun = useCallback(async (cleared, died = false) => {
@@ -424,6 +455,12 @@ export default function Dungeon() {
     setFullness(nextFull)
     setPetHp(curPetHp)
     if (dead) { setStatus('dead'); addLog('💀 ペットは力尽きた…'); finishRun(false, true) }
+
+    // ---- 40ターンごとに敵が1体湧く ----
+    if (!dead && nextTurns % SPAWN_EVERY === 0 && enemies.length < SPAWN_CAP) {
+      const born = spawnEnemy(s, enemies, player)
+      if (born) { enemies = [...enemies, born]; addLog('👁 物音がした…新たな敵が現れた') }
+    }
 
     // 敵の反撃演出（突進＋ペット点滅）。被弾時はマップも軽く揺らす
     if (Object.keys(attackerFx).length) {
