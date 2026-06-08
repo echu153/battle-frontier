@@ -1501,7 +1501,7 @@ export default function Game() {
     }
     const today = getDungeonDateStr()
     try {
-      const { data: da } = await supabase.from('dungeon_attempts').select('cnt_exp,cnt_gold,cnt_stone,cnt_prof,cnt_gem').eq('player_id', user.id).eq('date', today).single()
+      const { data: da } = await supabase.from('dungeon_attempts').select('cnt_exp,cnt_gold,cnt_stone,cnt_prof,cnt_gem').eq('player_id', user.id).eq('date', today).maybeSingle()
       setDungeonCounts({ exp:da?.cnt_exp||0, gold:da?.cnt_gold||0, stone:da?.cnt_stone||0, prof:da?.cnt_prof||0, gem:da?.cnt_gem||0 })
     } catch { setDungeonCounts({ exp:0, gold:0, stone:0, prof:0, gem:0 }) }
   }
@@ -1633,7 +1633,7 @@ export default function Game() {
     const col = DUNGEON_TYPE_COL[type]
     let dungeonRow = null
     try {
-      const { data: da } = await supabase.from('dungeon_attempts').select('*').eq('player_id', profile.id).eq('date', today).single()
+      const { data: da } = await supabase.from('dungeon_attempts').select('*').eq('player_id', profile.id).eq('date', today).maybeSingle()
       dungeonRow = da
     } catch {}
     const typeCount = dungeonRow?.[col] || 0
@@ -1647,7 +1647,12 @@ export default function Game() {
     // 出撃と共通の10秒クールダウン＋釣り中チェック（サーバー側）
     const { data: latestForDungeon } = await supabase.from('profiles').select('last_action_at, is_fishing').eq('id', profile.id).single()
     const dungeonElapsed = (Date.now() - new Date(latestForDungeon.last_action_at).getTime()) / 1000
-    if (dungeonElapsed < WAIT_SECONDS) { setLoading(false); return }
+    if (dungeonElapsed < WAIT_SECONDS) {
+      // クールダウン中は無言で止めず、残り秒数を表示して「進行しない」ように見えるのを防ぐ
+      const wait = Math.max(1, Math.ceil(WAIT_SECONDS - dungeonElapsed))
+      setBattleLogs([{ text:`⏳ クールダウン中です。あと${wait}秒お待ちください。`, color:'#ffcc44' }])
+      setScene('battle'); setLoading(false); return
+    }
     if (latestForDungeon.is_fishing) {
       setBattleLogs([{ text:'🎣 釣り中はデイリーダンジョンに入れません。先に釣りを終了してください。', color:'#ff8844' }])
       setScene('battle'); setLoading(false); return
@@ -2994,7 +2999,7 @@ export default function Game() {
       id: 'dungeon', title: '✨ デイリーダンジョン',
       content: `● 街の画面から「デイリーダンジョン」を選択
 ● EXP / Gold / 強化石 / 武器熟練度 / 宝石 の5種類、それぞれ1日5回まで
-● リセットは毎日0時（日本時間）`,
+● リセットは毎日朝5時（日本時間）`,
     },
     {
       id: 'fishing', title: '🎣 釣り',
@@ -3657,10 +3662,11 @@ export default function Game() {
                     {DUNGEON_LIST.map(d => {
                       const used = dungeonCounts[d.type]||0
                       const full = used >= DUNGEON_DAILY_LIMIT
+                      const dis = full || loading || !canAct
                       return (
-                      <button key={d.type} disabled={full||loading} onClick={() => { doDungeon(d.type); setShowDungeonPanel(false) }}
-                        style={{ padding:'10px', background:'#001020', border:`1px solid ${full?'#333':'#440088'}`, color:full?'#333':'#cc44ff', cursor:full?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'11px', opacity:full?0.4:1 }}>
-                        {d.label}<br/><span style={{fontSize:'10px',color:full?'#333':'#446688'}}>残り{DUNGEON_DAILY_LIMIT-used}/{DUNGEON_DAILY_LIMIT}</span>
+                      <button key={d.type} disabled={dis} onClick={() => { doDungeon(d.type); setShowDungeonPanel(false) }}
+                        style={{ padding:'10px', background:'#001020', border:`1px solid ${dis?'#333':'#440088'}`, color:dis?'#333':'#cc44ff', cursor:dis?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'11px', opacity:dis?0.4:1 }}>
+                        {d.label}<br/><span style={{fontSize:'10px',color:dis?'#333':'#446688'}}>{!full&&!canAct?`待機 ${remaining.toFixed(0)}秒`:`残り${DUNGEON_DAILY_LIMIT-used}/${DUNGEON_DAILY_LIMIT}`}</span>
                       </button>
                       )
                     })}
@@ -3970,10 +3976,11 @@ export default function Game() {
                       {DUNGEON_LIST.map(d => {
                         const used = dungeonCounts[d.type]||0
                         const full = used >= DUNGEON_DAILY_LIMIT
+                        const dis = full || loading || !canAct
                         return (
-                        <button key={d.type} disabled={full||loading} onClick={() => { doDungeon(d.type); setShowDungeonPanel(false) }}
-                          style={{ padding:'10px', background:'#001020', border:`1px solid ${full?'#333':'#440088'}`, color:full?'#333':'#cc44ff', cursor:full?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'11px', opacity:full?0.4:1 }}>
-                          {d.label}<br/><span style={{fontSize:'10px',color:full?'#333':'#446688'}}>残り{DUNGEON_DAILY_LIMIT-used}/{DUNGEON_DAILY_LIMIT}</span>
+                        <button key={d.type} disabled={dis} onClick={() => { doDungeon(d.type); setShowDungeonPanel(false) }}
+                          style={{ padding:'10px', background:'#001020', border:`1px solid ${dis?'#333':'#440088'}`, color:dis?'#333':'#cc44ff', cursor:dis?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'11px', opacity:dis?0.4:1 }}>
+                          {d.label}<br/><span style={{fontSize:'10px',color:dis?'#333':'#446688'}}>{!full&&!canAct?`待機 ${remaining.toFixed(0)}秒`:`残り${DUNGEON_DAILY_LIMIT-used}/${DUNGEON_DAILY_LIMIT}`}</span>
                         </button>
                         )
                       })}
