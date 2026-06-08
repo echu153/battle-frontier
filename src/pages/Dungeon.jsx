@@ -111,8 +111,8 @@ const roomOf = (rooms, x, y) => rooms.find((r) => x >= r.x && x < r.x + r.w && y
 function computeVisible(rooms, px, py) {
   const vis = new Set()
   const add = (x, y) => { if (inBounds(x, y)) vis.add(x + ',' + y) }
-  // 周囲（通路・全般）：自分中心の5x5（上下左右2マスずつ）
-  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) add(px + dx, py + dy)
+  // 周囲（通路・全般）：自分中心の半径2の円形（四角の角・斜め遠方は見えない）
+  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (dx * dx + dy * dy <= 4) add(px + dx, py + dy)
   // 部屋にいるなら部屋全体＋外周1マス
   const room = roomOf(rooms, px, py)
   if (room) {
@@ -126,7 +126,8 @@ function computeVisible(rooms, px, py) {
 function enemySeesPet(rooms, e, px, py) {
   const er = roomOf(rooms, e.x, e.y), pr = roomOf(rooms, px, py)
   if (er && er === pr) return true // 同じ部屋
-  return Math.max(Math.abs(e.x - px), Math.abs(e.y - py)) <= 2 // 通路で接近
+  const dx = e.x - px, dy = e.y - py
+  return dx * dx + dy * dy <= 4 // 通路で接近（ペットの円形視界と一致）
 }
 
 // ダメージ計算: 攻撃と防御の差が過剰だと効率が逓減する（物理=def / 特殊=mdef 共通）
