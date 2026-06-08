@@ -563,6 +563,8 @@ export default function Dungeon() {
   // ビューポート描画（プレイヤー中心）
   const ox = state.player.x - Math.floor(VW / 2)
   const oy = state.player.y - Math.floor(VH / 2)
+  // 通路にいるときは円形マスク（ビネット）で視界を完全な円に見せる。部屋では従来どおり
+  const inCorridor = !roomOf(state.rooms, state.player.x, state.player.y)
   // 配色：壁＝明るいスレート、床＝暗いネイビーで明確に区別
   const C = {
     unknown: '#000208',
@@ -644,7 +646,7 @@ export default function Dungeon() {
         </div>
 
         {/* マップ（ビューポート）。接触時に少し震える戦闘演出 */}
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', willChange: 'transform', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
+        <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', willChange: 'transform', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
           {Array.from({ length: VH }).map((_, vy) => Array.from({ length: VW }).map((_, vx) => {
             const x = ox + vx, y = oy + vy
             const c = cellAt(x, y)
@@ -667,6 +669,11 @@ export default function Dungeon() {
               </div>
             )
           }))}
+          {/* 通路では円形ビネットを重ねて視界を完全な円に見せる（プレイヤー＝中央50%） */}
+          {inCorridor && (
+            <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
+              background: 'radial-gradient(ellipse 29% 35.4% at 50% 50%, transparent 80%, #000208 100%)' }} />
+          )}
         </div>
 
         {status === 'exploring' && (
