@@ -1790,7 +1790,7 @@ export default function Game() {
     // ※ gold は上のRPC呼び出しに同梱済み
     if (type === 'stone' || type === 'prof' || type === 'gem') {
       const bonusExp = grantBonusExpLogs()
-      await supabase.rpc('apply_dungeon_reward', { p_type, p_claimed_exp: bonusExp })
+      await supabase.rpc('apply_dungeon_reward', { p_type: type, p_claimed_exp: bonusExp })
     }
 
     // dungeon_attempts更新（種類ごとの列を加算）
