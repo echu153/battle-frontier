@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue } from './Game'
-import { gemAllowedSlots, gemSlotCategory, GEM_SLOT_LABEL } from '../lib/stats'
+import { gemAllowedSlots, gemSlotCategory, GEM_SLOT_LABEL, calcProfBonus } from '../lib/stats'
 
 const SLOT_LABELS_FULL = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }
 const gemDisplayName = (gemType, rank) => `${GEM_DATA[gemType]?.name || gemType}(${rank})`
@@ -49,25 +49,6 @@ const WEAPON_TYPE_GROUP = {
 }
 const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'
 
-// 熟練度ボーナス：物理武器→ATK / 特殊武器→MATK（Game.jsxと同一ロジック）
-// 上昇値 = floor(元ステータス × (LV×1% + floor(LV/100)×50%))
-const calcProfBonus = (prof) => {
-  if (!prof) return {}
-  const weapon = prof.weapon
-  if (!weapon) return {}
-  const lv = prof.prof_lv || 0
-  const rate = lv * 0.01 + Math.floor(lv/100) * 0.5
-  if (rate <= 0) return {}
-  const result = {}
-  const atk  = Math.floor((weapon.atk_bonus ||0) * rate); if (atk  > 0) result.atk  = atk
-  const def  = Math.floor((weapon.def_bonus ||0) * rate); if (def  > 0) result.def  = def
-  const matk = Math.floor((weapon.matk_bonus||0) * rate); if (matk > 0) result.matk = matk
-  const mdef = Math.floor((weapon.mdef_bonus||0) * rate); if (mdef > 0) result.mdef = mdef
-  const spd  = Math.floor((weapon.spd_bonus ||0) * rate); if (spd  > 0) result.spd  = spd
-  const hp   = Math.floor((weapon.hp_bonus  ||0) * rate); if (hp   > 0) result.hp   = hp
-  const mp   = Math.floor((weapon.mp_bonus  ||0) * rate); if (mp   > 0) result.mp   = mp
-  return result
-}
 
 const getProfPrefix = (profLv) => {
   if (profLv >= 300) return '【極】'
@@ -520,7 +501,7 @@ export default function Equipment() {
                   const enhW = calcEnhancedStats(w, plus)
                   const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
                   const prof = tab === 'weapon' ? proficiency.find(p => p.equipment_id === item.id) : null
-                  const profBonus = calcProfBonus(prof ? { ...prof, weapon: w } : null)
+                  const profBonus = prof ? calcProfBonus(prof, w) : {}
                   const profPct = prof ? Math.min(100, (prof.prof_exp / 100) * 100) : 0
                   const profPrefix = prof ? getProfPrefix(prof.prof_lv) : ''
                   const canAwaken = isArtifactBase && prof && prof.prof_lv >= 300

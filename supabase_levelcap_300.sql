@@ -10,7 +10,8 @@
 -- ============================================================
 
 -- ===== 必要経験値（LV1〜300対応）=====
-CREATE OR REPLACE FUNCTION public.calc_exp_next(p_lv integer)
+-- ※既存関数の引数名は lv のため CREATE OR REPLACE で名前を変えず lv のまま使用
+CREATE OR REPLACE FUNCTION public.calc_exp_next(lv integer)
  RETURNS integer
  LANGUAGE plpgsql
  IMMUTABLE
@@ -19,13 +20,13 @@ DECLARE
   v_in_block integer;
 BEGIN
   -- LV100超（再修練でキャップ300になったクラス）
-  IF p_lv >= 100 THEN
-    IF p_lv <= 150 THEN RETURN 150; END IF;  -- LV100〜150
-    IF p_lv <= 200 THEN RETURN 160; END IF;  -- LV151〜200
-    IF p_lv <= 250 THEN RETURN 170; END IF;  -- LV201〜250
-    RETURN 180;                              -- LV251〜300
+  IF lv >= 100 THEN
+    IF lv <= 150 THEN RETURN 150; END IF;  -- LV100〜150
+    IF lv <= 200 THEN RETURN 160; END IF;  -- LV151〜200
+    IF lv <= 250 THEN RETURN 170; END IF;  -- LV201〜250
+    RETURN 180;                            -- LV251〜300
   END IF;
-  v_in_block := (p_lv - 1) % 100;
+  v_in_block := (lv - 1) % 100;
   IF v_in_block < 9  THEN RETURN 80;  END IF;  -- LV1〜9
   IF v_in_block < 29 THEN RETURN 100; END IF;  -- LV10〜29
   IF v_in_block < 59 THEN RETURN 120; END IF;  -- LV30〜59
