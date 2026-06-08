@@ -6,9 +6,9 @@
 //  被ダメは敵の攻撃タイプに応じて pet.def(物理) / pet.mdef(特殊) で軽減
 export const SPECIES = {
   // 総合力を3体で統一（HP10=1点 / 攻・防・特防=各1点 → 合計が一致）。基礎=20点(全員HP20)・成長=4.8点/Lvで全レベル同値
-  flame:  { label: 'ヴォル', emoji: '🐺', starter: true, atkType: 'phys', base: { hp: 20, atk: 10, def: 5, mdef: 3 }, grow: { hp: 6, atk: 2.4, def: 1.1, mdef: 0.7 } },
-  aqua:   { label: 'アルル', emoji: '🦊', starter: true, atkType: 'spec', base: { hp: 20, atk: 10, def: 2, mdef: 6 }, grow: { hp: 4, atk: 2.4, def: 0.8, mdef: 1.2 } },
-  leaf:   { label: 'ドラム', emoji: '🐢', starter: true, atkType: 'phys', base: { hp: 20, atk: 6,  def: 6, mdef: 6 }, grow: { hp: 8, atk: 1.0, def: 1.5, mdef: 1.5 } },
+  flame:  { label: 'ヴォル', emoji: '🐺', starter: true, atkType: 'phys', base: { hp: 20, atk: 10, def: 5, mdef: 3 }, grow: { hp: 6, atk: 2.4, def: 1.1, mdef: 0.7 }, evolve: { label: 'ヴォルガノフ', emoji: '🐺' } },
+  aqua:   { label: 'アルル', emoji: '🦊', starter: true, atkType: 'spec', base: { hp: 20, atk: 10, def: 2, mdef: 6 }, grow: { hp: 4, atk: 2.4, def: 0.8, mdef: 1.2 }, evolve: { label: 'アルミラ',   emoji: '🦊' } },
+  leaf:   { label: 'ドラム', emoji: '🐢', starter: true, atkType: 'phys', base: { hp: 20, atk: 6,  def: 6, mdef: 6 }, grow: { hp: 8, atk: 1.0, def: 1.5, mdef: 1.5 }, evolve: { label: 'ガルガノス', emoji: '🐢' } },
 }
 
 export const STARTERS = Object.entries(SPECIES).map(([id, s]) => ({ id, ...s }))
@@ -17,17 +17,37 @@ export const AFFECTION_MAX = 100
 
 // 現在レベルから次レベルへ上がるのに必要な経験値（レベル×10）。レベルごとに0から貯める
 export const expForLevel = (lv) => (lv || 1) * 10
-export const MAX_LEVEL = 50
+export const MAX_LEVEL = 50            // 進化前のレベル上限
+export const MAX_LEVEL_EVOLVED = 100   // 進化後のレベル上限
+export const EVOLVE_LEVEL = 50         // この Lv で進化できる
+export const EVOLVE_MULT = 1.5         // 進化時に現在ステを ×1.5
+export const EVOLVE_GROW_MULT = 2      // 進化後はレベル成長量 ×2
+// 進化後のレベル上限（種族に evolve 定義があり進化済みなら100）
+export const petMaxLevel = (pet) => (pet?.evolved ? MAX_LEVEL_EVOLVED : MAX_LEVEL)
+// 進化可能か（Lv50到達・未進化・進化形が定義されている）
+export const canEvolve = (pet) => !!pet && !pet.evolved && (pet.level || 1) >= EVOLVE_LEVEL && !!(SPECIES[pet.species]?.evolve)
+// 進化後の名前（未定義なら null）
+export const evolvedName = (pet) => SPECIES[pet?.species]?.evolve?.label || null
 
-// ペットの現在ステータス（種族＋レベル）
+// 1ステの値を算出。進化後は「Lv50時点ステ×1.5」を基点に、以降は成長量×2でLv100まで伸びる
+//  ・未進化: base + grow*(lv-1)
+//  ・進化済: (base + grow*49)*1.5 + grow*2*(lv-50)   ← 進化はLv50固定なので「現在ステ×1.5」と一致
+function statValue(base, grow, lv, evolved) {
+  if (!evolved) return base + grow * (lv - 1)
+  const base50 = base + grow * (EVOLVE_LEVEL - 1)
+  return base50 * EVOLVE_MULT + grow * EVOLVE_GROW_MULT * Math.max(0, lv - EVOLVE_LEVEL)
+}
+
+// ペットの現在ステータス（種族＋レベル＋進化状態）
 export function petStats(pet) {
   const sp = SPECIES[pet.species] || SPECIES.flame
   const lv = pet.level || 1
+  const evo = !!pet.evolved
   return {
-    maxHp:  Math.round(sp.base.hp + sp.grow.hp * (lv - 1)),
-    atk:    Math.round(sp.base.atk + sp.grow.atk * (lv - 1)),
-    def:    Math.round(sp.base.def + sp.grow.def * (lv - 1)),
-    mdef:   Math.round(sp.base.mdef + sp.grow.mdef * (lv - 1)),
+    maxHp:  Math.round(statValue(sp.base.hp,   sp.grow.hp,   lv, evo)),
+    atk:    Math.round(statValue(sp.base.atk,  sp.grow.atk,  lv, evo)),
+    def:    Math.round(statValue(sp.base.def,  sp.grow.def,  lv, evo)),
+    mdef:   Math.round(statValue(sp.base.mdef, sp.grow.mdef, lv, evo)),
     atkType: sp.atkType,
   }
 }
@@ -127,8 +147,12 @@ export const DUNGEON_ITEMS = Object.values(PET_ITEMS).filter((i) => i.dungeon)
 export const CAPPED_ITEMS = Object.values(PET_ITEMS).filter((i) => i.capped)
 
 export function speciesLabel(pet) {
-  return (SPECIES[pet.species] || {}).label || '???'
+  const sp = SPECIES[pet?.species] || {}
+  if (pet?.evolved && sp.evolve) return sp.evolve.label
+  return sp.label || '???'
 }
 export function speciesEmoji(pet) {
-  return (SPECIES[pet.species] || {}).emoji || '🐾'
+  const sp = SPECIES[pet?.species] || {}
+  if (pet?.evolved && sp.evolve) return sp.evolve.emoji || sp.emoji
+  return sp.emoji || '🐾'
 }

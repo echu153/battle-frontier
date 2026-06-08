@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { SPECIES, STARTERS, SKILLS, MAX_SKILL_SLOTS, SHOP_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX, atkLabel } from '../constants/pets'
+import { SPECIES, STARTERS, SKILLS, MAX_SKILL_SLOTS, SHOP_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX, atkLabel, canEvolve, petMaxLevel, evolvedName } from '../constants/pets'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 // ペット画像はペットページでアップロードしたものだけを使う（avatars/<uid>/pets/ 配下）
@@ -91,6 +91,17 @@ export default function Pets() {
     await supabase.from('pets').update({ is_active: true }).eq('id', pet.id)
     setLoading(false)
     flash(`${pet.name} を選択した`)
+    await fetchAll()
+  }
+
+  const doEvolve = async (pet) => {
+    const next = evolvedName(pet)
+    if (!window.confirm(`${pet.name}（${speciesLabel(pet)}）を ${next} に進化させます。\n進化すると現在ステータスが1.5倍になり、以降はレベル100まで成長量が2倍になります。よろしいですか？`)) return
+    setLoading(true)
+    const { error } = await supabase.rpc('pet_evolve', { p_pet_id: pet.id })
+    setLoading(false)
+    if (error) { flash('進化に失敗: ' + error.message); return }
+    flash(`✨ ${pet.name} は ${next} に進化した！`)
     await fetchAll()
   }
 
@@ -217,8 +228,8 @@ export default function Pets() {
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <Portrait pet={selected} size={64} />
           <div style={{ flex: 1 }}>
-            <div style={{ color: '#cce6ff', fontSize: 15 }}>{selected.name} <span style={{ color: '#6699cc', fontSize: 11 }}>({speciesLabel(selected)})</span></div>
-            <div style={{ color: '#88bbee', fontSize: 12, marginTop: 4 }}>Lv{selected.level}　HP{sst.maxHp} / {atkLabel(selected)}{sst.atk} / 防{sst.def} / 特防{sst.mdef}</div>
+            <div style={{ color: '#cce6ff', fontSize: 15 }}>{selected.name} <span style={{ color: selected.evolved ? '#ffcc66' : '#6699cc', fontSize: 11 }}>({speciesLabel(selected)}{selected.evolved ? '・進化' : ''})</span></div>
+            <div style={{ color: '#88bbee', fontSize: 12, marginTop: 4 }}>Lv{selected.level}/{petMaxLevel(selected)}　HP{sst.maxHp} / {atkLabel(selected)}{sst.atk} / 防{sst.def} / 特防{sst.mdef}</div>
             <div style={{ color: '#6699cc', fontSize: 11, marginTop: 2 }}>EXP {selected.exp} / {need}</div>
             <div style={{ color: '#ffaacc', fontSize: 11, marginTop: 2 }}>なつき {selected.affection}/{AFFECTION_MAX}（ステータス変換 +{conv}%）</div>
           </div>
@@ -228,6 +239,7 @@ export default function Pets() {
             ? <Btn onClick={() => !loading && doSkinship(selected)}>🤲 スキンシップ（なつき+1・あと{skinshipRemaining(selected)}回）</Btn>
             : <span style={{ background: '#0a0f1a', border: '1px solid #223344', color: '#556677', padding: '6px 12px', fontSize: 12 }}>🤲 スキンシップ済み</span>}
           {!selected.is_active && <Btn onClick={() => !loading && setActive(selected)}>このペットを選択する</Btn>}
+          {canEvolve(selected) && <Btn onClick={() => !loading && doEvolve(selected)}>✨ 進化させる（→{evolvedName(selected)}）</Btn>}
           {(items.rename || 0) > 0 && !renaming && <Btn onClick={() => { setRenaming(true); setRenameInput(selected.name) }}>🎫 ニックネーム変更券で改名（{items.rename}枚）</Btn>}
         </div>
         {renaming && (

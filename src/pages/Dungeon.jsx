@@ -218,7 +218,7 @@ export default function Dungeon() {
     addLog(`⚔ ${name}を撃破！ ＋EXP${data.exp_gain}${data.leveled ? `（Lv${data.level}に！）` : ''}`)
     setPet((p) => {
       if (!p?.species) return p
-      const st = petStats({ species: p.species, level: data.level })
+      const st = petStats({ species: p.species, level: data.level, evolved: p.evolved })
       return { ...p, level: data.level, exp: data.exp, ...st }
     })
   }, [])
@@ -275,7 +275,7 @@ export default function Dungeon() {
       if (ap) {
         const st = petStats(ap)
         const slots = Array.isArray(ap.skill_slots) && ap.skill_slots.length ? ap.skill_slots : ['tackle']
-        setPet({ id: ap.id, species: ap.species, name: ap.name, emoji: speciesEmoji(ap), image_url: ap.image_url, skillSlots: slots, level: ap.level, exp: ap.exp, ...st })
+        setPet({ id: ap.id, species: ap.species, evolved: ap.evolved, name: ap.name, emoji: speciesEmoji(ap), image_url: ap.image_url, skillSlots: slots, level: ap.level, exp: ap.exp, ...st })
         setSelectedSkill(slots[0])
         setPetHp(st.maxHp)
       }
