@@ -1701,6 +1701,9 @@ export default function Game() {
       return bonusExp
     }
 
+    // 報酬処理は途中で例外が出ても必ず loading を解除し結果を表示する
+    // （強化石/熟練度/宝石ダンジョンが「戦闘中...」のまま固まる不具合への対策）
+    try {
     if (type === 'exp') {
       const expGained = Math.floor(50 + Math.random() * 51)
       const currentClassLvD = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
@@ -1758,7 +1761,7 @@ export default function Game() {
           while (totalExp >= 100) { totalExp -= 100; newProfLv++ }
 
           await supabase.from('proficiency').update({ prof_exp:totalExp, prof_lv:newProfLv }).eq('id', prof.id)
-          if (newProfLv > prof.prof_lv) logs.push({ text:`⚔ 武器熟練度UP！ ${getProfPrefix(newProfLv)}${eqWeapon.weapons.name} LV${newProfLv}`, color:'#aa44ff' })
+          if (newProfLv > prof.prof_lv) logs.push({ text:`⚔ 武器熟練度UP！ ${getProfPrefix(newProfLv)}${eqWeapon.weapons?.name || '武器'} LV${newProfLv}`, color:'#aa44ff' })
           logs.push({ text:`⚔ 武器熟練度 +${profGained}`, color:'#aa44ff' })
         } else {
           logs.push({ text:`武器熟練度なし`, color:'#446688' })
@@ -1802,9 +1805,14 @@ export default function Game() {
     }
     await supabase.from('profiles').update({ last_action_at: new Date().toISOString() }).eq('id', profile.id)
     setDungeonCounts(prev => ({ ...prev, [type]: newCount }))
-    setBattleLogs(logs)
     await fetchProfile()
-    setLoading(false)
+    } catch (e) {
+      console.error('doDungeon error:', e)
+      logs.push({ text:`⚠ 報酬処理でエラーが発生しました（${e?.message || e}）`, color:'#ff8844' })
+    } finally {
+      setBattleLogs([...logs])
+      setLoading(false)
+    }
   }
 
   const DEV_ACCOUNTS = ['おれおれお']  // 開発者アカウント
