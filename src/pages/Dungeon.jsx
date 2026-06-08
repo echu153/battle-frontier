@@ -111,13 +111,14 @@ const roomOf = (rooms, x, y) => rooms.find((r) => x >= r.x && x < r.x + r.w && y
 function computeVisible(rooms, px, py) {
   const vis = new Set()
   const add = (x, y) => { if (inBounds(x, y)) vis.add(x + ',' + y) }
-  // 周囲（通路・全般）：自分中心の6x6相当(±3)を見せる。縁は上から重ねる円ビネットでぼかす
-  for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) add(px + dx, py + dy)
-  // 部屋にいるなら部屋全体＋外周1マス
   const room = roomOf(rooms, px, py)
   if (room) {
+    // 部屋にいるとき：部屋全体＋外周1マスのみ（通路は1マスだけ覗ける）
     for (let y = room.y - 1; y <= room.y + room.h; y++)
       for (let x = room.x - 1; x <= room.x + room.w; x++) add(x, y)
+  } else {
+    // 通路にいるとき：自分中心の6x6相当(±3)。縁は上から重ねる円ビネットでぼかす
+    for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) add(px + dx, py + dy)
   }
   return vis
 }
