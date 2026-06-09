@@ -204,6 +204,15 @@ export const CHARMS = {
   guard:    { type: 'guard',    name: '守りのチャーム',     emoji: '🛡️', effect: 'guard',    desc: '防御＋10%' },
 }
 export const getCharm = (t) => CHARMS[t] || CHARMS.hajimari
+// 装備チャームをプレイヤー本体ステへ反映する分を返す（攻→atk / 特攻→matk / 特防→mdef）
+export function charmPlayerBonus(charm) {
+  if (!charm) return null
+  return {
+    hp: charm.hp || 0, atk: charm.atk || 0, matk: charm.spatk || 0, def: charm.def || 0, mdef: charm.spdef || 0,
+    guard: getCharm(charm.ctype).effect === 'guard',       // 防御+10%
+    antidote: getCharm(charm.ctype).effect === 'antidote', // 毒確率50%減
+  }
+}
 // チャームのステ成長を加算したペットステを返す（ダンジョン/反映で使用）
 export function applyCharmStats(stats, charm) {
   if (!charm) return stats
