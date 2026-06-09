@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { SPECIES, STARTERS, SKILLS, skillsForSpecies, MAX_SKILL_SLOTS, SHOP_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage, assetSrc, getCharm } from '../constants/pets'
+import { SPECIES, STARTERS, SKILLS, skillsForSpecies, MAX_SKILL_SLOTS, SHOP_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage, assetSrc, getCharm, charmDisplayName, charmHpBonus } from '../constants/pets'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 // ペット画像はペットページでアップロードしたものだけを使う（avatars/<uid>/pets/ 配下）
@@ -324,8 +324,8 @@ export default function Pets() {
             return (
               <>
                 <div style={{ color: '#cce6ff', fontSize: 12, marginBottom: 6 }}>
-                  装備中：{cdef.emoji} {cdef.name} <span style={{ color: '#6699cc', fontSize: 10 }}>{cdef.desc}</span>
-                  {grown ? <span style={{ color: '#88ffaa', fontSize: 10 }}>　HP+{equipped.hp} 攻+{equipped.atk} 特攻+{equipped.spatk} 防+{equipped.def} 特防+{equipped.spdef}</span> : null}
+                  装備中：{cdef.emoji} {equipped ? charmDisplayName(equipped) : cdef.name} <span style={{ color: '#6699cc', fontSize: 10 }}>{cdef.desc}</span>
+                  {grown ? <span style={{ color: '#88ffaa', fontSize: 10 }}>　HP+{charmHpBonus(equipped)} 攻+{equipped.atk} 特攻+{equipped.spatk} 防+{equipped.def} 特防+{equipped.spdef}</span> : null}
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {charms.map((c) => {
@@ -333,12 +333,12 @@ export default function Pets() {
                     return (
                       <button key={c.id} onClick={() => !loading && !on && equipCharm(c.id)}
                         style={{ background: on ? '#170f2a' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: '#cce6ff', padding: '5px 8px', cursor: on ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
-                        {on ? '✓ ' : ''}{d.emoji} {d.name}
+                        {on ? '✓ ' : ''}{d.emoji} {charmDisplayName(c)}
                       </button>
                     )
                   })}
                 </div>
-                <div style={{ color: '#557799', fontSize: 10, marginTop: 6 }}>※強化・継承はチャームページ（次回実装）で。素はダンジョンで拾える</div>
+                <div style={{ color: '#557799', fontSize: 10, marginTop: 6 }}>※強化・継承はチャームページで。素はダンジョンで拾える</div>
               </>
             )
           })()}

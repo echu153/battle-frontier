@@ -188,7 +188,7 @@ export const PET_ITEMS = {
   spatk_seed: { key: 'spatk_seed', name: '特攻の素',  emoji: '🟣', price: 0, dungeon: false, capped: true, seed: 'spatk', up: 1,  desc: 'チャームの特攻を+1' },
   def_seed:   { key: 'def_seed',   name: '防御の素',  emoji: '🔵', price: 0, dungeon: false, capped: true, seed: 'def',   up: 1,  desc: 'チャームの防御を+1' },
   spdef_seed: { key: 'spdef_seed', name: '特防の素',  emoji: '🟢', price: 0, dungeon: false, capped: true, seed: 'spdef', up: 1,  desc: 'チャームの特防を+1' },
-  hp_seed:    { key: 'hp_seed',    name: 'HPの素',    emoji: '🟡', price: 0, dungeon: false, capped: true, seed: 'hp',    up: 10, desc: 'チャームのHPを+10' },
+  hp_seed:    { key: 'hp_seed',    name: 'HPの素',    emoji: '🟡', price: 0, dungeon: false, capped: true, seed: 'hp',    up: 5,  desc: 'チャームのHPを+5（消費1）' },
 }
 export const SHOP_ITEMS = Object.values(PET_ITEMS).filter((i) => !i.seed)   // 商店は素を除く
 export const SEED_ITEMS = Object.values(PET_ITEMS).filter((i) => i.seed)
@@ -196,19 +196,31 @@ export const DUNGEON_ITEMS = Object.values(PET_ITEMS).filter((i) => i.dungeon)
 export const CAPPED_ITEMS = Object.values(PET_ITEMS).filter((i) => i.capped)
 
 // チャーム定義。effect: null=なし / 'antidote'=毒確率50%減 / 'guard'=防御+10%
-export const CHARM_STAT_MAX = 100
+// 強化は「素の合計使用数」が CHARM_TOTAL_MAX(150) まで。各素は消費1。HPの素のみ1個=HP+5、他は1個=+1
+export const CHARM_TOTAL_MAX = 150
+export const CHARM_HP_PER = 5
 export const CHARM_STATS = ['hp', 'atk', 'spatk', 'def', 'spdef']
 export const CHARMS = {
-  hajimari: { type: 'hajimari', name: 'はじまりのチャーム', emoji: '🔰', effect: null,       desc: '追加能力なし（最初の装備）' },
+  hajimari: { type: 'hajimari', name: 'はじまりのチャーム', emoji: '🔰', effect: null,       desc: '追加能力なし' },
   antidote: { type: 'antidote', name: '解毒のチャーム',     emoji: '🧪', effect: 'antidote', desc: '毒になる確率が50%減る' },
   guard:    { type: 'guard',    name: '守りのチャーム',     emoji: '🛡️', effect: 'guard',    desc: '防御＋10%' },
 }
 export const getCharm = (t) => CHARMS[t] || CHARMS.hajimari
-// 装備チャームをプレイヤー本体ステへ反映する分を返す（攻→atk / 特攻→matk / 特防→mdef）
+// 使用した素の合計数（=強化ゲージ。CHARM_TOTAL_MAX まで）
+export const charmTotal = (c) => (c?.atk || 0) + (c?.spatk || 0) + (c?.def || 0) + (c?.spdef || 0) + (c?.hp || 0)
+// HPボーナス（HPの素は1個=+CHARM_HP_PER）。hp列は「使った個数」を保持
+export const charmHpBonus = (c) => (c?.hp || 0) * CHARM_HP_PER
+// 表示名（素を使った分だけ ＋N がつく）
+export function charmDisplayName(charm) {
+  const base = getCharm(charm?.ctype).name
+  const t = charmTotal(charm)
+  return t > 0 ? `${base}＋${t}` : base
+}
+// 装備チャームをプレイヤー本体ステへ反映する分（攻→atk / 特攻→matk / 特防→mdef / HPは×CHARM_HP_PER）
 export function charmPlayerBonus(charm) {
   if (!charm) return null
   return {
-    hp: charm.hp || 0, atk: charm.atk || 0, matk: charm.spatk || 0, def: charm.def || 0, mdef: charm.spdef || 0,
+    hp: charmHpBonus(charm), atk: charm.atk || 0, matk: charm.spatk || 0, def: charm.def || 0, mdef: charm.spdef || 0,
     guard: getCharm(charm.ctype).effect === 'guard',       // 防御+10%
     antidote: getCharm(charm.ctype).effect === 'antidote', // 毒確率50%減
   }
@@ -217,7 +229,7 @@ export function charmPlayerBonus(charm) {
 export function applyCharmStats(stats, charm) {
   if (!charm) return stats
   let { maxHp, atk, def, mdef } = stats
-  maxHp += charm.hp || 0
+  maxHp += charmHpBonus(charm)
   // 物理ペットは atk、特殊ペットは spatk をそのまま atk に加算
   atk += (stats.atkType === 'spec' ? (charm.spatk || 0) : (charm.atk || 0))
   def += charm.def || 0

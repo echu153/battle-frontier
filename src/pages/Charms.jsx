@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { CHARMS, getCharm, CHARM_STAT_MAX } from '../constants/pets'
+import { getCharm, CHARM_TOTAL_MAX, CHARM_HP_PER, charmDisplayName, charmTotal } from '../constants/pets'
 
-// チャームの能力と、対応する素アイテムキー・上げ幅
+// チャームの能力と、対応する素アイテムキー・1個あたりの上昇量（HPのみ+5、消費は全て1）
 const STAT_META = {
-  hp:    { label: 'HP',   seed: 'hp_seed',    emoji: '🟡', step: 10 },
-  atk:   { label: '攻撃', seed: 'atk_seed',   emoji: '🔴', step: 1 },
-  spatk: { label: '特攻', seed: 'spatk_seed', emoji: '🟣', step: 1 },
-  def:   { label: '防御', seed: 'def_seed',   emoji: '🔵', step: 1 },
-  spdef: { label: '特防', seed: 'spdef_seed', emoji: '🟢', step: 1 },
+  hp:    { label: 'HP',   seed: 'hp_seed',    emoji: '🟡', per: CHARM_HP_PER },
+  atk:   { label: '攻撃', seed: 'atk_seed',   emoji: '🔴', per: 1 },
+  spatk: { label: '特攻', seed: 'spatk_seed', emoji: '🟣', per: 1 },
+  def:   { label: '防御', seed: 'def_seed',   emoji: '🔵', per: 1 },
+  spdef: { label: '特防', seed: 'spdef_seed', emoji: '🟢', per: 1 },
 }
 const STAT_KEYS = ['hp', 'atk', 'spatk', 'def', 'spdef']
 
@@ -82,9 +82,9 @@ export default function Charms() {
     <button onClick={onClick} style={{ background: dim ? '#0a1424' : '#001840', border: `1px solid ${dim ? '#335588' : '#0088ff'}`, color: dim ? '#88aacc' : '#0088ff', padding: '5px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>{children}</button>
   )
 
-  const Bar = ({ value }) => (
+  const Bar = ({ value, max }) => (
     <div style={{ flex: 1, height: 8, background: '#0a1424', border: '1px solid #223a55', position: 'relative' }}>
-      <div style={{ width: `${(value / CHARM_STAT_MAX) * 100}%`, height: '100%', background: value >= CHARM_STAT_MAX ? '#ffcc44' : '#44aaff' }} />
+      <div style={{ width: `${Math.min(100, (value / max) * 100)}%`, height: '100%', background: value >= max ? '#ffcc44' : '#44aaff' }} />
     </div>
   )
 
@@ -118,39 +118,50 @@ export default function Charms() {
             {/* チャーム選択 */}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
               {charms.map((c) => {
-                const d = getCharm(c.ctype); const on = c.id === selId
+                const on = c.id === selId
                 return (
                   <button key={c.id} onClick={() => setSelId(c.id)}
                     style={{ background: on ? '#170f2a' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: '#cce6ff', padding: '5px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
-                    {d.emoji} {d.name}{equippedBy(c.id) ? `（${equippedBy(c.id)}）` : ''}
+                    {getCharm(c.ctype).emoji} {charmDisplayName(c)}{equippedBy(c.id) ? `（${equippedBy(c.id)}）` : ''}
                   </button>
                 )
               })}
             </div>
-            {sel && (
+            {sel && (() => {
+              const total = charmTotal(sel); const full = total >= CHARM_TOTAL_MAX
+              return (
               <div style={{ border: '1px solid #335588', background: '#00102a', padding: 12 }}>
-                <div style={{ color: '#cce6ff', fontSize: 14, marginBottom: 2 }}>{getCharm(sel.ctype).emoji} {getCharm(sel.ctype).name}</div>
-                <div style={{ color: '#6699cc', fontSize: 10, marginBottom: 10 }}>{getCharm(sel.ctype).desc}</div>
+                <div style={{ color: '#cce6ff', fontSize: 14, marginBottom: 2 }}>{getCharm(sel.ctype).emoji} {charmDisplayName(sel)}</div>
+                <div style={{ color: '#6699cc', fontSize: 10, marginBottom: 8 }}>{getCharm(sel.ctype).desc}</div>
+                {/* 強化ゲージ（全能力の合計／150） */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <span style={{ width: 64, fontSize: 11, color: '#aa88ff' }}>強化合計</span>
+                  <Bar value={total} max={CHARM_TOTAL_MAX} />
+                  <span style={{ width: 52, fontSize: 11, textAlign: 'right', color: full ? '#ffcc44' : '#88bbee' }}>{total}/{CHARM_TOTAL_MAX}</span>
+                </div>
                 {STAT_KEYS.map((stat) => {
-                  const meta = STAT_META[stat]; const val = sel[stat] || 0; const have = seeds[meta.seed] || 0; const full = val >= CHARM_STAT_MAX
+                  const meta = STAT_META[stat]; const cnt = sel[stat] || 0; const have = seeds[meta.seed] || 0
+                  const shown = cnt * meta.per // 表示上の上昇値（HPは×5）
+                  const dis = full || have === 0
                   return (
-                    <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                      <input type="checkbox" checked={!!checked[stat]} onChange={(e) => setChecked((c) => ({ ...c, [stat]: e.target.checked }))} disabled={full || have === 0} />
+                    <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+                      <input type="checkbox" checked={!!checked[stat]} onChange={(e) => setChecked((c) => ({ ...c, [stat]: e.target.checked }))} disabled={dis} />
                       <span style={{ width: 64, fontSize: 11, color: '#cce6ff' }}>{meta.emoji}{meta.label}</span>
-                      <Bar value={val} />
-                      <span style={{ width: 52, fontSize: 11, textAlign: 'right', color: full ? '#ffcc44' : '#88bbee' }}>{val}/{CHARM_STAT_MAX}</span>
-                      <button onClick={() => !loading && enhance(sel.id, stat, 1)} disabled={full || have === 0}
-                        style={{ background: (full || have === 0) ? '#0a0f1a' : '#001830', border: `1px solid ${(full || have === 0) ? '#223344' : '#0088cc'}`, color: (full || have === 0) ? '#445' : '#00aaff', padding: '3px 8px', cursor: (full || have === 0) ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
-                        +{meta.step}（素{have}）
+                      <span style={{ flex: 1, fontSize: 11, color: '#88bbee' }}>+{shown}{stat === 'hp' && cnt > 0 ? `（${cnt}個）` : ''}</span>
+                      <span style={{ fontSize: 10, color: '#557799' }}>素{have}</span>
+                      <button onClick={() => !loading && enhance(sel.id, stat, 1)} disabled={dis}
+                        style={{ background: dis ? '#0a0f1a' : '#001830', border: `1px solid ${dis ? '#223344' : '#0088cc'}`, color: dis ? '#445' : '#00aaff', padding: '3px 8px', cursor: dis ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                        +{meta.per}
                       </button>
                     </div>
                   )
                 })}
                 <div style={{ marginTop: 6 }}>
-                  <Btn onClick={() => !loading && bulkEnhance(sel)}>✅ 選択した能力をまとめて強化（素を全部使う）</Btn>
+                  <Btn onClick={() => !loading && bulkEnhance(sel)}>✅ 選択した能力をまとめて強化（合計150まで素を使う）</Btn>
                 </div>
               </div>
-            )}
+              )
+            })()}
           </>
         )}
 
@@ -166,7 +177,7 @@ export default function Charms() {
                     return (
                       <button key={c.id} onClick={() => setter(c.id)}
                         style={{ background: on ? '#170f2a' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: '#cce6ff', padding: '5px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
-                        {on ? '✓ ' : ''}{d.emoji} {d.name}（HP{c.hp}/攻{c.atk}/特攻{c.spatk}/防{c.def}/特防{c.spdef}）
+                        {on ? '✓ ' : ''}{d.emoji} {charmDisplayName(c)}（HP+{(c.hp || 0) * CHARM_HP_PER}/攻+{c.atk}/特攻+{c.spatk}/防+{c.def}/特防+{c.spdef}）
                       </button>
                     )
                   })}
@@ -185,7 +196,7 @@ export default function Charms() {
           <div onClick={() => !loading && setConfirm(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
             <div onClick={(e) => e.stopPropagation()} style={{ background: '#0a0820', border: '1px solid #aa88ff', padding: 20, maxWidth: 340, width: '100%', textAlign: 'center', fontFamily: 'monospace' }}>
               <div style={{ color: '#cce6ff', fontSize: 14, marginBottom: 12 }}>
-                {f && getCharm(f.ctype).name} の能力を<br />{t && getCharm(t.ctype).name} へ継承します。<br /><span style={{ color: '#ff8866' }}>{f && getCharm(f.ctype).name} は消えます。</span><br />よろしいですか？
+                {f && charmDisplayName(f)} の能力を<br />{t && charmDisplayName(t)} へ継承します。<br /><span style={{ color: '#ff8866' }}>{f && charmDisplayName(f)} は消えます。</span><br />よろしいですか？
               </div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
                 <Btn onClick={() => !loading && setConfirm(false)} dim>やめる</Btn>

@@ -53,28 +53,29 @@ begin
   update pets set charm_id = p_charm_id where id = p_pet_id and owner_id = auth.uid();
 end; $$;
 
--- 強化：素(pet_items)を消費してチャームの1ステを上げる（上限100／HPは10刻み）
+-- 強化：素(pet_items)を消費してチャームの1ステ列(=使用個数)を上げる。
+--  各素は消費1。全ステの合計(使用個数)は 150 まで。HPの素のみ表示上 1個=HP+5（列には個数を保存）
 --  p_stat: 'atk'|'spatk'|'def'|'spdef'|'hp' / p_times: 使用する素の個数
 create or replace function pet_charm_enhance(p_charm_id uuid, p_stat text, p_times int default 1)
 returns json language plpgsql security definer set search_path = public as $$
-declare v_key text; v_have int; v_cur int; v_step int; v_use int; v_room int;
+declare v_key text; v_have int; v_total int; v_use int; v_room int; c player_charms%rowtype;
 begin
   if p_times is null or p_times < 1 then raise exception 'bad times'; end if;
-  if not exists (select 1 from player_charms where id = p_charm_id and owner_id = auth.uid()) then raise exception 'charm not found'; end if;
+  select * into c from player_charms where id = p_charm_id and owner_id = auth.uid();
+  if not found then raise exception 'charm not found'; end if;
   v_key := case p_stat when 'atk' then 'atk_seed' when 'spatk' then 'spatk_seed' when 'def' then 'def_seed'
                        when 'spdef' then 'spdef_seed' when 'hp' then 'hp_seed' else null end;
   if v_key is null then raise exception 'bad stat'; end if;
-  v_step := case when p_stat = 'hp' then 10 else 1 end;
 
-  execute format('select %I from player_charms where id = $1', p_stat) into v_cur using p_charm_id;
-  v_room := floor((100 - v_cur) / v_step);                 -- あと何回上げられるか
+  v_total := c.atk + c.spatk + c.def + c.spdef + c.hp;   -- 既に使った素の合計
+  v_room := 150 - v_total;                               -- あと使える数
   select coalesce(qty,0) into v_have from pet_items where owner_id = auth.uid() and item_key = v_key;
   v_use := least(p_times, v_have, v_room);
   if v_use <= 0 then raise exception 'cannot enhance'; end if;
 
   update pet_items set qty = qty - v_use where owner_id = auth.uid() and item_key = v_key;
-  execute format('update player_charms set %I = %I + $1 where id = $2', p_stat, p_stat) using v_use * v_step, p_charm_id;
-  return json_build_object('used', v_use, 'stat', p_stat, 'gained', v_use * v_step);
+  execute format('update player_charms set %I = %I + $1 where id = $2', p_stat, p_stat) using v_use, p_charm_id;
+  return json_build_object('used', v_use, 'stat', p_stat);
 end; $$;
 
 -- 継承：継承元(p_from)の成長値を継承先(p_to)へ移し、元のチャームは削除する
@@ -86,10 +87,9 @@ begin
   select * into f from player_charms where id = p_from and owner_id = auth.uid();
   if not found then raise exception 'from not found'; end if;
   if not exists (select 1 from player_charms where id = p_to and owner_id = auth.uid()) then raise exception 'to not found'; end if;
-  -- 継承先に元の成長値をコピー（上限100／HP10刻みは値が既にその刻みなので維持）
+  -- 継承先に元の成長値（使用個数）をそのままコピー（合計は元々150以下）
   update player_charms set
-    atk = least(100, f.atk), spatk = least(100, f.spatk), def = least(100, f.def),
-    spdef = least(100, f.spdef), hp = least(100, f.hp)
+    atk = f.atk, spatk = f.spatk, def = f.def, spdef = f.spdef, hp = f.hp
     where id = p_to and owner_id = auth.uid();
   -- 装備していたペットがいれば外す → 元チャーム削除
   update pets set charm_id = null where charm_id = p_from and owner_id = auth.uid();
