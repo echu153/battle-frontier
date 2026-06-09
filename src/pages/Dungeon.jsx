@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, INV_MAX, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT } from '../constants/pets'
 import { AREAS, generateDropBonus, ARTIFACT_BASE_NAMES, GEM_TYPES, GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
@@ -422,6 +422,9 @@ export default function Dungeon() {
   // side: 'left'=自分/全般 / 'right'=敵の行動
   const addLog = (msg, side = 'left') => setLog((l) => [{ msg, side }, ...l].slice(0, 30))
 
+  // 持ち物の合計数（だっしゅつの翼は対象外＝消耗品＋戦利品）。INV_MAX を超えたら拾えない
+  const bagCount = () => Object.entries(inventory).filter(([k]) => k !== 'escape').reduce((s, [, q]) => s + (q || 0), 0) + lootBag.length
+
   const tryMove = (dx, dy) => {
     if (!state || status !== 'exploring' || busyRef.current) return
     let s = state
@@ -466,7 +469,11 @@ export default function Dungeon() {
       // アイテム取得
       const itemHere = s.items.find((it) => it.x === nx && it.y === ny)
       let items = s.items
-      if (itemHere) {
+      const isEscapePickup = itemHere && itemHere.kind === 'dropFood' && itemHere.key === 'escape'
+      if (itemHere && !isEscapePickup && bagCount() >= INV_MAX) {
+        // 持ち物が満杯：拾わずに床へ残す（プレイヤーはマスへ進む）
+        addLog('🎒 持ち物がいっぱいで拾えない（何か捨ててから）')
+      } else if (itemHere) {
         items = items.filter((it) => it.id !== itemHere.id); itemsRef.current += 1
         if (itemHere.kind === 'food') {
           // 床の消耗品をアイテム袋へ
@@ -865,7 +872,7 @@ export default function Dungeon() {
           return (
             <div style={{ marginTop: 12, background: '#000610', border: `1px solid ${dropMode ? '#cc7755' : '#113355'}`, padding: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <div style={{ color: '#88aacc', fontSize: 11 }}>🎒 持ち物 {dropMode && <span style={{ color: '#ff9966' }}>（捨てるモード：押すと足元に置く）</span>}</div>
+                <div style={{ color: '#88aacc', fontSize: 11 }}>🎒 持ち物 <span style={{ color: bagCount() >= INV_MAX ? '#ff7777' : '#5e7fa0' }}>{bagCount()}/{INV_MAX}</span>（翼は対象外）{dropMode && <span style={{ color: '#ff9966' }}>　捨てるモード：押すと足元に置く</span>}</div>
                 <button onClick={() => setDropMode((d) => !d)}
                   style={{ background: dropMode ? '#2a1000' : '#0a1424', border: `1px solid ${dropMode ? '#ff9966' : '#335588'}`, color: dropMode ? '#ff9966' : '#88aacc', padding: '3px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
                   🗑 捨てる{dropMode ? '（ON）' : ''}

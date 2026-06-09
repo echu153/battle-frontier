@@ -181,7 +181,7 @@ export const INV_MAX = 20
 export const PET_ITEMS = {
   escape:  { key: 'escape',  name: 'だっしゅつの翼',   emoji: '🪽', price: 500,   dungeon: true,  capped: false, desc: 'ダンジョンからいつでも脱出（使い切り・袋の対象外）' },
   onigiri: { key: 'onigiri', name: 'おにぎり',         emoji: '🍙', price: 200,   dungeon: true,  capped: true, fullness: 30, desc: '満腹度を30回復' },
-  konomi:  { key: 'konomi',  name: '木の実',           emoji: '🌰', price: 300,   dungeon: true,  capped: true, healPct: 0.2, desc: '最大HPの20%を回復' },
+  konomi:  { key: 'konomi',  name: '木の実',           emoji: '🍒', price: 300,   dungeon: true,  capped: true, healPct: 0.2, desc: '最大HPの20%を回復' },
   rename:  { key: 'rename',  name: 'ニックネーム変更券', emoji: '🎫', price: 10000, dungeon: false, capped: true,  desc: 'ペットの名前を変更できる' },
 }
 export const SHOP_ITEMS = Object.values(PET_ITEMS)
