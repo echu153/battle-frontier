@@ -93,8 +93,8 @@ export const getDungeon = (id) => DUNGEONS.find((d) => d.id === id) || DUNGEONS[
 
 // 敵の表示画像を決める（images配列があればランダムで1枚、無ければimage、どちらも無ければnull）
 export function pickEnemyImage(kind) {
-  if (kind?.images?.length) return kind.images[Math.floor(Math.random() * kind.images.length)]
-  return kind?.image || null
+  const img = kind?.images?.length ? kind.images[Math.floor(Math.random() * kind.images.length)] : (kind?.image || null)
+  return assetSrc(img)
 }
 
 export function enemiesForFloor(dungeon, floor) {
@@ -156,13 +156,18 @@ export function speciesEmoji(pet) {
   if (pet?.evolved && sp.evolve) return sp.evolve.emoji || sp.emoji
   return sp.emoji || '🐾'
 }
+// 画像キャッシュ対策：public/ の画像を「同じ名前で」差し替えたら、この数字を上げると最新が表示される
+export const ASSET_VER = '2'
+// 静的画像(先頭/)にだけ ?v= を付けてキャッシュを無効化。外部URL(http...)はそのまま
+export const assetSrc = (src) => (src && src.startsWith('/') ? `${src}?v=${ASSET_VER}` : src)
+
 // 種族デフォルト画像（進化済みなら進化形イラスト）。未設定なら null
 export function speciesImage(pet) {
   const sp = SPECIES[pet?.species] || {}
-  if (pet?.evolved && sp.evolve?.image) return sp.evolve.image
-  return sp.image || null
+  const img = (pet?.evolved && sp.evolve?.image) ? sp.evolve.image : (sp.image || null)
+  return assetSrc(img)
 }
-// 進化形イラストのパス（進化時にカスタム画像を上書きするのに使う）
+// 進化形イラストの素のパス（進化時に image_url へ保存する用。表示時は petImage が ?v を付ける）
 export const evolvedImage = (pet) => SPECIES[pet?.species]?.evolve?.image || null
 // 実際に表示する画像：カスタム(image_url) 優先、無ければ種族デフォルト
-export const petImage = (pet) => pet?.image_url || speciesImage(pet)
+export const petImage = (pet) => assetSrc(pet?.image_url) || speciesImage(pet)
