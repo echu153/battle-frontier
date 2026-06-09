@@ -232,7 +232,7 @@ export default function Pets() {
       {/* 選択中ペット詳細 */}
       <div style={{ border: '1px solid #335588', background: '#00102a', padding: 12, marginBottom: 14 }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <Portrait pet={selected} size={64} />
+          <Portrait pet={selected} size={110} />
           <div style={{ flex: 1 }}>
             <div style={{ color: '#cce6ff', fontSize: 15 }}>{selected.name} <span style={{ color: selected.evolved ? '#ffcc66' : '#6699cc', fontSize: 11 }}>({speciesLabel(selected)}{selected.evolved ? '・進化' : ''})</span></div>
             <div style={{ color: '#88bbee', fontSize: 12, marginTop: 4 }}>Lv{selected.level}/{petMaxLevel(selected)}　HP{sst.maxHp} / {atkLabel(selected)}{sst.atk} / 防{sst.def} / 特防{sst.mdef}</div>
