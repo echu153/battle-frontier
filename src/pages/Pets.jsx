@@ -21,6 +21,7 @@ export default function Pets() {
   const [renaming, setRenaming] = useState(false)
   const [renameInput, setRenameInput] = useState('')
   const [evolveConfirm, setEvolveConfirm] = useState(null) // 進化確認ポップアップ対象のペット
+  const [evolveDone, setEvolveDone] = useState(null)       // 進化完了ポップアップ対象のペット
 
   useEffect(() => { fetchAll() }, [])
 
@@ -96,8 +97,6 @@ export default function Pets() {
   }
 
   const doEvolve = async (pet) => {
-    const next = evolvedName(pet)
-    setEvolveConfirm(null)
     setLoading(true)
     const { error } = await supabase.rpc('pet_evolve', { p_pet_id: pet.id })
     if (!error) {
@@ -106,8 +105,9 @@ export default function Pets() {
       if (evoImg) await supabase.from('pets').update({ image_url: evoImg }).eq('id', pet.id)
     }
     setLoading(false)
+    setEvolveConfirm(null)
     if (error) { flash('進化に失敗: ' + error.message); return }
-    flash(`✨ ${pet.name} は ${next} に進化した！`)
+    setEvolveDone(pet)   // 同じポップアップで「○○に進化した！」を表示
     await fetchAll()
   }
 
@@ -326,24 +326,36 @@ export default function Pets() {
         </div>
       </div>
 
-      {/* 進化確認ポップアップ（ゲーム内） */}
-      {evolveConfirm && (
-        <div onClick={() => !loading && setEvolveConfirm(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div onClick={(e) => e.stopPropagation()}
-            style={{ background: '#0a0820', border: '1px solid #aa88ff', padding: 22, maxWidth: 320, width: '100%', textAlign: 'center', fontFamily: 'monospace' }}>
-            <div style={{ fontSize: 40, marginBottom: 6 }}>✨</div>
-            <Portrait pet={{ ...evolveConfirm, evolved: true }} size={88} />
-            <div style={{ color: '#cce6ff', fontSize: 14, margin: '12px 0' }}>
-              {evolveConfirm.name} を<br /><span style={{ color: '#ffcc66', fontSize: 16 }}>{evolvedName(evolveConfirm)}</span><br />に進化させますか？
-            </div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 8 }}>
-              <Btn onClick={() => !loading && setEvolveConfirm(null)}>やめる</Btn>
-              <Btn onClick={() => !loading && doEvolve(evolveConfirm)}>進化する</Btn>
+      {/* 進化ポップアップ（確認→完了を同じ画面で表示） */}
+      {(evolveConfirm || evolveDone) && (() => {
+        const target = evolveDone || evolveConfirm
+        const done = !!evolveDone
+        const closeDone = () => { if (!loading) setEvolveDone(null) }
+        return (
+          <div onClick={done ? closeDone : () => !loading && setEvolveConfirm(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div onClick={(e) => e.stopPropagation()}
+              style={{ background: '#0a0820', border: '1px solid #aa88ff', padding: 22, maxWidth: 320, width: '100%', textAlign: 'center', fontFamily: 'monospace' }}>
+              <div style={{ fontSize: 40, marginBottom: 6 }}>✨</div>
+              {/* 確認・完了とも進化後イラストを表示 */}
+              <Portrait pet={{ ...target, evolved: true, image_url: evolvedImage(target) }} size={88} />
+              <div style={{ color: '#cce6ff', fontSize: 14, margin: '12px 0' }}>
+                {done
+                  ? <>{target.name} は<br /><span style={{ color: '#ffcc66', fontSize: 16 }}>{evolvedName(target)}</span><br />に進化した！</>
+                  : <>{target.name} を<br /><span style={{ color: '#ffcc66', fontSize: 16 }}>{evolvedName(target)}</span><br />に進化させますか？</>}
+              </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 8 }}>
+                {done
+                  ? <Btn onClick={closeDone}>とじる</Btn>
+                  : <>
+                      <Btn onClick={() => !loading && setEvolveConfirm(null)}>やめる</Btn>
+                      <Btn onClick={() => !loading && doEvolve(evolveConfirm)}>進化する</Btn>
+                    </>}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </Wrap>
   )
 }
