@@ -20,7 +20,10 @@ create policy pet_items_select_own on pet_items for select using (auth.uid() = o
 -- 価格表（RPCから参照）
 create or replace function pet_item_price(p_key text)
 returns int language sql immutable set search_path = public as $$
-  select case p_key when 'escape' then 500 when 'onigiri' then 200 when 'konomi' then 300 when 'rename' then 10000 else null end;
+  select case p_key
+    when 'escape' then 500 when 'onigiri' then 200 when 'konomi' then 300 when 'rename' then 10000
+    when 'atk_seed' then 0 when 'spatk_seed' then 0 when 'def_seed' then 0 when 'spdef_seed' then 0 when 'hp_seed' then 0
+    else null end;
 $$;
 
 -- アイテム袋(20)の対象アイテム（だっしゅつの翼以外すべて）

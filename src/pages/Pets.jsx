@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { SPECIES, STARTERS, SKILLS, skillsForSpecies, MAX_SKILL_SLOTS, SHOP_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage, assetSrc } from '../constants/pets'
+import { SPECIES, STARTERS, SKILLS, skillsForSpecies, MAX_SKILL_SLOTS, SHOP_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage, assetSrc, getCharm } from '../constants/pets'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 // ペット画像はペットページでアップロードしたものだけを使う（avatars/<uid>/pets/ 配下）
@@ -24,6 +24,7 @@ export default function Pets() {
   const [evolveDone, setEvolveDone] = useState(null)       // 進化完了ポップアップ対象のペット
   const [showShop, setShowShop] = useState(false)          // ペット商店モーダル
   const [buyQty, setBuyQty] = useState({})                 // 商店の購入個数 { key: n }
+  const [charms, setCharms] = useState([])                 // 所持チャーム
 
   useEffect(() => { fetchAll() }, [])
 
@@ -32,6 +33,9 @@ export default function Pets() {
     if (!user) { nav('/login'); return }
     const { data: p } = await supabase.from('profiles').select('id, is_admin, gold').eq('id', user.id).single()
     setProfile(p)
+    try { await supabase.rpc('pet_charm_init') } catch { /* チャーム未導入時は無視 */ }
+    const { data: chs } = await supabase.from('player_charms').select('*').eq('owner_id', user.id)
+    setCharms(chs || [])
     const { data: list } = await supabase.from('pets').select('*').eq('owner_id', user.id).order('created_at')
     setPets(list || [])
     if (list && list.length && !selectedId) setSelectedId(list.find((x) => x.is_active)?.id || list[0].id)
@@ -95,6 +99,16 @@ export default function Pets() {
     await supabase.from('pets').update({ is_active: true }).eq('id', pet.id)
     setLoading(false)
     flash(`${pet.name} を選択した`)
+    await fetchAll()
+  }
+
+  const equipCharm = async (charmId) => {
+    if (!selectedId) return
+    setLoading(true)
+    const { error } = await supabase.rpc('pet_charm_equip', { p_pet_id: selectedId, p_charm_id: charmId })
+    setLoading(false)
+    if (error) { flash('装備に失敗: ' + error.message); return }
+    flash('チャームを装備した')
     await fetchAll()
   }
 
@@ -298,6 +312,36 @@ export default function Pets() {
               )
             })}
           </div>
+        </div>
+
+        {/* チャーム（装備でステ反映。強化/継承はチャームページで＝次回） */}
+        <div style={{ marginTop: 12, borderTop: '1px solid #223a55', paddingTop: 10 }}>
+          <div style={{ color: '#aa88ff', fontSize: 12, marginBottom: 6 }}>🧿 チャーム</div>
+          {(() => {
+            const equipped = charms.find((c) => c.id === selected.charm_id)
+            const cdef = getCharm(equipped?.ctype)
+            const grown = equipped && (equipped.hp || equipped.atk || equipped.spatk || equipped.def || equipped.spdef)
+            return (
+              <>
+                <div style={{ color: '#cce6ff', fontSize: 12, marginBottom: 6 }}>
+                  装備中：{cdef.emoji} {cdef.name} <span style={{ color: '#6699cc', fontSize: 10 }}>{cdef.desc}</span>
+                  {grown ? <span style={{ color: '#88ffaa', fontSize: 10 }}>　HP+{equipped.hp} 攻+{equipped.atk} 特攻+{equipped.spatk} 防+{equipped.def} 特防+{equipped.spdef}</span> : null}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {charms.map((c) => {
+                    const d = getCharm(c.ctype); const on = c.id === selected.charm_id
+                    return (
+                      <button key={c.id} onClick={() => !loading && !on && equipCharm(c.id)}
+                        style={{ background: on ? '#170f2a' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: '#cce6ff', padding: '5px 8px', cursor: on ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                        {on ? '✓ ' : ''}{d.emoji} {d.name}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div style={{ color: '#557799', fontSize: 10, marginTop: 6 }}>※強化・継承はチャームページ（次回実装）で。素はダンジョンで拾える</div>
+              </>
+            )
+          })()}
         </div>
       </div>
 

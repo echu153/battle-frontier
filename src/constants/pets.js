@@ -106,7 +106,7 @@ export const getSkill = (id) => SKILLS[id] || SKILLS.tackle
 //  areas: 出現するエリア（深いフロアほど後ろのエリアの敵が出る）
 export const DUNGEONS = [
   {
-    id: 'd10', name: '初級の洞窟', floors: 10, requires: null, emoji: '🕳', areas: [1, 2],
+    id: 'd10', name: '初級の洞窟', floors: 10, requires: null, emoji: '🕳', areas: [1, 2], charms: ['antidote', 'guard'],
     floorTable: [
       { from: 1,  to: 2,  enemies: [{ name: 'スライム', type: 'phys', images: ['/suraimu.png', '/suraimu2.png', '/suraimu3.png'], statMult: 0.5 }] },
       { from: 3,  to: 5,  enemies: [{ name: 'スライム', type: 'phys', images: ['/suraimu.png', '/suraimu2.png', '/suraimu3.png'], statMult: 0.5 }, { name: 'コウモリ', type: 'phys', image: '/koumori.png',     statMult: 0.75 }, { name: '毒キノコ', type: 'spec', image: '/dokukinoko.png', statMult: 1.0 }] },
@@ -183,10 +183,40 @@ export const PET_ITEMS = {
   onigiri: { key: 'onigiri', name: 'おにぎり',         emoji: '🍙', price: 200,   dungeon: true,  capped: true, fullness: 30, desc: '満腹度を30回復' },
   konomi:  { key: 'konomi',  name: '木の実',           emoji: '🍒', price: 300,   dungeon: true,  capped: true, healPct: 0.2, desc: '最大HPの20%を回復' },
   rename:  { key: 'rename',  name: 'ニックネーム変更券', emoji: '🎫', price: 10000, dungeon: false, capped: true,  desc: 'ペットの名前を変更できる' },
+  // チャーム強化用の素（ダンジョンで拾う。チャームページで使用）
+  atk_seed:   { key: 'atk_seed',   name: '攻撃の素',  emoji: '🔴', price: 0, dungeon: false, capped: true, seed: 'atk',   up: 1,  desc: 'チャームの攻撃を+1' },
+  spatk_seed: { key: 'spatk_seed', name: '特攻の素',  emoji: '🟣', price: 0, dungeon: false, capped: true, seed: 'spatk', up: 1,  desc: 'チャームの特攻を+1' },
+  def_seed:   { key: 'def_seed',   name: '防御の素',  emoji: '🔵', price: 0, dungeon: false, capped: true, seed: 'def',   up: 1,  desc: 'チャームの防御を+1' },
+  spdef_seed: { key: 'spdef_seed', name: '特防の素',  emoji: '🟢', price: 0, dungeon: false, capped: true, seed: 'spdef', up: 1,  desc: 'チャームの特防を+1' },
+  hp_seed:    { key: 'hp_seed',    name: 'HPの素',    emoji: '🟡', price: 0, dungeon: false, capped: true, seed: 'hp',    up: 10, desc: 'チャームのHPを+10' },
 }
-export const SHOP_ITEMS = Object.values(PET_ITEMS)
+export const SHOP_ITEMS = Object.values(PET_ITEMS).filter((i) => !i.seed)   // 商店は素を除く
+export const SEED_ITEMS = Object.values(PET_ITEMS).filter((i) => i.seed)
 export const DUNGEON_ITEMS = Object.values(PET_ITEMS).filter((i) => i.dungeon)
 export const CAPPED_ITEMS = Object.values(PET_ITEMS).filter((i) => i.capped)
+
+// チャーム定義。effect: null=なし / 'antidote'=毒確率50%減 / 'guard'=防御+10%
+export const CHARM_STAT_MAX = 100
+export const CHARM_STATS = ['hp', 'atk', 'spatk', 'def', 'spdef']
+export const CHARMS = {
+  hajimari: { type: 'hajimari', name: 'はじまりのチャーム', emoji: '🔰', effect: null,       desc: '追加能力なし（最初の装備）' },
+  antidote: { type: 'antidote', name: '解毒のチャーム',     emoji: '🧪', effect: 'antidote', desc: '毒になる確率が50%減る' },
+  guard:    { type: 'guard',    name: '守りのチャーム',     emoji: '🛡️', effect: 'guard',    desc: '防御＋10%' },
+}
+export const getCharm = (t) => CHARMS[t] || CHARMS.hajimari
+// チャームのステ成長を加算したペットステを返す（ダンジョン/反映で使用）
+export function applyCharmStats(stats, charm) {
+  if (!charm) return stats
+  let { maxHp, atk, def, mdef } = stats
+  maxHp += charm.hp || 0
+  // 物理ペットは atk、特殊ペットは spatk をそのまま atk に加算
+  atk += (stats.atkType === 'spec' ? (charm.spatk || 0) : (charm.atk || 0))
+  def += charm.def || 0
+  mdef += charm.spdef || 0
+  let out = { ...stats, maxHp, atk, def, mdef }
+  if (getCharm(charm.ctype).effect === 'guard') out.def = Math.round(out.def * 1.1)
+  return out
+}
 
 export function speciesLabel(pet) {
   const sp = SPECIES[pet?.species] || {}

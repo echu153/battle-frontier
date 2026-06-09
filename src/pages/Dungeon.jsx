@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, INV_MAX, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, SEED_ITEMS, INV_MAX, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats } from '../constants/pets'
 import { AREAS, generateDropBonus, ARTIFACT_BASE_NAMES, GEM_TYPES, GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
@@ -239,7 +239,7 @@ export default function Dungeon() {
     addLog(`⚔ ${name}を撃破！ ＋EXP${data.exp_gain}${data.leveled ? `（Lv${data.level}に！）` : ''}`)
     setPet((p) => {
       if (!p?.species) return p
-      const st = petStats({ species: p.species, level: data.level, evolved: p.evolved })
+      const st = applyCharmStats(petStats({ species: p.species, level: data.level, evolved: p.evolved }), p.charm)
       return { ...p, level: data.level, exp: data.exp, ...st }
     })
   }, [])
@@ -250,19 +250,28 @@ export default function Dungeon() {
   const rollLoot = useCallback(() => {
     lootSeq.current += 1
     const id = 'L' + lootSeq.current
-    const r = Math.random()
-    if (r < 1 / 3) {
+    const r = Math.random() * 103 // 素70 / 強化石15 / 宝石10 / 装備5 / チャーム3
+    if (r < 70) {
+      const sd = SEED_ITEMS[Math.floor(Math.random() * SEED_ITEMS.length)]
+      return { id, type: 'seed', seedKey: sd.key, label: sd.name, emoji: sd.emoji }
+    } else if (r < 85) {
+      const rank = STONE_DROP_RANKS[Math.floor(Math.random() * STONE_DROP_RANKS.length)]
+      return { id, type: 'stone', rank, label: `強化石(${rank})`, emoji: '🪨' }
+    } else if (r < 95) {
+      const gemType = GEM_TYPES[Math.floor(Math.random() * GEM_TYPES.length)]
+      return { id, type: 'gem', gemType, label: `${GEM_DATA[gemType]?.name || '宝石'}(F)`, emoji: '💍' }
+    } else if (r < 100) {
       const areaIds = dungeon?.areas || [1]
       const pool = AREAS.filter((a) => areaIds.includes(a.id)).flatMap((a) => [...(a.commonDrops || []), ...(a.rareDrops || [])])
       if (!pool.length) return null
       const name = pool[Math.floor(Math.random() * pool.length)]
       return { id, type: 'equip', name, label: name, emoji: '🎁' }
-    } else if (r < 2 / 3) {
-      const rank = STONE_DROP_RANKS[Math.floor(Math.random() * STONE_DROP_RANKS.length)]
-      return { id, type: 'stone', rank, label: `強化石(${rank})`, emoji: '🪨' }
     }
-    const gemType = GEM_TYPES[Math.floor(Math.random() * GEM_TYPES.length)]
-    return { id, type: 'gem', gemType, label: `${GEM_DATA[gemType]?.name || '宝石'}(F)`, emoji: '💍' }
+    // チャーム（3%）
+    const cpool = dungeon?.charms || []
+    if (!cpool.length) return null
+    const ct = cpool[Math.floor(Math.random() * cpool.length)]
+    return { id, type: 'charm', ctype: ct, label: getCharm(ct).name, emoji: getCharm(ct).emoji }
   }, [dungeon])
 
   // 退出時：持ち帰ったルート品を実際にプレイヤーへ付与
@@ -284,6 +293,10 @@ export default function Dungeon() {
       const { data: ex } = await supabase.from('player_gems').select('id, quantity').eq('player_id', userIdRef.current).eq('gem_type', entry.gemType).eq('rank', 'F').maybeSingle()
       if (ex) await supabase.from('player_gems').update({ quantity: (ex.quantity || 1) + 1 }).eq('id', ex.id)
       else await supabase.from('player_gems').insert({ player_id: userIdRef.current, gem_type: entry.gemType, rank: 'F', quantity: 1 })
+    } else if (entry.type === 'seed') {
+      await supabase.rpc('pet_grant_item', { p_key: entry.seedKey, p_qty: 1 })
+    } else if (entry.type === 'charm') {
+      await supabase.rpc('pet_charm_grant', { p_ctype: entry.ctype })
     }
   }, [])
 
@@ -349,9 +362,12 @@ export default function Dungeon() {
       // 選択中のペットを読み込む
       const { data: ap } = await supabase.from('pets').select('*').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
       if (ap) {
-        const st = petStats(ap)
+        // 装備中チャームを取得してステに反映（チャーム成長値＋守り＝防御+10%）
+        let charm = null
+        if (ap.charm_id) { const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle(); charm = c }
+        const st = applyCharmStats(petStats(ap), charm)
         const slots = Array.isArray(ap.skill_slots) && ap.skill_slots.length ? ap.skill_slots : ['tackle']
-        setPet({ id: ap.id, species: ap.species, evolved: ap.evolved, name: ap.name, emoji: speciesEmoji(ap), image_url: petImage(ap), skillSlots: slots, level: ap.level, exp: ap.exp, ...st })
+        setPet({ id: ap.id, species: ap.species, evolved: ap.evolved, charm, name: ap.name, emoji: speciesEmoji(ap), image_url: petImage(ap), skillSlots: slots, level: ap.level, exp: ap.exp, ...st })
         setSelectedSkill(slots[0])
         setPetHp(st.maxHp)
       }
@@ -538,8 +554,11 @@ export default function Dungeon() {
         // 敵スキル（確率発動）：heavy=倍率／poison=毒／vamp=自己回復
         const notes = []
         let heal = 0
+        const antidote = getCharm(pet.charm?.ctype).effect === 'antidote'
         for (const sk of (e.skills || [])) {
-          if (Math.random() >= sk.chance) continue
+          // 解毒のチャーム装備時は毒の発動確率を50%に
+          const chance = sk.type === 'poison' && antidote ? sk.chance * 0.5 : sk.chance
+          if (Math.random() >= chance) continue
           if (sk.type === 'heavy') { dmg = Math.round(dmg * (sk.mult || 1)); notes.push(sk.name) }
           else if (sk.type === 'poison') { willPoison = true; notes.push(sk.name) }
           else if (sk.type === 'vamp') { heal = Math.floor(dmg * (sk.frac || 0.5)); notes.push(sk.name) }
