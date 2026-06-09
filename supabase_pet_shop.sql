@@ -23,10 +23,10 @@ returns int language sql immutable set search_path = public as $$
   select case p_key when 'escape' then 500 when 'onigiri' then 200 when 'rename' then 10000 else null end;
 $$;
 
--- 持ち物上限(20)の対象アイテム（食料など。だっしゅつの翼は対象外）
+-- アイテム袋(20)の対象アイテム（だっしゅつの翼以外すべて）
 create or replace function pet_is_inv_item(p_key text)
 returns boolean language sql immutable set search_path = public as $$
-  select p_key in ('onigiri');
+  select p_key <> 'escape';
 $$;
 
 -- 購入：Gold残高を確認して減算し、所持を加算（全部サーバー側）
@@ -39,10 +39,10 @@ begin
   if v_price is null then raise exception 'unknown item'; end if;
   v_cost := v_price * p_qty;
 
-  -- 持ち物上限チェック（食料など対象アイテムの合計が20を超えない／だっしゅつの翼は対象外）
+  -- アイテム袋上限チェック（だっしゅつの翼以外の合計が20を超えない）
   if pet_is_inv_item(p_key) then
     select coalesce(sum(qty),0) into v_invtotal from pet_items
-      where owner_id = auth.uid() and item_key in ('onigiri');
+      where owner_id = auth.uid() and item_key <> 'escape';
     if v_invtotal + p_qty > 20 then raise exception 'inventory full'; end if;
   end if;
 

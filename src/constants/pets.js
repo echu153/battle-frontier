@@ -160,14 +160,14 @@ export function dungeonEnemyStats(floor, areaId) {
   }
 }
 
-// 持ち物の上限（食料など消費アイテムの合計数。※だっしゅつの翼は対象外）
+// アイテム袋の上限（だっしゅつの翼以外のすべてのアイテムの合計数）
 export const INV_MAX = 20
 // ペットアイテム定義（価格はサーバーRPC pet_item_price と一致させること）
-//  dungeon=true: ダンジョンで使用可能 / capped=true: 持ち物上限(INV_MAX)の対象
+//  dungeon=true: ダンジョンで使用可能 / capped=true: アイテム袋の上限(INV_MAX)の対象（だっしゅつの翼以外すべて）
 export const PET_ITEMS = {
-  escape:  { key: 'escape',  name: 'だっしゅつの翼',   emoji: '🪽', price: 500,   dungeon: true,  capped: false, desc: 'ダンジョンからいつでも脱出（使い切り）' },
+  escape:  { key: 'escape',  name: 'だっしゅつの翼',   emoji: '🪽', price: 500,   dungeon: true,  capped: false, desc: 'ダンジョンからいつでも脱出（使い切り・袋の対象外）' },
   onigiri: { key: 'onigiri', name: 'おにぎり',         emoji: '🍙', price: 200,   dungeon: true,  capped: true, fullness: 30, desc: '満腹度を30回復' },
-  rename:  { key: 'rename',  name: 'ニックネーム変更券', emoji: '🎫', price: 10000, dungeon: false, capped: false, desc: 'ペットの名前を変更できる' },
+  rename:  { key: 'rename',  name: 'ニックネーム変更券', emoji: '🎫', price: 10000, dungeon: false, capped: true,  desc: 'ペットの名前を変更できる' },
 }
 export const SHOP_ITEMS = Object.values(PET_ITEMS)
 export const DUNGEON_ITEMS = Object.values(PET_ITEMS).filter((i) => i.dungeon)

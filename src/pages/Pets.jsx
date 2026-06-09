@@ -22,6 +22,8 @@ export default function Pets() {
   const [renameInput, setRenameInput] = useState('')
   const [evolveConfirm, setEvolveConfirm] = useState(null) // 進化確認ポップアップ対象のペット
   const [evolveDone, setEvolveDone] = useState(null)       // 進化完了ポップアップ対象のペット
+  const [showShop, setShowShop] = useState(false)          // ペット商店モーダル
+  const [buyQty, setBuyQty] = useState({})                 // 商店の購入個数 { key: n }
 
   useEffect(() => { fetchAll() }, [])
 
@@ -41,16 +43,16 @@ export default function Pets() {
     if (its) setItems(Object.fromEntries(its.map((r) => [r.item_key, r.qty])))
   }
 
-  const buyItem = async (key) => {
+  const buyItem = async (key, qty = 1) => {
     setLoading(true)
-    const { data, error } = await supabase.rpc('pet_shop_buy', { p_key: key, p_qty: 1 })
+    const { error } = await supabase.rpc('pet_shop_buy', { p_key: key, p_qty: qty })
     setLoading(false)
     if (error) {
       const m = String(error.message)
-      flash(m.includes('gold') ? 'ゴールドが足りません' : m.includes('inventory') ? `持ち物がいっぱいです（食料は${INV_MAX}個まで）` : '購入失敗: ' + m)
+      flash(m.includes('gold') ? 'ゴールドが足りません' : m.includes('inventory') ? `アイテム袋がいっぱいです（だっしゅつの翼以外は合計${INV_MAX}個まで）` : '購入失敗: ' + m)
       return
     }
-    flash('購入しました')
+    flash(`購入しました（×${qty}）`)
     await fetchAll()
   }
 
@@ -222,7 +224,7 @@ export default function Pets() {
   if (!curSlots.includes('tackle')) curSlots.unshift('tackle')
 
   return (
-    <Wrap nav={nav} msg={msg}>
+    <Wrap nav={nav} msg={msg} onShop={() => setShowShop(true)}>
       {/* 所持一覧 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 8, marginBottom: 14 }}>
         {pets.map((p) => (
@@ -331,29 +333,49 @@ export default function Pets() {
         {selected.image_url && <Btn onClick={() => !loading && setImage(null)}>画像をはずす</Btn>}
       </div>
 
-      {/* ペット商店 */}
-      <div style={{ marginTop: 20, borderTop: '1px solid #335588', paddingTop: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <div style={{ color: '#ffcc44', fontSize: 14 }}>🛒 ペット商店</div>
-          <div style={{ color: '#ffd866', fontSize: 12 }}>所持G: {profile.gold?.toLocaleString?.() ?? profile.gold}</div>
-        </div>
-        <div style={{ color: '#5e7fa0', fontSize: 10, marginBottom: 6 }}>※食料などの持ち物は合計{INV_MAX}個まで（だっしゅつの翼は対象外）　食料 {items.onigiri || 0}/{INV_MAX}</div>
-        <div style={{ display: 'grid', gap: 8 }}>
-          {SHOP_ITEMS.map((it) => (
-            <div key={it.key} style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid #224466', background: '#000a18', padding: 8 }}>
-              <div style={{ fontSize: 26 }}>{it.emoji}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ color: '#cce6ff', fontSize: 13 }}>{it.name} <span style={{ color: '#6699cc', fontSize: 10 }}>所持{items[it.key] || 0}</span></div>
-                <div style={{ color: '#5e7fa0', fontSize: 10 }}>{it.desc}</div>
+      {/* ペット商店モーダル（ヘッダーの🛒商店ボタンから開く・複数購入可） */}
+      {showShop && (() => {
+        const bagCount = Object.entries(items).filter(([k]) => k !== 'escape').reduce((s, [, q]) => s + (q || 0), 0)
+        const qtyOf = (k) => Math.max(1, buyQty[k] || 1)
+        const setQ = (k, n) => setBuyQty((b) => ({ ...b, [k]: Math.max(1, Math.min(99, n)) }))
+        return (
+          <div onClick={() => !loading && setShowShop(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div onClick={(e) => e.stopPropagation()}
+              style={{ background: '#00102a', border: '1px solid #ffcc44', padding: 16, maxWidth: 420, width: '100%', maxHeight: '85vh', overflowY: 'auto', fontFamily: 'monospace' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ color: '#ffcc44', fontSize: 15 }}>🛒 ペット商店</div>
+                <div style={{ color: '#ffd866', fontSize: 12 }}>所持G: {profile.gold?.toLocaleString?.() ?? profile.gold}</div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ color: '#ffd866', fontSize: 12, marginBottom: 4 }}>{it.price.toLocaleString()}G</div>
-                <Btn onClick={() => !loading && buyItem(it.key)}>購入</Btn>
+              <div style={{ color: '#5e7fa0', fontSize: 10, marginBottom: 8 }}>※アイテム袋は だっしゅつの翼以外 合計{INV_MAX}個まで　袋 {bagCount}/{INV_MAX}</div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {SHOP_ITEMS.map((it) => {
+                  const q = qtyOf(it.key)
+                  return (
+                    <div key={it.key} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #224466', background: '#000a18', padding: 8 }}>
+                      <div style={{ fontSize: 24 }}>{it.emoji}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: '#cce6ff', fontSize: 13 }}>{it.name} <span style={{ color: '#6699cc', fontSize: 10 }}>所持{items[it.key] || 0}</span></div>
+                        <div style={{ color: '#5e7fa0', fontSize: 10 }}>{it.desc}</div>
+                        <div style={{ color: '#ffd866', fontSize: 11, marginTop: 2 }}>{it.price.toLocaleString()}G / 個</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end', marginBottom: 4 }}>
+                          <button onClick={() => setQ(it.key, q - 1)} style={qtyBtn}>−</button>
+                          <span style={{ color: '#cce6ff', fontSize: 13, minWidth: 22, textAlign: 'center' }}>{q}</span>
+                          <button onClick={() => setQ(it.key, q + 1)} style={qtyBtn}>＋</button>
+                        </div>
+                        <Btn onClick={() => !loading && buyItem(it.key, q)}>{(it.price * q).toLocaleString()}G 購入</Btn>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
+              <div style={{ textAlign: 'center', marginTop: 12 }}><Btn onClick={() => setShowShop(false)}>とじる</Btn></div>
             </div>
-          ))}
-        </div>
-      </div>
+          </div>
+        )
+      })()}
 
       {/* 進化ポップアップ（確認→完了を同じ画面で表示） */}
       {(evolveConfirm || evolveDone) && (() => {
@@ -401,7 +423,7 @@ function Portrait({ pet, size }) {
   return <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.7 }}>{speciesEmoji(pet)}</div>
 }
 
-function Wrap({ children, nav, msg }) {
+function Wrap({ children, nav, msg, onShop }) {
   return (
     <div style={{ minHeight: '100vh', background: '#000820', color: '#88ccff', fontFamily: 'monospace', padding: 16 }}>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
@@ -411,7 +433,10 @@ function Wrap({ children, nav, msg }) {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <div style={{ color: '#aa88ff', letterSpacing: 2 }}>🐾 ペット <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span></div>
-          <Btn onClick={() => nav('/dungeon')}>🕳 ダンジョン</Btn>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {onShop && <Btn onClick={onShop}>🛒 商店</Btn>}
+            <Btn onClick={() => nav('/dungeon')}>🕳 ダンジョン</Btn>
+          </div>
         </div>
         {msg && <div style={{ background: '#101a30', border: '1px solid #335588', color: '#aaddff', padding: 8, fontSize: 12, marginBottom: 10 }}>{msg}</div>}
         {children}
@@ -425,3 +450,4 @@ function Center({ children }) {
 function Btn({ children, onClick }) {
   return <button onClick={onClick} style={{ background: '#001840', border: '1px solid #0088ff', color: '#0088ff', padding: '6px 12px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>{children}</button>
 }
+const qtyBtn = { background: '#001028', border: '1px solid #335588', color: '#88bbee', width: 22, height: 22, cursor: 'pointer', fontFamily: 'monospace', fontSize: 13, lineHeight: '18px', padding: 0 }

@@ -2,7 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats, pickEnemyImage } from '../constants/pets'
+import { AREAS, generateDropBonus, ARTIFACT_BASE_NAMES } from './Game'
 import SortiePanel from '../components/SortiePanel'
+
+// 装備ドロップ確率（アイテムマスを拾ったときに、これ以下なら装備が出る）
+const EQUIP_DROP_CHANCE = 0.35
 
 // ============================================================
 // 不思議のダンジョン風プロトタイプ（Phase 1：クライアントのみ・報酬なし）
@@ -223,6 +227,21 @@ export default function Dungeon() {
     })
   }, [])
 
+  // アイテムマスを拾ったときの装備ドロップ（このダンジョンの出現エリアの通常/レアドロップから・ボス専用は除外）
+  const grantEquipmentDrop = useCallback(async () => {
+    const areaIds = dungeon?.areas || [1]
+    const pool = AREAS.filter((a) => areaIds.includes(a.id)).flatMap((a) => [...(a.commonDrops || []), ...(a.rareDrops || [])])
+    if (!pool.length || !userIdRef.current) return null
+    const name = pool[Math.floor(Math.random() * pool.length)]
+    const { data: weapon } = await supabase.from('weapons').select('*').eq('name', name).maybeSingle()
+    if (!weapon) return null
+    const isArti = ARTIFACT_BASE_NAMES.includes(weapon.name)
+    const bonus = isArti ? {} : generateDropBonus(weapon)
+    const { error } = await supabase.from('player_equipment').insert({ player_id: userIdRef.current, weapon_id: weapon.id, slot: weapon.slot, equipped: false, ...bonus })
+    if (error) return null
+    return name
+  }, [dungeon])
+
   // 40ターンごとの湧き：プレイヤーから離れた床マスに敵を1体生成
   const spawnEnemy = (s, enemies, player) => {
     const areaId = areaForFloor(dungeon, floorNum)
@@ -393,7 +412,15 @@ export default function Dungeon() {
       // アイテム取得
       const itemHere = s.items.find((it) => it.x === nx && it.y === ny)
       let items = s.items
-      if (itemHere) { items = items.filter((it) => it.id !== itemHere.id); itemsRef.current += 1; addLog('✨ アイテムを拾った') }
+      if (itemHere) {
+        items = items.filter((it) => it.id !== itemHere.id); itemsRef.current += 1
+        if (Math.random() < EQUIP_DROP_CHANCE) {
+          // 低確率で装備品がドロップ（プレイヤーが街で使える装備。付与後にログ）
+          grantEquipmentDrop().then((name) => addLog(name ? `🎁 装備品「${name}」を拾った！` : '✨ アイテムを拾った'))
+        } else {
+          addLog('✨ アイテムを拾った')
+        }
+      }
       player = { x: nx, y: ny }
       s = { ...s, items }
 
