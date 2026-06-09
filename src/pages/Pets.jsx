@@ -380,6 +380,12 @@ export default function Pets() {
         {selected.image_url && <Btn onClick={() => !loading && setImage(null)}>画像をはずす</Btn>}
       </div>
 
+      {/* ダンジョンに潜る（大きめボタン） */}
+      <button onClick={() => nav('/dungeon')}
+        style={{ width: '100%', marginTop: 20, padding: '14px', background: '#001830', border: '1px solid #0088cc', color: '#00aaff', cursor: 'pointer', fontFamily: 'monospace', fontSize: 16, letterSpacing: 2 }}>
+        🕳 ダンジョンに潜る
+      </button>
+
       {/* ペット商店モーダル（ヘッダーの🛒商店ボタンから開く・複数購入可） */}
       {showShop && (() => {
         const bagCount = Object.entries(items).filter(([k]) => k !== 'escape').reduce((s, [, q]) => s + (q || 0), 0)
@@ -479,11 +485,10 @@ function Wrap({ children, nav, msg, onShop, onHelp }) {
           <Btn onClick={() => nav('/game')}>← 街に戻る</Btn>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <div style={{ color: '#aa88ff', letterSpacing: 2 }}>🐾 ペット <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span> {onHelp && <span onClick={onHelp} style={{ cursor: 'pointer', color: '#66ccff', fontSize: 12 }}>❓ヘルプ</span>}</div>
+          <div style={{ color: '#aa88ff', letterSpacing: 2 }}>🐾 ペット {onHelp && <span onClick={onHelp} style={{ cursor: 'pointer', color: '#66ccff', fontSize: 12 }}>❓ヘルプ</span>}</div>
           <div style={{ display: 'flex', gap: 6 }}>
             {onShop && <Btn onClick={onShop}>🛒 商店</Btn>}
             <Btn onClick={() => nav('/charms')}>🧿 チャーム</Btn>
-            <Btn onClick={() => nav('/dungeon')}>🕳 ダンジョン</Btn>
           </div>
         </div>
         {msg && <div style={{ background: '#101a30', border: '1px solid #335588', color: '#aaddff', padding: 8, fontSize: 12, marginBottom: 10 }}>{msg}</div>}
