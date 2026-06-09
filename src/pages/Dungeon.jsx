@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats, pickEnemyImage } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT } from '../constants/pets'
 import { AREAS, generateDropBonus, ARTIFACT_BASE_NAMES } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
-// 装備ドロップ確率（アイテムマスを拾ったときに、これ以下なら装備が出る）
-const EQUIP_DROP_CHANCE = 0.35
+// アイテムマス取得時のドロップ確率（これ以下なら装備 or 強化石が出る）
+const DROP_CHANCE = 0.10
+const STONE_DROP_RATIO = 0.20         // ドロップのうち強化石になる割合（残りは装備）
+const STONE_DROP_RANKS = ['F', 'E', 'D']
 
 // ============================================================
 // 不思議のダンジョン風プロトタイプ（Phase 1：クライアントのみ・報酬なし）
@@ -107,7 +109,7 @@ function generateFloor(floorNum, dungeon) {
       mark(t.x, t.y)
       const kind = pool[rand(0, pool.length - 1)]
       const m = kind.statMult ?? 1.0
-      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), hp: Math.round(es.maxHp * m), maxHp: Math.round(es.maxHp * m), atk: Math.round(es.atk * m), def: Math.round(es.def * m), mdef: Math.round(es.mdef * m) })
+      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: enemySkillsFor(kind.name), hp: Math.round(es.maxHp * m), maxHp: Math.round(es.maxHp * m), atk: Math.round(es.atk * m), def: Math.round(es.def * m), mdef: Math.round(es.mdef * m) })
     }
   }
   const items = []
@@ -166,6 +168,7 @@ export default function Dungeon() {
   const [petHp, setPetHp] = useState(FALLBACK_PET.maxHp)
   const [turns, setTurns] = useState(0)
   const [fullness, setFullness] = useState(MAX_FULLNESS)
+  const [poisoned, setPoisoned] = useState(false) // 毒状態（次フロアで回復）
   const [log, setLog] = useState([])
   const [status, setStatus] = useState('select') // select | exploring | cleared | dead | escaped
   const [reward, setReward] = useState(null)
@@ -242,6 +245,19 @@ export default function Dungeon() {
     return name
   }, [dungeon])
 
+  // 強化石ドロップ（F〜D をランダムで1個。player_items に加算）
+  const grantStone = useCallback(async () => {
+    if (!userIdRef.current) return null
+    const rank = STONE_DROP_RANKS[Math.floor(Math.random() * STONE_DROP_RANKS.length)]
+    const name = `強化石(${rank})`
+    const { data: item } = await supabase.from('items').select('id').eq('name', name).maybeSingle()
+    if (!item) return null
+    const { data: existing } = await supabase.from('player_items').select('id, quantity').eq('player_id', userIdRef.current).eq('item_id', item.id).maybeSingle()
+    if (existing) await supabase.from('player_items').update({ quantity: (existing.quantity || 0) + 1 }).eq('id', existing.id)
+    else await supabase.from('player_items').insert({ player_id: userIdRef.current, item_id: item.id, quantity: 1, equipped: false })
+    return name
+  }, [])
+
   // 40ターンごとの湧き：プレイヤーから離れた床マスに敵を1体生成
   const spawnEnemy = (s, enemies, player) => {
     const areaId = areaForFloor(dungeon, floorNum)
@@ -262,7 +278,7 @@ export default function Dungeon() {
       const m = kind.statMult ?? 1.0
       spawnSeq.current += 1
       return {
-        id: 'es' + spawnSeq.current, x, y, name: kind.name, type: kind.type, image: pickEnemyImage(kind),
+        id: 'es' + spawnSeq.current, x, y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: enemySkillsFor(kind.name),
         hp: Math.round(es.maxHp * m), maxHp: Math.round(es.maxHp * m),
         atk: Math.round(es.atk * m), def: Math.round(es.def * m), mdef: Math.round(es.mdef * m),
       }
@@ -339,12 +355,13 @@ export default function Dungeon() {
     // 初期視界を記憶に反映
     f.explored = computeVisible(f.rooms, f.player.x, f.player.y)
     setState(f)
+    setPoisoned(false) // 次フロアに行くと毒は回復
   }, [])
 
   // ダンジョンを選んで開始
   const beginDungeon = (d) => {
     setDungeon(d)
-    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setLog([]); setReward(null); setStatus('exploring')
+    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setLog([]); setReward(null); setStatus('exploring')
     enterFloor(1, d)
     startRun(pet.id, d.id)
   }
@@ -414,9 +431,13 @@ export default function Dungeon() {
       let items = s.items
       if (itemHere) {
         items = items.filter((it) => it.id !== itemHere.id); itemsRef.current += 1
-        if (Math.random() < EQUIP_DROP_CHANCE) {
-          // 低確率で装備品がドロップ（プレイヤーが街で使える装備。付与後にログ）
-          grantEquipmentDrop().then((name) => addLog(name ? `🎁 装備品「${name}」を拾った！` : '✨ アイテムを拾った'))
+        if (Math.random() < DROP_CHANCE) {
+          // 低確率でドロップ。さらにその一部は強化石(F〜D)、残りは装備品
+          if (Math.random() < STONE_DROP_RATIO) {
+            grantStone().then((name) => addLog(name ? `🪨 ${name}を拾った！` : '✨ アイテムを拾った'))
+          } else {
+            grantEquipmentDrop().then((name) => addLog(name ? `🎁 装備品「${name}」を拾った！` : '✨ アイテムを拾った'))
+          }
         } else {
           addLog('✨ アイテムを拾った')
         }
@@ -447,20 +468,30 @@ export default function Dungeon() {
     let dead = false
     const attackerFx = {} // 反撃してきた敵の突進演出
     let petHit = false
+    let willPoison = false // このターンに毒を受けたか
     enemies = enemies.map((e) => {
       const sees = enemySeesPet(s.rooms, e, player.x, player.y)
       const adjacent = Math.abs(e.x - player.x) + Math.abs(e.y - player.y) === 1
       if (sees && adjacent) {
         // 敵の攻撃タイプに応じて pet.def(物理)/mdef(特殊)で軽減
         const guard = e.type === 'spec' ? (pet.mdef || 0) : (pet.def || 0)
-        const dmg = calcDamage(e.atk || 1, guard)
+        let dmg = calcDamage(e.atk || 1, guard)
+        // 敵スキル（確率発動）：heavy=倍率／poison=毒／vamp=自己回復
+        const notes = []
+        let heal = 0
+        for (const sk of (e.skills || [])) {
+          if (Math.random() >= sk.chance) continue
+          if (sk.type === 'heavy') { dmg = Math.round(dmg * (sk.mult || 1)); notes.push(sk.name) }
+          else if (sk.type === 'poison') { willPoison = true; notes.push(sk.name) }
+          else if (sk.type === 'vamp') { heal = Math.floor(dmg * (sk.frac || 0.5)); notes.push(sk.name) }
+        }
         curPetHp -= dmg
-        addLog(`${e.name}の攻撃！ ${dmg}ダメージ 💥`, 'right')
-        // 敵はペット方向へ突進、ペットを点滅させる
+        const tag = notes.length ? `【${notes.join('・')}】` : '攻撃'
+        addLog(`${e.name}の${tag}！ ${dmg}ダメージ 💥`, 'right')
         attackerFx[e.id] = { lunge: { dx: Math.sign(player.x - e.x), dy: Math.sign(player.y - e.y) } }
         petHit = true
         if (curPetHp <= 0) dead = true
-        return e
+        return heal > 0 ? { ...e, hp: Math.min(e.maxHp, e.hp + heal) } : e
       }
       let cands
       if (sees) {
@@ -493,9 +524,16 @@ export default function Dungeon() {
       } else if (nextTurns % HP_REGEN_EVERY === 0 && curPetHp < pet.maxHp) {
         curPetHp += 1
       }
+      // 毒：POISON_INTERVAL ターンごとに最大HPの POISON_PCT ダメージ（次フロアで回復）
+      if (poisoned && nextTurns % POISON_INTERVAL === 0) {
+        const pd = Math.max(1, Math.ceil(pet.maxHp * POISON_PCT))
+        curPetHp -= pd; addLog(`☠ 毒で${pd}ダメージ`)
+        if (curPetHp <= 0) dead = true
+      }
     }
     setFullness(nextFull)
     setPetHp(curPetHp)
+    if (willPoison && !poisoned) { setPoisoned(true); addLog('☠ 毒におかされた…！', 'right') }
     if (dead) { setStatus('dead'); addLog('💀 ペットは力尽きた…'); finishRun(false, true) }
 
     // ---- 40ターンごとに敵が1体湧く ----
@@ -533,7 +571,12 @@ export default function Dungeon() {
     if (key === 'escape') {
       setStatus('escaped'); addLog('🪽 ダンジョンから脱出した'); finishRun(false); return
     }
-    if (def?.fullness) {
+    if (def?.healPct) {
+      const heal = Math.ceil(pet.maxHp * def.healPct)
+      const healed = Math.min(pet.maxHp, petHp + heal)
+      addLog(`${def.emoji} ${def.name}を食べた（HP+${healed - petHp}）`)
+      commitTurn(state, state.player, state.enemies, healed) // 1ターン経過＋HP回復を反映
+    } else if (def?.fullness) {
       addLog(`${def.emoji} ${def.name}を食べた（満腹+${def.fullness}）`)
       commitTurn(state, state.player, state.enemies, petHp, -def.fullness) // 1ターン経過＋満腹回復
     }
@@ -688,6 +731,7 @@ export default function Dungeon() {
             {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 16, height: 16, objectFit: 'cover', borderRadius: 3 }} /> : <span>{pet.emoji}</span>}
             {pet.name} HP {petHp}/{pet.maxHp}
           </span>
+          {poisoned && <span style={{ color: '#cc77ff' }}>☠ 毒</span>}
           <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
           <span style={{ color: '#aa88ff' }}>⚡{getSkill(selectedSkill).name}</span>
         </div>

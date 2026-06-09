@@ -118,6 +118,20 @@ export const DUNGEONS = [
 ]
 export const getDungeon = (id) => DUNGEONS.find((d) => d.id === id) || DUNGEONS[0]
 
+// 敵スキル（攻撃時に確率で発動）。type: poison=毒付与 / heavy=ダメージ倍率 / vamp=与ダメの一部を自己回復
+//  ※毒キノコは毒、盗賊は2つ持ち。名前で引くので敵定義側は変更不要
+export const ENEMY_SKILLS = {
+  'コウモリ': [{ name: 'きゅうけつ', chance: 0.30, type: 'vamp', frac: 0.5 }],
+  '毒キノコ': [{ name: 'どくのこな', chance: 0.45, type: 'poison' }],
+  'ゴブリン': [{ name: 'つよ打ち',   chance: 0.30, type: 'heavy', mult: 1.5 }],
+  '野良犬':   [{ name: 'かみつき',   chance: 0.30, type: 'heavy', mult: 1.4 }],
+  '盗賊':     [{ name: 'ふいうち',   chance: 0.25, type: 'heavy', mult: 1.6 }, { name: 'どくナイフ', chance: 0.20, type: 'poison' }],
+}
+export const enemySkillsFor = (name) => ENEMY_SKILLS[name] || []
+// 毒：POISON_INTERVAL ターンごとに最大HPの POISON_PCT を失う（次フロアで回復）
+export const POISON_INTERVAL = 10
+export const POISON_PCT = 0.02
+
 // 敵の表示画像を決める（images配列があればランダムで1枚、無ければimage、どちらも無ければnull）
 export function pickEnemyImage(kind) {
   const img = kind?.images?.length ? kind.images[Math.floor(Math.random() * kind.images.length)] : (kind?.image || null)
@@ -167,6 +181,7 @@ export const INV_MAX = 20
 export const PET_ITEMS = {
   escape:  { key: 'escape',  name: 'だっしゅつの翼',   emoji: '🪽', price: 500,   dungeon: true,  capped: false, desc: 'ダンジョンからいつでも脱出（使い切り・袋の対象外）' },
   onigiri: { key: 'onigiri', name: 'おにぎり',         emoji: '🍙', price: 200,   dungeon: true,  capped: true, fullness: 30, desc: '満腹度を30回復' },
+  konomi:  { key: 'konomi',  name: '木の実',           emoji: '🌰', price: 300,   dungeon: true,  capped: true, healPct: 0.2, desc: '最大HPの20%を回復' },
   rename:  { key: 'rename',  name: 'ニックネーム変更券', emoji: '🎫', price: 10000, dungeon: false, capped: true,  desc: 'ペットの名前を変更できる' },
 }
 export const SHOP_ITEMS = Object.values(PET_ITEMS)
