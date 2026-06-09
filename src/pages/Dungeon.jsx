@@ -367,8 +367,6 @@ export default function Dungeon() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { nav('/login'); return }
       userIdRef.current = user.id
-      const { data } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
-      if (!data?.is_admin) { setAllowed(false); return }
       // 選択中のペットを読み込む
       const { data: ap } = await supabase.from('pets').select('*').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
       if (ap) {
@@ -724,7 +722,7 @@ export default function Dungeon() {
   const leaveToTown = async () => { await finishRun(false); nav('/game') }
 
   if (allowed === undefined) return <Center>読み込み中...</Center>
-  if (!allowed) return <Center>このページは開発中です（権限がありません）<br /><Btn onClick={() => nav('/game')}>🏰 街に戻る</Btn></Center>
+  if (!allowed) return <Center>読み込み中…<br /><Btn onClick={() => nav('/game')}>🏰 街に戻る</Btn></Center>
 
   // ダンジョン選択画面
   if (status === 'select') {
@@ -745,7 +743,7 @@ export default function Dungeon() {
           </div>
           <div style={{ display: 'grid', gap: 10 }}>
             {DUNGEONS.map((d) => {
-              const unlocked = !d.requires || cleared.has(d.requires)
+              const unlocked = !d.comingSoon && (!d.requires || cleared.has(d.requires))
               const isCleared = cleared.has(d.id)
               return (
                 <div key={d.id} onClick={() => unlocked && beginDungeon(d)}
@@ -754,7 +752,7 @@ export default function Dungeon() {
                   <div style={{ flex: 1 }}>
                     <div style={{ color: '#cce6ff', fontSize: 14 }}>{d.name} <span style={{ color: '#6699cc', fontSize: 11 }}>全{d.floors}階</span> {isCleared && <span style={{ color: '#44ff88', fontSize: 10 }}>✓クリア済</span>}</div>
                     <div style={{ color: unlocked ? '#6699cc' : '#aa6644', fontSize: 11, marginTop: 2 }}>
-                      {unlocked ? 'タップして挑戦' : `${getDungeon(d.requires).name} をクリアで開放`}
+                      {d.comingSoon ? '🔒 近日公開（後日のアップデートで開放）' : unlocked ? 'タップして挑戦' : `${getDungeon(d.requires).name} をクリアで開放`}
                     </div>
                   </div>
                 </div>
