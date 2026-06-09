@@ -337,8 +337,14 @@ export default function Pets() {
             <div onClick={(e) => e.stopPropagation()}
               style={{ background: '#0a0820', border: '1px solid #aa88ff', padding: 22, maxWidth: 320, width: '100%', textAlign: 'center', fontFamily: 'monospace' }}>
               <div style={{ fontSize: 40, marginBottom: 6 }}>✨</div>
-              {/* 確認中は進化前の画像、進化完了後は進化後イラストを表示 */}
-              <Portrait pet={done ? { ...target, evolved: true, image_url: evolvedImage(target) } : target} size={88} />
+              {/* 確認中は進化前の画像、進化完了後は進化後イラスト。全身が見えるよう contain で表示 */}
+              {(() => {
+                const showPet = done ? { ...target, evolved: true, image_url: evolvedImage(target) } : target
+                const src = petImage(showPet)
+                return src
+                  ? <img src={src} alt="" style={{ width: 120, height: 120, objectFit: 'contain', display: 'block', margin: '0 auto' }} />
+                  : <div style={{ fontSize: 64 }}>{speciesEmoji(showPet)}</div>
+              })()}
               <div style={{ color: '#cce6ff', fontSize: 14, margin: '12px 0' }}>
                 {done
                   ? <>{target.name} は<br /><span style={{ color: '#ffcc66', fontSize: 16 }}>{evolvedName(target)}</span><br />に進化した！</>
