@@ -21,6 +21,10 @@
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS exclude_from_ranking boolean DEFAULT false;
 
 -- 2) 開発環境(is_admin) ＋ ステ振り(stat_point_spent) ＋ 再修練完了(全クラス5) ＋ ランキング除外
+-- ※ stat_point_spent / retraining は保護トリガー(supabase_protect_stats.sql)対象のため、
+--    同一トランザクション内で GUC を立ててから更新する。[[protect-stats-apply-note]]
+BEGIN;
+SET LOCAL "app.allow_stat_change" = 'on';
 UPDATE profiles p SET
   is_admin = true,
   exclude_from_ranking = true,
@@ -30,6 +34,7 @@ UPDATE profiles p SET
        FROM (SELECT DISTINCT class_name FROM skills WHERE class_name <> '共通') t),
     '{}'::jsonb)
 WHERE p.username = 'えちゅ';
+COMMIT;
 
 -- 3) スキル全取得（player_skills に全スキルを付与。is_carried_over=true で現在のクラス以外も使用可）
 INSERT INTO player_skills (player_id, skill_id, is_carried_over)

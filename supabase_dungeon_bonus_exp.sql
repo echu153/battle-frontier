@@ -1,4 +1,11 @@
 -- ============================================================
+-- ⚠️【廃止・実行しないこと】 2026-06-09
+--   この apply_dungeon_reward は supabase_protect_stats.sql の版に完全に内包された
+--   （ボーナスEXPロジック同一＋保護トリガー対応の set_config 入り）。
+--   protect_stats.sql 適用後にこのファイルを流すと、apply_dungeon_reward が
+--   非GUC版へ巻き戻り、保護トリガーでダンジョン報酬(EXP/Gold)が弾かれて壊れる。
+--   → 実行不要。履歴として残すのみ。[[protect-stats-apply-note]]
+-- ============================================================
 -- デイリーダンジョン：EXP以外（gold/stone/prof/gem）にもおまけ経験値を付与
 --  - 既存の apply_dungeon_reward を拡張（gold/exp の挙動は変更なし）
 --  - 非EXPタイプで p_claimed_exp(8〜11想定) を受け取り、上限15でクランプして付与
