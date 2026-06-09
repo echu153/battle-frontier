@@ -736,13 +736,8 @@ export default function Dungeon() {
   const cellAt = (x, y) => {
     if (!inBounds(x, y)) return { ch: '', bg: C.unknown }
     const vis = isVisible(x, y)
-    if (!vis && !isExplored(x, y)) return { ch: '', bg: C.unknown } // 未踏
+    if (!vis) return { ch: '', bg: C.unknown } // 現在見えていない所は完全に真っ暗（記憶表示なし）
     const wall = state.grid[y][x] === '#'
-    if (!vis) {
-      // 記憶（薄い地形＋階段のみ）
-      if (!wall && state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: C.floorMem, dim: true }
-      return { ch: '', bg: wall ? C.wallMem : C.floorMem }
-    }
     // 現在視界：エンティティ優先（足元は床色）
     if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: C.floorVis, fx: fx.pet }
     const e = state.enemies.find((o) => o.x === x && o.y === y)
