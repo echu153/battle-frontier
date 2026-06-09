@@ -60,6 +60,26 @@ begin
   return json_build_object('gold', v_gold - v_cost, 'item_key', p_key, 'qty', v_qty);
 end; $$;
 
+-- ダンジョンのドロップ等で所持に加える（購入ではない／袋上限を超えない分だけ付与）
+create or replace function pet_grant_item(p_key text, p_qty int default 1)
+returns json language plpgsql security definer set search_path = public as $$
+declare v_qty int; v_invtotal int; v_add int;
+begin
+  if p_qty is null or p_qty < 1 then raise exception 'invalid qty'; end if;
+  if pet_item_price(p_key) is null then raise exception 'unknown item'; end if;
+  v_add := p_qty;
+  if pet_is_inv_item(p_key) then
+    select coalesce(sum(qty),0) into v_invtotal from pet_items where owner_id = auth.uid() and item_key <> 'escape';
+    if v_invtotal >= 20 then return json_build_object('granted', 0, 'full', true); end if;
+    if v_invtotal + v_add > 20 then v_add := 20 - v_invtotal; end if;
+  end if;
+  insert into pet_items(owner_id, item_key, qty) values (auth.uid(), p_key, v_add)
+    on conflict (owner_id, item_key) do update set qty = pet_items.qty + v_add
+    returning qty into v_qty;
+  return json_build_object('granted', v_add, 'qty', v_qty);
+end; $$;
+grant execute on function pet_grant_item(text, int) to authenticated;
+
 -- 脱出アイテム使用：1消費して残数を返す（ダンジョン側で精算する）
 create or replace function pet_use_escape()
 returns json language plpgsql security definer set search_path = public as $$

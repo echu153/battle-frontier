@@ -2,13 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT } from '../constants/pets'
-import { AREAS, generateDropBonus, ARTIFACT_BASE_NAMES } from './Game'
+import { AREAS, generateDropBonus, ARTIFACT_BASE_NAMES, GEM_TYPES, GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
-// アイテムマス取得時のドロップ確率（これ以下なら装備 or 強化石が出る）
-const DROP_CHANCE = 0.10
-const STONE_DROP_RATIO = 0.20         // ドロップのうち強化石になる割合（残りは装備）
-const STONE_DROP_RANKS = ['F', 'E', 'D']
+const STONE_DROP_RANKS = ['F', 'E', 'D'] // ✨から出る強化石のランク
+const FLOOR_FOODS = ['konomi', 'onigiri'] // 床に落ちている消耗品
 
 // ============================================================
 // 不思議のダンジョン風プロトタイプ（Phase 1：クライアントのみ・報酬なし）
@@ -113,11 +111,19 @@ function generateFloor(floorNum, dungeon) {
     }
   }
   const items = []
+  // ✨（装備/強化石/宝石）の宝箱マス
   const itemCount = rand(2, 3)
   for (let i = 0; i < itemCount; i++) {
     const room = rooms[rand(0, rooms.length - 1)]
     const t = randTileInRoom(room)
-    if (t) { mark(t.x, t.y); items.push({ id: 'i' + i, x: t.x, y: t.y }) }
+    if (t) { mark(t.x, t.y); items.push({ id: 'i' + i, x: t.x, y: t.y, kind: 'loot' }) }
+  }
+  // 床に落ちている消耗品（木の実・おにぎり）
+  const foodCount = rand(1, 2)
+  for (let i = 0; i < foodCount; i++) {
+    const room = rooms[rand(0, rooms.length - 1)]
+    const t = randTileInRoom(room)
+    if (t) { mark(t.x, t.y); items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: FLOOR_FOODS[rand(0, FLOOR_FOODS.length - 1)] }) }
   }
 
   return { grid, rooms, player, enemies, items, stairs, explored: new Set() }
@@ -256,6 +262,24 @@ export default function Dungeon() {
     if (existing) await supabase.from('player_items').update({ quantity: (existing.quantity || 0) + 1 }).eq('id', existing.id)
     else await supabase.from('player_items').insert({ player_id: userIdRef.current, item_id: item.id, quantity: 1, equipped: false })
     return name
+  }, [])
+
+  // 宝石ドロップ（ランダム種・Fランクを1個。player_gems に加算）
+  const grantGemF = useCallback(async () => {
+    if (!userIdRef.current) return null
+    const gemType = GEM_TYPES[Math.floor(Math.random() * GEM_TYPES.length)]
+    const { data: existing } = await supabase.from('player_gems').select('id, quantity').eq('player_id', userIdRef.current).eq('gem_type', gemType).eq('rank', 'F').maybeSingle()
+    if (existing) await supabase.from('player_gems').update({ quantity: (existing.quantity || 1) + 1 }).eq('id', existing.id)
+    else await supabase.from('player_gems').insert({ player_id: userIdRef.current, gem_type: gemType, rank: 'F', quantity: 1 })
+    return `${GEM_DATA[gemType]?.name || '宝石'}(F)`
+  }, [])
+
+  // 床の消耗品（木の実・おにぎり）をアイテム袋へ。残数を更新
+  const grantFood = useCallback(async (key) => {
+    const { data, error } = await supabase.rpc('pet_grant_item', { p_key: key, p_qty: 1 })
+    if (error || !data || !data.granted) return false
+    setInventory((inv) => ({ ...inv, [key]: (inv[key] || 0) + data.granted }))
+    return true
   }, [])
 
   // 40ターンごとの湧き：プレイヤーから離れた床マスに敵を1体生成
@@ -431,15 +455,16 @@ export default function Dungeon() {
       let items = s.items
       if (itemHere) {
         items = items.filter((it) => it.id !== itemHere.id); itemsRef.current += 1
-        if (Math.random() < DROP_CHANCE) {
-          // 低確率でドロップ。さらにその一部は強化石(F〜D)、残りは装備品
-          if (Math.random() < STONE_DROP_RATIO) {
-            grantStone().then((name) => addLog(name ? `🪨 ${name}を拾った！` : '✨ アイテムを拾った'))
-          } else {
-            grantEquipmentDrop().then((name) => addLog(name ? `🎁 装備品「${name}」を拾った！` : '✨ アイテムを拾った'))
-          }
+        if (itemHere.kind === 'food') {
+          // 床の消耗品をアイテム袋へ
+          const fdef = PET_ITEMS[itemHere.key]
+          grantFood(itemHere.key).then((ok) => addLog(ok ? `${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾って袋に入れた` : '🎒 袋がいっぱいで拾えなかった'))
         } else {
-          addLog('✨ アイテムを拾った')
+          // ✨：装備33% / 強化石33% / 宝石F33%
+          const r = Math.random()
+          if (r < 1 / 3) grantEquipmentDrop().then((name) => addLog(name ? `🎁 装備品「${name}」を拾った！` : '✨ アイテムを拾った'))
+          else if (r < 2 / 3) grantStone().then((name) => addLog(name ? `🪨 ${name}を拾った！` : '✨ アイテムを拾った'))
+          else grantGemF().then((name) => addLog(name ? `💍 宝石「${name}」を拾った！` : '✨ アイテムを拾った'))
         }
       }
       player = { x: nx, y: ny }
@@ -675,7 +700,7 @@ export default function Dungeon() {
     const e = state.enemies.find((o) => o.x === x && o.y === y)
     if (e) return { ch: '👹', img: e.image || null, bg: C.floorVis, fx: fx.enemies[e.id] || null }
     const it = state.items.find((o) => o.x === x && o.y === y)
-    if (it) return { ch: '✨', bg: C.floorVis }
+    if (it) return { ch: it.kind === 'food' ? (PET_ITEMS[it.key]?.emoji || '🍙') : '✨', bg: C.floorVis }
     if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: C.floorVis }
     return { ch: '', bg: wall ? C.wallVis : C.floorVis }
   }

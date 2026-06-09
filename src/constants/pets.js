@@ -121,7 +121,7 @@ export const getDungeon = (id) => DUNGEONS.find((d) => d.id === id) || DUNGEONS[
 // 敵スキル（攻撃時に確率で発動）。type: poison=毒付与 / heavy=ダメージ倍率 / vamp=与ダメの一部を自己回復
 //  ※毒キノコは毒、盗賊は2つ持ち。名前で引くので敵定義側は変更不要
 export const ENEMY_SKILLS = {
-  'コウモリ': [{ name: 'きゅうけつ', chance: 0.30, type: 'vamp', frac: 0.5 }],
+  'コウモリ': [{ name: 'きゅうけつ', chance: 0.30, type: 'vamp', frac: 0.3 }],
   '毒キノコ': [{ name: 'どくのこな', chance: 0.45, type: 'poison' }],
   'ゴブリン': [{ name: 'つよ打ち',   chance: 0.30, type: 'heavy', mult: 1.5 }],
   '野良犬':   [{ name: 'かみつき',   chance: 0.30, type: 'heavy', mult: 1.4 }],
