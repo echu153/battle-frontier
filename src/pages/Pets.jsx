@@ -283,18 +283,31 @@ export default function Pets() {
         </div>
       </div>
 
-      {/* 画像設定（ペットページでアップロードした画像のみ） */}
+      {/* 画像設定（デフォルト画像＋アップロード画像から選べる。進化後画像は進化後のみ） */}
       <div style={{ color: '#aa88ff', fontSize: 13, marginBottom: 6 }}>画像を設定（{selected.name}）</div>
-      {uploaded.length === 0
-        ? <div style={{ color: '#557799', fontSize: 11, marginBottom: 8 }}>まだ画像がありません。下のボタンからアップロードできます。</div>
-        : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(48px, 1fr))', gap: 6, marginBottom: 8 }}>
-            {uploaded.map((url) => (
-              <img key={url} src={url} alt="" onClick={() => !loading && setImage(url)}
-                style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', border: `2px solid ${selected.image_url === url ? '#aa88ff' : '#224466'}`, cursor: 'pointer' }} />
-            ))}
+      {(() => {
+        const sp = SPECIES[selected.species] || {}
+        const defaults = []
+        if (sp.image) defaults.push({ path: sp.image, label: 'デフォルト' })
+        if (selected.evolved && sp.evolve?.image) defaults.push({ path: sp.evolve.image, label: '進化後' })
+        const opts = [
+          ...defaults.map((d) => ({ ...d, src: assetSrc(d.path), isBase: d.path === sp.image })),
+          ...uploaded.map((url) => ({ path: url, src: url, label: null, isBase: false })),
+        ]
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))', gap: 6, marginBottom: 8 }}>
+            {opts.map((o) => {
+              const active = selected.image_url === o.path || (o.isBase && !selected.image_url)
+              return (
+                <div key={o.src} onClick={() => !loading && setImage(o.path)} style={{ cursor: 'pointer', textAlign: 'center' }}>
+                  <img src={o.src} alt="" style={{ width: '100%', aspectRatio: '1', objectFit: 'contain', border: `2px solid ${active ? '#aa88ff' : '#224466'}`, background: '#000818' }} />
+                  {o.label && <div style={{ fontSize: 9, color: active ? '#cba6ff' : '#5e7fa0' }}>{o.label}</div>}
+                </div>
+              )
+            })}
           </div>
-        )}
+        )
+      })()}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <label style={{ color: '#88ccff', fontSize: 12, border: '1px solid #0088ff', padding: '6px 10px', cursor: 'pointer' }}>
           画像をアップロード<input type="file" accept="image/*" onChange={uploadImage} style={{ display: 'none' }} />
