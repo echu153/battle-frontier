@@ -136,7 +136,10 @@ export default function Pets() {
   const toggleSlot = async (skillId) => {
     if (!selectedId) return
     if (SKILLS[skillId]?.fixed) return // たいあたりは固定装備（外せない）
-    const slots = Array.isArray(selected.skill_slots) ? selected.skill_slots : ['tackle']
+    // 旧スキルや別種族の不正なIDを除去（たいあたりは常に保持）。これが残っていると枠が埋まって選べなくなる
+    const validIds = new Set(skillsForSpecies(selected.species).map((s) => s.id))
+    let slots = (Array.isArray(selected.skill_slots) ? selected.skill_slots : ['tackle']).filter((s) => s === 'tackle' || validIds.has(s))
+    if (!slots.includes('tackle')) slots = ['tackle', ...slots]
     let next
     if (slots.includes(skillId)) {
       if (slots.length <= 1) { flash('スキルは最低1つ必要です'); return }
@@ -213,6 +216,10 @@ export default function Pets() {
   const sst = petStats(selected)
   const need = expForLevel(selected.level)
   const conv = Math.round(affectionConversion(selected.affection) * 100)
+  // 装備中スキル（旧ID等を除外した有効なものだけ。たいあたりは常に含む）
+  const validSkillIds = new Set(skillsForSpecies(selected.species).map((s) => s.id))
+  const curSlots = (Array.isArray(selected.skill_slots) ? selected.skill_slots : ['tackle']).filter((s) => s === 'tackle' || validSkillIds.has(s))
+  if (!curSlots.includes('tackle')) curSlots.unshift('tackle')
 
   return (
     <Wrap nav={nav} msg={msg}>
@@ -234,7 +241,7 @@ export default function Pets() {
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <Portrait pet={selected} size={110} />
           <div style={{ flex: 1 }}>
-            <div style={{ color: '#cce6ff', fontSize: 15 }}>{selected.name} <span style={{ color: selected.evolved ? '#ffcc66' : '#6699cc', fontSize: 11 }}>({speciesLabel(selected)}{selected.evolved ? '・進化' : ''})</span></div>
+            <div style={{ color: '#cce6ff', fontSize: 15 }}>{selected.name} <span style={{ color: selected.evolved ? '#ffcc66' : '#6699cc', fontSize: 11 }}>({speciesLabel(selected)})</span></div>
             <div style={{ color: '#88bbee', fontSize: 12, marginTop: 4 }}>Lv{selected.level}{Number.isFinite(petMaxLevel(selected)) ? `/${petMaxLevel(selected)}` : ''}　HP{sst.maxHp} / {atkLabel(selected)}{sst.atk} / 防{sst.def} / 特防{sst.mdef}</div>
             <div style={{ color: '#6699cc', fontSize: 11, marginTop: 2 }}>EXP {selected.exp} / {need}</div>
             <div style={{ color: '#ffaacc', fontSize: 11, marginTop: 2 }}>なつき {selected.affection}/{AFFECTION_MAX}（ステータス変換 +{conv}%）</div>
@@ -261,13 +268,13 @@ export default function Pets() {
         {/* スキル（ダンジョンに持っていくスキルを最大4つ選ぶ） */}
         <div style={{ marginTop: 12, borderTop: '1px solid #223a55', paddingTop: 10 }}>
           <div style={{ color: '#aa88ff', fontSize: 12, marginBottom: 6 }}>
-            持っていくスキル（たいあたり固定＋{MAX_SKILL_SLOTS - 1}つ）　{(selected.skill_slots || ['tackle']).length}/{MAX_SKILL_SLOTS}
+            持っていくスキル（たいあたり固定＋{MAX_SKILL_SLOTS - 1}つ）　{curSlots.length}/{MAX_SKILL_SLOTS}
           </div>
           <div style={{ display: 'grid', gap: 6 }}>
             {skillsForSpecies(selected.species).map((sk) => {
               const id = sk.id
               const learned = sk.learnLv <= selected.level
-              const carried = (selected.skill_slots || ['tackle']).includes(id) || sk.fixed
+              const carried = curSlots.includes(id) || sk.fixed
               const clickable = learned && !sk.fixed
               // 未習得スキルは内容を隠し、習得レベルだけ表示
               if (!learned) {

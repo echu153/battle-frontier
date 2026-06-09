@@ -71,28 +71,28 @@ export const SKILLS = {
   tackle:        { name: 'たいあたり', species: 'all',   learnLv: 1,   mult: 1.0, hits: 1, cost: 0,  fixed: true, desc: '通常の体当たり（満腹消費なし・固定装備）' },
 
   // --- 🐺 ヴォル / ヴォルガノフ（物理・牙と爪の狼）---
-  voru_bite:     { name: 'かみつき',       species: 'flame', learnLv: 3,   mult: 1.6,  hits: 1, cost: 2,  desc: '鋭い牙で噛みつく一撃（1.6倍／満腹2）' },
-  voru_claw:     { name: 'つめ裂き',       species: 'flame', learnLv: 8,   mult: 0.85, hits: 2, cost: 3,  desc: '両の爪で2回引き裂く（各0.85倍／満腹3）' },
-  voru_fangrush: { name: '牙突進',         species: 'flame', learnLv: 20,  mult: 2.3,  hits: 1, cost: 5, desc: '牙を剥いて突進する大技（2.3倍／満腹5）' },
-  voru_bloodfang:{ name: '月下の吸血牙',   species: 'flame', learnLv: 50,  mult: 1.4,  hits: 1, lifesteal: 0.3, cost: 5, desc: '与ダメの3割を回復する牙（1.4倍／満腹5）' },
-  voru_pack:     { name: '群狼乱舞',       species: 'flame', learnLv: 80,  mult: 0.9,  hits: 3, cost: 8, desc: '群れの如く3回連撃（各0.9倍／満腹8）' },
-  voru_alpha:    { name: '狼神・絶牙閃',   species: 'flame', learnLv: 120, mult: 3.6,  hits: 1, cost: 12, desc: '狼神の牙を宿す必殺の一撃（3.6倍／満腹12）' },
+  voru_bite:     { name: 'かみつき',       species: 'flame', learnLv: 3,   mult: 1.4,  hits: 1, cost: 2,  desc: '鋭い牙で噛みつく一撃（1.4倍／満腹2）' },
+  voru_claw:     { name: 'つめ裂き',       species: 'flame', learnLv: 8,   mult: 0.75, hits: 2, cost: 3,  desc: '両の爪で2回引き裂く（各0.75倍／満腹3）' },
+  voru_fangrush: { name: '牙突進',         species: 'flame', learnLv: 20,  mult: 1.9,  hits: 1, cost: 5, desc: '牙を剥いて突進する大技（1.9倍／満腹5）' },
+  voru_bloodfang:{ name: '月下の吸血牙',   species: 'flame', learnLv: 50,  mult: 1.2,  hits: 1, lifesteal: 0.3, cost: 5, desc: '与ダメの3割を回復する牙（1.2倍／満腹5）' },
+  voru_pack:     { name: '群狼乱舞',       species: 'flame', learnLv: 80,  mult: 0.8,  hits: 3, cost: 8, desc: '群れの如く3回連撃（各0.8倍／満腹8）' },
+  voru_alpha:    { name: '狼神・絶牙閃',   species: 'flame', learnLv: 120, mult: 3.0,  hits: 1, cost: 12, desc: '狼神の牙を宿す必殺の一撃（3.0倍／満腹12）' },
 
   // --- 🦊 アルル / アルミラ（特殊・妖術の狐）---
-  aruru_foxfire: { name: 'きつね火',       species: 'aqua',  learnLv: 3,   mult: 1.6,  hits: 1, cost: 2,  desc: '青白い狐火を放つ（1.6倍／満腹2）' },
-  aruru_illusion:{ name: '幻惑連弾',       species: 'aqua',  learnLv: 8,   mult: 0.85, hits: 2, cost: 3,  desc: '幻の弾を2連射（各0.85倍／満腹3）' },
-  aruru_blaze:   { name: '妖狐の業火',     species: 'aqua',  learnLv: 20,  mult: 2.3,  hits: 1, cost: 5, desc: '妖力の業火で焼く大技（2.3倍／満腹5）' },
-  aruru_drain:   { name: '生命吸収術',     species: 'aqua',  learnLv: 50,  mult: 1.4,  hits: 1, lifesteal: 0.3, cost: 5, desc: '与ダメの3割を吸収する術（1.4倍／満腹5）' },
-  aruru_ninetail:{ name: '九尾乱舞',       species: 'aqua',  learnLv: 80,  mult: 0.9,  hits: 3, cost: 8, desc: '九つの尾で3連撃（各0.9倍／満腹8）' },
-  aruru_celestial:{ name: '天狐・霊滅閃',  species: 'aqua',  learnLv: 120, mult: 3.6,  hits: 1, cost: 12, desc: '天狐の霊力を放つ必殺技（3.6倍／満腹12）' },
+  aruru_foxfire: { name: 'きつね火',       species: 'aqua',  learnLv: 3,   mult: 1.4,  hits: 1, cost: 2,  desc: '青白い狐火を放つ（1.4倍／満腹2）' },
+  aruru_illusion:{ name: '幻惑連弾',       species: 'aqua',  learnLv: 8,   mult: 0.75, hits: 2, cost: 3,  desc: '幻の弾を2連射（各0.75倍／満腹3）' },
+  aruru_blaze:   { name: '妖狐の業火',     species: 'aqua',  learnLv: 20,  mult: 1.9,  hits: 1, cost: 5, desc: '妖力の業火で焼く大技（1.9倍／満腹5）' },
+  aruru_drain:   { name: '生命吸収術',     species: 'aqua',  learnLv: 50,  mult: 1.2,  hits: 1, lifesteal: 0.3, cost: 5, desc: '与ダメの3割を吸収する術（1.2倍／満腹5）' },
+  aruru_ninetail:{ name: '九尾乱舞',       species: 'aqua',  learnLv: 80,  mult: 0.8,  hits: 3, cost: 8, desc: '九つの尾で3連撃（各0.8倍／満腹8）' },
+  aruru_celestial:{ name: '天狐・霊滅閃',  species: 'aqua',  learnLv: 120, mult: 3.0,  hits: 1, cost: 12, desc: '天狐の霊力を放つ必殺技（3.0倍／満腹12）' },
 
   // --- 🐢 ドラム / ガルガノス（物理・大地と甲羅の守護者）---
-  doramu_shell:  { name: 'こうら打ち',     species: 'leaf',  learnLv: 3,   mult: 1.6,  hits: 1, cost: 2,  desc: '硬い甲羅を叩きつける（1.6倍／満腹2）' },
-  doramu_rock:   { name: '岩石連打',       species: 'leaf',  learnLv: 8,   mult: 0.85, hits: 2, cost: 3,  desc: '岩の拳で2回殴る（各0.85倍／満腹3）' },
-  doramu_quake:  { name: '大地割り',       species: 'leaf',  learnLv: 20,  mult: 2.3,  hits: 1, cost: 5, desc: '大地を割る重い一撃（2.3倍／満腹5）' },
-  doramu_counter:{ name: 'グランドドレイン', species: 'leaf',  learnLv: 50,  mult: 1.4,  hits: 1, lifesteal: 0.3, cost: 5, desc: '大地に染みた血を吸い上げ、与ダメの3割を回復（1.4倍／満腹5）' },
-  doramu_tremor: { name: '連震撃',         species: 'leaf',  learnLv: 80,  mult: 0.9,  hits: 3, cost: 8, desc: '地響きで3連撃（各0.9倍／満腹8）' },
-  doramu_guardian:{ name: '守護神・大地崩撃',species: 'leaf', learnLv: 120, mult: 3.6,  hits: 1, cost: 12, desc: '守護神の力で大地ごと砕く（3.6倍／満腹12）' },
+  doramu_shell:  { name: 'こうら打ち',     species: 'leaf',  learnLv: 3,   mult: 1.4,  hits: 1, cost: 2,  desc: '硬い甲羅を叩きつける（1.4倍／満腹2）' },
+  doramu_rock:   { name: '岩石連打',       species: 'leaf',  learnLv: 8,   mult: 0.75, hits: 2, cost: 3,  desc: '岩の拳で2回殴る（各0.75倍／満腹3）' },
+  doramu_quake:  { name: '大地割り',       species: 'leaf',  learnLv: 20,  mult: 1.9,  hits: 1, cost: 5, desc: '大地を割る重い一撃（1.9倍／満腹5）' },
+  doramu_counter:{ name: 'グランドドレイン', species: 'leaf',  learnLv: 50,  mult: 1.2,  hits: 1, lifesteal: 0.3, cost: 5, desc: '大地に染みた血を吸い上げ、与ダメの3割を回復（1.2倍／満腹5）' },
+  doramu_tremor: { name: '連震撃',         species: 'leaf',  learnLv: 80,  mult: 0.8,  hits: 3, cost: 8, desc: '地響きで3連撃（各0.8倍／満腹8）' },
+  doramu_guardian:{ name: '守護神・大地崩撃',species: 'leaf', learnLv: 120, mult: 3.0,  hits: 1, cost: 12, desc: '守護神の力で大地ごと砕く（3.0倍／満腹12）' },
 }
 // その種族が持つスキル一覧（たいあたり＋種族スキル。習得Lv順）
 export const skillsForSpecies = (species) =>
