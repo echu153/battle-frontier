@@ -83,14 +83,23 @@ function generateFloor(floorNum, dungeon) {
     }
     return null
   }
+  // 部屋の内側（外周ぶんを除く）。階段を出入り口に置かないために使う
+  const randInnerTileInRoom = (room) => {
+    if (room.w < 3 || room.h < 3) return randTileInRoom(room)
+    for (let t = 0; t < 30; t++) {
+      const x = rand(room.x + 1, room.x + room.w - 2), y = rand(room.y + 1, room.y + room.h - 2)
+      if (isFree(x, y)) return { x, y }
+    }
+    return randTileInRoom(room)
+  }
 
   // プレイヤー開始：rooms[0] の中心
   const start = rooms[0]
   const player = { x: start.cx, y: start.cy }; mark(player.x, player.y)
 
-  // 階段：開始部屋以外のどこかの部屋
+  // 階段：開始部屋以外のどこかの部屋の「内側」（出入り口を塞がない）
   const stairRoom = rooms[rand(1, rooms.length - 1)]
-  let stairs = randTileInRoom(stairRoom) || { x: stairRoom.cx, y: stairRoom.cy }
+  let stairs = randInnerTileInRoom(stairRoom) || { x: stairRoom.cx, y: stairRoom.cy }
   mark(stairs.x, stairs.y)
 
   // 敵・アイテム配置（開始部屋は避ける）
@@ -110,20 +119,16 @@ function generateFloor(floorNum, dungeon) {
       enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: enemySkillsFor(kind.name), hp: Math.round(es.maxHp * m), maxHp: Math.round(es.maxHp * m), atk: Math.round(es.atk * m), def: Math.round(es.def * m), mdef: Math.round(es.mdef * m) })
     }
   }
+  // アイテム（✨/木の実/おにぎり 全部込み）を1フロア3〜5個ランダム
   const items = []
-  // ✨（装備/強化石/宝石）の宝箱マス
-  const itemCount = rand(2, 3)
+  const itemCount = rand(3, 5)
   for (let i = 0; i < itemCount; i++) {
     const room = rooms[rand(0, rooms.length - 1)]
     const t = randTileInRoom(room)
-    if (t) { mark(t.x, t.y); items.push({ id: 'i' + i, x: t.x, y: t.y, kind: 'loot' }) }
-  }
-  // 床に落ちている消耗品（木の実・おにぎり）
-  const foodCount = rand(1, 2)
-  for (let i = 0; i < foodCount; i++) {
-    const room = rooms[rand(0, rooms.length - 1)]
-    const t = randTileInRoom(room)
-    if (t) { mark(t.x, t.y); items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: FLOOR_FOODS[rand(0, FLOOR_FOODS.length - 1)] }) }
+    if (!t) continue
+    mark(t.x, t.y)
+    if (Math.random() < 0.4) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: FLOOR_FOODS[rand(0, FLOOR_FOODS.length - 1)] })
+    else items.push({ id: 'i' + i, x: t.x, y: t.y, kind: 'loot' })
   }
 
   return { grid, rooms, player, enemies, items, stairs, explored: new Set() }
@@ -471,8 +476,11 @@ export default function Dungeon() {
       let items = s.items
       const isEscapePickup = itemHere && itemHere.kind === 'dropFood' && itemHere.key === 'escape'
       if (itemHere && !isEscapePickup && bagCount() >= INV_MAX) {
-        // 持ち物が満杯：拾わずに床へ残す（プレイヤーはマスへ進む）
-        addLog('🎒 持ち物がいっぱいで拾えない（何か捨ててから）')
+        // 持ち物が満杯：拾わずに床へ残す（足元のアイテムが何か分かるよう名前を表示）
+        const onName = itemHere.kind === 'dropLoot' ? itemHere.loot?.label
+          : (itemHere.kind === 'food' || itemHere.kind === 'dropFood') ? (PET_ITEMS[itemHere.key]?.name || 'アイテム')
+          : '✨ なにか'
+        addLog(`🎒 足元に「${onName}」があるが持ち物がいっぱい`)
       } else if (itemHere) {
         items = items.filter((it) => it.id !== itemHere.id); itemsRef.current += 1
         if (itemHere.kind === 'food') {
@@ -481,14 +489,14 @@ export default function Dungeon() {
           grantFood(itemHere.key).then((ok) => addLog(ok ? `${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾って袋に入れた` : '🎒 袋がいっぱいで拾えなかった'))
         } else if (itemHere.kind === 'dropLoot' && itemHere.loot) {
           // 自分が捨てたルート品を拾い直す
-          setLootBag((b) => [...b, itemHere.loot]); addLog(`${itemHere.loot.emoji} ${itemHere.loot.label}を拾った（持ち帰ると入手）`)
+          setLootBag((b) => [...b, itemHere.loot]); addLog(`${itemHere.loot.emoji} ${itemHere.loot.label}を拾った`)
         } else if (itemHere.kind === 'dropFood' && itemHere.key) {
           const fdef = PET_ITEMS[itemHere.key]
           grantFood(itemHere.key).then((ok) => addLog(ok ? `${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾った` : '🎒 袋がいっぱいで拾えなかった'))
         } else {
           // ✨：装備33% / 強化石33% / 宝石F33%（持ち物に保持し生還で入手）
           const loot = rollLoot()
-          if (loot) { setLootBag((b) => [...b, loot]); addLog(`${loot.emoji} ${loot.label}を拾った（持ち帰ると入手）`) }
+          if (loot) { setLootBag((b) => [...b, loot]); addLog(`${loot.emoji} ${loot.label}を拾った`) }
           else addLog('✨ アイテムを拾った')
         }
       }
@@ -513,7 +521,8 @@ export default function Dungeon() {
   //  fullCost: このターンに消費(正)/回復(負)する満腹度
   const commitTurn = (s, player, enemies, curPetHp, fullCost = 0) => {
     // ---- 敵のターン ----
-    const occ = (x, y, self) => enemies.some((e) => e !== self && e.x === x && e.y === y)
+    // 敵が重ならないよう、移動済みの位置も含めて占有マスを管理する
+    const taken = new Set(enemies.map((e) => e.x + ',' + e.y))
     const isFloor = (x, y) => inBounds(x, y) && s.grid[y][x] === '.'
     let dead = false
     const attackerFx = {} // 反撃してきた敵の突進演出
@@ -557,7 +566,11 @@ export default function Dungeon() {
           .sort(() => Math.random() - 0.5)
       }
       for (const c of cands) {
-        if (isFloor(c.x, c.y) && !occ(c.x, c.y, e) && !(c.x === player.x && c.y === player.y)) return { ...e, x: c.x, y: c.y }
+        const ck = c.x + ',' + c.y
+        if (isFloor(c.x, c.y) && !taken.has(ck) && !(c.x === player.x && c.y === player.y)) {
+          taken.delete(e.x + ',' + e.y); taken.add(ck) // 移動先を占有・元を解放
+          return { ...e, x: c.x, y: c.y }
+        }
       }
       return e
     })
