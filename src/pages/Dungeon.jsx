@@ -367,6 +367,8 @@ export default function Dungeon() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { nav('/login'); return }
       userIdRef.current = user.id
+      const { data: prof } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
+      if (!prof?.is_admin) { setAllowed(false); return } // 一般公開は不正対策(RPC化)後まで停止
       // 選択中のペットを読み込む
       const { data: ap } = await supabase.from('pets').select('*').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
       if (ap) {
@@ -722,7 +724,7 @@ export default function Dungeon() {
   const leaveToTown = async () => { await finishRun(false); nav('/game') }
 
   if (allowed === undefined) return <Center>読み込み中...</Center>
-  if (!allowed) return <Center>読み込み中…<br /><Btn onClick={() => nav('/game')}>🏰 街に戻る</Btn></Center>
+  if (!allowed) return <Center>このページは開発中です（権限がありません）<br /><Btn onClick={() => nav('/game')}>🏰 街に戻る</Btn></Center>
 
   // ダンジョン選択画面
   if (status === 'select') {

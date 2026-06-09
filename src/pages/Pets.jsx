@@ -33,6 +33,7 @@ export default function Pets() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
     const { data: p } = await supabase.from('profiles').select('id, is_admin, gold').eq('id', user.id).single()
+    if (!p?.is_admin) { nav('/game'); return } // 一般公開は不正対策(RPC化)後まで停止
     setProfile(p)
     try { await supabase.rpc('pet_charm_init') } catch { /* チャーム未導入時は無視 */ }
     const { data: chs } = await supabase.from('player_charms').select('*').eq('owner_id', user.id)
