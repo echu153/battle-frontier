@@ -14,19 +14,25 @@ export default function Shop() {
   useEffect(() => { fetchAll() }, [])
 
   const fetchAll = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { nav('/login'); return }
-    const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-    setProfile(p)
-    const unlockedAreas = p.unlocked_areas || [1]
-    const maxArea = Math.max(...unlockedAreas)
-    const { data: it } = await supabase.from('items').select('*')
-      .lte('unlock_area', maxArea)
-      .eq('is_shop_item', true)
-      .order('id')
-    setItems(it || [])
-    const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id)
-    setPlayerItems(pi || [])
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { nav('/login'); return }
+      const { data: p, error: pe } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
+      if (pe || !p) { nav('/game'); return } // プロフィール取得失敗時は固まらず街へ
+      setProfile(p)
+      const unlockedAreas = Array.isArray(p.unlocked_areas) && p.unlocked_areas.length ? p.unlocked_areas : [1]
+      const maxArea = Math.max(...unlockedAreas)
+      const { data: it } = await supabase.from('items').select('*')
+        .lte('unlock_area', maxArea)
+        .eq('is_shop_item', true)
+        .order('id')
+      setItems(it || [])
+      const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id)
+      setPlayerItems(pi || [])
+    } catch (err) {
+      console.error('Shop fetch error:', err)
+      setProfile((prev) => prev || { gold: 0, _error: true })
+    }
   }
 
   const getQuantity = (itemId) => quantities[itemId] || 1
@@ -58,7 +64,10 @@ export default function Shop() {
   }
 
   if (!profile) return (
-    <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
+    <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh', fontFamily:'monospace' }}>
+      読み込み中...<br /><br />
+      <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'6px 14px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>← 街に戻る</button>
+    </div>
   )
 
   return (

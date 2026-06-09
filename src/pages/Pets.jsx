@@ -58,7 +58,8 @@ export default function Pets() {
       flash(m.includes('gold') ? 'ゴールドが足りません' : m.includes('inventory') ? `アイテム袋がいっぱいです（だっしゅつの翼以外は合計${INV_MAX}個まで）` : '購入失敗: ' + m)
       return
     }
-    flash(`購入しました（×${qty}）`)
+    flash(`${PET_ITEMS[key]?.name || 'アイテム'}を${qty}個 購入しました`)
+    setBuyQty((b) => ({ ...b, [key]: 1 })) // 購入後は個数を1にリセット
     await fetchAll()
   }
 
@@ -328,7 +329,7 @@ export default function Pets() {
             return (
               <>
                 <div style={{ color: '#cce6ff', fontSize: 12, marginBottom: 6 }}>
-                  装備中：{cdef.emoji} {equipped ? charmDisplayName(equipped) : cdef.name} <span style={{ color: '#6699cc', fontSize: 10 }}>{cdef.desc}</span>
+                  装備中：{cdef.emoji} {equipped ? charmDisplayName(equipped) : cdef.name}
                   {grown ? <span style={{ color: '#88ffaa', fontSize: 10 }}>　HP+{charmHpBonus(equipped)} 攻+{equipped.atk} 特攻+{equipped.spatk} 防+{equipped.def} 特防+{equipped.spdef}</span> : null}
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -402,6 +403,7 @@ export default function Pets() {
                 <div style={{ color: '#ffd866', fontSize: 12 }}>所持G: {profile.gold?.toLocaleString?.() ?? profile.gold}</div>
               </div>
               <div style={{ color: '#5e7fa0', fontSize: 10, marginBottom: 8 }}>※アイテム袋は だっしゅつの翼以外 合計{INV_MAX}個まで　袋 {bagCount}/{INV_MAX}</div>
+              {msg && <div style={{ background: '#101a30', border: '1px solid #335588', color: '#aaddff', padding: 8, fontSize: 12, marginBottom: 8, textAlign: 'center' }}>{msg}</div>}
               <div style={{ display: 'grid', gap: 8 }}>
                 {SHOP_ITEMS.map((it) => {
                   const q = qtyOf(it.key)
@@ -530,7 +532,8 @@ const HELP_SECTIONS = [
     '「継承」で別のチャームへ能力を移せます（移すと元のチャームは消滅）。',
   ] },
   { t: '🛒 商店について', b: [
-    'ヘッダーの🛒商店から、だっしゅつの翼・おにぎり・木の実・ニックネーム変更券などを購入（個数指定でまとめ買い可）。',
+    '⭐ まずはヘッダーの🛒商店で「木の実（HP回復）」と「おにぎり（満腹回復）」を買ってからダンジョンに臨むのがおすすめ！',
+    'ほかに だっしゅつの翼・ニックネーム変更券 なども購入できます（個数指定でまとめ買い可）。',
     '持ち物（アイテム袋）は だっしゅつの翼以外 合計10個まで。ダンジョン中は20個まで持てます。',
   ] },
   { t: '🕳 ダンジョンについて', b: [

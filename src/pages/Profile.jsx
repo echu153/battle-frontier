@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { calcEffectiveStats, calcEffectiveTotal, GEM_DATA, gemEffectValue } from '../lib/stats'
-import { petStats, speciesLabel, speciesEmoji, petImage, atkLabel, applyCharmStats, getCharm, charmDisplayName } from '../constants/pets'
+import { petStats, speciesLabel, speciesEmoji, petImage, atkLabel, applyCharmStats, charmDisplayName } from '../constants/pets'
 
 const gemBonusText = (gemType, rank) => {
   const g = GEM_DATA[gemType]; if (!g) return ''
@@ -358,7 +358,7 @@ export default function Profile() {
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ color:'#cce6ff', fontSize:'12px' }}>{pet.name} <span style={{ color: pet.evolved?'#ffcc66':'#6699cc', fontSize:'10px' }}>({speciesLabel(pet)})</span> {pet.is_active && <span style={{ color:'#44ff88', fontSize:'9px' }}>選択中</span>}</div>
                       <div style={{ color:'#88bbee', fontSize:'10px', marginTop:'2px' }}>Lv{pet.level}　HP{st.maxHp} / {atkLabel(pet)}{st.atk} / 防{st.def} / 特防{st.mdef}</div>
-                      {charm && <div style={{ color:'#9ccbb0', fontSize:'9px', marginTop:'2px' }}>🧿 {charmDisplayName(charm)}（{getCharm(charm.ctype).desc}）</div>}
+                      {charm && <div style={{ color:'#9ccbb0', fontSize:'9px', marginTop:'2px' }}>🧿 {charmDisplayName(charm)}</div>}
                     </div>
                   </div>
                 )
