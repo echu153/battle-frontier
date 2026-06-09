@@ -205,13 +205,21 @@ BEGIN
       attack_count   = raid_participants.attack_count + 1,
       last_attack_at = now();
 
-  -- 共有CD更新（profiles.last_action_at）
-  UPDATE profiles SET last_action_at = now() WHERE id = v_player_id;
+  -- 共有CD更新 + 出撃報酬（HP/MP全回復・EXP+10）
+  -- ※ exp は保護トリガー対象のため GUC を立ててから更新する
+  PERFORM set_config('app.allow_stat_change', 'on', true);
+  UPDATE profiles SET
+    hp_current     = v_profile.hp_max,
+    mp_current     = v_profile.mp_max,
+    exp            = COALESCE(exp, 0) + 10,
+    last_action_at = now()
+  WHERE id = v_player_id;
 
   RETURN json_build_object(
     'damage',     v_damage,
     'hp_current', v_new_hp,
     'hp_max',     v_boss.hp_max,
+    'exp',        COALESCE(v_profile.exp, 0) + 10,
     'status',     CASE WHEN v_new_hp = 0 THEN 'defeated' ELSE 'active' END
   );
 END;
