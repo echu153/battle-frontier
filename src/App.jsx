@@ -20,6 +20,7 @@ import Titles from './pages/Titles'
 import Admin from './pages/Admin'
 import Dungeon from './pages/Dungeon'
 import Pets from './pages/Pets'
+import Charms from './pages/Charms'
 import StatusDetail from './pages/StatusDetail'
 import Abyss from './pages/Abyss'
 import Tenkyuu from './pages/Tenkyuu'
@@ -129,6 +130,7 @@ function App() {
         <Route path="/admin" element={session ? <Admin /> : <Navigate to="/login" />} />
         <Route path="/dungeon" element={session ? <Dungeon /> : <Navigate to="/login" />} />
         <Route path="/pets" element={session ? <Pets /> : <Navigate to="/login" />} />
+        <Route path="/charms" element={session ? <Charms /> : <Navigate to="/login" />} />
         <Route path="/status" element={session ? <StatusDetail /> : <Navigate to="/login" />} />
         <Route path="/abyss" element={session ? <Abyss /> : <Navigate to="/login" />} />
         <Route path="/tenkyuu" element={session ? <Tenkyuu /> : <Navigate to="/login" />} />

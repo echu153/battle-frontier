@@ -479,6 +479,7 @@ function Wrap({ children, nav, msg, onShop }) {
           <div style={{ color: '#aa88ff', letterSpacing: 2 }}>🐾 ペット <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span></div>
           <div style={{ display: 'flex', gap: 6 }}>
             {onShop && <Btn onClick={onShop}>🛒 商店</Btn>}
+            <Btn onClick={() => nav('/charms')}>🧿 チャーム</Btn>
             <Btn onClick={() => nav('/dungeon')}>🕳 ダンジョン</Btn>
           </div>
         </div>

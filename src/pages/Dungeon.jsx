@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, SEED_ITEMS, INV_MAX, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, SEED_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats } from '../constants/pets'
 import { AREAS, generateDropBonus, ARTIFACT_BASE_NAMES, GEM_TYPES, GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
 const STONE_DROP_RANKS = ['F', 'E', 'D'] // ✨から出る強化石のランク
-const FLOOR_FOODS = ['konomi', 'onigiri'] // 床に落ちている消耗品
+const DUNGEON_BAG_MAX = 10 // ダンジョン中に持てる持ち物の上限（だっしゅつの翼は対象外）
 
 // ============================================================
 // 不思議のダンジョン風プロトタイプ（Phase 1：クライアントのみ・報酬なし）
@@ -127,7 +127,9 @@ function generateFloor(floorNum, dungeon) {
     const t = randTileInRoom(room)
     if (!t) continue
     mark(t.x, t.y)
-    if (Math.random() < 0.4) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: FLOOR_FOODS[rand(0, FLOOR_FOODS.length - 1)] })
+    const r = Math.random() // ✨80% / 木の実10% / おにぎり10%
+    if (r < 0.10) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'konomi' })
+    else if (r < 0.20) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'onigiri' })
     else items.push({ id: 'i' + i, x: t.x, y: t.y, kind: 'loot' })
   }
 
@@ -491,7 +493,7 @@ export default function Dungeon() {
       const itemHere = s.items.find((it) => it.x === nx && it.y === ny)
       let items = s.items
       const isEscapePickup = itemHere && itemHere.kind === 'dropFood' && itemHere.key === 'escape'
-      if (itemHere && !isEscapePickup && bagCount() >= INV_MAX) {
+      if (itemHere && !isEscapePickup && bagCount() >= DUNGEON_BAG_MAX) {
         // 持ち物が満杯：拾わずに床へ残す（足元のアイテムが何か分かるよう名前を表示）
         const onName = itemHere.kind === 'dropLoot' ? itemHere.loot?.label
           : (itemHere.kind === 'food' || itemHere.kind === 'dropFood') ? (PET_ITEMS[itemHere.key]?.name || 'アイテム')
@@ -899,7 +901,7 @@ export default function Dungeon() {
           return (
             <div style={{ marginTop: 12, background: '#000610', border: `1px solid ${dropMode ? '#cc7755' : '#113355'}`, padding: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <div style={{ color: '#88aacc', fontSize: 11 }}>🎒 持ち物 <span style={{ color: bagCount() >= INV_MAX ? '#ff7777' : '#5e7fa0' }}>{bagCount()}/{INV_MAX}</span>（翼は対象外）{dropMode && <span style={{ color: '#ff9966' }}>　捨てるモード：押すと足元に置く</span>}</div>
+                <div style={{ color: '#88aacc', fontSize: 11 }}>🎒 持ち物 <span style={{ color: bagCount() >= DUNGEON_BAG_MAX ? '#ff7777' : '#5e7fa0' }}>{bagCount()}/{DUNGEON_BAG_MAX}</span>（翼は対象外）{dropMode && <span style={{ color: '#ff9966' }}>　捨てるモード：押すと足元に置く</span>}</div>
                 <button onClick={() => setDropMode((d) => !d)}
                   style={{ background: dropMode ? '#2a1000' : '#0a1424', border: `1px solid ${dropMode ? '#ff9966' : '#335588'}`, color: dropMode ? '#ff9966' : '#88aacc', padding: '3px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
                   🗑 捨てる{dropMode ? '（ON）' : ''}
