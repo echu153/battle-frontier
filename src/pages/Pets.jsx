@@ -368,7 +368,7 @@ export default function Pets() {
 
 function Portrait({ pet, size }) {
   const src = petImage(pet) // カスタム画像 or 種族デフォ（進化で切替）
-  if (src) return <img src={src} alt="" style={{ width: size, height: size, objectFit: 'cover', borderRadius: 4 }} />
+  if (src) return <img src={src} alt="" style={{ width: size, height: size, objectFit: 'contain', borderRadius: 4 }} />
   return <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.7 }}>{speciesEmoji(pet)}</div>
 }
 
