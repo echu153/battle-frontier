@@ -42,7 +42,7 @@ begin
   select * into v_pet from pets where id = v_run.pet_id and owner_id = auth.uid();
   if not found then raise exception 'pet not found'; end if;
 
-  v_cap := case when v_pet.evolved then 100 else 50 end;  -- 進化で上限が100に
+  v_cap := case when v_pet.evolved then 9999 else 50 end;  -- 進化で上限が実質無限(9999)に
   v_new_exp := v_pet.exp + v_exp_gain;
   v_new_level := v_pet.level;
   while v_new_level < v_cap and v_new_exp >= v_new_level * 10 loop

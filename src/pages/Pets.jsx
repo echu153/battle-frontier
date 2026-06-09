@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { SPECIES, STARTERS, SKILLS, MAX_SKILL_SLOTS, SHOP_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage, assetSrc } from '../constants/pets'
+import { SPECIES, STARTERS, SKILLS, skillsForSpecies, MAX_SKILL_SLOTS, SHOP_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage, assetSrc } from '../constants/pets'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 // ペット画像はペットページでアップロードしたものだけを使う（avatars/<uid>/pets/ 配下）
@@ -235,7 +235,7 @@ export default function Pets() {
           <Portrait pet={selected} size={110} />
           <div style={{ flex: 1 }}>
             <div style={{ color: '#cce6ff', fontSize: 15 }}>{selected.name} <span style={{ color: selected.evolved ? '#ffcc66' : '#6699cc', fontSize: 11 }}>({speciesLabel(selected)}{selected.evolved ? '・進化' : ''})</span></div>
-            <div style={{ color: '#88bbee', fontSize: 12, marginTop: 4 }}>Lv{selected.level}/{petMaxLevel(selected)}　HP{sst.maxHp} / {atkLabel(selected)}{sst.atk} / 防{sst.def} / 特防{sst.mdef}</div>
+            <div style={{ color: '#88bbee', fontSize: 12, marginTop: 4 }}>Lv{selected.level}{Number.isFinite(petMaxLevel(selected)) ? `/${petMaxLevel(selected)}` : ''}　HP{sst.maxHp} / {atkLabel(selected)}{sst.atk} / 防{sst.def} / 特防{sst.mdef}</div>
             <div style={{ color: '#6699cc', fontSize: 11, marginTop: 2 }}>EXP {selected.exp} / {need}</div>
             <div style={{ color: '#ffaacc', fontSize: 11, marginTop: 2 }}>なつき {selected.affection}/{AFFECTION_MAX}（ステータス変換 +{conv}%）</div>
           </div>
@@ -264,7 +264,8 @@ export default function Pets() {
             持っていくスキル（たいあたり固定＋{MAX_SKILL_SLOTS - 1}つ）　{(selected.skill_slots || ['tackle']).length}/{MAX_SKILL_SLOTS}
           </div>
           <div style={{ display: 'grid', gap: 6 }}>
-            {Object.entries(SKILLS).map(([id, sk]) => {
+            {skillsForSpecies(selected.species).map((sk) => {
+              const id = sk.id
               const learned = sk.learnLv <= selected.level
               const carried = (selected.skill_slots || ['tackle']).includes(id) || sk.fixed
               const clickable = learned && !sk.fixed
