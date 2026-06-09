@@ -174,8 +174,8 @@ export function dungeonEnemyStats(floor, areaId) {
   }
 }
 
-// アイテム袋の上限（だっしゅつの翼以外のすべてのアイテムの合計数）
-export const INV_MAX = 20
+// アイテム袋の上限（潜る前の所持：だっしゅつの翼以外の合計）。ダンジョン中は別途20まで
+export const INV_MAX = 10
 // ペットアイテム定義（価格はサーバーRPC pet_item_price と一致させること）
 //  dungeon=true: ダンジョンで使用可能 / capped=true: アイテム袋の上限(INV_MAX)の対象（だっしゅつの翼以外すべて）
 export const PET_ITEMS = {

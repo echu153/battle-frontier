@@ -42,11 +42,11 @@ begin
   if v_price is null then raise exception 'unknown item'; end if;
   v_cost := v_price * p_qty;
 
-  -- アイテム袋上限チェック（だっしゅつの翼以外の合計が20を超えない）
+  -- アイテム袋上限チェック（潜る前の所持：だっしゅつの翼以外の合計が10を超えない）
   if pet_is_inv_item(p_key) then
     select coalesce(sum(qty),0) into v_invtotal from pet_items
       where owner_id = auth.uid() and item_key <> 'escape';
-    if v_invtotal + p_qty > 20 then raise exception 'inventory full'; end if;
+    if v_invtotal + p_qty > 10 then raise exception 'inventory full'; end if;
   end if;
 
   select gold into v_gold from profiles where id = auth.uid() for update;
@@ -73,8 +73,8 @@ begin
   v_add := p_qty;
   if pet_is_inv_item(p_key) then
     select coalesce(sum(qty),0) into v_invtotal from pet_items where owner_id = auth.uid() and item_key <> 'escape';
-    if v_invtotal >= 20 then return json_build_object('granted', 0, 'full', true); end if;
-    if v_invtotal + v_add > 20 then v_add := 20 - v_invtotal; end if;
+    if v_invtotal >= 10 then return json_build_object('granted', 0, 'full', true); end if;
+    if v_invtotal + v_add > 10 then v_add := 10 - v_invtotal; end if;
   end if;
   insert into pet_items(owner_id, item_key, qty) values (auth.uid(), p_key, v_add)
     on conflict (owner_id, item_key) do update set qty = pet_items.qty + v_add

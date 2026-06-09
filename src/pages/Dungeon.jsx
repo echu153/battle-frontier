@@ -6,7 +6,7 @@ import { AREAS, generateDropBonus, ARTIFACT_BASE_NAMES, GEM_TYPES, GEM_DATA } fr
 import SortiePanel from '../components/SortiePanel'
 
 const STONE_DROP_RANKS = ['F', 'E', 'D'] // ✨から出る強化石のランク
-const DUNGEON_BAG_MAX = 10 // ダンジョン中に持てる持ち物の上限（だっしゅつの翼は対象外）
+const DUNGEON_BAG_MAX = 20 // ダンジョン中に持てる持ち物の上限（だっしゅつの翼は対象外）
 
 // ============================================================
 // 不思議のダンジョン風プロトタイプ（Phase 1：クライアントのみ・報酬なし）
