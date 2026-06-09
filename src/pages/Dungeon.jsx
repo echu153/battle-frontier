@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, SEED_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats } from '../constants/pets'
-import { AREAS, generateDropBonus, ARTIFACT_BASE_NAMES, GEM_TYPES, GEM_DATA } from './Game'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats } from '../constants/pets'
+import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
-const STONE_DROP_RANKS = ['F', 'E', 'D'] // ✨から出る強化石のランク
 const DUNGEON_BAG_MAX = 20 // ダンジョン中に持てる持ち物の上限（だっしゅつの翼は対象外）
 
 // ============================================================
@@ -246,61 +245,17 @@ export default function Dungeon() {
     })
   }, [])
 
-  // ✨から出るルート品の抽選（この時点では付与しない＝持ち物に保持し、生還時に付与）
-  //  装備33% / 強化石(F〜D)33% / 宝石F 33%
-  const lootSeq = useRef(0)
-  const rollLoot = useCallback(() => {
-    lootSeq.current += 1
-    const id = 'L' + lootSeq.current
-    const r = Math.random() * 103 // 素70 / 強化石15 / 宝石10 / 装備5 / チャーム3
-    if (r < 70) {
-      const sd = SEED_ITEMS[Math.floor(Math.random() * SEED_ITEMS.length)]
-      return { id, type: 'seed', seedKey: sd.key, label: sd.name, emoji: sd.emoji }
-    } else if (r < 85) {
-      const rank = STONE_DROP_RANKS[Math.floor(Math.random() * STONE_DROP_RANKS.length)]
-      return { id, type: 'stone', rank, label: `強化石(${rank})`, emoji: '🪨' }
-    } else if (r < 95) {
-      const gemType = GEM_TYPES[Math.floor(Math.random() * GEM_TYPES.length)]
-      return { id, type: 'gem', gemType, label: `${GEM_DATA[gemType]?.name || '宝石'}(F)`, emoji: '💍' }
-    } else if (r < 100) {
-      const areaIds = dungeon?.areas || [1]
-      const pool = AREAS.filter((a) => areaIds.includes(a.id)).flatMap((a) => [...(a.commonDrops || []), ...(a.rareDrops || [])])
-      if (!pool.length) return null
-      const name = pool[Math.floor(Math.random() * pool.length)]
-      return { id, type: 'equip', name, label: name, emoji: '🎁' }
-    }
-    // チャーム（3%）
-    const cpool = dungeon?.charms || []
-    if (!cpool.length) return null
-    const ct = cpool[Math.floor(Math.random() * cpool.length)]
-    return { id, type: 'charm', ctype: ct, label: getCharm(ct).name, emoji: getCharm(ct).emoji }
-  }, [dungeon])
-
-  // 退出時：持ち帰ったルート品を実際にプレイヤーへ付与
-  const grantLootEntry = useCallback(async (entry) => {
-    if (!userIdRef.current || !entry) return
-    if (entry.type === 'equip') {
-      const { data: weapon } = await supabase.from('weapons').select('*').eq('name', entry.name).maybeSingle()
-      if (!weapon) return
-      const isArti = ARTIFACT_BASE_NAMES.includes(weapon.name)
-      const bonus = isArti ? {} : generateDropBonus(weapon)
-      await supabase.from('player_equipment').insert({ player_id: userIdRef.current, weapon_id: weapon.id, slot: weapon.slot, equipped: false, ...bonus })
-    } else if (entry.type === 'stone') {
-      const { data: item } = await supabase.from('items').select('id').eq('name', `強化石(${entry.rank})`).maybeSingle()
-      if (!item) return
-      const { data: ex } = await supabase.from('player_items').select('id, quantity').eq('player_id', userIdRef.current).eq('item_id', item.id).maybeSingle()
-      if (ex) await supabase.from('player_items').update({ quantity: (ex.quantity || 0) + 1 }).eq('id', ex.id)
-      else await supabase.from('player_items').insert({ player_id: userIdRef.current, item_id: item.id, quantity: 1, equipped: false })
-    } else if (entry.type === 'gem') {
-      const { data: ex } = await supabase.from('player_gems').select('id, quantity').eq('player_id', userIdRef.current).eq('gem_type', entry.gemType).eq('rank', 'F').maybeSingle()
-      if (ex) await supabase.from('player_gems').update({ quantity: (ex.quantity || 1) + 1 }).eq('id', ex.id)
-      else await supabase.from('player_gems').insert({ player_id: userIdRef.current, gem_type: entry.gemType, rank: 'F', quantity: 1 })
-    } else if (entry.type === 'seed') {
-      await supabase.rpc('pet_grant_item', { p_key: entry.seedKey, p_qty: entry.qty || 1 })
-    } else if (entry.type === 'charm') {
-      await supabase.rpc('pet_charm_grant', { p_ctype: entry.ctype })
-    }
-  }, [])
+  // ✨のルート品はサーバー(dungeon_pickup)が抽選・保持し、生還時(dungeon_finish)に付与する。
+  // クライアントは表示するだけ。サーバー戻り値の素のentryに表示用の label/emoji を付ける。
+  const lootDisplay = (e) => {
+    if (!e) return { label: '?', emoji: '✨' }
+    if (e.type === 'seed') { const d = PET_ITEMS[e.seedKey]; return { label: d?.name || e.seedKey, emoji: d?.emoji || '🔹' } }
+    if (e.type === 'stone') return { label: `強化石(${e.rank})`, emoji: '🪨' }
+    if (e.type === 'gem') return { label: `${GEM_DATA[e.gemType]?.name || '宝石'}(F)`, emoji: '💍' }
+    if (e.type === 'equip') return { label: e.name, emoji: '🎁' }
+    if (e.type === 'charm') return { label: getCharm(e.ctype).name, emoji: getCharm(e.ctype).emoji }
+    return { label: '?', emoji: '✨' }
+  }
 
   // 床の消耗品（木の実・おにぎり）をアイテム袋へ。残数を更新
   const grantFood = useCallback(async (key) => {
@@ -343,24 +298,15 @@ export default function Dungeon() {
     if (saveKey()) localStorage.removeItem(saveKey()) // 中断データを破棄
     if (finishedRef.current || !runIdRef.current) return
     finishedRef.current = true
-    // 生還時（死亡以外）のみ、持ち帰ったルート品をプレイヤーへ付与。死亡時は失う
-    let lootGranted = 0
-    const lootList = []
-    if (!died) {
-      for (const entry of lootBag) {
-        await grantLootEntry(entry)
-        const n = entry.qty || 1
-        lootGranted += n
-        lootList.push(`${entry.emoji || ''}${entry.label}${n > 1 ? `×${n}` : ''}`)
-      }
-    }
+    // ルート品の付与はサーバー(dungeon_finish)が生還時のみ実行。クライアントは表示用に一覧を保持
+    const lootList = died ? [] : lootBag.map((l) => `${l.emoji || ''}${l.label}${(l.qty || 1) > 1 ? `×${l.qty}` : ''}`)
     setLootBag([])
     const { data, error } = await supabase.rpc('dungeon_finish', {
       p_run_id: runIdRef.current, p_floors: floorsRef.current,
       p_enemies: enemiesRef.current, p_items: itemsRef.current, p_cleared: cleared, p_died: died,
     })
-    if (!error && data) setReward({ ...data, lootGranted, lootList })
-  }, [lootBag, grantLootEntry])
+    if (!error && data) setReward({ ...data, lootGranted: died ? 0 : (data.loot_granted || 0), lootList })
+  }, [lootBag])
 
   useEffect(() => {
     (async () => {
@@ -455,15 +401,18 @@ export default function Dungeon() {
 
   // 持ち物の合計数（だっしゅつの翼は対象外＝消耗品＋戦利品）。上限を超えたら拾えない
   const bagCount = () => Object.entries(inventory).filter(([k]) => k !== 'escape').reduce((s, [, q]) => s + (q || 0), 0) + lootBag.length
-  // ルート品を持ち物へ。素は同種でスタック（1枠扱い）、それ以外は個別
-  const addLootToBag = (loot) => setLootBag((b) => {
-    if (loot.type === 'seed') {
-      const i = b.findIndex((x) => x.type === 'seed' && x.seedKey === loot.seedKey)
-      if (i >= 0) { const c = [...b]; c[i] = { ...c[i], qty: (c[i].qty || 1) + (loot.qty || 1) }; return c }
-      return [...b, { ...loot, qty: loot.qty || 1 }]
-    }
-    return [...b, loot]
-  })
+  // ルート品を持ち物へ（表示用 label/emoji を付与）。素は同種でスタック（1枠扱い）、それ以外は個別
+  const addLootToBag = (raw) => {
+    const loot = { ...raw, ...lootDisplay(raw) }
+    setLootBag((b) => {
+      if (loot.type === 'seed') {
+        const i = b.findIndex((x) => x.type === 'seed' && x.seedKey === loot.seedKey)
+        if (i >= 0) { const c = [...b]; c[i] = { ...c[i], qty: (c[i].qty || 1) + (loot.qty || 1) }; return c }
+        return [...b, { ...loot, qty: loot.qty || 1 }]
+      }
+      return [...b, loot]
+    })
+  }
 
   const tryMove = (dx, dy) => {
     if (!state || status !== 'exploring' || busyRef.current) return
@@ -523,16 +472,20 @@ export default function Dungeon() {
           const fdef = PET_ITEMS[itemHere.key]
           grantFood(itemHere.key).then((ok) => addLog(ok ? `${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾って袋に入れた` : '🎒 袋がいっぱいで拾えなかった'))
         } else if (itemHere.kind === 'dropLoot' && itemHere.loot) {
-          // 自分が捨てたルート品を拾い直す
-          addLootToBag(itemHere.loot); addLog(`${itemHere.loot.emoji} ${itemHere.loot.label}を拾った`)
+          // 自分が捨てたルート品を拾い直す（サーバーで pending へ戻す）
+          supabase.rpc('dungeon_repick_loot', { p_run_id: runIdRef.current, p_loot_id: itemHere.loot.id }).then(({ data, error }) => {
+            if (error) { addLog('拾えなかった'); return }
+            const e = data || itemHere.loot; addLootToBag(e); const d = lootDisplay(e); addLog(`${d.emoji} ${d.label}を拾った`)
+          })
         } else if (itemHere.kind === 'dropFood' && itemHere.key) {
           const fdef = PET_ITEMS[itemHere.key]
           grantFood(itemHere.key).then((ok) => addLog(ok ? `${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾った` : '🎒 袋がいっぱいで拾えなかった'))
         } else {
-          // ✨：装備33% / 強化石33% / 宝石F33%（持ち物に保持し生還で入手）
-          const loot = rollLoot()
-          if (loot) { addLootToBag(loot); addLog(`${loot.emoji} ${loot.label}を拾った`) }
-          else addLog('✨ アイテムを拾った')
+          // ✨：サーバーが抽選して保持（生還で入手）
+          supabase.rpc('dungeon_pickup', { p_run_id: runIdRef.current }).then(({ data, error }) => {
+            if (error || !data) { addLog('✨ アイテムを拾った'); return }
+            addLootToBag(data); const d = lootDisplay(data); addLog(`${d.emoji} ${d.label}を拾った`)
+          })
         }
       }
       player = { x: nx, y: ny }
@@ -692,6 +645,9 @@ export default function Dungeon() {
     if (state.items.some((it) => it.x === px && it.y === py)) { addLog('🎒 足元にアイテムがあるので置けない'); return }
     let floorItem, label
     if (entry.kind === 'loot') {
+      // サーバーで pending → dropped へ移す
+      const { error } = await supabase.rpc('dungeon_drop_loot', { p_run_id: runIdRef.current, p_loot_id: entry.loot.id })
+      if (error) { addLog('置けなかった'); return }
       floorItem = { id: 'd' + entry.loot.id, x: px, y: py, kind: 'dropLoot', loot: entry.loot }
       label = entry.loot.label
       setLootBag((b) => b.filter((l) => l.id !== entry.loot.id))
