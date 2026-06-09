@@ -20,6 +20,7 @@ export default function Pets() {
   const [items, setItems] = useState({}) // 所持アイテム { key: qty }
   const [renaming, setRenaming] = useState(false)
   const [renameInput, setRenameInput] = useState('')
+  const [evolveConfirm, setEvolveConfirm] = useState(null) // 進化確認ポップアップ対象のペット
 
   useEffect(() => { fetchAll() }, [])
 
@@ -96,7 +97,7 @@ export default function Pets() {
 
   const doEvolve = async (pet) => {
     const next = evolvedName(pet)
-    if (!window.confirm(`${pet.name}（${speciesLabel(pet)}）を ${next} に進化させます。\n進化すると現在ステータスが1.5倍になり、以降はレベル100まで成長量が2倍になります。よろしいですか？`)) return
+    setEvolveConfirm(null)
     setLoading(true)
     const { error } = await supabase.rpc('pet_evolve', { p_pet_id: pet.id })
     if (!error) {
@@ -244,7 +245,7 @@ export default function Pets() {
             ? <Btn onClick={() => !loading && doSkinship(selected)}>🤲 スキンシップ（なつき+1・あと{skinshipRemaining(selected)}回）</Btn>
             : <span style={{ background: '#0a0f1a', border: '1px solid #223344', color: '#556677', padding: '6px 12px', fontSize: 12 }}>🤲 スキンシップ済み</span>}
           {!selected.is_active && <Btn onClick={() => !loading && setActive(selected)}>このペットを選択する</Btn>}
-          {canEvolve(selected) && <Btn onClick={() => !loading && doEvolve(selected)}>✨ 進化させる（→{evolvedName(selected)}）</Btn>}
+          {canEvolve(selected) && <Btn onClick={() => !loading && setEvolveConfirm(selected)}>✨ 進化させる（→{evolvedName(selected)}）</Btn>}
           {(items.rename || 0) > 0 && !renaming && <Btn onClick={() => { setRenaming(true); setRenameInput(selected.name) }}>🎫 ニックネーム変更券で改名（{items.rename}枚）</Btn>}
         </div>
         {renaming && (
@@ -324,6 +325,25 @@ export default function Pets() {
           ))}
         </div>
       </div>
+
+      {/* 進化確認ポップアップ（ゲーム内） */}
+      {evolveConfirm && (
+        <div onClick={() => !loading && setEvolveConfirm(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ background: '#0a0820', border: '1px solid #aa88ff', padding: 22, maxWidth: 320, width: '100%', textAlign: 'center', fontFamily: 'monospace' }}>
+            <div style={{ fontSize: 40, marginBottom: 6 }}>✨</div>
+            <Portrait pet={{ ...evolveConfirm, evolved: true }} size={88} />
+            <div style={{ color: '#cce6ff', fontSize: 14, margin: '12px 0' }}>
+              {evolveConfirm.name} を<br /><span style={{ color: '#ffcc66', fontSize: 16 }}>{evolvedName(evolveConfirm)}</span><br />に進化させますか？
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 8 }}>
+              <Btn onClick={() => !loading && setEvolveConfirm(null)}>やめる</Btn>
+              <Btn onClick={() => !loading && doEvolve(evolveConfirm)}>進化する</Btn>
+            </div>
+          </div>
+        </div>
+      )}
     </Wrap>
   )
 }
