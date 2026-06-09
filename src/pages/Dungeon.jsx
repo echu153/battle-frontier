@@ -124,7 +124,7 @@ function generateFloor(floorNum, dungeon) {
   const itemCount = rand(3, 5)
   for (let i = 0; i < itemCount; i++) {
     const room = rooms[rand(0, rooms.length - 1)]
-    const t = randTileInRoom(room)
+    const t = randInnerTileInRoom(room) // 出入り口（部屋の外周）には置かない
     if (!t) continue
     mark(t.x, t.y)
     const r = Math.random() // ✨80% / 木の実10% / おにぎり10%
@@ -296,7 +296,7 @@ export default function Dungeon() {
       if (ex) await supabase.from('player_gems').update({ quantity: (ex.quantity || 1) + 1 }).eq('id', ex.id)
       else await supabase.from('player_gems').insert({ player_id: userIdRef.current, gem_type: entry.gemType, rank: 'F', quantity: 1 })
     } else if (entry.type === 'seed') {
-      await supabase.rpc('pet_grant_item', { p_key: entry.seedKey, p_qty: 1 })
+      await supabase.rpc('pet_grant_item', { p_key: entry.seedKey, p_qty: entry.qty || 1 })
     } else if (entry.type === 'charm') {
       await supabase.rpc('pet_charm_grant', { p_ctype: entry.ctype })
     }
@@ -345,13 +345,21 @@ export default function Dungeon() {
     finishedRef.current = true
     // 生還時（死亡以外）のみ、持ち帰ったルート品をプレイヤーへ付与。死亡時は失う
     let lootGranted = 0
-    if (!died) { for (const entry of lootBag) { await grantLootEntry(entry); lootGranted++ } }
+    const lootList = []
+    if (!died) {
+      for (const entry of lootBag) {
+        await grantLootEntry(entry)
+        const n = entry.qty || 1
+        lootGranted += n
+        lootList.push(`${entry.emoji || ''}${entry.label}${n > 1 ? `×${n}` : ''}`)
+      }
+    }
     setLootBag([])
     const { data, error } = await supabase.rpc('dungeon_finish', {
       p_run_id: runIdRef.current, p_floors: floorsRef.current,
       p_enemies: enemiesRef.current, p_items: itemsRef.current, p_cleared: cleared, p_died: died,
     })
-    if (!error && data) setReward({ ...data, lootGranted })
+    if (!error && data) setReward({ ...data, lootGranted, lootList })
   }, [lootBag, grantLootEntry])
 
   useEffect(() => {
@@ -445,8 +453,17 @@ export default function Dungeon() {
   // side: 'left'=自分/全般 / 'right'=敵の行動
   const addLog = (msg, side = 'left') => setLog((l) => [{ msg, side }, ...l].slice(0, 30))
 
-  // 持ち物の合計数（だっしゅつの翼は対象外＝消耗品＋戦利品）。INV_MAX を超えたら拾えない
+  // 持ち物の合計数（だっしゅつの翼は対象外＝消耗品＋戦利品）。上限を超えたら拾えない
   const bagCount = () => Object.entries(inventory).filter(([k]) => k !== 'escape').reduce((s, [, q]) => s + (q || 0), 0) + lootBag.length
+  // ルート品を持ち物へ。素は同種でスタック（1枠扱い）、それ以外は個別
+  const addLootToBag = (loot) => setLootBag((b) => {
+    if (loot.type === 'seed') {
+      const i = b.findIndex((x) => x.type === 'seed' && x.seedKey === loot.seedKey)
+      if (i >= 0) { const c = [...b]; c[i] = { ...c[i], qty: (c[i].qty || 1) + (loot.qty || 1) }; return c }
+      return [...b, { ...loot, qty: loot.qty || 1 }]
+    }
+    return [...b, loot]
+  })
 
   const tryMove = (dx, dy) => {
     if (!state || status !== 'exploring' || busyRef.current) return
@@ -507,14 +524,14 @@ export default function Dungeon() {
           grantFood(itemHere.key).then((ok) => addLog(ok ? `${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾って袋に入れた` : '🎒 袋がいっぱいで拾えなかった'))
         } else if (itemHere.kind === 'dropLoot' && itemHere.loot) {
           // 自分が捨てたルート品を拾い直す
-          setLootBag((b) => [...b, itemHere.loot]); addLog(`${itemHere.loot.emoji} ${itemHere.loot.label}を拾った`)
+          addLootToBag(itemHere.loot); addLog(`${itemHere.loot.emoji} ${itemHere.loot.label}を拾った`)
         } else if (itemHere.kind === 'dropFood' && itemHere.key) {
           const fdef = PET_ITEMS[itemHere.key]
           grantFood(itemHere.key).then((ok) => addLog(ok ? `${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾った` : '🎒 袋がいっぱいで拾えなかった'))
         } else {
           // ✨：装備33% / 強化石33% / 宝石F33%（持ち物に保持し生還で入手）
           const loot = rollLoot()
-          if (loot) { setLootBag((b) => [...b, loot]); addLog(`${loot.emoji} ${loot.label}を拾った`) }
+          if (loot) { addLootToBag(loot); addLog(`${loot.emoji} ${loot.label}を拾った`) }
           else addLog('✨ アイテムを拾った')
         }
       }
@@ -542,6 +559,8 @@ export default function Dungeon() {
     // 敵が重ならないよう、移動済みの位置も含めて占有マスを管理する
     const taken = new Set(enemies.map((e) => e.x + ',' + e.y))
     const isFloor = (x, y) => inBounds(x, y) && s.grid[y][x] === '.'
+    // プレイヤーが今見えているマス（見えていない敵には攻撃させない）
+    const visNow = computeVisible(s.rooms, player.x, player.y)
     let dead = false
     const attackerFx = {} // 反撃してきた敵の突進演出
     let petHit = false
@@ -549,7 +568,7 @@ export default function Dungeon() {
     enemies = enemies.map((e) => {
       const sees = enemySeesPet(s.rooms, e, player.x, player.y)
       const adjacent = Math.abs(e.x - player.x) + Math.abs(e.y - player.y) === 1
-      if (sees && adjacent) {
+      if (sees && adjacent && visNow.has(e.x + ',' + e.y)) {
         // 敵の攻撃タイプに応じて pet.def(物理)/mdef(特殊)で軽減
         const guard = e.type === 'spec' ? (pet.mdef || 0) : (pet.def || 0)
         let dmg = calcDamage(e.atk || 1, guard)
@@ -917,7 +936,7 @@ export default function Dungeon() {
                 {lootBag.map((l) => (
                   <button key={l.id} onClick={() => dropMode && dropItem({ kind: 'loot', loot: l })}
                     style={{ background: dropMode ? '#1a0e08' : '#0a1a14', border: `1px solid ${dropMode ? '#cc7755' : '#2a5544'}`, color: '#bfe6cc', padding: '6px 10px', cursor: dropMode ? 'pointer' : 'default', fontFamily: 'monospace', fontSize: 12 }}>
-                    {l.emoji} {l.label}
+                    {l.emoji} {l.label}{(l.qty || 1) > 1 ? `×${l.qty}` : ''}
                   </button>
                 ))}
                 {empty && <span style={{ color: '#445566', fontSize: 11 }}>（持ち物なし）</span>}
@@ -963,7 +982,14 @@ function RewardPanel({ reward, pet }) {
       <div style={{ color: '#88bbee' }}>Lv{reward.level}（EXP {reward.exp}） / なつき {reward.affection}/100</div>
       {reward.aff_delta ? <div style={{ marginTop: 4, color: reward.aff_delta < 0 ? '#ff7777' : '#88ffaa' }}>なつき {reward.aff_delta > 0 ? '+' : ''}{reward.aff_delta}</div> : null}
       {reward.aff_bonus > 0 ? <div style={{ marginTop: 2, color: '#88ffaa', fontSize: 10 }}>🎉 ダンジョン{reward.clears}回達成！なつき+1</div> : (reward.clears != null ? <div style={{ marginTop: 2, color: '#7799bb', fontSize: 10 }}>ダンジョン{reward.clears}回（あと{10 - (reward.clears % 10)}回でなつき+1）</div> : null)}
-      {reward.lootGranted > 0 && <div style={{ marginTop: 4, color: '#bfe6cc', fontSize: 11 }}>🎁 持ち帰った戦利品 {reward.lootGranted}個 を入手！</div>}
+      {reward.lootGranted > 0 && (
+        <div style={{ marginTop: 4, color: '#bfe6cc', fontSize: 11 }}>
+          🎁 持ち帰った戦利品 {reward.lootGranted}個 を入手！
+          {Array.isArray(reward.lootList) && reward.lootList.length > 0 && (
+            <div style={{ marginTop: 2, color: '#9ccbb0', fontSize: 10, lineHeight: 1.6 }}>{reward.lootList.join('、')}</div>
+          )}
+        </div>
+      )}
       <div style={{ marginTop: 4, color: '#7799bb', fontSize: 10 }}>※EXPは撃破ごとに付与済み</div>
     </div>
   )
