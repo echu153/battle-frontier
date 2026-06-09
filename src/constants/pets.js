@@ -90,7 +90,7 @@ export const SKILLS = {
   doramu_shell:  { name: 'こうら打ち',     species: 'leaf',  learnLv: 3,   mult: 1.6,  hits: 1, cost: 2,  desc: '硬い甲羅を叩きつける（1.6倍／満腹2）' },
   doramu_rock:   { name: '岩石連打',       species: 'leaf',  learnLv: 8,   mult: 0.85, hits: 2, cost: 3,  desc: '岩の拳で2回殴る（各0.85倍／満腹3）' },
   doramu_quake:  { name: '大地割り',       species: 'leaf',  learnLv: 20,  mult: 2.3,  hits: 1, cost: 5, desc: '大地を割る重い一撃（2.3倍／満腹5）' },
-  doramu_counter:{ name: '鉄壁の反撃',     species: 'leaf',  learnLv: 50,  mult: 1.4,  hits: 1, lifesteal: 0.3, cost: 5, desc: '受け止めて反撃し3割回復（1.4倍／満腹5）' },
+  doramu_counter:{ name: 'グランドドレイン', species: 'leaf',  learnLv: 50,  mult: 1.4,  hits: 1, lifesteal: 0.3, cost: 5, desc: '大地に染みた血を吸い上げ、与ダメの3割を回復（1.4倍／満腹5）' },
   doramu_tremor: { name: '連震撃',         species: 'leaf',  learnLv: 80,  mult: 0.9,  hits: 3, cost: 8, desc: '地響きで3連撃（各0.9倍／満腹8）' },
   doramu_guardian:{ name: '守護神・大地崩撃',species: 'leaf', learnLv: 120, mult: 3.6,  hits: 1, cost: 12, desc: '守護神の力で大地ごと砕く（3.6倍／満腹12）' },
 }

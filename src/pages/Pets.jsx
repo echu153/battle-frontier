@@ -269,12 +269,20 @@ export default function Pets() {
               const learned = sk.learnLv <= selected.level
               const carried = (selected.skill_slots || ['tackle']).includes(id) || sk.fixed
               const clickable = learned && !sk.fixed
+              // 未習得スキルは内容を隠し、習得レベルだけ表示
+              if (!learned) {
+                return (
+                  <div key={id} style={{ border: '1px solid #1c2c44', background: '#000810', padding: '6px 8px', opacity: 0.7 }}>
+                    <div style={{ fontSize: 12, color: '#5e7fa0' }}>🔒 Lv{sk.learnLv} で習得</div>
+                  </div>
+                )
+              }
               return (
                 <div key={id} onClick={() => clickable && !loading && toggleSlot(id)}
-                  style={{ border: `1px solid ${carried ? '#aa88ff' : '#224466'}`, background: carried ? '#170f2a' : '#000a18', padding: '6px 8px', cursor: clickable ? 'pointer' : 'default', opacity: learned ? 1 : 0.45 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: learned ? '#cce6ff' : '#667788' }}>
+                  style={{ border: `1px solid ${carried ? '#aa88ff' : '#224466'}`, background: carried ? '#170f2a' : '#000a18', padding: '6px 8px', cursor: clickable ? 'pointer' : 'default' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#cce6ff' }}>
                     <span>{carried ? '✓ ' : ''}{sk.name} <span style={{ fontSize: 10, color: '#ffaa66' }}>{sk.cost > 0 ? `満腹${sk.cost}` : '消費なし'}</span></span>
-                    <span style={{ fontSize: 10, color: learned ? (carried ? '#aa88ff' : '#6699cc') : '#aa6644' }}>{sk.fixed ? '固定装備' : learned ? (carried ? '装備中' : '装備する') : `Lv${sk.learnLv}で習得`}</span>
+                    <span style={{ fontSize: 10, color: carried ? '#aa88ff' : '#6699cc' }}>{sk.fixed ? '固定装備' : carried ? '装備中' : '装備する'}</span>
                   </div>
                   <div style={{ fontSize: 10, color: '#5e7fa0', marginTop: 2 }}>{sk.desc}</div>
                 </div>
