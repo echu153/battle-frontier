@@ -902,13 +902,13 @@ export default function Dungeon() {
           )
         })()}
         {status === 'cleared' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<br /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<br /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
         {status === 'dead' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>💀 ペットは力尽きた…（なつき-3）<br /><br /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>💀 ペットは力尽きた…（なつき-3）<br /><br /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
         {status === 'escaped' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#cc88ff' }}>🪽 ダンジョンから脱出した<br /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#cc88ff' }}>🪽 ダンジョンから脱出した<br /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
 
         {/* ログ見出し：左＝自分の行動／右＝敵の行動 */}

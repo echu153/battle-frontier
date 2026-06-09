@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { calcEffectiveStats, calcEffectiveTotal, GEM_DATA, gemEffectValue } from '../lib/stats'
+import { petStats, speciesLabel, speciesEmoji, petImage, atkLabel, applyCharmStats, getCharm, charmDisplayName } from '../constants/pets'
 
 const gemBonusText = (gemType, rank) => {
   const g = GEM_DATA[gemType]; if (!g) return ''
@@ -102,6 +103,8 @@ export default function Profile() {
   const nav = useNavigate()
   const { playerId } = useParams()
   const [profile, setProfile] = useState(null)
+  const [pets, setPets] = useState([])
+  const [petCharms, setPetCharms] = useState([])
   const [equipment, setEquipment] = useState([])
   const [proficiency, setProficiency] = useState([])
   const [skillSets, setSkillSets] = useState([])
@@ -129,6 +132,11 @@ export default function Profile() {
     setProficiency(prof || [])
     const { data: ss } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', targetId).eq('set_type', 'sortie').order('slot_order')
     setSkillSets(ss || [])
+    // ペット（自分のプロフィールのみ表示。他人はRLSで空になる）
+    const { data: petList } = await supabase.from('pets').select('*').eq('owner_id', targetId).order('created_at')
+    setPets(petList || [])
+    const { data: chList } = await supabase.from('player_charms').select('*').eq('owner_id', targetId)
+    setPetCharms(chList || [])
     if (p?.ability_title_id) {
       const { data: at } = await supabase.from('titles').select('*').eq('id', p.ability_title_id).single()
       setAbilityTitle(at || null)
@@ -334,6 +342,30 @@ export default function Profile() {
           })}
           </div>
         </div>
+
+        {/* ペット（自分のプロフィールのみ） */}
+        {pets.length > 0 && (
+          <div style={{ border:'1px solid #5a3a8a', background:'#0c0820', padding:'12px' }}>
+            <div style={{ color:'#aa88ff', fontSize:'12px', marginBottom:'8px' }}>🐾 ペット</div>
+            <div style={{ display:'grid', gap:'8px' }}>
+              {pets.map(pet => {
+                const charm = petCharms.find(c => c.id === pet.charm_id)
+                const st = applyCharmStats(petStats(pet), charm)
+                const src = petImage(pet)
+                return (
+                  <div key={pet.id} style={{ display:'flex', gap:'10px', alignItems:'center', border:'1px solid #2a2050', background:'#080614', padding:'8px' }}>
+                    {src ? <img src={src} alt="" style={{ width:44, height:44, objectFit:'contain', borderRadius:4 }} /> : <div style={{ fontSize:34 }}>{speciesEmoji(pet)}</div>}
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ color:'#cce6ff', fontSize:'12px' }}>{pet.name} <span style={{ color: pet.evolved?'#ffcc66':'#6699cc', fontSize:'10px' }}>({speciesLabel(pet)})</span> {pet.is_active && <span style={{ color:'#44ff88', fontSize:'9px' }}>選択中</span>}</div>
+                      <div style={{ color:'#88bbee', fontSize:'10px', marginTop:'2px' }}>Lv{pet.level}　HP{st.maxHp} / {atkLabel(pet)}{st.atk} / 防{st.def} / 特防{st.mdef}</div>
+                      {charm && <div style={{ color:'#9ccbb0', fontSize:'9px', marginTop:'2px' }}>🧿 {charmDisplayName(charm)}（{getCharm(charm.ctype).desc}）</div>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* スキルセット */}
         <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
