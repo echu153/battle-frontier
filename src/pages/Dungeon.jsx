@@ -179,7 +179,9 @@ export default function Dungeon() {
   const [status, setStatus] = useState('select') // select | exploring | cleared | dead | escaped
   const [reward, setReward] = useState(null)
   const [selectedSkill, setSelectedSkill] = useState('tackle') // ダンジョン内で選択中のスキル
-  const [inventory, setInventory] = useState({}) // 持ち物 { item_key: qty }
+  const [inventory, setInventory] = useState({}) // 消耗品の持ち物 { item_key: qty }
+  const [lootBag, setLootBag] = useState([])     // 持ち帰り待ちのルート品（装備/強化石/宝石）。生還で付与
+  const [dropMode, setDropMode] = useState(false) // 「捨てる」モード（持ち物を選ぶと足元に置く）
   const [dungeon, setDungeon] = useState(null) // 選択中のダンジョン定義
   const [cleared, setCleared] = useState(new Set()) // クリア済みダンジョンID
   const [shake, setShake] = useState(null) // 戦闘演出：接触時のマップ揺れ（'hit' | 'kill'）
@@ -196,6 +198,7 @@ export default function Dungeon() {
   const applyFx = (next) => { fxId.current += 1; setFx({ pet: null, enemies: {}, ...next, t: fxId.current }) }
   const busyRef = useRef(false) // 体当たり〜敵反撃の演出中は入力をロック
   const spawnSeq = useRef(0) // 湧いた敵の連番ID用
+  const dropSeq = useRef(0)  // 床に置いたアイテムの連番ID用
   const turnTimers = useRef([])
   useEffect(() => () => {
     if (shakeTimer.current) clearTimeout(shakeTimer.current)
@@ -236,42 +239,47 @@ export default function Dungeon() {
     })
   }, [])
 
-  // アイテムマスを拾ったときの装備ドロップ（このダンジョンの出現エリアの通常/レアドロップから・ボス専用は除外）
-  const grantEquipmentDrop = useCallback(async () => {
-    const areaIds = dungeon?.areas || [1]
-    const pool = AREAS.filter((a) => areaIds.includes(a.id)).flatMap((a) => [...(a.commonDrops || []), ...(a.rareDrops || [])])
-    if (!pool.length || !userIdRef.current) return null
-    const name = pool[Math.floor(Math.random() * pool.length)]
-    const { data: weapon } = await supabase.from('weapons').select('*').eq('name', name).maybeSingle()
-    if (!weapon) return null
-    const isArti = ARTIFACT_BASE_NAMES.includes(weapon.name)
-    const bonus = isArti ? {} : generateDropBonus(weapon)
-    const { error } = await supabase.from('player_equipment').insert({ player_id: userIdRef.current, weapon_id: weapon.id, slot: weapon.slot, equipped: false, ...bonus })
-    if (error) return null
-    return name
+  // ✨から出るルート品の抽選（この時点では付与しない＝持ち物に保持し、生還時に付与）
+  //  装備33% / 強化石(F〜D)33% / 宝石F 33%
+  const lootSeq = useRef(0)
+  const rollLoot = useCallback(() => {
+    lootSeq.current += 1
+    const id = 'L' + lootSeq.current
+    const r = Math.random()
+    if (r < 1 / 3) {
+      const areaIds = dungeon?.areas || [1]
+      const pool = AREAS.filter((a) => areaIds.includes(a.id)).flatMap((a) => [...(a.commonDrops || []), ...(a.rareDrops || [])])
+      if (!pool.length) return null
+      const name = pool[Math.floor(Math.random() * pool.length)]
+      return { id, type: 'equip', name, label: name, emoji: '🎁' }
+    } else if (r < 2 / 3) {
+      const rank = STONE_DROP_RANKS[Math.floor(Math.random() * STONE_DROP_RANKS.length)]
+      return { id, type: 'stone', rank, label: `強化石(${rank})`, emoji: '🪨' }
+    }
+    const gemType = GEM_TYPES[Math.floor(Math.random() * GEM_TYPES.length)]
+    return { id, type: 'gem', gemType, label: `${GEM_DATA[gemType]?.name || '宝石'}(F)`, emoji: '💍' }
   }, [dungeon])
 
-  // 強化石ドロップ（F〜D をランダムで1個。player_items に加算）
-  const grantStone = useCallback(async () => {
-    if (!userIdRef.current) return null
-    const rank = STONE_DROP_RANKS[Math.floor(Math.random() * STONE_DROP_RANKS.length)]
-    const name = `強化石(${rank})`
-    const { data: item } = await supabase.from('items').select('id').eq('name', name).maybeSingle()
-    if (!item) return null
-    const { data: existing } = await supabase.from('player_items').select('id, quantity').eq('player_id', userIdRef.current).eq('item_id', item.id).maybeSingle()
-    if (existing) await supabase.from('player_items').update({ quantity: (existing.quantity || 0) + 1 }).eq('id', existing.id)
-    else await supabase.from('player_items').insert({ player_id: userIdRef.current, item_id: item.id, quantity: 1, equipped: false })
-    return name
-  }, [])
-
-  // 宝石ドロップ（ランダム種・Fランクを1個。player_gems に加算）
-  const grantGemF = useCallback(async () => {
-    if (!userIdRef.current) return null
-    const gemType = GEM_TYPES[Math.floor(Math.random() * GEM_TYPES.length)]
-    const { data: existing } = await supabase.from('player_gems').select('id, quantity').eq('player_id', userIdRef.current).eq('gem_type', gemType).eq('rank', 'F').maybeSingle()
-    if (existing) await supabase.from('player_gems').update({ quantity: (existing.quantity || 1) + 1 }).eq('id', existing.id)
-    else await supabase.from('player_gems').insert({ player_id: userIdRef.current, gem_type: gemType, rank: 'F', quantity: 1 })
-    return `${GEM_DATA[gemType]?.name || '宝石'}(F)`
+  // 退出時：持ち帰ったルート品を実際にプレイヤーへ付与
+  const grantLootEntry = useCallback(async (entry) => {
+    if (!userIdRef.current || !entry) return
+    if (entry.type === 'equip') {
+      const { data: weapon } = await supabase.from('weapons').select('*').eq('name', entry.name).maybeSingle()
+      if (!weapon) return
+      const isArti = ARTIFACT_BASE_NAMES.includes(weapon.name)
+      const bonus = isArti ? {} : generateDropBonus(weapon)
+      await supabase.from('player_equipment').insert({ player_id: userIdRef.current, weapon_id: weapon.id, slot: weapon.slot, equipped: false, ...bonus })
+    } else if (entry.type === 'stone') {
+      const { data: item } = await supabase.from('items').select('id').eq('name', `強化石(${entry.rank})`).maybeSingle()
+      if (!item) return
+      const { data: ex } = await supabase.from('player_items').select('id, quantity').eq('player_id', userIdRef.current).eq('item_id', item.id).maybeSingle()
+      if (ex) await supabase.from('player_items').update({ quantity: (ex.quantity || 0) + 1 }).eq('id', ex.id)
+      else await supabase.from('player_items').insert({ player_id: userIdRef.current, item_id: item.id, quantity: 1, equipped: false })
+    } else if (entry.type === 'gem') {
+      const { data: ex } = await supabase.from('player_gems').select('id, quantity').eq('player_id', userIdRef.current).eq('gem_type', entry.gemType).eq('rank', 'F').maybeSingle()
+      if (ex) await supabase.from('player_gems').update({ quantity: (ex.quantity || 1) + 1 }).eq('id', ex.id)
+      else await supabase.from('player_gems').insert({ player_id: userIdRef.current, gem_type: entry.gemType, rank: 'F', quantity: 1 })
+    }
   }, [])
 
   // 床の消耗品（木の実・おにぎり）をアイテム袋へ。残数を更新
@@ -315,12 +323,16 @@ export default function Dungeon() {
     if (saveKey()) localStorage.removeItem(saveKey()) // 中断データを破棄
     if (finishedRef.current || !runIdRef.current) return
     finishedRef.current = true
+    // 生還時（死亡以外）のみ、持ち帰ったルート品をプレイヤーへ付与。死亡時は失う
+    let lootGranted = 0
+    if (!died) { for (const entry of lootBag) { await grantLootEntry(entry); lootGranted++ } }
+    setLootBag([])
     const { data, error } = await supabase.rpc('dungeon_finish', {
       p_run_id: runIdRef.current, p_floors: floorsRef.current,
       p_enemies: enemiesRef.current, p_items: itemsRef.current, p_cleared: cleared, p_died: died,
     })
-    if (!error && data) setReward(data)
-  }, [])
+    if (!error && data) setReward({ ...data, lootGranted })
+  }, [lootBag, grantLootEntry])
 
   useEffect(() => {
     (async () => {
@@ -363,6 +375,7 @@ export default function Dungeon() {
             setTurns(sv.turns)
             setSelectedSkill(sv.selectedSkill || 'tackle')
             if (sv.inventory) setInventory(sv.inventory)
+            if (Array.isArray(sv.lootBag)) setLootBag(sv.lootBag)
             setState({ ...sv.state, explored: new Set(sv.state.explored) })
             setStatus('exploring')
             restored = true
@@ -385,7 +398,7 @@ export default function Dungeon() {
   // ダンジョンを選んで開始
   const beginDungeon = (d) => {
     setDungeon(d)
-    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setLog([]); setReward(null); setStatus('exploring')
+    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
     enterFloor(1, d)
     startRun(pet.id, d.id)
   }
@@ -397,14 +410,14 @@ export default function Dungeon() {
     if (status === 'exploring' && state && pet.id && runIdRef.current) {
       const sv = {
         runId: runIdRef.current, dungeonId: dungeon?.id, floorNum, petHp, fullness, turns,
-        selectedSkill, inventory, kills: enemiesRef.current, floorsCleared: floorsRef.current, itemsCollected: itemsRef.current,
+        selectedSkill, inventory, lootBag, kills: enemiesRef.current, floorsCleared: floorsRef.current, itemsCollected: itemsRef.current,
         state: { ...state, explored: [...state.explored] },
       }
       try { localStorage.setItem(key, JSON.stringify(sv)) } catch { /* 容量超過などは無視 */ }
     } else if (status === 'cleared' || status === 'dead' || status === 'escaped') {
       localStorage.removeItem(key)
     }
-  }, [status, state, petHp, fullness, turns, selectedSkill, inventory, floorNum, dungeon, pet.id])
+  }, [status, state, petHp, fullness, turns, selectedSkill, inventory, lootBag, floorNum, dungeon, pet.id])
 
   // side: 'left'=自分/全般 / 'right'=敵の行動
   const addLog = (msg, side = 'left') => setLog((l) => [{ msg, side }, ...l].slice(0, 30))
@@ -459,12 +472,17 @@ export default function Dungeon() {
           // 床の消耗品をアイテム袋へ
           const fdef = PET_ITEMS[itemHere.key]
           grantFood(itemHere.key).then((ok) => addLog(ok ? `${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾って袋に入れた` : '🎒 袋がいっぱいで拾えなかった'))
+        } else if (itemHere.kind === 'dropLoot' && itemHere.loot) {
+          // 自分が捨てたルート品を拾い直す
+          setLootBag((b) => [...b, itemHere.loot]); addLog(`${itemHere.loot.emoji} ${itemHere.loot.label}を拾った（持ち帰ると入手）`)
+        } else if (itemHere.kind === 'dropFood' && itemHere.key) {
+          const fdef = PET_ITEMS[itemHere.key]
+          grantFood(itemHere.key).then((ok) => addLog(ok ? `${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾った` : '🎒 袋がいっぱいで拾えなかった'))
         } else {
-          // ✨：装備33% / 強化石33% / 宝石F33%
-          const r = Math.random()
-          if (r < 1 / 3) grantEquipmentDrop().then((name) => addLog(name ? `🎁 装備品「${name}」を拾った！` : '✨ アイテムを拾った'))
-          else if (r < 2 / 3) grantStone().then((name) => addLog(name ? `🪨 ${name}を拾った！` : '✨ アイテムを拾った'))
-          else grantGemF().then((name) => addLog(name ? `💍 宝石「${name}」を拾った！` : '✨ アイテムを拾った'))
+          // ✨：装備33% / 強化石33% / 宝石F33%（持ち物に保持し生還で入手）
+          const loot = rollLoot()
+          if (loot) { setLootBag((b) => [...b, loot]); addLog(`${loot.emoji} ${loot.label}を拾った（持ち帰ると入手）`) }
+          else addLog('✨ アイテムを拾った')
         }
       }
       player = { x: nx, y: ny }
@@ -607,6 +625,29 @@ export default function Dungeon() {
     }
   }
 
+  // 持ち物を足元に置く（捨てる）。足元に既にアイテムがあると不可。1ターン消費
+  const dropItem = async (entry) => {
+    if (!state || status !== 'exploring' || busyRef.current) return
+    const px = state.player.x, py = state.player.y
+    if (state.items.some((it) => it.x === px && it.y === py)) { addLog('🎒 足元にアイテムがあるので置けない'); return }
+    let floorItem, label
+    if (entry.kind === 'loot') {
+      floorItem = { id: 'd' + entry.loot.id, x: px, y: py, kind: 'dropLoot', loot: entry.loot }
+      label = entry.loot.label
+      setLootBag((b) => b.filter((l) => l.id !== entry.loot.id))
+    } else {
+      if ((inventory[entry.key] || 0) < 1) return
+      const { error } = await supabase.rpc('pet_consume_item', { p_key: entry.key })
+      if (error) { addLog('置けなかった'); return }
+      setInventory((inv) => ({ ...inv, [entry.key]: (inv[entry.key] || 1) - 1 }))
+      dropSeq.current += 1
+      floorItem = { id: 'df' + dropSeq.current, x: px, y: py, kind: 'dropFood', key: entry.key }
+      label = PET_ITEMS[entry.key]?.name || 'アイテム'
+    }
+    addLog(`🎒 ${label}を足元に置いた`)
+    commitTurn({ ...state, items: [...state.items, floorItem] }, state.player, state.enemies, petHp) // 1ターン消費
+  }
+
   // 足踏み：その場で1ターン経過
   const stepInPlace = () => {
     if (!state || status !== 'exploring' || busyRef.current) return
@@ -700,7 +741,11 @@ export default function Dungeon() {
     const e = state.enemies.find((o) => o.x === x && o.y === y)
     if (e) return { ch: '👹', img: e.image || null, bg: C.floorVis, fx: fx.enemies[e.id] || null }
     const it = state.items.find((o) => o.x === x && o.y === y)
-    if (it) return { ch: it.kind === 'food' ? (PET_ITEMS[it.key]?.emoji || '🍙') : '✨', bg: C.floorVis }
+    if (it) {
+      const ch = (it.kind === 'food' || it.kind === 'dropFood') ? (PET_ITEMS[it.key]?.emoji || '🍙')
+        : it.kind === 'dropLoot' ? (it.loot?.emoji || '🎁') : '✨'
+      return { ch, bg: C.floorVis }
+    }
     if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: C.floorVis }
     return { ch: '', bg: wall ? C.wallVis : C.floorVis }
   }
@@ -814,20 +859,37 @@ export default function Dungeon() {
             </div>
           </div>
         )}
-        {status === 'exploring' && (
-          <div style={{ marginTop: 12, background: '#000610', border: '1px solid #113355', padding: 8 }}>
-            <div style={{ color: '#88aacc', fontSize: 11, marginBottom: 6 }}>🎒 持ち物</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {DUNGEON_ITEMS.filter((it) => (inventory[it.key] || 0) > 0).map((it) => (
-                <button key={it.key} onClick={() => useItem(it.key)}
-                  style={{ background: '#0a1424', border: '1px solid #335588', color: '#cce6ff', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
-                  {it.emoji} {it.name}×{inventory[it.key]}
+        {status === 'exploring' && (() => {
+          const consumables = DUNGEON_ITEMS.filter((it) => (inventory[it.key] || 0) > 0)
+          const empty = consumables.length === 0 && lootBag.length === 0
+          return (
+            <div style={{ marginTop: 12, background: '#000610', border: `1px solid ${dropMode ? '#cc7755' : '#113355'}`, padding: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <div style={{ color: '#88aacc', fontSize: 11 }}>🎒 持ち物 {dropMode && <span style={{ color: '#ff9966' }}>（捨てるモード：押すと足元に置く）</span>}</div>
+                <button onClick={() => setDropMode((d) => !d)}
+                  style={{ background: dropMode ? '#2a1000' : '#0a1424', border: `1px solid ${dropMode ? '#ff9966' : '#335588'}`, color: dropMode ? '#ff9966' : '#88aacc', padding: '3px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                  🗑 捨てる{dropMode ? '（ON）' : ''}
                 </button>
-              ))}
-              {DUNGEON_ITEMS.every((it) => (inventory[it.key] || 0) === 0) && <span style={{ color: '#445566', fontSize: 11 }}>（持ち物なし）</span>}
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {consumables.map((it) => (
+                  <button key={it.key} onClick={() => (dropMode ? dropItem({ kind: 'consumable', key: it.key }) : useItem(it.key))}
+                    style={{ background: dropMode ? '#1a0e08' : '#0a1424', border: `1px solid ${dropMode ? '#cc7755' : '#335588'}`, color: '#cce6ff', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
+                    {it.emoji} {it.name}×{inventory[it.key]}
+                  </button>
+                ))}
+                {lootBag.map((l) => (
+                  <button key={l.id} onClick={() => dropMode && dropItem({ kind: 'loot', loot: l })}
+                    style={{ background: dropMode ? '#1a0e08' : '#0a1a14', border: `1px solid ${dropMode ? '#cc7755' : '#2a5544'}`, color: '#bfe6cc', padding: '6px 10px', cursor: dropMode ? 'pointer' : 'default', fontFamily: 'monospace', fontSize: 12 }}>
+                    {l.emoji} {l.label}
+                  </button>
+                ))}
+                {empty && <span style={{ color: '#445566', fontSize: 11 }}>（持ち物なし）</span>}
+              </div>
+              {lootBag.length > 0 && <div style={{ color: '#557766', fontSize: 10, marginTop: 6 }}>※装備・宝石・強化石は生きて帰ると入手（やられると失う）</div>}
             </div>
-          </div>
-        )}
+          )
+        })()}
         {status === 'cleared' && (
           <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<br /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
@@ -865,6 +927,7 @@ function RewardPanel({ reward, pet }) {
       <div style={{ color: '#88bbee' }}>Lv{reward.level}（EXP {reward.exp}） / なつき {reward.affection}/100</div>
       {reward.aff_delta ? <div style={{ marginTop: 4, color: reward.aff_delta < 0 ? '#ff7777' : '#88ffaa' }}>なつき {reward.aff_delta > 0 ? '+' : ''}{reward.aff_delta}</div> : null}
       {reward.aff_bonus > 0 ? <div style={{ marginTop: 2, color: '#88ffaa', fontSize: 10 }}>🎉 ダンジョン{reward.clears}回達成！なつき+1</div> : (reward.clears != null ? <div style={{ marginTop: 2, color: '#7799bb', fontSize: 10 }}>ダンジョン{reward.clears}回（あと{10 - (reward.clears % 10)}回でなつき+1）</div> : null)}
+      {reward.lootGranted > 0 && <div style={{ marginTop: 4, color: '#bfe6cc', fontSize: 11 }}>🎁 持ち帰った戦利品 {reward.lootGranted}個 を入手！</div>}
       <div style={{ marginTop: 4, color: '#7799bb', fontSize: 10 }}>※EXPは撃破ごとに付与済み</div>
     </div>
   )
