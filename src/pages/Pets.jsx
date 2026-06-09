@@ -23,6 +23,7 @@ export default function Pets() {
   const [evolveConfirm, setEvolveConfirm] = useState(null) // 進化確認ポップアップ対象のペット
   const [evolveDone, setEvolveDone] = useState(null)       // 進化完了ポップアップ対象のペット
   const [showShop, setShowShop] = useState(false)          // ペット商店モーダル
+  const [showHelp, setShowHelp] = useState(false)          // ヘルプ（ペットシステム説明）
   const [buyQty, setBuyQty] = useState({})                 // 商店の購入個数 { key: n }
   const [charms, setCharms] = useState([])                 // 所持チャーム
 
@@ -89,6 +90,7 @@ export default function Pets() {
     if (error) { flash('作成に失敗: ' + error.message); return }
     setNaming(null)
     flash(`${finalName} を仲間にした！`)
+    setShowHelp(true) // 初めて仲間にしたらヘルプを表示
     await fetchAll()
   }
 
@@ -238,7 +240,8 @@ export default function Pets() {
   if (!curSlots.includes('tackle')) curSlots.unshift('tackle')
 
   return (
-    <Wrap nav={nav} msg={msg} onShop={() => setShowShop(true)}>
+    <Wrap nav={nav} msg={msg} onShop={() => setShowShop(true)} onHelp={() => setShowHelp(true)}>
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       {/* 所持一覧 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 8, marginBottom: 14 }}>
         {pets.map((p) => (
@@ -467,7 +470,7 @@ function Portrait({ pet, size }) {
   return <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.7 }}>{speciesEmoji(pet)}</div>
 }
 
-function Wrap({ children, nav, msg, onShop }) {
+function Wrap({ children, nav, msg, onShop, onHelp }) {
   return (
     <div style={{ minHeight: '100vh', background: '#000820', color: '#88ccff', fontFamily: 'monospace', padding: 16 }}>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
@@ -476,7 +479,7 @@ function Wrap({ children, nav, msg, onShop }) {
           <Btn onClick={() => nav('/game')}>← 街に戻る</Btn>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <div style={{ color: '#aa88ff', letterSpacing: 2 }}>🐾 ペット <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span></div>
+          <div style={{ color: '#aa88ff', letterSpacing: 2 }}>🐾 ペット <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span> {onHelp && <span onClick={onHelp} style={{ cursor: 'pointer', color: '#66ccff', fontSize: 12 }}>❓ヘルプ</span>}</div>
           <div style={{ display: 'flex', gap: 6 }}>
             {onShop && <Btn onClick={onShop}>🛒 商店</Btn>}
             <Btn onClick={() => nav('/charms')}>🧿 チャーム</Btn>
@@ -496,3 +499,59 @@ function Btn({ children, onClick }) {
   return <button onClick={onClick} style={{ background: '#001840', border: '1px solid #0088ff', color: '#0088ff', padding: '6px 12px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>{children}</button>
 }
 const qtyBtn = { background: '#001028', border: '1px solid #335588', color: '#88bbee', width: 22, height: 22, cursor: 'pointer', fontFamily: 'monospace', fontSize: 13, lineHeight: '18px', padding: 0 }
+
+// ペットシステムの説明ヘルプ
+const HELP_SECTIONS = [
+  { t: '🚩 進め方', b: [
+    '最初に相棒を1体選びます（ヴォル＝物理／アルル＝魔法／ドラム＝防御）。総合力はどれも互角、配分が違うだけ。',
+    '相棒を「選択中」にして🕳ダンジョンへ潜り、敵を倒してレベルを上げ、アイテムやチャームを集めて強くしていきます。',
+    'Lv50で「進化」でき、上限が解放されてさらに成長します。',
+  ] },
+  { t: '⚡ スキルについて', b: [
+    'スキルは体当たりで発動します。「たいあたり」は全種族固定（満腹消費なし）。',
+    '種族ごとに Lv3/8/20/50/80/120 でスキルを習得。ペット画面でダンジョンに持っていくスキルを最大4つ（たいあたり込み）選べます。',
+    'スキルは満腹度を消費して発動（強いほど多い）。ダンジョン内では十字キー横で使うスキルを切り替えられます。',
+  ] },
+  { t: '📊 ステータスとなつき', b: [
+    'ステは HP / 攻撃(または特攻) / 防御 / 特防。物理は相手の防御、特殊は特防で軽減されます。',
+    'レベルが上がると自動でステ成長。必要EXPは「Lv×10」。',
+    'なつき度は1日2回の「スキンシップ」で+1（5:00 / 17:00 リセット）。ダンジョンで倒されると-3、10回クリアごとに+1。',
+  ] },
+  { t: '🧿 チャームについて', b: [
+    'ペットに1つ装備できる強化アイテム。最初は「はじまりのチャーム」を装備（効果なし）。',
+    'ダンジョンで拾える「素」を使い、チャームページで強化。攻/特攻/防/特防/HPを合計150個ぶんまで伸ばせます（HPの素は1個=HP+5）。',
+    '効果付きチャームもあり（解毒＝毒確率50%減 / 守り＝防御+10%）。選択中ペットのチャーム効果は主人公（プレイヤー）にも反映されます。',
+    '「継承」で別のチャームへ能力を移せます（移すと元のチャームは消滅）。',
+  ] },
+  { t: '🛒 商店について', b: [
+    'ヘッダーの🛒商店から、だっしゅつの翼・おにぎり・木の実・ニックネーム変更券などを購入（個数指定でまとめ買い可）。',
+    '持ち物（アイテム袋）は だっしゅつの翼以外 合計10個まで。ダンジョン中は20個まで持てます。',
+  ] },
+  { t: '🕳 ダンジョンについて', b: [
+    '相棒で潜るローグライク。部屋と通路を進み、▼の階段で次の階へ。最深部でクリア。',
+    '✨や床のアイテムを拾うと持ち物へ。✨からは 素/強化石/宝石/装備/チャーム が出ます。',
+    '装備・宝石・強化石・チャームは「持ち帰り式」＝生きて帰れば入手、やられると失います。だっしゅつの翼で安全に撤退も可能。',
+    '「捨てる」で持ち物を足元に置けます（足元が空いている時・1ターン消費）。',
+  ] },
+]
+function HelpModal({ onClose }) {
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, fontFamily: 'monospace' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#00102a', border: '1px solid #aa88ff', padding: 16, maxWidth: 460, width: '100%', maxHeight: '88vh', overflowY: 'auto' }}>
+        <div style={{ color: '#aa88ff', fontSize: 16, letterSpacing: 1, marginBottom: 4 }}>📖 ペットシステムの遊び方</div>
+        <div style={{ color: '#6699cc', fontSize: 11, marginBottom: 10 }}>あとからヘッダーの「❓ヘルプ」でいつでも開けます。</div>
+        {HELP_SECTIONS.map((s) => (
+          <div key={s.t} style={{ marginBottom: 12 }}>
+            <div style={{ color: '#ffcc66', fontSize: 13, marginBottom: 4 }}>{s.t}</div>
+            {s.b.map((line, i) => (
+              <div key={i} style={{ color: '#cce6ff', fontSize: 11.5, lineHeight: 1.7, marginBottom: 2, paddingLeft: 10, textIndent: -10 }}>・{line}</div>
+            ))}
+          </div>
+        ))}
+        <div style={{ textAlign: 'center', marginTop: 8 }}>
+          <button onClick={onClose} style={{ background: '#001840', border: '1px solid #0088ff', color: '#0088ff', padding: '8px 20px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 13 }}>とじる</button>
+        </div>
+      </div>
+    </div>
+  )
+}
