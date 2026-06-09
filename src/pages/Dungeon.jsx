@@ -535,9 +535,13 @@ export default function Dungeon() {
     return (
       <div style={{ minHeight: '100vh', background: '#000820', color: '#88ccff', fontFamily: 'monospace', padding: 16 }}>
         <div style={{ maxWidth: 480, margin: '0 auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #003366', paddingBottom: 8, marginBottom: 10 }}>
+            <div style={{ color: '#ffcc00', fontSize: 16, letterSpacing: 3 }}>BATTLE FRONTIER</div>
+            <Btn onClick={() => nav('/game')}>← 街に戻る</Btn>
+          </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <div style={{ color: '#aa88ff', letterSpacing: 2 }}>🕳 ダンジョン選択 <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span></div>
-            <Btn onClick={() => nav('/game')}>🏰 街</Btn>
+            <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn>
           </div>
           <div style={{ display: 'flex', gap: 10, fontSize: 12, marginBottom: 12, alignItems: 'center' }}>
             {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4 }} /> : <span style={{ fontSize: 22 }}>{pet.emoji}</span>}
@@ -642,9 +646,12 @@ export default function Dungeon() {
         }
       `}</style>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #003366', paddingBottom: 8, marginBottom: 10 }}>
+          <div style={{ color: '#ffcc00', fontSize: 16, letterSpacing: 3 }}>BATTLE FRONTIER</div>
+          <Btn onClick={leaveToTown}>← 街に戻る</Btn>
+        </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ color: '#aa88ff', letterSpacing: 2 }}>{dungeon?.emoji || '🕳'} {dungeon?.name || 'ダンジョン'} <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span></div>
-          <Btn onClick={leaveToTown}>🏰 街</Btn>
         </div>
 
         <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 8, flexWrap: 'wrap' }}>
@@ -761,6 +768,7 @@ function RewardPanel({ reward, pet }) {
     <div style={{ background: '#001026', border: '1px solid #335588', padding: 10, margin: '10px auto', maxWidth: 280, fontSize: 12, color: '#cce6ff' }}>
       <div style={{ color: '#88bbee' }}>Lv{reward.level}（EXP {reward.exp}） / なつき {reward.affection}/100</div>
       {reward.aff_delta ? <div style={{ marginTop: 4, color: reward.aff_delta < 0 ? '#ff7777' : '#88ffaa' }}>なつき {reward.aff_delta > 0 ? '+' : ''}{reward.aff_delta}</div> : null}
+      {reward.aff_bonus > 0 ? <div style={{ marginTop: 2, color: '#88ffaa', fontSize: 10 }}>🎉 ダンジョン{reward.clears}回達成！なつき+1</div> : (reward.clears != null ? <div style={{ marginTop: 2, color: '#7799bb', fontSize: 10 }}>ダンジョン{reward.clears}回（あと{10 - (reward.clears % 10)}回でなつき+1）</div> : null)}
       <div style={{ marginTop: 4, color: '#7799bb', fontSize: 10 }}>※EXPは撃破ごとに付与済み</div>
     </div>
   )

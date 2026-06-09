@@ -405,12 +405,13 @@ function Wrap({ children, nav, msg }) {
   return (
     <div style={{ minHeight: '100vh', background: '#000820', color: '#88ccff', fontFamily: 'monospace', padding: 16 }}>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #003366', paddingBottom: 8, marginBottom: 10 }}>
+          <div style={{ color: '#ffcc00', fontSize: 16, letterSpacing: 3 }}>BATTLE FRONTIER</div>
+          <Btn onClick={() => nav('/game')}>← 街に戻る</Btn>
+        </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <div style={{ color: '#aa88ff', letterSpacing: 2 }}>🐾 ペット <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span></div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <Btn onClick={() => nav('/dungeon')}>🕳 ダンジョン</Btn>
-            <Btn onClick={() => nav('/game')}>🏰 街</Btn>
-          </div>
+          <Btn onClick={() => nav('/dungeon')}>🕳 ダンジョン</Btn>
         </div>
         {msg && <div style={{ background: '#101a30', border: '1px solid #335588', color: '#aaddff', padding: 8, fontSize: 12, marginBottom: 10 }}>{msg}</div>}
         {children}
