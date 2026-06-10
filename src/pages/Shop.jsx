@@ -35,11 +35,26 @@ export default function Shop() {
     }
   }
 
-  const getQuantity = (itemId) => quantities[itemId] || 1
+  const getQuantity = (itemId) => {
+    const v = quantities[itemId]
+    if (v === '' || v === undefined) return 1 // 入力中の空欄は1扱いで計算
+    return v
+  }
 
   const setQuantity = (itemId, val) => {
     const num = Math.max(1, Math.min(999, Number(val) || 1))
     setQuantities(q => ({ ...q, [itemId]: num }))
+  }
+
+  // 入力中: 空欄を許容（打ち直せるように）。数字は即クランプ
+  const onQuantityInput = (itemId, raw) => {
+    if (raw === '') { setQuantities(q => ({ ...q, [itemId]: '' })); return }
+    setQuantity(itemId, raw)
+  }
+
+  // フォーカスが外れたら空欄を1に補正
+  const onQuantityBlur = (itemId) => {
+    if (quantities[itemId] === '') setQuantities(q => ({ ...q, [itemId]: 1 }))
   }
 
   const buyItem = async (item) => {
@@ -116,8 +131,9 @@ export default function Shop() {
                   <button onClick={() => setQuantity(item.id, qty - 1)}
                     style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 6px', fontFamily:'monospace', fontSize:'12px' }}>-</button>
                   <input
-                    type="number" value={qty} min={1} max={999}
-                    onChange={e => setQuantity(item.id, e.target.value)}
+                    type="number" value={quantities[item.id] === '' ? '' : qty} min={1} max={999}
+                    onChange={e => onQuantityInput(item.id, e.target.value)}
+                    onBlur={() => onQuantityBlur(item.id)}
                     style={{ width:'40px', background:'#001028', border:'1px solid #003366', color:'#88ccff', textAlign:'center', fontFamily:'monospace', fontSize:'12px', padding:'2px' }}
                   />
                   <button onClick={() => setQuantity(item.id, qty + 1)}
