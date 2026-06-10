@@ -248,8 +248,12 @@ INSERT INTO exchange_shop (name, description, cost_items, reward_type, reward_we
 SELECT 'マレディクシオン',
        'S級銃。攻撃ヒット時、2ターンの間対象の回復力-10%。',
        '[{"item_name": "黒龍の鱗", "quantity": 50}, {"item_name": "黒龍の逆鱗", "quantity": 1}]'::jsonb,
-       'weapon', 'マレディクシオン', 'hit_heal_down_10_2t', 5, true, 3, 'レイドボス'
+       'weapon', 'マレディクシオン', 'hit_heal_down_10_2t', 5, true, 2, 'レイドボス'
 WHERE NOT EXISTS (SELECT 1 FROM exchange_shop WHERE name = 'マレディクシオン');
+
+-- 表示順: ヴァルブレイカー(1) → マレディクシオン(2) → 黒龍の鎧(3) → 強化石(4,5)
+UPDATE exchange_shop SET sort_order = 2 WHERE name = 'マレディクシオン';
+UPDATE exchange_shop SET sort_order = 3 WHERE name = '黒龍の鎧';
 
 INSERT INTO exchange_shop (name, description, cost_items, reward_type, reward_weapon_name, reward_bonus_effect, max_per_player, active, sort_order, tab)
 SELECT '強化石(S)【鱗】',

@@ -218,22 +218,48 @@ export default function Exchange() {
             const canAfford = !alreadyDone && costs.every(c => (materials[c.item_name] || 0) >= c.quantity)
             const weapon = weaponMap[item.reward_weapon_name]
 
+            // アイテム報酬（強化石など）は賭博場の景品風スリム表示
+            if (item.reward_type === 'item') {
+              return (
+                <div key={item.id} style={{ border: `1px solid ${canAfford ? '#224433' : '#003366'}`, background: '#001028', padding: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: '#88ccff', fontSize: '12px' }}>{item.reward_weapon_name}</div>
+                      <div style={{ fontSize: '10px', marginTop: '2px' }}>
+                        {costs.map((c, i) => {
+                          const held = materials[c.item_name] || 0
+                          const ok = held >= c.quantity
+                          return (
+                            <span key={c.item_name} style={{ color: '#557799' }}>
+                              {i > 0 && ' / '}{c.item_name}×{c.quantity}
+                              <span style={{ color: ok ? '#44ff88' : '#ff4444' }}>（{held}所持）</span>
+                            </span>
+                          )
+                        })}
+                      </div>
+                      <div style={{ color: '#446688', fontSize: '10px', marginTop: '2px' }}>
+                        {isUnlimited ? `何度でも交換可（${doneCount}回交換済み）` : `${item.max_per_player}回まで（残り${remaining}回）`}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleExchange(item.id)}
+                      disabled={!canAfford || exchanging === item.id}
+                      style={{ padding: '8px 14px', background: canAfford ? '#001a00' : '#000e20', border: `1px solid ${canAfford ? '#44ff88' : '#002244'}`, color: canAfford ? '#44ff88' : '#335566', cursor: canAfford ? 'pointer' : 'not-allowed', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                      {exchanging === item.id ? '処理中...' : alreadyDone ? '上限' : canAfford ? '交換' : '素材不足'}
+                    </button>
+                  </div>
+                </div>
+              )
+            }
+
             return (
               <div key={item.id} style={{
                 border: `1px solid ${alreadyDone ? '#1a3344' : canAfford ? '#224433' : '#0055aa'}`,
                 background: alreadyDone ? '#080f0f' : '#001028',
                 padding: '14px',
               }}>
-                {/* 装備カード／アイテム報酬カード */}
-                {item.reward_type === 'item' ? (
-                  <div style={{ border: '1px solid #0055aa', background: '#001028', padding: '10px', marginBottom: '10px' }}>
-                    <div style={{ color: '#446688', fontSize: '10px', marginBottom: '4px' }}>アイテム</div>
-                    <div style={{ color: '#ffcc00', fontSize: '13px', marginBottom: '4px' }}>{item.reward_weapon_name}</div>
-                    {item.description && <div style={{ color: '#446688', fontSize: '10px' }}>{item.description}</div>}
-                  </div>
-                ) : (
-                  <WeaponCard weapon={weapon} bonusEffect={item.reward_bonus_effect} />
-                )}
+                {/* 装備カード */}
+                <WeaponCard weapon={weapon} bonusEffect={item.reward_bonus_effect} />
 
                 {/* 必要素材 */}
                 <div style={{ borderTop: '1px solid #0a1828', paddingTop: '10px', marginBottom: '10px' }}>
