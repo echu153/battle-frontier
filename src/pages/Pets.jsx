@@ -23,6 +23,8 @@ export default function Pets() {
   const [evolveConfirm, setEvolveConfirm] = useState(null) // 進化確認ポップアップ対象のペット
   const [evolveDone, setEvolveDone] = useState(null)       // 進化完了ポップアップ対象のペット
   const [showShop, setShowShop] = useState(false)          // ペット商店モーダル
+  const [showStorage, setShowStorage] = useState(false)    // 倉庫モーダル
+  const [storage, setStorage] = useState({})               // 倉庫 { key: qty }
   const [showHelp, setShowHelp] = useState(false)          // ヘルプ（ペットシステム説明）
   const [buyQty, setBuyQty] = useState({})                 // 商店の購入個数 { key: n }
   const [charms, setCharms] = useState([])                 // 所持チャーム
@@ -47,6 +49,22 @@ export default function Pets() {
     if (ps) setPeriodStart(ps)
     const { data: its } = await supabase.from('pet_items').select('item_key, qty').eq('owner_id', user.id)
     if (its) setItems(Object.fromEntries(its.map((r) => [r.item_key, r.qty])))
+    const { data: sto } = await supabase.from('pet_storage').select('item_key, qty').eq('owner_id', user.id)
+    setStorage(Object.fromEntries((sto || []).map((r) => [r.item_key, r.qty])))
+  }
+
+  // 倉庫 ↔ 持ち物 の移動
+  const moveStorage = async (key, toBag, qty = 1) => {
+    setLoading(true)
+    const { error } = await supabase.rpc('pet_storage_move', { p_key: key, p_qty: qty, p_to_bag: toBag })
+    setLoading(false)
+    if (error) {
+      const m = String(error.message)
+      flash(m.includes('bag full') ? '持ち物がいっぱいです（合計10個まで）' : m.includes('no item') ? '在庫がありません' : '移動失敗: ' + m)
+      return
+    }
+    flash(toBag ? '持ち物に移しました' : '倉庫に戻しました')
+    await fetchAll()
   }
 
   const buyItem = async (key, qty = 1) => {
@@ -242,7 +260,7 @@ export default function Pets() {
   if (!curSlots.includes('tackle')) curSlots.unshift('tackle')
 
   return (
-    <Wrap nav={nav} msg={msg} onShop={() => setShowShop(true)} onHelp={() => setShowHelp(true)}>
+    <Wrap nav={nav} msg={msg} onShop={() => setShowShop(true)} onStorage={() => setShowStorage(true)} onHelp={() => setShowHelp(true)}>
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       {/* 所持一覧 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 8, marginBottom: 14 }}>
@@ -274,7 +292,7 @@ export default function Pets() {
             : <span style={{ background: '#0a0f1a', border: '1px solid #223344', color: '#556677', padding: '6px 12px', fontSize: 12 }}>🤲 スキンシップ済み</span>}
           {!selected.is_active && <Btn onClick={() => !loading && setActive(selected)}>このペットを選択する</Btn>}
           {canEvolve(selected) && <Btn onClick={() => !loading && setEvolveConfirm(selected)}>✨ 進化させる（→{evolvedName(selected)}）</Btn>}
-          {(items.rename || 0) > 0 && !renaming && <Btn onClick={() => { setRenaming(true); setRenameInput(selected.name) }}>🎫 ニックネーム変更券で改名（{items.rename}枚）</Btn>}
+          {(storage.rename || 0) > 0 && !renaming && <Btn onClick={() => { setRenaming(true); setRenameInput(selected.name) }}>🎫 ニックネーム変更券で改名（{storage.rename}枚）</Btn>}
         </div>
         {renaming && (
           <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -390,7 +408,6 @@ export default function Pets() {
 
       {/* ペット商店モーダル（ヘッダーの🛒商店ボタンから開く・複数購入可） */}
       {showShop && (() => {
-        const bagCount = Object.entries(items).filter(([k]) => k !== 'escape').reduce((s, [, q]) => s + (q || 0), 0)
         const qtyOf = (k) => Math.max(1, buyQty[k] || 1)
         const setQ = (k, n) => setBuyQty((b) => ({ ...b, [k]: Math.max(1, Math.min(99, n)) }))
         return (
@@ -402,7 +419,7 @@ export default function Pets() {
                 <div style={{ color: '#ffcc44', fontSize: 15 }}>🛒 ペット商店</div>
                 <div style={{ color: '#ffd866', fontSize: 12 }}>所持G: {profile.gold?.toLocaleString?.() ?? profile.gold}</div>
               </div>
-              <div style={{ color: '#5e7fa0', fontSize: 10, marginBottom: 8 }}>※アイテム袋は だっしゅつの翼以外 合計{INV_MAX}個まで　袋 {bagCount}/{INV_MAX}</div>
+              <div style={{ color: '#5e7fa0', fontSize: 10, marginBottom: 8 }}>※購入したアイテムは「🏬倉庫」に入ります。倉庫から「持ち物」に移してダンジョンへ持っていけます（持ち物は{INV_MAX}個まで）</div>
               {msg && <div style={{ background: '#101a30', border: '1px solid #335588', color: '#aaddff', padding: 8, fontSize: 12, marginBottom: 8, textAlign: 'center' }}>{msg}</div>}
               <div style={{ display: 'grid', gap: 8 }}>
                 {SHOP_ITEMS.map((it) => {
@@ -411,7 +428,7 @@ export default function Pets() {
                     <div key={it.key} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #224466', background: '#000a18', padding: 8 }}>
                       <div style={{ fontSize: 24 }}>{it.emoji}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ color: '#cce6ff', fontSize: 13 }}>{it.name} <span style={{ color: '#6699cc', fontSize: 10 }}>所持{items[it.key] || 0}</span></div>
+                        <div style={{ color: '#cce6ff', fontSize: 13 }}>{it.name} <span style={{ color: '#6699cc', fontSize: 10 }}>倉庫{storage[it.key] || 0}</span></div>
                         <div style={{ color: '#5e7fa0', fontSize: 10 }}>{it.desc}</div>
                         <div style={{ color: '#ffd866', fontSize: 11, marginTop: 2 }}>{it.price.toLocaleString()}G / 個</div>
                       </div>
@@ -428,6 +445,53 @@ export default function Pets() {
                 })}
               </div>
               <div style={{ textAlign: 'center', marginTop: 12 }}><Btn onClick={() => setShowShop(false)}>とじる</Btn></div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* 倉庫モーダル（購入・ダンジョン戦利品はここに入る。持ち物へ移してダンジョンへ） */}
+      {showStorage && (() => {
+        const bagTotal = Object.entries(items).filter(([k]) => k !== 'escape').reduce((s, [, q]) => s + (q || 0), 0)
+        const storeKeys = Object.keys(storage).filter((k) => (storage[k] || 0) > 0)
+        const bagKeys = Object.keys(items).filter((k) => (items[k] || 0) > 0)
+        const dungeonKeys = new Set(['escape', 'onigiri', 'konomi'])
+        const Row = ({ k, qty, right }) => {
+          const def = PET_ITEMS[k]
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #224466', background: '#000a18', padding: '6px 8px' }}>
+              <span style={{ fontSize: 18 }}>{def?.emoji || '🔹'}</span>
+              <span style={{ flex: 1, color: '#cce6ff', fontSize: 12 }}>{def?.name || k} <span style={{ color: '#6699cc' }}>×{qty}</span></span>
+              {right}
+            </div>
+          )
+        }
+        return (
+          <div onClick={() => !loading && setShowStorage(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div onClick={(e) => e.stopPropagation()}
+              style={{ background: '#00102a', border: '1px solid #66aaff', padding: 16, maxWidth: 420, width: '100%', maxHeight: '85vh', overflowY: 'auto', fontFamily: 'monospace' }}>
+              <div style={{ color: '#66aaff', fontSize: 15, marginBottom: 4 }}>🏬 倉庫</div>
+              {msg && <div style={{ background: '#101a30', border: '1px solid #335588', color: '#aaddff', padding: 8, fontSize: 12, margin: '6px 0', textAlign: 'center' }}>{msg}</div>}
+              <div style={{ color: '#5e7fa0', fontSize: 10, marginBottom: 8 }}>※ダンジョンで使う物（翼・木の実・おにぎり）は「→持ち物」で移してから潜る。持ち物 {bagTotal}/{INV_MAX}（翼以外）</div>
+
+              <div style={{ color: '#88aacc', fontSize: 11, marginBottom: 4 }}>📦 倉庫の中身</div>
+              <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
+                {storeKeys.length === 0 ? <span style={{ color: '#445566', fontSize: 11 }}>（空）</span> : storeKeys.map((k) => (
+                  <Row key={k} k={k} qty={storage[k]} right={dungeonKeys.has(k)
+                    ? <Btn onClick={() => !loading && moveStorage(k, true, 99)}>→持ち物</Btn>
+                    : <span style={{ color: '#5e7fa0', fontSize: 10 }}>{k.endsWith('_seed') ? 'チャーム強化で使用' : 'ここで使用'}</span>} />
+                ))}
+              </div>
+
+              <div style={{ color: '#88aacc', fontSize: 11, marginBottom: 4 }}>🎒 持ち物（ダンジョンに持っていく）</div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {bagKeys.length === 0 ? <span style={{ color: '#445566', fontSize: 11 }}>（空）</span> : bagKeys.map((k) => (
+                  <Row key={k} k={k} qty={items[k]} right={<Btn onClick={() => !loading && moveStorage(k, false, 99)}>→倉庫</Btn>} />
+                ))}
+              </div>
+
+              <div style={{ textAlign: 'center', marginTop: 12 }}><Btn onClick={() => setShowStorage(false)}>とじる</Btn></div>
             </div>
           </div>
         )
@@ -479,7 +543,7 @@ function Portrait({ pet, size }) {
   return <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.7 }}>{speciesEmoji(pet)}</div>
 }
 
-function Wrap({ children, nav, msg, onShop, onHelp }) {
+function Wrap({ children, nav, msg, onShop, onStorage, onHelp }) {
   return (
     <div style={{ minHeight: '100vh', background: '#000820', color: '#88ccff', fontFamily: 'monospace', padding: 16 }}>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
@@ -491,6 +555,7 @@ function Wrap({ children, nav, msg, onShop, onHelp }) {
           <div style={{ color: '#aa88ff', letterSpacing: 2 }}>🐾 ペット {onHelp && <span onClick={onHelp} style={{ cursor: 'pointer', color: '#66ccff', fontSize: 12 }}>❓ヘルプ</span>}</div>
           <div style={{ display: 'flex', gap: 6 }}>
             {onShop && <Btn onClick={onShop}>🛒 商店</Btn>}
+            {onStorage && <Btn onClick={onStorage}>🏬 倉庫</Btn>}
             <Btn onClick={() => nav('/charms')}>🧿 チャーム</Btn>
           </div>
         </div>

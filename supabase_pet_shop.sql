@@ -119,10 +119,11 @@ begin
     raise exception 'pet not found';
   end if;
 
-  select qty into v_qty from pet_items where owner_id = auth.uid() and item_key = 'rename';
+  -- ニックネーム変更券は倉庫(pet_storage)から消費する
+  select qty into v_qty from pet_storage where owner_id = auth.uid() and item_key = 'rename';
   if coalesce(v_qty,0) < 1 then raise exception 'no rename ticket'; end if;
 
-  update pet_items set qty = qty - 1 where owner_id = auth.uid() and item_key = 'rename'
+  update pet_storage set qty = qty - 1 where owner_id = auth.uid() and item_key = 'rename'
     returning qty into v_qty;
   update pets set name = v_name where id = p_pet_id and owner_id = auth.uid();
 

@@ -135,8 +135,9 @@ begin
       v_t := v_e->>'type';
       if v_t = 'seed' then
         v_q := coalesce((v_e->>'qty')::int, 1);
-        insert into pet_items(owner_id, item_key, qty) values (v_uid, v_e->>'seedKey', v_q)
-          on conflict (owner_id, item_key) do update set qty = pet_items.qty + v_q;
+        -- 戦利品の素は倉庫(pet_storage)へ預ける
+        insert into pet_storage(owner_id, item_key, qty) values (v_uid, v_e->>'seedKey', v_q)
+          on conflict (owner_id, item_key) do update set qty = pet_storage.qty + v_q;
       elsif v_t = 'stone' then
         select id into v_iid from items where name = '強化石(' || (v_e->>'rank') || ')';
         if v_iid is not null then

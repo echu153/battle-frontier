@@ -69,11 +69,12 @@ begin
 
   v_total := c.atk + c.spatk + c.def + c.spdef + c.hp;   -- 既に使った素の合計
   v_room := 150 - v_total;                               -- あと使える数
-  select coalesce(qty,0) into v_have from pet_items where owner_id = auth.uid() and item_key = v_key;
+  -- 素は倉庫(pet_storage)から消費する
+  select coalesce(qty,0) into v_have from pet_storage where owner_id = auth.uid() and item_key = v_key;
   v_use := least(p_times, v_have, v_room);
   if v_use <= 0 then raise exception 'cannot enhance'; end if;
 
-  update pet_items set qty = qty - v_use where owner_id = auth.uid() and item_key = v_key;
+  update pet_storage set qty = qty - v_use where owner_id = auth.uid() and item_key = v_key;
   execute format('update player_charms set %I = %I + $1 where id = $2', p_stat, p_stat) using v_use, p_charm_id;
   return json_build_object('used', v_use, 'stat', p_stat);
 end; $$;

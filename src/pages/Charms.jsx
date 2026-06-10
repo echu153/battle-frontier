@@ -37,7 +37,8 @@ export default function Charms() {
     setCharms(chs || [])
     const { data: ps } = await supabase.from('pets').select('id, name, charm_id').eq('owner_id', user.id)
     setPets(ps || [])
-    const { data: its } = await supabase.from('pet_items').select('item_key, qty').eq('owner_id', user.id)
+    // 素は倉庫(pet_storage)に入る
+    const { data: its } = await supabase.from('pet_storage').select('item_key, qty').eq('owner_id', user.id)
     const m = {}; (its || []).forEach((r) => { m[r.item_key] = r.qty }); setSeeds(m)
     if (chs && chs.length && !chs.find((c) => c.id === selId)) setSelId(chs[0].id)
   }
