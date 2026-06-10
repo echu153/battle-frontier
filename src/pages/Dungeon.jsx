@@ -472,23 +472,30 @@ export default function Dungeon() {
         else if (p > sp2) { useAtk = p; useType = 'phys' }
       }
       const guard = useType === 'spec' ? (target.mdef || 0) : (target.def || 0)
-      const perHit = calcDamage(Math.round(useAtk * (sk.mult || 1)), guard)
-      const total = perHit * hits
+      // ダメージは1発ごとに 0.9〜1.1 の乱数補正（最低1）
+      const vary = (n) => Math.max(1, Math.round(n * (0.9 + Math.random() * 0.2)))
+      const hitDmgs = Array.from({ length: hits }, () => vary(calcDamage(Math.round(useAtk * (sk.mult || 1)), guard)))
+      const total = hitDmgs.reduce((a, b) => a + b, 0)
       const newHp = target.hp - total
       const skillTag = selectedSkill === 'tackle' ? '' : `【${sk.name}】`
-      const hitTxt = hits > 1 ? `${perHit}×${hits}=` : ''
-      popDmg(target.x, target.y, total)
+      const HIT_MS = 170 // 連打は1発ずつ表示する間隔
+      // 連打スキルはまとめず1発ずつポップ＆ログを出す
+      hitDmgs.forEach((d, i) => {
+        const show = () => { popDmg(target.x, target.y, d); addLog(`⚔${skillTag} ${target.name}に${d}ダメージ！`) }
+        if (i === 0) show()
+        else { const t2 = setTimeout(show, i * HIT_MS); turnTimers.current.push(t2) }
+      })
       if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); const healed = Math.min(pet.maxHp, curPetHp + heal) - curPetHp; curPetHp += healed; if (healed > 0) { addLog(`💚 ${healed}回復`); popHeal(px, py, healed) } }
       const killed = newHp <= 0
       if (killed) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; grantKill(floorNum, target.name); triggerShake('kill') }
-      else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total}ダメージ！`); triggerShake('hit') }
+      else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); triggerShake('hit') }
 
       // 体当たり演出：ペットを相手方向へ突進、被弾した敵を点滅させる
       applyFx({ pet: { lunge: { dx, dy } }, enemies: killed ? {} : { [target.id]: { flash: true } } })
-      // 敵HPを即時反映してから、一呼吸おいて敵のターン（反撃）へ
+      // 敵HPを即時反映してから、一呼吸おいて敵のターン（反撃）へ（連打分の表示が終わってから）
       setState({ ...s, player, enemies })
       busyRef.current = true
-      const tid = setTimeout(() => commitTurn(s, player, enemies, curPetHp, fullCost), BREATH_MS)
+      const tid = setTimeout(() => commitTurn(s, player, enemies, curPetHp, fullCost), BREATH_MS + (hits - 1) * HIT_MS)
       turnTimers.current.push(tid)
       return
     } else {
@@ -578,7 +585,8 @@ export default function Dungeon() {
       if (sees && adjacent && visNow.has(e.x + ',' + e.y)) {
         // 敵の攻撃タイプに応じて pet.def(物理)/mdef(特殊)で軽減
         const guard = e.type === 'spec' ? (pet.mdef || 0) : (pet.def || 0)
-        let dmg = calcDamage(e.atk || 1, guard)
+        // 敵のダメージも 0.9〜1.1 の乱数補正（最低1）
+        let dmg = Math.max(1, Math.round(calcDamage(e.atk || 1, guard) * (0.9 + Math.random() * 0.2)))
         // 敵スキル（確率発動）：heavy=倍率／poison=毒／vamp=自己回復
         const notes = []
         let heal = 0
