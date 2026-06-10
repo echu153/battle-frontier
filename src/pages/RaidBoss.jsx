@@ -20,13 +20,15 @@ const BOSS_MDEF = 1000
 const BOSS_SPD  = 1200
 
 const TIER_INFO = [
-  { pct: 10, tier: 'A', label: '貢献度10%以上', gold: 50000, stones: ['B','C','D'], gemCount: 3, gemRank: 'D', scaleCount: '8~10', rareChance: '15%', color: '#ffcc00' },
-  { pct:  6, tier: 'B', label: '貢献度6%以上',  gold: 30000, stones: ['C','D','E'], gemCount: 2, gemRank: 'E', scaleCount: '6~8',  rareChance: '8%',  color: '#44aaff' },
-  { pct:  3, tier: 'C', label: '貢献度3%以上',  gold: 10000, stones: ['D','E','F'], gemCount: 1, gemRank: 'F', scaleCount: '4~6',  rareChance: '3%',  color: '#44ff88' },
-  { pct:  0, tier: 'D', label: '参加',           gold:  5000, stones: ['E','F'],    gemCount: 1, gemRank: 'F', scaleCount: '1~3',  rareChance: '0%',  color: '#888888' },
+  { pct: 10, attacks: 50, tier: 'A', label: '貢献度10%以上 or 出撃50回', gold: 50000, stones: ['B','C','D'], gemCount: 3, gemRank: 'D', scaleCount: '8~10', rareChance: '15%', color: '#ffcc00' },
+  { pct:  6, attacks: 20, tier: 'B', label: '貢献度6%以上 or 出撃20回',  gold: 30000, stones: ['C','D','E'], gemCount: 2, gemRank: 'E', scaleCount: '6~8',  rareChance: '8%',  color: '#44aaff' },
+  { pct:  3, attacks:  5, tier: 'C', label: '貢献度3%以上 or 出撃5回',   gold: 10000, stones: ['D','E','F'], gemCount: 1, gemRank: 'F', scaleCount: '4~6',  rareChance: '3%',  color: '#44ff88' },
+  { pct:  0, attacks:  0, tier: 'D', label: '参加',                       gold:  5000, stones: ['E','F'],    gemCount: 1, gemRank: 'F', scaleCount: '1~3',  rareChance: '0%',  color: '#888888' },
 ]
 
-function getTier(pct) { return TIER_INFO.find(t => pct >= t.pct) || TIER_INFO[TIER_INFO.length - 1] }
+function getTier(pct, attackCount = 0) {
+  return TIER_INFO.find(t => pct >= t.pct || attackCount >= t.attacks && t.attacks > 0) || TIER_INFO[TIER_INFO.length - 1]
+}
 function hpColor(r) { return r > 0.5 ? '#44ff88' : r > 0.25 ? '#ffcc00' : '#ff4444' }
 function fmt(n) { return Number(n).toLocaleString() }
 
@@ -511,7 +513,7 @@ export default function RaidBoss() {
   const totalEff = participants.reduce((s, p) => s + Number(p.damage_dealt) + Number(p.attack_count || 0) * 500, 0) || 1
   const myEff = myPart ? Number(myPart.damage_dealt) + Number(myPart.attack_count || 0) * 500 : 0
   const myContribPct = myEff / totalEff * 100
-  const myTier = getTier(myContribPct)
+  const myTier = getTier(myContribPct, Number(myPart?.attack_count || 0))
   const hpRatio = boss ? boss.hp_current / boss.hp_max : 0
   const canAct = remaining <= 0
 
@@ -638,7 +640,7 @@ export default function RaidBoss() {
             )}
             {boss.status === 'expired' && (
               <div style={{ color: '#886644', fontSize: '12px', marginBottom: '8px' }}>
-                ⌛ 時間切れ（討伐失敗）
+                ⌛ 時間切れ（討伐失敗）— その時点までの貢献に応じた報酬を受け取れます
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#446688', marginBottom: '4px' }}>
@@ -680,7 +682,7 @@ export default function RaidBoss() {
           )}
 
           {/* リワード受け取り */}
-          {boss.status === 'defeated' && myPart && (
+          {(boss.status === 'defeated' || boss.status === 'expired') && myPart && (
             <div style={{ border: '1px solid #224422', background: '#001a00', padding: '16px', marginBottom: '16px' }}>
               <div style={{ color: '#44ff88', fontSize: '13px', marginBottom: '12px' }}>🎁 リワード</div>
               {reward ? (
@@ -730,7 +732,7 @@ export default function RaidBoss() {
                   {participants.map((p, i) => {
                     const eff2 = Number(p.damage_dealt) + Number(p.attack_count || 0) * 500
                     const pct = eff2 / totalEff * 100
-                    const tier = getTier(pct)
+                    const tier = getTier(pct, Number(p.attack_count || 0))
                     const isMe = profile && p.player_id === profile.id
                     return (
                       <tr key={p.player_id} style={{ borderBottom: '1px solid #0a1a2a', background: isMe ? '#001122' : 'transparent' }}>
@@ -770,7 +772,7 @@ function RewardTable() {
           </div>
         </div>
       ))}
-      <div style={{ color: '#334455', fontSize: '10px', marginTop: '6px' }}>※ 出撃5回以上で最低Cティア保証</div>
+      <div style={{ color: '#334455', fontSize: '10px', marginTop: '6px' }}>※ 出撃回数でもティア保証: 5回→C / 20回→B / 50回→A。時間切れでもその時点の報酬を獲得可</div>
     </div>
   )
 }

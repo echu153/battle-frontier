@@ -224,8 +224,16 @@ export default function Exchange() {
                 background: alreadyDone ? '#080f0f' : '#001028',
                 padding: '14px',
               }}>
-                {/* 装備カード */}
-                <WeaponCard weapon={weapon} bonusEffect={item.reward_bonus_effect} />
+                {/* 装備カード／アイテム報酬カード */}
+                {item.reward_type === 'item' ? (
+                  <div style={{ border: '1px solid #0055aa', background: '#001028', padding: '10px', marginBottom: '10px' }}>
+                    <div style={{ color: '#446688', fontSize: '10px', marginBottom: '4px' }}>アイテム</div>
+                    <div style={{ color: '#ffcc00', fontSize: '13px', marginBottom: '4px' }}>{item.reward_weapon_name}</div>
+                    {item.description && <div style={{ color: '#446688', fontSize: '10px' }}>{item.description}</div>}
+                  </div>
+                ) : (
+                  <WeaponCard weapon={weapon} bonusEffect={item.reward_bonus_effect} />
+                )}
 
                 {/* 必要素材 */}
                 <div style={{ borderTop: '1px solid #0a1828', paddingTop: '10px', marginBottom: '10px' }}>
@@ -268,7 +276,7 @@ export default function Exchange() {
                     fontSize: '12px',
                   }}
                 >
-                  {alreadyDone ? '✓ 交換済み（1回限り）' : exchanging === item.id ? '処理中...' : canAfford ? '交換する' : '素材不足'}
+                  {alreadyDone ? '✓ 交換上限に達しました' : exchanging === item.id ? '処理中...' : canAfford ? '交換する' : '素材不足'}
                 </button>
               </div>
             )
