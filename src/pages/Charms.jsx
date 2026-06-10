@@ -158,7 +158,7 @@ export default function Charms() {
                   )
                 })}
                 <div style={{ marginTop: 6 }}>
-                  <Btn onClick={() => !loading && bulkEnhance(sel)}>✅ 選択した能力をまとめて強化（合計150まで素を使う）</Btn>
+                  <Btn onClick={() => !loading && bulkEnhance(sel)}>✅ 選択した能力をまとめて強化</Btn>
                 </div>
               </div>
               )
