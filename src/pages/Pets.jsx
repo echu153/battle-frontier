@@ -41,6 +41,11 @@ export default function Pets() {
     setCharms(chs || [])
     const { data: list } = await supabase.from('pets').select('*').eq('owner_id', user.id).order('created_at')
     setPets(list || [])
+    // 初めてペット選択画面を開いたとき（まだ1体もいない）はヘルプを自動表示
+    if ((list || []).length === 0 && !localStorage.getItem('bf_pet_help_seen')) {
+      localStorage.setItem('bf_pet_help_seen', '1')
+      setShowHelp(true)
+    }
     if (list && list.length && !selectedId) setSelectedId(list.find((x) => x.is_active)?.id || list[0].id)
     const { data: files } = await supabase.storage.from('avatars').list(`${user.id}/pets/`)
     if (files) setUploaded(files.filter((f) => f.name !== '.emptyFolderPlaceholder').map((f) => `${SUPABASE_URL}/storage/v1/object/public/avatars/${user.id}/pets/${f.name}`))
@@ -95,7 +100,6 @@ export default function Pets() {
     if (error) { flash('作成に失敗: ' + error.message); return }
     setNaming(null)
     flash(`${finalName} を仲間にした！`)
-    setShowHelp(true) // 初めて仲間にしたらヘルプを表示
     await fetchAll()
   }
 
