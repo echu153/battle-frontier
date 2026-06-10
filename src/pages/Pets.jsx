@@ -552,7 +552,7 @@ const HELP_SECTIONS = [
 function HelpModal({ onClose }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, fontFamily: 'monospace' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: '#00102a', border: '1px solid #aa88ff', padding: 16, maxWidth: 460, width: '100%', maxHeight: '88vh', overflowY: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#00102a', border: '1px solid #aa88ff', padding: 16, maxWidth: 460, width: '100%', maxHeight: '88vh', overflowY: 'auto', textAlign: 'left' }}>
         <div style={{ color: '#aa88ff', fontSize: 16, letterSpacing: 1, marginBottom: 4 }}>📖 ペットシステムの遊び方</div>
         <div style={{ color: '#6699cc', fontSize: 11, marginBottom: 10 }}>あとからヘッダーの「❓ヘルプ」でいつでも開けます。</div>
         {HELP_SECTIONS.map((s) => (
