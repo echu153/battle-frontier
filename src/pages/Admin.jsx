@@ -139,6 +139,7 @@ export default function Admin() {
           {[['suspicious','⚠ 不審プレイヤー'], ['logs','不正ログ'], ['all','全プレイヤー']].map(([key, label]) => (
             <button key={key} style={S.tab(tab===key)} onClick={() => setTab(key)}>{label}</button>
           ))}
+          <button style={S.btn('#cc6666')} onClick={() => nav('/moderation')}>🛡 アバター管理</button>
           <button style={S.btn('#446688')} onClick={() => nav('/game')}>← ゲームに戻る</button>
         </div>
 

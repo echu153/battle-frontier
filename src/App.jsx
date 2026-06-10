@@ -18,6 +18,7 @@ import RaidBoss from './pages/RaidBoss'
 import Exchange from './pages/Exchange'
 import Titles from './pages/Titles'
 import Admin from './pages/Admin'
+import Moderation from './pages/Moderation'
 import Dungeon from './pages/Dungeon'
 import Pets from './pages/Pets'
 import Charms from './pages/Charms'
@@ -146,6 +147,7 @@ function App() {
         <Route path="/exchange" element={session ? <Exchange /> : <Navigate to="/login" />} />
         <Route path="/titles" element={session ? <Titles /> : <Navigate to="/login" />} />
         <Route path="/admin" element={session ? <Admin /> : <Navigate to="/login" />} />
+        <Route path="/moderation" element={session ? <Moderation /> : <Navigate to="/login" />} />
         <Route path="/dungeon" element={session ? <Dungeon /> : <Navigate to="/login" />} />
         <Route path="/pets" element={session ? <Pets /> : <Navigate to="/login" />} />
         <Route path="/charms" element={session ? <Charms /> : <Navigate to="/login" />} />
