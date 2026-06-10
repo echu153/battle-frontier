@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { NG_WORDS_EXTRA } from '../constants/ngWords'
 
@@ -82,7 +81,6 @@ const PRESET_AVATARS = [
 ]
 
 export default function CharCreate() {
-  const nav = useNavigate()
   const [username, setUsername] = useState('')
   const [selectedClass, setSelectedClass] = useState('戦士')
   const [selectedAvatar, setSelectedAvatar] = useState(PRESET_AVATARS[0].url)
@@ -99,8 +97,9 @@ export default function CharCreate() {
       if (!user) throw new Error('ログインが必要です')
       const { data: dupCheck } = await supabase.from('profiles').select('id').eq('username', username.trim()).maybeSingle()
       if (dupCheck) { setError('その名前はすでに使われています'); setLoading(false); return }
-      const { data: existing } = await supabase.from('profiles').select('id').eq('id', user.id).single()
-      if (existing) { nav('/game'); return }
+      const { data: existing } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle()
+      // フルリロードで遷移：App側のhasChar(認証イベント時しか更新されない)を再評価させ、/createへ戻されるのを防ぐ
+      if (existing) { window.location.href = '/game'; return }
       const c = CLASSES.find(c => c.id === selectedClass)
       const { error: pErr } = await supabase.from('profiles').insert({
         id: user.id,
@@ -126,7 +125,8 @@ export default function CharCreate() {
           player_id: user.id, weapon_id: weapon.id, equipment_id: eqRow?.id, prof_exp: 0, prof_lv: 0, awakening: 0,
         })
       }
-      nav('/game')
+      // フルリロードで遷移：App側のhasCharを再評価させ、作成直後に/createへ戻される不具合を防ぐ
+      window.location.href = '/game'
     } catch (err) {
       setError(err.message)
     }
