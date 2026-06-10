@@ -111,7 +111,7 @@ export const DUNGEONS = [
       { from: 1,  to: 2,  enemies: [{ name: 'スライム', type: 'phys', images: ['/suraimu.png', '/suraimu2.png', '/suraimu3.png'], statMult: 0.5 }] },
       { from: 3,  to: 5,  enemies: [{ name: 'スライム', type: 'phys', images: ['/suraimu.png', '/suraimu2.png', '/suraimu3.png'], statMult: 0.5 }, { name: 'コウモリ', type: 'phys', image: '/koumori.png',     statMult: 0.75 }, { name: '毒キノコ', type: 'spec', image: '/dokukinoko.png', statMult: 1.0 }] },
       { from: 6,  to: 7,  enemies: [{ name: 'コウモリ', type: 'phys', image: '/koumori.png',    statMult: 0.75 }, { name: '毒キノコ', type: 'spec', image: '/dokukinoko.png', statMult: 1.0 }, { name: 'ゴブリン', type: 'phys', image: '/goburin.png', statMult: 1.0 }] },
-      { from: 8,  to: 10, enemies: [{ name: 'ゴブリン', type: 'phys', image: '/goburin.png', statMult: 1.0 }, { name: '野良犬', type: 'phys', images: ['/norainu1.png', '/norainu2.png'], statMult: 1.0 }, { name: '盗賊', type: 'phys', image: '/touzoku.png', statMult: 1.0 }] },
+      { from: 8,  to: 10, enemies: [{ name: 'ゴブリン', type: 'phys', image: '/goburin.png', statMult: 1.0 }, { name: '野良犬', type: 'phys', images: ['/norainu1.png', '/norainu2.png'], statMult: 1.0 }, { name: '盗賊', type: 'phys', image: '/touzoku.png', statMult: 1.1 }] },
     ],
   },
   { id: 'd30', name: '深淵の遺跡', floors: 30, requires: 'd10', emoji: '🏛', areas: [1, 2, 3, 4], comingSoon: true }, // 後日のアップデートで開放
