@@ -351,7 +351,14 @@ export default function Dungeon() {
         try {
           const sv = JSON.parse(raw)
           if (sv?.runId && sv?.state) {
-            runIdRef.current = sv.runId
+            // ランがサーバー側で終了していたら（run not active対策）新しいランを開始して続行
+            const { data: runRow } = await supabase.from('dungeon_runs').select('status').eq('id', sv.runId).maybeSingle()
+            if (runRow?.status === 'active') {
+              runIdRef.current = sv.runId
+            } else {
+              const { data: newRun } = await supabase.rpc('dungeon_start', { p_pet_id: ap.id, p_dungeon_id: sv.dungeonId || 'd10' })
+              runIdRef.current = newRun || null
+            }
             finishedRef.current = false
             enemiesRef.current = sv.kills || 0
             floorsRef.current = sv.floorsCleared || 0
@@ -844,14 +851,26 @@ export default function Dungeon() {
           0%,100% { transform: translate(0,0); }
           45% { transform: translate(var(--lx,0), var(--ly,0)); }
         }
+        /* PC: メイン＋右側ログの2カラム。狭い画面では従来どおり縦積み */
+        .bf-dg-wrap { max-width: 480px; margin: 0 auto; }
+        .bf-dg-side { display: none; }
+        @media (min-width: 900px) {
+          .bf-dg-wrap { display: flex; gap: 16px; max-width: 920px; align-items: flex-start; }
+          .bf-dg-main { flex: 1; min-width: 0; max-width: 520px; }
+          .bf-dg-side { display: block; width: 360px; position: sticky; top: 16px; }
+          .bf-dg-log-mobile { display: none; }
+        }
       `}</style>
-      <div style={{ maxWidth: 480, margin: '0 auto' }}>
+      <div className="bf-dg-wrap">
+        <div className="bf-dg-main">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #003366', paddingBottom: 8, marginBottom: 10 }}>
           <div style={{ color: '#ffcc00', fontSize: 16, letterSpacing: 3 }}>BATTLE FRONTIER</div>
           <Btn onClick={leaveToTown}>← 街に戻る</Btn>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ color: '#aa88ff', letterSpacing: 2 }}>{dungeon?.emoji || '🕳'} {dungeon?.name || 'ダンジョン'} <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span></div>
+          {/* 簡易出撃のクイックボタン（SortiePanelがポータルで描画。エリア選択は下のメニューから） */}
+          <span id="bf-sortie-quick" />
         </div>
 
         <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 8, flexWrap: 'wrap' }}>
@@ -964,20 +983,37 @@ export default function Dungeon() {
           <div style={{ textAlign: 'center', marginTop: 16, color: '#cc88ff' }}>🪽 ダンジョンから脱出した<RewardPanel reward={reward} pet={pet} /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
 
-        {/* ログ見出し：左＝自分の行動／右＝敵の行動 */}
-        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '0 2px 4px', borderBottom: '1px solid #113355' }}>
-          <span style={{ color: '#5588bb' }}>◀ 自分のログ</span>
-          <span style={{ color: '#cc8888' }}>敵のログ ▶</span>
-        </div>
-        <div style={{ background: '#000610', border: '1px solid #113355', borderTop: 'none', padding: 8, height: 140, overflowY: 'auto', fontSize: 11 }}>
-          {log.length === 0 ? <span style={{ color: '#335577' }}>隣のマスをクリック、または矢印で移動。部屋に入ると視界が開ける。👹に触れると戦闘、▼で次の階へ。</span>
-            : log.map((l, i) => <div key={i} style={{ color: i === 0 ? '#aaddff' : l.side === 'right' ? '#cc8888' : '#5588bb', textAlign: l.side === 'right' ? 'right' : 'left' }}>{l.msg}</div>)}
+        {/* ログ（スマホ・狭い画面用。PCでは右カラムに表示） */}
+        <div className="bf-dg-log-mobile">
+          <LogView log={log} height={140} />
         </div>
 
-        {/* ⚔ 簡易出撃（カジノと同じ・自キャラを並行して育成できる） */}
-        <SortiePanel />
+        {/* ⚔ 簡易出撃（カジノと同じ・自キャラを並行して育成できる）。エリア選択はここを開いて行う */}
+        <SortiePanel quickSlotId="bf-sortie-quick" collapsible />
+        </div>
+
+        {/* PC用：右側ログカラム */}
+        <div className="bf-dg-side">
+          <LogView log={log} height={460} />
+        </div>
       </div>
     </div>
+  )
+}
+
+// ログ表示（見出し＋スクロール枠）。スマホ＝下部／PC＝右カラムで共用
+function LogView({ log, height }) {
+  return (
+    <>
+      <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '0 2px 4px', borderBottom: '1px solid #113355' }}>
+        <span style={{ color: '#5588bb' }}>◀ 自分のログ</span>
+        <span style={{ color: '#cc8888' }}>敵のログ ▶</span>
+      </div>
+      <div style={{ background: '#000610', border: '1px solid #113355', borderTop: 'none', padding: 8, height, overflowY: 'auto', fontSize: 11 }}>
+        {log.length === 0 ? <span style={{ color: '#335577' }}>隣のマスをクリック、または矢印で移動。部屋に入ると視界が開ける。👹に触れると戦闘、▼で次の階へ。</span>
+          : log.map((l, i) => <div key={i} style={{ color: i === 0 ? '#aaddff' : l.side === 'right' ? '#cc8888' : '#5588bb', textAlign: l.side === 'right' ? 'right' : 'left' }}>{l.msg}</div>)}
+      </div>
+    </>
   )
 }
 

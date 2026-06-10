@@ -1,6 +1,7 @@
 // ⚔ 簡易出撃パネル（カジノと同じ仕様を共通化）。プロフィール/装備/クールダウン/BOT検知/清算を内包。
 // 洞窟(ダンジョン)など、どの画面でも <SortiePanel /> を置くだけで自キャラの簡易出撃ができる。
 import { useEffect, useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../supabase'
 import { AREAS, getEffectiveCap, generateDropBonus, ARTIFACT_BASE_NAMES } from '../pages/Game'
 
@@ -12,8 +13,13 @@ const AREA_PASS_EFFECT = { 2:'casino_area_2', 3:'casino_area_3', 4:'casino_area_
 const DEV_ACCOUNTS = []
 const expIsFrozen = (p) => !!(p && (p.exp_frozen || (p.exp_frozen_until && new Date(p.exp_frozen_until) > new Date())))
 
-export default function SortiePanel() {
+// quickSlotId: 指定するとそのidの要素へ小さな「⚔出撃」ボタンをポータル表示（ヘッダー等に置ける）
+// collapsible: trueでパネルを折りたたみ式にする（エリア選択などは展開して操作）
+export default function SortiePanel({ quickSlotId, collapsible = false } = {}) {
   const [profile, setProfile] = useState(null)
+  const [open, setOpen] = useState(!collapsible)
+  const [slotEl, setSlotEl] = useState(null)
+  useEffect(() => { if (quickSlotId) setSlotEl(document.getElementById(quickSlotId)) }, [quickSlotId])
   const [playerItems, setPlayerItems] = useState([])
   const [loading, setLoading] = useState(false)
   const [now, setNow] = useState(Date.now())
@@ -226,16 +232,26 @@ export default function SortiePanel() {
         </div>
       )}
 
-      {/* 出撃パネル */}
-      <div style={{ border:'1px solid #335577', background:'#001020', padding:'14px', marginTop:'16px' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
-          <div style={{ color:'#66aaff', fontSize:'13px' }}>⚔ 簡易出撃（自キャラ）</div>
+      {/* ヘッダー等に置く小型の出撃ボタン（ポータル）。選択中エリアで即出撃 */}
+      {slotEl && createPortal(
+        <button onClick={doSortie} disabled={loading || !unlocked || remain>0 || profile.is_fishing}
+          title={`簡易出撃（エリア${sortieArea}）`}
+          style={{ background: (remain>0||!unlocked)?'#000a14':'#001830', border:`1px solid ${(remain>0||!unlocked)?'#223344':'#0088cc'}`, color: (remain>0||!unlocked)?'#445566':'#00aaff', padding:'4px 10px', cursor:(loading||remain>0||!unlocked)?'default':'pointer', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap' }}>
+          {!unlocked ? '🔒出撃' : remain>0 ? `⏳${remain}s` : `⚔出撃(${sortieArea})`}
+        </button>, slotEl)}
+
+      {/* 出撃パネル（collapsible時は見出しで開閉。エリア選択はここから展開） */}
+      <div style={{ border:'1px solid #335577', background:'#001020', padding: collapsible && !open ? '8px 14px' : '14px', marginTop:'16px' }}>
+        <div onClick={() => collapsible && setOpen((o) => !o)}
+          style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: (collapsible && !open) ? 0 : '8px', cursor: collapsible ? 'pointer' : 'default' }}>
+          <div style={{ color:'#66aaff', fontSize:'13px' }}>⚔ 簡易出撃（自キャラ）{collapsible && <span style={{ color:'#446688', fontSize:'10px' }}>　{open ? '▲ とじる' : '▼ ひらく（エリア選択）'}</span>}</div>
           {sortiePending.count > 0 && (
-            <button onClick={()=>setShowSettle(true)} style={{ background:'#1a1000', border:'1px solid #ffcc00', color:'#ffcc00', padding:'3px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+            <button onClick={(e)=>{ e.stopPropagation(); setShowSettle(true) }} style={{ background:'#1a1000', border:'1px solid #ffcc00', color:'#ffcc00', padding:'3px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
               📋 戦果({sortiePending.count})
             </button>
           )}
         </div>
+        {(!collapsible || open) && (<>
         <div style={{ color:'#446688', fontSize:'10px', marginBottom:'10px', lineHeight:'1.6' }}>
           ボス・パピアなし／必ず勝利。{SORTIE_WAIT}秒に1回出撃でき、戦果は貯まります。離れる前に清算してください。
         </div>
@@ -263,6 +279,7 @@ export default function SortiePanel() {
           style={{ width:'100%', padding:'12px', background: (remain>0||!unlocked)?'#001':'#001830', border:`1px solid ${(remain>0||!unlocked)?'#223':'#0088cc'}`, color: (remain>0||!unlocked)?'#445':'#00aaff', cursor:(loading||remain>0||!unlocked)?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'1px' }}>
           {!unlocked ? '🔒 出撃許可証が必要' : remain>0 ? `⏳ 次の出撃まで ${remain}秒` : `⚔ 出撃する（エリア${sortieArea}）`}
         </button>
+        </>)}
       </div>
 
       {/* 清算モーダル */}
