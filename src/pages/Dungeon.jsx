@@ -448,9 +448,16 @@ export default function Dungeon() {
       if (cost > fullness) { addLog(`🍖 満腹度が足りない（${sk.name}は${cost}必要）たいあたりに切替を`); return }
       fullCost = cost
       const hits = sk.hits || 1
-      // ペットの攻撃タイプに応じて敵の def(物理)/mdef(特殊)で軽減
-      const guard = pet.atkType === 'spec' ? (target.mdef || 0) : (target.def || 0)
-      const perHit = calcDamage(Math.round(pet.atk * (sk.mult || 1)), guard)
+      // たいあたりは攻撃(物理)と特攻(特殊)の高いほうを参照（チャーム成長を両方活かせる）。
+      // スキルは従来どおり攻撃タイプ準拠。同値なら攻撃タイプ側
+      let useAtk = pet.atk, useType = pet.atkType
+      if (selectedSkill === 'tackle') {
+        const p = pet.atkPhys ?? pet.atk, sp2 = pet.atkSpec ?? pet.atk
+        if (sp2 > p) { useAtk = sp2; useType = 'spec' }
+        else if (p > sp2) { useAtk = p; useType = 'phys' }
+      }
+      const guard = useType === 'spec' ? (target.mdef || 0) : (target.def || 0)
+      const perHit = calcDamage(Math.round(useAtk * (sk.mult || 1)), guard)
       const total = perHit * hits
       const newHp = target.hp - total
       const skillTag = selectedSkill === 'tackle' ? '' : `【${sk.name}】`

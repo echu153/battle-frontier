@@ -250,14 +250,17 @@ export function charmPlayerBonus(charm) {
 }
 // チャームのステ成長を加算したペットステを返す（ダンジョン/反映で使用）
 export function applyCharmStats(stats, charm) {
-  if (!charm) return stats
+  if (!charm) return { ...stats, atkPhys: stats.atk, atkSpec: stats.atk }
   let { maxHp, atk, def, mdef } = stats
   maxHp += charmHpBonus(charm)
-  // 物理ペットは atk、特殊ペットは spatk をそのまま atk に加算
-  atk += (stats.atkType === 'spec' ? (charm.spatk || 0) : (charm.atk || 0))
+  // チャーム込みの物理値/特殊値を両方持つ（たいあたりは高いほうを参照して攻撃する）
+  const atkPhys = atk + (charm.atk || 0)
+  const atkSpec = atk + (charm.spatk || 0)
+  // 表示用のメイン攻撃値は従来どおり攻撃タイプ側
+  atk = stats.atkType === 'spec' ? atkSpec : atkPhys
   def += charm.def || 0
   mdef += charm.spdef || 0
-  let out = { ...stats, maxHp, atk, def, mdef }
+  let out = { ...stats, maxHp, atk, atkPhys, atkSpec, def, mdef }
   if (getCharm(charm.ctype).effect === 'guard') out.def = Math.round(out.def * 1.1)
   return out
 }
