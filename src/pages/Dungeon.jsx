@@ -725,6 +725,29 @@ export default function Dungeon() {
             {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4 }} /> : <span style={{ fontSize: 22 }}>{pet.emoji}</span>}
             <span>{pet.name}　Lv{pet.level ?? 1}{pet.id ? '' : '（ペット未選択＝報酬なし）'}</span>
           </div>
+
+          {/* 持ち物プレビュー＆だっしゅつの翼の警告（なくても挑める） */}
+          {(inventory.escape || 0) < 1 && (
+            <div style={{ background: '#1a0e00', border: '1px solid #cc7733', color: '#ffaa66', padding: 8, fontSize: 12, marginBottom: 10 }}>
+              ⚠ だっしゅつの翼を持っていません。途中で帰る手段がなくなります（倉庫から持ち物へ移すのを忘れずに）
+            </div>
+          )}
+          <div style={{ background: '#000610', border: '1px solid #113355', padding: 8, marginBottom: 12 }}>
+            <div style={{ color: '#88aacc', fontSize: 11, marginBottom: 6 }}>🎒 持ち物（ダンジョンに持っていく分）</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {Object.entries(inventory).filter(([, q]) => (q || 0) > 0).map(([k, q]) => {
+                const def = PET_ITEMS[k]
+                return (
+                  <span key={k} style={{ background: '#0a1424', border: '1px solid #335588', color: '#cce6ff', padding: '4px 8px', fontSize: 12 }}>
+                    {def?.emoji || '🔹'} {def?.name || k}×{q}
+                  </span>
+                )
+              })}
+              {Object.values(inventory).every((q) => (q || 0) < 1) && <span style={{ color: '#445566', fontSize: 11 }}>（なし）</span>}
+            </div>
+            <div style={{ marginTop: 6, textAlign: 'right' }}><Btn onClick={() => nav('/pet-storage')}>🏬 倉庫で入れ替える</Btn></div>
+          </div>
+
           <div style={{ display: 'grid', gap: 10 }}>
             {DUNGEONS.map((d) => {
               const unlocked = !d.comingSoon && (!d.requires || cleared.has(d.requires))
