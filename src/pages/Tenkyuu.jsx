@@ -826,7 +826,7 @@ export default function Tenkyuu() {
     }
   }
 
-  const handleChallenge = (palace) => {
+  const handleChallenge = async (palace) => {
     const pd = getPalace(palace)
     if (!pd || pd.wip || !profile || battling || remaining > 0) return
     setBattlePalace(palace)
@@ -834,7 +834,18 @@ export default function Tenkyuu() {
     setRemaining(TENKYUU_CD)
 
     const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
-    const { logs, win } = simulateTenkyuuBattle(eff, equipment, skillSets, profile, { ...pd.enemy }, playerItem)
+    // 読み込み未完了/失敗でstateが空のままだとスキル無し戦闘になるため、空ならDBから取り直す
+    let curSets = skillSets
+    if (curSets.length === 0) {
+      const { data: ss2 } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', profile.id).order('slot_order')
+      if (Array.isArray(ss2) && ss2.length) {
+        const challenge2 = ss2.filter(r => r.set_type === 'challenge')
+        const sortie2 = ss2.filter(r => (r.set_type || 'sortie') === 'sortie')
+        curSets = challenge2.some(r => r.skills?.type !== 'パッシブ') ? challenge2 : sortie2
+        setSkillSets(curSets)
+      }
+    }
+    const { logs, win } = simulateTenkyuuBattle(eff, equipment, curSets, profile, { ...pd.enemy }, playerItem)
     setBattleLogs(logs)
     setResultWin(win)
     if (win) setCleared(prev => prev.includes(palace) ? prev : [...prev, palace])

@@ -2089,7 +2089,19 @@ export default function Game() {
     const isArtifact = equippedWeaponItem?.bonus_effect === 'artifact'
 
     // 状況別スキルセット：パピア遭遇時はパピア限定セット、それ以外は出撃セット
-    const activeSkillSets = isPapiaEncounter ? papiaSkillSets : skillSets
+    // ページ遷移直後など、読み込み未完了/失敗でstateが空のままだとスキル無し戦闘になるため、空ならDBから取り直す
+    let curSortieSets = skillSets, curPapiaSets = papiaSkillSets
+    if (curSortieSets.length === 0) {
+      const { data: ss2 } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', profile.id).order('slot_order')
+      if (Array.isArray(ss2) && ss2.length) {
+        curSortieSets = ss2.filter(r => (r.set_type || 'sortie') === 'sortie')
+        const papia2 = ss2.filter(r => r.set_type === 'papia')
+        curPapiaSets = papia2.some(r => r.skills?.type !== 'パッシブ') ? papia2 : curSortieSets
+        setSkillSets(curSortieSets)
+        setPapiaSkillSets(curPapiaSets)
+      }
+    }
+    const activeSkillSets = isPapiaEncounter ? curPapiaSets : curSortieSets
     const passiveNames = activeSkillSets.filter(ss => ss.skills?.type === 'パッシブ').map(ss => ss.skills.name)
     const hasShingan    = passiveNames.includes('心眼')
     const hasBerserk    = passiveNames.includes('バーサク')

@@ -760,7 +760,18 @@ export default function Abyss() {
     setRemaining(ABYSS_CD)
 
     const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
-    const { logs, win, turns } = simulateAbyssBattle(eff, equipment, skillSets, profile, { ...floorData.enemy }, playerItem, targetFloor)
+    // 読み込み未完了/失敗でstateが空のままだとスキル無し戦闘になるため、空ならDBから取り直す
+    let curSets = skillSets
+    if (curSets.length === 0) {
+      const { data: ss2 } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', profile.id).order('slot_order')
+      if (Array.isArray(ss2) && ss2.length) {
+        const challenge2 = ss2.filter(r => r.set_type === 'challenge')
+        const sortie2 = ss2.filter(r => (r.set_type || 'sortie') === 'sortie')
+        curSets = challenge2.some(r => r.skills?.type !== 'パッシブ') ? challenge2 : sortie2
+        setSkillSets(curSets)
+      }
+    }
+    const { logs, win, turns } = simulateAbyssBattle(eff, equipment, curSets, profile, { ...floorData.enemy }, playerItem, targetFloor)
     setBattleLogs(logs)
 
     if (win) {
