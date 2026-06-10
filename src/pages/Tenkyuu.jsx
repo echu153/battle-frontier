@@ -204,10 +204,13 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const peekIdx = playerBuffs.berserk?.turns > 0 && playerBuffs.berserk.lockedSkill
       ? expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk.lockedSkill)
       : (skillIndex % (expandedSkillSet.length || 1))
-    const nextSkillName = expandedSkillSet.length > 0 ? expandedSkillSet[Math.max(0, peekIdx)]?.skills?.name : null
+    const nextSkill = expandedSkillSet.length > 0 ? expandedSkillSet[Math.max(0, peekIdx)]?.skills : null
+    const nextSkillName = nextSkill?.name || null
     const isSureHit = nextSkillName === '絶影狙撃'
+    // バフ・回復スキルは自分にかけるものなので敵に回避されない
+    const isSelfSkill = nextSkill && (nextSkill.type === '強化' || nextSkill.type === '回復')
     const skillExtraHit = (nextSkillName === '連装銃撃' && profile.class === '魔銃士' && rtCur >= 2) ? 10 : 0
-    const effectiveEnemyEvasion = isSureHit ? 0 : Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit)
+    const effectiveEnemyEvasion = (isSureHit || isSelfSkill) ? 0 : Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit)
     if (effectiveEnemyEvasion > 0 && Math.random()*100 < effectiveEnemyEvasion) {
       logs.push({ text:`${prefix}${nextSkillName ? `${nextSkillName}！` : '攻撃！'} しかし${enemy.name}に回避された！`, color:'#446688' })
       if (expandedSkillSet.length > 0) skillIndex++
