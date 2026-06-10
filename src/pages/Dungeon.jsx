@@ -564,10 +564,8 @@ export default function Dungeon() {
         }
       }
     }
-    let dead = false
-    const attackerFx = {} // 反撃してきた敵の突進演出
-    let petHit = false
     let willPoison = false // このターンに毒を受けたか
+    const attackers = []   // 隣接して攻撃してくる敵（1体ずつ順番に演出する）
     enemies = enemies.map((e) => {
       // プレイヤーの視界に入った敵も追跡を開始する（部屋・通路問わず）
       const sees = enemySeesPet(s.rooms, e, player.x, player.y) || visNow.has(e.x + ',' + e.y)
@@ -588,14 +586,9 @@ export default function Dungeon() {
           else if (sk.type === 'poison') { willPoison = true; notes.push(sk.name) }
           else if (sk.type === 'vamp') { heal = Math.floor(dmg * (sk.frac || 0.5)); notes.push(sk.name) }
         }
-        curPetHp -= dmg
-        popDmg(player.x, player.y, dmg)
-        if (heal > 0 && e.hp < e.maxHp) popHeal(e.x, e.y, Math.min(heal, e.maxHp - e.hp))
-        const tag = notes.length ? `【${notes.join('・')}】` : '攻撃'
-        addLog(`${e.name}の${tag}！ ${dmg}ダメージ 💥`, 'right')
-        attackerFx[e.id] = { lunge: { dx: Math.sign(player.x - e.x), dy: Math.sign(player.y - e.y) } }
-        petHit = true
-        if (curPetHp <= 0) dead = true
+        const healShown = heal > 0 ? Math.min(heal, e.maxHp - e.hp) : 0
+        attackers.push({ id: e.id, name: e.name, x: e.x, y: e.y, dmg, notes, healShown,
+          lunge: { dx: Math.sign(player.x - e.x), dy: Math.sign(player.y - e.y) } })
         return heal > 0 ? { ...e, hp: Math.min(e.maxHp, e.hp + heal) } : e
       }
       let cands
@@ -620,49 +613,70 @@ export default function Dungeon() {
       return e
     })
 
-    // ---- 満腹度・HP ----
-    const nextTurns = turns + 1
-    setTurns(nextTurns)
-    let nextFull = Math.max(0, Math.min(MAX_FULLNESS, fullness - fullCost)) // スキル消費/食料回復を反映
-    if (!dead) {
-      if (nextTurns % FULLNESS_EVERY === 0 && nextFull > 0) { nextFull -= 1; if (nextFull === 0) addLog('🍖 満腹度が0になった…！') }
-      if (nextFull <= 0) {
-        curPetHp -= 1; addLog('🥀 空腹で1ダメージ'); popDmg(player.x, player.y, 1)
-        if (curPetHp <= 0) dead = true
-      } else if (nextTurns % HP_REGEN_EVERY === 0 && curPetHp < pet.maxHp) {
-        curPetHp += 1
-      }
-      // 毒：POISON_INTERVAL ターンごとに最大HPの POISON_PCT ダメージ（次フロアで回復）
-      if (poisoned && nextTurns % POISON_INTERVAL === 0) {
-        const pd = Math.max(1, Math.ceil(pet.maxHp * POISON_PCT))
-        curPetHp -= pd; addLog(`☠ 毒で${pd}ダメージ`); popDmg(player.x, player.y, pd)
-        if (curPetHp <= 0) dead = true
-      }
-    }
-    setFullness(nextFull)
-    setPetHp(curPetHp)
-    if (willPoison && !poisoned) { setPoisoned(true); addLog('☠ 毒におかされた…！', 'right') }
-    if (dead) { setStatus('dead'); addLog('💀 ペットは力尽きた…'); finishRun(false, true) }
-
-    // ---- 40ターンごとに敵が1体湧く ----
-    if (!dead && nextTurns % SPAWN_EVERY === 0 && enemies.length < SPAWN_CAP) {
-      const born = spawnEnemy(s, enemies, player)
-      if (born) { enemies = [...enemies, born]; addLog('物音がした…新たな敵が現れた 👁', 'right') }
-    }
-
-    // 敵の反撃演出（突進＋ペット点滅）。被弾時はマップも軽く揺らす
-    if (Object.keys(attackerFx).length) {
-      applyFx({ pet: petHit ? { flash: true } : null, enemies: attackerFx })
-      if (petHit) triggerShake('hit')
-    } else {
-      applyFx({}) // 直前の体当たり演出をクリア
-    }
-    busyRef.current = false
-
-    // 視界を更新して記憶へ追記
+    // ---- 移動と視界は即時反映（攻撃演出はこの後1体ずつ） ----
     const nowVis = computeVisible(s.rooms, player.x, player.y)
     const explored = new Set(s.explored); nowVis.forEach((k) => explored.add(k))
     setState({ ...s, player, enemies, explored })
+    if (attackers.length === 0) applyFx({}) // 直前の体当たり演出をクリア
+
+    // ---- ターン終了処理（敵の攻撃演出がすべて終わってから実行） ----
+    const nextTurns = turns + 1
+    const finalize = (hp, died) => {
+      setTurns(nextTurns)
+      let dead = died
+      let curHp = hp
+      let nextFull = Math.max(0, Math.min(MAX_FULLNESS, fullness - fullCost)) // スキル消費/食料回復を反映
+      if (!dead) {
+        if (nextTurns % FULLNESS_EVERY === 0 && nextFull > 0) { nextFull -= 1; if (nextFull === 0) addLog('🍖 満腹度が0になった…！') }
+        if (nextFull <= 0) {
+          curHp -= 1; addLog('🥀 空腹で1ダメージ'); popDmg(player.x, player.y, 1)
+          if (curHp <= 0) dead = true
+        } else if (nextTurns % HP_REGEN_EVERY === 0 && curHp < pet.maxHp) {
+          curHp += 1
+        }
+        // 毒：POISON_INTERVAL ターンごとに最大HPの POISON_PCT ダメージ（次フロアで回復）
+        if (poisoned && nextTurns % POISON_INTERVAL === 0) {
+          const pd = Math.max(1, Math.ceil(pet.maxHp * POISON_PCT))
+          curHp -= pd; addLog(`☠ 毒で${pd}ダメージ`); popDmg(player.x, player.y, pd)
+          if (curHp <= 0) dead = true
+        }
+      }
+      setFullness(nextFull)
+      setPetHp(curHp)
+      if (willPoison && !poisoned) { setPoisoned(true); addLog('☠ 毒におかされた…！', 'right') }
+      if (dead) { setStatus('dead'); addLog('💀 ペットは力尽きた…'); finishRun(false, true) }
+
+      // ---- 40ターンごとに敵が1体湧く ----
+      if (!dead && nextTurns % SPAWN_EVERY === 0 && enemies.length < SPAWN_CAP) {
+        const born = spawnEnemy(s, enemies, player)
+        if (born) { enemies = [...enemies, born]; addLog('物音がした…新たな敵が現れた 👁', 'right'); setState({ ...s, player, enemies, explored }) }
+      }
+      busyRef.current = false
+    }
+
+    if (attackers.length === 0) { finalize(curPetHp, false); return }
+
+    // ---- 敵の攻撃は1体ずつワンテンポずつ（最初の1体もひと呼吸おいて） ----
+    busyRef.current = true
+    const STEP_MS = 330
+    let hpNow = curPetHp
+    let diedMid = false
+    attackers.forEach((a, i) => {
+      const tid = setTimeout(() => {
+        if (diedMid) return // 既に倒れていたら残りの攻撃はなし
+        hpNow -= a.dmg
+        popDmg(player.x, player.y, a.dmg)
+        if (a.healShown > 0) popHeal(a.x, a.y, a.healShown)
+        const tag = a.notes.length ? `【${a.notes.join('・')}】` : '攻撃'
+        addLog(`${a.name}の${tag}！ ${a.dmg}ダメージ 💥`, 'right')
+        applyFx({ pet: { flash: true }, enemies: { [a.id]: { lunge: a.lunge } } })
+        triggerShake('hit')
+        setPetHp(hpNow)
+        if (hpNow <= 0) { diedMid = true; finalize(hpNow, true); return }
+        if (i === attackers.length - 1) finalize(hpNow, false)
+      }, (i + 1) * STEP_MS)
+      turnTimers.current.push(tid)
+    })
   }
 
   // 持ち物の使用（食料＝満腹回復・1ターン経過 / だっしゅつの翼＝脱出）
