@@ -51,6 +51,23 @@ function App() {
     return () => clearInterval(id)
   }, [])
 
+  // 同時接続数カウント用ハートビート：ログイン中＆タブ表示中のみ2分おきに記録
+  useEffect(() => {
+    if (!session) return
+    const beat = () => {
+      if (document.hidden) return
+      supabase.rpc('heartbeat').then(() => {}, () => {})
+    }
+    beat()
+    const id = setInterval(beat, 120000)
+    const onVisible = () => { if (!document.hidden) beat() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [session])
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
