@@ -1550,7 +1550,9 @@ export default function Game() {
       const sortie = ss.filter(r => (r.set_type || 'sortie') === 'sortie')
       const papia  = ss.filter(r => r.set_type === 'papia')
       setSkillSets(sortie)
-      setPapiaSkillSets(papia.length ? papia : sortie)  // パピアセット未設定なら出撃を流用
+      // パピアセットにアクティブスキルが1つも無ければ出撃を流用（パッシブのみだと全部通常攻撃になるため）
+      const papiaHasActive = papia.some(r => r.skills?.type !== 'パッシブ')
+      setPapiaSkillSets(papiaHasActive ? papia : sortie)
     }
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id).eq('equipped', true).single()
     setPlayerItem(pi || null)
@@ -2213,7 +2215,7 @@ export default function Game() {
         const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk.lockedSkill)
         if (lockedIdx >= 0) skillIndex = lockedIdx
       }
-      let skillUsed = false
+      let skillUsed = false, mpShort = false
       if (expandedSkillSet.length > 0) {
         const cs = expandedSkillSet[skillIndex % expandedSkillSet.length]
         let mpCost = Math.floor((isArtifact ? (cs?.skills?.mp_cost||0)*2 : (cs?.skills?.mp_cost||0)) * passiveMpCostMult)
@@ -2309,7 +2311,7 @@ export default function Game() {
             if (enemyHp <= 0) { skillUsed = true; skillIndex++; return }
           }
           skillUsed = true; skillIndex++
-        }
+        } else if (cs && cs.skills) { mpShort = true }
       }
       if (!skillUsed) {
         const baseAtk = isMagical ? effBuff.matk : effBuff.atk
@@ -2325,7 +2327,7 @@ export default function Game() {
           logs.push({ text: `🗡 ヴァルブレイカーの効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
         }
         const critText = isCrit ? '💥クリティカル！ ' : ''
-        logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
+        logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！${mpShort?'（MP不足でスキル不発）':''}`, color:'#ffcc00' })
         if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
           const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
           playerHp = Math.min(profile.hp_max, playerHp + rageCure)

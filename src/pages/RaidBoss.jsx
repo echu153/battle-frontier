@@ -175,7 +175,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
         const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk.lockedSkill)
         if (lockedIdx >= 0) skillIndex = lockedIdx
       }
-      let skillUsed = false
+      let skillUsed = false, mpShort = false
       if (expandedSkillSet.length > 0) {
         const cs = expandedSkillSet[skillIndex % expandedSkillSet.length]
         let mpCost = Math.floor((isArtifact ? (cs?.skills?.mp_cost || 0) * 2 : (cs?.skills?.mp_cost || 0)) * passiveMpCostMult)
@@ -232,7 +232,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
           }
           skillUsed = true
           skillIndex++
-        }
+        } else if (cs && cs.skills) { mpShort = true }
       }
       if (!skillUsed) {
         const baseAtk = isMagical ? effBuff.matk : effBuff.atk
@@ -247,7 +247,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
         }
         totalDamage += finalDmg
         const critText = isCrit ? ' 💥クリティカル！' : ''
-        logs.push({ text: `${prefix}あなたの攻撃！ ${BOSS_NAME}に${fmt(finalDmg)}ダメージ！${critText}`, color: isCrit ? '#ff4444' : '#ffcc00' })
+        logs.push({ text: `${prefix}あなたの攻撃！ ${BOSS_NAME}に${fmt(finalDmg)}ダメージ！${critText}${mpShort?'（MP不足でスキル不発）':''}`, color: isCrit ? '#ff4444' : '#ffcc00' })
         if (expandedSkillSet.length > 0) skillIndex++
       }
     }
@@ -408,7 +408,8 @@ export default function RaidBoss() {
       const all = ss || []
       const raid = all.filter(r => r.set_type === 'raid')
       const sortie = all.filter(r => (r.set_type || 'sortie') === 'sortie')
-      setSkillSets(raid.length ? raid : sortie)
+      // アクティブスキルが1つも無いセットは未設定扱い（パッシブのみだと全部通常攻撃になるため）
+      setSkillSets(raid.some(r => r.skills?.type !== 'パッシブ') ? raid : sortie)
     }
 
     // 共有CD残り計算

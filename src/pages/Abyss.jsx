@@ -147,7 +147,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk.lockedSkill)
       if (lockedIdx >= 0) skillIndex = lockedIdx
     }
-    let skillUsed = false
+    let skillUsed = false, mpShort = false
     if (expandedSkillSet.length > 0) {
       const cs = expandedSkillSet[skillIndex % expandedSkillSet.length]
       let mpCost = Math.floor((isArtifact ? (cs?.skills?.mp_cost||0)*2 : (cs?.skills?.mp_cost||0)) * passiveMpCostMult)
@@ -229,7 +229,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
           if (enemyHp <= 0) { skillIndex++; return }
         }
         skillUsed = true; skillIndex++
-      }
+      } else if (cs && cs.skills) { mpShort = true }
     }
     if (!skillUsed) {
       const baseAtk = isMagical ? effBuff.matk : effBuff.atk
@@ -243,7 +243,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
         logs.push({ text: `🗡 ヴァルブレイカーの効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
       }
       const critText = isCrit ? '💥クリティカル！ ' : ''
-      logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
+      logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！${mpShort?'（MP不足でスキル不発）':''}`, color:'#ffcc00' })
       if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
         const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
         playerHp = Math.min(profile.hp_max, playerHp + rageCure)
@@ -697,7 +697,8 @@ export default function Abyss() {
       const all = ss || []
       const challenge = all.filter(r => r.set_type === 'challenge')
       const sortie = all.filter(r => (r.set_type || 'sortie') === 'sortie')
-      setSkillSets(challenge.length ? challenge : sortie)
+      // アクティブスキルが1つも無いセットは未設定扱い（パッシブのみだと全部通常攻撃になるため）
+      setSkillSets(challenge.some(r => r.skills?.type !== 'パッシブ') ? challenge : sortie)
     }
     setPlayerItem(pi || null)
 
