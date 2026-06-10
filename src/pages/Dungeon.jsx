@@ -160,14 +160,12 @@ function enemySeesPet(rooms, e, px, py) {
   return Math.max(Math.abs(e.x - px), Math.abs(e.y - py)) <= 2 // 通路で接近（ペットの5x5視界と一致）
 }
 
-// ダメージ計算: 攻撃と防御の差が過剰だと効率が逓減する（物理=def / 特殊=mdef 共通）
-//  ・防御が攻撃を上回る → 素攻撃の10%は最低保証で通す
-//  ・差(攻撃-防御)が「攻撃の50%」までは等倍、それを超えた分は効率半減
+// ダメージ計算: 割合軽減方式（物理=def / 特殊=mdef 共通）
+//  ダメージ = 攻撃² ÷ (攻撃 + 防御)。防御は「割合カット」として効く
+//  ・防御=攻撃と同値 → 半減 / 防御=攻撃の2倍 → 1/3 …とゼロにはならず必ず通る
+//  ・能力差が開きすぎても 引き算式のような「1しか通らない/素通し」の極端さが出ない
 function calcDamage(rawAtk, guard) {
-  const d = rawAtk - guard
-  if (d <= 0) return Math.max(1, Math.round(rawAtk * 0.10))
-  const cap = rawAtk * 0.5
-  return Math.max(1, Math.round(d <= cap ? d : cap + (d - cap) * 0.5))
+  return Math.max(1, Math.round((rawAtk * rawAtk) / (rawAtk + Math.max(0, guard))))
 }
 
 export default function Dungeon() {
