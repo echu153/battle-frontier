@@ -13,13 +13,19 @@ const AREA_PASS_EFFECT = { 2:'casino_area_2', 3:'casino_area_3', 4:'casino_area_
 const DEV_ACCOUNTS = []
 const expIsFrozen = (p) => !!(p && (p.exp_frozen || (p.exp_frozen_until && new Date(p.exp_frozen_until) > new Date())))
 
+const IDLE_SORTIE_LIMIT = 10 // activitySignal が変わらないまま出撃できる回数（超えるとBOT確認）
+
 // quickSlotId: 指定するとそのidの要素へ小さな「⚔出撃」ボタンをポータル表示（ヘッダー等に置ける）
 // collapsible: trueでパネルを折りたたみ式にする（エリア選択などは展開して操作）
-export default function SortiePanel({ quickSlotId, collapsible = false } = {}) {
+// activitySignal: 画面側の「活動」を示す値（例：ダンジョンのフロア番号）。
+//   変化しないまま IDLE_SORTIE_LIMIT 回出撃するとBOT確認を出す（放置マクロ対策）
+export default function SortiePanel({ quickSlotId, collapsible = false, activitySignal } = {}) {
   const [profile, setProfile] = useState(null)
   const [open, setOpen] = useState(!collapsible)
   const [slotEl, setSlotEl] = useState(null)
   useEffect(() => { if (quickSlotId) setSlotEl(document.getElementById(quickSlotId)) }, [quickSlotId])
+  const idleSorties = useRef(0)
+  useEffect(() => { idleSorties.current = 0 }, [activitySignal]) // フロア移動などの活動でリセット
   const [playerItems, setPlayerItems] = useState([])
   const [loading, setLoading] = useState(false)
   const [now, setNow] = useState(Date.now())
@@ -128,6 +134,15 @@ export default function SortiePanel({ quickSlotId, collapsible = false } = {}) {
           const intervals = times.slice(1).map((t,i) => t - times[i])
           const spread = Math.max(...intervals) - Math.min(...intervals)
           if (spread < AUTOCLICK_SPREAD_MS) { triggerBotCheck(); return }
+        }
+      }
+
+      // フロア移動などの活動が無いまま IDLE_SORTIE_LIMIT 回出撃 → BOT確認（放置マクロ対策）
+      if (activitySignal !== undefined && !DEV_ACCOUNTS.includes(profile.username)) {
+        idleSorties.current += 1
+        if (idleSorties.current >= IDLE_SORTIE_LIMIT) {
+          idleSorties.current = 0
+          triggerBotCheck(); return
         }
       }
 

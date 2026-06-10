@@ -1056,7 +1056,7 @@ export default function Dungeon() {
         </div>
 
         {/* ⚔ 簡易出撃（カジノと同じ・自キャラを並行して育成できる）。エリア選択はここを開いて行う */}
-        <SortiePanel quickSlotId="bf-sortie-quick" collapsible />
+        <SortiePanel quickSlotId="bf-sortie-quick" collapsible activitySignal={floorNum} />
         </div>
 
         {/* PC用：右側ログカラム */}
