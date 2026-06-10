@@ -1329,7 +1329,11 @@ export default function Game() {
   const [pendingPoints, setPendingPoints] = useState(0)
   const [statPoints, setStatPoints] = useState({})
   const [showStatPanel, setShowStatPanel] = useState(false)
-  const [statExpanded, setStatExpanded] = useState(true)  // ステータス欄の展開/折りたたみ
+  // ステータス欄・施設ボタン欄の展開/折りたたみ（localStorageに保存しページ遷移後も維持）
+  const [statExpanded, setStatExpanded] = useState(() => localStorage.getItem('statExpanded') !== '0')
+  const [facilitiesExpanded, setFacilitiesExpanded] = useState(() => localStorage.getItem('facilitiesExpanded') !== '0')
+  const toggleStatExpanded = () => setStatExpanded(v => { localStorage.setItem('statExpanded', v ? '0' : '1'); return !v })
+  const toggleFacilitiesExpanded = () => setFacilitiesExpanded(v => { localStorage.setItem('facilitiesExpanded', v ? '0' : '1'); return !v })
   const [selectedArea, setSelectedArea] = useState(() => Number(localStorage.getItem('selectedArea') || 1))
   const [regenRemaining, setRegenRemaining] = useState(0)
   const [innMessage, setInnMessage] = useState('')
@@ -3659,7 +3663,7 @@ export default function Game() {
                 </button>
               )}
             </>)}
-            <button onClick={()=>setStatExpanded(v=>!v)}
+            <button onClick={toggleStatExpanded}
               style={{ width:'100%', padding:'4px', marginTop:'6px', background:'#000e1a', border:'1px solid #003366', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
               {statExpanded ? '▲ ステータスを閉じる' : '▼ ステータスを表示'}
             </button>
@@ -3815,6 +3819,7 @@ export default function Game() {
                   )}
                 </div>
               )}
+              {facilitiesExpanded && (
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                 <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋</button>
                 <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿</button>
@@ -3827,6 +3832,11 @@ export default function Game() {
                 <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所</button>
                 {profile?.is_admin && <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット[開発]</button>}
               </div>
+              )}
+              <button onClick={toggleFacilitiesExpanded}
+                style={{ width:'100%', padding:'4px', marginTop:'6px', background:'#000e1a', border:'1px solid #003366', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                {facilitiesExpanded ? '▲ 施設を閉じる' : '▼ 施設を表示'}
+              </button>
               <button onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ width:'100%', padding:'14px', marginTop:'10px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦</button>
               {showChallengePanel && (
                 <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'10px' }}>
@@ -3975,7 +3985,7 @@ export default function Game() {
                 </button>
               )}
             </>)}
-            <button onClick={()=>setStatExpanded(v=>!v)}
+            <button onClick={toggleStatExpanded}
               style={{ width:'100%', padding:'4px', marginTop:'6px', background:'#000e1a', border:'1px solid #003366', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
               {statExpanded ? '▲ ステータスを閉じる' : '▼ ステータスを表示'}
             </button>
@@ -4132,6 +4142,7 @@ export default function Game() {
                     </div>
                   </div>
                 )}
+                {facilitiesExpanded && (
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
                   <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋へ</button>
                   <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿へ</button>
@@ -4143,6 +4154,11 @@ export default function Game() {
                   <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>
                   <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所へ</button>
                 </div>
+                )}
+                <button onClick={toggleFacilitiesExpanded}
+                  style={{ width:'100%', padding:'4px', marginTop:'6px', background:'#000e1a', border:'1px solid #003366', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                  {facilitiesExpanded ? '▲ 施設を閉じる' : '▼ 施設を表示'}
+                </button>
                 <button onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ width:'100%', padding:'14px', marginTop:'10px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦</button>
                 {showChallengePanel && (
                   <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'10px' }}>
