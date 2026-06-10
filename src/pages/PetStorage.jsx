@@ -22,8 +22,8 @@ export default function PetStorage() {
   const fetchAll = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
-    const { data: p } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
-    if (!p?.is_admin) { nav('/game'); return }
+    const { data: p } = await supabase.from('profiles').select('id').eq('id', user.id).single()
+    if (!p) { nav('/game'); return }
     setAllowed(true)
     const { data: sto } = await supabase.from('pet_storage').select('item_key, qty').eq('owner_id', user.id)
     setStorage(Object.fromEntries((sto || []).map((r) => [r.item_key, r.qty])))

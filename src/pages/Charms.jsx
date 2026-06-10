@@ -98,7 +98,7 @@ export default function Charms() {
           <div style={{ color: '#ffcc00', fontSize: 16, letterSpacing: 3 }}>BATTLE FRONTIER</div>
           <Btn onClick={() => nav('/pets')} dim>← ペット</Btn>
         </div>
-        <div style={{ color: '#aa88ff', letterSpacing: 2, marginBottom: 8 }}>🧿 チャーム <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span></div>
+        <div style={{ color: '#aa88ff', letterSpacing: 2, marginBottom: 8 }}>🧿 チャーム</div>
         {msg && <div style={{ background: '#101a30', border: '1px solid #335588', color: '#aaddff', padding: 8, fontSize: 12, marginBottom: 10 }}>{msg}</div>}
 
         {/* 所持素 */}

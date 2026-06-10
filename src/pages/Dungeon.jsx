@@ -8,13 +8,12 @@ import SortiePanel from '../components/SortiePanel'
 const DUNGEON_BAG_MAX = 20 // ダンジョン中に持てる持ち物の上限（だっしゅつの翼は対象外）
 
 // ============================================================
-// 不思議のダンジョン風プロトタイプ（Phase 1：クライアントのみ・報酬なし）
-// 開発者(is_admin)だけが入れる隠しコンテンツ。
+// 不思議のダンジョン風（一般公開）
 //  - 部屋＋通路を自動生成。階段はどこかの部屋にある
-//  - 視界(フォグ)：通路は周囲のみ／部屋に入ると部屋全体が見える。既知地形は薄く記憶
-//  - 敵AI：ペットが見えないとランダム徘徊、見えると接近
-//  - 戦闘：体当たりで1撃ずつ殴り合う（敵からも殴られる）
-// ※報酬付与は Phase 3 で RPC を介してサーバー検証してから実装する。
+//  - 視界(フォグ)：通路は周囲のみ／部屋に入ると部屋全体が見える
+//  - 敵AI：ペットが見えないとランダム徘徊、視界に入るとBFS最短経路で接近
+//  - 戦闘：体当たりで選択スキル発動。敵の攻撃は1体ずつ順番に
+//  - 戦利品・EXPはサーバーRPC(dungeon_*)で抽選・検証・付与（不正対策）
 // ============================================================
 
 // 区画グリッド（部屋スロット）
@@ -331,8 +330,8 @@ export default function Dungeon() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { nav('/login'); return }
       userIdRef.current = user.id
-      const { data: prof } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
-      if (!prof?.is_admin) { setAllowed(false); return } // 一般公開は不正対策(RPC化)後まで停止
+      const { data: prof } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle()
+      if (!prof) { setAllowed(false); return }
       // 選択中のペットを読み込む
       const { data: ap } = await supabase.from('pets').select('*').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
       if (ap) {
@@ -770,7 +769,7 @@ export default function Dungeon() {
             <Btn onClick={() => nav('/game')}>← 街に戻る</Btn>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <div style={{ color: '#aa88ff', letterSpacing: 2 }}>🕳 ダンジョン選択 <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span></div>
+            <div style={{ color: '#aa88ff', letterSpacing: 2 }}>🕳 ダンジョン選択</div>
             <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn>
           </div>
           <div style={{ display: 'flex', gap: 10, fontSize: 12, marginBottom: 12, alignItems: 'center' }}>
@@ -918,7 +917,7 @@ export default function Dungeon() {
           <Btn onClick={leaveToTown}>← 街に戻る</Btn>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div style={{ color: '#aa88ff', letterSpacing: 2 }}>{dungeon?.emoji || '🕳'} {dungeon?.name || 'ダンジョン'} <span style={{ fontSize: 11, color: '#4466aa' }}>[開発中]</span></div>
+          <div style={{ color: '#aa88ff', letterSpacing: 2 }}>{dungeon?.emoji || '🕳'} {dungeon?.name || 'ダンジョン'}</div>
           {/* 簡易出撃のクイックボタン（SortiePanelがポータルで描画。エリア選択は下のメニューから） */}
           <span id="bf-sortie-quick" />
         </div>
