@@ -2221,7 +2221,7 @@ export default function Game() {
       const skillExtraHit = (nextSkillName === '連装銃撃' && profile.class === '魔銃士' && rtCur >= 2) ? 10 : 0
       const effectiveEnemyEvasion = isSureHit ? 0 : Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit) + (enemy.isPapia ? 50 : 0)
       if (effectiveEnemyEvasion > 0 && Math.random()*100 < effectiveEnemyEvasion) {
-        logs.push({ text:`${prefix}攻撃！ しかし${enemy.name}に回避された！`, color:'#446688' })
+        logs.push({ text:`${prefix}${nextSkillName ? `${nextSkillName}！` : '攻撃！'} しかし${enemy.name}に回避された！`, color:'#446688' })
         if (expandedSkillSet.length > 0) skillIndex++
         return
       }
