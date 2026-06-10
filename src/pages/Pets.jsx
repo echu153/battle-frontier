@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { SPECIES, STARTERS, SKILLS, skillsForSpecies, MAX_SKILL_SLOTS, SHOP_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage, assetSrc, getCharm, charmDisplayName, charmHpBonus } from '../constants/pets'
+import { SPECIES, STARTERS, SKILLS, skillsForSpecies, MAX_SKILL_SLOTS, SHOP_ITEMS, PET_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage, assetSrc, getCharm, charmDisplayName, charmHpBonus } from '../constants/pets'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 // ペット画像はペットページでアップロードしたものだけを使う（avatars/<uid>/pets/ 配下）
