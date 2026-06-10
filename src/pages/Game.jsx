@@ -3421,11 +3421,12 @@ export default function Game() {
     const canChange = name !== profile.class && (requires2
       ? reqLv>=requiresLv && req2Lv>=requires2Lv
       : reqLv>=requiresLv)
-    return { name, lv:cl?cl.lv:1, canChange, requires, reqLv, requiresLv, requires2, req2Lv, requires2Lv }
+    return { name, lv:cl?cl.lv:1, canChange, requires, reqLv, requiresLv, requires2, req2Lv, requires2Lv, requiresItem:req.requiresItem }
   })
 
-  const normalAdvanced = advancedAvailable.filter(c => !c.requires2)
-  const specialAdvanced = advancedAvailable.filter(c => c.requires2)
+  // 証明書職(requiresItem)は専用セクションで別途表示するため、上位職/特殊上位職からは除外
+  const normalAdvanced = advancedAvailable.filter(c => !c.requires2 && !c.requiresItem)
+  const specialAdvanced = advancedAvailable.filter(c => c.requires2 && !c.requiresItem)
 
   const TempleContent = () => (
     <div style={{ border:'1px solid #886600', background:'#001020', padding:'16px' }}>
