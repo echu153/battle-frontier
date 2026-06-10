@@ -298,14 +298,25 @@ export default function Dungeon() {
     if (saveKey()) localStorage.removeItem(saveKey()) // 中断データを破棄
     if (finishedRef.current || !runIdRef.current) return
     finishedRef.current = true
-    // ルート品の付与はサーバー(dungeon_finish)が生還時のみ実行。クライアントは表示用に一覧を保持
-    const lootList = died ? [] : lootBag.map((l) => `${l.emoji || ''}${l.label}${(l.qty || 1) > 1 ? `×${l.qty}` : ''}`)
+    // ルート品の付与はサーバー(dungeon_finish)が実行。生還＝全部／死亡＝ランダムで半分失い残りは持ち帰り
+    const lootList = lootBag.map((l) => `${l.emoji || ''}${l.label}${(l.qty || 1) > 1 ? `×${l.qty}` : ''}`)
     setLootBag([])
     const { data, error } = await supabase.rpc('dungeon_finish', {
       p_run_id: runIdRef.current, p_floors: floorsRef.current,
       p_enemies: enemiesRef.current, p_items: itemsRef.current, p_cleared: cleared, p_died: died,
     })
-    if (!error && data) setReward({ ...data, lootGranted: died ? 0 : (data.loot_granted || 0), lootList })
+    if (!error && data) {
+      // 死亡時はサーバーが残した分(kept_loot)を表示。旧SQL(kept_lootなし)では従来どおり全ロスト表示
+      const kept = Array.isArray(data.kept_loot)
+        ? data.kept_loot.map((e) => { const d = lootDisplay(e); return `${d.emoji}${d.label}${(e.qty || 1) > 1 ? `×${e.qty}` : ''}` })
+        : null
+      setReward({
+        ...data,
+        lootGranted: data.loot_granted || 0,
+        lootList: died ? (kept || []) : lootList,
+        lostHalf: died && (data.loot_granted || 0) >= 0 && kept !== null,
+      })
+    }
   }, [lootBag])
 
   useEffect(() => {
@@ -444,7 +455,7 @@ export default function Dungeon() {
       if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); curPetHp = Math.min(pet.maxHp, curPetHp + heal); if (heal > 0) addLog(`💚 ${heal}回復`) }
       const killed = newHp <= 0
       if (killed) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; grantKill(floorNum, target.name); triggerShake('kill') }
-      else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total}`); triggerShake('hit') }
+      else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total}ダメージ！`); triggerShake('hit') }
 
       // 体当たり演出：ペットを相手方向へ突進、被弾した敵を点滅させる
       applyFx({ pet: { lunge: { dx, dy } }, enemies: killed ? {} : { [target.id]: { flash: true } } })
@@ -481,10 +492,10 @@ export default function Dungeon() {
           const fdef = PET_ITEMS[itemHere.key]
           grantFood(itemHere.key).then((ok) => addLog(ok ? `${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾った` : '🎒 袋がいっぱいで拾えなかった'))
         } else {
-          // ✨：サーバーが抽選して保持（生還で入手）
+          // ✨：サーバーが抽選して保持（生還で入手）。何を拾ったか必ずその場でログに出す
           supabase.rpc('dungeon_pickup', { p_run_id: runIdRef.current }).then(({ data, error }) => {
-            if (error || !data) { addLog('✨ アイテムを拾った'); return }
-            addLootToBag(data); const d = lootDisplay(data); addLog(`${d.emoji} ${d.label}を拾った`)
+            if (error || !data) { addLog(`✨ 拾えなかった（${error?.message || '通信エラー'}）`); return }
+            addLootToBag(data); const d = lootDisplay(data); addLog(`${d.emoji} ${d.label}を拾った！`)
           })
         }
       }
@@ -514,12 +525,28 @@ export default function Dungeon() {
     const isFloor = (x, y) => inBounds(x, y) && s.grid[y][x] === '.'
     // プレイヤーが今見えているマス（見えていない敵には攻撃させない）
     const visNow = computeVisible(s.rooms, player.x, player.y)
+    // プレイヤーからの最短距離マップ（BFS）。視界に入った敵はこれに沿って詰めてくる
+    const dist = new Map()
+    {
+      const q = [[player.x, player.y]]
+      dist.set(player.x + ',' + player.y, 0)
+      while (q.length) {
+        const [cx, cy] = q.shift()
+        const cd = dist.get(cx + ',' + cy)
+        if (cd >= 24) continue // 探索範囲は十分広く・無限拡散は防ぐ
+        for (const [ddx, ddy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx2 = cx + ddx, ny2 = cy + ddy, k = nx2 + ',' + ny2
+          if (isFloor(nx2, ny2) && !dist.has(k)) { dist.set(k, cd + 1); q.push([nx2, ny2]) }
+        }
+      }
+    }
     let dead = false
     const attackerFx = {} // 反撃してきた敵の突進演出
     let petHit = false
     let willPoison = false // このターンに毒を受けたか
     enemies = enemies.map((e) => {
-      const sees = enemySeesPet(s.rooms, e, player.x, player.y)
+      // プレイヤーの視界に入った敵も追跡を開始する（部屋・通路問わず）
+      const sees = enemySeesPet(s.rooms, e, player.x, player.y) || visNow.has(e.x + ',' + e.y)
       const adjacent = Math.abs(e.x - player.x) + Math.abs(e.y - player.y) === 1
       if (sees && adjacent && visNow.has(e.x + ',' + e.y)) {
         // 敵の攻撃タイプに応じて pet.def(物理)/mdef(特殊)で軽減
@@ -547,13 +574,12 @@ export default function Dungeon() {
       }
       let cands
       if (sees) {
-        cands = []
-        const sx = Math.sign(player.x - e.x), sy = Math.sign(player.y - e.y)
-        if (Math.abs(player.x - e.x) >= Math.abs(player.y - e.y)) {
-          if (sx) cands.push({ x: e.x + sx, y: e.y }); if (sy) cands.push({ x: e.x, y: e.y + sy })
-        } else {
-          if (sy) cands.push({ x: e.x, y: e.y + sy }); if (sx) cands.push({ x: e.x + sx, y: e.y })
-        }
+        // 最短距離マップに沿って詰める（距離が縮まる隣マスを優先。袋小路や別ルートにも対応）
+        cands = [{ x: e.x + 1, y: e.y }, { x: e.x - 1, y: e.y }, { x: e.x, y: e.y + 1 }, { x: e.x, y: e.y - 1 }]
+          .filter((c) => dist.has(c.x + ',' + c.y))
+          .sort((a, b) => dist.get(a.x + ',' + a.y) - dist.get(b.x + ',' + b.y))
+        const cur = dist.get(e.x + ',' + e.y)
+        if (cur != null) cands = cands.filter((c) => dist.get(c.x + ',' + c.y) < cur) // 遠ざかる動きはしない
       } else {
         cands = [{ x: e.x + 1, y: e.y }, { x: e.x - 1, y: e.y }, { x: e.x, y: e.y + 1 }, { x: e.x, y: e.y - 1 }]
           .sort(() => Math.random() - 0.5)
@@ -748,7 +774,7 @@ export default function Dungeon() {
     if (!vis) return { ch: '', bg: C.unknown } // 現在見えていない所は完全に真っ暗（記憶表示なし）
     const wall = state.grid[y][x] === '#'
     // 現在視界：エンティティ優先（足元は床色）
-    if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: C.floorVis, fx: fx.pet }
+    if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: C.floorVis, fx: fx.pet, poison: poisoned }
     const e = state.enemies.find((o) => o.x === x && o.y === y)
     if (e) return { ch: '👹', img: e.image || null, bg: C.floorVis, fx: fx.enemies[e.id] || null }
     const it = state.items.find((o) => o.x === x && o.y === y)
@@ -824,7 +850,11 @@ export default function Dungeon() {
             const c = cellAt(x, y)
             const clickable = status === 'exploring' && isVisible(x, y) && inBounds(x, y) && state.grid[y]?.[x] !== '#' &&
               Math.abs(x - state.player.x) + Math.abs(y - state.player.y) === 1
-            const inner = c.img ? <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : c.ch
+            // 毒状態のペットはうっすら紫に染める
+            const poisonFilter = c.poison ? 'sepia(0.6) hue-rotate(230deg) saturate(1.8) drop-shadow(0 0 3px #aa55ff)' : 'none'
+            const inner = c.img
+              ? <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: poisonFilter }} />
+              : <span style={{ filter: poisonFilter }}>{c.ch}</span>
             const anims = []
             if (c.fx?.lunge) anims.push('bf-lunge 0.26s ease-out')
             if (c.fx?.flash) anims.push('bf-flash 0.42s ease-in-out')
@@ -897,18 +927,18 @@ export default function Dungeon() {
                 ))}
                 {empty && <span style={{ color: '#445566', fontSize: 11 }}>（持ち物なし）</span>}
               </div>
-              {lootBag.length > 0 && <div style={{ color: '#557766', fontSize: 10, marginTop: 6 }}>※装備・宝石・強化石は生きて帰ると入手（やられると失う）</div>}
+              {lootBag.length > 0 && <div style={{ color: '#557766', fontSize: 10, marginTop: 6 }}>※戦利品は生きて帰ると全部入手（やられるとランダムで半分失う）</div>}
             </div>
           )
         })()}
         {status === 'cleared' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<br /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<RewardPanel reward={reward} pet={pet} /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
         {status === 'dead' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>💀 ペットは力尽きた…（なつき-3）<br /><br /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>💀 ペットは力尽きた…（なつき-3）<br /><span style={{ fontSize: 11, color: '#cc8888' }}>戦利品のランダム半分を失った…残りは持ち帰った</span><RewardPanel reward={reward} pet={pet} /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
         {status === 'escaped' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#cc88ff' }}>🪽 ダンジョンから脱出した<br /><br /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#cc88ff' }}>🪽 ダンジョンから脱出した<RewardPanel reward={reward} pet={pet} /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
 
         {/* ログ見出し：左＝自分の行動／右＝敵の行動 */}

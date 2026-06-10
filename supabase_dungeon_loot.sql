@@ -104,7 +104,8 @@ begin
   return v_moved;
 end; $$;
 
--- 退出精算：なつき(±)＆ 生還時のみ pending_loot をサーバーで付与。死亡＝破棄
+-- 退出精算：なつき(±)＆ pending_loot をサーバーで付与。
+--  生還＝全部入手／死亡＝ランダムで半分失い、残りは持ち帰り（kept_lootで返す）
 create or replace function dungeon_finish(p_run_id uuid, p_floors int, p_enemies int, p_items int, p_cleared boolean, p_died boolean)
 returns json language plpgsql security definer set search_path = public as $$
 declare
@@ -112,6 +113,7 @@ declare
   v_aff_delta int; v_new_aff int; v_new_clears int; v_bonus int;
   v_e jsonb; v_t text; v_slot text; v_uid uuid := auth.uid();
   v_iid items.id%type; v_wid weapons.id%type; v_q int; v_exrow record;
+  v_keep jsonb := '[]'::jsonb; v_kq int;
 begin
   select * into v_run from dungeon_runs where id = p_run_id;
   if not found then raise exception 'run not found'; end if;
@@ -129,9 +131,22 @@ begin
   v_new_aff := greatest(0, least(100, v_pet.affection + v_aff_delta));
   update pets set affection = v_new_aff, dungeon_clears = v_new_clears where id = v_pet.id;
 
-  -- 戦利品：生還時のみ付与
-  if not p_died then
+  -- 戦利品：生還＝全部／死亡＝ランダムで半分失う（素は個数を半減・その他は各50%で残る）
+  if p_died then
     for v_e in select * from jsonb_array_elements(v_run.pending_loot) loop
+      if v_e->>'type' = 'seed' then
+        v_q := coalesce((v_e->>'qty')::int, 1);
+        v_kq := floor(v_q / 2.0)::int + (case when v_q % 2 = 1 and random() < 0.5 then 1 else 0 end);
+        if v_kq > 0 then v_keep := v_keep || jsonb_set(v_e, '{qty}', to_jsonb(v_kq)); end if;
+      elsif random() < 0.5 then
+        v_keep := v_keep || v_e;
+      end if;
+    end loop;
+  else
+    v_keep := v_run.pending_loot;
+  end if;
+
+  for v_e in select * from jsonb_array_elements(v_keep) loop
       v_t := v_e->>'type';
       if v_t = 'seed' then
         v_q := coalesce((v_e->>'qty')::int, 1);
@@ -156,7 +171,6 @@ begin
         insert into player_charms(owner_id, ctype) values (v_uid, v_e->>'ctype');
       end if;
     end loop;
-  end if;
 
   update dungeon_runs set status = 'finished', finished_at = now(), floors_cleared = v_floors,
     items_collected = v_items, cleared = coalesce(p_cleared, false),
@@ -165,7 +179,7 @@ begin
 
   return json_build_object('aff_delta', v_aff_delta, 'affection', v_new_aff, 'aff_bonus', v_bonus,
     'clears', v_new_clears, 'level', v_pet.level, 'exp', v_pet.exp,
-    'loot_granted', case when p_died then 0 else jsonb_array_length(v_run.pending_loot) end);
+    'loot_granted', jsonb_array_length(v_keep), 'kept_loot', v_keep);
 end; $$;
 
 grant execute on function dungeon_pickup(uuid) to authenticated;
