@@ -447,6 +447,8 @@ export default function Dungeon() {
     const px = s.player.x, py = s.player.y
     const nx = px + dx, ny = py + dy
     if (!inBounds(nx, ny) || s.grid[ny][nx] === '#') return
+    // 斜め移動は壁の角を抜けられない（両脇のどちらかが壁なら不可）
+    if (dx !== 0 && dy !== 0 && (s.grid[py][nx] === '#' || s.grid[ny][px] === '#')) return
 
     let curPetHp = petHp
     let enemies = s.enemies
@@ -569,7 +571,10 @@ export default function Dungeon() {
     enemies = enemies.map((e) => {
       // プレイヤーの視界に入った敵も追跡を開始する（部屋・通路問わず）
       const sees = enemySeesPet(s.rooms, e, player.x, player.y) || visNow.has(e.x + ',' + e.y)
-      const adjacent = Math.abs(e.x - player.x) + Math.abs(e.y - player.y) === 1
+      // 斜め隣接も攻撃対象（ただし壁の角越しは不可＝プレイヤーの斜め移動と同条件）
+      const adx = e.x - player.x, ady = e.y - player.y
+      const diagBlocked = adx !== 0 && ady !== 0 && (s.grid[player.y]?.[e.x] === '#' || s.grid[e.y]?.[player.x] === '#')
+      const adjacent = Math.max(Math.abs(adx), Math.abs(ady)) === 1 && !diagBlocked
       if (sees && adjacent && visNow.has(e.x + ',' + e.y)) {
         // 敵の攻撃タイプに応じて pet.def(物理)/mdef(特殊)で軽減
         const guard = e.type === 'spec' ? (pet.mdef || 0) : (pet.def || 0)
@@ -854,7 +859,7 @@ export default function Dungeon() {
   const adjClick = (vx, vy) => {
     const x = ox + vx, y = oy + vy
     const dx = x - state.player.x, dy = y - state.player.y
-    if (Math.abs(dx) + Math.abs(dy) === 1) tryMove(dx, dy)
+    if (Math.max(Math.abs(dx), Math.abs(dy)) === 1) tryMove(dx, dy) // 斜めも含む8方向
   }
 
   return (
@@ -929,8 +934,11 @@ export default function Dungeon() {
           {Array.from({ length: VH }).map((_, vy) => Array.from({ length: VW }).map((_, vx) => {
             const x = ox + vx, y = oy + vy
             const c = cellAt(x, y)
+            const cdx = x - state.player.x, cdy = y - state.player.y
+            const cornerBlocked = cdx !== 0 && cdy !== 0 &&
+              (state.grid[state.player.y]?.[x] === '#' || state.grid[y]?.[state.player.x] === '#')
             const clickable = status === 'exploring' && isVisible(x, y) && inBounds(x, y) && state.grid[y]?.[x] !== '#' &&
-              Math.abs(x - state.player.x) + Math.abs(y - state.player.y) === 1
+              Math.max(Math.abs(cdx), Math.abs(cdy)) === 1 && !cornerBlocked
             // 毒状態のペットはうっすら紫に染める
             const poisonFilter = c.poison ? 'sepia(0.6) hue-rotate(230deg) saturate(1.8) drop-shadow(0 0 3px #aa55ff)' : 'none'
             const inner = c.img
@@ -977,9 +985,9 @@ export default function Dungeon() {
           <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'center', marginTop: 12 }}>
             {/* 十字キー */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gap: 4 }}>
-              <span /><Btn onClick={() => tryMove(0, -1)}>▲</Btn><span />
+              <Btn onClick={() => tryMove(-1, -1)}>↖</Btn><Btn onClick={() => tryMove(0, -1)}>▲</Btn><Btn onClick={() => tryMove(1, -1)}>↗</Btn>
               <Btn onClick={() => tryMove(-1, 0)}>◀</Btn><Btn onClick={stepInPlace}>足踏</Btn><Btn onClick={() => tryMove(1, 0)}>▶</Btn>
-              <span /><Btn onClick={() => tryMove(0, 1)}>▼</Btn><span />
+              <Btn onClick={() => tryMove(-1, 1)}>↙</Btn><Btn onClick={() => tryMove(0, 1)}>▼</Btn><Btn onClick={() => tryMove(1, 1)}>↘</Btn>
             </div>
             {/* 十字の隣にスキル（選択中を体当たりで発動） */}
             <div style={{ display: 'grid', gap: 4 }}>
