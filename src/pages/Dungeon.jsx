@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStats, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats } from '../constants/pets'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
@@ -103,9 +103,7 @@ function generateFloor(floorNum, dungeon) {
 
   // 敵・アイテム配置（開始部屋は避ける）
   const otherRooms = rooms.filter((r) => r !== start)
-  const areaId = areaForFloor(dungeon, floorNum)
   const pool = enemiesForFloor(dungeon, floorNum)
-  const es = dungeonEnemyStats(floorNum, areaId)
   const enemies = []
   const enemyCount = Math.min(8, 3 + Math.floor(floorNum / 3))
   for (let i = 0; i < enemyCount; i++) {
@@ -114,8 +112,9 @@ function generateFloor(floorNum, dungeon) {
     if (t) {
       mark(t.x, t.y)
       const kind = pool[rand(0, pool.length - 1)]
-      const m = kind.statMult ?? 1.0
-      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: enemySkillsFor(kind.name), hp: Math.round(es.maxHp * m), maxHp: Math.round(es.maxHp * m), atk: Math.round(es.atk * m), def: Math.round(es.def * m), mdef: Math.round(es.mdef * m) })
+      // 強さは初登場フロアの値で固定（深い階でも同種は同じ強さ）
+      const es = dungeonEnemyStatsFor(dungeon, kind)
+      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: enemySkillsFor(kind.name), hp: es.maxHp, maxHp: es.maxHp, atk: es.atk, def: es.def, mdef: es.mdef })
     }
   }
   // アイテム（✨/木の実/おにぎり 全部込み）を1フロア3〜5個ランダム
@@ -267,9 +266,7 @@ export default function Dungeon() {
 
   // 40ターンごとの湧き：プレイヤーから離れた床マスに敵を1体生成
   const spawnEnemy = (s, enemies, player) => {
-    const areaId = areaForFloor(dungeon, floorNum)
     const pool = enemiesForFloor(dungeon, floorNum)
-    const es = dungeonEnemyStats(floorNum, areaId)
     const rooms = s.rooms || []
     const occupied = (x, y) => enemies.some((e) => e.x === x && e.y === y) ||
       (player.x === x && player.y === y) || (s.stairs.x === x && s.stairs.y === y) ||
@@ -282,12 +279,11 @@ export default function Dungeon() {
       if (s.grid[y]?.[x] !== '.' || occupied(x, y)) continue
       if (Math.abs(x - player.x) + Math.abs(y - player.y) < 4) continue // 目の前には湧かせない
       const kind = pool[rand(0, pool.length - 1)]
-      const m = kind.statMult ?? 1.0
+      const es = dungeonEnemyStatsFor(dungeon, kind)
       spawnSeq.current += 1
       return {
         id: 'es' + spawnSeq.current, x, y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: enemySkillsFor(kind.name),
-        hp: Math.round(es.maxHp * m), maxHp: Math.round(es.maxHp * m),
-        atk: Math.round(es.atk * m), def: Math.round(es.def * m), mdef: Math.round(es.mdef * m),
+        hp: es.maxHp, maxHp: es.maxHp, atk: es.atk, def: es.def, mdef: es.mdef,
       }
     }
     return null

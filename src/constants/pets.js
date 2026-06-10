@@ -162,6 +162,29 @@ export function areaForFloor(dungeon, floor) {
   return areas[idx]
 }
 
+// その敵が最初に出現するフロア（floorTableの先頭から探す）。
+// 敵の強さは「初登場フロアの値」で固定する（深い階でも同種は同じ強さ）
+export function enemyFirstFloor(dungeon, name) {
+  if (dungeon?.floorTable) {
+    for (const row of dungeon.floorTable) {
+      if ((row.enemies || []).some((e) => e.name === name)) return row.from
+    }
+  }
+  return 1
+}
+// 種族ごとの実ステータス（初登場フロア基準＋種族倍率を適用）
+export function dungeonEnemyStatsFor(dungeon, kind) {
+  const ff = enemyFirstFloor(dungeon, kind?.name)
+  const es = dungeonEnemyStats(ff, areaForFloor(dungeon, ff))
+  const m = kind?.statMult ?? 1.0
+  return {
+    maxHp: Math.round(es.maxHp * m),
+    atk:   Math.round(es.atk * m),
+    def:   Math.round(es.def * m),
+    mdef:  Math.round(es.mdef * m),
+  }
+}
+
 // 敵ステータス（フロア深度＋エリア段階でスケール）。何度か挑戦してクリアする難度想定。
 //  ※数値はバランス調整ポイント。きつ/緩は係数を変えるだけ。
 export function dungeonEnemyStats(floor, areaId) {
