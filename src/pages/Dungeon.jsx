@@ -202,6 +202,19 @@ export default function Dungeon() {
   const fxId = useRef(0)
   const applyFx = (next) => { fxId.current += 1; setFx({ pet: null, enemies: {}, ...next, t: fxId.current }) }
   const busyRef = useRef(false) // 体当たり〜敵反撃の演出中は入力をロック
+  // 頭上に浮かぶダメージ/回復の数字（敵味方共通。ダメージ=赤 -n / 回復=緑 +n）
+  const [pops, setPops] = useState([])
+  const popSeq = useRef(0)
+  const addPop = (x, y, text, color) => {
+    popSeq.current += 1
+    const id = popSeq.current
+    // 同時に複数出ても重なりにくいよう少し横にずらす
+    setPops((ps) => [...ps, { id, x, y, text, color, dx: Math.round(Math.random() * 14 - 7) }])
+    const tid = setTimeout(() => setPops((ps) => ps.filter((p) => p.id !== id)), 850)
+    turnTimers.current.push(tid)
+  }
+  const popDmg = (x, y, n) => addPop(x, y, `-${n}`, '#ff5555')
+  const popHeal = (x, y, n) => addPop(x, y, `+${n}`, '#66ff99')
   const spawnSeq = useRef(0) // 湧いた敵の連番ID用
   const dropSeq = useRef(0)  // 床に置いたアイテムの連番ID用
   const turnTimers = useRef([])
@@ -462,7 +475,8 @@ export default function Dungeon() {
       const newHp = target.hp - total
       const skillTag = selectedSkill === 'tackle' ? '' : `【${sk.name}】`
       const hitTxt = hits > 1 ? `${perHit}×${hits}=` : ''
-      if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); curPetHp = Math.min(pet.maxHp, curPetHp + heal); if (heal > 0) addLog(`💚 ${heal}回復`) }
+      popDmg(target.x, target.y, total)
+      if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); const healed = Math.min(pet.maxHp, curPetHp + heal) - curPetHp; curPetHp += healed; if (healed > 0) { addLog(`💚 ${healed}回復`); popHeal(px, py, healed) } }
       const killed = newHp <= 0
       if (killed) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; grantKill(floorNum, target.name); triggerShake('kill') }
       else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); addLog(`⚔${skillTag} ${target.name}に${hitTxt}${total}ダメージ！`); triggerShake('hit') }
@@ -575,6 +589,8 @@ export default function Dungeon() {
           else if (sk.type === 'vamp') { heal = Math.floor(dmg * (sk.frac || 0.5)); notes.push(sk.name) }
         }
         curPetHp -= dmg
+        popDmg(player.x, player.y, dmg)
+        if (heal > 0 && e.hp < e.maxHp) popHeal(e.x, e.y, Math.min(heal, e.maxHp - e.hp))
         const tag = notes.length ? `【${notes.join('・')}】` : '攻撃'
         addLog(`${e.name}の${tag}！ ${dmg}ダメージ 💥`, 'right')
         attackerFx[e.id] = { lunge: { dx: Math.sign(player.x - e.x), dy: Math.sign(player.y - e.y) } }
@@ -611,7 +627,7 @@ export default function Dungeon() {
     if (!dead) {
       if (nextTurns % FULLNESS_EVERY === 0 && nextFull > 0) { nextFull -= 1; if (nextFull === 0) addLog('🍖 満腹度が0になった…！') }
       if (nextFull <= 0) {
-        curPetHp -= 1; addLog('🥀 空腹で1ダメージ')
+        curPetHp -= 1; addLog('🥀 空腹で1ダメージ'); popDmg(player.x, player.y, 1)
         if (curPetHp <= 0) dead = true
       } else if (nextTurns % HP_REGEN_EVERY === 0 && curPetHp < pet.maxHp) {
         curPetHp += 1
@@ -619,7 +635,7 @@ export default function Dungeon() {
       // 毒：POISON_INTERVAL ターンごとに最大HPの POISON_PCT ダメージ（次フロアで回復）
       if (poisoned && nextTurns % POISON_INTERVAL === 0) {
         const pd = Math.max(1, Math.ceil(pet.maxHp * POISON_PCT))
-        curPetHp -= pd; addLog(`☠ 毒で${pd}ダメージ`)
+        curPetHp -= pd; addLog(`☠ 毒で${pd}ダメージ`); popDmg(player.x, player.y, pd)
         if (curPetHp <= 0) dead = true
       }
     }
@@ -667,6 +683,7 @@ export default function Dungeon() {
       const heal = Math.ceil(pet.maxHp * def.healPct)
       const healed = Math.min(pet.maxHp, petHp + heal)
       addLog(`${def.emoji} ${def.name}を食べた（HP+${healed - petHp}）`)
+      if (healed - petHp > 0) popHeal(state.player.x, state.player.y, healed - petHp)
       commitTurn(state, state.player, state.enemies, healed) // 1ターン経過＋HP回復を反映
     } else if (def?.fullness) {
       addLog(`${def.emoji} ${def.name}を食べた（満腹+${def.fullness}）`)
@@ -854,6 +871,11 @@ export default function Dungeon() {
           0%,100% { transform: translate(0,0); }
           45% { transform: translate(var(--lx,0), var(--ly,0)); }
         }
+        @keyframes bf-popnum {
+          0%   { transform: translate(-50%, 0); opacity: 0; }
+          15%  { transform: translate(-50%, -4px); opacity: 1; }
+          100% { transform: translate(-50%, -18px); opacity: 0; }
+        }
         /* PC: メイン＋右側ログの2カラム。狭い画面では従来どおり縦積み */
         .bf-dg-wrap { max-width: 480px; margin: 0 auto; }
         .bf-dg-side { display: none; }
@@ -921,6 +943,20 @@ export default function Dungeon() {
             <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
               background: 'radial-gradient(ellipse 29% 35.4% at 50% 50%, transparent 80%, #000208 100%)' }} />
           )}
+          {/* 頭上に浮かぶダメージ(-赤)/回復(+緑)の数字 */}
+          {pops.map((p) => {
+            const vx = p.x - ox, vy = p.y - oy
+            if (vx < 0 || vx >= VW || vy < 0 || vy >= VH) return null
+            return (
+              <span key={p.id} style={{
+                position: 'absolute', zIndex: 3, pointerEvents: 'none',
+                left: `calc(${((vx + 0.5) / VW) * 100}% + ${p.dx}px)`, top: `${(vy / VH) * 100}%`,
+                color: p.color, fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace',
+                textShadow: '0 1px 2px #000, 0 0 4px #000',
+                animation: 'bf-popnum 0.85s ease-out forwards',
+              }}>{p.text}</span>
+            )
+          })}
         </div>
 
         {status === 'exploring' && (
