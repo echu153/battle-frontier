@@ -1503,6 +1503,10 @@ export default function Game() {
           : Math.min(1.0, 0.5 + retrainCount * 0.1)
       for (const k of _statKeys) _allClassBonus[k] += Math.floor((b[k] || 0) * rate)
     }
+    // キャラクターボーナス: 全クラス合計のレベルアップ数に応じて 1LVごとにHP+1・5LVごとにMP+1
+    const _totalLvUps = (Array.isArray(cl) ? cl : []).reduce((s, r) => s + Math.max(0, (r.lv || 1) - 1), 0)
+    _allClassBonus.hp_max += _totalLvUps
+    _allClassBonus.mp_max += Math.floor(_totalLvUps / 5)
     const _spent = data.stat_point_spent || {}
     const _computed = {
       hp_max: _base.hp_max + _allClassBonus.hp_max + (_spent.hp  ||0)*10,
