@@ -4,6 +4,7 @@ import { supabase } from '../supabase'
 import papiaIcon from '../assets/papia.png'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue, calcDefReduction } from '../lib/stats'
 import { charmPlayerBonus } from '../constants/pets'
+import { countClaimableTitles } from '../lib/titles'
 // Equipment.jsx 等が './Game' から参照しているため再export
 export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue, calcDefReduction } from '../lib/stats'
 
@@ -1362,6 +1363,7 @@ export default function Game() {
   const [showAnnouncements, setShowAnnouncements] = useState(false)
   const [announceTab, setAnnounceTab] = useState('update')   // お知らせモーダルの選択中タブ
   const [announcements, setAnnouncements] = useState([])
+  const [claimableTitles, setClaimableTitles] = useState(0)  // 獲得可能な称号数（街のバナー表示用）
   const [showGuide, setShowGuide] = useState(false)
   const [openGuideId, setOpenGuideId] = useState(null)
   const [openAnnouncementId, setOpenAnnouncementId] = useState(null)
@@ -1468,6 +1470,15 @@ export default function Game() {
     checkRaid()
     const id = setInterval(checkRaid, 30000) // 30秒ごと（21時スポーン検知を早める）
     return () => clearInterval(id)
+  }, [])
+
+  // 獲得可能な称号があれば街にバナーを表示
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      setClaimableTitles(await countClaimableTitles(user.id))
+    })()
   }, [])
 
   const fetchProfile = async () => {
@@ -3600,6 +3611,12 @@ export default function Game() {
         {showMenu && <div onClick={()=>setShowMenu(false)} style={{ position:'fixed', inset:0, zIndex:150 }} />}
 
         <div style={{ padding:'8px 12px' }}>
+          {claimableTitles > 0 && (
+            <button onClick={()=>nav('/titles')}
+              style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#001a08', border:'1px solid #44aa44', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              🎉 獲得できる称号があります！（{claimableTitles}件）→ 称号ページへ
+            </button>
+          )}
           <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', marginBottom:'8px' }}>
             {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'6px', border:'1px solid #660000', padding:'3px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
@@ -3899,6 +3916,13 @@ export default function Game() {
             <button onClick={logout} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ログアウト</button>
           </div>
         </div>
+
+        {claimableTitles > 0 && (
+          <button onClick={()=>nav('/titles')}
+            style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#001a08', border:'1px solid #44aa44', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            🎉 獲得できる称号があります！（{claimableTitles}件）→ 称号ページへ
+          </button>
+        )}
 
         <div style={{ display:'grid', gridTemplateColumns:'220px 1fr', gap:'12px' }}>
           <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', alignSelf:'start' }}>
