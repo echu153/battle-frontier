@@ -367,6 +367,7 @@ export default function RaidBoss() {
   const pollRef = useRef(null)
   const cdRef = useRef(null)
   const logsEndRef = useRef(null)
+  const attackingRef = useRef(false)  // 連打ガード（state更新前の多重発火を防ぐ）
 
   useEffect(() => {
     init()
@@ -451,58 +452,65 @@ export default function RaidBoss() {
 
   const handleAttack = async () => {
     if (!boss || !profile || remaining > 0 || battling) return
-    // かかし修練中は出撃不可（サーバー側 attack_raid_boss でも拒否される）
-    const { data: sc } = await supabase.from('scarecrow_sessions')
-      .select('ends_at').eq('player_id', profile.id).eq('status', 'active').maybeSingle()
-    if (sc && new Date(sc.ends_at) > new Date()) {
-      setBattleLogs([{ text: '🌾 かかし修練中はレイドボスに出撃できません。修練が終わるまで待ちましょう。', color: '#ffcc44' }])
-      setScene('battle')
-      return
-    }
-    setBattling(true)
-    setBattleLogs([])
-    setScene('battle')
-
-    const eff = calcEffectiveStats(profile, equipment, proficiency)
-    // 読み込み未完了/失敗でstateが空のままだとスキル無し戦闘になるため、空ならDBから取り直す
-    let curSets = skillSets
-    if (curSets.length === 0) {
-      const { data: ss2 } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', profile.id).order('slot_order')
-      if (Array.isArray(ss2) && ss2.length) {
-        const raid2 = ss2.filter(r => r.set_type === 'raid')
-        const sortie2 = ss2.filter(r => (r.set_type || 'sortie') === 'sortie')
-        curSets = raid2.some(r => r.skills?.type !== 'パッシブ') ? raid2 : sortie2
-        setSkillSets(curSets)
+    if (attackingRef.current) return  // 連打ガード（state更新前の多重クリックを同期的に弾く）
+    attackingRef.current = true
+    try {
+      // かかし修練中は出撃不可（サーバー側 attack_raid_boss でも拒否される）
+      const { data: sc } = await supabase.from('scarecrow_sessions')
+        .select('ends_at').eq('player_id', profile.id).eq('status', 'active').maybeSingle()
+      if (sc && new Date(sc.ends_at) > new Date()) {
+        setBattleLogs([{ text: '🌾 かかし修練中はレイドボスに出撃できません。修練が終わるまで待ちましょう。', color: '#ffcc44' }])
+        setScene('battle')
+        return
       }
-    }
-    const { logs, totalDamage } = simulateRaidBattle(eff, equipment, curSets, profile)
-    setBattleLogs(logs)
+      setBattling(true)
+      setBattleLogs([])
+      setScene('battle')
 
-    if (totalDamage > 0) {
+      const eff = calcEffectiveStats(profile, equipment, proficiency)
+      // 読み込み未完了/失敗でstateが空のままだとスキル無し戦闘になるため、空ならDBから取り直す
+      let curSets = skillSets
+      if (curSets.length === 0) {
+        const { data: ss2 } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', profile.id).order('slot_order')
+        if (Array.isArray(ss2) && ss2.length) {
+          const raid2 = ss2.filter(r => r.set_type === 'raid')
+          const sortie2 = ss2.filter(r => (r.set_type || 'sortie') === 'sortie')
+          curSets = raid2.some(r => r.skills?.type !== 'パッシブ') ? raid2 : sortie2
+          setSkillSets(curSets)
+        }
+      }
+      const { logs, totalDamage } = simulateRaidBattle(eff, equipment, curSets, profile)
+
+      // サーバーが権威。RPCを先に確定させ、成功した時だけ戦闘ログを表示する
+      // （cooldownで弾かれたのに戦闘ログが出て「0秒で出撃できた」ように見えるのを防ぐ）
       const { data, error } = await supabase.rpc('attack_raid_boss', {
         p_raid_id: boss.id,
         p_damage: totalDamage,
       })
 
       if (error || data?.error) {
-        if (data?.error !== 'cooldown') {
-          setBattleLogs(prev => [...prev, { text: data?.error || 'エラーが発生しました', color: '#ff4444' }])
+        if (data?.error === 'cooldown') {
+          // サーバーのCD残りに同期（クライアントのremainingがズレていた場合の是正）
+          const left = Number(data.seconds_left) || WAIT_SECONDS
+          setRemaining(left)
+          setBattleLogs([{ text: `⏳ クールダウン中です。あと${Math.max(1, Math.ceil(left))}秒お待ちください。`, color: '#ffcc44' }])
+        } else {
+          setBattleLogs([{ text: data?.error || error?.message || 'エラーが発生しました', color: '#ff4444' }])
         }
       } else {
+        setBattleLogs(logs)
         setBoss(prev => ({ ...prev, hp_current: data.hp_current, status: data.status }))
         setRemaining(WAIT_SECONDS)
         // HP/MP全回復 + 出撃EXP+10 はサーバ側(attack_raid_boss)で付与済み
-        // （保護トリガー対応のため exp の直接更新は廃止）
         const newExp = data.exp ?? ((profile.exp || 0) + 10)
         setProfile(prev => ({ ...prev, hp_current: eff.hp_max, mp_current: eff.mp_max, exp: newExp }))
         setBattleLogs(prev => [...prev, { text: 'EXP +10（出撃報酬）', color: '#44ff88' }])
         await fetchBoss(profile.id)
       }
-    } else {
-      setRemaining(WAIT_SECONDS)
+    } finally {
+      setBattling(false)
+      attackingRef.current = false
     }
-
-    setBattling(false)
   }
 
   const handleClaim = async () => {
