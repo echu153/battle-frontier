@@ -108,6 +108,7 @@ export default function Profile() {
   const [equipment, setEquipment] = useState([])
   const [proficiency, setProficiency] = useState([])
   const [skillSets, setSkillSets] = useState([])
+  const [classLevels, setClassLevels] = useState([])
   const [abilityTitle, setAbilityTitle] = useState(null)
   const [isOwn, setIsOwn] = useState(false)
   const [showAvatarPanel, setShowAvatarPanel] = useState(false)
@@ -132,6 +133,8 @@ export default function Profile() {
     setProficiency(prof || [])
     const { data: ss } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', targetId).eq('set_type', 'sortie').order('slot_order')
     setSkillSets(ss || [])
+    const { data: cls } = await supabase.from('class_levels').select('class_name, lv').eq('player_id', targetId)
+    setClassLevels(cls || [])
     // ペット（公開読み取りポリシーにより他人のも閲覧可。supabase_pets_public_read.sql）
     const { data: petList } = await supabase.from('pets').select('*').eq('owner_id', targetId).order('created_at')
     setPets(petList || [])
@@ -206,7 +209,8 @@ export default function Profile() {
               {profile.username}
             </div>
             <div style={{ color:'#446688', fontSize:'11px' }}>クラス: <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{('★'.repeat((profile.retraining||{})[profile.class]||0))}</span></div>
-            <div style={{ color:'#446688', fontSize:'11px' }}>LV: <span style={{color:'#ffcc00'}}>{profile.lv}</span></div>
+            <div style={{ color:'#446688', fontSize:'11px' }}>キャラクターLV: <span style={{color:'#ffcc00'}}>{profile.char_lv ?? profile.lv}</span></div>
+            <div style={{ color:'#446688', fontSize:'11px' }}>クラスLV: <span style={{color:'#ffcc00'}}>{(classLevels.find(c => c.class_name === profile.class)?.lv) ?? profile.lv}</span></div>
             <div style={{ color:'#446688', fontSize:'11px' }}>総合力: <span style={{color:'#44ff88'}}>{total}</span> <span style={{color: totalRank.color}}>【{totalRank.rank}】</span></div>
           </div>
         </div>
