@@ -1706,6 +1706,18 @@ export default function Game() {
     if (loading) return
     setLoading(true)
 
+    // かかし修練中はデイリーダンジョン不可（サーバー側 apply_dungeon_reward でも拒否される）
+    {
+      const { data: sc } = await supabase.from('scarecrow_sessions')
+        .select('ends_at').eq('player_id', profile.id).eq('status', 'active').maybeSingle()
+      if (sc && new Date(sc.ends_at) > new Date()) {
+        setBattleLogs([{ text:'🌾 かかし修練中はダンジョンに入れません。修練が終わるまで待ちましょう。', color:'#ffcc44' }])
+        setScene('battle')
+        setLoading(false)
+        return
+      }
+    }
+
     // stateではなくDBから直接カウント取得（state操作による回避を防ぐ）
     const today = getDungeonDateStr()
     const col = DUNGEON_TYPE_COL[type]

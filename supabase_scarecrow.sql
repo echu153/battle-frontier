@@ -605,7 +605,281 @@ END;
 $$;
 
 -- ============================================================
--- 12) 開発アカウント(おれおれお)をテスト状態に（手動・このまま実行可）
+-- 12) 修練中アクティビティのサーバー側ブロック
+--     賭博場（全ゲーム=メダル変動をトリガーで遮断）・釣り開始・
+--     ペットダンジョン開始・デイリーダンジョン報酬・簡易出撃精算
+-- ============================================================
+
+-- 共通ヘルパー: 修練中（時間経過前）か
+CREATE OR REPLACE FUNCTION public.scarecrow_is_active(p_uid uuid)
+ RETURNS boolean
+ LANGUAGE sql STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM scarecrow_sessions
+    WHERE player_id = p_uid AND status = 'active' AND now() < ends_at
+  );
+$$;
+
+-- 賭博場・釣り: profiles トリガーで遮断
+--   ・メダル変動 = 全カジノゲーム（ハイロー/スロット/両替/景品）はRPC本体に触れず確実にブロック
+--   ・is_fishing false→true = 釣り開始のブロック
+CREATE OR REPLACE FUNCTION public.protect_scarecrow_activity()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  IF (NEW.medals IS DISTINCT FROM OLD.medals)
+     OR (COALESCE(NEW.is_fishing, false) AND NOT COALESCE(OLD.is_fishing, false)) THEN
+    IF scarecrow_is_active(NEW.id) THEN
+      RAISE EXCEPTION 'かかし修練中は賭博場・釣りを利用できません';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS trg_protect_scarecrow_activity ON public.profiles;
+CREATE TRIGGER trg_protect_scarecrow_activity
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.protect_scarecrow_activity();
+
+-- ペットダンジョン開始（supabase_dungeon_rewards.sql の dungeon_start＋修練チェック。
+-- ※ dungeon_rewards.sql を再適用したらこのセクションも再適用）
+create or replace function dungeon_start(p_pet_id uuid, p_dungeon_id text default 'd10')
+returns uuid language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  if scarecrow_is_active(auth.uid()) then
+    raise exception 'かかし修練中はダンジョンに入れません';
+  end if;
+  if not exists (select 1 from pets where id = p_pet_id and owner_id = auth.uid()) then
+    raise exception 'pet not found';
+  end if;
+  update dungeon_runs set status = 'abandoned'
+    where owner_id = auth.uid() and status = 'active';
+  insert into dungeon_runs(owner_id, pet_id, status, dungeon_id)
+    values (auth.uid(), p_pet_id, 'active', coalesce(p_dungeon_id, 'd10'))
+    returning id into v_id;
+  return v_id;
+end; $$;
+
+-- デイリーダンジョン報酬（protect_stats版＋修練チェック。
+-- ※ protect_stats.sql を再適用したらこのセクションも再適用）
+CREATE OR REPLACE FUNCTION public.apply_dungeon_reward(p_type text, p_claimed_gold integer DEFAULT 0, p_claimed_exp integer DEFAULT 0)
+ RETURNS json
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+  v_uid uuid := auth.uid();
+  v_profile profiles%ROWTYPE;
+  v_exp_frozen boolean;
+  v_is_at_cap boolean;
+  v_class_lv integer;
+  v_cap integer;
+  v_max_gold integer;
+  v_char_lv integer;
+  v_new_exp integer; v_new_lv integer; v_new_exp_next integer;
+  v_new_pending integer; v_new_char_lv integer;
+BEGIN
+  IF v_uid IS NULL THEN RETURN json_build_object('ok',false,'reason','not_authenticated'); END IF;
+  SELECT * INTO v_profile FROM profiles WHERE id = v_uid;
+  IF NOT FOUND THEN RETURN json_build_object('ok',false,'reason','profile_not_found'); END IF;
+
+  -- ★かかし修練中は不可
+  IF scarecrow_is_active(v_uid) THEN
+    RETURN json_build_object('ok',false,'reason','scarecrow_active');
+  END IF;
+
+  PERFORM set_config('app.allow_stat_change','on',true);  -- ★保護トリガー許可
+
+  v_exp_frozen := COALESCE(v_profile.exp_frozen, false) OR
+    (v_profile.exp_frozen_until IS NOT NULL AND v_profile.exp_frozen_until > now());
+  SELECT lv INTO v_class_lv FROM class_levels
+    WHERE player_id = v_uid AND class_name = v_profile.class;
+  v_class_lv := COALESCE(v_class_lv, v_profile.lv);
+  v_cap := CASE WHEN COALESCE((v_profile.retraining ->> v_profile.class)::int, 0) >= 5
+                THEN 300 ELSE 100 END;
+  v_is_at_cap := v_class_lv >= v_cap;
+
+  IF p_type = 'gold' THEN
+    v_char_lv := COALESCE(v_profile.char_lv, v_profile.lv);
+    v_max_gold := CEIL(v_char_lv * 45 * (CASE WHEN v_char_lv <= 300 THEN 1.5 ELSE 1.0 END) * 1.5);
+    IF p_claimed_gold < 0 OR p_claimed_gold > v_max_gold THEN
+      UPDATE profiles SET suspicious_flag=true WHERE id=v_uid;
+      RETURN json_build_object('ok',false,'reason','invalid_gold');
+    END IF;
+    UPDATE profiles SET gold=gold+p_claimed_gold, last_action_at=now() WHERE id=v_uid;
+
+  ELSIF p_type = 'exp' THEN
+    IF NOT v_exp_frozen AND NOT v_is_at_cap THEN
+      IF p_claimed_exp < 0 OR p_claimed_exp > 100 THEN
+        UPDATE profiles SET suspicious_flag=true WHERE id=v_uid;
+        RETURN json_build_object('ok',false,'reason','invalid_exp');
+      END IF;
+    END IF;
+    IF v_exp_frozen OR v_is_at_cap THEN
+      RETURN json_build_object('ok',true,'frozen',true);
+    END IF;
+
+    v_new_exp := COALESCE(v_profile.exp,0) + p_claimed_exp;
+    v_new_lv := v_profile.lv;
+    v_new_exp_next := calc_exp_next(v_new_lv);
+    v_new_pending := COALESCE(v_profile.pending_stat_points,0);
+    v_new_char_lv := COALESCE(v_profile.char_lv,1);
+    WHILE v_new_exp >= v_new_exp_next AND v_new_lv < v_cap LOOP
+      v_new_exp := v_new_exp - v_new_exp_next;
+      v_new_lv := v_new_lv + 1;
+      v_new_exp_next := calc_exp_next(v_new_lv);
+      v_new_pending := v_new_pending + 1;
+      v_new_char_lv := v_new_char_lv + 1;
+    END LOOP;
+    IF v_new_lv >= v_cap THEN v_new_exp := 0; v_new_exp_next := calc_exp_next(v_cap); END IF;
+
+    UPDATE profiles SET
+      exp=v_new_exp, exp_next=v_new_exp_next, lv=v_new_lv,
+      pending_stat_points=v_new_pending, char_lv=v_new_char_lv,
+      last_action_at=now()
+    WHERE id=v_uid;
+    UPDATE class_levels SET lv=v_new_lv, exp=v_new_exp
+      WHERE player_id=v_uid AND class_name=v_profile.class;
+  END IF;
+
+  IF p_type <> 'exp' AND p_claimed_exp <> 0 THEN
+    IF p_claimed_exp < 0 OR p_claimed_exp > 15 THEN
+      UPDATE profiles SET suspicious_flag=true WHERE id=v_uid;
+      RETURN json_build_object('ok',false,'reason','invalid_bonus_exp');
+    END IF;
+    IF NOT v_exp_frozen AND NOT v_is_at_cap THEN
+      v_new_exp := COALESCE(v_profile.exp,0) + p_claimed_exp;
+      v_new_lv := v_profile.lv;
+      v_new_exp_next := calc_exp_next(v_new_lv);
+      v_new_pending := COALESCE(v_profile.pending_stat_points,0);
+      v_new_char_lv := COALESCE(v_profile.char_lv,1);
+      WHILE v_new_exp >= v_new_exp_next AND v_new_lv < v_cap LOOP
+        v_new_exp := v_new_exp - v_new_exp_next;
+        v_new_lv := v_new_lv + 1;
+        v_new_exp_next := calc_exp_next(v_new_lv);
+        v_new_pending := v_new_pending + 1;
+        v_new_char_lv := v_new_char_lv + 1;
+      END LOOP;
+      IF v_new_lv >= v_cap THEN v_new_exp := 0; v_new_exp_next := calc_exp_next(v_cap); END IF;
+
+      UPDATE profiles SET
+        exp=v_new_exp, exp_next=v_new_exp_next, lv=v_new_lv,
+        pending_stat_points=v_new_pending, char_lv=v_new_char_lv,
+        last_action_at=now()
+      WHERE id=v_uid;
+      UPDATE class_levels SET lv=v_new_lv, exp=v_new_exp
+        WHERE player_id=v_uid AND class_name=v_profile.class;
+    END IF;
+  END IF;
+
+  RETURN json_build_object('ok',true);
+END;
+$function$;
+
+-- 簡易出撃の精算（protect_stats版＋修練チェック。
+-- ※ protect_stats.sql を再適用したらこのセクションも再適用）
+CREATE OR REPLACE FUNCTION public.casino_settle_sortie(p_count integer, p_claimed_exp integer, p_claimed_gold integer)
+ RETURNS json
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+  v_uid uuid := auth.uid();
+  v_profile profiles%ROWTYPE;
+  v_class_lv integer;
+  v_cap integer;
+  v_is_at_cap boolean;
+  v_exp_frozen boolean;
+  v_new_exp int; v_new_lv int; v_new_exp_next int;
+  v_new_pending int; v_new_char_lv int;
+  v_old_lv int;
+  v_learned text[];
+BEGIN
+  IF v_uid IS NULL THEN RETURN json_build_object('ok',false,'reason','not_authenticated'); END IF;
+  SELECT * INTO v_profile FROM profiles WHERE id = v_uid;
+  IF NOT FOUND THEN RETURN json_build_object('ok',false,'reason','profile_not_found'); END IF;
+
+  -- ★かかし修練中は不可
+  IF scarecrow_is_active(v_uid) THEN
+    RETURN json_build_object('ok',false,'reason','scarecrow_active');
+  END IF;
+
+  IF p_count IS NULL OR p_count <= 0 OR p_count > 1000 THEN
+    RETURN json_build_object('ok',false,'reason','invalid_count'); END IF;
+  IF p_claimed_exp < 0 OR p_claimed_exp > p_count * 11 THEN
+    UPDATE profiles SET suspicious_flag = true WHERE id = v_uid;
+    RETURN json_build_object('ok',false,'reason','invalid_exp'); END IF;
+  IF p_claimed_gold < 0 OR p_claimed_gold > p_count * 1000 THEN
+    UPDATE profiles SET suspicious_flag = true WHERE id = v_uid;
+    RETURN json_build_object('ok',false,'reason','invalid_gold'); END IF;
+
+  SELECT lv INTO v_class_lv FROM class_levels
+    WHERE player_id = v_uid AND class_name = v_profile.class;
+  v_class_lv := COALESCE(v_class_lv, v_profile.lv);
+  v_cap := CASE WHEN COALESCE((v_profile.retraining ->> v_profile.class)::int,0) >= 5
+                THEN 300 ELSE 100 END;
+  v_is_at_cap := v_class_lv >= v_cap;
+  v_exp_frozen := COALESCE(v_profile.exp_frozen,false) OR
+    (v_profile.exp_frozen_until IS NOT NULL AND v_profile.exp_frozen_until > now());
+
+  v_old_lv       := v_profile.lv;
+  v_new_exp      := COALESCE(v_profile.exp,0) + (CASE WHEN v_exp_frozen OR v_is_at_cap THEN 0 ELSE p_claimed_exp END);
+  v_new_lv       := v_profile.lv;
+  v_new_exp_next := calc_exp_next(v_new_lv);
+  v_new_pending  := COALESCE(v_profile.pending_stat_points,0);
+  v_new_char_lv  := COALESCE(v_profile.char_lv,1);
+
+  IF NOT v_is_at_cap AND NOT v_exp_frozen THEN
+    WHILE v_new_exp >= v_new_exp_next AND v_new_lv < v_cap LOOP
+      v_new_exp := v_new_exp - v_new_exp_next;
+      v_new_lv := v_new_lv + 1;
+      v_new_exp_next := calc_exp_next(v_new_lv);
+      v_new_pending := v_new_pending + 1;
+      v_new_char_lv := v_new_char_lv + 1;
+    END LOOP;
+    IF v_new_lv >= v_cap THEN v_new_exp := 0; v_new_exp_next := calc_exp_next(v_cap); END IF;
+  END IF;
+
+  PERFORM set_config('app.allow_stat_change','on',true);
+  UPDATE profiles SET
+    exp = v_new_exp, exp_next = v_new_exp_next, lv = v_new_lv,
+    char_lv = v_new_char_lv, pending_stat_points = v_new_pending,
+    gold = gold + p_claimed_gold,
+    last_action_at = now()
+  WHERE id = v_uid;
+
+  IF NOT v_is_at_cap AND NOT v_exp_frozen THEN
+    UPDATE class_levels SET lv = v_new_lv, exp = v_new_exp
+      WHERE player_id = v_uid AND class_name = v_profile.class;
+  END IF;
+
+  -- レベルアップで習得するスキルを一括付与（未習得のみ）
+  IF v_new_lv > v_old_lv THEN
+    WITH ins AS (
+      INSERT INTO player_skills(player_id, skill_id)
+      SELECT v_uid, s.id FROM skills s
+      WHERE s.class_name = v_profile.class
+        AND s.required_lv > v_old_lv AND s.required_lv <= v_new_lv
+        AND NOT EXISTS (
+          SELECT 1 FROM player_skills ps WHERE ps.player_id = v_uid AND ps.skill_id = s.id)
+      RETURNING skill_id
+    )
+    SELECT array_agg(s.name) INTO v_learned
+      FROM ins JOIN skills s ON s.id = ins.skill_id;
+  END IF;
+
+  RETURN json_build_object('ok',true,'lv',v_new_lv,'exp',v_new_exp,
+    'pending_stat_points',v_new_pending,'char_lv',v_new_char_lv,
+    'learned', COALESCE(v_learned, ARRAY[]::text[]));
+END;
+$function$;
+
+-- ============================================================
+-- 13) 開発アカウント(おれおれお)をテスト状態に（手動・このまま実行可）
 --     チャージ0・進捗99/100（次の出撃1回でチャージ完了通知をテスト可能）
 -- ============================================================
 BEGIN;
