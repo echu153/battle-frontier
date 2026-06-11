@@ -543,7 +543,7 @@ export default function Smithy() {
                     </div>
                     <div style={{ fontSize:'10px', color:'#446688', marginBottom:'12px' }}>
                       成功率: <span style={{color: successRate >= 50 ? '#44ff88' : successRate >= 20 ? '#ffcc00' : '#ff4444'}}>{successRate}%</span>
-                      {nextPlus >= 11 && <span style={{color:'#ff4444'}}> ⚠ 失敗時+値下落</span>}
+                      {nextPlus >= 11 && <span style={{color:'#ff4444'}}> ⚠ 失敗すると+が1下がる</span>}
                     </div>
                     <button onClick={() => doEnhance(item)} disabled={!canEnhance || loading}
                       style={{ width:'100%', padding:'10px', background: canEnhance ? '#1a0800' : '#001', border:`1px solid ${canEnhance ? '#aa6644' : '#002244'}`, color: canEnhance ? '#ffcc88' : '#334455', cursor: canEnhance ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
