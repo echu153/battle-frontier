@@ -1407,6 +1407,8 @@ export default function Game() {
   const botCheckDeadlineRef = useRef(null)  // タイマー一時停止用：期限の絶対時刻
   const regenningRef = useRef(false)
   const innBusyRef = useRef(false)  // 宿屋利用の二重実行ガード（連打対策）
+  const clockOffsetRef = useRef(0)  // サーバー時刻 - 端末時刻(ms)。クールダウンのズレ補正用
+  const serverNow = () => Date.now() + clockOffsetRef.current
   const [canLeaveBattle, setCanLeaveBattle] = useState(true)  // 出撃後2秒は「街に戻る」を押せない（オートクリッカー連打対策）
   const leaveTimerRef = useRef(null)
 
@@ -1418,6 +1420,24 @@ export default function Game() {
 
   useEffect(() => { fetchProfile() }, [])
   useEffect(() => { fetchAnnouncements() }, [])
+
+  // サーバー時刻オフセットを測定（端末時計のズレでクールダウンが解消しない問題の対策）
+  useEffect(() => {
+    const sync = async () => {
+      try {
+        const t0 = Date.now()
+        const { data, error } = await supabase.rpc('server_now')
+        if (error || !data) return
+        const t1 = Date.now()
+        // 往復遅延の半分を見込んでサーバー時刻を推定
+        const serverMs = new Date(data).getTime() + (t1 - t0) / 2
+        clockOffsetRef.current = serverMs - t1
+      } catch {}
+    }
+    sync()
+    const id = setInterval(sync, 60000)
+    return () => clearInterval(id)
+  }, [])
 
   useEffect(() => {
     const onFocus = () => { fetchProfile() }
@@ -1433,7 +1453,7 @@ export default function Game() {
   useEffect(() => {
     if (!profile) return
     const id = setInterval(() => {
-      const elapsed = (Date.now()-new Date(profile.last_action_at).getTime())/1000
+      const elapsed = (serverNow()-new Date(profile.last_action_at).getTime())/1000
       const rem = Math.max(0, WAIT_SECONDS-elapsed)
       setRemaining(rem)
       setCanAct(rem === 0)
@@ -1751,7 +1771,7 @@ export default function Game() {
 
     // 出撃と共通の10秒クールダウン＋釣り中チェック（サーバー側）
     const { data: latestForDungeon } = await supabase.from('profiles').select('last_action_at, is_fishing').eq('id', profile.id).single()
-    const dungeonElapsed = (Date.now() - new Date(latestForDungeon.last_action_at).getTime()) / 1000
+    const dungeonElapsed = (serverNow() - new Date(latestForDungeon.last_action_at).getTime()) / 1000
     if (dungeonElapsed < WAIT_SECONDS) {
       // クールダウン中は無言で止めず、残り秒数を表示して「進行しない」ように見えるのを防ぐ
       const wait = Math.max(1, Math.ceil(WAIT_SECONDS - dungeonElapsed))
@@ -2088,8 +2108,9 @@ export default function Game() {
     leaveTimerRef.current = setTimeout(() => setCanLeaveBattle(true), 2000)
 
     // Atomic lock: last_action_atが古い場合のみUPDATE（複数端末同時出撃・釣り中出撃を防ぐ）
-    const lockTime = new Date(Date.now() - WAIT_SECONDS * 1000).toISOString()
-    const now = new Date().toISOString()
+    // 端末時計のズレ対策：サーバー時刻オフセットを補正した時刻で判定・記録する
+    const lockTime = new Date(serverNow() - WAIT_SECONDS * 1000).toISOString()
+    const now = new Date(serverNow()).toISOString()
     const { data: locked } = await supabase.from('profiles')
       .update({ last_action_at: now })
       .eq('id', profile.id)
@@ -2103,7 +2124,7 @@ export default function Game() {
       if (latest?.is_fishing) {
         setBattleLogs([{ text:'🎣 釣り中は出撃できません。先に釣りを終了してください。', color:'#ff8844' }])
       } else {
-        const elapsed = latest ? (Date.now() - new Date(latest.last_action_at).getTime()) / 1000 : 0
+        const elapsed = latest ? (serverNow() - new Date(latest.last_action_at).getTime()) / 1000 : 0
         const wait = Math.max(1, Math.ceil(WAIT_SECONDS - elapsed))
         setBattleLogs([{ text:`⏳ クールダウン中です。あと${wait}秒お待ちください。`, color:'#ffcc44' }])
       }
