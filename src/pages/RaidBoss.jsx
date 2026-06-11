@@ -455,14 +455,6 @@ export default function RaidBoss() {
     if (attackingRef.current) return  // 連打ガード（state更新前の多重クリックを同期的に弾く）
     attackingRef.current = true
     try {
-      // かかし修練中は出撃不可（サーバー側 attack_raid_boss でも拒否される）
-      const { data: sc } = await supabase.from('scarecrow_sessions')
-        .select('ends_at').eq('player_id', profile.id).eq('status', 'active').maybeSingle()
-      if (sc && new Date(sc.ends_at) > new Date()) {
-        setBattleLogs([{ text: '🌾 かかし修練中はレイドボスに出撃できません。修練が終わるまで待ちましょう。', color: '#ffcc44' }])
-        setScene('battle')
-        return
-      }
       setBattling(true)
       setBattleLogs([])
       setScene('battle')
@@ -501,10 +493,14 @@ export default function RaidBoss() {
         setBattleLogs(logs)
         setBoss(prev => ({ ...prev, hp_current: data.hp_current, status: data.status }))
         setRemaining(WAIT_SECONDS)
-        // HP/MP全回復 + 出撃EXP+10 はサーバ側(attack_raid_boss)で付与済み
+        // HP/MP全回復 + 出撃EXP はサーバ側(attack_raid_boss)で付与済み（かかし修練中はEXPなし）
         const newExp = data.exp ?? ((profile.exp || 0) + 10)
         setProfile(prev => ({ ...prev, hp_current: eff.hp_max, mp_current: eff.mp_max, exp: newExp }))
-        setBattleLogs(prev => [...prev, { text: 'EXP +10（出撃報酬）', color: '#44ff88' }])
+        if (data.exp_gained === 0) {
+          setBattleLogs(prev => [...prev, { text: '🌾 かかし修練中のため出撃報酬のEXPはもらえません', color: '#ffcc44' }])
+        } else {
+          setBattleLogs(prev => [...prev, { text: 'EXP +10（出撃報酬）', color: '#44ff88' }])
+        }
         await fetchBoss(profile.id)
       }
     } finally {

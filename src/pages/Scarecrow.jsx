@@ -219,7 +219,7 @@ export default function Scarecrow() {
                   完了まで解除しなければ EXP +{session.exp_reward}
                 </div>
                 <div style={{ color:'#884444', fontSize:'10px', marginBottom:'10px' }}>
-                  ※ 修練中は 出撃・レイドボス・賭博場・釣り・挑戦・ダンジョン を利用できません
+                  ※ 修練中は 出撃・賭博場・釣り・挑戦・ダンジョン を利用できません（レイドボスは出撃可・ただし出撃報酬EXPなし）
                 </div>
                 {showCancelConfirm ? (
                   <div style={{ border:'1px solid #ff4444', background:'#1a0000', padding:'14px' }}>
@@ -291,7 +291,8 @@ export default function Scarecrow() {
           ● チャージの獲得は週5回まで（消費しても週の獲得上限は増えない）。毎週月曜朝5時にリセット<br/>
           ● 3〜8時間を設定して開始。<span style={{ color:'#ffcc44' }}>設定した時間まで解除しなければ経験値を獲得</span><br/>
           ● 1回でも解除すると経験値はもらえない（修練回数も戻らない）<br/>
-          ● 修練中は 出撃・レイドボス・賭博場・釣り・挑戦・ダンジョン が利用できない（買い物などは可能）<br/>
+          ● 修練中は 出撃・賭博場・釣り・挑戦・ダンジョン が利用できない（買い物などは可能）<br/>
+          ● レイドボスには修練中も出撃できるが、出撃報酬のEXP+10はもらえない<br/>
           ● もらえるのは経験値のみ。装備はドロップしない
         </div>
       </div>

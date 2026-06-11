@@ -518,7 +518,7 @@ END;
 $function$;
 
 -- ============================================================
--- 11) attack_raid_boss 上書き（かかし修練中はレイドボス出撃不可）
+-- 11) attack_raid_boss 上書き（かかし修練中もレイドボス出撃は可・ただし出撃報酬EXPなし）
 --     supabase_raid_boss.sql の最新版＋かかしチェックのみ追加。
 --     ※ 今後 supabase_raid_boss.sql を再適用したら、このセクションも再適用すること
 -- ============================================================
@@ -533,15 +533,16 @@ DECLARE
   v_new_hp      bigint;
   v_cooldown    int := 10;
   v_expire_at   timestamptz;
+  v_sc_active   boolean;
+  v_exp_gain    int;
 BEGIN
   v_player_id := auth.uid();
   IF v_player_id IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
 
-  -- ★かかし修練中（時間経過前）は出撃不可
-  IF EXISTS (SELECT 1 FROM scarecrow_sessions
-             WHERE player_id = v_player_id AND status = 'active' AND now() < ends_at) THEN
-    RETURN json_build_object('error', 'かかし修練中は出撃できません');
-  END IF;
+  -- ★かかし修練中（時間経過前）は出撃自体は可能だが、出撃報酬のEXPは付与しない
+  v_sc_active := EXISTS (SELECT 1 FROM scarecrow_sessions
+                         WHERE player_id = v_player_id AND status = 'active' AND now() < ends_at);
+  v_exp_gain := CASE WHEN v_sc_active THEN 0 ELSE 10 END;
 
   SELECT * INTO v_boss FROM raid_boss WHERE id = p_raid_id FOR UPDATE;
   IF NOT FOUND THEN RETURN json_build_object('error', 'ボスが見つかりません'); END IF;
@@ -585,12 +586,12 @@ BEGIN
       attack_count   = raid_participants.attack_count + 1,
       last_attack_at = now();
 
-  -- 共有CD更新 + 出撃報酬（HP/MP全回復・EXP+10）
+  -- 共有CD更新 + 出撃報酬（HP/MP全回復・EXP+10。かかし修練中はEXP+0）
   PERFORM set_config('app.allow_stat_change', 'on', true);
   UPDATE profiles SET
     hp_current     = v_profile.hp_max,
     mp_current     = v_profile.mp_max,
-    exp            = COALESCE(exp, 0) + 10,
+    exp            = COALESCE(exp, 0) + v_exp_gain,
     last_action_at = now()
   WHERE id = v_player_id;
 
@@ -598,7 +599,8 @@ BEGIN
     'damage',     v_damage,
     'hp_current', v_new_hp,
     'hp_max',     v_boss.hp_max,
-    'exp',        COALESCE(v_profile.exp, 0) + 10,
+    'exp',        COALESCE(v_profile.exp, 0) + v_exp_gain,
+    'exp_gained', v_exp_gain,
     'status',     CASE WHEN v_new_hp = 0 THEN 'defeated' ELSE 'active' END
   );
 END;
