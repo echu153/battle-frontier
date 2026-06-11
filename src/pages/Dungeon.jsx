@@ -244,7 +244,8 @@ export default function Dungeon() {
   // 敵撃破：EXPを即時付与（サーバー）。レベルアップでステータスも即反映
   const grantKill = useCallback(async (floor, name = '敵') => {
     if (!runIdRef.current) return
-    const { data, error } = await supabase.rpc('dungeon_kill', { p_run_id: runIdRef.current, p_floor: floor })
+    // EXPは敵ごと（倍率はサーバー側の表で検証。強い敵ほど多い）
+    const { data, error } = await supabase.rpc('dungeon_kill', { p_run_id: runIdRef.current, p_floor: floor, p_enemy: name })
     if (error || !data) { addLog(`⚔ ${name}を撃破！`); return }
     addLog(`⚔ ${name}を撃破！ ＋EXP${data.exp_gain}${data.leveled ? `（Lv${data.level}に！）` : ''}`)
     setPet((p) => {
