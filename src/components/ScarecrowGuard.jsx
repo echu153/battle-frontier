@@ -31,7 +31,7 @@ export function ScarecrowBlockScreen({ endsAt }) {
         <div style={{ fontSize:'40px', marginBottom:'12px' }}>🌾</div>
         <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'10px' }}>かかし修練中です</div>
         <div style={{ color:'#aaaaaa', fontSize:'12px', lineHeight:'1.8', marginBottom:'8px' }}>
-          修練中は 賭博場・釣り・挑戦・ダンジョン を利用できません。
+          修練中は 出撃・レイドボス・賭博場・釣り・挑戦・ダンジョン を利用できません。
         </div>
         <div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
           終了予定: {new Date(endsAt).toLocaleString('ja-JP')}

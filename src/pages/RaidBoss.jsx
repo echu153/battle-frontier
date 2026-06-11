@@ -451,6 +451,14 @@ export default function RaidBoss() {
 
   const handleAttack = async () => {
     if (!boss || !profile || remaining > 0 || battling) return
+    // かかし修練中は出撃不可（サーバー側 attack_raid_boss でも拒否される）
+    const { data: sc } = await supabase.from('scarecrow_sessions')
+      .select('ends_at').eq('player_id', profile.id).eq('status', 'active').maybeSingle()
+    if (sc && new Date(sc.ends_at) > new Date()) {
+      setBattleLogs([{ text: '🌾 かかし修練中はレイドボスに出撃できません。修練が終わるまで待ちましょう。', color: '#ffcc44' }])
+      setScene('battle')
+      return
+    }
     setBattling(true)
     setBattleLogs([])
     setScene('battle')

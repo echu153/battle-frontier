@@ -1999,6 +1999,15 @@ export default function Game() {
       setBattleLogs([{ text:'🎣 釣り中は出撃できません。先に釣りを終了してください。', color:'#ff8844' }])
       setScene('battle'); return
     }
+    // かかし修練中は出撃不可（サーバー側 apply_battle_result でも拒否される）
+    {
+      const { data: sc } = await supabase.from('scarecrow_sessions')
+        .select('ends_at').eq('player_id', profile.id).eq('status', 'active').maybeSingle()
+      if (sc && new Date(sc.ends_at) > new Date()) {
+        setBattleLogs([{ text:'🌾 かかし修練中は出撃できません。修練が終わるまで待ちましょう。', color:'#ffcc44' }])
+        setScene('battle'); return
+      }
+    }
     const hpCurrent = profile.hp_current ?? profile.hp_max
     if (hpCurrent <= 0) return
     if (profile.is_dying && hpCurrent < profile.hp_max) return
