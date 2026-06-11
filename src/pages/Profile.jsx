@@ -324,7 +324,7 @@ export default function Profile() {
                   {equipped.weapons.hit_bonus > 0 && <span style={{color:'#ffaa44'}}>命中+{equipped.weapons.hit_bonus}% </span>}
                 </div>
                 )}
-                {(equipped.bonus_atk > 0 || equipped.bonus_def > 0 || equipped.bonus_matk > 0 || equipped.bonus_mdef > 0 || equipped.bonus_spd > 0 || equipped.bonus_hp > 0 || equipped.bonus_mp > 0 || (equipped.bonus_effect && equipped.bonus_effect !== 'artifact')) && (
+                {(equipped.bonus_atk > 0 || equipped.bonus_def > 0 || equipped.bonus_matk > 0 || equipped.bonus_mdef > 0 || equipped.bonus_spd > 0 || equipped.bonus_hp > 0 || equipped.bonus_mp > 0 || (equipped.bonus_crit||0) > 0 || (equipped.bonus_evasion||0) > 0 || (equipped.bonus_hit||0) > 0 || (equipped.bonus_effect && equipped.bonus_effect !== 'artifact')) && (
                   <div style={{ fontSize:'10px', color:'#ffaa00', marginBottom:'2px' }}>
                     ボーナス:
                     {equipped.bonus_hp   > 0 && ` HP+${equipped.bonus_hp}`}
@@ -334,6 +334,9 @@ export default function Profile() {
                     {equipped.bonus_matk > 0 && ` 魔攻+${equipped.bonus_matk}`}
                     {equipped.bonus_mdef > 0 && ` 魔防+${equipped.bonus_mdef}`}
                     {equipped.bonus_spd  > 0 && ` 速+${equipped.bonus_spd}`}
+                    {(equipped.bonus_crit||0)    > 0 && ` クリティカル率+${equipped.bonus_crit}%`}
+                    {(equipped.bonus_evasion||0) > 0 && ` 回避率+${equipped.bonus_evasion}%`}
+                    {(equipped.bonus_hit||0)     > 0 && ` 命中率+${equipped.bonus_hit}%`}
                     {equipped.bonus_effect && equipped.bonus_effect !== 'artifact' && ` ${getEffectLabel(equipped.bonus_effect)}`}
                   </div>
                 )}
