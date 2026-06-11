@@ -23,6 +23,8 @@
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS scarecrow_charges  int  NOT NULL DEFAULT 0;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS scarecrow_progress int  NOT NULL DEFAULT 0;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS scarecrow_week_key date;
+-- 今週のチャージ獲得数（厳密な週5回獲得上限用。消費しても減らない）
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS scarecrow_earned_week int NOT NULL DEFAULT 0;
 
 -- ===== 2) 保護トリガー（scarecrow_* 列はRPC経由のみ変更可） =====
 CREATE OR REPLACE FUNCTION public.protect_scarecrow_cols()
@@ -33,7 +35,8 @@ BEGIN
   IF current_setting('app.allow_stat_change', true) IS DISTINCT FROM 'on' THEN
     IF NEW.scarecrow_charges  IS DISTINCT FROM OLD.scarecrow_charges
        OR NEW.scarecrow_progress IS DISTINCT FROM OLD.scarecrow_progress
-       OR NEW.scarecrow_week_key IS DISTINCT FROM OLD.scarecrow_week_key THEN
+       OR NEW.scarecrow_week_key IS DISTINCT FROM OLD.scarecrow_week_key
+       OR NEW.scarecrow_earned_week IS DISTINCT FROM OLD.scarecrow_earned_week THEN
       RAISE EXCEPTION '不正な操作です（かかし修練場のデータはサーバ経由でのみ変更できます）';
     END IF;
   END IF;
@@ -100,11 +103,12 @@ BEGIN
   SELECT * INTO v_profile FROM profiles WHERE id = v_uid;
   IF NOT FOUND THEN RETURN json_build_object('error','キャラクターが見つかりません'); END IF;
 
-  -- 週が変わっていればチャージをリセット
+  -- 週が変わっていればチャージ・今週の獲得数をリセット
   IF v_profile.scarecrow_week_key IS DISTINCT FROM v_week THEN
     PERFORM set_config('app.allow_stat_change','on',true);
-    UPDATE profiles SET scarecrow_charges = 0, scarecrow_week_key = v_week WHERE id = v_uid;
+    UPDATE profiles SET scarecrow_charges = 0, scarecrow_earned_week = 0, scarecrow_week_key = v_week WHERE id = v_uid;
     v_profile.scarecrow_charges := 0;
+    v_profile.scarecrow_earned_week := 0;
   END IF;
 
   SELECT * INTO v_session FROM scarecrow_sessions
@@ -113,6 +117,7 @@ BEGIN
   RETURN json_build_object(
     'charges',  v_profile.scarecrow_charges,
     'progress', v_profile.scarecrow_progress,
+    'earned',   COALESCE(v_profile.scarecrow_earned_week, 0),
     'session',  CASE WHEN v_session.id IS NULL THEN NULL ELSE json_build_object(
       'id', v_session.id,
       'duration_hours', v_session.duration_hours,
@@ -320,6 +325,7 @@ DECLARE
   v_sc_week date;
   v_sc_charges int;
   v_sc_progress int;
+  v_sc_earned int;
   v_sc_charged boolean := false;
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('ok',false,'reason','not_authenticated'); END IF;
@@ -410,16 +416,20 @@ BEGIN
   --   ※ 簡易出撃(casino_settle_sortie)はこの関数を通らないため対象外
   v_sc_week := scarecrow_week_key_now();
   IF v_profile.scarecrow_week_key IS DISTINCT FROM v_sc_week THEN
-    v_sc_charges := 0;  -- 月曜朝5時(JST)でチャージリセット
+    v_sc_charges := 0;  -- 月曜朝5時(JST)でチャージ・今週の獲得数をリセット
+    v_sc_earned  := 0;
   ELSE
     v_sc_charges := COALESCE(v_profile.scarecrow_charges, 0);
+    v_sc_earned  := COALESCE(v_profile.scarecrow_earned_week, 0);
   END IF;
   v_sc_progress := COALESCE(v_profile.scarecrow_progress, 0);
-  IF v_sc_charges < 5 THEN
+  -- 厳密な週5回獲得上限: 今週5回チャージ済みなら消費していてもそれ以上貯まらない
+  IF v_sc_earned < 5 THEN
     v_sc_progress := v_sc_progress + 1;
     IF v_sc_progress >= 100 THEN
       v_sc_progress := v_sc_progress - 100;
       v_sc_charges := v_sc_charges + 1;
+      v_sc_earned  := v_sc_earned + 1;
       v_sc_charged := true;
     END IF;
   END IF;
@@ -438,6 +448,7 @@ BEGIN
       THEN COALESCE(boss_kill_count,0)+1 ELSE boss_kill_count END,
     scarecrow_charges=v_sc_charges,
     scarecrow_progress=v_sc_progress,
+    scarecrow_earned_week=v_sc_earned,
     scarecrow_week_key=v_sc_week
   WHERE id=v_uid;
 
@@ -583,7 +594,7 @@ $$;
 -- ============================================================
 BEGIN;
 SET LOCAL "app.allow_stat_change" = 'on';
-UPDATE profiles SET scarecrow_charges = 0, scarecrow_progress = 99,
+UPDATE profiles SET scarecrow_charges = 0, scarecrow_progress = 99, scarecrow_earned_week = 0,
                     scarecrow_week_key = scarecrow_week_key_now()
 WHERE username = 'おれおれお';
 COMMIT;

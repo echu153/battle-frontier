@@ -172,20 +172,24 @@ export default function Scarecrow() {
         {/* 修練回数 */}
         <div style={{ border:'1px solid #002244', background:'#000e20', padding:'12px', marginBottom:'14px' }}>
           <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
-            <span style={{ color:'#446688', fontSize:'11px' }}>修練回数</span>
-            <span style={{ color:'#ffcc44', fontSize:'13px' }}>{state.charges} / 5 回</span>
+            <span style={{ color:'#446688', fontSize:'11px' }}>修練回数（残り）</span>
+            <span style={{ color:'#ffcc44', fontSize:'13px' }}>{state.charges} 回</span>
+          </div>
+          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
+            <span style={{ color:'#446688', fontSize:'11px' }}>今週のチャージ獲得</span>
+            <span style={{ color:'#88ccff', fontSize:'12px' }}>{state.earned || 0} / 5 回</span>
           </div>
           <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
             <span style={{ color:'#446688', fontSize:'11px' }}>次のチャージまで</span>
-            <span style={{ color:'#88ccff', fontSize:'11px' }}>{state.charges >= 5 ? '満タン（週上限）' : `出撃あと${100 - (state.progress || 0)}回`}</span>
+            <span style={{ color:'#88ccff', fontSize:'11px' }}>{(state.earned || 0) >= 5 ? '今週の獲得上限に到達' : `出撃あと${100 - (state.progress || 0)}回`}</span>
           </div>
-          {state.charges < 5 && (
+          {(state.earned || 0) < 5 && (
             <div style={{ background:'#001028', height:'6px', border:'1px solid #002244' }}>
               <div style={{ height:'100%', width:`${state.progress || 0}%`, background:'linear-gradient(90deg,#332200,#ffcc44)' }} />
             </div>
           )}
           <div style={{ color:'#334455', fontSize:'10px', marginTop:'6px' }}>
-            ※ 出撃100回で1回チャージ（簡易出撃は対象外）。週5回まで・毎週月曜朝5時にリセット
+            ※ 出撃100回で1回チャージ（簡易出撃は対象外）。獲得は週5回まで・毎週月曜朝5時にリセット
           </div>
         </div>
 
@@ -284,7 +288,7 @@ export default function Scarecrow() {
         <div style={{ border:'1px solid #112233', background:'#000810', padding:'12px', fontSize:'11px', color:'#446688', lineHeight:'1.9', textAlign:'left' }}>
           <div style={{ color:'#335566', marginBottom:'4px' }}>📖 かかし修練場とは</div>
           ● 出撃100回ごとに修練回数が1回チャージされる（簡易出撃はカウントされない）<br/>
-          ● チャージは週5回まで。毎週月曜朝5時に修練回数はリセット<br/>
+          ● チャージの獲得は週5回まで（消費しても週の獲得上限は増えない）。毎週月曜朝5時にリセット<br/>
           ● 3〜8時間を設定して開始。<span style={{ color:'#ffcc44' }}>設定した時間まで解除しなければ経験値を獲得</span><br/>
           ● 1回でも解除すると経験値はもらえない（修練回数も戻らない）<br/>
           ● 修練中は 出撃・レイドボス・賭博場・釣り・挑戦・ダンジョン が利用できない（買い物などは可能）<br/>
