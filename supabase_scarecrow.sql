@@ -140,6 +140,7 @@ DECLARE
   v_profile profiles%ROWTYPE;
   v_week date := scarecrow_week_key_now();
   v_charges int;
+  v_week_sessions int;
   v_session scarecrow_sessions%ROWTYPE;
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('error','未認証'); END IF;
@@ -165,6 +166,21 @@ BEGIN
                     THEN 0 ELSE COALESCE(v_profile.scarecrow_charges, 0) END;
   IF v_charges <= 0 THEN
     RETURN json_build_object('error','修練回数がありません（出撃100回で1回チャージ）');
+  END IF;
+
+  -- ★不正検知: 今週6回目以降の開始は正規ルートでは不可能（チャージ獲得は週5回まで）。
+  --   発生した場合はデータ改ざんとみなしアカウント停止（管理者のテストは除外）
+  SELECT count(*) INTO v_week_sessions FROM scarecrow_sessions
+  WHERE player_id = v_uid
+    AND started_at >= ((v_week::timestamp + interval '5 hours') AT TIME ZONE 'Asia/Tokyo');
+  IF v_week_sessions >= 5 THEN
+    IF NOT COALESCE(v_profile.is_admin, false) THEN
+      PERFORM set_config('app.allow_stat_change','on',true);
+      UPDATE profiles SET is_suspended = true, suspicious_flag = true WHERE id = v_uid;
+      RETURN json_build_object('error','不正な操作が検出されたためアカウントを停止しました');
+    END IF;
+    -- 管理者はBANしないが上限自体は通知（テスト時はscarecrow_start_testを使用）
+    RETURN json_build_object('error','今週の修練回数の上限（5回）に達しています');
   END IF;
 
   PERFORM set_config('app.allow_stat_change','on',true);
