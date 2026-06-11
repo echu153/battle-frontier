@@ -2781,30 +2781,20 @@ export default function Game() {
       }
       for (const itemName of droppedItems) {
         if (itemName.startsWith('強化石') || MATERIAL_NAMES.includes(itemName)) {
-          // limit(1): itemsに同名が重複登録されていてもエラーにせず付与できるように
-          const { data: stoneItem } = await supabase.from('items').select('id').eq('name', itemName).limit(1).maybeSingle()
-          if (stoneItem) {
-            // 既存所持があれば加算、無ければ新規。upsert_player_item RPC に依存せず確実に反映させる
-            const { data: own } = await supabase.from('player_items')
-              .select('id, quantity').eq('player_id', profile.id).eq('item_id', stoneItem.id).limit(1).maybeSingle()
-            let grantErr = null
-            if (own) {
-              const { error } = await supabase.from('player_items').update({ quantity: (own.quantity || 1) + 1 }).eq('id', own.id)
-              grantErr = error
-            } else {
-              const { error } = await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: 1, equipped: false })
-              grantErr = error
-            }
-            if (grantErr) {
-              // 付与に失敗したのに「入手した！」と出すと反映されない不具合に見えるため明示する
-              console.error('drop grant error:', itemName, grantErr)
-              logs.push({ text:`⚠ ${itemName} の付与に失敗しました。時間をおいて再度お試しください`, color:'#ff8844' })
-            } else {
-              const isMat = MATERIAL_NAMES.includes(itemName)
-              logs.push({ text:`${isMat ? '✨' : '💎'} ${itemName} を入手した！`, color: isMat ? '#44ffaa' : '#6699cc' })
-            }
+          // サーバー側RPCで原子的に付与（SELECT→INSERTの隙間で失敗していた旧方式を置換）
+          // 失敗しても最大3回まで自動リトライして取りこぼしを防ぐ
+          let granted = false
+          for (let attempt = 0; attempt < 3 && !granted; attempt++) {
+            if (attempt > 0) await new Promise(r => setTimeout(r, 600))
+            const { data: gr, error: ge } = await supabase.rpc('grant_battle_item', { p_item_name: itemName })
+            if (!ge && gr?.ok) granted = true
+            else if (attempt === 2) console.error('drop grant error:', itemName, ge || gr)
+          }
+          if (granted) {
+            const isMat = MATERIAL_NAMES.includes(itemName)
+            logs.push({ text:`${isMat ? '✨' : '💎'} ${itemName} を入手した！`, color: isMat ? '#44ffaa' : '#6699cc' })
           } else {
-            logs.push({ text:`⚠ ${itemName} の付与に失敗しました（アイテム未登録）。運営に連絡してください`, color:'#ff8844' })
+            logs.push({ text:`⚠ ${itemName} の付与に失敗しました。運営に連絡してください`, color:'#ff8844' })
           }
           continue
         }
