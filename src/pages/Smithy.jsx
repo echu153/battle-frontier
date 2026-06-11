@@ -159,6 +159,7 @@ export default function Smithy() {
   const [craftTab, setCraftTab] = useState('equipment')
   const [sortKey, setSortKey] = useState(() => localStorage.getItem('equipSortKey') || 'obtained_asc')
   const [craftConfirm, setCraftConfirm] = useState(null) // { type:'equipment'|'stone', items?, selectedIds?, rarity }
+  const [enhanceResult, setEnhanceResult] = useState(null) // { ok, title, text } 強化ポップアップの結果表示
 
   useEffect(() => { fetchAll() }, [])
 
@@ -274,14 +275,14 @@ export default function Smithy() {
     if (success) {
       await supabase.from('player_equipment').update({ enhance_plus: nextPlus }).eq('id', item.id)
       resultPlus = nextPlus
-      showMessage(`✨ 強化成功！ ${item.weapons.name} が +${nextPlus} になった！`, '#ffcc00')
+      setEnhanceResult({ ok: true, title: '✨ 強化成功！', text: `${item.weapons.name} が +${nextPlus} になった！` })
     } else if (nextPlus >= 11) {
       const newPlus = Math.max(0, currentPlus - 1)
       await supabase.from('player_equipment').update({ enhance_plus: newPlus }).eq('id', item.id)
       resultPlus = newPlus
-      showMessage(`💔 強化失敗… ${item.weapons.name} が +${newPlus} に下落した…`, '#ff4444')
+      setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} が +${newPlus} に下落した…` })
     } else {
-      showMessage(`💔 強化失敗… ${item.weapons.name} は変化しなかった`, '#ff6644')
+      setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} は変化しなかった` })
     }
 
     await supabase.from('enhance_logs').insert({
@@ -298,7 +299,6 @@ export default function Smithy() {
     }
 
     await fetchAll()
-    setSelectedItem(null)
     setLoading(false)
   }
 
@@ -477,6 +477,89 @@ export default function Smithy() {
 
         {message && <div style={{ color: messageColor, fontSize:'12px', padding:'8px', border:`1px solid ${messageColor}`, marginBottom:'12px', textAlign:'center' }}>{message}</div>}
 
+        {/* 強化ポップアップ */}
+        {selectedItem && (() => {
+          const item = equipment.find(e => e.id === selectedItem.id) || selectedItem
+          const w = item.weapons
+          const plus = item.enhance_plus || 0
+          const nextPlus = plus + 1
+          const rankCosts = ENHANCE_COST_BY_RANK[w.rarity] || ENHANCE_COST_BY_RANK.ss
+          const cost = rankCosts[nextPlus] || rankCosts[rankCosts.length - 1]
+          const materialCount = MATERIAL_COUNT(plus)
+          const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped && !e.is_favorite && !(e.enhance_plus > 0)).length
+          const stoneCount = getStoneCount(w.rarity)
+          const totalMaterials = sameCount + stoneCount
+          const canEnhance = profile.gold >= cost && totalMaterials >= materialCount
+          const successRate = ENHANCE_RATE[nextPlus] !== undefined ? ENHANCE_RATE[nextPlus] : 100
+          const nextEnhanced = calcEnhancedStats(w, nextPlus)
+          const closeModal = () => { setSelectedItem(null); setEnhanceResult(null) }
+          return (
+            <div style={{ position:'fixed', inset:0, background:'rgba(0,4,16,0.85)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+              <div style={{ background:'#0a0800', border:'1px solid #aa6644', padding:'20px', maxWidth:'380px', width:'100%', fontFamily:'monospace' }}>
+                {message && <div style={{ color: messageColor, fontSize:'11px', padding:'6px', border:`1px solid ${messageColor}`, marginBottom:'10px', textAlign:'center' }}>{message}</div>}
+                {enhanceResult ? (
+                  <div style={{ textAlign:'center' }}>
+                    <div style={{ fontSize:'30px', marginBottom:'10px' }}>{enhanceResult.ok ? '✨' : '💔'}</div>
+                    <div style={{ color: enhanceResult.ok ? '#ffcc00' : '#ff4444', fontSize:'16px', letterSpacing:'2px', marginBottom:'10px' }}>
+                      {enhanceResult.ok ? '強化成功！' : '強化失敗…'}
+                    </div>
+                    <div style={{ color: enhanceResult.ok ? '#ffeeaa' : '#cc8888', fontSize:'13px', marginBottom:'18px' }}>{enhanceResult.text}</div>
+                    <div style={{ display:'flex', gap:'8px', justifyContent:'center' }}>
+                      <button onClick={() => setEnhanceResult(null)} disabled={loading}
+                        style={{ padding:'8px 16px', background:'#1a0800', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+                        続けて鍛錬する
+                      </button>
+                      <button onClick={closeModal} disabled={loading}
+                        style={{ padding:'8px 16px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+                        閉じる
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ color:'#aa6644', fontSize:'13px', marginBottom:'10px', textAlign:'center' }}>⚒ 武器強化</div>
+                    <div style={{ textAlign:'center', marginBottom:'12px' }}>
+                      <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}`, marginRight:'6px' }}>{RARITY_LABELS[w.rarity]}</span>
+                      <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'14px' }}>{w.name}{plus > 0 ? ` +${plus}` : ''}</span>
+                      <span style={{ color:'#446688', fontSize:'12px' }}> → </span>
+                      <span style={{ color:'#ffcc00', fontSize:'14px' }}>+{nextPlus}</span>
+                    </div>
+                    <div style={{ fontSize:'10px', color:'#88ccff', marginBottom:'8px' }}>
+                      強化後ステータス:
+                      {nextEnhanced.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}> 攻撃力+{nextEnhanced.atk_bonus}</span>}
+                      {nextEnhanced.def_bonus  > 0 && <span style={{color:'#88aaff'}}> 防御力+{nextEnhanced.def_bonus}</span>}
+                      {nextEnhanced.matk_bonus > 0 && <span style={{color:'#cc44ff'}}> 特殊攻撃力+{nextEnhanced.matk_bonus}</span>}
+                      {nextEnhanced.mdef_bonus > 0 && <span style={{color:'#44ccff'}}> 特殊防御力+{nextEnhanced.mdef_bonus}</span>}
+                      {nextEnhanced.spd_bonus  > 0 && <span style={{color:'#ff8844'}}> 素早さ+{nextEnhanced.spd_bonus}</span>}
+                      {nextEnhanced.hp_bonus   > 0 && <span style={{color:'#44ff88'}}> HP+{nextEnhanced.hp_bonus}</span>}
+                      {nextEnhanced.mp_bonus   > 0 && <span style={{color:'#4488ff'}}> MP+{nextEnhanced.mp_bonus}</span>}
+                    </div>
+                    <div style={{ fontSize:'10px', color:'#446688', marginBottom:'2px' }}>必要G: <span style={{color: profile.gold >= cost ? '#ffcc00' : '#ff4444'}}>{cost.toLocaleString()}G</span>（所持 {profile.gold.toLocaleString()}G）</div>
+                    <div style={{ fontSize:'10px', color:'#446688', marginBottom:'2px' }}>必要素材: <span style={{color:'#aa6644'}}>{materialCount}個</span></div>
+                    <div style={{ fontSize:'10px', color:'#446688', marginBottom:'2px' }}>　同名装備: <span style={{color: sameCount >= materialCount ? '#44ff88' : '#ffcc00'}}>{sameCount}個</span><span style={{ color:'#334455' }}>（+1以上・お気に入りは対象外）</span></div>
+                    <div style={{ fontSize:'10px', color:'#446688', marginBottom:'4px' }}>
+                      　{STONE_NAMES[w.rarity]}: <span style={{color: stoneCount > 0 ? '#ffcc00' : '#446688'}}>{stoneCount}個</span>
+                      <span style={{color: totalMaterials >= materialCount ? '#44ff88' : '#ff4444', marginLeft:'8px'}}>（合計 {totalMaterials}/{materialCount}）</span>
+                    </div>
+                    <div style={{ fontSize:'10px', color:'#446688', marginBottom:'12px' }}>
+                      成功率: <span style={{color: successRate >= 50 ? '#44ff88' : successRate >= 20 ? '#ffcc00' : '#ff4444'}}>{successRate}%</span>
+                      {nextPlus >= 11 && <span style={{color:'#ff4444'}}> ⚠ 失敗時+値下落</span>}
+                    </div>
+                    <button onClick={() => doEnhance(item)} disabled={!canEnhance || loading}
+                      style={{ width:'100%', padding:'10px', background: canEnhance ? '#1a0800' : '#001', border:`1px solid ${canEnhance ? '#aa6644' : '#002244'}`, color: canEnhance ? '#ffcc88' : '#334455', cursor: canEnhance ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
+                      {loading ? '鍛錬中...' : '⚒ 鍛錬する'}
+                    </button>
+                    <button onClick={closeModal} disabled={loading}
+                      style={{ width:'100%', padding:'7px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                      やめる
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )
+        })()}
+
         <div style={{ display:'flex', gap:'4px', marginBottom:'8px', flexWrap:'wrap' }}>
           {[{id:'enhance', label:'強化'}, {id:'craft', label:'加工'}, {id:'reeval', label:'再評価/再鑑定'}].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
@@ -541,9 +624,9 @@ export default function Smithy() {
                             {isArtifactBase && <span style={{ color:'#446688', fontSize:'10px' }}>強化不可</span>}
                           </div>
                           {!isArtifactBase && (
-                            <button onClick={() => setSelectedItem(isSelected ? null : item)}
+                            <button onClick={() => { setSelectedItem(item); setEnhanceResult(null) }}
                               style={{ padding:'3px 8px', background:'#001', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
-                              {isSelected ? '閉じる' : '強化する'}
+                              強化する
                             </button>
                           )}
                         </div>
@@ -558,36 +641,6 @@ export default function Smithy() {
                           {enhanced.mp_bonus   > 0 && <span style={{color:'#4488ff'}}>MP+{enhanced.mp_bonus} </span>}
                         </div>
 
-                        {isSelected && (
-                          <div style={{ borderTop:'1px solid #003366', paddingTop:'8px', marginTop:'6px' }}>
-                            <div style={{ fontSize:'11px', color:'#446688', marginBottom:'4px' }}>
-                              強化先: <span style={{color:'#ffcc00'}}>{w.name} +{nextPlus}</span>
-                            </div>
-                            <div style={{ fontSize:'10px', color:'#88ccff', marginBottom:'4px' }}>
-                              強化後ステータス:
-                              {nextEnhanced.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}> 攻撃力+{nextEnhanced.atk_bonus}</span>}
-                              {nextEnhanced.def_bonus  > 0 && <span style={{color:'#88aaff'}}> 防御力+{nextEnhanced.def_bonus}</span>}
-                              {nextEnhanced.matk_bonus > 0 && <span style={{color:'#cc44ff'}}> 特殊攻撃力+{nextEnhanced.matk_bonus}</span>}
-                              {nextEnhanced.mdef_bonus > 0 && <span style={{color:'#44ccff'}}> 特殊防御力+{nextEnhanced.mdef_bonus}</span>}
-                              {nextEnhanced.spd_bonus  > 0 && <span style={{color:'#ff8844'}}> 素早さ+{nextEnhanced.spd_bonus}</span>}
-                            </div>
-                            <div style={{ fontSize:'10px', color:'#446688', marginBottom:'2px' }}>必要G: <span style={{color:'#ffcc00'}}>{cost.toLocaleString()}G</span></div>
-                            <div style={{ fontSize:'10px', color:'#446688', marginBottom:'2px' }}>必要素材: <span style={{color:'#aa6644'}}>{materialCount}個</span></div>
-                            <div style={{ fontSize:'10px', color:'#446688', marginBottom:'2px' }}>　同名装備: <span style={{color: sameCount >= materialCount ? '#44ff88' : '#ffcc00'}}>{sameCount}個</span></div>
-                            <div style={{ fontSize:'10px', color:'#446688', marginBottom:'4px' }}>
-                              　{STONE_NAMES[w.rarity]}: <span style={{color: stoneCount > 0 ? '#ffcc00' : '#446688'}}>{stoneCount}個</span>
-                              <span style={{color: totalMaterials >= materialCount ? '#44ff88' : '#ff4444', marginLeft:'8px'}}>（合計 {totalMaterials}/{materialCount}）</span>
-                            </div>
-                            <div style={{ fontSize:'10px', color:'#446688', marginBottom:'8px' }}>
-                              成功率: <span style={{color: successRate >= 50 ? '#44ff88' : successRate >= 20 ? '#ffcc00' : '#ff4444'}}>{successRate}%</span>
-                              {nextPlus >= 11 && <span style={{color:'#ff4444'}}> ⚠ 失敗時+値下落</span>}
-                            </div>
-                            <button onClick={() => doEnhance(item)} disabled={!canEnhance || loading}
-                              style={{ width:'100%', padding:'8px', background: canEnhance ? '#1a0800' : '#001', border:`1px solid ${canEnhance ? '#aa6644' : '#002244'}`, color: canEnhance ? '#aa6644' : '#334455', cursor: canEnhance ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'12px' }}>
-                              ⚒ 鍛錬する
-                            </button>
-                          </div>
-                        )}
                       </div>
                     )
                   })}
