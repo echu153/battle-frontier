@@ -190,7 +190,7 @@ export function dungeonEnemyStatsFor(dungeon, kind) {
 export function dungeonEnemyStats(floor, areaId) {
   const t = areaId || 1
   return {
-    maxHp: Math.round(22 + floor * 8 + t * t * 9),
+    maxHp: Math.round((22 + floor * 8 + t * t * 9) * 0.8), // 2026-06-11調整: HP20%ダウン
     atk:   Math.round(7 + floor * 2.4 + t * t * 2),
     def:   Math.round(2 + floor * 1.1 + t * 2),
     mdef:  Math.round(2 + floor * 1.1 + t * 2),

@@ -37,7 +37,7 @@ begin
   if v_run.enemies_defeated >= 300 then raise exception 'too many kills'; end if;
 
   v_floor := least(greatest(coalesce(p_floor,1), 1), 99);
-  v_exp_gain := 3 + v_floor;
+  v_exp_gain := round((3 + v_floor) * 1.1)::int;  -- 2026-06-11調整: EXP1.1倍
 
   select * into v_pet from pets where id = v_run.pet_id and owner_id = auth.uid();
   if not found then raise exception 'pet not found'; end if;
