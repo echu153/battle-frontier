@@ -145,6 +145,10 @@ BEGIN
   SELECT * INTO v_profile FROM profiles WHERE id = v_uid FOR UPDATE;
   IF NOT FOUND THEN RETURN json_build_object('error','キャラクターが見つかりません'); END IF;
   IF v_profile.is_suspended THEN RETURN json_build_object('error','アカウント停止中'); END IF;
+  -- 開発中: 管理者アカウント限定（一般公開時にこの3行を削除）
+  IF NOT COALESCE(v_profile.is_admin, false) THEN
+    RETURN json_build_object('error','かかし修練場は準備中です');
+  END IF;
 
   -- 既にactiveがあれば不可
   IF EXISTS (SELECT 1 FROM scarecrow_sessions WHERE player_id = v_uid AND status = 'active') THEN

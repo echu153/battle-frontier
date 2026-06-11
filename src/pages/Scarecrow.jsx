@@ -54,6 +54,9 @@ export default function Scarecrow() {
   const fetchState = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
+    // 開発中: 管理者アカウント限定
+    const { data: me } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
+    if (!me?.is_admin) { nav('/game'); return }
     const { data, error } = await supabase.rpc('scarecrow_state')
     if (error || data?.error) { showMsg(data?.error || 'エラーが発生しました', '#ff4444'); return }
     setState(data)
