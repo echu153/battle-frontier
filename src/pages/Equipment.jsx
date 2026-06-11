@@ -385,6 +385,8 @@ export default function Equipment() {
                       </div>
                       <div style={{ fontSize:'9px', color: RARITY_COLORS[equipped.weapons.rarity] }}>{RARITY_LABELS[equipped.weapons.rarity]}</div>
                       <div style={{ fontSize:'9px', marginTop:'2px', lineHeight:'1.4' }}>
+                        {enhW.hp_bonus   > 0 && <span style={{color:'#44ff88'}}>HP+{enhW.hp_bonus} </span>}
+                        {enhW.mp_bonus   > 0 && <span style={{color:'#4488ff'}}>MP+{enhW.mp_bonus} </span>}
                         {enhW.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻+{enhW.atk_bonus} </span>}
                         {enhW.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防+{enhW.def_bonus} </span>}
                         {enhW.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>魔攻+{enhW.matk_bonus} </span>}

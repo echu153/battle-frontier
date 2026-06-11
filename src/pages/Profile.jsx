@@ -132,7 +132,7 @@ export default function Profile() {
     setProficiency(prof || [])
     const { data: ss } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', targetId).eq('set_type', 'sortie').order('slot_order')
     setSkillSets(ss || [])
-    // ペット（自分のプロフィールのみ表示。他人はRLSで空になる）
+    // ペット（公開読み取りポリシーにより他人のも閲覧可。supabase_pets_public_read.sql）
     const { data: petList } = await supabase.from('pets').select('*').eq('owner_id', targetId).order('created_at')
     setPets(petList || [])
     const { data: chList } = await supabase.from('player_charms').select('*').eq('owner_id', targetId)
@@ -311,8 +311,10 @@ export default function Profile() {
                   【{RARITY_LABELS[equipped.weapons.rarity]}】{getProfPrefix(profLv)}{equipped.weapons.name}
                   {plus > 0 && !isArtifactBase && <span style={{color:'#ffcc00'}}> +{plus}</span>}
                 </div>
-                {(enhW.atk_bonus>0 || enhW.def_bonus>0 || enhW.matk_bonus>0 || enhW.mdef_bonus>0 || enhW.spd_bonus>0 || equipped.weapons.matk_bonus_pct>0 || equipped.weapons.hit_bonus>0) && (
+                {(enhW.atk_bonus>0 || enhW.def_bonus>0 || enhW.matk_bonus>0 || enhW.mdef_bonus>0 || enhW.spd_bonus>0 || enhW.hp_bonus>0 || enhW.mp_bonus>0 || equipped.weapons.matk_bonus_pct>0 || equipped.weapons.hit_bonus>0) && (
                 <div style={{ fontSize:'10px', marginBottom:'2px' }}>
+                  {enhW.hp_bonus   > 0 && <span style={{color:'#00cc44'}}>HP+{enhW.hp_bonus} </span>}
+                  {enhW.mp_bonus   > 0 && <span style={{color:'#4488ff'}}>MP+{enhW.mp_bonus} </span>}
                   {enhW.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻+{enhW.atk_bonus} </span>}
                   {enhW.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防+{enhW.def_bonus} </span>}
                   {enhW.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>魔攻+{enhW.matk_bonus} </span>}
@@ -322,9 +324,11 @@ export default function Profile() {
                   {equipped.weapons.hit_bonus > 0 && <span style={{color:'#ffaa44'}}>命中+{equipped.weapons.hit_bonus}% </span>}
                 </div>
                 )}
-                {(equipped.bonus_atk > 0 || equipped.bonus_def > 0 || equipped.bonus_matk > 0 || equipped.bonus_mdef > 0 || equipped.bonus_spd > 0 || (equipped.bonus_effect && equipped.bonus_effect !== 'artifact')) && (
+                {(equipped.bonus_atk > 0 || equipped.bonus_def > 0 || equipped.bonus_matk > 0 || equipped.bonus_mdef > 0 || equipped.bonus_spd > 0 || equipped.bonus_hp > 0 || equipped.bonus_mp > 0 || (equipped.bonus_effect && equipped.bonus_effect !== 'artifact')) && (
                   <div style={{ fontSize:'10px', color:'#ffaa00', marginBottom:'2px' }}>
                     ボーナス:
+                    {equipped.bonus_hp   > 0 && ` HP+${equipped.bonus_hp}`}
+                    {equipped.bonus_mp   > 0 && ` MP+${equipped.bonus_mp}`}
                     {equipped.bonus_atk  > 0 && ` 攻+${equipped.bonus_atk}`}
                     {equipped.bonus_def  > 0 && ` 防+${equipped.bonus_def}`}
                     {equipped.bonus_matk > 0 && ` 魔攻+${equipped.bonus_matk}`}
@@ -343,7 +347,7 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* ペット（自分のプロフィールのみ） */}
+        {/* ペット（公開読み取りで他人のも表示） */}
         {pets.length > 0 && (
           <div style={{ border:'1px solid #5a3a8a', background:'#0c0820', padding:'12px' }}>
             <div style={{ color:'#aa88ff', fontSize:'12px', marginBottom:'8px' }}>🐾 ペット</div>

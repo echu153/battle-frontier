@@ -2061,7 +2061,17 @@ export default function Game() {
       .eq('is_fishing', false)
       .select('id')
     if (!locked || locked.length === 0) {
-      setLoading(false); setScene('town'); await fetchProfile(); return
+      // ロック失敗（クールダウン未経過/別端末で出撃中/釣り中）。
+      // 無言で街に戻すと「出撃したのにバトルログが出ない」ように見えるため、理由を表示する。
+      const { data: latest } = await supabase.from('profiles').select('last_action_at, is_fishing').eq('id', profile.id).maybeSingle()
+      if (latest?.is_fishing) {
+        setBattleLogs([{ text:'🎣 釣り中は出撃できません。先に釣りを終了してください。', color:'#ff8844' }])
+      } else {
+        const elapsed = latest ? (Date.now() - new Date(latest.last_action_at).getTime()) / 1000 : 0
+        const wait = Math.max(1, Math.ceil(WAIT_SECONDS - elapsed))
+        setBattleLogs([{ text:`⏳ クールダウン中です。あと${wait}秒お待ちください。`, color:'#ffcc44' }])
+      }
+      setScene('battle'); setLoading(false); await fetchProfile(); return
     }
     setProfile(p => ({ ...p, last_action_at: now }))
 
