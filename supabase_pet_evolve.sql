@@ -31,7 +31,6 @@ returns json language plpgsql security definer set search_path = public as $$
 declare
   v_run dungeon_runs%rowtype; v_pet pets%rowtype;
   v_floor int; v_exp_gain int; v_new_exp int; v_new_level int; v_cap int;
-  v_mult numeric;
 begin
   select * into v_run from dungeon_runs where id = p_run_id;
   if not found then raise exception 'run not found'; end if;
@@ -40,16 +39,16 @@ begin
   if v_run.enemies_defeated >= 300 then raise exception 'too many kills'; end if;
 
   v_floor := least(greatest(coalesce(p_floor,1), 1), 99);
-  -- 敵ごとの強さ倍率（constants/pets.js の statMult と一致させること。未知の敵は1.0）
-  v_mult := case p_enemy
-    when 'スライム' then 0.5
-    when 'コウモリ' then 0.75
-    when '毒キノコ' then 1.0
-    when 'ゴブリン' then 1.0
-    when '野良犬'   then 1.0
-    when '盗賊'     then 1.1
-    else 1.0 end;
-  v_exp_gain := greatest(1, round((3 + v_floor) * v_mult * 1.1)::int);  -- 強さ比例＋1.1倍
+  -- 敵ごとの固定EXP（強さ＝初登場階の能力に比例。階層では変わらない）
+  -- 未知の敵のみ階層フォールバック（新ダンジョン追加時はこの表に追記する）
+  v_exp_gain := case p_enemy
+    when 'スライム' then 2
+    when 'コウモリ' then 5
+    when '毒キノコ' then 7
+    when 'ゴブリン' then 10
+    when '野良犬'   then 12
+    when '盗賊'     then 13
+    else greatest(1, round((3 + v_floor) * 1.1)::int) end;
 
   select * into v_pet from pets where id = v_run.pet_id and owner_id = auth.uid();
   if not found then raise exception 'pet not found'; end if;
