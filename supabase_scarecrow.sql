@@ -409,14 +409,7 @@ BEGIN
     v_sc_charges := COALESCE(v_profile.scarecrow_charges, 0);
   END IF;
   v_sc_progress := COALESCE(v_profile.scarecrow_progress, 0);
-  IF v_profile.username = 'えちゅ' THEN
-    -- 開発アカウント: 出撃1回で1チャージ・上限99（テスト用）
-    IF v_sc_charges < 99 THEN
-      v_sc_charges := v_sc_charges + 1;
-      v_sc_charged := true;
-    END IF;
-    v_sc_progress := 0;
-  ELSIF v_sc_charges < 5 THEN
+  IF v_sc_charges < 5 THEN
     v_sc_progress := v_sc_progress + 1;
     IF v_sc_progress >= 100 THEN
       v_sc_progress := v_sc_progress - 100;
@@ -492,10 +485,12 @@ END;
 $function$;
 
 -- ============================================================
--- 11) 開発アカウントのチャージを99回に（手動・このまま実行可）
+-- 11) 開発アカウント(おれおれお)をテスト状態に（手動・このまま実行可）
+--     チャージ0・進捗99/100（次の出撃1回でチャージ完了通知をテスト可能）
 -- ============================================================
 BEGIN;
 SET LOCAL "app.allow_stat_change" = 'on';
-UPDATE profiles SET scarecrow_charges = 99, scarecrow_week_key = scarecrow_week_key_now()
-WHERE username = 'えちゅ';
+UPDATE profiles SET scarecrow_charges = 0, scarecrow_progress = 99,
+                    scarecrow_week_key = scarecrow_week_key_now()
+WHERE username = 'おれおれお';
 COMMIT;
