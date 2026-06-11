@@ -2924,6 +2924,12 @@ export default function Game() {
       p_mp_current: playerMp,
     })
 
+    // かかし修練場のチャージ完了通知
+    if (rpcResult?.scarecrow_charged) {
+      logs.push({ text: `🌾 かかし修練場のチャージが1回分完了！（現在${rpcResult.scarecrow_charges}回）`, color: '#ffcc44' })
+      setBattleLogs([...logs])
+    }
+
     await fetchProfile()
     setLoading(false)
   }

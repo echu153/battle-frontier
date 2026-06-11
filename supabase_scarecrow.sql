@@ -320,6 +320,7 @@ DECLARE
   v_sc_week date;
   v_sc_charges int;
   v_sc_progress int;
+  v_sc_charged boolean := false;
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('ok',false,'reason','not_authenticated'); END IF;
   SELECT * INTO v_profile FROM profiles WHERE id = v_uid;
@@ -408,11 +409,19 @@ BEGIN
     v_sc_charges := COALESCE(v_profile.scarecrow_charges, 0);
   END IF;
   v_sc_progress := COALESCE(v_profile.scarecrow_progress, 0);
-  IF v_sc_charges < 5 THEN
+  IF v_profile.username = 'えちゅ' THEN
+    -- 開発アカウント: 出撃1回で1チャージ・上限99（テスト用）
+    IF v_sc_charges < 99 THEN
+      v_sc_charges := v_sc_charges + 1;
+      v_sc_charged := true;
+    END IF;
+    v_sc_progress := 0;
+  ELSIF v_sc_charges < 5 THEN
     v_sc_progress := v_sc_progress + 1;
     IF v_sc_progress >= 100 THEN
       v_sc_progress := v_sc_progress - 100;
       v_sc_charges := v_sc_charges + 1;
+      v_sc_charged := true;
     END IF;
   END IF;
 
@@ -438,6 +447,55 @@ BEGIN
     WHERE player_id=v_uid AND class_name=v_profile.class;
   END IF;
 
-  RETURN json_build_object('ok',true,'level_ups',v_level_ups,'new_lv',v_new_lv);
+  RETURN json_build_object('ok',true,'level_ups',v_level_ups,'new_lv',v_new_lv,
+    'scarecrow_charged',v_sc_charged,'scarecrow_charges',v_sc_charges);
 END;
 $function$;
+
+-- ============================================================
+-- 10) テスト用: 1分修練（管理者限定・チャージ1消費・報酬は3時間分のEXP200）
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.scarecrow_start_test()
+ RETURNS json
+ LANGUAGE plpgsql SECURITY DEFINER
+AS $function$
+DECLARE
+  v_uid uuid := auth.uid();
+  v_profile profiles%ROWTYPE;
+  v_week date := scarecrow_week_key_now();
+  v_charges int;
+  v_session scarecrow_sessions%ROWTYPE;
+BEGIN
+  IF v_uid IS NULL THEN RETURN json_build_object('error','未認証'); END IF;
+  SELECT * INTO v_profile FROM profiles WHERE id = v_uid FOR UPDATE;
+  IF NOT FOUND THEN RETURN json_build_object('error','キャラクターが見つかりません'); END IF;
+  IF NOT COALESCE(v_profile.is_admin, false) THEN
+    RETURN json_build_object('error','権限がありません');
+  END IF;
+  IF EXISTS (SELECT 1 FROM scarecrow_sessions WHERE player_id = v_uid AND status = 'active') THEN
+    RETURN json_build_object('error','既に修練中です');
+  END IF;
+  v_charges := CASE WHEN v_profile.scarecrow_week_key IS DISTINCT FROM v_week
+                    THEN 0 ELSE COALESCE(v_profile.scarecrow_charges, 0) END;
+  IF v_charges <= 0 THEN RETURN json_build_object('error','修練回数がありません'); END IF;
+
+  PERFORM set_config('app.allow_stat_change','on',true);
+  UPDATE profiles SET scarecrow_charges = v_charges - 1, scarecrow_week_key = v_week
+  WHERE id = v_uid;
+
+  INSERT INTO scarecrow_sessions (player_id, duration_hours, started_at, ends_at)
+  VALUES (v_uid, 3, now(), now() + interval '1 minute')
+  RETURNING * INTO v_session;
+
+  RETURN json_build_object('success', true, 'ends_at', v_session.ends_at, 'exp_reward', 200, 'test', true);
+END;
+$function$;
+
+-- ============================================================
+-- 11) 開発アカウントのチャージを99回に（手動・このまま実行可）
+-- ============================================================
+BEGIN;
+SET LOCAL "app.allow_stat_change" = 'on';
+UPDATE profiles SET scarecrow_charges = 99, scarecrow_week_key = scarecrow_week_key_now()
+WHERE username = 'えちゅ';
+COMMIT;

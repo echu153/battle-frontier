@@ -80,6 +80,20 @@ export default function Scarecrow() {
     setLoading(false)
   }
 
+  // 開発用: 1分で完了するテスト修練
+  const startTest = async () => {
+    if (loading) return
+    setLoading(true)
+    const { data, error } = await supabase.rpc('scarecrow_start_test')
+    if (error || data?.error) {
+      showMsg(data?.error || 'エラーが発生しました', '#ff4444')
+    } else {
+      showMsg('🧪 1分テスト修練を開始しました')
+      await fetchState()
+    }
+    setLoading(false)
+  }
+
   const cancelTraining = async () => {
     if (loading) return
     setLoading(true)
@@ -259,11 +273,15 @@ export default function Scarecrow() {
               }}>
               {loading ? '処理中...' : state.charges > 0 ? `🌾 ${selectedHours}時間の修練を開始する` : '修練回数がありません'}
             </button>
+            <button onClick={startTest} disabled={loading || state.charges <= 0}
+              style={{ width:'100%', padding:'8px', marginTop:'8px', background:'#0a0a1a', border:'1px dashed #446688', color:'#88aacc', cursor: state.charges > 0 ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>
+              🧪 1分テスト修練を開始（開発用・チャージ1消費・EXP200）
+            </button>
           </div>
         )}
 
         {/* 説明 */}
-        <div style={{ border:'1px solid #112233', background:'#000810', padding:'12px', fontSize:'11px', color:'#446688', lineHeight:'1.9' }}>
+        <div style={{ border:'1px solid #112233', background:'#000810', padding:'12px', fontSize:'11px', color:'#446688', lineHeight:'1.9', textAlign:'left' }}>
           <div style={{ color:'#335566', marginBottom:'4px' }}>📖 かかし修練場とは</div>
           ● 出撃100回ごとに修練回数が1回チャージされる（簡易出撃はカウントされない）<br/>
           ● チャージは週5回まで。毎週月曜朝5時に修練回数はリセット<br/>
