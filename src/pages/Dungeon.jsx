@@ -359,11 +359,15 @@ export default function Dungeon() {
           if (sv?.runId && sv?.state) {
             // ランがサーバー側で終了していたら（run not active対策）新しいランを開始して続行
             const { data: runRow } = await supabase.from('dungeon_runs').select('status').eq('id', sv.runId).maybeSingle()
+            let sameRun = true
             if (runRow?.status === 'active') {
               runIdRef.current = sv.runId
             } else {
               const { data: newRun } = await supabase.rpc('dungeon_start', { p_pet_id: ap.id, p_dungeon_id: sv.dungeonId || 'd10' })
               runIdRef.current = newRun || null
+              // 戦利品の実体は旧ラン(pending_loot)に紐付くため、新ランでは持ち越せない
+              // （表示だけ残ると生還時に付与されず、捨てる/再抽選も bad run で失敗する）
+              sameRun = false
             }
             finishedRef.current = false
             enemiesRef.current = sv.kills || 0
@@ -376,7 +380,7 @@ export default function Dungeon() {
             setTurns(sv.turns)
             setSelectedSkill(sv.selectedSkill || 'tackle')
             if (sv.inventory) setInventory(sv.inventory)
-            if (Array.isArray(sv.lootBag)) setLootBag(sv.lootBag)
+            if (sameRun && Array.isArray(sv.lootBag)) setLootBag(sv.lootBag)
             setState({ ...sv.state, explored: new Set(sv.state.explored) })
             setStatus('exploring')
             restored = true
