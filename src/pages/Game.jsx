@@ -1313,6 +1313,21 @@ const getPapiaEventStatus = () => {
   return { active: false, untilNextMin: untilNext }
 }
 
+// お宝素材ドロップ2倍イベント（JST 2026/6/12 5:00 〜 6/15 4:59）
+//   JST05:00 = UTC前日20:00。開始 6/11 20:00 UTC 〜 終了 6/14 20:00 UTC（6/15 5:00JST）。
+//   時間になると自動で開始/終了する（クライアント時刻基準）。
+const MATERIAL_EVENT_START = Date.UTC(2026, 5, 11, 20, 0, 0) // 6/12 05:00 JST
+const MATERIAL_EVENT_END   = Date.UTC(2026, 5, 14, 20, 0, 0) // 6/15 05:00 JST（4:59まで有効）
+const getMaterialEventStatus = () => {
+  const now = Date.now()
+  const active = now >= MATERIAL_EVENT_START && now < MATERIAL_EVENT_END
+  if (!active) return { active: false }
+  const remMs = MATERIAL_EVENT_END - now
+  const remHour = Math.floor(remMs / (60*60*1000))
+  const remMin = Math.floor((remMs % (60*60*1000)) / (60*1000))
+  return { active: true, remainingHour: remHour, remainingMin: remMin }
+}
+
 // ============================================================
 // メインコンポーネント
 // ============================================================
@@ -2795,7 +2810,8 @@ export default function Game() {
       }
       // 素材ドロップ（0.1%）：素材所持中 or 無限ポーション所持中はドロップしない
       const matDrops = area.materialDrops || []
-      if (matDrops.length > 0 && Math.random()*100 < 0.1) {
+      const matEventRate = getMaterialEventStatus().active ? 2 : 1  // お宝素材2倍イベント
+      if (matDrops.length > 0 && Math.random()*100 < 0.1 * matEventRate) {
         const matName = matDrops[0]
         const isHpMat = HP_MATERIAL_NAMES.includes(matName)
         const potionEffect = isHpMat ? 'hp_pct_infinite' : 'mp_pct_infinite'
@@ -3423,6 +3439,7 @@ export default function Game() {
   const isDying = profile.is_dying||false
   const isBanned = profile.battle_ban_until && new Date(profile.battle_ban_until) > new Date()
   const papiaEvent = getPapiaEventStatus()
+  const materialEvent = getMaterialEventStatus()
   const banRemaining = isBanned ? (() => {
     const diffMs = new Date(profile.battle_ban_until) - new Date()
     const h = Math.floor(diffMs / 3600000)
@@ -3758,6 +3775,20 @@ export default function Game() {
                   <span style={{ color:'#446688', marginLeft:'8px' }}>残り{papiaEvent.remainingMin}分{papiaEvent.remainingSec}秒</span>
                 </div>
               )}
+              {materialEvent.active && (
+                <div style={{ background:'#001a0f', border:'1px solid #44ffaa', padding:'8px 10px', marginBottom:'8px', fontSize:'11px' }}>
+                  <div style={{ color:'#44ffaa', textAlign:'center', fontWeight:'bold', marginBottom:'4px' }}>
+                    ✨ お宝素材ドロップ2倍イベント開催中！
+                  </div>
+                  <div style={{ color:'#446688', textAlign:'center', marginBottom:'5px' }}>
+                    管理人がお宝作成達成記念 ／ 残り{materialEvent.remainingHour}時間{materialEvent.remainingMin}分
+                  </div>
+                  <div style={{ color:'#88ccbb', fontSize:'10px', lineHeight:'1.5' }}>
+                    森の生命液…始まりの森 ／ 荒野の薬草…荒廃した草原 ／ 古代の精髄…古代の洞窟<br/>
+                    蒼海の精気…蒼海の入り江 ／ 雷鳴の精気…巨峰山脈 ／ 霜の精気…白銀の霊峰
+                  </div>
+                </div>
+              )}
               {(() => {
                 const raidSeenKey = raidBossData ? `bf_raid_seen_${raidBossData.boss.id}` : null
                 const isSeen = raidSeenKey && localStorage.getItem(raidSeenKey)
@@ -4082,6 +4113,20 @@ export default function Game() {
                   <div style={{ background:'#1a0a00', border:'1px solid #ffaa00', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
                     <span style={{ color:'#ffaa00' }}>🌟 パピア出現率アップ中！</span>
                     <span style={{ color:'#446688', marginLeft:'8px' }}>残り{papiaEvent.remainingMin}分{papiaEvent.remainingSec}秒</span>
+                  </div>
+                )}
+                {materialEvent.active && (
+                  <div style={{ background:'#001a0f', border:'1px solid #44ffaa', padding:'8px 10px', marginBottom:'8px', fontSize:'11px' }}>
+                    <div style={{ color:'#44ffaa', textAlign:'center', fontWeight:'bold', marginBottom:'4px' }}>
+                      ✨ お宝素材ドロップ2倍イベント開催中！
+                    </div>
+                    <div style={{ color:'#446688', textAlign:'center', marginBottom:'5px' }}>
+                      管理人がお宝作成達成記念 ／ 残り{materialEvent.remainingHour}時間{materialEvent.remainingMin}分
+                    </div>
+                    <div style={{ color:'#88ccbb', fontSize:'10px', lineHeight:'1.5' }}>
+                      森の生命液…始まりの森 ／ 荒野の薬草…荒廃した草原 ／ 古代の精髄…古代の洞窟<br/>
+                      蒼海の精気…蒼海の入り江 ／ 雷鳴の精気…巨峰山脈 ／ 霜の精気…白銀の霊峰
+                    </div>
                   </div>
                 )}
                 {(() => {
