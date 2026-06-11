@@ -41,6 +41,7 @@ export default function Scarecrow() {
   const [message, setMessage] = useState('')
   const [messageColor, setMessageColor] = useState('#44ff88')
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [loadError, setLoadError] = useState(null)
   const [claimResult, setClaimResult] = useState(null)
   const [, setTickFinished] = useState(false)
 
@@ -58,7 +59,11 @@ export default function Scarecrow() {
     const { data: me } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
     if (!me?.is_admin) { nav('/game'); return }
     const { data, error } = await supabase.rpc('scarecrow_state')
-    if (error || data?.error) { showMsg(data?.error || 'エラーが発生しました', '#ff4444'); return }
+    if (error || data?.error) {
+      setLoadError(data?.error || error?.message || 'エラーが発生しました')
+      return
+    }
+    setLoadError(null)
     setState(data)
   }
 
@@ -102,6 +107,18 @@ export default function Scarecrow() {
     setLoading(false)
   }
 
+  if (loadError) {
+    return (
+      <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace', display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <div style={{ border:'1px solid #663333', background:'#100008', padding:'24px', textAlign:'center', maxWidth:'420px' }}>
+          <div style={{ color:'#ff6666', fontSize:'13px', marginBottom:'8px' }}>かかし修練場を読み込めませんでした</div>
+          <div style={{ color:'#996666', fontSize:'11px', marginBottom:'8px', wordBreak:'break-all' }}>{loadError}</div>
+          <div style={{ color:'#446688', fontSize:'10px', marginBottom:'16px' }}>※ supabase_scarecrow.sql が未適用の可能性があります</div>
+          <button onClick={() => nav('/game')} style={{ padding:'8px 20px', background:'none', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>← 街に戻る</button>
+        </div>
+      </div>
+    )
+  }
   if (!state) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh', fontFamily:'monospace' }}>読み込み中...</div>
 
   const session = state.session
