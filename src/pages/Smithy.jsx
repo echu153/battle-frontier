@@ -382,7 +382,10 @@ export default function Smithy() {
       if (s.type==='mp') return { type:'mp', value: baseVal*5 }
       return { type:s.type, value: baseVal }
     })
-    await supabase.from('player_equipment').update(slotsToColumns(newSlots)).eq('id', item.id)
+    const cols = slotsToColumns(newSlots)
+    // アーティファクト(古びた○○の進化先)の特殊能力は再鑑定で消さない（doReEvalと同じ保護）
+    if (item.bonus_effect === 'artifact') cols.bonus_effect = 'artifact'
+    await supabase.from('player_equipment').update(cols).eq('id', item.id)
     const newQty = owned - needed
     if (newQty <= 0) await supabase.from('player_items').delete().eq('id', sheetItem.id)
     else await supabase.from('player_items').update({ quantity: newQty }).eq('id', sheetItem.id)
