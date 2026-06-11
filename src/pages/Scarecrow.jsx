@@ -55,9 +55,6 @@ export default function Scarecrow() {
   const fetchState = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
-    // 開発中: 管理者アカウント限定
-    const { data: me } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
-    if (!me?.is_admin) { nav('/game'); return }
     const { data, error } = await supabase.rpc('scarecrow_state')
     if (error || data?.error) {
       setLoadError(data?.error || error?.message || 'エラーが発生しました')
@@ -75,20 +72,6 @@ export default function Scarecrow() {
       showMsg(data?.error || 'エラーが発生しました', '#ff4444')
     } else {
       showMsg(`🌾 修練開始！ ${selectedHours}時間後まで解除しなければ EXP+${data.exp_reward}`)
-      await fetchState()
-    }
-    setLoading(false)
-  }
-
-  // 開発用: 1分で完了するテスト修練
-  const startTest = async () => {
-    if (loading) return
-    setLoading(true)
-    const { data, error } = await supabase.rpc('scarecrow_start_test')
-    if (error || data?.error) {
-      showMsg(data?.error || 'エラーが発生しました', '#ff4444')
-    } else {
-      showMsg('🧪 1分テスト修練を開始しました')
       await fetchState()
     }
     setLoading(false)
@@ -276,10 +259,6 @@ export default function Scarecrow() {
                 fontFamily:'monospace', fontSize:'13px',
               }}>
               {loading ? '処理中...' : state.charges > 0 ? `🌾 ${selectedHours}時間の修練を開始する` : '修練回数がありません'}
-            </button>
-            <button onClick={startTest} disabled={loading || state.charges <= 0}
-              style={{ width:'100%', padding:'8px', marginTop:'8px', background:'#0a0a1a', border:'1px dashed #446688', color:'#88aacc', cursor: state.charges > 0 ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>
-              🧪 1分テスト修練を開始（開発用・チャージ1消費・EXP200）
             </button>
           </div>
         )}
