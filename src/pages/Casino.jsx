@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
 import { AREAS, getEffectiveCap, generateDropBonus, ARTIFACT_BASE_NAMES } from './Game'
 
 const SLOT_SYMBOLS = ['7️⃣', '⭐', '🔔', '🍇', '🍒', '🍋']
@@ -34,6 +35,7 @@ const BET_PRESETS = [10, 50, 100, 500, 1000]
 const RANK_LABELS = ['', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
 
 export default function Casino() {
+  const scarecrowBlock = useScarecrowBlock()
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
   const prevMedalsRef = useRef(null)
@@ -573,6 +575,7 @@ export default function Casino() {
     nav('/game')
   }
 
+  if (scarecrowBlock) return <ScarecrowBlockScreen endsAt={scarecrowBlock.ends_at} />
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
   return (

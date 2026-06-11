@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
 import { getWeaponGroup } from '../lib/stats'
 import {
   calcEffectiveStats,
@@ -779,6 +780,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
 }
 
 export default function Tenkyuu() {
+  const scarecrowBlock = useScarecrowBlock()
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
   const [equipment, setEquipment] = useState([])
@@ -863,6 +865,7 @@ export default function Tenkyuu() {
     setBattling(false)
   }
 
+  if (scarecrowBlock) return <ScarecrowBlockScreen endsAt={scarecrowBlock.ends_at} />
   if (!profile) {
     return <div style={{ color:'#c8a0ff', textAlign:'center', marginTop:'40vh', fontFamily:'monospace' }}>読み込み中...</div>
   }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
 import { sumClaimedFishingBonus, toFishingColumns } from '../lib/fishing'
 
 const FISH_SELL_PRICE = { f:150, e:450, d:1200, c:3000, b:7500, a:18000, s:45000, ss:120000, sss:300000 }
@@ -184,6 +185,7 @@ const calcCaughtFish = (location, startAt, now) => {
 }
 
 export default function Fishing() {
+  const scarecrowBlock = useScarecrowBlock()
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
   const [caughtFish, setCaughtFish] = useState([])
@@ -391,6 +393,7 @@ const getElapsedText = () => {
     return Math.floor(elapsed / avg)
   }
 
+  if (scarecrowBlock) return <ScarecrowBlockScreen endsAt={scarecrowBlock.ends_at} />
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
   const isFishing = profile.is_fishing || false

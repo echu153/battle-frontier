@@ -19,6 +19,7 @@ import Exchange from './pages/Exchange'
 import Titles from './pages/Titles'
 import Admin from './pages/Admin'
 import Moderation from './pages/Moderation'
+import Scarecrow from './pages/Scarecrow'
 import Dungeon from './pages/Dungeon'
 import Pets from './pages/Pets'
 import Charms from './pages/Charms'
@@ -148,6 +149,7 @@ function App() {
         <Route path="/titles" element={session ? <Titles /> : <Navigate to="/login" />} />
         <Route path="/admin" element={session ? <Admin /> : <Navigate to="/login" />} />
         <Route path="/moderation" element={session ? <Moderation /> : <Navigate to="/login" />} />
+        <Route path="/scarecrow" element={session ? <Scarecrow /> : <Navigate to="/login" />} />
         <Route path="/dungeon" element={session ? <Dungeon /> : <Navigate to="/login" />} />
         <Route path="/pets" element={session ? <Pets /> : <Navigate to="/login" />} />
         <Route path="/charms" element={session ? <Charms /> : <Navigate to="/login" />} />

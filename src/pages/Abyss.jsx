@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
 import { getWeaponGroup } from '../lib/stats'
 import {
   calcEffectiveStats,
@@ -649,6 +650,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
 }
 
 export default function Abyss() {
+  const scarecrowBlock = useScarecrowBlock()
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
   const [equipment, setEquipment] = useState([])
@@ -809,6 +811,7 @@ export default function Abyss() {
     return `${m}分`
   }
 
+  if (scarecrowBlock) return <ScarecrowBlockScreen endsAt={scarecrowBlock.ends_at} />
   if (!profile || !status) {
     return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh', fontFamily:'monospace' }}>読み込み中...</div>
   }

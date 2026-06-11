@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
 import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats } from '../constants/pets'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
@@ -168,6 +169,7 @@ function calcDamage(rawAtk, guard) {
 }
 
 export default function Dungeon() {
+  const scarecrowBlock = useScarecrowBlock()
   const nav = useNavigate()
   const [allowed, setAllowed] = useState(undefined)
   const [pet, setPet] = useState(FALLBACK_PET)
@@ -761,6 +763,7 @@ export default function Dungeon() {
   // 街に戻る（探索中なら現在の進捗で精算してから離脱）
   const leaveToTown = async () => { await finishRun(false); nav('/game') }
 
+  if (scarecrowBlock) return <ScarecrowBlockScreen endsAt={scarecrowBlock.ends_at} />
   if (allowed === undefined) return <Center>読み込み中...</Center>
   if (!allowed) return <Center>このページは開発中です（権限がありません）<br /><Btn onClick={() => nav('/game')}>🏰 街に戻る</Btn></Center>
 
