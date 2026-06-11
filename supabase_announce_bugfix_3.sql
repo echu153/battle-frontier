@@ -1,7 +1,19 @@
 -- ============================================================
--- お知らせ: 不具合修正（第3弾）
---   announcements へ INSERT。category='bug'。タイトルに日付は入れない（created_atで自動表示）。
+-- お知らせ: 不具合修正（第3弾・再登録版）
+--   旧バージョン（ネタバレ表記入り）を1件だけ削除してから、修正版を再登録。
+--   category='bug'。タイトルに日付は入れない（created_atで自動表示）。
 -- ============================================================
+
+-- 1) 直近に登録した第3弾（最新の「不具合修正のお知らせ」1件）を削除
+DELETE FROM announcements
+WHERE id = (
+  SELECT id FROM announcements
+  WHERE title = '不具合修正のお知らせ' AND category = 'bug'
+  ORDER BY created_at DESC
+  LIMIT 1
+);
+
+-- 2) 修正版を再登録
 INSERT INTO announcements (title, content, category, is_active, created_at)
 VALUES (
   '不具合修正のお知らせ',
