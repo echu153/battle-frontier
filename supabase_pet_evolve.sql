@@ -42,13 +42,13 @@ begin
   -- 敵ごとの固定EXP（強さ＝初登場階の能力に比例。階層では変わらない）
   -- 未知の敵のみ階層フォールバック（新ダンジョン追加時はこの表に追記する）
   v_exp_gain := case p_enemy
-    when 'スライム' then 2
-    when 'コウモリ' then 5
-    when '毒キノコ' then 7
-    when 'ゴブリン' then 10
-    when '野良犬'   then 12
-    when '盗賊'     then 13
-    else greatest(1, round((3 + v_floor) * 1.1)::int) end;
+    when 'スライム' then 4
+    when 'コウモリ' then 7
+    when '毒キノコ' then 10
+    when 'ゴブリン' then 13
+    when '野良犬'   then 17
+    when '盗賊'     then 21
+    else greatest(1, 3 + v_floor) end;
 
   select * into v_pet from pets where id = v_run.pet_id and owner_id = auth.uid();
   if not found then raise exception 'pet not found'; end if;
