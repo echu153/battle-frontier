@@ -237,6 +237,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
         } else if (cs && cs.skills) { mpShort = true }
       }
       if (!skillUsed) {
+        if (mpShort) logs.push({ text: `💧 MPが足りなくてスキルが使えない！`, color: '#6699ff' })
         const baseAtk = isMagical ? effBuff.matk : effBuff.atk
         const eDef = isMagical ? BOSS_MDEF : BOSS_DEF
         const baseDmg = Math.max(1, Math.floor(baseAtk * baseAtk / Math.max(1, baseAtk + eDef)) + Math.floor(Math.random() * 4))
@@ -249,7 +250,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
         }
         totalDamage += finalDmg
         const critText = isCrit ? ' 💥クリティカル！' : ''
-        logs.push({ text: `${prefix}あなたの攻撃！ ${BOSS_NAME}に${fmt(finalDmg)}ダメージ！${critText}${mpShort?'（MP不足でスキル不発）':''}`, color: isCrit ? '#ff4444' : '#ffcc00' })
+        logs.push({ text: `${prefix}あなたの攻撃！ ${BOSS_NAME}に${fmt(finalDmg)}ダメージ！${critText}`, color: isCrit ? '#ff4444' : '#ffcc00' })
         if (expandedSkillSet.length > 0) skillIndex++
       }
     }

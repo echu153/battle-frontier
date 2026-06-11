@@ -206,13 +206,21 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       : (skillIndex % (expandedSkillSet.length || 1))
     const nextSkill = expandedSkillSet.length > 0 ? expandedSkillSet[Math.max(0, peekIdx)]?.skills : null
     const nextSkillName = nextSkill?.name || null
-    const isSureHit = nextSkillName === '絶影狙撃'
-    // バフ・回復スキルは自分にかけるものなので敵に回避されない
-    const isSelfSkill = nextSkill && (nextSkill.type === '強化' || nextSkill.type === '回復')
+    // MP不足なら今ターンはスキル不可：明示メッセージを出して通常攻撃にフォールバック
+    let mpLack = false
+    if (nextSkill) {
+      let peekMpCost = Math.floor((isArtifact ? (nextSkill.mp_cost||0)*2 : (nextSkill.mp_cost||0)) * passiveMpCostMult)
+      if (nextSkill.name === 'マナボルト') peekMpCost = Math.max(1, Math.floor(playerMp * 0.1))
+      mpLack = playerMp < peekMpCost
+      if (mpLack) logs.push({ text:`💧 MPが足りなくてスキルが使えない！`, color:'#6699ff' })
+    }
+    const isSureHit = !mpLack && nextSkillName === '絶影狙撃'
+    // バフ・回復スキルは自分にかけるものなので敵に回避されない（MP不足時は通常攻撃なので回避判定あり）
+    const isSelfSkill = !mpLack && nextSkill && (nextSkill.type === '強化' || nextSkill.type === '回復')
     const skillExtraHit = (nextSkillName === '連装銃撃' && profile.class === '魔銃士' && rtCur >= 2) ? 10 : 0
     const effectiveEnemyEvasion = (isSureHit || isSelfSkill) ? 0 : Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit)
     if (effectiveEnemyEvasion > 0 && Math.random()*100 < effectiveEnemyEvasion) {
-      logs.push({ text:`${prefix}${nextSkillName ? `${nextSkillName}！` : '攻撃！'} しかし${enemy.name}に回避された！`, color:'#446688' })
+      logs.push({ text:`${prefix}${nextSkillName && !mpLack ? `${nextSkillName}！` : '攻撃！'} しかし${enemy.name}に回避された！`, color:'#446688' })
       if (expandedSkillSet.length > 0) skillIndex++
       playerAttacking = false
       if (mods.healOnPlayerAction) doHealOnPlayerAction()
@@ -223,7 +231,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk.lockedSkill)
       if (lockedIdx >= 0) skillIndex = lockedIdx
     }
-    let skillUsed = false, mpShort = false
+    let skillUsed = false
     if (expandedSkillSet.length > 0) {
       const cs = expandedSkillSet[skillIndex % expandedSkillSet.length]
       let mpCost = Math.floor((isArtifact ? (cs?.skills?.mp_cost||0)*2 : (cs?.skills?.mp_cost||0)) * passiveMpCostMult)
@@ -315,7 +323,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
           if (enemyHp <= 0) { skillIndex++; playerAttacking=false; if (mods.healOnPlayerAction) doHealOnPlayerAction(); return }
         }
         skillUsed = true; skillIndex++
-      } else if (cs && cs.skills) { mpShort = true }
+      }
     }
     if (!skillUsed) {
       const baseAtk = isMagical ? effBuff.matk : effBuff.atk
@@ -329,7 +337,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         logs.push({ text: `🗡 ヴァルブレイカーの効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
       }
       const critText = isCrit ? '💥クリティカル！ ' : ''
-      logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！${mpShort?'（MP不足でスキル不発）':''}`, color:'#ffcc00' })
+      logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
       if (finalDmg > 0) lastPlayerHitType = isMagical ? 'magical' : 'physical'
       maybeCounterFlat(finalDmg)
       if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
