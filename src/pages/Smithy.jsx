@@ -222,6 +222,7 @@ export default function Smithy() {
     const serverStoneCount = serverStoneItem?.quantity || 0
     const serverSameItems = (serverEquip || []).filter(e =>
       e.weapons?.name === item.weapons.name && e.id !== item.id && !e.equipped && !e.is_favorite
+      && !(e.enhance_plus > 0)  // 強化済み(+1以上)の装備は素材にしない
     )
     const serverTotalAvailable = serverSameItems.length + serverStoneCount
 
@@ -505,7 +506,7 @@ export default function Smithy() {
         {tab === 'enhance' && (
           <div>
             <div style={{ color:'#446688', fontSize:'11px', marginBottom:'8px' }}>
-              同じ名前の装備または同ランクの強化石を素材に使って強化できます。※古びた○○は強化不可
+              同じ名前の装備または同ランクの強化石を素材に使って強化できます。※古びた○○は強化不可。+1以上に強化済みの装備は素材になりません
             </div>
             {slots.map(slot => {
               const slotItems = sortEquipment(equipment.filter(e => e.slot === slot), sortKey)
@@ -521,7 +522,7 @@ export default function Smithy() {
                     const rankCosts = ENHANCE_COST_BY_RANK[w.rarity] || ENHANCE_COST_BY_RANK.ss
                     const cost = rankCosts[nextPlus] || rankCosts[rankCosts.length - 1]
                     const materialCount = MATERIAL_COUNT(plus)
-                    const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped).length
+                    const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped && !e.is_favorite && !(e.enhance_plus > 0)).length
                     const stoneCount = getStoneCount(w.rarity)
                     const totalMaterials = sameCount + stoneCount
                     const canEnhance = !isArtifactBase && profile.gold >= cost && totalMaterials >= materialCount
