@@ -209,8 +209,8 @@ export default function Profile() {
               {profile.username}
             </div>
             <div style={{ color:'#446688', fontSize:'11px' }}>クラス: <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{('★'.repeat((profile.retraining||{})[profile.class]||0))}</span></div>
-            <div style={{ color:'#446688', fontSize:'11px' }}>キャラクターLV: <span style={{color:'#ffcc00'}}>{profile.char_lv ?? profile.lv}</span></div>
             <div style={{ color:'#446688', fontSize:'11px' }}>クラスLV: <span style={{color:'#ffcc00'}}>{(classLevels.find(c => c.class_name === profile.class)?.lv) ?? profile.lv}</span></div>
+            <div style={{ color:'#446688', fontSize:'11px' }}>キャラクターLV: <span style={{color:'#ffcc00'}}>{profile.char_lv ?? profile.lv}</span></div>
             <div style={{ color:'#446688', fontSize:'11px' }}>総合力: <span style={{color:'#44ff88'}}>{total}</span> <span style={{color: totalRank.color}}>【{totalRank.rank}】</span></div>
           </div>
         </div>
