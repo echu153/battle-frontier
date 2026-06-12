@@ -934,7 +934,7 @@ export default function Dungeon() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#000820', color: '#88ccff', fontFamily: 'monospace', padding: '16px' }}>
+    <div style={{ minHeight: '100vh', background: '#000820', color: '#88ccff', fontFamily: 'monospace', padding: '10px 8px' }}>
       <style>{`
         @keyframes bf-dungeon-shake-hit {
           0%,100% { transform: translate(0,0); }
@@ -966,12 +966,12 @@ export default function Dungeon() {
           15%  { transform: translate(-50%, -4px); opacity: 1; }
           100% { transform: translate(-50%, -18px); opacity: 0; }
         }
-        /* PC: メイン＋右側ログの2カラム。狭い画面では従来どおり縦積み */
-        .bf-dg-wrap { max-width: 480px; margin: 0 auto; }
+        /* マップは画面幅いっぱいに広げる。狭い画面では従来どおり縦積み */
+        .bf-dg-wrap { max-width: min(96vw, 820px); margin: 0 auto; }
         .bf-dg-side { display: none; }
         @media (min-width: 900px) {
-          .bf-dg-wrap { display: flex; gap: 16px; max-width: 920px; align-items: flex-start; }
-          .bf-dg-main { flex: 1; min-width: 0; max-width: 520px; }
+          .bf-dg-wrap { display: flex; gap: 16px; max-width: 1100px; align-items: flex-start; }
+          .bf-dg-main { flex: 1; min-width: 0; max-width: 680px; }
           .bf-dg-side { display: block; width: 360px; position: sticky; top: 16px; }
           .bf-dg-log-mobile { display: none; }
         }
