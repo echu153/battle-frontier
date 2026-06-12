@@ -202,10 +202,11 @@ export default function Dungeon() {
   const [isAdmin, setIsAdmin] = useState(false) // 開発アカウント（comingSoonダンジョンに入れる）
   const [transition, setTransition] = useState(null) // フロア遷移演出 { floor, black, title }
   const [lockedOut, setLockedOut] = useState(false)   // 別端末でプレイ中＝この端末はロック
-  const [bgmOn, setBgmOn] = useState(() => localStorage.getItem('bf_dg_bgm') !== '0') // BGM ON/OFF
+  const [bgmOn, setBgmOn] = useState(false) // BGM ON/OFF（初期オフ）。追憶の遺跡(d30)でのみ再生
   const audioRef = useRef(null)
+  const bgmDungeon = dungeon?.id === 'd30' // BGM対象ダンジョン
 
-  // BGM：探索中かつONでループ再生（ブラウザの自動再生制限のため、操作時にも再生を試みる）
+  // BGM：対象ダンジョンの探索中かつONでループ再生（自動再生制限のため操作時にも再生を試みる）
   useEffect(() => {
     if (!audioRef.current) {
       const a = new Audio(`/dungeon_bgm.mp3?v=${ASSET_VER}`)
@@ -217,11 +218,11 @@ export default function Dungeon() {
   useEffect(() => {
     const a = audioRef.current
     if (!a) return
-    if (bgmOn && status === 'exploring') { a.play().catch(() => {}) }
+    if (bgmOn && bgmDungeon && status === 'exploring') { a.play().catch(() => {}) }
     else { a.pause() }
-  }, [bgmOn, status])
-  const ensureBgm = () => { const a = audioRef.current; if (a && bgmOn && a.paused) a.play().catch(() => {}) }
-  const toggleBgm = () => setBgmOn((v) => { const nv = !v; localStorage.setItem('bf_dg_bgm', nv ? '1' : '0'); return nv })
+  }, [bgmOn, bgmDungeon, status])
+  const ensureBgm = () => { const a = audioRef.current; if (a && bgmOn && bgmDungeon && a.paused) a.play().catch(() => {}) }
+  const toggleBgm = () => setBgmOn((v) => !v)
   const gridRef = useRef(null)
   const [cellPx, setCellPx] = useState(0) // 1マスのピクセル幅（床をワールド固定で敷くため）
 
@@ -1111,10 +1112,12 @@ export default function Dungeon() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #003366', paddingBottom: 8, marginBottom: 10 }}>
           <div style={{ color: '#ffcc00', fontSize: 16, letterSpacing: 3 }}>BATTLE FRONTIER</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button onClick={toggleBgm} title="BGM ON/OFF"
-              style={{ background: bgmOn ? '#101a30' : '#0a0a14', border: `1px solid ${bgmOn ? '#0088ff' : '#334455'}`, color: bgmOn ? '#66bbff' : '#556677', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
-              {bgmOn ? '🔊' : '🔇'}
-            </button>
+            {bgmDungeon && (
+              <button onClick={toggleBgm} title="BGM ON/OFF"
+                style={{ background: bgmOn ? '#101a30' : '#0a0a14', border: `1px solid ${bgmOn ? '#0088ff' : '#334455'}`, color: bgmOn ? '#66bbff' : '#556677', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
+                {bgmOn ? '🔊 BGM' : '🔇 BGM'}
+              </button>
+            )}
             <Btn onClick={leaveToTown}>← 街に戻る</Btn>
           </div>
         </div>
