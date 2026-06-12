@@ -286,16 +286,20 @@ export const ASSET_VER = '2'
 // 静的画像(先頭/)にだけ ?v= を付けてキャッシュを無効化。外部URL(http...)はそのまま
 export const assetSrc = (src) => (src && src.startsWith('/') ? `${src}?v=${ASSET_VER}` : src)
 
-// ダンジョンのタイル画像（public/ に置いたファイルを /xxx.png で指定）。
-//  画像を用意したらパスを設定（例 '/dg_floor.png'）。null のままなら従来の色／絵文字表示。
+// ダンジョンのタイル画像（public/ に置いたファイルを /xxx.png で指定）。ダンジョンIDごとに設定。
+//  画像を用意したらパスを設定（例 '/dg_floor.png'）。未設定のダンジョンは従来の色／絵文字表示。
 //  床・壁＝背景画像（無ければ色）、階段・アイテム＝絵文字に画像を重ねる（無ければ絵文字のまま）。
 export const DUNGEON_TILES = {
-  floor:  '/dg_floor.png',   // 床
-  wall:   '/dg_wall.png',    // 壁
-  stairs: '/dg_stairs.png',  // 階段
-  item:   '/dg_item.png',    // 落ちているアイテム（共通マーカー）
+  // 深淵の遺跡(30F)専用タイル
+  d30: {
+    floor:  '/dg_floor.png',   // 床
+    wall:   '/dg_wall.png',    // 壁
+    stairs: '/dg_stairs.png',  // 階段
+    item:   '/dg_item.png',    // 落ちているアイテム（共通マーカー）
+  },
+  // 初級の洞窟(d10)は従来の色・絵文字のまま（タイル未設定）
 }
-export const dgTileSrc = (key) => assetSrc(DUNGEON_TILES[key] || null)
+export const dgTileSrc = (dungeonId, key) => assetSrc(DUNGEON_TILES[dungeonId]?.[key] || null)
 
 // 種族デフォルト画像（進化済みなら進化形イラスト）。未設定なら null
 export function speciesImage(pet) {

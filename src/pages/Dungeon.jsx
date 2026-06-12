@@ -850,10 +850,10 @@ export default function Dungeon() {
     floorMem: '#0a1526',   // 記憶の床
     wallMem: '#313c52',    // 記憶の壁
   }
-  const floorTile = dgTileSrc('floor')
-  const wallTile = dgTileSrc('wall')
-  const stairsTile = dgTileSrc('stairs')
-  const itemTile = dgTileSrc('item')
+  const floorTile = dgTileSrc(dungeon?.id, 'floor')
+  const wallTile = dgTileSrc(dungeon?.id, 'wall')
+  const stairsTile = dgTileSrc(dungeon?.id, 'stairs')
+  const itemTile = dgTileSrc(dungeon?.id, 'item')
   const cellAt = (x, y) => {
     if (!inBounds(x, y)) return { ch: '', bg: C.unknown }
     const vis = isVisible(x, y)
