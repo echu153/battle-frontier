@@ -189,6 +189,22 @@ export default function Dungeon() {
   const [dungeon, setDungeon] = useState(null) // 選択中のダンジョン定義
   const [isAdmin, setIsAdmin] = useState(false) // 開発アカウント（comingSoonダンジョンに入れる）
   const [transition, setTransition] = useState(null) // フロア遷移演出 { floor, black, title }
+  const gridRef = useRef(null)
+  const [cellPx, setCellPx] = useState(0) // 1マスのピクセル幅（床をワールド固定で敷くため）
+
+  // グリッドの実寸からマスのpxを測る（レスポンシブ対応）
+  useEffect(() => {
+    const measure = () => {
+      const el = gridRef.current
+      if (!el) return
+      setCellPx((el.clientWidth - 12) / VW) // padding 6*2 を除く
+    }
+    measure()
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null
+    if (ro && gridRef.current) ro.observe(gridRef.current)
+    window.addEventListener('resize', measure)
+    return () => { if (ro) ro.disconnect(); window.removeEventListener('resize', measure) }
+  }, [state])
 
   // タイル画像（床/壁/階段/アイテム）を選択ダンジョンが決まった時点でプリロード。
   // 初めて見えたマスで画像読込待ちにならず即時表示される。
@@ -638,9 +654,15 @@ export default function Dungeon() {
         // 最短距離マップに沿って詰める（距離が縮まる隣マスを優先。袋小路や別ルートにも対応）
         cands = [{ x: e.x + 1, y: e.y }, { x: e.x - 1, y: e.y }, { x: e.x, y: e.y + 1 }, { x: e.x, y: e.y - 1 }]
           .filter((c) => dist.has(c.x + ',' + c.y))
-          .sort((a, b) => dist.get(a.x + ',' + a.y) - dist.get(b.x + ',' + b.y))
         const cur = dist.get(e.x + ',' + e.y)
         if (cur != null) cands = cands.filter((c) => dist.get(c.x + ',' + c.y) < cur) // 遠ざかる動きはしない
+        // 距離が同じならプレイヤーとの「大きい方の軸のズレ」を詰める手を優先＝
+        // 並走で永遠に距離が縮まらないのを防ぎ、必ず近づくようにする
+        const chase = (c) => {
+          const gx = Math.abs(c.x - player.x), gy = Math.abs(c.y - player.y)
+          return Math.max(gx, gy) * 1000 + (gx + gy) // チェビシェフ優先→マンハッタン
+        }
+        cands.sort((a, b) => (dist.get(a.x + ',' + a.y) - dist.get(b.x + ',' + b.y)) || (chase(a) - chase(b)))
       } else {
         cands = [{ x: e.x + 1, y: e.y }, { x: e.x - 1, y: e.y }, { x: e.x, y: e.y + 1 }, { x: e.x, y: e.y - 1 }]
           .sort(() => Math.random() - 0.5)
@@ -977,10 +999,13 @@ export default function Dungeon() {
         </div>
 
         {/* マップ（ビューポート）。接触時に少し震える戦闘演出 */}
-        <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', willChange: 'transform', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
-          {/* 床は画面に固定したシームレステクスチャ。1タイル=約4マスで自然な質感に */}
+        <div ref={gridRef} style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', willChange: 'transform', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
+          {/* 床はワールド(ダンジョン)に固定＝壁と一緒にスクロール。キャラ移動で床がズレない。1タイル=約4マス */}
           {floorTile && (
-            <div style={{ position: 'absolute', inset: 6, backgroundImage: `url(${floorTile})`, backgroundRepeat: 'repeat', backgroundSize: `${(4 / VW) * 100}% auto`, backgroundPosition: 'center', filter: 'brightness(0.72) saturate(0.95)', zIndex: 0, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', inset: 6, backgroundImage: `url(${floorTile})`, backgroundRepeat: 'repeat',
+              backgroundSize: cellPx > 0 ? `${cellPx * 4}px auto` : `${(4 / VW) * 100}% auto`,
+              backgroundPosition: cellPx > 0 ? `${-ox * cellPx}px ${-oy * cellPx}px` : 'center',
+              filter: 'brightness(0.72) saturate(0.95)', zIndex: 0, pointerEvents: 'none' }} />
           )}
           {/* 照明・ビネット：中央を明るく端を暗く＝1枚絵のような奥行きを出す */}
           {floorTile && (
