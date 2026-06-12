@@ -253,7 +253,7 @@ export default function Dungeon() {
     levelUpSeq.current += 1
     const id = levelUpSeq.current
     setLevelUp({ x, y, id })
-    const tid = setTimeout(() => setLevelUp((lu) => (lu && lu.id === id ? null : lu)), 4000)
+    const tid = setTimeout(() => setLevelUp((lu) => (lu && lu.id === id ? null : lu)), 3000)
     turnTimers.current.push(tid)
   }
   const spawnSeq = useRef(0) // 湧いた敵の連番ID用
@@ -1153,9 +1153,9 @@ export default function Dungeon() {
             return (
               <div key={levelUp.id} style={{
                 position: 'absolute', zIndex: 6, pointerEvents: 'none',
-                left: `${(vx + 0.5) * cellW}%`, top: `${(vy - 0.45) * cellH}%`,
+                left: `${(vx + 0.5) * cellW}%`, top: `${(vy - 0.2) * cellH}%`,
                 transform: 'translate(-50%, -100%)', width: W, height: H,
-                animation: 'bf-levelup-c 4s ease-out forwards',
+                animation: 'bf-levelup-c 3s ease-out forwards',
               }}>
                 {chars.map((ch, i) => {
                   const t = n > 1 ? i / (n - 1) : 0.5
@@ -1177,6 +1177,11 @@ export default function Dungeon() {
                       <span style={{
                         position: 'absolute', left: x, top: y - 2, transform: 'translate(-50%,-50%)',
                         fontSize: 16, opacity: 0, animation: `bf-sparkle 0.7s ease-out ${delay} forwards`,
+                      }}>✨</span>
+                      {/* 消える時のキラキラ（終盤に各文字でフラッシュ） */}
+                      <span style={{
+                        position: 'absolute', left: x, top: y - 2, transform: 'translate(-50%,-50%)',
+                        fontSize: 16, opacity: 0, animation: `bf-sparkle 0.7s ease-in ${2.2 + i * 0.08}s forwards`,
                       }}>✨</span>
                     </span>
                   )
