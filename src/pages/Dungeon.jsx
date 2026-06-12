@@ -6,7 +6,7 @@ import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, e
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
-const DUNGEON_BAG_MAX = 20 // ダンジョン中に持てる持ち物の上限（だっしゅつの翼は対象外）
+const DUNGEON_BAG_MAX = 20 // ダンジョン中に持てる持ち物の上限（だっしゅつの翼も含む）
 
 // ============================================================
 // 不思議のダンジョン風（一般公開）
@@ -39,7 +39,8 @@ function generateFloor(floorNum, dungeon) {
   const rooms = []
   for (let gy = 0; gy < RR; gy++) {
     for (let gx = 0; gx < RC; gx++) {
-      const rw = rand(3, CW - 2), rh = rand(3, CH - 2)
+      // 最低3×4（幅3・高さ4）以上の部屋にする（小さすぎる部屋を出さない）
+      const rw = rand(3, CW - 2), rh = rand(4, CH - 2)
       const rx = gx * CW + rand(1, CW - rw - 1)
       const ry = gy * CH + rand(1, CH - rh - 1)
       for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) grid[y][x] = '.'
@@ -460,8 +461,8 @@ export default function Dungeon() {
   // side: 'left'=自分/全般 / 'right'=敵の行動
   const addLog = (msg, side = 'left') => setLog((l) => [{ msg, side }, ...l].slice(0, 30))
 
-  // 持ち物の合計数（だっしゅつの翼は対象外＝消耗品＋戦利品）。上限を超えたら拾えない
-  const bagCount = () => Object.entries(inventory).filter(([k]) => k !== 'escape').reduce((s, [, q]) => s + (q || 0), 0) + lootBag.length
+  // 持ち物の合計数（だっしゅつの翼も含む＝消耗品＋戦利品）。上限を超えたら拾えない
+  const bagCount = () => Object.values(inventory).reduce((s, q) => s + (q || 0), 0) + lootBag.length
   // ルート品を持ち物へ（表示用 label/emoji を付与）。素は同種でスタック（1枠扱い）、それ以外は個別
   const addLootToBag = (raw) => {
     const loot = { ...raw, ...lootDisplay(raw) }
@@ -1141,7 +1142,7 @@ export default function Dungeon() {
           return (
             <div style={{ marginTop: 12, background: '#000610', border: `1px solid ${dropMode ? '#cc7755' : '#113355'}`, padding: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <div style={{ color: '#88aacc', fontSize: 11 }}>🎒 持ち物 <span style={{ color: bagCount() >= DUNGEON_BAG_MAX ? '#ff7777' : '#5e7fa0' }}>{bagCount()}/{DUNGEON_BAG_MAX}</span>（翼は対象外）{dropMode && <span style={{ color: '#ff9966' }}>　捨てるモード：押すと足元に置く</span>}</div>
+                <div style={{ color: '#88aacc', fontSize: 11 }}>🎒 持ち物 <span style={{ color: bagCount() >= DUNGEON_BAG_MAX ? '#ff7777' : '#5e7fa0' }}>{bagCount()}/{DUNGEON_BAG_MAX}</span>（翼も含む）{dropMode && <span style={{ color: '#ff9966' }}>　捨てるモード：押すと足元に置く</span>}</div>
                 <button onClick={() => setDropMode((d) => !d)}
                   style={{ background: dropMode ? '#2a1000' : '#0a1424', border: `1px solid ${dropMode ? '#ff9966' : '#335588'}`, color: dropMode ? '#ff9966' : '#88aacc', padding: '3px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
                   🗑 捨てる{dropMode ? '（ON）' : ''}

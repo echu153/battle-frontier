@@ -58,7 +58,7 @@ export default function PetStorage() {
 
   if (allowed === null) return <Center>読み込み中...</Center>
 
-  const bagTotal = Object.entries(items).filter(([k]) => k !== 'escape').reduce((s, [, q]) => s + (q || 0), 0)
+  const bagTotal = Object.values(items).reduce((s, q) => s + (q || 0), 0)
   const storeKeys = Object.keys(storage).filter((k) => (storage[k] || 0) > 0)
   const bagKeys = Object.keys(items).filter((k) => (items[k] || 0) > 0)
 
@@ -74,7 +74,7 @@ export default function PetStorage() {
 
         <div style={{ color: '#5e7fa0', fontSize: 11, lineHeight: 1.6, marginBottom: 12 }}>
           購入したアイテムやダンジョンの戦利品はここに預かります。ダンジョンで使う物（翼・木の実・おにぎり）は「→持ち物」で移してから潜ってください。<br />
-          持ち物 <span style={{ color: '#aaddff' }}>{bagTotal}/{bagMax}</span>（翼以外）<span style={{ color: '#5e7fa0' }}>　※ダンジョンを初めて踏破するごとに上限+10</span>
+          持ち物 <span style={{ color: '#aaddff' }}>{bagTotal}/{bagMax}</span><span style={{ color: '#5e7fa0' }}>　※ダンジョンを初めて踏破するごとに上限+10</span>
         </div>
 
         {/* 倉庫の中身 */}
