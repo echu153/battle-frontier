@@ -1048,10 +1048,11 @@ export default function Dungeon() {
               '--lx': c.fx.lunge ? `${Math.sign(c.fx.lunge.dx) * 40}%` : '0%',
               '--ly': c.fx.lunge ? `${Math.sign(c.fx.lunge.dy) * 40}%` : '0%',
             } : null
-            // 壁マスは「1枚で完結した岩タイル」を1マス＝1枚で表示（4種からマスごとにランダム）。
+            // 壁マスは「1枚で完結した岩タイル」を1マス＝1枚で表示（複数種からマスごとにランダム）。
+            // 壁は暗め＋やや寒色グレー寄りにして、暖色の床とハッキリ見分けられるようにする。
             const wallImg = c.wallImg
             const tileStyle = wallImg
-              ? { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+              ? { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6) saturate(0.55) hue-rotate(-8deg)' }
               : { backgroundImage: 'none' }
             // グリッド線対策：マス間のサブピクセル隙間を「そのマス自身の色」で埋める。
             //  透過の床マスはそのまま（継ぎ目なし）、壁マス・暗いマスは自色（暗）で塞ぐ。
