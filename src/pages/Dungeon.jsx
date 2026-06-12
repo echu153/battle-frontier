@@ -997,12 +997,21 @@ export default function Dungeon() {
           75%  { transform: translate(-50%, 8px); opacity: 1; }
           100% { transform: translate(-50%, 14px); opacity: 0; }
         }
-        @keyframes bf-levelup {
-          0%   { transform: translate(-50%, -90%) scale(0.7); opacity: 0; }
-          12%  { transform: translate(-50%, -100%) scale(1.06); opacity: 1; }
-          20%  { transform: translate(-50%, -100%) scale(1); opacity: 1; }
-          85%  { transform: translate(-50%, -104%) scale(1); opacity: 1; }
-          100% { transform: translate(-50%, -118%) scale(1); opacity: 0; }
+        @keyframes bf-levelup-c {
+          0%   { transform: translate(-50%, -100%); opacity: 0; }
+          8%   { opacity: 1; }
+          85%  { transform: translate(-50%, -104%); opacity: 1; }
+          100% { transform: translate(-50%, -120%); opacity: 0; }
+        }
+        @keyframes bf-letter-pop {
+          0%   { opacity: 0; transform: translate(-50%, 40%) rotate(var(--r,0deg)) scale(0.3); }
+          60%  { opacity: 1; transform: translate(-50%, -60%) rotate(var(--r,0deg)) scale(1.25); }
+          100% { opacity: 1; transform: translate(-50%, -50%) rotate(var(--r,0deg)) scale(1); }
+        }
+        @keyframes bf-sparkle {
+          0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.2) rotate(0deg); }
+          35%  { opacity: 1; transform: translate(-50%, -50%) scale(1.5) rotate(40deg); }
+          100% { opacity: 0; transform: translate(-50%, -50%) scale(0.6) rotate(90deg); }
         }
         /* マップは画面幅いっぱいに広げる */
         .bf-dg-wrap { max-width: min(96vw, 820px); margin: 0 auto; }
@@ -1133,35 +1142,45 @@ export default function Dungeon() {
               }}>{p.text}</span>
             )
           })}
-          {/* レベルアップ：キャラ上に虹色アーチで LEVEL UP（約4秒） */}
+          {/* レベルアップ：キャラの少し上に虹色アーチで LEVEL UP を1文字ずつ＋各文字でキラキラ（約4秒） */}
           {levelUp && (() => {
             const vx = levelUp.x - ox, vy = levelUp.y - oy
             if (vx < 0 || vx >= VW || vy < 0 || vy >= VH) return null
             const cellW = 100 / VW, cellH = 100 / VH
+            const W = 200, H = 96, cx = W / 2, cy = 86, rx = 84, ry = 64
+            const chars = 'LEVEL UP'.split('')
+            const n = chars.length
             return (
               <div key={levelUp.id} style={{
                 position: 'absolute', zIndex: 6, pointerEvents: 'none',
-                left: `${(vx + 0.5) * cellW}%`, top: `${(vy - 0.2) * cellH}%`,
-                transform: 'translate(-50%, -100%)', width: 150, height: 70,
-                animation: 'bf-levelup 4s ease-out forwards',
+                left: `${(vx + 0.5) * cellW}%`, top: `${(vy - 0.75) * cellH}%`,
+                transform: 'translate(-50%, -100%)', width: W, height: H,
+                animation: 'bf-levelup-c 4s ease-out forwards',
               }}>
-                <svg viewBox="0 0 150 70" width="150" height="70" style={{ overflow: 'visible' }}>
-                  <defs>
-                    <path id={`bf-arc-${levelUp.id}`} d="M 8 64 A 67 56 0 0 1 142 64" fill="none" />
-                    <linearGradient id={`bf-rainbow-${levelUp.id}`} x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="#ff3b3b" />
-                      <stop offset="20%" stopColor="#ff9e2c" />
-                      <stop offset="40%" stopColor="#ffe93b" />
-                      <stop offset="60%" stopColor="#44dd55" />
-                      <stop offset="80%" stopColor="#3bb0ff" />
-                      <stop offset="100%" stopColor="#b46bff" />
-                    </linearGradient>
-                  </defs>
-                  <text fontFamily="monospace" fontSize="19" fontWeight="bold" letterSpacing="1"
-                    fill={`url(#bf-rainbow-${levelUp.id})`} stroke="#000" strokeWidth="0.6" paintOrder="stroke">
-                    <textPath href={`#bf-arc-${levelUp.id}`} startOffset="50%" textAnchor="middle">LEVEL UP</textPath>
-                  </text>
-                </svg>
+                {chars.map((ch, i) => {
+                  const t = n > 1 ? i / (n - 1) : 0.5
+                  const ang = Math.PI * (1 - t)              // 180°→0°（左から右へ上を通る）
+                  const x = cx + rx * Math.cos(ang)
+                  const y = cy - ry * Math.sin(ang)
+                  const rot = (t - 0.5) * 120                // 端ほど傾けてアーチに沿わせる
+                  const hue = Math.round(t * 300)            // 赤→紫の虹
+                  const delay = `${i * 0.13}s`
+                  if (ch === ' ') return null
+                  return (
+                    <span key={i}>
+                      <span style={{
+                        position: 'absolute', left: x, top: y, '--r': `${rot}deg`,
+                        transformOrigin: 'center', fontFamily: 'monospace', fontWeight: 'bold', fontSize: 22,
+                        color: `hsl(${hue},90%,62%)`, textShadow: '0 0 2px #000, 0 1px 3px #000, 0 0 7px rgba(255,255,255,0.5)',
+                        opacity: 0, animation: `bf-letter-pop 0.5s ease-out ${delay} forwards`,
+                      }}>{ch}</span>
+                      <span style={{
+                        position: 'absolute', left: x, top: y - 2, transform: 'translate(-50%,-50%)',
+                        fontSize: 16, opacity: 0, animation: `bf-sparkle 0.7s ease-out ${delay} forwards`,
+                      }}>✨</span>
+                    </span>
+                  )
+                })}
               </div>
             )
           })()}
