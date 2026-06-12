@@ -292,7 +292,7 @@ export const assetSrc = (src) => (src && src.startsWith('/') ? `${src}?v=${ASSET
 export const DUNGEON_TILES = {
   // 深淵の遺跡(30F)専用タイル
   d30: {
-    floor:  '/dg_floor.png',   // 床
+    floor:  '/dg_floor2.png',  // 床（シームレス地面テクスチャ）
     wall:   '/dg_wall.png',    // 壁
     stairs: '/dg_stairs.png',  // 階段
     item:   '/dg_item.png',    // 落ちているアイテム（共通マーカー）

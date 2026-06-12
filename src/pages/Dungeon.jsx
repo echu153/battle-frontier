@@ -977,9 +977,14 @@ export default function Dungeon() {
 
         {/* マップ（ビューポート）。接触時に少し震える戦闘演出 */}
         <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', willChange: 'transform', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
-          {/* 床は画面に固定したリピートタイル（キャラが動いても床は動かない）。1タイル=1マス（キャラと同サイズ） */}
+          {/* 床は画面に固定したシームレステクスチャ。1タイル=約4マスで自然な質感に */}
           {floorTile && (
-            <div style={{ position: 'absolute', inset: 6, backgroundImage: `url(${floorTile})`, backgroundRepeat: 'repeat', backgroundSize: `${(1 / VW) * 100}% auto`, backgroundPosition: 'top left', filter: 'brightness(0.75)', zIndex: 0, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', inset: 6, backgroundImage: `url(${floorTile})`, backgroundRepeat: 'repeat', backgroundSize: `${(4 / VW) * 100}% auto`, backgroundPosition: 'center', filter: 'brightness(0.72) saturate(0.95)', zIndex: 0, pointerEvents: 'none' }} />
+          )}
+          {/* 照明・ビネット：中央を明るく端を暗く＝1枚絵のような奥行きを出す */}
+          {floorTile && (
+            <div style={{ position: 'absolute', inset: 6, zIndex: 0, pointerEvents: 'none',
+              background: 'radial-gradient(ellipse 60% 60% at 50% 50%, rgba(255,210,130,0.16) 0%, rgba(0,0,0,0) 45%), radial-gradient(ellipse 75% 75% at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,2,8,0.72) 100%)' }} />
           )}
           {Array.from({ length: VH }).map((_, vy) => Array.from({ length: VW }).map((_, vx) => {
             const x = ox + vx, y = oy + vy
