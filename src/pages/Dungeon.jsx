@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc } from '../constants/pets'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
@@ -850,23 +850,29 @@ export default function Dungeon() {
     floorMem: '#0a1526',   // 記憶の床
     wallMem: '#313c52',    // 記憶の壁
   }
+  const floorTile = dgTileSrc('floor')
+  const wallTile = dgTileSrc('wall')
+  const stairsTile = dgTileSrc('stairs')
+  const itemTile = dgTileSrc('item')
   const cellAt = (x, y) => {
     if (!inBounds(x, y)) return { ch: '', bg: C.unknown }
     const vis = isVisible(x, y)
     if (!vis) return { ch: '', bg: C.unknown } // 現在見えていない所は完全に真っ暗（記憶表示なし）
     const wall = state.grid[y][x] === '#'
+    // 床マスのタイル背景画像（壁はwallTile、それ以外はfloorTile）
+    const tileBg = wall ? wallTile : floorTile
     // 現在視界：エンティティ優先（足元は床色）
-    if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: C.floorVis, fx: fx.pet, poison: poisoned }
+    if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: C.floorVis, tileBg, fx: fx.pet, poison: poisoned }
     const e = state.enemies.find((o) => o.x === x && o.y === y)
-    if (e) return { ch: '👹', img: e.image || null, bg: C.floorVis, fx: fx.enemies[e.id] || null }
+    if (e) return { ch: '👹', img: e.image || null, bg: C.floorVis, tileBg, fx: fx.enemies[e.id] || null }
     const it = state.items.find((o) => o.x === x && o.y === y)
     if (it) {
       const ch = (it.kind === 'food' || it.kind === 'dropFood') ? (PET_ITEMS[it.key]?.emoji || '🍙')
         : it.kind === 'dropLoot' ? (it.loot?.emoji || '🎁') : '✨'
-      return { ch, bg: C.floorVis }
+      return { ch, bg: C.floorVis, tileBg, overlay: itemTile }
     }
-    if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: C.floorVis }
-    return { ch: '', bg: wall ? C.wallVis : C.floorVis }
+    if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: C.floorVis, tileBg, overlay: stairsTile }
+    return { ch: '', bg: wall ? C.wallVis : C.floorVis, tileBg }
   }
 
   const adjClick = (vx, vy) => {
@@ -956,7 +962,14 @@ export default function Dungeon() {
             const poisonFilter = c.poison ? 'sepia(0.6) hue-rotate(230deg) saturate(1.8) drop-shadow(0 0 3px #aa55ff)' : 'none'
             const inner = c.img
               ? <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: poisonFilter }} />
-              : <span style={{ filter: poisonFilter }}>{c.ch}</span>
+              : (
+                <span style={{ filter: poisonFilter, position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+                  {c.ch}
+                  {/* 階段・アイテムのカスタム画像（無ければonErrorで隠れ絵文字のまま） */}
+                  {c.overlay && <img src={c.overlay} alt="" onError={(ev) => { ev.target.style.display = 'none' }}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />}
+                </span>
+              )
             const anims = []
             if (c.fx?.lunge) anims.push('bf-lunge 0.26s ease-out')
             if (c.fx?.flash) anims.push('bf-flash 0.42s ease-in-out')
@@ -968,7 +981,7 @@ export default function Dungeon() {
             } : null
             return (
               <div key={`${vx}-${vy}`} onClick={() => clickable && adjClick(vx, vy)}
-                style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: `0 0 0 0.6px ${c.bg}` }}>
+                style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, backgroundImage: c.tileBg ? `url(${c.tileBg})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: `0 0 0 0.6px ${c.bg}` }}>
                 {fxStyle ? <div key={`fx${fx.t}`} style={fxStyle}>{inner}</div> : inner}
               </div>
             )
