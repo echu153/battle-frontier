@@ -1051,10 +1051,12 @@ export default function Dungeon() {
             // 壁マスも床と同じくワールド固定で連続表示＝マス目（1マスごとの継ぎ目）が消える。
             const wallImg = c.wallImg
             const WALLT = 3 // 壁テクスチャ1枚=約3マス
+            // 壁は暗く＋ややグレー寄りにして、暖色の床と色で見分けられるようにする（模様は維持）
+            const wallFilter = 'brightness(0.55) saturate(0.45)'
             const tileStyle = wallImg
               ? (cellPx > 0
-                ? { backgroundImage: `url(${wallImg})`, backgroundRepeat: 'repeat', backgroundSize: `${cellPx * WALLT}px ${cellPx * WALLT}px`, backgroundPosition: `${-x * cellPx}px ${-y * cellPx}px` }
-                : { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center' })
+                ? { backgroundImage: `url(${wallImg})`, backgroundRepeat: 'repeat', backgroundSize: `${cellPx * WALLT}px ${cellPx * WALLT}px`, backgroundPosition: `${-x * cellPx}px ${-y * cellPx}px`, filter: wallFilter }
+                : { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: wallFilter })
               : { backgroundImage: 'none' }
             // グリッド線対策：マス間のサブピクセル隙間を「そのマス自身の色」で埋める。
             //  透過の床マス・連続表示の壁マスはそのまま（継ぎ目なし）、暗いマスだけ自色で塞ぐ。
