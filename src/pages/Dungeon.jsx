@@ -203,6 +203,7 @@ export default function Dungeon() {
   const [transition, setTransition] = useState(null) // フロア遷移演出 { floor, black, title }
   const [lockedOut, setLockedOut] = useState(false)   // 別端末でプレイ中＝この端末はロック
   const [bgmOn, setBgmOn] = useState(false) // BGM ON/OFF（初期オフ）。追憶の遺跡(d30)でのみ再生
+  const [bgmVol, setBgmVol] = useState(() => { const v = parseInt(localStorage.getItem('bf_dg_bgmvol') || '35', 10); return isNaN(v) ? 35 : Math.min(100, Math.max(0, v)) }) // 0〜100
   const audioRef = useRef(null)
   const bgmDungeon = dungeon?.id === 'd30' // BGM対象ダンジョン
 
@@ -210,11 +211,16 @@ export default function Dungeon() {
   useEffect(() => {
     if (!audioRef.current) {
       const a = new Audio(`/dungeon_bgm.mp3?v=${ASSET_VER}`)
-      a.loop = true; a.volume = 0.35
+      a.loop = true; a.volume = bgmVol / 100
       audioRef.current = a
     }
     return () => { if (audioRef.current) { audioRef.current.pause() } }
   }, [])
+  // 音量変更を即時反映＋保存
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = bgmVol / 100
+    localStorage.setItem('bf_dg_bgmvol', String(bgmVol))
+  }, [bgmVol])
   useEffect(() => {
     const a = audioRef.current
     if (!a) return
@@ -1113,10 +1119,14 @@ export default function Dungeon() {
           <div style={{ color: '#ffcc00', fontSize: 16, letterSpacing: 3 }}>BATTLE FRONTIER</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {bgmDungeon && (
-              <button onClick={toggleBgm} title="BGM ON/OFF"
-                style={{ background: bgmOn ? '#101a30' : '#0a0a14', border: `1px solid ${bgmOn ? '#0088ff' : '#334455'}`, color: bgmOn ? '#66bbff' : '#556677', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
-                {bgmOn ? '🔊 BGM' : '🔇 BGM'}
-              </button>
+              <>
+                <button onClick={toggleBgm} title="BGM ON/OFF"
+                  style={{ background: bgmOn ? '#101a30' : '#0a0a14', border: `1px solid ${bgmOn ? '#0088ff' : '#334455'}`, color: bgmOn ? '#66bbff' : '#556677', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
+                  {bgmOn ? '🔊 BGM' : '🔇 BGM'}
+                </button>
+                <input type="range" min="0" max="100" value={bgmVol} onChange={(e) => setBgmVol(Number(e.target.value))}
+                  title={`音量 ${bgmVol}%`} style={{ width: 70, accentColor: '#0088ff', cursor: 'pointer' }} />
+              </>
             )}
             <Btn onClick={leaveToTown}>← 街に戻る</Btn>
           </div>
