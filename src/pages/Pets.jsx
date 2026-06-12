@@ -94,7 +94,7 @@ export default function Pets() {
     setLoading(true)
     const finalName = (name || '').trim() || sp.label
     const { error } = await supabase.from('pets').insert({
-      owner_id: profile.id, species: sp.id, name: finalName, level: 1, exp: 0, affection: 0, is_active: true,
+      owner_id: profile.id, species: sp.id, name: finalName, level: 1, exp: 0, affection: 50, is_active: true,
     })
     setLoading(false)
     if (error) { flash('作成に失敗: ' + error.message); return }
@@ -408,7 +408,7 @@ export default function Pets() {
                 <div style={{ color: '#ffcc44', fontSize: 15 }}>🛒 ペット商店</div>
                 <div style={{ color: '#ffd866', fontSize: 12 }}>所持G: {profile.gold?.toLocaleString?.() ?? profile.gold}</div>
               </div>
-              <div style={{ color: '#5e7fa0', fontSize: 10, marginBottom: 8 }}>※購入したアイテムは「🏬倉庫」に入ります。倉庫から「持ち物」に移してダンジョンへ持っていけます（持ち物は{INV_MAX}個まで）</div>
+              <div style={{ color: '#5e7fa0', fontSize: 10, marginBottom: 8 }}>※購入したアイテムは「🏬倉庫」に入ります。倉庫から「持ち物」に移してダンジョンへ持っていけます（持ち物は基本{INV_MAX}個・ダンジョンを初めて踏破するごとに上限+10）</div>
               {msg && <div style={{ background: '#101a30', border: '1px solid #335588', color: '#aaddff', padding: 8, fontSize: 12, marginBottom: 8, textAlign: 'center' }}>{msg}</div>}
               <div style={{ display: 'grid', gap: 8 }}>
                 {SHOP_ITEMS.map((it) => {

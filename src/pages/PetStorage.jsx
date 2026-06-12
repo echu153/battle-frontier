@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { PET_ITEMS, INV_MAX } from '../constants/pets'
+import { PET_ITEMS, bagCapacity } from '../constants/pets'
 
 // ダンジョンに持っていける（持ち物へ移せる）アイテム
 const DUNGEON_KEYS = new Set(['escape', 'onigiri', 'konomi'])
@@ -14,6 +14,7 @@ export default function PetStorage() {
   const [sel, setSel] = useState({})         // 選択個数 { key: n }
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
+  const [bagMax, setBagMax] = useState(bagCapacity(0))
 
   useEffect(() => { fetchAll() }, [])
 
@@ -29,6 +30,10 @@ export default function PetStorage() {
     setStorage(Object.fromEntries((sto || []).map((r) => [r.item_key, r.qty])))
     const { data: its } = await supabase.from('pet_items').select('item_key, qty').eq('owner_id', user.id)
     setItems(Object.fromEntries((its || []).map((r) => [r.item_key, r.qty])))
+    // 袋容量 = 10 + 10×(クリア済みダンジョン種類数)
+    const { data: runs } = await supabase.from('dungeon_runs').select('dungeon_id').eq('owner_id', user.id).eq('cleared', true)
+    const clearedKinds = new Set((runs || []).map((r) => r.dungeon_id)).size
+    setBagMax(bagCapacity(clearedKinds))
   }
 
   const setQty = (key, n, max) => {
@@ -43,7 +48,7 @@ export default function PetStorage() {
     setLoading(false)
     if (error) {
       const m = String(error.message)
-      flash(m.includes('bag full') ? `持ち物がいっぱいです（合計${INV_MAX}個まで）` : m.includes('no item') ? '在庫がありません' : '移動失敗: ' + m)
+      flash(m.includes('bag full') ? `持ち物がいっぱいです（合計${bagMax}個まで）` : m.includes('no item') ? '在庫がありません' : '移動失敗: ' + m)
       return
     }
     setSel((s) => ({ ...s, [key]: 1 }))
@@ -69,7 +74,7 @@ export default function PetStorage() {
 
         <div style={{ color: '#5e7fa0', fontSize: 11, lineHeight: 1.6, marginBottom: 12 }}>
           購入したアイテムやダンジョンの戦利品はここに預かります。ダンジョンで使う物（翼・木の実・おにぎり）は「→持ち物」で移してから潜ってください。<br />
-          持ち物 <span style={{ color: '#aaddff' }}>{bagTotal}/{INV_MAX}</span>（翼以外）
+          持ち物 <span style={{ color: '#aaddff' }}>{bagTotal}/{bagMax}</span>（翼以外）<span style={{ color: '#5e7fa0' }}>　※ダンジョンを初めて踏破するごとに上限+10</span>
         </div>
 
         {/* 倉庫の中身 */}
