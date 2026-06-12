@@ -188,6 +188,7 @@ export default function Dungeon() {
   const [dropMode, setDropMode] = useState(false) // 「捨てる」モード（持ち物を選ぶと足元に置く）
   const [dungeon, setDungeon] = useState(null) // 選択中のダンジョン定義
   const [isAdmin, setIsAdmin] = useState(false) // 開発アカウント（comingSoonダンジョンに入れる）
+  const [transition, setTransition] = useState(null) // フロア遷移演出 { floor, black, title }
   const [cleared, setCleared] = useState(new Set()) // クリア済みダンジョンID
   const [shake, setShake] = useState(null) // 戦闘演出：接触時のマップ揺れ（'hit' | 'kill'）
   const shakeTimer = useRef(null)
@@ -447,8 +448,19 @@ export default function Dungeon() {
     })
   }
 
+  // フロア遷移演出：階段フェードアウト→暗転→「ダンジョン名 フロア数」を1秒表示→フェードインでフロア表示
+  const descendFloor = (next) => {
+    busyRef.current = true
+    setTransition({ floor: next, black: 0, title: 0 })
+    setTimeout(() => setTransition((t) => t && { ...t, black: 1 }), 30)                 // 暗転フェードイン
+    setTimeout(() => { setFloorNum(next); enterFloor(next, dungeon); setTransition((t) => t && { ...t, title: 1 }) }, 470) // 完全暗転でフロア差替＋タイトル表示
+    setTimeout(() => setTransition((t) => t && { ...t, title: 0 }), 470 + 1000)          // タイトルフェードアウト
+    setTimeout(() => setTransition((t) => t && { ...t, black: 0 }), 470 + 1000 + 450)    // 暗転フェードアウト＝フロア出現
+    setTimeout(() => { setTransition(null); busyRef.current = false }, 470 + 1000 + 450 + 470)
+  }
+
   const tryMove = (dx, dy) => {
-    if (!state || status !== 'exploring' || busyRef.current) return
+    if (!state || status !== 'exploring' || busyRef.current || transition) return
     let s = state
     const px = s.player.x, py = s.player.y
     const nx = px + dx, ny = py + dy
@@ -546,8 +558,8 @@ export default function Dungeon() {
         floorsRef.current += 1
         if (floorNum >= (dungeon?.floors || 10)) { setStatus('cleared'); addLog('🏁 最深部を踏破！ダンジョンクリア！'); setState({ ...s, player }); if (dungeon) setCleared((c) => new Set(c).add(dungeon.id)); finishRun(true); return }
         addLog(`⬇ B${floorNum + 1}Fへ降りた`)
-        setFloorNum(floorNum + 1)
-        enterFloor(floorNum + 1, dungeon)
+        setState({ ...s, player }) // 階段に乗った姿を見せてからフェード
+        descendFloor(floorNum + 1)
         return
       }
     }
@@ -862,6 +874,11 @@ export default function Dungeon() {
   const cellAt = (x, y) => {
     if (!inBounds(x, y)) return { ch: '', bg: C.unknown }
     const vis = isVisible(x, y)
+    const isStairs = state.stairs.x === x && state.stairs.y === y
+    // 階段はフロア入場時から常に強調表示（霧の中でも光って見える＝即時に位置が分かる）
+    if (isStairs && (state.player.x !== x || state.player.y !== y)) {
+      return { ch: '▼', bg: vis ? floorBg : C.unknown, overlay: stairsTile, stairsGlow: true }
+    }
     if (!vis) return { ch: '', bg: C.unknown } // 現在見えていない所は完全に真っ暗（記憶表示なし）
     const wall = state.grid[y][x] === '#'
     // 現在視界：エンティティ優先（足元は床。floorTile時は透過で下地の床画像を見せる）
@@ -919,6 +936,14 @@ export default function Dungeon() {
           15%  { transform: translate(-50%, -4px); opacity: 1; }
           100% { transform: translate(-50%, -18px); opacity: 0; }
         }
+        @keyframes bf-stairs-glow {
+          0%,100% { opacity: 0.85; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.12); }
+        }
+        @keyframes bf-stairs-ring {
+          0%,100% { opacity: 0.35; transform: scale(0.9); }
+          50% { opacity: 0.9; transform: scale(1.15); }
+        }
         /* PC: メイン＋右側ログの2カラム。狭い画面では従来どおり縦積み */
         .bf-dg-wrap { max-width: 480px; margin: 0 auto; }
         .bf-dg-side { display: none; }
@@ -972,11 +997,17 @@ export default function Dungeon() {
             const inner = c.img
               ? <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: poisonFilter }} />
               : (
-                <span style={{ filter: poisonFilter, position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+                <span style={{ filter: poisonFilter, position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%',
+                  color: c.stairsGlow ? '#ffe680' : undefined,
+                  textShadow: c.stairsGlow ? '0 0 6px #ffcc33, 0 0 12px #ff9900' : undefined,
+                  animation: c.stairsGlow ? 'bf-stairs-glow 1.2s ease-in-out infinite' : undefined }}>
                   {c.ch}
                   {/* 階段・アイテムのカスタム画像（無ければonErrorで隠れ絵文字のまま） */}
                   {c.overlay && <img src={c.overlay} alt="" onError={(ev) => { ev.target.style.display = 'none' }}
-                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block',
+                      filter: c.stairsGlow ? 'drop-shadow(0 0 5px #ffcc33) drop-shadow(0 0 9px #ff9900) brightness(1.15)' : undefined }} />}
+                  {/* 階段の強調リング */}
+                  {c.stairsGlow && <span style={{ position: 'absolute', inset: '8%', borderRadius: '50%', boxShadow: '0 0 8px 2px rgba(255,200,60,0.7)', animation: 'bf-stairs-ring 1.2s ease-in-out infinite', pointerEvents: 'none' }} />}
                 </span>
               )
             const anims = []
@@ -1006,6 +1037,17 @@ export default function Dungeon() {
           {inCorridor && (
             <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
               background: 'radial-gradient(ellipse 29% 35.4% at 50% 50%, transparent 80%, #000208 100%)' }} />
+          )}
+          {/* フロア遷移演出：暗転＋「ダンジョン名 フロア数」 */}
+          {transition && (
+            <div style={{ position: 'absolute', inset: 0, zIndex: 10, pointerEvents: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: '#000208', opacity: transition.black, transition: 'opacity 0.45s ease' }}>
+              <div style={{ textAlign: 'center', opacity: transition.title, transition: 'opacity 0.4s ease' }}>
+                <div style={{ color: '#c8a0ff', fontSize: 20, letterSpacing: 4 }}>{dungeon?.emoji} {dungeon?.name}</div>
+                <div style={{ color: '#ffcc66', fontSize: 26, letterSpacing: 3, marginTop: 10 }}>B{transition.floor}F</div>
+              </div>
+            </div>
           )}
           {/* 頭上に浮かぶダメージ(-赤)/回復(+緑)の数字 */}
           {pops.map((p) => {
