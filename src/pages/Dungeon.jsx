@@ -1134,10 +1134,8 @@ export default function Dungeon() {
                 position: 'absolute', zIndex: 3, pointerEvents: 'none',
                 left: `calc(${((vx + 0.5) / VW) * 100}% + ${p.dx}px)`,
                 top: p.below ? `${((vy + 0.95) / VH) * 100}%` : `${(vy / VH) * 100}%`,
-                color: p.color, fontSize: p.below ? 15 : 13, fontWeight: 'bold', fontFamily: 'monospace',
-                textShadow: p.below
-                  ? '0 0 2px #000, 0 1px 3px #000, 0 0 6px #0a2a55, -1px 0 1px #000, 1px 0 1px #000'
-                  : '0 1px 2px #000, 0 0 4px #000', whiteSpace: 'nowrap',
+                color: p.color, fontSize: 15, fontWeight: 'bold', fontFamily: 'monospace',
+                textShadow: '0 0 2px #000, 0 1px 3px #000, 0 0 6px #000, -1px 0 1px #000, 1px 0 1px #000', whiteSpace: 'nowrap',
                 animation: p.below ? 'bf-popexp 1.1s ease-out forwards' : 'bf-popnum 0.85s ease-out forwards',
               }}>{p.text}</span>
             )
@@ -1164,7 +1162,7 @@ export default function Dungeon() {
                   const y = cy - ry * Math.sin(ang)
                   const rot = (t - 0.5) * 100                // 端ほど傾けてアーチに沿わせる
                   const hue = Math.round(t * 300)            // 赤→紫の虹
-                  const delay = `${i * 0.13}s`
+                  const delay = `${i * 0.07}s`
                   if (ch === ' ') return null
                   return (
                     <span key={i}>
