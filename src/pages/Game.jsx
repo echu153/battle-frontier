@@ -2343,6 +2343,22 @@ export default function Game() {
       const effectiveEnemyEvasion = (isSureHit || isSelfSkill) ? 0 : Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit) + (enemy.isPapia ? 50 : 0)
       if (effectiveEnemyEvasion > 0 && Math.random()*100 < effectiveEnemyEvasion) {
         logs.push({ text:`${prefix}${nextSkillName && !mpLack ? `${nextSkillName}！` : '攻撃！'} しかし${enemy.name}に回避された！`, color:'#446688' })
+        // 追撃系（鬼影閃の影歩き追撃など）はメインが回避されても独立ヒットとして発動する
+        if (nextSkill && !mpLack) {
+          const resPeek = executeSkill(nextSkill, effBuff, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
+          if (resPeek.followup && resPeek.followup.dmg > 0) {
+            const adjED = Math.max(1, Math.floor((enemy.def||0)*eDefRate))
+            const fScale = effBuff.atk / (effBuff.atk + adjED)
+            const fCrit = Math.random()*100 < playerCritRate
+            const fCritMult = fCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
+            const dr = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
+            let fDmg = Math.floor(resPeek.followup.dmg * fScale * fCritMult * passiveDmgMult * dr * (0.9 + Math.random()*0.2))
+            if (enemy.isPapia) fDmg = 1
+            fDmg = Math.max(1, fDmg)
+            enemyHp -= fDmg
+            logs.push({ text:`↳ 追撃！${resPeek.followup.label?`（${resPeek.followup.label}）`:''} ${enemy.name}に${fDmg}ダメージ！${fCrit?' 💥クリティカル！':''}`, color: fCrit?'#ffaa00':'#ffaa66' })
+          }
+        }
         if (expandedSkillSet.length > 0) skillIndex++
         return
       }
