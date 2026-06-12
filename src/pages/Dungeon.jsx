@@ -212,6 +212,14 @@ export default function Dungeon() {
     if (!audioRef.current) {
       const a = new Audio(`/dungeon_bgm.mp3?v=${ASSET_VER}`)
       a.loop = true; a.volume = bgmVol / 100
+      // 末尾の無音・継ぎ目を飛ばして即リスタート（曲終わりの間隔を最短に）
+      const LOOP_TRIM = 0.35 // 秒。曲末尾この秒数手前で先頭へ戻す
+      a.addEventListener('timeupdate', () => {
+        if (isFinite(a.duration) && a.duration > 0 && a.currentTime >= a.duration - LOOP_TRIM) {
+          a.currentTime = 0
+          if (!a.paused) a.play().catch(() => {})
+        }
+      })
       audioRef.current = a
     }
     return () => { if (audioRef.current) { audioRef.current.pause() } }
