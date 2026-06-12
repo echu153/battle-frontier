@@ -1409,6 +1409,7 @@ export default function Game() {
   const botCheckDeadlineRef = useRef(null)  // タイマー一時停止用：期限の絶対時刻
   const regenningRef = useRef(false)
   const innBusyRef = useRef(false)  // 宿屋利用の二重実行ガード（連打対策）
+  const battleBusyRef = useRef(false)  // 出撃の二重発火ガード（スマホ2連タップ対策）
   const clockOffsetRef = useRef(0)  // サーバー時刻 - 端末時刻(ms)。クールダウンのズレ補正用
   const serverNow = () => Date.now() + clockOffsetRef.current
   const [canLeaveBattle, setCanLeaveBattle] = useState(true)  // 出撃後2秒は「街に戻る」を押せない（オートクリッカー連打対策）
@@ -2035,6 +2036,11 @@ export default function Game() {
 
   const doBattle = async (e) => {
     if (!canAct || loading) return
+    // スマホの2連タップ等でstate更新(loading/scene)が反映される前に二重発火するのを同期的に防ぐ。
+    // 数百msの連打窓だけ塞げば十分（その後はloading/canActガードが効く）ので、タイマーで自動解放する。
+    if (battleBusyRef.current) return
+    battleBusyRef.current = true
+    setTimeout(() => { battleBusyRef.current = false }, 1500)
     if (botCheck) return  // BOT確認チャレンジ中は出撃不可
     // 自動操作検知（isTrusted=falseはSelenium等ブラウザ自動化ツールの特徴）
     if (e && !e.isTrusted) { await suspendAccount('自動操作が検出されました'); return }
