@@ -1,32 +1,33 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { supabase } from './supabase'
-import Login from './pages/Login'
-import CharCreate from './pages/CharCreate'
-import Game from './pages/Game'
-import Ranking from './pages/Ranking'
-import Equipment from './pages/Equipment'
-import Skills from './pages/Skills'
-import Shop from './pages/Shop'
-import Smithy from './pages/Smithy'
-import Profile from './pages/Profile'
-import Barber from './pages/Barber'
-import Fishing from './pages/Fishing'
-import Casino from './pages/Casino'
-import Museum from './pages/Museum'
-import RaidBoss from './pages/RaidBoss'
-import Exchange from './pages/Exchange'
-import Titles from './pages/Titles'
-import Admin from './pages/Admin'
-import Moderation from './pages/Moderation'
-import Scarecrow from './pages/Scarecrow'
-import Dungeon from './pages/Dungeon'
-import Pets from './pages/Pets'
-import Charms from './pages/Charms'
-import PetStorage from './pages/PetStorage'
-import StatusDetail from './pages/StatusDetail'
-import Abyss from './pages/Abyss'
-import Tenkyuu from './pages/Tenkyuu'
+import Login from './pages/Login' // 最初に出る画面は即時読み込み（チラつき防止）
+// 以下はページを開いた時に読み込む（コード分割＝初回ロードを軽く）
+const CharCreate = lazy(() => import('./pages/CharCreate'))
+const Game = lazy(() => import('./pages/Game'))
+const Ranking = lazy(() => import('./pages/Ranking'))
+const Equipment = lazy(() => import('./pages/Equipment'))
+const Skills = lazy(() => import('./pages/Skills'))
+const Shop = lazy(() => import('./pages/Shop'))
+const Smithy = lazy(() => import('./pages/Smithy'))
+const Profile = lazy(() => import('./pages/Profile'))
+const Barber = lazy(() => import('./pages/Barber'))
+const Fishing = lazy(() => import('./pages/Fishing'))
+const Casino = lazy(() => import('./pages/Casino'))
+const Museum = lazy(() => import('./pages/Museum'))
+const RaidBoss = lazy(() => import('./pages/RaidBoss'))
+const Exchange = lazy(() => import('./pages/Exchange'))
+const Titles = lazy(() => import('./pages/Titles'))
+const Admin = lazy(() => import('./pages/Admin'))
+const Moderation = lazy(() => import('./pages/Moderation'))
+const Scarecrow = lazy(() => import('./pages/Scarecrow'))
+const Dungeon = lazy(() => import('./pages/Dungeon'))
+const Pets = lazy(() => import('./pages/Pets'))
+const Charms = lazy(() => import('./pages/Charms'))
+const PetStorage = lazy(() => import('./pages/PetStorage'))
+const StatusDetail = lazy(() => import('./pages/StatusDetail'))
+const Abyss = lazy(() => import('./pages/Abyss'))
+const Tenkyuu = lazy(() => import('./pages/Tenkyuu'))
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -129,6 +130,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000820', color: '#0088ff', fontFamily: 'monospace', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>読み込み中...</div>}>
       <Routes>
         <Route path="/login" element={isPasswordRecovery || !session ? <Login isPasswordRecovery={isPasswordRecovery} /> : <Navigate to={hasChar ? '/game' : '/create'} />} />
         <Route path="/create" element={session && !hasChar ? <CharCreate /> : <Navigate to={!session ? '/login' : '/game'} />} />
@@ -159,6 +161,7 @@ function App() {
         <Route path="/tenkyuu" element={session ? <Tenkyuu /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }
