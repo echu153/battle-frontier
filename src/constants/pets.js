@@ -198,8 +198,8 @@ export function dungeonEnemyStats(floor, areaId) {
 }
 
 // アイテム袋の上限（潜る前の所持：だっしゅつの翼以外の合計）。ダンジョン中は別途20まで
-// 基本10＋「初めて踏破したダンジョン1種につき+10」（サーバー pet_bag_capacity と一致させること）
-export const INV_MAX = 10
+// 基本20＋「初めて踏破したダンジョン1種につき+10」（サーバー pet_bag_capacity と一致させること）
+export const INV_MAX = 20
 export const BAG_PER_DUNGEON = 10
 // クリア済みダンジョン種類数から袋容量を算出
 export function bagCapacity(clearedDungeonCount) {

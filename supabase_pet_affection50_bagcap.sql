@@ -2,7 +2,7 @@
 -- ペット調整 2026-06-12
 --  ① なつき度は50%スタート（新規ペット）。既に所持しているペットは +50（上限100）
 --  ② アイテム袋（持ち物）上限を「初めて踏破したダンジョン1種につき+10」で拡張
---     基本10 + 10×(クリア済みダンジョンの種類数)
+--     基本20 + 10×(クリア済みダンジョンの種類数)
 -- Supabase の SQL Editor でファイル全体を実行してください
 -- ============================================================
 
@@ -12,12 +12,12 @@ ALTER TABLE pets ALTER COLUMN affection SET DEFAULT 50;
 UPDATE pets SET affection = LEAST(100, affection + 50)
 WHERE affection < 50;
 
--- ===== ② アイテム袋容量 = 10 + 10×(クリア済みダンジョン種類数) =====
+-- ===== ② アイテム袋容量 = 20 + 10×(クリア済みダンジョン種類数) =====
 CREATE OR REPLACE FUNCTION public.pet_bag_capacity(p_uid uuid)
  RETURNS int
  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
 AS $$
-  SELECT 10 + 10 * COALESCE((
+  SELECT 20 + 10 * COALESCE((
     SELECT count(DISTINCT dungeon_id) FROM dungeon_runs
     WHERE owner_id = p_uid AND cleared = true
   ), 0)::int;
