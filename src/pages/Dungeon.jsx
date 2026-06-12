@@ -620,9 +620,11 @@ export default function Dungeon() {
     }
     let willPoison = false // このターンに毒を受けたか
     const attackers = []   // 隣接して攻撃してくる敵（1体ずつ順番に演出する）
+    const AGGRO_RANGE = 10 // この歩数以内の敵は視線に関係なく必ず追跡（後方の敵が放置されないように）
     enemies = enemies.map((e) => {
-      // プレイヤーの視界に入った敵も追跡を開始する（部屋・通路問わず）
-      const sees = enemySeesPet(s.rooms, e, player.x, player.y) || visNow.has(e.x + ',' + e.y)
+      // 視界に入った敵＋一定歩数(BFS距離)以内の敵は必ず追跡する（部屋・通路問わず）
+      const reach = dist.get(e.x + ',' + e.y)
+      const sees = enemySeesPet(s.rooms, e, player.x, player.y) || visNow.has(e.x + ',' + e.y) || (reach != null && reach <= AGGRO_RANGE)
       // 斜め隣接も攻撃対象（ただし壁の角越しは不可＝プレイヤーの斜め移動と同条件）
       const adx = e.x - player.x, ady = e.y - player.y
       const diagBlocked = adx !== 0 && ady !== 0 && (s.grid[player.y]?.[e.x] === '#' || s.grid[e.y]?.[player.x] === '#')
