@@ -31,6 +31,16 @@ const SPAWN_EVERY = 40        // 40ターンごとに敵が1体湧く
 const SPAWN_CAP = 12          // フロアの敵がこの数以上なら湧かせない（過密防止）
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1))
+
+// この端末の固有ID（ダンジョンの1端末専用ロック用）。端末ごとに永続。
+const getDeviceId = () => {
+  let d = localStorage.getItem('bf_device_id')
+  if (!d) {
+    d = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    localStorage.setItem('bf_device_id', d)
+  }
+  return d
+}
 const inBounds = (x, y) => x >= 0 && x < MAP_W && y >= 0 && y < MAP_H
 
 // ---- フロア自動生成 ----
@@ -190,6 +200,7 @@ export default function Dungeon() {
   const [dungeon, setDungeon] = useState(null) // 選択中のダンジョン定義
   const [isAdmin, setIsAdmin] = useState(false) // 開発アカウント（comingSoonダンジョンに入れる）
   const [transition, setTransition] = useState(null) // フロア遷移演出 { floor, black, title }
+  const [lockedOut, setLockedOut] = useState(false)   // 別端末でプレイ中＝この端末はロック
   const gridRef = useRef(null)
   const [cellPx, setCellPx] = useState(0) // 1マスのピクセル幅（床をワールド固定で敷くため）
 
@@ -283,7 +294,12 @@ export default function Dungeon() {
     setReward(null)
     if (!petId) return
     const { data, error } = await supabase.rpc('dungeon_start', { p_pet_id: petId, p_dungeon_id: dungeonId })
-    if (!error) runIdRef.current = data
+    if (!error) {
+      runIdRef.current = data
+      setLockedOut(false)
+      // この端末を操作端末として主張（別端末はロックされる）
+      if (data) supabase.rpc('dungeon_claim_device', { p_run_id: data, p_device: getDeviceId() }).then(() => {}, () => {})
+    }
   }, [])
 
   // 敵撃破：EXPを即時付与（サーバー）。レベルアップでステータスも即反映
@@ -428,6 +444,8 @@ export default function Dungeon() {
           } catch { /* 壊れていたら無視 */ }
         }
         if (sv?.state) {
+          // この端末を操作端末として主張（別端末で開いていたらそちらがロックされる）
+          if (runIdRef.current) { setLockedOut(false); supabase.rpc('dungeon_claim_device', { p_run_id: runIdRef.current, p_device: getDeviceId() }).then(() => {}, () => {}) }
           finishedRef.current = false
           enemiesRef.current = sv.kills || 0
           floorsRef.current = sv.floorsCleared || 0
@@ -481,7 +499,8 @@ export default function Dungeon() {
       if (saveTimer.current) clearTimeout(saveTimer.current)
       const runId = runIdRef.current
       saveTimer.current = setTimeout(() => {
-        supabase.rpc('dungeon_save_state', { p_run_id: runId, p_state: sv }).then(() => {}, () => {})
+        supabase.rpc('dungeon_save_state', { p_run_id: runId, p_state: sv, p_device: getDeviceId() })
+          .then(({ data }) => { if (data && data.ok === false && data.locked) setLockedOut(true) }, () => {})
       }, 700)
     } else if (status === 'cleared' || status === 'dead' || status === 'escaped') {
       localStorage.removeItem(key)
@@ -518,7 +537,7 @@ export default function Dungeon() {
   }
 
   const tryMove = (dx, dy) => {
-    if (!state || status !== 'exploring' || busyRef.current || transition) return
+    if (!state || status !== 'exploring' || busyRef.current || transition || lockedOut) return
     let s = state
     const px = s.player.x, py = s.player.y
     const nx = px + dx, ny = py + dy
@@ -1127,6 +1146,24 @@ export default function Dungeon() {
           {inCorridor && (
             <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
               background: 'radial-gradient(ellipse 29% 35.4% at 50% 50%, transparent 80%, #000208 100%)' }} />
+          )}
+          {/* 別端末でプレイ中＝この端末はロック */}
+          {lockedOut && (
+            <div style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0,2,8,0.86)', textAlign: 'center', padding: 16 }}>
+              <div>
+                <div style={{ fontSize: 34, marginBottom: 8 }}>📱🔒</div>
+                <div style={{ color: '#ffcc44', fontSize: 14, marginBottom: 6 }}>別の端末でプレイ中です</div>
+                <div style={{ color: '#aaccff', fontSize: 11, lineHeight: 1.7, marginBottom: 14 }}>
+                  ダンジョンは複数の端末で同時にプレイできません。<br />この端末で続けるには再読み込みしてください（操作権を取り戻します）。
+                </div>
+                <button onClick={() => window.location.reload()}
+                  style={{ background: '#001840', border: '1px solid #0088ff', color: '#0088ff', padding: '8px 18px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>🔄 再読み込みして続ける</button>
+                <div style={{ marginTop: 10 }}>
+                  <button onClick={() => nav('/pets')} style={{ background: 'none', border: '1px solid #446688', color: '#88aacc', padding: '6px 14px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>🐾 ペットへ</button>
+                </div>
+              </div>
+            </div>
           )}
           {/* フロア遷移演出：暗転＋「ダンジョン名 フロア数」 */}
           {transition && (
