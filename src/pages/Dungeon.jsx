@@ -1048,16 +1048,18 @@ export default function Dungeon() {
               '--lx': c.fx.lunge ? `${Math.sign(c.fx.lunge.dx) * 40}%` : '0%',
               '--ly': c.fx.lunge ? `${Math.sign(c.fx.lunge.dy) * 40}%` : '0%',
             } : null
-            // 壁マスは壁画像（1マスごと）。床マスは透過で下地の床1枚を見せる。
-            // 壁は寒色＋暗めに色補正して、暖色の床とハッキリ区別できるようにする。
+            // 壁マスも床と同じくワールド固定で連続表示＝マス目（1マスごとの継ぎ目）が消える。
             const wallImg = c.wallImg
+            const WALLT = 3 // 壁テクスチャ1枚=約3マス
             const tileStyle = wallImg
-              ? { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.62) saturate(0.5) hue-rotate(-18deg)' }
+              ? (cellPx > 0
+                ? { backgroundImage: `url(${wallImg})`, backgroundRepeat: 'repeat', backgroundSize: `${cellPx * WALLT}px ${cellPx * WALLT}px`, backgroundPosition: `${-x * cellPx}px ${-y * cellPx}px` }
+                : { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center' })
               : { backgroundImage: 'none' }
             // グリッド線対策：マス間のサブピクセル隙間を「そのマス自身の色」で埋める。
-            //  透過の床マスはそのまま（隙間も床が続くので継ぎ目なし）、それ以外は隙間を自色で塞ぐ。
+            //  透過の床マス・連続表示の壁マスはそのまま（継ぎ目なし）、暗いマスだけ自色で塞ぐ。
             const gapFill = floorTile
-              ? (c.bg !== 'transparent' ? `0 0 0 0.7px ${c.bg}` : 'none')
+              ? ((c.bg !== 'transparent' && !wallImg) ? `0 0 0 0.7px ${c.bg}` : 'none')
               : `0 0 0 0.6px ${c.bg}`
             return (
               <div key={`${vx}-${vy}`} onClick={() => clickable && adjClick(vx, vy)}
