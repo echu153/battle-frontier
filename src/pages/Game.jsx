@@ -1344,6 +1344,8 @@ export default function Game() {
   const [pendingPoints, setPendingPoints] = useState(0)
   const [statPoints, setStatPoints] = useState({})
   const [showStatPanel, setShowStatPanel] = useState(false)
+  // お宝素材2倍イベントのバナーを「1日1回（朝5時境界）」だけ表示するための確認済み日付
+  const [matEventSeenDate, setMatEventSeenDate] = useState(() => localStorage.getItem('bf_mat_event_seen') || '')
   // ステータス欄・施設ボタン欄の展開/折りたたみ（localStorageに保存しページ遷移後も維持）
   const [statExpanded, setStatExpanded] = useState(() => localStorage.getItem('statExpanded') !== '0')
   const [facilitiesExpanded, setFacilitiesExpanded] = useState(() => localStorage.getItem('facilitiesExpanded') !== '0')
@@ -3461,6 +3463,12 @@ export default function Game() {
   const isBanned = profile.battle_ban_until && new Date(profile.battle_ban_until) > new Date()
   const papiaEvent = getPapiaEventStatus()
   const materialEvent = getMaterialEventStatus()
+  const matEventBannerVisible = materialEvent.active && matEventSeenDate !== getDungeonDateStr()
+  const dismissMatEventBanner = () => {
+    const d = getDungeonDateStr()
+    localStorage.setItem('bf_mat_event_seen', d)
+    setMatEventSeenDate(d)
+  }
   const banRemaining = isBanned ? (() => {
     const diffMs = new Date(profile.battle_ban_until) - new Date()
     const h = Math.floor(diffMs / 3600000)
@@ -3796,7 +3804,7 @@ export default function Game() {
                   <span style={{ color:'#446688', marginLeft:'8px' }}>残り{papiaEvent.remainingMin}分{papiaEvent.remainingSec}秒</span>
                 </div>
               )}
-              {materialEvent.active && (
+              {matEventBannerVisible && (
                 <div style={{ background:'#001a0f', border:'1px solid #44ffaa', padding:'8px 10px', marginBottom:'8px', fontSize:'11px' }}>
                   <div style={{ color:'#44ffaa', textAlign:'center', fontWeight:'bold', marginBottom:'4px' }}>
                     ✨ お宝素材ドロップ2倍イベント開催中！
@@ -3807,6 +3815,9 @@ export default function Game() {
                   <div style={{ color:'#88ccbb', fontSize:'10px', lineHeight:'1.5' }}>
                     森の生命液…始まりの森 ／ 荒野の薬草…荒廃した草原 ／ 古代の精髄…古代の洞窟<br/>
                     蒼海の精気…蒼海の入り江 ／ 雷鳴の精気…巨峰山脈 ／ 霜の精気…白銀の霊峰
+                  </div>
+                  <div style={{ textAlign:'center', marginTop:'6px' }}>
+                    <button onClick={dismissMatEventBanner} style={{ padding:'3px 16px', background:'#001a08', border:'1px solid #44ffaa', color:'#44ffaa', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>確認（次の日まで非表示）</button>
                   </div>
                 </div>
               )}
