@@ -812,6 +812,13 @@ export default function Dungeon() {
   // 街に戻る（探索中なら現在の進捗で精算してから離脱）
   const leaveToTown = async () => { await finishRun(false); nav('/game') }
 
+  // あきらめる（倒された時と同じ仕様＝なつき-3・戦利品ランダム半分ロスト）
+  const giveUp = async () => {
+    if (status !== 'exploring' || busyRef.current) return
+    if (!window.confirm('あきらめますか？ 倒された時と同じく、なつき度が下がり戦利品の一部を失います。')) return
+    setStatus('dead'); addLog('🏳 あきらめた…'); await finishRun(false, true)
+  }
+
   if (scarecrowBlock) return <ScarecrowBlockScreen endsAt={scarecrowBlock.ends_at} />
   if (allowed === undefined) return <Center>読み込み中...</Center>
   if (!allowed) return <Center>このページは開発中です（権限がありません）<br /><Btn onClick={() => nav('/game')}>🏰 街に戻る</Btn></Center>
@@ -1118,6 +1125,14 @@ export default function Dungeon() {
                 )
               })}
             </div>
+          </div>
+        )}
+        {status === 'exploring' && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+            <button onClick={giveUp}
+              style={{ background: '#1a0808', border: '1px solid #aa4444', color: '#cc6666', padding: '6px 16px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
+              🏳 あきらめる
+            </button>
           </div>
         )}
         {status === 'exploring' && (() => {
