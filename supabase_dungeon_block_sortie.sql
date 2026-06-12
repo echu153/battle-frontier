@@ -1,8 +1,8 @@
 -- ============================================================
 -- 2026-06-13
---  ① ペットダンジョン探索中は出撃不可（別端末での同時プレイ対策）。
---     apply_battle_result（通常出撃）/ casino_settle_sortie（簡易出撃）に
---     「active な dungeon_runs があれば拒否」のチェックを追加。
+--  ① ペットダンジョン探索中は「通常出撃」不可（別端末での同時プレイ対策）。
+--     apply_battle_result（通常出撃）に「active な dungeon_runs があれば拒否」を追加。
+--     ※ 簡易出撃(casino_settle_sortie)はダンジョン中も可＝並行育成のため許可。
 --  ② だっしゅつの翼(escape)も持ち物にカウントする（pet_is_inv_item を全アイテム対象に）。
 --
 -- ★ apply_battle_result / casino_settle_sortie は supabase_scarecrow.sql で定義済み。
@@ -210,12 +210,9 @@ BEGIN
   SELECT * INTO v_profile FROM profiles WHERE id = v_uid;
   IF NOT FOUND THEN RETURN json_build_object('ok',false,'reason','profile_not_found'); END IF;
 
-  -- ★かかし修練中／ペットダンジョン探索中は不可
+  -- ★かかし修練中は不可（簡易出撃はダンジョン探索中も可＝並行育成のため許可）
   IF scarecrow_is_active(v_uid) THEN
     RETURN json_build_object('ok',false,'reason','scarecrow_active');
-  END IF;
-  IF has_active_dungeon(v_uid) THEN
-    RETURN json_build_object('ok',false,'reason','dungeon_active');
   END IF;
 
   IF p_count IS NULL OR p_count <= 0 OR p_count > 1000 THEN

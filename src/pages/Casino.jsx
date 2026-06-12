@@ -444,10 +444,6 @@ export default function Casino() {
     if (e && !e.isTrusted) { await suspendAccount('自動操作が検出されました'); return }
     if (profile.is_fishing) { setSortieMsg('🎣 釣り中は出撃できません'); setTimeout(()=>setSortieMsg(''),2500); return }
     if (profile.battle_ban_until && new Date(profile.battle_ban_until) > new Date()) { setSortieMsg('⛔ 異常な行動を検出。出撃禁止中です'); setTimeout(()=>setSortieMsg(''),2500); return }
-    {
-      const { data: dr } = await supabase.from('dungeon_runs').select('id').eq('owner_id', profile.id).eq('status', 'active').maybeSingle()
-      if (dr) { setSortieMsg('🕳 ダンジョン探索中は出撃できません'); setTimeout(()=>setSortieMsg(''),2500); return }
-    }
     if (!isAreaUnlocked(sortieArea)) { setSortieMsg('このエリアの出撃許可証を持っていません'); setTimeout(()=>setSortieMsg(''),2500); return }
     if (sortieRemain() > 0) { setSortieMsg(`次の出撃まで ${sortieRemain()}秒`); setTimeout(()=>setSortieMsg(''),1500); return }
     setLoading(true)
