@@ -987,7 +987,7 @@ export default function Dungeon() {
         <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', willChange: 'transform', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
           {/* 床は画面に固定したリピートタイル（キャラが動いても床は動かない）。1タイル=1マス（キャラと同サイズ） */}
           {floorTile && (
-            <div style={{ position: 'absolute', inset: 6, backgroundImage: `url(${floorTile})`, backgroundRepeat: 'repeat', backgroundSize: `${(1 / VW) * 100}% auto`, backgroundPosition: 'top left', zIndex: 0, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', inset: 6, backgroundImage: `url(${floorTile})`, backgroundRepeat: 'repeat', backgroundSize: `${(1 / VW) * 100}% auto`, backgroundPosition: 'top left', filter: 'brightness(0.88)', zIndex: 0, pointerEvents: 'none' }} />
           )}
           {Array.from({ length: VH }).map((_, vy) => Array.from({ length: VW }).map((_, vx) => {
             const x = ox + vx, y = oy + vy
