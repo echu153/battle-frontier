@@ -234,16 +234,28 @@ export default function Dungeon() {
   // 頭上に浮かぶダメージ/回復の数字（敵味方共通。ダメージ=赤 -n / 回復=緑 +n）
   const [pops, setPops] = useState([])
   const popSeq = useRef(0)
-  const addPop = (x, y, text, color) => {
+  const addPop = (x, y, text, color, opts = {}) => {
     popSeq.current += 1
     const id = popSeq.current
     // 同時に複数出ても重なりにくいよう少し横にずらす
-    setPops((ps) => [...ps, { id, x, y, text, color, dx: Math.round(Math.random() * 14 - 7) }])
-    const tid = setTimeout(() => setPops((ps) => ps.filter((p) => p.id !== id)), 850)
+    setPops((ps) => [...ps, { id, x, y, text, color, dx: Math.round(Math.random() * 14 - 7), below: !!opts.below }])
+    const tid = setTimeout(() => setPops((ps) => ps.filter((p) => p.id !== id)), opts.below ? 1100 : 850)
     turnTimers.current.push(tid)
   }
   const popDmg = (x, y, n) => addPop(x, y, `-${n}`, '#ff5555')
   const popHeal = (x, y, n) => addPop(x, y, `+${n}`, '#66ff99')
+  const popExp = (x, y, n) => addPop(x, y, `＋Exp ${n}`, '#5aa0ff', { below: true }) // 経験値は青で自分の下に
+
+  // レベルアップ演出（キャラの上に虹色アーチで LEVEL UP・約4秒）
+  const [levelUp, setLevelUp] = useState(null) // { x, y, id }
+  const levelUpSeq = useRef(0)
+  const triggerLevelUp = (x, y) => {
+    levelUpSeq.current += 1
+    const id = levelUpSeq.current
+    setLevelUp({ x, y, id })
+    const tid = setTimeout(() => setLevelUp((lu) => (lu && lu.id === id ? null : lu)), 4000)
+    turnTimers.current.push(tid)
+  }
   const spawnSeq = useRef(0) // 湧いた敵の連番ID用
   const dropSeq = useRef(0)  // 床に置いたアイテムの連番ID用
   const turnTimers = useRef([])
@@ -274,12 +286,17 @@ export default function Dungeon() {
   }, [])
 
   // 敵撃破：EXPを即時付与（サーバー）。レベルアップでステータスも即反映
-  const grantKill = useCallback(async (floor, name = '敵') => {
+  const grantKill = useCallback(async (floor, name = '敵', px = null, py = null) => {
     if (!runIdRef.current) return
     // EXPは敵ごと（倍率はサーバー側の表で検証。強い敵ほど多い）
     const { data, error } = await supabase.rpc('dungeon_kill', { p_run_id: runIdRef.current, p_floor: floor, p_enemy: name })
     if (error || !data) { addLog(`⚔ ${name}を撃破！`); return }
     addLog(`⚔ ${name}を撃破！ ＋EXP${data.exp_gain}${data.leveled ? `（Lv${data.level}に！）` : ''}`)
+    // 経験値ポップ（自分の下に青で）＋レベルアップ時は虹アーチ演出
+    if (px != null && py != null) {
+      if (data.exp_gain > 0) popExp(px, py, data.exp_gain)
+      if (data.leveled) triggerLevelUp(px, py)
+    }
     setPet((p) => {
       if (!p?.species) return p
       const st = applyCharmStats(petStats({ species: p.species, level: data.level, evolved: p.evolved }), p.charm)
@@ -533,7 +550,7 @@ export default function Dungeon() {
       })
       if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); const healed = Math.min(pet.maxHp, curPetHp + heal) - curPetHp; curPetHp += healed; if (healed > 0) { addLog(`💚 ${healed}回復`); popHeal(px, py, healed) } }
       const killed = newHp <= 0
-      if (killed) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; grantKill(floorNum, target.name); triggerShake('kill') }
+      if (killed) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; grantKill(floorNum, target.name, px, py); triggerShake('kill') }
       else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); triggerShake('hit') }
 
       // 体当たり演出：ペットを相手方向へ突進、被弾した敵を点滅させる
@@ -974,6 +991,19 @@ export default function Dungeon() {
           15%  { transform: translate(-50%, -4px); opacity: 1; }
           100% { transform: translate(-50%, -18px); opacity: 0; }
         }
+        @keyframes bf-popexp {
+          0%   { transform: translate(-50%, -2px); opacity: 0; }
+          20%  { transform: translate(-50%, 4px); opacity: 1; }
+          75%  { transform: translate(-50%, 8px); opacity: 1; }
+          100% { transform: translate(-50%, 14px); opacity: 0; }
+        }
+        @keyframes bf-levelup {
+          0%   { transform: translate(-50%, -90%) scale(0.7); opacity: 0; }
+          12%  { transform: translate(-50%, -100%) scale(1.06); opacity: 1; }
+          20%  { transform: translate(-50%, -100%) scale(1); opacity: 1; }
+          85%  { transform: translate(-50%, -104%) scale(1); opacity: 1; }
+          100% { transform: translate(-50%, -118%) scale(1); opacity: 0; }
+        }
         /* マップは画面幅いっぱいに広げる */
         .bf-dg-wrap { max-width: min(96vw, 820px); margin: 0 auto; }
         @media (min-width: 900px) {
@@ -1093,13 +1123,46 @@ export default function Dungeon() {
             return (
               <span key={p.id} style={{
                 position: 'absolute', zIndex: 3, pointerEvents: 'none',
-                left: `calc(${((vx + 0.5) / VW) * 100}% + ${p.dx}px)`, top: `${(vy / VH) * 100}%`,
-                color: p.color, fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace',
-                textShadow: '0 1px 2px #000, 0 0 4px #000',
-                animation: 'bf-popnum 0.85s ease-out forwards',
+                left: `calc(${((vx + 0.5) / VW) * 100}% + ${p.dx}px)`,
+                top: p.below ? `${((vy + 0.95) / VH) * 100}%` : `${(vy / VH) * 100}%`,
+                color: p.color, fontSize: p.below ? 12 : 13, fontWeight: 'bold', fontFamily: 'monospace',
+                textShadow: '0 1px 2px #000, 0 0 4px #000', whiteSpace: 'nowrap',
+                animation: p.below ? 'bf-popexp 1.1s ease-out forwards' : 'bf-popnum 0.85s ease-out forwards',
               }}>{p.text}</span>
             )
           })}
+          {/* レベルアップ：キャラ上に虹色アーチで LEVEL UP（約4秒） */}
+          {levelUp && (() => {
+            const vx = levelUp.x - ox, vy = levelUp.y - oy
+            if (vx < 0 || vx >= VW || vy < 0 || vy >= VH) return null
+            const cellW = 100 / VW, cellH = 100 / VH
+            return (
+              <div key={levelUp.id} style={{
+                position: 'absolute', zIndex: 6, pointerEvents: 'none',
+                left: `${(vx + 0.5) * cellW}%`, top: `${(vy - 0.2) * cellH}%`,
+                transform: 'translate(-50%, -100%)', width: 150, height: 70,
+                animation: 'bf-levelup 4s ease-out forwards',
+              }}>
+                <svg viewBox="0 0 150 70" width="150" height="70" style={{ overflow: 'visible' }}>
+                  <defs>
+                    <path id={`bf-arc-${levelUp.id}`} d="M 8 64 A 67 56 0 0 1 142 64" fill="none" />
+                    <linearGradient id={`bf-rainbow-${levelUp.id}`} x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="#ff3b3b" />
+                      <stop offset="20%" stopColor="#ff9e2c" />
+                      <stop offset="40%" stopColor="#ffe93b" />
+                      <stop offset="60%" stopColor="#44dd55" />
+                      <stop offset="80%" stopColor="#3bb0ff" />
+                      <stop offset="100%" stopColor="#b46bff" />
+                    </linearGradient>
+                  </defs>
+                  <text fontFamily="monospace" fontSize="19" fontWeight="bold" letterSpacing="1"
+                    fill={`url(#bf-rainbow-${levelUp.id})`} stroke="#000" strokeWidth="0.6" paintOrder="stroke">
+                    <textPath href={`#bf-arc-${levelUp.id}`} startOffset="50%" textAnchor="middle">LEVEL UP</textPath>
+                  </text>
+                </svg>
+              </div>
+            )
+          })()}
           {/* マップ右下：背景透過の文字だけログ（直近数件・邪魔にならない控えめサイズ） */}
           <div style={{ position: 'absolute', right: 8, bottom: 6, zIndex: 4, pointerEvents: 'none',
             width: 'min(62%, 360px)', textAlign: 'right', lineHeight: 1.5 }}>
