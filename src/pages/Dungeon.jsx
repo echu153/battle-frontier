@@ -982,9 +982,17 @@ export default function Dungeon() {
               '--lx': c.fx.lunge ? `${Math.sign(c.fx.lunge.dx) * 40}%` : '0%',
               '--ly': c.fx.lunge ? `${Math.sign(c.fx.lunge.dy) * 40}%` : '0%',
             } : null
+            // タイル画像は1枚をビューポート全体にまたいで分割表示＝マスの継ぎ目が消えて繋がって見える
+            const tiled = !!c.tileBg
+            const tileStyle = tiled ? {
+              backgroundImage: `url(${c.tileBg})`,
+              backgroundSize: `${VW * 100}% ${VH * 100}%`,
+              backgroundPosition: `${VW > 1 ? (vx / (VW - 1)) * 100 : 50}% ${VH > 1 ? (vy / (VH - 1)) * 100 : 50}%`,
+              backgroundRepeat: 'no-repeat',
+            } : { backgroundImage: 'none' }
             return (
               <div key={`${vx}-${vy}`} onClick={() => clickable && adjClick(vx, vy)}
-                style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, backgroundImage: c.tileBg ? `url(${c.tileBg})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: `0 0 0 0.6px ${c.bg}` }}>
+                style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, ...tileStyle, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: tiled ? 'none' : `0 0 0 0.6px ${c.bg}` }}>
                 {fxStyle ? <div key={`fx${fx.t}`} style={fxStyle}>{inner}</div> : inner}
               </div>
             )
