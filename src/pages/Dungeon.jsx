@@ -192,6 +192,13 @@ export default function Dungeon() {
   const [poisoned, setPoisoned] = useState(false) // 毒状態（次フロアで回復）
   const [paralyzed, setParalyzed] = useState(0)   // 麻痺＝あと何ターン行動不能か（電気クラゲ等）
   const [log, setLog] = useState([])
+  const [logHidden, setLogHidden] = useState(false) // 2秒間ログ更新が無ければフェードアウト
+  useEffect(() => {
+    if (log.length === 0) return
+    setLogHidden(false)
+    const t = setTimeout(() => setLogHidden(true), 2000)
+    return () => clearTimeout(t)
+  }, [log])
   const [status, setStatus] = useState('select') // select | exploring | cleared | dead | escaped
   const [reward, setReward] = useState(null)
   const [selectedSkill, setSelectedSkill] = useState('tackle') // ダンジョン内で選択中のスキル
@@ -1340,9 +1347,10 @@ export default function Dungeon() {
               </div>
             )
           })()}
-          {/* マップ右下：背景透過の文字だけログ（直近数件・邪魔にならない控えめサイズ） */}
+          {/* マップ右下：背景透過の文字だけログ（直近数件・2秒無更新でフェードアウト） */}
           <div style={{ position: 'absolute', right: 8, bottom: 6, zIndex: 4, pointerEvents: 'none',
-            width: 'min(62%, 360px)', textAlign: 'right', lineHeight: 1.5 }}>
+            width: 'min(62%, 360px)', textAlign: 'right', lineHeight: 1.5,
+            opacity: logHidden ? 0 : 1, transition: 'opacity 0.7s ease' }}>
             {log.slice(0, 4).reverse().map((l, i, arr) => (
               <div key={i} style={{
                 fontSize: 11, fontFamily: 'monospace',
