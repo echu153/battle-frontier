@@ -1229,11 +1229,6 @@ export default function Dungeon() {
                         position: 'absolute', left: x, top: y, '--dx': `${((i % 2 ? 1 : -1) * (5 + (i * 7) % 9))}px`,
                         fontSize: 15, opacity: 0, animation: `bf-spark-fall 0.9s ease-in ${delay} forwards`,
                       }}>✨</span>
-                      {/* 消える時にも✨がこぼれ落ちる */}
-                      <span style={{
-                        position: 'absolute', left: x, top: y, '--dx': `${((i % 2 ? -1 : 1) * (6 + (i * 5) % 8))}px`,
-                        fontSize: 15, opacity: 0, animation: `bf-spark-fall 1s ease-in ${2.1 + i * 0.07}s forwards`,
-                      }}>✨</span>
                     </span>
                   )
                 })}
