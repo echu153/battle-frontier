@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant, ASSET_VER } from '../constants/pets'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
@@ -202,6 +202,26 @@ export default function Dungeon() {
   const [isAdmin, setIsAdmin] = useState(false) // 開発アカウント（comingSoonダンジョンに入れる）
   const [transition, setTransition] = useState(null) // フロア遷移演出 { floor, black, title }
   const [lockedOut, setLockedOut] = useState(false)   // 別端末でプレイ中＝この端末はロック
+  const [bgmOn, setBgmOn] = useState(() => localStorage.getItem('bf_dg_bgm') !== '0') // BGM ON/OFF
+  const audioRef = useRef(null)
+
+  // BGM：探索中かつONでループ再生（ブラウザの自動再生制限のため、操作時にも再生を試みる）
+  useEffect(() => {
+    if (!audioRef.current) {
+      const a = new Audio(`/dungeon_bgm.mp3?v=${ASSET_VER}`)
+      a.loop = true; a.volume = 0.35
+      audioRef.current = a
+    }
+    return () => { if (audioRef.current) { audioRef.current.pause() } }
+  }, [])
+  useEffect(() => {
+    const a = audioRef.current
+    if (!a) return
+    if (bgmOn && status === 'exploring') { a.play().catch(() => {}) }
+    else { a.pause() }
+  }, [bgmOn, status])
+  const ensureBgm = () => { const a = audioRef.current; if (a && bgmOn && a.paused) a.play().catch(() => {}) }
+  const toggleBgm = () => setBgmOn((v) => { const nv = !v; localStorage.setItem('bf_dg_bgm', nv ? '1' : '0'); return nv })
   const gridRef = useRef(null)
   const [cellPx, setCellPx] = useState(0) // 1マスのピクセル幅（床をワールド固定で敷くため）
 
@@ -542,6 +562,7 @@ export default function Dungeon() {
   }
 
   const tryMove = (dx, dy) => {
+    ensureBgm() // 操作時にBGM再生を確実に開始（自動再生ブロック対策）
     if (!state || status !== 'exploring' || busyRef.current || transition || lockedOut) return
     // 麻痺中は行動不能。1ターン消費して敵だけ動く
     if (paralyzed > 0) {
@@ -1089,7 +1110,13 @@ export default function Dungeon() {
         <div className="bf-dg-main">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #003366', paddingBottom: 8, marginBottom: 10 }}>
           <div style={{ color: '#ffcc00', fontSize: 16, letterSpacing: 3 }}>BATTLE FRONTIER</div>
-          <Btn onClick={leaveToTown}>← 街に戻る</Btn>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button onClick={toggleBgm} title="BGM ON/OFF"
+              style={{ background: bgmOn ? '#101a30' : '#0a0a14', border: `1px solid ${bgmOn ? '#0088ff' : '#334455'}`, color: bgmOn ? '#66bbff' : '#556677', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
+              {bgmOn ? '🔊' : '🔇'}
+            </button>
+            <Btn onClick={leaveToTown}>← 街に戻る</Btn>
+          </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ color: '#aa88ff', letterSpacing: 2 }}>{dungeon?.emoji || '🕳'} {dungeon?.name || 'ダンジョン'}</div>
