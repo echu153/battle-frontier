@@ -1021,9 +1021,10 @@ export default function Dungeon() {
               '--ly': c.fx.lunge ? `${Math.sign(c.fx.lunge.dy) * 40}%` : '0%',
             } : null
             // 壁マスは壁画像（1マスごと）。床マスは透過で下地の床1枚を見せる。
+            // 壁は寒色＋暗めに色補正して、暖色の床とハッキリ区別できるようにする。
             const wallImg = c.wallImg
             const tileStyle = wallImg
-              ? { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+              ? { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.62) saturate(0.5) hue-rotate(-18deg)' }
               : { backgroundImage: 'none' }
             // floorTile有効時は床マスの極細枠線を消して継ぎ目をなくす
             const showHairline = !floorTile
