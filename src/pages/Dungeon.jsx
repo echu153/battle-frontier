@@ -857,25 +857,27 @@ export default function Dungeon() {
   const wallTile = dgTileSrc(dungeon?.id, 'wall')
   const stairsTile = dgTileSrc(dungeon?.id, 'stairs')
   const itemTile = dgTileSrc(dungeon?.id, 'item')
+  // 床はグリッド全体に1枚だけ敷く（シームレス）。床マスは透過してその床を見せる。
+  const floorBg = floorTile ? 'transparent' : C.floorVis
   const cellAt = (x, y) => {
     if (!inBounds(x, y)) return { ch: '', bg: C.unknown }
     const vis = isVisible(x, y)
     if (!vis) return { ch: '', bg: C.unknown } // 現在見えていない所は完全に真っ暗（記憶表示なし）
     const wall = state.grid[y][x] === '#'
-    // 床マスのタイル背景画像（壁はwallTile、それ以外はfloorTile）
-    const tileBg = wall ? wallTile : floorTile
-    // 現在視界：エンティティ優先（足元は床色）
-    if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: C.floorVis, tileBg, fx: fx.pet, poison: poisoned }
+    // 現在視界：エンティティ優先（足元は床。floorTile時は透過で下地の床画像を見せる）
+    if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: floorBg, fx: fx.pet, poison: poisoned }
     const e = state.enemies.find((o) => o.x === x && o.y === y)
-    if (e) return { ch: '👹', img: e.image || null, bg: C.floorVis, tileBg, fx: fx.enemies[e.id] || null }
+    if (e) return { ch: '👹', img: e.image || null, bg: floorBg, fx: fx.enemies[e.id] || null }
     const it = state.items.find((o) => o.x === x && o.y === y)
     if (it) {
       const ch = (it.kind === 'food' || it.kind === 'dropFood') ? (PET_ITEMS[it.key]?.emoji || '🍙')
         : it.kind === 'dropLoot' ? (it.loot?.emoji || '🎁') : '✨'
-      return { ch, bg: C.floorVis, tileBg, overlay: itemTile }
+      return { ch, bg: floorBg, overlay: itemTile }
     }
-    if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: C.floorVis, tileBg, overlay: stairsTile }
-    return { ch: '', bg: wall ? C.wallVis : C.floorVis, tileBg }
+    if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: floorBg, overlay: stairsTile }
+    // 壁マスは壁画像を1マスごとに表示（無ければ色）。床マスは透過。
+    if (wall) return { ch: '', bg: C.wallVis, wallImg: wallTile }
+    return { ch: '', bg: floorBg }
   }
 
   const adjClick = (vx, vy) => {
@@ -953,6 +955,10 @@ export default function Dungeon() {
 
         {/* マップ（ビューポート）。接触時に少し震える戦闘演出 */}
         <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', willChange: 'transform', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
+          {/* 床は1枚をビューポート全体に敷く＝床マスは透過してこれを見せる（継ぎ目ゼロ） */}
+          {floorTile && (
+            <div style={{ position: 'absolute', inset: 6, backgroundImage: `url(${floorTile})`, backgroundSize: 'cover', backgroundPosition: 'center', zIndex: 0, pointerEvents: 'none' }} />
+          )}
           {Array.from({ length: VH }).map((_, vy) => Array.from({ length: VW }).map((_, vx) => {
             const x = ox + vx, y = oy + vy
             const c = cellAt(x, y)
@@ -982,17 +988,16 @@ export default function Dungeon() {
               '--lx': c.fx.lunge ? `${Math.sign(c.fx.lunge.dx) * 40}%` : '0%',
               '--ly': c.fx.lunge ? `${Math.sign(c.fx.lunge.dy) * 40}%` : '0%',
             } : null
-            // タイル画像は1枚をビューポート全体にまたいで分割表示＝マスの継ぎ目が消えて繋がって見える
-            const tiled = !!c.tileBg
-            const tileStyle = tiled ? {
-              backgroundImage: `url(${c.tileBg})`,
-              backgroundSize: `${VW * 100}% ${VH * 100}%`,
-              backgroundPosition: `${VW > 1 ? (vx / (VW - 1)) * 100 : 50}% ${VH > 1 ? (vy / (VH - 1)) * 100 : 50}%`,
-              backgroundRepeat: 'no-repeat',
-            } : { backgroundImage: 'none' }
+            // 壁マスは壁画像（1マスごと）。床マスは透過で下地の床1枚を見せる。
+            const wallImg = c.wallImg
+            const tileStyle = wallImg
+              ? { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+              : { backgroundImage: 'none' }
+            // floorTile有効時は床マスの極細枠線を消して継ぎ目をなくす
+            const showHairline = !floorTile
             return (
               <div key={`${vx}-${vy}`} onClick={() => clickable && adjClick(vx, vy)}
-                style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, ...tileStyle, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: tiled ? 'none' : `0 0 0 0.6px ${c.bg}` }}>
+                style={{ position: 'relative', zIndex: 1, aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, ...tileStyle, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: showHairline ? `0 0 0 0.6px ${c.bg}` : 'none' }}>
                 {fxStyle ? <div key={`fx${fx.t}`} style={fxStyle}>{inner}</div> : inner}
               </div>
             )
