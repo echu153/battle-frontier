@@ -974,15 +974,8 @@ export default function Dungeon() {
           15%  { transform: translate(-50%, -4px); opacity: 1; }
           100% { transform: translate(-50%, -18px); opacity: 0; }
         }
-        /* マップは画面幅いっぱいに広げる。狭い画面では従来どおり縦積み */
+        /* マップは画面幅いっぱいに広げる */
         .bf-dg-wrap { max-width: min(96vw, 820px); margin: 0 auto; }
-        .bf-dg-side { display: none; }
-        /* 右下フローティングのログ枠（広い画面で表示。狭い画面はマップ下に表示） */
-        .bf-dg-float-log { display: none; }
-        @media (min-width: 480px) {
-          .bf-dg-float-log { display: block; }
-          .bf-dg-log-mobile { display: none; }
-        }
         @media (min-width: 900px) {
           .bf-dg-wrap { max-width: 920px; }
         }
@@ -1107,6 +1100,19 @@ export default function Dungeon() {
               }}>{p.text}</span>
             )
           })}
+          {/* マップ右下：背景透過の文字だけログ（直近数件・邪魔にならない控えめサイズ） */}
+          <div style={{ position: 'absolute', right: 8, bottom: 6, zIndex: 4, pointerEvents: 'none',
+            width: 'min(62%, 360px)', textAlign: 'right', lineHeight: 1.5 }}>
+            {log.slice(0, 4).reverse().map((l, i, arr) => (
+              <div key={i} style={{
+                fontSize: 11, fontFamily: 'monospace',
+                color: i === arr.length - 1 ? '#eaf4ff' : (l.side === 'right' ? '#ffb0b0' : '#bcd6ff'),
+                opacity: 0.45 + 0.55 * ((i + 1) / arr.length), // 古いほど薄く
+                textShadow: '0 1px 2px #000, 0 0 4px #000, 0 0 2px #000',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>{l.msg}</div>
+            ))}
+          </div>
         </div>
 
         {status === 'exploring' && (
@@ -1180,20 +1186,11 @@ export default function Dungeon() {
           <div style={{ textAlign: 'center', marginTop: 16, color: '#cc88ff' }}>🪽 ダンジョンから脱出した<RewardPanel reward={reward} pet={pet} /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
 
-        {/* ログ（スマホ・狭い画面用。PCでは右カラムに表示） */}
-        <div className="bf-dg-log-mobile">
-          <LogView log={log} height={140} />
-        </div>
 
         {/* ⚔ 簡易出撃（カジノと同じ・自キャラを並行して育成できる）。エリア選択はここを開いて行う */}
         <SortiePanel quickSlotId="bf-sortie-quick" collapsible activitySignal={floorNum} />
         </div>
 
-      </div>
-
-      {/* 右下フローティングのログ枠（広い画面） */}
-      <div className="bf-dg-float-log" style={{ position: 'fixed', right: 12, bottom: 12, width: 320, maxWidth: '38vw', zIndex: 50 }}>
-        <LogView log={log} height="34vh" />
       </div>
     </div>
   )
