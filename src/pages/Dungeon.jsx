@@ -273,6 +273,7 @@ export default function Dungeon() {
   const enemiesRef = useRef(0)
   const floorsRef = useRef(0)
   const itemsRef = useRef(0)
+  const saveTimer = useRef(null) // サーバー保存のデバウンス用
 
   // ラン開始（選択中ペットがある場合のみ報酬対象）
   const startRun = useCallback(async (petId, dungeonId = 'd10') => {
@@ -401,42 +402,48 @@ export default function Dungeon() {
       const { data: cl } = await supabase.from('dungeon_runs').select('dungeon_id').eq('owner_id', user.id).eq('cleared', true)
       if (cl) setCleared(new Set(cl.map((r) => r.dungeon_id)))
 
-      // 中断していた探索を復元（リロードしても継続）
+      // 中断していた探索を復元。サーバー優先＝どの端末からでも最新状態を続行できる。
       let restored = false
-      const raw = ap ? localStorage.getItem(`bf_dungeon2_${user.id}`) : null
-      if (raw) {
-        try {
-          const sv = JSON.parse(raw)
-          if (sv?.runId && sv?.state) {
-            // ランがサーバー側で終了していたら（run not active対策）新しいランを開始して続行
-            const { data: runRow } = await supabase.from('dungeon_runs').select('status').eq('id', sv.runId).maybeSingle()
-            let sameRun = true
-            if (runRow?.status === 'active') {
-              runIdRef.current = sv.runId
-            } else {
-              const { data: newRun } = await supabase.rpc('dungeon_start', { p_pet_id: ap.id, p_dungeon_id: sv.dungeonId || 'd10' })
-              runIdRef.current = newRun || null
-              // 戦利品の実体は旧ラン(pending_loot)に紐付くため、新ランでは持ち越せない
-              // （表示だけ残ると生還時に付与されず、捨てる/再抽選も bad run で失敗する）
-              sameRun = false
+      if (ap) {
+        let sv = null
+        // ① サーバーのアクティブ探索（最新）の保存状態を優先
+        const { data: activeRun } = await supabase.from('dungeon_runs')
+          .select('id, dungeon_id, client_state')
+          .eq('owner_id', user.id).eq('status', 'active')
+          .order('started_at', { ascending: false }).limit(1).maybeSingle()
+        if (activeRun?.client_state?.state) {
+          sv = activeRun.client_state
+          runIdRef.current = activeRun.id
+        } else {
+          // ② サーバーに状態が無ければ localStorage（その端末のリロード継続）。runがactiveな時のみ採用
+          try {
+            const raw = localStorage.getItem(`bf_dungeon2_${user.id}`)
+            if (raw) {
+              const j = JSON.parse(raw)
+              if (j?.runId && j?.state) {
+                const { data: rr } = await supabase.from('dungeon_runs').select('status').eq('id', j.runId).maybeSingle()
+                if (rr?.status === 'active') { sv = j; runIdRef.current = j.runId }
+              }
             }
-            finishedRef.current = false
-            enemiesRef.current = sv.kills || 0
-            floorsRef.current = sv.floorsCleared || 0
-            itemsRef.current = sv.itemsCollected || 0
-            setDungeon(getDungeon(sv.dungeonId))
-            setFloorNum(sv.floorNum)
-            setPetHp(sv.petHp)
-            setFullness(sv.fullness)
-            setTurns(sv.turns)
-            setSelectedSkill(sv.selectedSkill || 'tackle')
-            if (sv.inventory) setInventory(sv.inventory)
-            if (sameRun && Array.isArray(sv.lootBag)) setLootBag(sv.lootBag)
-            setState({ ...sv.state, explored: new Set(sv.state.explored) })
-            setStatus('exploring')
-            restored = true
-          }
-        } catch { /* 壊れていたら無視 */ }
+          } catch { /* 壊れていたら無視 */ }
+        }
+        if (sv?.state) {
+          finishedRef.current = false
+          enemiesRef.current = sv.kills || 0
+          floorsRef.current = sv.floorsCleared || 0
+          itemsRef.current = sv.itemsCollected || 0
+          setDungeon(getDungeon(sv.dungeonId))
+          setFloorNum(sv.floorNum)
+          setPetHp(sv.petHp)
+          setFullness(sv.fullness)
+          setTurns(sv.turns)
+          setSelectedSkill(sv.selectedSkill || 'tackle')
+          if (sv.inventory) setInventory(sv.inventory)
+          if (Array.isArray(sv.lootBag)) setLootBag(sv.lootBag)
+          setState({ ...sv.state, explored: new Set(sv.state.explored) })
+          setStatus('exploring')
+          restored = true
+        }
       }
       if (!restored) setStatus('select')
       setAllowed(true)
@@ -470,6 +477,12 @@ export default function Dungeon() {
         state: { ...state, explored: [...state.explored] },
       }
       try { localStorage.setItem(key, JSON.stringify(sv)) } catch { /* 容量超過などは無視 */ }
+      // サーバーにも保存（複数端末同期）。デバウンスして書き込みすぎを防ぐ
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      const runId = runIdRef.current
+      saveTimer.current = setTimeout(() => {
+        supabase.rpc('dungeon_save_state', { p_run_id: runId, p_state: sv }).then(() => {}, () => {})
+      }, 700)
     } else if (status === 'cleared' || status === 'dead' || status === 'escaped') {
       localStorage.removeItem(key)
     }
@@ -1008,10 +1021,11 @@ export default function Dungeon() {
           60%  { opacity: 1; transform: translate(-50%, -60%) rotate(var(--r,0deg)) scale(1.25); }
           100% { opacity: 1; transform: translate(-50%, -50%) rotate(var(--r,0deg)) scale(1); }
         }
-        @keyframes bf-sparkle {
-          0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.2) rotate(0deg); }
-          35%  { opacity: 1; transform: translate(-50%, -50%) scale(1.5) rotate(40deg); }
-          100% { opacity: 0; transform: translate(-50%, -50%) scale(0.6) rotate(90deg); }
+        /* ✨がその場で出て下へこぼれ落ちる（流れ星風） */
+        @keyframes bf-spark-fall {
+          0%   { opacity: 0; transform: translate(-50%, -60%) scale(0.3) rotate(0deg); }
+          25%  { opacity: 1; transform: translate(-50%, -30%) scale(1.3) rotate(20deg); }
+          100% { opacity: 0; transform: translate(calc(-50% + var(--dx, 0px)), 240%) scale(0.5) rotate(80deg); }
         }
         /* マップは画面幅いっぱいに広げる */
         .bf-dg-wrap { max-width: min(96vw, 820px); margin: 0 auto; }
@@ -1168,18 +1182,20 @@ export default function Dungeon() {
                     <span key={i}>
                       <span style={{
                         position: 'absolute', left: x, top: y, '--r': `${rot}deg`,
-                        transformOrigin: 'center', fontFamily: 'monospace', fontWeight: 'bold', fontSize: 19,
-                        color: `hsl(${hue},90%,62%)`, textShadow: '0 0 2px #000, 0 1px 3px #000, 0 0 7px rgba(255,255,255,0.5)',
+                        transformOrigin: 'center', fontFamily: 'monospace', fontWeight: 900, fontSize: 21,
+                        WebkitTextStroke: '1.4px #000', // 黒で縁取りして太く見やすく
+                        color: `hsl(${hue},92%,60%)`, textShadow: '0 0 3px #000, 0 2px 4px #000, 0 0 8px rgba(255,255,255,0.55)',
                         opacity: 0, animation: `bf-letter-pop 0.5s ease-out ${delay} forwards`,
                       }}>{ch}</span>
+                      {/* 出現時に✨がこぼれ落ちる（流れ星風） */}
                       <span style={{
-                        position: 'absolute', left: x, top: y - 2, transform: 'translate(-50%,-50%)',
-                        fontSize: 16, opacity: 0, animation: `bf-sparkle 0.7s ease-out ${delay} forwards`,
+                        position: 'absolute', left: x, top: y, '--dx': `${((i % 2 ? 1 : -1) * (5 + (i * 7) % 9))}px`,
+                        fontSize: 15, opacity: 0, animation: `bf-spark-fall 0.9s ease-in ${delay} forwards`,
                       }}>✨</span>
-                      {/* 消える時のキラキラ（終盤に各文字でフラッシュ） */}
+                      {/* 消える時にも✨がこぼれ落ちる */}
                       <span style={{
-                        position: 'absolute', left: x, top: y - 2, transform: 'translate(-50%,-50%)',
-                        fontSize: 16, opacity: 0, animation: `bf-sparkle 0.7s ease-in ${2.2 + i * 0.08}s forwards`,
+                        position: 'absolute', left: x, top: y, '--dx': `${((i % 2 ? -1 : 1) * (6 + (i * 5) % 8))}px`,
+                        fontSize: 15, opacity: 0, animation: `bf-spark-fall 1s ease-in ${2.1 + i * 0.07}s forwards`,
                       }}>✨</span>
                     </span>
                   )
