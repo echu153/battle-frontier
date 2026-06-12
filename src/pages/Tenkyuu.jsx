@@ -13,6 +13,7 @@ import {
   executeSkill,
   extractStatuses,
   BattleLogLine,
+  MULTI_HIT_SKILLS,
 } from './Game'
 import {
   TENKYUU_PALACES,
@@ -218,8 +219,11 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const isSureHit = !mpLack && nextSkillName === '絶影狙撃'
     // バフ・回復スキルは自分にかけるものなので敵に回避されない（MP不足時は通常攻撃なので回避判定あり）
     const isSelfSkill = !mpLack && nextSkill && (nextSkill.type === '強化' || nextSkill.type === '回復')
+    // 多段ヒットスキルは行動全体の回避判定をスキップし、1発ごとに回避判定する
+    const isMultiHitSkill = !mpLack && nextSkill && MULTI_HIT_SKILLS.has(nextSkill.name)
     const skillExtraHit = (nextSkillName === '連装銃撃' && profile.class === '魔銃士' && rtCur >= 2) ? 10 : 0
-    const effectiveEnemyEvasion = (isSureHit || isSelfSkill) ? 0 : Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit)
+    const baseEnemyEvasion = Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit)
+    const effectiveEnemyEvasion = (isSureHit || isSelfSkill || isMultiHitSkill) ? 0 : baseEnemyEvasion
     if (effectiveEnemyEvasion > 0 && Math.random()*100 < effectiveEnemyEvasion) {
       logs.push({ text:`${prefix}${nextSkillName && !mpLack ? `${nextSkillName}！` : '攻撃！'} しかし${enemy.name}に回避された！`, color:'#446688' })
       // 追撃系（鬼影閃の影歩き追撃など）はメインが回避されても独立ヒットとして発動する
@@ -279,9 +283,28 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         }
         const allinDebuffOutMult = playerBuffs.allinDebuff?.turns > 0 ? 0.7 : 1.0
         const enemyDmgReduceMult = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
-        let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * playerDmgMult * sameSkillMult * (0.9 + Math.random() * 0.2))
+        // 多段ヒットスキル：1発ごとに回避・クリティカル・ダメージ判定
+        const isMulti = Array.isArray(res.hitDmgs) && res.hitDmgs.length > 0 && res.dmg > 0
+        let finalDmg, resLog, multiCritAny = false
+        if (isMulti) {
+          const hitMult = defScale * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * playerDmgMult * sameSkillMult
+          const parts = []
+          finalDmg = 0
+          for (const hd of res.hitDmgs) {
+            if (baseEnemyEvasion > 0 && Math.random()*100 < baseEnemyEvasion) { parts.push('回避された！'); continue }
+            const hCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0))
+            const hMult = hCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
+            let hDmg = Math.max(1, Math.floor(hd * hitMult * hMult * (0.9 + Math.random()*0.2)))
+            if (hCrit) multiCritAny = true
+            finalDmg += hDmg
+            parts.push(`${hDmg}ダメージ！${hCrit ? '💥' : ''}`)
+          }
+          resLog = `${res.log.split('！')[0]}！ ${enemy.name}に ${parts.join(' ')}`
+        } else {
+          finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * playerDmgMult * sameSkillMult * (0.9 + Math.random() * 0.2))
+          resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
+        }
         if (res.dmg > 0) { lastPlayerHitType = cs.skills?.type === '魔法攻撃' ? 'magical' : 'physical'; prevDmgSkillName = cs.skills?.name }
-        const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
         if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
         dmgEnemy(finalDmg, actKind)
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
@@ -311,12 +334,12 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
         stripEnemyStatuses(buffsBefore)
         mirrorPlayerBuffs(pBuffsBefore)
-        const critInsert = finalCrit ? '💥クリティカル！ ' : ''
+        const critInsert = (finalCrit && !isMulti) ? '💥クリティカル！ ' : ''
         const dmgIdx = resLog.indexOf(enemy.name + 'に')
         const logWithCrit = critInsert
           ? (dmgIdx >= 0 ? resLog.slice(0, dmgIdx) + critInsert + resLog.slice(dmgIdx) : resLog + ' ' + critInsert)
           : resLog
-        logs.push({ text:`${prefix}${logWithCrit}`, color:finalCrit?'#ffff00':'#88ccff' })
+        logs.push({ text:`${prefix}${logWithCrit}`, color:(finalCrit && !isMulti) || multiCritAny ? '#ffff00' : '#88ccff' })
         if (sameSkillMult < 1.0 && res.dmg > 0) logs.push({ text:`🔁 ${enemy.name}は同じ技を見切っている…威力減！`, color:'#aa88cc' })
         maybeCounterFlat(finalDmg)
         if (res.followup && res.followup.dmg > 0) {

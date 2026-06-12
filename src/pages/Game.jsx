@@ -9,6 +9,8 @@ import { countClaimableTitles } from '../lib/titles'
 export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue, calcDefReduction } from '../lib/stats'
 
 export const WAIT_SECONDS = 10
+// 多段ヒットスキル：行動全体ではなく1発ごとに回避・クリティカル・ダメージ判定する
+export const MULTI_HIT_SKILLS = new Set(['マジックアロー','三連射','メテオストライク','連打','五連殺','飛天三角蹴り','連装銃撃'])
 const REGEN_SECONDS = 60
 
 export const ARTIFACT_BASE_NAMES = [
@@ -686,6 +688,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     case 'マジックアロー': {
       const ma1 = Math.floor(eff.matk*0.7*am*r()), ma2 = Math.floor(eff.matk*0.7*am*r())
       result.dmg = ma1+ma2
+      result.hitDmgs = [ma1, ma2]
       result.log = `🔮 マジックアロー！ ${enemy.name}に${ma1}の特殊ダメージ！${ma2}の特殊ダメージ！`; break
     }
     case 'ファイア': {
@@ -772,6 +775,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       const tlMult = rt>=2?0.6:0.5
       const s1=Math.floor(eff.atk*tlMult*am*r()), s2=Math.floor(eff.atk*tlMult*am*r()), s3=Math.floor(eff.atk*tlMult*am*r())
       result.dmg = s1+s2+s3
+      result.hitDmgs = [s1, s2, s3]
       result.log = `🏹 三連射！ ${enemy.name}に${s1}の物理ダメージ！${s2}の物理ダメージ！${s3}の物理ダメージ！`; break
     }
     case '狩猟本能':    { const huntRate = rt>=4?1.5:1.3; result.newPlayerBuffs.atkUp={turns:4,rate:huntRate}; result.newPlayerBuffs.spdUp={turns:4,rate:huntRate}; result.log = `🌲 狩猟本能！ 4ターンの間、攻撃力・素早さが上昇！`; break }
@@ -925,6 +929,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
         if (!meteoBurned && Math.random()*100 < 10) { meteoBurned = true; result.newEnemyBuffs.burn = { turns:5, dmgRate:0.02 } }
       }
       result.dmg = hitDmgs.reduce((a,b)=>a+b,0)
+      result.hitDmgs = hitDmgs
       result.log = `☄ メテオストライク！ ${enemy.name}に${hitDmgs.map(d=>`${d}の特殊ダメージ`).join('！')}！${meteoBurned ? ' やけど状態！' : ''}`
       break
     }
@@ -933,6 +938,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     case '連打': {
       const c1=Math.floor(eff.atk*0.4*am*r()), c2=Math.floor(eff.atk*0.4*am*r()), c3=Math.floor(eff.atk*0.4*am*r())
       result.dmg = c1+c2+c3
+      result.hitDmgs = [c1, c2, c3]
       result.log = `👊 連打！ ${enemy.name}に${c1}の物理ダメージ！${c2}の物理ダメージ！${c3}の物理ダメージ！`; break
     }
     case '残心':   result.newPlayerBuffs.spdUp={turns:4,rate:1.1}; result.newPlayerBuffs.hitBonus={turns:4,value:10}; result.log = `🧘 残心！ 4ターンの間、命中・素早さが上昇！`; break
@@ -979,6 +985,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
         for (let i=0;i<5;i++) { if (Math.random()*100 < 20) added++ }
         if (added > 0) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+added), lastTurn:0 } }
       }
+      result.hitDmgs = ds
       result.log = `🦵 五連殺！ ${enemy.name}に${ds.map(d=>`${d}の物理ダメージ`).join('！')}！`; break
     }
     case '闘争本能': result.log = `🔥 闘争本能【パッシブ】 HP50%以下の間、与ダメージ+10%（常時自動発動）`; break
@@ -993,11 +1000,11 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       const htAdd = rt>=5 ? 0.1 : 0     // 再修練5段で各ヒットの倍率+0.1
       if (Math.random() < htMiss) { result.dmg=0; result.log=`🦵 飛天三角蹴り！ 1撃目が外れた！`; break }
       const h1 = Math.floor(eff.atk*(0.5+htAdd)*am*r())
-      if (Math.random() < htMiss) { result.dmg=h1; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！ 2撃目が外れた！`; break }
+      if (Math.random() < htMiss) { result.dmg=h1; result.hitDmgs=[h1]; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！ 2撃目が外れた！`; break }
       const h2 = Math.floor(eff.atk*(0.8+htAdd)*am*r())
-      if (Math.random() < htMiss) { result.dmg=h1+h2; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！${h2}の物理ダメージ！ 3撃目が外れた！`; break }
+      if (Math.random() < htMiss) { result.dmg=h1+h2; result.hitDmgs=[h1,h2]; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！${h2}の物理ダメージ！ 3撃目が外れた！`; break }
       const h3 = Math.floor(eff.atk*(1.2+htAdd)*am*r())
-      result.dmg = h1+h2+h3; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！${h2}の物理ダメージ！${h3}の物理ダメージ！`; break
+      result.dmg = h1+h2+h3; result.hitDmgs=[h1,h2,h3]; result.log=`🦵 飛天三角蹴り！ ${h1}の物理ダメージ！${h2}の物理ダメージ！${h3}の物理ダメージ！`; break
     }
     // ── 魔銃士 ──
     case '魔弾': {
@@ -1008,6 +1015,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     case '連装銃撃': {
       const gs = Array.from({length:4}, ()=>Math.floor((eff.atk*0.25+eff.matk*0.25)*am*r()))
       result.dmg = gs.reduce((a,b)=>a+b,0)
+      result.hitDmgs = gs
       result.log = `🔫 連装銃撃！ ${enemy.name}に${gs.map(d=>`${d}の特殊ダメージ`).join('！')}！`; break
     }
     case '精密照準':   result.log = `🔫 精密照準【パッシブ】 命中率+5%（常時自動発動）`; break
@@ -2338,9 +2346,12 @@ export default function Game() {
       const isSureHit = !mpLack && nextSkillName === '絶影狙撃'
       // バフ・回復スキルは自分にかけるものなので敵に回避されない（MP不足時は通常攻撃なので回避判定あり）
       const isSelfSkill = !mpLack && nextSkill && (nextSkill.type === '強化' || nextSkill.type === '回復')
+      // 多段ヒットスキルは行動全体の回避判定をスキップし、1発ごとに回避判定する
+      const isMultiHitSkill = !mpLack && nextSkill && MULTI_HIT_SKILLS.has(nextSkill.name)
       // 連装銃撃の再修練強化：このスキルの命中+10%
       const skillExtraHit = (nextSkillName === '連装銃撃' && profile.class === '魔銃士' && rtCur >= 2) ? 10 : 0
-      const effectiveEnemyEvasion = (isSureHit || isSelfSkill) ? 0 : Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit) + (enemy.isPapia ? 50 : 0)
+      const baseEnemyEvasion = Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit) + (enemy.isPapia ? 50 : 0)
+      const effectiveEnemyEvasion = (isSureHit || isSelfSkill || isMultiHitSkill) ? 0 : baseEnemyEvasion
       if (effectiveEnemyEvasion > 0 && Math.random()*100 < effectiveEnemyEvasion) {
         logs.push({ text:`${prefix}${nextSkillName && !mpLack ? `${nextSkillName}！` : '攻撃！'} しかし${enemy.name}に回避された！`, color:'#446688' })
         // 追撃系（鬼影閃の影歩き追撃など）はメインが回避されても独立ヒットとして発動する
@@ -2404,9 +2415,29 @@ export default function Game() {
           // 半月蹴りの溜め：次のダメージスキルの威力を強化（消費）
           const nextBoostMult = (res.dmg > 0 && playerBuffs.nextSkillBoost) ? playerBuffs.nextSkillBoost.rate : 1.0
           if (nextBoostMult > 1.0 && cs.skills?.name !== '半月蹴り') res.newPlayerBuffs.nextSkillBoost = undefined
-          let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * nextBoostMult * (0.9 + Math.random() * 0.2))
-          if (enemy.isPapia && res.dmg > 0) finalDmg = 1
-          const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
+          // 多段ヒットスキル：1発ごとに回避・クリティカル・ダメージ判定（パピアにも1発ごとに1ダメージ）
+          const isMulti = Array.isArray(res.hitDmgs) && res.hitDmgs.length > 0 && res.dmg > 0
+          let finalDmg, resLog, multiCritAny = false
+          if (isMulti) {
+            const hitMult = defScale * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * nextBoostMult
+            const parts = []
+            finalDmg = 0
+            for (const hd of res.hitDmgs) {
+              if (baseEnemyEvasion > 0 && Math.random()*100 < baseEnemyEvasion) { parts.push('回避された！'); continue }
+              const hCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0))
+              const hMult = hCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
+              let hDmg = Math.max(1, Math.floor(hd * hitMult * hMult * (0.9 + Math.random()*0.2)))
+              if (enemy.isPapia) hDmg = 1
+              if (hCrit) multiCritAny = true
+              finalDmg += hDmg
+              parts.push(`${hDmg}ダメージ！${hCrit ? '💥' : ''}`)
+            }
+            resLog = `${res.log.split('！')[0]}！ ${enemy.name}に ${parts.join(' ')}`
+          } else {
+            finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * nextBoostMult * (0.9 + Math.random() * 0.2))
+            if (enemy.isPapia && res.dmg > 0) finalDmg = 1
+            resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
+          }
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
           enemyHp -= finalDmg
           if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
@@ -2435,12 +2466,12 @@ export default function Game() {
             if (hadBuff) logs.push({ text:`💸 オールインの反動中！ バフが効かない！`, color:'#ff4444' })
           }
           playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
-          const critInsert = finalCrit ? '💥クリティカル！ ' : ''
+          const critInsert = (finalCrit && !isMulti) ? '💥クリティカル！ ' : ''
           const dmgIdx = resLog.indexOf(enemy.name + 'に')
           const logWithCrit = critInsert
             ? (dmgIdx >= 0 ? resLog.slice(0, dmgIdx) + critInsert + resLog.slice(dmgIdx) : resLog + ' ' + critInsert)
             : resLog
-          logs.push({ text:`${prefix}${logWithCrit}`, color:finalCrit?'#ffff00':'#88ccff' })
+          logs.push({ text:`${prefix}${logWithCrit}`, color:(finalCrit && !isMulti) || multiCritAny ? '#ffff00' : '#88ccff' })
           // 追撃（影歩き/出血消費など）を別ヒットとして適用：メインとは独立したダメージ判定
           if (res.followup && res.followup.dmg > 0) {
             const fCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0))
