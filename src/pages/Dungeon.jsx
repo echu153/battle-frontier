@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant } from '../constants/pets'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
@@ -194,10 +194,11 @@ export default function Dungeon() {
   // 初めて見えたマスで画像読込待ちにならず即時表示される。
   useEffect(() => {
     if (!dungeon?.id) return
-    for (const key of ['floor', 'wall', 'stairs', 'item']) {
+    for (const key of ['floor', 'stairs', 'item']) {
       const src = dgTileSrc(dungeon.id, key)
       if (src) { const im = new Image(); im.src = src }
     }
+    for (const src of dgWallTiles(dungeon.id)) { const im = new Image(); im.src = src }
   }, [dungeon?.id])
   const [cleared, setCleared] = useState(new Set()) // クリア済みダンジョンID
   const [shake, setShake] = useState(null) // 戦闘演出：接触時のマップ揺れ（'hit' | 'kill'）
@@ -897,8 +898,8 @@ export default function Dungeon() {
       return { ch, bg: floorBg, overlay: itemTile }
     }
     if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: floorBg, overlay: stairsTile, stairsGlow: true }
-    // 壁マスは壁画像を1マスごとに表示（無ければ色）。床マスは透過。
-    if (wall) return { ch: '', bg: C.wallVis, wallImg: wallTile }
+    // 壁マスは壁画像を1マスごとに表示（複数あればマス座標でランダム）。床マスは透過。
+    if (wall) return { ch: '', bg: wallTile ? '#14100c' : C.wallVis, wallImg: dgWallVariant(dungeon?.id, x, y) || wallTile }
     return { ch: '', bg: floorBg }
   }
 
@@ -1026,11 +1027,14 @@ export default function Dungeon() {
             const tileStyle = wallImg
               ? { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.62) saturate(0.5) hue-rotate(-18deg)' }
               : { backgroundImage: 'none' }
-            // floorTile有効時は床マスの極細枠線を消して継ぎ目をなくす
-            const showHairline = !floorTile
+            // グリッド線対策：マス間のサブピクセル隙間を「そのマス自身の色」で埋める。
+            //  透過の床マスはそのまま（隙間も床が続くので継ぎ目なし）、それ以外は隙間を自色で塞ぐ。
+            const gapFill = floorTile
+              ? (c.bg !== 'transparent' ? `0 0 0 0.7px ${c.bg}` : 'none')
+              : `0 0 0 0.6px ${c.bg}`
             return (
               <div key={`${vx}-${vy}`} onClick={() => clickable && adjClick(vx, vy)}
-                style={{ position: 'relative', zIndex: 1, aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, ...tileStyle, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: showHairline ? `0 0 0 0.6px ${c.bg}` : 'none' }}>
+                style={{ position: 'relative', zIndex: 1, aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, ...tileStyle, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: gapFill }}>
                 {fxStyle ? <div key={`fx${fx.t}`} style={fxStyle}>{inner}</div> : inner}
               </div>
             )

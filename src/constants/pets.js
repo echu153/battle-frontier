@@ -293,13 +293,27 @@ export const DUNGEON_TILES = {
   // 深淵の遺跡(30F)専用タイル
   d30: {
     floor:  '/dg_floor2.png',  // 床（シームレス地面テクスチャ）
-    wall:   '/dg_wall.png',    // 壁
+    wall:   '/dg_wall.png',    // 壁（walls未指定時のフォールバック）
+    walls:  ['/dg_wall.png'],  // 壁バリエーション（複数入れるとマスごとにランダム表示）。例: ['/dg_wall.png','/dg_wall2.png','/dg_wall3.png']
     stairs: '/dg_stairs.png',  // 階段
     item:   '/dg_item.png',    // 落ちているアイテム（共通マーカー）
   },
   // 初級の洞窟(d10)は従来の色・絵文字のまま（タイル未設定）
 }
 export const dgTileSrc = (dungeonId, key) => assetSrc(DUNGEON_TILES[dungeonId]?.[key] || null)
+// 壁バリエーション配列（walls指定があればそれ、無ければwall単体を配列化）
+export const dgWallTiles = (dungeonId) => {
+  const t = DUNGEON_TILES[dungeonId]
+  const arr = (Array.isArray(t?.walls) && t.walls.length) ? t.walls : (t?.wall ? [t.wall] : [])
+  return arr.map((s) => assetSrc(s)).filter(Boolean)
+}
+// マス座標から決まる壁バリエーション添字（再描画でちらつかない決定論的選択）
+export const dgWallVariant = (dungeonId, x, y) => {
+  const arr = dgWallTiles(dungeonId)
+  if (arr.length === 0) return null
+  const h = ((x * 73856093) ^ (y * 19349663)) >>> 0
+  return arr[h % arr.length]
+}
 
 // 種族デフォルト画像（進化済みなら進化形イラスト）。未設定なら null
 export function speciesImage(pet) {
