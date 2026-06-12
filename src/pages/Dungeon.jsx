@@ -1021,15 +1021,15 @@ export default function Dungeon() {
           0%,100% { transform: translate(0,0); }
           45% { transform: translate(var(--lx,0), var(--ly,0)); }
         }
-        /* レベルアップ時に喜んで2回小ジャンプ */
+        /* レベルアップ時に喜んで2回小ジャンプ（間隔短め） */
         @keyframes bf-cheer {
           0%   { transform: translateY(0) scaleY(1); }
-          12%  { transform: translateY(2%) scaleY(0.9); }
-          30%  { transform: translateY(-26%) scaleY(1.05); }
-          46%  { transform: translateY(0) scaleY(0.95); }
-          58%  { transform: translateY(2%) scaleY(0.92); }
-          74%  { transform: translateY(-20%) scaleY(1.04); }
-          90%  { transform: translateY(0) scaleY(0.98); }
+          10%  { transform: translateY(2%) scaleY(0.9); }
+          26%  { transform: translateY(-26%) scaleY(1.05); }
+          40%  { transform: translateY(0) scaleY(0.95); }
+          48%  { transform: translateY(2%) scaleY(0.92); }
+          64%  { transform: translateY(-20%) scaleY(1.04); }
+          80%  { transform: translateY(0) scaleY(0.98); }
           100% { transform: translateY(0) scaleY(1); }
         }
         @keyframes bf-popnum {
@@ -1136,7 +1136,7 @@ export default function Dungeon() {
             const anims = []
             if (c.fx?.lunge) anims.push('bf-lunge 0.26s ease-out')
             if (c.fx?.flash) anims.push('bf-flash 0.42s ease-in-out')
-            if (c.cheer) anims.push('bf-cheer 0.9s ease-in-out') // レベルアップで2回小ジャンプ
+            if (c.cheer) anims.push('bf-cheer 0.7s ease-in-out') // レベルアップで2回小ジャンプ
             const fxStyle = (c.fx || c.cheer) ? {
               width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
               animation: anims.join(', '), willChange: 'transform, opacity',
