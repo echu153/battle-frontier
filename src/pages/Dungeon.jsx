@@ -585,16 +585,15 @@ export default function Dungeon() {
     setTimeout(() => { setTransition(null); busyRef.current = false }, 470 + 1000 + 450 + 470)
   }
 
-  // ダンジョン入場/再開時にも同じ「ダンジョン名 フロア数」演出を出す（フロアは差し替えず現在のまま）
+  // ダンジョン入場/再開時にも同じ「ダンジョン名 フロア数」演出を出す（フロアは差し替えず現在のまま）。
+  // リロードで床が一瞬見えないよう、最初から真っ暗(black:1)＋タイトル表示で始める。
   const playFloorIntro = (floor, dg) => {
     const meta = dg || dungeon
     busyRef.current = true
-    setTransition({ floor, black: 0, title: 0, name: meta?.name, emoji: meta?.emoji })
-    setTimeout(() => setTransition((t) => t && { ...t, black: 1 }), 30)
-    setTimeout(() => setTransition((t) => t && { ...t, title: 1 }), 470)
-    setTimeout(() => setTransition((t) => t && { ...t, title: 0 }), 470 + 1000)
-    setTimeout(() => setTransition((t) => t && { ...t, black: 0 }), 470 + 1000 + 450)
-    setTimeout(() => { setTransition(null); busyRef.current = false }, 470 + 1000 + 450 + 470)
+    setTransition({ floor, black: 1, title: 1, name: meta?.name, emoji: meta?.emoji })
+    setTimeout(() => setTransition((t) => t && { ...t, title: 0 }), 1000)               // タイトルフェードアウト
+    setTimeout(() => setTransition((t) => t && { ...t, black: 0 }), 1000 + 450)          // 暗転フェードアウト＝フロア出現
+    setTimeout(() => { setTransition(null); busyRef.current = false }, 1000 + 450 + 470)
   }
 
   const tryMove = (dx, dy) => {
