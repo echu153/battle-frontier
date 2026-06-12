@@ -244,7 +244,7 @@ export default function Dungeon() {
   }
   const popDmg = (x, y, n) => addPop(x, y, `-${n}`, '#ff5555')
   const popHeal = (x, y, n) => addPop(x, y, `+${n}`, '#66ff99')
-  const popExp = (x, y, n) => addPop(x, y, `＋Exp ${n}`, '#5aa0ff', { below: true }) // 経験値は青で自分の下に
+  const popExp = (x, y, n) => addPop(x, y, `＋Exp ${n}`, '#8fd0ff', { below: true }) // 経験値は明るい青で自分の下に
 
   // レベルアップ演出（キャラの上に虹色アーチで LEVEL UP・約4秒）
   const [levelUp, setLevelUp] = useState(null) // { x, y, id }
@@ -1125,8 +1125,10 @@ export default function Dungeon() {
                 position: 'absolute', zIndex: 3, pointerEvents: 'none',
                 left: `calc(${((vx + 0.5) / VW) * 100}% + ${p.dx}px)`,
                 top: p.below ? `${((vy + 0.95) / VH) * 100}%` : `${(vy / VH) * 100}%`,
-                color: p.color, fontSize: p.below ? 12 : 13, fontWeight: 'bold', fontFamily: 'monospace',
-                textShadow: '0 1px 2px #000, 0 0 4px #000', whiteSpace: 'nowrap',
+                color: p.color, fontSize: p.below ? 15 : 13, fontWeight: 'bold', fontFamily: 'monospace',
+                textShadow: p.below
+                  ? '0 0 2px #000, 0 1px 3px #000, 0 0 6px #0a2a55, -1px 0 1px #000, 1px 0 1px #000'
+                  : '0 1px 2px #000, 0 0 4px #000', whiteSpace: 'nowrap',
                 animation: p.below ? 'bf-popexp 1.1s ease-out forwards' : 'bf-popnum 0.85s ease-out forwards',
               }}>{p.text}</span>
             )
