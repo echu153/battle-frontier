@@ -125,7 +125,7 @@ function generateFloor(floorNum, dungeon) {
       const kind = pool[rand(0, pool.length - 1)]
       // 強さは初登場フロアの値で固定（深い階でも同種は同じ強さ）
       const es = dungeonEnemyStatsFor(dungeon, kind)
-      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: enemySkillsFor(kind.name), hp: es.maxHp, maxHp: es.maxHp, atk: es.atk, def: es.def, mdef: es.mdef })
+      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: kind.skills || enemySkillsFor(kind.name), hp: es.maxHp, maxHp: es.maxHp, atk: es.atk, def: es.def, mdef: es.mdef })
     }
   }
   // アイテム（✨/木の実/おにぎり 全部込み）を1フロア3〜5個ランダム
@@ -190,6 +190,7 @@ export default function Dungeon() {
   const [turns, setTurns] = useState(0)
   const [fullness, setFullness] = useState(MAX_FULLNESS)
   const [poisoned, setPoisoned] = useState(false) // 毒状態（次フロアで回復）
+  const [paralyzed, setParalyzed] = useState(0)   // 麻痺＝あと何ターン行動不能か（電気クラゲ等）
   const [log, setLog] = useState([])
   const [status, setStatus] = useState('select') // select | exploring | cleared | dead | escaped
   const [reward, setReward] = useState(null)
@@ -477,12 +478,13 @@ export default function Dungeon() {
     f.explored = computeVisible(f.rooms, f.player.x, f.player.y)
     setState(f)
     setPoisoned(false) // 次フロアに行くと毒は回復
+    setParalyzed(0)    // 麻痺も次フロアで回復
   }, [])
 
   // ダンジョンを選んで開始
   const beginDungeon = (d) => {
     setDungeon(d)
-    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
+    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
     enterFloor(1, d)
     startRun(pet.id, d.id)
   }
@@ -541,6 +543,13 @@ export default function Dungeon() {
 
   const tryMove = (dx, dy) => {
     if (!state || status !== 'exploring' || busyRef.current || transition || lockedOut) return
+    // 麻痺中は行動不能。1ターン消費して敵だけ動く
+    if (paralyzed > 0) {
+      setParalyzed((p) => Math.max(0, p - 1))
+      addLog('⚡ しびれて動けない！')
+      commitTurn(state, state.player, state.enemies, petHp)
+      return
+    }
     let s = state
     const px = s.player.x, py = s.player.y
     const nx = px + dx, ny = py + dy
@@ -672,6 +681,7 @@ export default function Dungeon() {
       }
     }
     let willPoison = false // このターンに毒を受けたか
+    let willParalyze = false // このターンに麻痺を受けたか
     const attackers = []   // 隣接して攻撃してくる敵（1体ずつ順番に演出する）
     const AGGRO_RANGE = 10 // この歩数以内の敵は視線に関係なく必ず追跡（後方の敵が放置されないように）
     enemies = enemies.map((e) => {
@@ -696,7 +706,10 @@ export default function Dungeon() {
           const chance = sk.type === 'poison' && antidote ? sk.chance * 0.5 : sk.chance
           if (Math.random() >= chance) continue
           if (sk.type === 'heavy') { dmg = Math.round(dmg * (sk.mult || 1)); notes.push(sk.name) }
+          // 溶解液：特殊判定（ペットの特防で軽減）の×mult攻撃。物理の敵でも特防に当たる
+          else if (sk.type === 'spec_heavy') { dmg = Math.max(1, Math.round(calcDamage(Math.round((e.atk || 1) * (sk.mult || 1)), pet.mdef || 0) * (0.9 + Math.random() * 0.2))); notes.push(sk.name) }
           else if (sk.type === 'poison') { willPoison = true; notes.push(sk.name) }
+          else if (sk.type === 'paralyze') { willParalyze = true; notes.push(sk.name) }
           else if (sk.type === 'vamp') { heal = Math.floor(dmg * (sk.frac || 0.5)); notes.push(sk.name) }
         }
         const healShown = heal > 0 ? Math.min(heal, e.maxHp - e.hp) : 0
@@ -763,6 +776,7 @@ export default function Dungeon() {
       setFullness(nextFull)
       setPetHp(curHp)
       if (willPoison && !poisoned) { setPoisoned(true); addLog('☠ 毒におかされた…！', 'right') }
+      if (willParalyze && paralyzed <= 0) { setParalyzed(1); addLog('⚡ しびれて次のターン動けない！', 'right') }
       if (dead) { setStatus('dead'); addLog('💀 ペットは力尽きた…'); finishRun(false, true) }
 
       // ---- 40ターンごとに敵が1体湧く ----
@@ -853,6 +867,7 @@ export default function Dungeon() {
   // 足踏み：その場で1ターン経過
   const stepInPlace = () => {
     if (!state || status !== 'exploring' || busyRef.current) return
+    if (paralyzed > 0) { setParalyzed((p) => Math.max(0, p - 1)); addLog('⚡ しびれて動けない！'); commitTurn(state, state.player, state.enemies, petHp); return }
     addLog('🚶 足踏みした')
     commitTurn(state, state.player, state.enemies, petHp)
   }
@@ -1090,6 +1105,7 @@ export default function Dungeon() {
             {pet.name} HP {petHp}/{pet.maxHp}
           </span>
           {poisoned && <span style={{ color: '#cc77ff' }}>☠ 毒</span>}
+          {paralyzed > 0 && <span style={{ color: '#ffe066' }}>⚡ 麻痺</span>}
           <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
           <span style={{ color: '#aa88ff' }}>⚡{getSkill(selectedSkill).name}</span>
         </div>

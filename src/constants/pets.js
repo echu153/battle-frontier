@@ -114,7 +114,53 @@ export const DUNGEONS = [
       { from: 8,  to: 10, enemies: [{ name: 'ゴブリン', type: 'phys', image: '/goburin.png', statMult: 1.0 }, { name: '野良犬', type: 'phys', images: ['/norainu1.png', '/norainu2.png'], statMult: 1.0 }, { name: '盗賊', type: 'phys', image: '/touzoku.png', statMult: 1.1 }] },
     ],
   },
-  { id: 'd30', name: '追憶の遺跡', floors: 30, requires: 'd10', emoji: '🏛', areas: [1, 2, 3, 4], comingSoon: true }, // 後日のアップデートで開放
+  // 追憶の遺跡（30F）。敵は stats を明示指定（フロア式ではなく固定値）。名前の変種ごとにステを変える。
+  {
+    id: 'd30', name: '追憶の遺跡', floors: 30, requires: 'd10', emoji: '🏛', areas: [1, 2, 3, 4], comingSoon: true, charms: ['antidote', 'guard'],
+    floorTable: [
+      // エリア①（1〜5）
+      { from: 1, to: 2, enemies: [
+        { name: 'スライム', type: 'phys', images: ['/suraimu.png', '/suraimu2.png', '/suraimu3.png'], stats: { maxHp: 70, atk: 30, def: 15, mdef: 15 }, skills: [{ name: '溶解液', chance: 0.30, type: 'spec_heavy', mult: 1.4 }] },
+      ] },
+      { from: 3, to: 5, enemies: [
+        { name: 'スライム', type: 'phys', images: ['/suraimu.png', '/suraimu2.png', '/suraimu3.png'], stats: { maxHp: 70, atk: 30, def: 15, mdef: 15 }, skills: [{ name: '溶解液', chance: 0.30, type: 'spec_heavy', mult: 1.4 }] },
+        { name: 'コウモリ', type: 'phys', image: '/koumori.png', stats: { maxHp: 100, atk: 45, def: 22, mdef: 22 } },
+        { name: '毒キノコ', type: 'spec', image: '/dokukinoko.png', stats: { maxHp: 130, atk: 60, def: 30, mdef: 30 } },
+      ] },
+      // エリア②（6〜9）
+      { from: 6, to: 9, enemies: [
+        { name: 'ゴブリン', type: 'phys', image: '/goburin.png', stats: { maxHp: 210, atk: 100, def: 55, mdef: 55 } },
+        { name: '野良犬', type: 'phys', images: ['/norainu1.png', '/norainu2.png'], stats: { maxHp: 210, atk: 100, def: 55, mdef: 55 } },
+        { name: '盗賊', type: 'phys', image: '/touzoku.png', stats: { maxHp: 230, atk: 110, def: 60, mdef: 60 } },
+      ] },
+      // エリア③（10〜19）
+      { from: 10, to: 14, enemies: [
+        { name: 'コボルト', type: 'phys', images: ['/koboruto.png', '/koboruto2.png'], stats: { maxHp: 340, atk: 135, def: 81, mdef: 81 } },
+        { name: 'スケルトン（剣）', type: 'phys', image: '/sukerutonken.png', stats: { maxHp: 380, atk: 150, def: 90, mdef: 90 } },
+        { name: 'スケルトン（弓）', type: 'phys', image: '/sukerutonyumi.png', stats: { maxHp: 320, atk: 170, def: 70, mdef: 70 } },
+      ] },
+      { from: 15, to: 19, enemies: [
+        { name: 'スケルトン（剣）', type: 'phys', image: '/sukerutonken.png', stats: { maxHp: 380, atk: 150, def: 90, mdef: 90 } },
+        { name: 'スケルトン（弓）', type: 'phys', image: '/sukerutonyumi.png', stats: { maxHp: 320, atk: 170, def: 70, mdef: 70 } },
+        { name: 'ゴーレム（攻）', type: 'spec', image: '/go-remukougeki.png', stats: { maxHp: 420, atk: 210, def: 90, mdef: 90 } },
+        { name: 'ゴーレム（守）', type: 'phys', image: '/go-remubougyo.png', stats: { maxHp: 650, atk: 120, def: 160, mdef: 160 } },
+      ] },
+      // エリア④（20〜29、30は一旦エリア④の敵で埋める。ボスは後日）
+      { from: 20, to: 24, enemies: [
+        { name: '深海魚人', type: 'spec', image: '/sinkaigyozin.png', stats: { maxHp: 700, atk: 210, def: 140, mdef: 140 } },
+        { name: '海賊（男）', type: 'phys', image: '/kaizokuotoko.png', stats: { maxHp: 770, atk: 231, def: 154, mdef: 140 } },
+        { name: '海賊（女）', type: 'spec', image: '/kaizokuonnna.png', stats: { maxHp: 700, atk: 225, def: 135, mdef: 150 } },
+        { name: 'ハリセンボン', type: 'phys', image: '/harisennbonn.png', stats: { maxHp: 650, atk: 220, def: 130, mdef: 130 }, skills: [{ name: 'どくのハリ', chance: 0.35, type: 'poison' }] },
+      ] },
+      { from: 25, to: 30, enemies: [
+        { name: '海賊（男）', type: 'phys', image: '/kaizokuotoko.png', stats: { maxHp: 770, atk: 231, def: 154, mdef: 140 } },
+        { name: '海賊（女）', type: 'spec', image: '/kaizokuonnna.png', stats: { maxHp: 700, atk: 225, def: 135, mdef: 150 } },
+        { name: '毒クラゲ', type: 'spec', image: '/dokukurage.png', stats: { maxHp: 700, atk: 210, def: 140, mdef: 140 }, skills: [{ name: 'どく', chance: 0.45, type: 'poison' }] },
+        { name: '電気クラゲ', type: 'spec', image: '/denkikurage.png', stats: { maxHp: 700, atk: 210, def: 140, mdef: 140 }, skills: [{ name: 'しびれ', chance: 0.30, type: 'paralyze' }] },
+        { name: 'ハリセンボン', type: 'phys', image: '/harisennbonn.png', stats: { maxHp: 650, atk: 220, def: 130, mdef: 130 }, skills: [{ name: 'どくのハリ', chance: 0.35, type: 'poison' }] },
+      ] },
+    ],
+  },
 ]
 export const getDungeon = (id) => DUNGEONS.find((d) => d.id === id) || DUNGEONS[0]
 
@@ -174,6 +220,10 @@ export function enemyFirstFloor(dungeon, name) {
 }
 // 種族ごとの実ステータス（初登場フロア基準＋種族倍率を適用）
 export function dungeonEnemyStatsFor(dungeon, kind) {
+  // stats を明示指定している敵（追憶の遺跡など）はその固定値を使う
+  if (kind?.stats) {
+    return { maxHp: kind.stats.maxHp, atk: kind.stats.atk, def: kind.stats.def, mdef: kind.stats.mdef }
+  }
   const ff = enemyFirstFloor(dungeon, kind?.name)
   const es = dungeonEnemyStats(ff, areaForFloor(dungeon, ff))
   const m = kind?.statMult ?? 1.0
