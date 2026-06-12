@@ -506,6 +506,7 @@ export default function Dungeon() {
           if (Array.isArray(sv.lootBag)) setLootBag(sv.lootBag)
           setState({ ...sv.state, explored: new Set(sv.state.explored) })
           setStatus('exploring')
+          playFloorIntro(sv.floorNum, getDungeon(sv.dungeonId)) // 再開時もダンジョン名・フロア表示
           restored = true
         }
       }
@@ -528,6 +529,7 @@ export default function Dungeon() {
     setDungeon(d)
     setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
     enterFloor(1, d)
+    playFloorIntro(1, d) // 入場時にダンジョン名・フロア表示
     startRun(pet.id, d.id)
   }
 
@@ -575,11 +577,23 @@ export default function Dungeon() {
   // フロア遷移演出：階段フェードアウト→暗転→「ダンジョン名 フロア数」を1秒表示→フェードインでフロア表示
   const descendFloor = (next) => {
     busyRef.current = true
-    setTransition({ floor: next, black: 0, title: 0 })
+    setTransition({ floor: next, black: 0, title: 0, name: dungeon?.name, emoji: dungeon?.emoji })
     setTimeout(() => setTransition((t) => t && { ...t, black: 1 }), 30)                 // 暗転フェードイン
     setTimeout(() => { setFloorNum(next); enterFloor(next, dungeon); setTransition((t) => t && { ...t, title: 1 }) }, 470) // 完全暗転でフロア差替＋タイトル表示
     setTimeout(() => setTransition((t) => t && { ...t, title: 0 }), 470 + 1000)          // タイトルフェードアウト
     setTimeout(() => setTransition((t) => t && { ...t, black: 0 }), 470 + 1000 + 450)    // 暗転フェードアウト＝フロア出現
+    setTimeout(() => { setTransition(null); busyRef.current = false }, 470 + 1000 + 450 + 470)
+  }
+
+  // ダンジョン入場/再開時にも同じ「ダンジョン名 フロア数」演出を出す（フロアは差し替えず現在のまま）
+  const playFloorIntro = (floor, dg) => {
+    const meta = dg || dungeon
+    busyRef.current = true
+    setTransition({ floor, black: 0, title: 0, name: meta?.name, emoji: meta?.emoji })
+    setTimeout(() => setTransition((t) => t && { ...t, black: 1 }), 30)
+    setTimeout(() => setTransition((t) => t && { ...t, title: 1 }), 470)
+    setTimeout(() => setTransition((t) => t && { ...t, title: 0 }), 470 + 1000)
+    setTimeout(() => setTransition((t) => t && { ...t, black: 0 }), 470 + 1000 + 450)
     setTimeout(() => { setTransition(null); busyRef.current = false }, 470 + 1000 + 450 + 470)
   }
 
@@ -1277,7 +1291,7 @@ export default function Dungeon() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: '#000208', opacity: transition.black, transition: 'opacity 0.45s ease' }}>
               <div style={{ textAlign: 'center', opacity: transition.title, transition: 'opacity 0.4s ease' }}>
-                <div style={{ color: '#c8a0ff', fontSize: 20, letterSpacing: 4 }}>{dungeon?.emoji} {dungeon?.name}</div>
+                <div style={{ color: '#c8a0ff', fontSize: 20, letterSpacing: 4 }}>{transition.emoji || dungeon?.emoji} {transition.name || dungeon?.name}</div>
                 <div style={{ color: '#ffcc66', fontSize: 26, letterSpacing: 3, marginTop: 10 }}>B{transition.floor}F</div>
               </div>
             </div>
