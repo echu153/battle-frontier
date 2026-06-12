@@ -913,8 +913,23 @@ export default function Dungeon() {
   // ダンジョン選択へ戻る（探索中なら現在の進捗で精算）
   const backToSelect = async () => { await finishRun(false); setDungeon(null); setStatus('select') }
 
-  // 街に戻る（探索中なら現在の進捗で精算してから離脱）
-  const leaveToTown = async () => { await finishRun(false); nav('/game') }
+  // 街に戻る：探索中は「中断（進行状況を保存してラン継続）」。クリア/死亡/脱出後はそのまま戻る
+  const leaveToTown = async () => {
+    if (status === 'exploring') {
+      if (!window.confirm('ダンジョンを中断して街に戻りますか？\n（進行状況は保存され、次回続きから再開できます）')) return
+      // デバウンス待たずにサーバーへ即保存（別端末でも続きから再開できるように）
+      if (runIdRef.current && state && pet.id) {
+        const sv = {
+          runId: runIdRef.current, dungeonId: dungeon?.id, floorNum, petHp, fullness, turns,
+          selectedSkill, inventory, lootBag, kills: enemiesRef.current, floorsCleared: floorsRef.current, itemsCollected: itemsRef.current,
+          state: { ...state, explored: [...state.explored] },
+        }
+        try { localStorage.setItem(saveKey(), JSON.stringify(sv)) } catch { /* 容量超過は無視 */ }
+        try { await supabase.rpc('dungeon_save_state', { p_run_id: runIdRef.current, p_state: sv, p_device: getDeviceId() }) } catch { /* オフライン等は無視 */ }
+      }
+    }
+    nav('/game')
+  }
 
   // あきらめる（倒された時と同じ仕様＝なつき-3・戦利品ランダム半分ロスト）
   const giveUp = async () => {
