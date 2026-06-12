@@ -955,9 +955,9 @@ export default function Dungeon() {
 
         {/* マップ（ビューポート）。接触時に少し震える戦闘演出 */}
         <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', willChange: 'transform', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
-          {/* 床は1枚をビューポート全体に敷く＝床マスは透過してこれを見せる（継ぎ目ゼロ） */}
+          {/* 床は画面に固定したリピートタイル（キャラが動いても床は動かない）。1タイル=約2.2マスで小さめ表示 */}
           {floorTile && (
-            <div style={{ position: 'absolute', inset: 6, backgroundImage: `url(${floorTile})`, backgroundSize: 'cover', backgroundPosition: 'center', zIndex: 0, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', inset: 6, backgroundImage: `url(${floorTile})`, backgroundRepeat: 'repeat', backgroundSize: `${(2.2 / VW) * 100}% auto`, backgroundPosition: 'center', zIndex: 0, pointerEvents: 'none' }} />
           )}
           {Array.from({ length: VH }).map((_, vy) => Array.from({ length: VW }).map((_, vx) => {
             const x = ox + vx, y = oy + vy
