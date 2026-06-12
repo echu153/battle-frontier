@@ -292,13 +292,13 @@ export default function Dungeon() {
     popSeq.current += 1
     const id = popSeq.current
     // 同時に複数出ても重なりにくいよう少し横にずらす
-    setPops((ps) => [...ps, { id, x, y, text, color, dx: Math.round(Math.random() * 14 - 7), below: !!opts.below }])
+    setPops((ps) => [...ps, { id, x, y, text, color, dx: Math.round(Math.random() * 14 - 7), below: !!opts.below, follow: !!opts.follow }])
     const tid = setTimeout(() => setPops((ps) => ps.filter((p) => p.id !== id)), opts.below ? 1100 : 850)
     turnTimers.current.push(tid)
   }
   const popDmg = (x, y, n) => addPop(x, y, `-${n}`, '#ff5555')
   const popHeal = (x, y, n) => addPop(x, y, `+${n}`, '#66ff99')
-  const popExp = (x, y, n) => addPop(x, y, `＋Exp ${n}`, '#8fd0ff', { below: true }) // 経験値は明るい青で自分の下に
+  const popExp = (x, y, n) => addPop(x, y, `＋Exp ${n}`, '#8fd0ff', { below: true, follow: true }) // 経験値は明るい青で自分の下に（キャラ追従）
 
   // レベルアップ演出（キャラの上に虹色アーチで LEVEL UP・約4秒）
   const [levelUp, setLevelUp] = useState(null) // { x, y, id }
@@ -1297,7 +1297,10 @@ export default function Dungeon() {
           )}
           {/* 頭上に浮かぶダメージ(-赤)/回復(+緑)の数字 */}
           {pops.map((p) => {
-            const vx = p.x - ox, vy = p.y - oy
+            // follow=true（経験値）はキャラの現在位置に追従。それ以外は出した場所に固定
+            const wx = p.follow ? state.player.x : p.x
+            const wy = p.follow ? state.player.y : p.y
+            const vx = wx - ox, vy = wy - oy
             if (vx < 0 || vx >= VW || vy < 0 || vy >= VH) return null
             return (
               <span key={p.id} style={{
@@ -1312,7 +1315,8 @@ export default function Dungeon() {
           })}
           {/* レベルアップ：キャラの少し上に虹色アーチで LEVEL UP を1文字ずつ＋各文字でキラキラ（約4秒） */}
           {levelUp && (() => {
-            const vx = levelUp.x - ox, vy = levelUp.y - oy
+            // キャラの現在位置に追従（移動・カメラスクロールしてもキャラの上に出る）
+            const vx = state.player.x - ox, vy = state.player.y - oy
             if (vx < 0 || vx >= VW || vy < 0 || vy >= VH) return null
             const cellW = 100 / VW, cellH = 100 / VH
             const W = 168, H = 82, cx = W / 2, cy = 74, rx = 66, ry = 50
