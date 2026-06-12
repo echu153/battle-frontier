@@ -1412,6 +1412,9 @@ export default function Game() {
   const battleBusyRef = useRef(false)  // 出撃の二重発火ガード（スマホ2連タップ対策）
   const clockOffsetRef = useRef(0)  // サーバー時刻 - 端末時刻(ms)。クールダウンのズレ補正用
   const serverNow = () => Date.now() + clockOffsetRef.current
+  // クールダウン終了時刻（端末時計基準の相対値）。サーバーの成功/残り秒数レスポンスから設定するため
+  // 時計のズレ・オフセット推定誤差の影響を受けない。null の間は last_action_at から計算（初期表示用）
+  const cdEndRef = useRef(null)
   const [canLeaveBattle, setCanLeaveBattle] = useState(true)  // 出撃後2秒は「街に戻る」を押せない（オートクリッカー連打対策）
   const leaveTimerRef = useRef(null)
 
@@ -1456,8 +1459,11 @@ export default function Game() {
   useEffect(() => {
     if (!profile) return
     const id = setInterval(() => {
-      const elapsed = (serverNow()-new Date(profile.last_action_at).getTime())/1000
-      const rem = Math.max(0, WAIT_SECONDS-elapsed)
+      // サーバーレスポンス由来の相対値(cdEndRef)を最優先（時計ズレの影響を受けない）。
+      // 未設定（ページ読み込み直後など）は last_action_at＋サーバー時刻補正から計算
+      const rem = cdEndRef.current !== null
+        ? Math.max(0, (cdEndRef.current - Date.now())/1000)
+        : Math.max(0, WAIT_SECONDS - (serverNow()-new Date(profile.last_action_at).getTime())/1000)
       setRemaining(rem)
       setCanAct(rem === 0)
       const regenElapsed = (Date.now()-new Date(profile.last_regen_at).getTime())/1000
@@ -1931,7 +1937,8 @@ export default function Game() {
     } catch {
       try { await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:0, [col]:1 }) } catch {}
     }
-    await supabase.from('profiles').update({ last_action_at: new Date().toISOString() }).eq('id', profile.id)
+    await supabase.from('profiles').update({ last_action_at: new Date(serverNow()).toISOString() }).eq('id', profile.id)
+    cdEndRef.current = Date.now() + WAIT_SECONDS * 1000  // 相対カウントダウンを開始
     setDungeonCounts(prev => ({ ...prev, [type]: newCount }))
     } catch (e) {
       console.error('doDungeon error:', e)
@@ -2115,29 +2122,42 @@ export default function Game() {
     if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current)
     leaveTimerRef.current = setTimeout(() => setCanLeaveBattle(true), 2000)
 
-    // Atomic lock: last_action_atが古い場合のみUPDATE（複数端末同時出撃・釣り中出撃を防ぐ）
-    // 端末時計のズレ対策：サーバー時刻オフセットを補正した時刻で判定・記録する
-    const lockTime = new Date(serverNow() - WAIT_SECONDS * 1000).toISOString()
+    // 出撃ロック: 判定・記録とも100%サーバー時計のRPC（端末時計に一切依存しない）
     const now = new Date(serverNow()).toISOString()
-    const { data: locked } = await supabase.from('profiles')
-      .update({ last_action_at: now })
-      .eq('id', profile.id)
-      .lt('last_action_at', lockTime)
-      .eq('is_fishing', false)
-      .select('id')
-    if (!locked || locked.length === 0) {
-      // ロック失敗（クールダウン未経過/別端末で出撃中/釣り中）。
-      // 無言で街に戻すと「出撃したのにバトルログが出ない」ように見えるため、理由を表示する。
-      const { data: latest } = await supabase.from('profiles').select('last_action_at, is_fishing').eq('id', profile.id).maybeSingle()
-      if (latest?.is_fishing) {
+    let lockOk = false
+    const { data: lock, error: lockErr } = await supabase.rpc('sortie_lock')
+    if (lockErr) {
+      // RPC未適用/通信失敗時のフォールバック: 旧アトミックUPDATE方式
+      const lockTime = new Date(serverNow() - WAIT_SECONDS * 1000).toISOString()
+      const { data: locked } = await supabase.from('profiles')
+        .update({ last_action_at: now })
+        .eq('id', profile.id)
+        .lt('last_action_at', lockTime)
+        .eq('is_fishing', false)
+        .select('id')
+      lockOk = !!(locked && locked.length > 0)
+      if (!lockOk) {
+        setBattleLogs([{ text:`⏳ クールダウン中です。少し待ってから再度お試しください。`, color:'#ffcc44' }])
+        setScene('battle'); setLoading(false); await fetchProfile(); return
+      }
+    } else if (!lock?.ok) {
+      if (lock?.reason === 'fishing') {
         setBattleLogs([{ text:'🎣 釣り中は出撃できません。先に釣りを終了してください。', color:'#ff8844' }])
+      } else if (lock?.reason === 'cooldown') {
+        // サーバーが返した残り秒数に完全同期（以後のカウントダウンもこの値基準）
+        const left = Math.max(0.5, Number(lock.seconds_left) || 1)
+        cdEndRef.current = Date.now() + left * 1000
+        setRemaining(left)
+        setBattleLogs([{ text:`⏳ クールダウン中です。あと${Math.max(1, Math.ceil(left))}秒お待ちください。`, color:'#ffcc44' }])
       } else {
-        const elapsed = latest ? (serverNow() - new Date(latest.last_action_at).getTime()) / 1000 : 0
-        const wait = Math.max(1, Math.ceil(WAIT_SECONDS - elapsed))
-        setBattleLogs([{ text:`⏳ クールダウン中です。あと${wait}秒お待ちください。`, color:'#ffcc44' }])
+        setBattleLogs([{ text:'⚠ 出撃処理に失敗しました。少し待ってから再度お試しください。', color:'#ff8844' }])
       }
       setScene('battle'); setLoading(false); await fetchProfile(); return
+    } else {
+      lockOk = true
     }
+    // ロック成功＝サーバーが今この瞬間からCD開始。相対カウントダウンを開始
+    cdEndRef.current = Date.now() + WAIT_SECONDS * 1000
     setProfile(p => ({ ...p, last_action_at: now }))
 
     // オートクリッカー検知：出撃間隔が異常に規則的（一定間隔の機械的連打）なら12時間出撃禁止
