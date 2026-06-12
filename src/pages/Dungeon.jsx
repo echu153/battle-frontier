@@ -259,13 +259,16 @@ export default function Dungeon() {
 
   // レベルアップ演出（キャラの上に虹色アーチで LEVEL UP・約4秒）
   const [levelUp, setLevelUp] = useState(null) // { x, y, id }
+  const [cheer, setCheer] = useState(0)        // レベルアップ時にキャラが喜んで2回小ジャンプ
   const levelUpSeq = useRef(0)
   const triggerLevelUp = (x, y) => {
     levelUpSeq.current += 1
     const id = levelUpSeq.current
     setLevelUp({ x, y, id })
+    setCheer(id) // ジャンプ演出（keyを変えてアニメ再生）
     const tid = setTimeout(() => setLevelUp((lu) => (lu && lu.id === id ? null : lu)), 3000)
-    turnTimers.current.push(tid)
+    const tid2 = setTimeout(() => setCheer((c) => (c === id ? 0 : c)), 1000)
+    turnTimers.current.push(tid, tid2)
   }
   const spawnSeq = useRef(0) // 湧いた敵の連番ID用
   const dropSeq = useRef(0)  // 床に置いたアイテムの連番ID用
@@ -969,7 +972,7 @@ export default function Dungeon() {
     if (!vis) return { ch: '', bg: C.unknown } // 現在見えていない所は完全に真っ暗（記憶表示なし）
     const wall = state.grid[y][x] === '#'
     // 現在視界：エンティティ優先（足元は床。floorTile時は透過で下地の床画像を見せる）
-    if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: floorBg, fx: fx.pet, poison: poisoned }
+    if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: floorBg, fx: fx.pet, poison: poisoned, cheer: cheer || 0 }
     const e = state.enemies.find((o) => o.x === x && o.y === y)
     if (e) return { ch: '👹', img: e.image || null, bg: floorBg, fx: fx.enemies[e.id] || null }
     const it = state.items.find((o) => o.x === x && o.y === y)
@@ -1017,6 +1020,17 @@ export default function Dungeon() {
         @keyframes bf-lunge {
           0%,100% { transform: translate(0,0); }
           45% { transform: translate(var(--lx,0), var(--ly,0)); }
+        }
+        /* レベルアップ時に喜んで2回小ジャンプ */
+        @keyframes bf-cheer {
+          0%   { transform: translateY(0) scaleY(1); }
+          12%  { transform: translateY(2%) scaleY(0.9); }
+          30%  { transform: translateY(-26%) scaleY(1.05); }
+          46%  { transform: translateY(0) scaleY(0.95); }
+          58%  { transform: translateY(2%) scaleY(0.92); }
+          74%  { transform: translateY(-20%) scaleY(1.04); }
+          90%  { transform: translateY(0) scaleY(0.98); }
+          100% { transform: translateY(0) scaleY(1); }
         }
         @keyframes bf-popnum {
           0%   { transform: translate(-50%, 0); opacity: 0; }
@@ -1122,12 +1136,14 @@ export default function Dungeon() {
             const anims = []
             if (c.fx?.lunge) anims.push('bf-lunge 0.26s ease-out')
             if (c.fx?.flash) anims.push('bf-flash 0.42s ease-in-out')
-            const fxStyle = c.fx ? {
+            if (c.cheer) anims.push('bf-cheer 0.9s ease-in-out') // レベルアップで2回小ジャンプ
+            const fxStyle = (c.fx || c.cheer) ? {
               width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
               animation: anims.join(', '), willChange: 'transform, opacity',
-              '--lx': c.fx.lunge ? `${Math.sign(c.fx.lunge.dx) * 40}%` : '0%',
-              '--ly': c.fx.lunge ? `${Math.sign(c.fx.lunge.dy) * 40}%` : '0%',
+              '--lx': c.fx?.lunge ? `${Math.sign(c.fx.lunge.dx) * 40}%` : '0%',
+              '--ly': c.fx?.lunge ? `${Math.sign(c.fx.lunge.dy) * 40}%` : '0%',
             } : null
+            const fxKey = c.cheer ? `cheer${c.cheer}` : `fx${fx.t}`
             // 壁マスは「1枚で完結した岩タイル」を1マス＝1枚で表示（複数種からマスごとにランダム）。
             // 壁は暗め＋やや寒色グレー寄りにして、暖色の床とハッキリ見分けられるようにする。
             const wallImg = c.wallImg
@@ -1142,7 +1158,7 @@ export default function Dungeon() {
             return (
               <div key={`${vx}-${vy}`} onClick={() => clickable && adjClick(vx, vy)}
                 style={{ position: 'relative', zIndex: 1, aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, ...tileStyle, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: gapFill }}>
-                {fxStyle ? <div key={`fx${fx.t}`} style={fxStyle}>{inner}</div> : inner}
+                {fxStyle ? <div key={fxKey} style={fxStyle}>{inner}</div> : inner}
               </div>
             )
           }))}
