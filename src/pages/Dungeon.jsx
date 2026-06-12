@@ -1147,13 +1147,13 @@ export default function Dungeon() {
             const vx = levelUp.x - ox, vy = levelUp.y - oy
             if (vx < 0 || vx >= VW || vy < 0 || vy >= VH) return null
             const cellW = 100 / VW, cellH = 100 / VH
-            const W = 200, H = 96, cx = W / 2, cy = 86, rx = 84, ry = 64
+            const W = 168, H = 82, cx = W / 2, cy = 74, rx = 66, ry = 50
             const chars = 'LEVEL UP'.split('')
             const n = chars.length
             return (
               <div key={levelUp.id} style={{
                 position: 'absolute', zIndex: 6, pointerEvents: 'none',
-                left: `${(vx + 0.5) * cellW}%`, top: `${(vy - 0.75) * cellH}%`,
+                left: `${(vx + 0.5) * cellW}%`, top: `${(vy - 0.45) * cellH}%`,
                 transform: 'translate(-50%, -100%)', width: W, height: H,
                 animation: 'bf-levelup-c 4s ease-out forwards',
               }}>
@@ -1162,7 +1162,7 @@ export default function Dungeon() {
                   const ang = Math.PI * (1 - t)              // 180°→0°（左から右へ上を通る）
                   const x = cx + rx * Math.cos(ang)
                   const y = cy - ry * Math.sin(ang)
-                  const rot = (t - 0.5) * 120                // 端ほど傾けてアーチに沿わせる
+                  const rot = (t - 0.5) * 100                // 端ほど傾けてアーチに沿わせる
                   const hue = Math.round(t * 300)            // 赤→紫の虹
                   const delay = `${i * 0.13}s`
                   if (ch === ' ') return null
@@ -1170,7 +1170,7 @@ export default function Dungeon() {
                     <span key={i}>
                       <span style={{
                         position: 'absolute', left: x, top: y, '--r': `${rot}deg`,
-                        transformOrigin: 'center', fontFamily: 'monospace', fontWeight: 'bold', fontSize: 22,
+                        transformOrigin: 'center', fontFamily: 'monospace', fontWeight: 'bold', fontSize: 19,
                         color: `hsl(${hue},90%,62%)`, textShadow: '0 0 2px #000, 0 1px 3px #000, 0 0 7px rgba(255,255,255,0.5)',
                         opacity: 0, animation: `bf-letter-pop 0.5s ease-out ${delay} forwards`,
                       }}>{ch}</span>
