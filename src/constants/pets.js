@@ -294,7 +294,7 @@ export const DUNGEON_TILES = {
   d30: {
     floor:  '/dg_floor2.png',  // 床（シームレス地面テクスチャ）
     wall:   '/dg_wall.png',    // 壁（walls未指定時のフォールバック）
-    walls:  ['/dg_wall4.png'],  // 壁（壁4）。複数入れるとマスごとにランダム表示
+    walls:  ['/dg_wall2.png', '/dg_wall3.png', '/dg_wall4.png', '/dg_wall5.png'],  // 壁4種（マスごとにランダム表示）
     stairs: '/dg_stairs.png',  // 階段
     item:   '/dg_item.png',    // 落ちているアイテム（共通マーカー）
   },

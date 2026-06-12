@@ -923,7 +923,7 @@ export default function Dungeon() {
     }
     if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: floorBg, overlay: stairsTile, stairsGlow: true }
     // 壁マスは壁画像を1マスごとに表示（複数あればマス座標でランダム）。床マスは透過。
-    if (wall) return { ch: '', bg: wallTile ? '#14100c' : C.wallVis, wallImg: dgWallVariant(dungeon?.id, x, y) || wallTile }
+    if (wall) return { ch: '', bg: wallTile ? '#241a12' : C.wallVis, wallImg: dgWallVariant(dungeon?.id, x, y) || wallTile }
     return { ch: '', bg: floorBg }
   }
 
@@ -1048,20 +1048,15 @@ export default function Dungeon() {
               '--lx': c.fx.lunge ? `${Math.sign(c.fx.lunge.dx) * 40}%` : '0%',
               '--ly': c.fx.lunge ? `${Math.sign(c.fx.lunge.dy) * 40}%` : '0%',
             } : null
-            // 壁マスも床と同じくワールド固定で連続表示＝マス目（1マスごとの継ぎ目）が消える。
+            // 壁マスは「1枚で完結した岩タイル」を1マス＝1枚で表示（4種からマスごとにランダム）。
             const wallImg = c.wallImg
-            const WALLT = 3 // 壁テクスチャ1枚=約3マス
-            // 壁は専用テクスチャの素の見た目で表示（必要なら brightness/saturate で調整）
-            const wallFilter = 'none'
             const tileStyle = wallImg
-              ? (cellPx > 0
-                ? { backgroundImage: `url(${wallImg})`, backgroundRepeat: 'repeat', backgroundSize: `${cellPx * WALLT}px ${cellPx * WALLT}px`, backgroundPosition: `${-x * cellPx}px ${-y * cellPx}px`, filter: wallFilter }
-                : { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: wallFilter })
+              ? { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center' }
               : { backgroundImage: 'none' }
             // グリッド線対策：マス間のサブピクセル隙間を「そのマス自身の色」で埋める。
-            //  透過の床マス・連続表示の壁マスはそのまま（継ぎ目なし）、暗いマスだけ自色で塞ぐ。
+            //  透過の床マスはそのまま（継ぎ目なし）、壁マス・暗いマスは自色（暗）で塞ぐ。
             const gapFill = floorTile
-              ? ((c.bg !== 'transparent' && !wallImg) ? `0 0 0 0.7px ${c.bg}` : 'none')
+              ? (c.bg !== 'transparent' ? `0 0 0 0.7px ${c.bg}` : 'none')
               : `0 0 0 0.6px ${c.bg}`
             return (
               <div key={`${vx}-${vy}`} onClick={() => clickable && adjClick(vx, vy)}
