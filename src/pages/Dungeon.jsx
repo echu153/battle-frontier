@@ -189,6 +189,16 @@ export default function Dungeon() {
   const [dungeon, setDungeon] = useState(null) // 選択中のダンジョン定義
   const [isAdmin, setIsAdmin] = useState(false) // 開発アカウント（comingSoonダンジョンに入れる）
   const [transition, setTransition] = useState(null) // フロア遷移演出 { floor, black, title }
+
+  // タイル画像（床/壁/階段/アイテム）を選択ダンジョンが決まった時点でプリロード。
+  // 初めて見えたマスで画像読込待ちにならず即時表示される。
+  useEffect(() => {
+    if (!dungeon?.id) return
+    for (const key of ['floor', 'wall', 'stairs', 'item']) {
+      const src = dgTileSrc(dungeon.id, key)
+      if (src) { const im = new Image(); im.src = src }
+    }
+  }, [dungeon?.id])
   const [cleared, setCleared] = useState(new Set()) // クリア済みダンジョンID
   const [shake, setShake] = useState(null) // 戦闘演出：接触時のマップ揺れ（'hit' | 'kill'）
   const shakeTimer = useRef(null)
@@ -874,11 +884,6 @@ export default function Dungeon() {
   const cellAt = (x, y) => {
     if (!inBounds(x, y)) return { ch: '', bg: C.unknown }
     const vis = isVisible(x, y)
-    const isStairs = state.stairs.x === x && state.stairs.y === y
-    // 階段はフロア入場時から常に強調表示（霧の中でも光って見える＝即時に位置が分かる）
-    if (isStairs && (state.player.x !== x || state.player.y !== y)) {
-      return { ch: '▼', bg: vis ? floorBg : C.unknown, overlay: stairsTile, stairsGlow: true }
-    }
     if (!vis) return { ch: '', bg: C.unknown } // 現在見えていない所は完全に真っ暗（記憶表示なし）
     const wall = state.grid[y][x] === '#'
     // 現在視界：エンティティ優先（足元は床。floorTile時は透過で下地の床画像を見せる）
@@ -891,7 +896,7 @@ export default function Dungeon() {
         : it.kind === 'dropLoot' ? (it.loot?.emoji || '🎁') : '✨'
       return { ch, bg: floorBg, overlay: itemTile }
     }
-    if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: floorBg, overlay: stairsTile }
+    if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: floorBg, overlay: stairsTile, stairsGlow: true }
     // 壁マスは壁画像を1マスごとに表示（無ければ色）。床マスは透過。
     if (wall) return { ch: '', bg: C.wallVis, wallImg: wallTile }
     return { ch: '', bg: floorBg }
