@@ -941,14 +941,6 @@ export default function Dungeon() {
           15%  { transform: translate(-50%, -4px); opacity: 1; }
           100% { transform: translate(-50%, -18px); opacity: 0; }
         }
-        @keyframes bf-stairs-glow {
-          0%,100% { opacity: 0.85; transform: scale(1); }
-          50% { opacity: 1; transform: scale(1.12); }
-        }
-        @keyframes bf-stairs-ring {
-          0%,100% { opacity: 0.35; transform: scale(0.9); }
-          50% { opacity: 0.9; transform: scale(1.15); }
-        }
         /* PC: メイン＋右側ログの2カラム。狭い画面では従来どおり縦積み */
         .bf-dg-wrap { max-width: 480px; margin: 0 auto; }
         .bf-dg-side { display: none; }
@@ -1004,15 +996,14 @@ export default function Dungeon() {
               : (
                 <span style={{ filter: poisonFilter, position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%',
                   color: c.stairsGlow ? '#ffe680' : undefined,
-                  textShadow: c.stairsGlow ? '0 0 6px #ffcc33, 0 0 12px #ff9900' : undefined,
-                  animation: c.stairsGlow ? 'bf-stairs-glow 1.2s ease-in-out infinite' : undefined }}>
+                  textShadow: c.stairsGlow ? '0 0 6px #ffcc33, 0 0 12px #ff9900' : undefined }}>
                   {c.ch}
                   {/* 階段・アイテムのカスタム画像（無ければonErrorで隠れ絵文字のまま） */}
                   {c.overlay && <img src={c.overlay} alt="" onError={(ev) => { ev.target.style.display = 'none' }}
                     style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block',
                       filter: c.stairsGlow ? 'drop-shadow(0 0 5px #ffcc33) drop-shadow(0 0 9px #ff9900) brightness(1.15)' : undefined }} />}
-                  {/* 階段の強調リング */}
-                  {c.stairsGlow && <span style={{ position: 'absolute', inset: '8%', borderRadius: '50%', boxShadow: '0 0 8px 2px rgba(255,200,60,0.7)', animation: 'bf-stairs-ring 1.2s ease-in-out infinite', pointerEvents: 'none' }} />}
+                  {/* 階段の強調（静的な発光リング） */}
+                  {c.stairsGlow && <span style={{ position: 'absolute', inset: '8%', borderRadius: '50%', boxShadow: '0 0 8px 2px rgba(255,200,60,0.7)', pointerEvents: 'none' }} />}
                 </span>
               )
             const anims = []
