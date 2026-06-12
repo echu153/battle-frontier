@@ -1051,8 +1051,8 @@ export default function Dungeon() {
             // 壁マスも床と同じくワールド固定で連続表示＝マス目（1マスごとの継ぎ目）が消える。
             const wallImg = c.wallImg
             const WALLT = 3 // 壁テクスチャ1枚=約3マス
-            // 壁は暗く＋ややグレー寄りにして、暖色の床と色で見分けられるようにする（模様は維持）
-            const wallFilter = 'brightness(0.55) saturate(0.45)'
+            // 壁は専用テクスチャの素の見た目で表示（必要なら brightness/saturate で調整）
+            const wallFilter = 'none'
             const tileStyle = wallImg
               ? (cellPx > 0
                 ? { backgroundImage: `url(${wallImg})`, backgroundRepeat: 'repeat', backgroundSize: `${cellPx * WALLT}px ${cellPx * WALLT}px`, backgroundPosition: `${-x * cellPx}px ${-y * cellPx}px`, filter: wallFilter }
