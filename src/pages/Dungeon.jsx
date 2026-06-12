@@ -187,6 +187,7 @@ export default function Dungeon() {
   const [lootBag, setLootBag] = useState([])     // 持ち帰り待ちのルート品（装備/強化石/宝石）。生還で付与
   const [dropMode, setDropMode] = useState(false) // 「捨てる」モード（持ち物を選ぶと足元に置く）
   const [dungeon, setDungeon] = useState(null) // 選択中のダンジョン定義
+  const [isAdmin, setIsAdmin] = useState(false) // 開発アカウント（comingSoonダンジョンに入れる）
   const [cleared, setCleared] = useState(new Set()) // クリア済みダンジョンID
   const [shake, setShake] = useState(null) // 戦闘演出：接触時のマップ揺れ（'hit' | 'kill'）
   const shakeTimer = useRef(null)
@@ -333,8 +334,9 @@ export default function Dungeon() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { nav('/login'); return }
       userIdRef.current = user.id
-      const { data: prof } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle()
+      const { data: prof } = await supabase.from('profiles').select('id, is_admin').eq('id', user.id).maybeSingle()
       if (!prof) { setAllowed(false); return }
+      setIsAdmin(!!prof.is_admin)
       // 選択中のペットを読み込む
       const { data: ap } = await supabase.from('pets').select('*').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
       if (ap) {
@@ -809,7 +811,8 @@ export default function Dungeon() {
 
           <div style={{ display: 'grid', gap: 10 }}>
             {DUNGEONS.map((d) => {
-              const unlocked = !d.comingSoon && (!d.requires || cleared.has(d.requires))
+              // 開発アカウントは comingSoon でも入れる（テスト用）
+              const unlocked = (!d.comingSoon || isAdmin) && (!d.requires || cleared.has(d.requires) || isAdmin)
               const isCleared = cleared.has(d.id)
               return (
                 <div key={d.id} onClick={() => unlocked && beginDungeon(d)}
@@ -818,7 +821,7 @@ export default function Dungeon() {
                   <div style={{ flex: 1 }}>
                     <div style={{ color: '#cce6ff', fontSize: 14 }}>{d.name} <span style={{ color: '#6699cc', fontSize: 11 }}>全{d.floors}階</span> {isCleared && <span style={{ color: '#44ff88', fontSize: 10 }}>✓クリア済</span>}</div>
                     <div style={{ color: unlocked ? '#6699cc' : '#aa6644', fontSize: 11, marginTop: 2 }}>
-                      {d.comingSoon ? '🔒 近日公開（後日のアップデートで開放）' : unlocked ? 'タップして挑戦' : `${getDungeon(d.requires).name} をクリアで開放`}
+                      {d.comingSoon && isAdmin ? '🛠 [開発] テスト挑戦可' : d.comingSoon ? '🔒 近日公開（後日のアップデートで開放）' : unlocked ? 'タップして挑戦' : `${getDungeon(d.requires).name} をクリアで開放`}
                     </div>
                   </div>
                 </div>
