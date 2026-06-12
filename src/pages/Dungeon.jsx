@@ -977,11 +977,14 @@ export default function Dungeon() {
         /* マップは画面幅いっぱいに広げる。狭い画面では従来どおり縦積み */
         .bf-dg-wrap { max-width: min(96vw, 820px); margin: 0 auto; }
         .bf-dg-side { display: none; }
-        @media (min-width: 900px) {
-          .bf-dg-wrap { display: flex; gap: 16px; max-width: 1100px; align-items: flex-start; }
-          .bf-dg-main { flex: 1; min-width: 0; max-width: 680px; }
-          .bf-dg-side { display: block; width: 360px; position: sticky; top: 16px; }
+        /* 右下フローティングのログ枠（広い画面で表示。狭い画面はマップ下に表示） */
+        .bf-dg-float-log { display: none; }
+        @media (min-width: 480px) {
+          .bf-dg-float-log { display: block; }
           .bf-dg-log-mobile { display: none; }
+        }
+        @media (min-width: 900px) {
+          .bf-dg-wrap { max-width: 920px; }
         }
       `}</style>
       <div className="bf-dg-wrap">
@@ -1186,10 +1189,11 @@ export default function Dungeon() {
         <SortiePanel quickSlotId="bf-sortie-quick" collapsible activitySignal={floorNum} />
         </div>
 
-        {/* PC用：右側ログカラム */}
-        <div className="bf-dg-side">
-          <LogView log={log} height={460} />
-        </div>
+      </div>
+
+      {/* 右下フローティングのログ枠（広い画面） */}
+      <div className="bf-dg-float-log" style={{ position: 'fixed', right: 12, bottom: 12, width: 320, maxWidth: '38vw', zIndex: 50 }}>
+        <LogView log={log} height="34vh" />
       </div>
     </div>
   )
