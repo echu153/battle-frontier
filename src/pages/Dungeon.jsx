@@ -1031,9 +1031,13 @@ export default function Dungeon() {
         }
         @keyframes bf-levelup-c {
           0%   { transform: translate(-50%, -100%); opacity: 0; }
-          8%   { opacity: 1; }
-          85%  { transform: translate(-50%, -104%); opacity: 1; }
-          100% { transform: translate(-50%, -120%); opacity: 0; }
+          8%   { transform: translate(-50%, -100%); opacity: 1; }
+          100% { transform: translate(-50%, -106%); opacity: 1; }
+        }
+        /* 文字ごとの退場（1文字目から順に下へ消える） */
+        @keyframes bf-letter-out {
+          0%   { opacity: 1; transform: translate(-50%, -50%) rotate(var(--r,0deg)) scale(1); }
+          100% { opacity: 0; transform: translate(-50%, 20%) rotate(var(--r,0deg)) scale(0.7); }
         }
         @keyframes bf-letter-pop {
           0%   { opacity: 0; transform: translate(-50%, 40%) rotate(var(--r,0deg)) scale(0.3); }
@@ -1214,6 +1218,7 @@ export default function Dungeon() {
                   const rot = (t - 0.5) * 100                // 端ほど傾けてアーチに沿わせる
                   const hue = Math.round(t * 300)            // 赤→紫の虹
                   const delay = `${i * 0.07}s`
+                  const exitDelay = `${1.9 + i * 0.09}s` // 消える時も1文字目から順に
                   if (ch === ' ') return null
                   return (
                     <span key={i}>
@@ -1222,12 +1227,17 @@ export default function Dungeon() {
                         transformOrigin: 'center', fontFamily: 'monospace', fontWeight: 900, fontSize: 21,
                         WebkitTextStroke: '1.4px #000', // 黒で縁取りして太く見やすく
                         color: `hsl(${hue},92%,60%)`, textShadow: '0 0 3px #000, 0 2px 4px #000, 0 0 8px rgba(255,255,255,0.55)',
-                        opacity: 0, animation: `bf-letter-pop 0.5s ease-out ${delay} forwards`,
+                        opacity: 0, animation: `bf-letter-pop 0.5s ease-out ${delay} forwards, bf-letter-out 0.45s ease-in ${exitDelay} forwards`,
                       }}>{ch}</span>
                       {/* 出現時に✨がこぼれ落ちる（流れ星風） */}
                       <span style={{
                         position: 'absolute', left: x, top: y, '--dx': `${((i % 2 ? 1 : -1) * (5 + (i * 7) % 9))}px`,
                         fontSize: 15, opacity: 0, animation: `bf-spark-fall 0.9s ease-in ${delay} forwards`,
+                      }}>✨</span>
+                      {/* 消える時も1文字ずつ✨がこぼれ落ちる */}
+                      <span style={{
+                        position: 'absolute', left: x, top: y, '--dx': `${((i % 2 ? -1 : 1) * (6 + (i * 5) % 8))}px`,
+                        fontSize: 15, opacity: 0, animation: `bf-spark-fall 0.9s ease-in ${exitDelay} forwards`,
                       }}>✨</span>
                     </span>
                   )
