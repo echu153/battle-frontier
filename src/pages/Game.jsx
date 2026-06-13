@@ -3876,18 +3876,28 @@ export default function Game() {
             {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'6px', border:'1px solid #660000', padding:'3px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
               {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width:'48px', height:'48px', objectFit:'cover', flexShrink:0 }} />}
-              <div style={{ flex:1, textAlign: NEW_UI ? 'left' : undefined }}>
-                <div style={{ color:'#ffcc00', fontSize:'13px' }}>
-                  {profile.display_title && <span style={{ color:'#aaaaff', fontSize:'11px', marginRight:'4px' }}>{profile.display_title}</span>}
-                  {profile.username}
+              <div style={{ flex:1, textAlign: NEW_UI ? 'left' : undefined, display: NEW_UI ? 'flex' : undefined, justifyContent: NEW_UI ? 'space-between' : undefined, alignItems: NEW_UI ? 'flex-start' : undefined }}>
+                <div>
+                  <div style={{ color:'#ffcc00', fontSize:'13px' }}>
+                    {profile.display_title && <span style={{ color:'#aaaaff', fontSize:'11px', marginRight:'4px' }}>{profile.display_title}</span>}
+                    {profile.username}
+                  </div>
+                  <div style={{ fontSize:'11px', color:'#446688' }}>
+                    <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{getRetrainingStars(profile.class, profile.retraining)}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／{cap}
+                  </div>
+                  <div style={{ fontSize:'11px', color:'#446688' }}>
+                    キャラクターLV: <span style={{color:'#ffcc00'}}>{charLv}</span>{!NEW_UI && <>　<span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span></>}
+                  </div>
+                  <div style={{ fontSize:'10px', color:'#446688' }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
                 </div>
-                <div style={{ fontSize:'11px', color:'#446688' }}>
-                  <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{getRetrainingStars(profile.class, profile.retraining)}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／{cap}
-                </div>
-                <div style={{ fontSize:'11px', color:'#446688' }}>
-                  キャラクターLV: <span style={{color:'#ffcc00'}}>{charLv}</span>　<span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span>
-                </div>
-                <div style={{ fontSize:'10px', color:'#446688' }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
+                {NEW_UI && (
+                  <div style={{ textAlign:'right', flexShrink:0, lineHeight:1.15 }}>
+                    <div style={{ fontSize:'9px', color:'#446688' }}>総合力</div>
+                    <div style={{ fontSize:'16px', color:'#44ff88', fontWeight:'bold' }}>{total}</div>
+                    <div style={{ fontSize:'9px', color:'#446688', marginTop:'2px' }}>ステータス</div>
+                    <div style={{ fontSize:'16px', color:totalRank.color, fontWeight:'bold' }}>{totalRank.rank}</div>
+                  </div>
+                )}
               </div>
             </div>
             <MiniBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying?'#ff2200':'#00cc44'} />
