@@ -33,6 +33,7 @@ export default function Charms() {
   const [toId, setToId] = useState(null)      // 継承先
   const [fuseBase, setFuseBase] = useState(null) // 合成：残す側
   const [fuseMat, setFuseMat] = useState(null)   // 合成：吸収して消える側
+  const [fuseDone, setFuseDone] = useState(null) // 合成完了演出（結果名）
   const [confirm, setConfirm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
@@ -96,9 +97,12 @@ export default function Charms() {
     const { error } = await supabase.rpc('pet_charm_fuse', { p_base: fuseBase, p_mat: fuseMat })
     setLoading(false)
     if (error) { flash('合成に失敗: ' + error.message); return }
+    const b = charms.find((c) => c.id === fuseBase); const m = charms.find((c) => c.id === fuseMat)
+    const resultName = b && m ? `${getCharm(b.ctype).short}と${getCharm(m.ctype).short}のチャーム` : 'チャーム'
     setFuseBase(null); setFuseMat(null)
     await load()
-    flash('合成しました！（2つの効果を引き継ぎ・素材は消滅）')
+    setFuseDone(resultName)
+    setTimeout(() => setFuseDone(null), 2200)
   }
 
   const Btn = ({ children, onClick, dim }) => (
@@ -256,6 +260,18 @@ export default function Charms() {
           </div>
         )}
       </div>
+
+      {/* 合成完了の演出 */}
+      {fuseDone && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', fontFamily: 'monospace', pointerEvents: 'none' }}>
+          <div style={{ textAlign: 'center', animation: 'bf-fuse-pop 0.5s ease-out' }}>
+            <div style={{ fontSize: 52, marginBottom: 6 }}>✨🔮✨</div>
+            <div style={{ color: '#ffe680', fontSize: 20, letterSpacing: 2, textShadow: '0 0 12px #aa77ff' }}>合成完了！</div>
+            <div style={{ color: '#c9b6ff', fontSize: 15, marginTop: 8 }}>🧿 {fuseDone}</div>
+          </div>
+          <style>{`@keyframes bf-fuse-pop{0%{transform:scale(0.5);opacity:0}40%{transform:scale(1.15);opacity:1}100%{transform:scale(1);opacity:1}}`}</style>
+        </div>
+      )}
 
       {/* 継承の確認 */}
       {confirm && (() => {
