@@ -769,11 +769,17 @@ export default function Dungeon() {
 
   const tryMove = (dx, dy) => {
     ensureBgm() // 操作時にBGM再生を確実に開始（自動再生ブロック対策）
-    if (!state || status !== 'exploring' || busyRef.current || transition || lockedOut) return
+    if (!state || status !== 'exploring' || busyRef.current || transition || lockedOut) {
+      addLog(`⛔ロック: busy=${busyRef.current} trans=${!!transition} lock=${lockedOut} st=${status}`)
+      return
+    }
     let s = state
     const px = s.player.x, py = s.player.y
     const nx = px + dx, ny = py + dy
-    if (!inBounds(nx, ny) || s.grid[ny][nx] === '#') return
+    if (!inBounds(nx, ny)) { addLog(`⛔範囲外 (${nx},${ny})`); return }
+    if (s.grid[ny][nx] === '#') { addLog(`🧱壁 (${nx},${ny}) 自(${px},${py})`); return }
+    // 斜め移動は壁の角を抜けられない（両脇のどちらかが壁なら不可）
+    if (dx !== 0 && dy !== 0 && (s.grid[py][nx] === '#' || s.grid[ny][px] === '#')) return
     // 斜め移動は壁の角を抜けられない（両脇のどちらかが壁なら不可）
     if (dx !== 0 && dy !== 0 && (s.grid[py][nx] === '#' || s.grid[ny][px] === '#')) return
 
