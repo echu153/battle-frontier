@@ -408,6 +408,7 @@ export default function Dungeon() {
   // 探索の集計（不正対策のためサーバーへ渡す素の値）
   const runIdRef = useRef(null)
   const finishedRef = useRef(false)
+  const fullHealRef = useRef(null) // レベルアップでHP全回復させる予約（commitTurnで確実に反映）
   const userIdRef = useRef(null)
   const saveKey = () => (userIdRef.current ? `bf_dungeon2_${userIdRef.current}` : null)
   const enemiesRef = useRef(0)
@@ -443,11 +444,20 @@ export default function Dungeon() {
       if (data.exp_gain > 0) popExp(px, py, data.exp_gain)
       if (data.leveled) triggerLevelUp(px, py)
     }
+    let newMax = null
     setPet((p) => {
       if (!p?.species) return p
       const st = applyCharmStats(petStats({ species: p.species, level: data.level, evolved: p.evolved }), p.charm)
+      newMax = st.maxHp
       return { ...p, level: data.level, exp: data.exp, ...st }
     })
+    // レベルアップしたらHP全回復（commitTurnのHP確定で上書きされないようrefに予約）
+    if (data.leveled && newMax != null) {
+      fullHealRef.current = newMax
+      setPetHp(newMax)
+      if (px != null && py != null) popHeal(px, py, newMax, { follow: true })
+      addLog('💚 レベルアップ！HPが全回復した')
+    }
   }, [])
 
   // ✨のルート品はサーバー(dungeon_pickup)が抽選・保持し、生還時(dungeon_finish)に付与する。
@@ -957,6 +967,8 @@ export default function Dungeon() {
       if (shield > 0) setShield((v) => Math.max(0, v - 1))
       if (regen > 0) setRegen((v) => Math.max(0, v - 1))
       setFullness(nextFull)
+      // レベルアップ全回復の予約があれば最終HPを最大に（commitTurnの順番に依存しないように）
+      if (!dead && fullHealRef.current != null) { curHp = fullHealRef.current; fullHealRef.current = null }
       setPetHp(curHp)
       // 状態異常カウントの減衰（毎ターン）
       if (paralyzed > 0) setParalyzed((p) => Math.max(0, p - 1))
@@ -1275,7 +1287,7 @@ export default function Dungeon() {
       const d = (it.kind === 'food' || it.kind === 'dropFood')
         ? { emoji: PET_ITEMS[it.key]?.emoji || '🎁', img: petItemImg(it.key) }
         : lootDisplay(it.loot) // loot / dropLoot とも it.loot を持つ
-      return { ch: d.emoji || '🎁', img: d.img || null, bg: floorBg, overlay: d.img ? null : itemTile }
+      return { ch: d.emoji || '🎁', img: d.img || null, item: true, bg: floorBg, overlay: d.img ? null : itemTile }
     }
     if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: floorBg, overlay: stairsTile, stairsGlow: true, water: waterWall }
     // 壁マスは壁画像を1マスごとに表示（複数あればマス座標でランダム）。床マスは透過。
@@ -1497,7 +1509,10 @@ export default function Dungeon() {
               : c.poison ? 'sepia(0.6) hue-rotate(230deg) saturate(1.8) drop-shadow(0 0 3px #aa55ff)'
               : 'none'
             const inner = c.img
-              ? <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: statusFilter }} />
+              ? (c.item
+                  // 床アイテムは小さめ＆全体が見えるよう contain
+                  ? <img src={c.img} alt="" style={{ width: '72%', height: '72%', objectFit: 'contain', display: 'block', margin: 'auto' }} />
+                  : <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: statusFilter }} />)
               : (
                 <span style={{ filter: statusFilter, position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%',
                   color: c.stairsGlow ? (c.water ? '#9ff0ff' : '#ffe680') : undefined,
