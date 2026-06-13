@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import papiaIcon from '../assets/papia.png'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue, calcDefReduction } from '../lib/stats'
-import { charmPlayerBonus, charmDisplayName, speciesLabel, speciesEmoji, petImage, petStats, atkLabel } from '../constants/pets'
+import { charmPlayerBonus } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
 // Equipment.jsx 等が './Game' から参照しているため再export
 export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue, calcDefReduction } from '../lib/stats'
@@ -1643,18 +1643,14 @@ export default function Game() {
     await supabase.from('profiles').update({ consecutive_battle_count: 0 }).eq('id', user.id)
     // 選択中ペットの装備チャーム効果をプレイヤー本体へ反映（未導入時は無視）
     let petCharm = null
-    let activePet = null
     try {
-      const { data: ap } = await supabase.from('pets').select('*').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
-      if (ap) {
-        activePet = ap
-        if (ap.charm_id) {
-          const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle()
-          if (c) { petCharm = charmPlayerBonus(c); activePet = { ...ap, charmName: charmDisplayName(c) } }
-        }
+      const { data: ap } = await supabase.from('pets').select('charm_id').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
+      if (ap?.charm_id) {
+        const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle()
+        if (c) petCharm = charmPlayerBonus(c)
       }
     } catch { /* チャーム未導入時は無視 */ }
-    setProfile({ ...data, ..._computed, petCharm, activePet, consecutive_battle_count: 0 })
+    setProfile({ ...data, ..._computed, petCharm, consecutive_battle_count: 0 })
     setPendingPoints(data.pending_stat_points || 0)
     // selectedAreaがこのアカウントで解放済みかチェック（別アカウントのlocalStorage値を弾く）
     const unlocked = data.unlocked_areas || [1]
@@ -3899,28 +3895,6 @@ export default function Game() {
                   )}
                   <div style={{ fontSize:'10px', color:'#446688' }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
                 </div>
-                {NEW_UI && profile.activePet && (() => {
-                  const ap = profile.activePet
-                  const ps = petStats(ap)
-                  return (
-                    <div style={{ flexShrink:0, display:'flex', alignItems:'center', gap:'10px', background:'#001840', border:'1px solid #0088ff', padding:'8px 12px' }}>
-                      {petImage(ap)
-                        ? <img src={petImage(ap)} alt="" style={{ width:'76px', height:'76px', objectFit:'contain', flexShrink:0 }} />
-                        : <span style={{ fontSize:'58px', lineHeight:1 }}>{speciesEmoji(ap)}</span>}
-                      <div style={{ textAlign:'left', lineHeight:1.4 }}>
-                        <div style={{ fontSize:'14px', color:'#88ccff', fontWeight:'bold' }}>
-                          {ap.name} <span style={{ color:'#ffcc00', fontSize:'12px' }}>Lv{ap.level}</span> <span style={{ color:'#446688', fontSize:'11px', fontWeight:'normal' }}>（{speciesLabel(ap)}）</span>
-                        </div>
-                        <div style={{ fontSize:'10px', color:'#446688', marginTop:'2px' }}>
-                          HP<span style={{color:'#44ff88'}}>{ps.maxHp}</span> {atkLabel(ap)}<span style={{color:'#ffcc00'}}>{ps.atk}</span> 防<span style={{color:'#88aaff'}}>{ps.def}</span> 特防<span style={{color:'#44ccff'}}>{ps.mdef}</span>
-                        </div>
-                        <div style={{ fontSize:'10px', color:'#446688', marginTop:'2px' }}>
-                          チャーム: <span style={{color:'#cc88ff'}}>{ap.charmName || 'なし'}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })()}
               </div>
             </div>
             <MiniBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying?'#ff2200':'#00cc44'} />
