@@ -1757,8 +1757,8 @@ export default function Dungeon() {
             const wallImg = c.wallImg
             const tileStyle = wallImg
               ? (c.water
-                  // 水たまり：暗くせず明るめ＆半透明にして床を透かす＝水に見せる
-                  ? { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(1.05) saturate(1.2)', opacity: 0.72 }
+                  // 水たまり＝渡れない深い水。床(水辺床)とハッキリ区別できるよう濃い青で暗めに＋縁取り
+                  ? { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.62) saturate(1.7) hue-rotate(8deg)' }
                   : { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6) saturate(0.55) hue-rotate(-8deg)' })
               : { backgroundImage: 'none' }
             // グリッド線対策：マス間のサブピクセル隙間を「そのマス自身の色」で埋める。
