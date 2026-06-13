@@ -989,11 +989,18 @@ export default function Dungeon() {
         const eAtk = (e.atk || 1) * ((e.buff || 0) > 0 ? ENEMY_BUFF_MULT : 1) * ((e.atkDown || 0) > 0 ? 1 - STAT_DOWN_PCT : 1)
         // 敵のダメージも 0.9〜1.1 の乱数補正（最低1）
         let dmg = Math.max(1, Math.round(calcDamage(eAtk, guard) * (0.9 + Math.random() * 0.2)))
-        // 敵スキル（確率発動）
+        // 敵スキル（確率発動）。ボスはHP50%以下で「復讐」を追加
+        const bossPh = e.boss ? DEVIL_PAPIA.phases[e.phase] : null
+        const lowHp = (e.hp || 0) <= (e.maxHp || 1) * 0.5
+        const sks = (lowHp && bossPh?.lowHpSkill) ? [...(e.skills || []), bossPh.lowHpSkill] : (e.skills || [])
         const notes = []
-        let heal = 0; let gotBuff = false
+        let heal = 0; let gotBuff = false; let reviveHeal = 0
+        // 第2形態：HP50%以下で1度だけ最大HPの reviveHealPct を回復
+        if (e.boss && e.phase === 1 && lowHp && !e.healedOnce && bossPh?.reviveHealPct) {
+          reviveHeal = Math.ceil((e.maxHp || 1) * bossPh.reviveHealPct)
+        }
         const antidote = getCharm(pet.charm?.ctype).effect === 'antidote'
-        for (const sk of (e.skills || [])) {
+        for (const sk of sks) {
           // 解毒のチャーム装備時は毒の発動確率を50%に
           const chance = sk.type === 'poison' && antidote ? sk.chance * 0.5 : sk.chance
           if (Math.random() >= chance) continue
@@ -1012,6 +1019,7 @@ export default function Dungeon() {
           lunge: { dx: Math.sign(player.x - e.x), dy: Math.sign(player.y - e.y) } })
         let ne = { ...e, atkDown: Math.max(0, (e.atkDown || 0) - 1), defDown: Math.max(0, (e.defDown || 0) - 1) } // デバフ減衰
         if (heal > 0) ne = { ...ne, hp: Math.min(e.maxHp, e.hp + heal) }
+        if (reviveHeal > 0) { ne = { ...ne, hp: Math.min(e.maxHp, ne.hp + reviveHeal), healedOnce: true }; addLog(`✨ ${e.name}はHPを回復した！`, 'right') }
         if (gotBuff) ne = { ...ne, buff: ENEMY_BUFF_TURNS }
         else if ((e.buff || 0) > 0) ne = { ...ne, buff: e.buff - 1 } // 攻撃したターンもバフ減衰
         return ne
@@ -1688,9 +1696,6 @@ export default function Dungeon() {
               // ボスは左上セルから2×2マスに広げて表示（overflow visibleで隣にはみ出す）＋頭上HPバー
               ? <div style={{ position: 'absolute', left: 0, top: 0, width: '200%', height: '200%', zIndex: 4, pointerEvents: 'none' }}>
                   <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
-                  {(() => { const r = Math.max(0, Math.min(1, (c.bossE.hp || 0) / (c.bossE.maxHp || 1)))
-                    return <div style={{ position: 'absolute', left: '6%', right: '6%', bottom: '2%', height: 5, background: 'rgba(0,4,10,0.85)', border: '1px solid #000', borderRadius: 2, overflow: 'hidden' }}>
-                      <div style={{ width: `${r * 100}%`, height: '100%', background: c.bossE.phase === 1 ? '#ff4488' : '#ff8844', transition: 'width 0.25s ease' }} /></div> })()}
                 </div>
               : c.img
               ? (c.item

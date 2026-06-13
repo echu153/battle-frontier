@@ -245,9 +245,12 @@ export const DEVIL_PAPIA = {
     },
     { // 第2形態：防御down・攻撃大幅up。物理＋特殊ミックス
       hp: 3000, atk: 260, def: 160, mdef: 150, type: 'phys', mix: true, image: '/debirupapia2.png',
+      // HP50%以下で「復讐」（高威力）。HP50%以下で1度だけ最大HP30%回復
+      lowHpSkill: { name: '復讐', chance: 0.45, type: 'spec_heavy', mult: 2.2 },
+      reviveHealPct: 0.30,
       skills: [
         { name: '冥撃', chance: 0.30, type: 'heavy', mult: 1.5 },
-        { name: '魔弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+        { name: '魔煉弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
         { name: '呪詛', chance: 0.25, type: 'weaken', stat: 'def', turns: 4 },
         { name: '狂乱', chance: 0.20, type: 'selfbuff' },
       ],
