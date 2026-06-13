@@ -1181,19 +1181,6 @@ export default function Dungeon() {
           <span id="bf-sortie-quick" />
         </div>
 
-        <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 8, flexWrap: 'wrap' }}>
-          <span>B{floorNum}/{dungeon?.floors || 10}F</span>
-          <span style={{ color: '#9fd' }}>Lv{pet.level}{pet.exp != null ? `（EXP ${pet.exp}/${expForLevel(pet.level || 1)}）` : ''}</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: petHp > pet.maxHp * 0.3 ? '#44ff88' : '#ff5555' }}>
-            {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 16, height: 16, objectFit: 'cover', borderRadius: 3 }} /> : <span>{pet.emoji}</span>}
-            {pet.name} HP {petHp}/{pet.maxHp}
-          </span>
-          {poisoned && <span style={{ color: '#cc77ff' }}>☠ 毒</span>}
-          {paralyzed > 0 && <span style={{ color: '#ffe066' }}>⚡ 麻痺</span>}
-          <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
-          <span style={{ color: '#aa88ff' }}>⚡{getSkill(selectedSkill).name}</span>
-        </div>
-
         {/* マップ（ビューポート）。接触時に少し震える戦闘演出 */}
         <div ref={gridRef} style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', willChange: 'transform', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
           {/* 床はワールド(ダンジョン)に固定＝壁と一緒にスクロール。キャラ移動で床がズレない。1タイル=約4マス */}
@@ -1208,6 +1195,21 @@ export default function Dungeon() {
             <div style={{ position: 'absolute', inset: 6, zIndex: 0, pointerEvents: 'none',
               background: 'radial-gradient(ellipse 60% 60% at 50% 50%, rgba(255,210,130,0.16) 0%, rgba(0,0,0,0) 45%), radial-gradient(ellipse 75% 75% at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,2,8,0.72) 100%)' }} />
           )}
+          {/* ステータス表示（マップ上部に重ねる） */}
+          <div style={{ position: 'absolute', top: 6, left: 6, right: 6, zIndex: 6, pointerEvents: 'none',
+            display: 'flex', gap: 10, fontSize: 11, flexWrap: 'wrap', alignItems: 'center',
+            padding: '5px 8px', background: 'linear-gradient(180deg, rgba(0,4,12,0.82) 0%, rgba(0,4,12,0.55) 100%)', borderBottom: '1px solid rgba(80,120,180,0.35)' }}>
+            <span>B{floorNum}/{dungeon?.floors || 10}F</span>
+            <span style={{ color: '#9fd' }}>Lv{pet.level}{pet.exp != null ? `（EXP ${pet.exp}/${expForLevel(pet.level || 1)}）` : ''}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: petHp > pet.maxHp * 0.3 ? '#44ff88' : '#ff5555' }}>
+              {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 14, height: 14, objectFit: 'cover', borderRadius: 3 }} /> : <span>{pet.emoji}</span>}
+              {pet.name} HP {petHp}/{pet.maxHp}
+            </span>
+            {poisoned && <span style={{ color: '#cc77ff' }}>☠ 毒</span>}
+            {paralyzed > 0 && <span style={{ color: '#ffe066' }}>⚡ 麻痺</span>}
+            <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
+            <span style={{ color: '#cba6ff' }}>⚡{getSkill(selectedSkill).name}</span>
+          </div>
           {Array.from({ length: VH }).map((_, vy) => Array.from({ length: VW }).map((_, vx) => {
             const x = ox + vx, y = oy + vy
             const c = cellAt(x, y)
