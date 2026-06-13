@@ -1017,8 +1017,9 @@ export default function Dungeon() {
     if (!sc || !state) return
     const px = state.player.x, py = state.player.y
     const lv = pet.level || 1
-    const vary = (n) => Math.max(1, Math.round(n * (0.9 + Math.random() * 0.2)))
-    const dmgPerHit = (mult) => vary(lv * 2 * mult) // 威力 = Lv×2×mult
+    // 威力 = Lv × 5 × 乱数。ダイスのみ専用の乱数幅
+    const dmgPerHit = () => Math.max(1, Math.round(lv * 5 * (0.85 + Math.random() * 0.3)))
+    const dmgDice = (d) => Math.max(1, Math.round(lv * 5 * (d[0] + Math.random() * (d[1] - d[0]))))
 
     // --- 自分バフ系（結界/障壁/聖域） ---
     if (sc.target === 'self') {
@@ -1055,10 +1056,7 @@ export default function Dungeon() {
     for (const tg of targets) {
       const hits = sc.hits || 1
       let dealt = 0
-      for (let h = 0; h < hits; h++) {
-        const mult = sc.dice ? (sc.dice[0] + Math.random() * (sc.dice[1] - sc.dice[0])) : sc.mult
-        dealt += dmgPerHit(mult)
-      }
+      for (let h = 0; h < hits; h++) dealt += sc.dice ? dmgDice(sc.dice) : dmgPerHit()
       const cur = enemies.find((e) => e.id === tg.id)
       if (!cur) continue
       const newHp = cur.hp - dealt

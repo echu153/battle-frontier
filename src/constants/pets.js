@@ -320,7 +320,7 @@ function scrollDesc(s) {
     return parts.join('・')
   }
   const tgt = s.target === 'aoe' ? '周囲の敵全体' : `${s.range}マス先まで(斜め可)の敵1体`
-  const pow = s.dice ? 'ランダム威力' : `威力Lv×2×${s.mult}${s.hits > 1 ? `×${s.hits}回` : ''}`
+  const pow = s.dice ? 'ランダム威力' : `威力Lv×5×乱数${s.hits > 1 ? `×${s.hits}回` : ''}`
   const ex = [s.drain ? `与ダメの${Math.round(s.drain * 100)}%回復` : '', s.recoil ? `反動${Math.round(s.recoil * 100)}%` : '', s.stun ? `${Math.round(s.stun * 100)}%でしびれ` : ''].filter(Boolean).join('・')
   return `${tgt}に${pow}${ex ? '／' + ex : ''}`
 }
