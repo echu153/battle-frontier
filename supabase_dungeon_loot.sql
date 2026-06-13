@@ -10,15 +10,15 @@ alter table dungeon_runs add column if not exists pending_loot jsonb not null de
 alter table dungeon_runs add column if not exists dropped_loot jsonb not null default '[]'::jsonb;
 alter table dungeon_runs add column if not exists loot_rolls int not null default 0;
 
--- ✨拾得：サーバーが抽選して pending_loot に積む（上限80）。素は同種でスタック
-create or replace function dungeon_pickup(p_run_id uuid)
+-- 拾得：クライアントが床で決めた戦利品(p_entry)を検証して pending_loot に積む（上限80）。素は同種でスタック
+--  ※床に実アイテムを表示するため抽選はクライアント。サーバーは「正規の種別・値のみ」許可してチート範囲を限定
+create or replace function dungeon_pickup(p_run_id uuid, p_entry jsonb)
 returns json language plpgsql security definer set search_path = public as $$
 declare
-  v_run dungeon_runs%rowtype; v_r numeric; v_entry jsonb; v_id text;
+  v_run dungeon_runs%rowtype; v_entry jsonb; v_id text; v_type text; v_key text;
   v_seeds  text[] := array['atk_seed','spatk_seed','def_seed','spdef_seed','hp_seed'];
   v_stones text[] := array['F','E','D'];
   v_gems   text[] := array['peridot','lapis','ruby','sapphire','amethyst','emerald','topaz','rosequartz','turquoise','morganite','kunzite','citrine','onyx','opal','moonstone','petalite'];
-  v_equips text[] := array['木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス','ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書','魔導の杖','魔術教本','鋼鉄の剣','鋭利なナイフ','狩人の弓','戦士の指輪','略奪の腕輪'];
   v_charms text[] := array['antidote','guard'];
   v_pending jsonb; v_arr jsonb := '[]'::jsonb; v_found boolean := false; v_e jsonb;
 begin
@@ -28,17 +28,27 @@ begin
   if v_run.status <> 'active' then raise exception 'run not active'; end if;
   if v_run.loot_rolls >= 80 then raise exception 'too many loot'; end if;
 
-  -- ✨枠の内訳: 素50 / 強化石10 / 宝石10 / チャーム5（合計75・装備は廃止）
+  -- 受け取った戦利品を正規化＆検証（不正な値は弾く）。idはサーバーで採番
   v_id := gen_random_uuid()::text;
-  v_r := random() * 75;
-  if v_r < 50 then
-    v_entry := jsonb_build_object('id', v_id, 'type', 'seed', 'seedKey', v_seeds[1 + floor(random()*5)::int], 'qty', 1);
-  elsif v_r < 60 then
-    v_entry := jsonb_build_object('id', v_id, 'type', 'stone', 'rank', v_stones[1 + floor(random()*3)::int]);
-  elsif v_r < 70 then
-    v_entry := jsonb_build_object('id', v_id, 'type', 'gem', 'gemType', v_gems[1 + floor(random()*array_length(v_gems,1))::int]);
+  v_type := p_entry->>'type';
+  if v_type = 'seed' then
+    v_key := p_entry->>'seedKey';
+    if not (v_key = any(v_seeds)) then raise exception 'bad seed'; end if;
+    v_entry := jsonb_build_object('id', v_id, 'type', 'seed', 'seedKey', v_key, 'qty', 1);
+  elsif v_type = 'stone' then
+    v_key := p_entry->>'rank';
+    if not (v_key = any(v_stones)) then raise exception 'bad stone'; end if;
+    v_entry := jsonb_build_object('id', v_id, 'type', 'stone', 'rank', v_key);
+  elsif v_type = 'gem' then
+    v_key := p_entry->>'gemType';
+    if not (v_key = any(v_gems)) then raise exception 'bad gem'; end if;
+    v_entry := jsonb_build_object('id', v_id, 'type', 'gem', 'gemType', v_key);
+  elsif v_type = 'charm' then
+    v_key := p_entry->>'ctype';
+    if not (v_key = any(v_charms)) then raise exception 'bad charm'; end if;
+    v_entry := jsonb_build_object('id', v_id, 'type', 'charm', 'ctype', v_key);
   else
-    v_entry := jsonb_build_object('id', v_id, 'type', 'charm', 'ctype', v_charms[1 + floor(random()*2)::int]);
+    raise exception 'bad loot type';
   end if;
 
   v_pending := v_run.pending_loot;
@@ -181,7 +191,8 @@ begin
     'loot_granted', jsonb_array_length(v_keep), 'kept_loot', v_keep);
 end; $$;
 
-grant execute on function dungeon_pickup(uuid) to authenticated;
+drop function if exists dungeon_pickup(uuid); -- 旧1引数版を削除
+grant execute on function dungeon_pickup(uuid, jsonb) to authenticated;
 grant execute on function dungeon_drop_loot(uuid, text) to authenticated;
 grant execute on function dungeon_repick_loot(uuid, text) to authenticated;
 grant execute on function dungeon_finish(uuid, int, int, int, boolean, boolean) to authenticated;

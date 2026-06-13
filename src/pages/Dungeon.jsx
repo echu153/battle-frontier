@@ -36,6 +36,21 @@ const BURN_PCT = 0.03         // やけど：最大HPのこの割合ダメージ
 const BURN_ATK_DOWN = 0.10    // やけど中：攻撃/特攻ダウン率
 const WEAKEN_ATK_DOWN = 0.10  // ステータスダウン中：攻撃/特攻ダウン率
 
+// 床に置く戦利品の抽選テーブル（クライアントで決定→床に実アイコン表示→拾得時サーバー検証）
+const DG_SEEDS = ['atk_seed', 'spatk_seed', 'def_seed', 'spdef_seed', 'hp_seed']
+const DG_STONES = ['F', 'E', 'D']
+const DG_GEMS = ['peridot', 'lapis', 'ruby', 'sapphire', 'amethyst', 'emerald', 'topaz', 'rosequartz', 'turquoise', 'morganite', 'kunzite', 'citrine', 'onyx', 'opal', 'moonstone', 'petalite']
+const DG_CHARMS = ['antidote', 'guard']
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
+// ✨枠の中身を抽選：素50 / 強化石10 / 宝石10 / チャーム5（合計75）
+function rollFloorLoot() {
+  const r = Math.random() * 75
+  if (r < 50) return { type: 'seed', seedKey: pick(DG_SEEDS), qty: 1 }
+  if (r < 60) return { type: 'stone', rank: pick(DG_STONES) }
+  if (r < 70) return { type: 'gem', gemType: pick(DG_GEMS) }
+  return { type: 'charm', ctype: pick(DG_CHARMS) }
+}
+
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1))
 
 // この端末の固有ID（ダンジョンの1端末専用ロック用）。端末ごとに永続。
@@ -142,12 +157,13 @@ function generateFloor(floorNum, dungeon) {
     const t = randInnerTileInRoom(room) // 出入り口（部屋の外周）には置かない
     if (!t) continue
     mark(t.x, t.y)
-    // ドロップ確率: 木の実10 / おにぎり10 / スキルの書5(10F+) / 残り75%は✨(素50・石10・宝石10・チャーム5をサーバー抽選)
+    // ドロップ確率: 木の実10 / おにぎり10 / スキルの書5(10F+) / 残り75%は素50・石10・宝石10・チャーム5
+    //  ※床に実アイテムのアイコンを表示（置いてある時点で何か分かる）。✨マーカーは廃止
     const r = Math.random()
     if (r < 0.10) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'konomi' })
     else if (r < 0.20) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'onigiri' })
     else if (r < 0.25 && floorNum >= 10) items.push({ id: 's' + i, x: t.x, y: t.y, kind: 'food', key: SCROLL_KEYS[rand(0, SCROLL_KEYS.length - 1)] }) // スキルの書（拾うと袋へ）
-    else items.push({ id: 'i' + i, x: t.x, y: t.y, kind: 'loot' })
+    else items.push({ id: 'i' + i, x: t.x, y: t.y, kind: 'loot', loot: rollFloorLoot() })
   }
 
   return { grid, rooms, player, enemies, items, stairs, explored: new Set() }
@@ -768,11 +784,13 @@ export default function Dungeon() {
           const fdef = PET_ITEMS[itemHere.key]
           addLog(`${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾った`)
           grantFood(itemHere.key).then((ok) => { if (!ok) addLog('🎒 袋がいっぱいで拾えなかった') })
-        } else {
-          // ✨：サーバーが抽選して保持（生還で入手）。結果は応答後に名前付きで表示
-          supabase.rpc('dungeon_pickup', { p_run_id: runIdRef.current }).then(({ data, error }) => {
-            if (error || !data) { addLog(`✨ 拾えなかった（${error?.message || '通信エラー'}）`); return }
-            addLootToBag(data); const d = lootDisplay(data); addLog(d.img ? `${d.label}を拾った！` : `${d.emoji} ${d.label}を拾った！`, 'left', d.img)
+        } else if (itemHere.loot) {
+          // 床の戦利品（素/石/宝石/チャーム）。中身は既知なので即ログ＋サーバーで検証・保持
+          const d = lootDisplay(itemHere.loot)
+          addLog(d.img ? `${d.label}を拾った！` : `${d.emoji} ${d.label}を拾った！`, 'left', d.img)
+          supabase.rpc('dungeon_pickup', { p_run_id: runIdRef.current, p_entry: itemHere.loot }).then(({ data, error }) => {
+            if (error || !data) { addLog('🎒 持ち帰れなかった'); return }
+            addLootToBag(data) // サーバーが採番したentry（id付き）で袋に反映
           })
         }
       }
@@ -1253,12 +1271,11 @@ export default function Dungeon() {
     if (e) return { ch: '👹', img: e.image || null, bg: floorBg, fx: fx.enemies[e.id] || null }
     const it = state.items.find((o) => o.x === x && o.y === y)
     if (it) {
-      // 床アイテム：素など画像があれば画像、無ければ絵文字
-      const itemImg = (it.kind === 'food' || it.kind === 'dropFood') ? petItemImg(it.key)
-        : it.kind === 'dropLoot' ? (it.loot?.img || null) : null
-      const ch = (it.kind === 'food' || it.kind === 'dropFood') ? (PET_ITEMS[it.key]?.emoji || '🍙')
-        : it.kind === 'dropLoot' ? (it.loot?.emoji || '🎁') : '✨'
-      return { ch, img: itemImg, bg: floorBg, overlay: itemImg ? null : itemTile }
+      // 床アイテムは実アイコンを表示（素=画像／食料・スキル書=絵文字／戦利品=lootDisplay）
+      const d = (it.kind === 'food' || it.kind === 'dropFood')
+        ? { emoji: PET_ITEMS[it.key]?.emoji || '🎁', img: petItemImg(it.key) }
+        : lootDisplay(it.loot) // loot / dropLoot とも it.loot を持つ
+      return { ch: d.emoji || '🎁', img: d.img || null, bg: floorBg, overlay: d.img ? null : itemTile }
     }
     if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: floorBg, overlay: stairsTile, stairsGlow: true, water: waterWall }
     // 壁マスは壁画像を1マスごとに表示（複数あればマス座標でランダム）。床マスは透過。
