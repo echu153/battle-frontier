@@ -3879,35 +3879,35 @@ export default function Game() {
           <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', marginBottom:'8px' }}>
             {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'6px', border:'1px solid #660000', padding:'3px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
-              {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width:'48px', height:'48px', objectFit:'cover', flexShrink:0 }} />}
+              {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width: NEW_UI ? '76px' : '48px', height: NEW_UI ? '76px' : '48px', objectFit:'cover', flexShrink:0 }} />}
               <div style={{ flex:1, textAlign: NEW_UI ? 'left' : undefined, display: NEW_UI ? 'flex' : undefined, justifyContent: NEW_UI ? 'space-between' : undefined, alignItems: NEW_UI ? 'flex-start' : undefined }}>
                 <div>
-                  <div style={{ color:'#ffcc00', fontSize:'13px' }}>
-                    {profile.display_title && <span style={{ color:'#aaaaff', fontSize:'11px', marginRight:'4px' }}>{profile.display_title}</span>}
+                  <div style={{ color:'#ffcc00', fontSize: NEW_UI ? '16px' : '13px', fontWeight: NEW_UI ? 'bold' : undefined }}>
+                    {profile.display_title && <span style={{ color:'#aaaaff', fontSize: NEW_UI ? '12px' : '11px', marginRight:'4px', fontWeight:'normal' }}>{profile.display_title}</span>}
                     {profile.username}
                   </div>
-                  <div style={{ fontSize:'11px', color:'#446688' }}>
+                  <div style={{ fontSize: NEW_UI ? '13px' : '11px', color:'#446688', marginTop: NEW_UI ? '3px' : undefined }}>
                     <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{getRetrainingStars(profile.class, profile.retraining)}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／{cap}
                   </div>
-                  <div style={{ fontSize:'11px', color:'#446688' }}>
+                  <div style={{ fontSize: NEW_UI ? '13px' : '11px', color:'#446688', marginTop: NEW_UI ? '3px' : undefined }}>
                     キャラクターLV: <span style={{color:'#ffcc00'}}>{charLv}</span>　<span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span>
                   </div>
-                  <div style={{ fontSize:'10px', color:'#446688' }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
+                  <div style={{ fontSize: NEW_UI ? '12px' : '10px', color:'#446688', marginTop: NEW_UI ? '3px' : undefined }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
                 </div>
                 {NEW_UI && (
                   profile.activePet ? (
-                    <button onClick={()=>nav('/pets')} style={{ flexShrink:0, display:'flex', alignItems:'center', gap:'6px', background:'#0e0a1a', border:'1px solid #aa88ff', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', textAlign:'left' }}>
+                    <button onClick={()=>nav('/pets')} style={{ flexShrink:0, display:'flex', alignItems:'center', gap:'8px', background:'#0e0a1a', border:'1px solid #aa88ff', padding:'6px 10px', cursor:'pointer', fontFamily:'monospace', textAlign:'left' }}>
                       {petImage(profile.activePet)
-                        ? <img src={petImage(profile.activePet)} alt="" style={{ width:'34px', height:'34px', objectFit:'contain', flexShrink:0 }} />
-                        : <span style={{ fontSize:'26px', lineHeight:1 }}>{speciesEmoji(profile.activePet)}</span>}
-                      <div style={{ lineHeight:1.3 }}>
-                        <div style={{ fontSize:'9px', color:'#8877aa' }}>🐾 ペット</div>
-                        <div style={{ fontSize:'12px', color:'#cbb6ff', fontWeight:'bold' }}>{profile.activePet.name}</div>
-                        <div style={{ fontSize:'10px', color:'#8877aa' }}>{speciesLabel(profile.activePet)} <span style={{ color:'#ffcc00' }}>Lv{profile.activePet.level}</span></div>
+                        ? <img src={petImage(profile.activePet)} alt="" style={{ width:'52px', height:'52px', objectFit:'contain', flexShrink:0 }} />
+                        : <span style={{ fontSize:'40px', lineHeight:1 }}>{speciesEmoji(profile.activePet)}</span>}
+                      <div style={{ lineHeight:1.35 }}>
+                        <div style={{ fontSize:'10px', color:'#8877aa' }}>🐾 ペット</div>
+                        <div style={{ fontSize:'14px', color:'#cbb6ff', fontWeight:'bold' }}>{profile.activePet.name}</div>
+                        <div style={{ fontSize:'11px', color:'#8877aa' }}>{speciesLabel(profile.activePet)} <span style={{ color:'#ffcc00' }}>Lv{profile.activePet.level}</span></div>
                       </div>
                     </button>
                   ) : (
-                    <button onClick={()=>nav('/pets')} style={{ flexShrink:0, alignSelf:'center', background:'#0e0a1a', border:'1px solid #6a5a8a', color:'#8877aa', padding:'8px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', textAlign:'center' }}>🐾<br/>ペット未選択</button>
+                    <button onClick={()=>nav('/pets')} style={{ flexShrink:0, alignSelf:'center', background:'#0e0a1a', border:'1px solid #6a5a8a', color:'#8877aa', padding:'10px 12px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', textAlign:'center' }}>🐾<br/>ペット未選択</button>
                   )
                 )}
               </div>
