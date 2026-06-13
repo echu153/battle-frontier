@@ -369,9 +369,9 @@ export default function Dungeon() {
     if (!AC) return
     const ctx = new AC()
     audioCtxRef.current = ctx
-    ;['aitemu', 'kaidan'].forEach(async (name) => {
+    ;['aitemu', 'kaidan', 'kougeki', '被ダメ'].forEach(async (name) => {
       try {
-        const res = await fetch(`/${name}.mp3?v=${ASSET_VER}`)
+        const res = await fetch(encodeURI(`/${name}.mp3`) + `?v=${ASSET_VER}`)
         const arr = await res.arrayBuffer()
         seBufRef.current[name] = await ctx.decodeAudioData(arr)
       } catch { /* デコード失敗時は new Audio にフォールバック */ }
@@ -383,12 +383,12 @@ export default function Dungeon() {
     const m = masterRef.current
     if (m <= 0) return // 全体ミュート中は鳴らさない
     const rate = name === 'kaidan' ? 1.2 : 1 // 階段は1.2倍速で再生
-    const baseVol = name === 'aitemu' ? 2.0 : 0.35 // アイテム音は大きめ・階段は控えめ
+    const baseVol = name === 'aitemu' ? 2.0 : (name === 'kougeki' || name === '被ダメ') ? 0.6 : 0.35 // アイテム大きめ・攻撃/被ダメ中・階段控えめ
     const vol = baseVol * seVolRef.current * m // SE音量×全体音量
     if (vol <= 0) return
     const ctx = audioCtxRef.current, buf = seBufRef.current[name]
     if (!ctx || !buf) { // まだデコード前なら従来方式で鳴らす
-      try { const a = new Audio(`/${name}.mp3?v=${ASSET_VER}`); a.volume = Math.min(1, vol); a.playbackRate = rate; a.play().catch(() => {}) } catch { /* ignore */ }
+      try { const a = new Audio(encodeURI(`/${name}.mp3`) + `?v=${ASSET_VER}`); a.volume = Math.min(1, vol); a.playbackRate = rate; a.play().catch(() => {}) } catch { /* ignore */ }
       return
     }
     if (ctx.state === 'suspended') ctx.resume().catch(() => {})
@@ -799,6 +799,7 @@ export default function Dungeon() {
         return
       }
       fullCost = cost
+      playSe('kougeki') // 攻撃SE
       const hits = sk.hits || 1
       // たいあたりは攻撃(物理)と特攻(特殊)の高いほうを参照（チャーム成長を両方活かせる）。
       // スキルは従来どおり攻撃タイプ準拠。同値なら攻撃タイプ側
@@ -1180,6 +1181,7 @@ export default function Dungeon() {
         if (diedMid) return // 既に倒れていたら残りの攻撃はなし
         const dmg = Math.max(1, Math.round(a.dmg * shieldOn))
         hpNow -= dmg
+        playSe('被ダメ') // 被ダメSE
         popDmg(player.x, player.y, dmg, { follow: true })
         if (a.healShown > 0) popHeal(a.x, a.y, a.healShown)
         const tag = a.notes.length ? `【${a.notes.join('・')}】` : '攻撃'
