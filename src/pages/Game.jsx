@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import papiaIcon from '../assets/papia.png'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue, calcDefReduction } from '../lib/stats'
-import { charmPlayerBonus } from '../constants/pets'
+import { charmPlayerBonus, speciesLabel, speciesEmoji, petImage } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
 // Equipment.jsx 等が './Game' から参照しているため再export
 export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue, calcDefReduction } from '../lib/stats'
@@ -1643,14 +1643,18 @@ export default function Game() {
     await supabase.from('profiles').update({ consecutive_battle_count: 0 }).eq('id', user.id)
     // 選択中ペットの装備チャーム効果をプレイヤー本体へ反映（未導入時は無視）
     let petCharm = null
+    let activePet = null
     try {
-      const { data: ap } = await supabase.from('pets').select('charm_id').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
-      if (ap?.charm_id) {
-        const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle()
-        if (c) petCharm = charmPlayerBonus(c)
+      const { data: ap } = await supabase.from('pets').select('*').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
+      if (ap) {
+        activePet = ap
+        if (ap.charm_id) {
+          const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle()
+          if (c) petCharm = charmPlayerBonus(c)
+        }
       }
     } catch { /* チャーム未導入時は無視 */ }
-    setProfile({ ...data, ..._computed, petCharm, consecutive_battle_count: 0 })
+    setProfile({ ...data, ..._computed, petCharm, activePet, consecutive_battle_count: 0 })
     setPendingPoints(data.pending_stat_points || 0)
     // selectedAreaがこのアカウントで解放済みかチェック（別アカウントのlocalStorage値を弾く）
     const unlocked = data.unlocked_areas || [1]
@@ -3878,38 +3882,33 @@ export default function Game() {
               {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width:'48px', height:'48px', objectFit:'cover', flexShrink:0 }} />}
               <div style={{ flex:1, textAlign: NEW_UI ? 'left' : undefined, display: NEW_UI ? 'flex' : undefined, justifyContent: NEW_UI ? 'space-between' : undefined, alignItems: NEW_UI ? 'flex-start' : undefined }}>
                 <div>
-                  <div style={{ color:'#ffcc00', fontSize: NEW_UI ? '15px' : '13px', fontWeight: NEW_UI ? 'bold' : undefined }}>
-                    {profile.display_title && <span style={{ color:'#aaaaff', fontSize:'11px', marginRight:'4px', fontWeight:'normal' }}>{profile.display_title}</span>}
+                  <div style={{ color:'#ffcc00', fontSize:'13px' }}>
+                    {profile.display_title && <span style={{ color:'#aaaaff', fontSize:'11px', marginRight:'4px' }}>{profile.display_title}</span>}
                     {profile.username}
                   </div>
-                  <div style={{ fontSize: NEW_UI ? '12px' : '11px', color:'#446688', marginTop: NEW_UI ? '2px' : undefined }}>
+                  <div style={{ fontSize:'11px', color:'#446688' }}>
                     <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{getRetrainingStars(profile.class, profile.retraining)}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／{cap}
                   </div>
-                  <div style={{ fontSize: NEW_UI ? '13px' : '11px', color: NEW_UI ? '#88ccff' : '#446688', marginTop: NEW_UI ? '2px' : undefined }}>
-                    キャラクターLV: <span style={{color:'#ffcc00', fontWeight: NEW_UI ? 'bold' : undefined, fontSize: NEW_UI ? '15px' : undefined }}>{charLv}</span>{!NEW_UI && <>　<span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span></>}
+                  <div style={{ fontSize:'11px', color:'#446688' }}>
+                    キャラクターLV: <span style={{color:'#ffcc00'}}>{charLv}</span>　<span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span>
                   </div>
-                  <div style={{ fontSize: NEW_UI ? '12px' : '10px', color:'#446688', marginTop: NEW_UI ? '2px' : undefined }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
+                  <div style={{ fontSize:'10px', color:'#446688' }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
                 </div>
                 {NEW_UI && (
-                  <div style={{ textAlign:'right', flexShrink:0, lineHeight:1.2 }}>
-                    <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', marginBottom:'4px' }}>
-                      <div>
-                        <div style={{ fontSize:'9px', color:'#446688' }}>総合力</div>
-                        <div style={{ fontSize:'15px', color:'#44ff88', fontWeight:'bold' }}>{total}</div>
+                  profile.activePet ? (
+                    <button onClick={()=>nav('/pets')} style={{ flexShrink:0, display:'flex', alignItems:'center', gap:'6px', background:'#0e0a1a', border:'1px solid #aa88ff', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', textAlign:'left' }}>
+                      {petImage(profile.activePet)
+                        ? <img src={petImage(profile.activePet)} alt="" style={{ width:'34px', height:'34px', objectFit:'contain', flexShrink:0 }} />
+                        : <span style={{ fontSize:'26px', lineHeight:1 }}>{speciesEmoji(profile.activePet)}</span>}
+                      <div style={{ lineHeight:1.3 }}>
+                        <div style={{ fontSize:'9px', color:'#8877aa' }}>🐾 ペット</div>
+                        <div style={{ fontSize:'12px', color:'#cbb6ff', fontWeight:'bold' }}>{profile.activePet.name}</div>
+                        <div style={{ fontSize:'10px', color:'#8877aa' }}>{speciesLabel(profile.activePet)} <span style={{ color:'#ffcc00' }}>Lv{profile.activePet.level}</span></div>
                       </div>
-                      <div>
-                        <div style={{ fontSize:'9px', color:'#446688' }}>ステータス</div>
-                        <div style={{ fontSize:'15px', color:totalRank.color, fontWeight:'bold' }}>{totalRank.rank}</div>
-                      </div>
-                    </div>
-                    <div style={{ display:'grid', gridTemplateColumns:'auto auto', gap:'1px 10px', fontSize:'11px', justifyContent:'flex-end' }}>
-                      <span style={{ color:'#446688' }}>攻 <span style={{ color:'#ffcc00' }}>{eff.atk}</span></span>
-                      <span style={{ color:'#446688' }}>防 <span style={{ color:'#88aaff' }}>{eff.def}</span></span>
-                      <span style={{ color:'#446688' }}>特攻 <span style={{ color:'#cc44ff' }}>{eff.matk}</span></span>
-                      <span style={{ color:'#446688' }}>特防 <span style={{ color:'#44ccff' }}>{eff.mdef}</span></span>
-                      <span style={{ color:'#446688' }}>速 <span style={{ color:'#ff8844' }}>{eff.spd}</span></span>
-                    </div>
-                  </div>
+                    </button>
+                  ) : (
+                    <button onClick={()=>nav('/pets')} style={{ flexShrink:0, alignSelf:'center', background:'#0e0a1a', border:'1px solid #6a5a8a', color:'#8877aa', padding:'8px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', textAlign:'center' }}>🐾<br/>ペット未選択</button>
+                  )
                 )}
               </div>
             </div>
