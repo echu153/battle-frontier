@@ -143,7 +143,7 @@ export const DUNGEONS = [
           { name: '重斬り', chance: 0.30, type: 'heavy', mult: 1.5 },
           { name: '骨砕き', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 },
           { name: '呪詛', chance: 0.25, type: 'weaken', stat: 'mdef', turns: 4 } ] },
-        { name: 'スケルトン（弓）', type: 'phys', image: '/sukerutonyumi.png', stats: { maxHp: 185, atk: 170, def: 70, mdef: 70 }, skills: [
+        { name: 'スケルトン（弓）', type: 'phys', image: '/sukerutonyumi.png', stats: { maxHp: 185, atk: 170, def: 70, mdef: 70 }, reach: 2, skills: [
           { name: '連射', chance: 0.30, type: 'heavy', mult: 1.3 },
           { name: '狙い撃ち', chance: 0.25, type: 'heavy', mult: 1.6 },
           { name: '毒矢', chance: 0.25, type: 'poison' } ] },
@@ -153,7 +153,7 @@ export const DUNGEONS = [
           { name: '重斬り', chance: 0.30, type: 'heavy', mult: 1.5 },
           { name: '骨砕き', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 },
           { name: '呪詛', chance: 0.25, type: 'weaken', stat: 'mdef', turns: 4 } ] },
-        { name: 'スケルトン（弓）', type: 'phys', image: '/sukerutonyumi.png', stats: { maxHp: 185, atk: 170, def: 70, mdef: 70 }, skills: [
+        { name: 'スケルトン（弓）', type: 'phys', image: '/sukerutonyumi.png', stats: { maxHp: 185, atk: 170, def: 70, mdef: 70 }, reach: 2, skills: [
           { name: '連射', chance: 0.30, type: 'heavy', mult: 1.3 },
           { name: '狙い撃ち', chance: 0.25, type: 'heavy', mult: 1.6 },
           { name: '毒矢', chance: 0.25, type: 'poison' } ] },
@@ -172,11 +172,11 @@ export const DUNGEONS = [
           { name: '水流弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
           { name: '墨吐き', chance: 0.30, type: 'weaken', stat: 'atk', turns: 4 },
           { name: '再生', chance: 0.25, type: 'vamp', frac: 0.3 } ] },
-        { name: '海賊（男）', type: 'phys', image: '/kaizokuotoko.png', stats: { maxHp: 350, atk: 231, def: 154, mdef: 140 }, skills: [
-          { name: '乱れ斬り', chance: 0.30, type: 'heavy', mult: 1.4 },
+        { name: '海賊（男）', type: 'phys', image: '/kaizokuotoko.png', stats: { maxHp: 350, atk: 231, def: 154, mdef: 140 }, reach: 2, skills: [
+          { name: '銃撃', chance: 0.30, type: 'heavy', mult: 1.4 },
           { name: '鼓舞', chance: 0.25, type: 'selfbuff' },
           { name: '足払い', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
-        { name: '海賊（女）', type: 'spec', image: '/kaizokuonnna.png', stats: { maxHp: 320, atk: 225, def: 135, mdef: 150 }, skills: [
+        { name: '海賊（女）', type: 'spec', image: '/kaizokuonnna.png', stats: { maxHp: 320, atk: 225, def: 135, mdef: 150 }, reach: 2, skills: [
           { name: '魔弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
           { name: '幻惑', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 },
           { name: '治癒', chance: 0.25, type: 'vamp', frac: 0.3 } ] },
@@ -186,11 +186,11 @@ export const DUNGEONS = [
           { name: '針千本', chance: 0.25, type: 'heavy', mult: 1.5 } ] },
       ] },
       { from: 25, to: 30, enemies: [
-        { name: '海賊（男）', type: 'phys', image: '/kaizokuotoko.png', stats: { maxHp: 350, atk: 231, def: 154, mdef: 140 }, skills: [
-          { name: '乱れ斬り', chance: 0.30, type: 'heavy', mult: 1.4 },
+        { name: '海賊（男）', type: 'phys', image: '/kaizokuotoko.png', stats: { maxHp: 350, atk: 231, def: 154, mdef: 140 }, reach: 2, skills: [
+          { name: '銃撃', chance: 0.30, type: 'heavy', mult: 1.4 },
           { name: '鼓舞', chance: 0.25, type: 'selfbuff' },
           { name: '足払い', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
-        { name: '海賊（女）', type: 'spec', image: '/kaizokuonnna.png', stats: { maxHp: 320, atk: 225, def: 135, mdef: 150 }, skills: [
+        { name: '海賊（女）', type: 'spec', image: '/kaizokuonnna.png', stats: { maxHp: 320, atk: 225, def: 135, mdef: 150 }, reach: 2, skills: [
           { name: '魔弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
           { name: '幻惑', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 },
           { name: '治癒', chance: 0.25, type: 'vamp', frac: 0.3 } ] },

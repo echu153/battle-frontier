@@ -148,7 +148,7 @@ function generateFloor(floorNum, dungeon) {
       const kind = pool[rand(0, pool.length - 1)]
       // 強さは初登場フロアの値で固定（深い階でも同種は同じ強さ）
       const es = dungeonEnemyStatsFor(dungeon, kind)
-      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: kind.skills || enemySkillsFor(kind.name), canSwim: isAquatic(kind.name), hp: es.maxHp, maxHp: es.maxHp, atk: es.atk, def: es.def, mdef: es.mdef })
+      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: kind.skills || enemySkillsFor(kind.name), canSwim: isAquatic(kind.name), reach: kind.reach || 1, hp: es.maxHp, maxHp: es.maxHp, atk: es.atk, def: es.def, mdef: es.mdef })
     }
   }
   // アイテム（✨/木の実/おにぎり 全部込み）を1フロア3〜5個ランダム
@@ -500,7 +500,7 @@ export default function Dungeon() {
       const es = dungeonEnemyStatsFor(dungeon, kind)
       spawnSeq.current += 1
       return {
-        id: 'es' + spawnSeq.current, x, y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: enemySkillsFor(kind.name), canSwim: isAquatic(kind.name),
+        id: 'es' + spawnSeq.current, x, y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: kind.skills || enemySkillsFor(kind.name), canSwim: isAquatic(kind.name), reach: kind.reach || 1,
         hp: es.maxHp, maxHp: es.maxHp, atk: es.atk, def: es.def, mdef: es.mdef,
       }
     }
@@ -862,11 +862,18 @@ export default function Dungeon() {
       // プレイヤーが見えている敵だけが追跡・攻撃する（霧の中からの不可視の急襲を防ぐ）
       //  ＝ 同じ部屋/接近(enemySeesPet) または プレイヤーの視界内(visNow) の敵のみ
       const sees = enemySeesPet(s.rooms, e, player.x, player.y) || visNow.has(e.x + ',' + e.y)
-      // 斜め隣接も攻撃対象（ただし壁の角越しは不可＝プレイヤーの斜め移動と同条件）
+      // 攻撃可能判定：reach マス以内＆直線(縦横/斜め)＆間に壁が無い。reach=1は従来の隣接攻撃
       const adx = e.x - player.x, ady = e.y - player.y
-      const diagBlocked = adx !== 0 && ady !== 0 && (s.grid[player.y]?.[e.x] === '#' || s.grid[e.y]?.[player.x] === '#')
-      const adjacent = Math.max(Math.abs(adx), Math.abs(ady)) === 1 && !diagBlocked
-      if (sees && adjacent && visNow.has(e.x + ',' + e.y)) {
+      const cheb = Math.max(Math.abs(adx), Math.abs(ady))
+      const reach = e.reach || 1
+      const straight = adx === 0 || ady === 0 || Math.abs(adx) === Math.abs(ady)
+      const sx = Math.sign(player.x - e.x), sy = Math.sign(player.y - e.y)
+      let lineClear = true
+      for (let k = 1; k < cheb; k++) { if (s.grid[e.y + sy * k]?.[e.x + sx * k] === '#') { lineClear = false; break } } // 間に壁
+      // 隣接(1マス)は斜め角の抜け不可も判定
+      const diagBlocked = cheb === 1 && adx !== 0 && ady !== 0 && (s.grid[player.y]?.[e.x] === '#' || s.grid[e.y]?.[player.x] === '#')
+      const inRange = cheb >= 1 && cheb <= reach && straight && lineClear && !diagBlocked
+      if (sees && inRange && visNow.has(e.x + ',' + e.y)) {
         // 敵の攻撃タイプに応じて pet.def(物理)/mdef(特殊)で軽減。防御/特防ダウン中は軽減を弱める
         const baseGuard = e.type === 'spec' ? (pet.mdef || 0) : (pet.def || 0)
         const guardDown = e.type === 'spec' ? (debuff.mdef > 0) : (debuff.def > 0)
