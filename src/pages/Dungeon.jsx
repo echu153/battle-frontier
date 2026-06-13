@@ -201,8 +201,8 @@ export default function Dungeon() {
   const [weakened, setWeakened] = useState(0)     // ステータスダウン＝あと何ターン攻撃/特攻ダウンか
   const [padSide, setPadSide] = useState(() => { const v = localStorage.getItem('bf_dg_padside'); return (v === 'right' || v === 'center') ? v : 'left' }) // 移動キーの配置: left|center|right
   const setPad = (n) => { setPadSide(n); try { localStorage.setItem('bf_dg_padside', n) } catch { /* ignore */ } }
-  const [seOn, setSeOn] = useState(() => localStorage.getItem('bf_dg_se') === 'on') // 効果音 ON/OFF（初期OFF）
-  const [masterOn, setMasterOn] = useState(() => localStorage.getItem('bf_dg_master') !== 'off') // 全体音量のON/OFF
+  const [seOn, setSeOn] = useState(() => localStorage.getItem('bf_dg_se') !== 'off') // 効果音 ON/OFF（全体ONなら既定オン）
+  const [masterOn, setMasterOn] = useState(() => localStorage.getItem('bf_dg_master') === 'on') // 全体音量のON/OFF（初期OFF）
   const [masterVol, setMasterVol] = useState(() => { const v = parseInt(localStorage.getItem('bf_dg_mastervol') || '70', 10); return isNaN(v) ? 70 : Math.min(100, Math.max(0, v)) }) // 全体音量 0〜100
   const masterRef = useRef(masterOn ? masterVol / 100 : 0)
   useEffect(() => { masterRef.current = masterOn ? masterVol / 100 : 0; try { localStorage.setItem('bf_dg_master', masterOn ? 'on' : 'off'); localStorage.setItem('bf_dg_mastervol', String(masterVol)) } catch { /* ignore */ } }, [masterOn, masterVol])
@@ -226,7 +226,7 @@ export default function Dungeon() {
   const [isAdmin, setIsAdmin] = useState(false) // 開発アカウント（comingSoonダンジョンに入れる）
   const [transition, setTransition] = useState(null) // フロア遷移演出 { floor, black, title }
   const [lockedOut, setLockedOut] = useState(false)   // 別端末でプレイ中＝この端末はロック
-  const [bgmOn, setBgmOn] = useState(false) // BGM ON/OFF（初期オフ）。追憶の遺跡(d30)でのみ再生
+  const [bgmOn, setBgmOn] = useState(() => localStorage.getItem('bf_dg_bgm') !== 'off') // BGM ON/OFF（全体ONなら既定オン）。追憶の遺跡(d30)でのみ再生
   const [bgmVol, setBgmVol] = useState(() => { const v = parseInt(localStorage.getItem('bf_dg_bgmvol') || '35', 10); return isNaN(v) ? 35 : Math.min(100, Math.max(0, v)) }) // 0〜100
   const audioRef = useRef(null)
   const bgmDungeon = dungeon?.id === 'd30' // BGM対象ダンジョン
@@ -261,7 +261,7 @@ export default function Dungeon() {
     else { a.pause() }
   }, [bgmOn, bgmDungeon, status])
   const ensureBgm = () => { const a = audioRef.current; if (a && bgmOn && bgmDungeon && a.paused) a.play().catch(() => {}) }
-  const toggleBgm = () => setBgmOn((v) => !v)
+  const toggleBgm = () => setBgmOn((v) => { const n = !v; try { localStorage.setItem('bf_dg_bgm', n ? 'on' : 'off') } catch { /* ignore */ } return n })
   // 効果音（SE）：事前にデコードして「触れた瞬間」に遅延なく鳴らす（Web Audio）
   const seOnRef = useRef(seOn)
   useEffect(() => { seOnRef.current = seOn }, [seOn])
@@ -1276,23 +1276,24 @@ export default function Dungeon() {
                     ))}
                   </div>
                 </div>
+                {!masterOn && <div style={{ color: '#7799aa', fontSize: 10, marginBottom: 6 }}>※「🔊全体」をオンにするとBGM/SEを切り替えられます</div>}
                 {/* BGM */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: bgmOn && bgmDungeon ? 4 : 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: bgmOn && bgmDungeon && masterOn ? 4 : 8, opacity: masterOn ? 1 : 0.5 }}>
                   <span style={{ color: '#aaccee', fontSize: 11 }}>BGM{bgmDungeon ? '' : '（このダンジョンは無し）'}</span>
-                  <button onClick={toggleBgm} disabled={!bgmDungeon}
-                    style={{ background: bgmOn ? '#101a30' : '#0a0a14', border: `1px solid ${bgmOn ? '#0088ff' : '#334455'}`, color: bgmOn ? '#66bbff' : '#556677', padding: '3px 10px', cursor: bgmDungeon ? 'pointer' : 'not-allowed', fontFamily: 'monospace', fontSize: 11 }}>
+                  <button onClick={toggleBgm} disabled={!bgmDungeon || !masterOn}
+                    style={{ background: bgmOn ? '#101a30' : '#0a0a14', border: `1px solid ${bgmOn ? '#0088ff' : '#334455'}`, color: bgmOn ? '#66bbff' : '#556677', padding: '3px 10px', cursor: (bgmDungeon && masterOn) ? 'pointer' : 'not-allowed', fontFamily: 'monospace', fontSize: 11 }}>
                     {bgmOn ? '🔊 ON' : '🔇 OFF'}
                   </button>
                 </div>
-                {bgmDungeon && bgmOn && (
+                {bgmDungeon && bgmOn && masterOn && (
                   <input type="range" min="0" max="100" value={bgmVol} onChange={(e) => setBgmVol(Number(e.target.value))}
                     title={`音量 ${bgmVol}%`} style={{ width: '100%', accentColor: '#0088ff', cursor: 'pointer', marginBottom: 8 }} />
                 )}
                 {/* SE */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: masterOn ? 1 : 0.5 }}>
                   <span style={{ color: '#aaccee', fontSize: 11 }}>効果音（SE）</span>
-                  <button onClick={toggleSe}
-                    style={{ background: seOn ? '#101a30' : '#0a0a14', border: `1px solid ${seOn ? '#0088ff' : '#334455'}`, color: seOn ? '#66bbff' : '#556677', padding: '3px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                  <button onClick={toggleSe} disabled={!masterOn}
+                    style={{ background: seOn ? '#101a30' : '#0a0a14', border: `1px solid ${seOn ? '#0088ff' : '#334455'}`, color: seOn ? '#66bbff' : '#556677', padding: '3px 10px', cursor: masterOn ? 'pointer' : 'not-allowed', fontFamily: 'monospace', fontSize: 11 }}>
                     {seOn ? '🔊 ON' : '🔇 OFF'}
                   </button>
                 </div>
