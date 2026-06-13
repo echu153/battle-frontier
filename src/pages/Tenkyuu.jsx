@@ -708,7 +708,8 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       const effect = currentItem.items.effect
       const isInfinite = effect === 'hp_pct_infinite' || effect === 'mp_pct_infinite'
       const onCooldown = (playerBuffs.potionCooldown?.turns || 0) > 0
-      const canUse = isInfinite ? !onCooldown : !itemUsed
+      // 無限ポーションは出撃のみ適用（天穹では発動しない）。通常ポーションは従来どおり
+      const canUse = isInfinite ? false : !itemUsed
       if (canUse) {
         if ((effect==='hp_pct' || effect==='hp_pct_infinite') && playerHp/profile.hp_max*100 <= threshold) {
           const healAmt = Math.floor(profile.hp_max*currentItem.items.value/100)
