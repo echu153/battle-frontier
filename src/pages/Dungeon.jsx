@@ -369,7 +369,7 @@ export default function Dungeon() {
     if (!AC) return
     const ctx = new AC()
     audioCtxRef.current = ctx
-    ;['aitemu', 'kaidan', 'kougeki', '被ダメ'].forEach(async (name) => {
+    ;['aitemu', 'kaidan', 'kougeki', '被ダメ', 'バフ', 'bosukeitaihenkazi'].forEach(async (name) => {
       try {
         const res = await fetch(encodeURI(`/${name}.mp3`) + `?v=${ASSET_VER}`)
         const arr = await res.arrayBuffer()
@@ -831,6 +831,7 @@ export default function Dungeon() {
       if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); const healed = Math.min(pet.maxHp, curPetHp + heal) - curPetHp; curPetHp += healed; if (healed > 0) { addLog(`💚 ${healed}回復`); popHeal(px, py, healed, { follow: true }) } }
       // 自分バフ技（攻撃up / 結界）
       if (sk.selfBuff) {
+        playSe('バフ') // バフSE（全キャラ共通）
         if (sk.selfBuff.kind === 'atkup') { setPetAtkUp(sk.selfBuff.turns); addLog(`🔺 ${sk.name}！攻撃が上がった`) }
         else if (sk.selfBuff.kind === 'shield') { setShield(sk.selfBuff.turns); shieldRateRef.current = sk.selfBuff.rate || 0.7; addLog(`🛡 ${sk.name}！被ダメを軽減`) }
       }
@@ -838,16 +839,22 @@ export default function Dungeon() {
       // ボスは2段階：第1形態を倒すと第2形態へ（HP全回復・防御down/攻撃up・物理特殊ミックス）
       if (killed && target.boss && target.phase === 0) {
         const p2 = DEVIL_PAPIA.phases[1]
+        // 第2形態のステ/HPにするが、画像は第1のまま2秒点滅 → その後第2形態画像へ差し替え
         enemies = enemies.map((e) => e.id === target.id ? {
-          ...e, phase: 1, type: p2.type, mix: !!p2.mix, image: assetSrc(p2.image), skills: p2.skills,
-          hp: p2.hp, maxHp: p2.hp, atk: p2.atk, def: p2.def, mdef: p2.mdef, buff: 0, atkDown: 0, defDown: 0,
+          ...e, phase: 1, type: p2.type, mix: !!p2.mix, image: assetSrc(DEVIL_PAPIA.phases[0].image), skills: p2.skills,
+          hp: p2.hp, maxHp: p2.hp, atk: p2.atk, def: p2.def, mdef: p2.mdef, buff: 0, atkDown: 0, defDown: 0, healedOnce: false, blink: true,
         } : e)
-        addLog('💀 デビルパピアが真の姿を現した…！第2形態！', 'right')
+        addLog('💀 デビルパピアが力を取り戻していく…！', 'right')
+        playSe('bosukeitaihenkazi') // 形態変化SE
         triggerShake('kill')
         applyFx({ pet: { lunge: { dx, dy } }, enemies: {} })
         setState({ ...s, player, enemies })
         busyRef.current = true
-        const tid = setTimeout(() => commitTurn(s, player, enemies, curPetHp, fullCost), BREATH_MS)
+        const tid = setTimeout(() => {
+          setState((prev) => prev ? { ...prev, enemies: prev.enemies.map((e) => e.id === target.id ? { ...e, image: assetSrc(p2.image), blink: false } : e) } : prev)
+          addLog('💀 デビルパピア 第2形態！', 'right')
+          busyRef.current = false
+        }, 2000)
         turnTimers.current.push(tid)
         return
       }
@@ -1034,7 +1041,7 @@ export default function Dungeon() {
           else if (sk.type === 'paralyze') { willParalyze = true; notes.push(sk.name) }
           else if (sk.type === 'burn') { willBurn = true; notes.push(sk.name) }
           else if (sk.type === 'weaken') { const st = sk.stat || 'atk'; willDebuff[st] = Math.max(willDebuff[st], sk.turns || 4); notes.push(sk.name) }
-          else if (sk.type === 'selfbuff') { gotBuff = true; notes.push(sk.name) }
+          else if (sk.type === 'selfbuff') { gotBuff = true; notes.push(sk.name); playSe('バフ') }
           else if (sk.type === 'vamp') { heal = Math.floor(dmg * (sk.frac || 0.5)); notes.push(sk.name) }
         }
         const healShown = heal > 0 ? Math.min(heal, e.maxHp - e.hp) : 0
@@ -1235,6 +1242,7 @@ export default function Dungeon() {
 
     // --- 自分バフ系（結界/障壁/聖域） ---
     if (sc.target === 'self') {
+      playSe('バフ') // バフSE
       if (sc.shieldRate) { setShield(sc.shieldTurns); shieldRateRef.current = sc.shieldRate }
       if (sc.regenPct) { setRegen(sc.regenTurns); regenAmtRef.current = Math.max(1, Math.ceil(pet.maxHp * sc.regenPct)) }
       addLog(`${sc.emoji} ${sc.name}を唱えた！`)
@@ -1528,6 +1536,10 @@ export default function Dungeon() {
           80%  { transform: translateY(0) scaleY(0.98); }
           100% { transform: translateY(0) scaleY(1); }
         }
+        @keyframes bf-boss-blink {
+          0%, 49% { opacity: 1; filter: brightness(2) drop-shadow(0 0 8px #ff3366); }
+          50%, 100% { opacity: 0.15; }
+        }
         @keyframes bf-popnum {
           0%   { transform: translate(-50%, 0); opacity: 0; }
           10%  { transform: translate(-50%, -5px); opacity: 1; }
@@ -1719,7 +1731,7 @@ export default function Dungeon() {
             const inner = (c.bossImg && c.img)
               // ボスは左上セルから2×2マスに広げて表示（overflow visibleで隣にはみ出す）＋頭上HPバー
               ? <div style={{ position: 'absolute', left: 0, top: 0, width: '200%', height: '200%', zIndex: 4, pointerEvents: 'none' }}>
-                  <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+                  <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', animation: c.bossE?.blink ? 'bf-boss-blink 0.22s steps(1) infinite' : undefined }} />
                 </div>
               : c.img
               ? (c.item
