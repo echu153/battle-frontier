@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import papiaIcon from '../assets/papia.png'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue, calcDefReduction } from '../lib/stats'
-import { charmPlayerBonus, speciesLabel, speciesEmoji, petImage } from '../constants/pets'
+import { charmPlayerBonus, charmDisplayName, speciesLabel, speciesEmoji, petImage, petStats, atkLabel } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
 // Equipment.jsx 等が './Game' から参照しているため再export
 export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue, calcDefReduction } from '../lib/stats'
@@ -1650,7 +1650,7 @@ export default function Game() {
         activePet = ap
         if (ap.charm_id) {
           const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle()
-          if (c) petCharm = charmPlayerBonus(c)
+          if (c) { petCharm = charmPlayerBonus(c); activePet = { ...ap, charmName: charmDisplayName(c) } }
         }
       }
     } catch { /* チャーム未導入時は無視 */ }
@@ -3899,22 +3899,28 @@ export default function Game() {
                   )}
                   <div style={{ fontSize:'10px', color:'#446688' }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
                 </div>
-                {NEW_UI && (
-                  profile.activePet ? (
-                    <button onClick={()=>nav('/pets')} style={{ flexShrink:0, display:'flex', alignItems:'center', gap:'8px', background:'#001840', border:'1px solid #0088ff', padding:'6px 10px', cursor:'pointer', fontFamily:'monospace', textAlign:'left' }}>
-                      {petImage(profile.activePet)
-                        ? <img src={petImage(profile.activePet)} alt="" style={{ width:'52px', height:'52px', objectFit:'contain', flexShrink:0 }} />
-                        : <span style={{ fontSize:'40px', lineHeight:1 }}>{speciesEmoji(profile.activePet)}</span>}
-                      <div style={{ lineHeight:1.35 }}>
-                        <div style={{ fontSize:'10px', color:'#446688' }}>🐾 ペット</div>
-                        <div style={{ fontSize:'14px', color:'#88ccff', fontWeight:'bold' }}>{profile.activePet.name}</div>
-                        <div style={{ fontSize:'11px', color:'#446688' }}>{speciesLabel(profile.activePet)} <span style={{ color:'#ffcc00' }}>Lv{profile.activePet.level}</span></div>
+                {NEW_UI && profile.activePet && (() => {
+                  const ap = profile.activePet
+                  const ps = petStats(ap)
+                  return (
+                    <div style={{ flexShrink:0, display:'flex', alignItems:'center', gap:'10px', background:'#001840', border:'1px solid #0088ff', padding:'8px 12px' }}>
+                      {petImage(ap)
+                        ? <img src={petImage(ap)} alt="" style={{ width:'76px', height:'76px', objectFit:'contain', flexShrink:0 }} />
+                        : <span style={{ fontSize:'58px', lineHeight:1 }}>{speciesEmoji(ap)}</span>}
+                      <div style={{ textAlign:'left', lineHeight:1.4 }}>
+                        <div style={{ fontSize:'14px', color:'#88ccff', fontWeight:'bold' }}>
+                          {ap.name} <span style={{ color:'#ffcc00', fontSize:'12px' }}>Lv{ap.level}</span> <span style={{ color:'#446688', fontSize:'11px', fontWeight:'normal' }}>（{speciesLabel(ap)}）</span>
+                        </div>
+                        <div style={{ fontSize:'10px', color:'#446688', marginTop:'2px' }}>
+                          HP<span style={{color:'#44ff88'}}>{ps.maxHp}</span> {atkLabel(ap)}<span style={{color:'#ffcc00'}}>{ps.atk}</span> 防<span style={{color:'#88aaff'}}>{ps.def}</span> 特防<span style={{color:'#44ccff'}}>{ps.mdef}</span>
+                        </div>
+                        <div style={{ fontSize:'10px', color:'#446688', marginTop:'2px' }}>
+                          チャーム: <span style={{color:'#cc88ff'}}>{ap.charmName || 'なし'}</span>
+                        </div>
                       </div>
-                    </button>
-                  ) : (
-                    <button onClick={()=>nav('/pets')} style={{ flexShrink:0, alignSelf:'center', background:'#001840', border:'1px solid #335577', color:'#446688', padding:'10px 12px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', textAlign:'center' }}>🐾<br/>ペット未選択</button>
+                    </div>
                   )
-                )}
+                })()}
               </div>
             </div>
             <MiniBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying?'#ff2200':'#00cc44'} />
