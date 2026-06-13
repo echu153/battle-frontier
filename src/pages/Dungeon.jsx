@@ -199,8 +199,8 @@ export default function Dungeon() {
   const [paralyzed, setParalyzed] = useState(0)   // 麻痺＝あと何ターン麻痺するか（攻撃が確率で失敗）
   const [burned, setBurned] = useState(false)     // やけど（次フロアで回復・攻撃/特攻ダウン）
   const [weakened, setWeakened] = useState(0)     // ステータスダウン＝あと何ターン攻撃/特攻ダウンか
-  const [padSide, setPadSide] = useState(() => (localStorage.getItem('bf_dg_padside') === 'right' ? 'right' : 'left')) // 移動キーの左右配置
-  const togglePadSide = () => setPadSide((s) => { const n = s === 'right' ? 'left' : 'right'; try { localStorage.setItem('bf_dg_padside', n) } catch { /* ignore */ } return n })
+  const [padSide, setPadSide] = useState(() => { const v = localStorage.getItem('bf_dg_padside'); return (v === 'right' || v === 'center') ? v : 'left' }) // 移動キーの配置: left|center|right
+  const setPad = (n) => { setPadSide(n); try { localStorage.setItem('bf_dg_padside', n) } catch { /* ignore */ } }
   const [seOn, setSeOn] = useState(() => localStorage.getItem('bf_dg_se') !== 'off') // 効果音 ON/OFF（初期ON）
   const toggleSe = () => setSeOn((v) => { const n = !v; try { localStorage.setItem('bf_dg_se', n ? 'on' : 'off') } catch { /* ignore */ } return n })
   const [showSettings, setShowSettings] = useState(false) // 設定パネル（歯車）
@@ -1224,10 +1224,14 @@ export default function Dungeon() {
                 {/* 移動キーの左右 */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <span style={{ color: '#aaccee', fontSize: 11 }}>移動キーの位置</span>
-                  <button onClick={togglePadSide}
-                    style={{ background: '#0a1424', border: '1px solid #335588', color: '#cce6ff', padding: '3px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
-                    {padSide === 'left' ? '◀ 左' : '右 ▶'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {[['left', '左'], ['center', '中央'], ['right', '右']].map(([v, label]) => (
+                      <button key={v} onClick={() => setPad(v)}
+                        style={{ background: padSide === v ? '#241640' : '#0a1424', border: `1px solid ${padSide === v ? '#aa88ff' : '#335588'}`, color: padSide === v ? '#cba6ff' : '#88aacc', padding: '3px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 {/* BGM */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: bgmOn && bgmDungeon ? 4 : 8 }}>
@@ -1468,8 +1472,9 @@ export default function Dungeon() {
         </div>
 
         {status === 'exploring' && (
-          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'flex-start', marginTop: 12,
-            flexDirection: padSide === 'right' ? 'row-reverse' : 'row' }}>
+          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 12,
+            flexDirection: padSide === 'center' ? 'column' : (padSide === 'right' ? 'row-reverse' : 'row'),
+            alignItems: padSide === 'center' ? 'center' : 'flex-start' }}>
             {/* 十字キー（すべて正方形・同サイズ） */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gridAutoRows: '44px', gap: 4 }}>
               <PadBtn onClick={() => tryMove(-1, -1)}>◤</PadBtn><PadBtn onClick={() => tryMove(0, -1)}>▲</PadBtn><PadBtn onClick={() => tryMove(1, -1)}>◥</PadBtn>
