@@ -199,6 +199,8 @@ export default function Dungeon() {
   const [paralyzed, setParalyzed] = useState(0)   // 麻痺＝あと何ターン麻痺するか（攻撃が確率で失敗）
   const [burned, setBurned] = useState(false)     // やけど（次フロアで回復・攻撃/特攻ダウン）
   const [weakened, setWeakened] = useState(0)     // ステータスダウン＝あと何ターン攻撃/特攻ダウンか
+  const [padSide, setPadSide] = useState(() => (localStorage.getItem('bf_dg_padside') === 'right' ? 'right' : 'left')) // 移動キーの左右配置
+  const togglePadSide = () => setPadSide((s) => { const n = s === 'right' ? 'left' : 'right'; try { localStorage.setItem('bf_dg_padside', n) } catch { /* ignore */ } return n })
   const [log, setLog] = useState([])
   const [logHidden, setLogHidden] = useState(false) // 2秒間ログ更新が無ければフェードアウト
   useEffect(() => {
@@ -1430,38 +1432,49 @@ export default function Dungeon() {
         </div>
 
         {status === 'exploring' && (
-          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'center', marginTop: 12 }}>
+          <>
+          {/* 移動キーの左右配置の切り替え */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12, marginBottom: 4 }}>
+            <button onClick={togglePadSide}
+              style={{ background: '#0a1424', border: '1px solid #335588', color: '#88aacc', padding: '3px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+              🎮 移動キー：{padSide === 'left' ? '左' : '右'}（切替）
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'flex-start',
+            flexDirection: padSide === 'right' ? 'row-reverse' : 'row' }}>
             {/* 十字キー（すべて正方形・同サイズ） */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gridAutoRows: '44px', gap: 4 }}>
               <PadBtn onClick={() => tryMove(-1, -1)}>◤</PadBtn><PadBtn onClick={() => tryMove(0, -1)}>▲</PadBtn><PadBtn onClick={() => tryMove(1, -1)}>◥</PadBtn>
               <PadBtn onClick={() => tryMove(-1, 0)}>◀</PadBtn><PadBtn onClick={stepInPlace}>■</PadBtn><PadBtn onClick={() => tryMove(1, 0)}>▶</PadBtn>
               <PadBtn onClick={() => tryMove(-1, 1)}>◣</PadBtn><PadBtn onClick={() => tryMove(0, 1)}>▼</PadBtn><PadBtn onClick={() => tryMove(1, 1)}>◢</PadBtn>
             </div>
-            {/* 十字の隣にスキル（選択中を体当たりで発動） */}
-            <div style={{ display: 'grid', gap: 4 }}>
-              {(pet.skillSlots || ['tackle']).map((id) => {
-                const on = selectedSkill === id
-                return (
-                  <button key={id} onClick={() => setSelectedSkill(id)}
-                    style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: on ? '#cba6ff' : '#5e7fa0', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, minWidth: 110, textAlign: 'left' }}>
-                    {on ? '▶ ' : ''}{getSkill(id).name}{getSkill(id).cost > 0 ? ` (満腹${getSkill(id).cost})` : ''}
+            {/* スキル＋使用できるアイテム（上ぞろえ） */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <div style={{ display: 'grid', gap: 4, alignContent: 'start' }}>
+                {(pet.skillSlots || ['tackle']).map((id) => {
+                  const on = selectedSkill === id
+                  return (
+                    <button key={id} onClick={() => setSelectedSkill(id)}
+                      style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: on ? '#cba6ff' : '#5e7fa0', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, minWidth: 110, textAlign: 'left' }}>
+                      {on ? '▶ ' : ''}{getSkill(id).name}{getSkill(id).cost > 0 ? ` (満腹${getSkill(id).cost})` : ''}
+                    </button>
+                  )
+                })}
+              </div>
+              <div style={{ display: 'grid', gap: 4, alignContent: 'start' }}>
+                {DUNGEON_ITEMS.filter((it) => (inventory[it.key] || 0) > 0).map((it) => (
+                  <button key={it.key} onClick={() => (dropMode ? dropItem({ kind: 'consumable', key: it.key }) : useItem(it.key))}
+                    style={{ background: dropMode ? '#1a0e08' : '#0a1424', border: `1px solid ${dropMode ? '#cc7755' : '#335588'}`, color: '#cce6ff', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, minWidth: 96, textAlign: 'left' }}>
+                    {it.emoji} {it.name}×{inventory[it.key]}
                   </button>
-                )
-              })}
-            </div>
-            {/* スキルの右に使用できるアイテム（木の実・おにぎり・翼）。捨てるモード時は足元に置く */}
-            <div style={{ display: 'grid', gap: 4, alignContent: 'start' }}>
-              {DUNGEON_ITEMS.filter((it) => (inventory[it.key] || 0) > 0).map((it) => (
-                <button key={it.key} onClick={() => (dropMode ? dropItem({ kind: 'consumable', key: it.key }) : useItem(it.key))}
-                  style={{ background: dropMode ? '#1a0e08' : '#0a1424', border: `1px solid ${dropMode ? '#cc7755' : '#335588'}`, color: '#cce6ff', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, minWidth: 96, textAlign: 'left' }}>
-                  {it.emoji} {it.name}×{inventory[it.key]}
-                </button>
-              ))}
-              {DUNGEON_ITEMS.every((it) => (inventory[it.key] || 0) < 1) && (
-                <span style={{ color: '#445566', fontSize: 10 }}>使えるアイテムなし</span>
-              )}
+                ))}
+                {DUNGEON_ITEMS.every((it) => (inventory[it.key] || 0) < 1) && (
+                  <span style={{ color: '#445566', fontSize: 10 }}>使えるアイテムなし</span>
+                )}
+              </div>
             </div>
           </div>
+          </>
         )}
         {/* 状態異常・フロアの状況（異常時のみ表示。何もなければ空白） */}
         {status === 'exploring' && (() => {
