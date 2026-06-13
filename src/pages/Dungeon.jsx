@@ -1472,7 +1472,7 @@ export default function Dungeon() {
             if (vx < 0 || vx >= VW || vy < 0 || vy >= VH) return null
             return (
               <span key={p.id} style={{
-                position: 'absolute', zIndex: 3, pointerEvents: 'none',
+                position: 'absolute', zIndex: 8, pointerEvents: 'none',
                 left: `calc(${((vx + 0.5) / VW) * 100}% + ${p.dx}px)`,
                 top: p.below ? `${((vy + 0.95) / VH) * 100}%` : `${(vy / VH) * 100}%`,
                 color: p.color, fontSize: 15, fontWeight: 'bold', fontFamily: 'monospace',
