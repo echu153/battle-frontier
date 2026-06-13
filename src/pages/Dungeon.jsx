@@ -383,7 +383,7 @@ export default function Dungeon() {
     const m = masterRef.current
     if (m <= 0) return // 全体ミュート中は鳴らさない
     const rate = name === 'kaidan' ? 1.2 : 1 // 階段は1.2倍速で再生
-    const baseVol = name === 'aitemu' ? 2.0 : (name === 'kougeki' || name === '被ダメ') ? 0.16 : 0.35 // アイテム大きめ・攻撃/被ダメ控えめ・階段控えめ
+    const baseVol = name === 'aitemu' ? 2.0 : name === 'kougeki' ? 0.08 : name === '被ダメ' ? 0.16 : 0.35 // アイテム大きめ・攻撃さらに控えめ・被ダメ控えめ・階段控えめ
     const vol = baseVol * seVolRef.current * m // SE音量×全体音量
     if (vol <= 0) return
     const ctx = audioCtxRef.current, buf = seBufRef.current[name]
