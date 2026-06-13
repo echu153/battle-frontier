@@ -769,15 +769,11 @@ export default function Dungeon() {
 
   const tryMove = (dx, dy) => {
     ensureBgm() // 操作時にBGM再生を確実に開始（自動再生ブロック対策）
-    if (!state || status !== 'exploring' || busyRef.current || transition || lockedOut) {
-      addLog(`⛔ロック: busy=${busyRef.current} trans=${!!transition} lock=${lockedOut} st=${status}`)
-      return
-    }
+    if (!state || status !== 'exploring' || busyRef.current || transition || lockedOut) return
     let s = state
     const px = s.player.x, py = s.player.y
     const nx = px + dx, ny = py + dy
-    if (!inBounds(nx, ny)) { addLog(`⛔範囲外 (${nx},${ny})`); return }
-    if (s.grid[ny][nx] === '#') { addLog(`🧱壁 (${nx},${ny}) 自(${px},${py})`); return }
+    if (!inBounds(nx, ny) || s.grid[ny][nx] === '#') return
     // 斜め移動は壁の角を抜けられない（両脇のどちらかが壁なら不可）
     if (dx !== 0 && dy !== 0 && (s.grid[py][nx] === '#' || s.grid[ny][px] === '#')) return
     // 斜め移動は壁の角を抜けられない（両脇のどちらかが壁なら不可）
@@ -1007,6 +1003,8 @@ export default function Dungeon() {
       for (let k = 1; k < cheb; k++) { if (s.grid[e.y + sy * k]?.[e.x + sx * k] === '#') { lineClear = false; break } } // 間に壁
       // 隣接(1マス)は斜め角の抜け不可も判定
       const diagBlocked = cheb === 1 && adx !== 0 && ady !== 0 && (s.grid[player.y]?.[e.x] === '#' || s.grid[e.y]?.[player.x] === '#')
+      // 攻撃可能距離：reachマス以内・直線・間に壁なし・隣接斜め角は不可
+      const inRange = cheb >= 1 && cheb <= reach && straight && lineClear && !diagBlocked
       // ボスは4マスのいずれかに隣接で攻撃可能。通常敵はreach判定
       const canAttack = e.boss ? enemyAdjacent(e, player.x, player.y) : (sees && inRange && visNow.has(e.x + ',' + e.y))
       // 回避のチャーム：5%で敵の攻撃を完全回避
