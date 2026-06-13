@@ -201,6 +201,9 @@ export default function Dungeon() {
   const [weakened, setWeakened] = useState(0)     // ステータスダウン＝あと何ターン攻撃/特攻ダウンか
   const [padSide, setPadSide] = useState(() => (localStorage.getItem('bf_dg_padside') === 'right' ? 'right' : 'left')) // 移動キーの左右配置
   const togglePadSide = () => setPadSide((s) => { const n = s === 'right' ? 'left' : 'right'; try { localStorage.setItem('bf_dg_padside', n) } catch { /* ignore */ } return n })
+  const [seOn, setSeOn] = useState(() => localStorage.getItem('bf_dg_se') !== 'off') // 効果音 ON/OFF（初期ON）
+  const toggleSe = () => setSeOn((v) => { const n = !v; try { localStorage.setItem('bf_dg_se', n ? 'on' : 'off') } catch { /* ignore */ } return n })
+  const [showSettings, setShowSettings] = useState(false) // 設定パネル（歯車）
   const [log, setLog] = useState([])
   const [logHidden, setLogHidden] = useState(false) // 2秒間ログ更新が無ければフェードアウト
   useEffect(() => {
@@ -254,6 +257,10 @@ export default function Dungeon() {
   }, [bgmOn, bgmDungeon, status])
   const ensureBgm = () => { const a = audioRef.current; if (a && bgmOn && bgmDungeon && a.paused) a.play().catch(() => {}) }
   const toggleBgm = () => setBgmOn((v) => !v)
+  // 効果音（SE）：ONのときだけ再生。短い音は都度生成して多重再生を許す
+  const seOnRef = useRef(seOn)
+  useEffect(() => { seOnRef.current = seOn }, [seOn])
+  const playSe = (name) => { if (!seOnRef.current) return; try { const a = new Audio(`/${name}.mp3?v=${ASSET_VER}`); a.volume = 0.6; a.play().catch(() => {}) } catch { /* ignore */ } }
   const gridRef = useRef(null)
   const [cellPx, setCellPx] = useState(0) // 1マスのピクセル幅（床をワールド固定で敷くため）
 
@@ -693,6 +700,7 @@ export default function Dungeon() {
         addLog(`🎒 足元に「${onName}」があるが持ち物がいっぱい`)
       } else if (itemHere) {
         items = items.filter((it) => it.id !== itemHere.id); itemsRef.current += 1
+        playSe('aitemu') // アイテム取得SE
         if (itemHere.kind === 'food') {
           // 床の消耗品をアイテム袋へ
           const fdef = PET_ITEMS[itemHere.key]
@@ -720,6 +728,7 @@ export default function Dungeon() {
       // 階段
       if (player.x === s.stairs.x && player.y === s.stairs.y) {
         floorsRef.current += 1
+        playSe('kaidan') // 階段SE
         if (floorNum >= (dungeon?.floors || 10)) { setStatus('cleared'); addLog('🏁 最深部を踏破！ダンジョンクリア！'); setState({ ...s, player }); if (dungeon) setCleared((c) => new Set(c).add(dungeon.id)); finishRun(true); return }
         addLog(`⬇ B${floorNum + 1}Fへ降りた`)
         setState({ ...s, player }) // 階段に乗った姿を見せてからフェード
@@ -1198,23 +1207,51 @@ export default function Dungeon() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #003366', paddingBottom: 8, marginBottom: 10 }}>
           <div style={{ color: '#ffcc00', fontSize: 16, letterSpacing: 3 }}>BATTLE FRONTIER</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {bgmDungeon && (
-              <>
-                <button onClick={toggleBgm} title="BGM ON/OFF"
-                  style={{ background: bgmOn ? '#101a30' : '#0a0a14', border: `1px solid ${bgmOn ? '#0088ff' : '#334455'}`, color: bgmOn ? '#66bbff' : '#556677', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
-                  {bgmOn ? '🔊 BGM' : '🔇 BGM'}
-                </button>
-                <input type="range" min="0" max="100" value={bgmVol} onChange={(e) => setBgmVol(Number(e.target.value))}
-                  title={`音量 ${bgmVol}%`} style={{ width: 70, accentColor: '#0088ff', cursor: 'pointer' }} />
-              </>
-            )}
             <Btn onClick={leaveToTown}>← 街に戻る</Btn>
           </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ color: '#aa88ff', letterSpacing: 2 }}>{dungeon?.emoji || '🕳'} {dungeon?.name || 'ダンジョン'}</div>
-          {/* 簡易出撃のクイックボタン（SortiePanelがポータルで描画。エリア選択は下のメニューから） */}
-          <span id="bf-sortie-quick" />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', position: 'relative' }}>
+            {/* 簡易出撃のクイックボタン（SortiePanelがポータルで描画。エリア選択は下のメニューから） */}
+            <span id="bf-sortie-quick" />
+            {/* 設定（歯車）：移動キー左右・BGM・SE */}
+            <button onClick={() => setShowSettings((v) => !v)} title="設定"
+              style={{ background: showSettings ? '#101a30' : '#0a1424', border: `1px solid ${showSettings ? '#0088ff' : '#335588'}`, color: '#88bbff', padding: '4px 9px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 13 }}>⚙</button>
+            {showSettings && (
+              <div style={{ position: 'absolute', top: '110%', right: 0, zIndex: 30, background: '#001026', border: '1px solid #335588', padding: 10, width: 220, fontFamily: 'monospace', boxShadow: '0 6px 18px rgba(0,0,0,0.6)' }}>
+                <div style={{ color: '#88bbff', fontSize: 12, marginBottom: 8 }}>⚙ 設定</div>
+                {/* 移動キーの左右 */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ color: '#aaccee', fontSize: 11 }}>移動キーの位置</span>
+                  <button onClick={togglePadSide}
+                    style={{ background: '#0a1424', border: '1px solid #335588', color: '#cce6ff', padding: '3px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                    {padSide === 'left' ? '◀ 左' : '右 ▶'}
+                  </button>
+                </div>
+                {/* BGM */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: bgmOn && bgmDungeon ? 4 : 8 }}>
+                  <span style={{ color: '#aaccee', fontSize: 11 }}>BGM{bgmDungeon ? '' : '（このダンジョンは無し）'}</span>
+                  <button onClick={toggleBgm} disabled={!bgmDungeon}
+                    style={{ background: bgmOn ? '#101a30' : '#0a0a14', border: `1px solid ${bgmOn ? '#0088ff' : '#334455'}`, color: bgmOn ? '#66bbff' : '#556677', padding: '3px 10px', cursor: bgmDungeon ? 'pointer' : 'not-allowed', fontFamily: 'monospace', fontSize: 11 }}>
+                    {bgmOn ? '🔊 ON' : '🔇 OFF'}
+                  </button>
+                </div>
+                {bgmDungeon && bgmOn && (
+                  <input type="range" min="0" max="100" value={bgmVol} onChange={(e) => setBgmVol(Number(e.target.value))}
+                    title={`音量 ${bgmVol}%`} style={{ width: '100%', accentColor: '#0088ff', cursor: 'pointer', marginBottom: 8 }} />
+                )}
+                {/* SE */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: '#aaccee', fontSize: 11 }}>効果音（SE）</span>
+                  <button onClick={toggleSe}
+                    style={{ background: seOn ? '#101a30' : '#0a0a14', border: `1px solid ${seOn ? '#0088ff' : '#334455'}`, color: seOn ? '#66bbff' : '#556677', padding: '3px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                    {seOn ? '🔊 ON' : '🔇 OFF'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* マップ（ビューポート）。接触時に少し震える戦闘演出 */}
@@ -1242,7 +1279,6 @@ export default function Dungeon() {
               {pet.name} HP {petHp}/{pet.maxHp}
             </span>
             <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
-            <span style={{ color: '#cba6ff' }}>⚡{getSkill(selectedSkill).name}</span>
           </div>
           {Array.from({ length: VH }).map((_, vy) => Array.from({ length: VW }).map((_, vx) => {
             const x = ox + vx, y = oy + vy
@@ -1432,15 +1468,7 @@ export default function Dungeon() {
         </div>
 
         {status === 'exploring' && (
-          <>
-          {/* 移動キーの左右配置の切り替え */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12, marginBottom: 4 }}>
-            <button onClick={togglePadSide}
-              style={{ background: '#0a1424', border: '1px solid #335588', color: '#88aacc', padding: '3px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
-              🎮 移動キー：{padSide === 'left' ? '左' : '右'}（切替）
-            </button>
-          </div>
-          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'flex-start',
+          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'flex-start', marginTop: 12,
             flexDirection: padSide === 'right' ? 'row-reverse' : 'row' }}>
             {/* 十字キー（すべて正方形・同サイズ） */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gridAutoRows: '44px', gap: 4 }}>
@@ -1474,7 +1502,6 @@ export default function Dungeon() {
               </div>
             </div>
           </div>
-          </>
         )}
         {/* 状態異常・フロアの状況（異常時のみ表示。何もなければ空白） */}
         {status === 'exploring' && (() => {
