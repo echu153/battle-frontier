@@ -215,8 +215,8 @@ export default function Charms() {
 
         {tab === 'fuse' && charms.length > 0 && (
           <div style={{ border: '1px solid #663388', background: '#0e0820', padding: 12 }}>
-            <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔮 神秘の欠片1つで2つのチャームを1つに（効果も両方引継ぎ・成長は合算で合計300まで）。<span style={{ color: '#ff8866' }}>素材側は消えます。合成済みは再合成不可。</span></div>
-            {[['base', '残す側（効果＋成長を受け継ぐ）', fuseBase, setFuseBase], ['mat', '素材（消える）', fuseMat, setFuseMat]].map(([key, label, val, setter]) => (
+            <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔮 神秘の欠片1つで2つのチャームを1つに（効果も両方引継ぎ・成長は合算で合計300まで）。<span style={{ color: '#ff8866' }}>合成②側は消えて①にまとまります。合成済みは再合成不可。</span></div>
+            {[['base', '合成①（こちらが残る）', fuseBase, setFuseBase], ['mat', '合成②（①に合わさり消える）', fuseMat, setFuseMat]].map(([key, label, val, setter]) => (
               <div key={key} style={{ marginBottom: 10 }}>
                 <div style={{ color: '#9977cc', fontSize: 11, marginBottom: 4 }}>{label}</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
