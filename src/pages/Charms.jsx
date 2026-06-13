@@ -157,7 +157,7 @@ export default function Charms() {
                       <input type="checkbox" checked={!!checked[stat]} onChange={(e) => setChecked((c) => ({ ...c, [stat]: e.target.checked }))} disabled={dis} />
                       <span style={{ width: 64, fontSize: 11, color: '#cce6ff' }}><SeedIcon seed={meta.seed} emoji={meta.emoji} size={14} />{meta.label}</span>
                       <span style={{ flex: 1, fontSize: 11, color: '#88bbee' }}>+{shown}{stat === 'hp' && cnt > 0 ? `（${cnt}個）` : ''}</span>
-                      <span style={{ fontSize: 10, color: '#557799' }}>素{have}</span>
+                      <span style={{ fontSize: 10, color: '#557799', display: 'inline-flex', alignItems: 'center', gap: 2 }}><SeedIcon seed={meta.seed} emoji={meta.emoji} size={12} />{have}</span>
                       <button onClick={() => !loading && enhance(sel.id, stat, 1)} disabled={dis}
                         style={{ background: dis ? '#0a0f1a' : '#001830', border: `1px solid ${dis ? '#223344' : '#0088cc'}`, color: dis ? '#445' : '#00aaff', padding: '3px 8px', cursor: dis ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
                         +{meta.per}

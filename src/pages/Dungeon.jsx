@@ -628,7 +628,7 @@ export default function Dungeon() {
   }, [status, state, petHp, fullness, turns, selectedSkill, inventory, lootBag, floorNum, dungeon, pet.id])
 
   // side: 'left'=自分/全般 / 'right'=敵の行動
-  const addLog = (msg, side = 'left') => setLog((l) => [{ msg, side }, ...l].slice(0, 30))
+  const addLog = (msg, side = 'left', icon = null) => setLog((l) => [{ msg, side, icon }, ...l].slice(0, 30))
 
   // 持ち物の合計数（だっしゅつの翼も含む＝消耗品＋戦利品）。上限を超えたら拾えない
   const bagCount = () => Object.values(inventory).reduce((s, q) => s + (q || 0), 0) + lootBag.length
@@ -759,7 +759,7 @@ export default function Dungeon() {
           grantFood(itemHere.key).then((ok) => { if (!ok) addLog('🎒 袋がいっぱいで拾えなかった') })
         } else if (itemHere.kind === 'dropLoot' && itemHere.loot) {
           // 自分が捨てたルート品を拾い直す（名前は既知なので即ログ・サーバー復帰は裏で）
-          const d0 = lootDisplay(itemHere.loot); addLog(`${d0.emoji} ${d0.label}を拾った`)
+          const d0 = lootDisplay(itemHere.loot); addLog(d0.img ? `${d0.label}を拾った` : `${d0.emoji} ${d0.label}を拾った`, 'left', d0.img)
           supabase.rpc('dungeon_repick_loot', { p_run_id: runIdRef.current, p_loot_id: itemHere.loot.id }).then(({ data, error }) => {
             if (error) { addLog('拾えなかった'); return }
             addLootToBag(data || itemHere.loot)
@@ -772,7 +772,7 @@ export default function Dungeon() {
           // ✨：サーバーが抽選して保持（生還で入手）。結果は応答後に名前付きで表示
           supabase.rpc('dungeon_pickup', { p_run_id: runIdRef.current }).then(({ data, error }) => {
             if (error || !data) { addLog(`✨ 拾えなかった（${error?.message || '通信エラー'}）`); return }
-            addLootToBag(data); const d = lootDisplay(data); addLog(`${d.emoji} ${d.label}を拾った！`)
+            addLootToBag(data); const d = lootDisplay(data); addLog(d.img ? `${d.label}を拾った！` : `${d.emoji} ${d.label}を拾った！`, 'left', d.img)
           })
         }
       }
@@ -1253,9 +1253,12 @@ export default function Dungeon() {
     if (e) return { ch: '👹', img: e.image || null, bg: floorBg, fx: fx.enemies[e.id] || null }
     const it = state.items.find((o) => o.x === x && o.y === y)
     if (it) {
+      // 床アイテム：素など画像があれば画像、無ければ絵文字
+      const itemImg = (it.kind === 'food' || it.kind === 'dropFood') ? petItemImg(it.key)
+        : it.kind === 'dropLoot' ? (it.loot?.img || null) : null
       const ch = (it.kind === 'food' || it.kind === 'dropFood') ? (PET_ITEMS[it.key]?.emoji || '🍙')
         : it.kind === 'dropLoot' ? (it.loot?.emoji || '🎁') : '✨'
-      return { ch, bg: floorBg, overlay: itemTile }
+      return { ch, img: itemImg, bg: floorBg, overlay: itemImg ? null : itemTile }
     }
     if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: floorBg, overlay: stairsTile, stairsGlow: true, water: waterWall }
     // 壁マスは壁画像を1マスごとに表示（複数あればマス座標でランダム）。床マスは透過。
@@ -1651,7 +1654,7 @@ export default function Dungeon() {
                 opacity: 0.45 + 0.55 * ((i + 1) / arr.length), // 古いほど薄く
                 textShadow: '0 1px 2px #000, 0 0 4px #000, 0 0 2px #000',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>{l.msg}</div>
+              }}>{l.icon && <img src={l.icon} alt="" style={{ width: 13, height: 13, objectFit: 'contain', verticalAlign: 'middle', marginRight: 3 }} />}{l.msg}</div>
             ))}
           </div>
         </div>
@@ -1769,7 +1772,7 @@ function LogView({ log, height }) {
       </div>
       <div style={{ background: '#000610', border: '1px solid #113355', borderTop: 'none', padding: 8, height, overflowY: 'auto', fontSize: 11 }}>
         {log.length === 0 ? <span style={{ color: '#335577' }}>隣のマスをクリック、または矢印で移動。部屋に入ると視界が開ける。👹に触れると戦闘、▼で次の階へ。</span>
-          : log.map((l, i) => <div key={i} style={{ color: i === 0 ? '#aaddff' : l.side === 'right' ? '#cc8888' : '#5588bb', textAlign: l.side === 'right' ? 'right' : 'left' }}>{l.msg}</div>)}
+          : log.map((l, i) => <div key={i} style={{ color: i === 0 ? '#aaddff' : l.side === 'right' ? '#cc8888' : '#5588bb', textAlign: l.side === 'right' ? 'right' : 'left' }}>{l.icon && <img src={l.icon} alt="" style={{ width: 13, height: 13, objectFit: 'contain', verticalAlign: 'middle', marginRight: 3 }} />}{l.msg}</div>)}
       </div>
     </>
   )
