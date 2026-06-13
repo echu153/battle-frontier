@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant, ASSET_VER } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, ASSET_VER } from '../constants/pets'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
@@ -1140,6 +1140,7 @@ export default function Dungeon() {
   const wallTile = dgTileSrc(dungeon?.id, 'wall')
   const stairsTile = dgTileSrc(dungeon?.id, 'stairs')
   const itemTile = dgTileSrc(dungeon?.id, 'item')
+  const waterWall = dgWaterWall(dungeon?.id) // 壁＝半透明の水たまり描画にするか
   // 床はグリッド全体に1枚だけ敷く（シームレス）。床マスは透過してその床を見せる。
   const floorBg = floorTile ? 'transparent' : C.floorVis
   const cellAt = (x, y) => {
@@ -1159,7 +1160,7 @@ export default function Dungeon() {
     }
     if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: floorBg, overlay: stairsTile, stairsGlow: true }
     // 壁マスは壁画像を1マスごとに表示（複数あればマス座標でランダム）。床マスは透過。
-    if (wall) return { ch: '', bg: wallTile ? '#241a12' : C.wallVis, wallImg: dgWallVariant(dungeon?.id, x, y) || wallTile }
+    if (wall) return { ch: '', bg: waterWall ? floorBg : (wallTile ? '#241a12' : C.wallVis), wallImg: dgWallVariant(dungeon?.id, x, y) || wallTile, water: waterWall }
     return { ch: '', bg: floorBg }
   }
 
@@ -1404,7 +1405,10 @@ export default function Dungeon() {
             // 壁は暗め＋やや寒色グレー寄りにして、暖色の床とハッキリ見分けられるようにする。
             const wallImg = c.wallImg
             const tileStyle = wallImg
-              ? { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6) saturate(0.55) hue-rotate(-8deg)' }
+              ? (c.water
+                  // 水たまり：暗くせず明るめ＆半透明にして床を透かす＝水に見せる
+                  ? { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(1.05) saturate(1.2)', opacity: 0.72 }
+                  : { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6) saturate(0.55) hue-rotate(-8deg)' })
               : { backgroundImage: 'none' }
             // グリッド線対策：マス間のサブピクセル隙間を「そのマス自身の色」で埋める。
             //  透過の床マスはそのまま（継ぎ目なし）、壁マス・暗いマスは自色（暗）で塞ぐ。

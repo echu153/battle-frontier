@@ -367,10 +367,13 @@ export const DUNGEON_TILES = {
     wall:   '/mizutamari.png',  // 壁＝水たまり
     walls:  ['/mizutamari.png'],
     stairs: '/dg_stairs.png',
+    waterWall: true,            // 壁を「水たまり」として半透明描画（床が透けて水に見える）
   },
   // 初級の洞窟(d10)は従来の色・絵文字のまま（タイル未設定）
 }
 export const dgTileSrc = (dungeonId, key) => assetSrc(DUNGEON_TILES[dungeonId]?.[key] || null)
+// 壁を「水たまり」として半透明描画するダンジョンか
+export const dgWaterWall = (dungeonId) => !!DUNGEON_TILES[dungeonId]?.waterWall
 // 壁バリエーション配列（walls指定があればそれ、無ければwall単体を配列化）
 export const dgWallTiles = (dungeonId) => {
   const t = DUNGEON_TILES[dungeonId]
