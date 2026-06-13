@@ -1961,11 +1961,16 @@ export default function Dungeon() {
           )
         })()}
         {status === 'exploring' && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 10 }}>
             <button onClick={giveUp}
               style={{ background: '#1a0808', border: '1px solid #aa4444', color: '#cc6666', padding: '6px 16px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
               🏳 あきらめる
             </button>
+            {/* 開発アカウント用フロアワープ */}
+            {isAdmin && dungeon && [29, 30].filter((f) => f <= (dungeon.floors || 10)).map((f) => (
+              <button key={f} onClick={() => { if (busyRef.current) return; setFloorNum(f); enterFloor(f, dungeon); floorsRef.current = Math.max(floorsRef.current, f - 1); addLog(`🛠 ${f}Fへワープ（開発）`) }}
+                style={{ background: '#0a1424', border: '1px solid #335588', color: '#88aacc', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>🛠 {f}F</button>
+            ))}
           </div>
         )}
         {status === 'cleared' && (
