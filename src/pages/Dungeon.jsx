@@ -2,11 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant, ASSET_VER } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant, ASSET_VER } from '../constants/pets'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
-const DUNGEON_BAG_MAX = 20 // ダンジョン中に持てる持ち物の上限（だっしゅつの翼も含む）
 
 // ============================================================
 // 不思議のダンジョン風（一般公開）
@@ -684,7 +683,7 @@ export default function Dungeon() {
       const itemHere = s.items.find((it) => it.x === nx && it.y === ny)
       let items = s.items
       const isEscapePickup = itemHere && itemHere.kind === 'dropFood' && itemHere.key === 'escape'
-      if (itemHere && !isEscapePickup && bagCount() >= DUNGEON_BAG_MAX) {
+      if (itemHere && !isEscapePickup && bagCount() >= bagCapacity(cleared.size)) {
         // 持ち物が満杯：拾わずに床へ残す（足元のアイテムが何か分かるよう名前を表示）
         const onName = itemHere.kind === 'dropLoot' ? itemHere.loot?.label
           : (itemHere.kind === 'food' || itemHere.kind === 'dropFood') ? (PET_ITEMS[itemHere.key]?.name || 'アイテム')
@@ -1433,7 +1432,7 @@ export default function Dungeon() {
             {/* 十字キー */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gap: 4 }}>
               <Btn onClick={() => tryMove(-1, -1)}>↖</Btn><Btn onClick={() => tryMove(0, -1)}>▲</Btn><Btn onClick={() => tryMove(1, -1)}>↗</Btn>
-              <Btn onClick={() => tryMove(-1, 0)}>◀</Btn><Btn onClick={stepInPlace}>足踏</Btn><Btn onClick={() => tryMove(1, 0)}>▶</Btn>
+              <Btn onClick={() => tryMove(-1, 0)}>◀</Btn><Btn onClick={stepInPlace}>〇</Btn><Btn onClick={() => tryMove(1, 0)}>▶</Btn>
               <Btn onClick={() => tryMove(-1, 1)}>↙</Btn><Btn onClick={() => tryMove(0, 1)}>▼</Btn><Btn onClick={() => tryMove(1, 1)}>↘</Btn>
             </div>
             {/* 十字の隣にスキル（選択中を体当たりで発動） */}
@@ -1447,6 +1446,18 @@ export default function Dungeon() {
                   </button>
                 )
               })}
+            </div>
+            {/* スキルの右に使用できるアイテム（木の実・おにぎり・翼）。捨てるモード時は足元に置く */}
+            <div style={{ display: 'grid', gap: 4, alignContent: 'start' }}>
+              {DUNGEON_ITEMS.filter((it) => (inventory[it.key] || 0) > 0).map((it) => (
+                <button key={it.key} onClick={() => (dropMode ? dropItem({ kind: 'consumable', key: it.key }) : useItem(it.key))}
+                  style={{ background: dropMode ? '#1a0e08' : '#0a1424', border: `1px solid ${dropMode ? '#cc7755' : '#335588'}`, color: '#cce6ff', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, minWidth: 96, textAlign: 'left' }}>
+                  {it.emoji} {it.name}×{inventory[it.key]}
+                </button>
+              ))}
+              {DUNGEON_ITEMS.every((it) => (inventory[it.key] || 0) < 1) && (
+                <span style={{ color: '#445566', fontSize: 10 }}>使えるアイテムなし</span>
+              )}
             </div>
           </div>
         )}
@@ -1478,31 +1489,25 @@ export default function Dungeon() {
           </div>
         )}
         {status === 'exploring' && (() => {
-          const consumables = DUNGEON_ITEMS.filter((it) => (inventory[it.key] || 0) > 0)
-          const empty = consumables.length === 0 && lootBag.length === 0
+          const bagMax = bagCapacity(cleared.size)
+          const empty = lootBag.length === 0
           return (
             <div style={{ marginTop: 12, background: '#000610', border: `1px solid ${dropMode ? '#cc7755' : '#113355'}`, padding: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <div style={{ color: '#88aacc', fontSize: 11 }}>🎒 持ち物 <span style={{ color: bagCount() >= DUNGEON_BAG_MAX ? '#ff7777' : '#5e7fa0' }}>{bagCount()}/{DUNGEON_BAG_MAX}</span>（翼も含む）{dropMode && <span style={{ color: '#ff9966' }}>　捨てるモード：押すと足元に置く</span>}</div>
+                <div style={{ color: '#88aacc', fontSize: 11 }}>🎒 持ち物 <span style={{ color: bagCount() >= bagMax ? '#ff7777' : '#5e7fa0' }}>{bagCount()}/{bagMax}</span>（翼も含む）{dropMode && <span style={{ color: '#ff9966' }}>　捨てるモード：押すと足元に置く</span>}</div>
                 <button onClick={() => setDropMode((d) => !d)}
                   style={{ background: dropMode ? '#2a1000' : '#0a1424', border: `1px solid ${dropMode ? '#ff9966' : '#335588'}`, color: dropMode ? '#ff9966' : '#88aacc', padding: '3px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
                   🗑 捨てる{dropMode ? '（ON）' : ''}
                 </button>
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {consumables.map((it) => (
-                  <button key={it.key} onClick={() => (dropMode ? dropItem({ kind: 'consumable', key: it.key }) : useItem(it.key))}
-                    style={{ background: dropMode ? '#1a0e08' : '#0a1424', border: `1px solid ${dropMode ? '#cc7755' : '#335588'}`, color: '#cce6ff', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
-                    {it.emoji} {it.name}×{inventory[it.key]}
-                  </button>
-                ))}
                 {lootBag.map((l) => (
                   <button key={l.id} onClick={() => dropMode && dropItem({ kind: 'loot', loot: l })}
                     style={{ background: dropMode ? '#1a0e08' : '#0a1a14', border: `1px solid ${dropMode ? '#cc7755' : '#2a5544'}`, color: '#bfe6cc', padding: '6px 10px', cursor: dropMode ? 'pointer' : 'default', fontFamily: 'monospace', fontSize: 12 }}>
                     {l.emoji} {l.label}{(l.qty || 1) > 1 ? `×${l.qty}` : ''}
                   </button>
                 ))}
-                {empty && <span style={{ color: '#445566', fontSize: 11 }}>（持ち物なし）</span>}
+                {empty && <span style={{ color: '#445566', fontSize: 11 }}>（戦利品なし。食料・翼はスキル横から使えます）</span>}
               </div>
               {lootBag.length > 0 && <div style={{ color: '#557766', fontSize: 10, marginTop: 6 }}>※戦利品は生きて帰ると全部入手（やられるとランダムで半分失う）</div>}
             </div>
