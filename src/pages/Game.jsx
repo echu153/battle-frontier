@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import papiaIcon from '../assets/papia.png'
@@ -1374,6 +1374,8 @@ export default function Game() {
   const battleBusyRef = useRef(false)  // 出撃の二重発火ガード（スマホ2連タップ対策）
   const clockOffsetRef = useRef(0)  // サーバー時刻 - 端末時刻(ms)。クールダウンのズレ補正用
   const serverNow = () => Date.now() + clockOffsetRef.current
+  const lastRemTickRef = useRef(-1)    // 出撃CD表示の前回tick(0.1秒単位)。再描画抑制用
+  const lastRegenSecRef = useRef(-1)   // 自然回復表示の前回秒。再描画抑制用
   // クールダウン終了時刻（端末時計基準の相対値）。サーバーの成功/残り秒数レスポンスから設定するため
   // 時計のズレ・オフセット推定誤差の影響を受けない。null の間は last_action_at から計算（初期表示用）
   const cdEndRef = useRef(null)
@@ -1426,11 +1428,21 @@ export default function Game() {
       const rem = cdEndRef.current !== null
         ? Math.max(0, (cdEndRef.current - Date.now())/1000)
         : Math.max(0, WAIT_SECONDS - (serverNow()-new Date(profile.last_action_at).getTime())/1000)
-      setRemaining(rem)
-      setCanAct(rem === 0)
+      // 表示精度(0.1秒)が変わった時だけstate更新＝無駄な再描画を抑制（待機中は0で固定→再描画なし）
+      const remTick = Math.round(rem*10)
+      if (remTick !== lastRemTickRef.current) {
+        lastRemTickRef.current = remTick
+        setRemaining(rem)
+        setCanAct(rem === 0)
+      }
       const regenElapsed = (Date.now()-new Date(profile.last_regen_at).getTime())/1000
       const regenRem = Math.max(0, REGEN_SECONDS-regenElapsed)
-      setRegenRemaining(regenRem)
+      // 自然回復は整数秒表示なので、秒が変わった時だけ更新（常時5回/秒の再描画を防ぐ）
+      const regenSec = Math.ceil(regenRem)
+      if (regenSec !== lastRegenSecRef.current) {
+        lastRegenSecRef.current = regenSec
+        setRegenRemaining(regenRem)
+      }
       if (regenRem === 0) doRegen()
     }, 200)
     return () => clearInterval(id)
@@ -3536,8 +3548,9 @@ export default function Game() {
   const charLv = profile.char_lv || profile.lv
   const innCost = isDying ? Math.min(charLv*15,profile.gold) : charLv*2
   const allocatedPoints = Object.values(statPoints).reduce((a,b)=>a+b,0)
-  const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
-  const total = calcTotal(eff)
+  // 重い装備走査を毎描画で再計算しないようメモ化（200msタイマー等の再描画で効く）
+  const eff = useMemo(() => calcEffectiveStats(profile, equipment, proficiency, abilityTitle), [profile, equipment, proficiency, abilityTitle])
+  const total = useMemo(() => calcTotal(eff), [eff])
   const totalRank = getTotalRank(total)
   const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
   const cap = getEffectiveCap(profile.class, profile.retraining)
