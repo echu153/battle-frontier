@@ -42,6 +42,7 @@ begin
       when '毒クラゲ'         then 78
       when '電気クラゲ'       then 80
       when 'ハリセンボン'     then 75
+      when 'デビルパピア'     then 1000  -- 30Fボス（撃破クリア報酬EXP）
       else greatest(1, 10 + v_floor) end;
   else
     -- 初級の洞窟など（従来どおり）

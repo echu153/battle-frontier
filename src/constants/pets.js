@@ -176,7 +176,7 @@ export const DUNGEONS = [
   },
   // 追憶の遺跡（30F）。敵は stats を明示指定（フロア式ではなく固定値）。名前の変種ごとにステを変える。
   {
-    id: 'd30', name: '追憶の遺跡', floors: 30, requires: 'd10', emoji: '🏛', areas: [1, 2, 3, 4], comingSoon: true, charms: ['antidote', 'guard'], bgm: '/dungeon_bgm.mp3',
+    id: 'd30', name: '追憶の遺跡', floors: 30, requires: 'd10', emoji: '🏛', areas: [1, 2, 3, 4], charms: ['antidote', 'guard'], bgm: '/dungeon_bgm.mp3',
     floorTable: [
       // 敵ごとの出現Fに合わせてバンドを分割（2026-06-14調整）
       // スライム1-5/コウモリ3-5/毒キノコ4-5/ゴブリン6-8/野良犬7-9/盗賊8-9
