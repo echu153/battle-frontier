@@ -34,7 +34,9 @@ const PARALYZE_FAIL = 0.30    // 麻痺中、攻撃が失敗する確率
 const BURN_INTERVAL = 20      // やけど：このターンごとにダメージ
 const BURN_PCT = 0.03         // やけど：最大HPのこの割合ダメージ
 const BURN_ATK_DOWN = 0.10    // やけど中：攻撃/特攻ダウン率
-const WEAKEN_ATK_DOWN = 0.10  // ステータスダウン中：攻撃/特攻ダウン率
+const STAT_DOWN_PCT = 0.30    // 敵のデバフ：対象ステータスを30%減
+const ENEMY_BUFF_MULT = 1.3   // 敵の自己バフ：攻撃1.3倍
+const ENEMY_BUFF_TURNS = 4    // 敵の自己バフ持続
 
 // 床に置く戦利品の抽選テーブル（クライアントで決定→床に実アイコン表示→拾得時サーバー検証）
 const DG_SEEDS = ['atk_seed', 'spatk_seed', 'def_seed', 'spdef_seed', 'hp_seed']
@@ -216,7 +218,7 @@ export default function Dungeon() {
   const [poisoned, setPoisoned] = useState(false) // 毒状態（次フロアで回復）
   const [paralyzed, setParalyzed] = useState(0)   // 麻痺＝あと何ターン麻痺するか（攻撃が確率で失敗）
   const [burned, setBurned] = useState(false)     // やけど（次フロアで回復・攻撃/特攻ダウン）
-  const [weakened, setWeakened] = useState(0)     // ステータスダウン＝あと何ターン攻撃/特攻ダウンか
+  const [debuff, setDebuff] = useState({ atk: 0, def: 0, mdef: 0 }) // 各ステのダウン残ターン（敵デバフ・30%減）
   const [shield, setShield] = useState(0)         // 結界/障壁＝あと何ターン被ダメ軽減か
   const shieldRateRef = useRef(1)                 // 軽減率（被ダメ×rate）
   const [regen, setRegen] = useState(0)           // 聖域＝あと何ターン毎ターン回復か
@@ -616,7 +618,7 @@ export default function Dungeon() {
     setPoisoned(false) // 次フロアに行くと毒は回復
     setParalyzed(0)    // 麻痺も次フロアで回復
     setBurned(false)   // やけども次フロアで回復
-    setWeakened(0)     // ステータスダウンも次フロアで回復
+    setDebuff({ atk: 0, def: 0, mdef: 0 }) // ステータスダウンも次フロアで回復
     setShield(0); shieldRateRef.current = 1   // バフも次フロアで切れる
     setRegen(0); regenAmtRef.current = 0
   }, [])
@@ -624,7 +626,7 @@ export default function Dungeon() {
   // ダンジョンを選んで開始
   const beginDungeon = (d) => {
     setDungeon(d)
-    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setBurned(false); setWeakened(0); setShield(0); shieldRateRef.current = 1; setRegen(0); regenAmtRef.current = 0; setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
+    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setBurned(false); setDebuff({ atk: 0, def: 0, mdef: 0 }); setShield(0); shieldRateRef.current = 1; setRegen(0); regenAmtRef.current = 0; setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
     enterFloor(1, d)
     playFloorIntro(1, d) // 入場時にダンジョン名・フロア表示
     startRun(pet.id, d.id)
@@ -735,7 +737,7 @@ export default function Dungeon() {
         else if (p > sp2) { useAtk = p; useType = 'phys' }
       }
       // やけど・ステータスダウン中は攻撃/特攻が下がる
-      const atkMul = (burned ? 1 - BURN_ATK_DOWN : 1) * (weakened > 0 ? 1 - WEAKEN_ATK_DOWN : 1)
+      const atkMul = (burned ? 1 - BURN_ATK_DOWN : 1) * (debuff.atk > 0 ? 1 - STAT_DOWN_PCT : 1)
       useAtk = useAtk * atkMul
       const guard = useType === 'spec' ? (target.mdef || 0) : (target.def || 0)
       // ダメージは1発ごとに 0.9〜1.1 の乱数補正（最低1）
@@ -852,11 +854,11 @@ export default function Dungeon() {
     let willPoison = false // このターンに毒を受けたか
     let willParalyze = false // このターンに麻痺を受けたか
     let willBurn = false   // このターンにやけどを受けたか
-    let willWeaken = 0     // このターンに受けたステータスダウンのターン数
+    const willDebuff = { atk: 0, def: 0, mdef: 0 } // このターンに受けたデバフの残ターン
     const attackers = []   // 隣接して攻撃してくる敵（1体ずつ順番に演出する）
     enemies = enemies.map((e) => {
-      // スキルの書「しびれ」効果中の敵は行動できない（1ターン消費）
-      if (e.stun > 0) return { ...e, stun: e.stun - 1 }
+      // スキルの書「しびれ」効果中の敵は行動できない（1ターン消費）。自己バフは減衰
+      if (e.stun > 0) return { ...e, stun: e.stun - 1, buff: Math.max(0, (e.buff || 0) - 1) }
       // プレイヤーが見えている敵だけが追跡・攻撃する（霧の中からの不可視の急襲を防ぐ）
       //  ＝ 同じ部屋/接近(enemySeesPet) または プレイヤーの視界内(visNow) の敵のみ
       const sees = enemySeesPet(s.rooms, e, player.x, player.y) || visNow.has(e.x + ',' + e.y)
@@ -865,13 +867,17 @@ export default function Dungeon() {
       const diagBlocked = adx !== 0 && ady !== 0 && (s.grid[player.y]?.[e.x] === '#' || s.grid[e.y]?.[player.x] === '#')
       const adjacent = Math.max(Math.abs(adx), Math.abs(ady)) === 1 && !diagBlocked
       if (sees && adjacent && visNow.has(e.x + ',' + e.y)) {
-        // 敵の攻撃タイプに応じて pet.def(物理)/mdef(特殊)で軽減
-        const guard = e.type === 'spec' ? (pet.mdef || 0) : (pet.def || 0)
+        // 敵の攻撃タイプに応じて pet.def(物理)/mdef(特殊)で軽減。防御/特防ダウン中は軽減を弱める
+        const baseGuard = e.type === 'spec' ? (pet.mdef || 0) : (pet.def || 0)
+        const guardDown = e.type === 'spec' ? (debuff.mdef > 0) : (debuff.def > 0)
+        const guard = guardDown ? baseGuard * (1 - STAT_DOWN_PCT) : baseGuard
+        // 敵の攻撃力（自己バフ中は ENEMY_BUFF_MULT 倍）
+        const eAtk = (e.atk || 1) * ((e.buff || 0) > 0 ? ENEMY_BUFF_MULT : 1)
         // 敵のダメージも 0.9〜1.1 の乱数補正（最低1）
-        let dmg = Math.max(1, Math.round(calcDamage(e.atk || 1, guard) * (0.9 + Math.random() * 0.2)))
-        // 敵スキル（確率発動）：heavy=倍率／poison=毒／vamp=自己回復
+        let dmg = Math.max(1, Math.round(calcDamage(eAtk, guard) * (0.9 + Math.random() * 0.2)))
+        // 敵スキル（確率発動）
         const notes = []
-        let heal = 0
+        let heal = 0; let gotBuff = false
         const antidote = getCharm(pet.charm?.ctype).effect === 'antidote'
         for (const sk of (e.skills || [])) {
           // 解毒のチャーム装備時は毒の発動確率を50%に
@@ -879,17 +885,22 @@ export default function Dungeon() {
           if (Math.random() >= chance) continue
           if (sk.type === 'heavy') { dmg = Math.round(dmg * (sk.mult || 1)); notes.push(sk.name) }
           // 溶解液：特殊判定（ペットの特防で軽減）の×mult攻撃。物理の敵でも特防に当たる
-          else if (sk.type === 'spec_heavy') { dmg = Math.max(1, Math.round(calcDamage(Math.round((e.atk || 1) * (sk.mult || 1)), pet.mdef || 0) * (0.9 + Math.random() * 0.2))); notes.push(sk.name) }
+          else if (sk.type === 'spec_heavy') { dmg = Math.max(1, Math.round(calcDamage(Math.round(eAtk * (sk.mult || 1)), pet.mdef || 0) * (0.9 + Math.random() * 0.2))); notes.push(sk.name) }
           else if (sk.type === 'poison') { willPoison = true; notes.push(sk.name) }
           else if (sk.type === 'paralyze') { willParalyze = true; notes.push(sk.name) }
           else if (sk.type === 'burn') { willBurn = true; notes.push(sk.name) }
-          else if (sk.type === 'weaken') { willWeaken = Math.max(willWeaken, sk.turns || 5); notes.push(sk.name) }
+          else if (sk.type === 'weaken') { const st = sk.stat || 'atk'; willDebuff[st] = Math.max(willDebuff[st], sk.turns || 4); notes.push(sk.name) }
+          else if (sk.type === 'selfbuff') { gotBuff = true; notes.push(sk.name) }
           else if (sk.type === 'vamp') { heal = Math.floor(dmg * (sk.frac || 0.5)); notes.push(sk.name) }
         }
         const healShown = heal > 0 ? Math.min(heal, e.maxHp - e.hp) : 0
         attackers.push({ id: e.id, name: e.name, x: e.x, y: e.y, dmg, notes, healShown,
           lunge: { dx: Math.sign(player.x - e.x), dy: Math.sign(player.y - e.y) } })
-        return heal > 0 ? { ...e, hp: Math.min(e.maxHp, e.hp + heal) } : e
+        let ne = e
+        if (heal > 0) ne = { ...ne, hp: Math.min(e.maxHp, e.hp + heal) }
+        if (gotBuff) ne = { ...ne, buff: ENEMY_BUFF_TURNS }
+        else if ((e.buff || 0) > 0) ne = { ...ne, buff: e.buff - 1 } // 攻撃したターンもバフ減衰
+        return ne
       }
       const chase = (c) => {
         const gx = Math.abs(c.x - player.x), gy = Math.abs(c.y - player.y)
@@ -913,15 +924,16 @@ export default function Dungeon() {
         cands = [{ x: e.x + 1, y: e.y }, { x: e.x - 1, y: e.y }, { x: e.x, y: e.y + 1 }, { x: e.x, y: e.y - 1 }]
           .sort(() => Math.random() - 0.5)
       }
+      const decayed = (e.buff || 0) > 0 ? { ...e, buff: e.buff - 1 } : e // 移動ターンも自己バフ減衰
       for (const c of cands) {
         const ck = c.x + ',' + c.y
         // 泳ぐ敵は水も通行可。それ以外は床のみ
         if (canPass(e, c.x, c.y) && !taken.has(ck) && !(c.x === player.x && c.y === player.y)) {
           taken.delete(e.x + ',' + e.y); taken.add(ck) // 移動先を占有・元を解放
-          return { ...e, x: c.x, y: c.y }
+          return { ...decayed, x: c.x, y: c.y }
         }
       }
-      return e
+      return decayed
     })
 
     // ---- 移動と視界は即時反映（攻撃演出はこの後1体ずつ） ----
@@ -972,12 +984,16 @@ export default function Dungeon() {
       setPetHp(curHp)
       // 状態異常カウントの減衰（毎ターン）
       if (paralyzed > 0) setParalyzed((p) => Math.max(0, p - 1))
-      if (weakened > 0) setWeakened((w) => Math.max(0, w - 1))
+      if (debuff.atk > 0 || debuff.def > 0 || debuff.mdef > 0) setDebuff((d) => ({ atk: Math.max(0, d.atk - 1), def: Math.max(0, d.def - 1), mdef: Math.max(0, d.mdef - 1) }))
       // 新たに受けた状態異常を付与
       if (willPoison && !poisoned) { setPoisoned(true); addLog('☠ 毒におかされた…！', 'right') }
       if (willBurn && !burned) { setBurned(true); addLog('🔥 やけどを負った…！', 'right') }
       if (willParalyze) { setParalyzed(PARALYZE_TURNS); addLog('⚡ 体がしびれた…！（しばらく攻撃が失敗することがある）', 'right') }
-      if (willWeaken > 0) { setWeakened((w) => Math.max(w, willWeaken)); addLog('▼ 攻撃・特攻が下がった…！', 'right') }
+      if (willDebuff.atk || willDebuff.def || willDebuff.mdef) {
+        setDebuff((d) => ({ atk: Math.max(d.atk, willDebuff.atk), def: Math.max(d.def, willDebuff.def), mdef: Math.max(d.mdef, willDebuff.mdef) }))
+        const names = [willDebuff.atk && '攻撃', willDebuff.def && '防御', willDebuff.mdef && '特防'].filter(Boolean).join('・')
+        addLog(`▼ ${names}が下がった…！`, 'right')
+      }
       if (dead) { setStatus('dead'); addLog('💀 ペットは力尽きた…'); finishRun(false, true) }
 
       // ---- 40ターンごとに敵が1体湧く ----
@@ -1469,7 +1485,9 @@ export default function Dungeon() {
             if (poisoned) chips.push({ k: 'poison', label: '☠ 毒', col: '#cc77ff' })
             if (paralyzed > 0) chips.push({ k: 'para', label: `⚡ 麻痺 残${paralyzed}`, col: '#ffe066' })
             if (burned) chips.push({ k: 'burn', label: '🔥 やけど', col: '#ff7755' })
-            if (burned || weakened > 0) chips.push({ k: 'down', label: '▼ ステータスダウン', col: '#88bbdd' })
+            if (burned || debuff.atk > 0) chips.push({ k: 'datk', label: '▼ 攻撃ダウン', col: '#88bbdd' })
+            if (debuff.def > 0) chips.push({ k: 'ddef', label: '▼ 防御ダウン', col: '#88bbdd' })
+            if (debuff.mdef > 0) chips.push({ k: 'dmdef', label: '▼ 特防ダウン', col: '#88bbdd' })
             if (shield > 0) chips.push({ k: 'shield', label: `🛡 結界 残${shield}`, col: '#66ddff' })
             if (regen > 0) chips.push({ k: 'regen', label: `🕊 聖域 残${regen}`, col: '#aaffcc' })
             if (fullness <= 0) chips.push({ k: 'hungry', label: '🥀 空腹', col: '#ff8855' })

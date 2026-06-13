@@ -133,31 +133,79 @@ export const DUNGEONS = [
         { name: '野良犬', type: 'phys', images: ['/norainu1.png', '/norainu2.png'], stats: { maxHp: 130, atk: 100, def: 55, mdef: 55 } },
         { name: '盗賊', type: 'phys', image: '/touzoku.png', stats: { maxHp: 150, atk: 110, def: 60, mdef: 60 } },
       ] },
-      // エリア③（10〜19）
+      // エリア③（10〜19）。10F以降は各敵スキル3つ（バフ/デバフ/状態異常を多種多様に）
       { from: 10, to: 14, enemies: [
-        { name: 'コボルト', type: 'phys', images: ['/koboruto.png', '/koboruto2.png'], stats: { maxHp: 200, atk: 135, def: 81, mdef: 81 } },
-        { name: 'スケルトン（剣）', type: 'phys', image: '/sukerutonken.png', stats: { maxHp: 220, atk: 150, def: 90, mdef: 90 } },
-        { name: 'スケルトン（弓）', type: 'phys', image: '/sukerutonyumi.png', stats: { maxHp: 185, atk: 170, def: 70, mdef: 70 } },
+        { name: 'コボルト', type: 'phys', images: ['/koboruto.png', '/koboruto2.png'], stats: { maxHp: 200, atk: 135, def: 81, mdef: 81 }, skills: [
+          { name: '乱舞', chance: 0.30, type: 'heavy', mult: 1.4 },
+          { name: '雄叫び', chance: 0.25, type: 'selfbuff' },
+          { name: 'すね狙い', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
+        { name: 'スケルトン（剣）', type: 'phys', image: '/sukerutonken.png', stats: { maxHp: 220, atk: 150, def: 90, mdef: 90 }, skills: [
+          { name: '重斬り', chance: 0.30, type: 'heavy', mult: 1.5 },
+          { name: '骨砕き', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 },
+          { name: '呪詛', chance: 0.25, type: 'weaken', stat: 'mdef', turns: 4 } ] },
+        { name: 'スケルトン（弓）', type: 'phys', image: '/sukerutonyumi.png', stats: { maxHp: 185, atk: 170, def: 70, mdef: 70 }, skills: [
+          { name: '連射', chance: 0.30, type: 'heavy', mult: 1.3 },
+          { name: '狙い撃ち', chance: 0.25, type: 'heavy', mult: 1.6 },
+          { name: '毒矢', chance: 0.25, type: 'poison' } ] },
       ] },
       { from: 15, to: 19, enemies: [
-        { name: 'スケルトン（剣）', type: 'phys', image: '/sukerutonken.png', stats: { maxHp: 220, atk: 150, def: 90, mdef: 90 } },
-        { name: 'スケルトン（弓）', type: 'phys', image: '/sukerutonyumi.png', stats: { maxHp: 185, atk: 170, def: 70, mdef: 70 } },
-        { name: 'ゴーレム（攻）', type: 'spec', image: '/go-remukougeki.png', stats: { maxHp: 235, atk: 210, def: 90, mdef: 90 } },
-        { name: 'ゴーレム（守）', type: 'phys', image: '/go-remubougyo.png', stats: { maxHp: 360, atk: 120, def: 160, mdef: 160 } },
+        { name: 'スケルトン（剣）', type: 'phys', image: '/sukerutonken.png', stats: { maxHp: 220, atk: 150, def: 90, mdef: 90 }, skills: [
+          { name: '重斬り', chance: 0.30, type: 'heavy', mult: 1.5 },
+          { name: '骨砕き', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 },
+          { name: '呪詛', chance: 0.25, type: 'weaken', stat: 'mdef', turns: 4 } ] },
+        { name: 'スケルトン（弓）', type: 'phys', image: '/sukerutonyumi.png', stats: { maxHp: 185, atk: 170, def: 70, mdef: 70 }, skills: [
+          { name: '連射', chance: 0.30, type: 'heavy', mult: 1.3 },
+          { name: '狙い撃ち', chance: 0.25, type: 'heavy', mult: 1.6 },
+          { name: '毒矢', chance: 0.25, type: 'poison' } ] },
+        { name: 'ゴーレム（攻）', type: 'spec', image: '/go-remukougeki.png', stats: { maxHp: 235, atk: 210, def: 90, mdef: 90 }, skills: [
+          { name: '岩石砲', chance: 0.30, type: 'spec_heavy', mult: 1.5 },
+          { name: '地響き', chance: 0.30, type: 'heavy', mult: 1.3 },
+          { name: '咆哮', chance: 0.20, type: 'selfbuff' } ] },
+        { name: 'ゴーレム（守）', type: 'phys', image: '/go-remubougyo.png', stats: { maxHp: 360, atk: 120, def: 160, mdef: 160 }, skills: [
+          { name: '堅守の構え', chance: 0.30, type: 'selfbuff' },
+          { name: '鈍重打', chance: 0.30, type: 'heavy', mult: 1.4 },
+          { name: '防御崩し', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
       ] },
-      // エリア④（20〜29、30は一旦エリア④の敵で埋める。ボスは後日）
+      // エリア④（20〜29、30は一旦エリア④の敵で埋める。ボスは後日）。各3スキル
       { from: 20, to: 24, enemies: [
-        { name: '深海魚人', type: 'spec', image: '/sinkaigyozin.png', stats: { maxHp: 320, atk: 210, def: 140, mdef: 140 } },
-        { name: '海賊（男）', type: 'phys', image: '/kaizokuotoko.png', stats: { maxHp: 350, atk: 231, def: 154, mdef: 140 } },
-        { name: '海賊（女）', type: 'spec', image: '/kaizokuonnna.png', stats: { maxHp: 320, atk: 225, def: 135, mdef: 150 } },
-        { name: 'ハリセンボン', type: 'phys', image: '/harisennbonn.png', stats: { maxHp: 300, atk: 220, def: 130, mdef: 130 }, skills: [{ name: 'どくのハリ', chance: 0.35, type: 'poison' }] },
+        { name: '深海魚人', type: 'spec', image: '/sinkaigyozin.png', stats: { maxHp: 320, atk: 210, def: 140, mdef: 140 }, skills: [
+          { name: '水流弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+          { name: '墨吐き', chance: 0.30, type: 'weaken', stat: 'atk', turns: 4 },
+          { name: '再生', chance: 0.25, type: 'vamp', frac: 0.3 } ] },
+        { name: '海賊（男）', type: 'phys', image: '/kaizokuotoko.png', stats: { maxHp: 350, atk: 231, def: 154, mdef: 140 }, skills: [
+          { name: '乱れ斬り', chance: 0.30, type: 'heavy', mult: 1.4 },
+          { name: '鼓舞', chance: 0.25, type: 'selfbuff' },
+          { name: '足払い', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
+        { name: '海賊（女）', type: 'spec', image: '/kaizokuonnna.png', stats: { maxHp: 320, atk: 225, def: 135, mdef: 150 }, skills: [
+          { name: '魔弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+          { name: '幻惑', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 },
+          { name: '治癒', chance: 0.25, type: 'vamp', frac: 0.3 } ] },
+        { name: 'ハリセンボン', type: 'phys', image: '/harisennbonn.png', stats: { maxHp: 300, atk: 220, def: 130, mdef: 130 }, skills: [
+          { name: 'どくのハリ', chance: 0.35, type: 'poison' },
+          { name: '膨張', chance: 0.25, type: 'selfbuff' },
+          { name: '針千本', chance: 0.25, type: 'heavy', mult: 1.5 } ] },
       ] },
       { from: 25, to: 30, enemies: [
-        { name: '海賊（男）', type: 'phys', image: '/kaizokuotoko.png', stats: { maxHp: 350, atk: 231, def: 154, mdef: 140 } },
-        { name: '海賊（女）', type: 'spec', image: '/kaizokuonnna.png', stats: { maxHp: 320, atk: 225, def: 135, mdef: 150 } },
-        { name: '毒クラゲ', type: 'spec', image: '/dokukurage.png', stats: { maxHp: 320, atk: 210, def: 140, mdef: 140 }, skills: [{ name: 'どく', chance: 0.45, type: 'poison' }] },
-        { name: '電気クラゲ', type: 'spec', image: '/denkikurage.png', stats: { maxHp: 320, atk: 210, def: 140, mdef: 140 }, skills: [{ name: 'しびれ', chance: 0.30, type: 'paralyze' }] },
-        { name: 'ハリセンボン', type: 'phys', image: '/harisennbonn.png', stats: { maxHp: 300, atk: 220, def: 130, mdef: 130 }, skills: [{ name: 'どくのハリ', chance: 0.35, type: 'poison' }] },
+        { name: '海賊（男）', type: 'phys', image: '/kaizokuotoko.png', stats: { maxHp: 350, atk: 231, def: 154, mdef: 140 }, skills: [
+          { name: '乱れ斬り', chance: 0.30, type: 'heavy', mult: 1.4 },
+          { name: '鼓舞', chance: 0.25, type: 'selfbuff' },
+          { name: '足払い', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
+        { name: '海賊（女）', type: 'spec', image: '/kaizokuonnna.png', stats: { maxHp: 320, atk: 225, def: 135, mdef: 150 }, skills: [
+          { name: '魔弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+          { name: '幻惑', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 },
+          { name: '治癒', chance: 0.25, type: 'vamp', frac: 0.3 } ] },
+        { name: '毒クラゲ', type: 'spec', image: '/dokukurage.png', stats: { maxHp: 320, atk: 210, def: 140, mdef: 140 }, skills: [
+          { name: 'どく', chance: 0.45, type: 'poison' },
+          { name: '痺れ毒', chance: 0.25, type: 'paralyze' },
+          { name: '溶解', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 } ] },
+        { name: '電気クラゲ', type: 'spec', image: '/denkikurage.png', stats: { maxHp: 320, atk: 210, def: 140, mdef: 140 }, skills: [
+          { name: 'しびれ', chance: 0.30, type: 'paralyze' },
+          { name: '放電', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+          { name: '帯電', chance: 0.25, type: 'selfbuff' } ] },
+        { name: 'ハリセンボン', type: 'phys', image: '/harisennbonn.png', stats: { maxHp: 300, atk: 220, def: 130, mdef: 130 }, skills: [
+          { name: 'どくのハリ', chance: 0.35, type: 'poison' },
+          { name: '膨張', chance: 0.25, type: 'selfbuff' },
+          { name: '針千本', chance: 0.25, type: 'heavy', mult: 1.5 } ] },
       ] },
     ],
   },
@@ -179,10 +227,10 @@ export const getDungeon = (id) => DUNGEONS.find((d) => d.id === id) || DUNGEONS[
 // 敵スキル（攻撃時に確率で発動）。type: poison=毒付与 / heavy=ダメージ倍率 / vamp=与ダメの一部を自己回復
 //  ※毒キノコは毒、盗賊は2つ持ち。名前で引くので敵定義側は変更不要
 export const ENEMY_SKILLS = {
-  'コウモリ': [{ name: 'きゅうけつ', chance: 0.30, type: 'vamp', frac: 0.3 }],
-  '毒キノコ': [{ name: 'どくのこな', chance: 0.45, type: 'poison' }],
+  'コウモリ': [{ name: 'きゅうけつ', chance: 0.30, type: 'vamp', frac: 0.3 }, { name: 'かく乱', chance: 0.30, type: 'weaken', stat: 'atk', turns: 4 }],
+  '毒キノコ': [{ name: 'どくのこな', chance: 0.45, type: 'poison' }, { name: '溶解胞子', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 }],
   'ゴブリン': [{ name: 'つよ打ち',   chance: 0.30, type: 'heavy', mult: 1.5 }],
-  '野良犬':   [{ name: 'かみつき',   chance: 0.30, type: 'heavy', mult: 1.4 }],
+  '野良犬':   [{ name: 'かみつき',   chance: 0.30, type: 'heavy', mult: 1.4 }, { name: 'いかく', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 }],
   '盗賊':     [{ name: 'ふいうち',   chance: 0.25, type: 'heavy', mult: 1.6 }, { name: 'どくナイフ', chance: 0.20, type: 'poison' }],
 }
 export const enemySkillsFor = (name) => ENEMY_SKILLS[name] || []
