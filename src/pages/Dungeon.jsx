@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, ASSET_VER } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, ASSET_VER } from '../constants/pets'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
@@ -438,7 +438,7 @@ export default function Dungeon() {
   // クライアントは表示するだけ。サーバー戻り値の素のentryに表示用の label/emoji を付ける。
   const lootDisplay = (e) => {
     if (!e) return { label: '?', emoji: '✨' }
-    if (e.type === 'seed') { const d = PET_ITEMS[e.seedKey]; return { label: d?.name || e.seedKey, emoji: d?.emoji || '🔹' } }
+    if (e.type === 'seed') { const d = PET_ITEMS[e.seedKey]; return { label: d?.name || e.seedKey, emoji: d?.emoji || '🔹', img: petItemImg(e.seedKey) } }
     if (e.type === 'stone') return { label: `強化石(${e.rank})`, emoji: '🪨' }
     if (e.type === 'gem') return { label: `${GEM_DATA[e.gemType]?.name || '宝石'}(F)`, emoji: '💍' }
     if (e.type === 'equip') return { label: e.name, emoji: '🎁' }
@@ -1721,8 +1721,8 @@ export default function Dungeon() {
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {lootBag.map((l) => (
                   <button key={l.id} onClick={() => dropMode && dropItem({ kind: 'loot', loot: l })}
-                    style={{ background: dropMode ? '#1a0e08' : '#0a1a14', border: `1px solid ${dropMode ? '#cc7755' : '#2a5544'}`, color: '#bfe6cc', padding: '6px 10px', cursor: dropMode ? 'pointer' : 'default', fontFamily: 'monospace', fontSize: 12 }}>
-                    {l.emoji} {l.label}{(l.qty || 1) > 1 ? `×${l.qty}` : ''}
+                    style={{ background: dropMode ? '#1a0e08' : '#0a1a14', border: `1px solid ${dropMode ? '#cc7755' : '#2a5544'}`, color: '#bfe6cc', padding: '6px 10px', cursor: dropMode ? 'pointer' : 'default', fontFamily: 'monospace', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {l.img ? <img src={l.img} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} /> : l.emoji} {l.label}{(l.qty || 1) > 1 ? `×${l.qty}` : ''}
                   </button>
                 ))}
                 {empty && <span style={{ color: '#445566', fontSize: 11 }}>（戦利品なし。食料・翼はスキル横から使えます）</span>}

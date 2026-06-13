@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { getCharm, CHARM_TOTAL_MAX, CHARM_HP_PER, charmDisplayName, charmTotal } from '../constants/pets'
+import { getCharm, CHARM_TOTAL_MAX, CHARM_HP_PER, charmDisplayName, charmTotal, petItemImg } from '../constants/pets'
+
+// 素アイコン（画像があれば画像、無ければ絵文字）
+function SeedIcon({ seed, emoji, size = 16 }) {
+  const src = petItemImg(seed)
+  return src
+    ? <img src={src} alt="" style={{ width: size, height: size, objectFit: 'contain', verticalAlign: 'middle', marginRight: 2 }} />
+    : <span>{emoji}</span>
+}
 
 // チャームの能力と、対応する素アイテムキー・1個あたりの上昇量（HPのみ+5、消費は全て1）
 const STAT_META = {
@@ -103,7 +111,7 @@ export default function Charms() {
 
         {/* 所持素 */}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12, marginBottom: 10, color: '#cce6ff' }}>
-          {STAT_KEYS.map((k) => <span key={k}>{STAT_META[k].emoji}{STAT_META[k].label}の素×{seeds[STAT_META[k].seed] || 0}</span>)}
+          {STAT_KEYS.map((k) => <span key={k}><SeedIcon seed={STAT_META[k].seed} emoji={STAT_META[k].emoji} />{STAT_META[k].label}の素×{seeds[STAT_META[k].seed] || 0}</span>)}
         </div>
 
         {/* タブ */}
@@ -147,7 +155,7 @@ export default function Charms() {
                   return (
                     <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
                       <input type="checkbox" checked={!!checked[stat]} onChange={(e) => setChecked((c) => ({ ...c, [stat]: e.target.checked }))} disabled={dis} />
-                      <span style={{ width: 64, fontSize: 11, color: '#cce6ff' }}>{meta.emoji}{meta.label}</span>
+                      <span style={{ width: 64, fontSize: 11, color: '#cce6ff' }}><SeedIcon seed={meta.seed} emoji={meta.emoji} size={14} />{meta.label}</span>
                       <span style={{ flex: 1, fontSize: 11, color: '#88bbee' }}>+{shown}{stat === 'hp' && cnt > 0 ? `（${cnt}個）` : ''}</span>
                       <span style={{ fontSize: 10, color: '#557799' }}>素{have}</span>
                       <button onClick={() => !loading && enhance(sel.id, stat, 1)} disabled={dis}

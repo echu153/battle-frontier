@@ -277,11 +277,11 @@ export const PET_ITEMS = {
   konomi:  { key: 'konomi',  name: '木の実',           emoji: '🍒', price: 300,   dungeon: true,  capped: true, healPct: 0.2, desc: '最大HPの20%を回復' },
   rename:  { key: 'rename',  name: 'ニックネーム変更券', emoji: '🎫', price: 100000, dungeon: false, capped: true,  desc: 'ペットの名前を変更できる' },
   // チャーム強化用の素（ダンジョンで拾う。チャームページで使用）
-  atk_seed:   { key: 'atk_seed',   name: '攻撃の素',  emoji: '🔴', price: 0, dungeon: false, capped: true, seed: 'atk',   up: 1,  desc: 'チャームの攻撃を+1' },
-  spatk_seed: { key: 'spatk_seed', name: '特攻の素',  emoji: '🟣', price: 0, dungeon: false, capped: true, seed: 'spatk', up: 1,  desc: 'チャームの特攻を+1' },
-  def_seed:   { key: 'def_seed',   name: '防御の素',  emoji: '🔵', price: 0, dungeon: false, capped: true, seed: 'def',   up: 1,  desc: 'チャームの防御を+1' },
-  spdef_seed: { key: 'spdef_seed', name: '特防の素',  emoji: '🟢', price: 0, dungeon: false, capped: true, seed: 'spdef', up: 1,  desc: 'チャームの特防を+1' },
-  hp_seed:    { key: 'hp_seed',    name: 'HPの素',    emoji: '🟡', price: 0, dungeon: false, capped: true, seed: 'hp',    up: 5,  desc: 'チャームのHPを+5（消費1）' },
+  atk_seed:   { key: 'atk_seed',   name: '攻撃の素',  emoji: '🔴', img: '/kougekimoto.png',     price: 0, dungeon: false, capped: true, seed: 'atk',   up: 1,  desc: 'チャームの攻撃を+1' },
+  spatk_seed: { key: 'spatk_seed', name: '特攻の素',  emoji: '🟣', img: '/tokukoumoto.png',     price: 0, dungeon: false, capped: true, seed: 'spatk', up: 1,  desc: 'チャームの特攻を+1' },
+  def_seed:   { key: 'def_seed',   name: '防御の素',  emoji: '🔵', img: '/bougyomoto.png',      price: 0, dungeon: false, capped: true, seed: 'def',   up: 1,  desc: 'チャームの防御を+1' },
+  spdef_seed: { key: 'spdef_seed', name: '特防の素',  emoji: '🟢', img: '/mahoubougyomoto.png', price: 0, dungeon: false, capped: true, seed: 'spdef', up: 1,  desc: 'チャームの特防を+1' },
+  hp_seed:    { key: 'hp_seed',    name: 'HPの素',    emoji: '🟡', img: '/HPmoto.png',         price: 0, dungeon: false, capped: true, seed: 'hp',    up: 5,  desc: 'チャームのHPを+5（消費1）' },
 }
 
 // ============================================================
@@ -312,6 +312,8 @@ export const SCROLLS = {
 }
 export const SCROLL_KEYS = Object.keys(SCROLLS)
 export const getScroll = (key) => SCROLLS[key]
+// アイテムのアイコン画像src（img指定がある素などは画像、無ければnull→絵文字表示）
+export const petItemImg = (key) => assetSrc(PET_ITEMS[key]?.img || null)
 function scrollDesc(s) {
   if (s.target === 'self') {
     const parts = []

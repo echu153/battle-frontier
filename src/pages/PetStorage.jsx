@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { PET_ITEMS, bagCapacity } from '../constants/pets'
+import { PET_ITEMS, bagCapacity, petItemImg } from '../constants/pets'
 
 // ダンジョンに持っていける（持ち物へ移せる）アイテム
 const DUNGEON_KEYS = new Set(['escape', 'onigiri', 'konomi'])
@@ -118,9 +118,10 @@ export default function PetStorage() {
 
 function ItemRow({ k, qty, children }) {
   const def = PET_ITEMS[k]
+  const img = petItemImg(k)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #224466', background: '#000a18', padding: '8px 10px' }}>
-      <span style={{ fontSize: 20 }}>{def?.emoji || '🔹'}</span>
+      {img ? <img src={img} alt="" style={{ width: 22, height: 22, objectFit: 'contain' }} /> : <span style={{ fontSize: 20 }}>{def?.emoji || '🔹'}</span>}
       <span style={{ flex: 1, color: '#cce6ff', fontSize: 13 }}>{def?.name || k} <span style={{ color: '#6699cc', fontSize: 11 }}>×{qty}</span></span>
       {children}
     </div>
