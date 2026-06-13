@@ -108,6 +108,60 @@ export const skillsForSpecies = (species) =>
 export const learnedSkills = (pet) => skillsForSpecies(pet?.species).filter((s) => s.learnLv <= (pet?.level || 1))
 export const getSkill = (id) => SKILLS[id] || SKILLS.tackle
 
+// 追憶の遺跡(d30)の敵定義（出現Fをいじりやすいよう定数化。floorTableで参照する）
+const D30E = {
+  slime:   { name: 'スライム', type: 'phys', images: ['/suraimu.png', '/suraimu2.png', '/suraimu3.png'], stats: { maxHp: 70, atk: 30, def: 15, mdef: 15 }, skills: [{ name: '溶解液', chance: 0.30, type: 'spec_heavy', mult: 1.4 }] },
+  koumori: { name: 'コウモリ', type: 'phys', image: '/koumori.png', stats: { maxHp: 80, atk: 45, def: 22, mdef: 22 } },
+  kinoko:  { name: '毒キノコ', type: 'spec', image: '/dokukinoko.png', stats: { maxHp: 104, atk: 60, def: 30, mdef: 30 } },
+  goblin:  { name: 'ゴブリン', type: 'phys', image: '/goburin.png', stats: { maxHp: 130, atk: 100, def: 55, mdef: 55 } },
+  dog:     { name: '野良犬', type: 'phys', images: ['/norainu1.png', '/norainu2.png'], stats: { maxHp: 130, atk: 100, def: 55, mdef: 55 } },
+  touzoku: { name: '盗賊', type: 'phys', image: '/touzoku.png', stats: { maxHp: 150, atk: 110, def: 60, mdef: 60 } },
+  kobold:  { name: 'コボルト', type: 'phys', images: ['/koboruto.png', '/koboruto2.png'], stats: { maxHp: 200, atk: 135, def: 81, mdef: 81 }, skills: [
+    { name: '乱舞', chance: 0.30, type: 'heavy', mult: 1.4 },
+    { name: '雄叫び', chance: 0.25, type: 'selfbuff' },
+    { name: 'すね狙い', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
+  skelSword: { name: 'スケルトン（剣）', type: 'phys', image: '/sukerutonken.png', stats: { maxHp: 220, atk: 150, def: 90, mdef: 90 }, skills: [
+    { name: '重斬り', chance: 0.30, type: 'heavy', mult: 1.5 },
+    { name: '骨砕き', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 },
+    { name: '呪詛', chance: 0.25, type: 'weaken', stat: 'mdef', turns: 4 } ] },
+  skelBow: { name: 'スケルトン（弓）', type: 'phys', image: '/sukerutonyumi.png', stats: { maxHp: 185, atk: 170, def: 70, mdef: 70 }, reach: 2, skills: [
+    { name: '連射', chance: 0.30, type: 'heavy', mult: 1.3 },
+    { name: '狙い撃ち', chance: 0.25, type: 'heavy', mult: 1.6 },
+    { name: '毒矢', chance: 0.25, type: 'poison' } ] },
+  golemA: { name: 'ゴーレム（攻）', type: 'spec', image: '/go-remukougeki.png', stats: { maxHp: 235, atk: 210, def: 90, mdef: 90 }, skills: [
+    { name: '岩石砲', chance: 0.30, type: 'spec_heavy', mult: 1.5 },
+    { name: '地響き', chance: 0.30, type: 'heavy', mult: 1.3 },
+    { name: '咆哮', chance: 0.20, type: 'selfbuff' } ] },
+  golemD: { name: 'ゴーレム（守）', type: 'phys', image: '/go-remubougyo.png', stats: { maxHp: 360, atk: 120, def: 160, mdef: 160 }, skills: [
+    { name: '堅守の構え', chance: 0.30, type: 'selfbuff' },
+    { name: '鈍重打', chance: 0.30, type: 'heavy', mult: 1.4 },
+    { name: '防御崩し', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
+  gyojin: { name: '深海魚人', type: 'spec', image: '/sinkaigyozin.png', stats: { maxHp: 320, atk: 210, def: 140, mdef: 140 }, skills: [
+    { name: '水流弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+    { name: '墨吐き', chance: 0.30, type: 'weaken', stat: 'atk', turns: 4 },
+    { name: '再生', chance: 0.25, type: 'vamp', frac: 0.3 } ] },
+  pirateM: { name: '海賊（男）', type: 'phys', image: '/kaizokuotoko.png', stats: { maxHp: 350, atk: 231, def: 154, mdef: 140 }, reach: 2, skills: [
+    { name: '銃撃', chance: 0.30, type: 'heavy', mult: 1.4 },
+    { name: '鼓舞', chance: 0.25, type: 'selfbuff' },
+    { name: '足払い', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
+  pirateF: { name: '海賊（女）', type: 'spec', image: '/kaizokuonnna.png', stats: { maxHp: 320, atk: 225, def: 135, mdef: 150 }, reach: 2, skills: [
+    { name: '魔弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+    { name: '幻惑', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 },
+    { name: '治癒', chance: 0.25, type: 'vamp', frac: 0.3 } ] },
+  harisen: { name: 'ハリセンボン', type: 'phys', image: '/harisennbonn.png', stats: { maxHp: 300, atk: 220, def: 130, mdef: 130 }, skills: [
+    { name: 'どくのハリ', chance: 0.35, type: 'poison' },
+    { name: '膨張', chance: 0.25, type: 'selfbuff' },
+    { name: '針千本', chance: 0.25, type: 'heavy', mult: 1.5 } ] },
+  dokukurage: { name: '毒クラゲ', type: 'spec', image: '/dokukurage.png', stats: { maxHp: 320, atk: 210, def: 140, mdef: 140 }, skills: [
+    { name: 'どく', chance: 0.45, type: 'poison' },
+    { name: '痺れ毒', chance: 0.25, type: 'paralyze' },
+    { name: '溶解', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 } ] },
+  denkikurage: { name: '電気クラゲ', type: 'spec', image: '/denkikurage.png', stats: { maxHp: 320, atk: 210, def: 140, mdef: 140 }, skills: [
+    { name: 'しびれ', chance: 0.30, type: 'paralyze' },
+    { name: '放電', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+    { name: '帯電', chance: 0.25, type: 'selfbuff' } ] },
+}
+
 // ダンジョン定義（まず2種。requires をクリアすると開放。以降は今後追加）
 //  areas: 出現するエリア（深いフロアほど後ろのエリアの敵が出る）
 export const DUNGEONS = [
@@ -124,95 +178,26 @@ export const DUNGEONS = [
   {
     id: 'd30', name: '追憶の遺跡', floors: 30, requires: 'd10', emoji: '🏛', areas: [1, 2, 3, 4], comingSoon: true, charms: ['antidote', 'guard'], bgm: '/dungeon_bgm.mp3',
     floorTable: [
-      // エリア①（1〜5）
-      { from: 1, to: 2, enemies: [
-        { name: 'スライム', type: 'phys', images: ['/suraimu.png', '/suraimu2.png', '/suraimu3.png'], stats: { maxHp: 70, atk: 30, def: 15, mdef: 15 }, skills: [{ name: '溶解液', chance: 0.30, type: 'spec_heavy', mult: 1.4 }] },
-      ] },
-      { from: 3, to: 5, enemies: [
-        { name: 'スライム', type: 'phys', images: ['/suraimu.png', '/suraimu2.png', '/suraimu3.png'], stats: { maxHp: 70, atk: 30, def: 15, mdef: 15 }, skills: [{ name: '溶解液', chance: 0.30, type: 'spec_heavy', mult: 1.4 }] },
-        { name: 'コウモリ', type: 'phys', image: '/koumori.png', stats: { maxHp: 80, atk: 45, def: 22, mdef: 22 } },
-        { name: '毒キノコ', type: 'spec', image: '/dokukinoko.png', stats: { maxHp: 104, atk: 60, def: 30, mdef: 30 } },
-      ] },
-      // エリア②（6〜9）
-      { from: 6, to: 9, enemies: [
-        { name: 'ゴブリン', type: 'phys', image: '/goburin.png', stats: { maxHp: 130, atk: 100, def: 55, mdef: 55 } },
-        { name: '野良犬', type: 'phys', images: ['/norainu1.png', '/norainu2.png'], stats: { maxHp: 130, atk: 100, def: 55, mdef: 55 } },
-        { name: '盗賊', type: 'phys', image: '/touzoku.png', stats: { maxHp: 150, atk: 110, def: 60, mdef: 60 } },
-      ] },
-      // エリア③（10〜19）。10F以降は各敵スキル3つ（バフ/デバフ/状態異常を多種多様に）
-      { from: 10, to: 14, enemies: [
-        { name: 'コボルト', type: 'phys', images: ['/koboruto.png', '/koboruto2.png'], stats: { maxHp: 200, atk: 135, def: 81, mdef: 81 }, skills: [
-          { name: '乱舞', chance: 0.30, type: 'heavy', mult: 1.4 },
-          { name: '雄叫び', chance: 0.25, type: 'selfbuff' },
-          { name: 'すね狙い', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
-        { name: 'スケルトン（剣）', type: 'phys', image: '/sukerutonken.png', stats: { maxHp: 220, atk: 150, def: 90, mdef: 90 }, skills: [
-          { name: '重斬り', chance: 0.30, type: 'heavy', mult: 1.5 },
-          { name: '骨砕き', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 },
-          { name: '呪詛', chance: 0.25, type: 'weaken', stat: 'mdef', turns: 4 } ] },
-        { name: 'スケルトン（弓）', type: 'phys', image: '/sukerutonyumi.png', stats: { maxHp: 185, atk: 170, def: 70, mdef: 70 }, reach: 2, skills: [
-          { name: '連射', chance: 0.30, type: 'heavy', mult: 1.3 },
-          { name: '狙い撃ち', chance: 0.25, type: 'heavy', mult: 1.6 },
-          { name: '毒矢', chance: 0.25, type: 'poison' } ] },
-      ] },
-      { from: 15, to: 19, enemies: [
-        { name: 'スケルトン（剣）', type: 'phys', image: '/sukerutonken.png', stats: { maxHp: 220, atk: 150, def: 90, mdef: 90 }, skills: [
-          { name: '重斬り', chance: 0.30, type: 'heavy', mult: 1.5 },
-          { name: '骨砕き', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 },
-          { name: '呪詛', chance: 0.25, type: 'weaken', stat: 'mdef', turns: 4 } ] },
-        { name: 'スケルトン（弓）', type: 'phys', image: '/sukerutonyumi.png', stats: { maxHp: 185, atk: 170, def: 70, mdef: 70 }, reach: 2, skills: [
-          { name: '連射', chance: 0.30, type: 'heavy', mult: 1.3 },
-          { name: '狙い撃ち', chance: 0.25, type: 'heavy', mult: 1.6 },
-          { name: '毒矢', chance: 0.25, type: 'poison' } ] },
-        { name: 'ゴーレム（攻）', type: 'spec', image: '/go-remukougeki.png', stats: { maxHp: 235, atk: 210, def: 90, mdef: 90 }, skills: [
-          { name: '岩石砲', chance: 0.30, type: 'spec_heavy', mult: 1.5 },
-          { name: '地響き', chance: 0.30, type: 'heavy', mult: 1.3 },
-          { name: '咆哮', chance: 0.20, type: 'selfbuff' } ] },
-        { name: 'ゴーレム（守）', type: 'phys', image: '/go-remubougyo.png', stats: { maxHp: 360, atk: 120, def: 160, mdef: 160 }, skills: [
-          { name: '堅守の構え', chance: 0.30, type: 'selfbuff' },
-          { name: '鈍重打', chance: 0.30, type: 'heavy', mult: 1.4 },
-          { name: '防御崩し', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
-      ] },
-      // エリア④（20〜29、30は一旦エリア④の敵で埋める。ボスは後日）。各3スキル
-      { from: 20, to: 24, enemies: [
-        { name: '深海魚人', type: 'spec', image: '/sinkaigyozin.png', stats: { maxHp: 320, atk: 210, def: 140, mdef: 140 }, skills: [
-          { name: '水流弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
-          { name: '墨吐き', chance: 0.30, type: 'weaken', stat: 'atk', turns: 4 },
-          { name: '再生', chance: 0.25, type: 'vamp', frac: 0.3 } ] },
-        { name: '海賊（男）', type: 'phys', image: '/kaizokuotoko.png', stats: { maxHp: 350, atk: 231, def: 154, mdef: 140 }, reach: 2, skills: [
-          { name: '銃撃', chance: 0.30, type: 'heavy', mult: 1.4 },
-          { name: '鼓舞', chance: 0.25, type: 'selfbuff' },
-          { name: '足払い', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
-        { name: '海賊（女）', type: 'spec', image: '/kaizokuonnna.png', stats: { maxHp: 320, atk: 225, def: 135, mdef: 150 }, reach: 2, skills: [
-          { name: '魔弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
-          { name: '幻惑', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 },
-          { name: '治癒', chance: 0.25, type: 'vamp', frac: 0.3 } ] },
-        { name: 'ハリセンボン', type: 'phys', image: '/harisennbonn.png', stats: { maxHp: 300, atk: 220, def: 130, mdef: 130 }, skills: [
-          { name: 'どくのハリ', chance: 0.35, type: 'poison' },
-          { name: '膨張', chance: 0.25, type: 'selfbuff' },
-          { name: '針千本', chance: 0.25, type: 'heavy', mult: 1.5 } ] },
-      ] },
-      { from: 25, to: 30, enemies: [
-        { name: '海賊（男）', type: 'phys', image: '/kaizokuotoko.png', stats: { maxHp: 350, atk: 231, def: 154, mdef: 140 }, reach: 2, skills: [
-          { name: '銃撃', chance: 0.30, type: 'heavy', mult: 1.4 },
-          { name: '鼓舞', chance: 0.25, type: 'selfbuff' },
-          { name: '足払い', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
-        { name: '海賊（女）', type: 'spec', image: '/kaizokuonnna.png', stats: { maxHp: 320, atk: 225, def: 135, mdef: 150 }, reach: 2, skills: [
-          { name: '魔弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
-          { name: '幻惑', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 },
-          { name: '治癒', chance: 0.25, type: 'vamp', frac: 0.3 } ] },
-        { name: '毒クラゲ', type: 'spec', image: '/dokukurage.png', stats: { maxHp: 320, atk: 210, def: 140, mdef: 140 }, skills: [
-          { name: 'どく', chance: 0.45, type: 'poison' },
-          { name: '痺れ毒', chance: 0.25, type: 'paralyze' },
-          { name: '溶解', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 } ] },
-        { name: '電気クラゲ', type: 'spec', image: '/denkikurage.png', stats: { maxHp: 320, atk: 210, def: 140, mdef: 140 }, skills: [
-          { name: 'しびれ', chance: 0.30, type: 'paralyze' },
-          { name: '放電', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
-          { name: '帯電', chance: 0.25, type: 'selfbuff' } ] },
-        { name: 'ハリセンボン', type: 'phys', image: '/harisennbonn.png', stats: { maxHp: 300, atk: 220, def: 130, mdef: 130 }, skills: [
-          { name: 'どくのハリ', chance: 0.35, type: 'poison' },
-          { name: '膨張', chance: 0.25, type: 'selfbuff' },
-          { name: '針千本', chance: 0.25, type: 'heavy', mult: 1.5 } ] },
-      ] },
+      // 敵ごとの出現Fに合わせてバンドを分割（2026-06-14調整）
+      // スライム1-5/コウモリ3-5/毒キノコ4-5/ゴブリン6-8/野良犬7-9/盗賊8-9
+      { from: 1,  to: 2,  enemies: [D30E.slime] },
+      { from: 3,  to: 3,  enemies: [D30E.slime, D30E.koumori] },
+      { from: 4,  to: 5,  enemies: [D30E.slime, D30E.koumori, D30E.kinoko] },
+      { from: 6,  to: 6,  enemies: [D30E.goblin] },
+      { from: 7,  to: 7,  enemies: [D30E.goblin, D30E.dog] },
+      { from: 8,  to: 8,  enemies: [D30E.goblin, D30E.dog, D30E.touzoku] },
+      { from: 9,  to: 9,  enemies: [D30E.dog, D30E.touzoku] },
+      // コボルト10-14/スケルトン剣・弓11-17/ゴーレム攻・守15-19
+      { from: 10, to: 10, enemies: [D30E.kobold] },
+      { from: 11, to: 14, enemies: [D30E.kobold, D30E.skelSword, D30E.skelBow] },
+      { from: 15, to: 17, enemies: [D30E.skelSword, D30E.skelBow, D30E.golemA, D30E.golemD] },
+      { from: 18, to: 19, enemies: [D30E.golemA, D30E.golemD] },
+      // 深海魚人20-24/海賊男・女21-28/ハリセンボン25-29/毒・電気クラゲ26-29
+      { from: 20, to: 20, enemies: [D30E.gyojin] },
+      { from: 21, to: 24, enemies: [D30E.gyojin, D30E.pirateM, D30E.pirateF] },
+      { from: 25, to: 25, enemies: [D30E.pirateM, D30E.pirateF, D30E.harisen] },
+      { from: 26, to: 28, enemies: [D30E.pirateM, D30E.pirateF, D30E.harisen, D30E.dokukurage, D30E.denkikurage] },
+      { from: 29, to: 30, enemies: [D30E.harisen, D30E.dokukurage, D30E.denkikurage] }, // 30はボス階で上書き（保険）
     ],
   },
   // 開発用ダンジョン（is_admin限定・BGMテスト）。深海の廃都
