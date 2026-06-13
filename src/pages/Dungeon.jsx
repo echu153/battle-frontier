@@ -1272,18 +1272,35 @@ export default function Dungeon() {
             <div style={{ position: 'absolute', inset: 6, zIndex: 0, pointerEvents: 'none',
               background: 'radial-gradient(ellipse 60% 60% at 50% 50%, rgba(255,210,130,0.16) 0%, rgba(0,0,0,0) 45%), radial-gradient(ellipse 75% 75% at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,2,8,0.72) 100%)' }} />
           )}
-          {/* ステータス表示（マップ上部に重ねる） */}
-          <div style={{ position: 'absolute', top: 6, left: 6, right: 6, zIndex: 6, pointerEvents: 'none',
-            display: 'flex', gap: 10, fontSize: 11, flexWrap: 'wrap', alignItems: 'center',
-            padding: '5px 8px', background: 'linear-gradient(180deg, rgba(0,4,12,0.82) 0%, rgba(0,4,12,0.55) 100%)', borderBottom: '1px solid rgba(80,120,180,0.35)' }}>
-            <span>B{floorNum}/{dungeon?.floors || 10}F</span>
-            <span style={{ color: '#9fd' }}>Lv{pet.level}{pet.exp != null ? `（EXP ${pet.exp}/${expForLevel(pet.level || 1)}）` : ''}</span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: petHp > pet.maxHp * 0.3 ? '#44ff88' : '#ff5555' }}>
-              {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 14, height: 14, objectFit: 'cover', borderRadius: 3 }} /> : <span>{pet.emoji}</span>}
-              {pet.name} HP {petHp}/{pet.maxHp}
-            </span>
-            <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
-          </div>
+          {/* ステータス表示（マップ上部に重ねる）。2段目に状態異常（異常時のみ） */}
+          {(() => {
+            const chips = []
+            if (poisoned) chips.push({ k: 'poison', label: '☠ 毒', col: '#cc77ff' })
+            if (paralyzed > 0) chips.push({ k: 'para', label: `⚡ 麻痺 残${paralyzed}`, col: '#ffe066' })
+            if (burned) chips.push({ k: 'burn', label: '🔥 やけど', col: '#ff7755' })
+            if (burned || weakened > 0) chips.push({ k: 'down', label: '▼ ステータスダウン', col: '#88bbdd' })
+            if (fullness <= 0) chips.push({ k: 'hungry', label: '🥀 空腹', col: '#ff8855' })
+            return (
+              <div style={{ position: 'absolute', top: 6, left: 6, right: 6, zIndex: 6, pointerEvents: 'none',
+                display: 'flex', flexDirection: 'column', gap: 3,
+                padding: '5px 8px', background: 'linear-gradient(180deg, rgba(0,4,12,0.82) 0%, rgba(0,4,12,0.55) 100%)', borderBottom: '1px solid rgba(80,120,180,0.35)' }}>
+                <div style={{ display: 'flex', gap: 10, fontSize: 11, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span>B{floorNum}/{dungeon?.floors || 10}F</span>
+                  <span style={{ color: '#9fd' }}>Lv{pet.level}{pet.exp != null ? `（EXP ${pet.exp}/${expForLevel(pet.level || 1)}）` : ''}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: petHp > pet.maxHp * 0.3 ? '#44ff88' : '#ff5555' }}>
+                    {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 14, height: 14, objectFit: 'cover', borderRadius: 3 }} /> : <span>{pet.emoji}</span>}
+                    {pet.name} HP {petHp}/{pet.maxHp}
+                  </span>
+                  <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
+                </div>
+                {chips.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, fontSize: 11, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {chips.map((c) => <span key={c.k} style={{ color: c.col, whiteSpace: 'nowrap' }}>{c.label}</span>)}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
           {Array.from({ length: VH }).map((_, vy) => Array.from({ length: VW }).map((_, vx) => {
             const x = ox + vx, y = oy + vy
             const c = cellAt(x, y)
@@ -1471,70 +1488,56 @@ export default function Dungeon() {
           </div>
         </div>
 
-        {status === 'exploring' && (
-          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 12,
-            flexDirection: padSide === 'center' ? 'column' : (padSide === 'right' ? 'row-reverse' : 'row'),
-            alignItems: padSide === 'center' ? 'center' : 'flex-start' }}>
-            {/* 十字キー（すべて正方形・同サイズ） */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gridAutoRows: '44px', gap: 4 }}>
+        {status === 'exploring' && (() => {
+          const padEl = (
+            <div key="pad" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gridAutoRows: '44px', gap: 4 }}>
               <PadBtn onClick={() => tryMove(-1, -1)}>◤</PadBtn><PadBtn onClick={() => tryMove(0, -1)}>▲</PadBtn><PadBtn onClick={() => tryMove(1, -1)}>◥</PadBtn>
               <PadBtn onClick={() => tryMove(-1, 0)}>◀</PadBtn><PadBtn onClick={stepInPlace}>■</PadBtn><PadBtn onClick={() => tryMove(1, 0)}>▶</PadBtn>
               <PadBtn onClick={() => tryMove(-1, 1)}>◣</PadBtn><PadBtn onClick={() => tryMove(0, 1)}>▼</PadBtn><PadBtn onClick={() => tryMove(1, 1)}>◢</PadBtn>
             </div>
-            {/* スキル＋使用できるアイテム（上ぞろえ） */}
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-              <div style={{ display: 'grid', gap: 4, alignContent: 'start' }}>
-                {(pet.skillSlots || ['tackle']).map((id) => {
-                  const on = selectedSkill === id
-                  return (
-                    <button key={id} onClick={() => setSelectedSkill(id)}
-                      style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: on ? '#cba6ff' : '#5e7fa0', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, minWidth: 110, textAlign: 'left' }}>
-                      {on ? '▶ ' : ''}{getSkill(id).name}{getSkill(id).cost > 0 ? ` (満腹${getSkill(id).cost})` : ''}
-                    </button>
-                  )
-                })}
-              </div>
-              <div style={{ display: 'grid', gap: 4, alignContent: 'start' }}>
-                {DUNGEON_ITEMS.filter((it) => (inventory[it.key] || 0) > 0).map((it) => (
-                  <button key={it.key} onClick={() => (dropMode ? dropItem({ kind: 'consumable', key: it.key }) : useItem(it.key))}
-                    style={{ background: dropMode ? '#1a0e08' : '#0a1424', border: `1px solid ${dropMode ? '#cc7755' : '#335588'}`, color: '#cce6ff', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, minWidth: 96, textAlign: 'left' }}>
-                    {it.emoji} {it.name}×{inventory[it.key]}
+          )
+          const skillsEl = (
+            <div key="skills" style={{ display: 'grid', gap: 4, alignContent: 'start' }}>
+              {(pet.skillSlots || ['tackle']).map((id) => {
+                const on = selectedSkill === id
+                return (
+                  <button key={id} onClick={() => setSelectedSkill(id)}
+                    style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: on ? '#cba6ff' : '#5e7fa0', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, minWidth: 110, textAlign: 'left' }}>
+                    {on ? '▶ ' : ''}{getSkill(id).name}{getSkill(id).cost > 0 ? ` (満腹${getSkill(id).cost})` : ''}
                   </button>
-                ))}
-                {DUNGEON_ITEMS.every((it) => (inventory[it.key] || 0) < 1) && (
-                  <span style={{ color: '#445566', fontSize: 10 }}>使えるアイテムなし</span>
-                )}
-              </div>
+                )
+              })}
             </div>
-          </div>
-        )}
-        {/* 状態異常・フロアの状況（異常時のみ表示。何もなければ空白） */}
-        {status === 'exploring' && (() => {
-          const chips = []
-          if (poisoned) chips.push({ k: 'poison', label: '☠ 毒', col: '#cc77ff', note: '10ターンごとに最大HPの2%' })
-          if (paralyzed > 0) chips.push({ k: 'para', label: `⚡ 麻痺 残${paralyzed}`, col: '#ffe066', note: '30%で攻撃失敗' })
-          if (burned) chips.push({ k: 'burn', label: '🔥 やけど', col: '#ff7755', note: '20ターンごとに最大HPの3%' })
-          if (burned || weakened > 0) chips.push({ k: 'down', label: '▼ ステータスダウン', col: '#88bbdd', note: '攻撃・特攻ダウン' })
-          if (fullness <= 0) chips.push({ k: 'hungry', label: '🥀 空腹', col: '#ff8855', note: '毎ターンHPが減る' })
-          if (chips.length === 0) return <div style={{ minHeight: 8 }} />
-          return (
-            <div style={{ marginTop: 10, background: '#0a0410', border: '1px solid #663355', padding: '6px 8px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-              {chips.map((c) => (
-                <span key={c.k} style={{ color: c.col, fontSize: 11, whiteSpace: 'nowrap' }}>
-                  {c.label}<span style={{ color: '#7799aa', fontSize: 10 }}>（{c.note}）</span>
-                </span>
+          )
+          const itemsEl = (
+            <div key="items" style={{ display: 'grid', gap: 4, alignContent: 'start' }}>
+              {DUNGEON_ITEMS.filter((it) => (inventory[it.key] || 0) > 0).map((it) => (
+                <button key={it.key} onClick={() => (dropMode ? dropItem({ kind: 'consumable', key: it.key }) : useItem(it.key))}
+                  style={{ background: dropMode ? '#1a0e08' : '#0a1424', border: `1px solid ${dropMode ? '#cc7755' : '#335588'}`, color: '#cce6ff', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, minWidth: 96, textAlign: 'left' }}>
+                  {it.emoji} {it.name}×{inventory[it.key]}
+                </button>
               ))}
+              {DUNGEON_ITEMS.every((it) => (inventory[it.key] || 0) < 1) && (
+                <span style={{ color: '#445566', fontSize: 10 }}>使えるアイテムなし</span>
+              )}
+            </div>
+          )
+          // 中央＝スキル｜移動キー｜アイテム / 左＝移動キー＋(スキル/アイテム) / 右＝その逆
+          if (padSide === 'center') {
+            return (
+              <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'flex-start', marginTop: 12 }}>
+                {skillsEl}{padEl}{itemsEl}
+              </div>
+            )
+          }
+          return (
+            <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'flex-start', marginTop: 12,
+              flexDirection: padSide === 'right' ? 'row-reverse' : 'row' }}>
+              {padEl}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>{skillsEl}{itemsEl}</div>
             </div>
           )
         })()}
-        {status === 'exploring' && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
-            <button onClick={giveUp}
-              style={{ background: '#1a0808', border: '1px solid #aa4444', color: '#cc6666', padding: '6px 16px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
-              🏳 あきらめる
-            </button>
-          </div>
-        )}
         {status === 'exploring' && (() => {
           const bagMax = bagCapacity(cleared.size)
           const empty = lootBag.length === 0
@@ -1560,6 +1563,14 @@ export default function Dungeon() {
             </div>
           )
         })()}
+        {status === 'exploring' && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+            <button onClick={giveUp}
+              style={{ background: '#1a0808', border: '1px solid #aa4444', color: '#cc6666', padding: '6px 16px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
+              🏳 あきらめる
+            </button>
+          </div>
+        )}
         {status === 'cleared' && (
           <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<RewardPanel reward={reward} pet={pet} /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
