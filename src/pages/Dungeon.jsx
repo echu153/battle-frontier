@@ -314,41 +314,45 @@ export default function Dungeon() {
   const [lockedOut, setLockedOut] = useState(false)   // 別端末でプレイ中＝この端末はロック
   const [bgmOn, setBgmOn] = useState(() => localStorage.getItem('bf_dg_bgm') !== 'off') // BGM ON/OFF（全体ONなら既定オン）。追憶の遺跡(d30)でのみ再生
   const [bgmVol, setBgmVol] = useState(() => { const v = parseInt(localStorage.getItem('bf_dg_bgmvol') || '35', 10); return isNaN(v) ? 35 : Math.min(100, Math.max(0, v)) }) // 0〜100
-  const bgmDungeon = !!dungeon?.bgm // BGMが設定されたダンジョンで再生
+  // 30Fボスはボス専用BGM、それ以外はダンジョンのBGM
+  const bgmSrc = isBossFloor(dungeon?.id, floorNum) ? '/30FBoos.mp3' : (dungeon?.bgm || null)
+  const bgmDungeon = !!bgmSrc // BGMが設定されているフロアで再生
   // BGMはWeb Audioでギャップレスにループ（HTMLAudioの継ぎ目をなくす）
   const bgmGainRef = useRef(null)
   const bgmSrcRef = useRef(null)
+  const bgmCurRef = useRef(null) // 現在鳴らしている曲のパス（フロアで切替検知）
   const bgmBufRef = useRef({})
   const bgmVolRef = useRef(bgmVol)
   useEffect(() => { bgmVolRef.current = bgmVol; try { localStorage.setItem('bf_dg_bgmvol', String(bgmVol)) } catch { /* ignore */ } }, [bgmVol])
   const applyBgmGain = () => { const g = bgmGainRef.current; if (g) g.gain.value = (bgmVolRef.current / 100) * masterRef.current }
-  const stopBgm = () => { const s = bgmSrcRef.current; if (s) { try { s.stop() } catch { /* ignore */ } try { s.disconnect() } catch { /* ignore */ } bgmSrcRef.current = null } }
-  const startBgm = async () => {
+  const stopBgm = () => { const s = bgmSrcRef.current; if (s) { try { s.stop() } catch { /* ignore */ } try { s.disconnect() } catch { /* ignore */ } bgmSrcRef.current = null } bgmCurRef.current = null }
+  const startBgm = async (srcPath) => {
     const ctx = audioCtxRef.current
-    if (!ctx || !dungeon?.bgm || bgmSrcRef.current) return
+    if (!ctx || !srcPath) return
+    if (bgmSrcRef.current && bgmCurRef.current === srcPath) return // 同じ曲が再生中
     if (ctx.state === 'suspended') { try { await ctx.resume() } catch { /* ignore */ } }
     if (!bgmGainRef.current) { const g = ctx.createGain(); g.connect(ctx.destination); bgmGainRef.current = g }
     applyBgmGain()
-    let buf = bgmBufRef.current[dungeon.bgm]
+    let buf = bgmBufRef.current[srcPath]
     if (!buf) {
-      try { const res = await fetch(encodeURI(dungeon.bgm) + `?v=${ASSET_VER}`); buf = await ctx.decodeAudioData(await res.arrayBuffer()); bgmBufRef.current[dungeon.bgm] = buf }
+      try { const res = await fetch(encodeURI(srcPath) + `?v=${ASSET_VER}`); buf = await ctx.decodeAudioData(await res.arrayBuffer()); bgmBufRef.current[srcPath] = buf }
       catch { return }
     }
-    if (bgmSrcRef.current) return // await中に開始済みなら二重再生しない
+    stopBgm() // 別の曲が鳴っていれば止めて差し替え
     const src = ctx.createBufferSource()
     src.buffer = buf; src.loop = true // バッファ全体をギャップレスにループ
     src.connect(bgmGainRef.current); src.start(0)
-    bgmSrcRef.current = src
+    bgmSrcRef.current = src; bgmCurRef.current = srcPath
   }
   // 音量（BGM音量×全体音量）を即時反映
   useEffect(() => { applyBgmGain() }, [bgmVol, masterOn, masterVol])
-  // 探索中＆ON＆全体ON で再生／それ以外は停止（全体オン切替＝操作起点で開始）
+  // 探索中＆ON＆全体ON で再生／それ以外は停止。フロアで曲が変わったら差し替え
   useEffect(() => {
-    if (bgmOn && bgmDungeon && masterOn && status === 'exploring') startBgm()
+    if (bgmOn && bgmSrc && masterOn && status === 'exploring') startBgm(bgmSrc)
     else stopBgm()
-  }, [bgmOn, bgmDungeon, masterOn, status, dungeon])
+  }, [bgmOn, bgmSrc, masterOn, status, dungeon])
   useEffect(() => () => stopBgm(), [])
-  const ensureBgm = () => { if (bgmOn && bgmDungeon && masterOn && !bgmSrcRef.current) startBgm() }
+  const ensureBgm = () => { if (bgmOn && bgmSrc && masterOn && (!bgmSrcRef.current || bgmCurRef.current !== bgmSrc)) startBgm(bgmSrc) }
   const toggleBgm = () => setBgmOn((v) => { const n = !v; try { localStorage.setItem('bf_dg_bgm', n ? 'on' : 'off') } catch { /* ignore */ } return n })
   // 効果音（SE）：事前にデコードして「触れた瞬間」に遅延なく鳴らす（Web Audio）
   const seOnRef = useRef(seOn)
@@ -736,12 +740,13 @@ export default function Dungeon() {
   // フロア遷移演出：階段フェードアウト→暗転→「ダンジョン名 フロア数」を1秒表示→フェードインでフロア表示
   const descendFloor = (next) => {
     busyRef.current = true
-    setTransition({ floor: next, black: 0, title: 0, name: dungeon?.name, emoji: dungeon?.emoji })
+    const hold = isBossFloor(dungeon?.id, next) ? 5000 : 1000 // ボスフロアは長めに見せる
+    setTransition({ floor: next, black: 0, title: 0, name: dungeon?.name, emoji: dungeon?.emoji, boss: isBossFloor(dungeon?.id, next) })
     setTimeout(() => setTransition((t) => t && { ...t, black: 1 }), 30)                 // 暗転フェードイン
     setTimeout(() => { setFloorNum(next); enterFloor(next, dungeon); setTransition((t) => t && { ...t, title: 1 }) }, 470) // 完全暗転でフロア差替＋タイトル表示
-    setTimeout(() => setTransition((t) => t && { ...t, title: 0 }), 470 + 1000)          // タイトルフェードアウト
-    setTimeout(() => setTransition((t) => t && { ...t, black: 0 }), 470 + 1000 + 450)    // 暗転フェードアウト＝フロア出現
-    setTimeout(() => { setTransition(null); busyRef.current = false }, 470 + 1000 + 450 + 470)
+    setTimeout(() => setTransition((t) => t && { ...t, title: 0 }), 470 + hold)          // タイトルフェードアウト
+    setTimeout(() => setTransition((t) => t && { ...t, black: 0 }), 470 + hold + 450)    // 暗転フェードアウト＝フロア出現
+    setTimeout(() => { setTransition(null); busyRef.current = false }, 470 + hold + 450 + 470)
   }
 
   // ダンジョン入場/再開時にも同じ「ダンジョン名 フロア数」演出を出す（フロアは差し替えず現在のまま）。
@@ -1792,6 +1797,7 @@ export default function Dungeon() {
               <div style={{ textAlign: 'center', opacity: transition.title, transition: 'opacity 0.4s ease' }}>
                 <div style={{ color: '#c8a0ff', fontSize: 20, letterSpacing: 4 }}>{transition.emoji || dungeon?.emoji} {transition.name || dungeon?.name}</div>
                 <div style={{ color: '#ffcc66', fontSize: 26, letterSpacing: 3, marginTop: 10 }}>B{transition.floor}F</div>
+                {transition.boss && <div style={{ color: '#ff5577', fontSize: 22, letterSpacing: 3, marginTop: 18, textShadow: '0 0 10px #ff2244' }}>👿 デビルパピア 出現</div>}
               </div>
             </div>
           )}
