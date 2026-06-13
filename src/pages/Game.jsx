@@ -3548,9 +3548,10 @@ export default function Game() {
   const charLv = profile.char_lv || profile.lv
   const innCost = isDying ? Math.min(charLv*15,profile.gold) : charLv*2
   const allocatedPoints = Object.values(statPoints).reduce((a,b)=>a+b,0)
-  // 重い装備走査を毎描画で再計算しないようメモ化（200msタイマー等の再描画で効く）
-  const eff = useMemo(() => calcEffectiveStats(profile, equipment, proficiency, abilityTitle), [profile, equipment, proficiency, abilityTitle])
-  const total = useMemo(() => calcTotal(eff), [eff])
+  // ※ここは早期returnの後なのでフック(useMemo)は使えない。通常計算に戻す。
+  //   常時再描画の主因はタイマーのstate更新だったため、そちらの抑制(下記interval)で軽量化を達成。
+  const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
+  const total = calcTotal(eff)
   const totalRank = getTotalRank(total)
   const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
   const cap = getEffectiveCap(profile.class, profile.retraining)
