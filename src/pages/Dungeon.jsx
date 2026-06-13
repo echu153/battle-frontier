@@ -142,10 +142,11 @@ function generateFloor(floorNum, dungeon) {
     const t = randInnerTileInRoom(room) // 出入り口（部屋の外周）には置かない
     if (!t) continue
     mark(t.x, t.y)
-    const r = Math.random() // 10F以降はスキルの書も低確率で混ざる
-    if (floorNum >= 10 && r < 0.07) items.push({ id: 's' + i, x: t.x, y: t.y, kind: 'food', key: SCROLL_KEYS[rand(0, SCROLL_KEYS.length - 1)] }) // スキルの書（拾うと袋へ）
-    else if (r < 0.17) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'konomi' })
-    else if (r < 0.27) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'onigiri' })
+    // ドロップ確率: 木の実10 / おにぎり10 / スキルの書5(10F+) / 残り75%は✨(素50・石10・宝石10・チャーム5をサーバー抽選)
+    const r = Math.random()
+    if (r < 0.10) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'konomi' })
+    else if (r < 0.20) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'onigiri' })
+    else if (r < 0.25 && floorNum >= 10) items.push({ id: 's' + i, x: t.x, y: t.y, kind: 'food', key: SCROLL_KEYS[rand(0, SCROLL_KEYS.length - 1)] }) // スキルの書（拾うと袋へ）
     else items.push({ id: 'i' + i, x: t.x, y: t.y, kind: 'loot' })
   }
 

@@ -28,16 +28,15 @@ begin
   if v_run.status <> 'active' then raise exception 'run not active'; end if;
   if v_run.loot_rolls >= 80 then raise exception 'too many loot'; end if;
 
+  -- ✨枠の内訳: 素50 / 強化石10 / 宝石10 / チャーム5（合計75・装備は廃止）
   v_id := gen_random_uuid()::text;
-  v_r := random() * 103;
-  if v_r < 70 then
+  v_r := random() * 75;
+  if v_r < 50 then
     v_entry := jsonb_build_object('id', v_id, 'type', 'seed', 'seedKey', v_seeds[1 + floor(random()*5)::int], 'qty', 1);
-  elsif v_r < 85 then
+  elsif v_r < 60 then
     v_entry := jsonb_build_object('id', v_id, 'type', 'stone', 'rank', v_stones[1 + floor(random()*3)::int]);
-  elsif v_r < 95 then
+  elsif v_r < 70 then
     v_entry := jsonb_build_object('id', v_id, 'type', 'gem', 'gemType', v_gems[1 + floor(random()*array_length(v_gems,1))::int]);
-  elsif v_r < 100 then
-    v_entry := jsonb_build_object('id', v_id, 'type', 'equip', 'name', v_equips[1 + floor(random()*array_length(v_equips,1))::int]);
   else
     v_entry := jsonb_build_object('id', v_id, 'type', 'charm', 'ctype', v_charms[1 + floor(random()*2)::int]);
   end if;
