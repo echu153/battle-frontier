@@ -1,18 +1,21 @@
 -- ============================================================
--- 追憶の遺跡(d30) 専用の敵EXP 2026-06-13
+-- 追憶の遺跡(d30) 専用の敵EXP 2026-06-14 改訂
 --  dungeon_kill が run の dungeon_id を見て、d30 のときは d30専用EXP表を使う。
 --  （d10 等は従来どおり。ランから dungeon_id を読むのでクライアント改ざん不可）
---  エリア③以降は伸びを緩やかに調整。
+--  ※クライアントは dungeon_kill(p_run_id, p_floor, p_enemy, p_lucky) の【4引数】で呼ぶ。
+--    幸せのチャーム(p_lucky)の50%×1.5抽選もこの関数に内包する。
 --  ※ supabase_pet_evolve.sql の dungeon_kill を上書き。再適用時はこのファイルも再適用。
+--  ※ pets.exp/level のみ更新（保護対象のステ列は触らないので protect_stats 後でも実行可）。
 -- Supabase の SQL Editor でファイル全体を実行してください
 -- ============================================================
 
-drop function if exists dungeon_kill(uuid, int);
-create or replace function dungeon_kill(p_run_id uuid, p_floor int, p_enemy text default null)
+drop function if exists dungeon_kill(uuid, int);            -- 旧2引数版
+drop function if exists dungeon_kill(uuid, int, text);      -- 旧3引数版（p_lucky無し）
+create or replace function dungeon_kill(p_run_id uuid, p_floor int, p_enemy text default null, p_lucky boolean default false)
 returns json language plpgsql security definer set search_path = public as $$
 declare
   v_run dungeon_runs%rowtype; v_pet pets%rowtype;
-  v_floor int; v_exp_gain int; v_new_exp int; v_new_level int; v_cap int;
+  v_floor int; v_exp_gain int; v_new_exp int; v_new_level int; v_cap int; v_lucky boolean := false;
 begin
   select * into v_run from dungeon_runs where id = p_run_id;
   if not found then raise exception 'run not found'; end if;
@@ -56,6 +59,9 @@ begin
       else greatest(1, 3 + v_floor) end;
   end if;
 
+  -- 幸せのチャーム：50%で経験値+50%（サーバー側で抽選＝改ざん不可）
+  if p_lucky and random() < 0.5 then v_exp_gain := round(v_exp_gain * 1.5)::int; v_lucky := true; end if;
+
   select * into v_pet from pets where id = v_run.pet_id and owner_id = auth.uid();
   if not found then raise exception 'pet not found'; end if;
 
@@ -71,6 +77,6 @@ begin
   update pets set exp = v_new_exp, level = v_new_level where id = v_pet.id;
   update dungeon_runs set enemies_defeated = enemies_defeated + 1 where id = p_run_id;
 
-  return json_build_object('exp_gain', v_exp_gain, 'level', v_new_level, 'exp', v_new_exp, 'leveled', v_new_level > v_pet.level);
+  return json_build_object('exp_gain', v_exp_gain, 'level', v_new_level, 'exp', v_new_exp, 'leveled', v_new_level > v_pet.level, 'lucky', v_lucky);
 end; $$;
-grant execute on function dungeon_kill(uuid, int, text) to authenticated;
+grant execute on function dungeon_kill(uuid, int, text, boolean) to authenticated;
