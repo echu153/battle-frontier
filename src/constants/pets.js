@@ -231,17 +231,19 @@ export function enemyFirstFloor(dungeon, name) {
   return 1
 }
 // 種族ごとの実ステータス（初登場フロア基準＋種族倍率を適用）
+// ※敵の攻撃力は全体調整で ENEMY_ATK_MULT を掛ける
+const ENEMY_ATK_MULT = 0.8 // 2026-06: 敵の攻撃力を一律20%ダウン
 export function dungeonEnemyStatsFor(dungeon, kind) {
   // stats を明示指定している敵（追憶の遺跡など）はその固定値を使う
   if (kind?.stats) {
-    return { maxHp: kind.stats.maxHp, atk: kind.stats.atk, def: kind.stats.def, mdef: kind.stats.mdef }
+    return { maxHp: kind.stats.maxHp, atk: Math.round(kind.stats.atk * ENEMY_ATK_MULT), def: kind.stats.def, mdef: kind.stats.mdef }
   }
   const ff = enemyFirstFloor(dungeon, kind?.name)
   const es = dungeonEnemyStats(ff, areaForFloor(dungeon, ff))
   const m = kind?.statMult ?? 1.0
   return {
     maxHp: Math.round(es.maxHp * m),
-    atk:   Math.round(es.atk * m),
+    atk:   Math.round(es.atk * m * ENEMY_ATK_MULT),
     def:   Math.round(es.def * m),
     mdef:  Math.round(es.mdef * m),
   }
