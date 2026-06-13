@@ -116,7 +116,7 @@ export const DUNGEONS = [
   },
   // 追憶の遺跡（30F）。敵は stats を明示指定（フロア式ではなく固定値）。名前の変種ごとにステを変える。
   {
-    id: 'd30', name: '追憶の遺跡', floors: 30, requires: 'd10', emoji: '🏛', areas: [1, 2, 3, 4], comingSoon: true, charms: ['antidote', 'guard'],
+    id: 'd30', name: '追憶の遺跡', floors: 30, requires: 'd10', emoji: '🏛', areas: [1, 2, 3, 4], comingSoon: true, charms: ['antidote', 'guard'], bgm: '/dungeon_bgm.mp3',
     floorTable: [
       // エリア①（1〜5）
       { from: 1, to: 2, enemies: [
@@ -158,6 +158,18 @@ export const DUNGEONS = [
         { name: '毒クラゲ', type: 'spec', image: '/dokukurage.png', stats: { maxHp: 700, atk: 210, def: 140, mdef: 140 }, skills: [{ name: 'どく', chance: 0.45, type: 'poison' }] },
         { name: '電気クラゲ', type: 'spec', image: '/denkikurage.png', stats: { maxHp: 700, atk: 210, def: 140, mdef: 140 }, skills: [{ name: 'しびれ', chance: 0.30, type: 'paralyze' }] },
         { name: 'ハリセンボン', type: 'phys', image: '/harisennbonn.png', stats: { maxHp: 650, atk: 220, def: 130, mdef: 130 }, skills: [{ name: 'どくのハリ', chance: 0.35, type: 'poison' }] },
+      ] },
+    ],
+  },
+  // 開発用ダンジョン（is_admin限定・BGMテスト）。深海の廃都
+  {
+    id: 'ddev', name: '深海の廃都', floors: 5, requires: null, emoji: '🌊', comingSoon: true, dev: true,
+    areas: [4], charms: ['antidote', 'guard'], bgm: '/深海の廃都.mp3',
+    floorTable: [
+      { from: 1, to: 5, enemies: [
+        { name: '毒クラゲ', type: 'spec', image: '/dokukurage.png', statMult: 1.0, skills: [{ name: 'どく', chance: 0.45, type: 'poison' }] },
+        { name: '電気クラゲ', type: 'spec', image: '/denkikurage.png', statMult: 1.0, skills: [{ name: 'しびれ', chance: 0.30, type: 'paralyze' }] },
+        { name: 'ハリセンボン', type: 'phys', image: '/harisennbonn.png', statMult: 1.0, skills: [{ name: 'どくのハリ', chance: 0.35, type: 'poison' }] },
       ] },
     ],
   },

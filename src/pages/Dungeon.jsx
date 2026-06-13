@@ -231,40 +231,41 @@ export default function Dungeon() {
   const [lockedOut, setLockedOut] = useState(false)   // 別端末でプレイ中＝この端末はロック
   const [bgmOn, setBgmOn] = useState(() => localStorage.getItem('bf_dg_bgm') !== 'off') // BGM ON/OFF（全体ONなら既定オン）。追憶の遺跡(d30)でのみ再生
   const [bgmVol, setBgmVol] = useState(() => { const v = parseInt(localStorage.getItem('bf_dg_bgmvol') || '35', 10); return isNaN(v) ? 35 : Math.min(100, Math.max(0, v)) }) // 0〜100
-  const audioRef = useRef(null)
-  const bgmDungeon = dungeon?.id === 'd30' // BGM対象ダンジョン
-
-  // BGM：対象ダンジョンの探索中かつONでループ再生（自動再生制限のため操作時にも再生を試みる）
-  useEffect(() => {
-    if (!audioRef.current) {
-      const a = new Audio(`/dungeon_bgm.mp3?v=${ASSET_VER}`)
-      a.loop = true; a.volume = bgmVol / 100
-      // 末尾の無音・継ぎ目を飛ばして即リスタート（曲終わりの間隔を最短に）
-      const LOOP_TRIM = 0.35 // 秒。曲末尾この秒数手前で先頭へ戻す
-      a.addEventListener('timeupdate', () => {
-        if (isFinite(a.duration) && a.duration > 0 && a.currentTime >= a.duration - LOOP_TRIM) {
-          a.currentTime = 0
-          if (!a.paused) a.play().catch(() => {})
-        }
-      })
-      audioRef.current = a
+  const bgmDungeon = !!dungeon?.bgm // BGMが設定されたダンジョンで再生
+  // BGMはWeb Audioでギャップレスにループ（HTMLAudioの継ぎ目をなくす）
+  const bgmGainRef = useRef(null)
+  const bgmSrcRef = useRef(null)
+  const bgmBufRef = useRef({})
+  const bgmVolRef = useRef(bgmVol)
+  useEffect(() => { bgmVolRef.current = bgmVol; try { localStorage.setItem('bf_dg_bgmvol', String(bgmVol)) } catch { /* ignore */ } }, [bgmVol])
+  const applyBgmGain = () => { const g = bgmGainRef.current; if (g) g.gain.value = (bgmVolRef.current / 100) * masterRef.current }
+  const stopBgm = () => { const s = bgmSrcRef.current; if (s) { try { s.stop() } catch { /* ignore */ } try { s.disconnect() } catch { /* ignore */ } bgmSrcRef.current = null } }
+  const startBgm = async () => {
+    const ctx = audioCtxRef.current
+    if (!ctx || !dungeon?.bgm || bgmSrcRef.current) return
+    if (ctx.state === 'suspended') { try { await ctx.resume() } catch { /* ignore */ } }
+    if (!bgmGainRef.current) { const g = ctx.createGain(); g.connect(ctx.destination); bgmGainRef.current = g }
+    applyBgmGain()
+    let buf = bgmBufRef.current[dungeon.bgm]
+    if (!buf) {
+      try { const res = await fetch(encodeURI(dungeon.bgm) + `?v=${ASSET_VER}`); buf = await ctx.decodeAudioData(await res.arrayBuffer()); bgmBufRef.current[dungeon.bgm] = buf }
+      catch { return }
     }
-    return () => { if (audioRef.current) { audioRef.current.pause() } }
-  }, [])
-  // 音量変更を即時反映＋保存（BGM音量×全体音量）
+    if (bgmSrcRef.current) return // await中に開始済みなら二重再生しない
+    const src = ctx.createBufferSource()
+    src.buffer = buf; src.loop = true // バッファ全体をギャップレスにループ
+    src.connect(bgmGainRef.current); src.start(0)
+    bgmSrcRef.current = src
+  }
+  // 音量（BGM音量×全体音量）を即時反映
+  useEffect(() => { applyBgmGain() }, [bgmVol, masterOn, masterVol])
+  // 探索中＆ON＆全体ON で再生／それ以外は停止（全体オン切替＝操作起点で開始）
   useEffect(() => {
-    const m = masterOn ? masterVol / 100 : 0
-    if (audioRef.current) audioRef.current.volume = (bgmVol / 100) * m
-    localStorage.setItem('bf_dg_bgmvol', String(bgmVol))
-  }, [bgmVol, masterOn, masterVol])
-  useEffect(() => {
-    const a = audioRef.current
-    if (!a) return
-    // 全体オンに切り替えた瞬間にも再生を開始する（ボタンクリックが操作起点になる）
-    if (bgmOn && bgmDungeon && masterOn && status === 'exploring') { a.play().catch(() => {}) }
-    else { a.pause() }
-  }, [bgmOn, bgmDungeon, masterOn, status])
-  const ensureBgm = () => { const a = audioRef.current; if (a && bgmOn && bgmDungeon && masterOn && a.paused) a.play().catch(() => {}) }
+    if (bgmOn && bgmDungeon && masterOn && status === 'exploring') startBgm()
+    else stopBgm()
+  }, [bgmOn, bgmDungeon, masterOn, status, dungeon])
+  useEffect(() => () => stopBgm(), [])
+  const ensureBgm = () => { if (bgmOn && bgmDungeon && masterOn && !bgmSrcRef.current) startBgm() }
   const toggleBgm = () => setBgmOn((v) => { const n = !v; try { localStorage.setItem('bf_dg_bgm', n ? 'on' : 'off') } catch { /* ignore */ } return n })
   // 効果音（SE）：事前にデコードして「触れた瞬間」に遅延なく鳴らす（Web Audio）
   const seOnRef = useRef(seOn)
