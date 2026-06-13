@@ -702,13 +702,11 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.delayHeal.amount)
       logs.push({ text:`💚 装備効果でHPが${playerBuffs.delayHeal.amount}回復した！`, color:'#44ff88' })
     }
-    // ポーション（十二宮では消費せず効果のみ適用）
-    if (!isHealSealed && currentItem) {
+    // ポーションは出撃のみ適用（天穹では無限・通常とも発動しない）
+    if (false && !isHealSealed && currentItem) {
       const threshold = currentItem.use_threshold||50
       const effect = currentItem.items.effect
       const isInfinite = effect === 'hp_pct_infinite' || effect === 'mp_pct_infinite'
-      const onCooldown = (playerBuffs.potionCooldown?.turns || 0) > 0
-      // 無限ポーションは出撃のみ適用（天穹では発動しない）。通常ポーションは従来どおり
       const canUse = isInfinite ? false : !itemUsed
       if (canUse) {
         if ((effect==='hp_pct' || effect==='hp_pct_infinite') && playerHp/profile.hp_max*100 <= threshold) {
