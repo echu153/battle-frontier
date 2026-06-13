@@ -3876,7 +3876,7 @@ export default function Game() {
             {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'6px', border:'1px solid #660000', padding:'3px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
               {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width:'48px', height:'48px', objectFit:'cover', flexShrink:0 }} />}
-              <div style={{ flex:1 }}>
+              <div style={{ flex:1, textAlign: NEW_UI ? 'left' : undefined }}>
                 <div style={{ color:'#ffcc00', fontSize:'13px' }}>
                   {profile.display_title && <span style={{ color:'#aaaaff', fontSize:'11px', marginRight:'4px' }}>{profile.display_title}</span>}
                   {profile.username}
@@ -3946,7 +3946,7 @@ export default function Game() {
 
           {scene==='town' && (
             <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
-              <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
+              {!NEW_UI && <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>}
               {isBanned && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #880000', padding:'8px', background:'#200000' }}>⛔ 出撃禁止中（残り{banRemaining}）<br/><span style={{color:'#884444',fontSize:'10px'}}>異常な行動が検出されました</span></div>}
               {isDying && !isBanned && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'6px', background:'#1a0000' }}>⚠ 瀕死状態です。宿屋でHP全回復してください。</div>}
               {isAtCap && <div style={{ color:'#ff8844', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #664400', padding:'4px', background:'#1a0800' }}>⚠ {profile.class}はレベルキャップ(LV{cap})に達しています</div>}
@@ -4334,7 +4334,7 @@ export default function Game() {
 
             {scene==='town' && (
               <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'8px' }}>
-                <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>
+                {!NEW_UI && <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>}
                 {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'10px', border:'1px solid #660000', padding:'8px', background:'#1a0000' }}>⚠ 瀕死状態です。宿屋でHP全回復してください。</div>}
                 {isAtCap && <div style={{ color:'#ff8844', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #664400', padding:'4px', background:'#1a0800' }}>⚠ {profile.class}はレベルキャップ(LV{cap})に達しています</div>}
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
