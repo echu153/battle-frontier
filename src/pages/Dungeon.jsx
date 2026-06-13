@@ -21,7 +21,7 @@ const DUNGEON_BAG_MAX = 20 // ダンジョン中に持てる持ち物の上限�
 const RC = 3, RR = 2, CW = 9, CH = 9  // 区画を広げ、大きい部屋も出るように
 const MAP_W = RC * CW, MAP_H = RR * CH
 // 表示ビューポート（プレイヤー中心）
-const VW = 11, VH = 9
+const VW = 11, VH = 10 // 上部のステータス表示分だけ縦に1行伸ばす
 
 const FALLBACK_PET = { name: '仮ペット', emoji: '🐾', image_url: null, maxHp: 40, atk: 12, def: 4, mdef: 4, atkType: 'phys', skillSlots: ['tackle'] }
 const MAX_FULLNESS = 100      // 満腹度の上限（100スタート）
@@ -1277,7 +1277,7 @@ export default function Dungeon() {
           {/* 通路では円形ビネットを重ねて視界を円に見せる（プレイヤー＝中央50%） */}
           {inCorridor && (
             <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
-              background: 'radial-gradient(ellipse 29% 35.4% at 50% 50%, transparent 80%, #000208 100%)' }} />
+              background: 'radial-gradient(ellipse 29% 31.9% at 50% 55%, transparent 80%, #000208 100%)' }} />
           )}
           {/* 別端末でプレイ中＝この端末はロック */}
           {lockedOut && (
