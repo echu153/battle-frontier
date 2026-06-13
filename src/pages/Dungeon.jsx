@@ -40,17 +40,37 @@ const ENEMY_BUFF_TURNS = 4    // 敵の自己バフ持続
 
 // 床に置く戦利品の抽選テーブル（クライアントで決定→床に実アイコン表示→拾得時サーバー検証）
 const DG_SEEDS = ['atk_seed', 'spatk_seed', 'def_seed', 'spdef_seed', 'hp_seed']
-const DG_STONES = ['F', 'E', 'D']
+const STONE_RANKS = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS']
 const DG_GEMS = ['peridot', 'lapis', 'ruby', 'sapphire', 'amethyst', 'emerald', 'topaz', 'rosequartz', 'turquoise', 'morganite', 'kunzite', 'citrine', 'onyx', 'opal', 'moonstone', 'petalite']
 const DG_CHARMS = ['antidote', 'guard']
+// エリア別の装備（本編AREASのcommonDrops/rareDropsから武器のみ抽出）
+const AREA_EQUIPS = {
+  1: ['木の盾', '木の靴', '粗悪な布', '粗悪な鎧', '粗悪な指輪', '粗悪なピアス', 'ロングソード', 'マチェット', '丈夫な弓', '見習いの杖', '見習い魔導書', '魔導の杖', '魔術教本'],
+  2: ['鋼鉄の剣', '鋭利なナイフ', '狩人の弓', '魔導の杖', '魔術教本', '戦士の指輪', '略奪の腕輪'],
+  3: ['鋼鉄の剣', '鋭利なナイフ', '狩人の弓', '魔導の杖', '魔術教本', '古代の護符', '秘術の首飾り'],
+  4: ['重鋼剣', '双牙短剣', '疾風の弓', '蒼木の杖', '精霊魔導典', '海流の腕輪', '蒼海の大剣', '海狼短剣', '蒼潮の弓', '海晶の杖', '海霊詠唱録', '蒼海の護符'],
+}
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
-// ✨枠の中身を抽選：素50 / 強化石10 / 宝石10 / チャーム5（合計75）
-function rollFloorLoot() {
-  const r = Math.random() * 75
+// 装備が落ちるエリア（フロア→エリア）。d30=①1-5/②6-9/③10-19/④20-29、d10=①1-5/②6-、その他はエリア④寄り
+function equipAreaFor(dungeonId, floor) {
+  if (dungeonId === 'd30') return floor <= 5 ? 1 : floor <= 9 ? 2 : floor <= 19 ? 3 : 4
+  if (dungeonId === 'd10') return floor <= 5 ? 1 : 2
+  return 4
+}
+// 強化石ランク：10Fごとに1段上げる（1-9=F/E/D、10-19=E/D/C …）
+function stoneRankForFloor(floor) {
+  const tier = Math.floor((floor - 1) / 10)
+  const baseIdx = Math.floor(Math.random() * 3) // 0,1,2 = F,E,D
+  return STONE_RANKS[Math.min(STONE_RANKS.length - 1, baseIdx + tier)]
+}
+// 戦利品枠の抽選：素50 / 強化石10 / 宝石10 / チャーム4 / 装備6（合計80）
+function rollFloorLoot(dungeonId, floor) {
+  const r = Math.random() * 80
   if (r < 50) return { type: 'seed', seedKey: pick(DG_SEEDS), qty: 1 }
-  if (r < 60) return { type: 'stone', rank: pick(DG_STONES) }
+  if (r < 60) return { type: 'stone', rank: stoneRankForFloor(floor) }
   if (r < 70) return { type: 'gem', gemType: pick(DG_GEMS) }
-  return { type: 'charm', ctype: pick(DG_CHARMS) }
+  if (r < 74) return { type: 'charm', ctype: pick(DG_CHARMS) }
+  return { type: 'equip', name: pick(AREA_EQUIPS[equipAreaFor(dungeonId, floor)] || AREA_EQUIPS[1]) }
 }
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1))
@@ -159,13 +179,13 @@ function generateFloor(floorNum, dungeon) {
     const t = randInnerTileInRoom(room) // 出入り口（部屋の外周）には置かない
     if (!t) continue
     mark(t.x, t.y)
-    // ドロップ確率: 木の実10 / おにぎり10 / スキルの書5(10F+) / 残り75%は素50・石10・宝石10・チャーム5
+    // ドロップ確率: 木の実8 / おにぎり8 / スキルの書4(10F+) / 残り80%=素50・石10・宝石10・チャーム4・装備6
     //  ※床に実アイテムのアイコンを表示（置いてある時点で何か分かる）。✨マーカーは廃止
     const r = Math.random()
-    if (r < 0.10) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'konomi' })
-    else if (r < 0.20) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'onigiri' })
-    else if (r < 0.25 && floorNum >= 10) items.push({ id: 's' + i, x: t.x, y: t.y, kind: 'food', key: SCROLL_KEYS[rand(0, SCROLL_KEYS.length - 1)] }) // スキルの書（拾うと袋へ）
-    else items.push({ id: 'i' + i, x: t.x, y: t.y, kind: 'loot', loot: rollFloorLoot() })
+    if (r < 0.08) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'konomi' })
+    else if (r < 0.16) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'onigiri' })
+    else if (r < 0.20 && floorNum >= 10) items.push({ id: 's' + i, x: t.x, y: t.y, kind: 'food', key: SCROLL_KEYS[rand(0, SCROLL_KEYS.length - 1)] }) // スキルの書（拾うと袋へ）
+    else items.push({ id: 'i' + i, x: t.x, y: t.y, kind: 'loot', loot: rollFloorLoot(dungeon?.id, floorNum) })
   }
 
   return { grid, rooms, player, enemies, items, stairs, explored: new Set() }

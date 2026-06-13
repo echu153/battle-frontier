@@ -17,7 +17,7 @@ returns json language plpgsql security definer set search_path = public as $$
 declare
   v_run dungeon_runs%rowtype; v_entry jsonb; v_id text; v_type text; v_key text;
   v_seeds  text[] := array['atk_seed','spatk_seed','def_seed','spdef_seed','hp_seed'];
-  v_stones text[] := array['F','E','D'];
+  v_stones text[] := array['F','E','D','C','B','A','S','SS','SSS'];
   v_gems   text[] := array['peridot','lapis','ruby','sapphire','amethyst','emerald','topaz','rosequartz','turquoise','morganite','kunzite','citrine','onyx','opal','moonstone','petalite'];
   v_charms text[] := array['antidote','guard'];
   v_pending jsonb; v_arr jsonb := '[]'::jsonb; v_found boolean := false; v_e jsonb;
@@ -47,6 +47,10 @@ begin
     v_key := p_entry->>'ctype';
     if not (v_key = any(v_charms)) then raise exception 'bad charm'; end if;
     v_entry := jsonb_build_object('id', v_id, 'type', 'charm', 'ctype', v_key);
+  elsif v_type = 'equip' then
+    v_key := p_entry->>'name';
+    if not exists (select 1 from weapons where name = v_key) then raise exception 'bad equip'; end if;
+    v_entry := jsonb_build_object('id', v_id, 'type', 'equip', 'name', v_key);
   else
     raise exception 'bad loot type';
   end if;
