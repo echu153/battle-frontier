@@ -3878,24 +3878,37 @@ export default function Game() {
               {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width:'48px', height:'48px', objectFit:'cover', flexShrink:0 }} />}
               <div style={{ flex:1, textAlign: NEW_UI ? 'left' : undefined, display: NEW_UI ? 'flex' : undefined, justifyContent: NEW_UI ? 'space-between' : undefined, alignItems: NEW_UI ? 'flex-start' : undefined }}>
                 <div>
-                  <div style={{ color:'#ffcc00', fontSize:'13px' }}>
-                    {profile.display_title && <span style={{ color:'#aaaaff', fontSize:'11px', marginRight:'4px' }}>{profile.display_title}</span>}
+                  <div style={{ color:'#ffcc00', fontSize: NEW_UI ? '15px' : '13px', fontWeight: NEW_UI ? 'bold' : undefined }}>
+                    {profile.display_title && <span style={{ color:'#aaaaff', fontSize:'11px', marginRight:'4px', fontWeight:'normal' }}>{profile.display_title}</span>}
                     {profile.username}
                   </div>
-                  <div style={{ fontSize:'11px', color:'#446688' }}>
+                  <div style={{ fontSize: NEW_UI ? '12px' : '11px', color:'#446688', marginTop: NEW_UI ? '2px' : undefined }}>
                     <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{getRetrainingStars(profile.class, profile.retraining)}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／{cap}
                   </div>
-                  <div style={{ fontSize:'11px', color:'#446688' }}>
-                    キャラクターLV: <span style={{color:'#ffcc00'}}>{charLv}</span>{!NEW_UI && <>　<span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span></>}
+                  <div style={{ fontSize: NEW_UI ? '13px' : '11px', color: NEW_UI ? '#88ccff' : '#446688', marginTop: NEW_UI ? '2px' : undefined }}>
+                    キャラクターLV: <span style={{color:'#ffcc00', fontWeight: NEW_UI ? 'bold' : undefined, fontSize: NEW_UI ? '15px' : undefined }}>{charLv}</span>{!NEW_UI && <>　<span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span></>}
                   </div>
-                  <div style={{ fontSize:'10px', color:'#446688' }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
+                  <div style={{ fontSize: NEW_UI ? '12px' : '10px', color:'#446688', marginTop: NEW_UI ? '2px' : undefined }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
                 </div>
                 {NEW_UI && (
-                  <div style={{ textAlign:'right', flexShrink:0, lineHeight:1.15 }}>
-                    <div style={{ fontSize:'9px', color:'#446688' }}>総合力</div>
-                    <div style={{ fontSize:'16px', color:'#44ff88', fontWeight:'bold' }}>{total}</div>
-                    <div style={{ fontSize:'9px', color:'#446688', marginTop:'2px' }}>ステータス</div>
-                    <div style={{ fontSize:'16px', color:totalRank.color, fontWeight:'bold' }}>{totalRank.rank}</div>
+                  <div style={{ textAlign:'right', flexShrink:0, lineHeight:1.2 }}>
+                    <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', marginBottom:'4px' }}>
+                      <div>
+                        <div style={{ fontSize:'9px', color:'#446688' }}>総合力</div>
+                        <div style={{ fontSize:'15px', color:'#44ff88', fontWeight:'bold' }}>{total}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:'9px', color:'#446688' }}>ステータス</div>
+                        <div style={{ fontSize:'15px', color:totalRank.color, fontWeight:'bold' }}>{totalRank.rank}</div>
+                      </div>
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'auto auto', gap:'1px 10px', fontSize:'11px', justifyContent:'flex-end' }}>
+                      <span style={{ color:'#446688' }}>攻 <span style={{ color:'#ffcc00' }}>{eff.atk}</span></span>
+                      <span style={{ color:'#446688' }}>防 <span style={{ color:'#88aaff' }}>{eff.def}</span></span>
+                      <span style={{ color:'#446688' }}>特攻 <span style={{ color:'#cc44ff' }}>{eff.matk}</span></span>
+                      <span style={{ color:'#446688' }}>特防 <span style={{ color:'#44ccff' }}>{eff.mdef}</span></span>
+                      <span style={{ color:'#446688' }}>速 <span style={{ color:'#ff8844' }}>{eff.spd}</span></span>
+                    </div>
                   </div>
                 )}
               </div>
