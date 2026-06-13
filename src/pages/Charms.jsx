@@ -215,16 +215,17 @@ export default function Charms() {
 
         {tab === 'fuse' && charms.length > 0 && (
           <div style={{ border: '1px solid #663388', background: '#0e0820', padding: 12 }}>
-            <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔮 神秘の欠片1つで2つのチャームを1つに（効果も両方引継ぎ・成長は合算で合計300まで）。<span style={{ color: '#ff8866' }}>合成②側は消えて①にまとまります。合成済みは再合成不可。</span></div>
-            {[['base', '合成①（こちらが残る）', fuseBase, setFuseBase], ['mat', '合成②（①に合わさり消える）', fuseMat, setFuseMat]].map(([key, label, val, setter]) => (
+            <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔮 神秘の欠片1つで2つの素材を1つのチャームに（効果も両方引継ぎ・成長は合算で合計300まで）。<span style={{ color: '#ff8866' }}>素材2つは無くなり1つにまとまります。合成済みは再合成不可。</span></div>
+            {[['base', '素材①', fuseBase, setFuseBase], ['mat', '素材②', fuseMat, setFuseMat]].map(([key, label, val, setter]) => (
               <div key={key} style={{ marginBottom: 10 }}>
                 <div style={{ color: '#9977cc', fontSize: 11, marginBottom: 4 }}>{label}</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {charms.map((c) => {
                     const d = getCharm(c.ctype); const on = c.id === val
+                    const other = key === 'base' ? fuseMat : fuseBase
                     return (
-                      <button key={c.id} onClick={() => !c.fused && setter(c.id)} disabled={c.fused}
-                        style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: c.fused ? '#556' : '#cce6ff', padding: '5px 8px', cursor: c.fused ? 'not-allowed' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                      <button key={c.id} onClick={() => !c.fused && c.id !== other && setter(c.id)} disabled={c.fused || c.id === other}
+                        style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: (c.fused || c.id === other) ? '#556' : '#cce6ff', padding: '5px 8px', cursor: (c.fused || c.id === other) ? 'not-allowed' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
                         {on ? '✓ ' : ''}{d.emoji} {charmDisplayName(c)}{c.fused ? '（合成済）' : ''}（計{(c.hp || 0) + (c.atk || 0) + (c.spatk || 0) + (c.def || 0) + (c.spdef || 0)}）
                       </button>
                     )
@@ -232,6 +233,25 @@ export default function Charms() {
                 </div>
               </div>
             ))}
+            {/* 合成結果のプレビュー */}
+            {(() => {
+              const b = charms.find((c) => c.id === fuseBase); const m = charms.find((c) => c.id === fuseMat)
+              if (!b || !m || b.id === m.id) return <div style={{ color: '#557799', fontSize: 11, marginBottom: 8 }}>素材①②を選ぶと合成結果が表示されます</div>
+              // 成長合算（合計300上限・HP→特防→防→特攻→攻 の順に切り捨て）
+              let st = { atk: b.atk + m.atk, spatk: b.spatk + m.spatk, def: b.def + m.def, spdef: b.spdef + m.spdef, hp: b.hp + m.hp }
+              let over = (st.atk + st.spatk + st.def + st.spdef + st.hp) - 300
+              for (const k of ['hp', 'spdef', 'def', 'spatk', 'atk']) { if (over <= 0) break; const cut = Math.min(st[k], over); st[k] -= cut; over -= cut }
+              const name = `${getCharm(b.ctype).short}と${getCharm(m.ctype).short}のチャーム`
+              const effs = [getCharm(b.ctype).desc, getCharm(m.ctype).desc].filter((x) => x && x !== '追加能力なし')
+              return (
+                <div style={{ border: '1px solid #aa88ff', background: '#160e2a', padding: 10, marginBottom: 10, fontSize: 11, color: '#cce6ff' }}>
+                  <div style={{ color: '#ffcc66', marginBottom: 4 }}>➡ 合成結果</div>
+                  <div>🧿 {name}＋{st.atk + st.spatk + st.def + st.spdef + st.hp}</div>
+                  <div style={{ color: '#88bbee', marginTop: 2 }}>HP+{st.hp * CHARM_HP_PER} / 攻+{st.atk} / 特攻+{st.spatk} / 防+{st.def} / 特防+{st.spdef}</div>
+                  {effs.length > 0 && <div style={{ color: '#aaffaa', marginTop: 2 }}>効果: {effs.join(' ／ ')}</div>}
+                </div>
+              )
+            })()}
             <Btn onClick={() => !loading && doFuse()}>🔮 合成する（欠片×{seeds.shard || 0}）</Btn>
           </div>
         )}
