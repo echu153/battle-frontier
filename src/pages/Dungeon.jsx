@@ -1429,11 +1429,11 @@ export default function Dungeon() {
 
         {status === 'exploring' && (
           <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'center', marginTop: 12 }}>
-            {/* 十字キー */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gap: 4 }}>
-              <Btn onClick={() => tryMove(-1, -1)}>◤</Btn><Btn onClick={() => tryMove(0, -1)}>▲</Btn><Btn onClick={() => tryMove(1, -1)}>◥</Btn>
-              <Btn onClick={() => tryMove(-1, 0)}>◀</Btn><Btn onClick={stepInPlace}>■</Btn><Btn onClick={() => tryMove(1, 0)}>▶</Btn>
-              <Btn onClick={() => tryMove(-1, 1)}>◣</Btn><Btn onClick={() => tryMove(0, 1)}>▼</Btn><Btn onClick={() => tryMove(1, 1)}>◢</Btn>
+            {/* 十字キー（すべて正方形・同サイズ） */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gridAutoRows: '44px', gap: 4 }}>
+              <PadBtn onClick={() => tryMove(-1, -1)}>◤</PadBtn><PadBtn onClick={() => tryMove(0, -1)}>▲</PadBtn><PadBtn onClick={() => tryMove(1, -1)}>◥</PadBtn>
+              <PadBtn onClick={() => tryMove(-1, 0)}>◀</PadBtn><PadBtn onClick={stepInPlace}>■</PadBtn><PadBtn onClick={() => tryMove(1, 0)}>▶</PadBtn>
+              <PadBtn onClick={() => tryMove(-1, 1)}>◣</PadBtn><PadBtn onClick={() => tryMove(0, 1)}>▼</PadBtn><PadBtn onClick={() => tryMove(1, 1)}>◢</PadBtn>
             </div>
             {/* 十字の隣にスキル（選択中を体当たりで発動） */}
             <div style={{ display: 'grid', gap: 4 }}>
@@ -1576,4 +1576,8 @@ function Center({ children }) {
 }
 function Btn({ children, onClick }) {
   return <button onClick={onClick} style={{ background: '#001840', border: '1px solid #0088ff', color: '#0088ff', padding: '6px 12px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 13 }}>{children}</button>
+}
+// 十字キー用：44×44の正方形で記号を中央寄せ（字形差で大きさがバラつかないよう固定）
+function PadBtn({ children, onClick }) {
+  return <button onClick={onClick} style={{ width: 44, height: 44, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, background: '#001840', border: '1px solid #0088ff', color: '#0088ff', cursor: 'pointer', fontFamily: 'monospace', fontSize: 16 }}>{children}</button>
 }
