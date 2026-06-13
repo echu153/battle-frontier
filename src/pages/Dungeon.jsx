@@ -29,6 +29,13 @@ const HP_REGEN_EVERY = 10     // 満腹なら10ターンごとにHP+1
 const FULLNESS_EVERY = 10     // 10ターンごとに満腹度-1
 const SPAWN_EVERY = 40        // 40ターンごとに敵が1体湧く
 const SPAWN_CAP = 12          // フロアの敵がこの数以上なら湧かせない（過密防止）
+// 状態異常
+const PARALYZE_TURNS = 5      // 麻痺の持続ターン
+const PARALYZE_FAIL = 0.30    // 麻痺中、攻撃が失敗する確率
+const BURN_INTERVAL = 20      // やけど：このターンごとにダメージ
+const BURN_PCT = 0.03         // やけど：最大HPのこの割合ダメージ
+const BURN_ATK_DOWN = 0.10    // やけど中：攻撃/特攻ダウン率
+const WEAKEN_ATK_DOWN = 0.10  // ステータスダウン中：攻撃/特攻ダウン率
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1))
 
@@ -190,7 +197,9 @@ export default function Dungeon() {
   const [turns, setTurns] = useState(0)
   const [fullness, setFullness] = useState(MAX_FULLNESS)
   const [poisoned, setPoisoned] = useState(false) // 毒状態（次フロアで回復）
-  const [paralyzed, setParalyzed] = useState(0)   // 麻痺＝あと何ターン行動不能か（電気クラゲ等）
+  const [paralyzed, setParalyzed] = useState(0)   // 麻痺＝あと何ターン麻痺するか（攻撃が確率で失敗）
+  const [burned, setBurned] = useState(false)     // やけど（次フロアで回復・攻撃/特攻ダウン）
+  const [weakened, setWeakened] = useState(0)     // ステータスダウン＝あと何ターン攻撃/特攻ダウンか
   const [log, setLog] = useState([])
   const [logHidden, setLogHidden] = useState(false) // 2秒間ログ更新が無ければフェードアウト
   useEffect(() => {
@@ -523,12 +532,14 @@ export default function Dungeon() {
     setState(f)
     setPoisoned(false) // 次フロアに行くと毒は回復
     setParalyzed(0)    // 麻痺も次フロアで回復
+    setBurned(false)   // やけども次フロアで回復
+    setWeakened(0)     // ステータスダウンも次フロアで回復
   }, [])
 
   // ダンジョンを選んで開始
   const beginDungeon = (d) => {
     setDungeon(d)
-    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
+    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setBurned(false); setWeakened(0); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
     enterFloor(1, d)
     playFloorIntro(1, d) // 入場時にダンジョン名・フロア表示
     startRun(pet.id, d.id)
@@ -600,13 +611,6 @@ export default function Dungeon() {
   const tryMove = (dx, dy) => {
     ensureBgm() // 操作時にBGM再生を確実に開始（自動再生ブロック対策）
     if (!state || status !== 'exploring' || busyRef.current || transition || lockedOut) return
-    // 麻痺中は行動不能。1ターン消費して敵だけ動く
-    if (paralyzed > 0) {
-      setParalyzed((p) => Math.max(0, p - 1))
-      addLog('⚡ しびれて動けない！')
-      commitTurn(state, state.player, state.enemies, petHp)
-      return
-    }
     let s = state
     const px = s.player.x, py = s.player.y
     const nx = px + dx, ny = py + dy
@@ -625,6 +629,16 @@ export default function Dungeon() {
       const sk = getSkill(selectedSkill)
       const cost = sk.cost || 0
       if (cost > fullness) { addLog(`🍖 満腹度が足りない（${sk.name}は${cost}必要）たいあたりに切替を`); return }
+      // 麻痺：30%で体がしびれて攻撃失敗（満腹は消費せず1ターン経過）
+      if (paralyzed > 0 && Math.random() < PARALYZE_FAIL) {
+        addLog('⚡ 体がしびれて攻撃できない！')
+        applyFx({ pet: { flash: true } })
+        setState({ ...s })
+        busyRef.current = true
+        const tid = setTimeout(() => commitTurn(s, s.player, s.enemies, curPetHp, 0), BREATH_MS)
+        turnTimers.current.push(tid)
+        return
+      }
       fullCost = cost
       const hits = sk.hits || 1
       // たいあたりは攻撃(物理)と特攻(特殊)の高いほうを参照（チャーム成長を両方活かせる）。
@@ -635,6 +649,9 @@ export default function Dungeon() {
         if (sp2 > p) { useAtk = sp2; useType = 'spec' }
         else if (p > sp2) { useAtk = p; useType = 'phys' }
       }
+      // やけど・ステータスダウン中は攻撃/特攻が下がる
+      const atkMul = (burned ? 1 - BURN_ATK_DOWN : 1) * (weakened > 0 ? 1 - WEAKEN_ATK_DOWN : 1)
+      useAtk = useAtk * atkMul
       const guard = useType === 'spec' ? (target.mdef || 0) : (target.def || 0)
       // ダメージは1発ごとに 0.9〜1.1 の乱数補正（最低1）
       const vary = (n) => Math.max(1, Math.round(n * (0.9 + Math.random() * 0.2)))
@@ -739,6 +756,8 @@ export default function Dungeon() {
     }
     let willPoison = false // このターンに毒を受けたか
     let willParalyze = false // このターンに麻痺を受けたか
+    let willBurn = false   // このターンにやけどを受けたか
+    let willWeaken = 0     // このターンに受けたステータスダウンのターン数
     const attackers = []   // 隣接して攻撃してくる敵（1体ずつ順番に演出する）
     const AGGRO_RANGE = 10 // この歩数以内の敵は視線に関係なく必ず追跡（後方の敵が放置されないように）
     enemies = enemies.map((e) => {
@@ -767,6 +786,8 @@ export default function Dungeon() {
           else if (sk.type === 'spec_heavy') { dmg = Math.max(1, Math.round(calcDamage(Math.round((e.atk || 1) * (sk.mult || 1)), pet.mdef || 0) * (0.9 + Math.random() * 0.2))); notes.push(sk.name) }
           else if (sk.type === 'poison') { willPoison = true; notes.push(sk.name) }
           else if (sk.type === 'paralyze') { willParalyze = true; notes.push(sk.name) }
+          else if (sk.type === 'burn') { willBurn = true; notes.push(sk.name) }
+          else if (sk.type === 'weaken') { willWeaken = Math.max(willWeaken, sk.turns || 5); notes.push(sk.name) }
           else if (sk.type === 'vamp') { heal = Math.floor(dmg * (sk.frac || 0.5)); notes.push(sk.name) }
         }
         const healShown = heal > 0 ? Math.min(heal, e.maxHp - e.hp) : 0
@@ -829,11 +850,23 @@ export default function Dungeon() {
           curHp -= pd; addLog(`☠ 毒で${pd}ダメージ`); popDmg(player.x, player.y, pd, { follow: true })
           if (curHp <= 0) dead = true
         }
+        // やけど：BURN_INTERVAL ターンごとに最大HPの BURN_PCT ダメージ（次フロアで回復）
+        if (burned && nextTurns % BURN_INTERVAL === 0) {
+          const bd = Math.max(1, Math.ceil(pet.maxHp * BURN_PCT))
+          curHp -= bd; addLog(`🔥 やけどで${bd}ダメージ`); popDmg(player.x, player.y, bd, { follow: true })
+          if (curHp <= 0) dead = true
+        }
       }
       setFullness(nextFull)
       setPetHp(curHp)
+      // 状態異常カウントの減衰（毎ターン）
+      if (paralyzed > 0) setParalyzed((p) => Math.max(0, p - 1))
+      if (weakened > 0) setWeakened((w) => Math.max(0, w - 1))
+      // 新たに受けた状態異常を付与
       if (willPoison && !poisoned) { setPoisoned(true); addLog('☠ 毒におかされた…！', 'right') }
-      if (willParalyze && paralyzed <= 0) { setParalyzed(1); addLog('⚡ しびれて次のターン動けない！', 'right') }
+      if (willBurn && !burned) { setBurned(true); addLog('🔥 やけどを負った…！', 'right') }
+      if (willParalyze) { setParalyzed(PARALYZE_TURNS); addLog('⚡ 体がしびれた…！（しばらく攻撃が失敗することがある）', 'right') }
+      if (willWeaken > 0) { setWeakened((w) => Math.max(w, willWeaken)); addLog('▼ 攻撃・特攻が下がった…！', 'right') }
       if (dead) { setStatus('dead'); addLog('💀 ペットは力尽きた…'); finishRun(false, true) }
 
       // ---- 40ターンごとに敵が1体湧く ----
@@ -924,7 +957,6 @@ export default function Dungeon() {
   // 足踏み：その場で1ターン経過
   const stepInPlace = () => {
     if (!state || status !== 'exploring' || busyRef.current) return
-    if (paralyzed > 0) { setParalyzed((p) => Math.max(0, p - 1)); addLog('⚡ しびれて動けない！'); commitTurn(state, state.player, state.enemies, petHp); return }
     addLog('🚶 足踏みした')
     commitTurn(state, state.player, state.enemies, petHp)
   }
@@ -1059,7 +1091,7 @@ export default function Dungeon() {
     if (!vis) return { ch: '', bg: C.unknown } // 現在見えていない所は完全に真っ暗（記憶表示なし）
     const wall = state.grid[y][x] === '#'
     // 現在視界：エンティティ優先（足元は床。floorTile時は透過で下地の床画像を見せる）
-    if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: floorBg, fx: fx.pet, poison: poisoned, cheer: cheer || 0, isPet: true }
+    if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: floorBg, fx: fx.pet, poison: poisoned, paralyze: paralyzed > 0, burn: burned, cheer: cheer || 0, isPet: true }
     const e = state.enemies.find((o) => o.x === x && o.y === y)
     if (e) return { ch: '👹', img: e.image || null, bg: floorBg, fx: fx.enemies[e.id] || null }
     const it = state.items.find((o) => o.x === x && o.y === y)
@@ -1206,8 +1238,6 @@ export default function Dungeon() {
               {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 14, height: 14, objectFit: 'cover', borderRadius: 3 }} /> : <span>{pet.emoji}</span>}
               {pet.name} HP {petHp}/{pet.maxHp}
             </span>
-            {poisoned && <span style={{ color: '#cc77ff' }}>☠ 毒</span>}
-            {paralyzed > 0 && <span style={{ color: '#ffe066' }}>⚡ 麻痺</span>}
             <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
             <span style={{ color: '#cba6ff' }}>⚡{getSkill(selectedSkill).name}</span>
           </div>
@@ -1220,11 +1250,15 @@ export default function Dungeon() {
             const clickable = status === 'exploring' && isVisible(x, y) && inBounds(x, y) && state.grid[y]?.[x] !== '#' &&
               Math.max(Math.abs(cdx), Math.abs(cdy)) === 1 && !cornerBlocked
             // 毒状態のペットはうっすら紫に染める
-            const poisonFilter = c.poison ? 'sepia(0.6) hue-rotate(230deg) saturate(1.8) drop-shadow(0 0 3px #aa55ff)' : 'none'
+            // 状態異常の色付け：やけど=赤＞麻痺=黄＞毒=紫 の優先で1色を重ねる
+            const statusFilter = c.burn ? 'sepia(0.7) saturate(3) hue-rotate(-25deg) brightness(1.05) drop-shadow(0 0 3px #ff5533)'
+              : c.paralyze ? 'sepia(0.8) saturate(2.2) hue-rotate(-12deg) brightness(1.08) drop-shadow(0 0 3px #ffe066)'
+              : c.poison ? 'sepia(0.6) hue-rotate(230deg) saturate(1.8) drop-shadow(0 0 3px #aa55ff)'
+              : 'none'
             const inner = c.img
-              ? <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: poisonFilter }} />
+              ? <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: statusFilter }} />
               : (
-                <span style={{ filter: poisonFilter, position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%',
+                <span style={{ filter: statusFilter, position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%',
                   color: c.stairsGlow ? '#ffe680' : undefined,
                   textShadow: c.stairsGlow ? '0 0 6px #ffcc33, 0 0 12px #ff9900' : undefined }}>
                   {c.ch}
@@ -1416,6 +1450,25 @@ export default function Dungeon() {
             </div>
           </div>
         )}
+        {/* 状態異常・フロアの状況（異常時のみ表示。何もなければ空白） */}
+        {status === 'exploring' && (() => {
+          const chips = []
+          if (poisoned) chips.push({ k: 'poison', label: '☠ 毒', col: '#cc77ff', note: '10ターンごとに最大HPの2%' })
+          if (paralyzed > 0) chips.push({ k: 'para', label: `⚡ 麻痺 残${paralyzed}`, col: '#ffe066', note: '30%で攻撃失敗' })
+          if (burned) chips.push({ k: 'burn', label: '🔥 やけど', col: '#ff7755', note: '20ターンごとに最大HPの3%' })
+          if (burned || weakened > 0) chips.push({ k: 'down', label: '▼ ステータスダウン', col: '#88bbdd', note: '攻撃・特攻ダウン' })
+          if (fullness <= 0) chips.push({ k: 'hungry', label: '🥀 空腹', col: '#ff8855', note: '毎ターンHPが減る' })
+          if (chips.length === 0) return <div style={{ minHeight: 8 }} />
+          return (
+            <div style={{ marginTop: 10, background: '#0a0410', border: '1px solid #663355', padding: '6px 8px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              {chips.map((c) => (
+                <span key={c.k} style={{ color: c.col, fontSize: 11, whiteSpace: 'nowrap' }}>
+                  {c.label}<span style={{ color: '#7799aa', fontSize: 10 }}>（{c.note}）</span>
+                </span>
+              ))}
+            </div>
+          )
+        })()}
         {status === 'exploring' && (
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
             <button onClick={giveUp}
