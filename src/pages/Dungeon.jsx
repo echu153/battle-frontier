@@ -1387,7 +1387,7 @@ export default function Dungeon() {
                     style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block',
                       filter: c.stairsGlow
                         ? (c.water
-                            ? 'sepia(0.9) saturate(2.4) hue-rotate(140deg) brightness(1.02) drop-shadow(0 0 5px #33ddee) drop-shadow(0 0 9px #0099bb)'
+                            ? 'sepia(0.85) saturate(1.7) hue-rotate(178deg) brightness(0.6) drop-shadow(0 0 5px #33ddee) drop-shadow(0 0 10px #0099bb)'
                             : 'drop-shadow(0 0 5px #ffcc33) drop-shadow(0 0 9px #ff9900) brightness(1.15)')
                         : undefined }} />}
                   {/* 階段の強調（静的な発光リング）。水エリアは青緑 */}
