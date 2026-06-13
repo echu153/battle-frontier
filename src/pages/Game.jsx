@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import papiaIcon from '../assets/papia.png'
-import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue, calcDefReduction } from '../lib/stats'
+import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue, calcDefReduction, calcEffectiveStats } from '../lib/stats'
 import { charmPlayerBonus } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
 // Equipment.jsx 等が './Game' から参照しているため再export
-export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue, calcDefReduction } from '../lib/stats'
+// ★ステータス計算は lib/stats.js の1実装に統一（表示系と戦闘系で値がズレないように）
+export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue, calcDefReduction, calcEffectiveStats } from '../lib/stats'
 
 export const WAIT_SECONDS = 10
 // 新UIレイアウトの有効フラグ。
@@ -458,104 +459,9 @@ const calcEnhancedStat = (base, plus) => {
   return Math.ceil(base * Math.pow(1.5, plus))
 }
 
-export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus = null) => {
-  const bonus = { atk:0, def:0, matk:0, mdef:0, spd:0, hp:0, mp:0 }
-  let matkPct = 0
-  let hitBonus = 0
-  let critBonus = 0
-  let evasionBonus = 0
-  let critResist = 0
-  let defPen = 0   // 防御貫通%（宝石）
-  let mdefPen = 0  // 魔法防御貫通%（宝石）
-  let critDmg = 0  // クリティカル威力%（宝石）
-  for (const item of equipment) {
-    if (!item.equipped || !item.weapons) continue
-    // 埋め込み宝石の効果
-    if (item.gem_type && item.gem_rank) {
-      const g = GEM_DATA[item.gem_type]
-      const v = gemEffectValue(item.gem_type, item.gem_rank)
-      if (g) {
-        switch (g.effect) {
-          case 'hp':   bonus.hp += v; break
-          case 'mp':   bonus.mp += v; break
-          case 'atk':  bonus.atk += v; break
-          case 'def':  bonus.def += v; break
-          case 'matk': bonus.matk += v; break
-          case 'mdef': bonus.mdef += v; break
-          case 'spd':  bonus.spd += v; break
-          case 'atk_matk': bonus.atk += v; bonus.matk += v; break
-          case 'def_mdef': bonus.def += v; bonus.mdef += v; break
-          case 'def_pen':     defPen += v; break
-          case 'mdef_pen':    mdefPen += v; break
-          case 'crit':        critBonus += v; break
-          case 'crit_resist': critResist += v; break
-          case 'hit':         hitBonus += v; break
-          case 'evasion':     evasionBonus += v; break
-          case 'crit_dmg':    critDmg += v; break
-        }
-      }
-    }
-    const w = item.weapons
-    const plus = item.enhance_plus || 0
-    // enhance_plusによる強化倍率を適用（古びた○○は除外）
-    const isArtifactBase = ARTIFACT_BASE_NAMES_SET.has(w.name)
-    const mult = (plus > 0 && !isArtifactBase) ? Math.pow(1.5, plus) : 1
-    bonus.atk  += Math.ceil((w.atk_bonus||0)  * mult) + (item.bonus_atk||0)
-    bonus.def  += Math.ceil((w.def_bonus||0)  * mult) + (item.bonus_def||0)
-    bonus.matk += Math.ceil((w.matk_bonus||0) * mult) + (item.bonus_matk||0)
-    bonus.mdef += Math.ceil((w.mdef_bonus||0) * mult) + (item.bonus_mdef||0)
-    bonus.spd  += Math.ceil((w.spd_bonus||0)  * mult) + (item.bonus_spd||0)
-    bonus.hp   += Math.ceil((w.hp_bonus||0)   * mult) + (item.bonus_hp||0)
-    bonus.mp   += Math.ceil((w.mp_bonus||0)   * mult) + (item.bonus_mp||0)
-    if (w.hp_bonus_pct > 0)  bonus.hp  += Math.floor(profile.hp_max * w.hp_bonus_pct/100)
-    if (w.mp_bonus_pct > 0)  bonus.mp  += Math.floor(profile.mp_max * w.mp_bonus_pct/100)
-    if (w.spd_bonus_pct > 0) bonus.spd += Math.floor(profile.spd   * w.spd_bonus_pct/100)
-    if (w.matk_bonus_pct > 0) matkPct  += w.matk_bonus_pct
-    if (w.hit_bonus > 0) hitBonus += w.hit_bonus
-    critBonus   += w.crit_bonus  || 0   // 武器固有クリティカル率
-    critResist  += w.crit_resist || 0   // 武器固有クリティカル抵抗
-    hitBonus    += item.bonus_hit     || 0
-    critBonus   += item.bonus_crit    || 0
-    evasionBonus += item.bonus_evasion || 0
-    if (item.slot === 'weapon') {
-      const prof = proficiency.find(p => p.equipment_id === item.id)
-      if (prof) {
-        const pb = calcProfBonus(prof, w)
-        bonus.atk  += pb.atk  || 0
-        bonus.def  += pb.def  || 0
-        bonus.matk += pb.matk || 0
-        bonus.mdef += pb.mdef || 0
-        bonus.spd  += pb.spd  || 0
-        bonus.hp   += pb.hp   || 0
-        bonus.mp   += pb.mp   || 0
-      }
-    }
-  }
-  const baseMatk = profile.matk + bonus.matk + (profile.museum_matk || 0)
-  const finalMatk = matkPct > 0 ? Math.floor(baseMatk * (1 + matkPct/100)) : baseMatk
-  const tb = titleBonus || {}
-  // 選択ペットの装備チャーム反映（profile.petCharm が無ければ無影響）。守りは防御+10%
-  const pc = profile.petCharm || {}
-  let defVal = profile.def + bonus.def + (profile.museum_def || 0) + (tb.def_bonus || 0) + (pc.def || 0)
-  if (pc.guard) defVal = Math.round(defVal * 1.1)
-  return {
-    atk:    profile.atk  + bonus.atk  + (profile.museum_atk || 0) + (tb.atk_bonus || 0) + (pc.atk || 0),
-    def:    defVal,
-    matk:   finalMatk + (tb.matk_bonus || 0) + (pc.matk || 0),
-    mdef:   profile.mdef + bonus.mdef + (profile.museum_mdef || 0) + (tb.mdef_bonus || 0) + (pc.mdef || 0),
-    spd:    profile.spd  + bonus.spd  + (profile.museum_spd || 0) + (tb.spd_bonus || 0),
-    hp_max: profile.hp_max + bonus.hp + (profile.museum_hp || 0) + (tb.hp_bonus || 0) + (pc.hp || 0),
-    mp_max: profile.mp_max + bonus.mp + (profile.museum_mp || 0) + (tb.mp_bonus || 0),
-    bonus,
-    hitBonus,
-    critBonus,
-    evasionBonus,
-    critResist,
-    defPen:  Math.min(PEN_CAP, defPen/100),   // 0〜0.8 の係数
-    mdefPen: Math.min(PEN_CAP, mdefPen/100),
-    critDmg: critDmg/100,  // クリティカル威力の加算分（係数）
-  }
-}
+// calcEffectiveStats は lib/stats.js に一本化（上部で import＋再export 済み）。
+// 旧Game.jsxローカル版は釣りボーナス(fishing_*)が抜けており、表示系(Profile/ランキング/詳細)と
+// 戦闘系で値がズレていたため削除した。
 
 // 回避率計算（防御側SPD > 攻撃側SPDのとき回避率UP、最大10%）
 // 回避率：相手より速いほど上昇。上限20%（相手の2倍速で上限到達）
