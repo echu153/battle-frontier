@@ -3882,17 +3882,22 @@ export default function Game() {
               {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width: NEW_UI ? '76px' : '48px', height: NEW_UI ? '76px' : '48px', objectFit:'cover', flexShrink:0 }} />}
               <div style={{ flex:1, textAlign: NEW_UI ? 'left' : undefined, display: NEW_UI ? 'flex' : undefined, justifyContent: NEW_UI ? 'space-between' : undefined, alignItems: NEW_UI ? 'flex-start' : undefined }}>
                 <div>
-                  <div style={{ color:'#ffcc00', fontSize: NEW_UI ? '16px' : '13px', fontWeight: NEW_UI ? 'bold' : undefined }}>
-                    {profile.display_title && <span style={{ color:'#aaaaff', fontSize: NEW_UI ? '12px' : '11px', marginRight:'4px', fontWeight:'normal' }}>{profile.display_title}</span>}
+                  <div style={{ color:'#ffcc00', fontSize:'13px' }}>
+                    {profile.display_title && <span style={{ color:'#aaaaff', fontSize:'11px', marginRight:'4px' }}>{profile.display_title}</span>}
                     {profile.username}
                   </div>
-                  <div style={{ fontSize: NEW_UI ? '13px' : '11px', color:'#446688', marginTop: NEW_UI ? '3px' : undefined }}>
+                  <div style={{ fontSize:'11px', color:'#446688' }}>
                     <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{getRetrainingStars(profile.class, profile.retraining)}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／{cap}
                   </div>
-                  <div style={{ fontSize: NEW_UI ? '13px' : '11px', color:'#446688', marginTop: NEW_UI ? '3px' : undefined }}>
-                    キャラクターLV: <span style={{color:'#ffcc00'}}>{charLv}</span>　<span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span>
+                  <div style={{ fontSize:'11px', color:'#446688' }}>
+                    キャラクターLV: <span style={{color:'#ffcc00'}}>{charLv}</span>{!NEW_UI && <>　<span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span></>}
                   </div>
-                  <div style={{ fontSize: NEW_UI ? '12px' : '10px', color:'#446688', marginTop: NEW_UI ? '3px' : undefined }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
+                  {NEW_UI && (
+                    <div style={{ fontSize:'11px', color:'#446688' }}>
+                      総合力: <span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span>
+                    </div>
+                  )}
+                  <div style={{ fontSize:'10px', color:'#446688' }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
                 </div>
                 {NEW_UI && (
                   profile.activePet ? (
