@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { calcEffectiveStats, calcEffectiveTotal, GEM_DATA, gemEffectValue } from '../lib/stats'
-import { petStats, speciesLabel, speciesEmoji, petImage, atkLabel, applyCharmStats, charmDisplayName } from '../constants/pets'
+import { petStats, speciesLabel, speciesEmoji, petImage, atkLabel, applyCharmStats, charmDisplayName, charmPlayerBonus } from '../constants/pets'
 
 const gemBonusText = (gemType, rank) => {
   const g = GEM_DATA[gemType]; if (!g) return ''
@@ -140,6 +140,10 @@ export default function Profile() {
     setPets(petList || [])
     const { data: chList } = await supabase.from('player_charms').select('*').eq('owner_id', targetId)
     setPetCharms(chList || [])
+    // 街と同じくアクティブペットの装備チャームを総合力に反映（petCharm）
+    const activePet = (petList || []).find(pt => pt.is_active)
+    const activeCharm = activePet?.charm_id ? (chList || []).find(c => c.id === activePet.charm_id) : null
+    setProfile(prev => prev ? { ...prev, petCharm: activeCharm ? charmPlayerBonus(activeCharm) : null } : prev)
     if (p?.ability_title_id) {
       const { data: at } = await supabase.from('titles').select('*').eq('id', p.ability_title_id).single()
       setAbilityTitle(at || null)

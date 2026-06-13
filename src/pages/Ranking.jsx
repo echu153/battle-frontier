@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { calcEffectiveTotal, getTotalRank } from '../lib/stats'
+import { charmPlayerBonus } from '../constants/pets'
 
 export default function Ranking() {
   const nav = useNavigate()
@@ -25,19 +26,30 @@ export default function Ranking() {
       } catch { /* 列未追加なら除外なし */ }
       const { data } = await supabase
         .from('profiles')
-        .select('id, username, lv, char_lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, avatar_url, retraining, museum_atk, museum_def, museum_matk, museum_mdef, museum_spd, museum_hp, museum_mp, ability_title_id')
+        .select('id, username, lv, char_lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, avatar_url, retraining, museum_atk, museum_def, museum_matk, museum_mdef, museum_spd, museum_hp, museum_mp, fishing_atk, fishing_def, fishing_matk, fishing_mdef, fishing_spd, fishing_hp, fishing_mp, ability_title_id')
         .order('char_lv', { ascending: false })
         .limit(50)
       const list = (data || []).filter(p => !excluded.has(p.id))
       const ids = list.map(p => p.id)
-      let eqs = [], profs = [], titleMap = {}
+      let eqs = [], profs = [], titleMap = {}, charmMap = {}
       if (ids.length > 0) {
-        const [{ data: eqData }, { data: profData }] = await Promise.all([
+        const [{ data: eqData }, { data: profData }, { data: petData }] = await Promise.all([
           supabase.from('player_equipment').select('*, weapons(*)').in('player_id', ids).eq('equipped', true),
           supabase.from('proficiency').select('player_id, equipment_id, prof_lv').in('player_id', ids),
+          // 街と同じくアクティブペットの装備チャームを総合力に反映
+          supabase.from('pets').select('owner_id, charm_id').in('owner_id', ids).eq('is_active', true),
         ])
         eqs = eqData || []
         profs = profData || []
+        const charmIds = [...new Set((petData || []).map(p => p.charm_id).filter(Boolean))]
+        if (charmIds.length > 0) {
+          const { data: charmRows } = await supabase.from('player_charms').select('*').in('id', charmIds)
+          const charmById = {}
+          for (const c of (charmRows || [])) charmById[c.id] = c
+          for (const pet of (petData || [])) {
+            if (pet.charm_id && charmById[pet.charm_id]) charmMap[pet.owner_id] = charmPlayerBonus(charmById[pet.charm_id])
+          }
+        }
       }
       const titleIds = [...new Set(list.map(p => p.ability_title_id).filter(Boolean))]
       if (titleIds.length > 0) {
@@ -48,7 +60,8 @@ export default function Ranking() {
         const eq = eqs.filter(e => e.player_id === p.id)
         const pf = profs.filter(x => x.player_id === p.id)
         const tb = p.ability_title_id ? titleMap[p.ability_title_id] : null
-        return { ...p, _total: calcEffectiveTotal(p, eq, pf, tb) }
+        const pProfile = { ...p, petCharm: charmMap[p.id] || null }
+        return { ...p, _total: calcEffectiveTotal(pProfile, eq, pf, tb) }
       })
       const sorted = withTotal.sort((a, b) => b._total - a._total)
       setPlayers(sorted)
