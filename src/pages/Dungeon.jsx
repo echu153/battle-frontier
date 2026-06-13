@@ -296,8 +296,9 @@ export default function Dungeon() {
     const tid = setTimeout(() => setPops((ps) => ps.filter((p) => p.id !== id)), opts.below ? 1100 : 1500)
     turnTimers.current.push(tid)
   }
-  const popDmg = (x, y, n) => addPop(x, y, `-${n}`, '#ff5555')
-  const popHeal = (x, y, n) => addPop(x, y, `+${n}`, '#66ff99')
+  // opts.follow=true でキャラの移動に追従（自分が受けたダメージ・回復に使う）
+  const popDmg = (x, y, n, opts = {}) => addPop(x, y, `-${n}`, '#ff5555', opts)
+  const popHeal = (x, y, n, opts = {}) => addPop(x, y, `+${n}`, '#66ff99', opts)
   const popExp = (x, y, n) => addPop(x, y, `＋Exp ${n}`, '#8fd0ff', { below: true, follow: true }) // 経験値は明るい青で自分の下に（キャラ追従）
 
   // レベルアップ演出（キャラの上に虹色アーチで LEVEL UP・約4秒）
@@ -648,7 +649,7 @@ export default function Dungeon() {
         if (i === 0) show()
         else { const t2 = setTimeout(show, i * HIT_MS); turnTimers.current.push(t2) }
       })
-      if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); const healed = Math.min(pet.maxHp, curPetHp + heal) - curPetHp; curPetHp += healed; if (healed > 0) { addLog(`💚 ${healed}回復`); popHeal(px, py, healed) } }
+      if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); const healed = Math.min(pet.maxHp, curPetHp + heal) - curPetHp; curPetHp += healed; if (healed > 0) { addLog(`💚 ${healed}回復`); popHeal(px, py, healed, { follow: true }) } }
       const killed = newHp <= 0
       if (killed) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; grantKill(floorNum, target.name, px, py); triggerShake('kill') }
       else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); triggerShake('hit') }
@@ -817,7 +818,7 @@ export default function Dungeon() {
       if (!dead) {
         if (nextTurns % FULLNESS_EVERY === 0 && nextFull > 0) { nextFull -= 1; if (nextFull === 0) addLog('🍖 満腹度が0になった…！') }
         if (nextFull <= 0) {
-          curHp -= 1; addLog('🥀 空腹で1ダメージ'); popDmg(player.x, player.y, 1)
+          curHp -= 1; addLog('🥀 空腹で1ダメージ'); popDmg(player.x, player.y, 1, { follow: true })
           if (curHp <= 0) dead = true
         } else if (nextTurns % HP_REGEN_EVERY === 0 && curHp < pet.maxHp) {
           curHp += 1
@@ -825,7 +826,7 @@ export default function Dungeon() {
         // 毒：POISON_INTERVAL ターンごとに最大HPの POISON_PCT ダメージ（次フロアで回復）
         if (poisoned && nextTurns % POISON_INTERVAL === 0) {
           const pd = Math.max(1, Math.ceil(pet.maxHp * POISON_PCT))
-          curHp -= pd; addLog(`☠ 毒で${pd}ダメージ`); popDmg(player.x, player.y, pd)
+          curHp -= pd; addLog(`☠ 毒で${pd}ダメージ`); popDmg(player.x, player.y, pd, { follow: true })
           if (curHp <= 0) dead = true
         }
       }
@@ -854,7 +855,7 @@ export default function Dungeon() {
       const tid = setTimeout(() => {
         if (diedMid) return // 既に倒れていたら残りの攻撃はなし
         hpNow -= a.dmg
-        popDmg(player.x, player.y, a.dmg)
+        popDmg(player.x, player.y, a.dmg, { follow: true })
         if (a.healShown > 0) popHeal(a.x, a.y, a.healShown)
         const tag = a.notes.length ? `【${a.notes.join('・')}】` : '攻撃'
         addLog(`${a.name}の${tag}！ ${a.dmg}ダメージ 💥`, 'right')
@@ -886,7 +887,7 @@ export default function Dungeon() {
       const heal = Math.ceil(pet.maxHp * def.healPct)
       const healed = Math.min(pet.maxHp, petHp + heal)
       addLog(`${def.emoji} ${def.name}を食べた（HP+${healed - petHp}）`)
-      if (healed - petHp > 0) popHeal(state.player.x, state.player.y, healed - petHp)
+      if (healed - petHp > 0) popHeal(state.player.x, state.player.y, healed - petHp, { follow: true })
       commitTurn(state, state.player, state.enemies, healed) // 1ターン経過＋HP回復を反映
     } else if (def?.fullness) {
       addLog(`${def.emoji} ${def.name}を食べた（満腹+${def.fullness}）`)
