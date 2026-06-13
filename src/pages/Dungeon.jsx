@@ -1035,6 +1035,8 @@ export default function Dungeon() {
         }
         try { localStorage.setItem(saveKey(), JSON.stringify(sv)) } catch { /* 容量超過は無視 */ }
         try { await supabase.rpc('dungeon_save_state', { p_run_id: runIdRef.current, p_state: sv, p_device: getDeviceId() }) } catch { /* オフライン等は無視 */ }
+        // 中断＝プレイ中ではない。出撃を許可できるよう suspended を立てる
+        try { await supabase.rpc('dungeon_set_suspended', { p_run_id: runIdRef.current, p_suspended: true }) } catch { /* 無視 */ }
       }
     }
     nav('/game')

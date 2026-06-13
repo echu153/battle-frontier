@@ -2126,12 +2126,12 @@ export default function Game() {
         setScene('battle'); return
       }
     }
-    // ペットダンジョン探索中は出撃不可（別端末対策。サーバー側 apply_battle_result でも拒否される）
+    // ペットダンジョンを「現在プレイ中」のときだけ出撃不可（中断中は出撃OK・別端末対策はサーバーでも拒否）
     {
       const { data: dr } = await supabase.from('dungeon_runs')
-        .select('id').eq('owner_id', profile.id).eq('status', 'active').maybeSingle()
-      if (dr) {
-        setBattleLogs([{ text:'🕳 ダンジョン探索中は出撃できません。ダンジョンを終えてからにしましょう。', color:'#ffcc44' }])
+        .select('id, suspended').eq('owner_id', profile.id).eq('status', 'active').maybeSingle()
+      if (dr && !dr.suspended) {
+        setBattleLogs([{ text:'🕳 ダンジョン探索中は出撃できません。中断するか終えてからにしましょう。', color:'#ffcc44' }])
         setScene('battle'); return
       }
     }
