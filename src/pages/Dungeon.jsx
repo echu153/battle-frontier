@@ -293,7 +293,7 @@ export default function Dungeon() {
     const id = popSeq.current
     // 同時に複数出ても重なりにくいよう少し横にずらす
     setPops((ps) => [...ps, { id, x, y, text, color, dx: Math.round(Math.random() * 14 - 7), below: !!opts.below, follow: !!opts.follow }])
-    const tid = setTimeout(() => setPops((ps) => ps.filter((p) => p.id !== id)), opts.below ? 1100 : 850)
+    const tid = setTimeout(() => setPops((ps) => ps.filter((p) => p.id !== id)), opts.below ? 1100 : 1500)
     turnTimers.current.push(tid)
   }
   const popDmg = (x, y, n) => addPop(x, y, `-${n}`, '#ff5555')
@@ -1058,7 +1058,7 @@ export default function Dungeon() {
     if (!vis) return { ch: '', bg: C.unknown } // 現在見えていない所は完全に真っ暗（記憶表示なし）
     const wall = state.grid[y][x] === '#'
     // 現在視界：エンティティ優先（足元は床。floorTile時は透過で下地の床画像を見せる）
-    if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: floorBg, fx: fx.pet, poison: poisoned, cheer: cheer || 0 }
+    if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: floorBg, fx: fx.pet, poison: poisoned, cheer: cheer || 0, isPet: true }
     const e = state.enemies.find((o) => o.x === x && o.y === y)
     if (e) return { ch: '👹', img: e.image || null, bg: floorBg, fx: fx.enemies[e.id] || null }
     const it = state.items.find((o) => o.x === x && o.y === y)
@@ -1120,8 +1120,9 @@ export default function Dungeon() {
         }
         @keyframes bf-popnum {
           0%   { transform: translate(-50%, 0); opacity: 0; }
-          15%  { transform: translate(-50%, -4px); opacity: 1; }
-          100% { transform: translate(-50%, -18px); opacity: 0; }
+          10%  { transform: translate(-50%, -5px); opacity: 1; }
+          75%  { transform: translate(-50%, -16px); opacity: 1; }
+          100% { transform: translate(-50%, -22px); opacity: 0; }
         }
         @keyframes bf-popexp {
           0%   { transform: translate(-50%, -2px); opacity: 0; }
@@ -1256,8 +1257,18 @@ export default function Dungeon() {
               : `0 0 0 0.6px ${c.bg}`
             return (
               <div key={`${vx}-${vy}`} onClick={() => clickable && adjClick(vx, vy)}
-                style={{ position: 'relative', zIndex: 1, aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, ...tileStyle, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: gapFill }}>
+                style={{ position: 'relative', zIndex: c.isPet ? 4 : 1, aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, ...tileStyle, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: gapFill }}>
                 {fxStyle ? <div key={fxKey} style={fxStyle}>{inner}</div> : inner}
+                {/* 自分のキャラに重ねるHPバー（足元寄り） */}
+                {c.isPet && (() => {
+                  const ratio = Math.max(0, Math.min(1, petHp / (pet.maxHp || 1)))
+                  const barCol = ratio > 0.5 ? '#44dd66' : ratio > 0.25 ? '#ffcc33' : '#ff4444'
+                  return (
+                    <div style={{ position: 'absolute', left: '8%', right: '8%', bottom: '4%', height: 4, background: 'rgba(0,4,10,0.85)', border: '1px solid #000', borderRadius: 2, overflow: 'hidden', zIndex: 5, pointerEvents: 'none' }}>
+                      <div style={{ width: `${ratio * 100}%`, height: '100%', background: barCol, transition: 'width 0.25s ease, background 0.25s ease' }} />
+                    </div>
+                  )
+                })()}
               </div>
             )
           }))}
@@ -1309,7 +1320,7 @@ export default function Dungeon() {
                 top: p.below ? `${((vy + 0.95) / VH) * 100}%` : `${(vy / VH) * 100}%`,
                 color: p.color, fontSize: 15, fontWeight: 'bold', fontFamily: 'monospace',
                 textShadow: '0 0 2px #000, 0 1px 3px #000, 0 0 6px #000, -1px 0 1px #000, 1px 0 1px #000', whiteSpace: 'nowrap',
-                animation: p.below ? 'bf-popexp 1.1s ease-out forwards' : 'bf-popnum 0.85s ease-out forwards',
+                animation: p.below ? 'bf-popexp 1.1s ease-out forwards' : 'bf-popnum 1.5s ease-out forwards',
               }}>{p.text}</span>
             )
           })}
