@@ -371,18 +371,28 @@ export const DUNGEON_TILES = {
   },
   // 初級の洞窟(d10)は従来の色・絵文字のまま（タイル未設定）
 }
-export const dgTileSrc = (dungeonId, key) => assetSrc(DUNGEON_TILES[dungeonId]?.[key] || null)
-// 壁を「水たまり」として半透明描画するダンジョンか
-export const dgWaterWall = (dungeonId) => !!DUNGEON_TILES[dungeonId]?.waterWall
+// 水エリア用タイル（追憶の遺跡 20〜29F・深海の廃都で共用）
+const WATER_TILES = { floor: '/水辺床.png', wall: '/mizutamari.png', walls: ['/mizutamari.png'], stairs: '/dg_stairs.png', waterWall: true }
+// 追憶の遺跡(d30)の20〜29Fは水エリア
+export const isWaterFloor = (dungeonId, floor) => dungeonId === 'd30' && floor >= 20 && floor <= 29
+// ダンジョン＋フロアから有効なタイル設定を返す（水エリアは上書き）
+export const dgTilesFor = (dungeonId, floor) => (isWaterFloor(dungeonId, floor) ? WATER_TILES : (DUNGEON_TILES[dungeonId] || null))
+// 泳げる（水＝壁を通れる）敵
+const AQUATIC = new Set(['深海魚人', 'ハリセンボン', '毒クラゲ', '電気クラゲ'])
+export const isAquatic = (name) => AQUATIC.has(name)
+
+export const dgTileSrc = (dungeonId, key, floor) => assetSrc(dgTilesFor(dungeonId, floor)?.[key] || null)
+// 壁を「水たまり」として半透明描画するか
+export const dgWaterWall = (dungeonId, floor) => !!dgTilesFor(dungeonId, floor)?.waterWall
 // 壁バリエーション配列（walls指定があればそれ、無ければwall単体を配列化）
-export const dgWallTiles = (dungeonId) => {
-  const t = DUNGEON_TILES[dungeonId]
+export const dgWallTiles = (dungeonId, floor) => {
+  const t = dgTilesFor(dungeonId, floor)
   const arr = (Array.isArray(t?.walls) && t.walls.length) ? t.walls : (t?.wall ? [t.wall] : [])
   return arr.map((s) => assetSrc(s)).filter(Boolean)
 }
 // マス座標から決まる壁バリエーション添字（再描画でちらつかない決定論的選択）
-export const dgWallVariant = (dungeonId, x, y) => {
-  const arr = dgWallTiles(dungeonId)
+export const dgWallVariant = (dungeonId, x, y, floor) => {
+  const arr = dgWallTiles(dungeonId, floor)
   if (arr.length === 0) return null
   const h = ((x * 73856093) ^ (y * 19349663)) >>> 0
   return arr[h % arr.length]

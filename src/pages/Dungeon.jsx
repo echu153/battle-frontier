@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, ASSET_VER } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, ASSET_VER } from '../constants/pets'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
@@ -131,7 +131,7 @@ function generateFloor(floorNum, dungeon) {
       const kind = pool[rand(0, pool.length - 1)]
       // 強さは初登場フロアの値で固定（深い階でも同種は同じ強さ）
       const es = dungeonEnemyStatsFor(dungeon, kind)
-      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: kind.skills || enemySkillsFor(kind.name), hp: es.maxHp, maxHp: es.maxHp, atk: es.atk, def: es.def, mdef: es.mdef })
+      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: kind.skills || enemySkillsFor(kind.name), canSwim: isAquatic(kind.name), hp: es.maxHp, maxHp: es.maxHp, atk: es.atk, def: es.def, mdef: es.mdef })
     }
   }
   // アイテム（✨/木の実/おにぎり 全部込み）を1フロア3〜5個ランダム
@@ -466,7 +466,7 @@ export default function Dungeon() {
       const es = dungeonEnemyStatsFor(dungeon, kind)
       spawnSeq.current += 1
       return {
-        id: 'es' + spawnSeq.current, x, y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: enemySkillsFor(kind.name),
+        id: 'es' + spawnSeq.current, x, y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: enemySkillsFor(kind.name), canSwim: isAquatic(kind.name),
         hp: es.maxHp, maxHp: es.maxHp, atk: es.atk, def: es.def, mdef: es.mdef,
       }
     }
@@ -793,6 +793,9 @@ export default function Dungeon() {
     // 敵が重ならないよう、移動済みの位置も含めて占有マスを管理する
     const taken = new Set(enemies.map((e) => e.x + ',' + e.y))
     const isFloor = (x, y) => inBounds(x, y) && s.grid[y][x] === '.'
+    // 水エリア：泳げる敵は水(壁)も通れる。プレイヤー・地上の敵は通れない
+    const waterFloor = isWaterFloor(dungeon?.id, floorNum)
+    const canPass = (e, x, y) => inBounds(x, y) && (s.grid[y][x] === '.' || (waterFloor && e.canSwim && s.grid[y][x] === '#'))
     // プレイヤーが今見えているマス（見えていない敵には攻撃させない）
     const visNow = computeVisible(s.rooms, player.x, player.y)
     // プレイヤーからの最短距離マップ（BFS）。視界に入った敵はこれに沿って詰めてくる
@@ -850,19 +853,23 @@ export default function Dungeon() {
           lunge: { dx: Math.sign(player.x - e.x), dy: Math.sign(player.y - e.y) } })
         return heal > 0 ? { ...e, hp: Math.min(e.maxHp, e.hp + heal) } : e
       }
+      const chase = (c) => {
+        const gx = Math.abs(c.x - player.x), gy = Math.abs(c.y - player.y)
+        return Math.max(gx, gy) * 1000 + (gx + gy) // チェビシェフ優先→マンハッタン
+      }
+      const swims = waterFloor && e.canSwim
       let cands
-      if (sees) {
+      if (swims && sees) {
+        // 泳ぐ敵は水(壁)も通り、迷路を無視してプレイヤーへ直進的に接近
+        cands = [{ x: e.x + 1, y: e.y }, { x: e.x - 1, y: e.y }, { x: e.x, y: e.y + 1 }, { x: e.x, y: e.y - 1 }]
+          .filter((c) => chase(c) < chase(e)) // 近づく手のみ
+          .sort((a, b) => chase(a) - chase(b))
+      } else if (sees) {
         // 最短距離マップに沿って詰める（距離が縮まる隣マスを優先。袋小路や別ルートにも対応）
         cands = [{ x: e.x + 1, y: e.y }, { x: e.x - 1, y: e.y }, { x: e.x, y: e.y + 1 }, { x: e.x, y: e.y - 1 }]
           .filter((c) => dist.has(c.x + ',' + c.y))
         const cur = dist.get(e.x + ',' + e.y)
         if (cur != null) cands = cands.filter((c) => dist.get(c.x + ',' + c.y) < cur) // 遠ざかる動きはしない
-        // 距離が同じならプレイヤーとの「大きい方の軸のズレ」を詰める手を優先＝
-        // 並走で永遠に距離が縮まらないのを防ぎ、必ず近づくようにする
-        const chase = (c) => {
-          const gx = Math.abs(c.x - player.x), gy = Math.abs(c.y - player.y)
-          return Math.max(gx, gy) * 1000 + (gx + gy) // チェビシェフ優先→マンハッタン
-        }
         cands.sort((a, b) => (dist.get(a.x + ',' + a.y) - dist.get(b.x + ',' + b.y)) || (chase(a) - chase(b)))
       } else {
         cands = [{ x: e.x + 1, y: e.y }, { x: e.x - 1, y: e.y }, { x: e.x, y: e.y + 1 }, { x: e.x, y: e.y - 1 }]
@@ -870,7 +877,8 @@ export default function Dungeon() {
       }
       for (const c of cands) {
         const ck = c.x + ',' + c.y
-        if (isFloor(c.x, c.y) && !taken.has(ck) && !(c.x === player.x && c.y === player.y)) {
+        // 泳ぐ敵は水も通行可。それ以外は床のみ
+        if (canPass(e, c.x, c.y) && !taken.has(ck) && !(c.x === player.x && c.y === player.y)) {
           taken.delete(e.x + ',' + e.y); taken.add(ck) // 移動先を占有・元を解放
           return { ...e, x: c.x, y: c.y }
         }
@@ -1136,11 +1144,11 @@ export default function Dungeon() {
     floorMem: '#0a1526',   // 記憶の床
     wallMem: '#313c52',    // 記憶の壁
   }
-  const floorTile = dgTileSrc(dungeon?.id, 'floor')
-  const wallTile = dgTileSrc(dungeon?.id, 'wall')
-  const stairsTile = dgTileSrc(dungeon?.id, 'stairs')
-  const itemTile = dgTileSrc(dungeon?.id, 'item')
-  const waterWall = dgWaterWall(dungeon?.id) // 壁＝半透明の水たまり描画にするか
+  const floorTile = dgTileSrc(dungeon?.id, 'floor', floorNum)
+  const wallTile = dgTileSrc(dungeon?.id, 'wall', floorNum)
+  const stairsTile = dgTileSrc(dungeon?.id, 'stairs', floorNum)
+  const itemTile = dgTileSrc(dungeon?.id, 'item', floorNum)
+  const waterWall = dgWaterWall(dungeon?.id, floorNum) // 壁＝半透明の水たまり描画にするか
   // 床はグリッド全体に1枚だけ敷く（シームレス）。床マスは透過してその床を見せる。
   const floorBg = floorTile ? 'transparent' : C.floorVis
   const cellAt = (x, y) => {
@@ -1160,7 +1168,7 @@ export default function Dungeon() {
     }
     if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: floorBg, overlay: stairsTile, stairsGlow: true, water: waterWall }
     // 壁マスは壁画像を1マスごとに表示（複数あればマス座標でランダム）。床マスは透過。
-    if (wall) return { ch: '', bg: waterWall ? floorBg : (wallTile ? '#241a12' : C.wallVis), wallImg: dgWallVariant(dungeon?.id, x, y) || wallTile, water: waterWall }
+    if (wall) return { ch: '', bg: waterWall ? floorBg : (wallTile ? '#241a12' : C.wallVis), wallImg: dgWallVariant(dungeon?.id, x, y, floorNum) || wallTile, water: waterWall }
     return { ch: '', bg: floorBg }
   }
 
