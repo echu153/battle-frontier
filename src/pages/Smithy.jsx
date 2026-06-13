@@ -495,8 +495,9 @@ export default function Smithy() {
           const materialCount = MATERIAL_COUNT(plus)
           const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped && !e.is_favorite && !(e.enhance_plus > 0)).length
           const stoneCount = getStoneCount(w.rarity)
-          const totalMaterials = sameCount + stoneCount
-          const canEnhance = profile.gold >= cost && totalMaterials >= materialCount
+          // 選択中の素材で足りているか
+          const matEnough = matSource === 'stone' ? stoneCount >= materialCount : sameCount >= materialCount
+          const canEnhance = profile.gold >= cost && matEnough
           const successRate = ENHANCE_RATE[nextPlus] !== undefined ? ENHANCE_RATE[nextPlus] : 100
           const nextEnhanced = calcEnhancedStats(w, nextPlus)
           const closeModal = () => { setSelectedItem(null); setEnhanceResult(null) }
@@ -542,17 +543,27 @@ export default function Smithy() {
                       {nextEnhanced.mp_bonus   > 0 && <span style={{color:'#4488ff'}}> MP+{nextEnhanced.mp_bonus}</span>}
                     </div>
                     <div style={{ fontSize:'10px', color:'#446688', marginBottom:'2px' }}>必要G: <span style={{color: profile.gold >= cost ? '#ffcc00' : '#ff4444'}}>{cost.toLocaleString()}G</span>（所持 {profile.gold.toLocaleString()}G）</div>
-                    <div style={{ fontSize:'10px', color:'#446688', marginBottom:'2px' }}>必要素材: <span style={{color:'#aa6644'}}>{materialCount}個</span></div>
-                    <div style={{ fontSize:'10px', color:'#446688', marginBottom:'2px' }}>　同名装備: <span style={{color: sameCount >= materialCount ? '#44ff88' : '#ffcc00'}}>{sameCount}個</span><span style={{ color:'#334455' }}>（+1以上・お気に入りは対象外）</span></div>
-                    <div style={{ fontSize:'10px', color:'#446688', marginBottom:'4px' }}>
-                      　{STONE_NAMES[w.rarity]}: <span style={{color: stoneCount > 0 ? '#ffcc00' : '#446688'}}>{stoneCount}個</span>
-                      <span style={{color: totalMaterials >= materialCount ? '#44ff88' : '#ff4444', marginLeft:'8px'}}>（合計 {totalMaterials}/{materialCount}）</span>
+                    <div style={{ fontSize:'10px', color:'#446688', marginBottom:'4px' }}>必要素材: <span style={{color:'#aa6644'}}>{materialCount}個</span>（どちらかを選択）</div>
+                    {/* 素材の選択：同名装備 or 強化石 */}
+                    <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
+                      {[
+                        { key:'equip', label:`同名装備 ${sameCount}/${materialCount}`, ok: sameCount >= materialCount },
+                        { key:'stone', label:`${STONE_NAMES[w.rarity]} ${stoneCount}/${materialCount}`, ok: stoneCount >= materialCount },
+                      ].map(opt => {
+                        const on = matSource === opt.key
+                        return (
+                          <button key={opt.key} onClick={() => setMatSource(opt.key)}
+                            style={{ flex:1, padding:'7px 4px', background: on ? '#1a1000' : '#000818', border:`1px solid ${on ? '#ffcc44' : '#223344'}`, color: on ? '#ffcc44' : (opt.ok ? '#88aacc' : '#665544'), cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                            {on ? '● ' : '○ '}{opt.label}{!opt.ok && ' (不足)'}
+                          </button>
+                        )
+                      })}
                     </div>
                     <div style={{ fontSize:'10px', color:'#446688', marginBottom:'12px' }}>
                       成功率: <span style={{color: successRate >= 50 ? '#44ff88' : successRate >= 20 ? '#ffcc00' : '#ff4444'}}>{successRate}%</span>
                       {nextPlus >= 11 && <span style={{color:'#ff4444'}}> ⚠ 失敗すると+が1下がる</span>}
                     </div>
-                    <button onClick={() => doEnhance(item)} disabled={!canEnhance || loading}
+                    <button onClick={() => doEnhance(item, matSource)} disabled={!canEnhance || loading}
                       style={{ width:'100%', padding:'10px', background: canEnhance ? '#1a0800' : '#001', border:`1px solid ${canEnhance ? '#aa6644' : '#002244'}`, color: canEnhance ? '#ffcc88' : '#334455', cursor: canEnhance ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
                       {loading ? '鍛錬中...' : '⚒ 鍛錬する'}
                     </button>
@@ -631,7 +642,7 @@ export default function Smithy() {
                             {isArtifactBase && <span style={{ color:'#446688', fontSize:'10px' }}>強化不可</span>}
                           </div>
                           {!isArtifactBase && (
-                            <button onClick={() => { setSelectedItem(item); setEnhanceResult(null) }}
+                            <button onClick={() => { setSelectedItem(item); setEnhanceResult(null); setMatSource(sameCount >= materialCount ? 'equip' : (stoneCount >= materialCount ? 'stone' : 'equip')) }}
                               style={{ padding:'3px 8px', background:'#001', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>
                               強化する
                             </button>
