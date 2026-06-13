@@ -205,10 +205,10 @@ export default function Dungeon() {
   const [seVol, setSeVol] = useState(() => { const v = parseInt(localStorage.getItem('bf_dg_sevol') || '70', 10); return isNaN(v) ? 70 : Math.min(100, Math.max(0, v)) }) // SE音量 0〜100
   const seVolRef = useRef(seVol / 100)
   useEffect(() => { seVolRef.current = seVol / 100; try { localStorage.setItem('bf_dg_sevol', String(seVol)) } catch { /* ignore */ } }, [seVol])
-  const [masterOn, setMasterOn] = useState(() => localStorage.getItem('bf_dg_master') === 'on') // 全体音量のON/OFF（初期OFF）
+  const [masterOn, setMasterOn] = useState(() => localStorage.getItem('bf_dg_master2') === 'on') // 全体音量のON/OFF（初期OFF。キー更新で過去のonをリセット）
   const [masterVol, setMasterVol] = useState(() => { const v = parseInt(localStorage.getItem('bf_dg_mastervol') || '70', 10); return isNaN(v) ? 70 : Math.min(100, Math.max(0, v)) }) // 全体音量 0〜100
   const masterRef = useRef(masterOn ? masterVol / 100 : 0)
-  useEffect(() => { masterRef.current = masterOn ? masterVol / 100 : 0; try { localStorage.setItem('bf_dg_master', masterOn ? 'on' : 'off'); localStorage.setItem('bf_dg_mastervol', String(masterVol)) } catch { /* ignore */ } }, [masterOn, masterVol])
+  useEffect(() => { masterRef.current = masterOn ? masterVol / 100 : 0; try { localStorage.setItem('bf_dg_master2', masterOn ? 'on' : 'off'); localStorage.setItem('bf_dg_mastervol', String(masterVol)) } catch { /* ignore */ } }, [masterOn, masterVol])
   const toggleSe = () => setSeOn((v) => { const n = !v; try { localStorage.setItem('bf_dg_se', n ? 'on' : 'off') } catch { /* ignore */ } return n })
   const [showSettings, setShowSettings] = useState(false) // 設定パネル（歯車）
   const [log, setLog] = useState([])
