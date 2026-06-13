@@ -346,7 +346,8 @@ export function speciesEmoji(pet) {
 // 画像キャッシュ対策：public/ の画像を「同じ名前で」差し替えたら、この数字を上げると最新が表示される
 export const ASSET_VER = '3'
 // 静的画像(先頭/)にだけ ?v= を付けてキャッシュを無効化。外部URL(http...)はそのまま
-export const assetSrc = (src) => (src && src.startsWith('/') ? `${src}?v=${ASSET_VER}` : src)
+// 日本語ファイル名でも安全になるよう encodeURI でパスをエンコードしてからクエリを付ける
+export const assetSrc = (src) => (src && src.startsWith('/') ? `${encodeURI(src)}?v=${ASSET_VER}` : src)
 
 // ダンジョンのタイル画像（public/ に置いたファイルを /xxx.png で指定）。ダンジョンIDごとに設定。
 //  画像を用意したらパスを設定（例 '/dg_floor.png'）。未設定のダンジョンは従来の色／絵文字表示。
@@ -359,6 +360,13 @@ export const DUNGEON_TILES = {
     walls:  ['/dg_wall2.png', '/dg_wall3.png', '/dg_wall5.png'],  // 壁3種（マスごとにランダム表示）
     stairs: '/dg_stairs.png',  // 階段
     item:   '/dg_item.png',    // 落ちているアイテム（共通マーカー）
+  },
+  // 深海の廃都(開発用)専用タイル。壁＝水たまり（後で特定モンスターのみ通行可にする予定）
+  ddev: {
+    floor:  '/水辺床.png',       // 床（水辺の地面）
+    wall:   '/mizutamari.png',  // 壁＝水たまり
+    walls:  ['/mizutamari.png'],
+    stairs: '/dg_stairs.png',
   },
   // 初級の洞窟(d10)は従来の色・絵文字のまま（タイル未設定）
 }
