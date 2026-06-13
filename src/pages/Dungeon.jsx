@@ -257,10 +257,37 @@ export default function Dungeon() {
   }, [bgmOn, bgmDungeon, status])
   const ensureBgm = () => { const a = audioRef.current; if (a && bgmOn && bgmDungeon && a.paused) a.play().catch(() => {}) }
   const toggleBgm = () => setBgmOn((v) => !v)
-  // 効果音（SE）：ONのときだけ再生。短い音は都度生成して多重再生を許す
+  // 効果音（SE）：事前にデコードして「触れた瞬間」に遅延なく鳴らす（Web Audio）
   const seOnRef = useRef(seOn)
   useEffect(() => { seOnRef.current = seOn }, [seOn])
-  const playSe = (name) => { if (!seOnRef.current) return; try { const a = new Audio(`/${name}.mp3?v=${ASSET_VER}`); a.volume = 0.6; a.play().catch(() => {}) } catch { /* ignore */ } }
+  const audioCtxRef = useRef(null)
+  const seBufRef = useRef({})
+  useEffect(() => {
+    const AC = window.AudioContext || window.webkitAudioContext
+    if (!AC) return
+    const ctx = new AC()
+    audioCtxRef.current = ctx
+    ;['aitemu', 'kaidan'].forEach(async (name) => {
+      try {
+        const res = await fetch(`/${name}.mp3?v=${ASSET_VER}`)
+        const arr = await res.arrayBuffer()
+        seBufRef.current[name] = await ctx.decodeAudioData(arr)
+      } catch { /* デコード失敗時は new Audio にフォールバック */ }
+    })
+    return () => { try { ctx.close() } catch { /* ignore */ } }
+  }, [])
+  const playSe = (name) => {
+    if (!seOnRef.current) return
+    const ctx = audioCtxRef.current, buf = seBufRef.current[name]
+    if (!ctx || !buf) { // まだデコード前なら従来方式で鳴らす
+      try { const a = new Audio(`/${name}.mp3?v=${ASSET_VER}`); a.volume = 0.6; a.play().catch(() => {}) } catch { /* ignore */ }
+      return
+    }
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {})
+    const src = ctx.createBufferSource(); src.buffer = buf
+    const g = ctx.createGain(); g.gain.value = 0.6
+    src.connect(g); g.connect(ctx.destination); src.start(0)
+  }
   const gridRef = useRef(null)
   const [cellPx, setCellPx] = useState(0) // 1マスのピクセル幅（床をワールド固定で敷くため）
 
