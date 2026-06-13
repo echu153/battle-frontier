@@ -71,6 +71,17 @@ function getBossForTurn(t) {
 }
 
 // レイドバトルシミュレーション（最大10ターン）
+// レイドの与ダメ圧縮：高火力は頭打ち（伸びを抑える）、低火力は底上げ（通りやすく）。
+//  PIVOT以下のダメージは LOW倍、超過分は HIGH倍に圧縮。これで火力差の開きを縮める。
+//  ※およそ PIVOT*LOW/(1-HIGH) … 付近で交差（それ未満=底上げ／超過=減少）。数値は調整ポイント。
+const RAID_DMG_PIVOT = 700
+const RAID_DMG_LOW = 1.3   // 低火力の底上げ倍率
+const RAID_DMG_HIGH = 0.4  // 高火力の超過分の倍率
+function compressRaidDmg(d) {
+  if (d <= 0) return d
+  return Math.max(1, Math.floor(d <= RAID_DMG_PIVOT ? d * RAID_DMG_LOW : RAID_DMG_PIVOT * RAID_DMG_LOW + (d - RAID_DMG_PIVOT) * RAID_DMG_HIGH))
+}
+
 function simulateRaidBattle(eff, equipment, skillSets, profile) {
   const logs = []
   let playerHp = Math.max(1, profile.hp_current ?? profile.hp_max)
@@ -199,6 +210,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
             else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + BOSS_MDEF)
           }
           let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * (0.9 + Math.random() * 0.2))
+          if (res.dmg > 0) finalDmg = compressRaidDmg(finalDmg) // 高火力頭打ち・低火力底上げ
           if (res.selfDmg > 0) playerHp = Math.max(1, playerHp - res.selfDmg)
           const isHealBlocked = playerBuffs.healBlock?.turns > 0
           if (!isHealBlocked && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
@@ -228,7 +240,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
             const fCrit = Math.random() * 100 < (playerCritRate + (res.bonusCritRate || 0))
             const fCritMult = fCrit ? (1.5 + (eff.critDmg || 0) + passiveCritDmgBonus) : 1.0
             let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * (0.9 + Math.random() * 0.2))
-            fDmg = Math.max(1, fDmg)
+            fDmg = compressRaidDmg(Math.max(1, fDmg))
             totalDamage += fDmg
             logs.push({ text: `↳ 追撃！${res.followup.label ? `（${res.followup.label}）` : ''} ${BOSS_NAME}に${fmt(fDmg)}ダメージ！${fCrit ? ' 💥クリティカル！' : ''}`, color: fCrit ? '#ffaa00' : '#ffaa66' })
           }
@@ -243,6 +255,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
         const baseDmg = Math.max(1, Math.floor(baseAtk * baseAtk / Math.max(1, baseAtk + eDef)) + Math.floor(Math.random() * 4))
         const tosoMult = (hasTosoHonno && playerHp <= profile.hp_max * 0.5) ? (pe('体術師')?1.25:1.1) : 1.0
         let finalDmg = Math.floor(baseDmg * critMult * (isArtifact ? 1.2 : 1.0) * passiveDmgMult * tosoMult * (0.9 + Math.random() * 0.2))
+        finalDmg = compressRaidDmg(finalDmg) // 高火力頭打ち・低火力底上げ
         if (!playerBuffs.healBlock?.turns && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
           const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
           playerHp = Math.min(profile.hp_max, playerHp + rageCure)
