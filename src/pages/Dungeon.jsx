@@ -1188,6 +1188,8 @@ export default function Dungeon() {
         @media (min-width: 900px) {
           .bf-dg-wrap { max-width: 920px; }
         }
+        /* メイン画面(マップ)はウィンドウを広げても大きくなりすぎないよう上限を設ける */
+        .bf-dg-grid { width: 100%; max-width: 440px; margin: 0 auto; }
       `}</style>
       <div className="bf-dg-wrap">
         <div className="bf-dg-main">
@@ -1214,7 +1216,7 @@ export default function Dungeon() {
         </div>
 
         {/* マップ（ビューポート）。接触時に少し震える戦闘演出 */}
-        <div ref={gridRef} style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', willChange: 'transform', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
+        <div ref={gridRef} className="bf-dg-grid" style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', willChange: 'transform', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
           {/* 床はワールド(ダンジョン)に固定＝壁と一緒にスクロール。キャラ移動で床がズレない。1タイル=約4マス */}
           {floorTile && (
             <div style={{ position: 'absolute', inset: 6, backgroundImage: `url(${floorTile})`, backgroundRepeat: 'repeat',
@@ -1578,6 +1580,15 @@ function Btn({ children, onClick }) {
   return <button onClick={onClick} style={{ background: '#001840', border: '1px solid #0088ff', color: '#0088ff', padding: '6px 12px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 13 }}>{children}</button>
 }
 // 十字キー用：44×44の正方形で記号を中央寄せ（字形差で大きさがバラつかないよう固定）
+// 押した瞬間に少し光らせて「どこを押したか」分かるようにする
 function PadBtn({ children, onClick }) {
-  return <button onClick={onClick} style={{ width: 44, height: 44, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, background: '#001840', border: '1px solid #0088ff', color: '#0088ff', cursor: 'pointer', fontFamily: 'monospace', fontSize: 16 }}>{children}</button>
+  const [pressed, setPressed] = useState(false)
+  const hold = () => { setPressed(true); setTimeout(() => setPressed(false), 180) }
+  return (
+    <button onPointerDown={hold} onClick={onClick}
+      style={{ width: 44, height: 44, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+        background: pressed ? '#0a3b6e' : '#001840', border: `1px solid ${pressed ? '#33bbff' : '#0088ff'}`, color: pressed ? '#bfe6ff' : '#0088ff',
+        transform: pressed ? 'scale(0.92)' : 'none', transition: 'background 0.05s, transform 0.05s',
+        cursor: 'pointer', fontFamily: 'monospace', fontSize: 16 }}>{children}</button>
+  )
 }
