@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, ASSET_VER } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, ASSET_VER } from '../constants/pets'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
@@ -142,9 +142,10 @@ function generateFloor(floorNum, dungeon) {
     const t = randInnerTileInRoom(room) // 出入り口（部屋の外周）には置かない
     if (!t) continue
     mark(t.x, t.y)
-    const r = Math.random() // ✨80% / 木の実10% / おにぎり10%
-    if (r < 0.10) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'konomi' })
-    else if (r < 0.20) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'onigiri' })
+    const r = Math.random() // 10F以降はスキルの書も低確率で混ざる
+    if (floorNum >= 10 && r < 0.07) items.push({ id: 's' + i, x: t.x, y: t.y, kind: 'food', key: SCROLL_KEYS[rand(0, SCROLL_KEYS.length - 1)] }) // スキルの書（拾うと袋へ）
+    else if (r < 0.17) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'konomi' })
+    else if (r < 0.27) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'onigiri' })
     else items.push({ id: 'i' + i, x: t.x, y: t.y, kind: 'loot' })
   }
 
@@ -199,6 +200,10 @@ export default function Dungeon() {
   const [paralyzed, setParalyzed] = useState(0)   // 麻痺＝あと何ターン麻痺するか（攻撃が確率で失敗）
   const [burned, setBurned] = useState(false)     // やけど（次フロアで回復・攻撃/特攻ダウン）
   const [weakened, setWeakened] = useState(0)     // ステータスダウン＝あと何ターン攻撃/特攻ダウンか
+  const [shield, setShield] = useState(0)         // 結界/障壁＝あと何ターン被ダメ軽減か
+  const shieldRateRef = useRef(1)                 // 軽減率（被ダメ×rate）
+  const [regen, setRegen] = useState(0)           // 聖域＝あと何ターン毎ターン回復か
+  const regenAmtRef = useRef(0)                   // 1ターンの回復量
   const [padSide, setPadSide] = useState(() => { const v = localStorage.getItem('bf_dg_padside'); return (v === 'right' || v === 'center') ? v : 'left' }) // 移動キーの配置: left|center|right
   const setPad = (n) => { setPadSide(n); try { localStorage.setItem('bf_dg_padside', n) } catch { /* ignore */ } }
   const [seOn, setSeOn] = useState(() => localStorage.getItem('bf_dg_se') !== 'off') // 効果音 ON/OFF（全体ONなら既定オン）
@@ -585,12 +590,14 @@ export default function Dungeon() {
     setParalyzed(0)    // 麻痺も次フロアで回復
     setBurned(false)   // やけども次フロアで回復
     setWeakened(0)     // ステータスダウンも次フロアで回復
+    setShield(0); shieldRateRef.current = 1   // バフも次フロアで切れる
+    setRegen(0); regenAmtRef.current = 0
   }, [])
 
   // ダンジョンを選んで開始
   const beginDungeon = (d) => {
     setDungeon(d)
-    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setBurned(false); setWeakened(0); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
+    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setBurned(false); setWeakened(0); setShield(0); shieldRateRef.current = 1; setRegen(0); regenAmtRef.current = 0; setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
     enterFloor(1, d)
     playFloorIntro(1, d) // 入場時にダンジョン名・フロア表示
     startRun(pet.id, d.id)
@@ -819,6 +826,8 @@ export default function Dungeon() {
     let willWeaken = 0     // このターンに受けたステータスダウンのターン数
     const attackers = []   // 隣接して攻撃してくる敵（1体ずつ順番に演出する）
     enemies = enemies.map((e) => {
+      // スキルの書「しびれ」効果中の敵は行動できない（1ターン消費）
+      if (e.stun > 0) return { ...e, stun: e.stun - 1 }
       // プレイヤーが見えている敵だけが追跡・攻撃する（霧の中からの不可視の急襲を防ぐ）
       //  ＝ 同じ部屋/接近(enemySeesPet) または プレイヤーの視界内(visNow) の敵のみ
       const sees = enemySeesPet(s.rooms, e, player.x, player.y) || visNow.has(e.x + ',' + e.y)
@@ -919,7 +928,15 @@ export default function Dungeon() {
           curHp -= bd; addLog(`🔥 やけどで${bd}ダメージ`); popDmg(player.x, player.y, bd, { follow: true })
           if (curHp <= 0) dead = true
         }
+        // 聖域：毎ターン回復
+        if (regen > 0 && curHp < pet.maxHp) {
+          const rh = Math.min(regenAmtRef.current, pet.maxHp - curHp)
+          if (rh > 0) { curHp += rh; popHeal(player.x, player.y, rh, { follow: true }) }
+        }
       }
+      // バフ・状態の減衰
+      if (shield > 0) setShield((v) => Math.max(0, v - 1))
+      if (regen > 0) setRegen((v) => Math.max(0, v - 1))
       setFullness(nextFull)
       setPetHp(curHp)
       // 状態異常カウントの減衰（毎ターン）
@@ -947,14 +964,16 @@ export default function Dungeon() {
     const STEP_MS = 330
     let hpNow = curPetHp
     let diedMid = false
+    const shieldOn = shield > 0 ? shieldRateRef.current : 1 // 結界/障壁の被ダメ軽減
     attackers.forEach((a, i) => {
       const tid = setTimeout(() => {
         if (diedMid) return // 既に倒れていたら残りの攻撃はなし
-        hpNow -= a.dmg
-        popDmg(player.x, player.y, a.dmg, { follow: true })
+        const dmg = Math.max(1, Math.round(a.dmg * shieldOn))
+        hpNow -= dmg
+        popDmg(player.x, player.y, dmg, { follow: true })
         if (a.healShown > 0) popHeal(a.x, a.y, a.healShown)
         const tag = a.notes.length ? `【${a.notes.join('・')}】` : '攻撃'
-        addLog(`${a.name}の${tag}！ ${a.dmg}ダメージ 💥`, 'right')
+        addLog(`${a.name}の${tag}！ ${dmg}ダメージ${shieldOn < 1 ? '🛡' : ''} 💥`, 'right')
         applyFx({ pet: { flash: true }, enemies: { [a.id]: { lunge: a.lunge } } })
         triggerShake('hit')
         setPetHp(hpNow)
@@ -979,6 +998,7 @@ export default function Dungeon() {
     if (key === 'escape') {
       setStatus('escaped'); addLog('🪽 ダンジョンから脱出した'); finishRun(false); return
     }
+    if (def?.scroll) { castScroll(key); return } // スキルの書を発動（1ターン経過は内部で）
     if (def?.healPct) {
       const heal = Math.ceil(pet.maxHp * def.healPct)
       const healed = Math.min(pet.maxHp, petHp + heal)
@@ -989,6 +1009,78 @@ export default function Dungeon() {
       addLog(`${def.emoji} ${def.name}を食べた（満腹+${def.fullness}）`)
       commitTurn(state, state.player, state.enemies, petHp, -def.fullness) // 1ターン経過＋満腹回復
     }
+  }
+
+  // スキルの書を発動。対象選定（範囲/斜め/全体）→ 威力Lv×2×mult のダメージ＋効果。1ターン消費
+  const castScroll = (key) => {
+    const sc = getScroll(key)
+    if (!sc || !state) return
+    const px = state.player.x, py = state.player.y
+    const lv = pet.level || 1
+    const vary = (n) => Math.max(1, Math.round(n * (0.9 + Math.random() * 0.2)))
+    const dmgPerHit = (mult) => vary(lv * 2 * mult) // 威力 = Lv×2×mult
+
+    // --- 自分バフ系（結界/障壁/聖域） ---
+    if (sc.target === 'self') {
+      if (sc.shieldRate) { setShield(sc.shieldTurns); shieldRateRef.current = sc.shieldRate }
+      if (sc.regenPct) { setRegen(sc.regenTurns); regenAmtRef.current = Math.max(1, Math.ceil(pet.maxHp * sc.regenPct)) }
+      addLog(`${sc.emoji} ${sc.name}を唱えた！`)
+      commitTurn(state, state.player, state.enemies, petHp) // 1ターン経過
+      return
+    }
+
+    // --- 攻撃系：対象の敵を選ぶ ---
+    const range = sc.range || 1
+    const inLine = (e) => {
+      const dx = e.x - px, dy = e.y - py
+      const cheb = Math.max(Math.abs(dx), Math.abs(dy))
+      if (cheb < 1 || cheb > range) return false
+      const straight = dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy) // 直線(縦横)or斜め
+      if (Math.abs(dx) === Math.abs(dy) && !sc.diag) return false // 斜め不可スキル
+      return straight
+    }
+    let targets = []
+    if (sc.target === 'aoe') {
+      targets = state.enemies.filter((e) => Math.max(Math.abs(e.x - px), Math.abs(e.y - py)) === 1) // 周囲8マス
+    } else {
+      const cand = state.enemies.filter(inLine).sort((a, b) =>
+        (Math.max(Math.abs(a.x - px), Math.abs(a.y - py))) - (Math.max(Math.abs(b.x - px), Math.abs(b.y - py))))
+      if (cand.length) targets = [cand[0]] // 最寄りの1体
+    }
+    if (targets.length === 0) { addLog(`${sc.emoji} ${sc.name}！ しかし届く敵がいない…`); commitTurn(state, state.player, state.enemies, petHp); return }
+
+    let enemies = state.enemies
+    let healBack = 0
+    let totalDealt = 0
+    for (const tg of targets) {
+      const hits = sc.hits || 1
+      let dealt = 0
+      for (let h = 0; h < hits; h++) {
+        const mult = sc.dice ? (sc.dice[0] + Math.random() * (sc.dice[1] - sc.dice[0])) : sc.mult
+        dealt += dmgPerHit(mult)
+      }
+      const cur = enemies.find((e) => e.id === tg.id)
+      if (!cur) continue
+      const newHp = cur.hp - dealt
+      totalDealt += dealt
+      popDmg(cur.x, cur.y, dealt)
+      if (sc.stun && Math.random() < sc.stun) addLog(`⚡ ${cur.name}はしびれた！`)
+      if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== cur.id); enemiesRef.current += 1; grantKill(floorNum, cur.name, px, py) }
+      else enemies = enemies.map((e) => e.id === cur.id ? { ...e, hp: newHp, stun: (sc.stun && Math.random() < sc.stun) ? 1 : (e.stun || 0) } : e)
+    }
+    if (sc.drain) healBack = Math.floor(totalDealt * sc.drain)
+    addLog(`${sc.emoji} ${sc.name}！ ${targets.length > 1 ? `${targets.length}体に` : ''}${totalDealt}ダメージ`)
+    triggerShake('hit')
+
+    let curHp = petHp
+    if (healBack > 0) { const h = Math.min(pet.maxHp, curHp + healBack) - curHp; if (h > 0) { curHp += h; addLog(`💚 ${h}回復`); popHeal(px, py, h, { follow: true }) } }
+    if (sc.recoil) { const rc = Math.max(1, Math.round(totalDealt * sc.recoil)); curHp -= rc; addLog(`💢 反動で${rc}ダメージ`); popDmg(px, py, rc, { follow: true }) }
+
+    setState({ ...state, enemies })
+    if (curHp <= 0) { setPetHp(0); setStatus('dead'); addLog('💀 ペットは力尽きた…'); finishRun(false, true); return }
+    busyRef.current = true
+    const tid = setTimeout(() => commitTurn({ ...state, enemies }, state.player, enemies, curHp), BREATH_MS)
+    turnTimers.current.push(tid)
   }
 
   // 持ち物を足元に置く（捨てる）。足元に既にアイテムがあると不可。1ターン消費
@@ -1347,6 +1439,8 @@ export default function Dungeon() {
             if (paralyzed > 0) chips.push({ k: 'para', label: `⚡ 麻痺 残${paralyzed}`, col: '#ffe066' })
             if (burned) chips.push({ k: 'burn', label: '🔥 やけど', col: '#ff7755' })
             if (burned || weakened > 0) chips.push({ k: 'down', label: '▼ ステータスダウン', col: '#88bbdd' })
+            if (shield > 0) chips.push({ k: 'shield', label: `🛡 結界 残${shield}`, col: '#66ddff' })
+            if (regen > 0) chips.push({ k: 'regen', label: `🕊 聖域 残${regen}`, col: '#aaffcc' })
             if (fullness <= 0) chips.push({ k: 'hungry', label: '🥀 空腹', col: '#ff8855' })
             return (
               <div style={{ position: 'absolute', top: 6, left: 6, right: 6, zIndex: 6, pointerEvents: 'none',

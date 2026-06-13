@@ -283,7 +283,53 @@ export const PET_ITEMS = {
   spdef_seed: { key: 'spdef_seed', name: '特防の素',  emoji: '🟢', price: 0, dungeon: false, capped: true, seed: 'spdef', up: 1,  desc: 'チャームの特防を+1' },
   hp_seed:    { key: 'hp_seed',    name: 'HPの素',    emoji: '🟡', price: 0, dungeon: false, capped: true, seed: 'hp',    up: 5,  desc: 'チャームのHPを+5（消費1）' },
 }
-export const SHOP_ITEMS = Object.values(PET_ITEMS).filter((i) => !i.seed)   // 商店は素を除く
+
+// ============================================================
+// スキルの書（消費アイテム）。使うとそのスキルを発動して消費。
+//  威力 = ペットLv × 2 × mult（ヒットごと）。本編skillsテーブルの倍率/効果に準拠。
+//  target: 'enemy'=対象1体 / 'aoe'=周囲(8マス)全体 / 'self'=自分(バフ)
+//  range=届くマス数 / diag=斜め判定あり / hits=ヒット数
+//  効果: drain=与ダメ割合を回復 / recoil=与ダメ割合の反動 / stun=敵を確率で1ターン行動不能
+//        dice=[min,max]の乱数倍率 / shieldRate+shieldTurns=被ダメ軽減バフ / regenPct+regenTurns=毎ターン回復
+// ============================================================
+export const SCROLLS = {
+  scr_iai:    { name: '居合斬',       emoji: '🗡️', mult: 1.5, hits: 1, range: 1, diag: true, target: 'enemy' },
+  scr_sutemi: { name: 'すてみ',       emoji: '💢', mult: 1.8, hits: 1, range: 1, diag: true, target: 'enemy', recoil: 0.2 },
+  scr_sanren: { name: '三連射',       emoji: '🏹', mult: 0.6, hits: 3, range: 2, diag: true, target: 'enemy' },
+  scr_shunpo: { name: '瞬歩瞬殺',     emoji: '🥷', mult: 1.5, hits: 1, range: 1, diag: true, target: 'enemy' },
+  scr_quake:  { name: 'アースクエイク', emoji: '🌎', mult: 1.6, hits: 1, range: 1, diag: true, target: 'aoe' },
+  scr_soul:   { name: 'ソウルドレイン', emoji: '👻', mult: 1.4, hits: 1, range: 1, diag: true, target: 'enemy', drain: 0.3 },
+  scr_inori:  { name: '祈りの結界',   emoji: '🙏', target: 'self', shieldRate: 0.7, shieldTurns: 4 },
+  scr_sabaki: { name: '聖なる裁き',   emoji: '⚖️', mult: 1.9, hits: 1, range: 1, diag: true, target: 'enemy' },
+  scr_kori:   { name: '氷の障壁',     emoji: '🧊', target: 'self', shieldRate: 0.6, shieldTurns: 4 },
+  scr_mind:   { name: 'マインドブレイク', emoji: '🧠', mult: 1.9, hits: 1, range: 1, diag: true, target: 'enemy', stun: 0.4 },
+  scr_goren:  { name: '五連殺',       emoji: '⚔️', mult: 0.3, hits: 5, range: 1, diag: true, target: 'enemy' },
+  scr_gun:    { name: '連装銃撃',     emoji: '🔫', mult: 0.5, hits: 4, range: 2, diag: true, target: 'enemy' },
+  scr_dice:   { name: 'ラッキーダイス', emoji: '🎲', hits: 1, range: 1, diag: true, target: 'enemy', dice: [0.9, 2.4] },
+  scr_raikou: { name: '雷光斬',       emoji: '⚡', mult: 1.7, hits: 1, range: 1, diag: true, target: 'enemy', stun: 0.3 },
+  scr_seiiki: { name: '聖域展開',     emoji: '🕊️', target: 'self', regenPct: 0.1, regenTurns: 4, shieldRate: 0.8, shieldTurns: 4 },
+  scr_dragon: { name: 'ドラゴンスラスト', emoji: '🐉', mult: 1.5, hits: 1, range: 1, diag: true, target: 'enemy' },
+}
+export const SCROLL_KEYS = Object.keys(SCROLLS)
+export const getScroll = (key) => SCROLLS[key]
+function scrollDesc(s) {
+  if (s.target === 'self') {
+    const parts = []
+    if (s.shieldRate) parts.push(`${s.shieldTurns}ターン被ダメ${Math.round((1 - s.shieldRate) * 100)}%減`)
+    if (s.regenPct) parts.push(`${s.regenTurns}ターン毎ターン最大HP${Math.round(s.regenPct * 100)}%回復`)
+    return parts.join('・')
+  }
+  const tgt = s.target === 'aoe' ? '周囲の敵全体' : `${s.range}マス先まで(斜め可)の敵1体`
+  const pow = s.dice ? 'ランダム威力' : `威力Lv×2×${s.mult}${s.hits > 1 ? `×${s.hits}回` : ''}`
+  const ex = [s.drain ? `与ダメの${Math.round(s.drain * 100)}%回復` : '', s.recoil ? `反動${Math.round(s.recoil * 100)}%` : '', s.stun ? `${Math.round(s.stun * 100)}%でしびれ` : ''].filter(Boolean).join('・')
+  return `${tgt}に${pow}${ex ? '／' + ex : ''}`
+}
+// スキルの書をアイテム化して PET_ITEMS に統合（ダンジョンで拾って使う消費アイテム）
+for (const [k, s] of Object.entries(SCROLLS)) {
+  PET_ITEMS[k] = { key: k, name: `${s.name}の書`, emoji: s.emoji, price: 0, dungeon: true, capped: true, scroll: true, desc: scrollDesc(s) }
+}
+
+export const SHOP_ITEMS = Object.values(PET_ITEMS).filter((i) => !i.seed && !i.scroll)   // 商店は素・スキルの書を除く
 export const SEED_ITEMS = Object.values(PET_ITEMS).filter((i) => i.seed)
 export const DUNGEON_ITEMS = Object.values(PET_ITEMS).filter((i) => i.dungeon)
 export const CAPPED_ITEMS = Object.values(PET_ITEMS).filter((i) => i.capped)
