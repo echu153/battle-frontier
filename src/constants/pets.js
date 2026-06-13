@@ -344,7 +344,7 @@ export function speciesEmoji(pet) {
   return sp.emoji || '🐾'
 }
 // 画像キャッシュ対策：public/ の画像を「同じ名前で」差し替えたら、この数字を上げると最新が表示される
-export const ASSET_VER = '2'
+export const ASSET_VER = '3'
 // 静的画像(先頭/)にだけ ?v= を付けてキャッシュを無効化。外部URL(http...)はそのまま
 export const assetSrc = (src) => (src && src.startsWith('/') ? `${src}?v=${ASSET_VER}` : src)
 
