@@ -202,6 +202,9 @@ export default function Dungeon() {
   const [padSide, setPadSide] = useState(() => { const v = localStorage.getItem('bf_dg_padside'); return (v === 'right' || v === 'center') ? v : 'left' }) // 移動キーの配置: left|center|right
   const setPad = (n) => { setPadSide(n); try { localStorage.setItem('bf_dg_padside', n) } catch { /* ignore */ } }
   const [seOn, setSeOn] = useState(() => localStorage.getItem('bf_dg_se') !== 'off') // 効果音 ON/OFF（全体ONなら既定オン）
+  const [seVol, setSeVol] = useState(() => { const v = parseInt(localStorage.getItem('bf_dg_sevol') || '70', 10); return isNaN(v) ? 70 : Math.min(100, Math.max(0, v)) }) // SE音量 0〜100
+  const seVolRef = useRef(seVol / 100)
+  useEffect(() => { seVolRef.current = seVol / 100; try { localStorage.setItem('bf_dg_sevol', String(seVol)) } catch { /* ignore */ } }, [seVol])
   const [masterOn, setMasterOn] = useState(() => localStorage.getItem('bf_dg_master') === 'on') // 全体音量のON/OFF（初期OFF）
   const [masterVol, setMasterVol] = useState(() => { const v = parseInt(localStorage.getItem('bf_dg_mastervol') || '70', 10); return isNaN(v) ? 70 : Math.min(100, Math.max(0, v)) }) // 全体音量 0〜100
   const masterRef = useRef(masterOn ? masterVol / 100 : 0)
@@ -257,10 +260,11 @@ export default function Dungeon() {
   useEffect(() => {
     const a = audioRef.current
     if (!a) return
-    if (bgmOn && bgmDungeon && status === 'exploring') { a.play().catch(() => {}) }
+    // 全体オンに切り替えた瞬間にも再生を開始する（ボタンクリックが操作起点になる）
+    if (bgmOn && bgmDungeon && masterOn && status === 'exploring') { a.play().catch(() => {}) }
     else { a.pause() }
-  }, [bgmOn, bgmDungeon, status])
-  const ensureBgm = () => { const a = audioRef.current; if (a && bgmOn && bgmDungeon && a.paused) a.play().catch(() => {}) }
+  }, [bgmOn, bgmDungeon, masterOn, status])
+  const ensureBgm = () => { const a = audioRef.current; if (a && bgmOn && bgmDungeon && masterOn && a.paused) a.play().catch(() => {}) }
   const toggleBgm = () => setBgmOn((v) => { const n = !v; try { localStorage.setItem('bf_dg_bgm', n ? 'on' : 'off') } catch { /* ignore */ } return n })
   // 効果音（SE）：事前にデコードして「触れた瞬間」に遅延なく鳴らす（Web Audio）
   const seOnRef = useRef(seOn)
@@ -286,15 +290,17 @@ export default function Dungeon() {
     const m = masterRef.current
     if (m <= 0) return // 全体ミュート中は鳴らさない
     const rate = name === 'kaidan' ? 1.2 : 1 // 階段は1.2倍速で再生
-    const baseVol = name === 'aitemu' ? 1.0 : 0.6 // アイテム音は大きめ
+    const baseVol = name === 'aitemu' ? 2.0 : 0.6 // アイテム音は大きめ
+    const vol = baseVol * seVolRef.current * m // SE音量×全体音量
+    if (vol <= 0) return
     const ctx = audioCtxRef.current, buf = seBufRef.current[name]
     if (!ctx || !buf) { // まだデコード前なら従来方式で鳴らす
-      try { const a = new Audio(`/${name}.mp3?v=${ASSET_VER}`); a.volume = Math.min(1, baseVol * m); a.playbackRate = rate; a.play().catch(() => {}) } catch { /* ignore */ }
+      try { const a = new Audio(`/${name}.mp3?v=${ASSET_VER}`); a.volume = Math.min(1, vol); a.playbackRate = rate; a.play().catch(() => {}) } catch { /* ignore */ }
       return
     }
     if (ctx.state === 'suspended') ctx.resume().catch(() => {})
     const src = ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate
-    const g = ctx.createGain(); g.gain.value = baseVol * m
+    const g = ctx.createGain(); g.gain.value = vol
     src.connect(g); g.connect(ctx.destination); src.start(0)
   }
   const gridRef = useRef(null)
@@ -1290,13 +1296,17 @@ export default function Dungeon() {
                     title={`音量 ${bgmVol}%`} style={{ width: '100%', accentColor: '#0088ff', cursor: 'pointer', marginBottom: 8 }} />
                 )}
                 {/* SE */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: masterOn ? 1 : 0.5 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: seOn && masterOn ? 4 : 0, opacity: masterOn ? 1 : 0.5 }}>
                   <span style={{ color: '#aaccee', fontSize: 11 }}>効果音（SE）</span>
                   <button onClick={toggleSe} disabled={!masterOn}
                     style={{ background: seOn ? '#101a30' : '#0a0a14', border: `1px solid ${seOn ? '#0088ff' : '#334455'}`, color: seOn ? '#66bbff' : '#556677', padding: '3px 10px', cursor: masterOn ? 'pointer' : 'not-allowed', fontFamily: 'monospace', fontSize: 11 }}>
                     {seOn ? '🔊 ON' : '🔇 OFF'}
                   </button>
                 </div>
+                {seOn && masterOn && (
+                  <input type="range" min="0" max="100" value={seVol} onChange={(e) => setSeVol(Number(e.target.value))}
+                    title={`SE音量 ${seVol}%`} style={{ width: '100%', accentColor: '#0088ff', cursor: 'pointer' }} />
+                )}
               </div>
             )}
           </div>
