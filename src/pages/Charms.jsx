@@ -31,6 +31,8 @@ export default function Charms() {
   const [checked, setChecked] = useState({})  // 一括強化で選択中の能力
   const [fromId, setFromId] = useState(null)  // 継承元
   const [toId, setToId] = useState(null)      // 継承先
+  const [fuseBase, setFuseBase] = useState(null) // 合成：残す側
+  const [fuseMat, setFuseMat] = useState(null)   // 合成：吸収して消える側
   const [confirm, setConfirm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
@@ -87,6 +89,18 @@ export default function Charms() {
     flash('継承しました（継承元のチャームは消えました）')
   }
 
+  const doFuse = async () => {
+    if (!fuseBase || !fuseMat || fuseBase === fuseMat) { flash('残す側と素材を選んでください'); return }
+    if ((seeds.shard || 0) < 1) { flash('神秘の欠片が足りません'); return }
+    setLoading(true)
+    const { error } = await supabase.rpc('pet_charm_fuse', { p_base: fuseBase, p_mat: fuseMat })
+    setLoading(false)
+    if (error) { flash('合成に失敗: ' + error.message); return }
+    setFuseBase(null); setFuseMat(null)
+    await load()
+    flash('合成しました！（2つの効果を引き継ぎ・素材は消滅）')
+  }
+
   const Btn = ({ children, onClick, dim }) => (
     <button onClick={onClick} style={{ background: dim ? '#0a1424' : '#001840', border: `1px solid ${dim ? '#335588' : '#0088ff'}`, color: dim ? '#88aacc' : '#0088ff', padding: '5px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>{children}</button>
   )
@@ -110,14 +124,16 @@ export default function Charms() {
         {msg && <div style={{ background: '#101a30', border: '1px solid #335588', color: '#aaddff', padding: 8, fontSize: 12, marginBottom: 10 }}>{msg}</div>}
 
         {/* 所持素 */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12, marginBottom: 10, color: '#cce6ff' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12, marginBottom: 6, color: '#cce6ff' }}>
           {STAT_KEYS.map((k) => <span key={k}><SeedIcon seed={STAT_META[k].seed} emoji={STAT_META[k].emoji} />{STAT_META[k].label}の素×{seeds[STAT_META[k].seed] || 0}</span>)}
         </div>
+        <div style={{ fontSize: 12, marginBottom: 10, color: '#c8a0ff' }}>🔮 神秘の欠片×{seeds.shard || 0}</div>
 
         {/* タブ */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
           <Btn onClick={() => setTab('enhance')} dim={tab !== 'enhance'}>強化</Btn>
           <Btn onClick={() => setTab('inherit')} dim={tab !== 'inherit'}>継承</Btn>
+          <Btn onClick={() => setTab('fuse')} dim={tab !== 'fuse'}>合成</Btn>
         </div>
 
         {charms.length === 0 && <div style={{ color: '#557799', fontSize: 12 }}>チャームを持っていません（ダンジョンで拾えます）</div>}
@@ -194,6 +210,29 @@ export default function Charms() {
               </div>
             ))}
             <Btn onClick={() => (fromId && toId && fromId !== toId ? setConfirm(true) : flash('継承元と継承先を選んでください'))}>継承する</Btn>
+          </div>
+        )}
+
+        {tab === 'fuse' && charms.length > 0 && (
+          <div style={{ border: '1px solid #663388', background: '#0e0820', padding: 12 }}>
+            <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔮 神秘の欠片1つで2つのチャームを1つに（効果も両方引継ぎ・成長は合算で合計300まで）。<span style={{ color: '#ff8866' }}>素材側は消えます。合成済みは再合成不可。</span></div>
+            {[['base', '残す側（効果＋成長を受け継ぐ）', fuseBase, setFuseBase], ['mat', '素材（消える）', fuseMat, setFuseMat]].map(([key, label, val, setter]) => (
+              <div key={key} style={{ marginBottom: 10 }}>
+                <div style={{ color: '#9977cc', fontSize: 11, marginBottom: 4 }}>{label}</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {charms.map((c) => {
+                    const d = getCharm(c.ctype); const on = c.id === val
+                    return (
+                      <button key={c.id} onClick={() => !c.fused && setter(c.id)} disabled={c.fused}
+                        style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: c.fused ? '#556' : '#cce6ff', padding: '5px 8px', cursor: c.fused ? 'not-allowed' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                        {on ? '✓ ' : ''}{d.emoji} {charmDisplayName(c)}{c.fused ? '（合成済）' : ''}（計{(c.hp || 0) + (c.atk || 0) + (c.spatk || 0) + (c.def || 0) + (c.spdef || 0)}）
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+            <Btn onClick={() => !loading && doFuse()}>🔮 合成する（欠片×{seeds.shard || 0}）</Btn>
           </div>
         )}
       </div>

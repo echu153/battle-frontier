@@ -26,11 +26,12 @@ grant execute on function pet_evolve(uuid) to authenticated;
 -- 敵撃破でEXP即時付与。EXP上限レベルを 進化済=9999 / 未進化=50 に切替
 -- EXPは敵ごとの強さ倍率（クライアントの statMult と同じ表をサーバー側に持ち検証）に比例
 drop function if exists dungeon_kill(uuid, int); -- 旧2引数版はデフォルト引数と曖昧になるため削除
-create or replace function dungeon_kill(p_run_id uuid, p_floor int, p_enemy text default null)
+drop function if exists dungeon_kill(uuid, int, text); -- 旧3引数版も削除（p_lucky追加版に差し替え）
+create or replace function dungeon_kill(p_run_id uuid, p_floor int, p_enemy text default null, p_lucky boolean default false)
 returns json language plpgsql security definer set search_path = public as $$
 declare
   v_run dungeon_runs%rowtype; v_pet pets%rowtype;
-  v_floor int; v_exp_gain int; v_new_exp int; v_new_level int; v_cap int;
+  v_floor int; v_exp_gain int; v_new_exp int; v_new_level int; v_cap int; v_lucky boolean := false;
 begin
   select * into v_run from dungeon_runs where id = p_run_id;
   if not found then raise exception 'run not found'; end if;
@@ -49,6 +50,8 @@ begin
     when '野良犬'   then 17
     when '盗賊'     then 21
     else greatest(1, 3 + v_floor) end;
+  -- 幸せのチャーム：50%で経験値+50%（サーバー側で抽選＝改ざん不可）
+  if p_lucky and random() < 0.5 then v_exp_gain := round(v_exp_gain * 1.5)::int; v_lucky := true; end if;
 
   select * into v_pet from pets where id = v_run.pet_id and owner_id = auth.uid();
   if not found then raise exception 'pet not found'; end if;
@@ -65,6 +68,6 @@ begin
   update pets set exp = v_new_exp, level = v_new_level where id = v_pet.id;
   update dungeon_runs set enemies_defeated = enemies_defeated + 1 where id = p_run_id;
 
-  return json_build_object('exp_gain', v_exp_gain, 'level', v_new_level, 'exp', v_new_exp, 'leveled', v_new_level > v_pet.level);
+  return json_build_object('exp_gain', v_exp_gain, 'level', v_new_level, 'exp', v_new_exp, 'leveled', v_new_level > v_pet.level, 'lucky', v_lucky);
 end; $$;
-grant execute on function dungeon_kill(uuid, int, text) to authenticated;
+grant execute on function dungeon_kill(uuid, int, text, boolean) to authenticated;

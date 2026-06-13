@@ -358,6 +358,7 @@ export const PET_ITEMS = {
   onigiri: { key: 'onigiri', name: 'おにぎり',         emoji: '🍙', price: 200,   dungeon: true,  capped: true, fullness: 30, desc: '満腹度を30回復' },
   konomi:  { key: 'konomi',  name: '木の実',           emoji: '🍒', price: 300,   dungeon: true,  capped: true, healPct: 0.2, desc: '最大HPの20%を回復' },
   rename:  { key: 'rename',  name: 'ニックネーム変更券', emoji: '🎫', price: 100000, dungeon: false, capped: true,  desc: 'ペットの名前を変更できる' },
+  shard:   { key: 'shard',   name: '神秘の欠片',       emoji: '🔮', price: 0, dungeon: false, capped: true, desc: 'チャーム合成に使う（30Fボス討伐でドロップ）' },
   // チャーム強化用の素（ダンジョンで拾う。チャームページで使用）
   atk_seed:   { key: 'atk_seed',   name: '攻撃の素',  emoji: '🔴', img: '/kougekimoto.png',     price: 0, dungeon: false, capped: true, seed: 'atk',   up: 1,  desc: 'チャームの攻撃を+1' },
   spatk_seed: { key: 'spatk_seed', name: '特攻の素',  emoji: '🟣', img: '/tokukoumoto.png',     price: 0, dungeon: false, capped: true, seed: 'spatk', up: 1,  desc: 'チャームの特攻を+1' },
@@ -425,17 +426,29 @@ export const CHARM_HP_PER = 5
 export const CHARM_STATS = ['hp', 'atk', 'spatk', 'def', 'spdef']
 export const CHARMS = {
   hajimari: { type: 'hajimari', name: 'はじまりのチャーム', emoji: '🔰', effect: null,       desc: '追加能力なし' },
-  antidote: { type: 'antidote', name: '解毒のチャーム',     emoji: '🧪', effect: 'antidote', desc: '毒になる確率が50%減る' },
-  guard:    { type: 'guard',    name: '守りのチャーム',     emoji: '🛡️', effect: 'guard',    desc: '防御＋10%' },
+  antidote: { type: 'antidote', name: '解毒のチャーム',     emoji: '🧪', effect: 'antidote', minFloor: 1,  desc: '毒になる確率が50%減る' },
+  guard:    { type: 'guard',    name: '守りのチャーム',     emoji: '🛡️', effect: 'guard',    minFloor: 1,  desc: '防御＋10%' },
+  mdefup:   { type: 'mdefup',   name: 'とくぼうのチャーム', emoji: '🟩', effect: 'mdefup',   minFloor: 1,  desc: '特防＋10%' },
+  atkup:    { type: 'atkup',    name: '攻撃のチャーム',     emoji: '🟥', effect: 'atkup',    minFloor: 10, desc: '攻撃＋10%' },
+  spatkup:  { type: 'spatkup',  name: 'とくこうのチャーム', emoji: '🟪', effect: 'spatkup',  minFloor: 10, desc: '特攻＋10%' },
+  evade:    { type: 'evade',    name: '回避のチャーム',     emoji: '💨', effect: 'evade',    minFloor: 20, desc: '回避＋5%' },
+  hit:      { type: 'hit',      name: '命中のチャーム',     emoji: '🎯', effect: 'hit',      minFloor: 20, desc: '命中＋5%' },
+  lucky:    { type: 'lucky',    name: '幸せのチャーム',     emoji: '🍀', effect: 'lucky',    minFloor: 20, rare: true, desc: '撃破時50%で経験値+50%（主人公は10%で経験値+1）' },
 }
 export const getCharm = (t) => CHARMS[t] || CHARMS.hajimari
+// そのフロアでドロップする通常チャーム（rare=幸せは別枠抽選）
+export const charmsForFloor = (floor) => Object.values(CHARMS).filter((c) => !c.rare && c.minFloor && floor >= c.minFloor).map((c) => c.type)
+// チャームが持つ効果一覧（合成で ctype2 を持つと2つ）
+export const charmEffects = (charm) => [charm?.ctype, charm?.ctype2].filter(Boolean).map((t) => getCharm(t).effect).filter(Boolean)
+export const charmHasEffect = (charm, eff) => charmEffects(charm).includes(eff)
 // 使用した素の合計数（=強化ゲージ。CHARM_TOTAL_MAX まで）
 export const charmTotal = (c) => (c?.atk || 0) + (c?.spatk || 0) + (c?.def || 0) + (c?.spdef || 0) + (c?.hp || 0)
 // HPボーナス（HPの素は1個=+CHARM_HP_PER）。hp列は「使った個数」を保持
 export const charmHpBonus = (c) => (c?.hp || 0) * CHARM_HP_PER
 // 表示名（素を使った分だけ ＋N がつく）
 export function charmDisplayName(charm) {
-  const base = getCharm(charm?.ctype).name
+  let base = getCharm(charm?.ctype).name
+  if (charm?.ctype2) base += `＆${getCharm(charm.ctype2).name}` // 合成済みは2つの名前
   const t = charmTotal(charm)
   return t > 0 ? `${base}＋${t}` : base
 }
@@ -454,15 +467,18 @@ export function applyCharmStats(stats, charm) {
   let { maxHp, atk, def, mdef } = stats
   maxHp += charmHpBonus(charm)
   // チャーム込みの物理値/特殊値を両方持つ（たいあたりは高いほうを参照して攻撃する）
-  const atkPhys = atk + (charm.atk || 0)
-  const atkSpec = atk + (charm.spatk || 0)
-  // 表示用のメイン攻撃値は従来どおり攻撃タイプ側
-  atk = stats.atkType === 'spec' ? atkSpec : atkPhys
+  let atkPhys = atk + (charm.atk || 0)
+  let atkSpec = atk + (charm.spatk || 0)
   def += charm.def || 0
   mdef += charm.spdef || 0
-  let out = { ...stats, maxHp, atk, atkPhys, atkSpec, def, mdef }
-  if (getCharm(charm.ctype).effect === 'guard') out.def = Math.round(out.def * 1.1)
-  return out
+  // 効果（合成で2つ持つことがある）：guard=防御+10% / mdefup=特防+10% / atkup=攻撃+10% / spatkup=特攻+10%
+  const effs = charmEffects(charm)
+  if (effs.includes('guard')) def = Math.round(def * 1.1)
+  if (effs.includes('mdefup')) mdef = Math.round(mdef * 1.1)
+  if (effs.includes('atkup')) atkPhys = Math.round(atkPhys * 1.1)
+  if (effs.includes('spatkup')) atkSpec = Math.round(atkSpec * 1.1)
+  atk = stats.atkType === 'spec' ? atkSpec : atkPhys // 表示用のメイン攻撃値は攻撃タイプ側
+  return { ...stats, maxHp, atk, atkPhys, atkSpec, def, mdef }
 }
 
 export function speciesLabel(pet) {

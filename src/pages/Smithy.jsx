@@ -160,6 +160,7 @@ export default function Smithy() {
   const [sortKey, setSortKey] = useState(() => localStorage.getItem('equipSortKey') || 'obtained_asc')
   const [craftConfirm, setCraftConfirm] = useState(null) // { type:'equipment'|'stone', items?, selectedIds?, rarity }
   const [enhanceResult, setEnhanceResult] = useState(null) // { ok, title, text } 強化ポップアップの結果表示
+  const [matSource, setMatSource] = useState('equip')       // 強化素材の選択: 'equip'=同名装備 / 'stone'=強化石
 
   useEffect(() => { fetchAll() }, [])
 
@@ -194,7 +195,7 @@ export default function Smithy() {
     else await supabase.from('player_items').update({ quantity: newQty }).eq('id', found.id)
   }
 
-  const doEnhance = async (item) => {
+  const doEnhance = async (item, source = 'equip') => {
     setLoading(true)
     const currentPlus = item.enhance_plus || 0
     const nextPlus = currentPlus + 1
@@ -225,11 +226,17 @@ export default function Smithy() {
       e.weapons?.name === item.weapons.name && e.id !== item.id && !e.equipped && !e.is_favorite
       && !(e.enhance_plus > 0)  // 強化済み(+1以上)の装備は素材にしない
     )
-    const serverTotalAvailable = serverSameItems.length + serverStoneCount
-
-    if (serverTotalAvailable < materialCount) {
-      showMessage(`素材が足りません！（同名装備${serverSameItems.length}個 + 強化石(${RARITY_LABELS[rarity]})${serverStoneCount}個 = ${serverTotalAvailable}個、${materialCount}個必要）`, '#ff4444')
-      setLoading(false); return
+    // 選択した素材だけで足りているか判定（同名装備 or 強化石）
+    if (source === 'stone') {
+      if (serverStoneCount < materialCount) {
+        showMessage(`強化石(${RARITY_LABELS[rarity]})が足りません！（${serverStoneCount}/${materialCount}個）`, '#ff4444')
+        setLoading(false); return
+      }
+    } else {
+      if (serverSameItems.length < materialCount) {
+        showMessage(`同名装備が足りません！（${serverSameItems.length}/${materialCount}個）`, '#ff4444')
+        setLoading(false); return
+      }
     }
 
     // ★ 楽観ロック: ゴールドが読み取り時と同じ値の場合のみ消費（別タブが先に消費してたら失敗）
@@ -243,9 +250,9 @@ export default function Smithy() {
       await fetchAll(); setLoading(false); return
     }
 
-    // 同名装備を消費
-    const useEquipCount = Math.min(serverSameItems.length, materialCount)
-    const useStoneCount = materialCount - useEquipCount
+    // 選択した素材のみ消費（同名装備 or 強化石）
+    const useEquipCount = source === 'stone' ? 0 : materialCount
+    const useStoneCount = source === 'stone' ? materialCount : 0
     for (let i = 0; i < useEquipCount; i++) {
       await supabase.from('player_equipment').delete().eq('id', serverSameItems[i].id)
     }

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, DEVIL_PAPIA, assetSrc, ASSET_VER } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmsForFloor, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, DEVIL_PAPIA, assetSrc, ASSET_VER } from '../constants/pets'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
@@ -65,12 +65,17 @@ function stoneRankForFloor(floor) {
   return STONE_RANKS[Math.min(STONE_RANKS.length - 1, baseIdx + tier)]
 }
 // 戦利品枠の抽選：素50 / 強化石10 / 宝石10 / チャーム4 / 装備6（合計80）
+//  チャームはフロア解禁制。20F以降は0.1%で幸せのチャーム（超レア）
 function rollFloorLoot(dungeonId, floor) {
   const r = Math.random() * 80
   if (r < 50) return { type: 'seed', seedKey: pick(DG_SEEDS), qty: 1 }
   if (r < 60) return { type: 'stone', rank: stoneRankForFloor(floor) }
   if (r < 70) return { type: 'gem', gemType: pick(DG_GEMS) }
-  if (r < 74) return { type: 'charm', ctype: pick(DG_CHARMS) }
+  if (r < 74) {
+    if (floor >= 20 && Math.random() < 0.001) return { type: 'charm', ctype: 'lucky' } // 0.1% 幸せのチャーム
+    const pool = charmsForFloor(floor)
+    return { type: 'charm', ctype: pool.length ? pick(pool) : 'guard' }
+  }
   return { type: 'equip', name: pick(AREA_EQUIPS[equipAreaFor(dungeonId, floor)] || AREA_EQUIPS[1]) }
 }
 
@@ -500,10 +505,11 @@ export default function Dungeon() {
   // 敵撃破：EXPを即時付与（サーバー）。レベルアップでステータスも即反映
   const grantKill = useCallback(async (floor, name = '敵', px = null, py = null) => {
     if (!runIdRef.current) return
-    // EXPは敵ごと（倍率はサーバー側の表で検証。強い敵ほど多い）
-    const { data, error } = await supabase.rpc('dungeon_kill', { p_run_id: runIdRef.current, p_floor: floor, p_enemy: name })
+    // EXPは敵ごと（倍率はサーバー側の表で検証）。幸せのチャーム装備時はサーバーが50%で+50%
+    const lucky = charmHasEffect(pet.charm, 'lucky')
+    const { data, error } = await supabase.rpc('dungeon_kill', { p_run_id: runIdRef.current, p_floor: floor, p_enemy: name, p_lucky: lucky })
     if (error || !data) { addLog(`⚔ ${name}を撃破！`); return }
-    addLog(`⚔ ${name}を撃破！ ＋EXP${data.exp_gain}${data.leveled ? `（Lv${data.level}に！）` : ''}`)
+    addLog(`⚔ ${name}を撃破！ ＋EXP${data.exp_gain}${data.lucky ? '🍀' : ''}${data.leveled ? `（Lv${data.level}に！）` : ''}`)
     // 経験値ポップ（自分の下に青で）＋レベルアップ時は虹アーチ演出
     if (px != null && py != null) {
       if (data.exp_gain > 0) popExp(px, py, data.exp_gain)
@@ -534,6 +540,7 @@ export default function Dungeon() {
     if (e.type === 'gem') return { label: `${GEM_DATA[e.gemType]?.name || '宝石'}(F)`, emoji: '💍' }
     if (e.type === 'equip') return { label: e.name, emoji: '🎁' }
     if (e.type === 'charm') return { label: getCharm(e.ctype).name, emoji: getCharm(e.ctype).emoji }
+    if (e.type === 'shard') return { label: '神秘の欠片', emoji: '🔮' }
     return { label: '?', emoji: '✨' }
   }
 
@@ -844,12 +851,17 @@ export default function Dungeon() {
         return
       }
       if (killed && target.boss && target.phase === 1) {
-        // ボス討伐＝ダンジョンクリア
+        // ボス討伐＝ダンジョンクリア。神秘の欠片を確定ドロップ
         setStatus('cleared'); addLog('🏁 デビルパピアを討伐！ダンジョンクリア！'); enemiesRef.current += 1
         grantKill(floorNum, target.name, px, py)
         setState({ ...s, player, enemies: enemies.filter((e) => e.id !== target.id) })
         if (dungeon) setCleared((c) => new Set(c).add(dungeon.id))
-        finishRun(true); return
+        addLog('🔮 神秘の欠片を手に入れた！')
+        const shardEntry = { type: 'shard' }
+        if (runIdRef.current) {
+          supabase.rpc('dungeon_pickup', { p_run_id: runIdRef.current, p_entry: shardEntry }).then(({ data }) => { addLootToBag(data || shardEntry); finishRun(true) }, () => finishRun(true))
+        } else finishRun(true)
+        return
       }
       if (killed) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; grantKill(floorNum, target.name, px, py); triggerShake('kill') }
       else {
@@ -983,6 +995,11 @@ export default function Dungeon() {
       const diagBlocked = cheb === 1 && adx !== 0 && ady !== 0 && (s.grid[player.y]?.[e.x] === '#' || s.grid[e.y]?.[player.x] === '#')
       // ボスは4マスのいずれかに隣接で攻撃可能。通常敵はreach判定
       const canAttack = e.boss ? enemyAdjacent(e, player.x, player.y) : (sees && inRange && visNow.has(e.x + ',' + e.y))
+      // 回避のチャーム：5%で敵の攻撃を完全回避
+      if (canAttack && charmHasEffect(pet.charm, 'evade') && Math.random() < 0.05) {
+        addLog(`💨 ${e.name}の攻撃を回避した！`, 'right')
+        return { ...e, atkDown: Math.max(0, (e.atkDown || 0) - 1), defDown: Math.max(0, (e.defDown || 0) - 1) }
+      }
       // ボス第2形態は物理/特殊ミックス（攻撃ごとにランダム）
       const atkType = (e.boss && e.mix) ? (Math.random() < 0.5 ? 'spec' : 'phys') : e.type
       if (canAttack) {

@@ -51,6 +51,8 @@ begin
     v_key := p_entry->>'name';
     if not exists (select 1 from weapons where name = v_key) then raise exception 'bad equip'; end if;
     v_entry := jsonb_build_object('id', v_id, 'type', 'equip', 'name', v_key);
+  elsif v_type = 'shard' then
+    v_entry := jsonb_build_object('id', v_id, 'type', 'shard');
   else
     raise exception 'bad loot type';
   end if;
@@ -182,6 +184,9 @@ begin
         if v_wid is not null then insert into player_equipment(player_id, weapon_id, slot, equipped) values (v_uid, v_wid, v_slot, false); end if;
       elsif v_t = 'charm' then
         insert into player_charms(owner_id, ctype) values (v_uid, v_e->>'ctype');
+      elsif v_t = 'shard' then
+        insert into pet_storage(owner_id, item_key, qty) values (v_uid, 'shard', 1)
+          on conflict (owner_id, item_key) do update set qty = pet_storage.qty + 1;
       end if;
     end loop;
 

@@ -10,6 +10,7 @@ returns int language sql immutable set search_path = public as $$
   select case p_key
     when 'escape' then 500 when 'onigiri' then 200 when 'konomi' then 300 when 'rename' then 100000
     when 'atk_seed' then 0 when 'spatk_seed' then 0 when 'def_seed' then 0 when 'spdef_seed' then 0 when 'hp_seed' then 0
+    when 'shard' then 0
     -- スキルの書（買えない＝0。ダンジョンドロップ専用）
     when 'scr_iai' then 0 when 'scr_sutemi' then 0 when 'scr_sanren' then 0 when 'scr_shunpo' then 0
     when 'scr_quake' then 0 when 'scr_soul' then 0 when 'scr_inori' then 0 when 'scr_sabaki' then 0
