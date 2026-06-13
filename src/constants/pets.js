@@ -230,6 +230,31 @@ export const DUNGEONS = [
 ]
 export const getDungeon = (id) => DUNGEONS.find((d) => d.id === id) || DUNGEONS[0]
 
+// 30Fボス：デビルパピア（2×2・移動する・2段階）。第2形態はHP全回復・防御down/攻撃up・物理特殊ミックス
+export const isBossFloor = (dungeonId, floor) => dungeonId === 'd30' && floor === 30
+export const DEVIL_PAPIA = {
+  name: 'デビルパピア', size: 2,
+  phases: [
+    { // 第1形態：防御寄り。物理攻撃＋自己防御バフ
+      hp: 1200, atk: 160, def: 220, mdef: 180, type: 'phys', image: '/debirupapia1.png',
+      skills: [
+        { name: '守りの構え', chance: 0.35, type: 'selfbuff' },
+        { name: '魔爪', chance: 0.30, type: 'heavy', mult: 1.4 },
+        { name: '威圧', chance: 0.25, type: 'weaken', stat: 'atk', turns: 4 },
+      ],
+    },
+    { // 第2形態：防御down・攻撃大幅up。物理＋特殊ミックス
+      hp: 3000, atk: 260, def: 160, mdef: 150, type: 'phys', mix: true, image: '/debirupapia2.png',
+      skills: [
+        { name: '冥撃', chance: 0.30, type: 'heavy', mult: 1.5 },
+        { name: '魔弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+        { name: '呪詛', chance: 0.25, type: 'weaken', stat: 'def', turns: 4 },
+        { name: '狂乱', chance: 0.20, type: 'selfbuff' },
+      ],
+    },
+  ],
+}
+
 // 敵スキル（攻撃時に確率で発動）。type: poison=毒付与 / heavy=ダメージ倍率 / vamp=与ダメの一部を自己回復
 //  ※毒キノコは毒、盗賊は2つ持ち。名前で引くので敵定義側は変更不要
 export const ENEMY_SKILLS = {

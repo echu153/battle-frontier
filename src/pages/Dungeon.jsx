@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, ASSET_VER } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, DEVIL_PAPIA, assetSrc, ASSET_VER } from '../constants/pets'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
@@ -87,8 +87,45 @@ const getDeviceId = () => {
 }
 const inBounds = (x, y) => x >= 0 && x < MAP_W && y >= 0 && y < MAP_H
 
+// ---- 多セル（ボス）ヘルパー ----
+const enemyCells = (e) => {
+  const n = e?.size || 1
+  const cells = []
+  for (let dy = 0; dy < n; dy++) for (let dx = 0; dx < n; dx++) cells.push([e.x + dx, e.y + dy])
+  return cells
+}
+const enemyAt = (enemies, x, y) => enemies.find((e) => enemyCells(e).some(([cx, cy]) => cx === x && cy === y))
+// (px,py) が敵の占有マスのいずれかにチェビシェフ1で隣接しているか（内部は除く）
+const enemyAdjacent = (e, px, py) => {
+  const cells = enemyCells(e)
+  if (cells.some(([cx, cy]) => cx === px && cy === py)) return false // 内部は不可
+  return cells.some(([cx, cy]) => Math.max(Math.abs(cx - px), Math.abs(cy - py)) === 1)
+}
+
+// ボスフロア生成：正方形の部屋の中央に2×2ボス。雑魚・アイテムなし
+function generateBossFloor(dungeon) {
+  const grid = Array.from({ length: MAP_H }, () => Array(MAP_W).fill('#'))
+  const RW = 15, RH = 13 // ボス部屋（正方形寄り）
+  const rx = Math.floor((MAP_W - RW) / 2), ry = Math.floor((MAP_H - RH) / 2)
+  for (let y = ry; y < ry + RH; y++) for (let x = rx; x < rx + RW; x++) grid[y][x] = '.'
+  const room = { x: rx, y: ry, w: RW, h: RH, gx: 0, gy: 0, cx: Math.floor(rx + RW / 2), cy: Math.floor(ry + RH / 2) }
+  // プレイヤーは部屋の下端中央
+  const player = { x: room.cx, y: ry + RH - 2 }
+  // ボスは中央（2×2の左上）
+  const ph = DEVIL_PAPIA.phases[0]
+  const boss = {
+    id: 'boss', boss: true, size: DEVIL_PAPIA.size, phase: 0,
+    x: room.cx - 1, y: ry + 2,
+    name: DEVIL_PAPIA.name, type: ph.type, mix: !!ph.mix, image: assetSrc(ph.image),
+    skills: ph.skills, reach: 1, canSwim: false,
+    hp: ph.hp, maxHp: ph.hp, atk: ph.atk, def: ph.def, mdef: ph.mdef,
+  }
+  return { grid, rooms: [room], player, enemies: [boss], items: [], stairs: { x: -9, y: -9 }, explored: new Set() }
+}
+
 // ---- フロア自動生成 ----
 function generateFloor(floorNum, dungeon) {
+  if (isBossFloor(dungeon?.id, floorNum)) return generateBossFloor(dungeon)
   const grid = Array.from({ length: MAP_H }, () => Array(MAP_W).fill('#'))
   const rooms = []
   for (let gy = 0; gy < RR; gy++) {
@@ -734,7 +771,7 @@ export default function Dungeon() {
     let fullCost = 0
 
     // 敵への体当たり＝選択中スキルが発動（コスト分の満腹度を消費）
-    const target = enemies.find((e) => e.x === nx && e.y === ny)
+    const target = enemyAt(enemies, nx, ny) // 多セル(ボス)対応
     if (target) {
       const sk = getSkill(selectedSkill)
       const cost = sk.cost || 0
@@ -785,6 +822,30 @@ export default function Dungeon() {
         else if (sk.selfBuff.kind === 'shield') { setShield(sk.selfBuff.turns); shieldRateRef.current = sk.selfBuff.rate || 0.7; addLog(`🛡 ${sk.name}！被ダメを軽減`) }
       }
       const killed = newHp <= 0
+      // ボスは2段階：第1形態を倒すと第2形態へ（HP全回復・防御down/攻撃up・物理特殊ミックス）
+      if (killed && target.boss && target.phase === 0) {
+        const p2 = DEVIL_PAPIA.phases[1]
+        enemies = enemies.map((e) => e.id === target.id ? {
+          ...e, phase: 1, type: p2.type, mix: !!p2.mix, image: assetSrc(p2.image), skills: p2.skills,
+          hp: p2.hp, maxHp: p2.hp, atk: p2.atk, def: p2.def, mdef: p2.mdef, buff: 0, atkDown: 0, defDown: 0,
+        } : e)
+        addLog('💀 デビルパピアが真の姿を現した…！第2形態！', 'right')
+        triggerShake('kill')
+        applyFx({ pet: { lunge: { dx, dy } }, enemies: {} })
+        setState({ ...s, player, enemies })
+        busyRef.current = true
+        const tid = setTimeout(() => commitTurn(s, player, enemies, curPetHp, fullCost), BREATH_MS)
+        turnTimers.current.push(tid)
+        return
+      }
+      if (killed && target.boss && target.phase === 1) {
+        // ボス討伐＝ダンジョンクリア
+        setStatus('cleared'); addLog('🏁 デビルパピアを討伐！ダンジョンクリア！'); enemiesRef.current += 1
+        grantKill(floorNum, target.name, px, py)
+        setState({ ...s, player, enemies: enemies.filter((e) => e.id !== target.id) })
+        if (dungeon) setCleared((c) => new Set(c).add(dungeon.id))
+        finishRun(true); return
+      }
       if (killed) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; grantKill(floorNum, target.name, px, py); triggerShake('kill') }
       else {
         // 敵デバフ技（攻撃/防御ダウンを対象に付与）
@@ -915,11 +976,14 @@ export default function Dungeon() {
       for (let k = 1; k < cheb; k++) { if (s.grid[e.y + sy * k]?.[e.x + sx * k] === '#') { lineClear = false; break } } // 間に壁
       // 隣接(1マス)は斜め角の抜け不可も判定
       const diagBlocked = cheb === 1 && adx !== 0 && ady !== 0 && (s.grid[player.y]?.[e.x] === '#' || s.grid[e.y]?.[player.x] === '#')
-      const inRange = cheb >= 1 && cheb <= reach && straight && lineClear && !diagBlocked
-      if (sees && inRange && visNow.has(e.x + ',' + e.y)) {
+      // ボスは4マスのいずれかに隣接で攻撃可能。通常敵はreach判定
+      const canAttack = e.boss ? enemyAdjacent(e, player.x, player.y) : (sees && inRange && visNow.has(e.x + ',' + e.y))
+      // ボス第2形態は物理/特殊ミックス（攻撃ごとにランダム）
+      const atkType = (e.boss && e.mix) ? (Math.random() < 0.5 ? 'spec' : 'phys') : e.type
+      if (canAttack) {
         // 敵の攻撃タイプに応じて pet.def(物理)/mdef(特殊)で軽減。防御/特防ダウン中は軽減を弱める
-        const baseGuard = e.type === 'spec' ? (pet.mdef || 0) : (pet.def || 0)
-        const guardDown = e.type === 'spec' ? (debuff.mdef > 0) : (debuff.def > 0)
+        const baseGuard = atkType === 'spec' ? (pet.mdef || 0) : (pet.def || 0)
+        const guardDown = atkType === 'spec' ? (debuff.mdef > 0) : (debuff.def > 0)
         const guard = guardDown ? baseGuard * (1 - STAT_DOWN_PCT) : baseGuard
         // 敵の攻撃力（自己バフ中は ENEMY_BUFF_MULT 倍／攻撃ダウン中は減）
         const eAtk = (e.atk || 1) * ((e.buff || 0) > 0 ? ENEMY_BUFF_MULT : 1) * ((e.atkDown || 0) > 0 ? 1 - STAT_DOWN_PCT : 1)
@@ -951,6 +1015,24 @@ export default function Dungeon() {
         if (gotBuff) ne = { ...ne, buff: ENEMY_BUFF_TURNS }
         else if ((e.buff || 0) > 0) ne = { ...ne, buff: e.buff - 1 } // 攻撃したターンもバフ減衰
         return ne
+      }
+      // ボスは2×2ブロックでプレイヤーへ接近（4マス全部が床＆プレイヤー非占有なら移動）
+      if (e.boss) {
+        const blockOk = (nx2, ny2) => {
+          for (let ddy = 0; ddy < e.size; ddy++) for (let ddx = 0; ddx < e.size; ddx++) {
+            const cx = nx2 + ddx, cy = ny2 + ddy
+            if (!inBounds(cx, cy) || s.grid[cy][cx] === '#') return false
+            if (cx === player.x && cy === player.y) return false
+          }
+          return true
+        }
+        const bcx = e.x + 0.5, bcy = e.y + 0.5 // ブロック中心
+        const moves = [{ x: e.x + 1, y: e.y }, { x: e.x - 1, y: e.y }, { x: e.x, y: e.y + 1 }, { x: e.x, y: e.y - 1 }]
+          .filter((c) => blockOk(c.x, c.y))
+          .filter((c) => Math.abs(c.x + 0.5 - player.x) + Math.abs(c.y + 0.5 - player.y) < Math.abs(bcx - player.x) + Math.abs(bcy - player.y))
+          .sort((a, b) => (Math.abs(a.x + 0.5 - player.x) + Math.abs(a.y + 0.5 - player.y)) - (Math.abs(b.x + 0.5 - player.x) + Math.abs(b.y + 0.5 - player.y)))
+        if (moves.length) return { ...e, x: moves[0].x, y: moves[0].y, buff: Math.max(0, (e.buff || 0) - 1), atkDown: Math.max(0, (e.atkDown || 0) - 1), defDown: Math.max(0, (e.defDown || 0) - 1) }
+        return { ...e, buff: Math.max(0, (e.buff || 0) - 1), atkDown: Math.max(0, (e.atkDown || 0) - 1), defDown: Math.max(0, (e.defDown || 0) - 1) }
       }
       const chase = (c) => {
         const gx = Math.abs(c.x - player.x), gy = Math.abs(c.y - player.y)
@@ -1048,7 +1130,7 @@ export default function Dungeon() {
       if (dead) { setStatus('dead'); addLog('💀 ペットは力尽きた…'); finishRun(false, true) }
 
       // ---- 40ターンごとに敵が1体湧く ----
-      if (!dead && nextTurns % SPAWN_EVERY === 0 && enemies.length < SPAWN_CAP) {
+      if (!dead && !isBossFloor(dungeon?.id, floorNum) && nextTurns % SPAWN_EVERY === 0 && enemies.length < SPAWN_CAP) {
         const born = spawnEnemy(s, enemies, player)
         if (born) { enemies = [...enemies, born]; addLog('物音がした…新たな敵が現れた 👁', 'right'); setState({ ...s, player, enemies, explored }) }
       }
@@ -1346,8 +1428,15 @@ export default function Dungeon() {
     const wall = state.grid[y][x] === '#'
     // 現在視界：エンティティ優先（足元は床。floorTile時は透過で下地の床画像を見せる）
     if (state.player.x === x && state.player.y === y) return { ch: pet.emoji || '🐾', img: pet.image_url, bg: floorBg, fx: fx.pet, poison: poisoned, paralyze: paralyzed > 0, burn: burned, cheer: cheer || 0, isPet: true }
-    const e = state.enemies.find((o) => o.x === x && o.y === y)
-    if (e) return { ch: '👹', img: e.image || null, bg: floorBg, fx: fx.enemies[e.id] || null }
+    const e = enemyAt(state.enemies, x, y)
+    if (e) {
+      // ボス(2×2)は左上セルにだけ画像を描き、4マスぶんに広げる。他3マスは透過
+      if (e.boss) {
+        if (e.x === x && e.y === y) return { ch: '👹', img: e.image || null, bg: floorBg, fx: fx.enemies[e.id] || null, bossImg: true, bossE: e }
+        return { ch: '', bg: floorBg } // 残り3マスは透過（左上の画像が覆う）
+      }
+      return { ch: '👹', img: e.image || null, bg: floorBg, fx: fx.enemies[e.id] || null }
+    }
     const it = state.items.find((o) => o.x === x && o.y === y)
     if (it) {
       // 床アイテムは実アイコンを表示（素=画像／食料・スキル書=絵文字／戦利品=lootDisplay）
@@ -1561,6 +1650,23 @@ export default function Dungeon() {
                     {chips.map((c) => <span key={c.k} style={{ color: c.col, whiteSpace: 'nowrap' }}>{c.label}</span>)}
                   </div>
                 )}
+                {/* ボスHPバー（大） */}
+                {(() => {
+                  const boss = state.enemies.find((e) => e.boss)
+                  if (!boss) return null
+                  const r = Math.max(0, Math.min(1, (boss.hp || 0) / (boss.maxHp || 1)))
+                  return (
+                    <div style={{ marginTop: 2 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: boss.phase === 1 ? '#ff77aa' : '#ffaa66' }}>
+                        <span>👿 {boss.name}{boss.phase === 1 ? '（第2形態）' : '（第1形態）'}</span>
+                        <span>{boss.hp}/{boss.maxHp}</span>
+                      </div>
+                      <div style={{ height: 7, background: 'rgba(0,4,10,0.85)', border: '1px solid #000', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ width: `${r * 100}%`, height: '100%', background: boss.phase === 1 ? '#ff4488' : '#ff8844', transition: 'width 0.25s ease' }} />
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             )
           })()}
@@ -1578,7 +1684,15 @@ export default function Dungeon() {
               : c.paralyze ? 'sepia(0.8) saturate(2.2) hue-rotate(-12deg) brightness(1.08) drop-shadow(0 0 3px #ffe066)'
               : c.poison ? 'sepia(0.6) hue-rotate(230deg) saturate(1.8) drop-shadow(0 0 3px #aa55ff)'
               : 'none'
-            const inner = c.img
+            const inner = (c.bossImg && c.img)
+              // ボスは左上セルから2×2マスに広げて表示（overflow visibleで隣にはみ出す）＋頭上HPバー
+              ? <div style={{ position: 'absolute', left: 0, top: 0, width: '200%', height: '200%', zIndex: 4, pointerEvents: 'none' }}>
+                  <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+                  {(() => { const r = Math.max(0, Math.min(1, (c.bossE.hp || 0) / (c.bossE.maxHp || 1)))
+                    return <div style={{ position: 'absolute', left: '6%', right: '6%', bottom: '2%', height: 5, background: 'rgba(0,4,10,0.85)', border: '1px solid #000', borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ width: `${r * 100}%`, height: '100%', background: c.bossE.phase === 1 ? '#ff4488' : '#ff8844', transition: 'width 0.25s ease' }} /></div> })()}
+                </div>
+              : c.img
               ? (c.item
                   // 床アイテムは小さめ＆全体が見えるよう contain
                   ? <img src={c.img} alt="" style={{ width: '72%', height: '72%', objectFit: 'contain', display: 'block', margin: 'auto' }} />
@@ -1627,7 +1741,7 @@ export default function Dungeon() {
               : `0 0 0 0.6px ${c.bg}`
             return (
               <div key={`${vx}-${vy}`} onClick={() => clickable && adjClick(vx, vy)}
-                style={{ position: 'relative', zIndex: c.isPet ? 4 : 1, aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, ...tileStyle, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: gapFill }}>
+                style={{ position: 'relative', zIndex: c.bossImg ? 3 : c.isPet ? 4 : 1, aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, ...tileStyle, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: gapFill }}>
                 {fxStyle ? <div key={fxKey} style={fxStyle}>{inner}</div> : inner}
                 {/* 自分のキャラに重ねるHPバー（足元寄り） */}
                 {c.isPet && (() => {
