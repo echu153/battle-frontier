@@ -425,15 +425,15 @@ export const CHARM_TOTAL_MAX = 150
 export const CHARM_HP_PER = 5
 export const CHARM_STATS = ['hp', 'atk', 'spatk', 'def', 'spdef']
 export const CHARMS = {
-  hajimari: { type: 'hajimari', name: 'はじまりのチャーム', emoji: '🔰', effect: null,       desc: '追加能力なし' },
-  antidote: { type: 'antidote', name: '解毒のチャーム',     emoji: '🧪', effect: 'antidote', minFloor: 1,  desc: '毒になる確率が50%減る' },
-  guard:    { type: 'guard',    name: '守りのチャーム',     emoji: '🛡️', effect: 'guard',    minFloor: 1,  desc: '防御＋10%' },
-  mdefup:   { type: 'mdefup',   name: 'とくぼうのチャーム', emoji: '🟩', effect: 'mdefup',   minFloor: 1,  desc: '特防＋10%' },
-  atkup:    { type: 'atkup',    name: '攻撃のチャーム',     emoji: '🟥', effect: 'atkup',    minFloor: 10, desc: '攻撃＋10%' },
-  spatkup:  { type: 'spatkup',  name: 'とくこうのチャーム', emoji: '🟪', effect: 'spatkup',  minFloor: 10, desc: '特攻＋10%' },
-  evade:    { type: 'evade',    name: '回避のチャーム',     emoji: '💨', effect: 'evade',    minFloor: 20, desc: '回避＋5%' },
-  hit:      { type: 'hit',      name: '命中のチャーム',     emoji: '🎯', effect: 'hit',      minFloor: 20, desc: '命中＋5%' },
-  lucky:    { type: 'lucky',    name: '幸せのチャーム',     emoji: '🍀', effect: 'lucky',    minFloor: 20, rare: true, desc: '撃破時50%で経験値+50%（主人公は10%で経験値+1）' },
+  hajimari: { type: 'hajimari', name: 'はじまりのチャーム', emoji: '🔰', effect: null,       short: 'はじまり', desc: '追加能力なし' },
+  antidote: { type: 'antidote', name: '解毒のチャーム',     emoji: '🧪', effect: 'antidote', short: '解毒', minFloor: 1,  desc: '毒になる確率が50%減る' },
+  guard:    { type: 'guard',    name: '守りのチャーム',     emoji: '🛡️', effect: 'guard',    short: '防御', minFloor: 1,  desc: '防御＋10%' },
+  mdefup:   { type: 'mdefup',   name: 'とくぼうのチャーム', emoji: '🟩', effect: 'mdefup',   short: '特防', minFloor: 1,  desc: '特防＋10%' },
+  atkup:    { type: 'atkup',    name: '攻撃のチャーム',     emoji: '🟥', effect: 'atkup',    short: '攻撃', minFloor: 10, desc: '攻撃＋10%' },
+  spatkup:  { type: 'spatkup',  name: 'とくこうのチャーム', emoji: '🟪', effect: 'spatkup',  short: '特攻', minFloor: 10, desc: '特攻＋10%' },
+  evade:    { type: 'evade',    name: '回避のチャーム',     emoji: '💨', effect: 'evade',    short: '回避', minFloor: 20, desc: '回避＋5%' },
+  hit:      { type: 'hit',      name: '命中のチャーム',     emoji: '🎯', effect: 'hit',      short: '命中', minFloor: 20, desc: '命中＋5%' },
+  lucky:    { type: 'lucky',    name: '幸せのチャーム',     emoji: '🍀', effect: 'lucky',    short: '幸せ', minFloor: 20, rare: true, desc: '撃破時50%で経験値+50%（主人公は10%で経験値+1）' },
 }
 export const getCharm = (t) => CHARMS[t] || CHARMS.hajimari
 // そのフロアでドロップする通常チャーム（rare=幸せは別枠抽選）
@@ -447,8 +447,10 @@ export const charmTotal = (c) => (c?.atk || 0) + (c?.spatk || 0) + (c?.def || 0)
 export const charmHpBonus = (c) => (c?.hp || 0) * CHARM_HP_PER
 // 表示名（素を使った分だけ ＋N がつく）
 export function charmDisplayName(charm) {
-  let base = getCharm(charm?.ctype).name
-  if (charm?.ctype2) base += `＆${getCharm(charm.ctype2).name}` // 合成済みは2つの名前
+  // 合成済みは「○と○のチャーム」（例：攻撃と特防のチャーム）
+  const base = charm?.ctype2
+    ? `${getCharm(charm.ctype).short}と${getCharm(charm.ctype2).short}のチャーム`
+    : getCharm(charm?.ctype).name
   const t = charmTotal(charm)
   return t > 0 ? `${base}＋${t}` : base
 }
