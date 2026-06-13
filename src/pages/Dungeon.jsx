@@ -1487,7 +1487,7 @@ export default function Dungeon() {
     }
     if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: floorBg, overlay: stairsTile, stairsGlow: true, water: waterWall }
     // 壁マスは壁画像を1マスごとに表示（複数あればマス座標でランダム）。床マスは透過。
-    if (wall) return { ch: '', bg: waterWall ? floorBg : (wallTile ? '#241a12' : C.wallVis), wallImg: dgWallVariant(dungeon?.id, x, y, floorNum) || wallTile, water: waterWall }
+    if (wall) return { ch: '', bg: waterWall ? floorBg : (wallTile ? '#08060a' : C.wallVis), wallImg: dgWallVariant(dungeon?.id, x, y, floorNum) || wallTile, water: waterWall }
     return { ch: '', bg: floorBg }
   }
 
@@ -1773,7 +1773,7 @@ export default function Dungeon() {
               ? (c.water
                   // 水たまり＝渡れない深い水。床(水辺床)とハッキリ区別できるよう濃い青で暗めに＋縁取り
                   ? { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.62) saturate(1.7) hue-rotate(8deg)' }
-                  : { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6) saturate(0.55) hue-rotate(-8deg)' })
+                  : { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.4) saturate(0.5) hue-rotate(-8deg)' })
               : { backgroundImage: 'none' }
             // グリッド線対策：マス間のサブピクセル隙間を「そのマス自身の色」で埋める。
             //  透過の床マスはそのまま（継ぎ目なし）、壁マス・暗いマスは自色（暗）で塞ぐ。
