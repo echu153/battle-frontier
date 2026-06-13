@@ -1158,7 +1158,7 @@ export default function Dungeon() {
         : it.kind === 'dropLoot' ? (it.loot?.emoji || '🎁') : '✨'
       return { ch, bg: floorBg, overlay: itemTile }
     }
-    if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: floorBg, overlay: stairsTile, stairsGlow: true }
+    if (state.stairs.x === x && state.stairs.y === y) return { ch: '▼', bg: floorBg, overlay: stairsTile, stairsGlow: true, water: waterWall }
     // 壁マスは壁画像を1マスごとに表示（複数あればマス座標でランダム）。床マスは透過。
     if (wall) return { ch: '', bg: waterWall ? floorBg : (wallTile ? '#241a12' : C.wallVis), wallImg: dgWallVariant(dungeon?.id, x, y) || wallTile, water: waterWall }
     return { ch: '', bg: floorBg }
@@ -1379,15 +1379,19 @@ export default function Dungeon() {
               ? <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: statusFilter }} />
               : (
                 <span style={{ filter: statusFilter, position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%',
-                  color: c.stairsGlow ? '#ffe680' : undefined,
-                  textShadow: c.stairsGlow ? '0 0 6px #ffcc33, 0 0 12px #ff9900' : undefined }}>
+                  color: c.stairsGlow ? (c.water ? '#9ff0ff' : '#ffe680') : undefined,
+                  textShadow: c.stairsGlow ? (c.water ? '0 0 6px #33ddee, 0 0 12px #0099bb' : '0 0 6px #ffcc33, 0 0 12px #ff9900') : undefined }}>
                   {c.ch}
-                  {/* 階段・アイテムのカスタム画像（無ければonErrorで隠れ絵文字のまま） */}
+                  {/* 階段・アイテムのカスタム画像（無ければonErrorで隠れ絵文字のまま）。水エリアは青緑に色変換 */}
                   {c.overlay && <img src={c.overlay} alt="" onError={(ev) => { ev.target.style.display = 'none' }}
                     style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block',
-                      filter: c.stairsGlow ? 'drop-shadow(0 0 5px #ffcc33) drop-shadow(0 0 9px #ff9900) brightness(1.15)' : undefined }} />}
-                  {/* 階段の強調（静的な発光リング） */}
-                  {c.stairsGlow && <span style={{ position: 'absolute', inset: '8%', borderRadius: '50%', boxShadow: '0 0 8px 2px rgba(255,200,60,0.7)', pointerEvents: 'none' }} />}
+                      filter: c.stairsGlow
+                        ? (c.water
+                            ? 'sepia(0.9) saturate(2.4) hue-rotate(140deg) brightness(1.02) drop-shadow(0 0 5px #33ddee) drop-shadow(0 0 9px #0099bb)'
+                            : 'drop-shadow(0 0 5px #ffcc33) drop-shadow(0 0 9px #ff9900) brightness(1.15)')
+                        : undefined }} />}
+                  {/* 階段の強調（静的な発光リング）。水エリアは青緑 */}
+                  {c.stairsGlow && <span style={{ position: 'absolute', inset: '8%', borderRadius: '50%', boxShadow: c.water ? '0 0 8px 2px rgba(60,210,235,0.7)' : '0 0 8px 2px rgba(255,200,60,0.7)', pointerEvents: 'none' }} />}
                 </span>
               )
             const anims = []
