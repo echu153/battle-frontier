@@ -246,6 +246,7 @@ export const JOB_GROWTH = {
   'ギャンブラー':{ hp:10, mp:10, atk:1, def:2, matk:1, mdef:2, spd:1 },
   '魔法剣士':  { hp:10, mp:10, atk:2, def:1, matk:2, mdef:1, spd:1 },
   '聖騎士':    { hp:20, mp:5,  atk:1, def:2, matk:1, mdef:2, spd:1 },
+  '竜騎士':    { hp:20, mp:5,  atk:2, def:2, matk:0, mdef:1, spd:1 },
 }
 
 export const JOB_LEVEL3_BONUS = {}
@@ -267,6 +268,7 @@ const ADVANCED_CLASSES = {
   'ギャンブラー':{ requiresItem:'gambler_proof' },
   '魔法剣士':  { requires:'戦士', requiresLv:50, requires2:'魔法使い', requires2Lv:50 },
   '聖騎士':    { requires:'戦士', requiresLv:50, requires2:'僧侶',    requires2Lv:50 },
+  '竜騎士':    { requiresItem:'dragon_knight_proof' },
 }
 
 const CLASS_LEVEL_CAP = {
@@ -275,7 +277,7 @@ const CLASS_LEVEL_CAP = {
   '元素使い':100, '死霊使い':100, '聖職者':100, '異端審問官':100, '賢者':100,
   'サイキッカー':100, '体術師':100, '魔銃士':100,
   'ギャンブラー':100,
-  '魔法剣士':100, '聖騎士':100,
+  '魔法剣士':100, '聖騎士':100, '竜騎士':100,
 }
 // 再修練5回でそのクラスのレベルキャップが300に解放される
 // 再修練強化の表示用説明（上から1段ずつ＝再修練1回ごとに解放）
@@ -1141,6 +1143,47 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.newPlayerBuffs.holyAwakening = { turns:5, defMult:rt>=5?0.6:0.4 }
       result.log = `✨ 神聖覚醒！ 5ターンの間、攻撃ごとに防御力・特殊防御力に基づく追撃を与える！`; break
     }
+    // ── 竜騎士 ──
+    case 'ドラゴンスラスト': {
+      result.dmg = Math.floor(eff.atk*(rt>=1?1.6:1.5)*am)
+      result.defPen = rt>=3?0.15:0.10  // 防御貫通10%（再修練3段で15%）
+      result.log = `🐉 ドラゴンスラスト！ ${enemy.name}に${result.dmg}の物理ダメージ！（防御貫通）`
+      break
+    }
+    case 'ドラゴンファング': {
+      const dfMult = 0.8
+      const h1=Math.floor(eff.atk*dfMult*am*r()), h2=Math.floor(eff.atk*dfMult*am*r())
+      result.dmg = h1+h2
+      result.hitDmgs = [h1, h2]
+      result.defPen = rt>=2?0.25:0.20  // 防御貫通20%（再修練2段で25%）
+      result.log = `🐉 ドラゴンファング！ ${enemy.name}に${h1}・${h2}の物理ダメージ！（2連撃・防御貫通）`
+      break
+    }
+    case '竜鱗の加護': result.log = `🛡 竜鱗の加護【パッシブ】 防御力1.2倍・被ダメ時30%で軽減（常時発動）`; break
+    case 'ドラゴンロア': {
+      const lrRate = rt>=4?0.6:0.7  // 攻撃・特攻を30%減（再修練4段で40%減）
+      const lrT = rt>=2?4:3
+      result.newEnemyBuffs.atkDown = { turns:lrT, rate:lrRate }
+      result.newEnemyBuffs.matkDown = { turns:lrT, rate:lrRate }
+      result.log = `🐉 ドラゴンロア！ ${lrT}ターンの間、${enemy.name}の攻撃・特殊攻撃を低下させた！`
+      break
+    }
+    case '天墜竜閃': {
+      if (playerBuffs.tenkaiCharge?.turns > 0) {
+        // 解放ターン：大ダメージ＋防御貫通30%
+        result.dmg = Math.floor(eff.atk*4.0*am)
+        result.defPen = rt>=5?0.4:0.3
+        result.newPlayerBuffs.tenkaiCharge = undefined // 溜め解除
+        result.log = `🐉💥 天墜竜閃・解放！ ${enemy.name}に${result.dmg}の物理ダメージ！（防御貫通）`
+      } else {
+        // 溜めターン：1ターン受けダメ-20%＆待機（追加行動なし）
+        result.newPlayerBuffs.dmgReduce = { turns:1, rate:0.8 }
+        result.newPlayerBuffs.tenkaiCharge = { turns:2 } // 次ターンに解放（ターン経過で1減るので2を入れる）
+        result.charging = true
+        result.log = `🐉 天墜竜閃！ 力を溜めている…（次ターンに解き放つ／受けるダメージ-20%）`
+      }
+      break
+    }
     default: result.dmg = Math.max(1,eff.atk*am); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
   }
   // パピアは状態異常・ステータス減少免疫
@@ -1369,6 +1412,7 @@ export default function Game() {
   const [classLevels, setClassLevels] = useState([])
   const [templeMessage, setTempleMessage] = useState('')
   const [hasGamblerProof, setHasGamblerProof] = useState(false)
+  const [hasDragonKnightProof, setHasDragonKnightProof] = useState(false)
   const [skillSets, setSkillSets] = useState([])          // 出撃(sortie)セット
   const [papiaSkillSets, setPapiaSkillSets] = useState([]) // パピア限定セット（空なら出撃にフォールバック）
   const [playerItem, setPlayerItem] = useState(null)
@@ -1542,16 +1586,18 @@ export default function Game() {
   const fetchProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
-    const [{ data }, { data: cl }, { data: gpCheck }, { data: ticketRow }] = await Promise.all([
+    const [{ data }, { data: cl }, { data: gpCheck }, { data: ticketRow }, { data: dkCheck }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('class_levels').select('*').eq('player_id', user.id),
       supabase.from('player_items').select('id, items!inner(effect)').eq('player_id', user.id).eq('items.effect', 'gambler_proof').maybeSingle(),
       supabase.from('player_items').select('id, quantity, items!inner(effect)').eq('player_id', user.id).eq('items.effect', 'exp_dungeon_ticket').maybeSingle(),
+      supabase.from('player_items').select('id, items!inner(effect)').eq('player_id', user.id).eq('items.effect', 'dragon_knight_proof').maybeSingle(),
     ])
     setExpDungeonTicket(ticketRow ? { id: ticketRow.id, quantity: ticketRow.quantity } : null)
     if (!data) { nav('/create'); return }
     if (Array.isArray(cl)) setClassLevels(cl)
     setHasGamblerProof(!!gpCheck)
+    setHasDragonKnightProof(!!dkCheck)
     // クラス成長分を毎回再計算してステータスを上書き（JOB_GROWTH変更が全員に反映される）
     // 全クラスのレベルアップ分を合算する（転職で積み上げたステータスも反映）
     const _base = getBaseClassStats(data.class)
@@ -2263,6 +2309,10 @@ export default function Game() {
     const hasGambleBody       = passiveNames.includes('ギャンブルボディ')
     const hasMadokenJutsu     = passiveNames.includes('魔導剣術')
     const hasHolyKnightPassive= passiveNames.includes('聖騎士の心得')
+    const hasRyurin           = passiveNames.includes('竜鱗の加護') // 防御1.2倍＋被ダメ時30%で-5%
+    const ryurinMult          = hasRyurin ? 1.2 : 1.0
+    // 竜鱗の加護：被ダメ時に30%で-5%の軽減倍率を返す
+    const ryurinReduce = () => (hasRyurin && Math.random() < 0.3) ? 0.95 : 1.0
 
     if (isBossEncounter) {
       // セット中(equipped=true)の魔よけのお守りを直接DBから取得する。
@@ -2322,8 +2372,8 @@ export default function Game() {
       const holyFieldDef = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
       const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?1.3:1.2) : 1.0
       const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
-      const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDef * holyKnightMult * kabeDefP
-      const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDef * holyKnightMult * kabeDefP
+      const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDef * holyKnightMult * ryurinMult * kabeDefP
+      const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDef * holyKnightMult * ryurinMult * kabeDefP
       const burnDebuffP = playerBuffs.burn?.turns > 0 ? 0.9 : 1.0
       const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * (pe('魔法剣士')?0.6:0.3)) : 0
       const pMatk  = (eff.matk - madokenBonus) * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP
@@ -2390,6 +2440,11 @@ export default function Game() {
         const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk.lockedSkill)
         if (lockedIdx >= 0) skillIndex = lockedIdx
       }
+      // 天墜竜閃の溜め中：次ターンは必ず天墜竜閃（解放）を出す
+      if (playerBuffs.tenkaiCharge?.turns > 0) {
+        const tIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === '天墜竜閃')
+        if (tIdx >= 0) skillIndex = tIdx
+      }
       let skillUsed = false
       if (expandedSkillSet.length > 0) {
         const cs = expandedSkillSet[skillIndex % expandedSkillSet.length]
@@ -2412,7 +2467,7 @@ export default function Game() {
           if (res.dmg > 0) {
             const sType = cs.skills?.type
             const skillCls = cs.skills?.class_name
-            const adjED  = Math.max(1, Math.floor((enemy.def ||0)*eDefRate))
+            const adjED  = Math.max(1, Math.floor((enemy.def ||0)*eDefRate*(1-(res.defPen||0))))
             const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate*(1-(res.mdefPen||0))))
             // サイコブラスト/マインドブレイク等、およびサイキッカー・魔銃士の全スキルは敵DEF・MDEFの低い方で軽減
             const useLowDef = cs.skills?.name === 'サイコブラスト' || res.useMinDef || skillCls === 'サイキッカー' || skillCls === '魔銃士'
@@ -2537,8 +2592,8 @@ export default function Game() {
       const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
       const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?1.3:1.2) : 1.0
       const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
-      const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDefE * holyKnightMultE * kabeDefE
-      const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE * kabeDefE
+      const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDefE * holyKnightMultE * ryurinMult * kabeDefE
+      const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE * ryurinMult * kabeDefE
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
       const berserkDmgRate = hasBerserk ? 1.1 : 1.0
       const isEM = enemy.type === 'magical'
@@ -2568,7 +2623,7 @@ export default function Game() {
       const playerDefRankReduction = calcDefReduction(isEM ? eff.mdef : eff.def)
       const gambleBodyMult = hasGambleBody ? (0.7 + Math.random() * (pe('ギャンブラー')?0.4:0.6)) : 1.0
       const allinDebuffInMult = playerBuffs.allinDebuff?.turns > 0 ? 1.3 : 1.0
-      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*(0.9+Math.random()*0.2))
+      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*ryurinReduce()*(0.9+Math.random()*0.2))
       playerHp -= finalDmg
       if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
@@ -2774,7 +2829,8 @@ export default function Game() {
       if (!playerSkipped) {
         doPlayerAttack(false)
         if (enemyHp <= 0) break
-        if (playerExtraRate > 0 && Math.random()*100 < playerExtraRate) {
+        // 天墜竜閃の溜めターンは追加行動なし
+        if (!(playerBuffs.tenkaiCharge?.turns > 0) && playerExtraRate > 0 && Math.random()*100 < playerExtraRate) {
           doPlayerAttack(true); if (enemyHp <= 0) break
         }
       }
@@ -3732,6 +3788,28 @@ export default function Game() {
                   <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{cl?cl.lv:1}/{getEffectiveCap('ギャンブラー', profile.retraining)}</div>
                 </div>
                 <button onClick={()=>setPendingClassChange('ギャンブラー')} disabled={isCurrent||!canChange||loading}
+                  style={{ padding:'4px 8px', background:isCurrent?'#001':canChange?'#1a1000':'#001', border:`1px solid ${isCurrent?'#334455':canChange?'#886600':'#002244'}`, color:isCurrent?'#334455':canChange?'#ffcc00':'#334455', cursor:isCurrent||!canChange?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
+                  {isCurrent?'現在':'転職'}
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+        {(() => {
+          const isCurrent = profile.class === '竜騎士'
+          const cl = classLevels.find(x=>x.class_name==='竜騎士')
+          const canChange = !isCurrent && hasDragonKnightProof
+          return (
+            <div style={{ border:`1px solid ${isCurrent?'#445566':canChange?'#886600':'#002244'}`, background:isCurrent?'#001828':'#001028', padding:'8px', marginTop:'8px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <div>
+                  <div style={{ color:isCurrent?'#88aabb':canChange?'#ffcc00':'#446688', fontSize:'12px' }}>
+                    竜騎士{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}
+                  </div>
+                  <div style={{ color:'#446688', fontSize:'10px' }}>竜騎士の証が必要</div>
+                  <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{cl?cl.lv:1}/{getEffectiveCap('竜騎士', profile.retraining)}</div>
+                </div>
+                <button onClick={()=>setPendingClassChange('竜騎士')} disabled={isCurrent||!canChange||loading}
                   style={{ padding:'4px 8px', background:isCurrent?'#001':canChange?'#1a1000':'#001', border:`1px solid ${isCurrent?'#334455':canChange?'#886600':'#002244'}`, color:isCurrent?'#334455':canChange?'#ffcc00':'#334455', cursor:isCurrent||!canChange?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>
                   {isCurrent?'現在':'転職'}
                 </button>
