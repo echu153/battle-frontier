@@ -19,12 +19,14 @@ const menuBtnStyle = {
   border: 'none',
   borderRadius: 0,
   background: `url("${MENU_BTN_IMG}") center/100% 100% no-repeat`,
-  color: '#fff',
+  color: '#f5dd9a',
   cursor: 'pointer',
   fontFamily: 'monospace',
-  fontSize: '13px',
+  fontSize: '14px',
   fontWeight: 'bold',
-  textShadow: '0 1px 3px rgba(0,0,0,0.9)',
+  letterSpacing: '1px',
+  // 金色文字＋焦げ茶の縁取りで彫り込み風に
+  textShadow: '1px 1px 0 #4a2600, -1px 1px 0 #4a2600, 1px -1px 0 #4a2600, -1px -1px 0 #4a2600, 0 2px 3px rgba(0,0,0,0.7)',
 }
 // 多段ヒットスキル：行動全体ではなく1発ごとに回避・クリティカル・ダメージ判定する
 export const MULTI_HIT_SKILLS = new Set(['マジックアロー','三連射','メテオストライク','連打','五連殺','飛天三角蹴り','連装銃撃'])
@@ -4136,30 +4138,30 @@ export default function Game() {
                         <span style={{ flex:1, borderTop:'1px solid #224466' }}/>キャラクター<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                       </div>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                        <button onClick={()=>nav('/equipment')} style={menuBtnStyle}>🗡 装備</button>
-                        <button onClick={()=>nav('/skills')} style={menuBtnStyle}>⚡ スキル</button>
-                        <button onClick={()=>nav('/profile')} style={menuBtnStyle}>👤 プロフィール</button>
-                        <button onClick={()=>nav('/equipment')} style={menuBtnStyle}>🎒 アイテム</button>
+                        <button onClick={()=>nav('/equipment')} style={menuBtnStyle}>装備</button>
+                        <button onClick={()=>nav('/skills')} style={menuBtnStyle}>スキル</button>
+                        <button onClick={()=>nav('/profile')} style={menuBtnStyle}>プロフィール</button>
+                        <button onClick={()=>nav('/equipment')} style={menuBtnStyle}>アイテム</button>
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
                         <span style={{ flex:1, borderTop:'1px solid #224466' }}/>施設<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                       </div>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                        <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={menuBtnStyle}>🏨 宿屋</button>
-                        <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={menuBtnStyle}>⛩ 神殿</button>
-                        <button onClick={()=>nav('/shop')} style={menuBtnStyle}>🛒 商店</button>
-                        <button onClick={()=>nav('/smithy')} style={menuBtnStyle}>⚒ 鍛冶屋</button>
-                        <button onClick={()=>nav('/museum')} style={menuBtnStyle}>🏛 博物館</button>
-                        <button onClick={()=>nav('/exchange')} style={menuBtnStyle}>🔄 交換所</button>
-                        <button onClick={()=>nav('/casino')} style={menuBtnStyle}>🎰 賭博場</button>
-                        <button onClick={()=>nav('/barber')} style={menuBtnStyle}>✂ 美容院</button>
+                        <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={menuBtnStyle}>宿屋</button>
+                        <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={menuBtnStyle}>神殿</button>
+                        <button onClick={()=>nav('/shop')} style={menuBtnStyle}>商店</button>
+                        <button onClick={()=>nav('/smithy')} style={menuBtnStyle}>鍛冶屋</button>
+                        <button onClick={()=>nav('/museum')} style={menuBtnStyle}>博物館</button>
+                        <button onClick={()=>nav('/exchange')} style={menuBtnStyle}>交換所</button>
+                        <button onClick={()=>nav('/casino')} style={menuBtnStyle}>賭博場</button>
+                        <button onClick={()=>nav('/barber')} style={menuBtnStyle}>美容院</button>
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
                         <span style={{ flex:1, borderTop:'1px solid #224466' }}/>放置コンテンツ<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                       </div>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                        <button onClick={()=>nav('/fishing')} style={menuBtnStyle}>🎣 釣り場</button>
-                        <button onClick={()=>nav('/scarecrow')} style={menuBtnStyle}>🌾 かかし修練場</button>
+                        <button onClick={()=>nav('/fishing')} style={menuBtnStyle}>釣り場</button>
+                        <button onClick={()=>nav('/scarecrow')} style={menuBtnStyle}>かかし修練場</button>
                       </div>
                     </div>
                   )}
@@ -4533,30 +4535,30 @@ export default function Game() {
                           <span style={{ flex:1, borderTop:'1px solid #224466' }}/>キャラクター<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                         </div>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                          <button onClick={()=>nav('/equipment')} style={menuBtnStyle}>🗡 装備</button>
-                          <button onClick={()=>nav('/skills')} style={menuBtnStyle}>⚡ スキル</button>
-                          <button onClick={()=>nav('/profile')} style={menuBtnStyle}>👤 プロフィール</button>
-                          <button onClick={()=>nav('/equipment')} style={menuBtnStyle}>🎒 アイテム</button>
+                          <button onClick={()=>nav('/equipment')} style={menuBtnStyle}>装備</button>
+                          <button onClick={()=>nav('/skills')} style={menuBtnStyle}>スキル</button>
+                          <button onClick={()=>nav('/profile')} style={menuBtnStyle}>プロフィール</button>
+                          <button onClick={()=>nav('/equipment')} style={menuBtnStyle}>アイテム</button>
                         </div>
                         <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
                           <span style={{ flex:1, borderTop:'1px solid #224466' }}/>施設<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                         </div>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                          <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={menuBtnStyle}>🏨 宿屋へ</button>
-                          <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={menuBtnStyle}>⛩ 神殿へ</button>
-                          <button onClick={()=>nav('/shop')} style={menuBtnStyle}>🛒 商店へ</button>
-                          <button onClick={()=>nav('/smithy')} style={menuBtnStyle}>⚒ 鍛冶屋へ</button>
-                          <button onClick={()=>nav('/museum')} style={menuBtnStyle}>🏛 博物館へ</button>
-                          <button onClick={()=>nav('/exchange')} style={menuBtnStyle}>🔄 交換所へ</button>
-                          <button onClick={()=>nav('/casino')} style={menuBtnStyle}>🎰 賭博場へ</button>
-                          <button onClick={()=>nav('/barber')} style={menuBtnStyle}>✂ 美容院へ</button>
+                          <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={menuBtnStyle}>宿屋へ</button>
+                          <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={menuBtnStyle}>神殿へ</button>
+                          <button onClick={()=>nav('/shop')} style={menuBtnStyle}>商店へ</button>
+                          <button onClick={()=>nav('/smithy')} style={menuBtnStyle}>鍛冶屋へ</button>
+                          <button onClick={()=>nav('/museum')} style={menuBtnStyle}>博物館へ</button>
+                          <button onClick={()=>nav('/exchange')} style={menuBtnStyle}>交換所へ</button>
+                          <button onClick={()=>nav('/casino')} style={menuBtnStyle}>賭博場へ</button>
+                          <button onClick={()=>nav('/barber')} style={menuBtnStyle}>美容院へ</button>
                         </div>
                         <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
                           <span style={{ flex:1, borderTop:'1px solid #224466' }}/>放置コンテンツ<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                         </div>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                          <button onClick={()=>nav('/fishing')} style={menuBtnStyle}>🎣 釣り場へ</button>
-                          <button onClick={()=>nav('/scarecrow')} style={menuBtnStyle}>🌾 かかし修練場へ</button>
+                          <button onClick={()=>nav('/fishing')} style={menuBtnStyle}>釣り場へ</button>
+                          <button onClick={()=>nav('/scarecrow')} style={menuBtnStyle}>かかし修練場へ</button>
                         </div>
                       </div>
                     )}
