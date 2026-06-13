@@ -246,7 +246,7 @@ export const JOB_GROWTH = {
   'ギャンブラー':{ hp:10, mp:10, atk:1, def:2, matk:1, mdef:2, spd:1 },
   '魔法剣士':  { hp:10, mp:10, atk:2, def:1, matk:2, mdef:1, spd:1 },
   '聖騎士':    { hp:20, mp:5,  atk:1, def:2, matk:1, mdef:2, spd:1 },
-  '竜騎士':    { hp:20, mp:5,  atk:2, def:2, matk:0, mdef:1, spd:1 },
+  '竜騎士':    { hp:20, mp:5,  atk:1, def:2, matk:1, mdef:2, spd:1 },
 }
 
 export const JOB_LEVEL3_BONUS = {}
@@ -297,6 +297,7 @@ export const RETRAINING_ENHANCEMENTS = {
   'サイキッカー': ['サイコショット：倍率 ATK×1.3＋MATK×0.6', 'マインドブレイク：40%でスタン', '第六感：与ダメ+5%（合計+10%）', '精神集中：×1.8・3ターン', 'サイコブラスト：倍率 ATK×1.8＋MATK×1.0'],
   '体術師': ['半月蹴り：次のスキルの威力×1.5', '五連殺：各ヒット20%で出血', '闘争本能：HP50%以下で与ダメ+25%', '破衝掌：防御無視 50%', '飛天三角蹴り：ミス撤廃＋各ヒットATK+0.1'],
   'ギャンブラー': ['ジャグリング：4ヒット', 'ラッキーダイス：×0.9〜2.2', 'ギャンブルボディ：被ダメ ×0.7〜1.1', 'オールイン：効果・反動6ターン', 'ジャックポット：2倍確率10%'],
+  '竜騎士': ['ドラゴンスラスト：防御貫通 30%', 'ドラゴンファング：倍率 0.9', '竜鱗の加護：30%で15%軽減', 'ドラゴンロア：自身の攻撃力×1.3（3T）', '天墜竜閃：威力 4.5'],
 }
 
 export const getEffectiveCap = (className, retraining) => {
@@ -1145,34 +1146,33 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     // ── 竜騎士 ──
     case 'ドラゴンスラスト': {
-      result.dmg = Math.floor(eff.atk*(rt>=1?1.6:1.5)*am)
-      result.defPen = rt>=3?0.15:0.10  // 防御貫通10%（再修練3段で15%）
+      result.dmg = Math.floor(eff.atk*1.5*am)
+      result.defPen = rt>=1?0.30:0.10  // 防御貫通10%（再修練1段で30%）
       result.log = `🐉 ドラゴンスラスト！ ${enemy.name}に${result.dmg}の物理ダメージ！（防御貫通）`
       break
     }
     case 'ドラゴンファング': {
-      const dfMult = 0.8
+      const dfMult = rt>=2?0.9:0.8  // 倍率0.8（再修練2段で0.9）
       const h1=Math.floor(eff.atk*dfMult*am*r()), h2=Math.floor(eff.atk*dfMult*am*r())
       result.dmg = h1+h2
       result.hitDmgs = [h1, h2]
-      result.defPen = rt>=2?0.25:0.20  // 防御貫通20%（再修練2段で25%）
+      result.defPen = 0.20  // 防御貫通20%
       result.log = `🐉 ドラゴンファング！ ${enemy.name}に${h1}・${h2}の物理ダメージ！（2連撃・防御貫通）`
       break
     }
     case '竜鱗の加護': result.log = `🛡 竜鱗の加護【パッシブ】 防御力1.2倍・被ダメ時30%で軽減（常時発動）`; break
     case 'ドラゴンロア': {
-      const lrRate = rt>=4?0.6:0.7  // 攻撃・特攻を30%減（再修練4段で40%減）
-      const lrT = rt>=2?4:3
-      result.newEnemyBuffs.atkDown = { turns:lrT, rate:lrRate }
-      result.newEnemyBuffs.matkDown = { turns:lrT, rate:lrRate }
-      result.log = `🐉 ドラゴンロア！ ${lrT}ターンの間、${enemy.name}の攻撃・特殊攻撃を低下させた！`
+      result.newEnemyBuffs.atkDown = { turns:3, rate:0.7 }   // 攻撃・特攻を30%減（3T）
+      result.newEnemyBuffs.matkDown = { turns:3, rate:0.7 }
+      if (rt>=4) result.newPlayerBuffs.atkUp = { turns:3, rate:1.3 }  // 再修練4段：自身の攻撃力×1.3（3T）
+      result.log = `🐉 ドラゴンロア！ 3ターンの間、${enemy.name}の攻撃・特殊攻撃を低下させた！${rt>=4?' 自身の攻撃力上昇！':''}`
       break
     }
     case '天墜竜閃': {
       if (playerBuffs.tenkaiCharge?.turns > 0) {
         // 解放ターン：大ダメージ＋防御貫通30%
-        result.dmg = Math.floor(eff.atk*4.0*am)
-        result.defPen = rt>=5?0.4:0.3
+        result.dmg = Math.floor(eff.atk*(rt>=5?4.5:4.0)*am)  // 威力4.0（再修練5段で4.5）
+        result.defPen = 0.3
         result.newPlayerBuffs.tenkaiCharge = undefined // 溜め解除
         result.log = `🐉💥 天墜竜閃・解放！ ${enemy.name}に${result.dmg}の物理ダメージ！（防御貫通）`
       } else {
@@ -2309,10 +2309,10 @@ export default function Game() {
     const hasGambleBody       = passiveNames.includes('ギャンブルボディ')
     const hasMadokenJutsu     = passiveNames.includes('魔導剣術')
     const hasHolyKnightPassive= passiveNames.includes('聖騎士の心得')
-    const hasRyurin           = passiveNames.includes('竜鱗の加護') // 防御1.2倍＋被ダメ時30%で-5%
+    const hasRyurin           = passiveNames.includes('竜鱗の加護') // 防御1.2倍＋被ダメ時30%で軽減（再修練3段で-15%）
     const ryurinMult          = hasRyurin ? 1.2 : 1.0
-    // 竜鱗の加護：被ダメ時に30%で-5%の軽減倍率を返す
-    const ryurinReduce = () => (hasRyurin && Math.random() < 0.3) ? 0.95 : 1.0
+    // 竜鱗の加護：被ダメ時に30%で軽減倍率を返す（通常-5%／再修練3段で-15%）
+    const ryurinReduce = () => (hasRyurin && Math.random() < 0.3) ? (pe('竜騎士')?0.85:0.95) : 1.0
 
     if (isBossEncounter) {
       // セット中(equipped=true)の魔よけのお守りを直接DBから取得する。
