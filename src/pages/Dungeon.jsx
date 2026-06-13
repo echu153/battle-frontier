@@ -201,7 +201,11 @@ export default function Dungeon() {
   const [weakened, setWeakened] = useState(0)     // ステータスダウン＝あと何ターン攻撃/特攻ダウンか
   const [padSide, setPadSide] = useState(() => { const v = localStorage.getItem('bf_dg_padside'); return (v === 'right' || v === 'center') ? v : 'left' }) // 移動キーの配置: left|center|right
   const setPad = (n) => { setPadSide(n); try { localStorage.setItem('bf_dg_padside', n) } catch { /* ignore */ } }
-  const [seOn, setSeOn] = useState(() => localStorage.getItem('bf_dg_se') !== 'off') // 効果音 ON/OFF（初期ON）
+  const [seOn, setSeOn] = useState(() => localStorage.getItem('bf_dg_se') === 'on') // 効果音 ON/OFF（初期OFF）
+  const [masterOn, setMasterOn] = useState(() => localStorage.getItem('bf_dg_master') !== 'off') // 全体音量のON/OFF
+  const [masterVol, setMasterVol] = useState(() => { const v = parseInt(localStorage.getItem('bf_dg_mastervol') || '70', 10); return isNaN(v) ? 70 : Math.min(100, Math.max(0, v)) }) // 全体音量 0〜100
+  const masterRef = useRef(masterOn ? masterVol / 100 : 0)
+  useEffect(() => { masterRef.current = masterOn ? masterVol / 100 : 0; try { localStorage.setItem('bf_dg_master', masterOn ? 'on' : 'off'); localStorage.setItem('bf_dg_mastervol', String(masterVol)) } catch { /* ignore */ } }, [masterOn, masterVol])
   const toggleSe = () => setSeOn((v) => { const n = !v; try { localStorage.setItem('bf_dg_se', n ? 'on' : 'off') } catch { /* ignore */ } return n })
   const [showSettings, setShowSettings] = useState(false) // 設定パネル（歯車）
   const [log, setLog] = useState([])
@@ -244,11 +248,12 @@ export default function Dungeon() {
     }
     return () => { if (audioRef.current) { audioRef.current.pause() } }
   }, [])
-  // 音量変更を即時反映＋保存
+  // 音量変更を即時反映＋保存（BGM音量×全体音量）
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = bgmVol / 100
+    const m = masterOn ? masterVol / 100 : 0
+    if (audioRef.current) audioRef.current.volume = (bgmVol / 100) * m
     localStorage.setItem('bf_dg_bgmvol', String(bgmVol))
-  }, [bgmVol])
+  }, [bgmVol, masterOn, masterVol])
   useEffect(() => {
     const a = audioRef.current
     if (!a) return
@@ -278,14 +283,17 @@ export default function Dungeon() {
   }, [])
   const playSe = (name) => {
     if (!seOnRef.current) return
+    const m = masterRef.current
+    if (m <= 0) return // 全体ミュート中は鳴らさない
+    const rate = name === 'kaidan' ? 1.2 : 1 // 階段は1.2倍速で再生
     const ctx = audioCtxRef.current, buf = seBufRef.current[name]
     if (!ctx || !buf) { // まだデコード前なら従来方式で鳴らす
-      try { const a = new Audio(`/${name}.mp3?v=${ASSET_VER}`); a.volume = 0.6; a.play().catch(() => {}) } catch { /* ignore */ }
+      try { const a = new Audio(`/${name}.mp3?v=${ASSET_VER}`); a.volume = 0.6 * m; a.playbackRate = rate; a.play().catch(() => {}) } catch { /* ignore */ }
       return
     }
     if (ctx.state === 'suspended') ctx.resume().catch(() => {})
-    const src = ctx.createBufferSource(); src.buffer = buf
-    const g = ctx.createGain(); g.gain.value = 0.6
+    const src = ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate
+    const g = ctx.createGain(); g.gain.value = 0.6 * m
     src.connect(g); g.connect(ctx.destination); src.start(0)
   }
   const gridRef = useRef(null)
@@ -1240,6 +1248,13 @@ export default function Dungeon() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ color: '#aa88ff', letterSpacing: 2 }}>{dungeon?.emoji || '🕳'} {dungeon?.name || 'ダンジョン'}</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', position: 'relative' }}>
+            {/* 全体音量（オン/オフ＋スライダー）。出撃の左 */}
+            <button onClick={() => setMasterOn((v) => !v)} title="全体の音 ON/OFF"
+              style={{ background: masterOn ? '#101a30' : '#0a0a14', border: `1px solid ${masterOn ? '#0088ff' : '#334455'}`, color: masterOn ? '#66bbff' : '#556677', padding: '4px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 13 }}>
+              {masterOn ? '🔊' : '🔇'}
+            </button>
+            <input type="range" min="0" max="100" value={masterVol} onChange={(e) => setMasterVol(Number(e.target.value))}
+              disabled={!masterOn} title={`全体音量 ${masterVol}%`} style={{ width: 64, accentColor: '#0088ff', cursor: masterOn ? 'pointer' : 'not-allowed' }} />
             {/* 簡易出撃のクイックボタン（SortiePanelがポータルで描画。エリア選択は下のメニューから） */}
             <span id="bf-sortie-quick" />
             {/* 設定（歯車）：移動キー左右・BGM・SE */}
