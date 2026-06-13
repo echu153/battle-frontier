@@ -4121,30 +4121,30 @@ export default function Game() {
                         <span style={{ flex:1, borderTop:'1px solid #224466' }}/>キャラクター<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                       </div>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                        <button onClick={()=>nav('/equipment')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🗡 装備</button>
-                        <button onClick={()=>nav('/skills')} style={{ padding:'10px', background:'#001020', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚡ スキル</button>
-                        <button onClick={()=>nav('/profile')} style={{ padding:'10px', background:'#001020', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>👤 プロフィール</button>
-                        <button onClick={()=>nav('/equipment')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎒 アイテム</button>
+                        <button onClick={()=>nav('/equipment')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🗡 装備</button>
+                        <button onClick={()=>nav('/skills')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚡ スキル</button>
+                        <button onClick={()=>nav('/profile')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>👤 プロフィール</button>
+                        <button onClick={()=>nav('/equipment')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎒 アイテム</button>
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
                         <span style={{ flex:1, borderTop:'1px solid #224466' }}/>施設<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                       </div>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                        <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋</button>
-                        <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿</button>
-                        <button onClick={()=>nav('/shop')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🛒 商店</button>
-                        <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋</button>
-                        <button onClick={()=>nav('/museum')} style={{ padding:'10px', background:'#001020', border:'1px solid #ccaa44', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏛 博物館</button>
-                        <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所</button>
-                        <button onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場</button>
-                        <button onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院</button>
+                        <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋</button>
+                        <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿</button>
+                        <button onClick={()=>nav('/shop')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🛒 商店</button>
+                        <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋</button>
+                        <button onClick={()=>nav('/museum')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏛 博物館</button>
+                        <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所</button>
+                        <button onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場</button>
+                        <button onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院</button>
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
                         <span style={{ flex:1, borderTop:'1px solid #224466' }}/>放置コンテンツ<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                       </div>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                        <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場</button>
-                        <button onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場</button>
+                        <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場</button>
+                        <button onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場</button>
                       </div>
                     </div>
                   )}
@@ -4518,30 +4518,30 @@ export default function Game() {
                           <span style={{ flex:1, borderTop:'1px solid #224466' }}/>キャラクター<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                         </div>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                          <button onClick={()=>nav('/equipment')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🗡 装備</button>
-                          <button onClick={()=>nav('/skills')} style={{ padding:'10px', background:'#001020', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚡ スキル</button>
-                          <button onClick={()=>nav('/profile')} style={{ padding:'10px', background:'#001020', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>👤 プロフィール</button>
-                          <button onClick={()=>nav('/equipment')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎒 アイテム</button>
+                          <button onClick={()=>nav('/equipment')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🗡 装備</button>
+                          <button onClick={()=>nav('/skills')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚡ スキル</button>
+                          <button onClick={()=>nav('/profile')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>👤 プロフィール</button>
+                          <button onClick={()=>nav('/equipment')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎒 アイテム</button>
                         </div>
                         <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
                           <span style={{ flex:1, borderTop:'1px solid #224466' }}/>施設<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                         </div>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                          <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋へ</button>
-                          <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿へ</button>
-                          <button onClick={()=>nav('/shop')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🛒 商店へ</button>
-                          <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋へ</button>
-                          <button onClick={()=>nav('/museum')} style={{ padding:'10px', background:'#001020', border:'1px solid #ccaa44', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏛 博物館へ</button>
-                          <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所へ</button>
-                          <button onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場へ</button>
-                          <button onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院へ</button>
+                          <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋へ</button>
+                          <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿へ</button>
+                          <button onClick={()=>nav('/shop')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🛒 商店へ</button>
+                          <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋へ</button>
+                          <button onClick={()=>nav('/museum')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏛 博物館へ</button>
+                          <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所へ</button>
+                          <button onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場へ</button>
+                          <button onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院へ</button>
                         </div>
                         <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
                           <span style={{ flex:1, borderTop:'1px solid #224466' }}/>放置コンテンツ<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                         </div>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                          <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>
-                          <button onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場へ</button>
+                          <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>
+                          <button onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場へ</button>
                         </div>
                       </div>
                     )}
