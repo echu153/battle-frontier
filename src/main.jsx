@@ -3,10 +3,9 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 
-// 開発環境(npm run dev)のときだけ新UIテーマを適用。本番ビルドには含まれない
-if (import.meta.env.DEV) {
-  import('./dev-ui.css')
-}
+// 新UIテーマ(ボタンの立体化など)。本番にも反映中。
+// 旧UIに戻すときは下を `if (import.meta.env.DEV)` に戻せばよい。
+import('./dev-ui.css')
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

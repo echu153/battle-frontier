@@ -9,8 +9,10 @@ import { countClaimableTitles } from '../lib/titles'
 export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue, calcDefReduction } from '../lib/stats'
 
 export const WAIT_SECONDS = 10
-// 開発環境限定の新UIレイアウト（npm run dev のみ。本番ビルドでは従来レイアウト）
-const NEW_UI = import.meta.env.DEV
+// 新UIレイアウトの有効フラグ。
+// 本番にも反映中（true）。旧UIに戻したいときは下行を import.meta.env.DEV（開発のみ）か
+// false（全環境で旧UI）に変更すればワンタッチで戻せる。git tag `ui-classic` も旧UI状態の復元ポイント。
+const NEW_UI = true
 // 多段ヒットスキル：行動全体ではなく1発ごとに回避・クリティカル・ダメージ判定する
 export const MULTI_HIT_SKILLS = new Set(['マジックアロー','三連射','メテオストライク','連打','五連殺','飛天三角蹴り','連装銃撃'])
 const REGEN_SECONDS = 60
