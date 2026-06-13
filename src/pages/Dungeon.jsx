@@ -37,6 +37,7 @@ const BURN_ATK_DOWN = 0.10    // やけど中：攻撃/特攻ダウン率
 const STAT_DOWN_PCT = 0.30    // 敵のデバフ：対象ステータスを30%減
 const ENEMY_BUFF_MULT = 1.3   // 敵の自己バフ：攻撃1.3倍
 const ENEMY_BUFF_TURNS = 4    // 敵の自己バフ持続
+const PET_ATKUP_MULT = 1.3    // ペットの攻撃バフ：攻撃1.3倍
 
 // 床に置く戦利品の抽選テーブル（クライアントで決定→床に実アイコン表示→拾得時サーバー検証）
 const DG_SEEDS = ['atk_seed', 'spatk_seed', 'def_seed', 'spdef_seed', 'hp_seed']
@@ -243,6 +244,7 @@ export default function Dungeon() {
   const shieldRateRef = useRef(1)                 // 軽減率（被ダメ×rate）
   const [regen, setRegen] = useState(0)           // 聖域＝あと何ターン毎ターン回復か
   const regenAmtRef = useRef(0)                   // 1ターンの回復量
+  const [petAtkUp, setPetAtkUp] = useState(0)     // 自分の攻撃バフ＝あと何ターン攻撃1.3倍か
   const [padSide, setPadSide] = useState(() => { const v = localStorage.getItem('bf_dg_padside'); return (v === 'right' || v === 'center') ? v : 'left' }) // 移動キーの配置: left|center|right
   const setPad = (n) => { setPadSide(n); try { localStorage.setItem('bf_dg_padside', n) } catch { /* ignore */ } }
   const [seOn, setSeOn] = useState(() => localStorage.getItem('bf_dg_se') !== 'off') // 効果音 ON/OFF（全体ONなら既定オン）
@@ -641,12 +643,13 @@ export default function Dungeon() {
     setDebuff({ atk: 0, def: 0, mdef: 0 }) // ステータスダウンも次フロアで回復
     setShield(0); shieldRateRef.current = 1   // バフも次フロアで切れる
     setRegen(0); regenAmtRef.current = 0
+    setPetAtkUp(0)
   }, [])
 
   // ダンジョンを選んで開始
   const beginDungeon = (d) => {
     setDungeon(d)
-    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setBurned(false); setDebuff({ atk: 0, def: 0, mdef: 0 }); setShield(0); shieldRateRef.current = 1; setRegen(0); regenAmtRef.current = 0; setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
+    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setBurned(false); setDebuff({ atk: 0, def: 0, mdef: 0 }); setShield(0); shieldRateRef.current = 1; setRegen(0); regenAmtRef.current = 0; setPetAtkUp(0); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
     enterFloor(1, d)
     playFloorIntro(1, d) // 入場時にダンジョン名・フロア表示
     startRun(pet.id, d.id)
@@ -756,10 +759,12 @@ export default function Dungeon() {
         if (sp2 > p) { useAtk = sp2; useType = 'spec' }
         else if (p > sp2) { useAtk = p; useType = 'phys' }
       }
-      // やけど・ステータスダウン中は攻撃/特攻が下がる
-      const atkMul = (burned ? 1 - BURN_ATK_DOWN : 1) * (debuff.atk > 0 ? 1 - STAT_DOWN_PCT : 1)
+      // やけど・ステータスダウン中は攻撃/特攻が下がる。攻撃バフ中は上がる
+      const atkMul = (burned ? 1 - BURN_ATK_DOWN : 1) * (debuff.atk > 0 ? 1 - STAT_DOWN_PCT : 1) * (petAtkUp > 0 ? PET_ATKUP_MULT : 1)
       useAtk = useAtk * atkMul
-      const guard = useType === 'spec' ? (target.mdef || 0) : (target.def || 0)
+      // 敵の防御。デバフ（防御down）を受けている敵は軽減が弱まる
+      const baseGuard = useType === 'spec' ? (target.mdef || 0) : (target.def || 0)
+      const guard = (target.defDown > 0) ? baseGuard * (1 - STAT_DOWN_PCT) : baseGuard
       // ダメージは1発ごとに 0.9〜1.1 の乱数補正（最低1）
       const vary = (n) => Math.max(1, Math.round(n * (0.9 + Math.random() * 0.2)))
       const hitDmgs = Array.from({ length: hits }, () => vary(calcDamage(Math.round(useAtk * (sk.mult || 1)), guard)))
@@ -774,9 +779,27 @@ export default function Dungeon() {
         else { const t2 = setTimeout(show, i * HIT_MS); turnTimers.current.push(t2) }
       })
       if (sk.lifesteal) { const heal = Math.floor(total * sk.lifesteal); const healed = Math.min(pet.maxHp, curPetHp + heal) - curPetHp; curPetHp += healed; if (healed > 0) { addLog(`💚 ${healed}回復`); popHeal(px, py, healed, { follow: true }) } }
+      // 自分バフ技（攻撃up / 結界）
+      if (sk.selfBuff) {
+        if (sk.selfBuff.kind === 'atkup') { setPetAtkUp(sk.selfBuff.turns); addLog(`🔺 ${sk.name}！攻撃が上がった`) }
+        else if (sk.selfBuff.kind === 'shield') { setShield(sk.selfBuff.turns); shieldRateRef.current = sk.selfBuff.rate || 0.7; addLog(`🛡 ${sk.name}！被ダメを軽減`) }
+      }
       const killed = newHp <= 0
       if (killed) { enemies = enemies.filter((e) => e.id !== target.id); enemiesRef.current += 1; grantKill(floorNum, target.name, px, py); triggerShake('kill') }
-      else { enemies = enemies.map((e) => e.id === target.id ? { ...e, hp: newHp } : e); triggerShake('hit') }
+      else {
+        // 敵デバフ技（攻撃/防御ダウンを対象に付与）
+        enemies = enemies.map((e) => {
+          if (e.id !== target.id) return e
+          let ne = { ...e, hp: newHp }
+          if (sk.enemyDebuff) {
+            if (sk.enemyDebuff.stat === 'atk') ne.atkDown = sk.enemyDebuff.turns
+            else if (sk.enemyDebuff.stat === 'def') ne.defDown = sk.enemyDebuff.turns
+          }
+          return ne
+        })
+        if (sk.enemyDebuff) addLog(`🔻 ${sk.name}！${target.name}の${sk.enemyDebuff.stat === 'atk' ? '攻撃' : '防御'}が下がった`)
+        triggerShake('hit')
+      }
 
       // 体当たり演出：ペットを相手方向へ突進、被弾した敵を点滅させる
       applyFx({ pet: { lunge: { dx, dy } }, enemies: killed ? {} : { [target.id]: { flash: true } } })
@@ -878,7 +901,7 @@ export default function Dungeon() {
     const attackers = []   // 隣接して攻撃してくる敵（1体ずつ順番に演出する）
     enemies = enemies.map((e) => {
       // スキルの書「しびれ」効果中の敵は行動できない（1ターン消費）。自己バフは減衰
-      if (e.stun > 0) return { ...e, stun: e.stun - 1, buff: Math.max(0, (e.buff || 0) - 1) }
+      if (e.stun > 0) return { ...e, stun: e.stun - 1, buff: Math.max(0, (e.buff || 0) - 1), atkDown: Math.max(0, (e.atkDown || 0) - 1), defDown: Math.max(0, (e.defDown || 0) - 1) }
       // プレイヤーが見えている敵だけが追跡・攻撃する（霧の中からの不可視の急襲を防ぐ）
       //  ＝ 同じ部屋/接近(enemySeesPet) または プレイヤーの視界内(visNow) の敵のみ
       const sees = enemySeesPet(s.rooms, e, player.x, player.y) || visNow.has(e.x + ',' + e.y)
@@ -898,8 +921,8 @@ export default function Dungeon() {
         const baseGuard = e.type === 'spec' ? (pet.mdef || 0) : (pet.def || 0)
         const guardDown = e.type === 'spec' ? (debuff.mdef > 0) : (debuff.def > 0)
         const guard = guardDown ? baseGuard * (1 - STAT_DOWN_PCT) : baseGuard
-        // 敵の攻撃力（自己バフ中は ENEMY_BUFF_MULT 倍）
-        const eAtk = (e.atk || 1) * ((e.buff || 0) > 0 ? ENEMY_BUFF_MULT : 1)
+        // 敵の攻撃力（自己バフ中は ENEMY_BUFF_MULT 倍／攻撃ダウン中は減）
+        const eAtk = (e.atk || 1) * ((e.buff || 0) > 0 ? ENEMY_BUFF_MULT : 1) * ((e.atkDown || 0) > 0 ? 1 - STAT_DOWN_PCT : 1)
         // 敵のダメージも 0.9〜1.1 の乱数補正（最低1）
         let dmg = Math.max(1, Math.round(calcDamage(eAtk, guard) * (0.9 + Math.random() * 0.2)))
         // 敵スキル（確率発動）
@@ -923,7 +946,7 @@ export default function Dungeon() {
         const healShown = heal > 0 ? Math.min(heal, e.maxHp - e.hp) : 0
         attackers.push({ id: e.id, name: e.name, x: e.x, y: e.y, dmg, notes, healShown,
           lunge: { dx: Math.sign(player.x - e.x), dy: Math.sign(player.y - e.y) } })
-        let ne = e
+        let ne = { ...e, atkDown: Math.max(0, (e.atkDown || 0) - 1), defDown: Math.max(0, (e.defDown || 0) - 1) } // デバフ減衰
         if (heal > 0) ne = { ...ne, hp: Math.min(e.maxHp, e.hp + heal) }
         if (gotBuff) ne = { ...ne, buff: ENEMY_BUFF_TURNS }
         else if ((e.buff || 0) > 0) ne = { ...ne, buff: e.buff - 1 } // 攻撃したターンもバフ減衰
@@ -951,7 +974,7 @@ export default function Dungeon() {
         cands = [{ x: e.x + 1, y: e.y }, { x: e.x - 1, y: e.y }, { x: e.x, y: e.y + 1 }, { x: e.x, y: e.y - 1 }]
           .sort(() => Math.random() - 0.5)
       }
-      const decayed = (e.buff || 0) > 0 ? { ...e, buff: e.buff - 1 } : e // 移動ターンも自己バフ減衰
+      const decayed = { ...e, buff: Math.max(0, (e.buff || 0) - 1), atkDown: Math.max(0, (e.atkDown || 0) - 1), defDown: Math.max(0, (e.defDown || 0) - 1) } // 移動ターンも各効果を減衰
       for (const c of cands) {
         const ck = c.x + ',' + c.y
         // 泳ぐ敵は水も通行可。それ以外は床のみ
@@ -1005,6 +1028,7 @@ export default function Dungeon() {
       // バフ・状態の減衰
       if (shield > 0) setShield((v) => Math.max(0, v - 1))
       if (regen > 0) setRegen((v) => Math.max(0, v - 1))
+      if (petAtkUp > 0) setPetAtkUp((v) => Math.max(0, v - 1))
       setFullness(nextFull)
       // レベルアップ全回復の予約があれば最終HPを最大に（commitTurnの順番に依存しないように）
       if (!dead && fullHealRef.current != null) { curHp = fullHealRef.current; fullHealRef.current = null }
@@ -1516,6 +1540,7 @@ export default function Dungeon() {
             if (debuff.def > 0) chips.push({ k: 'ddef', label: '▼ 防御ダウン', col: '#88bbdd' })
             if (debuff.mdef > 0) chips.push({ k: 'dmdef', label: '▼ 特防ダウン', col: '#88bbdd' })
             if (shield > 0) chips.push({ k: 'shield', label: `🛡 結界 残${shield}`, col: '#66ddff' })
+            if (petAtkUp > 0) chips.push({ k: 'atkup', label: `🔺 攻撃アップ 残${petAtkUp}`, col: '#ffcc66' })
             if (regen > 0) chips.push({ k: 'regen', label: `🕊 聖域 残${regen}`, col: '#aaffcc' })
             if (fullness <= 0) chips.push({ k: 'hungry', label: '🥀 空腹', col: '#ff8855' })
             return (
