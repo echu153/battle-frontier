@@ -1431,9 +1431,9 @@ export default function Dungeon() {
           <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'center', marginTop: 12 }}>
             {/* 十字キー */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gap: 4 }}>
-              <Btn onClick={() => tryMove(-1, -1)}>↖</Btn><Btn onClick={() => tryMove(0, -1)}>▲</Btn><Btn onClick={() => tryMove(1, -1)}>↗</Btn>
-              <Btn onClick={() => tryMove(-1, 0)}>◀</Btn><Btn onClick={stepInPlace}>〇</Btn><Btn onClick={() => tryMove(1, 0)}>▶</Btn>
-              <Btn onClick={() => tryMove(-1, 1)}>↙</Btn><Btn onClick={() => tryMove(0, 1)}>▼</Btn><Btn onClick={() => tryMove(1, 1)}>↘</Btn>
+              <Btn onClick={() => tryMove(-1, -1)}>◤</Btn><Btn onClick={() => tryMove(0, -1)}>▲</Btn><Btn onClick={() => tryMove(1, -1)}>◥</Btn>
+              <Btn onClick={() => tryMove(-1, 0)}>◀</Btn><Btn onClick={stepInPlace}>■</Btn><Btn onClick={() => tryMove(1, 0)}>▶</Btn>
+              <Btn onClick={() => tryMove(-1, 1)}>◣</Btn><Btn onClick={() => tryMove(0, 1)}>▼</Btn><Btn onClick={() => tryMove(1, 1)}>◢</Btn>
             </div>
             {/* 十字の隣にスキル（選択中を体当たりで発動） */}
             <div style={{ display: 'grid', gap: 4 }}>
