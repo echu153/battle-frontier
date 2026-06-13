@@ -742,7 +742,7 @@ export default function Dungeon() {
         addLog(`🎒 足元に「${onName}」があるが持ち物がいっぱい`)
       } else if (itemHere) {
         items = items.filter((it) => it.id !== itemHere.id); itemsRef.current += 1
-        playSe('aitemu') // アイテム取得SE
+        { const t = setTimeout(() => playSe('aitemu'), 90); turnTimers.current.push(t) } // アイテム取得SE（ほんの少し遅らせる）
         if (itemHere.kind === 'food') {
           // 床の消耗品をアイテム袋へ（名前は分かっているので即ログ・通信は裏で）
           const fdef = PET_ITEMS[itemHere.key]
@@ -760,11 +760,10 @@ export default function Dungeon() {
           addLog(`${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾った`)
           grantFood(itemHere.key).then((ok) => { if (!ok) addLog('🎒 袋がいっぱいで拾えなかった') })
         } else {
-          // ✨：サーバーが抽選するため名前は応答後。先に即時フィードバックを出す
-          addLog('✨ アイテムを拾った！')
+          // ✨：サーバーが抽選して保持（生還で入手）。結果は応答後に名前付きで表示
           supabase.rpc('dungeon_pickup', { p_run_id: runIdRef.current }).then(({ data, error }) => {
             if (error || !data) { addLog(`✨ 拾えなかった（${error?.message || '通信エラー'}）`); return }
-            addLootToBag(data); const d = lootDisplay(data); addLog(`${d.emoji} ${d.label}！`)
+            addLootToBag(data); const d = lootDisplay(data); addLog(`${d.emoji} ${d.label}を拾った！`)
           })
         }
       }
