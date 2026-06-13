@@ -744,23 +744,27 @@ export default function Dungeon() {
         items = items.filter((it) => it.id !== itemHere.id); itemsRef.current += 1
         playSe('aitemu') // アイテム取得SE
         if (itemHere.kind === 'food') {
-          // 床の消耗品をアイテム袋へ
+          // 床の消耗品をアイテム袋へ（名前は分かっているので即ログ・通信は裏で）
           const fdef = PET_ITEMS[itemHere.key]
-          grantFood(itemHere.key).then((ok) => addLog(ok ? `${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾って袋に入れた` : '🎒 袋がいっぱいで拾えなかった'))
+          addLog(`${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾って袋に入れた`)
+          grantFood(itemHere.key).then((ok) => { if (!ok) addLog('🎒 袋がいっぱいで拾えなかった') })
         } else if (itemHere.kind === 'dropLoot' && itemHere.loot) {
-          // 自分が捨てたルート品を拾い直す（サーバーで pending へ戻す）
+          // 自分が捨てたルート品を拾い直す（名前は既知なので即ログ・サーバー復帰は裏で）
+          const d0 = lootDisplay(itemHere.loot); addLog(`${d0.emoji} ${d0.label}を拾った`)
           supabase.rpc('dungeon_repick_loot', { p_run_id: runIdRef.current, p_loot_id: itemHere.loot.id }).then(({ data, error }) => {
             if (error) { addLog('拾えなかった'); return }
-            const e = data || itemHere.loot; addLootToBag(e); const d = lootDisplay(e); addLog(`${d.emoji} ${d.label}を拾った`)
+            addLootToBag(data || itemHere.loot)
           })
         } else if (itemHere.kind === 'dropFood' && itemHere.key) {
           const fdef = PET_ITEMS[itemHere.key]
-          grantFood(itemHere.key).then((ok) => addLog(ok ? `${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾った` : '🎒 袋がいっぱいで拾えなかった'))
+          addLog(`${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾った`)
+          grantFood(itemHere.key).then((ok) => { if (!ok) addLog('🎒 袋がいっぱいで拾えなかった') })
         } else {
-          // ✨：サーバーが抽選して保持（生還で入手）。何を拾ったか必ずその場でログに出す
+          // ✨：サーバーが抽選するため名前は応答後。先に即時フィードバックを出す
+          addLog('✨ アイテムを拾った！')
           supabase.rpc('dungeon_pickup', { p_run_id: runIdRef.current }).then(({ data, error }) => {
             if (error || !data) { addLog(`✨ 拾えなかった（${error?.message || '通信エラー'}）`); return }
-            addLootToBag(data); const d = lootDisplay(data); addLog(`${d.emoji} ${d.label}を拾った！`)
+            addLootToBag(data); const d = lootDisplay(data); addLog(`${d.emoji} ${d.label}！`)
           })
         }
       }
