@@ -1797,7 +1797,6 @@ export default function Dungeon() {
               <div style={{ textAlign: 'center', opacity: transition.title, transition: 'opacity 0.4s ease' }}>
                 <div style={{ color: '#c8a0ff', fontSize: 20, letterSpacing: 4 }}>{transition.emoji || dungeon?.emoji} {transition.name || dungeon?.name}</div>
                 <div style={{ color: '#ffcc66', fontSize: 26, letterSpacing: 3, marginTop: 10 }}>B{transition.floor}F</div>
-                {transition.boss && <div style={{ color: '#ff5577', fontSize: 22, letterSpacing: 3, marginTop: 18, textShadow: '0 0 10px #ff2244' }}>👿 デビルパピア 出現</div>}
               </div>
             </div>
           )}
