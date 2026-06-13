@@ -3901,18 +3901,18 @@ export default function Game() {
                 </div>
                 {NEW_UI && (
                   profile.activePet ? (
-                    <button onClick={()=>nav('/pets')} style={{ flexShrink:0, display:'flex', alignItems:'center', gap:'8px', background:'#0e0a1a', border:'1px solid #aa88ff', padding:'6px 10px', cursor:'pointer', fontFamily:'monospace', textAlign:'left' }}>
+                    <button onClick={()=>nav('/pets')} style={{ flexShrink:0, display:'flex', alignItems:'center', gap:'8px', background:'#001840', border:'1px solid #0088ff', padding:'6px 10px', cursor:'pointer', fontFamily:'monospace', textAlign:'left' }}>
                       {petImage(profile.activePet)
                         ? <img src={petImage(profile.activePet)} alt="" style={{ width:'52px', height:'52px', objectFit:'contain', flexShrink:0 }} />
                         : <span style={{ fontSize:'40px', lineHeight:1 }}>{speciesEmoji(profile.activePet)}</span>}
                       <div style={{ lineHeight:1.35 }}>
-                        <div style={{ fontSize:'10px', color:'#8877aa' }}>🐾 ペット</div>
-                        <div style={{ fontSize:'14px', color:'#cbb6ff', fontWeight:'bold' }}>{profile.activePet.name}</div>
-                        <div style={{ fontSize:'11px', color:'#8877aa' }}>{speciesLabel(profile.activePet)} <span style={{ color:'#ffcc00' }}>Lv{profile.activePet.level}</span></div>
+                        <div style={{ fontSize:'10px', color:'#446688' }}>🐾 ペット</div>
+                        <div style={{ fontSize:'14px', color:'#88ccff', fontWeight:'bold' }}>{profile.activePet.name}</div>
+                        <div style={{ fontSize:'11px', color:'#446688' }}>{speciesLabel(profile.activePet)} <span style={{ color:'#ffcc00' }}>Lv{profile.activePet.level}</span></div>
                       </div>
                     </button>
                   ) : (
-                    <button onClick={()=>nav('/pets')} style={{ flexShrink:0, alignSelf:'center', background:'#0e0a1a', border:'1px solid #6a5a8a', color:'#8877aa', padding:'10px 12px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', textAlign:'center' }}>🐾<br/>ペット未選択</button>
+                    <button onClick={()=>nav('/pets')} style={{ flexShrink:0, alignSelf:'center', background:'#001840', border:'1px solid #335577', color:'#446688', padding:'10px 12px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', textAlign:'center' }}>🐾<br/>ペット未選択</button>
                   )
                 )}
               </div>
