@@ -286,14 +286,15 @@ export default function Dungeon() {
     const m = masterRef.current
     if (m <= 0) return // 全体ミュート中は鳴らさない
     const rate = name === 'kaidan' ? 1.2 : 1 // 階段は1.2倍速で再生
+    const baseVol = name === 'aitemu' ? 1.0 : 0.6 // アイテム音は大きめ
     const ctx = audioCtxRef.current, buf = seBufRef.current[name]
     if (!ctx || !buf) { // まだデコード前なら従来方式で鳴らす
-      try { const a = new Audio(`/${name}.mp3?v=${ASSET_VER}`); a.volume = 0.6 * m; a.playbackRate = rate; a.play().catch(() => {}) } catch { /* ignore */ }
+      try { const a = new Audio(`/${name}.mp3?v=${ASSET_VER}`); a.volume = Math.min(1, baseVol * m); a.playbackRate = rate; a.play().catch(() => {}) } catch { /* ignore */ }
       return
     }
     if (ctx.state === 'suspended') ctx.resume().catch(() => {})
     const src = ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate
-    const g = ctx.createGain(); g.gain.value = 0.6 * m
+    const g = ctx.createGain(); g.gain.value = baseVol * m
     src.connect(g); g.connect(ctx.destination); src.start(0)
   }
   const gridRef = useRef(null)
