@@ -4063,7 +4063,7 @@ export default function Game() {
                 )
               })()}
               <button onClick={(e)=>doBattle(e)} disabled={!canAct||loading||!canBattle}
-                style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct&&canBattle?(NEW_UI?'#336699':'#ffcc00'):'#003366'}`, color:canAct&&canBattle?(NEW_UI?'#88aacc':'#ffcc00'):'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
+                style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
                 {isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
               </button>
               <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAllUsedUp||loading||isBanned}
@@ -4100,8 +4100,8 @@ export default function Game() {
                 <>
                   {/* ペットと挑戦を横並びに */}
                   <div style={{ display:'flex', gap:'8px' }}>
-                    <button onClick={()=>nav('/pets')} style={{ flex:1, padding:'14px', background:'#001840', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>🐾 ペット</button>
-                    <button onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ flex:1, padding:'14px', background:'#001840', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦</button>
+                    <button onClick={()=>nav('/pets')} style={{ flex:1, padding:'14px', background:'#0e0a1a', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>🐾 ペット</button>
+                    <button onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ flex:1, padding:'14px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦</button>
                   </div>
                   {showChallengePanel && (
                     <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'10px' }}>
@@ -4468,7 +4468,7 @@ export default function Game() {
                   )
                 })()}
                 <button onClick={(e)=>doBattle(e)} disabled={!canAct||loading||!canBattle}
-                  style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct&&canBattle?(NEW_UI?'#336699':'#ffcc00'):'#003366'}`, color:canAct&&canBattle?(NEW_UI?'#88aacc':'#ffcc00'):'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
+                  style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
                   {isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中（HP全回復まで出撃不可）':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
                 </button>
                 <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAllUsedUp||loading}
@@ -4497,8 +4497,8 @@ export default function Game() {
                   <>
                     {/* ペットと挑戦を横並びに */}
                     <div style={{ display:'flex', gap:'8px' }}>
-                      <button onClick={()=>nav('/pets')} style={{ flex:1, padding:'14px', background:'#001840', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>🐾 ペット</button>
-                      <button onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ flex:1, padding:'14px', background:'#001840', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦</button>
+                      <button onClick={()=>nav('/pets')} style={{ flex:1, padding:'14px', background:'#0e0a1a', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>🐾 ペット</button>
+                      <button onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ flex:1, padding:'14px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦</button>
                     </div>
                     {showChallengePanel && (
                       <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'10px' }}>
