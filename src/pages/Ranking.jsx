@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { calcEffectiveTotal, getTotalRank } from '../lib/stats'
-import { charmPlayerBonus, petStats, applyCharmStats, speciesLabel, speciesEmoji, getCharm, charmDisplayName } from '../constants/pets'
+import { charmPlayerBonus, petStats, applyCharmStats, speciesLabel, speciesEmoji, getCharm, charmDisplayName, petImage } from '../constants/pets'
 
 // ペット1体の能力合計（チャーム込み）。プレイヤー総合力と同じ重み付け。
 const petTotalPower = (pet, charm) => {
@@ -159,7 +159,7 @@ export default function Ranking() {
 
         {/* タブ切り替え */}
         <div style={{ display:'flex', gap:'6px', marginBottom:'12px' }}>
-          {[{ id:'total', label:'🏆 総合力' }, { id:'pet', label:'🐾 ペット' }, { id:'abyss', label:'🕯 奈落' }, { id:'museum', label:'🏛 寄贈数' }, { id:'medal', label:'🎫 メダル' }].map(t => (
+          {[{ id:'total', label:'🏆 総合力' }, { id:'abyss', label:'🕯 奈落' }, { id:'museum', label:'🏛 寄贈数' }, { id:'medal', label:'🎫 メダル' }, { id:'pet', label:'🐾 ペット' }].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{
                 flex:1, padding:'8px', fontFamily:'monospace', fontSize:'12px', cursor:'pointer',
@@ -261,10 +261,11 @@ export default function Ranking() {
                     {medal ? <span style={{ fontSize:'16px' }}>{medal}</span> : <span style={{ color:'#558866', fontSize:'11px' }}>{i+1}</span>}
                   </div>
 
-                  {/* ペット絵文字 */}
-                  <div style={{ width:'36px', height:'36px', display:'flex', alignItems:'center', justifyContent:'center', background:'#0c1a12', border:'1px solid #1a3322', flexShrink:0, fontSize:'20px' }}>
-                    {speciesEmoji(p)}
-                  </div>
+                  {/* ペットアイコン（設定画像優先・無ければ絵文字） */}
+                  {petImage(p)
+                    ? <img src={petImage(p)} alt="" style={{ width:'36px', height:'36px', objectFit:'cover', background:'#0c1a12', border:'1px solid #1a3322', flexShrink:0 }} />
+                    : <div style={{ width:'36px', height:'36px', display:'flex', alignItems:'center', justifyContent:'center', background:'#0c1a12', border:'1px solid #1a3322', flexShrink:0, fontSize:'20px' }}>{speciesEmoji(p)}</div>
+                  }
 
                   {/* ペット名・種族・飼い主 */}
                   <div style={{ flex:1, minWidth:0 }}>
