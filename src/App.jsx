@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { supabase } from './supabase'
 import Login from './pages/Login' // 最初に出る画面は即時読み込み（チラつき防止）
+import ErrorBoundary from './components/ErrorBoundary'
 // 以下はページを開いた時に読み込む（コード分割＝初回ロードを軽く）
 const CharCreate = lazy(() => import('./pages/CharCreate'))
 const Game = lazy(() => import('./pages/Game'))
@@ -130,6 +131,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <ErrorBoundary>
       <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000820', color: '#0088ff', fontFamily: 'monospace', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>読み込み中...</div>}>
       <Routes>
         <Route path="/login" element={isPasswordRecovery || !session ? <Login isPasswordRecovery={isPasswordRecovery} /> : <Navigate to={hasChar ? '/game' : '/create'} />} />
@@ -162,6 +164,7 @@ function App() {
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
       </Suspense>
+      </ErrorBoundary>
     </BrowserRouter>
   )
 }
