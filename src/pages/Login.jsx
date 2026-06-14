@@ -92,8 +92,8 @@ export default function Login({ isPasswordRecovery = false }) {
   const inputStyle = { background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace' }
 
   if (showContact) return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#000820' }}>
-      <div style={{ border:'1px solid #446688', background:'#001040', padding:'30px', width:'320px', fontFamily:'monospace' }}>
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', backgroundColor:'#0a1428', backgroundImage:'linear-gradient(rgba(4,10,28,0.45), rgba(4,10,28,0.6)), url(/taitorugamen.png)', backgroundSize:'cover', backgroundPosition:'center', backgroundRepeat:'no-repeat' }}>
+      <div style={{ border:'1px solid #2a5fa8', background:'rgba(0,16,52,0.82)', padding:'30px', width:'320px', fontFamily:'monospace', borderRadius:'8px', backdropFilter:'blur(3px)', WebkitBackdropFilter:'blur(3px)', boxShadow:'0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(232,180,48,0.18)' }}>
         <div style={{ color:'#ffcc00', textAlign:'center', fontSize:'20px', marginBottom:'20px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
         <div style={{ color:'#88ccff', fontSize:'14px', marginBottom:'12px' }}>📩 お問い合わせ</div>
         {contactSent ? (
@@ -143,8 +143,8 @@ export default function Login({ isPasswordRecovery = false }) {
   )
 
   return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#000820' }}>
-      <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'30px', width:'320px' }}>
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', backgroundColor:'#0a1428', backgroundImage:'linear-gradient(rgba(4,10,28,0.45), rgba(4,10,28,0.6)), url(/taitorugamen.png)', backgroundSize:'cover', backgroundPosition:'center', backgroundRepeat:'no-repeat' }}>
+      <div style={{ border:'1px solid #2a5fa8', background:'rgba(0,16,52,0.82)', padding:'30px', width:'320px', borderRadius:'8px', backdropFilter:'blur(3px)', WebkitBackdropFilter:'blur(3px)', boxShadow:'0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(232,180,48,0.18)' }}>
         <div style={{ color:'#ffcc00', textAlign:'center', fontSize:'20px', marginBottom:'20px', letterSpacing:'3px' }}>
           BATTLE FRONTIER
         </div>
