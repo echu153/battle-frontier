@@ -51,8 +51,6 @@ export default function Alchemy() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { nav('/login'); return }
-      const { data: p } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
-      if (!p?.is_admin) { nav('/game'); return } // 先行公開＝管理者限定
       await load()
       setLoading(false)
     })()
@@ -119,7 +117,7 @@ export default function Alchemy() {
     <div style={{ minHeight:'100vh', background:'#000a08', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'680px', margin:'0 auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #0a4030', paddingBottom:'8px', marginBottom:'12px' }}>
-          <div style={{ color:'#44ffaa', fontSize:'15px', letterSpacing:'3px' }}>🧪 錬金部屋 <span style={{ fontSize:'10px', color:'#558877' }}>[開発]</span></div>
+          <div style={{ color:'#44ffaa', fontSize:'15px', letterSpacing:'3px' }}>🧪 錬金部屋</div>
           <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
         </div>
 
