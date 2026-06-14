@@ -146,7 +146,8 @@ export default function Alchemy() {
               ※ 戦闘勝利で1%「時の結晶」を入手できます。錬金中の枠に使うと完成時間を1時間短縮できます。
             </div>
 
-            {/* 錬金部屋4つ（達成条件数ぶん 1→4 が順に開放） */}
+            {/* 錬金部屋4つ（2列・達成条件数ぶん 1→4 が順に開放） */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
             {[1, 2, 3, 4].map(slot => {
               const unlocked = slot <= slots
               const job = jobBySlot(slot)
@@ -220,6 +221,7 @@ export default function Alchemy() {
                 </div>
               )
             })}
+            </div>
           </>
         )}
       </div>
