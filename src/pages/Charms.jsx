@@ -105,6 +105,17 @@ export default function Charms() {
     setTimeout(() => setFuseDone(null), 2200)
   }
 
+  const doUnfuse = async (id) => {
+    if ((seeds.shard || 0) < 1) { flash('神秘の欠片が足りません'); return }
+    setLoading(true)
+    const { error } = await supabase.rpc('pet_charm_unfuse', { p_charm: id })
+    setLoading(false)
+    if (error) { flash('解除に失敗: ' + error.message); return }
+    setFuseBase(null); setFuseMat(null)
+    await load()
+    flash('合成を解除しました（2つ目の効果が外れました）')
+  }
+
   const Btn = ({ children, onClick, dim }) => (
     <button onClick={onClick} style={{ background: dim ? '#0a1424' : '#001840', border: `1px solid ${dim ? '#335588' : '#0088ff'}`, color: dim ? '#88aacc' : '#0088ff', padding: '5px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>{children}</button>
   )
@@ -257,6 +268,25 @@ export default function Charms() {
               )
             })()}
             <Btn onClick={() => !loading && doFuse()}>🔮 合成する（欠片×{seeds.shard || 0}）</Btn>
+
+            {/* 合成解除 */}
+            {charms.some((c) => c.fused) && (
+              <div style={{ marginTop: 14, borderTop: '1px solid #442266', paddingTop: 10 }}>
+                <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔓 神秘の欠片1つで合成を解除できます（2つ目の効果が外れ、再び合成できるようになります）。<span style={{ color: '#ff8866' }}>成長値はそのまま残ります。</span></div>
+                {charms.filter((c) => c.fused).map((c) => {
+                  const d = getCharm(c.ctype); const can = (seeds.shard || 0) >= 1
+                  return (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                      <span style={{ color: '#cce6ff', fontSize: 11 }}>{d.emoji} {charmDisplayName(c)}{equippedBy(c.id) ? `（${equippedBy(c.id)}）` : ''}</span>
+                      <button onClick={() => !loading && doUnfuse(c.id)} disabled={loading || !can}
+                        style={{ background: can ? '#1a0e2a' : '#0a0a14', border: `1px solid ${can ? '#aa66ff' : '#332244'}`, color: can ? '#c8a0ff' : '#556', padding: '4px 8px', cursor: can ? 'pointer' : 'not-allowed', fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap' }}>
+                        🔓 合成解除（欠片×1）
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
