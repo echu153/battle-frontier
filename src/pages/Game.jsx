@@ -3762,9 +3762,6 @@ export default function Game() {
             <button onClick={()=>setShowGuide(true)} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>📖</button>
           </div>
           <div style={{ display:'flex', gap:'6px' }}>
-            <button onClick={()=>nav('/equipment')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡</button>
-            <button onClick={()=>nav('/skills')} style={{ background:'none', border:'1px solid #cc44ff', color:'#cc44ff', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>⚡</button>
-            <button onClick={()=>nav('/profile')} style={{ background:'none', border:'1px solid #44ff88', color:'#44ff88', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>👤</button>
             <button onClick={()=>nav('/ranking')} style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏆</button>
             <button onClick={()=>setShowMenu(!showMenu)} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>☰</button>
           </div>
