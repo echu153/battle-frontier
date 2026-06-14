@@ -261,9 +261,9 @@ export default function Ranking() {
                     {medal ? <span style={{ fontSize:'16px' }}>{medal}</span> : <span style={{ color:'#558866', fontSize:'11px' }}>{i+1}</span>}
                   </div>
 
-                  {/* ペットアイコン（設定画像優先・無ければ絵文字） */}
+                  {/* ペットアイコン（設定画像優先・無ければ絵文字）。全身が収まるよう contain＝切れない */}
                   {petImage(p)
-                    ? <img src={petImage(p)} alt="" style={{ width:'36px', height:'36px', objectFit:'cover', background:'#0c1a12', border:'1px solid #1a3322', flexShrink:0 }} />
+                    ? <img src={petImage(p)} alt="" style={{ width:'36px', height:'36px', objectFit:'contain', background:'#0c1a12', border:'1px solid #1a3322', flexShrink:0 }} />
                     : <div style={{ width:'36px', height:'36px', display:'flex', alignItems:'center', justifyContent:'center', background:'#0c1a12', border:'1px solid #1a3322', flexShrink:0, fontSize:'20px' }}>{speciesEmoji(p)}</div>
                   }
 

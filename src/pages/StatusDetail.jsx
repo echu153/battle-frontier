@@ -293,7 +293,7 @@ export default function StatusDetail() {
                 return (
                   <div key={pet.id} style={{ display:'flex', gap:'10px', alignItems:'center', padding:'8px', border:`1px solid ${pet.is_active ? '#2a6a4a' : '#143322'}`, background: pet.is_active ? '#06180f' : '#04120a' }}>
                     <div style={{ width:'40px', height:'40px', display:'flex', alignItems:'center', justifyContent:'center', background:'#0c1a12', border:'1px solid #1a3322', flexShrink:0, fontSize:'22px', overflow:'hidden' }}>
-                      {img ? <img src={img} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : speciesEmoji(pet)}
+                      {img ? <img src={img} alt="" style={{ width:'100%', height:'100%', objectFit:'contain' }} /> : speciesEmoji(pet)}
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ fontSize:'12px', color:'#88ffcc', marginBottom:'2px' }}>
