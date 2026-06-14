@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { calcEffectiveTotal, getTotalRank } from '../lib/stats'
-import { charmPlayerBonus } from '../constants/pets'
+import { charmPlayerBonus, petStats, applyCharmStats, speciesLabel, speciesEmoji, getCharm, charmDisplayName } from '../constants/pets'
+
+// ペット1体の能力合計（チャーム込み）。プレイヤー総合力と同じ重み付け。
+const petTotalPower = (pet, charm) => {
+  const st = applyCharmStats(petStats(pet), charm || null)
+  return Math.floor(st.maxHp / 10) + st.atk + st.def + st.mdef
+}
 
 export default function Ranking() {
   const nav = useNavigate()
@@ -10,6 +16,7 @@ export default function Ranking() {
   const [museumPlayers, setMuseumPlayers] = useState([])
   const [medalPlayers, setMedalPlayers] = useState([])
   const [abyssPlayers, setAbyssPlayers] = useState([])
+  const [petRanking, setPetRanking] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState(null)
   const [tab, setTab] = useState('total')
@@ -98,6 +105,29 @@ export default function Ranking() {
       const { data: abyssData } = await supabase.rpc('get_abyss_ranking')
       setAbyssPlayers((Array.isArray(abyssData) ? abyssData : []).filter(p => !excluded.has(p.id)))
 
+      // ペット能力合計ランキング（チャーム込み・1体ごと）
+      const { data: allPets } = await supabase.from('pets').select('id, owner_id, name, species, level, evolved, image_url, charm_id')
+      const petList = (allPets || []).filter(p => !excluded.has(p.owner_id))
+      // チャーム読み込み
+      const petCharmIds = [...new Set(petList.map(p => p.charm_id).filter(Boolean))]
+      let petCharmById = {}
+      if (petCharmIds.length > 0) {
+        const { data: pcRows } = await supabase.from('player_charms').select('*').in('id', petCharmIds)
+        for (const c of (pcRows || [])) petCharmById[c.id] = c
+      }
+      // 飼い主名
+      const ownerIds = [...new Set(petList.map(p => p.owner_id).filter(Boolean))]
+      let ownerById = {}
+      if (ownerIds.length > 0) {
+        const { data: ownerRows } = await supabase.from('profiles').select('id, username, avatar_url').in('id', ownerIds)
+        for (const o of (ownerRows || [])) ownerById[o.id] = o
+      }
+      const petsWithPower = petList.map(p => {
+        const charm = p.charm_id ? petCharmById[p.charm_id] : null
+        return { ...p, _charm: charm, _owner: ownerById[p.owner_id] || null, _power: petTotalPower(p, charm) }
+      }).sort((a, b) => b._power - a._power).slice(0, 50)
+      setPetRanking(petsWithPower)
+
       setLoading(false)
     }
     init()
@@ -129,7 +159,7 @@ export default function Ranking() {
 
         {/* タブ切り替え */}
         <div style={{ display:'flex', gap:'6px', marginBottom:'12px' }}>
-          {[{ id:'total', label:'🏆 総合力' }, { id:'abyss', label:'🕯 奈落' }, { id:'museum', label:'🏛 寄贈数' }, { id:'medal', label:'🎫 メダル' }].map(t => (
+          {[{ id:'total', label:'🏆 総合力' }, { id:'pet', label:'🐾 ペット' }, { id:'abyss', label:'🕯 奈落' }, { id:'museum', label:'🏛 寄贈数' }, { id:'medal', label:'🎫 メダル' }].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{
                 flex:1, padding:'8px', fontFamily:'monospace', fontSize:'12px', cursor:'pointer',
@@ -144,7 +174,7 @@ export default function Ranking() {
 
         {/* 見出し */}
         <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'10px', textAlign:'center', letterSpacing:'2px' }}>
-          {tab === 'total' ? '🏆 総合力ランキング' : tab === 'abyss' ? '🕯 奈落闘技場 踏破ランキング' : tab === 'museum' ? '🏛 寄贈数ランキング' : '🎫 1日最高収支メダルランキング'}
+          {tab === 'total' ? '🏆 総合力ランキング' : tab === 'pet' ? '🐾 ペット能力ランキング（チャーム込み）' : tab === 'abyss' ? '🕯 奈落闘技場 踏破ランキング' : tab === 'museum' ? '🏛 寄贈数ランキング' : '🎫 1日最高収支メダルランキング'}
         </div>
 
         {loading ? (
@@ -206,6 +236,62 @@ export default function Ranking() {
             {players.length === 0 && (
               <div style={{ color:'#334455', padding:'20px', textAlign:'center', fontSize:'12px' }}>
                 まだプレイヤーがいません
+              </div>
+            )}
+          </div>
+        ) : tab === 'pet' ? (
+          <div>
+            {petRanking.map((p, i) => {
+              const medal = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
+              const isMe = p.owner_id === currentUserId
+              const charmName = p._charm ? charmDisplayName(p._charm) : null
+              return (
+                <div key={p.id}
+                  onClick={() => p._owner && nav(`/profile/${p.owner_id}`)}
+                  style={{
+                    display:'flex', alignItems:'center', gap:'8px',
+                    padding:'8px 10px', marginBottom:'4px',
+                    border:`1px solid ${isMe ? '#0066cc' : '#1a2a33'}`,
+                    background: isMe ? '#001830' : i === 0 ? '#0a1a14' : '#0a1410',
+                    cursor:'pointer', borderRadius:'2px',
+                  }}
+                >
+                  {/* 順位 */}
+                  <div style={{ minWidth:'28px', textAlign:'center' }}>
+                    {medal ? <span style={{ fontSize:'16px' }}>{medal}</span> : <span style={{ color:'#558866', fontSize:'11px' }}>{i+1}</span>}
+                  </div>
+
+                  {/* ペット絵文字 */}
+                  <div style={{ width:'36px', height:'36px', display:'flex', alignItems:'center', justifyContent:'center', background:'#0c1a12', border:'1px solid #1a3322', flexShrink:0, fontSize:'20px' }}>
+                    {speciesEmoji(p)}
+                  </div>
+
+                  {/* ペット名・種族・飼い主 */}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ color: isMe ? '#44ff88' : '#88ffcc', fontSize:'12px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {p.name || speciesLabel(p)}{p.evolved && <span style={{ color:'#ffcc00', fontSize:'10px' }}> ✦</span>}
+                    </div>
+                    <div style={{ color:'#558866', fontSize:'10px', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {speciesLabel(p)} Lv{p.level || 1}
+                      {charmName && <span style={{ color:'#ff88cc' }}> ・{charmName}</span>}
+                    </div>
+                    <div style={{ color:'#446688', fontSize:'9px', marginTop:'1px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      👤 {p._owner?.username || '???'}{isMe && <span style={{ color:'#44ff88' }}> (自分)</span>}
+                    </div>
+                  </div>
+
+                  {/* 能力合計 */}
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ color:'#44ffaa', fontSize:'15px', fontWeight:'bold' }}>{p._power}</div>
+                    <div style={{ color:'#558866', fontSize:'10px' }}>能力合計</div>
+                  </div>
+                </div>
+              )
+            })}
+
+            {petRanking.length === 0 && (
+              <div style={{ color:'#334455', padding:'20px', textAlign:'center', fontSize:'12px' }}>
+                まだペットがいません
               </div>
             )}
           </div>

@@ -20,6 +20,7 @@ import {
   calcStatsBreakdown, calcEffectiveStats, calcDefReduction, getTotalRank,
 } from '../lib/stats'
 import { sumClaimedFishingBonus, toFishingColumns } from '../lib/fishing'
+import { petStats, applyCharmStats, speciesLabel, speciesEmoji, charmDisplayName, atkLabel, petImage } from '../constants/pets'
 
 const STAT_META = [
   { key:'hp',   label:'HP',         color:'#00cc44', rankType:'hp'  },
@@ -68,6 +69,8 @@ export default function StatusDetail() {
   const [abilityTitle, setAbilityTitle] = useState(null)
   const [fishingRecords, setFishingRecords] = useState([])
   const [museumCounts, setMuseumCounts] = useState({ donations:0, completes:0 })
+  const [pets, setPets] = useState([])
+  const [petCharms, setPetCharms] = useState({})
 
   useEffect(() => { fetchAll() }, [])
 
@@ -87,6 +90,17 @@ export default function StatusDetail() {
     setProficiency(prof || [])
     setFishingRecords(fr || [])
     setMuseumCounts({ donations: donCount || 0, completes: cbCount || 0 })
+    // ペット（アクティブを先頭に）＋装備チャーム
+    const { data: petRows } = await supabase.from('pets').select('*').eq('owner_id', user.id)
+    const petList = (petRows || []).sort((a, b) => (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0))
+    setPets(petList)
+    const charmIds = [...new Set(petList.map(p => p.charm_id).filter(Boolean))]
+    if (charmIds.length > 0) {
+      const { data: charmRows } = await supabase.from('player_charms').select('*').in('id', charmIds)
+      const map = {}
+      for (const c of (charmRows || [])) map[c.id] = c
+      setPetCharms(map)
+    }
     // 旧仕様で消えた釣りボーナスを fishing_* 列へ一度だけ復元（Fishing.jsx と同一処理）
     if (!p.fishing_migrated) {
       const { totals, completed } = sumClaimedFishingBonus(fr || [])
@@ -251,6 +265,54 @@ export default function StatusDetail() {
             <br />
             ※ 釣りボーナスは専用枠で永続保存され、上の各ステータスの「釣り」内訳に反映されています。
             未釣り上げ・未受取の魚は <span style={{ color:'#88ccff' }}>🎣 釣り場 → 魚図鑑</span> から受け取れます。
+          </div>
+        </div>
+
+        {/* ペット（チャーム込みステータス） */}
+        <div style={{ ...box, border:'1px solid #1a5a3a' }}>
+          <div style={{ ...head, color:'#44ffaa' }}>🐾 ペット</div>
+          {pets.length === 0 ? (
+            <div style={{ color:'#334455', fontSize:'11px' }}>ペットを所持していません</div>
+          ) : (
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {pets.map(pet => {
+                const charm = pet.charm_id ? petCharms[pet.charm_id] : null
+                const st = applyCharmStats(petStats(pet), charm || null)
+                const power = Math.floor(st.maxHp / 10) + st.atk + st.def + st.mdef
+                const img = petImage(pet)
+                return (
+                  <div key={pet.id} style={{ display:'flex', gap:'10px', alignItems:'center', padding:'8px', border:`1px solid ${pet.is_active ? '#2a6a4a' : '#143322'}`, background: pet.is_active ? '#06180f' : '#04120a' }}>
+                    <div style={{ width:'40px', height:'40px', display:'flex', alignItems:'center', justifyContent:'center', background:'#0c1a12', border:'1px solid #1a3322', flexShrink:0, fontSize:'22px', overflow:'hidden' }}>
+                      {img ? <img src={img} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : speciesEmoji(pet)}
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:'12px', color:'#88ffcc', marginBottom:'2px' }}>
+                        {pet.name || speciesLabel(pet)}
+                        {pet.evolved && <span style={{ color:'#ffcc00', fontSize:'10px' }}> ✦進化</span>}
+                        {pet.is_active && <span style={{ color:'#44ff88', fontSize:'10px' }}> 【出撃中】</span>}
+                      </div>
+                      <div style={{ fontSize:'10px', color:'#558866', marginBottom:'4px' }}>
+                        {speciesLabel(pet)} Lv{pet.level || 1}
+                        {charm && <span style={{ color:'#ff88cc' }}> ・{charmDisplayName(charm)}</span>}
+                      </div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', fontSize:'10px' }}>
+                        <span style={{ color:'#00cc44', border:'1px solid #1a5a3a', background:'#000c1c', padding:'1px 6px' }}>HP {st.maxHp}</span>
+                        <span style={{ color:'#ffcc00', border:'1px solid #5a4a1a', background:'#000c1c', padding:'1px 6px' }}>{atkLabel(pet)} {st.atk}</span>
+                        <span style={{ color:'#88aaff', border:'1px solid #2a3a6a', background:'#000c1c', padding:'1px 6px' }}>防御 {st.def}</span>
+                        <span style={{ color:'#44ccff', border:'1px solid #1a4a6a', background:'#000c1c', padding:'1px 6px' }}>特防 {st.mdef}</span>
+                      </div>
+                    </div>
+                    <div style={{ textAlign:'right', flexShrink:0 }}>
+                      <div style={{ color:'#44ffaa', fontSize:'14px', fontWeight:'bold' }}>{power}</div>
+                      <div style={{ color:'#558866', fontSize:'9px' }}>能力合計</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          <div style={{ fontSize:'10px', color:'#446688', lineHeight:'1.7', marginTop:'8px' }}>
+            ※ 表示ステータスは装備中チャームの補正を含みます。能力合計は <span style={{ color:'#88ccff' }}>🐾 ペットランキング</span> と同じ計算（HP/10＋攻撃＋防御＋特防）です。
           </div>
         </div>
 
