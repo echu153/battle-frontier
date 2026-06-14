@@ -1428,12 +1428,14 @@ export default function Game() {
       const rem = cdEndRef.current !== null
         ? Math.max(0, (cdEndRef.current - Date.now())/1000)
         : Math.max(0, WAIT_SECONDS - (serverNow()-new Date(profile.last_action_at).getTime())/1000)
-      // 表示精度(0.1秒)が変わった時だけstate更新＝無駄な再描画を抑制（待機中は0で固定→再描画なし）
+      // canAct(ボタン有効)は毎回反映（同値ならReactが再描画スキップ＝負荷ゼロ）。
+      // ガード内に入れるとスマホの一時停止→復帰でtickを取りこぼし、押せなくなることがあった。
+      setCanAct(rem === 0)
+      // 残り秒数の表示は0.1秒精度が変わった時だけ更新＝無駄な再描画を抑制（待機中は0固定→再描画なし）
       const remTick = Math.round(rem*10)
       if (remTick !== lastRemTickRef.current) {
         lastRemTickRef.current = remTick
         setRemaining(rem)
-        setCanAct(rem === 0)
       }
       const regenElapsed = (Date.now()-new Date(profile.last_regen_at).getTime())/1000
       const regenRem = Math.max(0, REGEN_SECONDS-regenElapsed)
