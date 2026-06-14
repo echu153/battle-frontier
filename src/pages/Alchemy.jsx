@@ -28,7 +28,7 @@ const fmtDur = (min) => {
   return `${min}分`
 }
 const fmtRemain = (sec) => {
-  if (sec <= 0) return '完成！'
+  if (sec <= 0) return '錬金完成！'
   const h = Math.floor(sec / 3600)
   const m = Math.floor((sec % 3600) / 60)
   const s = Math.floor(sec % 60)
@@ -103,8 +103,17 @@ export default function Alchemy() {
 
   if (loading) return <div style={{ color:'#44ffaa', textAlign:'center', marginTop:'40vh', fontFamily:'monospace' }}>読み込み中...</div>
 
-  const slots = data?.slots || 0
   const crystal = data?.crystal || 0
+  // 各錬金部屋は条件ごとに独立解放（エリア③ボスがマスターゲート）
+  const area3 = !!data?.area3_boss
+  const slotUnlocked = (slot) => {
+    if (!area3) return false
+    if (slot === 1) return true
+    if (slot === 2) return !!data?.cleared_d30
+    if (slot === 3) return (data?.abyss_clears || 0) >= 10
+    if (slot === 4) return !!data?.area5_boss
+    return false
+  }
 
   const box = { border:'1px solid #1a5a3a', background:'#021410', padding:'12px', marginBottom:'10px', borderRadius:'2px' }
 
@@ -120,7 +129,7 @@ export default function Alchemy() {
           <div style={{ color:msg.c, fontSize:'12px', border:`1px solid ${msg.c}55`, background:'#001810', padding:'8px 12px', marginBottom:'10px' }}>{msg.t}</div>
         )}
 
-        {slots === 0 ? (
+        {!area3 ? (
           <div style={{ ...box, textAlign:'center', padding:'32px 16px' }}>
             <div style={{ fontSize:'30px', marginBottom:'10px' }}>🔒</div>
             <div style={{ color:'#88ccaa', fontSize:'13px', marginBottom:'6px' }}>錬金部屋はまだ開放されていません</div>
@@ -141,12 +150,12 @@ export default function Alchemy() {
 
             {/* 4枠 */}
             {[1, 2, 3, 4].map(slot => {
-              const unlocked = slot <= slots
+              const unlocked = slotUnlocked(slot)
               const job = jobBySlot(slot)
               if (!unlocked) {
                 return (
                   <div key={slot} style={{ ...box, opacity:0.7 }}>
-                    <div style={{ color:'#557777', fontSize:'12px' }}>🔒 枠 {slot}（未開放）</div>
+                    <div style={{ color:'#557777', fontSize:'12px' }}>🔒 錬金部屋 {slot}（未開放）</div>
                     <div style={{ color:'#446666', fontSize:'10px', marginTop:'4px' }}>{SLOT_COND[slot]}</div>
                   </div>
                 )
@@ -156,7 +165,7 @@ export default function Alchemy() {
                 const rank = pickRank[slot] || 'F'
                 return (
                   <div key={slot} style={box}>
-                    <div style={{ color:'#88ccaa', fontSize:'12px', marginBottom:'8px' }}>枠 {slot} <span style={{ color:'#557777' }}>（空き）</span></div>
+                    <div style={{ color:'#88ccaa', fontSize:'12px', marginBottom:'8px' }}>錬金部屋 {slot} <span style={{ color:'#557777' }}>（空き）</span></div>
                     <div style={{ display:'flex', flexWrap:'wrap', gap:'5px', marginBottom:'8px' }}>
                       {RANKS.map(r => (
                         <button key={r} onClick={() => setPickRank(q => ({ ...q, [slot]: r }))}
@@ -184,11 +193,11 @@ export default function Alchemy() {
               return (
                 <div key={slot} style={{ ...box, border:`1px solid ${ready ? '#ffcc44' : '#1a5a3a'}` }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
-                    <span style={{ color:'#88ccaa', fontSize:'12px' }}>枠 {slot}</span>
+                    <span style={{ color:'#88ccaa', fontSize:'12px' }}>錬金部屋 {slot}</span>
                     <span style={{ color:RANK_COLOR[job.rank], fontSize:'14px', fontWeight:'bold' }}>強化石({job.rank})</span>
                   </div>
                   <div style={{ color: ready ? '#ffcc44' : '#aaffdd', fontSize:'13px', marginBottom:'10px' }}>
-                    {ready ? '🎉 完成！受け取れます' : fmtRemain(sec)}
+                    {ready ? '🎉 錬金完成！受け取れます' : fmtRemain(sec)}
                   </div>
                   {ready ? (
                     <button onClick={() => doClaim(slot)} disabled={busy}

@@ -83,8 +83,27 @@ BEGIN
   RETURN LEAST(v_slots, 4);
 END;
 $$;
+-- 指定枠が解放済みか（各枠は条件ごとに独立。エリア③ボスがマスターゲート）
+CREATE OR REPLACE FUNCTION public.alchemy_slot_unlocked(p_uid uuid, p_slot int)
+ RETURNS boolean LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_areas int[]; v_d30 boolean; v_clears int;
+BEGIN
+  SELECT COALESCE(unlocked_areas, ARRAY[1]), COALESCE(cleared_d30,false)
+    INTO v_areas, v_d30 FROM profiles WHERE id = p_uid;
+  IF v_areas IS NULL OR NOT (v_areas @> ARRAY[4]) THEN RETURN false; END IF;  -- エリア③ボス=ゲート
+  IF p_slot = 1 THEN RETURN true; END IF;                       -- 1: エリア③ボス
+  IF p_slot = 2 THEN RETURN v_d30; END IF;                      -- 2: 追憶の遺跡(d30)踏破
+  IF p_slot = 3 THEN
+    SELECT COALESCE(total_clears,0) INTO v_clears FROM abyss_progress WHERE player_id = p_uid;
+    RETURN COALESCE(v_clears,0) >= 10;                          -- 3: 奈落10回踏破
+  END IF;
+  IF p_slot = 4 THEN RETURN v_areas @> ARRAY[6]; END IF;        -- 4: エリア⑤ボス
+  RETURN false;
+END;
+$$;
 GRANT EXECUTE ON FUNCTION public.alchemy_rank_minutes(text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.alchemy_slot_count(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.alchemy_slot_unlocked(uuid, int) TO authenticated;
 
 -- ===== 5) 状態取得 =====
 CREATE OR REPLACE FUNCTION public.alchemy_get()
@@ -131,8 +150,8 @@ DECLARE
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('ok',false,'reason','not_authenticated'); END IF;
   IF p_rank NOT IN ('F','E','D','C','B','A') THEN RETURN json_build_object('ok',false,'reason','invalid_rank'); END IF;
-  v_slots := alchemy_slot_count(v_uid);
-  IF p_slot < 1 OR p_slot > v_slots THEN RETURN json_build_object('ok',false,'reason','slot_locked'); END IF;
+  IF p_slot < 1 OR p_slot > 4 OR NOT alchemy_slot_unlocked(v_uid, p_slot) THEN
+    RETURN json_build_object('ok',false,'reason','slot_locked'); END IF;
   -- 既に稼働中ならNG
   SELECT (rank IS NOT NULL) INTO v_exists FROM alchemy_jobs WHERE player_id = v_uid AND slot = p_slot;
   IF COALESCE(v_exists,false) THEN RETURN json_build_object('ok',false,'reason','slot_busy'); END IF;
