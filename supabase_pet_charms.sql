@@ -68,7 +68,7 @@ begin
   if v_key is null then raise exception 'bad stat'; end if;
 
   v_total := c.atk + c.spatk + c.def + c.spdef + c.hp;   -- 既に使った素の合計
-  v_room := 150 - v_total;                               -- あと使える数
+  v_room := (case when c.fused then 300 else 150 end) - v_total;  -- あと使える数（合成済みは300）
   -- 素は倉庫(pet_storage)から消費する
   select coalesce(qty,0) into v_have from pet_storage where owner_id = auth.uid() and item_key = v_key;
   v_use := least(p_times, v_have, v_room);

@@ -168,7 +168,7 @@ export default function Charms() {
               })}
             </div>
             {sel && (() => {
-              const total = charmTotal(sel); const full = total >= CHARM_TOTAL_MAX
+              const total = charmTotal(sel); const cap = sel.fused ? 300 : CHARM_TOTAL_MAX; const full = total >= cap
               return (
               <div style={{ border: '1px solid #335588', background: '#00102a', padding: 12 }}>
                 <div style={{ color: '#cce6ff', fontSize: 14, marginBottom: 2 }}>{getCharm(sel.ctype).emoji} {charmDisplayName(sel)}</div>
@@ -176,8 +176,8 @@ export default function Charms() {
                 {/* 強化ゲージ（全能力の合計／150） */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                   <span style={{ width: 64, fontSize: 11, color: '#aa88ff' }}>強化合計</span>
-                  <Bar value={total} max={CHARM_TOTAL_MAX} />
-                  <span style={{ width: 52, fontSize: 11, textAlign: 'right', color: full ? '#ffcc44' : '#88bbee' }}>{total}/{CHARM_TOTAL_MAX}</span>
+                  <Bar value={total} max={cap} />
+                  <span style={{ width: 52, fontSize: 11, textAlign: 'right', color: full ? '#ffcc44' : '#88bbee' }}>{total}/{cap}</span>
                 </div>
                 {STAT_KEYS.map((stat) => {
                   const meta = STAT_META[stat]; const cnt = sel[stat] || 0; const have = seeds[meta.seed] || 0
