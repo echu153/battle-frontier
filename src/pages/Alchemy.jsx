@@ -92,14 +92,6 @@ export default function Alchemy() {
     flash(`🎁 ${res.item} を受け取りました！`)
     await load()
   }
-  const doSpeedup = async (slot) => {
-    setBusy(true)
-    const { data: res, error } = await supabase.rpc('alchemy_speedup', { p_slot: slot, p_count: 1 })
-    setBusy(false)
-    if (error || !res?.ok) { flash(`短縮失敗: ${error?.message || res?.reason || ''}`, '#ff5555'); return }
-    flash('⏩ 錬金用素材で30分短縮しました')
-    await load()
-  }
   const doCrystal = async (slot) => {
     setBusy(true)
     const { data: res, error } = await supabase.rpc('alchemy_use_crystal', { p_slot: slot, p_count: 1 })
@@ -112,7 +104,6 @@ export default function Alchemy() {
   if (loading) return <div style={{ color:'#44ffaa', textAlign:'center', marginTop:'40vh', fontFamily:'monospace' }}>読み込み中...</div>
 
   const slots = data?.slots || 0
-  const mat = data?.mat || 0
   const crystal = data?.crystal || 0
 
   const box = { border:'1px solid #1a5a3a', background:'#021410', padding:'12px', marginBottom:'10px', borderRadius:'2px' }
@@ -142,11 +133,10 @@ export default function Alchemy() {
           <>
             {/* 所持アイテム */}
             <div style={{ ...box, display:'flex', gap:'16px', alignItems:'center', flexWrap:'wrap' }}>
-              <span style={{ color:'#88ccaa', fontSize:'12px' }}>🔹 錬金用素材 <b style={{ color:'#aaffdd' }}>{mat}</b> <span style={{ color:'#557777', fontSize:'10px' }}>(各 -30分)</span></span>
               <span style={{ color:'#88ccaa', fontSize:'12px' }}>⏳ 時の結晶 <b style={{ color:'#cceeff' }}>{crystal}</b> <span style={{ color:'#557777', fontSize:'10px' }}>(各 -1時間)</span></span>
             </div>
             <div style={{ color:'#557777', fontSize:'10px', marginBottom:'10px', lineHeight:'1.7' }}>
-              ※ 出撃・簡易出撃で低確率に「錬金用素材」、戦闘勝利で1%「時の結晶」を入手できます。
+              ※ 戦闘勝利で1%「時の結晶」を入手できます。錬金中の枠に使うと完成時間を1時間短縮できます。
             </div>
 
             {/* 4枠 */}
@@ -207,10 +197,6 @@ export default function Alchemy() {
                     </button>
                   ) : (
                     <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
-                      <button onClick={() => doSpeedup(slot)} disabled={busy || mat < 1}
-                        style={{ padding:'7px 12px', background: mat>=1?'#06180f':'#020a08', border:`1px solid ${mat>=1?'#44ddaa':'#1a3a2a'}`, color: mat>=1?'#44ddaa':'#445555', cursor: (busy||mat<1)?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-                        🔹 素材で-30分 ({mat})
-                      </button>
                       <button onClick={() => doCrystal(slot)} disabled={busy || crystal < 1}
                         style={{ padding:'7px 12px', background: crystal>=1?'#04141a':'#020a08', border:`1px solid ${crystal>=1?'#66ccff':'#1a3a2a'}`, color: crystal>=1?'#66ccff':'#445555', cursor: (busy||crystal<1)?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'11px' }}>
                         ⏳ 結晶で-1時間 ({crystal})

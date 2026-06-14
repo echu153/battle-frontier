@@ -1,11 +1,10 @@
 -- ============================================================
 -- 錬金部屋（Alchemy Room）  2026-06-14
 --   ・時間経過で強化石(F〜A)を生成する錬金枠（最大4枠）
---   ・出撃/簡易出撃で低確率「錬金用素材」ドロップ → 枠の時間短縮(各 -30分)
---   ・戦闘勝利1%で「時の結晶」ドロップ → 枠の時間 -1時間
+--   ・戦闘勝利1%で「時の結晶」ドロップ → 枠の時間 -1時間（短縮はこれのみ）
 --   ・解放: エリア③ボス撃破で1枠 / 追憶の遺跡(d30)踏破で+1 /
 --           奈落闘技場10回踏破で+1 / エリア⑤ボス撃破で+1
---   ・不正対策: 所持数(alchemy_mat/time_crystal)と d30踏破フラグ(cleared_d30) は
+--   ・不正対策: 所持数(time_crystal)と d30踏破フラグ(cleared_d30) は
 --     protect_profile_stats で列保護。錬金枠の時刻は全てサーバー now() 基準。
 --     ドロップ抽選はサーバー側(apply_battle_result / casino_settle_sortie)で実施。
 --
@@ -111,7 +110,6 @@ BEGIN
   RETURN json_build_object(
     'ok', true,
     'slots', v_slots,
-    'mat', COALESCE(v_profile.alchemy_mat,0),
     'crystal', COALESCE(v_profile.time_crystal,0),
     'cleared_d30', COALESCE(v_profile.cleared_d30,false),
     'abyss_clears', (SELECT COALESCE(total_clears,0) FROM abyss_progress WHERE player_id = v_uid),
@@ -174,29 +172,9 @@ END;
 $$;
 GRANT EXECUTE ON FUNCTION public.alchemy_claim(int) TO authenticated;
 
--- ===== 8) 錬金用素材で時間短縮（1個 = -30分） =====
-CREATE OR REPLACE FUNCTION public.alchemy_speedup(p_slot int, p_count int)
- RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  v_uid uuid := auth.uid();
-  v_have int; v_use int; v_job alchemy_jobs%ROWTYPE;
-BEGIN
-  IF v_uid IS NULL THEN RETURN json_build_object('ok',false,'reason','not_authenticated'); END IF;
-  SELECT * INTO v_job FROM alchemy_jobs WHERE player_id = v_uid AND slot = p_slot;
-  IF NOT FOUND OR v_job.rank IS NULL THEN RETURN json_build_object('ok',false,'reason','empty'); END IF;
-  IF now() >= v_job.finish_at THEN RETURN json_build_object('ok',false,'reason','already_done'); END IF;
-  SELECT COALESCE(alchemy_mat,0) INTO v_have FROM profiles WHERE id = v_uid;
-  v_use := GREATEST(1, LEAST(COALESCE(p_count,1), v_have));
-  IF v_have < 1 THEN RETURN json_build_object('ok',false,'reason','no_material'); END IF;
-  PERFORM set_config('app.allow_stat_change','on',true);
-  UPDATE profiles SET alchemy_mat = alchemy_mat - v_use WHERE id = v_uid;
-  UPDATE alchemy_jobs SET finish_at = GREATEST(now(), finish_at - (v_use * 30 || ' minutes')::interval)
-    WHERE player_id = v_uid AND slot = p_slot;
-  SELECT * INTO v_job FROM alchemy_jobs WHERE player_id = v_uid AND slot = p_slot;
-  RETURN json_build_object('ok',true,'used',v_use,'finish_at',v_job.finish_at);
-END;
-$$;
-GRANT EXECUTE ON FUNCTION public.alchemy_speedup(int, int) TO authenticated;
+-- ===== 8) （廃止）錬金用素材での時間短縮 =====
+-- 仕様変更で錬金用素材は廃止。短縮は時の結晶のみ。旧関数があれば削除。
+DROP FUNCTION IF EXISTS public.alchemy_speedup(int, int);
 
 -- ===== 9) 時の結晶で -1時間 =====
 CREATE OR REPLACE FUNCTION public.alchemy_use_crystal(p_slot int, p_count int)
@@ -256,7 +234,6 @@ DECLARE
   v_sc_earned int;
   v_sc_charged boolean := false;
   v_alch_unlocked boolean := false;   -- ★錬金
-  v_mat_drop int := 0;                 -- ★錬金
   v_crys_drop int := 0;                -- ★錬金
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('ok',false,'reason','not_authenticated'); END IF;
@@ -341,10 +318,7 @@ BEGIN
 
   -- ★錬金ドロップ抽選（解放済み＝エリア③ボス撃破済のみ。サーバー側乱数＝改ざん不可）
   v_alch_unlocked := v_new_unlocked @> ARRAY[4];
-  IF v_alch_unlocked THEN
-    IF random() < 0.05 THEN v_mat_drop := 1; END IF;            -- 出撃で錬金用素材
-    IF p_win AND random() < 0.01 THEN v_crys_drop := 1; END IF; -- 勝利で時の結晶
-  END IF;
+  IF v_alch_unlocked AND p_win AND random() < 0.01 THEN v_crys_drop := 1; END IF; -- 勝利で時の結晶
 
   INSERT INTO battle_logs(player_id,area_id,is_boss,is_papia,win,exp_gained,gold_gained,level_ups)
   VALUES(v_uid,p_area_id,p_is_boss,p_is_papia,p_win,v_eff_exp,p_claimed_gold,v_level_ups);
@@ -380,7 +354,6 @@ BEGIN
     last_action_at=now(),
     boss_kill_count=CASE WHEN p_win AND p_is_boss
       THEN COALESCE(boss_kill_count,0)+1 ELSE boss_kill_count END,
-    alchemy_mat = alchemy_mat + v_mat_drop,       -- ★錬金
     time_crystal = time_crystal + v_crys_drop,    -- ★錬金
     scarecrow_charges=v_sc_charges,
     scarecrow_progress=v_sc_progress,
@@ -395,13 +368,13 @@ BEGIN
 
   RETURN json_build_object('ok',true,'level_ups',v_level_ups,'new_lv',v_new_lv,
     'scarecrow_charged',v_sc_charged,'scarecrow_charges',v_sc_charges,
-    'mat_drop',v_mat_drop,'crystal_drop',v_crys_drop);
+    'crystal_drop',v_crys_drop);
 END;
 $function$;
 
 -- ============================================================
--- 11) casino_settle_sortie 上書き（scarecrow版＋錬金素材ドロップ）
---   追加点: 解放済みなら 1出撃ごとに 5% で 錬金用素材 +1
+-- 11) casino_settle_sortie 上書き（scarecrow版そのまま。錬金素材は廃止）
+--   ※ 簡易出撃での錬金ドロップは無し。protect_stats/scarecrowを再適用したらこのセクションも再適用。
 -- ============================================================
 CREATE OR REPLACE FUNCTION public.casino_settle_sortie(p_count integer, p_claimed_exp integer, p_claimed_gold integer)
  RETURNS json
@@ -419,9 +392,6 @@ DECLARE
   v_new_pending int; v_new_char_lv int;
   v_old_lv int;
   v_learned text[];
-  v_alch_unlocked boolean := false;  -- ★錬金
-  v_mat_drop int := 0;                -- ★錬金
-  i int;                              -- ★錬金
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('ok',false,'reason','not_authenticated'); END IF;
   SELECT * INTO v_profile FROM profiles WHERE id = v_uid;
@@ -467,20 +437,11 @@ BEGIN
     IF v_new_lv >= v_cap THEN v_new_exp := 0; v_new_exp_next := calc_exp_next(v_cap); END IF;
   END IF;
 
-  -- ★錬金素材ドロップ（解放済みのみ・1出撃ごと5%・サーバー側乱数）
-  v_alch_unlocked := COALESCE(v_profile.unlocked_areas, ARRAY[1]) @> ARRAY[4];
-  IF v_alch_unlocked THEN
-    FOR i IN 1..p_count LOOP
-      IF random() < 0.05 THEN v_mat_drop := v_mat_drop + 1; END IF;
-    END LOOP;
-  END IF;
-
   PERFORM set_config('app.allow_stat_change','on',true);
   UPDATE profiles SET
     exp = v_new_exp, exp_next = v_new_exp_next, lv = v_new_lv,
     char_lv = v_new_char_lv, pending_stat_points = v_new_pending,
     gold = gold + p_claimed_gold,
-    alchemy_mat = alchemy_mat + v_mat_drop,   -- ★錬金
     last_action_at = now()
   WHERE id = v_uid;
 
@@ -505,7 +466,6 @@ BEGIN
 
   RETURN json_build_object('ok',true,'lv',v_new_lv,'exp',v_new_exp,
     'pending_stat_points',v_new_pending,'char_lv',v_new_char_lv,
-    'mat_drop',v_mat_drop,
     'learned', COALESCE(v_learned, ARRAY[]::text[]));
 END;
 $function$;
