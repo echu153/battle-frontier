@@ -276,8 +276,16 @@ useEffect(() => {
       fishing_location: null,
       fishing_started_at: null,
     }).eq('id', profile.id)
+    // 時の結晶ドロップ（1匹ごと1%・サーバー側抽選＝改ざん不可。錬金解放後のみ有効）
+    let crystalMsg = ''
+    if (results.length > 0) {
+      try {
+        const { data: cr } = await supabase.rpc('fishing_grant_crystal', { p_count: results.length })
+        if (cr?.crystal_drop > 0) crystalMsg = ` ⏳時の結晶×${cr.crystal_drop}入手！`
+      } catch { /* RPC未適用環境では無視 */ }
+    }
     await fetchAll()
-    showMessage(`🎣 釣りを終了しました！${results.length}匹釣れました！`)
+    showMessage(`🎣 釣りを終了しました！${results.length}匹釣れました！${crystalMsg}`)
     setLoading(false)
   }
 
