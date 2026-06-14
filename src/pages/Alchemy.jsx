@@ -103,16 +103,14 @@ export default function Alchemy() {
 
   if (loading) return <div style={{ color:'#44ffaa', textAlign:'center', marginTop:'40vh', fontFamily:'monospace' }}>読み込み中...</div>
 
+  const slots = data?.slots || 0   // 達成した解放条件の数ぶん 錬金部屋1→4 が順に開く（順不同）
   const crystal = data?.crystal || 0
-  // 各錬金部屋は条件ごとに独立解放（エリア③ボスがマスターゲート）
-  const area3 = !!data?.area3_boss
-  const slotUnlocked = (slot) => {
-    if (!area3) return false
-    if (slot === 1) return true
-    if (slot === 2) return !!data?.cleared_d30
-    if (slot === 3) return (data?.abyss_clears || 0) >= 10
-    if (slot === 4) return !!data?.area5_boss
-    return false
+  // まだ達成していない解放条件（エリア③ボスはページ自体のゲート）
+  const remainConds = []
+  if (data) {
+    if (!data.cleared_d30) remainConds.push('追憶の遺跡(30F)踏破')
+    if ((data.abyss_clears || 0) < 10) remainConds.push('奈落闘技場10回踏破')
+    if (!data.area5_boss) remainConds.push('エリア⑤ボス撃破')
   }
 
   const box = { border:'1px solid #1a5a3a', background:'#021410', padding:'12px', marginBottom:'10px', borderRadius:'2px' }
@@ -129,7 +127,7 @@ export default function Alchemy() {
           <div style={{ color:msg.c, fontSize:'12px', border:`1px solid ${msg.c}55`, background:'#001810', padding:'8px 12px', marginBottom:'10px' }}>{msg.t}</div>
         )}
 
-        {!area3 ? (
+        {slots === 0 ? (
           <div style={{ ...box, textAlign:'center', padding:'32px 16px' }}>
             <div style={{ fontSize:'30px', marginBottom:'10px' }}>🔒</div>
             <div style={{ color:'#88ccaa', fontSize:'13px', marginBottom:'6px' }}>錬金部屋はまだ開放されていません</div>
@@ -148,25 +146,32 @@ export default function Alchemy() {
               ※ 戦闘勝利で1%「時の結晶」を入手できます。錬金中の枠に使うと完成時間を1時間短縮できます。
             </div>
 
-            {/* 4枠 */}
+            {/* 錬金部屋4つ（達成条件数ぶん 1→4 が順に開放） */}
             {[1, 2, 3, 4].map(slot => {
-              const unlocked = slotUnlocked(slot)
+              const unlocked = slot <= slots
               const job = jobBySlot(slot)
+              const title = (
+                <div style={{ color:'#88ccaa', fontSize:'12px', marginBottom:'8px', textAlign:'left' }}>
+                  錬金部屋 {slot}{!job && unlocked && <span style={{ color:'#557777' }}> （空き）</span>}
+                </div>
+              )
               if (!unlocked) {
                 return (
                   <div key={slot} style={{ ...box, opacity:0.7 }}>
-                    <div style={{ color:'#557777', fontSize:'12px' }}>🔒 錬金部屋 {slot}（未開放）</div>
-                    <div style={{ color:'#446666', fontSize:'10px', marginTop:'4px' }}>{SLOT_COND[slot]}</div>
+                    <div style={{ color:'#557777', fontSize:'12px', textAlign:'left' }}>🔒 錬金部屋 {slot}（未開放）</div>
+                    <div style={{ color:'#446666', fontSize:'10px', marginTop:'4px', textAlign:'left' }}>
+                      解放条件を1つ達成すると開きます{remainConds.length ? `：${remainConds.join(' / ')}` : ''}
+                    </div>
                   </div>
                 )
               }
               if (!job) {
-                // 空き枠：ランク選択＋開始
+                // 空き：ランク選択＋開始
                 const rank = pickRank[slot] || 'F'
                 return (
                   <div key={slot} style={box}>
-                    <div style={{ color:'#88ccaa', fontSize:'12px', marginBottom:'8px' }}>錬金部屋 {slot} <span style={{ color:'#557777' }}>（空き）</span></div>
-                    <div style={{ display:'flex', flexWrap:'wrap', gap:'5px', marginBottom:'8px' }}>
+                    {title}
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:'5px', marginBottom:'8px', justifyContent:'center' }}>
                       {RANKS.map(r => (
                         <button key={r} onClick={() => setPickRank(q => ({ ...q, [slot]: r }))}
                           style={{ padding:'6px 10px', fontFamily:'monospace', fontSize:'12px', cursor:'pointer',
@@ -177,13 +182,15 @@ export default function Alchemy() {
                         </button>
                       ))}
                     </div>
-                    <div style={{ color:'#557777', fontSize:'11px', marginBottom:'8px' }}>
+                    <div style={{ color:'#557777', fontSize:'11px', marginBottom:'8px', textAlign:'center' }}>
                       強化石({rank}) ／ 所要 <span style={{ color:RANK_COLOR[rank] }}>{fmtDur(RANK_MIN[rank])}</span>
                     </div>
-                    <button onClick={() => doStart(slot)} disabled={busy}
-                      style={{ padding:'8px 16px', background:'#0a2a1e', border:'1px solid #44ffaa', color:'#44ffaa', cursor: busy?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px' }}>
-                      🧪 錬金開始
-                    </button>
+                    <div style={{ textAlign:'center' }}>
+                      <button onClick={() => doStart(slot)} disabled={busy}
+                        style={{ padding:'8px 16px', background:'#0a2a1e', border:'1px solid #44ffaa', color:'#44ffaa', cursor: busy?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+                        🧪 錬金開始
+                      </button>
+                    </div>
                   </div>
                 )
               }
@@ -192,26 +199,24 @@ export default function Alchemy() {
               const ready = sec <= 0
               return (
                 <div key={slot} style={{ ...box, border:`1px solid ${ready ? '#ffcc44' : '#1a5a3a'}` }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
-                    <span style={{ color:'#88ccaa', fontSize:'12px' }}>錬金部屋 {slot}</span>
-                    <span style={{ color:RANK_COLOR[job.rank], fontSize:'14px', fontWeight:'bold' }}>強化石({job.rank})</span>
-                  </div>
-                  <div style={{ color: ready ? '#ffcc44' : '#aaffdd', fontSize:'13px', marginBottom:'10px' }}>
+                  {title}
+                  <div style={{ color:RANK_COLOR[job.rank], fontSize:'15px', fontWeight:'bold', textAlign:'center', marginBottom:'6px' }}>強化石({job.rank})</div>
+                  <div style={{ color: ready ? '#ffcc44' : '#aaffdd', fontSize:'13px', marginBottom:'10px', textAlign:'center' }}>
                     {ready ? '🎉 錬金完成！受け取れます' : fmtRemain(sec)}
                   </div>
-                  {ready ? (
-                    <button onClick={() => doClaim(slot)} disabled={busy}
-                      style={{ padding:'8px 16px', background:'#2a2200', border:'1px solid #ffcc44', color:'#ffcc44', cursor: busy?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px' }}>
-                      🎁 受け取る
-                    </button>
-                  ) : (
-                    <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                  <div style={{ textAlign:'center' }}>
+                    {ready ? (
+                      <button onClick={() => doClaim(slot)} disabled={busy}
+                        style={{ padding:'8px 16px', background:'#2a2200', border:'1px solid #ffcc44', color:'#ffcc44', cursor: busy?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+                        🎁 受け取る
+                      </button>
+                    ) : (
                       <button onClick={() => doCrystal(slot)} disabled={busy || crystal < 1}
-                        style={{ padding:'7px 12px', background: crystal>=1?'#04141a':'#020a08', border:`1px solid ${crystal>=1?'#66ccff':'#1a3a2a'}`, color: crystal>=1?'#66ccff':'#445555', cursor: (busy||crystal<1)?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                        style={{ padding:'7px 14px', background: crystal>=1?'#04141a':'#020a08', border:`1px solid ${crystal>=1?'#66ccff':'#1a3a2a'}`, color: crystal>=1?'#66ccff':'#445555', cursor: (busy||crystal<1)?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'11px' }}>
                         ⏳ 結晶で-1時間 ({crystal})
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )
             })}

@@ -150,8 +150,8 @@ DECLARE
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('ok',false,'reason','not_authenticated'); END IF;
   IF p_rank NOT IN ('F','E','D','C','B','A') THEN RETURN json_build_object('ok',false,'reason','invalid_rank'); END IF;
-  IF p_slot < 1 OR p_slot > 4 OR NOT alchemy_slot_unlocked(v_uid, p_slot) THEN
-    RETURN json_build_object('ok',false,'reason','slot_locked'); END IF;
+  v_slots := alchemy_slot_count(v_uid);  -- 達成条件数ぶん 1→4 が順に開放
+  IF p_slot < 1 OR p_slot > v_slots THEN RETURN json_build_object('ok',false,'reason','slot_locked'); END IF;
   -- 既に稼働中ならNG
   SELECT (rank IS NOT NULL) INTO v_exists FROM alchemy_jobs WHERE player_id = v_uid AND slot = p_slot;
   IF COALESCE(v_exists,false) THEN RETURN json_build_object('ok',false,'reason','slot_busy'); END IF;
