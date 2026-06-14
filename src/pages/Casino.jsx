@@ -138,20 +138,28 @@ export default function Casino() {
     return false
   }
 
-  const exchangePrize = async (prize) => {
+  const exchangePrize = async (prize, reqQty = 1) => {
     if (loading) return
-    const qty = 1
     const used = dailyCounts[prize.key] || 0
-    if (used + qty > prize.limit) { showMessage('本日の交換上限を超えています', '#ff4444'); return }
-    if ((profile.medals||0) < prize.price) { showMessage('メダルが足りません', '#ff4444'); return }
-    if (prize.today && dailyNet < prize.price) { showMessage('当日獲得メダルが足りません', '#ff4444'); return }
+    const qty = Math.max(1, Math.min(Math.floor(reqQty) || 1, prize.limit - used))
+    if (qty < 1 || used + qty > prize.limit) { showMessage('本日の交換上限を超えています', '#ff4444'); return }
+    if ((profile.medals||0) < prize.price * qty) { showMessage('メダルが足りません', '#ff4444'); return }
+    if (prize.today && dailyNet < prize.price * qty) { showMessage('当日獲得メダルが足りません', '#ff4444'); return }
     setLoading(true)
-    const { data, error } = await supabase.rpc('casino_exchange_prize', { prize_key: prize.key, qty })
-    if (error) { showMessage(`交換失敗: ${error.message}`, '#ff4444'); setLoading(false); return }
+    // qtyぶんを1個ずつ交換（RPCは1回1個。途中で失敗したら成立分だけ確定して中断）
+    let done = 0
+    for (let i = 0; i < qty; i++) {
+      const { error } = await supabase.rpc('casino_exchange_prize', { prize_key: prize.key, qty: 1 })
+      if (error) {
+        if (done === 0) { showMessage(`交換失敗: ${error.message}`, '#ff4444'); setLoading(false); return }
+        break
+      }
+      done++
+    }
     setPrizeQty(q => ({ ...q, [prize.key]: 1 }))
     skipMedalGainRef.current = true  // 景品交換によるメダル消費はランキングの収支に含めない
     await fetchProfile()
-    showMessage(`🎁 ${prize.name} を交換しました！`, '#44ff88')
+    showMessage(`🎁 ${prize.name}${done > 1 ? ` ×${done}` : ''} を交換しました！`, '#44ff88')
     setLoading(false)
   }
 
@@ -991,6 +999,12 @@ export default function Casino() {
               const alreadyOwned = equipPrizeOwned(p)
               const canBuy = remain > 0 && enoughMedals && enoughToday && !alreadyOwned
               const borderColor = p.type==='equip' ? '#664400' : p.today ? '#446644' : '#003366'
+              // 複数個交換できる景品（装備/キーアイテム以外で上限2個以上）
+              const stackable = p.type!=='equip' && p.type!=='keyitem' && p.limit > 1
+              const affordMedals = p.price > 0 ? Math.floor((profile.medals||0) / p.price) : 0
+              const affordToday = p.today ? (p.price > 0 ? Math.floor(dailyNet / p.price) : 0) : Infinity
+              const maxQty = Math.max(1, Math.min(remain, affordMedals, affordToday))
+              const qty = stackable ? Math.min(prizeQty[p.key] || 1, maxQty) : 1
               return (
                 <div key={p.key} style={{ border:`1px solid ${borderColor}`, background:'#001028', padding:'10px', marginBottom:'6px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -1000,14 +1014,23 @@ export default function Casino() {
                         {p.today && <span style={{ color:'#44ff88', fontSize:'9px', marginLeft:'6px', border:'1px solid #44ff88', padding:'1px 4px' }}>当日獲得</span>}
                         {p.type==='equip' && <span style={{ color:'#ffaa44', fontSize:'9px', marginLeft:'6px', border:'1px solid #ffaa44', padding:'1px 4px' }}>装備</span>}
                       </div>
-                      <div style={{ color:'#ffaa00', fontSize:'11px', marginTop:'2px' }}>🎫 {p.price.toLocaleString()}</div>
+                      <div style={{ color:'#ffaa00', fontSize:'11px', marginTop:'2px' }}>
+                        🎫 {p.price.toLocaleString()}
+                        {stackable && qty > 1 && <span style={{ color:'#ffcc66' }}> ×{qty} = 🎫 {(p.price*qty).toLocaleString()}</span>}
+                      </div>
                       {p.desc && <div style={{ color:'#557799', fontSize:'10px', marginTop:'2px' }}>{p.desc}</div>}
                       <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>
                         {(p.type==='equip' || p.type==='keyitem') ? '1度きりの交換' : `本日 残り${remain}/${p.limit}個`}
                       </div>
                     </div>
                     <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-                      <button onClick={()=>exchangePrize(p)} disabled={!canBuy || loading}
+                      {stackable && canBuy && (
+                        <select value={qty} onChange={e=>setPrizeQty(q=>({ ...q, [p.key]: Number(e.target.value) }))} disabled={loading}
+                          style={{ padding:'7px 4px', background:'#000', border:'1px solid #886600', color:'#ffcc66', fontFamily:'monospace', fontSize:'11px' }}>
+                          {Array.from({ length: maxQty }, (_, i) => i+1).map(n => <option key={n} value={n}>{n}個</option>)}
+                        </select>
+                      )}
+                      <button onClick={()=>exchangePrize(p, qty)} disabled={!canBuy || loading}
                         style={{ padding:'8px 14px', background: canBuy?'#1a1000':'#001', border:`1px solid ${canBuy?'#ffaa00':'#002244'}`, color: canBuy?'#ffaa00':'#334455', cursor: canBuy?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap' }}>
                         {alreadyOwned ? '所持済み' : remain<=0 ? '上限' : !enoughMedals ? 'メダル不足' : !enoughToday ? '当日不足' : '交換'}
                       </button>
