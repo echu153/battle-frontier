@@ -190,6 +190,9 @@ export default function Barber() {
           <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px' }}>
             100Gで自分の画像をアップロードできます。アップロード後は無料で切り替え可能。
           </div>
+          <div style={{ color:'#ff8888', fontSize:'10px', marginBottom:'8px', lineHeight:1.5 }}>
+            ⚠️ 著作権を侵害する画像（他者のイラスト・キャラクター・写真など）や、実在する人物の写真はアップロードしないでください。違反した画像は予告なく削除する場合があります。
+          </div>
 
           {previewUrl && (
             <div style={{ textAlign:'center', marginBottom:'8px' }}>

@@ -382,6 +382,9 @@ export default function Pets() {
           </div>
         )
       })()}
+      <div style={{ color: '#ff8888', fontSize: 10, marginBottom: 8, lineHeight: 1.5 }}>
+        ⚠️ 著作権を侵害する画像（他者のイラスト・キャラクター・写真など）や、実在する人物の写真はアップロードしないでください。違反した画像は予告なく削除する場合があります。
+      </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <label style={{ color: '#88ccff', fontSize: 12, border: '1px solid #0088ff', padding: '6px 10px', cursor: 'pointer' }}>
           画像をアップロード<input type="file" accept="image/*" onChange={uploadImage} style={{ display: 'none' }} />
