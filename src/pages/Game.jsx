@@ -1763,11 +1763,11 @@ export default function Game() {
       // クールダウン中は無言で止めず、残り秒数を表示して「進行しない」ように見えるのを防ぐ
       const wait = Math.max(1, Math.ceil(WAIT_SECONDS - dungeonElapsed))
       setBattleLogs([{ text:`⏳ クールダウン中です。あと${wait}秒お待ちください。`, color:'#ffcc44' }])
-      setScene('battle'); setLoading(false); return
+      setCurrentEnemy(null); setScene('battle'); setLoading(false); return
     }
     if (latestForDungeon.is_fishing) {
       setBattleLogs([{ text:'🎣 釣り中はデイリーダンジョンに入れません。先に釣りを終了してください。', color:'#ff8844' }])
-      setScene('battle'); setLoading(false); return
+      setCurrentEnemy(null); setScene('battle'); setLoading(false); return
     }
 
     setScene('battle'); setBattleLogs([])
@@ -1780,6 +1780,7 @@ export default function Game() {
       gem:   { name:'たますけ', hp:1, atk:1, def:1, matk:1, mdef:1, spd:1, type:'physical' },
     }
     const dungeonEnemy = DUNGEON_ENEMIES[type]
+    setCurrentEnemy(dungeonEnemy)  // パピア等の前回敵画像が残らないように更新
     const logs = []
     logs.push({ text:`✨ デイリーダンジョン: ${dungeonEnemy.name}が現れた！`, color:'#cc44ff' })
 
