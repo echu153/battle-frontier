@@ -20,7 +20,7 @@ import {
   calcStatsBreakdown, calcEffectiveStats, calcDefReduction, getTotalRank,
 } from '../lib/stats'
 import { sumClaimedFishingBonus, toFishingColumns } from '../lib/fishing'
-import { petStats, applyCharmStats, speciesLabel, speciesEmoji, charmDisplayName, atkLabel, petImage } from '../constants/pets'
+import { petStats, applyCharmStats, speciesLabel, speciesEmoji, charmDisplayName, atkLabel, petImage, charmPlayerBonus } from '../constants/pets'
 
 const STAT_META = [
   { key:'hp',   label:'HP',         color:'#00cc44', rankType:'hp'  },
@@ -40,6 +40,7 @@ const SOURCE_META = [
   { key:'gem',     label:'宝石',   color:'#ff66cc' },
   { key:'prof',    label:'熟練度', color:'#44ff88' },
   { key:'title',   label:'称号',   color:'#ffaa44' },
+  { key:'pet',     label:'ペット', color:'#44ffaa' },
 ]
 
 const getStatRank = (val, type) => {
@@ -95,12 +96,16 @@ export default function StatusDetail() {
     const petList = (petRows || []).sort((a, b) => (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0))
     setPets(petList)
     const charmIds = [...new Set(petList.map(p => p.charm_id).filter(Boolean))]
+    let charmMap = {}
     if (charmIds.length > 0) {
       const { data: charmRows } = await supabase.from('player_charms').select('*').in('id', charmIds)
-      const map = {}
-      for (const c of (charmRows || [])) map[c.id] = c
-      setPetCharms(map)
+      for (const c of (charmRows || [])) charmMap[c.id] = c
+      setPetCharms(charmMap)
     }
+    // 街と同じく、出撃中ペットの装備チャーム補正を総合力（実効ステ）へ反映
+    const activePet = petList.find(pt => pt.is_active)
+    const activeCharm = activePet?.charm_id ? charmMap[activePet.charm_id] : null
+    p.petCharm = activeCharm ? charmPlayerBonus(activeCharm) : null
     // 旧仕様で消えた釣りボーナスを fishing_* 列へ一度だけ復元（Fishing.jsx と同一処理）
     if (!p.fishing_migrated) {
       const { totals, completed } = sumClaimedFishingBonus(fr || [])
@@ -192,6 +197,11 @@ export default function StatusDetail() {
                     {s.key === 'matk' && bd.matkPct > 0 && (
                       <span style={{ fontSize:'10px', color:'#cc44ff', border:'1px solid #cc44ff44', background:'#000c1c', padding:'1px 6px' }}>
                         装備%補正 ×{(1 + bd.matkPct/100).toFixed(2)}
+                      </span>
+                    )}
+                    {s.key === 'def' && bd.petGuard && (
+                      <span style={{ fontSize:'10px', color:'#44ffaa', border:'1px solid #44ffaa44', background:'#000c1c', padding:'1px 6px' }}>
+                        ペット(守り) ×1.10
                       </span>
                     )}
                     {chips.length === 0 && bd.matkPct === 0 && <span style={{ fontSize:'10px', color:'#334455' }}>ボーナスなし</span>}

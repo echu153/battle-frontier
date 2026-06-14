@@ -237,6 +237,9 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
   const prof  = zeroStats()
   const tb = titleBonus || {}
   const title = { atk:tb.atk_bonus||0, def:tb.def_bonus||0, matk:tb.matk_bonus||0, mdef:tb.mdef_bonus||0, spd:tb.spd_bonus||0, hp:tb.hp_bonus||0, mp:tb.mp_bonus||0 }
+  // 選択ペットの装備チャーム反映（profile.petCharm が無ければ無影響）。calcEffectiveStats と同一処理。
+  const pc = profile.petCharm || {}
+  const pet = { atk:pc.atk||0, def:pc.def||0, matk:pc.matk||0, mdef:pc.mdef||0, spd:0, hp:pc.hp||0, mp:0 }
 
   let matkPct = 0
   const cm = { hitBonus:0, critBonus:0, evasionBonus:0, critResist:0, defPen:0, mdefPen:0, critDmg:0 }
@@ -276,12 +279,15 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
   }
 
   // 実効値（matk のみ % 補正 → 称号加算の順）
-  const sumExceptTitle = (k) => base[k] + museum[k] + fishing[k] + equip[k] + gem[k] + prof[k]
-  const preMatk = sumExceptTitle('matk')
-  const effMatk = (matkPct > 0 ? Math.floor(preMatk * (1 + matkPct/100)) : preMatk) + title.matk
+  // ペットチャームは matk のみ %補正の後に加算（calcEffectiveStats と一致）。def は守りで×1.1。
+  const sumExceptTitle = (k) => base[k] + museum[k] + fishing[k] + equip[k] + gem[k] + prof[k] + pet[k]
+  const preMatk = base.matk + museum.matk + fishing.matk + equip.matk + gem.matk + prof.matk // ペット除く（%補正の対象外）
+  const effMatk = (matkPct > 0 ? Math.floor(preMatk * (1 + matkPct/100)) : preMatk) + title.matk + pet.matk
+  let effDef = sumExceptTitle('def') + title.def
+  if (pc.guard) effDef = Math.round(effDef * 1.1)
   const effective = {
     atk:  sumExceptTitle('atk') + title.atk,
-    def:  sumExceptTitle('def') + title.def,
+    def:  effDef,
     matk: effMatk,
     mdef: sumExceptTitle('mdef') + title.mdef,
     spd:  sumExceptTitle('spd') + title.spd,
@@ -290,7 +296,7 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
   }
 
   return {
-    base, museum, fishing, equip, gem, prof, title, matkPct, effective,
+    base, museum, fishing, equip, gem, prof, title, pet, petGuard: !!pc.guard, matkPct, effective,
     combat: {
       hitBonus: cm.hitBonus, critBonus: cm.critBonus, evasionBonus: cm.evasionBonus,
       critResist: cm.critResist,
