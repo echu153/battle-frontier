@@ -12,6 +12,30 @@ const FISH_RANK_COLORS = {
 const FISH_RANK_LABELS = { f:'F', e:'E', d:'D', c:'C', b:'B', a:'A', s:'S', ss:'SS', sss:'SSS' }
 const FISH_RANK_RATES = { f:25, e:21, d:18, c:15, b:12, a:5, s:3, ss:1, sss:0.1 }
 
+// ============================================================
+// 釣りイベント（JST 2026/6/15 5:00 〜 6/22 4:59）
+//   釣り成功1匹ごとに10%で「スゴイテガナガイエビ」(Sランク・売却1万)を追加獲得。
+//   ※魚図鑑(fishing_records)には登録しない。期間は自動で開始/終了。
+//   JST05:00 = UTC前日20:00。開始 6/14 20:00 UTC 〜 終了 6/21 20:00 UTC(6/22 5:00JST)。
+// ============================================================
+const FISHING_EVENT_START = Date.UTC(2026, 5, 14, 20, 0, 0) // 6/15 05:00 JST
+const FISHING_EVENT_END   = Date.UTC(2026, 5, 21, 20, 0, 0) // 6/22 05:00 JST（4:59まで有効）
+const EVENT_SHRIMP_NAME = 'スゴイテガナガイエビ'
+const EVENT_SHRIMP_RANK = 's'
+const EVENT_SHRIMP_PRICE = 10000
+const EVENT_SHRIMP_RATE = 10 // %（釣り成功1匹ごと）
+const isFishingEventActive = (t = Date.now()) => t >= FISHING_EVENT_START && t < FISHING_EVENT_END
+const getFishingEventStatus = () => {
+  const now = Date.now()
+  if (!isFishingEventActive(now)) return { active: false }
+  const remMs = FISHING_EVENT_END - now
+  return {
+    active: true,
+    remainingDay: Math.floor(remMs / (24*60*60*1000)),
+    remainingHour: Math.floor((remMs % (24*60*60*1000)) / (60*60*1000)),
+  }
+}
+
 const FISH_RANK_BONUS_STATS = {
   f:   ['atk','def','matk','mdef','spd'],
   e:   ['atk','def','matk','mdef','spd'],
@@ -175,7 +199,13 @@ const calcCaughtFish = (location, startAt, now) => {
   for (let i = 0; i < count; i++) {
     const rank = drawFishRank()
     const fish = drawFish(location, rank)
-    if (fish) results.push({ ...fish, location })
+    if (fish) {
+      results.push({ ...fish, location })
+      // 釣りイベント：成功1匹ごとに一定確率でスゴイテガナガイエビを追加獲得
+      if (isFishingEventActive(now) && Math.random() * 100 < EVENT_SHRIMP_RATE) {
+        results.push({ isEventShrimp: true, name: EVENT_SHRIMP_NAME, rank: EVENT_SHRIMP_RANK, location })
+      }
+    }
     if (Math.random() * 100 < STONE_DROP_RATE) {
       const stoneRank = drawStone()
       results.push({ isStone: true, rank: stoneRank, name: STONE_NAMES[stoneRank], location })
@@ -294,8 +324,12 @@ useEffect(() => {
     if (caughtFish.length === 0) return
     setLoading(true)
     let totalGold = 0
-    const fishItems = caughtFish.filter(f => !f.fish_name?.startsWith('強化石'))
+    const shrimpItems = caughtFish.filter(f => f.fish_name === EVENT_SHRIMP_NAME)
+    const fishItems = caughtFish.filter(f => !f.fish_name?.startsWith('強化石') && f.fish_name !== EVENT_SHRIMP_NAME)
     const stoneItems = caughtFish.filter(f => f.fish_name?.startsWith('強化石'))
+
+    // 釣りイベント：スゴイテガナガイエビは図鑑登録せず売却のみ（1匹1万）
+    totalGold += shrimpItems.length * EVENT_SHRIMP_PRICE
 
     for (const fish of fishItems) {
       const rankKey = fish.fish_rank?.toLowerCase() || 'f'
@@ -331,7 +365,7 @@ useEffect(() => {
     // caught_fish全削除
     await supabase.from('caught_fish').delete().eq('player_id', profile.id)
     await fetchAll()
-    showMessage(`💰 ${totalGold}G獲得！${stoneItems.length > 0 ? `強化石${stoneItems.length}個入手！` : ''}`)
+    showMessage(`💰 ${totalGold}G獲得！${stoneItems.length > 0 ? `強化石${stoneItems.length}個入手！` : ''}${shrimpItems.length > 0 ? ` ${EVENT_SHRIMP_NAME}×${shrimpItems.length}売却！` : ''}`)
     setLoading(false)
   }
 
@@ -405,6 +439,7 @@ const getElapsedText = () => {
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
   const isFishing = profile.is_fishing || false
+  const fishingEvent = getFishingEventStatus()
   const encFish = FISH_DATA[encLocation] || []
   const encRecords = records.filter(r => r.location === encLocation)
   const allCaught = encFish.every(f => encRecords.some(r => r.fish_name === f.name))
@@ -416,7 +451,8 @@ const getElapsedText = () => {
     fishSummary[key].count++
   }
   const summaryList = Object.values(fishSummary)
-  const totalGold = summaryList.filter(f=>!f.isStone).reduce((sum,f) => sum + (FISH_SELL_PRICE[f.rank?.toLowerCase()] || 5) * f.count, 0)
+  const fishSellPrice = (f) => f.name === EVENT_SHRIMP_NAME ? EVENT_SHRIMP_PRICE : (FISH_SELL_PRICE[f.rank?.toLowerCase()] || 5)
+  const totalGold = summaryList.filter(f=>!f.isStone).reduce((sum,f) => sum + fishSellPrice(f) * f.count, 0)
 
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
@@ -451,6 +487,17 @@ const getElapsedText = () => {
 
         {tab==='fishing' && (
           <div>
+            {fishingEvent.active && (
+              <div style={{ background:'#1a1000', border:'1px solid #ffcc00', padding:'10px', marginBottom:'12px', fontSize:'11px' }}>
+                <div style={{ color:'#ffcc00', textAlign:'center', fontWeight:'bold', marginBottom:'4px' }}>
+                  🦐 釣りイベント開催中！
+                </div>
+                <div style={{ color:'#88ccff', lineHeight:'1.6' }}>
+                  釣り成功時、{EVENT_SHRIMP_RATE}%の確率で「{EVENT_SHRIMP_NAME}」（Sランク・売却{EVENT_SHRIMP_PRICE.toLocaleString()}G）を追加で獲得！<br/>
+                  <span style={{ color:'#446688' }}>※魚図鑑には登録されません ／ 残り{fishingEvent.remainingDay}日{fishingEvent.remainingHour}時間</span>
+                </div>
+              </div>
+            )}
             {!isFishing ? (
               <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'16px' }}>
                 <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'12px' }}>釣り場所を選んで放置釣りを開始！</div>
@@ -504,7 +551,7 @@ const getElapsedText = () => {
                           </div>
                           <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
                             <span style={{ color:'#446688' }}>×{f.count}</span>
-                            {!f.isStone && <span style={{ color:'#ffcc00', fontSize:'10px' }}>{(FISH_SELL_PRICE[f.rank?.toLowerCase()||'f']||5)*f.count}G</span>}
+                            {!f.isStone && <span style={{ color:'#ffcc00', fontSize:'10px' }}>{fishSellPrice(f)*f.count}G</span>}
                             {f.isStone && <span style={{ color:'#6699cc', fontSize:'10px' }}>強化素材</span>}
                           </div>
                         </div>
