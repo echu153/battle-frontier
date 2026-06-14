@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue } from './Game'
 import { gemAllowedSlots, gemSlotCategory, GEM_SLOT_LABEL, calcProfBonus } from '../lib/stats'
@@ -94,7 +94,9 @@ export default function Equipment() {
   const [equipment, setEquipment] = useState([])
   const [proficiency, setProficiency] = useState([])
   const [allItems, setAllItems] = useState([])
-  const [tab, setTab] = useState('weapon')
+  const [searchParams] = useSearchParams()
+  const view = searchParams.get('view')  // 'gear'(装備+宝石) / 'items'(アイテム+お宝) / null(全部)
+  const [tab, setTab] = useState(view === 'items' ? 'item' : 'weapon')
   const [loading, setLoading] = useState(false)
   const [awakenMessage, setAwakenMessage] = useState('')
   const [confirmReset, setConfirmReset] = useState(null)
@@ -431,7 +433,7 @@ export default function Equipment() {
         {/* 所持装備 */}
         <div>
             <div style={{ display:'flex', gap:'4px', marginBottom:'6px', flexWrap:'wrap' }}>
-              {[...slots, 'item', 'gem', 'treasure'].map(s => (
+              {(view === 'items' ? ['item', 'treasure'] : view === 'gear' ? [...slots, 'gem'] : [...slots, 'item', 'gem', 'treasure']).map(s => (
                 <button key={s} onClick={() => setTab(s)}
                   style={{ padding:'4px 8px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
                     background: tab === s ? '#001840' : '#000818',

@@ -4045,10 +4045,10 @@ export default function Game() {
                         <span style={{ flex:1, borderTop:'1px solid #224466' }}/>キャラクター<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                       </div>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                        <button onClick={()=>nav('/equipment')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🗡 装備</button>
+                        <button onClick={()=>nav('/equipment?view=gear')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🗡 装備</button>
                         <button onClick={()=>nav('/skills')} style={{ padding:'10px', background:'#001020', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚡ スキル</button>
                         <button onClick={()=>nav('/profile')} style={{ padding:'10px', background:'#001020', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>👤 プロフィール</button>
-                        <button onClick={()=>nav('/equipment')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎒 アイテム</button>
+                        <button onClick={()=>nav('/equipment?view=items')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎒 アイテム</button>
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
                         <span style={{ flex:1, borderTop:'1px solid #224466' }}/>施設<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
@@ -4178,7 +4178,7 @@ export default function Game() {
             <button onClick={()=>setShowGuide(true)} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📖 ガイド</button>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={()=>nav('/equipment')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡 装備</button>
+            <button onClick={()=>nav('/equipment?view=gear')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡 装備</button>
             <button onClick={()=>nav('/skills')} style={{ background:'none', border:'1px solid #cc44ff', color:'#cc44ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>⚡ スキル</button>
             <button onClick={()=>nav('/profile')} style={{ background:'none', border:'1px solid #44ff88', color:'#44ff88', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>👤 プロフィール</button>
             <button onClick={()=>nav('/ranking')} style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏆 ランキング</button>
@@ -4446,10 +4446,10 @@ export default function Game() {
                           <span style={{ flex:1, borderTop:'1px solid #224466' }}/>キャラクター<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                         </div>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                          <button onClick={()=>nav('/equipment')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🗡 装備</button>
+                          <button onClick={()=>nav('/equipment?view=gear')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🗡 装備</button>
                           <button onClick={()=>nav('/skills')} style={{ padding:'10px', background:'#001020', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚡ スキル</button>
                           <button onClick={()=>nav('/profile')} style={{ padding:'10px', background:'#001020', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>👤 プロフィール</button>
-                          <button onClick={()=>nav('/equipment')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎒 アイテム</button>
+                          <button onClick={()=>nav('/equipment?view=items')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎒 アイテム</button>
                         </div>
                         <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
                           <span style={{ flex:1, borderTop:'1px solid #224466' }}/>施設<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
