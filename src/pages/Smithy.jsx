@@ -316,6 +316,7 @@ export default function Smithy() {
     const rarity = selected[0].weapons.rarity
     if (!selected.every(e => e.weapons.rarity === rarity)) { showMessage('同じランクの装備を3つ選択してください！', '#ff4444'); setLoading(false); return }
     if (selected.some(e => e.is_favorite)) { showMessage('お気に入り装備は加工できません！（★を解除してください）', '#ff4444'); setLoading(false); return }
+    if (selected.some(e => e.enhance_plus > 0)) { showMessage('強化済み(+1以上)の装備は加工できません！', '#ff4444'); setLoading(false); return }
     for (const item of selected) await supabase.from('player_equipment').delete().eq('id', item.id)
     const stoneName = STONE_NAMES[rarity]
     const { data: stoneItem } = await supabase.from('items').select('*').eq('name', stoneName).single()
@@ -691,7 +692,7 @@ export default function Smithy() {
                   <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>ランク指定でランダムに3つ選んで加工</div>
                   <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
                     {RARITY_ORDER.map(rarity => {
-                      const avail = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && e.weapons.rarity === rarity), sortKey)
+                      const avail = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && e.weapons.rarity === rarity), sortKey)
                       const canPick = avail.length >= 3
                       return (
                         <button key={rarity} onClick={() => {
@@ -820,7 +821,7 @@ export default function Smithy() {
 
 function CraftSelector({ equipment, loading, sortKey, onRequestCraft }) {
   const [selected, setSelected] = useState([])
-  const unequipped = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite), sortKey || 'obtained_asc')
+  const unequipped = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0)), sortKey || 'obtained_asc')
 
   const toggle = (id) => {
     if (selected.includes(id)) { setSelected(selected.filter(s => s !== id)); return }
