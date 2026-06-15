@@ -370,6 +370,7 @@ export default function RaidBoss() {
   const [skillSets, setSkillSets] = useState([])
   const [boss, setBoss] = useState(undefined)
   const [nextSpawn, setNextSpawn] = useState(null)
+  const [nextBossName, setNextBossName] = useState(null)  // 次回出現ボス名（2枠日替わり）
   const [participants, setParticipants] = useState([])
   const [myPart, setMyPart] = useState(null)
   const [scene, setScene] = useState('boss') // 'boss' | 'battle'
@@ -445,9 +446,11 @@ export default function RaidBoss() {
     const { data } = await supabase.rpc('spawn_raid_boss_if_needed')
     if (!data) return
 
+    setNextSpawn(data.next_spawn || null)
+    setNextBossName(data.next_boss_name || null)
+
     if (data.status === 'waiting') {
       setBoss(false)
-      setNextSpawn(data.next_spawn)
       return
     }
 
@@ -561,12 +564,14 @@ export default function RaidBoss() {
   const canAct = remaining <= 0
 
   const jst = jstNow()
-  const isPreSpawn = boss === false && jst.getHours() === 20 && jst.getMinutes() >= 30
+  // 各枠（21:00 / 22:00）の30分前から予告（20:30〜 と 21:30〜）
+  const isPreSpawn = boss === false && ((jst.getHours() === 20 && jst.getMinutes() >= 30) || (jst.getHours() === 21 && jst.getMinutes() >= 30))
   const getPreSpawnTarget = () => {
     if (nextSpawn) return nextSpawn
     const t = jstNow(); t.setHours(21, 0, 0, 0)
     return t.toISOString()
   }
+  const previewName = nextBossName || BOSS_NAME
 
   const base = { minHeight: '100vh', background: '#000820', color: '#aaccff', fontFamily: 'monospace', padding: '16px', boxSizing: 'border-box' }
 
@@ -606,19 +611,19 @@ export default function RaidBoss() {
           ) : (
             <div style={{ border: '1px solid #002244', background: '#000e20', padding: '12px', marginBottom: '16px' }}>
               <div style={{ color: '#446688', fontSize: '12px', marginBottom: '4px' }}>現在レイドボスは出現していません</div>
-              <div style={{ color: '#556677', fontSize: '11px' }}>次の出現: {nextSpawn ? <Countdown targetIso={nextSpawn} /> : '毎日21:00 JST'}</div>
+              <div style={{ color: '#556677', fontSize: '11px' }}>次の出現{nextBossName ? `（${nextBossName}）` : ''}: {nextSpawn ? <Countdown targetIso={nextSpawn} /> : '毎日21:00／22:00 JST'}</div>
             </div>
           )}
 
           {/* 次回出現ボス */}
           <div style={{ border: '1px solid #440000', background: '#0a0010', padding: '14px', marginBottom: '16px' }}>
             <div style={{ color: '#446688', fontSize: '10px', marginBottom: '8px' }}>次回出現ボス</div>
-            <img src={bossImage(BOSS_NAME)} alt={BOSS_NAME}
+            <img src={bossImage(previewName)} alt={previewName}
               style={{ width: '100%', maxHeight: '180px', objectFit: 'contain', display: 'block', marginBottom: '8px' }}
               onError={e => { e.target.style.display = 'none' }} />
             <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-              <div style={{ color: '#ff4444', fontSize: '16px', letterSpacing: '1px' }}>{BOSS_NAME}</div>
-              <div style={{ color: '#446688', fontSize: '10px', marginTop: '2px' }}>毎日21:00〜21:30 JST出現 / HP 1,000,000</div>
+              <div style={{ color: '#ff4444', fontSize: '16px', letterSpacing: '1px' }}>{previewName}</div>
+              <div style={{ color: '#446688', fontSize: '10px', marginTop: '2px' }}>毎日21:00／22:00 JST出現（各30分・2体が日替わり交互）/ HP 1,000,000</div>
             </div>
             <div style={{ fontSize: '10px', color: '#335566', lineHeight: '1.8' }}>
               全プレイヤーで協力して討伐！貢献度に応じてリワードが変わります。
