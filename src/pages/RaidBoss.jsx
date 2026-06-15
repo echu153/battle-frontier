@@ -138,12 +138,16 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   const passiveHitBonus   = (hasRokkan ? 5 : 0) + (hasSeimitsu ? 5 : 0) + ((hasTakaNoMe && pe('狩人')) ? 10 : 0)
   const effectiveSpdForCalc = hasTakaNoMe ? Math.floor(eff.spd * 1.2) : eff.spd
 
-  const playerCritRate  = calcCritRate(effectiveSpdForCalc, BOSS_SPD) + passiveCritBonus + (eff.critBonus || 0)
+  let   playerCritRate  = calcCritRate(effectiveSpdForCalc, BOSS_SPD) + passiveCritBonus + (eff.critBonus || 0)
   const bossCritRate    = Math.max(0, calcCritRate(BOSS_SPD, effectiveSpdForCalc))
   const playerHitBonus  = (eff.hitBonus || 0) + passiveHitBonus
-  const playerEvasion   = calcEvasionRate(effectiveSpdForCalc, BOSS_SPD) + (eff.evasionBonus || 0)
-  const playerExtraRate = calcExtraActionRate(effectiveSpdForCalc, BOSS_SPD)
+  let   playerEvasion   = calcEvasionRate(effectiveSpdForCalc, BOSS_SPD) + (eff.evasionBonus || 0)
+  let   playerExtraRate = calcExtraActionRate(effectiveSpdForCalc, BOSS_SPD)
   const bossExtraRate   = calcExtraActionRate(BOSS_SPD, effectiveSpdForCalc)
+
+  // ボス差別化：あまざ=物理被ダメ+10%/特殊-10%、ヴァルゼノク=その逆
+  const isAmaza = bossName === 'あまざ'
+  const weakMult = (isPhysical) => isAmaza ? (isPhysical ? 1.1 : 0.9) : (isPhysical ? 0.9 : 1.1)
 
   playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
 
@@ -161,7 +165,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
 
     // ターン10: 滅びの一撃（強制終了）
     if (turn === 10) {
-      logs.push({ text: `${turn}ターン目: ${bossName}の「滅びの咆哮」！`, color: '#ff0000' })
+      const t10name = isAmaza ? '水禍創世' : '滅びの咆哮'
+      logs.push({ text: `${turn}ターン目: ${bossName}の「${t10name}」！`, color: '#ff0000' })
       logs.push({ text: `999,999の壊滅ダメージ！（なんとか生き延びた…HP→1）`, color: '#ff4444' })
       break
     }
@@ -211,8 +216,9 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
             else if (sType === '物理攻撃') defScale = effBuff.atk / (effBuff.atk + BOSS_DEF)
             else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + BOSS_MDEF)
           }
+          const skillPhysical = !(cs.skills?.type === '魔法攻撃' || cs.skills?.name === 'サイコブラスト' || res.useMinDef)
           let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * (0.9 + Math.random() * 0.2))
-          if (res.dmg > 0) finalDmg = compressRaidDmg(finalDmg) // 高火力頭打ち・低火力底上げ
+          if (res.dmg > 0) finalDmg = compressRaidDmg(Math.floor(finalDmg * weakMult(skillPhysical))) // 弱点補正→高火力頭打ち・低火力底上げ
           if (res.selfDmg > 0) playerHp = Math.max(1, playerHp - res.selfDmg)
           const isHealBlocked = playerBuffs.healBlock?.turns > 0
           if (!isHealBlocked && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
@@ -242,7 +248,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
             const fCrit = Math.random() * 100 < (playerCritRate + (res.bonusCritRate || 0))
             const fCritMult = fCrit ? (1.5 + (eff.critDmg || 0) + passiveCritDmgBonus) : 1.0
             let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * (0.9 + Math.random() * 0.2))
-            fDmg = compressRaidDmg(Math.max(1, fDmg))
+            fDmg = compressRaidDmg(Math.max(1, Math.floor(fDmg * weakMult(skillPhysical))))
             totalDamage += fDmg
             logs.push({ text: `↳ 追撃！${res.followup.label ? `（${res.followup.label}）` : ''} ${bossName}に${fmt(fDmg)}ダメージ！${fCrit ? ' 💥クリティカル！' : ''}`, color: fCrit ? '#ffaa00' : '#ffaa66' })
           }
@@ -257,7 +263,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         const baseDmg = Math.max(1, Math.floor(baseAtk * baseAtk / Math.max(1, baseAtk + eDef)) + Math.floor(Math.random() * 4))
         const tosoMult = (hasTosoHonno && playerHp <= profile.hp_max * 0.5) ? (pe('体術師')?1.25:1.1) : 1.0
         let finalDmg = Math.floor(baseDmg * critMult * (isArtifact ? 1.2 : 1.0) * passiveDmgMult * tosoMult * (0.9 + Math.random() * 0.2))
-        finalDmg = compressRaidDmg(finalDmg) // 高火力頭打ち・低火力底上げ
+        finalDmg = compressRaidDmg(Math.floor(finalDmg * weakMult(!isMagical))) // 弱点補正→高火力頭打ち・低火力底上げ
         if (!playerBuffs.healBlock?.turns && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
           const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
           playerHp = Math.min(profile.hp_max, playerHp + rageCure)
@@ -282,12 +288,23 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       const defForCalc = Math.max(1, pDef)
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
 
-      // ターン4: 特殊スキル「暗黒侵食」（ダメージ＋回復封印3ターン）
+      // ターン4: 特殊スキル（倍率1.5）。ボスごとに効果が異なる
       if (turn === 4 && !isExtra) {
-        const specialDmg = Math.max(1, Math.floor(eAtk * eAtk / Math.max(1, eAtk + defForCalc) * 1.3 * (0.9 + Math.random() * 0.2)))
+        const specialDmg = Math.max(1, Math.floor(eAtk * eAtk / Math.max(1, eAtk + defForCalc) * 1.5 * (0.9 + Math.random() * 0.2)))
         playerHp -= specialDmg
-        playerBuffs.healBlock = { turns: 3 }
-        logs.push({ text: `${prefix}${bossName}の「暗黒侵食」！ ${fmt(specialDmg)}ダメージ！ 3ターンの間回復が封印された！`, color: '#aa22ff' })
+        if (isAmaza) {
+          // 深淵の水葬：10ターンの間 素早さ-50%（クリ・回避・追加行動率を半減SPDで再計算）
+          playerBuffs.spdDown = { turns: 10, rate: 0.5 }
+          const halfSpd = Math.floor(effectiveSpdForCalc * 0.5)
+          playerCritRate  = calcCritRate(halfSpd, BOSS_SPD) + passiveCritBonus + (eff.critBonus || 0)
+          playerEvasion   = calcEvasionRate(halfSpd, BOSS_SPD) + (eff.evasionBonus || 0)
+          playerExtraRate = calcExtraActionRate(halfSpd, BOSS_SPD)
+          logs.push({ text: `${prefix}${bossName}の「深淵の水葬」！ ${fmt(specialDmg)}ダメージ！ 10ターンの間 素早さ-50％！`, color: '#2299ff' })
+        } else {
+          // 暗黒侵食：回復無効を永続化
+          playerBuffs.healBlock = { turns: 999 }
+          logs.push({ text: `${prefix}${bossName}の「暗黒侵食」！ ${fmt(specialDmg)}ダメージ！ 回復が永続的に封印された！`, color: '#aa22ff' })
+        }
         if (playerHp <= 0) { playerHp = 0; logs.push({ text: `力尽きた…（バトル終了）`, color: '#ff4444' }); playerDied = true }
         return
       }
