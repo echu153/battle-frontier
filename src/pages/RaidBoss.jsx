@@ -16,7 +16,7 @@ import {
 const POLL_MS = 5000
 const BOSS_NAME = '黒龍ヴァルゼノク'
 // レイドボスの表示画像（ボス名→画像）。あまざ用は /public/raid-boss-amaza.png を配置
-const bossImage = (name) => name === 'あまざ' ? '/raid-boss-amaza.png' : '/varuzenoku.png'
+const bossImage = (name) => name === 'あまざ' ? '/amaza.png' : '/varuzenoku.png'
 const BOSS_DEF  = 1000
 const BOSS_MDEF = 1000
 const BOSS_SPD  = 1200
