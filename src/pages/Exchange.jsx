@@ -186,7 +186,7 @@ export default function Exchange() {
           <div style={{ border: '1px solid #002244', background: '#000e20', padding: '10px', marginBottom: '14px' }}>
             <div style={{ color: '#446688', fontSize: '10px', marginBottom: '6px' }}>所持素材</div>
             <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              {['黒龍の鱗', '黒龍の逆鱗'].map(name => (
+              {['黒龍の鱗', '黒龍の逆鱗', '水禍の雫', '雨禍の心核'].map(name => (
                 <div key={name} style={{ fontSize: '12px' }}>
                   <span style={{ color: '#556677' }}>{name}: </span>
                   <span style={{ color: (materials[name] || 0) > 0 ? '#ffcc44' : '#334455' }}>
