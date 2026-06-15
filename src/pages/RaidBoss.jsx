@@ -736,7 +736,7 @@ export default function RaidBoss() {
                   fontFamily: 'monospace', fontSize: '14px', letterSpacing: '2px',
                 }}
               >
-                {canAct ? `⚔ ${bossName}に挑戦する！` : '準備中...'}
+                {canAct ? `⚔ ${boss?.boss_name || BOSS_NAME}に挑戦する！` : '準備中...'}
               </button>
             </div>
           )}
