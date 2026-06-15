@@ -584,14 +584,12 @@ export default function RaidBoss() {
           {/* 次回出現ボス */}
           <div style={{ border: '1px solid #440000', background: '#0a0010', padding: '14px', marginBottom: '16px' }}>
             <div style={{ color: '#446688', fontSize: '10px', marginBottom: '8px' }}>次回出現ボス</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-              <img src="/raid-boss.png" alt={BOSS_NAME}
-                style={{ width: '48px', height: '48px', objectFit: 'contain', imageRendering: 'pixelated' }}
-                onError={e => { e.target.style.display = 'none' }} />
-              <div>
-                <div style={{ color: '#ff4444', fontSize: '14px', letterSpacing: '1px' }}>{BOSS_NAME}</div>
-                <div style={{ color: '#446688', fontSize: '10px', marginTop: '2px' }}>毎日21:00〜21:30 JST出現 / HP 1,000,000</div>
-              </div>
+            <img src="/raid-boss.png" alt={BOSS_NAME}
+              style={{ width: '100%', maxHeight: '180px', objectFit: 'contain', display: 'block', marginBottom: '8px' }}
+              onError={e => { e.target.style.display = 'none' }} />
+            <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+              <div style={{ color: '#ff4444', fontSize: '16px', letterSpacing: '1px' }}>{BOSS_NAME}</div>
+              <div style={{ color: '#446688', fontSize: '10px', marginTop: '2px' }}>毎日21:00〜21:30 JST出現 / HP 1,000,000</div>
             </div>
             <div style={{ fontSize: '10px', color: '#335566', lineHeight: '1.8' }}>
               全プレイヤーで協力して討伐！貢献度に応じてリワードが変わります。
@@ -647,7 +645,7 @@ export default function RaidBoss() {
           <div style={{ border: `1px solid ${boss.status === 'active' ? '#660000' : '#446600'}`, background: '#0a0010', padding: '20px', marginBottom: '16px' }}>
             <div style={{ textAlign: 'center', marginBottom: '12px' }}>
               <img src="/raid-boss.png" alt={BOSS_NAME}
-                style={{ width: '80px', height: '80px', objectFit: 'contain', imageRendering: 'pixelated' }}
+                style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', display: 'block' }}
                 onError={e => { e.target.style.display = 'none' }} />
               <div style={{ color: '#ff4444', fontSize: '16px', letterSpacing: '2px', marginTop: '8px' }}>{BOSS_NAME}</div>
             </div>
