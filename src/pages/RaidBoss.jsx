@@ -568,7 +568,7 @@ export default function RaidBoss() {
       setClaimError(data?.error || 'エラーが発生しました')
     } else {
       setReward(data)
-      await fetchBoss(profile.id)
+      clearInterval(pollRef.current)  // 受取後はポーリングを止め、報酬画面を維持する
     }
     setClaiming(false)
   }
@@ -770,8 +770,8 @@ export default function RaidBoss() {
                     {(reward.stones || []).map(s => `強化石(${s})×3`).join('　')}
                   </div>
                   <div style={{ color: '#ff66cc' }}>宝石({reward.gem_rank}) × {reward.gem_count}個（ランダム種類）</div>
-                  <div style={{ color: '#cc8844' }}>黒龍の鱗 × {reward.scale_count}個</div>
-                  {reward.got_gyaku && <div style={{ color: '#ffcc00' }}>⭐ 黒龍の逆鱗 × 1個（レアドロップ！）</div>}
+                  <div style={{ color: '#cc8844' }}>{reward.mat_name || '黒龍の鱗'} × {reward.scale_count}個</div>
+                  {reward.got_gyaku && <div style={{ color: '#ffcc00' }}>⭐ {reward.rare_name || '黒龍の逆鱗'} × 1個（レアドロップ！）</div>}
                   <div style={{ color: '#44ff88', marginTop: '4px' }}>✓ 受け取り完了！</div>
                 </div>
               ) : myPart.reward_claimed ? (
