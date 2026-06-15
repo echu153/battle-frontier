@@ -57,12 +57,12 @@ function Countdown({ targetIso }) {
 }
 
 // ボス統計（ターンごとに変化）
-function getBossForTurn(t) {
+function getBossForTurn(t, name = BOSS_NAME) {
   const atkBase = 100 + (t - 1) * 300
   const defBase = 1000 + (t - 1) * 100
   const mult = t >= 8 ? 4.0 : t >= 4 ? 1.5 : 1.0
   return {
-    name: BOSS_NAME,
+    name,
     atk:  Math.floor(atkBase * mult),
     matk: Math.floor(atkBase * mult),
     def:  Math.floor(defBase * mult),
@@ -166,7 +166,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       break
     }
 
-    const boss = getBossForTurn(turn)
+    const boss = getBossForTurn(turn, bossName)
     const enemyBuffs = {} // ボスはデバフ無効なので常に空
 
     // ========== プレイヤー攻撃 ==========
