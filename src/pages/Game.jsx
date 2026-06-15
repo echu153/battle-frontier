@@ -556,6 +556,7 @@ export const applyEquipmentEffects = (equipment, profile, playerBuffs, logs) => 
     if (effect === 'open_spd_20_1t')  { newBuffs.spdUp  = { turns:1, rate:1.2 }; logs.push({ text:`✨ 装備効果発動！ 1ターンの間素早さ+20%！`, color:'#ff8844' }) }
     if (effect === 'regen_heal_5_3t') { newBuffs.regenHeal = { turns:3, amount:Math.floor(profile.hp_max*0.05) }; logs.push({ text:`✨ 装備効果発動！ 3ターンの間毎ターンHP5%回復！`, color:'#44ff88' }) }
     if (effect === 'delay_heal_10')   { newBuffs.delayHeal = { triggerTurn:3, amount:Math.floor(profile.hp_max*0.1) }; logs.push({ text:`✨ 装備効果発動！ 3ターン後にHP10%回復！`, color:'#44ff88' }) }
+    if (effect === 'battle_start_ailment_shield') { newBuffs.ailmentShield = { charges:1 }; logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を1回無効化する！`, color:'#66ccff' }) }
   }
   return newBuffs
 }
@@ -1221,6 +1222,16 @@ export const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, p
       if (skill.effect === 'matkUp')    newEnemyBuffs.matkUp   = { turns: skill.turns||2, rate: skill.rate||1.25 }
       logs.push({ text:`⬆ ${enemy.name}の「${skill.name}」！ ${enemy.name}のステータスが上昇した！`, color:'#ffaa00' })
       break
+    }
+  }
+  // 哭雨の羽衣: 状態異常無効バフ（1回）。新規付与された状態異常を1つ無効化
+  if (newPlayerBuffs.ailmentShield?.charges > 0) {
+    const ailKeys = ['paralysis','burn','poison','severePoisoin','stun','bleed','healSeal','curseDmg']
+    const got = ailKeys.find(k => newPlayerBuffs[k] && !playerBuffs[k])
+    if (got) {
+      delete newPlayerBuffs[got]
+      newPlayerBuffs.ailmentShield = { charges: newPlayerBuffs.ailmentShield.charges - 1 }
+      logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を無効化した！`, color:'#66ccff' })
     }
   }
   return { dmgToPlayer, healEnemy, newPlayerBuffs, newEnemyBuffs }
@@ -2438,6 +2449,9 @@ export default function Game() {
             enemyBuffs.healDown = { turns: 2, rate: 0.9 }
             logs.push({ text: `🗡 ヴァルブレイカーの効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
           }
+          if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
+            enemyBuffs.spdDown = { turns: 2, rate: 0.95 }  // 濡羽杖アマザネ: 攻撃ヒット時 対象SPD-5%
+          }
           const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult)
           playerHp = Math.min(profile.hp_max, playerHp + healAmt)
           if (passiveHealReflect && healAmt > 0) {
@@ -2503,6 +2517,9 @@ export default function Game() {
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
           enemyBuffs.healDown = { turns: 2, rate: 0.9 }
           logs.push({ text: `🗡 ヴァルブレイカーの効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
+        }
+        if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
+          enemyBuffs.spdDown = { turns: 2, rate: 0.95 }  // 濡羽杖アマザネ: 攻撃ヒット時 対象SPD-5%
         }
         const critText = isCrit ? '💥クリティカル！ ' : ''
         logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })

@@ -151,6 +151,7 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     hitBonus    += item.bonus_hit     || 0
     critBonus   += item.bonus_crit    || 0
     evasionBonus += item.bonus_evasion || 0
+    if (item.bonus_effect === 'mdef_pen_5') gemAcc.mdefPen += 5  // 水禍の蒼珠: 魔法防御貫通+5%
     if (item.slot === 'weapon') {
       const prof = proficiency.find(p => p.equipment_id === item.id)
       if (prof) {
