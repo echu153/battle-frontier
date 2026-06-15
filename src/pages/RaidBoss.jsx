@@ -16,7 +16,7 @@ import {
 const POLL_MS = 5000
 const BOSS_NAME = '黒龍ヴァルゼノク'
 // レイドボスの表示画像（ボス名→画像）。あまざ用は /public/raid-boss-amaza.png を配置
-const bossImage = (name) => name === 'あまざ' ? '/raid-boss-amaza.png' : '/raid-boss.png'
+const bossImage = (name) => name === 'あまざ' ? '/raid-boss-amaza.png' : '/varuzenoku.png'
 const BOSS_DEF  = 1000
 const BOSS_MDEF = 1000
 const BOSS_SPD  = 1200
@@ -613,7 +613,7 @@ export default function RaidBoss() {
           {/* 次回出現ボス */}
           <div style={{ border: '1px solid #440000', background: '#0a0010', padding: '14px', marginBottom: '16px' }}>
             <div style={{ color: '#446688', fontSize: '10px', marginBottom: '8px' }}>次回出現ボス</div>
-            <img src="/raid-boss.png" alt={BOSS_NAME}
+            <img src={bossImage(BOSS_NAME)} alt={BOSS_NAME}
               style={{ width: '100%', maxHeight: '180px', objectFit: 'contain', display: 'block', marginBottom: '8px' }}
               onError={e => { e.target.style.display = 'none' }} />
             <div style={{ textAlign: 'center', marginBottom: '8px' }}>
