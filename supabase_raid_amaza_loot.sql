@@ -19,11 +19,11 @@ SELECT '濡羽杖アマザネ', 'staff', 'weapon', 's', 0, 0, 80, 20, 0
 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name = '濡羽杖アマザネ');
 --   哭雨の羽衣(防具S): 特攻20/特防80 ＋ 開幕1回だけ状態異常無効バフ
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '哭雨の羽衣', null, 'armor', 's', 0, 0, 20, 80, 0
+SELECT '哭雨の羽衣', 'armor', 'armor', 's', 0, 0, 20, 80, 0
 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name = '哭雨の羽衣');
 --   水禍の蒼珠(装飾A): 特攻20/特防20/素早さ10 ＋ 魔法防御貫通+5%
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '水禍の蒼珠', null, 'accessory', 'a', 0, 0, 20, 20, 10
+SELECT '水禍の蒼珠', 'accessory', 'accessory', 'a', 0, 0, 20, 20, 10
 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name = '水禍の蒼珠');
 
 -- 3) 交換所エントリー（タブ=レイドボス）。コストはヴァルゼノク装備と同等
