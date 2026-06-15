@@ -343,7 +343,7 @@ export const PET_ITEMS = {
   onigiri: { key: 'onigiri', name: 'おにぎり',         emoji: '🍙', price: 200,   dungeon: true,  capped: true, fullness: 30, desc: '満腹度を30回復' },
   konomi:  { key: 'konomi',  name: '木の実',           emoji: '🍒', price: 300,   dungeon: true,  capped: true, healPct: 0.2, desc: '最大HPの20%を回復' },
   rename:  { key: 'rename',  name: 'ニックネーム変更券', emoji: '🎫', price: 100000, dungeon: false, capped: true,  desc: 'ペットの名前を変更できる' },
-  shard:   { key: 'shard',   name: '神秘の欠片',       emoji: '🔮', price: 0, dungeon: false, capped: true, desc: 'チャーム合成に使う（30Fボス討伐でドロップ）' },
+  shard:   { key: 'shard',   name: '神秘の欠片',       emoji: '🔮', price: 0, dungeon: false, capped: true, noShop: true, desc: 'チャーム合成に使う（30Fボス討伐でドロップ）' },
   // チャーム強化用の素（ダンジョンで拾う。チャームページで使用）
   atk_seed:   { key: 'atk_seed',   name: '攻撃の素',  emoji: '🔴', img: '/kougekimoto.png',     price: 0, dungeon: false, capped: true, seed: 'atk',   up: 1,  desc: 'チャームの攻撃を+1' },
   spatk_seed: { key: 'spatk_seed', name: '特攻の素',  emoji: '🟣', img: '/tokukoumoto.png',     price: 0, dungeon: false, capped: true, seed: 'spatk', up: 1,  desc: 'チャームの特攻を+1' },
@@ -399,7 +399,7 @@ for (const [k, s] of Object.entries(SCROLLS)) {
   PET_ITEMS[k] = { key: k, name: `${s.name}の書`, emoji: s.emoji, price: 0, dungeon: true, capped: true, scroll: true, desc: scrollDesc(s) }
 }
 
-export const SHOP_ITEMS = Object.values(PET_ITEMS).filter((i) => !i.seed && !i.scroll)   // 商店は素・スキルの書を除く
+export const SHOP_ITEMS = Object.values(PET_ITEMS).filter((i) => !i.seed && !i.scroll && !i.noShop)   // 商店は素・スキルの書・神秘の欠片を除く
 export const SEED_ITEMS = Object.values(PET_ITEMS).filter((i) => i.seed)
 export const DUNGEON_ITEMS = Object.values(PET_ITEMS).filter((i) => i.dungeon)
 export const CAPPED_ITEMS = Object.values(PET_ITEMS).filter((i) => i.capped)
