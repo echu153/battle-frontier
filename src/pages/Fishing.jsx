@@ -493,7 +493,7 @@ const getElapsedText = () => {
                   🦐 釣りイベント開催中！
                 </div>
                 <div style={{ color:'#88ccff', lineHeight:'1.6' }}>
-                  釣り成功時、{EVENT_SHRIMP_RATE}%の確率で「{EVENT_SHRIMP_NAME}」（Sランク・売却{EVENT_SHRIMP_PRICE.toLocaleString()}G）を追加で獲得！<br/>
+                  釣り成功時、一定確率で「{EVENT_SHRIMP_NAME}」（Sランク・売却{EVENT_SHRIMP_PRICE.toLocaleString()}G）を追加で獲得！<br/>
                   <span style={{ color:'#446688' }}>※魚図鑑には登録されません ／ 残り{fishingEvent.remainingDay}日{fishingEvent.remainingHour}時間</span>
                 </div>
               </div>
