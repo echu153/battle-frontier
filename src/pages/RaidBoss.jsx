@@ -590,6 +590,15 @@ export default function RaidBoss() {
   }
   const previewName = nextBossName || BOSS_NAME
 
+  // 本日のレイドスケジュール（21時/22時の出現ボス）。サーバーの日替わり交互と一致させる
+  const epochDays = Math.floor(Date.UTC(jst.getFullYear(), jst.getMonth(), jst.getDate()) / 86400000)
+  const baseDays  = Math.floor(Date.UTC(2000, 0, 1) / 86400000)
+  const evenDay   = (((epochDays - baseDays) % 2) + 2) % 2 === 0
+  const slot21Boss = evenDay ? '黒龍ヴァルゼノク' : 'あまざ'
+  const slot22Boss = evenDay ? 'あまざ' : '黒龍ヴァルゼノク'
+  const curHM = jst.getHours() * 60 + jst.getMinutes()
+  const slotActive = (start) => curHM >= start && curHM < start + 30  // 出現中の枠か
+
   const base = { minHeight: '100vh', background: '#000820', color: '#aaccff', fontFamily: 'monospace', padding: '16px', boxSizing: 'border-box' }
 
   if (boss === undefined) {
@@ -603,7 +612,23 @@ export default function RaidBoss() {
           <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
           <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
         </div>
-        <div style={{ color:'#ff4444', fontSize:'14px', marginBottom:'16px' }}>⚔ レイドボス</div>
+        <div style={{ color:'#ff4444', fontSize:'14px', marginBottom:'12px' }}>⚔ レイドボス</div>
+
+        {/* 本日の出現スケジュール（21時/22時） */}
+        <div style={{ border:'1px solid #2a2a44', background:'#080814', padding:'10px 12px', marginBottom:'14px' }}>
+          <div style={{ color:'#8899bb', fontSize:'11px', marginBottom:'6px' }}>🗓 本日のレイドボス（JST）</div>
+          {[{ t:'21:00〜21:30', start:21*60, name:slot21Boss }, { t:'22:00〜22:30', start:22*60, name:slot22Boss }].map(s => {
+            const live = slotActive(s.start)
+            return (
+              <div key={s.t} style={{ display:'flex', alignItems:'center', gap:'10px', fontSize:'12px', padding:'2px 0' }}>
+                <span style={{ color: live ? '#ffcc44' : '#667799', minWidth:'92px' }}>{s.t}</span>
+                <span style={{ color: s.name==='あまざ' ? '#66bbff' : '#ff6666', fontWeight:'bold' }}>{s.name}</span>
+                {live && <span style={{ color:'#44ff88', fontSize:'10px' }}>● 出現中</span>}
+              </div>
+            )
+          })}
+          <div style={{ color:'#556688', fontSize:'9px', marginTop:'6px' }}>※ 各30分・HP100万。2体は日替わりで入れ替わります（翌日は上下が逆）。</div>
+        </div>
 
       {/* 【開発】管理者専用テストパネル */}
       {profile?.is_admin && (
