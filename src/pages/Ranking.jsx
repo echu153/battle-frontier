@@ -73,23 +73,10 @@ export default function Ranking() {
       const sorted = withTotal.sort((a, b) => b._total - a._total)
       setPlayers(sorted)
 
-      // 博物館寄贈数ランキング
-      const { data: dons } = await supabase.from('museum_donations').select('player_id')
-      const counts = {}
-      for (const d of (dons || [])) counts[d.player_id] = (counts[d.player_id] || 0) + 1
-      const topIds = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 50)
-      const mIds = topIds.map(([id]) => id)
-      let mMap = {}
-      if (mIds.length > 0) {
-        const { data: mProfs } = await supabase
-          .from('profiles')
-          .select('id, username, lv, char_lv, class, avatar_url, retraining')
-          .in('id', mIds)
-        for (const p of (mProfs || [])) mMap[p.id] = p
-      }
-      const museumList = topIds
-        .map(([id, count]) => ({ ...(mMap[id] || { id, username: '???' }), _count: count }))
-        .filter(p => p.username && !excluded.has(p.id))
+      // 博物館寄贈数ランキング（サーバー側で集計＝全寄贈レコードを取得しない。Egress削減）
+      const { data: museumData } = await supabase.rpc('get_museum_ranking')
+      const museumList = (Array.isArray(museumData) ? museumData : [])
+        .map(p => ({ ...p, _count: p.donation_count }))
       setMuseumPlayers(museumList)
 
       // メダルランキング：1日の最高ネット収支（勝ち負けを差し引いた額・両替除く。マイナスも集計）
