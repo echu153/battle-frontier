@@ -15,6 +15,8 @@ import {
 
 const POLL_MS = 5000
 const BOSS_NAME = '黒龍ヴァルゼノク'
+// レイドボスの表示画像（ボス名→画像）。あまざ用は /public/raid-boss-amaza.png を配置
+const bossImage = (name) => name === 'あまざ' ? '/raid-boss-amaza.png' : '/raid-boss.png'
 const BOSS_DEF  = 1000
 const BOSS_MDEF = 1000
 const BOSS_SPD  = 1200
@@ -82,7 +84,7 @@ function compressRaidDmg(d) {
   return Math.max(1, Math.floor(d <= RAID_DMG_PIVOT ? d * RAID_DMG_LOW : RAID_DMG_PIVOT * RAID_DMG_LOW + (d - RAID_DMG_PIVOT) * RAID_DMG_HIGH))
 }
 
-function simulateRaidBattle(eff, equipment, skillSets, profile) {
+function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_NAME) {
   const logs = []
   let playerHp = Math.max(1, profile.hp_current ?? profile.hp_max)
   let playerMp = profile.mp_current ?? profile.mp_max
@@ -145,7 +147,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
 
   playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
 
-  logs.push({ text: `⚠ ${BOSS_NAME}が現れた！`, color: '#ff4444' })
+  logs.push({ text: `⚠ ${bossName}が現れた！`, color: '#ff4444' })
 
   for (let turn = 1; turn <= 10; turn++) {
     // 骸の壁：ターン1と5の倍数で被ダメ-30%バリア
@@ -154,12 +156,12 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
       logs.push({ text: `💀 骸の壁発動！ 次に攻撃を受けるまで被ダメ-30%！`, color: '#cc44ff' })
     }
     // バフ段階のアナウンス
-    if (turn === 4) logs.push({ text: `━━ ${BOSS_NAME}が覚醒した！全ステータス1.5倍！ ━━`, color: '#ff8844' })
-    if (turn === 8) logs.push({ text: `━━ ${BOSS_NAME}が暴走状態に！全ステータス4倍！ ━━`, color: '#ff2222' })
+    if (turn === 4) logs.push({ text: `━━ ${bossName}が覚醒した！全ステータス1.5倍！ ━━`, color: '#ff8844' })
+    if (turn === 8) logs.push({ text: `━━ ${bossName}が暴走状態に！全ステータス4倍！ ━━`, color: '#ff2222' })
 
     // ターン10: 滅びの一撃（強制終了）
     if (turn === 10) {
-      logs.push({ text: `${turn}ターン目: ${BOSS_NAME}の「滅びの咆哮」！`, color: '#ff0000' })
+      logs.push({ text: `${turn}ターン目: ${bossName}の「滅びの咆哮」！`, color: '#ff0000' })
       logs.push({ text: `999,999の壊滅ダメージ！（なんとか生き延びた…HP→1）`, color: '#ff4444' })
       break
     }
@@ -225,7 +227,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
             if (passiveHealReflect && healAmt > 0) {
               const reflectDmg = Math.floor(healAmt * 0.5)
               totalDamage += reflectDmg
-              logs.push({ text: `✨ 神聖加護の反射！ ${BOSS_NAME}に${fmt(reflectDmg)}ダメージ！`, color: '#ffdd44' })
+              logs.push({ text: `✨ 神聖加護の反射！ ${bossName}に${fmt(reflectDmg)}ダメージ！`, color: '#ffdd44' })
             }
           } else if (res.heal > 0) {
             logs.push({ text: `回復封印中！ 回復効果が無効化された！`, color: '#aa22ff' })
@@ -242,7 +244,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
             let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * (0.9 + Math.random() * 0.2))
             fDmg = compressRaidDmg(Math.max(1, fDmg))
             totalDamage += fDmg
-            logs.push({ text: `↳ 追撃！${res.followup.label ? `（${res.followup.label}）` : ''} ${BOSS_NAME}に${fmt(fDmg)}ダメージ！${fCrit ? ' 💥クリティカル！' : ''}`, color: fCrit ? '#ffaa00' : '#ffaa66' })
+            logs.push({ text: `↳ 追撃！${res.followup.label ? `（${res.followup.label}）` : ''} ${bossName}に${fmt(fDmg)}ダメージ！${fCrit ? ' 💥クリティカル！' : ''}`, color: fCrit ? '#ffaa00' : '#ffaa66' })
           }
           skillUsed = true
           skillIndex++
@@ -263,7 +265,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
         }
         totalDamage += finalDmg
         const critText = isCrit ? ' 💥クリティカル！' : ''
-        logs.push({ text: `${prefix}あなたの攻撃！ ${BOSS_NAME}に${fmt(finalDmg)}ダメージ！${critText}`, color: isCrit ? '#ff4444' : '#ffcc00' })
+        logs.push({ text: `${prefix}あなたの攻撃！ ${bossName}に${fmt(finalDmg)}ダメージ！${critText}`, color: isCrit ? '#ff4444' : '#ffcc00' })
         if (expandedSkillSet.length > 0) skillIndex++
       }
     }
@@ -285,7 +287,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
         const specialDmg = Math.max(1, Math.floor(eAtk * eAtk / Math.max(1, eAtk + defForCalc) * 1.3 * (0.9 + Math.random() * 0.2)))
         playerHp -= specialDmg
         playerBuffs.healBlock = { turns: 3 }
-        logs.push({ text: `${prefix}${BOSS_NAME}の「暗黒侵食」！ ${fmt(specialDmg)}ダメージ！ 3ターンの間回復が封印された！`, color: '#aa22ff' })
+        logs.push({ text: `${prefix}${bossName}の「暗黒侵食」！ ${fmt(specialDmg)}ダメージ！ 3ターンの間回復が封印された！`, color: '#aa22ff' })
         if (playerHp <= 0) { playerHp = 0; logs.push({ text: `力尽きた…（バトル終了）`, color: '#ff4444' }); playerDied = true }
         return
       }
@@ -295,7 +297,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
       // プレイヤー回避
       const evasionRate = playerEvasion + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0)
       if (evasionRate > 0 && Math.random() * 100 < evasionRate) {
-        logs.push({ text: `${prefix}${BOSS_NAME}の攻撃！ しかし回避した！`, color: '#44ff88' })
+        logs.push({ text: `${prefix}${bossName}の攻撃！ しかし回避した！`, color: '#44ff88' })
         return
       }
       const playerDefRankReduction = calcDefReduction(pDef)
@@ -304,7 +306,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile) {
       playerHp -= finalDmg
       if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
       const critText = isCrit ? ' 💥クリティカル！' : ''
-      logs.push({ text: `${prefix}${BOSS_NAME}の攻撃！ あなたに${fmt(finalDmg)}ダメージ…${critText}`, color: isCrit ? '#ff2200' : '#ff6644' })
+      logs.push({ text: `${prefix}${bossName}の攻撃！ あなたに${fmt(finalDmg)}ダメージ…${critText}`, color: isCrit ? '#ff2200' : '#ff6644' })
       if (playerHp <= 0) {
         playerHp = 0
         logs.push({ text: `力尽きた…（バトル終了）`, color: '#ff4444' })
@@ -463,6 +465,21 @@ export default function RaidBoss() {
     }
   }
 
+  // 【開発】管理者がテスト用にボスを即出現/終了（is_devフラグ・一般プレイヤーには見えない）
+  const devSpawn = async (name) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const { error } = await supabase.rpc('spawn_raid_boss_dev', { p_boss_name: name })
+    if (error) { alert('開発スポーン失敗: ' + error.message); return }
+    await fetchBoss(user.id)
+    setScene('boss')
+  }
+  const devEnd = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const { error } = await supabase.rpc('end_raid_boss_dev')
+    if (error) { alert('終了失敗: ' + error.message); return }
+    await fetchBoss(user.id)
+  }
+
   const handleAttack = async () => {
     if (!boss || !profile || remaining > 0 || battling) return
     if (attackingRef.current) return  // 連打ガード（state更新前の多重クリックを同期的に弾く）
@@ -484,7 +501,7 @@ export default function RaidBoss() {
           setSkillSets(curSets)
         }
       }
-      const { logs, totalDamage } = simulateRaidBattle(eff, equipment, curSets, profile)
+      const { logs, totalDamage } = simulateRaidBattle(eff, equipment, curSets, profile, boss?.boss_name || BOSS_NAME)
 
       // サーバーが権威。RPCを先に確定させ、成功した時だけ戦闘ログを表示する
       // （cooldownで弾かれたのに戦闘ログが出て「0秒で出撃できた」ように見えるのを防ぐ）
@@ -566,6 +583,18 @@ export default function RaidBoss() {
         </div>
         <div style={{ color:'#ff4444', fontSize:'14px', marginBottom:'16px' }}>⚔ レイドボス</div>
 
+      {/* 【開発】管理者専用テストパネル */}
+      {profile?.is_admin && (
+        <div style={{ border:'1px solid #3a2a6a', background:'#0a0820', padding:'10px', marginBottom:'12px' }}>
+          <div style={{ color:'#a890ff', fontSize:'11px', marginBottom:'6px' }}>🔧 開発テスト（管理者のみ・一般には非表示）</div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+            <button onClick={() => devSpawn('あまざ')} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>あまざを今出現</button>
+            <button onClick={() => devSpawn('黒龍ヴァルゼノク')} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ヴァルゼノクを今出現</button>
+            <button onClick={devEnd} style={{ padding:'5px 10px', background:'#1a0a0a', border:'1px solid #aa4444', color:'#ff8888', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>テストボス終了</button>
+          </div>
+        </div>
+      )}
+
       {/* スポーン待ち */}
       {boss === false && (
         <div>
@@ -606,7 +635,7 @@ export default function RaidBoss() {
           {/* コンパクトHPバー */}
           <div style={{ border: '1px solid #440000', background: '#0a0010', padding: '12px', marginBottom: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#446688', marginBottom: '4px' }}>
-              <span style={{ color: '#ff4444' }}>{BOSS_NAME}</span>
+              <span style={{ color: '#ff4444' }}>{boss.boss_name || BOSS_NAME}</span>
               <span>{fmt(boss.hp_current)} / {fmt(boss.hp_max)}</span>
             </div>
             <div style={{ height: '8px', background: '#111122', border: '1px solid #223344', borderRadius: '2px', overflow: 'hidden' }}>
@@ -644,10 +673,12 @@ export default function RaidBoss() {
           {/* ボスカード */}
           <div style={{ border: `1px solid ${boss.status === 'active' ? '#660000' : '#446600'}`, background: '#0a0010', padding: '20px', marginBottom: '16px' }}>
             <div style={{ textAlign: 'center', marginBottom: '12px' }}>
-              <img src="/raid-boss.png" alt={BOSS_NAME}
+              <img src={bossImage(boss.boss_name)} alt={boss.boss_name || BOSS_NAME}
                 style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', display: 'block' }}
                 onError={e => { e.target.style.display = 'none' }} />
-              <div style={{ color: '#ff4444', fontSize: '16px', letterSpacing: '2px', marginTop: '8px' }}>{BOSS_NAME}</div>
+              <div style={{ color: '#ff4444', fontSize: '16px', letterSpacing: '2px', marginTop: '8px' }}>
+                {boss.boss_name || BOSS_NAME}{boss.is_dev && <span style={{ color: '#8a60ff', fontSize: '10px', marginLeft: '6px' }}>[開発テスト]</span>}
+              </div>
             </div>
             {boss.status === 'active' && boss.spawned_at && (() => {
               const expireAt = new Date(new Date(boss.spawned_at).getTime() + 30 * 60 * 1000)
@@ -700,7 +731,7 @@ export default function RaidBoss() {
                   fontFamily: 'monospace', fontSize: '14px', letterSpacing: '2px',
                 }}
               >
-                {canAct ? `⚔ ${BOSS_NAME}に挑戦する！` : '準備中...'}
+                {canAct ? `⚔ ${bossName}に挑戦する！` : '準備中...'}
               </button>
             </div>
           )}
