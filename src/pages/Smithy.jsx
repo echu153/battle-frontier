@@ -428,8 +428,8 @@ export default function Smithy() {
 
             {craftConfirm.type === 'equipment' && (
               <>
-                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'10px' }}>以下の装備を消費して強化石に加工します</div>
-                <div style={{ marginBottom:'12px' }}>
+                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'10px' }}>以下の装備{craftConfirm.items.length}個を消費して強化石に加工します</div>
+                <div style={{ marginBottom:'12px', maxHeight:'34vh', overflowY:'auto' }}>
                   {craftConfirm.items.map(item => (
                     <div key={item.id} style={{ color:'#88ccff', fontSize:'11px', padding:'5px 8px', borderBottom:'1px solid #002244', display:'flex', alignItems:'center', gap:'6px' }}>
                       <span style={{ fontSize:'9px', padding:'1px 4px', color:RARITY_COLORS[item.weapons.rarity], border:`1px solid ${RARITY_COLORS[item.weapons.rarity]}` }}>{RARITY_LABELS[item.weapons.rarity]}</span>
@@ -695,7 +695,7 @@ export default function Smithy() {
                     <span style={{ color:'#446688', fontSize:'10px' }}>作成回数</span>
                     <select value={craftTimes} onChange={e=>setCraftTimes(Number(e.target.value))}
                       style={{ background:'#001028', border:'1px solid #003366', color:'#ffcc00', fontFamily:'monospace', fontSize:'11px', padding:'2px 6px' }}>
-                      {[1,2,3,5,10,20,50].map(n => <option key={n} value={n}>{n}回</option>)}
+                      {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}回</option>)}
                     </select>
                     <span style={{ color:'#446688', fontSize:'9px' }}>（1回＝装備3個→強化石1個）</span>
                   </div>
