@@ -19,7 +19,7 @@ declare
   v_seeds  text[] := array['atk_seed','spatk_seed','def_seed','spdef_seed','hp_seed'];
   v_stones text[] := array['F','E','D','C','B','A','S','SS','SSS'];
   v_gems   text[] := array['peridot','lapis','ruby','sapphire','amethyst','emerald','topaz','rosequartz','turquoise','morganite','kunzite','citrine','onyx','opal','moonstone','petalite'];
-  v_charms text[] := array['antidote','guard'];
+  v_charms text[] := array['antidote','guard','mdefup','atkup','spatkup','evade','hit','lucky'];
   v_pending jsonb; v_arr jsonb := '[]'::jsonb; v_found boolean := false; v_e jsonb;
 begin
   select * into v_run from dungeon_runs where id = p_run_id;
