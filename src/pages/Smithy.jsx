@@ -161,6 +161,7 @@ export default function Smithy() {
   const [craftConfirm, setCraftConfirm] = useState(null) // { type:'equipment'|'stone', items?, selectedIds?, rarity }
   const [enhanceResult, setEnhanceResult] = useState(null) // { ok, title, text } 強化ポップアップの結果表示
   const [matSource, setMatSource] = useState('equip')       // 強化素材の選択: 'equip'=同名装備 / 'stone'=強化石
+  const [craftTimes, setCraftTimes] = useState(1)            // 加工(装備→強化石)の作成回数（1回=装備3個→強化石1個）
 
   useEffect(() => { fetchAll() }, [])
 
@@ -312,20 +313,21 @@ export default function Smithy() {
   const craftStoneFromSelectedItems = async (selectedIds) => {
     setLoading(true)
     const selected = selectedIds.map(id => equipment.find(e => e.id === id)).filter(Boolean)
-    if (selected.length !== 3) { showMessage('3つ選択してください！', '#ff4444'); setLoading(false); return }
+    if (selected.length < 3 || selected.length % 3 !== 0) { showMessage('装備は3の倍数で選択してください！', '#ff4444'); setLoading(false); return }
     const rarity = selected[0].weapons.rarity
-    if (!selected.every(e => e.weapons.rarity === rarity)) { showMessage('同じランクの装備を3つ選択してください！', '#ff4444'); setLoading(false); return }
+    if (!selected.every(e => e.weapons.rarity === rarity)) { showMessage('同じランクの装備を選択してください！', '#ff4444'); setLoading(false); return }
     if (selected.some(e => e.is_favorite)) { showMessage('お気に入り装備は加工できません！（★を解除してください）', '#ff4444'); setLoading(false); return }
     if (selected.some(e => e.enhance_plus > 0)) { showMessage('強化済み(+1以上)の装備は加工できません！', '#ff4444'); setLoading(false); return }
+    const count = selected.length / 3   // 3個=強化石1個
     for (const item of selected) await supabase.from('player_equipment').delete().eq('id', item.id)
     const stoneName = STONE_NAMES[rarity]
     const { data: stoneItem } = await supabase.from('items').select('*').eq('name', stoneName).single()
     if (stoneItem) {
       const existing = playerItems.find(pi => pi.item_id === stoneItem.id)
-      if (existing) await supabase.from('player_items').update({ quantity: (existing.quantity||1)+1 }).eq('id', existing.id)
-      else await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: 1, equipped: false })
+      if (existing) await supabase.from('player_items').update({ quantity: (existing.quantity||1)+count }).eq('id', existing.id)
+      else await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: count, equipped: false })
     }
-    showMessage(`✨ ${stoneName} を1つ作成した！`, '#ffcc00')
+    showMessage(`✨ ${stoneName} を${count}つ作成した！`, '#ffcc00')
     await fetchAll()
     setLoading(false)
   }
@@ -437,7 +439,7 @@ export default function Smithy() {
                 </div>
                 <div style={{ textAlign:'center', color:'#446688', fontSize:'11px', marginBottom:'4px' }}>↓</div>
                 <div style={{ textAlign:'center', color:'#ffcc00', fontSize:'13px', marginBottom:'16px' }}>
-                  {STONE_NAMES[craftConfirm.rarity]} × 1
+                  {STONE_NAMES[craftConfirm.rarity]} × {Math.floor((craftConfirm.items?.length || 0) / 3)}
                 </div>
               </>
             )}
@@ -687,25 +689,36 @@ export default function Smithy() {
               <div>
                 <div style={{ color:'#446688', fontSize:'11px', marginBottom:'10px' }}>同ランクの装備を3つ選択して強化石に加工できます（装備中は選択不可）</div>
 
-                {/* ランクボタン：ランダム3選択 */}
+                {/* ランクボタン：ランダム選択（作成回数ぶん一気に） */}
                 <div style={{ border:'1px solid #002244', background:'#000818', padding:'10px', marginBottom:'12px' }}>
-                  <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>ランク指定でランダムに3つ選んで加工</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px' }}>
+                    <span style={{ color:'#446688', fontSize:'10px' }}>作成回数</span>
+                    <select value={craftTimes} onChange={e=>setCraftTimes(Number(e.target.value))}
+                      style={{ background:'#001028', border:'1px solid #003366', color:'#ffcc00', fontFamily:'monospace', fontSize:'11px', padding:'2px 6px' }}>
+                      {[1,2,3,5,10,20,50].map(n => <option key={n} value={n}>{n}回</option>)}
+                    </select>
+                    <span style={{ color:'#446688', fontSize:'9px' }}>（1回＝装備3個→強化石1個）</span>
+                  </div>
+                  <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>ランク指定でランダムに選んで一気に加工</div>
                   <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
                     {RARITY_ORDER.map(rarity => {
                       const avail = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && e.weapons.rarity === rarity), sortKey)
-                      const canPick = avail.length >= 3
+                      const maxTimes = Math.floor(avail.length / 3)
+                      const canPick = maxTimes >= 1
+                      const times = Math.min(craftTimes, maxTimes)
                       return (
                         <button key={rarity} onClick={() => {
                           const shuffled = [...avail].sort(() => Math.random() - 0.5)
-                          const picked = shuffled.slice(0, 3)
+                          const picked = shuffled.slice(0, times * 3)
                           setCraftConfirm({ type:'equipment', items:picked, selectedIds:picked.map(i=>i.id), rarity })
                         }} disabled={!canPick}
                           style={{ padding:'5px 9px', background:canPick?'#0d1a00':'#001', border:`1px solid ${canPick?RARITY_COLORS[rarity]:'#002244'}`, color:canPick?RARITY_COLORS[rarity]:'#334455', cursor:canPick?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
-                          {RARITY_LABELS[rarity]} <span style={{fontSize:'9px'}}>({avail.length})</span>
+                          {RARITY_LABELS[rarity]} <span style={{fontSize:'9px'}}>({avail.length}→{maxTimes})</span>
                         </button>
                       )
                     })}
                   </div>
+                  <div style={{ color:'#334455', fontSize:'9px', marginTop:'6px' }}>※ 各ランクの(所持数→最大作成数)。選んだ回数が最大を超える場合は最大数まで加工します。</div>
                 </div>
 
                 {/* 手動選択 */}
