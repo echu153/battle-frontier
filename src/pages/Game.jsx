@@ -1473,6 +1473,10 @@ export default function Game() {
     const checkRaid = async () => {
       const jstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
       const h = jstNow.getHours(), m = jstNow.getMinutes()
+      // レイド時間帯（20:30〜23:59）以外は通信せず即終了（Egress削減）。
+      // 昼間は街にタブを開いているだけで30秒ごとにDBを叩いていたため、その無駄を排除。
+      const inRaidWindow = h > 20 || (h === 20 && m >= 30)
+      if (!inRaidWindow) { setRaidStatus(null); setRaidBossData(null); return }
       const { data } = await supabase.rpc('spawn_raid_boss_if_needed')
       const status = data?.status
       if (status === 'active' || status === 'defeated' || status === 'expired') {
