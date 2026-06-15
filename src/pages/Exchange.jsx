@@ -24,6 +24,9 @@ const BONUS_EFFECT_DESC = {
   'regen_heal_5_3t': 'バトル開始時、3ターンの間毎ターンHP5%回復',
   'delay_heal_10':   'バトル開始時、3ターン後にHP10%回復',
   'artifact':        'アーティファクト（MP消費2倍・与ダメージ1.2倍）',
+  'hit_spd_down_5':  '攻撃ヒット時、対象の素早さ-5%',
+  'battle_start_ailment_shield': '戦闘開始時、1回だけ状態異常を無効化',
+  'mdef_pen_5':      '魔法防御貫通+5%',
 }
 
 function WeaponCard({ weapon, bonusEffect }) {
