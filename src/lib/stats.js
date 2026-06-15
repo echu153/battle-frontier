@@ -122,6 +122,7 @@ export const calcProfBonus = (prof, weapon) => {
 export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus = null) => {
   const bonus = { atk:0, def:0, matk:0, mdef:0, spd:0, hp:0, mp:0 }
   let matkPct = 0
+  let atkPct = 0
   let hitBonus = 0
   let critBonus = 0
   let evasionBonus = 0
@@ -145,6 +146,7 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     if (w.mp_bonus_pct > 0)  bonus.mp  += Math.floor(profile.mp_max * w.mp_bonus_pct/100)
     if (w.spd_bonus_pct > 0) bonus.spd += Math.floor(profile.spd   * w.spd_bonus_pct/100)
     if (w.matk_bonus_pct > 0) matkPct  += w.matk_bonus_pct
+    if (w.atk_bonus_pct > 0)  atkPct   += w.atk_bonus_pct
     if (w.hit_bonus > 0) hitBonus += w.hit_bonus
     critBonus   += w.crit_bonus  || 0   // 武器固有クリティカル率
     critResist  += w.crit_resist || 0   // 武器固有クリティカル抵抗
@@ -169,13 +171,15 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
   // museum_* / fishing_* は永続ボーナス専用列（基礎列の再計算で消えないよう分離）
   const baseMatk = profile.matk + bonus.matk + (profile.museum_matk || 0) + (profile.fishing_matk || 0)
   const finalMatk = matkPct > 0 ? Math.floor(baseMatk * (1 + matkPct/100)) : baseMatk
+  const baseAtk = profile.atk + bonus.atk + (profile.museum_atk || 0) + (profile.fishing_atk || 0)
+  const finalAtk = atkPct > 0 ? Math.floor(baseAtk * (1 + atkPct/100)) : baseAtk
   const tb = titleBonus || {}
   // 選択ペットの装備チャーム反映（profile.petCharm が無ければ無影響）。守りは防御+10%
   const pc = profile.petCharm || {}
   let defVal = profile.def + bonus.def + (profile.museum_def || 0) + (profile.fishing_def || 0) + (tb.def_bonus || 0) + (pc.def || 0)
   if (pc.guard) defVal = Math.round(defVal * 1.1)
   return {
-    atk:    profile.atk  + bonus.atk  + (profile.museum_atk || 0) + (profile.fishing_atk || 0) + (tb.atk_bonus || 0) + (pc.atk || 0),
+    atk:    finalAtk + (tb.atk_bonus || 0) + (pc.atk || 0),
     def:    defVal,
     matk:   finalMatk + (tb.matk_bonus || 0) + (pc.matk || 0),
     mdef:   profile.mdef + bonus.mdef + (profile.museum_mdef || 0) + (profile.fishing_mdef || 0) + (tb.mdef_bonus || 0) + (pc.mdef || 0),
@@ -243,6 +247,7 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
   const pet = { atk:pc.atk||0, def:pc.def||0, matk:pc.matk||0, mdef:pc.mdef||0, spd:0, hp:pc.hp||0, mp:0 }
 
   let matkPct = 0
+  let atkPct = 0
   const cm = { hitBonus:0, critBonus:0, evasionBonus:0, critResist:0, defPen:0, mdefPen:0, critDmg:0 }
 
   for (const item of equipment) {
@@ -263,6 +268,7 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
     if (w.mp_bonus_pct > 0)  equip.mp  += Math.floor(profile.mp_max * w.mp_bonus_pct/100)
     if (w.spd_bonus_pct > 0) equip.spd += Math.floor(profile.spd   * w.spd_bonus_pct/100)
     if (w.matk_bonus_pct > 0) matkPct  += w.matk_bonus_pct
+    if (w.atk_bonus_pct > 0)  atkPct   += w.atk_bonus_pct
     if (w.hit_bonus > 0) cm.hitBonus += w.hit_bonus
     cm.critBonus    += w.crit_bonus  || 0
     cm.critResist   += w.crit_resist || 0
@@ -284,10 +290,12 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
   const sumExceptTitle = (k) => base[k] + museum[k] + fishing[k] + equip[k] + gem[k] + prof[k] + pet[k]
   const preMatk = base.matk + museum.matk + fishing.matk + equip.matk + gem.matk + prof.matk // ペット除く（%補正の対象外）
   const effMatk = (matkPct > 0 ? Math.floor(preMatk * (1 + matkPct/100)) : preMatk) + title.matk + pet.matk
+  const preAtk = base.atk + museum.atk + fishing.atk + equip.atk + gem.atk + prof.atk // ペット除く（%補正の対象外）
+  const effAtk = (atkPct > 0 ? Math.floor(preAtk * (1 + atkPct/100)) : preAtk) + title.atk + pet.atk
   let effDef = sumExceptTitle('def') + title.def
   if (pc.guard) effDef = Math.round(effDef * 1.1)
   const effective = {
-    atk:  sumExceptTitle('atk') + title.atk,
+    atk:  effAtk,
     def:  effDef,
     matk: effMatk,
     mdef: sumExceptTitle('mdef') + title.mdef,
@@ -297,7 +305,7 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
   }
 
   return {
-    base, museum, fishing, equip, gem, prof, title, pet, petGuard: !!pc.guard, matkPct, effective,
+    base, museum, fishing, equip, gem, prof, title, pet, petGuard: !!pc.guard, matkPct, atkPct, effective,
     combat: {
       hitBonus: cm.hitBonus, critBonus: cm.critBonus, evasionBonus: cm.evasionBonus,
       critResist: cm.critResist,

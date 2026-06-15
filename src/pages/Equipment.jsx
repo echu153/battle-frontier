@@ -391,8 +391,8 @@ export default function Equipment() {
                         {enhW.mp_bonus   > 0 && <span style={{color:'#4488ff'}}>MP+{enhW.mp_bonus} </span>}
                         {enhW.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻+{enhW.atk_bonus} </span>}
                         {enhW.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防+{enhW.def_bonus} </span>}
-                        {enhW.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>魔攻+{enhW.matk_bonus} </span>}
-                        {enhW.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>魔防+{enhW.mdef_bonus} </span>}
+                        {enhW.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>特攻+{enhW.matk_bonus} </span>}
+                        {enhW.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>特防+{enhW.mdef_bonus} </span>}
                         {enhW.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>速+{enhW.spd_bonus} </span>}
                       </div>
                       {equipped.bonus_effect && equipped.bonus_effect !== 'artifact' && <div style={{color:'#ffaa00', fontSize:'9px'}}>{getEffectLabel(equipped.bonus_effect)}</div>}
@@ -556,6 +556,7 @@ export default function Equipment() {
                         {enhW.mp_bonus   > 0 && <span style={{color:'#4488ff'}}>MP+{enhW.mp_bonus} </span>}
                         {w.hp_bonus_pct  > 0 && <span style={{color:'#44ff88'}}>HP+{w.hp_bonus_pct}% </span>}
                         {w.mp_bonus_pct  > 0 && <span style={{color:'#4488ff'}}>MP+{w.mp_bonus_pct}% </span>}
+                        {w.atk_bonus_pct  > 0 && <span style={{color:'#ffcc00'}}>攻撃力+{w.atk_bonus_pct}% </span>}
                         {w.matk_bonus_pct > 0 && <span style={{color:'#cc44ff'}}>特殊攻撃力+{w.matk_bonus_pct}% </span>}
                         {w.hit_bonus     > 0 && <span style={{color:'#ffaa44'}}>命中+{w.hit_bonus}% </span>}
                         {w.crit_bonus    > 0 && <span style={{color:'#ff6688'}}>クリ率+{w.crit_bonus}% </span>}

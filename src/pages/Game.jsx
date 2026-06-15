@@ -4633,7 +4633,7 @@ function MiniBar({ label, val, pct, color }) {
 
 const BUFF_LABELS = {
   atkUp:'⚔攻↑', atkDown:'⚔攻↓', defUp:'🛡防↑', defDown:'🛡防↓',
-  mdefUp:'🔮魔防↑', mdefDown:'🔮魔防↓', matkUp:'🔮魔攻↑',
+  mdefUp:'🔮特防↑', mdefDown:'🔮特防↓', matkUp:'🔮特攻↑',
   spdUp:'💨速↑', spdDown:'💨速↓',
   burn:'🔥火傷', paralysis:'⚡麻痺', stun:'💫気絶',
   poison:'🟢毒', severePoisoin:'☠猛毒',

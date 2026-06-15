@@ -319,16 +319,17 @@ export default function Profile() {
                   【{RARITY_LABELS[equipped.weapons.rarity]}】{getProfPrefix(profLv)}{equipped.weapons.name}
                   {plus > 0 && !isArtifactBase && <span style={{color:'#ffcc00'}}> +{plus}</span>}
                 </div>
-                {(enhW.atk_bonus>0 || enhW.def_bonus>0 || enhW.matk_bonus>0 || enhW.mdef_bonus>0 || enhW.spd_bonus>0 || enhW.hp_bonus>0 || enhW.mp_bonus>0 || equipped.weapons.matk_bonus_pct>0 || equipped.weapons.hit_bonus>0) && (
+                {(enhW.atk_bonus>0 || enhW.def_bonus>0 || enhW.matk_bonus>0 || enhW.mdef_bonus>0 || enhW.spd_bonus>0 || enhW.hp_bonus>0 || enhW.mp_bonus>0 || equipped.weapons.atk_bonus_pct>0 || equipped.weapons.matk_bonus_pct>0 || equipped.weapons.hit_bonus>0) && (
                 <div style={{ fontSize:'10px', marginBottom:'2px' }}>
                   {enhW.hp_bonus   > 0 && <span style={{color:'#00cc44'}}>HP+{enhW.hp_bonus} </span>}
                   {enhW.mp_bonus   > 0 && <span style={{color:'#4488ff'}}>MP+{enhW.mp_bonus} </span>}
                   {enhW.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻+{enhW.atk_bonus} </span>}
                   {enhW.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防+{enhW.def_bonus} </span>}
-                  {enhW.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>魔攻+{enhW.matk_bonus} </span>}
-                  {enhW.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>魔防+{enhW.mdef_bonus} </span>}
+                  {enhW.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>特攻+{enhW.matk_bonus} </span>}
+                  {enhW.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>特防+{enhW.mdef_bonus} </span>}
                   {enhW.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>速+{enhW.spd_bonus} </span>}
-                  {equipped.weapons.matk_bonus_pct > 0 && <span style={{color:'#cc44ff'}}>魔攻+{equipped.weapons.matk_bonus_pct}% </span>}
+                  {equipped.weapons.atk_bonus_pct > 0 && <span style={{color:'#ffcc00'}}>攻+{equipped.weapons.atk_bonus_pct}% </span>}
+                  {equipped.weapons.matk_bonus_pct > 0 && <span style={{color:'#cc44ff'}}>特攻+{equipped.weapons.matk_bonus_pct}% </span>}
                   {equipped.weapons.hit_bonus > 0 && <span style={{color:'#ffaa44'}}>命中+{equipped.weapons.hit_bonus}% </span>}
                 </div>
                 )}
@@ -339,8 +340,8 @@ export default function Profile() {
                     {equipped.bonus_mp   > 0 && ` MP+${equipped.bonus_mp}`}
                     {equipped.bonus_atk  > 0 && ` 攻+${equipped.bonus_atk}`}
                     {equipped.bonus_def  > 0 && ` 防+${equipped.bonus_def}`}
-                    {equipped.bonus_matk > 0 && ` 魔攻+${equipped.bonus_matk}`}
-                    {equipped.bonus_mdef > 0 && ` 魔防+${equipped.bonus_mdef}`}
+                    {equipped.bonus_matk > 0 && ` 特攻+${equipped.bonus_matk}`}
+                    {equipped.bonus_mdef > 0 && ` 特防+${equipped.bonus_mdef}`}
                     {equipped.bonus_spd  > 0 && ` 速+${equipped.bonus_spd}`}
                     {(equipped.bonus_crit||0)    > 0 && ` クリティカル率+${equipped.bonus_crit}%`}
                     {(equipped.bonus_evasion||0) > 0 && ` 回避率+${equipped.bonus_evasion}%`}
