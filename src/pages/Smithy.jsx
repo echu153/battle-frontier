@@ -356,6 +356,7 @@ export default function Smithy() {
   }
 
 
+  // 再評価：種類固定で値のみ再抽選（要：再鑑定済み＝スロット生成済み）
   const doReEval = async (item) => {
     setLoading(true)
     const rarity = item.weapons.rarity
@@ -363,26 +364,7 @@ export default function Smithy() {
     const sheetItem = playerItems.find(pi => pi.items?.name === '再評価依頼書')
     const owned = sheetItem?.quantity || 0
     if (owned < needed) { showMessage(`再評価依頼書が足りません！（所持${owned}枚・必要${needed}枚）`, '#ff4444'); setLoading(false); return }
-    const newSlots = generateBonusSlots(rarity)
-    const cols = slotsToColumns(newSlots)
-    if (item.bonus_effect === 'artifact') cols.bonus_effect = 'artifact'
-    await supabase.from('player_equipment').update(cols).eq('id', item.id)
-    const newQty = owned - needed
-    if (newQty <= 0) await supabase.from('player_items').delete().eq('id', sheetItem.id)
-    else await supabase.from('player_items').update({ quantity: newQty }).eq('id', sheetItem.id)
-    showMessage(`✨ ${item.weapons.name} のボーナスを再評価しました！`, '#ffcc00')
-    await fetchAll()
-    setLoading(false)
-  }
-
-  const doReAppraise = async (item) => {
-    setLoading(true)
-    const rarity = item.weapons.rarity
-    const needed = RE_EVAL_SHEETS[rarity]
-    const sheetItem = playerItems.find(pi => pi.items?.name === '再鑑定依頼書')
-    const owned = sheetItem?.quantity || 0
-    if (owned < needed) { showMessage(`再鑑定依頼書が足りません！（所持${owned}枚・必要${needed}枚）`, '#ff4444'); setLoading(false); return }
-    if (!item.bonus_slots_json) { showMessage('まず再評価を行ってください', '#ff4444'); setLoading(false); return }
+    if (!item.bonus_slots_json) { showMessage('まず再鑑定を行ってください', '#ff4444'); setLoading(false); return }
     const existingSlots = JSON.parse(item.bonus_slots_json)
     const config = RARITY_BONUS_CONFIG[rarity]
     const newSlots = existingSlots.map(s => {
@@ -394,13 +376,33 @@ export default function Smithy() {
       return { type:s.type, value: baseVal }
     })
     const cols = slotsToColumns(newSlots)
-    // アーティファクト(古びた○○の進化先)の特殊能力は再鑑定で消さない（doReEvalと同じ保護）
+    // アーティファクト(古びた○○の進化先)の特殊能力は消さない
     if (item.bonus_effect === 'artifact') cols.bonus_effect = 'artifact'
     await supabase.from('player_equipment').update(cols).eq('id', item.id)
     const newQty = owned - needed
     if (newQty <= 0) await supabase.from('player_items').delete().eq('id', sheetItem.id)
     else await supabase.from('player_items').update({ quantity: newQty }).eq('id', sheetItem.id)
-    showMessage(`🔍 ${item.weapons.name} のボーナス値を再鑑定しました！`, '#88ccff')
+    showMessage(`🔍 ${item.weapons.name} のボーナス値を再評価しました！`, '#88ccff')
+    await fetchAll()
+    setLoading(false)
+  }
+
+  // 再鑑定：全ボーナス再抽選（種類・値ともに引き直し）
+  const doReAppraise = async (item) => {
+    setLoading(true)
+    const rarity = item.weapons.rarity
+    const needed = RE_EVAL_SHEETS[rarity]
+    const sheetItem = playerItems.find(pi => pi.items?.name === '再鑑定依頼書')
+    const owned = sheetItem?.quantity || 0
+    if (owned < needed) { showMessage(`再鑑定依頼書が足りません！（所持${owned}枚・必要${needed}枚）`, '#ff4444'); setLoading(false); return }
+    const newSlots = generateBonusSlots(rarity)
+    const cols = slotsToColumns(newSlots)
+    if (item.bonus_effect === 'artifact') cols.bonus_effect = 'artifact'
+    await supabase.from('player_equipment').update(cols).eq('id', item.id)
+    const newQty = owned - needed
+    if (newQty <= 0) await supabase.from('player_items').delete().eq('id', sheetItem.id)
+    else await supabase.from('player_items').update({ quantity: newQty }).eq('id', sheetItem.id)
+    showMessage(`✨ ${item.weapons.name} のボーナスを再鑑定しました！`, '#ffcc00')
     await fetchAll()
     setLoading(false)
   }
@@ -761,7 +763,7 @@ export default function Smithy() {
               <span style={{color:'#446688'}}>再評価依頼書: <span style={{color:'#ffcc00'}}>{playerItems.find(pi=>pi.items?.name==='再評価依頼書')?.quantity||0}枚</span></span>
               <span style={{color:'#446688'}}>再鑑定依頼書: <span style={{color:'#88ccff'}}>{playerItems.find(pi=>pi.items?.name==='再鑑定依頼書')?.quantity||0}枚</span></span>
             </div>
-            <div style={{ color:'#446688', fontSize:'10px', marginBottom:'12px' }}>再評価：全ボーナス再抽選　再鑑定：種類固定で値のみ再抽選（要：再評価済み）　古びた○○は対象外</div>
+            <div style={{ color:'#446688', fontSize:'10px', marginBottom:'12px' }}>再鑑定：全ボーナス再抽選　再評価：種類固定で値のみ再抽選（要：再鑑定済み）　古びた○○は対象外</div>
             {slots.map(slot => {
               const slotItems = sortEquipment(equipment.filter(e => e.slot === slot), sortKey)
               if (slotItems.length === 0) return null
@@ -775,8 +777,9 @@ export default function Smithy() {
                     const needed = RE_EVAL_SHEETS[rarity]
                     const evalOwned = playerItems.find(pi=>pi.items?.name==='再評価依頼書')?.quantity||0
                     const appOwned = playerItems.find(pi=>pi.items?.name==='再鑑定依頼書')?.quantity||0
-                    const canEval = !isArtifactBase && evalOwned >= needed
-                    const canApp = !isArtifactBase && !!item.bonus_slots_json && appOwned >= needed
+                    // 再評価=値のみ再抽選(要スロット)、再鑑定=全再抽選(前提なし)
+                    const canEval = !isArtifactBase && !!item.bonus_slots_json && evalOwned >= needed
+                    const canApp = !isArtifactBase && appOwned >= needed
                     const hasBonus = item.bonus_atk>0||item.bonus_def>0||item.bonus_matk>0||item.bonus_mdef>0||item.bonus_spd>0||item.bonus_hp>0||item.bonus_mp>0||(item.bonus_crit||0)>0||(item.bonus_evasion||0)>0||(item.bonus_hit||0)>0||(item.bonus_effect&&item.bonus_effect!=='artifact')
                     return (
                       <div key={item.id} style={{ border:'1px solid #002244', background:'#001028', padding:'10px', marginBottom:'6px', opacity: isArtifactBase ? 0.5 : 1 }}>
@@ -816,7 +819,7 @@ export default function Smithy() {
                             {item.bonus_effect && item.bonus_effect !== 'artifact' && ` ${getEffectLabel(item.bonus_effect)}`}
                           </div>
                         ) : (
-                          !isArtifactBase && <div style={{fontSize:'10px',color:'#334455'}}>ボーナスなし（再評価で付与）</div>
+                          !isArtifactBase && <div style={{fontSize:'10px',color:'#334455'}}>ボーナスなし（再鑑定で付与）</div>
                         )}
                       </div>
                     )
