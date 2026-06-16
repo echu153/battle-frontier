@@ -15,7 +15,7 @@ import { charmPlayerBonus } from '../constants/pets'
 import {
   FOUND_MIN_CHARLV, MAX_COUNTRIES, rankOrder, rankProgress,
   expandGain, EXPAND_COOLDOWN_MS, fmtRemain, REGIONS,
-  AREA_META, computeAreaControl,
+  AREA_META, computeAreaControl, rankColor,
 } from '../lib/territory'
 
 const EMBLEMS = ['🏰','⚔','🦅','🐺','🌙','☀','🔥','❄','🐉','⭐','🛡','👑']
@@ -192,12 +192,21 @@ export default function Territory() {
   }
 
   const doAsylum = async (cid, name) => {
-    if (!window.confirm(`「${name}」に亡命しますか？\n亡命後の1週間は領地システム（領地拡大・建国・チャット・再亡命）を利用できません。`)) return
+    if (!window.confirm(`「${name}」に亡命しますか？\n亡命後の1週間は領地システム（領地拡大・建国・再亡命）を利用できません。`)) return
     setBusy(true)
     const { error } = await supabase.rpc('seek_asylum', { p_country_id: cid })
     setBusy(false)
     if (error) { flash(`亡命失敗: ${error.message}`, '#ff5555'); return }
     flash(`🏳 ${name} に亡命しました（二等兵から再スタート）`)
+    await reload()
+  }
+
+  const doAppoint = async (targetId, rank) => {
+    setBusy(true)
+    const { error } = await supabase.rpc('appoint_rank', { p_target: targetId, p_rank: rank })
+    setBusy(false)
+    if (error) { flash(`任命失敗: ${error.message}`, '#ff5555'); return }
+    flash(rank === '解任' ? '役職を解任しました' : `${rank}に任命しました`)
     await reload()
   }
 
@@ -256,7 +265,7 @@ export default function Territory() {
 
         {locked && (
           <div style={{ color:'#ff9944', fontSize:'12px', border:'1px solid #aa552255', background:'#1a0e00', padding:'8px 12px', marginBottom:'10px' }}>
-            🔒 亡命してから1週間は領地システムを利用できません（領地拡大・建国・チャット・再亡命が不可）。<br />解除まで残り {fmtRemain(lockRemain)}
+            🔒 亡命してから1週間は領地システムを利用できません（領地拡大・建国・再亡命が不可）。<br />解除まで残り {fmtRemain(lockRemain)}
           </div>
         )}
 
@@ -288,7 +297,7 @@ export default function Territory() {
           <div style={{ ...box, borderColor:'#ffcc44' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:'8px', flexWrap:'wrap' }}>
               <div style={{ color:'#ffddaa', fontSize:'17px' }}>{myCountry.emblem} {myCountry.name}</div>
-              <div style={{ color:'#ffcc44', fontSize:'13px' }}>あなたの階級：【{me?.country_rank}】</div>
+              <div style={{ fontSize:'13px', color:'#bbaa77' }}>あなたの階級：<b style={{ color: rankColor(me?.country_rank) }}>【{me?.country_rank}】</b></div>
             </div>
             {myCountry.description && <div style={{ color:'#88774a', fontSize:'11px', marginTop:'4px', whiteSpace:'pre-wrap' }}>{myCountry.description}</div>}
 
@@ -358,20 +367,35 @@ export default function Territory() {
             {/* 国民一覧（階級順） */}
             <div style={{ marginTop:'12px', paddingTop:'10px', borderTop:'1px solid #2a2010' }}>
               <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'6px' }}>👥 国民一覧（{memberCount(myCountry.id)}人）</div>
+              {me?.country_rank === '元帥' && <div style={{ color:'#88774a', fontSize:'10px', marginBottom:'4px' }}>※ 元帥は各国民を副元帥・参謀に任命できます（各1名）</div>}
               <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
                 {membersOf(myCountry.id).map(m => {
                   const isSelf = m.id === me?.id
+                  const rk = m.country_rank || '二等兵'
+                  const amMarshal = me?.country_rank === '元帥' && !isSelf && rk !== '元帥'
                   return (
-                    <div key={m.id} style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'11px',
+                    <div key={m.id} style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'11px', flexWrap:'wrap',
                       padding:'4px 6px', background: isSelf ? '#1a1200' : 'transparent', borderRadius:'2px' }}>
                       {m.avatar_url
                         ? <img src={m.avatar_url} alt="" style={{ width:'22px', height:'22px', borderRadius:'50%', objectFit:'cover', flexShrink:0 }} />
                         : <span style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#2a2010', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'12px', flexShrink:0 }}>👤</span>}
-                      <span onClick={() => nav(`/profile/${m.id}`)}
-                        style={{ flex:1, cursor:'pointer', color: m.country_rank === '元帥' ? '#ffcc44' : '#bbddff', textDecoration:'underline' }}>
-                        【{m.country_rank || '二等兵'}】{m.username}{isSelf && ' (あなた)'}
+                      <span onClick={() => nav(`/profile/${m.id}`)} style={{ flex:1, cursor:'pointer', textDecoration:'underline' }}>
+                        <b style={{ color: rankColor(rk) }}>【{rk}】</b><span style={{ color:'#bbddff' }}>{m.username}{isSelf && ' (あなた)'}</span>
                       </span>
                       <span style={{ color:'#88774a', whiteSpace:'nowrap' }}>総合力 {powerMap[m.id] ?? '—'}／貢献 {Math.floor(m.country_contrib || 0)}</span>
+                      {amMarshal && (
+                        <span style={{ display:'flex', gap:'3px' }}>
+                          {['副元帥','参謀'].map(r => (
+                            <button key={r} disabled={busy || rk === r} onClick={() => doAppoint(m.id, r)}
+                              style={{ padding:'2px 6px', fontFamily:'monospace', fontSize:'10px', cursor: (busy || rk === r) ? 'default' : 'pointer',
+                                background: rk === r ? '#2a1e02' : '#020100', border:`1px solid ${rk === r ? '#ffcc44' : '#4a3a1a'}`, color: rk === r ? '#ffcc44' : '#bbaa77' }}>{r}</button>
+                          ))}
+                          {(rk === '副元帥' || rk === '参謀') && (
+                            <button disabled={busy} onClick={() => doAppoint(m.id, '解任')}
+                              style={{ padding:'2px 6px', fontFamily:'monospace', fontSize:'10px', cursor:'pointer', background:'#1a1000', border:'1px solid #885533', color:'#aa7755' }}>解任</button>
+                          )}
+                        </span>
+                      )}
                     </div>
                   )
                 })}
@@ -496,14 +520,14 @@ export default function Territory() {
               {(membersOf(c.id).length > 0 || npcMembersOf(c.id).length > 0) && (
                 <div style={{ marginTop:'8px', borderTop:'1px solid #2a2010', paddingTop:'6px', display:'flex', flexWrap:'wrap', gap:'8px' }}>
                   {membersOf(c.id).map(m => (
-                    <span key={m.id} onClick={() => nav(`/profile/${m.id}`)} style={{ fontSize:'10px', cursor:'pointer', textDecoration:'underline', color: m.country_rank === '元帥' ? '#ffcc44' : '#bbddff' }}>
-                      【{m.country_rank || '二等兵'}】{m.username}（総合力{powerMap[m.id] ?? '—'}）
+                    <span key={m.id} onClick={() => nav(`/profile/${m.id}`)} style={{ fontSize:'10px', cursor:'pointer', textDecoration:'underline' }}>
+                      <b style={{ color: rankColor(m.country_rank || '二等兵') }}>【{m.country_rank || '二等兵'}】</b><span style={{ color:'#bbddff' }}>{m.username}（総合力{powerMap[m.id] ?? '—'}）</span>
                     </span>
                   ))}
                   {npcMembersOf(c.id).map(m => (
                     <span key={`npc-${m.id}`} onClick={() => setNpcDetail(m)}
-                      style={{ fontSize:'10px', cursor:'pointer', textDecoration:'underline', color: m.rank === '元帥' ? '#ffcc44' : '#bbaa77' }}>
-                      【{m.rank}】{m.name}{m.class ? `・${m.class}` : ''}（総合力{m.power}）
+                      style={{ fontSize:'10px', cursor:'pointer', textDecoration:'underline', color:'#bbaa77' }}>
+                      <b style={{ color: rankColor(m.rank) }}>【{m.rank}】</b>{m.name}{m.class ? `・${m.class}` : ''}（総合力{m.power}）
                     </span>
                   ))}
                 </div>
@@ -573,7 +597,7 @@ export default function Territory() {
               <div style={{ color:'#ffddaa', fontSize:'15px' }}>👤 {npcDetail.name}</div>
               <button onClick={() => setNpcDetail(null)} style={{ background:'none', border:'1px solid #885533', color:'#aa7755', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>×</button>
             </div>
-            <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'4px' }}>【{npcDetail.rank}】{npcDetail.class || '—'}</div>
+            <div style={{ fontSize:'12px', marginBottom:'4px' }}><b style={{ color: rankColor(npcDetail.rank) }}>【{npcDetail.rank}】</b><span style={{ color:'#bbaa77' }}>{npcDetail.class || '—'}</span></div>
             <div style={{ color:'#bbaa77', fontSize:'12px', marginBottom:'10px' }}>総合力 <b style={{ color:'#ffe' }}>{npcDetail.power}</b></div>
             {npcDetail.stats && (
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px 12px', fontSize:'12px' }}>

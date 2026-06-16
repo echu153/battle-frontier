@@ -211,6 +211,48 @@ BEGIN
 END;
 $function$;
 
+-- ===== 6.5) 任命（元帥が副元帥・参謀を任命／解任）=====
+-- 元帥のみ実行可。p_rank='副元帥'|'参謀'|'解任'。副元帥/参謀は国に各1名（既存者は自動階級に戻す）。
+CREATE OR REPLACE FUNCTION public.appoint_rank(p_target uuid, p_rank text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path = public
+AS $function$
+DECLARE
+  v_uid     uuid := auth.uid();
+  v_cid     uuid;
+  v_myrank  text;
+  v_tcid    uuid;
+  v_tcontrib numeric;
+  v_trank   text;
+BEGIN
+  IF v_uid IS NULL THEN RAISE EXCEPTION 'ログインが必要です'; END IF;
+  SELECT country_id, country_rank INTO v_cid, v_myrank FROM public.profiles WHERE id = v_uid;
+  IF v_myrank IS DISTINCT FROM '元帥' THEN RAISE EXCEPTION '元帥のみが任命できます'; END IF;
+  IF p_target = v_uid THEN RAISE EXCEPTION '自分自身は任命できません'; END IF;
+
+  SELECT country_id, country_contrib, country_rank INTO v_tcid, v_tcontrib, v_trank
+    FROM public.profiles WHERE id = p_target;
+  IF v_tcid IS NULL OR v_tcid IS DISTINCT FROM v_cid THEN
+    RAISE EXCEPTION '同じ国の国民のみ任命できます';
+  END IF;
+  IF v_trank = '元帥' THEN RAISE EXCEPTION '元帥の階級は変更できません'; END IF;
+
+  IF p_rank IN ('副元帥','参謀') THEN
+    -- 同役職の既存者を自動階級に戻す（各1名制）
+    UPDATE public.profiles
+       SET country_rank = public.territory_rank_for_contrib(country_contrib)
+     WHERE country_id = v_cid AND country_rank = p_rank AND id <> p_target;
+    UPDATE public.profiles SET country_rank = p_rank WHERE id = p_target;
+  ELSIF p_rank = '解任' OR p_rank IS NULL THEN
+    UPDATE public.profiles SET country_rank = public.territory_rank_for_contrib(v_tcontrib) WHERE id = p_target;
+  ELSE
+    RAISE EXCEPTION '無効な役職です';
+  END IF;
+END;
+$function$;
+
 -- ===== 7) エリア別領地（出撃エリアごとに領地を蓄積）=====
 -- ・各エリア(1〜7)ごとに国の領地量を保持。シェア最大の国がそのエリアを支配。
 -- ・将来: 支配国の国民はそのエリアで装備ドロップ率が上昇（最大+3%）。←実装は後日。
@@ -444,6 +486,7 @@ WHERE EXISTS (SELECT 1 FROM public.countries WHERE name = 'Zoon' AND is_npc)
 
 GRANT EXECUTE ON FUNCTION public.found_country(text, text, text, int) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.seek_asylum(uuid)              TO authenticated;
+GRANT EXECUTE ON FUNCTION public.appoint_rank(uuid, text)       TO authenticated;
 GRANT EXECUTE ON FUNCTION public.expand_territory(numeric, int)  TO authenticated;
 GRANT EXECUTE ON FUNCTION public.post_country_chat(text)         TO authenticated;
 GRANT EXECUTE ON FUNCTION public.tick_npc_countries()           TO authenticated;
