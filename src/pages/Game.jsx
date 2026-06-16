@@ -1007,7 +1007,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     // ── 魔法剣士 ──
     case '雷光斬': {
-      result.dmg = Math.floor((eff.atk + eff.matk)*(rt>=1?1.3:1.2)*am); result.hybridCombined = true
+      result.dmg = Math.floor((eff.atk*(rt>=1?1.3:1.2) + eff.matk*(rt>=1?0.6:0.5))*am)
       const raiHit = Math.random()*100 < 30
       if (raiHit && !(enemyBuffs.paralysis?.turns > 0)) result.newEnemyBuffs.paralysis = { turns:3, skipRate:0.25, spdRate:0.8 }
       result.log = `⚡⚔ 雷光斬！ ${enemy.name}に${result.dmg}のダメージ！${raiHit && !(enemyBuffs.paralysis?.turns > 0) ? ' 麻痺した！' : ''}`
@@ -1018,7 +1018,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       const flashStep = rt>=2?1.2:1.15
       const flashCount = prevSkill === '閃光' ? Math.min((playerBuffs.flashCombo?.count||0)+1, flashMax) : 0
       const flashMult = flashCount > 0 ? Math.pow(flashStep, flashCount) : 1.0
-      result.dmg = Math.floor((eff.atk + eff.matk)*0.8*am*flashMult); result.hybridCombined = true
+      result.dmg = Math.floor((eff.atk*0.8 + eff.matk*0.8)*am*flashMult)
       result.newPlayerBuffs.flashCombo = { count: flashCount > 0 ? flashCount : 1 }
       const comboText = flashCount > 0 ? ` 連続${flashCount+1}回（×${flashMult.toFixed(2)}）！` : ''
       result.log = `✨⚔ 閃光！ ${enemy.name}に${result.dmg}のダメージ！${comboText}`
@@ -1037,7 +1037,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       break
     }
     case 'エレメンタルエッジ': {
-      result.dmg = Math.floor((eff.atk + eff.matk)*(rt>=5?1.7:1.5)*am); result.hybridCombined = true
+      result.dmg = Math.floor((eff.atk*(rt>=5?1.7:1.5) + eff.matk*0.8)*am)
       const elemHit = Math.random()*100 < 36
       if (elemHit) {
         // やけど・麻痺・スタンを均等抽選（スタン2倍化：発動率36%×1/3で各12%）
@@ -1059,11 +1059,11 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     // ── 聖騎士 ──
     case 'ホーリーエッジ': {
-      result.dmg = Math.floor((eff.atk + eff.matk)*(rt>=1?1.6:1.5)*am); result.hybridCombined = true
+      result.dmg = Math.floor((eff.atk*(rt>=1?1.6:1.5) + eff.matk*(rt>=1?0.6:0.5))*am)
       result.log = `✨⚔ ホーリーエッジ！ ${enemy.name}に${result.dmg}のダメージ！`; break
     }
     case 'ディバインスマイト': {
-      result.dmg = Math.floor((eff.atk + eff.matk)*1.2*am); result.hybridCombined = true
+      result.dmg = Math.floor((eff.atk*1.2 + eff.matk*0.7)*am)
       const dmgDownHit = Math.random()*100 < (rt>=2?50:30)
       if (dmgDownHit) result.newEnemyBuffs.dmgDown = { turns:3, rate:0.85 }
       result.log = `✨⚔ ディバインスマイト！ ${enemy.name}に${result.dmg}のダメージ！${dmgDownHit ? ' 3Tの間、相手の与ダメ-15%！' : ''}`
@@ -2469,11 +2469,7 @@ export default function Game() {
             const useLowDef = cs.skills?.name === 'サイコブラスト' || res.useMinDef || skillCls === 'サイキッカー' || skillCls === '魔銃士'
             if (useLowDef) {
               defScale = effBuff.matk / (effBuff.matk + Math.min(adjED, adjEMD))
-            } else if (sType === '物理攻撃') {
-              // 両刀hybridスキルはATK+MATKを合算した攻撃ステで軽減カーブを計算（全振りと両刀が同火力になる）
-              const offStat = res.hybridCombined ? (effBuff.atk + effBuff.matk) : effBuff.atk
-              defScale = offStat / (offStat + adjED)
-            }
+            } else if (sType === '物理攻撃') defScale = effBuff.atk  / (effBuff.atk  + adjED)
             else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + adjEMD)
           }
           const allinDebuffOutMult = playerBuffs.allinDebuff?.turns > 0 ? 0.7 : 1.0
