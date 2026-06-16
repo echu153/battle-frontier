@@ -3365,6 +3365,13 @@ export default function Game() {
 ● クラスをLV1に戻す代わりに、スキルを1つ他クラスへ持ち越せる
 ● 再修練を重ねるとスキルが段階的に強化される（1回ごとに1つ解放）
 ● 再修練5回でそのクラスのLV上限が300に解放
+〔共通の効果〕
+● 他クラスでのステータス反映率+10%
+● スキルを1つ選んで、どのクラスでも使えるようにできる
+〔初期クラスで再修練すると〕
+● 再修練によるステータス反映率ボーナスが+30%になる
+〔上位クラスで再修練すると〕
+● そのクラスにいる間、スキルが強化される
 
 【上位クラスへの転職条件】
 ● 通常上位職：対応する初期クラスがLV100に到達
@@ -3903,7 +3910,7 @@ export default function Game() {
           )
         })}
       </div>
-      <div style={{ color:'#ffcc00', fontSize:'11px', marginBottom:'6px' }}>── 証明書職（アイテムで解放）──</div>
+      <div style={{ color:'#ffcc00', fontSize:'11px', marginBottom:'6px' }}>── 特殊上位職（アイテムで解放）──</div>
       <div style={{ marginBottom:'12px' }}>
         {(() => {
           const isCurrent = profile.class === 'ギャンブラー'
