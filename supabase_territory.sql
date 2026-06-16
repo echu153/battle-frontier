@@ -343,8 +343,8 @@ BEGIN
     RAISE EXCEPTION 'そのエリアはまだ解放されていません';
   END IF;
 
-  -- 開発アカウント(is_admin)はクールダウンなし
-  IF v_admin IS NOT TRUE AND v_last IS NOT NULL AND now() - v_last < interval '1 hour' THEN
+  -- 領地拡大は1時間に1回（全員適用）
+  IF v_last IS NOT NULL AND now() - v_last < interval '1 hour' THEN
     RAISE EXCEPTION '領地拡大は1時間に1回までです';
   END IF;
 

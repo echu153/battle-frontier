@@ -167,7 +167,7 @@ export default function Territory() {
 
   // 領地拡大クールダウン（is_admin は開発中CDなし）
   const lastExpand = me?.last_expand_at ? new Date(me.last_expand_at).getTime() : 0
-  const expandRemain = me?.is_admin ? 0 : Math.max(0, lastExpand + EXPAND_COOLDOWN_MS - Date.now())
+  const expandRemain = Math.max(0, lastExpand + EXPAND_COOLDOWN_MS - Date.now())
   // 亡命後ロック（この時刻まで領地システム利用不可。is_admin は除外）
   const lockUntil = me?.territory_locked_until ? new Date(me.territory_locked_until).getTime() : 0
   const lockRemain = me?.is_admin ? 0 : Math.max(0, lockUntil - Date.now())
