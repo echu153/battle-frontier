@@ -36,10 +36,11 @@ const MENU_DEFS = {
   alchemy:   { label:'🧪 錬金部屋',       color:'#44ddaa', path:'/alchemy', unlock:10 },
   raid:      { label:'⚔ レイドボス',      color:'#ff6644', path:'/raid',    unlock:30 },
   abyss:     { label:'⚔ 挑戦/奈落闘技場', color:'#c08cff', path:'/abyss',   unlock:30 },
+  territory: { label:'🏰 領地',           color:'#ffcc44', path:'/territory',unlock:0 },
 }
 // 各レイアウトのメニュー並び順（既存の並びを踏襲）
-const DESKTOP_MENU_ORDER = ['equipment','skills','profile','shop','smithy','museum','barber','casino','fishing','scarecrow','exchange','raid','pets','dungeon','alchemy','abyss']
-const MOBILE_MENU_ORDER  = ['shop','smithy','museum','barber','casino','fishing','exchange','raid','pets','dungeon','scarecrow','alchemy','abyss']
+const DESKTOP_MENU_ORDER = ['equipment','skills','profile','shop','smithy','museum','barber','casino','fishing','scarecrow','exchange','raid','pets','dungeon','alchemy','abyss','territory']
+const MOBILE_MENU_ORDER  = ['shop','smithy','museum','barber','casino','fishing','exchange','raid','pets','dungeon','scarecrow','alchemy','abyss','territory']
 
 // 多段ヒットスキル：行動全体ではなく1発ごとに回避・クリティカル・ダメージ判定する
 export const MULTI_HIT_SKILLS = new Set(['マジックアロー','三連射','メテオストライク','連打','五連殺','飛天三角蹴り','連装銃撃'])
@@ -4161,7 +4162,6 @@ export default function Game() {
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
             )}
-            <button onClick={()=>{ nav('/territory'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🏰 領地</button>
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
           </div>
@@ -4572,7 +4572,6 @@ export default function Game() {
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
             )}
-            <button onClick={()=>{ nav('/territory'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🏰 領地</button>
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
           </div>
