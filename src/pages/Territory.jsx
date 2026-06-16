@@ -55,7 +55,6 @@ export default function Territory() {
       const { data: prof } = await supabase.from('profiles')
         .select('*').eq('id', user.id).maybeSingle()
       if (!prof) { nav('/game'); return }
-      if (!prof.is_admin) { nav('/game'); return }   // ★is_admin限定の先行公開
       try {
         await supabase.rpc('tick_npc_countries')  // NPC国の領地を経過時間ぶん加算（未適用でも続行）
       } catch { /* RPC未適用などは無視 */ }
@@ -273,8 +272,6 @@ export default function Territory() {
           <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
         </div>
 
-        <div style={{ color:'#aa8844', fontSize:'10px', marginBottom:'10px' }}>※ is_admin限定で先行公開中。調整完了後に一般公開予定。</div>
-
         {msg && (
           <div style={{ color:msg.c, fontSize:'12px', border:`1px solid ${msg.c}55`, background:'#1a1200', padding:'8px 12px', marginBottom:'10px' }}>{msg.t}</div>
         )}
@@ -303,7 +300,7 @@ export default function Territory() {
             <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'6px' }}>あなたの所属</div>
             <div style={{ color:'#bbaa77', fontSize:'13px' }}>
               {unaffiliated?.emblem || '🏳'} 非加盟国（どこにも属していません）
-              <div style={{ color:'#88774a', fontSize:'10px', marginTop:'4px' }}>キャラクターLV{FOUND_MIN_CHARLV}以上で建国、または下記の国へ亡命できます。</div>
+              <div style={{ color:'#88774a', fontSize:'10px', marginTop:'4px' }}>キャラクターLV{FOUND_MIN_CHARLV}以上で建国できます。亡命は「🗺 世界地図」タブから行えます。</div>
             </div>
           </div>
         )}
