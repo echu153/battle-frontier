@@ -34,6 +34,7 @@ export default function Territory() {
   const [npcDetail, setNpcDetail] = useState(null)  // 詳細表示中のNPC国民
   const [expandArea, setExpandArea] = useState(null)  // 領地拡大の出撃エリア
   const [tab, setTab] = useState('home')        // 'home'(自国) | 'world'(世界地図)
+  const [expandMsg, setExpandMsg] = useState(null)  // 領地拡大の結果（ボタン下に表示）
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [, setTick] = useState(0)
@@ -211,13 +212,14 @@ export default function Territory() {
   }
 
   const doExpand = async () => {
-    if (!expandArea) { flash('出撃エリアを選んでください', '#ff5555'); return }
+    if (!expandArea) { setExpandMsg({ t: '出撃エリアを選んでください', c: '#ff5555' }); return }
     setBusy(true)
     const { data: res, error } = await supabase.rpc('expand_territory', { p_power: power, p_area: expandArea })
     setBusy(false)
-    if (error) { flash(`領地拡大失敗: ${error.message}`, '#ff5555'); return }
+    if (error) { setExpandMsg({ t: `領地拡大失敗: ${error.message}`, c: '#ff5555' }); setTimeout(() => setExpandMsg(null), 4000); return }
     const an = AREA_META.find(a => a.id === res.area)?.name || `エリア${res.area}`
-    flash(`🗺 ${an} の領地を ${res.gain} 拡大！`)
+    setExpandMsg({ t: `🗺 ${an} の領地を ${res.gain} 拡大！`, c: '#44ffaa' })
+    setTimeout(() => setExpandMsg(null), 4000)
     await reload()
   }
 
@@ -348,6 +350,9 @@ export default function Territory() {
                     ? `クールダウン中 残り ${fmtRemain(expandRemain)}`
                     : `${areaLabel(expandArea)}の領地を広げる`}
               </button>
+              {expandMsg && (
+                <div style={{ color:expandMsg.c, fontSize:'12px', marginTop:'8px', border:`1px solid ${expandMsg.c}55`, background:'#0a0700', padding:'6px 10px', borderRadius:'2px' }}>{expandMsg.t}</div>
+              )}
               {/* 自国のエリア別領地 */}
               <div style={{ marginTop:'10px', display:'flex', flexWrap:'wrap', gap:'8px' }}>
                 {AREA_META.map(a => {
