@@ -14,7 +14,7 @@ import { calcEffectiveTotal } from '../lib/stats'
 import { charmPlayerBonus } from '../constants/pets'
 import {
   FOUND_MIN_CHARLV, MAX_COUNTRIES, rankOrder, rankProgress,
-  expandGain, EXPAND_COOLDOWN_MS, fmtRemain, REGIONS,
+  EXPAND_COOLDOWN_MS, fmtRemain, REGIONS,
   AREA_META, computeAreaControl, rankColor,
 } from '../lib/territory'
 

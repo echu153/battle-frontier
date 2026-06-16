@@ -320,8 +320,8 @@ BEGIN
     RAISE EXCEPTION '領地拡大は1時間に1回までです';
   END IF;
 
-  -- 獲得量: 基礎10 + 総合力/20（総合力2万で約1010、上限クランプ済み）
-  v_gain := floor(10 + v_power / 20.0);
+  -- 獲得量: 基礎10 + 総合力/20 に 0.9〜1.1 の乱数を乗算（総合力2万で約1010±10%）
+  v_gain := floor((10 + v_power / 20.0) * (0.9 + random() * 0.2));
 
   -- 国の総領地に加算
   UPDATE public.countries SET territory = territory + v_gain WHERE id = v_cid
