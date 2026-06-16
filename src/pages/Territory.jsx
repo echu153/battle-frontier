@@ -36,6 +36,8 @@ export default function Territory() {
   const [tab, setTab] = useState('home')        // 'home'(自国) | 'world'(世界地図)
   const [expandMsg, setExpandMsg] = useState(null)  // 領地拡大の結果（ボタン下に表示）
   const [openRosters, setOpenRosters] = useState({})  // 国一覧の国民展開状態 {countryId:true}
+  const [descEdit, setDescEdit] = useState(false)     // 自国説明文の編集中
+  const [descInput, setDescInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [, setTick] = useState(0)
@@ -212,6 +214,16 @@ export default function Territory() {
     await reload()
   }
 
+  const doSaveDesc = async () => {
+    setBusy(true)
+    const { error } = await supabase.rpc('update_country_desc', { p_desc: descInput })
+    setBusy(false)
+    if (error) { flash(`保存失敗: ${error.message}`, '#ff5555'); return }
+    setDescEdit(false)
+    flash('国の説明を更新しました')
+    await reload()
+  }
+
   const doExpand = async () => {
     if (!expandArea) { setExpandMsg({ t: '出撃エリアを選んでください', c: '#ff5555' }); return }
     setBusy(true)
@@ -302,7 +314,26 @@ export default function Territory() {
               <div style={{ color:'#ffddaa', fontSize:'17px' }}>{myCountry.emblem} {myCountry.name}</div>
               <div style={{ fontSize:'13px', color:'#bbaa77' }}>あなたの階級：<b style={{ color: rankColor(me?.country_rank) }}>【{me?.country_rank}】</b></div>
             </div>
-            {myCountry.description && <div style={{ color:'#88774a', fontSize:'11px', marginTop:'4px', whiteSpace:'pre-wrap' }}>{myCountry.description}</div>}
+            {/* 国の説明文（元帥はいつでも編集可） */}
+            {descEdit ? (
+              <div style={{ marginTop:'6px' }}>
+                <textarea value={descInput} onChange={e => setDescInput(e.target.value)} maxLength={200} rows={2}
+                  placeholder="国の説明文（200文字以内）"
+                  style={{ width:'100%', boxSizing:'border-box', padding:'6px 8px', background:'#020100', border:'1px solid #4a3a1a', color:'#ffe', fontFamily:'monospace', fontSize:'12px', resize:'vertical' }} />
+                <div style={{ display:'flex', gap:'6px', marginTop:'4px' }}>
+                  <button disabled={busy} onClick={doSaveDesc} style={{ padding:'4px 10px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer', background:'#2a1e02', border:'1px solid #ffcc44', color:'#ffcc44' }}>保存</button>
+                  <button onClick={() => setDescEdit(false)} style={{ padding:'4px 10px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer', background:'#1a1000', border:'1px solid #885533', color:'#aa7755' }}>キャンセル</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display:'flex', alignItems:'flex-start', gap:'8px', marginTop:'4px' }}>
+                <div style={{ flex:1, color:'#88774a', fontSize:'11px', whiteSpace:'pre-wrap' }}>{myCountry.description || '（説明文は未設定）'}</div>
+                {me?.country_rank === '元帥' && (
+                  <button onClick={() => { setDescInput(myCountry.description || ''); setDescEdit(true) }}
+                    style={{ padding:'2px 8px', fontFamily:'monospace', fontSize:'10px', cursor:'pointer', whiteSpace:'nowrap', background:'#020100', border:'1px solid #4a3a1a', color:'#bbaa77' }}>✎ 編集</button>
+                )}
+              </div>
+            )}
 
             {/* 国の概況 */}
             <div style={{ display:'flex', gap:'16px', flexWrap:'wrap', marginTop:'10px', padding:'8px 10px', background:'#0a0700', borderRadius:'2px' }}>

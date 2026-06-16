@@ -253,6 +253,30 @@ BEGIN
 END;
 $function$;
 
+-- ===== 6.6) 国の説明文を編集（元帥のみ）=====
+CREATE OR REPLACE FUNCTION public.update_country_desc(p_desc text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path = public
+AS $function$
+DECLARE
+  v_uid  uuid := auth.uid();
+  v_cid  uuid;
+  v_rank text;
+  v_desc text := nullif(btrim(coalesce(p_desc,'')), '');
+BEGIN
+  IF v_uid IS NULL THEN RAISE EXCEPTION 'ログインが必要です'; END IF;
+  IF v_desc IS NOT NULL AND char_length(v_desc) > 200 THEN
+    RAISE EXCEPTION '説明文は200文字以内にしてください';
+  END IF;
+  SELECT country_id, country_rank INTO v_cid, v_rank FROM public.profiles WHERE id = v_uid;
+  IF v_cid IS NULL THEN RAISE EXCEPTION '国に所属していません'; END IF;
+  IF v_rank IS DISTINCT FROM '元帥' THEN RAISE EXCEPTION '元帥のみが国の説明を編集できます'; END IF;
+  UPDATE public.countries SET description = v_desc WHERE id = v_cid;
+END;
+$function$;
+
 -- ===== 7) エリア別領地（出撃エリアごとに領地を蓄積）=====
 -- ・各エリア(1〜7)ごとに国の領地量を保持。シェア最大の国がそのエリアを支配。
 -- ・将来: 支配国の国民はそのエリアで装備ドロップ率が上昇（最大+3%）。←実装は後日。
@@ -487,6 +511,7 @@ WHERE EXISTS (SELECT 1 FROM public.countries WHERE name = 'ZONE' AND is_npc)
 GRANT EXECUTE ON FUNCTION public.found_country(text, text, text, int) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.seek_asylum(uuid)              TO authenticated;
 GRANT EXECUTE ON FUNCTION public.appoint_rank(uuid, text)       TO authenticated;
+GRANT EXECUTE ON FUNCTION public.update_country_desc(text)      TO authenticated;
 GRANT EXECUTE ON FUNCTION public.expand_territory(numeric, int)  TO authenticated;
 GRANT EXECUTE ON FUNCTION public.post_country_chat(text)         TO authenticated;
 GRANT EXECUTE ON FUNCTION public.tick_npc_countries()           TO authenticated;
