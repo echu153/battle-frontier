@@ -225,6 +225,7 @@ DECLARE
   v_contrib numeric;
   v_rank    text;
   v_unlocked int[];
+  v_admin   boolean;
   v_power   numeric := least(greatest(coalesce(p_power,0),0), 100000);
   v_gain    numeric;
   v_terr    numeric;
@@ -236,8 +237,8 @@ BEGIN
     RAISE EXCEPTION '出撃エリアを選択してください';
   END IF;
 
-  SELECT country_id, last_expand_at, country_contrib, country_rank, unlocked_areas
-    INTO v_cid, v_last, v_contrib, v_rank, v_unlocked
+  SELECT country_id, last_expand_at, country_contrib, country_rank, unlocked_areas, is_admin
+    INTO v_cid, v_last, v_contrib, v_rank, v_unlocked, v_admin
     FROM public.profiles WHERE id = v_uid;
 
   IF v_cid IS NULL THEN RAISE EXCEPTION '国に所属していません'; END IF;
@@ -248,7 +249,8 @@ BEGIN
     RAISE EXCEPTION 'そのエリアはまだ解放されていません';
   END IF;
 
-  IF v_last IS NOT NULL AND now() - v_last < interval '1 hour' THEN
+  -- 開発アカウント(is_admin)はクールダウンなし
+  IF v_admin IS NOT TRUE AND v_last IS NOT NULL AND now() - v_last < interval '1 hour' THEN
     RAISE EXCEPTION '領地拡大は1時間に1回までです';
   END IF;
 
@@ -282,6 +284,60 @@ BEGIN
 END;
 $function$;
 
+-- ===== 9) 国限定チャット =====
+-- 同じ国に所属するプレイヤーだけが読み書きできるチャット。
+CREATE TABLE IF NOT EXISTS public.country_chat (
+  id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  country_id uuid NOT NULL REFERENCES public.countries(id) ON DELETE CASCADE,
+  user_id    uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  username   text NOT NULL,
+  message    text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_country_chat_country_time
+  ON public.country_chat (country_id, created_at DESC);
+
+ALTER TABLE public.country_chat ENABLE ROW LEVEL SECURITY;
+-- 読み取り: 自分が今所属している国のメッセージのみ
+DROP POLICY IF EXISTS country_chat_select ON public.country_chat;
+CREATE POLICY country_chat_select ON public.country_chat
+  FOR SELECT USING (
+    country_id = (SELECT country_id FROM public.profiles WHERE id = auth.uid())
+  );
+-- 書き込みは RPC(SECURITY DEFINER)経由のみ。直接INSERTポリシーは作らない。
+
+-- 投稿RPC: サーバ側で country_id / username を確定（クライアント値を信用しない）
+CREATE OR REPLACE FUNCTION public.post_country_chat(p_message text)
+ RETURNS public.country_chat
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path = public
+AS $function$
+DECLARE
+  v_uid  uuid := auth.uid();
+  v_cid  uuid;
+  v_name text;
+  v_unaff boolean;
+  v_msg  text := btrim(coalesce(p_message,''));
+  v_row  public.country_chat;
+BEGIN
+  IF v_uid IS NULL THEN RAISE EXCEPTION 'ログインが必要です'; END IF;
+  IF v_msg = '' THEN RAISE EXCEPTION 'メッセージを入力してください'; END IF;
+  IF char_length(v_msg) > 200 THEN RAISE EXCEPTION 'メッセージは200文字以内です'; END IF;
+
+  SELECT country_id, username INTO v_cid, v_name FROM public.profiles WHERE id = v_uid;
+  IF v_cid IS NULL THEN RAISE EXCEPTION '国に所属していません'; END IF;
+  SELECT is_unaffiliated INTO v_unaff FROM public.countries WHERE id = v_cid;
+  IF v_unaff IS TRUE THEN RAISE EXCEPTION '非加盟国ではチャットを使えません'; END IF;
+
+  INSERT INTO public.country_chat (country_id, user_id, username, message)
+  VALUES (v_cid, v_uid, v_name, v_msg)
+  RETURNING * INTO v_row;
+  RETURN v_row;
+END;
+$function$;
+
 GRANT EXECUTE ON FUNCTION public.found_country(text, text, text, int) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.seek_asylum(uuid)              TO authenticated;
 GRANT EXECUTE ON FUNCTION public.expand_territory(numeric, int)  TO authenticated;
+GRANT EXECUTE ON FUNCTION public.post_country_chat(text)         TO authenticated;
