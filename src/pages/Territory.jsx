@@ -33,8 +33,6 @@ export default function Territory() {
   const [npcMembers, setNpcMembers] = useState([])  // NPC国のダミー国民
   const [npcDetail, setNpcDetail] = useState(null)  // 詳細表示中のNPC国民
   const [expandArea, setExpandArea] = useState(null)  // 領地拡大の出撃エリア
-  const [chat, setChat] = useState([])          // 国チャット（古い→新しい順）
-  const [chatInput, setChatInput] = useState('')
   const [tab, setTab] = useState('home')        // 'home'(自国) | 'world'(世界地図)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -70,16 +68,6 @@ export default function Territory() {
     const id = setInterval(() => setTick(t => t + 1), 1000)
     return () => clearInterval(id)
   }, [])
-
-  // 国チャットを定期取得（所属国があり非加盟国でないとき）
-  useEffect(() => {
-    const cid = me?.country_id
-    const c = cid ? countries.find(x => x.id === cid) : null
-    if (!cid || !c || c.is_unaffiliated) { setChat([]); return }
-    loadChat(cid)
-    const t = setInterval(() => loadChat(cid), 4000)
-    return () => clearInterval(t)
-  }, [me?.country_id, countries.length])
 
   // 自分の総合力を算出（街/ランキングと同じ calcEffectiveTotal）
   const computePower = async (prof) => {
@@ -161,27 +149,8 @@ export default function Territory() {
     offsetRef.current = 0
   }
 
-  const loadChat = async (cid) => {
-    if (!cid) return
-    const { data } = await supabase.from('country_chat')
-      .select('id, username, message, created_at, user_id')
-      .eq('country_id', cid)
-      .order('created_at', { ascending: false })
-      .limit(50)
-    setChat((data || []).slice().reverse())
-  }
-
   const flash = (t, c = '#ffcc44') => { setMsg({ t, c }); setTimeout(() => setMsg(null), 3200) }
   const reload = async () => { if (me) await loadAll(me) }
-
-  const doSendChat = async () => {
-    const m = chatInput.trim()
-    if (!m) return
-    setChatInput('')
-    const { error } = await supabase.rpc('post_country_chat', { p_message: m })
-    if (error) { flash(`送信失敗: ${error.message}`, '#ff5555'); setChatInput(m); return }
-    await loadChat(me?.country_id)
-  }
 
   const unaffiliated = countries.find(c => c.is_unaffiliated)
   const affiliated = countries.filter(c => !c.is_unaffiliated)
@@ -406,35 +375,6 @@ export default function Territory() {
                     </div>
                   )
                 })}
-              </div>
-            </div>
-
-            {/* 国チャット（同じ国の所属者のみ） */}
-            <div style={{ marginTop:'12px', paddingTop:'10px', borderTop:'1px solid #2a2010' }}>
-              <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'6px' }}>💬 国チャット（{myCountry.name}限定）</div>
-              <div style={{ background:'#060400', border:'1px solid #2a2010', borderRadius:'2px', padding:'8px', height:'180px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'4px', textAlign:'left' }}>
-                {chat.length === 0 && <div style={{ color:'#557755', fontSize:'11px' }}>まだメッセージはありません。最初の一言を送りましょう。</div>}
-                {chat.map(m => {
-                  const isSelf = m.user_id === me?.id
-                  const t = new Date(m.created_at)
-                  const hhmm = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`
-                  return (
-                    <div key={m.id} style={{ fontSize:'11px', lineHeight:1.5 }}>
-                      <span style={{ color: isSelf ? '#ffcc44' : '#88aaff' }}>{m.username}</span>
-                      <span style={{ color:'#556', fontSize:'9px', marginLeft:'5px' }}>{hhmm}</span>
-                      <div style={{ color:'#ddd', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{m.message}</div>
-                    </div>
-                  )
-                })}
-              </div>
-              <div style={{ display:'flex', gap:'6px', marginTop:'6px' }}>
-                <input value={chatInput} onChange={e => setChatInput(e.target.value)} maxLength={200}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); doSendChat() } }}
-                  placeholder="メッセージ（200文字以内）"
-                  style={{ flex:1, boxSizing:'border-box', padding:'6px 8px', background:'#020100', border:'1px solid #4a3a1a', color:'#ffe', fontFamily:'monospace', fontSize:'12px' }} />
-                <button onClick={doSendChat} disabled={!chatInput.trim() || locked}
-                  style={{ padding:'6px 12px', fontFamily:'monospace', fontSize:'12px', cursor: (chatInput.trim() && !locked) ? 'pointer' : 'default',
-                    background:'#2a1e02', border:`1px solid ${(chatInput.trim() && !locked) ? '#ffcc44' : '#403010'}`, color: (chatInput.trim() && !locked) ? '#ffcc44' : '#88774a' }}>送信</button>
               </div>
             </div>
           </div>
