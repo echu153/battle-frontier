@@ -113,7 +113,7 @@ BEGIN
 
   SELECT is_admin, territory_locked_until INTO v_admin, v_lock FROM public.profiles WHERE id = v_uid;
   IF v_admin IS NOT TRUE AND v_lock IS NOT NULL AND now() < v_lock THEN
-    RAISE EXCEPTION '亡命後1週間は領地システムを利用できません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
+    RAISE EXCEPTION '所属国を移った直後は1週間 建国できません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
   END IF;
 
   -- 領域(大陸)の指定チェック
@@ -334,9 +334,9 @@ BEGIN
   SELECT is_unaffiliated INTO v_unaff FROM public.countries WHERE id = v_cid;
   IF v_unaff IS TRUE THEN RAISE EXCEPTION '非加盟国では領地を広げられません'; END IF;
 
-  -- 亡命後ロック中は領地拡大不可（is_adminは除外）
+  -- 所属国を移った直後ロック中は領地拡大不可（is_adminは除外）
   IF v_admin IS NOT TRUE AND v_lock IS NOT NULL AND now() < v_lock THEN
-    RAISE EXCEPTION '亡命後1週間は領地システムを利用できません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
+    RAISE EXCEPTION '所属国を移った直後は1週間 領地を広げられません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
   END IF;
 
   IF NOT (p_area = ANY(coalesce(v_unlocked, ARRAY[1]))) THEN
@@ -494,7 +494,9 @@ FROM (
   WHERE g <> 7 AND g NOT IN (SELECT region FROM public.countries WHERE region IS NOT NULL)
   ORDER BY (g <> 5), g LIMIT 1
 ) f
-WHERE NOT EXISTS (SELECT 1 FROM public.countries WHERE name = 'ZONE');
+WHERE NOT EXISTS (SELECT 1 FROM public.countries WHERE name IN ('ZONE','Zoon'));
+-- 旧名Zoonがあれば改名
+UPDATE public.countries SET name = 'ZONE' WHERE name = 'Zoon';
 
 -- ZONE のダミー国民（全員 総合力10000・クラス相応のステ配分）
 INSERT INTO public.npc_country_members (country_id, name, rank, class, power, contrib, stats, sort)
