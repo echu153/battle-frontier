@@ -16,9 +16,9 @@ CREATE OR REPLACE FUNCTION raid_boss_for_slot(p_date date, p_slot int)
 RETURNS text LANGUAGE sql IMMUTABLE AS $$
   SELECT CASE
     WHEN ((p_date - DATE '2000-01-01') % 2) = 0 THEN
-      CASE WHEN p_slot = 21 THEN '黒龍ヴァルゼノク' ELSE 'あまざ' END
+      CASE WHEN p_slot = 21 THEN '黒龍ヴァルゼノク' ELSE '雨摩座' END
     ELSE
-      CASE WHEN p_slot = 21 THEN 'あまざ' ELSE '黒龍ヴァルゼノク' END
+      CASE WHEN p_slot = 21 THEN '雨摩座' ELSE '黒龍ヴァルゼノク' END
   END
 $$;
 

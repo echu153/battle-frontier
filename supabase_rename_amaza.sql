@@ -1,54 +1,32 @@
 -- ============================================================
--- 雨摩座専用 素材＋交換所（ヴァルゼノクの黒龍素材と対になる水禍素材）
---   ・通常素材: 水禍の雫 / レア素材: 雨禍の心核
---   ・claim_raid_rewards をボス別ドロップに（雨摩座=水禍素材 / ヴァルゼノク=黒龍素材）
---   ・交換所3種（濡羽杖アマザネ/哭雨の羽衣/水禍の蒼珠）
+-- 改名: 「あまざ」→「雨摩座」（ライブDB一括）
+--   ① 既存レイドボス行の名前変更
+--   ② raid_boss_for_slot / claim_raid_rewards をボス名「雨摩座」基準に更新
+--   ③ アイテム説明・お知らせ本文の「あまざ」を「雨摩座」に置換
 --   Supabase の SQL Editor でファイル全体を実行してください
 -- ============================================================
 
--- 1) 素材アイテム
-INSERT INTO items (name, description, effect, value) VALUES
-  ('水禍の雫',   '雨摩座の水禍の雫。交換所で使用できる。', 'material', 0),
-  ('雨禍の心核', '雨摩座の雨禍の心核。極めて希少な素材。交換所で使用できる。', 'material', 0)
-ON CONFLICT DO NOTHING;
+-- ① 既存ボス行
+UPDATE raid_boss SET boss_name = '雨摩座' WHERE boss_name = 'あまざ';
 
--- 2) 交換報酬の武器
---   濡羽杖アマザネ(杖S): 特攻80/特防20 ＋ 攻撃ヒット時 対象SPD-5%
-INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '濡羽杖アマザネ', 'staff', 'weapon', 's', 0, 0, 80, 20, 0
-WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name = '濡羽杖アマザネ');
---   哭雨の羽衣(防具S): 特攻20/特防80 ＋ 開幕1回だけ状態異常無効バフ
-INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '哭雨の羽衣', 'armor', 'armor', 's', 0, 0, 20, 80, 0
-WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name = '哭雨の羽衣');
---   水禍の蒼珠(装飾A): 特攻20/特防20/素早さ10 ＋ 魔法防御貫通+5%
-INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '水禍の蒼珠', 'accessory', 'accessory', 'a', 0, 0, 20, 20, 10
-WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name = '水禍の蒼珠');
+-- ③ アイテム説明・お知らせの文言
+UPDATE items SET description = REPLACE(description, 'あまざ', '雨摩座') WHERE description LIKE '%あまざ%';
+UPDATE exchange_shop SET description = REPLACE(description, 'あまざ', '雨摩座') WHERE description LIKE '%あまざ%';
+UPDATE announcements SET title = REPLACE(title, 'あまざ', '雨摩座'), content = REPLACE(content, 'あまざ', '雨摩座')
+  WHERE title LIKE '%あまざ%' OR content LIKE '%あまざ%';
 
--- 3) 交換所エントリー（タブ=レイドボス）。コストはヴァルゼノク装備と同等
-INSERT INTO exchange_shop (name, description, cost_items, reward_type, reward_weapon_name, reward_bonus_effect, max_per_player, active, sort_order, tab)
-SELECT '濡羽杖アマザネ',
-       'S級杖。特攻80 特防20。攻撃ヒット時、対象の素早さ-5%。',
-       '[{"item_name": "水禍の雫", "quantity": 50}, {"item_name": "雨禍の心核", "quantity": 1}]'::jsonb,
-       'weapon', '濡羽杖アマザネ', 'hit_spd_down_5', 5, true, 11, 'レイドボス'
-WHERE NOT EXISTS (SELECT 1 FROM exchange_shop WHERE name = '濡羽杖アマザネ');
+-- ② 出現ボス名（日替わり交互）
+CREATE OR REPLACE FUNCTION raid_boss_for_slot(p_date date, p_slot int)
+RETURNS text LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE
+    WHEN ((p_date - DATE '2000-01-01') % 2) = 0 THEN
+      CASE WHEN p_slot = 21 THEN '黒龍ヴァルゼノク' ELSE '雨摩座' END
+    ELSE
+      CASE WHEN p_slot = 21 THEN '雨摩座' ELSE '黒龍ヴァルゼノク' END
+  END
+$$;
 
-INSERT INTO exchange_shop (name, description, cost_items, reward_type, reward_weapon_name, reward_bonus_effect, max_per_player, active, sort_order, tab)
-SELECT '哭雨の羽衣',
-       'S級防具。特攻20 特防80。戦闘開始時、1回だけ状態異常を無効化するバフを獲得。',
-       '[{"item_name": "水禍の雫", "quantity": 50}, {"item_name": "雨禍の心核", "quantity": 1}]'::jsonb,
-       'weapon', '哭雨の羽衣', 'battle_start_ailment_shield', 5, true, 12, 'レイドボス'
-WHERE NOT EXISTS (SELECT 1 FROM exchange_shop WHERE name = '哭雨の羽衣');
-
-INSERT INTO exchange_shop (name, description, cost_items, reward_type, reward_weapon_name, reward_bonus_effect, max_per_player, active, sort_order, tab)
-SELECT '水禍の蒼珠',
-       'A級装飾品。特攻20 特防20 素早さ10。魔法防御貫通+5%。',
-       '[{"item_name": "水禍の雫", "quantity": 25}]'::jsonb,
-       'weapon', '水禍の蒼珠', 'mdef_pen_5', null, true, 13, 'レイドボス'
-WHERE NOT EXISTS (SELECT 1 FROM exchange_shop WHERE name = '水禍の蒼珠');
-
--- 4) claim_raid_rewards をボス別ドロップに（雨摩座=水禍素材／ヴァルゼノク=黒龍素材）
+-- ② 報酬関数のボス別素材判定を「雨摩座」に
 CREATE OR REPLACE FUNCTION claim_raid_rewards(p_raid_id uuid)
 RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
@@ -79,8 +57,8 @@ DECLARE
   v_gyaku_item_id int;
   v_gyaku_chance  float;
   v_got_gyaku     boolean := false;
-  v_mat_name      text;   -- 通常素材名（ボス別）
-  v_rare_name     text;   -- レア素材名（ボス別）
+  v_mat_name      text;
+  v_rare_name     text;
 BEGIN
   v_player_id := auth.uid();
   IF v_player_id IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
@@ -114,7 +92,6 @@ BEGIN
   END IF;
   v_scale_count := v_scale_min + (random() * (v_scale_max - v_scale_min))::int;
 
-  -- ★ボス別の素材名
   IF v_boss.boss_name = '雨摩座' THEN
     v_mat_name := '水禍の雫'; v_rare_name := '雨禍の心核';
   ELSE
@@ -144,7 +121,6 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- 通常素材（鱗 / 水禍の雫）
   SELECT id INTO v_scale_item_id FROM items WHERE name = v_mat_name LIMIT 1;
   IF v_scale_item_id IS NOT NULL THEN
     INSERT INTO player_items (player_id, item_id, quantity, equipped)
@@ -152,7 +128,6 @@ BEGIN
     ON CONFLICT (player_id, item_id) DO UPDATE SET quantity = player_items.quantity + v_scale_count;
   END IF;
 
-  -- レア素材（逆鱗 / 雨禍の心核）（確率）
   IF v_gyaku_chance > 0 AND random() < v_gyaku_chance THEN
     v_got_gyaku := true;
     SELECT id INTO v_gyaku_item_id FROM items WHERE name = v_rare_name LIMIT 1;

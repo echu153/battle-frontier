@@ -1,7 +1,7 @@
 -- ============================================================
--- レイド Phase 2: 21時/22時の2枠・日替わり交互（ヴァルゼノク／あまざ）
+-- レイド Phase 2: 21時/22時の2枠・日替わり交互（ヴァルゼノク／雨摩座）
 --   ・1日2体: 21:00〜21:30 と 22:00〜22:30（各30分・HP100万）
---   ・日替わりで交互: 偶数日 21時=ヴァルゼノク/22時=あまざ、奇数日は逆
+--   ・日替わりで交互: 偶数日 21時=ヴァルゼノク/22時=雨摩座、奇数日は逆
 --   ・各枠は別レイド（参加・貢献・報酬は枠ごと独立）
 --   ・管理者テスト出現(is_dev)も内包（Phase1未適用環境でもこの1本でOK）
 --   Supabase の SQL Editor でファイル全体を実行してください
@@ -24,9 +24,9 @@ CREATE OR REPLACE FUNCTION raid_boss_for_slot(p_date date, p_slot int)
 RETURNS text LANGUAGE sql IMMUTABLE AS $$
   SELECT CASE
     WHEN ((p_date - DATE '2000-01-01') % 2) = 0 THEN
-      CASE WHEN p_slot = 21 THEN '黒龍ヴァルゼノク' ELSE 'あまざ' END
+      CASE WHEN p_slot = 21 THEN '黒龍ヴァルゼノク' ELSE '雨摩座' END
     ELSE
-      CASE WHEN p_slot = 21 THEN 'あまざ' ELSE '黒龍ヴァルゼノク' END
+      CASE WHEN p_slot = 21 THEN '雨摩座' ELSE '黒龍ヴァルゼノク' END
   END
 $$;
 
