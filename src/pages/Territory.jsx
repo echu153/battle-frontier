@@ -160,26 +160,73 @@ export default function Territory() {
           <div style={{ color:msg.c, fontSize:'12px', border:`1px solid ${msg.c}55`, background:'#1a1200', padding:'8px 12px', marginBottom:'10px' }}>{msg.t}</div>
         )}
 
-        {/* 自分の所属 */}
-        <div style={box}>
-          <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'6px' }}>あなたの所属</div>
-          {inUnaffiliated ? (
+        {/* 非加盟国（未所属）の案内 */}
+        {inUnaffiliated && (
+          <div style={box}>
+            <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'6px' }}>あなたの所属</div>
             <div style={{ color:'#bbaa77', fontSize:'13px' }}>
               {unaffiliated?.emblem || '🏳'} 非加盟国（どこにも属していません）
               <div style={{ color:'#88774a', fontSize:'10px', marginTop:'4px' }}>キャラクターLV{FOUND_MIN_CHARLV}以上で建国、または下記の国へ亡命できます。</div>
             </div>
-          ) : (
-            <div>
-              <div style={{ color:'#ffddaa', fontSize:'14px' }}>{myCountry?.emblem} {myCountry?.name}　<span style={{ color:'#ffcc44' }}>【{me?.country_rank}】</span></div>
-              <div style={{ color:'#bbaa77', fontSize:'11px', marginTop:'4px' }}>
-                あなたの貢献度: <b style={{ color:'#ffe' }}>{Math.floor(me?.country_contrib || 0)}</b>
-                {prog?.next && <span style={{ color:'#88774a' }}>　次の階級「{prog.next}」まで あと {prog.remain}</span>}
-                {!prog?.next && <span style={{ color:'#88774a' }}>　（自動昇格の最高位に到達）</span>}
-              </div>
-              <div style={{ color:'#88774a', fontSize:'11px', marginTop:'2px' }}>あなたの総合力: {power}（領地拡大量に影響）</div>
+          </div>
+        )}
+
+        {/* ★自国ダッシュボード（所属中＝国専用ページ） */}
+        {!inUnaffiliated && myCountry && (
+          <div style={{ ...box, borderColor:'#ffcc44' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:'8px', flexWrap:'wrap' }}>
+              <div style={{ color:'#ffddaa', fontSize:'17px' }}>{myCountry.emblem} {myCountry.name}</div>
+              <div style={{ color:'#ffcc44', fontSize:'13px' }}>あなたの階級：【{me?.country_rank}】</div>
             </div>
-          )}
-        </div>
+            {myCountry.description && <div style={{ color:'#88774a', fontSize:'11px', marginTop:'4px', whiteSpace:'pre-wrap' }}>{myCountry.description}</div>}
+
+            {/* 国の概況 */}
+            <div style={{ display:'flex', gap:'16px', flexWrap:'wrap', marginTop:'10px', padding:'8px 10px', background:'#0a0700', borderRadius:'2px' }}>
+              <span style={{ color:'#bbaa77', fontSize:'12px' }}>🗺 領地 <b style={{ color:'#ffe' }}>{Math.floor(myCountry.territory)}</b></span>
+              <span style={{ color:'#bbaa77', fontSize:'12px' }}>👥 国民 <b style={{ color:'#ffe' }}>{memberCount(myCountry.id)}</b>人</span>
+              <span style={{ color:'#bbaa77', fontSize:'12px' }}>👑 元帥 {members.find(m => m.id === myCountry.founder_id)?.username || '—'}</span>
+            </div>
+
+            {/* 自分の貢献度・階級進捗 */}
+            <div style={{ color:'#bbaa77', fontSize:'11px', marginTop:'10px' }}>
+              あなたの貢献度: <b style={{ color:'#ffe' }}>{Math.floor(me?.country_contrib || 0)}</b>
+              {prog?.next && <span style={{ color:'#88774a' }}>　次の階級「{prog.next}」まで あと {prog.remain}</span>}
+              {!prog?.next && <span style={{ color:'#88774a' }}>　（自動昇格の最高位）</span>}
+            </div>
+
+            {/* 領地拡大 */}
+            <div style={{ marginTop:'10px', paddingTop:'10px', borderTop:'1px solid #2a2010' }}>
+              <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'4px' }}>🗺 領地を広げる（1時間に1回）</div>
+              <div style={{ color:'#bbaa77', fontSize:'11px', marginBottom:'8px' }}>
+                次の拡大で <b style={{ color:'#ffe' }}>+{expandGain(power)}</b> 獲得（あなたの総合力 {power} 依存）。領地と貢献度に同量加算されます。
+              </div>
+              <button disabled={busy || expandRemain > 0} onClick={doExpand}
+                style={{ padding:'8px 16px', fontFamily:'monospace', fontSize:'13px', cursor: (busy || expandRemain > 0) ? 'default' : 'pointer',
+                  background: expandRemain > 0 ? '#1a1200' : '#2a1e02', border:`1px solid ${expandRemain > 0 ? '#403010' : '#ffcc44'}`,
+                  color: expandRemain > 0 ? '#88774a' : '#ffcc44' }}>
+                {expandRemain > 0 ? `クールダウン中 残り ${fmtRemain(expandRemain)}` : '領地を広げる'}
+              </button>
+            </div>
+
+            {/* 国民一覧（階級順） */}
+            <div style={{ marginTop:'12px', paddingTop:'10px', borderTop:'1px solid #2a2010' }}>
+              <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'6px' }}>👥 国民一覧（{memberCount(myCountry.id)}人）</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
+                {membersOf(myCountry.id).map(m => {
+                  const isSelf = m.id === me?.id
+                  return (
+                    <div key={m.id} style={{ display:'flex', justifyContent:'space-between', fontSize:'11px',
+                      padding:'3px 6px', background: isSelf ? '#1a1200' : 'transparent', borderRadius:'2px',
+                      color: m.country_rank === '元帥' ? '#ffcc44' : '#bbaa77' }}>
+                      <span>【{m.country_rank || '二等兵'}】{m.username}{isSelf && ' (あなた)'}</span>
+                      <span style={{ color:'#88774a' }}>貢献 {Math.floor(m.country_contrib || 0)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 世界地図（9大陸＝9領域） */}
         <div style={{ ...box, padding:'8px' }}>
@@ -217,22 +264,6 @@ export default function Territory() {
             </div>
           )}
         </div>
-
-        {/* 領地拡大（所属国がある時のみ） */}
-        {!inUnaffiliated && (
-          <div style={box}>
-            <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'6px' }}>🗺 領地を広げる（1時間に1回）</div>
-            <div style={{ color:'#bbaa77', fontSize:'11px', marginBottom:'8px' }}>
-              次の拡大で <b style={{ color:'#ffe' }}>+{expandGain(power)}</b> 獲得（総合力 {power} 依存）
-            </div>
-            <button disabled={busy || expandRemain > 0} onClick={doExpand}
-              style={{ padding:'8px 16px', fontFamily:'monospace', fontSize:'13px', cursor: (busy || expandRemain > 0) ? 'default' : 'pointer',
-                background: expandRemain > 0 ? '#1a1200' : '#2a1e02', border:`1px solid ${expandRemain > 0 ? '#403010' : '#ffcc44'}`,
-                color: expandRemain > 0 ? '#88774a' : '#ffcc44' }}>
-              {expandRemain > 0 ? `クールダウン中 残り ${fmtRemain(expandRemain)}` : '領地を広げる'}
-            </button>
-          </div>
-        )}
 
         {/* 建国フォーム */}
         {inUnaffiliated && (
