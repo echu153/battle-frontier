@@ -35,6 +35,7 @@ export default function Territory() {
   const [expandArea, setExpandArea] = useState(null)  // 領地拡大の出撃エリア
   const [tab, setTab] = useState('home')        // 'home'(自国) | 'world'(世界地図)
   const [expandMsg, setExpandMsg] = useState(null)  // 領地拡大の結果（ボタン下に表示）
+  const [openRosters, setOpenRosters] = useState({})  // 国一覧の国民展開状態 {countryId:true}
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [, setTick] = useState(0)
@@ -521,20 +522,28 @@ export default function Territory() {
                   </button>
                 )}
               </div>
-              {/* 国民の階級一覧（実プレイヤー＋NPCダミー） */}
+              {/* 国民の階級一覧（展開式・実プレイヤー＋NPCダミー） */}
               {(membersOf(c.id).length > 0 || npcMembersOf(c.id).length > 0) && (
-                <div style={{ marginTop:'8px', borderTop:'1px solid #2a2010', paddingTop:'6px', display:'flex', flexWrap:'wrap', gap:'8px' }}>
-                  {membersOf(c.id).map(m => (
-                    <span key={m.id} onClick={() => nav(`/profile/${m.id}`)} style={{ fontSize:'10px', cursor:'pointer', textDecoration:'underline' }}>
-                      <b style={{ color: rankColor(m.country_rank || '二等兵') }}>【{m.country_rank || '二等兵'}】</b><span style={{ color:'#bbddff' }}>{m.username}（総合力{powerMap[m.id] ?? '—'}）</span>
-                    </span>
-                  ))}
-                  {npcMembersOf(c.id).map(m => (
-                    <span key={`npc-${m.id}`} onClick={() => setNpcDetail(m)}
-                      style={{ fontSize:'10px', cursor:'pointer', textDecoration:'underline', color:'#bbaa77' }}>
-                      <b style={{ color: rankColor(m.rank) }}>【{m.rank}】</b>{m.name}{m.class ? `・${m.class}` : ''}（総合力{m.power}）
-                    </span>
-                  ))}
+                <div style={{ marginTop:'8px', borderTop:'1px solid #2a2010', paddingTop:'6px' }}>
+                  <button onClick={() => setOpenRosters(o => ({ ...o, [c.id]: !o[c.id] }))}
+                    style={{ background:'none', border:'none', color:'#bbaa77', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', padding:0 }}>
+                    {openRosters[c.id] ? '▼' : '▶'} 👥 国民一覧（{memberCount(c.id)}人）
+                  </button>
+                  {openRosters[c.id] && (
+                    <div style={{ marginTop:'6px', display:'flex', flexWrap:'wrap', gap:'8px' }}>
+                      {membersOf(c.id).map(m => (
+                        <span key={m.id} onClick={() => nav(`/profile/${m.id}`)} style={{ fontSize:'10px', cursor:'pointer', textDecoration:'underline' }}>
+                          <b style={{ color: rankColor(m.country_rank || '二等兵') }}>【{m.country_rank || '二等兵'}】</b><span style={{ color:'#bbddff' }}>{m.username}（総合力{powerMap[m.id] ?? '—'}）</span>
+                        </span>
+                      ))}
+                      {npcMembersOf(c.id).map(m => (
+                        <span key={`npc-${m.id}`} onClick={() => setNpcDetail(m)}
+                          style={{ fontSize:'10px', cursor:'pointer', textDecoration:'underline', color:'#bbaa77' }}>
+                          <b style={{ color: rankColor(m.rank) }}>【{m.rank}】</b>{m.name}{m.class ? `・${m.class}` : ''}（総合力{m.power}）
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -614,7 +623,7 @@ export default function Territory() {
                 ))}
               </div>
             )}
-            <div style={{ color:'#557755', fontSize:'10px', marginTop:'10px' }}>※ NPCキャラクター（Zoon所属）</div>
+            <div style={{ color:'#557755', fontSize:'10px', marginTop:'10px' }}>※ NPCキャラクター（{countryName(npcDetail.country_id)}所属）</div>
           </div>
         </div>
       )}

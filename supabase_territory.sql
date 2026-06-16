@@ -458,20 +458,20 @@ BEGIN
 END;
 $function$;
 
--- NPC国「Zoon」を空き大陸に設置（中央 region=5 を優先、無ければ最小の空き）
+-- NPC国「ZONE」を空き大陸に設置（中央 region=5 を優先、無ければ最小の空き）
 INSERT INTO public.countries (name, emblem, description, region, is_npc, is_unaffiliated, npc_rate, npc_last_tick, territory)
-SELECT 'Zoon', '🦁', '謎多き古き大国。誰が治めているのかは定かではない。', f.region, true, false, 50, now(), 0
+SELECT 'ZONE', '🦁', '謎多き古き大国。誰が治めているのかは定かではない。', f.region, true, false, 50, now(), 0
 FROM (
   SELECT g AS region FROM generate_series(1,9) g
   WHERE g <> 7 AND g NOT IN (SELECT region FROM public.countries WHERE region IS NOT NULL)
   ORDER BY (g <> 5), g LIMIT 1
 ) f
-WHERE NOT EXISTS (SELECT 1 FROM public.countries WHERE name = 'Zoon');
+WHERE NOT EXISTS (SELECT 1 FROM public.countries WHERE name = 'ZONE');
 
--- Zoon のダミー国民（全員 総合力10000・クラス相応のステ配分）
+-- ZONE のダミー国民（全員 総合力10000・クラス相応のステ配分）
 INSERT INTO public.npc_country_members (country_id, name, rank, class, power, contrib, stats, sort)
 SELECT z.id, v.name, v.rank, v.class, 10000, v.contrib, v.stats, v.sort
-FROM (SELECT id FROM public.countries WHERE name = 'Zoon' AND is_npc LIMIT 1) z,
+FROM (SELECT id FROM public.countries WHERE name = 'ZONE' AND is_npc LIMIT 1) z,
 (VALUES
   ('りおん','元帥','魔銃士',   6000, '{"hp":4000,"mp":2500,"atk":800,"def":800,"matk":5400,"mdef":1200,"spd":1800}'::jsonb, 1),
   ('れいし','副元帥','賢者',   4000, '{"hp":4000,"mp":4000,"atk":300,"def":900,"matk":4200,"mdef":2200,"spd":1200}'::jsonb, 2),
@@ -480,9 +480,9 @@ FROM (SELECT id FROM public.countries WHERE name = 'Zoon' AND is_npc LIMIT 1) z,
   ('とま','大将','体術師',     2000, '{"hp":5000,"mp":1000,"atk":4200,"def":1600,"matk":200,"mdef":1300,"spd":2000}'::jsonb, 5),
   ('えちゅ','大将','暗殺者',    2000, '{"hp":3500,"mp":1000,"atk":4500,"def":1000,"matk":200,"mdef":1200,"spd":2550}'::jsonb, 6)
 ) AS v(name, rank, class, contrib, stats, sort)
-WHERE EXISTS (SELECT 1 FROM public.countries WHERE name = 'Zoon' AND is_npc)
+WHERE EXISTS (SELECT 1 FROM public.countries WHERE name = 'ZONE' AND is_npc)
   AND NOT EXISTS (SELECT 1 FROM public.npc_country_members nm
-                  JOIN public.countries c ON c.id = nm.country_id WHERE c.name = 'Zoon');
+                  JOIN public.countries c ON c.id = nm.country_id WHERE c.name = 'ZONE');
 
 GRANT EXECUTE ON FUNCTION public.found_country(text, text, text, int) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.seek_asylum(uuid)              TO authenticated;
