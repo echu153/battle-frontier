@@ -31,6 +31,7 @@ export default function Territory() {
   const [catRows, setCatRows] = useState([])    // country_area_territory 全行
   const [powerMap, setPowerMap] = useState({})  // playerId -> 総合力
   const [npcMembers, setNpcMembers] = useState([])  // NPC国のダミー国民
+  const [npcDetail, setNpcDetail] = useState(null)  // 詳細表示中のNPC国民
   const [expandArea, setExpandArea] = useState(null)  // 領地拡大の出撃エリア
   const [chat, setChat] = useState([])          // 国チャット（古い→新しい順）
   const [chatInput, setChatInput] = useState('')
@@ -143,7 +144,7 @@ export default function Territory() {
       supabase.from('countries').select('*'),
       supabase.from('profiles').select('id, username, avatar_url, country_id, country_rank, country_contrib, lv, char_lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, retraining, museum_atk, museum_def, museum_matk, museum_mdef, museum_spd, museum_hp, museum_mp, fishing_atk, fishing_def, fishing_matk, fishing_mdef, fishing_spd, fishing_hp, fishing_mp, ability_title_id'),
       supabase.from('country_area_territory').select('country_id, area_id, amount'),
-      supabase.from('npc_country_members').select('id, country_id, name, rank, class, power, contrib, sort'),
+      supabase.from('npc_country_members').select('id, country_id, name, rank, class, power, contrib, stats, sort'),
     ])
     setCountries(cs || [])
     setMembers(mem || [])
@@ -546,7 +547,8 @@ export default function Territory() {
                     </span>
                   ))}
                   {npcMembersOf(c.id).map(m => (
-                    <span key={`npc-${m.id}`} style={{ fontSize:'10px', color: m.rank === '元帥' ? '#ffcc44' : '#bbaa77' }}>
+                    <span key={`npc-${m.id}`} onClick={() => setNpcDetail(m)}
+                      style={{ fontSize:'10px', cursor:'pointer', textDecoration:'underline', color: m.rank === '元帥' ? '#ffcc44' : '#bbaa77' }}>
                       【{m.rank}】{m.name}{m.class ? `・${m.class}` : ''}（総合力{m.power}）
                     </span>
                   ))}
@@ -606,6 +608,33 @@ export default function Territory() {
         )}
         </>)}
       </div>
+
+      {/* NPC国民の詳細（クラス・総合力・ステ内訳） */}
+      {npcDetail && (
+        <div onClick={() => setNpcDetail(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:300, padding:'16px' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:'#140e02', border:'1px solid #ffcc44', borderRadius:'4px', padding:'16px', maxWidth:'320px', width:'100%', fontFamily:'monospace' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
+              <div style={{ color:'#ffddaa', fontSize:'15px' }}>👤 {npcDetail.name}</div>
+              <button onClick={() => setNpcDetail(null)} style={{ background:'none', border:'1px solid #885533', color:'#aa7755', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>×</button>
+            </div>
+            <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'4px' }}>【{npcDetail.rank}】{npcDetail.class || '—'}</div>
+            <div style={{ color:'#bbaa77', fontSize:'12px', marginBottom:'10px' }}>総合力 <b style={{ color:'#ffe' }}>{npcDetail.power}</b></div>
+            {npcDetail.stats && (
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px 12px', fontSize:'12px' }}>
+                {[['HP','hp'],['MP','mp'],['攻撃','atk'],['防御','def'],['特殊攻撃','matk'],['特殊防御','mdef'],['素早さ','spd']].map(([lbl, k]) => (
+                  <div key={k} style={{ display:'flex', justifyContent:'space-between', borderBottom:'1px solid #2a2010', padding:'2px 0' }}>
+                    <span style={{ color:'#88774a' }}>{lbl}</span>
+                    <span style={{ color:'#ddd' }}>{npcDetail.stats[k] ?? '—'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ color:'#557755', fontSize:'10px', marginTop:'10px' }}>※ NPCキャラクター（Zoon所属）</div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
