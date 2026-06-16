@@ -1,0 +1,285 @@
+// ============================================================
+// 領地（国・建国）システム  ※is_admin限定で先行公開
+//   ・9カ国構成（うち1つは固定の「非加盟国」）。最大8カ国をプレイヤーが建国できる。
+//   ・建国: キャラクターLV500以上＆非加盟国に居ること。
+//   ・亡命: 他国への加入/離脱は1週間に1回まで。
+//   ・領地拡大: 1時間に1回・総合力に応じて獲得量が変わる。
+//   ・階級は貢献度で自動決定（建国者=元帥固定）。
+//   ・全ての時刻・操作は SECURITY DEFINER RPC 経由（supabase_territory.sql）。
+// ============================================================
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from '../supabase'
+import { calcEffectiveTotal } from '../lib/stats'
+import { charmPlayerBonus } from '../constants/pets'
+import {
+  FOUND_MIN_CHARLV, MAX_COUNTRIES, rankOrder, rankProgress,
+  expandGain, EXPAND_COOLDOWN_MS, fmtRemain,
+} from '../lib/territory'
+
+const EMBLEMS = ['🏰','⚔','🦅','🐺','🌙','☀','🔥','❄','🐉','⭐','🛡','👑']
+
+export default function Territory() {
+  const nav = useNavigate()
+  const [loading, setLoading] = useState(true)
+  const [me, setMe] = useState(null)            // profile（自分）
+  const [power, setPower] = useState(0)         // 総合力
+  const [countries, setCountries] = useState([])
+  const [members, setMembers] = useState([])    // 全プレイヤーの所属/階級（軽量）
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+  const [, setTick] = useState(0)
+  const offsetRef = useRef(0)
+  // 建国フォーム
+  const [fName, setFName] = useState('')
+  const [fEmblem, setFEmblem] = useState('🏰')
+  const [fDesc, setFDesc] = useState('')
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { nav('/login'); return }
+      const { data: prof } = await supabase.from('profiles')
+        .select('*').eq('id', user.id).maybeSingle()
+      if (!prof) { nav('/game'); return }
+      if (!prof.is_admin) { nav('/game'); return }   // ★is_admin限定の先行公開
+      await loadAll(prof)
+      setLoading(false)
+    })()
+    const id = setInterval(() => setTick(t => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  // 自分の総合力を算出（街/ランキングと同じ calcEffectiveTotal）
+  const computePower = async (prof) => {
+    try {
+      const [{ data: eq }, { data: pf }, { data: pets }] = await Promise.all([
+        supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', prof.id).eq('equipped', true),
+        supabase.from('proficiency').select('player_id, equipment_id, prof_lv').eq('player_id', prof.id),
+        supabase.from('pets').select('owner_id, charm_id').eq('owner_id', prof.id).eq('is_active', true),
+      ])
+      let petCharm = null
+      const charmId = (pets || []).find(p => p.charm_id)?.charm_id
+      if (charmId) {
+        const { data: c } = await supabase.from('player_charms').select('*').eq('id', charmId).maybeSingle()
+        if (c) petCharm = charmPlayerBonus(c)
+      }
+      let tb = null
+      if (prof.ability_title_id) {
+        const { data: t } = await supabase.from('titles').select('*').eq('id', prof.ability_title_id).maybeSingle()
+        tb = t || null
+      }
+      return calcEffectiveTotal({ ...prof, petCharm }, eq || [], pf || [], tb)
+    } catch { return 0 }
+  }
+
+  const loadAll = async (prof) => {
+    const [{ data: cs }, { data: mem }] = await Promise.all([
+      supabase.from('countries').select('*'),
+      supabase.from('profiles').select('id, username, country_id, country_rank, country_contrib'),
+    ])
+    setCountries(cs || [])
+    setMembers(mem || [])
+    const { data: fresh } = await supabase.from('profiles').select('*').eq('id', prof.id).maybeSingle()
+    setMe(fresh || prof)
+    setPower(await computePower(fresh || prof))
+    offsetRef.current = 0
+  }
+
+  const flash = (t, c = '#ffcc44') => { setMsg({ t, c }); setTimeout(() => setMsg(null), 3200) }
+  const reload = async () => { if (me) await loadAll(me) }
+
+  const unaffiliated = countries.find(c => c.is_unaffiliated)
+  const affiliated = countries.filter(c => !c.is_unaffiliated)
+  const myCountry = me?.country_id ? countries.find(c => c.id === me.country_id) : null
+  const inUnaffiliated = !myCountry || myCountry.is_unaffiliated
+  const memberCount = (cid) => members.filter(m => m.country_id === cid).length
+  const membersOf = (cid) => members.filter(m => m.country_id === cid)
+    .sort((a, b) => rankOrder(b.country_rank) - rankOrder(a.country_rank))
+
+  // 領地拡大クールダウン
+  const lastExpand = me?.last_expand_at ? new Date(me.last_expand_at).getTime() : 0
+  const expandRemain = Math.max(0, lastExpand + EXPAND_COOLDOWN_MS - Date.now())
+  // 亡命クールダウン
+  const lastAsylum = me?.last_asylum_at ? new Date(me.last_asylum_at).getTime() : 0
+  const asylumRemain = Math.max(0, lastAsylum + 7 * 24 * 60 * 60 * 1000 - Date.now())
+
+  const canFound = inUnaffiliated && (me?.char_lv || 0) >= FOUND_MIN_CHARLV && affiliated.length < MAX_COUNTRIES
+
+  const doFound = async () => {
+    if (!fName.trim()) { flash('国名を入力してください', '#ff5555'); return }
+    setBusy(true)
+    const { error } = await supabase.rpc('found_country', { p_name: fName.trim(), p_emblem: fEmblem, p_desc: fDesc.trim() })
+    setBusy(false)
+    if (error) { flash(`建国失敗: ${error.message}`, '#ff5555'); return }
+    flash(`👑 ${fName.trim()} を建国しました！あなたは元帥です`)
+    setFName(''); setFDesc('')
+    await reload()
+  }
+
+  const doAsylum = async (cid, name) => {
+    if (!window.confirm(`「${name}」に亡命しますか？\n亡命は1週間に1回までです。`)) return
+    setBusy(true)
+    const { error } = await supabase.rpc('seek_asylum', { p_country_id: cid })
+    setBusy(false)
+    if (error) { flash(`亡命失敗: ${error.message}`, '#ff5555'); return }
+    flash(`🏳 ${name} に亡命しました（二等兵から再スタート）`)
+    await reload()
+  }
+
+  const doExpand = async () => {
+    setBusy(true)
+    const { data: res, error } = await supabase.rpc('expand_territory', { p_power: power })
+    setBusy(false)
+    if (error) { flash(`領地拡大失敗: ${error.message}`, '#ff5555'); return }
+    flash(`🗺 領地を ${res.gain} 拡大！（あなたの貢献度 ${Math.floor(res.contrib)} ／ 階級 ${res.rank}）`)
+    await reload()
+  }
+
+  if (loading) return <div style={{ color:'#ffcc44', textAlign:'center', marginTop:'40vh', fontFamily:'monospace' }}>読み込み中...</div>
+
+  const box = { border:'1px solid #4a3a1a', background:'#140e02', padding:'12px', marginBottom:'10px', borderRadius:'2px' }
+  const prog = myCountry && !myCountry.is_unaffiliated ? rankProgress(me?.country_contrib) : null
+
+  return (
+    <div style={{ minHeight:'100vh', background:'#0a0800', padding:'16px', fontFamily:'monospace' }}>
+      <div style={{ maxWidth:'720px', margin:'0 auto' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #403010', paddingBottom:'8px', marginBottom:'12px' }}>
+          <div style={{ color:'#ffcc44', fontSize:'15px', letterSpacing:'3px' }}>🏰 領地</div>
+          <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
+        </div>
+
+        <div style={{ color:'#aa8844', fontSize:'10px', marginBottom:'10px' }}>※ is_admin限定で先行公開中。調整完了後に一般公開予定。</div>
+
+        {msg && (
+          <div style={{ color:msg.c, fontSize:'12px', border:`1px solid ${msg.c}55`, background:'#1a1200', padding:'8px 12px', marginBottom:'10px' }}>{msg.t}</div>
+        )}
+
+        {/* 自分の所属 */}
+        <div style={box}>
+          <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'6px' }}>あなたの所属</div>
+          {inUnaffiliated ? (
+            <div style={{ color:'#bbaa77', fontSize:'13px' }}>
+              {unaffiliated?.emblem || '🏳'} 非加盟国（どこにも属していません）
+              <div style={{ color:'#88774a', fontSize:'10px', marginTop:'4px' }}>キャラクターLV{FOUND_MIN_CHARLV}以上で建国、または下記の国へ亡命できます。</div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ color:'#ffddaa', fontSize:'14px' }}>{myCountry?.emblem} {myCountry?.name}　<span style={{ color:'#ffcc44' }}>【{me?.country_rank}】</span></div>
+              <div style={{ color:'#bbaa77', fontSize:'11px', marginTop:'4px' }}>
+                あなたの貢献度: <b style={{ color:'#ffe' }}>{Math.floor(me?.country_contrib || 0)}</b>
+                {prog?.next && <span style={{ color:'#88774a' }}>　次の階級「{prog.next}」まで あと {prog.remain}</span>}
+                {!prog?.next && <span style={{ color:'#88774a' }}>　（自動昇格の最高位に到達）</span>}
+              </div>
+              <div style={{ color:'#88774a', fontSize:'11px', marginTop:'2px' }}>あなたの総合力: {power}（領地拡大量に影響）</div>
+            </div>
+          )}
+        </div>
+
+        {/* 領地拡大（所属国がある時のみ） */}
+        {!inUnaffiliated && (
+          <div style={box}>
+            <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'6px' }}>🗺 領地を広げる（1時間に1回）</div>
+            <div style={{ color:'#bbaa77', fontSize:'11px', marginBottom:'8px' }}>
+              次の拡大で <b style={{ color:'#ffe' }}>+{expandGain(power)}</b> 獲得（総合力 {power} 依存）
+            </div>
+            <button disabled={busy || expandRemain > 0} onClick={doExpand}
+              style={{ padding:'8px 16px', fontFamily:'monospace', fontSize:'13px', cursor: (busy || expandRemain > 0) ? 'default' : 'pointer',
+                background: expandRemain > 0 ? '#1a1200' : '#2a1e02', border:`1px solid ${expandRemain > 0 ? '#403010' : '#ffcc44'}`,
+                color: expandRemain > 0 ? '#88774a' : '#ffcc44' }}>
+              {expandRemain > 0 ? `クールダウン中 残り ${fmtRemain(expandRemain)}` : '領地を広げる'}
+            </button>
+          </div>
+        )}
+
+        {/* 建国フォーム */}
+        {inUnaffiliated && (
+          <div style={box}>
+            <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'8px' }}>👑 建国する</div>
+            {!canFound ? (
+              <div style={{ color:'#aa7755', fontSize:'11px', lineHeight:'1.8' }}>
+                {(me?.char_lv || 0) < FOUND_MIN_CHARLV && <>・キャラクターLV{FOUND_MIN_CHARLV}以上が必要です（現在 LV{me?.char_lv || 0}）<br /></>}
+                {affiliated.length >= MAX_COUNTRIES && <>・建国できる枠が空いていません（最大{MAX_COUNTRIES}カ国）<br /></>}
+              </div>
+            ) : (
+              <div>
+                <div style={{ marginBottom:'8px' }}>
+                  <input value={fName} onChange={e => setFName(e.target.value)} maxLength={20} placeholder="国名（20文字以内）"
+                    style={{ width:'100%', boxSizing:'border-box', padding:'6px 8px', background:'#020100', border:'1px solid #4a3a1a', color:'#ffe', fontFamily:'monospace', fontSize:'13px' }} />
+                </div>
+                <div style={{ marginBottom:'8px', display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                  {EMBLEMS.map(e => (
+                    <button key={e} onClick={() => setFEmblem(e)}
+                      style={{ width:'34px', height:'30px', fontSize:'15px', cursor:'pointer',
+                        background: fEmblem === e ? '#2a1e02' : '#020100', border:`1px solid ${fEmblem === e ? '#ffcc44' : '#4a3a1a'}` }}>{e}</button>
+                  ))}
+                </div>
+                <div style={{ marginBottom:'8px' }}>
+                  <textarea value={fDesc} onChange={e => setFDesc(e.target.value)} maxLength={200} placeholder="国の説明文（任意・200文字以内）" rows={2}
+                    style={{ width:'100%', boxSizing:'border-box', padding:'6px 8px', background:'#020100', border:'1px solid #4a3a1a', color:'#ffe', fontFamily:'monospace', fontSize:'12px', resize:'vertical' }} />
+                </div>
+                <button disabled={busy} onClick={doFound}
+                  style={{ padding:'8px 16px', fontFamily:'monospace', fontSize:'13px', cursor: busy ? 'default' : 'pointer',
+                    background:'#2a1e02', border:'1px solid #ffcc44', color:'#ffcc44' }}>{fEmblem} 建国する</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 国一覧 */}
+        <div style={{ color:'#ffcc44', fontSize:'12px', margin:'14px 0 8px' }}>
+          🌍 国一覧（{affiliated.length} / {MAX_COUNTRIES} カ国）
+        </div>
+        {affiliated.length === 0 && (
+          <div style={{ color:'#88774a', fontSize:'12px', ...box }}>まだ建国された国はありません。最初の建国者になりましょう。</div>
+        )}
+        {affiliated.sort((a, b) => b.territory - a.territory).map(c => {
+          const isMine = c.id === me?.country_id
+          const founder = members.find(m => m.id === c.founder_id)
+          return (
+            <div key={c.id} style={{ ...box, borderColor: isMine ? '#ffcc44' : '#4a3a1a' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'8px' }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ color:'#ffddaa', fontSize:'14px' }}>{c.emblem} {c.name} {isMine && <span style={{ color:'#ffcc44', fontSize:'11px' }}>（所属中）</span>}</div>
+                  <div style={{ color:'#bbaa77', fontSize:'11px', marginTop:'4px' }}>
+                    🗺 領地 <b style={{ color:'#ffe' }}>{Math.floor(c.territory)}</b>　👥 {memberCount(c.id)}人　元帥: {founder?.username || '—'}
+                  </div>
+                  {c.description && <div style={{ color:'#88774a', fontSize:'11px', marginTop:'4px', whiteSpace:'pre-wrap' }}>{c.description}</div>}
+                </div>
+                {!isMine && me?.country_rank !== '元帥' && (
+                  <button disabled={busy || asylumRemain > 0} onClick={() => doAsylum(c.id, c.name)}
+                    style={{ padding:'5px 10px', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap', cursor:(busy || asylumRemain > 0) ? 'default' : 'pointer',
+                      background: asylumRemain > 0 ? '#1a1200' : '#2a1e02', border:`1px solid ${asylumRemain > 0 ? '#403010' : '#ffaa44'}`, color: asylumRemain > 0 ? '#88774a' : '#ffaa44' }}>
+                    {asylumRemain > 0 ? `亡命 ${fmtRemain(asylumRemain)}` : '亡命する'}
+                  </button>
+                )}
+              </div>
+              {/* 国民の階級一覧 */}
+              {membersOf(c.id).length > 0 && (
+                <div style={{ marginTop:'8px', borderTop:'1px solid #2a2010', paddingTop:'6px', display:'flex', flexWrap:'wrap', gap:'6px' }}>
+                  {membersOf(c.id).map(m => (
+                    <span key={m.id} style={{ fontSize:'10px', color: m.country_rank === '元帥' ? '#ffcc44' : '#bbaa77' }}>
+                      【{m.country_rank || '二等兵'}】{m.username}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        {/* 非加盟国へ離脱（所属国があり元帥でない時） */}
+        {!inUnaffiliated && me?.country_rank !== '元帥' && unaffiliated && (
+          <div style={{ ...box, marginTop:'14px' }}>
+            <div style={{ color:'#aa7755', fontSize:'11px', marginBottom:'6px' }}>所属国を抜けて非加盟国に戻る（亡命扱い・1週間に1回）</div>
+            <button disabled={busy || asylumRemain > 0} onClick={() => doAsylum(unaffiliated.id, '非加盟国')}
+              style={{ padding:'6px 12px', fontFamily:'monospace', fontSize:'11px', cursor:(busy || asylumRemain > 0) ? 'default' : 'pointer',
+                background:'#1a1000', border:'1px solid #885533', color:'#aa7755' }}>
+              {asylumRemain > 0 ? `離脱まで 残り ${fmtRemain(asylumRemain)}` : '非加盟国に戻る'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

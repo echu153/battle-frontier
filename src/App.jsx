@@ -30,6 +30,7 @@ const StatusDetail = lazy(() => import('./pages/StatusDetail'))
 const Abyss = lazy(() => import('./pages/Abyss'))
 const Tenkyuu = lazy(() => import('./pages/Tenkyuu'))
 const Alchemy = lazy(() => import('./pages/Alchemy'))
+const Territory = lazy(() => import('./pages/Territory'))
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -163,6 +164,7 @@ function App() {
         <Route path="/abyss" element={session ? <Abyss /> : <Navigate to="/login" />} />
         <Route path="/tenkyuu" element={session ? <Tenkyuu /> : <Navigate to="/login" />} />
         <Route path="/alchemy" element={session ? <Alchemy /> : <Navigate to="/login" />} />
+        <Route path="/territory" element={session ? <Territory /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
       </Suspense>
