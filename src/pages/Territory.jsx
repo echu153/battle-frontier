@@ -53,9 +53,18 @@ export default function Territory() {
         .select('*').eq('id', user.id).maybeSingle()
       if (!prof) { nav('/game'); return }
       if (!prof.is_admin) { nav('/game'); return }   // ★is_admin限定の先行公開
-      await supabase.rpc('tick_npc_countries').catch(() => {})  // NPC国の領地を経過時間ぶん加算
-      await loadAll(prof)
-      setLoading(false)
+      try {
+        await supabase.rpc('tick_npc_countries')  // NPC国の領地を経過時間ぶん加算（未適用でも続行）
+      } catch { /* RPC未適用などは無視 */ }
+      try {
+        await loadAll(prof)
+      } catch (e) {
+        // 読み込み失敗でも画面は表示する（無限「読み込み中」を防ぐ）
+        setMe(prof)
+        flash(`一部の読み込みに失敗しました: ${e?.message || e}`, '#ff5555')
+      } finally {
+        setLoading(false)
+      }
     })()
     const id = setInterval(() => setTick(t => t + 1), 1000)
     return () => clearInterval(id)
