@@ -793,7 +793,7 @@ export default function RaidBoss() {
                   <div style={{ color: '#ffcc44' }}>{reward.tier}ティア　貢献度: {reward.contribution_pct}%</div>
                   <div style={{ color: '#ffcc00' }}>Gold: +{fmt(reward.gold)}</div>
                   <div style={{ color: '#6699cc' }}>
-                    {(reward.stones || []).map(s => `強化石(${s})×3`).join('　')}
+                    {(reward.stones || []).map(s => `強化石(${s})×1`).join('　')}
                   </div>
                   <div style={{ color: '#ff66cc' }}>宝石({reward.gem_rank}) × {reward.gem_count}個（ランダム種類）</div>
                   <div style={{ color: '#cc8844' }}>{reward.mat_name || '黒龍の鱗'} × {reward.scale_count}個</div>
@@ -805,7 +805,7 @@ export default function RaidBoss() {
               ) : (
                 <>
                   <div style={{ fontSize: '12px', color: '#aaaaaa', marginBottom: '10px', lineHeight: '1.8' }}>
-                    予定リワード: {myTier.tier}ティア / Gold {fmt(myTier.gold)} / 強化石{myTier.stones.map(s=>`(${s})`).join('・')}×3 / 宝石{myTier.gemRank}×{myTier.gemCount}
+                    予定リワード: {myTier.tier}ティア / Gold {fmt(myTier.gold)} / 強化石{myTier.stones.map(s=>`(${s})`).join('・')}×1 / 宝石{myTier.gemRank}×{myTier.gemCount}
                   </div>
                   {claimError && <div style={{ color: '#ff4444', fontSize: '12px', marginBottom: '8px' }}>{claimError}</div>}
                   <button onClick={handleClaim} disabled={claiming}
@@ -871,7 +871,7 @@ function RewardTable() {
             <span style={{ color: '#ffcc00' }}>Gold {fmt(t.gold)}</span>
           </div>
           <div style={{ color: '#446688', marginTop: '2px' }}>
-            強化石{t.stones.map(s=>`(${s})`).join('・')}×3　宝石{t.gemRank}×{t.gemCount}　通常素材×{t.scaleCount}{t.tier !== 'D' ? `　レア素材${t.rareChance}` : ''}
+            強化石{t.stones.map(s=>`(${s})`).join('・')}×1　宝石{t.gemRank}×{t.gemCount}　通常素材×{t.scaleCount}{t.tier !== 'D' ? `　レア素材${t.rareChance}` : ''}
           </div>
         </div>
       ))}

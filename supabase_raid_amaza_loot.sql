@@ -129,8 +129,8 @@ BEGIN
     SELECT id INTO v_stone_item_id FROM items WHERE name = v_stone_name LIMIT 1;
     IF v_stone_item_id IS NOT NULL THEN
       INSERT INTO player_items (player_id, item_id, quantity, equipped)
-      VALUES (v_player_id, v_stone_item_id, 3, false)
-      ON CONFLICT (player_id, item_id) DO UPDATE SET quantity = player_items.quantity + 3;
+      VALUES (v_player_id, v_stone_item_id, 1, false)
+      ON CONFLICT (player_id, item_id) DO UPDATE SET quantity = player_items.quantity + 1;
     END IF;
   END LOOP;
 
