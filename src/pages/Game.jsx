@@ -4418,6 +4418,8 @@ export default function Game() {
                       )}
                     </div>
                   )}
+                  {/* 領地 */}
+                  <button onClick={()=>nav('/territory')} style={{ width:'100%', padding:'14px', marginTop:'10px', background:'#1a1402', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>🏰 領地</button>
                   {/* メニュー（展開式） */}
                   <button onClick={toggleFacilitiesExpanded}
                     style={{ width:'100%', padding:'12px', marginTop:'10px', background:'#000e1a', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'2px' }}>
@@ -4831,6 +4833,8 @@ export default function Game() {
                         )}
                       </div>
                     )}
+                    {/* 領地 */}
+                    <button onClick={()=>nav('/territory')} style={{ width:'100%', padding:'14px', marginTop:'10px', background:'#1a1402', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>🏰 領地</button>
                     {/* メニュー（展開式） */}
                     <button onClick={toggleFacilitiesExpanded}
                       style={{ width:'100%', padding:'12px', marginTop:'10px', background:'#000e1a', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'2px' }}>
