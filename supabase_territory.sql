@@ -54,6 +54,8 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS country_rank    text;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS country_contrib numeric NOT NULL DEFAULT 0;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_asylum_at  timestamptz;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_expand_at  timestamptz;
+-- 亡命後ロック：この時刻まで領地システム（拡大/建国/チャット/再亡命）を利用不可
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS territory_locked_until timestamptz;
 -- country_id が NULL のプレイヤーは「非加盟国」扱い（明示移行はしない）。
 
 -- ===== 3) RLS（countries は全ログインユーザーが閲覧可） =====
@@ -100,12 +102,19 @@ DECLARE
   v_cid     uuid;
   v_unaff   boolean;
   v_taken   boolean;
+  v_admin   boolean;
+  v_lock    timestamptz;
   v_name    text := btrim(coalesce(p_name,''));
   v_new     public.countries;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'ログインが必要です'; END IF;
   IF v_name = '' THEN RAISE EXCEPTION '国名を入力してください'; END IF;
   IF char_length(v_name) > 20 THEN RAISE EXCEPTION '国名は20文字以内にしてください'; END IF;
+
+  SELECT is_admin, territory_locked_until INTO v_admin, v_lock FROM public.profiles WHERE id = v_uid;
+  IF v_admin IS NOT TRUE AND v_lock IS NOT NULL AND now() < v_lock THEN
+    RAISE EXCEPTION '亡命後1週間は領地システムを利用できません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
+  END IF;
 
   -- 領域(大陸)の指定チェック
   IF p_region IS NULL OR p_region < 1 OR p_region > 9 THEN
@@ -163,13 +172,14 @@ DECLARE
   v_uid    uuid := auth.uid();
   v_cid    uuid;
   v_rank   text;
-  v_last   timestamptz;
+  v_lock   timestamptz;
+  v_admin  boolean;
   v_npc    boolean;
   v_me     public.profiles;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'ログインが必要です'; END IF;
 
-  SELECT country_id, country_rank, last_asylum_at INTO v_cid, v_rank, v_last
+  SELECT country_id, country_rank, territory_locked_until, is_admin INTO v_cid, v_rank, v_lock, v_admin
     FROM public.profiles WHERE id = v_uid;
 
   SELECT is_npc INTO v_npc FROM public.countries WHERE id = p_country_id;
@@ -185,12 +195,15 @@ BEGIN
     RAISE EXCEPTION '元帥は亡命できません';
   END IF;
 
-  IF v_last IS NOT NULL AND now() - v_last < interval '7 days' THEN
-    RAISE EXCEPTION '亡命は1週間に1回までです（次回 % まで）', to_char(v_last + interval '7 days', 'MM/DD HH24:MI');
+  -- 亡命後ロック中は再亡命不可（is_adminは除外）
+  IF v_admin IS NOT TRUE AND v_lock IS NOT NULL AND now() < v_lock THEN
+    RAISE EXCEPTION '亡命後1週間は領地システムを利用できません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
   END IF;
 
+  -- 亡命実行。以後1週間は領地システム利用不可。
   UPDATE public.profiles
-     SET country_id = p_country_id, country_rank = '二等兵', country_contrib = 0, last_asylum_at = now()
+     SET country_id = p_country_id, country_rank = '二等兵', country_contrib = 0,
+         last_asylum_at = now(), territory_locked_until = now() + interval '7 days'
    WHERE id = v_uid
   RETURNING * INTO v_me;
 
@@ -231,6 +244,7 @@ DECLARE
   v_rank    text;
   v_unlocked int[];
   v_admin   boolean;
+  v_lock    timestamptz;
   v_power   numeric := least(greatest(coalesce(p_power,0),0), 100000);
   v_gain    numeric;
   v_terr    numeric;
@@ -242,13 +256,18 @@ BEGIN
     RAISE EXCEPTION '出撃エリアを選択してください';
   END IF;
 
-  SELECT country_id, last_expand_at, country_contrib, country_rank, unlocked_areas, is_admin
-    INTO v_cid, v_last, v_contrib, v_rank, v_unlocked, v_admin
+  SELECT country_id, last_expand_at, country_contrib, country_rank, unlocked_areas, is_admin, territory_locked_until
+    INTO v_cid, v_last, v_contrib, v_rank, v_unlocked, v_admin, v_lock
     FROM public.profiles WHERE id = v_uid;
 
   IF v_cid IS NULL THEN RAISE EXCEPTION '国に所属していません'; END IF;
   SELECT is_unaffiliated INTO v_unaff FROM public.countries WHERE id = v_cid;
   IF v_unaff IS TRUE THEN RAISE EXCEPTION '非加盟国では領地を広げられません'; END IF;
+
+  -- 亡命後ロック中は領地拡大不可（is_adminは除外）
+  IF v_admin IS NOT TRUE AND v_lock IS NOT NULL AND now() < v_lock THEN
+    RAISE EXCEPTION '亡命後1週間は領地システムを利用できません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
+  END IF;
 
   IF NOT (p_area = ANY(coalesce(v_unlocked, ARRAY[1]))) THEN
     RAISE EXCEPTION 'そのエリアはまだ解放されていません';
@@ -323,6 +342,8 @@ DECLARE
   v_cid  uuid;
   v_name text;
   v_unaff boolean;
+  v_admin boolean;
+  v_lock  timestamptz;
   v_msg  text := btrim(coalesce(p_message,''));
   v_row  public.country_chat;
 BEGIN
@@ -330,8 +351,11 @@ BEGIN
   IF v_msg = '' THEN RAISE EXCEPTION 'メッセージを入力してください'; END IF;
   IF char_length(v_msg) > 200 THEN RAISE EXCEPTION 'メッセージは200文字以内です'; END IF;
 
-  SELECT country_id, username INTO v_cid, v_name FROM public.profiles WHERE id = v_uid;
+  SELECT country_id, username, is_admin, territory_locked_until INTO v_cid, v_name, v_admin, v_lock FROM public.profiles WHERE id = v_uid;
   IF v_cid IS NULL THEN RAISE EXCEPTION '国に所属していません'; END IF;
+  IF v_admin IS NOT TRUE AND v_lock IS NOT NULL AND now() < v_lock THEN
+    RAISE EXCEPTION '亡命後1週間は領地システムを利用できません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
+  END IF;
   SELECT is_unaffiliated INTO v_unaff FROM public.countries WHERE id = v_cid;
   IF v_unaff IS TRUE THEN RAISE EXCEPTION '非加盟国ではチャットを使えません'; END IF;
 

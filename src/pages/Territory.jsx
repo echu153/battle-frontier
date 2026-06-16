@@ -196,9 +196,15 @@ export default function Territory() {
   // 領地拡大クールダウン（is_admin は開発中CDなし）
   const lastExpand = me?.last_expand_at ? new Date(me.last_expand_at).getTime() : 0
   const expandRemain = me?.is_admin ? 0 : Math.max(0, lastExpand + EXPAND_COOLDOWN_MS - Date.now())
-  // 亡命クールダウン
-  const lastAsylum = me?.last_asylum_at ? new Date(me.last_asylum_at).getTime() : 0
-  const asylumRemain = Math.max(0, lastAsylum + 7 * 24 * 60 * 60 * 1000 - Date.now())
+  // 亡命後ロック（この時刻まで領地システム利用不可。is_admin は除外）
+  const lockUntil = me?.territory_locked_until ? new Date(me.territory_locked_until).getTime() : 0
+  const lockRemain = me?.is_admin ? 0 : Math.max(0, lockUntil - Date.now())
+  const locked = lockRemain > 0
+  // 亡命も同じ7日ロックに従う
+  const asylumRemain = lockRemain
+  // 到達済みエリア判定（未到達は名前を伏せる）
+  const myUnlockedSet = new Set(me?.unlocked_areas?.length ? me.unlocked_areas : [1])
+  const areaLabel = (id) => myUnlockedSet.has(id) ? (AREA_META.find(a => a.id === id)?.name || `エリア${id}`) : '？？？'
 
   const canFound = inUnaffiliated && (me?.char_lv || 0) >= FOUND_MIN_CHARLV && affiliated.length < MAX_COUNTRIES
 
@@ -217,7 +223,7 @@ export default function Territory() {
   }
 
   const doAsylum = async (cid, name) => {
-    if (!window.confirm(`「${name}」に亡命しますか？\n亡命は1週間に1回までです。`)) return
+    if (!window.confirm(`「${name}」に亡命しますか？\n亡命後の1週間は領地システム（領地拡大・建国・チャット・再亡命）を利用できません。`)) return
     setBusy(true)
     const { error } = await supabase.rpc('seek_asylum', { p_country_id: cid })
     setBusy(false)
@@ -238,7 +244,6 @@ export default function Territory() {
   }
 
   // 解放済みエリア（領地拡大で選べる出撃先）
-  const myUnlockedAreas = AREA_META.filter(a => (me?.unlocked_areas && me.unlocked_areas.length ? me.unlocked_areas : [1]).includes(a.id))
   // エリアごとの支配国・シェア
   const areaControl = computeAreaControl(catRows)
   // 自国のエリア別領地量
@@ -278,6 +283,12 @@ export default function Territory() {
 
         {msg && (
           <div style={{ color:msg.c, fontSize:'12px', border:`1px solid ${msg.c}55`, background:'#1a1200', padding:'8px 12px', marginBottom:'10px' }}>{msg.t}</div>
+        )}
+
+        {locked && (
+          <div style={{ color:'#ff9944', fontSize:'12px', border:'1px solid #aa552255', background:'#1a0e00', padding:'8px 12px', marginBottom:'10px' }}>
+            🔒 亡命してから1週間は領地システムを利用できません（領地拡大・建国・チャット・再亡命が不可）。<br />解除まで残り {fmtRemain(lockRemain)}
+          </div>
         )}
 
         {/* タブ切り替え */}
@@ -335,26 +346,29 @@ export default function Territory() {
               <div style={{ color:'#bbaa77', fontSize:'11px', marginBottom:'8px' }}>
                 出撃エリアを選んで拡大すると、そのエリアの領地が増えます。国の総領地と貢献度にも同量加算されます。
               </div>
-              {/* エリア選択 */}
+              {/* エリア選択（全7エリア。未到達は「？？？」で選択不可） */}
               <div style={{ display:'flex', flexWrap:'wrap', gap:'5px', marginBottom:'8px' }}>
-                {myUnlockedAreas.map(a => {
+                {AREA_META.map(a => {
+                  const unlocked = myUnlockedSet.has(a.id)
                   const sel = expandArea === a.id
                   return (
-                    <button key={a.id} onClick={() => setExpandArea(a.id)}
-                      style={{ padding:'5px 8px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer', textAlign:'left',
-                        background: sel ? '#2a1e02' : '#020100', border:`1px solid ${sel ? '#ffcc44' : '#4a3a1a'}`, color: sel ? '#ffcc44' : '#bbaa77' }}>
-                      {a.name}
+                    <button key={a.id} disabled={!unlocked} onClick={() => unlocked && setExpandArea(a.id)}
+                      style={{ padding:'5px 8px', fontFamily:'monospace', fontSize:'11px', cursor: unlocked ? 'pointer' : 'default', textAlign:'left',
+                        background: sel ? '#2a1e02' : '#020100', border:`1px solid ${sel ? '#ffcc44' : '#4a3a1a'}`, color: !unlocked ? '#5a4a2a' : (sel ? '#ffcc44' : '#bbaa77') }}>
+                      {areaLabel(a.id)}
                     </button>
                   )
                 })}
               </div>
-              <button disabled={busy || expandRemain > 0 || !expandArea} onClick={doExpand}
-                style={{ padding:'8px 16px', fontFamily:'monospace', fontSize:'13px', cursor: (busy || expandRemain > 0 || !expandArea) ? 'default' : 'pointer',
-                  background: expandRemain > 0 ? '#1a1200' : '#2a1e02', border:`1px solid ${expandRemain > 0 ? '#403010' : '#ffcc44'}`,
-                  color: expandRemain > 0 ? '#88774a' : '#ffcc44' }}>
-                {expandRemain > 0
-                  ? `クールダウン中 残り ${fmtRemain(expandRemain)}`
-                  : `${AREA_META.find(a=>a.id===expandArea)?.name || 'エリア'}の領地を広げる`}
+              <button disabled={busy || locked || expandRemain > 0 || !expandArea} onClick={doExpand}
+                style={{ padding:'8px 16px', fontFamily:'monospace', fontSize:'13px', cursor: (busy || locked || expandRemain > 0 || !expandArea) ? 'default' : 'pointer',
+                  background: (locked || expandRemain > 0) ? '#1a1200' : '#2a1e02', border:`1px solid ${(locked || expandRemain > 0) ? '#403010' : '#ffcc44'}`,
+                  color: (locked || expandRemain > 0) ? '#88774a' : '#ffcc44' }}>
+                {locked
+                  ? `亡命ロック中 残り ${fmtRemain(lockRemain)}`
+                  : expandRemain > 0
+                    ? `クールダウン中 残り ${fmtRemain(expandRemain)}`
+                    : `${areaLabel(expandArea)}の領地を広げる`}
               </button>
               {/* 自国のエリア別領地 */}
               <div style={{ marginTop:'10px', display:'flex', flexWrap:'wrap', gap:'8px' }}>
@@ -365,7 +379,7 @@ export default function Territory() {
                   const mine = ctrl && ctrl.topCountryId === me?.country_id
                   return (
                     <span key={a.id} style={{ fontSize:'10px', color: mine ? '#44ff88' : '#bbaa77' }}>
-                      {mine ? '👑' : ''}{a.name} {Math.floor(amt)}{ctrl && ctrl.total > 0 ? `(${Math.round((amt/ctrl.total)*100)}%)` : ''}
+                      {mine ? '👑' : ''}{areaLabel(a.id)} {Math.floor(amt)}{ctrl && ctrl.total > 0 ? `(${Math.round((amt/ctrl.total)*100)}%)` : ''}
                     </span>
                   )
                 })}
@@ -418,9 +432,9 @@ export default function Territory() {
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); doSendChat() } }}
                   placeholder="メッセージ（200文字以内）"
                   style={{ flex:1, boxSizing:'border-box', padding:'6px 8px', background:'#020100', border:'1px solid #4a3a1a', color:'#ffe', fontFamily:'monospace', fontSize:'12px' }} />
-                <button onClick={doSendChat} disabled={!chatInput.trim()}
-                  style={{ padding:'6px 12px', fontFamily:'monospace', fontSize:'12px', cursor: chatInput.trim() ? 'pointer' : 'default',
-                    background:'#2a1e02', border:`1px solid ${chatInput.trim() ? '#ffcc44' : '#403010'}`, color: chatInput.trim() ? '#ffcc44' : '#88774a' }}>送信</button>
+                <button onClick={doSendChat} disabled={!chatInput.trim() || locked}
+                  style={{ padding:'6px 12px', fontFamily:'monospace', fontSize:'12px', cursor: (chatInput.trim() && !locked) ? 'pointer' : 'default',
+                    background:'#2a1e02', border:`1px solid ${(chatInput.trim() && !locked) ? '#ffcc44' : '#403010'}`, color: (chatInput.trim() && !locked) ? '#ffcc44' : '#88774a' }}>送信</button>
               </div>
             </div>
           </div>
@@ -577,7 +591,7 @@ export default function Territory() {
             return (
               <div key={a.id} style={{ marginBottom:'8px' }}>
                 <div style={{ color:'#bbaa77', fontSize:'11px', marginBottom:'3px' }}>
-                  {a.name}{bd.total <= 0 && <span style={{ color:'#88774a' }}> （未開拓）</span>}
+                  {areaLabel(a.id)}{bd.total <= 0 && <span style={{ color:'#88774a' }}> （未開拓）</span>}
                 </div>
                 <div style={{ display:'flex', width:'100%', height:'16px', background:'#0a0700', border:'1px solid #2a2010', borderRadius:'2px', overflow:'hidden' }}>
                   {bd.total > 0 ? bd.rows.map(r => {
