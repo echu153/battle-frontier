@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS public.countries (
 );
 -- 既に旧バージョンを適用済みでも region 列を追加
 ALTER TABLE public.countries ADD COLUMN IF NOT EXISTS region int;
+-- NPC国（建国者なし・時間経過で領地が自動増加）用の列
+ALTER TABLE public.countries ADD COLUMN IF NOT EXISTS is_npc        boolean NOT NULL DEFAULT false;
+ALTER TABLE public.countries ADD COLUMN IF NOT EXISTS npc_rate      numeric NOT NULL DEFAULT 0;       -- 領地/時間（全エリア合計）
+ALTER TABLE public.countries ADD COLUMN IF NOT EXISTS npc_last_tick timestamptz;
 
 -- 非加盟国は1つだけ
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_unaffiliated_country
@@ -160,7 +164,7 @@ DECLARE
   v_cid    uuid;
   v_rank   text;
   v_last   timestamptz;
-  v_exists boolean;
+  v_npc    boolean;
   v_me     public.profiles;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'ログインが必要です'; END IF;
@@ -168,8 +172,9 @@ BEGIN
   SELECT country_id, country_rank, last_asylum_at INTO v_cid, v_rank, v_last
     FROM public.profiles WHERE id = v_uid;
 
-  SELECT true INTO v_exists FROM public.countries WHERE id = p_country_id;
-  IF v_exists IS NOT TRUE THEN RAISE EXCEPTION '対象の国が存在しません'; END IF;
+  SELECT is_npc INTO v_npc FROM public.countries WHERE id = p_country_id;
+  IF NOT FOUND THEN RAISE EXCEPTION '対象の国が存在しません'; END IF;
+  IF v_npc IS TRUE THEN RAISE EXCEPTION 'その国には亡命できません'; END IF;
 
   IF v_cid IS NOT DISTINCT FROM p_country_id THEN
     RAISE EXCEPTION '既にその国に所属しています';
@@ -337,7 +342,84 @@ BEGIN
 END;
 $function$;
 
+-- ===== 10) NPC国（建国者なし・領地が時間経過で自動増加）=====
+-- ダミー国民の表示用テーブル（実プロフィールではなく表示専用）
+CREATE TABLE IF NOT EXISTS public.npc_country_members (
+  id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  country_id uuid NOT NULL REFERENCES public.countries(id) ON DELETE CASCADE,
+  name       text NOT NULL,
+  rank       text NOT NULL,
+  class      text,
+  power      int  NOT NULL DEFAULT 0,    -- 総合力
+  contrib    numeric NOT NULL DEFAULT 0,
+  stats      jsonb,                      -- クラス相応のステ配分（将来の戦争/詳細表示用）
+  sort       int  NOT NULL DEFAULT 0
+);
+ALTER TABLE public.npc_country_members ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS npc_members_select_all ON public.npc_country_members;
+CREATE POLICY npc_members_select_all ON public.npc_country_members FOR SELECT USING (true);
+
+-- NPC国の領地を経過時間ぶん自動加算（ページ表示時に呼ぶ。cron不要・サーバnow()基準）
+CREATE OR REPLACE FUNCTION public.tick_npc_countries()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path = public
+AS $function$
+DECLARE
+  r        record;
+  v_elapsed numeric;
+  v_gain    numeric;
+  v_per     numeric;
+  a         int;
+BEGIN
+  FOR r IN SELECT id, npc_rate, npc_last_tick FROM public.countries WHERE is_npc LOOP
+    IF r.npc_rate IS NULL OR r.npc_rate <= 0 THEN CONTINUE; END IF;
+    v_elapsed := extract(epoch FROM (now() - coalesce(r.npc_last_tick, now()))) / 3600.0;
+    v_gain := floor(r.npc_rate * v_elapsed);
+    IF v_gain < 1 THEN CONTINUE; END IF;         -- 1未満は次回に持ち越し（端数を失わない）
+    v_per := v_gain / 7.0;                        -- 7エリアへ均等配分
+    UPDATE public.countries
+       SET territory = territory + v_gain,
+           npc_last_tick = coalesce(npc_last_tick, now()) + make_interval(secs => (v_gain / r.npc_rate) * 3600)
+     WHERE id = r.id;
+    FOR a IN 1..7 LOOP
+      INSERT INTO public.country_area_territory (country_id, area_id, amount)
+      VALUES (r.id, a, v_per)
+      ON CONFLICT (country_id, area_id) DO UPDATE SET amount = country_area_territory.amount + v_per;
+    END LOOP;
+  END LOOP;
+END;
+$function$;
+
+-- NPC国「Zoon」を空き大陸に設置（中央 region=5 を優先、無ければ最小の空き）
+INSERT INTO public.countries (name, emblem, description, region, is_npc, is_unaffiliated, npc_rate, npc_last_tick, territory)
+SELECT 'Zoon', '🦁', '謎多き古き大国。誰が治めているのかは定かではない。', f.region, true, false, 50, now(), 0
+FROM (
+  SELECT g AS region FROM generate_series(1,9) g
+  WHERE g <> 7 AND g NOT IN (SELECT region FROM public.countries WHERE region IS NOT NULL)
+  ORDER BY (g <> 5), g LIMIT 1
+) f
+WHERE NOT EXISTS (SELECT 1 FROM public.countries WHERE name = 'Zoon');
+
+-- Zoon のダミー国民（全員 総合力10000・クラス相応のステ配分）
+INSERT INTO public.npc_country_members (country_id, name, rank, class, power, contrib, stats, sort)
+SELECT z.id, v.name, v.rank, v.class, 10000, v.contrib, v.stats, v.sort
+FROM (SELECT id FROM public.countries WHERE name = 'Zoon' AND is_npc LIMIT 1) z,
+(VALUES
+  ('りおん','元帥','魔銃士',   6000, '{"hp":4000,"mp":2500,"atk":800,"def":800,"matk":5400,"mdef":1200,"spd":1800}'::jsonb, 1),
+  ('れいし','副元帥','賢者',   4000, '{"hp":4000,"mp":4000,"atk":300,"def":900,"matk":4200,"mdef":2200,"spd":1200}'::jsonb, 2),
+  ('くさりひめ','参謀','元素使い',3000,'{"hp":3500,"mp":3000,"atk":400,"def":900,"matk":5000,"mdef":1550,"spd":1200}'::jsonb, 3),
+  ('がが','大将','戦士',       2000, '{"hp":5000,"mp":1000,"atk":4000,"def":1800,"matk":300,"mdef":1400,"spd":1800}'::jsonb, 4),
+  ('とま','大将','戦士',       2000, '{"hp":5000,"mp":1000,"atk":4000,"def":1800,"matk":300,"mdef":1400,"spd":1800}'::jsonb, 5),
+  ('えちゅ','大将','戦士',      2000, '{"hp":5000,"mp":1000,"atk":4000,"def":1800,"matk":300,"mdef":1400,"spd":1800}'::jsonb, 6)
+) AS v(name, rank, class, contrib, stats, sort)
+WHERE EXISTS (SELECT 1 FROM public.countries WHERE name = 'Zoon' AND is_npc)
+  AND NOT EXISTS (SELECT 1 FROM public.npc_country_members nm
+                  JOIN public.countries c ON c.id = nm.country_id WHERE c.name = 'Zoon');
+
 GRANT EXECUTE ON FUNCTION public.found_country(text, text, text, int) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.seek_asylum(uuid)              TO authenticated;
 GRANT EXECUTE ON FUNCTION public.expand_territory(numeric, int)  TO authenticated;
 GRANT EXECUTE ON FUNCTION public.post_country_chat(text)         TO authenticated;
+GRANT EXECUTE ON FUNCTION public.tick_npc_countries()           TO authenticated;

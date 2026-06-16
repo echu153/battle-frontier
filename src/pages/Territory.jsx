@@ -30,6 +30,7 @@ export default function Territory() {
   const [members, setMembers] = useState([])    // 全プレイヤーの所属/階級（軽量）
   const [catRows, setCatRows] = useState([])    // country_area_territory 全行
   const [powerMap, setPowerMap] = useState({})  // playerId -> 総合力
+  const [npcMembers, setNpcMembers] = useState([])  // NPC国のダミー国民
   const [expandArea, setExpandArea] = useState(null)  // 領地拡大の出撃エリア
   const [chat, setChat] = useState([])          // 国チャット（古い→新しい順）
   const [chatInput, setChatInput] = useState('')
@@ -52,6 +53,7 @@ export default function Territory() {
         .select('*').eq('id', user.id).maybeSingle()
       if (!prof) { nav('/game'); return }
       if (!prof.is_admin) { nav('/game'); return }   // ★is_admin限定の先行公開
+      await supabase.rpc('tick_npc_countries').catch(() => {})  // NPC国の領地を経過時間ぶん加算
       await loadAll(prof)
       setLoading(false)
     })()
@@ -128,14 +130,16 @@ export default function Territory() {
   }
 
   const loadAll = async (prof) => {
-    const [{ data: cs }, { data: mem }, { data: cat }] = await Promise.all([
+    const [{ data: cs }, { data: mem }, { data: cat }, { data: npc }] = await Promise.all([
       supabase.from('countries').select('*'),
       supabase.from('profiles').select('id, username, avatar_url, country_id, country_rank, country_contrib, lv, char_lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, retraining, museum_atk, museum_def, museum_matk, museum_mdef, museum_spd, museum_hp, museum_mp, fishing_atk, fishing_def, fishing_matk, fishing_mdef, fishing_spd, fishing_hp, fishing_mp, ability_title_id'),
       supabase.from('country_area_territory').select('country_id, area_id, amount'),
+      supabase.from('npc_country_members').select('id, country_id, name, rank, class, power, contrib, sort'),
     ])
     setCountries(cs || [])
     setMembers(mem || [])
     setCatRows(cat || [])
+    setNpcMembers(npc || [])
     setPowerMap(await computePowers((mem || []).filter(m => m.country_id)))
     const { data: fresh } = await supabase.from('profiles').select('*').eq('id', prof.id).maybeSingle()
     const p = fresh || prof
@@ -173,7 +177,9 @@ export default function Territory() {
   const affiliated = countries.filter(c => !c.is_unaffiliated)
   const myCountry = me?.country_id ? countries.find(c => c.id === me.country_id) : null
   const inUnaffiliated = !myCountry || myCountry.is_unaffiliated
-  const memberCount = (cid) => members.filter(m => m.country_id === cid).length
+  const npcMembersOf = (cid) => npcMembers.filter(m => m.country_id === cid)
+    .sort((a, b) => (a.sort || 0) - (b.sort || 0))
+  const memberCount = (cid) => members.filter(m => m.country_id === cid).length + npcMembersOf(cid).length
   const membersOf = (cid) => members.filter(m => m.country_id === cid)
     .sort((a, b) => rankOrder(b.country_rank) - rankOrder(a.country_rank))
 
@@ -504,13 +510,17 @@ export default function Territory() {
             <div key={c.id} style={{ ...box, borderColor: isMine ? '#ffcc44' : '#4a3a1a' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'8px' }}>
                 <div style={{ flex:1 }}>
-                  <div style={{ color:'#ffddaa', fontSize:'14px' }}>{c.emblem} {c.name} {isMine && <span style={{ color:'#ffcc44', fontSize:'11px' }}>（所属中）</span>}</div>
+                  <div style={{ color:'#ffddaa', fontSize:'14px' }}>
+                    {c.emblem} {c.name}
+                    {isMine && <span style={{ color:'#ffcc44', fontSize:'11px' }}>（所属中）</span>}
+                    {c.is_npc && <span style={{ color:'#ff88cc', fontSize:'10px', marginLeft:'4px' }}>[NPC]</span>}
+                  </div>
                   <div style={{ color:'#bbaa77', fontSize:'11px', marginTop:'4px' }}>
-                    🗺 領地 <b style={{ color:'#ffe' }}>{Math.floor(c.territory)}</b>　👥 {memberCount(c.id)}人　元帥: {founder?.username || '—'}
+                    🗺 領地 <b style={{ color:'#ffe' }}>{Math.floor(c.territory)}</b>　👥 {memberCount(c.id)}人　元帥: {c.is_npc ? (npcMembersOf(c.id).find(m=>m.rank==='元帥')?.name || '—') : (founder?.username || '—')}
                   </div>
                   {c.description && <div style={{ color:'#88774a', fontSize:'11px', marginTop:'4px', whiteSpace:'pre-wrap' }}>{c.description}</div>}
                 </div>
-                {!isMine && me?.country_rank !== '元帥' && (
+                {!isMine && !c.is_npc && me?.country_rank !== '元帥' && (
                   <button disabled={busy || asylumRemain > 0} onClick={() => doAsylum(c.id, c.name)}
                     style={{ padding:'5px 10px', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap', cursor:(busy || asylumRemain > 0) ? 'default' : 'pointer',
                       background: asylumRemain > 0 ? '#1a1200' : '#2a1e02', border:`1px solid ${asylumRemain > 0 ? '#403010' : '#ffaa44'}`, color: asylumRemain > 0 ? '#88774a' : '#ffaa44' }}>
@@ -518,12 +528,17 @@ export default function Territory() {
                   </button>
                 )}
               </div>
-              {/* 国民の階級一覧 */}
-              {membersOf(c.id).length > 0 && (
-                <div style={{ marginTop:'8px', borderTop:'1px solid #2a2010', paddingTop:'6px', display:'flex', flexWrap:'wrap', gap:'6px' }}>
+              {/* 国民の階級一覧（実プレイヤー＋NPCダミー） */}
+              {(membersOf(c.id).length > 0 || npcMembersOf(c.id).length > 0) && (
+                <div style={{ marginTop:'8px', borderTop:'1px solid #2a2010', paddingTop:'6px', display:'flex', flexWrap:'wrap', gap:'8px' }}>
                   {membersOf(c.id).map(m => (
-                    <span key={m.id} style={{ fontSize:'10px', color: m.country_rank === '元帥' ? '#ffcc44' : '#bbaa77' }}>
-                      【{m.country_rank || '二等兵'}】{m.username}
+                    <span key={m.id} onClick={() => nav(`/profile/${m.id}`)} style={{ fontSize:'10px', cursor:'pointer', textDecoration:'underline', color: m.country_rank === '元帥' ? '#ffcc44' : '#bbddff' }}>
+                      【{m.country_rank || '二等兵'}】{m.username}（総合力{powerMap[m.id] ?? '—'}）
+                    </span>
+                  ))}
+                  {npcMembersOf(c.id).map(m => (
+                    <span key={`npc-${m.id}`} style={{ fontSize:'10px', color: m.rank === '元帥' ? '#ffcc44' : '#bbaa77' }}>
+                      【{m.rank}】{m.name}{m.class ? `・${m.class}` : ''}（総合力{m.power}）
                     </span>
                   ))}
                 </div>
