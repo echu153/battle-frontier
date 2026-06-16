@@ -3676,7 +3676,7 @@ export default function Game() {
             )
           })}
         </div>
-        <div style={{ overflowY:'auto' }}>
+        <div style={{ overflowY:'auto', flex:1 }}>
         {tabAnns.length === 0 && <div style={{ color:'#446688', fontSize:'12px' }}>このカテゴリのお知らせはありません</div>}
         {tabAnns.map(a => {
           const isNew = !seenAnnouncementIds.includes(a.id)
