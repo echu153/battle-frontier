@@ -4025,12 +4025,12 @@ export default function Game() {
             <div style={{ color:'#ffcc00', fontSize:'13px', letterSpacing:'2px' }}>BATTLE FRONTIER</div>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-            <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen() }} style={{ background:'none', border:`1px solid ${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, color:`${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', position:'relative' }}>
+            <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen() }} style={{ background:'none', border:`1px solid ${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, color:`${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', position:'relative' }}>
               📢{hasNewAnnouncements && <span style={{ marginLeft:'2px', background:'#ff4400', color:'#fff', fontSize:'7px', padding:'1px 3px', borderRadius:'2px', verticalAlign:'middle' }}>NEW</span>}
             </button>
-            <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>📖</button>
+            <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📖</button>
             <button onClick={()=>nav('/ranking')} style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏆</button>
-            <button onClick={()=>setShowMenu(!showMenu)} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>☰</button>
+            <button onClick={()=>setShowMenu(!showMenu)} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>☰ メニュー</button>
           </div>
         </div>
         {showMenu && (
