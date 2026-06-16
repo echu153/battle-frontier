@@ -101,10 +101,10 @@ BEGIN
 
   IF v_contribution >= 0.10 OR v_participant.attack_count >= 50 THEN
     v_tier := 'A'; v_gold := 50000; v_stone_ranks := ARRAY['B','C','D'];
-    v_gem_count := 3; v_gem_rank := 'D'; v_scale_min := 8; v_scale_max := 10; v_gyaku_chance := 0.15;
+    v_gem_count := 1; v_gem_rank := 'D'; v_scale_min := 8; v_scale_max := 10; v_gyaku_chance := 0.15;
   ELSIF v_contribution >= 0.06 OR v_participant.attack_count >= 20 THEN
     v_tier := 'B'; v_gold := 30000; v_stone_ranks := ARRAY['C','D','E'];
-    v_gem_count := 2; v_gem_rank := 'E'; v_scale_min := 6; v_scale_max := 8; v_gyaku_chance := 0.08;
+    v_gem_count := 1; v_gem_rank := 'E'; v_scale_min := 6; v_scale_max := 8; v_gyaku_chance := 0.08;
   ELSIF v_contribution >= 0.03 OR v_participant.attack_count >= 5 THEN
     v_tier := 'C'; v_gold := 10000; v_stone_ranks := ARRAY['D','E','F'];
     v_gem_count := 1; v_gem_rank := 'F'; v_scale_min := 4; v_scale_max := 6; v_gyaku_chance := 0.03;

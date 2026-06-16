@@ -23,8 +23,8 @@ const BOSS_MDEF = 1000
 const BOSS_SPD  = 1200
 
 const TIER_INFO = [
-  { pct: 10, attacks: 50, tier: 'A', label: '貢献度10%以上 or 出撃50回', gold: 50000, stones: ['B','C','D'], gemCount: 3, gemRank: 'D', scaleCount: '8~10', rareChance: '15%', color: '#ffcc00' },
-  { pct:  6, attacks: 20, tier: 'B', label: '貢献度6%以上 or 出撃20回',  gold: 30000, stones: ['C','D','E'], gemCount: 2, gemRank: 'E', scaleCount: '6~8',  rareChance: '8%',  color: '#44aaff' },
+  { pct: 10, attacks: 50, tier: 'A', label: '貢献度10%以上 or 出撃50回', gold: 50000, stones: ['B','C','D'], gemCount: 1, gemRank: 'D', scaleCount: '8~10', rareChance: '15%', color: '#ffcc00' },
+  { pct:  6, attacks: 20, tier: 'B', label: '貢献度6%以上 or 出撃20回',  gold: 30000, stones: ['C','D','E'], gemCount: 1, gemRank: 'E', scaleCount: '6~8',  rareChance: '8%',  color: '#44aaff' },
   { pct:  3, attacks:  5, tier: 'C', label: '貢献度3%以上 or 出撃5回',   gold: 10000, stones: ['D','E','F'], gemCount: 1, gemRank: 'F', scaleCount: '4~6',  rareChance: '3%',  color: '#44ff88' },
   { pct:  0, attacks:  0, tier: 'D', label: '参加',                       gold:  5000, stones: ['E','F'],    gemCount: 1, gemRank: 'F', scaleCount: '1~3',  rareChance: '0%',  color: '#888888' },
 ]
