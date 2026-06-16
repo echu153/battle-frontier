@@ -792,13 +792,13 @@ export default function Smithy() {
                           </div>
                           {!isArtifactBase && (
                             <div style={{ display:'flex', gap:'4px' }}>
-                              <button onClick={() => doReEval(item)} disabled={!canEval||loading}
-                                style={{ padding:'3px 8px', background:canEval?'#1a0800':'#001', border:`1px solid ${canEval?'#aa6644':'#002244'}`, color:canEval?'#aa6644':'#334455', cursor:canEval?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
-                                再評価 {needed}枚
-                              </button>
                               <button onClick={() => doReAppraise(item)} disabled={!canApp||loading}
                                 style={{ padding:'3px 8px', background:canApp?'#001840':'#001', border:`1px solid ${canApp?'#4466aa':'#002244'}`, color:canApp?'#88aaff':'#334455', cursor:canApp?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
                                 再鑑定 {needed}枚
+                              </button>
+                              <button onClick={() => doReEval(item)} disabled={!canEval||loading}
+                                style={{ padding:'3px 8px', background:canEval?'#1a0800':'#001', border:`1px solid ${canEval?'#aa6644':'#002244'}`, color:canEval?'#aa6644':'#334455', cursor:canEval?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
+                                再評価 {needed}枚
                               </button>
                             </div>
                           )}
