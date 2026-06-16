@@ -14,7 +14,7 @@ import { calcEffectiveTotal } from '../lib/stats'
 import { charmPlayerBonus } from '../constants/pets'
 import {
   FOUND_MIN_CHARLV, MAX_COUNTRIES, rankOrder, rankProgress,
-  expandGain, EXPAND_COOLDOWN_MS, fmtRemain, REGIONS, UNAFFILIATED_REGION,
+  expandGain, EXPAND_COOLDOWN_MS, fmtRemain, REGIONS,
 } from '../lib/territory'
 
 const EMBLEMS = ['🏰','⚔','🦅','🐺','🌙','☀','🔥','❄','🐉','⭐','🛡','👑']
@@ -187,9 +187,9 @@ export default function Territory() {
           <div style={{ position:'relative', width:'100%', aspectRatio:'1512 / 1000', backgroundImage:`url(${MAP_IMG})`, backgroundSize:'cover', backgroundPosition:'center', borderRadius:'2px', overflow:'hidden' }}>
             {REGIONS.map(rg => {
               const c = countryByRegion(rg.id)
-              const isUnaff = rg.id === UNAFFILIATED_REGION
+              const isUnaff = !!c?.is_unaffiliated   // 非加盟国の位置はDB(region)に追従
               const isMine = c && c.id === me?.country_id
-              const selectable = canFound && !c && !isUnaff
+              const selectable = canFound && !c
               const selected = fRegion === rg.id
               let bg = 'rgba(10,8,2,0.78)', bd = '#5a4a2a', col = '#bbaa77'
               if (isUnaff) { bd = '#6a6a7a'; col = '#bbbbcc' }
