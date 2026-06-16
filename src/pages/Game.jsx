@@ -3176,10 +3176,8 @@ export default function Game() {
 
   const GUIDE_SECTIONS = [
     {
-      id: 'allmenus', title: '📖 各メニューの使い方（総合ガイド）',
-      content: `街の画面に並ぶ各メニューの役割をまとめたよ。困ったらここを見てね。
-
-━━━━━━━━━━━━━━━
+      id: 'g_battle', title: '⚔ 戦う（出撃・デイリーダンジョン）',
+      content: `━━━━━━━━━━━━━━━
 ⚔ 出撃
 ━━━━━━━━━━━━━━━
 ● エリアを選んで「出撃」を押すと自動で戦闘が始まる、最も基本の行動
@@ -3194,9 +3192,11 @@ export default function Game() {
 ━━━━━━━━━━━━━━━
 ● EXP / Gold / 強化石 / 武器熟練度 / 宝石 の5種類
 ● それぞれ1日5回まで・毎日朝5時（日本時間）リセット
-● 通常出撃より報酬効率が良いので、毎日忘れずにこなそう
-
-━━━━━━━━━━━━━━━
+● 通常出撃より報酬効率が良いので、毎日忘れずにこなそう`,
+    },
+    {
+      id: 'g_character', title: '🛡 キャラクター育成（装備・スキル・プロフィール・アイテム）',
+      content: `━━━━━━━━━━━━━━━
 🛡 装備
 ━━━━━━━━━━━━━━━
 ● 戦闘でドロップした武器・防具は「装備」ページで確認・装備できる
@@ -3228,9 +3228,11 @@ export default function Game() {
 🎒 アイテム
 ━━━━━━━━━━━━━━━
 ● 所持している回復・補助アイテムや各種素材を確認・使用できる
-● 回数券などの便利アイテムもここから使う
-
-━━━━━━━━━━━━━━━
+● 回数券などの便利アイテムもここから使う`,
+    },
+    {
+      id: 'g_facility', title: '🏘 街の施設（宿屋・神殿・商店・鍛冶屋ほか）',
+      content: `━━━━━━━━━━━━━━━
 🏨 宿屋
 ━━━━━━━━━━━━━━━
 ● 戦闘でHPが0になると「瀕死状態」になり出撃不可になる
@@ -3285,9 +3287,11 @@ export default function Game() {
 ━━━━━━━━━━━━━━━
 ✂ 美容院
 ━━━━━━━━━━━━━━━
-● キャラクターの見た目を変更できる
-
-━━━━━━━━━━━━━━━
+● キャラクターの見た目を変更できる`,
+    },
+    {
+      id: 'g_other', title: '🎣 その他のコンテンツ（釣り場・かかし修練場・錬金部屋ほか）',
+      content: `━━━━━━━━━━━━━━━
 🎣 釣り場
 ━━━━━━━━━━━━━━━
 ● 竿を垂らして魚を釣ることができる
@@ -3803,7 +3807,7 @@ export default function Game() {
             <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen() }} style={{ background:'none', border:`1px solid ${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, color:`${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', position:'relative' }}>
               📢{hasNewAnnouncements && <span style={{ marginLeft:'2px', background:'#ff4400', color:'#fff', fontSize:'7px', padding:'1px 3px', borderRadius:'2px', verticalAlign:'middle' }}>NEW</span>}
             </button>
-            <button onClick={()=>{ setOpenGuideId('allmenus'); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>📖</button>
+            <button onClick={()=>{ setOpenGuideId('g_battle'); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>📖</button>
           </div>
           <div style={{ display:'flex', gap:'6px' }}>
             <button onClick={()=>nav('/ranking')} style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏆</button>
@@ -4219,7 +4223,7 @@ export default function Game() {
             <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen() }} style={{ background:'none', border:`1px solid ${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, color:`${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', position:'relative' }}>
               📢 お知らせ{hasNewAnnouncements && <span style={{ marginLeft:'4px', background:'#ff4400', color:'#fff', fontSize:'8px', padding:'1px 4px', borderRadius:'2px', verticalAlign:'middle' }}>NEW</span>}
             </button>
-            <button onClick={()=>{ setOpenGuideId('allmenus'); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📖 ガイド</button>
+            <button onClick={()=>{ setOpenGuideId('g_battle'); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📖 ガイド</button>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
             <button onClick={()=>nav('/equipment?view=gear')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡 装備</button>
