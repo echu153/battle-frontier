@@ -577,7 +577,7 @@ export default function Territory() {
             return (
               <div key={a.id} style={{ marginBottom:'8px' }}>
                 <div style={{ color:'#bbaa77', fontSize:'11px', marginBottom:'3px' }}>
-                  {a.name} <span style={{ color:'#88774a' }}>{bd.total > 0 ? `（計 ${Math.floor(bd.total)}）` : '（未開拓）'}</span>
+                  {a.name}{bd.total <= 0 && <span style={{ color:'#88774a' }}> （未開拓）</span>}
                 </div>
                 <div style={{ display:'flex', width:'100%', height:'16px', background:'#0a0700', border:'1px solid #2a2010', borderRadius:'2px', overflow:'hidden' }}>
                   {bd.total > 0 ? bd.rows.map(r => {
