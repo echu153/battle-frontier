@@ -173,8 +173,6 @@ export default function Territory() {
   const lockUntil = me?.territory_locked_until ? new Date(me.territory_locked_until).getTime() : 0
   const lockRemain = me?.is_admin ? 0 : Math.max(0, lockUntil - Date.now())
   const locked = lockRemain > 0
-  // 亡命も同じ7日ロックに従う
-  const asylumRemain = lockRemain
   // 到達済みエリア判定（未到達は名前を伏せる）
   const myUnlockedSet = new Set(me?.unlocked_areas?.length ? me.unlocked_areas : [1])
   const areaLabel = (id) => myUnlockedSet.has(id) ? (AREA_META.find(a => a.id === id)?.name || `エリア${id}`) : '？？？'
@@ -196,7 +194,10 @@ export default function Territory() {
   }
 
   const doAsylum = async (cid, name) => {
-    if (!window.confirm(`「${name}」に亡命しますか？\n亡命後の1週間は領地システム（領地拡大・建国・再亡命）を利用できません。`)) return
+    const warn = inUnaffiliated
+      ? `「${name}」に亡命しますか？`
+      : `「${name}」に亡命しますか？\n所属国を移ると、1週間は領地拡大・建国ができません。`
+    if (!window.confirm(warn)) return
     setBusy(true)
     const { error } = await supabase.rpc('seek_asylum', { p_country_id: cid })
     setBusy(false)
@@ -280,7 +281,7 @@ export default function Territory() {
 
         {locked && (
           <div style={{ color:'#ff9944', fontSize:'12px', border:'1px solid #aa552255', background:'#1a0e00', padding:'8px 12px', marginBottom:'10px' }}>
-            🔒 亡命してから1週間は領地システムを利用できません（領地拡大・建国・再亡命が不可）。<br />解除まで残り {fmtRemain(lockRemain)}
+            🔒 所属国を移ったため、1週間は領地拡大・建国ができません（亡命は可能）。<br />解除まで残り {fmtRemain(lockRemain)}
           </div>
         )}
 
@@ -546,10 +547,10 @@ export default function Territory() {
                   {c.description && <div style={{ color:'#88774a', fontSize:'11px', marginTop:'4px', whiteSpace:'pre-wrap' }}>{c.description}</div>}
                 </div>
                 {!isMine && !c.is_npc && me?.country_rank !== '元帥' && (
-                  <button disabled={busy || asylumRemain > 0} onClick={() => doAsylum(c.id, c.name)}
-                    style={{ padding:'5px 10px', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap', cursor:(busy || asylumRemain > 0) ? 'default' : 'pointer',
-                      background: asylumRemain > 0 ? '#1a1200' : '#2a1e02', border:`1px solid ${asylumRemain > 0 ? '#403010' : '#ffaa44'}`, color: asylumRemain > 0 ? '#88774a' : '#ffaa44' }}>
-                    {asylumRemain > 0 ? `亡命 ${fmtRemain(asylumRemain)}` : '亡命する'}
+                  <button disabled={busy} onClick={() => doAsylum(c.id, c.name)}
+                    style={{ padding:'5px 10px', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap', cursor: busy ? 'default' : 'pointer',
+                      background:'#2a1e02', border:'1px solid #ffaa44', color:'#ffaa44' }}>
+                    亡命する
                   </button>
                 )}
               </div>
@@ -622,10 +623,10 @@ export default function Territory() {
         {!inUnaffiliated && me?.country_rank !== '元帥' && unaffiliated && (
           <div style={{ ...box, marginTop:'14px' }}>
             <div style={{ color:'#aa7755', fontSize:'11px', marginBottom:'6px' }}>所属国を抜けて非加盟国に戻る（亡命扱い・1週間に1回）</div>
-            <button disabled={busy || asylumRemain > 0} onClick={() => doAsylum(unaffiliated.id, '非加盟国')}
-              style={{ padding:'6px 12px', fontFamily:'monospace', fontSize:'11px', cursor:(busy || asylumRemain > 0) ? 'default' : 'pointer',
+            <button disabled={busy} onClick={() => doAsylum(unaffiliated.id, '非加盟国')}
+              style={{ padding:'6px 12px', fontFamily:'monospace', fontSize:'11px', cursor: busy ? 'default' : 'pointer',
                 background:'#1a1000', border:'1px solid #885533', color:'#aa7755' }}>
-              {asylumRemain > 0 ? `離脱まで 残り ${fmtRemain(asylumRemain)}` : '非加盟国に戻る'}
+              非加盟国に戻る
             </button>
           </div>
         )}

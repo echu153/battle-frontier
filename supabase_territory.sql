@@ -172,14 +172,13 @@ DECLARE
   v_uid    uuid := auth.uid();
   v_cid    uuid;
   v_rank   text;
-  v_lock   timestamptz;
-  v_admin  boolean;
   v_npc    boolean;
+  v_from_unaff boolean;
   v_me     public.profiles;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'ログインが必要です'; END IF;
 
-  SELECT country_id, country_rank, territory_locked_until, is_admin INTO v_cid, v_rank, v_lock, v_admin
+  SELECT country_id, country_rank INTO v_cid, v_rank
     FROM public.profiles WHERE id = v_uid;
 
   SELECT is_npc INTO v_npc FROM public.countries WHERE id = p_country_id;
@@ -195,15 +194,20 @@ BEGIN
     RAISE EXCEPTION '元帥は亡命できません';
   END IF;
 
-  -- 亡命後ロック中は再亡命不可（is_adminは除外）
-  IF v_admin IS NOT TRUE AND v_lock IS NOT NULL AND now() < v_lock THEN
-    RAISE EXCEPTION '亡命後1週間は領地システムを利用できません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
+  -- 現在地が非加盟国(または無所属)かどうか
+  IF v_cid IS NULL THEN
+    v_from_unaff := true;
+  ELSE
+    SELECT is_unaffiliated INTO v_from_unaff FROM public.countries WHERE id = v_cid;
+    v_from_unaff := coalesce(v_from_unaff, true);
   END IF;
 
-  -- 亡命実行。以後1週間は領地システム利用不可。
+  -- 亡命はいつでも可能。所属国から他国へ移る場合のみ1週間ロック。
+  -- 非加盟国からの加入はペナルティなし（ロックを解除）。
   UPDATE public.profiles
      SET country_id = p_country_id, country_rank = '二等兵', country_contrib = 0,
-         last_asylum_at = now(), territory_locked_until = now() + interval '7 days'
+         last_asylum_at = now(),
+         territory_locked_until = CASE WHEN v_from_unaff THEN NULL ELSE now() + interval '7 days' END
    WHERE id = v_uid
   RETURNING * INTO v_me;
 
