@@ -23,10 +23,10 @@ const BOSS_MDEF = 1000
 const BOSS_SPD  = 1200
 
 const TIER_INFO = [
-  { pct: 10, attacks: 50, tier: 'A', label: '貢献度10%以上 or 出撃50回', gold: 150000, stones: ['B','C','D'], gemCount: 1, gemRank: 'D', scaleCount: '8~10', rareChance: '15%', color: '#ffcc00' },
-  { pct:  6, attacks: 20, tier: 'B', label: '貢献度6%以上 or 出撃20回',  gold: 90000, stones: ['C','D','E'], gemCount: 1, gemRank: 'E', scaleCount: '6~8',  rareChance: '8%',  color: '#44aaff' },
-  { pct:  3, attacks:  5, tier: 'C', label: '貢献度3%以上 or 出撃5回',   gold: 30000, stones: ['D','E','F'], gemCount: 1, gemRank: 'F', scaleCount: '4~6',  rareChance: '3%',  color: '#44ff88' },
-  { pct:  0, attacks:  0, tier: 'D', label: '参加',                       gold: 15000, stones: ['E','F'],    gemCount: 1, gemRank: 'F', scaleCount: '1~3',  rareChance: '0%',  color: '#888888' },
+  { pct: 10, attacks: 50, tier: 'A', label: '貢献度10%以上 or 出撃50回', gold: 150000, stones: ['B','C','D'], gemCount: 2, gemRank: 'D', scaleCount: '8~10', rareChance: '15%', color: '#ffcc00' },
+  { pct:  6, attacks: 20, tier: 'B', label: '貢献度6%以上 or 出撃20回',  gold: 90000, stones: ['C','D','E'], gemCount: 2, gemRank: 'E', scaleCount: '6~8',  rareChance: '8%',  color: '#44aaff' },
+  { pct:  3, attacks:  5, tier: 'C', label: '貢献度3%以上 or 出撃5回',   gold: 30000, stones: ['D','E','F'], gemCount: 2, gemRank: 'F', scaleCount: '4~6',  rareChance: '3%',  color: '#44ff88' },
+  { pct:  0, attacks:  0, tier: 'D', label: '参加',                       gold: 15000, stones: ['E','F'],    gemCount: 2, gemRank: 'F', scaleCount: '1~3',  rareChance: '0%',  color: '#888888' },
 ]
 
 function getTier(pct, attackCount = 0) {
@@ -793,7 +793,7 @@ export default function RaidBoss() {
                   <div style={{ color: '#ffcc44' }}>{reward.tier}ティア　貢献度: {reward.contribution_pct}%</div>
                   <div style={{ color: '#ffcc00' }}>Gold: +{fmt(reward.gold)}</div>
                   <div style={{ color: '#6699cc' }}>
-                    {(reward.stones || []).map(s => `強化石(${s})×1`).join('　')}
+                    {(reward.stones || []).map(s => `強化石(${s})×2`).join('　')}
                   </div>
                   <div style={{ color: '#ff66cc' }}>宝石({reward.gem_rank}) × {reward.gem_count}個（ランダム種類）</div>
                   <div style={{ color: '#cc8844' }}>{reward.mat_name || '黒龍の鱗'} × {reward.scale_count}個</div>
@@ -805,7 +805,7 @@ export default function RaidBoss() {
               ) : (
                 <>
                   <div style={{ fontSize: '12px', color: '#aaaaaa', marginBottom: '10px', lineHeight: '1.8' }}>
-                    予定リワード: {myTier.tier}ティア / Gold {fmt(myTier.gold)} / 強化石{myTier.stones.map(s=>`(${s})`).join('・')}×1 / 宝石{myTier.gemRank}×{myTier.gemCount}
+                    予定リワード: {myTier.tier}ティア / Gold {fmt(myTier.gold)} / 強化石{myTier.stones.map(s=>`(${s})`).join('・')}×2 / 宝石{myTier.gemRank}×{myTier.gemCount}
                   </div>
                   {claimError && <div style={{ color: '#ff4444', fontSize: '12px', marginBottom: '8px' }}>{claimError}</div>}
                   <button onClick={handleClaim} disabled={claiming}
@@ -871,7 +871,7 @@ function RewardTable() {
             <span style={{ color: '#ffcc00' }}>Gold {fmt(t.gold)}</span>
           </div>
           <div style={{ color: '#446688', marginTop: '2px' }}>
-            強化石{t.stones.map(s=>`(${s})`).join('・')}×1　宝石{t.gemRank}×{t.gemCount}　通常素材×{t.scaleCount}{t.tier !== 'D' ? `　レア素材${t.rareChance}` : ''}
+            強化石{t.stones.map(s=>`(${s})`).join('・')}×2　宝石{t.gemRank}×{t.gemCount}　通常素材×{t.scaleCount}{t.tier !== 'D' ? `　レア素材${t.rareChance}` : ''}
           </div>
         </div>
       ))}
