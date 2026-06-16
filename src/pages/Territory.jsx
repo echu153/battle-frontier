@@ -233,7 +233,7 @@ export default function Territory() {
     setBusy(false)
     if (error) { flash(`領地拡大失敗: ${error.message}`, '#ff5555'); return }
     const an = AREA_META.find(a => a.id === res.area)?.name || `エリア${res.area}`
-    flash(`🗺 ${an} の領地を ${res.gain} 拡大！（階級 ${res.rank}）`)
+    flash(`🗺 ${an} の領地を ${res.gain} 拡大！`)
     await reload()
   }
 

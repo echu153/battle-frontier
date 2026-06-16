@@ -76,8 +76,27 @@ export const AREA_META = [
   { id: 7, name: '煉獄火山' },
 ]
 
-// エリア支配国の装備ドロップ率ボーナス上限（将来実装。シェアに応じて 0〜この値）。
-export const AREA_DROP_BONUS_MAX = 0.03  // 最大 +3%
+// エリア領地シェアによる装備ドロップ率ボーナス上限（シェア100%で +2%）。
+// 加算はパーセンテージポイント。bonusPP = min(share,1) * AREA_DROP_BONUS_MAX * 100。
+export const AREA_DROP_BONUS_MAX = 0.02  // 最大 +2%
+
+// 指定国の各エリアの領地シェア（amount/エリア合計）。rows = country_area_territory 全行。
+// 返り値: { [areaId]: 0..1 }
+export const myAreaShares = (rows, countryId) => {
+  if (!countryId) return {}
+  const total = {}, mine = {}
+  for (const r of (rows || [])) {
+    const a = r.area_id, amt = Number(r.amount) || 0
+    total[a] = (total[a] || 0) + amt
+    if (r.country_id === countryId) mine[a] = (mine[a] || 0) + amt
+  }
+  const out = {}
+  for (const a of Object.keys(total)) out[a] = total[a] > 0 ? (mine[a] || 0) / total[a] : 0
+  return out
+}
+
+// エリアシェアから装備ドロップ率の加算ポイント(%)を算出。
+export const dropBonusPP = (share) => Math.min(Math.max(Number(share) || 0, 0), 1) * AREA_DROP_BONUS_MAX * 100
 
 // エリアごとの支配国(シェア最大)とシェアを算出。rows = country_area_territory 全行。
 // 返り値: { [areaId]: { topCountryId, share, total } }

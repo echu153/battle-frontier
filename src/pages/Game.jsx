@@ -6,6 +6,7 @@ const papiaIcon = '/papia.png'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue, calcDefReduction, calcEffectiveStats } from '../lib/stats'
 import { charmPlayerBonus } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
+import { myAreaShares, dropBonusPP } from '../lib/territory'
 // Equipment.jsx 等が './Game' から参照しているため再export
 // ★ステータス計算は lib/stats.js の1実装に統一（表示系と戦闘系で値がズレないように）
 export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue, calcDefReduction, calcEffectiveStats } from '../lib/stats'
@@ -1350,6 +1351,8 @@ export default function Game() {
   const toggleStatExpanded = () => setStatExpanded(v => { localStorage.setItem('statExpanded', v ? '0' : '1'); return !v })
   const toggleFacilitiesExpanded = () => setFacilitiesExpanded(v => { localStorage.setItem('facilitiesExpanded', v ? '0' : '1'); return !v })
   const [selectedArea, setSelectedArea] = useState(() => Number(localStorage.getItem('selectedArea') || 1))
+  // 領地：自国のエリア別シェア（装備ドロップ率ボーナス用）。{ areaId: 0..1 }
+  const [areaShareMap, setAreaShareMap] = useState({})
   const [regenRemaining, setRegenRemaining] = useState(0)
   const [innMessage, setInnMessage] = useState('')
   const [equipment, setEquipment] = useState([])
@@ -1641,6 +1644,15 @@ export default function Game() {
     if (!unlocked.includes(savedArea)) {
       setSelectedArea(1)
       localStorage.setItem('selectedArea', 1)
+    }
+    // 領地：自国のエリア別シェアを取得（装備ドロップ率ボーナス算出用。テーブル未作成でも無視）
+    if (data.country_id) {
+      try {
+        const { data: catRows } = await supabase.from('country_area_territory').select('country_id, area_id, amount')
+        setAreaShareMap(myAreaShares(catRows || [], data.country_id))
+      } catch { /* 領地未導入時は無視 */ }
+    } else {
+      setAreaShareMap({})
     }
     // クエリ失敗時(null)は既存ステートを保持し、正常な空配列のみ反映する
     const { data: eq } = await supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', user.id)
@@ -2939,11 +2951,13 @@ export default function Game() {
 
     if (win && !isPapiaEncounter) {
       let droppedItems = []
+      // 領地ボーナス：自国がこのエリアで占める領地シェアに応じて装備ドロップ率を加算（最大+2%）
+      const dropBonus = dropBonusPP(areaShareMap[area.id] || 0)
       if (isBossEncounter) {
         const dropList = area.bossDrops || []
         if (dropList.length > 0) {
-          const drop0 = Math.random()*100 < 3
-          const drop1 = dropList.length > 1 && Math.random()*100 < 3
+          const drop0 = Math.random()*100 < (3 + dropBonus)
+          const drop1 = dropList.length > 1 && Math.random()*100 < (3 + dropBonus)
           if (drop0 && drop1) droppedItems = [dropList[Math.random()<0.5?0:1]]
           else if (drop0) droppedItems = [dropList[0]]
           else if (drop1) droppedItems = [dropList[1]]
@@ -2955,7 +2969,7 @@ export default function Game() {
       } else {
         const commonDrops = area.commonDrops||[]
         const rareDrops = area.rareDrops||[]
-        if (commonDrops.length > 0 && Math.random()*100 < 3) {
+        if (commonDrops.length > 0 && Math.random()*100 < (3 + dropBonus)) {
           if (rareDrops.length > 0 && Math.random()*100 < 30) {
             droppedItems = [rareDrops[Math.floor(Math.random()*rareDrops.length)]]
           } else {
