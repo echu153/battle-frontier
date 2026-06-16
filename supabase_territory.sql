@@ -193,10 +193,25 @@ BEGIN
 END;
 $function$;
 
--- ===== 7) 領地拡大（1時間に1回・総合力依存）=====
+-- ===== 7) エリア別領地（出撃エリアごとに領地を蓄積）=====
+-- ・各エリア(1〜7)ごとに国の領地量を保持。シェア最大の国がそのエリアを支配。
+-- ・将来: 支配国の国民はそのエリアで装備ドロップ率が上昇（最大+3%）。←実装は後日。
+CREATE TABLE IF NOT EXISTS public.country_area_territory (
+  country_id uuid NOT NULL REFERENCES public.countries(id) ON DELETE CASCADE,
+  area_id    int  NOT NULL,
+  amount     numeric NOT NULL DEFAULT 0,
+  PRIMARY KEY (country_id, area_id)
+);
+ALTER TABLE public.country_area_territory ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS cat_select_all ON public.country_area_territory;
+CREATE POLICY cat_select_all ON public.country_area_territory FOR SELECT USING (true);
+
+-- ===== 8) 領地拡大（1時間に1回・総合力依存・出撃エリア指定）=====
 -- p_power = クライアントが計算した総合力。先行公開(is_admin限定)のため簡易採用。
+-- p_area  = 出撃エリア(1〜7)。プレイヤーの解放済みエリア(unlocked_areas)に含まれること。
 -- クールダウン(1h)はサーバ側で厳密判定。獲得量は power を上限クランプして算出。
-CREATE OR REPLACE FUNCTION public.expand_territory(p_power numeric)
+DROP FUNCTION IF EXISTS public.expand_territory(numeric);
+CREATE OR REPLACE FUNCTION public.expand_territory(p_power numeric, p_area int)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -209,20 +224,29 @@ DECLARE
   v_last    timestamptz;
   v_contrib numeric;
   v_rank    text;
+  v_unlocked int[];
   v_power   numeric := least(greatest(coalesce(p_power,0),0), 100000);
   v_gain    numeric;
   v_terr    numeric;
+  v_area_amt numeric;
   v_newrank text;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'ログインが必要です'; END IF;
+  IF p_area IS NULL OR p_area < 1 OR p_area > 7 THEN
+    RAISE EXCEPTION '出撃エリアを選択してください';
+  END IF;
 
-  SELECT country_id, last_expand_at, country_contrib, country_rank
-    INTO v_cid, v_last, v_contrib, v_rank
+  SELECT country_id, last_expand_at, country_contrib, country_rank, unlocked_areas
+    INTO v_cid, v_last, v_contrib, v_rank, v_unlocked
     FROM public.profiles WHERE id = v_uid;
 
   IF v_cid IS NULL THEN RAISE EXCEPTION '国に所属していません'; END IF;
   SELECT is_unaffiliated INTO v_unaff FROM public.countries WHERE id = v_cid;
   IF v_unaff IS TRUE THEN RAISE EXCEPTION '非加盟国では領地を広げられません'; END IF;
+
+  IF NOT (p_area = ANY(coalesce(v_unlocked, ARRAY[1]))) THEN
+    RAISE EXCEPTION 'そのエリアはまだ解放されていません';
+  END IF;
 
   IF v_last IS NOT NULL AND now() - v_last < interval '1 hour' THEN
     RAISE EXCEPTION '領地拡大は1時間に1回までです';
@@ -231,8 +255,15 @@ BEGIN
   -- 獲得量: 基礎10 + 総合力/20（総合力2万で約1010、上限クランプ済み）
   v_gain := floor(10 + v_power / 20.0);
 
+  -- 国の総領地に加算
   UPDATE public.countries SET territory = territory + v_gain WHERE id = v_cid
   RETURNING territory INTO v_terr;
+
+  -- 選択エリアの領地に加算（無ければ作成）
+  INSERT INTO public.country_area_territory (country_id, area_id, amount)
+  VALUES (v_cid, p_area, v_gain)
+  ON CONFLICT (country_id, area_id) DO UPDATE SET amount = country_area_territory.amount + v_gain
+  RETURNING amount INTO v_area_amt;
 
   v_contrib := coalesce(v_contrib,0) + v_gain;
 
@@ -247,10 +278,10 @@ BEGIN
      SET country_contrib = v_contrib, last_expand_at = now(), country_rank = v_newrank
    WHERE id = v_uid;
 
-  RETURN jsonb_build_object('gain', v_gain, 'territory', v_terr, 'contrib', v_contrib, 'rank', v_newrank);
+  RETURN jsonb_build_object('gain', v_gain, 'territory', v_terr, 'area', p_area, 'area_amount', v_area_amt, 'contrib', v_contrib, 'rank', v_newrank);
 END;
 $function$;
 
 GRANT EXECUTE ON FUNCTION public.found_country(text, text, text, int) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.seek_asylum(uuid)              TO authenticated;
-GRANT EXECUTE ON FUNCTION public.expand_territory(numeric)      TO authenticated;
+GRANT EXECUTE ON FUNCTION public.expand_territory(numeric, int)  TO authenticated;

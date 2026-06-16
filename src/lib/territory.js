@@ -64,6 +64,40 @@ export const expandGain = (power) => {
   return Math.floor(10 + p / 20)
 }
 
+// 出撃エリア(1〜7)。Game.jsx の AREAS と id/名前を一致させること。
+// 領地拡大時にエリアを選び、そのエリアの領地が増える。
+export const AREA_META = [
+  { id: 1, name: '始まりの森' },
+  { id: 2, name: '荒廃した草原' },
+  { id: 3, name: '古代の洞窟' },
+  { id: 4, name: '蒼海の入り江' },
+  { id: 5, name: '巨峰山脈' },
+  { id: 6, name: '白銀の霊峰' },
+  { id: 7, name: '煉獄火山' },
+]
+
+// エリア支配国の装備ドロップ率ボーナス上限（将来実装。シェアに応じて 0〜この値）。
+export const AREA_DROP_BONUS_MAX = 0.03  // 最大 +3%
+
+// エリアごとの支配国(シェア最大)とシェアを算出。rows = country_area_territory 全行。
+// 返り値: { [areaId]: { topCountryId, share, total } }
+export const computeAreaControl = (rows) => {
+  const byArea = {}
+  for (const r of (rows || [])) {
+    const a = r.area_id
+    if (!byArea[a]) byArea[a] = { total: 0, top: null, topAmt: 0 }
+    const amt = Number(r.amount) || 0
+    byArea[a].total += amt
+    if (amt > byArea[a].topAmt) { byArea[a].topAmt = amt; byArea[a].top = r.country_id }
+  }
+  const out = {}
+  for (const a of Object.keys(byArea)) {
+    const v = byArea[a]
+    out[a] = { topCountryId: v.top, share: v.total > 0 ? v.topAmt / v.total : 0, total: v.total }
+  }
+  return out
+}
+
 // クールダウン（ミリ秒）
 export const EXPAND_COOLDOWN_MS = 60 * 60 * 1000      // 領地拡大: 1時間
 export const ASYLUM_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000  // 亡命: 7日

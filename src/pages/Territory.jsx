@@ -15,6 +15,7 @@ import { charmPlayerBonus } from '../constants/pets'
 import {
   FOUND_MIN_CHARLV, MAX_COUNTRIES, rankOrder, rankProgress,
   expandGain, EXPAND_COOLDOWN_MS, fmtRemain, REGIONS,
+  AREA_META, computeAreaControl,
 } from '../lib/territory'
 
 const EMBLEMS = ['🏰','⚔','🦅','🐺','🌙','☀','🔥','❄','🐉','⭐','🛡','👑']
@@ -27,6 +28,8 @@ export default function Territory() {
   const [power, setPower] = useState(0)         // 総合力
   const [countries, setCountries] = useState([])
   const [members, setMembers] = useState([])    // 全プレイヤーの所属/階級（軽量）
+  const [catRows, setCatRows] = useState([])    // country_area_territory 全行
+  const [expandArea, setExpandArea] = useState(null)  // 領地拡大の出撃エリア
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [, setTick] = useState(0)
@@ -76,15 +79,21 @@ export default function Territory() {
   }
 
   const loadAll = async (prof) => {
-    const [{ data: cs }, { data: mem }] = await Promise.all([
+    const [{ data: cs }, { data: mem }, { data: cat }] = await Promise.all([
       supabase.from('countries').select('*'),
       supabase.from('profiles').select('id, username, country_id, country_rank, country_contrib'),
+      supabase.from('country_area_territory').select('country_id, area_id, amount'),
     ])
     setCountries(cs || [])
     setMembers(mem || [])
+    setCatRows(cat || [])
     const { data: fresh } = await supabase.from('profiles').select('*').eq('id', prof.id).maybeSingle()
-    setMe(fresh || prof)
-    setPower(await computePower(fresh || prof))
+    const p = fresh || prof
+    setMe(p)
+    setPower(await computePower(p))
+    // 出撃エリアの初期選択（解放済みエリアの先頭）
+    const unlocked = (p.unlocked_areas && p.unlocked_areas.length ? p.unlocked_areas : [1])
+    setExpandArea(prev => (prev && unlocked.includes(prev)) ? prev : unlocked[0])
     offsetRef.current = 0
   }
 
@@ -133,18 +142,32 @@ export default function Territory() {
   }
 
   const doExpand = async () => {
+    if (!expandArea) { flash('出撃エリアを選んでください', '#ff5555'); return }
     setBusy(true)
-    const { data: res, error } = await supabase.rpc('expand_territory', { p_power: power })
+    const { data: res, error } = await supabase.rpc('expand_territory', { p_power: power, p_area: expandArea })
     setBusy(false)
     if (error) { flash(`領地拡大失敗: ${error.message}`, '#ff5555'); return }
-    flash(`🗺 領地を ${res.gain} 拡大！（あなたの貢献度 ${Math.floor(res.contrib)} ／ 階級 ${res.rank}）`)
+    const an = AREA_META.find(a => a.id === res.area)?.name || `エリア${res.area}`
+    flash(`🗺 ${an} の領地を ${res.gain} 拡大！（階級 ${res.rank}）`)
     await reload()
   }
+
+  // 解放済みエリア（領地拡大で選べる出撃先）
+  const myUnlockedAreas = AREA_META.filter(a => (me?.unlocked_areas && me.unlocked_areas.length ? me.unlocked_areas : [1]).includes(a.id))
+  // エリアごとの支配国・シェア
+  const areaControl = computeAreaControl(catRows)
+  // 自国のエリア別領地量
+  const myAreaAmount = (areaId) => {
+    const r = catRows.find(x => x.country_id === me?.country_id && x.area_id === areaId)
+    return r ? Number(r.amount) : 0
+  }
+  const countryName = (cid) => countries.find(c => c.id === cid)?.name || '—'
 
   if (loading) return <div style={{ color:'#ffcc44', textAlign:'center', marginTop:'40vh', fontFamily:'monospace' }}>読み込み中...</div>
 
   const box = { border:'1px solid #4a3a1a', background:'#140e02', padding:'12px', marginBottom:'10px', borderRadius:'2px' }
   const prog = myCountry && !myCountry.is_unaffiliated ? rankProgress(me?.country_contrib) : null
+  const isTopRank = ['元帥','副元帥','参謀'].includes(me?.country_rank)  // 自動昇格しない任命枠
 
   return (
     <div style={{ minHeight:'100vh', background:'#0a0800', padding:'16px', fontFamily:'monospace' }}>
@@ -190,22 +213,59 @@ export default function Territory() {
             {/* 自分の貢献度・階級進捗 */}
             <div style={{ color:'#bbaa77', fontSize:'11px', marginTop:'10px' }}>
               あなたの貢献度: <b style={{ color:'#ffe' }}>{Math.floor(me?.country_contrib || 0)}</b>
-              {prog?.next && <span style={{ color:'#88774a' }}>　次の階級「{prog.next}」まで あと {prog.remain}</span>}
-              {!prog?.next && <span style={{ color:'#88774a' }}>　（自動昇格の最高位）</span>}
+              {isTopRank
+                ? <span style={{ color:'#88774a' }}>　（{me?.country_rank}は最高位です）</span>
+                : prog?.next
+                  ? <span style={{ color:'#88774a' }}>　次の階級「{prog.next}」まで あと {prog.remain}</span>
+                  : <span style={{ color:'#88774a' }}>　（自動昇格の最高位・大将）</span>}
             </div>
 
-            {/* 領地拡大 */}
+            {/* 領地拡大（出撃エリア指定） */}
             <div style={{ marginTop:'10px', paddingTop:'10px', borderTop:'1px solid #2a2010' }}>
               <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'4px' }}>🗺 領地を広げる（1時間に1回）</div>
               <div style={{ color:'#bbaa77', fontSize:'11px', marginBottom:'8px' }}>
-                次の拡大で <b style={{ color:'#ffe' }}>+{expandGain(power)}</b> 獲得（あなたの総合力 {power} 依存）。領地と貢献度に同量加算されます。
+                出撃エリアを選んで拡大すると、そのエリアの領地が増えます。次の拡大で <b style={{ color:'#ffe' }}>+{expandGain(power)}</b>（総合力 {power} 依存）。国の総領地と貢献度にも同量加算。
               </div>
-              <button disabled={busy || expandRemain > 0} onClick={doExpand}
-                style={{ padding:'8px 16px', fontFamily:'monospace', fontSize:'13px', cursor: (busy || expandRemain > 0) ? 'default' : 'pointer',
+              {/* エリア選択 */}
+              <div style={{ display:'flex', flexWrap:'wrap', gap:'5px', marginBottom:'8px' }}>
+                {myUnlockedAreas.map(a => {
+                  const sel = expandArea === a.id
+                  const ctrl = areaControl[a.id]
+                  const mine = ctrl && ctrl.topCountryId === me?.country_id
+                  return (
+                    <button key={a.id} onClick={() => setExpandArea(a.id)}
+                      style={{ padding:'5px 8px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer', textAlign:'left',
+                        background: sel ? '#2a1e02' : '#020100', border:`1px solid ${sel ? '#ffcc44' : '#4a3a1a'}`, color: sel ? '#ffcc44' : '#bbaa77' }}>
+                      {a.name}
+                      <span style={{ color: mine ? '#44ff88' : '#88774a', fontSize:'9px', marginLeft:'4px' }}>
+                        {ctrl && ctrl.total > 0 ? `支配:${countryName(ctrl.topCountryId)}(${Math.round(ctrl.share*100)}%)` : '未開拓'}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+              <button disabled={busy || expandRemain > 0 || !expandArea} onClick={doExpand}
+                style={{ padding:'8px 16px', fontFamily:'monospace', fontSize:'13px', cursor: (busy || expandRemain > 0 || !expandArea) ? 'default' : 'pointer',
                   background: expandRemain > 0 ? '#1a1200' : '#2a1e02', border:`1px solid ${expandRemain > 0 ? '#403010' : '#ffcc44'}`,
                   color: expandRemain > 0 ? '#88774a' : '#ffcc44' }}>
-                {expandRemain > 0 ? `クールダウン中 残り ${fmtRemain(expandRemain)}` : '領地を広げる'}
+                {expandRemain > 0
+                  ? `クールダウン中 残り ${fmtRemain(expandRemain)}`
+                  : `${AREA_META.find(a=>a.id===expandArea)?.name || 'エリア'}の領地を広げる`}
               </button>
+              {/* 自国のエリア別領地 */}
+              <div style={{ marginTop:'10px', display:'flex', flexWrap:'wrap', gap:'8px' }}>
+                {AREA_META.map(a => {
+                  const amt = myAreaAmount(a.id)
+                  if (amt <= 0) return null
+                  const ctrl = areaControl[a.id]
+                  const mine = ctrl && ctrl.topCountryId === me?.country_id
+                  return (
+                    <span key={a.id} style={{ fontSize:'10px', color: mine ? '#44ff88' : '#bbaa77' }}>
+                      {mine ? '👑' : ''}{a.name} {Math.floor(amt)}{ctrl && ctrl.total > 0 ? `(${Math.round((amt/ctrl.total)*100)}%)` : ''}
+                    </span>
+                  )
+                })}
+              </div>
             </div>
 
             {/* 国民一覧（階級順） */}
