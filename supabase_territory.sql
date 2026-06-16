@@ -20,21 +20,29 @@ CREATE TABLE IF NOT EXISTS public.countries (
   name            text NOT NULL UNIQUE,
   emblem          text,                              -- 国旗/エンブレム（絵文字や記号）
   description     text,                              -- 国の説明文
+  region          int,                               -- 地図上の領域(1〜9)。1領域=1国。非加盟国は中央(5)固定。
   founder_id      uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   territory       numeric NOT NULL DEFAULT 0,        -- 領地の広さ（拡大の累積）
   core_hp         int NOT NULL DEFAULT 1000000,      -- 将来の戦争用（コアHP）
   is_unaffiliated boolean NOT NULL DEFAULT false,    -- 非加盟国フラグ（1つだけ）
   created_at      timestamptz NOT NULL DEFAULT now()
 );
+-- 既に旧バージョンを適用済みでも region 列を追加
+ALTER TABLE public.countries ADD COLUMN IF NOT EXISTS region int;
 
 -- 非加盟国は1つだけ
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_unaffiliated_country
   ON public.countries (is_unaffiliated) WHERE is_unaffiliated;
+-- 1領域=1国（地図 ryouti.png の9大陸。region 1〜9 が各大陸に対応）
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_country_region
+  ON public.countries (region) WHERE region IS NOT NULL;
 
--- 非加盟国を1つだけ生成（存在しなければ）
-INSERT INTO public.countries (name, emblem, description, is_unaffiliated)
-SELECT '非加盟国', '🏳', 'どの国にも属さない者たちが暮らす中立の地。ここから新たな国を建てることができる。', true
+-- 非加盟国を1つだけ生成（存在しなければ）。中央の大陸 region=5 に配置。
+INSERT INTO public.countries (name, emblem, description, region, is_unaffiliated)
+SELECT '非加盟国', '🏳', 'どの国にも属さない者たちが暮らす中立の地。ここから新たな国を建てることができる。', 5, true
 WHERE NOT EXISTS (SELECT 1 FROM public.countries WHERE is_unaffiliated);
+-- 旧データ救済: 非加盟国に region が無ければ中央(5)を割り当て
+UPDATE public.countries SET region = 5 WHERE is_unaffiliated AND region IS NULL;
 
 -- ===== 2) profiles 列追加 =====
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS country_id      uuid REFERENCES public.countries(id) ON DELETE SET NULL;
@@ -73,7 +81,10 @@ END;
 $function$;
 
 -- ===== 5) 建国 =====
-CREATE OR REPLACE FUNCTION public.found_country(p_name text, p_emblem text, p_desc text)
+-- 旧シグネチャ(region無し)が残っていれば削除
+DROP FUNCTION IF EXISTS public.found_country(text, text, text);
+
+CREATE OR REPLACE FUNCTION public.found_country(p_name text, p_emblem text, p_desc text, p_region int)
  RETURNS public.countries
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -84,13 +95,25 @@ DECLARE
   v_charlv  int;
   v_cid     uuid;
   v_unaff   boolean;
-  v_count   int;
+  v_taken   boolean;
   v_name    text := btrim(coalesce(p_name,''));
   v_new     public.countries;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'ログインが必要です'; END IF;
   IF v_name = '' THEN RAISE EXCEPTION '国名を入力してください'; END IF;
   IF char_length(v_name) > 20 THEN RAISE EXCEPTION '国名は20文字以内にしてください'; END IF;
+
+  -- 領域(大陸)の指定チェック
+  IF p_region IS NULL OR p_region < 1 OR p_region > 9 THEN
+    RAISE EXCEPTION '建国する大陸を選択してください';
+  END IF;
+  IF p_region = 5 THEN
+    RAISE EXCEPTION '中央の大陸は非加盟国の領域です';
+  END IF;
+  SELECT true INTO v_taken FROM public.countries WHERE region = p_region;
+  IF v_taken IS TRUE THEN
+    RAISE EXCEPTION 'その大陸には既に国があります';
+  END IF;
 
   SELECT char_lv, country_id INTO v_charlv, v_cid FROM public.profiles WHERE id = v_uid;
   IF v_charlv IS NULL OR v_charlv < 500 THEN
@@ -105,14 +128,8 @@ BEGIN
     END IF;
   END IF;
 
-  -- 空き枠（加盟国は最大8カ国）
-  SELECT count(*) INTO v_count FROM public.countries WHERE is_unaffiliated = false;
-  IF v_count >= 8 THEN
-    RAISE EXCEPTION '建国できる枠が空いていません（最大8カ国）';
-  END IF;
-
-  INSERT INTO public.countries (name, emblem, description, founder_id, is_unaffiliated)
-  VALUES (v_name, nullif(btrim(coalesce(p_emblem,'')),''), nullif(btrim(coalesce(p_desc,'')),''), v_uid, false)
+  INSERT INTO public.countries (name, emblem, description, region, founder_id, is_unaffiliated)
+  VALUES (v_name, nullif(btrim(coalesce(p_emblem,'')),''), nullif(btrim(coalesce(p_desc,'')),''), p_region, v_uid, false)
   RETURNING * INTO v_new;
 
   UPDATE public.profiles
@@ -120,8 +137,13 @@ BEGIN
    WHERE id = v_uid;
 
   RETURN v_new;
-EXCEPTION WHEN unique_violation THEN
-  RAISE EXCEPTION 'その国名は既に使われています';
+EXCEPTION
+  WHEN unique_violation THEN
+    -- name か region の重複
+    IF EXISTS (SELECT 1 FROM public.countries WHERE region = p_region) THEN
+      RAISE EXCEPTION 'その大陸には既に国があります';
+    END IF;
+    RAISE EXCEPTION 'その国名は既に使われています';
 END;
 $function$;
 
@@ -228,6 +250,6 @@ BEGIN
 END;
 $function$;
 
-GRANT EXECUTE ON FUNCTION public.found_country(text, text, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.found_country(text, text, text, int) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.seek_asylum(uuid)              TO authenticated;
 GRANT EXECUTE ON FUNCTION public.expand_territory(numeric)      TO authenticated;

@@ -14,10 +14,11 @@ import { calcEffectiveTotal } from '../lib/stats'
 import { charmPlayerBonus } from '../constants/pets'
 import {
   FOUND_MIN_CHARLV, MAX_COUNTRIES, rankOrder, rankProgress,
-  expandGain, EXPAND_COOLDOWN_MS, fmtRemain,
+  expandGain, EXPAND_COOLDOWN_MS, fmtRemain, REGIONS, UNAFFILIATED_REGION,
 } from '../lib/territory'
 
 const EMBLEMS = ['🏰','⚔','🦅','🐺','🌙','☀','🔥','❄','🐉','⭐','🛡','👑']
+const MAP_IMG = '/ryouti.png'
 
 export default function Territory() {
   const nav = useNavigate()
@@ -34,6 +35,7 @@ export default function Territory() {
   const [fName, setFName] = useState('')
   const [fEmblem, setFEmblem] = useState('🏰')
   const [fDesc, setFDesc] = useState('')
+  const [fRegion, setFRegion] = useState(null)  // 選択した大陸(region 1〜9)
 
   useEffect(() => {
     (async () => {
@@ -106,14 +108,17 @@ export default function Territory() {
 
   const canFound = inUnaffiliated && (me?.char_lv || 0) >= FOUND_MIN_CHARLV && affiliated.length < MAX_COUNTRIES
 
+  const countryByRegion = (rid) => countries.find(c => c.region === rid) || null
+
   const doFound = async () => {
+    if (!fRegion) { flash('地図から建国する大陸を選んでください', '#ff5555'); return }
     if (!fName.trim()) { flash('国名を入力してください', '#ff5555'); return }
     setBusy(true)
-    const { error } = await supabase.rpc('found_country', { p_name: fName.trim(), p_emblem: fEmblem, p_desc: fDesc.trim() })
+    const { error } = await supabase.rpc('found_country', { p_name: fName.trim(), p_emblem: fEmblem, p_desc: fDesc.trim(), p_region: fRegion })
     setBusy(false)
     if (error) { flash(`建国失敗: ${error.message}`, '#ff5555'); return }
     flash(`👑 ${fName.trim()} を建国しました！あなたは元帥です`)
-    setFName(''); setFDesc('')
+    setFName(''); setFDesc(''); setFRegion(null)
     await reload()
   }
 
@@ -176,6 +181,43 @@ export default function Territory() {
           )}
         </div>
 
+        {/* 世界地図（9大陸＝9領域） */}
+        <div style={{ ...box, padding:'8px' }}>
+          <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'6px', paddingLeft:'4px' }}>🗺 世界地図（{REGIONS.length}大陸）</div>
+          <div style={{ position:'relative', width:'100%', aspectRatio:'1512 / 1000', backgroundImage:`url(${MAP_IMG})`, backgroundSize:'cover', backgroundPosition:'center', borderRadius:'2px', overflow:'hidden' }}>
+            {REGIONS.map(rg => {
+              const c = countryByRegion(rg.id)
+              const isUnaff = rg.id === UNAFFILIATED_REGION
+              const isMine = c && c.id === me?.country_id
+              const selectable = canFound && !c && !isUnaff
+              const selected = fRegion === rg.id
+              let bg = 'rgba(10,8,2,0.78)', bd = '#5a4a2a', col = '#bbaa77'
+              if (isUnaff) { bd = '#6a6a7a'; col = '#bbbbcc' }
+              else if (isMine) { bd = '#ffcc44'; col = '#ffe'; bg = 'rgba(42,30,2,0.88)' }
+              else if (c) { bd = '#aa7744'; col = '#ffddaa' }
+              if (selected) { bd = '#44ff88'; col = '#bbffcc'; bg = 'rgba(2,26,12,0.9)' }
+              return (
+                <div key={rg.id}
+                  onClick={selectable ? () => setFRegion(selected ? null : rg.id) : undefined}
+                  style={{ position:'absolute', left:`${rg.x}%`, top:`${rg.y}%`, transform:'translate(-50%,-50%)',
+                    background:bg, border:`1.5px solid ${bd}`, borderRadius:'3px', padding:'3px 6px',
+                    textAlign:'center', minWidth:'48px', maxWidth:'30%',
+                    cursor: selectable ? 'pointer' : 'default', boxShadow: selectable ? '0 0 6px rgba(68,255,136,0.4)' : 'none' }}>
+                  <div style={{ fontSize:'13px', lineHeight:1 }}>{isUnaff ? '🏳' : (c ? c.emblem : (selectable ? (selected ? '✓' : '＋') : '·'))}</div>
+                  <div style={{ fontSize:'9px', color:col, lineHeight:1.3, marginTop:'2px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                    {isUnaff ? '非加盟国' : (c ? c.name : (selectable ? (selected ? '選択中' : '空き') : '空き'))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          {canFound && (
+            <div style={{ color:'#88cc99', fontSize:'10px', marginTop:'6px', paddingLeft:'4px' }}>
+              地図の「＋」空き大陸をタップして建国地を選べます{fRegion ? `（選択中: ${REGIONS.find(r=>r.id===fRegion)?.name}）` : ''}
+            </div>
+          )}
+        </div>
+
         {/* 領地拡大（所属国がある時のみ） */}
         {!inUnaffiliated && (
           <div style={box}>
@@ -218,9 +260,11 @@ export default function Territory() {
                   <textarea value={fDesc} onChange={e => setFDesc(e.target.value)} maxLength={200} placeholder="国の説明文（任意・200文字以内）" rows={2}
                     style={{ width:'100%', boxSizing:'border-box', padding:'6px 8px', background:'#020100', border:'1px solid #4a3a1a', color:'#ffe', fontFamily:'monospace', fontSize:'12px', resize:'vertical' }} />
                 </div>
-                <button disabled={busy} onClick={doFound}
-                  style={{ padding:'8px 16px', fontFamily:'monospace', fontSize:'13px', cursor: busy ? 'default' : 'pointer',
-                    background:'#2a1e02', border:'1px solid #ffcc44', color:'#ffcc44' }}>{fEmblem} 建国する</button>
+                {!fRegion && <div style={{ color:'#aa7755', fontSize:'10px', marginBottom:'6px' }}>↑ 上の地図から建国する大陸（空き）を選んでください</div>}
+                <button disabled={busy || !fRegion} onClick={doFound}
+                  style={{ padding:'8px 16px', fontFamily:'monospace', fontSize:'13px', cursor: (busy || !fRegion) ? 'default' : 'pointer',
+                    background: fRegion ? '#2a1e02' : '#1a1200', border:`1px solid ${fRegion ? '#ffcc44' : '#403010'}`, color: fRegion ? '#ffcc44' : '#88774a' }}>
+                  {fEmblem} {fRegion ? `${REGIONS.find(r=>r.id===fRegion)?.name}に建国する` : '建国する'}</button>
               </div>
             )}
           </div>

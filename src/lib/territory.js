@@ -11,6 +11,21 @@ export const MAX_COUNTRIES = 8
 // 建国条件
 export const FOUND_MIN_CHARLV = 500
 
+// 地図 ryouti.png 上の9大陸＝9領域。region 1〜9。中央(5)は非加盟国の固定領域。
+// x/y は画像に対する中心位置(%)。マップ上のマーカー配置に使う。
+export const UNAFFILIATED_REGION = 5
+export const REGIONS = [
+  { id: 1, x: 13, y: 30, name: '北西の大陸' },
+  { id: 2, x: 29, y: 33, name: '北中西の大陸' },
+  { id: 3, x: 55, y: 28, name: '北の大陸' },
+  { id: 4, x: 84, y: 35, name: '北東の大陸' },
+  { id: 5, x: 44, y: 50, name: '中央の大陸' },   // 非加盟国
+  { id: 6, x: 21, y: 68, name: '南西の大陸' },
+  { id: 7, x: 39, y: 78, name: '南中西の大陸' },
+  { id: 8, x: 58, y: 73, name: '南中東の大陸' },
+  { id: 9, x: 83, y: 75, name: '南東の大陸' },
+]
+
 // 階級（低→高）。自動昇格で到達するのは 二等兵〜大将（16段）。
 // 副元帥/参謀/元帥は任命・建国専用（将来の下剋上で昇格）。
 export const RANKS_ASC = [
