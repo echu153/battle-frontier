@@ -3176,30 +3176,23 @@ export default function Game() {
 
   const GUIDE_SECTIONS = [
     {
-      id: 'g_battle', title: '⚔ 戦う（出撃・デイリーダンジョン）',
-      content: `━━━━━━━━━━━━━━━
-⚔ 出撃
-━━━━━━━━━━━━━━━
-● エリアを選んで「出撃」を押すと自動で戦闘が始まる、最も基本の行動
+      id: 'm_sortie', title: '⚔ 出撃',
+      content: `● エリアを選んで「出撃」を押すと自動で戦闘が始まる、最も基本の行動
 ● 勝利するとEXP・Goldを獲得。レベルアップでステータスが上昇する
 ● レベルアップでステータスポイントが1pt貰える（街の画面から割り振り）
 ● クールダウン（10秒）が終わると再び出撃できる
 ● ボスを倒すと次のエリアが解放される
-● 強くなる土台は「レベル」。まずは出撃を重ねてコツコツ育てよう
-
-━━━━━━━━━━━━━━━
-✨ デイリーダンジョン
-━━━━━━━━━━━━━━━
-● EXP / Gold / 強化石 / 武器熟練度 / 宝石 の5種類
+● 強くなる土台は「レベル」。まずは出撃を重ねてコツコツ育てよう`,
+    },
+    {
+      id: 'm_dungeon', title: '✨ デイリーダンジョン',
+      content: `● EXP / Gold / 強化石 / 武器熟練度 / 宝石 の5種類
 ● それぞれ1日5回まで・毎日朝5時（日本時間）リセット
 ● 通常出撃より報酬効率が良いので、毎日忘れずにこなそう`,
     },
     {
-      id: 'g_character', title: '🛡 キャラクター育成（装備・スキル・プロフィール・アイテム）',
-      content: `━━━━━━━━━━━━━━━
-🛡 装備
-━━━━━━━━━━━━━━━
-● 戦闘でドロップした武器・防具は「装備」ページで確認・装備できる
+      id: 'm_equip', title: '🛡 装備',
+      content: `● 戦闘でドロップした武器・防具は「装備」ページで確認・装備できる
 ● 各装備には宝石を1つ埋め込めるソケットがある
 ● 武器を使い続けると熟練度が上がりボーナスが付く
 〔💍 宝石〕
@@ -3207,126 +3200,110 @@ export default function Game() {
 ● 各装備に1つずつ装着（装備ページの「宝石」タブで合成・埋め込み）
 ● デイリーダンジョンの「宝石ダンジョン」で入手。ランクはF〜SSS
 ● 同じ宝石を3個合成すると1ランクUP（効果は1.5倍）
-● 装着部位に制限あり：%系（貫通/クリ/命中/回避）=装飾品のみ／HP・MP=防具・装飾品／攻撃系=武器・装飾品／防御系=防具・装飾品
-
-━━━━━━━━━━━━━━━
-⚡ スキル
-━━━━━━━━━━━━━━━
-● レベルアップで自動習得。スキルページでスロット（最大5個）にセット
+● 装着部位に制限あり：%系（貫通/クリ/命中/回避）=装飾品のみ／HP・MP=防具・装飾品／攻撃系=武器・装飾品／防御系=防具・装飾品`,
+    },
+    {
+      id: 'm_skill', title: '⚡ スキル',
+      content: `● レベルアップで自動習得。スキルページでスロット（最大5個）にセット
 ● 戦闘ではスロット順に上から繰り返し使用する
 ● パッシブスキルはセットで常時発動（パッシブは1つまで）
 ● MPが足りないとスキルが発動しない（宿屋でMP補充）
-● 転職するとセット中のスキルは全て外れるので、転職後にセットし直そう
-
-━━━━━━━━━━━━━━━
-👤 プロフィール
-━━━━━━━━━━━━━━━
-● 自分や他のプレイヤーの詳細ステータスを確認できる
-● 全クラス通算のレベルアップ回数がキャラクターレベル（総合力の指標）
-
-━━━━━━━━━━━━━━━
-🎒 アイテム
-━━━━━━━━━━━━━━━
-● 所持している回復・補助アイテムや各種素材を確認・使用できる
+● 転職するとセット中のスキルは全て外れるので、転職後にセットし直そう`,
+    },
+    {
+      id: 'm_profile', title: '👤 プロフィール',
+      content: `● 自分や他のプレイヤーの詳細ステータスを確認できる
+● 全クラス通算のレベルアップ回数がキャラクターレベル（総合力の指標）`,
+    },
+    {
+      id: 'm_item', title: '🎒 アイテム',
+      content: `● 所持している回復・補助アイテムや各種素材を確認・使用できる
 ● 回数券などの便利アイテムもここから使う`,
     },
     {
-      id: 'g_facility', title: '🏘 街の施設（宿屋・神殿・商店・鍛冶屋ほか）',
-      content: `━━━━━━━━━━━━━━━
-🏨 宿屋
-━━━━━━━━━━━━━━━
-● 戦闘でHPが0になると「瀕死状態」になり出撃不可になる
+      id: 'm_inn', title: '🏨 宿屋',
+      content: `● 戦闘でHPが0になると「瀕死状態」になり出撃不可になる
 ● 宿屋でHP・MPを全回復（Goldがかかる）
 ● 瀕死状態の回復は通常よりGoldが多くかかる
-● 時間経過でも自然回復する（瀕死状態も回復する）
-
-━━━━━━━━━━━━━━━
-⛩ 神殿（クラス・転職）
-━━━━━━━━━━━━━━━
-● 初期クラスは戦士・弓使い・魔法使い・僧侶・格闘家の5種類（各LV上限100）
+● 時間経過でも自然回復する（瀕死状態も回復する）`,
+    },
+    {
+      id: 'm_temple', title: '⛩ 神殿（クラス・転職）',
+      content: `● 初期クラスは戦士・弓使い・魔法使い・僧侶・格闘家の5種類（各LV上限100）
 ● LV1から他クラスに転職できる（ステータスポイントは引き継がれる）
 ● 転職するとセット中のスキルは全て外れる（習得済みは消えない）
 ● LV100到達クラスから上位職へ転職可能（侍・暗殺者・元素使い など）
 ● 複合上位職（魔法剣士・聖騎士・魔銃士・賢者）は対応2クラスがLV50以上で解放
 ● 「再修練」：クラスをLV1に戻す代わりにスキルを1つ他クラスへ持ち越せる
-● 再修練を重ねるとスキルが段階的に強化、5回でそのクラスのLV上限が300に解放
-
-━━━━━━━━━━━━━━━
-🛒 商店
-━━━━━━━━━━━━━━━
-● 回復アイテムや補助アイテムを購入できる
-● 解放エリアが進むと品揃えが変わる
-
-━━━━━━━━━━━━━━━
-⚒ 鍛冶屋
-━━━━━━━━━━━━━━━
-● 同名の武器か強化石を使って武器を強化できる
-● 強化石はエリア2以降の敵・デイリーダンジョン（石）・武器の加工で入手
-● 「再評価」：付与された特殊効果を別の効果に変更
-● 「再鑑定」：武器のボーナスステータスを振り直す
-
-━━━━━━━━━━━━━━━
-🏛 博物館
-━━━━━━━━━━━━━━━
-● 入手した装備（武器・防具・装飾品）を寄贈して展示できる
-● 寄贈すると永続的なステータスボーナスを獲得
-● 収集状況に応じたランキングもある
-
-━━━━━━━━━━━━━━━
-🔄 交換所
-━━━━━━━━━━━━━━━
-● レイドボスなどで集めた素材を、専用装備や強化石と交換
-● ラインナップはイベントやボスによって変わる
-
-━━━━━━━━━━━━━━━
-🎰 賭博場
-━━━━━━━━━━━━━━━
-● Goldをメダルに替え、スロットやハイ&ローで遊べる
-● 簡易出撃でまとめて周回もできる
-
-━━━━━━━━━━━━━━━
-✂ 美容院
-━━━━━━━━━━━━━━━
-● キャラクターの見た目を変更できる`,
+● 再修練を重ねるとスキルが段階的に強化、5回でそのクラスのLV上限が300に解放`,
     },
     {
-      id: 'g_other', title: '🎣 その他のコンテンツ（釣り場・かかし修練場・錬金部屋ほか）',
-      content: `━━━━━━━━━━━━━━━
-🎣 釣り場
-━━━━━━━━━━━━━━━
-● 竿を垂らして魚を釣ることができる
+      id: 'm_shop', title: '🛒 商店',
+      content: `● 回復アイテムや補助アイテムを購入できる
+● 解放エリアが進むと品揃えが変わる`,
+    },
+    {
+      id: 'm_smithy', title: '⚒ 鍛冶屋',
+      content: `● 同名の武器か強化石を使って武器を強化できる
+● 強化石はエリア2以降の敵・デイリーダンジョン（石）・武器の加工で入手
+● 「再評価」：付与された特殊効果を別の効果に変更
+● 「再鑑定」：武器のボーナスステータスを振り直す`,
+    },
+    {
+      id: 'm_museum', title: '🏛 博物館',
+      content: `● 入手した装備（武器・防具・装飾品）を寄贈して展示できる
+● 寄贈すると永続的なステータスボーナスを獲得
+● 収集状況に応じたランキングもある`,
+    },
+    {
+      id: 'm_exchange', title: '🔄 交換所',
+      content: `● レイドボスなどで集めた素材を、専用装備や強化石と交換
+● ラインナップはイベントやボスによって変わる`,
+    },
+    {
+      id: 'm_casino', title: '🎰 賭博場',
+      content: `● Goldをメダルに替え、スロットやハイ&ローで遊べる
+● 簡易出撃でまとめて周回もできる`,
+    },
+    {
+      id: 'm_barber', title: '✂ 美容院',
+      content: `● キャラクターの見た目を変更できる`,
+    },
+    {
+      id: 'm_fishing', title: '🎣 釣り場',
+      content: `● 竿を垂らして魚を釣ることができる
 ● 釣り中は出撃・デイリーダンジョンに入れない
 ● はじめて釣った魚は図鑑に登録され、永続的なステータスボーナスを獲得
-● 同じ魚の2回目以降は図鑑登録・ボーナスなし
-
-━━━━━━━━━━━━━━━
-🌾 かかし修練場
-━━━━━━━━━━━━━━━
-● かかし相手にスキルの威力やコンボを試せる修練施設
-● 修練中は出撃・デイリーダンジョンに入れない（終わるまで待とう）
-
-━━━━━━━━━━━━━━━
-🧪 錬金部屋
-━━━━━━━━━━━━━━━
-● 時間経過で強化石（F〜A）を自動生成する施設（最大4枠）
+● 同じ魚の2回目以降は図鑑登録・ボーナスなし`,
+    },
+    {
+      id: 'm_scarecrow', title: '🌾 かかし修練場',
+      content: `● かかし相手にスキルの威力やコンボを試せる修練施設
+● 修練中は出撃・デイリーダンジョンに入れない（終わるまで待とう）`,
+    },
+    {
+      id: 'm_alchemy', title: '🧪 錬金部屋',
+      content: `● 時間経過で強化石（F〜A）を自動生成する施設（最大4枠）
 ● 錬金用素材を使うと生成時間を短縮できる
 ● 各枠はエリアボス撃破・ダンジョン踏破などで順次解放される
-● ※先行公開中の機能です
-
-━━━━━━━━━━━━━━━
-🐾 ペット ／ ⚔ 挑戦
-━━━━━━━━━━━━━━━
-〔🐾 ペット〕
-● スターターを選んで育成できる相棒システム
+● ※先行公開中の機能です`,
+    },
+    {
+      id: 'm_pet', title: '🐾 ペット',
+      content: `● スターターを選んで育成できる相棒システム
 ● スキンシップで好感度を上げると能力が伸びる
-● チャームの装備・進化で強化、ペット専用ダンジョンにも挑戦できる
-〔⚔ 挑戦〕やり込み向けの高難度コンテンツへの入口
+● チャームの装備・進化で強化、ペット専用ダンジョンにも挑戦できる`,
+    },
+    {
+      id: 'm_challenge', title: '⚔ 挑戦（奈落・天穹）',
+      content: `やり込み向けの高難度コンテンツへの入口。
 ● 🕯 奈落闘技場：20階を順番に攻略。報酬はGold・強化石・宝石
 ● 🌌 天穹十二宮：全12宮のエンドコンテンツ（［開発］段階）
-● 一部は管理者・先行公開中の場合があります
-
-📜 うわさ話
-● 世の中には「アーティファクト」と呼ばれる武器があるらしい。
+● 一部は管理者・先行公開中の場合があります`,
+    },
+    {
+      id: 'm_rumor', title: '📜 うわさ話',
+      content: `● 世の中には「アーティファクト」と呼ばれる武器があるらしい。
   現代では風化してしまっているが、手入れをすればまた使えるようになるかも…`,
     },
   ]
@@ -3807,7 +3784,7 @@ export default function Game() {
             <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen() }} style={{ background:'none', border:`1px solid ${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, color:`${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', position:'relative' }}>
               📢{hasNewAnnouncements && <span style={{ marginLeft:'2px', background:'#ff4400', color:'#fff', fontSize:'7px', padding:'1px 3px', borderRadius:'2px', verticalAlign:'middle' }}>NEW</span>}
             </button>
-            <button onClick={()=>{ setOpenGuideId('g_battle'); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>📖</button>
+            <button onClick={()=>{ setOpenGuideId(null); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>📖</button>
           </div>
           <div style={{ display:'flex', gap:'6px' }}>
             <button onClick={()=>nav('/ranking')} style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏆</button>
@@ -4223,7 +4200,7 @@ export default function Game() {
             <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen() }} style={{ background:'none', border:`1px solid ${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, color:`${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', position:'relative' }}>
               📢 お知らせ{hasNewAnnouncements && <span style={{ marginLeft:'4px', background:'#ff4400', color:'#fff', fontSize:'8px', padding:'1px 4px', borderRadius:'2px', verticalAlign:'middle' }}>NEW</span>}
             </button>
-            <button onClick={()=>{ setOpenGuideId('g_battle'); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📖 ガイド</button>
+            <button onClick={()=>{ setOpenGuideId(null); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📖 ガイド</button>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
             <button onClick={()=>nav('/equipment?view=gear')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡 装備</button>
