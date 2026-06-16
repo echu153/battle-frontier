@@ -32,6 +32,7 @@ export default function Territory() {
   const [expandArea, setExpandArea] = useState(null)  // 領地拡大の出撃エリア
   const [chat, setChat] = useState([])          // 国チャット（古い→新しい順）
   const [chatInput, setChatInput] = useState('')
+  const [tab, setTab] = useState('home')        // 'home'(自国) | 'world'(世界地図)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [, setTick] = useState(0)
@@ -193,6 +194,18 @@ export default function Territory() {
     return r ? Number(r.amount) : 0
   }
   const countryName = (cid) => countries.find(c => c.id === cid)?.name || '—'
+  // 国ごとの色（横グラフ用）。加盟国の並び順で固定割り当て。
+  const COUNTRY_PALETTE = ['#ffcc44','#44aaff','#ff6688','#66dd88','#cc88ff','#ff9944','#44dddd','#dddd44']
+  const countryColor = (cid) => {
+    const idx = affiliated.findIndex(c => c.id === cid)
+    return idx < 0 ? '#888' : COUNTRY_PALETTE[idx % COUNTRY_PALETTE.length]
+  }
+  // エリアごとの「国→領地量」内訳（横グラフ用）
+  const areaBreakdown = (areaId) => {
+    const rows = catRows.filter(x => x.area_id === areaId && Number(x.amount) > 0)
+    const total = rows.reduce((s, r) => s + Number(r.amount), 0)
+    return { total, rows: rows.sort((a, b) => Number(b.amount) - Number(a.amount)) }
+  }
 
   if (loading) return <div style={{ color:'#ffcc44', textAlign:'center', marginTop:'40vh', fontFamily:'monospace' }}>読み込み中...</div>
 
@@ -214,6 +227,18 @@ export default function Territory() {
           <div style={{ color:msg.c, fontSize:'12px', border:`1px solid ${msg.c}55`, background:'#1a1200', padding:'8px 12px', marginBottom:'10px' }}>{msg.t}</div>
         )}
 
+        {/* タブ切り替え */}
+        <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
+          {[['home','🏰 自国'],['world','🗺 世界地図']].map(([k, lbl]) => (
+            <button key={k} onClick={() => setTab(k)}
+              style={{ flex:1, padding:'8px', fontFamily:'monospace', fontSize:'12px', cursor:'pointer',
+                background: tab === k ? '#2a1e02' : '#0a0700', border:`1px solid ${tab === k ? '#ffcc44' : '#403010'}`,
+                color: tab === k ? '#ffcc44' : '#88774a' }}>{lbl}</button>
+          ))}
+        </div>
+
+        {/* ===== 自国タブ ===== */}
+        {tab === 'home' && (<>
         {/* 非加盟国（未所属）の案内 */}
         {inUnaffiliated && (
           <div style={box}>
@@ -348,6 +373,13 @@ export default function Territory() {
           </div>
         )}
 
+        {inUnaffiliated && (
+          <div style={{ color:'#88774a', fontSize:'11px', ...box }}>「🗺 世界地図」タブから建国・他国への亡命ができます。</div>
+        )}
+        </>)}
+
+        {/* ===== 世界地図タブ ===== */}
+        {tab === 'world' && (<>
         {/* 世界地図（9大陸＝9領域） */}
         <div style={{ ...box, padding:'8px' }}>
           <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'6px', paddingLeft:'4px' }}>🗺 世界地図（{REGIONS.length}大陸）</div>
@@ -463,6 +495,43 @@ export default function Territory() {
           )
         })}
 
+        {/* 各エリアの占領割合（横グラフ） */}
+        <div style={{ color:'#ffcc44', fontSize:'12px', margin:'14px 0 8px' }}>📊 エリア占領割合</div>
+        <div style={box}>
+          {/* 凡例 */}
+          {affiliated.length > 0 && (
+            <div style={{ display:'flex', flexWrap:'wrap', gap:'8px', marginBottom:'10px' }}>
+              {affiliated.map(c => (
+                <span key={c.id} style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'10px', color:'#bbaa77' }}>
+                  <span style={{ width:'10px', height:'10px', background:countryColor(c.id), display:'inline-block', borderRadius:'2px' }} />
+                  {c.emblem} {c.name}
+                </span>
+              ))}
+            </div>
+          )}
+          {AREA_META.map(a => {
+            const bd = areaBreakdown(a.id)
+            return (
+              <div key={a.id} style={{ marginBottom:'8px' }}>
+                <div style={{ color:'#bbaa77', fontSize:'11px', marginBottom:'3px' }}>
+                  {a.name} <span style={{ color:'#88774a' }}>{bd.total > 0 ? `（計 ${Math.floor(bd.total)}）` : '（未開拓）'}</span>
+                </div>
+                <div style={{ display:'flex', width:'100%', height:'16px', background:'#0a0700', border:'1px solid #2a2010', borderRadius:'2px', overflow:'hidden' }}>
+                  {bd.total > 0 ? bd.rows.map(r => {
+                    const pct = (Number(r.amount) / bd.total) * 100
+                    return (
+                      <div key={r.country_id} title={`${countryName(r.country_id)} ${Math.round(pct)}%`}
+                        style={{ width:`${pct}%`, background:countryColor(r.country_id), display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden' }}>
+                        {pct >= 12 && <span style={{ fontSize:'9px', color:'#000', fontWeight:'bold' }}>{Math.round(pct)}%</span>}
+                      </div>
+                    )
+                  }) : null}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
         {/* 非加盟国へ離脱（所属国があり元帥でない時） */}
         {!inUnaffiliated && me?.country_rank !== '元帥' && unaffiliated && (
           <div style={{ ...box, marginTop:'14px' }}>
@@ -474,6 +543,7 @@ export default function Territory() {
             </button>
           </div>
         )}
+        </>)}
       </div>
     </div>
   )
