@@ -2908,7 +2908,9 @@ export default function Game() {
       : isBossEncounter ? 13
       : Math.floor(Math.random()*4)+8
     // キャラクターLV100まで経験値1.5倍（サーバー apply_battle_result の検証上限も1.5倍にしてある）
-    if (expGained > 0 && (profile.char_lv||1) < 100) expGained = Math.floor(expGained * 1.5)
+    const expBoosted = expGained > 0 && (profile.char_lv||1) < 100
+    if (expBoosted) expGained = Math.floor(expGained * 1.5)
+    const expBoostNote = expBoosted ? '（✨Lv100まで経験値1.5倍）' : ''
     const goldGained = (win && !papiaEscaped) ? Math.floor((enemy.gold||0) * 1.5) : 0  // 出撃ゴールド1.5倍
 
 
@@ -2919,12 +2921,12 @@ export default function Game() {
           logs.push({ text:`⚠ ${profile.class}はレベルキャップに達しています。経験値は入りません。`, color:'#ff8844' })
           logs.push({ text:`Gold + ${goldGained}`, color:'#ffcc00' })
         } else {
-          logs.push({ text:`EXP + ${expGained}　Gold + ${goldGained}`, color:'#ffcc00' })
+          logs.push({ text:`EXP + ${expGained}${expBoostNote}　Gold + ${goldGained}`, color:'#ffcc00' })
         }
       } else {
         logs.push({ text:`敗北…`, color:'#ff4444' })
         if (isBossEncounter) logs.push({ text:`💡 ボスに勝てないときは、商店の「魔よけのお守り」を装備するとボス戦を回避できます。`, color:'#cc44ff' })
-        if (!isAtCap) logs.push({ text:`EXP + ${expGained}`, color:'#ff6644' })
+        if (!isAtCap) logs.push({ text:`EXP + ${expGained}${expBoostNote}`, color:'#ff6644' })
       }
     }
 
