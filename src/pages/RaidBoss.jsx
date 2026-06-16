@@ -15,9 +15,9 @@ import {
 
 const POLL_MS = 5000
 const BOSS_NAME = '黒龍ヴァルゼノク'
-// レイドボスの表示画像（ボス名→画像）。あまざ用は /public/raid-boss-amaza.png を配置
+// レイドボスの表示画像（ボス名→画像）。雨摩座用は /public/raid-boss-amaza.png を配置
 const RAID_IMG_VER = '2'  // 画像差し替え時に上げるとキャッシュを無効化
-const bossImage = (name) => (name === 'あまざ' ? '/amaza.png' : '/varuzenoku.png') + `?v=${RAID_IMG_VER}`
+const bossImage = (name) => (name === '雨摩座' ? '/amaza.png' : '/varuzenoku.png') + `?v=${RAID_IMG_VER}`
 const BOSS_DEF  = 1000
 const BOSS_MDEF = 1000
 const BOSS_SPD  = 1200
@@ -146,8 +146,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   let   playerExtraRate = calcExtraActionRate(effectiveSpdForCalc, BOSS_SPD)
   const bossExtraRate   = calcExtraActionRate(BOSS_SPD, effectiveSpdForCalc)
 
-  // ボス差別化：あまざ=物理被ダメ+10%/特殊-10%、ヴァルゼノク=その逆
-  const isAmaza = bossName === 'あまざ'
+  // ボス差別化：雨摩座=物理被ダメ+10%/特殊-10%、ヴァルゼノク=その逆
+  const isAmaza = bossName === '雨摩座'
   const weakMult = (isPhysical) => isAmaza ? (isPhysical ? 1.1 : 0.9) : (isPhysical ? 0.9 : 1.1)
 
   playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
@@ -595,8 +595,8 @@ export default function RaidBoss() {
   const epochDays = Math.floor(Date.UTC(jst.getFullYear(), jst.getMonth(), jst.getDate()) / 86400000)
   const baseDays  = Math.floor(Date.UTC(2000, 0, 1) / 86400000)
   const evenDay   = (((epochDays - baseDays) % 2) + 2) % 2 === 0
-  const slot21Boss = evenDay ? '黒龍ヴァルゼノク' : 'あまざ'
-  const slot22Boss = evenDay ? 'あまざ' : '黒龍ヴァルゼノク'
+  const slot21Boss = evenDay ? '黒龍ヴァルゼノク' : '雨摩座'
+  const slot22Boss = evenDay ? '雨摩座' : '黒龍ヴァルゼノク'
   const curHM = jst.getHours() * 60 + jst.getMinutes()
   const slotActive = (start) => curHM >= start && curHM < start + 30  // 出現中の枠か
 
@@ -623,7 +623,7 @@ export default function RaidBoss() {
             return (
               <div key={s.t} style={{ display:'flex', alignItems:'center', gap:'10px', fontSize:'12px', padding:'2px 0' }}>
                 <span style={{ color: live ? '#ffcc44' : '#667799', minWidth:'92px' }}>{s.t}</span>
-                <span style={{ color: s.name==='あまざ' ? '#66bbff' : '#ff6666', fontWeight:'bold' }}>{s.name}</span>
+                <span style={{ color: s.name==='雨摩座' ? '#66bbff' : '#ff6666', fontWeight:'bold' }}>{s.name}</span>
                 {live && <span style={{ color:'#44ff88', fontSize:'10px' }}>● 出現中</span>}
               </div>
             )
@@ -636,7 +636,7 @@ export default function RaidBoss() {
         <div style={{ border:'1px solid #3a2a6a', background:'#0a0820', padding:'10px', marginBottom:'12px' }}>
           <div style={{ color:'#a890ff', fontSize:'11px', marginBottom:'6px' }}>🔧 開発テスト（管理者のみ・一般には非表示）</div>
           <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
-            <button onClick={() => devSpawn('あまざ')} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>あまざを今出現</button>
+            <button onClick={() => devSpawn('雨摩座')} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>雨摩座を今出現</button>
             <button onClick={() => devSpawn('黒龍ヴァルゼノク')} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ヴァルゼノクを今出現</button>
             <button onClick={devEnd} style={{ padding:'5px 10px', background:'#1a0a0a', border:'1px solid #aa4444', color:'#ff8888', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>テストボス終了</button>
           </div>
