@@ -15,6 +15,31 @@ export const WAIT_SECONDS = 10
 // 本番にも反映中（true）。旧UIに戻したいときは下行を import.meta.env.DEV（開発のみ）か
 // false（全環境で旧UI）に変更すればワンタッチで戻せる。git tag `ui-classic` も旧UI状態の復元ポイント。
 const NEW_UI = true
+
+// ☰メニュー項目の定義と段階開放。unlock=解放に必要なキャラクターLV（0=常時表示）。
+// 新規プレイヤーが序盤に機能過多で迷わないよう、進行に応じて施設を開放する。
+const MENU_DEFS = {
+  equipment: { label:'🗡 装備',          color:'#44aaff', path:'/equipment?view=gear', unlock:0 },
+  skills:    { label:'⚡ スキル',         color:'#cc44ff', path:'/skills',  unlock:0 },
+  profile:   { label:'👤 プロフィール',   color:'#44ff88', path:'/profile', unlock:0 },
+  shop:      { label:'🛒 商店',           color:'#44aa44', path:'/shop',    unlock:0 },
+  smithy:    { label:'⚒ 鍛冶屋',          color:'#aa6644', path:'/smithy',  unlock:0 },
+  fishing:   { label:'🎣 釣り場',         color:'#44aaff', path:'/fishing', unlock:5 },
+  museum:    { label:'🏛 博物館',         color:'#ccaa44', path:'/museum',  unlock:5 },
+  barber:    { label:'✂ 美容院',          color:'#ff88cc', path:'/barber',  unlock:5 },
+  exchange:  { label:'🔄 交換所',         color:'#ff6644', path:'/exchange',unlock:5 },
+  casino:    { label:'🎰 賭博場',         color:'#ffaa00', path:'/casino',  unlock:10 },
+  pets:      { label:'🐾 ペット',         color:'#aa88ff', path:'/pets',    unlock:10 },
+  dungeon:   { label:'🕳 ダンジョン',     color:'#aa88ff', path:'/dungeon', unlock:10 },
+  scarecrow: { label:'🌾 かかし修練場',   color:'#ffcc44', path:'/scarecrow',unlock:10 },
+  alchemy:   { label:'🧪 錬金部屋',       color:'#44ddaa', path:'/alchemy', unlock:10 },
+  raid:      { label:'⚔ レイドボス',      color:'#ff6644', path:'/raid',    unlock:30 },
+  abyss:     { label:'⚔ 挑戦/奈落闘技場', color:'#c08cff', path:'/abyss',   unlock:30 },
+}
+// 各レイアウトのメニュー並び順（既存の並びを踏襲）
+const DESKTOP_MENU_ORDER = ['equipment','skills','profile','shop','smithy','museum','barber','casino','fishing','scarecrow','exchange','raid','pets','dungeon','alchemy','abyss']
+const MOBILE_MENU_ORDER  = ['shop','smithy','museum','barber','casino','fishing','exchange','raid','pets','dungeon','scarecrow','alchemy','abyss']
+
 // 多段ヒットスキル：行動全体ではなく1発ごとに回避・クリティカル・ダメージ判定する
 export const MULTI_HIT_SKILLS = new Set(['マジックアロー','三連射','メテオストライク','連打','五連殺','飛天三角蹴り','連装銃撃'])
 const REGEN_SECONDS = 60
@@ -49,9 +74,9 @@ export const AREAS = [
   {
     id: 1, name: '始まりの森',
     enemies: [
-      { name:'スライム',   hp:30,  atk:8,   def:3,  matk:0,  mdef:3,  spd:3,  type:'physical', gold:5  },
-      { name:'コウモリ',   hp:37,  atk:10,  def:3,  matk:0,  mdef:3,  spd:15, type:'physical', gold:6  },
-      { name:'毒キノコ',   hp:60,  atk:3,   def:4,  matk:12, mdef:7,  spd:2,  type:'magical',  gold:8  },
+      { name:'スライム',   hp:30,  atk:6,   def:3,  matk:0,  mdef:3,  spd:3,  type:'physical', gold:5  },
+      { name:'コウモリ',   hp:37,  atk:7,   def:3,  matk:0,  mdef:3,  spd:15, type:'physical', gold:6  },
+      { name:'毒キノコ',   hp:60,  atk:2,   def:4,  matk:8,  mdef:7,  spd:2,  type:'magical',  gold:8  },
     ],
     boss: { name:'ビッグスライム', hp:500, atk:28, def:28, matk:5, mdef:30, spd:15, gold:50, isBoss:true, type:'physical' },
     commonDrops: ['木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス','ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
@@ -1360,6 +1385,7 @@ export default function Game() {
   const [announcements, setAnnouncements] = useState([])
   const [claimableTitles, setClaimableTitles] = useState(0)  // 獲得可能な称号数（街のバナー表示用）
   const [showGuide, setShowGuide] = useState(false)
+  const [showDyingTip, setShowDyingTip] = useState(false)  // 初めて瀕死になったとき1回だけ案内
   const [openGuideId, setOpenGuideId] = useState(null)
   const [guideView, setGuideView] = useState('select')  // 'select' | 'guide' | 'help'
   const [openHelpId, setOpenHelpId] = useState(null)
@@ -1405,6 +1431,22 @@ export default function Game() {
 
   useEffect(() => { fetchProfile() }, [])
   useEffect(() => { fetchAnnouncements() }, [])
+
+  // キャラ作成直後は初心者ガイドを自動で1回開く（受動プレイヤー向けオンボーディング）
+  useEffect(() => {
+    if (localStorage.getItem('bf_show_guide_onload') === '1') {
+      localStorage.removeItem('bf_show_guide_onload')
+      setGuideView('select'); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true)
+    }
+  }, [])
+
+  // 初めて瀕死状態になったとき、宿屋で回復するよう1回だけ案内する
+  useEffect(() => {
+    if (profile?.is_dying && !localStorage.getItem('bf_dying_tip_seen')) {
+      localStorage.setItem('bf_dying_tip_seen', '1')
+      setShowDyingTip(true)
+    }
+  }, [profile?.is_dying])
 
   // サーバー時刻オフセットを測定（端末時計のズレでクールダウンが解消しない問題の対策）
   useEffect(() => {
@@ -2879,6 +2921,7 @@ export default function Game() {
         }
       } else {
         logs.push({ text:`敗北…`, color:'#ff4444' })
+        if (isBossEncounter) logs.push({ text:`💡 ボスに勝てないときは、商店の「魔よけのお守り」を装備するとボス戦を回避できます。`, color:'#cc44ff' })
         if (!isAtCap) logs.push({ text:`EXP + ${expGained}`, color:'#ff6644' })
       }
     }
@@ -3676,6 +3719,23 @@ export default function Game() {
     </div>
   ) }
 
+  if (showDyingTip) return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.88)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
+      <div style={{ background:'#1a0000', border:'2px solid #ff4444', padding:'28px 24px', maxWidth:'380px', width:'100%', textAlign:'center' }}>
+        <div style={{ color:'#ff4444', fontSize:'24px', marginBottom:'8px' }}>⚠</div>
+        <div style={{ color:'#ff4444', fontSize:'15px', marginBottom:'14px', letterSpacing:'2px' }}>瀕死状態になりました</div>
+        <div style={{ color:'#ffaaaa', fontSize:'12px', lineHeight:'1.9', marginBottom:'20px', textAlign:'left' }}>
+          HPが0になり、このままでは<span style={{color:'#ff6666'}}>出撃できません</span>。<br/>
+          街の<span style={{color:'#ffcc44'}}>宿屋</span>でHPを全回復してから、また冒険に出かけましょう。
+        </div>
+        <button onClick={()=>setShowDyingTip(false)}
+          style={{ width:'100%', padding:'12px', background:'#000810', border:'1px solid #ff4444', color:'#ff6666', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'1px' }}>
+          OK
+        </button>
+      </div>
+    </div>
+  )
+
   if (newAnnouncementPopup) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.88)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ background:'#001040', border:'2px solid #ff8844', padding:'28px 24px', maxWidth:'420px', width:'100%', maxHeight:'90vh', overflowY:'auto', textAlign:'center' }}>
@@ -3818,6 +3878,50 @@ export default function Game() {
   const dungeonAllUsedUp = DUNGEON_LIST.every(d => (dungeonCounts[d.type]||0) >= DUNGEON_DAILY_LIMIT)
   const charLv = profile.char_lv || profile.lv
   const innCost = isDying ? Math.min(charLv*15,profile.gold) : charLv*2
+
+  // 解放判定：基本はキャラLv。錬金部屋のみエリア③ボス撃破（=エリア4解放）が条件。
+  const isMenuUnlocked = (key) => {
+    if (key === 'alchemy') return (profile.unlocked_areas||[1]).includes(4)
+    return charLv >= (MENU_DEFS[key]?.unlock || 0)
+  }
+  const menuLockLabel = (key) => {
+    if (key === 'alchemy') return 'エリア③ボス撃破で解放'
+    return `Lv${MENU_DEFS[key]?.unlock || 0}で解放`
+  }
+
+  // ☰メニュー1項目を描画。段階開放：未到達Lvはロック表示（クリック不可）。
+  const renderMenuBtn = (key) => {
+    const d = MENU_DEFS[key]
+    if (!d) return null
+    if (!isMenuUnlocked(key)) return (
+      <div key={key} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', width:'100%', padding:'10px 16px', borderBottom:'1px solid #002244', fontFamily:'monospace', fontSize:'12px', cursor:'not-allowed', boxSizing:'border-box' }}>
+        <span style={{ color:'#33445a' }}>🔒 {d.label.replace(/^\S+\s/, '')}</span>
+        <span style={{ color:'#886633', fontSize:'9px' }}>{menuLockLabel(key)}</span>
+      </div>
+    )
+    return (
+      <button key={key} onClick={()=>{ nav(d.path); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:d.color, cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>{d.label}</button>
+    )
+  }
+
+  // 街画面の施設パネル（グリッド）用：未到達Lvならボタンをロックセルに差し替える。
+  // node=解放時に表示する元のボタン。key=MENU_DEFSのキー。
+  const lockOr = (key, node) => {
+    if (isMenuUnlocked(key)) return node
+    const label = (MENU_DEFS[key]?.label || '').replace(/^\S+\s/, '')
+    return (
+      <div key={key} style={{ flex:1, padding:'10px', background:'#000a14', border:'1px solid #1c2a3a', color:'#33445a', fontFamily:'monospace', fontSize:'11px', textAlign:'center', cursor:'not-allowed', boxSizing:'border-box' }}>
+        🔒 {label}<br/><span style={{ color:'#886633', fontSize:'9px' }}>{menuLockLabel(key)}</span>
+      </div>
+    )
+  }
+
+  // 「次にやること」ヒント（街画面に表示）。優先度順で1つだけ提示。
+  const nextHint = isDying ? null
+    : (pendingPoints > 0 && charLv < 50) ? '★ ステータスポイントが余っています。左の「ステータスを振り分ける」で強化しよう！'
+    : (charLv < 3) ? '⚔ まずは「出撃」して敵を倒し、レベルを上げよう！　✨「デイリーダンジョン」の経験値ダンジョンでも効率よくLVアップできます。LVが上がると新しい施設も開放されます。'
+    : (charLv < 8) ? '🛒 「商店」で装備や回復アイテムを揃えると戦いがぐっと楽になります。'
+    : null
   const allocatedPoints = Object.values(statPoints).reduce((a,b)=>a+b,0)
   // ※ここは早期returnの後なのでフック(useMemo)は使えない。通常計算に戻す。
   //   常時再描画の主因はタイマーのstate更新だったため、そちらの抑制(下記interval)で軽量化を達成。
@@ -4035,21 +4139,10 @@ export default function Game() {
         </div>
         {showMenu && (
           <div style={{ position:'fixed', top:'40px', right:'12px', background:'#001040', border:'1px solid #446688', zIndex:200, minWidth:'120px' }}>
-            <button onClick={()=>{ nav('/shop'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🛒 商店</button>
-            <button onClick={()=>{ nav('/smithy'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚒ 鍛冶屋</button>
-            <button onClick={()=>{ nav('/museum'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🏛 博物館</button>
-            <button onClick={()=>{ nav('/barber'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>✂ 美容院</button>
-            <button onClick={()=>{ nav('/casino'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎰 賭博場</button>
-            <button onClick={()=>{ nav('/fishing'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎣 釣り場</button>
-            <button onClick={()=>{ nav('/exchange'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔄 交換所</button>
-            <button onClick={()=>{ nav('/raid'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚔ レイドボス</button>
-            <button onClick={()=>{ nav('/pets'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🐾 ペット</button>
-            <button onClick={()=>{ nav('/dungeon'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🕳 ダンジョン</button>
+            {MOBILE_MENU_ORDER.map(renderMenuBtn)}
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
             )}
-            <button onClick={()=>{ nav('/alchemy'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🧪 錬金部屋</button>
-            <button onClick={()=>{ nav('/abyss'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#c08cff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚔ 挑戦/奈落闘技場</button>
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
           </div>
@@ -4158,6 +4251,11 @@ export default function Game() {
               <select value={selectedArea} onChange={e=>{ const v=Number(e.target.value); setSelectedArea(v); localStorage.setItem('selectedArea',v) }} style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
                 {availableAreas.map(area=><option key={area.id} value={area.id}>{area.name}</option>)}
               </select>
+              {nextHint && (
+                <div style={{ background:'#001626', border:'1px solid #2a6699', color:'#88ccff', padding:'7px 10px', marginBottom:'8px', fontSize:'11px', lineHeight:'1.5', borderRadius:'3px' }}>
+                  💡 {nextHint}
+                </div>
+              )}
               {papiaEvent.active && (
                 <div style={{ background:'#1a0a00', border:'1px solid #ffaa00', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
                   <span style={{ color:'#ffaa00' }}>🌟 パピア出現率アップ中！</span>
@@ -4289,8 +4387,8 @@ export default function Game() {
                 <>
                   {/* ペットと挑戦を横並びに */}
                   <div style={{ display:'flex', gap:'8px' }}>
-                    <button onClick={()=>nav('/pets')} style={{ flex:1, padding:'14px', background:'#0e0a1a', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>🐾 ペット</button>
-                    <button onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ flex:1, padding:'14px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦</button>
+                    {lockOr('pets', <button key="pets" onClick={()=>nav('/pets')} style={{ flex:1, padding:'14px', background:'#0e0a1a', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>🐾 ペット</button>)}
+                    {lockOr('abyss', <button key="challenge" onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ flex:1, padding:'14px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦</button>)}
                   </div>
                   {showChallengePanel && (
                     <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'10px' }}>
@@ -4325,18 +4423,18 @@ export default function Game() {
                         <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿</button>
                         <button onClick={()=>nav('/shop')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🛒 商店</button>
                         <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋</button>
-                        <button onClick={()=>nav('/museum')} style={{ padding:'10px', background:'#001020', border:'1px solid #ccaa44', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏛 博物館</button>
-                        <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所</button>
-                        <button onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場</button>
-                        <button onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院</button>
+                        {lockOr('museum', <button key="museum" onClick={()=>nav('/museum')} style={{ padding:'10px', background:'#001020', border:'1px solid #ccaa44', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏛 博物館</button>)}
+                        {lockOr('exchange', <button key="exchange" onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所</button>)}
+                        {lockOr('casino', <button key="casino" onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場</button>)}
+                        {lockOr('barber', <button key="barber" onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院</button>)}
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
                         <span style={{ flex:1, borderTop:'1px solid #224466' }}/>放置コンテンツ<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                       </div>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                        <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場</button>
-                        <button onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場</button>
-                        <button onClick={()=>nav('/alchemy')} style={{ padding:'10px', background:'#001020', border:'1px solid #1a8a6a', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🧪 錬金部屋</button>
+                        {lockOr('fishing', <button key="fishing" onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場</button>)}
+                        {lockOr('scarecrow', <button key="scarecrow" onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場</button>)}
+                        {lockOr('alchemy', <button key="alchemy" onClick={()=>nav('/alchemy')} style={{ padding:'10px', background:'#001020', border:'1px solid #1a8a6a', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🧪 錬金部屋</button>)}
                       </div>
                     </div>
                   )}
@@ -4451,22 +4549,7 @@ export default function Game() {
         </div>
         {showMenu && (
           <div style={{ position:'fixed', top:'48px', right:'16px', background:'#001040', border:'1px solid #446688', zIndex:200, minWidth:'150px' }}>
-            <button onClick={()=>{ nav('/equipment?view=gear'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🗡 装備</button>
-            <button onClick={()=>{ nav('/skills'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚡ スキル</button>
-            <button onClick={()=>{ nav('/profile'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>👤 プロフィール</button>
-            <button onClick={()=>{ nav('/shop'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🛒 商店</button>
-            <button onClick={()=>{ nav('/smithy'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚒ 鍛冶屋</button>
-            <button onClick={()=>{ nav('/museum'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🏛 博物館</button>
-            <button onClick={()=>{ nav('/barber'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>✂ 美容院</button>
-            <button onClick={()=>{ nav('/casino'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎰 賭博場</button>
-            <button onClick={()=>{ nav('/fishing'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎣 釣り場</button>
-            <button onClick={()=>{ nav('/scarecrow'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🌾 かかし修練場</button>
-            <button onClick={()=>{ nav('/exchange'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔄 交換所</button>
-            <button onClick={()=>{ nav('/raid'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚔ レイドボス</button>
-            <button onClick={()=>{ nav('/pets'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🐾 ペット</button>
-            <button onClick={()=>{ nav('/dungeon'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🕳 ダンジョン</button>
-            <button onClick={()=>{ nav('/alchemy'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🧪 錬金部屋</button>
-            <button onClick={()=>{ nav('/abyss'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#c08cff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚔ 挑戦/奈落闘技場</button>
+            {DESKTOP_MENU_ORDER.map(renderMenuBtn)}
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
             )}
@@ -4583,6 +4666,11 @@ export default function Game() {
                     {availableAreas.map(area=><option key={area.id} value={area.id}>{area.name}</option>)}
                   </select>
                 </div>
+                {nextHint && (
+                  <div style={{ background:'#001626', border:'1px solid #2a6699', color:'#88ccff', padding:'7px 10px', marginBottom:'8px', fontSize:'11px', lineHeight:'1.5', borderRadius:'3px' }}>
+                    💡 {nextHint}
+                  </div>
+                )}
                 {papiaEvent.active && (
                   <div style={{ background:'#1a0a00', border:'1px solid #ffaa00', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
                     <span style={{ color:'#ffaa00' }}>🌟 パピア出現率アップ中！</span>
@@ -4712,8 +4800,8 @@ export default function Game() {
                   <>
                     {/* ペットと挑戦を横並びに */}
                     <div style={{ display:'flex', gap:'8px' }}>
-                      <button onClick={()=>nav('/pets')} style={{ flex:1, padding:'14px', background:'#0e0a1a', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>🐾 ペット</button>
-                      <button onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ flex:1, padding:'14px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦</button>
+                      {lockOr('pets', <button key="pets" onClick={()=>nav('/pets')} style={{ flex:1, padding:'14px', background:'#0e0a1a', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>🐾 ペット</button>)}
+                      {lockOr('abyss', <button key="challenge" onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ flex:1, padding:'14px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦</button>)}
                     </div>
                     {showChallengePanel && (
                       <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'10px' }}>
@@ -4748,17 +4836,17 @@ export default function Game() {
                           <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿へ</button>
                           <button onClick={()=>nav('/shop')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🛒 商店へ</button>
                           <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋へ</button>
-                          <button onClick={()=>nav('/museum')} style={{ padding:'10px', background:'#001020', border:'1px solid #ccaa44', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏛 博物館へ</button>
-                          <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所へ</button>
-                          <button onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場へ</button>
-                          <button onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院へ</button>
+                          {lockOr('museum', <button key="museum" onClick={()=>nav('/museum')} style={{ padding:'10px', background:'#001020', border:'1px solid #ccaa44', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏛 博物館へ</button>)}
+                          {lockOr('exchange', <button key="exchange" onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所へ</button>)}
+                          {lockOr('casino', <button key="casino" onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場へ</button>)}
+                          {lockOr('barber', <button key="barber" onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院へ</button>)}
                         </div>
                         <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
                           <span style={{ flex:1, borderTop:'1px solid #224466' }}/>放置コンテンツ<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                         </div>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                          <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>
-                          <button onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場へ</button>
+                          {lockOr('fishing', <button key="fishing" onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>)}
+                          {lockOr('scarecrow', <button key="scarecrow" onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場へ</button>)}
                         </div>
                       </div>
                     )}

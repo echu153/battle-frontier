@@ -125,6 +125,28 @@ export default function CharCreate() {
           player_id: user.id, weapon_id: weapon.id, equipment_id: eqRow?.id, prof_exp: 0, prof_lv: 0, awakening: 0,
         })
       }
+
+      // 初期スキル（Lv1解放分＋共通）を自動習得し、出撃セットへ自動装備する。
+      // ※スロットにセットしないと出撃で使えず「通常攻撃のみで弱い」と誤解されるため。
+      const { data: initSkills } = await supabase.from('skills').select('id, type, required_lv, class_name')
+        .in('class_name', [selectedClass, '共通']).lte('required_lv', 1).order('required_lv')
+      if (initSkills && initSkills.length > 0) {
+        await supabase.from('player_skills').insert(initSkills.map(s => ({ player_id: user.id, skill_id: s.id })))
+        // パッシブは専用スロット(0)、アクティブはスロット1〜5へ順に割り当て
+        const setRows = []
+        let activeSlot = 1
+        for (const s of initSkills) {
+          if (s.type === 'パッシブ') {
+            if (!setRows.some(r => r.slot_order === 0)) setRows.push({ player_id: user.id, set_type: 'sortie', skill_id: s.id, slot_order: 0, use_count: 1 })
+          } else if (activeSlot <= 5) {
+            setRows.push({ player_id: user.id, set_type: 'sortie', skill_id: s.id, slot_order: activeSlot++, use_count: 1 })
+          }
+        }
+        if (setRows.length > 0) await supabase.from('skill_sets').insert(setRows)
+      }
+
+      // 初回 /game 表示時に初心者ガイドを自動で開くためのフラグ
+      localStorage.setItem('bf_show_guide_onload', '1')
       // フルリロードで遷移：App側のhasCharを再評価させ、作成直後に/createへ戻される不具合を防ぐ
       window.location.href = '/game'
     } catch (err) {
