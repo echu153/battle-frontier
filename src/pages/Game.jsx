@@ -3427,11 +3427,13 @@ export default function Game() {
   )
 
   if (showGuide) return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ background:'#001040', border:'1px solid #44aaff', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'80vh', overflowY:'auto', fontFamily:'monospace', textAlign:'left' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', borderBottom:'1px solid #003366', paddingBottom:'8px' }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'16px', gap:'10px' }}>
+      <div style={{ width:'100%', maxWidth:'600px', display:'flex', justifyContent:'flex-end' }}>
+        <button onClick={()=>{ setShowGuide(false); setOpenGuideId(null) }} style={{ background:'#001040', border:'1px solid #44aaff', color:'#88ccff', padding:'10px 20px', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', borderRadius:'4px' }}>✕ 閉じる</button>
+      </div>
+      <div style={{ background:'#001040', border:'1px solid #44aaff', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'78vh', overflowY:'auto', fontFamily:'monospace', textAlign:'left' }}>
+        <div style={{ marginBottom:'12px', borderBottom:'1px solid #003366', paddingBottom:'8px' }}>
           <div style={{ color:'#44aaff', fontSize:'14px' }}>📖 初心者ガイド</div>
-          <button onClick={()=>{ setShowGuide(false); setOpenGuideId(null) }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>✕ 閉じる</button>
         </div>
         {GUIDE_SECTIONS.map(sec => (
           <div key={sec.id} style={{ marginBottom:'6px', border:'1px solid #002244', background:'#000818' }}>
@@ -3490,11 +3492,13 @@ export default function Game() {
   if (showAnnouncements) {
     const tabAnns = announcements.filter(a => a.title !== 'MAINTENANCE' && annCat(a) === announceTab)
     return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ background:'#001040', border:'1px solid #ff8844', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'80vh', display:'flex', flexDirection:'column', fontFamily:'monospace' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', borderBottom:'1px solid #003366', paddingBottom:'8px', flexShrink:0 }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'16px', gap:'10px' }}>
+      <div style={{ width:'100%', maxWidth:'600px', display:'flex', justifyContent:'flex-end' }}>
+        <button onClick={()=>{ setShowAnnouncements(false); setOpenAnnouncementId(null) }} style={{ background:'#001040', border:'1px solid #ff8844', color:'#ffaa66', padding:'10px 20px', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', borderRadius:'4px' }}>✕ 閉じる</button>
+      </div>
+      <div style={{ background:'#001040', border:'1px solid #ff8844', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'78vh', display:'flex', flexDirection:'column', fontFamily:'monospace' }}>
+        <div style={{ marginBottom:'12px', borderBottom:'1px solid #003366', paddingBottom:'8px', flexShrink:0 }}>
           <div style={{ color:'#ff8844', fontSize:'14px' }}>📢 お知らせ</div>
-          <button onClick={()=>{ setShowAnnouncements(false); setOpenAnnouncementId(null) }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>✕ 閉じる</button>
         </div>
         {/* カテゴリ別タブ */}
         <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'10px', flexShrink:0 }}>
