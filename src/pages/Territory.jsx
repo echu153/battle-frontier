@@ -29,6 +29,7 @@ export default function Territory() {
   const [countries, setCountries] = useState([])
   const [members, setMembers] = useState([])    // 全プレイヤーの所属/階級（軽量）
   const [catRows, setCatRows] = useState([])    // country_area_territory 全行
+  const [powerMap, setPowerMap] = useState({})  // playerId -> 総合力
   const [expandArea, setExpandArea] = useState(null)  // 領地拡大の出撃エリア
   const [chat, setChat] = useState([])          // 国チャット（古い→新しい順）
   const [chatInput, setChatInput] = useState('')
@@ -91,15 +92,51 @@ export default function Territory() {
     } catch { return 0 }
   }
 
+  // 複数メンバーの総合力を一括算出（ランキングと同じ calcEffectiveTotal）
+  const computePowers = async (list) => {
+    const ids = list.map(m => m.id)
+    if (!ids.length) return {}
+    try {
+      const [{ data: eqs }, { data: profs }, { data: pets }] = await Promise.all([
+        supabase.from('player_equipment').select('*, weapons(*)').in('player_id', ids).eq('equipped', true),
+        supabase.from('proficiency').select('player_id, equipment_id, prof_lv').in('player_id', ids),
+        supabase.from('pets').select('owner_id, charm_id').in('owner_id', ids).eq('is_active', true),
+      ])
+      const charmIds = [...new Set((pets || []).map(p => p.charm_id).filter(Boolean))]
+      const charmById = {}
+      if (charmIds.length) {
+        const { data: cr } = await supabase.from('player_charms').select('*').in('id', charmIds)
+        for (const c of (cr || [])) charmById[c.id] = c
+      }
+      const charmMap = {}
+      for (const pet of (pets || [])) if (pet.charm_id && charmById[pet.charm_id]) charmMap[pet.owner_id] = charmPlayerBonus(charmById[pet.charm_id])
+      const titleIds = [...new Set(list.map(m => m.ability_title_id).filter(Boolean))]
+      const titleMap = {}
+      if (titleIds.length) {
+        const { data: ts } = await supabase.from('titles').select('*').in('id', titleIds)
+        for (const t of (ts || [])) titleMap[t.id] = t
+      }
+      const map = {}
+      for (const m of list) {
+        const eq = (eqs || []).filter(e => e.player_id === m.id)
+        const pf = (profs || []).filter(x => x.player_id === m.id)
+        const tb = m.ability_title_id ? titleMap[m.ability_title_id] : null
+        map[m.id] = calcEffectiveTotal({ ...m, petCharm: charmMap[m.id] || null }, eq, pf, tb)
+      }
+      return map
+    } catch { return {} }
+  }
+
   const loadAll = async (prof) => {
     const [{ data: cs }, { data: mem }, { data: cat }] = await Promise.all([
       supabase.from('countries').select('*'),
-      supabase.from('profiles').select('id, username, country_id, country_rank, country_contrib'),
+      supabase.from('profiles').select('id, username, avatar_url, country_id, country_rank, country_contrib, lv, char_lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, retraining, museum_atk, museum_def, museum_matk, museum_mdef, museum_spd, museum_hp, museum_mp, fishing_atk, fishing_def, fishing_matk, fishing_mdef, fishing_spd, fishing_hp, fishing_mp, ability_title_id'),
       supabase.from('country_area_territory').select('country_id, area_id, amount'),
     ])
     setCountries(cs || [])
     setMembers(mem || [])
     setCatRows(cat || [])
+    setPowerMap(await computePowers((mem || []).filter(m => m.country_id)))
     const { data: fresh } = await supabase.from('profiles').select('*').eq('id', prof.id).maybeSingle()
     const p = fresh || prof
     setMe(p)
@@ -280,22 +317,17 @@ export default function Territory() {
             <div style={{ marginTop:'10px', paddingTop:'10px', borderTop:'1px solid #2a2010' }}>
               <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'4px' }}>🗺 領地を広げる（1時間に1回）</div>
               <div style={{ color:'#bbaa77', fontSize:'11px', marginBottom:'8px' }}>
-                出撃エリアを選んで拡大すると、そのエリアの領地が増えます。次の拡大で <b style={{ color:'#ffe' }}>+{expandGain(power)}</b>（総合力 {power} 依存）。国の総領地と貢献度にも同量加算。
+                出撃エリアを選んで拡大すると、そのエリアの領地が増えます。国の総領地と貢献度にも同量加算されます。
               </div>
               {/* エリア選択 */}
               <div style={{ display:'flex', flexWrap:'wrap', gap:'5px', marginBottom:'8px' }}>
                 {myUnlockedAreas.map(a => {
                   const sel = expandArea === a.id
-                  const ctrl = areaControl[a.id]
-                  const mine = ctrl && ctrl.topCountryId === me?.country_id
                   return (
                     <button key={a.id} onClick={() => setExpandArea(a.id)}
                       style={{ padding:'5px 8px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer', textAlign:'left',
                         background: sel ? '#2a1e02' : '#020100', border:`1px solid ${sel ? '#ffcc44' : '#4a3a1a'}`, color: sel ? '#ffcc44' : '#bbaa77' }}>
                       {a.name}
-                      <span style={{ color: mine ? '#44ff88' : '#88774a', fontSize:'9px', marginLeft:'4px' }}>
-                        {ctrl && ctrl.total > 0 ? `支配:${countryName(ctrl.topCountryId)}(${Math.round(ctrl.share*100)}%)` : '未開拓'}
-                      </span>
                     </button>
                   )
                 })}
@@ -327,15 +359,20 @@ export default function Territory() {
             {/* 国民一覧（階級順） */}
             <div style={{ marginTop:'12px', paddingTop:'10px', borderTop:'1px solid #2a2010' }}>
               <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'6px' }}>👥 国民一覧（{memberCount(myCountry.id)}人）</div>
-              <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
+              <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
                 {membersOf(myCountry.id).map(m => {
                   const isSelf = m.id === me?.id
                   return (
-                    <div key={m.id} style={{ display:'flex', justifyContent:'space-between', fontSize:'11px',
-                      padding:'3px 6px', background: isSelf ? '#1a1200' : 'transparent', borderRadius:'2px',
-                      color: m.country_rank === '元帥' ? '#ffcc44' : '#bbaa77' }}>
-                      <span>【{m.country_rank || '二等兵'}】{m.username}{isSelf && ' (あなた)'}</span>
-                      <span style={{ color:'#88774a' }}>貢献 {Math.floor(m.country_contrib || 0)}</span>
+                    <div key={m.id} style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'11px',
+                      padding:'4px 6px', background: isSelf ? '#1a1200' : 'transparent', borderRadius:'2px' }}>
+                      {m.avatar_url
+                        ? <img src={m.avatar_url} alt="" style={{ width:'22px', height:'22px', borderRadius:'50%', objectFit:'cover', flexShrink:0 }} />
+                        : <span style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#2a2010', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'12px', flexShrink:0 }}>👤</span>}
+                      <span onClick={() => nav(`/profile/${m.id}`)}
+                        style={{ flex:1, cursor:'pointer', color: m.country_rank === '元帥' ? '#ffcc44' : '#bbddff', textDecoration:'underline' }}>
+                        【{m.country_rank || '二等兵'}】{m.username}{isSelf && ' (あなた)'}
+                      </span>
+                      <span style={{ color:'#88774a', whiteSpace:'nowrap' }}>総合力 {powerMap[m.id] ?? '—'}／貢献 {Math.floor(m.country_contrib || 0)}</span>
                     </div>
                   )
                 })}
@@ -345,7 +382,7 @@ export default function Territory() {
             {/* 国チャット（同じ国の所属者のみ） */}
             <div style={{ marginTop:'12px', paddingTop:'10px', borderTop:'1px solid #2a2010' }}>
               <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'6px' }}>💬 国チャット（{myCountry.name}限定）</div>
-              <div style={{ background:'#060400', border:'1px solid #2a2010', borderRadius:'2px', padding:'8px', height:'180px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'4px' }}>
+              <div style={{ background:'#060400', border:'1px solid #2a2010', borderRadius:'2px', padding:'8px', height:'180px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'4px', textAlign:'left' }}>
                 {chat.length === 0 && <div style={{ color:'#557755', fontSize:'11px' }}>まだメッセージはありません。最初の一言を送りましょう。</div>}
                 {chat.map(m => {
                   const isSelf = m.user_id === me?.id
