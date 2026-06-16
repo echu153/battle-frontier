@@ -3429,7 +3429,7 @@ export default function Game() {
   if (showGuide) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'16px', gap:'10px' }}>
       <div style={{ width:'100%', maxWidth:'600px', display:'flex', justifyContent:'flex-end' }}>
-        <button onClick={()=>{ setShowGuide(false); setOpenGuideId(null) }} style={{ background:'#001040', border:'1px solid #44aaff', color:'#88ccff', padding:'10px 20px', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', borderRadius:'4px' }}>✕ 閉じる</button>
+        <button onClick={()=>{ setShowGuide(false); setOpenGuideId(null) }} style={{ background:'#001040', border:'1px solid #44aaff', color:'#88ccff', padding:'5px 12px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', borderRadius:'4px' }}>✕ 閉じる</button>
       </div>
       <div style={{ background:'#001040', border:'1px solid #44aaff', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'78vh', overflowY:'auto', fontFamily:'monospace', textAlign:'left' }}>
         <div style={{ marginBottom:'12px', borderBottom:'1px solid #003366', paddingBottom:'8px' }}>
@@ -3494,7 +3494,7 @@ export default function Game() {
     return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'16px', gap:'10px' }}>
       <div style={{ width:'100%', maxWidth:'600px', display:'flex', justifyContent:'flex-end' }}>
-        <button onClick={()=>{ setShowAnnouncements(false); setOpenAnnouncementId(null) }} style={{ background:'#001040', border:'1px solid #ff8844', color:'#ffaa66', padding:'10px 20px', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', borderRadius:'4px' }}>✕ 閉じる</button>
+        <button onClick={()=>{ setShowAnnouncements(false); setOpenAnnouncementId(null) }} style={{ background:'#001040', border:'1px solid #ff8844', color:'#ffaa66', padding:'5px 12px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', borderRadius:'4px' }}>✕ 閉じる</button>
       </div>
       <div style={{ background:'#001040', border:'1px solid #ff8844', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'78vh', display:'flex', flexDirection:'column', fontFamily:'monospace' }}>
         <div style={{ marginBottom:'12px', borderBottom:'1px solid #003366', paddingBottom:'8px', flexShrink:0 }}>
