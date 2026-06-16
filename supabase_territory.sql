@@ -410,9 +410,9 @@ FROM (SELECT id FROM public.countries WHERE name = 'Zoon' AND is_npc LIMIT 1) z,
   ('りおん','元帥','魔銃士',   6000, '{"hp":4000,"mp":2500,"atk":800,"def":800,"matk":5400,"mdef":1200,"spd":1800}'::jsonb, 1),
   ('れいし','副元帥','賢者',   4000, '{"hp":4000,"mp":4000,"atk":300,"def":900,"matk":4200,"mdef":2200,"spd":1200}'::jsonb, 2),
   ('くさりひめ','参謀','元素使い',3000,'{"hp":3500,"mp":3000,"atk":400,"def":900,"matk":5000,"mdef":1550,"spd":1200}'::jsonb, 3),
-  ('がが','大将','戦士',       2000, '{"hp":5000,"mp":1000,"atk":4000,"def":1800,"matk":300,"mdef":1400,"spd":1800}'::jsonb, 4),
-  ('とま','大将','戦士',       2000, '{"hp":5000,"mp":1000,"atk":4000,"def":1800,"matk":300,"mdef":1400,"spd":1800}'::jsonb, 5),
-  ('えちゅ','大将','戦士',      2000, '{"hp":5000,"mp":1000,"atk":4000,"def":1800,"matk":300,"mdef":1400,"spd":1800}'::jsonb, 6)
+  ('がが','大将','死霊使い',   2000, '{"hp":4000,"mp":3500,"atk":300,"def":900,"matk":4800,"mdef":1700,"spd":1200}'::jsonb, 4),
+  ('とま','大将','体術師',     2000, '{"hp":5000,"mp":1000,"atk":4200,"def":1600,"matk":200,"mdef":1300,"spd":2000}'::jsonb, 5),
+  ('えちゅ','大将','暗殺者',    2000, '{"hp":3500,"mp":1000,"atk":4500,"def":1000,"matk":200,"mdef":1200,"spd":2550}'::jsonb, 6)
 ) AS v(name, rank, class, contrib, stats, sort)
 WHERE EXISTS (SELECT 1 FROM public.countries WHERE name = 'Zoon' AND is_npc)
   AND NOT EXISTS (SELECT 1 FROM public.npc_country_members nm
