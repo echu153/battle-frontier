@@ -1363,6 +1363,7 @@ export default function Game() {
   const [openGuideId, setOpenGuideId] = useState(null)
   const [guideView, setGuideView] = useState('select')  // 'select' | 'guide' | 'help'
   const [openHelpId, setOpenHelpId] = useState(null)
+  const [openHelpSubs, setOpenHelpSubs] = useState({})  // HELPの中項目(【】)の開閉。キー = `${sectionId}:${index}`
   const [openAnnouncementId, setOpenAnnouncementId] = useState(null)
   const [pendingClassChange, setPendingClassChange] = useState(null)
   const [hasNewAnnouncements, setHasNewAnnouncements] = useState(false)
@@ -3583,6 +3584,23 @@ export default function Game() {
     </div>
   )
 
+  // HELPの content を【見出し】単位の中項目に分割する
+  const parseHelpSubs = (content) => {
+    const lines = content.split('\n')
+    const subs = []
+    let cur = null
+    for (const line of lines) {
+      const m = line.match(/^【(.+)】\s*$/)
+      if (m) {
+        cur = { heading: m[1], body: '' }
+        subs.push(cur)
+      } else if (cur) {
+        cur.body += (cur.body ? '\n' : '') + line
+      }
+    }
+    return subs.length ? subs : [{ heading: '詳細', body: content }]
+  }
+
   if (showGuide) {
     const inHelp = guideView === 'help'
     const accent = inHelp ? '#ffaa44' : '#44aaff'
@@ -3625,10 +3643,32 @@ export default function Game() {
               <span style={{ color:'#446688', fontSize:'10px' }}>{openId===sec.id?'▲':'▼'}</span>
             </button>
             {openId===sec.id && (
+              inHelp ? (
+                <div style={{ padding:'8px', borderTop:`1px solid #332200` }}>
+                  {parseHelpSubs(sec.content).map((sub, i) => {
+                    const subKey = `${sec.id}:${i}`
+                    const subOpen = !!openHelpSubs[subKey]
+                    return (
+                      <div key={subKey} style={{ marginBottom:'5px', border:'1px solid #2a1c00', background:'#0a0600' }}>
+                        <button onClick={()=>setOpenHelpSubs(s=>({ ...s, [subKey]: !s[subKey] }))}
+                          style={{ width:'100%', padding:'8px 10px', background:'none', border:'none', color:'#ffcc88', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', textAlign:'left', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                          <span>{sub.heading}</span>
+                          <span style={{ color:'#aa7733', fontSize:'9px' }}>{subOpen?'▲':'▼'}</span>
+                        </button>
+                        {subOpen && (
+                          <div style={{ padding:'8px 10px', borderTop:'1px solid #2a1c00', color:'#ffcc88', fontSize:'11px', lineHeight:'2.0', whiteSpace:'pre-wrap', textAlign:'left' }}>
+                            {sub.body}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
               <div style={{ padding:'12px', borderTop:`1px solid ${inHelp?'#332200':'#002244'}`, color:accentSub, fontSize:'11px', lineHeight:'2.0', whiteSpace:'pre-wrap', textAlign:'left' }}>
                 {sec.content}
               </div>
-            )}
+            ))}
           </div>
         ))}
       </div>
