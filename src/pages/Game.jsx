@@ -2902,11 +2902,13 @@ export default function Game() {
 
     playerHp = Math.max(0, playerHp)
     const win = enemyHp <= 0
-    const expGained = isAtCap ? 0
+    let expGained = isAtCap ? 0
       : papiaEscaped ? 0
       : isPapiaEncounter ? 200
       : isBossEncounter ? 13
       : Math.floor(Math.random()*4)+8
+    // キャラクターLV100まで経験値1.5倍（サーバー apply_battle_result の検証上限も1.5倍にしてある）
+    if (expGained > 0 && (profile.char_lv||1) < 100) expGained = Math.floor(expGained * 1.5)
     const goldGained = (win && !papiaEscaped) ? Math.floor((enemy.gold||0) * 1.5) : 0  // 出撃ゴールド1.5倍
 
 
