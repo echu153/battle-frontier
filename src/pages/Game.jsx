@@ -1361,6 +1361,8 @@ export default function Game() {
   const [claimableTitles, setClaimableTitles] = useState(0)  // 獲得可能な称号数（街のバナー表示用）
   const [showGuide, setShowGuide] = useState(false)
   const [openGuideId, setOpenGuideId] = useState(null)
+  const [guideView, setGuideView] = useState('select')  // 'select' | 'guide' | 'help'
+  const [openHelpId, setOpenHelpId] = useState(null)
   const [openAnnouncementId, setOpenAnnouncementId] = useState(null)
   const [pendingClassChange, setPendingClassChange] = useState(null)
   const [hasNewAnnouncements, setHasNewAnnouncements] = useState(false)
@@ -3308,6 +3310,159 @@ export default function Game() {
     },
   ]
 
+  // HELP：初心者ガイドより詳細な仕様解説。少しずつ項目を追加していく。
+  const HELP_SECTIONS = [
+    {
+      id: 'h_player', title: '👤 プレイヤー',
+      content: `【キャラクターレベル】
+● 全クラス通算の「レベルアップ回数」がキャラクターレベル。総合力の目安になる
+● 1つのクラスのLVではなく、これまで上げた全クラスのLVの合計
+
+【ステータスの種類】
+● HP：体力。0になると瀕死状態になり出撃できなくなる
+● MP：スキルの発動に消費する。足りないとスキルが出ず通常攻撃になる
+● 攻撃力（ATK）：物理スキル・通常攻撃の威力
+● 防御力（DEF）：物理ダメージの軽減
+● 特殊攻撃力（MATK）：魔法・特殊スキルの威力
+● 特殊防御力（MDEF）：特殊ダメージの軽減
+● 素早さ（SPD）：戦闘の行動順（先攻）に影響
+
+【ステータスポイント】
+● レベルアップごとに1pt獲得し、街の画面から自由に割り振れる
+● 1ptあたりの上昇量：HP +10 ／ MP +5 ／ 攻撃・防御・特攻・特防・素早さは各 +1
+● 振ったポイントは転職・再修練をしても引き継がれる
+
+【実効ステータス】
+● 表示される実効値＝基礎ステータス＋装備＋武器熟練度＋宝石＋称号＋釣り図鑑＋博物館などの各種ボーナスの合計
+● 攻撃%などの倍率ボーナスも実効値・表示に反映される
+
+【回復】
+● HP/MPは宿屋で全回復（Goldが必要）。時間経過でも自然回復する
+● 瀕死状態の回復は通常よりGoldが多くかかる`,
+    },
+    {
+      id: 'h_class', title: '🎭 クラス',
+      content: `【基本ルール】
+● 初期クラスは戦士・弓使い・魔法使い・僧侶・格闘家の5種類
+● 各クラスのLV上限は100（再修練5回でそのクラスのみ上限300に解放）
+● 神殿でいつでも他クラスへ転職できる。ステータスポイントは引き継がれる
+● 転職するとセット中のスキルは全て外れる（習得済みスキルは消えない）
+
+【再修練】
+● クラスをLV1に戻す代わりに、スキルを1つ他クラスへ持ち越せる
+● 再修練を重ねるとスキルが段階的に強化される（1回ごとに1つ解放）
+● 再修練5回でそのクラスのLV上限が300に解放
+
+【上位クラスへの転職条件】
+● 通常上位職：対応する初期クラスがLV100に到達
+● 複合上位職（魔法剣士・聖騎士・魔銃士・賢者）：対応する2クラスがそれぞれLV50以上
+● ギャンブラー：特定アイテムを所持（賭博場で入手できるかも…？）
+
+【各クラスの特徴】
+⚔ 戦士：高HP・高防御の前衛タンク。物理特化
+　→ 侍／狂戦士／魔法剣士／聖騎士
+🏹 弓使い：素早さ・命中に優れた後衛アタッカー
+　→ 狩人／暗殺者／魔銃士
+🔮 魔法使い：特殊攻撃力が突出した魔法特化。MP消費大
+　→ 元素使い／死霊使い／賢者
+🙏 僧侶：特殊防御・回復に強い支援型
+　→ 聖職者／異端審問官／賢者
+👊 格闘家：素手系の近接アタッカー。クセのある構成
+　→ サイキッカー／体術師
+🎲 ギャンブラー：隠しクラス。ランダム性の高い一発逆転型`,
+    },
+    {
+      id: 'h_equip', title: '🛡 装備',
+      content: `【装備部位】
+● 武器 ／ 防具 ／ 装飾品①・② を装備できる
+● 戦闘でドロップした装備は「装備」ページで確認・装備する
+
+【装備に付く要素】
+● ボーナスステータス：装備ごとに攻撃・防御などの追加値が付く
+● 特殊効果：開幕バフ・命中時デバフなど、装備固有の効果
+● 宝石ソケット：各装備に1つ宝石を埋め込める
+● 武器熟練度：同じ武器を使い続けると熟練度が上がり、ボーナスが伸びる
+
+【鍛冶屋でのメンテナンス】
+● 再鑑定：武器に付いたボーナスステータスを振り直す
+● 再評価：付与された特殊効果を別の効果に変更する
+
+【宝石】
+● ソケットに埋め込むとHP・攻撃・防御・クリティカル・貫通などの効果が得られる
+● ランクはF〜SSS。同じ宝石を3個合成すると1ランクUP（効果1.5倍）
+● 装着部位の制限：
+　・%系（貫通/クリ/命中/回避）… 装飾品のみ
+　・HP / MP … 防具・装飾品
+　・攻撃系 … 武器・装飾品
+　・防御系 … 防具・装飾品
+
+【アーティファクト】
+● 風化した特別な武器。手入れすると使えるようになる
+● 装備すると通常攻撃の与ダメージが1.2倍になる`,
+    },
+    {
+      id: 'h_enhance', title: '⚒ 装備の強化',
+      content: `【強化の基本】
+● 鍛冶屋で武器を +0 から最大 +16 まで強化できる
+● 強化するとステータスが上昇する
+● 必要素材は「同名の武器」か「強化石（同ランク）」のどちらかを選択
+● 強化済み（+1以上）の装備は素材に使えない
+
+【必要素材の個数】
+● +1〜+5：1個
+● +6〜+10：2個
+● +11〜+15：3個
+● +16：4個
+
+【強化成功率】
+● +3:90% ／ +4:80% ／ +5:70% ／ +6:50% ／ +7:40%
+● +8:30% ／ +9:20% ／ +10:10%
+● +11:5% ／ +12:3% ／ +13:2% ／ +14:1% ／ +15:0.5% ／ +16:0.1%
+● （+2まではほぼ確実に成功）
+
+【失敗時】
+● +10まで：失敗しても強化値は下がらない（素材は消費）
+● +11以降：失敗すると強化値が1段階下がる
+
+【強化石について】
+● ランクはF〜SSS。武器のランクに合った強化石を使う
+● 入手先：エリア2以降の敵ドロップ／デイリーダンジョン（石）／錬金部屋
+● 加工：装備3個を強化石1個に変換できる`,
+    },
+    {
+      id: 'h_battle', title: '⚔ 戦闘系',
+      content: `【戦闘の流れ】
+● 出撃すると自動でターン制の戦闘が進行する
+● 行動順は素早さ（SPD）が高いほうが先攻
+● スキルはスロットの上から順番に繰り返し使用。MPが足りないと通常攻撃になる
+● パッシブスキルはセット中ずっと効果が続く（1つまで）
+
+【ダメージ計算（通常攻撃）】
+● 物理：攻撃力² ÷（攻撃力＋敵の防御力）をベースに算出
+● 特殊：特殊攻撃力² ÷（特殊攻撃力＋敵の特殊防御力）をベースに算出
+● 最後に乱数で多少ブレる（毎回ぴったり同じ値にはならない）
+
+【クリティカル】
+● クリティカル率に応じて発生。発生すると基本ダメージが1.5倍
+● 「クリティカル威力」ボーナスがあると倍率がさらに上昇
+● クリティカル抵抗を持つ相手には発生しにくくなる
+
+【命中・回避】
+● 命中率が高いほど攻撃が当たりやすい
+● 回避率が高い相手には攻撃が外れることがある
+
+【貫通】
+● 防御貫通：相手の防御力を一定割合無視して物理ダメージを通す
+● 魔法防御貫通：同様に相手の特殊防御力を無視する
+● スキルの中には「防御無視」を持つものもある
+
+【バフ・デバフ・状態異常】
+● 攻撃力UP・防御UPなどのバフ／対象の能力を下げるデバフがある
+● 状態異常：毒・出血（継続ダメージ）、スタン（行動不能）、回復阻害 など
+● 効果はターン数で管理され、時間経過で切れる`,
+    },
+  ]
+
   if (pendingClassChange) return (
     <div style={{ minHeight:'100vh', background:'#000820', display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ background:'#001040', border:'1px solid #ccaa00', padding:'32px', maxWidth:'360px', width:'100%', textAlign:'center' }}>
@@ -3407,32 +3562,58 @@ export default function Game() {
     </div>
   )
 
-  if (showGuide) return (
+  if (showGuide) {
+    const inHelp = guideView === 'help'
+    const accent = inHelp ? '#ffaa44' : '#44aaff'
+    const accentSub = inHelp ? '#ffcc88' : '#88ccff'
+    const sections = inHelp ? HELP_SECTIONS : GUIDE_SECTIONS
+    const openId = inHelp ? openHelpId : openGuideId
+    const setOpenId = inHelp ? setOpenHelpId : setOpenGuideId
+    return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'16px', gap:'10px' }}>
       <div style={{ width:'100%', maxWidth:'600px', display:'flex', justifyContent:'flex-end' }}>
-        <button onClick={()=>{ setShowGuide(false); setOpenGuideId(null) }} style={{ background:'#001040', border:'1px solid #44aaff', color:'#88ccff', padding:'5px 12px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', borderRadius:'4px' }}>✕ 閉じる</button>
+        <button onClick={()=>{ setShowGuide(false); setOpenGuideId(null); setOpenHelpId(null); setGuideView('select') }} style={{ background:'#001040', border:`1px solid ${accent}`, color:accentSub, padding:'5px 12px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', borderRadius:'4px' }}>✕ 閉じる</button>
       </div>
-      <div style={{ background:'#001040', border:'1px solid #44aaff', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'78vh', overflowY:'auto', fontFamily:'monospace', textAlign:'left' }}>
-        <div style={{ marginBottom:'12px', borderBottom:'1px solid #003366', paddingBottom:'8px' }}>
-          <div style={{ color:'#44aaff', fontSize:'14px' }}>📖 初心者ガイド</div>
+
+      {guideView === 'select' ? (
+        <div style={{ background:'#001040', border:'1px solid #44aaff', padding:'20px 16px', maxWidth:'600px', width:'100%', fontFamily:'monospace', textAlign:'left' }}>
+          <div style={{ color:'#44aaff', fontSize:'14px', marginBottom:'16px', borderBottom:'1px solid #003366', paddingBottom:'8px' }}>📚 ヘルプ</div>
+          <div style={{ color:'#557799', fontSize:'11px', marginBottom:'14px' }}>見たい項目を選んでください。</div>
+          <button onClick={()=>{ setGuideView('guide'); setOpenGuideId(null) }}
+            style={{ width:'100%', padding:'16px', marginBottom:'12px', background:'#001830', border:'1px solid #44aaff', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', textAlign:'left' }}>
+            📖 初心者ガイド（各項目説明）
+            <div style={{ color:'#446688', fontSize:'10px', marginTop:'4px' }}>各メニュー・施設の使い方をざっくり確認</div>
+          </button>
+          <button onClick={()=>{ setGuideView('help'); setOpenHelpId(null) }}
+            style={{ width:'100%', padding:'16px', background:'#1a1000', border:'1px solid #ffaa44', color:'#ffcc88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', textAlign:'left' }}>
+            ❓ HELP（詳細）
+            <div style={{ color:'#aa7733', fontSize:'10px', marginTop:'4px' }}>ステータスや戦闘などの詳しい仕様を解説</div>
+          </button>
         </div>
-        {GUIDE_SECTIONS.map(sec => (
-          <div key={sec.id} style={{ marginBottom:'6px', border:'1px solid #002244', background:'#000818' }}>
-            <button onClick={()=>setOpenGuideId(openGuideId===sec.id?null:sec.id)}
-              style={{ width:'100%', padding:'10px 12px', background:'none', border:'none', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+      ) : (
+      <div style={{ background:'#001040', border:`1px solid ${accent}`, padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'78vh', overflowY:'auto', fontFamily:'monospace', textAlign:'left' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'12px', borderBottom:`1px solid ${inHelp?'#332200':'#003366'}`, paddingBottom:'8px' }}>
+          <button onClick={()=>{ setGuideView('select'); setOpenGuideId(null); setOpenHelpId(null) }} style={{ background:'none', border:`1px solid ${accent}`, color:accentSub, padding:'3px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', borderRadius:'4px' }}>← 戻る</button>
+          <div style={{ color:accent, fontSize:'14px' }}>{inHelp ? '❓ HELP（詳細）' : '📖 初心者ガイド（各項目説明）'}</div>
+        </div>
+        {sections.map(sec => (
+          <div key={sec.id} style={{ marginBottom:'6px', border:`1px solid ${inHelp?'#332200':'#002244'}`, background:'#000818' }}>
+            <button onClick={()=>setOpenId(openId===sec.id?null:sec.id)}
+              style={{ width:'100%', padding:'10px 12px', background:'none', border:'none', color:accentSub, cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <span>{sec.title}</span>
-              <span style={{ color:'#446688', fontSize:'10px' }}>{openGuideId===sec.id?'▲':'▼'}</span>
+              <span style={{ color:'#446688', fontSize:'10px' }}>{openId===sec.id?'▲':'▼'}</span>
             </button>
-            {openGuideId===sec.id && (
-              <div style={{ padding:'12px', borderTop:'1px solid #002244', color:'#88ccff', fontSize:'11px', lineHeight:'2.0', whiteSpace:'pre-wrap', textAlign:'left' }}>
+            {openId===sec.id && (
+              <div style={{ padding:'12px', borderTop:`1px solid ${inHelp?'#332200':'#002244'}`, color:accentSub, fontSize:'11px', lineHeight:'2.0', whiteSpace:'pre-wrap', textAlign:'left' }}>
                 {sec.content}
               </div>
             )}
           </div>
         ))}
       </div>
+      )}
     </div>
-  )
+  ) }
 
   if (newAnnouncementPopup) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.88)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
@@ -3477,7 +3658,7 @@ export default function Game() {
       <div style={{ width:'100%', maxWidth:'600px', display:'flex', justifyContent:'flex-end' }}>
         <button onClick={()=>{ setShowAnnouncements(false); setOpenAnnouncementId(null) }} style={{ background:'#001040', border:'1px solid #ff8844', color:'#ffaa66', padding:'5px 12px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', borderRadius:'4px' }}>✕ 閉じる</button>
       </div>
-      <div style={{ background:'#001040', border:'1px solid #ff8844', padding:'16px', maxWidth:'600px', width:'100%', maxHeight:'78vh', display:'flex', flexDirection:'column', fontFamily:'monospace' }}>
+      <div style={{ background:'#001040', border:'1px solid #ff8844', padding:'16px', maxWidth:'600px', width:'100%', height:'78vh', display:'flex', flexDirection:'column', fontFamily:'monospace' }}>
         <div style={{ marginBottom:'12px', borderBottom:'1px solid #003366', paddingBottom:'8px', flexShrink:0 }}>
           <div style={{ color:'#ff8844', fontSize:'14px' }}>📢 お知らせ</div>
         </div>
@@ -3784,7 +3965,7 @@ export default function Game() {
             <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen() }} style={{ background:'none', border:`1px solid ${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, color:`${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', position:'relative' }}>
               📢{hasNewAnnouncements && <span style={{ marginLeft:'2px', background:'#ff4400', color:'#fff', fontSize:'7px', padding:'1px 3px', borderRadius:'2px', verticalAlign:'middle' }}>NEW</span>}
             </button>
-            <button onClick={()=>{ setOpenGuideId(null); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>📖</button>
+            <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 6px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>📖</button>
           </div>
           <div style={{ display:'flex', gap:'6px' }}>
             <button onClick={()=>nav('/ranking')} style={{ background:'none', border:'1px solid #ffcc00', color:'#ffcc00', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏆</button>
@@ -4200,7 +4381,7 @@ export default function Game() {
             <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen() }} style={{ background:'none', border:`1px solid ${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, color:`${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', position:'relative' }}>
               📢 お知らせ{hasNewAnnouncements && <span style={{ marginLeft:'4px', background:'#ff4400', color:'#fff', fontSize:'8px', padding:'1px 4px', borderRadius:'2px', verticalAlign:'middle' }}>NEW</span>}
             </button>
-            <button onClick={()=>{ setOpenGuideId(null); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📖 ガイド</button>
+            <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'2px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📖 ガイド</button>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
             <button onClick={()=>nav('/equipment?view=gear')} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🗡 装備</button>
