@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS public.countries (
   name            text NOT NULL UNIQUE,
   emblem          text,                              -- 国旗/エンブレム（絵文字や記号）
   description     text,                              -- 国の説明文
-  region          int,                               -- 地図上の領域(1〜9)。1領域=1国。非加盟国は中央(5)固定。
+  region          int,                               -- 地図上の領域(1〜9)。1領域=1国。非加盟国は region=7 固定。
   founder_id      uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   territory       numeric NOT NULL DEFAULT 0,        -- 領地の広さ（拡大の累積）
   core_hp         int NOT NULL DEFAULT 1000000,      -- 将来の戦争用（コアHP）
@@ -37,12 +37,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uniq_unaffiliated_country
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_country_region
   ON public.countries (region) WHERE region IS NOT NULL;
 
--- 非加盟国を1つだけ生成（存在しなければ）。中央の大陸 region=5 に配置。
+-- 非加盟国を1つだけ生成（存在しなければ）。下段・左から2番目の大陸 region=7 に配置。
 INSERT INTO public.countries (name, emblem, description, region, is_unaffiliated)
-SELECT '非加盟国', '🏳', 'どの国にも属さない者たちが暮らす中立の地。ここから新たな国を建てることができる。', 5, true
+SELECT '非加盟国', '🏳', 'どの国にも属さない者たちが暮らす中立の地。ここから新たな国を建てることができる。', 7, true
 WHERE NOT EXISTS (SELECT 1 FROM public.countries WHERE is_unaffiliated);
--- 旧データ救済: 非加盟国に region が無ければ中央(5)を割り当て
-UPDATE public.countries SET region = 5 WHERE is_unaffiliated AND region IS NULL;
+-- 非加盟国の領域を region=7 に確定（旧版で 5 に置いていた場合も移動）
+UPDATE public.countries SET region = 7 WHERE is_unaffiliated AND region IS DISTINCT FROM 7;
 
 -- ===== 2) profiles 列追加 =====
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS country_id      uuid REFERENCES public.countries(id) ON DELETE SET NULL;
@@ -107,11 +107,12 @@ BEGIN
   IF p_region IS NULL OR p_region < 1 OR p_region > 9 THEN
     RAISE EXCEPTION '建国する大陸を選択してください';
   END IF;
-  IF p_region = 5 THEN
-    RAISE EXCEPTION '中央の大陸は非加盟国の領域です';
-  END IF;
-  SELECT true INTO v_taken FROM public.countries WHERE region = p_region;
-  IF v_taken IS TRUE THEN
+  -- 既にその領域に国がある（非加盟国の領域含む）なら建国不可
+  SELECT is_unaffiliated INTO v_taken FROM public.countries WHERE region = p_region;
+  IF FOUND THEN
+    IF v_taken IS TRUE THEN
+      RAISE EXCEPTION 'そこは非加盟国の領域です';
+    END IF;
     RAISE EXCEPTION 'その大陸には既に国があります';
   END IF;
 
