@@ -3219,7 +3219,20 @@ export default function Game() {
   }
 
   const fetchAnnouncements = async () => {
-    const { data } = await supabase.from('announcements').select('*').eq('is_active', true).order('created_at', { ascending: false })
+    // 全体向け(target_player_id=null)＋自分宛(target_player_id=自分)のみ取得
+    const { data: { user } } = await supabase.auth.getUser()
+    let data
+    try {
+      let q = supabase.from('announcements').select('*').eq('is_active', true)
+      q = user ? q.or(`target_player_id.is.null,target_player_id.eq.${user.id}`) : q.is('target_player_id', null)
+      const res = await q.order('created_at', { ascending: false })
+      if (res.error) throw res.error
+      data = res.data
+    } catch {
+      // target_player_id 列が無い旧環境向けフォールバック（全件取得）
+      const res = await supabase.from('announcements').select('*').eq('is_active', true).order('created_at', { ascending: false })
+      data = res.data
+    }
     const fetched = data || []
     setAnnouncements(fetched)
     try {
