@@ -3,7 +3,7 @@
 -- ------------------------------------------------------------
 -- ・9カ国構成（うち1つは固定の「非加盟国」＝どこにも属さないプレイヤーの居場所）。
 --   残り最大8カ国はプレイヤーが空き枠がある限り自由に建国できる。
--- ・建国条件: キャラクターLV(char_lv) 500以上 ＆ 非加盟国に居ること。
+-- ・建国条件: キャラクターLV(char_lv) 100以上 ＆ 非加盟国に居ること。
 -- ・亡命（他国への加入/離脱）は1週間(7日)に1回まで。
 -- ・領地は1時間に1回拡大でき、総合力に応じて1回の獲得量が変わる。
 -- ・階級は貢献度(country_contrib)で自動決定。建国者は「元帥」固定。
@@ -130,8 +130,8 @@ BEGIN
   END IF;
 
   SELECT char_lv, country_id INTO v_charlv, v_cid FROM public.profiles WHERE id = v_uid;
-  IF v_charlv IS NULL OR v_charlv < 500 THEN
-    RAISE EXCEPTION '建国にはキャラクターLV500以上が必要です';
+  IF v_charlv IS NULL OR v_charlv < 100 THEN
+    RAISE EXCEPTION '建国にはキャラクターLV100以上が必要です';
   END IF;
 
   -- 非加盟国（country_id が NULL もしくは is_unaffiliated）に居ること

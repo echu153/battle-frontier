@@ -9,7 +9,7 @@
 export const MAX_COUNTRIES = 8
 
 // 建国条件
-export const FOUND_MIN_CHARLV = 500
+export const FOUND_MIN_CHARLV = 100
 
 // 地図 ryouti.png 上の9大陸＝9領域。region 1〜9。中央(5)は非加盟国の固定領域。
 // x/y は画像に対する中心位置(%)。マップ上のマーカー配置に使う。
