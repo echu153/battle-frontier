@@ -1285,7 +1285,7 @@ const ANNOUNCE_TABS = [
   { key:'update', label:'アップデート', icon:'🆕' },
   { key:'bug',    label:'不具合',       icon:'🛠' },
   { key:'event',  label:'イベント',     icon:'🎉' },
-  { key:'past',   label:'過去',         icon:'🗂' },
+  { key:'past',   label:'その他',       icon:'🗂' },
 ]
 // カテゴリ正規化：未設定や未知カテゴリ（旧 'notice' 含む）は先頭タブに寄せて非表示化を防ぐ
 const annCat = (a) => (ANNOUNCE_TABS.some(t => t.key === a.category) ? a.category : ANNOUNCE_TABS[0].key)
