@@ -1406,6 +1406,10 @@ export default function Game() {
   const [retrainingClass, setRetrainingClass] = useState(null)
   const [retrainingMessage, setRetrainingMessage] = useState('')
   const [newAnnouncementPopup, setNewAnnouncementPopup] = useState(false)
+  const [adminMsgOpen, setAdminMsgOpen] = useState(false)  // 運営からのお知らせ（個別宛）モーダル
+  const [seenAdminMsgIds, setSeenAdminMsgIds] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('bf_seenAdminMsgs') || '[]') } catch { return [] }
+  })
   const [seenAnnouncementIds, setSeenAnnouncementIds] = useState(() => {
     try { return JSON.parse(localStorage.getItem('bf_seenAnnouncements') || '[]') } catch { return [] }
   })
@@ -3238,11 +3242,15 @@ export default function Game() {
     try {
       const seen = JSON.parse(localStorage.getItem('bf_seenAnnouncements') || '[]')
       setSeenAnnouncementIds(seen)
-      const hasNew = fetched.some(a => !seen.includes(a.id))
-      if (hasNew) {
-        setHasNewAnnouncements(true)
-        setNewAnnouncementPopup(true)
-      }
+      const seenAdmin = JSON.parse(localStorage.getItem('bf_seenAdminMsgs') || '[]')
+      setSeenAdminMsgIds(seenAdmin)
+      // 運営メッセージ（個別宛）は専用の既読キーで管理し、未読があれば優先で自動ポップアップ
+      const hasNewAdmin = fetched.some(a => a.target_player_id && !seenAdmin.includes(a.id))
+      // 全体お知らせ（個別宛を除く）の新着
+      const hasNewGlobal = fetched.some(a => !a.target_player_id && !seen.includes(a.id))
+      setHasNewAnnouncements(hasNewGlobal)
+      if (hasNewAdmin) setAdminMsgOpen(true)
+      else if (hasNewGlobal) setNewAnnouncementPopup(true)
     } catch {}
   }
 
@@ -3250,6 +3258,16 @@ export default function Game() {
     const ids = announcements.map(a => a.id)
     try { localStorage.setItem('bf_seenAnnouncements', JSON.stringify(ids)) } catch {}
     setHasNewAnnouncements(false)
+  }
+
+  // 運営からのお知らせ（個別宛）を既読にする（専用キー bf_seenAdminMsgs）
+  const markAdminMsgsSeen = () => {
+    const ids = announcements.filter(a => a.target_player_id).map(a => a.id)
+    setSeenAdminMsgIds(prev => {
+      const next = [...new Set([...prev, ...ids])]
+      try { localStorage.setItem('bf_seenAdminMsgs', JSON.stringify(next)) } catch {}
+      return next
+    })
   }
 
   const GUIDE_SECTIONS = [
@@ -3768,13 +3786,32 @@ export default function Game() {
     </div>
   )
 
+  if (adminMsgOpen) return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
+      <div style={{ background:'#001040', border:'2px solid #ffcc44', padding:'24px', maxWidth:'460px', width:'100%', maxHeight:'90vh', overflowY:'auto' }}>
+        <div style={{ color:'#ffcc44', fontSize:'15px', marginBottom:'16px', letterSpacing:'2px', textAlign:'center' }}>📩 運営からのお知らせ</div>
+        {announcements.filter(a => a.target_player_id).map(a => (
+          <div key={a.id} style={{ marginBottom:'14px', padding:'12px', background:'#000818', border:'1px solid #443300' }}>
+            <div style={{ color:'#ffcc88', fontSize:'13px', marginBottom:'6px' }}>{a.title}</div>
+            <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px' }}>{new Date(a.created_at).toLocaleDateString('ja-JP')}</div>
+            <div style={{ color:'#aaccee', fontSize:'12px', lineHeight:'1.9', whiteSpace:'pre-wrap' }}>{a.content}</div>
+          </div>
+        ))}
+        <button onClick={()=>{ setAdminMsgOpen(false); markAdminMsgsSeen() }}
+          style={{ width:'100%', marginTop:'4px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', padding:'10px', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>
+          確認しました
+        </button>
+      </div>
+    </div>
+  )
+
   if (newAnnouncementPopup) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.88)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ background:'#001040', border:'2px solid #ff8844', padding:'28px 24px', maxWidth:'420px', width:'100%', maxHeight:'90vh', overflowY:'auto', textAlign:'center' }}>
         <div style={{ color:'#ff8844', fontSize:'22px', marginBottom:'8px' }}>📢</div>
         <div style={{ color:'#ff8844', fontSize:'15px', marginBottom:'16px', letterSpacing:'2px' }}>新着お知らせ</div>
         <div style={{ marginBottom:'20px', textAlign:'left' }}>
-          {announcements.filter(a => !seenAnnouncementIds.includes(a.id)).map(a => (
+          {announcements.filter(a => !a.target_player_id && !seenAnnouncementIds.includes(a.id)).map(a => (
             <div key={a.id} style={{ marginBottom:'6px', padding:'8px 10px', background:'#000818', border:'1px solid #332200' }}>
               <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
                 <span style={{ color:'#ff8844', fontSize:'9px', padding:'1px 4px', border:'1px solid #ff8844' }}>NEW</span>
@@ -3959,6 +3996,8 @@ export default function Game() {
   //   常時再描画の主因はタイマーのstate更新だったため、そちらの抑制(下記interval)で軽量化を達成。
   const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
   const total = calcTotal(eff)
+  // 運営からのお知らせ（個別宛＝target_player_id付き）の未読件数。ホームのバナー表示用
+  const unreadAdminMsgs = announcements.filter(a => a.target_player_id && !seenAdminMsgIds.includes(a.id))
   const totalRank = getTotalRank(total)
   const currentClassLv = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
   const cap = getEffectiveCap(profile.class, profile.retraining)
@@ -4182,6 +4221,12 @@ export default function Game() {
         {showMenu && <div onClick={()=>setShowMenu(false)} style={{ position:'fixed', inset:0, zIndex:150 }} />}
 
         <div style={{ padding:'8px 12px' }}>
+          {unreadAdminMsgs.length > 0 && (
+            <button onClick={()=>setAdminMsgOpen(true)}
+              style={{ width:'100%', padding:'10px', marginBottom:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', animation:'none' }}>
+              📩 運営からのお知らせ（{unreadAdminMsgs.length}件）→ タップで確認
+            </button>
+          )}
           {claimableTitles > 0 && (
             <button onClick={()=>nav('/titles')}
               style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#001a08', border:'1px solid #44aa44', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
@@ -4593,6 +4638,12 @@ export default function Game() {
         )}
         {showMenu && <div onClick={()=>setShowMenu(false)} style={{ position:'fixed', inset:0, zIndex:150 }} />}
 
+        {unreadAdminMsgs.length > 0 && (
+          <button onClick={()=>setAdminMsgOpen(true)}
+            style={{ width:'100%', padding:'10px', marginBottom:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>
+            📩 運営からのお知らせ（{unreadAdminMsgs.length}件）→ タップで確認
+          </button>
+        )}
         {claimableTitles > 0 && (
           <button onClick={()=>nav('/titles')}
             style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#001a08', border:'1px solid #44aa44', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
