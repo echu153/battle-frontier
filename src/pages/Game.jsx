@@ -5154,7 +5154,6 @@ function StatMini({ label, base, bonus, color, type }) {
       <span style={{ color:'#446688', fontSize:'9px' }}>{label}</span>
       <span>
         <span style={{color, fontSize:'10px'}}>{base+bonus}</span>
-        {bonus > 0 && <span style={{color:'#44ccff', fontSize:'9px'}}>(+{bonus})</span>}
         <span style={{color:rank.color, fontSize:'9px', marginLeft:'2px'}}>{rank.rank}</span>
       </span>
     </div>
