@@ -4462,6 +4462,17 @@ export default function Game() {
               )}
               {NEW_UI ? (
                 <>
+                  {/* 挑戦（メニュー外） */}
+                  {lockOr('abyss', <button key="challenge" onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ width:'100%', padding:'14px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦</button>)}
+                  {showChallengePanel && (
+                    <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'10px' }}>
+                      <div style={{ color:'#ff6464', fontSize:'11px', marginBottom:'8px' }}>挑戦するコンテンツを選択</div>
+                      <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場</button>
+                      {profile?.is_admin && (
+                        <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
+                      )}
+                    </div>
+                  )}
                   {/* メニュー（展開式） */}
                   <button onClick={toggleFacilitiesExpanded}
                     style={{ width:'100%', padding:'12px', marginTop:'10px', background:'#000e1a', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'2px' }}>
@@ -4475,10 +4486,6 @@ export default function Game() {
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                         <button onClick={()=>nav('/territory')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 領地</button>
                         <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット</button>
-                        <button onClick={()=>nav('/abyss')} style={{ padding:'10px', background:'#001020', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ 挑戦</button>
-                        {profile?.is_admin && (
-                          <button onClick={()=>nav('/tenkyuu')} style={{ padding:'10px', background:'#001020', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌌 天穹[開発]</button>
-                        )}
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
                         <span style={{ flex:1, borderTop:'1px solid #224466' }}/>キャラクター<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
@@ -4878,6 +4885,17 @@ export default function Game() {
                 )}
                 {NEW_UI ? (
                   <>
+                    {/* 挑戦（メニュー外） */}
+                    {lockOr('abyss', <button key="challenge" onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ width:'100%', padding:'14px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>⚔ 挑戦</button>)}
+                    {showChallengePanel && (
+                      <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'10px' }}>
+                        <div style={{ color:'#ff6464', fontSize:'11px', marginBottom:'8px' }}>挑戦するコンテンツを選択</div>
+                        <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場</button>
+                        {profile?.is_admin && (
+                          <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
+                        )}
+                      </div>
+                    )}
                     {/* メニュー（展開式） */}
                     <button onClick={toggleFacilitiesExpanded}
                       style={{ width:'100%', padding:'12px', marginTop:'10px', background:'#000e1a', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'2px' }}>
