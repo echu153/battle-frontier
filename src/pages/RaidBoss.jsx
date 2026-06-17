@@ -483,7 +483,8 @@ export default function RaidBoss() {
     if (error || data?.error) {
       setPendingMsg(m => ({ ...m, [raidId]: data?.error || 'エラーが発生しました' }))
     } else {
-      const parts = [`${data.tier}ティア`, `Gold+${fmt(data.gold)}`, `強化石${(data.stones||[]).map(s=>`(${s})`).join('・')}×2`, `宝石(${data.gem_rank})×${data.gem_count}`]
+      const parts = [`${data.tier}ティア`, `Gold+${fmt(data.gold)}`, `強化石${(data.stones||[]).map(s=>`(${s})`).join('・')}×2`, `宝石(${data.gem_rank})×${data.gem_count}`, `${data.mat_name||'素材'}×${data.scale_count}`]
+      if (data.got_gyaku) parts.push(`⭐${data.rare_name||'レア素材'}×1`)
       setPendingMsg(m => ({ ...m, [raidId]: `✓ 受け取り完了！ ${parts.join(' / ')}` }))
       setPendingRewards(prev => prev.filter(r => r.raid_id !== raidId))
     }
