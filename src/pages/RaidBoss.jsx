@@ -398,6 +398,8 @@ export default function RaidBoss() {
   const [reward, setReward] = useState(null)
   const [claimError, setClaimError] = useState(null)
   const [remaining, setRemaining] = useState(0) // 共有CDの残り秒数
+  const [pendingRewards, setPendingRewards] = useState([]) // 過去レイドの未受取報酬（次のボスが出て画面から消えた分の救済）
+  const [pendingMsg, setPendingMsg] = useState({})         // raid_id→結果メッセージ
   const pollRef = useRef(null)
   const cdRef = useRef(null)
   const logsEndRef = useRef(null)
@@ -456,20 +458,47 @@ export default function RaidBoss() {
       setRemaining(Math.max(0, WAIT_SECONDS - elapsed))
     }
 
-    await fetchBoss(user.id)
+    const curBoss = await fetchBoss(user.id)
+    await fetchPendingRewards(user.id, curBoss?.id)
     pollRef.current = setInterval(() => fetchBoss(user.id), POLL_MS)
+  }
+
+  // 過去レイドの未受取報酬（討伐/時間切れ済み・reward_claimed=false）を拾う。
+  // 次のボスが出現すると現在ボスの画面からは消えるため、ここで救済表示する。
+  const fetchPendingRewards = async (playerId, currentBossId) => {
+    const { data } = await supabase
+      .from('raid_participants')
+      .select('raid_id, attack_count, damage_dealt, reward_claimed, raid_boss!inner(id, status, boss_name, defeated_at)')
+      .eq('player_id', playerId)
+      .eq('reward_claimed', false)
+      .in('raid_boss.status', ['defeated', 'expired'])
+    // 現在画面に出ているボスは通常のリワード欄で扱うので除外
+    const list = (data || []).filter(r => r.raid_id !== currentBossId)
+    setPendingRewards(list)
+  }
+
+  const claimPending = async (raidId) => {
+    setPendingMsg(m => ({ ...m, [raidId]: '処理中...' }))
+    const { data, error } = await supabase.rpc('claim_raid_rewards', { p_raid_id: raidId })
+    if (error || data?.error) {
+      setPendingMsg(m => ({ ...m, [raidId]: data?.error || 'エラーが発生しました' }))
+    } else {
+      const parts = [`${data.tier}ティア`, `Gold+${fmt(data.gold)}`, `強化石${(data.stones||[]).map(s=>`(${s})`).join('・')}×2`, `宝石(${data.gem_rank})×${data.gem_count}`]
+      setPendingMsg(m => ({ ...m, [raidId]: `✓ 受け取り完了！ ${parts.join(' / ')}` }))
+      setPendingRewards(prev => prev.filter(r => r.raid_id !== raidId))
+    }
   }
 
   const fetchBoss = async (playerId) => {
     const { data } = await supabase.rpc('spawn_raid_boss_if_needed')
-    if (!data) return
+    if (!data) return null
 
     setNextSpawn(data.next_spawn || null)
     setNextBossName(data.next_boss_name || null)
 
     if (data.status === 'waiting') {
       setBoss(false)
-      return
+      return null
     }
 
     setBoss(data)
@@ -484,6 +513,7 @@ export default function RaidBoss() {
       setParticipants(parts || [])
       setMyPart((parts || []).find(p => p.player_id === playerId) || null)
     }
+    return data
   }
 
   // 【開発】管理者がテスト用にボスを即出現/終了（is_devフラグ・一般プレイヤーには見えない）
@@ -630,6 +660,33 @@ export default function RaidBoss() {
           })}
           <div style={{ color:'#556688', fontSize:'9px', marginTop:'6px' }}>※ 各30分・HP100万。2体は日替わりで入れ替わります（翌日は上下が逆）。</div>
         </div>
+
+      {/* 未受取の過去レイド報酬（次のボスが出て画面から消えた分の救済） */}
+      {pendingRewards.length > 0 && (
+        <div style={{ border:'1px solid #886600', background:'#1a1400', padding:'12px', marginBottom:'12px' }}>
+          <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'8px' }}>🎁 未受取のレイド報酬があります</div>
+          {pendingRewards.map(r => (
+            <div key={r.raid_id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', marginBottom:'6px', flexWrap:'wrap' }}>
+              <span style={{ color:'#ccbb88', fontSize:'11px' }}>
+                {r.raid_boss?.boss_name || 'レイドボス'}（出撃{r.attack_count}回）
+              </span>
+              <button onClick={() => claimPending(r.raid_id)} disabled={pendingMsg[r.raid_id]==='処理中...'}
+                style={{ padding:'5px 16px', background:'#002200', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+                受け取る
+              </button>
+              {pendingMsg[r.raid_id] && <div style={{ color:'#88ccaa', fontSize:'10px', width:'100%' }}>{pendingMsg[r.raid_id]}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+      {/* 受け取り完了メッセージ（リスト消化後も最後の結果を残す） */}
+      {pendingRewards.length === 0 && Object.values(pendingMsg).some(m => m.startsWith('✓')) && (
+        <div style={{ border:'1px solid #224422', background:'#001a00', padding:'10px', marginBottom:'12px' }}>
+          {Object.entries(pendingMsg).filter(([,m])=>m.startsWith('✓')).map(([rid,m]) => (
+            <div key={rid} style={{ color:'#44ff88', fontSize:'11px' }}>{m}</div>
+          ))}
+        </div>
+      )}
 
       {/* 【開発】管理者専用テストパネル */}
       {profile?.is_admin && (
