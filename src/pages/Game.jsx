@@ -4476,8 +4476,6 @@ export default function Game() {
                       )}
                     </div>
                   )}
-                  {/* 領地 */}
-                  <button onClick={()=>nav('/territory')} style={{ width:'100%', padding:'14px', marginTop:'10px', background:'#1a1402', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>🏰 領地</button>
                   {/* メニュー（展開式） */}
                   <button onClick={toggleFacilitiesExpanded}
                     style={{ width:'100%', padding:'12px', marginTop:'10px', background:'#000e1a', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'2px' }}>
@@ -4486,6 +4484,12 @@ export default function Game() {
                   {facilitiesExpanded && (
                     <div style={{ border:'1px solid #003366', background:'#000a14', padding:'10px', marginTop:'8px' }}>
                       <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'2px 0 6px', color:'#446688', fontSize:'10px' }}>
+                        <span style={{ flex:1, borderTop:'1px solid #224466' }}/>コンテンツ<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
+                      </div>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                        <button onClick={()=>nav('/territory')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 領地</button>
+                      </div>
+                      <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
                         <span style={{ flex:1, borderTop:'1px solid #224466' }}/>キャラクター<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
                       </div>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
@@ -4897,8 +4901,6 @@ export default function Game() {
                         )}
                       </div>
                     )}
-                    {/* 領地 */}
-                    <button onClick={()=>nav('/territory')} style={{ width:'100%', padding:'14px', marginTop:'10px', background:'#1a1402', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>🏰 領地</button>
                     {/* メニュー（展開式） */}
                     <button onClick={toggleFacilitiesExpanded}
                       style={{ width:'100%', padding:'12px', marginTop:'10px', background:'#000e1a', border:'1px solid #336699', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'2px' }}>
