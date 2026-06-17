@@ -3790,7 +3790,7 @@ export default function Game() {
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ background:'#001040', border:'2px solid #ffcc44', padding:'24px', maxWidth:'460px', width:'100%', maxHeight:'90vh', overflowY:'auto' }}>
         <div style={{ color:'#ffcc44', fontSize:'15px', marginBottom:'16px', letterSpacing:'2px', textAlign:'center' }}>📩 運営からのお知らせ</div>
-        {announcements.filter(a => a.target_player_id).map(a => (
+        {announcements.filter(a => a.target_player_id && !seenAdminMsgIds.includes(a.id)).map(a => (
           <div key={a.id} style={{ marginBottom:'14px', padding:'12px', background:'#000818', border:'1px solid #443300' }}>
             <div style={{ color:'#ffcc88', fontSize:'13px', marginBottom:'6px' }}>{a.title}</div>
             <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px' }}>{new Date(a.created_at).toLocaleDateString('ja-JP')}</div>
