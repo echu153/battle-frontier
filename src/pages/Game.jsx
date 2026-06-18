@@ -2299,7 +2299,7 @@ export default function Game() {
     const rtCur = (profile.retraining||{})[profile.class]||0
     const pe = (cls) => profile.class === cls && rtCur >= 3
 
-    const passiveCritBonus   = (hasShingan ? 5 : 0) + (hasSeimitsu ? (pe('魔銃士')?10:5) : 0)
+    const passiveCritBonus   = (hasSeimitsu ? (pe('魔銃士')?10:5) : 0)
     const passiveCritDmgBonus = (hasOnmi && pe('暗殺者')) ? 0.2 : 0  // 隠身強化：クリ威力+20%
     const passiveDmgMult     = (hasShingan ? (pe('侍')?1.20:1.10) : 1.0) * (hasBerserk ? (pe('狂戦士')?1.30:1.15) : 1.0) * (hasKakushin ? (pe('異端審問官')?1.25:1.20) : 1.0) * (hasRokkan ? (pe('サイキッカー')?1.15:1.05) : 1.0)
     const passiveHealMult    = (hasShinkoka ? 1.5 : 1.0) * (hasKakushin ? (pe('異端審問官')?0.7:0.5) : 1.0)
