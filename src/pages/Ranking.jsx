@@ -34,8 +34,10 @@ export default function Ranking() {
       const { data } = await supabase
         .from('profiles')
         .select('id, username, lv, char_lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, avatar_url, retraining, museum_atk, museum_def, museum_matk, museum_mdef, museum_spd, museum_hp, museum_mp, fishing_atk, fishing_def, fishing_matk, fishing_mdef, fishing_spd, fishing_hp, fishing_mp, ability_title_id')
+        // 総合力はchar_lvと完全には比例しないため、char_lv上位だけで絞ると
+        // 「低レベルだが高総合力」のプレイヤーが漏れる。候補を多めに取り総合力でソート後に上位50へ。
         .order('char_lv', { ascending: false })
-        .limit(50)
+        .limit(200)
       const list = (data || []).filter(p => !excluded.has(p.id))
       const ids = list.map(p => p.id)
       let eqs = [], profs = [], titleMap = {}, charmMap = {}
@@ -70,7 +72,7 @@ export default function Ranking() {
         const pProfile = { ...p, petCharm: charmMap[p.id] || null }
         return { ...p, _total: calcEffectiveTotal(pProfile, eq, pf, tb) }
       })
-      const sorted = withTotal.sort((a, b) => b._total - a._total)
+      const sorted = withTotal.sort((a, b) => b._total - a._total).slice(0, 50)
       setPlayers(sorted)
 
       // 博物館寄贈数ランキング（サーバー側で集計＝全寄贈レコードを取得しない。Egress削減）
