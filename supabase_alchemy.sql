@@ -181,11 +181,12 @@ BEGIN
   v_name := '強化石(' || v_job.rank || ')';
   SELECT id INTO v_item_id FROM items WHERE name = v_name;
   IF v_item_id IS NULL THEN RETURN json_build_object('ok',false,'reason','item_not_found'); END IF;
+  -- ★先に枠を「完成品が残っている」条件付きで空にし、空にできた時だけ報酬付与（同時受取の二重付与防止）
+  UPDATE alchemy_jobs SET rank = NULL, started_at = NULL, finish_at = NULL
+    WHERE player_id = v_uid AND slot = p_slot AND rank IS NOT NULL AND finish_at IS NOT NULL AND now() >= finish_at;
+  IF NOT FOUND THEN RETURN json_build_object('ok',false,'reason','not_ready'); END IF;
   INSERT INTO player_items(player_id, item_id, quantity) VALUES (v_uid, v_item_id, 1)
   ON CONFLICT (player_id, item_id) DO UPDATE SET quantity = player_items.quantity + 1;
-  -- 枠を空に
-  UPDATE alchemy_jobs SET rank = NULL, started_at = NULL, finish_at = NULL
-    WHERE player_id = v_uid AND slot = p_slot;
   RETURN json_build_object('ok',true,'item', v_name);
 END;
 $$;
@@ -210,7 +211,10 @@ BEGIN
   v_use := GREATEST(1, LEAST(COALESCE(p_count,1), v_have));
   IF v_have < 1 THEN RETURN json_build_object('ok',false,'reason','no_crystal'); END IF;
   PERFORM set_config('app.allow_stat_change','on',true);
-  UPDATE profiles SET time_crystal = time_crystal - v_use WHERE id = v_uid;
+  -- 結晶を条件付き消費（time_crystal >= v_use の時だけ）。同時実行で負数になるのを防ぐ
+  UPDATE profiles SET time_crystal = time_crystal - v_use WHERE id = v_uid AND time_crystal >= v_use;
+  IF NOT FOUND THEN RETURN json_build_object('ok',false,'reason','no_crystal'); END IF;
+  -- 消費できた時だけ時短を適用
   UPDATE alchemy_jobs SET finish_at = GREATEST(now(), finish_at - (v_use || ' hours')::interval)
     WHERE player_id = v_uid AND slot = p_slot;
   SELECT * INTO v_job FROM alchemy_jobs WHERE player_id = v_uid AND slot = p_slot;
@@ -542,6 +546,11 @@ begin
       else greatest(1, 3 + v_floor) end;
   end if;
 
+  -- デビルパピアはd30の30Fボスのみ。floorが30以外での「デビルパピア」申告は通常EXPに是正（1000EXP連打防止）
+  if p_enemy = 'デビルパピア' and not (v_run.dungeon_id = 'd30' and v_floor = 30) then
+    v_exp_gain := greatest(1, 10 + v_floor);
+  end if;
+
   if p_lucky and random() < 0.5 then v_exp_gain := round(v_exp_gain * 1.5)::int; v_lucky := true; end if;
 
   select * into v_pet from pets where id = v_run.pet_id and owner_id = auth.uid();
@@ -560,7 +569,8 @@ begin
   update dungeon_runs set enemies_defeated = enemies_defeated + 1 where id = p_run_id;
 
   -- ★追憶の遺跡(d30)のボス「デビルパピア」撃破で踏破フラグを立てる（錬金2枠目の解放条件）
-  if v_run.dungeon_id = 'd30' and p_enemy = 'デビルパピア' then
+  --   ボスは30F固定。floor=30 を必須にして低層での即解放を防ぐ
+  if v_run.dungeon_id = 'd30' and p_enemy = 'デビルパピア' and v_floor = 30 then
     perform set_config('app.allow_stat_change','on',true);
     update profiles set cleared_d30 = true where id = auth.uid() and coalesce(cleared_d30,false) = false;
   end if;
