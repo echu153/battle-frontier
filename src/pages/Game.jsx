@@ -317,10 +317,10 @@ export const RETRAINING_ENHANCEMENTS = {
   '聖職者': ['ホーリーライト：30%で回復阻害50%', '奇跡：毎ターン最大HP15%回復', '神聖加護：回復量の50%を敵に反射', '祈りの結界：6ターン', '神罰執行：倍率 MATK×2.0'],
   '異端審問官': ['粛清：倍率 MATK×1.4＋MDEF×0.4', '狂信：特殊攻撃×1.3 追加', '執行本能：与ダメ+25%・回復量×0.7', '聖なる裁き：倍率 MATK×1.9', '断罪：回復封じ 60%'],
   '賢者': ['サンダーストライク：倍率 MATK×1.6', 'マナボルト：消費MP×6', '天啓：MATK×1.3', '氷の障壁：4ターン', 'メテオストライク：2〜5ヒット（2:30/3:40/4:20/5:10%）'],
-  '聖騎士': ['ホーリーエッジ：MATK倍率 0.5→1.0（再修練比例）', 'ディバインスマイト：与ダメ低下付与 50%', '聖騎士の心得：防御・特防×1.5', '聖域展開：毎ターン最大HP10%回復', '神聖覚醒：追撃 防御・特防の60%'],
-  '魔法剣士': ['雷光斬：MATK倍率 0.5→1.0（再修練比例）', '閃光：連続強化×1.2（最大4重複）／倍率0.8→1.0', '魔導剣術：変換率60%', '魔剣開放：反動2ターンに短縮', 'エレメンタルエッジ：MATK倍率 0.8→1.5（再修練比例）'],
-  '魔銃士': ['魔弾：倍率 0.9→1.2（再修練比例）', '連装銃撃：命中+10／倍率0.25→0.5', '精密照準：命中+10・クリ+10%', '強化装填：5ターン', 'キャノネスチュームビンド：連続強化×1.3が最大2重複／倍率1.2→1.5'],
-  'サイキッカー': ['サイコショット：MATK倍率 0.5→1.0（再修練比例）', 'マインドブレイク：40%でスタン／MATK倍率0.7→1.3', '第六感：与ダメ+15%', '精神集中：×1.8・3ターン', 'サイコブラスト：MATK倍率 0.9→1.4（再修練比例）'],
+  '聖騎士': ['ホーリーエッジ：倍率 ATK×1.5＋MATK×1.0', 'ディバインスマイト：与ダメ低下付与 50%', '聖騎士の心得：防御・特防×1.5', '聖域展開：毎ターン最大HP10%回復', '神聖覚醒：追撃 防御・特防の60%'],
+  '魔法剣士': ['雷光斬：倍率 ATK×1.2＋MATK×1.0', '閃光：連続強化×1.2（最大4重複）', '魔導剣術：変換率60%', '魔剣開放：反動2ターンに短縮', 'エレメンタルエッジ：倍率 ATK×1.5＋MATK×1.5'],
+  '魔銃士': ['魔弾：倍率 ATK×1.2＋MATK×1.2', '連装銃撃：命中+10', '精密照準：命中+10・クリ+10%', '強化装填：5ターン', 'キャノネスチュームビンド：連続強化×1.3が最大2重複'],
+  'サイキッカー': ['サイコショット：倍率 ATK×1.2＋MATK×1.0', 'マインドブレイク：40%でスタン', '第六感：与ダメ+15%', '精神集中：×1.8・3ターン', 'サイコブラスト：倍率 ATK×1.7＋MATK×1.4'],
   '体術師': ['半月蹴り：次のスキルの威力×1.8', '五連殺：各ヒット20%で出血', '闘争本能：HP30%以下で与ダメ+60%', '破衝掌：防御無視 50%', '飛天三角蹴り：ミス撤廃＋各ヒットATK+0.1'],
   'ギャンブラー': ['ジャグリング：4ヒット', 'ラッキーダイス：×0.9〜2.2', 'ギャンブルボディ：被ダメ ×0.7〜1.1', 'オールイン：効果・反動6ターン', 'ジャックポット：2倍確率10%'],
   '竜騎士': ['ドラゴンスラスト：防御貫通 30%', 'ドラゴンファング：倍率 0.9', '竜鱗の加護：30%で15%軽減', 'ドラゴンロア：自身の攻撃力×1.3（3T）', '天墜竜閃：威力 4.5'],
@@ -592,8 +592,6 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
   const am = isArtifact ? 1.2 : 1.0
   // 再修練強化：現在クラスがそのスキルのクラスと一致する場合のみ、再修練回数ぶん段階強化が乗る
   const rt = (profile?.class === skill?.class_name) ? ((profile?.retraining||{})[skill?.class_name]||0) : 0
-  // 両刀スキルの倍率を再修練に比例上昇させる（rt0でlo・rt5でhi、線形補間）
-  const rampC = (lo, hi) => lo + (hi - lo) * Math.min(rt, 5) / 5
   // 敵DEF・MDEF の低い方で軽減する計算（ハイブリッドスキル用）
   const calcMinDef = () => {
     const edr = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
@@ -896,11 +894,11 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     // ── サイキッカー ──
     case 'サイコショット': {
-      result.dmg = Math.floor((eff.atk*1.2+eff.matk*rampC(0.5,1.0))*am)
+      result.dmg = Math.floor((eff.atk*1.2+eff.matk*1.0)*am)
       result.log = `🔮 サイコショット！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
     case 'マインドブレイク': {
-      result.dmg = Math.floor((eff.atk*1.2+eff.matk*rampC(0.7,1.3))*am)
+      result.dmg = Math.floor((eff.atk*1.2+eff.matk*1.3)*am)
       let mbStun = ''
       if (rt>=2) {
         const sr_mb = enemyBuffs.stunResist ?? 1.0
@@ -911,7 +909,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     case '第六感':    result.log = `🔮 第六感【パッシブ】 命中率+5%（常時自動発動）`; break
     case '精神集中': { const ssT = rt>=4?3:2; const ssR = rt>=4?1.8:1.6; result.newPlayerBuffs.atkUp={turns:ssT,rate:ssR}; result.newPlayerBuffs.matkUp={turns:ssT,rate:ssR}; result.log = `🔮 精神集中！ ${ssT}ターンの間、攻撃力・特殊攻撃力が大幅上昇！`; break }
     case 'サイコブラスト': {
-      result.dmg = Math.floor((eff.atk*1.7+eff.matk*rampC(0.9,1.4))*am)
+      result.dmg = Math.floor((eff.atk*1.7+eff.matk*1.4)*am)
       result.log = `🔮 サイコブラスト！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
     // ── 体術師 ──
@@ -947,12 +945,12 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     // ── 魔銃士 ──
     case '魔弾': {
-      const mdMult = rampC(0.9,1.2)
+      const mdMult = 1.2
       result.dmg = Math.floor((eff.atk*mdMult+eff.matk*mdMult)*am)
       result.log = `🔫 魔弾！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
     case '連装銃撃': {
-      const lzC = rampC(0.25,0.5)
+      const lzC = 0.5
       const gs = Array.from({length:4}, ()=>Math.floor((eff.atk*lzC+eff.matk*lzC)*am*r()))
       result.dmg = gs.reduce((a,b)=>a+b,0)
       result.hitDmgs = gs
@@ -970,7 +968,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
         cannonStack = prevSkill === 'キャノネスチュームビンド' ? 1 : 0
       }
       const cannonMult = Math.pow(1.3, cannonStack)
-      const cbC = rampC(1.2,1.5)
+      const cbC = 1.5
       result.dmg = Math.floor((eff.atk*cbC+eff.matk*cbC)*am*cannonMult)
       result.log = `🔫 キャノネスチュームビンド！ ${enemy.name}に${result.dmg}の特殊ダメージ！${cannonMult>1.0?` 連続使用で威力上昇（×${cannonMult.toFixed(2)}）！`:''}`; break
     }
@@ -1000,7 +998,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.log = `💸 オールイン！ ${aiT}ターンの間、全ステータスが大幅上昇！`; break
     }
     case 'ジャックポット': {
-      const jpC = rampC(1.2,1.7)
+      const jpC = 1.7
       result.dmg = Math.floor((eff.atk*jpC + eff.matk*jpC) * am)
       const jackpot = Math.random()*100 < (rt>=5?10:5)
       if (jackpot) result.dmg *= 2
@@ -1008,7 +1006,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     // ── 魔法剣士 ──
     case '雷光斬': {
-      result.dmg = Math.floor((eff.atk*1.2 + eff.matk*rampC(0.5,1.0))*am)
+      result.dmg = Math.floor((eff.atk*1.2 + eff.matk*1.0)*am)
       const raiHit = Math.random()*100 < 30
       if (raiHit && !(enemyBuffs.paralysis?.turns > 0)) result.newEnemyBuffs.paralysis = { turns:3, skipRate:0.25, spdRate:0.8 }
       result.log = `⚡⚔ 雷光斬！ ${enemy.name}に${result.dmg}のダメージ！${raiHit && !(enemyBuffs.paralysis?.turns > 0) ? ' 麻痺した！' : ''}`
@@ -1019,7 +1017,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       const flashStep = rt>=2?1.2:1.15
       const flashCount = prevSkill === '閃光' ? Math.min((playerBuffs.flashCombo?.count||0)+1, flashMax) : 0
       const flashMult = flashCount > 0 ? Math.pow(flashStep, flashCount) : 1.0
-      const flC = rampC(0.8,1.0)
+      const flC = 1.0
       result.dmg = Math.floor((eff.atk*flC + eff.matk*flC)*am*flashMult)
       result.newPlayerBuffs.flashCombo = { count: flashCount > 0 ? flashCount : 1 }
       const comboText = flashCount > 0 ? ` 連続${flashCount+1}回（×${flashMult.toFixed(2)}）！` : ''
@@ -1039,7 +1037,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       break
     }
     case 'エレメンタルエッジ': {
-      result.dmg = Math.floor((eff.atk*1.5 + eff.matk*rampC(0.8,1.5))*am)
+      result.dmg = Math.floor((eff.atk*1.5 + eff.matk*1.5)*am)
       const elemHit = Math.random()*100 < 36
       if (elemHit) {
         // やけど・麻痺・スタンを均等抽選（スタン2倍化：発動率36%×1/3で各12%）
@@ -1061,11 +1059,11 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     // ── 聖騎士 ──
     case 'ホーリーエッジ': {
-      result.dmg = Math.floor((eff.atk*1.5 + eff.matk*rampC(0.5,1.0))*am)
+      result.dmg = Math.floor((eff.atk*1.5 + eff.matk*1.0)*am)
       result.log = `✨⚔ ホーリーエッジ！ ${enemy.name}に${result.dmg}のダメージ！`; break
     }
     case 'ディバインスマイト': {
-      result.dmg = Math.floor((eff.atk*1.2 + eff.matk*rampC(0.7,1.2))*am)
+      result.dmg = Math.floor((eff.atk*1.2 + eff.matk*1.2)*am)
       const dmgDownHit = Math.random()*100 < (rt>=2?50:30)
       if (dmgDownHit) result.newEnemyBuffs.dmgDown = { turns:3, rate:0.85 }
       result.log = `✨⚔ ディバインスマイト！ ${enemy.name}に${result.dmg}のダメージ！${dmgDownHit ? ' 3Tの間、相手の与ダメ-15%！' : ''}`
