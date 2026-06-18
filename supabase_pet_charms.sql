@@ -116,7 +116,9 @@ begin
 end; $$;
 
 grant execute on function pet_charm_init() to authenticated;
-grant execute on function pet_charm_grant(text) to authenticated;
+-- ★pet_charm_grant はクライアントから呼ばれず（ダンジョン報酬は dungeon_finish が直接INSERT）、
+--   直叩きでチャームを無料入手できてしまうため実行権限を剥奪する（PUBLIC既定付与分も含め全剥奪）。
+revoke execute on function pet_charm_grant(text) from public, anon, authenticated;
 grant execute on function pet_charm_equip(uuid, uuid) to authenticated;
 grant execute on function pet_charm_enhance(uuid, text, int) to authenticated;
 grant execute on function pet_charm_inherit(uuid, uuid) to authenticated;

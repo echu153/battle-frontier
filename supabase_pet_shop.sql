@@ -70,6 +70,9 @@ declare v_qty int; v_invtotal int; v_add int;
 begin
   if p_qty is null or p_qty < 1 then raise exception 'invalid qty'; end if;
   if pet_item_price(p_key) is null then raise exception 'unknown item'; end if;
+  -- ★ドロップ付与として許可するのは食料のみ。escape/rename/seed等を直叩きで無料入手するのを防ぐ
+  --   （ダンジョン中の食料拾得=grantFoodのみがこのRPCを呼ぶ）
+  if p_key not in ('onigiri','konomi') then raise exception 'not grantable'; end if;
   v_add := p_qty;
   if pet_is_inv_item(p_key) then
     select coalesce(sum(qty),0) into v_invtotal from pet_items where owner_id = auth.uid() and item_key <> 'escape';
