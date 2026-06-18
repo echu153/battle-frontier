@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue } from './Game'
@@ -98,6 +98,7 @@ export default function Equipment() {
   const view = searchParams.get('view')  // 'gear'(装備+宝石) / 'items'(アイテム+お宝) / null(全部)
   const [tab, setTab] = useState(view === 'items' ? 'item' : 'weapon')
   const [loading, setLoading] = useState(false)
+  const craftBusyRef = useRef(false)  // ポーション作成/宝石合成の二重実行ガード（連打対策）
   const [awakenMessage, setAwakenMessage] = useState('')
   const [confirmReset, setConfirmReset] = useState(null)
   const [sortKey, setSortKey] = useState(() => localStorage.getItem('equipSortKey') || 'obtained_asc')
@@ -141,21 +142,32 @@ export default function Equipment() {
 
   const craftPotion = async (recipe, potionEffect) => {
     if (loading) return
+    if (craftBusyRef.current) return  // 連打ガード（二重作成＝素材二重消費/無限ポーション複製を防ぐ）
+    craftBusyRef.current = true
     setLoading(true)
     setCraftMsg('')
+    try {
+    // 無限ポーションは1個のみ。既に所持していれば作成しない（連打での複製防止）
+    if (hasInfinitePotion(potionEffect)) { setCraftMsg('すでに所持しています'); setTimeout(()=>setCraftMsg(''),3000); return }
     const { data: potionItem } = await supabase.from('items').select('*').eq('effect', potionEffect).single()
-    if (!potionItem) { setLoading(false); return }
+    if (!potionItem) { return }
+    // 素材を楽観ロックで1個ずつ消費。1つでも消費できなければ中断（不整合な消費・複製を防ぐ）
     for (const matName of recipe) {
       const pi = allItems.find(i => i.items?.name === matName)
-      if (!pi) { setLoading(false); return }
-      if (pi.quantity > 1) await supabase.from('player_items').update({ quantity: pi.quantity - 1 }).eq('id', pi.id)
-      else await supabase.from('player_items').delete().eq('id', pi.id)
+      if (!pi || (pi.quantity||0) < 1) { setCraftMsg('素材が足りません'); setTimeout(()=>setCraftMsg(''),3000); await fetchAll(); return }
+      if (pi.quantity > 1) {
+        const { data: upd } = await supabase.from('player_items').update({ quantity: pi.quantity - 1 }).eq('id', pi.id).eq('quantity', pi.quantity).select('id')
+        if (!upd || upd.length === 0) { setCraftMsg('作成に失敗しました。もう一度お試しください。'); setTimeout(()=>setCraftMsg(''),3000); await fetchAll(); return }
+      } else {
+        const { data: del } = await supabase.from('player_items').delete().eq('id', pi.id).eq('quantity', pi.quantity).select('id')
+        if (!del || del.length === 0) { setCraftMsg('作成に失敗しました。もう一度お試しください。'); setTimeout(()=>setCraftMsg(''),3000); await fetchAll(); return }
+      }
     }
     await supabase.from('player_items').insert({ player_id: profile.id, item_id: potionItem.id, quantity: 1, equipped: false })
     await fetchAll()
     setCraftMsg(`✨ ${potionItem.name} を作成した！`)
     setTimeout(() => setCraftMsg(''), 3000)
-    setLoading(false)
+    } finally { setLoading(false); craftBusyRef.current = false }
   }
 
   // 一括合成：合成可能なものをすべてシミュレート（カスケード対応）
@@ -198,14 +210,19 @@ export default function Equipment() {
 
   const executeBulkSynthesis = async () => {
     if (!bulkPreview || loading) return
+    if (craftBusyRef.current) return  // 連打ガード（宝石の二重消費/複製を防ぐ）
+    craftBusyRef.current = true
     setLoading(true)
+    try {
     for (const op of bulkPreview.ops) {
-      // fromRankを消費
+      // fromRankを消費（楽観ロック：所持数が読取時と一致する時だけ-。失敗ならその操作をスキップ）
       const fromRow = gems.find(g => g.gem_type === op.gemType && g.rank === op.fromRank)
-      if (!fromRow) continue
+      if (!fromRow || (fromRow.quantity || 0) < op.count * 3) continue
       const newQty = (fromRow.quantity || 0) - op.count * 3
-      if (newQty <= 0) await supabase.from('player_gems').delete().eq('id', fromRow.id)
-      else await supabase.from('player_gems').update({ quantity: newQty }).eq('id', fromRow.id)
+      const { data: consumed } = await supabase.from('player_gems')
+        .update({ quantity: newQty }).eq('id', fromRow.id).eq('quantity', fromRow.quantity).select('id')
+      if (!consumed || consumed.length === 0) continue  // 競合が起きた操作は付与せずスキップ
+      if (newQty <= 0) await supabase.from('player_gems').delete().eq('id', fromRow.id).eq('quantity', 0)
       // toRankを付与（既存があればupdate、なければinsert）
       const toRow = gems.find(g => g.gem_type === op.gemType && g.rank === op.toRank)
       if (toRow) await supabase.from('player_gems').update({ quantity: (toRow.quantity || 0) + op.count }).eq('id', toRow.id)
@@ -213,7 +230,7 @@ export default function Equipment() {
     }
     await fetchAll()
     setBulkPreview({ done: true })
-    setLoading(false)
+    } finally { setLoading(false); craftBusyRef.current = false }
   }
 
   // 宝石：同種3個→上位ランク1個に合成
