@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
@@ -222,6 +222,7 @@ export default function Fishing() {
   const [records, setRecords] = useState([])
   const [selectedLocation, setSelectedLocation] = useState('日本海')
   const [loading, setLoading] = useState(false)
+  const sellBusyRef = useRef(false)  // 一括売却の二重実行ガード（連打対策）
   const [message, setMessage] = useState('')
   const [messageColor, setMessageColor] = useState('#44ff88')
   const [tab, setTab] = useState('fishing')
@@ -322,7 +323,12 @@ useEffect(() => {
   // 売却
   const sellAll = async () => {
     if (caughtFish.length === 0) return
+    if (sellBusyRef.current) return  // 連打ガード（二重売却＝Gold/石の二重付与を防ぐ）
+    sellBusyRef.current = true
     setLoading(true)
+    try {
+    // 今回売却する対象を固定（処理中に背景で釣れた魚を巻き込み削除しないようID集合を保持）
+    const soldIds = caughtFish.map(f => f.id)
     let totalGold = 0
     const shrimpItems = caughtFish.filter(f => f.fish_name === EVENT_SHRIMP_NAME)
     const fishItems = caughtFish.filter(f => !f.fish_name?.startsWith('強化石') && f.fish_name !== EVENT_SHRIMP_NAME)
@@ -361,12 +367,20 @@ useEffect(() => {
         }
       }
     }
-    await supabase.from('profiles').update({ gold: profile.gold + totalGold }).eq('id', profile.id)
-    // caught_fish全削除
-    await supabase.from('caught_fish').delete().eq('player_id', profile.id)
+    // Goldは最新値に加算（stale上書き防止）。更新が失敗したら釣果を削除せず中断＝データ損失を防ぐ
+    const { data: freshProf } = await supabase.from('profiles').select('gold').eq('id', profile.id).maybeSingle()
+    const baseGold = freshProf?.gold ?? profile.gold
+    const { error: goldErr } = await supabase.from('profiles').update({ gold: baseGold + totalGold }).eq('id', profile.id)
+    if (goldErr) {
+      showMessage('売却に失敗しました。もう一度お試しください。', '#ff4444')
+      await fetchAll()
+      return
+    }
+    // 売却済みの釣果のみ削除（処理中に新たに釣れた分は残す）
+    await supabase.from('caught_fish').delete().in('id', soldIds)
     await fetchAll()
     showMessage(`💰 ${totalGold}G獲得！${stoneItems.length > 0 ? `強化石${stoneItems.length}個入手！` : ''}${shrimpItems.length > 0 ? ` ${EVENT_SHRIMP_NAME}×${shrimpItems.length}売却！` : ''}`)
-    setLoading(false)
+    } finally { setLoading(false); sellBusyRef.current = false }
   }
 
   const claimBonus = async (record) => {
