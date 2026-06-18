@@ -308,11 +308,11 @@ const CLASS_LEVEL_CAP = {
 // 再修練5回でそのクラスのレベルキャップが300に解放される
 // 再修練強化の表示用説明（上から1段ずつ＝再修練1回ごとに解放）
 export const RETRAINING_ENHANCEMENTS = {
-  '侍': ['居合斬：倍率 ATK×1.3＋SPD×0.4', '断空：防御無視 50%', '心眼：与ダメ+5%（合計+10%）', '明鏡止水：命中+15', '月影：倍率 ATK×2.2'],
+  '侍': ['居合斬：倍率 ATK×1.3＋SPD×0.4', '断空：防御無視 50%', '心眼：与ダメ+5%（合計+10%）', '明鏡止水：4ターン防御貫通30%', '月影：倍率 ATK×2.2'],
   '狂戦士': ['マッドラッシュ：倍率 ATK×1.9', 'すてみ：反動 5%', 'バーサク：与ダメ+5%（合計+20%）', 'ブラッティロア：攻撃力上昇 ×1.3', 'フルブレイカー：防御無視 50%'],
   '狩人': ['毒矢：毒付与 100%', '三連射：倍率 ATK×0.6/hit', '鷹ノ目：命中+10（基本と合計+20）', '狩猟本能：攻撃・素早さ ×1.5', '絶影狙撃：倍率 ATK×2.2'],
   '暗殺者': ['瞬歩瞬殺：出血確率 100%', '鬼影閃：出血確率 80%', '隠身：クリティカル威力+20%', '影歩き：効果8ターン', '急所突き：出血スタック×25%追撃（最大125%）→出血消費'],
-  '元素使い': ['アクアショット：倍率 MATK×1.6', 'アースクエイク：スタン60%', '元素共鳴：与ダメ+30%', 'ライトニングボルト：倍率 MATK×1.7', 'フレイムバースト：やけど100%'],
+  '元素使い': ['アクアショット：倍率 MATK×1.6', 'アースクエイク：スタン60%', '元素共鳴：与ダメ+50%', 'ライトニングボルト：倍率 MATK×1.7', 'フレイムバースト：やけど100%'],
   '死霊使い': ['骸骨召喚：倍率 MATK×0.8', 'ソウルドレイン：倍率 MATK×1.4', '骸の壁：バリア中 防御・特防×1.2', '腐敗霧：防御・特防低下 ×0.6', '幽世ノ門：効果5ターン'],
   '聖職者': ['ホーリーライト：30%で回復阻害50%', '奇跡：毎ターン最大HP15%回復', '神聖加護：回復×1.4＋回復量の50%を敵に', '祈りの結界：6ターン', '神罰執行：倍率 MATK×2.0'],
   '異端審問官': ['粛清：倍率 MATK×1.4＋MDEF×0.4', '狂信：特殊攻撃×1.3 追加', '執行本能：与ダメ+15%', '聖なる裁き：倍率 MATK×1.9', '断罪：回復封じ 60%'],
@@ -677,7 +677,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.log = `⚔ 断空！ ${enemy.name}の防御を断ち切り${result.dmg}の物理ダメージ！`
       break
     }
-    case '明鏡止水':    result.newPlayerBuffs.atkUp={turns:4,rate:1.5}; result.newPlayerBuffs.hitBonus={turns:4,value:rt>=4?15:5}; result.log = `✨ 明鏡止水！ 4ターンの間攻撃力が上昇し命中率UP！`; break
+    case '明鏡止水':    result.newPlayerBuffs.atkUp={turns:4,rate:1.5}; result.newPlayerBuffs.hitBonus={turns:4,value:5}; if (rt>=4) result.newPlayerBuffs.mukyoPen={turns:4,rate:0.30}; result.log = `✨ 明鏡止水！ 4ターンの間攻撃力が上昇し命中率UP！${rt>=4?' 防御貫通30%獲得！':''}`; break
     case '月影': {
       result.dmg = Math.floor(eff.atk*(rt>=5?2.2:2.0)*am)
       const bleedHit6 = Math.random()*100 < 40
@@ -2464,7 +2464,7 @@ export default function Game() {
         if (cs && cs.skills && playerMp >= mpCost) {
           playerMp -= mpCost
           const hasGensoKyomei = passiveNames.includes('元素共鳴')
-          const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? (pe('元素使い')?1.30:1.20) : 1.0
+          const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? (pe('元素使い')?1.50:1.30) : 1.0
           // 精密照準：再修練3段で「同スキル連続使用時×1.1」が付く（素の精密照準は命中+5のみ）
           const seimitsuMult = (hasSeimitsu && pe('魔銃士') && prevSkillName && prevSkillName === cs.skills.name) ? 1.1 : 1.0
           prevSkillName = cs.skills.name
@@ -2477,7 +2477,8 @@ export default function Game() {
           if (res.dmg > 0) {
             const sType = cs.skills?.type
             const skillCls = cs.skills?.class_name
-            const adjED  = Math.max(1, Math.floor((enemy.def ||0)*eDefRate*(1-(res.defPen||0))))
+            const buffPen = playerBuffs.mukyoPen?.turns > 0 ? playerBuffs.mukyoPen.rate : 0  // 明鏡止水(rt4)等の防御貫通バフ
+            const adjED  = Math.max(1, Math.floor((enemy.def ||0)*eDefRate*(1-Math.min(0.8,(res.defPen||0)+buffPen))))
             const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate*(1-(res.mdefPen||0))))
             // サイコブラスト/マインドブレイク等、およびサイキッカー・魔銃士の全スキルは敵DEF・MDEFの低い方で軽減
             const useLowDef = cs.skills?.name === 'サイコブラスト' || res.useMinDef || skillCls === 'サイキッカー' || skillCls === '魔銃士'
