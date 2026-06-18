@@ -20,6 +20,12 @@ declare
   v_stones text[] := array['F','E','D','C','B','A','S','SS','SSS'];
   v_gems   text[] := array['peridot','lapis','ruby','sapphire','amethyst','emerald','topaz','rosequartz','turquoise','morganite','kunzite','citrine','onyx','opal','moonstone','petalite'];
   v_charms text[] := array['antidote','guard','mdefup','atkup','spatkup','evade','hit','lucky'];
+  -- ダンジョンで拾える装備のみ許可（クライアント Dungeon.jsx の AREA_EQUIPS と一致）。
+  -- これでS級レイド/交換装備など対象外武器名の注入を防ぐ。AREA_EQUIPS変更時は要同期。
+  v_dungeon_equips text[] := array[
+    '木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス','ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書','魔導の杖','魔術教本',
+    '鋼鉄の剣','鋭利なナイフ','狩人の弓','戦士の指輪','略奪の腕輪','古代の護符','秘術の首飾り',
+    '重鋼剣','双牙短剣','疾風の弓','蒼木の杖','精霊魔導典','海流の腕輪','蒼海の大剣','海狼短剣','蒼潮の弓','海晶の杖','海霊詠唱録','蒼海の護符'];
   v_pending jsonb; v_arr jsonb := '[]'::jsonb; v_found boolean := false; v_e jsonb;
 begin
   select * into v_run from dungeon_runs where id = p_run_id;
@@ -49,7 +55,8 @@ begin
     v_entry := jsonb_build_object('id', v_id, 'type', 'charm', 'ctype', v_key);
   elsif v_type = 'equip' then
     v_key := p_entry->>'name';
-    if not exists (select 1 from weapons where name = v_key) then raise exception 'bad equip'; end if;
+    -- 存在チェックではなく「ダンジョン許可装備」のみ通す（S級装備等の注入防止）
+    if not (v_key = any(v_dungeon_equips)) then raise exception 'bad equip'; end if;
     v_entry := jsonb_build_object('id', v_id, 'type', 'equip', 'name', v_key);
   elsif v_type = 'shard' then
     v_entry := jsonb_build_object('id', v_id, 'type', 'shard');
