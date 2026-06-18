@@ -2919,6 +2919,13 @@ export default function Game() {
         logs.push({ text:`💸 オールインの効果が切れた！ ${reactT}ターンの間全ステータスが低下し、バフが使えない！`, color:'#ff4444' })
         setBattleLogs([...logs])
       }
+      // turns が0になった一時バフ/デバフを掃除する。
+      // atkDown/defUp/spdDown 等は「truthy ? rate : 1」で読まれる箇所があり、削除しないと
+      // turns:0 のまま効果が永続してしまう（減衰ループは0を再減算しないため）。
+      // ※ berserk/spellBladeExhaust/allinActive の turns===0 ハンドラは上で処理済み。
+      //   charges 等 turns を持たないバフ（ailmentShield 等）は turns===0 にならず対象外。
+      Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns === 0) delete playerBuffs[k] })
+      Object.keys(enemyBuffs).forEach(k  => { if (enemyBuffs[k]?.turns === 0)  delete enemyBuffs[k] })
       if (bossHealCooldown > 0) bossHealCooldown--
       // 毎ターン終了時のHPスナップショット（表示用）
       logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:profile.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
