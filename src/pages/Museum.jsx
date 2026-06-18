@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
@@ -165,6 +165,7 @@ export default function Museum() {
   const [completeBonuses, setCompleteBonuses] = useState([])
   const [tab, setTab] = useState('donate')
   const [loading, setLoading] = useState(false)
+  const donateBusyRef = useRef(false)  // 寄贈/コンプ報酬の二重実行ガード（連打対策）
   const [message, setMessage] = useState(null)
   const [expandedGroup, setExpandedGroup] = useState(null)
 
@@ -192,6 +193,7 @@ export default function Museum() {
 
   const donate = async (item) => {
     if (loading) return
+    if (donateBusyRef.current) return  // 連打ガード（二重寄贈＝ステ二重付与を防ぐ）
     const name = item.weapons?.name
     if (!name) return
     const groupId = ITEM_GROUP_MAP[name]
@@ -202,25 +204,34 @@ export default function Museum() {
     if (donations.find(d => d.weapon_name === name && d.enhance_tier === tier)) {
       showMsg('このティアはすでに寄贈済みです', '#ff8844'); return
     }
+    donateBusyRef.current = true
     setLoading(true)
+    try {
     const stat = getMuseumStat(name, item.weapons.weapon_type, item.slot)
     const amount = getBonusAmount(name, groupId, item.enhance_plus || 0)
-    const updates = applyBonusToProfile(profile, stat, amount)
+    // 寄贈する装備を「現存する」条件付きで削除し、削除できた時だけボーナス付与＝二重付与を防ぐ
+    const { data: del } = await supabase.from('player_equipment').delete().eq('id', item.id).select('id')
+    if (!del || del.length === 0) { showMsg('寄贈に失敗しました（装備が見つかりません）', '#ff4444'); await fetchAll(); return }
+    // ボーナスは最新のmuseum_*に加算（複数寄贈時のlost update防止）
+    const { data: fresh } = await supabase.from('profiles').select('*').eq('id', profile.id).maybeSingle()
+    const updates = applyBonusToProfile(fresh || profile, stat, amount)
     await supabase.from('profiles').update(updates).eq('id', profile.id)
     await supabase.from('museum_donations').insert({
       player_id: profile.id, weapon_name: name, weapon_slot: item.slot,
       weapon_type: item.weapons.weapon_type, enhance_plus: item.enhance_plus || 0,
       enhance_tier: tier, bonus_stat: stat, bonus_amount: amount, area_group: groupId,
     })
-    await supabase.from('player_equipment').delete().eq('id', item.id)
     await fetchAll()
     showMsg(`🏛 ${name}（${TIER_LABELS[tier]}）を寄贈！ ${formatBonusText(stat, amount)}`)
-    setLoading(false)
+    } finally { setLoading(false); donateBusyRef.current = false }
   }
 
   const claimCompleteBonus = async (group, tier) => {
     if (loading) return
+    if (donateBusyRef.current) return  // 連打ガード（コンプ報酬の二重受取＝ステ二重付与を防ぐ）
+    donateBusyRef.current = true
     setLoading(true)
+    try {
     const tierMap = {}
     for (const d of donations) {
       if (!tierMap[d.weapon_name]) tierMap[d.weapon_name] = new Set()
@@ -233,19 +244,28 @@ export default function Museum() {
       if (tier === 1) return tiers.has(1) || tiers.has(2)
       return tiers.has(2)
     })
-    if (!allOk) { showMsg('条件を満たしていません', '#ff4444'); setLoading(false); return }
+    if (!allOk) { showMsg('条件を満たしていません', '#ff4444'); return }
+    const groupKey = `${group.id}__${tier}`
+    // 受取済みチェック（サーバー側の記録で確認＝再受取・二重付与を防ぐ）
+    const { data: already } = await supabase.from('museum_complete_bonuses')
+      .select('id').eq('player_id', profile.id).eq('group_id', groupKey).maybeSingle()
+    if (already) { showMsg('このコンプリート報酬は受取済みです', '#ff8844'); return }
     const mult = COMPLETE_BONUS_MULT[tier]
+    // 記録を先に作成（重複時は失敗させ二重付与を防ぐ）。失敗したら付与しない
+    const { error: recErr } = await supabase.from('museum_complete_bonuses').insert({ player_id: profile.id, group_id: groupKey })
+    if (recErr) { showMsg('このコンプリート報酬は受取済みです', '#ff8844'); await fetchAll(); return }
+    const { data: fresh } = await supabase.from('profiles').select('*').eq('id', profile.id).maybeSingle()
+    const base = fresh || profile
     const updates = {}
     for (const [stat, val] of Object.entries(group.completeBonus)) {
       const col = museumCol(stat)
-      updates[col] = (profile[col] || 0) + val * mult
+      updates[col] = (base[col] || 0) + val * mult
     }
     await supabase.from('profiles').update(updates).eq('id', profile.id)
-    await supabase.from('museum_complete_bonuses').insert({ player_id: profile.id, group_id: `${group.id}__${tier}` })
     await fetchAll()
     const bonusText = Object.entries(group.completeBonus).map(([k,v]) => `${STAT_LABELS[k]}+${v * mult}`).join(' ')
     showMsg(`🏆 ${group.name}（${TIER_LABELS[tier]}コンプ）！ ${bonusText}`)
-    setLoading(false)
+    } finally { setLoading(false); donateBusyRef.current = false }
   }
 
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh', fontFamily:'monospace' }}>読み込み中...</div>

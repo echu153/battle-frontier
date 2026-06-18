@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
@@ -23,6 +23,7 @@ export default function Barber() {
   const [selectedAvatar, setSelectedAvatar] = useState(null)
   const [uploadedAvatars, setUploadedAvatars] = useState([])
   const [loading, setLoading] = useState(false)
+  const uploadBusyRef = useRef(false)  // アップロード課金の二重実行ガード（連打対策）
   const [message, setMessage] = useState('')
   const [messageColor, setMessageColor] = useState('#44ff88')
   const [uploadFile, setUploadFile] = useState(null)
@@ -67,7 +68,10 @@ export default function Barber() {
       showMessage('ゴールドが足りません！（100G必要）', '#ff4444')
       return
     }
+    if (uploadBusyRef.current) return  // 連打ガード（二重アップロード/二重課金を防ぐ）
+    uploadBusyRef.current = true
     setLoading(true)
+    try {
     const ext = uploadFile.name.split('.').pop()
     const fileName = `${Date.now()}.${ext}`
     const filePath = `${profile.id}/${fileName}`
@@ -78,23 +82,26 @@ export default function Barber() {
 
     if (uploadError) {
       showMessage('アップロードに失敗しました', '#ff4444')
-      setLoading(false)
       return
     }
 
     const newUrl = `${SUPABASE_URL}/storage/v1/object/public/avatars/${filePath}`
 
-    // ゴールド消費・アバター更新
-    await supabase.from('profiles').update({
-      gold: profile.gold - UPLOAD_COST,
+    // ゴールド消費・アバター更新：最新Goldから減算し、所持が足りる時だけ確定（stale上書き/二重課金防止）
+    const { data: fresh } = await supabase.from('profiles').select('gold').eq('id', profile.id).maybeSingle()
+    const baseGold = fresh?.gold ?? profile.gold
+    if (baseGold < UPLOAD_COST) { showMessage('ゴールドが足りません！（100G必要）', '#ff4444'); await fetchAll(); return }
+    const { data: paid } = await supabase.from('profiles').update({
+      gold: baseGold - UPLOAD_COST,
       avatar_url: newUrl,
-    }).eq('id', profile.id)
+    }).eq('id', profile.id).gte('gold', UPLOAD_COST).select('id')
+    if (!paid || paid.length === 0) { showMessage('ゴールドが足りません！（100G必要）', '#ff4444'); await fetchAll(); return }
 
     setUploadFile(null)
     setPreviewUrl(null)
     showMessage('アップロード完了！アイコンを変更しました！')
     await fetchAll()
-    setLoading(false)
+    } finally { setLoading(false); uploadBusyRef.current = false }
   }
 
   const saveAvatar = async () => {
