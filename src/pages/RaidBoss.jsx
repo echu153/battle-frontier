@@ -358,6 +358,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk?.lockedSkill)
       if (lockedIdx >= 0) skillIndex = lockedIdx + 1
     }
+    // turns===0 の一時バフを掃除（atkUp等は ?.rate||1 で読まれるため、削除しないと永続する。Game.jsxと同様）
+    for (const k of Object.keys(playerBuffs)) { if (playerBuffs[k]?.turns === 0) delete playerBuffs[k] }
     // リジェネ・遅延ヒール（回復封印中は無効）
     const isHealBlockedTick = playerBuffs.healBlock?.turns > 0
     if (playerBuffs.regenHeal?.turns > 0) {

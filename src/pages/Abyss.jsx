@@ -674,6 +674,9 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       playerBuffs.allinDebuff = { turns:reactT, rate:0.7 }
       logs.push({ text:`💸 オールインの効果が切れた！ ${reactT}ターンの間全ステータスが低下し、バフが使えない！`, color:'#ff4444' })
     }
+    // turns===0 の一時バフ/デバフを掃除（truthy読みで永続するのを防ぐ。Game.jsxと同様）
+    Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns === 0) delete playerBuffs[k] })
+    Object.keys(enemyBuffs).forEach(k  => { if (enemyBuffs[k]?.turns === 0)  delete enemyBuffs[k] })
     logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:profile.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
     turn++
   }

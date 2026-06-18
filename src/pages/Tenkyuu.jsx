@@ -800,6 +800,9 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       playerBuffs.allinDebuff = { turns:reactT, rate:0.7 }
       logs.push({ text:`💸 オールインの効果が切れた！ ${reactT}ターンの間全ステータスが低下し、バフが使えない！`, color:'#ff4444' })
     }
+    // turns===0 の一時バフ/デバフを掃除（truthy読みで永続するのを防ぐ。Game.jsxと同様）
+    Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns === 0) delete playerBuffs[k] })
+    Object.keys(enemyBuffs).forEach(k  => { if (enemyBuffs[k]?.turns === 0)  delete enemyBuffs[k] })
     const twinBars = twin ? [
       { name:'カストル', hp:Math.max(0,twin.c.hp), max:twin.c.max, down:twin.c.down },
       { name:'ポルックス', hp:Math.max(0,twin.p.hp), max:twin.p.max, down:twin.p.down },
