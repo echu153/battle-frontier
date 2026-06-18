@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
@@ -153,6 +153,7 @@ export default function Smithy() {
   const [playerItems, setPlayerItems] = useState([])
   const [tab, setTab] = useState('enhance')
   const [loading, setLoading] = useState(false)
+  const craftBusyRef = useRef(false)  // 加工/合成の二重実行ガード（連打対策・stateより前に同期判定）
   const [message, setMessage] = useState('')
   const [messageColor, setMessageColor] = useState('#44ff88')
   const [selectedItem, setSelectedItem] = useState(null)
@@ -311,15 +312,26 @@ export default function Smithy() {
   }
 
   const craftStoneFromSelectedItems = async (selectedIds) => {
+    if (craftBusyRef.current) return  // 連打ガード（state更新前の二重実行を同期的に防ぐ）
+    craftBusyRef.current = true
     setLoading(true)
+    try {
     const selected = selectedIds.map(id => equipment.find(e => e.id === id)).filter(Boolean)
-    if (selected.length < 3 || selected.length % 3 !== 0) { showMessage('装備は3の倍数で選択してください！', '#ff4444'); setLoading(false); return }
+    if (selected.length < 3 || selected.length % 3 !== 0) { showMessage('装備は3の倍数で選択してください！', '#ff4444'); return }
     const rarity = selected[0].weapons.rarity
-    if (!selected.every(e => e.weapons.rarity === rarity)) { showMessage('同じランクの装備を選択してください！', '#ff4444'); setLoading(false); return }
-    if (selected.some(e => e.is_favorite)) { showMessage('お気に入り装備は加工できません！（★を解除してください）', '#ff4444'); setLoading(false); return }
-    if (selected.some(e => e.enhance_plus > 0)) { showMessage('強化済み(+1以上)の装備は加工できません！', '#ff4444'); setLoading(false); return }
-    const count = selected.length / 3   // 3個=強化石1個
-    for (const item of selected) await supabase.from('player_equipment').delete().eq('id', item.id)
+    if (!selected.every(e => e.weapons.rarity === rarity)) { showMessage('同じランクの装備を選択してください！', '#ff4444'); return }
+    if (selected.some(e => e.is_favorite)) { showMessage('お気に入り装備は加工できません！（★を解除してください）', '#ff4444'); return }
+    if (selected.some(e => e.enhance_plus > 0)) { showMessage('強化済み(+1以上)の装備は加工できません！', '#ff4444'); return }
+    // 消費する装備を「未強化のまま現存する」条件付きで削除し、実際に削除できた数だけ加工する
+    // （連打・別端末で同じ装備を二重消費→石を二重生成するのを防ぐ）
+    let deleted = 0
+    for (const item of selected) {
+      const { data: del } = await supabase.from('player_equipment').delete()
+        .eq('id', item.id).eq('enhance_plus', 0).select('id')
+      if (del && del.length > 0) deleted++
+    }
+    const count = Math.floor(deleted / 3)   // 実際に消費できた装備3個=強化石1個
+    if (count <= 0) { showMessage('加工に失敗しました（対象装備が見つかりません）', '#ff4444'); await fetchAll(); return }
     const stoneName = STONE_NAMES[rarity]
     const { data: stoneItem } = await supabase.from('items').select('*').eq('name', stoneName).single()
     if (stoneItem) {
@@ -329,19 +341,26 @@ export default function Smithy() {
     }
     showMessage(`✨ ${stoneName} を${count}つ作成した！`, '#ffcc00')
     await fetchAll()
-    setLoading(false)
+    } finally { setLoading(false); craftBusyRef.current = false }
   }
 
   const craftStoneFromStones = async (rarity) => {
+    if (craftBusyRef.current) return
+    craftBusyRef.current = true
     setLoading(true)
+    try {
     const stoneIdx = STONE_RANKS.indexOf(rarity)
-    if (stoneIdx >= STONE_RANKS.length - 1) { showMessage('これ以上ランクアップできません！', '#ff4444'); setLoading(false); return }
+    if (stoneIdx >= STONE_RANKS.length - 1) { showMessage('これ以上ランクアップできません！', '#ff4444'); return }
     const stoneName = STONE_NAMES[rarity]
     const { data: stoneItem } = await supabase.from('items').select('*').eq('name', stoneName).single()
     const existing = playerItems.find(pi => pi.item_id === stoneItem?.id)
-    if (!existing || (existing.quantity||0) < 3) { showMessage(`${stoneName}が3つ必要です！（所持${existing?.quantity||0}個）`, '#ff4444'); setLoading(false); return }
-    if ((existing.quantity||0) - 3 <= 0) await supabase.from('player_items').delete().eq('id', existing.id)
-    else await supabase.from('player_items').update({ quantity: (existing.quantity||0)-3 }).eq('id', existing.id)
+    if (!existing || (existing.quantity||0) < 3) { showMessage(`${stoneName}が3つ必要です！（所持${existing?.quantity||0}個）`, '#ff4444'); return }
+    // 消費を楽観ロック：所持数が読み取り時と一致する時だけ-3（連打/別端末での二重消費を防ぐ）
+    const newQty = (existing.quantity||0) - 3
+    const { data: consumed } = await supabase.from('player_items')
+      .update({ quantity: newQty }).eq('id', existing.id).eq('quantity', existing.quantity).select('id')
+    if (!consumed || consumed.length === 0) { showMessage('合成に失敗しました。もう一度お試しください。', '#ff4444'); await fetchAll(); return }
+    if (newQty <= 0) await supabase.from('player_items').delete().eq('id', existing.id).eq('quantity', 0)
     const nextRarity = STONE_RANKS[stoneIdx + 1]
     const nextStoneName = STONE_NAMES[nextRarity]
     const { data: nextStoneItem } = await supabase.from('items').select('*').eq('name', nextStoneName).single()
@@ -352,7 +371,7 @@ export default function Smithy() {
     }
     showMessage(`✨ ${nextStoneName} を1つ作成した！`, '#ffcc00')
     await fetchAll()
-    setLoading(false)
+    } finally { setLoading(false); craftBusyRef.current = false }
   }
 
 
