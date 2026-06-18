@@ -2822,8 +2822,8 @@ export default function Game() {
             } else {
               itemUsed = true
               const newQty = (currentItem.quantity||1)-1
-              if (newQty <= 0) await supabase.from('player_items').delete().eq('id', currentItem.id)
-              else await supabase.from('player_items').update({ quantity:newQty }).eq('id', currentItem.id)
+              if (newQty <= 0) await supabase.from('player_items').delete().eq('id', currentItem.id).gt('quantity', 0)
+              else await supabase.from('player_items').update({ quantity:newQty }).eq('id', currentItem.id).gte('quantity', currentItem.quantity)
               currentItem = null
             }
           }
