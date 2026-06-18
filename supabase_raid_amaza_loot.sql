@@ -91,9 +91,17 @@ BEGIN
     RETURN json_build_object('error', 'レイドはまだ終了していません');
   END IF;
 
-  SELECT * INTO v_participant FROM raid_participants WHERE raid_id = p_raid_id AND player_id = v_player_id;
-  IF NOT FOUND THEN RETURN json_build_object('error', '参加記録がありません'); END IF;
-  IF v_participant.reward_claimed THEN RETURN json_build_object('error', '既にリワードを受け取り済みです'); END IF;
+  -- ★原子的クレーム: 先に reward_claimed を立てる。同時/連打リクエストでも片方しか成功せず、
+  --   報酬の二重受け取りを防ぐ（読取→チェック→最後に更新だと両方通過しうる）。
+  UPDATE raid_participants SET reward_claimed = true
+  WHERE raid_id = p_raid_id AND player_id = v_player_id AND NOT reward_claimed
+  RETURNING * INTO v_participant;
+  IF NOT FOUND THEN
+    IF EXISTS (SELECT 1 FROM raid_participants WHERE raid_id = p_raid_id AND player_id = v_player_id) THEN
+      RETURN json_build_object('error', '既にリワードを受け取り済みです');
+    END IF;
+    RETURN json_build_object('error', '参加記録がありません');
+  END IF;
 
   SELECT COALESCE(SUM(damage_dealt + attack_count * 500), 1) INTO v_total_eff FROM raid_participants WHERE raid_id = p_raid_id;
   v_my_eff       := v_participant.damage_dealt + v_participant.attack_count * 500;
@@ -163,7 +171,7 @@ BEGIN
     END IF;
   END IF;
 
-  UPDATE raid_participants SET reward_claimed = true WHERE id = v_participant.id;
+  -- reward_claimed は冒頭で原子的に確定済み（ここでの再更新は不要）
 
   RETURN json_build_object(
     'success', true, 'tier', v_tier,
