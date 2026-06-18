@@ -87,11 +87,29 @@ begin
   if p_from = p_to then raise exception 'same charm'; end if;
   select * into f from player_charms where id = p_from and owner_id = auth.uid();
   if not found then raise exception 'from not found'; end if;
-  if not exists (select 1 from player_charms where id = p_to and owner_id = auth.uid()) then raise exception 'to not found'; end if;
-  -- 継承先に元の成長値（使用個数）をそのままコピー（合計は元々150以下）
-  update player_charms set
-    atk = f.atk, spatk = f.spatk, def = f.def, spdef = f.spdef, hp = f.hp
-    where id = p_to and owner_id = auth.uid();
+  declare t player_charms%rowtype;
+  begin
+  select * into t from player_charms where id = p_to and owner_id = auth.uid();
+  if not found then raise exception 'to not found'; end if;
+  -- 継承先に元の成長値をコピー。ただし継承先が単体(非合成)なら上限150へ切り詰める
+  -- （合成済み(最大300)を継承元にすると「単体で300」の不正状態を作れるため）
+  declare v_atk int := f.atk; v_spatk int := f.spatk; v_def int := f.def; v_spdef int := f.spdef; v_hp int := f.hp;
+    v_cap int := case when t.fused then 300 else 150 end; v_total int; v_over int; v_cut int;
+  begin
+    v_total := v_atk + v_spatk + v_def + v_spdef + v_hp;
+    if v_total > v_cap then
+      v_over := v_total - v_cap;
+      v_cut := least(v_hp, v_over);    v_hp := v_hp - v_cut;       v_over := v_over - v_cut;
+      v_cut := least(v_spdef, v_over); v_spdef := v_spdef - v_cut; v_over := v_over - v_cut;
+      v_cut := least(v_def, v_over);   v_def := v_def - v_cut;     v_over := v_over - v_cut;
+      v_cut := least(v_spatk, v_over); v_spatk := v_spatk - v_cut; v_over := v_over - v_cut;
+      v_cut := least(v_atk, v_over);   v_atk := v_atk - v_cut;     v_over := v_over - v_cut;
+    end if;
+    update player_charms set
+      atk = v_atk, spatk = v_spatk, def = v_def, spdef = v_spdef, hp = v_hp
+      where id = p_to and owner_id = auth.uid();
+  end;
+  end;
   -- 装備していたペットがいれば外す → 元チャーム削除
   update pets set charm_id = null where charm_id = p_from and owner_id = auth.uid();
   delete from player_charms where id = p_from and owner_id = auth.uid();
