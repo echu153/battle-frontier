@@ -167,7 +167,7 @@ BEGIN
     unlocked_areas=v_new_unlocked,
     pending_stat_points=v_new_pending,
     char_lv=v_new_char_lv,
-    last_action_at=now(),
+    -- last_action_at は出撃時(sortie_lock)で記録済み。ここで再更新するとCD起点が戦闘終了にズレるため外す
     boss_kill_count=CASE WHEN p_win AND p_is_boss
       THEN COALESCE(boss_kill_count,0)+1 ELSE boss_kill_count END,
     scarecrow_charges=v_sc_charges,
