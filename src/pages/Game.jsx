@@ -162,24 +162,21 @@ export const AREAS = [
     id: 6, name: '白銀の霊峰',
     enemies: [
       {
-        name:'雪男',       hp:2500, atk:500, def:520, matk:0,   mdef:440, spd:650, type:'physical', gold:400,
+        name:'雪男',       hp:3750, atk:750, def:780, matk:0,   mdef:660, spd:975, type:'physical', gold:400,
         skills: [
           { name:'雪崩拳',       type:'physical', mult:1.4 },
-          { name:'凍てつく咆哮', type:'debuff',   effect:'atkDown', rate:0.85, turns:2 },
         ],
       },
       {
-        name:'氷河ドラゴン', hp:3000, atk:550, def:560, matk:150, mdef:560, spd:700, type:'physical', gold:450,
+        name:'氷河ドラゴン', hp:4500, atk:825, def:840, matk:225, mdef:840, spd:1050, type:'physical', gold:450,
         skills: [
           { name:'氷河ブレス', type:'magical',  mult:1.5 },
-          { name:'凍結の鱗',   type:'buff',     effect:'defUp', rate:1.25, turns:2 },
         ],
       },
       {
-        name:'霜の精霊',   hp:2200, atk:200, def:400, matk:400, mdef:640, spd:750, type:'magical', gold:420,
+        name:'霜の精霊',   hp:3300, atk:300, def:600, matk:600, mdef:960, spd:1125, type:'magical', gold:420,
         skills: [
           { name:'霜の矢',   type:'magical',  mult:1.3 },
-          { name:'冷気まとい', type:'buff',   effect:'mdefUp', rate:1.3, turns:2 },
         ],
       },
     ],
@@ -202,21 +199,19 @@ export const AREAS = [
     id: 7, name: '煉獄火山',
     enemies: [
       {
-        name:'炎の精霊',   hp:3500, atk:700, def:640, matk:500, mdef:760, spd:1000, type:'magical', gold:600,
+        name:'炎の精霊',   hp:10500, atk:2100, def:1920, matk:1500, mdef:2280, spd:3000, type:'magical', gold:600,
         skills: [
           { name:'火炎弾', type:'magical',  mult:1.5 },
-          { name:'炎の衣', type:'buff',     effect:'matkUp', rate:1.25, turns:2 },
         ],
       },
       {
-        name:'溶岩ゴーレム', hp:5000, atk:850, def:900, matk:0, mdef:640, spd:1100, type:'physical', gold:700,
+        name:'溶岩ゴーレム', hp:15000, atk:2550, def:2700, matk:0, mdef:1920, spd:3300, type:'physical', gold:700,
         skills: [
           { name:'溶岩拳',   type:'physical', mult:1.6 },
-          { name:'岩盤防御', type:'buff',     effect:'defUp', rate:1.35, turns:2 },
         ],
       },
       {
-        name:'ファイアドレイク', hp:4000, atk:780, def:760, matk:300, mdef:800, spd:1200, type:'physical', gold:650,
+        name:'ファイアドレイク', hp:12000, atk:2340, def:2280, matk:900, mdef:2400, spd:3600, type:'physical', gold:650,
         skills: [
           { name:'炎爪連撃', type:'physical_multi', mult:0.8, hits:2 },
           { name:'業火ブレス', type:'magical',  mult:1.7 },
@@ -224,7 +219,7 @@ export const AREAS = [
       },
     ],
     boss: {
-      name:'深紅のサラマンダー', hp:100000, atk:2500, def:2800, matk:1400, mdef:2300, spd:2100, gold:25000, isBoss:true, type:'physical',
+      name:'深紅のサラマンダー', hp:200000, atk:3750, def:4200, matk:2100, mdef:3450, spd:3150, gold:25000, isBoss:true, type:'physical',
       skills: [
         { name:'溶岩爪撃',   type:'physical', mult:2.0, burnRate:0.3 },
         { name:'業火放射',   type:'magical',  mult:2.2, debuff:'mdefDown', debuffRate:0.8, debuffTurns:3 },
