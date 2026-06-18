@@ -196,8 +196,10 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
         let defScale = 1.0
         if (res.dmg > 0) {
           const sType = cs.skills?.type
-          const adjED  = Math.max(1, Math.floor((enemy.def ||0)*eDefRate*enPerm.defMult))
-          const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate*enPerm.mdefMult))
+          // スキルの防御貫通(res.defPen/res.mdefPen)＋明鏡止水等の貫通バフ(mukyoPen)を反映（Game.jsxと同様）
+          const buffPen = playerBuffs.mukyoPen?.turns > 0 ? playerBuffs.mukyoPen.rate : 0
+          const adjED  = Math.max(1, Math.floor((enemy.def ||0)*eDefRate*enPerm.defMult*(1-Math.min(0.8,(res.defPen||0)+buffPen))))
+          const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate*enPerm.mdefMult*(1-(res.mdefPen||0))))
           if (cs.skills?.name === 'サイコブラスト' || res.useMinDef) {
             defScale = effBuff.matk / (effBuff.matk + Math.min(adjED, adjEMD))
           } else if (sType === '物理攻撃') defScale = effBuff.atk  / (effBuff.atk  + adjED)

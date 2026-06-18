@@ -213,9 +213,13 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           let defScale = 1.0
           if (res.dmg > 0) {
             const sType = cs.skills?.type
-            if (cs.skills?.name === 'サイコブラスト' || res.useMinDef) defScale = effBuff.matk / (effBuff.matk + Math.min(BOSS_DEF, BOSS_MDEF))
-            else if (sType === '物理攻撃') defScale = effBuff.atk / (effBuff.atk + BOSS_DEF)
-            else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + BOSS_MDEF)
+            // 防御貫通を反映（宝石eff.defPen + スキルres.defPen + 明鏡止水等mukyoPen）。Game.jsxと同構造
+            const buffPen = playerBuffs.mukyoPen?.turns > 0 ? playerBuffs.mukyoPen.rate : 0
+            const bDef  = Math.max(1, Math.floor(BOSS_DEF  * (1-(eff.defPen||0))  * (1-Math.min(0.8,(res.defPen||0)+buffPen))))
+            const bMdef = Math.max(1, Math.floor(BOSS_MDEF * (1-(eff.mdefPen||0)) * (1-(res.mdefPen||0))))
+            if (cs.skills?.name === 'サイコブラスト' || res.useMinDef) defScale = effBuff.matk / (effBuff.matk + Math.min(bDef, bMdef))
+            else if (sType === '物理攻撃') defScale = effBuff.atk / (effBuff.atk + bDef)
+            else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + bMdef)
           }
           const skillPhysical = !(cs.skills?.type === '魔法攻撃' || cs.skills?.name === 'サイコブラスト' || res.useMinDef)
           let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * (0.9 + Math.random() * 0.2))
