@@ -2408,7 +2408,7 @@ export default function Game() {
       let mpLack = false
       if (nextSkill) {
         let peekMpCost = Math.floor((isArtifact ? (nextSkill.mp_cost||0)*2 : (nextSkill.mp_cost||0)) * passiveMpCostMult)
-        if (nextSkill.name === 'マナボルト') peekMpCost = Math.max(1, Math.floor(playerMp * 0.1))
+        if (nextSkill.name === 'マナボルト') peekMpCost = Math.max(1, Math.floor(playerMp * 0.2))
         mpLack = playerMp < peekMpCost
         if (mpLack) logs.push({ text:`💧 MPが足りなくてスキルが使えない！`, color:'#6699ff' })
       }
@@ -2457,7 +2457,7 @@ export default function Game() {
       if (expandedSkillSet.length > 0) {
         const cs = expandedSkillSet[skillIndex % expandedSkillSet.length]
         let mpCost = Math.floor((isArtifact ? (cs?.skills?.mp_cost||0)*2 : (cs?.skills?.mp_cost||0)) * passiveMpCostMult)
-        // マナボルト: 現在MPの10%（最低1）を消費
+        // マナボルト: 現在MPの20%（最低1）を消費
         if (cs?.skills?.name === 'マナボルト') mpCost = Math.max(1, Math.floor(playerMp * 0.2))
         if (cs && cs.skills && playerMp >= mpCost) {
           playerMp -= mpCost
