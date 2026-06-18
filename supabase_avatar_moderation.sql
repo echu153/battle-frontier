@@ -9,7 +9,7 @@
 
 CREATE OR REPLACE FUNCTION admin_remove_player_avatar(p_player_id uuid)
 RETURNS json
-LANGUAGE plpgsql SECURITY DEFINER AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_caller   uuid;
   v_is_admin boolean;
