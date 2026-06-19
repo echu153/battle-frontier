@@ -119,6 +119,7 @@ export default function AIAssistant({ ctx }) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}
+              maxLength={300}
               placeholder="質問を入力…"
               style={{
                 flex: 1, background: '#000a14', border: '1px solid #143a30', color: '#cfe',

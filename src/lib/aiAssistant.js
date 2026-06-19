@@ -475,7 +475,7 @@ const CLASS_INTENT = /なるには|なりたい|なるためには|転職|どん
 
 // メタ/雑談系（「答えられない」を避け、できることを前向きに案内するため）
 // 挨拶/お礼は文全体がそれだけのとき限定（ゲームエンティティの誤食いを防ぐためアンカー）
-const GREETING_TRIGGER = /^(こんにちは|こんばんは|おはようございます|おはよう?|やあ|よお|よっ|はじめまして|ハロー|hello|hi|hey|へい|ヘイ|どうも|やっほー?)[\sー！!。.,~〜]*$/i
+const GREETING_TRIGGER = /^(こんにちは|こんばんは|おはようございます|おはよう?|やあ|よお|よっ|はじめまして|ハロー|hello|hi|hey|へい|ヘイ|どうも|やっほー?)[\sー！!。.,~〜?？]*$/i
 const THANKS_TRIGGER = /^(ほんとに|本当に|どうも|いつも|まじ)?\s*(ありがとう?(ございます)?|あざ(す|っす)|サンキュー|さんきゅ[ーう]?|感謝(です|してる)?|thank(s| you)?|thx)[\sー！!。.,~〜]*$/i
 // 自己紹介：主語(あなた/君/AI等)が伴うか、文全体が「誰？/何者？」のときだけ
 const WHOAMI_TRIGGER = /(あなた|きみ|君|お前|おまえ|あんた)(って|は)?(誰|だれ|何者|なにもの|何なの|なになの|なに)|^(誰|だれ|何者|なにもの)[\sー！!。?？]*$|自己紹介(して)?|あなたについて|ai(なの|ですか)|ボットなの/i
@@ -508,9 +508,11 @@ const GREET_CANON = ['こんにちは', 'こんばんは', 'おはよう']
 const guessGreeting = (raw) => {
   const q = normalize(raw)
   if (q.length < 3 || q.length > 7) return null
+  // 正しい挨拶の「言いかけ/1字違い」のみ確認対象（完全一致は GREETING が処理するため除外）
   for (const g of GREET_CANON) {
-    if (g.startsWith(q) || editDistance(q, g) <= 1) return g
+    if (g !== q && (g.startsWith(q) || editDistance(q, g) === 1)) return g
   }
+  // よくある誤記（こんにちわ/こんばんわ）は完全一致でも確認に回す
   if (editDistance(q, 'こんにちわ') <= 1) return 'こんにちは'
   if (editDistance(q, 'こんばんわ') <= 1) return 'こんばんは'
   return null
@@ -522,21 +524,29 @@ const VOCAB = [
   'レイドボス', 'ダンジョン', '奈落闘技場', '錬金部屋', 'かかし修練場', '賭博場', '釣り', '交換所',
   '博物館', '領地', 'ペット', '鍛冶屋', '回復', 'ゴールド', '出撃',
 ]
+// 近似一致で「もしかして○○？」候補を返す（0〜3件）。
+// extractEntityで疑問・助詞ノイズを剥いてから比較し、「ステータってなに？」も拾えるように。
 const didYouMean = (raw) => {
-  const q = normalize(raw)
-  if (q.length < 2) return null
-  let best = null, bestD = Infinity
+  const ent = extractEntity(raw)
+  const q = normalize(ent && ent.length >= 2 ? ent : raw)
+  if (q.length < 2 || q.length > 40) return [] // 長すぎる入力は誤字推測の対象外（負荷対策）
+  const scored = []
   for (const term of [...VOCAB, ...ALL_CLASSES]) {
     const tn = normalize(term)
     const thr = tn.length <= 3 ? 1 : tn.length <= 6 ? 2 : 3
+    if (Math.abs(q.length - tn.length) > thr) continue // 長さ差が閾値超ならDP不要
+    if (tn.length <= 3 && tn[0] !== q[0]) continue      // 短語は先頭文字一致を要求（距離1で別語になりやすい）
     const d = editDistance(q, tn)
-    if (d <= thr && d < bestD) { bestD = d; best = term }
+    if (d <= thr) scored.push({ term, d })
   }
-  return best
+  if (!scored.length) return []
+  const minD = Math.min(...scored.map((s) => s.d))
+  return [...new Set(scored.filter((s) => s.d === minD).map((s) => s.term))].slice(0, 3)
 }
 
 export const askAssistant = async (query, ctx = {}) => {
-  const raw = (query || '').trim()
+  // 入力は最大300字にクランプ（巨大入力での編集距離計算・DB検索の負荷/DoSを防ぐ）
+  const raw = (query || '').trim().slice(0, 300)
   if (!raw) return { text: '質問を入力してください。例：「狂戦士になるには？」「メテオストライクの効果は？」「おすすめ強化」', kind: 'fallback' }
 
   const cls = findClassInQuery(raw)
@@ -615,10 +625,11 @@ export const askAssistant = async (query, ctx = {}) => {
 
   // 7) フォールバック（柔らかめに。「もしかして○○？」推測も挟む。記録はKB育成用）
   logUnanswered(raw)
-  const guess = didYouMean(raw)
-  if (guess) {
+  const guesses = didYouMean(raw)
+  if (guesses.length) {
+    const label = guesses.map((g) => `「${g}」`).join('か')
     return {
-      text: `うーん、ぴったりの答えが見つかりませんでした💦\nもしかして「${guess}」のことでしょうか？ そうなら「${guess}ってなに？」や「${guess}」と聞いてみてください😊\n違っていたら、もう少し詳しく教えてもらえると答えやすいです。`,
+      text: `うーん、ぴったりの答えが見つかりませんでした💦\nもしかして${label}のことでしょうか？ そうなら「${guesses[0]}ってなに？」のように聞いてみてください😊\n違っていたら、もう少し詳しく教えてもらえると答えやすいです。`,
       kind: 'fallback',
     }
   }
