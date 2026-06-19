@@ -31,7 +31,13 @@ const MODEL = Deno.env.get('GROQ_MODEL') || 'llama-3.3-70b-versatile'
 
 // サーバー側の不適切判定（クライアントのフィルタを直叩きで迂回されないよう、ここでも弾く）
 const NG = /(セックス|せっくす|sex|エロ|アダルト|adult|童貞|処女|射精|挿入|オナニー|自慰|まんこ|マンコ|ちんこ|チンコ|ちんぽ|チンポ|ペニス|性器|レイプ|強姦|ヌード|全裸|風俗|ポルノ|porn|18禁|r-?18|性行為|fuck|グロ画像|グロ動画|内臓|死体|惨殺|バラバラ死体|リョナ|死ね|殺すぞ|ぶっ殺|きちがい|キチガイ|気違い|池沼|知障|くたばれ)/i
-
+// NG判定用の正規化：NFKC（全角→半角等）→ゼロ幅除去→小文字化→区切り記号除去（迂回耐性）。原文は保持。
+const ngNorm = (s) => (s || '')
+  .normalize('NFKC')
+  .replace(/[\u200B-\u200D\uFEFF]/g, '')
+  .toLowerCase()
+  .replace(/[\s.\-_、。・,]/g, '')
+const isNG = (s) => NG.test(ngNorm(s))
 const SYSTEM_PROMPT = `あなたはブラウザゲーム「バトルフロンティア」のAI案内役「AI戦闘民族ジェミータ」だ。誇り高い戦士の気質を持つオリジナルキャラクターとして振る舞え。
 
 【口調・性格】
@@ -66,7 +72,7 @@ Deno.serve(async (req) => {
   const question = (body.question || '').toString().trim().slice(0, 500)
   if (!question) return json({ error: 'empty' }, 400)
   // 消費の前に不適切判定（消費させない・LLMに送らない）
-  if (NG.test(question.replace(/\s/g, ''))) return json({ allowed: true, text: 'くだらん。そんな話に付き合う気はない。ゲームのことなら相手をしてやる。', remaining: null })
+  if (isNG(question)) return json({ allowed: true, text: 'くだらん。そんな話に付き合う気はない。ゲームのことなら相手をしてやる。', remaining: null })
   if (!GROQ_API_KEY) return json({ allowed: false, reason: 'not_configured' }, 503)
 
   // 1日上限の消費（DBで原子的に判定）。残り回数 -1 = 上限到達
@@ -113,9 +119,10 @@ Deno.serve(async (req) => {
   }
   console.log('[clever-api] groq status:', status) // 本文やuidは記録しない
   if (!answer) { await refund(); return json({ allowed: false, reason: 'llm_error' }, 502) }
-  // 出力側モデレーション（生成結果が不適切なら出さない）
-  if (NG.test(answer.replace(/\s/g, ''))) {
-    return json({ allowed: true, text: 'くだらん。その手の話はしない。ゲームのことを訊け。', remaining, limit: DAILY_LIMIT })
+  // 出力側モデレーション（生成結果が不適切なら出さない）。正常質問なのにモデルが不適切出力した場合は払い戻す
+  if (isNG(answer)) {
+    await refund()
+    return json({ allowed: true, text: 'くだらん。その手の話はしない。ゲームのことを訊け。', remaining: typeof remaining === 'number' ? remaining + 1 : null, limit: DAILY_LIMIT })
   }
 
   return json({ allowed: true, text: answer.trim(), remaining, limit: DAILY_LIMIT })
