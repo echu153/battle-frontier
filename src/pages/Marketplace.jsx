@@ -99,6 +99,7 @@ export default function Marketplace() {
   const [msg, setMsg] = useState(null)
   const [sellTarget, setSellTarget] = useState(null) // 出品ダイアログ対象
   const [sellPrice, setSellPrice] = useState(0)
+  const [listResult, setListResult] = useState(null) // 出品完了ポップアップ { name, price, proceeds }
 
   useEffect(() => { init() }, [])
 
@@ -182,8 +183,9 @@ export default function Marketplace() {
     })
     setBusy(null)
     if (error || !data?.ok) { flash(data?.reason || 'エラーが発生しました', '#ff4444'); return }
+    const popup = { name: sellTarget.weapons?.name, price: sellPrice, proceeds: Math.floor((sellPrice || 0) * 0.8) }
     setSellTarget(null)
-    flash('出品しました！（14日間／売れなければ手元に戻ります）', '#44ff88')
+    setListResult(popup)
     await init()
   }
 
@@ -295,6 +297,22 @@ export default function Marketplace() {
           </div>
         )}
       </div>
+
+      {/* 出品完了ポップアップ（強化成功と同じ中央モーダル） */}
+      {listResult && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,4,16,0.85)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }} onClick={() => setListResult(null)}>
+          <div style={{ background:'#000e20', border:'1px solid #44ddaa', padding:'24px', maxWidth:'360px', width:'100%', fontFamily:'monospace', textAlign:'center' }} onClick={ev => ev.stopPropagation()}>
+            <div style={{ fontSize:'30px', marginBottom:'10px' }}>🏷</div>
+            <div style={{ color:'#44ddaa', fontSize:'16px', letterSpacing:'2px', marginBottom:'12px' }}>出品しました！</div>
+            <div style={{ color:'#aaccff', fontSize:'13px', marginBottom:'6px' }}>{listResult.name}</div>
+            <div style={{ color:'#ffcc44', fontSize:'15px', marginBottom:'4px' }}>{yen(listResult.price)}G</div>
+            <div style={{ color:'#557799', fontSize:'11px', marginBottom:'4px' }}>売却時の手取り <span style={{ color:'#44ff88' }}>{yen(listResult.proceeds)}G</span>（手数料20%）</div>
+            <div style={{ color:'#445566', fontSize:'10px', marginBottom:'18px' }}>14日間／売れなければ手元に戻ります</div>
+            <button onClick={() => setListResult(null)}
+              style={{ padding:'8px 20px', background:'#001a14', border:'1px solid #44ddaa', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>閉じる</button>
+          </div>
+        </div>
+      )}
 
       {/* 出品ダイアログ */}
       {sellTarget && (
