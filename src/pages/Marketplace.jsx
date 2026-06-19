@@ -25,9 +25,24 @@ const BONUS_EFFECT_DESC = {
 // クライアント側でも基準価格を算出（サーバーと同じロジック。表示・スライダー用）
 function basePriceOf(weapon) {
   if (!weapon) return null
-  if (weapon.name && weapon.name.startsWith('古びた')) return null  // 古びた○○は出品不可
+  if (!weapon.donatable) return null  // 出品できるのは博物館に寄贈できる装備のみ（古びた等は不可）
   if (weapon.base_price && weapon.base_price > 0) return weapon.base_price
   return { a:300000, b:250000, c:150000, d:100000, e:50000, f:20000 }[String(weapon.rarity).toLowerCase()] ?? null
+}
+
+// 個体ボーナス値（再鑑定等）→表示用配列。eq=player_equipment行 or listing.bonus(jsonb)
+const BONUS_FIELDS = [
+  ['atk','攻撃','#ffcc00'], ['def','防御','#88aaff'], ['matk','特攻','#cc44ff'],
+  ['mdef','特防','#44ccff'], ['spd','素早さ','#ff8844'], ['hp','HP','#44ff88'],
+  ['mp','MP','#4488ff'], ['crit','クリ率','#ff6688'], ['evasion','回避','#66ccff'], ['hit','命中','#ffaa44'],
+]
+function bonusList(src) {
+  if (!src) return []
+  // player_equipment行は bonus_atk 形式、listing.bonus は {atk:..} 形式の両対応
+  const get = k => src[`bonus_${k}`] ?? src[k] ?? 0
+  return BONUS_FIELDS
+    .map(([k, label, c]) => { const v = get(k); return v > 0 ? { label, v, c, pct: (k === 'crit' || k === 'evasion' || k === 'hit') } : null })
+    .filter(Boolean)
 }
 
 const RARITY_ORDER = { sss:8, ss:7, s:6, a:5, b:4, c:3, d:2, e:1, f:0 }
@@ -42,11 +57,12 @@ const SORT_OPTIONS = [
 
 const yen = n => (n ?? 0).toLocaleString()
 
-function WeaponCard({ weapon, bonusEffect, enhancePlus, right }) {
+function WeaponCard({ weapon, bonusEffect, enhancePlus, right, bonus }) {
   if (!weapon) return null
   const rarity = weapon.rarity?.toLowerCase() || 'f'
   const color = RARITY_COLORS[rarity] || '#888888'
   const effectDesc = BONUS_EFFECT_DESC[bonusEffect] || null
+  const bonuses = bonusList(bonus)
   const stats = [
     weapon.atk_bonus      > 0 && ['攻撃',   weapon.atk_bonus,      '#ffcc00'],
     weapon.def_bonus      > 0 && ['防御',   weapon.def_bonus,      '#88aaff'],
@@ -73,6 +89,14 @@ function WeaponCard({ weapon, bonusEffect, enhancePlus, right }) {
             <span key={i} style={{ fontSize:'11px', color:c }}>{label}+{val}</span>
           ))}
         </div>
+        {bonuses.length > 0 && (
+          <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginTop:'3px' }}>
+            <span style={{ fontSize:'10px', color:'#cc9933' }}>ボーナス</span>
+            {bonuses.map((b, i) => (
+              <span key={i} style={{ fontSize:'11px', color:b.c }}>{b.label}+{b.v}{b.pct ? '%' : ''}</span>
+            ))}
+          </div>
+        )}
         {effectDesc && (
           <div style={{ fontSize:'10px', color:'#9a8fc4', marginTop:'3px' }}>✦ {effectDesc}</div>
         )}
@@ -302,7 +326,7 @@ export default function Marketplace() {
               const canAfford = gold >= l.price
               return (
                 <div key={l.id} style={{ border:`1px solid ${canAfford ? '#224433' : '#0055aa'}`, background:'#001028', padding:'12px' }}>
-                  <WeaponCard weapon={l.weapons} bonusEffect={l.bonus_effect} />
+                  <WeaponCard weapon={l.weapons} bonusEffect={l.bonus_effect} bonus={l.bonus} />
                   <div style={{ fontSize:'10px', color:'#557799', marginTop:'8px', marginBottom:'4px' }}>出品者: <span style={{ color:'#88ccff' }}>{l.seller?.username || '???'}</span></div>
                   <PriceStats stat={stats[l.weapon_id]} base={l.base_price} />
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'8px' }}>
@@ -326,7 +350,7 @@ export default function Marketplace() {
               const days = Math.max(0, Math.ceil((new Date(l.expires_at).getTime() - Date.now()) / 86400000))
               return (
                 <div key={l.id} style={{ border:'1px solid #334455', background:'#001028', padding:'12px' }}>
-                  <WeaponCard weapon={l.weapons} bonusEffect={l.bonus_effect} />
+                  <WeaponCard weapon={l.weapons} bonusEffect={l.bonus_effect} bonus={l.bonus} />
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'8px' }}>
                     <div style={{ fontSize:'11px' }}>
                       <span style={{ color:'#ffcc44', fontSize:'14px' }}>{yen(l.price)}G</span>
@@ -355,7 +379,7 @@ export default function Marketplace() {
               const bp = basePriceOf(e.weapons)
               return (
                 <div key={e.id} style={{ border:'1px solid #003366', background:'#001028', padding:'12px' }}>
-                  <WeaponCard weapon={e.weapons} bonusEffect={e.bonus_effect} enhancePlus={e.enhance_plus}
+                  <WeaponCard weapon={e.weapons} bonusEffect={e.bonus_effect} enhancePlus={e.enhance_plus} bonus={e}
                     right={<button onClick={() => openSell(e)}
                       style={{ padding:'7px 16px', background:'#001a00', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap' }}>出品</button>} />
                   <div style={{ fontSize:'10px', color:'#557799', marginTop:'6px' }}>基準 {yen(bp)}G（{yen(Math.floor(bp*0.5))}〜{yen(Math.ceil(bp*1.5))}G）</div>
@@ -389,7 +413,7 @@ export default function Marketplace() {
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }} onClick={() => setSellTarget(null)}>
           <div style={{ background:'#000e20', border:'1px solid #0066aa', padding:'20px', maxWidth:'360px', width:'90%' }} onClick={ev => ev.stopPropagation()}>
             <div style={{ color:'#44ddaa', fontSize:'14px', marginBottom:'14px', textAlign:'center', letterSpacing:'2px' }}>出品価格を設定</div>
-            <WeaponCard weapon={sellTarget.weapons} bonusEffect={sellTarget.bonus_effect} />
+            <WeaponCard weapon={sellTarget.weapons} bonusEffect={sellTarget.bonus_effect} enhancePlus={sellTarget.enhance_plus} bonus={sellTarget} />
             <PriceStats stat={stats[sellTarget.weapon_id]} base={sellBase} />
             <div style={{ margin:'14px 0 6px', fontSize:'11px', color:'#557799' }}>価格（{yen(sellMin)} 〜 {yen(sellMax)}G）</div>
             <input type="range" min={sellMin} max={sellMax} step={Math.max(1, Math.round((sellMax - sellMin) / 100))}

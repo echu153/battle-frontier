@@ -17,6 +17,7 @@
 
 -- 1) 装備テーブルに列追加 --------------------------------------
 ALTER TABLE weapons          ADD COLUMN IF NOT EXISTS base_price integer;        -- 取引所の基準価格（NULL=rarity算出 or 出品不可）
+ALTER TABLE weapons          ADD COLUMN IF NOT EXISTS donatable  boolean NOT NULL DEFAULT false; -- 博物館に寄贈できる装備＝出品可
 ALTER TABLE player_equipment ADD COLUMN IF NOT EXISTS listed   boolean NOT NULL DEFAULT false;  -- 出品中（エスクロー）
 ALTER TABLE player_equipment ADD COLUMN IF NOT EXISTS is_bound boolean NOT NULL DEFAULT false;  -- 帰属（取引/加工不可）
 
@@ -54,7 +55,8 @@ DECLARE w weapons%ROWTYPE;
 BEGIN
   SELECT * INTO w FROM weapons WHERE id = p_weapon_id;
   IF NOT FOUND THEN RETURN NULL; END IF;
-  -- 古びた○○（アーティファクトの素体）は出品不可
+  -- 出品できるのは博物館に寄贈できる装備のみ（古びた○○・非寄贈装備は不可）
+  IF NOT w.donatable THEN RETURN NULL; END IF;
   IF w.name LIKE '古びた%' THEN RETURN NULL; END IF;
   -- 個別設定があれば最優先（ボス装備・レイド装備はここで設定する）
   IF w.base_price IS NOT NULL AND w.base_price > 0 THEN
@@ -80,12 +82,14 @@ CREATE TABLE IF NOT EXISTS public.marketplace_listings (
   weapon_id    integer NOT NULL REFERENCES weapons(id),
   price        integer NOT NULL,
   base_price   integer NOT NULL,
+  bonus        jsonb,                              -- 出品時の個体ボーナス値スナップショット（購入者表示用）
   status       text    NOT NULL DEFAULT 'active',  -- active / sold / cancelled / expired
   buyer_id     uuid REFERENCES profiles(id),
   listed_at    timestamptz NOT NULL DEFAULT now(),
   expires_at   timestamptz NOT NULL DEFAULT now() + interval '14 days',
   sold_at      timestamptz
 );
+ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS bonus jsonb;  -- 既存テーブルにも列追加
 CREATE INDEX IF NOT EXISTS idx_mp_status   ON marketplace_listings(status);
 CREATE INDEX IF NOT EXISTS idx_mp_weapon   ON marketplace_listings(weapon_id);
 CREATE INDEX IF NOT EXISTS idx_mp_seller   ON marketplace_listings(seller_id);
@@ -158,8 +162,11 @@ BEGIN
     RETURN json_build_object('ok', false, 'reason',
       format('価格は %s 〜 %s G の範囲で設定してください', v_min, v_max)); END IF;
 
-  INSERT INTO marketplace_listings (seller_id, equipment_id, weapon_id, price, base_price)
-  VALUES (v_uid, p_equipment_id, v_eq.weapon_id, p_price, v_base);
+  INSERT INTO marketplace_listings (seller_id, equipment_id, weapon_id, price, base_price, bonus)
+  VALUES (v_uid, p_equipment_id, v_eq.weapon_id, p_price, v_base, jsonb_build_object(
+    'atk', v_eq.bonus_atk, 'def', v_eq.bonus_def, 'matk', v_eq.bonus_matk, 'mdef', v_eq.bonus_mdef,
+    'spd', v_eq.bonus_spd, 'hp', v_eq.bonus_hp, 'mp', v_eq.bonus_mp,
+    'crit', v_eq.bonus_crit, 'evasion', v_eq.bonus_evasion, 'hit', v_eq.bonus_hit));
 
   UPDATE player_equipment SET listed = true WHERE id = p_equipment_id;
 
@@ -286,3 +293,35 @@ WHERE name IN (
 -- 設定後の確認:
 --   SELECT name, rarity, base_price FROM weapons
 --    WHERE name IN ('スライムの指輪','蒼粘剣','深紅の牙輪','ぷよぷよロッド') ORDER BY base_price;
+
+-- ============================================================
+-- 出品可能（＝博物館に寄贈できる）装備に donatable=true を付与
+--   博物館の登録装備（MUSEUM_GROUPS + ボスドロップ）と一致させる。
+--   ※ 博物館に装備を追加したら、ここにも装備名を追加すること。
+-- ============================================================
+UPDATE weapons SET donatable = false;  -- 一旦リセット（リスト変更時の取りこぼし防止）
+UPDATE weapons SET donatable = true WHERE name IN (
+  -- 初級エリア（エリア1〜3）
+  '木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス',
+  'ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書',
+  '鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','戦士の指輪','略奪の腕輪',
+  '古代の護符','秘術の首飾り',
+  -- エリア4：蒼海の入り江
+  '重鋼剣','双牙短剣','疾風の弓','蒼木の杖','精霊魔導典','海流の腕輪',
+  '蒼海の大剣','海狼短剣','蒼潮の弓','海晶の杖','海霊詠唱録','蒼海の護符',
+  -- エリア5：巨峰山脈
+  '山岳の斧','岩砕の拳','霞散弾銃','嵐のオーブ','峰岳の兜','岩石鎧','山岳の靴','岩石の護符',
+  '雷砕斧','鷹爪の拳','雷鳴銃','雷晶オーブ','嵐の兜','雷鷲鎧','疾風の靴','峰岳の守護輪',
+  -- エリア6：白銀の霊峰
+  '氷刃の剣','霜穿の槍','吹雪の弓','氷晶の杖','凍月刀','氷晶の護符',
+  '白銀の大剣','氷河長槍','極雪の弓','霜嵐の杖','凍蒼の刀','霜の宝珠',
+  -- エリア7：煉獄火山
+  '業火の短剣','炎のワンド','煉獄魔導書','炎の兜','溶岩鎧','紅蓮の靴','溶岩の指輪',
+  'サラマンダーブレード','フェニックスワンド','煉獄のコデックス','溶鉄のクラウン','ドレイクアーマー','ヴァルカンブーツ','業炎の指輪',
+  -- ボスドロップ（通常＋特殊）
+  'スライムの指輪','蒼粘剣','略奪者の短剣','影踏みのブーツ',
+  '古代魔導コア','虚無の杖','海竜の鱗','アクアクラウン',
+  '雷鷲の爪牙','嵐の重装甲','絶零の魔導砲','フロストバーンの聖鎧',
+  '深紅の牙輪','深紅の魔眼石','インフェルノバスティオン',
+  'ぷよぷよロッド','怪盗の指輪','結晶グリーブ'
+);
