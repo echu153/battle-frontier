@@ -3177,7 +3177,7 @@ export default function Game() {
     }
 
     // ① サーバー側でGold・EXPを検証してから適用（クライアント改ざん対策）
-    const { data: rpcResult } = await supabase.rpc('apply_battle_result', {
+    const { data: rpcResult, error: rpcError } = await supabase.rpc('apply_battle_result', {
       p_area_id: selectedArea,
       p_is_boss: isBossEncounter,
       p_is_papia: isPapiaEncounter,
@@ -3188,6 +3188,13 @@ export default function Game() {
       p_hp_current: playerHp,
       p_mp_current: playerMp,
     })
+
+    // ★サーバーが戦果を拒否した場合は、握り潰さず理由を表示（EXP/Goldが入らない原因の可視化）
+    if (rpcError || (rpcResult && rpcResult.ok === false)) {
+      const reason = rpcResult?.reason || rpcError?.message || 'unknown'
+      logs.push({ text: `⚠ サーバーが戦果を適用しませんでした（理由: ${reason}）。EXP/Goldは反映されていません。`, color: '#ff4444' })
+      setBattleLogs([...logs])
+    }
 
     // かかし修練場のチャージ完了通知
     if (rpcResult?.scarecrow_charged) {
