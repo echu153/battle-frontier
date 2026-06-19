@@ -19,6 +19,32 @@ ALTER TABLE weapons          ADD COLUMN IF NOT EXISTS base_price integer;       
 ALTER TABLE player_equipment ADD COLUMN IF NOT EXISTS listed   boolean NOT NULL DEFAULT false;  -- 出品中（エスクロー）
 ALTER TABLE player_equipment ADD COLUMN IF NOT EXISTS is_bound boolean NOT NULL DEFAULT false;  -- 帰属（取引/加工不可）
 
+-- 1.5) 帰属/出品/所有者の直接改変を禁止する保護トリガー -------------------
+-- player_id/listed/is_bound はクライアントが直接書く正当な経路が無い（出品・購入・
+-- キャンセル・期限戻しの専用RPCのみが変更する）。直接UPDATEを拒否し、専用RPCは
+-- SET LOCAL "app.allow_market_change"='on' を立ててから更新する。
+-- ※ weapon_id はアーティファクト覚醒がクライアントから直接書くため保護対象外。
+--   出品後の「品替え」は購入RPCが listing.weapon_id と行ロック下で再照合して弾く。
+CREATE OR REPLACE FUNCTION public.guard_player_equipment_market()
+RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF current_setting('app.allow_market_change', true) = 'on' THEN
+    RETURN NEW;  -- 専用RPC経由は許可
+  END IF;
+  IF NEW.player_id IS DISTINCT FROM OLD.player_id
+     OR NEW.listed   IS DISTINCT FROM OLD.listed
+     OR NEW.is_bound IS DISTINCT FROM OLD.is_bound THEN
+    RAISE EXCEPTION '取引所の保護列(player_id/listed/is_bound)は専用RPC経由でのみ変更できます';
+  END IF;
+  RETURN NEW;
+END; $$;
+
+DROP TRIGGER IF EXISTS trg_guard_pe_market ON player_equipment;
+CREATE TRIGGER trg_guard_pe_market
+  BEFORE UPDATE ON player_equipment
+  FOR EACH ROW EXECUTE FUNCTION public.guard_player_equipment_market();
+
 -- 2) 基準価格の算出関数 --------------------------------------
 CREATE OR REPLACE FUNCTION public.marketplace_base_price(p_weapon_id integer)
 RETURNS integer
@@ -77,6 +103,7 @@ CREATE OR REPLACE FUNCTION public.marketplace_expire()
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
+  PERFORM set_config('app.allow_market_change', 'on', true);  -- 保護トリガー解錠（トランザクション内のみ）
   UPDATE player_equipment pe SET listed = false
   FROM marketplace_listings ml
   WHERE ml.equipment_id = pe.id
@@ -99,6 +126,7 @@ DECLARE
   v_effect text;
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('ok', false, 'reason', '未ログイン'); END IF;
+  PERFORM set_config('app.allow_market_change', 'on', true);  -- 保護トリガー解錠
   PERFORM marketplace_expire();
 
   SELECT * INTO v_eq FROM player_equipment WHERE id = p_equipment_id FOR UPDATE;
@@ -144,6 +172,7 @@ DECLARE
   v_ml  marketplace_listings%ROWTYPE;
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('ok', false, 'reason', '未ログイン'); END IF;
+  PERFORM set_config('app.allow_market_change', 'on', true);  -- 保護トリガー解錠
   SELECT * INTO v_ml FROM marketplace_listings WHERE id = p_listing_id FOR UPDATE;
   IF NOT FOUND OR v_ml.seller_id <> v_uid THEN
     RETURN json_build_object('ok', false, 'reason', '対象の出品が見つかりません'); END IF;
@@ -162,10 +191,12 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_uid      uuid := auth.uid();
   v_ml       marketplace_listings%ROWTYPE;
+  v_eq       player_equipment%ROWTYPE;
   v_proceeds integer;
   v_updated  integer;
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('ok', false, 'reason', '未ログイン'); END IF;
+  PERFORM set_config('app.allow_market_change', 'on', true);  -- 保護トリガー解錠
   PERFORM marketplace_expire();
 
   SELECT * INTO v_ml FROM marketplace_listings WHERE id = p_listing_id FOR UPDATE;
@@ -175,10 +206,17 @@ BEGIN
   IF v_ml.seller_id = v_uid THEN
     RETURN json_build_object('ok', false, 'reason', '自分の出品は購入できません'); END IF;
 
-  -- 装備がまだ出品者の手元にあるか確認（クライアント直接操作対策）
-  PERFORM 1 FROM player_equipment
-   WHERE id = v_ml.equipment_id AND player_id = v_ml.seller_id AND listed = true;
-  IF NOT FOUND THEN
+  -- 対象装備を行ロックして再検証（同時削除/改変・出品後の品替え対策）。
+  -- listing と equipment_id/weapon_id/seller・listed・未装備・未強化・非artifact を再照合。
+  SELECT * INTO v_eq FROM player_equipment
+   WHERE id = v_ml.equipment_id FOR UPDATE;
+  IF NOT FOUND
+     OR v_eq.player_id <> v_ml.seller_id
+     OR v_eq.weapon_id <> v_ml.weapon_id
+     OR v_eq.listed = false
+     OR v_eq.equipped
+     OR COALESCE(v_eq.enhance_plus, 0) > 0
+     OR v_eq.bonus_effect = 'artifact' THEN
     UPDATE marketplace_listings SET status = 'cancelled' WHERE id = p_listing_id;
     RETURN json_build_object('ok', false, 'reason', 'この出品は無効になりました'); END IF;
 
@@ -189,14 +227,22 @@ BEGIN
   IF v_updated = 0 THEN
     RETURN json_build_object('ok', false, 'reason', '所持金が足りません'); END IF;
 
+  -- 装備を購入者へ条件付き移管（帰属化・装備解除・出品解除）。
+  -- 行ロック下なので必ず1件。万一0件ならRAISEで全ロールバック（代金喪失を防ぐ）。
+  UPDATE player_equipment
+     SET player_id = v_uid, listed = false, is_bound = true, equipped = false
+   WHERE id = v_ml.equipment_id
+     AND player_id = v_ml.seller_id
+     AND weapon_id = v_ml.weapon_id
+     AND listed = true;
+  GET DIAGNOSTICS v_updated = ROW_COUNT;
+  IF v_updated <> 1 THEN
+    RAISE EXCEPTION '装備の移管に失敗しました（同時変更を検知）';
+  END IF;
+
   -- 出品者へ手取り（手数料20%）
   v_proceeds := floor(v_ml.price * 0.8);
   UPDATE profiles SET gold = gold + v_proceeds WHERE id = v_ml.seller_id;
-
-  -- 装備を購入者へ移管（帰属化・装備解除・出品解除）
-  UPDATE player_equipment
-     SET player_id = v_uid, listed = false, is_bound = true, equipped = false
-   WHERE id = v_ml.equipment_id;
 
   UPDATE marketplace_listings
      SET status = 'sold', buyer_id = v_uid, sold_at = now()
