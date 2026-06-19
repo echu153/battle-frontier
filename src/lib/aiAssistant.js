@@ -489,7 +489,8 @@ const FOLLOWUP_TRIGGER = /^(もっと|もうちょい|もうすこし|もう少�
 // ゲームは戦闘テーマのため「殺す/血/倒す」等は対象にせず、明確に不適切な語に絞る。
 const NG_SEXUAL = /(セックス|せっくす|sex|エロ|ｴﾛ|アダルト|adult|童貞|処女|射精|挿入|オナニー|おなにー|自慰|まんこ|マンコ|ちんこ|チンコ|ちんぽ|チンポ|ペニス|性器|陰部|レイプ|強姦|ヌード|全裸|裸の|風俗|ソープ|ポルノ|porn|18禁|r-?18|えっちな|エッチな|性行為|性的な|抜きたい|fuck)/i
 const NG_GORE = /(グロ画像|グロ動画|内臓|死体|惨殺|バラバラ死体|首切り|スプラッタ|残虐画像|リョナ)/
-const NG_HARASS = /(死ね|しねよ|殺すぞ|ぶっ殺|きちがい|キチガイ|気違い|池沼|知障|障害者だ|くたばれ|消え失せろ)/
+// 侮蔑・嫌がらせ。誤爆しやすい語(ばか→「ばかり」/ぶす→「ぶすっと」/あほ等)は避け、明確なものに絞る
+const NG_HARASS = /(死ね|しねよ|殺すぞ|ぶっ殺|きちがい|キチガイ|気違い|池沼|知障|障害者だ|くたばれ|消え失せろ|消えろ|ごみ|ゴミ|ｺﾞﾐ|カス|クズ|屑|うざい|うざっ|きもい|キモい|きしょい|キショい|ブス|デブ|でぶ|無能|役立たず|まぬけ|間抜け|ボケ|くそ|クソ)/i
 const isInappropriate = (raw) => NG_SEXUAL.test(raw) || NG_GORE.test(raw) || NG_HARASS.test(raw)
 const REFUSAL_TEXT = `申し訳ありませんが、その内容にはお答えできません。🙅\nゲームに関する質問であれば、よろこんでお手伝いします！`
 
@@ -508,6 +509,13 @@ const THANKS_TEXTS = [
   `どういたしまして！また何かあれば聞いてください。`,
   `お役に立てたなら何よりです。いつでもどうぞ。`,
   `こちらこそ。困ったらまた声をかけてくださいね。`,
+]
+// 呼びかけ（おーい/ねえ 等、単独の声かけ）。文全体アンカーで判定。
+const CALL_TRIGGER = /^(おー+い|おい|おいおい|おーい|ねえ|ねぇ|ねえねえ|もしもし|ちょっと|ちょい|すみません|すいません|やほ|おーい)[\sー！!。.,~〜?？]*$/i
+const CALL_TEXTS = [
+  `はーい！どうしました？😊 ゲームのことなら何でも聞いてくださいね。`,
+  `呼びました？ 何かお手伝いできることがあれば言ってください！`,
+  `はい、ここにいますよ。気になることがあればどうぞ！`,
 ]
 const WHOAMI_TEXT = `🤖 ぼくはバトルフロンティアのAI案内役です。\nゲームの疑問に答えたり、あなたに合った強化を提案したりします。\n「何ができる？」と聞いてくれれば、できることの一覧を出しますよ。`
 
@@ -598,6 +606,7 @@ export const askAssistant = async (query, ctx = {}, _depth = 0) => {
     if (THANKS_TRIGGER.test(raw)) return { text: pick(THANKS_TEXTS), kind: 'meta' }
     if (GREETING_TRIGGER.test(raw)) return { text: GREETING_TEXT_FN(), kind: 'meta' }
     if (WHOAMI_TRIGGER.test(raw)) return { text: WHOAMI_TEXT, kind: 'meta' }
+    if (CALL_TRIGGER.test(raw)) return { text: pick(CALL_TEXTS), kind: 'meta' }
     const st = smalltalk(raw)
     if (st) return { text: st, kind: 'meta' }
     // 挨拶の言いかけ/誤記（こんにちわ・こんにち 等）は挨拶と同一扱い＝確認せずそのまま挨拶を返す
