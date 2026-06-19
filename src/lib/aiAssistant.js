@@ -19,6 +19,22 @@ const normalize = (s) => (s || '')
 // LIKE/ILIKE のワイルドカード( % _ \ )をエスケープし、ユーザー入力を文字どおり扱う
 const escapeLike = (s) => (s || '').replace(/[\\%_]/g, '\\$&')
 
+// レーベンシュタイン編集距離（タイポ・言いかけの「もしかして」推測に使用）
+const editDistance = (a, b) => {
+  const m = a.length, n = b.length
+  if (!m) return n
+  if (!n) return m
+  let prev = Array.from({ length: n + 1 }, (_, j) => j)
+  for (let i = 1; i <= m; i++) {
+    const cur = [i]
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+    }
+    prev = cur
+  }
+  return prev[n]
+}
+
 // ============================================================
 // クラス知識
 // ============================================================
@@ -474,17 +490,67 @@ const GREETING_TEXT = `やあ！🤖 バトルフロンティアの案内役で�
 const THANKS_TEXT = `どういたしまして！😊 また何かあればいつでも聞いてください。`
 const WHOAMI_TEXT = `🤖 ぼくはバトルフロンティアのAI案内役です。\nゲームの疑問に答えたり、あなたに合った強化を提案したりします。\n「何ができる？」と聞いてくれれば、できることの一覧を出しますよ。`
 
+// 相づち・短い雑談（会話を続ける返事。文全体がそれだけのとき限定）
+const SMALLTALK = [
+  { re: /^(へえ|へぇ|へー|ほー|ほぉ|ふーん|ふうん|ふむ|ふんふん|なるほど|なるほどね|そっか|そうか|そうなんだ|そうなのか|まじか|マジか|へえそうなんだ)[\sー!！。….~〜]*$/i,
+    a: 'でしょ？😊 ほかにも気になることがあれば何でも聞いてくださいね。例えば「おすすめ強化」や「○○ってなに？」など。' },
+  { re: /^(うん|はい|おう|おっけ|おっけー|ok|オーケー|了解|わかった|わかりました|りょ|りょうかい)[\sー!！。~〜]*$/i,
+    a: '👍 では、知りたいことがあればいつでも聞いてください！「強くなるには？」もおすすめです。' },
+  { re: /^(すごい|スゴイ|すご!|つよい|強い|やば|ヤバ|やばい|かっこいい|いいね)[\sー!！。~〜]*$/i,
+    a: 'ありがとう！😆 もっと強くなりたいなら「強くなるには？」や「おすすめ強化」を聞いてみてください。' },
+  { re: /^(つかれた|疲れた|ねむい|眠い|だるい|ひま|暇)[\sー!！。~〜]*$/i,
+    a: 'お疲れさま！🍵 無理せずどうぞ。ゲームの相談があればいつでも聞いてくださいね。' },
+]
+const smalltalk = (raw) => SMALLTALK.find((s) => s.re.test(raw))?.a || null
+
+// タイポ・言いかけの挨拶を推測（「こんにち」→「こんにちは」で確認を挟む）
+const GREET_CANON = ['こんにちは', 'こんばんは', 'おはよう']
+const guessGreeting = (raw) => {
+  const q = normalize(raw)
+  if (q.length < 3 || q.length > 7) return null
+  for (const g of GREET_CANON) {
+    if (g.startsWith(q) || editDistance(q, g) <= 1) return g
+  }
+  if (editDistance(q, 'こんにちわ') <= 1) return 'こんにちは'
+  if (editDistance(q, 'こんばんわ') <= 1) return 'こんばんは'
+  return null
+}
+
+// フォールバック時の「もしかして○○？」推測（よく使う語＋クラス名に対する近似一致）
+const VOCAB = [
+  '転職', '強化', 'おすすめ強化', '宝石', 'スキル', 'ステータス', 'ステ振り', '再修練', 'レベル上げ',
+  'レイドボス', 'ダンジョン', '奈落闘技場', '錬金部屋', 'かかし修練場', '賭博場', '釣り', '交換所',
+  '博物館', '領地', 'ペット', '鍛冶屋', '回復', 'ゴールド', '出撃',
+]
+const didYouMean = (raw) => {
+  const q = normalize(raw)
+  if (q.length < 2) return null
+  let best = null, bestD = Infinity
+  for (const term of [...VOCAB, ...ALL_CLASSES]) {
+    const tn = normalize(term)
+    const thr = tn.length <= 3 ? 1 : tn.length <= 6 ? 2 : 3
+    const d = editDistance(q, tn)
+    if (d <= thr && d < bestD) { bestD = d; best = term }
+  }
+  return best
+}
+
 export const askAssistant = async (query, ctx = {}) => {
   const raw = (query || '').trim()
   if (!raw) return { text: '質問を入力してください。例：「狂戦士になるには？」「メテオストライクの効果は？」「おすすめ強化」', kind: 'fallback' }
 
   const cls = findClassInQuery(raw)
 
-  // 0) 挨拶・お礼・自己紹介（短い雑談にも気持ちよく返す。ゲーム語を含まないもののみ）
+  // 0) 挨拶・お礼・自己紹介・相づち（短い雑談にも気持ちよく返す。ゲーム語を含まないもののみ）
   if (!cls) {
     if (THANKS_TRIGGER.test(raw)) return { text: THANKS_TEXT, kind: 'meta' }
     if (GREETING_TRIGGER.test(raw)) return { text: GREETING_TEXT, kind: 'meta' }
     if (WHOAMI_TRIGGER.test(raw)) return { text: WHOAMI_TEXT, kind: 'meta' }
+    const st = smalltalk(raw)
+    if (st) return { text: st, kind: 'meta' }
+    // タイポ/言いかけの挨拶 → 確認を挟む（完全一致でなかった場合のみ）
+    const g = guessGreeting(raw)
+    if (g) return { text: `もしかして「${g}」でしょうか？😊\n合っていれば「${g}！」と返してくださいね。そこからゲームのお手伝いをします。違っていたら、もう少し詳しく教えてください。`, kind: 'meta' }
   }
 
   // 1) 対戦相手の対策（「○○に勝ちたい」）。PROGRESSIONの「勝てない」と被るので先に判定。
@@ -547,8 +613,15 @@ export const askAssistant = async (query, ctx = {}) => {
   if (HELP_TRIGGER.test(raw)) return { text: HELP_TEXT, kind: 'meta' }
   if (LIMIT_TRIGGER.test(raw)) return { text: LIMIT_TEXT, kind: 'meta' }
 
-  // 7) フォールバック（柔らかめに。答えられなかった質問はDBに自動記録＝後でKBに反映）
+  // 7) フォールバック（柔らかめに。「もしかして○○？」推測も挟む。記録はKB育成用）
   logUnanswered(raw)
+  const guess = didYouMean(raw)
+  if (guess) {
+    return {
+      text: `うーん、ぴったりの答えが見つかりませんでした💦\nもしかして「${guess}」のことでしょうか？ そうなら「${guess}ってなに？」や「${guess}」と聞いてみてください😊\n違っていたら、もう少し詳しく教えてもらえると答えやすいです。`,
+      kind: 'fallback',
+    }
+  }
   return {
     text: 'うーん、その質問はまだうまく答えられないみたい💦\nでも、このゲームのことならいろいろお手伝いできます！例えば：\n・「狂戦士になるには？」（職業・転職条件）\n・「メテオストライクの効果は？」（スキル/装備/アイテム名）\n・「錬金部屋ってなに？」（施設の使い方）\n・「おすすめ強化」「強くなるには？」（強化の相談）\n・「○○に勝ちたい」（対戦相手の対策）\nもっと具体的に聞いてもらえれば答えやすいです😊',
     kind: 'fallback',
