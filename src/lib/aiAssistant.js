@@ -16,6 +16,9 @@ const normalize = (s) => (s || '')
   .replace(/\s+/g, '')
   .replace(/[、。，．・！!？?「」『』（）()【】_~〜:：]/g, '')
 
+// LIKE/ILIKE のワイルドカード( % _ \ )をエスケープし、ユーザー入力を文字どおり扱う
+const escapeLike = (s) => (s || '').replace(/[\\%_]/g, '\\$&')
+
 // ============================================================
 // クラス知識
 // ============================================================
@@ -334,7 +337,7 @@ const lookupExact = async (term) => {
 // 部分一致を全マスタ表で検索し、明示的にスコアリング（前方一致＞含む、短い名前ほど上位）
 const lookupPartial = async (term) => {
   if (!term || term.length < 2) return null
-  const like = `%${term}%`
+  const like = `%${escapeLike(term)}%`
   const results = await Promise.all(
     SEARCH_TABLES.map((t) => supabase.from(t.table).select(t.cols).ilike('name', like).limit(5)),
   )
@@ -391,7 +394,7 @@ const PROFILE_COLS = 'username, class, char_lv, atk, def, matk, mdef, spd, hp_ma
 // usernameを完全一致(大小無視)で1件に特定。複数ヒットは曖昧として候補を返す。
 const findProfileExact = async (nm) => {
   if (!nm) return { kind: 'none' }
-  const { data } = await supabase.from('profiles').select(PROFILE_COLS).ilike('username', nm).limit(3)
+  const { data } = await supabase.from('profiles').select(PROFILE_COLS).ilike('username', escapeLike(nm)).limit(3)
   if (!data || !data.length) return { kind: 'none' }
   if (data.length === 1) return { kind: 'one', opp: data[0] }
   return { kind: 'ambiguous', names: data.map((d) => d.username) }
@@ -405,7 +408,7 @@ const buildMatchupAdvice = async (ctx, name) => {
     if (stripped && stripped !== name) res = await findProfileExact(stripped)
   }
   if (res.kind === 'none') {
-    const { data } = await supabase.from('profiles').select(PROFILE_COLS).ilike('username', `%${name}%`).limit(6)
+    const { data } = await supabase.from('profiles').select(PROFILE_COLS).ilike('username', `%${escapeLike(name)}%`).limit(6)
     const names = [...new Set((data || []).map((d) => d.username))]
     if (names.length === 1) res = { kind: 'one', opp: (data || [])[0] }
     else if (names.length > 1) res = { kind: 'ambiguous', names }
@@ -527,11 +530,10 @@ export const askAssistant = async (query, ctx = {}) => {
 // 記録失敗してもユーザー体験は止めない。
 const logUnanswered = (raw) => {
   const q = (raw || '').trim()
-  const n = normalize(q)
-  if (!q || n.length < 2) return
+  if (!q || q.length < 2) return
   try {
-    // asker はサーバ側で auth.uid() から取得する（クライアント指定を信用しない）
-    supabase.rpc('log_unanswered', { q, n })
+    // norm も asker もサーバ側で生成・取得する（クライアント指定を信用しない）
+    supabase.rpc('log_unanswered', { q })
       .then(() => {}, () => {}) // エラーは握りつぶす（記録は補助機能）
   } catch { /* noop */ }
 }
