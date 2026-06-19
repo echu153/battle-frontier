@@ -1500,11 +1500,14 @@ export default function Game() {
   useEffect(() => {
     if (!profile) return
     const id = setInterval(() => {
-      // サーバーレスポンス由来の相対値(cdEndRef)を最優先（時計ズレの影響を受けない）。
-      // 未設定（ページ読み込み直後など）は last_action_at＋サーバー時刻補正から計算
-      const rem = cdEndRef.current !== null
-        ? Math.max(0, (cdEndRef.current - Date.now())/1000)
-        : Math.max(0, effWait(profile, serverNow()) - (serverNow()-new Date(profile.last_action_at).getTime())/1000)
+      // サーバーレスポンス由来の相対値(cdEndRef)は時計ズレに強いが、ブーストが切れる瞬間を跨ぐと
+      // 出撃時に固定した10秒終了時刻のままになり、実際は20秒CDのサーバーより早く有効化されてしまう。
+      // そのため last_action_at＋現在のeffWait からの再評価値と「大きい方」を採用（過小表示=早押し空振りを防ぐ）。
+      const cdRem  = cdEndRef.current !== null ? Math.max(0, (cdEndRef.current - Date.now())/1000) : 0
+      const actRem = profile.last_action_at
+        ? Math.max(0, effWait(profile, serverNow()) - (serverNow()-new Date(profile.last_action_at).getTime())/1000)
+        : 0
+      const rem = cdEndRef.current !== null ? Math.max(cdRem, actRem) : actRem
       // canAct(ボタン有効)は毎回反映（同値ならReactが再描画スキップ＝負荷ゼロ）。
       // ガード内に入れるとスマホの一時停止→復帰でtickを取りこぼし、押せなくなることがあった。
       setCanAct(rem === 0)

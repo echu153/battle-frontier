@@ -32,8 +32,10 @@ const TIER_INFO = [
   { pct:  0, attacks:  0, tier: 'D', label: '参加',                       gold: 15000, stones: ['E','F'],    gemCount: 2, gemRank: 'F', scaleCount: '1~3',  rareChance: '0%',  color: '#888888' },
 ]
 
-function getTier(pct, attackCount = 0) {
-  return TIER_INFO.find(t => pct >= t.pct || attackCount >= t.attacks && t.attacks > 0) || TIER_INFO[TIER_INFO.length - 1]
+// ★2026-06-20: is_admin限定先行。管理者は出撃回数ティア保証を半減(50/20/5→25/10/3)。claim_raid_rewards と一致。
+const tierAttacks = (t, isAdmin) => (isAdmin && t.attacks > 0 ? Math.ceil(t.attacks / 2) : t.attacks)
+function getTier(pct, attackCount = 0, isAdmin = false) {
+  return TIER_INFO.find(t => pct >= t.pct || (attackCount >= tierAttacks(t, isAdmin) && t.attacks > 0)) || TIER_INFO[TIER_INFO.length - 1]
 }
 function hpColor(r) { return r > 0.5 ? '#44ff88' : r > 0.25 ? '#ffcc00' : '#ff4444' }
 function fmt(n) { return Number(n).toLocaleString() }
@@ -617,7 +619,7 @@ export default function RaidBoss() {
   const totalEff = participants.reduce((s, p) => s + Number(p.damage_dealt) + Number(p.attack_count || 0) * 500, 0) || 1
   const myEff = myPart ? Number(myPart.damage_dealt) + Number(myPart.attack_count || 0) * 500 : 0
   const myContribPct = myEff / totalEff * 100
-  const myTier = getTier(myContribPct, Number(myPart?.attack_count || 0))
+  const myTier = getTier(myContribPct, Number(myPart?.attack_count || 0), profile?.is_admin)
   const hpRatio = boss ? boss.hp_current / boss.hp_max : 0
   const canAct = remaining <= 0
 
@@ -902,7 +904,7 @@ export default function RaidBoss() {
                   {participants.map((p, i) => {
                     const eff2 = Number(p.damage_dealt) + Number(p.attack_count || 0) * 500
                     const pct = eff2 / totalEff * 100
-                    const tier = getTier(pct, Number(p.attack_count || 0))
+                    const tier = getTier(pct, Number(p.attack_count || 0), profile?.is_admin && p.player_id === profile.id)
                     const isMe = profile && p.player_id === profile.id
                     return (
                       <tr key={p.player_id} style={{ borderBottom: '1px solid #0a1a2a', background: isMe ? '#001122' : 'transparent' }}>
@@ -934,7 +936,7 @@ function RewardTable() {
       {TIER_INFO.map(t => (
         <div key={t.pct} style={{ fontSize: '11px', padding: '4px 0', borderBottom: '1px solid #0a1220' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: t.color }}>{t.tier}ティア　{t.label}</span>
+            <span style={{ color: t.color }}>{t.tier}ティア　{t.attacks > 0 ? `貢献度${t.pct}%以上 or 出撃${tierAttacks(t, profile?.is_admin)}回` : t.label}</span>
             <span style={{ color: '#ffcc00' }}>Gold {fmt(t.gold)}</span>
           </div>
           <div style={{ color: '#446688', marginTop: '2px' }}>
@@ -942,7 +944,7 @@ function RewardTable() {
           </div>
         </div>
       ))}
-      <div style={{ color: '#334455', fontSize: '10px', marginTop: '6px' }}>※ 出撃回数でもティア保証: 5回→C / 20回→B / 50回→A。時間切れでもその時点の報酬を獲得可</div>
+      <div style={{ color: '#334455', fontSize: '10px', marginTop: '6px' }}>※ 出撃回数でもティア保証: {tierAttacks(TIER_INFO[2], profile?.is_admin)}回→C / {tierAttacks(TIER_INFO[1], profile?.is_admin)}回→B / {tierAttacks(TIER_INFO[0], profile?.is_admin)}回→A。時間切れでもその時点の報酬を獲得可</div>
     </div>
   )
 }
