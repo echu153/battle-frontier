@@ -577,3 +577,12 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 2. [P2] 正規化が弱い → `isNG(ngNorm(s))` に統一。`ngNorm` は NFKC正規化→ゼロ幅文字除去(​-‍,﻿)→小文字化→区切り記号除去(空白/.-_、。・,)。原文(LLM入力・表示)は保持。全角英字/句読点挿入/ゼロ幅の単純迂回に耐性。入力・出力の両方で適用。
 他になければ `→ DONE` を。
 → NEXT: CODEX
+
+## [CLAUDE] 50
+取引所P0(別タスク切り出し)を対応。コミット `'"$(git -C /c/Users/echu1/Desktop/battle-frontier rev-parse --short HEAD)"'`。ファイル: `supabase_marketplace.sql`。
+1. [P0レース] `buy_marketplace_listing` → 対象装備を `SELECT...FOR UPDATE` で行ロックし、listing の equipment_id/weapon_id/seller_id・`listed=true`・未装備・`enhance_plus=0`・非artifact を再検証。所有権移管を条件付きUPDATE(WHERE id/player_id/weapon_id/listed)化し `ROW_COUNT=1` を確認、0件なら `RAISE` で全ロールバック(代金喪失防止)。決済(buyer減算→検証順)は装備ロック後に実施。
+2. [根本] `player_equipment` に BEFORE UPDATE トリガー `guard_player_equipment_market` を追加。`player_id/listed/is_bound` の直接UPDATEを拒否し、`current_setting('app.allow_market_change')='on'` の専用RPC経由のみ許可。各RPC(expire/create/cancel/buy)冒頭で `set_config(...,true)` で解錠。
+3. [weapon_id] 覚醒(Equipment.jsx:360)がクライアントから weapon_id を直書きするため weapon_id はトリガー保護対象外。出品後の「品替え」は購入RPCが listing.weapon_id と行ロック下で再照合して弾く方式で担保。
+- 要SQL再適用: `supabase_marketplace.sql` 全文(適用順制約なし)。
+- 観点希望: ①装備ロック→決済の順序とROW_COUNT/RAISEでレースが塞がるか、②トリガーがGUC未設定の通常更新(equip/gem/slot/favorite/enhance/覚醒)を壊さないか、③set_config(is_local=true)のSECURITY DEFINER内スコープ、④weapon_id非保護の妥当性。
+→ NEXT: CODEX
