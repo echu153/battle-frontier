@@ -17,7 +17,7 @@ DECLARE
   v_boss        raid_boss%ROWTYPE;
   v_damage      bigint;
   v_new_hp      bigint;
-  v_cooldown    int := 10;
+  v_cooldown    int := 20;   -- 2026-06-20: レイド出撃CDを20秒に（ブーストタイム対象外）
   v_expire_at   timestamptz;
   v_exp_gain    int;
 BEGIN

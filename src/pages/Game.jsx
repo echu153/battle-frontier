@@ -12,7 +12,14 @@ import AIAssistant from '../components/AIAssistant'
 // ★ステータス計算は lib/stats.js の1実装に統一（表示系と戦闘系で値がズレないように）
 export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue, calcDefReduction, calcEffectiveStats } from '../lib/stats'
 
-export const WAIT_SECONDS = 10
+export const WAIT_SECONDS = 20      // 通常出撃クールダウン秒（街の出撃・デイリーダンジョン共通）
+export const BOOST_WAIT = 10        // ブーストタイム中の出撃クールダウン秒（1日1回30分・街の出撃のみ。レイド/簡易出撃は対象外）
+export const BOOST_DURATION_MIN = 30 // ブーストタイムの継続分数
+// ブーストが有効か（profiles.boost_active_until が未来）。nowMs は省略時 Date.now()
+export const isBoostActive = (profile, nowMs = Date.now()) =>
+  !!(profile?.boost_active_until && new Date(profile.boost_active_until).getTime() > nowMs)
+// 現在の有効クールダウン秒（ブースト中は短縮）。街の出撃・デイリーダンジョンで使用
+export const effWait = (profile, nowMs = Date.now()) => isBoostActive(profile, nowMs) ? BOOST_WAIT : WAIT_SECONDS
 // 新UIレイアウトの有効フラグ。
 // 本番にも反映中（true）。旧UIに戻したいときは下行を import.meta.env.DEV（開発のみ）か
 // false（全環境で旧UI）に変更すればワンタッチで戻せる。git tag `ui-classic` も旧UI状態の復元ポイント。
@@ -413,17 +420,18 @@ const getTotalRank = (total) => {
 
 export const calcExpNext = (lv) => {
   // LV100超（再修練でキャップ300になったクラス）の必要経験値
+  // ★レベルアップ必要EXPは2026-06-20に半減（サーバー calc_exp_next と一致させること）
   if (lv >= 100) {
-    if (lv <= 150) return 150  // LV100〜150
-    if (lv <= 200) return 160  // LV151〜200
-    if (lv <= 250) return 170  // LV201〜250
-    return 180                 // LV251〜300
+    if (lv <= 150) return 75   // LV100〜150
+    if (lv <= 200) return 80   // LV151〜200
+    if (lv <= 250) return 85   // LV201〜250
+    return 90                  // LV251〜300
   }
   const lvInBlock = (lv - 1) % 100
-  if (lvInBlock < 9)  return 80   // LV1〜9
-  if (lvInBlock < 29) return 100  // LV10〜29
-  if (lvInBlock < 59) return 120  // LV30〜59
-  return 140                      // LV60〜99
+  if (lvInBlock < 9)  return 40   // LV1〜9
+  if (lvInBlock < 29) return 50   // LV10〜29
+  if (lvInBlock < 59) return 60   // LV30〜59
+  return 70                       // LV60〜99
 }
 
 const WEAPON_TYPE_GROUP = {
@@ -1382,6 +1390,8 @@ export default function Game() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [showMenu, setShowMenu] = useState(false)
   const [showContact, setShowContact] = useState(false)
+  const [showOptions, setShowOptions] = useState(false)   // ⚙ オプション（ブーストタイム発動など）
+  const [boostLoading, setBoostLoading] = useState(false)
   const [contactForm, setContactForm] = useState({ category: 'bug', body: '' })
   const [contactSent, setContactSent] = useState(false)
   const [contactLoading, setContactLoading] = useState(false)
@@ -1494,7 +1504,7 @@ export default function Game() {
       // 未設定（ページ読み込み直後など）は last_action_at＋サーバー時刻補正から計算
       const rem = cdEndRef.current !== null
         ? Math.max(0, (cdEndRef.current - Date.now())/1000)
-        : Math.max(0, WAIT_SECONDS - (serverNow()-new Date(profile.last_action_at).getTime())/1000)
+        : Math.max(0, effWait(profile, serverNow()) - (serverNow()-new Date(profile.last_action_at).getTime())/1000)
       // canAct(ボタン有効)は毎回反映（同値ならReactが再描画スキップ＝負荷ゼロ）。
       // ガード内に入れるとスマホの一時停止→復帰でtickを取りこぼし、押せなくなることがあった。
       setCanAct(rem === 0)
@@ -1844,9 +1854,10 @@ export default function Game() {
     // 出撃と共通の10秒クールダウン＋釣り中チェック（サーバー側）
     const { data: latestForDungeon } = await supabase.from('profiles').select('last_action_at, is_fishing').eq('id', profile.id).single()
     const dungeonElapsed = (serverNow() - new Date(latestForDungeon.last_action_at).getTime()) / 1000
-    if (dungeonElapsed < WAIT_SECONDS) {
+    const dungeonWait = effWait(profile, serverNow())
+    if (dungeonElapsed < dungeonWait) {
       // クールダウン中は無言で止めず、残り秒数を表示して「進行しない」ように見えるのを防ぐ
-      const wait = Math.max(1, Math.ceil(WAIT_SECONDS - dungeonElapsed))
+      const wait = Math.max(1, Math.ceil(dungeonWait - dungeonElapsed))
       setBattleLogs([{ text:`⏳ クールダウン中です。あと${wait}秒お待ちください。`, color:'#ffcc44' }])
       setCurrentEnemy(null); setScene('battle'); setLoading(false); return
     }
@@ -2004,7 +2015,7 @@ export default function Game() {
       try { await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:0, [col]:1 }) } catch {}
     }
     await supabase.from('profiles').update({ last_action_at: new Date(serverNow()).toISOString() }).eq('id', profile.id)
-    cdEndRef.current = Date.now() + WAIT_SECONDS * 1000  // 相対カウントダウンを開始
+    cdEndRef.current = Date.now() + effWait(profile) * 1000  // 相対カウントダウンを開始
     setDungeonCounts(prev => ({ ...prev, [type]: newCount }))
     } catch (e) {
       console.error('doDungeon error:', e)
@@ -2203,7 +2214,7 @@ export default function Game() {
     const { data: lock, error: lockErr } = await supabase.rpc('sortie_lock')
     if (lockErr) {
       // RPC未適用/通信失敗時のフォールバック: 旧アトミックUPDATE方式
-      const lockTime = new Date(serverNow() - WAIT_SECONDS * 1000).toISOString()
+      const lockTime = new Date(serverNow() - effWait(profile, serverNow()) * 1000).toISOString()
       const { data: locked } = await supabase.from('profiles')
         .update({ last_action_at: now })
         .eq('id', profile.id)
@@ -2232,7 +2243,7 @@ export default function Game() {
       lockOk = true
     }
     // ロック成功＝サーバーが今この瞬間からCD開始。相対カウントダウンを開始
-    cdEndRef.current = Date.now() + WAIT_SECONDS * 1000
+    cdEndRef.current = Date.now() + effWait(profile, serverNow()) * 1000
     setProfile(p => ({ ...p, last_action_at: now }))
 
     // オートクリッカー検知：出撃間隔が異常に規則的（一定間隔の機械的連打）なら12時間出撃禁止
@@ -3234,6 +3245,26 @@ export default function Game() {
   }
   const logout = async () => { await supabase.auth.signOut(); nav('/login') }
 
+  // ⚡ ブーストタイム発動（1日1回・30分間 出撃クールダウンが10秒に短縮。街の出撃のみ／レイド・簡易出撃は対象外）
+  const startBoost = async () => {
+    if (boostLoading) return
+    setBoostLoading(true)
+    try {
+      const { data, error } = await supabase.rpc('start_boost')
+      if (error) { alert('ブーストの発動に失敗しました。少し待ってからお試しください。'); return }
+      if (!data?.ok) {
+        if (data?.reason === 'already_used') alert('本日分のブーストタイムは使用済みです（毎日朝にリセット）。')
+        else if (data?.reason === 'active') alert('すでにブーストタイム中です。')
+        else alert('ブーストの発動に失敗しました。')
+        await fetchProfile()
+        return
+      }
+      setProfile(p => p ? { ...p, boost_active_until: data.boost_active_until, boost_used_date: data.boost_used_date } : p)
+    } finally {
+      setBoostLoading(false)
+    }
+  }
+
   const submitContact = async () => {
     if (!contactForm.body.trim()) return
     setContactLoading(true)
@@ -3623,6 +3654,44 @@ export default function Game() {
     </div>
   )
 
+  if (showOptions) {
+    const boostActive = isBoostActive(profile)
+    const todayJst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' })).toISOString().slice(0,10)
+    const usedToday = profile?.boost_used_date === todayJst
+    const boostMinLeft = boostActive ? Math.ceil((new Date(profile.boost_active_until).getTime() - Date.now())/60000) : 0
+    return (
+      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+        <div style={{ background:'#001020', border:'1px solid #446688', padding:'20px', maxWidth:'460px', width:'100%', fontFamily:'monospace' }}>
+          <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'16px' }}>⚙ オプション</div>
+          <div style={{ border:'1px solid #335577', background:'#000a18', padding:'14px', marginBottom:'16px' }}>
+            <div style={{ color:'#ffcc44', fontSize:'13px', marginBottom:'6px' }}>⚡ ブーストタイム</div>
+            <div style={{ color:'#88aacc', fontSize:'11px', lineHeight:'1.7', marginBottom:'12px' }}>
+              発動すると<strong style={{color:'#ffcc44'}}>{BOOST_DURATION_MIN}分間</strong>、街の出撃クールダウンが<strong style={{color:'#ffcc44'}}>{WAIT_SECONDS}秒 → {BOOST_WAIT}秒</strong>に短縮されます。<br/>
+              ・1日1回まで（毎日リセット）<br/>
+              ・レイドボス・簡易出撃は対象外
+            </div>
+            {boostActive ? (
+              <div style={{ textAlign:'center', color:'#44ff88', fontSize:'13px', padding:'10px', border:'1px solid #225544', background:'#001810' }}>
+                🟢 ブーストタイム中（残り約{boostMinLeft}分）
+              </div>
+            ) : usedToday ? (
+              <div style={{ textAlign:'center', color:'#886633', fontSize:'12px', padding:'10px', border:'1px solid #332a14', background:'#0a0800' }}>
+                本日分は使用済みです（毎日リセット）
+              </div>
+            ) : (
+              <button onClick={startBoost} disabled={boostLoading}
+                style={{ width:'100%', padding:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor: boostLoading?'default':'pointer', fontFamily:'monospace', fontSize:'13px' }}>
+                {boostLoading ? '発動中…' : `⚡ ブーストタイムを発動（${BOOST_DURATION_MIN}分間）`}
+              </button>
+            )}
+          </div>
+          <button onClick={()=>setShowOptions(false)}
+            style={{ width:'100%', padding:'10px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>閉じる</button>
+        </div>
+      </div>
+    )
+  }
+
   if (showContact) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ background:'#001020', border:'1px solid #446688', padding:'20px', maxWidth:'460px', width:'100%', fontFamily:'monospace' }}>
@@ -3964,7 +4033,8 @@ export default function Game() {
   const hpPct = Math.min(100,(hpCurrent/profile.hp_max)*100)
   const mpPct = Math.min(100,(mpCurrent/profile.mp_max)*100)
   const expPct = Math.min(100,(profile.exp/profile.exp_next)*100)
-  const timerPct = ((WAIT_SECONDS-remaining)/WAIT_SECONDS)*100
+  const _waitSecs = effWait(profile, serverNow())
+  const timerPct = ((_waitSecs-remaining)/_waitSecs)*100
   const regenPct = ((REGEN_SECONDS-regenRemaining)/REGEN_SECONDS)*100
   const unlockedAreas = profile.unlocked_areas||[1]
   const availableAreas = AREAS.filter(a=>unlockedAreas.includes(a.id))
@@ -4235,7 +4305,9 @@ export default function Game() {
         </div>
         {showMenu && (
           <div style={{ position:'fixed', top:'40px', right:'12px', background:'#001040', border:'1px solid #446688', zIndex:200, minWidth:'120px' }}>
-            {MOBILE_MENU_ORDER.map(renderMenuBtn)}
+            <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
+            <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
+            <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ オプション</button>
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
             )}
@@ -4666,7 +4738,9 @@ export default function Game() {
         </div>
         {showMenu && (
           <div style={{ position:'fixed', top:'48px', right:'16px', background:'#001040', border:'1px solid #446688', zIndex:200, minWidth:'150px' }}>
-            {DESKTOP_MENU_ORDER.map(renderMenuBtn)}
+            <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
+            <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
+            <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ オプション</button>
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
             )}

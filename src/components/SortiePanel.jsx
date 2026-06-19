@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from '../supabase'
 import { AREAS, getEffectiveCap, generateDropBonus, ARTIFACT_BASE_NAMES } from '../pages/Game'
 
-const SORTIE_WAIT = 30 // 出撃クールダウン秒（街/カジノの出撃と共通の last_action_at で管理）
+const SORTIE_WAIT = 60 // 簡易出撃クールダウン秒（街/カジノの出撃と共通の last_action_at で管理。2026-06-20: 30→60）
 const AUTOCLICK_SAMPLES = 12
 const AUTOCLICK_SPREAD_MS = 1200
 const SORTIE_STREAK_LIMIT = 20

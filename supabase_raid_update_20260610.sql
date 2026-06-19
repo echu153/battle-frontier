@@ -2,7 +2,7 @@
 -- レイドボス アップデート 2026-06-10
 --  ① ヴァルゼノク HP 100万（spawn RPC）
 --  ② 30分で討伐できなかった場合（expired）でも、その時点の貢献度で討伐報酬を受け取れる
---  ③ 出撃回数ティア保証: 50回→Aティア / 20回→Bティア / 5回→Cティア
+--  ③ 出撃回数ティア保証: 25回→Aティア / 10回→Bティア / 3回→Cティア（2026-06-20に半減）
 --  ④ 交換所: マレディクシオン（銃S）追加 / 強化石(S) 交換追加（鱗×70 or 逆鱗×2）
 --  ⑤ do_exchange を item 報酬対応に更新
 -- ※ supabase_protect_stats.sql 適用済み環境を想定（claim 内で GUC を立ててから profiles を更新）
@@ -146,13 +146,14 @@ BEGIN
   v_contribution := v_my_eff::float / v_total_eff::float;
 
   -- ティア決定（貢献度 or 出撃回数のどちらか高い方）
-  IF v_contribution >= 0.10 OR v_participant.attack_count >= 50 THEN
+  -- 2026-06-20: レイド出撃CDを20秒化＆ブースト対象外にしたため、出撃回数の保証ラインを半減（50/20/5→25/10/3）
+  IF v_contribution >= 0.10 OR v_participant.attack_count >= 25 THEN
     v_tier := 'A'; v_gold := 50000; v_stone_ranks := ARRAY['B','C','D'];
     v_gem_count := 3; v_gem_rank := 'D'; v_scale_min := 8; v_scale_max := 10; v_gyaku_chance := 0.15;
-  ELSIF v_contribution >= 0.06 OR v_participant.attack_count >= 20 THEN
+  ELSIF v_contribution >= 0.06 OR v_participant.attack_count >= 10 THEN
     v_tier := 'B'; v_gold := 30000; v_stone_ranks := ARRAY['C','D','E'];
     v_gem_count := 2; v_gem_rank := 'E'; v_scale_min := 6; v_scale_max := 8; v_gyaku_chance := 0.08;
-  ELSIF v_contribution >= 0.03 OR v_participant.attack_count >= 5 THEN
+  ELSIF v_contribution >= 0.03 OR v_participant.attack_count >= 3 THEN
     v_tier := 'C'; v_gold := 10000; v_stone_ranks := ARRAY['D','E','F'];
     v_gem_count := 1; v_gem_rank := 'F'; v_scale_min := 4; v_scale_max := 6; v_gyaku_chance := 0.03;
   ELSE
