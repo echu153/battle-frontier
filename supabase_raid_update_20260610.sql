@@ -144,10 +144,10 @@ BEGIN
   IF NOT FOUND THEN RETURN json_build_object('error', '参加記録がありません'); END IF;
   IF v_participant.reward_claimed THEN RETURN json_build_object('error', '既にリワードを受け取り済みです'); END IF;
 
-  -- ★is_admin限定先行: 管理者のみ出撃回数ティア保証を半減（レイドCD20秒化に対応）。公開時は既定値を25/10/3に。
+  -- ★is_admin限定先行: 管理者のみ出撃回数ティア保証ラインを 20/10/5 に（レイドCD20秒化に対応）。公開時は既定値をこれに。
   SELECT is_admin INTO v_is_admin FROM profiles WHERE id = v_player_id;
   IF COALESCE(v_is_admin, false) THEN
-    v_atk_a := 25; v_atk_b := 10; v_atk_c := 3;
+    v_atk_a := 20; v_atk_b := 10; v_atk_c := 5;
   END IF;
 
   -- 有効スコアで貢献度計算（出撃1回=500ボーナス）

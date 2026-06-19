@@ -1299,15 +1299,21 @@ const ANNOUNCE_TABS = [
 // カテゴリ正規化：未設定や未知カテゴリ（旧 'notice' 含む）は先頭タブに寄せて非表示化を防ぐ
 const annCat = (a) => (ANNOUNCE_TABS.some(t => t.key === a.category) ? a.category : ANNOUNCE_TABS[0].key)
 
-// パピア出現率アップイベント時間帯（JST）: 8:00 / 12:00 / 16:00 / 22:00 から30分
+// パピア出現率アップイベント時間帯（JST）。
+//   非管理者: 8:00 / 12:00 / 16:00 / 22:00 から各30分（従来の固定4枠）
+//   ★is_admin限定先行: 管理者は profiles.papia_hour（自分で選んだ時刻）から30分の1枠のみ。公開時は全員選択式へ。
 const PAPIA_EVENT_HOURS = [8, 12, 16, 22]
-const getPapiaEventStatus = () => {
+const getPapiaEventStatus = (profile) => {
   const now = Date.now()
   const jstNow = new Date(now + 9*60*60*1000)
   const h = jstNow.getUTCHours()
   const m = jstNow.getUTCMinutes()
   const totalMin = h * 60 + m
-  for (const startH of PAPIA_EVENT_HOURS) {
+  // 管理者は選択した1枠のみ（未設定ならイベント無し）
+  const hours = profile?.is_admin
+    ? (Number.isInteger(profile.papia_hour) ? [profile.papia_hour] : [])
+    : PAPIA_EVENT_HOURS
+  for (const startH of hours) {
     const startMin = startH * 60
     const endMin = startMin + 30
     if (totalMin >= startMin && totalMin < endMin) {
@@ -1316,8 +1322,9 @@ const getPapiaEventStatus = () => {
       return { active: true, remainingMin: remaining, remainingSec: remainSec }
     }
   }
-  const allMins = PAPIA_EVENT_HOURS.map(h => h * 60)
-  const nextMin = allMins.find(m => m > totalMin) ?? (allMins[0] + 24*60)
+  if (hours.length === 0) return { active: false, untilNextMin: null }
+  const allMins = hours.map(hh => hh * 60)
+  const nextMin = allMins.find(mm => mm > totalMin) ?? (allMins[0] + 24*60)
   const untilNext = nextMin - totalMin
   return { active: false, untilNextMin: untilNext }
 }
@@ -1392,6 +1399,8 @@ export default function Game() {
   const [showContact, setShowContact] = useState(false)
   const [showOptions, setShowOptions] = useState(false)   // ⚙ オプション（ブーストタイム発動など）
   const [boostLoading, setBoostLoading] = useState(false)
+  const [papiaHourLoading, setPapiaHourLoading] = useState(false)
+  const [papiaSel, setPapiaSel] = useState(20)            // パピア時間帯の選択値（デフォルト20時）
   const [contactForm, setContactForm] = useState({ category: 'bug', body: '' })
   const [contactSent, setContactSent] = useState(false)
   const [contactLoading, setContactLoading] = useState(false)
@@ -2198,7 +2207,7 @@ export default function Game() {
     const area = AREAS.find(a => a.id === selectedArea)
     const bossRate = profile.boss_encounter_rate || 0
     const isBossEncounter = Math.random()*100 < bossRate
-    const papiaRate = getPapiaEventStatus().active ? 2 : 1
+    const papiaRate = getPapiaEventStatus(profile).active ? 2 : 1
     const isPapiaEncounter = !isBossEncounter && Math.random()*100 < papiaRate
     const enemy = isPapiaEncounter
       ? { ...PAPIA }
@@ -3270,6 +3279,28 @@ export default function Game() {
     }
   }
 
+  // 🌟 パピア出現時間帯の設定（is_admin限定先行・1か月変更不可）
+  const savePapiaHour = async () => {
+    if (papiaHourLoading) return
+    setPapiaHourLoading(true)
+    try {
+      const { data, error } = await supabase.rpc('set_papia_hour', { p_hour: papiaSel })
+      if (error) { alert('設定に失敗しました。少し待ってからお試しください。'); return }
+      if (!data?.ok) {
+        if (data?.reason === 'locked') alert(`パピア時間帯は1か月に1回しか変更できません。次に変更できるのは ${new Date(data.unlock_at).toLocaleString('ja-JP')} 以降です。`)
+        else if (data?.reason === 'not_admin') alert('現在は管理者のみ設定できます。')
+        else if (data?.reason === 'invalid_hour') alert('時刻の指定が不正です。')
+        else alert('設定に失敗しました。')
+        await fetchProfile()
+        return
+      }
+      setProfile(p => p ? { ...p, papia_hour: data.papia_hour, papia_hour_set_at: new Date().toISOString() } : p)
+      alert(`パピア出現時間帯を ${String(data.papia_hour).padStart(2,'0')}:00〜${String(data.papia_hour).padStart(2,'0')}:30 に設定しました（1か月変更不可）`)
+    } finally {
+      setPapiaHourLoading(false)
+    }
+  }
+
   const submitContact = async () => {
     if (!contactForm.body.trim()) return
     setContactLoading(true)
@@ -3661,9 +3692,15 @@ export default function Game() {
 
   if (showOptions) {
     const boostActive = isBoostActive(profile)
-    const todayJst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' })).toISOString().slice(0,10)
+    // ブーストの日次リセットは朝5時(JST)基準＝JST時刻から5時間引いた日付（サーバー start_boost と一致）
+    const _gd = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
+    _gd.setHours(_gd.getHours() - 5)
+    const todayJst = _gd.toISOString().slice(0,10)
     const usedToday = profile?.boost_used_date === todayJst
     const boostMinLeft = boostActive ? Math.ceil((new Date(profile.boost_active_until).getTime() - Date.now())/60000) : 0
+    const papiaLocked = profile?.papia_hour_set_at && (Date.now() < new Date(profile.papia_hour_set_at).getTime() + 30*24*60*60*1000)
+    const papiaUnlockAt = profile?.papia_hour_set_at ? new Date(new Date(profile.papia_hour_set_at).getTime() + 30*24*60*60*1000) : null
+    const pad2 = (n) => String(n).padStart(2,'0')
     return (
       <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
         <div style={{ background:'#001020', border:'1px solid #446688', padding:'20px', maxWidth:'460px', width:'100%', fontFamily:'monospace' }}>
@@ -3672,7 +3709,7 @@ export default function Game() {
             <div style={{ color:'#ffcc44', fontSize:'13px', marginBottom:'6px' }}>⚡ ブーストタイム</div>
             <div style={{ color:'#88aacc', fontSize:'11px', lineHeight:'1.7', marginBottom:'12px' }}>
               発動すると<strong style={{color:'#ffcc44'}}>{BOOST_DURATION_MIN}分間</strong>、街の出撃クールダウンが<strong style={{color:'#ffcc44'}}>{WAIT_SECONDS}秒 → {BOOST_WAIT}秒</strong>に短縮されます。<br/>
-              ・1日1回まで（毎日リセット）<br/>
+              ・1日1回まで（毎日<strong style={{color:'#ffcc44'}}>朝5時</strong>リセット）<br/>
               ・レイドボス・簡易出撃は対象外
             </div>
             {boostActive ? (
@@ -3681,7 +3718,7 @@ export default function Game() {
               </div>
             ) : usedToday ? (
               <div style={{ textAlign:'center', color:'#886633', fontSize:'12px', padding:'10px', border:'1px solid #332a14', background:'#0a0800' }}>
-                本日分は使用済みです（毎日リセット）
+                本日分は使用済みです（朝5時にリセット）
               </div>
             ) : (
               <button onClick={startBoost} disabled={boostLoading}
@@ -3690,6 +3727,35 @@ export default function Game() {
               </button>
             )}
           </div>
+
+          {/* 🌟 パピア出現時間帯（プレイヤー選択・1か月変更不可） */}
+          <div style={{ border:'1px solid #335577', background:'#000a18', padding:'14px', marginBottom:'16px' }}>
+            <div style={{ color:'#ffaa00', fontSize:'13px', marginBottom:'6px' }}>🌟 パピア出現時間帯</div>
+            <div style={{ color:'#88aacc', fontSize:'11px', lineHeight:'1.7', marginBottom:'10px' }}>
+              選んだ時刻から<strong style={{color:'#ffaa00'}}>30分間</strong>、パピアの出現率がアップします（毎日その時刻）。<br/>
+              ・<strong style={{color:'#ffaa00'}}>一度決めると1か月は変更できません</strong>
+            </div>
+            <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'8px' }}>
+              現在の設定: {Number.isInteger(profile?.papia_hour) ? `${pad2(profile.papia_hour)}:00〜${pad2(profile.papia_hour)}:30` : '未設定'}
+            </div>
+            {papiaLocked ? (
+              <div style={{ textAlign:'center', color:'#886633', fontSize:'11px', padding:'8px', border:'1px solid #332a14', background:'#0a0800' }}>
+                変更は {papiaUnlockAt.toLocaleString('ja-JP')} 以降に可能
+              </div>
+            ) : (
+              <div style={{ display:'flex', gap:'8px' }}>
+                <select value={papiaSel} onChange={e=>setPapiaSel(Number(e.target.value))}
+                  style={{ flex:1, padding:'8px', background:'#001040', border:'1px solid #446688', color:'#88ccff', fontFamily:'monospace', fontSize:'12px' }}>
+                  {Array.from({length:24},(_,h)=>(<option key={h} value={h}>{pad2(h)}:00〜{pad2(h)}:30</option>))}
+                </select>
+                <button onClick={savePapiaHour} disabled={papiaHourLoading}
+                  style={{ padding:'8px 14px', background:'#1a1400', border:'1px solid #ffaa00', color:'#ffaa00', cursor: papiaHourLoading?'default':'pointer', fontFamily:'monospace', fontSize:'12px', whiteSpace:'nowrap' }}>
+                  {papiaHourLoading ? '設定中…' : 'この時刻に設定'}
+                </button>
+              </div>
+            )}
+          </div>
+
           <button onClick={()=>setShowOptions(false)}
             style={{ width:'100%', padding:'10px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>閉じる</button>
         </div>
@@ -4020,7 +4086,9 @@ export default function Game() {
   const mpCurrent = Math.max(0, profile.mp_current??profile.mp_max)
   const isDying = profile.is_dying||false
   const isBanned = profile.battle_ban_until && new Date(profile.battle_ban_until) > new Date()
-  const papiaEvent = getPapiaEventStatus()
+  const papiaEvent = getPapiaEventStatus(profile)
+  const boostActive = isBoostActive(profile)
+  const boostRemainMin = boostActive ? Math.max(1, Math.ceil((new Date(profile.boost_active_until).getTime() - Date.now())/60000)) : 0
   const materialEvent = getMaterialEventStatus()
   const matEventBannerVisible = materialEvent.active && matEventSeenDate !== getDungeonDateStr()
   const dismissMatEventBanner = () => {
@@ -4448,6 +4516,12 @@ export default function Game() {
                 <div style={{ background:'#1a0a00', border:'1px solid #ffaa00', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
                   <span style={{ color:'#ffaa00' }}>🌟 パピア出現率アップ中！</span>
                   <span style={{ color:'#446688', marginLeft:'8px' }}>残り{papiaEvent.remainingMin}分{papiaEvent.remainingSec}秒</span>
+                </div>
+              )}
+              {boostActive && (
+                <div style={{ background:'#1a1400', border:'1px solid #ffcc44', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
+                  <span style={{ color:'#ffcc44' }}>⚡ ブーストタイム中！</span>
+                  <span style={{ color:'#446688', marginLeft:'8px' }}>残り約{boostRemainMin}分（出撃が{BOOST_WAIT}秒に短縮）</span>
                 </div>
               )}
               {matEventBannerVisible && (
@@ -4883,6 +4957,12 @@ export default function Game() {
                   <div style={{ background:'#1a0a00', border:'1px solid #ffaa00', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
                     <span style={{ color:'#ffaa00' }}>🌟 パピア出現率アップ中！</span>
                     <span style={{ color:'#446688', marginLeft:'8px' }}>残り{papiaEvent.remainingMin}分{papiaEvent.remainingSec}秒</span>
+                  </div>
+                )}
+                {boostActive && (
+                  <div style={{ background:'#1a1400', border:'1px solid #ffcc44', padding:'6px 10px', marginBottom:'8px', textAlign:'center', fontSize:'11px' }}>
+                    <span style={{ color:'#ffcc44' }}>⚡ ブーストタイム中！</span>
+                    <span style={{ color:'#446688', marginLeft:'8px' }}>残り約{boostRemainMin}分（出撃が{BOOST_WAIT}秒に短縮）</span>
                   </div>
                 )}
                 {matEventBannerVisible && (

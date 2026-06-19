@@ -32,8 +32,9 @@ const TIER_INFO = [
   { pct:  0, attacks:  0, tier: 'D', label: '参加',                       gold: 15000, stones: ['E','F'],    gemCount: 2, gemRank: 'F', scaleCount: '1~3',  rareChance: '0%',  color: '#888888' },
 ]
 
-// ★2026-06-20: is_admin限定先行。管理者は出撃回数ティア保証を半減(50/20/5→25/10/3)。claim_raid_rewards と一致。
-const tierAttacks = (t, isAdmin) => (isAdmin && t.attacks > 0 ? Math.ceil(t.attacks / 2) : t.attacks)
+// ★2026-06-20: is_admin限定先行。管理者は出撃回数ティア保証を A=20 / B=10 / C=5 に（claim_raid_rewards と一致）。非管理者は50/20/5。
+const ADMIN_TIER_ATTACKS = { A: 20, B: 10, C: 5 }
+const tierAttacks = (t, isAdmin) => (isAdmin && t.attacks > 0 ? (ADMIN_TIER_ATTACKS[t.tier] ?? t.attacks) : t.attacks)
 function getTier(pct, attackCount = 0, isAdmin = false) {
   return TIER_INFO.find(t => pct >= t.pct || (attackCount >= tierAttacks(t, isAdmin) && t.attacks > 0)) || TIER_INFO[TIER_INFO.length - 1]
 }

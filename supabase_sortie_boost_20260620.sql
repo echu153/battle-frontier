@@ -9,9 +9,40 @@
 --   ※ pure関数置換＋列追加＋新RPCのみ。protect_stats等の戦闘/報酬関数には触れないため適用順は任意。
 -- ============================================================
 
--- ① ブースト管理列 -------------------------------------------------
+-- ① ブースト管理列＋パピア時間帯（プレイヤー選択） ----------------
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS boost_active_until timestamptz;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS boost_used_date    date;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS papia_hour        int;          -- パピア出現率アップの開始時刻(JST 0-23)。NULL=未設定
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS papia_hour_set_at timestamptz;  -- 設定日時（変更は1か月に1回まで）
+
+-- パピア時間帯の設定RPC（is_admin限定先行・一度決めたら1か月変更不可）
+CREATE OR REPLACE FUNCTION public.set_papia_hour(p_hour int)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_uid uuid := auth.uid();
+  v_row profiles%ROWTYPE;
+BEGIN
+  IF v_uid IS NULL THEN RETURN json_build_object('ok',false,'reason','not_authenticated'); END IF;
+  IF p_hour IS NULL OR p_hour < 0 OR p_hour > 23 THEN RETURN json_build_object('ok',false,'reason','invalid_hour'); END IF;
+  SELECT * INTO v_row FROM profiles WHERE id = v_uid FOR UPDATE;
+  IF NOT FOUND THEN RETURN json_build_object('ok',false,'reason','profile_not_found'); END IF;
+  -- ★is_admin限定先行: 管理者以外は不可。公開時はこの判定を外す。
+  IF NOT v_row.is_admin THEN RETURN json_build_object('ok',false,'reason','not_admin'); END IF;
+  -- 一度決めたら1か月（30日）変更不可
+  IF v_row.papia_hour_set_at IS NOT NULL AND now() < v_row.papia_hour_set_at + interval '30 days' THEN
+    RETURN json_build_object('ok',false,'reason','locked',
+      'papia_hour', v_row.papia_hour,
+      'unlock_at', v_row.papia_hour_set_at + interval '30 days');
+  END IF;
+  UPDATE profiles SET papia_hour = p_hour, papia_hour_set_at = now() WHERE id = v_uid;
+  RETURN json_build_object('ok',true,'papia_hour', p_hour, 'unlock_at', now() + interval '30 days');
+END;
+$$;
+GRANT EXECUTE ON FUNCTION public.set_papia_hour(int) TO authenticated;
 
 -- ② 通常出撃ロック（管理者: ブースト中10秒/通常20秒、非管理者: 10秒） ----
 CREATE OR REPLACE FUNCTION public.sortie_lock()
@@ -64,7 +95,7 @@ AS $$
 DECLARE
   v_uid   uuid := auth.uid();
   v_row   profiles%ROWTYPE;
-  v_today date := (now() AT TIME ZONE 'Asia/Tokyo')::date;  -- 日次リセットはJST基準（デイリーダンジョンと同じ）
+  v_today date := (now() AT TIME ZONE 'Asia/Tokyo' - interval '5 hours')::date;  -- 日次リセットはJST朝5時基準（5時より前は前日扱い）
   v_until timestamptz;
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('ok',false,'reason','not_authenticated'); END IF;
