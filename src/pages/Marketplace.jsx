@@ -156,6 +156,7 @@ export default function Marketplace() {
   const [rankFilter, setRankFilter] = useState('all')
   const [sortBy, setSortBy] = useState('obtained')
   const [category, setCategory] = useState('general') // 'general' | 'boss'
+  const [expanded, setExpanded] = useState(() => new Set()) // 展開中のweapon_id
 
   useEffect(() => { init() }, [])
 
@@ -274,6 +275,33 @@ export default function Marketplace() {
   )
   const sellEquip = applyFilterSort(myEquip, e => e.weapons, e => basePriceOf(e.weapons))
 
+  // 購入タブ：同じ装備(weapon_id)でまとめ、最安を代表に。展開で個別出品を表示。
+  const buyGroups = (() => {
+    const m = new Map()
+    for (const l of buyListings) {
+      if (!m.has(l.weapon_id)) m.set(l.weapon_id, [])
+      m.get(l.weapon_id).push(l)
+    }
+    const groups = [...m.values()].map(ls => {
+      const sorted = [...ls].sort((a, b) => a.price - b.price)
+      return { weapon_id: sorted[0].weapon_id, weapon: sorted[0].weapons, base: sorted[0].base_price, minPrice: sorted[0].price, listings: sorted }
+    })
+    const r = g => RARITY_ORDER[String(g.weapon?.rarity || '').toLowerCase()] ?? -1
+    switch (sortBy) {
+      case 'rank_desc':  groups.sort((a, b) => r(b) - r(a)); break
+      case 'rank_asc':   groups.sort((a, b) => r(a) - r(b)); break
+      case 'price_desc': groups.sort((a, b) => b.minPrice - a.minPrice); break
+      case 'price_asc':  groups.sort((a, b) => a.minPrice - b.minPrice); break
+      default: break // 入手順＝buyListings順を維持
+    }
+    return groups
+  })()
+  const toggleExpand = (wid) => setExpanded(prev => {
+    const next = new Set(prev)
+    next.has(wid) ? next.delete(wid) : next.add(wid)
+    return next
+  })
+
   const base = { minHeight:'100vh', background:'#000820', color:'#aaccff', fontFamily:'monospace', padding:'16px', boxSizing:'border-box' }
   const sellBase = sellTarget ? basePriceOf(sellTarget.weapons) : 0
   const sellMin = Math.floor(sellBase * 0.5)
@@ -345,27 +373,57 @@ export default function Marketplace() {
       )}
 
       <div style={{ maxWidth:'600px', margin:'0 auto' }}>
-        {/* 購入タブ */}
+        {/* 購入タブ（同じ装備はまとめて最安表示・クリックで展開） */}
         {tab === 'buy' && (
           <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
-            {buyListings.map(l => {
-              const canAfford = gold >= l.price
+            {buyGroups.map(g => {
+              const open = expanded.has(g.weapon_id)
               return (
-                <div key={l.id} style={{ border:`1px solid ${canAfford ? '#224433' : '#0055aa'}`, background:'#001028', padding:'12px' }}>
-                  <WeaponCard weapon={l.weapons} bonusEffect={l.bonus_effect} bonus={l.bonus} />
-                  <div style={{ fontSize:'10px', color:'#557799', marginTop:'8px', marginBottom:'4px' }}>出品者: <span style={{ color:'#88ccff' }}>{l.seller?.username || '???'}</span></div>
-                  <PriceStats stat={stats[l.weapon_id]} base={l.base_price} />
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'8px' }}>
-                    <div style={{ color:'#ffcc44', fontSize:'15px' }}>{yen(l.price)}G</div>
-                    <button onClick={() => handleBuy(l)} disabled={!canAfford || busy === l.id}
-                      style={{ padding:'8px 18px', background: canAfford ? '#001a00' : '#000e20', border:`1px solid ${canAfford ? '#44ff88' : '#002244'}`, color: canAfford ? '#44ff88' : '#335566', cursor: canAfford ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'12px' }}>
-                      {busy === l.id ? '処理中...' : canAfford ? '購入' : '所持金不足'}
-                    </button>
+                <div key={g.weapon_id} style={{ border:'1px solid #0055aa', background:'#001028' }}>
+                  {/* まとめ行（クリックで展開） */}
+                  <div onClick={() => toggleExpand(g.weapon_id)} style={{ padding:'12px', cursor:'pointer' }}>
+                    <WeaponCard weapon={g.weapon} bonusEffect={g.listings[0].bonus_effect} />
+                    <PriceStats stat={stats[g.weapon_id]} base={g.base} />
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'8px' }}>
+                      <div>
+                        <span style={{ color:'#557799', fontSize:'10px' }}>最安 </span>
+                        <span style={{ color:'#ffcc44', fontSize:'15px' }}>{yen(g.minPrice)}G</span>
+                        <span style={{ color:'#557799', fontSize:'11px', marginLeft:'8px' }}>出品 {g.listings.length}件</span>
+                      </div>
+                      <span style={{ color:'#88ccff', fontSize:'11px' }}>{open ? '▲ 閉じる' : '▼ 出品を見る'}</span>
+                    </div>
                   </div>
+                  {/* 展開：個別の出品（価格・出品者・ボーナス・購入） */}
+                  {open && (
+                    <div style={{ borderTop:'1px solid #0a1f33' }}>
+                      {g.listings.map(l => {
+                        const canAfford = gold >= l.price
+                        const lb = bonusList(l.bonus)
+                        return (
+                          <div key={l.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', padding:'10px 12px', borderTop:'1px solid #061626' }}>
+                            <div style={{ minWidth:0 }}>
+                              <div style={{ color:'#ffcc44', fontSize:'14px' }}>{yen(l.price)}G</div>
+                              <div style={{ fontSize:'10px', color:'#557799' }}>出品者: <span style={{ color:'#88ccff' }}>{l.seller?.username || '???'}</span></div>
+                              {lb.length > 0 && (
+                                <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginTop:'2px' }}>
+                                  <span style={{ fontSize:'9px', color:'#cc9933' }}>ボーナス</span>
+                                  {lb.map((b, i) => <span key={i} style={{ fontSize:'10px', color:b.c }}>{b.label}+{b.v}{b.pct ? '%' : ''}</span>)}
+                                </div>
+                              )}
+                            </div>
+                            <button onClick={() => handleBuy(l)} disabled={!canAfford || busy === l.id}
+                              style={{ flexShrink:0, padding:'8px 18px', background: canAfford ? '#001a00' : '#000e20', border:`1px solid ${canAfford ? '#44ff88' : '#002244'}`, color: canAfford ? '#44ff88' : '#335566', cursor: canAfford ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'12px' }}>
+                              {busy === l.id ? '処理中...' : canAfford ? '購入' : '所持金不足'}
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )
             })}
-            {buyListings.length === 0 && <div style={{ color:'#446688', fontSize:'12px', textAlign:'center', padding:'40px' }}>現在出品されているアイテムはありません</div>}
+            {buyGroups.length === 0 && <div style={{ color:'#446688', fontSize:'12px', textAlign:'center', padding:'40px' }}>現在出品されているアイテムはありません</div>}
           </div>
         )}
 
