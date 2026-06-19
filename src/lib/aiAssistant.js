@@ -505,14 +505,15 @@ const smalltalk = (raw) => SMALLTALK.find((s) => s.re.test(raw))?.a || null
 
 // タイポ・言いかけの挨拶を推測（「こんにち」→「こんにちは」で確認を挟む）
 const GREET_CANON = ['こんにちは', 'こんばんは', 'おはよう']
+// 挨拶の言いかけ/誤記を検知（呼び出し側で挨拶と同一扱い＝確認せずGREETING_TEXTを返す）。
 const guessGreeting = (raw) => {
   const q = normalize(raw)
   if (q.length < 3 || q.length > 7) return null
-  // 正しい挨拶の「言いかけ/1字違い」のみ確認対象（完全一致は GREETING が処理するため除外）
+  // 正しい挨拶の「言いかけ/1字違い」（完全一致は GREETING が先に処理するため除外）
   for (const g of GREET_CANON) {
     if (g !== q && (g.startsWith(q) || editDistance(q, g) === 1)) return g
   }
-  // よくある誤記（こんにちわ/こんばんわ）は完全一致でも確認に回す
+  // よくある誤記（こんにちわ/こんばんわ）は完全一致でも挨拶として扱う
   if (editDistance(q, 'こんにちわ') <= 1) return 'こんにちは'
   if (editDistance(q, 'こんばんわ') <= 1) return 'こんばんは'
   return null
@@ -626,24 +627,26 @@ export const askAssistant = async (query, ctx = {}, _depth = 0) => {
   if (LIMIT_TRIGGER.test(raw)) return { text: LIMIT_TEXT, kind: 'meta' }
 
   // 7) フォールバック（柔らかめに。「もしかして○○？」推測も挟む。記録はKB育成用）
-  if (_depth === 0) logUnanswered(raw)
   const guesses = didYouMean(raw)
-  // 候補が1つに絞れたら、確認だけでなく“その語の回答”をそのまま出す
+  // 候補が1つに絞れたら、確認だけでなく“その語の回答”をそのまま出す（解決時は未回答記録しない）
   if (guesses.length === 1 && _depth === 0) {
     try {
       const sub = await askAssistant(guesses[0], ctx, 1)
       if (sub && sub.kind !== 'fallback') {
         return { text: `もしかして「${guesses[0]}」のことでしょうか？ そうなら：\n\n${sub.text}`, kind: sub.kind }
       }
-    } catch { /* 解決できなければ通常フォールバックへ */ }
+    } catch { /* 解決できなければ下の通常フォールバック（記録あり）へ */ }
   } else if (guesses.length > 1) {
-    // 複数候補で意味が大きく変わる場合は、どれか聞き返す
+    // 複数候補で意味が大きく変わる場合は、どれか聞き返す（＝答えられていないので記録）
+    if (_depth === 0) logUnanswered(raw)
     const label = guesses.map((g) => `「${g}」`).join('か')
     return {
       text: `うーん、ぴったりの答えが見つかりませんでした💦\nもしかして${label}のことでしょうか？ 知りたい方を「○○ってなに？」と聞いてください😊`,
       kind: 'fallback',
     }
   }
+  // ここに到達＝本当に答えられなかった（候補なし or 単一候補が解決せず）→ 1回だけ記録
+  if (_depth === 0) logUnanswered(raw)
   return {
     text: 'うーん、その質問はまだうまく答えられないみたい💦\nでも、このゲームのことならいろいろお手伝いできます！例えば：\n・「狂戦士になるには？」（職業・転職条件）\n・「メテオストライクの効果は？」（スキル/装備/アイテム名）\n・「錬金部屋ってなに？」（施設の使い方）\n・「おすすめ強化」「強くなるには？」（強化の相談）\n・「○○に勝ちたい」（対戦相手の対策）\nもっと具体的に聞いてもらえれば答えやすいです😊',
     kind: 'fallback',
