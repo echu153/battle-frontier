@@ -838,3 +838,15 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 - 以後の戦闘清算(casino_settle_sortie/apply_battle_result等)は当人のJWT下で calc_exp_next が半減を返すため、ループで正しく解消される（＝恒常的な再発はしない想定）。今回のは半減前の貯金分の一回限りの是正。
 観点: (j) インライン半減しきい値が `calc_exp_next`(SQL/クライアント)と完全一致しているか、(k) キャップ式 `retraining ->> class >= 5 → 300` が settle と一致しているか（クラス別・nullガード）、(l) `pending_stat_points`/`char_lv` を遡及加算する是非（過去レベル分の無料ポイント付与。対象は管理者のみだが妥当か）、(m) class_levels 行が無い/別クラスの場合の挙動、(n) 冪等性（再実行で多重加算しないか＝超過が無ければループ0回でno-op）。
 → NEXT: CODEX
+
+## [CLAUDE] 77（追加要望: ブースト/パピア/レイドティア）
+コミット `11f69f3`。ユーザー追加要望を is_admin限定先行で実装。
+- **ブースト朝5時リセット**: `start_boost` の日次キーを `(now() AT TIME ZONE 'Asia/Tokyo' - interval '5 hours')::date` に。クライアントOptionsの usedToday も同基準(-5h)。
+- **ブースト稼働インジケータ**: 街バナーに「⚡ ブーストタイム中！残り約N分」をパピアバナーと並べて表示（PC/モバイル両方、`boostActive`/`boostRemainMin`）。
+- **パピア時間プレイヤー選択(admin先行)**: `profiles.papia_hour(0-23)`/`papia_hour_set_at` 列＋`set_papia_hour(p_hour)` RPC（admin限定・0-23検証・**1か月(30日)変更不可**・FOR UPDATE）。`getPapiaEventStatus(profile)` は管理者=選択1枠のみ(未設定はイベント無し)、非管理者=従来固定4枠(8/12/16/22)。Optionsに選択UI（現設定表示・ロック中は解除日時表示・24時間ドロップダウン）。エンカウント率・バナーの呼び出しに profile を伝播。**公開時は非管理者も選択式へ＝固定4枠を撤去（ユーザー指示「本番移行時に忘れず適用」）**。
+- **レイドティア(admin) A=20/B=10/C=5**: `claim_raid_rewards` の admin分岐を 25/10/3→20/10/5。RaidBoss表示は `ADMIN_TIER_ATTACKS={A:20,B:10,C:5}` で getTier/報酬表/注記を同期。非管理者50/20/5。
+- **保留**: かかしチャージ 100→50(admin先行)。`apply_battle_result` が複数ファイルに散在し本番で生きている版が未確定（scarecrow.sqlの版はダンジョンブロック未内包＝単純な最新ではない疑い）。デグレ回避のため、生存版を `check_live_functions.sql` 等で特定してから安全に is_admin 分岐を入れる。
+
+観点: (o) set_papia_hour の1か月ロック/競合/JST、(p) getPapiaEventStatus の管理者未設定時(イベント無し)とエンカウント率分岐の整合、(q) ブースト5時境界のクライアント計算(toLocaleString→-5h→toISOString)の妥当性（表示用途・最終判定はサーバー）、(r) レイドティア20/10/5のSQL/表示一致、(s) 新規列追加(papia_hour)とSELECT *依存箇所への影響。
+要適用SQL: `supabase_sortie_boost_20260620.sql`(papia列+RPC+5時リセット追記版・再適用) / `supabase_raid_update_20260610.sql`(ティア20/10/5・再適用)。
+→ NEXT: CODEX
