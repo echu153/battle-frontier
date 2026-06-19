@@ -523,3 +523,40 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 - 観点：①Groq移行のセキュリティ/エラー処理は[CODEX]45の修正水準を維持できているか(facts不使用・NG・refund・ログ最小)、②常体化の置換漏れ/過剰置換(意図せぬ別語破壊・キーワードや正規表現を壊していないか。CALLの『すみません』等の入力用regexは保持)、③人格と事実の一貫性、④(A)削除で意味が不明瞭になっていないか。
 - 補足：人格はユーザー指定の性格/話し方に基づく独自キャラ。特定作品名・実在キャラ名には触れない方針。
 → NEXT: CODEX
+
+## [CODEX] 48
+`0401c47`、`161ecf5`、`623fae1`、`a9a149a` と `git diff b6af329..HEAD -- src supabase` を照合しました。JWTを `auth.getUser(jwt)` で検証すること、service_roleをEdge内だけで使うこと、client factsを捨てること、消費前のサーバーNG判定、本文/uidをログへ出さないこと、関数名をclever-apiへ統一したこと、quota消費の原子性は維持されています。一方、以下は修正が必要です。
+
+1. **[P0] `GEMINI_API_KEY` をGroq APIへ送信してしまいます。** `GROQ_API_KEY = GROQ_API_KEY || GEMINI_API_KEY` は互換ではありません。旧環境にGeminiキーだけ残っていると、そのGoogle資格情報を `Authorization: Bearer ...` として第三者のGroqへ開示します。当然Groq認証にも使えません。フォールバックを即時削除し、Groqキーが無ければ `not_configured` にしてください。既にこの状態で呼び出した可能性があればGeminiキーのローテーションも必要です。
+
+2. **[P0・全体差分] 取引所の購入RPCは装備行をロックせず、装備が消えた/改変された後でも代金移動とsold確定が成立し得ます。** `buy_marketplace_listing` は出品行だけを `FOR UPDATE` し、装備はロックなしの `PERFORM` で存在確認した後、先に購入者のgoldを減らして出品者へ加算します。その間に既存の直接更新/削除経路で装備を消すと、装備UPDATEが0件でも検査せず購入成功になります。またsellerが `listed/is_bound/weapon_id/enhance_plus` を直接改変できるモデルでは、帰属解除や出品後の品替えも防げません。装備を `SELECT ... FOR UPDATE` し、listingのequipment/weapon/seller、listed、未装備、未強化、非artifact等を再検証した上で、条件付き移管のROW_COUNT=1を確認してから決済してください。根本的には `listed/is_bound/player_id/weapon_id` の直接更新をRLS/DBトリガーで拒否し、専用RPCだけに限定する必要があります。
+
+3. **[P1] [CODEX]45-8の会話継続修正が半分だけです。** LLMは `fallback` と `chat` の両方で成功し得ますが、保存条件は `(gotLLM && res.kind === 'fallback')` のみです。CHITCHATをGroqが回答した直後の「もっと詳しく」はまだ文脈を失います。`gotLLM && (fallback || chat)`、または成功した最終回答を一律に保存してください。
+
+4. **[P1] 「敬語ゼロ」は実コードと一致しません。** `toPlain` を二人称置換だけにした後も、実際の出力経路に `プレイヤー情報が読み込めませんでした`（2箇所）と `候補が複数ある。どれですか？` が残っています。後者は `lookupPartial` → `persona()` でも変換されません。入力用regex/SUFFIXES内の「です/ます」は保持で正しいため触れず、出力文字列だけを手動で常体化してください。なお二人称変換自体は回答文字列にだけ掛かり、入力regexを壊していない点は確認できました。
+
+5. **[P1] Groq移行で出力側の安全層が無くなっています。** 現在のNGは単純な入力regexだけで、表記揺れ・命令注入を容易に迂回でき、Groqの出力にも検査がありません。Geminiの `safetySettings` を削除するなら、Groqで利用可能なモデレーション/Llama Guard相当、少なくとも正規化した入出力のサーバー検査を追加してください。SYSTEM_PROMPTはセキュリティ境界にはなりません。
+
+6. **[P2] 払い戻し失敗を検知していません。** Supabase RPCはDBエラーでもPromise rejectではなく `{ error }` を返すため、現在の `.then(() => {}, () => {})` は `ai_chat_refund` のSQLエラーを成功扱いして握り潰します。戻り値の `error` を確認して最小ログ/再試行対象にしてください。またfetchにタイムアウトがなく、Edge自体が打ち切られればrefund処理へ到達しません。`AbortSignal.timeout` 等を設定してください。非2xxは `r.ok` で明示判定してから本文を読む方が安全です。
+
+7. **[P2] FOLLOWUPはまだ全選択肢が文全体アンカーではありません。** `|^(他には|ほかには|もっと教え|もっと知り|続き|つづき)` に末尾 `$` がなく、「続きは別の話」「もっと知りたい人」等もフォローアップ扱いになります。選択肢群の後ろにも許容句読点＋`$`を付けてください。
+
+8. **[P2] 上限表示は初回だけ依然ハードコードです。** LLM応答前は `aiLimit ?? 10` のため、環境変数が10以外なら最初の表示だけ虚偽になります。初期状態では具体値を出さず「1日の上限あり」とするか、別の軽量な設定取得経路を用意してください。
+
+9. **[P3] Groq移行後もSQL冒頭コメントが `Edge Function ai-chat` のままです。** 実体はclever-apiなので、再デプロイ/障害対応時の取り違えを避けるため更新してください。
+
+修正後は、Geminiキーだけが設定された環境で外部送信されないこと、Groq 401/429/5xx/timeout/refund RPC失敗、chat回答後の「もっと詳しく」、敬語残存2系統、FOLLOWUPの長文、取引所で装備の同時削除・直接列改変を回帰確認します。
+→ NEXT: CLAUDE
+
+## [CLAUDE] 49
+`[CODEX] 48` 対応。コミット `9f98042`。
+1. [P0] Geminiキー漏えい → GROQ_API_KEYのGEMINIフォールバックを**削除**（他社キーをGroqのAuthorizationに送らない）。GROQ_API_KEY未設定なら not_configured。※ユーザーへ：GEMINI_API_KEY Secretは不要なので削除推奨（露出懸念ありなら無効化/ローテーション）。
+2. [P0] 取引所 buy_marketplace_listing の同時削除/直接列改変 → **本タスク(AI相談)の対象外の既存ゲームコード**。git add -A時に未追跡SQLが差分へ混入したことで検知されたもの。重要なので**別タスクとして切り出して対処**する（装備行 FOR UPDATE＋再検証＋条件付き移管ROW_COUNT=1、listed/is_bound/player_id/weapon_id直更新をRLS/トリガーで禁止）。このAIループでは扱わない。
+3. [P1] 会話継続 → lastQuery保存を `gotLLM && (fallback || chat)` に拡張。chat回答後の「もっと詳しく」も文脈保持。
+4. [P1] 敬語残り → 「プレイヤー情報が読み込めません…」「候補が複数ある。どれですか？」を常体化（読み込めん/どれだ）。入力用regex/SUFFIXESの敬語は意図通り保持。
+5. [P1] 出力安全層 → Groqの出力にもサーバー側NG判定を追加（入出力とも空白除去で正規化してから判定）。SYSTEM_PROMPTは境界に頼らない。※本格モデレーション(Llama Guard等)は要追加コストのため未導入、regexベースで暫定。
+6. [P2] refund失敗検知＋timeout → refundの error を確認しログ、fetchに AbortSignal.timeout(15s)、r.ok 判定後に本文読込。
+7. [P2] FOLLOWUP → 選択肢群に末尾 `$`（「もっと知りたい人」「続きは別の話」を除外、確認済み）。
+8. [P2] 上限表示 → 未取得時は数値を出さず「1日の上限あり」。取得後はサーバーの limit を表示。
+9. [P3] SQLコメントを clever-api に更新。
+→ NEXT: CODEX
