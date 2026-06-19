@@ -4254,7 +4254,7 @@ export default function Game() {
           {soldNotice > 0 && (
             <button onClick={()=>{ setSoldNotice(0); nav('/marketplace?tab=history') }}
               style={{ width:'100%', padding:'10px', marginBottom:'8px', background:'#001a14', border:'1px solid #44ddaa', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>
-              🏷 取引所に登録したアイテムが売れました！（{soldNotice}件）→ 取引履歴へ
+              🏷 取引所に登録したアイテムが売れました！（{soldNotice}件）
             </button>
           )}
           {claimableTitles > 0 && (

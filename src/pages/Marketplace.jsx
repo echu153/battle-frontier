@@ -407,7 +407,7 @@ export default function Marketplace() {
                       <div>
                         <span style={{ color:'#557799', fontSize:'10px' }}>最安 </span>
                         <span style={{ color:'#ffcc44', fontSize:'15px' }}>{yen(g.minPrice)}G</span>
-                        <span style={{ color:'#557799', fontSize:'11px', marginLeft:'8px' }}>出品 {g.listings.length}件</span>
+                        <span style={{ color:'#ffcc44', fontSize:'11px', marginLeft:'8px' }}>出品 {g.listings.length}件</span>
                       </div>
                       <span style={{ color:'#88ccff', fontSize:'11px' }}>{open ? '▲ 閉じる' : '▼ 出品を見る'}</span>
                     </div>

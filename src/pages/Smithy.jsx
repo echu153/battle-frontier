@@ -604,7 +604,7 @@ export default function Smithy() {
         })()}
 
         <div style={{ display:'flex', gap:'4px', marginBottom:'8px', flexWrap:'wrap' }}>
-          {[{id:'enhance', label:'強化'}, {id:'craft', label:'加工'}, {id:'reeval', label:'再評価/再鑑定'}].map(t => (
+          {[{id:'enhance', label:'強化'}, {id:'craft', label:'加工'}, {id:'reeval', label:'再鑑定/再評価'}].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{ padding:'6px 14px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
                 background: tab === t.id ? '#001840' : '#000818',
@@ -780,8 +780,8 @@ export default function Smithy() {
         {tab === 'reeval' && (
           <div>
             <div style={{ display:'flex', gap:'16px', marginBottom:'8px', fontSize:'11px' }}>
-              <span style={{color:'#446688'}}>再評価依頼書: <span style={{color:'#ffcc00'}}>{playerItems.find(pi=>pi.items?.name==='再評価依頼書')?.quantity||0}枚</span></span>
               <span style={{color:'#446688'}}>再鑑定依頼書: <span style={{color:'#88ccff'}}>{playerItems.find(pi=>pi.items?.name==='再鑑定依頼書')?.quantity||0}枚</span></span>
+              <span style={{color:'#446688'}}>再評価依頼書: <span style={{color:'#ffcc00'}}>{playerItems.find(pi=>pi.items?.name==='再評価依頼書')?.quantity||0}枚</span></span>
             </div>
             <div style={{ color:'#446688', fontSize:'10px', marginBottom:'12px' }}>再鑑定：全ボーナス再抽選　再評価：種類固定で値のみ再抽選（要：再鑑定済み）　古びた○○は対象外</div>
             {slots.map(slot => {
