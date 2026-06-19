@@ -162,6 +162,8 @@ export default function Marketplace() {
   const [slotFilter, setSlotFilter] = useState('all') // all | weapon | armor | accessory
   const [expanded, setExpanded] = useState(() => new Set()) // 展開中のweapon_id
   const [history, setHistory] = useState({ bought: [], sold: [] }) // 取引履歴
+  const [confirmBuy, setConfirmBuy] = useState(null)    // 購入確認モーダル対象
+  const [confirmCancel, setConfirmCancel] = useState(null) // 取消確認モーダル対象
 
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('tab')
@@ -227,22 +229,23 @@ export default function Marketplace() {
 
   const flash = (text, color) => { setMsg({ text, color }); setTimeout(() => setMsg(null), 3500) }
 
-  const handleBuy = async (l) => {
-    if (!confirm(`「${l.weapons?.name}」を ${yen(l.price)}G で購入しますか？\n購入後は帰属（取引・加工不可）になります。`)) return
+  // 購入実行（確認はアプリ内モーダルで取る。window.confirmはモバイルWebViewで効かないため不使用）
+  const doBuy = async (l) => {
+    setConfirmBuy(null)
     setBusy(l.id)
     const { data, error } = await supabase.rpc('buy_marketplace_listing', { p_listing_id: l.id })
     setBusy(null)
-    if (error || !data?.ok) { flash(data?.reason || 'エラーが発生しました', '#ff4444'); await init(); return }
+    if (error || !data?.ok) { flash(data?.reason || error?.message || 'エラーが発生しました', '#ff4444'); await init(); return }
     flash('購入しました！装備画面で確認できます', '#44ff88')
     await init()
   }
 
-  const handleCancel = async (l) => {
-    if (!confirm('この出品を取り消しますか？')) return
+  const doCancel = async (l) => {
+    setConfirmCancel(null)
     setBusy(l.id)
     const { data, error } = await supabase.rpc('cancel_marketplace_listing', { p_listing_id: l.id })
     setBusy(null)
-    if (error || !data?.ok) { flash(data?.reason || 'エラーが発生しました', '#ff4444'); await init(); return }
+    if (error || !data?.ok) { flash(data?.reason || error?.message || 'エラーが発生しました', '#ff4444'); await init(); return }
     flash('出品を取り消しました', '#88ccff')
     await init()
   }
@@ -449,7 +452,7 @@ export default function Marketplace() {
                                 </div>
                               )}
                             </div>
-                            <button onClick={() => handleBuy(l)} disabled={!canAfford || busy === l.id}
+                            <button onClick={() => setConfirmBuy(l)} disabled={!canAfford || busy === l.id}
                               style={{ flexShrink:0, padding:'8px 18px', background: canAfford ? '#001a00' : '#000e20', border:`1px solid ${canAfford ? '#44ff88' : '#002244'}`, color: canAfford ? '#44ff88' : '#335566', cursor: canAfford ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'12px' }}>
                               {busy === l.id ? '処理中...' : canAfford ? '購入' : '所持金不足'}
                             </button>
@@ -479,7 +482,7 @@ export default function Marketplace() {
                       <span style={{ color:'#557799', marginLeft:'8px' }}>手取り {yen(Math.floor(l.price * 0.8))}G</span>
                       <div style={{ color:'#445566', fontSize:'10px', marginTop:'2px' }}>残り約{days}日で手元に戻ります</div>
                     </div>
-                    <button onClick={() => handleCancel(l)} disabled={busy === l.id}
+                    <button onClick={() => setConfirmCancel(l)} disabled={busy === l.id}
                       style={{ padding:'8px 14px', background:'#1a0000', border:'1px solid #aa4444', color:'#ff6666', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
                       {busy === l.id ? '処理中...' : '取消'}
                     </button>
@@ -549,6 +552,36 @@ export default function Marketplace() {
           </div>
         )}
       </div>
+
+      {/* 購入確認モーダル（window.confirm不使用） */}
+      {confirmBuy && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,4,16,0.85)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }} onClick={() => setConfirmBuy(null)}>
+          <div style={{ background:'#000e20', border:'1px solid #44ff88', padding:'22px', maxWidth:'340px', width:'100%', fontFamily:'monospace', textAlign:'center' }} onClick={ev => ev.stopPropagation()}>
+            <div style={{ color:'#44ff88', fontSize:'15px', letterSpacing:'2px', marginBottom:'12px' }}>購入の確認</div>
+            <div style={{ color:'#aaccff', fontSize:'13px', marginBottom:'6px' }}>{confirmBuy.weapons?.name}</div>
+            <div style={{ color:'#ffcc44', fontSize:'16px', marginBottom:'8px' }}>{yen(confirmBuy.price)}G</div>
+            <div style={{ color:'#557799', fontSize:'10px', marginBottom:'18px' }}>購入後は帰属（取引・加工不可／強化は可）になります</div>
+            <div style={{ display:'flex', gap:'10px' }}>
+              <button onClick={() => setConfirmBuy(null)} style={{ flex:1, padding:'10px', background:'none', border:'1px solid #445566', color:'#778899', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>やめる</button>
+              <button onClick={() => doBuy(confirmBuy)} style={{ flex:2, padding:'10px', background:'#001a00', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>購入する</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 取消確認モーダル */}
+      {confirmCancel && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,4,16,0.85)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }} onClick={() => setConfirmCancel(null)}>
+          <div style={{ background:'#000e20', border:'1px solid #aa4444', padding:'22px', maxWidth:'340px', width:'100%', fontFamily:'monospace', textAlign:'center' }} onClick={ev => ev.stopPropagation()}>
+            <div style={{ color:'#ff6666', fontSize:'15px', letterSpacing:'2px', marginBottom:'12px' }}>出品の取り消し</div>
+            <div style={{ color:'#aaccff', fontSize:'13px', marginBottom:'18px' }}>{confirmCancel.weapons?.name} を取り消して手元に戻します</div>
+            <div style={{ display:'flex', gap:'10px' }}>
+              <button onClick={() => setConfirmCancel(null)} style={{ flex:1, padding:'10px', background:'none', border:'1px solid #445566', color:'#778899', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>やめる</button>
+              <button onClick={() => doCancel(confirmCancel)} style={{ flex:2, padding:'10px', background:'#1a0000', border:'1px solid #aa4444', color:'#ff6666', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>取り消す</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 出品完了ポップアップ（強化成功と同じ中央モーダル） */}
       {listResult && (
