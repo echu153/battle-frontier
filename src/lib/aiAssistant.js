@@ -122,7 +122,7 @@ const findClassInQuery = (raw) => {
 // ============================================================
 export const KB = [
   { id: 'stat-meaning', keywords: ['ステータス', 'abcd', '攻撃力', '防御力', '特攻', '特防', '素早さ'],
-    a: `📊 ステータスの意味\n・攻撃(A)＝物理ダメージの元（剣/斧/槍/弓/短剣/拳/銃/刀）\n・防御(B)＝物理被ダメ軽減\n・特殊攻撃(C)＝魔法ダメージの元（杖/ワンド/魔導書/オーブ）\n・特殊防御(D)＝魔法被ダメ軽減\n・素早さ(S)＝先攻/回避/クリティカル率\n・HP/MP＝体力と消費資源\nクラスと武器に合わせて伸ばすステを決めましょう。` },
+    a: `📊 ステータスの意味\n・攻撃＝物理ダメージの元（剣/斧/槍/弓/短剣/拳/銃/刀）\n・防御＝物理被ダメ軽減\n・特殊攻撃＝魔法ダメージの元（杖/ワンド/魔導書/オーブ）\n・特殊防御＝魔法被ダメ軽減\n・素早さ＝先攻/回避/クリティカル率\n・HP/MP＝体力と消費資源\nクラスと武器に合わせて伸ばすステを決めましょう。` },
   { id: 'stat-allocate', keywords: ['ステ振り', 'ステータスポイント', '振り分け', '振る', '振り方'],
     a: `🔧 ステータス振り分けは「プロフィール」や街の「ステータスを振り分ける」から行えます。\n迷ったら「おすすめ強化」と聞いてください。あなたのクラスに合わせて提案します。` },
   { id: 'class-change', keywords: ['転職', 'クラスチェンジ', 'クラス変更', '職業', '上位職'],
@@ -208,27 +208,27 @@ export const buildAdvice = (ctx, query) => {
 
   if (style === 'magical') {
     lines.push('🔮 タイプ：魔法型')
-    lines.push('・最優先で「特殊攻撃(C)」。火力が一番伸びます')
-    lines.push('・打たれ弱いので「HP」「特殊防御(D)」も確保')
+    lines.push('・最優先で「特殊攻撃」。火力が一番伸びます')
+    lines.push('・打たれ弱いので「HP」「特殊防御」も確保')
     lines.push('・宝石：アメジスト(特攻)=武器/装飾、エメラルド(特防)=防具/装飾')
     lines.push('・命中が不安なら装飾品にオパール(命中)を')
   } else if (style === 'physical') {
     lines.push('⚔ タイプ：物理型')
-    lines.push('・最優先で「攻撃(A)」。火力が一番伸びます')
-    lines.push('・前線で殴るなら「HP」「防御(B)」も確保')
-    lines.push('・「素早さ(S)」は先攻・クリ率・回避に効く')
+    lines.push('・最優先で「攻撃」。火力が一番伸びます')
+    lines.push('・前線で殴るなら「HP」「防御」も確保')
+    lines.push('・「素早さ」は先攻・クリ率・回避に効く')
     lines.push('・宝石：ルビー(攻撃)=武器/装飾、サファイア(防御)=防具/装飾')
   } else {
     lines.push('⚖ タイプ：混合型(物理＋魔法)')
-    lines.push('・攻撃(A)と特殊攻撃(C)の両方を使う。主力スキルが使う方を厚めに')
+    lines.push('・攻撃と特殊攻撃の両方を使う。主力スキルが使う方を厚めに')
     lines.push('・どっち付かずを避け、まず片方に寄せると火力が安定')
     lines.push('・宝石：ローズクォーツ(攻撃＋特攻)が好相性')
   }
 
   const def = eff.def || 0, mdef = eff.mdef || 0
   if (def > 0 && mdef > 0) {
-    if (def < mdef * 0.6) lines.push('⚠ 物理防御(B)が手薄。サファイアや防具で補強を')
-    else if (mdef < def * 0.6) lines.push('⚠ 特殊防御(D)が手薄。エメラルドや防具で補強を')
+    if (def < mdef * 0.6) lines.push('⚠ 物理防御が手薄。サファイアや防具で補強を')
+    else if (mdef < def * 0.6) lines.push('⚠ 特殊防御が手薄。エメラルドや防具で補強を')
   }
   lines.push('—')
   lines.push('🛠 強化の進め方')
@@ -248,7 +248,7 @@ export const buildProgressionAdvice = (ctx) => {
   const cls = profile.class || '冒険者'
   const pending = profile.pending_stat_points || 0
   const style = detectStyle(ctx, '')
-  const focus = style === 'magical' ? '特殊攻撃(C)' : style === 'physical' ? '攻撃(A)' : '攻撃(A)か特殊攻撃(C)（主力スキルが使う方）'
+  const focus = style === 'magical' ? '特殊攻撃' : style === 'physical' ? '攻撃' : '攻撃か特殊攻撃（主力スキルが使う方）'
 
   const steps = []
   // 1) 余っているステは即振り
@@ -271,8 +271,8 @@ export const buildProgressionAdvice = (ctx) => {
   const def = eff.def || 0, mdef = eff.mdef || 0
   let warn = ''
   if (def > 0 && mdef > 0) {
-    if (def < mdef * 0.6) warn = '\n⚠ 物理防御(B)が手薄。物理が痛い敵はサファイアや防具で補強を'
-    else if (mdef < def * 0.6) warn = '\n⚠ 特殊防御(D)が手薄。魔法が痛い敵はエメラルドや防具で補強を'
+    if (def < mdef * 0.6) warn = '\n⚠ 物理防御が手薄。物理が痛い敵はサファイアや防具で補強を'
+    else if (mdef < def * 0.6) warn = '\n⚠ 特殊防御が手薄。魔法が痛い敵はエメラルドや防具で補強を'
   }
 
   const nextGate = lv < 5 ? '\n🔓 LV5で釣り場/博物館/美容院/交換所が開放されます'
@@ -438,14 +438,14 @@ const buildMatchupAdvice = async (ctx, name) => {
   const opp = res.opp
   const t = classType(opp.class) // 相手クラスの「傾向」（職によっては実攻撃属性は断定不可）
   const counter = t === '物理型'
-    ? '相手は主に物理寄り。防御(B)とHPを厚くし、サファイアや防具で物理被ダメを抑えるのが有効です。'
+    ? '相手は主に物理寄り。防御とHPを厚くし、サファイアや防具で物理被ダメを抑えるのが有効です。'
     : t === '魔法型'
-      ? '相手は主に魔法寄り。特殊防御(D)とHPを厚くし、エメラルドや防具で魔法被ダメを抑えるのが有効です。'
-      : '相手は物理・魔法の混合寄り。防御(B)と特殊防御(D)をバランス良く確保しましょう。'
+      ? '相手は主に魔法寄り。特殊防御とHPを厚くし、エメラルドや防具で魔法被ダメを抑えるのが有効です。'
+      : '相手は物理・魔法の混合寄り。防御と特殊防御をバランス良く確保しましょう。'
 
   // 自分の火力軸は「自分の」クラス/ステで決める（相手タイプに引きずられない）
   const myStyle = detectStyle(ctx, '')
-  const myFocus = myStyle === 'magical' ? '特殊攻撃(C)' : myStyle === 'physical' ? '攻撃(A)' : '主力スキルが使う攻撃ステ'
+  const myFocus = myStyle === 'magical' ? '特殊攻撃' : myStyle === 'physical' ? '攻撃' : '主力スキルが使う攻撃ステ'
 
   const meLv = ctx?.profile?.char_lv || ctx?.profile?.lv
   const lvNote = meLv && opp.char_lv
@@ -505,24 +505,25 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
 // 事実回答もジェミータ口調に統一するための共通整形層。
 // ・敬語の語尾を常体/断定へ（安全な置換のみ） ・前後にキャラの口上を添える
 const toPlain = (t) => (t || '')
+  .replace(/あなた/g, '貴様').replace(/お前/g, '貴様')
   .replace(/できます/g, 'できる').replace(/できません/g, 'できん')
   .replace(/しましょう/g, 'しろ').replace(/ましょう/g, 'よう')
   .replace(/ます。/g, 'る。').replace(/ますね。?/g, 'る。')
   .replace(/です。/g, 'だ。').replace(/ですか[。？?]?/g, 'だ？')
   .replace(/してください/g, 'しろ').replace(/おすすめです/g, 'がいい')
 const WRAP_LEAD = ['フン、いいだろう。教えてやる。', 'ほう、それを訊くか。', 'よく訊いた。', '']
-const WRAP_CLOSE = ['…精進しろ。', 'あとはお前次第だ。', '分かったら鍛えに戻れ。', '']
+const WRAP_CLOSE = ['…精進しろ。', 'あとは貴様次第だ。', '分かったら鍛えに戻れ。', '']
 const persona = (t) => `${pick(WRAP_LEAD)}\n${toPlain(t)}\n${pick(WRAP_CLOSE)}`.replace(/\n{2,}/g, '\n').trim()
 const GREETING_TEXTS = [
   `フン、来たか。何が訊きたい。手短に言え。`,
-  `俺はジェミータ。お前の相談、聞いてやる。遠慮はいらん。`,
+  `俺はジェミータ。貴様の相談、聞いてやる。遠慮はいらん。`,
   `ほう、また来たな。強くなりたいのか？ なら訊け。`,
 ]
 const GREETING_TEXT_FN = () => pick(GREETING_TEXTS)
 const THANKS_TEXTS = [
   `礼はいらん。当然のことをしたまでだ。`,
   `フン。次はもっと骨のある問いを持ってこい。`,
-  `気にするな。お前が強くなれば、それでいい。`,
+  `気にするな。貴様が強くなれば、それでいい。`,
 ]
 // 呼びかけ（おーい/ねえ 等、単独の声かけ）。文全体アンカーで判定。
 const CALL_TRIGGER = /^(おー+い|おい|おいおい|おーい|ねえ|ねぇ|ねえねえ|もしもし|ちょっと|ちょい|すみません|すいません|やほ|おーい)[\sー！!。.,~〜?？]*$/i
@@ -531,7 +532,7 @@ const CALL_TEXTS = [
   `フン、呼んだか。さっさと用件を言え。`,
   `ここにいる。何が訊きたい。`,
 ]
-const WHOAMI_TEXT = `俺は「AI戦闘民族ジェミータ」。お前の戦いを導く者だ。\nゲームのことなら何でも答えてやる。手加減はせん。\n「何ができる」と訊けば、教えてやろう。`
+const WHOAMI_TEXT = `俺は「AI戦闘民族ジェミータ」。貴様の戦いを導く者だ。\nゲームのことなら何でも答えてやる。手加減はせん。\n「何ができる」と訊けば、教えてやろう。`
 
 // 相づち・短い雑談（会話を続ける返事。文全体がそれだけのとき限定）
 const SMALLTALK = [
@@ -556,7 +557,7 @@ const CHITCHAT = [
   { re: /眠い|ねむい|疲れ|つかれ|だるい|しんどい/, a: 'たるんでいるな。…休むなら休め。そして次に備えろ。' },
   { re: /お腹|おなか|腹減|はらへ|ごはん|ご飯|腹減った/, a: '腹が減っては戦はできん。食ってこい。話はそれからだ。' },
   { re: /楽しい|たのしい|面白い|おもしろい|最高|たのし/, a: 'ほう、楽しんでいるか。悪くない。だが強さに終わりはない。' },
-  { re: /つまらん|つまんない|飽きた|あきた/, a: '退屈か。なら、より強い敵に挑め。お前次第だ。' },
+  { re: /つまらん|つまんない|飽きた|あきた/, a: '退屈か。なら、より強い敵に挑め。貴様次第だ。' },
 ]
 const chitchat = (raw) => CHITCHAT.find((c) => c.re.test(raw))?.a || null
 
