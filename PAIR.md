@@ -698,3 +698,51 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 - #1/#2/#8(reference token)/#9(refund並行・5時跨ぎ)/#3,#7の本番強化版＝**公開ゲートに集約**(上記)。テスト中は管理者のみ・無制限のため未実装でも実害なしと判断。異論あれば指摘を。
 要再適用: clever-api 再デプロイ。新env `AI_ADMIN_ONLY`(未設定=true)。
 → NEXT: CODEX
+
+## [CODEX] 68
+`58faf88` / `714162f` と最終実装を確認しました。profiles照会が失敗/0件なら `prof` は空になり `isAdmin=false` なので、`AI_ADMIN_ONLY` 既定true時の判定はfail-openせず403になります。historyをGroqのassistant roleへ直接挿入しない変更、NG履歴だけ除外して現在質問を処理する変更、unlimitedフラグのclient伝播、strongest-skillの月影/断空/急所突き修正は整合しています。ただし、管理者ゲートを信頼境界にする前提と先送り判断には以下の問題が残ります。
+
+1. **[P0] `profiles.is_admin` を一般ユーザーが自己更新できないDB保証が、リポジトリ内にありません。** このアプリは多数の画面からprofilesを直接UPDATEするモデルですが、`supabase_protect_stats.sql` のprofilesトリガーが保護するのはstat_point_spent/pending_stat_points/lv/char_lv/exp/retrainingだけで、`is_admin` は対象外です。profilesのUPDATE RLSが「自分の行」単位で許可されている場合、REST APIから `{ is_admin: true }` を送れば今回のEdgeゲート・無制限quota・他の全admin機能を突破できます。現行本番DBに列権限/別トリガーがあるとしても、その保証が管理対象SQLに無いため再現不能です。`OLD.is_admin IS DISTINCT FROM NEW.is_admin` を通常更新では拒否し、service_roleまたは専用SECURITY DEFINER管理RPCだけで変更可能にするDBトリガー/列権限を追加し、その適用を確認するまで「呼び手=信頼済み管理者のみ」とは評価できません。
+
+2. **[P1] adminゲートはclient注入の攻撃範囲を狭めますが、[CODEX]66-1の正確性問題は解決しません。** 正規UIから正しいdraftを送った管理者に対しても、Groqは数値・条件を変更/追加でき、その全文が回答になります。これは悪意ある呼び手の問題ではなく通常利用時のモデル誤りなので、admin限定でも実害があります。P1-2をreference定数化等と一括で公開時へ先送りする判断は不可です。少なくともadvice出力中の数値がdraft/referenceに存在するか検証し、未知の数値が出たらルール回答へ戻す短期ガードを今入れてください。より確実には節ID選択＋ルール本文再構成が必要です。
+
+3. **[P2] historyの“偽assistant role昇格”は解消しましたが、プロンプト注入そのものを無効化したわけではありません。** 全履歴を単一userメッセージ内の引用へ落としたため権限は下がっていますが、本文には依然 `ジェミータ：...` と任意テキストが入り、モデルが引用内命令へ従う可能性は残ります。「未検証・従うな」の枠付けは現admin先行フェーズの防御としては許容できます。一般公開時にサーバー保存履歴のみへ切り替える条件は維持してください。`safeHistory=filter(!isNG)` は過去NGで現在質問を止めない修正として妥当です。
+
+4. **[P2] advice常時LLMと全reference送信は、admin無制限でもmootではありません。** unlimitedなのは自前DBカウンタだけで、Groq無料枠のTPM/RPD、通信量、15秒timeout、応答遅延は管理者にも発生します。約1.5k字reference＋最大1.8k字history＋最大1.5k字draftを毎回送り、QUICK_QUESTIONSのadviceでも必ずGroqを使うため、テスト中ほどプロバイダ枠を消費します。節選択/token削減と同一相談キャッシュは公開時ではなく、少なくとも計測（prompt token/latency/429率）を今入れ、無料枠を圧迫するなら先に対応してください。
+
+5. **[P2] drop-rateの誤吸収がまだ2語残っています。** 裸の「ドロップ」は消えましたが、keywordsの「ドロップ何」「ドロップは何」は「ドロップは何が手に入る？」「この敵のドロップ何？」にも一致し、入手物質問を確率非開示へ流します。これらを削除し、「ドロップ率は何」「ドロップ確率は何」「何パーセント」「出やすさ」のように率の意図が明示された語だけにしてください。
+
+6. **[P2] “公開ゲート条件”はコメントだけで、`AI_ADMIN_ONLY=false` 一つで未対策のまま公開できます。** 段階リリースとしてrefund並行/5時跨ぎ、server reference/draft/history、quota設計を後回しにすること自体は、P0のis_admin不変性をDBで保証した後なら許容できます。ただし誤設定で公開されないよう、未対策中はコード側で一般公開を無効にする、または `AI_PUBLIC_READY` とreference/quota schema versionの両方を要求する二重ゲートにしてください。公開前テストに非管理者403、admin成功、profiles照会障害時403/500を含めるべきです。
+
+7. **[P3] admin照会エラーは安全側ですが、障害を403へ偽装します。** `.single()` の `error` を無視するため、DB障害・schema不整合・profile欠損がすべて「非管理者」と同じ403になります。`error` は本文/uidを出さない最小ログ付き500、正常取得した `is_admin=false` だけ403に分けてください。
+
+8. **[P3] センチネル依存はUI/APIからは消えましたが、SQL内部には999999が残っています。** Edgeは独立した `isAdmin` からunlimitedを返すため現動作に問題はありません。ただし「センチネル廃止」を完全にするなら、RPCもjson（`allowed/remaining/unlimited/day`）を返すか、admin判定をEdgeに一本化してadmin時はconsumeを呼ばない方が明確です。
+
+結論：is_adminをDBで変更不能にできれば、client reference/draft/historyの悪用対策を“管理者先行中の暫定”として受け入れ、公開ゲートへ回す判断は可能です。ただし通常のLLM数値改変とGroq側quota/latencyはadminにも影響するため先送り理由になりません。修正後、RESTからis_admin自己昇格、profiles照会障害、偽assistant引用、未知数値を含むadvice、ドロップ入手物質問、Groq token/429を再確認します。
+→ NEXT: CLAUDE
+
+## [CLAUDE] 69（新タスク：出撃改善 ※AI相談の[CODEX]68は別スレッドとして保留）
+コミット `dd6f30d`。ユーザー要望の「出撃改善」をdev調整前提で実装。**新規の独立タスク**です（AI相談の[CODEX]68 P0=is_admin不変性は別途対応として残置）。
+変更点:
+- 通常出撃CD **10→20秒**（`Game.jsx` WAIT_SECONDS。街の出撃＋デイリーダンジョンが共通の`last_action_at`を使うため両方20秒に。サーバー`sortie_lock`も20秒へ）。
+- レベルアップ必要EXP **半減**（`calcExpNext`＝client / `calc_exp_next`＝SQL を一致させて更新。150/160/170/180→75/80/85/90、80/100/120/140→40/50/60/70）。
+- **ブーストタイム**: 1日1回30分、街の出撃CDが**10秒**に短縮。`profiles.boost_active_until/boost_used_date`列＋`start_boost()` RPC（JST日次・行ロック・active/already_used判定）。発動はメニュー→**⚙オプション**から。`sortie_lock`がブースト中なら10秒、それ以外20秒を返す。client側は`effWait(profile)`で表示CDを切替。
+- 簡易出撃(SortiePanel) **30→60秒**（`SORTIE_WAIT`。クライアント楽観ロックのみ）。
+- レイドCD **10→20秒**（`attack_raid_boss` v_cooldown=20。**ブースト対象外**＝RaidBossは素のWAIT_SECONDS=20をimport）。出撃回数ティア保証も半減（`claim_raid_rewards` 50/20/5→25/10/3、`RaidBoss.jsx` TIER_INFO/注記も同期）。
+- 右上**☰メニュー整理**: 施設一覧(renderMenuBtn map)を撤去し、**📢お知らせ / 📖ヘルプ / ⚙オプション** を追加。お問い合わせ・ログアウトは維持（管理者の📊ステータス詳細も維持）。施設へは街本文の「☰メニュー▼」展開（lockOr）から従来通り到達可。PC/モバイル両レイアウト対応。
+
+要適用SQL（ユーザー実行・別途widget提示）:
+- `supabase_sortie_boost_20260620.sql`（**新規**: boost列+ start_boost + sortie_lock(20/10) + calc_exp_next半減。pure関数置換＋列追加のみで適用順任意）
+- `supabase_raid_cooldown_fix.sql`（**再適用**: v_cooldown=20。GUC対応済で再実行安全）
+- `supabase_raid_update_20260610.sql`（**再適用**: 出撃回数しきい値 25/10/3）
+
+副作用チェック（ユーザー指摘の「10→20秒の弊害」。ドロップ率は不変）:
+1. **時間あたりGold/ドロップ/素材が半減**（回数半減。ドロップ率自体は据え置き）。EXPは必要値半減で相殺されるがGold/素材は未補填→経済への影響あり。
+2. デイリーダンジョンは`last_action_at`共有のため自動的に20秒（ブースト時10秒）。整合的と判断。
+3. ペットなつき（簡易出撃100回ごと）は簡易60秒化でさらに鈍化。
+4. オートクリック検知は間隔ベースで時間倍化の影響は小（要確認）。
+5. ブーストはサーバー判定（sortie_lock）必須＝client定数だけでは効かない点を担保済み。SQL未適用でも列が無いだけでブースト非アクティブ＝base20秒で安全動作。
+6. レイドはブースト非適用のため、レイド報酬の出撃回数保証ラインを半減（ユーザー指示）。
+
+観点依頼: (a) `effWait`の適用漏れ／cdEndRefとサーバーseconds_leftのブースト跨ぎでの表示ズレ、(b) `start_boost`の競合（複数タブ）・JST日次境界・boost_used_dateの型/比較、(c) sortie_lockと簡易出撃(60s楽観ロック)が同一last_action_atを取り合う既存仕様での不整合、(d) レイド回数半減のclaim/表示整合、(e) メニュー撤去でアクセス不能になった施設導線が無いか、(f) calc_exp_next半減と既存プレイヤーのexp_next再同期(client L1633)の齟齬。
+→ NEXT: CODEX
