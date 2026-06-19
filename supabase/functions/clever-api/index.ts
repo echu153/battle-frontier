@@ -1,12 +1,12 @@
 // ============================================================
-// AI相談アシスタント「ジェミータ」会話用LLMプロキシ（Google Gemini 無料枠）
+// AI相談アシスタント「ジェミータ」会話用LLMプロキシ（Groq 無料枠・OpenAI互換）
 //   ・APIキーはサーバー側に秘匿
 //   ・1日N回/ユーザーの上限をDBで原子的に強制（超過はクライアントがルールへフォールバック）
 //   ・ゲームの「事実」はクライアントのルールベースが担当。ここは雑談・自由会話。
 //     クライアント入力は信用せず、事実の根拠としては使わない（捏造防止）。
 //   ・関数名は clever-api（クライアントの functions.invoke('clever-api') と一致）
 //
-// シークレット: GEMINI_API_KEY（必須）/ AI_DAILY_LIMIT（任意・既定10）/ GEMINI_MODEL（任意）
+// シークレット: GROQ_API_KEY（必須）/ AI_DAILY_LIMIT（任意・既定10）/ GROQ_MODEL（任意・既定 llama-3.3-70b-versatile）
 // SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY は自動注入。
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -22,11 +22,12 @@ const json = (body: unknown, status = 200) =>
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') || ''
+// プロバイダ=Groq（無料枠が広い）。互換のためGEMINI_API_KEYもフォールバックで読む。
+const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY') || Deno.env.get('GEMINI_API_KEY') || ''
 // 上限は有限の正整数のみ採用。不正値は既定10。
 const _lim = parseInt(Deno.env.get('AI_DAILY_LIMIT') || '10', 10)
 const DAILY_LIMIT = Number.isFinite(_lim) && _lim > 0 ? _lim : 10
-const MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-2.5-flash-lite'
+const MODEL = Deno.env.get('GROQ_MODEL') || 'llama-3.3-70b-versatile'
 
 // サーバー側の不適切判定（クライアントのフィルタを直叩きで迂回されないよう、ここでも弾く）
 const NG = /(セックス|せっくす|sex|エロ|アダルト|adult|童貞|処女|射精|挿入|オナニー|自慰|まんこ|マンコ|ちんこ|チンコ|ちんぽ|チンポ|ペニス|性器|レイプ|強姦|ヌード|全裸|風俗|ポルノ|porn|18禁|r-?18|性行為|fuck|グロ画像|グロ動画|内臓|死体|惨殺|バラバラ死体|リョナ|死ね|殺すぞ|ぶっ殺|きちがい|キチガイ|気違い|池沼|知障|くたばれ)/i
@@ -47,10 +48,6 @@ const SYSTEM_PROMPT = `あなたはブラウザゲーム「バトルフロンテ
 
 特定の漫画・アニメ・作品名や、実在のキャラクター名には一切触れるな。あくまでこのゲーム独自のキャラクターとして話せ。`
 
-// Geminiの安全設定（明示）
-const SAFETY = ['HARM_CATEGORY_HARASSMENT', 'HARM_CATEGORY_HATE_SPEECH', 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'HARM_CATEGORY_DANGEROUS_CONTENT']
-  .map((category) => ({ category, threshold: 'BLOCK_MEDIUM_AND_ABOVE' }))
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'method' }, 405)
@@ -68,9 +65,9 @@ Deno.serve(async (req) => {
   try { body = await req.json() } catch { return json({ error: 'bad json' }, 400) }
   const question = (body.question || '').toString().trim().slice(0, 500)
   if (!question) return json({ error: 'empty' }, 400)
-  // 消費の前に不適切判定（消費させない・Geminiに送らない）
+  // 消費の前に不適切判定（消費させない・LLMに送らない）
   if (NG.test(question)) return json({ allowed: true, text: 'くだらん。そんな話に付き合う気はない。ゲームのことなら相手をしてやる。', remaining: null })
-  if (!GEMINI_API_KEY) return json({ allowed: false, reason: 'not_configured' }, 503)
+  if (!GROQ_API_KEY) return json({ allowed: false, reason: 'not_configured' }, 503)
 
   // 1日上限の消費（DBで原子的に判定）。残り回数 -1 = 上限到達
   const svc = createClient(SUPABASE_URL, SERVICE_KEY)
@@ -85,30 +82,30 @@ Deno.serve(async (req) => {
   // プロンプト（クライアントの facts は信用しない＝根拠に使わない。質問のみ渡す）
   const userText = `プレイヤーの発言：${question}`
 
-  // Gemini 呼び出し（失敗時は消費を払い戻す）
+  // Groq（OpenAI互換チャット補完）呼び出し（失敗時は消費を払い戻す）
   let answer = ''
   let status = 0
   try {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ role: 'user', parts: [{ text: userText }] }],
-          generationConfig: { maxOutputTokens: 400, temperature: 0.8 },
-          safetySettings: SAFETY,
-        }),
-      },
-    )
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GROQ_API_KEY}` },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userText },
+        ],
+        max_tokens: 400,
+        temperature: 0.8,
+      }),
+    })
     status = r.status
     const data = await r.json()
-    answer = data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text).join('') || ''
+    answer = data?.choices?.[0]?.message?.content || ''
   } catch {
     answer = ''
   }
-  console.log('[clever-api] gemini status:', status) // 本文やuidは記録しない
+  console.log('[clever-api] groq status:', status) // 本文やuidは記録しない
   if (!answer) { await refund(); return json({ allowed: false, reason: 'llm_error' }, 502) }
 
   return json({ allowed: true, text: answer.trim(), remaining, limit: DAILY_LIMIT })
