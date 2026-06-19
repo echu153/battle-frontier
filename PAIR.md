@@ -746,3 +746,16 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 
 観点依頼: (a) `effWait`の適用漏れ／cdEndRefとサーバーseconds_leftのブースト跨ぎでの表示ズレ、(b) `start_boost`の競合（複数タブ）・JST日次境界・boost_used_dateの型/比較、(c) sortie_lockと簡易出撃(60s楽観ロック)が同一last_action_atを取り合う既存仕様での不整合、(d) レイド回数半減のclaim/表示整合、(e) メニュー撤去でアクセス不能になった施設導線が無いか、(f) calc_exp_next半減と既存プレイヤーのexp_next再同期(client L1633)の齟齬。
 → NEXT: CODEX
+
+## [CLAUDE] 70（[CLAUDE]69を is_admin 限定先行へ変更）
+コミット `4cbec35`。ユーザー指示で「出撃改善はdev=is_admin限定で先行」に方針変更。**Supabaseは単一DB・main→Vercel本番**のため、コード/SQLが本番に乗っても一般プレイヤーに影響しないよう、全変更を`is_admin`で分岐させた（[CLAUDE]69の無条件適用を撤回）。
+- 通常出撃CD: `effWait`＝管理者のみ20秒(ブースト中10秒)・非管理者10秒。`sortie_lock`も同分岐。
+- EXP半減: client `calcExpNext(lv, isAdmin)`（全呼出しに is_admin 伝播）。SQL `calc_exp_next(lv)` は **STABLE+SECURITY DEFINER** にして `auth.uid()` の is_admin を内部参照（apply_battle_result/casino_settle_sortie は呼び出しそのまま＝再定義不要）。非管理者・JWT無し(pg_cron等)は従来値。
+- ブースト: `start_boost` は非管理者に `not_admin` 返し。メニューの⚙オプションも管理者のみ表示。
+- 簡易出撃: `sortieWaitFor(profile)`＝管理者60秒/非管理者30秒。
+- レイド: `raidWaitFor(profile)`＝管理者20秒/非管理者10秒。`attack_raid_boss` v_cooldown は v_profile.is_admin で20/10。回数ティア保証は `claim_raid_rewards` 内で is_admin のとき25/10/3、非管理者50/20/5。RaidBoss.jsx の TIER_INFO 表示は**50/20/5に据え置き**（公開＝非管理者向けが正。管理者には表示と実値で軽微な差が出るが先行用途として許容）。
+- メニュー: PC/モバイルとも `profile.is_admin ? 新メニュー(お知らせ/ヘルプ/オプション+ステータス詳細) : 従来の施設一覧(renderMenuBtn)`。
+- 公開時は各 is_admin 分岐を外すだけ（コード/SQLにTODOコメント明記）。要適用SQL: `supabase_sortie_boost_20260620.sql`(新規) / `supabase_raid_cooldown_fix.sql`(再) / `supabase_raid_update_20260610.sql`(再)。
+
+追加観点: (g) calc_exp_next を STABLE+DEFINER+auth.uid()参照にした影響（apply_battle_result内のレベルアップループでの当人is_admin解決の正しさ／JWT非在時フォールバック／STABLE化の副作用）、(h) is_admin分岐の漏れ（client/SQLで非管理者が新仕様に触れる経路が無いか）、(i) 管理者TIER_INFO表示と実値の差を許容するかの判断。
+→ NEXT: CODEX
