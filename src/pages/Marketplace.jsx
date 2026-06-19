@@ -45,6 +45,16 @@ function bonusList(src) {
     .filter(Boolean)
 }
 
+// ボス（出撃ボスのドロップ）装備＝専用「ボス」タブで表示
+const BOSS_EQUIP = new Set([
+  'スライムの指輪','蒼粘剣','略奪者の短剣','影踏みのブーツ',
+  '古代魔導コア','虚無の杖','海竜の鱗','アクアクラウン',
+  '雷鷲の爪牙','嵐の重装甲','絶零の魔導砲','フロストバーンの聖鎧',
+  '深紅の牙輪','深紅の魔眼石','インフェルノバスティオン',
+  'ぷよぷよロッド','怪盗の指輪','結晶グリーブ',
+])
+const isBossWeapon = w => !!w && BOSS_EQUIP.has(w.name)
+
 const RARITY_ORDER = { sss:8, ss:7, s:6, a:5, b:4, c:3, d:2, e:1, f:0 }
 const RANK_FILTERS = ['all', 'a', 'b', 'c', 'd', 'e', 'f']
 const SORT_OPTIONS = [
@@ -145,6 +155,7 @@ export default function Marketplace() {
   const [listResult, setListResult] = useState(null) // 出品完了ポップアップ { name, price, proceeds }
   const [rankFilter, setRankFilter] = useState('all')
   const [sortBy, setSortBy] = useState('obtained')
+  const [category, setCategory] = useState('general') // 'general' | 'boss'
 
   useEffect(() => { init() }, [])
 
@@ -239,8 +250,10 @@ export default function Marketplace() {
   // ランク絞り込み＋ソート（購入一覧・出品候補で共用）。weaponGetter/priceGetterで対象差を吸収。
   const applyFilterSort = (arr, weaponGetter, priceGetter) => {
     let out = arr.filter(x => {
+      const w = weaponGetter(x)
+      if ((category === 'boss') !== isBossWeapon(w)) return false  // 一般/ボスの振り分け
       if (rankFilter === 'all') return true
-      return String(weaponGetter(x)?.rarity || '').toLowerCase() === rankFilter
+      return String(w?.rarity || '').toLowerCase() === rankFilter
     })
     const r = x => RARITY_ORDER[String(weaponGetter(x)?.rarity || '').toLowerCase()] ?? -1
     const p = x => priceGetter(x) ?? 0
@@ -295,6 +308,19 @@ export default function Marketplace() {
       {/* 絞り込み・ソート（購入／出品タブ） */}
       {tab !== 'mine' && (
         <div style={{ maxWidth:'600px', margin:'0 auto 14px', display:'flex', flexWrap:'wrap', gap:'10px', alignItems:'center' }}>
+          <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
+            {[['general','一般'],['boss','ボス']].map(([id, label]) => {
+              const on = category === id
+              const c = id === 'boss' ? '#ffcc44' : '#88ccff'
+              return (
+                <button key={id} onClick={() => setCategory(id)} style={{
+                  padding:'3px 10px', background: on ? '#001840' : 'none',
+                  border:`1px solid ${on ? c : '#223344'}`, color: on ? c : '#556677',
+                  cursor:'pointer', fontFamily:'monospace', fontSize:'11px', borderRadius:'3px',
+                }}>{label}</button>
+              )
+            })}
+          </div>
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
             <span style={{ color:'#446688', fontSize:'10px', marginRight:'2px' }}>ランク</span>
             {RANK_FILTERS.map(rk => {
