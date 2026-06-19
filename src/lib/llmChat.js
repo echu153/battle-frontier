@@ -13,8 +13,8 @@ export const llmChat = async ({ question, facts, player } = {}) => {
       body: { question, facts: facts || '', player: player || {} },
     })
     if (error) return null
-    if (data?.allowed && data?.text) return { text: data.text, remaining: data.remaining }
-    return { allowed: false, reason: data?.reason }
+    if (data?.allowed && data?.text) return { text: data.text, remaining: data.remaining, limit: data.limit }
+    return { allowed: false, reason: data?.reason, limit: data?.limit }
   } catch {
     return null
   }

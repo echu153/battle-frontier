@@ -51,6 +51,23 @@ $func$;
 revoke all on function public.ai_chat_consume(uuid, int) from public, anon, authenticated;
 grant execute on function public.ai_chat_consume(uuid, int) to service_role;
 
+-- 払い戻し：LLM呼び出しが失敗したとき、消費した1回を戻す（利用者負担を避ける）。
+create or replace function public.ai_chat_refund(p_user uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $func$
+declare
+  v_day date := (now() at time zone 'Asia/Tokyo')::date;
+begin
+  update public.ai_chat_usage set count = greatest(count - 1, 0)
+  where user_id = p_user and day = v_day;
+end;
+$func$;
+revoke all on function public.ai_chat_refund(uuid) from public, anon, authenticated;
+grant execute on function public.ai_chat_refund(uuid) to service_role;
+
 -- 任意：管理者が利用状況を見るための参照ポリシー
 drop policy if exists ai_chat_usage_admin_read on public.ai_chat_usage;
 create policy ai_chat_usage_admin_read on public.ai_chat_usage

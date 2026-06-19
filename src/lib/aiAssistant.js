@@ -471,7 +471,7 @@ const buildMatchupAdvice = async (ctx, name) => {
 const ADVICE_TRIGGER = /おすすめ|オススメ|お勧め|強化したい|なにを伸ば|何を伸ば|どこを伸ば|ビルド|振り方|戦闘スタイル|ステ振り|どこに振/
 // 漠然とした「強くなるには/何をすれば/どうすれば」系 → 総合の攻略アドバイス
 const PROGRESSION_TRIGGER = /強くなるに|強くなりたい|強くなれ|強くなるた|どうすれば強|どうしたら強|どう強く|何をすれ|なにをすれ|何すれ|なにすれ|何から|なにから|伸び悩|勝てない|進め方|育て方|育成|効率よく強|次に何|次は何|つよくな/
-const CLASS_INTENT = /なるには|なりたい|なるためには|転職|どんな職|どういう職|どんなクラス|どういうクラス|職業|の条件|になれ|強さ|強み|特徴|性能|長所|得意|役割|どんな感じ|どんな強|どういう強|どんなの|ってどう|の説明/
+const CLASS_INTENT = /なるには|なりたい|なるためには|転職|どんな職|どういう職|どんなクラス|どういうクラス|職業|の条件|になれ|強さ|強み|特徴|性能|長所|役割|どんな感じ|どんな強|どういう強|どんなの|ってどう|の説明/
 
 // メタ/雑談系（「答えられない」を避け、できることを前向きに案内するため）
 // 挨拶/お礼は文全体がそれだけのとき限定（ゲームエンティティの誤食いを防ぐためアンカー）
@@ -483,15 +483,17 @@ const HELP_TRIGGER = /何ができ|なにができ|できること|できる事|
 // 「あなた/AIの苦手・限界・答えられない」など、対象がメタだと分かる表現に限定（裸の苦手/限界は除外）
 const LIMIT_TRIGGER = /答えられない|こたえられない|答えれない|こたえれない|答えら?んない|(あなた|きみ|君|ai|ボット|案内役|お前|おまえ)(の|が|は|って)?(苦手|限界|できないこと|わからない|不得意)|苦手な質問|答えられる(の|か|こと)|何は答え/i
 // 直前の話題を深掘りするフォロー発話（会話の継続性。ctx.lastQuery を踏まえて返す）
-const FOLLOWUP_TRIGGER = /^(もっと|もうちょい|もうすこし|もう少し)?(くわし|詳し)|他には|ほかには|もっと教え|もっと知り|続き|つづき|^もっと[\s!！。]*$/
+const FOLLOWUP_TRIGGER = /^(もっと|もうちょい|もうすこし|もう少し)?(くわしく|詳しく)[\sー!！。.?？]*$|^(他には|ほかには|もっと教え|もっと知り|続き|つづき)|^もっと[\sー!！。]*$/
 
 // 不適切な内容（R18・グロ・差別/嫌がらせ等）は最優先できっぱり断る。
 // ゲームは戦闘テーマのため「殺す/血/倒す」等は対象にせず、明確に不適切な語に絞る。
 const NG_SEXUAL = /(セックス|せっくす|sex|エロ|ｴﾛ|アダルト|adult|童貞|処女|射精|挿入|オナニー|おなにー|自慰|まんこ|マンコ|ちんこ|チンコ|ちんぽ|チンポ|ペニス|性器|陰部|レイプ|強姦|ヌード|全裸|裸の|風俗|ソープ|ポルノ|porn|18禁|r-?18|えっちな|エッチな|性行為|性的な|抜きたい|fuck)/i
 const NG_GORE = /(グロ画像|グロ動画|内臓|死体|惨殺|バラバラ死体|首切り|スプラッタ|残虐画像|リョナ)/
-// 侮蔑・嫌がらせ。誤爆しやすい語(ばか→「ばかり」/ぶす→「ぶすっと」/あほ等)は避け、明確なものに絞る
-const NG_HARASS = /(死ね|しねよ|殺すぞ|ぶっ殺|きちがい|キチガイ|気違い|池沼|知障|障害者だ|くたばれ|消え失せろ|消えろ|ごみ|ゴミ|ｺﾞﾐ|カス|クズ|屑|うざい|うざっ|きもい|キモい|きしょい|キショい|ブス|デブ|でぶ|無能|役立たず|まぬけ|間抜け|ボケ|くそ|クソ)/i
-const isInappropriate = (raw) => NG_SEXUAL.test(raw) || NG_GORE.test(raw) || NG_HARASS.test(raw)
+// 明確な罵倒・脅迫は文中どこでも弾く
+const NG_SLUR = /(死ね|しねよ|殺すぞ|ぶっ殺|きちがい|キチガイ|気違い|池沼|知障|障害者だ|くたばれ|消え失せろ)/i
+// 短い侮蔑語（カス/くそ/ボケ等）は単独発話のときだけ。ゲーム用語(カスタム等)の語中誤爆を避ける
+const NG_INSULT_STANDALONE = /^(ごみ|ゴミ|ｺﾞﾐ|カス|クズ|屑|うざい|うざっ|きもい|キモい|きしょい|キショい|ブス|デブ|でぶ|無能|役立たず|まぬけ|間抜け|ボケ|くそ|クソ|消えろ)[だなよぞねえ、。！!？?ー〜\s]*$/i
+const isInappropriate = (raw) => NG_SEXUAL.test(raw) || NG_GORE.test(raw) || NG_SLUR.test(raw) || NG_INSULT_STANDALONE.test((raw || '').trim())
 const REFUSAL_TEXT = `くだらん。そんな話に付き合う気はない。\nゲームのことなら相手をしてやる。出直してこい。`
 
 // メタ応答（ジェミータ口調。ゲームのことなら何でも答える、を威厳をもって伝える）
@@ -499,6 +501,18 @@ const HELP_TEXT = `フン、俺に訊けることを教えてやる。\n・転�
 const LIMIT_TEXT = `フン、ゲームのことで俺が答えられんことは、ほぼ無い。\nスキルも装備も施設も強化も、訊けば答えてやる。\n万一詰まる問いがあっても、次に活かすだけだ。\nまずは「おすすめの強化」でも訊いてみろ。`
 // 同じ表現の繰り返しを避けるため、いくつかの言い回しからランダムに選ぶ
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
+
+// 事実回答もジェミータ口調に統一するための共通整形層。
+// ・敬語の語尾を常体/断定へ（安全な置換のみ） ・前後にキャラの口上を添える
+const toPlain = (t) => (t || '')
+  .replace(/できます/g, 'できる').replace(/できません/g, 'できん')
+  .replace(/しましょう/g, 'しろ').replace(/ましょう/g, 'よう')
+  .replace(/ます。/g, 'る。').replace(/ますね。?/g, 'る。')
+  .replace(/です。/g, 'だ。').replace(/ですか[。？?]?/g, 'だ？')
+  .replace(/してください/g, 'しろ').replace(/おすすめです/g, 'がいい')
+const WRAP_LEAD = ['フン、いいだろう。教えてやる。', 'ほう、それを訊くか。', 'よく訊いた。', '']
+const WRAP_CLOSE = ['…精進しろ。', 'あとはお前次第だ。', '分かったら鍛えに戻れ。', '']
+const persona = (t) => `${pick(WRAP_LEAD)}\n${toPlain(t)}\n${pick(WRAP_CLOSE)}`.replace(/\n{2,}/g, '\n').trim()
 const GREETING_TEXTS = [
   `フン、来たか。何が訊きたい。手短に言え。`,
   `俺はジェミータ。お前の相談、聞いてやる。遠慮はいらん。`,
@@ -537,8 +551,8 @@ const smalltalk = (raw) => SMALLTALK.find((s) => s.re.test(raw))?.a || null
 const CHITCHAT = [
   { re: /暑|あつ(い|すぎ|か)|猛暑/, a: '暑さ如きで音を上げるな。…水分くらいは取っておけ。' },
   { re: /寒|さむ|冷え/, a: '寒さで震えるな。鍛え方が足りん証拠だ。' },
-  { re: /いい天気|晴れ|快晴/, a: 'フン、天気がどうした。修行に言い訳は要らん。' },
-  { re: /雨|あめ|台風|くもり|曇り/, a: '雨か。ならば腰を据えて強くなる好機だ。' },
+  { re: /いい天気|晴れてる|快晴|今日は晴/, a: 'フン、天気がどうした。修行に言い訳は要らん。' },
+  { re: /(雨|あめ)(だ|です|ね|降|の日|模様)|台風|曇って|くもり(だ|ね)/, a: '雨か。ならば腰を据えて強くなる好機だ。' },
   { re: /眠い|ねむい|疲れ|つかれ|だるい|しんどい/, a: 'たるんでいるな。…休むなら休め。そして次に備えろ。' },
   { re: /お腹|おなか|腹減|はらへ|ごはん|ご飯|腹減った/, a: '腹が減っては戦はできん。食ってこい。話はそれからだ。' },
   { re: /楽しい|たのしい|面白い|おもしろい|最高|たのし/, a: 'ほう、楽しんでいるか。悪くない。だが強さに終わりはない。' },
@@ -615,7 +629,7 @@ export const askAssistant = async (query, ctx = {}, _depth = 0) => {
     if (FOLLOWUP_TRIGGER.test(raw) && ctx?.lastQuery) {
       const lc = findClassInQuery(ctx.lastQuery)
       if (lc) {
-        try { const sk = await lookupClassSkills(lc); if (sk) return { text: `${lc}のスキルはこちらです：\n\n${sk}`, kind: 'db' } } catch { /* 下へ */ }
+        try { const sk = await lookupClassSkills(lc); if (sk) return { text: persona(`${lc}のスキルだ。\n${sk}`), kind: 'db' } } catch { /* 下へ */ }
       }
       return { text: `さっきの「${ctx.lastQuery}」の話か。どこが訊きたい。効果か、入手か、解放条件か。はっきり言え。`, kind: 'meta' }
     }
@@ -628,7 +642,7 @@ export const askAssistant = async (query, ctx = {}, _depth = 0) => {
     if (opp && !findClassInQuery(opp)) {
       try {
         const m = await buildMatchupAdvice(ctx, opp)
-        if (m) return { text: m, kind: 'matchup' }
+        if (m) return { text: persona(m), kind: 'matchup' }
       } catch { /* DB失敗時は下の通常処理へ */ }
     }
   }
@@ -639,23 +653,23 @@ export const askAssistant = async (query, ctx = {}, _depth = 0) => {
     try {
       if (/スキル|わざ|アビリティ|何ができ|なにができ|できること|技(?!術)/.test(raw)) {
         const sk = await lookupClassSkills(cls)
-        if (sk) return { text: sk, kind: 'db' }
+        if (sk) return { text: persona(sk), kind: 'db' }
       }
       if (/武器|ぶき/.test(raw)) {
-        return { text: classWeaponText(cls), kind: 'class' }
+        return { text: persona(classWeaponText(cls)), kind: 'class' }
       }
     } catch { /* DB失敗時は下へ */ }
   }
 
   // 3) 強化アドバイス（具体）／総合攻略アドバイス（漠然とした相談）
-  if (ADVICE_TRIGGER.test(raw)) return { text: buildAdvice(ctx, raw), kind: 'advice' }
-  if (PROGRESSION_TRIGGER.test(raw)) return { text: buildProgressionAdvice(ctx), kind: 'advice' }
+  if (ADVICE_TRIGGER.test(raw)) return { text: persona(buildAdvice(ctx, raw)), kind: 'advice' }
+  if (PROGRESSION_TRIGGER.test(raw)) return { text: persona(buildProgressionAdvice(ctx)), kind: 'advice' }
 
   // 4) クラス説明（転職意図あり、または職名以外がノイズだけのとき）
   if (cls) {
     const remainder = normalize(raw.replace(cls, '')).replace(/って|なに|なん|です|とは|どんな|どういう|について|の|は|を|が/g, '')
     if (CLASS_INTENT.test(raw) || remainder === '') {
-      return { text: classInfoText(cls), kind: 'class' }
+      return { text: persona(classInfoText(cls)), kind: 'class' }
     }
     // それ以外（「狂戦士が使える○○」等）は後続の汎用検索に流す
   }
@@ -664,17 +678,17 @@ export const askAssistant = async (query, ctx = {}, _depth = 0) => {
   const term = extractEntity(raw)
   try {
     const exact = await lookupExact(term)
-    if (exact) return { text: exact, kind: 'db' }
+    if (exact) return { text: persona(exact), kind: 'db' }
   } catch { /* ネット失敗時は静的KBへ */ }
 
   // 4) 静的KB（施設・仕組み）
   const kb = searchKB(raw)
-  if (kb) return { text: kb.a, kind: 'kb' }
+  if (kb) return { text: persona(kb.a), kind: 'kb' }
 
   // 5) DB部分一致（曖昧名・候補聞き返し）
   try {
     const hit = await lookupPartial(term)
-    if (hit) return { text: hit, kind: 'db' }
+    if (hit) return { text: persona(hit), kind: 'db' }
   } catch { /* フォールバックへ */ }
 
   // 6) メタ案内（「何ができる？」「答えられない質問は？」等は前向きに案内）

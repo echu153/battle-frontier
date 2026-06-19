@@ -23,8 +23,9 @@ export default function AIAssistant({ ctx }) {
   const busyRef = useRef(false)
   // 直前に実のある回答ができた質問を覚えておき、「もっと詳しく」等のフォロー発話に文脈で応える
   const lastQueryRef = useRef('')
-  // 本日のAI回答の残り回数（null=まだ不明 / 0=上限到達でテンプレのみ）
+  // 本日のAI回答の残り回数（null=まだ不明 / 0=上限到達でテンプレのみ）と1日上限（サーバー値）
   const [aiRemaining, setAiRemaining] = useState(null)
+  const [aiLimit, setAiLimit] = useState(null)
 
   const send = async (textArg) => {
     const text = (textArg ?? input).trim()
@@ -33,27 +34,32 @@ export default function AIAssistant({ ctx }) {
     busyRef.current = true
     setInput('')
     setBusy(true)
-    setMessages((m) => [...m, { role: 'user', text }, { role: 'ai', text: '🔎 調べています…' }])
+    setMessages((m) => [...m, { role: 'user', text }, { role: 'ai', text: '…見極めている。少し待て。' }])
     let answer
     try {
       const res = await askAssistant(text, { ...ctx, lastQuery: lastQueryRef.current })
       answer = res.text
       // 事実質問はルールベース（正確）で確定。答えに詰まった質問だけ会話用LLM（1日上限つき）へ。
       // LLM未デプロイ/上限到達/エラー時は llmChat が null/allowed:false を返すのでルールの回答を表示。
+      let gotLLM = false
       if (res.kind === 'fallback' || res.kind === 'chat') {
         const p = ctx?.profile
         const llm = await llmChat({ question: text, player: { name: p?.name, cls: p?.class, lv: p?.char_lv } })
         if (llm && llm.text) {
           answer = llm.text
+          gotLLM = true
           if (typeof llm.remaining === 'number') setAiRemaining(llm.remaining) // AI回答成功＝残り回数を更新
+          if (typeof llm.limit === 'number') setAiLimit(llm.limit)
         } else if (llm && llm.allowed === false && llm.reason === 'daily_limit') {
           setAiRemaining(0) // 上限到達＝以降テンプレのみ
+          if (typeof llm.limit === 'number') setAiLimit(llm.limit)
         }
       }
-      // 実のある回答（雑談/聞き取れず/拒否 以外）のときだけ直前話題として記憶
-      if (res.kind && res.kind !== 'meta' && res.kind !== 'chat' && res.kind !== 'fallback' && res.kind !== 'refused') lastQueryRef.current = text
+      // 直前話題として記憶：事実回答 or LLMが答えた自由質問（聞き返し「もっと詳しく」が続くように）
+      const substantive = ['kb', 'db', 'class', 'advice', 'matchup'].includes(res.kind)
+      if (substantive || (gotLLM && res.kind === 'fallback')) lastQueryRef.current = text
     } catch {
-      answer = '通信エラーが発生しました。もう一度お試しください。'
+      answer = '通信が乱れたか。もう一度言ってみろ。'
     }
     // 直前の「調べています…」プレースホルダを回答で置き換える
     setMessages((m) => {
@@ -113,9 +119,9 @@ export default function AIAssistant({ ctx }) {
             color: aiRemaining === 0 ? '#cc9944' : '#55bb99',
           }}>
             {aiRemaining === 0
-              ? <span>📋 現在テンプレ回答のみ（ジェミータの本気は本日分を使い切った・明朝リセット）</span>
+              ? <span>📋 現在テンプレ回答のみ（ジェミータの本気は本日分を使い切った・日付が変わればリセット）</span>
               : aiRemaining === null
-                ? <span>⚔ ジェミータの本気：1日10回まで（超過後はテンプレ回答）</span>
+                ? <span>⚔ ジェミータの本気：1日{aiLimit ?? 10}回まで（超過後はテンプレ回答）</span>
                 : <span>⚔ ジェミータの本気：あと{aiRemaining}回（超過後はテンプレ回答）</span>}
           </div>
 

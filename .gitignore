@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code 個人設定（秘密情報を含み得るためコミットしない）
+.claude/settings.local.json
