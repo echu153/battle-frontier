@@ -487,11 +487,25 @@ export const askAssistant = async (query, ctx = {}) => {
     if (hit) return { text: hit, kind: 'db' }
   } catch { /* フォールバックへ */ }
 
-  // 6) フォールバック
+  // 6) フォールバック（答えられなかった質問はDBに自動記録＝後でKBに反映するため）
+  logUnanswered(raw, ctx)
   return {
     text: 'うまく聞き取れませんでした。こんな質問ができます：\n・「狂戦士になるには？」（職名で転職条件）\n・「元素使いのスキル」「狂戦士が使える武器」\n・「メテオストライクの効果は？」（スキル/アイテム/武器/称号/交換品の名前）\n・「宝石ってなに？」「レベル上げの効率は？」\n・「おすすめ強化」（あなた専用アドバイス）',
     kind: 'fallback',
   }
+}
+
+// 答えられなかった質問を ai_unanswered テーブルへ記録（fire-and-forget）。
+// 同じ質問は normalize したキーで集約し hits を加算（RPC側で upsert）。
+// 記録失敗してもユーザー体験は止めない。
+const logUnanswered = (raw, ctx) => {
+  const q = (raw || '').trim()
+  const n = normalize(q)
+  if (!q || n.length < 2) return
+  try {
+    supabase.rpc('log_unanswered', { q, n, asker: ctx?.profile?.id || null })
+      .then(() => {}, () => {}) // エラーは握りつぶす（記録は補助機能）
+  } catch { /* noop */ }
 }
 
 export const QUICK_QUESTIONS = [
