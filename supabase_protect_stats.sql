@@ -519,7 +519,8 @@ BEGIN
 
   ELSIF p_type = 'exp' THEN
     IF NOT v_exp_frozen AND NOT v_is_at_cap THEN
-      IF p_claimed_exp < 0 OR p_claimed_exp > 100 THEN
+      -- キャラLV100未満は経験値1.5倍（クライアントと一致）。上限も1.5倍(150)にして誤検知を防ぐ
+      IF p_claimed_exp < 0 OR p_claimed_exp > (CASE WHEN COALESCE(v_profile.char_lv, v_profile.lv) < 100 THEN 150 ELSE 100 END) THEN
         UPDATE profiles SET suspicious_flag=true WHERE id=v_uid;
         RETURN json_build_object('ok',false,'reason','invalid_exp');
       END IF;

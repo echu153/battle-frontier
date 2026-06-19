@@ -1902,7 +1902,9 @@ export default function Game() {
     // （強化石/熟練度/宝石ダンジョンが「戦闘中...」のまま固まる不具合への対策）
     try {
     if (type === 'exp') {
-      const expGained = Math.floor(50 + Math.random() * 51)
+      let expGained = Math.floor(50 + Math.random() * 51)
+      // キャラクターLV100未満は経験値1.5倍（出撃と同じ。サーバー apply_dungeon_reward の上限も1.5倍にしてある）
+      if ((profile.char_lv||1) < 100) expGained = Math.floor(expGained * 1.5)
       const currentClassLvD = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
       const capD = getEffectiveCap(profile.class, profile.retraining)
       if (expIsFrozen(profile)) {
