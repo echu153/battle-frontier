@@ -23,6 +23,8 @@ export default function AIAssistant({ ctx }) {
   const busyRef = useRef(false)
   // 直前に実のある回答ができた質問を覚えておき、「もっと詳しく」等のフォロー発話に文脈で応える
   const lastQueryRef = useRef('')
+  // 本日のAI回答の残り回数（null=まだ不明 / 0=上限到達でテンプレのみ）
+  const [aiRemaining, setAiRemaining] = useState(null)
 
   const send = async (textArg) => {
     const text = (textArg ?? input).trim()
@@ -41,7 +43,12 @@ export default function AIAssistant({ ctx }) {
       if (res.kind === 'fallback' || res.kind === 'chat') {
         const p = ctx?.profile
         const llm = await llmChat({ question: text, player: { name: p?.name, cls: p?.class, lv: p?.char_lv } })
-        if (llm && llm.text) answer = llm.text
+        if (llm && llm.text) {
+          answer = llm.text
+          if (typeof llm.remaining === 'number') setAiRemaining(llm.remaining) // AI回答成功＝残り回数を更新
+        } else if (llm && llm.allowed === false && llm.reason === 'daily_limit') {
+          setAiRemaining(0) // 上限到達＝以降テンプレのみ
+        }
       }
       // 実のある回答（雑談/聞き取れず/拒否 以外）のときだけ直前話題として記憶
       if (res.kind && res.kind !== 'meta' && res.kind !== 'chat' && res.kind !== 'fallback' && res.kind !== 'refused') lastQueryRef.current = text
@@ -97,6 +104,19 @@ export default function AIAssistant({ ctx }) {
             <button onClick={() => setOpen(false)} style={{
               background: 'none', border: 'none', color: '#668899', fontSize: '16px', cursor: 'pointer',
             }}>✕</button>
+          </div>
+
+          {/* AI回答の残り回数ステータス（10回まではAIが考えて回答／以降はテンプレのみ） */}
+          <div style={{
+            padding: '5px 12px', borderBottom: '1px solid #06251d', background: '#00140f',
+            fontSize: '10px', display: 'flex', alignItems: 'center', gap: '6px',
+            color: aiRemaining === 0 ? '#cc9944' : '#55bb99',
+          }}>
+            {aiRemaining === 0
+              ? <span>📋 現在テンプレ回答のみ（AI回答は本日分を使い切りました・明朝リセット）</span>
+              : aiRemaining === null
+                ? <span>🤖 AI回答：1日10回まで（超過後はテンプレ回答）</span>
+                : <span>🤖 AI回答：あと{aiRemaining}回（超過後はテンプレ回答）</span>}
           </div>
 
           {/* メッセージ一覧 */}
