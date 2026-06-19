@@ -26,7 +26,7 @@ const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') || ''
 const DAILY_LIMIT = parseInt(Deno.env.get('AI_DAILY_LIMIT') || '10', 10)
-const MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-2.0-flash'
+const MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-2.5-flash-lite'
 
 const SYSTEM_PROMPT = `あなたはブラウザゲーム「バトルフロンティア」のAI案内役です。プレイヤーと親しみやすく自然な日本語で会話します。
 守ること：
