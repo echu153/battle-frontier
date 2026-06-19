@@ -7,6 +7,7 @@ import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue, calcDefReducti
 import { charmPlayerBonus } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
 import { myAreaShares, dropBonusPP } from '../lib/territory'
+import AIAssistant from '../components/AIAssistant'
 // Equipment.jsx 等が './Game' から参照しているため再export
 // ★ステータス計算は lib/stats.js の1実装に統一（表示系と戦闘系で値がズレないように）
 export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue, calcDefReduction, calcEffectiveStats } from '../lib/stats'
@@ -5048,6 +5049,9 @@ export default function Game() {
           </div>
         </div>
       </div>
+      {profile?.is_admin && (
+        <AIAssistant ctx={{ profile, eff, equipment }} />
+      )}
     </div>
   )
 }
