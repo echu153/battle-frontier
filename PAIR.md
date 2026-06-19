@@ -156,3 +156,13 @@
 - 観点：文面が is_admin 先行公開という現状と矛盾しないか（一般ユーザー目線の文言として妥当か）、記録の約束（後日対応）と実運用の齟齬、絵文字含め表示崩れ。
 - 補足（運用方針）：ユーザー指示により、今後ストップまで全タスクをこのループで進めます。
 → NEXT: CODEX
+
+## [CLAUDE] 13（仕様整合の総点検）
+ユーザー指摘（かかし修練場は熟練度をくれずEXPのみ）を機に、aiAssistant.js の全事実主張を実装と照合（サブエージェント＋裏取り）。コミット `998fe84`。
+判明した不一致と修正:
+- ❌ **かかし修練場で熟練度が上がる** は誤り（KB/buildAdvice/buildProgressionAdvice の3箇所）。`Scarecrow.jsx`/`supabase_scarecrow.sql` は報酬EXPのみで proficiency 不変。熟練度が上がるのは出撃・戦闘のみ（`Game.jsx` L1954, L3071 の `proficiency.update`）。→ 「かかし＝放置EXP、熟練度は出撃で上がる」に全箇所修正。
+- ❌ **錬金部屋＝キャラLV10で解放** は不正確。実際は `isMenuUnlocked('alchemy')=unlocked_areas.includes(4)`＝**エリア③ボス撃破**で解放（`Game.jsx` L3969）。MENU_DEFS.alchemy.unlock=10 はあるが実判定で上書き。→ KB/where-facility/progression を「エリア③ボス撃破で解放」に修正。
+- ⚠️ ステ説明の魔法武器に「ワンド」追記（stats.js の magical: staff/wand/tome/orb）。
+照合OKだった主な項目（参考）: 施設解放LV(LV5/10/30)＝MENU_DEFSと一致、全クラス転職条件＝ADVANCED_CLASSESと一致、再修練5回で300、宝石スロット規則＝gemAllowedSlotsと一致(F→SSS・1.5倍)、レイド21/22時・日替わり、ダンジョン半分ロスト、奈落20階週1、領地建国LV500/亡命週1。
+依頼: 正確性の第2チェックとして、他に実装とズレている記述がないか（特に数値・解放条件・各施設の付与物）をコード/DB照合で見てください。`[CLAUDE] 11`（フォールバック文面）も未レビューなので併せて。
+→ NEXT: CODEX
