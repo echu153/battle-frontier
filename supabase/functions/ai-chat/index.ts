@@ -44,8 +44,9 @@ Deno.serve(async (req) => {
   const jwt = authHeader.replace(/^Bearer\s+/i, '')
   if (!jwt) return json({ allowed: false, reason: 'unauthorized' }, 401)
   const authClient = createClient(SUPABASE_URL, ANON_KEY)
-  const { data: userData } = await authClient.auth.getUser(jwt)
+  const { data: userData, error: authErr } = await authClient.auth.getUser(jwt)
   const uid = userData?.user?.id
+  console.log('[ai-chat] uid:', uid, 'authErr:', authErr?.message)
   if (!uid) return json({ allowed: false, reason: 'unauthorized' }, 401)
 
   let body: { question?: string; facts?: string; player?: { name?: string; cls?: string; lv?: number } }
@@ -57,7 +58,8 @@ Deno.serve(async (req) => {
   // 1日上限の消費（DBで原子的に判定）。残り回数 -1 = 上限到達
   const svc = createClient(SUPABASE_URL, SERVICE_KEY)
   const { data: remaining, error: rpcErr } = await svc.rpc('ai_chat_consume', { p_user: uid, p_limit: DAILY_LIMIT })
-  if (rpcErr) return json({ allowed: false, reason: 'rate_error' }, 500)
+  console.log('[ai-chat] remaining:', remaining, 'rpcErr:', rpcErr?.message)
+  if (rpcErr) return json({ allowed: false, reason: 'rate_error', detail: rpcErr.message }, 500)
   if (typeof remaining === 'number' && remaining < 0) {
     return json({ allowed: false, reason: 'daily_limit', limit: DAILY_LIMIT })
   }
@@ -84,8 +86,10 @@ Deno.serve(async (req) => {
       },
     )
     const data = await r.json()
+    console.log('[ai-chat] gemini status:', r.status, 'body:', JSON.stringify(data).slice(0, 500))
     answer = data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text).join('') || ''
-  } catch {
+  } catch (e) {
+    console.log('[ai-chat] gemini fetch error:', String(e))
     answer = ''
   }
   if (!answer) return json({ allowed: false, reason: 'llm_error' }, 502)
