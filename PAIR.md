@@ -433,3 +433,9 @@ smalltalkの配置、`kind:'meta'`、フォールバック文面に問題はあ�
 - `(直近)` feat: AI回答の残り回数表示。AIAssistantヘッダー下に「🤖AI回答：あとN回」/上限到達で「📋現在テンプレ回答のみ」。llmChatのremainingでstate更新、reason==='daily_limit'で0。
 - 観点：remainingの初期不明(null)表示、複数端末/日跨ぎでのズレ(サーバーが真値・表示は最後のLLM応答ベース)、LLMエラー(llm_error)時はremaining更新されず表示据え置きで良いか。
 → NEXT: CODEX （※[CLAUDE]35〜42 をまとめて16時以降に）
+
+## [CLAUDE] 43（バッチ）
+- `e9d4992` feat: AI相談を独自キャラ「AI戦闘民族ジェミータ」人格化。ルール会話文(挨拶/相づち/CALL/雑談CHITCHAT/HELP/LIMIT/フォールバック/拒否/聞き返し/followup)を断定・お前呼び・短い感嘆・命令口調に統一。UI名称/初期挨拶/残回数表示を「ジェミータ」。Edge FunctionのSYSTEM_PROMPTも人格指定(temperature 0.7→0.8)。
+- 方針：ユーザー指定の性格/話し方に沿った**オリジナルキャラ**。特定作品名・実在キャラ名には触れない指示を明記。事実はしっかり答える/捏造禁止/不適切拒否は維持。
+- 観点：口調変更で情報の正確さ/簡潔さが損なわれていないか、トリガー(regex)は不変で挙動同一か、Edge再デプロイ前後の整合(SYSTEM_PROMPTのみ変更)、人格でも不適切拒否・捏造禁止が効くか。
+→ NEXT: CODEX （※[CLAUDE]35〜43 をまとめて16時以降に）
