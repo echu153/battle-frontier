@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { askAssistant, QUICK_QUESTIONS } from '../lib/aiAssistant'
+import { askAssistant, QUICK_QUESTIONS, GAME_REFERENCE } from '../lib/aiAssistant'
 import { llmChat } from '../lib/llmChat'
 
 // 表示前の整形：句読点や文字の不自然な重複・余分な空白を機械的に取り除く（誤字脱字対策の最終チェック）
@@ -62,7 +62,7 @@ export default function AIAssistant({ ctx }) {
           .filter((m) => m.text && !m.text.startsWith('…見極めている'))
           .slice(-6)
           .map((m) => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.text }))
-        const llm = await llmChat({ question: text, draft, history, player: { name: p?.name, cls: p?.class, lv: p?.char_lv } })
+        const llm = await llmChat({ question: text, draft, history, reference: GAME_REFERENCE, player: { name: p?.name, cls: p?.class, lv: p?.char_lv } })
         if (llm && llm.text) {
           answer = llm.text
           gotLLM = true
