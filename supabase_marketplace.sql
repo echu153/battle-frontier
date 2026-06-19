@@ -74,7 +74,7 @@ END; $$;
 CREATE TABLE IF NOT EXISTS public.marketplace_listings (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   seller_id    uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  equipment_id uuid NOT NULL REFERENCES player_equipment(id) ON DELETE CASCADE,
+  equipment_id integer NOT NULL REFERENCES player_equipment(id) ON DELETE CASCADE,
   weapon_id    integer NOT NULL REFERENCES weapons(id),
   price        integer NOT NULL,
   base_price   integer NOT NULL,
@@ -115,7 +115,7 @@ BEGIN
 END; $$;
 
 -- 5) 出品 ----------------------------------------------------
-CREATE OR REPLACE FUNCTION public.create_marketplace_listing(p_equipment_id uuid, p_price integer)
+CREATE OR REPLACE FUNCTION public.create_marketplace_listing(p_equipment_id integer, p_price integer)
 RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
@@ -254,7 +254,7 @@ END; $$;
 
 GRANT EXECUTE ON FUNCTION public.marketplace_base_price(integer)      TO authenticated;
 GRANT EXECUTE ON FUNCTION public.marketplace_expire()                 TO authenticated;
-GRANT EXECUTE ON FUNCTION public.create_marketplace_listing(uuid,int) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.create_marketplace_listing(integer,integer) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.cancel_marketplace_listing(uuid)     TO authenticated;
 GRANT EXECUTE ON FUNCTION public.buy_marketplace_listing(uuid)        TO authenticated;
 
