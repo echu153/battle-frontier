@@ -381,6 +381,47 @@ const classWeaponText = (cls) => {
   return `🗡 ${cls}（${t}）の武器相性\n${body}\n※このゲームは装備にクラス縛りはありません（どの武器種も装備可能）。上記は火力が伸びやすい組み合わせです。`
 }
 
+// 「○○に勝ちたい」：相手プレイヤーを profiles から照会し、対策アドバイスを返す。
+// 相手名は「(名前) に勝ち/勝て/勝つ/倒し/より強く」の前半から抽出する。
+const extractOpponent = (raw) => {
+  const m = raw.match(/^(.+?)\s*(?:さん|くん|ちゃん)?\s*(?:に|を|より)\s*(?:勝ち|勝て|勝つ|勝てる|倒し|倒す|強く|超え)/)
+  return m ? m[1].trim() : null
+}
+const buildMatchupAdvice = async (ctx, name) => {
+  // 完全一致(大小無視)→部分一致の順で照会
+  let { data } = await supabase.from('profiles')
+    .select('username, class, char_lv, atk, def, matk, mdef, spd, hp_max')
+    .ilike('username', name).limit(1)
+  if (!data || !data.length) {
+    ;({ data } = await supabase.from('profiles')
+      .select('username, class, char_lv, atk, def, matk, mdef, spd, hp_max')
+      .ilike('username', `%${name}%`).limit(1))
+  }
+  const opp = data?.[0]
+  if (!opp) return `「${name}」というプレイヤーが見つかりませんでした。ユーザー名が正確か確認してください（大文字小文字は区別しません）。`
+
+  const t = classType(opp.class)
+  const counter = t === '物理型'
+    ? '相手は物理アタッカー。防御(B)とHPを厚くし、サファイアや防具で物理被ダメを抑えるのが有効です。'
+    : t === '魔法型'
+      ? '相手は魔法アタッカー。特殊防御(D)とHPを厚くし、エメラルドや防具で魔法被ダメを抑えるのが有効です。'
+      : '相手は物理・魔法の混合型。防御(B)と特殊防御(D)をバランス良く確保しましょう。'
+
+  const meLv = ctx?.profile?.char_lv || ctx?.profile?.lv
+  const lvNote = meLv && opp.char_lv
+    ? (meLv >= opp.char_lv ? `あなた(LV${meLv})は相手以上のレベルです。あとは装備・宝石・熟練度の詰めで上回れます。`
+      : `あなた(LV${meLv})は相手(LV${opp.char_lv})よりレベルが低め。出撃やデイリーダンジョンでLV・総合力を上げるのが先決です。`)
+    : ''
+
+  return `⚔ ${opp.username} 対策\n` +
+    `相手：${opp.class}（${t}）／キャラLV${opp.char_lv}\n` +
+    `${counter}\n` +
+    `自分の火力（${t === '魔法型' ? '特殊攻撃(C)' : t === '物理型' ? '攻撃(A)' : '主力スキルが使う攻撃ステ'}）も伸ばし、総合力で上回ることが基本です。\n` +
+    (lvNote ? lvNote + '\n' : '') +
+    `相手の基礎ステ（※装備・宝石を除く参考値）: 攻${opp.atk ?? '-'} 防${opp.def ?? '-'} 特攻${opp.matk ?? '-'} 特防${opp.mdef ?? '-'} 速${opp.spd ?? '-'}\n` +
+    `※表示は基礎ステのみ。実戦では装備・宝石・熟練度の差が大きく影響します。`
+}
+
 // ============================================================
 // 公開API：問い合わせに回答（async）
 //   returns: { text, kind }  kind = advice|class|kb|db|fallback
@@ -395,7 +436,17 @@ export const askAssistant = async (query, ctx = {}) => {
   const raw = (query || '').trim()
   if (!raw) return { text: '質問を入力してください。例：「狂戦士になるには？」「メテオストライクの効果は？」「おすすめ強化」', kind: 'fallback' }
 
-  // 1) 強化アドバイス（具体）／総合攻略アドバイス（漠然とした相談）
+  // 1) 対戦相手の対策（「○○に勝ちたい」）。PROGRESSIONの「勝てない」と被るので先に判定。
+  if (/に勝|を倒|より強く|を超え/.test(raw)) {
+    const opp = extractOpponent(raw)
+    if (opp && !findClassInQuery(opp)) {
+      try {
+        return { text: await buildMatchupAdvice(ctx, opp), kind: 'matchup' }
+      } catch { /* DB失敗時は下の通常処理へ */ }
+    }
+  }
+
+  // 2) 強化アドバイス（具体）／総合攻略アドバイス（漠然とした相談）
   if (ADVICE_TRIGGER.test(raw)) return { text: buildAdvice(ctx, raw), kind: 'advice' }
   if (PROGRESSION_TRIGGER.test(raw)) return { text: buildProgressionAdvice(ctx), kind: 'advice' }
 
