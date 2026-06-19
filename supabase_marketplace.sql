@@ -259,8 +259,28 @@ GRANT EXECUTE ON FUNCTION public.cancel_marketplace_listing(uuid)     TO authent
 GRANT EXECUTE ON FUNCTION public.buy_marketplace_listing(uuid)        TO authenticated;
 
 -- ============================================================
--- ボス装備（出撃ドロップ）の基準価格を個別設定する例：
---   UPDATE weapons SET base_price = 1000000 WHERE name = '＜ボス装備A＞';
---   UPDATE weapons SET base_price =  300000 WHERE name = '＜ボス装備B＞';
--- レイドボス交換装備も同様に後日設定。
+-- ボス装備（出撃ボスのドロップ装備）の基準価格を設定
+--   rarity A のボス装備 = ボス装備A = 100万 / rarity B = ボス装備B = 30万
+--   （一般のA=30万/B=25万より高い「ボス装備」価格。rarityで自動判定）
+--   ※ rarity が a/b 以外のボス装備は base_price を変更しない（一般ルールにフォールバック）
 -- ============================================================
+UPDATE weapons SET base_price = CASE lower(rarity)
+    WHEN 'a' THEN 1000000   -- ボス装備A
+    WHEN 'b' THEN  300000   -- ボス装備B
+    ELSE base_price
+  END
+WHERE name IN (
+  -- エリアボス通常ドロップ
+  'スライムの指輪','蒼粘剣',
+  '略奪者の短剣','影踏みのブーツ',
+  '古代魔導コア','虚無の杖',
+  '海竜の鱗','アクアクラウン',
+  '雷鷲の爪牙','嵐の重装甲',
+  '絶零の魔導砲','フロストバーンの聖鎧',
+  '深紅の牙輪','深紅の魔眼石','インフェルノバスティオン',
+  -- エリアボス特殊ドロップ（5%）
+  'ぷよぷよロッド','怪盗の指輪','結晶グリーブ'
+);
+-- 設定後の確認:
+--   SELECT name, rarity, base_price FROM weapons
+--    WHERE name IN ('スライムの指輪','蒼粘剣','深紅の牙輪','ぷよぷよロッド') ORDER BY base_price;
