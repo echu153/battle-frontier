@@ -169,5 +169,17 @@ Deno.serve(async (req) => {
     return json({ allowed: true, text: 'くだらん。その手の話はしない。ゲームのことを訊け。', remaining: typeof remaining === 'number' ? remaining + 1 : null, limit: DAILY_LIMIT, unlimited: isAdmin })
   }
 
+  // 数値ガード（advice=draftありのときのみ）：回答が下書き/ゲーム知識/質問に存在しない
+  // 2桁以上の数値を出したら、モデルが数値を捏造・改変した疑い→正確なルール回答(draft)へ差し戻す。
+  // ※1桁は通常文に頻出し誤検知が多いので対象外。LV・％・回数など意味のある値(2桁以上)を検査。
+  if (draft) {
+    const allowed = new Set((`${draft}\n${reference}\n${question}\n${DAILY_LIMIT}`).match(/\d{2,}/g) || [])
+    const introduced = (answer.match(/\d{2,}/g) || []).filter((n) => !allowed.has(n))
+    if (introduced.length > 0) {
+      console.log('[clever-api] number guard → draft fallback') // 値そのものは記録しない
+      return json({ allowed: true, text: draft.trim(), remaining, limit: DAILY_LIMIT, unlimited: isAdmin, guarded: true })
+    }
+  }
+
   return json({ allowed: true, text: answer.trim(), remaining, limit: DAILY_LIMIT, unlimited: isAdmin })
 })
