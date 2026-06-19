@@ -57,7 +57,12 @@ export default function AIAssistant({ ctx }) {
       if (res.kind === 'fallback' || res.kind === 'chat' || res.kind === 'advice') {
         const p = ctx?.profile
         const draft = res.kind === 'advice' ? res.text : ''
-        const llm = await llmChat({ question: text, draft, player: { name: p?.name, cls: p?.class, lv: p?.char_lv } })
+        // 直前までの会話履歴（このターン前のmessages）を文脈として渡す
+        const history = messages
+          .filter((m) => m.text && !m.text.startsWith('…見極めている'))
+          .slice(-6)
+          .map((m) => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.text }))
+        const llm = await llmChat({ question: text, draft, history, player: { name: p?.name, cls: p?.class, lv: p?.char_lv } })
         if (llm && llm.text) {
           answer = llm.text
           gotLLM = true
@@ -132,11 +137,13 @@ export default function AIAssistant({ ctx }) {
             fontSize: '10px', display: 'flex', alignItems: 'center', gap: '6px',
             color: aiRemaining === 0 ? '#cc9944' : '#55bb99',
           }}>
-            {aiRemaining === 0
-              ? <span>📋 現在テンプレ回答のみ（ジェミータの本気は本日分を使い切った・日付が変わればリセット）</span>
-              : aiRemaining === null
-                ? <span>⚔ ジェミータの本気：{aiLimit ? `1日${aiLimit}回まで` : '1日の上限あり'}（超過後はテンプレ回答）</span>
-                : <span>⚔ ジェミータの本気：あと{aiRemaining}回（超過後はテンプレ回答）</span>}
+            {aiRemaining >= 100000
+              ? <span>⚔ ジェミータの本気：無制限（管理者）</span>
+              : aiRemaining === 0
+                ? <span>📋 現在テンプレ回答のみ（本日分を使い切った・毎朝5時にリセット）</span>
+                : aiRemaining === null
+                  ? <span>⚔ ジェミータの本気：{aiLimit ? `1日${aiLimit}回まで` : '1日の上限あり'}（毎朝5時リセット・超過後はテンプレ回答）</span>
+                  : <span>⚔ ジェミータの本気：あと{aiRemaining}回（毎朝5時リセット・超過後はテンプレ回答）</span>}
           </div>
 
           {/* メッセージ一覧 */}

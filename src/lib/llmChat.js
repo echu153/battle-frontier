@@ -7,11 +7,12 @@ import { supabase } from '../supabase'
 //   null                    … 通信失敗・未デプロイ（同上フォールバック）
 // ※Edge Functionが未デプロイ/未設定でも null を返すだけで、UIは従来どおり動く。
 // draft … ルールベースが用意した正確な草案。AIはこれを土台に質問へ合わせて作り直す。
-export const llmChat = async ({ question, draft, player } = {}) => {
+// history … 直近の会話履歴 [{role:'user'|'assistant', content}]（文脈考慮用）。
+export const llmChat = async ({ question, draft, player, history } = {}) => {
   if (!question) return null
   try {
     const { data, error } = await supabase.functions.invoke('clever-api', {
-      body: { question, draft: draft || '', player: player || {} },
+      body: { question, draft: draft || '', player: player || {}, history: history || [] },
     })
     if (error) return null
     if (data?.allowed && data?.text) return { text: data.text, remaining: data.remaining, limit: data.limit }

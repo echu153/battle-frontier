@@ -23,10 +23,15 @@ security definer
 set search_path = public
 as $func$
 declare
-  v_day   date := (now() at time zone 'Asia/Tokyo')::date;
+  -- 日付の境界は毎朝5時(JST)。5時より前は前日扱い（他のゲーム機能と統一）。
+  v_day   date := (now() at time zone 'Asia/Tokyo' - interval '5 hours')::date;
   v_count int;
 begin
   if p_user is null then return -1; end if;
+  -- 管理者(is_admin)は無制限（消費・記録しない）。
+  if exists (select 1 from public.profiles where id = p_user and is_admin) then
+    return 999999;
+  end if;
 
   insert into public.ai_chat_usage (user_id, day, count)
   values (p_user, v_day, 0)
@@ -59,7 +64,7 @@ security definer
 set search_path = public
 as $func$
 declare
-  v_day date := (now() at time zone 'Asia/Tokyo')::date;
+  v_day date := (now() at time zone 'Asia/Tokyo' - interval '5 hours')::date;
 begin
   update public.ai_chat_usage set count = greatest(count - 1, 0)
   where user_id = p_user and day = v_day;
