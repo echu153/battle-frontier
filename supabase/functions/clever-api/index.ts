@@ -68,9 +68,11 @@ Deno.serve(async (req) => {
   const uid = userData?.user?.id
   if (!uid) return json({ allowed: false, reason: 'unauthorized' }, 401)
 
-  let body: { question?: string }
+  let body: { question?: string; draft?: string }
   try { body = await req.json() } catch { return json({ error: 'bad json' }, 400) }
   const question = (body.question || '').toString().trim().slice(0, 500)
+  // 参考下書き＝クライアントのルールベースが用意した正確な草案（本人向け）。質問に合わせて作り直す土台。
+  const draft = (body.draft || '').toString().slice(0, 1500)
   if (!question) return json({ error: 'empty' }, 400)
   // 消費の前に不適切判定（消費させない・LLMに送らない）
   if (isNG(question)) return json({ allowed: true, text: 'くだらん。そんな話に付き合う気はない。ゲームのことなら相手をしてやる。', remaining: null })
@@ -90,7 +92,11 @@ Deno.serve(async (req) => {
   }
 
   // プロンプト（クライアントの facts は信用しない＝根拠に使わない。質問のみ渡す）
-  const userText = `プレイヤーの発言：${question}`
+  // 下書きがあれば、それを正確な土台にしつつ「質問に合わせて」作り直させる（テンプレ感を消す）
+  const ref = draft
+    ? `参考下書き（このゲームのヘルパーが用意した、数値が正確な草案。これを土台にしろ。ただし丸写しはするな。貴様の質問の意図に合わせて、必要な部分だけを選び、順序や強弱を変えて自然な会話として答えろ）：\n${draft}\n\n`
+    : ''
+  const userText = `${ref}プレイヤーの発言：${question}`
 
   // Groq（OpenAI互換チャット補完）呼び出し（失敗時は消費を払い戻す）
   let answer = ''

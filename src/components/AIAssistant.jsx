@@ -52,9 +52,12 @@ export default function AIAssistant({ ctx }) {
       // 事実質問はルールベース（正確）で確定。答えに詰まった質問だけ会話用LLM（1日上限つき）へ。
       // LLM未デプロイ/上限到達/エラー時は llmChat が null/allowed:false を返すのでルールの回答を表示。
       let gotLLM = false
-      if (res.kind === 'fallback' || res.kind === 'chat') {
+      // 雑談/聞き取れず は丸ごとAIへ。強化相談(advice)は、ルールの正確な回答を“下書き”として渡し、
+      // 質問に合わせて作り直させる（毎回テンプレにならないように）。AI不可時はルール回答を表示。
+      if (res.kind === 'fallback' || res.kind === 'chat' || res.kind === 'advice') {
         const p = ctx?.profile
-        const llm = await llmChat({ question: text, player: { name: p?.name, cls: p?.class, lv: p?.char_lv } })
+        const draft = res.kind === 'advice' ? res.text : ''
+        const llm = await llmChat({ question: text, draft, player: { name: p?.name, cls: p?.class, lv: p?.char_lv } })
         if (llm && llm.text) {
           answer = llm.text
           gotLLM = true
