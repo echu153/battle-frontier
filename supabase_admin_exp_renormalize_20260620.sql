@@ -60,8 +60,17 @@ BEGIN
           char_lv = v_clv, pending_stat_points = v_pend
       WHERE id = r.id;
 
-    UPDATE class_levels SET lv = v_lv, exp = v_exp
-      WHERE player_id = r.id AND class_name = r.class;
+    -- class_levels は行が無くても確実に同期（UPSERT）
+    INSERT INTO class_levels (player_id, class_name, lv, exp)
+    VALUES (r.id, r.class, v_lv, v_exp)
+    ON CONFLICT (player_id, class_name) DO UPDATE SET lv = EXCLUDED.lv, exp = EXCLUDED.exp;
+
+    -- 跨いだレベルの習得スキルを補完（現在LV以下の未習得を一括付与＝冪等・再実行安全）
+    INSERT INTO player_skills (player_id, skill_id)
+    SELECT r.id, s.id FROM skills s
+    WHERE s.class_name = r.class AND s.required_lv <= v_lv
+      AND NOT EXISTS (SELECT 1 FROM player_skills ps WHERE ps.player_id = r.id AND ps.skill_id = s.id)
+    ON CONFLICT DO NOTHING;
 
     RAISE NOTICE 'is_admin % 正規化: lv=% exp=%/% (level_ups=%)', r.id, v_lv, v_exp, v_next, v_ups;
   END LOOP;

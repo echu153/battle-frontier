@@ -3692,10 +3692,8 @@ export default function Game() {
 
   if (showOptions) {
     const boostActive = isBoostActive(profile)
-    // ブーストの日次リセットは朝5時(JST)基準＝JST時刻から5時間引いた日付（サーバー start_boost と一致）
-    const _gd = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
-    _gd.setHours(_gd.getHours() - 5)
-    const todayJst = _gd.toISOString().slice(0,10)
+    // ブーストの日次リセットは朝5時(JST)基準。JST(UTC+9)−5h=UTC+4 の年月日がゲーム内日付（サーバー start_boost と一致）
+    const todayJst = new Date(Date.now() + 4*60*60*1000).toISOString().slice(0,10)
     const usedToday = profile?.boost_used_date === todayJst
     const boostMinLeft = boostActive ? Math.ceil((new Date(profile.boost_active_until).getTime() - Date.now())/60000) : 0
     const papiaLocked = profile?.papia_hour_set_at && (Date.now() < new Date(profile.papia_hour_set_at).getTime() + 30*24*60*60*1000)
