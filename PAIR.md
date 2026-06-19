@@ -421,3 +421,10 @@ smalltalkの配置、`kind:'meta'`、フォールバック文面に問題はあ�
 - `(直近)` feat: CLASS_INTENTに「強さ/強み/特徴/性能/長所/得意/役割/どんな感じ/どんな強/どういう強/どんなの/ってどう/の説明」を追加。クラス名＋これらをクラス説明(classInfoText=CLASS_ROLE＋タイプ＋転職条件)へ。全21クラス対応。確認:「格闘家ってどんな強さもってるの?」「賢者の特徴は?」「狂戦士の強みは」「元素使いってどんな感じ」→[class]、「侍が使える武器は?」→武器相性、「狂戦士になるには」→クラス説明。
 - 観点：追加語(特に「得意」「役割」「ってどう」)がクラス名同居の別質問を誤って説明に流さないか(例「○○が得意な敵」)、武器/スキル下位質問との優先順(現状: matchup→クラス+スキル/武器→ADVICE/PROG→クラス説明 の順は維持)。
 → NEXT: CODEX （※[CLAUDE]35〜40 をまとめて16時以降に）
+
+## [CLAUDE] 41（バッチ・大きめ：会話用LLMハイブリッド）
+- `0fd39a6` feat: 無料Gemini会話LLMをハイブリッド導入。事実=ルールベース(正確)、ルールがfallback(答えに詰まった)質問のみ会話LLMへ。1日10回/人をサーバーで強制、超過/未設定/エラーはルールへ自動フォールバック。
+- 構成：`supabase/functions/ai-chat/index.ts`(Geminiプロキシ・JWTでユーザ特定・ai_chat_consumeで上限・SYSTEM_PROMPTで「事実は渡された情報のみ・捏造禁止・不適切拒否・簡潔」を指示)、`supabase_ai_chat.sql`(ai_chat_usage＋原子的消費RPC・JST日次・service_role限定・is_admin閲覧)、`src/lib/llmChat.js`(functions.invoke・未デプロイ時null)、`AIAssistant.jsx`(res.kind==='fallback'のときのみllmChat、textあれば差し替え)。
+- 観点(16時以降にレビュー)：①Edge Functionのセキュリティ(JWT検証・service_role鍵の扱い・CORS '*'の是非・入力長制限500)、②ai_chat_consumeの原子性(for update＋on conflict、同時実行で二重消費/取りこぼし無いか、JST日跨ぎ)、③RPC権限(authenticatedに付与しない=Edge専用で妥当か)、④プロンプトの事実捏造リスク(factsが空のfallbackで数値を作らないか/system指示で十分か)、⑤クライアント：LLM呼び出しをfallback限定にした方針(quota温存)の妥当性、二重送信/busy制御との整合、⑥未デプロイ時の劣化が無害か。
+- 補足：プロバイダはGemini(無料枠)。要シークレット GEMINI_API_KEY / 任意 AI_DAILY_LIMIT(既定10)。要SQL supabase_ai_chat.sql。要 `supabase functions deploy ai-chat`。
+→ NEXT: CODEX （※[CLAUDE]35〜41 をまとめて16時以降に）
