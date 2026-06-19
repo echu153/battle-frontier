@@ -28,11 +28,15 @@ create table if not exists public.ai_unanswered (
 -- 既存テーブルにも CHECK 制約を冪等に付与
 do $$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'ai_unanswered_question_len') then
+  if not exists (select 1 from pg_constraint
+                 where conname = 'ai_unanswered_question_len'
+                   and conrelid = 'public.ai_unanswered'::regclass) then
     alter table public.ai_unanswered
       add constraint ai_unanswered_question_len check (char_length(question) <= 300);
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'ai_unanswered_norm_len') then
+  if not exists (select 1 from pg_constraint
+                 where conname = 'ai_unanswered_norm_len'
+                   and conrelid = 'public.ai_unanswered'::regclass) then
     alter table public.ai_unanswered
       add constraint ai_unanswered_norm_len check (char_length(norm) between 1 and 200);
   end if;
@@ -70,6 +74,9 @@ declare
   nn  text;
 begin
   if uid is null then return; end if;          -- 認証必須
+  -- 先行公開中は is_admin のみ記録可（UI ゲートはセキュリティ境界にならないため RPC 内でも確認）。
+  -- 一般公開時はこの判定を外し、代わりにユーザー単位レート制限を実装すること。
+  if not exists (select 1 from public.profiles p where p.id = uid and p.is_admin) then return; end if;
   if char_length(nq) = 0 then return; end if;   -- 空質問は拒否
   -- 正規化：小文字化→空白除去→記号除去→200字上限
   nn := lower(nq);
@@ -96,7 +103,7 @@ grant execute on function public.log_unanswered(text) to authenticated;
 -- 運用（管理者）
 --   一覧:       select question, hits, last_at from public.ai_unanswered where not resolved order by hits desc;
 --   反映済み化: update public.ai_unanswered set resolved = true where norm = '...';
--- PII定期クリーンアップ（pg_cron 等で定期実行を推奨）:
+-- PII定期クリーンアップ（DELETE policy は authenticated に無いため、pg_cron か DBオーナー権限で実行）:
 --   update public.ai_unanswered set asker = null where last_at < now() - interval '90 days';
 --   delete from public.ai_unanswered where resolved and last_at < now() - interval '180 days';
 -- ============================================================
