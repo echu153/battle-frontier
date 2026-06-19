@@ -25,40 +25,59 @@ const BONUS_EFFECT_DESC = {
 // クライアント側でも基準価格を算出（サーバーと同じロジック。表示・スライダー用）
 function basePriceOf(weapon) {
   if (!weapon) return null
+  if (weapon.name && weapon.name.startsWith('古びた')) return null  // 古びた○○は出品不可
   if (weapon.base_price && weapon.base_price > 0) return weapon.base_price
   return { a:300000, b:250000, c:150000, d:100000, e:50000, f:20000 }[String(weapon.rarity).toLowerCase()] ?? null
 }
 
+const RARITY_ORDER = { sss:8, ss:7, s:6, a:5, b:4, c:3, d:2, e:1, f:0 }
+const RANK_FILTERS = ['all', 'a', 'b', 'c', 'd', 'e', 'f']
+const SORT_OPTIONS = [
+  { id:'obtained', label:'入手順' },
+  { id:'rank_desc', label:'ランク高→低' },
+  { id:'rank_asc', label:'ランク低→高' },
+  { id:'price_desc', label:'価格高→安' },
+  { id:'price_asc', label:'価格安→高' },
+]
+
 const yen = n => (n ?? 0).toLocaleString()
 
-function WeaponCard({ weapon, bonusEffect, enhancePlus }) {
+function WeaponCard({ weapon, bonusEffect, enhancePlus, right }) {
   if (!weapon) return null
   const rarity = weapon.rarity?.toLowerCase() || 'f'
   const color = RARITY_COLORS[rarity] || '#888888'
   const effectDesc = BONUS_EFFECT_DESC[bonusEffect] || null
+  const stats = [
+    weapon.atk_bonus      > 0 && ['攻撃',   weapon.atk_bonus,      '#ffcc00'],
+    weapon.def_bonus      > 0 && ['防御',   weapon.def_bonus,      '#88aaff'],
+    weapon.matk_bonus     > 0 && ['特攻',   weapon.matk_bonus,     '#cc44ff'],
+    weapon.mdef_bonus     > 0 && ['特防',   weapon.mdef_bonus,     '#44ccff'],
+    weapon.spd_bonus      > 0 && ['素早さ', weapon.spd_bonus,      '#ff8844'],
+    weapon.atk_bonus_pct  > 0 && ['攻撃',   weapon.atk_bonus_pct + '%',  '#ffcc00'],
+    weapon.matk_bonus_pct > 0 && ['特攻',   weapon.matk_bonus_pct + '%', '#cc44ff'],
+  ].filter(Boolean)
   return (
-    <div style={{ border:'1px solid #0055aa', background:'#001028', padding:'10px', marginBottom:'8px' }}>
-      <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>{SLOT_LABELS[weapon.slot] || weapon.slot}</div>
-      <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'6px' }}>
-        <span style={{ fontSize:'9px', padding:'1px 4px', color, border:`1px solid ${color}` }}>{RARITY_LABELS[rarity] || rarity.toUpperCase()}</span>
-        <span style={{ color, fontSize:'13px' }}>{weapon.name}</span>
-        {enhancePlus > 0 && <span style={{ color:'#ffcc00', fontSize:'11px' }}>+{enhancePlus}</span>}
+    <div style={{ display:'flex', gap:'10px', alignItems:'center' }}>
+      {/* ランクバッジ（大きめ・左揃え） */}
+      <div style={{ width:'34px', height:'34px', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', color, border:`1px solid ${color}`, borderRadius:'4px', fontSize:'15px', fontWeight:'bold', background:'#00060f' }}>
+        {RARITY_LABELS[rarity] || rarity.toUpperCase()}
       </div>
-      <div style={{ fontSize:'10px' }}>
-        {weapon.atk_bonus   > 0 && <span style={{ color:'#ffcc00' }}>攻撃力+{weapon.atk_bonus} </span>}
-        {weapon.def_bonus   > 0 && <span style={{ color:'#88aaff' }}>防御力+{weapon.def_bonus} </span>}
-        {weapon.matk_bonus  > 0 && <span style={{ color:'#cc44ff' }}>特殊攻撃力+{weapon.matk_bonus} </span>}
-        {weapon.mdef_bonus  > 0 && <span style={{ color:'#44ccff' }}>特殊防御力+{weapon.mdef_bonus} </span>}
-        {weapon.spd_bonus   > 0 && <span style={{ color:'#ff8844' }}>素早さ+{weapon.spd_bonus} </span>}
-        {weapon.atk_bonus_pct  > 0 && <span style={{ color:'#ffcc00' }}>攻撃力+{weapon.atk_bonus_pct}% </span>}
-        {weapon.matk_bonus_pct > 0 && <span style={{ color:'#cc44ff' }}>特殊攻撃力+{weapon.matk_bonus_pct}% </span>}
-      </div>
-      {effectDesc && (
-        <div style={{ fontSize:'10px', color:'#446688', marginTop:'4px' }}>
-          <span style={{ color:'#cc88ff' }}>【特殊能力】</span>
-          <span style={{ color:'#aaaaff', marginLeft:'4px' }}>{effectDesc}</span>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ display:'flex', alignItems:'baseline', gap:'6px' }}>
+          <span style={{ color, fontSize:'14px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{weapon.name}</span>
+          {enhancePlus > 0 && <span style={{ color:'#ffcc00', fontSize:'12px' }}>+{enhancePlus}</span>}
+          <span style={{ color:'#445566', fontSize:'10px', marginLeft:'auto', whiteSpace:'nowrap' }}>{SLOT_LABELS[weapon.slot] || weapon.slot}</span>
         </div>
-      )}
+        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginTop:'3px' }}>
+          {stats.map(([label, val, c], i) => (
+            <span key={i} style={{ fontSize:'11px', color:c }}>{label}+{val}</span>
+          ))}
+        </div>
+        {effectDesc && (
+          <div style={{ fontSize:'10px', color:'#9a8fc4', marginTop:'3px' }}>✦ {effectDesc}</div>
+        )}
+      </div>
+      {right && <div style={{ flexShrink:0 }}>{right}</div>}
     </div>
   )
 }
@@ -100,6 +119,8 @@ export default function Marketplace() {
   const [sellTarget, setSellTarget] = useState(null) // 出品ダイアログ対象
   const [sellPrice, setSellPrice] = useState(0)
   const [listResult, setListResult] = useState(null) // 出品完了ポップアップ { name, price, proceeds }
+  const [rankFilter, setRankFilter] = useState('all')
+  const [sortBy, setSortBy] = useState('obtained')
 
   useEffect(() => { init() }, [])
 
@@ -190,7 +211,31 @@ export default function Marketplace() {
   }
 
   const myListings = listings.filter(l => l.seller_id === userId)
-  const buyListings = listings.filter(l => l.seller_id !== userId)
+
+  // ランク絞り込み＋ソート（購入一覧・出品候補で共用）。weaponGetter/priceGetterで対象差を吸収。
+  const applyFilterSort = (arr, weaponGetter, priceGetter) => {
+    let out = arr.filter(x => {
+      if (rankFilter === 'all') return true
+      return String(weaponGetter(x)?.rarity || '').toLowerCase() === rankFilter
+    })
+    const r = x => RARITY_ORDER[String(weaponGetter(x)?.rarity || '').toLowerCase()] ?? -1
+    const p = x => priceGetter(x) ?? 0
+    const byObtained = [...out] // 元配列順＝入手/出品順
+    switch (sortBy) {
+      case 'rank_desc':  out.sort((a, b) => r(b) - r(a)); break
+      case 'rank_asc':   out.sort((a, b) => r(a) - r(b)); break
+      case 'price_desc': out.sort((a, b) => p(b) - p(a)); break
+      case 'price_asc':  out.sort((a, b) => p(a) - p(b)); break
+      default:           out = byObtained
+    }
+    return out
+  }
+
+  const buyListings = applyFilterSort(
+    listings.filter(l => l.seller_id !== userId),
+    l => l.weapons, l => l.price,
+  )
+  const sellEquip = applyFilterSort(myEquip, e => e.weapons, e => basePriceOf(e.weapons))
 
   const base = { minHeight:'100vh', background:'#000820', color:'#aaccff', fontFamily:'monospace', padding:'16px', boxSizing:'border-box' }
   const sellBase = sellTarget ? basePriceOf(sellTarget.weapons) : 0
@@ -223,6 +268,32 @@ export default function Marketplace() {
         <div style={{ maxWidth:'600px', margin:'0 auto 12px', border:`1px solid ${msg.color}`, background:'#001020', padding:'10px', color:msg.color, fontSize:'12px' }}>{msg.text}</div>
       )}
 
+      {/* 絞り込み・ソート（購入／出品タブ） */}
+      {tab !== 'mine' && (
+        <div style={{ maxWidth:'600px', margin:'0 auto 14px', display:'flex', flexWrap:'wrap', gap:'10px', alignItems:'center' }}>
+          <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
+            <span style={{ color:'#446688', fontSize:'10px', marginRight:'2px' }}>ランク</span>
+            {RANK_FILTERS.map(rk => {
+              const on = rankFilter === rk
+              const c = rk === 'all' ? '#88ccff' : (RARITY_COLORS[rk] || '#88ccff')
+              return (
+                <button key={rk} onClick={() => setRankFilter(rk)} style={{
+                  padding:'3px 8px', background: on ? '#001840' : 'none',
+                  border:`1px solid ${on ? c : '#223344'}`, color: on ? c : '#556677',
+                  cursor:'pointer', fontFamily:'monospace', fontSize:'10px', borderRadius:'3px',
+                }}>{rk === 'all' ? '全て' : RARITY_LABELS[rk]}</button>
+              )
+            })}
+          </div>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{
+            marginLeft:'auto', background:'#001028', border:'1px solid #0055aa', color:'#aaccff',
+            fontFamily:'monospace', fontSize:'11px', padding:'4px 6px', borderRadius:'3px', cursor:'pointer',
+          }}>
+            {SORT_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
+        </div>
+      )}
+
       <div style={{ maxWidth:'600px', margin:'0 auto' }}>
         {/* 購入タブ */}
         {tab === 'buy' && (
@@ -232,7 +303,7 @@ export default function Marketplace() {
               return (
                 <div key={l.id} style={{ border:`1px solid ${canAfford ? '#224433' : '#0055aa'}`, background:'#001028', padding:'12px' }}>
                   <WeaponCard weapon={l.weapons} bonusEffect={l.bonus_effect} />
-                  <div style={{ fontSize:'10px', color:'#557799', marginBottom:'4px' }}>出品者: <span style={{ color:'#88ccff' }}>{l.seller?.username || '???'}</span></div>
+                  <div style={{ fontSize:'10px', color:'#557799', marginTop:'8px', marginBottom:'4px' }}>出品者: <span style={{ color:'#88ccff' }}>{l.seller?.username || '???'}</span></div>
                   <PriceStats stat={stats[l.weapon_id]} base={l.base_price} />
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'8px' }}>
                     <div style={{ color:'#ffcc44', fontSize:'15px' }}>{yen(l.price)}G</div>
@@ -256,7 +327,7 @@ export default function Marketplace() {
               return (
                 <div key={l.id} style={{ border:'1px solid #334455', background:'#001028', padding:'12px' }}>
                   <WeaponCard weapon={l.weapons} bonusEffect={l.bonus_effect} />
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'8px' }}>
                     <div style={{ fontSize:'11px' }}>
                       <span style={{ color:'#ffcc44', fontSize:'14px' }}>{yen(l.price)}G</span>
                       <span style={{ color:'#557799', marginLeft:'8px' }}>手取り {yen(Math.floor(l.price * 0.8))}G</span>
@@ -280,20 +351,19 @@ export default function Marketplace() {
             <div style={{ color:'#445566', fontSize:'10px', marginBottom:'4px' }}>
               ※ 未強化・未装備の対象装備のみ出品できます（アーティファクト・帰属品は不可）。手数料20%。売れなければ14日で手元に戻ります。
             </div>
-            {myEquip.map(e => {
+            {sellEquip.map(e => {
               const bp = basePriceOf(e.weapons)
               return (
                 <div key={e.id} style={{ border:'1px solid #003366', background:'#001028', padding:'12px' }}>
-                  <WeaponCard weapon={e.weapons} bonusEffect={e.bonus_effect} />
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                    <div style={{ fontSize:'10px', color:'#557799' }}>基準 {yen(bp)}G（{yen(Math.floor(bp*0.5))}〜{yen(Math.ceil(bp*1.5))}G）</div>
-                    <button onClick={() => openSell(e)}
-                      style={{ padding:'8px 16px', background:'#001a00', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>出品</button>
-                  </div>
+                  <WeaponCard weapon={e.weapons} bonusEffect={e.bonus_effect} enhancePlus={e.enhance_plus}
+                    right={<button onClick={() => openSell(e)}
+                      style={{ padding:'7px 16px', background:'#001a00', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap' }}>出品</button>} />
+                  <div style={{ fontSize:'10px', color:'#557799', marginTop:'6px' }}>基準 {yen(bp)}G（{yen(Math.floor(bp*0.5))}〜{yen(Math.ceil(bp*1.5))}G）</div>
                 </div>
               )
             })}
             {myEquip.length === 0 && <div style={{ color:'#446688', fontSize:'12px', textAlign:'center', padding:'40px' }}>出品できる装備がありません</div>}
+            {myEquip.length > 0 && sellEquip.length === 0 && <div style={{ color:'#446688', fontSize:'12px', textAlign:'center', padding:'40px' }}>条件に合う装備がありません</div>}
           </div>
         )}
       </div>

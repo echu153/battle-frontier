@@ -54,6 +54,8 @@ DECLARE w weapons%ROWTYPE;
 BEGIN
   SELECT * INTO w FROM weapons WHERE id = p_weapon_id;
   IF NOT FOUND THEN RETURN NULL; END IF;
+  -- 古びた○○（アーティファクトの素体）は出品不可
+  IF w.name LIKE '古びた%' THEN RETURN NULL; END IF;
   -- 個別設定があれば最優先（ボス装備・レイド装備はここで設定する）
   IF w.base_price IS NOT NULL AND w.base_price > 0 THEN
     RETURN w.base_price;
