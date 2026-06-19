@@ -57,6 +57,7 @@ const isBossWeapon = w => !!w && BOSS_EQUIP.has(w.name)
 
 const RARITY_ORDER = { sss:8, ss:7, s:6, a:5, b:4, c:3, d:2, e:1, f:0 }
 const RANK_FILTERS = ['all', 'a', 'b', 'c', 'd', 'e', 'f']
+const SLOT_FILTERS = [['all','全'], ['weapon','武器'], ['armor','防具'], ['accessory','装飾品']]
 const SORT_OPTIONS = [
   { id:'obtained', label:'入手順' },
   { id:'rank_desc', label:'ランク高→低' },
@@ -158,6 +159,7 @@ export default function Marketplace() {
   const [rankFilter, setRankFilter] = useState('all')
   const [sortBy, setSortBy] = useState('obtained')
   const [category, setCategory] = useState('general') // 'general' | 'boss'
+  const [slotFilter, setSlotFilter] = useState('all') // all | weapon | armor | accessory
   const [expanded, setExpanded] = useState(() => new Set()) // 展開中のweapon_id
   const [history, setHistory] = useState({ bought: [], sold: [] }) // 取引履歴
 
@@ -272,6 +274,11 @@ export default function Marketplace() {
     let out = arr.filter(x => {
       const w = weaponGetter(x)
       if ((category === 'boss') !== isBossWeapon(w)) return false  // 一般/ボスの振り分け
+      if (slotFilter !== 'all') {
+        const slot = String(w?.slot || '')
+        const ok = slotFilter === 'accessory' ? slot.startsWith('accessory') : slot === slotFilter
+        if (!ok) return false
+      }
       if (rankFilter === 'all') return true
       return String(w?.rarity || '').toLowerCase() === rankFilter
     })
@@ -364,6 +371,18 @@ export default function Marketplace() {
                   padding:'3px 10px', background: on ? '#001840' : 'none',
                   border:`1px solid ${on ? c : '#223344'}`, color: on ? c : '#556677',
                   cursor:'pointer', fontFamily:'monospace', fontSize:'11px', borderRadius:'3px',
+                }}>{label}</button>
+              )
+            })}
+          </div>
+          <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
+            {SLOT_FILTERS.map(([id, label]) => {
+              const on = slotFilter === id
+              return (
+                <button key={id} onClick={() => setSlotFilter(id)} style={{
+                  padding:'3px 8px', background: on ? '#001840' : 'none',
+                  border:`1px solid ${on ? '#44ddaa' : '#223344'}`, color: on ? '#44ddaa' : '#556677',
+                  cursor:'pointer', fontFamily:'monospace', fontSize:'10px', borderRadius:'3px',
                 }}>{label}</button>
               )
             })}
