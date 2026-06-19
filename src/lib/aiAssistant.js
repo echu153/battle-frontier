@@ -382,30 +382,50 @@ const classWeaponText = (cls) => {
 }
 
 // 「○○に勝ちたい」：相手プレイヤーを profiles から照会し、対策アドバイスを返す。
-// 相手名は「(名前) に勝ち/勝て/勝つ/倒し/より強く」の前半から抽出する。
+// 相手名は「(名前) に勝ち/勝て/勝つ/倒し/より強く」の前半から抽出する（敬称は剥がさず保持）。
 const extractOpponent = (raw) => {
-  const m = raw.match(/^(.+?)\s*(?:さん|くん|ちゃん)?\s*(?:に|を|より)\s*(?:勝ち|勝て|勝つ|勝てる|倒し|倒す|強く|超え)/)
+  const m = raw.match(/^(.+?)\s*(?:に|を|より)\s*(?:勝ち|勝て|勝つ|勝てる|倒し|倒す|強く|超え)/)
   return m ? m[1].trim() : null
 }
+const PROFILE_COLS = 'username, class, char_lv, atk, def, matk, mdef, spd, hp_max'
+// usernameを完全一致(大小無視)で1件に特定。複数ヒットは曖昧として候補を返す。
+const findProfileExact = async (nm) => {
+  if (!nm) return { kind: 'none' }
+  const { data } = await supabase.from('profiles').select(PROFILE_COLS).ilike('username', nm).limit(3)
+  if (!data || !data.length) return { kind: 'none' }
+  if (data.length === 1) return { kind: 'one', opp: data[0] }
+  return { kind: 'ambiguous', names: data.map((d) => d.username) }
+}
+// 戻り値: 文字列(=回答/候補提示) または null(=該当なし→呼び出し側で通常処理へフォールバック)
 const buildMatchupAdvice = async (ctx, name) => {
-  // 完全一致(大小無視)→部分一致の順で照会
-  let { data } = await supabase.from('profiles')
-    .select('username, class, char_lv, atk, def, matk, mdef, spd, hp_max')
-    .ilike('username', name).limit(1)
-  if (!data || !data.length) {
-    ;({ data } = await supabase.from('profiles')
-      .select('username, class, char_lv, atk, def, matk, mdef, spd, hp_max')
-      .ilike('username', `%${name}%`).limit(1))
+  // ①フルネームで完全一致 → ②敬称を剥がして完全一致 → ③部分一致(一意のみ採用)
+  let res = await findProfileExact(name)
+  if (res.kind === 'none') {
+    const stripped = name.replace(/(さん|くん|ちゃん|様|氏)$/u, '')
+    if (stripped && stripped !== name) res = await findProfileExact(stripped)
   }
-  const opp = data?.[0]
-  if (!opp) return `「${name}」というプレイヤーが見つかりませんでした。ユーザー名が正確か確認してください（大文字小文字は区別しません）。`
+  if (res.kind === 'none') {
+    const { data } = await supabase.from('profiles').select(PROFILE_COLS).ilike('username', `%${name}%`).limit(6)
+    const names = [...new Set((data || []).map((d) => d.username))]
+    if (names.length === 1) res = { kind: 'one', opp: (data || [])[0] }
+    else if (names.length > 1) res = { kind: 'ambiguous', names }
+  }
+  if (res.kind === 'none') return null // 該当プレイヤー無し → matchupを確定しない
+  if (res.kind === 'ambiguous') {
+    return `🔎 「${name}」に近いプレイヤーが複数います。正確なユーザー名で聞いてください。\n${res.names.slice(0, 6).map((n) => '・' + n).join('\n')}`
+  }
 
-  const t = classType(opp.class)
+  const opp = res.opp
+  const t = classType(opp.class) // 相手クラスの「傾向」（職によっては実攻撃属性は断定不可）
   const counter = t === '物理型'
-    ? '相手は物理アタッカー。防御(B)とHPを厚くし、サファイアや防具で物理被ダメを抑えるのが有効です。'
+    ? '相手は主に物理寄り。防御(B)とHPを厚くし、サファイアや防具で物理被ダメを抑えるのが有効です。'
     : t === '魔法型'
-      ? '相手は魔法アタッカー。特殊防御(D)とHPを厚くし、エメラルドや防具で魔法被ダメを抑えるのが有効です。'
-      : '相手は物理・魔法の混合型。防御(B)と特殊防御(D)をバランス良く確保しましょう。'
+      ? '相手は主に魔法寄り。特殊防御(D)とHPを厚くし、エメラルドや防具で魔法被ダメを抑えるのが有効です。'
+      : '相手は物理・魔法の混合寄り。防御(B)と特殊防御(D)をバランス良く確保しましょう。'
+
+  // 自分の火力軸は「自分の」クラス/ステで決める（相手タイプに引きずられない）
+  const myStyle = detectStyle(ctx, '')
+  const myFocus = myStyle === 'magical' ? '特殊攻撃(C)' : myStyle === 'physical' ? '攻撃(A)' : '主力スキルが使う攻撃ステ'
 
   const meLv = ctx?.profile?.char_lv || ctx?.profile?.lv
   const lvNote = meLv && opp.char_lv
@@ -414,9 +434,9 @@ const buildMatchupAdvice = async (ctx, name) => {
     : ''
 
   return `⚔ ${opp.username} 対策\n` +
-    `相手：${opp.class}（${t}）／キャラLV${opp.char_lv}\n` +
+    `相手：${opp.class}（主に${t}の傾向）／キャラLV${opp.char_lv}\n` +
     `${counter}\n` +
-    `自分の火力（${t === '魔法型' ? '特殊攻撃(C)' : t === '物理型' ? '攻撃(A)' : '主力スキルが使う攻撃ステ'}）も伸ばし、総合力で上回ることが基本です。\n` +
+    `自分の火力（あなたは${myStyle === 'magical' ? '魔法型' : myStyle === 'physical' ? '物理型' : '混合型'}なので「${myFocus}」）も伸ばし、総合力で上回ることが基本です。\n` +
     (lvNote ? lvNote + '\n' : '') +
     `相手の基礎ステ（※装備・宝石を除く参考値）: 攻${opp.atk ?? '-'} 防${opp.def ?? '-'} 特攻${opp.matk ?? '-'} 特防${opp.mdef ?? '-'} 速${opp.spd ?? '-'}\n` +
     `※表示は基礎ステのみ。実戦では装備・宝石・熟練度の差が大きく影響します。`
@@ -436,22 +456,22 @@ export const askAssistant = async (query, ctx = {}) => {
   const raw = (query || '').trim()
   if (!raw) return { text: '質問を入力してください。例：「狂戦士になるには？」「メテオストライクの効果は？」「おすすめ強化」', kind: 'fallback' }
 
+  const cls = findClassInQuery(raw)
+
   // 1) 対戦相手の対策（「○○に勝ちたい」）。PROGRESSIONの「勝てない」と被るので先に判定。
+  //    相手がDBに居る場合のみ matchup を確定。居なければ null で通常処理へフォールバック。
   if (/に勝|を倒|より強く|を超え/.test(raw)) {
     const opp = extractOpponent(raw)
     if (opp && !findClassInQuery(opp)) {
       try {
-        return { text: await buildMatchupAdvice(ctx, opp), kind: 'matchup' }
+        const m = await buildMatchupAdvice(ctx, opp)
+        if (m) return { text: m, kind: 'matchup' }
       } catch { /* DB失敗時は下の通常処理へ */ }
     }
   }
 
-  // 2) 強化アドバイス（具体）／総合攻略アドバイス（漠然とした相談）
-  if (ADVICE_TRIGGER.test(raw)) return { text: buildAdvice(ctx, raw), kind: 'advice' }
-  if (PROGRESSION_TRIGGER.test(raw)) return { text: buildProgressionAdvice(ctx), kind: 'advice' }
-
-  // 2) クラス質問（職名を含み、かつ意図がある場合のみ。武器/スキルの下位質問は専用検索へ）
-  const cls = findClassInQuery(raw)
+  // 2) 「クラス＋スキル/武器」の具体質問は、汎用おすすめ/進行相談より先に専用回答へ。
+  //    （「狂戦士におすすめの武器」が ADVICE_TRIGGER に吸われるのを防ぐ）
   if (cls) {
     try {
       if (/スキル|わざ|アビリティ/.test(raw)) {
@@ -462,7 +482,14 @@ export const askAssistant = async (query, ctx = {}) => {
         return { text: classWeaponText(cls), kind: 'class' }
       }
     } catch { /* DB失敗時は下へ */ }
-    // 職名以外がノイズだけ（「○○ってなに/とは」等）か、転職意図があるならクラス説明
+  }
+
+  // 3) 強化アドバイス（具体）／総合攻略アドバイス（漠然とした相談）
+  if (ADVICE_TRIGGER.test(raw)) return { text: buildAdvice(ctx, raw), kind: 'advice' }
+  if (PROGRESSION_TRIGGER.test(raw)) return { text: buildProgressionAdvice(ctx), kind: 'advice' }
+
+  // 4) クラス説明（転職意図あり、または職名以外がノイズだけのとき）
+  if (cls) {
     const remainder = normalize(raw.replace(cls, '')).replace(/って|なに|なん|です|とは|どんな|どういう|について|の|は|を|が/g, '')
     if (CLASS_INTENT.test(raw) || remainder === '') {
       return { text: classInfoText(cls), kind: 'class' }
@@ -488,7 +515,7 @@ export const askAssistant = async (query, ctx = {}) => {
   } catch { /* フォールバックへ */ }
 
   // 6) フォールバック（答えられなかった質問はDBに自動記録＝後でKBに反映するため）
-  logUnanswered(raw, ctx)
+  logUnanswered(raw)
   return {
     text: 'うまく聞き取れませんでした。こんな質問ができます：\n・「狂戦士になるには？」（職名で転職条件）\n・「元素使いのスキル」「狂戦士が使える武器」\n・「メテオストライクの効果は？」（スキル/アイテム/武器/称号/交換品の名前）\n・「宝石ってなに？」「レベル上げの効率は？」\n・「おすすめ強化」（あなた専用アドバイス）',
     kind: 'fallback',
@@ -498,12 +525,13 @@ export const askAssistant = async (query, ctx = {}) => {
 // 答えられなかった質問を ai_unanswered テーブルへ記録（fire-and-forget）。
 // 同じ質問は normalize したキーで集約し hits を加算（RPC側で upsert）。
 // 記録失敗してもユーザー体験は止めない。
-const logUnanswered = (raw, ctx) => {
+const logUnanswered = (raw) => {
   const q = (raw || '').trim()
   const n = normalize(q)
   if (!q || n.length < 2) return
   try {
-    supabase.rpc('log_unanswered', { q, n, asker: ctx?.profile?.id || null })
+    // asker はサーバ側で auth.uid() から取得する（クライアント指定を信用しない）
+    supabase.rpc('log_unanswered', { q, n })
       .then(() => {}, () => {}) // エラーは握りつぶす（記録は補助機能）
   } catch { /* noop */ }
 }
