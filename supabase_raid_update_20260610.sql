@@ -2,7 +2,7 @@
 -- レイドボス アップデート 2026-06-10
 --  ① ヴァルゼノク HP 100万（spawn RPC）
 --  ② 30分で討伐できなかった場合（expired）でも、その時点の貢献度で討伐報酬を受け取れる
---  ③ 出撃回数ティア保証: 25回→Aティア / 10回→Bティア / 3回→Cティア（2026-06-20に半減）
+--  ③ 出撃回数ティア保証: 50/20/5（is_admin先行で管理者のみ25/10/3。2026-06-20）
 --  ④ 交換所: マレディクシオン（銃S）追加 / 強化石(S) 交換追加（鱗×70 or 逆鱗×2）
 --  ⑤ do_exchange を item 報酬対応に更新
 -- ※ supabase_protect_stats.sql 適用済み環境を想定（claim 内で GUC を立ててから profiles を更新）
@@ -125,6 +125,10 @@ DECLARE
   v_gyaku_item_id    int;
   v_gyaku_chance     float;
   v_got_gyaku        boolean := false;
+  v_is_admin         boolean;
+  v_atk_a            int := 50;   -- 出撃回数ティア保証ライン（既定＝非管理者）
+  v_atk_b            int := 20;
+  v_atk_c            int := 5;
 BEGIN
   v_player_id := auth.uid();
   IF v_player_id IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
@@ -140,20 +144,26 @@ BEGIN
   IF NOT FOUND THEN RETURN json_build_object('error', '参加記録がありません'); END IF;
   IF v_participant.reward_claimed THEN RETURN json_build_object('error', '既にリワードを受け取り済みです'); END IF;
 
+  -- ★is_admin限定先行: 管理者のみ出撃回数ティア保証を半減（レイドCD20秒化に対応）。公開時は既定値を25/10/3に。
+  SELECT is_admin INTO v_is_admin FROM profiles WHERE id = v_player_id;
+  IF COALESCE(v_is_admin, false) THEN
+    v_atk_a := 25; v_atk_b := 10; v_atk_c := 3;
+  END IF;
+
   -- 有効スコアで貢献度計算（出撃1回=500ボーナス）
   SELECT COALESCE(SUM(damage_dealt + attack_count * 500), 1) INTO v_total_eff FROM raid_participants WHERE raid_id = p_raid_id;
   v_my_eff       := v_participant.damage_dealt + v_participant.attack_count * 500;
   v_contribution := v_my_eff::float / v_total_eff::float;
 
   -- ティア決定（貢献度 or 出撃回数のどちらか高い方）
-  -- 2026-06-20: レイド出撃CDを20秒化＆ブースト対象外にしたため、出撃回数の保証ラインを半減（50/20/5→25/10/3）
-  IF v_contribution >= 0.10 OR v_participant.attack_count >= 25 THEN
+  -- 2026-06-20: is_admin限定先行。管理者は出撃回数ラインを半減(25/10/3)、非管理者は従来(50/20/5)。
+  IF v_contribution >= 0.10 OR v_participant.attack_count >= v_atk_a THEN
     v_tier := 'A'; v_gold := 50000; v_stone_ranks := ARRAY['B','C','D'];
     v_gem_count := 3; v_gem_rank := 'D'; v_scale_min := 8; v_scale_max := 10; v_gyaku_chance := 0.15;
-  ELSIF v_contribution >= 0.06 OR v_participant.attack_count >= 10 THEN
+  ELSIF v_contribution >= 0.06 OR v_participant.attack_count >= v_atk_b THEN
     v_tier := 'B'; v_gold := 30000; v_stone_ranks := ARRAY['C','D','E'];
     v_gem_count := 2; v_gem_rank := 'E'; v_scale_min := 6; v_scale_max := 8; v_gyaku_chance := 0.08;
-  ELSIF v_contribution >= 0.03 OR v_participant.attack_count >= 3 THEN
+  ELSIF v_contribution >= 0.03 OR v_participant.attack_count >= v_atk_c THEN
     v_tier := 'C'; v_gold := 10000; v_stone_ranks := ARRAY['D','E','F'];
     v_gem_count := 1; v_gem_rank := 'F'; v_scale_min := 4; v_scale_max := 6; v_gyaku_chance := 0.03;
   ELSE

@@ -5,7 +5,10 @@ import { createPortal } from 'react-dom'
 import { supabase } from '../supabase'
 import { AREAS, getEffectiveCap, generateDropBonus, ARTIFACT_BASE_NAMES } from '../pages/Game'
 
-const SORTIE_WAIT = 60 // 簡易出撃クールダウン秒（街/カジノの出撃と共通の last_action_at で管理。2026-06-20: 30→60）
+const SORTIE_WAIT = 30          // 簡易出撃クールダウン秒（従来＝非管理者）
+const SORTIE_WAIT_ADMIN = 60    // ★2026-06-20: is_admin限定先行＝管理者は60秒（街/カジノの出撃と共通の last_action_at で管理）
+// プロフィールに応じた有効クールダウン秒
+const sortieWaitFor = (p) => p?.is_admin ? SORTIE_WAIT_ADMIN : SORTIE_WAIT
 const AUTOCLICK_SAMPLES = 12
 const AUTOCLICK_SPREAD_MS = 1200
 const SORTIE_STREAK_LIMIT = 20
@@ -103,7 +106,7 @@ export default function SortiePanel({ quickSlotId, collapsible = false, activity
   const sortieRemain = () => {
     if (!profile?.last_action_at) return 0
     const elapsed = (now - new Date(profile.last_action_at).getTime()) / 1000
-    return Math.max(0, Math.ceil(SORTIE_WAIT - elapsed))
+    return Math.max(0, Math.ceil(sortieWaitFor(profile) - elapsed))
   }
 
   const doSortie = async (e) => {
@@ -116,7 +119,7 @@ export default function SortiePanel({ quickSlotId, collapsible = false, activity
     if (sortieRemain() > 0) { setSortieMsg(`次の出撃まで ${sortieRemain()}秒`); setTimeout(()=>setSortieMsg(''),1500); return }
     setLoading(true)
     try {
-      const lockTime = new Date(Date.now() - SORTIE_WAIT * 1000).toISOString()
+      const lockTime = new Date(Date.now() - sortieWaitFor(profile) * 1000).toISOString()
       const { data: locked } = await supabase.from('profiles')
         .update({ last_action_at: new Date().toISOString() })
         .eq('id', profile.id).lt('last_action_at', lockTime).eq('is_fishing', false).select('id')
@@ -283,7 +286,7 @@ export default function SortiePanel({ quickSlotId, collapsible = false, activity
         </div>
         {(!collapsible || open) && (<>
         <div style={{ color:'#446688', fontSize:'10px', marginBottom:'10px', lineHeight:'1.6' }}>
-          ボス・パピアなし／必ず勝利。{SORTIE_WAIT}秒に1回出撃でき、戦果は貯まります。離れる前に清算してください。
+          ボス・パピアなし／必ず勝利。{sortieWaitFor(profile)}秒に1回出撃でき、戦果は貯まります。離れる前に清算してください。
         </div>
 
         <div style={{ marginBottom:'8px' }}>

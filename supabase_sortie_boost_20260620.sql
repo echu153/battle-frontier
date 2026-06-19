@@ -1,20 +1,19 @@
 -- ============================================================
--- 出撃改善 2026-06-20
---   ① 通常出撃クールダウン 10秒 → 20秒（sortie_lock）
---   ② ブーストタイム: 1日1回30分、街の出撃CDが10秒に短縮（profilesに列追加＋start_boost RPC）
---   ③ レベルアップ必要EXPを半減（calc_exp_next。クライアント calcExpNext と一致）
+-- 出撃改善 2026-06-20  ★is_admin限定先行（一般プレイヤーは従来どおり）
+--   ① 通常出撃クールダウン: 管理者のみ 10→20秒（非管理者は10秒のまま）
+--   ② ブーストタイム: 管理者のみ 1日1回30分、街の出撃CDが10秒に短縮
+--   ③ レベルアップ必要EXP: 管理者のみ半減（非管理者は従来値）
 --
---   ※ レイド出撃CD20秒化は supabase_raid_cooldown_fix.sql（v_cooldown=20）を再適用。
---   ※ レイド出撃回数ティア保証の半減は supabase_raid_update_20260610.sql を再適用。
---   ※ 簡易出撃(SortiePanel)の60秒化はクライアントのみ（last_action_atの楽観ロック）。
---   ※ このファイルは pure関数の置換＋列追加＋新RPCのみ。protect_stats等の戦闘/報酬関数には触れないため、適用順は任意。
+--   ※ レイド出撃CD/回数ティアの管理者先行は supabase_raid_cooldown_fix.sql / supabase_raid_update_20260610.sql を再適用。
+--   ※ 一般公開時は各関数の is_admin 分岐を外す（このファイルのコメントの「公開時」を参照）。
+--   ※ pure関数置換＋列追加＋新RPCのみ。protect_stats等の戦闘/報酬関数には触れないため適用順は任意。
 -- ============================================================
 
 -- ① ブースト管理列 -------------------------------------------------
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS boost_active_until timestamptz;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS boost_used_date    date;
 
--- ② 通常出撃ロック（ブースト中は10秒、通常は20秒） -----------------
+-- ② 通常出撃ロック（管理者: ブースト中10秒/通常20秒、非管理者: 10秒） ----
 CREATE OR REPLACE FUNCTION public.sortie_lock()
 RETURNS json
 LANGUAGE plpgsql
@@ -34,9 +33,13 @@ BEGIN
   IF NOT FOUND THEN RETURN json_build_object('ok',false,'reason','profile_not_found'); END IF;
   IF v_row.is_fishing THEN RETURN json_build_object('ok',false,'reason','fishing'); END IF;
 
-  -- ブーストタイム中は10秒、それ以外は20秒
-  v_wait := CASE WHEN v_row.boost_active_until IS NOT NULL AND v_row.boost_active_until > now()
-                 THEN 10 ELSE 20 END;
+  -- ★is_admin限定先行: 管理者のみ20秒（ブースト中10秒）。非管理者は従来10秒。公開時は下を「常に20/10」に。
+  IF v_row.is_admin THEN
+    v_wait := CASE WHEN v_row.boost_active_until IS NOT NULL AND v_row.boost_active_until > now()
+                   THEN 10 ELSE 20 END;
+  ELSE
+    v_wait := 10;
+  END IF;
 
   IF v_row.last_action_at IS NOT NULL THEN
     v_left := v_wait - EXTRACT(EPOCH FROM (now() - v_row.last_action_at));
@@ -51,7 +54,7 @@ END;
 $$;
 GRANT EXECUTE ON FUNCTION public.sortie_lock() TO authenticated;
 
--- ②-2 ブースト発動RPC（1日1回・30分） ----------------------------
+-- ②-2 ブースト発動RPC（管理者限定・1日1回・30分） -----------------
 CREATE OR REPLACE FUNCTION public.start_boost()
 RETURNS json
 LANGUAGE plpgsql
@@ -68,6 +71,11 @@ BEGIN
 
   SELECT * INTO v_row FROM profiles WHERE id = v_uid FOR UPDATE;
   IF NOT FOUND THEN RETURN json_build_object('ok',false,'reason','profile_not_found'); END IF;
+
+  -- ★is_admin限定先行: 管理者以外はブースト不可。公開時はこの判定を外す。
+  IF NOT v_row.is_admin THEN
+    RETURN json_build_object('ok',false,'reason','not_admin');
+  END IF;
 
   -- すでにブースト中
   IF v_row.boost_active_until IS NOT NULL AND v_row.boost_active_until > now() THEN
@@ -89,27 +97,35 @@ END;
 $$;
 GRANT EXECUTE ON FUNCTION public.start_boost() TO authenticated;
 
--- ③ レベルアップ必要EXP半減（クライアント calcExpNext と一致） ------
+-- ③ レベルアップ必要EXP（管理者のみ半減。クライアント calcExpNext と一致） --
+--   STABLE: 呼び出しユーザー(auth.uid())の is_admin を参照するため IMMUTABLE 不可。
+--   apply_battle_result / casino_settle_sortie からは calc_exp_next(lv) 呼び出しのまま
+--   auth.uid() 経由で当人の is_admin が効くので、それらの関数の再定義は不要。
+--   公開時は「常に半減（base/2）」に変更する。
 CREATE OR REPLACE FUNCTION public.calc_exp_next(lv integer)
 RETURNS integer
 LANGUAGE plpgsql
-IMMUTABLE
+STABLE
+SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
   v_in_block integer;
+  v_base     integer;
+  v_is_admin boolean;
 BEGIN
-  -- LV100超（再修練でキャップ300になったクラス）
   IF lv >= 100 THEN
-    IF lv <= 150 THEN RETURN 75; END IF;  -- LV100〜150
-    IF lv <= 200 THEN RETURN 80; END IF;  -- LV151〜200
-    IF lv <= 250 THEN RETURN 85; END IF;  -- LV201〜250
-    RETURN 90;                            -- LV251〜300
+    v_base := CASE WHEN lv <= 150 THEN 150 WHEN lv <= 200 THEN 160 WHEN lv <= 250 THEN 170 ELSE 180 END;
+  ELSE
+    v_in_block := (lv - 1) % 100;
+    v_base := CASE WHEN v_in_block < 9 THEN 80 WHEN v_in_block < 29 THEN 100 WHEN v_in_block < 59 THEN 120 ELSE 140 END;
   END IF;
-  v_in_block := (lv - 1) % 100;
-  IF v_in_block < 9  THEN RETURN 40; END IF;  -- LV1〜9
-  IF v_in_block < 29 THEN RETURN 50; END IF;  -- LV10〜29
-  IF v_in_block < 59 THEN RETURN 60; END IF;  -- LV30〜59
-  RETURN 70;                                   -- LV60〜99
+
+  -- ★is_admin限定先行: 当人が管理者のときだけ半減。公開時は無条件 floor(v_base/2)。
+  SELECT is_admin INTO v_is_admin FROM profiles WHERE id = auth.uid();
+  IF COALESCE(v_is_admin, false) THEN
+    RETURN floor(v_base / 2.0)::integer;
+  END IF;
+  RETURN v_base;
 END;
 $$;

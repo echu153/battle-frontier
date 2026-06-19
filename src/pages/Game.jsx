@@ -18,8 +18,11 @@ export const BOOST_DURATION_MIN = 30 // ブーストタイムの継続分数
 // ブーストが有効か（profiles.boost_active_until が未来）。nowMs は省略時 Date.now()
 export const isBoostActive = (profile, nowMs = Date.now()) =>
   !!(profile?.boost_active_until && new Date(profile.boost_active_until).getTime() > nowMs)
-// 現在の有効クールダウン秒（ブースト中は短縮）。街の出撃・デイリーダンジョンで使用
-export const effWait = (profile, nowMs = Date.now()) => isBoostActive(profile, nowMs) ? BOOST_WAIT : WAIT_SECONDS
+// 現在の有効クールダウン秒。★2026-06-20: is_admin限定先行。
+//   非管理者は従来どおり10秒。管理者は通常20秒・ブースト中10秒（街の出撃・デイリーダンジョン）
+export const LEGACY_WAIT = 10
+export const effWait = (profile, nowMs = Date.now()) =>
+  profile?.is_admin ? (isBoostActive(profile, nowMs) ? BOOST_WAIT : WAIT_SECONDS) : LEGACY_WAIT
 // 新UIレイアウトの有効フラグ。
 // 本番にも反映中（true）。旧UIに戻したいときは下行を import.meta.env.DEV（開発のみ）か
 // false（全環境で旧UI）に変更すればワンタッチで戻せる。git tag `ui-classic` も旧UI状態の復元ポイント。
@@ -418,20 +421,17 @@ const getTotalRank = (total) => {
   return { rank:'SSS', color:'#ffcc00' }
 }
 
-export const calcExpNext = (lv) => {
-  // LV100超（再修練でキャップ300になったクラス）の必要経験値
-  // ★レベルアップ必要EXPは2026-06-20に半減（サーバー calc_exp_next と一致させること）
+// ★2026-06-20: is_admin限定先行。isAdmin=true のときだけ必要EXPを半減（サーバー calc_exp_next と一致させること）
+export const calcExpNext = (lv, isAdmin = false) => {
+  let base
   if (lv >= 100) {
-    if (lv <= 150) return 75   // LV100〜150
-    if (lv <= 200) return 80   // LV151〜200
-    if (lv <= 250) return 85   // LV201〜250
-    return 90                  // LV251〜300
+    // LV100超（再修練でキャップ300になったクラス）の必要経験値
+    base = lv <= 150 ? 150 : lv <= 200 ? 160 : lv <= 250 ? 170 : 180
+  } else {
+    const lvInBlock = (lv - 1) % 100
+    base = lvInBlock < 9 ? 80 : lvInBlock < 29 ? 100 : lvInBlock < 59 ? 120 : 140
   }
-  const lvInBlock = (lv - 1) % 100
-  if (lvInBlock < 9)  return 40   // LV1〜9
-  if (lvInBlock < 29) return 50   // LV10〜29
-  if (lvInBlock < 59) return 60   // LV30〜59
-  return 70                       // LV60〜99
+  return isAdmin ? Math.floor(base / 2) : base
 }
 
 const WEAPON_TYPE_GROUP = {
@@ -1641,7 +1641,7 @@ export default function Game() {
       spd:    _base.spd   + _allClassBonus.spd    + (_spent.spd  ||0),
     }
     // exp_nextも現在のLVから再計算して同期
-    _computed.exp_next = calcExpNext(data.lv)
+    _computed.exp_next = calcExpNext(data.lv, data.is_admin)
     // DBにも書き戻す（Profile・Rankingページが正しい値を読めるようにする）
     const _needsUpdate = [..._statKeys, 'exp_next'].some(k => data[k] !== _computed[k])
     if (_needsUpdate) {
@@ -1903,7 +1903,7 @@ export default function Game() {
       }
       let dispExp = profile.exp + bonusExp, dispLv = profile.lv, dispExpNext = profile.exp_next
       while (dispExp >= dispExpNext && dispLv < cap) {
-        dispExp -= dispExpNext; dispLv++; dispExpNext = calcExpNext(dispLv)
+        dispExp -= dispExpNext; dispLv++; dispExpNext = calcExpNext(dispLv, profile.is_admin)
         logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${dispLv}！`, color:'#cc44ff' })
       }
       logs.push({ text:`EXP +${bonusExp}`, color:'#cc8800' })
@@ -1927,7 +1927,7 @@ export default function Game() {
         let dispLv = profile.lv
         let dispExpNext = profile.exp_next
         while (dispExp >= dispExpNext && dispLv < capD) {
-          dispExp -= dispExpNext; dispLv++; dispExpNext = calcExpNext(dispLv)
+          dispExp -= dispExpNext; dispLv++; dispExpNext = calcExpNext(dispLv, profile.is_admin)
           logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${dispLv}！`, color:'#cc44ff' })
         }
         await supabase.rpc('apply_dungeon_reward', { p_type:'exp', p_claimed_exp:expGained })
@@ -3139,7 +3139,7 @@ export default function Game() {
 
     if (!isAtCap && !frozenExp) {
       while (newExp >= newExpNext && newLv < cap) {
-        newExp -= newExpNext; newLv++; newExpNext = calcExpNext(newLv); newPendingPoints++
+        newExp -= newExpNext; newLv++; newExpNext = calcExpNext(newLv, profile.is_admin); newPendingPoints++
         newCharLv++
         logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${newLv}！ ステータスポイント+1`, color:'#cc44ff' })
         setBattleLogs([...logs])
@@ -3155,7 +3155,7 @@ export default function Game() {
         }
       }
       if (newLv >= cap) {
-        newExp = 0; newExpNext = calcExpNext(cap)
+        newExp = 0; newExpNext = calcExpNext(cap, profile.is_admin)
         logs.push({ text:`🎯 ${profile.class}がレベルキャップ(LV${cap})に到達！`, color:'#ffcc00' })
         setBattleLogs([...logs])
       }
@@ -4305,11 +4305,14 @@ export default function Game() {
         </div>
         {showMenu && (
           <div style={{ position:'fixed', top:'40px', right:'12px', background:'#001040', border:'1px solid #446688', zIndex:200, minWidth:'120px' }}>
-            <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
-            <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
-            <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ オプション</button>
-            {profile?.is_admin && (
+            {profile?.is_admin ? (<>
+              {/* ★2026-06-20: is_admin限定先行の新メニュー（お知らせ/ヘルプ/オプション）。一般公開時はこの分岐を外す */}
+              <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
+              <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
+              <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ オプション</button>
               <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
+            </>) : (
+              MOBILE_MENU_ORDER.map(renderMenuBtn)
             )}
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
@@ -4738,11 +4741,14 @@ export default function Game() {
         </div>
         {showMenu && (
           <div style={{ position:'fixed', top:'48px', right:'16px', background:'#001040', border:'1px solid #446688', zIndex:200, minWidth:'150px' }}>
-            <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
-            <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
-            <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ オプション</button>
-            {profile?.is_admin && (
+            {profile?.is_admin ? (<>
+              {/* ★2026-06-20: is_admin限定先行の新メニュー（お知らせ/ヘルプ/オプション）。一般公開時はこの分岐を外す */}
+              <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
+              <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
+              <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ オプション</button>
               <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
+            </>) : (
+              DESKTOP_MENU_ORDER.map(renderMenuBtn)
             )}
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>

@@ -14,6 +14,9 @@ import {
 } from './Game'
 
 const POLL_MS = 5000
+// レイド出撃CD。★2026-06-20: is_admin限定先行＝管理者は20秒、非管理者は従来10秒（ブースト対象外）
+const RAID_LEGACY_WAIT = 10
+const raidWaitFor = (p) => p?.is_admin ? WAIT_SECONDS : RAID_LEGACY_WAIT
 const BOSS_NAME = '黒龍ヴァルゼノク'
 // レイドボスの表示画像（ボス名→画像）。雨摩座用は /public/raid-boss-amaza.png を配置
 const RAID_IMG_VER = '2'  // 画像差し替え時に上げるとキャッシュを無効化
@@ -23,9 +26,9 @@ const BOSS_MDEF = 1000
 const BOSS_SPD  = 1200
 
 const TIER_INFO = [
-  { pct: 10, attacks: 25, tier: 'A', label: '貢献度10%以上 or 出撃25回', gold: 150000, stones: ['B','C','D'], gemCount: 2, gemRank: 'D', scaleCount: '8~10', rareChance: '15%', color: '#ffcc00' },
-  { pct:  6, attacks: 10, tier: 'B', label: '貢献度6%以上 or 出撃10回',  gold: 90000, stones: ['C','D','E'], gemCount: 2, gemRank: 'E', scaleCount: '6~8',  rareChance: '8%',  color: '#44aaff' },
-  { pct:  3, attacks:  3, tier: 'C', label: '貢献度3%以上 or 出撃3回',   gold: 30000, stones: ['D','E','F'], gemCount: 2, gemRank: 'F', scaleCount: '4~6',  rareChance: '3%',  color: '#44ff88' },
+  { pct: 10, attacks: 50, tier: 'A', label: '貢献度10%以上 or 出撃50回', gold: 150000, stones: ['B','C','D'], gemCount: 2, gemRank: 'D', scaleCount: '8~10', rareChance: '15%', color: '#ffcc00' },
+  { pct:  6, attacks: 20, tier: 'B', label: '貢献度6%以上 or 出撃20回',  gold: 90000, stones: ['C','D','E'], gemCount: 2, gemRank: 'E', scaleCount: '6~8',  rareChance: '8%',  color: '#44aaff' },
+  { pct:  3, attacks:  5, tier: 'C', label: '貢献度3%以上 or 出撃5回',   gold: 30000, stones: ['D','E','F'], gemCount: 2, gemRank: 'F', scaleCount: '4~6',  rareChance: '3%',  color: '#44ff88' },
   { pct:  0, attacks:  0, tier: 'D', label: '参加',                       gold: 15000, stones: ['E','F'],    gemCount: 2, gemRank: 'F', scaleCount: '1~3',  rareChance: '0%',  color: '#888888' },
 ]
 
@@ -461,7 +464,7 @@ export default function RaidBoss() {
     // 共有CD残り計算
     if (prof.last_action_at) {
       const elapsed = (Date.now() - new Date(prof.last_action_at).getTime()) / 1000
-      setRemaining(Math.max(0, WAIT_SECONDS - elapsed))
+      setRemaining(Math.max(0, raidWaitFor(prof) - elapsed))
     }
 
     const curBoss = await fetchBoss(user.id)
@@ -580,7 +583,7 @@ export default function RaidBoss() {
       } else {
         setBattleLogs(logs)
         setBoss(prev => ({ ...prev, hp_current: data.hp_current, status: data.status }))
-        setRemaining(WAIT_SECONDS)
+        setRemaining(raidWaitFor(profile))
         // HP/MP全回復 + 出撃EXP はサーバ側(attack_raid_boss)で付与済み（かかし修練中はEXPなし）
         const newExp = data.exp ?? ((profile.exp || 0) + 10)
         setProfile(prev => ({ ...prev, hp_current: eff.hp_max, mp_current: eff.mp_max, exp: newExp }))
@@ -829,7 +832,7 @@ export default function RaidBoss() {
                 <span style={{ color: canAct ? '#44ff88' : '#ffcc00' }}>{canAct ? '▶ 挑戦可能！' : `${remaining.toFixed(1)}秒`}</span>
               </div>
               <div style={{ background: '#001028', height: '6px', border: '1px solid #002244', marginBottom: '12px' }}>
-                <div style={{ height: '100%', width: `${((WAIT_SECONDS - remaining) / WAIT_SECONDS) * 100}%`, background: canAct ? '#44ff88' : 'linear-gradient(90deg,#003366,#0088ff)', transition: 'width 0.2s' }} />
+                <div style={{ height: '100%', width: `${((raidWaitFor(profile) - remaining) / raidWaitFor(profile)) * 100}%`, background: canAct ? '#44ff88' : 'linear-gradient(90deg,#003366,#0088ff)', transition: 'width 0.2s' }} />
               </div>
               <button
                 onClick={handleAttack}
@@ -939,7 +942,7 @@ function RewardTable() {
           </div>
         </div>
       ))}
-      <div style={{ color: '#334455', fontSize: '10px', marginTop: '6px' }}>※ 出撃回数でもティア保証: 3回→C / 10回→B / 25回→A。時間切れでもその時点の報酬を獲得可</div>
+      <div style={{ color: '#334455', fontSize: '10px', marginTop: '6px' }}>※ 出撃回数でもティア保証: 5回→C / 20回→B / 50回→A。時間切れでもその時点の報酬を獲得可</div>
     </div>
   )
 }
