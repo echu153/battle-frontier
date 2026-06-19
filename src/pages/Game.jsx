@@ -1388,6 +1388,7 @@ export default function Game() {
   const [announceTab, setAnnounceTab] = useState('update')   // お知らせモーダルの選択中タブ
   const [announcements, setAnnouncements] = useState([])
   const [claimableTitles, setClaimableTitles] = useState(0)  // 獲得可能な称号数（街のバナー表示用）
+  const [soldNotice, setSoldNotice] = useState(0)            // 取引所で売れた未確認の出品数（街のバナー表示用）
   const [showGuide, setShowGuide] = useState(false)
   const [showDyingTip, setShowDyingTip] = useState(false)  // 初めて瀕死になったとき1回だけ案内
   const [openGuideId, setOpenGuideId] = useState(null)
@@ -1571,6 +1572,11 @@ export default function Game() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       setClaimableTitles(await countClaimableTitles(user.id))
+      // 取引所：自分の出品が売れて未確認の件数
+      const { count } = await supabase.from('marketplace_listings')
+        .select('id', { count: 'exact', head: true })
+        .eq('seller_id', user.id).eq('status', 'sold').eq('seller_seen', false)
+      setSoldNotice(count || 0)
     })()
   }, [])
 
@@ -4241,6 +4247,12 @@ export default function Game() {
             <button onClick={()=>setAdminMsgOpen(true)}
               style={{ width:'100%', padding:'10px', marginBottom:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', animation:'none' }}>
               📩 運営からのお知らせ（{unreadAdminMsgs.length}件）→ タップで確認
+            </button>
+          )}
+          {soldNotice > 0 && (
+            <button onClick={()=>{ setSoldNotice(0); nav('/marketplace?tab=history') }}
+              style={{ width:'100%', padding:'10px', marginBottom:'8px', background:'#001a14', border:'1px solid #44ddaa', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>
+              🏷 取引所に登録したアイテムが売れました！（{soldNotice}件）→ 取引履歴へ
             </button>
           )}
           {claimableTitles > 0 && (

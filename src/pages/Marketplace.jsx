@@ -66,6 +66,7 @@ const SORT_OPTIONS = [
 ]
 
 const yen = n => (n ?? 0).toLocaleString()
+const fmtDate = s => { if (!s) return ''; const d = new Date(s); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }
 
 function WeaponCard({ weapon, bonusEffect, enhancePlus, right, bonus }) {
   if (!weapon) return null
@@ -138,6 +139,7 @@ const TABS = [
   { id:'buy',  label:'購入' },
   { id:'mine', label:'マイ出品' },
   { id:'sell', label:'出品する' },
+  { id:'history', label:'取引履歴' },
 ]
 
 export default function Marketplace() {
@@ -157,8 +159,18 @@ export default function Marketplace() {
   const [sortBy, setSortBy] = useState('obtained')
   const [category, setCategory] = useState('general') // 'general' | 'boss'
   const [expanded, setExpanded] = useState(() => new Set()) // 展開中のweapon_id
+  const [history, setHistory] = useState({ bought: [], sold: [] }) // 取引履歴
 
-  useEffect(() => { init() }, [])
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab')
+    if (t && TABS.some(x => x.id === t)) setTab(t)
+    init()
+  }, [])
+
+  // 履歴を開いたら売却通知を既読化
+  useEffect(() => {
+    if (tab === 'history') supabase.rpc('marketplace_mark_sales_seen').then(() => {}, () => {})
+  }, [tab])
 
   const init = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -166,7 +178,7 @@ export default function Marketplace() {
     setUserId(user.id)
     await supabase.rpc('marketplace_expire')  // 期限切れを手元に戻す
 
-    const [{ data: prof }, { data: active }, { data: sold }, { data: eq }] = await Promise.all([
+    const [{ data: prof }, { data: active }, { data: sold }, { data: eq }, { data: bought }, { data: soldByMe }] = await Promise.all([
       supabase.from('profiles').select('gold').eq('id', user.id).single(),
       supabase.from('marketplace_listings')
         .select('*, weapons(*), seller:profiles!marketplace_listings_seller_id_fkey(username)')
@@ -176,6 +188,12 @@ export default function Marketplace() {
         .eq('status', 'sold')
         .gte('sold_at', new Date(Date.now() - 7 * 86400000).toISOString()),
       supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', user.id).order('obtained_at'),
+      supabase.from('marketplace_listings')
+        .select('*, weapons(*), seller:profiles!marketplace_listings_seller_id_fkey(username)')
+        .eq('status', 'sold').eq('buyer_id', user.id).order('sold_at', { ascending: false }).limit(100),
+      supabase.from('marketplace_listings')
+        .select('*, weapons(*), buyer:profiles!marketplace_listings_buyer_id_fkey(username)')
+        .eq('status', 'sold').eq('seller_id', user.id).order('sold_at', { ascending: false }).limit(100),
     ])
 
     setGold(prof?.gold ?? 0)
@@ -202,6 +220,7 @@ export default function Marketplace() {
       basePriceOf(e.weapons) != null
     )
     setMyEquip(sellable)
+    setHistory({ bought: bought || [], sold: soldByMe || [] })
   }
 
   const flash = (text, color) => { setMsg({ text, color }); setTimeout(() => setMsg(null), 3500) }
@@ -334,7 +353,7 @@ export default function Marketplace() {
       )}
 
       {/* 絞り込み・ソート（購入／出品タブ） */}
-      {tab !== 'mine' && (
+      {(tab === 'buy' || tab === 'sell') && (
         <div style={{ maxWidth:'600px', margin:'0 auto 14px', display:'flex', flexWrap:'wrap', gap:'10px', alignItems:'center' }}>
           <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
             {[['general','一般'],['boss','ボス']].map(([id, label]) => {
@@ -472,6 +491,42 @@ export default function Marketplace() {
             })}
             {myEquip.length === 0 && <div style={{ color:'#446688', fontSize:'12px', textAlign:'center', padding:'40px' }}>出品できる装備がありません</div>}
             {myEquip.length > 0 && sellEquip.length === 0 && <div style={{ color:'#446688', fontSize:'12px', textAlign:'center', padding:'40px' }}>条件に合う装備がありません</div>}
+          </div>
+        )}
+
+        {/* 取引履歴タブ */}
+        {tab === 'history' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:'18px' }}>
+            <div>
+              <div style={{ color:'#44ff88', fontSize:'12px', marginBottom:'8px', borderBottom:'1px solid #143a28', paddingBottom:'4px' }}>🛒 購入したアイテム（{history.bought.length}）</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {history.bought.map(l => (
+                  <div key={l.id} style={{ border:'1px solid #143a28', background:'#001028', padding:'10px' }}>
+                    <WeaponCard weapon={l.weapons} bonusEffect={l.bonus_effect} bonus={l.bonus} />
+                    <div style={{ display:'flex', justifyContent:'space-between', marginTop:'6px', fontSize:'10px', color:'#557799' }}>
+                      <span>出品者: <span style={{ color:'#88ccff' }}>{l.seller?.username || '???'}</span> ／ {fmtDate(l.sold_at)}</span>
+                      <span style={{ color:'#ff8866' }}>-{yen(l.price)}G</span>
+                    </div>
+                  </div>
+                ))}
+                {history.bought.length === 0 && <div style={{ color:'#446688', fontSize:'11px', padding:'12px', textAlign:'center' }}>購入履歴はありません</div>}
+              </div>
+            </div>
+            <div>
+              <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'8px', borderBottom:'1px solid #3a3014', paddingBottom:'4px' }}>💰 売れたアイテム（{history.sold.length}）</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {history.sold.map(l => (
+                  <div key={l.id} style={{ border:'1px solid #3a3014', background:'#001028', padding:'10px' }}>
+                    <WeaponCard weapon={l.weapons} bonusEffect={l.bonus_effect} bonus={l.bonus} />
+                    <div style={{ display:'flex', justifyContent:'space-between', marginTop:'6px', fontSize:'10px', color:'#557799' }}>
+                      <span>購入者: <span style={{ color:'#88ccff' }}>{l.buyer?.username || '???'}</span> ／ {fmtDate(l.sold_at)}</span>
+                      <span style={{ color:'#44ff88' }}>+{yen(Math.floor(l.price * 0.8))}G</span>
+                    </div>
+                  </div>
+                ))}
+                {history.sold.length === 0 && <div style={{ color:'#446688', fontSize:'11px', padding:'12px', textAlign:'center' }}>売却履歴はありません</div>}
+              </div>
+            </div>
           </div>
         )}
       </div>

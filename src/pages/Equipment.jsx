@@ -537,7 +537,10 @@ export default function Equipment() {
                           <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>{profPrefix}{w.name}</span>
                           {plus > 0 && !isArtifactBase && <span style={{ color:'#ffcc00', fontSize:'11px', fontWeight:'bold' }}>+{plus}</span>}
                         </div>
-                        <div style={{ display:'flex', gap:'4px' }}>
+                        <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
+                          {item.is_bound && (
+                            <span title="帰属（取引所で入手・出品/加工不可）" style={{ fontSize:'9px', padding:'2px 5px', color:'#cc88ff', border:'1px solid #6644aa', borderRadius:'3px' }}>帰属</span>
+                          )}
                           <button onClick={() => toggleFavorite(item)} disabled={loading}
                             title={item.is_favorite ? 'お気に入り解除（加工・寄贈できるようになる）' : 'お気に入り登録（加工・寄贈されなくなる）'}
                             style={{ padding:'2px 6px', background: item.is_favorite ? '#2a2000' : '#001', border:`1px solid ${item.is_favorite ? '#ffcc00' : '#334455'}`, color: item.is_favorite ? '#ffcc00' : '#445566', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{item.is_favorite ? '★' : '☆'}</button>

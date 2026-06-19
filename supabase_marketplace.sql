@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS public.marketplace_listings (
   sold_at      timestamptz
 );
 ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS bonus jsonb;  -- 既存テーブルにも列追加
+ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS seller_seen boolean NOT NULL DEFAULT false; -- 出品者が売却通知を確認済みか
 CREATE INDEX IF NOT EXISTS idx_mp_status   ON marketplace_listings(status);
 CREATE INDEX IF NOT EXISTS idx_mp_weapon   ON marketplace_listings(weapon_id);
 CREATE INDEX IF NOT EXISTS idx_mp_seller   ON marketplace_listings(seller_id);
@@ -261,6 +262,17 @@ BEGIN
   RETURN json_build_object('ok', true, 'price', v_ml.price);
 END; $$;
 
+-- 8) 売却通知（ホーム画面用）を確認済みにする
+CREATE OR REPLACE FUNCTION public.marketplace_mark_sales_seen()
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  UPDATE marketplace_listings
+     SET seller_seen = true
+   WHERE seller_id = auth.uid() AND status = 'sold' AND seller_seen = false;
+END; $$;
+
+GRANT EXECUTE ON FUNCTION public.marketplace_mark_sales_seen()       TO authenticated;
 GRANT EXECUTE ON FUNCTION public.marketplace_base_price(integer)      TO authenticated;
 GRANT EXECUTE ON FUNCTION public.marketplace_expire()                 TO authenticated;
 GRANT EXECUTE ON FUNCTION public.create_marketplace_listing(integer,integer) TO authenticated;
