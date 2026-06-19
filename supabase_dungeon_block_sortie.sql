@@ -95,6 +95,8 @@ BEGIN
     IF p_is_papia THEN v_max_exp := 200;
     ELSIF p_is_boss THEN v_max_exp := 13;
     ELSE v_max_exp := 11; END IF;
+    -- ★キャラクターLV100未満は経験値1.5倍（クライアントと一致）。上限も1.5倍にしないと誤検知でEXP凍結する
+    IF COALESCE(v_profile.char_lv, 1) < 100 THEN v_max_exp := CEIL(v_max_exp * 1.5); END IF;
 
     IF p_claimed_exp < 0 OR p_claimed_exp > v_max_exp THEN
       UPDATE profiles SET suspicious_flag=true,
