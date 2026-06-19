@@ -13,12 +13,11 @@ const tidy = (t) => (t || '')
   .trim()
 
 // ============================================================
-// AI相談アシスタント（ルールベース・LLM不使用）
-//   フローティングのチャットUI。質問に自動回答し、強化アドバイスもする。
-//   ※現在 is_admin 限定で先行公開（Game.jsx 側でゲート）。
+// AI相談アシスタント「AI戦闘民族ジェミータ」
+//   ☰メニューから開くチャットUI（open/onClose で親が開閉を制御）。
+//   ルールベース(正確)＋会話LLMのハイブリッド。質問に回答し強化アドバイスもする。
 // ============================================================
-export default function AIAssistant({ ctx }) {
-  const [open, setOpen] = useState(false)
+export default function AIAssistant({ ctx, open = false, onClose }) {
   const [messages, setMessages] = useState([
     { role: 'ai', text: 'フン、来たか。俺は戦いの導き手「AI戦闘民族ジェミータ」だ。\nゲームのことなら何でも訊け。「○○とは」「○○になるには」、何でも答えてやる。\n強化に迷ったなら「おすすめの強化」と訊け。手加減はせん。' },
   ])
@@ -99,22 +98,7 @@ export default function AIAssistant({ ctx }) {
 
   return (
     <>
-      {/* フローティング起動ボタン */}
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          style={{
-            position: 'fixed', right: '16px', bottom: '16px', zIndex: 9998,
-            width: '56px', height: '56px', borderRadius: '50%',
-            background: '#0a1530', border: '2px solid #44ddaa', color: '#44ddaa',
-            fontSize: '24px', cursor: 'pointer', fontFamily: 'monospace',
-            boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
-          }}
-          title="AI戦闘民族ジェミータ"
-        >🤖</button>
-      )}
-
-      {/* チャットパネル */}
+      {/* チャットパネル（☰メニューから開く） */}
       {open && (
         <div style={{
           position: 'fixed', right: '16px', bottom: '16px', zIndex: 9999,
@@ -128,8 +112,8 @@ export default function AIAssistant({ ctx }) {
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             padding: '10px 12px', borderBottom: '1px solid #0a3a30', background: '#001520',
           }}>
-            <span style={{ color: '#44ddaa', fontSize: '13px' }}>⚔ AI戦闘民族ジェミータ（β・管理者先行）</span>
-            <button onClick={() => setOpen(false)} style={{
+            <span style={{ color: '#44ddaa', fontSize: '13px' }}>⚔ AI戦闘民族ジェミータ（β版）</span>
+            <button onClick={onClose} style={{
               background: 'none', border: 'none', color: '#668899', fontSize: '16px', cursor: 'pointer',
             }}>✕</button>
           </div>

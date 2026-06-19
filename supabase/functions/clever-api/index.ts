@@ -83,7 +83,8 @@ Deno.serve(async (req) => {
   // DB障害/スキーマ不整合は「非管理者(403)」と区別して500（fail-open防止＋誤判定の隠蔽防止）。
   if (profErr) { console.error('[clever-api] profile lookup error'); return json({ allowed: false, reason: 'profile_error' }, 500) }
   const isAdmin = !!prof?.is_admin
-  const ADMIN_ONLY = (Deno.env.get('AI_ADMIN_ONLY') || 'true') !== 'false'
+  // 一般公開済み（既定false）。再び管理者限定に戻すときは AI_ADMIN_ONLY=true を設定する。
+  const ADMIN_ONLY = (Deno.env.get('AI_ADMIN_ONLY') || 'false') === 'true'
   if (ADMIN_ONLY && !isAdmin) return json({ allowed: false, reason: 'admin_only' }, 403)
 
   let body: { question?: string; draft?: string; reference?: string; history?: Array<{ role?: string; content?: string }> }
