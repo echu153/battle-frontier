@@ -199,7 +199,7 @@ const detectStyle = (ctx, query) => {
 
 export const buildAdvice = (ctx, query) => {
   const profile = ctx?.profile
-  if (!profile) return 'プレイヤー情報が読み込めませんでした。街の画面で再度試してみろ。'
+  if (!profile) return 'プレイヤー情報が読み込めん。街の画面でやり直せ。'
   const eff = ctx?.eff || {}
   const cls = profile.class || '冒険者'
   const style = detectStyle(ctx, query)
@@ -242,7 +242,7 @@ export const buildAdvice = (ctx, query) => {
 // プレイヤーのLV・状態を見て“今やるべき優先順位”を返す総合アドバイス。
 export const buildProgressionAdvice = (ctx) => {
   const profile = ctx?.profile
-  if (!profile) return 'プレイヤー情報が読み込めませんでした。街の画面で再度試してみろ。'
+  if (!profile) return 'プレイヤー情報が読み込めん。街の画面でやり直せ。'
   const eff = ctx?.eff || {}
   const lv = profile.char_lv || profile.lv || 1
   const cls = profile.class || '冒険者'
@@ -373,7 +373,7 @@ const lookupPartial = async (term) => {
   if (uniqNames.length === 1 || cands[0].score - (cands[1]?.score ?? -999) >= 100) {
     return cands[0].format()
   }
-  return `🔎 候補が複数ある。どれですか？\n${uniqNames.slice(0, 6).map((n) => '・' + n).join('\n')}`
+  return `🔎 候補が複数ある。どれだ？\n${uniqNames.slice(0, 6).map((n) => '・' + n).join('\n')}`
 }
 
 // クラスのスキル一覧をDBから取得
@@ -483,7 +483,7 @@ const HELP_TRIGGER = /何ができ|なにができ|できること|できる事|
 // 「あなた/AIの苦手・限界・答えられない」など、対象がメタだと分かる表現に限定（裸の苦手/限界は除外）
 const LIMIT_TRIGGER = /答えられない|こたえられない|答えれない|こたえれない|答えら?んない|(あなた|きみ|君|ai|ボット|案内役|お前|おまえ)(の|が|は|って)?(苦手|限界|できないこと|わからない|不得意)|苦手な質問|答えられる(の|か|こと)|何は答え/i
 // 直前の話題を深掘りするフォロー発話（会話の継続性。ctx.lastQuery を踏まえて返す）
-const FOLLOWUP_TRIGGER = /^(もっと|もうちょい|もうすこし|もう少し)?(くわしく|詳しく)[\sー!！。.?？]*$|^(他には|ほかには|もっと教え|もっと知り|続き|つづき)|^もっと[\sー!！。]*$/
+const FOLLOWUP_TRIGGER = /^(もっと|もうちょい|もうすこし|もう少し)?(くわしく|詳しく)[\sー!！。.?？]*$|^(他には|ほかには|もっと教えて?|もっと知りたい?|続き|つづき)[\sー!！。.?？]*$|^もっと[\sー!！。]*$/
 
 // 不適切な内容（R18・グロ・差別/嫌がらせ等）は最優先できっぱり断る。
 // ゲームは戦闘テーマのため「殺す/血/倒す」等は対象にせず、明確に不適切な語に絞る。

@@ -57,7 +57,7 @@ export default function AIAssistant({ ctx }) {
       }
       // 直前話題として記憶：事実回答 or LLMが答えた自由質問（聞き返し「もっと詳しく」が続くように）
       const substantive = ['kb', 'db', 'class', 'advice', 'matchup'].includes(res.kind)
-      if (substantive || (gotLLM && res.kind === 'fallback')) lastQueryRef.current = text
+      if (substantive || (gotLLM && (res.kind === 'fallback' || res.kind === 'chat'))) lastQueryRef.current = text
     } catch {
       answer = '通信が乱れたか。もう一度言ってみろ。'
     }
@@ -121,7 +121,7 @@ export default function AIAssistant({ ctx }) {
             {aiRemaining === 0
               ? <span>📋 現在テンプレ回答のみ（ジェミータの本気は本日分を使い切った・日付が変わればリセット）</span>
               : aiRemaining === null
-                ? <span>⚔ ジェミータの本気：1日{aiLimit ?? 10}回まで（超過後はテンプレ回答）</span>
+                ? <span>⚔ ジェミータの本気：{aiLimit ? `1日${aiLimit}回まで` : '1日の上限あり'}（超過後はテンプレ回答）</span>
                 : <span>⚔ ジェミータの本気：あと{aiRemaining}回（超過後はテンプレ回答）</span>}
           </div>
 

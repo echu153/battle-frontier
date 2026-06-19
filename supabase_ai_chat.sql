@@ -1,6 +1,6 @@
 -- ============================================================
 -- AI相談アシスタント：会話用LLMの「1日N回/ユーザー」上限管理
---   Edge Function ai-chat から service_role で ai_chat_consume を呼ぶ。
+--   Edge Function clever-api から service_role で ai_chat_consume を呼ぶ。
 --   JST(=UTC+9)の暦日でカウントし、日付が変われば自動リセット。
 -- ============================================================
 

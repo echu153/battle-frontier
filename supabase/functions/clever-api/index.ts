@@ -22,8 +22,8 @@ const json = (body: unknown, status = 200) =>
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-// プロバイダ=Groq（無料枠が広い）。互換のためGEMINI_API_KEYもフォールバックで読む。
-const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY') || Deno.env.get('GEMINI_API_KEY') || ''
+// プロバイダ=Groq。GROQ_API_KEY のみ使用（他社キーをGroqへ送らない＝資格情報の漏えい防止）。
+const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY') || ''
 // 上限は有限の正整数のみ採用。不正値は既定10。
 const _lim = parseInt(Deno.env.get('AI_DAILY_LIMIT') || '10', 10)
 const DAILY_LIMIT = Number.isFinite(_lim) && _lim > 0 ? _lim : 10
@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
   const question = (body.question || '').toString().trim().slice(0, 500)
   if (!question) return json({ error: 'empty' }, 400)
   // 消費の前に不適切判定（消費させない・LLMに送らない）
-  if (NG.test(question)) return json({ allowed: true, text: 'くだらん。そんな話に付き合う気はない。ゲームのことなら相手をしてやる。', remaining: null })
+  if (NG.test(question.replace(/\s/g, ''))) return json({ allowed: true, text: 'くだらん。そんな話に付き合う気はない。ゲームのことなら相手をしてやる。', remaining: null })
   if (!GROQ_API_KEY) return json({ allowed: false, reason: 'not_configured' }, 503)
 
   // 1日上限の消費（DBで原子的に判定）。残り回数 -1 = 上限到達
@@ -77,7 +77,10 @@ Deno.serve(async (req) => {
     return json({ allowed: false, reason: 'daily_limit', limit: DAILY_LIMIT })
   }
 
-  const refund = async () => { await svc.rpc('ai_chat_refund', { p_user: uid }).then(() => {}, () => {}) }
+  const refund = async () => {
+    const { error } = await svc.rpc('ai_chat_refund', { p_user: uid })
+    if (error) console.error('[clever-api] refund failed')
+  }
 
   // プロンプト（クライアントの facts は信用しない＝根拠に使わない。質問のみ渡す）
   const userText = `プレイヤーの発言：${question}`
@@ -98,15 +101,22 @@ Deno.serve(async (req) => {
         max_tokens: 400,
         temperature: 0.8,
       }),
+      signal: AbortSignal.timeout(15000),
     })
     status = r.status
-    const data = await r.json()
-    answer = data?.choices?.[0]?.message?.content || ''
+    if (r.ok) {
+      const data = await r.json()
+      answer = data?.choices?.[0]?.message?.content || ''
+    }
   } catch {
     answer = ''
   }
   console.log('[clever-api] groq status:', status) // 本文やuidは記録しない
   if (!answer) { await refund(); return json({ allowed: false, reason: 'llm_error' }, 502) }
+  // 出力側モデレーション（生成結果が不適切なら出さない）
+  if (NG.test(answer.replace(/\s/g, ''))) {
+    return json({ allowed: true, text: 'くだらん。その手の話はしない。ゲームのことを訊け。', remaining, limit: DAILY_LIMIT })
+  }
 
   return json({ allowed: true, text: answer.trim(), remaining, limit: DAILY_LIMIT })
 })
