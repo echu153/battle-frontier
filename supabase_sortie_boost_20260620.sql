@@ -12,11 +12,13 @@
 -- ① ブースト管理列＋パピア時間帯（プレイヤー選択） ----------------
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS boost_active_until timestamptz;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS boost_used_date    date;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS papia_hour        int;          -- パピア出現率アップの開始時刻(JST 0-23)。NULL=未設定
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS papia_hour        int;          -- パピア出現率アップ開始時刻(JST 0-23) 枠1。NULL=未設定
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS papia_hour2       int;          -- パピア枠2(JST 0-23)。NULL=未設定
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS papia_hour_set_at timestamptz;  -- 設定日時（変更は1か月に1回まで）
 
--- パピア時間帯の設定RPC（is_admin限定先行・一度決めたら1か月変更不可）
-CREATE OR REPLACE FUNCTION public.set_papia_hour(p_hour int)
+-- パピア時間帯の設定RPC（is_admin限定先行・2枠・一度決めたら1か月変更不可）
+DROP FUNCTION IF EXISTS public.set_papia_hour(int);
+CREATE OR REPLACE FUNCTION public.set_papia_hour(p_hour int, p_hour2 int DEFAULT NULL)
 RETURNS json
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -28,6 +30,7 @@ DECLARE
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('ok',false,'reason','not_authenticated'); END IF;
   IF p_hour IS NULL OR p_hour < 0 OR p_hour > 23 THEN RETURN json_build_object('ok',false,'reason','invalid_hour'); END IF;
+  IF p_hour2 IS NOT NULL AND (p_hour2 < 0 OR p_hour2 > 23) THEN RETURN json_build_object('ok',false,'reason','invalid_hour'); END IF;
   SELECT * INTO v_row FROM profiles WHERE id = v_uid FOR UPDATE;
   IF NOT FOUND THEN RETURN json_build_object('ok',false,'reason','profile_not_found'); END IF;
   -- ★is_admin限定先行: 管理者以外は不可。公開時はこの判定を外す。
@@ -35,14 +38,14 @@ BEGIN
   -- 一度決めたら1か月（30日）変更不可
   IF v_row.papia_hour_set_at IS NOT NULL AND now() < v_row.papia_hour_set_at + interval '30 days' THEN
     RETURN json_build_object('ok',false,'reason','locked',
-      'papia_hour', v_row.papia_hour,
+      'papia_hour', v_row.papia_hour, 'papia_hour2', v_row.papia_hour2,
       'unlock_at', v_row.papia_hour_set_at + interval '30 days');
   END IF;
-  UPDATE profiles SET papia_hour = p_hour, papia_hour_set_at = now() WHERE id = v_uid;
-  RETURN json_build_object('ok',true,'papia_hour', p_hour, 'unlock_at', now() + interval '30 days');
+  UPDATE profiles SET papia_hour = p_hour, papia_hour2 = p_hour2, papia_hour_set_at = now() WHERE id = v_uid;
+  RETURN json_build_object('ok',true,'papia_hour', p_hour, 'papia_hour2', p_hour2, 'unlock_at', now() + interval '30 days');
 END;
 $$;
-GRANT EXECUTE ON FUNCTION public.set_papia_hour(int) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.set_papia_hour(int, int) TO authenticated;
 
 -- ② 通常出撃ロック（管理者: ブースト中10秒/通常20秒、非管理者: 10秒） ----
 CREATE OR REPLACE FUNCTION public.sortie_lock()

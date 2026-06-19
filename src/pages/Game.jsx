@@ -1309,9 +1309,9 @@ const getPapiaEventStatus = (profile) => {
   const h = jstNow.getUTCHours()
   const m = jstNow.getUTCMinutes()
   const totalMin = h * 60 + m
-  // 管理者は選択した1枠のみ（未設定ならイベント無し）
+  // 管理者は選択した最大2枠のみ（未設定ならイベント無し）。非管理者は従来固定4枠。
   const hours = profile?.is_admin
-    ? (Number.isInteger(profile.papia_hour) ? [profile.papia_hour] : [])
+    ? [profile.papia_hour, profile.papia_hour2].filter(Number.isInteger)
     : PAPIA_EVENT_HOURS
   for (const startH of hours) {
     const startMin = startH * 60
@@ -1400,7 +1400,8 @@ export default function Game() {
   const [showOptions, setShowOptions] = useState(false)   // ⚙ オプション（ブーストタイム発動など）
   const [boostLoading, setBoostLoading] = useState(false)
   const [papiaHourLoading, setPapiaHourLoading] = useState(false)
-  const [papiaSel, setPapiaSel] = useState(20)            // パピア時間帯の選択値（デフォルト20時）
+  const [papiaSel, setPapiaSel] = useState(20)            // パピア枠1の選択値（デフォルト20時）
+  const [papiaSel2, setPapiaSel2] = useState(-1)          // パピア枠2の選択値（-1=なし）
   const [contactForm, setContactForm] = useState({ category: 'bug', body: '' })
   const [contactSent, setContactSent] = useState(false)
   const [contactLoading, setContactLoading] = useState(false)
@@ -3284,7 +3285,8 @@ export default function Game() {
     if (papiaHourLoading) return
     setPapiaHourLoading(true)
     try {
-      const { data, error } = await supabase.rpc('set_papia_hour', { p_hour: papiaSel })
+      const p_hour2 = papiaSel2 >= 0 ? papiaSel2 : null
+      const { data, error } = await supabase.rpc('set_papia_hour', { p_hour: papiaSel, p_hour2 })
       if (error) { alert('設定に失敗しました。少し待ってからお試しください。'); return }
       if (!data?.ok) {
         if (data?.reason === 'locked') alert(`パピア時間帯は1か月に1回しか変更できません。次に変更できるのは ${new Date(data.unlock_at).toLocaleString('ja-JP')} 以降です。`)
@@ -3294,8 +3296,10 @@ export default function Game() {
         await fetchProfile()
         return
       }
-      setProfile(p => p ? { ...p, papia_hour: data.papia_hour, papia_hour_set_at: new Date().toISOString() } : p)
-      alert(`パピア出現時間帯を ${String(data.papia_hour).padStart(2,'0')}:00〜${String(data.papia_hour).padStart(2,'0')}:30 に設定しました（1か月変更不可）`)
+      setProfile(p => p ? { ...p, papia_hour: data.papia_hour, papia_hour2: data.papia_hour2, papia_hour_set_at: new Date().toISOString() } : p)
+      const fmtH = (h) => Number.isInteger(h) ? `${String(h).padStart(2,'0')}:00〜${String(h).padStart(2,'0')}:30` : null
+      const slots = [fmtH(data.papia_hour), fmtH(data.papia_hour2)].filter(Boolean).join(' と ')
+      alert(`パピア出現時間帯を ${slots} に設定しました（1か月変更不可）`)
     } finally {
       setPapiaHourLoading(false)
     }
@@ -3702,7 +3706,7 @@ export default function Game() {
     return (
       <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
         <div style={{ background:'#001020', border:'1px solid #446688', padding:'20px', maxWidth:'460px', width:'100%', fontFamily:'monospace' }}>
-          <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'16px' }}>⚙ オプション</div>
+          <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'16px' }}>⚙ ブースト/パピア時間設定</div>
           <div style={{ border:'1px solid #335577', background:'#000a18', padding:'14px', marginBottom:'16px' }}>
             <div style={{ color:'#ffcc44', fontSize:'13px', marginBottom:'6px' }}>⚡ ブーストタイム</div>
             <div style={{ color:'#88aacc', fontSize:'11px', lineHeight:'1.7', marginBottom:'12px' }}>
@@ -3731,26 +3735,38 @@ export default function Game() {
             <div style={{ color:'#ffaa00', fontSize:'13px', marginBottom:'6px' }}>🌟 パピア出現時間帯</div>
             <div style={{ color:'#88aacc', fontSize:'11px', lineHeight:'1.7', marginBottom:'10px' }}>
               選んだ時刻から<strong style={{color:'#ffaa00'}}>30分間</strong>、パピアの出現率がアップします（毎日その時刻）。<br/>
+              ・<strong style={{color:'#ffaa00'}}>2枠まで</strong>設定できます<br/>
               ・<strong style={{color:'#ffaa00'}}>一度決めると1か月は変更できません</strong>
             </div>
             <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'8px' }}>
-              現在の設定: {Number.isInteger(profile?.papia_hour) ? `${pad2(profile.papia_hour)}:00〜${pad2(profile.papia_hour)}:30` : '未設定'}
+              現在の設定: {[profile?.papia_hour, profile?.papia_hour2].filter(Number.isInteger).map(h=>`${pad2(h)}:00〜${pad2(h)}:30`).join(' / ') || '未設定'}
             </div>
             {papiaLocked ? (
               <div style={{ textAlign:'center', color:'#886633', fontSize:'11px', padding:'8px', border:'1px solid #332a14', background:'#0a0800' }}>
                 変更は {papiaUnlockAt.toLocaleString('ja-JP')} 以降に可能
               </div>
             ) : (
-              <div style={{ display:'flex', gap:'8px' }}>
-                <select value={papiaSel} onChange={e=>setPapiaSel(Number(e.target.value))}
-                  style={{ flex:1, padding:'8px', background:'#001040', border:'1px solid #446688', color:'#88ccff', fontFamily:'monospace', fontSize:'12px' }}>
-                  {Array.from({length:24},(_,h)=>(<option key={h} value={h}>{pad2(h)}:00〜{pad2(h)}:30</option>))}
-                </select>
+              <>
+                <div style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'8px' }}>
+                  <span style={{ color:'#446688', fontSize:'11px', width:'42px' }}>枠1</span>
+                  <select value={papiaSel} onChange={e=>setPapiaSel(Number(e.target.value))}
+                    style={{ flex:1, padding:'8px', background:'#001040', border:'1px solid #446688', color:'#88ccff', fontFamily:'monospace', fontSize:'12px' }}>
+                    {Array.from({length:24},(_,h)=>(<option key={h} value={h}>{pad2(h)}:00〜{pad2(h)}:30</option>))}
+                  </select>
+                </div>
+                <div style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'10px' }}>
+                  <span style={{ color:'#446688', fontSize:'11px', width:'42px' }}>枠2</span>
+                  <select value={papiaSel2} onChange={e=>setPapiaSel2(Number(e.target.value))}
+                    style={{ flex:1, padding:'8px', background:'#001040', border:'1px solid #446688', color:'#88ccff', fontFamily:'monospace', fontSize:'12px' }}>
+                    <option value={-1}>なし</option>
+                    {Array.from({length:24},(_,h)=>(<option key={h} value={h}>{pad2(h)}:00〜{pad2(h)}:30</option>))}
+                  </select>
+                </div>
                 <button onClick={savePapiaHour} disabled={papiaHourLoading}
-                  style={{ padding:'8px 14px', background:'#1a1400', border:'1px solid #ffaa00', color:'#ffaa00', cursor: papiaHourLoading?'default':'pointer', fontFamily:'monospace', fontSize:'12px', whiteSpace:'nowrap' }}>
-                  {papiaHourLoading ? '設定中…' : 'この時刻に設定'}
+                  style={{ width:'100%', padding:'10px', background:'#1a1400', border:'1px solid #ffaa00', color:'#ffaa00', cursor: papiaHourLoading?'default':'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+                  {papiaHourLoading ? '設定中…' : 'この時刻で設定（1か月変更不可）'}
                 </button>
-              </div>
+              </>
             )}
           </div>
 
@@ -4087,6 +4103,8 @@ export default function Game() {
   const papiaEvent = getPapiaEventStatus(profile)
   const boostActive = isBoostActive(profile)
   const boostRemainMin = boostActive ? Math.max(1, Math.ceil((new Date(profile.boost_active_until).getTime() - Date.now())/60000)) : 0
+  // 管理者でパピア時間が未設定なら街にセットアップ通知（押すと設定画面へ）
+  const papiaNeedsSetup = profile?.is_admin && !Number.isInteger(profile?.papia_hour) && !Number.isInteger(profile?.papia_hour2)
   const materialEvent = getMaterialEventStatus()
   const matEventBannerVisible = materialEvent.active && matEventSeenDate !== getDungeonDateStr()
   const dismissMatEventBanner = () => {
@@ -4380,7 +4398,7 @@ export default function Game() {
               {/* ★2026-06-20: is_admin限定先行の新メニュー（お知らせ/ヘルプ/オプション）。一般公開時はこの分岐を外す */}
               <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
               <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
-              <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ オプション</button>
+              <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ ブースト/パピア時間設定</button>
               <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
             </>) : (
               MOBILE_MENU_ORDER.map(renderMenuBtn)
@@ -4408,6 +4426,12 @@ export default function Game() {
             <button onClick={()=>nav('/titles')}
               style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#001a08', border:'1px solid #44aa44', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
               🎉 獲得できる称号があります！（{claimableTitles}件）→ 称号ページへ
+            </button>
+          )}
+          {papiaNeedsSetup && (
+            <button onClick={()=>setShowOptions(true)}
+              style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a1200', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              🌟 パピアの出現時間が未設定です！→ ブースト/パピア時間設定へ
             </button>
           )}
           <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', marginBottom:'8px' }}>
@@ -4822,7 +4846,7 @@ export default function Game() {
               {/* ★2026-06-20: is_admin限定先行の新メニュー（お知らせ/ヘルプ/オプション）。一般公開時はこの分岐を外す */}
               <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
               <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
-              <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ オプション</button>
+              <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ ブースト/パピア時間設定</button>
               <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
             </>) : (
               DESKTOP_MENU_ORDER.map(renderMenuBtn)
@@ -4843,6 +4867,12 @@ export default function Game() {
           <button onClick={()=>nav('/titles')}
             style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#001a08', border:'1px solid #44aa44', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
             🎉 獲得できる称号があります！（{claimableTitles}件）→ 称号ページへ
+          </button>
+        )}
+        {papiaNeedsSetup && (
+          <button onClick={()=>setShowOptions(true)}
+            style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a1200', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            🌟 パピアの出現時間が未設定です！→ ブースト/パピア時間設定へ
           </button>
         )}
 
