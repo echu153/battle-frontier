@@ -608,7 +608,7 @@ export const askAssistant = async (query, ctx = {}, _depth = 0) => {
     if (WHOAMI_TRIGGER.test(raw)) return { text: WHOAMI_TEXT, kind: 'meta' }
     if (CALL_TRIGGER.test(raw)) return { text: pick(CALL_TEXTS), kind: 'meta' }
     const st = smalltalk(raw)
-    if (st) return { text: st, kind: 'meta' }
+    if (st) return { text: st, kind: 'chat' }
     // 挨拶の言いかけ/誤記（こんにちわ・こんにち 等）は挨拶と同一扱い＝確認せずそのまま挨拶を返す
     if (guessGreeting(raw)) return { text: GREETING_TEXT_FN(), kind: 'meta' }
     // 直前の話題の深掘り（「もっと詳しく」「他には」）＝会話の継続性
@@ -681,7 +681,7 @@ export const askAssistant = async (query, ctx = {}, _depth = 0) => {
   if (HELP_TRIGGER.test(raw)) return { text: HELP_TEXT, kind: 'meta' }
   if (LIMIT_TRIGGER.test(raw)) return { text: LIMIT_TEXT, kind: 'meta' }
   const cc = chitchat(raw)
-  if (cc) return { text: cc, kind: 'meta' }
+  if (cc) return { text: cc, kind: 'chat' }
 
   // 7) フォールバック（柔らかめに。「もしかして○○？」推測も挟む。記録はKB育成用）
   const guesses = didYouMean(raw)

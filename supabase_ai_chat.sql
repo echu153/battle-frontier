@@ -47,8 +47,9 @@ begin
 end;
 $func$;
 
--- anon/authenticated には付与しない（Edge Function の service_role のみ実行）
+-- anon/authenticated には付与しない。Edge Function が使う service_role にのみ許可する。
 revoke all on function public.ai_chat_consume(uuid, int) from public, anon, authenticated;
+grant execute on function public.ai_chat_consume(uuid, int) to service_role;
 
 -- 任意：管理者が利用状況を見るための参照ポリシー
 drop policy if exists ai_chat_usage_admin_read on public.ai_chat_usage;
