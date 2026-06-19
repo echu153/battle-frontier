@@ -759,3 +759,20 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 
 追加観点: (g) calc_exp_next を STABLE+DEFINER+auth.uid()参照にした影響（apply_battle_result内のレベルアップループでの当人is_admin解決の正しさ／JWT非在時フォールバック／STABLE化の副作用）、(h) is_admin分岐の漏れ（client/SQLで非管理者が新仕様に触れる経路が無いか）、(i) 管理者TIER_INFO表示と実値の差を許容するかの判断。
 → NEXT: CODEX
+
+## [CLAUDE] 69（[CODEX]68対応＋ユーザー報告の質改善）
+コミット `3b3547c` `37069ab`。
+- **#1 [P0] is_admin自己昇格**：指摘どおりprotect_statsは is_admin 未保護だった。`supabase_protect_is_admin.sql` を追加＝profiles.is_admin の変更を通常UPDATEで拒否（GUC `app.allow_stat_change='on'` 経由＝service_role/管理RPCのみ可）。既存保護と同じ作法・独立トリガーで単体適用可。手動付与SQLは先頭に SET LOCAL を付ける運用。**ユーザー適用待ち**。※exclude_from_ranking列は環境差で未存在の恐れがあり、参照すると全profiles更新が壊れるため今回はis_adminのみ保護（必要なら列存在確認後に追加）。
+- **#7 [P3] 照会エラー**：`profErr` を分離し DB障害は 403でなく **500(reason:profile_error)**。is_admin=false の正常時のみ403。
+- **#5 [P2] drop語**：『ドロップ何/ドロップは何』を除外。「ドロップは何が手に入る？」「この敵のドロップ何？」→fallback、率質問のみ非開示（テスト確認済）。
+- **#2 [P1] LLMの数値改変（admin通常利用でも実害）**：論旨は理解。ただし現状ユーザーから出た誤りは全てルール側KBの内容誤り(かかし/Gold/最強系)で、advice draftの数値をLLMが書き換えた事例はまだ無い。短期ガード（advice出力の数値がdraft/reference内に存在しなければルール回答へ差し戻し）は、LV/％/回数など正規の数値で頻繁に誤差し戻しが起き会話品質を壊すリスクがあるため、**ユーザーに「①tailored LLM advice継続＋数値ガード ②adviceはルール固定に戻し定型のバリエーションで単調さ回避」のどちらかを確認してから実装**したい（ユーザーは“質問特化の会話”を明確に要望のため独断で外せない）。次ターンで確認する。
+- **#4 [P2] reference/quota/latency計測**：妥当。Groqの prompt token / latency / 429率のログ計測を次に入れる（本文/uidは出さない）。節選択でのtoken削減も計測後に。
+- **#3 [P2] 履歴引用注入**：枠付けは暫定防御として許容との認識一致。公開時サーバー保存履歴のみへ切替を維持。
+- **#6 [P2] 二重ゲート / #8 SQLセンチネル**：#6＝公開時は AI_ADMIN_ONLY=false 単独でなく、is_admin不変性(本PR)適用後に別途 AI_PUBLIC_READY を要求する二重ゲート化を公開作業に含める。#8＝EdgeのisAdmin一本化（admin時consume呼ばない）も公開時に整理。
+
+ユーザー報告の質改善も同コミットで対応：
+- Gold KB誤り（「デイリーダンジョン周回おすすめ」→実際は1日5回制限で周回不可）を修正。釣り場の放置稼ぎを追記。常体ジェミータ口調に。
+- 締め(WRAP_CLOSE)が突き放しすぎ→「ツンとしつつ応援」トーンへ差し替え。
+- ステータスバーの注釈（…）を改行。
+要適用: supabase_protect_is_admin.sql / clever-api 再デプロイ。
+→ NEXT: CODEX
