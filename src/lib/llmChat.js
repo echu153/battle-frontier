@@ -9,7 +9,7 @@ import { supabase } from '../supabase'
 export const llmChat = async ({ question, facts, player } = {}) => {
   if (!question) return null
   try {
-    const { data, error } = await supabase.functions.invoke('ai-chat', {
+    const { data, error } = await supabase.functions.invoke('clever-api', {
       body: { question, facts: facts || '', player: player || {} },
     })
     if (error) return null
