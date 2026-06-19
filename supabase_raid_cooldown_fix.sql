@@ -19,15 +19,13 @@ DECLARE
   v_new_hp      bigint;
   v_cooldown    int := 10;
   v_expire_at   timestamptz;
+  v_exp_gain    int;
 BEGIN
   v_player_id := auth.uid();
   IF v_player_id IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
 
-  -- ★かかし修練中（時間経過前）は出撃不可
-  IF EXISTS (SELECT 1 FROM scarecrow_sessions
-             WHERE player_id = v_player_id AND status = 'active' AND now() < ends_at) THEN
-    RETURN json_build_object('error', 'かかし修練中は出撃できません');
-  END IF;
+  -- かかし修練は時間経過待ちの放置型のため、その間もレイド出撃は許可する
+  -- （以前は「かかし修練中は出撃できません」で弾いていたが、ユーザー要望で解除）
 
   SELECT * INTO v_boss FROM raid_boss WHERE id = p_raid_id FOR UPDATE;
   IF NOT FOUND THEN RETURN json_build_object('error', 'ボスが見つかりません'); END IF;
@@ -73,12 +71,20 @@ BEGIN
       attack_count   = raid_participants.attack_count + 1,
       last_attack_at = now();
 
-  -- 共有CD更新 + 出撃報酬（HP/MP全回復・EXP+10）
+  -- かかし修練中（時間経過前）は出撃報酬のEXPを付与しない（修練の時間EXPと二重取り防止）
+  IF EXISTS (SELECT 1 FROM scarecrow_sessions
+             WHERE player_id = v_player_id AND status = 'active' AND now() < ends_at) THEN
+    v_exp_gain := 0;
+  ELSE
+    v_exp_gain := 10;
+  END IF;
+
+  -- 共有CD更新 + 出撃報酬（HP/MP全回復・EXP+v_exp_gain）
   PERFORM set_config('app.allow_stat_change', 'on', true);
   UPDATE profiles SET
     hp_current     = v_profile.hp_max,
     mp_current     = v_profile.mp_max,
-    exp            = COALESCE(exp, 0) + 10,
+    exp            = COALESCE(exp, 0) + v_exp_gain,
     last_action_at = now()
   WHERE id = v_player_id;
 
@@ -87,7 +93,8 @@ BEGIN
     'hp_current', v_new_hp,
     'hp_max',     v_boss.hp_max,
     'status',     CASE WHEN v_new_hp = 0 THEN 'defeated' ELSE 'active' END,
-    'exp',        COALESCE(v_profile.exp, 0) + 10
+    'exp',        COALESCE(v_profile.exp, 0) + v_exp_gain,
+    'exp_gained', v_exp_gain
   );
 END;
 $$;
