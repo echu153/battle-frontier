@@ -4623,6 +4623,9 @@ export default function Game() {
             </div>
           )}
         </div>
+        {profile?.is_admin && (
+          <AIAssistant ctx={{ profile, eff, equipment }} />
+        )}
       </div>
     )
   }
