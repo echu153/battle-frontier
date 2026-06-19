@@ -2,11 +2,12 @@
 // AI相談アシスタント「ジェミータ」会話用LLMプロキシ（Groq 無料枠・OpenAI互換）
 //   ・APIキーはサーバー側に秘匿
 //   ・1日N回/ユーザーの上限をDBで原子的に強制（超過はクライアントがルールへフォールバック）
+//   ・先行フェーズは is_admin のみ許可（Edgeでも検証＝直叩き対策）。AI_ADMIN_ONLY=false で一般公開。
 //   ・ゲームの「事実」はクライアント同梱の静的リファレンス(reference)＋下書き(draft)を根拠に答える。
-//     これらは偽装されても本人にしか返らない自己完結被害。プロンプトで「ここに無い数値を作るな」と制約。
+//     reference/draft/historyは未検証入力として枠付けし命令に従わせない。公開時は信頼境界を再設計する。
 //   ・関数名は clever-api（クライアントの functions.invoke('clever-api') と一致）
 //
-// シークレット: GROQ_API_KEY（必須）/ AI_DAILY_LIMIT（任意・既定10）/ GROQ_MODEL（任意・既定 llama-3.3-70b-versatile）
+// シークレット: GROQ_API_KEY（必須）/ AI_DAILY_LIMIT（任意・既定10）/ GROQ_MODEL（任意）/ AI_ADMIN_ONLY（任意・既定true）
 // SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY は自動注入。
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
