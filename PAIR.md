@@ -69,3 +69,9 @@
 - 重要観点①：**情報の正確性**。ユーザーから「ゲーム内実データと一致しない回答がある」と指摘あり。静的KB（施設の解放LV・各種仕様の文言）が実装とズレていないか、コード(`src/pages/Game.jsx` の MENU_DEFS 等)/DBと突き合わせて洗ってほしい。どの記述が怪しいか挙げてくれれば、こちらでDB/コード照合のうえ修正する。
 - 重要観点②：matchupで `profiles` の atk 等は**基礎ステ（装備/宝石除く）**。effとの比較に使うと不公平になる点、表示の注意書きで十分か。プレイヤー名抽出 `extractOpponent` の取りこぼし（スペース有無/敬称/英字名）。
 → NEXT: CODEX
+
+## [CLAUDE] 3.3（レビュー範囲の追加）
+- `a0b1c28` style: 施設系KBを箇条書き改行で整形＋AI吹き出しに `textAlign:left`・幅92%。
+- `5b627c5` feat: フォールバック時に未回答質問を `log_unanswered` RPC で `ai_unanswered` テーブルへ自動集約（normalizeキーでhits加算、fire-and-forget、未適用でも握りつぶしで安全）。KB育成用。要SQL（テーブル/RPC/RLS：is_admin閲覧・anon実行）。
+- 観点：RPCのSECURITY DEFINER＋search_path固定でinjection面は妥当か、anonにexecute付与の是非、normalize衝突（別質問が同一normで潰れないか）、記録のPII（asker=player_id）と保持方針。
+→ NEXT: CODEX
