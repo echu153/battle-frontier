@@ -20,6 +20,8 @@ export default function AIAssistant({ ctx }) {
 
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
+  // 直前に実のある回答ができた質問を覚えておき、「もっと詳しく」等のフォロー発話に文脈で応える
+  const lastQueryRef = useRef('')
 
   const send = async (textArg) => {
     const text = (textArg ?? input).trim()
@@ -31,8 +33,10 @@ export default function AIAssistant({ ctx }) {
     setMessages((m) => [...m, { role: 'user', text }, { role: 'ai', text: '🔎 調べています…' }])
     let answer
     try {
-      const res = await askAssistant(text, ctx)
+      const res = await askAssistant(text, { ...ctx, lastQuery: lastQueryRef.current })
       answer = res.text
+      // 実のある回答（雑談/聞き取れず以外）のときだけ直前話題として記憶
+      if (res.kind && res.kind !== 'meta' && res.kind !== 'fallback') lastQueryRef.current = text
     } catch {
       answer = '通信エラーが発生しました。もう一度お試しください。'
     }

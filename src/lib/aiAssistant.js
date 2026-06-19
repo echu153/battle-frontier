@@ -482,12 +482,25 @@ const WHOAMI_TRIGGER = /(あなた|きみ|君|お前|おまえ|あんた)(って
 const HELP_TRIGGER = /何ができ|なにができ|できること|できる事|使い方|つかいかた|ヘルプ|help|何が聞け|なにが聞け|何を聞け|なにを聞け|どんなこと(が|を)?(聞|質問|きけ|分か)|機能|メニュー|何を質問/
 // 「あなた/AIの苦手・限界・答えられない」など、対象がメタだと分かる表現に限定（裸の苦手/限界は除外）
 const LIMIT_TRIGGER = /答えられない|こたえられない|答えれない|こたえれない|答えら?んない|(あなた|きみ|君|ai|ボット|案内役|お前|おまえ)(の|が|は|って)?(苦手|限界|できないこと|わからない|不得意)|苦手な質問|答えられる(の|か|こと)|何は答え/i
+// 直前の話題を深掘りするフォロー発話（会話の継続性。ctx.lastQuery を踏まえて返す）
+const FOLLOWUP_TRIGGER = /^(もっと|もうちょい|もうすこし|もう少し)?(くわし|詳し)|他には|ほかには|もっと教え|もっと知り|続き|つづき|^もっと[\s!！。]*$/
 
 // メタ応答（ゲームのことなら何でも、を前向きに伝える）
 const HELP_TEXT = `🤖 ぼくに聞けること\nこのゲームのことなら、いろいろお手伝いできます！例えば：\n・職業/転職：「狂戦士になるには？」\n・スキル/装備/アイテム：「メテオストライクの効果は？」\n・施設の使い方：「錬金部屋ってなに？」「奈落闘技場は？」\n・強化の相談：「おすすめ強化」「強くなるには？」\n・対戦相手の対策：「○○に勝ちたい」\n気軽に何でも聞いてくださいね😊`
 const LIMIT_TEXT = `🤖 基本的に、このゲームに関することなら何でも答えられるよう頑張ります！\nスキル・装備・アイテム・施設・転職・強化のコツ・対戦相手の対策など、ゲームのことならお任せください。\nもしすぐ答えられない質問があれば、今後の回答改善の参考にさせてもらいます。\nまずは「おすすめ強化」や「○○ってなに？」を試してみてください！`
-const GREETING_TEXT = `やあ！🤖 バトルフロンティアの案内役です。\nゲームのことなら何でも聞いてくださいね。\n例：「おすすめ強化」「狂戦士になるには？」「○○ってなに？」`
-const THANKS_TEXT = `どういたしまして！😊 また何かあればいつでも聞いてください。`
+// 同じ表現の繰り返しを避けるため、いくつかの言い回しからランダムに選ぶ
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
+const GREETING_TEXTS = [
+  `やあ！🤖 バトルフロンティアの案内役です。\nゲームのことなら何でも聞いてくださいね。\n例：「おすすめ強化」「狂戦士になるには？」`,
+  `こんにちは！何かお手伝いできることはありますか？\n強化の相談や「○○ってなに？」など、気軽にどうぞ。`,
+  `どうも！ゲームのことで気になることがあれば聞いてください。\n「強くなるには？」もよく聞かれますよ。`,
+]
+const GREETING_TEXT_FN = () => pick(GREETING_TEXTS)
+const THANKS_TEXTS = [
+  `どういたしまして！また何かあれば聞いてください。`,
+  `お役に立てたなら何よりです。いつでもどうぞ。`,
+  `こちらこそ。困ったらまた声をかけてくださいね。`,
+]
 const WHOAMI_TEXT = `🤖 ぼくはバトルフロンティアのAI案内役です。\nゲームの疑問に答えたり、あなたに合った強化を提案したりします。\n「何ができる？」と聞いてくれれば、できることの一覧を出しますよ。`
 
 // 相づち・短い雑談（会話を続ける返事。文全体がそれだけのとき限定）
@@ -519,7 +532,7 @@ const chitchat = (raw) => CHITCHAT.find((c) => c.re.test(raw))?.a || null
 
 // タイポ・言いかけの挨拶を推測（「こんにち」→「こんにちは」で確認を挟む）
 const GREET_CANON = ['こんにちは', 'こんばんは', 'おはよう']
-// 挨拶の言いかけ/誤記を検知（呼び出し側で挨拶と同一扱い＝確認せずGREETING_TEXTを返す）。
+// 挨拶の言いかけ/誤記を検知（呼び出し側で挨拶と同一扱い＝確認せず挨拶文を返す）。
 const guessGreeting = (raw) => {
   const q = normalize(raw)
   if (q.length < 3 || q.length > 7) return null
@@ -571,13 +584,21 @@ export const askAssistant = async (query, ctx = {}, _depth = 0) => {
 
   // 0) 挨拶・お礼・自己紹介・相づち（短い雑談にも気持ちよく返す。ゲーム語を含まないもののみ）
   if (!cls) {
-    if (THANKS_TRIGGER.test(raw)) return { text: THANKS_TEXT, kind: 'meta' }
-    if (GREETING_TRIGGER.test(raw)) return { text: GREETING_TEXT, kind: 'meta' }
+    if (THANKS_TRIGGER.test(raw)) return { text: pick(THANKS_TEXTS), kind: 'meta' }
+    if (GREETING_TRIGGER.test(raw)) return { text: GREETING_TEXT_FN(), kind: 'meta' }
     if (WHOAMI_TRIGGER.test(raw)) return { text: WHOAMI_TEXT, kind: 'meta' }
     const st = smalltalk(raw)
     if (st) return { text: st, kind: 'meta' }
     // 挨拶の言いかけ/誤記（こんにちわ・こんにち 等）は挨拶と同一扱い＝確認せずそのまま挨拶を返す
-    if (guessGreeting(raw)) return { text: GREETING_TEXT, kind: 'meta' }
+    if (guessGreeting(raw)) return { text: GREETING_TEXT_FN(), kind: 'meta' }
+    // 直前の話題の深掘り（「もっと詳しく」「他には」）＝会話の継続性
+    if (FOLLOWUP_TRIGGER.test(raw) && ctx?.lastQuery) {
+      const lc = findClassInQuery(ctx.lastQuery)
+      if (lc) {
+        try { const sk = await lookupClassSkills(lc); if (sk) return { text: `${lc}のスキルはこちらです：\n\n${sk}`, kind: 'db' } } catch { /* 下へ */ }
+      }
+      return { text: `さっきの「${ctx.lastQuery}」についてですね。どこを詳しく知りたいですか？（例：効果／入手方法／解放条件 など、具体的に聞いてもらえると答えやすいです）`, kind: 'meta' }
+    }
   }
 
   // 1) 対戦相手の対策（「○○に勝ちたい」）。PROGRESSIONの「勝てない」と被るので先に判定。
