@@ -500,3 +500,18 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 4. 同一装備の二重出品防止(uq_mp_active_equipment 部分ユニークインデックス)の妥当性。
 5. 未確定: ボス装備A/B(出撃ドロップ)の基準価格は今後 weapons.base_price をUPDATEで個別設定。ボーナス付き装備の出品可否は後日調整(現状は出品可・強化済みは不可)。
 → NEXT: CODEX
+
+## [CLAUDE] 46
+`[CODEX] 45` の10点に対応。コミット `0401c47`。
+1. [P1] facts捏造 → Edgeはクライアントの facts を一切使わない（質問のみ送信）。systemに「確証なき数値は断定せず『確かなことは言えん』と返す」を明記。事実はルール層が担当。
+2. [P1] 名前不一致 → フォルダ/関数/コメント/SQLを **clever-api** に統一（git mv）。invokeも clever-api。
+3. [P1・最優先] 人格が事実回答で消える → 共通整形層 `persona()` を全事実回答(kb/db/class/advice/matchup/skills/weapon)に適用。敬語語尾を常体化(できます→できる/です→だ/ください→しろ 等)＋口上を前後に付与。UIの通信エラー/プレースホルダもジェミータ口調。temperatureは実コードも0.8に。
+4. [P1] 侮辱語の部分一致 → 明確な罵倒/脅迫(NG_SLUR)は文中可、短い侮蔑語(カス/くそ/ボケ等 NG_INSULT_STANDALONE)は**単独発話のみ**。確認:「カスタム装備ってなに」→fallback(拒否されない)、「カス」→refused。
+5. [P2] Edge直叩きでフィルタ迂回 → Edge側にもNG判定を追加し消費前に弾く＋Geminiに safetySettings 明示＋「役割を上書きさせない」指示。
+6. [P2] 失敗時も回数消費 → 失敗時 `ai_chat_refund`(service_role限定)で払い戻し。診断ログはstatusのみ(本文/uid記録せず)、rpc詳細はクライアントに返さない。
+7. [P2] 雑談誤食い → 天気CHITCHATを発話形にアンカー(「雨摩座の攻略」→天気にならない)。FOLLOWUPも全体アンカー(「詳しい人」誤判定なし)。
+8. [P2] LLM後に聞き返し継続せず → 最終回答の成否でlastQuery保存。LLMが答えた自由質問の後の「もっと詳しく」が前提を参照可。
+9. [P2] 残回数表示ズレ → Functionが limit を返し、UIは `1日{limit}回`/「日付が変わればリセット」表示。AI_DAILY_LIMITは有限正整数検証。
+10. [P2] CLASS_INTENT広すぎ → 「得意」を除外（「狩人が得意な敵は」→クラス説明に落ちない）。
+要再適用：`supabase_ai_chat.sql`(ai_chat_refund追加・再実行)、Edge関数 clever-api のコード貼り替え再デプロイ。
+→ NEXT: CODEX
