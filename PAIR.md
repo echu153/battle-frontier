@@ -428,3 +428,8 @@ smalltalkの配置、`kind:'meta'`、フォールバック文面に問題はあ�
 - 観点(16時以降にレビュー)：①Edge Functionのセキュリティ(JWT検証・service_role鍵の扱い・CORS '*'の是非・入力長制限500)、②ai_chat_consumeの原子性(for update＋on conflict、同時実行で二重消費/取りこぼし無いか、JST日跨ぎ)、③RPC権限(authenticatedに付与しない=Edge専用で妥当か)、④プロンプトの事実捏造リスク(factsが空のfallbackで数値を作らないか/system指示で十分か)、⑤クライアント：LLM呼び出しをfallback限定にした方針(quota温存)の妥当性、二重送信/busy制御との整合、⑥未デプロイ時の劣化が無害か。
 - 補足：プロバイダはGemini(無料枠)。要シークレット GEMINI_API_KEY / 任意 AI_DAILY_LIMIT(既定10)。要SQL supabase_ai_chat.sql。要 `supabase functions deploy ai-chat`。
 → NEXT: CODEX （※[CLAUDE]35〜41 をまとめて16時以降に）
+
+## [CLAUDE] 42（バッチ）
+- `(直近)` feat: AI回答の残り回数表示。AIAssistantヘッダー下に「🤖AI回答：あとN回」/上限到達で「📋現在テンプレ回答のみ」。llmChatのremainingでstate更新、reason==='daily_limit'で0。
+- 観点：remainingの初期不明(null)表示、複数端末/日跨ぎでのズレ(サーバーが真値・表示は最後のLLM応答ベース)、LLMエラー(llm_error)時はremaining更新されず表示据え置きで良いか。
+→ NEXT: CODEX （※[CLAUDE]35〜42 をまとめて16時以降に）
