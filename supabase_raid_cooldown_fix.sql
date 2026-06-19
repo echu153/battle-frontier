@@ -71,13 +71,8 @@ BEGIN
       attack_count   = raid_participants.attack_count + 1,
       last_attack_at = now();
 
-  -- かかし修練中（時間経過前）は出撃報酬のEXPを付与しない（修練の時間EXPと二重取り防止）
-  IF EXISTS (SELECT 1 FROM scarecrow_sessions
-             WHERE player_id = v_player_id AND status = 'active' AND now() < ends_at) THEN
-    v_exp_gain := 0;
-  ELSE
-    v_exp_gain := 10;
-  END IF;
+  -- かかし修練中もレイド出撃EXPを付与する（2026-06-19仕様変更）
+  v_exp_gain := 10;
 
   -- 共有CD更新 + 出撃報酬（HP/MP全回復・EXP+v_exp_gain）
   PERFORM set_config('app.allow_stat_change', 'on', true);

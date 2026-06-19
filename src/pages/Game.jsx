@@ -30,6 +30,7 @@ const MENU_DEFS = {
   museum:    { label:'🏛 博物館',         color:'#ccaa44', path:'/museum',  unlock:5 },
   barber:    { label:'✂ 美容院',          color:'#ff88cc', path:'/barber',  unlock:5 },
   exchange:  { label:'🔄 交換所',         color:'#ff6644', path:'/exchange',unlock:5 },
+  marketplace:{ label:'🏷 取引所',        color:'#44ddaa', path:'/marketplace',unlock:10 },
   casino:    { label:'🎰 賭博場',         color:'#ffaa00', path:'/casino',  unlock:10 },
   pets:      { label:'🐾 ペット',         color:'#aa88ff', path:'/pets',    unlock:10 },
   dungeon:   { label:'🕳 ダンジョン',     color:'#aa88ff', path:'/dungeon', unlock:10 },
@@ -40,8 +41,8 @@ const MENU_DEFS = {
   territory: { label:'🏰 領地',           color:'#ffcc44', path:'/territory',unlock:0 },
 }
 // 各レイアウトのメニュー並び順（既存の並びを踏襲）
-const DESKTOP_MENU_ORDER = ['equipment','skills','profile','shop','smithy','museum','barber','casino','fishing','scarecrow','exchange','raid','pets','dungeon','alchemy','abyss','territory']
-const MOBILE_MENU_ORDER  = ['shop','smithy','museum','barber','casino','fishing','exchange','raid','pets','dungeon','scarecrow','alchemy','abyss','territory']
+const DESKTOP_MENU_ORDER = ['equipment','skills','profile','shop','smithy','museum','barber','casino','fishing','scarecrow','exchange','marketplace','raid','pets','dungeon','alchemy','abyss','territory']
+const MOBILE_MENU_ORDER  = ['shop','smithy','museum','barber','casino','fishing','exchange','marketplace','raid','pets','dungeon','scarecrow','alchemy','abyss','territory']
 
 // 多段ヒットスキル：行動全体ではなく1発ごとに回避・クリティカル・ダメージ判定する
 export const MULTI_HIT_SKILLS = new Set(['マジックアロー','三連射','メテオストライク','連打','五連殺','飛天三角蹴り','連装銃撃'])
@@ -4537,7 +4538,7 @@ export default function Game() {
                         <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋</button>
                         {lockOr('museum', <button key="museum" onClick={()=>nav('/museum')} style={{ padding:'10px', background:'#001020', border:'1px solid #ccaa44', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏛 博物館</button>)}
                         {lockOr('exchange', <button key="exchange" onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所</button>)}
-                        {profile?.is_admin && <button key="marketplace" onClick={()=>nav('/marketplace')} style={{ padding:'10px', background:'#001020', border:'1px solid #1a8a6a', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏷 取引所 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
+                        {lockOr('marketplace', <button key="marketplace" onClick={()=>nav('/marketplace')} style={{ padding:'10px', background:'#001020', border:'1px solid #1a8a6a', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏷 取引所</button>)}
                         {lockOr('casino', <button key="casino" onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場</button>)}
                         {lockOr('barber', <button key="barber" onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院</button>)}
                       </div>

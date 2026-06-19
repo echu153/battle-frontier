@@ -685,11 +685,7 @@ BEGIN
   SELECT * INTO v_profile FROM profiles WHERE id = v_uid;
   IF NOT FOUND THEN RETURN json_build_object('ok',false,'reason','profile_not_found'); END IF;
 
-  -- ★かかし修練中は不可
-  IF scarecrow_is_active(v_uid) THEN
-    RETURN json_build_object('ok',false,'reason','scarecrow_active');
-  END IF;
-
+  -- かかし修練中もデイリーダンジョンは可能（2026-06-19仕様変更）
   PERFORM set_config('app.allow_stat_change','on',true);  -- ★保護トリガー許可
 
   v_exp_frozen := COALESCE(v_profile.exp_frozen, false) OR

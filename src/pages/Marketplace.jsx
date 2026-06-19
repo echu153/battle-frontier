@@ -340,7 +340,7 @@ export default function Marketplace() {
         <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
       </div>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
-        <div style={{ color:'#44ddaa', fontSize:'14px' }}>🏷 取引所 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></div>
+        <div style={{ color:'#44ddaa', fontSize:'14px' }}>🏷 取引所</div>
         <div style={{ color:'#ffcc44', fontSize:'12px' }}>所持金 {yen(gold)}G</div>
       </div>
 
