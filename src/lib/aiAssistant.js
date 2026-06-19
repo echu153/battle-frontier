@@ -1,149 +1,166 @@
 // ============================================================
-// AI相談アシスタント（ルールベース・LLM不使用・完全無料）
-// 「○○ってなに？」「○○するには？」への自動回答 ＋ 戦闘スタイル別の強化アドバイス
-//   - knowledge base（KB）：キーワード一致スコアで最適回答を選ぶ
-//   - buildAdvice：プレイヤーのクラス／実効ステータスを読み、おすすめ強化を提案
-// 設計方針：ゲーム本体のロジック（lib/stats.js, Game.jsx）に依存せず、
-//   呼び出し側から profile / eff（実効ステ）/ equipment を受け取って判断する。
+// AI相談アシスタント（ルールベース＋DB検索・LLM不使用・完全無料）
+//   1) クラス知識（転職条件・役割）……全クラス網羅（静的）
+//   2) 施設/仕組みのQ&A（静的KB・キーワード長重み付けスコア）
+//   3) DBライブ検索（Supabaseの読み取りは無料）……skills / items / weapons を
+//      名前で照合し、「○○ってなに？」「○○の効果は？」に動的回答
+// すべてフロント＋無料読み取りで完結（リアルマネー不要）。
 // ============================================================
+import { supabase } from '../supabase'
 
-// 入力正規化：全角→半角、空白・記号・助詞ノイズを除去し、ひらがな小文字化に近い形へ
+// 入力正規化：全角英数→半角、空白・記号を除去
 const normalize = (s) => (s || '')
   .toString()
   .toLowerCase()
   .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
   .replace(/\s+/g, '')
-  .replace(/[、。，．・！!？?「」『』（）()【】_~〜:：-]/g, '')
+  .replace(/[、。，．・！!？?「」『』（）()【】_~〜:：]/g, '')
 
-// クラス分類（物理／魔法／混合）
+// ============================================================
+// クラス知識
+// ============================================================
+export const INITIAL_CLASSES = ['戦士', '弓使い', '魔法使い', '僧侶', '格闘家']
+
 export const PHYSICAL_CLASSES = ['戦士', '弓使い', '格闘家', '侍', '狂戦士', '狩人', '暗殺者', '体術師', '竜騎士']
 export const MAGICAL_CLASSES = ['魔法使い', '僧侶', '元素使い', '死霊使い', '聖職者', '異端審問官', '賢者']
 export const HYBRID_CLASSES = ['魔法剣士', '聖騎士', '魔銃士', 'サイキッカー', 'ギャンブラー']
 
+// 転職条件（Game.jsx の ADVANCED_CLASSES と同期。requiresLv 既定=100）
+const ADVANCED_REQ = {
+  '侍': { requires: '戦士' },
+  '狂戦士': { requires: '戦士' },
+  '狩人': { requires: '弓使い' },
+  '暗殺者': { requires: '弓使い' },
+  '元素使い': { requires: '魔法使い' },
+  '死霊使い': { requires: '魔法使い' },
+  '聖職者': { requires: '僧侶' },
+  '異端審問官': { requires: '僧侶' },
+  '賢者': { requires: '僧侶', requiresLv: 50, requires2: '魔法使い', requires2Lv: 50 },
+  'サイキッカー': { requires: '格闘家' },
+  '体術師': { requires: '格闘家' },
+  '魔銃士': { requires: '弓使い', requiresLv: 50, requires2: '魔法使い', requires2Lv: 50 },
+  'ギャンブラー': { requiresItem: '賭博場で「ギャンブラーの証」を入手する' },
+  '魔法剣士': { requires: '戦士', requiresLv: 50, requires2: '魔法使い', requires2Lv: 50 },
+  '聖騎士': { requires: '戦士', requiresLv: 50, requires2: '僧侶', requires2Lv: 50 },
+  '竜騎士': { requiresItem: 'ドラゴン討伐で「竜騎士の証明」を入手する' },
+}
+
+// 各クラスの役割（ひとこと説明）
+const CLASS_ROLE = {
+  '戦士': '物理アタッカーの基本職。剣などの物理武器で戦う。',
+  '弓使い': '弓で戦う基本職。命中・素早さ寄り。',
+  '魔法使い': '特殊攻撃(魔法)で戦う基本職。',
+  '僧侶': '回復・補助が得意な基本職。',
+  '格闘家': '拳で戦う手数型の基本職。',
+  '侍': '刀の物理上位職。居合斬・防御無視・月影が強力。',
+  '狂戦士': '高火力・高リスクの物理上位職。バーサクで与ダメ増だが被ダメも増。',
+  '狩人': '弓の物理上位職。毒矢・三連射・絶影狙撃。',
+  '暗殺者': '出血特化の物理上位職。急所突きで一気に削る。',
+  '元素使い': '属性魔法アタッカー。スタン・やけど・落雷。',
+  '死霊使い': '召喚とドレインの魔法職。バリアや弱体も。',
+  '聖職者': '回復・聖属性の僧侶上位職。神罰執行で攻めも可。',
+  '異端審問官': '攻撃寄りの僧侶上位職。回復封じを持つ。',
+  '賢者': '高位魔法アタッカー。メテオストライクが切り札。',
+  'サイキッカー': '物理＋魔法の混合職。スタンを絡める。',
+  '体術師': '連撃・出血の格闘上位職。HPが減るほど火力上昇。',
+  '魔銃士': '銃で物理＋魔法を撃つ混合職。命中が高い。',
+  'ギャンブラー': '運で性能が変動する特殊職。証明アイテムで転職。',
+  '魔法剣士': '物理＋魔法の剣士。変換と連続強化が軸。',
+  '聖騎士': '物理＋魔法＋回復をこなす重装の混合職。',
+  '竜騎士': '防御貫通の物理職。竜の力で大ダメージ。',
+}
+
+export const ALL_CLASSES = [...INITIAL_CLASSES, ...Object.keys(ADVANCED_REQ)]
+
+const classType = (c) =>
+  MAGICAL_CLASSES.includes(c) ? '魔法型' : HYBRID_CLASSES.includes(c) ? '混合型' : '物理型'
+
+// クラスの転職条件・役割を文章化
+const classInfoText = (c) => {
+  const role = CLASS_ROLE[c] || ''
+  let how
+  if (INITIAL_CLASSES.includes(c)) {
+    how = '最初から選べる基本職。街の「神殿」でいつでも転職できます。'
+  } else {
+    const r = ADVANCED_REQ[c]
+    if (!r) how = '神殿で条件を満たすと転職できます。'
+    else if (r.requiresItem) how = `${r.requiresItem}と、神殿で転職できます。`
+    else if (r.requires2) how = `「${r.requires}」をLV${r.requiresLv || 100}、かつ「${r.requires2}」をLV${r.requires2Lv || 100}まで上げると、神殿で転職できます。`
+    else how = `「${r.requires}」をLV${r.requiresLv || 100}まで上げると、神殿で転職できます。`
+  }
+  return `🛐 ${c}（${classType(c)}）\n${role}\n【転職条件】${how}\nクラスごとにLVは別管理。転職後に再修練を5回行うとLV上限が100→300に解放されます。`
+}
+
+// クエリ内に登場するクラス名を返す（最長一致優先）
+const findClassInQuery = (raw) => {
+  const hits = ALL_CLASSES.filter((c) => raw.includes(c))
+  if (!hits.length) return null
+  return hits.sort((a, b) => b.length - a.length)[0]
+}
+
 // ============================================================
-// 知識ベース（Q&A）
-//   keywords … 質問に含まれていたらヒット扱いになる語（正規化後で照合）
-//   a         … 回答本文（改行可）
+// 静的KB（施設・仕組み）
 // ============================================================
 export const KB = [
-  // --- ステータスの意味 ---
-  {
-    id: 'stat-meaning',
-    keywords: ['ステータス', 'abcd', 'ステ', '攻撃力', '防御力', '特攻', '特防', '素早さ'],
-    a: `📊 ステータスの意味\n・攻撃(A)＝物理ダメージの元。剣/斧/槍/弓/短剣/拳/銃/刀など物理武器で使う\n・防御(B)＝物理ダメージを軽減\n・特殊攻撃(C)＝魔法ダメージの元。杖/魔導書/オーブなど魔法武器で使う\n・特殊防御(D)＝魔法ダメージを軽減\n・素早さ(S)＝先攻/回避/クリティカル率に影響\n・HP/MP＝体力と消費資源\nクラスと武器に合わせて伸ばすステを決めるのがコツです。`,
-  },
-  {
-    id: 'stat-allocate',
-    keywords: ['ステ振り', 'ステータスポイント', '振り分け', 'ポイント', 'allocate', '振る', 'どこに振る'],
-    a: `🔧 ステータス振り分けは「プロフィール」または街の「ステータスを振り分ける」から行えます。\nレベルアップで貯まったポイントを、自分のクラス・武器に合ったステに振りましょう。\n振り方に迷ったら「おすすめ強化」と聞いてください。あなたのクラスに合わせて提案します。`,
-  },
-  // --- 転職・クラス ---
-  {
-    id: 'class-change',
-    keywords: ['転職', 'クラスチェンジ', 'クラス変更', '職業', 'クラスをかえる', 'job', '上位職'],
-    a: `🛐 転職は街の「神殿」から行えます。\n・基本職（戦士/弓使い/魔法使い/僧侶/格闘家）はいつでも転職可\n・上位職は条件（特定クラスがLV100など）を満たすと解放\n・賢者/魔法剣士/聖騎士/魔銃士は2クラスをLV50まで上げる複合条件\n・ギャンブラー/竜騎士は専用の証明アイテムが必要\nクラスごとにLVは別管理。再修練5回でレベル上限が300に解放されます。`,
-  },
-  {
-    id: 'retraining',
-    keywords: ['再修練', 'リトレ', '上限解放', 'レベル上限', 'lv300', '300', '神殿'],
-    a: `⚡ 再修練は街の「神殿」で、現在のクラスを対象に行えます（本職限定）。\n再修練するたびにそのクラスのスキルが1段ずつ強化され、5回でレベル上限が100→300に解放されます。\n各クラスの再修練強化内容は神殿の画面で確認できます。`,
-  },
-  // --- 施設の場所・行き方（MENU連動の汎用説明） ---
-  {
-    id: 'where-facility',
-    keywords: ['どこ', 'どうやっていく', '行き方', 'ばしょ', '場所', 'ひらく', '開放', '解放条件', 'メニュー'],
-    a: `🧭 各施設は画面右上の「☰ メニュー」から行けます。キャラクターLVで段階的に開放されます。\n・LV5：釣り場 / 博物館 / 美容院 / 交換所\n・LV10：賭博場 / ペット / ダンジョン / かかし修練場 / 錬金部屋\n・LV30：レイドボス / 奈落闘技場\n装備・スキル・商店・鍛冶屋・プロフィールは最初から使えます。`,
-  },
-  // --- 強化系施設 ---
-  {
-    id: 'smithy',
-    keywords: ['鍛冶屋', '強化', '装備強化', '+', 'プラス', '強化石', 'きょうか'],
-    a: `⚒ 鍛冶屋では装備を「強化石」を使って強化（+値）できます。\n強化値が上がると武器/防具の固定ボーナスが増加。強化石は商店・ドロップ・錬金部屋などで入手できます。\n錬金部屋（LV10解放）では強化石を時間で自動生成できます。`,
-  },
-  {
-    id: 'alchemy',
-    keywords: ['錬金', '錬金部屋', '強化石生成', 'アルケミ'],
-    a: `🧪 錬金部屋（LV10解放）では、時間経過で強化石を自動生成できます（最大4枠）。\n枠を解放しておくと放置で強化石が貯まるので、装備強化の素材源として優秀です。`,
-  },
-  {
-    id: 'gems',
-    keywords: ['宝石', 'ジェム', 'gem', 'ルビー', 'サファイア', '埋め込み', '装着'],
-    a: `💎 宝石（ジェム）は装備に埋め込んで追加効果を得られます。\n・攻撃系（ルビー等）→武器・装飾品\n・防御系（サファイア等）→防具・装飾品\n・HP/MP系→防具・装飾品\n・％系（クリ率/命中/回避など）→装飾品のみ\nランクが上がるほど効果は1.5倍ずつ強力に（F→SSS）。交換所や博物館報酬などで入手できます。`,
-  },
-  {
-    id: 'scarecrow',
-    keywords: ['かかし', '修練場', '熟練度', 'じゅくれんど', '練習'],
-    a: `🌾 かかし修練場（LV10解放）では、安全に戦って武器の熟練度を上げられます。\n熟練度が上がると、その武器種の固定ボーナスに倍率がかかり実効ステが伸びます。\n使っている武器種をコツコツ鍛えると効果的です。`,
-  },
-  // --- 戦闘・経験値 ---
-  {
-    id: 'levelup',
-    keywords: ['レベル', 'lv上げ', 'レベル上げ', '経験値', 'exp', '効率', 'はやく強く'],
-    a: `📈 レベルを上げるには「出撃」で敵を倒すのが基本。\nデイリーダンジョンの経験値ダンジョンを使うと効率よくEXPを稼げます。\nLVが上がるとステータスポイントが貯まり、新しい施設も開放されます。`,
-  },
-  {
-    id: 'sortie',
-    keywords: ['出撃', 'バトル', '戦闘', 'たたかう', 'エリア', '敵'],
-    a: `⚔ 「出撃」で各エリアの敵と戦えます。勝つとEXP・Gold・ドロップが手に入ります。\nこのゲームはソロ出撃（パーティ編成はありません）。\n強い敵に挑む前に、装備強化・ステ振り・スキルを整えましょう。`,
-  },
-  // --- コンテンツ ---
-  {
-    id: 'raid',
-    keywords: ['レイド', 'レイドボス', 'ボス', 'あまざ', 'ヴァルゼノク', '討伐'],
-    a: `⚔ レイドボス（LV30解放）は毎日21時/22時に出現する高HPボスです。\nみんなで削り、与ダメージに応じて報酬（EXP/素材/強化石など）がもらえます。\n素材は交換所で専用装備や強化石と交換できます。日替わりでボスが入れ替わります。`,
-  },
-  {
-    id: 'dungeon',
-    keywords: ['ダンジョン', 'ろぐらいく', 'ローグライク', 'ペットダンジョン', 'もぐる'],
-    a: `🕳 ダンジョン（LV10解放）はペットで挑むローグライク。\n奥へ進むほど報酬が増えますが、死亡すると持ち物の半分をロストします。\n倉庫に預けたアイテムは安全。無理せず撤退も大事です。`,
-  },
-  {
-    id: 'pets',
-    keywords: ['ペット', 'pet', 'なつき', '進化', 'チャーム', 'えさ'],
-    a: `🐾 ペット（LV10解放）は育てて懐かせ、進化やチャーム強化ができます。\nダンジョン攻略のお供になります。スキンシップや出撃で懐き度を上げましょう。`,
-  },
-  {
-    id: 'abyss',
-    keywords: ['奈落', '奈落闘技場', '闘技場', '挑戦', 'アリーナ'],
-    a: `⚔ 奈落闘技場（LV30解放）は20階の順番制チャレンジ。週1回挑戦でき、Gold・強化石・宝石などが報酬です。\n総合力をしっかり上げてから挑みましょう。`,
-  },
-  {
-    id: 'casino',
-    keywords: ['賭博', '賭博場', 'カジノ', 'スロット', 'ギャンブル'],
-    a: `🎰 賭博場（LV10解放）ではAT（行動回数）を使ってスロットなどで遊べます。\n景品と交換できますが、あくまで運。使いすぎ注意です。`,
-  },
-  {
-    id: 'fishing',
-    keywords: ['釣り', '釣り場', 'fishing', 'さかな'],
-    a: `🎣 釣り場（LV5解放）では釣りで素材やアイテムが手に入ります。\n放置気味でも資源を稼げるサブコンテンツです。`,
-  },
-  {
-    id: 'exchange',
-    keywords: ['交換所', '交換', 'exchange', 'こうかん'],
-    a: `🔄 交換所（LV5解放）では、レイド素材や各種アイテムを装備・強化石・宝石などと交換できます。\nレイドで集めた素材の使い道はここです。`,
-  },
-  {
-    id: 'museum',
-    keywords: ['博物館', 'museum', '寄贈', 'コレクション'],
-    a: `🏛 博物館（LV5解放）ではアイテムを寄贈してコレクションを埋め、報酬を得られます。\nダブったアイテムの使い道としても有効です。`,
-  },
-  {
-    id: 'territory',
-    keywords: ['領地', '国', '建国', '亡命', 'テリトリー'],
-    a: `🏰 領地システムでは9カ国から所属を選べます。建国はLV500が必要。\n亡命は週1回まで。領地拡大は総合力に応じて行えます（先行公開中の機能です）。`,
-  },
-  // --- お金・回復 ---
-  {
-    id: 'gold',
-    keywords: ['gold', 'ゴールド', 'お金', '稼ぎ', 'かね', 'もうけ'],
-    a: `💰 Goldは出撃・ダンジョン・釣りなどで稼げます。\n商店での購入、装備強化、交換などに使います。効率重視ならデイリーダンジョン周回がおすすめ。`,
-  },
-  {
-    id: 'heal',
-    keywords: ['回復', '宿屋', 'hp回復', 'ポーション', 'なおす'],
-    a: `💊 HP/MPはポーションや宿屋で回復できます。出撃前に整えておきましょう。\nスキルや装備にも回復効果を持つものがあります。`,
-  },
+  { id: 'stat-meaning', keywords: ['ステータス', 'abcd', '攻撃力', '防御力', '特攻', '特防', '素早さ'],
+    a: `📊 ステータスの意味\n・攻撃(A)＝物理ダメージの元（剣/斧/槍/弓/短剣/拳/銃/刀）\n・防御(B)＝物理被ダメ軽減\n・特殊攻撃(C)＝魔法ダメージの元（杖/魔導書/オーブ）\n・特殊防御(D)＝魔法被ダメ軽減\n・素早さ(S)＝先攻/回避/クリティカル率\n・HP/MP＝体力と消費資源\nクラスと武器に合わせて伸ばすステを決めましょう。` },
+  { id: 'stat-allocate', keywords: ['ステ振り', 'ステータスポイント', '振り分け', '振る', '振り方'],
+    a: `🔧 ステータス振り分けは「プロフィール」や街の「ステータスを振り分ける」から行えます。\n迷ったら「おすすめ強化」と聞いてください。あなたのクラスに合わせて提案します。` },
+  { id: 'class-change', keywords: ['転職', 'クラスチェンジ', 'クラス変更', '職業', '上位職'],
+    a: `🛐 転職は街の「神殿」から。\n・基本職(戦士/弓使い/魔法使い/僧侶/格闘家)はいつでも可\n・上位職は条件(特定クラスをLV100など)で解放\n・賢者/魔法剣士/聖騎士/魔銃士は2クラスをLV50まで\n・ギャンブラー/竜騎士は専用の証明アイテムが必要\n「〇〇になるには？」と職名で聞くと条件を答えます。` },
+  { id: 'retraining', keywords: ['再修練', '上限解放', 'レベル上限', 'lv300', '神殿'],
+    a: `⚡ 再修練は神殿で現在のクラス(本職)に対して行えます。\n1回ごとにそのクラスのスキルが1段強化され、5回でLV上限が100→300に解放されます。` },
+  { id: 'where-facility', keywords: ['施設', '行き方', '場所', '解放条件', 'メニュー', '開放'],
+    a: `🧭 各施設は右上「☰ メニュー」から。LVで段階開放：\n・LV5：釣り場/博物館/美容院/交換所\n・LV10：賭博場/ペット/ダンジョン/かかし修練場/錬金部屋\n・LV30：レイドボス/奈落闘技場\n装備・スキル・商店・鍛冶屋・プロフィールは最初から。` },
+  { id: 'smithy', keywords: ['鍛冶屋', '装備強化', '強化石', 'プラス強化'],
+    a: `⚒ 鍛冶屋では装備を「強化石」で+強化できます。強化値が上がると固定ボーナス増加。\n強化石は商店・ドロップ・錬金部屋（自動生成）で入手。` },
+  { id: 'alchemy', keywords: ['錬金', '錬金部屋'],
+    a: `🧪 錬金部屋(LV10)は時間経過で強化石を自動生成(最大4枠)。放置で素材が貯まります。` },
+  { id: 'gems', keywords: ['宝石', 'ジェム', 'ルビー', 'サファイア', '埋め込み'],
+    a: `💎 宝石(ジェム)は装備に埋め込んで追加効果。\n・攻撃系(ルビー等)→武器/装飾\n・防御系(サファイア等)→防具/装飾\n・HP/MP系→防具/装飾\n・％系(クリ/命中/回避)→装飾品のみ\nランクが上がるほど1.5倍ずつ強力(F→SSS)。交換所・博物館報酬等で入手。` },
+  { id: 'scarecrow', keywords: ['かかし', '修練場', '熟練度'],
+    a: `🌾 かかし修練場(LV10)で武器の熟練度を安全に上げられます。熟練度が上がると固定ボーナスに倍率がかかり実効ステUP。` },
+  { id: 'levelup', keywords: ['レベル上げ', '経験値', 'レベルあげ', 'exp', 'レベリング'],
+    a: `📈 レベル上げは「出撃」で敵を倒すのが基本。デイリーダンジョンの経験値ダンジョンが効率的。LVで施設も開放。` },
+  { id: 'sortie', keywords: ['出撃', 'バトル', '戦闘', 'エリア'],
+    a: `⚔ 「出撃」で各エリアの敵と戦えます(ソロ・パーティ無し)。装備強化・ステ振り・スキルを整えてから挑みましょう。` },
+  { id: 'raid', keywords: ['レイド', 'レイドボス', 'あまざ', 'ヴァルゼノク'],
+    a: `⚔ レイドボス(LV30)は毎日21時/22時出現の高HPボス。与ダメに応じて報酬(EXP/素材/強化石)。素材は交換所で専用装備等と交換。日替わりでボス交替。` },
+  { id: 'dungeon', keywords: ['ダンジョン', 'ローグライク', 'もぐる'],
+    a: `🕳 ダンジョン(LV10)はペットで挑むローグライク。奥ほど報酬増だが死亡で持ち物半分ロスト。倉庫預けは安全。撤退も大事。` },
+  { id: 'pets', keywords: ['ペット', '懐き', '進化', 'チャーム'],
+    a: `🐾 ペット(LV10)は育てて懐かせ、進化やチャーム強化が可能。ダンジョンのお供。スキンシップや出撃で懐き度UP。` },
+  { id: 'abyss', keywords: ['奈落', '闘技場', '挑戦'],
+    a: `⚔ 奈落闘技場(LV30)は20階の順番制。週1挑戦でGold・強化石・宝石が報酬。総合力を上げてから。` },
+  { id: 'casino', keywords: ['賭博', '賭博場', 'カジノ', 'スロット'],
+    a: `🎰 賭博場(LV10)はATを使ってスロット等で遊べ、景品と交換可。あくまで運。使いすぎ注意。` },
+  { id: 'fishing', keywords: ['釣り', '釣り場'],
+    a: `🎣 釣り場(LV5)で素材やアイテムが入手可。放置気味でも稼げるサブコンテンツ。` },
+  { id: 'exchange', keywords: ['交換所', '交換'],
+    a: `🔄 交換所(LV5)でレイド素材等を装備・強化石・宝石と交換。集めた素材の使い道はここ。` },
+  { id: 'museum', keywords: ['博物館', '寄贈', 'コレクション'],
+    a: `🏛 博物館(LV5)でアイテム寄贈しコレクションを埋め報酬獲得。ダブり品の使い道に。` },
+  { id: 'territory', keywords: ['領地', '建国', '亡命', '国'],
+    a: `🏰 領地は9カ国から所属選択。建国はLV500、亡命は週1回、領地拡大は総合力依存(先行公開中)。` },
+  { id: 'gold', keywords: ['gold', 'ゴールド', 'お金', '稼ぎ'],
+    a: `💰 Goldは出撃・ダンジョン・釣り等で稼げ、商店購入や強化に使用。効率重視ならデイリーダンジョン周回。` },
+  { id: 'heal', keywords: ['回復', '宿屋', 'ポーション'],
+    a: `💊 HP/MPはポーションや宿屋で回復。出撃前に整えましょう。回復効果を持つスキル・装備もあります。` },
 ]
+
+const searchKB = (raw) => {
+  const q = normalize(raw)
+  let best = null, bestScore = 0
+  for (const entry of KB) {
+    let score = 0
+    for (const kw of entry.keywords) {
+      const n = normalize(kw)
+      if (n && q.includes(n)) score += n.length
+    }
+    if (score > bestScore) { bestScore = score; best = entry }
+  }
+  return bestScore > 0 ? best : null
+}
 
 // ============================================================
 // 強化アドバイザー
@@ -151,11 +168,10 @@ export const KB = [
 const detectStyle = (ctx, query) => {
   const q = normalize(query)
   if (/まほう|魔法|とくこう|特攻|matk|魔法型|魔法特化/.test(q)) return 'magical'
-  if (/ぶつり|物理|こうげき|攻撃型|物理型|物理特化/.test(q)) return 'physical'
+  if (/ぶつり|物理|攻撃型|物理型|物理特化/.test(q)) return 'physical'
   const cls = ctx?.profile?.class
   if (cls && MAGICAL_CLASSES.includes(cls)) return 'magical'
   if (cls && PHYSICAL_CLASSES.includes(cls)) return 'physical'
-  // 混合・不明はステ実値で判断
   const eff = ctx?.eff || {}
   if ((eff.matk || 0) > (eff.atk || 0) * 1.1) return 'magical'
   if ((eff.atk || 0) > (eff.matk || 0) * 1.1) return 'physical'
@@ -164,104 +180,153 @@ const detectStyle = (ctx, query) => {
 
 export const buildAdvice = (ctx, query) => {
   const profile = ctx?.profile
-  if (!profile) {
-    return 'プレイヤー情報が読み込めませんでした。街の画面で再度お試しください。'
-  }
+  if (!profile) return 'プレイヤー情報が読み込めませんでした。街の画面で再度お試しください。'
   const eff = ctx?.eff || {}
   const cls = profile.class || '冒険者'
   const style = detectStyle(ctx, query)
   const pending = profile.pending_stat_points || 0
+  const lines = [`🤖 ${profile.name || 'あなた'}（${cls}）への強化アドバイス`]
 
-  const lines = []
-  lines.push(`🤖 ${profile.name || 'あなた'}（${cls}）への強化アドバイス`)
-
-  // スタイル別の伸ばすステ
   if (style === 'magical') {
     lines.push('🔮 タイプ：魔法型')
-    lines.push('・最優先で「特殊攻撃(C)」を伸ばす。火力が一番伸びます')
-    lines.push('・打たれ弱いので「HP」と「特殊防御(D)」も並行して確保')
-    lines.push('・宝石はアメジスト(特攻)＝武器/装飾、エメラルド(特防)＝防具/装飾がおすすめ')
+    lines.push('・最優先で「特殊攻撃(C)」。火力が一番伸びます')
+    lines.push('・打たれ弱いので「HP」「特殊防御(D)」も確保')
+    lines.push('・宝石：アメジスト(特攻)=武器/装飾、エメラルド(特防)=防具/装飾')
     lines.push('・命中が不安なら装飾品にオパール(命中)を')
   } else if (style === 'physical') {
     lines.push('⚔ タイプ：物理型')
-    lines.push('・最優先で「攻撃(A)」を伸ばす。火力が一番伸びます')
-    lines.push('・前線で殴るなら「HP」と「防御(B)」も確保して安定化')
-    lines.push('・「素早さ(S)」は先攻・クリ率・回避に効くので余裕があれば投資')
-    lines.push('・宝石はルビー(攻撃)＝武器/装飾、サファイア(防御)＝防具/装飾がおすすめ')
+    lines.push('・最優先で「攻撃(A)」。火力が一番伸びます')
+    lines.push('・前線で殴るなら「HP」「防御(B)」も確保')
+    lines.push('・「素早さ(S)」は先攻・クリ率・回避に効く')
+    lines.push('・宝石：ルビー(攻撃)=武器/装飾、サファイア(防御)=防具/装飾')
   } else {
-    lines.push('⚖ タイプ：混合型（物理＋魔法）')
-    lines.push('・攻撃(A)と特殊攻撃(C)の両方を使うクラス。主力スキルが使う方を厚めに')
-    lines.push('・どっち付かずを避けるため、まずは片方に寄せると火力が安定します')
-    lines.push('・宝石はローズクォーツ(攻撃＋特攻)が混合型と好相性')
+    lines.push('⚖ タイプ：混合型(物理＋魔法)')
+    lines.push('・攻撃(A)と特殊攻撃(C)の両方を使う。主力スキルが使う方を厚めに')
+    lines.push('・どっち付かずを避け、まず片方に寄せると火力が安定')
+    lines.push('・宝石：ローズクォーツ(攻撃＋特攻)が好相性')
   }
 
-  // 一番低い守りのステを指摘
-  const def = eff.def || 0
-  const mdef = eff.mdef || 0
+  const def = eff.def || 0, mdef = eff.mdef || 0
   if (def > 0 && mdef > 0) {
-    if (def < mdef * 0.6) lines.push('⚠ 物理防御(B)が手薄です。物理が痛い敵に注意。サファイアや防具で補強を')
-    else if (mdef < def * 0.6) lines.push('⚠ 特殊防御(D)が手薄です。魔法が痛い敵に注意。エメラルドや防具で補強を')
+    if (def < mdef * 0.6) lines.push('⚠ 物理防御(B)が手薄。サファイアや防具で補強を')
+    else if (mdef < def * 0.6) lines.push('⚠ 特殊防御(D)が手薄。エメラルドや防具で補強を')
   }
-
-  // 共通の伸ばし方
   lines.push('—')
   lines.push('🛠 強化の進め方')
-  lines.push('・鍛冶屋：強化石で武器/防具を+強化（錬金部屋で強化石を自動生成）')
-  lines.push('・かかし修練場：使用武器の熟練度を上げると固定ボーナスに倍率')
-  if (pending > 0) {
-    lines.push(`・今ステータスポイントが ${pending} 残っています。上記の優先ステに振りましょう`)
-  }
-
+  lines.push('・鍛冶屋：強化石で武器/防具を+強化(錬金部屋で石を自動生成)')
+  lines.push('・かかし修練場：使用武器の熟練度を上げ固定ボーナスに倍率')
+  if (pending > 0) lines.push(`・今ステータスポイントが ${pending} 残っています。上記の優先ステに振りましょう`)
   return lines.join('\n')
 }
 
 // ============================================================
-// 公開API：問い合わせに回答
-//   query: ユーザー入力 / ctx: { profile, eff, equipment }
-//   returns: { text, kind }  kind = 'advice' | 'kb' | 'fallback'
+// DBライブ検索（Supabase 読み取り＝無料）
+// ============================================================
+// クエリから検索語（エンティティ名）を抽出：末尾の疑問・助詞表現を除去
+const SUFFIXES = [
+  'について教えて', 'について', 'ってどんなスキル', 'ってどんな', 'ってどういう', 'ってなんですか',
+  'ってなに', 'って何', 'とはなに', 'とは何', 'とは', 'の効果は', 'の効果', 'の威力', 'のステ',
+  'の性能', 'を教えて', 'を知りたい', '教えて', '知りたい', 'になるには', 'になりたい',
+  'になるためには', 'はどこ', 'ってどこ', 'はどう', 'ってどう', 'です', 'ですか',
+]
+const extractEntity = (raw) => {
+  let s = (raw || '').trim().replace(/[？?！!。、\s]+$/g, '')
+  for (let i = 0; i < 3; i++) {
+    for (const suf of SUFFIXES) {
+      if (s.endsWith(suf)) { s = s.slice(0, -suf.length); break }
+    }
+  }
+  return s.replace(/^[のはをがで]+|[のはをがで]+$/g, '').trim()
+}
+
+// クラスのスキル一覧をDBから取得
+const lookupClassSkills = async (cls) => {
+  const { data } = await supabase.from('skills').select('name, required_lv, mp_cost, description')
+    .eq('class_name', cls).order('required_lv')
+  if (!data || !data.length) return null
+  const lines = [`⚡ ${cls}のスキル`]
+  for (const s of data) {
+    lines.push(`・${s.name}（LV${s.required_lv} / MP${s.mp_cost ?? '-'}）${s.description ? '：' + s.description : ''}`)
+  }
+  return lines.join('\n')
+}
+
+// 名前でスキル/アイテム/武器を横断検索
+const lookupEntity = async (term) => {
+  if (!term || term.length < 2) return null
+  const like = `%${term}%`
+  const [sk, it, wp] = await Promise.all([
+    supabase.from('skills').select('name, class_name, required_lv, mp_cost, type, description').ilike('name', like).limit(3),
+    supabase.from('items').select('name, description, buy_price').ilike('name', like).limit(3),
+    supabase.from('weapons').select('name, weapon_type, rarity, base_atk, base_matk, atk_bonus, matk_bonus').ilike('name', like).limit(3),
+  ])
+  // 完全一致を優先
+  const exact = (arr) => arr?.find((x) => x.name === term) || (arr && arr[0])
+  const s = exact(sk.data), w = exact(wp.data), i = exact(it.data)
+  if (s) {
+    return `⚡ ${s.name}（${s.class_name || ''}スキル / LV${s.required_lv} / MP${s.mp_cost ?? '-'}）\n${s.description || '（説明データなし）'}`
+  }
+  if (w) {
+    const atk = (w.base_atk || 0) + (w.atk_bonus || 0)
+    const matk = (w.base_matk || 0) + (w.matk_bonus || 0)
+    const stats = [atk ? `攻撃${atk}` : '', matk ? `特攻${matk}` : ''].filter(Boolean).join(' / ') || 'ステータスデータなし'
+    return `🗡 ${w.name}（武器${w.weapon_type ? '・' + w.weapon_type : ''}${w.rarity ? ' / ' + String(w.rarity).toUpperCase() + '級' : ''}）\n${stats}`
+  }
+  if (i) {
+    return `📦 ${i.name}${i.buy_price ? `（${i.buy_price}G）` : ''}\n${i.description || '（説明データなし）'}`
+  }
+  return null
+}
+
+// ============================================================
+// 公開API：問い合わせに回答（async）
+//   returns: { text, kind }  kind = advice|class|kb|db|fallback
 // ============================================================
 const ADVICE_TRIGGER = /おすすめ|オススメ|お勧め|強化したい|なにを伸ば|何を伸ば|どこを伸ば|どう強く|ビルド|育て方|振り方|戦闘スタイル|強くなりたい/
 
-export const askAssistant = (query, ctx = {}) => {
+export const askAssistant = async (query, ctx = {}) => {
   const raw = (query || '').trim()
-  if (!raw) return { text: '質問を入力してください。例：「転職するには？」「おすすめ強化を教えて」', kind: 'fallback' }
+  if (!raw) return { text: '質問を入力してください。例：「狂戦士になるには？」「メテオストライクの効果は？」「おすすめ強化」', kind: 'fallback' }
 
-  // 強化アドバイス意図を優先判定
-  if (ADVICE_TRIGGER.test(raw)) {
-    return { text: buildAdvice(ctx, raw), kind: 'advice' }
-  }
+  // 1) 強化アドバイス
+  if (ADVICE_TRIGGER.test(raw)) return { text: buildAdvice(ctx, raw), kind: 'advice' }
 
-  // KB をキーワード一致スコアで検索
-  const q = normalize(raw)
-  let best = null
-  let bestScore = 0
-  for (const entry of KB) {
-    let score = 0
-    for (const kw of entry.keywords) {
-      const n = normalize(kw)
-      // 長い（具体的な）キーワードほど高得点。汎用語（どこ等）で誤一致しにくくする
-      if (n && q.includes(n)) score += n.length
+  // 2) クラス質問（職名を含む）
+  const cls = findClassInQuery(raw)
+  if (cls) {
+    // 「○○のスキル」ならDBからスキル一覧
+    if (/スキル|技|わざ|アビリティ/.test(raw)) {
+      try {
+        const sk = await lookupClassSkills(cls)
+        if (sk) return { text: sk, kind: 'db' }
+      } catch { /* DB失敗時は下の静的回答へ */ }
     }
-    if (score > bestScore) { bestScore = score; best = entry }
+    return { text: classInfoText(cls), kind: 'class' }
   }
 
-  if (best && bestScore > 0) {
-    return { text: best.a, kind: 'kb' }
-  }
+  // 3) 静的KB（施設・仕組み）
+  const kb = searchKB(raw)
+  if (kb) return { text: kb.a, kind: 'kb' }
 
-  // フォールバック：候補を提示
+  // 4) DBライブ検索（スキル名・アイテム名・武器名）
+  try {
+    const term = extractEntity(raw)
+    const hit = await lookupEntity(term)
+    if (hit) return { text: hit, kind: 'db' }
+  } catch { /* ネット失敗時はフォールバック */ }
+
+  // 5) フォールバック
   return {
-    text: 'うまく聞き取れませんでした。こんな質問ができます：\n・「転職するには？」\n・「宝石ってなに？」\n・「レベル上げの効率は？」\n・「おすすめ強化を教えて」\n・「レイドボスってなに？」',
+    text: 'うまく聞き取れませんでした。こんな質問ができます：\n・「狂戦士になるには？」（職名で転職条件）\n・「元素使いのスキル」（クラスのスキル一覧）\n・「メテオストライクの効果は？」（スキル名）\n・「宝石ってなに？」「レベル上げの効率は？」\n・「おすすめ強化」（あなた専用アドバイス）',
     kind: 'fallback',
   }
 }
 
-// チャット初回に出すサジェスト（クイック質問ボタン用）
 export const QUICK_QUESTIONS = [
-  'おすすめ強化を教えて',
-  '転職するには？',
+  'おすすめ強化',
+  '狂戦士になるには？',
+  '転職について',
   '宝石ってなに？',
   'レベル上げの効率は？',
-  '強化石はどこ？',
   'レイドボスってなに？',
 ]

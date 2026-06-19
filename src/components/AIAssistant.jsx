@@ -18,12 +18,28 @@ export default function AIAssistant({ ctx }) {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages, open])
 
-  const send = (textArg) => {
+  const [busy, setBusy] = useState(false)
+
+  const send = async (textArg) => {
     const text = (textArg ?? input).trim()
-    if (!text) return
-    const res = askAssistant(text, ctx)
-    setMessages((m) => [...m, { role: 'user', text }, { role: 'ai', text: res.text }])
+    if (!text || busy) return
     setInput('')
+    setBusy(true)
+    setMessages((m) => [...m, { role: 'user', text }, { role: 'ai', text: '🔎 調べています…' }])
+    let answer
+    try {
+      const res = await askAssistant(text, ctx)
+      answer = res.text
+    } catch {
+      answer = '通信エラーが発生しました。もう一度お試しください。'
+    }
+    // 直前の「調べています…」プレースホルダを回答で置き換える
+    setMessages((m) => {
+      const next = m.slice()
+      next[next.length - 1] = { role: 'ai', text: answer }
+      return next
+    })
+    setBusy(false)
   }
 
   const onKey = (e) => {
