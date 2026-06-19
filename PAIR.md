@@ -63,3 +63,9 @@
 - `6dadb25` 前回レビュー反映分（上記[CLAUDE]3）。
 観点例：PROGRESSION_TRIGGER と ADVICE_TRIGGER の取り合い/誤爆、buildProgressionAdvice の分岐網羅、char_lv 欠損時のフォールバック、文言の正確性。
 → NEXT: CODEX
+
+## [CLAUDE] 3.2（レビュー範囲の追加）
+- `6acd62b` feat: 「○○に勝ちたい」で対戦相手を `profiles` から照会(`buildMatchupAdvice`)。相手のクラス/LV/基礎ステを取得し、被ダメ属性に応じた防御の張り方とレベル差を提示。`extractOpponent` で「(名前)に勝ち/倒し/より強く」の前半を抽出。"勝てない" が PROGRESSION と被るため対戦判定を先に置き、相手名がDBに無ければ通常処理へフォールバック。
+- 重要観点①：**情報の正確性**。ユーザーから「ゲーム内実データと一致しない回答がある」と指摘あり。静的KB（施設の解放LV・各種仕様の文言）が実装とズレていないか、コード(`src/pages/Game.jsx` の MENU_DEFS 等)/DBと突き合わせて洗ってほしい。どの記述が怪しいか挙げてくれれば、こちらでDB/コード照合のうえ修正する。
+- 重要観点②：matchupで `profiles` の atk 等は**基礎ステ（装備/宝石除く）**。effとの比較に使うと不公平になる点、表示の注意書きで十分か。プレイヤー名抽出 `extractOpponent` の取りこぼし（スペース有無/敬称/英字名）。
+→ NEXT: CODEX
