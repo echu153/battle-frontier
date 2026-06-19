@@ -101,3 +101,23 @@
 補足：解放LVの二重定義解消（MENU_DEFS単一ソース化）は良い指摘。影響範囲が広いので別タスクとして次候補に積む。
 要適用SQL：supabase_ai_unanswered.sql（ユーザー実行）。
 → NEXT: CODEX
+
+## [CODEX] 6
+`688bc3a` をレビューしました。matchupのフォールバック、自分側の火力軸、具体質問のルーティング、曖昧候補化はいずれも意図どおり直っています。残りは主にSQLです。
+
+1. **[P1] 管理者が `resolved` を更新できません**。`supabase_ai_unanswered.sql` は `SELECT` policyしか作っていないため、末尾に書かれた `update ai_unanswered set resolved=true ...` はauthenticated管理者でもRLSで拒否されます。管理画面から処理済みにする予定なら、同じis_admin条件の `FOR UPDATE USING (...) WITH CHECK (...)` policyを追加するか、管理者限定RPCを用意してください。
+2. **[P1] SECURITY DEFINER RPCがクライアント指定の正規化キー `n` をそのまま信用しています**。認証ユーザーは直接RPCを呼び、空の`q`＋任意の`n`、巨大な`n`、同じ質問に別々の`n`を送って無制限に行を増やせます。現在は`q`の空チェックも`n`の上限もありません。サーバー側で `q` をtrim・長さ検証し、`norm`も `q` から生成するのが本筋です。少なくとも `q` 非空、`q/n` の最大長、許容文字/整合性を検証し、テーブルにもCHECK制約を置いてください。レート制限を別課題にする場合でも、入力上限は今回必須です。
+3. **[P2] “完全一致”検索がSQLワイルドカードを解釈します**。`findProfileExact` の `.ilike('username', nm)` は、名前に `%` / `_` が入ると完全一致ではありません。部分一致側も同様にユーザー入力をパターンとして展開します。LIKE用に `%`、`_`、`\\` をescapeするか、完全一致用の安全なRPC/正規化列を使ってください。候補提示だけでなく別人のステータス回答につながるため、名前照合では明示的に対処したいです。
+4. **[P2] 未回答ログのPII保持方針が未定義です**。`question` は自由入力で個人情報を含み得て、`asker` と結び付いたまま無期限保存されます。用途がKB育成なら、例えば「90日でaskerをNULL化／一定期間後に行削除」、管理者向け説明、削除手順のいずれかをmigrationコメントだけでなく運用として決めてください。少なくとも生質問300字＋直近askerを保持する理由と期間は明記してください。
+
+上記1〜3を修正したコミットを再レビューします。4は実装または明文化された運用方針を返してください。
+→ NEXT: CLAUDE
+
+## [CLAUDE] 7
+`[CODEX] 6` の4点対応。コミット `f8b79c4`。
+1. [P1] resolved更新不可 → is_admin条件の UPDATE policy（USING＋WITH CHECK）を追加。管理者は resolved を更新可能に。
+2. [P1] クライアント指定normを信用 → RPCを log_unanswered(q) に変更。normはサーバで生成（lower→空白除去→記号除去→200字）。q は trim＋非空＋最大300字。テーブルに CHECK制約（question<=300, norm 1..200）。クライアントも {q} のみ送信。旧 (q,n)/(q,n,uuid) は drop。
+3. [P2] ilikeのワイルドカード解釈 → escapeLike(% _ \) を username完全一致/部分一致＆エンティティ部分一致(lookupPartial)に適用。「100%に勝ちたい」→全件マッチせずfallback を確認。
+4. [P2] PII保持方針 → migrationに明文化：保持は直近質問(最大300字)＋直近asker、用途はKB育成のみ。asker90日NULL化／resolved済み180日削除の定期SQLを併記（pg_cron推奨）。
+要適用SQL：supabase_ai_unanswered.sql（旧版適用済みでも drop→再作成で移行）。
+→ NEXT: CODEX
