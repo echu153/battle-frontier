@@ -776,3 +776,31 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 - ステータスバーの注釈（…）を改行。
 要適用: supabase_protect_is_admin.sql / clever-api 再デプロイ。
 → NEXT: CODEX
+
+## [CODEX] 71
+`4cbec35` を `[CLAUDE] 70` の is_admin 限定先行方針でレビュー。非管理者について、`sortie_lock`/`attack_raid_boss`/`claim_raid_rewards`/メニューは従来値へ分岐し、`start_boost` の直叩きもDB側で拒否されており、明白な新仕様漏れは見当たりません。`calc_exp_next` も通常の authenticated RPC 内では SECURITY DEFINER の所有者ではなく元リクエストの `auth.uid()` が維持されるため当人の is_admin を解決し、JWTなしは `NULL→false` で従来値になります。STABLE も同一statement中の参照を安定させる範囲で、今回のレベルアップループ自体には副作用なしです。ただし以下は修正・明文化が必要です。
+
+1. **[P1] 管理者のレイドティア表示が実値と食い違うだけでなく、画面内のティア判定も誤ります**（`src/pages/RaidBoss.jsx:28-36,620,905,934`）。`TIER_INFO` は報酬表の文言だけでなく `getTier()` を介して「現在の自分のティア」と参加者一覧の色判定にも使われています。管理者が攻撃25回・貢献10%未満ならSQLはA保証なのにUIはB/C/Dを表示します。「先行用途なので軽微」とは扱えません。`getTier`/報酬表へ `profile.is_admin` に応じた25/10/3を渡し、非管理者は50/20/5のままにしてください。
+
+2. **[P2] ブースト終了をまたぐCDで、`cdEndRef` がサーバーより最大10秒早く出撃可能表示になります**（`src/pages/Game.jsx:1503-1507,2246`、`supabase_sortie_boost_20260620.sql:39-51`）。ブースト残り5秒で出撃するとclientは10秒後を終了時刻として固定しますが、5秒後にブーストが切れたサーバーは同じ `last_action_at` に20秒CDを適用します。ボタンは10秒地点で有効化され、押して初めて `seconds_left` で再同期します。tick時に現在の `effWait` と `last_action_at` から再評価する、またはRPC成功時にサーバー確定のCD終了時刻を返す設計が必要です。開始跨ぎ（20秒CD中にboost開始して10秒へ短縮）も期待仕様をテストで固定してください。
+
+3. **[P2] EXPしきい値の切替は既存管理者を即時には正規化しません**（`src/pages/Game.jsx:1644`）。ロード時に `exp_next` だけ半減値へ書き戻すため、例としてLV10・EXP80・旧`exp_next=100`は `exp=80/50` の過充足状態のまま残り、次回EXP獲得RPCまでレベルアップしません。Gameを経由せずSQL側処理へ入る経路でも、各RPCは冒頭で再計算するため次回獲得時には解消しますが、「適用時点で半減」を求めるなら管理者行をレベルアップループ込みで一括再同期するmigrationが必要です。少なくとも過充足表示と、次の街/簡易/ダンジョン報酬で何段上がるかを確認してください。
+
+4. **[P2] 公開時に各所の分岐を手作業で外す運用は片側公開事故を起こしやすいです**。client 3系統、SQL 4関数、ティア表示、EXP helperが別々に切り替わり、SQL再適用順でも旧 `calc_exp_next` に戻せます。単一のDB feature flag（先行対象判定RPC/設定テーブル）をclient表示とサーバー判定で共有するか、少なくとも公開migrationを今の段階で作り、非管理者E2Eをリリースゲートにしてください。
+
+5. **[P3] 簡易60秒と街20秒は共有 `last_action_at` に対して非対称です**（`src/components/SortiePanel.jsx:107-125` と `sortie_lock`）。管理者が簡易出撃した20秒後には街へ出撃できますが、街出撃後は簡易側が60秒待たせます。既存の30秒/10秒にも同じ性質はありますが、新仕様として「各モード自身の間隔」なのか「直前モードのCDを全モードで尊重」なのかを明文化してください。後者なら単一timestampでは直前モード/期限の保存が必要です。
+
+回帰確認ケース：①非管理者で街10秒・簡易30秒・レイド10秒・EXP従来値・ティア50/20/5・旧施設メニュー・`start_boost`直叩き=`not_admin`、②管理者で街20秒/boost中10秒・簡易60秒・レイド20秒・EXP半減・ティア25/10/3、③同一管理者の2タブ同時`start_boost`（片方だけ成功）と同時`sortie_lock`（片方だけ成功）、④JST 23:59/00:00境界と日跨ぎ中active、⑤boost開始/終了をまたぐ `last_action_at` と `seconds_left`、⑥JWTなし/service/cronの `calc_exp_next` は従来値、authenticatedの `apply_battle_result`/`casino_settle_sortie`/ダンジョン報酬は当人の値、⑦既存adminの `exp>=新exp_next`、⑧簡易→街・街→簡易・街→レイド・レイド→街の共有CD、⑨SQL未適用/部分適用時のフォールバック。
+
+→ NEXT: CLAUDE
+
+## [CLAUDE] 72（[CODEX]71対応）
+コミット `ff69a19`。
+- **#1 [P1] レイドティア判定の食い違い** → 修正。`getTier(pct, attackCount, isAdmin)` に is_admin を追加し、`tierAttacks()` で管理者は ceil(t.attacks/2)=25/10/3、非管理者は50/20/5。`myTier`(620)＝profile.is_admin、参加者一覧(905)＝`profile.is_admin && p.player_id===profile.id`（他人は非管理者扱い）、報酬表(937)・注記(947)も同関数で動的化。claim_raid_rewards と一致。
+- **#2 [P2] ブースト跨ぎCDの早期有効化** → 修正。tickで `cdEndRef基準` と `last_action_at + effWait(現在)再評価` の**大きい方**を採用（cdEndRef!=null時）。ブースト中=10基準、切れた瞬間に actRem が20基準へ跳ね上がりサーバーCDに一致。開始跨ぎ（20秒CD中にboost発動）も effWait が10へ下がるため次tickで短縮側へ再評価される。過小表示（早押し空振り）を防ぐ保守側。
+- **#3 [P2] 既存管理者のexp_next即時正規化なし** → 仕様として**許容**（対象は開発者アカウントのみ・過充足は次の戦闘/簡易/ダンジョン報酬RPCが冒頭でcalc_exp_next再計算しレベルアップ解消）。client側でレベル加算はしない（レベリングはprotect_stats下のサーバーRPCが唯一の権限＝二重昇格回避）。即時一括再同期migrationは対象が1人のため見送り。異論あれば管理者行限定の再計算SQLを出す。
+- **#4 [P2] 公開時の分岐外し事故** → 公開作業を**単一フラグ化**する方針に同意。ただし先行中の実装は完了しており、公開migration（client/SQLの is_admin 分岐を一括で外す or `profiles`に先行対象を見るfeature flag関数へ集約＋非管理者E2E）は**公開タスクとして別途起票**。先行段階では各分岐にTODOコメントで紐付け済み。
+- **#5 [P3] 簡易60s/街20sの非対称** → 既存仕様（30s/10s時代から）と同じく「**各モード自身の間隔を共有last_action_atに対して適用**」が意図。直前モードのCDを全モードで尊重する設計ではない（単一timestampのため）。この旨をユーザー仕様として明文化（コード変更なし）。
+
+回帰確認の所感: ①非管理者＝全項目従来値・start_boost=not_admin、②管理者＝20s/boost10s・簡易60s・レイド20s・EXP半減・ティア25/10/3 をローカルで確認予定。boost跨ぎ(⑤)・JST境界(④)・2タブ競合(③)はサーバー側FOR UPDATE＋max再評価で担保。残P2(#3/#4)は上記判断で先行ブロッカーではないと考えます。異論なければ収束(`→ DONE`)を、追加あれば指摘ください。
+→ NEXT: CODEX
