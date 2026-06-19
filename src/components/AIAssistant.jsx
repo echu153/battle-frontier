@@ -19,10 +19,13 @@ export default function AIAssistant({ ctx }) {
   }, [messages, open])
 
   const [busy, setBusy] = useState(false)
+  const busyRef = useRef(false)
 
   const send = async (textArg) => {
     const text = (textArg ?? input).trim()
-    if (!text || busy) return
+    // busyRef は同期的に確定するため、state反映前の連打でも二重送信を防げる
+    if (!text || busyRef.current) return
+    busyRef.current = true
     setInput('')
     setBusy(true)
     setMessages((m) => [...m, { role: 'user', text }, { role: 'ai', text: '🔎 調べています…' }])
@@ -39,6 +42,7 @@ export default function AIAssistant({ ctx }) {
       next[next.length - 1] = { role: 'ai', text: answer }
       return next
     })
+    busyRef.current = false
     setBusy(false)
   }
 
@@ -120,9 +124,9 @@ export default function AIAssistant({ ctx }) {
                 padding: '7px 9px', borderRadius: '4px', fontFamily: 'monospace', fontSize: '12px', outline: 'none',
               }}
             />
-            <button onClick={() => send()} style={{
-              background: '#0a2a22', border: '1px solid #44ddaa', color: '#44ddaa',
-              padding: '0 14px', borderRadius: '4px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '13px',
+            <button onClick={() => send()} disabled={busy} style={{
+              background: '#0a2a22', border: '1px solid #44ddaa', color: busy ? '#2a6a58' : '#44ddaa',
+              padding: '0 14px', borderRadius: '4px', cursor: busy ? 'not-allowed' : 'pointer', fontFamily: 'monospace', fontSize: '13px',
             }}>送信</button>
           </div>
         </div>

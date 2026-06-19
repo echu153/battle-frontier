@@ -239,6 +239,77 @@ const extractEntity = (raw) => {
   return s.replace(/^[のはをがで]+|[のはをがで]+$/g, '').trim()
 }
 
+// ============================================================
+// 検索レジストリ（公開マスタ表のみ。プレイヤー個人情報を含む表は対象外）
+//   表を1件追加するだけで横断検索の対象を増やせる設計。
+//   format(row) … 表示整形。score時は name のみ使用。
+// ============================================================
+const SEARCH_TABLES = [
+  {
+    table: 'skills', cols: 'name, class_name, required_lv, mp_cost, type, description',
+    format: (s) => `⚡ ${s.name}（${s.class_name || ''}スキル / LV${s.required_lv} / MP${s.mp_cost ?? '-'}）\n${s.description || '（説明データなし）'}`,
+  },
+  {
+    table: 'weapons', cols: 'name, weapon_type, rarity, class, base_atk, base_matk, atk_bonus, matk_bonus',
+    format: (w) => {
+      const atk = (w.base_atk || 0) + (w.atk_bonus || 0)
+      const matk = (w.base_matk || 0) + (w.matk_bonus || 0)
+      const stats = [atk ? `攻撃${atk}` : '', matk ? `特攻${matk}` : ''].filter(Boolean).join(' / ') || 'ステータスデータなし'
+      return `🗡 ${w.name}（武器${w.weapon_type ? '・' + w.weapon_type : ''}${w.rarity ? ' / ' + String(w.rarity).toUpperCase() + '級' : ''}）\n${stats}`
+    },
+  },
+  {
+    table: 'items', cols: 'name, description, buy_price',
+    format: (i) => `📦 ${i.name}${i.buy_price ? `（${i.buy_price}G）` : ''}\n${i.description || '（説明データなし）'}`,
+  },
+  {
+    table: 'titles', cols: 'name, category, description',
+    format: (t) => `🏅 ${t.name}${t.category ? `（${t.category}）` : ''}\n${t.description || '（説明データなし）'}`,
+  },
+  {
+    table: 'exchange_shop', cols: 'name, description, reward_type',
+    format: (e) => `🔄 ${e.name}（交換所）\n${e.description || '（説明データなし）'}`,
+  },
+]
+
+// 完全一致を全マスタ表に問い合わせ（レジストリ順で最初のヒットを採用）
+const lookupExact = async (term) => {
+  if (!term || term.length < 2) return null
+  const results = await Promise.all(
+    SEARCH_TABLES.map((t) => supabase.from(t.table).select(t.cols).eq('name', term).limit(1)),
+  )
+  for (let i = 0; i < SEARCH_TABLES.length; i++) {
+    const row = results[i].data?.[0]
+    if (row) return SEARCH_TABLES[i].format(row)
+  }
+  return null
+}
+
+// 部分一致を全マスタ表で検索し、明示的にスコアリング（前方一致＞含む、短い名前ほど上位）
+const lookupPartial = async (term) => {
+  if (!term || term.length < 2) return null
+  const like = `%${term}%`
+  const results = await Promise.all(
+    SEARCH_TABLES.map((t) => supabase.from(t.table).select(t.cols).ilike('name', like).limit(5)),
+  )
+  const cands = []
+  results.forEach((r, i) => {
+    for (const row of (r.data || [])) {
+      const name = row.name || ''
+      let score = name === term ? 1000 : name.startsWith(term) ? 500 - name.length : 100 - name.length
+      cands.push({ name, score, format: () => SEARCH_TABLES[i].format(row) })
+    }
+  })
+  if (!cands.length) return null
+  cands.sort((a, b) => b.score - a.score)
+  // 上位が突出していれば確定、そうでなければ候補を聞き返す（非決定的な黙采用を避ける）
+  const uniqNames = [...new Set(cands.map((c) => c.name))]
+  if (uniqNames.length === 1 || cands[0].score - (cands[1]?.score ?? -999) >= 100) {
+    return cands[0].format()
+  }
+  return `🔎 候補が複数あります。どれですか？\n${uniqNames.slice(0, 6).map((n) => '・' + n).join('\n')}`
+}
+
 // クラスのスキル一覧をDBから取得
 const lookupClassSkills = async (cls) => {
   const { data } = await supabase.from('skills').select('name, required_lv, mp_cost, description')
@@ -251,38 +322,26 @@ const lookupClassSkills = async (cls) => {
   return lines.join('\n')
 }
 
-// 名前でスキル/アイテム/武器を横断検索
-const lookupEntity = async (term) => {
-  if (!term || term.length < 2) return null
-  const like = `%${term}%`
-  const [sk, it, wp] = await Promise.all([
-    supabase.from('skills').select('name, class_name, required_lv, mp_cost, type, description').ilike('name', like).limit(3),
-    supabase.from('items').select('name, description, buy_price').ilike('name', like).limit(3),
-    supabase.from('weapons').select('name, weapon_type, rarity, base_atk, base_matk, atk_bonus, matk_bonus').ilike('name', like).limit(3),
-  ])
-  // 完全一致を優先
-  const exact = (arr) => arr?.find((x) => x.name === term) || (arr && arr[0])
-  const s = exact(sk.data), w = exact(wp.data), i = exact(it.data)
-  if (s) {
-    return `⚡ ${s.name}（${s.class_name || ''}スキル / LV${s.required_lv} / MP${s.mp_cost ?? '-'}）\n${s.description || '（説明データなし）'}`
-  }
-  if (w) {
-    const atk = (w.base_atk || 0) + (w.atk_bonus || 0)
-    const matk = (w.base_matk || 0) + (w.matk_bonus || 0)
-    const stats = [atk ? `攻撃${atk}` : '', matk ? `特攻${matk}` : ''].filter(Boolean).join(' / ') || 'ステータスデータなし'
-    return `🗡 ${w.name}（武器${w.weapon_type ? '・' + w.weapon_type : ''}${w.rarity ? ' / ' + String(w.rarity).toUpperCase() + '級' : ''}）\n${stats}`
-  }
-  if (i) {
-    return `📦 ${i.name}${i.buy_price ? `（${i.buy_price}G）` : ''}\n${i.description || '（説明データなし）'}`
-  }
-  return null
+// クラスと武器の相性（このゲームは装備にクラス縛りが無く、weapon_typeで物理/魔法
+// スケールが決まる。よって「相性の良い武器種」を案内する静的回答）。
+const PHYS_WEAPONS = '剣・斧・槍・弓・短剣・拳・銃・刀'
+const MAG_WEAPONS = '杖・ワンド・魔導書・オーブ'
+const classWeaponText = (cls) => {
+  const t = classType(cls)
+  let body
+  if (t === '魔法型') body = `魔法武器（${MAG_WEAPONS}）が「特殊攻撃」で計算され火力に直結します。`
+  else if (t === '物理型') body = `物理武器（${PHYS_WEAPONS}）が「攻撃」で計算され火力に直結します。`
+  else body = `物理武器（${PHYS_WEAPONS}）と魔法武器（${MAG_WEAPONS}）の両方を使えます。主力スキルが使う方の武器を選ぶと火力が安定します。`
+  return `🗡 ${cls}（${t}）の武器相性\n${body}\n※このゲームは装備にクラス縛りはありません（どの武器種も装備可能）。上記は火力が伸びやすい組み合わせです。`
 }
 
 // ============================================================
 // 公開API：問い合わせに回答（async）
 //   returns: { text, kind }  kind = advice|class|kb|db|fallback
+//   解決順：強化アドバイス → クラス(意図あり) → DB完全一致 → 静的KB → DB部分一致 → フォールバック
 // ============================================================
 const ADVICE_TRIGGER = /おすすめ|オススメ|お勧め|強化したい|なにを伸ば|何を伸ば|どこを伸ば|どう強く|ビルド|育て方|振り方|戦闘スタイル|強くなりたい/
+const CLASS_INTENT = /なるには|なりたい|なるためには|転職|どんな職|どういう職|どんなクラス|職業|の条件|になれ/
 
 export const askAssistant = async (query, ctx = {}) => {
   const raw = (query || '').trim()
@@ -291,33 +350,46 @@ export const askAssistant = async (query, ctx = {}) => {
   // 1) 強化アドバイス
   if (ADVICE_TRIGGER.test(raw)) return { text: buildAdvice(ctx, raw), kind: 'advice' }
 
-  // 2) クラス質問（職名を含む）
+  // 2) クラス質問（職名を含み、かつ意図がある場合のみ。武器/スキルの下位質問は専用検索へ）
   const cls = findClassInQuery(raw)
   if (cls) {
-    // 「○○のスキル」ならDBからスキル一覧
-    if (/スキル|技|わざ|アビリティ/.test(raw)) {
-      try {
+    try {
+      if (/スキル|わざ|アビリティ/.test(raw)) {
         const sk = await lookupClassSkills(cls)
         if (sk) return { text: sk, kind: 'db' }
-      } catch { /* DB失敗時は下の静的回答へ */ }
+      }
+      if (/武器|ぶき/.test(raw)) {
+        return { text: classWeaponText(cls), kind: 'class' }
+      }
+    } catch { /* DB失敗時は下へ */ }
+    // 職名以外がノイズだけ（「○○ってなに/とは」等）か、転職意図があるならクラス説明
+    const remainder = normalize(raw.replace(cls, '')).replace(/って|なに|なん|です|とは|どんな|どういう|について|の|は|を|が/g, '')
+    if (CLASS_INTENT.test(raw) || remainder === '') {
+      return { text: classInfoText(cls), kind: 'class' }
     }
-    return { text: classInfoText(cls), kind: 'class' }
+    // それ以外（「狂戦士が使える○○」等）は後続の汎用検索に流す
   }
 
-  // 3) 静的KB（施設・仕組み）
+  // 3) DB完全一致（「強化石(F)ってなに？」など。静的KBより先に確定させる）
+  const term = extractEntity(raw)
+  try {
+    const exact = await lookupExact(term)
+    if (exact) return { text: exact, kind: 'db' }
+  } catch { /* ネット失敗時は静的KBへ */ }
+
+  // 4) 静的KB（施設・仕組み）
   const kb = searchKB(raw)
   if (kb) return { text: kb.a, kind: 'kb' }
 
-  // 4) DBライブ検索（スキル名・アイテム名・武器名）
+  // 5) DB部分一致（曖昧名・候補聞き返し）
   try {
-    const term = extractEntity(raw)
-    const hit = await lookupEntity(term)
+    const hit = await lookupPartial(term)
     if (hit) return { text: hit, kind: 'db' }
-  } catch { /* ネット失敗時はフォールバック */ }
+  } catch { /* フォールバックへ */ }
 
-  // 5) フォールバック
+  // 6) フォールバック
   return {
-    text: 'うまく聞き取れませんでした。こんな質問ができます：\n・「狂戦士になるには？」（職名で転職条件）\n・「元素使いのスキル」（クラスのスキル一覧）\n・「メテオストライクの効果は？」（スキル名）\n・「宝石ってなに？」「レベル上げの効率は？」\n・「おすすめ強化」（あなた専用アドバイス）',
+    text: 'うまく聞き取れませんでした。こんな質問ができます：\n・「狂戦士になるには？」（職名で転職条件）\n・「元素使いのスキル」「狂戦士が使える武器」\n・「メテオストライクの効果は？」（スキル/アイテム/武器/称号/交換品の名前）\n・「宝石ってなに？」「レベル上げの効率は？」\n・「おすすめ強化」（あなた専用アドバイス）',
     kind: 'fallback',
   }
 }
