@@ -46,12 +46,12 @@ export default function AIAssistant({ ctx }) {
     setBusy(true)
     setMessages((m) => [...m, { role: 'user', text }, { role: 'ai', text: '…見極めている。少し待て。' }])
     let answer
+    let gotLLM = false // LLM生成文かどうか（tidy整形はLLM出力のみに適用＝ルール/DB本文は無加工）
     try {
       const res = await askAssistant(text, { ...ctx, lastQuery: lastQueryRef.current })
       answer = res.text
       // 事実質問はルールベース（正確）で確定。答えに詰まった質問だけ会話用LLM（1日上限つき）へ。
       // LLM未デプロイ/上限到達/エラー時は llmChat が null/allowed:false を返すのでルールの回答を表示。
-      let gotLLM = false
       // 雑談/聞き取れず は丸ごとAIへ。強化相談(advice)は、ルールの正確な回答を“下書き”として渡し、
       // 質問に合わせて作り直させる（毎回テンプレにならないように）。AI不可時はルール回答を表示。
       if (res.kind === 'fallback' || res.kind === 'chat' || res.kind === 'advice') {
@@ -79,8 +79,9 @@ export default function AIAssistant({ ctx }) {
     } catch {
       answer = '通信が乱れたか。もう一度言ってみろ。'
     }
-    // 直前の「調べています…」プレースホルダを、整形済みの回答で置き換える
-    const finalText = tidy(answer)
+    // 直前の「調べています…」プレースホルダを回答で置き換える。
+    // tidy整形はLLM生成文のみ（誤字対策）。ルール/DB本文は正確なので無加工で表示する。
+    const finalText = gotLLM ? tidy(answer) : (answer || '')
     setMessages((m) => {
       const next = m.slice()
       next[next.length - 1] = { role: 'ai', text: finalText }
