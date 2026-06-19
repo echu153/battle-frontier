@@ -219,6 +219,52 @@ export const buildAdvice = (ctx, query) => {
   return lines.join('\n')
 }
 
+// 「強くなるには？」「何をすればいい？」のような漠然とした相談に、
+// プレイヤーのLV・状態を見て“今やるべき優先順位”を返す総合アドバイス。
+export const buildProgressionAdvice = (ctx) => {
+  const profile = ctx?.profile
+  if (!profile) return 'プレイヤー情報が読み込めませんでした。街の画面で再度お試しください。'
+  const eff = ctx?.eff || {}
+  const lv = profile.char_lv || profile.lv || 1
+  const cls = profile.class || '冒険者'
+  const pending = profile.pending_stat_points || 0
+  const style = detectStyle(ctx, '')
+  const focus = style === 'magical' ? '特殊攻撃(C)' : style === 'physical' ? '攻撃(A)' : '攻撃(A)か特殊攻撃(C)（主力スキルが使う方）'
+
+  const steps = []
+  // 1) 余っているステは即振り
+  if (pending > 0) steps.push(`① 余っているステータスポイント ${pending} を「${focus}」に振る（プロフィール画面）`)
+  // 2) 火力ステを伸ばす
+  steps.push(`${pending > 0 ? '②' : '①'} 出撃やデイリーダンジョンでLVを上げ、貯まったポイントを「${focus}」中心に振る`)
+  // 3) 装備
+  steps.push('・装備を整える：商店/ドロップで強い武器防具を入手 → 鍛冶屋で強化石を使って+強化（錬金部屋LV10で石を自動生成）')
+  // 4) 熟練度
+  if (lv >= 10) steps.push('・かかし修練場(LV10)で使用武器の熟練度を上げる＝固定ボーナスに倍率がかかり実効ステUP')
+  // 5) 宝石
+  steps.push('・装飾品や装備に宝石を埋める（攻撃系=武器、防御系=防具、％系=装飾品）。交換所・博物館報酬で入手')
+  // 6) スキル/再修練
+  steps.push('・スキル画面で習得スキルを確認。本職を極めたら神殿で「再修練」5回でスキル強化＆LV上限300解放')
+  // 7) コンテンツでの素材集め
+  if (lv >= 30) steps.push('・レイドボス(LV30)の素材を集め、交換所で専用装備や強化石(S)と交換すると一段強くなれる')
+
+  // 守りの偏りを指摘
+  const def = eff.def || 0, mdef = eff.mdef || 0
+  let warn = ''
+  if (def > 0 && mdef > 0) {
+    if (def < mdef * 0.6) warn = '\n⚠ 物理防御(B)が手薄。物理が痛い敵はサファイアや防具で補強を'
+    else if (mdef < def * 0.6) warn = '\n⚠ 特殊防御(D)が手薄。魔法が痛い敵はエメラルドや防具で補強を'
+  }
+
+  const nextGate = lv < 5 ? '\n🔓 LV5で釣り場/博物館/美容院/交換所が開放されます'
+    : lv < 10 ? '\n🔓 LV10で賭博場/ペット/ダンジョン/かかし修練場/錬金部屋が開放されます'
+    : lv < 30 ? '\n🔓 LV30でレイドボス/奈落闘技場が開放されます' : ''
+
+  return `🤖 ${profile.name || 'あなた'}（${cls}・LV${lv}）が強くなる手順\n` +
+    `あなたは${style === 'magical' ? '魔法型' : style === 'physical' ? '物理型' : '混合型'}なので火力の軸は「${focus}」です。\n\n` +
+    steps.join('\n') + warn + nextGate +
+    '\n\n（「おすすめ強化」で振り方の詳細、「○○のスキル」で習得技も確認できます）'
+}
+
 // ============================================================
 // DBライブ検索（Supabase 読み取り＝無料）
 // ============================================================
@@ -340,15 +386,18 @@ const classWeaponText = (cls) => {
 //   returns: { text, kind }  kind = advice|class|kb|db|fallback
 //   解決順：強化アドバイス → クラス(意図あり) → DB完全一致 → 静的KB → DB部分一致 → フォールバック
 // ============================================================
-const ADVICE_TRIGGER = /おすすめ|オススメ|お勧め|強化したい|なにを伸ば|何を伸ば|どこを伸ば|どう強く|ビルド|育て方|振り方|戦闘スタイル|強くなりたい/
+const ADVICE_TRIGGER = /おすすめ|オススメ|お勧め|強化したい|なにを伸ば|何を伸ば|どこを伸ば|ビルド|振り方|戦闘スタイル|ステ振り|どこに振/
+// 漠然とした「強くなるには/何をすれば/どうすれば」系 → 総合の攻略アドバイス
+const PROGRESSION_TRIGGER = /強くなるに|強くなりたい|強くなれ|強くなるた|どうすれば強|どうしたら強|どう強く|何をすれ|なにをすれ|何すれ|なにすれ|何から|なにから|伸び悩|勝てない|進め方|育て方|育成|効率よく強|次に何|次は何|つよくな/
 const CLASS_INTENT = /なるには|なりたい|なるためには|転職|どんな職|どういう職|どんなクラス|職業|の条件|になれ/
 
 export const askAssistant = async (query, ctx = {}) => {
   const raw = (query || '').trim()
   if (!raw) return { text: '質問を入力してください。例：「狂戦士になるには？」「メテオストライクの効果は？」「おすすめ強化」', kind: 'fallback' }
 
-  // 1) 強化アドバイス
+  // 1) 強化アドバイス（具体）／総合攻略アドバイス（漠然とした相談）
   if (ADVICE_TRIGGER.test(raw)) return { text: buildAdvice(ctx, raw), kind: 'advice' }
+  if (PROGRESSION_TRIGGER.test(raw)) return { text: buildProgressionAdvice(ctx), kind: 'advice' }
 
   // 2) クラス質問（職名を含み、かつ意図がある場合のみ。武器/スキルの下位質問は専用検索へ）
   const cls = findClassInQuery(raw)
