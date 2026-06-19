@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { askAssistant, QUICK_QUESTIONS } from '../lib/aiAssistant'
+import { llmChat } from '../lib/llmChat'
 
 // ============================================================
 // AI相談アシスタント（ルールベース・LLM不使用）
@@ -35,8 +36,15 @@ export default function AIAssistant({ ctx }) {
     try {
       const res = await askAssistant(text, { ...ctx, lastQuery: lastQueryRef.current })
       answer = res.text
-      // 実のある回答（雑談/聞き取れず以外）のときだけ直前話題として記憶
-      if (res.kind && res.kind !== 'meta' && res.kind !== 'fallback') lastQueryRef.current = text
+      // 事実質問はルールベース（正確）で確定。答えに詰まった質問だけ会話用LLM（1日上限つき）へ。
+      // LLM未デプロイ/上限到達/エラー時は llmChat が null/allowed:false を返すのでルールの回答を表示。
+      if (res.kind === 'fallback') {
+        const p = ctx?.profile
+        const llm = await llmChat({ question: text, player: { name: p?.name, cls: p?.class, lv: p?.char_lv } })
+        if (llm && llm.text) answer = llm.text
+      }
+      // 実のある回答（雑談/聞き取れず/拒否 以外）のときだけ直前話題として記憶
+      if (res.kind && res.kind !== 'meta' && res.kind !== 'fallback' && res.kind !== 'refused') lastQueryRef.current = text
     } catch {
       answer = '通信エラーが発生しました。もう一度お試しください。'
     }
