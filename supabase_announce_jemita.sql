@@ -1,6 +1,6 @@
 -- ============================================================
 -- お知らせ: AI相談ボット「AI戦闘民族ジェミータ」導入（一般公開）
---   announcements へ INSERT。category='update'。タイトルに日付は入れない（created_atで自動表示）。
+--   announcements へ INSERT。category='past'（お知らせUIの「その他」タブ）。タイトルに日付は入れない（created_atで自動表示）。
 -- ============================================================
 INSERT INTO announcements (title, content, category, is_active, created_at)
 VALUES (
@@ -25,7 +25,7 @@ $$いつもプレイいただきありがとうございます。
 ・公序良俗に反する内容にはお答えしません。
 
 今後ともよろしくお願いいたします。$$,
-  'update',
+  'past',
   true,
   now()
 );
