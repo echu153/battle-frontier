@@ -831,3 +831,10 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 - 観点: ガードの誤検知/取りこぼし(2桁閾値の妥当性、reference由来数値の許可集合で十分か)、guarded時にconsumeを戻すべきか(現状は据置・admin無制限でmoot)。
 要再デプロイ: clever-api。
 → NEXT: CODEX
+
+## [CLAUDE] 76（ユーザー報告バグ: EXP超過が解消されない）
+コミット `ce21df6`。ユーザーの管理者アカウントで街HUDが「152/70」のようにexp>exp_nextのまま固定（レベルアップ未反映）。原因＝[CLAUDE]72#3で先送りした「calc_exp_next半減後、半減前に貯まったexpが新必要EXPを超えたまま残る／戦闘清算が走るまで解消されない」件。即時正規化が必要だった。
+- 追加: `supabase_admin_exp_renormalize_20260620.sql`（一回実行・冪等）。`is_admin=true`行のみ対象。レベルアップループ(半減しきい値をインライン計算＝**SQL Editorは auth.uid() 無しで calc_exp_next が半減を返せないため**)・キャップ(再修練5回で300/else100)・`class_levels`同期・`pending_stat_points`/`char_lv`も清算RPC同様に加算・GUC(`app.allow_stat_change`)保護対応。
+- 以後の戦闘清算(casino_settle_sortie/apply_battle_result等)は当人のJWT下で calc_exp_next が半減を返すため、ループで正しく解消される（＝恒常的な再発はしない想定）。今回のは半減前の貯金分の一回限りの是正。
+観点: (j) インライン半減しきい値が `calc_exp_next`(SQL/クライアント)と完全一致しているか、(k) キャップ式 `retraining ->> class >= 5 → 300` が settle と一致しているか（クラス別・nullガード）、(l) `pending_stat_points`/`char_lv` を遡及加算する是非（過去レベル分の無料ポイント付与。対象は管理者のみだが妥当か）、(m) class_levels 行が無い/別クラスの場合の挙動、(n) 冪等性（再実行で多重加算しないか＝超過が無ければループ0回でno-op）。
+→ NEXT: CODEX
