@@ -742,7 +742,7 @@ export default function RaidBoss() {
             </div>
           </div>
 
-          <RewardTable />
+          <RewardTable isAdmin={profile?.is_admin} />
         </div>
       )}
 
@@ -921,7 +921,7 @@ export default function RaidBoss() {
             </div>
           )}
 
-          <RewardTable />
+          <RewardTable isAdmin={profile?.is_admin} />
         </div>
       )}
       </div>
@@ -929,14 +929,14 @@ export default function RaidBoss() {
   )
 }
 
-function RewardTable() {
+function RewardTable({ isAdmin = false }) {
   return (
     <div style={{ border: '1px solid #112233', background: '#000810', padding: '14px', marginTop: '16px' }}>
       <div style={{ color: '#335566', fontSize: '11px', marginBottom: '8px' }}>討伐報酬</div>
       {TIER_INFO.map(t => (
         <div key={t.pct} style={{ fontSize: '11px', padding: '4px 0', borderBottom: '1px solid #0a1220' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: t.color }}>{t.tier}ティア　{t.attacks > 0 ? `貢献度${t.pct}%以上 or 出撃${tierAttacks(t, profile?.is_admin)}回` : t.label}</span>
+            <span style={{ color: t.color }}>{t.tier}ティア　{t.attacks > 0 ? `貢献度${t.pct}%以上 or 出撃${tierAttacks(t, isAdmin)}回` : t.label}</span>
             <span style={{ color: '#ffcc00' }}>Gold {fmt(t.gold)}</span>
           </div>
           <div style={{ color: '#446688', marginTop: '2px' }}>
@@ -944,7 +944,7 @@ function RewardTable() {
           </div>
         </div>
       ))}
-      <div style={{ color: '#334455', fontSize: '10px', marginTop: '6px' }}>※ 出撃回数でもティア保証: {tierAttacks(TIER_INFO[2], profile?.is_admin)}回→C / {tierAttacks(TIER_INFO[1], profile?.is_admin)}回→B / {tierAttacks(TIER_INFO[0], profile?.is_admin)}回→A。時間切れでもその時点の報酬を獲得可</div>
+      <div style={{ color: '#334455', fontSize: '10px', marginTop: '6px' }}>※ 出撃回数でもティア保証: {tierAttacks(TIER_INFO[2], isAdmin)}回→C / {tierAttacks(TIER_INFO[1], isAdmin)}回→B / {tierAttacks(TIER_INFO[0], isAdmin)}回→A。時間切れでもその時点の報酬を獲得可</div>
     </div>
   )
 }

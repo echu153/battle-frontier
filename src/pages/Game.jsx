@@ -1500,14 +1500,16 @@ export default function Game() {
   useEffect(() => {
     if (!profile) return
     const id = setInterval(() => {
-      // サーバーレスポンス由来の相対値(cdEndRef)は時計ズレに強いが、ブーストが切れる瞬間を跨ぐと
-      // 出撃時に固定した10秒終了時刻のままになり、実際は20秒CDのサーバーより早く有効化されてしまう。
-      // そのため last_action_at＋現在のeffWait からの再評価値と「大きい方」を採用（過小表示=早押し空振りを防ぐ）。
-      const cdRem  = cdEndRef.current !== null ? Math.max(0, (cdEndRef.current - Date.now())/1000) : 0
+      // 管理者はブーストでCDが動的に変わる（開始で20→10短縮・終了で10→20延長）ため、毎tick
+      //   last_action_at＋現在のeffWait で再評価する＝サーバー(sortie_lock)の v_wait 判定と一致。
+      //   固定タイマー(cdEndRef)だと開始跨ぎで待たせ過ぎ・終了跨ぎで早く有効化してしまう。
+      // 非管理者はCDが常に10秒固定なので、従来どおり時計ズレに強い cdEndRef を優先。
       const actRem = profile.last_action_at
         ? Math.max(0, effWait(profile, serverNow()) - (serverNow()-new Date(profile.last_action_at).getTime())/1000)
         : 0
-      const rem = cdEndRef.current !== null ? Math.max(cdRem, actRem) : actRem
+      const rem = profile.is_admin
+        ? actRem
+        : (cdEndRef.current !== null ? Math.max(0, (cdEndRef.current - Date.now())/1000) : actRem)
       // canAct(ボタン有効)は毎回反映（同値ならReactが再描画スキップ＝負荷ゼロ）。
       // ガード内に入れるとスマホの一時停止→復帰でtickを取りこぼし、押せなくなることがあった。
       setCanAct(rem === 0)
