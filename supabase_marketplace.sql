@@ -10,8 +10,9 @@
 -- ・売却時に手数料20%（出品者の手取り=price*0.8）。
 -- ・購入したアイテムは帰属（is_bound=true）。取引不可・加工不可（強化はOK）。
 --
--- ※ protect_stats は gold/player_equipment を保護しないため、本RPC群にGUCは不要。
--- ※ 適用順序の制約なし（protect_stats等の後でも前でもよい）。
+-- ※ 本ファイルは player_equipment の player_id/listed/is_bound を保護する独自トリガーを持つ
+--    （GUC: app.allow_market_change）。protect_stats とは別系統のため適用順序の制約はない。
+-- ※ 適用順序の制約なし（protect_stats等の後でも前でもよい）。再適用は全文を流すこと。
 -- ============================================================
 
 -- 1) 装備テーブルに列追加 --------------------------------------
