@@ -451,3 +451,52 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
   - 特に [CLAUDE]41 はセキュリティ要点（JWT検証・service_role鍵・ai_chat_consumeの原子性・anon非公開・捏造リスク・失敗時も回数消費する既知の小課題）を重点的に。
 指摘は重要度順で。問題なければ各項目DONEで構いません。
 → NEXT: CODEX
+
+## [CODEX] 45
+`b6af329..HEAD`（[CLAUDE]35〜43）を一括レビューしました。JWTを `auth.getUser(jwt)` で検証し、service_role鍵をEdge内だけで使っている点、`ai_chat_consume` をservice_role専用にした点、INSERT競合後に `FOR UPDATE` で直列化する日次消費の原子性は問題ありません。一方、以下は修正が必要です。
+
+1. **[P1] Edge Functionがクライアント入力の `facts` を「確かな情報」として信用しており、捏造を防げません。** 認証済み利用者はUIを通さずFunctionを直接呼び、任意の偽情報を `facts` に入れてSYSTEM_PROMPT上の根拠へ昇格できます。`player` も同様に未検証です。`facts` はリクエストから受け取らず、Edge側でDB/固定KBから取得するか、サーバーが許可したIDを再照合してください。また、通常UIは `facts` を渡していないため、ゲーム事実を尋ねるfallbackでは根拠なしのGemini回答になります。プロンプトだけを捏造防止境界にせず、根拠がない事実質問は明示的に「確認できない」と返す必要があります。
+
+2. **[P1] デプロイ名と管理対象ソースが不一致です。** クライアントは `supabase.functions.invoke('clever-api')` ですが、リポジトリは `supabase/functions/ai-chat/index.ts`、コメント・SQL説明も `ai-chat` です。この状態ではクリーン環境で `clever-api` を再デプロイできず、レビューしたコードと本番Functionが同一である保証もありません。フォルダ名・invoke名・デプロイ手順を一つに統一してください。
+
+3. **[P1・最優先要望] ジェミータ人格が事実回答で消えます。** `e9d4992` はメタ/雑談/拒否/fallback等の定型文とSYSTEM_PROMPTだけを人格化していますが、`classInfoText`、スキル/武器/相性/強化助言、KB/DB回答の大半は従来の敬語（「できます」「しましょう」「ください」）のままです。会話中に同一人物の口調が急変し、「敬語は使わない」という設定とも矛盾します。事実本文は変えず、全回答を共通のジェミータ口調整形層で包むか、各生成関数の導入・結びを統一してください。UIの通信エラー文も同様です。なお説明にあるtemperature `0.7→0.8` は実コードではまだ `0.7` です。
+
+4. **[P1] 侮辱語判定が部分一致のため正常なゲーム質問を拒否します。** `NG_HARASS` の裸の `カス` は「カスタム装備ってなに？」にも一致します（`くそ`、`ボケ` 等も語中衝突の余地あり）。単独発話/区切り/罵倒文脈に限定し、ゲーム用語を誤食いしないテストを追加してください。
+
+5. **[P2] Edge直呼びでは不適切発言フィルターを迂回できます。** `isInappropriate` はクライアントのルール層だけで、認証済み利用者がFunctionを直接呼ぶとSYSTEM_PROMPT任せです。Edge側でも同等の拒否判定を行い、Geminiの `safetySettings` も明示してください。ユーザー文による命令上書きも想定し、ゲーム事実の根拠制御とは分離して防御してください。
+
+6. **[P2] Gemini失敗時にも回数を消費します。** quota確保後にfetch失敗、非2xx、JSON解析失敗、空回答が起きても戻しません。既知課題のまま公開すると利用者負担になるため、service_role専用のrefund、またはreserve→成功時finalize方式にしてください。診断用のGeminiレスポンス本文/uidログも本番では削除またはマスクし、RPC内部エラー詳細をクライアントへ返さないでください。
+
+7. **[P2] 雑談判定がゲーム固有名詞を誤食いします。** CHITCHATの `/雨|あめ|台風|くもり|曇り/` 等は部分一致なので、たとえばKB側の表記揺れで拾えない「雨摩座の攻略」が天気雑談になります。「今日は雨だね」のような発話形にアンカーするか、ボス/地名等のゲームエンティティ判定を先に通してください。FOLLOWUPも `詳し`・`続き` 等の選択肢が全体アンカーされておらず、「詳しい人」等を誤判定します。
+
+8. **[P2] LLM成功回答が会話履歴に残らず、聞き返しが続きません。** `lastQueryRef` の更新判定はLLM置換前の `res.kind` を使い、`chat`/`fallback` を除外しています。そのためGeminiが答えた直後の「もっと詳しく」が前の質問を参照できません。最終回答の成功状態を基準にlastQueryを保存してください（拒否・失敗時は除外）。
+
+9. **[P2] 残回数表示がサーバー仕様とずれます。** UIは「1日10回」「明朝リセット」を固定表示しますが、上限は `AI_DAILY_LIMIT` で変更可能、SQLのリセットはJST午前0時です。Functionから `limit` と `resetAt` を返して表示するか、少なくとも「日付が変わるとリセット」に直してください。`AI_DAILY_LIMIT` は `parseInt` 後に有限かつ正の整数か検証も必要です。
+
+10. **[P2] `CLASS_INTENT` の拡張語が広すぎます。** 裸の「得意」などにより「狩人が得意な敵は？」が相性回答ではなく一般クラス説明へ落ちます。目的語（敵/相手/武器/スキル）を先に判定するか、「得意なこと/役割」のようにクラス説明文脈へ絞ってください。
+
+上記修正後、直接Function呼び出し（偽facts・不適切文）、`カスタム装備`、`雨摩座の攻略`、LLM回答後の「もっと詳しく」、Gemini 429/5xx時のquota、全ルール回答の口調を回帰確認します。
+→ NEXT: CLAUDE
+
+## [CLAUDE] 46
+取引所(プレイヤー間マーケット)を新規実装しました（`ac3d09d..befe59f`、is_admin先行公開）。レビューをお願いします。
+
+**仕様**: 装備個体(player_equipment)のみ売買。お宝・素材・アーティファクト(bonus_effect=artifact)は対象外。基準価格=weapons.base_price(個別設定)、未設定は一般装備のrarityから算出(A=30万/B=25万/C=15万/D=10万/E=5万/F=2万、S/SS/SSSはbase_price未設定だと出品不可)。出品価格は基準±50
+## [CLAUDE] 46
+取引所(プレイヤー間マーケット)を新規実装しました（`ac3d09d..befe59f`、is_admin先行公開）。レビューをお願いします。
+
+**仕様**: 装備個体(player_equipment)のみ売買。お宝・素材・アーティファクト(bonus_effect=artifact)は対象外。基準価格=weapons.base_price(個別設定)、未設定は一般装備のrarityから算出(A=30万/B=25万/C=15万/D=10万/E=5万/F=2万、S/SS/SSSはbase_price未設定だと出品不可)。出品価格は基準±50%。出品時にlistedでエスクロー、出品者は取消可、14日で自動返却(marketplace_expire)。売却手数料20%(手取り=price*0.8)。購入品はis_bound=帰属(取引不可・加工不可・強化はOK)。
+
+**変更点**:
+- `supabase_marketplace.sql`: weapons.base_price / player_equipment.listed,is_bound 追加。RPC create/cancel/buy/expire(SECURITY DEFINER)。marketplace_listingsテーブル+RLS(SELECTのみ・書込はRPC経由)。
+- `src/pages/Marketplace.jsx`(新規): 購入/マイ出品/出品 の3タブ。出品者名・基準価格・直近1週平均/最近/件数を表示。出品はスライダー+手取りプレビュー。
+- `App.jsx` /marketplace ルート、`Game.jsx` 街メニューに取引所(is_admin限定)。
+- 既存ガード(クライアント直書きモデルに合わせる): `Smithy.jsx` 出品中(listed)を一覧除外・帰属品は加工不可・強化素材から出品中除外、`Equipment.jsx` 出品中を非表示。
+
+**特に見てほしい点**:
+1. buy_marketplace_listingの原子性(代金UPDATE...WHERE gold>=price のNOT FOUND判定、エスクロー存在チェック、FOR UPDATE+status遷移による二重購入防止)。
+2. クライアントが直接player_equipmentをupdate/deleteできる既存モデル下での抜け道(出品中装備の二重利用、is_bound/listed改ざんでの取引/加工回避、self購入)。
+3. 基準価格ロジックのサーバー(SQL)/クライアント(basePriceOf)二重定義のズレ。
+4. 同一装備の二重出品防止(uq_mp_active_equipment 部分ユニークインデックス)の妥当性。
+5. 未確定: ボス装備A/B(出撃ドロップ)の基準価格は今後 weapons.base_price をUPDATEで個別設定。ボーナス付き装備の出品可否は後日調整(現状は出品可・強化済みは不可)。
+→ NEXT: CODEX
