@@ -137,16 +137,16 @@ export default function AIAssistant({ ctx }) {
           {/* AI回答の残り回数ステータス（10回まではAIが考えて回答／以降はテンプレのみ） */}
           <div style={{
             padding: '5px 12px', borderBottom: '1px solid #06251d', background: '#00140f',
-            fontSize: '10px', display: 'flex', alignItems: 'center', gap: '6px',
+            fontSize: '10px', display: 'flex', alignItems: 'center', gap: '6px', lineHeight: 1.5,
             color: aiRemaining === 0 ? '#cc9944' : '#55bb99',
           }}>
             {aiUnlimited
               ? <span>⚔ ジェミータの本気：無制限（管理者）</span>
               : aiRemaining === 0
-                ? <span>📋 現在テンプレ回答のみ（本日分を使い切った・毎朝5時にリセット）</span>
+                ? <span>📋 現在テンプレ回答のみ<br />（本日分を使い切った・毎朝5時にリセット）</span>
                 : aiRemaining === null
-                  ? <span>⚔ ジェミータの本気：{aiLimit ? `1日${aiLimit}回まで` : '1日の上限あり'}（毎朝5時リセット・超過後はテンプレ回答）</span>
-                  : <span>⚔ ジェミータの本気：あと{aiRemaining}回（毎朝5時リセット・超過後はテンプレ回答）</span>}
+                  ? <span>⚔ ジェミータの本気：{aiLimit ? `1日${aiLimit}回まで` : '1日の上限あり'}<br />（毎朝5時リセット・超過後はテンプレ回答）</span>
+                  : <span>⚔ ジェミータの本気：あと{aiRemaining}回<br />（毎朝5時リセット・超過後はテンプレ回答）</span>}
           </div>
 
           {/* メッセージ一覧 */}
