@@ -16,7 +16,7 @@ export const llmChat = async ({ question, draft, player, history, reference } = 
       body: { question, draft: draft || '', player: player || {}, history: history || [], reference: reference || '' },
     })
     if (error) return null
-    if (data?.allowed && data?.text) return { text: data.text, remaining: data.remaining, limit: data.limit }
+    if (data?.allowed && data?.text) return { text: data.text, remaining: data.remaining, limit: data.limit, unlimited: data.unlimited }
     return { allowed: false, reason: data?.reason, limit: data?.limit }
   } catch {
     return null

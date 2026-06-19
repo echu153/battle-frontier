@@ -36,6 +36,7 @@ export default function AIAssistant({ ctx }) {
   // 本日のAI回答の残り回数（null=まだ不明 / 0=上限到達でテンプレのみ）と1日上限（サーバー値）
   const [aiRemaining, setAiRemaining] = useState(null)
   const [aiLimit, setAiLimit] = useState(null)
+  const [aiUnlimited, setAiUnlimited] = useState(false) // 管理者=無制限（Edgeのunlimitedフラグ。センチネル値に依存しない）
 
   const send = async (textArg) => {
     const text = (textArg ?? input).trim()
@@ -66,6 +67,7 @@ export default function AIAssistant({ ctx }) {
         if (llm && llm.text) {
           answer = llm.text
           gotLLM = true
+          if (llm.unlimited) setAiUnlimited(true) // 管理者＝無制限
           if (typeof llm.remaining === 'number') setAiRemaining(llm.remaining) // AI回答成功＝残り回数を更新
           if (typeof llm.limit === 'number') setAiLimit(llm.limit)
         } else if (llm && llm.allowed === false && llm.reason === 'daily_limit') {
@@ -138,7 +140,7 @@ export default function AIAssistant({ ctx }) {
             fontSize: '10px', display: 'flex', alignItems: 'center', gap: '6px',
             color: aiRemaining === 0 ? '#cc9944' : '#55bb99',
           }}>
-            {aiRemaining >= 100000
+            {aiUnlimited
               ? <span>⚔ ジェミータの本気：無制限（管理者）</span>
               : aiRemaining === 0
                 ? <span>📋 現在テンプレ回答のみ（本日分を使い切った・毎朝5時にリセット）</span>
