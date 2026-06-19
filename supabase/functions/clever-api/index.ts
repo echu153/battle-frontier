@@ -77,8 +77,7 @@ Deno.serve(async (req) => {
 
   // service_role クライアント（is_admin判定・上限RPC両方で使う）
   const svc = createClient(SUPABASE_URL, SERVICE_KEY)
-  // 先行フェーズ：is_admin のみ許可。UIだけでなくEdgeでも検証＝JWT直叩きで非管理者が呼ぶのを防ぐ。
-  // 一般公開時は AI_ADMIN_ONLY=false を設定して解除する（その際に quota/refund/履歴の本番対策を併せて入れる）。
+  // 一般公開済み。is_admin は無制限判定に使う。AI_ADMIN_ONLY=true のときだけ管理者限定へ戻る（Edgeで検証）。
   const { data: prof, error: profErr } = await svc.from('profiles').select('is_admin').eq('id', uid).single()
   // DB障害/スキーマ不整合は「非管理者(403)」と区別して500（fail-open防止＋誤判定の隠蔽防止）。
   if (profErr) { console.error('[clever-api] profile lookup error'); return json({ allowed: false, reason: 'profile_error' }, 500) }
