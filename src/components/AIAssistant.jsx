@@ -10,7 +10,7 @@ import { llmChat } from '../lib/llmChat'
 export default function AIAssistant({ ctx }) {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState([
-    { role: 'ai', text: 'やあ！バトルフロンティアの案内役だよ。\n「○○ってなに？」「○○するには？」と聞いてね。\n強化に迷ったら「おすすめ強化を教えて」もどうぞ。' },
+    { role: 'ai', text: 'フン、来たか。俺は戦いの導き手「AI戦闘民族ジェミータ」だ。\nゲームのことなら何でも訊け。「○○とは」「○○になるには」、何でも答えてやる。\n強化に迷ったなら「おすすめの強化」と訊け。手加減はせん。' },
   ])
   const [input, setInput] = useState('')
   const scrollRef = useRef(null)
@@ -82,7 +82,7 @@ export default function AIAssistant({ ctx }) {
             fontSize: '24px', cursor: 'pointer', fontFamily: 'monospace',
             boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
           }}
-          title="AI相談"
+          title="AI戦闘民族ジェミータ"
         >🤖</button>
       )}
 
@@ -100,7 +100,7 @@ export default function AIAssistant({ ctx }) {
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             padding: '10px 12px', borderBottom: '1px solid #0a3a30', background: '#001520',
           }}>
-            <span style={{ color: '#44ddaa', fontSize: '13px' }}>🤖 AI相談（β・管理者先行）</span>
+            <span style={{ color: '#44ddaa', fontSize: '13px' }}>⚔ AI戦闘民族ジェミータ（β・管理者先行）</span>
             <button onClick={() => setOpen(false)} style={{
               background: 'none', border: 'none', color: '#668899', fontSize: '16px', cursor: 'pointer',
             }}>✕</button>
@@ -113,10 +113,10 @@ export default function AIAssistant({ ctx }) {
             color: aiRemaining === 0 ? '#cc9944' : '#55bb99',
           }}>
             {aiRemaining === 0
-              ? <span>📋 現在テンプレ回答のみ（AI回答は本日分を使い切りました・明朝リセット）</span>
+              ? <span>📋 現在テンプレ回答のみ（ジェミータの本気は本日分を使い切った・明朝リセット）</span>
               : aiRemaining === null
-                ? <span>🤖 AI回答：1日10回まで（超過後はテンプレ回答）</span>
-                : <span>🤖 AI回答：あと{aiRemaining}回（超過後はテンプレ回答）</span>}
+                ? <span>⚔ ジェミータの本気：1日10回まで（超過後はテンプレ回答）</span>
+                : <span>⚔ ジェミータの本気：あと{aiRemaining}回（超過後はテンプレ回答）</span>}
           </div>
 
           {/* メッセージ一覧 */}
