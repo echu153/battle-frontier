@@ -1396,6 +1396,7 @@ export default function Game() {
   }, [showChallengePanel])
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [showMenu, setShowMenu] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false) // AI戦闘民族ジェミータ（☰メニューから開く）
   const [showContact, setShowContact] = useState(false)
   const [showOptions, setShowOptions] = useState(false)   // ⚙ オプション（ブーストタイム発動など）
   const [boostLoading, setBoostLoading] = useState(false)
@@ -1932,6 +1933,8 @@ export default function Game() {
       let expGained = Math.floor(50 + Math.random() * 51)
       // キャラクターLV100未満は経験値1.5倍（出撃と同じ。サーバー apply_dungeon_reward の上限も1.5倍にしてある）
       if ((profile.char_lv||1) < 100) expGained = Math.floor(expGained * 1.5)
+      // ★is_admin限定先行: 経験値ダンジョンの獲得EXPを半減（サーバーは渡した値をそのまま加算・上限以下なので追加SQL不要）
+      if (profile.is_admin) expGained = Math.floor(expGained / 2)
       const currentClassLvD = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
       const capD = getEffectiveCap(profile.class, profile.retraining)
       if (expIsFrozen(profile)) {
@@ -4410,6 +4413,7 @@ export default function Game() {
             </>) : (
               MOBILE_MENU_ORDER.map(renderMenuBtn)
             )}
+            <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
           </div>
@@ -4822,9 +4826,7 @@ export default function Game() {
             </div>
           )}
         </div>
-        {profile?.is_admin && (
-          <AIAssistant ctx={{ profile, eff, equipment }} />
-        )}
+        <AIAssistant ctx={{ profile, eff, equipment }} open={aiOpen} onClose={()=>setAiOpen(false)} />
       </div>
     )
   }
@@ -4858,6 +4860,7 @@ export default function Game() {
             </>) : (
               DESKTOP_MENU_ORDER.map(renderMenuBtn)
             )}
+            <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
           </div>
@@ -5268,9 +5271,7 @@ export default function Game() {
           </div>
         </div>
       </div>
-      {profile?.is_admin && (
-        <AIAssistant ctx={{ profile, eff, equipment }} />
-      )}
+      <AIAssistant ctx={{ profile, eff, equipment }} open={aiOpen} onClose={()=>setAiOpen(false)} />
     </div>
   )
 }
