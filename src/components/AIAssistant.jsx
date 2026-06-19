@@ -92,12 +92,13 @@ export default function AIAssistant({ ctx }) {
             {messages.map((m, i) => (
               <div key={i} style={{
                 alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-                maxWidth: '85%',
+                maxWidth: m.role === 'user' ? '85%' : '92%',
                 background: m.role === 'user' ? '#10325a' : '#06121f',
                 border: `1px solid ${m.role === 'user' ? '#2a6aa0' : '#1a4a40'}`,
                 color: m.role === 'user' ? '#cce4ff' : '#bfe8d8',
-                padding: '7px 10px', borderRadius: '6px',
-                fontSize: '12px', lineHeight: '1.7', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                padding: '8px 11px', borderRadius: '6px',
+                fontSize: '12px', lineHeight: '1.8', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                textAlign: 'left',
               }}>{m.text}</div>
             ))}
           </div>
