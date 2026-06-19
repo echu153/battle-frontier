@@ -519,8 +519,10 @@ const guessGreeting = (raw) => {
 }
 
 // フォールバック時の「もしかして○○？」推測（よく使う語＋クラス名に対する近似一致）
+// 近似一致で「もしかして○○?」の候補。各語は単体で askAssistant が回答できるもののみ
+// （自己解決しない曖昧語＝「強化」「スキル」は入れない＝そのまま回答できないため）。
 const VOCAB = [
-  '転職', '強化', 'おすすめ強化', '宝石', 'スキル', 'ステータス', 'ステ振り', '再修練', 'レベル上げ',
+  '転職', 'おすすめ強化', '宝石', 'ステータス', 'ステ振り', '再修練', 'レベル上げ',
   'レイドボス', 'ダンジョン', '奈落闘技場', '錬金部屋', 'かかし修練場', '賭博場', '釣り', '交換所',
   '博物館', '領地', 'ペット', '鍛冶屋', '回復', 'ゴールド', '出撃',
 ]
@@ -544,7 +546,8 @@ const didYouMean = (raw) => {
   return [...new Set(scored.filter((s) => s.d === minD).map((s) => s.term))].slice(0, 3)
 }
 
-export const askAssistant = async (query, ctx = {}) => {
+// _depth: 「もしかして○○?」推測で内部的に再帰呼び出しする際の深さ（無限再帰防止。0=ユーザー入力）
+export const askAssistant = async (query, ctx = {}, _depth = 0) => {
   // 入力は最大300字にクランプ（巨大入力での編集距離計算・DB検索の負荷/DoSを防ぐ）
   const raw = (query || '').trim().slice(0, 300)
   if (!raw) return { text: '質問を入力してください。例：「狂戦士になるには？」「メテオストライクの効果は？」「おすすめ強化」', kind: 'fallback' }
@@ -558,9 +561,8 @@ export const askAssistant = async (query, ctx = {}) => {
     if (WHOAMI_TRIGGER.test(raw)) return { text: WHOAMI_TEXT, kind: 'meta' }
     const st = smalltalk(raw)
     if (st) return { text: st, kind: 'meta' }
-    // タイポ/言いかけの挨拶 → 確認を挟む（完全一致でなかった場合のみ）
-    const g = guessGreeting(raw)
-    if (g) return { text: `もしかして「${g}」でしょうか？😊\n合っていれば「${g}！」と返してくださいね。そこからゲームのお手伝いをします。違っていたら、もう少し詳しく教えてください。`, kind: 'meta' }
+    // 挨拶の言いかけ/誤記（こんにちわ・こんにち 等）は挨拶と同一扱い＝確認せずそのまま挨拶を返す
+    if (guessGreeting(raw)) return { text: GREETING_TEXT, kind: 'meta' }
   }
 
   // 1) 対戦相手の対策（「○○に勝ちたい」）。PROGRESSIONの「勝てない」と被るので先に判定。
@@ -624,12 +626,21 @@ export const askAssistant = async (query, ctx = {}) => {
   if (LIMIT_TRIGGER.test(raw)) return { text: LIMIT_TEXT, kind: 'meta' }
 
   // 7) フォールバック（柔らかめに。「もしかして○○？」推測も挟む。記録はKB育成用）
-  logUnanswered(raw)
+  if (_depth === 0) logUnanswered(raw)
   const guesses = didYouMean(raw)
-  if (guesses.length) {
+  // 候補が1つに絞れたら、確認だけでなく“その語の回答”をそのまま出す
+  if (guesses.length === 1 && _depth === 0) {
+    try {
+      const sub = await askAssistant(guesses[0], ctx, 1)
+      if (sub && sub.kind !== 'fallback') {
+        return { text: `もしかして「${guesses[0]}」のことでしょうか？ そうなら：\n\n${sub.text}`, kind: sub.kind }
+      }
+    } catch { /* 解決できなければ通常フォールバックへ */ }
+  } else if (guesses.length > 1) {
+    // 複数候補で意味が大きく変わる場合は、どれか聞き返す
     const label = guesses.map((g) => `「${g}」`).join('か')
     return {
-      text: `うーん、ぴったりの答えが見つかりませんでした💦\nもしかして${label}のことでしょうか？ そうなら「${guesses[0]}ってなに？」のように聞いてみてください😊\n違っていたら、もう少し詳しく教えてもらえると答えやすいです。`,
+      text: `うーん、ぴったりの答えが見つかりませんでした💦\nもしかして${label}のことでしょうか？ 知りたい方を「○○ってなに？」と聞いてください😊`,
       kind: 'fallback',
     }
   }
