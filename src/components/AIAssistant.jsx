@@ -2,6 +2,16 @@ import { useState, useRef, useEffect } from 'react'
 import { askAssistant, QUICK_QUESTIONS } from '../lib/aiAssistant'
 import { llmChat } from '../lib/llmChat'
 
+// 表示前の整形：句読点や文字の不自然な重複・余分な空白を機械的に取り除く（誤字脱字対策の最終チェック）
+const tidy = (t) => (t || '')
+  .replace(/[ \t\u3000]+/g, ' ')           // 連続スペース（全角含む）→1つ
+  .replace(/ ?([。、！？!?]) ?/g, '$1')      // 句読点まわりの空白除去
+  .replace(/([。、！？!?])\1+/g, '$1')       // 句読点の重複（。。→。）
+  .replace(/(.)\1{3,}/g, '$1$1$1')          // 同じ文字の4連以上→3連（誤入力・連打対策）
+  .replace(/[ \t]+\n/g, '\n')               // 行末の空白
+  .replace(/\n{3,}/g, '\n\n')               // 過剰な空行
+  .trim()
+
 // ============================================================
 // AI相談アシスタント（ルールベース・LLM不使用）
 //   フローティングのチャットUI。質問に自動回答し、強化アドバイスもする。
@@ -61,10 +71,11 @@ export default function AIAssistant({ ctx }) {
     } catch {
       answer = '通信が乱れたか。もう一度言ってみろ。'
     }
-    // 直前の「調べています…」プレースホルダを回答で置き換える
+    // 直前の「調べています…」プレースホルダを、整形済みの回答で置き換える
+    const finalText = tidy(answer)
     setMessages((m) => {
       const next = m.slice()
-      next[next.length - 1] = { role: 'ai', text: answer }
+      next[next.length - 1] = { role: 'ai', text: finalText }
       return next
     })
     busyRef.current = false
