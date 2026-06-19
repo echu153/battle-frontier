@@ -117,7 +117,7 @@ export default function Equipment() {
     const { data: eq } = await supabase
       .from('player_equipment').select('*, weapons(*)')
       .eq('player_id', user.id).order('obtained_at')
-    setEquipment(eq || [])
+    setEquipment((eq || []).filter(e => !e.listed))  // 取引所に出品中の装備は隠す
     const { data: prof } = await supabase
       .from('proficiency').select('*, weapons(*)')
       .eq('player_id', user.id)

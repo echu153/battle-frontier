@@ -172,7 +172,7 @@ export default function Smithy() {
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     setProfile(p)
     const { data: eq } = await supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', user.id).order('obtained_at')
-    setEquipment(eq || [])
+    setEquipment((eq || []).filter(e => !e.listed))  // 取引所に出品中の装備は隠す
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id)
     setPlayerItems(pi || [])
   }
@@ -225,7 +225,7 @@ export default function Smithy() {
     const serverStoneItem = serverPItems?.find(pi => pi.items?.name === stoneName)
     const serverStoneCount = serverStoneItem?.quantity || 0
     const serverSameItems = (serverEquip || []).filter(e =>
-      e.weapons?.name === item.weapons.name && e.id !== item.id && !e.equipped && !e.is_favorite
+      e.weapons?.name === item.weapons.name && e.id !== item.id && !e.equipped && !e.is_favorite && !e.listed
       && !(e.enhance_plus > 0)  // 強化済み(+1以上)の装備は素材にしない
     )
     // 選択した素材だけで足りているか判定（同名装備 or 強化石）
@@ -322,6 +322,7 @@ export default function Smithy() {
     if (!selected.every(e => e.weapons.rarity === rarity)) { showMessage('同じランクの装備を選択してください！', '#ff4444'); return }
     if (selected.some(e => e.is_favorite)) { showMessage('お気に入り装備は加工できません！（★を解除してください）', '#ff4444'); return }
     if (selected.some(e => e.enhance_plus > 0)) { showMessage('強化済み(+1以上)の装備は加工できません！', '#ff4444'); return }
+    if (selected.some(e => e.is_bound)) { showMessage('帰属アイテム（取引所で入手）は加工できません！', '#ff4444'); return }
     // 消費する装備を「未強化のまま現存する」条件付きで削除し、実際に削除できた数だけ加工する
     // （連打・別端末で同じ装備を二重消費→石を二重生成するのを防ぐ）
     let deleted = 0
