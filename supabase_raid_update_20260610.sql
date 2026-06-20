@@ -126,8 +126,8 @@ DECLARE
   v_gyaku_chance     float;
   v_got_gyaku        boolean := false;
   v_is_admin         boolean;
-  v_atk_a            int := 50;   -- 出撃回数ティア保証ライン（既定＝非管理者）
-  v_atk_b            int := 20;
+  v_atk_a            int := 20;   -- ★2026-06-20公開: 全プレイヤー 20/10/5
+  v_atk_b            int := 10;
   v_atk_c            int := 5;
 BEGIN
   v_player_id := auth.uid();
@@ -144,11 +144,7 @@ BEGIN
   IF NOT FOUND THEN RETURN json_build_object('error', '参加記録がありません'); END IF;
   IF v_participant.reward_claimed THEN RETURN json_build_object('error', '既にリワードを受け取り済みです'); END IF;
 
-  -- ★is_admin限定先行: 管理者のみ出撃回数ティア保証ラインを 20/10/5 に（レイドCD20秒化に対応）。公開時は既定値をこれに。
-  SELECT is_admin INTO v_is_admin FROM profiles WHERE id = v_player_id;
-  IF COALESCE(v_is_admin, false) THEN
-    v_atk_a := 20; v_atk_b := 10; v_atk_c := 5;
-  END IF;
+  -- ★2026-06-20公開: 全プレイヤー 20/10/5（既定値に反映済み）
 
   -- 有効スコアで貢献度計算（出撃1回=500ボーナス）
   SELECT COALESCE(SUM(damage_dealt + attack_count * 500), 1) INTO v_total_eff FROM raid_participants WHERE raid_id = p_raid_id;

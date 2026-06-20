@@ -17,7 +17,7 @@ DECLARE
   v_boss        raid_boss%ROWTYPE;
   v_damage      bigint;
   v_new_hp      bigint;
-  v_cooldown    int := 10;   -- 既定（非管理者）。管理者はv_profile取得後に20へ（下記）
+  v_cooldown    int := 20;   -- ★2026-06-20公開: 全プレイヤー20秒（ブースト対象外）
   v_expire_at   timestamptz;
   v_exp_gain    int;
 BEGIN
@@ -43,9 +43,6 @@ BEGIN
   SELECT * INTO v_profile FROM profiles WHERE id = v_player_id FOR UPDATE;
   IF NOT FOUND THEN RETURN json_build_object('error', 'キャラクターが見つかりません'); END IF;
   IF v_profile.is_suspended THEN RETURN json_build_object('error', 'アカウント停止中'); END IF;
-
-  -- ★is_admin限定先行: レイドCDは管理者のみ20秒（ブースト対象外）、非管理者は従来10秒。公開時は無条件20へ。
-  IF v_profile.is_admin THEN v_cooldown := 20; END IF;
 
   IF v_profile.last_action_at IS NOT NULL THEN
     IF now() - v_profile.last_action_at < (v_cooldown || ' seconds')::interval THEN

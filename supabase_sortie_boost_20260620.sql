@@ -33,14 +33,14 @@ BEGIN
   IF p_hour2 IS NOT NULL AND (p_hour2 < 0 OR p_hour2 > 23) THEN RETURN json_build_object('ok',false,'reason','invalid_hour'); END IF;
   SELECT * INTO v_row FROM profiles WHERE id = v_uid FOR UPDATE;
   IF NOT FOUND THEN RETURN json_build_object('ok',false,'reason','profile_not_found'); END IF;
-  -- ★is_admin限定先行: 管理者以外は不可。公開時はこの判定を外す。
-  IF NOT v_row.is_admin THEN RETURN json_build_object('ok',false,'reason','not_admin'); END IF;
+  -- ★2026-06-20公開: 全プレイヤー設定可
   -- 一度決めたら1か月（30日）変更不可
   IF v_row.papia_hour_set_at IS NOT NULL AND now() < v_row.papia_hour_set_at + interval '30 days' THEN
     RETURN json_build_object('ok',false,'reason','locked',
       'papia_hour', v_row.papia_hour, 'papia_hour2', v_row.papia_hour2,
       'unlock_at', v_row.papia_hour_set_at + interval '30 days');
   END IF;
+  PERFORM set_config('app.allow_boost_change','on',true);  -- ★列保護トリガー許可
   UPDATE profiles SET papia_hour = p_hour, papia_hour2 = p_hour2, papia_hour_set_at = now() WHERE id = v_uid;
   RETURN json_build_object('ok',true,'papia_hour', p_hour, 'papia_hour2', p_hour2, 'unlock_at', now() + interval '30 days');
 END;
@@ -67,13 +67,9 @@ BEGIN
   IF NOT FOUND THEN RETURN json_build_object('ok',false,'reason','profile_not_found'); END IF;
   IF v_row.is_fishing THEN RETURN json_build_object('ok',false,'reason','fishing'); END IF;
 
-  -- ★is_admin限定先行: 管理者のみ20秒（ブースト中10秒）。非管理者は従来10秒。公開時は下を「常に20/10」に。
-  IF v_row.is_admin THEN
-    v_wait := CASE WHEN v_row.boost_active_until IS NOT NULL AND v_row.boost_active_until > now()
-                   THEN 10 ELSE 20 END;
-  ELSE
-    v_wait := 10;
-  END IF;
+  -- ★2026-06-20公開: 全プレイヤー20秒・ブースト中10秒
+  v_wait := CASE WHEN v_row.boost_active_until IS NOT NULL AND v_row.boost_active_until > now()
+                 THEN 10 ELSE 20 END;
 
   IF v_row.last_action_at IS NOT NULL THEN
     v_left := v_wait - EXTRACT(EPOCH FROM (now() - v_row.last_action_at));
@@ -106,11 +102,7 @@ BEGIN
   SELECT * INTO v_row FROM profiles WHERE id = v_uid FOR UPDATE;
   IF NOT FOUND THEN RETURN json_build_object('ok',false,'reason','profile_not_found'); END IF;
 
-  -- ★is_admin限定先行: 管理者以外はブースト不可。公開時はこの判定を外す。
-  IF NOT v_row.is_admin THEN
-    RETURN json_build_object('ok',false,'reason','not_admin');
-  END IF;
-
+  -- ★2026-06-20公開: 全プレイヤー発動可
   -- すでにブースト中
   IF v_row.boost_active_until IS NOT NULL AND v_row.boost_active_until > now() THEN
     RETURN json_build_object('ok',false,'reason','active',
@@ -124,6 +116,7 @@ BEGIN
   END IF;
 
   v_until := now() + interval '30 minutes';
+  PERFORM set_config('app.allow_boost_change','on',true);  -- ★列保護トリガー許可
   UPDATE profiles SET boost_active_until = v_until, boost_used_date = v_today WHERE id = v_uid;
 
   RETURN json_build_object('ok',true,'boost_active_until', v_until, 'boost_used_date', v_today);
@@ -136,17 +129,16 @@ GRANT EXECUTE ON FUNCTION public.start_boost() TO authenticated;
 --   apply_battle_result / casino_settle_sortie からは calc_exp_next(lv) 呼び出しのまま
 --   auth.uid() 経由で当人の is_admin が効くので、それらの関数の再定義は不要。
 --   公開時は「常に半減（base/2）」に変更する。
+-- ★2026-06-20公開: 全プレイヤー「半減＋10」。auth.uid()依存をやめ IMMUTABLE に戻す。
 CREATE OR REPLACE FUNCTION public.calc_exp_next(lv integer)
 RETURNS integer
 LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
+IMMUTABLE
 SET search_path = public
 AS $$
 DECLARE
   v_in_block integer;
   v_base     integer;
-  v_is_admin boolean;
 BEGIN
   IF lv >= 100 THEN
     v_base := CASE WHEN lv <= 150 THEN 150 WHEN lv <= 200 THEN 160 WHEN lv <= 250 THEN 170 ELSE 180 END;
@@ -154,12 +146,30 @@ BEGIN
     v_in_block := (lv - 1) % 100;
     v_base := CASE WHEN v_in_block < 9 THEN 80 WHEN v_in_block < 29 THEN 100 WHEN v_in_block < 59 THEN 120 ELSE 140 END;
   END IF;
-
-  -- ★is_admin限定先行: 当人が管理者のときだけ「半減＋10」。公開時は無条件 floor(v_base/2)+10。
-  SELECT is_admin INTO v_is_admin FROM profiles WHERE id = auth.uid();
-  IF COALESCE(v_is_admin, false) THEN
-    RETURN floor(v_base / 2.0)::integer + 10;
-  END IF;
-  RETURN v_base;
+  RETURN floor(v_base / 2.0)::integer + 10;
 END;
 $$;
+
+-- ★2026-06-20公開: boost/papia 列の直接書き換え対策（start_boost / set_papia_hour 経由のみ許可）
+--   通常UPDATEでこれらの列を変えると拒否。RPCは app.allow_boost_change='on' を立ててから更新する。
+CREATE OR REPLACE FUNCTION public.protect_boost_papia()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF current_setting('app.allow_boost_change', true) IS DISTINCT FROM 'on' THEN
+    IF NEW.boost_active_until IS DISTINCT FROM OLD.boost_active_until
+       OR NEW.boost_used_date  IS DISTINCT FROM OLD.boost_used_date
+       OR NEW.papia_hour       IS DISTINCT FROM OLD.papia_hour
+       OR NEW.papia_hour2      IS DISTINCT FROM OLD.papia_hour2
+       OR NEW.papia_hour_set_at IS DISTINCT FROM OLD.papia_hour_set_at THEN
+      RAISE EXCEPTION '不正な操作です（ブースト/パピア設定はサーバー経由でのみ変更できます）';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_protect_boost_papia ON public.profiles;
+CREATE TRIGGER trg_protect_boost_papia
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.protect_boost_papia();

@@ -59,9 +59,8 @@ BEGIN
   ELSIF p_is_boss AND p_area_id BETWEEN 1 AND 7 THEN v_max_gold := v_boss_golds[p_area_id];
   ELSIF p_area_id BETWEEN 1 AND 7 THEN v_max_gold := v_normal_golds[p_area_id];
   ELSE v_max_gold := 700; END IF;
-  -- ★is_admin先行: 出撃CD20秒化のGold補正に対応。管理者はエリア1-4を×2・エリア5+を×1.5（一般は×1.5）
-  v_max_gold := CEIL(v_max_gold * (CASE WHEN COALESCE(v_profile.is_admin, false) AND p_area_id <= 4
-                                        THEN 2.0 ELSE 1.5 END));
+  -- ★2026-06-20公開: 全プレイヤー エリア1-4×2・エリア5+×1.5
+  v_max_gold := CEIL(v_max_gold * (CASE WHEN p_area_id <= 4 THEN 2.0 ELSE 1.5 END));
 
   IF p_claimed_gold < 0 OR p_claimed_gold > v_max_gold THEN
     UPDATE profiles SET suspicious_flag=true,
@@ -122,8 +121,8 @@ BEGIN
   INSERT INTO battle_logs(player_id,area_id,is_boss,is_papia,win,exp_gained,gold_gained,level_ups)
   VALUES(v_uid,p_area_id,p_is_boss,p_is_papia,p_win,v_eff_exp,p_claimed_gold,v_level_ups);
 
-  -- かかし修練場チャージ（★is_admin先行: 管理者は50回、それ以外は100回で1チャージ）
-  v_sc_need := CASE WHEN COALESCE(v_profile.is_admin, false) THEN 50 ELSE 100 END;
+  -- かかし修練場チャージ（★2026-06-20公開: 全プレイヤー50回で1チャージ）
+  v_sc_need := 50;
   v_sc_week := scarecrow_week_key_now();
   IF v_profile.scarecrow_week_key IS DISTINCT FROM v_sc_week THEN
     v_sc_charges := 0; v_sc_earned := 0;
