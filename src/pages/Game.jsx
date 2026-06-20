@@ -1420,6 +1420,7 @@ export default function Game() {
   const [announcements, setAnnouncements] = useState([])
   const [claimableTitles, setClaimableTitles] = useState(0)  // 獲得可能な称号数（街のバナー表示用）
   const [soldNotice, setSoldNotice] = useState(0)            // 取引所で売れた未確認の出品数（街のバナー表示用）
+  const [unreadReplies, setUnreadReplies] = useState(0)      // お問い合わせへの運営返信で未確認の件数（街のバナー表示用）
   const [showGuide, setShowGuide] = useState(false)
   const [showDyingTip, setShowDyingTip] = useState(false)  // 初めて瀕死になったとき1回だけ案内
   const [openGuideId, setOpenGuideId] = useState(null)
@@ -1613,8 +1614,38 @@ export default function Game() {
         .select('id', { count: 'exact', head: true })
         .eq('seller_id', user.id).eq('status', 'sold').eq('seller_seen', false)
       setSoldNotice(count || 0)
+      // お問い合わせへの運営返信の未確認件数（reply_at が既読保存より新しいもの）
+      await refreshUnreadReplies(user.id)
     })()
   }, [])
+
+  // お問い合わせ返信の未読件数を再計算（reply有りの自分の問い合わせ × ローカル既読リスト）
+  const refreshUnreadReplies = async (uid) => {
+    try {
+      const userId = uid || (await supabase.auth.getUser()).data?.user?.id
+      if (!userId) return
+      const { data } = await supabase.from('contact_messages')
+        .select('id, reply_at')
+        .eq('player_id', userId)
+        .not('reply', 'is', null)
+      let seen = {}
+      try { seen = JSON.parse(localStorage.getItem('bf_seenContactReplies') || '{}') } catch {}
+      // 既読保存時刻より reply_at が新しい（＝再返信含む）ものを未読とみなす
+      const unread = (data || []).filter(r => !seen[r.id] || (r.reply_at && seen[r.id] < r.reply_at))
+      setUnreadReplies(unread.length)
+    } catch { /* 列が無い旧環境などは無視 */ }
+  }
+
+  // 表示中の返信をすべて既読にする（idごとに reply_at を保存）
+  const markContactRepliesSeen = (rows) => {
+    try {
+      const list = rows || myContacts
+      const seen = JSON.parse(localStorage.getItem('bf_seenContactReplies') || '{}')
+      for (const c of list) if (c.reply) seen[c.id] = c.reply_at || new Date().toISOString()
+      localStorage.setItem('bf_seenContactReplies', JSON.stringify(seen))
+    } catch {}
+    setUnreadReplies(0)
+  }
 
   const fetchProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -3380,8 +3411,10 @@ export default function Game() {
         }
       }
       setMyContacts(rows)
+      return rows
     } catch (e) {
       setMyContacts([])
+      return []
     } finally {
       setContactsLoading(false)
     }
@@ -3872,7 +3905,7 @@ export default function Game() {
           {[{ key:'new', label:'新規お問い合わせ' }, { key:'history', label: profile?.is_admin ? '受信一覧・返信' : '過去のお問い合わせ' }].map(t => {
             const on = contactView === t.key
             return (
-              <button key={t.key} onClick={()=>{ setContactView(t.key); if (t.key==='history') fetchMyContacts() }}
+              <button key={t.key} onClick={()=>{ setContactView(t.key); if (t.key==='history') fetchMyContacts().then(rows => markContactRepliesSeen(rows)) }}
                 style={{ flex:1, padding:'8px 4px', background: on?'#001840':'#000818', border:`1px solid ${on?'#88ccff':'#223344'}`, color: on?'#88ccff':'#557799', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
                 {t.label}
               </button>
@@ -3928,7 +3961,7 @@ export default function Game() {
           <>
             <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'20px 0' }}>送信しました。ありがとうございます。</div>
             <div style={{ color:'#446688', fontSize:'11px', textAlign:'center', marginBottom:'12px' }}>運営からの返信は「過去のお問い合わせ」から確認できます。</div>
-            <button onClick={()=>{ setContactSent(false); setContactForm({ category:'bug', body:'' }); setContactView('history'); fetchMyContacts() }}
+            <button onClick={()=>{ setContactSent(false); setContactForm({ category:'bug', body:'' }); setContactView('history'); fetchMyContacts().then(rows => markContactRepliesSeen(rows)) }}
               style={{ width:'100%', padding:'10px', marginBottom:'8px', background:'#001840', border:'1px solid #88ccff', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>過去のお問い合わせを見る</button>
             <button onClick={()=>{ setShowContact(false); setContactSent(false); setContactForm({ category:'bug', body:'' }) }}
               style={{ width:'100%', padding:'10px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>閉じる</button>
@@ -4579,6 +4612,12 @@ export default function Game() {
               🎉 獲得できる称号があります！（{claimableTitles}件）→ 称号ページへ
             </button>
           )}
+          {unreadReplies > 0 && (
+            <button onClick={()=>{ setShowContact(true); setContactView('history'); fetchMyContacts().then(rows => markContactRepliesSeen(rows)) }}
+              style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              📩 お問い合わせに運営からの返信が届いています！（{unreadReplies}件）→ 確認する
+            </button>
+          )}
           {papiaNeedsSetup && (
             <button onClick={()=>setShowOptions(true)}
               style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a1200', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
@@ -5017,6 +5056,12 @@ export default function Game() {
           <button onClick={()=>nav('/titles')}
             style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#001a08', border:'1px solid #44aa44', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
             🎉 獲得できる称号があります！（{claimableTitles}件）→ 称号ページへ
+          </button>
+        )}
+        {unreadReplies > 0 && (
+          <button onClick={()=>{ setShowContact(true); setContactView('history'); fetchMyContacts().then(rows => markContactRepliesSeen(rows)) }}
+            style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            📩 お問い合わせに運営からの返信が届いています！（{unreadReplies}件）→ 確認する
           </button>
         )}
         {papiaNeedsSetup && (
