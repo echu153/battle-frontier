@@ -1415,6 +1415,7 @@ export default function Game() {
   const [contactsLoading, setContactsLoading] = useState(false)
   const [adminReplyDrafts, setAdminReplyDrafts] = useState({}) // is_admin用: {contact_id: 返信文}の下書き
   const [adminReplyingId, setAdminReplyingId] = useState(null)  // 送信中のお問い合わせID
+  const [adminContactFilter, setAdminContactFilter] = useState('unreplied') // 管理人受信一覧の絞り込み: 'unreplied'=未返信 / 'replied'=返信済み
   const [showAnnouncements, setShowAnnouncements] = useState(false)
   const [announceTab, setAnnounceTab] = useState('update')   // お知らせモーダルの選択中タブ
   const [announcements, setAnnouncements] = useState([])
@@ -3400,6 +3401,8 @@ export default function Game() {
   const fetchMyContacts = async () => {
     setContactsLoading(true)
     try {
+      // 管理人が開いたタイミングで、返信済み2週間超のメッセージを自動削除（cron無し環境のフォールバック）
+      if (isContactAdmin) { try { await supabase.rpc('purge_old_replied_contacts') } catch {} }
       let q = supabase.from('contact_messages').select('*').order('created_at', { ascending: false })
       if (!isContactAdmin) q = q.eq('player_id', profile.id)
       const { data, error } = await q
@@ -3917,15 +3920,38 @@ export default function Game() {
           })}
         </div>
 
-        {contactView === 'history' ? (
+        {contactView === 'history' ? (() => {
+          // 管理人は「未返信/返信済み」で絞り込み。一般ユーザーは全件。
+          const shownContacts = isContactAdmin
+            ? myContacts.filter(c => adminContactFilter === 'replied' ? c.reply : !c.reply)
+            : myContacts
+          return (
           <>
-            {contactsLoading && <div style={{ color:'#446688', fontSize:'12px', textAlign:'center', padding:'16px 0' }}>読み込み中...</div>}
-            {!contactsLoading && myContacts.length === 0 && (
-              <div style={{ color:'#446688', fontSize:'12px', textAlign:'center', padding:'16px 0', lineHeight:'1.8' }}>
-                {isContactAdmin ? 'お問い合わせはまだありません。' : 'これまでのお問い合わせはありません。'}
+            {/* 管理人のみ: 未返信 / 返信済み サブタブ */}
+            {isContactAdmin && (
+              <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
+                {[{ key:'unreplied', label:'未返信' }, { key:'replied', label:'返信済み' }].map(f => {
+                  const on = adminContactFilter === f.key
+                  const cnt = myContacts.filter(c => f.key === 'replied' ? c.reply : !c.reply).length
+                  return (
+                    <button key={f.key} onClick={()=>setAdminContactFilter(f.key)}
+                      style={{ flex:1, padding:'6px 4px', background: on?'#1a1400':'#000818', border:`1px solid ${on?'#ffcc44':'#223344'}`, color: on?'#ffcc44':'#557799', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                      {f.label}（{cnt}）
+                    </button>
+                  )
+                })}
               </div>
             )}
-            {!contactsLoading && myContacts.map(c => (
+            {isContactAdmin && adminContactFilter === 'replied' && (
+              <div style={{ color:'#886644', fontSize:'10px', marginBottom:'8px', lineHeight:'1.6' }}>※ 返信済みのメッセージは返信から2週間後に自動削除されます。</div>
+            )}
+            {contactsLoading && <div style={{ color:'#446688', fontSize:'12px', textAlign:'center', padding:'16px 0' }}>読み込み中...</div>}
+            {!contactsLoading && shownContacts.length === 0 && (
+              <div style={{ color:'#446688', fontSize:'12px', textAlign:'center', padding:'16px 0', lineHeight:'1.8' }}>
+                {isContactAdmin ? (adminContactFilter === 'replied' ? '返信済みのお問い合わせはありません。' : '未返信のお問い合わせはありません。') : 'これまでのお問い合わせはありません。'}
+              </div>
+            )}
+            {!contactsLoading && shownContacts.map(c => (
               <div key={c.id} style={{ marginBottom:'12px', border:'1px solid #223344', background:'#000818' }}>
                 <div style={{ padding:'10px 12px', borderBottom:'1px solid #112233' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
@@ -3961,7 +3987,8 @@ export default function Game() {
             <button onClick={()=>setShowContact(false)}
               style={{ width:'100%', padding:'10px', marginTop:'4px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>閉じる</button>
           </>
-        ) : contactSent ? (
+          )
+        })() : contactSent ? (
           <>
             <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'20px 0' }}>送信しました。ありがとうございます。</div>
             <div style={{ color:'#446688', fontSize:'11px', textAlign:'center', marginBottom:'12px' }}>運営からの返信は「過去のお問い合わせ」から確認できます。</div>

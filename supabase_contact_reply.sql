@@ -63,6 +63,40 @@ $$;
 
 GRANT EXECUTE ON FUNCTION admin_reply_contact(uuid, text) TO authenticated;
 
+-- 4) 返信済み2週間超のお問い合わせを自動削除
+--    ・管理人がお問い合わせ画面を開いたときにクライアントから呼ばれる（cron無し環境のフォールバック）
+--    ・pg_cron が使えるなら下の cron.schedule も設定すると、誰も開かなくても定期削除される
+CREATE OR REPLACE FUNCTION purge_old_replied_contacts()
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_count integer;
+  v_uid uuid := auth.uid();
+BEGIN
+  -- ユーザー経由の呼び出しは管理人(おれおれお)のみ許可。cron等(auth.uid()=null)はそのまま許可。
+  IF v_uid IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM profiles p WHERE p.id = v_uid AND p.username = 'おれおれお') THEN
+    RAISE EXCEPTION '権限がありません（管理人専用）';
+  END IF;
+
+  DELETE FROM contact_messages
+   WHERE reply IS NOT NULL
+     AND reply_at IS NOT NULL
+     AND reply_at < now() - interval '14 days';
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION purge_old_replied_contacts() TO authenticated;
+
+-- （任意）pg_cron が有効なら毎日4時(UTC)に自動実行。未使用なら実行しなくてOK。
+-- CREATE EXTENSION IF NOT EXISTS pg_cron;
+-- SELECT cron.schedule('purge_replied_contacts', '0 4 * * *', $$SELECT purge_old_replied_contacts();$$);
+
 -- 確認
 -- SELECT id, player_name, category, left(body,20) AS body, reply IS NOT NULL AS replied, reply_at
 -- FROM contact_messages ORDER BY created_at DESC LIMIT 10;
