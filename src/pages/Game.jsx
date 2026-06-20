@@ -3431,8 +3431,12 @@ export default function Game() {
 
   // is_admin: お問い合わせに直接返信（reply列を更新）
   const adminReplyContact = async (id) => {
-    const text = (adminReplyDrafts[id] || '').trim()
+    const existing = myContacts.find(c => c.id === id)
+    const text = ((adminReplyDrafts[id] ?? existing?.reply ?? '')).trim()
     if (!text) return
+    // 送信前の確認ポップアップ
+    const verb = existing?.reply ? '更新' : '送信'
+    if (!window.confirm(`この内容で返信を${verb}します。よろしいですか？\n\n──────────\n${text}\n──────────`)) return
     setAdminReplyingId(id)
     try {
       const { error } = await supabase.rpc('admin_reply_contact', { p_id: id, p_reply: text })
