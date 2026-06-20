@@ -1299,6 +1299,7 @@ const ANNOUNCE_TABS = [
   { key:'bug',    label:'不具合',       icon:'🛠' },
   { key:'event',  label:'イベント',     icon:'🎉' },
   { key:'past',   label:'その他',       icon:'🗂' },
+  { key:'reply',  label:'お問い合わせ返信', icon:'📩' },  // 個別宛(target_player_id)の運営返信専用タブ
 ]
 // カテゴリ正規化：未設定や未知カテゴリ（旧 'notice' 含む）は先頭タブに寄せて非表示化を防ぐ
 const annCat = (a) => (ANNOUNCE_TABS.some(t => t.key === a.category) ? a.category : ANNOUNCE_TABS[0].key)
@@ -4046,7 +4047,12 @@ export default function Game() {
   )
 
   if (showAnnouncements) {
-    const tabAnns = announcements.filter(a => a.title !== 'MAINTENANCE' && annCat(a) === announceTab)
+    // 個別宛(target_player_id)の運営返信は「お問い合わせ返信」タブに分離。それ以外のタブからは除外。
+    const tabAnns = announcements.filter(a => {
+      if (a.title === 'MAINTENANCE') return false
+      if (announceTab === 'reply') return a.target_player_id && a.target_player_id === profile?.id
+      return !a.target_player_id && annCat(a) === announceTab
+    })
     return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'16px', gap:'10px' }}>
       <div style={{ width:'100%', maxWidth:'600px', display:'flex', justifyContent:'flex-end' }}>
@@ -4060,9 +4066,11 @@ export default function Game() {
         <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'10px', flexShrink:0 }}>
           {ANNOUNCE_TABS.map(t => {
             const on = announceTab === t.key
-            const hasNew = announcements.some(a => a.title !== 'MAINTENANCE' && annCat(a) === t.key && !seenAnnouncementIds.includes(a.id))
+            const hasNew = t.key === 'reply'
+              ? announcements.some(a => a.target_player_id === profile?.id && !seenAdminMsgIds.includes(a.id))
+              : announcements.some(a => a.title !== 'MAINTENANCE' && !a.target_player_id && annCat(a) === t.key && !seenAnnouncementIds.includes(a.id))
             return (
-              <button key={t.key} onClick={()=>{ setAnnounceTab(t.key); setOpenAnnouncementId(null) }}
+              <button key={t.key} onClick={()=>{ setAnnounceTab(t.key); setOpenAnnouncementId(null); if (t.key === 'reply') markAdminMsgsSeen() }}
                 style={{ flex:'1 1 56px', minWidth:'56px', padding:'6px 2px', background: on?'#1a0c00':'#000818', border:`1px solid ${on?'#ff8844':'#223344'}`, color: on?'#ffaa66':'#557799', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', position:'relative', whiteSpace:'nowrap' }}>
                 {t.icon} {t.label}
                 {hasNew && <span style={{ position:'absolute', top:'-5px', right:'-3px', background:'#ff4400', color:'#fff', fontSize:'7px', padding:'1px 4px', borderRadius:'6px' }}>NEW</span>}
@@ -4071,9 +4079,10 @@ export default function Game() {
           })}
         </div>
         <div style={{ overflowY:'auto', flex:1 }}>
-        {tabAnns.length === 0 && <div style={{ color:'#446688', fontSize:'12px' }}>このカテゴリのお知らせはありません</div>}
+        {announceTab !== 'reply' && tabAnns.length === 0 && <div style={{ color:'#446688', fontSize:'12px' }}>このカテゴリのお知らせはありません</div>}
+        {announceTab === 'reply' && tabAnns.length === 0 && <div style={{ color:'#446688', fontSize:'12px', lineHeight:'1.8' }}>お問い合わせへの運営からの返信がここに届きます。</div>}
         {tabAnns.map(a => {
-          const isNew = !seenAnnouncementIds.includes(a.id)
+          const isNew = announceTab === 'reply' ? !seenAdminMsgIds.includes(a.id) : !seenAnnouncementIds.includes(a.id)
           return (
             <div key={a.id} style={{ marginBottom:'8px', border:`1px solid ${isNew?'#443300':'#002244'}`, background:'#000818' }}>
               <button onClick={()=>setOpenAnnouncementId(openAnnouncementId===a.id?null:a.id)}
