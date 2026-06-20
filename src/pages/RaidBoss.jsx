@@ -508,9 +508,10 @@ export default function RaidBoss() {
     if (error || data?.error) {
       setPendingMsg(m => ({ ...m, [raidId]: data?.error || 'エラーが発生しました' }))
     } else {
-      const parts = [`${data.tier}ティア`, `Gold+${fmt(data.gold)}`, `強化石${(data.stones||[]).map(s=>`(${s})`).join('・')}×2`, `宝石(${data.gem_rank})×${data.gem_count}`, `${data.mat_name||'素材'}×${data.scale_count}`]
-      if (data.got_gyaku) parts.push(`⭐${data.rare_name||'レア素材'}×1`)
-      setPendingMsg(m => ({ ...m, [raidId]: `✓ 受け取り完了！ ${parts.join(' / ')}` }))
+      const parts = [`${data.tier}ティア`, `Gold+${fmt(data.gold)}`, `強化石${(data.stones||[]).map(s=>`(${s})`).join('・')}×2`, `宝石(${data.gem_rank})×${data.gem_count}`, `通常素材：${data.mat_name||'素材'}×${data.scale_count}`]
+      if (data.got_gyaku) parts.push(`⭐レア素材：${data.rare_name||'レア素材'}×1`)
+      const bossNm = pendingRewards.find(r => r.raid_id === raidId)?.raid_boss?.boss_name
+      setPendingMsg(m => ({ ...m, [raidId]: `✓ ${bossNm ? bossNm + '：' : ''}受け取り完了！ ${parts.join(' / ')}` }))
       setPendingRewards(prev => prev.filter(r => r.raid_id !== raidId))
     }
   }
@@ -705,8 +706,8 @@ export default function RaidBoss() {
           ))}
         </div>
       )}
-      {/* 受け取り完了メッセージ（リスト消化後も最後の結果を残す） */}
-      {pendingRewards.length === 0 && Object.values(pendingMsg).some(m => m.startsWith('✓')) && (
+      {/* 受け取り完了メッセージ（1個受け取るごとに即表示・残りがあっても出す） */}
+      {Object.values(pendingMsg).some(m => m.startsWith('✓')) && (
         <div style={{ border:'1px solid #224422', background:'#001a00', padding:'10px', marginBottom:'12px' }}>
           {Object.entries(pendingMsg).filter(([,m])=>m.startsWith('✓')).map(([rid,m]) => (
             <div key={rid} style={{ color:'#44ff88', fontSize:'11px' }}>{m}</div>
@@ -879,8 +880,8 @@ export default function RaidBoss() {
                     {(reward.stones || []).map(s => `強化石(${s})×2`).join('　')}
                   </div>
                   <div style={{ color: '#ff66cc' }}>宝石({reward.gem_rank}) × {reward.gem_count}個（ランダム種類）</div>
-                  <div style={{ color: '#cc8844' }}>{reward.mat_name || '黒龍の鱗'} × {reward.scale_count}個</div>
-                  {reward.got_gyaku && <div style={{ color: '#ffcc00' }}>⭐ {reward.rare_name || '黒龍の逆鱗'} × 1個（レアドロップ！）</div>}
+                  <div style={{ color: '#cc8844' }}>通常素材：{reward.mat_name || '黒龍の鱗'} × {reward.scale_count}個</div>
+                  {reward.got_gyaku && <div style={{ color: '#ffcc00' }}>⭐ レア素材：{reward.rare_name || '黒龍の逆鱗'} × 1個（レアドロップ！）</div>}
                   <div style={{ color: '#44ff88', marginTop: '4px' }}>✓ 受け取り完了！</div>
                 </div>
               ) : myPart.reward_claimed ? (
