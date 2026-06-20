@@ -874,3 +874,30 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 - **#3 [P2] papia/boost列の直接UPDATE迂回** → 残置（公開時タスク）。先行段階の影響は「**管理者自身が自分のロックを書き換えられる**」だけで、非管理者はサーバー分岐で新仕様の恩恵を受けない＝実害は開発者の自己チートのみ。公開時に `is_admin` 同様、`boost_active_until/boost_used_date/papia_hour/papia_hour_set_at` を通常UPDATEから保護するトリガー（RPCはGUCで許可）を `supabase_protect_is_admin.sql` 系に追加する。`[CLAUDE]70`の公開ゲート条件に追記。
 要再適用SQL: `supabase_admin_exp_renormalize_20260620.sql`（スキル補完＋class_levels UPSERT版。再実行安全）。
 → NEXT: CODEX
+
+## [CLAUDE] 80（レビュー再開：出撃時間変更まわりの不具合点検）
+[CLAUDE]79以降ユーザー指示で一旦停止していたが、再開。テーマは**「出撃CD20秒化(is_admin先行)に伴う一連の変更で不具合が出ないか」**の総点検。すべて is_admin先行（一般プレイヤーは従来動作）。主な参照コミット: `b87a281`(最新EXP), `6392944`, `d361804`/`331d37c`(daily dungeon), `aa9d76c`/`6392944`(apply_battle_result統合), `50d336a`(papia2枠), `24dbf60`。
+
+実装サマリ（最終状態）:
+- 通常出撃CD 20秒/ブースト中10秒/非管理者10秒（`effWait`・`sortie_lock`）。デイリーダンジョンも同じ`last_action_at`+`effWait`でブースト中10秒。
+- 必要EXP: 管理者のみ `floor(base/2)+10`（client `calcExpNext` / server `calc_exp_next` 一致。STABLE+DEFINER+auth.uid()）。
+- ブースト: 1日1回30分・朝5時(JST)リセット（`start_boost` の日次キー=UTC+4 / client も UTC+4）。発動はメニュー、街にインジケータ。
+- 簡易出撃60秒（`SORTIE_WAIT_ADMIN`）。ペットなつき: 管理者は簡易50回ごと（localStorage `bf_sortie_total` の `affStep` 分岐）。
+- レイド: CD20秒固定（`raidWaitFor`/`attack_raid_boss` v_cooldown=admin20/他10）。ティア保証 admin 20/10/5（`claim_raid_rewards` v_atk + RaidBoss `ADMIN_TIER_ATTACKS`）。
+- かかし: 管理者50回チャージ（`apply_battle_result` v_sc_need / Scarecrow.jsx・AI KB表示も50/100）。
+- 通常出撃Gold: 管理者エリア1-4×2・5+×1.5。**client倍率と `apply_battle_result` のGold上限 v_max_gold を同条件で一致**させた（不一致だと invalid_gold で戦果破棄）。
+- デイリーダンジョン: 管理者1日3回（`dungeonDailyLimitFor`）。報酬×5/3（DUNGEON_REWARD_MULT。gold/石/宝石/熟練度）。経験値ダンジョンは×5/6（半減×内容補正、≤サーバー上限150）。**daily gold上限は `apply_dungeon_reward` を admin×5/3** に。
+- 武器熟練度(通常出撃) 管理者×2。
+- バグ修正: `has_active_dungeon` 中断考慮版（出撃ブロックでEXP/Gold入らない真因）。`apply_battle_result` の `ok:false` を画面表示（握り潰し解消・[681a7a0]）。EXP超過正規化＋スキル補完。
+
+**重点レビュー観点（出撃時間変更起因の不具合を探す）**:
+1. **client送信値とサーバー検証上限の不一致**で `invalid_gold`/`invalid_exp` を踏む経路が他に無いか（town gold エリア1-4×2 と v_max_gold、daily gold ×5/3 と v_max_gold、exp dungeon ×5/6 ≤150、papia遭遇時exp200上限など）。
+2. **`calc_exp_next` を STABLE+DEFINER+auth.uid()** にした影響の再点検（apply_battle_result/casino_settle_sortie/apply_dungeon_reward 内のループでの当人is_admin解決、JWT非在時）。`+10` 追加で上限を超える帯が無いか。
+3. **effWort/effWait のブースト境界**（開始/終了跨ぎ、cdEndRef と actRem、daily dungeon と town の共有 last_action_at）。
+4. **ペットなつき affStep 切替**：localStorage 累計に対し 100→50 に変えた瞬間の milestone 計算（`floor(after/50)-floor(before/50)` で過去分が一気に加算され得る）。
+5. **デイリーダンジョン3回**：client `dungeonDailyLimitFor` だけで上限管理（サーバー未強制）の妥当性。報酬×5/3の floor 端数・石/宝石の2/3抽選。
+6. **is_admin分岐の漏れ/二重適用**（特に exp dungeon が「半減」と「×5/3」両方掛かる点＝意図通り×5/6か）。
+7. **簡易出撃60秒 と 街20秒 の共有 last_action_at** での相互待ち（既存仕様の範囲か）。
+8. 公開時に外し忘れると危険な箇所の洗い出し。
+
+→ NEXT: CODEX
