@@ -3376,6 +3376,10 @@ export default function Game() {
     }
   }
 
+  // お問い合わせの管理（全件閲覧・返信）は管理人「おれおれお」のみ。
+  // 他の is_admin（えちゅ等の開発アカウント）は自分の問い合わせのみ閲覧で、返信権限なし。
+  const isContactAdmin = profile?.username === 'おれおれお'
+
   const submitContact = async () => {
     if (!contactForm.body.trim()) return
     setContactLoading(true)
@@ -3397,12 +3401,12 @@ export default function Game() {
     setContactsLoading(true)
     try {
       let q = supabase.from('contact_messages').select('*').order('created_at', { ascending: false })
-      if (!profile?.is_admin) q = q.eq('player_id', profile.id)
+      if (!isContactAdmin) q = q.eq('player_id', profile.id)
       const { data, error } = await q
       if (error) throw error
       let rows = data || []
       // 管理者表示用: player_name が未保存の古いレコードは profiles.username で補完
-      if (profile?.is_admin && rows.length > 0) {
+      if (isContactAdmin && rows.length > 0) {
         const ids = [...new Set(rows.filter(r => !r.player_name && r.player_id).map(r => r.player_id))]
         if (ids.length > 0) {
           const { data: profs } = await supabase.from('profiles').select('id, username').in('id', ids)
@@ -3902,7 +3906,7 @@ export default function Game() {
         <div style={{ color:'#88ccff', fontSize:'14px', marginBottom:'12px' }}>📩 お問い合わせ</div>
         {/* 新規 / 履歴 切り替えタブ */}
         <div style={{ display:'flex', gap:'6px', marginBottom:'14px' }}>
-          {[{ key:'new', label:'新規お問い合わせ' }, { key:'history', label: profile?.is_admin ? '受信一覧・返信' : '過去のお問い合わせ' }].map(t => {
+          {[{ key:'new', label:'新規お問い合わせ' }, { key:'history', label: isContactAdmin ? '受信一覧・返信' : '過去のお問い合わせ' }].map(t => {
             const on = contactView === t.key
             return (
               <button key={t.key} onClick={()=>{ setContactView(t.key); if (t.key==='history') fetchMyContacts().then(rows => markContactRepliesSeen(rows)) }}
@@ -3918,7 +3922,7 @@ export default function Game() {
             {contactsLoading && <div style={{ color:'#446688', fontSize:'12px', textAlign:'center', padding:'16px 0' }}>読み込み中...</div>}
             {!contactsLoading && myContacts.length === 0 && (
               <div style={{ color:'#446688', fontSize:'12px', textAlign:'center', padding:'16px 0', lineHeight:'1.8' }}>
-                {profile?.is_admin ? 'お問い合わせはまだありません。' : 'これまでのお問い合わせはありません。'}
+                {isContactAdmin ? 'お問い合わせはまだありません。' : 'これまでのお問い合わせはありません。'}
               </div>
             )}
             {!contactsLoading && myContacts.map(c => (
@@ -3928,7 +3932,7 @@ export default function Game() {
                     <span style={{ color:'#88ccff', fontSize:'11px' }}>{CONTACT_CAT_LABEL[c.category] || c.category}</span>
                     <span style={{ color:'#446688', fontSize:'10px' }}>{new Date(c.created_at).toLocaleDateString('ja-JP')}</span>
                   </div>
-                  {profile?.is_admin && <div style={{ color:'#6699cc', fontSize:'10px', marginBottom:'4px' }}>from: {c.player_name || c.player_id}</div>}
+                  {isContactAdmin && <div style={{ color:'#6699cc', fontSize:'10px', marginBottom:'4px' }}>from: {c.player_name || c.player_id}</div>}
                   <div style={{ color:'#ccddff', fontSize:'12px', lineHeight:'1.7', whiteSpace:'pre-wrap' }}>{c.body}</div>
                 </div>
                 {/* 運営からの返信 */}
@@ -3938,10 +3942,10 @@ export default function Game() {
                     <div style={{ color:'#aaddff', fontSize:'12px', lineHeight:'1.7', whiteSpace:'pre-wrap' }}>{c.reply}</div>
                   </div>
                 ) : (
-                  !profile?.is_admin && <div style={{ padding:'8px 12px', color:'#557799', fontSize:'10px' }}>運営からの返信をお待ちください。</div>
+                  !isContactAdmin && <div style={{ padding:'8px 12px', color:'#557799', fontSize:'10px' }}>運営からの返信をお待ちください。</div>
                 )}
-                {/* is_admin: 返信入力 */}
-                {profile?.is_admin && (
+                {/* 管理人(おれおれお)のみ: 返信入力 */}
+                {isContactAdmin && (
                   <div style={{ padding:'10px 12px', borderTop:'1px solid #112233' }}>
                     <textarea value={adminReplyDrafts[c.id] ?? (c.reply || '')} onChange={e=>setAdminReplyDrafts(d=>({ ...d, [c.id]: e.target.value }))}
                       rows={3} placeholder="返信内容を入力..."

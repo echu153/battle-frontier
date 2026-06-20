@@ -14,13 +14,14 @@ ALTER TABLE contact_messages
 -- 2) RLS（行レベルセキュリティ）
 ALTER TABLE contact_messages ENABLE ROW LEVEL SECURITY;
 
--- 本人 or 管理者は閲覧可
+-- 本人 or 管理人(おれおれお)のみ閲覧可。
+-- ※ 他の is_admin（えちゅ等の開発アカウント）には全件を見せない＝お問い合わせ管理は管理人専用。
 DROP POLICY IF EXISTS contact_select_own_or_admin ON contact_messages;
 CREATE POLICY contact_select_own_or_admin ON contact_messages
   FOR SELECT TO authenticated
   USING (
     player_id = auth.uid()
-    OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.is_admin = true)
+    OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.username = 'おれおれお')
   );
 
 -- 送信（INSERT）は本人のみ（既存に同等ポリシーがあれば重複してもこのDROP/CREATEで上書き）
@@ -37,12 +38,12 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_is_admin boolean;
+  v_username text;
   v_row contact_messages;
 BEGIN
-  SELECT is_admin INTO v_is_admin FROM profiles WHERE id = auth.uid();
-  IF NOT COALESCE(v_is_admin, false) THEN
-    RAISE EXCEPTION '権限がありません（管理者専用）';
+  SELECT username INTO v_username FROM profiles WHERE id = auth.uid();
+  IF v_username IS DISTINCT FROM 'おれおれお' THEN
+    RAISE EXCEPTION '権限がありません（管理人専用）';
   END IF;
 
   UPDATE contact_messages
