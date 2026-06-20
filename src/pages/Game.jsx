@@ -3394,7 +3394,7 @@ export default function Game() {
     fetchMyContacts()  // 履歴を最新化
   }
 
-  const CONTACT_CAT_LABEL = { bug:'不具合報告', ban_appeal:'アカウント停止への異議', other:'その他' }
+  const CONTACT_CAT_LABEL = { bug:'不具合報告', request:'ご意見・ご要望', ban_appeal:'アカウント停止への異議', other:'その他' }
 
   // 過去のお問い合わせを取得。is_admin は全員分、一般は自分の分のみ（reply列＝運営返信を含む）
   const fetchMyContacts = async () => {
@@ -3980,6 +3980,7 @@ export default function Game() {
               <select value={contactForm.category} onChange={e=>setContactForm(f=>({...f, category:e.target.value}))}
                 style={{ width:'100%', padding:'8px', background:'#001040', border:'1px solid #446688', color:'#88ccff', fontFamily:'monospace', fontSize:'12px' }}>
                 <option value="bug">不具合報告</option>
+                <option value="request">ご意見・ご要望</option>
                 <option value="ban_appeal">アカウント停止への異議</option>
                 <option value="other">その他</option>
               </select>
