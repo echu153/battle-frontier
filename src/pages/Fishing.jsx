@@ -192,10 +192,15 @@ const drawStone = () => {
 }
 
 const calcCaughtFish = (location, startAt, now) => {
-  const elapsed = (now - new Date(startAt).getTime()) / 1000
+  // startAt が無効(null等)だと new Date(null)=1970年起点で count が膨大になりフリーズする。
+  // → 無効・経過0以下なら釣果なしで安全に返す。
+  const startMs = startAt ? new Date(startAt).getTime() : NaN
+  if (!Number.isFinite(startMs)) return []
+  const elapsed = (now - startMs) / 1000
+  if (!(elapsed > 0)) return []
   const results = []
   const avgInterval = (MIN_INTERVAL + MAX_INTERVAL) / 2
-  const count = Math.floor(elapsed / avgInterval)
+  const count = Math.min(Math.floor(elapsed / avgInterval), 50000)  // 異常値での無限ループ/フリーズ防止
   for (let i = 0; i < count; i++) {
     const rank = drawFishRank()
     const fish = drawFish(location, rank)
