@@ -1,7 +1,4 @@
--- ============================================================
--- 本番公開 一括SQL 2026-06-20（メンテナンス中にこの順で実行）
---   ① 公開関数群  ② dungeon_consume(+一意制約)  ③ 全員EXP正規化（最後）
--- ============================================================
+-- 本番公開 一括SQL 2026-06-20（メンテ中にこの順で実行: ①公開関数群 ②dungeon_consume(+一意制約) ③全員EXP正規化）
 
 -- ===== [1/7] sortie_boost =====
 -- ============================================================
@@ -638,7 +635,7 @@ BEGIN
 END;
 $$;
 
--- ===== [4/7] apply_battle_result(かかし50/Gold) =====
+-- ===== [4/7] apply_battle_result =====
 -- ============================================================
 -- かかし修練場チャージ: is_admin限定先行で 100回→50回 (2026-06-20)
 --   出撃CD20秒化に合わせ、管理者のみ「出撃50回で1チャージ」。非管理者は従来100回。
@@ -948,14 +945,15 @@ GRANT EXECUTE ON FUNCTION public.apply_dungeon_reward(text, integer, integer) TO
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM dungeon_attempts GROUP BY player_id, date HAVING COUNT(*) > 1) THEN
+    -- ★[CODEX]90 #2: 別々の取得を表す重複は合計が実消費。exploit防止の安全側＝SUM（上限3でクランプ）
     CREATE TEMP TABLE _da_merged ON COMMIT DROP AS
       SELECT player_id, date,
-             MAX(COALESCE(count,0))     AS count,
-             MAX(COALESCE(cnt_exp,0))   AS cnt_exp,
-             MAX(COALESCE(cnt_gold,0))  AS cnt_gold,
-             MAX(COALESCE(cnt_stone,0)) AS cnt_stone,
-             MAX(COALESCE(cnt_prof,0))  AS cnt_prof,
-             MAX(COALESCE(cnt_gem,0))   AS cnt_gem
+             MAX(COALESCE(count,0))            AS count,
+             LEAST(3, SUM(COALESCE(cnt_exp,0)))   AS cnt_exp,
+             LEAST(3, SUM(COALESCE(cnt_gold,0)))  AS cnt_gold,
+             LEAST(3, SUM(COALESCE(cnt_stone,0))) AS cnt_stone,
+             LEAST(3, SUM(COALESCE(cnt_prof,0)))  AS cnt_prof,
+             LEAST(3, SUM(COALESCE(cnt_gem,0)))   AS cnt_gem
       FROM dungeon_attempts GROUP BY player_id, date HAVING COUNT(*) > 1;
     DELETE FROM dungeon_attempts da USING _da_merged m WHERE da.player_id = m.player_id AND da.date = m.date;
     INSERT INTO dungeon_attempts (player_id, date, count, cnt_exp, cnt_gold, cnt_stone, cnt_prof, cnt_gem)
