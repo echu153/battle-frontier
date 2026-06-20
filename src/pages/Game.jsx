@@ -421,7 +421,7 @@ const getTotalRank = (total) => {
   return { rank:'SSS', color:'#ffcc00' }
 }
 
-// ★2026-06-20: is_admin限定先行。isAdmin=true のときだけ必要EXPを半減（サーバー calc_exp_next と一致させること）
+// ★2026-06-20: is_admin限定先行。isAdmin=true のとき必要EXPを「半減＋10」（サーバー calc_exp_next と一致させること）
 export const calcExpNext = (lv, isAdmin = false) => {
   let base
   if (lv >= 100) {
@@ -431,7 +431,7 @@ export const calcExpNext = (lv, isAdmin = false) => {
     const lvInBlock = (lv - 1) % 100
     base = lvInBlock < 9 ? 80 : lvInBlock < 29 ? 100 : lvInBlock < 59 ? 120 : 140
   }
-  return isAdmin ? Math.floor(base / 2) : base
+  return isAdmin ? Math.floor(base / 2) + 10 : base
 }
 
 const WEAPON_TYPE_GROUP = {

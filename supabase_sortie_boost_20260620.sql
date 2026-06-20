@@ -155,10 +155,10 @@ BEGIN
     v_base := CASE WHEN v_in_block < 9 THEN 80 WHEN v_in_block < 29 THEN 100 WHEN v_in_block < 59 THEN 120 ELSE 140 END;
   END IF;
 
-  -- ★is_admin限定先行: 当人が管理者のときだけ半減。公開時は無条件 floor(v_base/2)。
+  -- ★is_admin限定先行: 当人が管理者のときだけ「半減＋10」。公開時は無条件 floor(v_base/2)+10。
   SELECT is_admin INTO v_is_admin FROM profiles WHERE id = auth.uid();
   IF COALESCE(v_is_admin, false) THEN
-    RETURN floor(v_base / 2.0)::integer;
+    RETURN floor(v_base / 2.0)::integer + 10;
   END IF;
   RETURN v_base;
 END;
