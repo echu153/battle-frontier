@@ -4276,9 +4276,9 @@ export default function Game() {
 
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
-  // メンテナンス中チェック
+  // メンテナンス中チェック（★管理者(is_admin)はメンテ中でもプレイ可＝動作確認用）
   const maintenanceAnnouncement = announcements.find(a => a.title === 'MAINTENANCE')
-  if (maintenanceAnnouncement) return (
+  if (maintenanceAnnouncement && !profile?.is_admin) return (
     <div style={{ minHeight:'100vh', background:'#000820', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'monospace' }}>
       <div style={{ textAlign:'center', padding:'32px', border:'1px solid #ffcc00', background:'#001020', maxWidth:'400px' }}>
         <div style={{ fontSize:'32px', marginBottom:'16px' }}>🔧</div>
