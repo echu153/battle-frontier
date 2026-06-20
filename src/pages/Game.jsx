@@ -1279,6 +1279,10 @@ const getDungeonDateStr = () => new Date(Date.now() + (9 - 5)*60*60*1000).toISOS
 
 // デイリーダンジョン：種類ごとに1日5回。type→DB列名／表示名／一覧
 const DUNGEON_DAILY_LIMIT = 5
+// ★is_admin限定先行: 出撃CD20秒化に伴いデイリーダンジョンは管理者のみ1日3回（一般は従来5回）。
+//   回数が5→3に減るぶん、1回あたりの報酬を×5/3にして1日の総取得量を維持（gold/expはサーバー上限も要調整）。
+const dungeonDailyLimitFor = (p) => p?.is_admin ? 3 : 5
+const DUNGEON_REWARD_MULT = 5 / 3   // 管理者の1回あたり報酬倍率（3回で従来5回ぶん相当）
 const DUNGEON_TYPE_COL = { exp:'cnt_exp', gold:'cnt_gold', stone:'cnt_stone', prof:'cnt_prof', gem:'cnt_gem' }
 const DUNGEON_TYPE_LABEL = { exp:'経験値', gold:'ゴールド', stone:'強化石', prof:'熟練度', gem:'宝石' }
 const DUNGEON_LIST = [
@@ -1861,8 +1865,8 @@ export default function Game() {
     } catch {}
     const typeCount = dungeonRow?.[col] || 0
     // 当日分(5回)使い切った後の選択＝6回目以上＝グリッチとみなし即停止
-    if (typeCount >= DUNGEON_DAILY_LIMIT) {
-      await suspendAccount(`デイリーダンジョン(${DUNGEON_TYPE_LABEL[type]})を1日${DUNGEON_DAILY_LIMIT+1}回以上選択`)
+    if (typeCount >= dungeonDailyLimitFor(profile)) {
+      await suspendAccount(`デイリーダンジョン(${DUNGEON_TYPE_LABEL[type]})を1日${dungeonDailyLimitFor(profile)+1}回以上選択`)
       setLoading(false)
       return
     }
@@ -1933,8 +1937,10 @@ export default function Game() {
       let expGained = Math.floor(50 + Math.random() * 51)
       // キャラクターLV100未満は経験値1.5倍（出撃と同じ。サーバー apply_dungeon_reward の上限も1.5倍にしてある）
       if ((profile.char_lv||1) < 100) expGained = Math.floor(expGained * 1.5)
-      // ★is_admin限定先行: 経験値ダンジョンの獲得EXPを半減（サーバーは渡した値をそのまま加算・上限以下なので追加SQL不要）
-      if (profile.is_admin) expGained = Math.floor(expGained / 2)
+      // ★is_admin限定先行: 経験値ダンジョンは「獲得半減(×1/2)」＋「3回化の内容補正(×5/3)」＝実質×5/6。
+      //   1日の総取得EXP(3回ぶん)が従来5回ぶんの約半分になり、経験値ダンジョン半減の意図と一致。
+      //   base100×1.5×5/6=125 ≤ サーバー上限150 なので追加SQL不要。
+      if (profile.is_admin) expGained = Math.floor(expGained * 5 / 6)
       const currentClassLvD = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
       const capD = getEffectiveCap(profile.class, profile.retraining)
       if (expIsFrozen(profile)) {
@@ -1957,7 +1963,9 @@ export default function Game() {
       const charLvG = profile.char_lv || profile.lv
       // 基礎: キャラLv×30〜45。キャラLv300以下は育成支援ボーナス×1.5
       const lvBonus = charLvG <= 300 ? 1.5 : 1.0
-      const goldGained = Math.floor(charLvG * 30 * (1.0 + Math.random() * 0.5) * lvBonus * 1.5)  // デイリーダンジョン ゴールド1.5倍
+      let goldGained = Math.floor(charLvG * 30 * (1.0 + Math.random() * 0.5) * lvBonus * 1.5)  // デイリーダンジョン ゴールド1.5倍
+      // ★is_admin限定先行: 3回化の内容補正（×5/3）。サーバー apply_dungeon_reward のGold上限も管理者×5/3に上げること。
+      if (profile.is_admin) goldGained = Math.floor(goldGained * DUNGEON_REWARD_MULT)
       logs.push({ text:`Gold +${goldGained}${lvBonus > 1 ? '（キャラLv300までボーナス ×1.5！）' : ''}`, color:'#ffcc00' })
       const bonusExp = grantBonusExpLogs()
       await supabase.rpc('apply_dungeon_reward', { p_type:'gold', p_claimed_gold:goldGained, p_claimed_exp:bonusExp })
@@ -1969,18 +1977,21 @@ export default function Game() {
         // items テーブルに該当行が無いと付与されず「入手」表示だけ出てしまう不具合への対策
         logs.push({ text:`⚠ ${stoneName} の付与に失敗しました（アイテム未登録）。運営に連絡してください`, color:'#ff8844' })
       } else {
+        // ★is_admin先行: 3回化の内容補正（×5/3）。1個＋2/3の確率でもう1個（平均1.67個）
+        const stoneQty = profile.is_admin ? (Math.random() < (DUNGEON_REWARD_MULT - 1) ? 2 : 1) : 1
         // 既存所持があれば加算、無ければ新規。upsert_player_item RPC に依存せず確実に反映させる
         const { data: ownStone } = await supabase.from('player_items')
           .select('id, quantity').eq('player_id', profile.id).eq('item_id', stoneItem.id).maybeSingle()
         if (ownStone) {
-          await supabase.from('player_items').update({ quantity: (ownStone.quantity || 1) + 1 }).eq('id', ownStone.id)
+          await supabase.from('player_items').update({ quantity: (ownStone.quantity || 1) + stoneQty }).eq('id', ownStone.id)
         } else {
-          await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: 1, equipped: false })
+          await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: stoneQty, equipped: false })
         }
-        logs.push({ text:`💎 ${stoneName} を入手！`, color:'#6699cc' })
+        logs.push({ text:`💎 ${stoneName} を入手！${stoneQty > 1 ? `（×${stoneQty}）` : ''}`, color:'#6699cc' })
       }
     } else if (type === 'prof') {
-      const profGained = Math.floor(50 + Math.random() * 51)
+      let profGained = Math.floor(50 + Math.random() * 51)
+      if (profile.is_admin) profGained = Math.floor(profGained * DUNGEON_REWARD_MULT)  // ★is_admin先行: 3回化の内容補正×5/3
       const eqWeapon = equipment.find(e => e.slot==='weapon' && e.equipped)
       if (eqWeapon) {
         const prof = proficiency.find(p => p.equipment_id===eqWeapon.id)
@@ -1999,20 +2010,21 @@ export default function Game() {
         logs.push({ text:`武器が装備されていません`, color:'#446688' })
       }
     } else if (type === 'gem') {
-      // ランダムでFランク宝石を1個獲得
+      // ランダムでFランク宝石を獲得（★is_admin先行: 3回化の内容補正で1個＋2/3の確率でもう1個）
       const gemType = GEM_TYPES[Math.floor(Math.random()*GEM_TYPES.length)]
+      const gemQty = profile.is_admin ? (Math.random() < (DUNGEON_REWARD_MULT - 1) ? 2 : 1) : 1
       try {
         const { data: existing } = await supabase.from('player_gems')
           .select('*').eq('player_id', profile.id).eq('gem_type', gemType).eq('rank', 'F').single()
         if (existing) {
-          await supabase.from('player_gems').update({ quantity:(existing.quantity||1)+1 }).eq('id', existing.id)
+          await supabase.from('player_gems').update({ quantity:(existing.quantity||1)+gemQty }).eq('id', existing.id)
         } else {
-          await supabase.from('player_gems').insert({ player_id:profile.id, gem_type:gemType, rank:'F', quantity:1 })
+          await supabase.from('player_gems').insert({ player_id:profile.id, gem_type:gemType, rank:'F', quantity:gemQty })
         }
       } catch {
-        try { await supabase.from('player_gems').insert({ player_id:profile.id, gem_type:gemType, rank:'F', quantity:1 }) } catch {}
+        try { await supabase.from('player_gems').insert({ player_id:profile.id, gem_type:gemType, rank:'F', quantity:gemQty }) } catch {}
       }
-      logs.push({ text:`💍 宝石「${GEM_DATA[gemType].name}(F)」を入手！`, color:'#ff66cc' })
+      logs.push({ text:`💍 宝石「${GEM_DATA[gemType].name}(F)」を入手！${gemQty > 1 ? `（×${gemQty}）` : ''}`, color:'#ff66cc' })
     }
 
     // gold以外のEXP以外ダンジョン（stone/prof/gem）にもおまけ経験値（8〜11）を付与
@@ -4138,7 +4150,7 @@ export default function Game() {
   const unlockedAreas = profile.unlocked_areas||[1]
   const availableAreas = AREAS.filter(a=>unlockedAreas.includes(a.id))
   // デイリーダンジョン：全種使い切ったらパネル自体を開けない／残り合計
-  const dungeonAllUsedUp = DUNGEON_LIST.every(d => (dungeonCounts[d.type]||0) >= DUNGEON_DAILY_LIMIT)
+  const dungeonAllUsedUp = DUNGEON_LIST.every(d => (dungeonCounts[d.type]||0) >= dungeonDailyLimitFor(profile))
   const charLv = profile.char_lv || profile.lv
   const innCost = isDying ? Math.min(charLv*15,profile.gold) : charLv*2
 
@@ -4654,16 +4666,16 @@ export default function Game() {
               </button>
               {showDungeonPanel && (
                 <div style={{ border:'1px solid #440088', background:'#0a001a', padding:'10px', marginBottom:'10px' }}>
-                  <div style={{ color:'#cc44ff', fontSize:'11px', marginBottom:'8px' }}>ダンジョンを選択（各{DUNGEON_DAILY_LIMIT}回/日）</div>
+                  <div style={{ color:'#cc44ff', fontSize:'11px', marginBottom:'8px' }}>ダンジョンを選択（各{dungeonDailyLimitFor(profile)}回/日）</div>
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                     {DUNGEON_LIST.map(d => {
                       const used = dungeonCounts[d.type]||0
-                      const full = used >= DUNGEON_DAILY_LIMIT
+                      const full = used >= dungeonDailyLimitFor(profile)
                       const dis = full || loading || !canAct
                       return (
                       <button key={d.type} disabled={dis} onClick={() => { doDungeon(d.type); setShowDungeonPanel(false) }}
                         style={{ padding:'10px', background:'#001020', border:`1px solid ${dis?'#333':'#440088'}`, color:dis?'#333':'#cc44ff', cursor:dis?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'11px', opacity:dis?0.4:1 }}>
-                        {d.label}<br/><span style={{fontSize:'10px',color:dis?'#333':'#446688'}}>{!full&&!canAct?`待機 ${remaining.toFixed(0)}秒`:`残り${DUNGEON_DAILY_LIMIT-used}/${DUNGEON_DAILY_LIMIT}`}</span>
+                        {d.label}<br/><span style={{fontSize:'10px',color:dis?'#333':'#446688'}}>{!full&&!canAct?`待機 ${remaining.toFixed(0)}秒`:`残り${dungeonDailyLimitFor(profile)-used}/${dungeonDailyLimitFor(profile)}`}</span>
                       </button>
                       )
                     })}
@@ -5106,16 +5118,16 @@ export default function Game() {
                 </button>
                 {showDungeonPanel && (
                   <div style={{ border:'1px solid #440088', background:'#0a001a', padding:'10px', marginBottom:'8px' }}>
-                    <div style={{ color:'#cc44ff', fontSize:'11px', marginBottom:'8px' }}>ダンジョンを選択（各{DUNGEON_DAILY_LIMIT}回/日）</div>
+                    <div style={{ color:'#cc44ff', fontSize:'11px', marginBottom:'8px' }}>ダンジョンを選択（各{dungeonDailyLimitFor(profile)}回/日）</div>
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                       {DUNGEON_LIST.map(d => {
                         const used = dungeonCounts[d.type]||0
-                        const full = used >= DUNGEON_DAILY_LIMIT
+                        const full = used >= dungeonDailyLimitFor(profile)
                         const dis = full || loading || !canAct
                         return (
                         <button key={d.type} disabled={dis} onClick={() => { doDungeon(d.type); setShowDungeonPanel(false) }}
                           style={{ padding:'10px', background:'#001020', border:`1px solid ${dis?'#333':'#440088'}`, color:dis?'#333':'#cc44ff', cursor:dis?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'11px', opacity:dis?0.4:1 }}>
-                          {d.label}<br/><span style={{fontSize:'10px',color:dis?'#333':'#446688'}}>{!full&&!canAct?`待機 ${remaining.toFixed(0)}秒`:`残り${DUNGEON_DAILY_LIMIT-used}/${DUNGEON_DAILY_LIMIT}`}</span>
+                          {d.label}<br/><span style={{fontSize:'10px',color:dis?'#333':'#446688'}}>{!full&&!canAct?`待機 ${remaining.toFixed(0)}秒`:`残り${dungeonDailyLimitFor(profile)-used}/${dungeonDailyLimitFor(profile)}`}</span>
                         </button>
                         )
                       })}
