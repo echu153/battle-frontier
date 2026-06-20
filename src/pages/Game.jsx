@@ -1988,17 +1988,20 @@ export default function Game() {
       if (expIsFrozen(profile)) {
         logs.push({ text:`EXP +${expGained}（調査中につき停止）`, color:'#446688' })
       } else if (currentClassLvD < capD) {
-        // レベルアップ表示はクライアントで計算、DB更新はRPC経由
-        let dispExp = profile.exp + expGained
-        let dispLv = profile.lv
-        let dispExpNext = profile.exp_next
-        while (dispExp >= dispExpNext && dispLv < capD) {
-          dispExp -= dispExpNext; dispLv++; dispExpNext = calcExpNext(dispLv, profile.is_admin)
-          logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${dispLv}！`, color:'#cc44ff' })
-        }
+        // DB更新はRPC経由。★[CODEX]83 #2: 拒否時に偽の「LEVEL UP/EXP+」を出さないよう、成功時のみ表示ログを積む
         const { data: expRes, error: expErr } = await supabase.rpc('apply_dungeon_reward', { p_type:'exp', p_claimed_exp:expGained })
         if (expErr || expRes?.ok === false) { rewardFailed = true; rewardFailReason = expRes?.reason || expErr?.message || 'unknown' }
-        else logs.push({ text:`EXP +${expGained}`, color:'#cc8800' })
+        else {
+          // レベルアップ表示はクライアントで計算（サーバーで反映済み）
+          let dispExp = profile.exp + expGained
+          let dispLv = profile.lv
+          let dispExpNext = profile.exp_next
+          while (dispExp >= dispExpNext && dispLv < capD) {
+            dispExp -= dispExpNext; dispLv++; dispExpNext = calcExpNext(dispLv, profile.is_admin)
+            logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${dispLv}！`, color:'#cc44ff' })
+          }
+          logs.push({ text:`EXP +${expGained}`, color:'#cc8800' })
+        }
       } else {
         logs.push({ text:`⚠ レベルキャップに達しています（EXP +0）`, color:'#ff8844' })
       }
@@ -2080,24 +2083,26 @@ export default function Game() {
       if (bErr || bRes?.ok === false) logs.push({ text:`⚠ おまけEXPは反映されませんでした（理由: ${bRes?.reason || bErr?.message || 'unknown'}）`, color:'#ff8844' })
     }
 
-    // ★exp/gold が拒否されたら回数を消費せず理由を表示（本体報酬が入っていないため）
+    // ★失敗時の警告は出すが、回数(count)とCDは常に消費する。
+    //   理由: Supabaseの error/timeout は「サーバー未実行」を保証せず、ここで未消費にすると
+    //   「サーバー成功・レスポンス喪失」時に再試行で二重取得できてしまうため（[CODEX]83 #1）。
+    //   ※ 拒否時に回数を無駄にしない完全な解決は apply_dungeon_reward を回数/CD込みの単一RPCに統合する公開時タスク。
     if (rewardFailed) {
-      logs.push({ text:`⚠ サーバーが報酬を適用しませんでした（理由: ${rewardFailReason}）。この回数は消費されていません。`, color:'#ff4444' })
-    } else {
-      // dungeon_attempts更新（種類ごとの列を加算）
-      try {
-        if (dungeonRow) {
-          await supabase.from('dungeon_attempts').update({ [col]: newCount }).eq('id', dungeonRow.id)
-        } else {
-          await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:0, [col]:1 })
-        }
-      } catch {
-        try { await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:0, [col]:1 }) } catch {}
-      }
-      await supabase.from('profiles').update({ last_action_at: new Date(serverNow()).toISOString() }).eq('id', profile.id)
-      cdEndRef.current = Date.now() + effWait(profile) * 1000  // 相対カウントダウンを開始
-      setDungeonCounts(prev => ({ ...prev, [type]: newCount }))
+      logs.push({ text:`⚠ 報酬が反映されなかった可能性があります（理由: ${rewardFailReason}）。`, color:'#ff8844' })
     }
+    // dungeon_attempts更新（種類ごとの列を加算）
+    try {
+      if (dungeonRow) {
+        await supabase.from('dungeon_attempts').update({ [col]: newCount }).eq('id', dungeonRow.id)
+      } else {
+        await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:0, [col]:1 })
+      }
+    } catch {
+      try { await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:0, [col]:1 }) } catch {}
+    }
+    await supabase.from('profiles').update({ last_action_at: new Date(serverNow()).toISOString() }).eq('id', profile.id)
+    cdEndRef.current = Date.now() + effWait(profile) * 1000  // 相対カウントダウンを開始
+    setDungeonCounts(prev => ({ ...prev, [type]: newCount }))
     } catch (e) {
       console.error('doDungeon error:', e)
       logs.push({ text:`⚠ 報酬処理でエラーが発生しました（${e?.message || e}）`, color:'#ff8844' })
