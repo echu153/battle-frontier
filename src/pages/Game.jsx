@@ -1911,7 +1911,7 @@ export default function Game() {
       return
     }
 
-    // 出撃と共通の10秒クールダウン＋釣り中チェック（サーバー側）
+    // 街の出撃と共通のクールダウン（effWait＝管理者20秒/ブースト中10秒、一般10秒）＋釣り中チェック
     const { data: latestForDungeon } = await supabase.from('profiles').select('last_action_at, is_fishing').eq('id', profile.id).single()
     const dungeonElapsed = (serverNow() - new Date(latestForDungeon.last_action_at).getTime()) / 1000
     const dungeonWait = effWait(profile, serverNow())
@@ -3842,7 +3842,7 @@ export default function Game() {
           <div style={{ border:'1px solid #335577', background:'#000a18', padding:'14px', marginBottom:'16px' }}>
             <div style={{ color:'#ffcc44', fontSize:'13px', marginBottom:'6px' }}>⚡ ブーストタイム</div>
             <div style={{ color:'#88aacc', fontSize:'11px', lineHeight:'1.7', marginBottom:'12px' }}>
-              発動すると<strong style={{color:'#ffcc44'}}>{BOOST_DURATION_MIN}分間</strong>、街の出撃クールダウンが<strong style={{color:'#ffcc44'}}>{WAIT_SECONDS}秒 → {BOOST_WAIT}秒</strong>に短縮されます。<br/>
+              発動すると<strong style={{color:'#ffcc44'}}>{BOOST_DURATION_MIN}分間</strong>、街の出撃・<strong style={{color:'#ffcc44'}}>デイリーダンジョン</strong>のクールダウンが<strong style={{color:'#ffcc44'}}>{WAIT_SECONDS}秒 → {BOOST_WAIT}秒</strong>に短縮されます。<br/>
               ・1日1回まで（毎日<strong style={{color:'#ffcc44'}}>朝5時</strong>リセット）<br/>
               ・レイドボス・簡易出撃は対象外
             </div>
