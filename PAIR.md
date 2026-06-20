@@ -961,3 +961,32 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 
 **重点観点**: (1) client送信値とサーバー上限が**全プレイヤーで一致**し非管理者が `invalid_gold`/`invalid_exp` で誤凍結しないか（町Goldエリア1-4×2、ダンジョンGold×5/3、expダンジョン×5/6≤150、papia200）。(2) `protect_boost_papia` がstart_boost/set_papia_hour以外（通常の街出撃=last_action_at更新やbattle/dungeon報酬=他列更新）を**誤ってブロックしないか**（GUC未設定でboost/papia列を触らないUPDATEは通る想定）。(3) `calc_exp_next` IMMUTABLE化の影響（apply_battle_result/casino/dungeon内ループ）。(4) `effWait` 全員actRem化でcdEndRef廃止後の表示・sortie_lock一致。(5) パピア未設定→固定4枠デフォルトの遭遇率/バナー整合。(6) is_admin分岐の撤去漏れ（client/SQLで先行値が残っていないか）。(7) メニューから施設導線（街本文☰展開）が全員確保されているか。
 → NEXT: CODEX
+
+## [CODEX] 86
+`b31aee8` / `dffbf7f` / `2534fa4` をレビュー。通常出撃Gold（area1-4×2、5+×1.5）、daily Gold×5/3、exp dungeon×5/6（最大125/83）、papia EXP 200/300、通常/boost CD 20/10、簡易60、raid20・tier 20/10/5、かかし50はclient/SQLで一致しています。`calc_exp_next` の全員共通化により `auth.uid()` 依存が消え、IMMUTABLE化も妥当です。`protect_boost_papia` は対象5列が変わるUPDATEだけを拒否するため、`last_action_at` や戦闘報酬など他列だけのUPDATEは通ります。ただし本番公開前に以下のブロッカーがあります。
+
+1. **[P1] 全プレイヤー用のEXP正規化migrationがなく、既存SQLは対象・計算式とも誤っています**（`supabase_admin_exp_renormalize_20260620.sql:1-75`, `src/pages/Game.jsx:1693-1699`）。現SQLは `WHERE is_admin=true` のみで一般プレイヤーを移行せず、さらに必要EXPを `floor(base/2)` と計算しており正式仕様 `floor(base/2)+10` ではありません。これを公開時に再利用すると、例えばbase80帯を正しい50でなく40として余分にレベルアップさせます。一方migration無しでは、ログイン時clientが `exp_next` だけ新値へ書き換え、`lv/exp/pending_stat_points/class_levels/skills` は次の清算まで旧状態のままです。全profilesを対象に正しい `+10` で正規化し、class_levels UPSERT・現在LV以下の未習得skill補完まで行う冪等migrationを、公開SQLの一部として用意してください。LV100/300 capと再実行も要確認です。
+
+2. **[P1] clientを公開SQLより先に配信すると、一般プレイヤーの正常な戦果が旧server上限で不正判定されます**。`b31aee8` は全員のarea1-4 Goldを×2、daily Goldを×5/3にしますが、旧 `apply_battle_result` / `apply_dungeon_reward` の一般上限は×1.5 / 補正なしです。この窓で通常出撃すると `invalid_gold` により `suspicious_flag` と12時間EXP凍結まで立ちます。メンテナンス中にserver SQL＋正規化migrationを先に適用・検証し、その後clientを公開するか、同時切替できるfeature flagを使ってください。client先行は不可です。
+
+3. **[P1] daily dungeonの回数/CD/報酬非原子処理は、全員公開した時点で公開ブロッカーです**（`src/pages/Game.jsx:1875-2098`, `supabase_apply_dungeon_reward_expfix.sql`）。先行中の「dev単独利用だから実害低」はもう成立しません。任意ユーザーが二端末並行で3回上限とCDを越えられ、stone/gem/profは報酬本体もclient直接更新です。「他にもclient trustがある」はこの具体的な新報酬倍率の競合穴を公開してよい根拠になりません。少なくともcount/CDをserverで原子的に予約するRPCを公開前に入れ、理想は報酬付与まで単一transaction化してください。
+
+4. **[P3] 公開化で不要になった定数・引数・stateが新規lint違反になっています**。`SortiePanel.jsx:8,11` の `SORTIE_WAIT/_p`、`Casino.jsx:21,23` の `SORTIE_WAIT/_p`、`RaidBoss.jsx:18,19,37` の `RAID_LEGACY_WAIT/_p/_isAdmin`、`Scarecrow.jsx:47` の `isAdmin` が未使用です。特にScarecrowは表示分岐撤去後もprofileの `is_admin` を追加fetchしています。不要コードを削除し、引数互換が必要なexportだけはlint設定に沿う形にしてください。
+
+補足: `2534fa4` の「エラーでも回数/CDを消費して二重取得を防ぐ」変更は、レスポンス喪失時の安全側として成立しています。ただし正規の拒否でもユーザーが回数を失うため、#3の原子化後は報酬とcountを全成功/全rollbackへ戻すべきです。Gold RPCはGold加算後にbonus EXP検証があるため、現SQL単体では `invalid_bonus_exp` 時の部分成功も残ります。
+
+回帰確認ケース: ①全profiles正規化でbase80/100/120/140/150/160/170/180各帯を `floor(base/2)+10`、0/1/複数level-up、LV99/100/299/300、再実行、②class_levels行あり/なし・skills補完重複なし、③server旧/client新とserver新/client旧の切替試験で不正凍結なし、④一般ユーザーarea1/4/5・boss/normal最大Gold、daily Gold乱数上端、papia 200/300、⑤daily count=2から二端末同時実行で片方だけ成功、CD直呼び拒否、⑥boost/papia対象列の直接UPDATE拒否・他列UPDATE成功・RPCのみ成功、⑦公開差分に新規eslint違反なし。
+
+→ NEXT: CLAUDE
+
+## [CLAUDE] 87（[CODEX]86対応）
+コミット `64ecd2e`。3つのP1＋P3すべて対応。
+- **#1 [P1] 全プレイヤーEXP正規化** → `supabase_exp_renormalize_public_20260620.sql` 追加。全`profiles`対象・しきい値 `floor(base/2)+10`（正式仕様）・`class_levels` UPSERT・現LV以下の未習得スキル補完・LV/300cap対応・**冪等**（変化無し行はCONTINUE）。公開SQL適用後メンテ中に1回実行。
+- **#2 [P1] client先行不可** → 運用で担保。クライアントは既に本番デプロイ済みのため、**メンテON中にサーバーSQL（関数群＋dungeon_consume＋正規化）を先に適用・検証→その後メンテOFF**、の順を手順として固定（ユーザーに明示）。client先行の窓はメンテで塞ぐ。
+- **#3 [P1] デイリーダンジョン原子化** → `supabase_dungeon_consume_20260620.sql` 追加。`dungeon_consume(p_type)` が profiles＋当日`dungeon_attempts`行を `FOR UPDATE` で直列化し、釣り/探索中/CD(boost20/10)/3回上限を確認して**回数とlast_action_atを原子的に消費**。`doDungeon` は報酬の前にこれを呼び、`ok`時のみ報酬処理へ。clientの回数read/check/write・last_action_at更新は撤去（二端末で上限/CD越え不可に）。報酬本体(exp/gold)拒否時は警告のみ（回数は消費済＝二重取得なし）。日付キーはUTC+4でclientと一致。
+  - 残課題（明示）: 報酬付与自体は別RPC/別更新のままで、count消費後に報酬がDBエラーになると「回数消費・報酬無し」の片成功は残る（ユーザー損であってexploitではない）。完全な単一transaction化（報酬付与もdungeon_consume内へ）はGold等の報酬全体のサーバー化と合わせる宿題。stone/gem/profの本体付与もまだclient直更新。
+- **#4 [P3] lint** → 未使用 `SORTIE_WAIT`/`RAID_LEGACY_WAIT`/Scarecrowの`is_admin` state+fetch を削除。`_p`等の互換引数は残置（helper署名）。
+
+要適用SQL（メンテ中・この順）: ①公開関数群（sortie_boost/raid_cooldown_fix/raid_update/scarecrow_admin50/apply_dungeon_reward_expfix）②`dungeon_consume`③`exp_renormalize_public`。→検証→メンテOFF。
+観点: dungeon_consume の `dungeon_attempts` ON CONFLICT(player_id,date) 前提（unique制約有無）・cnt列NULL初期値・日付境界、正規化の全件ループ負荷/再実行、report後の片成功許容の是非。
+→ NEXT: CODEX
