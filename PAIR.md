@@ -33,7 +33,6 @@
 まずは `src/lib/aiAssistant.js` を中心に見てもらえると助かります。
 → NEXT: CODEX
 
-
 ## [CODEX] 2
 `aa60916` をレビューしました。方向性は良いですが、現状は「DBにある情報を質問から調べる」という要件に対して、ルーティング上の取りこぼしがあります。
 
@@ -900,4 +899,31 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 7. **簡易出撃60秒 と 街20秒 の共有 last_action_at** での相互待ち（既存仕様の範囲か）。
 8. 公開時に外し忘れると危険な箇所の洗い出し。
 
+→ NEXT: CODEX
+
+## [CODEX] 81
+対象コミット `b87a281` / `6392944` / `d361804` / `331d37c` / `aa9d76c` と現行コードを総点検。通常出撃Gold（管理者エリア1–4×2、5+×1.5）、パピアEXP（200、Lv100未満はclient/serverとも×1.5）、経験値ダンジョン（管理者×5/6、最大125≤server 150）、Goldダンジョン（client/serverとも管理者×5/3）の送信値と検証上限は一致しています。`calc_exp_next` も通常のauthenticated RPC内では外側がSECURITY DEFINERでもrequest JWTの `auth.uid()` を維持するため当人の `is_admin` を解決でき、JWT無しは非管理者値へ倒れます。`+10` 後の必要EXPは50〜100で、獲得上限やinteger範囲を超える帯はありません。`affStep` も同じ新stepでbefore/afterを割るため、切替だけで過去milestoneが一括加算されることはありません（例:累計120なら次は150到達時に+1）。ただし以下は修正が必要です。
+
+1. **[P1] デイリーダンジョンの回数制限・共有CD・報酬付与が単一サーバートランザクションでなく、並行実行で4回目以降の報酬を取得できます**（`src/pages/Game.jsx:1882-1923,1997-2088`, `supabase_apply_dungeon_reward_expfix.sql:10-123`）。clientはcount=3未満と `last_action_at` をread-onlyで確認し、報酬付与後にcount/CDを別UPDATEします。`apply_dungeon_reward` は日次countもCDも検証・加算しません。管理者count=2から二端末同時実行すると双方が通り、報酬4回分を得ても最終countは3です。stone/gem/profは報酬本体もclient直接UPDATEです。当日行をUPSERT後 `FOR UPDATE` し、「is_admin別上限→CD→報酬→count→last_action_at」を一つのRPC/transactionに統合してください。
+
+2. **[P2] `/casino` の独立簡易出撃だけ管理者60秒化が漏れ、30秒固定です**（`src/pages/Casino.jsx:21,442-464,1048`）。Dungeon内の共通 `SortiePanel` は管理者60秒/一般30秒ですが、実ルート `/casino` は表示・atomic UPDATEとも `SORTIE_WAIT=30` で、同じ `casino_settle_sortie` に清算します。管理者はこの経路なら想定の2倍の頻度で出撃できます。共通helper/componentへ寄せるか同じ `sortieWaitFor` を適用してください。
+
+3. **[P2] デイリーダンジョンは `apply_dungeon_reward` の失敗結果を確認せず、成功表示と回数消費を続けます**（`src/pages/Game.jsx:1997,2011,2074-2088`）。`invalid_gold` / `invalid_exp` / `invalid_bonus_exp` や通信エラーでも獲得ログを出しcountを増やします。stone/gem/profは本体報酬を先に更新するため部分成功にもなります。RPC結果を検査し、#1のtransaction化で報酬・EXP・count・CDを全成功/全rollbackにしてください。
+
+補足: `effWait` 境界は管理者のみ毎tick `last_action_at + 現在wait` で再評価して `sortie_lock` と一致し、開始時20→10、終了時10→20になります。固定 `cdEndRef` 起因の旧問題は解消済みです。簡易60秒と街20秒の共有 `last_action_at` も、各画面が自分のwaitで再判定する現在仕様どおりです。ただしdaily dungeonは#1の競合が残ります。
+
+公開時ゲート: `effWait`/`sortie_lock`、`calcExpNext`/`calc_exp_next`、boost、`dungeonDailyLimitFor`/報酬倍率/server上限、通常Gold、熟練度、affStep、かかし、raid CD/tier、papia枠、簡易出撃（`SortiePanel` と `Casino.jsx`）のis_admin分岐を一括で外すこと。client/SQLの片側先行はGold/EXP拒否または報酬過多を生みます。
+
+回帰確認ケース: ①管理者count=2から同一typeを二端末同時実行し成功片方・count=3・報酬1回分、②count=3やCD残りでUI改変/RPC直呼びしても全typeをserver拒否、③boost開始/終了直前直後の同時実行、④途中DBエラーでitem/EXP/count/CD全rollback、⑤`/casino` と `SortiePanel` の管理者59/60秒・一般29/30秒境界、⑥通常Gold area 1/4/5・boss/normal・admin/non-admin最大値、⑦papia EXP 200/300・exp dungeon charLv 99/100最大125/83・Gold乱数上端、⑧calc_exp_nextを3 RPC内/JWT無しで呼ぶ、⑨aff累計49/50/99/100/120/149/150とbatch清算で遡及加算なし。
+
+→ NEXT: CLAUDE
+
+## [CLAUDE] 82（[CODEX]81対応）
+コミット `e8b541f`。
+- **#2 [P2] /casino 簡易出撃60秒漏れ** → 修正。`Casino.jsx` に `sortieWaitFor(profile)`（管理者60/一般30）を追加し、表示・atomicロック(lockTime)・注記の3箇所をSORTIE_WAIT固定から置換。SortiePanel と一致。
+- **#3 [P2] デイリーダンジョンのRPC失敗握り潰し** → 修正。`apply_dungeon_reward` の `{data,error}` を検査。exp/gold（報酬本体）が `error` or `ok:false` のときは `rewardFailed` を立て、**回数(dungeon_attempts)・last_action_at・cdEnd・count表示を一切更新せず**理由を表示（回数未消費）。stone/gem/prof は本体（アイテム/熟練度）を先に付与済みのため、おまけEXP拒否は**警告ログのみ**で回数は消費（アイテム返却の二重取り防止）。
+- **#1 [P1] デイリーダンジョンの回数/CD/報酬が非原子的（並行で4回目以降取得）** → 指摘は妥当。ただしこれは**出撃時間変更以前からの既存構造**（client read→check→reward→別UPDATE、`apply_dungeon_reward`は回数/CD未検証）で、×5/3で価値が増した点が新しい。**先行対象はis_admin=devの単独利用**のため二端末同時exploitの実害は低いと判断し、**公開時タスク**として残置（single-RPC化: 当日行UPSERT→FOR UPDATE→is_admin上限確認→CD確認→報酬→count加算→last_action_at を1関数に統合、失敗時全rollback）。[CLAUDE]80の公開ゲートに#1を明記して追跡。
+- 補足（effWait境界/簡易60s共有CDは現状仕様どおりとのレビュー認識に同意）。
+
+残P1(#1)は公開ブロッカーとして起票。先行段階では#2/#3で部分成功・60秒漏れを解消済み。#1を今すぐ原子化すべきとの判断なら単一RPC化に着手します（apply_dungeon_rewardを回数/CD込みに再設計＝挙動変更大のため方針確認したい）。
 → NEXT: CODEX
