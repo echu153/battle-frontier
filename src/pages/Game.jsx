@@ -1888,36 +1888,20 @@ export default function Game() {
       }
     }
 
-    // stateではなくDBから直接カウント取得（state操作による回避を防ぐ）
-    const today = getDungeonDateStr()
-    const col = DUNGEON_TYPE_COL[type]
-    let dungeonRow = null
-    try {
-      const { data: da } = await supabase.from('dungeon_attempts').select('*').eq('player_id', profile.id).eq('date', today).maybeSingle()
-      dungeonRow = da
-    } catch {}
-    const typeCount = dungeonRow?.[col] || 0
-    // 当日分(5回)使い切った後の選択＝6回目以上＝グリッチとみなし即停止
-    if (typeCount >= dungeonDailyLimitFor(profile)) {
-      await suspendAccount(`デイリーダンジョン(${DUNGEON_TYPE_LABEL[type]})を1日${dungeonDailyLimitFor(profile)+1}回以上選択`)
-      setLoading(false)
-      return
-    }
-
-    // 街の出撃と共通のクールダウン（effWait＝管理者20秒/ブースト中10秒、一般10秒）＋釣り中チェック
-    const { data: latestForDungeon } = await supabase.from('profiles').select('last_action_at, is_fishing').eq('id', profile.id).single()
-    const dungeonElapsed = (serverNow() - new Date(latestForDungeon.last_action_at).getTime()) / 1000
-    const dungeonWait = effWait(profile, serverNow())
-    if (dungeonElapsed < dungeonWait) {
-      // クールダウン中は無言で止めず、残り秒数を表示して「進行しない」ように見えるのを防ぐ
-      const wait = Math.max(1, Math.ceil(dungeonWait - dungeonElapsed))
-      setBattleLogs([{ text:`⏳ クールダウン中です。あと${wait}秒お待ちください。`, color:'#ffcc44' }])
+    // ★2026-06-20公開: 回数/CD/釣り/探索中チェックと「回数消費」をサーバーで原子的に実行（二端末バイパス対策）。
+    //   ok のときだけ報酬処理へ進む。回数・last_action_at はサーバーが消費済み。
+    const { data: consumeRes, error: consumeErr } = await supabase.rpc('dungeon_consume', { p_type: type })
+    if (consumeErr || !consumeRes?.ok) {
+      const reason = consumeRes?.reason || consumeErr?.message
+      let msg = '⚠ ダンジョンを開始できませんでした。少し待ってお試しください。'
+      if (reason === 'cooldown') msg = `⏳ クールダウン中です。あと${Math.max(1, Math.ceil(Number(consumeRes?.seconds_left) || 1))}秒お待ちください。`
+      else if (reason === 'daily_limit') msg = `本日分のこのダンジョンは終了しました（1日${dungeonDailyLimitFor(profile)}回）。`
+      else if (reason === 'dungeon_active') msg = '🕳 ペットダンジョン探索中はデイリーダンジョンに入れません。'
+      else if (reason === 'fishing') msg = '🎣 釣り中はデイリーダンジョンに入れません。先に釣りを終了してください。'
+      setBattleLogs([{ text: msg, color:'#ffcc44' }])
       setCurrentEnemy(null); setScene('battle'); setLoading(false); return
     }
-    if (latestForDungeon.is_fishing) {
-      setBattleLogs([{ text:'🎣 釣り中はデイリーダンジョンに入れません。先に釣りを終了してください。', color:'#ff8844' }])
-      setCurrentEnemy(null); setScene('battle'); setLoading(false); return
-    }
+    const newCount = consumeRes.count   // サーバーが消費した後の回数
 
     setScene('battle'); setBattleLogs([])
 
@@ -1938,8 +1922,8 @@ export default function Game() {
     logs.push({ text:`1ターン目: あなたの攻撃！ ${dungeonEnemy.name}に${dmg}ダメージ！`, color:'#ffcc00' })
     logs.push({ text:`${dungeonEnemy.name}を倒した！`, color:'#44ff88' })
 
-    const newCount = typeCount + 1
-    // ★サーバーが報酬を拒否したら回数を消費しない／理由を表示（exp・goldは報酬本体なので拒否時は未消費）
+    // ★newCount は dungeon_consume が消費済みの値（上で取得済み）。回数とCDはサーバーで確保済み。
+    // 報酬本体(exp/gold)の拒否時は理由を表示（回数は既に消費されているため返却はしない＝二重取得防止）
     let rewardFailed = false, rewardFailReason = ''
 
     // EXP以外のダンジョン（gold/stone/prof/gem）に付与するおまけ経験値（8〜11）。
@@ -2075,24 +2059,11 @@ export default function Game() {
       if (bErr || bRes?.ok === false) logs.push({ text:`⚠ おまけEXPは反映されませんでした（理由: ${bRes?.reason || bErr?.message || 'unknown'}）`, color:'#ff8844' })
     }
 
-    // ★失敗時の警告は出すが、回数(count)とCDは常に消費する。
-    //   理由: Supabaseの error/timeout は「サーバー未実行」を保証せず、ここで未消費にすると
-    //   「サーバー成功・レスポンス喪失」時に再試行で二重取得できてしまうため（[CODEX]83 #1）。
-    //   ※ 拒否時に回数を無駄にしない完全な解決は apply_dungeon_reward を回数/CD込みの単一RPCに統合する公開時タスク。
+    // 報酬本体(exp/gold)が拒否された場合は警告のみ（回数・CDは dungeon_consume で消費済み）
     if (rewardFailed) {
       logs.push({ text:`⚠ 報酬が反映されなかった可能性があります（理由: ${rewardFailReason}）。`, color:'#ff8844' })
     }
-    // dungeon_attempts更新（種類ごとの列を加算）
-    try {
-      if (dungeonRow) {
-        await supabase.from('dungeon_attempts').update({ [col]: newCount }).eq('id', dungeonRow.id)
-      } else {
-        await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:0, [col]:1 })
-      }
-    } catch {
-      try { await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:0, [col]:1 }) } catch {}
-    }
-    await supabase.from('profiles').update({ last_action_at: new Date(serverNow()).toISOString() }).eq('id', profile.id)
+    // 回数・last_action_at はサーバー(dungeon_consume)が更新済み。クライアントは表示とカウントダウンのみ。
     cdEndRef.current = Date.now() + effWait(profile) * 1000  // 相対カウントダウンを開始
     setDungeonCounts(prev => ({ ...prev, [type]: newCount }))
     } catch (e) {

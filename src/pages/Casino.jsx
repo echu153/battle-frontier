@@ -18,9 +18,8 @@ const PRIZES = [
   { key:'luckyRing',    name:'幸運の指輪',       price:50000,  limit:1, today:false, type:'equip', desc:'全能力値+10  特殊: 回避率+5%（重複不可）' },
   { key:'gamblerProof', name:'ギャンブラーの証', price:100000, limit:1, today:false, type:'keyitem', desc:'ギャンブラーに転職できる証。1度きりの交換。' },
 ]
-const SORTIE_WAIT = 30        // 賭博場出撃のクールダウン秒（従来＝非管理者）
-const SORTIE_WAIT_ADMIN = 60 // ★is_admin限定先行: 管理者は60秒（SortiePanelと一致）
-const sortieWaitFor = (_p) => SORTIE_WAIT_ADMIN   // ★2026-06-20公開: 全プレイヤー60秒
+const SORTIE_WAIT = 60   // ★2026-06-20公開: 賭博場簡易出撃クールダウン秒（全プレイヤー60秒）
+const sortieWaitFor = (_p) => SORTIE_WAIT
 // EXP凍結中か（手動のexp_frozen、または期限付きのexp_frozen_until）
 const expIsFrozen = (p) => !!(p && (p.exp_frozen || (p.exp_frozen_until && new Date(p.exp_frozen_until) > new Date())))
 const AUTOCLICK_SAMPLES = 12   // オートクリッカー検知：直近サンプル数

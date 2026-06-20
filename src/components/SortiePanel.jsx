@@ -5,10 +5,8 @@ import { createPortal } from 'react-dom'
 import { supabase } from '../supabase'
 import { AREAS, getEffectiveCap, generateDropBonus, ARTIFACT_BASE_NAMES } from '../pages/Game'
 
-const SORTIE_WAIT = 30          // 簡易出撃クールダウン秒（従来＝非管理者）
-const SORTIE_WAIT_ADMIN = 60    // ★2026-06-20: is_admin限定先行＝管理者は60秒（街/カジノの出撃と共通の last_action_at で管理）
-// プロフィールに応じた有効クールダウン秒
-const sortieWaitFor = (_p) => SORTIE_WAIT_ADMIN   // ★2026-06-20公開: 全プレイヤー60秒
+const SORTIE_WAIT = 60    // ★2026-06-20公開: 簡易出撃クールダウン秒（全プレイヤー60秒）
+const sortieWaitFor = (_p) => SORTIE_WAIT
 const AUTOCLICK_SAMPLES = 12
 const AUTOCLICK_SPREAD_MS = 1200
 const SORTIE_STREAK_LIMIT = 20

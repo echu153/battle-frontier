@@ -14,9 +14,8 @@ import {
 } from './Game'
 
 const POLL_MS = 5000
-// レイド出撃CD。★2026-06-20: is_admin限定先行＝管理者は20秒、非管理者は従来10秒（ブースト対象外）
-const RAID_LEGACY_WAIT = 10
-const raidWaitFor = (_p) => WAIT_SECONDS   // ★2026-06-20公開: 全プレイヤー20秒（ブースト対象外）
+// レイド出撃CD。★2026-06-20公開: 全プレイヤー20秒（ブースト対象外）
+const raidWaitFor = (_p) => WAIT_SECONDS
 const BOSS_NAME = '黒龍ヴァルゼノク'
 // レイドボスの表示画像（ボス名→画像）。雨摩座用は /public/raid-boss-amaza.png を配置
 const RAID_IMG_VER = '2'  // 画像差し替え時に上げるとキャッシュを無効化

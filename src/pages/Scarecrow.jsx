@@ -44,7 +44,6 @@ export default function Scarecrow() {
   const [loadError, setLoadError] = useState(null)
   const [claimResult, setClaimResult] = useState(null)
   const [, setTickFinished] = useState(false)
-  const [isAdmin, setIsAdmin] = useState(false)   // ★かかしチャージ必要回数の出し分け用（管理者50/他100）
 
   useEffect(() => { fetchState() }, [])
 
@@ -56,10 +55,6 @@ export default function Scarecrow() {
   const fetchState = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
-    try {
-      const { data: prof } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
-      setIsAdmin(!!prof?.is_admin)
-    } catch { /* is_admin取得失敗時は従来表示(100) */ }
     const { data, error } = await supabase.rpc('scarecrow_state')
     if (error || data?.error) {
       setLoadError(data?.error || error?.message || 'エラーが発生しました')
