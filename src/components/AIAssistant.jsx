@@ -54,11 +54,13 @@ export default function AIAssistant({ ctx, open = false, onClose }) {
       resKind = res.kind
       // 事実質問はルールベース（正確）で確定。答えに詰まった質問だけ会話用LLM（1日上限つき）へ。
       // LLM未デプロイ/上限到達/エラー時は llmChat が null/allowed:false を返すのでルールの回答を表示。
-      // 雑談/聞き取れず は丸ごとAIへ。強化相談(advice)は、ルールの正確な回答を“下書き”として渡し、
-      // 質問に合わせて作り直させる（毎回テンプレにならないように）。AI不可時はルール回答を表示。
-      if (res.kind === 'fallback' || res.kind === 'chat' || res.kind === 'advice') {
+      // 事実質問(kb/db/class/advice/matchup)も、ルールの正確な回答を“下書き”として渡してAIに通し、
+      // 質問の意図に合わせて詳しく作り直させる（定型のまま即答にしない）。雑談/聞き取れず(chat/fallback)は丸ごとAIへ。
+      // AI不可(上限/エラー/未設定)時は、下書き＝正確なルール回答をそのまま表示。数値ガードで捏造は差し戻す。
+      const LLM_KINDS = ['fallback', 'chat', 'advice', 'kb', 'db', 'class', 'matchup']
+      if (LLM_KINDS.includes(res.kind)) {
         const p = ctx?.profile
-        const draft = res.kind === 'advice' ? res.text : ''
+        const draft = ['advice', 'kb', 'db', 'class', 'matchup'].includes(res.kind) ? res.text : ''
         // 直前までの会話履歴（このターン前のmessages）を文脈として渡す
         const history = messages
           .filter((m) => m.text && !m.text.startsWith('…見極めている'))
