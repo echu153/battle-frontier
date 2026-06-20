@@ -6,6 +6,28 @@
 --   ・1日3回（種類ごと）／CD=ブースト中10秒・通常20秒／釣り中・ダンジョン探索中は不可。
 --   ・日付キー = JST朝5時基準（UTC+4の日付。クライアント getDungeonDateStr と一致）。
 -- ============================================================
+
+-- ★ON CONFLICT(player_id,date) が機能するための一意制約を保証（無い環境対策）。
+--   先に重複行を1行へ統合（各cntは最大値＝消費済み多めの安全側）してからUNIQUE INDEXを張る。
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM dungeon_attempts GROUP BY player_id, date HAVING COUNT(*) > 1) THEN
+    CREATE TEMP TABLE _da_merged ON COMMIT DROP AS
+      SELECT player_id, date,
+             MAX(COALESCE(count,0))     AS count,
+             MAX(COALESCE(cnt_exp,0))   AS cnt_exp,
+             MAX(COALESCE(cnt_gold,0))  AS cnt_gold,
+             MAX(COALESCE(cnt_stone,0)) AS cnt_stone,
+             MAX(COALESCE(cnt_prof,0))  AS cnt_prof,
+             MAX(COALESCE(cnt_gem,0))   AS cnt_gem
+      FROM dungeon_attempts GROUP BY player_id, date HAVING COUNT(*) > 1;
+    DELETE FROM dungeon_attempts da USING _da_merged m WHERE da.player_id = m.player_id AND da.date = m.date;
+    INSERT INTO dungeon_attempts (player_id, date, count, cnt_exp, cnt_gold, cnt_stone, cnt_prof, cnt_gem)
+      SELECT player_id, date, count, cnt_exp, cnt_gold, cnt_stone, cnt_prof, cnt_gem FROM _da_merged;
+  END IF;
+END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS dungeon_attempts_player_date_uidx ON public.dungeon_attempts (player_id, date);
+
 CREATE OR REPLACE FUNCTION public.dungeon_consume(p_type text)
 RETURNS json
 LANGUAGE plpgsql

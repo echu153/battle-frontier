@@ -6,7 +6,7 @@ import { supabase } from '../supabase'
 import { AREAS, getEffectiveCap, generateDropBonus, ARTIFACT_BASE_NAMES } from '../pages/Game'
 
 const SORTIE_WAIT = 60    // ★2026-06-20公開: 簡易出撃クールダウン秒（全プレイヤー60秒）
-const sortieWaitFor = (_p) => SORTIE_WAIT
+const sortieWaitFor = () => SORTIE_WAIT
 const AUTOCLICK_SAMPLES = 12
 const AUTOCLICK_SPREAD_MS = 1200
 const SORTIE_STREAK_LIMIT = 20

@@ -15,7 +15,7 @@ import {
 
 const POLL_MS = 5000
 // レイド出撃CD。★2026-06-20公開: 全プレイヤー20秒（ブースト対象外）
-const raidWaitFor = (_p) => WAIT_SECONDS
+const raidWaitFor = () => WAIT_SECONDS
 const BOSS_NAME = '黒龍ヴァルゼノク'
 // レイドボスの表示画像（ボス名→画像）。雨摩座用は /public/raid-boss-amaza.png を配置
 const RAID_IMG_VER = '2'  // 画像差し替え時に上げるとキャッシュを無効化
@@ -33,9 +33,9 @@ const TIER_INFO = [
 
 // ★2026-06-20公開: 全プレイヤーの出撃回数ティア保証を A=20 / B=10 / C=5 に（claim_raid_rewards と一致）。
 const PUBLIC_TIER_ATTACKS = { A: 20, B: 10, C: 5 }
-const tierAttacks = (t, _isAdmin) => (t.attacks > 0 ? (PUBLIC_TIER_ATTACKS[t.tier] ?? t.attacks) : t.attacks)
-function getTier(pct, attackCount = 0, isAdmin = false) {
-  return TIER_INFO.find(t => pct >= t.pct || (attackCount >= tierAttacks(t, isAdmin) && t.attacks > 0)) || TIER_INFO[TIER_INFO.length - 1]
+const tierAttacks = (t) => (t.attacks > 0 ? (PUBLIC_TIER_ATTACKS[t.tier] ?? t.attacks) : t.attacks)
+function getTier(pct, attackCount = 0) {
+  return TIER_INFO.find(t => pct >= t.pct || (attackCount >= tierAttacks(t) && t.attacks > 0)) || TIER_INFO[TIER_INFO.length - 1]
 }
 function hpColor(r) { return r > 0.5 ? '#44ff88' : r > 0.25 ? '#ffcc00' : '#ff4444' }
 function fmt(n) { return Number(n).toLocaleString() }

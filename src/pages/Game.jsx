@@ -1902,6 +1902,8 @@ export default function Game() {
       setCurrentEnemy(null); setScene('battle'); setLoading(false); return
     }
     const newCount = consumeRes.count   // サーバーが消費した後の回数
+    // ★[CODEX]88 #3: サーバーが last_action_at を更新済み。ローカルにも即反映しCDタイマーを正しくする
+    setProfile(p => p ? { ...p, last_action_at: new Date(serverNow()).toISOString() } : p)
 
     setScene('battle'); setBattleLogs([])
 

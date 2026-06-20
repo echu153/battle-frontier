@@ -19,7 +19,7 @@ const PRIZES = [
   { key:'gamblerProof', name:'ギャンブラーの証', price:100000, limit:1, today:false, type:'keyitem', desc:'ギャンブラーに転職できる証。1度きりの交換。' },
 ]
 const SORTIE_WAIT = 60   // ★2026-06-20公開: 賭博場簡易出撃クールダウン秒（全プレイヤー60秒）
-const sortieWaitFor = (_p) => SORTIE_WAIT
+const sortieWaitFor = () => SORTIE_WAIT
 // EXP凍結中か（手動のexp_frozen、または期限付きのexp_frozen_until）
 const expIsFrozen = (p) => !!(p && (p.exp_frozen || (p.exp_frozen_until && new Date(p.exp_frozen_until) > new Date())))
 const AUTOCLICK_SAMPLES = 12   // オートクリッカー検知：直近サンプル数

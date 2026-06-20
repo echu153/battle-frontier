@@ -1,10 +1,9 @@
 -- ============================================================
 -- 本番公開 一括SQL 2026-06-20（メンテナンス中にこの順で実行）
---   ① 公開関数群  ② dungeon_consume  ③ 全員EXP正規化（最後）
---   ※ 末尾の DO ブロック（正規化）まで含め、ファイル全体を1回実行すればOK。
+--   ① 公開関数群  ② dungeon_consume(+一意制約)  ③ 全員EXP正規化（最後）
 -- ============================================================
 
--- ===== [1/7] sortie_boost（CD/ブースト/EXP/パピア/列保護） =====
+-- ===== [1/7] sortie_boost =====
 -- ============================================================
 -- 出撃改善 2026-06-20  ★is_admin限定先行（一般プレイヤーは従来どおり）
 --   ① 通常出撃クールダウン: 管理者のみ 10→20秒（非管理者は10秒のまま）
@@ -181,7 +180,7 @@ CREATE TRIGGER trg_protect_boost_papia
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.protect_boost_papia();
 
--- ===== [2/7] raid_cooldown_fix（レイドCD20秒） =====
+-- ===== [2/7] raid_cooldown_fix =====
 -- ============================================================
 -- レイドボス 0秒出撃（クールダウンすり抜け）対策 (2026-06-11)
 --   原因: attack_raid_boss が profiles を行ロック無しで SELECT してから
@@ -280,7 +279,7 @@ $$;
 
 GRANT EXECUTE ON FUNCTION attack_raid_boss(uuid, bigint) TO authenticated;
 
--- ===== [3/7] raid_update（ティア20/10/5・交換所） =====
+-- ===== [3/7] raid_update =====
 -- ============================================================
 -- レイドボス アップデート 2026-06-10
 --  ① ヴァルゼノク HP 100万（spawn RPC）
@@ -639,7 +638,7 @@ BEGIN
 END;
 $$;
 
--- ===== [4/7] scarecrow_admin50→apply_battle_result（かかし50・出撃Gold上限） =====
+-- ===== [4/7] apply_battle_result(かかし50/Gold) =====
 -- ============================================================
 -- かかし修練場チャージ: is_admin限定先行で 100回→50回 (2026-06-20)
 --   出撃CD20秒化に合わせ、管理者のみ「出撃50回で1チャージ」。非管理者は従来100回。
@@ -810,7 +809,7 @@ BEGIN
 END;
 $function$;
 
--- ===== [5/7] apply_dungeon_reward（ダンジョンGold上限×5/3） =====
+-- ===== [5/7] apply_dungeon_reward =====
 -- ============================================================
 -- apply_dungeon_reward を最新版へ（経験値ダンジョンのLV100未満1.5倍に対応）
 --   ・exp上限を char_lv<100 で 100→150 に（クライアントの1.5倍と一致＝誤検知防止）
@@ -934,7 +933,7 @@ $function$;
 
 GRANT EXECUTE ON FUNCTION public.apply_dungeon_reward(text, integer, integer) TO authenticated;
 
--- ===== [6/7] dungeon_consume（回数/CD原子化） =====
+-- ===== [6/7] dungeon_consume(+一意制約) =====
 -- ============================================================
 -- デイリーダンジョン: 回数/CDをサーバーで原子的に消費するRPC（本番公開 2026-06-20）
 --   クライアントの read→check→write 方式は二端末並行で3回上限/CDを越えられるため、
@@ -943,6 +942,28 @@ GRANT EXECUTE ON FUNCTION public.apply_dungeon_reward(text, integer, integer) TO
 --   ・1日3回（種類ごと）／CD=ブースト中10秒・通常20秒／釣り中・ダンジョン探索中は不可。
 --   ・日付キー = JST朝5時基準（UTC+4の日付。クライアント getDungeonDateStr と一致）。
 -- ============================================================
+
+-- ★ON CONFLICT(player_id,date) が機能するための一意制約を保証（無い環境対策）。
+--   先に重複行を1行へ統合（各cntは最大値＝消費済み多めの安全側）してからUNIQUE INDEXを張る。
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM dungeon_attempts GROUP BY player_id, date HAVING COUNT(*) > 1) THEN
+    CREATE TEMP TABLE _da_merged ON COMMIT DROP AS
+      SELECT player_id, date,
+             MAX(COALESCE(count,0))     AS count,
+             MAX(COALESCE(cnt_exp,0))   AS cnt_exp,
+             MAX(COALESCE(cnt_gold,0))  AS cnt_gold,
+             MAX(COALESCE(cnt_stone,0)) AS cnt_stone,
+             MAX(COALESCE(cnt_prof,0))  AS cnt_prof,
+             MAX(COALESCE(cnt_gem,0))   AS cnt_gem
+      FROM dungeon_attempts GROUP BY player_id, date HAVING COUNT(*) > 1;
+    DELETE FROM dungeon_attempts da USING _da_merged m WHERE da.player_id = m.player_id AND da.date = m.date;
+    INSERT INTO dungeon_attempts (player_id, date, count, cnt_exp, cnt_gold, cnt_stone, cnt_prof, cnt_gem)
+      SELECT player_id, date, count, cnt_exp, cnt_gold, cnt_stone, cnt_prof, cnt_gem FROM _da_merged;
+  END IF;
+END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS dungeon_attempts_player_date_uidx ON public.dungeon_attempts (player_id, date);
+
 CREATE OR REPLACE FUNCTION public.dungeon_consume(p_type text)
 RETURNS json
 LANGUAGE plpgsql
@@ -1016,7 +1037,7 @@ END;
 $$;
 GRANT EXECUTE ON FUNCTION public.dungeon_consume(text) TO authenticated;
 
--- ===== [7/7] 全員EXP正規化（必ず最後に実行） =====
+-- ===== [7/7] 全員EXP正規化（最後） =====
 -- ============================================================
 -- 全プレイヤーのEXP正規化（本番公開 2026-06-20）
 --   必要EXPが全プレイヤーで「floor(base/2)+10」へ変わったため、超過しているexpを
@@ -1069,11 +1090,8 @@ BEGIN
       ELSE (CASE WHEN ((v_lv - 1) % 100) < 9 THEN 80 WHEN ((v_lv - 1) % 100) < 29 THEN 100 WHEN ((v_lv - 1) % 100) < 59 THEN 120 ELSE 140 END)
     END) / 2.0)::int + 10;
 
-    -- 変化が無い行はスキップ（無駄なUPDATE/トリガー発火を避ける＝冪等で軽量）
-    IF v_lv = r.lv AND v_exp = COALESCE(r.exp,0) THEN
-      CONTINUE;
-    END IF;
-
+    -- ★[CODEX]88 #1: レベルを跨がない行も exp_next が旧値（80→50等）のため全行を同期する。
+    --   冪等性は値が同じなら同結果＝再実行安全。class_levels UPSERT / skill補完も全行で実行。
     UPDATE profiles
       SET lv = v_lv, exp = v_exp, exp_next = v_next,
           char_lv = v_clv, pending_stat_points = v_pend

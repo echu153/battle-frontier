@@ -50,11 +50,8 @@ BEGIN
       ELSE (CASE WHEN ((v_lv - 1) % 100) < 9 THEN 80 WHEN ((v_lv - 1) % 100) < 29 THEN 100 WHEN ((v_lv - 1) % 100) < 59 THEN 120 ELSE 140 END)
     END) / 2.0)::int + 10;
 
-    -- 変化が無い行はスキップ（無駄なUPDATE/トリガー発火を避ける＝冪等で軽量）
-    IF v_lv = r.lv AND v_exp = COALESCE(r.exp,0) THEN
-      CONTINUE;
-    END IF;
-
+    -- ★[CODEX]88 #1: レベルを跨がない行も exp_next が旧値（80→50等）のため全行を同期する。
+    --   冪等性は値が同じなら同結果＝再実行安全。class_levels UPSERT / skill補完も全行で実行。
     UPDATE profiles
       SET lv = v_lv, exp = v_exp, exp_next = v_next,
           char_lv = v_clv, pending_stat_points = v_pend
