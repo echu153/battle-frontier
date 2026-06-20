@@ -22,7 +22,7 @@ const IDLE_SORTIE_LIMIT = 10 // activitySignal が変わらないまま出撃で
 // collapsible: trueでパネルを折りたたみ式にする（エリア選択などは展開して操作）
 // activitySignal: 画面側の「活動」を示す値（例：ダンジョンのフロア番号）。
 //   変化しないまま IDLE_SORTIE_LIMIT 回出撃するとBOT確認を出す（放置マクロ対策）
-export default function SortiePanel({ quickSlotId, collapsible = false, activitySignal } = {}) {
+export default function SortiePanel({ quickSlotId, collapsible = false, activitySignal, idleLimit = IDLE_SORTIE_LIMIT } = {}) {
   const [profile, setProfile] = useState(null)
   const [open, setOpen] = useState(!collapsible)
   const [slotEl, setSlotEl] = useState(null)
@@ -143,7 +143,7 @@ export default function SortiePanel({ quickSlotId, collapsible = false, activity
       // フロア移動などの活動が無いまま IDLE_SORTIE_LIMIT 回出撃 → BOT確認（放置マクロ対策）
       if (activitySignal !== undefined && !DEV_ACCOUNTS.includes(profile.username)) {
         idleSorties.current += 1
-        if (idleSorties.current >= IDLE_SORTIE_LIMIT) {
+        if (idleSorties.current >= idleLimit) {
           idleSorties.current = 0
           triggerBotCheck(); return
         }

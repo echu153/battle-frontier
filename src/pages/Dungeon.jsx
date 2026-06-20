@@ -2020,7 +2020,7 @@ export default function Dungeon() {
 
 
         {/* ⚔ 簡易出撃（カジノと同じ・自キャラを並行して育成できる）。エリア選択はここを開いて行う */}
-        <SortiePanel quickSlotId="bf-sortie-quick" collapsible activitySignal={floorNum} />
+        <SortiePanel quickSlotId="bf-sortie-quick" collapsible activitySignal={floorNum} idleLimit={20} />
         </div>
 
       </div>
