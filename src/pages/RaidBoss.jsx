@@ -16,7 +16,7 @@ import {
 const POLL_MS = 5000
 // レイド出撃CD。★2026-06-20: is_admin限定先行＝管理者は20秒、非管理者は従来10秒（ブースト対象外）
 const RAID_LEGACY_WAIT = 10
-const raidWaitFor = (p) => p?.is_admin ? WAIT_SECONDS : RAID_LEGACY_WAIT
+const raidWaitFor = (_p) => WAIT_SECONDS   // ★2026-06-20公開: 全プレイヤー20秒（ブースト対象外）
 const BOSS_NAME = '黒龍ヴァルゼノク'
 // レイドボスの表示画像（ボス名→画像）。雨摩座用は /public/raid-boss-amaza.png を配置
 const RAID_IMG_VER = '2'  // 画像差し替え時に上げるとキャッシュを無効化
@@ -32,9 +32,9 @@ const TIER_INFO = [
   { pct:  0, attacks:  0, tier: 'D', label: '参加',                       gold: 15000, stones: ['E','F'],    gemCount: 2, gemRank: 'F', scaleCount: '1~3',  rareChance: '0%',  color: '#888888' },
 ]
 
-// ★2026-06-20: is_admin限定先行。管理者は出撃回数ティア保証を A=20 / B=10 / C=5 に（claim_raid_rewards と一致）。非管理者は50/20/5。
-const ADMIN_TIER_ATTACKS = { A: 20, B: 10, C: 5 }
-const tierAttacks = (t, isAdmin) => (isAdmin && t.attacks > 0 ? (ADMIN_TIER_ATTACKS[t.tier] ?? t.attacks) : t.attacks)
+// ★2026-06-20公開: 全プレイヤーの出撃回数ティア保証を A=20 / B=10 / C=5 に（claim_raid_rewards と一致）。
+const PUBLIC_TIER_ATTACKS = { A: 20, B: 10, C: 5 }
+const tierAttacks = (t, _isAdmin) => (t.attacks > 0 ? (PUBLIC_TIER_ATTACKS[t.tier] ?? t.attacks) : t.attacks)
 function getTier(pct, attackCount = 0, isAdmin = false) {
   return TIER_INFO.find(t => pct >= t.pct || (attackCount >= tierAttacks(t, isAdmin) && t.attacks > 0)) || TIER_INFO[TIER_INFO.length - 1]
 }

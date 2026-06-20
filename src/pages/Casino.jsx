@@ -20,7 +20,7 @@ const PRIZES = [
 ]
 const SORTIE_WAIT = 30        // 賭博場出撃のクールダウン秒（従来＝非管理者）
 const SORTIE_WAIT_ADMIN = 60 // ★is_admin限定先行: 管理者は60秒（SortiePanelと一致）
-const sortieWaitFor = (p) => p?.is_admin ? SORTIE_WAIT_ADMIN : SORTIE_WAIT
+const sortieWaitFor = (_p) => SORTIE_WAIT_ADMIN   // ★2026-06-20公開: 全プレイヤー60秒
 // EXP凍結中か（手動のexp_frozen、または期限付きのexp_frozen_until）
 const expIsFrozen = (p) => !!(p && (p.exp_frozen || (p.exp_frozen_until && new Date(p.exp_frozen_until) > new Date())))
 const AUTOCLICK_SAMPLES = 12   // オートクリッカー検知：直近サンプル数

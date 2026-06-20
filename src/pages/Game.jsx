@@ -18,11 +18,10 @@ export const BOOST_DURATION_MIN = 30 // ブーストタイムの継続分数
 // ブーストが有効か（profiles.boost_active_until が未来）。nowMs は省略時 Date.now()
 export const isBoostActive = (profile, nowMs = Date.now()) =>
   !!(profile?.boost_active_until && new Date(profile.boost_active_until).getTime() > nowMs)
-// 現在の有効クールダウン秒。★2026-06-20: is_admin限定先行。
-//   非管理者は従来どおり10秒。管理者は通常20秒・ブースト中10秒（街の出撃・デイリーダンジョン）
+// 現在の有効クールダウン秒。★2026-06-20: 全プレイヤー公開。通常20秒・ブースト中10秒（街の出撃・デイリーダンジョン）
 export const LEGACY_WAIT = 10
 export const effWait = (profile, nowMs = Date.now()) =>
-  profile?.is_admin ? (isBoostActive(profile, nowMs) ? BOOST_WAIT : WAIT_SECONDS) : LEGACY_WAIT
+  isBoostActive(profile, nowMs) ? BOOST_WAIT : WAIT_SECONDS
 // 新UIレイアウトの有効フラグ。
 // 本番にも反映中（true）。旧UIに戻したいときは下行を import.meta.env.DEV（開発のみ）か
 // false（全環境で旧UI）に変更すればワンタッチで戻せる。git tag `ui-classic` も旧UI状態の復元ポイント。
@@ -421,8 +420,9 @@ const getTotalRank = (total) => {
   return { rank:'SSS', color:'#ffcc00' }
 }
 
-// ★2026-06-20: is_admin限定先行。isAdmin=true のとき必要EXPを「半減＋10」（サーバー calc_exp_next と一致させること）
-export const calcExpNext = (lv, isAdmin = false) => {
+// ★2026-06-20: 全プレイヤー公開。必要EXPは「半減＋10」（サーバー calc_exp_next と一致させること）
+// 第2引数 isAdmin は後方互換で残置（値に影響しない）
+export const calcExpNext = (lv, _isAdmin = false) => {
   let base
   if (lv >= 100) {
     // LV100超（再修練でキャップ300になったクラス）の必要経験値
@@ -431,7 +431,7 @@ export const calcExpNext = (lv, isAdmin = false) => {
     const lvInBlock = (lv - 1) % 100
     base = lvInBlock < 9 ? 80 : lvInBlock < 29 ? 100 : lvInBlock < 59 ? 120 : 140
   }
-  return isAdmin ? Math.floor(base / 2) + 10 : base
+  return Math.floor(base / 2) + 10
 }
 
 const WEAPON_TYPE_GROUP = {
@@ -1281,7 +1281,7 @@ const getDungeonDateStr = () => new Date(Date.now() + (9 - 5)*60*60*1000).toISOS
 const DUNGEON_DAILY_LIMIT = 5
 // ★is_admin限定先行: 出撃CD20秒化に伴いデイリーダンジョンは管理者のみ1日3回（一般は従来5回）。
 //   回数が5→3に減るぶん、1回あたりの報酬を×5/3にして1日の総取得量を維持（gold/expはサーバー上限も要調整）。
-const dungeonDailyLimitFor = (p) => p?.is_admin ? 3 : 5
+const dungeonDailyLimitFor = (_p) => 3   // ★2026-06-20: 全プレイヤー公開（1日3回）
 const DUNGEON_REWARD_MULT = 5 / 3   // 管理者の1回あたり報酬倍率（3回で従来5回ぶん相当）
 const DUNGEON_TYPE_COL = { exp:'cnt_exp', gold:'cnt_gold', stone:'cnt_stone', prof:'cnt_prof', gem:'cnt_gem' }
 const DUNGEON_TYPE_LABEL = { exp:'経験値', gold:'ゴールド', stone:'強化石', prof:'熟練度', gem:'宝石' }
@@ -1304,8 +1304,8 @@ const ANNOUNCE_TABS = [
 const annCat = (a) => (ANNOUNCE_TABS.some(t => t.key === a.category) ? a.category : ANNOUNCE_TABS[0].key)
 
 // パピア出現率アップイベント時間帯（JST）。
-//   非管理者: 8:00 / 12:00 / 16:00 / 22:00 から各30分（従来の固定4枠）
-//   ★is_admin限定先行: 管理者は profiles.papia_hour（自分で選んだ時刻）から30分の1枠のみ。公開時は全員選択式へ。
+//   ★2026-06-20公開: 全プレイヤーが最大2枠を自分で選択（profiles.papia_hour / papia_hour2）。
+//   未設定なら従来の固定4枠（8/12/16/22時）をデフォルトとして適用。
 const PAPIA_EVENT_HOURS = [8, 12, 16, 22]
 const getPapiaEventStatus = (profile) => {
   const now = Date.now()
@@ -1313,10 +1313,8 @@ const getPapiaEventStatus = (profile) => {
   const h = jstNow.getUTCHours()
   const m = jstNow.getUTCMinutes()
   const totalMin = h * 60 + m
-  // 管理者は選択した最大2枠のみ（未設定ならイベント無し）。非管理者は従来固定4枠。
-  const hours = profile?.is_admin
-    ? [profile.papia_hour, profile.papia_hour2].filter(Number.isInteger)
-    : PAPIA_EVENT_HOURS
+  const sel = [profile?.papia_hour, profile?.papia_hour2].filter(Number.isInteger)
+  const hours = sel.length > 0 ? sel : PAPIA_EVENT_HOURS
   for (const startH of hours) {
     const startMin = startH * 60
     const endMin = startMin + 30
@@ -1522,16 +1520,11 @@ export default function Game() {
   useEffect(() => {
     if (!profile) return
     const id = setInterval(() => {
-      // 管理者はブーストでCDが動的に変わる（開始で20→10短縮・終了で10→20延長）ため、毎tick
-      //   last_action_at＋現在のeffWait で再評価する＝サーバー(sortie_lock)の v_wait 判定と一致。
-      //   固定タイマー(cdEndRef)だと開始跨ぎで待たせ過ぎ・終了跨ぎで早く有効化してしまう。
-      // 非管理者はCDが常に10秒固定なので、従来どおり時計ズレに強い cdEndRef を優先。
-      const actRem = profile.last_action_at
+      // ★2026-06-20公開: 全員ブーストでCDが動的(20⇔10)に変わるため、毎tick last_action_at＋現在のeffWait で
+      //   再評価＝サーバー(sortie_lock)の v_wait 判定と一致。固定 cdEndRef だと開始/終了跨ぎでズレる。
+      const rem = profile.last_action_at
         ? Math.max(0, effWait(profile, serverNow()) - (serverNow()-new Date(profile.last_action_at).getTime())/1000)
         : 0
-      const rem = profile.is_admin
-        ? actRem
-        : (cdEndRef.current !== null ? Math.max(0, (cdEndRef.current - Date.now())/1000) : actRem)
       // canAct(ボタン有効)は毎回反映（同値ならReactが再描画スキップ＝負荷ゼロ）。
       // ガード内に入れるとスマホの一時停止→復帰でtickを取りこぼし、押せなくなることがあった。
       setCanAct(rem === 0)
@@ -1979,10 +1972,9 @@ export default function Game() {
       let expGained = Math.floor(50 + Math.random() * 51)
       // キャラクターLV100未満は経験値1.5倍（出撃と同じ。サーバー apply_dungeon_reward の上限も1.5倍にしてある）
       if ((profile.char_lv||1) < 100) expGained = Math.floor(expGained * 1.5)
-      // ★is_admin限定先行: 経験値ダンジョンは「獲得半減(×1/2)」＋「3回化の内容補正(×5/3)」＝実質×5/6。
-      //   1日の総取得EXP(3回ぶん)が従来5回ぶんの約半分になり、経験値ダンジョン半減の意図と一致。
-      //   base100×1.5×5/6=125 ≤ サーバー上限150 なので追加SQL不要。
-      if (profile.is_admin) expGained = Math.floor(expGained * 5 / 6)
+      // ★2026-06-20公開: 経験値ダンジョンは「獲得半減(×1/2)」＋「3回化の内容補正(×5/3)」＝実質×5/6。
+      //   base100×1.5×5/6=125 ≤ サーバー上限150。
+      expGained = Math.floor(expGained * 5 / 6)
       const currentClassLvD = classLevels.find(cl => cl.class_name === profile.class)?.lv || profile.lv
       const capD = getEffectiveCap(profile.class, profile.retraining)
       if (expIsFrozen(profile)) {
@@ -2010,8 +2002,8 @@ export default function Game() {
       // 基礎: キャラLv×30〜45。キャラLv300以下は育成支援ボーナス×1.5
       const lvBonus = charLvG <= 300 ? 1.5 : 1.0
       let goldGained = Math.floor(charLvG * 30 * (1.0 + Math.random() * 0.5) * lvBonus * 1.5)  // デイリーダンジョン ゴールド1.5倍
-      // ★is_admin限定先行: 3回化の内容補正（×5/3）。サーバー apply_dungeon_reward のGold上限も管理者×5/3に上げること。
-      if (profile.is_admin) goldGained = Math.floor(goldGained * DUNGEON_REWARD_MULT)
+      // ★2026-06-20公開: 3回化の内容補正（×5/3）。サーバー apply_dungeon_reward のGold上限も×5/3。
+      goldGained = Math.floor(goldGained * DUNGEON_REWARD_MULT)
       const bonusExp = grantBonusExpLogs()
       const { data: goldRes, error: goldErr } = await supabase.rpc('apply_dungeon_reward', { p_type:'gold', p_claimed_gold:goldGained, p_claimed_exp:bonusExp })
       if (goldErr || goldRes?.ok === false) { rewardFailed = true; rewardFailReason = goldRes?.reason || goldErr?.message || 'unknown' }
@@ -2024,8 +2016,8 @@ export default function Game() {
         // items テーブルに該当行が無いと付与されず「入手」表示だけ出てしまう不具合への対策
         logs.push({ text:`⚠ ${stoneName} の付与に失敗しました（アイテム未登録）。運営に連絡してください`, color:'#ff8844' })
       } else {
-        // ★is_admin先行: 3回化の内容補正（×5/3）。1個＋2/3の確率でもう1個（平均1.67個）
-        const stoneQty = profile.is_admin ? (Math.random() < (DUNGEON_REWARD_MULT - 1) ? 2 : 1) : 1
+        // ★2026-06-20公開: 3回化の内容補正（×5/3）。1個＋2/3の確率でもう1個（平均1.67個）
+        const stoneQty = Math.random() < (DUNGEON_REWARD_MULT - 1) ? 2 : 1
         // 既存所持があれば加算、無ければ新規。upsert_player_item RPC に依存せず確実に反映させる
         const { data: ownStone } = await supabase.from('player_items')
           .select('id, quantity').eq('player_id', profile.id).eq('item_id', stoneItem.id).maybeSingle()
@@ -2038,7 +2030,7 @@ export default function Game() {
       }
     } else if (type === 'prof') {
       let profGained = Math.floor(50 + Math.random() * 51)
-      if (profile.is_admin) profGained = Math.floor(profGained * DUNGEON_REWARD_MULT)  // ★is_admin先行: 3回化の内容補正×5/3
+      profGained = Math.floor(profGained * DUNGEON_REWARD_MULT)  // ★2026-06-20公開: 3回化の内容補正×5/3
       const eqWeapon = equipment.find(e => e.slot==='weapon' && e.equipped)
       if (eqWeapon) {
         const prof = proficiency.find(p => p.equipment_id===eqWeapon.id)
@@ -2059,7 +2051,7 @@ export default function Game() {
     } else if (type === 'gem') {
       // ランダムでFランク宝石を獲得（★is_admin先行: 3回化の内容補正で1個＋2/3の確率でもう1個）
       const gemType = GEM_TYPES[Math.floor(Math.random()*GEM_TYPES.length)]
-      const gemQty = profile.is_admin ? (Math.random() < (DUNGEON_REWARD_MULT - 1) ? 2 : 1) : 1
+      const gemQty = Math.random() < (DUNGEON_REWARD_MULT - 1) ? 2 : 1
       try {
         const { data: existing } = await supabase.from('player_gems')
           .select('*').eq('player_id', profile.id).eq('gem_type', gemType).eq('rank', 'F').single()
@@ -3056,8 +3048,8 @@ export default function Game() {
     const expBoosted = expGained > 0 && (profile.char_lv||1) < 100
     if (expBoosted) expGained = Math.floor(expGained * 1.5)
     const expBoostNote = expBoosted ? '（✨Lv100まで経験値1.5倍）' : ''
-    // 出撃ゴールド倍率。★is_admin先行: 出撃CD20秒化の補正で管理者はエリア1-4を×2・エリア5+を×1.5（一般は従来×1.5）
-    const goldMult = profile.is_admin ? (selectedArea <= 4 ? 2 : 1.5) : 1.5
+    // 出撃ゴールド倍率。★2026-06-20公開: 出撃CD20秒化の補正でエリア1-4を×2・エリア5+を×1.5
+    const goldMult = selectedArea <= 4 ? 2 : 1.5
     const goldGained = (win && !papiaEscaped) ? Math.floor((enemy.gold||0) * goldMult) : 0
 
 
@@ -3179,7 +3171,7 @@ export default function Game() {
       const prof = proficiency.find(p => p.equipment_id===equippedWeaponItem.id)
       if (prof) {
         let profExpGained = Math.floor(Math.random()*4)+8
-        if (profile.is_admin) profExpGained *= 2  // ★is_admin先行: 出撃CD20秒化の補正で武器熟練度×2
+        profExpGained *= 2  // ★2026-06-20公開: 出撃CD20秒化の補正で武器熟練度×2
         let totalExp = prof.prof_exp+profExpGained
         let newProfLv = prof.prof_lv
         while (totalExp >= 100) { totalExp -= 100; newProfLv++ }
@@ -4341,7 +4333,8 @@ export default function Game() {
   const boostActive = isBoostActive(profile)
   const boostRemainMin = boostActive ? Math.max(1, Math.ceil((new Date(profile.boost_active_until).getTime() - Date.now())/60000)) : 0
   // 管理者でパピア時間が未設定なら街にセットアップ通知（押すと設定画面へ）
-  const papiaNeedsSetup = profile?.is_admin && !Number.isInteger(profile?.papia_hour) && !Number.isInteger(profile?.papia_hour2)
+  // ★2026-06-20公開: 未設定でも固定4枠がデフォルト適用されるため「未設定」通知は出さない（カスタムは設定画面から任意）
+  const papiaNeedsSetup = false
   const materialEvent = getMaterialEventStatus()
   const matEventBannerVisible = materialEvent.active && matEventSeenDate !== getDungeonDateStr()
   const dismissMatEventBanner = () => {
@@ -4633,14 +4626,12 @@ export default function Game() {
         </div>
         {showMenu && (
           <div style={{ position:'fixed', top:'40px', right:'12px', background:'#001040', border:'1px solid #446688', zIndex:200, minWidth:'120px' }}>
-            {profile?.is_admin ? (<>
-              {/* ★2026-06-20: is_admin限定先行の新メニュー（お知らせ/ヘルプ/オプション）。一般公開時はこの分岐を外す */}
-              <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
-              <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
-              <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ ブースト/パピア時間設定</button>
+            {/* ★2026-06-20公開: 全プレイヤーに新メニュー（お知らせ/ヘルプ/オプション）。施設は街本文の☰メニュー▼から */}
+            <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
+            <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
+            <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ ブースト/パピア時間設定</button>
+            {profile?.is_admin && (
               <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
-            </>) : (
-              MOBILE_MENU_ORDER.map(renderMenuBtn)
             )}
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
@@ -5086,14 +5077,12 @@ export default function Game() {
         </div>
         {showMenu && (
           <div style={{ position:'fixed', top:'48px', right:'16px', background:'#001040', border:'1px solid #446688', zIndex:200, minWidth:'150px' }}>
-            {profile?.is_admin ? (<>
-              {/* ★2026-06-20: is_admin限定先行の新メニュー（お知らせ/ヘルプ/オプション）。一般公開時はこの分岐を外す */}
-              <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
-              <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
-              <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ ブースト/パピア時間設定</button>
+            {/* ★2026-06-20公開: 全プレイヤーに新メニュー（お知らせ/ヘルプ/オプション）。施設は街本文の☰メニュー▼から */}
+            <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
+            <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
+            <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ ブースト/パピア時間設定</button>
+            {profile?.is_admin && (
               <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
-            </>) : (
-              DESKTOP_MENU_ORDER.map(renderMenuBtn)
             )}
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>

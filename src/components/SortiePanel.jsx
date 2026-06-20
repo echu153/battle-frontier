@@ -8,7 +8,7 @@ import { AREAS, getEffectiveCap, generateDropBonus, ARTIFACT_BASE_NAMES } from '
 const SORTIE_WAIT = 30          // 簡易出撃クールダウン秒（従来＝非管理者）
 const SORTIE_WAIT_ADMIN = 60    // ★2026-06-20: is_admin限定先行＝管理者は60秒（街/カジノの出撃と共通の last_action_at で管理）
 // プロフィールに応じた有効クールダウン秒
-const sortieWaitFor = (p) => p?.is_admin ? SORTIE_WAIT_ADMIN : SORTIE_WAIT
+const sortieWaitFor = (_p) => SORTIE_WAIT_ADMIN   // ★2026-06-20公開: 全プレイヤー60秒
 const AUTOCLICK_SAMPLES = 12
 const AUTOCLICK_SPREAD_MS = 1200
 const SORTIE_STREAK_LIMIT = 20
@@ -228,8 +228,8 @@ export default function SortiePanel({ quickSlotId, collapsible = false, activity
     setShowSettle(false)
 
     // 累計出撃N回ごとに、選択中ペットのなつき+1（節目を跨いだ回数だけ加算）
-    // ★is_admin先行: 簡易出撃60秒化の補正で管理者は50回ごと（一般は従来100回）
-    const affStep = profile.is_admin ? 50 : 100
+    // ★2026-06-20公開: 簡易出撃60秒化の補正で50回ごと
+    const affStep = 50
     let petAffMsg = ''
     try {
       const key = 'bf_sortie_total_' + profile.id
