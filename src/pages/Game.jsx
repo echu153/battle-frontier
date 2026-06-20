@@ -1744,10 +1744,13 @@ export default function Game() {
       // サーバー時刻基準で回復間隔をまだ満たしていなければ何もしない（宿屋直後の二重発火対策）
       const serverElapsed = (Date.now() - new Date(sp.last_regen_at).getTime())/1000
       if (serverElapsed < REGEN_SECONDS) { await fetchProfile(); return }
-      const current = sp.hp_current ?? sp.hp_max
-      const newHp = Math.min(sp.hp_max, Math.floor(current+sp.hp_max*0.2))
-      const newMp = Math.min(sp.mp_max, Math.floor((sp.mp_current??sp.mp_max)+sp.mp_max*0.2))
-      const newIsDying = newHp >= sp.hp_max ? false : sp.is_dying
+      // 装備・釣り等込みの実効最大まで自然回復する
+      const _rEff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
+      const hpMaxR = _rEff.hp_max, mpMaxR = _rEff.mp_max
+      const current = sp.hp_current ?? hpMaxR
+      const newHp = Math.min(hpMaxR, Math.floor(current+hpMaxR*0.2))
+      const newMp = Math.min(mpMaxR, Math.floor((sp.mp_current??mpMaxR)+mpMaxR*0.2))
+      const newIsDying = newHp >= hpMaxR ? false : sp.is_dying
       await supabase.from('profiles').update({
         hp_current:newHp, mp_current:newMp, is_dying:newIsDying,
         last_regen_at:new Date().toISOString(),
@@ -2225,6 +2228,10 @@ export default function Game() {
     }
 
     const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
+    // 装備・釣り等込みの実効最大HP/MP。戦闘の最大HP/MPプール・回復上限・%計算はこれを使う
+    const maxHp = eff.hp_max
+    const maxMp = eff.mp_max
+    const battleProfile = { ...profile, hp_max: maxHp, mp_max: maxMp }
     const area = AREAS.find(a => a.id === selectedArea)
     const bossRate = profile.boss_encounter_rate || 0
     const isBossEncounter = Math.random()*100 < bossRate
@@ -2301,8 +2308,8 @@ export default function Game() {
     const isAtCap = currentClassLv >= cap
 
     const logs = []
-    let playerHp = hpCurrent
-    let playerMp = profile.mp_current ?? profile.mp_max
+    let playerHp = Math.min(hpCurrent, maxHp)
+    let playerMp = Math.min(profile.mp_current ?? maxMp, maxMp)
     let enemyHp = enemy.hp
     let turn = 1, skillIndex = 0
     let playerBuffs = {}, enemyBuffs = {}
@@ -2405,7 +2412,7 @@ export default function Game() {
       : { text:`${enemy.name}が現れた！`, color:'#88ccff' }
     )
 
-    playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
+    playerBuffs = applyEquipmentEffects(equipment, battleProfile, playerBuffs, logs)
 
     const effectiveSpdForCalc = hasTakaNoMe ? Math.floor(eff.spd * 1.2) : eff.spd
     const weaponType = equippedWeaponItem?.weapons?.weapon_type || 'sword'
@@ -2481,7 +2488,7 @@ export default function Game() {
         logs.push({ text:`${prefix}${nextSkillName && !mpLack ? `${nextSkillName}！` : '攻撃！'} しかし${enemy.name}に回避された！`, color:'#446688' })
         // 追撃系（鬼影閃の影歩き追撃など）はメインが回避されても独立ヒットとして発動する
         if (nextSkill && !mpLack) {
-          const resPeek = executeSkill(nextSkill, effBuff, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
+          const resPeek = executeSkill(nextSkill, effBuff, battleProfile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
           if (resPeek.followup && resPeek.followup.dmg > 0) {
             const adjED = Math.max(1, Math.floor((enemy.def||0)*eDefRate))
             const fScale = effBuff.atk / (effBuff.atk + adjED)
@@ -2522,7 +2529,7 @@ export default function Game() {
           // 精密照準：再修練3段で「同スキル連続使用時×1.1」が付く（素の精密照準は命中+5のみ）
           const seimitsuMult = (hasSeimitsu && pe('魔銃士') && prevSkillName && prevSkillName === cs.skills.name) ? 1.1 : 1.0
           prevSkillName = cs.skills.name
-          const res = executeSkill(cs.skills, {...effBuff, lastMpCost:mpCost}, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
+          const res = executeSkill(cs.skills, {...effBuff, lastMpCost:mpCost}, battleProfile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
           const finalCrit = res.dmg > 0 && (isCrit || (res.bonusCritRate > 0 && Math.random()*100 < playerCritRate + res.bonusCritRate))
           const finalCritMult = finalCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
           const tosoMult = hasTosoHonno ? (playerHp <= profile.hp_max * 0.3 ? 1.6 : playerHp <= profile.hp_max * 0.5 ? 1.2 : 1.0) : 1.0  // 闘争本能：HP50%以下+20%／HP30%以下+60%（重複なし）
@@ -3244,10 +3251,13 @@ export default function Game() {
     const serverCost = isDying ? Math.min(dyingCost, serverProfile.gold) : normalCost
     if (!isDying && serverProfile.gold < normalCost) { setLoading(false); innBusyRef.current = false; return }
 
+    // 装備・釣り等込みの実効最大まで全回復する
+    const _innEff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
+
     // ★ 楽観ロック: ゴールドが読み取り時と同じ場合のみ更新（別タブが先に利用してたら失敗）
     const { data: locked } = await supabase.from('profiles').update({
-      hp_current: serverProfile.hp_max,
-      mp_current: serverProfile.mp_max,
+      hp_current: _innEff.hp_max,
+      mp_current: _innEff.mp_max,
       gold: serverProfile.gold - serverCost,
       is_dying: false,
       last_regen_at: new Date().toISOString(),  // 自然回復タイマーをリセット（回復直後の上書き発火を防ぐ）
@@ -3340,7 +3350,7 @@ export default function Game() {
     setContactLoading(true)
     await supabase.from('contact_messages').insert({
       player_id: profile.id,
-      player_name: profile.name,
+      player_name: profile.username,
       category: contactForm.category,
       body: contactForm.body.trim(),
     })
@@ -3359,7 +3369,17 @@ export default function Game() {
       if (!profile?.is_admin) q = q.eq('player_id', profile.id)
       const { data, error } = await q
       if (error) throw error
-      setMyContacts(data || [])
+      let rows = data || []
+      // 管理者表示用: player_name が未保存の古いレコードは profiles.username で補完
+      if (profile?.is_admin && rows.length > 0) {
+        const ids = [...new Set(rows.filter(r => !r.player_name && r.player_id).map(r => r.player_id))]
+        if (ids.length > 0) {
+          const { data: profs } = await supabase.from('profiles').select('id, username').in('id', ids)
+          const nameMap = Object.fromEntries((profs || []).map(p => [p.id, p.username]))
+          rows = rows.map(r => r.player_name ? r : { ...r, player_name: nameMap[r.player_id] || r.player_name })
+        }
+      }
+      setMyContacts(rows)
     } catch (e) {
       setMyContacts([])
     } finally {
@@ -4222,8 +4242,12 @@ export default function Game() {
     </div>
   )
 
-  const hpCurrent = Math.max(0, profile.hp_current??profile.hp_max)
-  const mpCurrent = Math.max(0, profile.mp_current??profile.mp_max)
+  // 装備・釣り・博物館・称号込みの実効最大HP/MP（街表示・回復・戦闘プールはこれを使う）
+  const _effMax = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
+  const hpMaxEff = _effMax.hp_max
+  const mpMaxEff = _effMax.mp_max
+  const hpCurrent = Math.max(0, profile.hp_current??hpMaxEff)
+  const mpCurrent = Math.max(0, profile.mp_current??mpMaxEff)
   const isDying = profile.is_dying||false
   const isBanned = profile.battle_ban_until && new Date(profile.battle_ban_until) > new Date()
   const papiaEvent = getPapiaEventStatus(profile)
@@ -4244,9 +4268,9 @@ export default function Game() {
     const m = Math.ceil((diffMs % 3600000) / 60000)
     return `${h}時間${m}分`
   })() : null
-  const canBattle = !isBanned && (!isDying || hpCurrent >= profile.hp_max)
-  const hpPct = Math.min(100,(hpCurrent/profile.hp_max)*100)
-  const mpPct = Math.min(100,(mpCurrent/profile.mp_max)*100)
+  const canBattle = !isBanned && (!isDying || hpCurrent >= hpMaxEff)
+  const hpPct = Math.min(100,(hpCurrent/hpMaxEff)*100)
+  const mpPct = Math.min(100,(mpCurrent/mpMaxEff)*100)
   const expPct = Math.min(100,(profile.exp/profile.exp_next)*100)
   const _waitSecs = effWait(profile, serverNow())
   const timerPct = ((_waitSecs-remaining)/_waitSecs)*100
@@ -4586,8 +4610,8 @@ export default function Game() {
                 </div>
               </div>
             </div>
-            <MiniBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying?'#ff2200':'#00cc44'} />
-            <MiniBar label="MP" val={`${mpCurrent}/${profile.mp_max}`} pct={mpPct} color="#4488ff" />
+            <MiniBar label="HP" val={`${hpCurrent}/${hpMaxEff}`} pct={hpPct} color={isDying?'#ff2200':'#00cc44'} />
+            <MiniBar label="MP" val={`${mpCurrent}/${mpMaxEff}`} pct={mpPct} color="#4488ff" />
             {statExpanded && (<>
               <MiniBar label="EXP" val={`${profile.exp}/${profile.exp_next}`} pct={expPct} color="#cc8800" />
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#446688', marginBottom:'2px' }}>
@@ -5022,8 +5046,8 @@ export default function Game() {
               <span>総合力: <span style={{color:'#44ff88', fontWeight:'bold'}}>{total}</span></span>
               <span style={{color:totalRank.color, fontWeight:'bold'}}>{totalRank.rank}</span>
             </div>
-            <StatBar label="HP" val={`${hpCurrent}/${profile.hp_max}`} pct={hpPct} color={isDying?'#ff2200':'#00cc44'} />
-            <StatBar label="MP" val={`${mpCurrent}/${profile.mp_max}`} pct={mpPct} color="#4488ff" />
+            <StatBar label="HP" val={`${hpCurrent}/${hpMaxEff}`} pct={hpPct} color={isDying?'#ff2200':'#00cc44'} />
+            <StatBar label="MP" val={`${mpCurrent}/${mpMaxEff}`} pct={mpPct} color="#4488ff" />
             {statExpanded && (<>
               <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginTop:'6px' }}>
                 <span>経験値</span><span style={{color:'#cc8800'}}>{profile.exp}/{profile.exp_next}</span>
