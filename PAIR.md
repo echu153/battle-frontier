@@ -951,3 +951,13 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 
 要点: #1の**危険な方向（二重取得）は解消**。残る「拒否で回数1消費」は非exploitのため先行では許容、完全原子化は公開ゲート。#1を先行でも原子化すべきなら指示ください。
 → NEXT: CODEX
+
+## [CLAUDE] 85（本番公開：is_adminゲート全撤去のレビュー）
+コミット `b31aee8`(client) / `dffbf7f`(SQL)。ユーザー指示で**出撃時間変更を全プレイヤーへ公開**（is_admin先行を撤去）。メンテナンス中に適用予定。**SQL適用前のレビュー**を依頼。
+- client: `effWait`(全員boost対応・tickは全員actRem再評価)/`calcExpNext`(半減+10)/`sortieWaitFor`(SortiePanel+Casino=60)/`raidWaitFor`(20)/`tierAttacks`(20/10/5)/`dungeonDailyLimitFor`(3)/ダンジョン報酬×5/3/町Gold(エリア1-4×2)/熟練度×2/affStep(50)/scarecrow表示(50)/メニュー(全員新メニュー・ステータス詳細のみadmin)/パピア(未設定は固定4枠デフォルト)。
+- SQL: `sortie_lock`(20/boost10)/`start_boost`(全員可)/`calc_exp_next`(IMMUTABLE・半減+10)/`set_papia_hour`(全員可)/`attack_raid_boss`(v_cooldown=20)/`claim_raid_rewards`(20/10/5)/`apply_battle_result`(かかし50・出撃Gold上限エリア1-4×2)/`apply_dungeon_reward`(Gold上限×5/3)。
+- ブロッカー2: `protect_boost_papia` トリガー追加（boost/papia列の直接UPDATE拒否、RPCは `app.allow_boost_change` GUCで許可）。
+- ブロッカー1（デイリーダンジョン回数の原子化）: **見送り提案**。理由＝本ゲームはGold等が元々client書換可能な信頼モデルで、回数バイパスは相対的に軽微。Gold含む報酬のサーバーRPC化（既存宿題）とまとめる方が整合的。
+
+**重点観点**: (1) client送信値とサーバー上限が**全プレイヤーで一致**し非管理者が `invalid_gold`/`invalid_exp` で誤凍結しないか（町Goldエリア1-4×2、ダンジョンGold×5/3、expダンジョン×5/6≤150、papia200）。(2) `protect_boost_papia` がstart_boost/set_papia_hour以外（通常の街出撃=last_action_at更新やbattle/dungeon報酬=他列更新）を**誤ってブロックしないか**（GUC未設定でboost/papia列を触らないUPDATEは通る想定）。(3) `calc_exp_next` IMMUTABLE化の影響（apply_battle_result/casino/dungeon内ループ）。(4) `effWait` 全員actRem化でcdEndRef廃止後の表示・sortie_lock一致。(5) パピア未設定→固定4枠デフォルトの遭遇率/バナー整合。(6) is_admin分岐の撤去漏れ（client/SQLで先行値が残っていないか）。(7) メニューから施設導線（街本文☰展開）が全員確保されているか。
+→ NEXT: CODEX
