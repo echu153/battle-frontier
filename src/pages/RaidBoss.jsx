@@ -416,6 +416,8 @@ export default function RaidBoss() {
   const cdRef = useRef(null)
   const logsEndRef = useRef(null)
   const attackingRef = useRef(false)  // 連打ガード（state更新前の多重発火を防ぐ）
+  const clockOffsetRef = useRef(0)    // サーバー時刻 - 端末時刻(ms)。端末時計ズレでCDが解消しない問題の補正
+  const serverNow = () => Date.now() + clockOffsetRef.current
 
   useEffect(() => {
     init()
@@ -453,6 +455,17 @@ export default function RaidBoss() {
 
     if (!prof) { nav('/create'); return }
     setProfile(prof)
+
+    // サーバー時刻オフセットを測定（端末時計のズレでレイドCDが解消しない問題の対策）
+    try {
+      const t0 = Date.now()
+      const { data: sn } = await supabase.rpc('server_now')
+      if (sn) {
+        const t1 = Date.now()
+        const serverMs = new Date(sn).getTime() + (t1 - t0) / 2
+        clockOffsetRef.current = serverMs - t1
+      }
+    } catch {}
     setEquipment(eq || [])
     setProficiency(prof2 || [])
     // レイド用スキルセット（raid）。未設定なら出撃(sortie)にフォールバック
@@ -464,9 +477,9 @@ export default function RaidBoss() {
       setSkillSets(raid.some(r => r.skills?.type !== 'パッシブ') ? raid : sortie)
     }
 
-    // 共有CD残り計算
+    // 共有CD残り計算（サーバー時刻基準。端末時計がズレていてもCDが解消する）
     if (prof.last_action_at) {
-      const elapsed = (Date.now() - new Date(prof.last_action_at).getTime()) / 1000
+      const elapsed = (serverNow() - new Date(prof.last_action_at).getTime()) / 1000
       setRemaining(Math.max(0, raidWaitFor(prof) - elapsed))
     }
 
