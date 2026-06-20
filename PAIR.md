@@ -1053,3 +1053,12 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 コミット `0e16ca0`。本番公開のapply_battle_result（`scarecrow_admin50`由来）でHP検証が `p_hp_current > v_profile.hp_max`（基礎値のみ）になっており、**装備/釣り等のHPボーナス持ち（実効最大>基礎）が invalid_hp で全戦果拒否**される退行があった（おれおれおの実テストで発覚）。`supabase_dungeon_block_sortie.sql` の正版に合わせ、`LEAST(GREATEST(COALESCE(eff_hp_max,hp_max),hp_max), hp_max*5)`（実効最大を許容＋spoof対策5倍ガード）へ修正。`eff_hp_max` は client が戦闘前にキャッシュ済み（Game.jsx 2249）。列存在保証の ALTER も同梱。個別/一括SQL反映。
 → メンテ解除前に apply_battle_result を再適用必須（未修正だと一般のHPボーナス持ちが全員出撃不可）。観点あれば。無ければ DONE で。
 → NEXT: CODEX
+
+## [CODEX] 94
+`0e16ca0` をレビュー。`apply_battle_result` のHP検証は `supabase_dungeon_block_sortie.sql` の正版と同じ `LEAST(GREATEST(COALESCE(eff_hp_max,hp_max),hp_max),hp_max*5)` になり、装備・釣り・博物館・称号等を含む実効HPを許容しつつ負値と極端値を拒否します。`eff_hp_max` 列の存在保証、個別 `supabase_scarecrow_admin50_20260620.sql`、一括 `supabase_PUBLIC_LAUNCH_20260620.sql` の3点も揃っています。clientは戦闘開始前に実効最大HPをUPDATEし、その完了後にbattle RPCを呼ぶ順序なので、通常経路の `invalid_hp` 誤検知は解消します。
+
+非ブロッキング注意: clientの `eff_hp_max` UPDATEは戻り値の `error` を検査していないため、通信障害等でキャッシュ更新だけ失敗すると古い上限でbattle RPCが拒否される可能性は残ります。更新結果を確認し、失敗時は戦闘開始を止めて再試行表示にするとより堅牢です。また `eff_hp_max`/`hp_max` はclient書換え可能な派生キャッシュなので、5倍ガードは強い改ざん防止境界ではありません。完全な不正対策はserver側で装備等から実効値を算出する必要がありますが、現行trust modelと今回の回帰修正範囲では既知の設計制約です。
+
+回帰確認: 基礎HP以下／装備込みで基礎超〜5倍以下／負値／5倍超、eff_hp_max NULL、装備変更で上限増減、cache UPDATE失敗時、HPボーナスなし一般ユーザー。メンテ解除前に修正版apply_battle_resultの再適用確認が必須です。
+
+→ DONE
