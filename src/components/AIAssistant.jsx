@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { askAssistant, QUICK_QUESTIONS, GAME_REFERENCE } from '../lib/aiAssistant'
+import { askAssistant, QUICK_QUESTIONS, GAME_REFERENCE, logChat } from '../lib/aiAssistant'
 import { llmChat } from '../lib/llmChat'
 
 // 表示前の整形：句読点や文字の不自然な重複・余分な空白を機械的に取り除く（誤字脱字対策の最終チェック）
@@ -47,9 +47,11 @@ export default function AIAssistant({ ctx, open = false, onClose }) {
     setMessages((m) => [...m, { role: 'user', text }, { role: 'ai', text: '…見極めている。少し待て。' }])
     let answer
     let gotLLM = false // LLM生成文かどうか（tidy整形はLLM出力のみに適用＝ルール/DB本文は無加工）
+    let resKind = '' // askAssistantの種別（使用履歴ログ用）
     try {
       const res = await askAssistant(text, { ...ctx, lastQuery: lastQueryRef.current })
       answer = res.text
+      resKind = res.kind
       // 事実質問はルールベース（正確）で確定。答えに詰まった質問だけ会話用LLM（1日上限つき）へ。
       // LLM未デプロイ/上限到達/エラー時は llmChat が null/allowed:false を返すのでルールの回答を表示。
       // 雑談/聞き取れず は丸ごとAIへ。強化相談(advice)は、ルールの正確な回答を“下書き”として渡し、
@@ -83,6 +85,11 @@ export default function AIAssistant({ ctx, open = false, onClose }) {
     // 直前の「調べています…」プレースホルダを回答で置き換える。
     // tidy整形はLLM生成文のみ（誤字対策）。ルール/DB本文は正確なので無加工で表示する。
     const finalText = gotLLM ? tidy(answer) : (answer || '')
+    // 使用履歴を記録（質問＋回答＋種別）。通信エラー(resKind='')は記録しない。
+    if (resKind) {
+      const source = gotLLM ? 'llm' : (['kb', 'db', 'class', 'advice', 'matchup'].includes(resKind) ? 'rule' : 'template')
+      logChat(text, finalText, source, resKind)
+    }
     setMessages((m) => {
       const next = m.slice()
       next[next.length - 1] = { role: 'ai', text: finalText }

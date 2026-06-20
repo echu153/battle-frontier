@@ -771,6 +771,17 @@ const logUnanswered = (raw) => {
   } catch { /* noop */ }
 }
 
+// 会話ログ（質問＋回答＋種別）を記録。管理者がSupabaseで確認する用。user_idはサーバーが確定。
+// source: 'llm'(AI生成) / 'rule'(ルール回答) / 'template'(定型・フォールバック) / 'blocked'(拒否)
+export const logChat = (question, answer, source, kind) => {
+  const q = (question || '').trim()
+  if (!q) return
+  try {
+    supabase.rpc('log_chat', { p_question: q, p_answer: answer || '', p_source: source || 'rule', p_kind: kind || null })
+      .then(() => {}, () => {}) // 記録は補助機能。失敗は握りつぶす
+  } catch { /* noop */ }
+}
+
 export const QUICK_QUESTIONS = [
   'おすすめ強化',
   '狂戦士になるには？',
