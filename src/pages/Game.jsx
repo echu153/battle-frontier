@@ -4381,6 +4381,8 @@ export default function Game() {
   // 街画面の施設パネル（グリッド）用：未到達Lvならボタンをロックセルに差し替える。
   // node=解放時に表示する元のボタン。key=MENU_DEFSのキー。
   const lockOr = (key, node) => {
+    // 釣り中はレベル未解放でも「釣り場」を必ず開放（終了ボタンに到達できず詰むのを防ぐ）
+    if (key === 'fishing' && profile?.is_fishing) return node
     if (isMenuUnlocked(key)) return node
     const label = (MENU_DEFS[key]?.label || '').replace(/^\S+\s/, '')
     return (

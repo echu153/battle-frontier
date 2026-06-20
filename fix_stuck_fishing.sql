@@ -9,10 +9,14 @@ UPDATE profiles
 SET is_fishing = false, fishing_location = NULL, fishing_started_at = NULL
 WHERE is_fishing = true AND fishing_started_at IS NULL;
 
--- ② 特定プレイヤーを強制的に釣り終了させる場合（usernameを書き換えて実行）
--- UPDATE profiles
--- SET is_fishing = false, fishing_location = NULL, fishing_started_at = NULL
--- WHERE username = 'ここにユーザー名';
+-- ② 報告のあった「釣り中」固着プレイヤーを強制終了（開始時刻は有効だが抜けられない人）
+--    ※釣果は付与されない（フラグ解除のみ）。本人は再度釣りをやり直せる。
+UPDATE profiles
+SET is_fishing = false, fishing_location = NULL, fishing_started_at = NULL
+WHERE username IN ('哀','アズサ','水狼','ここにゃん','ツキミ','えるもあ');
+
+-- （任意）現在「釣り中」の全員を一括終了したい場合はこちら
+-- UPDATE profiles SET is_fishing = false, fishing_location = NULL, fishing_started_at = NULL WHERE is_fishing = true;
 
 -- 確認: まだ釣り中のプレイヤー一覧
 SELECT username, is_fishing, fishing_started_at
