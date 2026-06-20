@@ -1299,7 +1299,6 @@ const ANNOUNCE_TABS = [
   { key:'bug',    label:'不具合',       icon:'🛠' },
   { key:'event',  label:'イベント',     icon:'🎉' },
   { key:'past',   label:'その他',       icon:'🗂' },
-  { key:'reply',  label:'お問い合わせ返信', icon:'📩' },  // 個別宛(target_player_id)の運営返信専用タブ
 ]
 // カテゴリ正規化：未設定や未知カテゴリ（旧 'notice' 含む）は先頭タブに寄せて非表示化を防ぐ
 const annCat = (a) => (ANNOUNCE_TABS.some(t => t.key === a.category) ? a.category : ANNOUNCE_TABS[0].key)
@@ -1411,6 +1410,11 @@ export default function Game() {
   const [contactForm, setContactForm] = useState({ category: 'bug', body: '' })
   const [contactSent, setContactSent] = useState(false)
   const [contactLoading, setContactLoading] = useState(false)
+  const [contactView, setContactView] = useState('new')    // 'new'=新規問い合わせ / 'history'=過去の問い合わせと返信
+  const [myContacts, setMyContacts] = useState([])          // 自分の過去問い合わせ（reply列含む）
+  const [contactsLoading, setContactsLoading] = useState(false)
+  const [adminReplyDrafts, setAdminReplyDrafts] = useState({}) // is_admin用: {contact_id: 返信文}の下書き
+  const [adminReplyingId, setAdminReplyingId] = useState(null)  // 送信中のお問い合わせID
   const [showAnnouncements, setShowAnnouncements] = useState(false)
   const [announceTab, setAnnounceTab] = useState('update')   // お知らせモーダルの選択中タブ
   const [announcements, setAnnouncements] = useState([])
@@ -3342,6 +3346,42 @@ export default function Game() {
     })
     setContactSent(true)
     setContactLoading(false)
+    fetchMyContacts()  // 履歴を最新化
+  }
+
+  const CONTACT_CAT_LABEL = { bug:'不具合報告', ban_appeal:'アカウント停止への異議', other:'その他' }
+
+  // 過去のお問い合わせを取得。is_admin は全員分、一般は自分の分のみ（reply列＝運営返信を含む）
+  const fetchMyContacts = async () => {
+    setContactsLoading(true)
+    try {
+      let q = supabase.from('contact_messages').select('*').order('created_at', { ascending: false })
+      if (!profile?.is_admin) q = q.eq('player_id', profile.id)
+      const { data, error } = await q
+      if (error) throw error
+      setMyContacts(data || [])
+    } catch (e) {
+      setMyContacts([])
+    } finally {
+      setContactsLoading(false)
+    }
+  }
+
+  // is_admin: お問い合わせに直接返信（reply列を更新）
+  const adminReplyContact = async (id) => {
+    const text = (adminReplyDrafts[id] || '').trim()
+    if (!text) return
+    setAdminReplyingId(id)
+    try {
+      const { error } = await supabase.rpc('admin_reply_contact', { p_id: id, p_reply: text })
+      if (error) throw error
+      setAdminReplyDrafts(d => { const n = { ...d }; delete n[id]; return n })
+      await fetchMyContacts()
+    } catch (e) {
+      alert('返信の送信に失敗しました。' + (e?.message ? `\n${e.message}` : ''))
+    } finally {
+      setAdminReplyingId(null)
+    }
   }
 
   const fetchAnnouncements = async () => {
@@ -3805,11 +3845,71 @@ export default function Game() {
 
   if (showContact) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ background:'#001020', border:'1px solid #446688', padding:'20px', maxWidth:'460px', width:'100%', fontFamily:'monospace' }}>
+      <div style={{ background:'#001020', border:'1px solid #446688', padding:'20px', maxWidth:'460px', width:'100%', maxHeight:'90vh', overflowY:'auto', fontFamily:'monospace', boxSizing:'border-box' }}>
         <div style={{ color:'#88ccff', fontSize:'14px', marginBottom:'12px' }}>📩 お問い合わせ</div>
-        {contactSent ? (
+        {/* 新規 / 履歴 切り替えタブ */}
+        <div style={{ display:'flex', gap:'6px', marginBottom:'14px' }}>
+          {[{ key:'new', label:'新規お問い合わせ' }, { key:'history', label: profile?.is_admin ? '受信一覧・返信' : '過去のお問い合わせ' }].map(t => {
+            const on = contactView === t.key
+            return (
+              <button key={t.key} onClick={()=>{ setContactView(t.key); if (t.key==='history') fetchMyContacts() }}
+                style={{ flex:1, padding:'8px 4px', background: on?'#001840':'#000818', border:`1px solid ${on?'#88ccff':'#223344'}`, color: on?'#88ccff':'#557799', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                {t.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {contactView === 'history' ? (
+          <>
+            {contactsLoading && <div style={{ color:'#446688', fontSize:'12px', textAlign:'center', padding:'16px 0' }}>読み込み中...</div>}
+            {!contactsLoading && myContacts.length === 0 && (
+              <div style={{ color:'#446688', fontSize:'12px', textAlign:'center', padding:'16px 0', lineHeight:'1.8' }}>
+                {profile?.is_admin ? 'お問い合わせはまだありません。' : 'これまでのお問い合わせはありません。'}
+              </div>
+            )}
+            {!contactsLoading && myContacts.map(c => (
+              <div key={c.id} style={{ marginBottom:'12px', border:'1px solid #223344', background:'#000818' }}>
+                <div style={{ padding:'10px 12px', borderBottom:'1px solid #112233' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+                    <span style={{ color:'#88ccff', fontSize:'11px' }}>{CONTACT_CAT_LABEL[c.category] || c.category}</span>
+                    <span style={{ color:'#446688', fontSize:'10px' }}>{new Date(c.created_at).toLocaleDateString('ja-JP')}</span>
+                  </div>
+                  {profile?.is_admin && <div style={{ color:'#6699cc', fontSize:'10px', marginBottom:'4px' }}>from: {c.player_name || c.player_id}</div>}
+                  <div style={{ color:'#ccddff', fontSize:'12px', lineHeight:'1.7', whiteSpace:'pre-wrap' }}>{c.body}</div>
+                </div>
+                {/* 運営からの返信 */}
+                {c.reply ? (
+                  <div style={{ padding:'10px 12px', background:'#001828' }}>
+                    <div style={{ color:'#ffcc44', fontSize:'10px', marginBottom:'4px' }}>📩 運営からの返信{c.reply_at && <span style={{ color:'#446688', marginLeft:'6px' }}>{new Date(c.reply_at).toLocaleDateString('ja-JP')}</span>}</div>
+                    <div style={{ color:'#aaddff', fontSize:'12px', lineHeight:'1.7', whiteSpace:'pre-wrap' }}>{c.reply}</div>
+                  </div>
+                ) : (
+                  !profile?.is_admin && <div style={{ padding:'8px 12px', color:'#557799', fontSize:'10px' }}>運営からの返信をお待ちください。</div>
+                )}
+                {/* is_admin: 返信入力 */}
+                {profile?.is_admin && (
+                  <div style={{ padding:'10px 12px', borderTop:'1px solid #112233' }}>
+                    <textarea value={adminReplyDrafts[c.id] ?? (c.reply || '')} onChange={e=>setAdminReplyDrafts(d=>({ ...d, [c.id]: e.target.value }))}
+                      rows={3} placeholder="返信内容を入力..."
+                      style={{ width:'100%', padding:'6px', background:'#001040', border:'1px solid #335577', color:'#ccddff', fontFamily:'monospace', fontSize:'11px', resize:'vertical', boxSizing:'border-box', marginBottom:'6px' }} />
+                    <button onClick={()=>adminReplyContact(c.id)} disabled={adminReplyingId===c.id || !(adminReplyDrafts[c.id] ?? c.reply ?? '').trim()}
+                      style={{ width:'100%', padding:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', opacity:(adminReplyDrafts[c.id] ?? c.reply ?? '').trim() ? 1 : 0.4 }}>
+                      {adminReplyingId===c.id ? '送信中...' : (c.reply ? '返信を更新' : '返信を送信')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+            <button onClick={()=>setShowContact(false)}
+              style={{ width:'100%', padding:'10px', marginTop:'4px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>閉じる</button>
+          </>
+        ) : contactSent ? (
           <>
             <div style={{ color:'#44ff88', fontSize:'13px', textAlign:'center', padding:'20px 0' }}>送信しました。ありがとうございます。</div>
+            <div style={{ color:'#446688', fontSize:'11px', textAlign:'center', marginBottom:'12px' }}>運営からの返信は「過去のお問い合わせ」から確認できます。</div>
+            <button onClick={()=>{ setContactSent(false); setContactForm({ category:'bug', body:'' }); setContactView('history'); fetchMyContacts() }}
+              style={{ width:'100%', padding:'10px', marginBottom:'8px', background:'#001840', border:'1px solid #88ccff', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>過去のお問い合わせを見る</button>
             <button onClick={()=>{ setShowContact(false); setContactSent(false); setContactForm({ category:'bug', body:'' }) }}
               style={{ width:'100%', padding:'10px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>閉じる</button>
           </>
@@ -4047,12 +4147,7 @@ export default function Game() {
   )
 
   if (showAnnouncements) {
-    // 個別宛(target_player_id)の運営返信は「お問い合わせ返信」タブに分離。それ以外のタブからは除外。
-    const tabAnns = announcements.filter(a => {
-      if (a.title === 'MAINTENANCE') return false
-      if (announceTab === 'reply') return a.target_player_id && a.target_player_id === profile?.id
-      return !a.target_player_id && annCat(a) === announceTab
-    })
+    const tabAnns = announcements.filter(a => a.title !== 'MAINTENANCE' && annCat(a) === announceTab)
     return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'16px', gap:'10px' }}>
       <div style={{ width:'100%', maxWidth:'600px', display:'flex', justifyContent:'flex-end' }}>
@@ -4066,11 +4161,9 @@ export default function Game() {
         <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'10px', flexShrink:0 }}>
           {ANNOUNCE_TABS.map(t => {
             const on = announceTab === t.key
-            const hasNew = t.key === 'reply'
-              ? announcements.some(a => a.target_player_id === profile?.id && !seenAdminMsgIds.includes(a.id))
-              : announcements.some(a => a.title !== 'MAINTENANCE' && !a.target_player_id && annCat(a) === t.key && !seenAnnouncementIds.includes(a.id))
+            const hasNew = announcements.some(a => a.title !== 'MAINTENANCE' && annCat(a) === t.key && !seenAnnouncementIds.includes(a.id))
             return (
-              <button key={t.key} onClick={()=>{ setAnnounceTab(t.key); setOpenAnnouncementId(null); if (t.key === 'reply') markAdminMsgsSeen() }}
+              <button key={t.key} onClick={()=>{ setAnnounceTab(t.key); setOpenAnnouncementId(null) }}
                 style={{ flex:'1 1 56px', minWidth:'56px', padding:'6px 2px', background: on?'#1a0c00':'#000818', border:`1px solid ${on?'#ff8844':'#223344'}`, color: on?'#ffaa66':'#557799', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', position:'relative', whiteSpace:'nowrap' }}>
                 {t.icon} {t.label}
                 {hasNew && <span style={{ position:'absolute', top:'-5px', right:'-3px', background:'#ff4400', color:'#fff', fontSize:'7px', padding:'1px 4px', borderRadius:'6px' }}>NEW</span>}
@@ -4079,10 +4172,9 @@ export default function Game() {
           })}
         </div>
         <div style={{ overflowY:'auto', flex:1 }}>
-        {announceTab !== 'reply' && tabAnns.length === 0 && <div style={{ color:'#446688', fontSize:'12px' }}>このカテゴリのお知らせはありません</div>}
-        {announceTab === 'reply' && tabAnns.length === 0 && <div style={{ color:'#446688', fontSize:'12px', lineHeight:'1.8' }}>お問い合わせへの運営からの返信がここに届きます。</div>}
+        {tabAnns.length === 0 && <div style={{ color:'#446688', fontSize:'12px' }}>このカテゴリのお知らせはありません</div>}
         {tabAnns.map(a => {
-          const isNew = announceTab === 'reply' ? !seenAdminMsgIds.includes(a.id) : !seenAnnouncementIds.includes(a.id)
+          const isNew = !seenAnnouncementIds.includes(a.id)
           return (
             <div key={a.id} style={{ marginBottom:'8px', border:`1px solid ${isNew?'#443300':'#002244'}`, background:'#000818' }}>
               <button onClick={()=>setOpenAnnouncementId(openAnnouncementId===a.id?null:a.id)}
