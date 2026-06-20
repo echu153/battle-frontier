@@ -2264,6 +2264,8 @@ export default function Game() {
     const maxHp = eff.hp_max
     const maxMp = eff.mp_max
     const battleProfile = { ...profile, hp_max: maxHp, mp_max: maxMp }
+    // サーバーのHP検証用に実効最大HPをキャッシュ（apply_battle_result が eff_hp_max を上限に使う）
+    await supabase.from('profiles').update({ eff_hp_max: maxHp }).eq('id', profile.id)
     const area = AREAS.find(a => a.id === selectedArea)
     const bossRate = profile.boss_encounter_rate || 0
     const isBossEncounter = Math.random()*100 < bossRate
@@ -2564,7 +2566,7 @@ export default function Game() {
           const res = executeSkill(cs.skills, {...effBuff, lastMpCost:mpCost}, battleProfile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
           const finalCrit = res.dmg > 0 && (isCrit || (res.bonusCritRate > 0 && Math.random()*100 < playerCritRate + res.bonusCritRate))
           const finalCritMult = finalCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
-          const tosoMult = hasTosoHonno ? (playerHp <= profile.hp_max * 0.3 ? 1.6 : playerHp <= profile.hp_max * 0.5 ? 1.2 : 1.0) : 1.0  // 闘争本能：HP50%以下+20%／HP30%以下+60%（重複なし）
+          const tosoMult = hasTosoHonno ? (playerHp <= maxHp * 0.3 ? 1.6 : playerHp <= maxHp * 0.5 ? 1.2 : 1.0) : 1.0  // 闘争本能：HP50%以下+20%／HP30%以下+60%（重複なし）
           // ②DEFスケーリング：物理=ATK/(ATK+敵DEF)、魔法=MATK/(MATK+敵MDEF)
           let defScale = 1.0
           if (res.dmg > 0) {
@@ -2618,7 +2620,7 @@ export default function Game() {
             enemyBuffs.spdDown = { turns: 2, rate: 0.95 }  // 濡羽杖アマザネ: 攻撃ヒット時 対象SPD-5%
           }
           const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult)
-          playerHp = Math.min(profile.hp_max, playerHp + healAmt)
+          playerHp = Math.min(maxHp, playerHp + healAmt)
           if (passiveHealReflect && healAmt > 0) {
             const reflectDmg = Math.floor(healAmt * 0.5)
             enemyHp -= reflectDmg
@@ -2656,8 +2658,8 @@ export default function Game() {
             logs.push({ text:`↳ 追撃！${res.followup.label?`（${res.followup.label}）`:''} ${enemy.name}に${fDmg}ダメージ！${fCrit?' 💥クリティカル！':''}`, color: fCrit?'#ffaa00':'#ffaa66' })
           }
           if (playerAttacking && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-            const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
-            playerHp = Math.min(profile.hp_max, playerHp + rageCure)
+            const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(maxHp * 0.2))
+            playerHp = Math.min(maxHp, playerHp + rageCure)
             logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
           }
           // 神聖覚醒：攻撃ごとに追撃
@@ -2689,8 +2691,8 @@ export default function Game() {
         const critText = isCrit ? '💥クリティカル！ ' : ''
         logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
         if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
-          playerHp = Math.min(profile.hp_max, playerHp + rageCure)
+          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(maxHp * 0.2))
+          playerHp = Math.min(maxHp, playerHp + rageCure)
           logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
         }
         if (expandedSkillSet.length > 0) skillIndex++
@@ -2750,13 +2752,13 @@ export default function Game() {
         const hpRate = enemyHp / enemyMaxHp
         if (!bossHeal2Used && hpRate <= 0.3) {
           bossHealCount = 2; bossHeal1Used = true; bossHeal2Used = true
-          const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
+          const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, maxHp, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
           enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
           Object.assign(enemyBuffs, result.newEnemyBuffs)
           return
         } else if (!bossHeal1Used && hpRate <= 0.6) {
           bossHealCount = 1; bossHeal1Used = true
-          const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
+          const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, maxHp, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
           enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
           Object.assign(enemyBuffs, result.newEnemyBuffs)
           return
@@ -2766,7 +2768,7 @@ export default function Game() {
       if (enemy.specialMove && !bossSpecialUsed && enemyHp / enemyMaxHp <= 0.1) {
         bossSpecialUsed = true
         logs.push({ text:`💥 ${enemy.name}の「${enemy.specialMove.name}」！！`, color:'#ff0000' })
-        const result = executeEnemySkill(enemy.specialMove, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
+        const result = executeEnemySkill(enemy.specialMove, enemy, enemyHp, enemyMaxHp, playerHp, maxHp, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
         playerHp -= result.dmgToPlayer
         Object.assign(playerBuffs, result.newPlayerBuffs)
         return
@@ -2780,7 +2782,7 @@ export default function Game() {
           bossBuff2Used = true
           const buffSkill = buffSkills[buffSkills.length > 1 ? 1 : 0]
           logs.push({ text:`⚡ ${enemy.name}の「${buffSkill.name}」！`, color:'#ff8844' })
-          const result = executeEnemySkill(buffSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
+          const result = executeEnemySkill(buffSkill, enemy, enemyHp, enemyMaxHp, playerHp, maxHp, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
           playerHp -= result.dmgToPlayer
           Object.assign(playerBuffs, result.newPlayerBuffs)
           Object.assign(enemyBuffs, result.newEnemyBuffs)
@@ -2789,7 +2791,7 @@ export default function Game() {
           bossBuff1Used = true
           const buffSkill = buffSkills[0]
           logs.push({ text:`⚡ ${enemy.name}の「${buffSkill.name}」！`, color:'#ff8844' })
-          const result = executeEnemySkill(buffSkill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
+          const result = executeEnemySkill(buffSkill, enemy, enemyHp, enemyMaxHp, playerHp, maxHp, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
           playerHp -= result.dmgToPlayer
           Object.assign(playerBuffs, result.newPlayerBuffs)
           Object.assign(enemyBuffs, result.newEnemyBuffs)
@@ -2800,7 +2802,7 @@ export default function Game() {
       const nonHealSkills = enemy.skills.filter(s => s.type !== 'heal' && s.type !== 'buff')
       if (nonHealSkills.length === 0) return
       const skill = nonHealSkills[Math.floor(Math.random()*nonHealSkills.length)]
-      const result = executeEnemySkill(skill, enemy, enemyHp, enemyMaxHp, playerHp, profile.hp_max, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
+      const result = executeEnemySkill(skill, enemy, enemyHp, enemyMaxHp, playerHp, maxHp, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
       playerHp -= result.dmgToPlayer
       enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
       Object.assign(playerBuffs, result.newPlayerBuffs)
@@ -2844,19 +2846,19 @@ export default function Game() {
       }
       // プレイヤーへの持続ダメージ
       if (playerBuffs.severePoisoin?.turns > 0) {
-        const spDmgP = Math.floor(profile.hp_max * 0.05)
+        const spDmgP = Math.floor(maxHp * 0.05)
         playerHp = Math.max(0, playerHp - spDmgP)
         logs.push({ text:`🤢 猛毒ダメージ！ あなたに${spDmgP}ダメージ！`, color:'#aa44ff' })
         if (playerHp <= 0) break
       }
       if (playerBuffs.burn?.turns > 0) {
-        const burnDmgP = Math.floor(profile.hp_max * 0.02)
+        const burnDmgP = Math.floor(maxHp * 0.02)
         playerHp = Math.max(0, playerHp - burnDmgP)
         logs.push({ text:`🔥 やけどダメージ！ あなたに${burnDmgP}ダメージ！`, color:'#ff6622' })
         if (playerHp <= 0) break
       }
       if (playerBuffs.bleed) {
-        const bleedDmgP = Math.floor(profile.hp_max * 0.01 * playerBuffs.bleed.stacks)
+        const bleedDmgP = Math.floor(maxHp * 0.01 * playerBuffs.bleed.stacks)
         playerHp = Math.max(0, playerHp - bleedDmgP)
         logs.push({ text:`🩸 出血ダメージ！ あなたに${bleedDmgP}ダメージ（${playerBuffs.bleed.stacks}スタック）！`, color:'#ff4466' })
         if (playerHp <= 0) break
@@ -2874,7 +2876,7 @@ export default function Game() {
       }
       if (!isHealSealed && playerBuffs.regenHeal?.turns > 0) {
         const healAmt = Math.floor(playerBuffs.regenHeal.amount * passiveHealMult)
-        playerHp = Math.min(profile.hp_max, playerHp + healAmt)
+        playerHp = Math.min(maxHp, playerHp + healAmt)
         logs.push({ text:`💚 回復効果でHPが${healAmt}回復した！`, color:'#44ff88' })
         if (passiveHealReflect && healAmt > 0) {
           const reflectDmg = Math.floor(healAmt * 0.5)
@@ -2883,7 +2885,7 @@ export default function Game() {
         }
       }
       if (!isHealSealed && playerBuffs.delayHeal && turn === playerBuffs.delayHeal.triggerTurn) {
-        playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.delayHeal.amount)
+        playerHp = Math.min(maxHp, playerHp + playerBuffs.delayHeal.amount)
         logs.push({ text:`💚 装備効果でHPが${playerBuffs.delayHeal.amount}回復した！`, color:'#44ff88' })
       }
       if (!isHealSealed && currentItem) {
@@ -2893,9 +2895,9 @@ export default function Game() {
         const onCooldown = (playerBuffs.potionCooldown?.turns || 0) > 0
         const canUse = isInfinite ? !onCooldown : !itemUsed
         if (canUse) {
-          if ((effect==='hp_pct' || effect==='hp_pct_infinite') && playerHp/profile.hp_max*100 <= threshold) {
-            const healAmt = Math.floor(profile.hp_max*currentItem.items.value/100)
-            playerHp = Math.min(profile.hp_max, playerHp+healAmt)
+          if ((effect==='hp_pct' || effect==='hp_pct_infinite') && playerHp/maxHp*100 <= threshold) {
+            const healAmt = Math.floor(maxHp*currentItem.items.value/100)
+            playerHp = Math.min(maxHp, playerHp+healAmt)
             logs.push({ text:`🧪 ${currentItem.items.name}を使用！ HPが${healAmt}回復した！`, color:'#44ff88' })
             if (isInfinite) {
               playerBuffs.potionCooldown = { turns:5 }
@@ -2907,9 +2909,9 @@ export default function Game() {
               else await supabase.from('player_items').update({ quantity:newQty }).eq('id', currentItem.id).gte('quantity', currentItem.quantity)
               currentItem = null
             }
-          } else if ((effect==='mp_pct' || effect==='mp_pct_infinite') && playerMp/profile.mp_max*100 <= threshold) {
-            const healAmt = Math.floor(profile.mp_max*currentItem.items.value/100)
-            playerMp = Math.min(profile.mp_max, playerMp+healAmt)
+          } else if ((effect==='mp_pct' || effect==='mp_pct_infinite') && playerMp/maxMp*100 <= threshold) {
+            const healAmt = Math.floor(maxMp*currentItem.items.value/100)
+            playerMp = Math.min(maxMp, playerMp+healAmt)
             logs.push({ text:`🧪 ${currentItem.items.name}を使用！ MPが${healAmt}回復した！`, color:'#4488ff' })
             if (isInfinite) {
               playerBuffs.potionCooldown = { turns:5 }
@@ -3023,7 +3025,7 @@ export default function Game() {
       Object.keys(enemyBuffs).forEach(k  => { if (enemyBuffs[k]?.turns === 0)  delete enemyBuffs[k] })
       if (bossHealCooldown > 0) bossHealCooldown--
       // 毎ターン終了時のHPスナップショット（表示用）
-      logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:profile.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
+      logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:maxHp, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
       turn++
     }
 

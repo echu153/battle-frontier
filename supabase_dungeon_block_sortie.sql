@@ -11,6 +11,9 @@
 -- Supabase の SQL Editor でファイル全体を実行してください
 -- ============================================================
 
+-- ===== HP/MPボーナスを戦闘に反映するための実効最大HPキャッシュ列 =====
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS eff_hp_max integer;
+
 -- ===== 共通: active なダンジョン探索があるか =====
 CREATE OR REPLACE FUNCTION public.has_active_dungeon(p_uid uuid)
  RETURNS boolean
@@ -108,7 +111,9 @@ BEGIN
     END IF;
   END IF;
 
-  IF p_hp_current < 0 OR p_hp_current > v_profile.hp_max THEN
+  -- HP上限は装備・釣り等込みの実効最大(eff_hp_max)を許容。spoof対策に基礎の5倍でガード。
+  IF p_hp_current < 0 OR p_hp_current >
+       LEAST(GREATEST(COALESCE(v_profile.eff_hp_max, v_profile.hp_max), v_profile.hp_max), v_profile.hp_max * 5) THEN
     RETURN json_build_object('ok',false,'reason','invalid_hp'); END IF;
 
   v_eff_exp      := CASE WHEN v_exp_frozen OR v_is_at_cap OR p_papia_escaped THEN 0 ELSE p_claimed_exp END;
