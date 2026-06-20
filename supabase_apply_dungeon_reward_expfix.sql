@@ -41,7 +41,9 @@ BEGIN
 
   IF p_type = 'gold' THEN
     v_char_lv := COALESCE(v_profile.char_lv, v_profile.lv);
-    v_max_gold := CEIL(v_char_lv * 45 * (CASE WHEN v_char_lv <= 300 THEN 1.5 ELSE 1.0 END) * 1.5);
+    -- ★is_admin限定先行: デイリーダンジョン3回化に伴い管理者のGold上限を×5/3（クライアントの×5/3と一致）
+    v_max_gold := CEIL(v_char_lv * 45 * (CASE WHEN v_char_lv <= 300 THEN 1.5 ELSE 1.0 END) * 1.5
+                       * (CASE WHEN COALESCE(v_profile.is_admin, false) THEN 5.0/3.0 ELSE 1 END));
     IF p_claimed_gold < 0 OR p_claimed_gold > v_max_gold THEN
       UPDATE profiles SET suspicious_flag=true WHERE id=v_uid;
       RETURN json_build_object('ok',false,'reason','invalid_gold');
