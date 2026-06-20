@@ -1304,17 +1304,15 @@ const ANNOUNCE_TABS = [
 const annCat = (a) => (ANNOUNCE_TABS.some(t => t.key === a.category) ? a.category : ANNOUNCE_TABS[0].key)
 
 // パピア出現率アップイベント時間帯（JST）。
-//   ★2026-06-20公開: 全プレイヤーが最大2枠を自分で選択（profiles.papia_hour / papia_hour2）。
-//   未設定なら従来の固定4枠（8/12/16/22時）をデフォルトとして適用。
-const PAPIA_EVENT_HOURS = [8, 12, 16, 22]
+//   ★2026-06-20公開: 各プレイヤーが最大2枠を自分で選択（profiles.papia_hour / papia_hour2）。
+//   未設定なら出現率アップは発生しない（固定4枠デフォルトは廃止）。
 const getPapiaEventStatus = (profile) => {
   const now = Date.now()
   const jstNow = new Date(now + 9*60*60*1000)
   const h = jstNow.getUTCHours()
   const m = jstNow.getUTCMinutes()
   const totalMin = h * 60 + m
-  const sel = [profile?.papia_hour, profile?.papia_hour2].filter(Number.isInteger)
-  const hours = sel.length > 0 ? sel : PAPIA_EVENT_HOURS
+  const hours = [profile?.papia_hour, profile?.papia_hour2].filter(Number.isInteger)
   for (const startH of hours) {
     const startMin = startH * 60
     const endMin = startMin + 30
@@ -4305,9 +4303,8 @@ export default function Game() {
   const papiaEvent = getPapiaEventStatus(profile)
   const boostActive = isBoostActive(profile)
   const boostRemainMin = boostActive ? Math.max(1, Math.ceil((new Date(profile.boost_active_until).getTime() - Date.now())/60000)) : 0
-  // 管理者でパピア時間が未設定なら街にセットアップ通知（押すと設定画面へ）
-  // ★2026-06-20公開: 未設定でも固定4枠がデフォルト適用されるため「未設定」通知は出さない（カスタムは設定画面から任意）
-  const papiaNeedsSetup = false
+  // ★2026-06-20公開: パピア時間は未設定だと出現率アップが無いため、未設定なら街に設定通知（押すと設定画面へ）
+  const papiaNeedsSetup = !Number.isInteger(profile?.papia_hour) && !Number.isInteger(profile?.papia_hour2)
   const materialEvent = getMaterialEventStatus()
   const matEventBannerVisible = materialEvent.active && matEventSeenDate !== getDungeonDateStr()
   const dismissMatEventBanner = () => {
@@ -4641,7 +4638,7 @@ export default function Game() {
           {papiaNeedsSetup && (
             <button onClick={()=>setShowOptions(true)}
               style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a1200', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
-              🌟 パピアの出現時間が未設定です！→ ブースト/パピア時間設定へ
+              🌟 パピア出現率アップの時間が未設定です（設定するまで発生しません）→ 設定する
             </button>
           )}
           <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', marginBottom:'8px' }}>
