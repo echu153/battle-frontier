@@ -227,14 +227,16 @@ export default function SortiePanel({ quickSlotId, collapsible = false, activity
     savePending({ count:0 })
     setShowSettle(false)
 
-    // 累計出撃100回ごとに、選択中ペットのなつき+1（100の節目を跨いだ回数だけ加算）
+    // 累計出撃N回ごとに、選択中ペットのなつき+1（節目を跨いだ回数だけ加算）
+    // ★is_admin先行: 簡易出撃60秒化の補正で管理者は50回ごと（一般は従来100回）
+    const affStep = profile.is_admin ? 50 : 100
     let petAffMsg = ''
     try {
       const key = 'bf_sortie_total_' + profile.id
       const before = parseInt(localStorage.getItem(key) || '0', 10) || 0
       const after = before + pend.count
       localStorage.setItem(key, String(after))
-      const milestones = Math.floor(after / 100) - Math.floor(before / 100)
+      const milestones = Math.floor(after / affStep) - Math.floor(before / affStep)
       if (milestones > 0) {
         const { data } = await supabase.rpc('pet_sortie_affection', { p_times: milestones })
         if (data?.added > 0) petAffMsg = ` 🐾なつき+${data.added}`

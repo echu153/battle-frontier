@@ -59,7 +59,9 @@ BEGIN
   ELSIF p_is_boss AND p_area_id BETWEEN 1 AND 7 THEN v_max_gold := v_boss_golds[p_area_id];
   ELSIF p_area_id BETWEEN 1 AND 7 THEN v_max_gold := v_normal_golds[p_area_id];
   ELSE v_max_gold := 700; END IF;
-  v_max_gold := CEIL(v_max_gold * 1.5);
+  -- ★is_admin先行: 出撃CD20秒化のGold補正に対応。管理者はエリア1-4を×2・エリア5+を×1.5（一般は×1.5）
+  v_max_gold := CEIL(v_max_gold * (CASE WHEN COALESCE(v_profile.is_admin, false) AND p_area_id <= 4
+                                        THEN 2.0 ELSE 1.5 END));
 
   IF p_claimed_gold < 0 OR p_claimed_gold > v_max_gold THEN
     UPDATE profiles SET suspicious_flag=true,

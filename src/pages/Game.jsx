@@ -2994,7 +2994,9 @@ export default function Game() {
     const expBoosted = expGained > 0 && (profile.char_lv||1) < 100
     if (expBoosted) expGained = Math.floor(expGained * 1.5)
     const expBoostNote = expBoosted ? '（✨Lv100まで経験値1.5倍）' : ''
-    const goldGained = (win && !papiaEscaped) ? Math.floor((enemy.gold||0) * 1.5) : 0  // 出撃ゴールド1.5倍
+    // 出撃ゴールド倍率。★is_admin先行: 出撃CD20秒化の補正で管理者はエリア1-4を×2・エリア5+を×1.5（一般は従来×1.5）
+    const goldMult = profile.is_admin ? (selectedArea <= 4 ? 2 : 1.5) : 1.5
+    const goldGained = (win && !papiaEscaped) ? Math.floor((enemy.gold||0) * goldMult) : 0
 
 
     if (!papiaEscaped) {
@@ -3114,7 +3116,8 @@ export default function Game() {
     if (equippedWeaponItem) {
       const prof = proficiency.find(p => p.equipment_id===equippedWeaponItem.id)
       if (prof) {
-        const profExpGained = Math.floor(Math.random()*4)+8
+        let profExpGained = Math.floor(Math.random()*4)+8
+        if (profile.is_admin) profExpGained *= 2  // ★is_admin先行: 出撃CD20秒化の補正で武器熟練度×2
         let totalExp = prof.prof_exp+profExpGained
         let newProfLv = prof.prof_lv
         while (totalExp >= 100) { totalExp -= 100; newProfLv++ }
