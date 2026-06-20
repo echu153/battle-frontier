@@ -1946,6 +1946,8 @@ export default function Game() {
     logs.push({ text:`${dungeonEnemy.name}を倒した！`, color:'#44ff88' })
 
     const newCount = typeCount + 1
+    // ★サーバーが報酬を拒否したら回数を消費しない／理由を表示（exp・goldは報酬本体なので拒否時は未消費）
+    let rewardFailed = false, rewardFailReason = ''
 
     // EXP以外のダンジョン（gold/stone/prof/gem）に付与するおまけ経験値（8〜11）。
     // 表示ログを積み、RPCへ渡す値を返す（適用・レベルアップはサーバー側 apply_dungeon_reward が実施）。
@@ -1994,8 +1996,9 @@ export default function Game() {
           dispExp -= dispExpNext; dispLv++; dispExpNext = calcExpNext(dispLv, profile.is_admin)
           logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${dispLv}！`, color:'#cc44ff' })
         }
-        await supabase.rpc('apply_dungeon_reward', { p_type:'exp', p_claimed_exp:expGained })
-        logs.push({ text:`EXP +${expGained}`, color:'#cc8800' })
+        const { data: expRes, error: expErr } = await supabase.rpc('apply_dungeon_reward', { p_type:'exp', p_claimed_exp:expGained })
+        if (expErr || expRes?.ok === false) { rewardFailed = true; rewardFailReason = expRes?.reason || expErr?.message || 'unknown' }
+        else logs.push({ text:`EXP +${expGained}`, color:'#cc8800' })
       } else {
         logs.push({ text:`⚠ レベルキャップに達しています（EXP +0）`, color:'#ff8844' })
       }
@@ -2006,9 +2009,10 @@ export default function Game() {
       let goldGained = Math.floor(charLvG * 30 * (1.0 + Math.random() * 0.5) * lvBonus * 1.5)  // デイリーダンジョン ゴールド1.5倍
       // ★is_admin限定先行: 3回化の内容補正（×5/3）。サーバー apply_dungeon_reward のGold上限も管理者×5/3に上げること。
       if (profile.is_admin) goldGained = Math.floor(goldGained * DUNGEON_REWARD_MULT)
-      logs.push({ text:`Gold +${goldGained}${lvBonus > 1 ? '（キャラLv300までボーナス ×1.5！）' : ''}`, color:'#ffcc00' })
       const bonusExp = grantBonusExpLogs()
-      await supabase.rpc('apply_dungeon_reward', { p_type:'gold', p_claimed_gold:goldGained, p_claimed_exp:bonusExp })
+      const { data: goldRes, error: goldErr } = await supabase.rpc('apply_dungeon_reward', { p_type:'gold', p_claimed_gold:goldGained, p_claimed_exp:bonusExp })
+      if (goldErr || goldRes?.ok === false) { rewardFailed = true; rewardFailReason = goldRes?.reason || goldErr?.message || 'unknown' }
+      else logs.push({ text:`Gold +${goldGained}${lvBonus > 1 ? '（キャラLv300までボーナス ×1.5！）' : ''}`, color:'#ffcc00' })
     } else if (type === 'stone') {
       const r = Math.random() * 100
       const stoneName = r < 10 ? '強化石(F)' : r < 25 ? '強化石(E)' : r < 55 ? '強化石(D)' : r < 80 ? '強化石(C)' : r < 95 ? '強化石(B)' : '強化石(A)'
@@ -2071,22 +2075,29 @@ export default function Game() {
     // ※ gold は上のRPC呼び出しに同梱済み
     if (type === 'stone' || type === 'prof' || type === 'gem') {
       const bonusExp = grantBonusExpLogs()
-      await supabase.rpc('apply_dungeon_reward', { p_type: type, p_claimed_exp: bonusExp })
+      // stone/gem/profは本体（アイテム/熟練度）を付与済みなので、おまけEXP拒否は警告のみ（回数は消費する）
+      const { data: bRes, error: bErr } = await supabase.rpc('apply_dungeon_reward', { p_type: type, p_claimed_exp: bonusExp })
+      if (bErr || bRes?.ok === false) logs.push({ text:`⚠ おまけEXPは反映されませんでした（理由: ${bRes?.reason || bErr?.message || 'unknown'}）`, color:'#ff8844' })
     }
 
-    // dungeon_attempts更新（種類ごとの列を加算）
-    try {
-      if (dungeonRow) {
-        await supabase.from('dungeon_attempts').update({ [col]: newCount }).eq('id', dungeonRow.id)
-      } else {
-        await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:0, [col]:1 })
+    // ★exp/gold が拒否されたら回数を消費せず理由を表示（本体報酬が入っていないため）
+    if (rewardFailed) {
+      logs.push({ text:`⚠ サーバーが報酬を適用しませんでした（理由: ${rewardFailReason}）。この回数は消費されていません。`, color:'#ff4444' })
+    } else {
+      // dungeon_attempts更新（種類ごとの列を加算）
+      try {
+        if (dungeonRow) {
+          await supabase.from('dungeon_attempts').update({ [col]: newCount }).eq('id', dungeonRow.id)
+        } else {
+          await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:0, [col]:1 })
+        }
+      } catch {
+        try { await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:0, [col]:1 }) } catch {}
       }
-    } catch {
-      try { await supabase.from('dungeon_attempts').insert({ player_id:profile.id, date:today, count:0, [col]:1 }) } catch {}
+      await supabase.from('profiles').update({ last_action_at: new Date(serverNow()).toISOString() }).eq('id', profile.id)
+      cdEndRef.current = Date.now() + effWait(profile) * 1000  // 相対カウントダウンを開始
+      setDungeonCounts(prev => ({ ...prev, [type]: newCount }))
     }
-    await supabase.from('profiles').update({ last_action_at: new Date(serverNow()).toISOString() }).eq('id', profile.id)
-    cdEndRef.current = Date.now() + effWait(profile) * 1000  // 相対カウントダウンを開始
-    setDungeonCounts(prev => ({ ...prev, [type]: newCount }))
     } catch (e) {
       console.error('doDungeon error:', e)
       logs.push({ text:`⚠ 報酬処理でエラーが発生しました（${e?.message || e}）`, color:'#ff8844' })

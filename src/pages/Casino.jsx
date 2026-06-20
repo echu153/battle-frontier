@@ -18,7 +18,9 @@ const PRIZES = [
   { key:'luckyRing',    name:'幸運の指輪',       price:50000,  limit:1, today:false, type:'equip', desc:'全能力値+10  特殊: 回避率+5%（重複不可）' },
   { key:'gamblerProof', name:'ギャンブラーの証', price:100000, limit:1, today:false, type:'keyitem', desc:'ギャンブラーに転職できる証。1度きりの交換。' },
 ]
-const SORTIE_WAIT = 30 // 賭博場出撃のクールダウン秒（通常出撃と共通のlast_action_atで管理）
+const SORTIE_WAIT = 30 // 賭博場出撃のクールダウン秒（従来＝非管理者）
+// ★is_admin限定先行: 簡易出撃は管理者60秒/一般30秒（SortiePanelと一致）
+const sortieWaitFor = (p) => p?.is_admin ? 60 : 30
 // EXP凍結中か（手動のexp_frozen、または期限付きのexp_frozen_until）
 const expIsFrozen = (p) => !!(p && (p.exp_frozen || (p.exp_frozen_until && new Date(p.exp_frozen_until) > new Date())))
 const AUTOCLICK_SAMPLES = 12   // オートクリッカー検知：直近サンプル数
@@ -442,7 +444,7 @@ export default function Casino() {
   const sortieRemain = () => {
     if (!profile?.last_action_at) return 0
     const elapsed = (now - new Date(profile.last_action_at).getTime()) / 1000
-    return Math.max(0, Math.ceil(SORTIE_WAIT - elapsed))
+    return Math.max(0, Math.ceil(sortieWaitFor(profile) - elapsed))
   }
 
   // 簡易出撃：1回出撃（ボス/パピア無し・必ず勝利）
@@ -458,7 +460,7 @@ export default function Casino() {
     // ★ どこかで例外が出ても loading を必ず false に戻し、画面が固まる（リロードまで操作不可）のを防ぐ
     try {
       // 共通の last_action_at で30秒ロック（不正対策）
-      const lockTime = new Date(Date.now() - SORTIE_WAIT * 1000).toISOString()
+      const lockTime = new Date(Date.now() - sortieWaitFor(profile) * 1000).toISOString()
       const { data: locked } = await supabase.from('profiles')
         .update({ last_action_at: new Date().toISOString() })
         .eq('id', profile.id).lt('last_action_at', lockTime).eq('is_fishing', false).select('id')
@@ -1059,7 +1061,7 @@ export default function Casino() {
                 )}
               </div>
               <div style={{ color:'#446688', fontSize:'10px', marginBottom:'10px', lineHeight:'1.6' }}>
-                ボス・パピアなし／必ず勝利。{SORTIE_WAIT}秒に1回出撃でき、戦果は貯まります。街に戻る前に清算してください。
+                ボス・パピアなし／必ず勝利。{sortieWaitFor(profile)}秒に1回出撃でき、戦果は貯まります。街に戻る前に清算してください。
               </div>
 
               <div style={{ marginBottom:'8px' }}>
