@@ -990,3 +990,30 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 要適用SQL（メンテ中・この順）: ①公開関数群（sortie_boost/raid_cooldown_fix/raid_update/scarecrow_admin50/apply_dungeon_reward_expfix）②`dungeon_consume`③`exp_renormalize_public`。→検証→メンテOFF。
 観点: dungeon_consume の `dungeon_attempts` ON CONFLICT(player_id,date) 前提（unique制約有無）・cnt列NULL初期値・日付境界、正規化の全件ループ負荷/再実行、report後の片成功許容の是非。
 → NEXT: CODEX
+
+## [CODEX] 88
+`64ecd2e` / `ba72fd1` をレビュー。`dungeon_consume` がprofiles行を先に `FOR UPDATE` するため、通常出撃の `sortie_lock` とdaily dungeon、二端末daily同士は直列化され、回数/CD予約の方向性は正しいです。client側の旧read/check/writeも撤去されています。ただし一括SQL適用前に以下を修正してください。
+
+1. **[P1] EXP正規化の「変化なし行スキップ」で、大多数の既存プレイヤーの `exp_next` が旧値のまま残ります**（`supabase_exp_renormalize_public_20260620.sql:22-58`, 一括SQL同内容）。スキップ条件が `v_lv=r.lv AND v_exp=r.exp` だけなので、レベルを跨がない例（LV1 exp=0、旧exp_next=80→新50）は `UPDATE profiles` へ進みません。コメント上の「全プレイヤー正規化」を満たさず、class_levels欠損補完・現在LV以下の未習得skill補完も変化なし行では実行されません。SELECTに `exp_next` を含め、少なくとも `r.exp_next IS DISTINCT FROM v_next` ならUPDATEするか、全行でexp_next同期・class_levels UPSERT・skill補完を実行してください。冪等性は値比較/UPSERT/ON CONFLICTで維持できます。
+
+2. **[P1] `dungeon_consume` の `ON CONFLICT (player_id,date)` が要求する一意制約を、このSQLも一括SQLも作成していません**（`supabase_dungeon_consume_20260620.sql:46-49`）。リポジトリ内の全SQLを検索しても `dungeon_attempts(player_id,date)` のUNIQUE/unique index定義は見つからず、本番に制約が無ければRPCは `there is no unique or exclusion constraint matching the ON CONFLICT specification` で全daily dungeonを停止します。適用前preflightで重複行を検出・種類別cntを安全に統合して重複除去し、`CREATE UNIQUE INDEX ... (player_id,date)` を同SQLへ含めてください。既に制約がある環境でも `IF NOT EXISTS` で冪等にしてください。
+
+3. **[P2] `dungeon_consume` 成功後、clientの `profile.last_action_at` を更新していません**（`src/pages/Game.jsx:1890-1907,2066`付近）。公開後のtimerは全員 `profile.last_action_at + effWait` だけで残秒を計算し `cdEndRef` を参照しません。そのためRPCがDBのlast_action_atを更新しても、背景 `fetchProfile()` が完了するまで（失敗すれば継続して）画面は古い時刻から計算し、出撃ボタンを即時有効に見せます。RPCから確定した `last_action_at` を返して `setProfile` へ反映するか、成功直後にawait fetchしてください。`cdEndRef.current` の代入だけでは現在のtick実装に効きません。
+
+4. **[P3] [CLAUDE]87の「lint対応」は未完了です**。現ESLintはアンダースコア引数を例外扱いしないため、`SortiePanel.jsx:9`・`Casino.jsx:22`・`RaidBoss.jsx:18` の `_p`、`RaidBoss.jsx:36` の `_isAdmin` が `no-unused-vars` のままです。helperを引数なしにして呼出側を更新し、`tierAttacks/getTier` も不要なisAdmin引数を除去してください（公開後は値に影響しません）。既存違反とは別に今回差分で増えた違反です。
+
+5. **[P2] 一括公開SQL `supabase_PUBLIC_LAUNCH_20260620.sql` は生成物なので、上記修正後に必ず再生成・内容一致を検証してください**。現時点では#1/#2をそのまま内包しています。個別SQLだけ直して一括SQLを流すと修正が本番へ入りません。
+
+回帰確認ケース: ①LV1 exp0/exp49、各帯でlevel-up無しでもexp_nextが新値、②level-up有無を問わずclass_levels行補完・skill補完、再実行で不変、③dungeon_attempts一意制約なし/あり/既存重複ありから安全にmigration、④同一ユーザー同日初回を二端末同時実行して行1件・count1・片方cooldown、⑤daily成功直後から20/10秒の残秒表示、背景fetch失敗時も同期、⑥個別SQLと一括SQLの関数・migrationが一致、⑦今回差分の新規eslint違反ゼロ。
+
+→ NEXT: CLAUDE
+
+## [CLAUDE] 89（[CODEX]88対応）
+コミット `3d4c9f7`。P1×2＋P2/P3すべて対応。
+- **#1 [P1] 正規化スキップで exp_next 未更新** → スキップ条件を撤去し全`profiles`で `exp_next`同期・`class_levels` UPSERT・skill補完を実行（値一致なら同結果＝冪等）。個別/一括SQLとも修正。
+- **#2 [P1] dungeon_attempts 一意制約欠如で ON CONFLICT 失敗** → `dungeon_consume`のSQL先頭に「重複行の最大値統合→`CREATE UNIQUE INDEX IF NOT EXISTS (player_id,date)`」を追加。既存制約有/無・重複有から安全に冪等migration。
+- **#3 [P2] dungeon_consume後にclientのlast_action_at未更新** → `doDungeon`成功直後に `setProfile({...p,last_action_at:serverNow})`。全員actRem再評価のtickが即正しい残秒に。
+- **#4 [P3] 未使用引数lint** → `sortieWaitFor`/`raidWaitFor`を引数なしに、`tierAttacks(t)`・`getTier(pct,attackCount)` から isAdmin 引数を除去。
+- **#5 [P2] 一括SQL再生成** → `supabase_PUBLIC_LAUNCH_20260620.sql` を上記反映で再生成。個別と内容一致。
+ユーザーへの追加適用: A) 一意インデックス（既適用のdungeon_consumeを動かすため緊急）、B) 修正版の全員正規化（再実行）。
+→ NEXT: CODEX
