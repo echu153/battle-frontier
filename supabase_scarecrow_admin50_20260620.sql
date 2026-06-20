@@ -6,6 +6,7 @@
 --     他ロジック（ダンジョンブロック / GUC / EXP1.5倍 / レベルアップ / Gold検証 等）は一切不変。
 --   公開時は v_sc_need の既定を 50 にするか、is_admin 分岐を外す。
 -- ============================================================
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS eff_hp_max integer;  -- HP検証用の実効最大HP（クライアントが戦闘前にキャッシュ）
 CREATE OR REPLACE FUNCTION public.apply_battle_result(p_area_id integer, p_is_boss boolean, p_is_papia boolean, p_papia_escaped boolean, p_win boolean, p_claimed_exp integer, p_claimed_gold integer, p_hp_current integer, p_mp_current integer)
  RETURNS json
  LANGUAGE plpgsql
@@ -88,7 +89,9 @@ BEGIN
     END IF;
   END IF;
 
-  IF p_hp_current < 0 OR p_hp_current > v_profile.hp_max THEN
+  -- ★HP上限は装備・釣り等込みの実効最大(eff_hp_max)を許容。spoof対策に基礎の5倍でガード。
+  IF p_hp_current < 0 OR p_hp_current >
+       LEAST(GREATEST(COALESCE(v_profile.eff_hp_max, v_profile.hp_max), v_profile.hp_max), v_profile.hp_max * 5) THEN
     RETURN json_build_object('ok',false,'reason','invalid_hp'); END IF;
 
   v_eff_exp      := CASE WHEN v_exp_frozen OR v_is_at_cap OR p_papia_escaped THEN 0 ELSE p_claimed_exp END;
