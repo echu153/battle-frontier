@@ -69,7 +69,7 @@ function Countdown({ targetIso }) {
 function getBossForTurn(t, name = BOSS_NAME) {
   const atkBase = 100 + (t - 1) * 300
   const defBase = 1000 + (t - 1) * 100
-  const mult = t >= 8 ? 5.0 : t >= 4 ? 2.0 : 1.0
+  const mult = t >= 8 ? 10.0 : t >= 4 ? 2.0 : 1.0
   return {
     name,
     atk:  Math.floor(atkBase * mult),
@@ -174,7 +174,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     }
     // バフ段階のアナウンス
     if (turn === 4) logs.push({ text: `━━ ${bossName}が覚醒した！全ステータス2倍！ ━━`, color: '#ff8844' })
-    if (turn === 8) logs.push({ text: `━━ ${bossName}が暴走状態に！全ステータス5倍！ ━━`, color: '#ff2222' })
+    if (turn === 8) logs.push({ text: `━━ ${bossName}が暴走状態に！全ステータス10倍！ ━━`, color: '#ff2222' })
 
     // ターン10: 滅びの一撃（強制終了）
     if (turn === 10) {
