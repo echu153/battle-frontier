@@ -207,6 +207,7 @@ DECLARE
   v_weapon   weapons%ROWTYPE;
   v_title_id int;
   v_inserted int;
+  v_i        int;
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('error','未認証'); END IF;
 
@@ -248,12 +249,18 @@ BEGIN
       ON CONFLICT (player_id, item_id) DO UPDATE SET quantity = player_items.quantity + v_qty;
 
     ELSIF v_type = 'weapon' THEN
+      -- weaponは v_qty>0 を検証し qty 個ぶん付与（qty:0/負数/欠落不正をrollback・[CODEX]101 P2）
+      IF v_qty <= 0 THEN RAISE EXCEPTION '報酬装備数が不正です: % %', v_name, v_qty; END IF;
       SELECT * INTO v_weapon FROM weapons WHERE name = v_name LIMIT 1;
       IF NOT FOUND THEN RAISE EXCEPTION '報酬装備が見つかりません: %', v_name; END IF;
-      INSERT INTO player_equipment (player_id, weapon_id, slot, equipped, enhance_plus, bonus_effect)
-      VALUES (v_uid, v_weapon.id, v_weapon.slot, false, 0, NULL);
+      FOR v_i IN 1..v_qty LOOP
+        INSERT INTO player_equipment (player_id, weapon_id, slot, equipped, enhance_plus, bonus_effect)
+        VALUES (v_uid, v_weapon.id, v_weapon.slot, false, 0, NULL);
+      END LOOP;
 
     ELSIF v_type = 'title' THEN
+      -- 称号は重複不能なので数量は1のみ許可（[CODEX]101 P2）
+      IF v_qty <> 1 THEN RAISE EXCEPTION '称号報酬の数量は1のみです: % %', v_name, v_qty; END IF;
       SELECT id INTO v_title_id FROM titles WHERE name = v_name LIMIT 1;
       IF v_title_id IS NULL THEN RAISE EXCEPTION '報酬称号が見つかりません: %', v_name; END IF;
       INSERT INTO player_titles (player_id, title_id) VALUES (v_uid, v_title_id) ON CONFLICT DO NOTHING;

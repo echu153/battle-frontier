@@ -57,6 +57,8 @@ export default function Event() {
     setLoading(false)
   }, [nav])
 
+  // 初回マウント時のデータ取得（awaitの後にstate更新する正当なfetch）
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { init() }, [init])
 
   const claim = async (threshold) => {

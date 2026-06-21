@@ -118,19 +118,6 @@ export default function Equipment() {
     { name:'哭雨の羽衣',       desc:'S級防具。特攻20 特防80。戦闘開始時、1回だけ状態異常を無効化。' },
   ]
 
-  const redeemRaidTicket = async (weaponName) => {
-    if (loading) return
-    setLoading(true); setTicketMsg(''); setTicketGot(null)
-    const { data, error } = await supabase.rpc('redeem_raid_ticket', { p_weapon_name: weaponName })
-    if (error || data?.error) {
-      setTicketMsg(data?.error || 'エラーが発生しました')
-    } else {
-      setTicketGot(weaponName)  // ポップアップは閉じず、獲得表示を出す
-      await fetchAll()
-    }
-    setLoading(false)
-  }
-
   useEffect(() => { fetchAll() }, [])
 
   const fetchAll = async () => {
@@ -152,6 +139,20 @@ export default function Equipment() {
     setAllItems(pi || [])
     const { data: g } = await supabase.from('player_gems').select('*').eq('player_id', user.id)
     setGems(g || [])
+  }
+
+  // 選択券を1枚消費してS級レイド装備へ交換（fetchAll 定義後に置く＝参照前定義のlint回避）
+  const redeemRaidTicket = async (weaponName) => {
+    if (loading) return
+    setLoading(true); setTicketMsg(''); setTicketGot(null)
+    const { data, error } = await supabase.rpc('redeem_raid_ticket', { p_weapon_name: weaponName })
+    if (error || data?.error) {
+      setTicketMsg(data?.error || 'エラーが発生しました')
+    } else {
+      setTicketGot(weaponName)  // ポップアップは閉じず、獲得表示を出す
+      await fetchAll()
+    }
+    setLoading(false)
   }
 
   const HP_RECIPE = ['森の生命液','荒野の薬草','古代の精髄']
