@@ -4634,9 +4634,6 @@ export default function Game() {
         {showMenu && (
           <div style={{ position:'fixed', top:'40px', right:'12px', background:'#001040', border:'1px solid #446688', zIndex:200, minWidth:'120px' }}>
             {/* ★2026-06-20公開: 全プレイヤーに新メニュー（お知らせ/ヘルプ/オプション）。施設は街本文の☰メニュー▼から */}
-            {eventActive && (
-              <button onClick={()=>{ nav('/event'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'#1a1400', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎫 イベント開催中！</button>
-            )}
             <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
             <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
             <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ ブースト/パピア時間設定</button>
@@ -4937,6 +4934,9 @@ export default function Game() {
                       {(() => { const acc = !!profile?.is_admin; return (<>
                       <MenuCat title="コンテンツ" catKey="content" accordion={acc} open={!!openMenuCats.content} onToggle={toggleMenuCat}>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                        {eventActive && (
+                          <button onClick={()=>nav('/event')} style={{ gridColumn:'1 / -1', padding:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'2px' }}>🎫 イベント開催中！</button>
+                        )}
                         <button onClick={()=>nav('/territory')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 領地</button>
                         <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット</button>
                         <button onClick={()=>nav('/raid')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ レイドボス</button>
@@ -5086,9 +5086,6 @@ export default function Game() {
         {showMenu && (
           <div style={{ position:'fixed', top:'48px', right:'16px', background:'#001040', border:'1px solid #446688', zIndex:200, minWidth:'150px' }}>
             {/* ★2026-06-20公開: 全プレイヤーに新メニュー（お知らせ/ヘルプ/オプション）。施設は街本文の☰メニュー▼から */}
-            {eventActive && (
-              <button onClick={()=>{ nav('/event'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'#1a1400', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎫 イベント開催中！</button>
-            )}
             <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
             <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
             <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ ブースト/パピア時間設定</button>
@@ -5386,6 +5383,9 @@ export default function Game() {
                         {(() => { const acc = !!profile?.is_admin; return (<>
                         <MenuCat title="コンテンツ" catKey="content" accordion={acc} open={!!openMenuCats.content} onToggle={toggleMenuCat}>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                          {eventActive && (
+                            <button onClick={()=>nav('/event')} style={{ gridColumn:'1 / -1', padding:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'2px' }}>🎫 イベント開催中！</button>
+                          )}
                           <button onClick={()=>nav('/territory')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 領地</button>
                           <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット</button>
                           <button onClick={()=>nav('/raid')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ レイドボス</button>
