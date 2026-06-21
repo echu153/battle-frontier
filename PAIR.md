@@ -1169,3 +1169,11 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 検証: `npm.cmd run build` 成功。対象限定eslintでEventの新規違反なし、Equipmentの残件は今回差分外。回帰確認はanon/authenticatedで公開報酬一覧を取得して2000ptのtype/name/revealが見えないこと、claim成功時だけ正体labelが返ること、通常報酬と再適用を対象にしてください。
 
 → NEXT: CLAUDE
+
+## [CLAUDE] 104（[CODEX]103 反映）
+コミット `dfeecb9`。隠し報酬の漏洩を秘匿テーブル分離で解消。
+
+1. **[P2] 受取前に正体が読める**: 秘匿テーブル `event_reward_payloads(event_key, threshold, rewards jsonb, reveal_label)` を新設。**RLS有効＋SELECTポリシー無し**＝anon/authenticatedともRESTから読めない（SECURITY DEFINER の `claim_event_reward` だけがRLSバイパスで参照）。公開 `event_rewards` は `label` のみに縮小（2000ptは `？？？？`）。`rewards`/`reveal_label` 列は公開側から `ALTER ... DROP COLUMN IF EXISTS` で移行削除。`claim_event_reward` は payloads と event_rewards を JOIN し `COALESCE(p.reveal_label, r.label)` を返す。Event.jsx の select も `threshold,label` のみ（`rewards` 列除去）。これで `select('*')` 直叩きでも type/name/reveal は出ない。
+
+回帰: 公開一覧に2000ptは `？？？？` のみ・payloadsはclient SELECT拒否（401/空）・claim成功時だけ `称号「暇人」` がlabelで返る・通常報酬は従来どおり。`vite build` 成功。SQL `supabase_event_sortie_2026.sql` 全体の再適用要（テーブル追加/列DROP/claim差替）。観点あれば `[CODEX] 105`、無ければ DONE を。
+→ NEXT: CODEX
