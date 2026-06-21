@@ -212,6 +212,25 @@ INSERT INTO event_rewards (event_key, threshold, label) VALUES
   ('sortie_2026_06', 1900, '100万ゴールド'),
   ('sortie_2026_06', 2000, '？？？？');
 
+-- 4-3) ボス装備報酬は装備名を公開列に持たせ、クライアントがweaponsからステータスを表示する
+--   （ボス装備はゲーム内ドロップ＝非秘匿。称号など隠し報酬には付けない）
+ALTER TABLE event_rewards ADD COLUMN IF NOT EXISTS weapon_names text[];
+UPDATE event_rewards SET weapon_names = NULL WHERE event_key = 'sortie_2026_06';
+UPDATE event_rewards SET weapon_names = ARRAY['氷刃の剣','氷晶の杖','峰岳の守護輪'] WHERE event_key='sortie_2026_06' AND threshold=25;
+UPDATE event_rewards SET weapon_names = ARRAY['結晶グリーブ']               WHERE event_key='sortie_2026_06' AND threshold=100;
+UPDATE event_rewards SET weapon_names = ARRAY['蒼粘剣']                     WHERE event_key='sortie_2026_06' AND threshold=225;
+UPDATE event_rewards SET weapon_names = ARRAY['虚無の杖']                   WHERE event_key='sortie_2026_06' AND threshold=300;
+UPDATE event_rewards SET weapon_names = ARRAY['スライムの指輪']             WHERE event_key='sortie_2026_06' AND threshold=375;
+UPDATE event_rewards SET weapon_names = ARRAY['影踏みのブーツ']             WHERE event_key='sortie_2026_06' AND threshold=450;
+UPDATE event_rewards SET weapon_names = ARRAY['古代魔導コア']               WHERE event_key='sortie_2026_06' AND threshold=525;
+UPDATE event_rewards SET weapon_names = ARRAY['海竜の鱗']                   WHERE event_key='sortie_2026_06' AND threshold=600;
+UPDATE event_rewards SET weapon_names = ARRAY['アクアクラウン']             WHERE event_key='sortie_2026_06' AND threshold=675;
+UPDATE event_rewards SET weapon_names = ARRAY['嵐の重装甲']                 WHERE event_key='sortie_2026_06' AND threshold=750;
+UPDATE event_rewards SET weapon_names = ARRAY['絶零の魔導砲']               WHERE event_key='sortie_2026_06' AND threshold=825;
+UPDATE event_rewards SET weapon_names = ARRAY['雷鷲の爪牙']                 WHERE event_key='sortie_2026_06' AND threshold=900;
+UPDATE event_rewards SET weapon_names = ARRAY['フロストバーンの聖鎧']       WHERE event_key='sortie_2026_06' AND threshold=975;
+UPDATE event_rewards SET weapon_names = ARRAY['インフェルノバスティオン']   WHERE event_key='sortie_2026_06' AND threshold=1050;
+
 -- ============================================================
 -- 5) sortie_lock 更新（出撃ポイント加算を追記。20/10秒ロジックは維持）
 -- ============================================================

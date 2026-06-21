@@ -29,6 +29,7 @@ export default function Event() {
   const [loadErr, setLoadErr] = useState(null)
   const [nowMs, setNowMs] = useState(0)
   const [gotPopup, setGotPopup] = useState(null)  // 受取時の「○○を獲得した！」ポップアップ
+  const [weaponMap, setWeaponMap] = useState({})  // ボス装備報酬のステータス（name→weapon行）
 
   const init = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -36,7 +37,7 @@ export default function Event() {
 
     const cfgR = await supabase.from('event_config').select('*').eq('event_key', EVENT_KEY).maybeSingle()
     const ptsR = await supabase.from('event_points').select('points').eq('event_key', EVENT_KEY).eq('player_id', user.id).maybeSingle()
-    const rwR  = await supabase.from('event_rewards').select('threshold, label').eq('event_key', EVENT_KEY).order('threshold')
+    const rwR  = await supabase.from('event_rewards').select('threshold, label, weapon_names').eq('event_key', EVENT_KEY).order('threshold')
     const clR  = await supabase.from('event_claims').select('threshold').eq('event_key', EVENT_KEY).eq('player_id', user.id)
     const tiR  = await supabase.from('player_items').select('quantity, items!inner(name)').eq('player_id', user.id).eq('items.name', TICKET_ITEM)
 
@@ -56,7 +57,36 @@ export default function Event() {
     setTickets((tiR.data || []).reduce((s, r) => s + (r.quantity || 0), 0))
     setNowMs(Date.now())
     setLoading(false)
+
+    // ボス装備報酬のステータスを weapons から取得（装備名は公開列 weapon_names）
+    const wNames = [...new Set((rwR.data || []).flatMap(r => r.weapon_names || []))]
+    if (wNames.length > 0) {
+      const { data: weapons } = await supabase.from('weapons').select('*').in('name', wNames)
+      const wm = {}
+      for (const w of (weapons || [])) wm[w.name] = w
+      setWeaponMap(wm)
+    }
   }, [nav])
+
+  // 装備のステータスを簡潔に並べる（0より大きい項目のみ）
+  const weaponStatParts = (w) => {
+    if (!w) return []
+    const parts = []
+    const push = (v, label, color) => { if (v > 0) parts.push({ label: `${label}+${v}`, color }) }
+    push(w.atk_bonus, '攻撃', '#ffcc00');   push(w.def_bonus, '防御', '#88aaff')
+    push(w.matk_bonus, '特攻', '#cc44ff');  push(w.mdef_bonus, '特防', '#44ccff')
+    push(w.spd_bonus, '素早さ', '#ff8844'); push(w.hp_bonus, 'HP', '#44ff88')
+    push(w.mp_bonus, 'MP', '#4488ff')
+    if (w.atk_bonus_pct > 0)  parts.push({ label: `攻撃+${w.atk_bonus_pct}%`, color: '#ffcc00' })
+    if (w.matk_bonus_pct > 0) parts.push({ label: `特攻+${w.matk_bonus_pct}%`, color: '#cc44ff' })
+    if (w.hp_bonus_pct > 0)   parts.push({ label: `HP+${w.hp_bonus_pct}%`, color: '#44ff88' })
+    if (w.mp_bonus_pct > 0)   parts.push({ label: `MP+${w.mp_bonus_pct}%`, color: '#4488ff' })
+    if (w.spd_bonus_pct > 0)  parts.push({ label: `素早さ+${w.spd_bonus_pct}%`, color: '#ff8844' })
+    if (w.hit_bonus > 0)      parts.push({ label: `命中+${w.hit_bonus}%`, color: '#ffaa44' })
+    if (w.crit_bonus > 0)     parts.push({ label: `クリ+${w.crit_bonus}%`, color: '#ff6688' })
+    if (w.crit_resist > 0)    parts.push({ label: `クリ耐性+${w.crit_resist}%`, color: '#66ccff' })
+    return parts
+  }
 
   // 初回マウント時のデータ取得（awaitの後にstate更新する正当なfetch）
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -180,9 +210,24 @@ export default function Event() {
                 background: isClaimed ? '#060f0f' : canClaim ? '#00140a' : '#000a18',
                 padding:'10px 12px',
               }}>
-                <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                  <span style={{ color: reached ? '#ffcc00' : '#446688', fontSize:'13px', minWidth:'52px' }}>{r.threshold}pt</span>
-                  <span style={{ color: reached ? '#cce0ff' : '#556677', fontSize:'12px' }}>{r.label}</span>
+                <div style={{ display:'flex', alignItems:'flex-start', gap:'10px', minWidth:0 }}>
+                  <span style={{ color: reached ? '#ffcc00' : '#446688', fontSize:'13px', minWidth:'52px', paddingTop:'1px' }}>{r.threshold}pt</span>
+                  <div style={{ minWidth:0 }}>
+                    <span style={{ color: reached ? '#cce0ff' : '#556677', fontSize:'12px' }}>{r.label}</span>
+                    {(r.weapon_names || []).map(wn => {
+                      const w = weaponMap[wn]
+                      const parts = weaponStatParts(w)
+                      if (!parts.length) return null
+                      return (
+                        <div key={wn} style={{ marginTop:'3px', fontSize:'10px', lineHeight:'1.5' }}>
+                          {(r.weapon_names.length > 1) && <span style={{ color:'#778899' }}>{wn}: </span>}
+                          {parts.map((p, i) => (
+                            <span key={i} style={{ color:p.color, marginRight:'6px' }}>{p.label}</span>
+                          ))}
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
                 {isClaimed ? (
                   <span style={{ color:'#446655', fontSize:'11px', whiteSpace:'nowrap' }}>✓ 受取済</span>
