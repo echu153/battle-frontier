@@ -1399,7 +1399,7 @@ export default function Game() {
   const [facilitiesExpanded, setFacilitiesExpanded] = useState(() => localStorage.getItem('facilitiesExpanded') !== '0')
   const toggleStatExpanded = () => setStatExpanded(v => { localStorage.setItem('statExpanded', v ? '0' : '1'); return !v })
   const toggleFacilitiesExpanded = () => setFacilitiesExpanded(v => { localStorage.setItem('facilitiesExpanded', v ? '0' : '1'); return !v })
-  // ☰メニュー内のカテゴリ別アコーディオン（開発限定。気に入らなければこのstateとMenuCatの呼び出しを外せば従来表示に戻る）
+  // ☰メニュー内のカテゴリ別アコーディオン（一般公開済み。戻すならMenuCatのaccordion指定をfalseに）
   const [openMenuCats, setOpenMenuCats] = useState(() => { try { return JSON.parse(localStorage.getItem('openMenuCats') || '{}') } catch { return {} } })
   const toggleMenuCat = (k) => setOpenMenuCats(p => { const n = { ...p, [k]: !p[k] }; localStorage.setItem('openMenuCats', JSON.stringify(n)); return n })
   const [selectedArea, setSelectedArea] = useState(() => Number(localStorage.getItem('selectedArea') || 1))
@@ -4943,7 +4943,7 @@ export default function Game() {
                   </button>
                   {facilitiesExpanded && (
                     <div style={{ border:'1px solid #003366', background:'#000a14', padding:'10px', marginTop:'8px' }}>
-                      {(() => { const acc = !!profile?.is_admin; return (<>
+                      {(() => { const acc = true; return (<>
                       <MenuCat title="コンテンツ" catKey="content" accordion={acc} open={!!openMenuCats.content || eventVisible} onToggle={toggleMenuCat}>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                         {eventVisible && (
@@ -5392,7 +5392,7 @@ export default function Game() {
                     </button>
                     {facilitiesExpanded && (
                       <div style={{ border:'1px solid #003366', background:'#000a14', padding:'10px', marginTop:'8px' }}>
-                        {(() => { const acc = !!profile?.is_admin; return (<>
+                        {(() => { const acc = true; return (<>
                         <MenuCat title="コンテンツ" catKey="content" accordion={acc} open={!!openMenuCats.content || eventVisible} onToggle={toggleMenuCat}>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
                           {eventVisible && (
