@@ -35,7 +35,7 @@ export default function Event() {
 
     const cfgR = await supabase.from('event_config').select('*').eq('event_key', EVENT_KEY).maybeSingle()
     const ptsR = await supabase.from('event_points').select('points').eq('event_key', EVENT_KEY).eq('player_id', user.id).maybeSingle()
-    const rwR  = await supabase.from('event_rewards').select('threshold, rewards, label').eq('event_key', EVENT_KEY).order('threshold')
+    const rwR  = await supabase.from('event_rewards').select('threshold, label').eq('event_key', EVENT_KEY).order('threshold')
     const clR  = await supabase.from('event_claims').select('threshold').eq('event_key', EVENT_KEY).eq('player_id', user.id)
     const tiR  = await supabase.from('player_items').select('quantity, items!inner(name)').eq('player_id', user.id).eq('items.name', TICKET_ITEM)
 

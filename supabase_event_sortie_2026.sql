@@ -37,11 +37,22 @@ CREATE TABLE IF NOT EXISTS event_points (
   PRIMARY KEY (player_id, event_key)
 );
 
+-- 公開テーブル: threshold と「表示ラベル（隠し報酬は伏字）」のみ。client SELECT可。
 CREATE TABLE IF NOT EXISTS event_rewards (
   event_key  text NOT NULL,
   threshold  int  NOT NULL,
-  rewards    jsonb NOT NULL,   -- [{"type":"gold|item|weapon|title","name":"...","qty":N}]
   label      text NOT NULL,
+  PRIMARY KEY (event_key, threshold)
+);
+
+-- 秘匿テーブル: 付与内容(rewards)と隠し報酬の正体(reveal_label)。
+--   RLSを有効にしSELECTポリシーを作らない＝clientはRESTからも読めない。
+--   SECURITY DEFINER の claim_event_reward だけが参照する（RLSバイパス）。
+CREATE TABLE IF NOT EXISTS event_reward_payloads (
+  event_key    text NOT NULL,
+  threshold    int  NOT NULL,
+  rewards      jsonb NOT NULL,   -- [{"type":"gold|item|weapon|title","name":"...","qty":N}]
+  reveal_label text,             -- 受取時に表示する正体（伏字報酬のみ）
   PRIMARY KEY (event_key, threshold)
 );
 
@@ -54,15 +65,17 @@ CREATE TABLE IF NOT EXISTS event_claims (
 );
 
 -- ===== 2) RLS =====
-ALTER TABLE event_config  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE event_points  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE event_rewards ENABLE ROW LEVEL SECURITY;
-ALTER TABLE event_claims  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_config          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_points          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_rewards         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_reward_payloads ENABLE ROW LEVEL SECURITY;  -- ★SELECTポリシー無し＝client読取不可
+ALTER TABLE event_claims          ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "event_config_select"  ON event_config;
 DROP POLICY IF EXISTS "event_rewards_select" ON event_rewards;
 DROP POLICY IF EXISTS "event_points_select"  ON event_points;
 DROP POLICY IF EXISTS "event_claims_select"  ON event_claims;
+-- event_reward_payloads には SELECT ポリシーを作らない（claim の SECURITY DEFINER のみ参照）
 CREATE POLICY "event_config_select"  ON event_config  FOR SELECT USING (true);
 CREATE POLICY "event_rewards_select" ON event_rewards FOR SELECT USING (true);
 CREATE POLICY "event_points_select"  ON event_points  FOR SELECT USING (auth.uid() = player_id);
@@ -75,69 +88,129 @@ ON CONFLICT (event_key) DO UPDATE
   SET name = EXCLUDED.name, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at;
 
 -- ===== 4) 報酬データ =====
-DELETE FROM event_rewards WHERE event_key = 'sortie_2026_06';
-INSERT INTO event_rewards (event_key, threshold, rewards, label) VALUES
-  ('sortie_2026_06',   25, '[{"type":"weapon","name":"氷刃の剣"},{"type":"weapon","name":"氷晶の杖"},{"type":"weapon","name":"峰岳の守護輪"}]', '氷刃の剣・氷晶の杖・峰岳の守護輪'),
-  ('sortie_2026_06',   50, '[{"type":"gold","qty":100000}]', '10万ゴールド'),
-  ('sortie_2026_06',   75, '[{"type":"gold","qty":100000}]', '10万ゴールド'),
-  ('sortie_2026_06',  100, '[{"type":"weapon","name":"結晶グリーブ"}]', '結晶グリーブ'),
-  ('sortie_2026_06',  125, '[{"type":"item","name":"強化石(B)","qty":2}]', '強化石(B)×2'),
-  ('sortie_2026_06',  150, '[{"type":"gold","qty":150000}]', '15万ゴールド'),
-  ('sortie_2026_06',  175, '[{"type":"item","name":"強化石(B)","qty":2}]', '強化石(B)×2'),
-  ('sortie_2026_06',  200, '[{"type":"gold","qty":150000}]', '15万ゴールド'),
-  ('sortie_2026_06',  225, '[{"type":"weapon","name":"蒼粘剣"}]', '蒼粘剣'),
-  ('sortie_2026_06',  250, '[{"type":"item","name":"強化石(A)","qty":1}]', '強化石(A)'),
-  ('sortie_2026_06',  275, '[{"type":"gold","qty":200000}]', '20万ゴールド'),
-  ('sortie_2026_06',  300, '[{"type":"weapon","name":"虚無の杖"}]', '虚無の杖'),
-  ('sortie_2026_06',  325, '[{"type":"item","name":"強化石(A)","qty":1}]', '強化石(A)'),
-  ('sortie_2026_06',  350, '[{"type":"gold","qty":200000}]', '20万ゴールド'),
-  ('sortie_2026_06',  375, '[{"type":"weapon","name":"スライムの指輪"}]', 'スライムの指輪'),
-  ('sortie_2026_06',  400, '[{"type":"item","name":"強化石(A)","qty":1}]', '強化石(A)'),
-  ('sortie_2026_06',  425, '[{"type":"gold","qty":200000}]', '20万ゴールド'),
-  ('sortie_2026_06',  450, '[{"type":"weapon","name":"影踏みのブーツ"}]', '影踏みのブーツ'),
-  ('sortie_2026_06',  475, '[{"type":"item","name":"強化石(A)","qty":1}]', '強化石(A)'),
-  ('sortie_2026_06',  500, '[{"type":"gold","qty":200000}]', '20万ゴールド'),
-  ('sortie_2026_06',  525, '[{"type":"weapon","name":"古代魔導コア"}]', '古代魔導コア'),
-  ('sortie_2026_06',  550, '[{"type":"item","name":"強化石(A)","qty":2}]', '強化石(A)×2'),
-  ('sortie_2026_06',  575, '[{"type":"gold","qty":250000}]', '25万ゴールド'),
-  ('sortie_2026_06',  600, '[{"type":"weapon","name":"海竜の鱗"}]', '海竜の鱗'),
-  ('sortie_2026_06',  625, '[{"type":"item","name":"強化石(A)","qty":2}]', '強化石(A)×2'),
-  ('sortie_2026_06',  650, '[{"type":"gold","qty":250000}]', '25万ゴールド'),
-  ('sortie_2026_06',  675, '[{"type":"weapon","name":"アクアクラウン"}]', 'アクアクラウン'),
-  ('sortie_2026_06',  700, '[{"type":"item","name":"強化石(A)","qty":2}]', '強化石(A)×2'),
-  ('sortie_2026_06',  725, '[{"type":"gold","qty":250000}]', '25万ゴールド'),
-  ('sortie_2026_06',  750, '[{"type":"weapon","name":"嵐の重装甲"}]', '嵐の重装甲'),
-  ('sortie_2026_06',  775, '[{"type":"item","name":"強化石(A)","qty":2}]', '強化石(A)×2'),
-  ('sortie_2026_06',  800, '[{"type":"gold","qty":250000}]', '25万ゴールド'),
-  ('sortie_2026_06',  825, '[{"type":"weapon","name":"絶零の魔導砲"}]', '絶零の魔導砲'),
-  ('sortie_2026_06',  850, '[{"type":"item","name":"強化石(A)","qty":3}]', '強化石(A)×3'),
-  ('sortie_2026_06',  875, '[{"type":"gold","qty":300000}]', '30万ゴールド'),
-  ('sortie_2026_06',  900, '[{"type":"weapon","name":"雷鷲の爪牙"}]', '雷鷲の爪牙'),
-  ('sortie_2026_06',  925, '[{"type":"item","name":"強化石(A)","qty":3}]', '強化石(A)×3'),
-  ('sortie_2026_06',  950, '[{"type":"gold","qty":300000}]', '30万ゴールド'),
-  ('sortie_2026_06',  975, '[{"type":"weapon","name":"フロストバーンの聖鎧"}]', 'フロストバーンの聖鎧'),
-  ('sortie_2026_06', 1000, '[{"type":"item","name":"強化石(A)","qty":3}]', '強化石(A)×3'),
-  ('sortie_2026_06', 1025, '[{"type":"gold","qty":300000}]', '30万ゴールド'),
-  ('sortie_2026_06', 1050, '[{"type":"weapon","name":"インフェルノバスティオン"}]', 'インフェルノバスティオン'),
-  ('sortie_2026_06', 1075, '[{"type":"item","name":"強化石(A)","qty":3}]', '強化石(A)×3'),
-  ('sortie_2026_06', 1100, '[{"type":"gold","qty":300000}]', '30万ゴールド'),
-  ('sortie_2026_06', 1125, '[{"type":"item","name":"黒龍の逆鱗","qty":1}]', '黒龍の逆鱗'),
-  ('sortie_2026_06', 1150, '[{"type":"item","name":"雨禍の心核","qty":1}]', '雨禍の心核'),
-  ('sortie_2026_06', 1175, '[{"type":"item","name":"神雷炉心","qty":1}]', '神雷炉心'),
-  ('sortie_2026_06', 1200, '[{"type":"item","name":"Sレアレイドボス装備選択券","qty":1}]', 'Sレアレイドボス装備選択券'),
-  ('sortie_2026_06', 1300, '[{"type":"gold","qty":500000}]', '50万ゴールド'),
-  ('sortie_2026_06', 1400, '[{"type":"gold","qty":500000}]', '50万ゴールド'),
-  ('sortie_2026_06', 1500, '[{"type":"gold","qty":500000}]', '50万ゴールド'),
-  ('sortie_2026_06', 1600, '[{"type":"gold","qty":500000}]', '50万ゴールド'),
-  ('sortie_2026_06', 1700, '[{"type":"gold","qty":500000}]', '50万ゴールド'),
-  ('sortie_2026_06', 1800, '[{"type":"gold","qty":500000}]', '50万ゴールド'),
-  ('sortie_2026_06', 1900, '[{"type":"gold","qty":1000000}]', '100万ゴールド'),
-  ('sortie_2026_06', 2000, '[{"type":"title","name":"暇人"}]', '？？？？');
+-- 既存(rewards/reveal_labelを公開event_rewardsに持っていた版)からの移行: 公開側から秘匿列を落とす
+ALTER TABLE event_rewards DROP COLUMN IF EXISTS rewards;
+ALTER TABLE event_rewards DROP COLUMN IF EXISTS reveal_label;
 
--- 隠し報酬の正体（一覧は label=？？？？、受取時に reveal_label を表示）
-ALTER TABLE event_rewards ADD COLUMN IF NOT EXISTS reveal_label text;
-UPDATE event_rewards SET reveal_label = '称号「暇人」'
-  WHERE event_key = 'sortie_2026_06' AND threshold = 2000;
+-- 4-1) 秘匿: 付与内容＋正体（client SELECT不可）
+DELETE FROM event_reward_payloads WHERE event_key = 'sortie_2026_06';
+INSERT INTO event_reward_payloads (event_key, threshold, rewards, reveal_label) VALUES
+  ('sortie_2026_06',   25, '[{"type":"weapon","name":"氷刃の剣"},{"type":"weapon","name":"氷晶の杖"},{"type":"weapon","name":"峰岳の守護輪"}]', NULL),
+  ('sortie_2026_06',   50, '[{"type":"gold","qty":100000}]', NULL),
+  ('sortie_2026_06',   75, '[{"type":"gold","qty":100000}]', NULL),
+  ('sortie_2026_06',  100, '[{"type":"weapon","name":"結晶グリーブ"}]', NULL),
+  ('sortie_2026_06',  125, '[{"type":"item","name":"強化石(B)","qty":2}]', NULL),
+  ('sortie_2026_06',  150, '[{"type":"gold","qty":150000}]', NULL),
+  ('sortie_2026_06',  175, '[{"type":"item","name":"強化石(B)","qty":2}]', NULL),
+  ('sortie_2026_06',  200, '[{"type":"gold","qty":150000}]', NULL),
+  ('sortie_2026_06',  225, '[{"type":"weapon","name":"蒼粘剣"}]', NULL),
+  ('sortie_2026_06',  250, '[{"type":"item","name":"強化石(A)","qty":1}]', NULL),
+  ('sortie_2026_06',  275, '[{"type":"gold","qty":200000}]', NULL),
+  ('sortie_2026_06',  300, '[{"type":"weapon","name":"虚無の杖"}]', NULL),
+  ('sortie_2026_06',  325, '[{"type":"item","name":"強化石(A)","qty":1}]', NULL),
+  ('sortie_2026_06',  350, '[{"type":"gold","qty":200000}]', NULL),
+  ('sortie_2026_06',  375, '[{"type":"weapon","name":"スライムの指輪"}]', NULL),
+  ('sortie_2026_06',  400, '[{"type":"item","name":"強化石(A)","qty":1}]', NULL),
+  ('sortie_2026_06',  425, '[{"type":"gold","qty":200000}]', NULL),
+  ('sortie_2026_06',  450, '[{"type":"weapon","name":"影踏みのブーツ"}]', NULL),
+  ('sortie_2026_06',  475, '[{"type":"item","name":"強化石(A)","qty":1}]', NULL),
+  ('sortie_2026_06',  500, '[{"type":"gold","qty":200000}]', NULL),
+  ('sortie_2026_06',  525, '[{"type":"weapon","name":"古代魔導コア"}]', NULL),
+  ('sortie_2026_06',  550, '[{"type":"item","name":"強化石(A)","qty":2}]', NULL),
+  ('sortie_2026_06',  575, '[{"type":"gold","qty":250000}]', NULL),
+  ('sortie_2026_06',  600, '[{"type":"weapon","name":"海竜の鱗"}]', NULL),
+  ('sortie_2026_06',  625, '[{"type":"item","name":"強化石(A)","qty":2}]', NULL),
+  ('sortie_2026_06',  650, '[{"type":"gold","qty":250000}]', NULL),
+  ('sortie_2026_06',  675, '[{"type":"weapon","name":"アクアクラウン"}]', NULL),
+  ('sortie_2026_06',  700, '[{"type":"item","name":"強化石(A)","qty":2}]', NULL),
+  ('sortie_2026_06',  725, '[{"type":"gold","qty":250000}]', NULL),
+  ('sortie_2026_06',  750, '[{"type":"weapon","name":"嵐の重装甲"}]', NULL),
+  ('sortie_2026_06',  775, '[{"type":"item","name":"強化石(A)","qty":2}]', NULL),
+  ('sortie_2026_06',  800, '[{"type":"gold","qty":250000}]', NULL),
+  ('sortie_2026_06',  825, '[{"type":"weapon","name":"絶零の魔導砲"}]', NULL),
+  ('sortie_2026_06',  850, '[{"type":"item","name":"強化石(A)","qty":3}]', NULL),
+  ('sortie_2026_06',  875, '[{"type":"gold","qty":300000}]', NULL),
+  ('sortie_2026_06',  900, '[{"type":"weapon","name":"雷鷲の爪牙"}]', NULL),
+  ('sortie_2026_06',  925, '[{"type":"item","name":"強化石(A)","qty":3}]', NULL),
+  ('sortie_2026_06',  950, '[{"type":"gold","qty":300000}]', NULL),
+  ('sortie_2026_06',  975, '[{"type":"weapon","name":"フロストバーンの聖鎧"}]', NULL),
+  ('sortie_2026_06', 1000, '[{"type":"item","name":"強化石(A)","qty":3}]', NULL),
+  ('sortie_2026_06', 1025, '[{"type":"gold","qty":300000}]', NULL),
+  ('sortie_2026_06', 1050, '[{"type":"weapon","name":"インフェルノバスティオン"}]', NULL),
+  ('sortie_2026_06', 1075, '[{"type":"item","name":"強化石(A)","qty":3}]', NULL),
+  ('sortie_2026_06', 1100, '[{"type":"gold","qty":300000}]', NULL),
+  ('sortie_2026_06', 1125, '[{"type":"item","name":"黒龍の逆鱗","qty":1}]', NULL),
+  ('sortie_2026_06', 1150, '[{"type":"item","name":"雨禍の心核","qty":1}]', NULL),
+  ('sortie_2026_06', 1175, '[{"type":"item","name":"神雷炉心","qty":1}]', NULL),
+  ('sortie_2026_06', 1200, '[{"type":"item","name":"Sレアレイドボス装備選択券","qty":1}]', NULL),
+  ('sortie_2026_06', 1300, '[{"type":"gold","qty":500000}]', NULL),
+  ('sortie_2026_06', 1400, '[{"type":"gold","qty":500000}]', NULL),
+  ('sortie_2026_06', 1500, '[{"type":"gold","qty":500000}]', NULL),
+  ('sortie_2026_06', 1600, '[{"type":"gold","qty":500000}]', NULL),
+  ('sortie_2026_06', 1700, '[{"type":"gold","qty":500000}]', NULL),
+  ('sortie_2026_06', 1800, '[{"type":"gold","qty":500000}]', NULL),
+  ('sortie_2026_06', 1900, '[{"type":"gold","qty":1000000}]', NULL),
+  ('sortie_2026_06', 2000, '[{"type":"title","name":"暇人"}]', '称号「暇人」');
+
+-- 4-2) 公開: 表示ラベルのみ（2000ptは伏字＝？？？？）
+DELETE FROM event_rewards WHERE event_key = 'sortie_2026_06';
+INSERT INTO event_rewards (event_key, threshold, label) VALUES
+  ('sortie_2026_06',   25, '氷刃の剣・氷晶の杖・峰岳の守護輪'),
+  ('sortie_2026_06',   50, '10万ゴールド'),
+  ('sortie_2026_06',   75, '10万ゴールド'),
+  ('sortie_2026_06',  100, '結晶グリーブ'),
+  ('sortie_2026_06',  125, '強化石(B)×2'),
+  ('sortie_2026_06',  150, '15万ゴールド'),
+  ('sortie_2026_06',  175, '強化石(B)×2'),
+  ('sortie_2026_06',  200, '15万ゴールド'),
+  ('sortie_2026_06',  225, '蒼粘剣'),
+  ('sortie_2026_06',  250, '強化石(A)'),
+  ('sortie_2026_06',  275, '20万ゴールド'),
+  ('sortie_2026_06',  300, '虚無の杖'),
+  ('sortie_2026_06',  325, '強化石(A)'),
+  ('sortie_2026_06',  350, '20万ゴールド'),
+  ('sortie_2026_06',  375, 'スライムの指輪'),
+  ('sortie_2026_06',  400, '強化石(A)'),
+  ('sortie_2026_06',  425, '20万ゴールド'),
+  ('sortie_2026_06',  450, '影踏みのブーツ'),
+  ('sortie_2026_06',  475, '強化石(A)'),
+  ('sortie_2026_06',  500, '20万ゴールド'),
+  ('sortie_2026_06',  525, '古代魔導コア'),
+  ('sortie_2026_06',  550, '強化石(A)×2'),
+  ('sortie_2026_06',  575, '25万ゴールド'),
+  ('sortie_2026_06',  600, '海竜の鱗'),
+  ('sortie_2026_06',  625, '強化石(A)×2'),
+  ('sortie_2026_06',  650, '25万ゴールド'),
+  ('sortie_2026_06',  675, 'アクアクラウン'),
+  ('sortie_2026_06',  700, '強化石(A)×2'),
+  ('sortie_2026_06',  725, '25万ゴールド'),
+  ('sortie_2026_06',  750, '嵐の重装甲'),
+  ('sortie_2026_06',  775, '強化石(A)×2'),
+  ('sortie_2026_06',  800, '25万ゴールド'),
+  ('sortie_2026_06',  825, '絶零の魔導砲'),
+  ('sortie_2026_06',  850, '強化石(A)×3'),
+  ('sortie_2026_06',  875, '30万ゴールド'),
+  ('sortie_2026_06',  900, '雷鷲の爪牙'),
+  ('sortie_2026_06',  925, '強化石(A)×3'),
+  ('sortie_2026_06',  950, '30万ゴールド'),
+  ('sortie_2026_06',  975, 'フロストバーンの聖鎧'),
+  ('sortie_2026_06', 1000, '強化石(A)×3'),
+  ('sortie_2026_06', 1025, '30万ゴールド'),
+  ('sortie_2026_06', 1050, 'インフェルノバスティオン'),
+  ('sortie_2026_06', 1075, '強化石(A)×3'),
+  ('sortie_2026_06', 1100, '30万ゴールド'),
+  ('sortie_2026_06', 1125, '黒龍の逆鱗'),
+  ('sortie_2026_06', 1150, '雨禍の心核'),
+  ('sortie_2026_06', 1175, '神雷炉心'),
+  ('sortie_2026_06', 1200, 'Sレアレイドボス装備選択券'),
+  ('sortie_2026_06', 1300, '50万ゴールド'),
+  ('sortie_2026_06', 1400, '50万ゴールド'),
+  ('sortie_2026_06', 1500, '50万ゴールド'),
+  ('sortie_2026_06', 1600, '50万ゴールド'),
+  ('sortie_2026_06', 1700, '50万ゴールド'),
+  ('sortie_2026_06', 1800, '50万ゴールド'),
+  ('sortie_2026_06', 1900, '100万ゴールド'),
+  ('sortie_2026_06', 2000, '？？？？');
 
 -- ============================================================
 -- 5) sortie_lock 更新（出撃ポイント加算を追記。20/10秒ロジックは維持）
@@ -211,9 +284,12 @@ DECLARE
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('error','未認証'); END IF;
 
-  -- 受取時は隠し報酬の正体(reveal_label)を返す。無ければ通常labelを使う
-  SELECT rewards, COALESCE(reveal_label, label) INTO v_rewards, v_label
-  FROM event_rewards WHERE event_key = p_event_key AND threshold = p_threshold;
+  -- 付与内容は秘匿テーブル(event_reward_payloads)から。受取時のみ正体(reveal_label)を返し、
+  -- 無ければ公開label。秘匿テーブルは SECURITY DEFINER の本関数からのみ読める。
+  SELECT p.rewards, COALESCE(p.reveal_label, r.label) INTO v_rewards, v_label
+  FROM event_reward_payloads p
+  JOIN event_rewards r ON r.event_key = p.event_key AND r.threshold = p.threshold
+  WHERE p.event_key = p_event_key AND p.threshold = p_threshold;
   IF NOT FOUND THEN RETURN json_build_object('error','報酬が見つかりません'); END IF;
 
   SELECT points INTO v_points FROM event_points WHERE player_id = v_uid AND event_key = p_event_key;
