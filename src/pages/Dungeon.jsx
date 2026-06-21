@@ -732,6 +732,13 @@ export default function Dungeon() {
   // 持ち物の合計数（だっしゅつの翼も含む＝消耗品＋戦利品）。上限を超えたら拾えない
   const bagCount = () => Object.values(inventory).reduce((s, q) => s + (q || 0), 0) + lootBag.length
   // ルート品を持ち物へ（表示用 label/emoji を付与）。素は同種でスタック（1枠扱い）、それ以外は個別
+  // 拾得がサーバーで失敗したとき、床から消したアイテムを元に戻す（消失防止）
+  const restoreFieldItem = (item) => {
+    if (!item) return
+    itemsRef.current = Math.max(0, itemsRef.current - 1)
+    setState((prev) => prev ? { ...prev, items: prev.items.some((it) => it.id === item.id) ? prev.items : [...prev.items, item] } : prev)
+  }
+
   const addLootToBag = (raw) => {
     const loot = { ...raw, ...lootDisplay(raw) }
     setLootBag((b) => {
@@ -915,24 +922,24 @@ export default function Dungeon() {
           // 床の消耗品をアイテム袋へ（名前は分かっているので即ログ・通信は裏で）
           const fdef = PET_ITEMS[itemHere.key]
           addLog(`${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾って袋に入れた`)
-          grantFood(itemHere.key).then((ok) => { if (!ok) addLog('🎒 袋がいっぱいで拾えなかった') })
+          grantFood(itemHere.key).then((ok) => { if (!ok) { addLog('🎒 袋がいっぱいで拾えなかった（床に戻した）'); restoreFieldItem(itemHere) } })
         } else if (itemHere.kind === 'dropLoot' && itemHere.loot) {
           // 自分が捨てたルート品を拾い直す（名前は既知なので即ログ・サーバー復帰は裏で）
           const d0 = lootDisplay(itemHere.loot); addLog(d0.img ? `${d0.label}を拾った` : `${d0.emoji} ${d0.label}を拾った`, 'left', d0.img)
           supabase.rpc('dungeon_repick_loot', { p_run_id: runIdRef.current, p_loot_id: itemHere.loot.id }).then(({ data, error }) => {
-            if (error) { addLog('拾えなかった'); return }
+            if (error) { addLog('拾えなかった（床に戻した）'); restoreFieldItem(itemHere); return }
             addLootToBag(data || itemHere.loot)
           })
         } else if (itemHere.kind === 'dropFood' && itemHere.key) {
           const fdef = PET_ITEMS[itemHere.key]
           addLog(`${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾った`)
-          grantFood(itemHere.key).then((ok) => { if (!ok) addLog('🎒 袋がいっぱいで拾えなかった') })
+          grantFood(itemHere.key).then((ok) => { if (!ok) { addLog('🎒 袋がいっぱいで拾えなかった（床に戻した）'); restoreFieldItem(itemHere) } })
         } else if (itemHere.loot) {
           // 床の戦利品（素/石/宝石/チャーム）。中身は既知なので即ログ＋サーバーで検証・保持
           const d = lootDisplay(itemHere.loot)
           addLog(d.img ? `${d.label}を拾った！` : `${d.emoji} ${d.label}を拾った！`, 'left', d.img)
           supabase.rpc('dungeon_pickup', { p_run_id: runIdRef.current, p_entry: itemHere.loot }).then(({ data, error }) => {
-            if (error || !data) { addLog('🎒 持ち帰れなかった'); return }
+            if (error || !data) { addLog('🎒 持ち帰れなかった（床に戻した）'); restoreFieldItem(itemHere); return }
             addLootToBag(data) // サーバーが採番したentry（id付き）で袋に反映
           })
         }

@@ -32,7 +32,7 @@ begin
   if not found then raise exception 'run not found'; end if;
   if v_run.owner_id <> auth.uid() then raise exception 'not your run'; end if;
   if v_run.status <> 'active' then raise exception 'run not active'; end if;
-  if v_run.loot_rolls >= 80 then raise exception 'too many loot'; end if;
+  if v_run.loot_rolls >= 500 then raise exception 'too many loot'; end if;  -- 旧80は30階ダンジョンで途中(29階付近)に到達し拾得不能＝アイテム消失の原因だったため緩和
 
   -- 受け取った戦利品を正規化＆検証（不正な値は弾く）。idはサーバーで採番
   v_id := gen_random_uuid()::text;
