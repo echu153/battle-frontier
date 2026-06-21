@@ -408,6 +408,8 @@ DECLARE
   v_atk_a            int := 20;   -- ★2026-06-20公開: 全プレイヤー 20/10/5
   v_atk_b            int := 10;
   v_atk_c            int := 5;
+  v_mat_name         text;   -- ★通常素材名（ボス別）
+  v_rare_name        text;   -- ★レア素材名（ボス別）
 BEGIN
   v_player_id := auth.uid();
   IF v_player_id IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
@@ -447,6 +449,13 @@ BEGIN
   END IF;
   v_scale_count := v_scale_min + (random() * (v_scale_max - v_scale_min))::int;
 
+  -- ★ボス別の素材名（雨摩座=水禍素材／その他=黒龍素材）
+  IF v_boss.boss_name = '雨摩座' THEN
+    v_mat_name := '水禍の雫'; v_rare_name := '雨禍の心核';
+  ELSE
+    v_mat_name := '黒龍の鱗'; v_rare_name := '黒龍の逆鱗';
+  END IF;
+
   -- Gold付与（保護トリガー対応）
   PERFORM set_config('app.allow_stat_change', 'on', true);
   UPDATE profiles SET gold = gold + v_gold WHERE id = v_player_id;
@@ -473,18 +482,18 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- 黒龍の鱗
-  SELECT id INTO v_scale_item_id FROM items WHERE name = '黒龍の鱗' LIMIT 1;
+  -- 通常素材（ボス別: 黒龍の鱗 / 水禍の雫）
+  SELECT id INTO v_scale_item_id FROM items WHERE name = v_mat_name LIMIT 1;
   IF v_scale_item_id IS NOT NULL THEN
     INSERT INTO player_items (player_id, item_id, quantity, equipped)
     VALUES (v_player_id, v_scale_item_id, v_scale_count, false)
     ON CONFLICT (player_id, item_id) DO UPDATE SET quantity = player_items.quantity + v_scale_count;
   END IF;
 
-  -- 黒龍の逆鱗（確率）
+  -- レア素材（ボス別: 黒龍の逆鱗 / 雨禍の心核）（確率）
   IF v_gyaku_chance > 0 AND random() < v_gyaku_chance THEN
     v_got_gyaku := true;
-    SELECT id INTO v_gyaku_item_id FROM items WHERE name = '黒龍の逆鱗' LIMIT 1;
+    SELECT id INTO v_gyaku_item_id FROM items WHERE name = v_rare_name LIMIT 1;
     IF v_gyaku_item_id IS NOT NULL THEN
       INSERT INTO player_items (player_id, item_id, quantity, equipped)
       VALUES (v_player_id, v_gyaku_item_id, 1, false)
@@ -503,7 +512,9 @@ BEGIN
     'gem_count',        v_gem_count,
     'gem_rank',         v_gem_rank,
     'scale_count',      v_scale_count,
-    'got_gyaku',        v_got_gyaku
+    'got_gyaku',        v_got_gyaku,
+    'mat_name',         v_mat_name,
+    'rare_name',        v_rare_name
   );
 END;
 $$;
