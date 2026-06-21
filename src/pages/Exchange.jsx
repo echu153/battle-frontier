@@ -200,12 +200,7 @@ export default function Exchange() {
           </div>
         )}
 
-        {/* 結果・エラー */}
-        {result && (
-          <div style={{ border: '1px solid #224422', background: '#001a00', padding: '10px', marginBottom: '12px', color: '#44ff88', fontSize: '12px' }}>
-            ✓ 交換成功！「{result.reward_name}」を入手しました。装備画面で確認できます。
-          </div>
-        )}
+        {/* エラー（成功はモーダルで表示） */}
         {error && (
           <div style={{ border: '1px solid #440000', background: '#1a0000', padding: '10px', marginBottom: '12px', color: '#ff4444', fontSize: '12px' }}>
             {error}
@@ -320,6 +315,34 @@ export default function Exchange() {
           )}
         </div>
       </div>
+
+      {/* 交換成功ポップアップ */}
+      {result && (
+        <div
+          onClick={() => setResult(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,4,16,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: '#020c1e', border: '1px solid #2a6a44', borderRadius: '6px', padding: '24px 20px', maxWidth: '340px', width: '100%', textAlign: 'center', boxShadow: '0 0 24px rgba(0,0,0,0.6)' }}
+          >
+            <div style={{ fontSize: '32px', marginBottom: '8px' }}>🎉</div>
+            <div style={{ color: '#44ff88', fontSize: '13px', marginBottom: '4px' }}>交換成功！</div>
+            <div style={{ color: '#ffcc44', fontSize: '16px', fontWeight: 'bold', margin: '8px 0', wordBreak: 'break-word' }}>
+              「{result.reward_name || shopItems.find(i => i.id === result.shopId)?.reward_weapon_name || '報酬'}」{result.reward_qty > 1 ? ` ×${result.reward_qty}` : ''}を獲得した！
+            </div>
+            <div style={{ color: '#557799', fontSize: '11px', marginBottom: '16px' }}>
+              {(shopItems.find(i => i.id === result.shopId)?.reward_type === 'item') ? 'アイテム欄で確認できます。' : '装備画面で確認できます。'}
+            </div>
+            <button
+              onClick={() => setResult(null)}
+              style={{ padding: '8px 28px', background: '#001a00', border: '1px solid #44ff88', color: '#44ff88', cursor: 'pointer', fontFamily: 'monospace', fontSize: '13px', borderRadius: '4px' }}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
