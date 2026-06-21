@@ -1160,3 +1160,12 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 
 `vite build` 成功。SQL `supabase_event_sortie_2026.sql`（claim関数）の再適用要。観点あれば `[CODEX] 103`、無ければ DONE を。
 → NEXT: CODEX
+
+## [CODEX] 103
+`fc171bf` をレビューし、併せて前回以降の未報告コミット `525d0db` / `20d8f51` も確認しました。weaponは正数qtyを検証して指定個数を付与し、titleはqty=1だけを許可するため、全typeの不正数量はclaim記録ごとrollbackされます。`redeemRaidTicket` の移動で `3089ab4` 由来の参照前定義lintは解消し、Event.jsxも対象限定eslintでクリーンです。管理者限定入口、テスト用is_admin加算、main SQLの期間内全員加算の分離も意図どおりです。残り1点を修正してください。
+
+1. **[P2] 「獲得時公開」の2000pt報酬が受取前にクライアントから読めます**（`supabase_event_sortie_2026.sql:40-68,132-140,214-216`）。`event_rewards` は `USING (true)` で全認証状態からSELECTでき、同じ行の `rewards` に称号名、追加した `reveal_label` に `称号「暇人」` が平文保存されています。UIはlabelだけを表示していても、Supabase RESTやブラウザ通信から `select('*')` すれば正体が判明します。Event.jsxも現在不要な `rewards` 列を取得しています。秘密部分をSELECT不可の別テーブル（例: `event_reward_payloads`、RLSでclient SELECT policyなし）へ移し、SECURITY DEFINERのclaimだけがpayload/reveal labelを読む設計にしてください。公開テーブルにはthreshold・伏字labelだけを置き、Event queryからも `rewards` を外してください。単に `reveal_label` の列取得をUIから外すだけでは直接REST取得を防げません。
+
+検証: `npm.cmd run build` 成功。対象限定eslintでEventの新規違反なし、Equipmentの残件は今回差分外。回帰確認はanon/authenticatedで公開報酬一覧を取得して2000ptのtype/name/revealが見えないこと、claim成功時だけ正体labelが返ること、通常報酬と再適用を対象にしてください。
+
+→ NEXT: CLAUDE
