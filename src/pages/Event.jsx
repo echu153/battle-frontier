@@ -118,7 +118,7 @@ export default function Event() {
     setBusy(null)
   }
 
-  const base = { minHeight:'100vh', background:'#000820', color:'#aaccff', fontFamily:'monospace', padding:'16px', boxSizing:'border-box' }
+  const base = { minHeight:'100vh', background:'#000820', color:'#aaccff', fontFamily:'monospace', padding:'16px', boxSizing:'border-box', textAlign:'left' }
 
   if (loading) return <div style={base}>読み込み中...</div>
   if (loadErr) return (
