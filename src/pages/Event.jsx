@@ -22,6 +22,7 @@ export default function Event() {
   const [points, setPoints] = useState(0)
   const [rewards, setRewards] = useState([])
   const [claimed, setClaimed] = useState(new Set())
+  const [claimedReveal, setClaimedReveal] = useState({})  // 受取済みthreshold→正体ラベル
   const [tickets, setTickets] = useState(0)
   const [busy, setBusy] = useState(null)
   const [msg, setMsg] = useState(null)
@@ -38,7 +39,7 @@ export default function Event() {
     const cfgR = await supabase.from('event_config').select('*').eq('event_key', EVENT_KEY).maybeSingle()
     const ptsR = await supabase.from('event_points').select('points').eq('event_key', EVENT_KEY).eq('player_id', user.id).maybeSingle()
     const rwR  = await supabase.from('event_rewards').select('threshold, label, weapon_names').eq('event_key', EVENT_KEY).order('threshold')
-    const clR  = await supabase.from('event_claims').select('threshold').eq('event_key', EVENT_KEY).eq('player_id', user.id)
+    const clR  = await supabase.from('event_claims').select('threshold, reveal_label').eq('event_key', EVENT_KEY).eq('player_id', user.id)
     const tiR  = await supabase.from('player_items').select('quantity, items!inner(name)').eq('player_id', user.id).eq('items.name', TICKET_ITEM)
 
     // 1つでもDBエラー（テーブル未適用/RLS不備等）なら「空イベント」と誤認せずエラー表示する
@@ -54,6 +55,7 @@ export default function Event() {
     setPoints(ptsR.data?.points || 0)
     setRewards(rwR.data || [])
     setClaimed(new Set((clR.data || []).map(r => r.threshold)))
+    setClaimedReveal(Object.fromEntries((clR.data || []).filter(r => r.reveal_label).map(r => [r.threshold, r.reveal_label])))
     setTickets((tiR.data || []).reduce((s, r) => s + (r.quantity || 0), 0))
     setNowMs(Date.now())
     setLoading(false)
@@ -203,6 +205,8 @@ export default function Event() {
             const isClaimed = claimed.has(r.threshold)
             const reached = points >= r.threshold
             const canClaim = reached && !isClaimed
+            // 受取済みは正体(claimedReveal)を、未受取は公開label（隠し報酬は？？？？）を表示
+            const displayLabel = (isClaimed && claimedReveal[r.threshold]) ? claimedReveal[r.threshold] : r.label
             return (
               <div key={r.threshold} style={{
                 display:'grid', gridTemplateColumns:'52px minmax(0,1fr) auto', columnGap:'10px', alignItems:'start',
@@ -214,7 +218,7 @@ export default function Event() {
                 <span style={{ color: reached ? '#ffcc00' : '#446688', fontSize:'13px' }}>{r.threshold}pt</span>
                 {/* 列2: 名前＋ステータス（同じ左端から開始） */}
                 <div style={{ minWidth:0 }}>
-                  <div style={{ color: reached ? '#cce0ff' : '#556677', fontSize:'12px' }}>{r.label}</div>
+                  <div style={{ color: reached ? '#cce0ff' : '#556677', fontSize:'12px' }}>{displayLabel}</div>
                   {(r.weapon_names || []).map(wn => {
                     const w = weaponMap[wn]
                     const parts = weaponStatParts(w)

@@ -57,12 +57,14 @@ CREATE TABLE IF NOT EXISTS event_reward_payloads (
 );
 
 CREATE TABLE IF NOT EXISTS event_claims (
-  player_id  uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  event_key  text NOT NULL,
-  threshold  int  NOT NULL,
-  claimed_at timestamptz NOT NULL DEFAULT now(),
+  player_id    uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  event_key    text NOT NULL,
+  threshold    int  NOT NULL,
+  reveal_label text,             -- 受取時に確定した表示名（本人のみ閲覧可＝受取後は正体を表示）
+  claimed_at   timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (player_id, event_key, threshold)
 );
+ALTER TABLE event_claims ADD COLUMN IF NOT EXISTS reveal_label text;  -- 既存環境への移行
 
 -- ===== 2) RLS =====
 ALTER TABLE event_config          ENABLE ROW LEVEL SECURITY;
@@ -317,9 +319,10 @@ BEGIN
     RETURN json_build_object('error','ポイントが足りません','points',v_points);
   END IF;
 
-  -- 原子的に受取記録（同時/連打でも片方しか挿入されず二重受取を防ぐ）
-  INSERT INTO event_claims (player_id, event_key, threshold)
-  VALUES (v_uid, p_event_key, p_threshold) ON CONFLICT DO NOTHING;
+  -- 原子的に受取記録（同時/連打でも片方しか挿入されず二重受取を防ぐ）。
+  -- 受取後の表示用に正体(v_label)を本人の受取行へ保存（event_claimsは本人のみSELECT可）。
+  INSERT INTO event_claims (player_id, event_key, threshold, reveal_label)
+  VALUES (v_uid, p_event_key, p_threshold, v_label) ON CONFLICT DO NOTHING;
   GET DIAGNOSTICS v_inserted = ROW_COUNT;
   IF v_inserted = 0 THEN RETURN json_build_object('error','既に受け取り済みです'); END IF;
 
