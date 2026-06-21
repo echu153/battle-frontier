@@ -106,6 +106,31 @@ export default function Equipment() {
   const [embedTarget, setEmbedTarget] = useState(null)  // 埋め込み先の装備id
   const [bulkPreview, setBulkPreview] = useState(null)  // 一括合成プレビュー
   const [craftMsg, setCraftMsg] = useState('')
+  const [ticketPopup, setTicketPopup] = useState(false)  // Sレアレイドボス装備選択券のポップアップ
+  const [ticketMsg, setTicketMsg] = useState('')
+
+  // 選択券で交換できるS級レイド装備（redeem_raid_ticket の許可リストと一致）
+  const RAID_TICKET_CHOICES = [
+    { name:'ヴァルブレイカー', desc:'S級大剣。攻撃80 防御20。攻撃ヒット時、2T対象の回復力-10%。' },
+    { name:'マレディクシオン', desc:'S級銃。攻撃60 特攻60 素早さ10。攻撃ヒット時、2T対象の回復力-10%。' },
+    { name:'濡羽杖アマザネ',   desc:'S級杖。特攻80 特防20。攻撃ヒット時、対象の素早さ-5%。' },
+    { name:'哭雨の羽衣',       desc:'S級防具。特攻20 特防80。戦闘開始時、1回だけ状態異常を無効化。' },
+  ]
+
+  const redeemRaidTicket = async (weaponName) => {
+    if (loading) return
+    setLoading(true); setTicketMsg('')
+    const { data, error } = await supabase.rpc('redeem_raid_ticket', { p_weapon_name: weaponName })
+    if (error || data?.error) {
+      setTicketMsg(data?.error || 'エラーが発生しました')
+    } else {
+      setTicketPopup(false)
+      setAwakenMessage(`✨ 「${weaponName}」を入手しました！装備タブで確認できます。`)
+      setTimeout(() => setAwakenMessage(''), 4000)
+      await fetchAll()
+    }
+    setLoading(false)
+  }
 
   useEffect(() => { fetchAll() }, [])
 
@@ -490,6 +515,11 @@ export default function Equipment() {
                         ) : pi.items.effect === 'stat_reset' ? (
                           <button onClick={() => setConfirmReset(pi)} disabled={loading}
                             style={{ padding:'2px 8px', background:'#200010', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
+                        ) : pi.items.name === 'Sレアレイドボス装備選択券' ? (
+                          <button onClick={() => { setTicketPopup(true); setTicketMsg('') }} disabled={loading}
+                            style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
+                        ) : pi.items.effect === 'material' ? (
+                          <span style={{ color:'#aa8800', fontSize:'10px' }}>素材</span>
                         ) : pi.equipped ? (
                           <span style={{ color:'#0088ff', fontSize:'10px' }}>セット中</span>
                         ) : (
@@ -847,6 +877,31 @@ export default function Equipment() {
               <button onClick={() => setConfirmReset(null)} style={{ flex:1, padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>キャンセル</button>
               <button onClick={() => useStatReset(confirmReset)} disabled={loading} style={{ flex:1, padding:'8px', background:'#200010', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>使用する</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {ticketPopup && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}
+          onClick={() => { if (!loading) setTicketPopup(false) }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'#0a0c1a', border:'1px solid #ffcc44', padding:'20px', maxWidth:'360px', width:'92%', fontFamily:'monospace', maxHeight:'80vh', overflowY:'auto' }}>
+            <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'6px' }}>🎫 Sレアレイドボス装備選択券</div>
+            <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'14px', lineHeight:'1.5' }}>
+              交換するS級レイド装備を1つ選んでください。<br/>
+              <span style={{ color:'#ff8844' }}>選択すると券を1枚消費します。</span>
+            </div>
+            {ticketMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{ticketMsg}</div>}
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {RAID_TICKET_CHOICES.map(c => (
+                <button key={c.name} onClick={() => redeemRaidTicket(c.name)} disabled={loading}
+                  style={{ textAlign:'left', padding:'10px', background:'#001028', border:'1px solid #0055aa', color:'#cce0ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', opacity: loading ? 0.5 : 1 }}>
+                  <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'2px' }}>{c.name}</div>
+                  <div style={{ color:'#778899', fontSize:'10px' }}>{c.desc}</div>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setTicketPopup(false)} disabled={loading}
+              style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>キャンセル</button>
           </div>
         </div>
       )}
