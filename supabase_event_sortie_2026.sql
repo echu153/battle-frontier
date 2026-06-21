@@ -18,8 +18,8 @@ WHERE NOT EXISTS (SELECT 1 FROM items WHERE name = 'Sレアレイドボス装備
 
 -- 称号「暇人」：見た目専用（効果なし）。condition_type='event' は判定スイッチに無いため
 -- 称号ページからは取得不可（イベント報酬のRPCからのみ player_titles へ付与される）。
-INSERT INTO titles (name, description, condition_type, condition_value)
-SELECT '暇人', '出撃ポイントラリーで2000ptを達成した証。', 'event', 2000
+INSERT INTO titles (name, description, category, condition_type, condition_value)
+SELECT '暇人', '出撃ポイントラリーで2000ptを達成した証。', 'event', 'event', 2000
 WHERE NOT EXISTS (SELECT 1 FROM titles WHERE name = '暇人');
 
 -- ===== 1) テーブル =====
@@ -274,7 +274,7 @@ DECLARE
   v_held      int;
   v_weapon    weapons%ROWTYPE;
   v_effect    text;
-  v_allowed   text[] := ARRAY['ヴァルブレイカー','濡羽杖アマザネ','哭雨の羽衣'];
+  v_allowed   text[] := ARRAY['ヴァルブレイカー','マレディクシオン','濡羽杖アマザネ','哭雨の羽衣'];
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('error','未認証'); END IF;
   IF NOT (p_weapon_name = ANY(v_allowed)) THEN
@@ -292,6 +292,7 @@ BEGIN
 
   v_effect := CASE p_weapon_name
     WHEN 'ヴァルブレイカー' THEN 'hit_heal_down_10_2t'
+    WHEN 'マレディクシオン' THEN 'hit_heal_down_10_2t'
     WHEN '濡羽杖アマザネ'   THEN 'hit_spd_down_5'
     WHEN '哭雨の羽衣'       THEN 'battle_start_ailment_shield'
   END;

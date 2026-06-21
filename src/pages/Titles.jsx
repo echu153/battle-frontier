@@ -7,7 +7,7 @@ const CATEGORY_LABELS = {
   level:'レベル到達', job:'転職・再修練', area:'エリア突破',
   boss:'ボス撃破', raid:'レイドボス', gambling:'賭博',
   treasure:'お宝・錬金', museum:'博物館', enhance:'強化',
-  class_retraining:'クラス再修練',
+  class_retraining:'クラス再修練', event:'イベント',
 }
 
 const GENERIC_TITLES_KEY = 'generic'
