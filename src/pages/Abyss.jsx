@@ -234,6 +234,11 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
           enemyBuffs.healDown = { turns: 2, rate: 0.9 }
           logs.push({ text: `🗡 ヴァルブレイカーの効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
         }
+        // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
+        if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
+          enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
+          logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
+        }
         const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult)
         playerHp = Math.min(profile.hp_max, playerHp + healAmt)
         if (passiveHealReflect && healAmt > 0) {
@@ -463,7 +468,10 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     if (def.dispelPlayerBuffs) { playerBuffs = {}; logs.push({ text:`🌀 ${def.name}！ あなたの強化が全て消し去られた！`, color:'#cc66ff' }) }
     if (def.inflict) {
       for (const st of def.inflict) {
-        if (st === 'paralysis' && !(playerBuffs.paralysis?.turns > 0)) playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }
+        if (st === 'paralysis' && !(playerBuffs.paralysis?.turns > 0)) {
+          if ((eff?.paraResist || 0) > 0 && Math.random() * 100 < eff.paraResist) logs.push({ text:`⚡ 雷鋼の機神鎧の加護！ 麻痺を防いだ！`, color:'#66ccff' })
+          else playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }
+        }
         if (st === 'burn') playerBuffs.burn = { turns:5, dmgRate:0.02 }
         if (st === 'stun') playerBuffs.stun = { turns:1 }
       }

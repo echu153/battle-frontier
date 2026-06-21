@@ -1184,3 +1184,19 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 検証: 秘匿・公開のthreshold集合は各56件で一致、`npm.cmd run build` 成功。適用時は部分実行せず `supabase_event_sortie_2026.sql` 全体を最後まで実行し、anon/authenticatedのpayload SELECT拒否、公開2000pt=`？？？？`、claim時のみ `称号「暇人」`、通常報酬付与を確認してください。
 
 → DONE
+
+## [CLAUDE] 106（新レイドボス：雷鋼機神ゼルギアス）
+コミット（後述）。3体目のレイドボス「雷鋼機神ゼルギアス」を追加。ユーザーと設計を確定（固有行動=神雷崩撃／被ダメ物理+10%特殊-10／短刃=素早さ60／3体ローテ組込）。
+
+実装概要:
+1. **3体ローテ化**: `raid_boss_for_slot` を `%2`→`%3` 周期に（cycle=[ヴァルゼノク,雨摩座,ゼルギアス]、21時=cycle[d]/22時=cycle[d+1]）。フロント RaidBoss.jsx のスケジュール表示も同式に同期（`cycleIdx=(((epochDays-baseDays)%3)+3)%3`）。**フロントとSQLの式一致が要**（不一致だと予告と実出現がズレる）。
+2. **固有行動「神雷崩撃」（ターン4・×1.5）**: プレイヤーに本物の麻痺（10T・素早さ-20%＋25%行動不能）を付与。レイド戦闘ループに**麻痺の行動スキップ判定を新設**（従来レイドはspdRate-20%しか効かずスキップ未実装だった）。ターン10フィニッシャ=「神雷終焉」。被ダメ差別化=物理+10%/特殊-10%（雨摩座と同型・ヴァルゼノクの逆）。
+3. **装備3種**（交換所・素材: 雷鋼片/神雷炉心）:
+   - 雷鋼の機神鎧(防具S 防60特防40) `paralysis_resist_50`＝麻痺になる確率50%軽減
+   - 蒼雷の短刃(短剣S 攻40素早60) `extra_hit_paralysis_30`＝追加行動ヒット時30%で敵麻痺
+   - 神雷の環(装飾A 防10素早40 + `spd_bonus_pct=10`＝素早さ+10%)
+4. **装備効果の実装方式**: `calcEffectiveStats`(stats.js)で `paralysis_resist_50`/`extra_hit_paralysis_30` を検出し `eff.paraResist`/`eff.extraParaChance` を返す（シグネチャ変更なしで全エンジン共通参照）。麻痺軽減は Game(`executeEnemySkill`)/Abyss/Tenkyuu/Raid(神雷崩撃)の麻痺付与箇所、追加行動麻痺は各 `doPlayerAttack(isExtra)` ヒット箇所にフック。getEffectLabel に新旧6ラベル追記。
+5. **claim_raid_rewards**: ボス別ドロップ分岐にゼルギアス（通常=雷鋼片/レア=神雷炉心）を追加（最新版 20260621 に追従）。
+
+検証: `vite build` 成功。対象6ファイルの対象限定eslintは 147問題で**HEADと同数＝新規lintゼロ**。要適用SQL `supabase_raid_zerugiasu.sql` 全体（items/weapons/exchange/`raid_boss_for_slot`/`claim_raid_rewards`）。**SQL未適用だとローテ関数が%2のままでフロント%3とズレる**ため、デプロイは21:00 JST前のSQL適用とセットが必要。観点あれば `[CODEX] 107`、無ければ DONE を。回帰確認: ゼルギアス出現(dev)→神雷崩撃の麻痺/スキップ、麻痺軽減装備の発動率、追加行動麻痺、3体ローテの予告一致、claim素材、交換所の入手と効果、既存2体の回帰。
+→ NEXT: CODEX

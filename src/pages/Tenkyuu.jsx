@@ -313,6 +313,11 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
           enemyBuffs.healDown = { turns: 2, rate: 0.9 }
           logs.push({ text: `🗡 ヴァルブレイカーの効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
         }
+        // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
+        if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
+          enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
+          logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
+        }
         const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult)
         playerHp = Math.min(profile.hp_max, playerHp + healAmt)
         mirrorPlayerHeal(healAmt)
@@ -469,7 +474,10 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       const st = mods.statusOnHit[(turn - 1) % mods.statusOnHit.length]
       if (st === 'poison'   && !(playerBuffs.poison?.turns > 0))     { playerBuffs.poison = { turns:5, dmgRate:0.04 }; logs.push({ text:`☠ ${enemy.name}の毒が回った！`, color:'#44ff44' }) }
       if (st === 'burn'     && !(playerBuffs.burn?.turns > 0))       { playerBuffs.burn = { turns:5, dmgRate:0.02 }; logs.push({ text:`🔥 ${enemy.name}にやけどを負わされた！`, color:'#ff6622' }) }
-      if (st === 'paralysis'&& !(playerBuffs.paralysis?.turns > 0))  { playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }; logs.push({ text:`⚡ ${enemy.name}に麻痺させられた！`, color:'#ffdd44' }) }
+      if (st === 'paralysis'&& !(playerBuffs.paralysis?.turns > 0))  {
+        if ((eff?.paraResist || 0) > 0 && Math.random() * 100 < eff.paraResist) logs.push({ text:`⚡ 雷鋼の機神鎧の加護！ 麻痺を防いだ！`, color:'#66ccff' })
+        else { playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }; logs.push({ text:`⚡ ${enemy.name}に麻痺させられた！`, color:'#ffdd44' }) }
+      }
     }
     // bonusVsStatus（天蠍アンタレス：毒状態の敵に追撃）
     if (mods.bonusVsStatus && playerBuffs[mods.bonusVsStatus.st]?.turns > 0) {

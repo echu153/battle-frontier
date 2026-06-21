@@ -1192,8 +1192,13 @@ export const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, p
       dmgToPlayer = Math.floor(rawDmg * enemyDmgDown * dmgReduceRate * (1 - defRankRed) * incomingDmgMult * (0.9 + Math.random() * 0.2))
       logs.push({ text:`⚔ ${enemy.name}の「${skill.name}」！ あなたに${dmgToPlayer}ダメージ！`, color:'#ff4444' })
       if (skill.paralysisRate && Math.random() < skill.paralysisRate && !(newPlayerBuffs.paralysis?.turns > 0)) {
-        newPlayerBuffs.paralysis = { turns:5, skipRate:0.25, spdRate:0.8 }
-        logs.push({ text:`⚡ 麻痺した！`, color:'#ffaa00' })
+        // 雷鋼の機神鎧: 麻痺になる確率を軽減（eff.paraResist%の確率で無効化）
+        if ((eff?.paraResist || 0) > 0 && Math.random() * 100 < eff.paraResist) {
+          logs.push({ text:`⚡ 雷鋼の機神鎧の加護！ 麻痺を防いだ！`, color:'#66ccff' })
+        } else {
+          newPlayerBuffs.paralysis = { turns:5, skipRate:0.25, spdRate:0.8 }
+          logs.push({ text:`⚡ 麻痺した！`, color:'#ffaa00' })
+        }
       }
       if (skill.burnRate && Math.random() < skill.burnRate && !(newPlayerBuffs.burn?.turns > 0)) {
         newPlayerBuffs.burn = { turns:3 }
@@ -2701,6 +2706,11 @@ export default function Game() {
         }
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
           enemyBuffs.spdDown = { turns: 2, rate: 0.95 }  // 濡羽杖アマザネ: 攻撃ヒット時 対象SPD-5%
+        }
+        // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
+        if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
+          enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
+          logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
         }
         const critText = isCrit ? '💥クリティカル！ ' : ''
         logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
