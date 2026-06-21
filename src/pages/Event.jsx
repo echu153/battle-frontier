@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
@@ -26,30 +26,41 @@ export default function Event() {
   const [busy, setBusy] = useState(null)
   const [msg, setMsg] = useState(null)
   const [err, setErr] = useState(null)
+  const [loadErr, setLoadErr] = useState(null)
+  const [nowMs, setNowMs] = useState(0)
 
-  useEffect(() => { init() }, [])
-
-  const init = async () => {
+  const init = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
 
-    const [{ data: cfg }, { data: pts }, { data: rw }, { data: cl }, { data: ti }] = await Promise.all([
-      supabase.from('event_config').select('*').eq('event_key', EVENT_KEY).maybeSingle(),
-      supabase.from('event_points').select('points').eq('event_key', EVENT_KEY).eq('player_id', user.id).maybeSingle(),
-      supabase.from('event_rewards').select('threshold, rewards, label').eq('event_key', EVENT_KEY).order('threshold'),
-      supabase.from('event_claims').select('threshold').eq('event_key', EVENT_KEY).eq('player_id', user.id),
-      supabase.from('player_items').select('quantity, items!inner(name)').eq('player_id', user.id).eq('items.name', TICKET_ITEM),
-    ])
+    const cfgR = await supabase.from('event_config').select('*').eq('event_key', EVENT_KEY).maybeSingle()
+    const ptsR = await supabase.from('event_points').select('points').eq('event_key', EVENT_KEY).eq('player_id', user.id).maybeSingle()
+    const rwR  = await supabase.from('event_rewards').select('threshold, rewards, label').eq('event_key', EVENT_KEY).order('threshold')
+    const clR  = await supabase.from('event_claims').select('threshold').eq('event_key', EVENT_KEY).eq('player_id', user.id)
+    const tiR  = await supabase.from('player_items').select('quantity, items!inner(name)').eq('player_id', user.id).eq('items.name', TICKET_ITEM)
 
-    setConfig(cfg || null)
-    setPoints(pts?.points || 0)
-    setRewards(rw || [])
-    setClaimed(new Set((cl || []).map(r => r.threshold)))
-    setTickets((ti || []).reduce((s, r) => s + (r.quantity || 0), 0))
+    // 1つでもDBエラー（テーブル未適用/RLS不備等）なら「空イベント」と誤認せずエラー表示する
+    const failed = [cfgR, ptsR, rwR, clR, tiR].find(r => r.error)
+    if (failed) {
+      setLoadErr('イベント情報の取得に失敗しました。時間をおいて再読み込みしてください。')
+      setLoading(false)
+      return
+    }
+
+    setLoadErr(null)
+    setConfig(cfgR.data || null)
+    setPoints(ptsR.data?.points || 0)
+    setRewards(rwR.data || [])
+    setClaimed(new Set((clR.data || []).map(r => r.threshold)))
+    setTickets((tiR.data || []).reduce((s, r) => s + (r.quantity || 0), 0))
+    setNowMs(Date.now())
     setLoading(false)
-  }
+  }, [nav])
+
+  useEffect(() => { init() }, [init])
 
   const claim = async (threshold) => {
+    if (busy) return
     setBusy(threshold); setErr(null); setMsg(null)
     const { data, error } = await supabase.rpc('claim_event_reward', { p_event_key: EVENT_KEY, p_threshold: threshold })
     if (error || data?.error) {
@@ -62,6 +73,7 @@ export default function Event() {
   }
 
   const redeem = async (weaponName) => {
+    if (busy) return
     setBusy('ticket:' + weaponName); setErr(null); setMsg(null)
     const { data, error } = await supabase.rpc('redeem_raid_ticket', { p_weapon_name: weaponName })
     if (error || data?.error) {
@@ -76,8 +88,15 @@ export default function Event() {
   const base = { minHeight:'100vh', background:'#000820', color:'#aaccff', fontFamily:'monospace', padding:'16px', boxSizing:'border-box' }
 
   if (loading) return <div style={base}>読み込み中...</div>
+  if (loadErr) return (
+    <div style={base}>
+      <div style={{ color:'#ff6644', fontSize:'13px', marginBottom:'12px' }}>{loadErr}</div>
+      <button onClick={() => { setLoading(true); init() }} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'6px 14px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>再読み込み</button>
+      <button onClick={() => nav('/game')} style={{ marginLeft:'8px', background:'none', border:'1px solid #446688', color:'#446688', padding:'6px 14px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>← 街に戻る</button>
+    </div>
+  )
 
-  const now = Date.now()
+  const now = nowMs
   const startMs = config ? new Date(config.starts_at).getTime() : 0
   const endMs   = config ? new Date(config.ends_at).getTime()   : 0
   const active  = config && now >= startMs && now < endMs
@@ -132,7 +151,7 @@ export default function Event() {
                     <div style={{ color:'#ffcc00', fontSize:'12px' }}>{c.name}</div>
                     <div style={{ color:'#778899', fontSize:'10px' }}>{c.desc}</div>
                   </div>
-                  <button onClick={() => redeem(c.name)} disabled={busy === 'ticket:' + c.name}
+                  <button onClick={() => redeem(c.name)} disabled={!!busy}
                     style={{ padding:'8px 12px', background:'#001a00', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap' }}>
                     {busy === 'ticket:' + c.name ? '処理中...' : '交換'}
                   </button>
@@ -165,7 +184,7 @@ export default function Event() {
                 {isClaimed ? (
                   <span style={{ color:'#446655', fontSize:'11px', whiteSpace:'nowrap' }}>✓ 受取済</span>
                 ) : (
-                  <button onClick={() => claim(r.threshold)} disabled={!canClaim || busy === r.threshold}
+                  <button onClick={() => claim(r.threshold)} disabled={!canClaim || !!busy}
                     style={{ padding:'6px 12px', background: canClaim ? '#001a00' : '#000e20', border:`1px solid ${canClaim ? '#44ff88' : '#13283a'}`, color: canClaim ? '#44ff88' : '#33495c', cursor: canClaim ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap' }}>
                     {busy === r.threshold ? '処理中...' : canClaim ? '受け取る' : '未達成'}
                   </button>

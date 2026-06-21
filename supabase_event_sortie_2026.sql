@@ -231,28 +231,31 @@ BEGIN
     v_qty  := COALESCE((v_entry->>'qty')::int, 1);
 
     IF v_type = 'gold' THEN
+      IF v_qty <= 0 THEN RAISE EXCEPTION 'gold報酬額が不正です: %', v_qty; END IF;
       UPDATE profiles SET gold = gold + v_qty WHERE id = v_uid;
 
     ELSIF v_type = 'item' THEN
+      -- ★報酬名/数量が不正なら例外で全ロールバック（受取権だけ失わせない・[CODEX]99 P2）
+      IF v_qty <= 0 THEN RAISE EXCEPTION '報酬数量が不正です: % %', v_name, v_qty; END IF;
       SELECT id INTO v_item_id FROM items WHERE name = v_name LIMIT 1;
-      IF v_item_id IS NOT NULL THEN
-        INSERT INTO player_items (player_id, item_id, quantity, equipped)
-        VALUES (v_uid, v_item_id, v_qty, false)
-        ON CONFLICT (player_id, item_id) DO UPDATE SET quantity = player_items.quantity + v_qty;
-      END IF;
+      IF v_item_id IS NULL THEN RAISE EXCEPTION '報酬アイテムが見つかりません: %', v_name; END IF;
+      INSERT INTO player_items (player_id, item_id, quantity, equipped)
+      VALUES (v_uid, v_item_id, v_qty, false)
+      ON CONFLICT (player_id, item_id) DO UPDATE SET quantity = player_items.quantity + v_qty;
 
     ELSIF v_type = 'weapon' THEN
       SELECT * INTO v_weapon FROM weapons WHERE name = v_name LIMIT 1;
-      IF FOUND THEN
-        INSERT INTO player_equipment (player_id, weapon_id, slot, equipped, enhance_plus, bonus_effect)
-        VALUES (v_uid, v_weapon.id, v_weapon.slot, false, 0, NULL);
-      END IF;
+      IF NOT FOUND THEN RAISE EXCEPTION '報酬装備が見つかりません: %', v_name; END IF;
+      INSERT INTO player_equipment (player_id, weapon_id, slot, equipped, enhance_plus, bonus_effect)
+      VALUES (v_uid, v_weapon.id, v_weapon.slot, false, 0, NULL);
 
     ELSIF v_type = 'title' THEN
       SELECT id INTO v_title_id FROM titles WHERE name = v_name LIMIT 1;
-      IF v_title_id IS NOT NULL THEN
-        INSERT INTO player_titles (player_id, title_id) VALUES (v_uid, v_title_id) ON CONFLICT DO NOTHING;
-      END IF;
+      IF v_title_id IS NULL THEN RAISE EXCEPTION '報酬称号が見つかりません: %', v_name; END IF;
+      INSERT INTO player_titles (player_id, title_id) VALUES (v_uid, v_title_id) ON CONFLICT DO NOTHING;
+
+    ELSE
+      RAISE EXCEPTION '不明な報酬タイプです: %', v_type;
     END IF;
   END LOOP;
 
@@ -287,7 +290,9 @@ BEGIN
   SELECT id INTO v_ticket_id FROM items WHERE name = 'Sレアレイドボス装備選択券' LIMIT 1;
   IF v_ticket_id IS NULL THEN RETURN json_build_object('error','選択券アイテムが存在しません'); END IF;
 
-  SELECT COALESCE(quantity,0) INTO v_held FROM player_items WHERE player_id = v_uid AND item_id = v_ticket_id;
+  -- ★同時交換による複製防止: 所持行をロックしてから消費する（[CODEX]99 P1）
+  SELECT COALESCE(quantity,0) INTO v_held FROM player_items
+    WHERE player_id = v_uid AND item_id = v_ticket_id FOR UPDATE;
   IF v_held < 1 THEN RETURN json_build_object('error','選択券を所持していません'); END IF;
 
   SELECT * INTO v_weapon FROM weapons WHERE name = p_weapon_name LIMIT 1;
@@ -300,7 +305,10 @@ BEGIN
     WHEN '哭雨の羽衣'       THEN 'battle_start_ailment_shield'
   END;
 
-  UPDATE player_items SET quantity = quantity - 1 WHERE player_id = v_uid AND item_id = v_ticket_id;
+  -- 更新0件＝別リクエストが先に消費済み→中断（複製防止の二重ガード）
+  UPDATE player_items SET quantity = quantity - 1
+    WHERE player_id = v_uid AND item_id = v_ticket_id AND quantity >= 1;
+  IF NOT FOUND THEN RETURN json_build_object('error','選択券の消費に失敗しました'); END IF;
   DELETE FROM player_items WHERE player_id = v_uid AND item_id = v_ticket_id AND quantity <= 0;
 
   INSERT INTO player_equipment (player_id, weapon_id, slot, equipped, enhance_plus, bonus_effect)
