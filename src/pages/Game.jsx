@@ -27,6 +27,31 @@ export const effWait = (profile, nowMs = Date.now()) =>
 // false（全環境で旧UI）に変更すればワンタッチで戻せる。git tag `ui-classic` も旧UI状態の復元ポイント。
 const NEW_UI = true
 
+// ☰メニューのカテゴリ区切り。accordion=true（開発限定）のときは見出しタップで開閉、
+// false のときは従来通り見出し＋中身を常時表示。気に入らなければ呼び出し側で accordion を渡さなければ元に戻る。
+function MenuCat({ title, catKey, accordion, open, onToggle, children }) {
+  if (!accordion) {
+    return (
+      <>
+        <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
+          <span style={{ flex:1, borderTop:'1px solid #224466' }}/>{title}<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
+        </div>
+        {children}
+      </>
+    )
+  }
+  return (
+    <>
+      <button onClick={() => onToggle(catKey)}
+        style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', margin:'10px 0 0', padding:'8px 10px', background:'#00111f', border:'1px solid #224466', color:'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', letterSpacing:'1px' }}>
+        <span>{title}</span>
+        <span style={{ color:'#446688' }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && <div style={{ marginTop:'6px' }}>{children}</div>}
+    </>
+  )
+}
+
 // ☰メニュー項目の定義と段階開放。unlock=解放に必要なキャラクターLV（0=常時表示）。
 // 新規プレイヤーが序盤に機能過多で迷わないよう、進行に応じて施設を開放する。
 const MENU_DEFS = {
@@ -1367,6 +1392,9 @@ export default function Game() {
   const [facilitiesExpanded, setFacilitiesExpanded] = useState(() => localStorage.getItem('facilitiesExpanded') !== '0')
   const toggleStatExpanded = () => setStatExpanded(v => { localStorage.setItem('statExpanded', v ? '0' : '1'); return !v })
   const toggleFacilitiesExpanded = () => setFacilitiesExpanded(v => { localStorage.setItem('facilitiesExpanded', v ? '0' : '1'); return !v })
+  // ☰メニュー内のカテゴリ別アコーディオン（開発限定。気に入らなければこのstateとMenuCatの呼び出しを外せば従来表示に戻る）
+  const [openMenuCats, setOpenMenuCats] = useState(() => { try { return JSON.parse(localStorage.getItem('openMenuCats') || '{}') } catch { return {} } })
+  const toggleMenuCat = (k) => setOpenMenuCats(p => { const n = { ...p, [k]: !p[k] }; localStorage.setItem('openMenuCats', JSON.stringify(n)); return n })
   const [selectedArea, setSelectedArea] = useState(() => Number(localStorage.getItem('selectedArea') || 1))
   // 領地：自国のエリア別シェア（装備ドロップ率ボーナス用）。{ areaId: 0..1 }
   const [areaShareMap, setAreaShareMap] = useState({})
@@ -4894,26 +4922,23 @@ export default function Game() {
                   </button>
                   {facilitiesExpanded && (
                     <div style={{ border:'1px solid #003366', background:'#000a14', padding:'10px', marginTop:'8px' }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'2px 0 6px', color:'#446688', fontSize:'10px' }}>
-                        <span style={{ flex:1, borderTop:'1px solid #224466' }}/>コンテンツ<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
-                      </div>
+                      {(() => { const acc = !!profile?.is_admin; return (<>
+                      <MenuCat title="コンテンツ" catKey="content" accordion={acc} open={!!openMenuCats.content} onToggle={toggleMenuCat}>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                         <button onClick={()=>nav('/territory')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 領地</button>
                         <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット</button>
                         <button onClick={()=>nav('/raid')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ レイドボス</button>
                       </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
-                        <span style={{ flex:1, borderTop:'1px solid #224466' }}/>キャラクター<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
-                      </div>
+                      </MenuCat>
+                      <MenuCat title="キャラクター" catKey="character" accordion={acc} open={!!openMenuCats.character} onToggle={toggleMenuCat}>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                         <button onClick={()=>nav('/equipment?view=gear')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🗡 装備</button>
                         <button onClick={()=>nav('/skills')} style={{ padding:'10px', background:'#001020', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚡ スキル</button>
                         <button onClick={()=>nav('/profile')} style={{ padding:'10px', background:'#001020', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>👤 プロフィール</button>
                         <button onClick={()=>nav('/equipment?view=items')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎒 アイテム</button>
                       </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
-                        <span style={{ flex:1, borderTop:'1px solid #224466' }}/>施設<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
-                      </div>
+                      </MenuCat>
+                      <MenuCat title="施設" catKey="facility" accordion={acc} open={!!openMenuCats.facility} onToggle={toggleMenuCat}>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                         <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋</button>
                         <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿</button>
@@ -4925,14 +4950,15 @@ export default function Game() {
                         {lockOr('casino', <button key="casino" onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場</button>)}
                         {lockOr('barber', <button key="barber" onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院</button>)}
                       </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
-                        <span style={{ flex:1, borderTop:'1px solid #224466' }}/>放置コンテンツ<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
-                      </div>
+                      </MenuCat>
+                      <MenuCat title="放置コンテンツ" catKey="idle" accordion={acc} open={!!openMenuCats.idle} onToggle={toggleMenuCat}>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                         {lockOr('fishing', <button key="fishing" onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場</button>)}
                         {lockOr('scarecrow', <button key="scarecrow" onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場</button>)}
                         {lockOr('alchemy', <button key="alchemy" onClick={()=>nav('/alchemy')} style={{ padding:'10px', background:'#001020', border:'1px solid #1a8a6a', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🧪 錬金部屋</button>)}
                       </div>
+                      </MenuCat>
+                      </>) })()}
                     </div>
                   )}
                 </>
@@ -5342,26 +5368,23 @@ export default function Game() {
                     </button>
                     {facilitiesExpanded && (
                       <div style={{ border:'1px solid #003366', background:'#000a14', padding:'10px', marginTop:'8px' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'2px 0 6px', color:'#446688', fontSize:'10px' }}>
-                          <span style={{ flex:1, borderTop:'1px solid #224466' }}/>コンテンツ<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
-                        </div>
+                        {(() => { const acc = !!profile?.is_admin; return (<>
+                        <MenuCat title="コンテンツ" catKey="content" accordion={acc} open={!!openMenuCats.content} onToggle={toggleMenuCat}>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
                           <button onClick={()=>nav('/territory')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 領地</button>
                           <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット</button>
                           <button onClick={()=>nav('/raid')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ レイドボス</button>
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
-                          <span style={{ flex:1, borderTop:'1px solid #224466' }}/>キャラクター<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
-                        </div>
+                        </MenuCat>
+                        <MenuCat title="キャラクター" catKey="character" accordion={acc} open={!!openMenuCats.character} onToggle={toggleMenuCat}>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
                           <button onClick={()=>nav('/equipment?view=gear')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🗡 装備</button>
                           <button onClick={()=>nav('/skills')} style={{ padding:'10px', background:'#001020', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚡ スキル</button>
                           <button onClick={()=>nav('/profile')} style={{ padding:'10px', background:'#001020', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>👤 プロフィール</button>
                           <button onClick={()=>nav('/equipment?view=items')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎒 アイテム</button>
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
-                          <span style={{ flex:1, borderTop:'1px solid #224466' }}/>施設<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
-                        </div>
+                        </MenuCat>
+                        <MenuCat title="施設" catKey="facility" accordion={acc} open={!!openMenuCats.facility} onToggle={toggleMenuCat}>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
                           <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋へ</button>
                           <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿へ</button>
@@ -5372,14 +5395,15 @@ export default function Game() {
                           {lockOr('casino', <button key="casino" onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場へ</button>)}
                           {lockOr('barber', <button key="barber" onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院へ</button>)}
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'12px 0 6px', color:'#446688', fontSize:'10px' }}>
-                          <span style={{ flex:1, borderTop:'1px solid #224466' }}/>放置コンテンツ<span style={{ flex:1, borderTop:'1px solid #224466' }}/>
-                        </div>
+                        </MenuCat>
+                        <MenuCat title="放置コンテンツ" catKey="idle" accordion={acc} open={!!openMenuCats.idle} onToggle={toggleMenuCat}>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
                           {lockOr('fishing', <button key="fishing" onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>)}
                           {lockOr('scarecrow', <button key="scarecrow" onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場へ</button>)}
                           {lockOr('alchemy', <button key="alchemy" onClick={()=>nav('/alchemy')} style={{ padding:'10px', background:'#001020', border:'1px solid #1a8a6a', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🧪 錬金部屋へ</button>)}
                         </div>
+                        </MenuCat>
+                        </>) })()}
                       </div>
                     )}
                   </>
