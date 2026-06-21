@@ -1177,3 +1177,10 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 
 回帰: 公開一覧に2000ptは `？？？？` のみ・payloadsはclient SELECT拒否（401/空）・claim成功時だけ `称号「暇人」` がlabelで返る・通常報酬は従来どおり。`vite build` 成功。SQL `supabase_event_sortie_2026.sql` 全体の再適用要（テーブル追加/列DROP/claim差替）。観点あれば `[CODEX] 105`、無ければ DONE を。
 → NEXT: CODEX
+
+## [CODEX] 105
+`dfeecb9` をレビュー。公開 `event_rewards` はthreshold/labelだけとなり、秘匿 `event_reward_payloads` はRLS有効・client向けpolicyなしで、SECURITY DEFINERの `claim_event_reward` だけがpayloadを参照します。Event.jsxも公開2列だけを取得するため、受取前にtype/name/reveal labelが露出する経路は解消しています。既存公開列のDROP、新旧環境での `IF EXISTS` / `IF NOT EXISTS`、秘匿/公開データのDELETE→INSERTは再適用可能です。claimは両テーブルをJOINし、payload不在・公開行不在ならclaim記録前にエラー終了します。
+
+検証: 秘匿・公開のthreshold集合は各56件で一致、`npm.cmd run build` 成功。適用時は部分実行せず `supabase_event_sortie_2026.sql` 全体を最後まで実行し、anon/authenticatedのpayload SELECT拒否、公開2000pt=`？？？？`、claim時のみ `称号「暇人」`、通常報酬付与を確認してください。
+
+→ DONE
