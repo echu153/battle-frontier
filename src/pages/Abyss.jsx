@@ -58,6 +58,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   const enemyProfile = { hp_max: enemyMaxHp, mp_max: 999999, class: '', retraining: {}, username: enemy.name }
 
   const equippedWeaponItem = equipment.find(e => e.slot === 'weapon' && e.equipped)
+  const ondmgSpdUp = eff.ondmgSpdUp || 0  // 雷鋼の機神鎧: 被ダメ時に付与する素早さ倍率（0=なし）
   const isArtifact = equippedWeaponItem?.bonus_effect === 'artifact'
 
   const passiveNames = skillSets.filter(ss => ss.skills?.type === 'パッシブ').map(ss => ss.skills.name)
@@ -468,10 +469,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     if (def.dispelPlayerBuffs) { playerBuffs = {}; logs.push({ text:`🌀 ${def.name}！ あなたの強化が全て消し去られた！`, color:'#cc66ff' }) }
     if (def.inflict) {
       for (const st of def.inflict) {
-        if (st === 'paralysis' && !(playerBuffs.paralysis?.turns > 0)) {
-          if ((eff?.paraResist || 0) > 0 && Math.random() * 100 < eff.paraResist) logs.push({ text:`⚡ 雷鋼の機神鎧の加護！ 麻痺を防いだ！`, color:'#66ccff' })
-          else playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }
-        }
+        if (st === 'paralysis' && !(playerBuffs.paralysis?.turns > 0)) playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }
         if (st === 'burn') playerBuffs.burn = { turns:5, dmgRate:0.02 }
         if (st === 'stun') playerBuffs.stun = { turns:1 }
       }
@@ -533,6 +531,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   }
 
   while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
+    const hpBeforeTurn = playerHp  // 雷鋼の機神鎧: このターンに被ダメしたか判定用
     if (passiveNames.includes('骸の壁') && (turn === 1 || turn % 5 === 0)) {
       playerBuffs.dmgReduce = { turns:999, rate:0.7, isGainoKabe:true }
       logs.push({ text:`💀 骸の壁発動！ 次に攻撃を受けるまで被ダメ-30%！`, color:'#cc44ff' })
@@ -687,6 +686,11 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     // turns===0 の一時バフ/デバフを掃除（truthy読みで永続するのを防ぐ。Game.jsxと同様）
     Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns === 0) delete playerBuffs[k] })
     Object.keys(enemyBuffs).forEach(k  => { if (enemyBuffs[k]?.turns === 0)  delete enemyBuffs[k] })
+    // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+5%（既存の上位spdUpは上書きしない）
+    if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
+      playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
+      logs.push({ text:`⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}％！`, color:'#66ccff' })
+    }
     logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:profile.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
     turn++
   }

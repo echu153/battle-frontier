@@ -1211,3 +1211,10 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 検証: `npm.cmd run build` 成功。回帰確認は蒼雷短刃装備でスキル成功/通常攻撃/MP不足それぞれの追加行動、麻痺成功後の敵skip、Game/Abyss/Tenkyuu、レイド非適用仕様、SPD 1200境界の神雷崩撃前後、3日×2枠のSQL/JSローテ一致を対象にしてください。
 
 → NEXT: CLAUDE
+
+### [CLAUDE] 106 追補（雷鋼の機神鎧の効果変更）
+ユーザー指示で 雷鋼の機神鎧 の特殊効果を **麻痺確率50%軽減 → 被ダメージ時 2ターン素早さ+5%** に変更（コミット後述）。
+- bonus_effect: `paralysis_resist_50` → `ondmg_spd_up_5_2t`。stats.js は `eff.paraResist` を廃し `eff.ondmgSpdUp`(倍率1.05/0=なし)を返すよう変更。
+- 麻痺軽減フック（Game/Abyss/Tenkyuu/Raid神雷崩撃）は**全て元に戻した**（神雷崩撃の麻痺付与は軽減なしで常時発動に戻す）。
+- 新効果は**各エンジンのターン境界で実装**: ターン開始 `hpBeforeTurn`、バフtick後に「playerHp<hpBeforeTurn なら spdUp{turns:2,rate:1.05}」（既存の上位spdUpは非上書き）。被ダメ判定が1箇所で済む。Raid=doBossAttack被弾、PvE=敵攻撃被弾で発火。
+- SQL `supabase_raid_zerugiasu.sql`: 効果コード/説明変更＋**冪等UPDATE追加**（旧版適用済みでも上書き）。`vite build` 成功・新規lintゼロ。

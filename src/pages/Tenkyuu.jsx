@@ -114,6 +114,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
   const capPlayerDmg = (d) => mods.dmgTakenCap ? Math.min(d, Math.floor(profile.hp_max * mods.dmgTakenCap)) : d
 
   const equippedWeaponItem = equipment.find(e => e.slot === 'weapon' && e.equipped)
+  const ondmgSpdUp = eff.ondmgSpdUp || 0  // 雷鋼の機神鎧: 被ダメ時に付与する素早さ倍率（0=なし）
   const isArtifact = equippedWeaponItem?.bonus_effect === 'artifact'
 
   const passiveNames = skillSets.filter(ss => ss.skills?.type === 'パッシブ').map(ss => ss.skills.name)
@@ -474,10 +475,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       const st = mods.statusOnHit[(turn - 1) % mods.statusOnHit.length]
       if (st === 'poison'   && !(playerBuffs.poison?.turns > 0))     { playerBuffs.poison = { turns:5, dmgRate:0.04 }; logs.push({ text:`☠ ${enemy.name}の毒が回った！`, color:'#44ff44' }) }
       if (st === 'burn'     && !(playerBuffs.burn?.turns > 0))       { playerBuffs.burn = { turns:5, dmgRate:0.02 }; logs.push({ text:`🔥 ${enemy.name}にやけどを負わされた！`, color:'#ff6622' }) }
-      if (st === 'paralysis'&& !(playerBuffs.paralysis?.turns > 0))  {
-        if ((eff?.paraResist || 0) > 0 && Math.random() * 100 < eff.paraResist) logs.push({ text:`⚡ 雷鋼の機神鎧の加護！ 麻痺を防いだ！`, color:'#66ccff' })
-        else { playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }; logs.push({ text:`⚡ ${enemy.name}に麻痺させられた！`, color:'#ffdd44' }) }
-      }
+      if (st === 'paralysis'&& !(playerBuffs.paralysis?.turns > 0))  { playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }; logs.push({ text:`⚡ ${enemy.name}に麻痺させられた！`, color:'#ffdd44' }) }
     }
     // bonusVsStatus（天蠍アンタレス：毒状態の敵に追撃）
     if (mods.bonusVsStatus && playerBuffs[mods.bonusVsStatus.st]?.turns > 0) {
@@ -603,6 +601,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
   }
 
   while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
+    const hpBeforeTurn = playerHp  // 雷鋼の機神鎧: このターンに被ダメしたか判定用
     // ===== ターン開始: mods による敵能力スケーリング =====
     if (mods.turnScaleAtk) { const m = 1 + mods.turnScaleAtk * (turn - 1); enPerm.atkMult = m; enPerm.matkMult = m }
     if (mods.turnScaleAll) { const m = 1 + mods.turnScaleAll * (turn - 1); enPerm.atkMult = m; enPerm.matkMult = m; enPerm.defMult = m; enPerm.mdefMult = m; enPerm.spdMult = m }
@@ -813,6 +812,11 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     // turns===0 の一時バフ/デバフを掃除（truthy読みで永続するのを防ぐ。Game.jsxと同様）
     Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns === 0) delete playerBuffs[k] })
     Object.keys(enemyBuffs).forEach(k  => { if (enemyBuffs[k]?.turns === 0)  delete enemyBuffs[k] })
+    // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+5%（既存の上位spdUpは上書きしない）
+    if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
+      playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
+      logs.push({ text:`⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}％！`, color:'#66ccff' })
+    }
     const twinBars = twin ? [
       { name:'カストル', hp:Math.max(0,twin.c.hp), max:twin.c.max, down:twin.c.down },
       { name:'ポルックス', hp:Math.max(0,twin.p.hp), max:twin.p.max, down:twin.p.down },

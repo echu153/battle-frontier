@@ -159,8 +159,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   const isZerugiasu = bossName === BOSS_ZERUGIASU
   const physWeakBoss = isAmaza || isZerugiasu
   const weakMult = (isPhysical) => physWeakBoss ? (isPhysical ? 1.1 : 0.9) : (isPhysical ? 0.9 : 1.1)
-  // 雷鋼の機神鎧：麻痺になる確率を軽減（神雷崩撃の麻痺付与を eff.paraResist% で無効化）
-  const paraResist = eff.paraResist || 0
+  // 雷鋼の機神鎧：被ダメージ時に2ターン素早さ+5%（eff.ondmgSpdUp = 倍率1.05／0=効果なし）
+  const ondmgSpdUp = eff.ondmgSpdUp || 0
 
   playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
 
@@ -186,6 +186,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
 
     const boss = getBossForTurn(turn, bossName)
     const enemyBuffs = {} // ボスはデバフ無効なので常に空
+    const hpBeforeTurn = playerHp // 雷鋼の機神鎧: このターンに被ダメしたか判定用
 
     // ========== プレイヤー攻撃 ==========
     const doPlayerAttack = (isExtra = false) => {
@@ -345,17 +346,13 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           playerExtraRate = calcExtraActionRate(halfSpd, BOSS_SPD)
           logs.push({ text: `${prefix}${bossName}の「深淵の水葬」！ ${fmt(specialDmg)}ダメージ！ 10ターンの間 素早さ-50％！`, color: '#2299ff' })
         } else if (isZerugiasu) {
-          // 神雷崩撃：本物の麻痺（10ターン・素早さ-20%＋25%で行動不能）。雷鋼の機神鎧で確率軽減
-          if (paraResist > 0 && Math.random() * 100 < paraResist) {
-            logs.push({ text: `${prefix}${bossName}の「神雷崩撃」！ ${fmt(specialDmg)}ダメージ！ しかし雷鋼の機神鎧が麻痺を防いだ！`, color: '#66ccff' })
-          } else {
-            playerBuffs.paralysis = { turns: 10, skipRate: 0.25, spdRate: 0.8 }
-            const paraSpd = Math.floor(effectiveSpdForCalc * 0.8)
-            playerCritRate  = calcCritRate(paraSpd, BOSS_SPD) + passiveCritBonus + (eff.critBonus || 0)
-            playerEvasion   = calcEvasionRate(paraSpd, BOSS_SPD) + (eff.evasionBonus || 0)
-            playerExtraRate = calcExtraActionRate(paraSpd, BOSS_SPD)
-            logs.push({ text: `${prefix}${bossName}の「神雷崩撃」！ ${fmt(specialDmg)}ダメージ！ 麻痺した！（素早さ低下＋行動不能の危険）`, color: '#ffcc00' })
-          }
+          // 神雷崩撃：本物の麻痺（10ターン・素早さ-20%＋25%で行動不能）
+          playerBuffs.paralysis = { turns: 10, skipRate: 0.25, spdRate: 0.8 }
+          const paraSpd = Math.floor(effectiveSpdForCalc * 0.8)
+          playerCritRate  = calcCritRate(paraSpd, BOSS_SPD) + passiveCritBonus + (eff.critBonus || 0)
+          playerEvasion   = calcEvasionRate(paraSpd, BOSS_SPD) + (eff.evasionBonus || 0)
+          playerExtraRate = calcExtraActionRate(paraSpd, BOSS_SPD)
+          logs.push({ text: `${prefix}${bossName}の「神雷崩撃」！ ${fmt(specialDmg)}ダメージ！ 麻痺した！（素早さ低下＋行動不能の危険）`, color: '#ffcc00' })
         } else {
           // 暗黒侵食：回復無効を永続化
           playerBuffs.healBlock = { turns: 999 }
@@ -427,6 +424,11 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     }
     // turns===0 の一時バフを掃除（atkUp等は ?.rate||1 で読まれるため、削除しないと永続する。Game.jsxと同様）
     for (const k of Object.keys(playerBuffs)) { if (playerBuffs[k]?.turns === 0) delete playerBuffs[k] }
+    // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+5%（既存の上位spdUpは上書きしない）
+    if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
+      playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
+      logs.push({ text: `⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}％！`, color: '#66ccff' })
+    }
     // リジェネ・遅延ヒール（回復封印中は無効）
     const isHealBlockedTick = playerBuffs.healBlock?.turns > 0
     if (playerBuffs.regenHeal?.turns > 0) {

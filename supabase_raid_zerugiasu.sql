@@ -16,7 +16,7 @@ INSERT INTO items (name, description, effect, value) VALUES
 ON CONFLICT DO NOTHING;
 
 -- 2) 交換報酬の装備（武器テーブル）
---   雷鋼の機神鎧(防具S): 防御60/特防40 ＋ 麻痺になる確率を50%軽減
+--   雷鋼の機神鎧(防具S): 防御60/特防40 ＋ 被ダメージ時 2ターン素早さ+5%
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
 SELECT '雷鋼の機神鎧', 'armor', 'armor', 's', 0, 60, 0, 40, 0
 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name = '雷鋼の機神鎧');
@@ -32,10 +32,15 @@ WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name = '神雷の環');
 -- 3) 交換所エントリー（タブ=レイドボス）。コストはヴァルゼノク/雨摩座装備と同等
 INSERT INTO exchange_shop (name, description, cost_items, reward_type, reward_weapon_name, reward_bonus_effect, max_per_player, active, sort_order, tab)
 SELECT '雷鋼の機神鎧',
-       'S級防具。防御60 特防40。麻痺になる確率を50%軽減する。',
+       'S級防具。防御60 特防40。被ダメージ時、2ターン素早さ+5%。',
        '[{"item_name": "雷鋼片", "quantity": 50}, {"item_name": "神雷炉心", "quantity": 1}]'::jsonb,
-       'weapon', '雷鋼の機神鎧', 'paralysis_resist_50', 5, true, 14, 'レイドボス'
+       'weapon', '雷鋼の機神鎧', 'ondmg_spd_up_5_2t', 5, true, 14, 'レイドボス'
 WHERE NOT EXISTS (SELECT 1 FROM exchange_shop WHERE name = '雷鋼の機神鎧');
+-- 旧効果(麻痺軽減)で適用済みでも上書きされるよう冪等UPDATE
+UPDATE exchange_shop
+   SET reward_bonus_effect = 'ondmg_spd_up_5_2t',
+       description = 'S級防具。防御60 特防40。被ダメージ時、2ターン素早さ+5%。'
+ WHERE name = '雷鋼の機神鎧';
 
 INSERT INTO exchange_shop (name, description, cost_items, reward_type, reward_weapon_name, reward_bonus_effect, max_per_player, active, sort_order, tab)
 SELECT '蒼雷の短刃',

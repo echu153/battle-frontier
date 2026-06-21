@@ -70,7 +70,7 @@ const getEffectLabel = (effect) => {
     'hit_heal_down_10_2t':'【攻撃ヒット時・対象の回復力2T-10%】',
     'mdef_pen_5':'【魔法防御貫通+5%】',
     'battle_start_ailment_shield':'【開幕・状態異常を1回無効化】',
-    'paralysis_resist_50':'【麻痺になる確率を50%軽減】',
+    'ondmg_spd_up_5_2t':'【被ダメージ時・2ターン素早さ+5%】',
     'extra_hit_paralysis_30':'【追加行動の攻撃ヒット時・30%で相手を麻痺】',
   }
   return labels[effect] || effect

@@ -127,7 +127,7 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
   let critBonus = 0
   let evasionBonus = 0
   let critResist = 0
-  let paraResist = 0      // 雷鋼の機神鎧: 麻痺になる確率を軽減（%）
+  let ondmgSpdPct = 0     // 雷鋼の機神鎧: 被ダメージ時に素早さを一定時間アップ（%）
   let extraParaChance = 0 // 蒼雷の短刃: 追加行動の攻撃ヒット時に相手を麻痺させる確率（%）
   const gemAcc = { bonus, defPen:0, mdefPen:0, critDmg:0, critBonus:0, critResist:0, hitBonus:0, evasionBonus:0 }
   for (const item of equipment) {
@@ -156,7 +156,7 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     critBonus   += item.bonus_crit    || 0
     evasionBonus += item.bonus_evasion || 0
     if (item.bonus_effect === 'mdef_pen_5') gemAcc.mdefPen += 5  // 水禍の蒼珠: 魔法防御貫通+5%
-    if (item.bonus_effect === 'paralysis_resist_50') paraResist += 50      // 雷鋼の機神鎧: 麻痺確率-50%
+    if (item.bonus_effect === 'ondmg_spd_up_5_2t') ondmgSpdPct += 5      // 雷鋼の機神鎧: 被ダメ時 2T素早さ+5%
     if (item.slot === 'weapon' && item.bonus_effect === 'extra_hit_paralysis_30') extraParaChance += 30  // 蒼雷の短刃
     if (item.slot === 'weapon') {
       const prof = proficiency.find(p => p.equipment_id === item.id)
@@ -198,7 +198,7 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     defPen:  Math.min(PEN_CAP, gemAcc.defPen/100),
     mdefPen: Math.min(PEN_CAP, gemAcc.mdefPen/100),
     critDmg: gemAcc.critDmg/100,
-    paraResist: Math.min(100, paraResist),        // 麻痺になる確率の軽減率（%）
+    ondmgSpdUp: ondmgSpdPct > 0 ? 1 + ondmgSpdPct / 100 : 0, // 被ダメ時に付与する素早さ倍率（例:1.05）。0=効果なし
     extraParaChance: Math.min(100, extraParaChance), // 追加行動ヒット時の麻痺付与率（%）
   }
 }
