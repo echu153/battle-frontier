@@ -25,11 +25,11 @@ BEGIN
     END IF;
   END IF;
   UPDATE profiles SET last_action_at = now() WHERE id = v_uid;
-  -- ★テスト中: おれおれお のみ加算（公開時はこの IF を外す）
-  IF v_row.username = 'おれおれお' THEN
+  -- ★テスト中: 管理者のみ・期間/event_config非依存で必ず加算（event_key直書き）。
+  --   公開時は is_admin 条件を外し、event_config の期間で判定する版（本体SQL）に戻すこと。
+  IF v_row.is_admin THEN
     INSERT INTO event_points (player_id, event_key, points)
-    SELECT v_uid, ec.event_key, 1 FROM event_config ec
-    WHERE now() >= ec.starts_at AND now() < ec.ends_at
+    VALUES (v_uid, 'sortie_2026_06', 1)
     ON CONFLICT (player_id, event_key) DO UPDATE SET points = event_points.points + 1;
   END IF;
   RETURN json_build_object('ok',true);

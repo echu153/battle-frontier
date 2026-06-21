@@ -132,7 +132,12 @@ INSERT INTO event_rewards (event_key, threshold, rewards, label) VALUES
   ('sortie_2026_06', 1700, '[{"type":"gold","qty":500000}]', '50万ゴールド'),
   ('sortie_2026_06', 1800, '[{"type":"gold","qty":500000}]', '50万ゴールド'),
   ('sortie_2026_06', 1900, '[{"type":"gold","qty":1000000}]', '100万ゴールド'),
-  ('sortie_2026_06', 2000, '[{"type":"title","name":"暇人"}]', '称号「暇人」');
+  ('sortie_2026_06', 2000, '[{"type":"title","name":"暇人"}]', '？？？？');
+
+-- 隠し報酬の正体（一覧は label=？？？？、受取時に reveal_label を表示）
+ALTER TABLE event_rewards ADD COLUMN IF NOT EXISTS reveal_label text;
+UPDATE event_rewards SET reveal_label = '称号「暇人」'
+  WHERE event_key = 'sortie_2026_06' AND threshold = 2000;
 
 -- ============================================================
 -- 5) sortie_lock 更新（出撃ポイント加算を追記。20/10秒ロジックは維持）
@@ -169,13 +174,11 @@ BEGIN
   UPDATE profiles SET last_action_at = now() WHERE id = v_uid;
 
   -- ★イベント: 開催期間内なら出撃ポイント+1（同時/連打でも行ロック直下のため二重加算しない）
-  --   ★テスト中: おれおれお のみ加算（公開時は「AND v_row.username = 'おれおれお'」を削除）
-  IF v_row.username = 'おれおれお' THEN
-    INSERT INTO event_points (player_id, event_key, points)
-    SELECT v_uid, ec.event_key, 1 FROM event_config ec
-    WHERE now() >= ec.starts_at AND now() < ec.ends_at
-    ON CONFLICT (player_id, event_key) DO UPDATE SET points = event_points.points + 1;
-  END IF;
+  --   ※テスト中は supabase_event_test_oreoreo.sql の is_admin 限定版で上書きする
+  INSERT INTO event_points (player_id, event_key, points)
+  SELECT v_uid, ec.event_key, 1 FROM event_config ec
+  WHERE now() >= ec.starts_at AND now() < ec.ends_at
+  ON CONFLICT (player_id, event_key) DO UPDATE SET points = event_points.points + 1;
 
   RETURN json_build_object('ok',true);
 END;
@@ -207,7 +210,8 @@ DECLARE
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('error','未認証'); END IF;
 
-  SELECT rewards, label INTO v_rewards, v_label
+  -- 受取時は隠し報酬の正体(reveal_label)を返す。無ければ通常labelを使う
+  SELECT rewards, COALESCE(reveal_label, label) INTO v_rewards, v_label
   FROM event_rewards WHERE event_key = p_event_key AND threshold = p_threshold;
   IF NOT FOUND THEN RETURN json_build_object('error','報酬が見つかりません'); END IF;
 
