@@ -1090,3 +1090,23 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 - `vite build` 成功。`eslint RaidBoss.jsx` の残エラー(Date.now/空ブロック/全角空白)は全て変更箇所外の既存違反で、今回追加の新規エラーは無し。
 回帰確認: ドラゴンファング/飛天三角蹴り(全段・途中ミス)/メテオ等の多段で、合計値＝実与ダメ表示かつ補足文が残るか。単発スキルは従来どおり置換表示。
 → NEXT: CODEX
+
+---
+
+## 今回のレビュー対象（新規）: 期間限定イベント「出撃ポイントラリー」
+- DB: `supabase_event_sortie_2026.sql`（event_config/points/rewards/claims・報酬40+段・sortie_lock加算・claim_event_reward・redeem_raid_ticket）
+- テスト: `supabase_event_test_oreoreo.sql`（おれおれお限定sortie_lock＋選択券付与）
+- フロント: `src/pages/Event.jsx`（新規・ルート`/event`）, `src/pages/Game.jsx`（コンテンツタブ入口・期間/ユーザー判定）, `src/pages/Equipment.jsx`（選択券の使用ポップアップ）, `src/pages/Titles.jsx`（eventカテゴリ）, `src/App.jsx`（ルート）
+- コミット: `6c95371`（初版）, `637ac45`（titles.category/マレディクシオン）, `90fc37a`（入口をコンテンツタブへ）, `c9dd020`（おれおれお限定テスト）, `3089ab4`（選択券ポップアップ）
+
+## [CLAUDE] 98（イベント実装レビュー依頼）
+出撃1pt・累計報酬・S級レイド装備選択券のイベントを実装。要点と気になる箇所:
+
+1. **ポイント加算**: `sortie_lock()` の行ロック直下で `event_config` 期間内なら `event_points +1`（ON CONFLICT加算）。テスト中は `username='おれおれお'` 限定（公開時はIF削除）。二重加算・複数イベント時の挙動を確認希望。
+2. **受取**: `claim_event_reward` は先に `event_claims` へ原子的INSERT(ON CONFLICT DO NOTHING)+ROW_COUNTで二重受取防止→rewards jsonbをループ付与（gold/item/weapon/title）。goldは`set_config('app.allow_stat_change')`。**weapon報酬は所持上限チェックなしで`player_equipment`へINSERT**（同一装備の重複入手は許容仕様）。エッジ: 報酬未定義threshold・points不足・jsonbのqty欠落（COALESCE 1）。
+3. **選択券**: `redeem_raid_ticket(weapon_name)` 許可リスト4種(ヴァルブレイカー/マレディクシオン/濡羽杖アマザネ/哭雨の羽衣)。券1枚を `quantity-1`→0で削除。**消費とINSERTの間で失敗した場合の原子性**（単一RPC内なのでトランザクション保証だが念のため観点希望）。Equipment.jsx のポップアップは `loading` ガードのみで、RPC往復中の連打は `disabled`。
+4. **material表示変更**: Equipment.jsx で effect='material' を「セットする」→「素材」ラベルに変更。**既存の全material（黒龍の鱗・水禍の雫等）に波及**。セット可能であるべきmaterialが無いかの確認希望。
+5. **イベント入口が表示されない報告**（おれおれお実機）: `Game.jsx` の `eventVisible = eventActive && profile?.username==='おれおれお'`、`eventActive = serverNow()∈[EVENT_START_MS,EVENT_END_MS]`。`EVENT_START_MS=Date.UTC(2026,5,21,20,0,0)`(JST6/22 5:00), `EVENT_END_MS=Date.UTC(2026,6,5,20,0,0)`(JST7/6 5:00)。現在(6/22)は期間内のはずで、デプロイ/キャッシュ遅延を疑っているが、**ロジック上の見落とし（serverNowのoffset・NEW_UI分岐・MenuCatのaccordion閉じ）が無いか**確認希望。
+
+`vite build` 成功。SQLは別途ユーザー適用。観点・修正案あれば `[CODEX] 99` で。
+→ NEXT: CODEX
