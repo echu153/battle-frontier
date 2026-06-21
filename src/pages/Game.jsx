@@ -354,7 +354,7 @@ export const RETRAINING_ENHANCEMENTS = {
   '異端審問官': ['粛清：倍率 MATK×1.4＋MDEF×0.4', '狂信：特殊攻撃×1.3 追加', '執行本能：与ダメ+25%・回復量×0.7', '聖なる裁き：倍率 MATK×1.9', '断罪：回復封じ 60%'],
   '賢者': ['サンダーストライク：倍率 MATK×1.6', 'マナボルト：消費MP×6', '天啓：MATK×1.3', '氷の障壁：4ターン', 'メテオストライク：2〜5ヒット（2:30/3:40/4:20/5:10%）'],
   '聖騎士': ['ホーリーエッジ：倍率 ATK×1.5＋MATK×1.0', 'ディバインスマイト：与ダメ低下付与 50%', '聖騎士の心得：防御・特防×1.5', '聖域展開：毎ターン最大HP10%回復', '神聖覚醒：追撃 防御・特防の60%'],
-  '魔法剣士': ['雷光斬：倍率 ATK×1.2＋MATK×1.0', '閃光：連続強化×1.2（最大4重複）', '魔導剣術：変換率60%', '魔剣開放：反動2ターンに短縮', 'エレメンタルエッジ：倍率 ATK×1.5＋MATK×1.5'],
+  '魔法剣士': ['雷光斬：倍率 ATK×1.4＋MATK×1.0', '閃光：連続強化×1.2（最大4重複）', '魔導剣術：変換率60%', '魔剣開放：反動2ターンに短縮', 'エレメンタルエッジ：倍率 ATK×1.7＋MATK×1.7'],
   '魔銃士': ['魔弾：倍率 ATK×1.2＋MATK×1.2', '連装銃撃：命中+10', '精密照準：命中+10・クリ+10%', '強化装填：5ターン', 'キャノネスチュームビンド：連続強化×1.3が最大2重複'],
   'サイキッカー': ['サイコショット：倍率 ATK×1.2＋MATK×1.0', 'マインドブレイク：40%でスタン', '第六感：与ダメ+15%', '精神集中：×1.8・3ターン', 'サイコブラスト：倍率 ATK×1.7＋MATK×1.4'],
   '体術師': ['半月蹴り：次のスキルの威力×1.8', '五連殺：各ヒット20%で出血', '闘争本能：HP30%以下で与ダメ+60%', '破衝掌：防御無視 50%', '飛天三角蹴り：ミス撤廃＋各ヒットATK+0.1'],
@@ -1041,7 +1041,8 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     // ── 魔法剣士 ──
     case '雷光斬': {
-      result.dmg = Math.floor((eff.atk*1.2 + eff.matk*1.0)*am)
+      const raiAtkMult = rt>=1?1.4:1.2  // 再修練1段でATK倍率1.2→1.4（素はそのまま）
+      result.dmg = Math.floor((eff.atk*raiAtkMult + eff.matk*1.0)*am)
       const raiHit = Math.random()*100 < 30
       if (raiHit && !(enemyBuffs.paralysis?.turns > 0)) result.newEnemyBuffs.paralysis = { turns:3, skipRate:0.25, spdRate:0.8 }
       result.log = `⚡⚔ 雷光斬！ ${enemy.name}に${result.dmg}のダメージ！${raiHit && !(enemyBuffs.paralysis?.turns > 0) ? ' 麻痺した！' : ''}`
@@ -1072,7 +1073,8 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       break
     }
     case 'エレメンタルエッジ': {
-      result.dmg = Math.floor((eff.atk*1.5 + eff.matk*1.5)*am)
+      const eeMult = rt>=5?1.7:1.5  // 再修練5段で倍率1.5→1.7（素はそのまま）
+      result.dmg = Math.floor((eff.atk*eeMult + eff.matk*eeMult)*am)
       const elemHit = Math.random()*100 < 36
       if (elemHit) {
         // やけど・麻痺・スタンを均等抽選（スタン2倍化：発動率36%×1/3で各12%）

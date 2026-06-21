@@ -182,6 +182,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
 
     // ========== プレイヤー攻撃 ==========
     const doPlayerAttack = (isExtra = false) => {
+      if (playerDied) return  // 死亡後は同ターン内でも行動させない（死亡後に攻撃が続く不具合の修正）
       const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * (pe('魔法剣士')?0.6:0.3)) : 0
       const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?1.3:1.2) : 1.0
       const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
@@ -200,6 +201,12 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       if (playerBuffs.berserk?.turns > 0 && playerBuffs.berserk.lockedSkill) {
         const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk.lockedSkill)
         if (lockedIdx >= 0) skillIndex = lockedIdx
+      }
+      // 天墜竜閃の溜め中：次の手番は必ず天墜竜閃（解放）を出す。
+      // （Game.jsxと同様。これが無いとレイドでは溜めた後に解放されず、次の通常スキルが出てしまう）
+      if (playerBuffs.tenkaiCharge?.turns > 0) {
+        const tIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === '天墜竜閃')
+        if (tIdx >= 0) skillIndex = tIdx
       }
       let skillUsed = false, mpShort = false
       if (expandedSkillSet.length > 0) {
@@ -251,7 +258,15 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           // ボスにはデバフ・状態異常無効（newEnemyBuffsは捨てる）
           playerBuffs = { ...playerBuffs, ...res.newPlayerBuffs }
           const critText = finalCrit ? ' 💥クリティカル！' : ''
-          const resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
+          // ダメージ表記：多段ヒット(res.hitDmgs)はログに合計(res.dmg)の文字列が現れず replace が効かない＝
+          // 生のヒット内訳(未圧縮)が表示され、実際の与ダメ(finalDmg)と食い違う。実際の与ダメで作り直す。
+          let resLog
+          if (Array.isArray(res.hitDmgs) && res.hitDmgs.length > 1 && res.dmg > 0) {
+            const head = res.log.split('！')[0]
+            resLog = `${head}！ ${bossName}に${fmt(finalDmg)}ダメージ！（${res.hitDmgs.length}回ヒット）`
+          } else {
+            resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), fmt(finalDmg)) : res.log
+          }
           logs.push({ text: `${prefix}${resLog}${critText}`, color: finalCrit ? '#ff4444' : '#88ccff' })
           // 追撃（影歩き/出血消費など）を別ヒットとして適用：メインとは独立したダメージ判定
           if (res.followup && res.followup.dmg > 0) {
@@ -288,6 +303,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
 
     // ========== ボス攻撃（HPは変動するが結果をDBに保存しない） ==========
     const doBossAttack = (isExtra = false) => {
+      if (playerDied) return  // 死亡後は追撃も含めて行動を止める（死亡後にターン継続する不具合の修正）
       const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?1.3:1.2) : 1.0
       const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
       const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1) * holyKnightMultE * kabeDefE
@@ -343,16 +359,18 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
 
     // SPD差による行動順
     const playerFirst = effectiveSpdForCalc >= BOSS_SPD
+    // 天墜竜閃の溜めターンは追加行動なし（Game.jsxと同様。溜め中=tenkaiCharge>0 の間は追撃しない）
+    const canPlayerExtra = () => !(playerBuffs.tenkaiCharge?.turns > 0) && Math.random() * 100 < playerExtraRate
     if (playerFirst) {
       doPlayerAttack()
-      if (Math.random() * 100 < playerExtraRate) doPlayerAttack(true)
+      if (canPlayerExtra()) doPlayerAttack(true)
       doBossAttack()
       if (Math.random() * 100 < bossExtraRate) doBossAttack(true)
     } else {
       doBossAttack()
       if (Math.random() * 100 < bossExtraRate) doBossAttack(true)
       doPlayerAttack()
-      if (Math.random() * 100 < playerExtraRate) doPlayerAttack(true)
+      if (canPlayerExtra()) doPlayerAttack(true)
     }
 
     if (playerDied) break
