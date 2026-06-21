@@ -78,6 +78,11 @@ const MENU_DEFS = {
 const DESKTOP_MENU_ORDER = ['equipment','skills','profile','shop','smithy','museum','barber','casino','fishing','scarecrow','exchange','marketplace','raid','pets','dungeon','alchemy','abyss','territory']
 const MOBILE_MENU_ORDER  = ['shop','smithy','museum','barber','casino','fishing','exchange','marketplace','raid','pets','dungeon','scarecrow','alchemy','abyss','territory']
 
+// 期間限定イベント「出撃ポイントラリー」の開催期間（JST 2026/6/22 05:00 〜 7/6 05:00）。
+// クライアントの表示判定用（ポイント加算・受取の実体はサーバーRPCが期間管理）。
+export const EVENT_START_MS = Date.UTC(2026, 5, 21, 20, 0, 0) // JST 6/22 05:00
+export const EVENT_END_MS   = Date.UTC(2026, 6, 5, 20, 0, 0)  // JST 7/6 05:00
+
 // 多段ヒットスキル：行動全体ではなく1発ごとに回避・クリティカル・ダメージ判定する
 export const MULTI_HIT_SKILLS = new Set(['マジックアロー','三連射','メテオストライク','連打','五連殺','飛天三角蹴り','連装銃撃'])
 const REGEN_SECONDS = 60
@@ -4361,6 +4366,8 @@ export default function Game() {
   const dungeonAllUsedUp = DUNGEON_LIST.every(d => (dungeonCounts[d.type]||0) >= dungeonDailyLimitFor(profile))
   const charLv = profile.char_lv || profile.lv
   const innCost = isDying ? Math.min(charLv*15,profile.gold) : charLv*2
+  // 期間限定イベント開催中か（サーバー時刻基準。メニュー入口の表示判定のみ）
+  const eventActive = (() => { const t = serverNow(); return t >= EVENT_START_MS && t < EVENT_END_MS })()
 
   // 解放判定：基本はキャラLv。錬金部屋のみエリア③ボス撃破（=エリア4解放）が条件。
   const isMenuUnlocked = (key) => {
@@ -4627,6 +4634,9 @@ export default function Game() {
         {showMenu && (
           <div style={{ position:'fixed', top:'40px', right:'12px', background:'#001040', border:'1px solid #446688', zIndex:200, minWidth:'120px' }}>
             {/* ★2026-06-20公開: 全プレイヤーに新メニュー（お知らせ/ヘルプ/オプション）。施設は街本文の☰メニュー▼から */}
+            {eventActive && (
+              <button onClick={()=>{ nav('/event'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'#1a1400', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎫 イベント開催中！</button>
+            )}
             <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
             <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
             <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ ブースト/パピア時間設定</button>
@@ -5076,6 +5086,9 @@ export default function Game() {
         {showMenu && (
           <div style={{ position:'fixed', top:'48px', right:'16px', background:'#001040', border:'1px solid #446688', zIndex:200, minWidth:'150px' }}>
             {/* ★2026-06-20公開: 全プレイヤーに新メニュー（お知らせ/ヘルプ/オプション）。施設は街本文の☰メニュー▼から */}
+            {eventActive && (
+              <button onClick={()=>{ nav('/event'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'#1a1400', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎫 イベント開催中！</button>
+            )}
             <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
             <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
             <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ ブースト/パピア時間設定</button>

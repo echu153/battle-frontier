@@ -1,0 +1,179 @@
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from '../supabase'
+
+const EVENT_KEY = 'sortie_2026_06'
+
+// 選択券で交換できるS級レイド装備（redeem_raid_ticket の許可リストと一致）
+const TICKET_ITEM = 'Sレアレイドボス装備選択券'
+const TICKET_CHOICES = [
+  { name: 'ヴァルブレイカー', desc: 'S級大剣。攻撃力80 防御20。攻撃ヒット時、2ターン対象の回復力-10%。' },
+  { name: '濡羽杖アマザネ',   desc: 'S級杖。特攻80 特防20。攻撃ヒット時、対象の素早さ-5%。' },
+  { name: '哭雨の羽衣',       desc: 'S級防具。特攻20 特防80。戦闘開始時、1回だけ状態異常を無効化。' },
+]
+
+const fmt = (n) => Number(n).toLocaleString('ja-JP')
+
+export default function Event() {
+  const nav = useNavigate()
+  const [loading, setLoading] = useState(true)
+  const [config, setConfig] = useState(null)
+  const [points, setPoints] = useState(0)
+  const [rewards, setRewards] = useState([])
+  const [claimed, setClaimed] = useState(new Set())
+  const [tickets, setTickets] = useState(0)
+  const [busy, setBusy] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => { init() }, [])
+
+  const init = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { nav('/login'); return }
+
+    const [{ data: cfg }, { data: pts }, { data: rw }, { data: cl }, { data: ti }] = await Promise.all([
+      supabase.from('event_config').select('*').eq('event_key', EVENT_KEY).maybeSingle(),
+      supabase.from('event_points').select('points').eq('event_key', EVENT_KEY).eq('player_id', user.id).maybeSingle(),
+      supabase.from('event_rewards').select('threshold, rewards, label').eq('event_key', EVENT_KEY).order('threshold'),
+      supabase.from('event_claims').select('threshold').eq('event_key', EVENT_KEY).eq('player_id', user.id),
+      supabase.from('player_items').select('quantity, items!inner(name)').eq('player_id', user.id).eq('items.name', TICKET_ITEM),
+    ])
+
+    setConfig(cfg || null)
+    setPoints(pts?.points || 0)
+    setRewards(rw || [])
+    setClaimed(new Set((cl || []).map(r => r.threshold)))
+    setTickets((ti || []).reduce((s, r) => s + (r.quantity || 0), 0))
+    setLoading(false)
+  }
+
+  const claim = async (threshold) => {
+    setBusy(threshold); setErr(null); setMsg(null)
+    const { data, error } = await supabase.rpc('claim_event_reward', { p_event_key: EVENT_KEY, p_threshold: threshold })
+    if (error || data?.error) {
+      setErr(data?.error || 'エラーが発生しました')
+    } else {
+      setMsg(`✓ 「${data.label}」を受け取りました！`)
+      await init()
+    }
+    setBusy(null)
+  }
+
+  const redeem = async (weaponName) => {
+    setBusy('ticket:' + weaponName); setErr(null); setMsg(null)
+    const { data, error } = await supabase.rpc('redeem_raid_ticket', { p_weapon_name: weaponName })
+    if (error || data?.error) {
+      setErr(data?.error || 'エラーが発生しました')
+    } else {
+      setMsg(`✓ 「${weaponName}」を入手しました！装備画面で確認できます。`)
+      await init()
+    }
+    setBusy(null)
+  }
+
+  const base = { minHeight:'100vh', background:'#000820', color:'#aaccff', fontFamily:'monospace', padding:'16px', boxSizing:'border-box' }
+
+  if (loading) return <div style={base}>読み込み中...</div>
+
+  const now = Date.now()
+  const startMs = config ? new Date(config.starts_at).getTime() : 0
+  const endMs   = config ? new Date(config.ends_at).getTime()   : 0
+  const active  = config && now >= startMs && now < endMs
+  const ended   = config && now >= endMs
+
+  // 次の未達マイルストーン（プログレスバー用）
+  const nextReward = rewards.find(r => r.threshold > points)
+  const maxThreshold = rewards.length ? rewards[rewards.length - 1].threshold : 2000
+
+  return (
+    <div style={base}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
+        <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
+        <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
+      </div>
+
+      <div style={{ color:'#ffcc44', fontSize:'15px', marginBottom:'4px' }}>🎫 出撃ポイントラリー</div>
+      <div style={{ color:'#557799', fontSize:'11px', marginBottom:'12px' }}>
+        出撃1回ごとに1ポイント獲得。累計ポイントで報酬を受け取れます。
+        {config && <><br/>期間: {new Date(config.starts_at).toLocaleString('ja-JP')} 〜 {new Date(config.ends_at).toLocaleString('ja-JP')}</>}
+      </div>
+
+      <div style={{ maxWidth:'620px', margin:'0 auto' }}>
+        {!active && (
+          <div style={{ border:'1px solid #443300', background:'#1a1400', padding:'10px', marginBottom:'12px', color:'#ffcc44', fontSize:'12px' }}>
+            {ended ? '⏰ イベントは終了しました。未受取の報酬は引き続き受け取れます。' : '⏳ イベントはまだ開催されていません。'}
+          </div>
+        )}
+
+        {/* ポイント表示＋プログレス */}
+        <div style={{ border:'1px solid #224488', background:'#001028', padding:'14px', marginBottom:'14px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline' }}>
+            <span style={{ color:'#88ccff', fontSize:'12px' }}>現在のポイント</span>
+            <span style={{ color:'#ffcc00', fontSize:'22px' }}>{fmt(points)}<span style={{ fontSize:'12px', color:'#557799' }}> pt</span></span>
+          </div>
+          <div style={{ height:'8px', background:'#001428', border:'1px solid #113355', marginTop:'8px' }}>
+            <div style={{ height:'100%', width:`${Math.min(100, (points / maxThreshold) * 100)}%`, background:'#3388ff' }} />
+          </div>
+          <div style={{ color:'#557799', fontSize:'10px', marginTop:'6px' }}>
+            {nextReward ? `次の報酬まで あと ${fmt(nextReward.threshold - points)}pt（${nextReward.threshold}pt: ${nextReward.label}）` : '全マイルストーン到達！'}
+          </div>
+        </div>
+
+        {/* 選択券交換 */}
+        {tickets > 0 && (
+          <div style={{ border:'1px solid #886600', background:'#1a1200', padding:'12px', marginBottom:'14px' }}>
+            <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'8px' }}>🎟 Sレアレイドボス装備選択券（所持: {tickets}枚）— 1枚で1つ交換</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {TICKET_CHOICES.map(c => (
+                <div key={c.name} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', border:'1px solid #0055aa', background:'#001028', padding:'8px 10px' }}>
+                  <div>
+                    <div style={{ color:'#ffcc00', fontSize:'12px' }}>{c.name}</div>
+                    <div style={{ color:'#778899', fontSize:'10px' }}>{c.desc}</div>
+                  </div>
+                  <button onClick={() => redeem(c.name)} disabled={busy === 'ticket:' + c.name}
+                    style={{ padding:'8px 12px', background:'#001a00', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap' }}>
+                    {busy === 'ticket:' + c.name ? '処理中...' : '交換'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {msg && <div style={{ border:'1px solid #224422', background:'#001a00', padding:'10px', marginBottom:'12px', color:'#44ff88', fontSize:'12px' }}>{msg}</div>}
+        {err && <div style={{ border:'1px solid #440000', background:'#1a0000', padding:'10px', marginBottom:'12px', color:'#ff4444', fontSize:'12px' }}>{err}</div>}
+
+        {/* 報酬リスト */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+          {rewards.map(r => {
+            const isClaimed = claimed.has(r.threshold)
+            const reached = points >= r.threshold
+            const canClaim = reached && !isClaimed
+            return (
+              <div key={r.threshold} style={{
+                display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px',
+                border:`1px solid ${isClaimed ? '#1a3344' : canClaim ? '#224433' : '#0a2030'}`,
+                background: isClaimed ? '#060f0f' : canClaim ? '#00140a' : '#000a18',
+                padding:'10px 12px',
+              }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                  <span style={{ color: reached ? '#ffcc00' : '#446688', fontSize:'13px', minWidth:'52px' }}>{r.threshold}pt</span>
+                  <span style={{ color: reached ? '#cce0ff' : '#556677', fontSize:'12px' }}>{r.label}</span>
+                </div>
+                {isClaimed ? (
+                  <span style={{ color:'#446655', fontSize:'11px', whiteSpace:'nowrap' }}>✓ 受取済</span>
+                ) : (
+                  <button onClick={() => claim(r.threshold)} disabled={!canClaim || busy === r.threshold}
+                    style={{ padding:'6px 12px', background: canClaim ? '#001a00' : '#000e20', border:`1px solid ${canClaim ? '#44ff88' : '#13283a'}`, color: canClaim ? '#44ff88' : '#33495c', cursor: canClaim ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap' }}>
+                    {busy === r.threshold ? '処理中...' : canClaim ? '受け取る' : '未達成'}
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
