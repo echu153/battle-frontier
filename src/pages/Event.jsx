@@ -28,6 +28,7 @@ export default function Event() {
   const [err, setErr] = useState(null)
   const [loadErr, setLoadErr] = useState(null)
   const [nowMs, setNowMs] = useState(0)
+  const [gotPopup, setGotPopup] = useState(null)  // 受取時の「○○を獲得した！」ポップアップ
 
   const init = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -68,7 +69,7 @@ export default function Event() {
     if (error || data?.error) {
       setErr(data?.error || 'エラーが発生しました')
     } else {
-      setMsg(`✓ 「${data.label}」を受け取りました！`)
+      setGotPopup({ name: data.label })  // ポップアップで「○○を獲得した！」
       await init()
     }
     setBusy(null)
@@ -81,7 +82,7 @@ export default function Event() {
     if (error || data?.error) {
       setErr(data?.error || 'エラーが発生しました')
     } else {
-      setMsg(`✓ 「${weaponName}」を入手しました！装備画面で確認できます。`)
+      setGotPopup({ name: weaponName, note: '装備画面で確認できます。' })
       await init()
     }
     setBusy(null)
@@ -196,6 +197,20 @@ export default function Event() {
           })}
         </div>
       </div>
+
+      {gotPopup && (
+        <div onClick={() => setGotPopup(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.82)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:300, padding:'16px' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:'#0a0c1a', border:'1px solid #ffcc44', padding:'24px', maxWidth:'340px', width:'92%', fontFamily:'monospace', textAlign:'center' }}>
+            <div style={{ fontSize:'30px', marginBottom:'8px' }}>🎉</div>
+            <div style={{ color:'#ffcc00', fontSize:'15px', marginBottom:'6px', lineHeight:'1.5' }}>「{gotPopup.name}」を獲得した！</div>
+            {gotPopup.note && <div style={{ color:'#88ccaa', fontSize:'11px', marginBottom:'4px' }}>{gotPopup.note}</div>}
+            <button onClick={() => setGotPopup(null)}
+              style={{ width:'100%', marginTop:'14px', padding:'10px', background:'#001a00', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>OK</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
