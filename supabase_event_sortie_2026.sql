@@ -19,7 +19,7 @@ WHERE NOT EXISTS (SELECT 1 FROM items WHERE name = 'Sレアレイドボス装備
 -- 称号「暇人」：見た目専用（効果なし）。condition_type='event' は判定スイッチに無いため
 -- 称号ページからは取得不可（イベント報酬のRPCからのみ player_titles へ付与される）。
 INSERT INTO titles (name, description, category, condition_type, condition_value)
-SELECT '暇人', '出撃ポイントラリーで2000ptを達成した証。', 'event', 'event', 2000
+SELECT '暇人', '出撃イベントで2000ptを達成した証。', 'event', 'event', 2000
 WHERE NOT EXISTS (SELECT 1 FROM titles WHERE name = '暇人');
 
 -- ===== 1) テーブル =====
@@ -85,7 +85,7 @@ CREATE POLICY "event_claims_select"  ON event_claims  FOR SELECT USING (auth.uid
 
 -- ===== 3) イベント設定（期間: JST 6/22 05:00 〜 7/6 05:00=「7/6 4:59まで」）=====
 INSERT INTO event_config (event_key, name, starts_at, ends_at) VALUES
-  ('sortie_2026_06', '出撃ポイントラリー', '2026-06-22 05:00:00+09', '2026-07-06 05:00:00+09')
+  ('sortie_2026_06', '出撃イベント', '2026-06-22 05:00:00+09', '2026-07-06 05:00:00+09')
 ON CONFLICT (event_key) DO UPDATE
   SET name = EXCLUDED.name, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at;
 

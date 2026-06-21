@@ -150,7 +150,7 @@ export default function Event() {
         <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
       </div>
 
-      <div style={{ color:'#ffcc44', fontSize:'15px', marginBottom:'4px' }}>🎫 出撃ポイントラリー</div>
+      <div style={{ color:'#ffcc44', fontSize:'15px', marginBottom:'4px' }}>🎫 出撃イベント</div>
       <div style={{ color:'#557799', fontSize:'11px', marginBottom:'12px' }}>
         出撃1回ごとに1ポイント獲得。累計ポイントで報酬を受け取れます。
         {config && <><br/>期間: {new Date(config.starts_at).toLocaleString('ja-JP')} 〜 {new Date(config.ends_at).toLocaleString('ja-JP')}</>}
