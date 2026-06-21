@@ -4368,6 +4368,8 @@ export default function Game() {
   const innCost = isDying ? Math.min(charLv*15,profile.gold) : charLv*2
   // 期間限定イベント開催中か（サーバー時刻基準。メニュー入口の表示判定のみ）
   const eventActive = (() => { const t = serverNow(); return t >= EVENT_START_MS && t < EVENT_END_MS })()
+  // ★テスト中: イベント入口は「おれおれお」のみ表示（公開時は username 条件を外す）
+  const eventVisible = eventActive && profile?.username === 'おれおれお'
 
   // 解放判定：基本はキャラLv。錬金部屋のみエリア③ボス撃破（=エリア4解放）が条件。
   const isMenuUnlocked = (key) => {
@@ -4934,7 +4936,7 @@ export default function Game() {
                       {(() => { const acc = !!profile?.is_admin; return (<>
                       <MenuCat title="コンテンツ" catKey="content" accordion={acc} open={!!openMenuCats.content} onToggle={toggleMenuCat}>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                        {eventActive && (
+                        {eventVisible && (
                           <button onClick={()=>nav('/event')} style={{ gridColumn:'1 / -1', padding:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'2px' }}>🎫 イベント開催中！</button>
                         )}
                         <button onClick={()=>nav('/territory')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 領地</button>

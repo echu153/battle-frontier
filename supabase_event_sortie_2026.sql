@@ -169,10 +169,13 @@ BEGIN
   UPDATE profiles SET last_action_at = now() WHERE id = v_uid;
 
   -- ★イベント: 開催期間内なら出撃ポイント+1（同時/連打でも行ロック直下のため二重加算しない）
-  INSERT INTO event_points (player_id, event_key, points)
-  SELECT v_uid, ec.event_key, 1 FROM event_config ec
-  WHERE now() >= ec.starts_at AND now() < ec.ends_at
-  ON CONFLICT (player_id, event_key) DO UPDATE SET points = event_points.points + 1;
+  --   ★テスト中: おれおれお のみ加算（公開時は「AND v_row.username = 'おれおれお'」を削除）
+  IF v_row.username = 'おれおれお' THEN
+    INSERT INTO event_points (player_id, event_key, points)
+    SELECT v_uid, ec.event_key, 1 FROM event_config ec
+    WHERE now() >= ec.starts_at AND now() < ec.ends_at
+    ON CONFLICT (player_id, event_key) DO UPDATE SET points = event_points.points + 1;
+  END IF;
 
   RETURN json_build_object('ok',true);
 END;
