@@ -205,31 +205,31 @@ export default function Event() {
             const canClaim = reached && !isClaimed
             return (
               <div key={r.threshold} style={{
-                display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'8px',
+                display:'grid', gridTemplateColumns:'52px minmax(0,1fr) auto', columnGap:'10px', alignItems:'start',
                 border:`1px solid ${isClaimed ? '#1a3344' : canClaim ? '#224433' : '#0a2030'}`,
                 background: isClaimed ? '#060f0f' : canClaim ? '#00140a' : '#000a18',
                 padding:'10px 12px',
               }}>
-                <div style={{ display:'flex', alignItems:'flex-start', gap:'10px', minWidth:0 }}>
-                  <span style={{ color: reached ? '#ffcc00' : '#446688', fontSize:'13px', minWidth:'52px' }}>{r.threshold}pt</span>
-                  {/* 名前とステータスは同じ列＝同じ左端から開始 */}
-                  <div style={{ minWidth:0 }}>
-                    <span style={{ color: reached ? '#cce0ff' : '#556677', fontSize:'12px' }}>{r.label}</span>
-                    {(r.weapon_names || []).map(wn => {
-                      const w = weaponMap[wn]
-                      const parts = weaponStatParts(w)
-                      if (!parts.length) return null
-                      return (
-                        <div key={wn} style={{ marginTop:'4px', fontSize:'10px', lineHeight:'1.5' }}>
-                          {(r.weapon_names.length > 1) && <span style={{ color:'#778899' }}>{wn}: </span>}
-                          {parts.map((p, i) => (
-                            <span key={i} style={{ color:p.color, marginRight:'6px' }}>{p.label}</span>
-                          ))}
-                        </div>
-                      )
-                    })}
-                  </div>
+                {/* 列1: pt */}
+                <span style={{ color: reached ? '#ffcc00' : '#446688', fontSize:'13px' }}>{r.threshold}pt</span>
+                {/* 列2: 名前＋ステータス（同じ左端から開始） */}
+                <div style={{ minWidth:0 }}>
+                  <div style={{ color: reached ? '#cce0ff' : '#556677', fontSize:'12px' }}>{r.label}</div>
+                  {(r.weapon_names || []).map(wn => {
+                    const w = weaponMap[wn]
+                    const parts = weaponStatParts(w)
+                    if (!parts.length) return null
+                    return (
+                      <div key={wn} style={{ marginTop:'4px', fontSize:'10px', lineHeight:'1.6' }}>
+                        {(r.weapon_names.length > 1) && <span style={{ color:'#778899' }}>{wn}: </span>}
+                        {parts.map((p, i) => (
+                          <span key={i} style={{ color:p.color, marginRight:'6px' }}>{p.label}</span>
+                        ))}
+                      </div>
+                    )
+                  })}
                 </div>
+                {/* 列3: ボタン/受取済 */}
                 {isClaimed ? (
                   <span style={{ color:'#446655', fontSize:'11px', whiteSpace:'nowrap', paddingTop:'1px' }}>✓ 受取済</span>
                 ) : (
