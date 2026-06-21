@@ -389,7 +389,7 @@ DECLARE
   v_held      int;
   v_weapon    weapons%ROWTYPE;
   v_effect    text;
-  v_allowed   text[] := ARRAY['ヴァルブレイカー','マレディクシオン','濡羽杖アマザネ','哭雨の羽衣'];
+  v_allowed   text[] := ARRAY['ヴァルブレイカー','マレディクシオン','濡羽杖アマザネ','哭雨の羽衣','雷鋼の機神鎧','蒼雷の短刃'];
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('error','未認証'); END IF;
   IF NOT (p_weapon_name = ANY(v_allowed)) THEN
@@ -412,6 +412,8 @@ BEGIN
     WHEN 'マレディクシオン' THEN 'hit_heal_down_10_2t'
     WHEN '濡羽杖アマザネ'   THEN 'hit_spd_down_5'
     WHEN '哭雨の羽衣'       THEN 'battle_start_ailment_shield'
+    WHEN '雷鋼の機神鎧'     THEN 'ondmg_spd_up_5_2t'
+    WHEN '蒼雷の短刃'       THEN 'extra_hit_paralysis_30'
   END;
 
   -- 更新0件＝別リクエストが先に消費済み→中断（複製防止の二重ガード）
