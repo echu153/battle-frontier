@@ -108,6 +108,7 @@ export default function Equipment() {
   const [craftMsg, setCraftMsg] = useState('')
   const [ticketPopup, setTicketPopup] = useState(false)  // Sレアレイドボス装備選択券のポップアップ
   const [ticketMsg, setTicketMsg] = useState('')
+  const [ticketGot, setTicketGot] = useState(null)  // 交換成功で獲得した装備名（ポップアップ内に表示）
 
   // 選択券で交換できるS級レイド装備（redeem_raid_ticket の許可リストと一致）
   const RAID_TICKET_CHOICES = [
@@ -119,14 +120,12 @@ export default function Equipment() {
 
   const redeemRaidTicket = async (weaponName) => {
     if (loading) return
-    setLoading(true); setTicketMsg('')
+    setLoading(true); setTicketMsg(''); setTicketGot(null)
     const { data, error } = await supabase.rpc('redeem_raid_ticket', { p_weapon_name: weaponName })
     if (error || data?.error) {
       setTicketMsg(data?.error || 'エラーが発生しました')
     } else {
-      setTicketPopup(false)
-      setAwakenMessage(`✨ 「${weaponName}」を入手しました！装備タブで確認できます。`)
-      setTimeout(() => setAwakenMessage(''), 4000)
+      setTicketGot(weaponName)  // ポップアップは閉じず、獲得表示を出す
       await fetchAll()
     }
     setLoading(false)
@@ -516,7 +515,7 @@ export default function Equipment() {
                           <button onClick={() => setConfirmReset(pi)} disabled={loading}
                             style={{ padding:'2px 8px', background:'#200010', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
                         ) : pi.items.name === 'Sレアレイドボス装備選択券' ? (
-                          <button onClick={() => { setTicketPopup(true); setTicketMsg('') }} disabled={loading}
+                          <button onClick={() => { setTicketPopup(true); setTicketMsg(''); setTicketGot(null) }} disabled={loading}
                             style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
                         ) : pi.items.effect === 'material' ? (
                           <span style={{ color:'#aa8800', fontSize:'10px' }}>素材</span>
@@ -891,6 +890,12 @@ export default function Equipment() {
               <span style={{ color:'#ff8844' }}>選択すると券を1枚消費します。</span>
             </div>
             {ticketMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{ticketMsg}</div>}
+            {ticketGot && (
+              <div style={{ border:'1px solid #2a6a3a', background:'#04140a', padding:'10px', marginBottom:'12px', color:'#44ff88', fontSize:'12px', lineHeight:'1.5' }}>
+                ✨ 「{ticketGot}」を獲得しました！<br/>
+                <span style={{ color:'#88ccaa', fontSize:'10px' }}>装備タブで確認・装備できます。</span>
+              </div>
+            )}
             <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
               {RAID_TICKET_CHOICES.map(c => (
                 <button key={c.name} onClick={() => redeemRaidTicket(c.name)} disabled={loading}
@@ -901,7 +906,7 @@ export default function Equipment() {
               ))}
             </div>
             <button onClick={() => setTicketPopup(false)} disabled={loading}
-              style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>キャンセル</button>
+              style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{ticketGot ? '閉じる' : 'キャンセル'}</button>
           </div>
         </div>
       )}
