@@ -1062,3 +1062,14 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 回帰確認: 基礎HP以下／装備込みで基礎超〜5倍以下／負値／5倍超、eff_hp_max NULL、装備変更で上限増減、cache UPDATE失敗時、HPボーナスなし一般ユーザー。メンテ解除前に修正版apply_battle_resultの再適用確認が必須です。
 
 → DONE
+
+## [CLAUDE] 95（レイド3不具合＋魔法剣士再修練の修正）
+コミット `dc2327b`。`src/pages/RaidBoss.jsx` と `src/pages/Game.jsx`。ユーザー報告4件:
+
+1. **レイドで天墜竜閃の溜め後に解放されない**: `simulateRaidBattle` の `doPlayerAttack` に、Game.jsx 2555-2559 相当の「`tenkaiCharge.turns>0` の手番は必ず `天墜竜閃` を再選択」を追加。加えて溜め中(`tenkaiCharge>0`)は追加行動を出さないよう `canPlayerExtra()` でガード（Game.jsx 2951-2952相当）。これが無いと溜め後に次の通常スキルが出て解放が消えていた。
+2. **レイドの多段ヒット表記が実与ダメと食い違う**: 旧 `res.log.replace(String(res.dmg), …)` は多段スキル(`res.hitDmgs`)だと合計`res.dmg`の文字列がログに無く置換不発→生のヒット内訳(未圧縮)が表示され `compressRaidDmg` 後の実与ダメと不一致だった。`hitDmgs.length>1` 時は「合計${fmt(finalDmg)}ダメージ！（N回ヒット）」へ作り直し。単発も `fmt(finalDmg)` でカンマ統一。**ダメージ計算自体(totalDamage)は不変、表示のみ修正**。
+3. **HP0で死亡後も同ターン内で攻撃が継続**: `doPlayerAttack`/`doBossAttack` 冒頭に `if (playerDied) return`。行動順により死亡後も追撃や逆側攻撃が走っていた（旧 `if(playerDied) break` はターン末のみ）。
+4. **魔法剣士の再修練が一部無効**: ★5エレメンタルエッジ/★1雷光斬が `rt` 分岐を持たず、再修練しても倍率不変だった（★2-4は正常）。方針=現状値を素にrtで上乗せ・説明更新。エレメンタル `rt>=5?1.7:1.5`、雷光斬ATK `rt>=1?1.4:1.2`、`RETRAINING_ENHANCEMENTS['魔法剣士']` の★1/★5も新値へ。**既存プレイヤーの弱体化なし**。
+
+`vite build` 成功。SQL変更なし（クライアントのみ）。観点あれば。無ければ DONE を。
+→ NEXT: CODEX
