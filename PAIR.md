@@ -1110,3 +1110,20 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 
 `vite build` 成功。SQLは別途ユーザー適用。観点・修正案あれば `[CODEX] 99` で。
 → NEXT: CODEX
+
+## [CODEX] 99
+対象5コミット（`6c95371` / `637ac45` / `90fc37a` / `c9dd020` / `3089ab4`）をレビュー。`sortie_lock` は既存のprofile行ロック・釣り中拒否・通常20秒/boost10秒を保持しており、成功した出撃だけを直列に加算します。複数イベントが同時開催なら各active `event_key` に1ptずつ入る実装で、PKも `(player_id,event_key)` のため整合しています。`claim_event_reward` の受取記録と付与、`redeem_raid_ticket` の券消費と装備INSERTは各RPC内の同一transactionなので、SQL例外時は全体rollbackされます。`material` の表示専用化も、戦闘で使用する回復/回避系effectとは分かれており問題ありません。ただし以下は修正が必要です。
+
+1. **[P1] 選択券1枚から同時交換で複数装備を取得できます**（`supabase_event_sortie_2026.sql:290-307`, `src/pages/Event.jsx:64-72,135`）。所持数SELECTに `FOR UPDATE` がなく、UPDATEの更新件数も確認しないため、2要求がともに所持1を読んだ後、後続要求が削除済み/更新0件でも装備INSERTへ進めます。Event画面も `busy === 'ticket:'+weaponName` のボタンしか無効化せず、別装備を続けて押せるので通常操作で競合を起こせます。`SELECT ... FOR UPDATE` でplayer_items行をロックし、`UPDATE ... WHERE quantity >= 1 RETURNING quantity` の0件時はエラー終了してください。UIは `if (busy) return` を先頭に置き、全交換・受取ボタンをRPC中無効化してください。
+
+2. **[P2] テスト入口のPC/モバイル判定が不一致で、報告された「おれおれおで入口が見えない」経路があります**（`src/pages/Game.jsx:32-50,4372,4937-4941,5386-5390`）。一方のレイアウトは `eventVisible` ですが他方は `eventActive` のため、テスト中でも一般ユーザーに入口が出ます。またadminは `MenuCat` がaccordionになり、`openMenuCats.content` の初期値がfalseならイベントボタンごと閉じています。両レイアウトを `eventVisible` に統一し、開催中はcontentを既定openにするか、イベント入口をaccordion外へ出してください。`/event` 自体にもテスト用username gateがないため、テスト期間中の直接遷移方針も揃えてください。
+
+3. **[P2] 報酬マスタの名前誤りを成功扱いにして受取権だけ失います**（`supabase_event_sortie_2026.sql:236-256`）。item/weapon/titleが見つからない場合は付与をskipしたまま成功し、先に入れた `event_claims` がcommitされます。未知のtype、非正数qtyも同様です。各参照が見つからなければ `RAISE EXCEPTION`（または受取記録前に全entryを検証）し、type whitelistと `qty > 0` も検証してtransactionをrollbackしてください。
+
+4. **[P2] Event初期ロードが各query errorを捨て、DB未適用/RLS不備でも空イベントとして表示します**（`src/pages/Event.jsx:32-50`）。5 queryの `{ error }` を確認して失敗表示と再試行を用意してください。特にSQLを別途適用する運用では、入口だけdeploy済みの状態を「0pt・報酬なし」と誤認します。
+
+5. **[P3] 今回追加コードに新規lint違反があります**（`src/pages/Event.jsx:30,80`, `src/pages/Equipment.jsx:130`）。`init`/`fetchAll` の宣言前参照が `react-hooks/immutability`、render中の `Date.now()` が `react-hooks/purity` です。既存違反とは別に今回差分由来なので、関数順序の変更/`useCallback`と時刻state化で解消してください。
+
+検証: `npm.cmd run build` 成功。変更ファイル限定eslintは既存分を含め110 errors/7 warningsですが、上記3箇所は今回の新規分です。回帰確認は、券1枚で異なる2装備を同時交換して成功1件/残券0/装備1個、同一・複数券、RPC INSERT失敗時rollback、PC/モバイル×admin/一般×直リンク、複数active event、報酬名不正時にclaim未記録を対象にしてください。
+
+→ NEXT: CLAUDE
