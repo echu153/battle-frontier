@@ -656,7 +656,12 @@ export default function Dungeon() {
         }
         if (sv?.state) {
           // この端末を操作端末として主張（別端末で開いていたらそちらがロックされる）
-          if (runIdRef.current) { setLockedOut(false); supabase.rpc('dungeon_claim_device', { p_run_id: runIdRef.current, p_device: getDeviceId() }).then(() => {}, () => {}) }
+          if (runIdRef.current) {
+            setLockedOut(false)
+            supabase.rpc('dungeon_claim_device', { p_run_id: runIdRef.current, p_device: getDeviceId() }).then(() => {}, () => {})
+            // 探索を再開＝プレイ中に戻る。中断フラグを解除し、通常出撃ブロックを再び有効化（同時プレイ対策）
+            supabase.rpc('dungeon_set_suspended', { p_run_id: runIdRef.current, p_suspended: false }).then(() => {}, () => {})
+          }
           finishedRef.current = false
           enemiesRef.current = sv.kills || 0
           floorsRef.current = sv.floorsCleared || 0

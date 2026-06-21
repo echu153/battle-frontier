@@ -19,7 +19,9 @@ CREATE OR REPLACE FUNCTION public.has_active_dungeon(p_uid uuid)
  RETURNS boolean
  LANGUAGE sql STABLE
 AS $$
-  SELECT EXISTS (SELECT 1 FROM dungeon_runs WHERE owner_id = p_uid AND status = 'active');
+  -- suspended（中断＝街に戻って一時停止中）は「探索中」に含めない。
+  -- 含めると、中断後に通常出撃しても apply_battle_result が dungeon_active で弾き、EXP/Goldが入らない。
+  SELECT EXISTS (SELECT 1 FROM dungeon_runs WHERE owner_id = p_uid AND status = 'active' AND NOT COALESCE(suspended, false));
 $$;
 
 -- ===== ② だっしゅつの翼も持ち物にカウント =====
