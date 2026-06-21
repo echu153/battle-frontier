@@ -205,38 +205,39 @@ export default function Event() {
             const canClaim = reached && !isClaimed
             return (
               <div key={r.threshold} style={{
-                display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px',
                 border:`1px solid ${isClaimed ? '#1a3344' : canClaim ? '#224433' : '#0a2030'}`,
                 background: isClaimed ? '#060f0f' : canClaim ? '#00140a' : '#000a18',
                 padding:'10px 12px',
               }}>
-                <div style={{ display:'flex', alignItems:'flex-start', gap:'10px', minWidth:0 }}>
-                  <span style={{ color: reached ? '#ffcc00' : '#446688', fontSize:'13px', minWidth:'52px', paddingTop:'1px' }}>{r.threshold}pt</span>
-                  <div style={{ minWidth:0 }}>
+                {/* 1行目: pt＋名前＋ボタン（Gold等と同じ並び） */}
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'10px', minWidth:0 }}>
+                    <span style={{ color: reached ? '#ffcc00' : '#446688', fontSize:'13px', minWidth:'52px' }}>{r.threshold}pt</span>
                     <span style={{ color: reached ? '#cce0ff' : '#556677', fontSize:'12px' }}>{r.label}</span>
-                    {(r.weapon_names || []).map(wn => {
-                      const w = weaponMap[wn]
-                      const parts = weaponStatParts(w)
-                      if (!parts.length) return null
-                      return (
-                        <div key={wn} style={{ marginTop:'3px', fontSize:'10px', lineHeight:'1.5' }}>
-                          {(r.weapon_names.length > 1) && <span style={{ color:'#778899' }}>{wn}: </span>}
-                          {parts.map((p, i) => (
-                            <span key={i} style={{ color:p.color, marginRight:'6px' }}>{p.label}</span>
-                          ))}
-                        </div>
-                      )
-                    })}
                   </div>
+                  {isClaimed ? (
+                    <span style={{ color:'#446655', fontSize:'11px', whiteSpace:'nowrap' }}>✓ 受取済</span>
+                  ) : (
+                    <button onClick={() => claim(r.threshold)} disabled={!canClaim || !!busy}
+                      style={{ padding:'6px 12px', background: canClaim ? '#001a00' : '#000e20', border:`1px solid ${canClaim ? '#44ff88' : '#13283a'}`, color: canClaim ? '#44ff88' : '#33495c', cursor: canClaim ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap' }}>
+                      {busy === r.threshold ? '処理中...' : canClaim ? '受け取る' : '未達成'}
+                    </button>
+                  )}
                 </div>
-                {isClaimed ? (
-                  <span style={{ color:'#446655', fontSize:'11px', whiteSpace:'nowrap' }}>✓ 受取済</span>
-                ) : (
-                  <button onClick={() => claim(r.threshold)} disabled={!canClaim || !!busy}
-                    style={{ padding:'6px 12px', background: canClaim ? '#001a00' : '#000e20', border:`1px solid ${canClaim ? '#44ff88' : '#13283a'}`, color: canClaim ? '#44ff88' : '#33495c', cursor: canClaim ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap' }}>
-                    {busy === r.threshold ? '処理中...' : canClaim ? '受け取る' : '未達成'}
-                  </button>
-                )}
+                {/* 2行目以降: 装備ステータス（名前の下＝pt幅ぶん字下げして揃える） */}
+                {(r.weapon_names || []).map(wn => {
+                  const w = weaponMap[wn]
+                  const parts = weaponStatParts(w)
+                  if (!parts.length) return null
+                  return (
+                    <div key={wn} style={{ marginTop:'4px', paddingLeft:'62px', fontSize:'10px', lineHeight:'1.5' }}>
+                      {(r.weapon_names.length > 1) && <span style={{ color:'#778899' }}>{wn}: </span>}
+                      {parts.map((p, i) => (
+                        <span key={i} style={{ color:p.color, marginRight:'6px' }}>{p.label}</span>
+                      ))}
+                    </div>
+                  )
+                })}
               </div>
             )
           })}
