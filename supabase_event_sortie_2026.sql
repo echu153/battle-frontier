@@ -429,3 +429,49 @@ BEGIN
 END;
 $$;
 GRANT EXECUTE ON FUNCTION public.redeem_raid_ticket(text) TO authenticated;
+
+-- ============================================================
+-- 8) レイドボス・デイリーダンジョンでもポイント加算（RPC本体を触らずトリガーで）
+--    ・期間内のみ加算（grant_event_point が期間判定）
+--    ・raid_participants.attack_count の増分＝レイド攻撃回数ぶん加算
+--    ・dungeon_attempts の cnt_* 合計の増分＝ダンジョン挑戦回数ぶん加算
+--    ※attack_raid_boss/dungeon_consume の関数定義に依存しないので並行改修と衝突しない
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.grant_event_point(p_uid uuid, p_n int)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+BEGIN
+  IF p_uid IS NULL OR p_n IS NULL OR p_n <= 0 THEN RETURN; END IF;
+  INSERT INTO event_points (player_id, event_key, points)
+  SELECT p_uid, ec.event_key, p_n FROM event_config ec
+  WHERE now() >= ec.starts_at AND now() < ec.ends_at
+  ON CONFLICT (player_id, event_key) DO UPDATE SET points = event_points.points + EXCLUDED.points;
+END $$;
+
+-- レイド: 攻撃ごとに attack_count が増える分を加算
+CREATE OR REPLACE FUNCTION public.trg_raid_event_point()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE v_delta int;
+BEGIN
+  v_delta := COALESCE(NEW.attack_count,0) - CASE WHEN TG_OP='UPDATE' THEN COALESCE(OLD.attack_count,0) ELSE 0 END;
+  PERFORM grant_event_point(NEW.player_id, v_delta);
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS raid_event_point ON raid_participants;
+CREATE TRIGGER raid_event_point AFTER INSERT OR UPDATE OF attack_count ON raid_participants
+FOR EACH ROW EXECUTE FUNCTION trg_raid_event_point();
+
+-- デイリーダンジョン: cnt_* の合計増分ぶん加算（dungeon_consume は1回1増）
+CREATE OR REPLACE FUNCTION public.trg_dungeon_event_point()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE v_new int; v_old int;
+BEGIN
+  v_new := COALESCE(NEW.cnt_exp,0)+COALESCE(NEW.cnt_gold,0)+COALESCE(NEW.cnt_stone,0)+COALESCE(NEW.cnt_prof,0)+COALESCE(NEW.cnt_gem,0);
+  v_old := CASE WHEN TG_OP='UPDATE'
+                THEN COALESCE(OLD.cnt_exp,0)+COALESCE(OLD.cnt_gold,0)+COALESCE(OLD.cnt_stone,0)+COALESCE(OLD.cnt_prof,0)+COALESCE(OLD.cnt_gem,0)
+                ELSE 0 END;
+  PERFORM grant_event_point(NEW.player_id, v_new - v_old);
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS dungeon_event_point ON dungeon_attempts;
+CREATE TRIGGER dungeon_event_point AFTER INSERT OR UPDATE ON dungeon_attempts
+FOR EACH ROW EXECUTE FUNCTION trg_dungeon_event_point();
