@@ -262,8 +262,19 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           // 生のヒット内訳(未圧縮)が表示され、実際の与ダメ(finalDmg)と食い違う。実際の与ダメで作り直す。
           let resLog
           if (Array.isArray(res.hitDmgs) && res.hitDmgs.length > 1 && res.dmg > 0) {
-            const head = res.log.split('！')[0]
-            resLog = `${head}！ ${bossName}に${fmt(finalDmg)}ダメージ！（${res.hitDmgs.length}回ヒット）`
+            // ダメージ内訳のみ合計表示に差し替え、スキル名(先頭)と末尾の補足
+            // （「2連撃・防御貫通」「○撃目が外れた」「やけど状態」等＝'ダメージ'を含まない節）は温存する
+            const segs = res.log.split('！')
+            const head = segs[0]
+            const tail = []
+            for (let i = segs.length - 1; i >= 1; i--) {
+              const s = segs[i]
+              if (s === '') continue
+              if (s.includes('ダメージ')) break  // ここはヒット内訳なので停止
+              tail.unshift(s)
+            }
+            const suffix = tail.length ? ' ' + tail.join('！') + (res.log.endsWith('！') ? '！' : '') : ''
+            resLog = `${head}！ ${bossName}に合計${fmt(finalDmg)}ダメージ！（${res.hitDmgs.length}回ヒット）${suffix}`
           } else {
             resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), fmt(finalDmg)) : res.log
           }
