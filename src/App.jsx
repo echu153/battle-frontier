@@ -30,6 +30,7 @@ const StatusDetail = lazy(() => import('./pages/StatusDetail'))
 const Abyss = lazy(() => import('./pages/Abyss'))
 const Tenkyuu = lazy(() => import('./pages/Tenkyuu'))
 const Alchemy = lazy(() => import('./pages/Alchemy'))
+const Idle = lazy(() => import('./pages/Idle'))
 const Territory = lazy(() => import('./pages/Territory'))
 const Marketplace = lazy(() => import('./pages/Marketplace'))
 const Event = lazy(() => import('./pages/Event'))
@@ -166,6 +167,7 @@ function App() {
         <Route path="/abyss" element={session ? <Abyss /> : <Navigate to="/login" />} />
         <Route path="/tenkyuu" element={session ? <Tenkyuu /> : <Navigate to="/login" />} />
         <Route path="/alchemy" element={session ? <Alchemy /> : <Navigate to="/login" />} />
+        <Route path="/idle" element={session ? <Idle /> : <Navigate to="/login" />} />
         <Route path="/territory" element={session ? <Territory /> : <Navigate to="/login" />} />
         <Route path="/marketplace" element={session ? <Marketplace /> : <Navigate to="/login" />} />
         <Route path="/event" element={session ? <Event /> : <Navigate to="/login" />} />
