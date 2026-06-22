@@ -6,8 +6,8 @@
 // 「攻撃側(att)」「防御側(def)」のどちらもフルスキルで殴り合う。
 //
 // PvP固有ルール（要件）:
-//  ・与ダメージは一律70%軽減（×0.3）       … PVP.dmgMult
-//  ・回復量はすべて50%減（×0.5）            … PVP.healMult
+//  ・与ダメージは一律90%軽減（×0.1）       … PVP.dmgMult
+//  ・回復量は減少なし（×1.0）               … PVP.healMult
 //  ・素早さ由来のクリティカル率・回避率は上限2倍（速さ補正ぶんのみ×2）
 //  ・素早さが速い方が先攻。HP0で決着。ターン上限到達はHP割合が高い方の勝ち（同率は引分）。
 //
@@ -29,8 +29,8 @@ import {
 } from '../pages/Game'
 
 const PVP = {
-  dmgMult: 0.3,   // 与ダメージ70%軽減
-  healMult: 0.5,  // 回復量50%減
+  dmgMult: 0.1,   // 与ダメージ90%軽減
+  healMult: 1.0,  // 回復量は減少なし
   turnCap: 60,    // ターン上限
 }
 const CRIT_BASE_RATE = 100 / 24  // calcCritRate の基礎クリ率（速さ補正を除いた素の値）
@@ -320,7 +320,7 @@ function doAttack(att, def, isExtra, ctx) {
         dealToDef(fDmg)
         logs.push({ text: `↳ 追撃！${res.followup.label ? `（${res.followup.label}）` : ''} ${enemyName}に${fDmg}ダメージ！${fCrit ? ' 💥クリティカル！' : ''}`, color: fCrit ? '#ffaa00' : '#ffaa66' })
       }
-      // 血の狂気（回復は50%減）
+      // 血の狂気（回復補正は PVP.healMult）
       if (att.buffs.bloodRage?.turns > 0 && finalDmg > 0 && !(att.buffs.healSeal?.turns > 0)) {
         const rageCure = Math.min(Math.floor(finalDmg * att.buffs.bloodRage.healRate * PVP.healMult), Math.floor(eff.hp_max * 0.2))
         att.hp = Math.min(eff.hp_max, att.hp + rageCure)
@@ -490,7 +490,7 @@ export function simulatePvpBattle(inputA, inputB) {
   const B = buildSide(inputB, 'B')
 
   logs.push({ text: `⚔ 対人戦開始！ ${A.profile.username} vs ${B.profile.username}`, color: '#ffcc66' })
-  logs.push({ text: `（与ダメージ-70%／回復-50%／素早さによるクリ・回避は上限2倍）`, color: '#88aacc' })
+  logs.push({ text: `（与ダメージ-90%／回復は通常どおり／素早さによるクリ・回避は上限2倍）`, color: '#88aacc' })
 
   // 開幕の装備効果バフ
   A.buffs = applyEquipmentEffects(A.equipment, { ...A.profile, hp_max: A.eff.hp_max }, A.buffs, logs)
