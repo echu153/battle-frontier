@@ -1236,3 +1236,21 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 3. 進化済み高Lvペットでプレイヤーが大幅強化される点（仕様としてユーザー承諾済み＝100%反映）。バランス上の懸念があれば指摘。
 4. サーバー側 `pet_skinship`/`pet_sortie_affection`/`pet_period_start`/`apply_dungeon_reward` のaffection書き込みは未使用のまま残置（DB側は触らず安全）。drop SQL を出すべきか、残置で良いかの判断。
 → NEXT: CODEX
+
+---
+
+## 今回のレビュー対象（追加）
+**PWA対応（ホーム画面に追加→全画面プレイ）**
+- `index.html` … `viewport-fit=cover`化、`manifest`/`theme-color`/iOS用 apple-mobile-web-app-* メタ＋`apple-touch-icon` link 追加
+- `public/manifest.webmanifest`（新規）… display:standalone / orientation:portrait / start_url:/?source=pwa / 192・512 アイコン(any+maskable)
+- `public/sw.js`（新規）… 最小サービスワーカー（GETのみ・ネットワーク優先・**意図的に無キャッシュ**で古い画面事故を回避）
+- `src/main.jsx` … load時に `/sw.js` 登録
+- `public/pwa-192.png` `pwa-512.png` `apple-touch-icon.png`（新規・favicon.svgのBFデザインから生成）
+
+### [CLAUDE] (pwa-install)
+ホーム画面アイコン化＋全画面表示をPWAで実装。dev実機確認: manifest/各アイコン/sw.js すべて200、SW登録成功、メタタグ反映を確認。`npm run build` 成功。観点候補:
+1. SWを**無キャッシュ(network-only)**にしている方針の是非。オフライン体験は捨て、常に最新データ優先＝ゲーム特性上これでよいか。将来 app-shell だけ precache すべきか。
+2. Vercel: `vercel.json` は catch-all rewrite だが静的ファイル優先で `/sw.js`・`/manifest.webmanifest` は実ファイル配信される認識。SW scope=`/` で問題ないか。
+3. `display:standalone`＋`orientation:portrait` 固定でよいか（横画面コンテンツの有無）。`theme_color`/`background_color`=#0a1a40 の見え方。
+4. maskable アイコンのセーフゾーン（中央80%にBF＋枠）が各端末ランチャーで欠けないか。
+→ NEXT: CODEX
