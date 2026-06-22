@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { SPECIES, STARTERS, SKILLS, skillsForSpecies, MAX_SKILL_SLOTS, SHOP_ITEMS, PET_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, affectionConversion, AFFECTION_MAX, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage, assetSrc, getCharm, charmDisplayName, charmHpBonus } from '../constants/pets'
+import { SPECIES, STARTERS, SKILLS, skillsForSpecies, MAX_SKILL_SLOTS, SHOP_ITEMS, PET_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage, assetSrc, getCharm, charmDisplayName, charmHpBonus } from '../constants/pets'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 // ペット画像はペットページでアップロードしたものだけを使う（avatars/<uid>/pets/ 配下）
@@ -16,7 +16,6 @@ export default function Pets() {
   const [loading, setLoading] = useState(false)
   const [naming, setNaming] = useState(null) // 命名中のスターター種族 {id,label,...}
   const [nick, setNick] = useState('')
-  const [periodStart, setPeriodStart] = useState(null) // 現在のスキンシップ時間帯の開始時刻
   const [items, setItems] = useState({}) // 所持アイテム { key: qty }
   const [renaming, setRenaming] = useState(false)
   const [renameInput, setRenameInput] = useState('')
@@ -49,8 +48,6 @@ export default function Pets() {
     if (list && list.length && !selectedId) setSelectedId(list.find((x) => x.is_active)?.id || list[0].id)
     const { data: files } = await supabase.storage.from('avatars').list(`${user.id}/pets/`)
     if (files) setUploaded(files.filter((f) => f.name !== '.emptyFolderPlaceholder').map((f) => `${SUPABASE_URL}/storage/v1/object/public/avatars/${user.id}/pets/${f.name}`))
-    const { data: ps } = await supabase.rpc('pet_period_start')
-    if (ps) setPeriodStart(ps)
     const { data: its } = await supabase.from('pet_items').select('item_key, qty').eq('owner_id', user.id)
     if (its) setItems(Object.fromEntries(its.map((r) => [r.item_key, r.qty])))
     const { data: sto } = await supabase.from('pet_storage').select('item_key, qty').eq('owner_id', user.id)
@@ -81,20 +78,13 @@ export default function Pets() {
     await fetchAll()
   }
 
-  // 現在の時間帯(12時間)のスキンシップ残り回数（1回まで／1日2回）
-  const skinshipRemaining = (pet) => {
-    if (!periodStart || !pet.skinship_period_start) return 1
-    const same = new Date(pet.skinship_period_start).getTime() === new Date(periodStart).getTime()
-    return same ? Math.max(0, 1 - (pet.skinship_count || 0)) : 1
-  }
-
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 2500) }
 
   const pickStarter = async (sp, name) => {
     setLoading(true)
     const finalName = (name || '').trim() || sp.label
     const { error } = await supabase.from('pets').insert({
-      owner_id: profile.id, species: sp.id, name: finalName, level: 1, exp: 0, affection: 50, is_active: true,
+      owner_id: profile.id, species: sp.id, name: finalName, level: 1, exp: 0, is_active: true,
     })
     setLoading(false)
     if (error) { flash('作成に失敗: ' + error.message); return }
@@ -135,19 +125,6 @@ export default function Pets() {
     setEvolveConfirm(null)
     if (error) { flash('進化に失敗: ' + error.message); return }
     setEvolveDone(pet)   // 同じポップアップで「○○に進化した！」を表示
-    await fetchAll()
-  }
-
-  const doSkinship = async (pet) => {
-    setLoading(true)
-    const { data, error } = await supabase.rpc('pet_skinship', { p_pet_id: pet.id })
-    setLoading(false)
-    if (error) {
-      if (String(error.message).includes('limit')) flash('この時間帯はもうスキンシップ済み（5:00 / 17:00 にリセット）')
-      else flash('失敗: ' + error.message)
-      return
-    }
-    flash(`${pet.name} と触れ合った！ なつき+1（この時間帯あと${data.remaining}回）`)
     await fetchAll()
   }
 
@@ -242,7 +219,6 @@ export default function Pets() {
   const selected = pets.find((p) => p.id === selectedId) || pets[0]
   const sst = petStats(selected)
   const need = expForLevel(selected.level)
-  const conv = Math.round(affectionConversion(selected.affection) * 100)
   // 装備中スキル（旧ID等を除外した有効なものだけ。たいあたりは常に含む）
   const validSkillIds = new Set(skillsForSpecies(selected.species).map((s) => s.id))
   const curSlots = (Array.isArray(selected.skill_slots) ? selected.skill_slots : ['tackle']).filter((s) => s === 'tackle' || validSkillIds.has(s))
@@ -272,13 +248,10 @@ export default function Pets() {
             <div style={{ color: '#cce6ff', fontSize: 15 }}>{selected.name} <span style={{ color: selected.evolved ? '#ffcc66' : '#6699cc', fontSize: 11 }}>({speciesLabel(selected)})</span></div>
             <div style={{ color: '#88bbee', fontSize: 12, marginTop: 4 }}>Lv{selected.level}{Number.isFinite(petMaxLevel(selected)) ? `/${petMaxLevel(selected)}` : ''}　HP{sst.maxHp} / {atkLabel(selected)}{sst.atk} / 防{sst.def} / 特防{sst.mdef}</div>
             <div style={{ color: '#6699cc', fontSize: 11, marginTop: 2 }}>EXP {selected.exp} / {need}</div>
-            <div style={{ color: '#ffaacc', fontSize: 11, marginTop: 2 }}>なつき {selected.affection}/{AFFECTION_MAX}（ステータス変換 +{conv}%）</div>
+            {selected.is_active && <div style={{ color: '#88ffaa', fontSize: 11, marginTop: 2 }}>★ 選択中：このペットのステータスがプレイヤーに100%反映中</div>}
           </div>
         </div>
         <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {skinshipRemaining(selected) > 0
-            ? <Btn onClick={() => !loading && doSkinship(selected)}>🤲 スキンシップ（なつき+1・あと{skinshipRemaining(selected)}回）</Btn>
-            : <span style={{ background: '#0a0f1a', border: '1px solid #223344', color: '#556677', padding: '6px 12px', fontSize: 12 }}>🤲 スキンシップ済み</span>}
           {!selected.is_active && <Btn onClick={() => !loading && setActive(selected)}>このペットを選択する</Btn>}
           {canEvolve(selected) && <Btn onClick={() => !loading && setEvolveConfirm(selected)}>✨ 進化させる（→{evolvedName(selected)}）</Btn>}
           {(storage.rename || 0) > 0 && !renaming && <Btn onClick={() => { setRenaming(true); setRenameInput(selected.name) }}>🎫 ニックネーム変更券で改名（{storage.rename}枚）</Btn>}
@@ -291,7 +264,6 @@ export default function Pets() {
             <Btn onClick={() => { setRenaming(false); setRenameInput('') }}>やめる</Btn>
           </div>
         )}
-        <div style={{ color: '#557799', fontSize: 10, marginTop: 4 }}>※スキンシップは1日2回（5:00 / 17:00 にリセット）</div>
 
         {/* スキル（ダンジョンに持っていくスキルを最大4つ選ぶ） */}
         <div style={{ marginTop: 12, borderTop: '1px solid #223a55', paddingTop: 10 }}>
@@ -530,11 +502,11 @@ const HELP_SECTIONS = [
     '種族ごとに Lv3/8/20/50/80/120 でスキルを習得。ペット画面でダンジョンに持っていくスキルを最大4つ（たいあたり込み）選べます。',
     'スキルは満腹度を消費して発動（強いほど多い）。連打スキルは1発ずつヒットします。ダンジョン内では十字キー横で使うスキルを切り替えられます。',
   ] },
-  { t: '📊 ステータスとなつき', b: [
+  { t: '📊 ステータスについて', b: [
     'ステは HP / 攻撃(または特攻) / 防御 / 特防。物理は相手の防御、特殊は特防で軽減されます。',
     '防御は割合で軽減する方式。能力差が大きくてもある程度のダメージは必ず通ります（ダメージは毎回少しランダムに揺れます）。',
     'レベルが上がると自動でステ成長。必要EXPは「Lv×10」。',
-    'なつき度は1日2回の「スキンシップ」で+1（5:00 / 17:00 リセット）。ダンジョンで倒されると-3、10回クリアごとに+1。',
+    '★ 選択中（出撃中）のペットのステータスは、主人公（プレイヤー）に100%反映されます。攻撃タイプに応じて 攻撃→攻撃 / 特攻→特攻 に加算され、HP・防御・特防もそのまま上乗せされます。',
   ] },
   { t: '🧿 チャームについて', b: [
     'ペットに1つ装備できる強化アイテム。最初は「はじまりのチャーム」を装備（効果なし）。',

@@ -1375,10 +1375,10 @@ export default function Dungeon() {
     nav('/game')
   }
 
-  // あきらめる（倒された時と同じ仕様＝なつき-3・戦利品ランダム半分ロスト）
+  // あきらめる（倒された時と同じ仕様＝戦利品ランダム半分ロスト）
   const giveUp = async () => {
     if (status !== 'exploring' || busyRef.current) return
-    if (!window.confirm('あきらめますか？ 倒された時と同じく、なつき度が下がり戦利品の一部を失います。')) return
+    if (!window.confirm('あきらめますか？ 倒された時と同じく、戦利品の一部を失います。')) return
     setStatus('dead'); addLog('🏳 あきらめた…'); await finishRun(false, true)
   }
 
@@ -2024,7 +2024,7 @@ export default function Dungeon() {
           <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<RewardPanel reward={reward} pet={pet} /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
         {status === 'dead' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>💀 ペットは力尽きた…（なつき-3）<br /><span style={{ fontSize: 11, color: '#cc8888' }}>戦利品のランダム半分を失った…残りは持ち帰った</span><RewardPanel reward={reward} pet={pet} /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>💀 ペットは力尽きた…<br /><span style={{ fontSize: 11, color: '#cc8888' }}>戦利品のランダム半分を失った…残りは持ち帰った</span><RewardPanel reward={reward} pet={pet} /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
         {status === 'escaped' && (
           <div style={{ textAlign: 'center', marginTop: 16, color: '#cc88ff' }}>🪽 ダンジョンから脱出した<RewardPanel reward={reward} pet={pet} /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
@@ -2063,9 +2063,7 @@ function RewardPanel({ reward, pet }) {
   }
   return (
     <div style={{ background: '#001026', border: '1px solid #335588', padding: 10, margin: '10px auto', maxWidth: 280, fontSize: 12, color: '#cce6ff' }}>
-      <div style={{ color: '#88bbee' }}>Lv{reward.level}（EXP {reward.exp}） / なつき {reward.affection}/100</div>
-      {reward.aff_delta ? <div style={{ marginTop: 4, color: reward.aff_delta < 0 ? '#ff7777' : '#88ffaa' }}>なつき {reward.aff_delta > 0 ? '+' : ''}{reward.aff_delta}</div> : null}
-      {reward.aff_bonus > 0 ? <div style={{ marginTop: 2, color: '#88ffaa', fontSize: 10 }}>🎉 ダンジョン{reward.clears}回達成！なつき+1</div> : (reward.clears != null ? <div style={{ marginTop: 2, color: '#7799bb', fontSize: 10 }}>ダンジョン{reward.clears}回（あと{10 - (reward.clears % 10)}回でなつき+1）</div> : null)}
+      <div style={{ color: '#88bbee' }}>Lv{reward.level}（EXP {reward.exp}）</div>
       {reward.lootGranted > 0 && (
         <div style={{ marginTop: 4, color: '#bfe6cc', fontSize: 11 }}>
           🎁 持ち帰った戦利品 {reward.lootGranted}個 を入手！

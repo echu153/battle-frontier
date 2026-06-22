@@ -4,7 +4,7 @@ import { supabase } from '../supabase'
 // public/ 配下の安定URL参照（ハッシュ付きバンドルだとデプロイ後にキャッシュ不整合で404→画像が出ないため）
 const papiaIcon = '/papia.png'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue, calcDefReduction, calcEffectiveStats } from '../lib/stats'
-import { charmPlayerBonus } from '../constants/pets'
+import { charmPlayerBonus, petPlayerBonus } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
 import { myAreaShares, dropBonusPP } from '../lib/territory'
 import AIAssistant from '../components/AIAssistant'
@@ -1732,16 +1732,20 @@ export default function Game() {
     }
     // ログイン時にセッションをまたいだ連続出撃カウントをリセット
     await supabase.from('profiles').update({ consecutive_battle_count: 0 }).eq('id', user.id)
-    // 選択中ペットの装備チャーム効果をプレイヤー本体へ反映（未導入時は無視）
+    // 選択中ペットの本体ステ(100%反映)＋装備チャーム効果をプレイヤー本体へ反映（未導入時は無視）
     let petCharm = null
+    let petStat = null
     try {
-      const { data: ap } = await supabase.from('pets').select('charm_id').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
-      if (ap?.charm_id) {
-        const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle()
-        if (c) petCharm = charmPlayerBonus(c)
+      const { data: ap } = await supabase.from('pets').select('species, level, evolved, charm_id').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
+      if (ap) {
+        petStat = petPlayerBonus(ap)
+        if (ap.charm_id) {
+          const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle()
+          if (c) petCharm = charmPlayerBonus(c)
+        }
       }
-    } catch { /* チャーム未導入時は無視 */ }
-    setProfile({ ...data, ..._computed, petCharm, consecutive_battle_count: 0 })
+    } catch { /* ペット未導入時は無視 */ }
+    setProfile({ ...data, ..._computed, petCharm, petStat, consecutive_battle_count: 0 })
     setPendingPoints(data.pending_stat_points || 0)
     // selectedAreaがこのアカウントで解放済みかチェック（別アカウントのlocalStorage値を弾く）
     const unlocked = data.unlocked_areas || [1]
@@ -3642,7 +3646,7 @@ export default function Game() {
     {
       id: 'm_pet', title: '🐾 ペット',
       content: `● スターターを選んで育成できる相棒システム
-● スキンシップで好感度を上げると能力が伸びる
+● 選択中（出撃中）のペットのステータスは主人公に100%反映される
 ● チャームの装備・進化で強化、ペット専用ダンジョンにも挑戦できる`,
     },
     {

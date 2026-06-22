@@ -20,7 +20,7 @@ import {
   calcStatsBreakdown, calcEffectiveStats, calcDefReduction, getTotalRank,
 } from '../lib/stats'
 import { sumClaimedFishingBonus, toFishingColumns } from '../lib/fishing'
-import { petStats, applyCharmStats, speciesLabel, speciesEmoji, charmDisplayName, atkLabel, petImage, charmPlayerBonus } from '../constants/pets'
+import { petStats, applyCharmStats, speciesLabel, speciesEmoji, charmDisplayName, atkLabel, petImage, charmPlayerBonus, petPlayerBonus } from '../constants/pets'
 
 const STAT_META = [
   { key:'hp',   label:'HP',         color:'#00cc44', rankType:'hp'  },
@@ -102,9 +102,10 @@ export default function StatusDetail() {
       for (const c of (charmRows || [])) charmMap[c.id] = c
       setPetCharms(charmMap)
     }
-    // 街と同じく、出撃中ペットの装備チャーム補正を総合力（実効ステ）へ反映
+    // 街と同じく、出撃中ペットの本体ステ(100%)＋装備チャーム補正を総合力（実効ステ）へ反映
     const activePet = petList.find(pt => pt.is_active)
     const activeCharm = activePet?.charm_id ? charmMap[activePet.charm_id] : null
+    p.petStat = activePet ? petPlayerBonus(activePet) : null
     p.petCharm = activeCharm ? charmPlayerBonus(activeCharm) : null
     // 旧仕様で消えた釣りボーナスを fishing_* 列へ一度だけ復元（Fishing.jsx と同一処理）
     if (!p.fishing_migrated) {

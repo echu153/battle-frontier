@@ -225,25 +225,9 @@ export default function SortiePanel({ quickSlotId, collapsible = false, activity
     savePending({ count:0 })
     setShowSettle(false)
 
-    // 累計出撃N回ごとに、選択中ペットのなつき+1（節目を跨いだ回数だけ加算）
-    // ★2026-06-20公開: 簡易出撃60秒化の補正で50回ごと
-    const affStep = 50
-    let petAffMsg = ''
-    try {
-      const key = 'bf_sortie_total_' + profile.id
-      const before = parseInt(localStorage.getItem(key) || '0', 10) || 0
-      const after = before + pend.count
-      localStorage.setItem(key, String(after))
-      const milestones = Math.floor(after / affStep) - Math.floor(before / affStep)
-      if (milestones > 0) {
-        const { data } = await supabase.rpc('pet_sortie_affection', { p_times: milestones })
-        if (data?.added > 0) petAffMsg = ` 🐾なつき+${data.added}`
-      }
-    } catch { /* なつき加算は失敗しても出撃清算は通す */ }
-
     await fetchProfile()
     setLoading(false)
-    showMessage(`清算完了！ EXP+${pend.exp} Gold+${pend.gold}${pend.drops.length?` ドロップ${pend.drops.length}個`:''}${learnedSkillNames.length?` スキル習得:${learnedSkillNames.join('・')}`:''}${petAffMsg}`, '#44ff88')
+    showMessage(`清算完了！ EXP+${pend.exp} Gold+${pend.gold}${pend.drops.length?` ドロップ${pend.drops.length}個`:''}${learnedSkillNames.length?` スキル習得:${learnedSkillNames.join('・')}`:''}`, '#44ff88')
   }
 
   if (!profile) return null

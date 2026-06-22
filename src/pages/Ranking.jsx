@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { calcEffectiveTotal, getTotalRank } from '../lib/stats'
-import { charmPlayerBonus, petStats, applyCharmStats, speciesLabel, speciesEmoji, getCharm, charmDisplayName, petImage } from '../constants/pets'
+import { charmPlayerBonus, petPlayerBonus, petStats, applyCharmStats, speciesLabel, speciesEmoji, getCharm, charmDisplayName, petImage } from '../constants/pets'
 
 // ペット1体の能力合計（チャーム込み）。プレイヤー総合力と同じ重み付け。
 const petTotalPower = (pet, charm) => {
@@ -40,16 +40,17 @@ export default function Ranking() {
         .limit(200)
       const list = (data || []).filter(p => !excluded.has(p.id))
       const ids = list.map(p => p.id)
-      let eqs = [], profs = [], titleMap = {}, charmMap = {}
+      let eqs = [], profs = [], titleMap = {}, charmMap = {}, petStatMap = {}
       if (ids.length > 0) {
         const [{ data: eqData }, { data: profData }, { data: petData }] = await Promise.all([
           supabase.from('player_equipment').select('*, weapons(*)').in('player_id', ids).eq('equipped', true),
           supabase.from('proficiency').select('player_id, equipment_id, prof_lv').in('player_id', ids),
-          // 街と同じくアクティブペットの装備チャームを総合力に反映
-          supabase.from('pets').select('owner_id, charm_id').in('owner_id', ids).eq('is_active', true),
+          // 街と同じくアクティブペットの本体ステ(100%)＋装備チャームを総合力に反映
+          supabase.from('pets').select('owner_id, species, level, evolved, charm_id').in('owner_id', ids).eq('is_active', true),
         ])
         eqs = eqData || []
         profs = profData || []
+        for (const pet of (petData || [])) petStatMap[pet.owner_id] = petPlayerBonus(pet)
         const charmIds = [...new Set((petData || []).map(p => p.charm_id).filter(Boolean))]
         if (charmIds.length > 0) {
           const { data: charmRows } = await supabase.from('player_charms').select('*').in('id', charmIds)
@@ -69,7 +70,7 @@ export default function Ranking() {
         const eq = eqs.filter(e => e.player_id === p.id)
         const pf = profs.filter(x => x.player_id === p.id)
         const tb = p.ability_title_id ? titleMap[p.ability_title_id] : null
-        const pProfile = { ...p, petCharm: charmMap[p.id] || null }
+        const pProfile = { ...p, petStat: petStatMap[p.id] || null, petCharm: charmMap[p.id] || null }
         return { ...p, _total: calcEffectiveTotal(pProfile, eq, pf, tb) }
       })
       const sorted = withTotal.sort((a, b) => b._total - a._total).slice(0, 50)

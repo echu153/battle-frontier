@@ -178,17 +178,27 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
   const baseAtk = profile.atk + bonus.atk + (profile.museum_atk || 0) + (profile.fishing_atk || 0)
   const finalAtk = atkPct > 0 ? Math.floor(baseAtk * (1 + atkPct/100)) : baseAtk
   const tb = titleBonus || {}
-  // 選択ペットの装備チャーム反映（profile.petCharm が無ければ無影響）。守りは防御+10%
+  // 選択ペット反映（無ければ無影響）。守りは防御+10%。
+  //  ・petCharm = 装備チャーム補正 / petStat = ペット本体ステ100%反映（petPlayerBonus）
+  //  両者を同じ加算枠で合算する（pet.* に集約）。
   const pc = profile.petCharm || {}
-  let defVal = profile.def + bonus.def + (profile.museum_def || 0) + (profile.fishing_def || 0) + (tb.def_bonus || 0) + (pc.def || 0)
+  const ps = profile.petStat || {}
+  const pet = {
+    atk:  (pc.atk  || 0) + (ps.atk  || 0),
+    def:  (pc.def  || 0) + (ps.def  || 0),
+    matk: (pc.matk || 0) + (ps.matk || 0),
+    mdef: (pc.mdef || 0) + (ps.mdef || 0),
+    hp:   (pc.hp   || 0) + (ps.hp   || 0),
+  }
+  let defVal = profile.def + bonus.def + (profile.museum_def || 0) + (profile.fishing_def || 0) + (tb.def_bonus || 0) + pet.def
   if (pc.guard) defVal = Math.round(defVal * 1.1)
   return {
-    atk:    finalAtk + (tb.atk_bonus || 0) + (pc.atk || 0),
+    atk:    finalAtk + (tb.atk_bonus || 0) + pet.atk,
     def:    defVal,
-    matk:   finalMatk + (tb.matk_bonus || 0) + (pc.matk || 0),
-    mdef:   profile.mdef + bonus.mdef + (profile.museum_mdef || 0) + (profile.fishing_mdef || 0) + (tb.mdef_bonus || 0) + (pc.mdef || 0),
+    matk:   finalMatk + (tb.matk_bonus || 0) + pet.matk,
+    mdef:   profile.mdef + bonus.mdef + (profile.museum_mdef || 0) + (profile.fishing_mdef || 0) + (tb.mdef_bonus || 0) + pet.mdef,
     spd:    profile.spd  + bonus.spd  + (profile.museum_spd || 0) + (profile.fishing_spd || 0) + (tb.spd_bonus || 0),
-    hp_max: profile.hp_max + bonus.hp + (profile.museum_hp || 0) + (profile.fishing_hp || 0) + (tb.hp_bonus || 0) + (pc.hp || 0),
+    hp_max: profile.hp_max + bonus.hp + (profile.museum_hp || 0) + (profile.fishing_hp || 0) + (tb.hp_bonus || 0) + pet.hp,
     mp_max: profile.mp_max + bonus.mp + (profile.museum_mp || 0) + (profile.fishing_mp || 0) + (tb.mp_bonus || 0),
     bonus,
     hitBonus:     hitBonus     + gemAcc.hitBonus,
@@ -248,9 +258,15 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
   const prof  = zeroStats()
   const tb = titleBonus || {}
   const title = { atk:tb.atk_bonus||0, def:tb.def_bonus||0, matk:tb.matk_bonus||0, mdef:tb.mdef_bonus||0, spd:tb.spd_bonus||0, hp:tb.hp_bonus||0, mp:tb.mp_bonus||0 }
-  // 選択ペットの装備チャーム反映（profile.petCharm が無ければ無影響）。calcEffectiveStats と同一処理。
+  // 選択ペット反映（無ければ無影響）。calcEffectiveStats と同一処理。
+  //  petCharm(装備チャーム) ＋ petStat(本体ステ100%) を「ペット」ソースに合算。
   const pc = profile.petCharm || {}
-  const pet = { atk:pc.atk||0, def:pc.def||0, matk:pc.matk||0, mdef:pc.mdef||0, spd:0, hp:pc.hp||0, mp:0 }
+  const ps = profile.petStat || {}
+  const pet = {
+    atk:(pc.atk||0)+(ps.atk||0), def:(pc.def||0)+(ps.def||0),
+    matk:(pc.matk||0)+(ps.matk||0), mdef:(pc.mdef||0)+(ps.mdef||0),
+    spd:0, hp:(pc.hp||0)+(ps.hp||0), mp:0,
+  }
 
   let matkPct = 0
   let atkPct = 0

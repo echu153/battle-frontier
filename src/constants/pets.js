@@ -13,8 +13,6 @@ export const SPECIES = {
 
 export const STARTERS = Object.entries(SPECIES).map(([id, s]) => ({ id, ...s }))
 
-export const AFFECTION_MAX = 100
-
 // 現在レベルから次レベルへ上がるのに必要な経験値（レベル×10）。レベルごとに0から貯める
 export const expForLevel = (lv) => (lv || 1) * 10
 export const MAX_LEVEL = 50            // 進化前のレベル上限（Lv50で進化が必要）
@@ -53,12 +51,22 @@ export function petStats(pet) {
 }
 export const atkLabel = (pet) => ((SPECIES[pet.species] || SPECIES.flame).atkType === 'spec' ? '特攻' : '攻撃')
 
-// なつき度によるプレイヤーへのステータス変換率の上限（後で調整しやすいよう定数化）
-export const CONVERSION_MAX = 1.00  // なつき満タンで最大100%
-// なつき度によるプレイヤーへのステータス変換率（0% 〜 CONVERSION_MAX）
-// 実適用（街/戦闘への反映）はPhase2後半
-export function affectionConversion(affection) {
-  return CONVERSION_MAX * Math.min(1, (affection || 0) / AFFECTION_MAX)
+// 選択中ペットの本体ステータスをプレイヤー本体ステへ反映する分（常に100%）。
+//  ・HP → プレイヤーHP / 防 → 防 / 特防 → 特防
+//  ・攻は atkType に応じて 物理=atk / 特殊=matk へ振り分け
+//  ・spd はペットに無いため反映なし
+// チャーム(charmPlayerBonus)と同じ加算枠で stats.js が合算する。
+export function petPlayerBonus(pet) {
+  if (!pet || !pet.species) return null
+  const st = petStats(pet)
+  const isSpec = st.atkType === 'spec'
+  return {
+    hp:   st.maxHp,
+    atk:  isSpec ? 0 : st.atk,
+    matk: isSpec ? st.atk : 0,
+    def:  st.def,
+    mdef: st.mdef,
+  }
 }
 
 // ペット専用スキル（体当たり時に「選択中スキル」が発動する）
