@@ -438,8 +438,8 @@ BEGIN
   -- 厳密な週5回獲得上限: 今週5回チャージ済みなら消費していてもそれ以上貯まらない
   IF v_sc_earned < 5 THEN
     v_sc_progress := v_sc_progress + 1;
-    IF v_sc_progress >= 100 THEN
-      v_sc_progress := v_sc_progress - 100;
+    IF v_sc_progress >= 50 THEN  -- ★出撃改善でチャージ必要回数を100→50に（クライアントUIと一致）
+      v_sc_progress := v_sc_progress - 50;
       v_sc_charges := v_sc_charges + 1;
       v_sc_earned  := v_sc_earned + 1;
       v_sc_charged := true;

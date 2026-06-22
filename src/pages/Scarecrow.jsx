@@ -168,7 +168,7 @@ export default function Scarecrow() {
           </div>
           {(state.earned || 0) < 5 && (
             <div style={{ background:'#001028', height:'6px', border:'1px solid #002244' }}>
-              <div style={{ height:'100%', width:`${state.progress || 0}%`, background:'linear-gradient(90deg,#332200,#ffcc44)' }} />
+              <div style={{ height:'100%', width:`${Math.min(100, ((state.progress || 0) / 50) * 100)}%`, background:'linear-gradient(90deg,#332200,#ffcc44)' }} />
             </div>
           )}
           <div style={{ color:'#334455', fontSize:'10px', marginTop:'6px' }}>
