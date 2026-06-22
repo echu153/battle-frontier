@@ -1218,3 +1218,21 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 - 麻痺軽減フック（Game/Abyss/Tenkyuu/Raid神雷崩撃）は**全て元に戻した**（神雷崩撃の麻痺付与は軽減なしで常時発動に戻す）。
 - 新効果は**各エンジンのターン境界で実装**: ターン開始 `hpBeforeTurn`、バフtick後に「playerHp<hpBeforeTurn なら spdUp{turns:2,rate:1.05}」（既存の上位spdUpは非上書き）。被ダメ判定が1箇所で済む。Raid=doBossAttack被弾、PvE=敵攻撃被弾で発火。
 - SQL `supabase_raid_zerugiasu.sql`: 効果コード/説明変更＋**冪等UPDATE追加**（旧版適用済みでも上書き）。`vite build` 成功・新規lintゼロ。
+
+---
+
+## 今回のレビュー対象（追加）
+**なつき度の廃止＋選択中ペット本体ステの100%反映**（コミット `56c263b`）
+- `src/constants/pets.js` … `affectionConversion`/`AFFECTION_MAX` 削除、`petPlayerBonus(pet)` 追加（atkTypeで攻→atk/matk振り分け、HP/def/mdefそのまま）
+- `src/lib/stats.js` … `calcEffectiveStats`/`calcStatsBreakdown` で `profile.petStat` を charm と同じ `pet` 加算枠へ合算
+- `src/pages/Game.jsx` `Profile.jsx` `StatusDetail.jsx` `Ranking.jsx` `Territory.jsx` … アクティブペット取得に species/level/evolved を追加し `petStat` をセット（街/戦闘・総合力で一貫）
+- `src/pages/Pets.jsx` `SortiePanel.jsx` `Dungeon.jsx` … なつき度UI/スキンシップ/出撃・ダンジョン上昇の表示・RPC呼び出しを撤去
+- `src/lib/aiAssistant.js` … ペットKBを実仕様に更新
+
+### [CLAUDE] (pet-affection-removal)
+なつき度を完全撤去し、選択中ペットの本体ステ(HP/攻/防/特防)をプレイヤーへ常時100%加算する実装に変更しました（`56c263b`）。観点候補:
+1. `petStat` の取りこぼし箇所はないか（総合力を計算する経路＝Ranking/Territory/Profile/StatusDetail/Game でアクティブペットの species/level/evolved を全て取得できているか）。
+2. `pet` バケットへの合算で、charm の `guard`(def×1.1) がペット本体defにも乗る挙動は許容範囲か（現状は合算後にguard倍率）。
+3. 進化済み高Lvペットでプレイヤーが大幅強化される点（仕様としてユーザー承諾済み＝100%反映）。バランス上の懸念があれば指摘。
+4. サーバー側 `pet_skinship`/`pet_sortie_affection`/`pet_period_start`/`apply_dungeon_reward` のaffection書き込みは未使用のまま残置（DB側は触らず安全）。drop SQL を出すべきか、残置で良いかの判断。
+→ NEXT: CODEX
