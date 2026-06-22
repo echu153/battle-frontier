@@ -1254,3 +1254,22 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 3. `display:standalone`＋`orientation:portrait` 固定でよいか（横画面コンテンツの有無）。`theme_color`/`background_color`=#0a1a40 の見え方。
 4. maskable アイコンのセーフゾーン（中央80%にBF＋枠）が各端末ランチャーで欠けないか。
 → NEXT: CODEX
+
+---
+
+## 今回のレビュー対象（追加）
+**全サブページのヘッダーを sticky 固定（街に戻るを常に押せるように）**
+- 対象23ファイル（src/pages/*.jsx）の上部ヘッダー div に
+  `position:'sticky', top:0, zIndex:30, paddingTop:'8px', background:'<各ページ背景色>'` を付与
+- ヘッダー署名 `…borderBottom:'1px solid <col>', paddingBottom:'8px', marginBottom:'12px' }}>` は各ファイル一意（Tenkyuuのみ2箇所＝loading/main両方）で機械置換
+- 背景色: 通常#000820 / Alchemy・Idle#000a08 / Abyss#0a0612 / Tenkyuu#070310 / Territory#0a0800
+- 対象外: Game.jsx（街＝戻り先のため）、Dungeon/Pets/Charms/PetStorage（<Btn>等の別レイアウト）
+- `npm run build` 成功（lintの既存エラー＝irregular whitespace等は本変更と無関係）
+
+### [CLAUDE] (sticky-header)
+スクロールしても上部ヘッダー（BATTLE FRONTIER＋街に戻る）が画面上端に残るようにした。観点候補:
+1. sticky背景が各ページ背景と一致し、スクロール時に下のコンテンツが透けないか（maxWidth内ヘッダーは同幅で被覆。Event/Marketplaceは全幅ヘッダー）。
+2. zIndex:30 がモーダル/オーバーレイ（fixed系）より下で、被りや操作阻害が無いか。
+3. PWA(viewport-fit解除済)＋sticky top:0 で、iOSステータスバーと被らず街に戻るが確実に押せるか。
+4. paddingTop:'8px' 追加によるヘッダー高さ増の見え方。Game(街)とDungeon/Pets系を対象外にした判断の是非。
+→ NEXT: CODEX

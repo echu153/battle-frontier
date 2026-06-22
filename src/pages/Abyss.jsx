@@ -877,7 +877,7 @@ export default function Abyss() {
     <div style={{ minHeight:'100vh', background:'#0a0612', padding:'12px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'640px', margin:'0 auto' }}>
         {/* ヘッダー */}
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #3a1f5a', paddingBottom:'8px', marginBottom:'12px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #3a1f5a', paddingBottom:'8px', marginBottom:'12px', position:'sticky', top:0, zIndex:30, paddingTop:'8px', background:'#0a0612' }}>
           <div style={{ color:'#c08cff', fontSize:'16px', letterSpacing:'3px' }}>🕯 奈落闘技場</div>
           <button onClick={()=>nav('/game')} style={{ background:'none', border:'1px solid #6644aa', color:'#9977cc', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏰 街に戻る</button>
         </div>

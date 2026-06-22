@@ -338,7 +338,7 @@ export default function Idle() {
   return (
     <div style={{ minHeight:'100vh', background:'#000a08', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'620px', margin:'0 auto' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #0a4030', paddingBottom:'8px', marginBottom:'12px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #0a4030', paddingBottom:'8px', marginBottom:'12px', position:'sticky', top:0, zIndex:30, paddingTop:'8px', background:'#000a08' }}>
           <div style={{ color:'#44ffaa', fontSize:'15px', letterSpacing:'2px' }}>🏕 自動遠征 <span style={{ color:'#557777', fontSize:'10px' }}>[開発]</span></div>
           <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
         </div>

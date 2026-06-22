@@ -930,7 +930,7 @@ export default function Tenkyuu() {
     return (
       <div style={{ minHeight:'100vh', background:'#070310', padding:'12px', fontFamily:'monospace' }}>
         <div style={{ maxWidth:'640px', margin:'0 auto' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #2a1f5a', paddingBottom:'8px', marginBottom:'12px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #2a1f5a', paddingBottom:'8px', marginBottom:'12px', position:'sticky', top:0, zIndex:30, paddingTop:'8px', background:'#070310' }}>
             <div style={{ color:'#c8a0ff', fontSize:'16px', letterSpacing:'3px' }}>🌌 天穹十二宮</div>
             <button onClick={()=>nav('/game')} style={{ background:'none', border:'1px solid #6644aa', color:'#9977cc', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏰 街に戻る</button>
           </div>
@@ -945,7 +945,7 @@ export default function Tenkyuu() {
   return (
     <div style={{ minHeight:'100vh', background:'#070310', padding:'12px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'680px', margin:'0 auto' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #2a1f5a', paddingBottom:'8px', marginBottom:'12px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #2a1f5a', paddingBottom:'8px', marginBottom:'12px', position:'sticky', top:0, zIndex:30, paddingTop:'8px', background:'#070310' }}>
           <div style={{ color:'#c8a0ff', fontSize:'16px', letterSpacing:'3px' }}>🌌 天穹十二宮</div>
           <button onClick={()=>nav('/game')} style={{ background:'none', border:'1px solid #6644aa', color:'#9977cc', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏰 街に戻る</button>
         </div>

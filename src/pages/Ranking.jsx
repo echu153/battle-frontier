@@ -139,7 +139,7 @@ export default function Ranking() {
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'12px', fontFamily:'monospace' }}>
       <div style={{ maxWidth:'600px', margin:'0 auto' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px', position:'sticky', top:0, zIndex:30, paddingTop:'8px', background:'#000820' }}>
           <div style={{ color:'#ffcc00', fontSize:'14px', letterSpacing:'2px' }}>BATTLE FRONTIER</div>
           <button onClick={() => nav('/game')}
             style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
