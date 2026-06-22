@@ -1,7 +1,8 @@
 // ============================================================
 // 自動遠征 / 放置キャンプ（Idle Camp）  ※is_admin限定で先行公開
-//   ・開始すると、画面を閉じていても経過時間に応じて EXP/Gold が溜まる。
-//   ・溜まり/上限/レートは全てサーバー(idle_get/idle_claim)が計算＝改ざん不可。
+//   ・このページ（または常駐ミニ窓）を開いている間だけ EXP/Gold が溜まる方式。
+//     在席はハートビート(idle_heartbeat,20秒毎)でサーバーに通知し、在席分のみ加算。
+//   ・溜まり/上限/レートは全てサーバーが計算＝改ざん不可。
 //   ・Phase2: PC常駐ミニ窓（Document Picture-in-Picture）。別作業中も小窓で
 //     遠征状況を表示し、小窓内から受け取りも可能（Chrome/Edgeのみ対応）。
 //   ※スマホの動画PiP(canvas→captureStream)は Phase3 で追加予定。
@@ -17,21 +18,23 @@ const fmtDur = (min) => {
   return `${m}分`
 }
 
-// サーバー起点(started_at)＋経過時間から、表示中の見込み額をリアルタイム算出。
+// 在席ハートビート方式：サーバーが持つ accrued_sec（在席中に貯まった秒）に、
+// 最終beatからの「開いている間」のぶん(GRACE上限)を上乗せして表示。
+// 閉じている間は heartbeat が止まるので加算されない＝ページを開いている間だけ進む。
 // 画面本体とPiP小窓の両方で同じ計算を使い、表示を一致させる。
 const computeLive = (data, nowMs) => {
-  let liveMin = data?.capped_min || 0
-  let pendingExp = data?.pending_exp || 0
-  let pendingGold = data?.pending_gold || 0
-  let isFull = data?.is_full || false
-  if (data?.running && data?.started_at) {
-    const elapsedMin = Math.floor((nowMs - new Date(data.started_at).getTime()) / 60000)
-    liveMin = Math.max(0, Math.min(elapsedMin, data.cap_min))
-    isFull = elapsedMin >= data.cap_min
-    pendingGold = liveMin * (data.gold_pm || 0)
-    pendingExp = (data.at_cap || data.exp_frozen) ? 0 : liveMin * (data.exp_pm || 0)
+  const capSec = (data?.cap_min || 0) * 60
+  let totalSec = data?.accrued_sec || 0
+  if (data?.running && data?.last_beat_at) {
+    const delta = (nowMs - new Date(data.last_beat_at).getTime()) / 1000
+    totalSec += Math.min(Math.max(0, delta), data.grace_sec || 90)
   }
-  const pct = data?.cap_min ? Math.min(100, Math.round((liveMin / data.cap_min) * 100)) : 0
+  totalSec = Math.min(totalSec, capSec)
+  const liveMin = Math.floor(totalSec / 60)
+  const pendingGold = liveMin * (data?.gold_pm || 0)
+  const pendingExp = (data?.at_cap || data?.exp_frozen) ? 0 : liveMin * (data?.exp_pm || 0)
+  const isFull = capSec > 0 && totalSec >= capSec
+  const pct = capSec ? Math.min(100, Math.round((totalSec / capSec) * 100)) : 0
   return { liveMin, pendingExp, pendingGold, isFull, pct }
 }
 
@@ -58,7 +61,17 @@ export default function Idle() {
     setData(res)
   }
 
+  // 在席ハートビート：開いている間だけサーバーに在席を通知し、在席ぶんを加算してもらう。
+  // 返り値で accrued_sec / last_beat_at を最新化（閉じればこの送信が止まり加算も止まる）。
+  const beat = async () => {
+    const { data: res } = await supabase.rpc('idle_heartbeat')
+    if (!res?.ok) return
+    if (res.server_now) offsetRef.current = new Date(res.server_now).getTime() - Date.now()
+    setData(prev => prev ? { ...prev, running: res.running, accrued_sec: res.accrued_sec ?? prev.accrued_sec, last_beat_at: res.last_beat_at ?? prev.last_beat_at } : prev)
+  }
+
   useEffect(() => {
+    let beatId
     (async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { nav('/login'); return }
@@ -66,10 +79,14 @@ export default function Idle() {
       if (!me?.is_admin) { nav('/game'); return }
       await load()
       setLoading(false)
+      await beat()
+      // 20秒ごとに在席通知（サーバーGRACE=90秒なのでバックグラウンド絞りでも在席維持）
+      beatId = setInterval(beat, 20000)
     })()
     const id = setInterval(() => setTick(t => t + 1), 1000)
     return () => {
       clearInterval(id)
+      if (beatId) clearInterval(beatId)
       if (pipCleanupRef.current) pipCleanupRef.current()
       if (pipWinRef.current) { try { pipWinRef.current.close() } catch { /* ignore */ } }
     }
@@ -228,8 +245,8 @@ export default function Idle() {
         )}
 
         <div style={{ color:'#88ccaa', fontSize:'11px', lineHeight:'1.8', marginBottom:'12px' }}>
-          キャラを遠征に送り出すと、<b style={{ color:'#cceeff' }}>ゲームを閉じていても</b>時間に応じて EXP / Gold が溜まります。<br />
-          溜まる速さは到達した最奥エリアで上がり、最大 <b style={{ color:'#cceeff' }}>{fmtDur(data?.cap_min || 0)}</b> ぶんまで蓄積。受け取ると再び0から溜まり始めます。
+          キャラを遠征に送り出すと、<b style={{ color:'#cceeff' }}>このページ（または常駐ミニ窓）を開いている間だけ</b>時間に応じて EXP / Gold が溜まります。<br />
+          <span style={{ color:'#557777' }}>※ ページを閉じている間は溜まりません。</span>溜まる速さは到達した最奥エリアで上がり、最大 <b style={{ color:'#cceeff' }}>{fmtDur(data?.cap_min || 0)}</b> ぶんまで蓄積。受け取ると再び0から溜まり始めます。
         </div>
 
         <div style={{ ...box, display:'flex', gap:'20px', flexWrap:'wrap', alignItems:'center' }}>
