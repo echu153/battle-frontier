@@ -526,6 +526,8 @@ export function simulatePvpBattle(inputA, inputB) {
       type: 'hp', turn: ctx.turn,
       playerHp: Math.max(0, A.hp), playerMax: A.eff.hp_max, playerName: A.profile.username,
       enemyHp: Math.max(0, B.hp), enemyMax: B.eff.hp_max, enemyName: B.profile.username,
+      playerMp: Math.max(0, A.mp), playerMpMax: A.eff.mp_max,
+      enemyMp: Math.max(0, B.mp), enemyMpMax: B.eff.mp_max,
       playerStatus: extractStatuses(A.buffs), enemyStatus: extractStatuses(B.buffs),
     })
     ctx.turn++

@@ -5714,7 +5714,8 @@ export function BattleLogLine({ l }) {
         ))}
       </div>
     )
-    const col = (key, name, cur, max, pct, color, status, align) => (
+    // curMp/maxMp を渡すと MP も表示（PvP用。PvEは未指定なので従来どおり非表示）
+    const col = (key, name, cur, max, pct, color, status, align, curMp, maxMp) => (
       <div key={key} style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', justifyContent:'flex-end' }}>
         {statusRow(status, align)}
         <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#b8d0e8', gap:'4px' }}>
@@ -5724,17 +5725,25 @@ export function BattleLogLine({ l }) {
         <div style={{ background:'#13243a', height:'6px', border:'1px solid #2a456a' }}>
           <div style={{ height:'100%', width:`${pct}%`, background:`linear-gradient(90deg,#0a3,${color})` }} />
         </div>
+        {maxMp != null && (<>
+          <div style={{ display:'flex', justifyContent:'flex-end', fontSize:'9px', color:'#6aa6e0', gap:'4px', marginTop:'1px' }}>
+            <span style={{ flexShrink:0 }}>MP {Math.max(0,curMp).toLocaleString()} / {maxMp.toLocaleString()}</span>
+          </div>
+          <div style={{ background:'#11203a', height:'4px', border:'1px solid #244a6a' }}>
+            <div style={{ height:'100%', width:`${Math.max(0,Math.min(100,(curMp/Math.max(1,maxMp))*100))}%`, background:'#3a78d8' }} />
+          </div>
+        </>)}
       </div>
     )
     // 双子(第3宮)など複数の敵HPバーに対応：l.twin があれば各体を個別のバーで表示
     const enemyCols = Array.isArray(l.twin)
       ? l.twin.map((b, i) => col(`e${i}`, `${b.name}${b.down ? '（蘇生中）' : ''}`, b.hp, b.max, Math.max(0, Math.min(100, (b.hp / b.max) * 100)), b.down ? '#8866aa' : '#ff6655', null, 'flex-end'))
-      : col('e', l.enemyName, l.enemyHp, l.enemyMax, ePct, '#ff6655', l.enemyStatus, 'flex-end')
+      : col('e', l.enemyName, l.enemyHp, l.enemyMax, ePct, '#ff6655', l.enemyStatus, 'flex-end', l.enemyMp, l.enemyMpMax)
     return (
       <div style={{ borderBottom:'1px solid #24405e', padding:'6px 6px', background:'#16263c', borderRadius:'3px', margin:'2px 0' }}>
         <div style={{ fontSize:'9px', color:'#7fa8d0', marginBottom:'3px', textAlign:'center' }}>━ {l.turn}ターン終了時 ━</div>
         <div style={{ display:'flex', gap:'12px', alignItems:'flex-end' }}>
-          {col('p', l.playerName, l.playerHp, l.playerMax, pPct, '#33dd66', l.playerStatus, 'flex-start')}
+          {col('p', l.playerName, l.playerHp, l.playerMax, pPct, '#33dd66', l.playerStatus, 'flex-start', l.playerMp, l.playerMpMax)}
           {enemyCols}
         </div>
       </div>
