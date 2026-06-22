@@ -1168,10 +1168,12 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     // ── サモナー ──
     case 'オオカミ召喚': {
+      // 物理ダメージ（敵DEFで軽減）だが火力参照は特殊攻撃力
       result.dmg = Math.floor(eff.matk*1.1*am)
+      result.physScaleMatk = true
       const wolfBleed = Math.random()*100 < 30
       if (wolfBleed) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
-      result.log = `🐺 オオカミ召喚！ ${enemy.name}に${result.dmg}の特殊ダメージ！${wolfBleed ? ` ${enemy.name}は出血した！` : ''}`
+      result.log = `🐺 オオカミ召喚！ ${enemy.name}に${result.dmg}の物理ダメージ！${wolfBleed ? ` ${enemy.name}は出血した！` : ''}`
       break
     }
     case '小悪魔召喚': {
@@ -2632,7 +2634,10 @@ export default function Game() {
             const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate*(1-(res.mdefPen||0))))
             // サイコブラスト/マインドブレイク等、およびサイキッカー・魔銃士の全スキルは敵DEF・MDEFの低い方で軽減
             const useLowDef = cs.skills?.name === 'サイコブラスト' || res.useMinDef || skillCls === 'サイキッカー' || skillCls === '魔銃士'
-            if (useLowDef) {
+            if (res.physScaleMatk) {
+              // 物理ダメージ（敵DEFで軽減）だが火力参照は特殊攻撃（オオカミ召喚など）
+              defScale = effBuff.matk / (effBuff.matk + adjED)
+            } else if (useLowDef) {
               defScale = effBuff.matk / (effBuff.matk + Math.min(adjED, adjEMD))
             } else if (sType === '物理攻撃') defScale = effBuff.atk  / (effBuff.atk  + adjED)
             else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + adjEMD)
@@ -4550,10 +4555,13 @@ export default function Game() {
   const isAtCap = currentClassLv >= cap
   const retrainingCount = (profile.retraining || {})[profile.class] || 0
 
-  const availableClasses = INITIAL_CLASSES.map(c=>{
-    const cl = classLevels.find(x=>x.class_name===c)
-    return { name:c, lv:cl?cl.lv:1, canChange: c !== profile.class }
-  })
+  const availableClasses = INITIAL_CLASSES
+    // サモナーは is_admin 限定先行公開（一般プレイヤーには非表示）
+    .filter(c => c !== 'サモナー' || profile?.is_admin)
+    .map(c=>{
+      const cl = classLevels.find(x=>x.class_name===c)
+      return { name:c, lv:cl?cl.lv:1, canChange: c !== profile.class }
+    })
   const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, req])=>{
     const requires = req.requires
     const requiresLv = req.requiresLv || 100

@@ -254,7 +254,10 @@ function doAttack(att, def, isExtra, ctx) {
         const buffPen = attBuffs.mukyoPen?.turns > 0 ? attBuffs.mukyoPen.rate : 0
         const adjED  = Math.max(1, Math.floor((def.eff.def  || 0) * eDefRate  * (1 - Math.min(0.8, (res.defPen || 0) + buffPen))))
         const adjEMD = Math.max(1, Math.floor((def.eff.mdef || 0) * eMdefRate * (1 - (res.mdefPen || 0))))
-        if (cs.skills?.name === 'サイコブラスト' || res.useMinDef) {
+        if (res.physScaleMatk) {
+          // 物理ダメージ（敵DEFで軽減）だが火力参照は特殊攻撃（オオカミ召喚など）
+          defScale = ratioMatk / (ratioMatk + adjED); useMagicalRank = false
+        } else if (cs.skills?.name === 'サイコブラスト' || res.useMinDef) {
           defScale = ratioMatk / (ratioMatk + Math.min(adjED, adjEMD))
           useMagicalRank = adjEMD <= adjED
         } else if (sType === '物理攻撃') { defScale = ratioAtk / (ratioAtk + adjED); useMagicalRank = false }
