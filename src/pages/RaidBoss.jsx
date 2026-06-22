@@ -89,7 +89,7 @@ function getBossForTurn(t, name = BOSS_NAME) {
 //   ・d > 3000 → 出力 < 素ダメ（大きいほど強く逓減）。順位は保たれる（単調増加）。
 //  EXP を小さくするほど高火力をより強く抑制。
 const RAID_DMG_PIVOT = 3000
-const RAID_DMG_EXP = 0.4
+const RAID_DMG_EXP = 0.3
 function compressRaidDmg(d) {
   if (d <= 0) return d
   return Math.max(1, Math.floor(RAID_DMG_PIVOT * Math.pow(d / RAID_DMG_PIVOT, RAID_DMG_EXP)))
