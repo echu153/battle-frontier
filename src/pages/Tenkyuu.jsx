@@ -257,6 +257,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       const cs = expandedSkillSet[skillIndex % expandedSkillSet.length]
       let mpCost = Math.floor((isArtifact ? (cs?.skills?.mp_cost||0)*2 : (cs?.skills?.mp_cost||0)) * passiveMpCostMult)
       if (cs?.skills?.name === 'マナボルト') mpCost = Math.max(1, Math.floor(playerMp * 0.1))
+        if (cs?.skills?.name === '天墜竜閃' && playerBuffs.tenkaiCharge?.turns > 0) mpCost = 0  // 解放ターンはMP消費なし（溜め時に消費済み）
       if (cs && cs.skills && playerMp >= mpCost) {
         playerMp -= mpCost
         const hasGensoKyomei = passiveNames.includes('元素共鳴')
