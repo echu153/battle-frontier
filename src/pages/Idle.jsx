@@ -39,6 +39,11 @@ const computeLive = (data, nowMs) => {
 }
 
 const PIP_SUPPORTED = typeof window !== 'undefined' && 'documentPictureInPicture' in window
+// 動画PiP（スマホ向け）: Android Chrome=requestPictureInPicture / iOS Safari=webkit presentation mode
+const VIDEO_PIP_SUPPORTED = typeof document !== 'undefined' && (
+  document.pictureInPictureEnabled ||
+  (typeof HTMLVideoElement !== 'undefined' && typeof HTMLVideoElement.prototype.webkitSetPresentationMode === 'function')
+)
 
 export default function Idle() {
   const nav = useNavigate()
@@ -47,12 +52,19 @@ export default function Idle() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [pipActive, setPipActive] = useState(false)
+  const [videoPipActive, setVideoPipActive] = useState(false)
   const [, setTick] = useState(0)
   const offsetRef = useRef(0)     // serverNow(ms) - Date.now()
   const dataRef = useRef(null)    // 最新dataをPiP更新ループから参照
   const actionsRef = useRef({})   // 最新doStart/doClaimをPiPボタンから参照（クロージャ陳腐化対策）
   const pipWinRef = useRef(null)
   const pipCleanupRef = useRef(null)
+  // 動画PiP（スマホ）用
+  const videoRef = useRef(null)
+  const canvasRef = useRef(null)
+  const streamRef = useRef(null)
+  const drawIntervalRef = useRef(null)
+  const heroFrameRef = useRef(false)
 
   const load = async () => {
     const { data: res, error } = await supabase.rpc('idle_get')
@@ -89,6 +101,8 @@ export default function Idle() {
       if (beatId) clearInterval(beatId)
       if (pipCleanupRef.current) pipCleanupRef.current()
       if (pipWinRef.current) { try { pipWinRef.current.close() } catch { /* ignore */ } }
+      if (drawIntervalRef.current) clearInterval(drawIntervalRef.current)
+      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
     }
   }, [])
 
@@ -207,6 +221,90 @@ export default function Idle() {
 
   const closePip = () => { if (pipWinRef.current) { try { pipWinRef.current.close() } catch { /* ignore */ } } }
 
+  // ===== スマホ常駐ミニ窓（canvas→動画PiP・観賞用） =====
+  // 自動戦闘の様子をcanvasに描き、captureStreamで映像化して動画PiPに乗せる。
+  // 動画PiPはYouTube等と同じOS小窓でYouTube全画面の上に浮かせられるが、操作は不可（観賞用）。
+  const drawFrame = () => {
+    const c = canvasRef.current
+    if (!c) return
+    const ctx = c.getContext('2d')
+    const W = c.width, H = c.height
+    const cur = dataRef.current
+    const { liveMin, pendingExp, pendingGold, isFull, pct } = computeLive(cur, serverNowMs())
+    heroFrameRef.current = !heroFrameRef.current
+
+    ctx.fillStyle = '#000a08'; ctx.fillRect(0, 0, W, H)
+    ctx.textAlign = 'center'
+    ctx.fillStyle = '#44ffaa'; ctx.font = '15px monospace'
+    ctx.fillText('🏕 自動遠征', W / 2, 24)
+
+    ctx.font = '36px serif'
+    ctx.fillText(!cur?.running ? '🏕' : (heroFrameRef.current ? '🗡️🐉' : '💥🐉'), W / 2, 78)
+
+    ctx.font = '12px monospace'; ctx.fillStyle = '#88ccaa'
+    ctx.fillText(!cur?.running ? '停止中' : (isFull ? '🈵 上限到達・受取推奨' : `遠征中… ${fmtDur(liveMin)}ぶん`), W / 2, 104)
+
+    ctx.strokeStyle = '#0a4030'; ctx.strokeRect(40, 116, W - 80, 10)
+    ctx.fillStyle = isFull ? '#ffcc44' : '#2ec27e'; ctx.fillRect(40, 116, (W - 80) * pct / 100, 10)
+
+    ctx.textAlign = 'left'; ctx.font = '16px monospace'
+    ctx.fillStyle = '#aaffdd'; ctx.fillText(`EXP  +${pendingExp}`, 50, 152)
+    ctx.fillStyle = '#ffe9a3'; ctx.fillText(`Gold +${pendingGold}`, 50, 176)
+  }
+
+  const stopVideoPip = () => {
+    const video = videoRef.current
+    try {
+      if (document.pictureInPictureElement) document.exitPictureInPicture()
+      else if (video && typeof video.webkitSetPresentationMode === 'function') video.webkitSetPresentationMode('inline')
+    } catch { /* ignore */ }
+    if (drawIntervalRef.current) { clearInterval(drawIntervalRef.current); drawIntervalRef.current = null }
+    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
+    if (video) { try { video.pause() } catch { /* ignore */ } video.srcObject = null }
+    setVideoPipActive(false)
+  }
+
+  const openVideoPip = async () => {
+    const video = videoRef.current
+    if (!VIDEO_PIP_SUPPORTED || !video) { flash('このブラウザは動画ミニ窓に未対応です', '#ffaa44'); return }
+    try {
+      if (!canvasRef.current) {
+        const c = document.createElement('canvas'); c.width = 320; c.height = 200; canvasRef.current = c
+      }
+      drawFrame()
+      const stream = canvasRef.current.captureStream(4)
+      streamRef.current = stream
+      video.srcObject = stream
+      video.muted = true
+      await video.play()
+      if (drawIntervalRef.current) clearInterval(drawIntervalRef.current)
+      drawIntervalRef.current = setInterval(drawFrame, 500)
+      if (typeof video.requestPictureInPicture === 'function') {
+        await video.requestPictureInPicture()
+      } else if (typeof video.webkitSetPresentationMode === 'function') {
+        video.webkitSetPresentationMode('picture-in-picture')
+      } else { throw new Error('unsupported') }
+      setVideoPipActive(true)
+    } catch {
+      flash('動画ミニ窓を開けませんでした（操作直後にお試しください）', '#ff5555')
+      stopVideoPip()
+    }
+  }
+
+  // 動画PiPがユーザー操作（小窓を閉じる/全画面化）で終了したらstateを戻す
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    const onLeave = () => { if (!document.pictureInPictureElement) { stopVideoPip() } }
+    const onWebkit = () => { if (video.webkitPresentationMode && video.webkitPresentationMode !== 'picture-in-picture') stopVideoPip() }
+    video.addEventListener('leavepictureinpicture', onLeave)
+    video.addEventListener('webkitpresentationmodechanged', onWebkit)
+    return () => {
+      video.removeEventListener('leavepictureinpicture', onLeave)
+      video.removeEventListener('webkitpresentationmodechanged', onWebkit)
+    }
+  }, [])
+
   if (loading) return <div style={{ color:'#44ffaa', textAlign:'center', marginTop:'40vh', fontFamily:'monospace' }}>読み込み中...</div>
 
   const { liveMin, pendingExp, pendingGold, isFull, pct } = computeLive(data, serverNowMs())
@@ -225,24 +323,43 @@ export default function Idle() {
           <div style={{ color:msg.c, fontSize:'12px', border:`1px solid ${msg.c}55`, background:'#001810', padding:'8px 12px', marginBottom:'10px' }}>{msg.t}</div>
         )}
 
-        {/* PC常駐ミニ窓 */}
-        <div style={{ ...box, display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', flexWrap:'wrap' }}>
+        {/* PC常駐ミニ窓（Document PiP・操作可） */}
+        <div style={{ ...box, display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', flexWrap:'wrap', marginBottom:'8px' }}>
           <div style={{ color:'#88ccaa', fontSize:'11px', lineHeight:'1.6' }}>
-            🖥 <b style={{ color:'#cceeff' }}>常駐ミニ窓</b><span style={{ color:'#557777' }}>（Chrome/Edge）</span><br />
-            <span style={{ color:'#557777', fontSize:'10px' }}>別の作業中も小窓で遠征を表示。小窓から受け取りも可能</span>
+            🖥 <b style={{ color:'#cceeff' }}>PC常駐ミニ窓</b><span style={{ color:'#557777' }}>（Chrome/Edge）</span><br />
+            <span style={{ color:'#557777', fontSize:'10px' }}>別の作業中も小窓で表示。小窓内から受け取りも可能</span>
           </div>
           {pipActive ? (
-            <button onClick={closePip} style={{ padding:'8px 14px', background:'#1a0a0a', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✕ ミニ窓を閉じる</button>
+            <button onClick={closePip} style={{ padding:'8px 14px', background:'#1a0a0a', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✕ 閉じる</button>
           ) : (
             <button onClick={openPip} disabled={!PIP_SUPPORTED}
               style={{ padding:'8px 14px', background: PIP_SUPPORTED?'#04141a':'#0a0e08', border:`1px solid ${PIP_SUPPORTED?'#66ccff':'#1a3a2a'}`, color: PIP_SUPPORTED?'#66ccff':'#445555', cursor: PIP_SUPPORTED?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'12px' }}>
-              🖥 ミニ窓で常駐
+              🖥 常駐
             </button>
           )}
         </div>
-        {!PIP_SUPPORTED && (
-          <div style={{ color:'#557777', fontSize:'10px', marginBottom:'10px' }}>※ お使いのブラウザは常駐ミニ窓（Document PiP）に未対応です。Chrome / Edge でご利用ください。</div>
+
+        {/* スマホ動画ミニ窓（動画PiP・観賞用） */}
+        <div style={{ ...box, display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', flexWrap:'wrap' }}>
+          <div style={{ color:'#88ccaa', fontSize:'11px', lineHeight:'1.6' }}>
+            📱 <b style={{ color:'#cceeff' }}>スマホ動画ミニ窓</b><span style={{ color:'#557777' }}>（YouTube脇に）</span><br />
+            <span style={{ color:'#557777', fontSize:'10px' }}>YouTube等を全画面で見ながら脇に表示。観賞用（操作はアプリに戻って）</span>
+          </div>
+          {videoPipActive ? (
+            <button onClick={stopVideoPip} style={{ padding:'8px 14px', background:'#1a0a0a', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✕ 閉じる</button>
+          ) : (
+            <button onClick={openVideoPip} disabled={!VIDEO_PIP_SUPPORTED}
+              style={{ padding:'8px 14px', background: VIDEO_PIP_SUPPORTED?'#1a0a14':'#0a0e08', border:`1px solid ${VIDEO_PIP_SUPPORTED?'#ff88cc':'#1a3a2a'}`, color: VIDEO_PIP_SUPPORTED?'#ff88cc':'#445555', cursor: VIDEO_PIP_SUPPORTED?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'12px' }}>
+              📱 小窓で表示
+            </button>
+          )}
+        </div>
+        {!PIP_SUPPORTED && !VIDEO_PIP_SUPPORTED && (
+          <div style={{ color:'#557777', fontSize:'10px', marginBottom:'10px' }}>※ お使いのブラウザはミニ窓に未対応です。PCはChrome/Edge、スマホはSafari/Chromeをお試しください。</div>
         )}
+        {/* 動画PiP用の隠しvideo（DOM上に存在し再生されている必要がある） */}
+        <video ref={videoRef} muted playsInline aria-hidden="true"
+          style={{ position:'absolute', width:'1px', height:'1px', opacity:0, pointerEvents:'none' }} />
 
         <div style={{ color:'#88ccaa', fontSize:'11px', lineHeight:'1.8', marginBottom:'12px' }}>
           キャラを遠征に送り出すと、<b style={{ color:'#cceeff' }}>このページ（または常駐ミニ窓）を開いている間だけ</b>時間に応じて EXP / Gold が溜まります。<br />
