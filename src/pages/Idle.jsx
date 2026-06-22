@@ -266,27 +266,45 @@ export default function Idle() {
 
   const openVideoPip = async () => {
     const video = videoRef.current
-    if (!VIDEO_PIP_SUPPORTED || !video) { flash('このブラウザは動画ミニ窓に未対応です', '#ffaa44'); return }
+    if (!video) { flash('内部エラー: video要素が未準備です', '#ff5555'); return }
     try {
       if (!canvasRef.current) {
         const c = document.createElement('canvas'); c.width = 320; c.height = 200; canvasRef.current = c
       }
+      const canvas = canvasRef.current
       drawFrame()
-      const stream = canvasRef.current.captureStream(4)
+      const cap = canvas.captureStream || canvas.mozCaptureStream
+      if (!cap) throw new Error('canvas.captureStream 非対応のブラウザです')
+      const stream = cap.call(canvas, 8)
       streamRef.current = stream
       video.srcObject = stream
       video.muted = true
-      await video.play()
+      video.setAttribute('playsinline', '')
+      video.setAttribute('autoplay', '')
+      // 描画ループを先に回して、PiP起動前にフレームを流す
       if (drawIntervalRef.current) clearInterval(drawIntervalRef.current)
-      drawIntervalRef.current = setInterval(drawFrame, 500)
+      drawIntervalRef.current = setInterval(drawFrame, 250)
+      await video.play()
+      // 端末によっては映像の寸法確定を待つ必要がある
+      if (!video.videoWidth) {
+        await new Promise((resolve) => {
+          const t = setTimeout(resolve, 400)
+          video.onloadedmetadata = () => { clearTimeout(t); resolve() }
+        })
+      }
       if (typeof video.requestPictureInPicture === 'function') {
         await video.requestPictureInPicture()
       } else if (typeof video.webkitSetPresentationMode === 'function') {
+        // iOS Safari。MediaStream映像のPiPは未対応の場合あり（その時はここで例外）
         video.webkitSetPresentationMode('picture-in-picture')
-      } else { throw new Error('unsupported') }
+      } else {
+        throw new Error('このブラウザはPiPに未対応です')
+      }
       setVideoPipActive(true)
-    } catch {
-      flash('動画ミニ窓を開けませんでした（操作直後にお試しください）', '#ff5555')
+    } catch (e) {
+      // 実際のエラー名/内容を表示して原因を切り分けられるようにする
+      const detail = e?.name ? `${e.name}: ${e.message || ''}` : (e?.message || String(e))
+      flash(`動画ミニ窓を開けませんでした → ${detail}`, '#ff5555')
       stopVideoPip()
     }
   }
@@ -342,8 +360,8 @@ export default function Idle() {
         {/* スマホ動画ミニ窓（動画PiP・観賞用） */}
         <div style={{ ...box, display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', flexWrap:'wrap' }}>
           <div style={{ color:'#88ccaa', fontSize:'11px', lineHeight:'1.6' }}>
-            📱 <b style={{ color:'#cceeff' }}>スマホ動画ミニ窓</b><span style={{ color:'#557777' }}>（YouTube脇に）</span><br />
-            <span style={{ color:'#557777', fontSize:'10px' }}>YouTube等を全画面で見ながら脇に表示。観賞用（操作はアプリに戻って）</span>
+            📱 <b style={{ color:'#cceeff' }}>スマホ動画ミニ窓</b><span style={{ color:'#557777' }}>（どのアプリの上にも浮く）</span><br />
+            <span style={{ color:'#557777', fontSize:'10px' }}>小窓を出したままスマホは普通に操作できます。小窓の中身は観賞用（タップ操作は不可）</span>
           </div>
           {videoPipActive ? (
             <button onClick={stopVideoPip} style={{ padding:'8px 14px', background:'#1a0a0a', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✕ 閉じる</button>
@@ -358,7 +376,7 @@ export default function Idle() {
           <div style={{ color:'#557777', fontSize:'10px', marginBottom:'10px' }}>※ お使いのブラウザはミニ窓に未対応です。PCはChrome/Edge、スマホはSafari/Chromeをお試しください。</div>
         )}
         {/* 動画PiP用の隠しvideo（DOM上に存在し再生されている必要がある） */}
-        <video ref={videoRef} muted playsInline aria-hidden="true"
+        <video ref={videoRef} muted playsInline autoPlay aria-hidden="true"
           style={{ position:'absolute', width:'1px', height:'1px', opacity:0, pointerEvents:'none' }} />
 
         <div style={{ color:'#88ccaa', fontSize:'11px', lineHeight:'1.8', marginBottom:'12px' }}>
