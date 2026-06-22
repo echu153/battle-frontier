@@ -163,6 +163,7 @@ export default function Smithy() {
   const [enhanceResult, setEnhanceResult] = useState(null) // { ok, title, text } 強化ポップアップの結果表示
   const [matSource, setMatSource] = useState('equip')       // 強化素材の選択: 'equip'=同名装備 / 'stone'=強化石
   const [craftTimes, setCraftTimes] = useState(1)            // 加工(装備→強化石)の作成回数（1回=装備3個→強化石1個）
+  const [stoneTimes, setStoneTimes] = useState({})           // 強化石→上位 の作成回数（ランク別・1回=強化石3個→上位1個）
 
   useEffect(() => { fetchAll() }, [])
 
@@ -345,7 +346,7 @@ export default function Smithy() {
     } finally { setLoading(false); craftBusyRef.current = false }
   }
 
-  const craftStoneFromStones = async (rarity) => {
+  const craftStoneFromStones = async (rarity, times = 1) => {
     if (craftBusyRef.current) return
     craftBusyRef.current = true
     setLoading(true)
@@ -355,9 +356,13 @@ export default function Smithy() {
     const stoneName = STONE_NAMES[rarity]
     const { data: stoneItem } = await supabase.from('items').select('*').eq('name', stoneName).single()
     const existing = playerItems.find(pi => pi.item_id === stoneItem?.id)
-    if (!existing || (existing.quantity||0) < 3) { showMessage(`${stoneName}が3つ必要です！（所持${existing?.quantity||0}個）`, '#ff4444'); return }
-    // 消費を楽観ロック：所持数が読み取り時と一致する時だけ-3（連打/別端末での二重消費を防ぐ）
-    const newQty = (existing.quantity||0) - 3
+    // 回数を所持数で上限クランプ（強化石3つ＝1回）。最低1回。
+    const maxTimes = Math.floor((existing?.quantity || 0) / 3)
+    const n = Math.max(1, Math.min(Math.floor(times) || 1, maxTimes))
+    const need = n * 3
+    if (!existing || (existing.quantity||0) < need) { showMessage(`${stoneName}が${need}個必要です！（所持${existing?.quantity||0}個）`, '#ff4444'); return }
+    // 消費を楽観ロック：所持数が読み取り時と一致する時だけ-need（連打/別端末での二重消費を防ぐ）
+    const newQty = (existing.quantity||0) - need
     const { data: consumed } = await supabase.from('player_items')
       .update({ quantity: newQty }).eq('id', existing.id).eq('quantity', existing.quantity).select('id')
     if (!consumed || consumed.length === 0) { showMessage('合成に失敗しました。もう一度お試しください。', '#ff4444'); await fetchAll(); return }
@@ -367,10 +372,10 @@ export default function Smithy() {
     const { data: nextStoneItem } = await supabase.from('items').select('*').eq('name', nextStoneName).single()
     if (nextStoneItem) {
       const nextExisting = playerItems.find(pi => pi.item_id === nextStoneItem.id)
-      if (nextExisting) await supabase.from('player_items').update({ quantity: (nextExisting.quantity||1)+1 }).eq('id', nextExisting.id)
-      else await supabase.from('player_items').insert({ player_id: profile.id, item_id: nextStoneItem.id, quantity: 1, equipped: false })
+      if (nextExisting) await supabase.from('player_items').update({ quantity: (nextExisting.quantity||1)+n }).eq('id', nextExisting.id)
+      else await supabase.from('player_items').insert({ player_id: profile.id, item_id: nextStoneItem.id, quantity: n, equipped: false })
     }
-    showMessage(`✨ ${nextStoneName} を1つ作成した！`, '#ffcc00')
+    showMessage(`✨ ${nextStoneName} を${n}つ作成した！`, '#ffcc00')
     await fetchAll()
     } finally { setLoading(false); craftBusyRef.current = false }
   }
@@ -436,7 +441,7 @@ export default function Smithy() {
     const c = craftConfirm
     setCraftConfirm(null)
     if (c.type === 'equipment') craftStoneFromSelectedItems(c.selectedIds)
-    else craftStoneFromStones(c.rarity)
+    else craftStoneFromStones(c.rarity, c.times || 1)
   }
 
   return (
@@ -468,16 +473,17 @@ export default function Smithy() {
 
             {craftConfirm.type === 'stone' && (() => {
               const nextRarity = STONE_RANKS[STONE_RANKS.indexOf(craftConfirm.rarity)+1]
+              const t = craftConfirm.times || 1
               return (
                 <>
                   <div style={{ marginBottom:'12px' }}>
                     <div style={{ color:'#88ccff', fontSize:'12px', padding:'6px 8px', borderBottom:'1px solid #002244' }}>
-                      {STONE_NAMES[craftConfirm.rarity]} × 3
+                      {STONE_NAMES[craftConfirm.rarity]} × {t*3}
                     </div>
                   </div>
                   <div style={{ textAlign:'center', color:'#446688', fontSize:'11px', marginBottom:'4px' }}>↓</div>
                   <div style={{ textAlign:'center', color:'#ffcc00', fontSize:'13px', marginBottom:'16px' }}>
-                    {STONE_NAMES[nextRarity]} × 1
+                    {STONE_NAMES[nextRarity]} × {t}
                   </div>
                 </>
               )
@@ -754,20 +760,34 @@ export default function Smithy() {
             )}
             {craftTab === 'stone' && (
               <div>
-                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>同ランクの強化石3つ→1つ上のランクの強化石1つに加工できます</div>
+                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>同ランクの強化石3つ→1つ上のランクの強化石1つに加工できます（所持数の範囲でまとめて作成できます）</div>
                 {STONE_RANKS.slice(0, -1).map(rarity => {
                   const count = getStoneCount(rarity)
-                  const canCraft = count >= 3
+                  const maxTimes = Math.floor(count / 3)
+                  const canCraft = maxTimes >= 1
+                  const times = Math.max(1, Math.min(stoneTimes[rarity] || maxTimes, maxTimes))
                   const nextRarity = STONE_RANKS[STONE_RANKS.indexOf(rarity) + 1]
                   return (
-                    <div key={rarity} style={{ border:`1px solid ${canCraft ? '#446600' : '#002244'}`, background:'#001028', padding:'10px', marginBottom:'6px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <div key={rarity} style={{ border:`1px solid ${canCraft ? '#446600' : '#002244'}`, background:'#001028', padding:'10px', marginBottom:'6px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
                       <div>
-                        <span style={{ color:'#88ccff', fontSize:'12px' }}>{STONE_NAMES[rarity]} ×3</span>
+                        <span style={{ color:'#88ccff', fontSize:'12px' }}>{STONE_NAMES[rarity]} ×{canCraft ? times*3 : 3}</span>
                         <span style={{ color: canCraft ? '#44ff88' : '#ff4444', fontSize:'10px', marginLeft:'8px' }}>（所持{count}個）</span>
-                        <span style={{ color:'#446688', fontSize:'10px', marginLeft:'8px' }}>→ {STONE_NAMES[nextRarity]}</span>
+                        <span style={{ color:'#446688', fontSize:'10px', marginLeft:'8px' }}>→ {STONE_NAMES[nextRarity]} ×{canCraft ? times : 1}</span>
                       </div>
-                      <button onClick={() => setCraftConfirm({ type:'stone', rarity })} disabled={!canCraft || loading}
-                        style={{ padding:'4px 10px', background: canCraft ? '#1a1400' : '#001', border:`1px solid ${canCraft ? '#aa8800' : '#002244'}`, color: canCraft ? '#ffcc00' : '#334455', cursor: canCraft ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>加工する</button>
+                      <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                        {canCraft && (
+                          <>
+                            <span style={{ color:'#446688', fontSize:'10px' }}>回数</span>
+                            <input type="number" min={1} max={maxTimes} value={times}
+                              onChange={e => { const v = Math.max(1, Math.min(parseInt(e.target.value,10)||1, maxTimes)); setStoneTimes(s => ({ ...s, [rarity]: v })) }}
+                              style={{ width:'48px', background:'#000818', border:'1px solid #224466', color:'#88ccff', fontFamily:'monospace', fontSize:'11px', padding:'2px 4px', textAlign:'center' }} />
+                            <button onClick={() => setStoneTimes(s => ({ ...s, [rarity]: maxTimes }))}
+                              style={{ padding:'2px 6px', background:'#001830', border:'1px solid #224466', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'9px' }}>最大</button>
+                          </>
+                        )}
+                        <button onClick={() => setCraftConfirm({ type:'stone', rarity, times })} disabled={!canCraft || loading}
+                          style={{ padding:'4px 10px', background: canCraft ? '#1a1400' : '#001', border:`1px solid ${canCraft ? '#aa8800' : '#002244'}`, color: canCraft ? '#ffcc00' : '#334455', cursor: canCraft ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>加工する</button>
+                      </div>
                     </div>
                   )
                 })}
