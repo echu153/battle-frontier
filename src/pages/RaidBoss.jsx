@@ -86,8 +86,8 @@ function getBossForTurn(t, name = BOSS_NAME) {
 //  PIVOT以下のダメージは LOW倍、超過分は HIGH倍に圧縮。これで火力差の開きを縮める。
 //  ※およそ PIVOT*LOW/(1-HIGH) … 付近で交差（それ未満=底上げ／超過=減少）。数値は調整ポイント。
 const RAID_DMG_PIVOT = 700
-const RAID_DMG_LOW = 1.5   // 低火力の底上げ倍率（↑強化:弱い人も通りやすく）
-const RAID_DMG_HIGH = 0.25 // 高火力の超過分の倍率（↓強化:強い人はより頭打ち）
+const RAID_DMG_LOW = 2.2   // 低火力の底上げ倍率（↑強化:弱い人も通りやすく）
+const RAID_DMG_HIGH = 0.12 // 高火力の超過分の倍率（↓強化:強い人はより頭打ち）
 function compressRaidDmg(d) {
   if (d <= 0) return d
   return Math.max(1, Math.floor(d <= RAID_DMG_PIVOT ? d * RAID_DMG_LOW : RAID_DMG_PIVOT * RAID_DMG_LOW + (d - RAID_DMG_PIVOT) * RAID_DMG_HIGH))
