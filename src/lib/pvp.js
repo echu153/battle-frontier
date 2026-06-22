@@ -6,7 +6,10 @@
 // 「攻撃側(att)」「防御側(def)」のどちらもフルスキルで殴り合う。
 //
 // PvP固有ルール（要件）:
-//  ・与ダメージは一律90%軽減（×0.1）       … PVP.dmgMult
+//  ・与ダメージ軽減は「攻撃力側」で行う。防御との突き合わせ(defScale=atk/(atk+def))に
+//    使う攻撃値を ratioAtkMult 倍に縮小し、防御(def/mdef)のレバレッジを大きくする。
+//    さらに最終倍率 dmgMult で全体量を調整。これにより防御特化が効く。
+//    ※ executeSkill に渡すステ自体は縮小しない＝**回復(ヒール/吸収)量は満額のまま**。
 //  ・回復量は減少なし（×1.0）               … PVP.healMult
 //  ・素早さ由来のクリティカル率・回避率は上限2倍（速さ補正ぶんのみ×2）
 //  ・素早さが速い方が先攻。HP0で決着。ターン上限到達はHP割合が高い方の勝ち（同率は引分）。
@@ -29,9 +32,10 @@ import {
 } from '../pages/Game'
 
 const PVP = {
-  dmgMult: 0.1,   // 与ダメージ90%軽減
-  healMult: 1.0,  // 回復量は減少なし
-  turnCap: 60,    // ターン上限
+  ratioAtkMult: 0.25, // defScale で使う攻撃値の縮小率（小さいほど防御が効く＝防御レバレッジ大）
+  dmgMult: 0.25,      // 最終ダメージ倍率（全体量の調整つまみ）
+  healMult: 1.0,      // 回復量は減少なし
+  turnCap: 60,        // ターン上限
 }
 const CRIT_BASE_RATE = 100 / 24  // calcCritRate の基礎クリ率（速さ補正を除いた素の値）
 
@@ -148,6 +152,10 @@ function doAttack(att, def, isExtra, ctx) {
   const paralysisSpdP = attBuffs.paralysis?.turns > 0 ? (attBuffs.paralysis.spdRate || 0.8) : 1.0
   const pSpd = att.effectiveSpdForCalc * (attBuffs.spdUp ? attBuffs.spdUp.rate : 1) * paralysisSpdP
   const effBuff = { ...eff, atk: pAtk, def: pDef, mdef: pMdef, matk: pMatk, spd: pSpd }
+  // 防御との突き合わせ(defScale)に使う攻撃値だけを縮小（防御のレバレッジを上げる）。
+  // res.dmg / res.heal は満額の effBuff から算出されるので回復量には影響しない。
+  const ratioAtk  = pAtk  * PVP.ratioAtkMult
+  const ratioMatk = pMatk * PVP.ratioAtkMult
 
   // 防御側の防御率（バフ＋攻撃側の貫通）
   const eDefRate  = (defBuffs.defDown  ? defBuffs.defDown.rate  : 1) * (defBuffs.defUp  ? defBuffs.defUp.rate  : 1) * (1 - (eff.defPen  || 0))
@@ -202,7 +210,7 @@ function doAttack(att, def, isExtra, ctx) {
       const resPeek = executeSkill(nextSkill, effBuff, profile, enemyObj, defBuffs, attBuffs, att.isArtifact, att.prevSkillName)
       if (resPeek.followup && resPeek.followup.dmg > 0) {
         const adjED = Math.max(1, Math.floor((def.eff.def || 0) * eDefRate))
-        const fScale = effBuff.atk / (effBuff.atk + adjED)
+        const fScale = ratioAtk / (ratioAtk + adjED)
         const fCrit = Math.random() * 100 < critRate
         const fCritMult = fCrit ? (1.5 + (eff.critDmg || 0) + att.passiveCritDmgBonus) : 1.0
         const dr = defBuffs.dmgReduce?.turns > 0 ? defBuffs.dmgReduce.rate : 1.0
@@ -247,10 +255,10 @@ function doAttack(att, def, isExtra, ctx) {
         const adjED  = Math.max(1, Math.floor((def.eff.def  || 0) * eDefRate  * (1 - Math.min(0.8, (res.defPen || 0) + buffPen))))
         const adjEMD = Math.max(1, Math.floor((def.eff.mdef || 0) * eMdefRate * (1 - (res.mdefPen || 0))))
         if (cs.skills?.name === 'サイコブラスト' || res.useMinDef) {
-          defScale = effBuff.matk / (effBuff.matk + Math.min(adjED, adjEMD))
+          defScale = ratioMatk / (ratioMatk + Math.min(adjED, adjEMD))
           useMagicalRank = adjEMD <= adjED
-        } else if (sType === '物理攻撃') { defScale = effBuff.atk / (effBuff.atk + adjED); useMagicalRank = false }
-        else if (sType === '魔法攻撃') { defScale = effBuff.matk / (effBuff.matk + adjEMD); useMagicalRank = true }
+        } else if (sType === '物理攻撃') { defScale = ratioAtk / (ratioAtk + adjED); useMagicalRank = false }
+        else if (sType === '魔法攻撃') { defScale = ratioMatk / (ratioMatk + adjEMD); useMagicalRank = true }
       }
       const allinDebuffOutMult = attBuffs.allinDebuff?.turns > 0 ? 0.7 : 1.0
       const reduceMult = defReduceMult(useMagicalRank)
@@ -339,8 +347,9 @@ function doAttack(att, def, isExtra, ctx) {
   // 通常攻撃（スキル不使用時）
   if (!skillUsed) {
     const baseAtk = att.isMagical ? effBuff.matk : effBuff.atk
+    const ratioBaseAtk = baseAtk * PVP.ratioAtkMult  // 防御レバレッジ用に縮小（スキルと同方針）
     const eDefVal = att.isMagical ? Math.max(1, Math.floor((def.eff.mdef || 0) * eMdefRate)) : Math.max(1, Math.floor(def.eff.def * eDefRate))
-    const baseDmg = Math.max(1, Math.floor(baseAtk * baseAtk / Math.max(1, baseAtk + eDefVal)) + Math.floor(Math.random() * 4))
+    const baseDmg = Math.max(1, Math.floor(baseAtk * ratioBaseAtk / Math.max(1, ratioBaseAtk + eDefVal)) + Math.floor(Math.random() * 4))
     const reduceMult = defReduceMult(att.isMagical)
     const finalDmg = Math.floor(baseDmg * 0.7 * critMult * (att.isArtifact ? 1.2 : 1.0) * att.passiveDmgMult * reduceMult * PVP.dmgMult * (0.9 + Math.random() * 0.2))
     dealToDef(finalDmg)
@@ -490,7 +499,7 @@ export function simulatePvpBattle(inputA, inputB) {
   const B = buildSide(inputB, 'B')
 
   logs.push({ text: `⚔ 対人戦開始！ ${A.profile.username} vs ${B.profile.username}`, color: '#ffcc66' })
-  logs.push({ text: `（与ダメージ-90%／回復は通常どおり／素早さによるクリ・回避は上限2倍）`, color: '#88aacc' })
+  logs.push({ text: `（与ダメージは防御力で大きく軽減／回復は通常どおり／素早さによるクリ・回避は上限2倍）`, color: '#88aacc' })
 
   // 開幕の装備効果バフ
   A.buffs = applyEquipmentEffects(A.equipment, { ...A.profile, hp_max: A.eff.hp_max }, A.buffs, logs)

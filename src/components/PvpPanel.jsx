@@ -1,6 +1,6 @@
 // ⚔ 対人戦（PvP）パネル — 開発者限定の先行実装。
 // 街メニューのボタンから開く。相手を検索して選び、出撃スキルで殴り合う。
-// 与ダメージ-90%／回復は通常どおり／素早さ由来クリ・回避は上限2倍（simulatePvpBattle 側）。
+// 与ダメージは防御力で大きく軽減（攻撃力側で縮小）／回復は通常どおり／素早さ由来クリ・回避は上限2倍。
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
 import { calcEffectiveStats } from '../lib/stats'
@@ -124,7 +124,7 @@ export default function PvpPanel({ onClose }) {
         </div>
 
         <div style={{ color: '#88aacc', fontSize: '10px', lineHeight: '1.7', marginBottom: '10px' }}>
-          与ダメージ-90%／回復は通常どおり／素早さによるクリ・回避は上限2倍。スキルはお互いの<b>出撃</b>セットを反映。素早さが速い方が先攻。
+          与ダメージは防御力で大きく軽減／回復は通常どおり／素早さによるクリ・回避は上限2倍。スキルはお互いの<b>出撃</b>セットを反映。素早さが速い方が先攻。
         </div>
 
         {!myLoadout && !error && <div style={{ color: '#9977aa', fontSize: '12px' }}>自分のデータを読込中...</div>}
