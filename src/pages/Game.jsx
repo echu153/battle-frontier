@@ -2315,12 +2315,17 @@ export default function Game() {
     }
 
     const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
+    // 戦争コンテンツ：管理者グローバルフラグ(game_flags.war_active)がONのとき、バトル中のみ全員HP+20000。
+    //  ※バトル中だけの一時バフ。保存HPは通常の実効最大で頭打ち＝サーバー検証はそのままでOK。
+    const WAR_HP_BONUS = 20000
+    let warOn = false
+    try { const { data: wf } = await supabase.from('game_flags').select('bool_value').eq('key','war_active').maybeSingle(); warOn = !!wf?.bool_value } catch { /* テーブル未作成時は無視 */ }
     // 装備・釣り等込みの実効最大HP/MP。戦闘の最大HP/MPプール・回復上限・%計算はこれを使う
-    const maxHp = eff.hp_max
+    const maxHp = eff.hp_max + (warOn ? WAR_HP_BONUS : 0)
     const maxMp = eff.mp_max
     const battleProfile = { ...profile, hp_max: maxHp, mp_max: maxMp }
-    // サーバーのHP検証用に実効最大HPをキャッシュ（apply_battle_result が eff_hp_max を上限に使う）
-    await supabase.from('profiles').update({ eff_hp_max: maxHp }).eq('id', profile.id)
+    // サーバーのHP検証用に実効最大HPをキャッシュ（戦争HPは保存しないので通常の実効最大を書く）
+    await supabase.from('profiles').update({ eff_hp_max: eff.hp_max }).eq('id', profile.id)
     const area = AREAS.find(a => a.id === selectedArea)
     const bossRate = profile.boss_encounter_rate || 0
     const isBossEncounter = Math.random()*100 < bossRate
@@ -2397,7 +2402,7 @@ export default function Game() {
     const isAtCap = currentClassLv >= cap
 
     const logs = []
-    let playerHp = Math.min(hpCurrent, maxHp)
+    let playerHp = warOn ? maxHp : Math.min(hpCurrent, maxHp)  // 戦争中は満タン(+20000込み)で開始
     let playerMp = Math.min(profile.mp_current ?? maxMp, maxMp)
     let enemyHp = enemy.hp
     let turn = 1, skillIndex = 0
@@ -3327,7 +3332,7 @@ export default function Game() {
       p_win: win,
       p_claimed_exp: expGained,
       p_claimed_gold: goldGained,
-      p_hp_current: playerHp,
+      p_hp_current: Math.min(playerHp, eff.hp_max),  // 戦争HP(+20000)は保存しない＝通常の実効最大で頭打ち
       p_mp_current: playerMp,
     })
 
