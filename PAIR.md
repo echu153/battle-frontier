@@ -1273,3 +1273,20 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 3. PWA(viewport-fit解除済)＋sticky top:0 で、iOSステータスバーと被らず街に戻るが確実に押せるか。
 4. paddingTop:'8px' 追加によるヘッダー高さ増の見え方。Game(街)とDungeon/Pets系を対象外にした判断の是非。
 → NEXT: CODEX
+
+---
+
+## 今回のレビュー対象（追加）
+**「ホーム画面に追加」手順モーダルを右上☰メニューに追加**（src/pages/Game.jsx）
+- 状態: `showInstallGuide` / `installTab`（UA で iPhone/Android 初期選択）
+- モーダル: 既存 `if (showOptions) return(...)` と同じ early-return 方式で追加。iPhone(Safari)/Android(Chrome)タブ切替・手順1-3・全画面/更新不要の注記。`display-mode:standalone` 検出時は「すでにアプリとして起動中」表示
+- メニュー: モバイル/PC 両方の ☰ に `📱 ホーム画面に追加` を「お問い合わせ」直後へ追加（replace_allで両方）
+- `npm run build` 成功。実画面はログイン必須でE2E未確認（要ユーザー確認）
+
+### [CLAUDE] (install-guide-modal)
+参考画像(meguruland)準拠の追加手順をゲーム内に実装。観点候補:
+1. iOS手順の正確性（共有→ホーム画面に追加→追加）。Safari限定の注意は妥当か。Android手順（⋮→アプリをインストール/ホーム画面に追加）。
+2. early-return方式モーダルが既存の showOptions/showContact と干渉しないか（同時true時の優先順）。
+3. `navigator.standalone`/`matchMedia('(display-mode: standalone)')` の判定可搬性。
+4. メニュー配置（お問い合わせ直後）でよいか。お知らせ等での周知文面を出すべきか。
+→ NEXT: CODEX

@@ -1434,6 +1434,8 @@ export default function Game() {
   const [aiOpen, setAiOpen] = useState(false) // AI戦闘民族ジェミータ（☰メニューから開く）
   const [showContact, setShowContact] = useState(false)
   const [showOptions, setShowOptions] = useState(false)   // ⚙ オプション（ブーストタイム発動など）
+  const [showInstallGuide, setShowInstallGuide] = useState(false)  // 📱 ホーム画面に追加の手順
+  const [installTab, setInstallTab] = useState(() => (/android/i.test(navigator.userAgent) ? 'android' : 'iphone'))
   const [boostLoading, setBoostLoading] = useState(false)
   const [papiaHourLoading, setPapiaHourLoading] = useState(false)
   const [papiaSel, setPapiaSel] = useState(20)            // パピア枠1の選択値（デフォルト20時）
@@ -3940,6 +3942,70 @@ export default function Game() {
     )
   }
 
+  if (showInstallGuide) {
+    const isStandalone = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true
+    const tab = installTab
+    const tabBtn = (key, label) => (
+      <button onClick={()=>setInstallTab(key)} style={{ flex:1, padding:'10px', background: tab===key?'#0a2440':'#001020', border:`1px solid ${tab===key?'#44aaff':'#234'}`, color: tab===key?'#aad4ff':'#557', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', fontWeight: tab===key?'bold':'normal' }}>{label}</button>
+    )
+    const stepBox = { border:'1px solid #234', background:'#000a18', padding:'12px 14px', marginBottom:'10px', borderRadius:'4px' }
+    const num = { color:'#44aaff', fontWeight:'bold', marginRight:'6px' }
+    return (
+      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', overflowY:'auto' }}>
+        <div style={{ background:'#001020', border:'1px solid #446688', padding:'20px', maxWidth:'460px', width:'100%', fontFamily:'monospace', maxHeight:'90vh', overflowY:'auto' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
+            <div style={{ color:'#44aaff', fontSize:'15px' }}>📱 ホーム画面に追加</div>
+            <button onClick={()=>setShowInstallGuide(false)} style={{ background:'none', border:'none', color:'#557', cursor:'pointer', fontFamily:'monospace', fontSize:'18px' }}>✕</button>
+          </div>
+
+          <div style={{ border:'1px solid #234', background:'#000a18', padding:'12px 14px', marginBottom:'14px', borderRadius:'4px', color:'#9cf', fontSize:'12px', lineHeight:'1.9' }}>
+            <div>✅ ホーム画面からワンタップで起動</div>
+            <div>✅ 全画面表示でアプリのように快適</div>
+          </div>
+
+          {isStandalone && (
+            <div style={{ textAlign:'center', color:'#44ff88', fontSize:'12px', padding:'10px', border:'1px solid #225544', background:'#001810', marginBottom:'14px' }}>
+              🎉 すでにアプリとして起動中です！
+            </div>
+          )}
+
+          <div style={{ display:'flex', gap:'8px', marginBottom:'14px' }}>
+            {tabBtn('iphone', 'iPhone')}
+            {tabBtn('android', 'Android')}
+          </div>
+
+          {tab === 'iphone' ? (
+            <div>
+              <div style={{ color:'#88aacc', fontSize:'11px', marginBottom:'10px', lineHeight:'1.7' }}>
+                ⚠️ <strong style={{color:'#ffcc44'}}>Safari</strong> で開いてください（Chromeやアプリ内ブラウザでは「ホーム画面に追加」が出ません）
+              </div>
+              <div style={stepBox}><span style={num}>1.</span>画面下（または上）のメニューバーの<strong style={{color:'#aad4ff'}}>「共有」ボタン</strong>（□に↑の形）をタップ</div>
+              <div style={stepBox}><span style={num}>2.</span>メニューを下にスクロールして<strong style={{color:'#aad4ff'}}>「ホーム画面に追加」</strong>を選ぶ</div>
+              <div style={stepBox}><span style={num}>3.</span>右上の<strong style={{color:'#aad4ff'}}>「追加」</strong>をタップ</div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ color:'#88aacc', fontSize:'11px', marginBottom:'10px', lineHeight:'1.7' }}>
+                <strong style={{color:'#ffcc44'}}>Chrome</strong> で開くのがおすすめです
+              </div>
+              <div style={stepBox}><span style={num}>1.</span>右上の<strong style={{color:'#aad4ff'}}>「⋮」（その他）</strong>をタップ</div>
+              <div style={stepBox}><span style={num}>2.</span><strong style={{color:'#aad4ff'}}>「アプリをインストール」</strong>または<strong style={{color:'#aad4ff'}}>「ホーム画面に追加」</strong>を選ぶ</div>
+              <div style={stepBox}><span style={num}>3.</span><strong style={{color:'#aad4ff'}}>「インストール」/「追加」</strong>をタップ</div>
+            </div>
+          )}
+
+          <div style={{ color:'#557', fontSize:'10px', lineHeight:'1.7', marginTop:'6px', marginBottom:'14px' }}>
+            ※ 追加したアイコンを押すと、アドレスバーの無い全画面でゲームが起動します。<br/>
+            ※ ゲームを更新してもアイコンを作り直す必要はありません。
+          </div>
+
+          <button onClick={()=>setShowInstallGuide(false)}
+            style={{ width:'100%', padding:'10px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>閉じる</button>
+        </div>
+      </div>
+    )
+  }
+
   if (showContact) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ background:'#001020', border:'1px solid #446688', padding:'20px', maxWidth:'460px', width:'100%', maxHeight:'90vh', overflowY:'auto', fontFamily:'monospace', boxSizing:'border-box' }}>
@@ -4662,6 +4728,7 @@ export default function Game() {
             )}
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
+            <button onClick={()=>{ setShowInstallGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📱 ホーム画面に追加</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
           </div>
         )}
@@ -5117,6 +5184,7 @@ export default function Game() {
             )}
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
+            <button onClick={()=>{ setShowInstallGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📱 ホーム画面に追加</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
           </div>
         )}
