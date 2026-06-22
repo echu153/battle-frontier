@@ -46,8 +46,11 @@ const pvpEvasionFromSpd = (defSpd, atkSpd) => calcEvasionRate(defSpd, atkSpd) * 
 
 // 1プレイヤー分の戦闘状態を組み立てる。
 //  input: { eff, equipment, skillSets, proficiency, profile, playerItem }
+// 戦争(対人)テスト: 対人戦のときだけ、両プレイヤーとも最大HP+20000（通常出撃などには影響しない）
+const PVP_WAR_HP_BONUS = 20000
 function buildSide(input, key) {
-  const { eff, equipment, skillSets, profile } = input
+  const { equipment, skillSets, profile } = input
+  const eff = { ...input.eff, hp_max: (input.eff?.hp_max || 0) + PVP_WAR_HP_BONUS }
   const equippedWeaponItem = equipment.find(e => e.slot === 'weapon' && e.equipped)
   const weaponType = equippedWeaponItem?.weapons?.weapon_type || 'sword'
   const isMagical = getWeaponGroup(weaponType) === 'magical'
