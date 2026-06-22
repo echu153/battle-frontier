@@ -418,6 +418,14 @@ function applyTurnStart(side, opp, ctx) {
     side.hp = Math.min(maxHp, side.hp + amt)
     logs.push({ text: `💚 ${name}の回復効果でHPが${amt}回復した！`, color: '#44ff88' })
   }
+  if (b.regenMp?.turns > 0) {
+    const maxMp = side.eff.mp_max
+    const amt = Math.floor(maxMp * b.regenMp.rate)
+    if (amt > 0 && side.mp < maxMp) {
+      side.mp = Math.min(maxMp, side.mp + amt)
+      logs.push({ text: `🔵 ${name}の魔力供給でMPが${amt}回復した！`, color: '#4488ff' })
+    }
+  }
   if (!sealed && b.delayHeal && ctx.turn === b.delayHeal.triggerTurn) {
     const amt = Math.floor(b.delayHeal.amount * PVP.healMult)
     side.hp = Math.min(maxHp, side.hp + amt)

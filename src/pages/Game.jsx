@@ -86,7 +86,7 @@ export const EVENT_START_MS = Date.UTC(2026, 5, 21, 20, 0, 0) // JST 6/22 05:00
 export const EVENT_END_MS   = Date.UTC(2026, 6, 5, 20, 0, 0)  // JST 7/6 05:00
 
 // 多段ヒットスキル：行動全体ではなく1発ごとに回避・クリティカル・ダメージ判定する
-export const MULTI_HIT_SKILLS = new Set(['マジックアロー','三連射','メテオストライク','連打','五連殺','飛天三角蹴り','連装銃撃'])
+export const MULTI_HIT_SKILLS = new Set(['マジックアロー','三連射','メテオストライク','連打','五連殺','飛天三角蹴り','連装銃撃','群れの号令'])
 const REGEN_SECONDS = 60
 
 export const ARTIFACT_BASE_NAMES = [
@@ -286,6 +286,7 @@ const JOB_BASE = {
   '魔法使い':{ hp_max:45, mp_max:50, atk:2,  def:2,  matk:14, mdef:4,  spd:4  },
   '僧侶':    { hp_max:55, mp_max:45, atk:2,  def:3,  matk:7,  mdef:12, spd:3  },
   '格闘家':  { hp_max:70, mp_max:10, atk:10, def:6,  matk:2,  mdef:5,  spd:7  },
+  'サモナー':{ hp_max:50, mp_max:48, atk:2,  def:3,  matk:9,  mdef:8,  spd:5  },
 }
 // 上位クラスはJOB_BASEを持たず、requires元の基本クラスのJOB_BASEを引き継ぐ
 const getBaseClassStats = (className) => {
@@ -309,6 +310,7 @@ export const JOB_GROWTH = {
   '異端審問官':{ hp:10, mp:10, atk:0, def:2, matk:2, mdef:2, spd:1 },
   '賢者':      { hp:10, mp:10, atk:1, def:1, matk:2, mdef:2, spd:1 },
   '格闘家':    { hp:10, mp:5,  atk:2, def:1, matk:0, mdef:2, spd:1 },
+  'サモナー':  { hp:10, mp:10, atk:0, def:1, matk:1, mdef:2, spd:1 },
   'サイキッカー':{ hp:10, mp:5, atk:2, def:1, matk:2, mdef:1, spd:2 },
   '体術師':    { hp:20, mp:5,  atk:2, def:1, matk:1, mdef:1, spd:2 },
   '魔銃士':    { hp:10, mp:5,  atk:2, def:1, matk:2, mdef:1, spd:2 },
@@ -320,7 +322,7 @@ export const JOB_GROWTH = {
 
 export const JOB_LEVEL3_BONUS = {}
 
-const INITIAL_CLASSES = ['戦士','弓使い','魔法使い','僧侶','格闘家']
+const INITIAL_CLASSES = ['戦士','弓使い','魔法使い','僧侶','格闘家','サモナー']
 const ADVANCED_CLASSES = {
   '侍':        { requires:'戦士' },
   '狂戦士':    { requires:'戦士' },
@@ -341,7 +343,7 @@ const ADVANCED_CLASSES = {
 }
 
 const CLASS_LEVEL_CAP = {
-  '戦士':100, '弓使い':100, '魔法使い':100, '僧侶':100, '格闘家':100,
+  '戦士':100, '弓使い':100, '魔法使い':100, '僧侶':100, '格闘家':100, 'サモナー':100,
   '侍':100, '狂戦士':100, '狩人':100, '暗殺者':100,
   '元素使い':100, '死霊使い':100, '聖職者':100, '異端審問官':100, '賢者':100,
   'サイキッカー':100, '体術師':100, '魔銃士':100,
@@ -1163,6 +1165,34 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
         result.log = `🐉 天墜竜閃！ 力を溜めている…（次ターンに解き放つ／受けるダメージ-20%）`
       }
       break
+    }
+    // ── サモナー ──
+    case 'オオカミ召喚': {
+      result.dmg = Math.floor(eff.matk*1.1*am)
+      const wolfBleed = Math.random()*100 < 30
+      if (wolfBleed) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
+      result.log = `🐺 オオカミ召喚！ ${enemy.name}に${result.dmg}の特殊ダメージ！${wolfBleed ? ` ${enemy.name}は出血した！` : ''}`
+      break
+    }
+    case '小悪魔召喚': {
+      result.dmg = Math.floor(eff.matk*1.4*am)
+      result.log = `😈 小悪魔召喚！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
+    }
+    case '魔力供給': {
+      result.newPlayerBuffs.regenMp = { turns:4, rate:0.2 }
+      result.log = `🔵 魔力供給！ 4ターンの間、毎ターン最大MPの20%が回復する！`; break
+    }
+    case 'グリフォン召喚': {
+      result.dmg = Math.floor(eff.matk*1.3*am)
+      result.newPlayerBuffs.spdUp = { turns:2, rate:1.2 }
+      result.log = `🦅 グリフォン召喚！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 2ターンの間、素早さが20%上昇！`; break
+    }
+    case '群れの号令': {
+      const swarmHits = Math.random() < 0.5 ? 3 : 4
+      const swarm = Array.from({length:swarmHits}, ()=>Math.floor(eff.matk*(0.4+Math.random()*0.1)*am*r()))
+      result.dmg = swarm.reduce((a,b)=>a+b,0)
+      result.hitDmgs = swarm
+      result.log = `🐾 群れの号令！ ${enemy.name}に${swarm.map(d=>`${d}の特殊ダメージ`).join('！')}！`; break
     }
     default: result.dmg = Math.max(1,eff.atk*am); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
   }
@@ -2913,6 +2943,13 @@ export default function Game() {
           const reflectDmg = Math.floor(healAmt * 0.5)
           enemyHp -= reflectDmg
           logs.push({ text:`✨ 神聖加護の反射！ ${enemy.name}に${reflectDmg}ダメージ！`, color:'#ffdd44' })
+        }
+      }
+      if (playerBuffs.regenMp?.turns > 0) {
+        const mpAmt = Math.floor(maxMp * playerBuffs.regenMp.rate)
+        if (mpAmt > 0 && playerMp < maxMp) {
+          playerMp = Math.min(maxMp, playerMp + mpAmt)
+          logs.push({ text:`🔵 魔力供給でMPが${mpAmt}回復した！`, color:'#4488ff' })
         }
       }
       if (!isHealSealed && playerBuffs.delayHeal && turn === playerBuffs.delayHeal.triggerTurn) {
@@ -5674,7 +5711,7 @@ const BUFF_LABELS = {
   burn:'🔥火傷', paralysis:'⚡麻痺', stun:'💫気絶',
   poison:'🟢毒', severePoisoin:'☠猛毒',
   healDown:'💉回復↓', dmgDown:'⬇被ダメ↓', dmgReduce:'🛡軽減',
-  regenHeal:'💚再生', skeletonDmg:'💀骸骨',
+  regenHeal:'💚再生', regenMp:'🔵魔力供給', skeletonDmg:'💀骸骨',
   berserk:'😡狂乱', holyField:'✨聖域', holyAwakening:'✨神聖覚醒',
   critResist:'クリ耐', hitBonus:'🎯命中↑', evasion:'💨回避↑',
   allinActive:'🎲全賭け', allinDebuff:'💸反動',

@@ -8,9 +8,10 @@ const CLASSES = [
   { id:'魔法使い',icon:'🔮', hp_max:45,  mp_max:50, atk:2,  def:2,  matk:14, mdef:4,  spd:4,  desc:'高魔力・強力な魔法攻撃', weaponName:'木の杖' },
   { id:'僧侶',    icon:'✨', hp_max:55,  mp_max:45, atk:2,  def:3,  matk:7,  mdef:12, spd:3,  desc:'回復・魔法防御が高い',   weaponName:'聖なる杖' },
   { id:'格闘家',  icon:'👊', hp_max:70,  mp_max:10, atk:11, def:5,  matk:1,  mdef:3,  spd:8,  desc:'素手で戦う打撃特化の格闘家', weaponName:'木の剣' },
+  { id:'サモナー',icon:'🐺', hp_max:50,  mp_max:48, atk:2,  def:3,  matk:9,  mdef:8,  spd:5,  desc:'召喚獣で戦う特殊攻撃型・MP回復も得意', weaponName:'木の杖' },
 ]
 
-const ALL_INITIAL_CLASSES = ['戦士','弓使い','魔法使い','僧侶','格闘家']
+const ALL_INITIAL_CLASSES = ['戦士','弓使い','魔法使い','僧侶','格闘家','サモナー']
 
 // 部分一致でNG（名前の一部に含まれていても弾く）
 // ※NG_WORDS_EXTRAは ../constants/ngWords.js で管理
