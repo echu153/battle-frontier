@@ -39,8 +39,14 @@ const computeLive = (data, nowMs) => {
 }
 
 const PIP_SUPPORTED = typeof window !== 'undefined' && 'documentPictureInPicture' in window
+// iOS判定（iPadOSのMac偽装も考慮）
+const IS_IOS = typeof navigator !== 'undefined' && (
+  /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+)
 // 動画PiP（スマホ向け）: Android Chrome=requestPictureInPicture / iOS Safari=webkit presentation mode
-const VIDEO_PIP_SUPPORTED = typeof document !== 'undefined' && (
+// ※iOS Safariは <video> 要素にwebkit APIはあるが、canvas映像(MediaStream)のPiPは非対応のため実質不可。
+const VIDEO_PIP_SUPPORTED = typeof document !== 'undefined' && !IS_IOS && (
   document.pictureInPictureEnabled ||
   (typeof HTMLVideoElement !== 'undefined' && typeof HTMLVideoElement.prototype.webkitSetPresentationMode === 'function')
 )
@@ -372,8 +378,14 @@ export default function Idle() {
             </button>
           )}
         </div>
-        {!PIP_SUPPORTED && !VIDEO_PIP_SUPPORTED && (
-          <div style={{ color:'#557777', fontSize:'10px', marginBottom:'10px' }}>※ お使いのブラウザはミニ窓に未対応です。PCはChrome/Edge、スマホはSafari/Chromeをお試しください。</div>
+        {IS_IOS && (
+          <div style={{ color:'#ffaa44', fontSize:'10px', marginBottom:'10px', lineHeight:'1.7', border:'1px solid #ffaa4433', background:'#1a1200', padding:'8px 10px' }}>
+            ⚠ <b>iPhone / iPad の Safari</b> は、ゲーム画面を小窓化する方式（canvas映像のPiP）に未対応です（Safari側の制限で、Webからは回避できません）。<br />
+            小窓表示は <b>Android Chrome / PCのChrome・Edge</b> でご利用いただけます。iOSでは在席中にこのページを開いたままにしてご利用ください。
+          </div>
+        )}
+        {!IS_IOS && !PIP_SUPPORTED && !VIDEO_PIP_SUPPORTED && (
+          <div style={{ color:'#557777', fontSize:'10px', marginBottom:'10px' }}>※ お使いのブラウザはミニ窓に未対応です。PCはChrome/Edge、スマホはAndroid Chromeをお試しください。</div>
         )}
         {/* 動画PiP用の隠しvideo（DOM上に存在し再生されている必要がある） */}
         <video ref={videoRef} muted playsInline autoPlay aria-hidden="true"
