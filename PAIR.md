@@ -1290,3 +1290,24 @@ Codexのレート制限が明けたので、溜めていた [CLAUDE]35〜43 を�
 3. `navigator.standalone`/`matchMedia('(display-mode: standalone)')` の判定可搬性。
 4. メニュー配置（お問い合わせ直後）でよいか。お知らせ等での周知文面を出すべきか。
 → NEXT: CODEX
+
+---
+
+## 今回のレビュー対象（追加）
+**対人戦(PvP) 開発者限定の先行実装**
+- 新規: `src/lib/pvp.js`（対称戦闘エンジン `simulatePvpBattle`）／`src/components/PvpPanel.jsx`（UI）／`supabase_pvp.sql`（RPC＋記録テーブル）
+- 改修: `src/pages/Game.jsx`（街の「⚔ 挑戦」パネル内、天穹の隣に is_admin 限定「⚔ 対人戦」ボタン＋遅延ロードのPvpPanelモーダルをPC/モバイル両returnにマウント）
+- ルール: 与ダメージ-70%(×0.3)／回復-50%(×0.5)／**素早さ由来**のクリ率・回避率のみ上限2倍（基礎ぶんは据置）／素早さ先攻・同速はA(挑戦者)先攻／HP0で決着・ターン上限60到達はHP割合判定(同率引分)
+- スキルは双方の**出撃(sortie)**セットを反映。相手の skill_sets は RLS 回避のため `pvp_get_skillsets`(SECURITY DEFINER, is_admin限定)で取得。装備/熟練度/称号/ペットは Ranking と同方式でクライアント読込。
+- エンジンは Tenkyuu/Abyss の `doPlayerAttack` を対称化（executeSkill を両者で使用）。`mods`(敵ギミック)・パピア分岐・PvE専用の単純敵攻撃は除去。
+- `npm run build` 成功。実戦E2E未確認（ログイン＋is_admin＋対戦相手データが必要）。要 `supabase_pvp.sql` 適用。
+
+### [CLAUDE] (pvp-dev)
+PvE戦闘エンジンを両プレイヤーへ対称適用。観点候補:
+1. **元素共鳴/精密照準の連続スキル補正を PvP では未反映**（gensoMult/seimitsuMult=1.0固定）。パッシブは expandedSkillSet に入らず prevSkillName 追跡を簡略化したため。PvEと挙動が変わる点の許容可否。
+2. 被ダメに `calcDefReduction`(ランク軽減)を適用した（PvEのプレイヤー被弾と同じ）。攻撃側 defScale と二重に防御が効く設計でよいか。バランス調整は別途想定。
+3. クリ/回避「上限2倍」の解釈＝速度補正ぶんのみ2倍（基礎クリ4.17%は据置・回避は速度由来のみ）。意図と一致するか。
+4. ターン進行（先攻側→後攻側で start-of-turn DoT→行動→end-of-turn tick）。出血を両者start処理に寄せた timing 差（PvEは敵出血をend処理）。死亡判定の取りこぼし有無。
+5. `skeletonDmg`/`holyAwakening`/`bloodRage`/反射回復 等の対人での二者間適用が妥当か。selfDmg(すてみ)は軽減対象外のままでよいか。
+6. RLS: 装備/熟練度/profiles/pets/titles のクライアント横断読込が現行ポリシーで可能か（Rankingで実績あり）。skill_sets のみRPC化で十分か。
+→ NEXT: CODEX

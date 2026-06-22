@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 // public/ 配下の安定URL参照（ハッシュ付きバンドルだとデプロイ後にキャッシュ不整合で404→画像が出ないため）
@@ -8,6 +8,8 @@ import { charmPlayerBonus, petPlayerBonus } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
 import { myAreaShares, dropBonusPP } from '../lib/territory'
 import AIAssistant from '../components/AIAssistant'
+// 対人戦(PvP)パネルは循環import回避のため遅延ロード（pvp.js が ./Game を参照するため）
+const PvpPanel = lazy(() => import('../components/PvpPanel'))
 // Equipment.jsx 等が './Game' から参照しているため再export
 // ★ステータス計算は lib/stats.js の1実装に統一（表示系と戦闘系で値がズレないように）
 export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue, calcDefReduction, calcEffectiveStats } from '../lib/stats'
@@ -1422,6 +1424,7 @@ export default function Game() {
   const [dungeonCounts, setDungeonCounts] = useState({ exp:DUNGEON_DAILY_LIMIT, gold:DUNGEON_DAILY_LIMIT, stone:DUNGEON_DAILY_LIMIT, prof:DUNGEON_DAILY_LIMIT, gem:DUNGEON_DAILY_LIMIT })
   const [showDungeonPanel, setShowDungeonPanel] = useState(false)
   const [showChallengePanel, setShowChallengePanel] = useState(false)
+  const [showPvp, setShowPvp] = useState(false)  // 対人戦(PvP)パネル開閉（is_admin限定）
   const challengePanelRef = useRef(null)
   // 挑戦パネルを開いたら、その位置まで自動スクロール（スマホで画面外に出るのを防ぐ）
   useEffect(() => {
@@ -5009,6 +5012,9 @@ export default function Game() {
                       {profile?.is_admin && (
                         <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                       )}
+                      {profile?.is_admin && (
+                        <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                      )}
                     </div>
                   )}
                   {/* メニュー（展開式） */}
@@ -5090,6 +5096,9 @@ export default function Game() {
                   {profile?.is_admin && (
                     <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                   )}
+                  {profile?.is_admin && (
+                    <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                  )}
                 </div>
               )}
                 </>
@@ -5148,6 +5157,7 @@ export default function Game() {
           )}
         </div>
         <AIAssistant ctx={{ profile, eff, equipment }} open={aiOpen} onClose={()=>setAiOpen(false)} />
+        {showPvp && <Suspense fallback={null}><PvpPanel onClose={()=>setShowPvp(false)} /></Suspense>}
       </div>
     )
   }
@@ -5462,6 +5472,9 @@ export default function Game() {
                         {profile?.is_admin && (
                           <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                         )}
+                        {profile?.is_admin && (
+                          <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                        )}
                       </div>
                     )}
                     {/* メニュー（展開式） */}
@@ -5542,6 +5555,9 @@ export default function Game() {
                     {profile?.is_admin && (
                       <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                     )}
+                    {profile?.is_admin && (
+                      <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                    )}
                   </div>
                 )}
                   </>
@@ -5602,6 +5618,7 @@ export default function Game() {
         </div>
       </div>
       <AIAssistant ctx={{ profile, eff, equipment }} open={aiOpen} onClose={()=>setAiOpen(false)} />
+      {showPvp && <Suspense fallback={null}><PvpPanel onClose={()=>setShowPvp(false)} /></Suspense>}
     </div>
   )
 }
