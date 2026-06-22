@@ -396,7 +396,7 @@ function applyTurnStart(side, opp, ctx) {
     if (side.hp <= 0) return true
   }
   if (b.bleed) {
-    const d = Math.floor(maxHp * 0.01 * b.bleed.stacks); side.hp = Math.max(0, side.hp - d)
+    const d = Math.floor(side.hp * 0.01 * b.bleed.stacks); side.hp = Math.max(0, side.hp - d)
     logs.push({ text: `🩸 出血ダメージ！ ${name}に${d}ダメージ（${b.bleed.stacks}スタック）！`, color: '#ff4466' })
     if (side.hp <= 0) return true
     b.bleed.lastTurn = (b.bleed.lastTurn || 0) + 1

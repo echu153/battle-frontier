@@ -2924,7 +2924,7 @@ export default function Game() {
         if (playerHp <= 0) break
       }
       if (playerBuffs.bleed) {
-        const bleedDmgP = Math.floor(maxHp * 0.01 * playerBuffs.bleed.stacks)
+        const bleedDmgP = Math.floor(playerHp * 0.01 * playerBuffs.bleed.stacks)  // 現在HPの1%×スタック
         playerHp = Math.max(0, playerHp - bleedDmgP)
         logs.push({ text:`🩸 出血ダメージ！ あなたに${bleedDmgP}ダメージ（${playerBuffs.bleed.stacks}スタック）！`, color:'#ff4466' })
         if (playerHp <= 0) break
@@ -3056,7 +3056,7 @@ export default function Game() {
 
       // 敵出血ダメージ（敵ターン終了時）
       if (enemyBuffs.bleed) {
-        const bleedDmg = Math.floor(enemyMaxHp * 0.01 * enemyBuffs.bleed.stacks)
+        const bleedDmg = Math.floor(enemyHp * 0.01 * enemyBuffs.bleed.stacks)  // 現在HPの1%×スタック
         enemyHp -= bleedDmg
         logs.push({ text:`🩸 出血ダメージ！ ${enemy.name}に${bleedDmg}ダメージ（${enemyBuffs.bleed.stacks}スタック）！`, color:'#ff4466' })
         if (enemyHp <= 0) break

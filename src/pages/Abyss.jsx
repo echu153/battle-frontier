@@ -575,7 +575,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       if (playerHp <= 0) break
     }
     if (playerBuffs.bleed) {
-      const bleedDmgP = Math.floor(profile.hp_max * 0.01 * playerBuffs.bleed.stacks); playerHp = Math.max(0, playerHp - bleedDmgP)
+      const bleedDmgP = Math.floor(playerHp * 0.01 * playerBuffs.bleed.stacks); playerHp = Math.max(0, playerHp - bleedDmgP)
       logs.push({ text:`🩸 出血ダメージ！ あなたに${bleedDmgP}ダメージ（${playerBuffs.bleed.stacks}スタック）！`, color:'#ff4466' })
       if (playerHp <= 0) break
       playerBuffs.bleed.lastTurn = (playerBuffs.bleed.lastTurn || 0) + 1
@@ -657,7 +657,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     if (playerHp <= 0) break
 
     if (enemyBuffs.bleed) {
-      const bleedDmg = Math.floor(enemyMaxHp * 0.01 * enemyBuffs.bleed.stacks); enemyHp -= bleedDmg
+      const bleedDmg = Math.floor(enemyHp * 0.01 * enemyBuffs.bleed.stacks); enemyHp -= bleedDmg
       logs.push({ text:`🩸 出血ダメージ！ ${enemy.name}に${bleedDmg}ダメージ（${enemyBuffs.bleed.stacks}スタック）！`, color:'#ff4466' })
       if (enemyHp <= 0) break
       enemyBuffs.bleed.lastTurn = (enemyBuffs.bleed.lastTurn || 0) + 1
