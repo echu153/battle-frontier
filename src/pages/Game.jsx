@@ -2794,10 +2794,13 @@ export default function Game() {
       const isSelfSkill = !mpLack && nextSkill && (nextSkill.type === '強化' || nextSkill.type === '回復')
       // 多段ヒットスキルは行動全体の回避判定をスキップし、1発ごとに回避判定する
       const isMultiHitSkill = !mpLack && nextSkill && MULTI_HIT_SKILLS.has(nextSkill.name)
+      // ウンディーネ3段目（静水の加護）はダメージ0の自己バフなので回避対象外
+      const isOndoBuff = !mpLack && nextSkill?.name === 'ウンディーネ' &&
+        (playerBuffs.spiritCombo?.name === 'ウンディーネ' ? (playerBuffs.spiritCombo.count || 0) : 0) >= 2
       // 連装銃撃の再修練強化：このスキルの命中+10%
       const skillExtraHit = (nextSkillName === '連装銃撃' && profile.class === '魔銃士' && rtCur >= 2) ? 10 : 0
       const baseEnemyEvasion = Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit) + (enemy.isPapia ? 50 : 0)
-      const effectiveEnemyEvasion = (isSureHit || isSelfSkill || isMultiHitSkill) ? 0 : baseEnemyEvasion
+      const effectiveEnemyEvasion = (isSureHit || isSelfSkill || isMultiHitSkill || isOndoBuff) ? 0 : baseEnemyEvasion
       if (effectiveEnemyEvasion > 0 && Math.random()*100 < effectiveEnemyEvasion) {
         logs.push({ text:`${prefix}${nextSkillName && !mpLack ? `${nextSkillName}！` : '攻撃！'} しかし${enemy.name}に回避された！`, color:'#446688' })
         // 追撃系（鬼影閃の影歩き追撃など）はメインが回避されても独立ヒットとして発動する
@@ -3118,7 +3121,7 @@ export default function Game() {
         bossSpecialUsed = true
         logs.push({ text:`💥 ${enemy.name}の「${enemy.specialMove.name}」！！`, color:'#ff0000' })
         const result = executeEnemySkill(enemy.specialMove, enemy, enemyHp, enemyMaxHp, playerHp, maxHp, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
-        playerHp -= result.dmgToPlayer
+        damageTarget(result.dmgToPlayer)
         Object.assign(playerBuffs, result.newPlayerBuffs)
         return
       }
@@ -3132,7 +3135,7 @@ export default function Game() {
           const buffSkill = buffSkills[buffSkills.length > 1 ? 1 : 0]
           logs.push({ text:`⚡ ${enemy.name}の「${buffSkill.name}」！`, color:'#ff8844' })
           const result = executeEnemySkill(buffSkill, enemy, enemyHp, enemyMaxHp, playerHp, maxHp, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
-          playerHp -= result.dmgToPlayer
+          damageTarget(result.dmgToPlayer)
           Object.assign(playerBuffs, result.newPlayerBuffs)
           Object.assign(enemyBuffs, result.newEnemyBuffs)
           return
@@ -3141,7 +3144,7 @@ export default function Game() {
           const buffSkill = buffSkills[0]
           logs.push({ text:`⚡ ${enemy.name}の「${buffSkill.name}」！`, color:'#ff8844' })
           const result = executeEnemySkill(buffSkill, enemy, enemyHp, enemyMaxHp, playerHp, maxHp, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
-          playerHp -= result.dmgToPlayer
+          damageTarget(result.dmgToPlayer)
           Object.assign(playerBuffs, result.newPlayerBuffs)
           Object.assign(enemyBuffs, result.newEnemyBuffs)
           return
@@ -3152,7 +3155,7 @@ export default function Game() {
       if (nonHealSkills.length === 0) return
       const skill = nonHealSkills[Math.floor(Math.random()*nonHealSkills.length)]
       const result = executeEnemySkill(skill, enemy, enemyHp, enemyMaxHp, playerHp, maxHp, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
-      playerHp -= result.dmgToPlayer
+      damageTarget(result.dmgToPlayer)
       enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
       Object.assign(playerBuffs, result.newPlayerBuffs)
       Object.assign(enemyBuffs, result.newEnemyBuffs)
@@ -3182,6 +3185,19 @@ export default function Game() {
         else if (petSpecies === 'leaf') { const sr=enemyBuffs.stunResist??1.0; if (Math.random()*100 < 30*sr) { enemyBuffs.stun={turns:1}; enemyBuffs.stunResist=sr*0.5; extra=' スタン！' } }
       }
       logs.push({ text:`🐾 ペットの${label}！ ${enemy.name}に${dmg}ダメージ！${extra}`, color:'#ffaa44' })
+    }
+    // ブリーダー：敵スキル等のダメージも50%でペットが受ける（ペット生存時）
+    const damageTarget = (dmg) => {
+      if (dmg <= 0) { return }
+      if (petActive && petHp > 0 && Math.random() < 0.5) {
+        const cut = petBuffs.reduceTurns > 0 ? (1 - petBuffs.reduce) : 1.0
+        const d = Math.max(1, Math.floor(dmg * cut))
+        petHp = Math.max(0, petHp - d)
+        logs.push({ text:`↳ 攻撃はペットに！ ペットに${d}ダメージ！（残りHP${petHp}）`, color:'#ff8844' })
+        if (petHp <= 0) logs.push({ text:`💥 ペットは倒れてしまった…`, color:'#ff4444' })
+      } else {
+        playerHp -= dmg
+      }
     }
     if (petActive) logs.push({ text:`🐾 ペットを召喚！（HP${petMaxHp}）`, color:'#ffcc66' })
 
@@ -3434,7 +3450,7 @@ export default function Game() {
       }
       if (bossHealCooldown > 0) bossHealCooldown--
       // 毎ターン終了時のHPスナップショット（表示用）
-      logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:maxHp, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
+      logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:maxHp, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs), petHp: petActive ? Math.max(0,petHp) : null, petMax: petActive ? petMaxHp : null })
       turn++
     }
 
@@ -6150,6 +6166,17 @@ export function BattleLogLine({ l }) {
           {col('p', l.playerName, l.playerHp, l.playerMax, pPct, '#33dd66', l.playerStatus, 'flex-start', l.playerMp, l.playerMpMax)}
           {enemyCols}
         </div>
+        {l.petMax != null && (
+          <div style={{ marginTop:'4px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:'9px', color:'#ffcc66', gap:'4px' }}>
+              <span>🐾 ペット{l.petHp <= 0 ? '（戦闘不能）' : ''}</span>
+              <span style={{ flexShrink:0, fontWeight:'bold' }}>{Math.max(0,l.petHp).toLocaleString()} / {l.petMax.toLocaleString()}</span>
+            </div>
+            <div style={{ background:'#2a1f10', height:'5px', border:'1px solid #5a4420' }}>
+              <div style={{ height:'100%', width:`${Math.max(0, Math.min(100,(l.petHp/Math.max(1,l.petMax))*100))}%`, background:'linear-gradient(90deg,#a70,#ffaa44)' }} />
+            </div>
+          </div>
+        )}
       </div>
     )
   }
