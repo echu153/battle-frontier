@@ -61,6 +61,7 @@ export default function Titles() {
       case 'gambling_gold':     return `${condData.gamblingGoldMax.toLocaleString()}/${v.toLocaleString()}`
       case 'treasure_hp_or_mp': return condData.hasHpPotion || condData.hasMpPotion ? '作成済み' : '未作成'
       case 'treasure_both':     return `HP:${condData.hasHpPotion?'✓':'✗'} MP:${condData.hasMpPotion?'✓':'✗'}`
+      case 'pet_level':         return `ペット最高Lv ${condData.maxPetLevel}/${v}`
       case 'class_retraining':  return `${title.condition_extra} 再修練 ${(profile.retraining||{})[title.condition_extra]||0}/${title.condition_value}回`
       default: return null
     }

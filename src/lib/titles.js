@@ -29,6 +29,13 @@ export const fetchTitleData = async (userId) => {
     supabase.from('player_items').select('id, items!inner(effect)').eq('player_id', userId).eq('items.effect', 'mp_pct_infinite'),
   ])
 
+  // ペットの最高レベル（称号「ペット想い」用）
+  let maxPetLevel = 0
+  try {
+    const { data: pets } = await supabase.from('pets').select('level').eq('owner_id', userId)
+    maxPetLevel = (pets || []).reduce((m, p) => Math.max(m, p.level || 0), 0)
+  } catch { /* ペット未導入時は0 */ }
+
   const classLevelTotal = (classLevels || []).reduce((s, cl) => s + (cl.lv || 0), 0)
   const advancedClassCount = (classLevels || []).filter(cl => !BASE_CLASSES.includes(cl.class_name)).length
   const retrainingTotal = Object.values(p?.retraining || {}).reduce((s, v) => s + v, 0)
@@ -49,6 +56,7 @@ export const fetchTitleData = async (userId) => {
     gamblingGoldMax: p?.gambling_gold_max_single || 0,
     hasHpPotion: (hpPotItems || []).length > 0,
     hasMpPotion: (mpPotItems || []).length > 0,
+    maxPetLevel,
   }
 
   return { profile: p, titles: titles || [], playerTitles: pt || [], condData }
@@ -74,6 +82,7 @@ export const checkTitleCondition = (title, profile, condData) => {
     case 'gambling_gold':     return condData.gamblingGoldMax >= v
     case 'treasure_hp_or_mp': return condData.hasHpPotion || condData.hasMpPotion
     case 'treasure_both':     return condData.hasHpPotion && condData.hasMpPotion
+    case 'pet_level':         return condData.maxPetLevel >= v
     case 'class_retraining':  return ((profile.retraining || {})[title.condition_extra] || 0) >= title.condition_value
     case 'generic':           return true
     default:                  return false
