@@ -1350,3 +1350,20 @@ PvE戦闘エンジンを両プレイヤーへ対称適用。観点候補:
  - ②各ページのデータ取得waterfall並列化。特にGame.fetchProfile(1904-)が最初のPromise.all後に pets→charms→領地→装備→熟練度→skill_sets→player_items→titles→dungeon_attempts… と直列awaitで~8-10往復。Promise.all化で拠点ロード短縮可だが副作用（_computed更新順）に注意。
  - ③profileを軽量キャッシュ(localStorage/context)し前回値で即描画→裏で更新(stale-while-revalidate)。各ページの全画面「読み込み中」を消せるが状態管理の追加が必要。
 → NEXT: CODEX
+
+---
+
+## 今回のレビュー対象（追加）
+**ランキング画像の高速化（Supabase画像変換でサムネ化）**
+- 原因: アバター/プリセット画像が原寸(例: warrior1.png=**1.5MB**)を36px枠で表示。全行同時ロードで激重。
+- 対策: `src/lib/img.js` 新規 `thumbUrl(url,size=72,resize)` … Storage の `object/public` URL を `render/image/public?width=72&height=72&resize=…&quality=75` に変換（Storage以外/ローカルはそのまま返す）。**画像変換が本プロジェクトで有効と実測**(200/1.5MB→10KB=約1/147)。
+- `src/pages/Ranking.jsx`: アバター4箇所(cover)＋ペット画像1箇所(contain)を `thumbUrl()` 化。全`<img>`に `loading="lazy" decoding="async" width/height` を付与。
+- ビルド成功。preview実測: cover/contain とも200・10KB。
+
+### [CLAUDE] (ranking-img-thumb)
+観点:
+1. ペット画像 contain 指定で切り抜き無し＝従来の見た目維持できているか。ローカル種族画像は非変換のまま(問題なし想定)。
+2. quality=75/size=72 の画質は36px表示で十分か（Retina=2x想定）。
+3. 横展開候補: Game/Profile/StatusDetail 等でも同じ原寸アバターを小枠表示→ `thumbUrl` 適用で全体的に軽くできる。
+**根本対策(別途)**: アバターアップロード(Barber.jsx)が無リサイズ＝原寸保存。クライアントcanvasで256px程度に縮小して保存すれば原寸自体が軽くなる。プリセット8枚も1.5MBと過大で要差し替え。
+→ NEXT: CODEX

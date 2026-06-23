@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { calcEffectiveTotal, getTotalRank } from '../lib/stats'
 import { charmPlayerBonus, petPlayerBonus, petStats, applyCharmStats, speciesLabel, speciesEmoji, getCharm, charmDisplayName, petImage } from '../constants/pets'
+import { thumbUrl } from '../lib/img'
 
 // ペット1体の能力合計（チャーム込み）。プレイヤー総合力と同じ重み付け。
 const petTotalPower = (pet, charm) => {
@@ -200,7 +201,7 @@ export default function Ranking() {
 
                   {/* アバター */}
                   {p.avatar_url
-                    ? <img src={p.avatar_url} alt="avatar" style={{ width:'36px', height:'36px', objectFit:'cover', flexShrink:0 }} />
+                    ? <img src={thumbUrl(p.avatar_url)} alt="avatar" loading="lazy" decoding="async" width="36" height="36" style={{ width:'36px', height:'36px', objectFit:'cover', flexShrink:0 }} />
                     : <div style={{ width:'36px', height:'36px', background:'#001428', border:'1px solid #003366', flexShrink:0 }} />
                   }
 
@@ -253,7 +254,7 @@ export default function Ranking() {
 
                   {/* ペットアイコン（設定画像優先・無ければ絵文字）。全身が収まるよう contain＝切れない */}
                   {petImage(p)
-                    ? <img src={petImage(p)} alt="" style={{ width:'36px', height:'36px', objectFit:'contain', background:'#0c1a12', border:'1px solid #1a3322', flexShrink:0 }} />
+                    ? <img src={thumbUrl(petImage(p), 72, 'contain')} alt="" loading="lazy" decoding="async" width="36" height="36" style={{ width:'36px', height:'36px', objectFit:'contain', background:'#0c1a12', border:'1px solid #1a3322', flexShrink:0 }} />
                     : <div style={{ width:'36px', height:'36px', display:'flex', alignItems:'center', justifyContent:'center', background:'#0c1a12', border:'1px solid #1a3322', flexShrink:0, fontSize:'20px' }}>{speciesEmoji(p)}</div>
                   }
 
@@ -315,7 +316,7 @@ export default function Ranking() {
 
                   {/* アバター */}
                   {p.avatar_url
-                    ? <img src={p.avatar_url} alt="avatar" style={{ width:'36px', height:'36px', objectFit:'cover', flexShrink:0 }} />
+                    ? <img src={thumbUrl(p.avatar_url)} alt="avatar" loading="lazy" decoding="async" width="36" height="36" style={{ width:'36px', height:'36px', objectFit:'cover', flexShrink:0 }} />
                     : <div style={{ width:'36px', height:'36px', background:'#001428', border:'1px solid #003366', flexShrink:0 }} />
                   }
 
@@ -373,7 +374,7 @@ export default function Ranking() {
 
                   {/* アバター */}
                   {p.avatar_url
-                    ? <img src={p.avatar_url} alt="avatar" style={{ width:'36px', height:'36px', objectFit:'cover', flexShrink:0 }} />
+                    ? <img src={thumbUrl(p.avatar_url)} alt="avatar" loading="lazy" decoding="async" width="36" height="36" style={{ width:'36px', height:'36px', objectFit:'cover', flexShrink:0 }} />
                     : <div style={{ width:'36px', height:'36px', background:'#001428', border:'1px solid #003366', flexShrink:0 }} />
                   }
 
@@ -424,7 +425,7 @@ export default function Ranking() {
                     {medal ? <span style={{ fontSize:'16px' }}>{medal}</span> : <span style={{ color:'#7766aa', fontSize:'11px' }}>{rank}</span>}
                   </div>
                   {p.avatar_url
-                    ? <img src={p.avatar_url} alt="avatar" style={{ width:'36px', height:'36px', objectFit:'cover', flexShrink:0 }} />
+                    ? <img src={thumbUrl(p.avatar_url)} alt="avatar" loading="lazy" decoding="async" width="36" height="36" style={{ width:'36px', height:'36px', objectFit:'cover', flexShrink:0 }} />
                     : <div style={{ width:'36px', height:'36px', background:'#100a1c', border:'1px solid #2a1840', flexShrink:0 }} />
                   }
                   <div style={{ flex:1, minWidth:0 }}>
