@@ -57,18 +57,71 @@ export default class MainScene extends Phaser.Scene {
     return (this.textures.exists(key) && !this.missingArt.has(key)) ? key : name
   }
 
+  // 透過処理後のキー優先。無ければ art() にフォールバック
+  spriteKey(name) {
+    const c = `${name}_c`
+    return this.textures.exists(c) ? c : this.art(name)
+  }
+
+  // hero/slime の白背景を透過に(縁から繋がった白だけをフラッドフィルで抜く)
+  prepareArt() {
+    for (const name of ['hero', 'slime']) {
+      const key = `${name}_png`
+      if (!this.textures.exists(key) || this.missingArt.has(key)) continue
+      try {
+        const img = this.textures.get(key).getSourceImage()
+        const cv = this.removeWhiteBackground(img)
+        if (cv) this.textures.addCanvas(`${name}_c`, cv)
+      } catch (e) {
+        // 失敗時は白背景のまま表示(クラッシュさせない)
+        console.warn('[action-rpg] 背景透過に失敗:', name, e)
+      }
+    }
+  }
+
+  removeWhiteBackground(img) {
+    const w = img.width, h = img.height
+    if (!w || !h) return null
+    const cv = document.createElement('canvas')
+    cv.width = w; cv.height = h
+    const ctx = cv.getContext('2d', { willReadFrequently: true })
+    ctx.drawImage(img, 0, 0)
+    const imgData = ctx.getImageData(0, 0, w, h)
+    const px = imgData.data
+    const isWhite = (p) => px[p * 4] > 225 && px[p * 4 + 1] > 225 && px[p * 4 + 2] > 225
+    const visited = new Uint8Array(w * h)
+    const stack = []
+    const push = (x, y) => {
+      if (x < 0 || y < 0 || x >= w || y >= h) return
+      const p = y * w + x
+      if (visited[p] || !isWhite(p)) return
+      visited[p] = 1; stack.push(p)
+    }
+    for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1) }
+    for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y) }
+    while (stack.length) {
+      const p = stack.pop()
+      px[p * 4 + 3] = 0 // alpha=0
+      const x = p % w, y = (p - x) / w
+      push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1)
+    }
+    ctx.putImageData(imgData, 0, 0)
+    return cv
+  }
+
   create() {
     this.generateTextures()
+    this.prepareArt() // 白背景の画像を透過に(縁から繋がった白のみ抜く＝目や光沢は残す)
     this.drawGround()
 
     // --- プレイヤー ---
-    const heroKey = this.art('hero')
+    const heroKey = this.spriteKey('hero')
     this.player = this.physics.add.image(800, 600, heroKey)
     this.player.setDepth(10).setCollideWorldBounds(true)
-    if (heroKey === 'hero_png') {
+    if (heroKey !== 'hero') {
       // 高解像度の1枚絵は当たり判定用に小さく表示(後でドット絵スプライトに差し替え予定)
-      this.player.setDisplaySize(48, 48)
-      this.player.body.setSize(this.player.width * 0.45, this.player.height * 0.45, true)
+      this.player.setDisplaySize(56, 56)
+      this.player.body.setSize(this.player.width * 0.4, this.player.height * 0.4, true)
     }
 
     // --- 敵(スライム) ---
@@ -116,13 +169,13 @@ export default class MainScene extends Phaser.Scene {
     g.fillStyle(0x000000).fillRect(9, 13, 3, 3).fillRect(17, 13, 3, 3)
     g.generateTexture('slime', 28, 30); g.destroy()
 
-    // 斬撃エフェクト(白い三日月)
+    // 斬撃エフェクト(三日月)：太い白＋外側に薄い水色のグローで見やすく
     g = this.make.graphics({ x: 0, y: 0 })
-    g.lineStyle(5, 0xffffff, 1)
-    g.beginPath()
-    g.arc(24, 24, 20, Phaser.Math.DegToRad(-55), Phaser.Math.DegToRad(55), false)
-    g.strokePath()
-    g.generateTexture('slash', 48, 48); g.destroy()
+    g.lineStyle(14, 0x88ddff, 0.5)
+    g.beginPath(); g.arc(48, 48, 38, Phaser.Math.DegToRad(-62), Phaser.Math.DegToRad(62), false); g.strokePath()
+    g.lineStyle(7, 0xffffff, 1)
+    g.beginPath(); g.arc(48, 48, 38, Phaser.Math.DegToRad(-58), Phaser.Math.DegToRad(58), false); g.strokePath()
+    g.generateTexture('slash', 96, 96); g.destroy()
   }
 
   drawGround() {
@@ -142,11 +195,11 @@ export default class MainScene extends Phaser.Scene {
   spawnSlime() {
     const x = Phaser.Math.Between(100, 1500)
     const y = Phaser.Math.Between(100, 1100)
-    const key = this.art('slime')
+    const key = this.spriteKey('slime')
     const s = this.slimes.create(x, y, key)
     s.setDepth(5)
-    if (key === 'slime_png') {
-      s.setDisplaySize(34, 34)
+    if (key !== 'slime') {
+      s.setDisplaySize(40, 40)
       s.body.setSize(s.width * 0.6, s.height * 0.6, true)
     }
     s.hp = 30
@@ -262,17 +315,17 @@ export default class MainScene extends Phaser.Scene {
 
     // プレイヤーをキュッと一瞬大きく(相対=素材スケールに依存しない)
     // ※位置の踏み込みは物理ボディが毎フレーム上書きするので使わず、スケール＋斬撃で表現
-    this.tweens.add({ targets: this.player, scale: '*=1.12', duration: 55, yoyo: true })
+    this.tweens.add({ targets: this.player, scale: '*=1.2', duration: 70, yoyo: true })
 
-    // 斬撃の三日月：敵との間に出して、振り抜くように回転＋フェード
-    const sx = this.player.x + Math.cos(ang) * 22
-    const sy = this.player.y + Math.sin(ang) * 22
+    // 斬撃の三日月：前方に大きく出して、振り抜くように回転＋フェード
+    const sx = this.player.x + Math.cos(ang) * 30
+    const sy = this.player.y + Math.sin(ang) * 30
     const slash = this.add.image(sx, sy, 'slash')
-      .setDepth(20).setRotation(ang - 0.5).setScale(0.5).setAlpha(0.95)
+      .setDepth(20).setRotation(ang - 0.9).setScale(0.6).setAlpha(1)
     this.tweens.add({
       targets: slash,
-      rotation: ang + 0.6, scale: 1.25, alpha: 0,
-      duration: 180, ease: 'Cubic.easeOut',
+      rotation: ang + 0.9, scale: 1.7, alpha: 0,
+      duration: 240, ease: 'Cubic.easeOut',
       onComplete: () => slash.destroy(),
     })
   }
