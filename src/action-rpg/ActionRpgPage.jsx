@@ -11,6 +11,7 @@ export default function ActionRpgPage() {
   const containerRef = useRef(null)
   const gameRef = useRef(null)
   const [hud, setHud] = useState({ level: 1, exp: 0, expNext: 20, hp: 100, hpMax: 100, mp: 30, mpMax: 30, combo: 0 })
+  const [notice, setNotice] = useState(true)
 
   useEffect(() => {
     const onHud = (e) => setHud(e.detail)
@@ -19,12 +20,11 @@ export default function ActionRpgPage() {
     gameRef.current = new Phaser.Game({
       type: Phaser.AUTO,
       parent: containerRef.current,
-      width: 800,
-      height: 600,
       backgroundColor: '#1d3b1d',
       pixelArt: true, // ドット絵をぼかさない
       physics: { default: 'arcade', arcade: { debug: false } },
-      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+      // RESIZE＝画面いっぱいに描画(レターボックスの黒帯を出さない)
+      scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
       scene: [MainScene],
     })
 
@@ -76,20 +76,36 @@ export default function ActionRpgPage() {
       {/* === 左半分：移動バーチャルパッド === */}
       <VirtualPad />
 
-      {/* === 右半分：攻撃／スキルボタン === */}
-      <div style={{ position: 'absolute', right: 24, bottom: 28, display: 'flex', alignItems: 'flex-end', gap: 14, userSelect: 'none' }}>
-        {/* スキル枠(未実装・近日) */}
+      {/* === 右半分：オート／スキル／攻撃ボタン === */}
+      <div style={{ position: 'absolute', right: 24, bottom: 28, display: 'flex', alignItems: 'flex-end', gap: 12, userSelect: 'none' }}>
+        <AutoButton />
         <SkillButton label="近日" />
         <SkillButton label="近日" />
         {/* 攻撃(大ボタン)：押している間くり返し攻撃(実際の発動はクールタイムで制御) */}
         <AttackButton />
       </div>
 
-      {/* 操作ヒント */}
-      <div style={{ position: 'absolute', top: 8, width: '100%', textAlign: 'center', fontFamily: 'monospace', fontSize: 11, color: '#9fb', textShadow: '0 1px 2px #000', pointerEvents: 'none' }}>
-        左：移動パッド ／ 右：攻撃ボタン（PCは WASD/矢印＋スペースも可）
-      </div>
+      {/* 趣味制作の注意書き(閉じれる) */}
+      {notice && (
+        <div style={{ position: 'absolute', top: 90, left: '50%', transform: 'translateX(-50%)', maxWidth: '90%', display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(0,0,0,0.7)', border: '1px solid #555', borderRadius: 6, padding: '6px 10px', fontFamily: 'monospace', fontSize: 11, color: '#ddd' }}>
+          <span>🛠 趣味で制作中のお試し版です。プレイしても報酬等はありません。</span>
+          <button onClick={() => setNotice(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+        </div>
+      )}
     </div>
+  )
+}
+
+// オート：ON中はゲーム側が自動で敵を探して接近＋攻撃
+function AutoButton() {
+  const [on, setOn] = useState(false)
+  const toggle = () => {
+    const next = !on
+    setOn(next)
+    action(next ? 'auto:on' : 'auto:off')
+  }
+  return (
+    <button onClick={toggle} style={{ width: 64, height: 64, borderRadius: '50%', background: on ? 'radial-gradient(circle at 35% 30%, #ffe27a, #e0a019)' : 'rgba(20,30,50,0.75)', border: `2px solid ${on ? '#fff3c0' : '#446'}`, color: on ? '#3a2a00' : '#9ab', fontFamily: 'monospace', fontSize: 12, fontWeight: 'bold', cursor: 'pointer', touchAction: 'none', boxShadow: on ? '0 0 10px rgba(255,210,80,0.7)' : 'none' }}>AUTO</button>
   )
 }
 

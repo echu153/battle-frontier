@@ -35,6 +35,7 @@ export default class MainScene extends Phaser.Scene {
     this.lastMapEmit = 0
     this.mpAccum = 0
     this.facingAngle = 0 // 攻撃の向き(ラジアン、初期は右)
+    this.autoMode = false // オート戦闘ON/OFF
   }
 
   preload() {
@@ -139,6 +140,8 @@ export default class MainScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-SPACE', () => this.tryAttack())
     this._onAction = (e) => {
       if (e.detail === 'attack') this.tryAttack()
+      else if (e.detail === 'auto:on') this.autoMode = true
+      else if (e.detail === 'auto:off') this.autoMode = false
       // 例: else if (e.detail === 'skill:heal') this.useHeal()  ← スキルはここに足す
     }
     window.addEventListener('arpg-action', this._onAction)
@@ -224,7 +227,8 @@ export default class MainScene extends Phaser.Scene {
     if (time - this.lastMapEmit > 150) { this.lastMapEmit = time; this.emitMap() }
     this.updateHeroVisual(delta) // 見た目を物理ボディに追従＋歩行バウンド
     if (this.dead) return
-    this.handleMovement()
+    if (this.autoMode) this.handleAuto()
+    else this.handleMovement()
     this.handleWander(delta)
     this.handleEnemyAttacks(time)
     // MPの自然回復(1秒に+2、上限まで)
@@ -290,6 +294,27 @@ export default class MainScene extends Phaser.Scene {
     // 動いている向きを覚えておく(敵がいない時の攻撃方向に使う)
     this.facingAngle = Math.atan2(vy, vx)
     this.player.setVelocity((vx / len) * PLAYER_SPEED, (vy / len) * PLAYER_SPEED)
+  }
+
+  // オート戦闘：一番近い敵へ接近し、射程に入ったら自動攻撃
+  handleAuto() {
+    let target = null, best = Infinity
+    this.slimes.getChildren().forEach((s) => {
+      if (!s || !s.active) return
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, s.x, s.y)
+      if (d < best) { best = d; target = s }
+    })
+    if (!target) { this.player.setVelocity(0, 0); return }
+    const ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, target.x, target.y)
+    this.facingAngle = ang
+    if (best > ATTACK_RANGE - 8) {
+      // まだ遠い→近づく
+      this.player.setVelocity(Math.cos(ang) * PLAYER_SPEED, Math.sin(ang) * PLAYER_SPEED)
+    } else {
+      // 射程内→止まって攻撃(クールタイムはtryAttack側で制御)
+      this.player.setVelocity(0, 0)
+      this.tryAttack()
+    }
   }
 
   handleWander(delta) {
