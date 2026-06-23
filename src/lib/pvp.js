@@ -352,12 +352,14 @@ function doAttack(att, def, isExtra, ctx) {
       if (res.dmg > 0) att.prevDmgSkillName = cs.skills?.name
       if (res.selfDmg > 0) att.hp = Math.max(0, att.hp - res.selfDmg)
       dealToDef(finalDmg)
-      if (finalDmg > 0 && att.equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(defBuffs.healDown?.turns > 0)) {
-        defBuffs.healDown = { turns: 2, rate: 0.9 }
+      // ★直接付与する相手デバフは res.newEnemyBuffs に書く（下で def.buffs = res.newEnemyBuffs に置換されるため、
+      //   defBuffs(旧オブジェクト)に書くと捨てられてアイコンも効果も消える）
+      if (finalDmg > 0 && att.equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(res.newEnemyBuffs.healDown?.turns > 0)) {
+        res.newEnemyBuffs.healDown = { turns: 2, rate: 0.9 }
         logs.push({ text: `🗡 ${att.equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemyName}の回復力が2ターンの間-10%！`, color: '#ff8844' })
       }
-      if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(defBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
-        defBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
+      if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(res.newEnemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
+        res.newEnemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
         logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemyName}を麻痺させた！`, color: '#ffe066' })
       }
       const healUpMult = attBuffs.healUp?.turns > 0 ? attBuffs.healUp.rate : 1

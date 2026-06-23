@@ -2958,7 +2958,8 @@ export default function Game() {
             for (const k of blockedKeys) { if (res.newPlayerBuffs[k] !== playerBuffs[k]) res.newPlayerBuffs[k] = playerBuffs[k] }
             if (hadBuff) logs.push({ text:`💸 オールインの反動中！ バフが効かない！`, color:'#ff4444' })
           }
-          playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
+          // 直前に付与した武器デバフ(回復ダウン/素早さダウン等)を捨てないようマージ（=で置換すると消える）
+          playerBuffs = { ...playerBuffs, ...res.newPlayerBuffs }; enemyBuffs = { ...enemyBuffs, ...res.newEnemyBuffs }
           // 精霊共鳴：同じ精霊召喚を3回使うたび、次の行動で確定追加行動
           if (passiveNames.includes('精霊共鳴') && playerBuffs.spiritCombo?.tripled) {
             playerBuffs.guaranteedExtra = true
