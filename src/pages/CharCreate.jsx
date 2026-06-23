@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabase } from '../supabase'
 import { NG_WORDS_EXTRA } from '../constants/ngWords'
 
@@ -87,20 +87,9 @@ export default function CharCreate() {
   const [selectedAvatar, setSelectedAvatar] = useState(PRESET_AVATARS[0].url)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  // サモナーは is_admin 限定先行公開。既存プロフィールが is_admin の場合のみクラス候補に出す
-  const [isAdmin, setIsAdmin] = useState(false)
 
-  useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
-      if (data?.is_admin) setIsAdmin(true)
-    })()
-  }, [])
-
-  // 表示するクラス（サモナーは管理者のみ）
-  const visibleClasses = CLASSES.filter(c => c.id !== 'サモナー' || isAdmin)
+  // 全クラス表示（サモナー含め一般公開）
+  const visibleClasses = CLASSES
 
   const handle = async (e) => {
     e.preventDefault()

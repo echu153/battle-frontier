@@ -363,7 +363,8 @@ const ADVANCED_CLASSES = {
 }
 
 // is_admin 限定先行公開の上位職（一般プレイヤーには転職候補に出さない）
-const ADMIN_ONLY_CLASSES = new Set(['精霊召喚士','式神使い','ブリーダー'])
+// ※サモナー系3職は一般公開済みのため空。今後の先行公開職をここに入れる
+const ADMIN_ONLY_CLASSES = new Set([])
 // 再修練しても他クラスへ持ち越せない（＝他クラスで使用不可）スキルを持つクラス
 const NON_CARRYOVER_CLASSES = new Set(['精霊召喚士','ブリーダー'])
 
@@ -4916,13 +4917,10 @@ export default function Game() {
   const isAtCap = currentClassLv >= cap
   const retrainingCount = (profile.retraining || {})[profile.class] || 0
 
-  const availableClasses = INITIAL_CLASSES
-    // サモナーは is_admin 限定先行公開（一般プレイヤーには非表示）
-    .filter(c => c !== 'サモナー' || profile?.is_admin)
-    .map(c=>{
-      const cl = classLevels.find(x=>x.class_name===c)
-      return { name:c, lv:cl?cl.lv:1, canChange: c !== profile.class }
-    })
+  const availableClasses = INITIAL_CLASSES.map(c=>{
+    const cl = classLevels.find(x=>x.class_name===c)
+    return { name:c, lv:cl?cl.lv:1, canChange: c !== profile.class }
+  })
   const advancedAvailable = Object.entries(ADVANCED_CLASSES)
     // is_admin 限定先行公開の上位職は一般プレイヤーには出さない
     .filter(([name]) => !ADMIN_ONLY_CLASSES.has(name) || profile?.is_admin)
