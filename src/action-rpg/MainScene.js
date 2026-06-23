@@ -47,8 +47,7 @@ export default class MainScene extends Phaser.Scene {
     // key(name) → 実ファイルの対応。差し替えるときはここを変える。
     this.missingArt = new Set()
     const ART_FILES = {
-      hero: '/syoumen.png',        // 下(正面)
-      up: '/4houmenusiro.png',     // 上(後ろ姿)
+      hero: '/syoumen.png',        // 正面(フォールバック用。通常は左右のみ使用)
       left: '/4houmenhidari.png',  // 左
       right: '/4houmenmigi.png',   // 右
       slime: '/2dsuraimu.png',
@@ -74,7 +73,7 @@ export default class MainScene extends Phaser.Scene {
 
   // hero/slime の白背景を透過に(縁から繋がった白だけをフラッドフィルで抜く)
   prepareArt() {
-    for (const name of ['hero', 'up', 'left', 'right', 'slime']) {
+    for (const name of ['hero', 'left', 'right', 'slime']) {
       const key = `${name}_png`
       if (!this.textures.exists(key) || this.missingArt.has(key)) continue
       try {
@@ -137,14 +136,15 @@ export default class MainScene extends Phaser.Scene {
     this.walkPhase = 0
     this.lunge = { x: 0, y: 0 } // 攻撃の踏み込みオフセット(tweenで0に戻す)
 
-    // 4方向テクスチャ。3方向の画像が揃っていれば向きで差し替える(無ければ正面のみ＝flip運用)
-    this.dirKeys = {
-      down: this.spriteKey('hero'), up: this.spriteKey('up'),
-      left: this.spriteKey('left'), right: this.spriteKey('right'),
-    }
-    this.hasDir = ['up', 'left', 'right'].every(
+    // 左右向きのみ使用(上下に動いても横向きを維持する＝「左右しか向かない」方式)
+    this.dirKeys = { left: this.spriteKey('left'), right: this.spriteKey('right') }
+    this.hasDir = ['left', 'right'].every(
       (n) => this.textures.exists(`${n}_png`) && !this.missingArt.has(`${n}_png`))
-    this.curDir = 'down'
+    this.curDir = 'right'
+    if (this.hasDir) {
+      this.hero.setTexture(this.dirKeys.right)
+      this.hero.setDisplaySize(64, 64)
+    }
 
     // --- 敵(スライム) ---
     this.slimes = this.physics.add.group()
@@ -295,16 +295,16 @@ export default class MainScene extends Phaser.Scene {
     this.hero.y = this.player.y + this.lunge.y + bobY
   }
 
-  // 角度→4方向(down/up/left/right)。0=右, +y=下。
+  // 角度→左右のみ。横成分が小さい(ほぼ真上/真下)なら null＝現状維持。
   dirFromAngle(a) {
-    const c = Math.cos(a), s = Math.sin(a)
-    if (Math.abs(c) > Math.abs(s)) return c > 0 ? 'right' : 'left'
-    return s > 0 ? 'down' : 'up'
+    const c = Math.cos(a)
+    if (Math.abs(c) < 0.2) return null
+    return c > 0 ? 'right' : 'left'
   }
 
   // 向きが変わった時だけテクスチャ差し替え(毎フレームsetTextureは無駄なので)
   setHeroDir(dir) {
-    if (!this.hasDir || dir === this.curDir) return
+    if (!this.hasDir || !dir || dir === this.curDir) return
     this.curDir = dir
     this.hero.setTexture(this.dirKeys[dir]).setFlipX(false)
     this.hero.setDisplaySize(64, 64) // テクスチャごとにサイズが違っても64pxに揃える
