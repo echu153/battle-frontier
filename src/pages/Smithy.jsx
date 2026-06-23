@@ -72,6 +72,12 @@ const getEffectLabel = (effect) => {
     'open_spd_10_2t':'【開幕2T・素早さ+10%】','open_spd_20_1t':'【開幕1T・素早さ+20%】',
     'delay_heal_10':'【3T後・HP10%回復】','regen_heal_5_3t':'【開幕3T・毎T HP5%回復】',
     'artifact':'【消費MP2倍・与ダメージ1.2倍】',
+    'hit_spd_down_5':'【攻撃ヒット時・対象の素早さ-5%】',
+    'hit_heal_down_10_2t':'【攻撃ヒット時・対象の回復力2T-10%】',
+    'mdef_pen_5':'【魔法防御貫通+5%】',
+    'battle_start_ailment_shield':'【開幕・状態異常を1回無効化】',
+    'ondmg_spd_up_5_2t':'【被ダメージ時・2ターン素早さ+5%】',
+    'extra_hit_paralysis_30':'【追加行動の攻撃ヒット時・30%で相手を麻痺】',
   }
   return labels[effect] || effect
 }
@@ -402,7 +408,7 @@ export default function Smithy() {
     })
     const cols = slotsToColumns(newSlots)
     // アーティファクト(古びた○○の進化先)の特殊能力は消さない
-    if (item.bonus_effect === 'artifact') cols.bonus_effect = 'artifact'
+    if (item.bonus_effect && !EFFECT_POOL.includes(item.bonus_effect)) cols.bonus_effect = item.bonus_effect  // 固定特殊効果(アーティファクト/レイド装備)は再評価で消さず保持
     await supabase.from('player_equipment').update(cols).eq('id', item.id)
     const newQty = owned - needed
     if (newQty <= 0) await supabase.from('player_items').delete().eq('id', sheetItem.id)
@@ -422,7 +428,7 @@ export default function Smithy() {
     if (owned < needed) { showMessage(`再鑑定依頼書が足りません！（所持${owned}枚・必要${needed}枚）`, '#ff4444'); setLoading(false); return }
     const newSlots = generateBonusSlots(rarity)
     const cols = slotsToColumns(newSlots)
-    if (item.bonus_effect === 'artifact') cols.bonus_effect = 'artifact'
+    if (item.bonus_effect && !EFFECT_POOL.includes(item.bonus_effect)) cols.bonus_effect = item.bonus_effect  // 固定特殊効果(アーティファクト/レイド装備)は再評価で消さず保持
     await supabase.from('player_equipment').update(cols).eq('id', item.id)
     const newQty = owned - needed
     if (newQty <= 0) await supabase.from('player_items').delete().eq('id', sheetItem.id)
