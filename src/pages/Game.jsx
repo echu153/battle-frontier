@@ -87,6 +87,17 @@ export const EVENT_END_MS   = Date.UTC(2026, 6, 5, 20, 0, 0)  // JST 7/6 05:00
 
 // 多段ヒットスキル：行動全体ではなく1発ごとに回避・クリティカル・ダメージ判定する
 export const MULTI_HIT_SKILLS = new Set(['マジックアロー','三連射','メテオストライク','連打','五連殺','飛天三角蹴り','連装銃撃','群れの号令'])
+
+// 精霊召喚士の精霊召喚スキル（連続使用で 1段目→2段目→3段目 にエスカレート）
+export const SPIRIT_SUMMONS = new Set(['サラマンド','ウンディーネ','シルフ','ノーム','ルミナ','ノクス'])
+// 精霊召喚のコンボ状態を解決：直前に同じ精霊召喚を使っていれば段階が上がる
+// tier 0=召喚 / 1=2段目 / 2=3段目（最大段階を維持）。newCount は連続使用回数
+const spiritComboState = (skillName, playerBuffs) => {
+  const sc = playerBuffs.spiritCombo
+  const cont = !!sc && sc.name === skillName
+  const count = cont ? (sc.count || 0) : 0
+  return { tier: Math.min(count, 2), newCount: count + 1 }
+}
 const REGEN_SECONDS = 60
 
 export const ARTIFACT_BASE_NAMES = [
@@ -375,6 +386,7 @@ export const RETRAINING_ENHANCEMENTS = {
   '体術師': ['半月蹴り：次のスキルの威力×1.8', '五連殺：各ヒット20%で出血', '闘争本能：HP30%以下で与ダメ+60%', '破衝掌：防御無視 50%', '飛天三角蹴り：ミス撤廃＋各ヒットATK+0.1'],
   'ギャンブラー': ['ジャグリング：4ヒット', 'ラッキーダイス：×0.9〜2.2', 'ギャンブルボディ：被ダメ ×0.7〜1.1', 'オールイン：効果・反動6ターン', 'ジャックポット：2倍確率10%'],
   '竜騎士': ['ドラゴンスラスト：防御貫通 30%', 'ドラゴンファング：倍率 0.9', '竜鱗の加護：30%で15%軽減', 'ドラゴンロア：自身の攻撃力×1.3（3T）', '天墜竜閃：威力 4.5'],
+  '精霊召喚士': ['精霊共鳴：最大MP+20%を追加', '召喚（1段目）：倍率 1.4→1.5', '召喚バフ：1.3→1.4倍／ノクスの魔法防御貫通 5%→8%', '2段目スキル：倍率すべて+0.1', '3段目スキル：倍率すべて+0.2'],
 }
 
 export const getEffectiveCap = (className, retraining) => {
@@ -1202,7 +1214,133 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.hitDmgs = swarm
       result.log = `🐾 群れの号令！ ${enemy.name}に${swarm.map(d=>`${d}の特殊ダメージ`).join('！')}！`; break
     }
+    // ── 精霊召喚士（連続使用で段階上昇）──
+    case 'サラマンド': {
+      const { tier, newCount } = spiritComboState('サラマンド', playerBuffs)
+      if (tier === 0) {
+        result.dmg = Math.floor(eff.matk*(rt>=2?1.5:1.4)*am)
+        result.newPlayerBuffs.matkUp = { turns:3, rate:(rt>=3?1.4:1.3) }
+        result.log = `🔥 火精召喚：サラマンド！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 3ターンの間、特殊攻撃力が上昇！`
+      } else if (tier === 1) {
+        result.dmg = Math.floor(eff.matk*(1.8+(rt>=4?0.1:0))*am)
+        const burn = Math.random()*100 < 50
+        if (burn) result.newEnemyBuffs.burn = { turns:5, dmgRate:0.02 }
+        result.log = `🔥 紅蓮の息吹！ ${enemy.name}に${result.dmg}の特殊ダメージ！${burn?' やけど状態！':''}`
+      } else {
+        result.dmg = Math.floor(eff.matk*(2.2+(rt>=5?0.2:0))*am)
+        const burn = Math.random()*100 < 80
+        if (burn) result.newEnemyBuffs.burn = { turns:5, dmgRate:0.02 }
+        result.log = `🔥 インフェルノブレス！ ${enemy.name}に${result.dmg}の特殊ダメージ！${burn?' やけど状態！':''}`
+      }
+      result.newPlayerBuffs.spiritCombo = { name:'サラマンド', count:newCount, tripled: newCount%3===0 }
+      break
+    }
+    case 'ウンディーネ': {
+      const { tier, newCount } = spiritComboState('ウンディーネ', playerBuffs)
+      if (tier === 0) {
+        result.dmg = Math.floor(eff.matk*(rt>=2?1.5:1.4)*am)
+        result.newPlayerBuffs.mdefUp = { turns:3, rate:(rt>=3?1.4:1.3) }
+        result.log = `🌊 水精召喚：ウンディーネ！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 3ターンの間、特殊防御力が上昇！`
+      } else if (tier === 1) {
+        result.dmg = Math.floor(eff.matk*(1.4+(rt>=4?0.1:0))*am)
+        const buffKeys = Object.keys(enemyBuffs).filter(k => enemyBuffs[k]?.turns > 0)
+        let dispelTxt = ''
+        if (buffKeys.length > 0) {
+          const removeKey = buffKeys[Math.floor(Math.random()*buffKeys.length)]
+          result.newEnemyBuffs[removeKey] = { turns:0, rate:1 }
+          dispelTxt = ' 相手のバフを1つ消去！'
+        }
+        result.log = `🌊 アクアレイン！ ${enemy.name}に${result.dmg}の特殊ダメージ！${dispelTxt}`
+      } else {
+        // 静水の加護：攻撃せず4ターン被ダメージ30%減
+        result.newPlayerBuffs.dmgReduce = { turns:4, rate:0.7 }
+        result.log = `🌊 静水の加護！ 4ターンの間、受けるダメージが30%減少！`
+      }
+      result.newPlayerBuffs.spiritCombo = { name:'ウンディーネ', count:newCount, tripled: newCount%3===0 }
+      break
+    }
+    case 'シルフ': {
+      const { tier, newCount } = spiritComboState('シルフ', playerBuffs)
+      if (tier === 0) {
+        result.dmg = Math.floor(eff.matk*(rt>=2?1.5:1.4)*am)
+        result.newPlayerBuffs.spdUp = { turns:3, rate:(rt>=3?1.4:1.3) }
+        result.log = `🌪 風精召喚：シルフ！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 3ターンの間、素早さが上昇！`
+      } else if (tier === 1) {
+        result.dmg = Math.floor(eff.matk*(1.7+(rt>=4?0.1:0))*am)
+        result.physScaleMatk = true
+        const bleed = Math.random()*100 < 30
+        if (bleed) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
+        result.log = `🌪 翠嵐の刃！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleed?` ${enemy.name}は出血した！`:''}`
+      } else {
+        result.dmg = Math.floor(eff.matk*(2.0+(rt>=5?0.2:0))*am)
+        result.physScaleMatk = true
+        const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 }
+        result.log = `🌪 テンペストエッジ！ ${enemy.name}に${result.dmg}の物理ダメージ！ ${enemy.name}は出血した！`
+      }
+      result.newPlayerBuffs.spiritCombo = { name:'シルフ', count:newCount, tripled: newCount%3===0 }
+      break
+    }
+    case 'ノーム': {
+      const { tier, newCount } = spiritComboState('ノーム', playerBuffs)
+      if (tier === 0) {
+        result.dmg = Math.floor(eff.matk*(rt>=2?1.5:1.4)*am)
+        result.newPlayerBuffs.defUp = { turns:3, rate:(rt>=3?1.4:1.3) }
+        result.log = `⛰ 土精召喚：ノーム！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 3ターンの間、防御力が上昇！`
+      } else if (tier === 1) {
+        result.dmg = Math.floor(eff.matk*(1.7+(rt>=4?0.1:0))*am)
+        const sr = enemyBuffs.stunResist ?? 1.0
+        const stun = Math.random()*100 < 30 * sr
+        if (stun) { result.newEnemyBuffs.stun = { turns:1 }; result.newEnemyBuffs.stunResist = sr*0.5 }
+        result.log = `⛰ 岩霊の鉄槌！ ${enemy.name}に${result.dmg}の特殊ダメージ！${stun?' スタン！':''}`
+      } else {
+        // 岩石砲：命中90%（10%で外れる）
+        if (Math.random() < 0.1) { result.dmg = 0; result.log = `⛰ 岩石砲！ しかし外れた！` }
+        else { result.dmg = Math.floor(eff.matk*(2.5+(rt>=5?0.2:0))*am); result.log = `⛰ 岩石砲！ ${enemy.name}に${result.dmg}の特殊ダメージ！` }
+      }
+      result.newPlayerBuffs.spiritCombo = { name:'ノーム', count:newCount, tripled: newCount%3===0 }
+      break
+    }
+    case 'ルミナ': {
+      const { tier, newCount } = spiritComboState('ルミナ', playerBuffs)
+      if (tier === 0) {
+        result.dmg = Math.floor(eff.matk*(rt>=2?1.5:1.4)*am)
+        result.newPlayerBuffs.healUp = { turns:3, rate:(rt>=3?1.4:1.3) }
+        result.log = `🌟 光精召喚：ルミナ！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 3ターンの間、回復力が上昇！`
+      } else if (tier === 1) {
+        result.dmg = Math.floor(eff.matk*1.0*am)
+        result.heal = Math.floor(profile.hp_max*0.15)
+        result.log = `🌟 浄化の輝き！ ${enemy.name}に${result.dmg}の特殊ダメージ！ HPを${result.heal}回復！`
+      } else {
+        result.dmg = Math.floor(eff.matk*(2.0+(rt>=5?0.2:0))*am)
+        result.heal = Math.floor(result.dmg*0.5)
+        result.log = `🌟 ルミナ・レイ！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 与えたダメージの半分を回復！`
+      }
+      result.newPlayerBuffs.spiritCombo = { name:'ルミナ', count:newCount, tripled: newCount%3===0 }
+      break
+    }
+    case 'ノクス': {
+      const { tier, newCount } = spiritComboState('ノクス', playerBuffs)
+      if (tier === 0) {
+        result.dmg = Math.floor(eff.matk*(rt>=2?1.5:1.4)*am)
+        result.newPlayerBuffs.spiritMdefPen = { turns:3, rate:(rt>=3?0.08:0.05) }
+        result.log = `🌑 闇精召喚：ノクス！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 3ターンの間、魔法防御貫通を得る！`
+      } else if (tier === 1) {
+        result.dmg = Math.floor(eff.matk*(1.5+(rt>=4?0.1:0))*am)
+        result.newEnemyBuffs.dmgDown = { turns:3, rate:0.9 }
+        result.log = `🌑 深淵の囁き！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 3ターンの間、相手の与ダメージ10%減！`
+      } else {
+        result.dmg = Math.floor(eff.matk*(2.2+(rt>=5?0.2:0))*am)
+        result.mdefPen = 0.3
+        result.log = `🌑 ノクターン！ ${enemy.name}の魔法防御を貫通し${result.dmg}の特殊ダメージ！`
+      }
+      result.newPlayerBuffs.spiritCombo = { name:'ノクス', count:newCount, tripled: newCount%3===0 }
+      break
+    }
     default: result.dmg = Math.max(1,eff.atk*am); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
+  }
+  // 精霊召喚士コンボ：精霊召喚以外のスキルを使ったらコンボをリセット
+  if (!SPIRIT_SUMMONS.has(skill.name) && playerBuffs.spiritCombo) {
+    result.newPlayerBuffs.spiritCombo = undefined
   }
   // パピアは状態異常・ステータス減少免疫
   if (enemy.isPapia) {
@@ -2636,8 +2774,9 @@ export default function Game() {
             const sType = cs.skills?.type
             const skillCls = cs.skills?.class_name
             const buffPen = playerBuffs.mukyoPen?.turns > 0 ? playerBuffs.mukyoPen.rate : 0  // 明鏡止水(rt4)等の防御貫通バフ
+            const spMdefPen = playerBuffs.spiritMdefPen?.turns > 0 ? playerBuffs.spiritMdefPen.rate : 0  // ノクス：魔法防御貫通バフ
             const adjED  = Math.max(1, Math.floor((enemy.def ||0)*eDefRate*(1-Math.min(0.8,(res.defPen||0)+buffPen))))
-            const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate*(1-(res.mdefPen||0))))
+            const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate*(1-Math.min(0.8,(res.mdefPen||0)+spMdefPen))))
             // サイコブラスト/マインドブレイク等、およびサイキッカー・魔銃士の全スキルは敵DEF・MDEFの低い方で軽減
             const useLowDef = cs.skills?.name === 'サイコブラスト' || res.useMinDef || skillCls === 'サイキッカー' || skillCls === '魔銃士'
             if (res.physScaleMatk) {
@@ -2685,7 +2824,8 @@ export default function Game() {
           if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
             enemyBuffs.spdDown = { turns: 2, rate: 0.95 }  // 濡羽杖アマザネ: 攻撃ヒット時 対象SPD-5%
           }
-          const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult)
+          const healUpMult = playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1
+          const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult * healUpMult)
           playerHp = Math.min(maxHp, playerHp + healAmt)
           if (passiveHealReflect && healAmt > 0) {
             const reflectDmg = Math.floor(healAmt * 0.5)
@@ -2707,6 +2847,12 @@ export default function Game() {
             if (hadBuff) logs.push({ text:`💸 オールインの反動中！ バフが効かない！`, color:'#ff4444' })
           }
           playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
+          // 精霊共鳴：同じ精霊召喚を3回使うたび、次の行動で確定追加行動
+          if (passiveNames.includes('精霊共鳴') && playerBuffs.spiritCombo?.tripled) {
+            playerBuffs.guaranteedExtra = true
+            playerBuffs.spiritCombo = { ...playerBuffs.spiritCombo, tripled:false }
+            logs.push({ text:`🌟 精霊共鳴！ 精霊の力が高まり、追加行動を得る！`, color:'#ffdd66' })
+          }
           const critInsert = (finalCrit && !isMulti) ? '💥クリティカル！ ' : ''
           const dmgIdx = resLog.indexOf(enemy.name + 'に')
           const logWithCrit = critInsert
@@ -2947,7 +3093,7 @@ export default function Game() {
         logs.push({ text:`🚫 回復封じ中！ 回復効果が無効化された！`, color:'#ff4488' })
       }
       if (!isHealSealed && playerBuffs.regenHeal?.turns > 0) {
-        const healAmt = Math.floor(playerBuffs.regenHeal.amount * passiveHealMult)
+        const healAmt = Math.floor(playerBuffs.regenHeal.amount * passiveHealMult * (playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1))
         playerHp = Math.min(maxHp, playerHp + healAmt)
         logs.push({ text:`💚 回復効果でHPが${healAmt}回復した！`, color:'#44ff88' })
         if (passiveHealReflect && healAmt > 0) {
@@ -3020,8 +3166,11 @@ export default function Game() {
       if (!playerSkipped) {
         doPlayerAttack(false)
         if (enemyHp <= 0) break
+        // 精霊共鳴：確定追加行動（消費）
+        const spiritExtra = !!playerBuffs.guaranteedExtra
+        if (playerBuffs.guaranteedExtra) playerBuffs.guaranteedExtra = false
         // 天墜竜閃の溜めターンは追加行動なし
-        if (!(playerBuffs.tenkaiCharge?.turns > 0) && playerExtraRate > 0 && Math.random()*100 < playerExtraRate) {
+        if (!(playerBuffs.tenkaiCharge?.turns > 0) && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) {
           doPlayerAttack(true); if (enemyHp <= 0) break
         }
       }
@@ -5729,6 +5878,7 @@ const BUFF_LABELS = {
   poison:'🟢毒', severePoisoin:'☠猛毒',
   healDown:'💉回復↓', dmgDown:'⬇被ダメ↓', dmgReduce:'🛡軽減',
   regenHeal:'💚再生', regenMp:'🔵魔力供給', skeletonDmg:'💀骸骨',
+  healUp:'💚回復力↑', spiritMdefPen:'🌑魔貫↑',
   berserk:'😡狂乱', holyField:'✨聖域', holyAwakening:'✨神聖覚醒',
   critResist:'クリ耐', hitBonus:'🎯命中↑', evasion:'💨回避↑',
   allinActive:'🎲全賭け', allinDebuff:'💸反動',

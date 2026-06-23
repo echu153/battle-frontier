@@ -114,6 +114,7 @@ function buildSide(input, key) {
     prevDmgSkillName: null,
     // パッシブ
     rtCur, pe,
+    hasSpiritResonance: has('精霊共鳴'),
     hasBerserk, hasOnmi, hasMadokenJutsu, hasHolyKnightPassive, hasTosoHonno,
     passiveCritBonus, passiveCritDmgBonus, passiveDmgMult, passiveHealMult,
     passiveMatkMult, passiveMpCostMult, passiveMatkMultTenki, passiveHitBonus, passiveHealReflect,
@@ -255,8 +256,9 @@ function doAttack(att, def, isExtra, ctx) {
       let useMagicalRank = sType === '魔法攻撃'
       if (res.dmg > 0) {
         const buffPen = attBuffs.mukyoPen?.turns > 0 ? attBuffs.mukyoPen.rate : 0
+        const spMdefPen = attBuffs.spiritMdefPen?.turns > 0 ? attBuffs.spiritMdefPen.rate : 0  // ノクス：魔法防御貫通バフ
         const adjED  = Math.max(1, Math.floor((def.eff.def  || 0) * eDefRate  * (1 - Math.min(0.8, (res.defPen || 0) + buffPen))))
-        const adjEMD = Math.max(1, Math.floor((def.eff.mdef || 0) * eMdefRate * (1 - (res.mdefPen || 0))))
+        const adjEMD = Math.max(1, Math.floor((def.eff.mdef || 0) * eMdefRate * (1 - Math.min(0.8, (res.mdefPen || 0) + spMdefPen))))
         if (res.physScaleMatk) {
           // 物理ダメージ（敵DEFで軽減）だが火力参照は特殊攻撃（オオカミ召喚など）
           defScale = ratioMatk / (ratioMatk + adjED); useMagicalRank = false
@@ -300,7 +302,8 @@ function doAttack(att, def, isExtra, ctx) {
         defBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
         logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemyName}を麻痺させた！`, color: '#ffe066' })
       }
-      const healAmt = attBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * att.passiveHealMult * PVP.healMult)
+      const healUpMult = attBuffs.healUp?.turns > 0 ? attBuffs.healUp.rate : 1
+      const healAmt = attBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * att.passiveHealMult * PVP.healMult * healUpMult)
       att.hp = Math.min(eff.hp_max, att.hp + healAmt)
       if (att.passiveHealReflect && healAmt > 0) {
         const reflectDmg = Math.floor(healAmt * 0.5)
@@ -420,7 +423,7 @@ function applyTurnStart(side, opp, ctx) {
     logs.push({ text: `💚 ${name}のリジェネ！ HPが${amt}回復した！`, color: '#44ff88' })
   }
   if (!sealed && b.regenHeal?.turns > 0) {
-    const amt = Math.floor(b.regenHeal.amount * side.passiveHealMult * PVP.healMult)
+    const amt = Math.floor(b.regenHeal.amount * side.passiveHealMult * PVP.healMult * (b.healUp?.turns > 0 ? b.healUp.rate : 1))
     side.hp = Math.min(maxHp, side.hp + amt)
     logs.push({ text: `💚 ${name}の回復効果でHPが${amt}回復した！`, color: '#44ff88' })
   }
@@ -460,11 +463,19 @@ function takeTurn(att, def, ctx) {
   if (checkSkip(att, ctx)) return false
   doAttack(att, def, false, ctx)
   if (def.hp <= 0) return true
+  // 精霊共鳴：同じ精霊召喚を3回使うたび確定追加行動
+  if (att.hasSpiritResonance && att.buffs.spiritCombo?.tripled) {
+    att.buffs.guaranteedExtra = true
+    att.buffs.spiritCombo = { ...att.buffs.spiritCombo, tripled: false }
+    ctx.logs.push({ text: `🌟 ${att.profile.username} の精霊共鳴！ 追加行動を得る！`, color: '#ffdd66' })
+  }
+  const spiritExtra = !!att.buffs.guaranteedExtra
+  if (att.buffs.guaranteedExtra) att.buffs.guaranteedExtra = false
   const extraRate = calcExtraActionRate(
     att.effectiveSpdForCalc * (att.buffs.spdUp ? att.buffs.spdUp.rate : 1),
     def.effectiveSpdForCalc * (def.buffs.spdUp ? def.buffs.spdUp.rate : 1)
   )
-  if (extraRate > 0 && Math.random() * 100 < extraRate) {
+  if (spiritExtra || (extraRate > 0 && Math.random() * 100 < extraRate)) {
     doAttack(att, def, true, ctx)
     if (def.hp <= 0) return true
   }
