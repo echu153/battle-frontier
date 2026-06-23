@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { controls } from './controls'
 
 // ============================================================
 // アクションRPG 最小プロト — コアループだけ
@@ -16,7 +17,6 @@ const SLIME_COUNT = 8
 
 const ENEMY_ATTACK_RANGE = 38   // 敵がこちらを殴れる距離(接触)
 const ENEMY_ATTACK_INTERVAL = 900 // 敵の攻撃間隔(ms)
-const DRAG_THRESHOLD = 12       // これ以上動かしたら「移動」、未満なら「攻撃タップ」
 
 export default class MainScene extends Phaser.Scene {
   constructor() {
@@ -35,11 +35,11 @@ export default class MainScene extends Phaser.Scene {
   }
 
   preload() {
-    // [ART] 本番ではここでドット絵スプライトシートを読む。例:
-    //   this.load.spritesheet('hero', '/action-rpg/hero.png', { frameWidth: 32, frameHeight: 32 })
-    //   this.load.spritesheet('slime', '/action-rpg/slime.png', { frameWidth: 32, frameHeight: 32 })
-    //   this.load.image('grass', '/action-rpg/grass-tile.png')
-    // 今は素材が無いので generateTextures() でその場で作る。
+    // [ART] public/action-rpg/hero.png があれば読む。無くてもエラーにせず四角で動かす。
+    //   本番で4方向歩きにするときは spritesheet に差し替え:
+    //   this.load.spritesheet('hero', '/action-rpg/hero.png', { frameWidth: 48, frameHeight: 48 })
+    this.load.image('hero_png', '/action-rpg/hero.png')
+    this.load.on('loaderror', (file) => { if (file?.key === 'hero_png') this.heroMissing = true })
   }
 
   create() {
@@ -47,38 +47,30 @@ export default class MainScene extends Phaser.Scene {
     this.drawGround()
 
     // --- プレイヤー ---
-    this.player = this.physics.add.image(400, 300, 'hero')
+    const heroKey = (this.textures.exists('hero_png') && !this.heroMissing) ? 'hero_png' : 'hero'
+    this.player = this.physics.add.image(800, 600, heroKey)
     this.player.setDepth(10).setCollideWorldBounds(true)
+    if (heroKey === 'hero_png') {
+      // 高解像度の1枚絵は当たり判定用に小さく表示(後でドット絵スプライトに差し替え予定)
+      this.player.setDisplaySize(44, 44)
+      this.player.body.setSize(this.player.width * 0.5, this.player.height * 0.5, true)
+    }
 
     // --- 敵(スライム) ---
     this.slimes = this.physics.add.group()
     for (let i = 0; i < SLIME_COUNT; i++) this.spawnSlime()
 
     // --- 入力 ---
-    // 移動: WASD/矢印 or ドラッグ。攻撃: 「動かさずにタップ」or スペースキー。
+    // 移動: PCはWASD/矢印、スマホは左半分のバーチャルパッド(controls.moveX/Y)。
+    // 攻撃: 右半分のボタン or スペースキー(action('attack')をシーンがlisten)。
     this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE')
-    this.pointerTarget = null
-    this._downAt = null      // 押した瞬間の座標(タップ/ドラッグ判定用)
-    this._dragging = false
-    this.input.on('pointerdown', (p) => {
-      this._downAt = { x: p.x, y: p.y }
-      this._dragging = false
-    })
-    this.input.on('pointermove', (p) => {
-      if (!p.isDown || !this._downAt) return
-      // 押した位置から一定以上動いたら「移動ドラッグ」と判定
-      if (Math.hypot(p.x - this._downAt.x, p.y - this._downAt.y) > DRAG_THRESHOLD) {
-        this._dragging = true
-        this.pointerTarget = { x: p.worldX, y: p.worldY }
-      }
-    })
-    this.input.on('pointerup', () => {
-      if (this._downAt && !this._dragging) this.tryAttack() // 動かさず離した＝攻撃タップ
-      this._downAt = null
-      this._dragging = false
-      this.pointerTarget = null
-    })
     this.input.keyboard.on('keydown-SPACE', () => this.tryAttack())
+    this._onAction = (e) => {
+      if (e.detail === 'attack') this.tryAttack()
+      // 例: else if (e.detail === 'skill:heal') this.useHeal()  ← スキルはここに足す
+    }
+    window.addEventListener('arpg-action', this._onAction)
+    this.events.once('shutdown', () => window.removeEventListener('arpg-action', this._onAction))
 
     // カメラはプレイヤー追従。世界はちょい広め。
     this.physics.world.setBounds(0, 0, 1600, 1200)
@@ -148,14 +140,13 @@ export default class MainScene extends Phaser.Scene {
     if (k.W.isDown || k.UP.isDown) vy = -1
     if (k.S.isDown || k.DOWN.isDown) vy = 1
 
-    if (vx === 0 && vy === 0 && this.pointerTarget) {
-      // タップ/ドラッグした方向へ
-      const dx = this.pointerTarget.x - this.player.x
-      const dy = this.pointerTarget.y - this.player.y
-      const dist = Math.hypot(dx, dy)
-      if (dist > 8) { vx = dx / dist; vy = dy / dist }
+    if (vx === 0 && vy === 0) {
+      // キー入力が無ければ左半分のバーチャルパッドの値を使う
+      vx = controls.moveX
+      vy = controls.moveY
     }
-    const len = Math.hypot(vx, vy) || 1
+    const len = Math.hypot(vx, vy)
+    if (len < 0.01) { this.player.setVelocity(0, 0); return }
     this.player.setVelocity((vx / len) * PLAYER_SPEED, (vy / len) * PLAYER_SPEED)
   }
 

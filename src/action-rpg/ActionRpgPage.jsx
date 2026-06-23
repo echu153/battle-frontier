@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Phaser from 'phaser'
 import MainScene from './MainScene'
+import { setMove, action } from './controls'
 
 // アクションRPG プロト：Phaserのcanvas + ReactのHUD。
 // 役割分担 → ゲーム本体=Phaser / UI(バー・コンボ表示)=React。
@@ -62,11 +63,83 @@ export default function ActionRpgPage() {
         </div>
       )}
 
+      {/* === 左半分：移動バーチャルパッド === */}
+      <VirtualPad />
+
+      {/* === 右半分：攻撃／スキルボタン === */}
+      <div style={{ position: 'absolute', right: 24, bottom: 28, display: 'flex', alignItems: 'flex-end', gap: 14, userSelect: 'none' }}>
+        {/* スキル枠(未実装・近日) */}
+        <SkillButton label="近日" />
+        <SkillButton label="近日" />
+        {/* 攻撃(大ボタン)：押している間くり返し攻撃(実際の発動はクールタイムで制御) */}
+        <AttackButton />
+      </div>
+
       {/* 操作ヒント */}
-      <div style={{ position: 'absolute', bottom: 10, width: '100%', textAlign: 'center', fontFamily: 'monospace', fontSize: 11, color: '#9fb', textShadow: '0 1px 2px #000', pointerEvents: 'none' }}>
-        移動: WASD/矢印 or ドラッグ ・ 攻撃: 敵の近くでタップ/クリック or スペースキー
+      <div style={{ position: 'absolute', top: 8, width: '100%', textAlign: 'center', fontFamily: 'monospace', fontSize: 11, color: '#9fb', textShadow: '0 1px 2px #000', pointerEvents: 'none' }}>
+        左：移動パッド ／ 右：攻撃ボタン（PCは WASD/矢印＋スペースも可）
       </div>
     </div>
+  )
+}
+
+// 左半分のどこを触っても、その点を中心にスティックが出る方式
+function VirtualPad() {
+  const baseRef = useRef(null)
+  const MAX = 55 // スティックの最大振り幅(px)
+  const [vis, setVis] = useState(null) // 表示用 {bx,by,kx,ky}
+
+  const onDown = (e) => {
+    baseRef.current = { x: e.clientX, y: e.clientY }
+    setVis({ bx: e.clientX, by: e.clientY, kx: e.clientX, ky: e.clientY })
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const onMove = (e) => {
+    const b = baseRef.current
+    if (!b) return
+    let dx = e.clientX - b.x, dy = e.clientY - b.y
+    const d = Math.hypot(dx, dy)
+    if (d > MAX) { dx = (dx / d) * MAX; dy = (dy / d) * MAX }
+    setVis({ bx: b.x, by: b.y, kx: b.x + dx, ky: b.y + dy })
+    setMove(dx / MAX, dy / MAX)
+  }
+  const onUp = () => { baseRef.current = null; setVis(null); setMove(0, 0) }
+
+  return (
+    <div
+      onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+      style={{ position: 'absolute', left: 0, top: 0, width: '50%', height: '100%', touchAction: 'none', zIndex: 5 }}
+    >
+      {vis && (
+        <>
+          <div style={{ position: 'fixed', left: vis.bx, top: vis.by, width: 110, height: 110, marginLeft: -55, marginTop: -55, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.35)', background: 'rgba(0,0,0,0.2)', pointerEvents: 'none' }} />
+          <div style={{ position: 'fixed', left: vis.kx, top: vis.ky, width: 52, height: 52, marginLeft: -26, marginTop: -26, borderRadius: '50%', background: 'rgba(120,180,255,0.7)', border: '2px solid #cfe', pointerEvents: 'none' }} />
+        </>
+      )}
+    </div>
+  )
+}
+
+function AttackButton() {
+  const timer = useRef(null)
+  const start = (e) => {
+    e.preventDefault()
+    action('attack')
+    timer.current = setInterval(() => action('attack'), 120) // 押しっぱなしで連打(発動はCTで制御)
+  }
+  const stop = () => { if (timer.current) { clearInterval(timer.current); timer.current = null } }
+  useEffect(() => stop, [])
+  return (
+    <button
+      onPointerDown={start} onPointerUp={stop} onPointerLeave={stop} onPointerCancel={stop}
+      style={{ width: 92, height: 92, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #ff8a5c, #c93a1e)', border: '3px solid #ffd0b0', color: '#fff', fontFamily: 'monospace', fontSize: 16, fontWeight: 'bold', cursor: 'pointer', touchAction: 'none', boxShadow: '0 4px 10px rgba(0,0,0,0.5)' }}
+    >攻撃</button>
+  )
+}
+
+function SkillButton({ label }) {
+  return (
+    <button disabled style={{ width: 58, height: 58, borderRadius: '50%', background: 'rgba(20,30,50,0.7)', border: '2px solid #335', color: '#668', fontFamily: 'monospace', fontSize: 11, cursor: 'not-allowed', touchAction: 'none' }}>{label}</button>
   )
 }
 
