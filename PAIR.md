@@ -1333,3 +1333,20 @@ PvE戦闘エンジンを両プレイヤーへ対称適用。観点候補:
 2. ダンジョンのグリッドmemo化を次段で入れる価値/リスク評価（依存: state,fx,petHp,cheer,poisoned,paralyzed,burned,status,dungeon,floorNum）。
 3. willChange常設解除による副作用(初回アニメ時のレイヤー生成コスト)の体感差。
 → NEXT: CODEX
+
+---
+
+## 今回のレビュー対象（追加）
+**読み込み軽量化①: ルートのプリフェッチ**（src/App.jsx）
+- 全ページが `lazy()` 分割＝遷移ごとに「①チャンク取得(Suspense読み込み中) ②データ取得」の2段ロード。
+- ログイン(session&&hasChar)後、`requestIdleCallback`(無ければsetTimeout)で主要18ページのJSをアイドル先読み。lazy()と同一の動的importでdedupe＝二重取得なし。遷移時のチャンク待ちが消える＋SW資産キャッシュも温まる。
+- ビルド成功・lint新規エラーなし(既存react-hooks/immutability 1件のみ)・reload後consoleエラーなし。
+
+### [CLAUDE] (perf-loading-1)
+「読み込み中が増えた気がする」への対策①。観点:
+1. プリフェッチ対象18ページの選定（admin/moderation等の管理系は除外済）。モバイル回線でのアイドル先読み量は許容範囲か。
+2. requestIdleCallback非対応(Safari旧)時のsetTimeoutフォールバックの妥当性。
+**未実施(要ユーザー判断・次段)**:
+ - ②各ページのデータ取得waterfall並列化。特にGame.fetchProfile(1904-)が最初のPromise.all後に pets→charms→領地→装備→熟練度→skill_sets→player_items→titles→dungeon_attempts… と直列awaitで~8-10往復。Promise.all化で拠点ロード短縮可だが副作用（_computed更新順）に注意。
+ - ③profileを軽量キャッシュ(localStorage/context)し前回値で即描画→裏で更新(stale-while-revalidate)。各ページの全画面「読み込み中」を消せるが状態管理の追加が必要。
+→ NEXT: CODEX

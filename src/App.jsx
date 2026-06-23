@@ -107,6 +107,45 @@ function App() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // ルートのプリフェッチ：ログイン後のアイドル時間に主要ページのJSを先読みする。
+  // 遷移時に出る「読み込み中」(チャンク取得待ち)を消し、SWの資産キャッシュも温める。
+  // lazy() と同じ動的importなのでバンドラがdedupe＝二重取得にならない。
+  useEffect(() => {
+    if (!session || !hasChar) return
+    const thunks = [
+      () => import('./pages/Pets'),
+      () => import('./pages/Dungeon'),
+      () => import('./pages/Shop'),
+      () => import('./pages/Equipment'),
+      () => import('./pages/Skills'),
+      () => import('./pages/Smithy'),
+      () => import('./pages/Fishing'),
+      () => import('./pages/Casino'),
+      () => import('./pages/RaidBoss'),
+      () => import('./pages/Exchange'),
+      () => import('./pages/Ranking'),
+      () => import('./pages/Profile'),
+      () => import('./pages/Alchemy'),
+      () => import('./pages/Titles'),
+      () => import('./pages/Museum'),
+      () => import('./pages/Abyss'),
+      () => import('./pages/Tenkyuu'),
+      () => import('./pages/Territory'),
+    ]
+    let i = 0
+    let cancelled = false
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 300))
+    const cancel = window.cancelIdleCallback || clearTimeout
+    let handle
+    const run = () => {
+      if (cancelled || i >= thunks.length) return
+      thunks[i++]().catch(() => {})
+      handle = idle(run)
+    }
+    handle = idle(run)
+    return () => { cancelled = true; if (handle != null) cancel(handle) }
+  }, [session, hasChar])
+
   const checkChar = async (userId) => {
     const { data } = await supabase.from('profiles').select('id, is_suspended, suspension_reason').eq('id', userId).single()
     if (data?.is_suspended) {
