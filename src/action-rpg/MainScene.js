@@ -2,16 +2,21 @@ import Phaser from 'phaser'
 
 // ============================================================
 // アクションRPG 最小プロト — コアループだけ
-//   移動 → 近づくと自動攻撃(HITコンボ) → 撃破でEXP → レベルアップ
+//   移動 → クリック/タップで攻撃(HITコンボ) → 撃破でEXP → レベルアップ
+//   敵に接触するとこちらもダメージを受ける(HP0でやられ→復活)
 // 見た目は今はコード生成の四角/丸。後でドット絵に差し替える箇所には
 //   [ART] というコメントを付けてある。
 // ============================================================
 
 const PLAYER_SPEED = 160       // プレイヤー移動速度(px/秒)
-const ATTACK_RANGE = 60        // 自動攻撃が届く距離
-const ATTACK_INTERVAL = 600    // 攻撃間隔(ms)
+const ATTACK_RANGE = 60        // 攻撃が届く距離
+const ATTACK_INTERVAL = 600    // 攻撃間隔(ms)＝クールタイム
 const COMBO_TIMEOUT = 3000     // この時間倒さないとコンボ途切れる(ms)
 const SLIME_COUNT = 8
+
+const ENEMY_ATTACK_RANGE = 38   // 敵がこちらを殴れる距離(接触)
+const ENEMY_ATTACK_INTERVAL = 900 // 敵の攻撃間隔(ms)
+const DRAG_THRESHOLD = 12       // これ以上動かしたら「移動」、未満なら「攻撃タップ」
 
 export default class MainScene extends Phaser.Scene {
   constructor() {
@@ -24,6 +29,7 @@ export default class MainScene extends Phaser.Scene {
     this.lastAttack = 0
     this.combo = 0
     this.lastKill = 0
+    this.dead = false
     // セーブ対象になる進行データ（プロトなのでメモリのみ）
     this.state = { level: 1, exp: 0, expNext: 20, hp: 100, hpMax: 100 }
   }
@@ -49,11 +55,30 @@ export default class MainScene extends Phaser.Scene {
     for (let i = 0; i < SLIME_COUNT; i++) this.spawnSlime()
 
     // --- 入力 ---
-    this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT')
+    // 移動: WASD/矢印 or ドラッグ。攻撃: 「動かさずにタップ」or スペースキー。
+    this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE')
     this.pointerTarget = null
-    this.input.on('pointerdown', (p) => { this.pointerTarget = { x: p.worldX, y: p.worldY } })
-    this.input.on('pointermove', (p) => { if (p.isDown) this.pointerTarget = { x: p.worldX, y: p.worldY } })
-    this.input.on('pointerup', () => { this.pointerTarget = null })
+    this._downAt = null      // 押した瞬間の座標(タップ/ドラッグ判定用)
+    this._dragging = false
+    this.input.on('pointerdown', (p) => {
+      this._downAt = { x: p.x, y: p.y }
+      this._dragging = false
+    })
+    this.input.on('pointermove', (p) => {
+      if (!p.isDown || !this._downAt) return
+      // 押した位置から一定以上動いたら「移動ドラッグ」と判定
+      if (Math.hypot(p.x - this._downAt.x, p.y - this._downAt.y) > DRAG_THRESHOLD) {
+        this._dragging = true
+        this.pointerTarget = { x: p.worldX, y: p.worldY }
+      }
+    })
+    this.input.on('pointerup', () => {
+      if (this._downAt && !this._dragging) this.tryAttack() // 動かさず離した＝攻撃タップ
+      this._downAt = null
+      this._dragging = false
+      this.pointerTarget = null
+    })
+    this.input.keyboard.on('keydown-SPACE', () => this.tryAttack())
 
     // カメラはプレイヤー追従。世界はちょい広め。
     this.physics.world.setBounds(0, 0, 1600, 1200)
@@ -104,9 +129,10 @@ export default class MainScene extends Phaser.Scene {
   }
 
   update(time, delta) {
+    if (this.dead) return
     this.handleMovement()
     this.handleWander(delta)
-    this.handleAutoAttack(time)
+    this.handleEnemyAttacks(time)
     // コンボの時間切れ
     if (this.combo > 0 && time - this.lastKill > COMBO_TIMEOUT) {
       this.combo = 0
@@ -144,9 +170,11 @@ export default class MainScene extends Phaser.Scene {
     })
   }
 
-  handleAutoAttack(time) {
+  // クリック/タップ or スペースで発動。射程内の一番近い敵を殴る(クールタイムあり)
+  tryAttack() {
+    if (this.dead) return
+    const time = this.time.now
     if (time - this.lastAttack < ATTACK_INTERVAL) return
-    // 射程内で一番近いスライムを探す
     let target = null, best = ATTACK_RANGE
     this.slimes.getChildren().forEach((s) => {
       if (!s || !s.active) return
@@ -156,12 +184,53 @@ export default class MainScene extends Phaser.Scene {
     if (!target) return
 
     this.lastAttack = time
+    // 攻撃モーション(プレイヤーが敵側へ軽く踏み込む)
+    this.tweens.add({ targets: this.player, scale: 1.15, duration: 60, yoyo: true })
     const dmg = Phaser.Math.Between(8, 14)
     target.hp -= dmg
     this.showDamage(target.x, target.y, dmg)
     this.tweens.add({ targets: target, scale: 1.25, duration: 60, yoyo: true })
 
     if (target.hp <= 0) this.killSlime(target)
+  }
+
+  // 敵の攻撃：接触中の敵が一定間隔でこちらにダメージ
+  handleEnemyAttacks(time) {
+    this.slimes.getChildren().forEach((s) => {
+      if (!s || !s.active) return
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, s.x, s.y)
+      if (d > ENEMY_ATTACK_RANGE) return
+      if (time - (s.lastAttack || 0) < ENEMY_ATTACK_INTERVAL) return
+      s.lastAttack = time
+      const dmg = Phaser.Math.Between(4, 8)
+      this.damagePlayer(dmg)
+    }, this)
+  }
+
+  damagePlayer(dmg) {
+    if (this.dead) return
+    this.state.hp = Math.max(0, this.state.hp - dmg)
+    this.showFloatText(this.player.x, this.player.y - 18, String(dmg), '#ff6b6b', 14)
+    // 被弾フラッシュ(赤く明滅)
+    this.player.setTintFill(0xff3b3b)
+    this.time.delayedCall(110, () => { if (this.player) this.player.clearTint() })
+    this.emitHud()
+    if (this.state.hp <= 0) this.onDeath()
+  }
+
+  onDeath() {
+    this.dead = true
+    this.player.setVelocity(0, 0)
+    this.showFloatText(this.player.x, this.player.y - 30, 'やられた…', '#ff5555', 22)
+    this.cameras.main.shake(250, 0.01)
+    this.time.delayedCall(1500, () => {
+      // 復活：HP全回復・中央へ戻る・コンボリセット
+      this.dead = false
+      this.state.hp = this.state.hpMax
+      this.combo = 0
+      this.player.setPosition(800, 600).clearTint()
+      this.emitHud()
+    })
   }
 
   killSlime(s) {

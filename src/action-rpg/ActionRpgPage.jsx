@@ -59,7 +59,7 @@ export default function ActionRpgPage() {
 
       {/* 操作ヒント */}
       <div style={{ position: 'absolute', bottom: 10, width: '100%', textAlign: 'center', fontFamily: 'monospace', fontSize: 11, color: '#9fb', textShadow: '0 1px 2px #000', pointerEvents: 'none' }}>
-        WASD / 矢印キー or 画面をタップ＆ドラッグで移動 ・ 敵に近づくと自動攻撃
+        移動: WASD/矢印 or ドラッグ ・ 攻撃: 敵の近くでタップ/クリック or スペースキー
       </div>
     </div>
   )
