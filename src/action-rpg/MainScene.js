@@ -45,7 +45,14 @@ export default class MainScene extends Phaser.Scene {
     // public/ に置いた画像があれば使う。無くてもエラーにせず四角/丸で動かす。
     // key(name) → 実ファイルの対応。差し替えるときはここを変える。
     this.missingArt = new Set()
-    const ART_FILES = { hero: '/syoumen.png', slime: '/2dsuraimu.png', grass: '/2dheigen.png' }
+    const ART_FILES = {
+      hero: '/syoumen.png',        // 下(正面)
+      up: '/4houmenusiro.png',     // 上(後ろ姿)
+      left: '/4houmenhidari.png',  // 左
+      right: '/4houmenmigi.png',   // 右
+      slime: '/2dsuraimu.png',
+      grass: '/2dheigen.png',
+    }
     for (const [name, path] of Object.entries(ART_FILES)) {
       this.load.image(`${name}_png`, path)
     }
@@ -66,7 +73,7 @@ export default class MainScene extends Phaser.Scene {
 
   // hero/slime の白背景を透過に(縁から繋がった白だけをフラッドフィルで抜く)
   prepareArt() {
-    for (const name of ['hero', 'slime']) {
+    for (const name of ['hero', 'up', 'left', 'right', 'slime']) {
       const key = `${name}_png`
       if (!this.textures.exists(key) || this.missingArt.has(key)) continue
       try {
@@ -128,6 +135,15 @@ export default class MainScene extends Phaser.Scene {
     this.hero.setOrigin(0.5, 0.62) // 足元を基準にすると接地感が出る
     this.walkPhase = 0
     this.lunge = { x: 0, y: 0 } // 攻撃の踏み込みオフセット(tweenで0に戻す)
+
+    // 4方向テクスチャ。3方向の画像が揃っていれば向きで差し替える(無ければ正面のみ＝flip運用)
+    this.dirKeys = {
+      down: this.spriteKey('hero'), up: this.spriteKey('up'),
+      left: this.spriteKey('left'), right: this.spriteKey('right'),
+    }
+    this.hasDir = ['up', 'left', 'right'].every(
+      (n) => this.textures.exists(`${n}_png`) && !this.missingArt.has(`${n}_png`))
+    this.curDir = 'down'
 
     // --- 敵(スライム) ---
     this.slimes = this.physics.add.group()
@@ -269,11 +285,28 @@ export default class MainScene extends Phaser.Scene {
     if (!this.dead && speed > 5) {
       this.walkPhase += delta * 0.02
       bobY = -Math.abs(Math.sin(this.walkPhase)) * 6 // 接地→ジャンプの上下動
+      // 移動方向で見た目の向きを切り替え
+      if (this.hasDir) this.setHeroDir(this.dirFromAngle(Math.atan2(v.y, v.x)))
     } else {
       this.walkPhase = 0
     }
     this.hero.x = this.player.x + this.lunge.x
     this.hero.y = this.player.y + this.lunge.y + bobY
+  }
+
+  // 角度→4方向(down/up/left/right)。0=右, +y=下。
+  dirFromAngle(a) {
+    const c = Math.cos(a), s = Math.sin(a)
+    if (Math.abs(c) > Math.abs(s)) return c > 0 ? 'right' : 'left'
+    return s > 0 ? 'down' : 'up'
+  }
+
+  // 向きが変わった時だけテクスチャ差し替え(毎フレームsetTextureは無駄なので)
+  setHeroDir(dir) {
+    if (!this.hasDir || dir === this.curDir) return
+    this.curDir = dir
+    this.hero.setTexture(this.dirKeys[dir]).setFlipX(false)
+    this.hero.setDisplaySize(64, 64) // テクスチャごとにサイズが違っても64pxに揃える
   }
 
   handleMovement() {
@@ -363,8 +396,9 @@ export default class MainScene extends Phaser.Scene {
 
   // 攻撃モーション：向く→前に踏み込む→キュッと伸び→斬撃エフェクト
   playAttackFx(ang) {
-    // 左右の向き(右向き素材を基準に、左ならフリップ)
-    if (Math.abs(Math.cos(ang)) > 0.2) this.hero.setFlipX(Math.cos(ang) < 0)
+    // 攻撃方向に向く：4方向画像があればテクスチャ差し替え、無ければ左右フリップ
+    if (this.hasDir) this.setHeroDir(this.dirFromAngle(ang))
+    else if (Math.abs(Math.cos(ang)) > 0.2) this.hero.setFlipX(Math.cos(ang) < 0)
 
     // 踏み込み：見た目を前方へグイッと出して戻す(物理と分離したので自由に動かせる)
     this.tweens.killTweensOf(this.lunge)
