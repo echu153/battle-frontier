@@ -212,7 +212,7 @@ export default class MainScene extends Phaser.Scene {
     this.state.hp = Math.max(0, this.state.hp - dmg)
     this.showFloatText(this.player.x, this.player.y - 18, String(dmg), '#ff6b6b', 14)
     // 被弾フラッシュ(赤く明滅)
-    this.player.setTintFill(0xff3b3b)
+    this.player.setTint(0xff3b3b).setTintMode(Phaser.TintModes.FILL)
     this.time.delayedCall(110, () => { if (this.player) this.player.clearTint() })
     this.emitHud()
     if (this.state.hp <= 0) this.onDeath()

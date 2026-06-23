@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Phaser from 'phaser'
 import MainScene from './MainScene'
 
 // アクションRPG プロト：Phaserのcanvas + ReactのHUD。
 // 役割分担 → ゲーム本体=Phaser / UI(バー・コンボ表示)=React。
 export default function ActionRpgPage() {
+  const navigate = useNavigate()
   const containerRef = useRef(null)
   const gameRef = useRef(null)
   const [hud, setHud] = useState({ level: 1, exp: 0, expNext: 20, hp: 100, hpMax: 100, combo: 0 })
@@ -38,6 +40,9 @@ export default function ActionRpgPage() {
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
+      {/* 街に戻る */}
+      <button onClick={() => navigate('/game')} style={{ position: 'absolute', top: 12, right: 12, padding: '8px 14px', background: 'rgba(0,16,32,0.85)', border: '1px solid #2b6cff', color: '#9cf', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, borderRadius: 4 }}>← 街に戻る</button>
 
       {/* === React製HUD（canvasの上に重ねる） === */}
       <div style={{ position: 'absolute', top: 12, left: 12, fontFamily: 'monospace', color: '#fff', pointerEvents: 'none', width: 220 }}>

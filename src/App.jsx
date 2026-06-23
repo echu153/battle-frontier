@@ -211,7 +211,7 @@ function App() {
         <Route path="/territory" element={session ? <Territory /> : <Navigate to="/login" />} />
         <Route path="/marketplace" element={session ? <Marketplace /> : <Navigate to="/login" />} />
         <Route path="/event" element={session ? <Event /> : <Navigate to="/login" />} />
-        <Route path="/action-rpg" element={<ActionRpg />} />
+        <Route path="/action-rpg" element={session ? <ActionRpg /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
       </Suspense>
