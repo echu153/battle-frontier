@@ -11,6 +11,29 @@ export const WEAPON_TYPE_GROUP = {
 }
 export const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'
 
+// ===== 武器種ごとの固有能力（装備中の武器スロットにのみ適用・全レア共通） =====
+// atkPct/matkPct=攻撃/特殊攻撃%上乗せ, hit=命中±, evasion=回避%, defPen/mdefPen=防御/特防貫通%,
+// dmgMult=与ダメージ倍率(0.10で+10%), mpCostMult=消費MP倍率(-0.10で-10%)
+// ※ wand/rod は staff に統合済みのため個別エントリ不要
+export const WEAPON_TYPE_PASSIVE = {
+  sword:   { atkPct: 5 },                 // 剣: 攻撃+5%
+  katana:  { atkPct: 5 },                 // 刀: 攻撃+5%
+  knuckle: { atkPct: 5 },                 // 格闘: 攻撃+5%
+  gun:     { atkPct: 3, matkPct: 3 },     // 銃: 攻撃/特殊攻撃+3%
+  staff:   { matkPct: 5 },                // 杖: 特殊攻撃+5%
+  dagger:  { evasion: 3 },                // 短剣: 回避+3%
+  bow:     { hit: 5 },                    // 弓: 命中+5%
+  axe:     { hit: -10, dmgMult: 0.10 },   // 斧: 与ダメ+10%・命中-10%
+  spear:   { defPen: 5 },                 // 槍: 防御貫通+5%
+  orb:     { mdefPen: 5 },                // オーブ: 特殊防御貫通+5%
+  tome:    { mpCostMult: -0.10 },         // 魔導書: 消費MP-10%
+}
+export const WEAPON_TYPE_PASSIVE_LABEL = {
+  sword:'攻撃+5%', katana:'攻撃+5%', knuckle:'攻撃+5%', gun:'攻撃・特殊攻撃+3%',
+  staff:'特殊攻撃+5%', dagger:'回避+3%', bow:'命中+5%', axe:'与ダメ+10%・命中-10%',
+  spear:'防御貫通+5%', orb:'特殊防御貫通+5%', tome:'消費MP-10%',
+}
+
 export const ARTIFACT_BASE_NAMES_SET = new Set([
   '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
   '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたオーブ'
@@ -129,6 +152,8 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
   let critResist = 0
   let ondmgSpdPct = 0     // 雷鋼の機神鎧: 被ダメージ時に素早さを一定時間アップ（%）
   let extraParaChance = 0 // 蒼雷の短刃: 追加行動の攻撃ヒット時に相手を麻痺させる確率（%）
+  let weaponDmgMult = 1   // 武器種固有: 与ダメージ倍率（斧+10%など）
+  let weaponMpCostMult = 1// 武器種固有: 消費MP倍率（魔導書-10%など）
   const gemAcc = { bonus, defPen:0, mdefPen:0, critDmg:0, critBonus:0, critResist:0, hitBonus:0, evasionBonus:0 }
   for (const item of equipment) {
     if (!item.equipped || !item.weapons) continue
@@ -159,6 +184,18 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     if (item.bonus_effect === 'ondmg_spd_up_5_2t') ondmgSpdPct += 5      // 雷鋼の機神鎧: 被ダメ時 2T素早さ+5%
     if (item.slot === 'weapon' && item.bonus_effect === 'extra_hit_paralysis_30') extraParaChance += 30  // 蒼雷の短刃
     if (item.slot === 'weapon') {
+      // 武器種ごとの固有能力（装備中の武器のみ）
+      const wp = WEAPON_TYPE_PASSIVE[w.weapon_type]
+      if (wp) {
+        atkPct       += wp.atkPct  || 0
+        matkPct      += wp.matkPct || 0
+        hitBonus     += wp.hit     || 0
+        evasionBonus += wp.evasion || 0
+        gemAcc.defPen  += wp.defPen  || 0
+        gemAcc.mdefPen += wp.mdefPen || 0
+        if (wp.dmgMult)    weaponDmgMult    *= 1 + wp.dmgMult
+        if (wp.mpCostMult) weaponMpCostMult *= 1 + wp.mpCostMult
+      }
       const prof = proficiency.find(p => p.equipment_id === item.id)
       if (prof) {
         const pb = calcProfBonus(prof, w)
@@ -210,6 +247,8 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     critDmg: gemAcc.critDmg/100,
     ondmgSpdUp: ondmgSpdPct > 0 ? 1 + ondmgSpdPct / 100 : 0, // 被ダメ時に付与する素早さ倍率（例:1.05）。0=効果なし
     extraParaChance: Math.min(100, extraParaChance), // 追加行動ヒット時の麻痺付与率（%）
+    weaponDmgMult,   // 武器種固有の与ダメージ倍率（斧=1.10など）
+    weaponMpCostMult,// 武器種固有の消費MP倍率（魔導書=0.90など）
   }
 }
 
@@ -298,6 +337,16 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
     cm.critBonus    += item.bonus_crit    || 0
     cm.evasionBonus += item.bonus_evasion || 0
     if (item.slot === 'weapon') {
+      // 武器種ごとの固有能力（calcEffectiveStats と一致させる）
+      const wp = WEAPON_TYPE_PASSIVE[w.weapon_type]
+      if (wp) {
+        atkPct  += wp.atkPct  || 0
+        matkPct += wp.matkPct || 0
+        cm.hitBonus     += wp.hit     || 0
+        cm.evasionBonus += wp.evasion || 0
+        cm.defPen  += wp.defPen  || 0
+        cm.mdefPen += wp.mdefPen || 0
+      }
       const pr = proficiency.find(p => p.equipment_id === item.id)
       if (pr) {
         const pb = calcProfBonus(pr, w)

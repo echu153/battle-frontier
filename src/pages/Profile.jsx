@@ -74,7 +74,7 @@ const getEffectLabel = (effect) => {
     'open_mdef_10_2t':'【開幕2T・特殊防御力+10%】','open_mdef_20_1t':'【開幕1T・特殊防御力+20%】',
     'open_spd_10_2t':'【開幕2T・素早さ+10%】','open_spd_20_1t':'【開幕1T・素早さ+20%】',
     'delay_heal_10':'【3T後・HP10%回復】','regen_heal_5_3t':'【開幕3T・毎T HP5%回復】',
-    'artifact':'【消費MP2倍・与ダメージ1.2倍】',
+    'artifact':'【消費MP2倍・スキルダメージ1.3倍】',
     'hit_spd_down_5':'【攻撃ヒット時・対象の素早さ-5%】',
     'hit_heal_down_10_2t':'【攻撃ヒット時・対象の回復力2T-10%】',
     'mdef_pen_5':'【魔法防御貫通+5%】',

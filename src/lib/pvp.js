@@ -91,10 +91,10 @@ function buildSide(input, key) {
 
   const passiveCritBonus    = hasShingan ? 5 : 0
   const passiveCritDmgBonus = (hasOnmi && pe('暗殺者')) ? 0.2 : 0
-  const passiveDmgMult      = (hasShingan ? (pe('侍') ? 1.10 : 1.05) : 1.0) * (hasBerserk ? (pe('狂戦士') ? 1.20 : 1.15) : 1.0) * (hasKakushin ? (pe('異端審問官') ? 1.15 : 1.1) : 1.0) * (hasRokkan ? (pe('サイキッカー') ? 1.10 : 1.05) : 1.0)
+  const passiveDmgMult      = (hasShingan ? (pe('侍') ? 1.10 : 1.05) : 1.0) * (hasBerserk ? (pe('狂戦士') ? 1.20 : 1.15) : 1.0) * (hasKakushin ? (pe('異端審問官') ? 1.15 : 1.1) : 1.0) * (hasRokkan ? (pe('サイキッカー') ? 1.10 : 1.05) : 1.0) * (eff.weaponDmgMult || 1)
   const passiveHealMult     = (hasShinkoka ? (pe('聖職者') ? 1.4 : 1.2) : 1.0) * (hasKakushin ? 0.7 : 1.0)
   const passiveMatkMult     = hasShinkoka ? 1.1 : 1.0
-  const passiveMpCostMult   = hasTenki ? 0.9 : 1.0
+  const passiveMpCostMult   = (hasTenki ? 0.9 : 1.0) * (eff.weaponMpCostMult || 1)
   const passiveMatkMultTenki = hasTenki ? (pe('賢者') ? 1.3 : 1.1) : 1.0
   const passiveHitBonus     = (hasRokkan ? 5 : 0) + (hasSeimitsu ? 5 : 0) + ((hasTakaNoMe && pe('狩人')) ? 10 : 0)
   const passiveHealReflect  = (hasShinkoka && pe('聖職者'))
@@ -419,7 +419,7 @@ function doAttack(att, def, isExtra, ctx) {
     const baseDmg = Math.max(1, Math.floor(baseAtk * ratioBaseAtk / Math.max(1, ratioBaseAtk + eDefVal)) + Math.floor(Math.random() * 4))
     const reduceMult = defReduceMult(att.isMagical)
     const breederDmgMult = attBuffs.breederDmgUp?.turns > 0 ? attBuffs.breederDmgUp.rate : 1.0
-    const finalDmg = Math.floor(baseDmg * 0.7 * critMult * (att.isArtifact ? 1.2 : 1.0) * att.passiveDmgMult * reduceMult * breederDmgMult * PVP.dmgMult * (0.9 + Math.random() * 0.2))
+    const finalDmg = Math.floor(baseDmg * 0.7 * critMult * (att.isArtifact ? 1.3 : 1.0) * att.passiveDmgMult * reduceMult * breederDmgMult * PVP.dmgMult * (0.9 + Math.random() * 0.2))
     dealToDef(finalDmg)
     const critText = isCrit ? '💥クリティカル！ ' : ''
     logs.push({ text: `${prefix}${critText}攻撃！ ${enemyName}に${finalDmg}ダメージ！`, color: '#ffcc00' })

@@ -140,11 +140,11 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
 
   const passiveCritBonus  = hasShingan ? 5 : 0
   const passiveCritDmgBonus = (hasOnmi && pe('暗殺者')) ? 0.2 : 0
-  const passiveDmgMult    = (hasShingan ? (pe('侍')?1.10:1.05) : 1.0) * (hasBerserk ? (pe('狂戦士')?1.20:1.15) : 1.0) * (hasKakushin ? (pe('異端審問官')?1.15:1.1) : 1.0) * (hasRokkan ? (pe('サイキッカー')?1.10:1.05) : 1.0)
+  const passiveDmgMult    = (hasShingan ? (pe('侍')?1.10:1.05) : 1.0) * (hasBerserk ? (pe('狂戦士')?1.20:1.15) : 1.0) * (hasKakushin ? (pe('異端審問官')?1.15:1.1) : 1.0) * (hasRokkan ? (pe('サイキッカー')?1.10:1.05) : 1.0) * (eff.weaponDmgMult || 1)
   const passiveHealMult   = (hasShinkoka ? (pe('聖職者')?1.4:1.2) : 1.0) * (hasKakushin ? 0.7 : 1.0)
   const passiveHealReflect = (hasShinkoka && pe('聖職者'))
   const passiveMatkMult   = hasShinkoka ? 1.1 : 1.0
-  const passiveMpCostMult = hasTenki ? 0.9 : 1.0
+  const passiveMpCostMult = (hasTenki ? 0.9 : 1.0) * (eff.weaponMpCostMult || 1)
   const passiveMatkMultTenki = hasTenki ? (pe('賢者')?1.3:1.1) : 1.0
   const passiveHitBonus   = (hasRokkan ? 5 : 0) + (hasSeimitsu ? 5 : 0) + ((hasTakaNoMe && pe('狩人')) ? 10 : 0)
   const effectiveSpdForCalc = hasTakaNoMe ? Math.floor(eff.spd * 1.2) : eff.spd
@@ -309,7 +309,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         const eDef = isMagical ? BOSS_MDEF : BOSS_DEF
         const baseDmg = Math.max(1, Math.floor(baseAtk * baseAtk / Math.max(1, baseAtk + eDef)) + Math.floor(Math.random() * 4))
         const tosoMult = (hasTosoHonno && playerHp <= profile.hp_max * 0.5) ? (pe('体術師')?1.25:1.1) : 1.0
-        let finalDmg = Math.floor(baseDmg * critMult * (isArtifact ? 1.2 : 1.0) * passiveDmgMult * tosoMult * (0.9 + Math.random() * 0.2))
+        let finalDmg = Math.floor(baseDmg * critMult * (isArtifact ? 1.3 : 1.0) * passiveDmgMult * tosoMult * (0.9 + Math.random() * 0.2))
         finalDmg = compressRaidDmg(Math.floor(finalDmg * weakMult(!isMagical))) // 弱点補正→高火力頭打ち・低火力底上げ
         if (!playerBuffs.healBlock?.turns && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
           const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)

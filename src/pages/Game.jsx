@@ -663,7 +663,7 @@ export const applyEquipmentEffects = (equipment, profile, playerBuffs, logs) => 
 export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkill = '') => {
   const result = { dmg:0, heal:0, log:'', newEnemyBuffs:{ ...enemyBuffs }, newPlayerBuffs:{ ...playerBuffs }, selfDmg:0, bonusCritRate:0 }
   const randMult = (min, max) => min + Math.random()*(max-min)
-  const am = isArtifact ? 1.2 : 1.0
+  const am = isArtifact ? 1.3 : 1.0
   // 再修練強化：現在クラスがそのスキルのクラスと一致する場合のみ、再修練回数ぶん段階強化が乗る
   const rt = (profile?.class === skill?.class_name) ? ((profile?.retraining||{})[skill?.class_name]||0) : 0
   // 敵DEF・MDEF の低い方で軽減する計算（ハイブリッドスキル用）
@@ -2677,10 +2677,10 @@ export default function Game() {
 
     const passiveCritBonus   = (hasSeimitsu ? (pe('魔銃士')?10:5) : 0)
     const passiveCritDmgBonus = (hasOnmi && pe('暗殺者')) ? 0.2 : 0  // 隠身強化：クリ威力+20%
-    const passiveDmgMult     = (hasShingan ? (pe('侍')?1.20:1.10) : 1.0) * (hasBerserk ? (pe('狂戦士')?1.30:1.15) : 1.0) * (hasKakushin ? (pe('異端審問官')?1.25:1.20) : 1.0) * (hasRokkan ? (pe('サイキッカー')?1.15:1.05) : 1.0)
+    const passiveDmgMult     = (hasShingan ? (pe('侍')?1.20:1.10) : 1.0) * (hasBerserk ? (pe('狂戦士')?1.30:1.15) : 1.0) * (hasKakushin ? (pe('異端審問官')?1.25:1.20) : 1.0) * (hasRokkan ? (pe('サイキッカー')?1.15:1.05) : 1.0) * (eff.weaponDmgMult || 1)
     const passiveHealMult    = (hasShinkoka ? 1.5 : 1.0) * (hasKakushin ? (pe('異端審問官')?0.7:0.5) : 1.0)
     const passiveMatkMult    = hasShinkoka ? 1.1 : 1.0
-    const passiveMpCostMult  = hasTenki ? 0.7 : 1.0
+    const passiveMpCostMult  = (hasTenki ? 0.7 : 1.0) * (eff.weaponMpCostMult || 1)
     const passiveMatkMultTenki = hasTenki ? (pe('賢者')?1.3:1.2) : 1.0
     const passiveHitBonus    = (hasRokkan ? 5 : 0) + (hasSeimitsu ? (pe('魔銃士')?10:5) : 0) + (hasTakaNoMe ? (pe('狩人')?25:15) : 0)
     const passiveHealReflect = (hasShinkoka && pe('聖職者'))  // 神聖加護強化：回復量の50%を敵に
@@ -3003,7 +3003,7 @@ export default function Game() {
         const baseDmg = Math.max(1, Math.floor(baseAtk*baseAtk/Math.max(1,baseAtk+eDefVal))+Math.floor(Math.random()*4))
         const enemyDmgReduceMult2 = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
         const breederDmgMult = playerBuffs.breederDmgUp?.turns > 0 ? playerBuffs.breederDmgUp.rate : 1.0
-        let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.2:1.0)*passiveDmgMult*enemyDmgReduceMult2*breederDmgMult*(0.9+Math.random()*0.2))
+        let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*enemyDmgReduceMult2*breederDmgMult*(0.9+Math.random()*0.2))
         if (enemy.isPapia) finalDmg = 1
         enemyHp -= finalDmg
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
