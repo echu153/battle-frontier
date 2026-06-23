@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { PET_ITEMS, bagCapacity, petItemImg } from '../constants/pets'
+import { PET_ITEMS, bagCapacity, petItemImg, SCROLL_KEYS, getScroll } from '../constants/pets'
 
 // ダンジョンに持っていける（持ち物へ移せる）アイテム
-const DUNGEON_KEYS = new Set(['escape', 'onigiri', 'konomi'])
+// 倉庫から「持ち物」へ取り出せる＝ダンジョンで使う物。スキルの書(SCROLL_KEYS)も対象に含める。
+const DUNGEON_KEYS = new Set(['escape', 'onigiri', 'konomi', ...SCROLL_KEYS])
 
 export default function PetStorage() {
   const nav = useNavigate()
@@ -117,7 +118,7 @@ export default function PetStorage() {
 }
 
 function ItemRow({ k, qty, children }) {
-  const def = PET_ITEMS[k]
+  const def = PET_ITEMS[k] || getScroll(k)  // スキルの書はPET_ITEMSに無いのでSCROLLSから補完
   const img = petItemImg(k)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #224466', background: '#000a18', padding: '8px 10px' }}>
