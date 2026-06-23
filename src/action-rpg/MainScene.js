@@ -13,7 +13,8 @@ const PLAYER_SPEED = 160       // プレイヤー移動速度(px/秒)
 const ATTACK_RANGE = 60        // 攻撃が届く距離
 const ATTACK_INTERVAL = 600    // 攻撃間隔(ms)＝クールタイム
 const COMBO_TIMEOUT = 3000     // この時間倒さないとコンボ途切れる(ms)
-const SLIME_COUNT = 8
+const SLIME_COUNT = 14
+const AUTO_ENGAGE_RANGE = 700  // オート時にこの距離内の敵だけ追う(遠い敵は無視)
 
 const ENEMY_ATTACK_RANGE = 38   // 敵がこちらを殴れる距離(接触)
 const ENEMY_ATTACK_INTERVAL = 900 // 敵の攻撃間隔(ms)
@@ -329,7 +330,7 @@ export default class MainScene extends Phaser.Scene {
     this.player.setVelocity((vx / len) * PLAYER_SPEED, (vy / len) * PLAYER_SPEED)
   }
 
-  // オート戦闘：一番近い敵へ接近し、射程に入ったら自動攻撃
+  // オート戦闘：一定距離内で一番近い敵へ接近し、射程に入ったら自動攻撃
   handleAuto() {
     let target = null, best = Infinity
     this.slimes.getChildren().forEach((s) => {
@@ -337,7 +338,8 @@ export default class MainScene extends Phaser.Scene {
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, s.x, s.y)
       if (d < best) { best = d; target = s }
     })
-    if (!target) { this.player.setVelocity(0, 0); return }
+    // 近くに敵がいなければ追わずその場待機(マップ端まで走って壁にこすりつくのを防ぐ)
+    if (!target || best > AUTO_ENGAGE_RANGE) { this.player.setVelocity(0, 0); return }
     const ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, target.x, target.y)
     this.facingAngle = ang
     if (best > ATTACK_RANGE - 8) {
@@ -405,9 +407,8 @@ export default class MainScene extends Phaser.Scene {
     this.lunge.x = Math.cos(ang) * 16
     this.lunge.y = Math.sin(ang) * 16
     this.tweens.add({ targets: this.lunge, x: 0, y: 0, duration: 180, ease: 'Back.easeOut' })
-
-    // 縦に伸びる踏み込みっぽいスケール(相対=素材スケールに依存しない)
-    this.tweens.add({ targets: this.hero, scaleX: '*=1.18', scaleY: '*=0.9', duration: 70, yoyo: true })
+    // ※以前あったスケール伸び演出は、向き切替のsetDisplaySizeと競合してサイズがズレる
+    //   バグの原因だったので撤去。迫力は踏み込み(lunge)＋斬撃で表現する。
 
     // 斬撃の三日月：前方に大きく出して、振り抜くように回転＋フェード
     const sx = this.player.x + Math.cos(ang) * 30
