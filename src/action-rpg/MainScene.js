@@ -277,9 +277,9 @@ export default class MainScene extends Phaser.Scene {
     if (!this.dead && speed > 5) {
       this.walkPhase += delta * 0.02
       bobY = -Math.abs(Math.sin(this.walkPhase)) * 6 // 接地→ジャンプの上下動
-      // 横移動の向きで左右反転(右=反転なし/左=反転)。ほぼ真上下なら現状維持。
-      if (v.x > 5) this.hero.setFlipX(false)
-      else if (v.x < -5) this.hero.setFlipX(true)
+      // 横移動の向きで左右反転(右=反転/左=反転なし)。ほぼ真上下なら現状維持。
+      if (v.x > 5) this.hero.setFlipX(true)
+      else if (v.x < -5) this.hero.setFlipX(false)
     } else {
       this.walkPhase = 0
     }
@@ -376,7 +376,7 @@ export default class MainScene extends Phaser.Scene {
   // 攻撃モーション：向く→前に踏み込む→キュッと伸び→斬撃エフェクト
   playAttackFx(ang) {
     // 攻撃方向に向く(横成分があれば左右反転)
-    if (Math.abs(Math.cos(ang)) > 0.2) this.hero.setFlipX(Math.cos(ang) < 0)
+    if (Math.abs(Math.cos(ang)) > 0.2) this.hero.setFlipX(Math.cos(ang) > 0)
 
     // 踏み込み：見た目を前方へグイッと出して戻す(物理と分離したので自由に動かせる)
     this.tweens.killTweensOf(this.lunge)
