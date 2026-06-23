@@ -826,7 +826,10 @@ export default function Smithy() {
                     // 再評価=値のみ再抽選(要スロット)、再鑑定=全再抽選(前提なし)
                     const canEval = !isArtifactBase && !!item.bonus_slots_json && evalOwned >= needed
                     const canApp = !isArtifactBase && appOwned >= needed
-                    const hasBonus = item.bonus_atk>0||item.bonus_def>0||item.bonus_matk>0||item.bonus_mdef>0||item.bonus_spd>0||item.bonus_hp>0||item.bonus_mp>0||(item.bonus_crit||0)>0||(item.bonus_evasion||0)>0||(item.bonus_hit||0)>0||(item.bonus_effect&&item.bonus_effect!=='artifact')
+                    // bonus_effect は「再評価ボーナス(EFFECT_POOL)」と「固定の特殊能力(レイド/アーティファクト)」が同居。表示を分ける。
+                    const slotEffect = item.bonus_effect && EFFECT_POOL.includes(item.bonus_effect) ? item.bonus_effect : null
+                    const fixedAbility = item.bonus_effect && !EFFECT_POOL.includes(item.bonus_effect) ? item.bonus_effect : null
+                    const hasBonus = item.bonus_atk>0||item.bonus_def>0||item.bonus_matk>0||item.bonus_mdef>0||item.bonus_spd>0||item.bonus_hp>0||item.bonus_mp>0||(item.bonus_crit||0)>0||(item.bonus_evasion||0)>0||(item.bonus_hit||0)>0||!!slotEffect
                     return (
                       <div key={item.id} style={{ border:'1px solid #002244', background:'#001028', padding:'10px', marginBottom:'6px', opacity: isArtifactBase ? 0.5 : 1 }}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
@@ -862,10 +865,13 @@ export default function Smithy() {
                             {(item.bonus_crit||0)>0 && ` クリティカル率+${item.bonus_crit}%`}
                             {(item.bonus_evasion||0)>0 && ` 回避率+${item.bonus_evasion}%`}
                             {(item.bonus_hit||0)>0 && ` 命中率+${item.bonus_hit}%`}
-                            {item.bonus_effect && item.bonus_effect !== 'artifact' && ` ${getEffectLabel(item.bonus_effect)}`}
+                            {slotEffect && ` ${getEffectLabel(slotEffect)}`}
                           </div>
                         ) : (
                           !isArtifactBase && <div style={{fontSize:'10px',color:'#334455'}}>ボーナスなし（再鑑定で付与）</div>
+                        )}
+                        {fixedAbility && (
+                          <div style={{ fontSize:'10px', color:'#66ccff', marginTop:'3px' }}>特殊能力: {getEffectLabel(fixedAbility)}</div>
                         )}
                       </div>
                     )
