@@ -47,7 +47,7 @@ export default function ActionRpgPage() {
       <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', alignItems: 'flex-start', gap: 8, fontFamily: 'monospace', color: '#fff', pointerEvents: 'none' }}>
         {/* 円形ポートレート＋Lvバッジ */}
         <div style={{ position: 'relative', width: 46, height: 46, flexShrink: 0 }}>
-          <div style={{ width: 46, height: 46, borderRadius: '50%', border: '2px solid #cfe', background: "#243 url('/syoumen.png') center/cover no-repeat", boxShadow: '0 1px 3px rgba(0,0,0,0.6)' }} />
+          <div style={{ width: 46, height: 46, borderRadius: '50%', border: '2px solid #cfe', background: "#243 url('/hero_front.webp') center/cover no-repeat", boxShadow: '0 1px 3px rgba(0,0,0,0.6)' }} />
           <div style={{ position: 'absolute', left: -4, top: -4, minWidth: 18, height: 18, padding: '0 3px', borderRadius: 9, background: '#1a3a6a', border: '1px solid #6bf', color: '#cfe', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{hud.level}</div>
         </div>
         <div style={{ width: 180 }}>
