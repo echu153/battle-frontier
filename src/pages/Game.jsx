@@ -1266,14 +1266,15 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
         result.newPlayerBuffs.spdUp = { turns:3, rate:(rt>=3?1.4:1.3) }
         result.log = `🌪 風精召喚：シルフ！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 3ターンの間、素早さが上昇！`
       } else if (tier === 1) {
+        // サイキッカー同様：特攻参照だが物理攻撃（敵DEF/MDEFの低い方で軽減）
         result.dmg = Math.floor(eff.matk*(1.7+(rt>=4?0.1:0))*am)
-        result.physScaleMatk = true
+        result.useMinDef = true
         const bleed = Math.random()*100 < 30
         if (bleed) { const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 } }
         result.log = `🌪 翠嵐の刃！ ${enemy.name}に${result.dmg}の物理ダメージ！${bleed?` ${enemy.name}は出血した！`:''}`
       } else {
         result.dmg = Math.floor(eff.matk*(2.0+(rt>=5?0.2:0))*am)
-        result.physScaleMatk = true
+        result.useMinDef = true
         const b = enemyBuffs.bleed; result.newEnemyBuffs.bleed = { stacks:Math.min(5,(b?.stacks||0)+1), lastTurn:0 }
         result.log = `🌪 テンペストエッジ！ ${enemy.name}に${result.dmg}の物理ダメージ！ ${enemy.name}は出血した！`
       }
