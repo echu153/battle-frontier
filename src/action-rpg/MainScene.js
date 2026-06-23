@@ -115,14 +115,18 @@ export default class MainScene extends Phaser.Scene {
     this.drawGround()
 
     // --- プレイヤー ---
+    // 物理ボディ(透明)と見た目(this.hero)を分離。これで見た目を物理に縛られず
+    // 自由にバウンド/踏み込み/スケールできる(=アクション感を出せる)。
     const heroKey = this.spriteKey('hero')
-    this.player = this.physics.add.image(800, 600, heroKey)
-    this.player.setDepth(10).setCollideWorldBounds(true)
-    if (heroKey !== 'hero') {
-      // 高解像度の1枚絵は当たり判定用に小さく表示(後でドット絵スプライトに差し替え予定)
-      this.player.setDisplaySize(56, 56)
-      this.player.body.setSize(this.player.width * 0.4, this.player.height * 0.4, true)
-    }
+    this.player = this.physics.add.image(800, 600, heroKey).setVisible(false)
+    this.player.setCollideWorldBounds(true)
+    this.player.body.setSize(24, 24, true) // 足元の当たり判定(テクスチャ中央に小さく)
+
+    this.hero = this.add.image(800, 600, heroKey).setDepth(10)
+    this.hero.setDisplaySize(64, 64)
+    this.hero.setOrigin(0.5, 0.62) // 足元を基準にすると接地感が出る
+    this.walkPhase = 0
+    this.lunge = { x: 0, y: 0 } // 攻撃の踏み込みオフセット(tweenで0に戻す)
 
     // --- 敵(スライム) ---
     this.slimes = this.physics.add.group()
@@ -207,11 +211,18 @@ export default class MainScene extends Phaser.Scene {
     s.expReward = 15
     // ゆっくり徘徊
     s.wanderTimer = 0
+    // ぷるぷる(常時のスクワッシュ＆ストレッチでスライムらしさ)
+    s.setOrigin(0.5, 0.85)
+    s.bounce = this.tweens.add({
+      targets: s, scaleY: s.scaleY * 0.82, scaleX: s.scaleX * 1.08,
+      duration: Phaser.Math.Between(420, 620), yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+    })
   }
 
   update(time, delta) {
     // ミニマップ用の座標を間引いて配信(毎フレームは重いので150ms毎)
     if (time - this.lastMapEmit > 150) { this.lastMapEmit = time; this.emitMap() }
+    this.updateHeroVisual(delta) // 見た目を物理ボディに追従＋歩行バウンド
     if (this.dead) return
     this.handleMovement()
     this.handleWander(delta)
@@ -242,6 +253,23 @@ export default class MainScene extends Phaser.Scene {
       player: { x: Math.round(this.player.x), y: Math.round(this.player.y) },
       enemies,
     } }))
+  }
+
+  // 見た目スプライトを物理ボディへ追従。移動中はぴょこぴょこ跳ねる。
+  // ※回転(angle)は攻撃/被弾/死亡のtweenが持つので、ここでは触らない(競合回避)。
+  updateHeroVisual(delta) {
+    if (!this.hero || !this.player) return
+    const v = this.player.body.velocity
+    const speed = Math.hypot(v.x, v.y)
+    let bobY = 0
+    if (!this.dead && speed > 5) {
+      this.walkPhase += delta * 0.02
+      bobY = -Math.abs(Math.sin(this.walkPhase)) * 6 // 接地→ジャンプの上下動
+    } else {
+      this.walkPhase = 0
+    }
+    this.hero.x = this.player.x + this.lunge.x
+    this.hero.y = this.player.y + this.lunge.y + bobY
   }
 
   handleMovement() {
@@ -308,14 +336,19 @@ export default class MainScene extends Phaser.Scene {
     if (target.hp <= 0) this.killSlime(target)
   }
 
-  // 攻撃モーション：指定方向に向く→スケール→斬撃エフェクト
+  // 攻撃モーション：向く→前に踏み込む→キュッと伸び→斬撃エフェクト
   playAttackFx(ang) {
     // 左右の向き(右向き素材を基準に、左ならフリップ)
-    if (Math.abs(Math.cos(ang)) > 0.2) this.player.setFlipX(Math.cos(ang) < 0)
+    if (Math.abs(Math.cos(ang)) > 0.2) this.hero.setFlipX(Math.cos(ang) < 0)
 
-    // プレイヤーをキュッと一瞬大きく(相対=素材スケールに依存しない)
-    // ※位置の踏み込みは物理ボディが毎フレーム上書きするので使わず、スケール＋斬撃で表現
-    this.tweens.add({ targets: this.player, scale: '*=1.2', duration: 70, yoyo: true })
+    // 踏み込み：見た目を前方へグイッと出して戻す(物理と分離したので自由に動かせる)
+    this.tweens.killTweensOf(this.lunge)
+    this.lunge.x = Math.cos(ang) * 16
+    this.lunge.y = Math.sin(ang) * 16
+    this.tweens.add({ targets: this.lunge, x: 0, y: 0, duration: 180, ease: 'Back.easeOut' })
+
+    // 縦に伸びる踏み込みっぽいスケール(相対=素材スケールに依存しない)
+    this.tweens.add({ targets: this.hero, scaleX: '*=1.18', scaleY: '*=0.9', duration: 70, yoyo: true })
 
     // 斬撃の三日月：前方に大きく出して、振り抜くように回転＋フェード
     const sx = this.player.x + Math.cos(ang) * 30
@@ -347,9 +380,10 @@ export default class MainScene extends Phaser.Scene {
     if (this.dead) return
     this.state.hp = Math.max(0, this.state.hp - dmg)
     this.showFloatText(this.player.x, this.player.y - 18, String(dmg), '#ff6b6b', 14)
-    // 被弾フラッシュ(赤く明滅)
-    this.player.setTint(0xff3b3b).setTintMode(Phaser.TintModes.FILL)
-    this.time.delayedCall(110, () => { if (this.player) this.player.clearTint() })
+    // 被弾フラッシュ(赤く明滅)＋のけぞり
+    this.hero.setTint(0xff3b3b).setTintMode(Phaser.TintModes.FILL)
+    this.time.delayedCall(110, () => { if (this.hero) this.hero.clearTint() })
+    this.tweens.add({ targets: this.hero, angle: { from: -12, to: 0 }, duration: 200, ease: 'Quad.easeOut' })
     this.emitHud()
     if (this.state.hp <= 0) this.onDeath()
   }
@@ -359,12 +393,15 @@ export default class MainScene extends Phaser.Scene {
     this.player.setVelocity(0, 0)
     this.showFloatText(this.player.x, this.player.y - 30, 'やられた…', '#ff5555', 22)
     this.cameras.main.shake(250, 0.01)
+    // 倒れる演出(回転＋半透明)
+    this.tweens.add({ targets: this.hero, angle: 90, alpha: 0.4, duration: 300 })
     this.time.delayedCall(1500, () => {
       // 復活：HP全回復・中央へ戻る・コンボリセット
       this.dead = false
       this.state.hp = this.state.hpMax
       this.combo = 0
-      this.player.setPosition(800, 600).clearTint()
+      this.player.setPosition(800, 600)
+      this.hero.setAngle(0).setAlpha(1).clearTint()
       this.emitHud()
     })
   }
