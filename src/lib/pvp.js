@@ -120,6 +120,7 @@ function buildSide(input, key) {
     // パッシブ
     rtCur, pe,
     hasSpiritResonance: has('精霊共鳴'),
+    hasShikigami: has('式神召喚'),
     hasBerserk, hasOnmi, hasMadokenJutsu, hasHolyKnightPassive, hasTosoHonno,
     passiveCritBonus, passiveCritDmgBonus, passiveDmgMult, passiveHealMult,
     passiveMatkMult, passiveMpCostMult, passiveMatkMultTenki, passiveHitBonus, passiveHealReflect,
@@ -418,6 +419,17 @@ function applyTurnStart(side, opp, ctx) {
     const d = Math.floor(b.skeletonDmg.dmg * PVP.dmgMult)
     opp.hp -= d
     logs.push({ text: `💀 ${name}の骸骨の持続ダメージ！ ${opp.profile.username}に${d}ダメージ！`, color: '#cc44ff' })
+    if (opp.hp <= 0) return true
+  }
+  // 式神召喚（パッシブ）：毎ターン、特殊攻撃力×0.5（再修練1で0.8）の式神攻撃
+  if (side.hasShikigami) {
+    const mult = side.rtCur >= 1 ? 0.8 : 0.5
+    const eMdefR = (opp.buffs.mdefDown ? opp.buffs.mdefDown.rate : 1) * (opp.buffs.mdefUp ? opp.buffs.mdefUp.rate : 1)
+    const matk = side.eff.matk
+    const adjEMD = Math.max(1, Math.floor((opp.eff.mdef || 0) * eMdefR))
+    const d = Math.max(1, Math.floor(matk * mult * (matk / (matk + adjEMD)) * PVP.dmgMult))
+    opp.hp -= d
+    logs.push({ text: `👹 ${name}の式神の攻撃！ ${opp.profile.username}に${d}ダメージ！`, color: '#cc88ff' })
     if (opp.hp <= 0) return true
   }
   const sealed = b.healSeal?.turns > 0

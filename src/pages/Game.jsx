@@ -86,7 +86,7 @@ export const EVENT_START_MS = Date.UTC(2026, 5, 21, 20, 0, 0) // JST 6/22 05:00
 export const EVENT_END_MS   = Date.UTC(2026, 6, 5, 20, 0, 0)  // JST 7/6 05:00
 
 // 多段ヒットスキル：行動全体ではなく1発ごとに回避・クリティカル・ダメージ判定する
-export const MULTI_HIT_SKILLS = new Set(['マジックアロー','三連射','メテオストライク','連打','五連殺','飛天三角蹴り','連装銃撃','群れの号令'])
+export const MULTI_HIT_SKILLS = new Set(['マジックアロー','三連射','メテオストライク','連打','五連殺','飛天三角蹴り','連装銃撃','群れの号令','符術・式打ち'])
 
 // 精霊召喚士の精霊召喚スキル（連続使用で 1段目→2段目→3段目 にエスカレート）
 export const SPIRIT_SUMMONS = new Set(['サラマンド','ウンディーネ','シルフ','ノーム','ルミナ','ノクス'])
@@ -323,6 +323,7 @@ export const JOB_GROWTH = {
   '格闘家':    { hp:10, mp:5,  atk:2, def:1, matk:0, mdef:2, spd:1 },
   'サモナー':  { hp:10, mp:10, atk:0, def:1, matk:1, mdef:2, spd:1 },
   '精霊召喚士':{ hp:10, mp:10, atk:0, def:2, matk:2, mdef:2, spd:1 },
+  '式神使い':  { hp:10, mp:10, atk:0, def:1, matk:3, mdef:1, spd:2 },
   'サイキッカー':{ hp:10, mp:5, atk:2, def:1, matk:2, mdef:1, spd:2 },
   '体術師':    { hp:20, mp:5,  atk:2, def:1, matk:1, mdef:1, spd:2 },
   '魔銃士':    { hp:10, mp:5,  atk:2, def:1, matk:2, mdef:1, spd:2 },
@@ -353,10 +354,11 @@ const ADVANCED_CLASSES = {
   '聖騎士':    { requires:'戦士', requiresLv:50, requires2:'僧侶',    requires2Lv:50 },
   '竜騎士':    { requiresItem:'dragon_knight_proof' },
   '精霊召喚士':{ requires:'サモナー' },
+  '式神使い':  { requires:'サモナー' },
 }
 
 // is_admin 限定先行公開の上位職（一般プレイヤーには転職候補に出さない）
-const ADMIN_ONLY_CLASSES = new Set(['精霊召喚士'])
+const ADMIN_ONLY_CLASSES = new Set(['精霊召喚士','式神使い'])
 // 再修練しても他クラスへ持ち越せない（＝他クラスで使用不可）スキルを持つクラス
 const NON_CARRYOVER_CLASSES = new Set(['精霊召喚士'])
 
@@ -367,7 +369,7 @@ const CLASS_LEVEL_CAP = {
   'サイキッカー':100, '体術師':100, '魔銃士':100,
   'ギャンブラー':100,
   '魔法剣士':100, '聖騎士':100, '竜騎士':100,
-  '精霊召喚士':100,
+  '精霊召喚士':100, '式神使い':100,
 }
 // 再修練5回でそのクラスのレベルキャップが300に解放される
 // 再修練強化の表示用説明（上から1段ずつ＝再修練1回ごとに解放）
@@ -389,6 +391,7 @@ export const RETRAINING_ENHANCEMENTS = {
   'ギャンブラー': ['ジャグリング：4ヒット', 'ラッキーダイス：×0.9〜2.2', 'ギャンブルボディ：被ダメ ×0.7〜1.1', 'オールイン：効果・反動6ターン', 'ジャックポット：2倍確率10%'],
   '竜騎士': ['ドラゴンスラスト：防御貫通 30%', 'ドラゴンファング：倍率 0.9', '竜鱗の加護：30%で15%軽減', 'ドラゴンロア：自身の攻撃力×1.3（3T）', '天墜竜閃：威力 4.5'],
   '精霊召喚士': ['精霊共鳴：最大MP+20%を追加', '召喚（1段目）：倍率 1.4→1.5', '召喚バフ：1.3→1.4倍／ノクスの魔法防御貫通 5%→8%', '2段目スキル：倍率すべて+0.1', '3段目スキル：倍率すべて+0.2'],
+  '式神使い': ['式神召喚：式神の毎ターン攻撃 特殊攻撃力×0.5→0.8', '符術・式打ち：特殊攻撃力×0.8→0.9', '呪符・魂削り：特殊防御30%ダウン(3T)→35%ダウン(4T)', '陰陽結界：被ダメ20%減・50%回復→30%減・60%回復', '禁術・神降ろし：特殊攻撃力×2.2→2.4'],
 }
 
 export const getEffectiveCap = (className, retraining) => {
@@ -1339,11 +1342,51 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.newPlayerBuffs.spiritCombo = { name:'ノクス', count:newCount, tripled: newCount%3===0 }
       break
     }
+    // ── 式神使い ──
+    case '符術・式打ち': {
+      const m = rt>=2 ? 0.9 : 0.8
+      const h1 = Math.floor(eff.matk*m*am*r()), h2 = Math.floor(eff.matk*m*am*r())
+      result.dmg = h1+h2
+      result.hitDmgs = [h1, h2]
+      result.log = `📜 符術・式打ち！ ${enemy.name}に${h1}・${h2}の特殊ダメージ！`
+      break
+    }
+    case '呪符・魂削り': {
+      result.dmg = Math.floor(eff.matk*1.7*am)
+      const turns = rt>=3 ? 4 : 3
+      const rate = rt>=3 ? 0.65 : 0.7
+      result.newEnemyBuffs.mdefDown = { turns, rate }
+      result.log = `📜 呪符・魂削り！ ${enemy.name}に${result.dmg}の特殊ダメージ！ ${turns}ターンの間、特殊防御力を${Math.round((1-rate)*100)}%低下！`
+      break
+    }
+    case '陰陽結界': {
+      const reduce = rt>=4 ? 0.3 : 0.2
+      const healRate = rt>=4 ? 0.6 : 0.5
+      result.newPlayerBuffs.dmgReduce = { turns:3, rate: 1 - reduce }
+      result.newPlayerBuffs.onmyoHeal = { turns:3, reduce, healRate }
+      result.log = `🔯 陰陽結界！ 3ターンの間、受けるダメージを${Math.round(reduce*100)}%軽減し、軽減分の${Math.round(healRate*100)}%を回復！`
+      break
+    }
+    case '禁術・神降ろし': {
+      if (playerBuffs.kinjutsuLock) {
+        result.dmg = 0
+        result.log = `📿 禁術・神降ろし！ しかし連続では使えず、失敗した！`
+      } else {
+        result.dmg = Math.floor(eff.matk*(rt>=5?2.4:2.2)*am)
+        result.newPlayerBuffs.kinjutsuLock = true
+        result.log = `📿 禁術・神降ろし！ ${enemy.name}に${result.dmg}の特殊ダメージ！`
+      }
+      break
+    }
     default: result.dmg = Math.max(1,eff.atk*am); result.log = `攻撃！ ${enemy.name}に${result.dmg}ダメージ！`
   }
   // 精霊召喚士コンボ：精霊召喚以外のスキルを使ったらコンボをリセット
   if (!SPIRIT_SUMMONS.has(skill.name) && playerBuffs.spiritCombo) {
     result.newPlayerBuffs.spiritCombo = undefined
+  }
+  // 禁術・神降ろし：他スキルを使ったら連続使用ロックを解除
+  if (skill.name !== '禁術・神降ろし' && playerBuffs.kinjutsuLock) {
+    result.newPlayerBuffs.kinjutsuLock = undefined
   }
   // パピアは状態異常・ステータス減少免疫
   if (enemy.isPapia) {
@@ -2967,6 +3010,15 @@ export default function Game() {
       const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*ryurinReduce()*(0.9+Math.random()*0.2))
       playerHp -= finalDmg
       if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
+      // 陰陽結界：軽減した分の一定割合を回復
+      if (playerBuffs.onmyoHeal?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
+        const oh = playerBuffs.onmyoHeal
+        const healBack = Math.floor(finalDmg * (oh.reduce / (1 - oh.reduce)) * oh.healRate)
+        if (healBack > 0) {
+          playerHp = Math.min(maxHp, playerHp + healBack)
+          logs.push({ text:`🔯 陰陽結界！ 軽減した分から${healBack}回復した！`, color:'#66ddaa' })
+        }
+      }
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
       const critText = isCrit ? ' 💥クリティカル！' : ''
       logs.push({ text:`${prefix}${enemy.name}の攻撃！ あなたに${finalDmg}ダメージ…${critText}`, color:isCrit?'#ff2200':'#ff6644' })
@@ -3098,6 +3150,17 @@ export default function Game() {
       if (playerBuffs.skeletonDmg?.turns > 0) {
         enemyHp -= playerBuffs.skeletonDmg.dmg
         logs.push({ text:`💀 骸骨の持続ダメージ！ ${enemy.name}に${playerBuffs.skeletonDmg.dmg}ダメージ！`, color:'#cc44ff' })
+        if (enemyHp <= 0) break
+      }
+      // 式神召喚（パッシブ）：毎ターン終了後、特殊攻撃力×0.5（再修練1で0.8）の式神攻撃
+      if (passiveNames.includes('式神召喚')) {
+        const shikiMult = rtCur >= 1 ? 0.8 : 0.5
+        const eMdefR = (enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1) * (enemyBuffs.mdefUp ? enemyBuffs.mdefUp.rate : 1)
+        const adjEMD = Math.max(1, Math.floor((enemy.mdef||0) * eMdefR))
+        let shikiDmg = Math.max(1, Math.floor(eff.matk * shikiMult * (eff.matk/(eff.matk + adjEMD)) * (0.9 + Math.random()*0.2)))
+        if (enemy.isPapia) shikiDmg = 1
+        enemyHp -= shikiDmg
+        logs.push({ text:`👹 式神の攻撃！ ${enemy.name}に${shikiDmg}の特殊ダメージ！`, color:'#cc88ff' })
         if (enemyHp <= 0) break
       }
       const isHealSealed = playerBuffs.healSeal?.turns > 0
