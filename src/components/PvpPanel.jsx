@@ -48,7 +48,7 @@ async function loadLoadout(playerId, isSelf) {
     skillSets = rpc?.skill_sets || []
   }
 
-  const profileWithPet = { ...profile, petStat, petCharm }
+  const profileWithPet = { ...profile, petStat, petCharm, activePet: pet || null }
   const eff = calcEffectiveStats(profileWithPet, eq || [], prof || [], titleBonus)
   return { eff, equipment: eq || [], skillSets, proficiency: prof || [], profile: profileWithPet, playerItem: null }
 }

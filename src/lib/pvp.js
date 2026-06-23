@@ -20,8 +20,10 @@
 // 戻り値: { logs, winner /* 'A' | 'B' | 'draw' */, turns, aHpPct, bHpPct }
 // ============================================================
 import { getWeaponGroup } from './stats'
+import { petStats } from '../constants/pets'
 import {
   calcEvasionRate,
+  BREEDER_PET_SKILLS,
   calcExtraActionRate,
   calcCritRate,
   calcDefReduction,
@@ -64,6 +66,16 @@ function buildSide(input, key) {
   // 精霊共鳴（再修練1+）: 最大MP+20%（mp初期値/回復上限/表示すべてに反映）
   if (profile.class === '精霊召喚士' && rtCur >= 1 && has('精霊共鳴')) {
     eff.mp_max = Math.floor(eff.mp_max * 1.2)
+  }
+
+  // ブリーダー：ペット召喚（ステ×2・HP×5の独立エンティティ）
+  let petActive = false, petHp = 0, petMaxHp = 0, petAtk = 0, petDef = 0, petMdef = 0, petAtkType = 'phys', petSpecies = null
+  if (profile.class === 'ブリーダー' && has('ペット召喚') && profile.activePet?.species) {
+    const ps = petStats(profile.activePet)
+    petAtk = ps.atk * 2; petDef = ps.def * 2; petMdef = ps.mdef * 2
+    petMaxHp = ps.maxHp * 5; petHp = petMaxHp
+    petAtkType = ps.atkType; petSpecies = profile.activePet.species
+    petActive = true
   }
 
   const hasShingan   = has('心眼')
@@ -121,6 +133,9 @@ function buildSide(input, key) {
     rtCur, pe,
     hasSpiritResonance: has('精霊共鳴'),
     hasShikigami: has('式神召喚'),
+    // ブリーダー：ペット
+    petActive, petHp, petMaxHp, petAtk, petDef, petMdef, petAtkType, petSpecies,
+    petBuffs: { reduce: 0, reduceTurns: 0 },
     hasBerserk, hasOnmi, hasMadokenJutsu, hasHolyKnightPassive, hasTosoHonno,
     passiveCritBonus, passiveCritDmgBonus, passiveDmgMult, passiveHealMult,
     passiveMatkMult, passiveMpCostMult, passiveMatkMultTenki, passiveHitBonus, passiveHealReflect,
@@ -185,7 +200,19 @@ function doAttack(att, def, isExtra, ctx) {
   const buffHitBonus = attBuffs.hitBonus?.turns > 0 ? attBuffs.hitBonus.value : 0
 
   // 与ダメージを防御側HPへ適用するヘルパ
-  const dealToDef = (amt) => { if (amt > 0) def.hp -= amt }
+  // ブリーダー：防御側のペット生存時は50%でペットが受ける
+  const dealToDef = (amt) => {
+    if (amt <= 0) return
+    if (def.petActive && def.petHp > 0 && Math.random() < 0.5) {
+      const cut = def.petBuffs.reduceTurns > 0 ? (1 - def.petBuffs.reduce) : 1.0
+      const d = Math.max(1, Math.floor(amt * cut))
+      def.petHp = Math.max(0, def.petHp - d)
+      ctx.logs.push({ text: `↳ 攻撃は${def.profile.username}のペットに！ ${d}ダメージ（残りHP${def.petHp}）`, color: '#ff8844' })
+      if (def.petHp <= 0) ctx.logs.push({ text: `💥 ${def.profile.username}のペットは倒れた…`, color: '#ff4444' })
+    } else {
+      def.hp -= amt
+    }
+  }
   // 防御側の被ダメ軽減（ランク軽減＋dmgReduceバフ）。物理/特殊で参照ステ切替
   const defReduceMult = (useMagical) => {
     const rankRed = calcDefReduction(useMagical ? def.eff.mdef : def.eff.def)
@@ -246,7 +273,32 @@ function doAttack(att, def, isExtra, ctx) {
     let mpCost = Math.floor((att.isArtifact ? (cs?.skills?.mp_cost || 0) * 2 : (cs?.skills?.mp_cost || 0)) * att.passiveMpCostMult)
     if (cs?.skills?.name === 'マナボルト') mpCost = Math.max(1, Math.floor(att.mp * 0.1))
     if (cs?.skills?.name === '天墜竜閃' && attBuffs.tenkaiCharge?.turns > 0) mpCost = 0
-    if (cs && cs.skills && att.mp >= mpCost) {
+    // ブリーダー：ペット系コマンド（ペット不在/MP不足は失敗＝通常攻撃へ）
+    if (cs?.skills && BREEDER_PET_SKILLS.has(cs.skills.name)) {
+      const petAlive = att.petActive && att.petHp > 0
+      if (petAlive && att.mp >= mpCost) {
+        att.mp -= mpCost
+        const nm = cs.skills.name
+        if (nm === '攻撃して！') { if (petAttackPvp(att, def, att.rtCur >= 2 ? 3.5 : 3.0, '攻撃して！', logs)) return }
+        else if (nm === 'やっちゃえ！') { if (petAttackPvp(att, def, att.rtCur >= 5 ? 6.0 : 5.0, 'やっちゃえ！', logs)) return }
+        else if (nm === '一緒に頑張ろう！') {
+          const t = att.rtCur >= 3 ? 6 : 3
+          attBuffs.breederDmgUp = { turns: t, rate: 1.5 }
+          logs.push({ text: `${prefix}一緒に頑張ろう！ ${t}ターンの間、自分とペットの与ダメージ+50%！`, color: '#ffcc66' })
+        } else if (nm === '休憩しよう！') {
+          const ph = Math.floor(att.eff.hp_max * 0.2); att.hp = Math.min(att.eff.hp_max, att.hp + ph)
+          const pph = Math.floor(att.petMaxHp * 0.2); att.petHp = Math.min(att.petMaxHp, att.petHp + pph)
+          let cutTxt = ''
+          if (att.rtCur >= 4) { attBuffs.dmgReduce = { turns: 1, rate: 0.7 }; att.petBuffs.reduce = 0.3; att.petBuffs.reduceTurns = 1; cutTxt = ' 1ターン被ダメ30%カット！' }
+          logs.push({ text: `${prefix}休憩しよう！ 自分のHP+${ph}・ペットのHP+${pph}！${cutTxt}`, color: '#66ddaa' })
+        }
+        att.skillIndex++
+        return
+      } else {
+        logs.push({ text: `${prefix}${cs.skills.name}！ しかしペットがいない…通常攻撃になった！`, color: '#888888' })
+      }
+    }
+    if (cs && cs.skills && !BREEDER_PET_SKILLS.has(cs.skills.name) && att.mp >= mpCost) {
       att.mp -= mpCost
       const hasGensoKyomei = att.expandedSkillSet.some(ss => ss.skills?.name === '元素共鳴') // 安全側（パッシブはexpandedに無いので実質false）
       void hasGensoKyomei
@@ -366,7 +418,8 @@ function doAttack(att, def, isExtra, ctx) {
     const eDefVal = att.isMagical ? Math.max(1, Math.floor((def.eff.mdef || 0) * eMdefRate)) : Math.max(1, Math.floor(def.eff.def * eDefRate))
     const baseDmg = Math.max(1, Math.floor(baseAtk * ratioBaseAtk / Math.max(1, ratioBaseAtk + eDefVal)) + Math.floor(Math.random() * 4))
     const reduceMult = defReduceMult(att.isMagical)
-    const finalDmg = Math.floor(baseDmg * 0.7 * critMult * (att.isArtifact ? 1.2 : 1.0) * att.passiveDmgMult * reduceMult * PVP.dmgMult * (0.9 + Math.random() * 0.2))
+    const breederDmgMult = attBuffs.breederDmgUp?.turns > 0 ? attBuffs.breederDmgUp.rate : 1.0
+    const finalDmg = Math.floor(baseDmg * 0.7 * critMult * (att.isArtifact ? 1.2 : 1.0) * att.passiveDmgMult * reduceMult * breederDmgMult * PVP.dmgMult * (0.9 + Math.random() * 0.2))
     dealToDef(finalDmg)
     const critText = isCrit ? '💥クリティカル！ ' : ''
     logs.push({ text: `${prefix}${critText}攻撃！ ${enemyName}に${finalDmg}ダメージ！`, color: '#ffcc00' })
@@ -377,6 +430,29 @@ function doAttack(att, def, isExtra, ctx) {
     }
     if (att.expandedSkillSet.length > 0) att.skillIndex++
   }
+}
+
+// ブリーダー：ペットの攻撃（自動攻撃・コマンド共通）。opp へダメージ。死亡時 true。
+// 素早さ非依存。PvPでは回避判定は省略（実験的）。
+function petAttackPvp(side, opp, mult, label, logs) {
+  if (!side.petActive || side.petHp <= 0) return false
+  const name = side.profile.username
+  const isSpec = side.petAtkType === 'spec'
+  const edr = (opp.buffs.defDown?.rate || 1) * (opp.buffs.defUp?.rate || 1)
+  const emr = (opp.buffs.mdefDown?.rate || 1) * (opp.buffs.mdefUp?.rate || 1)
+  const adjDef = Math.max(1, Math.floor(isSpec ? (opp.eff.mdef || 0) * emr : (opp.eff.def || 0) * edr))
+  const base = side.petAtk * mult
+  const dmgUp = side.buffs.breederDmgUp?.turns > 0 ? side.buffs.breederDmgUp.rate : 1.0
+  const dmg = Math.max(1, Math.floor(base * (base / (base + adjDef)) * dmgUp * PVP.dmgMult))
+  opp.hp -= dmg
+  let extra = ''
+  if (side.rtCur >= 1) {
+    if (side.petSpecies === 'flame' && Math.random() * 100 < 30) { const b = opp.buffs.bleed; opp.buffs.bleed = { stacks: Math.min(5, (b?.stacks || 0) + 1), lastTurn: 0 }; extra = ' 出血！' }
+    else if (side.petSpecies === 'aqua' && Math.random() * 100 < 40) { opp.buffs.spdDown = { turns: 3, rate: 0.7 }; extra = ' 素早さ低下！' }
+    else if (side.petSpecies === 'leaf') { const sr = opp.buffs.stunResist ?? 1.0; if (Math.random() * 100 < 30 * sr) { opp.buffs.stun = { turns: 1 }; opp.buffs.stunResist = sr * 0.5; extra = ' スタン！' } }
+  }
+  logs.push({ text: `🐾 ${name}のペットの${label}！ ${opp.profile.username}に${dmg}ダメージ！${extra}`, color: '#ffaa44' })
+  return opp.hp <= 0
 }
 
 // ターン開始時の持続効果（毒/やけど/出血/呪/骸骨/リジェネ/リジェネ回復/遅延回復）
@@ -431,6 +507,10 @@ function applyTurnStart(side, opp, ctx) {
     opp.hp -= d
     logs.push({ text: `👹 ${name}の式神の攻撃！ ${opp.profile.username}に${d}ダメージ！`, color: '#cc88ff' })
     if (opp.hp <= 0) return true
+  }
+  // ブリーダー：召喚ペットの毎ターン自動攻撃（×1.0）
+  if (side.petActive && side.petHp > 0) {
+    if (petAttackPvp(side, opp, 1.0, 'こうげき', logs)) return true
   }
   const sealed = b.healSeal?.turns > 0
   if (sealed) logs.push({ text: `🚫 ${name}は回復封じ中！ 回復効果が無効化された！`, color: '#ff4488' })
@@ -505,6 +585,7 @@ function endTurnBuffs(side, ctx, hpBeforeTurn) {
   const logs = ctx.logs
   const berserkWasActive = b.berserk?.turns > 0
   Object.keys(b).forEach(k => { if (b[k]?.turns > 0) b[k].turns-- })
+  if (side.petBuffs?.reduceTurns > 0) side.petBuffs.reduceTurns--
   if (berserkWasActive && b.berserk?.turns === 0 && side.expandedSkillSet.length > 0) {
     const lockedIdx = side.expandedSkillSet.findIndex(ss => ss.skills?.name === b.berserk.lockedSkill)
     if (lockedIdx >= 0) side.skillIndex = lockedIdx + 1
@@ -580,6 +661,7 @@ export function simulatePvpBattle(inputA, inputB) {
       playerMp: Math.max(0, A.mp), playerMpMax: A.eff.mp_max,
       enemyMp: Math.max(0, B.mp), enemyMpMax: B.eff.mp_max,
       playerStatus: extractStatuses(A.buffs), enemyStatus: extractStatuses(B.buffs),
+      petHp: A.petActive ? Math.max(0, A.petHp) : null, petMax: A.petActive ? A.petMaxHp : null,
     })
     ctx.turn++
   }
