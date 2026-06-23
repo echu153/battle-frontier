@@ -77,7 +77,8 @@ export default function ActionRpgPage() {
       <VirtualPad />
 
       {/* === 右半分：オート／スキル／攻撃ボタン === */}
-      <div style={{ position: 'absolute', right: 24, bottom: 28, display: 'flex', alignItems: 'flex-end', gap: 12, userSelect: 'none' }}>
+      {/* zIndex=10：左半分の移動パッド(zIndex5)より上に置き、ボタンを確実にタップできるように */}
+      <div style={{ position: 'absolute', right: 24, bottom: 28, display: 'flex', alignItems: 'flex-end', gap: 12, userSelect: 'none', zIndex: 10 }}>
         <AutoButton />
         <SkillButton label="近日" />
         <SkillButton label="近日" />
