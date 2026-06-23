@@ -2857,11 +2857,13 @@ export default function Game() {
               logs.push({ text:`${prefix}休憩しよう！ 自分のHP+${ph}・ペットのHP+${pph}！${cutTxt}`, color:'#66ddaa' })
             }
             skillUsed = true; skillIndex++
+            playerAttacking = false
             return
-          } else {
+          } else if (!petAlive) {
             logs.push({ text:`${prefix}${cs.skills.name}！ しかしペットがいない…通常攻撃になった！`, color:'#888888' })
             // skillUsed=false のまま下の通常攻撃へフォールバック（MP消費なし）
           }
+          // ※petAlive かつ MP不足のときは下の MP不足ログ＋通常攻撃に流れる（BREEDER_PET_SKILLSは executeSkill 対象外）
         }
         if (cs && cs.skills && !BREEDER_PET_SKILLS.has(cs.skills.name) && playerMp >= mpCost) {
           playerMp -= mpCost
