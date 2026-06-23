@@ -100,6 +100,14 @@ export default class MainScene extends Phaser.Scene {
     g.fillStyle(0x6fcf4f).fillCircle(14, 16, 13)
     g.fillStyle(0x000000).fillRect(9, 13, 3, 3).fillRect(17, 13, 3, 3)
     g.generateTexture('slime', 28, 30); g.destroy()
+
+    // 斬撃エフェクト(白い三日月)
+    g = this.make.graphics({ x: 0, y: 0 })
+    g.lineStyle(5, 0xffffff, 1)
+    g.beginPath()
+    g.arc(24, 24, 20, Phaser.Math.DegToRad(-55), Phaser.Math.DegToRad(55), false)
+    g.strokePath()
+    g.generateTexture('slash', 48, 48); g.destroy()
   }
 
   drawGround() {
@@ -175,14 +183,39 @@ export default class MainScene extends Phaser.Scene {
     if (!target) return
 
     this.lastAttack = time
-    // 攻撃モーション(プレイヤーが敵側へ軽く踏み込む)
-    this.tweens.add({ targets: this.player, scale: 1.15, duration: 60, yoyo: true })
+    this.playAttackFx(target)
     const dmg = Phaser.Math.Between(8, 14)
     target.hp -= dmg
     this.showDamage(target.x, target.y, dmg)
-    this.tweens.add({ targets: target, scale: 1.25, duration: 60, yoyo: true })
+    // 被弾リアクション：白く点滅＋少しのけぞる(相対スケール)
+    target.setTint(0xffffff)
+    this.time.delayedCall(80, () => { if (target.active) target.clearTint() })
+    this.tweens.add({ targets: target, scale: '*=1.25', duration: 60, yoyo: true })
 
     if (target.hp <= 0) this.killSlime(target)
+  }
+
+  // 攻撃モーション：敵の方を向く→踏み込み→斬撃エフェクト
+  playAttackFx(target) {
+    const ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, target.x, target.y)
+    // 左右の向き(右向き素材を基準に、左ならフリップ)
+    if (Math.abs(Math.cos(ang)) > 0.2) this.player.setFlipX(Math.cos(ang) < 0)
+
+    // プレイヤーをキュッと一瞬大きく(相対=素材スケールに依存しない)
+    // ※位置の踏み込みは物理ボディが毎フレーム上書きするので使わず、スケール＋斬撃で表現
+    this.tweens.add({ targets: this.player, scale: '*=1.12', duration: 55, yoyo: true })
+
+    // 斬撃の三日月：敵との間に出して、振り抜くように回転＋フェード
+    const sx = this.player.x + Math.cos(ang) * 22
+    const sy = this.player.y + Math.sin(ang) * 22
+    const slash = this.add.image(sx, sy, 'slash')
+      .setDepth(20).setRotation(ang - 0.5).setScale(0.5).setAlpha(0.95)
+    this.tweens.add({
+      targets: slash,
+      rotation: ang + 0.6, scale: 1.25, alpha: 0,
+      duration: 180, ease: 'Cubic.easeOut',
+      onComplete: () => slash.destroy(),
+    })
   }
 
   // 敵の攻撃：接触中の敵が一定間隔でこちらにダメージ
