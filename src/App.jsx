@@ -34,6 +34,7 @@ const Idle = lazy(() => import('./pages/Idle'))
 const Territory = lazy(() => import('./pages/Territory'))
 const Marketplace = lazy(() => import('./pages/Marketplace'))
 const Event = lazy(() => import('./pages/Event'))
+const ActionRpg = lazy(() => import('./action-rpg/ActionRpgPage')) // アクションRPGプロト(認証不要・独立)
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -210,6 +211,7 @@ function App() {
         <Route path="/territory" element={session ? <Territory /> : <Navigate to="/login" />} />
         <Route path="/marketplace" element={session ? <Marketplace /> : <Navigate to="/login" />} />
         <Route path="/event" element={session ? <Event /> : <Navigate to="/login" />} />
+        <Route path="/action-rpg" element={<ActionRpg />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
       </Suspense>
