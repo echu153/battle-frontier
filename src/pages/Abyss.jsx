@@ -179,6 +179,11 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk.lockedSkill)
       if (lockedIdx >= 0) skillIndex = lockedIdx
     }
+    // 天墜竜閃の溜め中は次手番を必ず天墜竜閃(解放)に固定（無いと溜めっぱなしで攻撃しない）
+    if (playerBuffs.tenkaiCharge?.turns > 0) {
+      const tIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === '天墜竜閃')
+      if (tIdx >= 0) skillIndex = tIdx
+    }
     let skillUsed = false
     if (expandedSkillSet.length > 0) {
       const cs = expandedSkillSet[skillIndex % expandedSkillSet.length]
