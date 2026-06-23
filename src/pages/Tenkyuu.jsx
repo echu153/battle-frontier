@@ -753,7 +753,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     if (!playerSkipped) {
       doPlayerAttack(false)
       if (enemyHp <= 0) break
-      if (playerExtraRate > 0 && Math.random()*100 < playerExtraRate) { doPlayerAttack(true); if (enemyHp <= 0) break }
+      if (!(playerBuffs.tenkaiCharge?.turns > 0) && playerExtraRate > 0 && Math.random()*100 < playerExtraRate) { doPlayerAttack(true); if (enemyHp <= 0) break }
     }
 
     // 敵のターン
