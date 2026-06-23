@@ -82,9 +82,12 @@ const getEffectLabel = (effect) => {
   return labels[effect] || effect
 }
 
-const generateBonusSlots = (rarity) => {
+const generateBonusSlots = (rarity, hasFixedEffect = false) => {
   const config = RARITY_BONUS_CONFIG[rarity]
-  const pool = ['a','s','ss','sss'].includes(rarity) ? BONUS_TYPES_HIGH : BONUS_TYPES_BASE
+  let pool = ['a','s','ss','sss'].includes(rarity) ? BONUS_TYPES_HIGH : BONUS_TYPES_BASE
+  // 固定特殊能力を持つ武器(アーティファクト/レイド装備等)は effect 枠が固定効果で上書きされ消えるため、
+  // effect を抽選プールから除外して常にステータスボーナスを枠数ぶん付与する
+  if (hasFixedEffect) pool = pool.filter(t => t !== 'effect')
   const usedTypes = new Set()
   const slots = []
   for (let i = 0; i < config.slots; i++) {
@@ -398,17 +401,31 @@ export default function Smithy() {
     if (!item.bonus_slots_json) { showMessage('まず再鑑定を行ってください', '#ff4444'); setLoading(false); return }
     const existingSlots = JSON.parse(item.bonus_slots_json)
     const config = RARITY_BONUS_CONFIG[rarity]
-    const newSlots = existingSlots.map(s => {
-      if (s.type === 'effect') return { type:'effect', value: EFFECT_POOL[Math.floor(Math.random()*EFFECT_POOL.length)] }
-      if (s.type==='crit'||s.type==='evasion'||s.type==='hit') return { type:s.type, value: 1.0+Math.floor(Math.random()*9)*0.5 }
+    const hasFixedEffect = !!(item.bonus_effect && !EFFECT_POOL.includes(item.bonus_effect))
+    // 固定特殊能力持ちで、過去の鑑定で effect 枠が残っている場合は未使用のステータス種へ振り替える（消える枠を救済）
+    const evalPool = (['a','s','ss','sss'].includes(rarity) ? BONUS_TYPES_HIGH : BONUS_TYPES_BASE).filter(t => t !== 'effect')
+    const usedTypes = new Set(existingSlots.map(s => s.type))
+    const rollStatSlot = (type) => {
+      if (type==='crit'||type==='evasion'||type==='hit') return { type, value: 1.0+Math.floor(Math.random()*9)*0.5 }
       const baseVal = Math.floor(Math.random()*(config.max-config.min+1))+config.min
-      if (s.type==='hp') return { type:'hp', value: baseVal*10 }
-      if (s.type==='mp') return { type:'mp', value: baseVal*5 }
-      return { type:s.type, value: baseVal }
+      if (type==='hp') return { type:'hp', value: baseVal*10 }
+      if (type==='mp') return { type:'mp', value: baseVal*5 }
+      return { type, value: baseVal }
+    }
+    const newSlots = existingSlots.map(s => {
+      if (s.type === 'effect') {
+        if (hasFixedEffect) {
+          const avail = evalPool.filter(t => !usedTypes.has(t))
+          const t = avail[Math.floor(Math.random()*avail.length)]
+          usedTypes.add(t)
+          return rollStatSlot(t)
+        }
+        return { type:'effect', value: EFFECT_POOL[Math.floor(Math.random()*EFFECT_POOL.length)] }
+      }
+      return rollStatSlot(s.type)
     })
     const cols = slotsToColumns(newSlots)
-    // アーティファクト(古びた○○の進化先)の特殊能力は消さない
-    if (item.bonus_effect && !EFFECT_POOL.includes(item.bonus_effect)) cols.bonus_effect = item.bonus_effect  // 固定特殊効果(アーティファクト/レイド装備)は再評価で消さず保持
+    if (hasFixedEffect) cols.bonus_effect = item.bonus_effect  // 固定特殊効果(アーティファクト/レイド装備)は再評価で消さず保持
     await supabase.from('player_equipment').update(cols).eq('id', item.id)
     const newQty = owned - needed
     if (newQty <= 0) await supabase.from('player_items').delete().eq('id', sheetItem.id)
@@ -426,9 +443,10 @@ export default function Smithy() {
     const sheetItem = playerItems.find(pi => pi.items?.name === '再鑑定依頼書')
     const owned = sheetItem?.quantity || 0
     if (owned < needed) { showMessage(`再鑑定依頼書が足りません！（所持${owned}枚・必要${needed}枚）`, '#ff4444'); setLoading(false); return }
-    const newSlots = generateBonusSlots(rarity)
+    const hasFixedEffect = !!(item.bonus_effect && !EFFECT_POOL.includes(item.bonus_effect))
+    const newSlots = generateBonusSlots(rarity, hasFixedEffect)
     const cols = slotsToColumns(newSlots)
-    if (item.bonus_effect && !EFFECT_POOL.includes(item.bonus_effect)) cols.bonus_effect = item.bonus_effect  // 固定特殊効果(アーティファクト/レイド装備)は再評価で消さず保持
+    if (hasFixedEffect) cols.bonus_effect = item.bonus_effect  // 固定特殊効果(アーティファクト/レイド装備)は再評価で消さず保持
     await supabase.from('player_equipment').update(cols).eq('id', item.id)
     const newQty = owned - needed
     if (newQty <= 0) await supabase.from('player_items').delete().eq('id', sheetItem.id)
