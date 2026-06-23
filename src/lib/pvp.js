@@ -428,6 +428,9 @@ function doAttack(att, def, isExtra, ctx) {
       att.hp = Math.min(eff.hp_max, att.hp + rageCure)
       logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
     }
+    // 通常攻撃は精霊召喚でも神降ろしでもない → コンボ/連続使用ロックを解除
+    if (attBuffs.spiritCombo) attBuffs.spiritCombo = undefined
+    if (attBuffs.kinjutsuLock) attBuffs.kinjutsuLock = undefined
     if (att.expandedSkillSet.length > 0) att.skillIndex++
   }
 }

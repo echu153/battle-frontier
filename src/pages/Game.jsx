@@ -3024,6 +3024,9 @@ export default function Game() {
           playerHp = Math.min(maxHp, playerHp + rageCure)
           logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
         }
+        // 通常攻撃は精霊召喚でも神降ろしでもない → コンボ/連続使用ロックを解除
+        if (playerBuffs.spiritCombo) playerBuffs.spiritCombo = undefined
+        if (playerBuffs.kinjutsuLock) playerBuffs.kinjutsuLock = undefined
         if (expandedSkillSet.length > 0) skillIndex++
       }
       playerAttacking = false
@@ -3197,6 +3200,15 @@ export default function Game() {
         if (petHp <= 0) logs.push({ text:`💥 ペットは倒れてしまった…`, color:'#ff4444' })
       } else {
         playerHp -= dmg
+        // 陰陽結界：敵スキルダメージでも軽減分の一定割合を回復
+        if (playerBuffs.onmyoHeal?.turns > 0 && dmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
+          const oh = playerBuffs.onmyoHeal
+          const healBack = Math.floor(dmg * (oh.reduce / (1 - oh.reduce)) * oh.healRate)
+          if (healBack > 0) {
+            playerHp = Math.min(maxHp, playerHp + healBack)
+            logs.push({ text:`🔯 陰陽結界！ 軽減した分から${healBack}回復した！`, color:'#66ddaa' })
+          }
+        }
       }
     }
     if (petActive) logs.push({ text:`🐾 ペットを召喚！（HP${petMaxHp}）`, color:'#ffcc66' })
