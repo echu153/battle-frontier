@@ -31,7 +31,9 @@ export default class MainScene extends Phaser.Scene {
     this.lastKill = 0
     this.dead = false
     // セーブ対象になる進行データ（プロトなのでメモリのみ）
-    this.state = { level: 1, exp: 0, expNext: 20, hp: 100, hpMax: 100 }
+    this.state = { level: 1, exp: 0, expNext: 20, hp: 100, hpMax: 100, mp: 30, mpMax: 30 }
+    this.lastMapEmit = 0
+    this.mpAccum = 0
   }
 
   preload() {
@@ -129,15 +131,38 @@ export default class MainScene extends Phaser.Scene {
   }
 
   update(time, delta) {
+    // ミニマップ用の座標を間引いて配信(毎フレームは重いので150ms毎)
+    if (time - this.lastMapEmit > 150) { this.lastMapEmit = time; this.emitMap() }
     if (this.dead) return
     this.handleMovement()
     this.handleWander(delta)
     this.handleEnemyAttacks(time)
+    // MPの自然回復(1秒に+2、上限まで)
+    this.mpAccum += delta
+    if (this.mpAccum >= 500 && this.state.mp < this.state.mpMax) {
+      this.mpAccum = 0
+      this.state.mp = Math.min(this.state.mpMax, this.state.mp + 1)
+      this.emitHud()
+    }
     // コンボの時間切れ
     if (this.combo > 0 && time - this.lastKill > COMBO_TIMEOUT) {
       this.combo = 0
       this.emitHud()
     }
+  }
+
+  // ミニマップ用：ワールドサイズ・自分・敵の座標をReactへ
+  emitMap() {
+    if (!this.player) return
+    const enemies = []
+    this.slimes.getChildren().forEach((s) => {
+      if (s && s.active) enemies.push({ x: Math.round(s.x), y: Math.round(s.y) })
+    })
+    window.dispatchEvent(new CustomEvent('arpg-map', { detail: {
+      worldW: 1600, worldH: 1200,
+      player: { x: Math.round(this.player.x), y: Math.round(this.player.y) },
+      enemies,
+    } }))
   }
 
   handleMovement() {
@@ -297,7 +322,8 @@ export default class MainScene extends Phaser.Scene {
   emitHud() {
     window.dispatchEvent(new CustomEvent('arpg-hud', { detail: {
       level: this.state.level, exp: this.state.exp, expNext: this.state.expNext,
-      hp: this.state.hp, hpMax: this.state.hpMax, combo: this.combo,
+      hp: this.state.hp, hpMax: this.state.hpMax,
+      mp: this.state.mp, mpMax: this.state.mpMax, combo: this.combo,
     } }))
   }
 }
