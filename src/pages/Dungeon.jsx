@@ -1666,7 +1666,7 @@ export default function Dungeon() {
         </div>
 
         {/* マップ（ビューポート）。接触時に少し震える戦闘演出 */}
-        <div ref={gridRef} className="bf-dg-grid" style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', willChange: 'transform', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
+        <div ref={gridRef} className="bf-dg-grid" style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', willChange: shake ? 'transform' : 'auto', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
           {/* 床はワールド(ダンジョン)に固定＝壁と一緒にスクロール。キャラ移動で床がズレない。1タイル=約4マス */}
           {floorTile && (
             <div style={{ position: 'absolute', inset: 6, backgroundImage: `url(${floorTile})`, backgroundRepeat: 'repeat',

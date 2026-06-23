@@ -1311,3 +1311,25 @@ PvE戦闘エンジンを両プレイヤーへ対称適用。観点候補:
 5. `skeletonDmg`/`holyAwakening`/`bloodRage`/反射回復 等の対人での二者間適用が妥当か。selfDmg(すてみ)は軽減対象外のままでよいか。
 6. RLS: 装備/熟練度/profiles/pets/titles のクライアント横断読込が現行ポリシーで可能か（Rankingで実績あり）。skill_sets のみRPC化で十分か。
 → NEXT: CODEX
+
+---
+
+## 今回のレビュー対象（追加）
+**動作軽量化（アプリ全体・見た目不変方針）**
+- `public/sw.js` 全面改訂（network-only → 用途別キャッシュ）:
+  - HTML(navigate)=ネットワーク優先（デプロイ後すぐ最新／オフライン時のみcache）
+  - `/assets/*`(ハッシュ付き不変)=cache-first
+  - 同一オリジンの画像/音声/manifest等=stale-while-revalidate
+  - クロスオリジン(Supabase)とGET以外=素通し（APIに介入しない）
+  - VERSION付き(bf-v2)・activateで旧cache掃除
+- `src/pages/Dungeon.jsx`:
+  - グリッドの `willChange:'transform'` を常時→`shake?'transform':'auto'`（揺れ演出時のみ。合成レイヤー常設をやめる。見た目不変）
+- 実働確認(dev): 新SW v2活性化・同一オリジン画像が `bf-static-bf-v2` にキャッシュ・クロスオリジン非キャッシュ・consoleエラー無し。ビルド成功
+
+### [CLAUDE] (perf-lite)
+ユーザー選択=「見た目そのまま・安全重視／アプリ全体」。SW資産キャッシュ＋willChange整理のみ実施。
+**未実施(要相談)**: ダンジョン110マスは毎再描画で全reconcile（ダメージpop等の頻繁なsetStateで誘発）。最大の体感改善はグリッドの`useMemo`/`React.memo`化だが、依存取りこぼしで描画スタール（実バグ）のリスクがあり、ログイン必須でE2E不可のため安全側で見送り。観点:
+1. SWのHTML=network-first/資産=cache-first・SWR方針の妥当性。画像更新時の一時stale(次回読込で更新)は許容範囲か。
+2. ダンジョンのグリッドmemo化を次段で入れる価値/リスク評価（依存: state,fx,petHp,cheer,poisoned,paralyzed,burned,status,dungeon,floorNum）。
+3. willChange常設解除による副作用(初回アニメ時のレイヤー生成コスト)の体感差。
+→ NEXT: CODEX
