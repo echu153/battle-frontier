@@ -34,14 +34,27 @@ export default class MainScene extends Phaser.Scene {
     this.state = { level: 1, exp: 0, expNext: 20, hp: 100, hpMax: 100, mp: 30, mpMax: 30 }
     this.lastMapEmit = 0
     this.mpAccum = 0
+    this.facingAngle = 0 // 攻撃の向き(ラジアン、初期は右)
   }
 
   preload() {
     // [ART] public/action-rpg/hero.png があれば読む。無くてもエラーにせず四角で動かす。
     //   本番で4方向歩きにするときは spritesheet に差し替え:
     //   this.load.spritesheet('hero', '/action-rpg/hero.png', { frameWidth: 48, frameHeight: 48 })
-    this.load.image('hero_png', '/action-rpg/hero.png')
-    this.load.on('loaderror', (file) => { if (file?.key === 'hero_png') this.heroMissing = true })
+    // public/ に置いた画像があれば使う。無くてもエラーにせず四角/丸で動かす。
+    // key(name) → 実ファイルの対応。差し替えるときはここを変える。
+    this.missingArt = new Set()
+    const ART_FILES = { hero: '/syoumen.png', slime: '/2dsuraimu.png', grass: '/2dheigen.png' }
+    for (const [name, path] of Object.entries(ART_FILES)) {
+      this.load.image(`${name}_png`, path)
+    }
+    this.load.on('loaderror', (file) => { if (file?.key) this.missingArt.add(file.key) })
+  }
+
+  // 画像があればそのキー、無ければコード生成テクスチャのキーを返す
+  art(name) {
+    const key = `${name}_png`
+    return (this.textures.exists(key) && !this.missingArt.has(key)) ? key : name
   }
 
   create() {
@@ -49,13 +62,13 @@ export default class MainScene extends Phaser.Scene {
     this.drawGround()
 
     // --- プレイヤー ---
-    const heroKey = (this.textures.exists('hero_png') && !this.heroMissing) ? 'hero_png' : 'hero'
+    const heroKey = this.art('hero')
     this.player = this.physics.add.image(800, 600, heroKey)
     this.player.setDepth(10).setCollideWorldBounds(true)
     if (heroKey === 'hero_png') {
       // 高解像度の1枚絵は当たり判定用に小さく表示(後でドット絵スプライトに差し替え予定)
-      this.player.setDisplaySize(44, 44)
-      this.player.body.setSize(this.player.width * 0.5, this.player.height * 0.5, true)
+      this.player.setDisplaySize(48, 48)
+      this.player.body.setSize(this.player.width * 0.45, this.player.height * 0.45, true)
     }
 
     // --- 敵(スライム) ---
@@ -113,16 +126,29 @@ export default class MainScene extends Phaser.Scene {
   }
 
   drawGround() {
-    for (let y = 0; y < 1200; y += 32)
-      for (let x = 0; x < 1600; x += 32)
-        this.add.image(x, y, 'grass').setOrigin(0).setDepth(0)
+    if (this.art('grass') === 'grass_png') {
+      // 草原画像はワールド全体に敷き詰める(TileSpriteでタイル繰り返し)
+      const ts = this.add.tileSprite(0, 0, 1600, 1200, 'grass_png').setOrigin(0).setDepth(0)
+      // 元画像が大きいので縮小して細かい草が見えるように
+      const src = this.textures.get('grass_png').getSourceImage()
+      ts.setTileScale(384 / src.width, 384 / src.height)
+    } else {
+      for (let y = 0; y < 1200; y += 32)
+        for (let x = 0; x < 1600; x += 32)
+          this.add.image(x, y, 'grass').setOrigin(0).setDepth(0)
+    }
   }
 
   spawnSlime() {
     const x = Phaser.Math.Between(100, 1500)
     const y = Phaser.Math.Between(100, 1100)
-    const s = this.slimes.create(x, y, 'slime')
+    const key = this.art('slime')
+    const s = this.slimes.create(x, y, key)
     s.setDepth(5)
+    if (key === 'slime_png') {
+      s.setDisplaySize(34, 34)
+      s.body.setSize(s.width * 0.6, s.height * 0.6, true)
+    }
     s.hp = 30
     s.hpMax = 30
     s.expReward = 15
@@ -180,6 +206,8 @@ export default class MainScene extends Phaser.Scene {
     }
     const len = Math.hypot(vx, vy)
     if (len < 0.01) { this.player.setVelocity(0, 0); return }
+    // 動いている向きを覚えておく(敵がいない時の攻撃方向に使う)
+    this.facingAngle = Math.atan2(vy, vx)
     this.player.setVelocity((vx / len) * PLAYER_SPEED, (vy / len) * PLAYER_SPEED)
   }
 
@@ -194,21 +222,28 @@ export default class MainScene extends Phaser.Scene {
     })
   }
 
-  // クリック/タップ or スペースで発動。射程内の一番近い敵を殴る(クールタイムあり)
+  // クリック/タップ or スペースで発動。常に斬撃モーションは出し、射程内に敵がいればダメージ。
   tryAttack() {
     if (this.dead) return
     const time = this.time.now
     if (time - this.lastAttack < ATTACK_INTERVAL) return
+    this.lastAttack = time
+
     let target = null, best = ATTACK_RANGE
     this.slimes.getChildren().forEach((s) => {
       if (!s || !s.active) return
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, s.x, s.y)
       if (d < best) { best = d; target = s }
     })
-    if (!target) return
 
-    this.lastAttack = time
-    this.playAttackFx(target)
+    // 攻撃方向：敵がいればその方向、いなければ最後に向いた方向(初期は右)
+    const ang = target
+      ? Phaser.Math.Angle.Between(this.player.x, this.player.y, target.x, target.y)
+      : (this.facingAngle ?? 0)
+    this.playAttackFx(ang)
+
+    if (!target) return // 空振り：エフェクトだけ
+
     const dmg = Phaser.Math.Between(8, 14)
     target.hp -= dmg
     this.showDamage(target.x, target.y, dmg)
@@ -220,9 +255,8 @@ export default class MainScene extends Phaser.Scene {
     if (target.hp <= 0) this.killSlime(target)
   }
 
-  // 攻撃モーション：敵の方を向く→踏み込み→斬撃エフェクト
-  playAttackFx(target) {
-    const ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, target.x, target.y)
+  // 攻撃モーション：指定方向に向く→スケール→斬撃エフェクト
+  playAttackFx(ang) {
     // 左右の向き(右向き素材を基準に、左ならフリップ)
     if (Math.abs(Math.cos(ang)) > 0.2) this.player.setFlipX(Math.cos(ang) < 0)
 
