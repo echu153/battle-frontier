@@ -6111,21 +6111,35 @@ const BUFF_LABELS = {
   statusImmune:'🔰状態免疫', stunResist:'💫スタン耐',
   curseDmg:'💜呪い', healSeal:'🚫回復封',
   bloodRage:'🩸ブラッティロア',
+  matkDown:'🔮特攻↓', mukyoPen:'🗡防御貫通', tenkaiCharge:'🐉溜め',
+  onmyoHeal:'💚陰陽の理', regen:'💚再生', ailmentShield:'🛡異常無効',
+  spiritCombo:'✨精霊連',
 }
+// アイコン表示しない内部用フラグ（ターン内で消費される一時フラグ・内部CD）
+const STATUS_HIDDEN = new Set(['potionCooldown', 'nextSkillBoost', 'guaranteedExtra', 'kinjutsuLock'])
 export function extractStatuses(buffs) {
   const out = []
   for (const k of Object.keys(buffs || {})) {
     const b = buffs[k]
     if (!b) continue
-    const active = (b.turns > 0) || (k === 'bleed' && b.stacks > 0)
-    if (!active) continue
+    if (STATUS_HIDDEN.has(k)) continue
     // 出血はスタック数表示
     if (k === 'bleed') {
-      out.push({ label: `🩸出血×${b.stacks}`, color: '#ff8866' })
+      if (b.stacks > 0) out.push({ label: `🩸出血×${b.stacks}`, color: '#ff8866' })
       continue
     }
+    // 状態異常シールド（残回数）・精霊連（カウント）は turns を持たないので個別判定
+    if (k === 'ailmentShield') {
+      if ((b.charges || 0) > 0) out.push({ label: `🛡異常無効×${b.charges}`, color: '#66ddaa' })
+      continue
+    }
+    if (k === 'spiritCombo') {
+      if ((b.count || 0) > 0) out.push({ label: `✨精霊連×${b.count}`, color: '#66ddaa' })
+      continue
+    }
+    if (!(b.turns > 0)) continue
     const label = BUFF_LABELS[k] || k
-    const positive = /↑|軽減|聖域|命中↑|全賭け|魔剣|ブラッティロア|再生|骸骨|覚醒|回避↑|閃光連撃|連装|状態免疫|スタン耐/.test(label)
+    const positive = /↑|軽減|聖域|命中↑|全賭け|魔剣|ブラッティロア|再生|骸骨|覚醒|回避↑|閃光連撃|連装|状態免疫|スタン耐|防御貫通|溜め|陰陽|異常無効|精霊連/.test(label)
     out.push({ label, color: positive ? '#66ddaa' : '#ff8866' })
   }
   return out
