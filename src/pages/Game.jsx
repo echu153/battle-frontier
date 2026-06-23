@@ -311,6 +311,7 @@ export const JOB_GROWTH = {
   '賢者':      { hp:10, mp:10, atk:1, def:1, matk:2, mdef:2, spd:1 },
   '格闘家':    { hp:10, mp:5,  atk:2, def:1, matk:0, mdef:2, spd:1 },
   'サモナー':  { hp:10, mp:10, atk:0, def:1, matk:1, mdef:2, spd:1 },
+  '精霊召喚士':{ hp:10, mp:10, atk:0, def:2, matk:2, mdef:2, spd:1 },
   'サイキッカー':{ hp:10, mp:5, atk:2, def:1, matk:2, mdef:1, spd:2 },
   '体術師':    { hp:20, mp:5,  atk:2, def:1, matk:1, mdef:1, spd:2 },
   '魔銃士':    { hp:10, mp:5,  atk:2, def:1, matk:2, mdef:1, spd:2 },
@@ -340,7 +341,11 @@ const ADVANCED_CLASSES = {
   '魔法剣士':  { requires:'戦士', requiresLv:50, requires2:'魔法使い', requires2Lv:50 },
   '聖騎士':    { requires:'戦士', requiresLv:50, requires2:'僧侶',    requires2Lv:50 },
   '竜騎士':    { requiresItem:'dragon_knight_proof' },
+  '精霊召喚士':{ requires:'サモナー' },
 }
+
+// is_admin 限定先行公開の上位職（一般プレイヤーには転職候補に出さない）
+const ADMIN_ONLY_CLASSES = new Set(['精霊召喚士'])
 
 const CLASS_LEVEL_CAP = {
   '戦士':100, '弓使い':100, '魔法使い':100, '僧侶':100, '格闘家':100, 'サモナー':100,
@@ -349,6 +354,7 @@ const CLASS_LEVEL_CAP = {
   'サイキッカー':100, '体術師':100, '魔銃士':100,
   'ギャンブラー':100,
   '魔法剣士':100, '聖騎士':100, '竜騎士':100,
+  '精霊召喚士':100,
 }
 // 再修練5回でそのクラスのレベルキャップが300に解放される
 // 再修練強化の表示用説明（上から1段ずつ＝再修練1回ごとに解放）
@@ -4562,7 +4568,10 @@ export default function Game() {
       const cl = classLevels.find(x=>x.class_name===c)
       return { name:c, lv:cl?cl.lv:1, canChange: c !== profile.class }
     })
-  const advancedAvailable = Object.entries(ADVANCED_CLASSES).map(([name, req])=>{
+  const advancedAvailable = Object.entries(ADVANCED_CLASSES)
+    // is_admin 限定先行公開の上位職は一般プレイヤーには出さない
+    .filter(([name]) => !ADMIN_ONLY_CLASSES.has(name) || profile?.is_admin)
+    .map(([name, req])=>{
     const requires = req.requires
     const requiresLv = req.requiresLv || 100
     const requires2 = req.requires2
