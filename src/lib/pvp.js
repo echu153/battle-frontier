@@ -354,7 +354,7 @@ function doAttack(att, def, isExtra, ctx) {
       dealToDef(finalDmg)
       if (finalDmg > 0 && att.equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(defBuffs.healDown?.turns > 0)) {
         defBuffs.healDown = { turns: 2, rate: 0.9 }
-        logs.push({ text: `🗡 ヴァルブレイカーの効果！ ${enemyName}の回復力が2ターンの間-10%！`, color: '#ff8844' })
+        logs.push({ text: `🗡 ${att.equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemyName}の回復力が2ターンの間-10%！`, color: '#ff8844' })
       }
       if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(defBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
         defBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }

@@ -2931,7 +2931,7 @@ export default function Game() {
           enemyHp -= finalDmg
           if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
             enemyBuffs.healDown = { turns: 2, rate: 0.9 }
-            logs.push({ text: `🗡 ヴァルブレイカーの効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
+            logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
           }
           if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
             enemyBuffs.spdDown = { turns: 2, rate: 0.95 }  // 濡羽杖アマザネ: 攻撃ヒット時 対象SPD-5%
@@ -3008,7 +3008,7 @@ export default function Game() {
         enemyHp -= finalDmg
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
           enemyBuffs.healDown = { turns: 2, rate: 0.9 }
-          logs.push({ text: `🗡 ヴァルブレイカーの効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
+          logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
         }
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
           enemyBuffs.spdDown = { turns: 2, rate: 0.95 }  // 濡羽杖アマザネ: 攻撃ヒット時 対象SPD-5%
