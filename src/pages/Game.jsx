@@ -5440,7 +5440,7 @@ export default function Game() {
                   {facilitiesExpanded && (
                     <div style={{ border:'1px solid #003366', background:'#000a14', padding:'10px', marginTop:'8px' }}>
                       {(() => { const acc = true; return (<>
-                      <MenuCat title="コンテンツ" catKey="content" accordion={acc} open={!!openMenuCats.content || eventVisible} onToggle={toggleMenuCat}>
+                      <MenuCat title="コンテンツ" catKey="content" accordion={acc} open={openMenuCats.content !== undefined ? !!openMenuCats.content : eventVisible} onToggle={toggleMenuCat}>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                         {eventVisible && (
                           <button onClick={()=>nav('/event')} style={{ gridColumn:'1 / -1', padding:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'2px' }}>🎫 イベント開催中！</button>
@@ -5899,7 +5899,7 @@ export default function Game() {
                     {facilitiesExpanded && (
                       <div style={{ border:'1px solid #003366', background:'#000a14', padding:'10px', marginTop:'8px' }}>
                         {(() => { const acc = true; return (<>
-                        <MenuCat title="コンテンツ" catKey="content" accordion={acc} open={!!openMenuCats.content || eventVisible} onToggle={toggleMenuCat}>
+                        <MenuCat title="コンテンツ" catKey="content" accordion={acc} open={openMenuCats.content !== undefined ? !!openMenuCats.content : eventVisible} onToggle={toggleMenuCat}>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
                           {eventVisible && (
                             <button onClick={()=>nav('/event')} style={{ gridColumn:'1 / -1', padding:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'2px' }}>🎫 イベント開催中！</button>
