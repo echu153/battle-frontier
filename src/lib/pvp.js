@@ -61,6 +61,11 @@ function buildSide(input, key) {
   const rtCur = (profile.retraining || {})[profile.class] || 0
   const pe = (cls) => profile.class === cls && rtCur >= 3
 
+  // 精霊共鳴（再修練1+）: 最大MP+20%（mp初期値/回復上限/表示すべてに反映）
+  if (profile.class === '精霊召喚士' && rtCur >= 1 && has('精霊共鳴')) {
+    eff.mp_max = Math.floor(eff.mp_max * 1.2)
+  }
+
   const hasShingan   = has('心眼')
   const hasBerserk   = has('バーサク')
   const hasTakaNoMe  = has('鷹ノ目')

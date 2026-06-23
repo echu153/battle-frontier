@@ -357,6 +357,8 @@ const ADVANCED_CLASSES = {
 
 // is_admin 限定先行公開の上位職（一般プレイヤーには転職候補に出さない）
 const ADMIN_ONLY_CLASSES = new Set(['精霊召喚士'])
+// 再修練しても他クラスへ持ち越せない（＝他クラスで使用不可）スキルを持つクラス
+const NON_CARRYOVER_CLASSES = new Set(['精霊召喚士'])
 
 const CLASS_LEVEL_CAP = {
   '戦士':100, '弓使い':100, '魔法使い':100, '僧侶':100, '格闘家':100, 'サモナー':100,
@@ -2035,8 +2037,9 @@ export default function Game() {
     const { data: ps } = await supabase.from('player_skills')
       .select('*, skills(*)')
       .eq('player_id', profile.id)
+    // 精霊召喚士のスキルは持ち越し禁止（他クラスで使用不可）
     const classSkills = (ps || []).filter(s =>
-      s.skills?.class_name === targetClass && !s.is_carried_over
+      s.skills?.class_name === targetClass && !s.is_carried_over && !NON_CARRYOVER_CLASSES.has(s.skills?.class_name)
     )
     setRetrainingClass(targetClass)
     setRetrainingSkills(classSkills)
@@ -2057,7 +2060,8 @@ export default function Game() {
       setRetrainingMessage('再修練に失敗しました'); setLoading(false); return
     }
 
-    if (selectedCarrySkill) {
+    // 精霊召喚士スキルは持ち越し禁止（防御的チェック：候補にも出さないが念のため）
+    if (selectedCarrySkill && !NON_CARRYOVER_CLASSES.has(targetClass)) {
       await supabase.from('player_skills').update({ is_carried_over: true })
         .eq('player_id', profile.id).eq('skill_id', selectedCarrySkill)
     }
@@ -2462,7 +2466,7 @@ export default function Game() {
     const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
     // 装備・釣り等込みの実効最大HP/MP。戦闘の最大HP/MPプール・回復上限・%計算はこれを使う
     const maxHp = eff.hp_max
-    const maxMp = eff.mp_max
+    let maxMp = eff.mp_max
     const battleProfile = { ...profile, hp_max: maxHp, mp_max: maxMp }
     // サーバーのHP検証用に実効最大HPをキャッシュ（apply_battle_result が eff_hp_max を上限に使う）
     await supabase.from('profiles').update({ eff_hp_max: maxHp }).eq('id', profile.id)
@@ -2594,6 +2598,13 @@ export default function Game() {
     // 再修練3段でパッシブ強化（現在クラス一致＆再修練3回以上＆そのパッシブをセット中）
     const rtCur = (profile.retraining||{})[profile.class]||0
     const pe = (cls) => profile.class === cls && rtCur >= 3
+
+    // 精霊共鳴（再修練1+）: 最大MP+20%
+    if (profile.class === '精霊召喚士' && rtCur >= 1 && passiveNames.includes('精霊共鳴')) {
+      maxMp = Math.floor(maxMp * 1.2)
+      battleProfile.mp_max = maxMp
+      playerMp = Math.min(maxMp, profile.mp_current ?? maxMp)
+    }
 
     const passiveCritBonus   = (hasSeimitsu ? (pe('魔銃士')?10:5) : 0)
     const passiveCritDmgBonus = (hasOnmi && pe('暗殺者')) ? 0.2 : 0  // 隠身強化：クリ威力+20%
@@ -4346,7 +4357,9 @@ export default function Game() {
         </div>
         <div style={{ marginBottom:'12px' }}>
           {retrainingSkills.length === 0 ? (
-            <div style={{ color:'#446688', fontSize:'11px', textAlign:'center', padding:'12px' }}>習得済みスキルがありません</div>
+            <div style={{ color:'#446688', fontSize:'11px', textAlign:'center', padding:'12px' }}>
+              {NON_CARRYOVER_CLASSES.has(retrainingClass) ? `${retrainingClass}のスキルは他クラスへ持ち越せません` : '習得済みスキルがありません'}
+            </div>
           ) : (
             retrainingSkills.map(ps => (
               <div key={ps.skill_id} onClick={()=>setSelectedCarrySkill(selectedCarrySkill===ps.skill_id?null:ps.skill_id)}
