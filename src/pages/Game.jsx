@@ -5101,16 +5101,16 @@ export default function Game() {
             </div>
           )
         })()}
-        {(hasBreederProof || profile.is_admin) && (() => {
+        {(() => {
           const isCurrent = profile.class === 'ブリーダー'
           const cl = classLevels.find(x=>x.class_name==='ブリーダー')
-          const canChange = !isCurrent && (hasBreederProof || profile.is_admin)
+          const canChange = !isCurrent && hasBreederProof
           return (
             <div style={{ border:`1px solid ${isCurrent?'#445566':canChange?'#886600':'#002244'}`, background:isCurrent?'#001828':'#001028', padding:'8px', marginTop:'8px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <div>
                   <div style={{ color:isCurrent?'#88aabb':canChange?'#ffcc00':'#446688', fontSize:'12px' }}>
-                    ブリーダー{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}{profile.is_admin&&!hasBreederProof&&<span style={{color:'#ff8844',fontSize:'9px',marginLeft:'6px'}}>（管理者）</span>}
+                    ブリーダー{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}
                   </div>
                   <div style={{ color:'#446688', fontSize:'10px' }}>ブリーダーの証が必要（称号「ペット想い」で獲得）</div>
                   <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{cl?cl.lv:1}/{getEffectiveCap('ブリーダー', profile.retraining)}</div>
