@@ -115,6 +115,10 @@ export default function Equipment() {
   const [ticketPopup, setTicketPopup] = useState(false)  // Sレアレイドボス装備選択券のポップアップ
   const [ticketMsg, setTicketMsg] = useState('')
   const [ticketGot, setTicketGot] = useState(null)  // 交換成功で獲得した装備名（ポップアップ内に表示）
+  const [renamePopup, setRenamePopup] = useState(null)  // 装備命名券のポップアップ（対象=player_items行）
+  const [renameTargetId, setRenameTargetId] = useState(null)  // 命名する装備のid
+  const [renameText, setRenameText] = useState('')
+  const [renameMsg, setRenameMsg] = useState('')
 
   // 選択券で交換できるS級レイド装備（redeem_raid_ticket の許可リストと一致）
   const RAID_TICKET_CHOICES = [
@@ -160,6 +164,35 @@ export default function Equipment() {
       setTicketGot(weaponName)  // ポップアップは閉じず、獲得表示を出す
       await fetchAll()
     }
+    setLoading(false)
+  }
+
+  // 装備命名券：+10以上の装備に好きな名前(12文字以内)を付ける。券を1枚消費。
+  const RENAME_MAX = 12
+  const applyRename = async () => {
+    if (loading || !renamePopup) return
+    const name = renameText.trim()
+    if (name.length === 0) { setRenameMsg('名前を入力してください'); return }
+    if ([...name].length > RENAME_MAX) { setRenameMsg(`${RENAME_MAX}文字以内で入力してください`); return }
+    const target = equipment.find(e => e.id === renameTargetId)
+    if (!target) { setRenameMsg('命名する装備を選んでください'); return }
+    if ((target.enhance_plus || 0) < 10) { setRenameMsg('+10以上の装備にのみ命名できます'); return }
+    setRenameMsg('')
+    setLoading(true)
+    const pi = renamePopup
+    // 券を1枚消費（楽観ロック：数量が読取時と一致するときだけ消費）
+    if ((pi.quantity || 0) > 1) {
+      const { data: upd } = await supabase.from('player_items').update({ quantity: pi.quantity - 1 }).eq('id', pi.id).eq('quantity', pi.quantity).select('id')
+      if (!upd || upd.length === 0) { setRenameMsg('処理に失敗しました。もう一度お試しください。'); await fetchAll(); setLoading(false); return }
+    } else {
+      const { data: del } = await supabase.from('player_items').delete().eq('id', pi.id).eq('quantity', pi.quantity).select('id')
+      if (!del || del.length === 0) { setRenameMsg('処理に失敗しました。もう一度お試しください。'); await fetchAll(); setLoading(false); return }
+    }
+    await supabase.from('player_equipment').update({ custom_name: name }).eq('id', target.id)
+    await fetchAll()
+    setRenamePopup(null); setRenameTargetId(null); setRenameText(''); setRenameMsg('')
+    setAwakenMessage(`✨ 「${name}」と命名した！`)
+    setTimeout(() => setAwakenMessage(''), 3000)
     setLoading(false)
   }
 
@@ -432,7 +465,8 @@ export default function Equipment() {
                   {equipped ? (
                     <>
                       <div style={{ color: RARITY_COLORS[equipped.weapons.rarity], fontSize:'11px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                        {getProfPrefix(proficiency.find(p => p.equipment_id === equipped.id)?.prof_lv || 0)}{equipped.weapons.name}
+                        {getProfPrefix(proficiency.find(p => p.equipment_id === equipped.id)?.prof_lv || 0)}
+                        {equipped.custom_name ? <span style={{color:'#ff99cc'}}>{equipped.custom_name}</span> : equipped.weapons.name}
                         {plus > 0 && <span style={{color:'#ffcc00'}}> +{plus}</span>}
                       </div>
                       <div style={{ fontSize:'9px', color: RARITY_COLORS[equipped.weapons.rarity] }}>{RARITY_LABELS[equipped.weapons.rarity]}</div>
@@ -526,6 +560,9 @@ export default function Equipment() {
                         ) : pi.items.name === 'Sレアレイドボス装備選択券' ? (
                           <button onClick={() => { setTicketPopup(true); setTicketMsg(''); setTicketGot(null) }} disabled={loading}
                             style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
+                        ) : pi.items.effect === 'equip_rename' ? (
+                          <button onClick={() => { setRenamePopup(pi); setRenameTargetId(null); setRenameText(''); setRenameMsg('') }} disabled={loading}
+                            style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
                         ) : pi.items.effect === 'material' ? (
                           <span style={{ color:'#aa8800', fontSize:'10px' }}>素材</span>
                         ) : pi.equipped ? (
@@ -572,7 +609,11 @@ export default function Equipment() {
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
                         <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
                           <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>{RARITY_LABELS[w.rarity]}</span>
-                          <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>{profPrefix}{w.name}</span>
+                          <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>
+                            {profPrefix}
+                            {item.custom_name ? <span style={{color:'#ff99cc'}}>{item.custom_name}</span> : w.name}
+                          </span>
+                          {item.custom_name && <span style={{ color:'#667788', fontSize:'9px' }}>({w.name})</span>}
                           {plus > 0 && !isArtifactBase && <span style={{ color:'#ffcc00', fontSize:'11px', fontWeight:'bold' }}>+{plus}</span>}
                         </div>
                         <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
@@ -919,6 +960,59 @@ export default function Equipment() {
           </div>
         </div>
       )}
+
+      {renamePopup && (() => {
+        const targets = equipment.filter(e => (e.enhance_plus || 0) >= 10)
+        return (
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}
+            onClick={() => { if (!loading) setRenamePopup(null) }}>
+            <div onClick={e => e.stopPropagation()} style={{ background:'#0a0c1a', border:'1px solid #ffcc44', padding:'20px', maxWidth:'380px', width:'92%', fontFamily:'monospace', maxHeight:'82vh', overflowY:'auto' }}>
+              <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'6px' }}>🏷 装備命名券</div>
+              <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'14px', lineHeight:'1.5' }}>
+                <span style={{ color:'#ffcc00' }}>+10以上</span>の装備に好きな名前（{RENAME_MAX}文字以内）を付けられます。<br/>
+                <span style={{ color:'#ff8844' }}>命名すると券を1枚消費します。</span>
+              </div>
+              {targets.length === 0 ? (
+                <div style={{ color:'#ff8844', fontSize:'11px', marginBottom:'12px' }}>+10以上の装備を所持していません。</div>
+              ) : (
+                <>
+                  <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>命名する装備を選択</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'12px' }}>
+                    {targets.map(e => {
+                      const on = renameTargetId === e.id
+                      return (
+                        <button key={e.id} onClick={() => setRenameTargetId(e.id)} disabled={loading}
+                          style={{ textAlign:'left', padding:'8px', background: on ? '#1a1400' : '#001028', border:`1px solid ${on ? '#ffcc44' : '#0055aa'}`, color: on ? '#ffcc44' : '#cce0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                          {e.custom_name && <span style={{ color:'#ff99cc' }}>「{e.custom_name}」</span>}
+                          {e.weapons.name} <span style={{ color:'#ffcc00' }}>+{e.enhance_plus}</span>
+                          <span style={{ color:'#446688', fontSize:'10px' }}>（{SLOT_LABELS[e.slot] || e.slot}）</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>新しい名前（{RENAME_MAX}文字以内）</div>
+                  <input type="text" value={renameText} maxLength={RENAME_MAX}
+                    onChange={e => setRenameText(e.target.value)}
+                    placeholder="例：絶対正義の剣"
+                    style={{ width:'100%', boxSizing:'border-box', background:'#001028', border:'1px solid #0055aa', color:'#cce0ff', fontFamily:'monospace', fontSize:'13px', padding:'8px', marginBottom:'4px' }} />
+                  <div style={{ textAlign:'right', color:'#446688', fontSize:'10px', marginBottom:'10px' }}>{[...renameText].length}/{RENAME_MAX}</div>
+                </>
+              )}
+              {renameMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{renameMsg}</div>}
+              <div style={{ display:'flex', gap:'8px' }}>
+                <button onClick={() => setRenamePopup(null)} disabled={loading}
+                  style={{ flex:1, padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>キャンセル</button>
+                {targets.length > 0 && (
+                  <button onClick={applyRename} disabled={loading || !renameTargetId || renameText.trim().length === 0}
+                    style={{ flex:2, padding:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', opacity:(!renameTargetId || renameText.trim().length===0)?0.5:1 }}>
+                    {loading ? '処理中...' : '命名する'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
