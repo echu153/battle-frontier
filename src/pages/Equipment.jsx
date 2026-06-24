@@ -176,7 +176,7 @@ export default function Equipment() {
     if ([...name].length > RENAME_MAX) { setRenameMsg(`${RENAME_MAX}文字以内で入力してください`); return }
     const target = equipment.find(e => e.id === renameTargetId)
     if (!target) { setRenameMsg('命名する装備を選んでください'); return }
-    if ((target.enhance_plus || 0) < 10) { setRenameMsg('+10以上の装備にのみ命名できます'); return }
+    if ((target.enhance_plus || 0) < 7) { setRenameMsg('+7以上の装備にのみ命名できます'); return }
     setRenameMsg('')
     setLoading(true)
     const pi = renamePopup
@@ -962,18 +962,18 @@ export default function Equipment() {
       )}
 
       {renamePopup && (() => {
-        const targets = equipment.filter(e => (e.enhance_plus || 0) >= 10)
+        const targets = equipment.filter(e => (e.enhance_plus || 0) >= 7)
         return (
           <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}
             onClick={() => { if (!loading) setRenamePopup(null) }}>
             <div onClick={e => e.stopPropagation()} style={{ background:'#0a0c1a', border:'1px solid #ffcc44', padding:'20px', maxWidth:'380px', width:'92%', fontFamily:'monospace', maxHeight:'82vh', overflowY:'auto' }}>
               <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'6px' }}>🏷 装備命名券</div>
               <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'14px', lineHeight:'1.5' }}>
-                <span style={{ color:'#ffcc00' }}>+10以上</span>の装備に好きな名前（{RENAME_MAX}文字以内）を付けられます。<br/>
+                <span style={{ color:'#ffcc00' }}>+7以上</span>の装備に好きな名前（{RENAME_MAX}文字以内）を付けられます。<br/>
                 <span style={{ color:'#ff8844' }}>命名すると券を1枚消費します。</span>
               </div>
               {targets.length === 0 ? (
-                <div style={{ color:'#ff8844', fontSize:'11px', marginBottom:'12px' }}>+10以上の装備を所持していません。</div>
+                <div style={{ color:'#ff8844', fontSize:'11px', marginBottom:'12px' }}>+7以上の装備を所持していません。</div>
               ) : (
                 <>
                   <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>命名する装備を選択</div>
