@@ -11,7 +11,7 @@
 //    さらに最終倍率 dmgMult で全体量を調整。これにより防御特化が効く。
 //    ※ executeSkill に渡すステ自体は縮小しない＝**回復(ヒール/吸収)量は満額のまま**。
 //  ・回復量は減少なし（×1.0）               … PVP.healMult
-//  ・素早さ由来のクリティカル率・回避率は上限2倍（速さ補正ぶんのみ×2）
+//  ・素早さ由来のクリティカル率・回避率は上限1.5倍（速さ補正ぶんのみ×1.5）
 //  ・素早さが速い方が先攻。HP0で決着。ターン上限到達はHP割合が高い方の勝ち（同率は引分）。
 //
 // スキルは各自の「出撃」スキルセットを反映（呼び出し側で sortie を渡す）。
@@ -40,11 +40,12 @@ const PVP = {
   turnCap: 60,        // ターン上限
 }
 const CRIT_BASE_RATE = 100 / 24  // calcCritRate の基礎クリ率（速さ補正を除いた素の値）
+const PVP_SPD_BONUS_MULT = 1.5   // PvPで素早さ由来のクリ率・回避率に掛ける倍率（上限○倍）
 
-// 素早さ由来のクリ率を2倍に（基礎ぶんは据え置き、速さ補正ぶんのみ倍化＝実質「上限2倍」）
-const pvpCritFromSpd = (spd) => CRIT_BASE_RATE + (calcCritRate(spd) - CRIT_BASE_RATE) * 2
-// 素早さ由来の回避率を2倍に（上限2倍）
-const pvpEvasionFromSpd = (defSpd, atkSpd) => calcEvasionRate(defSpd, atkSpd) * 2
+// 素早さ由来のクリ率を1.5倍に（基礎ぶんは据え置き、速さ補正ぶんのみ倍化＝実質「上限1.5倍」）
+const pvpCritFromSpd = (spd) => CRIT_BASE_RATE + (calcCritRate(spd) - CRIT_BASE_RATE) * PVP_SPD_BONUS_MULT
+// 素早さ由来の回避率を1.5倍に（上限1.5倍）
+const pvpEvasionFromSpd = (defSpd, atkSpd) => calcEvasionRate(defSpd, atkSpd) * PVP_SPD_BONUS_MULT
 
 // 1プレイヤー分の戦闘状態を組み立てる。
 //  input: { eff, equipment, skillSets, proficiency, profile, playerItem }
@@ -627,7 +628,7 @@ export function simulatePvpBattle(inputA, inputB) {
   const B = buildSide(inputB, 'B')
 
   logs.push({ text: `⚔ 対人戦開始！ ${A.profile.username} vs ${B.profile.username}`, color: '#ffcc66' })
-  logs.push({ text: `（与ダメージは防御力で大きく軽減／回復は通常どおり／素早さによるクリ・回避は上限2倍）`, color: '#88aacc' })
+  logs.push({ text: `（与ダメージは防御力で大きく軽減／回復は通常どおり／素早さによるクリ・回避は上限1.5倍）`, color: '#88aacc' })
 
   // 開幕の装備効果バフ
   A.buffs = applyEquipmentEffects(A.equipment, { ...A.profile, hp_max: A.eff.hp_max }, A.buffs, logs)
