@@ -97,8 +97,8 @@ function compressRaidDmg(d) {
 
 function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_NAME) {
   const logs = []
-  let playerHp = Math.max(1, profile.hp_current ?? profile.hp_max)
-  let playerMp = profile.mp_current ?? profile.mp_max
+  let playerHp = Math.max(1, profile.hp_current ?? eff.hp_max)
+  let playerMp = profile.mp_current ?? eff.mp_max
   let totalDamage = 0
   let skillIndex = 0
   let prevSkillName = null
@@ -232,7 +232,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           const res = executeSkill(cs.skills, { ...effBuff, lastMpCost: mpCost }, profile, boss, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
           const finalCrit = res.dmg > 0 && (isCrit || (res.bonusCritRate > 0 && Math.random() * 100 < playerCritRate + res.bonusCritRate))
           const finalCritMult = finalCrit ? (1.5 + (eff.critDmg || 0) + passiveCritDmgBonus) : 1.0
-          const tosoMult = (hasTosoHonno && playerHp <= profile.hp_max * 0.5) ? (pe('体術師')?1.25:1.1) : 1.0
+          const tosoMult = (hasTosoHonno && playerHp <= eff.hp_max * 0.5) ? (pe('体術師')?1.25:1.1) : 1.0
           let defScale = 1.0
           if (res.dmg > 0) {
             const sType = cs.skills?.type
@@ -251,13 +251,13 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           const isHealBlocked = playerBuffs.healBlock?.turns > 0
           if (!isHealBlocked && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
             const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
-            playerHp = Math.min(profile.hp_max, playerHp + rageCure)
+            playerHp = Math.min(eff.hp_max, playerHp + rageCure)
             logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
           }
           totalDamage += finalDmg
           if (!isHealBlocked) {
             const healAmt = Math.floor(res.heal * passiveHealMult)
-            playerHp = Math.min(profile.hp_max, playerHp + healAmt)
+            playerHp = Math.min(eff.hp_max, playerHp + healAmt)
             if (passiveHealReflect && healAmt > 0) {
               const reflectDmg = Math.floor(healAmt * 0.5)
               totalDamage += reflectDmg
@@ -308,12 +308,12 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         const baseAtk = isMagical ? effBuff.matk : effBuff.atk
         const eDef = isMagical ? BOSS_MDEF : BOSS_DEF
         const baseDmg = Math.max(1, Math.floor(baseAtk * baseAtk / Math.max(1, baseAtk + eDef)) + Math.floor(Math.random() * 4))
-        const tosoMult = (hasTosoHonno && playerHp <= profile.hp_max * 0.5) ? (pe('体術師')?1.25:1.1) : 1.0
+        const tosoMult = (hasTosoHonno && playerHp <= eff.hp_max * 0.5) ? (pe('体術師')?1.25:1.1) : 1.0
         let finalDmg = Math.floor(baseDmg * critMult * (isArtifact ? 1.3 : 1.0) * passiveDmgMult * tosoMult * (0.9 + Math.random() * 0.2))
         finalDmg = compressRaidDmg(Math.floor(finalDmg * weakMult(!isMagical))) // 弱点補正→高火力頭打ち・低火力底上げ
         if (!playerBuffs.healBlock?.turns && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
           const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
-          playerHp = Math.min(profile.hp_max, playerHp + rageCure)
+          playerHp = Math.min(eff.hp_max, playerHp + rageCure)
           logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
         }
         totalDamage += finalDmg
@@ -436,13 +436,13 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     const isHealBlockedTick = playerBuffs.healBlock?.turns > 0
     if (playerBuffs.regenHeal?.turns > 0) {
       if (!isHealBlockedTick) {
-        playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.regenHeal.amount)
+        playerHp = Math.min(eff.hp_max, playerHp + playerBuffs.regenHeal.amount)
         logs.push({ text: `💚 リジェネ！ HPが${playerBuffs.regenHeal.amount}回復！`, color: '#44ff88' })
       }
     }
     if (playerBuffs.delayHeal?.triggerTurn === turn) {
       if (!isHealBlockedTick) {
-        playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.delayHeal.amount)
+        playerHp = Math.min(eff.hp_max, playerHp + playerBuffs.delayHeal.amount)
         logs.push({ text: `💚 ${playerBuffs.delayHeal.amount}HP回復！`, color: '#44ff88' })
       }
     }
@@ -459,6 +459,7 @@ export default function RaidBoss() {
   const [profile, setProfile] = useState(null)
   const [equipment, setEquipment] = useState([])
   const [proficiency, setProficiency] = useState([])
+  const [abilityTitle, setAbilityTitle] = useState(null)  // 称号ボーナス（calcEffectiveStatsに渡す）
   const [skillSets, setSkillSets] = useState([])
   const [boss, setBoss] = useState(undefined)
   const [nextSpawn, setNextSpawn] = useState(null)
@@ -517,6 +518,11 @@ export default function RaidBoss() {
 
     if (!prof) { nav('/create'); return }
     setProfile(prof)
+    // 称号ボーナスを取得（戦闘ステータスに反映）
+    if (prof.ability_title_id) {
+      const { data: at } = await supabase.from('titles').select('*').eq('id', prof.ability_title_id).single()
+      setAbilityTitle(at || null)
+    } else { setAbilityTitle(null) }
 
     // サーバー時刻オフセットを測定（端末時計のズレでレイドCDが解消しない問題の対策）
     try {
@@ -629,7 +635,7 @@ export default function RaidBoss() {
       setBattleLogs([])
       setScene('battle')
 
-      const eff = calcEffectiveStats(profile, equipment, proficiency)
+      const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
       // 読み込み未完了/失敗でstateが空のままだとスキル無し戦闘になるため、空ならDBから取り直す
       let curSets = skillSets
       if (curSets.length === 0) {

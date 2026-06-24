@@ -40,9 +40,10 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
   const mods = enemy.mods || {}
 
   // ステータス上限（過剰分5%）を適用。上限は宮ごと(enemy.cap)に設定。
-  const capped = applyStatCap(effRaw, profileRaw.hp_max, enemy.cap || mods.capOverride)
+  // ★装備・釣り等込みの実効最大HP/MPを上限適用に渡す（基礎値だとボーナスが乗らない）
+  const capped = applyStatCap(effRaw, effRaw.hp_max, enemy.cap || mods.capOverride)
   const eff = capped.eff
-  const profile = { ...profileRaw, hp_max: capped.hpMax }
+  const profile = { ...profileRaw, hp_max: capped.hpMax, mp_max: effRaw.mp_max }
 
   // 第7 天秤エルゲルビ: ステ平均化＋攻守の偏りが大きいと即死
   let instakillDoomed = false
