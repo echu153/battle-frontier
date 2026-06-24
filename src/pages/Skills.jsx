@@ -34,6 +34,8 @@ export default function Skills() {
   const [activeTab, setActiveTab] = useState('current')
   const [setMessage, setSetMessage] = useState('')
   const [selectedSet, setSelectedSet] = useState('sortie')  // 編集中のセット種別
+  const [bulkMode, setBulkMode] = useState(false)           // まとめて選択モード
+  const [bulkIds, setBulkIds] = useState([])                // 一括反映で選んだスキルID（選択順）
 
   useEffect(() => { fetchAll() }, [])
 
@@ -124,6 +126,37 @@ export default function Skills() {
   const removeFromSlot = async (slotOrder) => {
     setLoading(true)
     await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('set_type', selectedSet).eq('slot_order', slotOrder)
+    await fetchAll()
+    setLoading(false)
+  }
+
+  // まとめて選択：スキルID のチェックをトグル（選択順を保持）
+  const toggleBulk = (skillId) => {
+    setSetMessage('')
+    setBulkIds(prev => prev.includes(skillId) ? prev.filter(id => id !== skillId) : [...prev, skillId])
+  }
+
+  // 選択中スキルを現在のセットへ一括反映（パッシブ→専用スロット、通常→上から順に最大5枠）
+  const applyBulk = async () => {
+    const chosen = bulkIds
+      .map(id => playerSkills.find(ps => ps.skill_id === id))
+      .filter(Boolean)
+      .filter(ps => ps.skills && (ps.skills.class_name === profile.class || ps.skills.class_name === '共通' || ps.is_carried_over))
+    const passives = chosen.filter(ps => ps.skills.type === 'パッシブ')
+    const actives = chosen.filter(ps => ps.skills.type !== 'パッシブ')
+    if (passives.length > 1) { setSetMessage('パッシブは1個までです。1つだけ選んでください。'); return }
+    if (actives.length > 5) { setSetMessage('通常スキルは最大5個までです。5個以内で選んでください。'); return }
+    if (chosen.length === 0) { setSetMessage('反映するスキルを選んでください。'); return }
+    setSetMessage('')
+    setLoading(true)
+    // 現在のセットを一旦クリアしてから入れ直す
+    await supabase.from('skill_sets').delete().eq('player_id', profile.id).eq('set_type', selectedSet)
+    const rows = []
+    if (passives[0]) rows.push({ player_id: profile.id, set_type: selectedSet, skill_id: passives[0].skill_id, slot_order: PASSIVE_SLOT, use_count: 1 })
+    actives.forEach((ps, i) => rows.push({ player_id: profile.id, set_type: selectedSet, skill_id: ps.skill_id, slot_order: ACTIVE_SLOTS[i], use_count: 1 }))
+    if (rows.length) await supabase.from('skill_sets').insert(rows)
+    setBulkIds([])
+    setBulkMode(false)
     await fetchAll()
     setLoading(false)
   }
@@ -224,6 +257,27 @@ export default function Skills() {
           </div>
         </div>
 
+        {/* まとめて選択モード */}
+        <div style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'8px', flexWrap:'wrap' }}>
+          <button onClick={()=>{ setBulkMode(m=>!m); setBulkIds([]); setSetMessage('') }} disabled={loading}
+            style={{ padding:'6px 12px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
+              background:bulkMode?'#0a1630':'#000818', border:`1px solid ${bulkMode?'#44ff88':'#225544'}`, color:bulkMode?'#44ff88':'#557799' }}>
+            {bulkMode ? '✓ まとめて選択中' : '☑ まとめて選択'}
+          </button>
+          {bulkMode && (
+            <>
+              <span style={{ color:'#557799', fontSize:'10px' }}>
+                一覧でチェック→「{SET_TYPES.find(s=>s.key===selectedSet)?.label}」へ反映（パッシブ1＋通常5まで・選んだ順）
+              </span>
+              <button onClick={applyBulk} disabled={loading || bulkIds.length===0}
+                style={{ padding:'6px 12px', fontFamily:'monospace', fontSize:'11px', cursor: bulkIds.length===0?'not-allowed':'pointer',
+                  background:'#06220f', border:'1px solid #44ff88', color: bulkIds.length===0?'#335544':'#44ff88', opacity: bulkIds.length===0?0.6:1 }}>
+                選択した{bulkIds.length}個を反映
+              </button>
+            </>
+          )}
+        </div>
+
         {/* タブ切り替え */}
         <div style={{ display:'flex', gap:'4px', marginBottom:'8px' }}>
           <button onClick={()=>setActiveTab('current')}
@@ -243,7 +297,8 @@ export default function Skills() {
               const learned = learnedIds.includes(skill.id)
               const inSet = curSets.find(ss => ss.skill_id === skill.id)
               return (
-                <SkillCard key={skill.id} skill={skill} learned={learned} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={true} />
+                <SkillCard key={skill.id} skill={skill} learned={learned} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={true}
+                  bulkMode={bulkMode} bulkChecked={bulkIds.includes(skill.id)} onBulkToggle={toggleBulk} />
               )
             })}
           </div>
@@ -266,7 +321,8 @@ export default function Skills() {
                 {skills.map(skill => {
                   const inSet = curSets.find(ss => ss.skill_id === skill.id)
                   return (
-                    <SkillCard key={skill.id} skill={skill} learned={true} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={className === profile.class || className === '共通' || carriedSkillIds.includes(skill.id)} />
+                    <SkillCard key={skill.id} skill={skill} learned={true} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={className === profile.class || className === '共通' || carriedSkillIds.includes(skill.id)}
+                      bulkMode={bulkMode} bulkChecked={bulkIds.includes(skill.id)} onBulkToggle={toggleBulk} />
                   )
                 })}
               </div>
@@ -298,17 +354,23 @@ export default function Skills() {
   )
 }
 
-function SkillCard({ skill, learned, inSet, skillSets, loading, onSet, canSet }) {
+function SkillCard({ skill, learned, inSet, skillSets, loading, onSet, canSet, bulkMode, bulkChecked, onBulkToggle }) {
+  const bulkSelectable = bulkMode && learned && canSet
   return (
-    <div style={{ border:`1px solid ${learned ? '#0044aa' : '#002244'}`, background: learned ? '#001028' : '#000818', padding:'10px', marginBottom:'6px', opacity: learned ? 1 : 0.5 }}>
+    <div onClick={bulkSelectable ? () => onBulkToggle(skill.id) : undefined}
+      style={{ border:`1px solid ${bulkChecked ? '#44ff88' : (learned ? '#0044aa' : '#002244')}`, background: bulkChecked ? '#06220f' : (learned ? '#001028' : '#000818'), padding:'10px', marginBottom:'6px', opacity: learned ? 1 : 0.5, cursor: bulkSelectable ? 'pointer' : 'default' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
         <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+          {bulkSelectable && (
+            <input type="checkbox" checked={bulkChecked} readOnly
+              style={{ accentColor:'#44ff88', width:'14px', height:'14px', cursor:'pointer' }} />
+          )}
           <span style={{ fontSize:'9px', padding:'1px 4px', color: TYPE_COLORS[skill.type], border:`1px solid ${TYPE_COLORS[skill.type]}` }}>{skill.type}</span>
           <span style={{ color: learned ? '#88ccff' : '#446688', fontSize:'12px' }}>{skill.name}</span>
         </div>
         <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
           {skill.type !== 'パッシブ' && <span style={{ color:'#446688', fontSize:'10px' }}>MP{skill.mp_cost}</span>}
-          {learned && !inSet && canSet && (
+          {!bulkMode && learned && !inSet && canSet && (
             skill.type === 'パッシブ' ? (
               <button onClick={() => onSet(skill.id, PASSIVE_SLOT)} disabled={loading}
                 style={{ background:'#1a0c00', border:'1px solid #ff8844', color:'#ff8844', fontFamily:'monospace', fontSize:'10px', padding:'3px 8px', cursor:'pointer' }}>パッシブにセット</button>
