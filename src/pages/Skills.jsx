@@ -169,6 +169,23 @@ export default function Skills() {
   const carriedSkillIds = playerSkills.filter(ps => ps.is_carried_over).map(ps => ps.skill_id)
   const curSets = skillSets.filter(ss => setTypeOf(ss) === selectedSet)  // 編集中セットの中身
 
+  // まとめて選択中の各スキルが、どのスロットに入るか（パッシブ／通常①〜⑤）を事前計算
+  const CIRCLED = ['①','②','③','④','⑤']
+  const bulkLabels = {}
+  {
+    let activeIdx = 0
+    for (const id of bulkIds) {
+      const ps = playerSkills.find(p => p.skill_id === id)
+      if (!ps?.skills) continue
+      if (ps.skills.type === 'パッシブ') {
+        bulkLabels[id] = { text: 'パッシブ', color: '#ff8844' }
+      } else {
+        bulkLabels[id] = { text: `通常${CIRCLED[activeIdx] || (activeIdx + 1)}`, color: activeIdx < 5 ? '#44ff88' : '#ff6464' }
+        activeIdx++
+      }
+    }
+  }
+
   // クラス別にグループ化
   const skillsByClass = {}
   for (const ps of playerSkills) {
@@ -298,7 +315,7 @@ export default function Skills() {
               const inSet = curSets.find(ss => ss.skill_id === skill.id)
               return (
                 <SkillCard key={skill.id} skill={skill} learned={learned} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={true}
-                  bulkMode={bulkMode} bulkChecked={bulkIds.includes(skill.id)} onBulkToggle={toggleBulk} />
+                  bulkMode={bulkMode} bulkChecked={bulkIds.includes(skill.id)} onBulkToggle={toggleBulk} bulkLabel={bulkLabels[skill.id]} />
               )
             })}
           </div>
@@ -322,7 +339,7 @@ export default function Skills() {
                   const inSet = curSets.find(ss => ss.skill_id === skill.id)
                   return (
                     <SkillCard key={skill.id} skill={skill} learned={true} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={className === profile.class || className === '共通' || carriedSkillIds.includes(skill.id)}
-                      bulkMode={bulkMode} bulkChecked={bulkIds.includes(skill.id)} onBulkToggle={toggleBulk} />
+                      bulkMode={bulkMode} bulkChecked={bulkIds.includes(skill.id)} onBulkToggle={toggleBulk} bulkLabel={bulkLabels[skill.id]} />
                   )
                 })}
               </div>
@@ -354,7 +371,7 @@ export default function Skills() {
   )
 }
 
-function SkillCard({ skill, learned, inSet, skillSets, loading, onSet, canSet, bulkMode, bulkChecked, onBulkToggle }) {
+function SkillCard({ skill, learned, inSet, skillSets, loading, onSet, canSet, bulkMode, bulkChecked, onBulkToggle, bulkLabel }) {
   const bulkSelectable = bulkMode && learned && canSet
   return (
     <div onClick={bulkSelectable ? () => onBulkToggle(skill.id) : undefined}
@@ -367,6 +384,9 @@ function SkillCard({ skill, learned, inSet, skillSets, loading, onSet, canSet, b
           )}
           <span style={{ fontSize:'9px', padding:'1px 4px', color: TYPE_COLORS[skill.type], border:`1px solid ${TYPE_COLORS[skill.type]}` }}>{skill.type}</span>
           <span style={{ color: learned ? '#88ccff' : '#446688', fontSize:'12px' }}>{skill.name}</span>
+          {bulkChecked && bulkLabel && (
+            <span style={{ fontSize:'10px', padding:'1px 6px', color:'#000', background:bulkLabel.color, fontWeight:'bold', borderRadius:'2px' }}>{bulkLabel.text}</span>
+          )}
         </div>
         <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
           {skill.type !== 'パッシブ' && <span style={{ color:'#446688', fontSize:'10px' }}>MP{skill.mp_cost}</span>}
