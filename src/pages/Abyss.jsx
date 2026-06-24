@@ -36,8 +36,8 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   const logs = []
   // 奈落限定ルール: 敵は階数×2%の被ダメージ軽減（プレイヤーの与ダメに乗算）
   const abyssEnemyDR = 1 - Math.min(0.9, floor * 0.02)
-  let playerHp = profile.hp_max
-  let playerMp = profile.mp_max
+  let playerHp = eff.hp_max
+  let playerMp = eff.mp_max
   let enemyHp = enemy.hp
   const enemyMaxHp = enemy.hp
   let turn = 1, skillIndex = 0
@@ -199,7 +199,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
         const res = executeSkill(cs.skills, {...effBuff, lastMpCost:mpCost}, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
         const finalCrit = res.dmg > 0 && (isCrit || (res.bonusCritRate > 0 && Math.random()*100 < playerCritRate + res.bonusCritRate))
         const finalCritMult = finalCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
-        const tosoMult = (hasTosoHonno && playerHp <= profile.hp_max * 0.5) ? (pe('体術師')?1.25:1.1) : 1.0
+        const tosoMult = (hasTosoHonno && playerHp <= eff.hp_max * 0.5) ? (pe('体術師')?1.25:1.1) : 1.0
         let defScale = 1.0
         if (res.dmg > 0) {
           const sType = cs.skills?.type
@@ -247,7 +247,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
           logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
         }
         const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult)
-        playerHp = Math.min(profile.hp_max, playerHp + healAmt)
+        playerHp = Math.min(eff.hp_max, playerHp + healAmt)
         if (passiveHealReflect && healAmt > 0) {
           const reflectDmg = Math.floor(healAmt * 0.5)
           enemyHp -= reflectDmg
@@ -282,8 +282,8 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
           logs.push({ text:`↳ 追撃！${res.followup.label?`（${res.followup.label}）`:''} ${enemy.name}に${fDmg}ダメージ！${fCrit?' 💥クリティカル！':''}`, color: fCrit?'#ffaa00':'#ffaa66' })
         }
         if (playerAttacking && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
-          playerHp = Math.min(profile.hp_max, playerHp + rageCure)
+          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(eff.hp_max * 0.2))
+          playerHp = Math.min(eff.hp_max, playerHp + rageCure)
           logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
         }
         if (playerBuffs.holyAwakening?.turns > 0 && finalDmg > 0) {
@@ -309,8 +309,8 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       const critText = isCrit ? '💥クリティカル！ ' : ''
       logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
       if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-        const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
-        playerHp = Math.min(profile.hp_max, playerHp + rageCure)
+        const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(eff.hp_max * 0.2))
+        playerHp = Math.min(eff.hp_max, playerHp + rageCure)
         logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
       }
       if (expandedSkillSet.length > 0) skillIndex++
@@ -393,7 +393,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   // 既存スキル（executeSkillのswitchで定義済み）を敵が詠唱
   const castExistingSkill = (def) => {
     const eStats = enemyCastStats()
-    const playerTarget = { name:profile.username, def:eff.def, mdef:eff.mdef, hp:profile.hp_max, hp_max:profile.hp_max, type:'physical' }
+    const playerTarget = { name:profile.username, def:eff.def, mdef:eff.mdef, hp:eff.hp_max, hp_max:eff.hp_max, type:'physical' }
     // executeSkill: caster=enemy(eStats/enemyProfile), target=player。
     // 戻り値 newPlayerBuffs=詠唱者(敵)バフ, newEnemyBuffs=対象(プレイヤー)デバフ
     const res = executeSkill({ name:def.name }, eStats, enemyProfile, playerTarget, playerBuffs, enemyBuffs, false, prevEnemySkill)
@@ -570,12 +570,12 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     }
     // プレイヤーへの持続ダメージ
     if (playerBuffs.severePoisoin?.turns > 0) {
-      const spDmgP = Math.floor(profile.hp_max * 0.05); playerHp = Math.max(0, playerHp - spDmgP)
+      const spDmgP = Math.floor(eff.hp_max * 0.05); playerHp = Math.max(0, playerHp - spDmgP)
       logs.push({ text:`🤢 猛毒ダメージ！ あなたに${spDmgP}ダメージ！`, color:'#aa44ff' })
       if (playerHp <= 0) break
     }
     if (playerBuffs.burn?.turns > 0) {
-      const burnDmgP = Math.floor(profile.hp_max * 0.02); playerHp = Math.max(0, playerHp - burnDmgP)
+      const burnDmgP = Math.floor(eff.hp_max * 0.02); playerHp = Math.max(0, playerHp - burnDmgP)
       logs.push({ text:`🔥 やけどダメージ！ あなたに${burnDmgP}ダメージ！`, color:'#ff6622' })
       if (playerHp <= 0) break
     }
@@ -595,7 +595,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     if (isHealSealed) logs.push({ text:`🚫 回復封じ中！ 回復効果が無効化された！`, color:'#ff4488' })
     if (!isHealSealed && playerBuffs.regenHeal?.turns > 0) {
       const healAmt = Math.floor(playerBuffs.regenHeal.amount * passiveHealMult)
-      playerHp = Math.min(profile.hp_max, playerHp + healAmt)
+      playerHp = Math.min(eff.hp_max, playerHp + healAmt)
       logs.push({ text:`💚 回復効果でHPが${healAmt}回復した！`, color:'#44ff88' })
       if (passiveHealReflect && healAmt > 0) {
         const reflectDmg = Math.floor(healAmt * 0.5); enemyHp -= reflectDmg
@@ -603,7 +603,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       }
     }
     if (!isHealSealed && playerBuffs.delayHeal && turn === playerBuffs.delayHeal.triggerTurn) {
-      playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.delayHeal.amount)
+      playerHp = Math.min(eff.hp_max, playerHp + playerBuffs.delayHeal.amount)
       logs.push({ text:`💚 装備効果でHPが${playerBuffs.delayHeal.amount}回復した！`, color:'#44ff88' })
     }
     // ポーションは出撃のみ適用（奈落では無限・通常とも発動しない）
@@ -613,15 +613,15 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       const isInfinite = effect === 'hp_pct_infinite' || effect === 'mp_pct_infinite'
       const canUse = isInfinite ? false : !itemUsed
       if (canUse) {
-        if ((effect==='hp_pct' || effect==='hp_pct_infinite') && playerHp/profile.hp_max*100 <= threshold) {
-          const healAmt = Math.floor(profile.hp_max*currentItem.items.value/100)
-          playerHp = Math.min(profile.hp_max, playerHp+healAmt)
+        if ((effect==='hp_pct' || effect==='hp_pct_infinite') && playerHp/eff.hp_max*100 <= threshold) {
+          const healAmt = Math.floor(eff.hp_max*currentItem.items.value/100)
+          playerHp = Math.min(eff.hp_max, playerHp+healAmt)
           logs.push({ text:`🧪 ${currentItem.items.name}を使用！ HPが${healAmt}回復した！`, color:'#44ff88' })
           if (isInfinite) { playerBuffs.potionCooldown = { turns:5 }; logs.push({ text:`⏳ 5ターンのクールダウンが入った！`, color:'#aaaaaa' }) }
           else itemUsed = true
-        } else if ((effect==='mp_pct' || effect==='mp_pct_infinite') && playerMp/profile.mp_max*100 <= threshold) {
-          const healAmt = Math.floor(profile.mp_max*currentItem.items.value/100)
-          playerMp = Math.min(profile.mp_max, playerMp+healAmt)
+        } else if ((effect==='mp_pct' || effect==='mp_pct_infinite') && playerMp/eff.mp_max*100 <= threshold) {
+          const healAmt = Math.floor(eff.mp_max*currentItem.items.value/100)
+          playerMp = Math.min(eff.mp_max, playerMp+healAmt)
           logs.push({ text:`🧪 ${currentItem.items.name}を使用！ MPが${healAmt}回復した！`, color:'#4488ff' })
           if (isInfinite) { playerBuffs.potionCooldown = { turns:5 }; logs.push({ text:`⏳ 5ターンのクールダウンが入った！`, color:'#aaaaaa' }) }
           else itemUsed = true
@@ -697,7 +697,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
       logs.push({ text:`⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}％！`, color:'#66ccff' })
     }
-    logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:profile.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
+    logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:eff.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
     turn++
   }
 
