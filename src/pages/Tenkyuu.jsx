@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
 import { getWeaponGroup } from '../lib/stats'
+import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 import {
   calcEffectiveStats,
   calcEvasionRate,
@@ -883,7 +884,13 @@ export default function Tenkyuu() {
       supabase.from('player_items').select('*, items(*)').eq('player_id', user.id).eq('equipped', true).maybeSingle(),
     ])
     if (!prof) { nav('/create'); return }
-    setProfile(prof)
+    // 選択中ペットの本体ステ(100%)＋装備チャームをプレイヤーへ反映（街と同じ。これが無いとペット分が戦闘に乗らない）
+    let petCharm = null, petStat = null, activePet = null
+    try {
+      const { data: ap } = await supabase.from('pets').select('species, level, evolved, charm_id').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
+      if (ap) { activePet = ap; petStat = petPlayerBonus(ap); if (ap.charm_id) { const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle(); if (c) petCharm = charmPlayerBonus(c) } }
+    } catch { /* ペット未導入時は無視 */ }
+    setProfile({ ...prof, petCharm, petStat, activePet })
     setEquipment(eq || [])
     setProficiency(prof2 || [])
     {
