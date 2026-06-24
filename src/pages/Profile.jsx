@@ -324,7 +324,9 @@ export default function Profile() {
               <div key={slot} style={{ border:'1px solid #002a55', background:'#000c1e', padding:'10px', textAlign:'center' }}>
                 <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>{slotLabel}</div>
                 <div style={{ color: RARITY_COLORS[equipped.weapons.rarity], fontSize:'12px', marginBottom:'4px' }}>
-                  【{RARITY_LABELS[equipped.weapons.rarity]}】{getProfPrefix(profLv)}{equipped.weapons.name}
+                  【{RARITY_LABELS[equipped.weapons.rarity]}】{getProfPrefix(profLv)}
+                  {equipped.custom_name ? <span style={{color:'#ff99cc'}}>{equipped.custom_name}</span> : equipped.weapons.name}
+                  {equipped.custom_name && <span style={{ color:'#667788', fontSize:'10px' }}>（{equipped.weapons.name}）</span>}
                   {plus > 0 && !isArtifactBase && <span style={{color:'#ffcc00'}}> +{plus}</span>}
                 </div>
                 {(enhW.atk_bonus>0 || enhW.def_bonus>0 || enhW.matk_bonus>0 || enhW.mdef_bonus>0 || enhW.spd_bonus>0 || enhW.hp_bonus>0 || enhW.mp_bonus>0 || equipped.weapons.atk_bonus_pct>0 || equipped.weapons.matk_bonus_pct>0 || equipped.weapons.hit_bonus>0) && (
