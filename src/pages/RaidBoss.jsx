@@ -15,9 +15,8 @@ import {
 } from './Game'
 
 const POLL_MS = 5000
-// レイド出撃CD。★2026-06-20公開: 全プレイヤー20秒（ブースト対象外）
-// ★2026-06-26 is_admin限定先行: レイドは10秒固定（10/20モードに関係なく）。
-const raidWaitFor = (prof) => (prof?.is_admin ? 10 : WAIT_SECONDS)
+// レイド出撃CD。★2026-06-26 全員公開: レイドは10秒固定（10/20モードに関係なく）。
+const raidWaitFor = () => 10
 const BOSS_NAME = '黒龍ヴァルゼノク'
 const BOSS_ZERUGIASU = '雷鋼機神ゼルギアス'
 // レイドボスの3体ローテ（21時/22時の2枠を3日周期で全員が回る）
@@ -37,12 +36,11 @@ const TIER_INFO = [
 ]
 
 // ★2026-06-20公開: 全プレイヤーの出撃回数ティア保証を A=20 / B=10 / C=5 に（claim_raid_rewards と一致）。
-const PUBLIC_TIER_ATTACKS = { A: 20, B: 10, C: 5 }
-// ★2026-06-26 is_admin限定先行: レイド10秒固定で出撃回数が増えるため、出撃回数ティア保証を倍に（A=40/B=20/C=10）。
-const ADMIN_TIER_ATTACKS = { A: 40, B: 20, C: 10 }
-const tierAttacks = (t, isAdmin = false) => (t.attacks > 0 ? ((isAdmin ? ADMIN_TIER_ATTACKS : PUBLIC_TIER_ATTACKS)[t.tier] ?? t.attacks) : t.attacks)
-function getTier(pct, attackCount = 0, isAdmin = false) {
-  return TIER_INFO.find(t => pct >= t.pct || (attackCount >= tierAttacks(t, isAdmin) && t.attacks > 0)) || TIER_INFO[TIER_INFO.length - 1]
+// ★2026-06-26 全員公開: レイド10秒固定で出撃回数が増えるため、出撃回数ティア保証を倍に（A=40/B=20/C=10）。
+const PUBLIC_TIER_ATTACKS = { A: 40, B: 20, C: 10 }
+const tierAttacks = (t) => (t.attacks > 0 ? (PUBLIC_TIER_ATTACKS[t.tier] ?? t.attacks) : t.attacks)
+function getTier(pct, attackCount = 0) {
+  return TIER_INFO.find(t => pct >= t.pct || (attackCount >= tierAttacks(t) && t.attacks > 0)) || TIER_INFO[TIER_INFO.length - 1]
 }
 function hpColor(r) { return r > 0.5 ? '#44ff88' : r > 0.25 ? '#ffcc00' : '#ff4444' }
 function fmt(n) { return Number(n).toLocaleString() }

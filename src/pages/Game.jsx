@@ -22,14 +22,11 @@ export const isBoostActive = (profile, nowMs = Date.now()) =>
   !!(profile?.boost_active_until && new Date(profile.boost_active_until).getTime() > nowMs)
 // 現在の有効クールダウン秒。★2026-06-20: 全プレイヤー公開。通常20秒・ブースト中10秒（街の出撃・デイリーダンジョン）
 export const LEGACY_WAIT = 10
-// 出撃CDモード（10秒/20秒選択式・週1変更）。★2026-06-26 is_admin限定先行。
-//  管理者: profiles.sortie_mode（10 or 20）を採用。10秒は報酬減（exp5-6/boss7/gold半分）。
-//  非管理者: 現状維持（ブーストで20⇔10。報酬は変わらない）。
-export const is10sMode = (profile) => !!(profile?.is_admin && profile?.sortie_mode === 10)
-export const effWait = (profile, nowMs = Date.now()) =>
-  profile?.is_admin
-    ? (profile?.sortie_mode === 10 ? BOOST_WAIT : WAIT_SECONDS)
-    : (isBoostActive(profile, nowMs) ? BOOST_WAIT : WAIT_SECONDS)
+// 出撃CDモード（10秒/20秒選択式・週1変更）。★2026-06-26 全員公開（ブースト廃止）。
+//  profiles.sortie_mode（10 or 20、既定20）を全プレイヤーで採用。10秒は報酬減（exp5-6/boss7/gold半分）。
+export const is10sMode = (profile) => profile?.sortie_mode === 10
+export const effWait = (profile, _nowMs = Date.now()) =>
+  profile?.sortie_mode === 10 ? BOOST_WAIT : WAIT_SECONDS
 // 新UIレイアウトの有効フラグ。
 // 本番にも反映中（true）。旧UIに戻したいときは下行を import.meta.env.DEV（開発のみ）か
 // false（全環境で旧UI）に変更すればワンタッチで戻せる。git tag `ui-classic` も旧UI状態の復元ポイント。
@@ -4312,7 +4309,6 @@ export default function Game() {
       <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
         <div style={{ background:'#001020', border:'1px solid #446688', padding:'20px', maxWidth:'460px', width:'100%', fontFamily:'monospace' }}>
           <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'16px' }}>⚙ 出撃時間/パピア時間設定</div>
-          {profile?.is_admin ? (
           <div style={{ border:'1px solid #335577', background:'#000a18', padding:'14px', marginBottom:'16px' }}>
             <div style={{ color:'#ffcc44', fontSize:'13px', marginBottom:'6px' }}>⚡ 出撃の待機時間</div>
             <div style={{ color:'#88aacc', fontSize:'11px', lineHeight:'1.7', marginBottom:'12px' }}>
@@ -4338,30 +4334,6 @@ export default function Game() {
               </div>
             )}
           </div>
-          ) : (
-          <div style={{ border:'1px solid #335577', background:'#000a18', padding:'14px', marginBottom:'16px' }}>
-            <div style={{ color:'#ffcc44', fontSize:'13px', marginBottom:'6px' }}>⚡ ブーストタイム</div>
-            <div style={{ color:'#88aacc', fontSize:'11px', lineHeight:'1.7', marginBottom:'12px' }}>
-              発動すると<strong style={{color:'#ffcc44'}}>{BOOST_DURATION_MIN}分間</strong>、街の出撃・<strong style={{color:'#ffcc44'}}>デイリーダンジョン</strong>のクールダウンが<strong style={{color:'#ffcc44'}}>{WAIT_SECONDS}秒 → {BOOST_WAIT}秒</strong>に短縮されます。<br/>
-              ・1日1回まで（毎日<strong style={{color:'#ffcc44'}}>朝5時</strong>リセット）<br/>
-              ・レイドボス・簡易出撃は対象外
-            </div>
-            {boostActive ? (
-              <div style={{ textAlign:'center', color:'#44ff88', fontSize:'13px', padding:'10px', border:'1px solid #225544', background:'#001810' }}>
-                🟢 ブーストタイム中（残り約{boostMinLeft}分）
-              </div>
-            ) : usedToday ? (
-              <div style={{ textAlign:'center', color:'#886633', fontSize:'12px', padding:'10px', border:'1px solid #332a14', background:'#0a0800' }}>
-                本日分は使用済みです（朝5時にリセット）
-              </div>
-            ) : (
-              <button onClick={startBoost} disabled={boostLoading}
-                style={{ width:'100%', padding:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor: boostLoading?'default':'pointer', fontFamily:'monospace', fontSize:'13px' }}>
-                {boostLoading ? '発動中…' : `⚡ ブーストタイムを発動（${BOOST_DURATION_MIN}分間）`}
-              </button>
-            )}
-          </div>
-          )}
 
           {/* 🌟 パピア出現時間帯（プレイヤー選択・1か月変更不可） */}
           <div style={{ border:'1px solid #335577', background:'#000a18', padding:'14px', marginBottom:'16px' }}>
