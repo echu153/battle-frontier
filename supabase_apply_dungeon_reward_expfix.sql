@@ -47,7 +47,8 @@ BEGIN
       UPDATE profiles SET suspicious_flag=true WHERE id=v_uid;
       RETURN json_build_object('ok',false,'reason','invalid_gold');
     END IF;
-    UPDATE profiles SET gold=gold+p_claimed_gold, last_action_at=now() WHERE id=v_uid;
+    -- ★2026-06-26: デイリーダンジョンはCDなし。共通CDアンカー last_action_at は更新しない（街出撃等に巻き添えCDを掛けない）
+    UPDATE profiles SET gold=gold+p_claimed_gold WHERE id=v_uid;
 
   ELSIF p_type = 'exp' THEN
     IF NOT v_exp_frozen AND NOT v_is_at_cap THEN
@@ -77,8 +78,7 @@ BEGIN
 
     UPDATE profiles SET
       exp=v_new_exp, exp_next=v_new_exp_next, lv=v_new_lv,
-      pending_stat_points=v_new_pending, char_lv=v_new_char_lv,
-      last_action_at=now()
+      pending_stat_points=v_new_pending, char_lv=v_new_char_lv
     WHERE id=v_uid;
     UPDATE class_levels SET lv=v_new_lv, exp=v_new_exp
       WHERE player_id=v_uid AND class_name=v_profile.class;
@@ -107,8 +107,7 @@ BEGIN
 
       UPDATE profiles SET
         exp=v_new_exp, exp_next=v_new_exp_next, lv=v_new_lv,
-        pending_stat_points=v_new_pending, char_lv=v_new_char_lv,
-        last_action_at=now()
+        pending_stat_points=v_new_pending, char_lv=v_new_char_lv
       WHERE id=v_uid;
       UPDATE class_levels SET lv=v_new_lv, exp=v_new_exp
         WHERE player_id=v_uid AND class_name=v_profile.class;
