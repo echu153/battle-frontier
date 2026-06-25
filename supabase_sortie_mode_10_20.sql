@@ -115,17 +115,7 @@ BEGIN
   IF v_row.is_fishing THEN RETURN json_build_object('ok',false,'reason','fishing'); END IF;
   IF has_active_dungeon(v_uid) THEN RETURN json_build_object('ok',false,'reason','dungeon_active'); END IF;
 
-  -- ★2026-06-26 is_admin先行: 管理者は sortie_mode（10/20）。非管理者は従来20秒・ブースト中10秒。
-  v_wait := CASE
-    WHEN COALESCE(v_row.is_admin,false) THEN (CASE WHEN v_row.sortie_mode = 10 THEN 10 ELSE 20 END)
-    WHEN v_row.boost_active_until IS NOT NULL AND v_row.boost_active_until > now() THEN 10
-    ELSE 20 END;
-  IF v_row.last_action_at IS NOT NULL THEN
-    v_left := v_wait - EXTRACT(EPOCH FROM (now() - v_row.last_action_at));
-    IF v_left > 0 THEN
-      RETURN json_build_object('ok',false,'reason','cooldown','seconds_left',round(v_left,1));
-    END IF;
-  END IF;
+  -- ★2026-06-26: デイリーダンジョンはCDなし（回数制限のみ）。CD判定・last_action_at更新は行わない。
 
   v_today := (now() AT TIME ZONE 'Asia/Tokyo' - interval '5 hours')::date;
 
@@ -155,7 +145,7 @@ BEGIN
     cnt_gem   = COALESCE(cnt_gem,0)   + (CASE WHEN p_type='gem'   THEN 1 ELSE 0 END)
   WHERE player_id = v_uid AND date = v_today;
 
-  UPDATE profiles SET last_action_at = now() WHERE id = v_uid;
+  -- ★2026-06-26: CDなし化に伴い last_action_at は更新しない（街出撃CDに影響させない）。
 
   RETURN json_build_object('ok',true,'count',v_cur + 1);
 END;

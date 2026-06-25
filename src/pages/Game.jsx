@@ -2187,8 +2187,7 @@ export default function Game() {
       setCurrentEnemy(null); setScene('battle'); setLoading(false); return
     }
     const newCount = consumeRes.count   // サーバーが消費した後の回数
-    // ★[CODEX]88 #3: サーバーが last_action_at を更新済み。ローカルにも即反映しCDタイマーを正しくする
-    setProfile(p => p ? { ...p, last_action_at: new Date(serverNow()).toISOString() } : p)
+    // ★2026-06-26: デイリーダンジョンはCDなし（サーバーも last_action_at 非更新）。街出撃のCDタイマーも触らない。
 
     setScene('battle'); setBattleLogs([])
 
@@ -2350,8 +2349,7 @@ export default function Game() {
     if (rewardFailed) {
       logs.push({ text:`⚠ 報酬が反映されなかった可能性があります（理由: ${rewardFailReason}）。`, color:'#ff8844' })
     }
-    // 回数・last_action_at はサーバー(dungeon_consume)が更新済み。クライアントは表示とカウントダウンのみ。
-    cdEndRef.current = Date.now() + effWait(profile) * 1000  // 相対カウントダウンを開始
+    // ★2026-06-26: デイリーダンジョンはCDなし。街出撃のCDタイマー(cdEndRef)は触らない。回数のみ更新。
     setDungeonCounts(prev => ({ ...prev, [type]: newCount }))
     } catch (e) {
       console.error('doDungeon error:', e)
@@ -5480,11 +5478,11 @@ export default function Game() {
                     {DUNGEON_LIST.map(d => {
                       const used = dungeonCounts[d.type]||0
                       const full = used >= dungeonDailyLimitFor(profile)
-                      const dis = full || loading || !canAct
+                      const dis = full || loading   // ★2026-06-26: デイリーダンジョンはCDなし（回数のみ制限）
                       return (
                       <button key={d.type} disabled={dis} onClick={() => { doDungeon(d.type); setShowDungeonPanel(false) }}
                         style={{ padding:'10px', background:'#001020', border:`1px solid ${dis?'#333':'#440088'}`, color:dis?'#333':'#cc44ff', cursor:dis?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'11px', opacity:dis?0.4:1 }}>
-                        {d.label}<br/><span style={{fontSize:'10px',color:dis?'#333':'#446688'}}>{!full&&!canAct?`待機 ${remaining.toFixed(0)}秒`:`残り${dungeonDailyLimitFor(profile)-used}/${dungeonDailyLimitFor(profile)}`}</span>
+                        {d.label}<br/><span style={{fontSize:'10px',color:dis?'#333':'#446688'}}>{`残り${dungeonDailyLimitFor(profile)-used}/${dungeonDailyLimitFor(profile)}`}</span>
                       </button>
                       )
                     })}
@@ -5952,7 +5950,7 @@ export default function Game() {
                         return (
                         <button key={d.type} disabled={dis} onClick={() => { doDungeon(d.type); setShowDungeonPanel(false) }}
                           style={{ padding:'10px', background:'#001020', border:`1px solid ${dis?'#333':'#440088'}`, color:dis?'#333':'#cc44ff', cursor:dis?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'11px', opacity:dis?0.4:1 }}>
-                          {d.label}<br/><span style={{fontSize:'10px',color:dis?'#333':'#446688'}}>{!full&&!canAct?`待機 ${remaining.toFixed(0)}秒`:`残り${dungeonDailyLimitFor(profile)-used}/${dungeonDailyLimitFor(profile)}`}</span>
+                          {d.label}<br/><span style={{fontSize:'10px',color:dis?'#333':'#446688'}}>{`残り${dungeonDailyLimitFor(profile)-used}/${dungeonDailyLimitFor(profile)}`}</span>
                         </button>
                         )
                       })}
