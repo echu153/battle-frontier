@@ -22,8 +22,14 @@ export const isBoostActive = (profile, nowMs = Date.now()) =>
   !!(profile?.boost_active_until && new Date(profile.boost_active_until).getTime() > nowMs)
 // 現在の有効クールダウン秒。★2026-06-20: 全プレイヤー公開。通常20秒・ブースト中10秒（街の出撃・デイリーダンジョン）
 export const LEGACY_WAIT = 10
+// 出撃CDモード（10秒/20秒選択式・週1変更）。★2026-06-26 is_admin限定先行。
+//  管理者: profiles.sortie_mode（10 or 20）を採用。10秒は報酬減（exp5-6/boss7/gold半分）。
+//  非管理者: 現状維持（ブーストで20⇔10。報酬は変わらない）。
+export const is10sMode = (profile) => !!(profile?.is_admin && profile?.sortie_mode === 10)
 export const effWait = (profile, nowMs = Date.now()) =>
-  isBoostActive(profile, nowMs) ? BOOST_WAIT : WAIT_SECONDS
+  profile?.is_admin
+    ? (profile?.sortie_mode === 10 ? BOOST_WAIT : WAIT_SECONDS)
+    : (isBoostActive(profile, nowMs) ? BOOST_WAIT : WAIT_SECONDS)
 // 新UIレイアウトの有効フラグ。
 // 本番にも反映中（true）。旧UIに戻したいときは下行を import.meta.env.DEV（開発のみ）か
 // false（全環境で旧UI）に変更すればワンタッチで戻せる。git tag `ui-classic` も旧UI状態の復元ポイント。
@@ -1670,6 +1676,7 @@ export default function Game() {
   const [showInstallGuide, setShowInstallGuide] = useState(false)  // 📱 ホーム画面に追加の手順
   const [installTab, setInstallTab] = useState(() => (/android/i.test(navigator.userAgent) ? 'android' : 'iphone'))
   const [boostLoading, setBoostLoading] = useState(false)
+  const [sortieModeLoading, setSortieModeLoading] = useState(false)  // ⚡ 出撃CDモード(10/20)変更中
   const [papiaHourLoading, setPapiaHourLoading] = useState(false)
   const [papiaSel, setPapiaSel] = useState(20)            // パピア枠1の選択値（デフォルト20時）
   const [papiaSel2, setPapiaSel2] = useState(-1)          // パピア枠2の選択値（-1=なし）
@@ -3470,17 +3477,19 @@ export default function Game() {
 
     playerHp = Math.max(0, playerHp)
     const win = enemyHp <= 0
+    // ★2026-06-26 10秒モード(is_admin先行): 出撃EXP 5-6 / ボス 7 / Gold半分（クライアントが低い値を送るのみ。サーバー上限は20秒モードの高い方のままなので検証は通る＝誤検知なし）
+    const tenSec = is10sMode(profile)
     let expGained = isAtCap ? 0
       : papiaEscaped ? 0
       : isPapiaEncounter ? 200
-      : isBossEncounter ? 13
-      : Math.floor(Math.random()*4)+8
+      : isBossEncounter ? (tenSec ? 7 : 13)
+      : tenSec ? (Math.floor(Math.random()*2)+5) : (Math.floor(Math.random()*4)+8)
     // キャラクターLV100まで経験値1.5倍（サーバー apply_battle_result の検証上限も1.5倍にしてある）
     const expBoosted = expGained > 0 && (profile.char_lv||1) < 100
     if (expBoosted) expGained = Math.floor(expGained * 1.5)
     const expBoostNote = expBoosted ? '（✨Lv100まで経験値1.5倍）' : ''
     // 出撃ゴールド倍率。★2026-06-20公開: 出撃CD20秒化の補正でエリア1-4を×2・エリア5+を×1.5
-    const goldMult = selectedArea <= 4 ? 2 : 1.5
+    const goldMult = (selectedArea <= 4 ? 2 : 1.5) * (tenSec ? 0.5 : 1)
     const goldGained = (win && !papiaEscaped) ? Math.floor((enemy.gold||0) * goldMult) : 0
 
 
@@ -3790,6 +3799,29 @@ export default function Game() {
       setProfile(p => p ? { ...p, boost_active_until: data.boost_active_until, boost_used_date: data.boost_used_date } : p)
     } finally {
       setBoostLoading(false)
+    }
+  }
+
+  // ⚡ 出撃CDモード（10秒/20秒）の変更（is_admin限定先行・週1回変更不可）
+  const setSortieModeMode = async (mode) => {
+    if (sortieModeLoading) return
+    if (mode !== 10 && mode !== 20) return
+    setSortieModeLoading(true)
+    try {
+      const { data, error } = await supabase.rpc('set_sortie_mode', { p_mode: mode })
+      if (error) { alert('設定に失敗しました。少し待ってからお試しください。'); return }
+      if (!data?.ok) {
+        if (data?.reason === 'locked') alert(`出撃時間の変更は1週間に1回だけです。次に変更できるのは ${new Date(data.unlock_at).toLocaleString('ja-JP')} 以降です。`)
+        else if (data?.reason === 'not_admin') alert('現在は管理者のみ変更できます。')
+        else if (data?.reason === 'invalid_mode') alert('指定が不正です（10 または 20）。')
+        else alert('設定に失敗しました。')
+        await fetchProfile()
+        return
+      }
+      setProfile(p => p ? { ...p, sortie_mode: data.sortie_mode, sortie_mode_set_at: new Date().toISOString() } : p)
+      alert(`出撃の待機時間を ${data.sortie_mode}秒 に設定しました（1週間変更不可）`)
+    } finally {
+      setSortieModeLoading(false)
     }
   }
 
@@ -4274,10 +4306,41 @@ export default function Game() {
     const papiaLocked = profile?.papia_hour_set_at && (Date.now() < new Date(profile.papia_hour_set_at).getTime() + 30*24*60*60*1000)
     const papiaUnlockAt = profile?.papia_hour_set_at ? new Date(new Date(profile.papia_hour_set_at).getTime() + 30*24*60*60*1000) : null
     const pad2 = (n) => String(n).padStart(2,'0')
+    // ⚡ 出撃CDモード（is_admin限定先行・週1変更）
+    const curMode = profile?.sortie_mode === 10 ? 10 : 20
+    const modeLocked = profile?.sortie_mode_set_at && (Date.now() < new Date(profile.sortie_mode_set_at).getTime() + 7*24*60*60*1000)
+    const modeUnlockAt = profile?.sortie_mode_set_at ? new Date(new Date(profile.sortie_mode_set_at).getTime() + 7*24*60*60*1000) : null
     return (
       <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
         <div style={{ background:'#001020', border:'1px solid #446688', padding:'20px', maxWidth:'460px', width:'100%', fontFamily:'monospace' }}>
-          <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'16px' }}>⚙ ブースト/パピア時間設定</div>
+          <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'16px' }}>⚙ {profile?.is_admin ? '出撃時間/パピア時間設定' : 'ブースト/パピア時間設定'}</div>
+          {profile?.is_admin ? (
+          <div style={{ border:'1px solid #335577', background:'#000a18', padding:'14px', marginBottom:'16px' }}>
+            <div style={{ color:'#ffcc44', fontSize:'13px', marginBottom:'6px' }}>⚡ 出撃の待機時間</div>
+            <div style={{ color:'#88aacc', fontSize:'11px', lineHeight:'1.7', marginBottom:'12px' }}>
+              街の出撃・<strong style={{color:'#ffcc44'}}>デイリーダンジョン</strong>のクールダウンを<strong style={{color:'#ffcc44'}}>10秒</strong>か<strong style={{color:'#ffcc44'}}>20秒</strong>から選べます。<br/>
+              ・<strong style={{color:'#ffcc44'}}>10秒</strong>は報酬が控えめ（出撃EXP5〜6 / ボス7 / Gold半分）<br/>
+              ・<strong style={{color:'#ffcc44'}}>20秒</strong>は現状どおり（報酬そのまま）<br/>
+              ・簡易出撃は1分・レイドは10秒で固定<br/>
+              ・<strong style={{color:'#ffcc44'}}>変更は1週間に1回</strong>まで
+            </div>
+            <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'8px' }}>現在の設定: <strong style={{color:'#ffcc44'}}>{curMode}秒</strong></div>
+            {modeLocked ? (
+              <div style={{ textAlign:'center', color:'#886633', fontSize:'11px', padding:'8px', border:'1px solid #332a14', background:'#0a0800' }}>
+                次に変更できるのは {modeUnlockAt.toLocaleString('ja-JP')} 以降です
+              </div>
+            ) : (
+              <div style={{ display:'flex', gap:'8px' }}>
+                {[10,20].map(m => (
+                  <button key={m} onClick={()=>setSortieModeMode(m)} disabled={sortieModeLoading || m===curMode}
+                    style={{ flex:1, padding:'12px', background: m===curMode?'#1a2a00':'#1a1400', border:`1px solid ${m===curMode?'#88cc44':'#ffcc44'}`, color: m===curMode?'#88cc44':'#ffcc44', cursor:(sortieModeLoading||m===curMode)?'default':'pointer', fontFamily:'monospace', fontSize:'13px' }}>
+                    {m===curMode ? `✅ ${m}秒（設定中）` : `${m}秒にする`}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          ) : (
           <div style={{ border:'1px solid #335577', background:'#000a18', padding:'14px', marginBottom:'16px' }}>
             <div style={{ color:'#ffcc44', fontSize:'13px', marginBottom:'6px' }}>⚡ ブーストタイム</div>
             <div style={{ color:'#88aacc', fontSize:'11px', lineHeight:'1.7', marginBottom:'12px' }}>
@@ -4300,6 +4363,7 @@ export default function Game() {
               </button>
             )}
           </div>
+          )}
 
           {/* 🌟 パピア出現時間帯（プレイヤー選択・1か月変更不可） */}
           <div style={{ border:'1px solid #335577', background:'#000a18', padding:'14px', marginBottom:'16px' }}>
