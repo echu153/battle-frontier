@@ -4994,7 +4994,7 @@ export default function Game() {
           {RETRAINING_ENHANCEMENTS[profile.class].map((desc, i) => {
             const active = i < retrainingCount
             return (
-              <div key={i} style={{ fontSize:'10px', lineHeight:'1.7', color: active ? '#88ffaa' : '#445566' }}>
+              <div key={i} style={{ fontSize:'10px', lineHeight:'1.7', color: active ? '#88ffaa' : '#445566', textAlign:'left' }}>
                 {active ? '✔' : '✖'} <span style={{color:'#ccaa00'}}>{'★'.repeat(i+1)}</span> {desc}
               </div>
             )
