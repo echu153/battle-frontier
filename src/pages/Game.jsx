@@ -392,10 +392,10 @@ export const RETRAINING_ENHANCEMENTS = {
   '聖職者': ['ホーリーライト：30%で回復阻害50%', '奇跡：毎ターン最大HP15%回復', '神聖加護：回復量の50%を敵に反射', '祈りの結界：6ターン', '神罰執行：倍率 MATK×2.0'],
   '異端審問官': ['粛清：倍率 MATK×1.4＋MDEF×0.4', '狂信：特殊攻撃×1.3 追加', '執行本能：与ダメ+25%・回復量×0.7', '聖なる裁き：倍率 MATK×1.9', '断罪：回復封じ 60%'],
   '賢者': ['サンダーストライク：倍率 MATK×1.6', 'マナボルト：消費MP×6', '天啓：MATK×1.3', '氷の障壁：4ターン', 'メテオストライク：2〜5ヒット（2:30/3:40/4:20/5:10%）'],
-  '聖騎士': ['ホーリーエッジ：倍率 ATK×1.5＋MATK×1.0', 'ディバインスマイト：与ダメ低下付与 50%', '聖騎士の心得：防御・特防×1.5', '聖域展開：毎ターン最大HP10%回復', '神聖覚醒：追撃 防御・特防の60%'],
+  '聖騎士': ['ホーリーエッジ：倍率 ATK×1.7＋MATK×1.1', 'ディバインスマイト：与ダメ低下付与 50%', '聖騎士の心得：防御・特防×1.5', '聖域展開：毎ターン最大HP10%回復', '神聖覚醒：追撃 防御・特防の60%'],
   '魔法剣士': ['雷光斬：倍率 ATK×1.4＋MATK×1.0', '閃光：連続強化×1.2（最大4重複）', '魔導剣術：変換率60%', '魔剣開放：反動2ターンに短縮', 'エレメンタルエッジ：倍率 ATK×1.7＋MATK×1.7'],
-  '魔銃士': ['魔弾：倍率 ATK×1.2＋MATK×1.2', '連装銃撃：命中+10', '精密照準：命中+10・クリ+10%', '強化装填：5ターン', 'キャノネスチュームビンド：連続強化×1.3が最大2重複'],
-  'サイキッカー': ['サイコショット：倍率 ATK×1.2＋MATK×1.0', 'マインドブレイク：40%でスタン', '第六感：与ダメ+15%', '精神集中：×1.8・3ターン', 'サイコブラスト：倍率 ATK×1.7＋MATK×1.4'],
+  '魔銃士': ['魔弾：倍率 ATK×1.4＋MATK×1.3', '連装銃撃：命中+10', '精密照準：命中+10・クリ+10%', '強化装填：5ターン', 'キャノネスチュームビンド：連続強化×1.3が最大2重複'],
+  'サイキッカー': ['サイコショット：倍率 ATK×1.4＋MATK×1.1', 'マインドブレイク：40%でスタン', '第六感：与ダメ+15%', '精神集中：×1.8・3ターン', 'サイコブラスト：倍率 ATK×1.9＋MATK×1.5'],
   '体術師': ['半月蹴り：次のスキルの威力×1.8', '五連殺：各ヒット20%で出血', '闘争本能：HP30%以下で与ダメ+60%', '破衝掌：防御無視 50%', '飛天三角蹴り：ミス撤廃＋各ヒットATK+0.1'],
   'ギャンブラー': ['ジャグリング：4ヒット', 'ラッキーダイス：×0.9〜2.2', 'ギャンブルボディ：被ダメ ×0.7〜1.1', 'オールイン：効果・反動6ターン', 'ジャックポット：2倍確率10%'],
   '竜騎士': ['ドラゴンスラスト：防御貫通 30%', 'ドラゴンファング：倍率 0.9', '竜鱗の加護：30%で15%軽減', 'ドラゴンロア：自身の攻撃力×1.3（3T）', '天墜竜閃：威力 4.5'],
@@ -971,7 +971,8 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     // ── サイキッカー ──
     case 'サイコショット': {
-      result.dmg = Math.floor((eff.atk*1.2+eff.matk*1.0)*am)
+      const psA = rt>=1?1.4:1.2, psC = rt>=1?1.1:1.0
+      result.dmg = Math.floor((eff.atk*psA+eff.matk*psC)*am)
       result.log = `🔮 サイコショット！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
     case 'マインドブレイク': {
@@ -986,7 +987,8 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     case '第六感':    result.log = `🔮 第六感【パッシブ】 命中率+5%（常時自動発動）`; break
     case '精神集中': { const ssT = rt>=4?3:2; const ssR = rt>=4?1.8:1.6; result.newPlayerBuffs.atkUp={turns:ssT,rate:ssR}; result.newPlayerBuffs.matkUp={turns:ssT,rate:ssR}; result.log = `🔮 精神集中！ ${ssT}ターンの間、攻撃力・特殊攻撃力が大幅上昇！`; break }
     case 'サイコブラスト': {
-      result.dmg = Math.floor((eff.atk*1.7+eff.matk*1.4)*am)
+      const pbA = rt>=5?1.9:1.7, pbC = rt>=5?1.5:1.4
+      result.dmg = Math.floor((eff.atk*pbA+eff.matk*pbC)*am)
       result.log = `🔮 サイコブラスト！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
     // ── 体術師 ──
@@ -1022,8 +1024,8 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     // ── 魔銃士 ──
     case '魔弾': {
-      const mdMult = 1.2
-      result.dmg = Math.floor((eff.atk*mdMult+eff.matk*mdMult)*am)
+      const mdA = rt>=1?1.4:1.2, mdC = rt>=1?1.3:1.2
+      result.dmg = Math.floor((eff.atk*mdA+eff.matk*mdC)*am)
       result.log = `🔫 魔弾！ ${enemy.name}に${result.dmg}の特殊ダメージ！`; break
     }
     case '連装銃撃': {
@@ -1138,7 +1140,8 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     }
     // ── 聖騎士 ──
     case 'ホーリーエッジ': {
-      result.dmg = Math.floor((eff.atk*1.5 + eff.matk*1.0)*am)
+      const heA = rt>=1?1.7:1.5, heC = rt>=1?1.1:1.0
+      result.dmg = Math.floor((eff.atk*heA + eff.matk*heC)*am)
       result.log = `✨⚔ ホーリーエッジ！ ${enemy.name}に${result.dmg}のダメージ！`; break
     }
     case 'ディバインスマイト': {
