@@ -5150,7 +5150,7 @@ export default function Game() {
                   <div style={{ color:isCurrent?'#88aabb':canChange?'#ffcc00':'#446688', fontSize:'12px' }}>
                     ブリーダー{isCurrent&&<span style={{color:'#446688',fontSize:'9px',marginLeft:'6px'}}>（現在）</span>}
                   </div>
-                  <div style={{ color:'#446688', fontSize:'10px' }}>ブリーダーの証が必要（称号「ペット想い」で獲得）</div>
+                  <div style={{ color:'#446688', fontSize:'10px' }}>ブリーダーの証が必要</div>
                   <div style={{ color:'#446688', fontSize:'10px' }}>クラスLV{cl?cl.lv:1}/{getEffectiveCap('ブリーダー', profile.retraining)}</div>
                 </div>
                 <button onClick={()=>setPendingClassChange('ブリーダー')} disabled={isCurrent||!canChange||loading}
