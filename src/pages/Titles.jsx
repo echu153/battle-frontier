@@ -7,8 +7,11 @@ const CATEGORY_LABELS = {
   level:'レベル到達', job:'転職・再修練', area:'エリア突破',
   boss:'ボス撃破', raid:'レイドボス', gambling:'賭博',
   treasure:'お宝・錬金', museum:'博物館', enhance:'強化',
-  class_retraining:'クラス再修練', event:'イベント',
+  class_retraining:'クラス再修練', event:'イベント', pet:'ペット',
 }
+
+// 未獲得のうちは正体を隠す（？？？？表示）称号か。イベント報酬の称号はサプライズのため伏字にする。
+const isSecretTitle = (title) => title.condition_type === 'event'
 
 const GENERIC_TITLES_KEY = 'generic'
 
@@ -228,17 +231,18 @@ export default function Titles() {
               const acquired = isAcquired(title.id)
               const condMet = checkCondition(title)
               const progress = condProgress(title)
+              const secret = !acquired && isSecretTitle(title)  // 未獲得のイベント称号は正体を伏せる
               return (
                 <div key={title.id} style={{ border:`1px solid ${acquired ? '#005500' : condMet ? '#44aa44' : '#002244'}`, background: acquired ? '#001408' : '#000818', padding:'10px', marginBottom:'6px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px' }}>
                   <div style={{ flex:1 }}>
                     <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'2px' }}>
-                      <span style={{ color: acquired ? '#44ff88' : condMet ? '#88ff88' : '#446688', fontSize:'12px' }}>{title.name}</span>
+                      <span style={{ color: acquired ? '#44ff88' : condMet ? '#88ff88' : '#446688', fontSize:'12px' }}>{secret ? '？？？？' : title.name}</span>
                       {acquired && <span style={{ color:'#44ff88', fontSize:'9px', border:'1px solid #44ff88', padding:'0 4px' }}>獲得済み</span>}
                     </div>
-                    <div style={{ color:'#446688', fontSize:'9px', marginBottom:'2px' }}>{title.description}</div>
-                    <div style={{ color:'#887700', fontSize:'9px' }}>{bonusText(title)}</div>
-                    {title.bonus_item_name && <div style={{ color:'#ffaa44', fontSize:'9px' }}>＋{title.bonus_item_name}</div>}
-                    {!acquired && progress && <div style={{ color: condMet ? '#44ff88' : '#446688', fontSize:'9px', marginTop:'2px' }}>進捗: {progress}</div>}
+                    <div style={{ color:'#446688', fontSize:'9px', marginBottom:'2px' }}>{secret ? '？？？？' : title.description}</div>
+                    {!secret && <div style={{ color:'#887700', fontSize:'9px' }}>{bonusText(title)}</div>}
+                    {!secret && title.bonus_item_name && <div style={{ color:'#ffaa44', fontSize:'9px' }}>＋{title.bonus_item_name}</div>}
+                    {!acquired && !secret && progress && <div style={{ color: condMet ? '#44ff88' : '#446688', fontSize:'9px', marginTop:'2px' }}>進捗: {progress}</div>}
                   </div>
                   <div style={{ flexShrink:0 }}>
                     {acquired ? (
