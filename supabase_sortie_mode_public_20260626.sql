@@ -36,11 +36,16 @@ END;
 $$;
 GRANT EXECUTE ON FUNCTION public.set_sortie_mode(int) TO authenticated;
 
--- ② 通常出撃ロック（全員 sortie_mode 10/20） ------------------
+-- ② 通常出撃ロック（全員 sortie_mode 10/20 ＋ 出撃ポイント加算） --------
+-- ★出撃ポイントラリーの加算をここで行う。20秒=1pt / 10秒=0.5pt（2回で1pt）。
+--   半ポイントは event_points.frac（0/1）に繰り越し。
+ALTER TABLE event_points ADD COLUMN IF NOT EXISTS frac smallint NOT NULL DEFAULT 0;
+
 CREATE OR REPLACE FUNCTION public.sortie_lock()
 RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_uid uuid := auth.uid(); v_row profiles%ROWTYPE; v_wait int; v_left numeric;
+  v_half int;  -- 今回付与する半ポイント数（10秒=1, 20秒=2）
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('ok',false,'reason','not_authenticated'); END IF;
   SELECT * INTO v_row FROM profiles WHERE id = v_uid FOR UPDATE;
@@ -58,6 +63,17 @@ BEGIN
   END IF;
 
   UPDATE profiles SET last_action_at = now() WHERE id = v_uid;
+
+  -- イベント: 開催期間内なら出撃ポイント加算（行ロック直下＝二重加算しない）
+  v_half := CASE WHEN v_row.sortie_mode = 10 THEN 1 ELSE 2 END;
+  INSERT INTO event_points (player_id, event_key, points, frac)
+  SELECT v_uid, ec.event_key, v_half / 2, v_half % 2
+  FROM event_config ec
+  WHERE now() >= ec.starts_at AND now() < ec.ends_at
+  ON CONFLICT (player_id, event_key) DO UPDATE
+    SET points = event_points.points + ((event_points.frac + v_half) / 2),
+        frac   = (event_points.frac + v_half) % 2;
+
   RETURN json_build_object('ok',true);
 END;
 $$;
