@@ -1695,6 +1695,7 @@ export default function Game() {
   const [claimableTitles, setClaimableTitles] = useState(0)  // 獲得可能な称号数（街のバナー表示用）
   const [soldNotice, setSoldNotice] = useState(0)            // 取引所で売れた未確認の出品数（街のバナー表示用）
   const [unreadReplies, setUnreadReplies] = useState(0)      // お問い合わせへの運営返信で未確認の件数（街のバナー表示用）
+  const [unrepliedContacts, setUnrepliedContacts] = useState(0)  // 管理人(おれおれお)向け: 未返信のお問い合わせ件数（街のバナー表示用）
   const [showGuide, setShowGuide] = useState(false)
   const [showDyingTip, setShowDyingTip] = useState(false)  // 初めて瀕死になったとき1回だけ案内
   const [openGuideId, setOpenGuideId] = useState(null)
@@ -1904,6 +1905,20 @@ export default function Game() {
       setUnreadReplies(unread.length)
     } catch { /* 列が無い旧環境などは無視 */ }
   }
+
+  // 管理人(おれおれお)向け: 未返信のお問い合わせ件数を再計算（街のバナー表示用）
+  const refreshUnrepliedContacts = async (uname) => {
+    try {
+      const name = uname ?? profile?.username
+      if (name !== 'おれおれお') { setUnrepliedContacts(0); return }
+      const { count } = await supabase.from('contact_messages')
+        .select('id', { count: 'exact', head: true })
+        .is('reply', null)
+      setUnrepliedContacts(count || 0)
+    } catch { /* 旧環境などは無視 */ }
+  }
+  // プロフィール確定後（おれおれおログイン時）に未返信件数を取得
+  useEffect(() => { refreshUnrepliedContacts(profile?.username) }, [profile?.username])
 
   // 表示中の返信をすべて既読にする（idごとに reply_at を保存）
   const markContactRepliesSeen = (rows) => {
@@ -3889,6 +3904,7 @@ export default function Game() {
         }
       }
       setMyContacts(rows)
+      if (isContactAdmin) setUnrepliedContacts(rows.filter(r => !r.reply).length)
       return rows
     } catch (e) {
       setMyContacts([])
@@ -5234,6 +5250,12 @@ export default function Game() {
               📩 お問い合わせに運営からの返信が届いています！（{unreadReplies}件）→ 確認する
             </button>
           )}
+          {isContactAdmin && unrepliedContacts > 0 && (
+            <button onClick={()=>{ setShowContact(true); setContactView('history'); setAdminContactFilter('unreplied'); fetchMyContacts() }}
+              style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a0a14', border:'1px solid #ff66aa', color:'#ff88bb', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              📨 未返信のお問い合わせがあります（{unrepliedContacts}件）→ 受信一覧へ
+            </button>
+          )}
           {papiaNeedsSetup && (
             <button onClick={()=>setShowOptions(true)}
               style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a1200', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
@@ -5689,6 +5711,12 @@ export default function Game() {
           <button onClick={()=>{ setShowContact(true); setContactView('history'); fetchMyContacts().then(rows => markContactRepliesSeen(rows)) }}
             style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
             📩 お問い合わせに運営からの返信が届いています！（{unreadReplies}件）→ 確認する
+          </button>
+        )}
+        {isContactAdmin && unrepliedContacts > 0 && (
+          <button onClick={()=>{ setShowContact(true); setContactView('history'); setAdminContactFilter('unreplied'); fetchMyContacts() }}
+            style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a0a14', border:'1px solid #ff66aa', color:'#ff88bb', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            📨 未返信のお問い合わせがあります（{unrepliedContacts}件）→ 受信一覧へ
           </button>
         )}
         {papiaNeedsSetup && (
