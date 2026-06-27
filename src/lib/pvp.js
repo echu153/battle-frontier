@@ -474,38 +474,32 @@ function applyTurnStart(side, opp, ctx) {
   const maxHp = side.eff.hp_max
   const b = side.buffs
 
-  // 状態異常無効（戦争のコア＝defenderStatusImmune）。
-  // 出血/毒/猛毒/やけど/呪縛 はすべて割合（現在HP/最大HP基準）ダメージなので、
-  // コアの巨大ダミーHPに対しては膨大な値になってしまう。設計どおりコアは状態異常を
-  // 受け付けないので、DoT 処理を丸ごとスキップする（骸骨/式神/ペット等の召喚火力は下で処理＝残す）。
-  if (!side.statusImmune) {
-    if (b.severePoisoin?.turns > 0) {
-      const d = Math.floor(maxHp * 0.05); side.hp = Math.max(0, side.hp - d)
-      logs.push({ text: `🤢 猛毒ダメージ！ ${name}に${d}ダメージ！`, color: '#aa44ff' })
-      if (side.hp <= 0) return true
-    }
-    if (b.burn?.turns > 0) {
-      const d = Math.floor(maxHp * 0.02); side.hp = Math.max(0, side.hp - d)
-      logs.push({ text: `🔥 やけどダメージ！ ${name}に${d}ダメージ！`, color: '#ff6622' })
-      if (side.hp <= 0) return true
-    }
-    if (b.poison?.turns > 0) {
-      const d = Math.floor(maxHp * b.poison.dmgRate); side.hp = Math.max(0, side.hp - d)
-      logs.push({ text: `☠ 毒ダメージ！ ${name}に${d}ダメージ！`, color: '#44ff44' })
-      if (side.hp <= 0) return true
-    }
-    if (b.curseDmg?.turns > 0) {
-      side.hp = Math.max(0, side.hp - b.curseDmg.dmg)
-      logs.push({ text: `💀 呪縛ダメージ！ ${name}に${b.curseDmg.dmg}ダメージ！`, color: '#cc44ff' })
-      if (side.hp <= 0) return true
-    }
-    if (b.bleed) {
-      const d = Math.floor(side.hp * 0.01 * b.bleed.stacks); side.hp = Math.max(0, side.hp - d)
-      logs.push({ text: `🩸 出血ダメージ！ ${name}に${d}ダメージ（${b.bleed.stacks}スタック）！`, color: '#ff4466' })
-      if (side.hp <= 0) return true
-      b.bleed.lastTurn = (b.bleed.lastTurn || 0) + 1
-      if (b.bleed.lastTurn >= 3) delete b.bleed
-    }
+  if (b.severePoisoin?.turns > 0) {
+    const d = Math.floor(maxHp * 0.05); side.hp = Math.max(0, side.hp - d)
+    logs.push({ text: `🤢 猛毒ダメージ！ ${name}に${d}ダメージ！`, color: '#aa44ff' })
+    if (side.hp <= 0) return true
+  }
+  if (b.burn?.turns > 0) {
+    const d = Math.floor(maxHp * 0.02); side.hp = Math.max(0, side.hp - d)
+    logs.push({ text: `🔥 やけどダメージ！ ${name}に${d}ダメージ！`, color: '#ff6622' })
+    if (side.hp <= 0) return true
+  }
+  if (b.poison?.turns > 0) {
+    const d = Math.floor(maxHp * b.poison.dmgRate); side.hp = Math.max(0, side.hp - d)
+    logs.push({ text: `☠ 毒ダメージ！ ${name}に${d}ダメージ！`, color: '#44ff44' })
+    if (side.hp <= 0) return true
+  }
+  if (b.curseDmg?.turns > 0) {
+    side.hp = Math.max(0, side.hp - b.curseDmg.dmg)
+    logs.push({ text: `💀 呪縛ダメージ！ ${name}に${b.curseDmg.dmg}ダメージ！`, color: '#cc44ff' })
+    if (side.hp <= 0) return true
+  }
+  if (b.bleed) {
+    const d = Math.floor(side.hp * 0.01 * b.bleed.stacks); side.hp = Math.max(0, side.hp - d)
+    logs.push({ text: `🩸 出血ダメージ！ ${name}に${d}ダメージ（${b.bleed.stacks}スタック）！`, color: '#ff4466' })
+    if (side.hp <= 0) return true
+    b.bleed.lastTurn = (b.bleed.lastTurn || 0) + 1
+    if (b.bleed.lastTurn >= 3) delete b.bleed
   }
   // 骸骨：相手へ持続ダメージ
   if (b.skeletonDmg?.turns > 0) {
@@ -634,12 +628,10 @@ function endTurnBuffs(side, ctx, hpBeforeTurn) {
 //  A = 挑戦者（先攻判定が同速のときAが先攻）
 // ============================================================
 export function simulatePvpBattle(inputA, inputB, opts = {}) {
-  const { hpBonus = 0, turnCap = PVP.turnCap, defenderStatusImmune = false } = opts
+  const { hpBonus = 0, turnCap = PVP.turnCap } = opts
   const logs = []
   const A = buildSide(inputA, 'A', hpBonus)
   const B = buildSide(inputB, 'B', hpBonus)
-  // 戦争のコアは状態異常無効（DoT が巨大ダミーHPに対して膨れ上がるのを防ぐ）。
-  if (defenderStatusImmune) B.statusImmune = true
 
   logs.push({ text: `⚔ 対人戦開始！ ${A.profile.username} vs ${B.profile.username}`, color: '#ffcc66' })
   logs.push({ text: `（与ダメージは防御力で大きく軽減／回復は通常どおり／素早さによる補正は無し）`, color: '#88aacc' })

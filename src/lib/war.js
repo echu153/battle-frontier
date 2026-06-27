@@ -1,47 +1,28 @@
 // ============================================================
 // 戦争システムの戦闘計算（M1）
 // ------------------------------------------------------------
-// コア攻撃は「実際にスキルを撃って10ターン戦う」シミュレーション。
-// 既存のPvP戦闘エンジン(simulatePvpBattle)を再利用し、コアを
-// 「無反撃・超高HP・防御0のダミー」として殴り、与えた合計ダメージを測る。
-// → 物理/魔法どちらのスキルも実発動するので、両刀(atk+matk)ビルドも正当に評価される。
+// コア攻撃は「実効 攻撃力＋特攻」をもとにしたシンプルな固定ダメージ。
+//   power = eff.atk + eff.matk（装備/ペット/称号/熟練 込みの実効値）
+//   raw   = floor(power × WAR_CORE_DMG_MULT)   ← サーバ送信用の生ダメ
+// 攻撃と特攻を両方足すので、物理型・魔法型・両刀型のいずれも公平に評価される。
 // ※サーバ(war_attack_core)がこの生ダメージをさらに90%軽減して敵コアへ適用する。
+//   （10ターン戦闘シミュ方式は出血等のDoTがコアの巨大HPで膨張するため廃止）
 // ============================================================
-import { simulatePvpBattle } from './pvp'
 
 export const WAR_CORE_HP = 300000        // サーバ war_tick と一致（表示用）
 export const WAR_CORE_REDUCTION = 0.9    // サーバ war_attack_core が適用（表示用）
-export const WAR_CORE_TURNS = 10         // コア戦のターン数（強制終了）
-// 全体スケールの最終つまみ。コアは防御0なので生ダメが大きく出る→送信前にこの倍率で縮小。
-// サーバ側でさらに×0.1(90%軽減)。実効スケール = WAR_CORE_DMG_MULT × 0.1。要調整。
-// 較正(2026-06-28): 状態異常DoT除外後の実測=おれおれおで10ターン素ダメ約33,713。
-//   33,713 × 1.5 = 50,569(送信) → サーバ×0.1 = 約5,056/発(目標5000)。
-//   CD20秒×3発/分 ≒ 15,168/分 → コアHP30万を単独約20分。
-export const WAR_CORE_DMG_MULT = 1.5
+// 全体スケールの最終つまみ。(攻撃力+特攻) に掛ける。サーバ側でさらに×0.1(90%軽減)。
+// 実効スケール = WAR_CORE_DMG_MULT × 0.1。要較正（実機で power を見て調整）。
+export const WAR_CORE_DMG_MULT = 2.5
 
-const CORE_DUMMY_HP = 100000000          // コアダミーのHP（10ターンで絶対に落ちない大きさ）
-
-// コア（ダミー防御側）の戦闘入力。ステ0・スキル無し・無反撃に近い。
-//  simulatePvpBattle の inputB として渡す。
-function coreInput() {
-  return {
-    eff: { hp_max: CORE_DUMMY_HP, mp_max: 0, atk: 0, def: 0, matk: 0, mdef: 0, spd: 1 },
-    equipment: [],
-    skillSets: [],
-    proficiency: [],
-    profile: { username: '敵コア', class: 'コア', retraining: {}, activePet: null },
-    playerItem: null,
-  }
-}
-
-// コア攻撃（M1）。自分の出撃/対人スキルで10ターン殴る実シミュレーション。
+// コア攻撃（M1）。実効「攻撃力＋特攻」から固定ダメージを算出。
 //  loadout: loadLoadout の戻り（自分の eff/equipment/skillSets 等）。
-//  戻り: { raw=サーバ送信用の生ダメ(90%軽減前)・dealt=10ターン素の合計・logs=戦闘ログ }
+//  戻り: { raw=サーバ送信用の生ダメ(90%軽減前)・atk・matk・power=atk+matk }
 export function simulateCoreAttack(loadout) {
-  if (!loadout) return { raw: 1, dealt: 0, logs: [] }
-  // defenderStatusImmune: コアは状態異常無効（出血/毒/やけど等のDoTが巨大ダミーHPで膨張するのを防ぐ）
-  const res = simulatePvpBattle(loadout, coreInput(), { hpBonus: 0, turnCap: WAR_CORE_TURNS, defenderStatusImmune: true })
-  const dealt = CORE_DUMMY_HP - (res.endHpB ?? CORE_DUMMY_HP)
-  const raw = Math.max(1, Math.floor(dealt * WAR_CORE_DMG_MULT))
-  return { raw, dealt, logs: res.logs || [] }
+  if (!loadout?.eff) return { raw: 1, atk: 0, matk: 0, power: 0 }
+  const atk = Math.max(0, Math.floor(loadout.eff.atk || 0))
+  const matk = Math.max(0, Math.floor(loadout.eff.matk || 0))
+  const power = atk + matk
+  const raw = Math.max(1, Math.floor(power * WAR_CORE_DMG_MULT))
+  return { raw, atk, matk, power }
 }
