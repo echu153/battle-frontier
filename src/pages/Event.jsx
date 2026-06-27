@@ -152,7 +152,7 @@ export default function Event() {
 
       <div style={{ color:'#ffcc44', fontSize:'15px', marginBottom:'4px' }}>🎫 出撃イベント</div>
       <div style={{ color:'#557799', fontSize:'11px', marginBottom:'12px' }}>
-        出撃1回ごとに1ポイント獲得。累計ポイントで報酬を受け取れます。
+        出撃でポイント獲得（出撃時間モードで獲得量が変化）。20秒モードは1回で1pt、10秒モードは2回で1pt。累計ポイントで報酬を受け取れます。
         {config && <><br/>期間: {new Date(config.starts_at).toLocaleString('ja-JP')} 〜 {new Date(config.ends_at).toLocaleString('ja-JP')}</>}
       </div>
 
