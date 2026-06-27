@@ -38,11 +38,15 @@ export async function loadLoadout(playerId, isSelf) {
     titleBonus = at || null
   }
 
-  // 出撃スキルセット
+  // PvPスキルセット（無ければ出撃を流用）
   let skillSets
   if (isSelf) {
     const { data: ss } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', playerId).order('slot_order')
-    skillSets = (ss || []).filter(r => (r.set_type || 'sortie') === 'sortie')
+    const all = ss || []
+    const pvp = all.filter(r => (r.set_type || 'sortie') === 'pvp')
+    // PvPセットにアクティブスキルが無ければ出撃を流用（パッシブのみ/空だと全部通常攻撃になるため。他セットと同方針）
+    const pvpHasActive = pvp.some(r => r.skills?.type !== 'パッシブ')
+    skillSets = pvpHasActive ? pvp : all.filter(r => (r.set_type || 'sortie') === 'sortie')
   } else {
     const { data: rpc } = await supabase.rpc('pvp_get_skillsets', { p_target: playerId })
     if (rpc?.error) throw new Error(rpc.error)

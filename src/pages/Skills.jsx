@@ -17,6 +17,7 @@ const SET_TYPES = [
   { key:'papia',     label:'🌟 パピア限定',  color:'#ffaa00' },
   { key:'challenge', label:'🕯 挑戦',        color:'#ff6464' },
   { key:'raid',      label:'🐉 レイド',      color:'#ff66aa' },
+  { key:'pvp',       label:'🥊 対人戦',      color:'#8ad0ff' },
 ]
 const setTypeOf = (ss) => ss.set_type || 'sortie'
 

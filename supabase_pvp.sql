@@ -9,18 +9,30 @@
 -- 適用順の制約は特に無し（他SQLの関数を上書きしない独立追加）。
 -- ============================================================
 
--- ① 相手の出撃スキルセット取得 -------------------------------------------------
+-- ① 相手のPvPスキルセット取得 -------------------------------------------------
+--    'pvp' セットにアクティブスキルが1つでもあれば 'pvp' を、無ければ 'sortie'(出撃)を返す。
+--    （パッシブのみ/空のPvPセットは「未設定」扱いで出撃に流用＝クライアントloadLoadoutと同方針）
 CREATE OR REPLACE FUNCTION pvp_get_skillsets(p_target uuid)
 RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   v_is_admin boolean;
   v_result   json;
+  v_use_type text;
 BEGIN
   SELECT COALESCE(is_admin, false) INTO v_is_admin FROM profiles WHERE id = auth.uid();
   IF NOT v_is_admin THEN
     RETURN json_build_object('error', '権限がありません');
   END IF;
+
+  -- PvPセットにアクティブ(非パッシブ)スキルがあれば 'pvp'、無ければ 'sortie'
+  SELECT CASE WHEN EXISTS (
+      SELECT 1 FROM skill_sets s2
+      JOIN skills sk2 ON sk2.id = s2.skill_id
+      WHERE s2.player_id = p_target AND s2.set_type = 'pvp'
+        AND COALESCE(sk2.type, '') <> 'パッシブ'
+    ) THEN 'pvp' ELSE 'sortie' END
+  INTO v_use_type;
 
   SELECT COALESCE(json_agg(t ORDER BY t.slot_order), '[]'::json) INTO v_result
   FROM (
@@ -30,7 +42,7 @@ BEGIN
     FROM skill_sets ss
     LEFT JOIN skills sk ON sk.id = ss.skill_id
     WHERE ss.player_id = p_target
-      AND COALESCE(ss.set_type, 'sortie') = 'sortie'
+      AND COALESCE(ss.set_type, 'sortie') = v_use_type
   ) t;
 
   RETURN json_build_object('ok', true, 'skill_sets', v_result);
