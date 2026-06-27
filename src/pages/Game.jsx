@@ -1540,6 +1540,15 @@ export const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, p
       logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を無効化した！`, color:'#66ccff' })
     }
   }
+  // アクアクラウン(真化): 状態異常になる確率-eff.evoAilmentResist%。新規付与された状態異常を確率で無効化
+  if ((eff?.evoAilmentResist || 0) > 0) {
+    const ailKeys2 = ['paralysis','burn','poison','severePoisoin','stun','bleed','healSeal','curseDmg']
+    const got2 = ailKeys2.find(k => newPlayerBuffs[k] && !playerBuffs[k])
+    if (got2 && Math.random()*100 < eff.evoAilmentResist) {
+      delete newPlayerBuffs[got2]
+      logs.push({ text:`💧 アクアクラウンの真化！ 状態異常を防いだ！`, color:'#66ccff' })
+    }
+  }
   return { dmgToPlayer, healEnemy, newPlayerBuffs, newEnemyBuffs }
 }
 
@@ -2802,6 +2811,8 @@ export default function Game() {
       const count = ss.use_count || 1
       for (let i = 0; i < count; i++) expandedSkillSet.push(ss)
     }
+    // 全スキルセット判定（アクティブスロット5枠すべてに通常スキルがセット済み）= 深紅の牙輪/魔眼石の真化条件
+    const allSkillsSet = activeSkillSets.filter(ss => ss.skills && ss.skills.type !== 'パッシブ').length >= 5
 
     const playerSpd = effectiveSpdForCalc
     const enemySpd = enemy.spd||5
@@ -2817,6 +2828,40 @@ export default function Game() {
     // プレイヤーの命中ボーナス（アクアクラウンなど）
     const playerHitBonus = (eff.hitBonus || 0) + passiveHitBonus
 
+    // ボス装備 真化: プレイヤーの攻撃ヒット時の効果（スライムの指輪=SPD-10% / 略奪者の短剣=出血 / 絶零の魔導砲=スタン）
+    const applyEvoHitEffects = (dmg) => {
+      if (dmg <= 0) return
+      if (eff.evoHitSpdDown && !(enemyBuffs.spdDown?.turns > 0 && enemyBuffs.spdDown.rate <= 0.9)) {
+        enemyBuffs.spdDown = { turns: 2, rate: 0.9 }
+        logs.push({ text:`💧 真化効果！ ${enemy.name}の素早さが2ターン-10%！`, color:'#66ccff' })
+      }
+      if ((eff.evoHitBleed||0) > 0 && Math.random()*100 < eff.evoHitBleed) {
+        enemyBuffs.bleed = { stacks: Math.min(5, (enemyBuffs.bleed?.stacks||0)+1), lastTurn: 0 }
+        logs.push({ text:`🩸 真化効果！ ${enemy.name}が出血した！`, color:'#ff4444' })
+      }
+      if ((eff.evoHitStun||0) > 0 && !(enemyBuffs.stun?.turns > 0) && Math.random()*100 < eff.evoHitStun) {
+        enemyBuffs.stun = { turns: 1 }
+        logs.push({ text:`💫 真化効果！ ${enemy.name}をスタンさせた！`, color:'#ffaa00' })
+      }
+    }
+    // ボス装備 真化: プレイヤー被ダメージ時の効果（嵐の重装甲=反射 / フロストバーンの聖鎧=スタン / インフェルノバスティオン=やけど）
+    const onPlayerDamaged = (dmg) => {
+      if (dmg <= 0) return
+      if ((eff.evoReflectPct||0) > 0) {
+        const refl = Math.max(1, Math.floor(dmg * eff.evoReflectPct / 100))
+        enemyHp -= refl
+        logs.push({ text:`🛡 真化効果！ 受けたダメージの${eff.evoReflectPct}%（${refl}）を反射！`, color:'#88ccff' })
+      }
+      if ((eff.evoOndmgStun||0) > 0 && !(enemyBuffs.stun?.turns > 0) && Math.random()*100 < eff.evoOndmgStun) {
+        enemyBuffs.stun = { turns: 1 }
+        logs.push({ text:`💫 真化効果！ 反撃で${enemy.name}をスタンさせた！`, color:'#ffaa00' })
+      }
+      if ((eff.evoOndmgBurn||0) > 0 && !(enemyBuffs.burn?.turns > 0) && Math.random()*100 < eff.evoOndmgBurn) {
+        enemyBuffs.burn = { turns: 5, dmgRate: 0.02 }
+        logs.push({ text:`🔥 真化効果！ 反撃で${enemy.name}をやけどさせた！`, color:'#ff8844' })
+      }
+    }
+
     const doPlayerAttack = (isExtra=false) => {
       playerAttacking = true
       const holyFieldDef = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
@@ -2826,8 +2871,11 @@ export default function Game() {
       const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDef * holyKnightMult * ryurinMult * kabeDefP
       const burnDebuffP = playerBuffs.burn?.turns > 0 ? 0.9 : 1.0
       const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * (pe('魔法剣士')?0.6:0.3)) : 0
-      const pMatk  = (eff.matk - madokenBonus) * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP
-      const pAtk   = (eff.atk + madokenBonus)  * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP
+      // ボス装備 真化: 全スキルセット時の攻撃/特攻+10%（深紅の牙輪/魔眼石）
+      const evoAllAtkMult  = (allSkillsSet && (eff.evoAllskillAtk||0)  > 0) ? 1 + eff.evoAllskillAtk/100  : 1
+      const evoAllMatkMult = (allSkillsSet && (eff.evoAllskillMatk||0) > 0) ? 1 + eff.evoAllskillMatk/100 : 1
+      const pMatk  = (eff.matk - madokenBonus) * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP * evoAllMatkMult
+      const pAtk   = (eff.atk + madokenBonus)  * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP * evoAllAtkMult
       const paralysisSpdP = playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1.0
       const pSpd   = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * paralysisSpdP
       const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
@@ -3000,6 +3048,7 @@ export default function Game() {
           if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
             enemyBuffs.spdDown = { turns: 2, rate: 0.95 }  // 濡羽杖アマザネ: 攻撃ヒット時 対象SPD-5%
           }
+          applyEvoHitEffects(finalDmg)
           const healUpMult = playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1
           const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult * healUpMult)
           playerHp = Math.min(maxHp, playerHp + healAmt)
@@ -3078,6 +3127,7 @@ export default function Game() {
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
           enemyBuffs.spdDown = { turns: 2, rate: 0.95 }  // 濡羽杖アマザネ: 攻撃ヒット時 対象SPD-5%
         }
+        applyEvoHitEffects(finalDmg)
         // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
         if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
           enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
@@ -3139,6 +3189,11 @@ export default function Game() {
       if (evasionRate > 0 && Math.random()*100 < evasionRate) {
         const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
         logs.push({ text:`${prefix}${enemy.name}の攻撃！ しかし回避した！`, color:'#44ff88' })
+        // ボス装備 真化: 影踏みのブーツ — 回避時2ターン素早さ+10%
+        if (eff.evoEvadeSpdUp && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= 1.1)) {
+          playerBuffs.spdUp = { turns: 2, rate: 1.1 }
+          logs.push({ text:`💨 真化効果！ 回避して素早さ+10%（2ターン）！`, color:'#66ccff' })
+        }
         return
       }
 
@@ -3147,8 +3202,11 @@ export default function Game() {
       const playerDefRankReduction = calcDefReduction(isEM ? eff.mdef : eff.def)
       const gambleBodyMult = hasGambleBody ? (0.7 + Math.random() * (pe('ギャンブラー')?0.4:0.6)) : 1.0
       const allinDebuffInMult = playerBuffs.allinDebuff?.turns > 0 ? 1.3 : 1.0
-      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*ryurinReduce()*(0.9+Math.random()*0.2))
+      // ボス装備 真化: 被ダメージ%軽減（海竜の鱗=全体-5% / 蒼粘剣=物理-10%）
+      const evoTakenMult = (eff.evoDmgTakenMult||1) * (!isEM ? (eff.evoPhysDmgTakenMult||1) : 1)
+      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*ryurinReduce()*evoTakenMult*(0.9+Math.random()*0.2))
       playerHp -= finalDmg
+      onPlayerDamaged(finalDmg)
       if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
       // 陰陽結界：軽減した分の一定割合を回復
       if (playerBuffs.onmyoHeal?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
@@ -3190,7 +3248,7 @@ export default function Game() {
         bossSpecialUsed = true
         logs.push({ text:`💥 ${enemy.name}の「${enemy.specialMove.name}」！！`, color:'#ff0000' })
         const result = executeEnemySkill(enemy.specialMove, enemy, enemyHp, enemyMaxHp, playerHp, maxHp, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
-        damageTarget(result.dmgToPlayer)
+        damageTarget(result.dmgToPlayer, !((enemy.specialMove.type||'').includes('magical')))
         Object.assign(playerBuffs, result.newPlayerBuffs)
         return
       }
@@ -3224,7 +3282,7 @@ export default function Game() {
       if (nonHealSkills.length === 0) return
       const skill = nonHealSkills[Math.floor(Math.random()*nonHealSkills.length)]
       const result = executeEnemySkill(skill, enemy, enemyHp, enemyMaxHp, playerHp, maxHp, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
-      damageTarget(result.dmgToPlayer)
+      damageTarget(result.dmgToPlayer, !((skill.type||'').includes('magical')))
       enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
       Object.assign(playerBuffs, result.newPlayerBuffs)
       Object.assign(enemyBuffs, result.newEnemyBuffs)
@@ -3256,7 +3314,7 @@ export default function Game() {
       logs.push({ text:`🐾 ペットの${label}！ ${enemy.name}に${dmg}ダメージ！${extra}`, color:'#ffaa44' })
     }
     // ブリーダー：敵スキル等のダメージも50%でペットが受ける（ペット生存時）
-    const damageTarget = (dmg) => {
+    const damageTarget = (dmg, isPhysical = true) => {
       if (dmg <= 0) { return }
       if (petActive && petHp > 0 && Math.random() < 0.5) {
         const cut = petBuffs.reduceTurns > 0 ? (1 - petBuffs.reduce) : 1.0
@@ -3265,7 +3323,11 @@ export default function Game() {
         logs.push({ text:`↳ 攻撃はペットに！ ペットに${d}ダメージ！（残りHP${petHp}）`, color:'#ff8844' })
         if (petHp <= 0) logs.push({ text:`💥 ペットは倒れてしまった…`, color:'#ff4444' })
       } else {
+        // ボス装備 真化: 被ダメージ%軽減（プレイヤーが受ける時のみ・敵スキルにも適用）
+        const evoTakenMult = (eff.evoDmgTakenMult||1) * (isPhysical ? (eff.evoPhysDmgTakenMult||1) : 1)
+        if (evoTakenMult !== 1) dmg = Math.max(1, Math.floor(dmg * evoTakenMult))
         playerHp -= dmg
+        onPlayerDamaged(dmg)
         // 陰陽結界：敵スキルダメージでも軽減分の一定割合を回復
         if (playerBuffs.onmyoHeal?.turns > 0 && dmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
           const oh = playerBuffs.onmyoHeal

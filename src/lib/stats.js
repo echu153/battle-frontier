@@ -152,6 +152,14 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
   let critResist = 0
   let ondmgSpdPct = 0     // 雷鋼の機神鎧: 被ダメージ時に素早さを一定時間アップ（%）
   let extraParaChance = 0 // 蒼雷の短刃: 追加行動の攻撃ヒット時に相手を麻痺させる確率（%）
+  // ボス装備 進化(真化)効果。bonus_effectで判定しスロット非依存で集約 → eff.* として戦闘ループが消費
+  let evoMpToMatk = 0, evoSpdToAtk = 0               // 古代魔導コア / 雷鷲の爪牙（ステ派生）
+  let evoDmgTakenMult = 1, evoPhysDmgTakenMult = 1   // 海竜の鱗 / 蒼粘剣（被ダメ%軽減）
+  let evoReflectPct = 0, evoAilmentResist = 0        // 嵐の重装甲 / アクアクラウン
+  let evoHitSpdDown = false, evoHitBleed = 0, evoHitStun = 0  // スライムの指輪 / 略奪者の短剣 / 絶零の魔導砲（攻撃ヒット時）
+  let evoOndmgStun = 0, evoOndmgBurn = 0             // フロストバーンの聖鎧 / インフェルノバスティオン（被ダメ時）
+  let evoEvadeSpdUp = false                          // 影踏みのブーツ（回避時）
+  let evoAllskillAtk = 0, evoAllskillMatk = 0        // 深紅の牙輪 / 深紅の魔眼石（全スキルセット時・条件は戦闘側で判定）
   let weaponDmgMult = 1   // 武器種固有: 与ダメージ倍率（斧+10%など）
   let weaponMpCostMult = 1// 武器種固有: 消費MP倍率（魔導書-10%など）
   const gemAcc = { bonus, defPen:0, mdefPen:0, critDmg:0, critBonus:0, critResist:0, hitBonus:0, evasionBonus:0 }
@@ -186,6 +194,24 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     if (item.bonus_effect === 'mdef_pen_5') gemAcc.mdefPen += 5  // 水禍の蒼珠: 魔法防御貫通+5%
     if (item.bonus_effect === 'ondmg_spd_up_5_2t') ondmgSpdPct += 5      // 雷鋼の機神鎧: 被ダメ時 2T素早さ+5%
     if (item.slot === 'weapon' && item.bonus_effect === 'extra_hit_paralysis_30') extraParaChance += 30  // 蒼雷の短刃
+    // ボス装備 真化効果（スロット非依存・5段で付与される bonus_effect）
+    switch (item.bonus_effect) {
+      case 'evo_mp_to_matk_5':          evoMpToMatk += 5; break
+      case 'evo_spd_to_atk_3':          evoSpdToAtk += 3; break
+      case 'evo_mdef_pen_10':           gemAcc.mdefPen += 10; break
+      case 'evo_dmg_taken_down_5':      evoDmgTakenMult *= 0.95; break
+      case 'evo_phys_dmg_taken_down_10':evoPhysDmgTakenMult *= 0.90; break
+      case 'evo_reflect_5':             evoReflectPct += 5; break
+      case 'evo_ailment_resist_5':      evoAilmentResist += 5; break
+      case 'evo_hit_spd_down_10_2t':    evoHitSpdDown = true; break
+      case 'evo_hit_bleed_30':          evoHitBleed = 30; break
+      case 'evo_hit_stun_20':           evoHitStun = 20; break
+      case 'evo_ondmg_stun_20':         evoOndmgStun = 20; break
+      case 'evo_ondmg_burn_50':         evoOndmgBurn = 50; break
+      case 'evo_evade_spd_up_10_2t':    evoEvadeSpdUp = true; break
+      case 'evo_allskill_atk_10':       evoAllskillAtk = 10; break
+      case 'evo_allskill_matk_10':      evoAllskillMatk = 10; break
+    }
     if (item.slot === 'weapon') {
       // 武器種ごとの固有能力（装備中の武器のみ）
       const wp = WEAPON_TYPE_PASSIVE[w.weapon_type]
@@ -212,6 +238,9 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
       }
     }
   }
+  // ボス装備 真化の派生ステ（基礎値ベース）: 古代魔導コア MP→特攻 / 雷鷲の爪牙 素早さ→攻撃
+  if (evoMpToMatk > 0) bonus.matk += Math.floor((profile.mp_max || 0) * evoMpToMatk / 100)
+  if (evoSpdToAtk > 0) bonus.atk  += Math.floor((profile.spd    || 0) * evoSpdToAtk / 100)
   // museum_* / fishing_* は永続ボーナス専用列（基礎列の再計算で消えないよう分離）
   const baseMatk = profile.matk + bonus.matk + (profile.museum_matk || 0) + (profile.fishing_matk || 0)
   const finalMatk = matkPct > 0 ? Math.floor(baseMatk * (1 + matkPct/100)) : baseMatk
@@ -250,6 +279,10 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     critDmg: gemAcc.critDmg/100,
     ondmgSpdUp: ondmgSpdPct > 0 ? 1 + ondmgSpdPct / 100 : 0, // 被ダメ時に付与する素早さ倍率（例:1.05）。0=効果なし
     extraParaChance: Math.min(100, extraParaChance), // 追加行動ヒット時の麻痺付与率（%）
+    // ボス装備 真化効果（戦闘ループが消費）
+    evoDmgTakenMult, evoPhysDmgTakenMult, evoReflectPct, evoAilmentResist,
+    evoHitSpdDown, evoHitBleed, evoHitStun, evoOndmgStun, evoOndmgBurn, evoEvadeSpdUp,
+    evoAllskillAtk, evoAllskillMatk,
     weaponDmgMult,   // 武器種固有の与ダメージ倍率（斧=1.10など）
     weaponMpCostMult,// 武器種固有の消費MP倍率（魔導書=0.90など）
   }
@@ -341,6 +374,10 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
     cm.hitBonus     += item.bonus_hit     || 0
     cm.critBonus    += item.bonus_crit    || 0
     cm.evasionBonus += item.bonus_evasion || 0
+    // ボス装備 真化の派生ステ（calcEffectiveStats と一致させる）
+    if (item.bonus_effect === 'evo_mp_to_matk_5') equip.matk += Math.floor((profile.mp_max||0) * 0.05)
+    if (item.bonus_effect === 'evo_spd_to_atk_3') equip.atk  += Math.floor((profile.spd||0)    * 0.03)
+    if (item.bonus_effect === 'evo_mdef_pen_10')  cm.mdefPen += 10
     if (item.slot === 'weapon') {
       // 武器種ごとの固有能力（calcEffectiveStats と一致させる）
       const wp = WEAPON_TYPE_PASSIVE[w.weapon_type]
