@@ -5342,23 +5342,23 @@ export default function Game() {
                     {profile.display_title && <span style={{ color:'#aaaaff', fontSize:'11px', marginRight:'4px' }}>{profile.display_title}</span>}
                     {profile.username}
                   </div>
-                  <div style={{ fontSize:'11px', color:'#446688' }}>
+                  <div style={{ fontSize:'11px', color:'#6688aa' }}>
                     <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{getRetrainingStars(profile.class, profile.retraining)}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／{cap}
                   </div>
-                  <div style={{ fontSize:'11px', color:'#446688' }}>
+                  <div style={{ fontSize:'11px', color:'#6688aa' }}>
                     キャラクターLV: <span style={{color:'#ffcc00'}}>{charLv}</span>{!NEW_UI && <>　<span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span></>}
                   </div>
                   {NEW_UI && (
-                    <div style={{ fontSize:'11px', color:'#446688' }}>
+                    <div style={{ fontSize:'11px', color:'#6688aa' }}>
                       総合力: <span style={{color:'#44ff88'}}>{total}</span> <span style={{color:totalRank.color}}>{totalRank.rank}</span>
                     </div>
                   )}
-                  <div style={{ fontSize:'10px', color:'#446688' }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
+                  <div style={{ fontSize:'11px', color:'#6688aa' }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
                 </div>
                 {profile?.is_admin && profile.country_id && (
-                  <div style={{ textAlign:'right', fontSize:'10px', color:'#446688', lineHeight:'1.7', flexShrink:0, marginLeft:'8px' }}>
+                  <div style={{ textAlign:'right', fontSize:'11px', color:'#6688aa', lineHeight:'1.7', flexShrink:0, marginLeft:'8px' }}>
                     <div>所属国</div>
-                    <div style={{ color:'#88ccff', fontSize:'11px' }}>{myCountryName || '—'}</div>
+                    <div style={{ color:'#88ccff' }}>{myCountryName || '—'}</div>
                     <div>階級：<span style={{ color: rankColor(profile.country_rank) }}>{profile.country_rank || '—'}</span></div>
                   </div>
                 )}
@@ -5829,18 +5829,18 @@ export default function Game() {
               </div>
             </div>
             {profile?.is_admin && profile.country_id && (
-              <div style={{ textAlign:'right', fontSize:'10px', color:'#446688', lineHeight:'1.6', marginBottom:'6px' }}>
-                所属国 <span style={{ color:'#88ccff', fontSize:'11px' }}>{myCountryName || '—'}</span>
+              <div style={{ textAlign:'right', fontSize:'11px', color:'#6688aa', lineHeight:'1.6', marginBottom:'6px' }}>
+                所属国 <span style={{ color:'#88ccff' }}>{myCountryName || '—'}</span>
                 <span style={{ marginLeft:'8px' }}>階級：<span style={{ color: rankColor(profile.country_rank) }}>{profile.country_rank || '—'}</span></span>
               </div>
             )}
-            <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>
-              クラス: <span style={{color:'#88ccff'}}>{profile.class}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／<span style={{color:'#446688'}}>{cap}</span>
+            <div style={{ fontSize:'11px', color:'#6688aa', marginBottom:'2px' }}>
+              クラス: <span style={{color:'#88ccff'}}>{profile.class}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／<span style={{color:'#6688aa'}}>{cap}</span>
             </div>
-            <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>
+            <div style={{ fontSize:'11px', color:'#6688aa', marginBottom:'2px' }}>
               キャラクターLV: <span style={{color:'#ffcc00'}}>{charLv}</span>
             </div>
-            <div style={{ fontSize:'11px', color:'#446688', marginBottom:'6px', display:'flex', justifyContent:'space-between' }}>
+            <div style={{ fontSize:'11px', color:'#6688aa', marginBottom:'6px', display:'flex', justifyContent:'space-between' }}>
               <span>総合力: <span style={{color:'#44ff88', fontWeight:'bold'}}>{total}</span></span>
               <span style={{color:totalRank.color, fontWeight:'bold'}}>{totalRank.rank}</span>
             </div>

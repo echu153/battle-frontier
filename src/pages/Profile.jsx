@@ -214,9 +214,9 @@ export default function Profile() {
         {/* アバター */}
         <div style={{ display:'flex', gap:'16px', alignItems:'center', marginBottom:'16px' }}>
           {profile.is_admin && profile.country_id && (
-            <div style={{ marginLeft:'auto', alignSelf:'flex-start', textAlign:'right', fontSize:'11px', color:'#446688', lineHeight:'1.7', order:2 }}>
+            <div style={{ marginLeft:'auto', alignSelf:'flex-start', textAlign:'right', fontSize:'11px', color:'#6688aa', lineHeight:'1.7', order:2 }}>
               <div>所属国</div>
-              <div style={{ color:'#88ccff', fontSize:'13px' }}>{countryName || '—'}</div>
+              <div style={{ color:'#88ccff' }}>{countryName || '—'}</div>
               <div>階級：<span style={{ color: rankColor(profile.country_rank) }}>{profile.country_rank || '—'}</span></div>
             </div>
           )}
@@ -236,10 +236,10 @@ export default function Profile() {
               {profile.display_title && <span style={{ color:'#ffcc00', fontSize:'13px', marginRight:'4px' }}>{profile.display_title}</span>}
               {profile.username}
             </div>
-            <div style={{ color:'#446688', fontSize:'11px' }}>クラス: <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{('★'.repeat((profile.retraining||{})[profile.class]||0))}</span></div>
-            <div style={{ color:'#446688', fontSize:'11px' }}>クラスLV: <span style={{color:'#ffcc00'}}>{(classLevels.find(c => c.class_name === profile.class)?.lv) ?? profile.lv}</span></div>
-            <div style={{ color:'#446688', fontSize:'11px' }}>キャラクターLV: <span style={{color:'#ffcc00'}}>{profile.char_lv ?? profile.lv}</span></div>
-            <div style={{ color:'#446688', fontSize:'11px' }}>総合力: <span style={{color:'#44ff88'}}>{total}</span> <span style={{color: totalRank.color}}>【{totalRank.rank}】</span></div>
+            <div style={{ color:'#6688aa', fontSize:'11px' }}>クラス: <span style={{color:'#88ccff'}}>{profile.class}</span><span style={{color:'#ffcc00'}}>{('★'.repeat((profile.retraining||{})[profile.class]||0))}</span></div>
+            <div style={{ color:'#6688aa', fontSize:'11px' }}>クラスLV: <span style={{color:'#ffcc00'}}>{(classLevels.find(c => c.class_name === profile.class)?.lv) ?? profile.lv}</span></div>
+            <div style={{ color:'#6688aa', fontSize:'11px' }}>キャラクターLV: <span style={{color:'#ffcc00'}}>{profile.char_lv ?? profile.lv}</span></div>
+            <div style={{ color:'#6688aa', fontSize:'11px' }}>総合力: <span style={{color:'#44ff88'}}>{total}</span> <span style={{color: totalRank.color}}>【{totalRank.rank}】</span></div>
           </div>
         </div>
 
