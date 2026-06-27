@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { EVO_EFFECT_LABELS } from '../constants/bossEvolution'
 
 const RARITY_COLORS = {
   f:'#888888', e:'#6699cc', d:'#ff8844', c:'#44bb44',
@@ -20,6 +21,7 @@ const BONUS_EFFECT_DESC = {
   'artifact':        'アーティファクト（出品不可）',
   'hit_spd_down_5':  '攻撃ヒット時、対象の素早さ-5%',
   'mdef_pen_5':      '魔法防御貫通+5%',
+  ...EVO_EFFECT_LABELS,
 }
 
 // クライアント側でも基準価格を算出（サーバーと同じロジック。表示・スライダー用）

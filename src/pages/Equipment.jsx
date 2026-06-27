@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue } from './Game'
 import { gemAllowedSlots, gemSlotCategory, GEM_SLOT_LABEL, calcProfBonus } from '../lib/stats'
+import { EVO_EFFECT_LABELS, evoMultiplier } from '../constants/bossEvolution'
 
 const SLOT_LABELS_FULL = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }
 const gemDisplayName = (gemType, rank) => `${GEM_DATA[gemType]?.name || gemType}(${rank})`
@@ -72,25 +73,26 @@ const getEffectLabel = (effect) => {
     'battle_start_ailment_shield':'【開幕・状態異常を1回無効化】',
     'ondmg_spd_up_5_2t':'【被ダメージ時・2ターン素早さ+5%】',
     'extra_hit_paralysis_30':'【追加行動の攻撃ヒット時・30%で相手を麻痺】',
+    ...EVO_EFFECT_LABELS,
   }
   return labels[effect] || effect
 }
 
-// enhance_plusによる強化後ステータス計算（1.5倍・古びた○○除外）
-const calcEnhancedStats = (weapon, plus) => {
-  if (!plus || plus <= 0) return weapon
+// enhance_plus(1.5倍)＋進化(基礎×(1+0.2*stage))による強化後ステータス計算（古びた○○除外）
+const calcEnhancedStats = (weapon, plus, evolveStage = 0) => {
   const isArtifactBase = ARTIFACT_BASE_NAMES.includes(weapon.name)
-  if (isArtifactBase) return weapon
-  const mult = Math.pow(1.5, plus)
+  const mult = (plus > 0 && !isArtifactBase) ? Math.pow(1.5, plus) : 1
+  const baseMult = mult * evoMultiplier(evolveStage)
+  if (baseMult === 1) return weapon
   return {
     ...weapon,
-    atk_bonus:  weapon.atk_bonus  > 0 ? Math.ceil(weapon.atk_bonus  * mult) : weapon.atk_bonus,
-    def_bonus:  weapon.def_bonus  > 0 ? Math.ceil(weapon.def_bonus  * mult) : weapon.def_bonus,
-    matk_bonus: weapon.matk_bonus > 0 ? Math.ceil(weapon.matk_bonus * mult) : weapon.matk_bonus,
-    mdef_bonus: weapon.mdef_bonus > 0 ? Math.ceil(weapon.mdef_bonus * mult) : weapon.mdef_bonus,
-    spd_bonus:  weapon.spd_bonus  > 0 ? Math.ceil(weapon.spd_bonus  * mult) : weapon.spd_bonus,
-    hp_bonus:   weapon.hp_bonus   > 0 ? Math.ceil(weapon.hp_bonus   * mult) : weapon.hp_bonus,
-    mp_bonus:   weapon.mp_bonus   > 0 ? Math.ceil(weapon.mp_bonus   * mult) : weapon.mp_bonus,
+    atk_bonus:  weapon.atk_bonus  > 0 ? Math.ceil(weapon.atk_bonus  * baseMult) : weapon.atk_bonus,
+    def_bonus:  weapon.def_bonus  > 0 ? Math.ceil(weapon.def_bonus  * baseMult) : weapon.def_bonus,
+    matk_bonus: weapon.matk_bonus > 0 ? Math.ceil(weapon.matk_bonus * baseMult) : weapon.matk_bonus,
+    mdef_bonus: weapon.mdef_bonus > 0 ? Math.ceil(weapon.mdef_bonus * baseMult) : weapon.mdef_bonus,
+    spd_bonus:  weapon.spd_bonus  > 0 ? Math.ceil(weapon.spd_bonus  * baseMult) : weapon.spd_bonus,
+    hp_bonus:   weapon.hp_bonus   > 0 ? Math.ceil(weapon.hp_bonus   * baseMult) : weapon.hp_bonus,
+    mp_bonus:   weapon.mp_bonus   > 0 ? Math.ceil(weapon.mp_bonus   * baseMult) : weapon.mp_bonus,
   }
 }
 
@@ -459,7 +461,7 @@ export default function Equipment() {
             {equippedSlots.map(slot => {
               const equipped = equipment.find(e => e.slot === slot && e.equipped)
               const plus = equipped?.enhance_plus || 0
-              const enhW = equipped ? calcEnhancedStats(equipped.weapons, plus) : null
+              const enhW = equipped ? calcEnhancedStats(equipped.weapons, plus, equipped.evolve_stage || 0) : null
               return (
                 <div key={slot} style={{ border:'1px solid #003366', background:'#001028', padding:'8px' }}>
                   <div style={{ color:'#446688', fontSize:'10px', marginBottom:'3px' }}>{SLOT_LABELS[slot]}</div>
@@ -595,7 +597,7 @@ export default function Equipment() {
                 {filteredEquipment.map(item => {
                   const w = item.weapons
                   const plus = item.enhance_plus || 0
-                  const enhW = calcEnhancedStats(w, plus)
+                  const enhW = calcEnhancedStats(w, plus, item.evolve_stage || 0)
                   const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
                   const prof = tab === 'weapon' ? proficiency.find(p => p.equipment_id === item.id) : null
                   const profBonus = prof ? calcProfBonus(prof, w) : {}

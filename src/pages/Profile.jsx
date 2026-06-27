@@ -4,6 +4,7 @@ import { supabase } from '../supabase'
 import { calcEffectiveStats, calcEffectiveTotal, GEM_DATA, gemEffectValue } from '../lib/stats'
 import { rankColor } from '../lib/territory'
 import { petStats, speciesLabel, speciesEmoji, petImage, atkLabel, applyCharmStats, charmDisplayName, charmPlayerBonus, petPlayerBonus } from '../constants/pets'
+import { EVO_EFFECT_LABELS, evoMultiplier } from '../constants/bossEvolution'
 
 const gemBonusText = (gemType, rank) => {
   const g = GEM_DATA[gemType]; if (!g) return ''
@@ -82,27 +83,28 @@ const getEffectLabel = (effect) => {
     'battle_start_ailment_shield':'【開幕・状態異常を1回無効化】',
     'ondmg_spd_up_5_2t':'【被ダメージ時・2ターン素早さ+5%】',
     'extra_hit_paralysis_30':'【追加行動の攻撃ヒット時・30%で相手を麻痺】',
+    ...EVO_EFFECT_LABELS,
   }
   return labels[effect] || effect
 }
 // 再評価で付くスロット効果（=ボーナス扱い）。これ以外の bonus_effect は固定の特殊能力。
 const REEVAL_SLOT_EFFECTS = ['open_atk_10_2t','open_atk_20_1t','open_def_10_2t','open_def_20_1t','open_matk_10_2t','open_matk_20_1t','open_mdef_10_2t','open_mdef_20_1t','open_spd_10_2t','open_spd_20_1t','delay_heal_10','regen_heal_5_3t']
 
-// 強化後ステータス計算（1.5倍）
-const calcEnhancedStats = (weapon, plus) => {
-  if (!plus || plus <= 0) return weapon
+// 強化後ステータス計算（1.5倍＋進化 基礎×(1+0.2*stage)）
+const calcEnhancedStats = (weapon, plus, evolveStage = 0) => {
   const isArtifactBase = ARTIFACT_BASE_NAMES.includes(weapon.name)
-  if (isArtifactBase) return weapon
-  const mult = Math.pow(1.5, plus)
+  const mult = (plus > 0 && !isArtifactBase) ? Math.pow(1.5, plus) : 1
+  const baseMult = mult * evoMultiplier(evolveStage)
+  if (baseMult === 1) return weapon
   return {
     ...weapon,
-    atk_bonus:  weapon.atk_bonus  > 0 ? Math.ceil(weapon.atk_bonus  * mult) : weapon.atk_bonus,
-    def_bonus:  weapon.def_bonus  > 0 ? Math.ceil(weapon.def_bonus  * mult) : weapon.def_bonus,
-    matk_bonus: weapon.matk_bonus > 0 ? Math.ceil(weapon.matk_bonus * mult) : weapon.matk_bonus,
-    mdef_bonus: weapon.mdef_bonus > 0 ? Math.ceil(weapon.mdef_bonus * mult) : weapon.mdef_bonus,
-    spd_bonus:  weapon.spd_bonus  > 0 ? Math.ceil(weapon.spd_bonus  * mult) : weapon.spd_bonus,
-    hp_bonus:   weapon.hp_bonus   > 0 ? Math.ceil(weapon.hp_bonus   * mult) : weapon.hp_bonus,
-    mp_bonus:   weapon.mp_bonus   > 0 ? Math.ceil(weapon.mp_bonus   * mult) : weapon.mp_bonus,
+    atk_bonus:  weapon.atk_bonus  > 0 ? Math.ceil(weapon.atk_bonus  * baseMult) : weapon.atk_bonus,
+    def_bonus:  weapon.def_bonus  > 0 ? Math.ceil(weapon.def_bonus  * baseMult) : weapon.def_bonus,
+    matk_bonus: weapon.matk_bonus > 0 ? Math.ceil(weapon.matk_bonus * baseMult) : weapon.matk_bonus,
+    mdef_bonus: weapon.mdef_bonus > 0 ? Math.ceil(weapon.mdef_bonus * baseMult) : weapon.mdef_bonus,
+    spd_bonus:  weapon.spd_bonus  > 0 ? Math.ceil(weapon.spd_bonus  * baseMult) : weapon.spd_bonus,
+    hp_bonus:   weapon.hp_bonus   > 0 ? Math.ceil(weapon.hp_bonus   * baseMult) : weapon.hp_bonus,
+    mp_bonus:   weapon.mp_bonus   > 0 ? Math.ceil(weapon.mp_bonus   * baseMult) : weapon.mp_bonus,
   }
 }
 
@@ -334,7 +336,7 @@ export default function Profile() {
             )
             const plus = equipped.enhance_plus || 0
             const isArtifactBase = ARTIFACT_BASE_NAMES.includes(equipped.weapons.name)
-            const enhW = calcEnhancedStats(equipped.weapons, plus)
+            const enhW = calcEnhancedStats(equipped.weapons, plus, equipped.evolve_stage || 0)
             const profLv = proficiency.find(p => p.weapon_id === equipped.weapons.id)?.prof_lv || 0
             return (
               <div key={slot} style={{ border:'1px solid #002a55', background:'#000c1e', padding:'10px', textAlign:'center' }}>

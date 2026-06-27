@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { EVO_EFFECT_LABELS } from '../constants/bossEvolution'
 
 const RARITY_COLORS = {
   f:'#888888', e:'#6699cc', d:'#ff8844', c:'#44bb44',
@@ -29,6 +30,7 @@ const BONUS_EFFECT_DESC = {
   'mdef_pen_5':      '魔法防御貫通+5%',
   'ondmg_spd_up_5_2t':     '被ダメージ時、2ターンの間素早さ+5%',
   'extra_hit_paralysis_30':'追加行動の攻撃ヒット時、30%で相手を麻痺',
+  ...EVO_EFFECT_LABELS,
 }
 
 function WeaponCard({ weapon, bonusEffect }) {

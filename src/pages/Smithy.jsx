@@ -145,18 +145,18 @@ const sortEquipment = (items, key) => [...items].sort((a, b) => {
   return new Date(a.obtained_at) - new Date(b.obtained_at)
 })
 
-// 強化後ステータス計算（1.5倍）
-const calcEnhancedStats = (weapon, plus) => {
-  if (!plus || plus <= 0) return weapon
-  const mult = Math.pow(1.5, plus)
+// 強化後ステータス計算（1.5倍＋進化 基礎×(1+0.2*stage)）
+const calcEnhancedStats = (weapon, plus, evolveStage = 0) => {
+  const baseMult = Math.pow(1.5, Math.max(0, plus)) * evoMultiplier(evolveStage)
+  if (baseMult === 1) return weapon
   return {
-    atk_bonus:  weapon.atk_bonus  > 0 ? Math.ceil(weapon.atk_bonus  * mult) : weapon.atk_bonus,
-    def_bonus:  weapon.def_bonus  > 0 ? Math.ceil(weapon.def_bonus  * mult) : weapon.def_bonus,
-    matk_bonus: weapon.matk_bonus > 0 ? Math.ceil(weapon.matk_bonus * mult) : weapon.matk_bonus,
-    mdef_bonus: weapon.mdef_bonus > 0 ? Math.ceil(weapon.mdef_bonus * mult) : weapon.mdef_bonus,
-    spd_bonus:  weapon.spd_bonus  > 0 ? Math.ceil(weapon.spd_bonus  * mult) : weapon.spd_bonus,
-    hp_bonus:   weapon.hp_bonus   > 0 ? Math.ceil(weapon.hp_bonus   * mult) : weapon.hp_bonus,
-    mp_bonus:   weapon.mp_bonus   > 0 ? Math.ceil(weapon.mp_bonus   * mult) : weapon.mp_bonus,
+    atk_bonus:  weapon.atk_bonus  > 0 ? Math.ceil(weapon.atk_bonus  * baseMult) : weapon.atk_bonus,
+    def_bonus:  weapon.def_bonus  > 0 ? Math.ceil(weapon.def_bonus  * baseMult) : weapon.def_bonus,
+    matk_bonus: weapon.matk_bonus > 0 ? Math.ceil(weapon.matk_bonus * baseMult) : weapon.matk_bonus,
+    mdef_bonus: weapon.mdef_bonus > 0 ? Math.ceil(weapon.mdef_bonus * baseMult) : weapon.mdef_bonus,
+    spd_bonus:  weapon.spd_bonus  > 0 ? Math.ceil(weapon.spd_bonus  * baseMult) : weapon.spd_bonus,
+    hp_bonus:   weapon.hp_bonus   > 0 ? Math.ceil(weapon.hp_bonus   * baseMult) : weapon.hp_bonus,
+    mp_bonus:   weapon.mp_bonus   > 0 ? Math.ceil(weapon.mp_bonus   * baseMult) : weapon.mp_bonus,
   }
 }
 
@@ -637,7 +637,7 @@ export default function Smithy() {
           const matEnough = matSource === 'stone' ? stoneCount >= materialCount : sameCount >= materialCount
           const canEnhance = profile.gold >= cost && matEnough
           const successRate = ENHANCE_RATE[nextPlus] !== undefined ? ENHANCE_RATE[nextPlus] : 100
-          const nextEnhanced = calcEnhancedStats(w, nextPlus)
+          const nextEnhanced = calcEnhancedStats(w, nextPlus, item.evolve_stage || 0)
           const closeModal = () => { setSelectedItem(null); setEnhanceResult(null) }
           return (
             <div style={{ position:'fixed', inset:0, background:'rgba(0,4,16,0.85)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
@@ -880,8 +880,8 @@ export default function Smithy() {
                     const totalMaterials = sameCount + stoneCount
                     const canEnhance = !isArtifactBase && profile.gold >= cost && totalMaterials >= materialCount
                     const successRate = ENHANCE_RATE[nextPlus] !== undefined ? ENHANCE_RATE[nextPlus] : 100
-                    const enhanced = calcEnhancedStats(w, plus)
-                    const nextEnhanced = isArtifactBase ? w : calcEnhancedStats(w, nextPlus)
+                    const enhanced = calcEnhancedStats(w, plus, item.evolve_stage || 0)
+                    const nextEnhanced = isArtifactBase ? w : calcEnhancedStats(w, nextPlus, item.evolve_stage || 0)
                     const isSelected = selectedItem?.id === item.id
 
                     return (
