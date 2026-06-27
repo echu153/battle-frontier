@@ -20,6 +20,7 @@
 // 戻り値: { logs, winner /* 'A' | 'B' | 'draw' */, turns, aHpPct, bHpPct }
 // ============================================================
 import { getWeaponGroup } from './stats'
+import { evoOnHit, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from './evoCombat'
 import { petStats } from '../constants/pets'
 import {
   calcEvasionRate,
@@ -123,6 +124,7 @@ function buildSide(input, key) {
     effectiveSpdForCalc,
     ondmgSpdUp,
     expandedSkillSet,
+    allSkillsSet: evoAllSkillsSet(skillSets),  // 深紅の牙輪/魔眼石の真化条件
     // 状態
     hp: eff.hp_max,
     mp: eff.mp_max,
@@ -173,8 +175,8 @@ function doAttack(att, def, isExtra, ctx) {
   const pMdef = eff.mdef * (attBuffs.mdefUp ? attBuffs.mdefUp.rate : 1) * (attBuffs.defUp ? attBuffs.defUp.rate : 1) * holyFieldDef * holyKnightMult * kabeDefP
   const burnDebuffP = attBuffs.burn?.turns > 0 ? 0.9 : 1.0
   const madokenBonus = att.hasMadokenJutsu ? Math.floor(eff.matk * (att.pe('魔法剣士') ? 0.6 : 0.3)) : 0
-  const pMatk = (eff.matk - madokenBonus) * (attBuffs.matkUp ? attBuffs.matkUp.rate : 1) * att.passiveMatkMult * att.passiveMatkMultTenki * burnDebuffP
-  const pAtk  = (eff.atk + madokenBonus) * (attBuffs.atkUp ? attBuffs.atkUp.rate : 1) * (attBuffs.atkDown ? attBuffs.atkDown.rate : 1) * burnDebuffP
+  const pMatk = (eff.matk - madokenBonus) * (attBuffs.matkUp ? attBuffs.matkUp.rate : 1) * att.passiveMatkMult * att.passiveMatkMultTenki * burnDebuffP * evoMatkMult(eff, att.allSkillsSet)
+  const pAtk  = (eff.atk + madokenBonus) * (attBuffs.atkUp ? attBuffs.atkUp.rate : 1) * (attBuffs.atkDown ? attBuffs.atkDown.rate : 1) * burnDebuffP * evoAtkMult(eff, att.allSkillsSet)
   const paralysisSpdP = attBuffs.paralysis?.turns > 0 ? (attBuffs.paralysis.spdRate || 0.8) : 1.0
   const pSpd = att.effectiveSpdForCalc * (attBuffs.spdUp ? attBuffs.spdUp.rate : 1) * paralysisSpdP
   const effBuff = { ...eff, atk: pAtk, def: pDef, mdef: pMdef, matk: pMatk, spd: pSpd }
@@ -212,13 +214,19 @@ function doAttack(att, def, isExtra, ctx) {
       if (def.petHp <= 0) ctx.logs.push({ text: `💥 ${def.profile.username}のペットは倒れた…`, color: '#ff4444' })
     } else {
       def.hp -= amt
+      // 真化（防御側の装備）: 反射 → 攻撃側へ（嵐の重装甲）。スタン/やけどはPvPのバフ置換仕様の都合で割愛。
+      if ((def.eff.evoReflectPct || 0) > 0) {
+        const refl = Math.max(1, Math.floor(amt * def.eff.evoReflectPct / 100))
+        att.hp -= refl
+        ctx.logs.push({ text: `🛡 真化効果！ ${def.profile.username}が${refl}を反射！`, color: '#88ccff' })
+      }
     }
   }
-  // 防御側の被ダメ軽減（ランク軽減＋dmgReduceバフ）。物理/特殊で参照ステ切替
+  // 防御側の被ダメ軽減（ランク軽減＋dmgReduceバフ＋真化%軽減）。物理/特殊で参照ステ切替
   const defReduceMult = (useMagical) => {
     const rankRed = calcDefReduction(useMagical ? def.eff.mdef : def.eff.def)
     const dr = defBuffs.dmgReduce?.turns > 0 ? defBuffs.dmgReduce.rate : 1.0
-    return (1 - rankRed) * dr
+    return (1 - rankRed) * dr * evoTakenMult(def.eff, !useMagical)
   }
 
   // 次に使うスキルを覗き見（MP不足判定・必中判定）
@@ -244,6 +252,7 @@ function doAttack(att, def, isExtra, ctx) {
   // 回避された場合（追撃系はメイン回避でも独立発動）
   if (effectiveDefEvasion > 0 && Math.random() * 100 < effectiveDefEvasion) {
     logs.push({ text: `${prefix}${nextSkillName && !mpLack ? `${nextSkillName}！` : '攻撃！'} しかし${enemyName}に回避された！`, color: '#446688' })
+    evoOnEvade(def.eff, defBuffs, logs)  // 影踏みのブーツ（回避した防御側）
     if (nextSkill && !mpLack) {
       const resPeek = executeSkill(nextSkill, effBuff, profile, enemyObj, defBuffs, attBuffs, att.isArtifact, att.prevSkillName)
       if (resPeek.followup && resPeek.followup.dmg > 0) {
@@ -353,6 +362,7 @@ function doAttack(att, def, isExtra, ctx) {
       if (res.dmg > 0) att.prevDmgSkillName = cs.skills?.name
       if (res.selfDmg > 0) att.hp = Math.max(0, att.hp - res.selfDmg)
       dealToDef(finalDmg)
+      evoOnHit(eff, finalDmg, res.newEnemyBuffs, enemyName, logs)  // 真化: 攻撃ヒット時の敵デバフ（res.newEnemyBuffsに書く＝置換で消えない）
       // ★直接付与する相手デバフは res.newEnemyBuffs に書く（下で def.buffs = res.newEnemyBuffs に置換されるため、
       //   defBuffs(旧オブジェクト)に書くと捨てられてアイコンも効果も消える）
       if (finalDmg > 0 && att.equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(res.newEnemyBuffs.healDown?.turns > 0)) {
@@ -424,6 +434,7 @@ function doAttack(att, def, isExtra, ctx) {
     const breederDmgMult = attBuffs.breederDmgUp?.turns > 0 ? attBuffs.breederDmgUp.rate : 1.0
     const finalDmg = Math.floor(baseDmg * 0.7 * critMult * (att.isArtifact ? 1.3 : 1.0) * att.passiveDmgMult * reduceMult * breederDmgMult * PVP.dmgMult * (0.9 + Math.random() * 0.2))
     dealToDef(finalDmg)
+    evoOnHit(eff, finalDmg, defBuffs, enemyName, logs)  // 真化: 通常攻撃ヒット時の敵デバフ（通常攻撃はdef.buffs置換なし）
     const critText = isCrit ? '💥クリティカル！ ' : ''
     logs.push({ text: `${prefix}${critText}攻撃！ ${enemyName}に${finalDmg}ダメージ！`, color: '#ffcc00' })
     if (att.buffs.bloodRage?.turns > 0 && finalDmg > 0 && !(att.buffs.healSeal?.turns > 0)) {

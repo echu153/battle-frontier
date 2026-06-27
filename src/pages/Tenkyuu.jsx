@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
 import { getWeaponGroup } from '../lib/stats'
+import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 import {
   calcEffectiveStats,
@@ -163,6 +164,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const count = ss.use_count || 1
     for (let i = 0; i < count; i++) expandedSkillSet.push(ss)
   }
+  const allSkillsSet = evoAllSkillsSet(skillSets)  // 深紅の牙輪/魔眼石の真化条件
 
   const playerSpd = effectiveSpdForCalc
   const enemySpd = enemy.spd || 5
@@ -194,8 +196,8 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDef * holyKnightMult * kabeDefP
     const burnDebuffP = playerBuffs.burn?.turns > 0 ? 0.9 : 1.0
     const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * (pe('魔法剣士')?0.6:0.3)) : 0
-    const pMatk  = (eff.matk - madokenBonus) * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP
-    const pAtk   = (eff.atk + madokenBonus)  * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP
+    const pMatk  = (eff.matk - madokenBonus) * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP * evoMatkMult(eff, allSkillsSet)
+    const pAtk   = (eff.atk + madokenBonus)  * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP * evoAtkMult(eff, allSkillsSet)
     const paralysisSpdP = playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1.0
     const pSpd   = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * paralysisSpdP
     const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
@@ -322,6 +324,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
           enemyBuffs.healDown = { turns: 2, rate: 0.9 }
           logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
         }
+        evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs)
         // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
         if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
           enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
@@ -391,6 +394,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         enemyBuffs.healDown = { turns: 2, rate: 0.9 }
         logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
       }
+      evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs)
       const critText = isCrit ? '💥クリティカル！ ' : ''
       logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
       if (finalDmg > 0) lastPlayerHitType = isMagical ? 'magical' : 'physical'
@@ -465,7 +469,10 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const critMult = isCrit ? (1.5 + enPerm.critDmgPlus) : 1.0
     const rankRed = calcDefReduction(rankStat)
     const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
-    return capPlayerDmg(Math.max(0, Math.floor(raw * defScale * critMult * (1 - rankRed) * dmgReduceRate * (0.9 + Math.random()*0.2))))
+    // ボス装備 真化: 被ダメ%軽減＋反撃/反射（敵スキルダメージの共通経路）
+    const dmg = capPlayerDmg(Math.max(0, Math.floor(raw * defScale * critMult * (1 - rankRed) * dmgReduceRate * evoTakenMult(eff, useStat !== 'matk') * (0.9 + Math.random()*0.2))))
+    const refl = evoOnDamaged(eff, dmg, enemyBuffs, enemy.name, logs); if (refl > 0) dmgEnemy(refl, 'physical')
+    return dmg
   }
 
   // mods: 敵の攻撃が命中したときの追加処理（スタン・状態異常付与・毒追撃）
@@ -523,6 +530,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     if (evasionRate > 0 && Math.random()*100 < evasionRate) {
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
       logs.push({ text:`${prefix}${enemy.name}の攻撃！ しかし回避した！`, color:'#44ff88' })
+      evoOnEvade(eff, playerBuffs, logs)  // 影踏みのブーツ
       return
     }
     enemyActionStreak++
@@ -531,9 +539,10 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const playerDefRankReduction = mods.defPen ? 0 : calcDefReduction(isEM ? eff.mdef : eff.def)
     const gambleBodyMult = hasGambleBody ? (0.7 + Math.random() * (pe('ギャンブラー')?0.4:0.6)) : 1.0
     const allinDebuffInMult = playerBuffs.allinDebuff?.turns > 0 ? 1.3 : 1.0
-    let finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*escalateMult*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*(0.9+Math.random()*0.2))
+    let finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*escalateMult*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*evoTakenMult(eff, !isEM)*(0.9+Math.random()*0.2))
     finalDmg = capPlayerDmg(finalDmg)
     playerHp -= finalDmg
+    { const refl = evoOnDamaged(eff, finalDmg, enemyBuffs, enemy.name, logs); if (refl > 0) dmgEnemy(refl, 'physical') }
     if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
     const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
     const critText = isCrit ? ' 💥クリティカル！' : ''
@@ -575,11 +584,11 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const baseDmg = Math.max(1, Math.floor(eAtk*eAtk/Math.max(1,eAtk+defForCalc))+Math.floor(Math.random()*3))
     const evasionRate = calcEvasionRate(effectiveSpdForCalc, enemy.spd) + (eff.evasionBonus||0) + (playerBuffs.evasion?.turns>0?playerBuffs.evasion.rate*100:0) + (hasOnmi?5:0)
     if (evasionRate > 0 && Math.random()*100 < evasionRate) {
-      logs.push({ text:`${turn}ターン目: ${body.name}の攻撃！ しかし回避した！`, color:'#44ff88' }); return
+      logs.push({ text:`${turn}ターン目: ${body.name}の攻撃！ しかし回避した！`, color:'#44ff88' }); evoOnEvade(eff, playerBuffs, logs); return
     }
     const dmgReduceRate = playerBuffs.dmgReduce?.turns>0 ? playerBuffs.dmgReduce.rate : 1.0
     const playerDefRankReduction = calcDefReduction(isMag ? eff.mdef : eff.def)
-    let finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*(1-playerDefRankReduction)*(0.9+Math.random()*0.2))
+    let finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*(1-playerDefRankReduction)*evoTakenMult(eff, !isMag)*(0.9+Math.random()*0.2))
     finalDmg = capPlayerDmg(finalDmg)
     playerHp -= finalDmg
     if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null

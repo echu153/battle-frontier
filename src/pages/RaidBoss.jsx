@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { getWeaponGroup } from '../lib/stats'
+import { evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 import { pushSupported, pushConfigured, getPushStatus, enableRaidPush, disableRaidPush } from '../lib/push'
 import {
@@ -120,6 +121,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     const count = ss.use_count || 1
     for (let i = 0; i < count; i++) expandedSkillSet.push(ss)
   }
+  const allSkillsSet = evoAllSkillsSet(skillSets)  // 深紅の牙輪/魔眼石の真化条件
 
   const hasShingan    = passiveNames.includes('心眼')
   const hasBerserk    = passiveNames.includes('バーサク')
@@ -199,8 +201,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * (pe('魔法剣士')?0.6:0.3)) : 0
       const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?1.3:1.2) : 1.0
       const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
-      const pAtk  = (eff.atk + madokenBonus) * (playerBuffs.atkUp?.rate  || 1) * (playerBuffs.atkDown?.rate || 1) * (playerBuffs.burn?.turns > 0 ? 0.9 : 1)
-      const pMatk = (eff.matk - madokenBonus) * (playerBuffs.matkUp?.rate || 1) * passiveMatkMult * passiveMatkMultTenki * (playerBuffs.burn?.turns > 0 ? 0.9 : 1)
+      const pAtk  = (eff.atk + madokenBonus) * (playerBuffs.atkUp?.rate  || 1) * (playerBuffs.atkDown?.rate || 1) * (playerBuffs.burn?.turns > 0 ? 0.9 : 1) * evoAtkMult(eff, allSkillsSet)
+      const pMatk = (eff.matk - madokenBonus) * (playerBuffs.matkUp?.rate || 1) * passiveMatkMult * passiveMatkMultTenki * (playerBuffs.burn?.turns > 0 ? 0.9 : 1) * evoMatkMult(eff, allSkillsSet)
       const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1) * holyKnightMult * kabeDefP
       const pMdef = eff.mdef * (playerBuffs.mdefUp?.rate || 1) * (playerBuffs.defUp?.rate || 1) * holyKnightMult * kabeDefP
       const pSpd  = effectiveSpdForCalc * (playerBuffs.spdUp?.rate || 1) * (playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1)
@@ -341,8 +343,10 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
 
       // ターン4: 特殊スキル（倍率1.5）。ボスごとに効果が異なる
       if (turn === 4 && !isExtra) {
-        const specialDmg = Math.max(1, Math.floor(eAtk * eAtk / Math.max(1, eAtk + defForCalc) * 1.5 * (0.9 + Math.random() * 0.2)))
+        let specialDmg = Math.max(1, Math.floor(eAtk * eAtk / Math.max(1, eAtk + defForCalc) * 1.5 * (0.9 + Math.random() * 0.2)))
+        specialDmg = Math.max(1, Math.floor(specialDmg * evoTakenMult(eff, false)))  // 真化: 被ダメ%軽減(海竜)
         playerHp -= specialDmg
+        if ((eff.evoReflectPct||0) > 0) { const r = Math.max(1, Math.floor(specialDmg * eff.evoReflectPct/100)); totalDamage += r; logs.push({ text:`🛡 真化効果！ 反射で${fmt(r)}ダメージ！`, color:'#88ccff' }) }
         if (isAmaza) {
           // 深淵の水葬：10ターンの間 素早さ-50%（クリ・回避・追加行動率を半減SPDで再計算）
           playerBuffs.spdDown = { turns: 10, rate: 0.5 }
@@ -374,12 +378,14 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       const evasionRate = playerEvasion + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0)
       if (evasionRate > 0 && Math.random() * 100 < evasionRate) {
         logs.push({ text: `${prefix}${bossName}の攻撃！ しかし回避した！`, color: '#44ff88' })
+        evoOnEvade(eff, playerBuffs, logs)  // 影踏みのブーツ
         return
       }
       const playerDefRankReduction = calcDefReduction(pDef)
       const gambleBodyMult = hasGambleBody ? (0.7 + Math.random() * (pe('ギャンブラー')?0.4:0.6)) : 1.0
-      const finalDmg = Math.floor(baseDmg * (isCrit ? 1.5 : 1.0) * dmgReduceRate * berserkDmgRate * (1 - playerDefRankReduction) * gambleBodyMult * (0.9 + Math.random() * 0.2))
+      const finalDmg = Math.floor(baseDmg * (isCrit ? 1.5 : 1.0) * dmgReduceRate * berserkDmgRate * (1 - playerDefRankReduction) * gambleBodyMult * evoTakenMult(eff, true) * (0.9 + Math.random() * 0.2))
       playerHp -= finalDmg
+      if ((eff.evoReflectPct||0) > 0 && finalDmg > 0) { const r = Math.max(1, Math.floor(finalDmg * eff.evoReflectPct/100)); totalDamage += r; logs.push({ text:`🛡 真化効果！ 反射で${fmt(r)}ダメージ！`, color:'#88ccff' }) }
       if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
       const critText = isCrit ? ' 💥クリティカル！' : ''
       logs.push({ text: `${prefix}${bossName}の攻撃！ あなたに${fmt(finalDmg)}ダメージ…${critText}`, color: isCrit ? '#ff2200' : '#ff6644' })
