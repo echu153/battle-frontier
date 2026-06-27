@@ -3,55 +3,9 @@
 // 与ダメージは防御力で大きく軽減（攻撃力側で縮小）／回復は通常どおり／素早さ由来クリ・回避は上限1.5倍。
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
-import { calcEffectiveStats } from '../lib/stats'
-import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 import { BattleLogLine } from '../pages/Game'
 import { simulatePvpBattle } from '../lib/pvp'
-
-// 1プレイヤー分の戦闘ロードアウトを読み込む。
-//  isSelf=true なら skill_sets を直接、false なら RPC(pvp_get_skillsets) で取得。
-async function loadLoadout(playerId, isSelf) {
-  const [{ data: profile }, { data: eq }, { data: prof }, { data: pets }] = await Promise.all([
-    supabase.from('profiles').select('*').eq('id', playerId).single(),
-    supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', playerId).eq('equipped', true),
-    supabase.from('proficiency').select('player_id, equipment_id, prof_lv').eq('player_id', playerId),
-    supabase.from('pets').select('owner_id, species, level, evolved, charm_id').eq('owner_id', playerId).eq('is_active', true),
-  ])
-  if (!profile) throw new Error('プロフィールが見つかりません')
-
-  // ペット本体ステ(100%)＋装備チャームを反映（Ranking/街と同方式）
-  let petStat = null, petCharm = null
-  const pet = (pets || [])[0]
-  if (pet) {
-    petStat = petPlayerBonus(pet)
-    if (pet.charm_id) {
-      const { data: charm } = await supabase.from('player_charms').select('*').eq('id', pet.charm_id).maybeSingle()
-      if (charm) petCharm = charmPlayerBonus(charm)
-    }
-  }
-
-  // 称号ボーナス
-  let titleBonus = null
-  if (profile.ability_title_id) {
-    const { data: at } = await supabase.from('titles').select('*').eq('id', profile.ability_title_id).maybeSingle()
-    titleBonus = at || null
-  }
-
-  // 出撃スキルセット
-  let skillSets
-  if (isSelf) {
-    const { data: ss } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', playerId).order('slot_order')
-    skillSets = (ss || []).filter(r => (r.set_type || 'sortie') === 'sortie')
-  } else {
-    const { data: rpc } = await supabase.rpc('pvp_get_skillsets', { p_target: playerId })
-    if (rpc?.error) throw new Error(rpc.error)
-    skillSets = rpc?.skill_sets || []
-  }
-
-  const profileWithPet = { ...profile, petStat, petCharm, activePet: pet || null }
-  const eff = calcEffectiveStats(profileWithPet, eq || [], prof || [], titleBonus)
-  return { eff, equipment: eq || [], skillSets, proficiency: prof || [], profile: profileWithPet, playerItem: null }
-}
+import { loadLoadout } from '../lib/pvpLoadout'
 
 export default function PvpPanel({ onClose }) {
   const [meId, setMeId] = useState(null)
@@ -95,7 +49,8 @@ export default function PvpPanel({ onClose }) {
       if (!oppLoadout.skillSets.length) {
         setError('相手の出撃スキルが未設定です（全て通常攻撃になります）')
       }
-      const { logs: blogs, winner: w, turns, aHpPct, bHpPct } = simulatePvpBattle(myLoadout, oppLoadout)
+      // 旧対人戦パネルは従来どおり最大HP+20000のテスト補正を維持（組み手は補正なし）
+      const { logs: blogs, winner: w, turns, aHpPct, bHpPct } = simulatePvpBattle(myLoadout, oppLoadout, { hpBonus: 20000 })
       setLogs(blogs)
       setWinner(w)
       // 勝敗を一時記録（検証用・失敗は握りつぶす）

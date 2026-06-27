@@ -1386,3 +1386,24 @@ PvE戦闘エンジンを両プレイヤーへ対称適用。観点候補:
 3. バナー文言・色（錬金=#44ddaa緑系・領地=#ffcc44黄）と配置順。`alchemyReady>0` の件数表示は受取可能枠数。
 4. 一般公開時は `profile?.is_admin` ゲートを外すだけ。他に公開時チェック漏れがないか。
 → NEXT: CODEX
+
+---
+
+## 今回のレビュー対象（追加）
+**🥊 組み手（対人戦の準備施設・is_admin限定先行）**
+- 目的: 総合力±10%のランダムマッチ or 総合力上位10人から選んで対戦できる練習施設。報酬なし。正式な対人戦を実装したら削除予定。
+- `src/lib/pvpLoadout.js`（新規）: `loadLoadout()`（PvpPanelから抽出して共有化）＋`loadTotalCandidates()`（Ranking.jsxと同方式で総合力候補を取得）。
+- `src/components/KumitePanel.jsx`（新規）: マッチングUI（ランダム±10%／上位10人選択）→対戦→ログ。HP補正なし。`pvp_record_result`で勝敗のみ記録。
+- `src/lib/pvp.js`: `simulatePvpBattle(a,b,opts)` に `hpBonus`(既定0) を追加。**組み手はHP補正なし**／旧対人戦パネルは `{hpBonus:20000}` を明示。先攻判定を **素早さ完全同値はランダム**（旧: 同値はA固定）に変更。
+- `src/components/PvpPanel.jsx`: loadLoadoutをpvpLoadoutへ移管。simulatePvpBattle呼び出しに `{hpBonus:20000}` 指定。
+- `src/pages/Game.jsx`: 挑戦パネルの対人戦ボタン隣に「🥊 組み手」(is_admin限定・4箇所)＋KumitePanelをPC/モバイル両returnにマウント。
+- 既存 `supabase_pvp.sql`（`pvp_get_skillsets`/`pvp_record_result`・is_admin限定）を流用＝新規SQL不要。
+
+### [CLAUDE] (kumite-1)
+観点:
+1. **総合力の整合**: 自分は `totalFromEff(myLoadout.eff)`、相手候補は `loadTotalCandidates`→`calcEffectiveTotal`。両者ともペット本体100%＋チャーム＋称号込みで一致しているか。式の差異はないか（calcEffectiveTotal は `mp_max/5` を含む＝totalFromEffも合わせた）。
+2. **マッチ範囲**: `±10%` を `c._total ∈ [myTotal*0.9, myTotal*1.1]` で判定。候補は char_lv 上位200から総合力ソート。**低char_lvだが高総合力**の相手や、200位圏外の同格者が漏れる可能性。許容か、サーバー側総合力列が要るか。
+3. **HP補正の分離**: 組み手=補正なし、旧対人戦=20000。`buildSide(input,key,hpBonus=0)` の既定0で取りこぼしないか。
+4. **先攻同値ランダム**: `aSpd>bSpd?…:aSpd<bSpd?…:(rand)` がターン毎に評価される（バフで速度変動するため）＝完全同値時は毎ターン抽選。意図通りか（開幕固定でなくてよいか）。
+5. **一般公開時の課題**: `pvp_get_skillsets`/`pvp_record_result` が is_admin限定。公開時は非管理者でも相手の出撃スキルを読める版RPCが必要（個人情報露出の線引きも）。他に公開時チェック漏れは。
+→ NEXT: CODEX

@@ -50,11 +50,10 @@ const pvpEvasionFromSpd = (defSpd, atkSpd) => calcEvasionRate(defSpd, atkSpd) * 
 
 // 1プレイヤー分の戦闘状態を組み立てる。
 //  input: { eff, equipment, skillSets, proficiency, profile, playerItem }
-// 戦争(対人)テスト: 対人戦のときだけ、両プレイヤーとも最大HP+20000（通常出撃などには影響しない）
-const PVP_WAR_HP_BONUS = 20000
-function buildSide(input, key) {
+//  hpBonus: 最大HP加算（組み手は0＝素のステで戦う。旧対人戦テストパネルは20000を渡す）
+function buildSide(input, key, hpBonus = 0) {
   const { equipment, skillSets, profile } = input
-  const eff = { ...input.eff, hp_max: (input.eff?.hp_max || 0) + PVP_WAR_HP_BONUS }
+  const eff = { ...input.eff, hp_max: (input.eff?.hp_max || 0) + hpBonus }
   const equippedWeaponItem = equipment.find(e => e.slot === 'weapon' && e.equipped)
   const weaponType = equippedWeaponItem?.weapons?.weapon_type || 'sword'
   const isMagical = getWeaponGroup(weaponType) === 'magical'
@@ -633,10 +632,11 @@ function endTurnBuffs(side, ctx, hpBeforeTurn) {
 //  inputA / inputB: { eff, equipment, skillSets, proficiency, profile, playerItem }
 //  A = 挑戦者（先攻判定が同速のときAが先攻）
 // ============================================================
-export function simulatePvpBattle(inputA, inputB) {
+export function simulatePvpBattle(inputA, inputB, opts = {}) {
+  const { hpBonus = 0 } = opts
   const logs = []
-  const A = buildSide(inputA, 'A')
-  const B = buildSide(inputB, 'B')
+  const A = buildSide(inputA, 'A', hpBonus)
+  const B = buildSide(inputB, 'B', hpBonus)
 
   logs.push({ text: `⚔ 対人戦開始！ ${A.profile.username} vs ${B.profile.username}`, color: '#ffcc66' })
   logs.push({ text: `（与ダメージは防御力で大きく軽減／回復は通常どおり／素早さによるクリ・回避は上限1.5倍）`, color: '#88aacc' })
@@ -648,10 +648,10 @@ export function simulatePvpBattle(inputA, inputB) {
   const ctx = { logs, turn: 1 }
 
   while (A.hp > 0 && B.hp > 0 && ctx.turn <= PVP.turnCap) {
-    // 先攻＝素早さが速い方（同速なら A）
+    // 先攻＝素早さが速い方（完全同値はランダム）
     const aSpd = A.effectiveSpdForCalc * (A.buffs.spdUp ? A.buffs.spdUp.rate : 1)
     const bSpd = B.effectiveSpdForCalc * (B.buffs.spdUp ? B.buffs.spdUp.rate : 1)
-    const order = aSpd >= bSpd ? [A, B] : [B, A]
+    const order = aSpd > bSpd ? [A, B] : aSpd < bSpd ? [B, A] : (Math.random() < 0.5 ? [A, B] : [B, A])
     const aHpBefore = A.hp, bHpBefore = B.hp
 
     // ターン開始: 持続効果（先攻側→後攻側）

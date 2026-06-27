@@ -11,6 +11,8 @@ import AIAssistant from '../components/AIAssistant'
 import RaidNotify from '../components/RaidNotify'
 // 対人戦(PvP)パネルは循環import回避のため遅延ロード（pvp.js が ./Game を参照するため）
 const PvpPanel = lazy(() => import('../components/PvpPanel'))
+// 組み手パネル（対人戦の準備施設・開発者限定）も同様に遅延ロード
+const KumitePanel = lazy(() => import('../components/KumitePanel'))
 // Equipment.jsx 等が './Game' から参照しているため再export
 // ★ステータス計算は lib/stats.js の1実装に統一（表示系と戦闘系で値がズレないように）
 export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue, calcDefReduction, calcEffectiveStats } from '../lib/stats'
@@ -1671,6 +1673,7 @@ export default function Game() {
   const [showDungeonPanel, setShowDungeonPanel] = useState(false)
   const [showChallengePanel, setShowChallengePanel] = useState(false)
   const [showPvp, setShowPvp] = useState(false)  // 対人戦(PvP)パネル開閉（is_admin限定）
+  const [showKumite, setShowKumite] = useState(false)  // 組み手パネル開閉（is_admin限定）
   const challengePanelRef = useRef(null)
   // 挑戦パネルを開いたら、その位置まで自動スクロール（スマホで画面外に出るのを防ぐ）
   useEffect(() => {
@@ -5766,7 +5769,7 @@ export default function Game() {
                             <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                           )}
                           {profile?.is_admin && (
-                            <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                            <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button><button onClick={()=>{ setShowKumite(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1420', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🥊 組み手 <span style={{ fontSize:'9px', color:'#7788aa' }}>[開発]</span></button></>
                           )}
                         </div>
                       )}
@@ -5833,7 +5836,7 @@ export default function Game() {
                     <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                   )}
                   {profile?.is_admin && (
-                    <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                    <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button><button onClick={()=>{ setShowKumite(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1420', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🥊 組み手 <span style={{ fontSize:'9px', color:'#7788aa' }}>[開発]</span></button></>
                   )}
                 </div>
               )}
@@ -5895,6 +5898,7 @@ export default function Game() {
         <AIAssistant ctx={{ profile, eff, equipment }} open={aiOpen} onClose={()=>setAiOpen(false)} />
         <RaidNotify open={raidNotifyOpen} onClose={()=>setRaidNotifyOpen(false)} />
         {showPvp && <Suspense fallback={null}><PvpPanel onClose={()=>setShowPvp(false)} /></Suspense>}
+        {showKumite && <Suspense fallback={null}><KumitePanel onClose={()=>setShowKumite(false)} /></Suspense>}
       </div>
     )
   }
@@ -6256,7 +6260,7 @@ export default function Game() {
                               <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                             )}
                             {profile?.is_admin && (
-                              <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                              <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button><button onClick={()=>{ setShowKumite(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1420', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🥊 組み手 <span style={{ fontSize:'9px', color:'#7788aa' }}>[開発]</span></button></>
                             )}
                           </div>
                         )}
@@ -6322,7 +6326,7 @@ export default function Game() {
                       <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                     )}
                     {profile?.is_admin && (
-                      <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                      <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button><button onClick={()=>{ setShowKumite(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1420', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🥊 組み手 <span style={{ fontSize:'9px', color:'#7788aa' }}>[開発]</span></button></>
                     )}
                   </div>
                 )}
@@ -6386,6 +6390,7 @@ export default function Game() {
       <AIAssistant ctx={{ profile, eff, equipment }} open={aiOpen} onClose={()=>setAiOpen(false)} />
       <RaidNotify open={raidNotifyOpen} onClose={()=>setRaidNotifyOpen(false)} />
       {showPvp && <Suspense fallback={null}><PvpPanel onClose={()=>setShowPvp(false)} /></Suspense>}
+      {showKumite && <Suspense fallback={null}><KumitePanel onClose={()=>setShowKumite(false)} /></Suspense>}
     </div>
   )
 }
