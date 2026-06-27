@@ -42,6 +42,7 @@ export default function Territory() {
   const [msg, setMsg] = useState(null)
   const [, setTick] = useState(0)
   const offsetRef = useRef(0)
+  const expandBusyRef = useRef(false)  // 領地拡大の連打ガード（state更新前の多重発火を同期的に弾く）
   // 建国フォーム
   const [fName, setFName] = useState('')
   const [fEmblem, setFEmblem] = useState('🏰')
@@ -232,14 +233,20 @@ export default function Territory() {
 
   const doExpand = async () => {
     if (!expandArea) { setExpandMsg({ t: '出撃エリアを選んでください', c: '#ff5555' }); return }
+    if (expandBusyRef.current) return  // 連打ガード（state更新前の多重クリックを同期的に弾く）
+    expandBusyRef.current = true
     setBusy(true)
-    const { data: res, error } = await supabase.rpc('expand_territory', { p_power: power, p_area: expandArea })
-    setBusy(false)
-    if (error) { setExpandMsg({ t: `領地拡大失敗: ${error.message}`, c: '#ff5555' }); setTimeout(() => setExpandMsg(null), 4000); return }
-    const an = AREA_META.find(a => a.id === res.area)?.name || `エリア${res.area}`
-    setExpandMsg({ t: `🗺 ${an} の領地を ${res.gain} 拡大！`, c: '#44ffaa' })
-    setTimeout(() => setExpandMsg(null), 4000)
-    await reload()
+    try {
+      const { data: res, error } = await supabase.rpc('expand_territory', { p_power: power, p_area: expandArea })
+      if (error) { setExpandMsg({ t: `領地拡大失敗: ${error.message}`, c: '#ff5555' }); setTimeout(() => setExpandMsg(null), 4000); return }
+      const an = AREA_META.find(a => a.id === res.area)?.name || `エリア${res.area}`
+      setExpandMsg({ t: `🗺 ${an} の領地を ${res.gain} 拡大！`, c: '#44ffaa' })
+      setTimeout(() => setExpandMsg(null), 4000)
+      await reload()
+    } finally {
+      setBusy(false)
+      expandBusyRef.current = false
+    }
   }
 
   // 解放済みエリア（領地拡大で選べる出撃先）

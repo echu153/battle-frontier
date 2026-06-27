@@ -326,9 +326,11 @@ BEGIN
     RAISE EXCEPTION '出撃エリアを選択してください';
   END IF;
 
+  -- ★FOR UPDATE で自分の行を排他ロック＝同一プレイヤーの expand_territory を直列化。
+  --   連打/多重発火で「読み取り→更新」の隙にCDチェックをすり抜ける(複数回拡大)のを防ぐ。
   SELECT country_id, last_expand_at, country_contrib, country_rank, unlocked_areas, is_admin, territory_locked_until
     INTO v_cid, v_last, v_contrib, v_rank, v_unlocked, v_admin, v_lock
-    FROM public.profiles WHERE id = v_uid;
+    FROM public.profiles WHERE id = v_uid FOR UPDATE;
 
   IF v_cid IS NULL THEN RAISE EXCEPTION '国に所属していません'; END IF;
   SELECT is_unaffiliated INTO v_unaff FROM public.countries WHERE id = v_cid;
