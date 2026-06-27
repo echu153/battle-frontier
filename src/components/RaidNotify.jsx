@@ -84,7 +84,7 @@ export default function RaidNotify({ open, onClose }) {
 
         {msg && <p style={{ fontSize: '11px', color: '#9bd', marginTop: '8px', lineHeight: 1.6 }}>{msg}</p>}
 
-        <p style={{ fontSize: '10px', color: '#557', marginTop: '12px', lineHeight: 1.6 }}>
+        <p style={{ fontSize: '10px', color: '#557', marginTop: '12px', lineHeight: 1.6, textAlign: 'left' }}>
           ※通知は端末ごとの設定です（スマホとPCで別々）。<br />
           ※iPhoneは「ホーム画面に追加」してアプリとして開いてからでないとONにできません（iOS16.4以降）。
         </p>
