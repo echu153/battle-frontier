@@ -175,6 +175,8 @@ export default function Smithy() {
   const [sortKey, setSortKey] = useState(() => localStorage.getItem('equipSortKey') || 'obtained_asc')
   const [craftConfirm, setCraftConfirm] = useState(null) // { type:'equipment'|'stone', items?, selectedIds?, rarity }
   const [enhanceResult, setEnhanceResult] = useState(null) // { ok, title, text } 強化ポップアップの結果表示
+  const [evolveTarget, setEvolveTarget] = useState(null)   // 進化ポップアップ対象の装備
+  const [evolveResult, setEvolveResult] = useState(null)   // { maxed, name, stage } 進化結果表示
   const [matSource, setMatSource] = useState('equip')       // 強化素材の選択: 'equip'=同名装備 / 'stone'=強化石
   const [craftTimes, setCraftTimes] = useState(1)            // 加工(装備→強化石)の作成回数（1回=装備3個→強化石1個）
   const [stoneTimes, setStoneTimes] = useState({})           // 強化石→上位 の作成回数（ランク別・1回=強化石3個→上位1個）
@@ -532,8 +534,7 @@ export default function Smithy() {
         await grantMaterial(matName, cost.amount)
         showMessage('処理が競合しました。もう一度お試しください', '#ff4444'); await fetchAll(); return
       }
-      if (next === MAX_EVO_STAGE) showMessage(`✦ ${item.weapons.name} が真化した！特殊能力を獲得！`, '#ffcc00')
-      else showMessage(`✨ ${item.weapons.name} を進化させた！（${next}段階）`, '#66ccff')
+      setEvolveResult({ maxed: next === MAX_EVO_STAGE, name: item.weapons.name, stage: next })
       await fetchAll()
     } finally { setLoading(false); craftBusyRef.current = false }
   }
@@ -703,6 +704,105 @@ export default function Smithy() {
                     <button onClick={() => doEnhance(item, matSource)} disabled={!canEnhance || loading}
                       style={{ width:'100%', padding:'10px', background: canEnhance ? '#1a0800' : '#001', border:`1px solid ${canEnhance ? '#aa6644' : '#002244'}`, color: canEnhance ? '#ffcc88' : '#334455', cursor: canEnhance ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
                       {loading ? '鍛錬中...' : '⚒ 鍛錬する'}
+                    </button>
+                    <button onClick={closeModal} disabled={loading}
+                      style={{ width:'100%', padding:'7px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                      やめる
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* 進化ポップアップ */}
+        {evolveTarget && (() => {
+          const item = equipment.find(e => e.id === evolveTarget.id) || evolveTarget
+          const w = item.weapons
+          const line = EQUIP_TO_LINE[w.name]
+          const stage = item.evolve_stage || 0
+          const maxed = stage >= MAX_EVO_STAGE
+          const next = stage + 1
+          const cost = EVO_COST[next]
+          const matName = cost ? (cost.type === 'blood' ? line.blood : line.heart) : null
+          const owned = matName ? getMatCount(matName) : 0
+          const canEvolve = !maxed && owned >= cost.amount
+          const isShinka = next === MAX_EVO_STAGE
+          const curMult = evoMultiplier(stage)
+          const nextMult = evoMultiplier(next)
+          const accent = isShinka ? '#ffcc00' : '#66ccff'
+          const statRow = (mult) => [
+            ['攻', w.atk_bonus, '#ffcc00'], ['防', w.def_bonus, '#88aaff'], ['特攻', w.matk_bonus, '#cc44ff'],
+            ['特防', w.mdef_bonus, '#44ccff'], ['速', w.spd_bonus, '#ff8844'], ['HP', w.hp_bonus, '#44ff88'], ['MP', w.mp_bonus, '#4488ff'],
+          ].filter(([,v]) => (v||0) > 0).map(([lbl,v,c]) => (
+            <span key={lbl} style={{ color:c, marginRight:'7px' }}>{lbl}+{Math.ceil((v||0)*mult)}</span>
+          ))
+          const closeModal = () => { setEvolveTarget(null); setEvolveResult(null) }
+          return (
+            <div style={{ position:'fixed', inset:0, background:'rgba(0,4,16,0.85)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+              <div style={{ background:'#04060f', border:`1px solid ${accent}`, padding:'20px', maxWidth:'400px', width:'100%', fontFamily:'monospace' }}>
+                {message && <div style={{ color: messageColor, fontSize:'11px', padding:'6px', border:`1px solid ${messageColor}`, marginBottom:'10px', textAlign:'center' }}>{message}</div>}
+                {evolveResult ? (
+                  <div style={{ textAlign:'center' }}>
+                    <div style={{ fontSize:'30px', marginBottom:'10px' }}>{evolveResult.maxed ? '✦' : '✨'}</div>
+                    <div style={{ color: evolveResult.maxed ? '#ffcc00' : '#66ccff', fontSize:'16px', letterSpacing:'2px', marginBottom:'10px' }}>
+                      {evolveResult.maxed ? '真化成功！' : '進化成功！'}
+                    </div>
+                    <div style={{ color:'#cfe6ff', fontSize:'13px', marginBottom:'10px' }}>
+                      {evolveResult.maxed
+                        ? `${evolveResult.name} が真化した！`
+                        : `${evolveResult.name} が ${evolveResult.stage}段階になった！`}
+                    </div>
+                    {evolveResult.maxed && (
+                      <div style={{ color:'#ffcc00', fontSize:'11px', marginBottom:'14px' }}>特殊能力獲得: {getEffectLabel(line.effect)}</div>
+                    )}
+                    <div style={{ display:'flex', gap:'8px', justifyContent:'center', marginTop:'8px' }}>
+                      {!evolveResult.maxed && (item.evolve_stage || 0) < MAX_EVO_STAGE && (
+                        <button onClick={() => setEvolveResult(null)} disabled={loading}
+                          style={{ padding:'8px 16px', background:'#001838', border:'1px solid #3388cc', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+                          続けて進化する
+                        </button>
+                      )}
+                      <button onClick={closeModal} disabled={loading}
+                        style={{ padding:'8px 16px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+                        閉じる
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ color:accent, fontSize:'13px', marginBottom:'10px', textAlign:'center' }}>{isShinka ? '✦ 真化' : '⚗ 装備進化'}</div>
+                    <div style={{ textAlign:'center', marginBottom:'12px' }}>
+                      <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}`, marginRight:'6px' }}>{RARITY_LABELS[w.rarity]}</span>
+                      <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'14px' }}>{w.name}{(item.enhance_plus||0)>0?` +${item.enhance_plus}`:''}</span>
+                    </div>
+                    {/* 段階 */}
+                    <div style={{ textAlign:'center', marginBottom:'12px', fontSize:'13px' }}>
+                      <span style={{ color:'#88ccff' }}>{stage}段階</span>
+                      <span style={{ color:'#446688' }}> → </span>
+                      <span style={{ color:accent }}>{next}段階{isShinka ? '（真化）' : ''}</span>
+                    </div>
+                    {/* ステ変化 */}
+                    <div style={{ fontSize:'10px', color:'#88ccff', marginBottom:'4px' }}>
+                      現在（基礎×{curMult.toFixed(1)}）: {statRow(curMult)}
+                    </div>
+                    <div style={{ fontSize:'10px', color:'#88ccff', marginBottom:'10px' }}>
+                      進化後（基礎×{nextMult.toFixed(1)}）: {statRow(nextMult)}
+                    </div>
+                    {/* 特殊能力 */}
+                    <div style={{ fontSize:'10px', color:'#66ccff', marginBottom:'8px' }}>
+                      特殊能力: {isShinka
+                        ? <span style={{ color:'#ffcc00' }}>{getEffectLabel(line.effect)} を獲得</span>
+                        : <span style={{ color:'#445566' }}>{getEffectLabel(line.effect)}（真化で解放）</span>}
+                    </div>
+                    {/* コスト */}
+                    <div style={{ fontSize:'10px', color:'#446688', marginBottom:'12px' }}>
+                      必要素材: <span style={{ color: canEvolve ? '#ff99cc' : '#ff4444' }}>{matName} {cost.amount}個</span>（所持 {owned}個）
+                    </div>
+                    <button onClick={() => doEvolve(item)} disabled={!canEvolve || loading}
+                      style={{ width:'100%', padding:'10px', background: canEvolve ? (isShinka?'#2a2000':'#001838') : '#001', border:`1px solid ${canEvolve ? accent : '#002244'}`, color: canEvolve ? accent : '#334455', cursor: canEvolve ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
+                      {loading ? '処理中...' : (isShinka ? '✦ 真化させる' : '⚗ 進化させる')}
                     </button>
                     <button onClick={closeModal} disabled={loading}
                       style={{ width:'100%', padding:'7px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
@@ -1095,9 +1195,9 @@ export default function Smithy() {
                           {next}段階に必要: <span style={{ color: canEvolve ? '#ff99cc' : '#ff4444' }}>{matName} {cost.amount}個</span>（所持{owned}）
                           {next === MAX_EVO_STAGE && <span style={{ color:'#ffcc00' }}> ＝真化</span>}
                         </div>
-                        <button disabled={!canEvolve || loading} onClick={() => doEvolve(item)}
+                        <button disabled={!canEvolve || loading} onClick={() => { setEvolveTarget(item); setEvolveResult(null) }}
                           style={{ padding:'5px 12px', background: canEvolve ? (next===MAX_EVO_STAGE?'#2a2000':'#001838') : '#001', border:`1px solid ${canEvolve ? (next===MAX_EVO_STAGE?'#ffcc00':'#3388cc') : '#002244'}`, color: canEvolve ? (next===MAX_EVO_STAGE?'#ffcc00':'#88ccff') : '#334455', cursor: canEvolve ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>
-                          {loading ? '...' : (next===MAX_EVO_STAGE ? '✦ 真化させる' : '⚗ 進化させる')}
+                          {next===MAX_EVO_STAGE ? '✦ 真化させる' : '⚗ 進化させる'}
                         </button>
                       </div>
                     )}
