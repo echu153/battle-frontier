@@ -1931,8 +1931,10 @@ export default function Game() {
       try {
         const { data: res } = await supabase.rpc('alchemy_get')
         if (res?.ok) {
-          const nowMs = res.server_now ? new Date(res.server_now).getTime() : Date.now()
-          setAlchemyReady((res.jobs || []).filter(j => j.finish_at && new Date(j.finish_at).getTime() <= nowMs).length)
+          // サーバー判定の ready かつ「現在解放されている枠」だけを数える。
+          // alchemy_get は解放枠外(slot>slots)の完成品も返すため(例: 奈落の週次リセットで
+          // 枠数が減った後の取り残し)、ページUIで受け取れる枠＝slot<=slots に揃える。
+          setAlchemyReady((res.jobs || []).filter(j => j.ready && (j.slot || 1) <= (res.slots || 0)).length)
         }
       } catch { /* 未導入時は無視 */ }
     } else setAlchemyReady(0)
