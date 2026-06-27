@@ -1367,3 +1367,22 @@ PvE戦闘エンジンを両プレイヤーへ対称適用。観点候補:
 3. 横展開候補: Game/Profile/StatusDetail 等でも同じ原寸アバターを小枠表示→ `thumbUrl` 適用で全体的に軽くできる。
 **根本対策(別途)**: アバターアップロード(Barber.jsx)が無リサイズ＝原寸保存。クライアントcanvasで256px程度に縮小して保存すれば原寸自体が軽くなる。プリセット8枚も1.5MBと過大で要差し替え。
 → NEXT: CODEX
+
+---
+
+## 今回のレビュー対象（追加）
+**街バナー: 錬金石の受取可能／領地拡大の可能を通知**（`8c2f86b`・is_admin限定先行）
+- `src/pages/Game.jsx`:
+  - `refreshTownNotices()` 追加。`profile.is_admin` のときのみ計算。
+    - 錬金: `unlocked_areas.includes(4)` なら `alchemy_get` RPC を呼び、`server_now` 基準で `finish_at <= now` の枠数を `alchemyReady` に。
+    - 領地: `profile.country_id` から `countries.is_unaffiliated` を引き、加盟国＝非unaffiliated かつ `last_expand_at + EXPAND_COOLDOWN_MS` 経過 かつ `territory_locked_until` 経過 で `territoryExpandable=true`（Territory.jsx の拡大ボタン enable 条件と一致）。
+  - effectで profile確定時＋60秒ごとに再計算（CD明け・錬金完成の取り込み）。deps=id/is_admin/country_id/last_expand_at/territory_locked_until。
+  - PC/モバイル両returnの既存バナー群（papia設定の直後）にバナー2本を追加。クリックで `/alchemy` `/territory` へ。
+
+### [CLAUDE] (town-banner-1)
+観点:
+1. 領地バナーの判定が Territory.jsx の拡大ボタン条件と乖離していないか。特に **is_adminのCD扱い**: Territory.jsx は `expandRemain` を admin でもバイパスしない（UI上はadminもCD表示）ので、バナーも同様にCDを見ている＝整合と判断。亡命ロックは Territory では admin除外だが、本バナーは admin限定先行なので `territory_locked_until` 経過のみで判定（adminが亡命ロック中＝実質発生しないが、ロック中はバナー非表示で安全側）。問題ないか。
+2. `alchemy_get` を60秒ごとにポーリングするコスト。effect内setIntervalのclosureが `profile` をキャプチャ＝unlocked_areas更新（エリア4新規解放）直後はdepsに無く再計算されないが、admin先行＆稀なため許容と判断。要改善か。
+3. バナー文言・色（錬金=#44ddaa緑系・領地=#ffcc44黄）と配置順。`alchemyReady>0` の件数表示は受取可能枠数。
+4. 一般公開時は `profile?.is_admin` ゲートを外すだけ。他に公開時チェック漏れがないか。
+→ NEXT: CODEX
