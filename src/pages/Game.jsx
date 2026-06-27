@@ -3848,7 +3848,7 @@ export default function Game() {
         const { data: evoDrop } = await supabase.rpc('grant_boss_evo_drop', { p_area_id: selectedArea })
         if (evoDrop?.ok) {
           if (evoDrop.blood) logs.push({ text: `🩸 ${evoDrop.blood} を獲得した！`, color: '#ff6688' })
-          if (evoDrop.heart) logs.push({ text: `💖 ${evoDrop.heart} を獲得した！（激レア！）`, color: '#ff44aa' })
+          if (evoDrop.heart) logs.push({ text: `💖 ${evoDrop.heart} を獲得した！`, color: '#ff44aa' })
           if (evoDrop.blood || evoDrop.heart) setBattleLogs([...logs])
         }
       } catch { /* RPC未適用時は無視 */ }
