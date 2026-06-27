@@ -14,7 +14,10 @@ export const WAR_CORE_REDUCTION = 0.9    // サーバ war_attack_core が適用�
 export const WAR_CORE_TURNS = 10         // コア戦のターン数（強制終了）
 // 全体スケールの最終つまみ。コアは防御0なので生ダメが大きく出る→送信前にこの倍率で縮小。
 // サーバ側でさらに×0.1(90%軽減)。実効スケール = WAR_CORE_DMG_MULT × 0.1。要調整。
-export const WAR_CORE_DMG_MULT = 0.0024
+// 較正(2026-06-28): 状態異常DoT除外後の実測=おれおれおで10ターン素ダメ約33,713。
+//   33,713 × 1.5 = 50,569(送信) → サーバ×0.1 = 約5,056/発(目標5000)。
+//   CD20秒×3発/分 ≒ 15,168/分 → コアHP30万を単独約20分。
+export const WAR_CORE_DMG_MULT = 1.5
 
 const CORE_DUMMY_HP = 100000000          // コアダミーのHP（10ターンで絶対に落ちない大きさ）
 
