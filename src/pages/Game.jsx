@@ -6,7 +6,7 @@ const papiaIcon = '/papia.png'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue, calcDefReduction, calcEffectiveStats } from '../lib/stats'
 import { charmPlayerBonus, petPlayerBonus, petStats } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
-import { myAreaShares, dropBonusPP } from '../lib/territory'
+import { myAreaShares, dropBonusPP, EXPAND_COOLDOWN_MS } from '../lib/territory'
 import AIAssistant from '../components/AIAssistant'
 // 対人戦(PvP)パネルは循環import回避のため遅延ロード（pvp.js が ./Game を参照するため）
 const PvpPanel = lazy(() => import('../components/PvpPanel'))
@@ -1696,6 +1696,8 @@ export default function Game() {
   const [soldNotice, setSoldNotice] = useState(0)            // 取引所で売れた未確認の出品数（街のバナー表示用）
   const [unreadReplies, setUnreadReplies] = useState(0)      // お問い合わせへの運営返信で未確認の件数（街のバナー表示用）
   const [unrepliedContacts, setUnrepliedContacts] = useState(0)  // 管理人(おれおれお)向け: 未返信のお問い合わせ件数（街のバナー表示用）
+  const [alchemyReady, setAlchemyReady] = useState(0)        // 錬金部屋で受け取れる強化石の数（街のバナー表示用・is_admin限定先行）
+  const [territoryExpandable, setTerritoryExpandable] = useState(false)  // 領地拡大が可能か（街のバナー表示用・is_admin限定先行）
   const [showGuide, setShowGuide] = useState(false)
   const [showDyingTip, setShowDyingTip] = useState(false)  // 初めて瀕死になったとき1回だけ案内
   const [openGuideId, setOpenGuideId] = useState(null)
@@ -1919,6 +1921,39 @@ export default function Game() {
   }
   // プロフィール確定後（おれおれおログイン時）に未返信件数を取得
   useEffect(() => { refreshUnrepliedContacts(profile?.username) }, [profile?.username])
+
+  // 街バナー: 錬金部屋の強化石が受け取れる / 領地を広げられる を検出（is_admin限定先行）
+  const refreshTownNotices = async (p) => {
+    const prof = p || profile
+    if (!prof?.is_admin) { setAlchemyReady(0); setTerritoryExpandable(false); return }
+    // 錬金部屋: 完成済み（受取可能）の枠数。エリア③ボス撃破で開放（=エリア4解放）が前提。
+    if ((prof.unlocked_areas || [1]).includes(4)) {
+      try {
+        const { data: res } = await supabase.rpc('alchemy_get')
+        if (res?.ok) {
+          const nowMs = res.server_now ? new Date(res.server_now).getTime() : Date.now()
+          setAlchemyReady((res.jobs || []).filter(j => j.finish_at && new Date(j.finish_at).getTime() <= nowMs).length)
+        }
+      } catch { /* 未導入時は無視 */ }
+    } else setAlchemyReady(0)
+    // 領地拡大: 加盟国に所属 かつ 亡命ロックなし かつ クールダウン明け（Territory.jsxの拡大ボタン条件と一致）
+    if (prof.country_id) {
+      try {
+        const { data: c } = await supabase.from('countries').select('is_unaffiliated').eq('id', prof.country_id).maybeSingle()
+        const lastExpand = prof.last_expand_at ? new Date(prof.last_expand_at).getTime() : 0
+        const lockUntil = prof.territory_locked_until ? new Date(prof.territory_locked_until).getTime() : 0
+        const affiliated = !!(c && !c.is_unaffiliated)
+        setTerritoryExpandable(affiliated && Date.now() >= lastExpand + EXPAND_COOLDOWN_MS && Date.now() >= lockUntil)
+      } catch { /* 領地未導入時は無視 */ setTerritoryExpandable(false) }
+    } else setTerritoryExpandable(false)
+  }
+  // プロフィール確定時＋60秒ごとに再計算（クールダウン明け・錬金完成を取り込む）
+  useEffect(() => {
+    if (!profile?.id) return
+    refreshTownNotices(profile)
+    const id = setInterval(() => refreshTownNotices(profile), 60000)
+    return () => clearInterval(id)
+  }, [profile?.id, profile?.is_admin, profile?.country_id, profile?.last_expand_at, profile?.territory_locked_until])
 
   // 表示中の返信をすべて既読にする（idごとに reply_at を保存）
   const markContactRepliesSeen = (rows) => {
@@ -5262,6 +5297,18 @@ export default function Game() {
               🌟 パピア出現率アップの時間が未設定です（設定するまで発生しません）→ 設定する
             </button>
           )}
+          {alchemyReady > 0 && (
+            <button onClick={()=>nav('/alchemy')}
+              style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#021410', border:'1px solid #44ddaa', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              🧪 錬金部屋で強化石を受け取れます！（{alchemyReady}件）→ 錬金部屋へ
+            </button>
+          )}
+          {territoryExpandable && (
+            <button onClick={()=>nav('/territory')}
+              style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              🗺 領地を広げられます！→ 領地へ
+            </button>
+          )}
           <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', marginBottom:'8px' }}>
             {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'6px', border:'1px solid #660000', padding:'3px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
@@ -5723,6 +5770,18 @@ export default function Game() {
           <button onClick={()=>setShowOptions(true)}
             style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a1200', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
             🌟 パピアの出現時間が未設定です！→ 出撃時間/パピア時間設定へ
+          </button>
+        )}
+        {alchemyReady > 0 && (
+          <button onClick={()=>nav('/alchemy')}
+            style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#021410', border:'1px solid #44ddaa', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            🧪 錬金部屋で強化石を受け取れます！（{alchemyReady}件）→ 錬金部屋へ
+          </button>
+        )}
+        {territoryExpandable && (
+          <button onClick={()=>nav('/territory')}
+            style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            🗺 領地を広げられます！→ 領地へ
           </button>
         )}
 
