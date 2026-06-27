@@ -166,7 +166,7 @@ DECLARE r record;
 BEGIN
   -- 開戦: コアHPに戦争定数100000をセット。★参加者seedはM2（M1のNPC core-onlyでは不要）
   FOR r IN SELECT id FROM public.wars WHERE status='declared' AND starts_at <= now() FOR UPDATE LOOP
-    UPDATE public.wars SET status='active', attacker_core_hp=100000, defender_core_hp=100000 WHERE id = r.id;
+    UPDATE public.wars SET status='active', attacker_core_hp=300000, defender_core_hp=300000 WHERE id = r.id;
   END LOOP;
   -- 締め: 時間切れ→決着
   FOR r IN SELECT id FROM public.wars WHERE status='active' AND ends_at <= now() FOR UPDATE LOOP

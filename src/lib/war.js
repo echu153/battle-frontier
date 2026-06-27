@@ -17,7 +17,7 @@ export function compressWarDmg(d) {
   return Math.max(1, Math.floor(WAR_DMG_PIVOT * Math.pow(d / WAR_DMG_PIVOT, WAR_DMG_EXP)))
 }
 
-export const WAR_CORE_HP = 100000        // サーバ war_tick と一致（表示用）
+export const WAR_CORE_HP = 300000        // サーバ war_tick と一致（表示用・要調整）
 export const WAR_CORE_REDUCTION = 0.9    // サーバ war_attack_core が適用（表示用）
 export const WAR_CORE_TURNS = 10         // コア戦ターン数（概算係数の根拠）
 
