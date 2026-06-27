@@ -576,7 +576,7 @@ export default function Equipment() {
                         <span style={{ color:'#446688', fontSize:'10px' }}>×{pi.quantity}</span>
                         {(pi.items.effect === 'enhance_stone' || pi.items.name?.includes('依頼書')) ? (
                           <span style={{ color:'#aa8800', fontSize:'10px' }}>強化素材</span>
-                        ) : (pi.items.effect?.startsWith('casino_area') || pi.items.effect === 'gambler_proof' || pi.items.effect === 'exp_dungeon_ticket') ? (
+                        ) : (pi.items.effect?.startsWith('casino_area') || pi.items.effect?.endsWith('_proof') || pi.items.effect === 'exp_dungeon_ticket') ? (
                           <span style={{ color:'#cc44ff', fontSize:'10px' }}>大切なもの</span>
                         ) : pi.items.effect === 'stat_reset' ? (
                           <button onClick={() => setConfirmReset(pi)} disabled={loading}
