@@ -4931,6 +4931,16 @@ export default function Game() {
     localStorage.setItem('bf_mat_event_seen', d)
     setMatEventSeenDate(d)
   }
+  // レイドボス通知の「確認」はアカウント単位・1日1回。端末ローカルでなくprofiles.raid_seen_dateに
+  // JST日付を保存し、スマホで確認すればPCでも当日は再確認不要にする。
+  const raidJstDateStr = () => new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)
+  const raidNoticeSeenToday = profile.raid_seen_date === raidJstDateStr()
+  const markRaidNoticeSeen = async () => {
+    const d = raidJstDateStr()
+    if (profile.raid_seen_date === d) return
+    setProfile(p => p ? { ...p, raid_seen_date: d } : p)
+    try { await supabase.from('profiles').update({ raid_seen_date: d }).eq('id', profile.id) } catch { /* 列未追加の旧環境などは無視 */ }
+  }
   const banRemaining = isBanned ? (() => {
     const diffMs = new Date(profile.battle_ban_until) - new Date()
     const h = Math.floor(diffMs / 3600000)
@@ -5450,14 +5460,12 @@ export default function Game() {
                 </div>
               )}
               {(() => {
-                const raidSeenKey = raidBossData ? `bf_raid_seen_${raidBossData.boss.id}` : null
-                const isSeen = raidSeenKey && localStorage.getItem(raidSeenKey)
+                const isSeen = raidNoticeSeenToday
                 const b = raidBossData?.boss
                 const parts = raidBossData?.participants || []
                 const hpRatio = b ? b.hp_current / b.hp_max : 0
                 const totalDmg = parts.reduce((s,p) => s + Number(p.damage_dealt), 0)
-                const todayJst = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)
-                const waitingSeen = localStorage.getItem(`bf_raid_waiting_seen_${todayJst}`)
+                const waitingSeen = raidNoticeSeenToday
                 if ((raidStatus === 'defeated' || raidStatus === 'expired') && isSeen) return null
                 if ((!raidStatus || raidStatus === null) && waitingSeen) return null
                 if (raidStatus === 'pre') return (
@@ -5470,9 +5478,9 @@ export default function Game() {
                   <div style={{ border:'1px solid #440000', background:'#0a0010', padding:'10px', marginBottom:'8px' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
                       <span style={{ color:'#ff4444', fontSize:'11px', letterSpacing:'1px' }}>⚔ レイドボス</span>
-                      {(raidStatus === 'defeated' || raidStatus === 'expired') && raidSeenKey && (
+                      {(raidStatus === 'defeated' || raidStatus === 'expired') && (
                         <span style={{ color:'#446688', fontSize:'10px', cursor:'pointer' }}
-                          onClick={()=>{ localStorage.setItem(raidSeenKey,'1'); setRaidStatus(null); setRaidBossData(null) }}>× 閉じる</span>
+                          onClick={()=>{ markRaidNoticeSeen(); setRaidStatus(null); setRaidBossData(null) }}>× 閉じる</span>
                       )}
                     </div>
                     {raidStatus === 'active' && b && (
@@ -5507,12 +5515,11 @@ export default function Game() {
                       <div style={{ fontSize:'10px', color:'#886644' }}>⌛ 時間切れ（討伐失敗）</div>
                     )}
                     {(!raidStatus || raidStatus === null) && (() => {
-                      const todayJst = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)
-                      if (localStorage.getItem(`bf_raid_waiting_seen_${todayJst}`)) return null
+                      if (raidNoticeSeenToday) return null
                       return (
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                           <span style={{ fontSize:'10px', color:'#335566' }}>毎日21:00 JST 出現</span>
-                          <button onClick={()=>{ const d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10); localStorage.setItem(`bf_raid_waiting_seen_${d}`,'1'); nav('/raid') }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'3px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>確認する</button>
+                          <button onClick={()=>{ markRaidNoticeSeen(); nav('/raid') }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'3px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>確認する</button>
                         </div>
                       )
                     })()}
@@ -5937,15 +5944,13 @@ export default function Game() {
                   </div>
                 )}
                 {(() => {
-                  const raidSeenKey = raidBossData ? `bf_raid_seen_${raidBossData.boss.id}` : null
-                  const isSeen = raidSeenKey && localStorage.getItem(raidSeenKey)
+                  const isSeen = raidNoticeSeenToday
                   const b = raidBossData?.boss
                   const parts = raidBossData?.participants || []
                   const hpRatio = b ? b.hp_current / b.hp_max : 0
                   const totalDmg = parts.reduce((s,p) => s + Number(p.damage_dealt), 0)
                   const hasUnclaimed = raidStatus === 'defeated' && parts.some(p => p.player_id === profile?.id && !p.reward_claimed)
-                  const todayJst2 = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)
-                  const waitingSeen2 = localStorage.getItem(`bf_raid_waiting_seen_${todayJst2}`)
+                  const waitingSeen2 = raidNoticeSeenToday
                   if ((raidStatus === 'defeated' || raidStatus === 'expired') && isSeen && !hasUnclaimed) return null
                   if ((!raidStatus || raidStatus === null) && waitingSeen2) return null
                   if (raidStatus === 'pre') return (
@@ -5958,9 +5963,9 @@ export default function Game() {
                     <div style={{ border:'1px solid #440000', background:'#0a0010', padding:'10px', marginBottom:'8px' }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
                         <span style={{ color:'#ff4444', fontSize:'11px', letterSpacing:'1px' }}>⚔ レイドボス</span>
-                        {(raidStatus === 'defeated' || raidStatus === 'expired') && raidSeenKey && (
+                        {(raidStatus === 'defeated' || raidStatus === 'expired') && (
                           <span style={{ color:'#446688', fontSize:'10px', cursor:'pointer' }}
-                            onClick={()=>{ localStorage.setItem(raidSeenKey,'1'); setRaidStatus(null); setRaidBossData(null) }}>× 閉じる</span>
+                            onClick={()=>{ markRaidNoticeSeen(); setRaidStatus(null); setRaidBossData(null) }}>× 閉じる</span>
                         )}
                       </div>
                       {raidStatus === 'active' && b && (
@@ -6000,12 +6005,11 @@ export default function Game() {
                         <div style={{ fontSize:'10px', color:'#886644' }}>⌛ 時間切れ（討伐失敗）</div>
                       )}
                       {(!raidStatus || raidStatus === null) && (() => {
-                        const todayJst = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)
-                        if (localStorage.getItem(`bf_raid_waiting_seen_${todayJst}`)) return null
+                        if (raidNoticeSeenToday) return null
                         return (
                           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                             <span style={{ fontSize:'10px', color:'#335566' }}>毎日21:00 JST 出現</span>
-                            <button onClick={()=>{ const d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10); localStorage.setItem(`bf_raid_waiting_seen_${d}`,'1'); nav('/raid') }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'3px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>確認する</button>
+                            <button onClick={()=>{ markRaidNoticeSeen(); nav('/raid') }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'3px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>確認する</button>
                           </div>
                         )
                       })()}
