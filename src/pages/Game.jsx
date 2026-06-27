@@ -5769,7 +5769,7 @@ export default function Game() {
                             <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                           )}
                           {profile?.is_admin && (
-                            <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button><button onClick={()=>{ setShowKumite(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1420', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🥊 組み手 <span style={{ fontSize:'9px', color:'#7788aa' }}>[開発]</span></button></>
+                            <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
                           )}
                         </div>
                       )}
@@ -5793,6 +5793,7 @@ export default function Game() {
                         {lockOr('marketplace', <button key="marketplace" onClick={()=>nav('/marketplace')} style={{ padding:'10px', background:'#001020', border:'1px solid #1a8a6a', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏷 取引所</button>)}
                         {lockOr('casino', <button key="casino" onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場</button>)}
                         {lockOr('barber', <button key="barber" onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院</button>)}
+                        {profile?.is_admin && <button key="kumite" onClick={()=>setShowKumite(true)} style={{ padding:'10px', background:'#001020', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🥊 組み手 <span style={{ fontSize:'9px', color:'#7788aa' }}>[開発]</span></button>}
                       </div>
                       </MenuCat>
                       <MenuCat title="放置コンテンツ" catKey="idle" accordion={acc} open={!!openMenuCats.idle} onToggle={toggleMenuCat}>
@@ -5821,6 +5822,7 @@ export default function Game() {
                 <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所</button>
                 <button onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場</button>
                 <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット</button>
+                {profile?.is_admin && <button onClick={()=>setShowKumite(true)} style={{ padding:'10px', background:'#001020', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🥊 組み手 <span style={{ fontSize:'9px', color:'#7788aa' }}>[開発]</span></button>}
               </div>
               )}
               <button onClick={toggleFacilitiesExpanded}
@@ -5836,7 +5838,7 @@ export default function Game() {
                     <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                   )}
                   {profile?.is_admin && (
-                    <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button><button onClick={()=>{ setShowKumite(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1420', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🥊 組み手 <span style={{ fontSize:'9px', color:'#7788aa' }}>[開発]</span></button></>
+                    <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
                   )}
                 </div>
               )}
@@ -6260,7 +6262,7 @@ export default function Game() {
                               <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                             )}
                             {profile?.is_admin && (
-                              <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button><button onClick={()=>{ setShowKumite(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1420', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🥊 組み手 <span style={{ fontSize:'9px', color:'#7788aa' }}>[開発]</span></button></>
+                              <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
                             )}
                           </div>
                         )}
@@ -6283,6 +6285,7 @@ export default function Game() {
                           {lockOr('exchange', <button key="exchange" onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所へ</button>)}
                           {lockOr('casino', <button key="casino" onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場へ</button>)}
                           {lockOr('barber', <button key="barber" onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院へ</button>)}
+                          {profile?.is_admin && <button key="kumite" onClick={()=>setShowKumite(true)} style={{ padding:'10px', background:'#001020', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🥊 組み手 <span style={{ fontSize:'9px', color:'#7788aa' }}>[開発]</span></button>}
                         </div>
                         </MenuCat>
                         <MenuCat title="放置コンテンツ" catKey="idle" accordion={acc} open={!!openMenuCats.idle} onToggle={toggleMenuCat}>
@@ -6311,6 +6314,7 @@ export default function Game() {
                   <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所へ</button>
                   <button onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場へ</button>
                   <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット</button>
+                  {profile?.is_admin && <button onClick={()=>setShowKumite(true)} style={{ padding:'10px', background:'#001020', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🥊 組み手 <span style={{ fontSize:'9px', color:'#7788aa' }}>[開発]</span></button>}
                 </div>
                 )}
                 <button onClick={toggleFacilitiesExpanded}
@@ -6326,7 +6330,7 @@ export default function Game() {
                       <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                     )}
                     {profile?.is_admin && (
-                      <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button><button onClick={()=>{ setShowKumite(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1420', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🥊 組み手 <span style={{ fontSize:'9px', color:'#7788aa' }}>[開発]</span></button></>
+                      <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
                     )}
                   </div>
                 )}
