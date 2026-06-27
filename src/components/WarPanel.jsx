@@ -1,6 +1,6 @@
-// 🏳 戦争パネル — M1（NPC core-only・is_admin先行テスト）。
-// 領地画面から開く。建国者(元帥)が宣戦布告→開戦→敵コアを攻撃→勝利/領地総取り を検証する。
-// ※M1はコア戦のみ（持続HP/瀕死/相互戦闘はM2）。war_tickはこのパネル内だけで呼ぶ（領地本体に影響させない）。
+// 🏳 戦争パネル — 専用ページ(/war)の本体UI。
+// 建国者(元帥)が宣戦布告→開戦→敵コアを攻撃→勝利/領地総取り を行う。
+// ※ページ枠(ヘッダー/戻る)は War.jsx が用意し、ここは中身だけをインライン描画する。
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
 import { loadLoadout } from '../lib/pvpLoadout'
@@ -8,8 +8,7 @@ import { simulateCoreAttack, WAR_CORE_HP } from '../lib/war'
 
 const ATTACK_CD_MS = 20000  // 疑似CD（サーバーCDはM2）
 
-const overlay = { position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:2000, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'16px', overflowY:'auto', fontFamily:'monospace' }
-const box = { background:'#140802', border:'1px solid #e05a62', maxWidth:'560px', width:'100%', padding:'16px', marginTop:'24px' }
+const box = { background:'#140802', border:'1px solid #e05a62', padding:'16px', fontFamily:'monospace' }
 const fmt = (ms) => { const s=Math.floor(ms/1000); const m=Math.floor(s/60); return m>0?`${m}分${s%60}秒`:`${s}秒` }
 
 function CoreBar({ label, hp, color }) {
@@ -26,7 +25,7 @@ function CoreBar({ label, hp, color }) {
   )
 }
 
-export default function WarPanel({ onClose, me, myCountry, countries }) {
+export default function WarPanel({ me, myCountry, countries }) {
   const [loadout, setLoadout] = useState(null)
   const [war, setWar] = useState(null)
   const [target, setTarget] = useState('')
@@ -140,13 +139,7 @@ export default function WarPanel({ onClose, me, myCountry, countries }) {
     : null
 
   return (
-    <div style={overlay}>
-      <div style={box}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', borderBottom:'1px solid #5a2a1a', paddingBottom:'8px' }}>
-          <div style={{ color:'#ff8a6a', fontSize:'15px', letterSpacing:'2px' }}>🏳 戦争 <span style={{ color:'#aa6655', fontSize:'10px' }}>(M1・開発者限定)</span></div>
-          <button onClick={onClose} style={{ background:'none', border:'1px solid #aa5544', color:'#cc8866', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>✕ 閉じる</button>
-        </div>
-
+    <div style={box}>
         {!myCountry && <div style={{ color:'#ddaa88', fontSize:'12px' }}>国に所属していません。領地画面で建国または加入してください。</div>}
 
         {myCountry && (
@@ -244,7 +237,6 @@ export default function WarPanel({ onClose, me, myCountry, countries }) {
             </div>
           </div>
         )}
-      </div>
     </div>
   )
 }

@@ -7,7 +7,7 @@
 //   ・階級は貢献度で自動決定（建国者=元帥固定）。
 //   ・全ての時刻・操作は SECURITY DEFINER RPC 経由（supabase_territory.sql）。
 // ============================================================
-import { useEffect, useRef, useState, lazy, Suspense } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { calcEffectiveTotal } from '../lib/stats'
@@ -17,8 +17,6 @@ import {
   EXPAND_COOLDOWN_MS, fmtRemain, REGIONS,
   AREA_META, computeAreaControl, rankColor,
 } from '../lib/territory'
-// 戦争パネルは war.js→pvp.js→Game の循環import回避のため遅延ロード（PvpPanel/KumitenPanelと同方針）
-const WarPanel = lazy(() => import('../components/WarPanel'))
 
 const EMBLEMS = ['🏰','⚔','🦅','🐺','🌙','☀','🔥','❄','🐉','⭐','🛡','👑']
 const MAP_IMG = '/ryouti.png'
@@ -40,7 +38,6 @@ export default function Territory() {
   const [openRosters, setOpenRosters] = useState({})  // 国一覧の国民展開状態 {countryId:true}
   const [descEdit, setDescEdit] = useState(false)     // 自国説明文の編集中
   const [descInput, setDescInput] = useState('')
-  const [showWar, setShowWar] = useState(false)       // 🏳 戦争パネル（is_admin先行）
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [, setTick] = useState(0)
@@ -286,7 +283,7 @@ export default function Territory() {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #403010', paddingBottom:'8px', marginBottom:'12px', position:'sticky', top:0, zIndex:30, paddingTop:'8px', background:'#0a0800' }}>
           <div style={{ color:'#ffcc44', fontSize:'15px', letterSpacing:'3px' }}>🏰 領地</div>
           <div style={{ display:'flex', gap:'6px' }}>
-            {me?.is_admin && <button onClick={() => setShowWar(true)} style={{ background:'none', border:'1px solid #e05a62', color:'#ff6464', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏳 戦争 <span style={{ fontSize:'9px', color:'#aa5555' }}>[開発]</span></button>}
+            {me?.is_admin && <button onClick={() => nav('/war')} style={{ background:'none', border:'1px solid #e05a62', color:'#ff6464', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏳 戦争 <span style={{ fontSize:'9px', color:'#aa5555' }}>[開発]</span></button>}
             <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
           </div>
         </div>
@@ -676,7 +673,6 @@ export default function Territory() {
         </div>
       )}
 
-      {showWar && <Suspense fallback={null}><WarPanel onClose={() => setShowWar(false)} me={me} myCountry={myCountry} countries={countries} /></Suspense>}
     </div>
   )
 }

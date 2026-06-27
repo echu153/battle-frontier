@@ -32,6 +32,7 @@ const Tenkyuu = lazy(() => import('./pages/Tenkyuu'))
 const Alchemy = lazy(() => import('./pages/Alchemy'))
 const Idle = lazy(() => import('./pages/Idle'))
 const Territory = lazy(() => import('./pages/Territory'))
+const War = lazy(() => import('./pages/War'))
 const Marketplace = lazy(() => import('./pages/Marketplace'))
 const Event = lazy(() => import('./pages/Event'))
 const ActionRpg = lazy(() => import('./action-rpg/ActionRpgPage')) // アクションRPGプロト(認証不要・独立)
@@ -209,6 +210,7 @@ function App() {
         <Route path="/alchemy" element={session ? <Alchemy /> : <Navigate to="/login" />} />
         <Route path="/idle" element={session ? <Idle /> : <Navigate to="/login" />} />
         <Route path="/territory" element={session ? <Territory /> : <Navigate to="/login" />} />
+        <Route path="/war" element={session ? <War /> : <Navigate to="/login" />} />
         <Route path="/marketplace" element={session ? <Marketplace /> : <Navigate to="/login" />} />
         <Route path="/event" element={session ? <Event /> : <Navigate to="/login" />} />
         <Route path="/action-rpg" element={session ? <ActionRpg /> : <Navigate to="/login" />} />
