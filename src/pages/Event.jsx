@@ -151,9 +151,12 @@ export default function Event() {
       </div>
 
       <div style={{ color:'#ffcc44', fontSize:'15px', marginBottom:'4px' }}>🎫 出撃イベント</div>
-      <div style={{ color:'#557799', fontSize:'11px', marginBottom:'12px' }}>
-        出撃でポイント獲得（出撃時間モードで獲得量が変化）。20秒モードは1回で1pt、10秒モードは2回で1pt。累計ポイントで報酬を受け取れます。
-        {config && <><br/>期間: {new Date(config.starts_at).toLocaleString('ja-JP')} 〜 {new Date(config.ends_at).toLocaleString('ja-JP')}</>}
+      <div style={{ color:'#9fc1e0', fontSize:'12px', marginBottom:'12px', lineHeight:'1.9' }}>
+        出撃でポイントを獲得し、累計ポイントで報酬を受け取れます。<br/>
+        獲得ポイントは出撃時間モードで変化します。<br/>
+        ・20秒モード … <span style={{ color:'#ffcc44' }}>1回で 1pt</span><br/>
+        ・10秒モード … <span style={{ color:'#ffcc44' }}>2回で 1pt</span>
+        {config && <><br/><span style={{ color:'#7799bb' }}>期間: {new Date(config.starts_at).toLocaleString('ja-JP')} 〜 {new Date(config.ends_at).toLocaleString('ja-JP')}</span></>}
       </div>
 
       <div style={{ maxWidth:'620px', margin:'0 auto' }}>
