@@ -37,6 +37,7 @@ export default function WarPanel({ onClose, me, myCountry, countries }) {
   const [cdUntil, setCdUntil] = useState(0)
   const [, setTick] = useState(0)
   const [lastInfo, setLastInfo] = useState(null)      // { atk, matk, power, raw, applied } 直近の数値
+  const [participants, setParticipants] = useState([])  // 進行中戦争の war_participants
 
   const nameOf = (cid) => (countries || []).find(c => c.id === cid)?.name || '???'
 
@@ -48,7 +49,12 @@ export default function WarPanel({ onClose, me, myCountry, countries }) {
       .or(`attacker_country_id.eq.${myCountry.id},defender_country_id.eq.${myCountry.id}`)
       .order('created_at', { ascending: false })
       .limit(1)
-    setWar((data || [])[0] || null)
+    const w = (data || [])[0] || null
+    setWar(w)
+    if (w) {
+      const { data: ps } = await supabase.from('war_participants').select('*').eq('war_id', w.id)
+      setParticipants(ps || [])
+    } else setParticipants([])
   }
 
   useEffect(() => {
@@ -92,6 +98,22 @@ export default function WarPanel({ onClose, me, myCountry, countries }) {
     setBusy(false)
   }
 
+  // 管理者テスト補助: NPC国側にダミー参加者を seed（dying=true で瀕死状態）
+  const seedNpc = async (dying) => {
+    if (!war || busy) return
+    setBusy(true); setErr(''); setMsg('')
+    const { error } = await supabase.rpc('war_admin_seed_npc', { p_war_id: war.id, p_count: 3, p_hp: 50000, p_dying: dying })
+    if (error) setErr(error.message); else { setMsg(dying ? 'NPCダミー3体を瀕死で投入' : 'NPCダミー3体を投入'); await refreshWar() }
+    setBusy(false)
+  }
+  const clearParticipants = async () => {
+    if (!war || busy) return
+    setBusy(true); setErr(''); setMsg('')
+    const { error } = await supabase.rpc('war_admin_clear_participants', { p_war_id: war.id })
+    if (error) setErr(error.message); else { setMsg('参加者をクリア'); await refreshWar() }
+    setBusy(false)
+  }
+
   const isAttacker = war && myCountry && war.attacker_country_id === myCountry.id
   const enemyCid   = war ? (isAttacker ? war.defender_country_id : war.attacker_country_id) : null
   const myCoreHp   = war ? (isAttacker ? war.attacker_core_hp : war.defender_core_hp) : null
@@ -102,6 +124,14 @@ export default function WarPanel({ onClose, me, myCountry, countries }) {
   const cdRemain   = Math.max(0, cdUntil - Date.now())
   const targetOptions = (countries || []).filter(c => c.id !== myCountry?.id && !c.is_unaffiliated)
   const enemyIsNpc = (countries || []).find(c => c.id === enemyCid)?.is_npc
+
+  // 敵参加者の集計（非瀕死=「dyingでない」or「dying_untilが既に過ぎた」）。非瀕死が0でコア解禁。
+  const nowMs = Date.now()
+  const isDyingNow = (p) => p.status === 'dying' && p.dying_until && new Date(p.dying_until).getTime() > nowMs
+  const enemyParts = participants.filter(p => p.country_id === enemyCid)
+  const enemyActive = enemyParts.filter(p => !isDyingNow(p)).length
+  const enemyDying  = enemyParts.length - enemyActive
+  const coreUnlocked = enemyParts.length > 0 ? enemyActive === 0 : true  // 参加者0(NPC core-only)は従来どおり解禁
 
   const resultText = war?.status === 'done'
     ? (war.result === 'draw' ? '🤝 引き分け（領地移動なし）'
@@ -147,15 +177,33 @@ export default function WarPanel({ onClose, me, myCountry, countries }) {
             </div>
             <CoreBar label={`敵コア（${nameOf(enemyCid)}）`} hp={enemyCoreHp} color="#ff5544" />
             <CoreBar label={`自国コア（${myCountry?.name}）`} hp={myCoreHp} color="#44aaff" />
-            {enemyIsNpc && <div style={{ color:'#88aa66', fontSize:'10px', marginBottom:'8px' }}>※NPC国は防衛参加者ゼロ＝全員瀕死扱い。コアを直接攻撃できます。</div>}
+
+            {/* 敵参加者の状況＝コア解禁条件 */}
+            <div style={{ color: coreUnlocked ? '#88cc66' : '#ddaa66', fontSize:'11px', margin:'6px 0' }}>
+              敵防衛: 戦闘可能 <b>{enemyActive}</b> ／ 瀕死 <b>{enemyDying}</b>
+              {enemyParts.length === 0
+                ? '（参加者なし＝コア直接攻撃可）'
+                : (coreUnlocked ? ' → 全員瀕死！コア解禁🔓' : ' → 全員瀕死にするまでコアは攻撃不可🔒')}
+            </div>
+
             <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-              <button onClick={attack} disabled={busy || cdRemain > 0}
-                style={{ flex:1, minWidth:'160px', background: cdRemain>0?'#1a0c06':'#3a1208', border:`1px solid ${cdRemain>0?'#5a3a2a':'#ff6644'}`, color: cdRemain>0?'#7a5a4a':'#ff9977', padding:'10px', cursor: cdRemain>0?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'1px' }}>
-                {cdRemain > 0 ? `⏱ ${Math.ceil(cdRemain/1000)}秒` : '🗡 敵コアを攻撃'}
+              <button onClick={attack} disabled={busy || cdRemain > 0 || !coreUnlocked}
+                style={{ flex:1, minWidth:'160px', background: (cdRemain>0||!coreUnlocked)?'#1a0c06':'#3a1208', border:`1px solid ${(cdRemain>0||!coreUnlocked)?'#5a3a2a':'#ff6644'}`, color: (cdRemain>0||!coreUnlocked)?'#7a5a4a':'#ff9977', padding:'10px', cursor: (cdRemain>0||!coreUnlocked)?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'1px' }}>
+                {cdRemain > 0 ? `⏱ ${Math.ceil(cdRemain/1000)}秒` : (coreUnlocked ? '🗡 敵コアを攻撃' : '🔒 コアは攻撃不可')}
               </button>
               <button onClick={forceEnd} disabled={busy}
                 style={{ background:'#1a0c06', border:'1px solid #886644', color:'#bb9966', padding:'10px 12px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>⏹ 即決着（テスト）</button>
             </div>
+
+            {/* 管理者テスト補助（M2-1：瀕死ゲート検証用） */}
+            {me?.is_admin && (
+              <div style={{ marginTop:'8px', borderTop:'1px dashed #4a2a1a', paddingTop:'8px', display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                <span style={{ color:'#886644', fontSize:'10px', width:'100%' }}>🛠 検証ツール（NPCダミー参加者）</span>
+                <button onClick={() => seedNpc(false)} disabled={busy} style={{ background:'#0c1206', border:'1px solid #559944', color:'#99cc77', padding:'5px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>＋ダミー3体(戦闘可)</button>
+                <button onClick={() => seedNpc(true)} disabled={busy} style={{ background:'#120c06', border:'1px solid #996644', color:'#ccaa77', padding:'5px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>＋ダミー3体(瀕死)</button>
+                <button onClick={clearParticipants} disabled={busy} style={{ background:'#120606', border:'1px solid #884444', color:'#cc7777', padding:'5px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>参加者クリア</button>
+              </div>
+            )}
           </div>
         )}
 
