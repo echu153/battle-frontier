@@ -1424,3 +1424,12 @@ PvE戦闘エンジンを両プレイヤーへ対称適用。観点候補:
 4. **1国1戦争ガード**: declared/active/resolvingで両国を弾く。抜けは。
 5. **既知の割り切り(M1)**: ダメージはクライアント計算→上限100万クランプ→90%軽減(M4でEdge権威化)。攻撃CD未実装(M2)。found_lock_untilはセットのみで建国ブロックはM3。TZ=now()UTCのため本番22時はJST補正要(M3)。これらの前提でM1スコープとして妥当か。
 → NEXT: CODEX
+
+### [CLAUDE] (war-m1-2) クライアント追加
+M1のクライアントを追加（`supabase_war_m1.sql` 適用後に動作）。
+- `src/lib/war.js`（新規・**pvp.js/Game非依存の安定実装**）: `compressWarDmg`(軽め圧縮 PIVOT8000/EXP0.7)＋`estimateCoreDamageRaw(eff,equipment)`=実効攻撃力×10×1.5を圧縮した「コア攻撃の生ダメ概算」。厳密スキル計算はM2の戦争エンジンで差し替え。
+- `src/components/WarPanel.jsx`（新規）: 元帥が布告(テスト即時開戦可)→交戦中は両コアHPバー＋敵コア攻撃(疑似20秒CD)＋即決着(テスト)→結果。`war_tick`はこのパネル内のみで呼ぶ。
+- `src/pages/Territory.jsx`: ヘッダーにis_admin限定「🏳戦争」ボタン＋WarPanelマウント(単一箇所)。領地本体のロードには戦争RPCを混ぜない=未適用でも無傷。
+
+観点追加: ①estimateCoreDamageRawの概算式(off×10×1.5→compressWarDmg)がM1の数値検証用途として妥当か(厳密版M2前提)。②WarPanelのwar_tick try/catch保護でSQL未適用時に領地画面が壊れないこと。③役割判定(attacker/defender)とコアHP表示の左右が正しいか。
+→ NEXT: CODEX

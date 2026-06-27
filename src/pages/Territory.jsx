@@ -17,6 +17,7 @@ import {
   EXPAND_COOLDOWN_MS, fmtRemain, REGIONS,
   AREA_META, computeAreaControl, rankColor,
 } from '../lib/territory'
+import WarPanel from '../components/WarPanel'
 
 const EMBLEMS = ['🏰','⚔','🦅','🐺','🌙','☀','🔥','❄','🐉','⭐','🛡','👑']
 const MAP_IMG = '/ryouti.png'
@@ -38,6 +39,7 @@ export default function Territory() {
   const [openRosters, setOpenRosters] = useState({})  // 国一覧の国民展開状態 {countryId:true}
   const [descEdit, setDescEdit] = useState(false)     // 自国説明文の編集中
   const [descInput, setDescInput] = useState('')
+  const [showWar, setShowWar] = useState(false)       // 🏳 戦争パネル（is_admin先行）
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [, setTick] = useState(0)
@@ -282,7 +284,10 @@ export default function Territory() {
       <div style={{ maxWidth:'720px', margin:'0 auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #403010', paddingBottom:'8px', marginBottom:'12px', position:'sticky', top:0, zIndex:30, paddingTop:'8px', background:'#0a0800' }}>
           <div style={{ color:'#ffcc44', fontSize:'15px', letterSpacing:'3px' }}>🏰 領地</div>
-          <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
+          <div style={{ display:'flex', gap:'6px' }}>
+            {me?.is_admin && <button onClick={() => setShowWar(true)} style={{ background:'none', border:'1px solid #e05a62', color:'#ff6464', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏳 戦争 <span style={{ fontSize:'9px', color:'#aa5555' }}>[開発]</span></button>}
+            <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
+          </div>
         </div>
 
         {msg && (
@@ -669,6 +674,8 @@ export default function Territory() {
           </div>
         </div>
       )}
+
+      {showWar && <WarPanel onClose={() => setShowWar(false)} me={me} myCountry={myCountry} countries={countries} />}
     </div>
   )
 }
