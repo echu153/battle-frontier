@@ -1697,6 +1697,7 @@ export default function Game() {
   const [unreadReplies, setUnreadReplies] = useState(0)      // お問い合わせへの運営返信で未確認の件数（街のバナー表示用）
   const [unrepliedContacts, setUnrepliedContacts] = useState(0)  // 管理人(おれおれお)向け: 未返信のお問い合わせ件数（街のバナー表示用）
   const [alchemyReady, setAlchemyReady] = useState(0)        // 錬金部屋で受け取れる強化石の数（街のバナー表示用・is_admin限定先行）
+  const [alchemyEmpty, setAlchemyEmpty] = useState(0)        // 錬金部屋の空き枠数（街のバナー表示用・is_admin限定先行）
   const [territoryExpandable, setTerritoryExpandable] = useState(false)  // 領地拡大が可能か（街のバナー表示用・is_admin限定先行）
   const [showGuide, setShowGuide] = useState(false)
   const [showDyingTip, setShowDyingTip] = useState(false)  // 初めて瀕死になったとき1回だけ案内
@@ -1925,19 +1926,21 @@ export default function Game() {
   // 街バナー: 錬金部屋の強化石が受け取れる / 領地を広げられる を検出（is_admin限定先行）
   const refreshTownNotices = async (p) => {
     const prof = p || profile
-    if (!prof?.is_admin) { setAlchemyReady(0); setTerritoryExpandable(false); return }
+    if (!prof?.is_admin) { setAlchemyReady(0); setAlchemyEmpty(0); setTerritoryExpandable(false); return }
     // 錬金部屋: 完成済み（受取可能）の枠数。エリア③ボス撃破で開放（=エリア4解放）が前提。
     if ((prof.unlocked_areas || [1]).includes(4)) {
       try {
         const { data: res } = await supabase.rpc('alchemy_get')
         if (res?.ok) {
-          // サーバー判定の ready かつ「現在解放されている枠」だけを数える。
-          // alchemy_get は解放枠外(slot>slots)の完成品も返すため(例: 奈落の週次リセットで
-          // 枠数が減った後の取り残し)、ページUIで受け取れる枠＝slot<=slots に揃える。
-          setAlchemyReady((res.jobs || []).filter(j => j.ready && (j.slot || 1) <= (res.slots || 0)).length)
+          const slots = res.slots || 0
+          // 解放枠(slot<=slots)に絞ったジョブ。alchemy_get は解放枠外(slot>slots)の取り残し
+          // (例: 奈落の週次リセットで枠数が減った後)も返すため、ページUIに揃える。
+          const unlockedJobs = (res.jobs || []).filter(j => (j.slot || 1) <= slots)
+          setAlchemyReady(unlockedJobs.filter(j => j.ready).length)          // 受取可能（サーバー判定ready）
+          setAlchemyEmpty(Math.max(0, slots - unlockedJobs.length))          // 空き枠（解放済みで稼働ジョブなし）
         }
       } catch { /* 未導入時は無視 */ }
-    } else setAlchemyReady(0)
+    } else { setAlchemyReady(0); setAlchemyEmpty(0) }
     // 領地拡大: 加盟国に所属 かつ 亡命ロックなし かつ クールダウン明け（Territory.jsxの拡大ボタン条件と一致）
     if (prof.country_id) {
       try {
@@ -5305,6 +5308,12 @@ export default function Game() {
               🧪 錬金部屋で強化石を受け取れます！（{alchemyReady}件）→ 錬金部屋へ
             </button>
           )}
+          {alchemyEmpty > 0 && (
+            <button onClick={()=>nav('/alchemy')}
+              style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#0a1408', border:'1px solid #88cc66', color:'#aadd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              🧪 錬金部屋に空きがあります（{alchemyEmpty}枠）→ 錬金を始める
+            </button>
+          )}
           {territoryExpandable && (
             <button onClick={()=>nav('/territory')}
               style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
@@ -5778,6 +5787,12 @@ export default function Game() {
           <button onClick={()=>nav('/alchemy')}
             style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#021410', border:'1px solid #44ddaa', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
             🧪 錬金部屋で強化石を受け取れます！（{alchemyReady}件）→ 錬金部屋へ
+          </button>
+        )}
+        {alchemyEmpty > 0 && (
+          <button onClick={()=>nav('/alchemy')}
+            style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#0a1408', border:'1px solid #88cc66', color:'#aadd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            🧪 錬金部屋に空きがあります（{alchemyEmpty}枠）→ 錬金を始める
           </button>
         )}
         {territoryExpandable && (
