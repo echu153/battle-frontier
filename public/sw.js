@@ -13,6 +13,36 @@ self.addEventListener('install', () => {
   self.skipWaiting()
 })
 
+// ---- レイド通知（Web Push）----
+// サーバー(send-raid-push)からのプッシュを受けて通知を出す。ペイロードは使わず固定文言。
+self.addEventListener('push', (event) => {
+  const title = '⚔ レイドボス出現！'
+  const body = 'レイドボスが現れた。今すぐ討伐に向かえ！（出現は約30分）'
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: '/pwa-192.png',
+      badge: '/pwa-192.png',
+      tag: 'raid-spawn',          // 同時刻の重複通知をまとめる
+      renotify: true,
+      data: { url: '/' },
+    }).catch(() => {}),
+  )
+})
+
+// 通知タップ＝アプリを前面に（開いていなければ開く）
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const url = (event.notification.data && event.notification.data.url) || '/'
+  event.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    for (const c of all) {
+      if ('focus' in c) { try { await c.focus(); return } catch { /* 下へ */ } }
+    }
+    if (self.clients.openWindow) await self.clients.openWindow(url)
+  })())
+})
+
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys()

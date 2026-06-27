@@ -8,6 +8,7 @@ import { charmPlayerBonus, petPlayerBonus, petStats } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
 import { myAreaShares, dropBonusPP, EXPAND_COOLDOWN_MS, rankColor } from '../lib/territory'
 import AIAssistant from '../components/AIAssistant'
+import RaidNotify from '../components/RaidNotify'
 // 対人戦(PvP)パネルは循環import回避のため遅延ロード（pvp.js が ./Game を参照するため）
 const PvpPanel = lazy(() => import('../components/PvpPanel'))
 // Equipment.jsx 等が './Game' から参照しているため再export
@@ -1671,6 +1672,7 @@ export default function Game() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [showMenu, setShowMenu] = useState(false)
   const [aiOpen, setAiOpen] = useState(false) // AI戦闘民族ジェミータ（☰メニューから開く）
+  const [raidNotifyOpen, setRaidNotifyOpen] = useState(false) // レイド通知（Web Push）設定パネル
   const [showContact, setShowContact] = useState(false)
   const [showOptions, setShowOptions] = useState(false)   // ⚙ オプション（ブーストタイム発動など）
   const [showInstallGuide, setShowInstallGuide] = useState(false)  // 📱 ホーム画面に追加の手順
@@ -5270,6 +5272,7 @@ export default function Game() {
             )}
             <button onClick={()=>{ nav('/action-rpg'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#9fe', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🗡 アクションRPG <span style={{ fontSize:'9px', color:'#8877aa' }}>(お試し)</span></button>
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
+            <button onClick={()=>{ setRaidNotifyOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8866', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔔 レイド通知</button>
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
             <button onClick={()=>{ setShowInstallGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📱 ホーム画面に追加</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
@@ -5724,6 +5727,7 @@ export default function Game() {
           )}
         </div>
         <AIAssistant ctx={{ profile, eff, equipment }} open={aiOpen} onClose={()=>setAiOpen(false)} />
+        <RaidNotify open={raidNotifyOpen} onClose={()=>setRaidNotifyOpen(false)} />
         {showPvp && <Suspense fallback={null}><PvpPanel onClose={()=>setShowPvp(false)} /></Suspense>}
       </div>
     )
@@ -5762,6 +5766,7 @@ export default function Game() {
             )}
             <button onClick={()=>{ nav('/action-rpg'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#9fe', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🗡 アクションRPG <span style={{ fontSize:'9px', color:'#8877aa' }}>(お試し)</span></button>
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
+            <button onClick={()=>{ setRaidNotifyOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8866', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔔 レイド通知</button>
             <button onClick={()=>{ setShowContact(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📩 お問い合わせ</button>
             <button onClick={()=>{ setShowInstallGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📱 ホーム画面に追加</button>
             <button onClick={()=>{ logout(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🚪 ログアウト</button>
@@ -6213,6 +6218,7 @@ export default function Game() {
         </div>
       </div>
       <AIAssistant ctx={{ profile, eff, equipment }} open={aiOpen} onClose={()=>setAiOpen(false)} />
+      <RaidNotify open={raidNotifyOpen} onClose={()=>setRaidNotifyOpen(false)} />
       {showPvp && <Suspense fallback={null}><PvpPanel onClose={()=>setShowPvp(false)} /></Suspense>}
     </div>
   )
