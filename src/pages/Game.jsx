@@ -1699,6 +1699,8 @@ export default function Game() {
   const [contactsLoading, setContactsLoading] = useState(false)
   const [adminReplyDrafts, setAdminReplyDrafts] = useState({}) // is_admin用: {contact_id: 返信文}の下書き
   const [adminReplyingId, setAdminReplyingId] = useState(null)  // 送信中のお問い合わせID
+  const [userReplyDrafts, setUserReplyDrafts] = useState({})    // ユーザーの追い返信の下書き {contact_id: 文}
+  const [contactPostingId, setContactPostingId] = useState(null) // スレッド追記の送信中ID
   const [adminContactFilter, setAdminContactFilter] = useState('unreplied') // 管理人受信一覧の絞り込み: 'unreplied'=未返信 / 'replied'=返信済み
   const [showAnnouncements, setShowAnnouncements] = useState(false)
   const [announceTab, setAnnounceTab] = useState('update')   // お知らせモーダルの選択中タブ
@@ -1927,10 +1929,19 @@ export default function Game() {
     try {
       const name = uname ?? profile?.username
       if (name !== 'おれおれお') { setUnrepliedContacts(0); return }
-      const { count } = await supabase.from('contact_messages')
-        .select('id', { count: 'exact', head: true })
-        .is('reply', null)
-      setUnrepliedContacts(count || 0)
+      // 「未返信」＝最後のメッセージがユーザー（未返信の新規＋ユーザーの追い返信）。threadも加味して数える。
+      const { data: rows } = await supabase.from('contact_messages').select('id, body, created_at, reply, reply_at')
+      if (!rows) { setUnrepliedContacts(0); return }
+      const ids = rows.map(r => r.id)
+      const byC = {}
+      if (ids.length > 0) {
+        try {
+          const { data: th } = await supabase.from('contact_thread').select('contact_id, sender, body, created_at').in('contact_id', ids)
+          for (const t of (th || [])) (byC[t.contact_id] ||= []).push(t)
+        } catch { /* contact_thread未導入時は reply 列のみで判定 */ }
+      }
+      const cnt = rows.filter(r => needsAdminReply({ ...r, thread: byC[r.id] || [] })).length
+      setUnrepliedContacts(cnt)
     } catch { /* 旧環境などは無視 */ }
   }
   // プロフィール確定後（おれおれおログイン時）に未返信件数を取得
@@ -4010,7 +4021,21 @@ export default function Game() {
 
   const CONTACT_CAT_LABEL = { bug:'不具合報告', request:'ご意見・ご要望', ban_appeal:'アカウント停止への異議', other:'その他' }
 
-  // 過去のお問い合わせを取得。is_admin は全員分、一般は自分の分のみ（reply列＝運営返信を含む）
+  // 1件の問い合わせを「初回質問(body) → 初回運営返信(reply) → 以降の往復(thread)」の時系列メッセージ配列に展開
+  const buildThread = (c) => {
+    const msgs = [{ sender: 'user', body: c.body, at: c.created_at }]
+    if (c.reply) msgs.push({ sender: 'admin', body: c.reply, at: c.reply_at || c.created_at })
+    for (const t of (c.thread || [])) msgs.push({ sender: t.sender, body: t.body, at: t.created_at })
+    msgs.sort((a, b) => new Date(a.at) - new Date(b.at))
+    return msgs
+  }
+  // 最後のメッセージがユーザー＝運営の返信待ち（管理人の「未返信」判定）
+  const needsAdminReply = (c) => {
+    const m = buildThread(c)
+    return m.length === 0 || m[m.length - 1].sender === 'user'
+  }
+
+  // 過去のお問い合わせを取得。is_admin は全員分、一般は自分の分のみ（reply列＋thread＝往復履歴を含む）
   const fetchMyContacts = async () => {
     setContactsLoading(true)
     try {
@@ -4021,17 +4046,27 @@ export default function Game() {
       const { data, error } = await q
       if (error) throw error
       let rows = data || []
+      // 各問い合わせの往復履歴(contact_thread)を取得して紐付け（未導入の旧環境は無視）
+      const ids = rows.map(r => r.id)
+      if (ids.length > 0) {
+        try {
+          const { data: th } = await supabase.from('contact_thread').select('*').in('contact_id', ids).order('created_at', { ascending: true })
+          const byC = {}
+          for (const t of (th || [])) (byC[t.contact_id] ||= []).push(t)
+          rows = rows.map(r => ({ ...r, thread: byC[r.id] || [] }))
+        } catch { /* contact_thread未導入時は無視 */ }
+      }
       // 管理者表示用: player_name が未保存の古いレコードは profiles.username で補完
       if (isContactAdmin && rows.length > 0) {
-        const ids = [...new Set(rows.filter(r => !r.player_name && r.player_id).map(r => r.player_id))]
-        if (ids.length > 0) {
-          const { data: profs } = await supabase.from('profiles').select('id, username').in('id', ids)
+        const pids = [...new Set(rows.filter(r => !r.player_name && r.player_id).map(r => r.player_id))]
+        if (pids.length > 0) {
+          const { data: profs } = await supabase.from('profiles').select('id, username').in('id', pids)
           const nameMap = Object.fromEntries((profs || []).map(p => [p.id, p.username]))
           rows = rows.map(r => r.player_name ? r : { ...r, player_name: nameMap[r.player_id] || r.player_name })
         }
       }
       setMyContacts(rows)
-      if (isContactAdmin) setUnrepliedContacts(rows.filter(r => !r.reply).length)
+      if (isContactAdmin) setUnrepliedContacts(rows.filter(needsAdminReply).length)
       return rows
     } catch (e) {
       setMyContacts([])
@@ -4041,18 +4076,38 @@ export default function Game() {
     }
   }
 
-  // is_admin: お問い合わせに直接返信（reply列を更新）
+  // ユーザー/管理人がスレッドに追記（運営返信への返信・運営の追い返信）。送信者はサーバー側でロール判定。
+  const postContactMessage = async (id, body, draftSetter) => {
+    const text = (body || '').trim()
+    if (!text) return
+    setContactPostingId(id)
+    try {
+      const { error } = await supabase.rpc('contact_post_message', { p_contact_id: id, p_body: text })
+      if (error) throw error
+      draftSetter(d => { const n = { ...d }; delete n[id]; return n })
+      await fetchMyContacts()
+    } catch (e) {
+      alert('送信に失敗しました。' + (e?.message ? `\n${e.message}` : ''))
+    } finally {
+      setContactPostingId(null)
+    }
+  }
+
+  // is_admin: 返信を送信。初回は admin_reply_contact(reply列)、以降は contact_post_message(thread)。
   const adminReplyContact = async (id) => {
     const existing = myContacts.find(c => c.id === id)
-    const text = ((adminReplyDrafts[id] ?? existing?.reply ?? '')).trim()
+    const text = (adminReplyDrafts[id] || '').trim()
     if (!text) return
-    // 送信前の確認ポップアップ
-    const verb = existing?.reply ? '更新' : '送信'
-    if (!window.confirm(`この内容で返信を${verb}します。よろしいですか？\n\n──────────\n${text}\n──────────`)) return
+    if (!window.confirm(`この内容で返信を送信します。よろしいですか？\n\n──────────\n${text}\n──────────`)) return
     setAdminReplyingId(id)
     try {
-      const { error } = await supabase.rpc('admin_reply_contact', { p_id: id, p_reply: text })
-      if (error) throw error
+      if (existing?.reply) {
+        const { error } = await supabase.rpc('contact_post_message', { p_contact_id: id, p_body: text })
+        if (error) throw error
+      } else {
+        const { error } = await supabase.rpc('admin_reply_contact', { p_id: id, p_reply: text })
+        if (error) throw error
+      }
       setAdminReplyDrafts(d => { const n = { ...d }; delete n[id]; return n })
       await fetchMyContacts()
     } catch (e) {
@@ -4640,39 +4695,61 @@ export default function Game() {
                 {isContactAdmin ? (adminContactFilter === 'replied' ? '返信済みのお問い合わせはありません。' : '未返信のお問い合わせはありません。') : 'これまでのお問い合わせはありません。'}
               </div>
             )}
-            {!contactsLoading && shownContacts.map(c => (
+            {!contactsLoading && shownContacts.map(c => {
+              const thread = buildThread(c)
+              const hasAdminMsg = thread.some(m => m.sender === 'admin')
+              return (
               <div key={c.id} style={{ marginBottom:'12px', border:'1px solid #223344', background:'#000818' }}>
                 <div style={{ padding:'10px 12px', borderBottom:'1px solid #112233' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                     <span style={{ color:'#88ccff', fontSize:'11px' }}>{CONTACT_CAT_LABEL[c.category] || c.category}</span>
                     <span style={{ color:'#446688', fontSize:'10px' }}>{new Date(c.created_at).toLocaleDateString('ja-JP')}</span>
                   </div>
-                  {isContactAdmin && <div style={{ color:'#6699cc', fontSize:'10px', marginBottom:'4px' }}>from: {c.player_name || c.player_id}</div>}
-                  <div style={{ color:'#ccddff', fontSize:'12px', lineHeight:'1.7', whiteSpace:'pre-wrap' }}>{c.body}</div>
+                  {isContactAdmin && <div style={{ color:'#6699cc', fontSize:'10px', marginTop:'4px' }}>from: {c.player_name || c.player_id}</div>}
                 </div>
-                {/* 運営からの返信 */}
-                {c.reply ? (
-                  <div style={{ padding:'10px 12px', background:'#001828' }}>
-                    <div style={{ color:'#ffcc44', fontSize:'10px', marginBottom:'4px' }}>📩 運営からの返信{c.reply_at && <span style={{ color:'#446688', marginLeft:'6px' }}>{new Date(c.reply_at).toLocaleDateString('ja-JP')}</span>}</div>
-                    <div style={{ color:'#aaddff', fontSize:'12px', lineHeight:'1.7', whiteSpace:'pre-wrap' }}>{c.reply}</div>
-                  </div>
-                ) : (
-                  !isContactAdmin && <div style={{ padding:'8px 12px', color:'#557799', fontSize:'10px' }}>運営からの返信をお待ちください。</div>
-                )}
-                {/* 管理人(おれおれお)のみ: 返信入力 */}
-                {isContactAdmin && (
+                {/* 会話スレッド（吹き出し） */}
+                <div style={{ padding:'10px 12px', display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {thread.map((m, i) => {
+                    const isAdminMsg = m.sender === 'admin'
+                    const mine = isContactAdmin ? isAdminMsg : !isAdminMsg
+                    const label = isAdminMsg ? '📩 運営' : (isContactAdmin ? `🙋 ${c.player_name || 'ユーザー'}` : '🙋 あなた')
+                    return (
+                      <div key={i} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth:'85%' }}>
+                        <div style={{ color: isAdminMsg ? '#ffcc44' : '#88ccff', fontSize:'9px', marginBottom:'2px', textAlign: mine ? 'right' : 'left' }}>
+                          {label}{m.at && <span style={{ color:'#446688', marginLeft:'4px' }}>{new Date(m.at).toLocaleDateString('ja-JP')}</span>}
+                        </div>
+                        <div style={{ background: isAdminMsg ? '#001828' : '#0a1430', border:`1px solid ${isAdminMsg ? '#2a4a66' : '#26406a'}`, borderRadius:'6px', padding:'7px 10px', color: isAdminMsg ? '#aaddff' : '#ccddff', fontSize:'12px', lineHeight:'1.7', whiteSpace:'pre-wrap' }}>{m.body}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {/* 入力欄：管理人は常に返信可。ユーザーは運営返信後に追い返信可。 */}
+                {isContactAdmin ? (
                   <div style={{ padding:'10px 12px', borderTop:'1px solid #112233' }}>
-                    <textarea value={adminReplyDrafts[c.id] ?? (c.reply || '')} onChange={e=>setAdminReplyDrafts(d=>({ ...d, [c.id]: e.target.value }))}
+                    <textarea value={adminReplyDrafts[c.id] || ''} onChange={e=>setAdminReplyDrafts(d=>({ ...d, [c.id]: e.target.value }))}
                       rows={3} placeholder="返信内容を入力..."
                       style={{ width:'100%', padding:'6px', background:'#001040', border:'1px solid #335577', color:'#ccddff', fontFamily:'monospace', fontSize:'11px', resize:'vertical', boxSizing:'border-box', marginBottom:'6px' }} />
-                    <button onClick={()=>adminReplyContact(c.id)} disabled={adminReplyingId===c.id || !(adminReplyDrafts[c.id] ?? c.reply ?? '').trim()}
-                      style={{ width:'100%', padding:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', opacity:(adminReplyDrafts[c.id] ?? c.reply ?? '').trim() ? 1 : 0.4 }}>
-                      {adminReplyingId===c.id ? '送信中...' : (c.reply ? '返信を更新' : '返信を送信')}
+                    <button onClick={()=>adminReplyContact(c.id)} disabled={adminReplyingId===c.id || !(adminReplyDrafts[c.id] || '').trim()}
+                      style={{ width:'100%', padding:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', opacity:(adminReplyDrafts[c.id] || '').trim() ? 1 : 0.4 }}>
+                      {adminReplyingId===c.id ? '送信中...' : '返信を送信'}
                     </button>
                   </div>
+                ) : hasAdminMsg ? (
+                  <div style={{ padding:'10px 12px', borderTop:'1px solid #112233' }}>
+                    <textarea value={userReplyDrafts[c.id] || ''} onChange={e=>setUserReplyDrafts(d=>({ ...d, [c.id]: e.target.value }))}
+                      rows={2} placeholder="運営への返信を入力..."
+                      style={{ width:'100%', padding:'6px', background:'#001040', border:'1px solid #335577', color:'#ccddff', fontFamily:'monospace', fontSize:'11px', resize:'vertical', boxSizing:'border-box', marginBottom:'6px' }} />
+                    <button onClick={()=>postContactMessage(c.id, userReplyDrafts[c.id], setUserReplyDrafts)} disabled={contactPostingId===c.id || !(userReplyDrafts[c.id] || '').trim()}
+                      style={{ width:'100%', padding:'8px', background:'#001840', border:'1px solid #88ccff', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', opacity:(userReplyDrafts[c.id] || '').trim() ? 1 : 0.4 }}>
+                      {contactPostingId===c.id ? '送信中...' : '返信する'}
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ padding:'8px 12px', color:'#557799', fontSize:'10px', borderTop:'1px solid #112233' }}>運営からの返信をお待ちください。</div>
                 )}
               </div>
-            ))}
+              )
+            })}
             <button onClick={()=>setShowContact(false)}
               style={{ width:'100%', padding:'10px', marginTop:'4px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>閉じる</button>
           </>
