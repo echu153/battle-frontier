@@ -783,12 +783,13 @@ export default function Smithy() {
                       <span style={{ color:'#446688' }}> → </span>
                       <span style={{ color:accent }}>{next}段階{isShinka ? '（真化）' : ''}</span>
                     </div>
-                    {/* ステ変化 */}
-                    <div style={{ fontSize:'10px', color:'#88ccff', marginBottom:'4px' }}>
-                      現在（基礎×{curMult.toFixed(1)}）: {statRow(curMult)}
-                    </div>
-                    <div style={{ fontSize:'10px', color:'#88ccff', marginBottom:'10px' }}>
-                      進化後（基礎×{nextMult.toFixed(1)}）: {statRow(nextMult)}
+                    {/* ステ変化（現在 ↓ 進化後） */}
+                    <div style={{ border:'1px solid #123a55', background:'#000c18', padding:'10px', marginBottom:'10px' }}>
+                      <div style={{ fontSize:'9px', color:'#446688', marginBottom:'3px', textAlign:'center' }}>現在（基礎×{curMult.toFixed(1)}）</div>
+                      <div style={{ fontSize:'11px', textAlign:'center' }}>{statRow(curMult)}</div>
+                      <div style={{ textAlign:'center', color:accent, fontSize:'15px', margin:'5px 0' }}>↓</div>
+                      <div style={{ fontSize:'9px', color: isShinka ? '#ffcc00' : '#66ccff', marginBottom:'3px', textAlign:'center' }}>進化後（基礎×{nextMult.toFixed(1)}）</div>
+                      <div style={{ fontSize:'12px', textAlign:'center' }}>{statRow(nextMult)}</div>
                     </div>
                     {/* 特殊能力 */}
                     <div style={{ fontSize:'10px', color:'#66ccff', marginBottom:'8px' }}>
