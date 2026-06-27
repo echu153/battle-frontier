@@ -36,7 +36,8 @@ function coreInput() {
 //  戻り: { raw=サーバ送信用の生ダメ(90%軽減前)・dealt=10ターン素の合計・logs=戦闘ログ }
 export function simulateCoreAttack(loadout) {
   if (!loadout) return { raw: 1, dealt: 0, logs: [] }
-  const res = simulatePvpBattle(loadout, coreInput(), { hpBonus: 0, turnCap: WAR_CORE_TURNS })
+  // defenderStatusImmune: コアは状態異常無効（出血/毒/やけど等のDoTが巨大ダミーHPで膨張するのを防ぐ）
+  const res = simulatePvpBattle(loadout, coreInput(), { hpBonus: 0, turnCap: WAR_CORE_TURNS, defenderStatusImmune: true })
   const dealt = CORE_DUMMY_HP - (res.endHpB ?? CORE_DUMMY_HP)
   const raw = Math.max(1, Math.floor(dealt * WAR_CORE_DMG_MULT))
   return { raw, dealt, logs: res.logs || [] }
