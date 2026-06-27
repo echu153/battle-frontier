@@ -1407,3 +1407,20 @@ PvE戦闘エンジンを両プレイヤーへ対称適用。観点候補:
 4. **先攻同値ランダム**: `aSpd>bSpd?…:aSpd<bSpd?…:(rand)` がターン毎に評価される（バフで速度変動するため）＝完全同値時は毎ターン抽選。意図通りか（開幕固定でなくてよいか）。
 5. **一般公開時の課題**: `pvp_get_skillsets`/`pvp_record_result` が is_admin限定。公開時は非管理者でも相手の出撃スキルを読める版RPCが必要（個人情報露出の線引きも）。他に公開時チェック漏れは。
 → NEXT: CODEX
+
+---
+
+## 今回のレビュー対象（追加）
+**🏰 戦争システム M1（NPC core-only・is_admin先行）— SQLスキーマ＆RPC**
+- `supabase_war_m1.sql`（新規・ユーザーが手動適用）: `wars`/`war_participants` テーブル＋`declare_war`/`war_tick`/`war_attack_core`/`war_admin_end`/`_war_resolve`。
+- 目的: 持続HP/瀕死/相互戦闘を使わず「布告→開戦→コア削り→勝利→領地総取り」のパイプラインとコア数値(HP10万/軽減90%)を先に検証。
+- 設計: コアHPは戦争定数100000(countries.core_hp既定1Mに非依存)。スケジューラはwar_tick()オンデマンド(cron無し)。declare_war/war_attack_coreはis_admin限定(先行ゲート・M4解除)。全員瀕死ゲートはwar_participantsの非瀕死カウント(NPCは未seed=0で通過)。決着=領地マージ+敗国民非加盟+元帥found_lock_until+6ヶ月+敗国DELETE(CASCADE)。
+
+### [CLAUDE] (war-m1-1)
+観点:
+1. **SQLインジェクション/権限**: 全RPC SECURITY DEFINER+search_path=public。declare_war/war_attack_coreはis_admin必須。_war_resolveは未GRANT(内部PERFORMのみ)。漏れは。
+2. **決着の整合**: _war_resolveの領地マージ順(area INSERT…ON CONFLICT → territory加算 → 国民NULL → 元帥ロック → 敗国DELETE)。CASCADEで敗国のarea/members/chatが消えるが、マージは削除前に完了している。NPC敗北(founder NULL/実国民0)で破綻しないか。両コア0同時=draw扱いで良いか。
+3. **並行性**: コア減算は単一行UPDATE…RETURNINGで原子的。war_attack_core/war_tick/war_admin_endが同戦争に同時到達したときの二重決着(_war_resolveのstatusガードFOR UPDATEで防げているか)。
+4. **1国1戦争ガード**: declared/active/resolvingで両国を弾く。抜けは。
+5. **既知の割り切り(M1)**: ダメージはクライアント計算→上限100万クランプ→90%軽減(M4でEdge権威化)。攻撃CD未実装(M2)。found_lock_untilはセットのみで建国ブロックはM3。TZ=now()UTCのため本番22時はJST補正要(M3)。これらの前提でM1スコープとして妥当か。
+→ NEXT: CODEX
