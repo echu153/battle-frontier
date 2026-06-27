@@ -113,7 +113,7 @@ BEGIN
 
   SELECT is_admin, territory_locked_until INTO v_admin, v_lock FROM public.profiles WHERE id = v_uid;
   IF v_admin IS NOT TRUE AND v_lock IS NOT NULL AND now() < v_lock THEN
-    RAISE EXCEPTION '所属国を移った直後は1週間 建国できません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
+    RAISE EXCEPTION '所属国を移った直後は3日間 建国できません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
   END IF;
 
   -- 領域(大陸)の指定チェック
@@ -202,12 +202,12 @@ BEGIN
     v_from_unaff := coalesce(v_from_unaff, true);
   END IF;
 
-  -- 亡命はいつでも可能。所属国から他国へ移る場合のみ1週間ロック。
+  -- 亡命はいつでも可能。所属国から他国へ移る場合のみ3日ロック。
   -- 非加盟国からの加入はペナルティなし（ロックを解除）。
   UPDATE public.profiles
      SET country_id = p_country_id, country_rank = '二等兵', country_contrib = 0,
          last_asylum_at = now(),
-         territory_locked_until = CASE WHEN v_from_unaff THEN NULL ELSE now() + interval '7 days' END
+         territory_locked_until = CASE WHEN v_from_unaff THEN NULL ELSE now() + interval '3 days' END
    WHERE id = v_uid
   RETURNING * INTO v_me;
 
@@ -338,7 +338,7 @@ BEGIN
 
   -- 所属国を移った直後ロック中は領地拡大不可（is_adminは除外）
   IF v_admin IS NOT TRUE AND v_lock IS NOT NULL AND now() < v_lock THEN
-    RAISE EXCEPTION '所属国を移った直後は1週間 領地を広げられません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
+    RAISE EXCEPTION '所属国を移った直後は3日間 領地を広げられません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
   END IF;
 
   IF NOT (p_area = ANY(coalesce(v_unlocked, ARRAY[1]))) THEN

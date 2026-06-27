@@ -202,7 +202,7 @@ export default function Territory() {
   const doAsylum = async (cid, name) => {
     const warn = inUnaffiliated
       ? `「${name}」に亡命しますか？`
-      : `「${name}」に亡命しますか？\n所属国を移ると、1週間は領地拡大・建国ができません。`
+      : `「${name}」に亡命しますか？\n所属国を移ると、3日間は領地拡大・建国ができません。`
     if (!window.confirm(warn)) return
     setBusy(true)
     const { error } = await supabase.rpc('seek_asylum', { p_country_id: cid })
@@ -291,7 +291,7 @@ export default function Territory() {
 
         {locked && (
           <div style={{ color:'#ff9944', fontSize:'12px', border:'1px solid #aa552255', background:'#1a0e00', padding:'8px 12px', marginBottom:'10px' }}>
-            🔒 所属国を移ったため、1週間は領地拡大・建国ができません（亡命は可能）。<br />解除まで残り {fmtRemain(lockRemain)}
+            🔒 所属国を移ったため、3日間は領地拡大・建国ができません（亡命は可能）。<br />解除まで残り {fmtRemain(lockRemain)}
           </div>
         )}
 

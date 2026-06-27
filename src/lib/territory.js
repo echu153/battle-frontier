@@ -133,7 +133,7 @@ export const computeAreaControl = (rows) => {
 
 // クールダウン（ミリ秒）
 export const EXPAND_COOLDOWN_MS = 60 * 60 * 1000      // 領地拡大: 1時間
-export const ASYLUM_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000  // 亡命: 7日
+export const ASYLUM_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000  // 亡命後の領地拡大/建国ロック: 3日
 
 // 残り時間を mm:ss / d/h 表記に
 export const fmtRemain = (ms) => {
