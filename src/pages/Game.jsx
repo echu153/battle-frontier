@@ -1926,10 +1926,10 @@ export default function Game() {
   // プロフィール確定後（おれおれおログイン時）に未返信件数を取得
   useEffect(() => { refreshUnrepliedContacts(profile?.username) }, [profile?.username])
 
-  // 街バナー: 錬金部屋の強化石が受け取れる / 領地を広げられる を検出（is_admin限定先行）
+  // 街バナー: 錬金部屋の強化石が受け取れる / 領地を広げられる を検出（全プレイヤー）
   const refreshTownNotices = async (p) => {
     const prof = p || profile
-    if (!prof?.is_admin) { setAlchemyReady(0); setAlchemyEmpty(0); setTerritoryExpandable(false); setMyCountryName(''); return }
+    if (!prof) { setAlchemyReady(0); setAlchemyEmpty(0); setTerritoryExpandable(false); setMyCountryName(''); return }
     // 錬金部屋: 完成済み（受取可能）の枠数。エリア③ボス撃破で開放（=エリア4解放）が前提。
     if ((prof.unlocked_areas || [1]).includes(4)) {
       try {
@@ -5358,7 +5358,7 @@ export default function Game() {
                   )}
                   <div style={{ fontSize:'11px', color:'#6688aa' }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
                 </div>
-                {profile?.is_admin && profile.country_id && (
+                {profile.country_id && (
                   <div style={{ textAlign:'right', fontSize:'11px', color:'#6688aa', lineHeight:'1.7', flexShrink:0, marginLeft:'8px' }}>
                     <div>所属国</div>
                     <div style={{ color:'#88ccff' }}>{myCountryName || '—'}</div>
@@ -5833,7 +5833,7 @@ export default function Game() {
                 {profile.username}
               </div>
             </div>
-            {profile?.is_admin && profile.country_id && (
+            {profile.country_id && (
               <div style={{ textAlign:'right', fontSize:'11px', color:'#6688aa', lineHeight:'1.6', marginBottom:'6px' }}>
                 所属国 <span style={{ color:'#88ccff' }}>{myCountryName || '—'}</span>
                 <span style={{ marginLeft:'8px' }}>階級：<span style={{ color: rankColor(profile.country_rank) }}>{profile.country_rank || '—'}</span></span>

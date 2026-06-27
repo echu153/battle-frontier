@@ -137,8 +137,8 @@ export default function Profile() {
     if (!p) { nav('/game'); return }
     setProfile(p)
     setSelectedAvatar(p.avatar_url)
-    // 所属国名（is_admin限定先行の右上表示用。未導入/未所属なら空）
-    if (p.is_admin && p.country_id) {
+    // 所属国名（右上表示用。未導入/未所属なら空）
+    if (p.country_id) {
       const { data: c } = await supabase.from('countries').select('name').eq('id', p.country_id).maybeSingle()
       setCountryName(c?.name || '')
     } else {
@@ -213,7 +213,7 @@ export default function Profile() {
 
         {/* アバター */}
         <div style={{ display:'flex', gap:'16px', alignItems:'center', marginBottom:'16px' }}>
-          {profile.is_admin && profile.country_id && (
+          {profile.country_id && (
             <div style={{ marginLeft:'auto', alignSelf:'flex-start', textAlign:'right', fontSize:'11px', color:'#6688aa', lineHeight:'1.7', order:2 }}>
               <div>所属国</div>
               <div style={{ color:'#88ccff' }}>{countryName || '—'}</div>
