@@ -472,7 +472,7 @@ export default function Equipment() {
                         {equipped.custom_name ? <span style={{color:'#ff99cc'}}>{equipped.custom_name}</span> : equipped.weapons.name}
                         {plus > 0 && <span style={{color:'#ffcc00'}}> +{plus}</span>}
                       </div>
-                      <div style={{ fontSize:'9px', color: RARITY_COLORS[displayRarity(equipped)] }}>{RARITY_LABELS[displayRarity(equipped)]}{isShinka(equipped) ? ' 真化' : ''}</div>
+                      <div style={{ fontSize:'9px', color: RARITY_COLORS[displayRarity(equipped)] }}>{RARITY_LABELS[displayRarity(equipped)]}{isShinka(equipped) ? ' ★' : ''}</div>
                       <div style={{ fontSize:'9px', marginTop:'2px', lineHeight:'1.4' }}>
                         {enhW.hp_bonus   > 0 && <span style={{color:'#44ff88'}}>HP+{enhW.hp_bonus} </span>}
                         {enhW.mp_bonus   > 0 && <span style={{color:'#4488ff'}}>MP+{enhW.mp_bonus} </span>}
@@ -612,7 +612,7 @@ export default function Equipment() {
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
                         <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
                           <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[displayRarity(item)], border:`1px solid ${RARITY_COLORS[displayRarity(item)]}` }}>{RARITY_LABELS[displayRarity(item)]}</span>
-                          {isShinka(item) && <span style={{ fontSize:'9px', color:'#ffcc00', border:'1px solid #ffcc00', padding:'1px 4px' }}>真化</span>}
+                          {isShinka(item) && <span style={{ fontSize:'13px', color:'#ffcc00' }}>★</span>}
                           <span style={{ color: RARITY_COLORS[displayRarity(item)], fontSize:'12px' }}>
                             {profPrefix}
                             {item.custom_name ? <span style={{color:'#ff99cc'}}>{item.custom_name}</span> : w.name}

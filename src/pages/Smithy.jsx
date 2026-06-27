@@ -666,7 +666,7 @@ export default function Smithy() {
                   <>
                     <div style={{ color:'#aa6644', fontSize:'13px', marginBottom:'10px', textAlign:'center' }}>⚒ 武器強化</div>
                     <div style={{ textAlign:'center', marginBottom:'12px' }}>
-                      <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[displayRarity(item)], border:`1px solid ${RARITY_COLORS[displayRarity(item)]}`, marginRight:'6px' }}>{RARITY_LABELS[displayRarity(item)]}{isShinka(item)?' 真化':''}</span>
+                      <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[displayRarity(item)], border:`1px solid ${RARITY_COLORS[displayRarity(item)]}`, marginRight:'6px' }}>{RARITY_LABELS[displayRarity(item)]}{isShinka(item)?' ★':''}</span>
                       <span style={{ color: RARITY_COLORS[displayRarity(item)], fontSize:'14px' }}>{w.name}{plus > 0 ? ` +${plus}` : ''}</span>
                       <span style={{ color:'#446688', fontSize:'12px' }}> → </span>
                       <span style={{ color:'#ffcc00', fontSize:'14px' }}>+{nextPlus}</span>
@@ -889,7 +889,7 @@ export default function Smithy() {
                       <div key={item.id} style={{ border:`1px solid ${isSelected ? '#aa6644' : '#002244'}`, background: isSelected ? '#1a0800' : '#001028', padding:'10px', marginBottom:'6px', opacity: isArtifactBase ? 0.5 : 1 }}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
                           <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-                            <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[displayRarity(item)], border:`1px solid ${RARITY_COLORS[displayRarity(item)]}` }}>{RARITY_LABELS[displayRarity(item)]}{isShinka(item)?' 真化':''}</span>
+                            <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[displayRarity(item)], border:`1px solid ${RARITY_COLORS[displayRarity(item)]}` }}>{RARITY_LABELS[displayRarity(item)]}{isShinka(item)?' ★':''}</span>
                             <span style={{ color: RARITY_COLORS[displayRarity(item)], fontSize:'12px' }}>{w.name}{plus > 0 ? ` +${plus}` : ''}</span>
                             {item.equipped && <span style={{ color:'#0088ff', fontSize:'10px' }}>装備中</span>}
                             {isArtifactBase && <span style={{ color:'#446688', fontSize:'10px' }}>強化不可</span>}
@@ -1050,7 +1050,7 @@ export default function Smithy() {
                       <div key={item.id} style={{ border:'1px solid #002244', background:'#001028', padding:'10px', marginBottom:'6px', opacity: isArtifactBase ? 0.5 : 1 }}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
                           <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-                            <span style={{ fontSize:'9px', padding:'1px 4px', color:RARITY_COLORS[displayRarity(item)], border:`1px solid ${RARITY_COLORS[displayRarity(item)]}` }}>{RARITY_LABELS[displayRarity(item)]}{isShinka(item)?' 真化':''}</span>
+                            <span style={{ fontSize:'9px', padding:'1px 4px', color:RARITY_COLORS[displayRarity(item)], border:`1px solid ${RARITY_COLORS[displayRarity(item)]}` }}>{RARITY_LABELS[displayRarity(item)]}{isShinka(item)?' ★':''}</span>
                             <span style={{ color:RARITY_COLORS[displayRarity(item)], fontSize:'12px' }}>{w.name}{(item.enhance_plus||0)>0?` +${item.enhance_plus}`:''}</span>
                             {item.equipped && <span style={{color:'#0088ff',fontSize:'10px'}}>装備中</span>}
                             {isArtifactBase && <span style={{color:'#446688',fontSize:'10px'}}>対象外</span>}
@@ -1173,7 +1173,7 @@ export default function Smithy() {
                   <div key={item.id} style={{ border:`1px solid ${maxed ? '#ffcc00' : '#003a55'}`, background: maxed ? '#1a1400' : '#001028', padding:'10px', marginBottom:'6px' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px', gap:'8px', flexWrap:'wrap' }}>
                       <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
-                        <span style={{ fontSize:'9px', padding:'1px 4px', color: maxed ? '#ffcc00' : RARITY_COLORS[w.rarity], border:`1px solid ${maxed ? '#ffcc00' : RARITY_COLORS[w.rarity]}` }}>{maxed ? '真化S' : RARITY_LABELS[w.rarity]}</span>
+                        <span style={{ fontSize:'9px', padding:'1px 4px', color: maxed ? '#ffcc00' : RARITY_COLORS[w.rarity], border:`1px solid ${maxed ? '#ffcc00' : RARITY_COLORS[w.rarity]}` }}>{maxed ? '★S' : RARITY_LABELS[w.rarity]}</span>
                         <span style={{ color: maxed ? '#ffcc00' : RARITY_COLORS[w.rarity], fontSize:'12px' }}>{w.name}{(item.enhance_plus||0)>0?` +${item.enhance_plus}`:''}</span>
                         {item.equipped && <span style={{ color:'#0088ff', fontSize:'10px' }}>装備中</span>}
                       </div>
