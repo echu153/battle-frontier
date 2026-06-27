@@ -71,7 +71,7 @@ BEGIN
     IF NOT FOUND THEN
       v_win_start := (v_jst_date::text || 'T' || lpad(v_slot::text,2,'0') || ':00:00+09:00')::timestamptz;
       INSERT INTO raid_boss (spawn_date, boss_name, hp_max, hp_current, status, spawned_at, slot)
-      VALUES (v_jst_date, raid_boss_for_slot(v_jst_date, v_slot), 1000000, 1000000, 'active', v_win_start, v_slot)
+      VALUES (v_jst_date, raid_boss_for_slot(v_jst_date, v_slot), 2000000, 2000000, 'active', v_win_start, v_slot)
       ON CONFLICT (spawn_date, slot) WHERE is_dev = false DO NOTHING;
       SELECT * INTO v_boss FROM raid_boss WHERE spawn_date=v_jst_date AND slot=v_slot AND is_dev=false;
     END IF;
