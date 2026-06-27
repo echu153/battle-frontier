@@ -7,7 +7,7 @@
 //   ・階級は貢献度で自動決定（建国者=元帥固定）。
 //   ・全ての時刻・操作は SECURITY DEFINER RPC 経由（supabase_territory.sql）。
 // ============================================================
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { calcEffectiveTotal } from '../lib/stats'
@@ -17,7 +17,8 @@ import {
   EXPAND_COOLDOWN_MS, fmtRemain, REGIONS,
   AREA_META, computeAreaControl, rankColor,
 } from '../lib/territory'
-import WarPanel from '../components/WarPanel'
+// 戦争パネルは war.js→pvp.js→Game の循環import回避のため遅延ロード（PvpPanel/KumitenPanelと同方針）
+const WarPanel = lazy(() => import('../components/WarPanel'))
 
 const EMBLEMS = ['🏰','⚔','🦅','🐺','🌙','☀','🔥','❄','🐉','⭐','🛡','👑']
 const MAP_IMG = '/ryouti.png'
@@ -675,7 +676,7 @@ export default function Territory() {
         </div>
       )}
 
-      {showWar && <WarPanel onClose={() => setShowWar(false)} me={me} myCountry={myCountry} countries={countries} />}
+      {showWar && <Suspense fallback={null}><WarPanel onClose={() => setShowWar(false)} me={me} myCountry={myCountry} countries={countries} /></Suspense>}
     </div>
   )
 }

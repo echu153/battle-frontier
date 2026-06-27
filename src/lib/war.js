@@ -1,36 +1,41 @@
 // ============================================================
 // 戦争システムの戦闘計算（M1）
 // ------------------------------------------------------------
-// ※M1はコア戦の数値感とパイプライン検証が目的。複雑なPvPエンジン(pvp.js)には
-//   依存せず、実効攻撃力ベースでコア攻撃の生ダメージを「概算」する安定実装。
-//   厳密なスキル計算（持続HP/相互戦闘）はM2の戦争エンジンで差し替える。
+// コア攻撃は「実際にスキルを撃って10ターン戦う」シミュレーション。
+// 既存のPvP戦闘エンジン(simulatePvpBattle)を再利用し、コアを
+// 「無反撃・超高HP・防御0のダミー」として殴り、与えた合計ダメージを測る。
+// → 物理/魔法どちらのスキルも実発動するので、両刀(atk+matk)ビルドも正当に評価される。
+// ※サーバ(war_attack_core)がこの生ダメージをさらに90%軽減して敵コアへ適用する。
 // ============================================================
-import { getWeaponGroup } from './stats'
+import { simulatePvpBattle } from './pvp'
 
-// 戦争用ダメージ圧縮（軽め）。レイドの compressRaidDmg と同型だが
-// PIVOT高め・指数大きめ＝圧縮を弱める＝「弱者は少し底上げ／強者は緩やかに頭打ち／戦力差は概ね保持」。
-// 戦力差が大きければ弱者は基本勝てない、というユーザー方針に合わせた初期値（要バランス調整）。
-export const WAR_DMG_PIVOT = 8000
-export const WAR_DMG_EXP = 0.7
-export function compressWarDmg(d) {
-  if (d <= 0) return 0
-  return Math.max(1, Math.floor(WAR_DMG_PIVOT * Math.pow(d / WAR_DMG_PIVOT, WAR_DMG_EXP)))
+export const WAR_CORE_HP = 300000        // サーバ war_tick と一致（表示用）
+export const WAR_CORE_REDUCTION = 0.9    // サーバ war_attack_core が適用（表示用）
+export const WAR_CORE_TURNS = 10         // コア戦のターン数（強制終了）
+export const WAR_CORE_DMG_MULT = 1.0     // 全体スケールの最終つまみ（数値感の調整用）
+
+const CORE_DUMMY_HP = 100000000          // コアダミーのHP（10ターンで絶対に落ちない大きさ）
+
+// コア（ダミー防御側）の戦闘入力。ステ0・スキル無し・無反撃に近い。
+//  simulatePvpBattle の inputB として渡す。
+function coreInput() {
+  return {
+    eff: { hp_max: CORE_DUMMY_HP, mp_max: 0, atk: 0, def: 0, matk: 0, mdef: 0, spd: 1 },
+    equipment: [],
+    skillSets: [],
+    proficiency: [],
+    profile: { username: '敵コア', class: 'コア', retraining: {}, activePet: null },
+    playerItem: null,
+  }
 }
 
-export const WAR_CORE_HP = 300000        // サーバ war_tick と一致（表示用・要調整）
-export const WAR_CORE_REDUCTION = 0.9    // サーバ war_attack_core が適用（表示用）
-export const WAR_CORE_TURNS = 10         // コア戦ターン数（概算係数の根拠）
-
-// コア攻撃の生ダメージ概算（M1）。
-//  eff/equipment: loadLoadout の戻り（実効ステ＋装備）。
-//  戻り値はサーバ war_attack_core に渡す「圧縮済み・90%軽減前」の生ダメージ。
-//  ※10ターン × 平均スキル倍率(約1.5)相当を実効攻撃力から概算。M2で厳密版に差し替え。
-export function estimateCoreDamageRaw(eff, equipment) {
-  if (!eff) return 1
-  const weaponItem = (equipment || []).find(e => e.slot === 'weapon' && e.equipped)
-  const wtype = weaponItem?.weapons?.weapon_type || 'sword'
-  const isMagical = getWeaponGroup(wtype) === 'magical'
-  const off = isMagical ? (eff.matk || 0) : (eff.atk || 0)
-  const rawOutput = off * WAR_CORE_TURNS * 1.5
-  return compressWarDmg(rawOutput)
+// コア攻撃の生ダメージ（M1）。
+//  loadout: loadLoadout の戻り（自分の eff/equipment/skillSets 等）。
+//  自分の出撃/対人スキルで10ターン殴り、コアに与えた合計ダメージを返す。
+//  戻り値はサーバ war_attack_core に渡す「90%軽減前」の生ダメージ。
+export function simulateCoreAttackRaw(loadout) {
+  if (!loadout) return 1
+  const res = simulatePvpBattle(loadout, coreInput(), { hpBonus: 0, turnCap: WAR_CORE_TURNS })
+  const dealt = CORE_DUMMY_HP - (res.endHpB ?? CORE_DUMMY_HP)
+  return Math.max(1, Math.floor(dealt * WAR_CORE_DMG_MULT))
 }

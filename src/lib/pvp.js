@@ -628,7 +628,7 @@ function endTurnBuffs(side, ctx, hpBeforeTurn) {
 //  A = 挑戦者（先攻判定が同速のときAが先攻）
 // ============================================================
 export function simulatePvpBattle(inputA, inputB, opts = {}) {
-  const { hpBonus = 0 } = opts
+  const { hpBonus = 0, turnCap = PVP.turnCap } = opts
   const logs = []
   const A = buildSide(inputA, 'A', hpBonus)
   const B = buildSide(inputB, 'B', hpBonus)
@@ -642,7 +642,7 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
 
   const ctx = { logs, turn: 1 }
 
-  while (A.hp > 0 && B.hp > 0 && ctx.turn <= PVP.turnCap) {
+  while (A.hp > 0 && B.hp > 0 && ctx.turn <= turnCap) {
     // 先攻＝素早さが速い方（完全同値はランダム）
     const aSpd = A.effectiveSpdForCalc * (A.buffs.spdUp ? A.buffs.spdUp.rate : 1)
     const bSpd = B.effectiveSpdForCalc * (B.buffs.spdUp ? B.buffs.spdUp.rate : 1)
@@ -686,10 +686,15 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
   else if (A.hp <= 0 && B.hp <= 0) winner = 'draw'
   else winner = aHpPct > bHpPct ? 'A' : (bHpPct > aHpPct ? 'B' : 'draw')  // ターン上限：HP割合判定
 
-  const turns = Math.min(ctx.turn, PVP.turnCap)
+  const turns = Math.min(ctx.turn, turnCap)
   if (winner === 'A') logs.push({ text: `✦ ${A.profile.username} の勝利！（${turns}ターン）`, color: '#ffcc44' })
   else if (winner === 'B') logs.push({ text: `✦ ${B.profile.username} の勝利！（${turns}ターン）`, color: '#ffcc44' })
   else logs.push({ text: `引き分け…（${turns}ターン）`, color: '#aaaaaa' })
 
-  return { logs, winner, turns, aHpPct, bHpPct }
+  // endHp/endMp は絶対値（戦争の持続HP・コア戦のダメージ計測に使用）
+  return {
+    logs, winner, turns, aHpPct, bHpPct,
+    endHpA: Math.max(0, A.hp), endMpA: Math.max(0, A.mp),
+    endHpB: Math.max(0, B.hp), endMpB: Math.max(0, B.mp),
+  }
 }

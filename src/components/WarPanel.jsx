@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
 import { loadLoadout } from '../lib/pvpLoadout'
-import { estimateCoreDamageRaw, WAR_CORE_HP } from '../lib/war'
+import { simulateCoreAttackRaw, WAR_CORE_HP } from '../lib/war'
 
 const ATTACK_CD_MS = 20000  // 疑似CD（サーバーCDはM2）
 
@@ -72,7 +72,7 @@ export default function WarPanel({ onClose, me, myCountry, countries }) {
   const attack = async () => {
     if (!war || !loadout || busy || Date.now() < cdUntil) return
     setBusy(true); setErr('')
-    const raw = estimateCoreDamageRaw(loadout.eff, loadout.equipment)
+    const raw = simulateCoreAttackRaw(loadout)
     const { error } = await supabase.rpc('war_attack_core', { p_war_id: war.id, p_raw_damage: raw })
     if (error) setErr(error.message); else { setCdUntil(Date.now() + ATTACK_CD_MS); await refreshWar() }
     setBusy(false)

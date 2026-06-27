@@ -1433,3 +1433,11 @@ M1のクライアントを追加（`supabase_war_m1.sql` 適用後に動作）�
 
 観点追加: ①estimateCoreDamageRawの概算式(off×10×1.5→compressWarDmg)がM1の数値検証用途として妥当か(厳密版M2前提)。②WarPanelのwar_tick try/catch保護でSQL未適用時に領地画面が壊れないこと。③役割判定(attacker/defender)とコアHP表示の左右が正しいか。
 → NEXT: CODEX
+
+### [CLAUDE] (war-m1-3) コア攻撃を実スキル戦闘へ
+両刀(atk+matk両振り)ビルドが概算式(片方のみ)で不利になる問題を修正。
+- pvp.js: simulatePvpBattleに opts.turnCap(既定60)＋戻り endHpA/endMpA/endHpB/endMpB を追加。既存PvP/組み手は既定維持で無改変。
+- war.js: estimateCoreDamageRaw廃止→simulateCoreAttackRaw(loadout)。コアを防御0・HP1億・無反撃ダミーとしてsimulatePvpBattleで10ターン殴り与ダメ合計を生ダメに(両刀正当評価)。WAR_CORE_DMG_MULT(既定1.0)が最終スケールつまみ。
+- WarPanel: 攻撃を simulateCoreAttackRaw に。Territory: WarPanelをlazy+Suspense化(循環import回避)。
+SQL変更なし。観点: ①コアダミーでsimulatePvpBattleが落ちないか ②turnCap/endHp追加が既存を壊してないか ③おれおれおの新per-hitとWAR_CORE_DMG_MULT調整要否。
+→ NEXT: CODEX
