@@ -1106,24 +1106,6 @@ export default function Smithy() {
               ボス装備のみ5段階まで進化（段階ごとに基礎ステ上昇）。<span style={{color:'#ffcc00'}}>5段階＝真化</span>で基礎ステ×2＋レアS＋特殊能力を獲得。
             </div>
 
-            {/* dev: 素材付与（is_admin限定） */}
-            {profile.is_admin && (
-            <div style={{ border:'1px dashed #aa4466', background:'#1a0010', padding:'10px', marginBottom:'14px' }}>
-              <div style={{ color:'#ff6688', fontSize:'10px', marginBottom:'8px' }}>🛠 dev: 素材付与（テスト用・is_admin限定）</div>
-              <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
-                {BOSS_LINES.map(line => (
-                  <div key={line.area} style={{ display:'flex', gap:'3px', alignItems:'center' }}>
-                    <span style={{ color:'#88aacc', fontSize:'9px', width:'92px', textAlign:'right' }}>{line.boss}</span>
-                    <button disabled={loading} onClick={async () => { await grantMaterial(line.blood, 50); showMessage(`${line.blood}+50`, '#ff66aa'); await fetchAll() }}
-                      style={{ padding:'2px 6px', background:'#2a0014', border:'1px solid #aa4466', color:'#ff88aa', cursor:'pointer', fontFamily:'monospace', fontSize:'9px' }}>血+50</button>
-                    <button disabled={loading} onClick={async () => { await grantMaterial(line.heart, 1); showMessage(`${line.heart}+1`, '#ff66aa'); await fetchAll() }}
-                      style={{ padding:'2px 6px', background:'#2a0014', border:'1px solid #aa4466', color:'#ff88aa', cursor:'pointer', fontFamily:'monospace', fontSize:'9px' }}>心臓+1</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-            )}
-
             {/* 血→心臓 変換 */}
             <div style={{ color:'#aa6644', fontSize:'11px', marginBottom:'6px' }}>── 血 → 心臓 変換（血{BLOOD_PER_HEART}→心臓1）──</div>
             <div style={{ marginBottom:'16px' }}>
