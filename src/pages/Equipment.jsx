@@ -122,7 +122,8 @@ export default function Equipment() {
   const [renameText, setRenameText] = useState('')
   const [renameMsg, setRenameMsg] = useState('')
   const [boxPopup, setBoxPopup] = useState(false)   // ボス装備進化支援箱の選択ポップアップ
-  const [boxGot, setBoxGot] = useState(null)        // 受け取った血の名前
+  const [boxConfirm, setBoxConfirm] = useState(null) // 選択確認中のボスline（OK前の1段確認）
+  const [boxToast, setBoxToast] = useState('')       // 獲得トースト（自動消滅）
   const [boxMsg, setBoxMsg] = useState('')
 
   // 選択券で交換できるS級レイド装備（redeem_raid_ticket の許可リストと一致）
@@ -175,12 +176,14 @@ export default function Equipment() {
   // ボス装備進化支援箱：箱を1個消費して、選んだボスの血×10を受け取る（サーバーRPCで処理）
   const useBloodBox = async (bloodName) => {
     if (loading) return
-    setLoading(true); setBoxMsg(''); setBoxGot(null)
+    setLoading(true); setBoxMsg('')
     const { data, error } = await supabase.rpc('use_boss_blood_box', { p_blood_name: bloodName })
     if (error || data === false) {
       setBoxMsg(error?.message || '使用できませんでした（箱がない、または不正な選択）')
     } else {
-      setBoxGot(bloodName)
+      setBoxPopup(false); setBoxConfirm(null)
+      setBoxToast(bloodName)
+      setTimeout(() => setBoxToast(''), 2500)  // 獲得ポップアップは自動で消す
       await fetchAll()
     }
     setLoading(false)
@@ -986,33 +989,50 @@ export default function Equipment() {
         </div>
       )}
 
+      {boxToast && (
+        <div style={{ position:'fixed', top:'18px', left:'50%', transform:'translateX(-50%)', zIndex:200, background:'#140a10', border:'1px solid #ff88aa', color:'#ff99cc', padding:'12px 22px', fontFamily:'monospace', fontSize:'13px', boxShadow:'0 2px 12px rgba(0,0,0,0.6)' }}>
+          ✨ {boxToast}×10 を獲得しました！
+        </div>
+      )}
+
       {boxPopup && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}
-          onClick={() => { if (!loading) setBoxPopup(false) }}>
+          onClick={() => { if (!loading) { setBoxPopup(false); setBoxConfirm(null) } }}>
           <div onClick={e => e.stopPropagation()} style={{ background:'#0a0c1a', border:'1px solid #ff88aa', padding:'20px', maxWidth:'360px', width:'92%', fontFamily:'monospace', maxHeight:'80vh', overflowY:'auto' }}>
-            <div style={{ color:'#ff88aa', fontSize:'14px', marginBottom:'6px' }}>🎁 ボス装備進化支援箱</div>
-            <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'14px', lineHeight:'1.5' }}>
-              血を受け取るボスを1つ選んでください。<br/>
-              <span style={{ color:'#ff8844' }}>選択すると箱を1個消費し、そのボスの血×10を受け取ります。</span>
-            </div>
+            <div style={{ color:'#ff88aa', fontSize:'14px', marginBottom:'10px' }}>🎁 ボス装備進化支援箱</div>
             {boxMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{boxMsg}</div>}
-            {boxGot && (
-              <div style={{ border:'1px solid #6a2a4a', background:'#140a10', padding:'10px', marginBottom:'12px', color:'#ff99cc', fontSize:'12px', lineHeight:'1.5' }}>
-                ✨ 「{boxGot}」×10 を受け取りました！<br/>
-                <span style={{ color:'#cc88aa', fontSize:'10px' }}>鍛冶屋の「進化」タブで装備の進化に使えます。</span>
-              </div>
+            {boxConfirm ? (
+              <>
+                <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'16px', lineHeight:'1.6', textAlign:'center' }}>
+                  <span style={{ color:'#ff99cc', fontSize:'13px' }}>{boxConfirm.blood}×10</span> を選択します。<br/>
+                  <span style={{ color:'#ff8844', fontSize:'11px' }}>箱を1個消費します。よろしいですか？</span>
+                </div>
+                <div style={{ display:'flex', gap:'8px' }}>
+                  <button onClick={() => useBloodBox(boxConfirm.blood)} disabled={loading}
+                    style={{ flex:1, padding:'10px', background:'#1a0010', border:'1px solid #ff88aa', color:'#ff99cc', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'12px', opacity: loading ? 0.5 : 1 }}>{loading ? '処理中...' : 'OK'}</button>
+                  <button onClick={() => setBoxConfirm(null)} disabled={loading}
+                    style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>戻る</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'14px', lineHeight:'1.5' }}>
+                  血を受け取るボスを1つ選んでください。<br/>
+                  <span style={{ color:'#ff8844' }}>選択すると箱を1個消費し、そのボスの血×10を受け取ります。</span>
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {BOSS_LINES.map(line => (
+                    <button key={line.area} onClick={() => { setBoxConfirm(line); setBoxMsg('') }} disabled={loading}
+                      style={{ textAlign:'left', padding:'10px', background:'#001028', border:'1px solid #aa4466', color:'#cce0ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', opacity: loading ? 0.5 : 1 }}>
+                      <div style={{ color:'#ff99cc', fontSize:'12px', marginBottom:'2px' }}>{line.boss}</div>
+                      <div style={{ color:'#778899', fontSize:'10px' }}>{line.blood} ×10 を受け取る</div>
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setBoxPopup(false)} disabled={loading}
+                  style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>キャンセル</button>
+              </>
             )}
-            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-              {BOSS_LINES.map(line => (
-                <button key={line.area} onClick={() => useBloodBox(line.blood)} disabled={loading}
-                  style={{ textAlign:'left', padding:'10px', background:'#001028', border:'1px solid #aa4466', color:'#cce0ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', opacity: loading ? 0.5 : 1 }}>
-                  <div style={{ color:'#ff99cc', fontSize:'12px', marginBottom:'2px' }}>{line.boss}</div>
-                  <div style={{ color:'#778899', fontSize:'10px' }}>{line.blood} ×10 を受け取る</div>
-                </button>
-              ))}
-            </div>
-            <button onClick={() => setBoxPopup(false)} disabled={loading}
-              style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{boxGot ? '閉じる' : 'キャンセル'}</button>
           </div>
         </div>
       )}
