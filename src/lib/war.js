@@ -12,7 +12,9 @@ import { simulatePvpBattle } from './pvp'
 export const WAR_CORE_HP = 300000        // サーバ war_tick と一致（表示用）
 export const WAR_CORE_REDUCTION = 0.9    // サーバ war_attack_core が適用（表示用）
 export const WAR_CORE_TURNS = 10         // コア戦のターン数（強制終了）
-export const WAR_CORE_DMG_MULT = 1.0     // 全体スケールの最終つまみ（数値感の調整用）
+// 全体スケールの最終つまみ。コアは防御0なので生ダメが大きく出る→送信前にこの倍率で縮小。
+// サーバ側でさらに×0.1(90%軽減)。実効スケール = WAR_CORE_DMG_MULT × 0.1。要調整。
+export const WAR_CORE_DMG_MULT = 0.05
 
 const CORE_DUMMY_HP = 100000000          // コアダミーのHP（10ターンで絶対に落ちない大きさ）
 
@@ -29,13 +31,13 @@ function coreInput() {
   }
 }
 
-// コア攻撃の生ダメージ（M1）。
+// コア攻撃（M1）。自分の出撃/対人スキルで10ターン殴る実シミュレーション。
 //  loadout: loadLoadout の戻り（自分の eff/equipment/skillSets 等）。
-//  自分の出撃/対人スキルで10ターン殴り、コアに与えた合計ダメージを返す。
-//  戻り値はサーバ war_attack_core に渡す「90%軽減前」の生ダメージ。
-export function simulateCoreAttackRaw(loadout) {
-  if (!loadout) return 1
+//  戻り: { raw=サーバ送信用の生ダメ(90%軽減前)・dealt=10ターン素の合計・logs=戦闘ログ }
+export function simulateCoreAttack(loadout) {
+  if (!loadout) return { raw: 1, dealt: 0, logs: [] }
   const res = simulatePvpBattle(loadout, coreInput(), { hpBonus: 0, turnCap: WAR_CORE_TURNS })
   const dealt = CORE_DUMMY_HP - (res.endHpB ?? CORE_DUMMY_HP)
-  return Math.max(1, Math.floor(dealt * WAR_CORE_DMG_MULT))
+  const raw = Math.max(1, Math.floor(dealt * WAR_CORE_DMG_MULT))
+  return { raw, dealt, logs: res.logs || [] }
 }

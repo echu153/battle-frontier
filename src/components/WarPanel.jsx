@@ -4,7 +4,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
 import { loadLoadout } from '../lib/pvpLoadout'
-import { simulateCoreAttackRaw, WAR_CORE_HP } from '../lib/war'
+import { simulateCoreAttack, WAR_CORE_HP } from '../lib/war'
+import { BattleLogLine } from '../pages/Game'
 
 const ATTACK_CD_MS = 20000  // 疑似CD（サーバーCDはM2）
 
@@ -36,6 +37,8 @@ export default function WarPanel({ onClose, me, myCountry, countries }) {
   const [msg, setMsg] = useState('')
   const [cdUntil, setCdUntil] = useState(0)
   const [, setTick] = useState(0)
+  const [battleLog, setBattleLog] = useState([])     // 直近のコア攻撃の戦闘ログ
+  const [lastInfo, setLastInfo] = useState(null)      // { dealt, raw, applied } 直近の数値
 
   const nameOf = (cid) => (countries || []).find(c => c.id === cid)?.name || '???'
 
@@ -72,9 +75,15 @@ export default function WarPanel({ onClose, me, myCountry, countries }) {
   const attack = async () => {
     if (!war || !loadout || busy || Date.now() < cdUntil) return
     setBusy(true); setErr('')
-    const raw = simulateCoreAttackRaw(loadout)
-    const { error } = await supabase.rpc('war_attack_core', { p_war_id: war.id, p_raw_damage: raw })
-    if (error) setErr(error.message); else { setCdUntil(Date.now() + ATTACK_CD_MS); await refreshWar() }
+    const { raw, dealt, logs } = simulateCoreAttack(loadout)
+    const { data, error } = await supabase.rpc('war_attack_core', { p_war_id: war.id, p_raw_damage: raw })
+    if (error) { setErr(error.message) }
+    else {
+      setCdUntil(Date.now() + ATTACK_CD_MS)
+      setBattleLog(logs)
+      setLastInfo({ dealt, raw, applied: data?.damage ?? null })
+      await refreshWar()
+    }
     setBusy(false)
   }
 
@@ -175,6 +184,27 @@ export default function WarPanel({ onClose, me, myCountry, countries }) {
 
         {msg && <div style={{ color:'#ffcc66', fontSize:'11px', marginBottom:'6px' }}>{msg}</div>}
         {err && <div style={{ color:'#ff8899', fontSize:'11px', marginBottom:'6px' }}>{err}</div>}
+
+        {/* 直近のコア攻撃の数値＋戦闘ログ */}
+        {(lastInfo || battleLog.length > 0) && (
+          <div style={{ border:'1px solid #4a2a1a', background:'#0c0604', padding:'10px', marginTop:'4px' }}>
+            {lastInfo && (
+              <div style={{ color:'#ddbb88', fontSize:'11px', marginBottom:'6px', lineHeight:'1.6' }}>
+                前回の攻撃: 10ターン素ダメ合計 <b style={{ color:'#ffcc66' }}>{lastInfo.dealt.toLocaleString()}</b>
+                <span style={{ color:'#88775a' }}> → 送信 {lastInfo.raw.toLocaleString()} → </span>
+                コア実ダメ <b style={{ color:'#ff8866' }}>{(lastInfo.applied ?? 0).toLocaleString()}</b>
+                <span style={{ color:'#88775a' }}>（90%軽減後）</span>
+              </div>
+            )}
+            {battleLog.length > 0 && (
+              <div style={{ maxHeight:'40vh', overflowY:'auto', borderTop:'1px solid #3a2418', paddingTop:'6px' }}>
+                {battleLog
+                  .filter(l => l.type !== 'hp' && !/対人戦開始|与ダメージは防御力|^✦|引き分け/.test(l.text || ''))
+                  .map((l, i) => <BattleLogLine key={i} l={l} />)}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
