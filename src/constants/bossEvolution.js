@@ -108,3 +108,11 @@ export const isEvolvableEquip = (name) => EVO_EQUIP_NAMES.has(name)
 
 // 次段のコスト説明（UI用）
 export const nextEvoCost = (stage) => EVO_COST[(stage || 0) + 1] || null
+
+// 真化済みか（5段到達）
+export const isShinka = (item) => (item?.evolve_stage || 0) >= MAX_EVO_STAGE
+
+// 表示用レアリティ: 真化(5段)はS表示に上書き。weapons.rarity自体は共有列のため変更しない。
+//  item = player_equipment行（weapons結合済み）。fallback はweaponsが無い場合の素のrarity。
+export const displayRarity = (item, fallback) =>
+  isShinka(item) ? 's' : (item?.weapons?.rarity ?? fallback ?? 'f')

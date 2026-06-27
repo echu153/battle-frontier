@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue } from './Game'
 import { gemAllowedSlots, gemSlotCategory, GEM_SLOT_LABEL, calcProfBonus } from '../lib/stats'
-import { EVO_EFFECT_LABELS, evoMultiplier } from '../constants/bossEvolution'
+import { EVO_EFFECT_LABELS, evoMultiplier, displayRarity, isShinka } from '../constants/bossEvolution'
 
 const SLOT_LABELS_FULL = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }
 const gemDisplayName = (gemType, rank) => `${GEM_DATA[gemType]?.name || gemType}(${rank})`
@@ -467,12 +467,12 @@ export default function Equipment() {
                   <div style={{ color:'#446688', fontSize:'10px', marginBottom:'3px' }}>{SLOT_LABELS[slot]}</div>
                   {equipped ? (
                     <>
-                      <div style={{ color: RARITY_COLORS[equipped.weapons.rarity], fontSize:'11px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      <div style={{ color: RARITY_COLORS[displayRarity(equipped)], fontSize:'11px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                         {getProfPrefix(proficiency.find(p => p.equipment_id === equipped.id)?.prof_lv || 0)}
                         {equipped.custom_name ? <span style={{color:'#ff99cc'}}>{equipped.custom_name}</span> : equipped.weapons.name}
                         {plus > 0 && <span style={{color:'#ffcc00'}}> +{plus}</span>}
                       </div>
-                      <div style={{ fontSize:'9px', color: RARITY_COLORS[equipped.weapons.rarity] }}>{RARITY_LABELS[equipped.weapons.rarity]}</div>
+                      <div style={{ fontSize:'9px', color: RARITY_COLORS[displayRarity(equipped)] }}>{RARITY_LABELS[displayRarity(equipped)]}{isShinka(equipped) ? ' 真化' : ''}</div>
                       <div style={{ fontSize:'9px', marginTop:'2px', lineHeight:'1.4' }}>
                         {enhW.hp_bonus   > 0 && <span style={{color:'#44ff88'}}>HP+{enhW.hp_bonus} </span>}
                         {enhW.mp_bonus   > 0 && <span style={{color:'#4488ff'}}>MP+{enhW.mp_bonus} </span>}
@@ -611,8 +611,9 @@ export default function Equipment() {
                     <div key={item.id} style={{ border:`1px solid ${item.equipped ? '#0044aa' : '#002244'}`, background: item.equipped ? '#001028' : '#000818', padding:'10px', marginBottom:'6px' }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
                         <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-                          <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>{RARITY_LABELS[w.rarity]}</span>
-                          <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>
+                          <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[displayRarity(item)], border:`1px solid ${RARITY_COLORS[displayRarity(item)]}` }}>{RARITY_LABELS[displayRarity(item)]}</span>
+                          {isShinka(item) && <span style={{ fontSize:'9px', color:'#ffcc00', border:'1px solid #ffcc00', padding:'1px 4px' }}>真化</span>}
+                          <span style={{ color: RARITY_COLORS[displayRarity(item)], fontSize:'12px' }}>
                             {profPrefix}
                             {item.custom_name ? <span style={{color:'#ff99cc'}}>{item.custom_name}</span> : w.name}
                           </span>

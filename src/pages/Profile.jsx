@@ -4,7 +4,7 @@ import { supabase } from '../supabase'
 import { calcEffectiveStats, calcEffectiveTotal, GEM_DATA, gemEffectValue } from '../lib/stats'
 import { rankColor } from '../lib/territory'
 import { petStats, speciesLabel, speciesEmoji, petImage, atkLabel, applyCharmStats, charmDisplayName, charmPlayerBonus, petPlayerBonus } from '../constants/pets'
-import { EVO_EFFECT_LABELS, evoMultiplier } from '../constants/bossEvolution'
+import { EVO_EFFECT_LABELS, evoMultiplier, displayRarity, isShinka } from '../constants/bossEvolution'
 
 const gemBonusText = (gemType, rank) => {
   const g = GEM_DATA[gemType]; if (!g) return ''
@@ -341,8 +341,8 @@ export default function Profile() {
             return (
               <div key={slot} style={{ border:'1px solid #002a55', background:'#000c1e', padding:'10px', textAlign:'center' }}>
                 <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>{slotLabel}</div>
-                <div style={{ color: RARITY_COLORS[equipped.weapons.rarity], fontSize:'12px', marginBottom:'4px' }}>
-                  【{RARITY_LABELS[equipped.weapons.rarity]}】{getProfPrefix(profLv)}
+                <div style={{ color: RARITY_COLORS[displayRarity(equipped)], fontSize:'12px', marginBottom:'4px' }}>
+                  【{RARITY_LABELS[displayRarity(equipped)]}】{isShinka(equipped) ? '✦真化 ' : ''}{getProfPrefix(profLv)}
                   {equipped.custom_name ? <span style={{color:'#ff99cc'}}>{equipped.custom_name}</span> : equipped.weapons.name}
                   {equipped.custom_name && <span style={{ color:'#667788', fontSize:'10px' }}>（{equipped.weapons.name}）</span>}
                   {plus > 0 && !isArtifactBase && <span style={{color:'#ffcc00'}}> +{plus}</span>}
