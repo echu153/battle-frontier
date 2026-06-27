@@ -6,7 +6,7 @@ const papiaIcon = '/papia.png'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue, calcDefReduction, calcEffectiveStats } from '../lib/stats'
 import { charmPlayerBonus, petPlayerBonus, petStats } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
-import { myAreaShares, dropBonusPP, EXPAND_COOLDOWN_MS } from '../lib/territory'
+import { myAreaShares, dropBonusPP, EXPAND_COOLDOWN_MS, rankColor } from '../lib/territory'
 import AIAssistant from '../components/AIAssistant'
 // 対人戦(PvP)パネルは循環import回避のため遅延ロード（pvp.js が ./Game を参照するため）
 const PvpPanel = lazy(() => import('../components/PvpPanel'))
@@ -1699,6 +1699,7 @@ export default function Game() {
   const [alchemyReady, setAlchemyReady] = useState(0)        // 錬金部屋で受け取れる強化石の数（街のバナー表示用・is_admin限定先行）
   const [alchemyEmpty, setAlchemyEmpty] = useState(0)        // 錬金部屋の空き枠数（街のバナー表示用・is_admin限定先行）
   const [territoryExpandable, setTerritoryExpandable] = useState(false)  // 領地拡大が可能か（街のバナー表示用・is_admin限定先行）
+  const [myCountryName, setMyCountryName] = useState('')     // 所属国名（ホーム/プロフィールの所属国表示用・is_admin限定先行）
   const [showGuide, setShowGuide] = useState(false)
   const [showDyingTip, setShowDyingTip] = useState(false)  // 初めて瀕死になったとき1回だけ案内
   const [openGuideId, setOpenGuideId] = useState(null)
@@ -1926,7 +1927,7 @@ export default function Game() {
   // 街バナー: 錬金部屋の強化石が受け取れる / 領地を広げられる を検出（is_admin限定先行）
   const refreshTownNotices = async (p) => {
     const prof = p || profile
-    if (!prof?.is_admin) { setAlchemyReady(0); setAlchemyEmpty(0); setTerritoryExpandable(false); return }
+    if (!prof?.is_admin) { setAlchemyReady(0); setAlchemyEmpty(0); setTerritoryExpandable(false); setMyCountryName(''); return }
     // 錬金部屋: 完成済み（受取可能）の枠数。エリア③ボス撃破で開放（=エリア4解放）が前提。
     if ((prof.unlocked_areas || [1]).includes(4)) {
       try {
@@ -1944,13 +1945,14 @@ export default function Game() {
     // 領地拡大: 加盟国に所属 かつ 亡命ロックなし かつ クールダウン明け（Territory.jsxの拡大ボタン条件と一致）
     if (prof.country_id) {
       try {
-        const { data: c } = await supabase.from('countries').select('is_unaffiliated').eq('id', prof.country_id).maybeSingle()
+        const { data: c } = await supabase.from('countries').select('name, is_unaffiliated').eq('id', prof.country_id).maybeSingle()
         const lastExpand = prof.last_expand_at ? new Date(prof.last_expand_at).getTime() : 0
         const lockUntil = prof.territory_locked_until ? new Date(prof.territory_locked_until).getTime() : 0
         const affiliated = !!(c && !c.is_unaffiliated)
+        setMyCountryName(c?.name || '')
         setTerritoryExpandable(affiliated && Date.now() >= lastExpand + EXPAND_COOLDOWN_MS && Date.now() >= lockUntil)
-      } catch { /* 領地未導入時は無視 */ setTerritoryExpandable(false) }
-    } else setTerritoryExpandable(false)
+      } catch { /* 領地未導入時は無視 */ setTerritoryExpandable(false); setMyCountryName('') }
+    } else { setTerritoryExpandable(false); setMyCountryName('') }
   }
   // プロフィール確定時＋60秒ごとに再計算（クールダウン明け・錬金完成を取り込む）
   useEffect(() => {
@@ -5353,6 +5355,13 @@ export default function Game() {
                   )}
                   <div style={{ fontSize:'10px', color:'#446688' }}>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></div>
                 </div>
+                {profile?.is_admin && profile.country_id && (
+                  <div style={{ textAlign:'right', fontSize:'10px', color:'#446688', lineHeight:'1.7', flexShrink:0, marginLeft:'8px' }}>
+                    <div>所属国</div>
+                    <div style={{ color:'#88ccff', fontSize:'11px' }}>{myCountryName || '—'}</div>
+                    <div>階級：<span style={{ color: rankColor(profile.country_rank) }}>{profile.country_rank || '—'}</span></div>
+                  </div>
+                )}
               </div>
             </div>
             <MiniBar label="HP" val={`${hpCurrent}/${hpMaxEff}`} pct={hpPct} color={isDying?'#ff2200':'#00cc44'} />
@@ -5819,6 +5828,12 @@ export default function Game() {
                 {profile.username}
               </div>
             </div>
+            {profile?.is_admin && profile.country_id && (
+              <div style={{ textAlign:'right', fontSize:'10px', color:'#446688', lineHeight:'1.6', marginBottom:'6px' }}>
+                所属国 <span style={{ color:'#88ccff', fontSize:'11px' }}>{myCountryName || '—'}</span>
+                <span style={{ marginLeft:'8px' }}>階級：<span style={{ color: rankColor(profile.country_rank) }}>{profile.country_rank || '—'}</span></span>
+              </div>
+            )}
             <div style={{ fontSize:'11px', color:'#446688', marginBottom:'2px' }}>
               クラス: <span style={{color:'#88ccff'}}>{profile.class}</span> <span style={{color:'#ffcc00'}}>LV{currentClassLv}</span>／<span style={{color:'#446688'}}>{cap}</span>
             </div>

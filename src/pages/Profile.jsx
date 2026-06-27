@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { calcEffectiveStats, calcEffectiveTotal, GEM_DATA, gemEffectValue } from '../lib/stats'
+import { rankColor } from '../lib/territory'
 import { petStats, speciesLabel, speciesEmoji, petImage, atkLabel, applyCharmStats, charmDisplayName, charmPlayerBonus, petPlayerBonus } from '../constants/pets'
 
 const gemBonusText = (gemType, rank) => {
@@ -118,6 +119,7 @@ export default function Profile() {
   const [skillSets, setSkillSets] = useState([])
   const [classLevels, setClassLevels] = useState([])
   const [abilityTitle, setAbilityTitle] = useState(null)
+  const [countryName, setCountryName] = useState('')  // 所属国名（is_admin限定先行で右上に表示）
   const [isOwn, setIsOwn] = useState(false)
   const [showAvatarPanel, setShowAvatarPanel] = useState(false)
   const [selectedAvatar, setSelectedAvatar] = useState(null)
@@ -135,6 +137,13 @@ export default function Profile() {
     if (!p) { nav('/game'); return }
     setProfile(p)
     setSelectedAvatar(p.avatar_url)
+    // 所属国名（is_admin限定先行の右上表示用。未導入/未所属なら空）
+    if (p.is_admin && p.country_id) {
+      const { data: c } = await supabase.from('countries').select('name').eq('id', p.country_id).maybeSingle()
+      setCountryName(c?.name || '')
+    } else {
+      setCountryName('')
+    }
     const { data: eq } = await supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', targetId)
     setEquipment(eq || [])
     const { data: prof } = await supabase.from('proficiency').select('*, weapons(*)').eq('player_id', targetId)
@@ -204,6 +213,13 @@ export default function Profile() {
 
         {/* アバター */}
         <div style={{ display:'flex', gap:'16px', alignItems:'center', marginBottom:'16px' }}>
+          {profile.is_admin && profile.country_id && (
+            <div style={{ marginLeft:'auto', alignSelf:'flex-start', textAlign:'right', fontSize:'11px', color:'#446688', lineHeight:'1.7', order:2 }}>
+              <div>所属国</div>
+              <div style={{ color:'#88ccff', fontSize:'13px' }}>{countryName || '—'}</div>
+              <div>階級：<span style={{ color: rankColor(profile.country_rank) }}>{profile.country_rank || '—'}</span></div>
+            </div>
+          )}
           <div style={{ position:'relative' }}>
             {profile.avatar_url ? (
               <img src={profile.avatar_url} alt="avatar" style={{ width:'80px', height:'80px', objectFit:'cover' }} />
