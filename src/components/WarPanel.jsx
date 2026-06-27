@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
 import { loadLoadout } from '../lib/pvpLoadout'
-import { simulateCoreAttack, WAR_CORE_HP } from '../lib/war'
+import { simulateCoreAttack, simulateWarBattle, dummyCombatInput, WAR_CORE_HP, WAR_HP_BONUS } from '../lib/war'
 
 const ATTACK_CD_MS = 20000  // 疑似CD（サーバーCDはM2）
 
@@ -25,6 +25,16 @@ function CoreBar({ label, hp, color }) {
   )
 }
 
+// 参加者の細いHP/MPバー（cur/max）。
+function StatBar({ cur, max, color, h = 8 }) {
+  const pct = max > 0 ? Math.max(0, Math.min(100, cur / max * 100)) : 0
+  return (
+    <div style={{ height:`${h}px`, background:'#2a1408', border:'1px solid #4a2418', flex:1 }}>
+      <div style={{ height:'100%', width:`${pct}%`, background:color }} />
+    </div>
+  )
+}
+
 export default function WarPanel({ me, myCountry, countries }) {
   const [loadout, setLoadout] = useState(null)
   const [war, setWar] = useState(null)
@@ -37,6 +47,7 @@ export default function WarPanel({ me, myCountry, countries }) {
   const [, setTick] = useState(0)
   const [lastInfo, setLastInfo] = useState(null)      // { atk, matk, power, raw, applied } 直近の数値
   const [participants, setParticipants] = useState([])  // 進行中戦争の war_participants
+  const [battleResult, setBattleResult] = useState(null)  // 直近の相互戦闘の結果
 
   const nameOf = (cid) => (countries || []).find(c => c.id === cid)?.name || '???'
 
@@ -89,6 +100,37 @@ export default function WarPanel({ me, myCountry, countries }) {
     setBusy(false)
   }
 
+  // 相互戦闘（M2-2）: 敵参加者を殴る。両者の持続HP/MPを開始値に20ターン戦い、結果を永続化。
+  const attackPlayer = async (tgt) => {
+    if (!war || !loadout || busy || Date.now() < cdUntil) return
+    const myRow = participants.find(p => p.player_id === me?.id)
+    if (!myRow) { setErr('あなたは参加者として登録されていません（開戦時seed要）'); return }
+    setBusy(true); setErr(''); setMsg('')
+    try {
+      const tgtInput = tgt.is_dummy ? dummyCombatInput(tgt) : await loadLoadout(tgt.player_id, false)
+      const res = simulateWarBattle(loadout, tgtInput, { atkHp: myRow.hp, atkMp: myRow.mp, tgtHp: tgt.hp, tgtMp: tgt.mp })
+      const atkHpMax = (loadout.eff?.hp_max || 0) + WAR_HP_BONUS
+      const atkMpMax = loadout.eff?.mp_max || 0
+      const { data, error } = await supabase.rpc('war_attack', {
+        p_war_id: war.id, p_target: tgt.player_id,
+        p_atk_end_hp: res.atkEndHp, p_atk_end_mp: res.atkEndMp,
+        p_tgt_end_hp: res.tgtEndHp, p_tgt_end_mp: res.tgtEndMp,
+        p_atk_hp_max: atkHpMax, p_atk_mp_max: atkMpMax,
+      })
+      if (error) setErr(error.message)
+      else {
+        setCdUntil(Date.now() + ATTACK_CD_MS)
+        setBattleResult({
+          name: tgt.is_dummy ? 'ダミー兵' : (tgt.player_id || '敵'),
+          tgtBefore: tgt.hp, tgtAfter: data?.tgt_hp ?? res.tgtEndHp, tgtDying: data?.tgt_dying,
+          atkBefore: myRow.hp, atkAfter: data?.atk_hp ?? res.atkEndHp, atkDying: data?.atk_dying,
+        })
+        await refreshWar()
+      }
+    } catch (e) { setErr('交戦に失敗: ' + e.message) }
+    setBusy(false)
+  }
+
   const forceEnd = async () => {
     if (!war || busy) return
     setBusy(true); setErr('')
@@ -131,6 +173,8 @@ export default function WarPanel({ me, myCountry, countries }) {
   const enemyActive = enemyParts.filter(p => !isDyingNow(p)).length
   const enemyDying  = enemyParts.length - enemyActive
   const coreUnlocked = enemyParts.length > 0 ? enemyActive === 0 : true  // 参加者0(NPC core-only)は従来どおり解禁
+  const myRow = participants.find(p => p.player_id === me?.id) || null
+  const iAmDying = myRow ? isDyingNow(myRow) : false
 
   const resultText = war?.status === 'done'
     ? (war.result === 'draw' ? '🤝 引き分け（領地移動なし）'
@@ -171,6 +215,25 @@ export default function WarPanel({ me, myCountry, countries }) {
             <CoreBar label={`敵コア（${nameOf(enemyCid)}）`} hp={enemyCoreHp} color="#ff5544" />
             <CoreBar label={`自国コア（${myCountry?.name}）`} hp={myCoreHp} color="#44aaff" />
 
+            {/* 自分の持続HP/MP（消耗戦） */}
+            {myRow && (
+              <div style={{ border:'1px solid #2a4a2a', background:'#0a1206', padding:'8px', margin:'8px 0' }}>
+                <div style={{ color: iAmDying ? '#ff7766' : '#88cc88', fontSize:'11px', marginBottom:'4px' }}>
+                  あなた（{me?.username || '自分'}）{iAmDying ? ' — 瀕死中（攻撃不可）' : ''}
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'3px' }}>
+                  <span style={{ color:'#88cc88', fontSize:'10px', width:'24px' }}>HP</span>
+                  <StatBar cur={myRow.hp} max={myRow.hp_max} color="#44cc66" />
+                  <span style={{ color:'#aaccaa', fontSize:'10px', minWidth:'90px', textAlign:'right' }}>{myRow.hp.toLocaleString()} / {myRow.hp_max.toLocaleString()}</span>
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                  <span style={{ color:'#6699cc', fontSize:'10px', width:'24px' }}>MP</span>
+                  <StatBar cur={myRow.mp} max={myRow.mp_max} color="#4488dd" />
+                  <span style={{ color:'#aaccdd', fontSize:'10px', minWidth:'90px', textAlign:'right' }}>{myRow.mp.toLocaleString()} / {myRow.mp_max.toLocaleString()}</span>
+                </div>
+              </div>
+            )}
+
             {/* 敵参加者の状況＝コア解禁条件 */}
             <div style={{ color: coreUnlocked ? '#88cc66' : '#ddaa66', fontSize:'11px', margin:'6px 0' }}>
               敵防衛: 戦闘可能 <b>{enemyActive}</b> ／ 瀕死 <b>{enemyDying}</b>
@@ -178,6 +241,39 @@ export default function WarPanel({ me, myCountry, countries }) {
                 ? '（参加者なし＝コア直接攻撃可）'
                 : (coreUnlocked ? ' → 全員瀕死！コア解禁🔓' : ' → 全員瀕死にするまでコアは攻撃不可🔒')}
             </div>
+
+            {/* 敵参加者リスト（殴って瀕死にする） */}
+            {enemyParts.length > 0 && (
+              <div style={{ border:'1px solid #4a2a1a', background:'#160a04', padding:'8px', marginBottom:'8px' }}>
+                <div style={{ color:'#ddaa77', fontSize:'10px', marginBottom:'6px' }}>敵参加者（殴って瀕死にするとコアが解禁）</div>
+                {enemyParts.map((p, i) => {
+                  const dying = isDyingNow(p)
+                  const canAttack = !dying && !iAmDying && cdRemain === 0 && !busy
+                  return (
+                    <div key={p.player_id} style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'5px', opacity: dying ? 0.5 : 1 }}>
+                      <span style={{ color:'#ccb088', fontSize:'10px', width:'72px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        {p.is_dummy ? `ダミー${i + 1}` : p.player_id.slice(0, 6)}
+                      </span>
+                      <StatBar cur={p.hp} max={p.hp_max} color={dying ? '#885544' : '#dd5544'} h={10} />
+                      <span style={{ color:'#bba088', fontSize:'10px', minWidth:'74px', textAlign:'right' }}>{Math.max(0, p.hp).toLocaleString()}/{p.hp_max.toLocaleString()}</span>
+                      <button onClick={() => attackPlayer(p)} disabled={!canAttack}
+                        style={{ background: canAttack ? '#3a1208' : '#1a0c06', border:`1px solid ${canAttack ? '#ff6644' : '#5a3a2a'}`, color: canAttack ? '#ff9977' : '#7a5a4a', padding:'3px 8px', cursor: canAttack ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'10px', whiteSpace:'nowrap' }}>
+                        {dying ? '瀕死' : (cdRemain > 0 ? `${Math.ceil(cdRemain/1000)}s` : '🗡交戦')}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* 直近の交戦結果 */}
+            {battleResult && (
+              <div style={{ border:'1px solid #4a2a1a', background:'#0c0604', padding:'8px', marginBottom:'8px', fontSize:'10px', color:'#ccb088', lineHeight:'1.6' }}>
+                ⚔ {battleResult.name} と交戦：
+                相手HP {battleResult.tgtBefore.toLocaleString()}→<b style={{ color:'#ff8866' }}>{battleResult.tgtAfter.toLocaleString()}</b>{battleResult.tgtDying ? ' 💀瀕死！' : ''}
+                ／ 自分HP {battleResult.atkBefore.toLocaleString()}→<b style={{ color:'#88cc66' }}>{battleResult.atkAfter.toLocaleString()}</b>{battleResult.atkDying ? ' 💀瀕死！' : ''}
+              </div>
+            )}
 
             <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
               <button onClick={attack} disabled={busy || cdRemain > 0 || !coreUnlocked}

@@ -632,6 +632,11 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
   const logs = []
   const A = buildSide(inputA, 'A', hpBonus)
   const B = buildSide(inputB, 'B', hpBonus)
+  // 戦争の消耗戦: 持続HP/MPを開始値として受け取る（未指定なら満タン＝従来のPvP/組み手）。
+  if (opts.startHpA != null) A.hp = Math.min(A.eff.hp_max, Math.max(0, opts.startHpA))
+  if (opts.startMpA != null) A.mp = Math.min(A.eff.mp_max, Math.max(0, opts.startMpA))
+  if (opts.startHpB != null) B.hp = Math.min(B.eff.hp_max, Math.max(0, opts.startHpB))
+  if (opts.startMpB != null) B.mp = Math.min(B.eff.mp_max, Math.max(0, opts.startMpB))
 
   logs.push({ text: `⚔ 対人戦開始！ ${A.profile.username} vs ${B.profile.username}`, color: '#ffcc66' })
   logs.push({ text: `（与ダメージは防御力で大きく軽減／回復は通常どおり／素早さによる補正は無し）`, color: '#88aacc' })
