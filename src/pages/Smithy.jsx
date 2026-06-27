@@ -1,6 +1,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import {
+  BOSS_LINES, EQUIP_TO_LINE, EVO_COST, EVO_EFFECT_LABELS,
+  MAX_EVO_STAGE, BLOOD_PER_HEART, evoMultiplier, isEvolvableEquip,
+} from '../constants/bossEvolution'
 
 const SLOT_LABELS = { weapon:'武器', armor:'防具', accessory:'装飾品', accessory2:'装飾品' }
 const RARITY_COLORS = {
@@ -78,6 +82,7 @@ const getEffectLabel = (effect) => {
     'battle_start_ailment_shield':'【開幕・状態異常を1回無効化】',
     'ondmg_spd_up_5_2t':'【被ダメージ時・2ターン素早さ+5%】',
     'extra_hit_paralysis_30':'【追加行動の攻撃ヒット時・30%で相手を麻痺】',
+    ...EVO_EFFECT_LABELS,
   }
   return labels[effect] || effect
 }
@@ -456,6 +461,83 @@ export default function Smithy() {
     setLoading(false)
   }
 
+  // ============================================================
+  // ボス装備 進化（is_admin限定先行）
+  // ============================================================
+  const getMatCount = (name) => playerItems.find(pi => pi.items?.name === name)?.quantity || 0
+
+  // 名前指定で素材を消費（楽観ロック）。成功で true。
+  const consumeMaterial = async (name, amount) => {
+    const { data: row } = await supabase.from('player_items')
+      .select('id, quantity, items!inner(name)').eq('player_id', profile.id).eq('items.name', name).maybeSingle()
+    const owned = row?.quantity || 0
+    if (!row || owned < amount) return false
+    const newQty = owned - amount
+    const { data: locked } = newQty <= 0
+      ? await supabase.from('player_items').delete().eq('id', row.id).eq('quantity', owned).select('id')
+      : await supabase.from('player_items').update({ quantity: newQty }).eq('id', row.id).eq('quantity', owned).select('id')
+    return !!(locked && locked.length)
+  }
+
+  // 素材を付与（player_items に加算 or 追加）
+  const grantMaterial = async (name, amount) => {
+    const { data: it } = await supabase.from('items').select('id').eq('name', name).maybeSingle()
+    if (!it) { showMessage(`アイテム「${name}」が未登録です（SQL未適用）`, '#ff4444'); return false }
+    const existing = playerItems.find(pi => pi.item_id === it.id)
+    if (existing) await supabase.from('player_items').update({ quantity: (existing.quantity || 0) + amount }).eq('id', existing.id)
+    else await supabase.from('player_items').insert({ player_id: profile.id, item_id: it.id, quantity: amount, equipped: false })
+    return true
+  }
+
+  // 血→心臓 変換（血50 → 心臓1）
+  const doConvertHeart = async (line) => {
+    if (craftBusyRef.current) return
+    craftBusyRef.current = true; setLoading(true)
+    try {
+      if (getMatCount(line.blood) < BLOOD_PER_HEART) {
+        showMessage(`${line.blood}が${BLOOD_PER_HEART}個必要です`, '#ff4444'); return
+      }
+      const ok = await consumeMaterial(line.blood, BLOOD_PER_HEART)
+      if (!ok) { showMessage('変換に失敗しました。もう一度お試しください', '#ff4444'); await fetchAll(); return }
+      await grantMaterial(line.heart, 1)
+      showMessage(`✨ ${line.heart} を1個生成した！`, '#ff66aa')
+      await fetchAll()
+    } finally { setLoading(false); craftBusyRef.current = false }
+  }
+
+  // 進化（1段階上げる）
+  const doEvolve = async (item) => {
+    if (craftBusyRef.current) return
+    craftBusyRef.current = true; setLoading(true)
+    try {
+      const line = EQUIP_TO_LINE[item.weapons.name]
+      if (!line) { showMessage('進化できない装備です', '#ff4444'); return }
+      const stage = item.evolve_stage || 0
+      if (stage >= MAX_EVO_STAGE) { showMessage('すでに真化済みです', '#ffcc00'); return }
+      const next = stage + 1
+      const cost = EVO_COST[next]
+      const matName = cost.type === 'blood' ? line.blood : line.heart
+      if (getMatCount(matName) < cost.amount) {
+        showMessage(`${matName}が${cost.amount}個必要です（所持${getMatCount(matName)}）`, '#ff4444'); return
+      }
+      const ok = await consumeMaterial(matName, cost.amount)
+      if (!ok) { showMessage('進化に失敗しました。もう一度お試しください', '#ff4444'); await fetchAll(); return }
+      // evolve_stage を更新。真化(5段)で特殊能力(bonus_effect)を付与。
+      const upd = { evolve_stage: next }
+      if (next === MAX_EVO_STAGE) upd.bonus_effect = line.effect
+      const { data: locked } = await supabase.from('player_equipment')
+        .update(upd).eq('id', item.id).eq('evolve_stage', stage).select('id')
+      if (!locked || !locked.length) {
+        // 競合で段階がズレた → 素材を返却
+        await grantMaterial(matName, cost.amount)
+        showMessage('処理が競合しました。もう一度お試しください', '#ff4444'); await fetchAll(); return
+      }
+      if (next === MAX_EVO_STAGE) showMessage(`✦ ${item.weapons.name} が真化した！特殊能力を獲得！`, '#ffcc00')
+      else showMessage(`✨ ${item.weapons.name} を進化させた！（${next}段階）`, '#66ccff')
+      await fetchAll()
+    } finally { setLoading(false); craftBusyRef.current = false }
+  }
+
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
   const slots = ['weapon', 'armor', 'accessory', 'accessory2']
@@ -634,7 +716,8 @@ export default function Smithy() {
         })()}
 
         <div style={{ display:'flex', gap:'4px', marginBottom:'8px', flexWrap:'wrap' }}>
-          {[{id:'enhance', label:'強化'}, {id:'craft', label:'加工'}, {id:'reeval', label:'再鑑定/再評価'}].map(t => (
+          {[{id:'enhance', label:'強化'}, {id:'craft', label:'加工'}, {id:'reeval', label:'再鑑定/再評価'},
+            ...(profile.is_admin ? [{id:'evolve', label:'⚗ 進化(dev)'}] : [])].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{ padding:'6px 14px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
                 background: tab === t.id ? '#001840' : '#000818',
@@ -897,6 +980,131 @@ export default function Smithy() {
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* 進化タブ（is_admin限定先行） */}
+        {tab === 'evolve' && profile.is_admin && (
+          <div>
+            <div style={{ color:'#446688', fontSize:'11px', marginBottom:'10px', lineHeight:1.6 }}>
+              エリアボスを倒すと「○○の血(50%)」「○○の心臓(0.5%)」をドロップ。血{BLOOD_PER_HEART}個で心臓1個に変換できます。<br/>
+              ボス装備のみ5段階まで進化（段階ごとに基礎ステ上昇）。<span style={{color:'#ffcc00'}}>5段階＝真化</span>で基礎ステ×2＋レアS＋特殊能力を獲得。
+            </div>
+
+            {/* dev: 素材付与 */}
+            <div style={{ border:'1px dashed #aa4466', background:'#1a0010', padding:'10px', marginBottom:'14px' }}>
+              <div style={{ color:'#ff6688', fontSize:'10px', marginBottom:'8px' }}>🛠 dev: 素材付与（テスト用・is_admin限定）</div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
+                {BOSS_LINES.map(line => (
+                  <div key={line.area} style={{ display:'flex', gap:'3px', alignItems:'center' }}>
+                    <span style={{ color:'#88aacc', fontSize:'9px', width:'92px', textAlign:'right' }}>{line.boss}</span>
+                    <button disabled={loading} onClick={async () => { await grantMaterial(line.blood, 50); showMessage(`${line.blood}+50`, '#ff66aa'); await fetchAll() }}
+                      style={{ padding:'2px 6px', background:'#2a0014', border:'1px solid #aa4466', color:'#ff88aa', cursor:'pointer', fontFamily:'monospace', fontSize:'9px' }}>血+50</button>
+                    <button disabled={loading} onClick={async () => { await grantMaterial(line.heart, 1); showMessage(`${line.heart}+1`, '#ff66aa'); await fetchAll() }}
+                      style={{ padding:'2px 6px', background:'#2a0014', border:'1px solid #aa4466', color:'#ff88aa', cursor:'pointer', fontFamily:'monospace', fontSize:'9px' }}>心臓+1</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 血→心臓 変換 */}
+            <div style={{ color:'#aa6644', fontSize:'11px', marginBottom:'6px' }}>── 血 → 心臓 変換（血{BLOOD_PER_HEART}→心臓1）──</div>
+            <div style={{ marginBottom:'16px' }}>
+              {BOSS_LINES.map(line => {
+                const blood = getMatCount(line.blood)
+                const heart = getMatCount(line.heart)
+                if (blood === 0 && heart === 0) return null
+                const canConvert = blood >= BLOOD_PER_HEART
+                return (
+                  <div key={line.area} style={{ border:'1px solid #002244', background:'#001028', padding:'8px 10px', marginBottom:'5px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+                    <div style={{ fontSize:'11px' }}>
+                      <span style={{ color:'#ff88aa' }}>{line.blood} {blood}</span>
+                      <span style={{ color:'#446688' }}> / </span>
+                      <span style={{ color:'#ff66cc' }}>{line.heart} {heart}</span>
+                    </div>
+                    <button disabled={!canConvert || loading} onClick={() => doConvertHeart(line)}
+                      style={{ padding:'4px 10px', background: canConvert ? '#2a0020' : '#001', border:`1px solid ${canConvert ? '#cc66aa' : '#002244'}`, color: canConvert ? '#ff99cc' : '#334455', cursor: canConvert ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
+                      心臓に変換
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* ボス装備 進化リスト */}
+            <div style={{ color:'#aa6644', fontSize:'11px', marginBottom:'6px' }}>── ボス装備の進化 ──</div>
+            {(() => {
+              const evoItems = sortEquipment(equipment.filter(e => isEvolvableEquip(e.weapons?.name)), sortKey)
+              if (evoItems.length === 0) return <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>進化できるボス装備を所持していません</div>
+              return evoItems.map(item => {
+                const w = item.weapons
+                const line = EQUIP_TO_LINE[w.name]
+                const stage = item.evolve_stage || 0
+                const maxed = stage >= MAX_EVO_STAGE
+                const next = stage + 1
+                const cost = EVO_COST[next]
+                const matName = cost ? (cost.type === 'blood' ? line.blood : line.heart) : null
+                const owned = matName ? getMatCount(matName) : 0
+                const canEvolve = !maxed && owned >= cost.amount
+                const curMult = evoMultiplier(stage)
+                const nextMult = evoMultiplier(next)
+                const statRow = (mult) => [
+                  ['攻', w.atk_bonus, '#ffcc00'], ['防', w.def_bonus, '#88aaff'], ['特攻', w.matk_bonus, '#cc44ff'],
+                  ['特防', w.mdef_bonus, '#44ccff'], ['速', w.spd_bonus, '#ff8844'], ['HP', w.hp_bonus, '#44ff88'], ['MP', w.mp_bonus, '#4488ff'],
+                ].filter(([,v]) => (v||0) > 0).map(([lbl,v,c]) => (
+                  <span key={lbl} style={{ color:c, marginRight:'7px' }}>{lbl}+{Math.ceil((v||0)*mult)}</span>
+                ))
+                return (
+                  <div key={item.id} style={{ border:`1px solid ${maxed ? '#ffcc00' : '#003a55'}`, background: maxed ? '#1a1400' : '#001028', padding:'10px', marginBottom:'6px' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px', gap:'8px', flexWrap:'wrap' }}>
+                      <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
+                        <span style={{ fontSize:'9px', padding:'1px 4px', color: maxed ? '#ffcc00' : RARITY_COLORS[w.rarity], border:`1px solid ${maxed ? '#ffcc00' : RARITY_COLORS[w.rarity]}` }}>{maxed ? '真化S' : RARITY_LABELS[w.rarity]}</span>
+                        <span style={{ color: maxed ? '#ffcc00' : RARITY_COLORS[w.rarity], fontSize:'12px' }}>{w.name}{(item.enhance_plus||0)>0?` +${item.enhance_plus}`:''}</span>
+                        {item.equipped && <span style={{ color:'#0088ff', fontSize:'10px' }}>装備中</span>}
+                      </div>
+                      {/* 段階ゲージ */}
+                      <div style={{ display:'flex', gap:'3px', alignItems:'center' }}>
+                        {[1,2,3,4,5].map(s => (
+                          <span key={s} style={{ width:'12px', height:'12px', display:'inline-block', borderRadius:'2px',
+                            background: s <= stage ? (s===5 ? '#ffcc00' : '#66ccff') : '#11233a', border:'1px solid #003a55' }} />
+                        ))}
+                        <span style={{ color: maxed ? '#ffcc00' : '#88ccff', fontSize:'10px', marginLeft:'4px' }}>{stage}/{MAX_EVO_STAGE}</span>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize:'10px', color:'#446688', marginBottom:'4px' }}>
+                      基礎ステ（×{curMult.toFixed(1)}）: {statRow(curMult)}
+                    </div>
+                    {!maxed && (
+                      <div style={{ fontSize:'10px', color:'#446688', marginBottom:'6px' }}>
+                        進化後（×{nextMult.toFixed(1)}）: {statRow(nextMult)}
+                      </div>
+                    )}
+
+                    <div style={{ fontSize:'10px', color:'#66ccff', marginBottom:'6px' }}>
+                      特殊能力: {maxed
+                        ? <span style={{ color:'#ffcc00' }}>{getEffectLabel(line.effect)}</span>
+                        : <span style={{ color:'#445566' }}>{getEffectLabel(line.effect)}（真化で解放）</span>}
+                    </div>
+
+                    {maxed ? (
+                      <div style={{ fontSize:'11px', color:'#ffcc00', textAlign:'center', padding:'4px' }}>✦ 真化完了</div>
+                    ) : (
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+                        <div style={{ fontSize:'10px', color:'#446688' }}>
+                          {next}段階に必要: <span style={{ color: canEvolve ? '#ff99cc' : '#ff4444' }}>{matName} {cost.amount}個</span>（所持{owned}）
+                          {next === MAX_EVO_STAGE && <span style={{ color:'#ffcc00' }}> ＝真化</span>}
+                        </div>
+                        <button disabled={!canEvolve || loading} onClick={() => doEvolve(item)}
+                          style={{ padding:'5px 12px', background: canEvolve ? (next===MAX_EVO_STAGE?'#2a2000':'#001838') : '#001', border:`1px solid ${canEvolve ? (next===MAX_EVO_STAGE?'#ffcc00':'#3388cc') : '#002244'}`, color: canEvolve ? (next===MAX_EVO_STAGE?'#ffcc00':'#88ccff') : '#334455', cursor: canEvolve ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>
+                          {loading ? '...' : (next===MAX_EVO_STAGE ? '✦ 真化させる' : '⚗ 進化させる')}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            })()}
           </div>
         )}
 

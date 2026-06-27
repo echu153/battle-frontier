@@ -785,19 +785,21 @@ export default function Dungeon() {
     let s = state
     const px = s.player.x, py = s.player.y
     const nx = px + dx, ny = py + dy
-    if (!inBounds(nx, ny) || s.grid[ny][nx] === '#') return
-    // 斜め移動は壁の角を抜けられない（両脇のどちらかが壁なら不可）
-    if (dx !== 0 && dy !== 0 && (s.grid[py][nx] === '#' || s.grid[ny][px] === '#')) return
-    // 斜め移動は壁の角を抜けられない（両脇のどちらかが壁なら不可）
-    if (dx !== 0 && dy !== 0 && (s.grid[py][nx] === '#' || s.grid[ny][px] === '#')) return
+    if (!inBounds(nx, ny)) return
+    // 移動先にいる敵（多セル/ボス対応）。水(壁)タイル上にいる泳ぐ敵も攻撃対象にする
+    const target = enemyAt(s.enemies, nx, ny)
+    if (!target) {
+      // 敵がいない水/壁へは進入不可
+      if (s.grid[ny][nx] === '#') return
+      // 斜め移動は壁の角を抜けられない（両脇のどちらかが壁なら不可）
+      if (dx !== 0 && dy !== 0 && (s.grid[py][nx] === '#' || s.grid[ny][px] === '#')) return
+    }
 
     let curPetHp = petHp
     let enemies = s.enemies
     let player = s.player
     let fullCost = 0
 
-    // 敵への体当たり＝選択中スキルが発動（コスト分の満腹度を消費）
-    const target = enemyAt(enemies, nx, ny) // 多セル(ボス)対応
     if (target) {
       const sk = getSkill(selectedSkill)
       const cost = sk.cost || 0

@@ -162,13 +162,16 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     const plus = item.enhance_plus || 0
     const isArtifactBase = ARTIFACT_BASE_NAMES_SET.has(w.name)
     const mult = (plus > 0 && !isArtifactBase) ? Math.pow(1.5, plus) : 1
-    bonus.atk  += Math.ceil((w.atk_bonus||0)  * mult) + (item.bonus_atk||0)
-    bonus.def  += Math.ceil((w.def_bonus||0)  * mult) + (item.bonus_def||0)
-    bonus.matk += Math.ceil((w.matk_bonus||0) * mult) + (item.bonus_matk||0)
-    bonus.mdef += Math.ceil((w.mdef_bonus||0) * mult) + (item.bonus_mdef||0)
-    bonus.spd  += Math.ceil((w.spd_bonus||0)  * mult) + (item.bonus_spd||0)
-    bonus.hp   += Math.ceil((w.hp_bonus||0)   * mult) + (item.bonus_hp||0)
-    bonus.mp   += Math.ceil((w.mp_bonus||0)   * mult) + (item.bonus_mp||0)
+    // ボス装備進化: 基礎ステに ×(1+0.2*evolve_stage)。5段(真化)で×2.0。強化倍率(1.5^plus)とは独立に乗算。
+    const evoMult = 1 + 0.2 * (item.evolve_stage || 0)
+    const baseMult = mult * evoMult
+    bonus.atk  += Math.ceil((w.atk_bonus||0)  * baseMult) + (item.bonus_atk||0)
+    bonus.def  += Math.ceil((w.def_bonus||0)  * baseMult) + (item.bonus_def||0)
+    bonus.matk += Math.ceil((w.matk_bonus||0) * baseMult) + (item.bonus_matk||0)
+    bonus.mdef += Math.ceil((w.mdef_bonus||0) * baseMult) + (item.bonus_mdef||0)
+    bonus.spd  += Math.ceil((w.spd_bonus||0)  * baseMult) + (item.bonus_spd||0)
+    bonus.hp   += Math.ceil((w.hp_bonus||0)   * baseMult) + (item.bonus_hp||0)
+    bonus.mp   += Math.ceil((w.mp_bonus||0)   * baseMult) + (item.bonus_mp||0)
     if (w.hp_bonus_pct > 0)  bonus.hp  += Math.floor(profile.hp_max * w.hp_bonus_pct/100)
     if (w.mp_bonus_pct > 0)  bonus.mp  += Math.floor(profile.mp_max * w.mp_bonus_pct/100)
     if (w.spd_bonus_pct > 0) bonus.spd += Math.floor(profile.spd   * w.spd_bonus_pct/100)
