@@ -755,7 +755,10 @@ export default function Smithy() {
                         : `${evolveResult.name} が ${evolveResult.stage}段階になった！`}
                     </div>
                     {evolveResult.maxed && (
-                      <div style={{ color:'#ffcc00', fontSize:'11px', marginBottom:'14px' }}>特殊能力獲得: {getEffectLabel(line.effect)}</div>
+                      <>
+                        <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'6px' }}>ランク <span style={{ fontSize:'10px', padding:'1px 5px', border:'1px solid #ffcc00' }}>S</span> に昇格！</div>
+                        <div style={{ color:'#ffcc00', fontSize:'11px', marginBottom:'14px' }}>特殊能力獲得: {getEffectLabel(line.effect)}</div>
+                      </>
                     )}
                     <div style={{ display:'flex', gap:'8px', justifyContent:'center', marginTop:'8px' }}>
                       {!evolveResult.maxed && (item.evolve_stage || 0) < MAX_EVO_STAGE && (
@@ -778,16 +781,26 @@ export default function Smithy() {
                       <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'14px' }}>{w.name}{(item.enhance_plus||0)>0?` +${item.enhance_plus}`:''}</span>
                     </div>
                     {/* 段階 */}
-                    <div style={{ textAlign:'center', marginBottom:'12px', fontSize:'13px' }}>
+                    <div style={{ textAlign:'center', marginBottom: isShinka ? '8px' : '12px', fontSize:'13px' }}>
                       <span style={{ color:'#88ccff' }}>{stage}段階</span>
                       <span style={{ color:'#446688' }}> → </span>
                       <span style={{ color:accent }}>{next}段階{isShinka ? '（真化）' : ''}</span>
                     </div>
+                    {/* 真化でランク昇格（→S） */}
+                    {isShinka && (
+                      <div style={{ textAlign:'center', marginBottom:'12px', fontSize:'12px' }}>
+                        <span style={{ color:'#446688' }}>ランク </span>
+                        <span style={{ fontSize:'10px', padding:'1px 5px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>{RARITY_LABELS[w.rarity]}</span>
+                        <span style={{ color:'#446688' }}> → </span>
+                        <span style={{ fontSize:'10px', padding:'1px 5px', color:'#ffcc00', border:'1px solid #ffcc00' }}>S</span>
+                        <span style={{ color:'#ffcc00' }}> に昇格</span>
+                      </div>
+                    )}
                     {/* ステ変化（現在 ↓ 進化後） */}
                     <div style={{ border:'1px solid #123a55', background:'#000c18', padding:'10px', marginBottom:'10px' }}>
                       <div style={{ fontSize:'9px', color:'#446688', marginBottom:'3px', textAlign:'center' }}>現在（基礎×{curMult.toFixed(1)}）</div>
                       <div style={{ fontSize:'11px', textAlign:'center' }}>{statRow(curMult)}</div>
-                      <div style={{ textAlign:'center', color:accent, fontSize:'15px', margin:'5px 0' }}>↓</div>
+                      <div style={{ textAlign:'center', color:accent, fontSize:'11px', margin:'4px 0' }}>↓</div>
                       <div style={{ fontSize:'9px', color: isShinka ? '#ffcc00' : '#66ccff', marginBottom:'3px', textAlign:'center' }}>進化後（基礎×{nextMult.toFixed(1)}）</div>
                       <div style={{ fontSize:'12px', textAlign:'center' }}>{statRow(nextMult)}</div>
                     </div>
