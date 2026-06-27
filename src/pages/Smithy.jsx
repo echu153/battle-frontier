@@ -832,7 +832,7 @@ export default function Smithy() {
 
         <div style={{ display:'flex', gap:'4px', marginBottom:'8px', flexWrap:'wrap' }}>
           {[{id:'enhance', label:'強化'}, {id:'craft', label:'加工'}, {id:'reeval', label:'再鑑定/再評価'},
-            ...(profile.is_admin ? [{id:'evolve', label:'⚗ 進化(dev)'}] : [])].map(t => (
+            {id:'evolve', label:'⚗ 進化'}].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{ padding:'6px 14px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
                 background: tab === t.id ? '#001840' : '#000818',
@@ -1098,15 +1098,16 @@ export default function Smithy() {
           </div>
         )}
 
-        {/* 進化タブ（is_admin限定先行） */}
-        {tab === 'evolve' && profile.is_admin && (
+        {/* 進化タブ（一般公開） */}
+        {tab === 'evolve' && (
           <div>
             <div style={{ color:'#446688', fontSize:'11px', marginBottom:'10px', lineHeight:1.6 }}>
               エリアボスを倒すと「○○の血(50%)」「○○の心臓(0.5%)」をドロップ。血{BLOOD_PER_HEART}個で心臓1個に変換できます。<br/>
               ボス装備のみ5段階まで進化（段階ごとに基礎ステ上昇）。<span style={{color:'#ffcc00'}}>5段階＝真化</span>で基礎ステ×2＋レアS＋特殊能力を獲得。
             </div>
 
-            {/* dev: 素材付与 */}
+            {/* dev: 素材付与（is_admin限定） */}
+            {profile.is_admin && (
             <div style={{ border:'1px dashed #aa4466', background:'#1a0010', padding:'10px', marginBottom:'14px' }}>
               <div style={{ color:'#ff6688', fontSize:'10px', marginBottom:'8px' }}>🛠 dev: 素材付与（テスト用・is_admin限定）</div>
               <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
@@ -1121,6 +1122,7 @@ export default function Smithy() {
                 ))}
               </div>
             </div>
+            )}
 
             {/* 血→心臓 変換 */}
             <div style={{ color:'#aa6644', fontSize:'11px', marginBottom:'6px' }}>── 血 → 心臓 変換（血{BLOOD_PER_HEART}→心臓1）──</div>

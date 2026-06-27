@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue } from './Game'
 import { gemAllowedSlots, gemSlotCategory, GEM_SLOT_LABEL, calcProfBonus } from '../lib/stats'
-import { EVO_EFFECT_LABELS, evoMultiplier, displayRarity, isShinka } from '../constants/bossEvolution'
+import { EVO_EFFECT_LABELS, evoMultiplier, displayRarity, isShinka, BOSS_LINES } from '../constants/bossEvolution'
 
 const SLOT_LABELS_FULL = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }
 const gemDisplayName = (gemType, rank) => `${GEM_DATA[gemType]?.name || gemType}(${rank})`
@@ -121,6 +121,9 @@ export default function Equipment() {
   const [renameTargetId, setRenameTargetId] = useState(null)  // 命名する装備のid
   const [renameText, setRenameText] = useState('')
   const [renameMsg, setRenameMsg] = useState('')
+  const [boxPopup, setBoxPopup] = useState(false)   // ボス装備進化支援箱の選択ポップアップ
+  const [boxGot, setBoxGot] = useState(null)        // 受け取った血の名前
+  const [boxMsg, setBoxMsg] = useState('')
 
   // 選択券で交換できるS級レイド装備（redeem_raid_ticket の許可リストと一致）
   const RAID_TICKET_CHOICES = [
@@ -164,6 +167,20 @@ export default function Equipment() {
       setTicketMsg(data?.error || 'エラーが発生しました')
     } else {
       setTicketGot(weaponName)  // ポップアップは閉じず、獲得表示を出す
+      await fetchAll()
+    }
+    setLoading(false)
+  }
+
+  // ボス装備進化支援箱：箱を1個消費して、選んだボスの血×10を受け取る（サーバーRPCで処理）
+  const useBloodBox = async (bloodName) => {
+    if (loading) return
+    setLoading(true); setBoxMsg(''); setBoxGot(null)
+    const { data, error } = await supabase.rpc('use_boss_blood_box', { p_blood_name: bloodName })
+    if (error || data === false) {
+      setBoxMsg(error?.message || '使用できませんでした（箱がない、または不正な選択）')
+    } else {
+      setBoxGot(bloodName)
       await fetchAll()
     }
     setLoading(false)
@@ -567,6 +584,9 @@ export default function Equipment() {
                         ) : pi.items.effect === 'equip_rename' ? (
                           <button onClick={() => { setRenamePopup(pi); setRenameTargetId(null); setRenameText(''); setRenameMsg('') }} disabled={loading}
                             style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
+                        ) : pi.items.effect === 'boss_blood_box' ? (
+                          <button onClick={() => { setBoxPopup(true); setBoxMsg(''); setBoxGot(null) }} disabled={loading}
+                            style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ff88aa', color:'#ff88aa', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
                         ) : pi.items.effect === 'material' ? (
                           <span style={{ color:'#aa8800', fontSize:'10px' }}>素材</span>
                         ) : pi.equipped ? (
@@ -962,6 +982,37 @@ export default function Equipment() {
             </div>
             <button onClick={() => setTicketPopup(false)} disabled={loading}
               style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{ticketGot ? '閉じる' : 'キャンセル'}</button>
+          </div>
+        </div>
+      )}
+
+      {boxPopup && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}
+          onClick={() => { if (!loading) setBoxPopup(false) }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'#0a0c1a', border:'1px solid #ff88aa', padding:'20px', maxWidth:'360px', width:'92%', fontFamily:'monospace', maxHeight:'80vh', overflowY:'auto' }}>
+            <div style={{ color:'#ff88aa', fontSize:'14px', marginBottom:'6px' }}>🎁 ボス装備進化支援箱</div>
+            <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'14px', lineHeight:'1.5' }}>
+              血を受け取るボスを1つ選んでください。<br/>
+              <span style={{ color:'#ff8844' }}>選択すると箱を1個消費し、そのボスの血×10を受け取ります。</span>
+            </div>
+            {boxMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{boxMsg}</div>}
+            {boxGot && (
+              <div style={{ border:'1px solid #6a2a4a', background:'#140a10', padding:'10px', marginBottom:'12px', color:'#ff99cc', fontSize:'12px', lineHeight:'1.5' }}>
+                ✨ 「{boxGot}」×10 を受け取りました！<br/>
+                <span style={{ color:'#cc88aa', fontSize:'10px' }}>鍛冶屋の「進化」タブで装備の進化に使えます。</span>
+              </div>
+            )}
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {BOSS_LINES.map(line => (
+                <button key={line.area} onClick={() => useBloodBox(line.blood)} disabled={loading}
+                  style={{ textAlign:'left', padding:'10px', background:'#001028', border:'1px solid #aa4466', color:'#cce0ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', opacity: loading ? 0.5 : 1 }}>
+                  <div style={{ color:'#ff99cc', fontSize:'12px', marginBottom:'2px' }}>{line.boss}</div>
+                  <div style={{ color:'#778899', fontSize:'10px' }}>{line.blood} ×10 を受け取る</div>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setBoxPopup(false)} disabled={loading}
+              style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{boxGot ? '閉じる' : 'キャンセル'}</button>
           </div>
         </div>
       )}

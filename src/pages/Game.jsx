@@ -1710,6 +1710,7 @@ export default function Game() {
   const [alchemyReady, setAlchemyReady] = useState(0)        // 錬金部屋で受け取れる強化石の数（街のバナー表示用・is_admin限定先行）
   const [alchemyEmpty, setAlchemyEmpty] = useState(0)        // 錬金部屋の空き枠数（街のバナー表示用・is_admin限定先行）
   const [territoryExpandable, setTerritoryExpandable] = useState(false)  // 領地拡大が可能か（街のバナー表示用・is_admin限定先行）
+  const [boxAvailable, setBoxAvailable] = useState(0)        // ボス装備進化支援箱の所持数（街のバナー表示用）
   const [myCountryName, setMyCountryName] = useState('')     // 所属国名（ホーム/プロフィールの所属国表示用・is_admin限定先行）
   const [showGuide, setShowGuide] = useState(false)
   const [showDyingTip, setShowDyingTip] = useState(false)  // 初めて瀕死になったとき1回だけ案内
@@ -1997,6 +1998,14 @@ export default function Game() {
     ])
     setExpDungeonTicket(ticketRow ? { id: ticketRow.id, quantity: ticketRow.quantity } : null)
     if (!data) { nav('/create'); return }
+    // ログイン特典: ボス装備進化支援箱（7/31までログインで全員に1回付与）。サーバーRPCが二重付与・締切を判定。
+    try { await supabase.rpc('claim_evo_support_box') } catch { /* 未適用時は無視 */ }
+    // 進化支援箱の所持チェック（街バナー用）
+    try {
+      const { data: boxRow } = await supabase.from('player_items')
+        .select('quantity, items!inner(effect)').eq('player_id', user.id).eq('items.effect', 'boss_blood_box').maybeSingle()
+      setBoxAvailable(boxRow?.quantity || 0)
+    } catch { setBoxAvailable(0) }
     if (Array.isArray(cl)) setClassLevels(cl)
     setHasGamblerProof(!!gpCheck)
     setHasDragonKnightProof(!!dkCheck)
@@ -5395,6 +5404,12 @@ export default function Game() {
             <button onClick={()=>nav('/territory')}
               style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
               🗺 領地を広げられます！→ 領地へ
+            </button>
+          )}
+          {boxAvailable > 0 && (
+            <button onClick={()=>nav('/equipment?view=items')}
+              style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a0010', border:'1px solid #ff88aa', color:'#ff99cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              🎁 ボス装備進化支援箱を{boxAvailable}個所持中！→ アイテム画面で使う
             </button>
           )}
           <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', marginBottom:'8px' }}>
