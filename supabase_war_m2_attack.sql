@@ -19,15 +19,24 @@ BEGIN
   FOR r IN SELECT id, attacker_country_id, defender_country_id
              FROM public.wars WHERE status='declared' AND starts_at <= now() FOR UPDATE LOOP
     UPDATE public.wars SET status='active', attacker_core_hp=300000, defender_core_hp=300000 WHERE id = r.id;
-    -- 実国民を seed（HPは profiles を使うので war_participants.hp は表示フォールバック用の概算）
-    INSERT INTO public.war_participants
-      (war_id, player_id, country_id, hp, mp, hp_max, mp_max, loadout, status, is_dummy)
-    SELECT r.id, p.id, p.country_id,
-           coalesce(p.hp_current, p.hp_max), coalesce(p.mp_current, p.mp_max),
-           p.hp_max, p.mp_max, NULL, 'active', false
-    FROM public.profiles p
-    WHERE p.country_id IN (r.attacker_country_id, r.defender_country_id)
-    ON CONFLICT (war_id, player_id) DO NOTHING;
+    -- 実国民を seed（HPは profiles を使うので war_participants.hp は表示フォールバック用の概算）。
+    -- ★開戦時に「満タン参戦」: 新規にseedした実プレイヤーの現在HPに +10000（戦争補正）を一度だけ加算。
+    --   現在HPは常に実効最大以下の不変条件のため、+10000してもクライアントの戦争上限(eff+10000)を超えない。
+    --   終戦後は街表示/自然回復が実効最大へ自然収束（クランプ）するためサーバ側の戻し処理は不要。
+    WITH ins AS (
+      INSERT INTO public.war_participants
+        (war_id, player_id, country_id, hp, mp, hp_max, mp_max, loadout, status, is_dummy)
+      SELECT r.id, p.id, p.country_id,
+             coalesce(p.hp_current, p.hp_max), coalesce(p.mp_current, p.mp_max),
+             p.hp_max, p.mp_max, NULL, 'active', false
+      FROM public.profiles p
+      WHERE p.country_id IN (r.attacker_country_id, r.defender_country_id)
+      ON CONFLICT (war_id, player_id) DO NOTHING
+      RETURNING player_id
+    )
+    UPDATE public.profiles p
+       SET hp_current = coalesce(p.hp_current, p.hp_max) + 10000
+     WHERE p.id IN (SELECT player_id FROM ins);
   END LOOP;
 
   -- 瀕死復活(dummy): 全快して復帰

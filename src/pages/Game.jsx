@@ -108,6 +108,9 @@ const spiritComboState = (skillName, playerBuffs) => {
   return { tier: Math.min(count, 2), newCount: count + 1 }
 }
 const REGEN_SECONDS = 60
+// 戦争中の最大HP補正（HPのみ）。lib/war.js の WAR_HP_BONUS と同値。
+// （Game→war→pvp→Game の循環import回避のためここで再定義）
+const WAR_HP_BONUS = 10000
 
 export const ARTIFACT_BASE_NAMES = [
   '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
@@ -1717,6 +1720,7 @@ export default function Game() {
   const [territoryExpandable, setTerritoryExpandable] = useState(false)  // 領地拡大が可能か（街のバナー表示用・is_admin限定先行）
   const [boxAvailable, setBoxAvailable] = useState(0)        // ボス装備進化支援箱の所持数（街のバナー表示用）
   const [myCountryName, setMyCountryName] = useState('')     // 所属国名（ホーム/プロフィールの所属国表示用・is_admin限定先行）
+  const [atWar, setAtWar] = useState(false)                  // 自国が交戦中（active）か。戦争中はホームのHP/MP表示を戦争用に切替
   const [showGuide, setShowGuide] = useState(false)
   const [showDyingTip, setShowDyingTip] = useState(false)  // 初めて瀕死になったとき1回だけ案内
   const [openGuideId, setOpenGuideId] = useState(null)
@@ -1978,7 +1982,15 @@ export default function Game() {
         setMyCountryName(c?.name || '')
         setTerritoryExpandable(affiliated && Date.now() >= lastExpand + EXPAND_COOLDOWN_MS && Date.now() >= lockUntil)
       } catch { /* 領地未導入時は無視 */ setTerritoryExpandable(false); setMyCountryName('') }
-    } else { setTerritoryExpandable(false); setMyCountryName('') }
+      // 自国が交戦中(active)か。戦争中はホームのHP/MPを戦争用表示(上限+10000)に切替。
+      try {
+        const { data: w } = await supabase.from('wars').select('id')
+          .eq('status', 'active')
+          .or(`attacker_country_id.eq.${prof.country_id},defender_country_id.eq.${prof.country_id}`)
+          .limit(1)
+        setAtWar(!!(w && w.length))
+      } catch { /* 戦争SQL未適用なら無視 */ setAtWar(false) }
+    } else { setTerritoryExpandable(false); setMyCountryName(''); setAtWar(false) }
   }
   // プロフィール確定時＋60秒ごとに再計算（クールダウン明け・錬金完成を取り込む）
   useEffect(() => {
@@ -2146,10 +2158,11 @@ export default function Game() {
       // 装備・釣り等込みの実効最大まで自然回復する
       const _rEff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
       const hpMaxR = _rEff.hp_max, mpMaxR = _rEff.mp_max
+      const hpCapR = atWar ? hpMaxR + WAR_HP_BONUS : hpMaxR   // 戦争中はHP上限+10000まで回復
       const current = sp.hp_current ?? hpMaxR
-      const newHp = Math.min(hpMaxR, Math.floor(current+hpMaxR*0.2))
+      const newHp = Math.min(hpCapR, Math.floor(current+hpMaxR*0.2))
       const newMp = Math.min(mpMaxR, Math.floor((sp.mp_current??mpMaxR)+mpMaxR*0.2))
-      const newIsDying = newHp >= hpMaxR ? false : sp.is_dying
+      const newIsDying = newHp >= hpMaxR ? false : sp.is_dying   // 瀕死解除は通常上限基準（復帰を難しくしない）
       await supabase.from('profiles').update({
         hp_current:newHp, mp_current:newMp, is_dying:newIsDying,
         last_regen_at:new Date().toISOString(),
@@ -5082,7 +5095,9 @@ export default function Game() {
   const _effMax = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
   const hpMaxEff = _effMax.hp_max
   const mpMaxEff = _effMax.mp_max
-  const hpCurrent = Math.max(0, profile.hp_current??hpMaxEff)
+  // 戦争中はHP上限+10000（満タン参戦）。MPは据え置き。終戦後はhpCurrentが通常上限へ自然収束。
+  const hpMaxDisp = atWar ? hpMaxEff + WAR_HP_BONUS : hpMaxEff
+  const hpCurrent = Math.max(0, Math.min(profile.hp_current??hpMaxDisp, hpMaxDisp))
   const mpCurrent = Math.max(0, profile.mp_current??mpMaxEff)
   const isDying = profile.is_dying||false
   const isBanned = profile.battle_ban_until && new Date(profile.battle_ban_until) > new Date()
@@ -5115,7 +5130,7 @@ export default function Game() {
     return `${h}時間${m}分`
   })() : null
   const canBattle = !isBanned && (!isDying || hpCurrent >= hpMaxEff)
-  const hpPct = Math.min(100,(hpCurrent/hpMaxEff)*100)
+  const hpPct = Math.min(100,(hpCurrent/hpMaxDisp)*100)
   const mpPct = Math.min(100,(mpCurrent/mpMaxEff)*100)
   const expPct = Math.min(100,(profile.exp/profile.exp_next)*100)
   const _waitSecs = effWait(profile, serverNow())
@@ -5536,7 +5551,12 @@ export default function Game() {
                 )}
               </div>
             </div>
-            <MiniBar label="HP" val={`${hpCurrent}/${hpMaxEff}`} pct={hpPct} color={isDying?'#ff2200':'#00cc44'} />
+            {atWar && (
+              <div style={{ display:'flex', alignItems:'center', gap:'6px', background:'#2a0808', border:'1px solid #e05a62', color:'#ff8a6a', fontSize:'11px', padding:'3px 8px', marginBottom:'4px', letterSpacing:'1px' }}>
+                <span>⚔ 戦争中</span><span style={{ color:'#cc8866', fontSize:'10px' }}>HP上限 +{WAR_HP_BONUS.toLocaleString()}（満タン参戦）</span>
+              </div>
+            )}
+            <MiniBar label="HP" val={`${hpCurrent}/${hpMaxDisp}`} pct={hpPct} color={isDying?'#ff2200':(atWar?'#ff6644':'#00cc44')} />
             <MiniBar label="MP" val={`${mpCurrent}/${mpMaxEff}`} pct={mpPct} color="#4488ff" />
             {statExpanded && (<>
               <MiniBar label="EXP" val={`${profile.exp}/${profile.exp_next}`} pct={expPct} color="#cc8800" />
@@ -6021,7 +6041,12 @@ export default function Game() {
               <span>総合力: <span style={{color:'#44ff88', fontWeight:'bold'}}>{total}</span></span>
               <span style={{color:totalRank.color, fontWeight:'bold'}}>{totalRank.rank}</span>
             </div>
-            <StatBar label="HP" val={`${hpCurrent}/${hpMaxEff}`} pct={hpPct} color={isDying?'#ff2200':'#00cc44'} />
+            {atWar && (
+              <div style={{ display:'flex', alignItems:'center', gap:'6px', background:'#2a0808', border:'1px solid #e05a62', color:'#ff8a6a', fontSize:'11px', padding:'3px 8px', marginBottom:'4px', letterSpacing:'1px' }}>
+                <span>⚔ 戦争中</span><span style={{ color:'#cc8866', fontSize:'10px' }}>HP上限 +{WAR_HP_BONUS.toLocaleString()}（満タン参戦）</span>
+              </div>
+            )}
+            <StatBar label="HP" val={`${hpCurrent}/${hpMaxDisp}`} pct={hpPct} color={isDying?'#ff2200':(atWar?'#ff6644':'#00cc44')} />
             <StatBar label="MP" val={`${mpCurrent}/${mpMaxEff}`} pct={mpPct} color="#4488ff" />
             {statExpanded && (<>
               <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginTop:'6px' }}>

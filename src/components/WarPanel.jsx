@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
 import { loadLoadout } from '../lib/pvpLoadout'
-import { simulateCoreAttack, simulateWarBattle, dummyCombatInput, WAR_CORE_HP } from '../lib/war'
+import { simulateCoreAttack, simulateWarBattle, dummyCombatInput, WAR_CORE_HP, WAR_HP_BONUS } from '../lib/war'
 
 const ATTACK_CD_MS = 20000  // 疑似CD（サーバーCDはM2）
 const REGEN_SECONDS = 60    // 自然回復間隔（Game.jsx と一致）。60秒ごとに最大HP/MPの+20%。
@@ -96,9 +96,10 @@ export default function WarPanel({ me, myCountry, countries }) {
     const elapsed = (Date.now() - new Date(sp.last_regen_at).getTime()) / 1000
     if (elapsed < REGEN_SECONDS) return
     const hpMax = loadout.eff.hp_max, mpMax = loadout.eff.mp_max
-    const newHp = Math.min(hpMax, Math.floor((sp.hp_current ?? hpMax) + hpMax * 0.2))
+    const hpCap = war?.status === 'active' ? hpMax + WAR_HP_BONUS : hpMax  // 戦争中はHP上限+10000
+    const newHp = Math.min(hpCap, Math.floor((sp.hp_current ?? hpMax) + hpMax * 0.2))
     const newMp = Math.min(mpMax, Math.floor((sp.mp_current ?? mpMax) + mpMax * 0.2))
-    const newIsDying = newHp >= hpMax ? false : sp.is_dying
+    const newIsDying = newHp >= hpMax ? false : sp.is_dying   // 瀕死解除は通常上限基準
     await supabase.from('profiles').update({
       hp_current: newHp, mp_current: newMp, is_dying: newIsDying, last_regen_at: new Date().toISOString(),
     }).eq('id', me.id)
@@ -151,20 +152,20 @@ export default function WarPanel({ me, myCountry, countries }) {
     if (!myRow) { setErr('あなたは参加者として登録されていません（開戦時seed要）'); return }
     setBusy(true); setErr(''); setMsg('')
     try {
-      // 自分の開始HP/MP＝街と共有の現在値（self）。最大は実効値。
-      const atkHpMax = loadout.eff?.hp_max || 0
+      // 自分の開始HP/MP＝街と共有の現在値（self）。最大は実効値＋戦争補正(HPのみ+10000)。
+      const atkHpMax = (loadout.eff?.hp_max || 0) + WAR_HP_BONUS
       const atkMpMax = loadout.eff?.mp_max || 0
       const atkStartHp = Math.min(atkHpMax, self?.hp_current ?? atkHpMax)
       const atkStartMp = Math.min(atkMpMax, self?.mp_current ?? atkMpMax)
 
-      // 対象の戦闘入力と開始HP/MP・最大値
+      // 対象の戦闘入力と開始HP/MP・最大値（実プレイヤーは戦争補正+10000・MPは据え置き）
       let tgtInput, tgtStartHp, tgtStartMp, tgtHpMax, tgtMpMax
       if (tgt.is_dummy) {
         tgtInput = dummyCombatInput(tgt)
         tgtStartHp = tgt.hp; tgtStartMp = tgt.mp; tgtHpMax = tgt.hp_max; tgtMpMax = tgt.mp_max
       } else {
         tgtInput = await loadLoadout(tgt.player_id, false)
-        tgtHpMax = tgtInput.eff?.hp_max || 0; tgtMpMax = tgtInput.eff?.mp_max || 0
+        tgtHpMax = (tgtInput.eff?.hp_max || 0) + WAR_HP_BONUS; tgtMpMax = tgtInput.eff?.mp_max || 0
         const cur = enemyHpMap[tgt.player_id]
         tgtStartHp = Math.min(tgtHpMax, cur?.hp ?? tgtHpMax)
         tgtStartMp = Math.min(tgtMpMax, cur?.mp ?? tgtMpMax)
@@ -278,7 +279,7 @@ export default function WarPanel({ me, myCountry, countries }) {
 
             {/* 自分の現在HP/MP（街と共有・自然回復で回復） */}
             {myRow && (() => {
-              const hpMax = loadout?.eff?.hp_max || 0
+              const hpMax = (loadout?.eff?.hp_max || 0) + WAR_HP_BONUS  // 戦争中はHP上限+10000
               const mpMax = loadout?.eff?.mp_max || 0
               const hpCur = Math.min(hpMax, self?.hp_current ?? hpMax)
               const mpCur = Math.min(mpMax, self?.mp_current ?? mpMax)
@@ -319,13 +320,15 @@ export default function WarPanel({ me, myCountry, countries }) {
                   const canAttack = !dying && !iAmDying && cdRemain === 0 && !busy
                   // 実プレイヤーは profiles の現在HP（街と共有）、ダミーは war_participants.hp
                   const curHp = p.is_dummy ? p.hp : (enemyHpMap[p.player_id]?.hp ?? p.hp)
+                  // 実プレイヤーは戦争補正+10000（war_participants.hp_maxは装備抜き基礎値ゆえ概算）
+                  const curMax = p.is_dummy ? p.hp_max : (p.hp_max + WAR_HP_BONUS)
                   return (
                     <div key={p.player_id} style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'5px', opacity: dying ? 0.5 : 1 }}>
                       <span style={{ color:'#ccb088', fontSize:'10px', width:'72px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                         {p.is_dummy ? `ダミー${i + 1}` : p.player_id.slice(0, 6)}
                       </span>
-                      <StatBar cur={curHp} max={p.hp_max} color={dying ? '#885544' : '#dd5544'} h={10} />
-                      <span style={{ color:'#bba088', fontSize:'10px', minWidth:'74px', textAlign:'right' }}>{Math.max(0, curHp).toLocaleString()}/{p.hp_max.toLocaleString()}</span>
+                      <StatBar cur={curHp} max={curMax} color={dying ? '#885544' : '#dd5544'} h={10} />
+                      <span style={{ color:'#bba088', fontSize:'10px', minWidth:'74px', textAlign:'right' }}>{Math.max(0, curHp).toLocaleString()}/{curMax.toLocaleString()}</span>
                       <button onClick={() => attackPlayer(p)} disabled={!canAttack}
                         style={{ background: canAttack ? '#3a1208' : '#1a0c06', border:`1px solid ${canAttack ? '#ff6644' : '#5a3a2a'}`, color: canAttack ? '#ff9977' : '#7a5a4a', padding:'3px 8px', cursor: canAttack ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'10px', whiteSpace:'nowrap' }}>
                         {dying ? '瀕死' : (cdRemain > 0 ? `${Math.ceil(cdRemain/1000)}s` : '🗡交戦')}
