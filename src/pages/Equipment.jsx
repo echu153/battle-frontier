@@ -72,7 +72,7 @@ const getEffectLabel = (effect) => {
     'mdef_pen_5':'【魔法防御貫通+5%】',
     'battle_start_ailment_shield':'【開幕・状態異常を1回無効化】',
     'ondmg_spd_up_5_2t':'【被ダメージ時・2ターン素早さ+5%】',
-    'extra_hit_paralysis_30':'【追加行動の攻撃ヒット時・30%で相手を麻痺】',
+    'extra_hit_paralysis_30':'【追加行動の攻撃ヒット時・20%で相手を麻痺】',
     ...EVO_EFFECT_LABELS,
   }
   return labels[effect] || effect
@@ -133,7 +133,7 @@ export default function Equipment() {
     { name:'濡羽杖アマザネ',   desc:'S級杖。特攻80 特防20。攻撃ヒット時、対象の素早さ-5%。' },
     { name:'哭雨の羽衣',       desc:'S級防具。特攻20 特防80。戦闘開始時、1回だけ状態異常を無効化。' },
     { name:'雷鋼の機神鎧',     desc:'S級防具。防御60 特防40。被ダメージ時、2T素早さ+5%。' },
-    { name:'蒼雷の短刃',       desc:'S級短剣。攻撃40 素早さ60。追加行動の攻撃ヒット時、30%で麻痺。' },
+    { name:'蒼雷の短刃',       desc:'S級短剣。攻撃40 素早さ60。追加行動の攻撃ヒット時、20%で麻痺。' },
   ]
 
   useEffect(() => { fetchAll() }, [])

@@ -193,7 +193,7 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     evasionBonus += item.bonus_evasion || 0
     if (item.bonus_effect === 'mdef_pen_5') gemAcc.mdefPen += 5  // 水禍の蒼珠: 魔法防御貫通+5%
     if (item.bonus_effect === 'ondmg_spd_up_5_2t') ondmgSpdPct += 5      // 雷鋼の機神鎧: 被ダメ時 2T素早さ+5%
-    if (item.slot === 'weapon' && item.bonus_effect === 'extra_hit_paralysis_30') extraParaChance += 30  // 蒼雷の短刃
+    if (item.slot === 'weapon' && item.bonus_effect === 'extra_hit_paralysis_30') extraParaChance += 20  // 蒼雷の短刃（20%にナーフ）
     // ボス装備 真化効果（スロット非依存・5段で付与される bonus_effect）
     switch (item.bonus_effect) {
       case 'evo_mp_to_matk_5':          evoMpToMatk += 5; break

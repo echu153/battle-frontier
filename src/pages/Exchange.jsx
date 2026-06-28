@@ -29,7 +29,7 @@ const BONUS_EFFECT_DESC = {
   'battle_start_ailment_shield': '戦闘開始時、1回だけ状態異常を無効化',
   'mdef_pen_5':      '魔法防御貫通+5%',
   'ondmg_spd_up_5_2t':     '被ダメージ時、2ターンの間素早さ+5%',
-  'extra_hit_paralysis_30':'追加行動の攻撃ヒット時、30%で相手を麻痺',
+  'extra_hit_paralysis_30':'追加行動の攻撃ヒット時、20%で相手を麻痺',
   ...EVO_EFFECT_LABELS,
 }
 
