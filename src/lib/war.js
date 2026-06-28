@@ -13,8 +13,9 @@ import { simulatePvpBattle } from './pvp'
 
 export const WAR_CORE_HP = 300000        // サーバ war_tick と一致（表示用）
 export const WAR_CORE_REDUCTION = 0.9    // サーバ war_attack_core が適用（表示用）
-export const WAR_HP_BONUS = 20000        // 戦争中の最大HP補正（spec）。サーバ seed と一致。
 export const WAR_TURN_CAP = 20           // 1回の交戦のターン上限（消耗戦＝20ターンで強制終了）
+// ※戦争HP/MPは街の profiles.hp_current/mp_current と完全共有（自然回復もそのまま反映）。
+//   以前の「最大HP+20000」バッファは共有とぶつかるため廃止＝実効最大そのままで戦う。
 // 全体スケールの最終つまみ。(攻撃力+特攻) に掛ける。サーバ側でさらに×0.1(90%軽減)。
 // 較正(2026-06-28): 実測 power=6,619 → 6,619×7.55×0.1 ≒ 約5,000/発(目標)。
 //   実効スケール = WAR_CORE_DMG_MULT × 0.1。CD20秒・コアHP30万で単独約20分。
@@ -44,7 +45,7 @@ export function simulateCoreAttack(loadout) {
 //  戻り: { logs, atkEndHp, atkEndMp, tgtEndHp, tgtEndMp }
 export function simulateWarBattle(attacker, target, start) {
   const res = simulatePvpBattle(attacker, target, {
-    hpBonus: WAR_HP_BONUS, turnCap: WAR_TURN_CAP,
+    hpBonus: 0, turnCap: WAR_TURN_CAP,   // +20000廃止＝実効最大で戦う（HP/MPは街と共有）
     startHpA: start?.atkHp, startMpA: start?.atkMp,
     startHpB: start?.tgtHp, startMpB: start?.tgtMp,
   })
