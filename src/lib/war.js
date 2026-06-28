@@ -68,21 +68,23 @@ export function simulateWarBattle(attacker, target, start) {
   const logs = res.logs || []
   let atkEndHp = res.endHpA
   let tgtEndHp = res.endHpB
-  // ★終了時の最低保証: 仕掛けた/仕掛けられたに関わらず両者とも、相手の開始HPの
+  // ★終了時の最低保証: 仕掛けた/仕掛けられたに関わらず両者とも、相手の【最大体力】の
   //   WAR_MIN_END_DMG_PCT 以上を必ず与える。届いていなければ終了時に不足分を上乗せ（一矢報いた！）。
   //   戦闘力差があっても双方必ず削れる＝無双させない・攻撃側も必ず被弾する。
   if (WAR_MIN_END_DMG_PCT > 0) {
-    // 相手(B)へ：自分(A)の保証ダメージ
+    const atkMax = (attacker?.eff?.hp_max || 0) + WAR_HP_BONUS   // 戦争の最大体力
+    const tgtMax = (target?.eff?.hp_max || 0) + WAR_HP_BONUS
+    // 相手(B)へ：自分(A)の保証ダメージ（相手の最大体力の割合）
     if (start?.tgtHp != null) {
-      const cap = Math.max(0, Math.floor(start.tgtHp * (1 - WAR_MIN_END_DMG_PCT)))
+      const cap = Math.max(0, start.tgtHp - Math.floor(tgtMax * WAR_MIN_END_DMG_PCT))
       if (tgtEndHp > cap) {
         const extra = tgtEndHp - cap; tgtEndHp = cap
         logs.push({ text: `🏹 一矢報いた！ ${extra.toLocaleString()}ダメージ与えた！`, color: '#ffcc44' })
       }
     }
-    // 自分(A)へ：相手(B)の保証ダメージ（攻撃側も必ず被弾）
+    // 自分(A)へ：相手(B)の保証ダメージ（自分の最大体力の割合・攻撃側も必ず被弾）
     if (start?.atkHp != null) {
-      const cap = Math.max(0, Math.floor(start.atkHp * (1 - WAR_MIN_END_DMG_PCT)))
+      const cap = Math.max(0, start.atkHp - Math.floor(atkMax * WAR_MIN_END_DMG_PCT))
       if (atkEndHp > cap) {
         const extra = atkEndHp - cap; atkEndHp = cap
         logs.push({ text: `🩸 反撃を受けた… ${extra.toLocaleString()}ダメージ受けた！`, color: '#ff8866' })

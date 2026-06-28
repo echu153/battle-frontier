@@ -54,6 +54,7 @@ export default function WarPanel({ me, myCountry, countries }) {
   const [enemyHpMap, setEnemyHpMap] = useState({})  // 互換: 実プレイヤーHPマップ（memberMapと同一参照）
   const [memberMap, setMemberMap] = useState({})    // 全実プレイヤー参加者の状況（player_id -> {hp,mp,is_dying,username,avatar_url}）
   const [battleView, setBattleView] = useState(null)  // 交戦のバトルログ画面（{name, logs, tgtDying, atkDying} / null=非表示）
+  const [preparing, setPreparing] = useState(false)   // 出陣準備中（満タン参戦の反映完了まで読み込み表示）
   const [history, setHistory] = useState([])          // 対戦履歴（war_battle_log の直近）
   const warFilledRef = useRef(null)        // 満タン参戦を適用済みの戦争ID（多重ヒールガード・Game.jsxと同じlocalStorageキー共有）
 
@@ -143,17 +144,21 @@ export default function WarPanel({ me, myCountry, countries }) {
   }, [loadout])
 
   // 満タン参戦: activeな戦争を検知したら war_self_buff RPC を呼ぶ（サーバー権威・1戦争1回・冪等）。
-  // 実効最大HP(装備込み)を渡し、war_participants.hp_maxを実効値へ自己上書き＋現在HPを戦争上限へ。
+  // 実効最大HP(装備込み)を渡し、war_participants.hp_maxを実効値へ自己上書き＋現在HPを戦争上限へ全快。
+  // 完了するまで preparing=true で「出陣準備中」を表示（上限だけ上がってHP半端、の見え方を防ぐ）。
   useEffect(() => {
     if (war?.status !== 'active' || !me?.id || !loadout?.eff) return
     if (warFilledRef.current === war.id) return
     warFilledRef.current = war.id
+    setPreparing(true)
     ;(async () => {
       try {
+        const warMax = (loadout.eff.hp_max || 0) + WAR_HP_BONUS
         const { error } = await supabase.rpc('war_self_buff', { p_war_id: war.id, p_eff_hp_max: loadout.eff.hp_max || 0 })
-        if (error) { warFilledRef.current = null; return }  // RPC未適用などは次回再試行
-        await refreshWar()
+        if (error) { warFilledRef.current = null }   // RPC未適用などは次回再試行
+        else { setSelf(s => ({ ...(s || {}), hp_current: warMax, is_dying: false })); await refreshWar() }  // 楽観的に全快表示
       } catch { warFilledRef.current = null }
+      finally { setPreparing(false) }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [war?.status, war?.id, loadout])
@@ -323,6 +328,14 @@ export default function WarPanel({ me, myCountry, countries }) {
 
   return (
     <div style={box}>
+        {/* 出陣準備中（満タン参戦の反映が終わるまで全面ローディング） */}
+        {preparing && (
+          <div style={{ position:'fixed', inset:0, zIndex:130, background:'rgba(10,5,0,0.92)', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:'10px', fontFamily:'monospace' }}>
+            <div style={{ color:'#ff8a6a', fontSize:'16px', letterSpacing:'3px' }}>⚔ 出陣準備中…</div>
+            <div style={{ color:'#bb9977', fontSize:'12px' }}>HPを全回復しています</div>
+          </div>
+        )}
+
         {/* 交戦バトルログ（出撃のように別画面で全ターン表示） */}
         {battleView && (
           <div style={{ position:'fixed', inset:0, zIndex:120, background:'#0a0500', overflowY:'auto', padding:'16px', fontFamily:'monospace' }}>

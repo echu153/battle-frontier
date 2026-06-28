@@ -35,7 +35,7 @@ BEGIN
       RETURNING player_id
     )
     UPDATE public.profiles p
-       SET hp_current = coalesce(p.hp_current, p.hp_max) + 10000
+       SET hp_current = p.hp_max + 10000, mp_current = p.mp_max, is_dying = false
      WHERE p.id IN (SELECT player_id FROM ins);
   END LOOP;
 
