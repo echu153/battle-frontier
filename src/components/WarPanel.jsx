@@ -52,6 +52,8 @@ export default function WarPanel({ me, myCountry, countries }) {
   const [self, setSelf] = useState(null)   // 自分の現在HP/MP（profiles.hp_current/mp_current＝街と共有）
   const [enemyHpMap, setEnemyHpMap] = useState({})  // 互換: 実プレイヤーHPマップ（memberMapと同一参照）
   const [memberMap, setMemberMap] = useState({})    // 全実プレイヤー参加者の状況（player_id -> {hp,mp,is_dying,username,avatar_url}）
+  const [battleView, setBattleView] = useState(null)  // 交戦のバトルログ画面（{name, logs, tgtDying, atkDying} / null=非表示）
+  const [history, setHistory] = useState([])          // 対戦履歴（war_battle_log の直近）
   const warFilledRef = useRef(null)        // 満タン参戦を適用済みの戦争ID（多重ヒールガード・Game.jsxと同じlocalStorageキー共有）
 
   const nameOf = (cid) => (countries || []).find(c => c.id === cid)?.name || '???'
@@ -70,7 +72,13 @@ export default function WarPanel({ me, myCountry, countries }) {
     if (w) {
       const r = await supabase.from('war_participants').select('*').eq('war_id', w.id)
       ps = r.data || []
-    }
+      // 対戦履歴（直近30件）。テーブル未適用時は無視。
+      try {
+        const { data: hist } = await supabase.from('war_battle_log')
+          .select('*').eq('war_id', w.id).order('created_at', { ascending: false }).limit(30)
+        setHistory(hist || [])
+      } catch { setHistory([]) }
+    } else setHistory([])
     setParticipants(ps)
     // 全実プレイヤー参加者（自国＋敵国）の現在HP/MP・瀕死・名前・アイコンをまとめて取得。
     // 自国/敵国どちらの国民も状況を表示するため一括で引く（ダミーは war_participants 側を使う）。
@@ -205,12 +213,15 @@ export default function WarPanel({ me, myCountry, countries }) {
       })
       if (error) setErr(error.message)
       else {
+        const tname = tgt.is_dummy ? 'ダミー兵' : (memberMap[tgt.player_id]?.username || tgt.player_id.slice(0, 6))
         setCdUntil(Date.now() + ATTACK_CD_MS)
         setBattleResult({
-          name: tgt.is_dummy ? 'ダミー兵' : tgt.player_id.slice(0, 6),
+          name: tname,
           tgtBefore: tgtStartHp, tgtAfter: data?.tgt_hp ?? res.tgtEndHp, tgtDying: data?.tgt_dying,
           atkBefore: atkStartHp, atkAfter: data?.atk_hp ?? res.atkEndHp, atkDying: data?.atk_dying,
         })
+        // 出撃のように別画面でバトルログを表示
+        setBattleView({ name: tname, logs: res.logs || [], tgtDying: data?.tgt_dying, atkDying: data?.atk_dying })
         await refreshWar()
       }
     } catch (e) { setErr('交戦に失敗: ' + e.message) }
@@ -304,6 +315,29 @@ export default function WarPanel({ me, myCountry, countries }) {
 
   return (
     <div style={box}>
+        {/* 交戦バトルログ（出撃のように別画面で全ターン表示） */}
+        {battleView && (
+          <div style={{ position:'fixed', inset:0, zIndex:120, background:'#0a0500', overflowY:'auto', padding:'16px', fontFamily:'monospace' }}>
+            <div style={{ maxWidth:'720px', margin:'0 auto' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #5a2a1a', paddingBottom:'8px', marginBottom:'10px', position:'sticky', top:0, background:'#0a0500', paddingTop:'4px' }}>
+                <div style={{ color:'#ff8a6a', fontSize:'14px', letterSpacing:'2px' }}>⚔ {battleView.name} との交戦</div>
+                <button onClick={() => setBattleView(null)} style={{ background:'#2a1008', border:'1px solid #e05a62', color:'#ff8a6a', padding:'6px 14px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>← 戻る</button>
+              </div>
+              <div>
+                {(battleView.logs || []).map((l, i) => l?.type === 'hp' ? (
+                  <div key={i} style={{ margin:'5px 0', padding:'4px 6px', background:'#140a04', border:'1px solid #2a1a0a' }}>
+                    <div style={{ fontSize:'10px', color:'#aaccaa' }}>{l.playerName}: HP {Math.round(l.playerHp).toLocaleString()}/{Math.round(l.playerMax).toLocaleString()}　MP {Math.round(l.playerMp).toLocaleString()}/{Math.round(l.playerMpMax).toLocaleString()}</div>
+                    <div style={{ fontSize:'10px', color:'#ddaa99' }}>{l.enemyName}: HP {Math.round(l.enemyHp).toLocaleString()}/{Math.round(l.enemyMax).toLocaleString()}　MP {Math.round(l.enemyMp).toLocaleString()}/{Math.round(l.enemyMpMax).toLocaleString()}</div>
+                  </div>
+                ) : (
+                  <div key={i} style={{ color: l?.color || '#cccccc', fontSize:'12px', lineHeight:'1.6' }}>{l?.text}</div>
+                ))}
+              </div>
+              <button onClick={() => setBattleView(null)} style={{ width:'100%', marginTop:'12px', background:'#2a1008', border:'1px solid #e05a62', color:'#ff8a6a', padding:'10px', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'2px' }}>← 戦争ページへ戻る</button>
+            </div>
+          </div>
+        )}
+
         {!myCountry && <div style={{ color:'#ddaa88', fontSize:'12px' }}>国に所属していません。領地画面で建国または加入してください。</div>}
 
         {myCountry && (
@@ -449,6 +483,25 @@ export default function WarPanel({ me, myCountry, countries }) {
               <span style={{ color:'#88775a' }}>送信 {lastInfo.raw.toLocaleString()} → </span>
               コア実ダメ <b style={{ color:'#ff8866' }}>{(lastInfo.applied ?? 0).toLocaleString()}</b>
               <span style={{ color:'#88775a' }}>（90%軽減後）</span>
+            </div>
+          </div>
+        )}
+
+        {/* 対戦履歴（お互いの国民が交戦した結果） */}
+        {history.length > 0 && (
+          <div style={{ border:'1px solid #4a2a1a', background:'#0c0604', padding:'10px', marginTop:'10px' }}>
+            <div style={{ color:'#ddaa77', fontSize:'12px', marginBottom:'6px' }}>📜 対戦履歴</div>
+            <div style={{ maxHeight:'240px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'3px' }}>
+              {history.map(h => {
+                const mine = h.attacker_country_id === myCountry?.id   // 自国民の攻撃か
+                return (
+                  <div key={h.id} style={{ fontSize:'10px', lineHeight:'1.5', color:'#bbaa99', borderLeft:`2px solid ${mine ? '#44aa66' : '#cc5544'}`, paddingLeft:'6px' }}>
+                    <b style={{ color: mine ? '#88dd99' : '#ff9988' }}>{h.attacker_name || '？'}</b> が <b style={{ color:'#ddccbb' }}>{h.target_name || '？'}</b> と交戦
+                    → {h.target_name || '相手'}に <b style={{ color:'#ff8866' }}>{Number(h.dmg_to_target || 0).toLocaleString()}</b> ダメージ！{h.target_dying ? ' 💀瀕死' : ''}
+                    {h.dmg_to_attacker > 0 && <span style={{ color:'#88775a' }}>（{h.attacker_name}は{Number(h.dmg_to_attacker).toLocaleString()}被弾{h.attacker_dying ? '・💀瀕死' : ''}）</span>}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
