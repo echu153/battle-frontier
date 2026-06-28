@@ -87,8 +87,8 @@ export default function WarPanel({ me, myCountry, countries }) {
     const map = {}
     if (realIds.length) {
       const { data: eps } = await supabase.from('profiles')
-        .select('id, username, avatar_url, hp_current, mp_current, is_dying').in('id', realIds)
-      for (const e of (eps || [])) map[e.id] = { hp: e.hp_current, mp: e.mp_current, is_dying: e.is_dying, username: e.username, avatar_url: e.avatar_url }
+        .select('id, username, avatar_url, hp_current, mp_current, is_dying, country_rank').in('id', realIds)
+      for (const e of (eps || [])) map[e.id] = { hp: e.hp_current, mp: e.mp_current, is_dying: e.is_dying, username: e.username, avatar_url: e.avatar_url, country_rank: e.country_rank }
     }
     setMemberMap(map)
     setEnemyHpMap(map)  // 互換: 既存参照用（同じ実プレイヤーHPマップ）
@@ -267,13 +267,17 @@ export default function WarPanel({ me, myCountry, countries }) {
   // 敵参加者の集計（非瀕死=「dyingでない」or「dying_untilが既に過ぎた」）。非瀕死が0でコア解禁。
   const nowMs = Date.now()
   const isDyingNow = (p) => p.status === 'dying' && p.dying_until && new Date(p.dying_until).getTime() > nowMs
-  const enemyParts = participants.filter(p => p.country_id === enemyCid)
+  // 階級順（高い人が上）。ダミー/不明は末尾。
+  const RANK_ORDER = { '元帥': 0, '副元帥': 1, '参謀': 2, '一等兵': 3, '二等兵': 4 }
+  const rankVal = (p) => p.is_dummy ? 9 : (RANK_ORDER[memberMap[p.player_id]?.country_rank] ?? 5)
+  const byRank = (a, b) => rankVal(a) - rankVal(b)
+  const enemyParts = participants.filter(p => p.country_id === enemyCid).sort(byRank)
   const enemyActive = enemyParts.filter(p => !isDyingNow(p)).length
   const enemyDying  = enemyParts.length - enemyActive
   const coreUnlocked = enemyParts.length > 0 ? enemyActive === 0 : true  // 参加者0(NPC core-only)は従来どおり解禁
   const myRow = participants.find(p => p.player_id === me?.id) || null
   const iAmDying = myRow ? isDyingNow(myRow) : false
-  const allyParts = participants.filter(p => p.country_id === myCountry?.id)
+  const allyParts = participants.filter(p => p.country_id === myCountry?.id).sort(byRank)
 
   // 国民1人ぶんの行（状況＝HPバー＋瀕死/あなた表示）。attackable=true の敵だけ🗡交戦ボタンを出す。
   const memberRow = (p, attackable, idx) => {
@@ -281,6 +285,7 @@ export default function WarPanel({ me, myCountry, countries }) {
     const info = memberMap[p.player_id]
     const isMe = p.player_id === me?.id
     const name = p.is_dummy ? `ダミー${idx + 1}` : (info?.username || p.player_id.slice(0, 6))
+    const rank = p.is_dummy ? null : info?.country_rank
     const curHp = p.is_dummy ? p.hp : (info?.hp ?? p.hp)
     const curMax = p.is_dummy ? p.hp_max : (p.hp_max + WAR_HP_BONUS)  // 実プレイヤーは戦争補正+10000（基礎値ゆえ概算）
     const canAttack = attackable && !dying && !iAmDying && cdRemain === 0 && !busy
@@ -290,7 +295,7 @@ export default function WarPanel({ me, myCountry, countries }) {
           ? <img src={info.avatar_url} alt="" style={{ width:'20px', height:'20px', borderRadius:'50%', objectFit:'cover', flexShrink:0 }} />
           : <span style={{ width:'20px', height:'20px', borderRadius:'50%', background:'#2a1810', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', flexShrink:0 }}>{p.is_dummy ? '🤖' : '👤'}</span>}
         <span style={{ flex:1, minWidth:0, color: isMe ? '#ffdd99' : '#ccb088', fontSize:'10px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textAlign:'left' }}>
-          {name}{isMe ? '(あなた)' : ''}
+          {rank && <b style={{ color:'#ddaa66' }}>【{rank}】</b>}{name}{isMe ? '(あなた)' : ''}
         </span>
         <div style={{ width:'88px', flexShrink:0, display:'flex' }}>
           <StatBar cur={curHp} max={curMax} color={dying ? '#885544' : (attackable ? '#dd5544' : '#44aa66')} h={10} />
@@ -483,13 +488,13 @@ export default function WarPanel({ me, myCountry, countries }) {
 
         {/* 対戦履歴（お互いの国民が交戦した結果） */}
         {history.length > 0 && (
-          <div style={{ border:'1px solid #4a2a1a', background:'#0c0604', padding:'10px', marginTop:'10px' }}>
-            <div style={{ color:'#ddaa77', fontSize:'12px', marginBottom:'6px' }}>📜 対戦履歴</div>
-            <div style={{ maxHeight:'240px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'3px' }}>
+          <div style={{ border:'1px solid #4a2a1a', background:'#0c0604', padding:'10px', marginTop:'10px', textAlign:'left' }}>
+            <div style={{ color:'#ddaa77', fontSize:'12px', marginBottom:'6px', textAlign:'left' }}>📜 対戦履歴</div>
+            <div style={{ maxHeight:'240px', overflowY:'auto', display:'flex', flexDirection:'column', alignItems:'flex-start', gap:'3px' }}>
               {history.map(h => {
                 const mine = h.attacker_country_id === myCountry?.id   // 自国民の攻撃か
                 return (
-                  <div key={h.id} style={{ fontSize:'10px', lineHeight:'1.5', color:'#bbaa99', borderLeft:`2px solid ${mine ? '#44aa66' : '#cc5544'}`, paddingLeft:'6px' }}>
+                  <div key={h.id} style={{ width:'100%', fontSize:'10px', lineHeight:'1.5', color:'#bbaa99', borderLeft:`2px solid ${mine ? '#44aa66' : '#cc5544'}`, paddingLeft:'6px', textAlign:'left' }}>
                     <b style={{ color: mine ? '#88dd99' : '#ff9988' }}>{h.attacker_name || '？'}</b> が <b style={{ color:'#ddccbb' }}>{h.target_name || '？'}</b> と交戦
                     → {h.target_name || '相手'}に <b style={{ color:'#ff8866' }}>{Number(h.dmg_to_target || 0).toLocaleString()}</b> ダメージ！{h.target_dying ? ' 💀瀕死' : ''}
                     {h.dmg_to_attacker > 0 && <span style={{ color:'#88775a' }}>（{h.attacker_name}は{Number(h.dmg_to_attacker).toLocaleString()}被弾{h.attacker_dying ? '・💀瀕死' : ''}）</span>}
