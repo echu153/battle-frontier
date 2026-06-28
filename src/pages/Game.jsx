@@ -2595,6 +2595,11 @@ export default function Game() {
         setScene('battle'); return
       }
     }
+    // 戦争中は通常出撃不可（戦争に専念。HP/MPは戦争と共有のため街で削れるのを防ぐ意図も）
+    if (atWar) {
+      setBattleLogs([{ text:'⚔ 戦争中は通常の出撃ができません。戦争ページで戦いましょう。', color:'#ff8a6a' }])
+      setScene('battle'); return
+    }
     const hpCurrent = profile.hp_current ?? profile.hp_max
     if (hpCurrent <= 0) return
     if (profile.is_dying && hpCurrent < profile.hp_max) return
@@ -5130,7 +5135,7 @@ export default function Game() {
     const m = Math.ceil((diffMs % 3600000) / 60000)
     return `${h}時間${m}分`
   })() : null
-  const canBattle = !isBanned && (!isDying || hpCurrent >= hpMaxEff)
+  const canBattle = !isBanned && !atWar && (!isDying || hpCurrent >= hpMaxEff)
   const hpPct = Math.min(100,(hpCurrent/hpMaxDisp)*100)
   const mpPct = Math.min(100,(mpCurrent/mpMaxEff)*100)
   const expPct = Math.min(100,(profile.exp/profile.exp_next)*100)
@@ -5730,7 +5735,7 @@ export default function Game() {
               })()}
               <button onClick={(e)=>doBattle(e)} disabled={!canAct||loading||!canBattle}
                 style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
-                {isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
+                {atWar?'⚔ 戦争中（出撃不可）':isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
               </button>
               <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAllUsedUp||loading||isBanned}
                 style={{ width:'100%', padding:'12px', background:'#0a001a', border:`1px solid ${dungeonAllUsedUp||isBanned?'#333':'#cc44ff'}`, color:dungeonAllUsedUp||isBanned?'#333':'#cc44ff', cursor:dungeonAllUsedUp||isBanned?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'13px', marginBottom:'10px', opacity:dungeonAllUsedUp||isBanned?0.4:1 }}>
@@ -6236,7 +6241,7 @@ export default function Game() {
                 })()}
                 <button onClick={(e)=>doBattle(e)} disabled={!canAct||loading||!canBattle}
                   style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
-                  {isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中（HP全回復まで出撃不可）':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
+                  {atWar?'⚔ 戦争中（出撃不可）':isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中（HP全回復まで出撃不可）':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
                 </button>
                 <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAllUsedUp||loading}
                   style={{ width:'100%', padding:'10px', background:'#0a001a', border:`1px solid ${dungeonAllUsedUp?'#333':'#cc44ff'}`, color:dungeonAllUsedUp?'#333':'#cc44ff', cursor:dungeonAllUsedUp?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px', opacity:dungeonAllUsedUp?0.4:1 }}>
