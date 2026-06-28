@@ -2009,26 +2009,19 @@ export default function Game() {
     return () => clearInterval(id)
   }, [profile?.id, profile?.is_admin, profile?.country_id, profile?.last_expand_at, profile?.territory_locked_until])
 
-  // 満タン参戦: 交戦中(active)を初めて検知した戦争につき1回だけ、現在HPを戦争上限(eff+10000)へ引き上げる。
-  // サーバの開戦seed加算がSQL適用順/タイミングで効かなくても、クライアントで確実に満タンにする保険。
-  // 1戦争1回（warFilledRef＋localStorageで端末越し含め多重ヒールを抑止）。既に上限超ならそのまま。
+  // 満タン参戦: 交戦中(active)を検知したら war_self_buff RPC を呼ぶ（サーバー権威・1戦争1回・冪等）。
+  // 実効最大HP(装備込み)を渡し、war_participants.hp_maxを実効値へ自己上書き＋現在HPを戦争上限へ満タン化。
   useEffect(() => {
     if (!atWar || !activeWarId || !profile?.id) return
     if (warFilledRef.current === activeWarId) return
-    const lsKey = `bf_war_filled_${activeWarId}`
-    if (localStorage.getItem(lsKey)) { warFilledRef.current = activeWarId; return }
     warFilledRef.current = activeWarId
     ;(async () => {
       try {
         const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
-        const warMax = eff.hp_max + WAR_HP_BONUS
-        const { data: sp } = await supabase.from('profiles').select('hp_current').eq('id', profile.id).single()
-        if (sp && (sp.hp_current ?? 0) < warMax) {
-          await supabase.from('profiles').update({ hp_current: warMax, is_dying: false }).eq('id', profile.id)
-          await fetchProfile()
-        }
-        localStorage.setItem(lsKey, '1')
-      } catch { warFilledRef.current = null /* 失敗時は次回再試行 */ }
+        const { error } = await supabase.rpc('war_self_buff', { p_war_id: activeWarId, p_eff_hp_max: eff.hp_max })
+        if (error) { warFilledRef.current = null; return }  // RPC未適用などは次回再試行
+        await fetchProfile()
+      } catch { warFilledRef.current = null }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [atWar, activeWarId, profile?.id])

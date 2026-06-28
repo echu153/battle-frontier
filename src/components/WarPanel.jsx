@@ -131,24 +131,18 @@ export default function WarPanel({ me, myCountry, countries }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadout])
 
-  // 満タン参戦: activeな戦争を初めて検知した戦争につき1回だけ現在HPを戦争上限(eff+10000)へ。
-  // Game.jsx(ホーム)と同じ localStorage キーで端末越しの多重ヒールも抑止（片方で適用すれば両方済み扱い）。
+  // 満タン参戦: activeな戦争を検知したら war_self_buff RPC を呼ぶ（サーバー権威・1戦争1回・冪等）。
+  // 実効最大HP(装備込み)を渡し、war_participants.hp_maxを実効値へ自己上書き＋現在HPを戦争上限へ。
   useEffect(() => {
     if (war?.status !== 'active' || !me?.id || !loadout?.eff) return
     if (warFilledRef.current === war.id) return
-    const lsKey = `bf_war_filled_${war.id}`
-    if (localStorage.getItem(lsKey)) { warFilledRef.current = war.id; return }
     warFilledRef.current = war.id
     ;(async () => {
       try {
-        const warMax = (loadout.eff.hp_max || 0) + WAR_HP_BONUS
-        const { data: sp } = await supabase.from('profiles').select('hp_current').eq('id', me.id).single()
-        if (sp && (sp.hp_current ?? 0) < warMax) {
-          await supabase.from('profiles').update({ hp_current: warMax, is_dying: false }).eq('id', me.id)
-          await refreshWar()
-        }
-        localStorage.setItem(lsKey, '1')
-      } catch { warFilledRef.current = null /* 失敗時は次回再試行 */ }
+        const { error } = await supabase.rpc('war_self_buff', { p_war_id: war.id, p_eff_hp_max: loadout.eff.hp_max || 0 })
+        if (error) { warFilledRef.current = null; return }  // RPC未適用などは次回再試行
+        await refreshWar()
+      } catch { warFilledRef.current = null }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [war?.status, war?.id, loadout])
@@ -283,10 +277,12 @@ export default function WarPanel({ me, myCountry, countries }) {
         {info?.avatar_url
           ? <img src={info.avatar_url} alt="" style={{ width:'20px', height:'20px', borderRadius:'50%', objectFit:'cover', flexShrink:0 }} />
           : <span style={{ width:'20px', height:'20px', borderRadius:'50%', background:'#2a1810', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', flexShrink:0 }}>{p.is_dummy ? '🤖' : '👤'}</span>}
-        <span style={{ color: isMe ? '#ffdd99' : '#ccb088', fontSize:'10px', width:'80px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flexShrink:0 }}>
+        <span style={{ flex:1, minWidth:0, color: isMe ? '#ffdd99' : '#ccb088', fontSize:'10px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textAlign:'left' }}>
           {name}{isMe ? '(あなた)' : ''}
         </span>
-        <StatBar cur={curHp} max={curMax} color={dying ? '#885544' : (attackable ? '#dd5544' : '#44aa66')} h={10} />
+        <div style={{ width:'88px', flexShrink:0, display:'flex' }}>
+          <StatBar cur={curHp} max={curMax} color={dying ? '#885544' : (attackable ? '#dd5544' : '#44aa66')} h={10} />
+        </div>
         <span style={{ color:'#bba088', fontSize:'10px', minWidth:'74px', textAlign:'right', flexShrink:0 }}>{Math.max(0, curHp).toLocaleString()}/{curMax.toLocaleString()}</span>
         {attackable ? (
           <button onClick={() => attackPlayer(p)} disabled={!canAttack}
