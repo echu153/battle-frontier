@@ -368,7 +368,7 @@ function doAttack(att, def, isExtra, ctx) {
         logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemyName}を麻痺させた！`, color: '#ffe066' })
       }
       const healUpMult = attBuffs.healUp?.turns > 0 ? attBuffs.healUp.rate : 1
-      const healAmt = attBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * att.passiveHealMult * PVP.healMult * healUpMult)
+      const healAmt = attBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * att.passiveHealMult * PVP.healMult * ctx.healMult * healUpMult)
       att.hp = Math.min(eff.hp_max, att.hp + healAmt)
       if (att.passiveHealReflect && healAmt > 0) {
         const reflectDmg = Math.floor(healAmt * 0.5)
@@ -404,7 +404,7 @@ function doAttack(att, def, isExtra, ctx) {
       }
       // 血の狂気（回復補正は PVP.healMult）
       if (att.buffs.bloodRage?.turns > 0 && finalDmg > 0 && !(att.buffs.healSeal?.turns > 0)) {
-        const rageCure = Math.min(Math.floor(finalDmg * att.buffs.bloodRage.healRate * PVP.healMult), Math.floor(eff.hp_max * 0.2))
+        const rageCure = Math.min(Math.floor(finalDmg * att.buffs.bloodRage.healRate * PVP.healMult * ctx.healMult), Math.floor(eff.hp_max * 0.2))
         att.hp = Math.min(eff.hp_max, att.hp + rageCure)
         logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
       }
@@ -432,7 +432,7 @@ function doAttack(att, def, isExtra, ctx) {
     const critText = isCrit ? '💥クリティカル！ ' : ''
     logs.push({ text: `${prefix}${critText}攻撃！ ${enemyName}に${finalDmg}ダメージ！`, color: '#ffcc00' })
     if (att.buffs.bloodRage?.turns > 0 && finalDmg > 0 && !(att.buffs.healSeal?.turns > 0)) {
-      const rageCure = Math.min(Math.floor(finalDmg * att.buffs.bloodRage.healRate * PVP.healMult), Math.floor(eff.hp_max * 0.2))
+      const rageCure = Math.min(Math.floor(finalDmg * att.buffs.bloodRage.healRate * PVP.healMult * ctx.healMult), Math.floor(eff.hp_max * 0.2))
       att.hp = Math.min(eff.hp_max, att.hp + rageCure)
       logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
     }
@@ -526,12 +526,12 @@ function applyTurnStart(side, opp, ctx) {
   const sealed = b.healSeal?.turns > 0
   if (sealed) logs.push({ text: `🚫 ${name}は回復封じ中！ 回復効果が無効化された！`, color: '#ff4488' })
   if (b.regen?.turns > 0) {
-    const amt = Math.floor(maxHp * b.regen.rate * PVP.healMult)
+    const amt = Math.floor(maxHp * b.regen.rate * PVP.healMult * ctx.healMult)
     side.hp = Math.min(maxHp, side.hp + amt)
     logs.push({ text: `💚 ${name}のリジェネ！ HPが${amt}回復した！`, color: '#44ff88' })
   }
   if (!sealed && b.regenHeal?.turns > 0) {
-    const amt = Math.floor(b.regenHeal.amount * side.passiveHealMult * PVP.healMult * (b.healUp?.turns > 0 ? b.healUp.rate : 1))
+    const amt = Math.floor(b.regenHeal.amount * side.passiveHealMult * PVP.healMult * ctx.healMult * (b.healUp?.turns > 0 ? b.healUp.rate : 1))
     side.hp = Math.min(maxHp, side.hp + amt)
     logs.push({ text: `💚 ${name}の回復効果でHPが${amt}回復した！`, color: '#44ff88' })
   }
@@ -544,7 +544,7 @@ function applyTurnStart(side, opp, ctx) {
     }
   }
   if (!sealed && b.delayHeal && ctx.turn === b.delayHeal.triggerTurn) {
-    const amt = Math.floor(b.delayHeal.amount * PVP.healMult)
+    const amt = Math.floor(b.delayHeal.amount * PVP.healMult * ctx.healMult)
     side.hp = Math.min(maxHp, side.hp + amt)
     logs.push({ text: `💚 ${name}の装備効果でHPが${amt}回復した！`, color: '#44ff88' })
   }
@@ -647,7 +647,7 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
 
   // 戦争用の調整係数（未指定＝1.0＝組み手/PvPは従来どおり）。
   //  atkDmgMult: 通常/スキル与ダメ倍率 / dotMult: 状態異常DoT(自分が喰らう)倍率
-  const ctx = { logs, turn: 1, atkDmgMult: opts.atkDmgMult ?? 1, dotMult: opts.dotMult ?? 1 }
+  const ctx = { logs, turn: 1, atkDmgMult: opts.atkDmgMult ?? 1, dotMult: opts.dotMult ?? 1, healMult: opts.healMult ?? 1 }
 
   while (A.hp > 0 && B.hp > 0 && ctx.turn <= turnCap) {
     // 先攻＝素早さが速い方（完全同値はランダム）
