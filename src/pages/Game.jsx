@@ -1810,8 +1810,8 @@ export default function Game() {
   }, [])
 
   useEffect(() => {
-    const onFocus = () => { fetchProfile() }
-    const onVisibility = () => { if (document.visibilityState === 'visible') fetchProfile() }
+    const onFocus = () => { fetchProfile(); refreshTownNotices() }
+    const onVisibility = () => { if (document.visibilityState === 'visible') { fetchProfile(); refreshTownNotices() } }
     window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
@@ -2018,6 +2018,9 @@ export default function Game() {
     ;(async () => {
       try {
         const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
+        const warMax = eff.hp_max + WAR_HP_BONUS
+        // 楽観更新: 先に画面上のHPを満タン(戦争上限)へ。上限+1万と満タン化を同時に見せる（ラグ解消）。
+        setProfile(p => p ? { ...p, hp_current: Math.max(p.hp_current ?? 0, warMax), is_dying: false } : p)
         const { error } = await supabase.rpc('war_self_buff', { p_war_id: activeWarId, p_eff_hp_max: eff.hp_max })
         if (error) { warFilledRef.current = null; return }  // RPC未適用などは次回再試行
         await fetchProfile()
@@ -2199,9 +2202,11 @@ export default function Game() {
       const hpMaxR = _rEff.hp_max, mpMaxR = _rEff.mp_max
       const hpCapR = atWar ? hpMaxR + WAR_HP_BONUS : hpMaxR   // 戦争中はHP上限+10000まで回復
       const current = sp.hp_current ?? hpMaxR
-      // 回復量も戦争中は戦争HP(上限+10000)の20%（通常時は通常上限の20%）
-      const newHp = Math.min(hpCapR, Math.floor(current+hpCapR*0.2))
-      const newMp = Math.min(mpMaxR, Math.floor((sp.mp_current??mpMaxR)+mpMaxR*0.2))
+      const curMp = sp.mp_current ?? mpMaxR
+      // ★回復は「上げるだけ」。現在HPが上限超(戦争+1万バッファ等)でも絶対に減らさない。
+      //   atWar検知ラグ中にhpCapRがeff止まりでもバッファを削らないようにする（終戦バッファ解除はサーバ_war_resolveが担当）。
+      const newHp = Math.max(current, Math.min(hpCapR, Math.floor(current+hpCapR*0.2)))
+      const newMp = Math.max(curMp, Math.min(mpMaxR, Math.floor(curMp+mpMaxR*0.2)))
       const newIsDying = newHp >= hpMaxR ? false : sp.is_dying   // 瀕死解除は通常上限基準（復帰を難しくしない）
       await supabase.from('profiles').update({
         hp_current:newHp, mp_current:newMp, is_dying:newIsDying,
