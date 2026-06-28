@@ -19,6 +19,9 @@ export const WAR_TURN_CAP = 15           // 1回の交戦のターン上限（�
 export const WAR_DOT_MULT  = 0.35        // 状態異常DoT(出血/毒/やけど等)の倍率。小さいほどDoTが弱い
 export const WAR_DMG_MULT  = 1.5         // 通常/スキル与ダメの倍率。大きいほど直接ダメが通る
 export const WAR_HEAL_MULT = 0.4         // 回復(スキル回復/リジェネ/血の狂気等)の倍率。小さいほど回復で粘れない
+// 防御無視の最低ダメージ保証＝相手の最大HPのこの割合は必ず通す。戦闘力差があっても弱者が少し削れる＝無双対策。
+// 例: 0.004 → 相手最大HPの0.4%/ヒット。大きいほど弱者でも削れる（無双しにくい）。
+export const WAR_MIN_DMG_PCT = 0.004
 // 戦争中の最大HP補正（HPのみ・MPは据え置き）。開戦seed(war_tick)で現在HPにも+この値を
 // 加算＝「満タンで参戦」。街と共有のまま戦争中だけ上限が広がる（終戦で通常上限に自然収束）。
 // ※Game.jsx 側にも同値のローカル定数 WAR_HP_BONUS=10000 がある（循環import回避のため）。
@@ -55,6 +58,7 @@ export function simulateWarBattle(attacker, target, start) {
     hpBonus: WAR_HP_BONUS, turnCap: WAR_TURN_CAP,   // 戦争中は最大HP+10000（満タン参戦の上限）
     warMode: true,                                  // ターン上限で両者生存なら「決着がつかなかった」表示
     atkDmgMult: WAR_DMG_MULT, dotMult: WAR_DOT_MULT, healMult: WAR_HEAL_MULT, // 直接ダメ↑/DoT↓/回復↓
+    minDmgPct: WAR_MIN_DMG_PCT,                     // 防御無視の最低ダメージ保証（無双対策）
     startHpA: start?.atkHp, startMpA: start?.atkMp,
     startHpB: start?.tgtHp, startMpB: start?.tgtMp,
   })

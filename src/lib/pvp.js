@@ -160,6 +160,8 @@ function doAttack(att, def, isExtra, ctx) {
   const profile = att.profile
   const enemyName = def.profile.username
   const enemyObj = defenderEnemyObj(def)
+  // 防御無視の最低ダメージ（戦争用）。攻撃が当たった(res.dmg>0/通常攻撃)時、これ未満なら底上げ。
+  const minDmg = ctx.minDmgPct > 0 ? Math.max(1, Math.floor((def.eff.hp_max || 0) * ctx.minDmgPct)) : 0
 
   // ===== 施術ステータス（自分のバフ反映） =====
   const holyFieldDef = attBuffs.holyField?.turns > 0 ? attBuffs.holyField.rate : 1.0
@@ -348,9 +350,11 @@ function doAttack(att, def, isExtra, ctx) {
           finalDmg += hDmg
           parts.push(`${hDmg}ダメージ！${hCrit ? '💥' : ''}`)
         }
+        if (minDmg > 0) finalDmg = Math.max(finalDmg, minDmg)  // 戦争: 防御無視の最低ダメージ保証（合計）
         resLog = `${res.log.split('！')[0]}！ ${enemyName}に ${parts.join(' ')}`
       } else {
         finalDmg = Math.floor(res.dmg * defScale * finalCritMult * att.passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * reduceMult * PVP.dmgMult * ctx.atkDmgMult * (0.9 + Math.random() * 0.2))
+        if (res.dmg > 0 && minDmg > 0) finalDmg = Math.max(finalDmg, minDmg)  // 戦争: 防御無視の最低ダメージ保証
         resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
       }
       if (res.dmg > 0) att.prevDmgSkillName = cs.skills?.name
@@ -426,7 +430,8 @@ function doAttack(att, def, isExtra, ctx) {
     const baseDmg = Math.max(1, Math.floor(baseAtk * ratioBaseAtk / Math.max(1, ratioBaseAtk + eDefVal)) + Math.floor(Math.random() * 4))
     const reduceMult = defReduceMult(att.isMagical)
     const breederDmgMult = attBuffs.breederDmgUp?.turns > 0 ? attBuffs.breederDmgUp.rate : 1.0
-    const finalDmg = Math.floor(baseDmg * 0.7 * critMult * (att.isArtifact ? 1.3 : 1.0) * att.passiveDmgMult * reduceMult * breederDmgMult * PVP.dmgMult * ctx.atkDmgMult * (0.9 + Math.random() * 0.2))
+    let finalDmg = Math.floor(baseDmg * 0.7 * critMult * (att.isArtifact ? 1.3 : 1.0) * att.passiveDmgMult * reduceMult * breederDmgMult * PVP.dmgMult * ctx.atkDmgMult * (0.9 + Math.random() * 0.2))
+    if (minDmg > 0) finalDmg = Math.max(finalDmg, minDmg)  // 戦争: 防御無視の最低ダメージ保証
     dealToDef(finalDmg)
     evoOnHit(eff, finalDmg, defBuffs, enemyName, logs)  // 真化: 通常攻撃ヒット時の敵デバフ（通常攻撃はdef.buffs置換なし）
     const critText = isCrit ? '💥クリティカル！ ' : ''
@@ -647,7 +652,8 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
 
   // 戦争用の調整係数（未指定＝1.0＝組み手/PvPは従来どおり）。
   //  atkDmgMult: 通常/スキル与ダメ倍率 / dotMult: 状態異常DoT(自分が喰らう)倍率
-  const ctx = { logs, turn: 1, atkDmgMult: opts.atkDmgMult ?? 1, dotMult: opts.dotMult ?? 1, healMult: opts.healMult ?? 1 }
+  // minDmgPct: 防御無視の最低ダメージ保証（相手最大HPの割合）。戦争で戦闘力差があっても少し通す用。0=無効。
+  const ctx = { logs, turn: 1, atkDmgMult: opts.atkDmgMult ?? 1, dotMult: opts.dotMult ?? 1, healMult: opts.healMult ?? 1, minDmgPct: opts.minDmgPct ?? 0 }
 
   while (A.hp > 0 && B.hp > 0 && ctx.turn <= turnCap) {
     // 先攻＝素早さが速い方（完全同値はランダム）
