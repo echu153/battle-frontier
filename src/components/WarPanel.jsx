@@ -496,9 +496,9 @@ export default function WarPanel({ me, myCountry, countries }) {
               {history.map(h => {
                 const mine = h.attacker_country_id === myCountry?.id   // 自国民の攻撃か
                 if (h.is_core) {
-                  // コア攻撃は分かりやすいように大きく・太字で目立たせる
+                  // コア攻撃は分かりやすいように色だけ変える（大きさは通常）
                   return (
-                    <div key={h.id} style={{ width:'100%', fontSize:'13px', fontWeight:'bold', lineHeight:'1.6', color:'#ffcc44', borderLeft:`3px solid ${mine ? '#44cc66' : '#ff5544'}`, paddingLeft:'7px', textAlign:'left', letterSpacing:'0.5px', margin:'2px 0' }}>
+                    <div key={h.id} style={{ width:'100%', fontSize:'10px', lineHeight:'1.5', color:'#ffcc44', borderLeft:`2px solid ${mine ? '#44cc66' : '#ff5544'}`, paddingLeft:'6px', textAlign:'left' }}>
                       🔥【コア攻撃】<span style={{ color: mine ? '#aaffbb' : '#ff9988' }}>{h.attacker_name || '？'}</span> が {h.target_name || '敵コア'}に <span style={{ color:'#ff7744' }}>{Number(h.dmg_to_target || 0).toLocaleString()}</span> ダメージ！
                     </div>
                   )

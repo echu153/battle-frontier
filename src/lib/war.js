@@ -13,7 +13,10 @@ import { simulatePvpBattle } from './pvp'
 
 export const WAR_CORE_HP = 300000        // サーバ war_tick と一致（表示用）
 export const WAR_CORE_REDUCTION = 0.9    // サーバ war_attack_core が適用（表示用）
-export const WAR_TURN_CAP = 20           // 1回の交戦のターン上限（消耗戦＝20ターンで強制終了）
+export const WAR_TURN_CAP = 15           // 1回の交戦のターン上限（消耗戦＝15ターンで強制終了＝決着つかず）
+// 戦争の戦闘調整: 状態異常(出血/毒/やけど等)の被ダメは半分・通常/スキルの与ダメは少し増やす。
+export const WAR_DOT_MULT = 0.5          // 状態異常DoTの倍率（半減）
+export const WAR_DMG_MULT = 1.3          // 通常/スキル与ダメの倍率（少し増やす）
 // 戦争中の最大HP補正（HPのみ・MPは据え置き）。開戦seed(war_tick)で現在HPにも+この値を
 // 加算＝「満タンで参戦」。街と共有のまま戦争中だけ上限が広がる（終戦で通常上限に自然収束）。
 // ※Game.jsx 側にも同値のローカル定数 WAR_HP_BONUS=10000 がある（循環import回避のため）。
@@ -48,6 +51,8 @@ export function simulateCoreAttack(loadout) {
 export function simulateWarBattle(attacker, target, start) {
   const res = simulatePvpBattle(attacker, target, {
     hpBonus: WAR_HP_BONUS, turnCap: WAR_TURN_CAP,   // 戦争中は最大HP+10000（満タン参戦の上限）
+    warMode: true,                                  // ターン上限で両者生存なら「決着がつかなかった」表示
+    atkDmgMult: WAR_DMG_MULT, dotMult: WAR_DOT_MULT, // 通常/スキル与ダメ↑・状態異常DoT↓
     startHpA: start?.atkHp, startMpA: start?.atkMp,
     startHpB: start?.tgtHp, startMpB: start?.tgtMp,
   })

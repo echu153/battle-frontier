@@ -255,7 +255,7 @@ function doAttack(att, def, isExtra, ctx) {
         const fCrit = Math.random() * 100 < critRate
         const fCritMult = fCrit ? (1.5 + (eff.critDmg || 0) + att.passiveCritDmgBonus) : 1.0
         const dr = defBuffs.dmgReduce?.turns > 0 ? defBuffs.dmgReduce.rate : 1.0
-        let fDmg = Math.floor(resPeek.followup.dmg * fScale * fCritMult * att.passiveDmgMult * dr * (1 - calcDefReduction(def.eff.def)) * PVP.dmgMult * (0.9 + Math.random() * 0.2))
+        let fDmg = Math.floor(resPeek.followup.dmg * fScale * fCritMult * att.passiveDmgMult * dr * (1 - calcDefReduction(def.eff.def)) * PVP.dmgMult * ctx.atkDmgMult * (0.9 + Math.random() * 0.2))
         fDmg = Math.max(1, fDmg)
         dealToDef(fDmg)
         logs.push({ text: `↳ 追撃！${resPeek.followup.label ? `（${resPeek.followup.label}）` : ''} ${enemyName}に${fDmg}ダメージ！${fCrit ? ' 💥クリティカル！' : ''}`, color: fCrit ? '#ffaa00' : '#ffaa66' })
@@ -336,7 +336,7 @@ function doAttack(att, def, isExtra, ctx) {
       const isMulti = Array.isArray(res.hitDmgs) && res.hitDmgs.length > 0 && res.dmg > 0
       let finalDmg, resLog, multiCritAny = false
       if (isMulti) {
-        const hitMult = defScale * att.passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * reduceMult * PVP.dmgMult
+        const hitMult = defScale * att.passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * reduceMult * PVP.dmgMult * ctx.atkDmgMult
         const parts = []
         finalDmg = 0
         for (const hd of res.hitDmgs) {
@@ -350,7 +350,7 @@ function doAttack(att, def, isExtra, ctx) {
         }
         resLog = `${res.log.split('！')[0]}！ ${enemyName}に ${parts.join(' ')}`
       } else {
-        finalDmg = Math.floor(res.dmg * defScale * finalCritMult * att.passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * reduceMult * PVP.dmgMult * (0.9 + Math.random() * 0.2))
+        finalDmg = Math.floor(res.dmg * defScale * finalCritMult * att.passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * reduceMult * PVP.dmgMult * ctx.atkDmgMult * (0.9 + Math.random() * 0.2))
         resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
       }
       if (res.dmg > 0) att.prevDmgSkillName = cs.skills?.name
@@ -397,7 +397,7 @@ function doAttack(att, def, isExtra, ctx) {
       if (res.followup && res.followup.dmg > 0) {
         const fCrit = Math.random() * 100 < (critRate + (res.bonusCritRate || 0))
         const fCritMult = fCrit ? (1.5 + (eff.critDmg || 0) + att.passiveCritDmgBonus) : 1.0
-        let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * att.passiveDmgMult * tosoMult * allinDebuffOutMult * reduceMult * PVP.dmgMult * (0.9 + Math.random() * 0.2))
+        let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * att.passiveDmgMult * tosoMult * allinDebuffOutMult * reduceMult * PVP.dmgMult * ctx.atkDmgMult * (0.9 + Math.random() * 0.2))
         fDmg = Math.max(1, fDmg)
         dealToDef(fDmg)
         logs.push({ text: `↳ 追撃！${res.followup.label ? `（${res.followup.label}）` : ''} ${enemyName}に${fDmg}ダメージ！${fCrit ? ' 💥クリティカル！' : ''}`, color: fCrit ? '#ffaa00' : '#ffaa66' })
@@ -410,7 +410,7 @@ function doAttack(att, def, isExtra, ctx) {
       }
       // 神聖覚醒の追撃
       if (att.buffs.holyAwakening?.turns > 0 && finalDmg > 0) {
-        const holyBonusDmg = Math.floor((pDef * att.buffs.holyAwakening.defMult + pMdef * att.buffs.holyAwakening.defMult) * PVP.dmgMult)
+        const holyBonusDmg = Math.floor((pDef * att.buffs.holyAwakening.defMult + pMdef * att.buffs.holyAwakening.defMult) * PVP.dmgMult * ctx.atkDmgMult)
         dealToDef(holyBonusDmg)
         logs.push({ text: `✨ 神聖覚醒の追撃！ ${enemyName}に${holyBonusDmg}ダメージ！`, color: '#ffeeaa' })
       }
@@ -426,7 +426,7 @@ function doAttack(att, def, isExtra, ctx) {
     const baseDmg = Math.max(1, Math.floor(baseAtk * ratioBaseAtk / Math.max(1, ratioBaseAtk + eDefVal)) + Math.floor(Math.random() * 4))
     const reduceMult = defReduceMult(att.isMagical)
     const breederDmgMult = attBuffs.breederDmgUp?.turns > 0 ? attBuffs.breederDmgUp.rate : 1.0
-    const finalDmg = Math.floor(baseDmg * 0.7 * critMult * (att.isArtifact ? 1.3 : 1.0) * att.passiveDmgMult * reduceMult * breederDmgMult * PVP.dmgMult * (0.9 + Math.random() * 0.2))
+    const finalDmg = Math.floor(baseDmg * 0.7 * critMult * (att.isArtifact ? 1.3 : 1.0) * att.passiveDmgMult * reduceMult * breederDmgMult * PVP.dmgMult * ctx.atkDmgMult * (0.9 + Math.random() * 0.2))
     dealToDef(finalDmg)
     evoOnHit(eff, finalDmg, defBuffs, enemyName, logs)  // 真化: 通常攻撃ヒット時の敵デバフ（通常攻撃はdef.buffs置換なし）
     const critText = isCrit ? '💥クリティカル！ ' : ''
@@ -475,27 +475,27 @@ function applyTurnStart(side, opp, ctx) {
   const b = side.buffs
 
   if (b.severePoisoin?.turns > 0) {
-    const d = Math.floor(maxHp * 0.05); side.hp = Math.max(0, side.hp - d)
+    const d = Math.floor(maxHp * 0.05 * ctx.dotMult); side.hp = Math.max(0, side.hp - d)
     logs.push({ text: `🤢 猛毒ダメージ！ ${name}に${d}ダメージ！`, color: '#aa44ff' })
     if (side.hp <= 0) return true
   }
   if (b.burn?.turns > 0) {
-    const d = Math.floor(maxHp * 0.02); side.hp = Math.max(0, side.hp - d)
+    const d = Math.floor(maxHp * 0.02 * ctx.dotMult); side.hp = Math.max(0, side.hp - d)
     logs.push({ text: `🔥 やけどダメージ！ ${name}に${d}ダメージ！`, color: '#ff6622' })
     if (side.hp <= 0) return true
   }
   if (b.poison?.turns > 0) {
-    const d = Math.floor(maxHp * b.poison.dmgRate); side.hp = Math.max(0, side.hp - d)
+    const d = Math.floor(maxHp * b.poison.dmgRate * ctx.dotMult); side.hp = Math.max(0, side.hp - d)
     logs.push({ text: `☠ 毒ダメージ！ ${name}に${d}ダメージ！`, color: '#44ff44' })
     if (side.hp <= 0) return true
   }
   if (b.curseDmg?.turns > 0) {
-    side.hp = Math.max(0, side.hp - b.curseDmg.dmg)
-    logs.push({ text: `💀 呪縛ダメージ！ ${name}に${b.curseDmg.dmg}ダメージ！`, color: '#cc44ff' })
+    const cd = Math.floor(b.curseDmg.dmg * ctx.dotMult); side.hp = Math.max(0, side.hp - cd)
+    logs.push({ text: `💀 呪縛ダメージ！ ${name}に${cd}ダメージ！`, color: '#cc44ff' })
     if (side.hp <= 0) return true
   }
   if (b.bleed) {
-    const d = Math.floor(side.hp * 0.01 * b.bleed.stacks); side.hp = Math.max(0, side.hp - d)
+    const d = Math.floor(side.hp * 0.01 * b.bleed.stacks * ctx.dotMult); side.hp = Math.max(0, side.hp - d)
     logs.push({ text: `🩸 出血ダメージ！ ${name}に${d}ダメージ（${b.bleed.stacks}スタック）！`, color: '#ff4466' })
     if (side.hp <= 0) return true
     b.bleed.lastTurn = (b.bleed.lastTurn || 0) + 1
@@ -645,7 +645,9 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
   A.buffs = applyEquipmentEffects(A.equipment, { ...A.profile, hp_max: A.eff.hp_max }, A.buffs, logs)
   B.buffs = applyEquipmentEffects(B.equipment, { ...B.profile, hp_max: B.eff.hp_max }, B.buffs, logs)
 
-  const ctx = { logs, turn: 1 }
+  // 戦争用の調整係数（未指定＝1.0＝組み手/PvPは従来どおり）。
+  //  atkDmgMult: 通常/スキル与ダメ倍率 / dotMult: 状態異常DoT(自分が喰らう)倍率
+  const ctx = { logs, turn: 1, atkDmgMult: opts.atkDmgMult ?? 1, dotMult: opts.dotMult ?? 1 }
 
   while (A.hp > 0 && B.hp > 0 && ctx.turn <= turnCap) {
     // 先攻＝素早さが速い方（完全同値はランダム）
@@ -692,7 +694,10 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
   else winner = aHpPct > bHpPct ? 'A' : (bHpPct > aHpPct ? 'B' : 'draw')  // ターン上限：HP割合判定
 
   const turns = Math.min(ctx.turn, turnCap)
-  if (winner === 'A') logs.push({ text: `✦ ${A.profile.username} の勝利！（${turns}ターン）`, color: '#ffcc44' })
+  const ranOut = A.hp > 0 && B.hp > 0   // ターン上限まで両者生存＝強制終了
+  if (opts.warMode && ranOut) {
+    logs.push({ text: `⚖ 決着がつかなかった（${turns}ターン）`, color: '#cccccc' })
+  } else if (winner === 'A') logs.push({ text: `✦ ${A.profile.username} の勝利！（${turns}ターン）`, color: '#ffcc44' })
   else if (winner === 'B') logs.push({ text: `✦ ${B.profile.username} の勝利！（${turns}ターン）`, color: '#ffcc44' })
   else logs.push({ text: `引き分け…（${turns}ターン）`, color: '#aaaaaa' })
 
