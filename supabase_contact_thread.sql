@@ -74,3 +74,36 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.contact_post_message(uuid, text) TO authenticated;
+
+-- 3) 「確認済み」対応：返信せずに未返信一覧から外す（返信不要な締めメッセージ向け）
+ALTER TABLE public.contact_messages ADD COLUMN IF NOT EXISTS admin_ack_at timestamptz;
+
+CREATE OR REPLACE FUNCTION public.admin_ack_contact(p_id uuid)
+RETURNS public.contact_messages
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_username text;
+  v_row public.contact_messages;
+BEGIN
+  SELECT username INTO v_username FROM public.profiles WHERE id = auth.uid();
+  IF v_username IS DISTINCT FROM 'おれおれお' THEN
+    RAISE EXCEPTION '権限がありません（管理人専用）';
+  END IF;
+
+  UPDATE public.contact_messages
+     SET admin_ack_at = now()
+   WHERE id = p_id
+   RETURNING * INTO v_row;
+
+  IF v_row.id IS NULL THEN
+    RAISE EXCEPTION '対象のお問い合わせが見つかりません';
+  END IF;
+
+  RETURN v_row;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.admin_ack_contact(uuid) TO authenticated;

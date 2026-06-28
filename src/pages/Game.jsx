@@ -1945,7 +1945,7 @@ export default function Game() {
       const name = uname ?? profile?.username
       if (name !== 'おれおれお') { setUnrepliedContacts(0); return }
       // 「未返信」＝最後のメッセージがユーザー（未返信の新規＋ユーザーの追い返信）。threadも加味して数える。
-      const { data: rows } = await supabase.from('contact_messages').select('id, body, created_at, reply, reply_at')
+      const { data: rows } = await supabase.from('contact_messages').select('id, body, created_at, reply, reply_at, admin_ack_at')
       if (!rows) { setUnrepliedContacts(0); return }
       const ids = rows.map(r => r.id)
       const byC = {}
@@ -4097,10 +4097,16 @@ export default function Game() {
     msgs.sort((a, b) => new Date(a.at) - new Date(b.at))
     return msgs
   }
-  // 最後のメッセージがユーザー＝運営の返信待ち（管理人の「未返信」判定）
+  // 最後のメッセージがユーザー＝運営の返信待ち（管理人の「未返信」判定）。
+  // ただし管理人が「確認済み(admin_ack_at)」にした後、新しいユーザー発言が無ければ未返信扱いにしない
+  // （例: 「直りました、ありがとう」など返信不要な締めにも対応）。
   const needsAdminReply = (c) => {
     const m = buildThread(c)
-    return m.length === 0 || m[m.length - 1].sender === 'user'
+    if (m.length === 0) return true
+    const last = m[m.length - 1]
+    if (last.sender !== 'user') return false
+    const ackAt = c.admin_ack_at ? new Date(c.admin_ack_at).getTime() : 0
+    return new Date(last.at).getTime() > ackAt
   }
 
   // 過去のお問い合わせを取得。is_admin は全員分、一般は自分の分のみ（reply列＋thread＝往復履歴を含む）
@@ -4158,6 +4164,20 @@ export default function Game() {
       alert('送信に失敗しました。' + (e?.message ? `\n${e.message}` : ''))
     } finally {
       setContactPostingId(null)
+    }
+  }
+
+  // is_admin: 返信せずに「確認済み」にして未返信一覧から外す（返信不要な締め向け）
+  const adminAckContact = async (id) => {
+    setAdminReplyingId(id)
+    try {
+      const { error } = await supabase.rpc('admin_ack_contact', { p_id: id })
+      if (error) throw error
+      await fetchMyContacts()
+    } catch (e) {
+      alert('確認処理に失敗しました。' + (e?.message ? `\n${e.message}` : ''))
+    } finally {
+      setAdminReplyingId(null)
     }
   }
 
@@ -4798,9 +4818,15 @@ export default function Game() {
                       rows={3} placeholder="返信内容を入力..."
                       style={{ width:'100%', padding:'6px', background:'#001040', border:'1px solid #335577', color:'#ccddff', fontFamily:'monospace', fontSize:'11px', resize:'vertical', boxSizing:'border-box', marginBottom:'6px' }} />
                     <button onClick={()=>adminReplyContact(c.id)} disabled={adminReplyingId===c.id || !(adminReplyDrafts[c.id] || '').trim()}
-                      style={{ width:'100%', padding:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', opacity:(adminReplyDrafts[c.id] || '').trim() ? 1 : 0.4 }}>
+                      style={{ width:'100%', padding:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', opacity:(adminReplyDrafts[c.id] || '').trim() ? 1 : 0.4, marginBottom: needsAdminReply(c) ? '6px' : 0 }}>
                       {adminReplyingId===c.id ? '送信中...' : '返信を送信'}
                     </button>
+                    {needsAdminReply(c) && (
+                      <button onClick={()=>adminAckContact(c.id)} disabled={adminReplyingId===c.id}
+                        style={{ width:'100%', padding:'8px', background:'#0a1a08', border:'1px solid #44aa44', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                        ✓ 確認済みにする（返信せず未返信から外す）
+                      </button>
+                    )}
                   </div>
                 ) : hasAdminMsg ? (
                   <div style={{ padding:'10px 12px', borderTop:'1px solid #112233' }}>
