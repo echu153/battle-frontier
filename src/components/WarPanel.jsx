@@ -495,6 +495,14 @@ export default function WarPanel({ me, myCountry, countries }) {
             <div style={{ maxHeight:'240px', overflowY:'auto', display:'flex', flexDirection:'column', alignItems:'flex-start', gap:'3px' }}>
               {history.map(h => {
                 const mine = h.attacker_country_id === myCountry?.id   // 自国民の攻撃か
+                if (h.is_core) {
+                  // コア攻撃は分かりやすいように大きく・太字で目立たせる
+                  return (
+                    <div key={h.id} style={{ width:'100%', fontSize:'13px', fontWeight:'bold', lineHeight:'1.6', color:'#ffcc44', borderLeft:`3px solid ${mine ? '#44cc66' : '#ff5544'}`, paddingLeft:'7px', textAlign:'left', letterSpacing:'0.5px', margin:'2px 0' }}>
+                      🔥【コア攻撃】<span style={{ color: mine ? '#aaffbb' : '#ff9988' }}>{h.attacker_name || '？'}</span> が {h.target_name || '敵コア'}に <span style={{ color:'#ff7744' }}>{Number(h.dmg_to_target || 0).toLocaleString()}</span> ダメージ！
+                    </div>
+                  )
+                }
                 return (
                   <div key={h.id} style={{ width:'100%', fontSize:'10px', lineHeight:'1.5', color:'#bbaa99', borderLeft:`2px solid ${mine ? '#44aa66' : '#cc5544'}`, paddingLeft:'6px', textAlign:'left' }}>
                     <b style={{ color: mine ? '#88dd99' : '#ff9988' }}>{h.attacker_name || '？'}</b> が <b style={{ color:'#ddccbb' }}>{h.target_name || '？'}</b> と交戦

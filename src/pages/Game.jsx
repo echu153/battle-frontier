@@ -2219,6 +2219,7 @@ export default function Game() {
   }
 
   const doChangeClass = async (targetClass) => {
+    if (atWar) { setTempleMessage('⚔ 戦争中は転職できません。'); return }
     setLoading(true); setTempleMessage('')
     const { data, error } = await supabase.rpc('switch_class', { p_target_class: targetClass })
     if (error || !data?.ok) {
@@ -3937,6 +3938,7 @@ export default function Game() {
 
   const useInn = async () => {
     if (loading || innBusyRef.current) return  // 連打・二重実行ガード（refで同期的に即ブロック）
+    if (atWar) { setInnMessage('⚔ 戦争中は宿屋を利用できません。'); return }  // 戦争中はHP/MP共有のため宿屋禁止
     innBusyRef.current = true
     setLoading(true)
     const isDying = profile.is_dying||false
@@ -4566,9 +4568,9 @@ export default function Game() {
         <div style={{ color:'#ccaa00', fontSize:'15px', marginBottom:'16px', letterSpacing:'2px' }}>{pendingClassChange}に転職します！</div>
         <div style={{ color:'#446688', fontSize:'11px', marginBottom:'24px' }}>よろしいですか？</div>
         <div style={{ display:'flex', gap:'12px', justifyContent:'center' }}>
-          <button onClick={async ()=>{ await doChangeClass(pendingClassChange); setPendingClassChange(null) }} disabled={loading}
-            style={{ padding:'10px 24px', background:'#1a1000', border:'1px solid #ccaa00', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
-            {loading ? '処理中...' : '転職する'}
+          <button onClick={async ()=>{ await doChangeClass(pendingClassChange); setPendingClassChange(null) }} disabled={loading||atWar}
+            style={{ padding:'10px 24px', background:'#1a1000', border:'1px solid #ccaa00', color:'#ccaa00', cursor:(loading||atWar)?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', opacity:(loading||atWar)?0.5:1 }}>
+            {atWar ? '戦争中は不可' : (loading ? '処理中...' : '転職する')}
           </button>
           <button onClick={()=>setPendingClassChange(null)} disabled={loading}
             style={{ padding:'10px 24px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
@@ -5973,9 +5975,9 @@ export default function Game() {
                   </div>
                   <div style={{ display:'flex', gap:'8px' }}>
                     <button onClick={backToTown} style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>戻る</button>
-                    <button onClick={useInn} disabled={loading||(!isDying&&profile.gold<innCost)}
-                      style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor:(loading||(!isDying&&profile.gold<innCost))?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', opacity:(loading||(!isDying&&profile.gold<innCost))?0.4:1 }}>
-                      利用する
+                    <button onClick={useInn} disabled={loading||atWar||(!isDying&&profile.gold<innCost)}
+                      style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor:(loading||atWar||(!isDying&&profile.gold<innCost))?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', opacity:(loading||atWar||(!isDying&&profile.gold<innCost))?0.4:1 }}>
+                      {atWar ? '戦争中は利用不可' : '利用する'}
                     </button>
                   </div>
                 </>
@@ -6480,9 +6482,9 @@ export default function Game() {
                     </div>
                     <div style={{ display:'flex', gap:'8px' }}>
                       <button onClick={backToTown} style={{ flex:1, padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 街に戻る</button>
-                      <button onClick={useInn} disabled={loading||(!isDying&&profile.gold<innCost)}
-                        style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor:(loading||(!isDying&&profile.gold<innCost))?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', opacity:(loading||(!isDying&&profile.gold<innCost))?0.4:1 }}>
-                        利用する
+                      <button onClick={useInn} disabled={loading||atWar||(!isDying&&profile.gold<innCost)}
+                        style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor:(loading||atWar||(!isDying&&profile.gold<innCost))?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', opacity:(loading||atWar||(!isDying&&profile.gold<innCost))?0.4:1 }}>
+                        {atWar ? '戦争中は利用不可' : '利用する'}
                       </button>
                     </div>
                   </>
