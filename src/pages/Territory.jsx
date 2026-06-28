@@ -430,12 +430,12 @@ export default function Territory() {
                       {m.avatar_url
                         ? <img src={m.avatar_url} alt="" style={{ width:'22px', height:'22px', borderRadius:'50%', objectFit:'cover', flexShrink:0 }} />
                         : <span style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#2a2010', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'12px', flexShrink:0 }}>👤</span>}
-                      <span onClick={() => nav(`/profile/${m.id}`)} style={{ flex:1, cursor:'pointer', textDecoration:'underline' }}>
+                      <span onClick={() => nav(`/profile/${m.id}`)} style={{ cursor:'pointer', textDecoration:'underline', whiteSpace:'nowrap' }}>
                         <b style={{ color: rankColor(rk) }}>【{rk}】</b><span style={{ color:'#bbddff' }}>{m.username}{isSelf && ' (あなた)'}</span>
                       </span>
                       <span style={{ color:'#88774a', whiteSpace:'nowrap' }}>総合力 {powerMap[m.id] ?? '—'}／貢献 {Math.floor(m.country_contrib || 0)}</span>
                       {amMarshal && (
-                        <span style={{ display:'flex', gap:'3px' }}>
+                        <span style={{ display:'flex', gap:'3px', marginLeft:'auto' }}>
                           {['副元帥','参謀'].map(r => (
                             <button key={r} disabled={busy || rk === r} onClick={() => doAppoint(m.id, r)}
                               style={{ padding:'2px 6px', fontFamily:'monospace', fontSize:'10px', cursor: (busy || rk === r) ? 'default' : 'pointer',

@@ -50,7 +50,8 @@ export default function WarPanel({ me, myCountry, countries }) {
   const [participants, setParticipants] = useState([])  // 進行中戦争の war_participants
   const [battleResult, setBattleResult] = useState(null)  // 直近の相互戦闘の結果
   const [self, setSelf] = useState(null)   // 自分の現在HP/MP（profiles.hp_current/mp_current＝街と共有）
-  const [enemyHpMap, setEnemyHpMap] = useState({})  // 敵実プレイヤーの現在HP/MP（player_id -> {hp,mp}）
+  const [enemyHpMap, setEnemyHpMap] = useState({})  // 互換: 実プレイヤーHPマップ（memberMapと同一参照）
+  const [memberMap, setMemberMap] = useState({})    // 全実プレイヤー参加者の状況（player_id -> {hp,mp,is_dying,username,avatar_url}）
   const warFilledRef = useRef(null)        // 満タン参戦を適用済みの戦争ID（多重ヒールガード・Game.jsxと同じlocalStorageキー共有）
 
   const nameOf = (cid) => (countries || []).find(c => c.id === cid)?.name || '???'
@@ -71,21 +72,26 @@ export default function WarPanel({ me, myCountry, countries }) {
       ps = r.data || []
     }
     setParticipants(ps)
-    // 自分の現在HP/MP（街と共有の profiles.hp_current/mp_current）を取得
-    if (me?.id) {
-      const { data: sp } = await supabase.from('profiles')
-        .select('hp_current, mp_current, is_dying').eq('id', me.id).single()
-      if (sp) setSelf(sp)
+    // 全実プレイヤー参加者（自国＋敵国）の現在HP/MP・瀕死・名前・アイコンをまとめて取得。
+    // 自国/敵国どちらの国民も状況を表示するため一括で引く（ダミーは war_participants 側を使う）。
+    const realIds = ps.filter(p => !p.is_dummy).map(p => p.player_id)
+    const map = {}
+    if (realIds.length) {
+      const { data: eps } = await supabase.from('profiles')
+        .select('id, username, avatar_url, hp_current, mp_current, is_dying').in('id', realIds)
+      for (const e of (eps || [])) map[e.id] = { hp: e.hp_current, mp: e.mp_current, is_dying: e.is_dying, username: e.username, avatar_url: e.avatar_url }
     }
-    // 敵の実プレイヤー参加者の現在HP/MPをまとめて取得（ダミーは war_participants.hp を使う）
-    const enemyCidLocal = w && myCountry ? (w.attacker_country_id === myCountry.id ? w.defender_country_id : w.attacker_country_id) : null
-    const realEnemyIds = ps.filter(p => p.country_id === enemyCidLocal && !p.is_dummy).map(p => p.player_id)
-    if (realEnemyIds.length) {
-      const { data: eps } = await supabase.from('profiles').select('id, hp_current, mp_current').in('id', realEnemyIds)
-      const map = {}
-      for (const e of (eps || [])) map[e.id] = { hp: e.hp_current, mp: e.mp_current }
-      setEnemyHpMap(map)
-    } else setEnemyHpMap({})
+    setMemberMap(map)
+    setEnemyHpMap(map)  // 互換: 既存参照用（同じ実プレイヤーHPマップ）
+    // 自分の現在HP/MP（街と共有の profiles.hp_current/mp_current）
+    if (me?.id) {
+      const sp = map[me.id]
+      if (sp) setSelf({ hp_current: sp.hp, mp_current: sp.mp, is_dying: sp.is_dying })
+      else {
+        const { data: s2 } = await supabase.from('profiles').select('hp_current, mp_current, is_dying').eq('id', me.id).single()
+        if (s2) setSelf(s2)
+      }
+    }
   }
 
   // 自然回復（街と同じ：60秒ごとに最大HP/MPの+20%）。戦争ページ滞在中も効かせる。
@@ -261,6 +267,38 @@ export default function WarPanel({ me, myCountry, countries }) {
   const coreUnlocked = enemyParts.length > 0 ? enemyActive === 0 : true  // 参加者0(NPC core-only)は従来どおり解禁
   const myRow = participants.find(p => p.player_id === me?.id) || null
   const iAmDying = myRow ? isDyingNow(myRow) : false
+  const allyParts = participants.filter(p => p.country_id === myCountry?.id)
+
+  // 国民1人ぶんの行（状況＝HPバー＋瀕死/あなた表示）。attackable=true の敵だけ🗡交戦ボタンを出す。
+  const memberRow = (p, attackable, idx) => {
+    const dying = isDyingNow(p)
+    const info = memberMap[p.player_id]
+    const isMe = p.player_id === me?.id
+    const name = p.is_dummy ? `ダミー${idx + 1}` : (info?.username || p.player_id.slice(0, 6))
+    const curHp = p.is_dummy ? p.hp : (info?.hp ?? p.hp)
+    const curMax = p.is_dummy ? p.hp_max : (p.hp_max + WAR_HP_BONUS)  // 実プレイヤーは戦争補正+10000（基礎値ゆえ概算）
+    const canAttack = attackable && !dying && !iAmDying && cdRemain === 0 && !busy
+    return (
+      <div key={p.player_id} style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'5px', opacity: dying ? 0.5 : 1 }}>
+        {info?.avatar_url
+          ? <img src={info.avatar_url} alt="" style={{ width:'20px', height:'20px', borderRadius:'50%', objectFit:'cover', flexShrink:0 }} />
+          : <span style={{ width:'20px', height:'20px', borderRadius:'50%', background:'#2a1810', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', flexShrink:0 }}>{p.is_dummy ? '🤖' : '👤'}</span>}
+        <span style={{ color: isMe ? '#ffdd99' : '#ccb088', fontSize:'10px', width:'80px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flexShrink:0 }}>
+          {name}{isMe ? '(あなた)' : ''}
+        </span>
+        <StatBar cur={curHp} max={curMax} color={dying ? '#885544' : (attackable ? '#dd5544' : '#44aa66')} h={10} />
+        <span style={{ color:'#bba088', fontSize:'10px', minWidth:'74px', textAlign:'right', flexShrink:0 }}>{Math.max(0, curHp).toLocaleString()}/{curMax.toLocaleString()}</span>
+        {attackable ? (
+          <button onClick={() => attackPlayer(p)} disabled={!canAttack}
+            style={{ background: canAttack ? '#3a1208' : '#1a0c06', border:`1px solid ${canAttack ? '#ff6644' : '#5a3a2a'}`, color: canAttack ? '#ff9977' : '#7a5a4a', padding:'3px 8px', cursor: canAttack ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'10px', whiteSpace:'nowrap', flexShrink:0 }}>
+            {dying ? '瀕死' : (cdRemain > 0 ? `${Math.ceil(cdRemain/1000)}s` : '🗡交戦')}
+          </button>
+        ) : (
+          <span style={{ fontSize:'10px', color: dying ? '#cc6655' : '#66aa77', minWidth:'40px', textAlign:'center', flexShrink:0 }}>{dying ? '💀瀕死' : '戦闘可'}</span>
+        )}
+      </div>
+    )
+  }
 
   const resultText = war?.status === 'done'
     ? (war.result === 'draw' ? '🤝 引き分け（領地移動なし）'
@@ -335,31 +373,19 @@ export default function WarPanel({ me, myCountry, countries }) {
                 : (coreUnlocked ? ' → 全員瀕死！コア解禁🔓' : ' → 全員瀕死にするまでコアは攻撃不可🔒')}
             </div>
 
-            {/* 敵参加者リスト（殴って瀕死にする） */}
+            {/* 敵国の国民（殴って瀕死にするとコア解禁）。各行の🗡交戦で攻撃対象を選択。 */}
             {enemyParts.length > 0 && (
               <div style={{ border:'1px solid #4a2a1a', background:'#160a04', padding:'8px', marginBottom:'8px' }}>
-                <div style={{ color:'#ddaa77', fontSize:'10px', marginBottom:'6px' }}>敵参加者（殴って瀕死にするとコアが解禁）</div>
-                {enemyParts.map((p, i) => {
-                  const dying = isDyingNow(p)
-                  const canAttack = !dying && !iAmDying && cdRemain === 0 && !busy
-                  // 実プレイヤーは profiles の現在HP（街と共有）、ダミーは war_participants.hp
-                  const curHp = p.is_dummy ? p.hp : (enemyHpMap[p.player_id]?.hp ?? p.hp)
-                  // 実プレイヤーは戦争補正+10000（war_participants.hp_maxは装備抜き基礎値ゆえ概算）
-                  const curMax = p.is_dummy ? p.hp_max : (p.hp_max + WAR_HP_BONUS)
-                  return (
-                    <div key={p.player_id} style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'5px', opacity: dying ? 0.5 : 1 }}>
-                      <span style={{ color:'#ccb088', fontSize:'10px', width:'72px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                        {p.is_dummy ? `ダミー${i + 1}` : p.player_id.slice(0, 6)}
-                      </span>
-                      <StatBar cur={curHp} max={curMax} color={dying ? '#885544' : '#dd5544'} h={10} />
-                      <span style={{ color:'#bba088', fontSize:'10px', minWidth:'74px', textAlign:'right' }}>{Math.max(0, curHp).toLocaleString()}/{curMax.toLocaleString()}</span>
-                      <button onClick={() => attackPlayer(p)} disabled={!canAttack}
-                        style={{ background: canAttack ? '#3a1208' : '#1a0c06', border:`1px solid ${canAttack ? '#ff6644' : '#5a3a2a'}`, color: canAttack ? '#ff9977' : '#7a5a4a', padding:'3px 8px', cursor: canAttack ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'10px', whiteSpace:'nowrap' }}>
-                        {dying ? '瀕死' : (cdRemain > 0 ? `${Math.ceil(cdRemain/1000)}s` : '🗡交戦')}
-                      </button>
-                    </div>
-                  )
-                })}
+                <div style={{ color:'#ff9977', fontSize:'11px', marginBottom:'6px' }}>⚔ 敵国：{nameOf(enemyCid)}（{enemyParts.length}人）<span style={{ color:'#aa7755', fontSize:'9px' }}>— 🗡交戦で攻撃</span></div>
+                {enemyParts.map((p, i) => memberRow(p, true, i))}
+              </div>
+            )}
+
+            {/* 自国の国民（味方の状況）。攻撃はできない。 */}
+            {allyParts.length > 0 && (
+              <div style={{ border:'1px solid #2a4a2a', background:'#0a1206', padding:'8px', marginBottom:'8px' }}>
+                <div style={{ color:'#88cc88', fontSize:'11px', marginBottom:'6px' }}>🛡 自国：{myCountry?.name}（{allyParts.length}人）<span style={{ color:'#557755', fontSize:'9px' }}>— 味方の状況</span></div>
+                {allyParts.map((p, i) => memberRow(p, false, i))}
               </div>
             )}
 

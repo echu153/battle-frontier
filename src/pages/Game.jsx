@@ -5589,6 +5589,12 @@ export default function Game() {
               🧪 錬金部屋に空きがあります（{alchemyEmpty}枠）→ 錬金を始める
             </button>
           )}
+          {atWar && (
+            <button onClick={()=>nav('/war')}
+              style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#2a0808', border:'1px solid #e05a62', color:'#ff8a6a', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', letterSpacing:'1px' }}>
+              ⚔ 戦争中！国の存亡をかけた戦いに参加 → 戦争ページへ
+            </button>
+          )}
           {territoryExpandable && (
             <button onClick={()=>nav('/territory')}
               style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
@@ -6092,6 +6098,12 @@ export default function Game() {
           <button onClick={()=>nav('/alchemy')}
             style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#0a1408', border:'1px solid #88cc66', color:'#aadd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
             🧪 錬金部屋に空きがあります（{alchemyEmpty}枠）→ 錬金を始める
+          </button>
+        )}
+        {atWar && (
+          <button onClick={()=>nav('/war')}
+            style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#2a0808', border:'1px solid #e05a62', color:'#ff8a6a', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', letterSpacing:'1px' }}>
+            ⚔ 戦争中！国の存亡をかけた戦いに参加 → 戦争ページへ
           </button>
         )}
         {territoryExpandable && (
