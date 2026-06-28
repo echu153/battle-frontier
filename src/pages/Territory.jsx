@@ -2,7 +2,7 @@
 // 領地（国・建国）システム  ※is_admin限定で先行公開
 //   ・9カ国構成（うち1つは固定の「非加盟国」）。最大8カ国をプレイヤーが建国できる。
 //   ・建国: キャラクターLV100以上＆非加盟国に居ること。
-//   ・亡命: 他国への加入/離脱は1週間に1回まで。
+//   ・亡命: 他国へ移ると3日間 領地システム(拡大/建国)ロック（非加盟国へ戻るのは無ロック）。
 //   ・領地拡大: 1時間に1回・総合力に応じて獲得量が変わる。
 //   ・階級は貢献度で自動決定（建国者=元帥固定）。
 //   ・全ての時刻・操作は SECURITY DEFINER RPC 経由（supabase_territory.sql）。
@@ -635,7 +635,7 @@ export default function Territory() {
         {/* 非加盟国へ離脱（所属国があり元帥でない時） */}
         {!inUnaffiliated && me?.country_rank !== '元帥' && unaffiliated && (
           <div style={{ ...box, marginTop:'14px' }}>
-            <div style={{ color:'#aa7755', fontSize:'11px', marginBottom:'6px' }}>所属国を抜けて非加盟国に戻る（亡命扱い・1週間に1回）</div>
+            <div style={{ color:'#aa7755', fontSize:'11px', marginBottom:'6px' }}>所属国を抜けて非加盟国に戻る（亡命扱い）</div>
             <button disabled={busy} onClick={() => doAsylum(unaffiliated.id, '非加盟国')}
               style={{ padding:'6px 12px', fontFamily:'monospace', fontSize:'11px', cursor: busy ? 'default' : 'pointer',
                 background:'#1a1000', border:'1px solid #885533', color:'#aa7755' }}>

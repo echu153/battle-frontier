@@ -4,7 +4,7 @@
 -- ・9カ国構成（うち1つは固定の「非加盟国」＝どこにも属さないプレイヤーの居場所）。
 --   残り最大8カ国はプレイヤーが空き枠がある限り自由に建国できる。
 -- ・建国条件: キャラクターLV(char_lv) 100以上 ＆ 非加盟国に居ること。
--- ・亡命（他国への加入/離脱）は1週間(7日)に1回まで。
+-- ・亡命（他国への加入/離脱）後、他国へ移った場合は3日間 領地システム(拡大/建国)ロック。
 -- ・領地は1時間に1回拡大でき、総合力に応じて1回の獲得量が変わる。
 -- ・階級は貢献度(country_contrib)で自動決定。建国者は「元帥」固定。
 --   「副元帥」「参謀」は将来の任命/下剋上用に予約（自動昇格では到達しない）。
@@ -426,7 +426,7 @@ BEGIN
   SELECT country_id, username, is_admin, territory_locked_until INTO v_cid, v_name, v_admin, v_lock FROM public.profiles WHERE id = v_uid;
   IF v_cid IS NULL THEN RAISE EXCEPTION '国に所属していません'; END IF;
   IF v_admin IS NOT TRUE AND v_lock IS NOT NULL AND now() < v_lock THEN
-    RAISE EXCEPTION '亡命後1週間は領地システムを利用できません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
+    RAISE EXCEPTION '亡命後3日間は領地システムを利用できません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
   END IF;
   SELECT is_unaffiliated INTO v_unaff FROM public.countries WHERE id = v_cid;
   IF v_unaff IS TRUE THEN RAISE EXCEPTION '非加盟国ではチャットを使えません'; END IF;
