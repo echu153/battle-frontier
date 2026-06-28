@@ -71,14 +71,13 @@ export function simulateWarBattle(attacker, target, start) {
   // ★終了時の最低保証: 仕掛けた/仕掛けられたに関わらず両者とも、相手の開始HPの
   //   WAR_MIN_END_DMG_PCT 以上を必ず与える。届いていなければ終了時に不足分を上乗せ（一矢報いた！）。
   //   戦闘力差があっても双方必ず削れる＝無双させない・攻撃側も必ず被弾する。
-  const pct = Math.round(WAR_MIN_END_DMG_PCT * 100)
   if (WAR_MIN_END_DMG_PCT > 0) {
     // 相手(B)へ：自分(A)の保証ダメージ
     if (start?.tgtHp != null) {
       const cap = Math.max(0, Math.floor(start.tgtHp * (1 - WAR_MIN_END_DMG_PCT)))
       if (tgtEndHp > cap) {
         const extra = tgtEndHp - cap; tgtEndHp = cap
-        logs.push({ text: `🏹 一矢報いた！ 相手に最低保証 +${extra.toLocaleString()}（開始HPの${pct}%）`, color: '#ffcc44' })
+        logs.push({ text: `🏹 一矢報いた！ ${extra.toLocaleString()}ダメージ与えた！`, color: '#ffcc44' })
       }
     }
     // 自分(A)へ：相手(B)の保証ダメージ（攻撃側も必ず被弾）
@@ -86,7 +85,7 @@ export function simulateWarBattle(attacker, target, start) {
       const cap = Math.max(0, Math.floor(start.atkHp * (1 - WAR_MIN_END_DMG_PCT)))
       if (atkEndHp > cap) {
         const extra = atkEndHp - cap; atkEndHp = cap
-        logs.push({ text: `🩸 反撃を受けた… 自分に最低保証 +${extra.toLocaleString()}（開始HPの${pct}%）`, color: '#ff8866' })
+        logs.push({ text: `🩸 反撃を受けた… ${extra.toLocaleString()}ダメージ受けた！`, color: '#ff8866' })
       }
     }
   }
