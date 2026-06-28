@@ -1927,8 +1927,14 @@ export default function Game() {
         .not('reply', 'is', null)
       let seen = {}
       try { seen = JSON.parse(localStorage.getItem('bf_seenContactReplies') || '{}') } catch {}
-      // 既読保存時刻より reply_at が新しい（＝再返信含む）ものを未読とみなす
-      const unread = (data || []).filter(r => !seen[r.id] || (r.reply_at && seen[r.id] < r.reply_at))
+      // 既読保存時刻より reply_at が新しい（＝再返信含む）ものを未読とみなす。
+      // ※タイムスタンプは文字列でなく数値(getTime)で比較（フォーマット差による誤判定を防ぐ）。
+      const unread = (data || []).filter(r => {
+        if (!r.reply_at) return false
+        const seenAt = seen[r.id]
+        if (!seenAt) return true
+        return new Date(seenAt).getTime() < new Date(r.reply_at).getTime()
+      })
       setUnreadReplies(unread.length)
     } catch { /* 列が無い旧環境などは無視 */ }
   }
@@ -2036,6 +2042,19 @@ export default function Game() {
       localStorage.setItem('bf_seenContactReplies', JSON.stringify(seen))
     } catch {}
     setUnreadReplies(0)
+  }
+
+  // 返信バナーの「✓確認」: 開かずにその場で既読化してバナーを消す。
+  const dismissReplyBanner = async () => {
+    try {
+      const { data } = await supabase.from('contact_messages')
+        .select('id, reply, reply_at')
+        .eq('player_id', profile.id)
+        .not('reply', 'is', null)
+      markContactRepliesSeen(data || [])
+    } catch {
+      setUnreadReplies(0)
+    }
   }
 
   const fetchProfile = async () => {
@@ -5511,10 +5530,14 @@ export default function Game() {
             </button>
           )}
           {unreadReplies > 0 && (
-            <button onClick={()=>{ setShowContact(true); setContactView('history'); fetchMyContacts().then(rows => markContactRepliesSeen(rows)) }}
-              style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
-              📩 お問い合わせに運営からの返信が届いています！（{unreadReplies}件）→ 確認する
-            </button>
+            <div style={{ display:'flex', gap:'6px', marginBottom:'8px' }}>
+              <button onClick={()=>{ setShowContact(true); setContactView('history'); fetchMyContacts().then(rows => markContactRepliesSeen(rows)) }}
+                style={{ flex:1, padding:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+                📩 お問い合わせに運営からの返信が届いています！（{unreadReplies}件）→ 確認する
+              </button>
+              <button onClick={dismissReplyBanner} title="既読にしてこの通知を消す"
+                style={{ flexShrink:0, padding:'8px 12px', background:'#0a1a08', border:'1px solid #44aa44', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✓</button>
+            </div>
           )}
           {isContactAdmin && unrepliedContacts > 0 && (
             <button onClick={()=>{ setShowContact(true); setContactView('history'); setAdminContactFilter('unreplied'); fetchMyContacts() }}
@@ -6012,10 +6035,14 @@ export default function Game() {
           </button>
         )}
         {unreadReplies > 0 && (
-          <button onClick={()=>{ setShowContact(true); setContactView('history'); fetchMyContacts().then(rows => markContactRepliesSeen(rows)) }}
-            style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
-            📩 お問い合わせに運営からの返信が届いています！（{unreadReplies}件）→ 確認する
-          </button>
+          <div style={{ display:'flex', gap:'6px', marginBottom:'12px' }}>
+            <button onClick={()=>{ setShowContact(true); setContactView('history'); fetchMyContacts().then(rows => markContactRepliesSeen(rows)) }}
+              style={{ flex:1, padding:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              📩 お問い合わせに運営からの返信が届いています！（{unreadReplies}件）→ 確認する
+            </button>
+            <button onClick={dismissReplyBanner} title="既読にしてこの通知を消す"
+              style={{ flexShrink:0, padding:'8px 12px', background:'#0a1a08', border:'1px solid #44aa44', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✓</button>
+          </div>
         )}
         {isContactAdmin && unrepliedContacts > 0 && (
           <button onClick={()=>{ setShowContact(true); setContactView('history'); setAdminContactFilter('unreplied'); fetchMyContacts() }}
