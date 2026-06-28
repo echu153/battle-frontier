@@ -1,7 +1,7 @@
 // 🏳 戦争パネル — 専用ページ(/war)の本体UI。
 // 建国者(元帥)が宣戦布告→開戦→敵コアを攻撃→勝利/領地総取り を行う。
 // ※ページ枠(ヘッダー/戻る)は War.jsx が用意し、ここは中身だけをインライン描画する。
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../supabase'
 import { loadLoadout } from '../lib/pvpLoadout'
 import { simulateCoreAttack, simulateWarBattle, dummyCombatInput, WAR_CORE_HP, WAR_HP_BONUS } from '../lib/war'
@@ -51,6 +51,7 @@ export default function WarPanel({ me, myCountry, countries }) {
   const [battleResult, setBattleResult] = useState(null)  // 直近の相互戦闘の結果
   const [self, setSelf] = useState(null)   // 自分の現在HP/MP（profiles.hp_current/mp_current＝街と共有）
   const [enemyHpMap, setEnemyHpMap] = useState({})  // 敵実プレイヤーの現在HP/MP（player_id -> {hp,mp}）
+  const warFilledRef = useRef(null)        // 満タン参戦を適用済みの戦争ID（多重ヒールガード・Game.jsxと同じlocalStorageキー共有）
 
   const nameOf = (cid) => (countries || []).find(c => c.id === cid)?.name || '???'
 
@@ -123,6 +124,28 @@ export default function WarPanel({ me, myCountry, countries }) {
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadout])
+
+  // 満タン参戦: activeな戦争を初めて検知した戦争につき1回だけ現在HPを戦争上限(eff+10000)へ。
+  // Game.jsx(ホーム)と同じ localStorage キーで端末越しの多重ヒールも抑止（片方で適用すれば両方済み扱い）。
+  useEffect(() => {
+    if (war?.status !== 'active' || !me?.id || !loadout?.eff) return
+    if (warFilledRef.current === war.id) return
+    const lsKey = `bf_war_filled_${war.id}`
+    if (localStorage.getItem(lsKey)) { warFilledRef.current = war.id; return }
+    warFilledRef.current = war.id
+    ;(async () => {
+      try {
+        const warMax = (loadout.eff.hp_max || 0) + WAR_HP_BONUS
+        const { data: sp } = await supabase.from('profiles').select('hp_current').eq('id', me.id).single()
+        if (sp && (sp.hp_current ?? 0) < warMax) {
+          await supabase.from('profiles').update({ hp_current: warMax, is_dying: false }).eq('id', me.id)
+          await refreshWar()
+        }
+        localStorage.setItem(lsKey, '1')
+      } catch { warFilledRef.current = null /* 失敗時は次回再試行 */ }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [war?.status, war?.id, loadout])
 
   const declare = async () => {
     if (!target || busy) return

@@ -1721,6 +1721,8 @@ export default function Game() {
   const [boxAvailable, setBoxAvailable] = useState(0)        // ボス装備進化支援箱の所持数（街のバナー表示用）
   const [myCountryName, setMyCountryName] = useState('')     // 所属国名（ホーム/プロフィールの所属国表示用・is_admin限定先行）
   const [atWar, setAtWar] = useState(false)                  // 自国が交戦中（active）か。戦争中はホームのHP/MP表示を戦争用に切替
+  const [activeWarId, setActiveWarId] = useState(null)       // 交戦中の戦争ID（開戦時の満タン参戦を1戦争1回にするため）
+  const warFilledRef = useRef(null)                          // 満タン参戦を適用済みの戦争ID（多重適用ガード）
   const [showGuide, setShowGuide] = useState(false)
   const [showDyingTip, setShowDyingTip] = useState(false)  // 初めて瀕死になったとき1回だけ案内
   const [openGuideId, setOpenGuideId] = useState(null)
@@ -1989,8 +1991,9 @@ export default function Game() {
           .or(`attacker_country_id.eq.${prof.country_id},defender_country_id.eq.${prof.country_id}`)
           .limit(1)
         setAtWar(!!(w && w.length))
-      } catch { /* 戦争SQL未適用なら無視 */ setAtWar(false) }
-    } else { setTerritoryExpandable(false); setMyCountryName(''); setAtWar(false) }
+        setActiveWarId(w?.[0]?.id || null)
+      } catch { /* 戦争SQL未適用なら無視 */ setAtWar(false); setActiveWarId(null) }
+    } else { setTerritoryExpandable(false); setMyCountryName(''); setAtWar(false); setActiveWarId(null) }
   }
   // プロフィール確定時＋60秒ごとに再計算（クールダウン明け・錬金完成を取り込む）
   useEffect(() => {
@@ -1999,6 +2002,30 @@ export default function Game() {
     const id = setInterval(() => refreshTownNotices(profile), 60000)
     return () => clearInterval(id)
   }, [profile?.id, profile?.is_admin, profile?.country_id, profile?.last_expand_at, profile?.territory_locked_until])
+
+  // 満タン参戦: 交戦中(active)を初めて検知した戦争につき1回だけ、現在HPを戦争上限(eff+10000)へ引き上げる。
+  // サーバの開戦seed加算がSQL適用順/タイミングで効かなくても、クライアントで確実に満タンにする保険。
+  // 1戦争1回（warFilledRef＋localStorageで端末越し含め多重ヒールを抑止）。既に上限超ならそのまま。
+  useEffect(() => {
+    if (!atWar || !activeWarId || !profile?.id) return
+    if (warFilledRef.current === activeWarId) return
+    const lsKey = `bf_war_filled_${activeWarId}`
+    if (localStorage.getItem(lsKey)) { warFilledRef.current = activeWarId; return }
+    warFilledRef.current = activeWarId
+    ;(async () => {
+      try {
+        const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
+        const warMax = eff.hp_max + WAR_HP_BONUS
+        const { data: sp } = await supabase.from('profiles').select('hp_current').eq('id', profile.id).single()
+        if (sp && (sp.hp_current ?? 0) < warMax) {
+          await supabase.from('profiles').update({ hp_current: warMax, is_dying: false }).eq('id', profile.id)
+          await fetchProfile()
+        }
+        localStorage.setItem(lsKey, '1')
+      } catch { warFilledRef.current = null /* 失敗時は次回再試行 */ }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [atWar, activeWarId, profile?.id])
 
   // 表示中の返信をすべて既読にする（idごとに reply_at を保存）
   const markContactRepliesSeen = (rows) => {
