@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../supabase'
 import { loadLoadout } from '../lib/pvpLoadout'
+import { BattleLogLine } from '../pages/Game'
 import { simulateCoreAttack, simulateWarBattle, dummyCombatInput, WAR_CORE_HP, WAR_HP_BONUS } from '../lib/war'
 
 const ATTACK_CD_MS = 20000  // 疑似CD（サーバーCDはM2）
@@ -324,14 +325,7 @@ export default function WarPanel({ me, myCountry, countries }) {
                 <button onClick={() => setBattleView(null)} style={{ background:'#2a1008', border:'1px solid #e05a62', color:'#ff8a6a', padding:'6px 14px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>← 戻る</button>
               </div>
               <div>
-                {(battleView.logs || []).map((l, i) => l?.type === 'hp' ? (
-                  <div key={i} style={{ margin:'5px 0', padding:'4px 6px', background:'#140a04', border:'1px solid #2a1a0a' }}>
-                    <div style={{ fontSize:'10px', color:'#aaccaa' }}>{l.playerName}: HP {Math.round(l.playerHp).toLocaleString()}/{Math.round(l.playerMax).toLocaleString()}　MP {Math.round(l.playerMp).toLocaleString()}/{Math.round(l.playerMpMax).toLocaleString()}</div>
-                    <div style={{ fontSize:'10px', color:'#ddaa99' }}>{l.enemyName}: HP {Math.round(l.enemyHp).toLocaleString()}/{Math.round(l.enemyMax).toLocaleString()}　MP {Math.round(l.enemyMp).toLocaleString()}/{Math.round(l.enemyMpMax).toLocaleString()}</div>
-                  </div>
-                ) : (
-                  <div key={i} style={{ color: l?.color || '#cccccc', fontSize:'12px', lineHeight:'1.6' }}>{l?.text}</div>
-                ))}
+                {(battleView.logs || []).map((l, i) => <BattleLogLine key={i} l={l} />)}
               </div>
               <button onClick={() => setBattleView(null)} style={{ width:'100%', marginTop:'12px', background:'#2a1008', border:'1px solid #e05a62', color:'#ff8a6a', padding:'10px', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'2px' }}>← 戦争ページへ戻る</button>
             </div>
