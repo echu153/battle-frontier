@@ -19,9 +19,12 @@ export const WAR_TURN_CAP = 15           // 1回の交戦のターン上限（�
 export const WAR_DOT_MULT  = 0.35        // 状態異常DoT(出血/毒/やけど等)の倍率。小さいほどDoTが弱い
 export const WAR_DMG_MULT  = 1.5         // 通常/スキル与ダメの倍率。大きいほど直接ダメが通る
 export const WAR_HEAL_MULT = 0.4         // 回復(スキル回復/リジェネ/血の狂気等)の倍率。小さいほど回復で粘れない
-// 防御無視の最低ダメージ保証＝相手の最大HPのこの割合は必ず通す。戦闘力差があっても弱者が少し削れる＝無双対策。
-// 例: 0.004 → 相手最大HPの0.4%/ヒット。大きいほど弱者でも削れる（無双しにくい）。
-export const WAR_MIN_DMG_PCT = 0.004
+// per-hitの最低ダメージ保証（ターンが続かないと効きにくいので既定0=無効）。
+export const WAR_MIN_DMG_PCT = 0
+// ★終了時の最低保証ダメージ：仕掛けた側は最終的に「相手の開始HPのこの割合」を必ず与える。
+//   交戦終了時に届いていなければ不足分を上乗せ＝戦闘力差があっても必ず一矢報いる（無双対策）。
+//   例: 0.10 → 相手の開始HPが10000なら最低1000ダメージ保証。
+export const WAR_MIN_END_DMG_PCT = 0.10
 // 戦争中の最大HP補正（HPのみ・MPは据え置き）。開戦seed(war_tick)で現在HPにも+この値を
 // 加算＝「満タンで参戦」。街と共有のまま戦争中だけ上限が広がる（終戦で通常上限に自然収束）。
 // ※Game.jsx 側にも同値のローカル定数 WAR_HP_BONUS=10000 がある（循環import回避のため）。
@@ -62,10 +65,22 @@ export function simulateWarBattle(attacker, target, start) {
     startHpA: start?.atkHp, startMpA: start?.atkMp,
     startHpB: start?.tgtHp, startMpB: start?.tgtMp,
   })
+  const logs = res.logs || []
+  let tgtEndHp = res.endHpB
+  // ★終了時の最低保証: 仕掛けた側は相手の開始HPの WAR_MIN_END_DMG_PCT 以上を必ず与える。
+  //   届いていなければ終了時に不足分を上乗せ（一矢報いた！）。戦闘力差があっても無双させない。
+  if (start?.tgtHp != null && WAR_MIN_END_DMG_PCT > 0) {
+    const cap = Math.max(0, Math.floor(start.tgtHp * (1 - WAR_MIN_END_DMG_PCT)))  // 開始HPの(1-割合)
+    if (tgtEndHp > cap) {
+      const extra = tgtEndHp - cap
+      tgtEndHp = cap
+      logs.push({ text: `🏹 一矢報いた！ 最低保証ダメージ +${extra.toLocaleString()}（相手の開始HPの${Math.round(WAR_MIN_END_DMG_PCT * 100)}%保証）`, color: '#ffcc44' })
+    }
+  }
   return {
-    logs: res.logs || [],
+    logs,
     atkEndHp: res.endHpA, atkEndMp: res.endMpA,
-    tgtEndHp: res.endHpB, tgtEndMp: res.endMpB,
+    tgtEndHp, tgtEndMp: res.endMpB,
   }
 }
 
