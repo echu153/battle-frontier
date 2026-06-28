@@ -97,7 +97,8 @@ export default function WarPanel({ me, myCountry, countries }) {
     if (elapsed < REGEN_SECONDS) return
     const hpMax = loadout.eff.hp_max, mpMax = loadout.eff.mp_max
     const hpCap = war?.status === 'active' ? hpMax + WAR_HP_BONUS : hpMax  // 戦争中はHP上限+10000
-    const newHp = Math.min(hpCap, Math.floor((sp.hp_current ?? hpMax) + hpMax * 0.2))
+    // 回復量も戦争中は戦争HP(上限+10000)の20%
+    const newHp = Math.min(hpCap, Math.floor((sp.hp_current ?? hpMax) + hpCap * 0.2))
     const newMp = Math.min(mpMax, Math.floor((sp.mp_current ?? mpMax) + mpMax * 0.2))
     const newIsDying = newHp >= hpMax ? false : sp.is_dying   // 瀕死解除は通常上限基準
     await supabase.from('profiles').update({

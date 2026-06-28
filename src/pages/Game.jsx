@@ -2160,7 +2160,8 @@ export default function Game() {
       const hpMaxR = _rEff.hp_max, mpMaxR = _rEff.mp_max
       const hpCapR = atWar ? hpMaxR + WAR_HP_BONUS : hpMaxR   // 戦争中はHP上限+10000まで回復
       const current = sp.hp_current ?? hpMaxR
-      const newHp = Math.min(hpCapR, Math.floor(current+hpMaxR*0.2))
+      // 回復量も戦争中は戦争HP(上限+10000)の20%（通常時は通常上限の20%）
+      const newHp = Math.min(hpCapR, Math.floor(current+hpCapR*0.2))
       const newMp = Math.min(mpMaxR, Math.floor((sp.mp_current??mpMaxR)+mpMaxR*0.2))
       const newIsDying = newHp >= hpMaxR ? false : sp.is_dying   // 瀕死解除は通常上限基準（復帰を難しくしない）
       await supabase.from('profiles').update({
