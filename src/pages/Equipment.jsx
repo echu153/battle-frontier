@@ -429,7 +429,10 @@ export default function Equipment() {
   const useStatReset = async (pi) => {
     setLoading(true)
     const { data, error } = await supabase.rpc('reset_stat_points')
-    if (error || !data?.ok) { setLoading(false); setConfirmReset(null); return }
+    if (error || !data?.ok) {
+      if (data?.reason === 'war_locked') alert('⚔ 戦争中は記憶除去（ステータス振り直し）が使えません。')
+      setLoading(false); setConfirmReset(null); return
+    }
     if (pi.quantity > 1) {
       await supabase.from('player_items').update({ quantity: pi.quantity - 1 }).eq('id', pi.id)
     } else {
