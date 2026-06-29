@@ -3746,12 +3746,13 @@ export default function Game() {
     if (expBoosted) expGained = Math.floor(expGained * 1.5)
     const expBoostNote = expBoosted ? '（✨Lv100まで経験値1.5倍）' : ''
     // 出撃ゴールド倍率。★2026-06-20公開: 出撃CD20秒化の補正でエリア1-4を×2・エリア5+を×1.5
-    // 【変異】段階(char_lv500+・エリア①〜④)はエリア⑤相当のGold（変異ボス9000 / 雑魚=エリア⑤雑魚×1.5）。それ以外は従来通り。
+    // 【変異】段階のGold（エリア⑤相当）。変異ボスは常に9000。雑魚は「そのエリアの変異ボスを1回撃破済み」のときのみ強化。
+    const mutantCleared = (profile.mutant_cleared_areas || []).includes(selectedArea)
     const goldGained = (() => {
       if (!win || papiaEscaped) return 0
       if (mutantStage && !isPapiaEncounter) {
-        const base = isBossEncounter ? (enemy.gold || 6000) : (AREAS[4].enemies[enemyIdx]?.gold || 280)
-        return Math.floor(base * 1.5 * (tenSec ? 0.5 : 1))
+        if (isBossEncounter) return Math.floor((enemy.gold || 6000) * 1.5 * (tenSec ? 0.5 : 1))  // 変異ボス=エリア⑤相当
+        if (mutantCleared)   return Math.floor((AREAS[4].enemies[enemyIdx]?.gold || 280) * 1.5 * (tenSec ? 0.5 : 1))  // 撃破済みエリアの雑魚
       }
       const goldMult = (selectedArea <= 4 ? 2 : 1.5) * (tenSec ? 0.5 : 1)
       return Math.floor((enemy.gold || 0) * goldMult)
