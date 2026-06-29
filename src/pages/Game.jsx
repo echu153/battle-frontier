@@ -426,22 +426,22 @@ const CLASS_LEVEL_CAP = {
 // 再修練5回でそのクラスのレベルキャップが300に解放される
 // 再修練強化の表示用説明（上から1段ずつ＝再修練1回ごとに解放）
 export const RETRAINING_ENHANCEMENTS = {
-  '侍': ['居合斬：倍率 ATK×1.3＋SPD×0.4', '断空：防御無視 50%', '心眼：与ダメ+20%', '明鏡止水：4ターン防御貫通30%', '月影：倍率 ATK×2.2'],
-  '狂戦士': ['マッドラッシュ：倍率 ATK×1.9', 'すてみ：反動 5%', 'バーサク：与ダメ+30%・被ダメ+20%', 'ブラッティロア：攻撃力上昇 ×1.3', 'フルブレイカー：防御無視 50%'],
-  '狩人': ['毒矢：毒付与 100%', '三連射：倍率 ATK×0.6/hit', '鷹ノ目：命中+25', '狩猟本能：攻撃・素早さ ×2.0', '絶影狙撃：倍率 ATK×2.2'],
-  '暗殺者': ['瞬歩瞬殺：出血確率 100%', '鬼影閃：出血確率 80%', '隠身：クリティカル威力+20%', '影歩き：効果8ターン', '急所突き：出血スタック×25%追撃（最大125%）→出血消費'],
-  '元素使い': ['アクアショット：倍率 MATK×1.6', 'アースクエイク：スタン60%', '元素共鳴：魔法ダメ+50%', 'ライトニングボルト：倍率 MATK×1.7', 'フレイムバースト：やけど100%'],
-  '死霊使い': ['骸骨召喚：倍率 MATK×0.8', 'ソウルドレイン：倍率 MATK×1.4', '骸の壁：バリア中 防御・特防×1.2', '腐敗霧：防御・特防低下 ×0.6', '幽世ノ門：効果5ターン'],
-  '聖職者': ['ホーリーライト：30%で回復阻害50%', '奇跡：毎ターン最大HP15%回復', '神聖加護：回復量の50%を敵に反射', '祈りの結界：6ターン', '神罰執行：倍率 MATK×2.0'],
-  '異端審問官': ['粛清：倍率 MATK×1.4＋MDEF×0.4', '狂信：特殊攻撃×1.3 追加', '執行本能：与ダメ+25%・回復量×0.7', '聖なる裁き：倍率 MATK×1.9', '断罪：回復封じ 60%'],
-  '賢者': ['サンダーストライク：倍率 MATK×1.6', 'マナボルト：消費MP×6', '天啓：MATK×1.3', '氷の障壁：4ターン', 'メテオストライク：2〜5ヒット（2:30/3:40/4:20/5:10%）'],
-  '聖騎士': ['ホーリーエッジ：倍率 ATK×1.7＋MATK×1.1', 'ディバインスマイト：与ダメ低下付与 50%', '聖騎士の心得：防御・特防×1.5', '聖域展開：毎ターン最大HP10%回復', '神聖覚醒：追撃 防御・特防の60%'],
-  '魔法剣士': ['雷光斬：倍率 ATK×1.4＋MATK×1.0', '閃光：連続強化×1.2（最大4重複）', '魔導剣術：変換率60%', '魔剣開放：反動2ターンに短縮', 'エレメンタルエッジ：倍率 ATK×1.7＋MATK×1.7'],
-  '魔銃士': ['魔弾：倍率 ATK×1.4＋MATK×1.3', '連装銃撃：命中+10', '精密照準：命中+10・クリ+10%', '強化装填：5ターン', 'キャノネスチュームビンド：連続強化×1.3が最大2重複'],
-  'サイキッカー': ['サイコショット：倍率 ATK×1.4＋MATK×1.1', 'マインドブレイク：40%でスタン', '第六感：与ダメ+15%', '精神集中：×1.8・3ターン', 'サイコブラスト：倍率 ATK×1.9＋MATK×1.5'],
-  '体術師': ['半月蹴り：次のスキルの威力×1.8', '五連殺：各ヒット20%で出血', '闘争本能：HP30%以下で与ダメ+60%', '破衝掌：防御無視 50%', '飛天三角蹴り：ミス撤廃＋各ヒットATK+0.1'],
-  'ギャンブラー': ['ジャグリング：4ヒット', 'ラッキーダイス：×0.9〜2.2', 'ギャンブルボディ：被ダメ ×0.7〜1.1', 'オールイン：効果・反動6ターン', 'ジャックポット：2倍確率10%'],
-  '竜騎士': ['ドラゴンスラスト：防御貫通 30%', 'ドラゴンファング：倍率 0.9', '竜鱗の加護：30%で15%軽減', 'ドラゴンロア：自身の攻撃力×1.3（3T）', '天墜竜閃：威力 4.5'],
+  '侍': ['居合斬：倍率 ATK×1.3＋SPD×0.4', '断空：防御無視 50%', '居合の構え：通常5枠を回数1ずつ埋めると物理ダメ+40%（再修練+70%）', '明鏡止水：4ターン防御貫通30%', '月影：倍率 ATK×2.2'],
+  '狂戦士': ['マッドラッシュ：倍率 ATK×1.9', 'すてみ：反動 5%', 'バーサク：与ダメ+15%・被ダメ+15%（再修練 与ダメ+40%・被ダメ+20%）', 'ブラッティロア：攻撃力上昇 ×1.3', 'フルブレイカー：防御無視 50%'],
+  '狩人': ['毒矢：毒付与 100%', '三連射：倍率 ATK×0.6/hit', '鷹ノ目：命中+10（再修練 命中+20＋素早さの10%を攻撃に加算）', '狩猟本能：攻撃・素早さ ×2.0', '絶影狙撃：倍率 ATK×2.2'],
+  '暗殺者': ['瞬歩瞬殺：出血確率 100%', '鬼影閃：出血確率 80%', '隠身：回避率+5%（再修練 クリ威力+25%）', '影歩き：効果8ターン', '急所突き：出血スタック×25%追撃（最大125%）→出血消費'],
+  '元素使い': ['アクアショット：倍率 MATK×1.6', 'アースクエイク：スタン60%', '元素共鳴：別スキル連携で魔法ダメ+30%（再修練+50%）', 'ライトニングボルト：倍率 MATK×1.7', 'フレイムバースト：やけど100%'],
+  '死霊使い': ['骸骨召喚：倍率 MATK×0.8', 'ソウルドレイン：倍率 MATK×1.4', '骸の壁：T1・5の倍数で被ダメ-30%（再修練 バリア中 防御・特防×1.2）', '腐敗霧：防御・特防低下 ×0.6', '幽世ノ門：効果5ターン'],
+  '聖職者': ['ホーリーライト：30%で回復阻害50%', '奇跡：毎ターン最大HP15%回復', '神聖加護：回復量×1.5・MATK×1.1（再修練 回復量の100%を敵に反射）', '祈りの結界：6ターン', '神罰執行：倍率 MATK×2.0'],
+  '異端審問官': ['粛清：倍率 MATK×1.4＋MDEF×0.4', '狂信：特殊攻撃×1.3 追加', '執行本能：与ダメ+20%・回復量×0.5（再修練 与ダメ+40%）', '聖なる裁き：倍率 MATK×1.9', '断罪：回復封じ 60%'],
+  '賢者': ['サンダーストライク：倍率 MATK×1.6', 'マナボルト：消費MP×6', '天啓：MP消費×0.7・MATK×1.2（再修練 MP消費×0.5・MATK×1.4）', '氷の障壁：4ターン', 'メテオストライク：2〜5ヒット（2:30/3:40/4:20/5:10%）'],
+  '聖騎士': ['ホーリーエッジ：倍率 ATK×1.7＋MATK×1.1', 'ディバインスマイト：与ダメ低下付与 50%', '聖騎士の心得：防御・特防×1.5（再修練×2.0）', '聖域展開：毎ターン最大HP10%回復', '神聖覚醒：追撃 防御・特防の60%'],
+  '魔法剣士': ['雷光斬：倍率 ATK×1.4＋MATK×1.0', '閃光：連続強化×1.2（最大4重複）', '魔導剣術：特攻の30%を攻撃に変換（再修練 60%変換＋攻撃×1.1）', '魔剣開放：反動2ターンに短縮', 'エレメンタルエッジ：倍率 ATK×1.7＋MATK×1.7'],
+  '魔銃士': ['魔弾：倍率 ATK×1.4＋MATK×1.3', '連装銃撃：命中+10', '精密照準：命中+10（再修練 同スキル連続で与ダメ+10%・クリ+2%／重複3）', '強化装填：5ターン', 'キャノネスチュームビンド：連続強化×1.3が最大2重複'],
+  'サイキッカー': ['サイコショット：倍率 ATK×1.4＋MATK×1.1', 'マインドブレイク：40%でスタン', '第六感：命中+10（再修練 魔法ヒット毎に与ダメ+5%／重複6）', '精神集中：×1.8・3ターン', 'サイコブラスト：倍率 ATK×1.9＋MATK×1.5'],
+  '体術師': ['半月蹴り：次のスキルの威力×1.8', '五連殺：各ヒット20%で出血', '闘争本能：HP50%以下+20%／HP30%以下+60%（再修練 +40%／+100%）', '破衝掌：防御無視 50%', '飛天三角蹴り：ミス撤廃＋各ヒットATK+0.1'],
+  'ギャンブラー': ['ジャグリング：4ヒット', 'ラッキーダイス：×0.9〜2.2', 'ギャンブルボディ：被ダメ×0.7〜1.3（再修練 ×0.5〜1.2）', 'オールイン：効果・反動6ターン', 'ジャックポット：2倍確率10%'],
+  '竜騎士': ['ドラゴンスラスト：防御貫通 30%', 'ドラゴンファング：倍率 0.9', '竜鱗の加護：防御×1.2・30%で5%軽減（再修練 防御×1.4・20%軽減）', 'ドラゴンロア：自身の攻撃力×1.3（3T）', '天墜竜閃：威力 4.5'],
   '精霊召喚士': ['精霊共鳴：最大MP+20%を追加', '召喚（1段目）：倍率 1.4→1.5', '召喚バフ：1.3→1.4倍／ノクスの魔法防御貫通 5%→8%', '2段目スキル：倍率すべて+0.1', '3段目スキル：倍率すべて+0.2'],
   '式神使い': ['式神召喚：式神の毎ターン攻撃 特殊攻撃力×0.5→0.8', '符術・式打ち：特殊攻撃力×0.8→0.9', '呪符・魂削り：特殊防御30%ダウン(3T)→35%ダウン(4T)', '陰陽結界：被ダメ20%減・50%回復→30%減・60%回復', '禁術・神降ろし：特殊攻撃力×2.2→2.4'],
   'ブリーダー': ['ペット召喚：ペットの攻撃に種族別の追加効果を付与', '攻撃して！：倍率 ×3.0→×3.5', '一緒に頑張ろう！：効果3ターン→6ターン', '休憩しよう！：1ターン被ダメ30%カットを追加', 'やっちゃえ！：倍率 ×5.0→×6.0'],
@@ -1027,7 +1027,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       }
       result.log = `🔮 マインドブレイク！ ${enemy.name}に${result.dmg}の特殊ダメージ！${mbStun}`; break
     }
-    case '第六感':    result.log = `🔮 第六感【パッシブ】 命中率+5%（常時自動発動）`; break
+    case '第六感':    result.log = `🔮 第六感【パッシブ】 命中+10（再修練：魔法攻撃ヒット毎に与ダメ+5%・最大6）`; break
     case '精神集中': { const ssT = rt>=4?3:2; const ssR = rt>=4?1.8:1.6; result.newPlayerBuffs.atkUp={turns:ssT,rate:ssR}; result.newPlayerBuffs.matkUp={turns:ssT,rate:ssR}; result.log = `🔮 精神集中！ ${ssT}ターンの間、攻撃力・特殊攻撃力が大幅上昇！`; break }
     case 'サイコブラスト': {
       const pbA = rt>=5?1.9:1.7, pbC = rt>=5?1.5:1.4
@@ -1047,7 +1047,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.hitDmgs = ds
       result.log = `🦵 五連殺！ ${enemy.name}に${ds.map(d=>`${d}の物理ダメージ`).join('！')}！`; break
     }
-    case '闘争本能': result.log = `🔥 闘争本能【パッシブ】 HP50%以下で与ダメ+20%／HP30%以下で+60%（常時自動発動）`; break
+    case '闘争本能': result.log = `🔥 闘争本能【パッシブ】 HP50%以下+20%／HP30%以下+60%（再修練：+40%／+100%）`; break
     case '破衝掌': {
       const edr_hs = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
       const defVal_hs = Math.floor((enemy.def||0)*edr_hs*(rt>=4?0.5:0.7)/2)
@@ -1078,7 +1078,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.hitDmgs = gs
       result.log = `🔫 連装銃撃！ ${enemy.name}に${gs.map(d=>`${d}の特殊ダメージ`).join('！')}！`; break
     }
-    case '精密照準':   result.log = `🔫 精密照準【パッシブ】 命中率+5%（常時自動発動）`; break
+    case '精密照準':   result.log = `🔫 精密照準【パッシブ】 命中+10（再修練：同スキル連続で与ダメ+10%・クリ+2%・最大3）`; break
     case '強化装填':   { const klT = rt>=4?5:3; result.newPlayerBuffs.atkUp={turns:klT,rate:1.7}; result.newPlayerBuffs.matkUp={turns:klT,rate:1.7}; result.log = `🔫 強化装填！ ${klT}ターンの間、攻撃力・特殊攻撃力が大幅上昇！`; break }
     case 'キャノネスチュームビンド': {
       let cannonStack
@@ -1108,7 +1108,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.dmg = Math.floor(statVal * roll * am)
       result.log = `🎲 ラッキーダイス！ ${enemy.name}に${result.dmg}のダメージ！（${roll.toFixed(2)}倍）`; break
     }
-    case 'ギャンブルボディ': result.log = `🎭 ギャンブルボディ【パッシブ】 被ダメージがランダムに変動（常時自動発動）`; break
+    case 'ギャンブルボディ': result.log = `🎭 ギャンブルボディ【パッシブ】 被ダメ×0.7〜1.3（再修練：×0.5〜1.2）`; break
     case 'オールイン': {
       if (playerBuffs.allinDebuff?.turns > 0) { result.log = `💸 オールイン！ 反動中のため使用できない！`; break }
       const aiT = rt>=4?6:4
@@ -1147,7 +1147,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.log = `✨⚔ 閃光！ ${enemy.name}に${result.dmg}のダメージ！${comboText}`
       break
     }
-    case '魔導剣術': result.log = `⚔ 魔導剣術【パッシブ】 特殊攻撃力の30%を攻撃力に変換（常時発動）`; break
+    case '魔導剣術': result.log = `⚔ 魔導剣術【パッシブ】 特殊攻撃力の30%を攻撃力に変換（再修練：60%変換＋攻撃×1.1）`; break
     case '魔剣開放': {
       if (playerBuffs.spellBladeSealed?.turns > 0) {
         result.log = `⚔ 魔剣開放！ バフ不可状態のため発動できない！`; break
@@ -1194,7 +1194,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.log = `✨⚔ ディバインスマイト！ ${enemy.name}に${result.dmg}のダメージ！${dmgDownHit ? ' 3Tの間、相手の与ダメ-15%！' : ''}`
       break
     }
-    case '聖騎士の心得': result.log = `🛡 聖騎士の心得【パッシブ】 防御力・特殊防御力が1.2倍（常時発動）`; break
+    case '聖騎士の心得': result.log = `🛡 聖騎士の心得【パッシブ】 防御力・特殊防御力が1.5倍（再修練：2.0倍）`; break
     case '聖域展開': {
       const seikiHeal = rt>=4?0.10:0.05
       result.newPlayerBuffs.regenHeal = { turns:4, amount:Math.floor(profile.hp_max*seikiHeal) }
@@ -1221,7 +1221,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       result.log = `🐉 ドラゴンファング！ ${enemy.name}に${h1}・${h2}の物理ダメージ！（2連撃・防御貫通）`
       break
     }
-    case '竜鱗の加護': result.log = `🛡 竜鱗の加護【パッシブ】 防御力1.2倍・被ダメ時30%で軽減（常時発動）`; break
+    case '竜鱗の加護': result.log = `🛡 竜鱗の加護【パッシブ】 防御力1.2倍・被ダメ時30%で5%軽減（再修練：防御1.4倍・20%軽減）`; break
     case 'ドラゴンロア': {
       result.newEnemyBuffs.atkDown = { turns:3, rate:0.7 }   // 攻撃・特攻を30%減（3T）
       result.newEnemyBuffs.matkDown = { turns:3, rate:0.7 }
@@ -2830,6 +2830,8 @@ export default function Game() {
     let bossHeal2Used = false   // HP30%以下で発動
     let papiaEscaped = false
     let playerAttacking = false  // bloodRage：直接攻撃中のみtrue
+    let rokkanStacks = 0    // 第六感(再修練)：魔法攻撃ヒット毎に+5%・最大6
+    let seimitsuStacks = 0  // 精密照準(再修練)：同スキル連続で+10%/クリ+2%・最大3
 
     const equippedWeaponItem = equipment.find(e => e.slot==='weapon' && e.equipped)
     const ondmgSpdUp = eff.ondmgSpdUp || 0  // 雷鋼の機神鎧: 被ダメ時に付与する素早さ倍率（0=なし）
@@ -2850,7 +2852,7 @@ export default function Game() {
     }
     const activeSkillSets = isPapiaEncounter ? curPapiaSets : curSortieSets
     const passiveNames = activeSkillSets.filter(ss => ss.skills?.type === 'パッシブ').map(ss => ss.skills.name)
-    const hasShingan    = passiveNames.includes('心眼')
+    const hasIai        = passiveNames.includes('居合の構え') || passiveNames.includes('心眼')  // 居合の構え（旧:心眼）
     const hasBerserk    = passiveNames.includes('バーサク')
     const hasTakaNoMe   = passiveNames.includes('鷹ノ目')
     const hasKakushin   = passiveNames.includes('執行本能')
@@ -2886,27 +2888,38 @@ export default function Game() {
       petActive = true
     }
 
-    const passiveCritBonus   = (hasSeimitsu ? (pe('魔銃士')?10:5) : 0)
-    const passiveCritDmgBonus = (hasOnmi && pe('暗殺者')) ? 0.2 : 0  // 隠身強化：クリ威力+20%
-    const passiveDmgMult     = (hasShingan ? (pe('侍')?1.20:1.10) : 1.0) * (hasBerserk ? (pe('狂戦士')?1.30:1.15) : 1.0) * (hasKakushin ? (pe('異端審問官')?1.25:1.20) : 1.0) * (hasRokkan ? (pe('サイキッカー')?1.15:1.05) : 1.0) * (eff.weaponDmgMult || 1)
-    const passiveHealMult    = (hasShinkoka ? 1.5 : 1.0) * (hasKakushin ? (pe('異端審問官')?0.7:0.5) : 1.0)
+    const passiveCritBonus   = 0  // 精密照準のクリは再修練のスタックへ移行（素のクリ加算なし）
+    const passiveCritDmgBonus = (hasOnmi && pe('暗殺者')) ? 0.25 : 0  // 隠身強化：クリ威力+25%
+    // 心眼(居合の構え)は物理ダメ専用のため passiveDmgMult からは除外（iaiPhysMult で別管理）
+    // 第六感の素の与ダメ強化は廃止（再修練スタックへ移行）
+    const passiveDmgMult     = (hasBerserk ? (pe('狂戦士')?1.40:1.15) : 1.0) * (hasKakushin ? (pe('異端審問官')?1.40:1.20) : 1.0) * (eff.weaponDmgMult || 1)
+    const passiveHealMult    = (hasShinkoka ? 1.5 : 1.0) * (hasKakushin ? 0.5 : 1.0)  // 執行本能：回復量×0.5（常時）
     const passiveMatkMult    = hasShinkoka ? 1.1 : 1.0
-    const passiveMpCostMult  = (hasTenki ? 0.7 : 1.0) * (eff.weaponMpCostMult || 1)
-    const passiveMatkMultTenki = hasTenki ? (pe('賢者')?1.3:1.2) : 1.0
-    const passiveHitBonus    = (hasRokkan ? 5 : 0) + (hasSeimitsu ? (pe('魔銃士')?10:5) : 0) + (hasTakaNoMe ? (pe('狩人')?25:15) : 0)
-    const passiveHealReflect = (hasShinkoka && pe('聖職者'))  // 神聖加護強化：回復量の50%を敵に
+    const passiveMpCostMult  = (hasTenki ? (pe('賢者')?0.5:0.7) : 1.0) * (eff.weaponMpCostMult || 1)  // 天啓：MP消費 通常×0.7／再修練×0.5
+    const passiveMatkMultTenki = hasTenki ? (pe('賢者')?1.4:1.2) : 1.0  // 天啓：MATK 通常×1.2／再修練×1.4
+    const passiveHitBonus    = (hasRokkan ? 10 : 0) + (hasSeimitsu ? 10 : 0) + (hasTakaNoMe ? (pe('狩人')?20:10) : 0)  // 第六感/精密照準=命中+10、鷹ノ目=+10/+20
+    const passiveHealReflect = (hasShinkoka && pe('聖職者'))  // 神聖加護強化：回復量を敵に反射  // 神聖加護強化：回復量の50%を敵に
     const hasGambleBody       = passiveNames.includes('ギャンブルボディ')
     const hasMadokenJutsu     = passiveNames.includes('魔導剣術')
     const hasHolyKnightPassive= passiveNames.includes('聖騎士の心得')
-    const hasRyurin           = passiveNames.includes('竜鱗の加護') // 防御1.2倍＋被ダメ時30%で軽減（再修練3段で-15%）
-    const ryurinMult          = hasRyurin ? 1.2 : 1.0
-    // 竜鱗の加護：被ダメ時に30%で軽減倍率を返す（通常-5%／再修練3段で-15%）
-    const ryurinReduce = () => (hasRyurin && Math.random() < 0.3) ? (pe('竜騎士')?0.85:0.95) : 1.0
+    const hasRyurin           = passiveNames.includes('竜鱗の加護') // 防御×1.2（再修練×1.4）＋被ダメ時30%で軽減
+    const ryurinMult          = hasRyurin ? (pe('竜騎士')?1.4:1.2) : 1.0
+    // 竜鱗の加護：被ダメ時に30%で軽減倍率を返す（通常-5%／再修練3段で-20%）
+    const ryurinReduce = () => (hasRyurin && Math.random() < 0.3) ? (pe('竜騎士')?0.80:0.95) : 1.0
+
+    // 居合の構え：通常スキル5枠すべてが埋まり、各枠の使用回数が1のとき発動（物理ダメージ専用 通常+40%／再修練+70%）
+    const iaiLoadoutOK = [1,2,3,4,5].every(n => {
+      const s = activeSkillSets.find(ss => ss.slot_order === n && ss.skills?.type !== 'パッシブ')
+      return s && (s.use_count ?? 1) === 1
+    })
+    const iaiPhysMult   = (hasIai && iaiLoadoutOK) ? (pe('侍')?1.70:1.40) : 1.0
+    const takaAtkBonus  = (hasTakaNoMe && pe('狩人')) ? Math.floor((eff.spd||0) * 0.1) : 0  // 鷹ノ目強化：素早さの10%を攻撃に加算
+    const madokenAtkMult = (hasMadokenJutsu && pe('魔法剣士')) ? 1.1 : 1.0  // 魔導剣術強化：攻撃力×1.1
     // プレイヤーの防御パッシブ/フィールドバフ合算（聖騎士の心得・聖域展開・竜鱗・骸の壁）。
     // doEnemyAttackと同じ係数を敵スキル経路(executeEnemySkill)にも渡すための関数。
     const playerPassiveDefMult = () => {
       const hf = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
-      const hk = hasHolyKnightPassive ? (pe('聖騎士')?1.5:1.3) : 1.0
+      const hk = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
       const kb = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
       return hf * hk * ryurinMult * kb
     }
@@ -2940,7 +2953,7 @@ export default function Game() {
 
     playerBuffs = applyEquipmentEffects(equipment, battleProfile, playerBuffs, logs)
 
-    const effectiveSpdForCalc = hasTakaNoMe ? Math.floor(eff.spd * 1.2) : eff.spd
+    const effectiveSpdForCalc = eff.spd  // 鷹ノ目のSPD×1.2は廃止（命中+ATK加算へ仕様変更）
     const weaponType = equippedWeaponItem?.weapons?.weapon_type || 'sword'
     const isMagical = getWeaponGroup(weaponType) === 'magical'
     const expandedSkillSet = []
@@ -3003,7 +3016,7 @@ export default function Game() {
     const doPlayerAttack = (isExtra=false) => {
       playerAttacking = true
       const holyFieldDef = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
-      const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?1.5:1.3) : 1.0
+      const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
       const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
       const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDef * holyKnightMult * ryurinMult * kabeDefP
       const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDef * holyKnightMult * ryurinMult * kabeDefP
@@ -3013,7 +3026,7 @@ export default function Game() {
       const evoAllAtkMult  = (allSkillsSet && (eff.evoAllskillAtk||0)  > 0) ? 1 + eff.evoAllskillAtk/100  : 1
       const evoAllMatkMult = (allSkillsSet && (eff.evoAllskillMatk||0) > 0) ? 1 + eff.evoAllskillMatk/100 : 1
       const pMatk  = (eff.matk - madokenBonus) * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP * evoAllMatkMult
-      const pAtk   = (eff.atk + madokenBonus)  * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP * evoAllAtkMult
+      const pAtk   = (eff.atk + madokenBonus + takaAtkBonus) * madokenAtkMult * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP * evoAllAtkMult
       const paralysisSpdP = playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1.0
       const pSpd   = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * paralysisSpdP
       const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
@@ -3123,13 +3136,22 @@ export default function Game() {
           playerMp -= mpCost
           const hasGensoKyomei = passiveNames.includes('元素共鳴')
           const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name && cs.skills.type === '魔法攻撃') ? (pe('元素使い')?1.50:1.30) : 1.0
-          // 精密照準：再修練3段で「同スキル連続使用時×1.1」が付く（素の精密照準は命中+5のみ）
-          const seimitsuMult = (hasSeimitsu && pe('魔銃士') && prevSkillName && prevSkillName === cs.skills.name) ? 1.1 : 1.0
+          // 精密照準（再修練）：同スキルを連続使用するたびに与ダメ+10%・クリ率+2%（重複3／別スキルでリセット）
+          if (hasSeimitsu && pe('魔銃士')) {
+            seimitsuStacks = (prevSkillName && prevSkillName === cs.skills.name) ? Math.min(3, seimitsuStacks + 1) : 0
+          }
+          const seimitsuMult = 1 + 0.10 * seimitsuStacks
+          const seimitsuCritBonus = 2 * seimitsuStacks
           prevSkillName = cs.skills.name
           const res = executeSkill(cs.skills, {...effBuff, lastMpCost:mpCost}, battleProfile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
-          const finalCrit = res.dmg > 0 && (isCrit || (res.bonusCritRate > 0 && Math.random()*100 < playerCritRate + res.bonusCritRate))
+          // 第六感（再修練）：これまでの魔法攻撃ヒット数に応じ全与ダメ+5%/スタック（最大6＝+30%）
+          const rokkanMult = (hasRokkan && pe('サイキッカー')) ? (1 + 0.05 * Math.min(6, rokkanStacks)) : 1.0
+          const bcr = res.bonusCritRate || 0
+          const finalCrit = res.dmg > 0 && (isCrit || ((bcr + seimitsuCritBonus) > 0 && Math.random()*100 < playerCritRate + bcr + seimitsuCritBonus))
           const finalCritMult = finalCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
-          const tosoMult = hasTosoHonno ? (playerHp <= maxHp * 0.3 ? 1.6 : playerHp <= maxHp * 0.5 ? 1.2 : 1.0) : 1.0  // 闘争本能：HP50%以下+20%／HP30%以下+60%（重複なし）
+          const tosoMult = hasTosoHonno ? (playerHp <= maxHp * 0.3 ? (pe('体術師')?2.0:1.6) : playerHp <= maxHp * 0.5 ? (pe('体術師')?1.4:1.2) : 1.0) : 1.0  // 闘争本能：HP50%以下/30%以下で与ダメ強化（再修練で増加）
+          // 居合の構え：物理攻撃スキルのみ物理ダメ強化（魔法には乗らない）
+          const iaiMult = (cs.skills?.type === '物理攻撃') ? iaiPhysMult : 1.0
           // ②DEFスケーリング：物理=ATK/(ATK+敵DEF)、魔法=MATK/(MATK+敵MDEF)
           let defScale = 1.0
           if (res.dmg > 0) {
@@ -3158,12 +3180,12 @@ export default function Game() {
           const isMulti = Array.isArray(res.hitDmgs) && res.hitDmgs.length > 0 && res.dmg > 0
           let finalDmg, resLog, multiCritAny = false
           if (isMulti) {
-            const hitMult = defScale * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * nextBoostMult
+            const hitMult = defScale * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * nextBoostMult
             const parts = []
             finalDmg = 0
             for (const hd of res.hitDmgs) {
               if (baseEnemyEvasion > 0 && Math.random()*100 < baseEnemyEvasion) { parts.push('回避された！'); continue }
-              const hCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0))
+              const hCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0) + seimitsuCritBonus)
               const hMult = hCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
               let hDmg = Math.max(1, Math.floor(hd * hitMult * hMult * (0.9 + Math.random()*0.2)))
               if (enemy.isPapia) hDmg = 1
@@ -3173,12 +3195,14 @@ export default function Game() {
             }
             resLog = `${res.log.split('！')[0]}！ ${enemy.name}に ${parts.join(' ')}`
           } else {
-            finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * nextBoostMult * (0.9 + Math.random() * 0.2))
+            finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * nextBoostMult * (0.9 + Math.random() * 0.2))
             if (enemy.isPapia && res.dmg > 0) finalDmg = 1
             resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           }
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
           enemyHp -= finalDmg
+          // 第六感（再修練）：魔法攻撃がヒットしたらスタック+1（最大6・戦闘中持続）
+          if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks + 1)
           if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
             enemyBuffs.healDown = { turns: 2, rate: 0.9 }
             logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
@@ -3191,7 +3215,7 @@ export default function Game() {
           const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult * healUpMult)
           playerHp = Math.min(maxHp, playerHp + healAmt)
           if (passiveHealReflect && healAmt > 0) {
-            const reflectDmg = Math.floor(healAmt * 0.5)
+            const reflectDmg = healAmt  // 神聖加護強化：回復量の100%を反射
             enemyHp -= reflectDmg
             logs.push({ text:`✨ 神聖加護の反射！ ${enemy.name}に${reflectDmg}ダメージ！`, color:'#ffdd44' })
           }
@@ -3227,7 +3251,7 @@ export default function Game() {
           if (res.followup && res.followup.dmg > 0) {
             const fCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0))
             const fCritMult = fCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
-            let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * (0.9 + Math.random()*0.2))
+            let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * (0.9 + Math.random()*0.2))
             if (enemy.isPapia) fDmg = 1
             fDmg = Math.max(1, fDmg)
             enemyHp -= fDmg
@@ -3255,7 +3279,11 @@ export default function Game() {
         const baseDmg = Math.max(1, Math.floor(baseAtk*baseAtk/Math.max(1,baseAtk+eDefVal))+Math.floor(Math.random()*4))
         const enemyDmgReduceMult2 = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
         const breederDmgMult = playerBuffs.breederDmgUp?.turns > 0 ? playerBuffs.breederDmgUp.rate : 1.0
-        let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*enemyDmgReduceMult2*breederDmgMult*(0.9+Math.random()*0.2))
+        const iaiNormalMult = isMagical ? 1.0 : iaiPhysMult  // 居合の構え：物理通常攻撃のみ強化
+        const rokkanMultN = (hasRokkan && pe('サイキッカー')) ? (1 + 0.05 * Math.min(6, rokkanStacks)) : 1.0
+        // 通常攻撃でスキル連続が途切れる → 精密照準/元素共鳴のチェーンをリセット
+        seimitsuStacks = 0; prevSkillName = null
+        let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*iaiNormalMult*rokkanMultN*enemyDmgReduceMult2*breederDmgMult*(0.9+Math.random()*0.2))
         if (enemy.isPapia) finalDmg = 1
         enemyHp -= finalDmg
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
@@ -3302,7 +3330,7 @@ export default function Game() {
         return
       }
       const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
-      const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?1.5:1.3) : 1.0
+      const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
       const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
       const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDefE * holyKnightMultE * ryurinMult * kabeDefE
       const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE * ryurinMult * kabeDefE
@@ -3338,7 +3366,7 @@ export default function Game() {
       const enemyDmgDownRate = enemyBuffs.dmgDown?.turns > 0 ? enemyBuffs.dmgDown.rate : 1.0
       // ③プレイヤーDEFランクによるボーナス軽減
       const playerDefRankReduction = calcDefReduction(isEM ? eff.mdef : eff.def)
-      const gambleBodyMult = hasGambleBody ? (0.7 + Math.random() * (pe('ギャンブラー')?0.4:0.6)) : 1.0
+      const gambleBodyMult = hasGambleBody ? (pe('ギャンブラー') ? (0.5 + Math.random()*0.7) : (0.7 + Math.random()*0.6)) : 1.0  // 通常0.7〜1.3／再修練0.5〜1.2
       const allinDebuffInMult = playerBuffs.allinDebuff?.turns > 0 ? 1.3 : 1.0
       // ボス装備 真化: 被ダメージ%軽減（海竜の鱗=全体-5% / 蒼粘剣=物理-10%）
       const evoTakenMult = (eff.evoDmgTakenMult||1) * (!isEM ? (eff.evoPhysDmgTakenMult||1) : 1)
@@ -3566,7 +3594,7 @@ export default function Game() {
         playerHp = Math.min(maxHp, playerHp + healAmt)
         logs.push({ text:`💚 回復効果でHPが${healAmt}回復した！`, color:'#44ff88' })
         if (passiveHealReflect && healAmt > 0) {
-          const reflectDmg = Math.floor(healAmt * 0.5)
+          const reflectDmg = healAmt  // 神聖加護強化：回復量の100%を反射
           enemyHp -= reflectDmg
           logs.push({ text:`✨ 神聖加護の反射！ ${enemy.name}に${reflectDmg}ダメージ！`, color:'#ffdd44' })
         }

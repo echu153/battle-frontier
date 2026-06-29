@@ -48,6 +48,8 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   let itemUsed = false
   let prevSkillName = null
   let playerAttacking = false
+  let rokkanStacks = 0    // 第六感(再修練)：魔法攻撃ヒット毎に+5%・最大6
+  let seimitsuStacks = 0  // 精密照準(再修練)：同スキル連続で+10%/クリ+2%・最大3
 
   // ===== 敵スキルAI 状態（kit駆動） =====
   // 敵はMP消費なしでスキル撃ち放題。HP閾値で発動スキルが1度だけ切り替わる。
@@ -64,7 +66,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   const isArtifact = equippedWeaponItem?.bonus_effect === 'artifact'
 
   const passiveNames = skillSets.filter(ss => ss.skills?.type === 'パッシブ').map(ss => ss.skills.name)
-  const hasShingan    = passiveNames.includes('心眼')
+  const hasIai        = passiveNames.includes('居合の構え') || passiveNames.includes('心眼')  // 居合の構え（旧:心眼）
   const hasBerserk    = passiveNames.includes('バーサク')
   const hasTakaNoMe   = passiveNames.includes('鷹ノ目')
   const hasKakushin   = passiveNames.includes('執行本能')
@@ -78,24 +80,35 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   const rtCur = (profile.retraining || {})[profile.class] || 0
   const pe = (cls) => profile.class === cls && rtCur >= 3
 
-  const passiveCritBonus    = hasShingan ? 5 : 0
-  const passiveCritDmgBonus = (hasOnmi && pe('暗殺者')) ? 0.2 : 0
-  const passiveDmgMult      = (hasShingan ? (pe('侍')?1.10:1.05) : 1.0) * (hasBerserk ? (pe('狂戦士')?1.20:1.15) : 1.0) * (hasKakushin ? (pe('異端審問官')?1.15:1.1) : 1.0) * (hasRokkan ? (pe('サイキッカー')?1.10:1.05) : 1.0) * (eff.weaponDmgMult || 1)
-  const passiveHealMult     = (hasShinkoka ? (pe('聖職者')?1.4:1.2) : 1.0) * (hasKakushin ? 0.7 : 1.0)
+  const passiveCritBonus    = 0  // 精密照準のクリは再修練のスタックへ移行（素のクリ加算なし）
+  const passiveCritDmgBonus = (hasOnmi && pe('暗殺者')) ? 0.25 : 0  // 隠身強化：クリ威力+25%
+  // 心眼(居合の構え)は物理ダメ専用のため passiveDmgMult からは除外（iaiPhysMult で別管理）
+  // 第六感の素の与ダメ強化は廃止（再修練スタックへ移行）
+  const passiveDmgMult      = (hasBerserk ? (pe('狂戦士')?1.40:1.15) : 1.0) * (hasKakushin ? (pe('異端審問官')?1.40:1.20) : 1.0) * (eff.weaponDmgMult || 1)
+  const passiveHealMult     = (hasShinkoka ? 1.5 : 1.0) * (hasKakushin ? 0.5 : 1.0)  // 執行本能：回復量×0.5（常時）
   const passiveMatkMult     = hasShinkoka ? 1.1 : 1.0
-  const passiveMpCostMult   = (hasTenki ? 0.9 : 1.0) * (eff.weaponMpCostMult || 1)
-  const passiveMatkMultTenki = hasTenki ? (pe('賢者')?1.3:1.1) : 1.0
-  const passiveHitBonus     = (hasRokkan ? 5 : 0) + (hasSeimitsu ? 5 : 0) + ((hasTakaNoMe && pe('狩人')) ? 10 : 0)
+  const passiveMpCostMult   = (hasTenki ? (pe('賢者')?0.5:0.7) : 1.0) * (eff.weaponMpCostMult || 1)  // 天啓：MP消費 通常×0.7／再修練×0.5
+  const passiveMatkMultTenki = hasTenki ? (pe('賢者')?1.4:1.2) : 1.0  // 天啓：MATK 通常×1.2／再修練×1.4
+  const passiveHitBonus     = (hasRokkan ? 10 : 0) + (hasSeimitsu ? 10 : 0) + (hasTakaNoMe ? (pe('狩人')?20:10) : 0)  // 第六感/精密照準=命中+10、鷹ノ目=+10/+20
   const passiveHealReflect  = (hasShinkoka && pe('聖職者'))
   const hasGambleBody       = passiveNames.includes('ギャンブルボディ')
   const hasMadokenJutsu     = passiveNames.includes('魔導剣術')
   const hasHolyKnightPassive= passiveNames.includes('聖騎士の心得')
 
+  // 居合の構え：通常スキル5枠すべてが埋まり、各枠の使用回数が1のとき発動（物理ダメージ専用 通常+40%／再修練+70%）
+  const iaiLoadoutOK = [1,2,3,4,5].every(n => {
+    const s = skillSets.find(ss => ss.slot_order === n && ss.skills?.type !== 'パッシブ')
+    return s && (s.use_count ?? 1) === 1
+  })
+  const iaiPhysMult   = (hasIai && iaiLoadoutOK) ? (pe('侍')?1.70:1.40) : 1.0
+  const takaAtkBonus  = (hasTakaNoMe && pe('狩人')) ? Math.floor((eff.spd||0) * 0.1) : 0  // 鷹ノ目強化：素早さの10%を攻撃に加算
+  const madokenAtkMult = (hasMadokenJutsu && pe('魔法剣士')) ? 1.1 : 1.0  // 魔導剣術強化：攻撃力×1.1
+
   logs.push({ text:`⚔ ${enemy.name}が立ちはだかった！`, color:'#ff6644' })
 
   playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
 
-  const effectiveSpdForCalc = hasTakaNoMe ? Math.floor(eff.spd * 1.2) : eff.spd
+  const effectiveSpdForCalc = eff.spd  // 鷹ノ目のSPD×1.2は廃止（命中+ATK加算へ仕様変更）
   const weaponType = equippedWeaponItem?.weapons?.weapon_type || 'sword'
   const isMagical = getWeaponGroup(weaponType) === 'magical'
   const expandedSkillSet = []
@@ -118,14 +131,14 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   const doPlayerAttack = (isExtra = false) => {
     playerAttacking = true
     const holyFieldDef = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
-    const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?1.3:1.2) : 1.0
+    const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
     const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
     const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDef * holyKnightMult * kabeDefP
     const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDef * holyKnightMult * kabeDefP
     const burnDebuffP = playerBuffs.burn?.turns > 0 ? 0.9 : 1.0
     const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * (pe('魔法剣士')?0.6:0.3)) : 0
     const pMatk  = (eff.matk - madokenBonus) * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP * evoMatkMult(eff, allSkillsSet)
-    const pAtk   = (eff.atk + madokenBonus)  * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP * evoAtkMult(eff, allSkillsSet)
+    const pAtk   = (eff.atk + madokenBonus + takaAtkBonus) * madokenAtkMult * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP * evoAtkMult(eff, allSkillsSet)
     const paralysisSpdP = playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1.0
     const pSpd   = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * paralysisSpdP
     const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
@@ -196,13 +209,18 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       if (cs && cs.skills && playerMp >= mpCost) {
         playerMp -= mpCost
         const hasGensoKyomei = passiveNames.includes('元素共鳴')
-        const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? (pe('元素使い')?1.25:1.15) : 1.0
-        const seimitsuMult = (hasSeimitsu && pe('魔銃士') && prevSkillName && prevSkillName === cs.skills.name) ? 1.1 : 1.0
+        const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name && cs.skills.type === '魔法攻撃') ? (pe('元素使い')?1.50:1.30) : 1.0
+        // 精密照準（再修練）：同スキルを連続使用するたびに与ダメ+10%・クリ率+2%（重複3／別スキルでリセット）
+        if (hasSeimitsu && pe('魔銃士')) seimitsuStacks = (prevSkillName && prevSkillName === cs.skills.name) ? Math.min(3, seimitsuStacks+1) : 0
+        const seimitsuMult = 1 + 0.10 * seimitsuStacks
+        const seimitsuCritBonus = 2 * seimitsuStacks
         prevSkillName = cs.skills.name
         const res = executeSkill(cs.skills, {...effBuff, lastMpCost:mpCost}, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
-        const finalCrit = res.dmg > 0 && (isCrit || (res.bonusCritRate > 0 && Math.random()*100 < playerCritRate + res.bonusCritRate))
+        const rokkanMult = (hasRokkan && pe('サイキッカー')) ? (1 + 0.05*Math.min(6, rokkanStacks)) : 1.0
+        const iaiMult = (cs.skills?.type === '物理攻撃') ? iaiPhysMult : 1.0
+        const finalCrit = res.dmg > 0 && (isCrit || ((res.bonusCritRate > 0 || seimitsuCritBonus > 0) && Math.random()*100 < playerCritRate + res.bonusCritRate + seimitsuCritBonus))
         const finalCritMult = finalCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
-        const tosoMult = (hasTosoHonno && playerHp <= eff.hp_max * 0.5) ? (pe('体術師')?1.25:1.1) : 1.0
+        const tosoMult = hasTosoHonno ? (playerHp <= eff.hp_max*0.3 ? (pe('体術師')?2.0:1.6) : playerHp <= eff.hp_max*0.5 ? (pe('体術師')?1.4:1.2) : 1.0) : 1.0
         let defScale = 1.0
         if (res.dmg > 0) {
           const sType = cs.skills?.type
@@ -221,12 +239,12 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
         const isMulti = Array.isArray(res.hitDmgs) && res.hitDmgs.length > 0 && res.dmg > 0
         let finalDmg, resLog, multiCritAny = false
         if (isMulti) {
-          const hitMult = defScale * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * abyssEnemyDR
+          const hitMult = defScale * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * abyssEnemyDR
           const parts = []
           finalDmg = 0
           for (const hd of res.hitDmgs) {
             if (baseEnemyEvasion > 0 && Math.random()*100 < baseEnemyEvasion) { parts.push('回避された！'); continue }
-            const hCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0))
+            const hCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0) + seimitsuCritBonus)
             const hMult = hCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
             let hDmg = Math.max(1, Math.floor(hd * hitMult * hMult * (0.9 + Math.random()*0.2)))
             if (hCrit) multiCritAny = true
@@ -235,11 +253,12 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
           }
           resLog = `${res.log.split('！')[0]}！ ${enemy.name}に ${parts.join(' ')}`
         } else {
-          finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * abyssEnemyDR * (0.9 + Math.random() * 0.2))
+          finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * abyssEnemyDR * (0.9 + Math.random() * 0.2))
           resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
         }
         if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
         enemyHp -= finalDmg
+        if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks+1)
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
           enemyBuffs.healDown = { turns: 2, rate: 0.9 }
           logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
@@ -253,7 +272,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
         const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult)
         playerHp = Math.min(eff.hp_max, playerHp + healAmt)
         if (passiveHealReflect && healAmt > 0) {
-          const reflectDmg = Math.floor(healAmt * 0.5)
+          const reflectDmg = healAmt
           enemyHp -= reflectDmg
           logs.push({ text:`✨ 神聖加護の反射！ ${enemy.name}に${reflectDmg}ダメージ！`, color:'#ffdd44' })
         }
@@ -278,9 +297,9 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
         logs.push({ text:`${prefix}${logWithCrit}`, color:(finalCrit && !isMulti) || multiCritAny ? '#ffff00' : '#88ccff' })
         // 追撃（影歩き/出血消費など）を別ヒットとして適用：メインとは独立したダメージ判定
         if (res.followup && res.followup.dmg > 0) {
-          const fCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0))
+          const fCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0) + seimitsuCritBonus)
           const fCritMult = fCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
-          let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * enemyDmgReduceMult * abyssEnemyDR * (0.9 + Math.random()*0.2))
+          let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * abyssEnemyDR * (0.9 + Math.random()*0.2))
           fDmg = Math.max(1, fDmg)
           enemyHp -= fDmg
           logs.push({ text:`↳ 追撃！${res.followup.label?`（${res.followup.label}）`:''} ${enemy.name}に${fDmg}ダメージ！${fCrit?' 💥クリティカル！':''}`, color: fCrit?'#ffaa00':'#ffaa66' })
@@ -304,7 +323,11 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       const eDefVal = isMagical ? Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate*enPerm.mdefMult)) : Math.max(1, Math.floor(enemy.def*eDefRate*enPerm.defMult))
       const baseDmg = Math.max(1, Math.floor(baseAtk*baseAtk/Math.max(1,baseAtk+eDefVal))+Math.floor(Math.random()*4))
       const enemyDmgReduceMult2 = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
-      let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*enemyDmgReduceMult2*abyssEnemyDR*(0.9+Math.random()*0.2))
+      const iaiNormalMult = isMagical ? 1.0 : iaiPhysMult  // 居合の構え：物理通常攻撃のみ強化
+      const rokkanMultN = (hasRokkan && pe('サイキッカー')) ? (1 + 0.05 * Math.min(6, rokkanStacks)) : 1.0
+      // 通常攻撃でスキル連続が途切れる → 精密照準/元素共鳴のチェーンをリセット
+      seimitsuStacks = 0; prevSkillName = null
+      let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*iaiNormalMult*rokkanMultN*enemyDmgReduceMult2*abyssEnemyDR*(0.9+Math.random()*0.2))
       enemyHp -= finalDmg
       if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
         enemyBuffs.healDown = { turns: 2, rate: 0.9 }
@@ -325,12 +348,12 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
 
   const doEnemyAttack = (isExtra = false) => {
     const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
-    const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?1.3:1.2) : 1.0
+    const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
     const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
     const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDefE * holyKnightMultE * kabeDefE
     const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE * kabeDefE
     const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
-    const berserkDmgRate = hasBerserk ? 1.1 : 1.0
+    const berserkDmgRate = hasBerserk ? (pe('狂戦士')?1.20:1.15) : 1.0
     const isEM = enemy.type === 'magical'
     const burnDebuffE = enemyBuffs.burn?.turns > 0 ? 0.9 : 1.0
     const eAtk = isEM
@@ -352,7 +375,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     }
     const enemyDmgDownRate = enemyBuffs.dmgDown?.turns > 0 ? enemyBuffs.dmgDown.rate : 1.0
     const playerDefRankReduction = calcDefReduction(isEM ? eff.mdef : eff.def)
-    const gambleBodyMult = hasGambleBody ? (0.7 + Math.random() * (pe('ギャンブラー')?0.4:0.6)) : 1.0
+    const gambleBodyMult = hasGambleBody ? (pe('ギャンブラー') ? (0.5+Math.random()*0.7) : (0.7+Math.random()*0.6)) : 1.0
     const allinDebuffInMult = playerBuffs.allinDebuff?.turns > 0 ? 1.3 : 1.0
     const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*evoTakenMult(eff, !isEM)*(0.9+Math.random()*0.2))
     playerHp -= finalDmg
@@ -608,7 +631,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       playerHp = Math.min(eff.hp_max, playerHp + healAmt)
       logs.push({ text:`💚 回復効果でHPが${healAmt}回復した！`, color:'#44ff88' })
       if (passiveHealReflect && healAmt > 0) {
-        const reflectDmg = Math.floor(healAmt * 0.5); enemyHp -= reflectDmg
+        const reflectDmg = healAmt; enemyHp -= reflectDmg
         logs.push({ text:`✨ 神聖加護の反射！ ${enemy.name}に${reflectDmg}ダメージ！`, color:'#ffdd44' })
       }
     }

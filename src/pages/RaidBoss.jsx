@@ -108,6 +108,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   let prevSkillName = null
   let playerBuffs = {}
   let playerDied = false
+  let rokkanStacks = 0
+  let seimitsuStacks = 0
 
   const equippedWeapon = equipment.find(e => e.slot === 'weapon' && e.equipped)
   const isArtifact = equippedWeapon?.bonus_effect === 'artifact'
@@ -123,7 +125,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   }
   const allSkillsSet = evoAllSkillsSet(skillSets)  // 深紅の牙輪/魔眼石の真化条件
 
-  const hasShingan    = passiveNames.includes('心眼')
+  const hasIai        = passiveNames.includes('居合の構え') || passiveNames.includes('心眼')  // 居合の構え（旧:心眼）
   const hasBerserk    = passiveNames.includes('バーサク')
   const hasKakushin   = passiveNames.includes('執行本能')
   const hasShinkoka   = passiveNames.includes('神聖加護')
@@ -143,16 +145,27 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   const rtCur = (profile.retraining || {})[profile.class] || 0
   const pe = (cls) => profile.class === cls && rtCur >= 3
 
-  const passiveCritBonus  = hasShingan ? 5 : 0
-  const passiveCritDmgBonus = (hasOnmi && pe('暗殺者')) ? 0.2 : 0
-  const passiveDmgMult    = (hasShingan ? (pe('侍')?1.10:1.05) : 1.0) * (hasBerserk ? (pe('狂戦士')?1.20:1.15) : 1.0) * (hasKakushin ? (pe('異端審問官')?1.15:1.1) : 1.0) * (hasRokkan ? (pe('サイキッカー')?1.10:1.05) : 1.0) * (eff.weaponDmgMult || 1)
-  const passiveHealMult   = (hasShinkoka ? (pe('聖職者')?1.4:1.2) : 1.0) * (hasKakushin ? 0.7 : 1.0)
+  const passiveCritBonus  = 0  // 精密照準のクリは再修練のスタックへ移行（素のクリ加算なし）
+  const passiveCritDmgBonus = (hasOnmi && pe('暗殺者')) ? 0.25 : 0  // 隠身強化：クリ威力+25%
+  // 心眼(居合の構え)は物理ダメ専用のため passiveDmgMult からは除外（iaiPhysMult で別管理）
+  // 第六感の素の与ダメ強化は廃止（再修練スタックへ移行）
+  const passiveDmgMult    = (hasBerserk ? (pe('狂戦士')?1.40:1.15) : 1.0) * (hasKakushin ? (pe('異端審問官')?1.40:1.20) : 1.0) * (eff.weaponDmgMult || 1)
+  const passiveHealMult   = (hasShinkoka ? 1.5 : 1.0) * (hasKakushin ? 0.5 : 1.0)  // 神聖加護回復×1.5固定・執行本能回復×0.5固定
   const passiveHealReflect = (hasShinkoka && pe('聖職者'))
   const passiveMatkMult   = hasShinkoka ? 1.1 : 1.0
-  const passiveMpCostMult = (hasTenki ? 0.9 : 1.0) * (eff.weaponMpCostMult || 1)
-  const passiveMatkMultTenki = hasTenki ? (pe('賢者')?1.3:1.1) : 1.0
-  const passiveHitBonus   = (hasRokkan ? 5 : 0) + (hasSeimitsu ? 5 : 0) + ((hasTakaNoMe && pe('狩人')) ? 10 : 0)
-  const effectiveSpdForCalc = hasTakaNoMe ? Math.floor(eff.spd * 1.2) : eff.spd
+  const passiveMpCostMult = (hasTenki ? (pe('賢者')?0.5:0.7) : 1.0) * (eff.weaponMpCostMult || 1)  // 天啓：MP消費 通常×0.7／再修練×0.5
+  const passiveMatkMultTenki = hasTenki ? (pe('賢者')?1.4:1.2) : 1.0  // 天啓：MATK 通常×1.2／再修練×1.4
+  const passiveHitBonus   = (hasRokkan ? 10 : 0) + (hasSeimitsu ? 10 : 0) + (hasTakaNoMe ? (pe('狩人')?20:10) : 0)
+  const effectiveSpdForCalc = eff.spd
+
+  // 居合の構え：通常スキル5枠すべてが埋まり、各枠の使用回数が1のとき発動（物理ダメージ専用 通常+40%／再修練+70%）
+  const iaiLoadoutOK = [1,2,3,4,5].every(n => {
+    const s = skillSets.find(ss => ss.slot_order === n && ss.skills?.type !== 'パッシブ')
+    return s && (s.use_count ?? 1) === 1
+  })
+  const iaiPhysMult   = (hasIai && iaiLoadoutOK) ? (pe('侍')?1.70:1.40) : 1.0
+  const takaAtkBonus  = (hasTakaNoMe && pe('狩人')) ? Math.floor((eff.spd||0) * 0.1) : 0  // 鷹ノ目強化：素早さの10%を攻撃に加算
+  const madokenAtkMult = (hasMadokenJutsu && pe('魔法剣士')) ? 1.1 : 1.0  // 魔導剣術強化：攻撃力×1.1
 
   let   playerCritRate  = calcCritRate(effectiveSpdForCalc, BOSS_SPD) + passiveCritBonus + (eff.critBonus || 0)
   const bossCritRate    = Math.max(0, calcCritRate(BOSS_SPD, effectiveSpdForCalc))
@@ -199,9 +212,9 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     const doPlayerAttack = (isExtra = false) => {
       if (playerDied) return  // 死亡後は同ターン内でも行動させない（死亡後に攻撃が続く不具合の修正）
       const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * (pe('魔法剣士')?0.6:0.3)) : 0
-      const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?1.3:1.2) : 1.0
+      const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
       const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
-      const pAtk  = (eff.atk + madokenBonus) * (playerBuffs.atkUp?.rate  || 1) * (playerBuffs.atkDown?.rate || 1) * (playerBuffs.burn?.turns > 0 ? 0.9 : 1) * evoAtkMult(eff, allSkillsSet)
+      const pAtk  = (eff.atk + madokenBonus + takaAtkBonus) * madokenAtkMult * (playerBuffs.atkUp?.rate  || 1) * (playerBuffs.atkDown?.rate || 1) * (playerBuffs.burn?.turns > 0 ? 0.9 : 1) * evoAtkMult(eff, allSkillsSet)
       const pMatk = (eff.matk - madokenBonus) * (playerBuffs.matkUp?.rate || 1) * passiveMatkMult * passiveMatkMultTenki * (playerBuffs.burn?.turns > 0 ? 0.9 : 1) * evoMatkMult(eff, allSkillsSet)
       const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1) * holyKnightMult * kabeDefP
       const pMdef = eff.mdef * (playerBuffs.mdefUp?.rate || 1) * (playerBuffs.defUp?.rate || 1) * holyKnightMult * kabeDefP
@@ -231,13 +244,20 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         if (cs?.skills?.name === '天墜竜閃' && playerBuffs.tenkaiCharge?.turns > 0) mpCost = 0  // 解放ターンはMP消費なし（溜め時に消費済み）
         if (cs && cs.skills && playerMp >= mpCost) {
           playerMp -= mpCost
-          const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? (pe('元素使い')?1.25:1.15) : 1.0
-          const seimitsuMult = (hasSeimitsu && pe('魔銃士') && prevSkillName && prevSkillName === cs.skills.name) ? 1.1 : 1.0
+          const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? (pe('元素使い')?1.50:1.30) : 1.0
+          // 精密照準（再修練）：同スキルを連続使用するたびに与ダメ+10%・クリ率+2%（重複3／別スキルでリセット）
+          if (hasSeimitsu && pe('魔銃士')) seimitsuStacks = (prevSkillName && prevSkillName === cs.skills.name) ? Math.min(3, seimitsuStacks+1) : 0
+          const seimitsuMult = 1 + 0.10 * seimitsuStacks
+          const seimitsuCritBonus = 2 * seimitsuStacks
           prevSkillName = cs.skills.name
           const res = executeSkill(cs.skills, { ...effBuff, lastMpCost: mpCost }, profile, boss, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
-          const finalCrit = res.dmg > 0 && (isCrit || (res.bonusCritRate > 0 && Math.random() * 100 < playerCritRate + res.bonusCritRate))
+          // 第六感（再修練）：これまでの魔法攻撃ヒット数に応じ全与ダメ+5%/スタック（最大6＝+30%）
+          const rokkanMult = (hasRokkan && pe('サイキッカー')) ? (1 + 0.05*Math.min(6, rokkanStacks)) : 1.0
+          // 居合の構え：物理攻撃スキルのみ物理ダメ強化（魔法には乗らない）
+          const iaiMult = (cs.skills?.type === '物理攻撃') ? iaiPhysMult : 1.0
+          const finalCrit = res.dmg > 0 && (isCrit || ((res.bonusCritRate + seimitsuCritBonus) > 0 && Math.random() * 100 < playerCritRate + res.bonusCritRate + seimitsuCritBonus))
           const finalCritMult = finalCrit ? (1.5 + (eff.critDmg || 0) + passiveCritDmgBonus) : 1.0
-          const tosoMult = (hasTosoHonno && playerHp <= eff.hp_max * 0.5) ? (pe('体術師')?1.25:1.1) : 1.0
+          const tosoMult = hasTosoHonno ? (playerHp <= eff.hp_max * 0.3 ? (pe('体術師')?2.0:1.6) : playerHp <= eff.hp_max * 0.5 ? (pe('体術師')?1.4:1.2) : 1.0) : 1.0
           let defScale = 1.0
           if (res.dmg > 0) {
             const sType = cs.skills?.type
@@ -250,8 +270,10 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
             else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + bMdef)
           }
           const skillPhysical = !(cs.skills?.type === '魔法攻撃' || cs.skills?.name === 'サイコブラスト' || res.useMinDef)
-          let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * (0.9 + Math.random() * 0.2))
+          let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * (0.9 + Math.random() * 0.2))
           if (res.dmg > 0) finalDmg = compressRaidDmg(Math.floor(finalDmg * weakMult(skillPhysical))) // 弱点補正→高火力頭打ち・低火力底上げ
+          // 第六感（再修練）：魔法攻撃がヒットしたらスタック+1（最大6・戦闘中持続）
+          if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks + 1)
           if (res.selfDmg > 0) playerHp = Math.max(1, playerHp - res.selfDmg)
           const isHealBlocked = playerBuffs.healBlock?.turns > 0
           if (!isHealBlocked && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
@@ -264,7 +286,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
             const healAmt = Math.floor(res.heal * passiveHealMult)
             playerHp = Math.min(eff.hp_max, playerHp + healAmt)
             if (passiveHealReflect && healAmt > 0) {
-              const reflectDmg = Math.floor(healAmt * 0.5)
+              const reflectDmg = healAmt  // 神聖加護強化：回復量の100%を反射
               totalDamage += reflectDmg
               logs.push({ text: `✨ 神聖加護の反射！ ${bossName}に${fmt(reflectDmg)}ダメージ！`, color: '#ffdd44' })
             }
@@ -299,7 +321,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           if (res.followup && res.followup.dmg > 0) {
             const fCrit = Math.random() * 100 < (playerCritRate + (res.bonusCritRate || 0))
             const fCritMult = fCrit ? (1.5 + (eff.critDmg || 0) + passiveCritDmgBonus) : 1.0
-            let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * (0.9 + Math.random() * 0.2))
+            let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * (0.9 + Math.random() * 0.2))
             fDmg = compressRaidDmg(Math.max(1, Math.floor(fDmg * weakMult(skillPhysical))))
             totalDamage += fDmg
             logs.push({ text: `↳ 追撃！${res.followup.label ? `（${res.followup.label}）` : ''} ${bossName}に${fmt(fDmg)}ダメージ！${fCrit ? ' 💥クリティカル！' : ''}`, color: fCrit ? '#ffaa00' : '#ffaa66' })
@@ -313,9 +335,14 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         const baseAtk = isMagical ? effBuff.matk : effBuff.atk
         const eDef = isMagical ? BOSS_MDEF : BOSS_DEF
         const baseDmg = Math.max(1, Math.floor(baseAtk * baseAtk / Math.max(1, baseAtk + eDef)) + Math.floor(Math.random() * 4))
-        const tosoMult = (hasTosoHonno && playerHp <= eff.hp_max * 0.5) ? (pe('体術師')?1.25:1.1) : 1.0
-        let finalDmg = Math.floor(baseDmg * critMult * (isArtifact ? 1.3 : 1.0) * passiveDmgMult * tosoMult * (0.9 + Math.random() * 0.2))
+        const tosoMult = hasTosoHonno ? (playerHp <= eff.hp_max * 0.3 ? (pe('体術師')?2.0:1.6) : playerHp <= eff.hp_max * 0.5 ? (pe('体術師')?1.4:1.2) : 1.0) : 1.0
+        // 通常攻撃：物理時のみ居合の構えを乗算／第六感スタックを乗算
+        const naIaiMult = isMagical ? 1.0 : iaiPhysMult
+        const naRokkanMult = (hasRokkan && pe('サイキッカー')) ? (1 + 0.05*Math.min(6, rokkanStacks)) : 1.0
+        let finalDmg = Math.floor(baseDmg * critMult * (isArtifact ? 1.3 : 1.0) * passiveDmgMult * tosoMult * naIaiMult * naRokkanMult * (0.9 + Math.random() * 0.2))
         finalDmg = compressRaidDmg(Math.floor(finalDmg * weakMult(!isMagical))) // 弱点補正→高火力頭打ち・低火力底上げ
+        // 通常攻撃は精密照準スタックをリセット（連続スキルが途切れる）
+        seimitsuStacks = 0; prevSkillName = null
         if (!playerBuffs.healBlock?.turns && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
           const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
           playerHp = Math.min(eff.hp_max, playerHp + rageCure)
@@ -331,12 +358,12 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     // ========== ボス攻撃（HPは変動するが結果をDBに保存しない） ==========
     const doBossAttack = (isExtra = false) => {
       if (playerDied) return  // 死亡後は追撃も含めて行動を止める（死亡後にターン継続する不具合の修正）
-      const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?1.3:1.2) : 1.0
+      const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
       const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
       const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1) * holyKnightMultE * kabeDefE
       const pMdef = eff.mdef * (playerBuffs.mdefUp?.rate || 1) * (playerBuffs.defUp?.rate || 1) * holyKnightMultE * kabeDefE
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
-      const berserkDmgRate = hasBerserk ? 1.1 : 1.0
+      const berserkDmgRate = hasBerserk ? (pe('狂戦士')?1.20:1.15) : 1.0
       const eAtk = boss.atk
       const defForCalc = Math.max(1, pDef)
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
@@ -382,7 +409,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         return
       }
       const playerDefRankReduction = calcDefReduction(pDef)
-      const gambleBodyMult = hasGambleBody ? (0.7 + Math.random() * (pe('ギャンブラー')?0.4:0.6)) : 1.0
+      const gambleBodyMult = hasGambleBody ? (pe('ギャンブラー') ? (0.5+Math.random()*0.7) : (0.7+Math.random()*0.6)) : 1.0
       const finalDmg = Math.floor(baseDmg * (isCrit ? 1.5 : 1.0) * dmgReduceRate * berserkDmgRate * (1 - playerDefRankReduction) * gambleBodyMult * evoTakenMult(eff, true) * (0.9 + Math.random() * 0.2))
       playerHp -= finalDmg
       if ((eff.evoReflectPct||0) > 0 && finalDmg > 0) { const r = Math.max(1, Math.floor(finalDmg * eff.evoReflectPct/100)); totalDamage += r; logs.push({ text:`🛡 真化効果！ 反射で${fmt(r)}ダメージ！`, color:'#88ccff' }) }
