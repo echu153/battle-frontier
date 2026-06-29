@@ -95,12 +95,8 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   const hasMadokenJutsu     = passiveNames.includes('魔導剣術')
   const hasHolyKnightPassive= passiveNames.includes('聖騎士の心得')
 
-  // 居合の構え：通常スキル5枠すべてが埋まり、各枠の使用回数が1のとき発動（物理ダメージ専用 通常+40%／再修練+70%）
-  const iaiLoadoutOK = [1,2,3,4,5].every(n => {
-    const s = skillSets.find(ss => ss.slot_order === n && ss.skills?.type !== 'パッシブ')
-    return s && (s.use_count ?? 1) === 1
-  })
-  const iaiPhysMult   = (hasIai && iaiLoadoutOK) ? (pe('侍')?1.70:1.40) : 1.0
+  // 居合の構え：物理ダメージ専用の強化（通常+40%／再修練+70%・編成条件なし）
+  const iaiPhysMult   = hasIai ? (pe('侍')?1.70:1.40) : 1.0
   const takaAtkBonus  = (hasTakaNoMe && pe('狩人')) ? Math.floor((eff.spd||0) * 0.1) : 0  // 鷹ノ目強化：素早さの10%を攻撃に加算
   const madokenAtkMult = (hasMadokenJutsu && pe('魔法剣士')) ? 1.1 : 1.0  // 魔導剣術強化：攻撃力×1.1
 
