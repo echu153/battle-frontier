@@ -185,8 +185,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   logs.push({ text: `⚠ ${bossName}が現れた！`, color: '#ff4444' })
 
   for (let turn = 1; turn <= 10; turn++) {
-    // 骸の壁：ターン1と5の倍数で被ダメ-30%バリア
-    if (hasGainoKabe && (turn === 1 || turn % 5 === 0)) {
+    // 骸の壁：ターン1と4の倍数で被ダメ-30%バリア
+    if (hasGainoKabe && (turn === 1 || turn % 4 === 0)) {
       playerBuffs.dmgReduce = { turns: 999, rate: 0.7, isGainoKabe: true }
       logs.push({ text: `💀 骸の壁発動！ 次に攻撃を受けるまで被ダメ-30%！`, color: '#cc44ff' })
     }
@@ -211,7 +211,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       if (playerDied) return  // 死亡後は同ターン内でも行動させない（死亡後に攻撃が続く不具合の修正）
       const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * (pe('魔法剣士')?0.6:0.3)) : 0
       const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
-      const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
+      const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
       const pAtk  = (eff.atk + madokenBonus + takaAtkBonus) * madokenAtkMult * (playerBuffs.atkUp?.rate  || 1) * (playerBuffs.atkDown?.rate || 1) * (playerBuffs.burn?.turns > 0 ? 0.9 : 1) * evoAtkMult(eff, allSkillsSet)
       const pMatk = (eff.matk - madokenBonus) * (playerBuffs.matkUp?.rate || 1) * passiveMatkMult * passiveMatkMultTenki * (playerBuffs.burn?.turns > 0 ? 0.9 : 1) * evoMatkMult(eff, allSkillsSet)
       const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1) * holyKnightMult * kabeDefP
@@ -357,7 +357,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     const doBossAttack = (isExtra = false) => {
       if (playerDied) return  // 死亡後は追撃も含めて行動を止める（死亡後にターン継続する不具合の修正）
       const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
-      const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
+      const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
       const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1) * holyKnightMultE * kabeDefE
       const pMdef = eff.mdef * (playerBuffs.mdefUp?.rate || 1) * (playerBuffs.defUp?.rate || 1) * holyKnightMultE * kabeDefE
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0

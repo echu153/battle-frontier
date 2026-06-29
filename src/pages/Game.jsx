@@ -431,7 +431,7 @@ export const RETRAINING_ENHANCEMENTS = {
   '狩人': ['毒矢：毒付与 100%', '三連射：倍率 ATK×0.6/hit', '鷹ノ目：命中+10（再修練 命中+20＋素早さの10%を攻撃に加算）', '狩猟本能：攻撃・素早さ ×2.0', '絶影狙撃：倍率 ATK×2.2'],
   '暗殺者': ['瞬歩瞬殺：出血確率 100%', '鬼影閃：出血確率 80%', '隠身：回避率+5%（再修練 クリ威力+25%）', '影歩き：効果8ターン', '急所突き：出血スタック×25%追撃（最大125%）→出血消費'],
   '元素使い': ['アクアショット：倍率 MATK×1.6', 'アースクエイク：スタン60%', '元素共鳴：別スキル連携で魔法ダメ+30%（再修練+50%）', 'ライトニングボルト：倍率 MATK×1.7', 'フレイムバースト：やけど100%'],
-  '死霊使い': ['骸骨召喚：倍率 MATK×0.8', 'ソウルドレイン：倍率 MATK×1.4', '骸の壁：T1・5の倍数で被ダメ-30%（再修練 バリア中 防御・特防×1.2）', '腐敗霧：防御・特防低下 ×0.6', '幽世ノ門：効果5ターン'],
+  '死霊使い': ['骸骨召喚：倍率 MATK×0.8', 'ソウルドレイン：倍率 MATK×1.4', '骸の壁：T1・4の倍数で被ダメ-30%（再修練 バリア中 防御・特防×2.0）', '腐敗霧：防御・特防低下 ×0.6', '幽世ノ門：効果5ターン'],
   '聖職者': ['ホーリーライト：30%で回復阻害50%', '奇跡：毎ターン最大HP15%回復', '神聖加護：回復量×1.5・MATK×1.1（再修練 回復量の100%を敵に反射）', '祈りの結界：6ターン', '神罰執行：倍率 MATK×2.0'],
   '異端審問官': ['粛清：倍率 MATK×1.4＋MDEF×0.4', '狂信：特殊攻撃×1.3 追加', '執行本能：与ダメ+20%・回復量×0.5（再修練 与ダメ+40%）', '聖なる裁き：倍率 MATK×1.9', '断罪：回復封じ 60%'],
   '賢者': ['サンダーストライク：倍率 MATK×1.6', 'マナボルト：消費MP×6', '天啓：MP消費×0.7・MATK×1.2（再修練 MP消費×0.5・MATK×1.4）', '氷の障壁：4ターン', 'メテオストライク：2〜5ヒット（2:30/3:40/4:20/5:10%）'],
@@ -2918,7 +2918,7 @@ export default function Game() {
     const playerPassiveDefMult = () => {
       const hf = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
       const hk = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
-      const kb = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
+      const kb = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
       return hf * hk * ryurinMult * kb
     }
 
@@ -3015,7 +3015,7 @@ export default function Game() {
       playerAttacking = true
       const holyFieldDef = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
       const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
-      const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
+      const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
       const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDef * holyKnightMult * ryurinMult * kabeDefP
       const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDef * holyKnightMult * ryurinMult * kabeDefP
       const burnDebuffP = playerBuffs.burn?.turns > 0 ? 0.9 : 1.0
@@ -3329,7 +3329,7 @@ export default function Game() {
       }
       const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
       const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
-      const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 1.2 : 1.0
+      const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
       const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDefE * holyKnightMultE * ryurinMult * kabeDefE
       const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE * ryurinMult * kabeDefE
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
@@ -3507,7 +3507,7 @@ export default function Game() {
 
     while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
       const hpBeforeTurn = playerHp  // 雷鋼の機神鎧: このターンに被ダメしたか判定用
-      if (passiveNames.includes('骸の壁') && (turn === 1 || turn % 5 === 0)) {
+      if (passiveNames.includes('骸の壁') && (turn === 1 || turn % 4 === 0)) {
         playerBuffs.dmgReduce = { turns:999, rate:0.7, isGainoKabe:true }
         logs.push({ text:`💀 骸の壁発動！ 次に攻撃を受けるまで被ダメ-30%！`, color:'#cc44ff' })
       }
