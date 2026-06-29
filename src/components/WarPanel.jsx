@@ -236,6 +236,16 @@ export default function WarPanel({ me, myCountry, countries }) {
     setBusy(false)
   }
 
+  // 自己全回復（戦争中1回・瀕死でも発動可・HP/MP全快）
+  const selfHeal = async () => {
+    if (!war || !loadout || busy) return
+    setBusy(true); setErr(''); setMsg('')
+    const { error } = await supabase.rpc('war_self_heal', { p_war_id: war.id, p_eff_hp_max: loadout.eff?.hp_max || 0 })
+    if (error) setErr(error.message)
+    else { setMsg('❤️‍🩹 自己回復！ HP/MPが全快した'); await refreshWar() }
+    setBusy(false)
+  }
+
   const forceEnd = async () => {
     if (!war || busy) return
     setBusy(true); setErr('')
@@ -400,11 +410,16 @@ export default function WarPanel({ me, myCountry, countries }) {
                     <StatBar cur={hpCur} max={hpMax} color="#44cc66" />
                     <span style={{ color:'#aaccaa', fontSize:'10px', minWidth:'90px', textAlign:'right' }}>{hpCur.toLocaleString()} / {hpMax.toLocaleString()}</span>
                   </div>
-                  <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'6px' }}>
                     <span style={{ color:'#6699cc', fontSize:'10px', width:'24px' }}>MP</span>
                     <StatBar cur={mpCur} max={mpMax} color="#4488dd" />
                     <span style={{ color:'#aaccdd', fontSize:'10px', minWidth:'90px', textAlign:'right' }}>{mpCur.toLocaleString()} / {mpMax.toLocaleString()}</span>
                   </div>
+                  {/* 自己全回復（1戦争1回・瀕死でも可・HP/MP全快） */}
+                  <button onClick={selfHeal} disabled={busy || myRow.self_heal_used}
+                    style={{ width:'100%', padding:'7px', background: myRow.self_heal_used ? '#0c1206' : '#0a1a0c', border:`1px solid ${myRow.self_heal_used ? '#3a5a3a' : '#55cc77'}`, color: myRow.self_heal_used ? '#557755' : '#88ee99', cursor: (busy || myRow.self_heal_used) ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                    {myRow.self_heal_used ? '🩹 自己回復は使用済み' : '❤️‍🩹 自己回復（戦争中1回・HP/MP全快）'}
+                  </button>
                 </div>
               )
             })()}
