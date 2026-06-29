@@ -342,11 +342,15 @@ useEffect(() => {
     // 釣りイベント：スゴイテガナガイエビは図鑑登録せず売却のみ（1匹1万）
     totalGold += shrimpItems.length * EVENT_SHRIMP_PRICE
 
+    // 図鑑は「場所＋魚名」で1件（同名でも場所が違えば別図鑑＝カンパチ等が日本海/カリブ海で重複しない）。
+    // 同セッションでの二重挿入も inserted で防ぐ。
+    const inserted = new Set(records.map(r => `${r.location}|${r.fish_name}`))
     for (const fish of fishItems) {
       const rankKey = fish.fish_rank?.toLowerCase() || 'f'
       totalGold += FISH_SELL_PRICE[rankKey] || 50
-      const existing = records.find(r => r.fish_name === fish.fish_name)
-      if (!existing) {
+      const key = `${fish.location}|${fish.fish_name}`
+      if (!inserted.has(key)) {
+        inserted.add(key)
         await supabase.from('fishing_records').insert({
           player_id: profile.id,
           fish_name: fish.fish_name,

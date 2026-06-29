@@ -16,13 +16,12 @@ CREATE OR REPLACE FUNCTION pvp_get_skillsets(p_target uuid)
 RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
-  v_is_admin boolean;
   v_result   json;
   v_use_type text;
 BEGIN
-  SELECT COALESCE(is_admin, false) INTO v_is_admin FROM profiles WHERE id = auth.uid();
-  IF NOT v_is_admin THEN
-    RETURN json_build_object('error', '権限がありません');
+  -- 組み手/対人戦の相手スキル取得は全プレイヤー可（読み取りのみ）。
+  IF auth.uid() IS NULL THEN
+    RETURN json_build_object('error', '未認証です');
   END IF;
 
   -- PvPセットにアクティブ(非パッシブ)スキルがあれば 'pvp'、無ければ 'sortie'
@@ -77,12 +76,11 @@ CREATE OR REPLACE FUNCTION pvp_record_result(
 ) RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
-  v_is_admin boolean;
   v_id       bigint;
 BEGIN
-  SELECT COALESCE(is_admin, false) INTO v_is_admin FROM profiles WHERE id = auth.uid();
-  IF NOT v_is_admin THEN
-    RETURN json_build_object('error', '権限がありません');
+  -- 組み手の勝敗記録は全プレイヤー可（challenger=自分固定。報酬なしの記録のみ）。
+  IF auth.uid() IS NULL THEN
+    RETURN json_build_object('error', '未認証です');
   END IF;
   IF p_winner NOT IN ('challenger', 'opponent', 'draw') THEN
     RETURN json_build_object('error', 'winner不正');
