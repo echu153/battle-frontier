@@ -301,6 +301,43 @@ export const AREAS = [
 ]
 
 // ============================================================
+// 【変異】ボス（char_lv 500以上・エリア①〜④のボス出現時に置き換え）
+//  原種を底上げしてエリア⑤級の強さに。Gold=4500(×2倍で9000=エリア⑤相当)。
+//  血/心臓ドロップは selectedArea 基準なので据え置き（①ならスライムの血）。EXPは通常ボス据え置き。
+// ============================================================
+export const MUTANT_BOSSES = {
+  1: { name:'【変異】ビッグスライム', hp:35000, atk:700, def:1300, matk:200, mdef:1200, spd:600, gold:6000, isBoss:true, type:'physical',
+    skills:[
+      { name:'粘殻砕き', type:'physical', mult:1.7 },
+      { name:'酸蝕',     type:'debuff',   effect:'atkDown', rate:0.8, turns:3 },
+      { name:'増殖再生', type:'heal',     rate:0.15 },
+    ],
+    specialMove:{ name:'融解の津波', type:'physical', mult:2.5 } },
+  2: { name:'【変異】盗賊団のリーダー', hp:32000, atk:900, def:800, matk:200, mdef:850, spd:1300, gold:6000, isBoss:true, type:'physical',
+    skills:[
+      { name:'乱刃',     type:'physical_multi', mult:0.7, hits:3 },
+      { name:'急所抉り', type:'physical', mult:2.0 },
+      { name:'韋駄天',   type:'buff',     effect:'atkSpdUp', atkRate:1.3, spdRate:1.3, turns:3 },
+    ],
+    specialMove:{ name:'百花繚乱', type:'physical', mult:2.5 } },
+  3: { name:'【変異】古代の番人', hp:36000, atk:600, def:1000, matk:1100, mdef:1000, spd:900, gold:6000, isBoss:true, type:'magical',
+    skills:[
+      { name:'古代の波動', type:'magical', mult:1.6 },
+      { name:'停滞の呪',   type:'debuff',  effect:'spdDown', rate:0.7, turns:3 },
+      { name:'守護結界',   type:'buff',    effect:'defMdefUp', defRate:1.4, mdefRate:1.4, turns:3 },
+    ],
+    specialMove:{ name:'古代神の裁き', type:'magical', mult:2.5 } },
+  4: { name:'【変異】シーサーペント', hp:40000, atk:950, def:950, matk:650, mdef:900, spd:850, gold:6000, isBoss:true, type:'physical',
+    skills:[
+      { name:'大海嘯',   type:'physical', mult:1.8 },
+      { name:'深海の渦', type:'debuff',   effect:'spdDown', rate:0.6, turns:3 },
+      { name:'潮癒',     type:'heal',     rate:0.15 },
+    ],
+    specialMove:{ name:'大渦呑', type:'physical', mult:2.5 } },
+}
+export const MUTANT_BOSS_LV = 500  // 変異ボスの出現に必要な char_lv
+
+// ============================================================
 // クラス定義
 // ============================================================
 const JOB_BASE = {
@@ -1634,6 +1671,7 @@ const getMaterialEventStatus = () => {
 export default function Game() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
+  const profileRef = useRef(null)  // 常に最新のprofileを保持（focus/visibility等の空依存useEffectから参照するため）
   const [remaining, setRemaining] = useState(0)
   const [canAct, setCanAct] = useState(false)
   const [scene, setScene] = useState('town')
@@ -1809,6 +1847,9 @@ export default function Game() {
     return () => clearInterval(id)
   }, [])
 
+  // profileRef を常に最新へ。空依存のfocus/visibility effectから古いnull profileを参照しないように。
+  useEffect(() => { profileRef.current = profile }, [profile])
+
   useEffect(() => {
     const onFocus = () => { fetchProfile(); refreshTownNotices() }
     const onVisibility = () => { if (document.visibilityState === 'visible') { fetchProfile(); refreshTownNotices() } }
@@ -1964,8 +2005,11 @@ export default function Game() {
 
   // 街バナー: 錬金部屋の強化石が受け取れる / 領地を広げられる を検出（全プレイヤー）
   const refreshTownNotices = async (p) => {
-    const prof = p || profile
-    if (!prof) { setAlchemyReady(0); setAlchemyEmpty(0); setTerritoryExpandable(false); setMyCountryName(''); return }
+    // p未指定でも profileRef（常に最新）→ profile の順でフォールバック。
+    // focus/visibility から引数なしで呼ばれた際に古いnullを掴んで表示を消すのを防ぐ。
+    const prof = p || profileRef.current || profile
+    // profile未確定のうちは現在の表示を維持（国名等を空にしない）。ログアウト等はホーム自体が出ない。
+    if (!prof) return
     // 錬金部屋: 完成済み（受取可能）の枠数。エリア③ボス撃破で開放（=エリア4解放）が前提。
     if ((prof.unlocked_areas || [1]).includes(4)) {
       try {
@@ -1983,13 +2027,16 @@ export default function Game() {
     // 領地拡大: 加盟国に所属 かつ 亡命ロックなし かつ クールダウン明け（Territory.jsxの拡大ボタン条件と一致）
     if (prof.country_id) {
       try {
-        const { data: c } = await supabase.from('countries').select('name, is_unaffiliated').eq('id', prof.country_id).maybeSingle()
+        const { data: c, error } = await supabase.from('countries').select('name, is_unaffiliated').eq('id', prof.country_id).maybeSingle()
         const lastExpand = prof.last_expand_at ? new Date(prof.last_expand_at).getTime() : 0
         const lockUntil = prof.territory_locked_until ? new Date(prof.territory_locked_until).getTime() : 0
-        const affiliated = !!(c && !c.is_unaffiliated)
-        setMyCountryName(c?.name || '')
-        setTerritoryExpandable(affiliated && Date.now() >= lastExpand + EXPAND_COOLDOWN_MS && Date.now() >= lockUntil)
-      } catch { /* 領地未導入時は無視 */ setTerritoryExpandable(false); setMyCountryName('') }
+        // 取得成功時のみ更新。通信失敗・一時的なnullで既に表示中の国名を消さない（ちらつき防止）。
+        if (!error && c) {
+          setMyCountryName(c.name || '')
+          const affiliated = !c.is_unaffiliated
+          setTerritoryExpandable(affiliated && Date.now() >= lastExpand + EXPAND_COOLDOWN_MS && Date.now() >= lockUntil)
+        }
+      } catch { /* 領地未導入/通信失敗時は既存表示を維持（国名を消さない） */ }
       // 自国が交戦中(active)か。戦争中はホームのHP/MPを戦争用表示(上限+10000)に切替。
       try {
         const { data: w } = await supabase.from('wars').select('id')
@@ -2690,11 +2737,15 @@ export default function Game() {
     const isBossEncounter = Math.random()*100 < bossRate
     const papiaRate = getPapiaEventStatus(profile).active ? 2 : 1
     const isPapiaEncounter = !isBossEncounter && Math.random()*100 < papiaRate
+    // 【変異】段階: char_lv 500以上＋エリア①〜④。ボスは変異ボスに置換、雑魚はステ据え置きでGoldのみエリア⑤相当。
+    const mutantStage = selectedArea <= 4 && (profile.char_lv || 1) >= MUTANT_BOSS_LV
+    const useMutantBoss = isBossEncounter && mutantStage && MUTANT_BOSSES[selectedArea]
+    const enemyIdx = Math.floor(Math.random() * area.enemies.length)
     const enemy = isPapiaEncounter
       ? { ...PAPIA }
       : isBossEncounter
-        ? { ...area.boss }
-        : { ...area.enemies[Math.floor(Math.random()*area.enemies.length)] }
+        ? { ...(useMutantBoss ? MUTANT_BOSSES[selectedArea] : area.boss) }
+        : { ...area.enemies[enemyIdx] }
     const enemyMaxHp = enemy.hp
 
     setLoading(true); setScene('battle'); setBattleLogs([]); setCurrentEnemy(enemy)
@@ -3695,8 +3746,16 @@ export default function Game() {
     if (expBoosted) expGained = Math.floor(expGained * 1.5)
     const expBoostNote = expBoosted ? '（✨Lv100まで経験値1.5倍）' : ''
     // 出撃ゴールド倍率。★2026-06-20公開: 出撃CD20秒化の補正でエリア1-4を×2・エリア5+を×1.5
-    const goldMult = (selectedArea <= 4 ? 2 : 1.5) * (tenSec ? 0.5 : 1)
-    const goldGained = (win && !papiaEscaped) ? Math.floor((enemy.gold||0) * goldMult) : 0
+    // 【変異】段階(char_lv500+・エリア①〜④)はエリア⑤相当のGold（変異ボス9000 / 雑魚=エリア⑤雑魚×1.5）。それ以外は従来通り。
+    const goldGained = (() => {
+      if (!win || papiaEscaped) return 0
+      if (mutantStage && !isPapiaEncounter) {
+        const base = isBossEncounter ? (enemy.gold || 6000) : (AREAS[4].enemies[enemyIdx]?.gold || 280)
+        return Math.floor(base * 1.5 * (tenSec ? 0.5 : 1))
+      }
+      const goldMult = (selectedArea <= 4 ? 2 : 1.5) * (tenSec ? 0.5 : 1)
+      return Math.floor((enemy.gold || 0) * goldMult)
+    })()
 
 
     if (!papiaEscaped) {
