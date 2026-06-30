@@ -4841,7 +4841,7 @@ export default function Game() {
         {contactView === 'history' ? (() => {
           // 管理人は「未返信/返信済み」で絞り込み。一般ユーザーは全件。
           const shownContacts = isContactAdmin
-            ? myContacts.filter(c => adminContactFilter === 'replied' ? c.reply : !c.reply)
+            ? myContacts.filter(c => adminContactFilter === 'replied' ? !needsAdminReply(c) : needsAdminReply(c))
             : myContacts
           return (
           <>
@@ -4850,7 +4850,7 @@ export default function Game() {
               <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
                 {[{ key:'unreplied', label:'未返信' }, { key:'replied', label:'返信済み' }].map(f => {
                   const on = adminContactFilter === f.key
-                  const cnt = myContacts.filter(c => f.key === 'replied' ? c.reply : !c.reply).length
+                  const cnt = myContacts.filter(c => f.key === 'replied' ? !needsAdminReply(c) : needsAdminReply(c)).length
                   return (
                     <button key={f.key} onClick={()=>setAdminContactFilter(f.key)}
                       style={{ flex:1, padding:'6px 4px', background: on?'#1a1400':'#000818', border:`1px solid ${on?'#ffcc44':'#223344'}`, color: on?'#ffcc44':'#557799', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
@@ -6146,6 +6146,12 @@ export default function Game() {
             📩 運営からのお知らせ（{unreadAdminMsgs.length}件）→ タップで確認
           </button>
         )}
+        {soldNotice > 0 && (
+          <button onClick={()=>{ setSoldNotice(0); nav('/marketplace?tab=history') }}
+            style={{ width:'100%', padding:'10px', marginBottom:'12px', background:'#001a14', border:'1px solid #44ddaa', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>
+            🏷 取引所に登録したアイテムが売れました！（{soldNotice}件）
+          </button>
+        )}
         {claimableTitles > 0 && (
           <button onClick={()=>nav('/titles')}
             style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#001a08', border:'1px solid #44aa44', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
@@ -6196,6 +6202,12 @@ export default function Game() {
           <button onClick={()=>nav('/territory')}
             style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
             🗺 領地を広げられます！→ 領地へ
+          </button>
+        )}
+        {boxAvailable > 0 && (
+          <button onClick={()=>nav('/equipment?view=items')}
+            style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a0010', border:'1px solid #ff88aa', color:'#ff99cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            🎁 ボス装備進化支援箱を{boxAvailable}個所持中！→ アイテム画面で使う
           </button>
         )}
 
@@ -6492,6 +6504,7 @@ export default function Game() {
                           <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋へ</button>
                           {lockOr('museum', <button key="museum" onClick={()=>nav('/museum')} style={{ padding:'10px', background:'#001020', border:'1px solid #ccaa44', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏛 博物館へ</button>)}
                           {lockOr('exchange', <button key="exchange" onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所へ</button>)}
+                          {lockOr('marketplace', <button key="marketplace" onClick={()=>nav('/marketplace')} style={{ padding:'10px', background:'#001020', border:'1px solid #1a8a6a', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏷 取引所へ</button>)}
                           {lockOr('casino', <button key="casino" onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場へ</button>)}
                           {lockOr('barber', <button key="barber" onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院へ</button>)}
                           <button key="kumite" onClick={()=>setShowKumite(true)} style={{ padding:'10px', background:'#001020', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🥊 組み手</button>
