@@ -625,6 +625,8 @@ export default function Equipment() {
                   const w = item.weapons
                   const plus = item.enhance_plus || 0
                   const enhW = calcEnhancedStats(w, plus, item.evolve_stage || 0)
+                  // 「元:」表示用の基礎ステ＝強化(+N)前・進化倍率は反映済み（真化で基礎ステが2倍になるのを正しく表示）
+                  const baseW = calcEnhancedStats(w, 0, item.evolve_stage || 0)
                   const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
                   const prof = tab === 'weapon' ? proficiency.find(p => p.equipment_id === item.id) : null
                   const profBonus = prof ? calcProfBonus(prof, w) : {}
@@ -676,11 +678,11 @@ export default function Equipment() {
 
                       {/* 強化後ステータス表示 */}
                       <div style={{ fontSize:'10px', color:'#446688', marginBottom:'4px' }}>
-                        {enhW.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻撃力+{enhW.atk_bonus}{plus>0&&!isArtifactBase&&w.atk_bonus>0?<span style={{color:'#888',fontSize:'9px'}}>(元:{w.atk_bonus})</span>:null} </span>}
-                        {enhW.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防御力+{enhW.def_bonus}{plus>0&&!isArtifactBase&&w.def_bonus>0?<span style={{color:'#888',fontSize:'9px'}}>(元:{w.def_bonus})</span>:null} </span>}
-                        {enhW.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>特殊攻撃力+{enhW.matk_bonus}{plus>0&&!isArtifactBase&&w.matk_bonus>0?<span style={{color:'#888',fontSize:'9px'}}>(元:{w.matk_bonus})</span>:null} </span>}
-                        {enhW.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>特殊防御力+{enhW.mdef_bonus}{plus>0&&!isArtifactBase&&w.mdef_bonus>0?<span style={{color:'#888',fontSize:'9px'}}>(元:{w.mdef_bonus})</span>:null} </span>}
-                        {enhW.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>素早さ+{enhW.spd_bonus}{plus>0&&!isArtifactBase&&w.spd_bonus>0?<span style={{color:'#888',fontSize:'9px'}}>(元:{w.spd_bonus})</span>:null} </span>}
+                        {enhW.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻撃力+{enhW.atk_bonus}{plus>0&&!isArtifactBase&&w.atk_bonus>0?<span style={{color:'#888',fontSize:'9px'}}>(元:{baseW.atk_bonus})</span>:null} </span>}
+                        {enhW.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防御力+{enhW.def_bonus}{plus>0&&!isArtifactBase&&w.def_bonus>0?<span style={{color:'#888',fontSize:'9px'}}>(元:{baseW.def_bonus})</span>:null} </span>}
+                        {enhW.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>特殊攻撃力+{enhW.matk_bonus}{plus>0&&!isArtifactBase&&w.matk_bonus>0?<span style={{color:'#888',fontSize:'9px'}}>(元:{baseW.matk_bonus})</span>:null} </span>}
+                        {enhW.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>特殊防御力+{enhW.mdef_bonus}{plus>0&&!isArtifactBase&&w.mdef_bonus>0?<span style={{color:'#888',fontSize:'9px'}}>(元:{baseW.mdef_bonus})</span>:null} </span>}
+                        {enhW.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>素早さ+{enhW.spd_bonus}{plus>0&&!isArtifactBase&&w.spd_bonus>0?<span style={{color:'#888',fontSize:'9px'}}>(元:{baseW.spd_bonus})</span>:null} </span>}
                         {w.spd_bonus_pct > 0 && <span style={{color:'#ff8844'}}>素早さ+{w.spd_bonus_pct}% </span>}
                         {enhW.hp_bonus   > 0 && <span style={{color:'#44ff88'}}>HP+{enhW.hp_bonus} </span>}
                         {enhW.mp_bonus   > 0 && <span style={{color:'#4488ff'}}>MP+{enhW.mp_bonus} </span>}
