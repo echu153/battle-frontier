@@ -27,8 +27,8 @@ export const BOSS_LINES = [
   {
     area: 1, boss: 'ビッグスライム', blood: 'スライムの血', heart: 'スライムの心臓',
     equips: [
-      { name: 'スライムの指輪', effect: 'evo_hit_spd_down_10_2t' },
-      { name: '蒼粘剣',         effect: 'evo_phys_dmg_taken_down_10' },
+      { name: 'スライムの指輪', effect: 'evo_phys_dmg_taken_down_10' },
+      { name: '蒼粘剣',         effect: 'evo_hit_spd_down_10_2t' },
     ],
   },
   {
