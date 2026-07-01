@@ -465,7 +465,8 @@ const getElapsedText = () => {
   const fishingEvent = getFishingEventStatus()
   const encFish = FISH_DATA[encLocation] || []
   const encRecords = records.filter(r => r.location === encLocation)
-  const allCaught = encFish.every(f => encRecords.some(r => r.fish_name === f.name))
+  // コンプリート受取の条件は「全魚の個別ボーナス受取済み(bonus_claimed)」＝claimCompleteBonusと一致させる
+  const allClaimed = encFish.every(f => encRecords.some(r => r.fish_name === f.name && r.bonus_claimed))
 
   const fishSummary = {}
   for (const f of caughtFish) {
@@ -629,10 +630,10 @@ const getElapsedText = () => {
               ))}
             </div>
 
-            <div style={{ border:`1px solid ${allCaught?'#ffcc00':'#002244'}`, background:'#001028', padding:'10px', marginBottom:'12px' }}>
+            <div style={{ border:`1px solid ${allClaimed?'#ffcc00':'#002244'}`, background:'#001028', padding:'10px', marginBottom:'12px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <div>
-                  <div style={{ color: allCaught?'#ffcc00':'#446688', fontSize:'12px', marginBottom:'2px' }}>
+                  <div style={{ color: allClaimed?'#ffcc00':'#446688', fontSize:'12px', marginBottom:'2px' }}>
                     {encLocation} コンプリートボーナス
                   </div>
                   <div style={{ fontSize:'10px', color:'#446688' }}>
@@ -648,9 +649,9 @@ const getElapsedText = () => {
                 {(profile.fishing_completed || []).includes(encLocation) ? (
                   <span style={{ color:'#44ff88', fontSize:'10px', whiteSpace:'nowrap' }}>✓ 受取済み</span>
                 ) : (
-                  <button onClick={()=>claimCompleteBonus(encLocation)} disabled={!allCaught || loading}
-                    style={{ padding:'6px 10px', background: allCaught?'#1a1000':'#001', border:`1px solid ${allCaught?'#ffcc00':'#002244'}`, color: allCaught?'#ffcc00':'#334455', cursor: allCaught?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
-                    {allCaught ? '受け取る' : '未達成'}
+                  <button onClick={()=>claimCompleteBonus(encLocation)} disabled={!allClaimed || loading}
+                    style={{ padding:'6px 10px', background: allClaimed?'#1a1000':'#001', border:`1px solid ${allClaimed?'#ffcc00':'#002244'}`, color: allClaimed?'#ffcc00':'#334455', cursor: allClaimed?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>
+                    {allClaimed ? '受け取る' : '未達成'}
                   </button>
                 )}
               </div>

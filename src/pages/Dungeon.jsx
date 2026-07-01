@@ -529,7 +529,7 @@ export default function Dungeon() {
       if (px != null && py != null) popHeal(px, py, newMax, { follow: true })
       addLog('💚 レベルアップ！HPが全回復した')
     }
-  }, [])
+  }, [pet.charm])
 
   // ✨のルート品はサーバー(dungeon_pickup)が抽選・保持し、生還時(dungeon_finish)に付与する。
   // クライアントは表示するだけ。サーバー戻り値の素のentryに表示用の label/emoji を付ける。

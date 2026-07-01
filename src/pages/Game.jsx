@@ -2640,7 +2640,7 @@ export default function Game() {
   const botCheckOverlay = botCheck && (
     <div style={{ position:'fixed', inset:0, zIndex:99999, background:'rgba(0,0,0,0.88)' }}>
       <div style={{ position:'absolute', top:'24px', left:0, right:0, textAlign:'center', color:'#ffcc00', fontFamily:'monospace', fontSize:'13px', padding:'0 16px' }}>
-        ⚠ 自動操作の疑いがあります。<br/>1分以内に下のボタンを押してください（未操作の場合アカウントを停止します）
+        ⚠ 自動操作の疑いがあります。<br/>5分以内に下のボタンを押してください（未操作の場合アカウントを停止します）
       </div>
       <button onClick={passBotCheck}
         style={{ position:'absolute', top:`${botCheck.top}vh`, left:`${botCheck.left}vw`, padding:'14px 22px', background:'#1a0000', border:'2px solid #ff4444', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'14px', whiteSpace:'nowrap' }}>
@@ -4345,14 +4345,14 @@ export default function Game() {
       content: `● エリアを選んで「出撃」を押すと自動で戦闘が始まる、最も基本の行動
 ● 勝利するとEXP・Goldを獲得。レベルアップでステータスが上昇する
 ● レベルアップでステータスポイントが1pt貰える（街の画面から割り振り）
-● クールダウン（10秒）が終わると再び出撃できる
+● クールダウン（20秒）が終わると再び出撃できる
 ● ボスを倒すと次のエリアが解放される
 ● 強くなる土台は「レベル」。まずは出撃を重ねてコツコツ育てよう`,
     },
     {
       id: 'm_dungeon', title: '✨ デイリーダンジョン',
       content: `● EXP / Gold / 強化石 / 武器熟練度 / 宝石 の5種類
-● それぞれ1日5回まで・毎日朝5時（日本時間）リセット
+● それぞれ1日3回まで・毎日朝5時（日本時間）リセット
 ● 通常出撃より報酬効率が良いので、毎日忘れずにこなそう`,
     },
     {

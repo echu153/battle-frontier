@@ -591,7 +591,7 @@ export default function Equipment() {
                           <button onClick={() => { setRenamePopup(pi); setRenameTargetId(null); setRenameText(''); setRenameMsg('') }} disabled={loading}
                             style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
                         ) : pi.items.effect === 'boss_blood_box' ? (
-                          <button onClick={() => { setBoxPopup(true); setBoxMsg(''); setBoxGot(null) }} disabled={loading}
+                          <button onClick={() => { setBoxPopup(true); setBoxMsg('') }} disabled={loading}
                             style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ff88aa', color:'#ff88aa', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
                         ) : pi.items.effect === 'material' ? (
                           <span style={{ color:'#aa8800', fontSize:'10px' }}>素材</span>

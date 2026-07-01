@@ -66,6 +66,9 @@ export default function Casino() {
   const [atGames, setAtGames] = useState(0)            // AT残りゲーム数
   const [navStep, setNavStep] = useState(0)            // ナビ押し順の進行（演出用）
   const [atTotalWin, setAtTotalWin] = useState(0)      // AT中の累計払い出し
+  // リロードしてもAT累計獲得の表示が消えないようlocalStorageに退避（casino_stateは累計を返さないため）。
+  // useRefの初期化はレンダー時（＝退避用useEffectが上書きする前）に走るので、リロード前の値をここで確保する。
+  const savedAtTotalRef = useRef((() => { try { return Number(localStorage.getItem('bf_casino_at_total')) || 0 } catch { return 0 } })())
   const [atResult, setAtResult] = useState(null)       // { success, payout } / CZは{success,czWon,kind:'cz'}
   const [czGames, setCzGames] = useState(0)            // CZ残りゲーム数
   const [tokuGames, setTokuGames] = useState(0)        // 特化ゾーン残りゲーム数
@@ -96,6 +99,7 @@ export default function Casino() {
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id) }, [])
 
   useEffect(() => { initCasino() }, [])
+  useEffect(() => { try { localStorage.setItem('bf_casino_at_total', String(atTotalWin)) } catch {} }, [atTotalWin])
 
   // 賭博場を開いた時：サーバーの進行中状態を復元（リロードしてもAT/ダブルアップ等を継続）
   const initCasino = async () => {
@@ -112,6 +116,7 @@ export default function Casino() {
         setSlotMode(s.mode)
         setAtGames(s.at_games || 0); setCzGames(s.cz_games || 0); setTokuGames(s.toku_games || 0)
         if (s.mode !== 'normal' && s.at_bet) setSlotBet(s.at_bet)
+        if (s.mode === 'at') setAtTotalWin(savedAtTotalRef.current)  // AT継続中はリロード前の累計を復元
       }
       const h = data.hilo
       if (h) {
