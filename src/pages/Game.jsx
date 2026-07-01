@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, useMemo, lazy, Suspense } from 'react'
+import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 // public/ 配下の安定URL参照（ハッシュ付きバンドルだとデプロイ後にキャッシュ不整合で404→画像が出ないため）
 const papiaIcon = '/papia.png'
-import { GEM_DATA, GEM_RANKS, GEM_TYPES, PEN_CAP, gemEffectValue, calcDefReduction, calcEffectiveStats } from '../lib/stats'
+import { GEM_DATA, GEM_TYPES, calcDefReduction, calcEffectiveStats } from '../lib/stats'
 import { charmPlayerBonus, petPlayerBonus, petStats } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
 import { myAreaShares, dropBonusPP, EXPAND_COOLDOWN_MS, rankColor } from '../lib/territory'
@@ -82,10 +82,6 @@ const MENU_DEFS = {
   abyss:     { label:'⚔ 挑戦/奈落闘技場', color:'#c08cff', path:'/abyss',   unlock:30 },
   territory: { label:'🏰 領地',           color:'#ffcc44', path:'/territory',unlock:0 },
 }
-// 各レイアウトのメニュー並び順（既存の並びを踏襲）
-const DESKTOP_MENU_ORDER = ['equipment','skills','profile','shop','smithy','museum','barber','casino','fishing','scarecrow','exchange','marketplace','raid','pets','dungeon','alchemy','abyss','territory']
-const MOBILE_MENU_ORDER  = ['shop','smithy','museum','barber','casino','fishing','exchange','marketplace','raid','pets','dungeon','scarecrow','alchemy','abyss','territory']
-
 // 期間限定イベント「出撃ポイントラリー」の開催期間（JST 2026/6/22 05:00 〜 7/6 05:00）。
 // クライアントの表示判定用（ポイント加算・受取の実体はサーバーRPCが期間管理）。
 export const EVENT_START_MS = Date.UTC(2026, 5, 21, 20, 0, 0) // JST 6/22 05:00
@@ -136,7 +132,6 @@ const PAPIA_TURNS = [
 // ============================================================
 const MATERIAL_NAMES = ['森の生命液','荒野の薬草','古代の精髄','蒼海の精気','雷鳴の精気','霜の精気']
 const HP_MATERIAL_NAMES = ['森の生命液','荒野の薬草','古代の精髄']
-const MP_MATERIAL_NAMES = ['蒼海の精気','雷鳴の精気','霜の精気']
 
 export const AREAS = [
   {
@@ -476,7 +471,6 @@ const calcLvBonus = (className, upToLevel) => {
   }
   return bonus
 }
-const calcLv20Bonus = (className) => calcLvBonus(className, 20)
 const getRetrainingStars = (className, retraining) => {
   const count = (retraining || {})[className] || 0
   return '★'.repeat(count)
@@ -492,12 +486,6 @@ const STAT_LABELS = {
 // ============================================================
 // 防御ランク→被ダメージ軽減率（calcDefReduction）は ../lib/stats に集約。
 // 上部で import / 再export 済み。
-
-// ATK²/(ATK+DEF) 比率式ベースダメージ
-const calcRatioDmg = (atk, enemyDef, mult, am) => {
-  const adjDef = Math.max(0, enemyDef)
-  return Math.floor((atk * atk / Math.max(1, atk + adjDef)) * mult * am)
-}
 
 const getStatRank = (val, type) => {
   let thresholds
@@ -559,47 +547,6 @@ const getProfPrefix = (profLv) => {
   if (profLv >= 200)  return '【真】'
   if (profLv >= 100)  return '【改】'
   return ''
-}
-
-// 熟練度ボーナス（stats.jsと同一ロジック）
-const calcProfBonus = (prof, weapon) => {
-  if (!prof || !weapon) return {}
-  const profLv = prof.prof_lv || 0
-  let rate
-  if (profLv <= 300) {
-    rate = profLv * 0.01 + Math.floor(profLv / 100) * 0.5
-  } else {
-    const base = 4.5
-    const lv300  = Math.min(profLv, 600) - 300
-    const lv600  = Math.max(0, Math.min(profLv, 1000) - 600)
-    const lv1000 = Math.max(0, Math.min(profLv, 2000) - 1000)
-    const lv2000 = Math.max(0, profLv - 2000)
-    rate = base
-      + Math.floor(lv300  / 10)  * 0.01
-      + Math.floor(lv600  / 20)  * 0.01
-      + Math.floor(lv1000 / 50)  * 0.01
-      + Math.floor(lv2000 / 100) * 0.01
-  }
-  if (rate <= 0) return {}
-  const result = {}
-  const atk  = Math.floor((weapon.atk_bonus ||0) * rate); if (atk  > 0) result.atk  = atk
-  const def  = Math.floor((weapon.def_bonus ||0) * rate); if (def  > 0) result.def  = def
-  const matk = Math.floor((weapon.matk_bonus||0) * rate); if (matk > 0) result.matk = matk
-  const mdef = Math.floor((weapon.mdef_bonus||0) * rate); if (mdef > 0) result.mdef = mdef
-  const spd  = Math.floor((weapon.spd_bonus ||0) * rate); if (spd  > 0) result.spd  = spd
-  const hp   = Math.floor((weapon.hp_bonus  ||0) * rate); if (hp   > 0) result.hp   = hp
-  const mp   = Math.floor((weapon.mp_bonus  ||0) * rate); if (mp   > 0) result.mp   = mp
-  return result
-}
-
-const ARTIFACT_BASE_NAMES_SET = new Set([
-  '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
-  '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたオーブ'
-])
-
-const calcEnhancedStat = (base, plus) => {
-  if (!plus || plus <= 0 || base <= 0) return base
-  return Math.ceil(base * Math.pow(1.5, plus))
 }
 
 // calcEffectiveStats は lib/stats.js に一本化（上部で import＋再export 済み）。
@@ -708,16 +655,9 @@ export const applyEquipmentEffects = (equipment, profile, playerBuffs, logs) => 
 // ============================================================
 export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkill = '') => {
   const result = { dmg:0, heal:0, log:'', newEnemyBuffs:{ ...enemyBuffs }, newPlayerBuffs:{ ...playerBuffs }, selfDmg:0, bonusCritRate:0 }
-  const randMult = (min, max) => min + Math.random()*(max-min)
   const am = isArtifact ? 1.3 : 1.0
   // 再修練強化：現在クラスがそのスキルのクラスと一致する場合のみ、再修練回数ぶん段階強化が乗る
   const rt = (profile?.class === skill?.class_name) ? ((profile?.retraining||{})[skill?.class_name]||0) : 0
-  // 敵DEF・MDEF の低い方で軽減する計算（ハイブリッドスキル用）
-  const calcMinDef = () => {
-    const edr = (enemyBuffs.defDown?.rate||1)*(enemyBuffs.defUp?.rate||1)
-    const emr = (enemyBuffs.mdefDown?.rate||1)*(enemyBuffs.mdefUp?.rate||1)
-    return Math.min(Math.floor((enemy.def||0)*edr/2), Math.floor((enemy.mdef||0)*emr/2))
-  }
   const r = () => 0.85 + Math.random()*0.3
   switch (skill.name) {
     case '体当たり':    result.dmg = Math.floor(eff.atk*1.2*am); result.log = `⚔ 体当たり！ ${enemy.name}に${result.dmg}の物理ダメージ！`; break
@@ -1166,7 +1106,7 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       if (elemHit) {
         // やけど・麻痺・スタンを均等抽選（スタン2倍化：発動率36%×1/3で各12%）
         const elemRoll = Math.random()*100
-        let statusName = ''
+        let statusName
         if (elemRoll < 33.34) {
           result.newEnemyBuffs.burn = { turns:5, dmgRate:0.02 }; statusName = 'やけど'
         } else if (elemRoll < 66.67) {
@@ -1604,8 +1544,6 @@ const DUNGEON_DAILY_LIMIT = 5
 //   回数が5→3に減るぶん、1回あたりの報酬を×5/3にして1日の総取得量を維持（gold/expはサーバー上限も要調整）。
 const dungeonDailyLimitFor = (_p) => 3   // ★2026-06-20: 全プレイヤー公開（1日3回）
 const DUNGEON_REWARD_MULT = 5 / 3   // 管理者の1回あたり報酬倍率（3回で従来5回ぶん相当）
-const DUNGEON_TYPE_COL = { exp:'cnt_exp', gold:'cnt_gold', stone:'cnt_stone', prof:'cnt_prof', gem:'cnt_gem' }
-const DUNGEON_TYPE_LABEL = { exp:'経験値', gold:'ゴールド', stone:'強化石', prof:'熟練度', gem:'宝石' }
 const DUNGEON_LIST = [
   { type:'exp',   label:'経験値ダンジョン' },
   { type:'gold',  label:'ゴールドダンジョン' },
@@ -1727,10 +1665,12 @@ export default function Game() {
   const [aiOpen, setAiOpen] = useState(false) // AI戦闘民族ジェミータ（☰メニューから開く）
   const [raidNotifyOpen, setRaidNotifyOpen] = useState(false) // レイド通知（Web Push）設定パネル
   const [showContact, setShowContact] = useState(false)
-  const [showOptions, setShowOptions] = useState(false)   // ⚙ オプション（ブーストタイム発動など）
+  const [showOptions, setShowOptions] = useState(false)   // ⚙ 出撃設定（出撃時間/パピア/変異ボス）
+  // 【変異】ボスを出現させるか（char_lv500+のエリア①〜④）。localStorage・既定ON。
+  const [mutantEnabled, setMutantEnabled] = useState(() => localStorage.getItem('bf_mutantBoss') !== '0')
+  const toggleMutant = () => setMutantEnabled(v => { localStorage.setItem('bf_mutantBoss', v ? '0' : '1'); return !v })
   const [showInstallGuide, setShowInstallGuide] = useState(false)  // 📱 ホーム画面に追加の手順
   const [installTab, setInstallTab] = useState(() => (/android/i.test(navigator.userAgent) ? 'android' : 'iphone'))
-  const [boostLoading, setBoostLoading] = useState(false)
   const [sortieModeLoading, setSortieModeLoading] = useState(false)  // ⚡ 出撃CDモード(10/20)変更中
   const [papiaHourLoading, setPapiaHourLoading] = useState(false)
   const [papiaSel, setPapiaSel] = useState(20)            // パピア枠1の選択値（デフォルト20時）
@@ -1786,7 +1726,6 @@ export default function Game() {
   const [seenAnnouncementIds, setSeenAnnouncementIds] = useState(() => {
     try { return JSON.parse(localStorage.getItem('bf_seenAnnouncements') || '[]') } catch { return [] }
   })
-  const battleCountTrackerRef = useRef({ start: null, count: 0 })
   const sortieTimesRef = useRef([])  // オートクリッカー検知：出撃時刻の履歴
   const botCheckTimerRef = useRef(null)  // BOT確認チャレンジのタイマー
   const botCheckActiveRef = useRef(false)  // チャレンジ中フラグ
@@ -1840,7 +1779,7 @@ export default function Game() {
         // 往復遅延の半分を見込んでサーバー時刻を推定
         const serverMs = new Date(data).getTime() + (t1 - t0) / 2
         clockOffsetRef.current = serverMs - t1
-      } catch {}
+      } catch { /* 意図的に無視 */ }
     }
     sync()
     const id = setInterval(sync, 60000)
@@ -1967,7 +1906,7 @@ export default function Game() {
         .eq('player_id', userId)
         .not('reply', 'is', null)
       let seen = {}
-      try { seen = JSON.parse(localStorage.getItem('bf_seenContactReplies') || '{}') } catch {}
+      try { seen = JSON.parse(localStorage.getItem('bf_seenContactReplies') || '{}') } catch { /* 意図的に無視 */ }
       // 既読保存時刻より reply_at が新しい（＝再返信含む）ものを未読とみなす。
       // ※タイムスタンプは文字列でなく数値(getTime)で比較（フォーマット差による誤判定を防ぐ）。
       const unread = (data || []).filter(r => {
@@ -2083,7 +2022,7 @@ export default function Game() {
       const seen = JSON.parse(localStorage.getItem('bf_seenContactReplies') || '{}')
       for (const c of list) if (c.reply) seen[c.id] = c.reply_at || new Date().toISOString()
       localStorage.setItem('bf_seenContactReplies', JSON.stringify(seen))
-    } catch {}
+    } catch { /* 意図的に無視 */ }
     setUnreadReplies(0)
   }
 
@@ -2528,7 +2467,7 @@ export default function Game() {
           await supabase.from('player_gems').insert({ player_id:profile.id, gem_type:gemType, rank:'F', quantity:gemQty })
         }
       } catch {
-        try { await supabase.from('player_gems').insert({ player_id:profile.id, gem_type:gemType, rank:'F', quantity:gemQty }) } catch {}
+        try { await supabase.from('player_gems').insert({ player_id:profile.id, gem_type:gemType, rank:'F', quantity:gemQty }) } catch { /* 意図的に無視 */ }
       }
       logs.push({ text:`💍 宝石「${GEM_DATA[gemType].name}(F)」を入手！${gemQty > 1 ? `（×${gemQty}）` : ''}`, color:'#ff66cc' })
     }
@@ -2558,7 +2497,6 @@ export default function Game() {
     fetchProfile().catch(() => {})
   }
 
-  const DEV_ACCOUNTS = ['おれおれお']  // 開発者アカウント
   const suspendAccount = async (reason) => {
     await supabase.from('profiles').update({
       is_suspended: true,
@@ -2707,7 +2645,7 @@ export default function Game() {
 
 
     // 街に戻らず連続出撃10回でBOTチャレンジ発動（F5連打＋オートクリック対策）
-    if (true) {
+    {
       const newConsec = (profile.consecutive_battle_count || 0) + 1
       if (newConsec >= 10) {
         await supabase.from('profiles').update({ consecutive_battle_count: 0, suspicious_flag: true }).eq('id', profile.id)
@@ -2737,8 +2675,8 @@ export default function Game() {
     const isBossEncounter = Math.random()*100 < bossRate
     const papiaRate = getPapiaEventStatus(profile).active ? 2 : 1
     const isPapiaEncounter = !isBossEncounter && Math.random()*100 < papiaRate
-    // 【変異】段階: char_lv 500以上＋エリア①〜④。ボスは変異ボスに置換、雑魚はステ据え置きでGoldのみエリア⑤相当。
-    const mutantStage = selectedArea <= 4 && (profile.char_lv || 1) >= MUTANT_BOSS_LV
+    // 【変異】段階: char_lv 500以上＋エリア①〜④＋出撃設定でON。ボスは変異ボスに置換、雑魚はGoldのみエリア⑤相当。
+    const mutantStage = selectedArea <= 4 && (profile.char_lv || 1) >= MUTANT_BOSS_LV && mutantEnabled
     const useMutantBoss = isBossEncounter && mutantStage && MUTANT_BOSSES[selectedArea]
     const enemyIdx = Math.floor(Math.random() * area.enemies.length)
     const enemy = isPapiaEncounter
@@ -2756,7 +2694,7 @@ export default function Game() {
 
     // 出撃ロック: 判定・記録とも100%サーバー時計のRPC（端末時計に一切依存しない）
     const now = new Date(serverNow()).toISOString()
-    let lockOk = false
+    let lockOk
     const { data: lock, error: lockErr } = await supabase.rpc('sortie_lock')
     if (lockErr) {
       // RPC未適用/通信失敗時のフォールバック: 旧アトミックUPDATE方式
@@ -2786,7 +2724,7 @@ export default function Game() {
       }
       setScene('battle'); setLoading(false); await fetchProfile(); return
     } else {
-      lockOk = true
+      /* 何もしない */
     }
     // ロック成功＝サーバーが今この瞬間からCD開始。相対カウントダウンを開始
     cdEndRef.current = Date.now() + effWait(profile, serverNow()) * 1000
@@ -2821,7 +2759,6 @@ export default function Game() {
     let itemUsed = false
     let prevSkillName = null
     // BOSS回復管理
-    let bossHealCount = 0
     let bossHealCooldown = 0
     let bossSpecialUsed = false
     let bossBuff1Used = false   // HP70%以下で発動
@@ -2970,8 +2907,6 @@ export default function Game() {
     const playerCritRate  = calcCritRate(playerSpd, enemySpd) + passiveCritBonus + (eff.critBonus || 0)
     const enemyCritRate   = Math.max(0, calcCritRate(enemySpd, playerSpd) - (eff.critResist||0) - (playerBuffs.critResist?.turns > 0 ? (playerBuffs.critResist.value||0) : 0))
 
-    // プレイヤーの回避率（敵が攻撃するとき）
-    const playerEvasionRate = calcEvasionRate(effectiveSpdForCalc, enemySpd)
     // 敵の回避率（プレイヤーが攻撃するとき）
     const enemyEvasionRate  = calcEvasionRate(enemySpd, effectiveSpdForCalc)
     // プレイヤーの命中ボーナス（アクアクラウンなど）
@@ -3121,7 +3056,7 @@ export default function Game() {
               if (rtCur>=4) { playerBuffs.dmgReduce = { turns:1, rate:0.7 }; petBuffs.reduce = 0.3; petBuffs.reduceTurns = 1; cutTxt = ' 1ターン被ダメ30%カット！' }
               logs.push({ text:`${prefix}休憩しよう！ 自分のHP+${ph}・ペットのHP+${pph}！${cutTxt}`, color:'#66ddaa' })
             }
-            skillUsed = true; skillIndex++
+            skillIndex++
             playerAttacking = false
             return
           } else if (!petAlive) {
@@ -3265,7 +3200,7 @@ export default function Game() {
             const holyBonusDmg = Math.floor((pDef * playerBuffs.holyAwakening.defMult + pMdef * playerBuffs.holyAwakening.defMult))
             enemyHp -= holyBonusDmg
             logs.push({ text:`✨ 神聖覚醒の追撃！ ${enemy.name}に${holyBonusDmg}ダメージ！`, color:'#ffeeaa' })
-            if (enemyHp <= 0) { skillUsed = true; skillIndex++; return }
+            if (enemyHp <= 0) { skillIndex++; return }
           }
           skillUsed = true; skillIndex++
         }
@@ -3394,13 +3329,13 @@ export default function Game() {
       if (healSkill) {
         const hpRate = enemyHp / enemyMaxHp
         if (!bossHeal2Used && hpRate <= 0.3) {
-          bossHealCount = 2; bossHeal1Used = true; bossHeal2Used = true
+          bossHeal1Used = true; bossHeal2Used = true
           const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, maxHp, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
           enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
           Object.assign(enemyBuffs, result.newEnemyBuffs)
           return
         } else if (!bossHeal1Used && hpRate <= 0.6) {
-          bossHealCount = 1; bossHeal1Used = true
+          bossHeal1Used = true
           const result = executeEnemySkill(healSkill, enemy, enemyHp, enemyMaxHp, playerHp, maxHp, playerBuffs, enemyBuffs, logs, eff, playerPassiveDefMult(), ryurinReduce())
           enemyHp = Math.min(enemyMaxHp, enemyHp + result.healEnemy)
           Object.assign(enemyBuffs, result.newEnemyBuffs)
@@ -3801,9 +3736,7 @@ export default function Game() {
       }
     }
 
-    let newIsDying = profile.is_dying || false
     if (playerHp === 0) {
-      newIsDying = true
       logs.push({ text:`⚠ 瀕死状態！宿屋でHP全回復してください。`, color:'#ff4444' })
     }
     setBattleLogs(logs)
@@ -3915,7 +3848,6 @@ export default function Game() {
       }
     }
 
-    const newBossRate = isBossEncounter ? 0 : bossRate+0.5
     let newUnlockedAreas = [...(profile.unlocked_areas||[1])]
     if (win && enemy.isBoss && !newUnlockedAreas.includes(selectedArea+1)) {
       const nextArea = selectedArea+1
@@ -3945,11 +3877,8 @@ export default function Game() {
 
     const frozenExp = expIsFrozen(profile)
     let newExp = frozenExp ? profile.exp : profile.exp + expGained
-    let newGold = profile.gold + goldGained
     let newLv = profile.lv
     let newExpNext = profile.exp_next
-    let newPendingPoints = profile.pending_stat_points||0
-    let newCharLv = profile.char_lv || 1
 
     if (frozenExp && expGained > 0) {
       logs.push({ text:`EXP +${expGained}（調査中につき停止）`, color:'#446688' })
@@ -3958,8 +3887,7 @@ export default function Game() {
 
     if (!isAtCap && !frozenExp) {
       while (newExp >= newExpNext && newLv < cap) {
-        newExp -= newExpNext; newLv++; newExpNext = calcExpNext(newLv, profile.is_admin); newPendingPoints++
-        newCharLv++
+        newExp -= newExpNext; newLv++; newExpNext = calcExpNext(newLv, profile.is_admin)
         logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${newLv}！ ステータスポイント+1`, color:'#cc44ff' })
         setBattleLogs([...logs])
         const { data: lvupSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class).eq('required_lv', newLv)
@@ -3974,7 +3902,6 @@ export default function Game() {
         }
       }
       if (newLv >= cap) {
-        newExp = 0; newExpNext = calcExpNext(cap, profile.is_admin)
         logs.push({ text:`🎯 ${profile.class}がレベルキャップ(LV${cap})に到達！`, color:'#ffcc00' })
         setBattleLogs([...logs])
       }
@@ -4087,26 +4014,6 @@ export default function Game() {
   }
   const logout = async () => { await supabase.auth.signOut(); nav('/login') }
 
-  // ⚡ ブーストタイム発動（1日1回・30分間 出撃クールダウンが10秒に短縮。街の出撃のみ／レイド・簡易出撃は対象外）
-  const startBoost = async () => {
-    if (boostLoading) return
-    setBoostLoading(true)
-    try {
-      const { data, error } = await supabase.rpc('start_boost')
-      if (error) { alert('ブーストの発動に失敗しました。少し待ってからお試しください。'); return }
-      if (!data?.ok) {
-        if (data?.reason === 'already_used') alert('本日分のブーストタイムは使用済みです（毎日朝にリセット）。')
-        else if (data?.reason === 'active') alert('すでにブーストタイム中です。')
-        else alert('ブーストの発動に失敗しました。')
-        await fetchProfile()
-        return
-      }
-      setProfile(p => p ? { ...p, boost_active_until: data.boost_active_until, boost_used_date: data.boost_used_date } : p)
-    } finally {
-      setBoostLoading(false)
-    }
-  }
-
   // ⚡ 出撃CDモード（10秒/20秒）の変更（is_admin限定先行・週1回変更不可）
   const setSortieModeMode = async (mode) => {
     if (sortieModeLoading) return
@@ -4200,7 +4107,7 @@ export default function Game() {
     setContactsLoading(true)
     try {
       // 管理人が開いたタイミングで、返信済み2週間超のメッセージを自動削除（cron無し環境のフォールバック）
-      if (isContactAdmin) { try { await supabase.rpc('purge_old_replied_contacts') } catch {} }
+      if (isContactAdmin) { try { await supabase.rpc('purge_old_replied_contacts') } catch { /* 意図的に無視 */ } }
       let q = supabase.from('contact_messages').select('*').order('created_at', { ascending: false })
       if (!isContactAdmin) q = q.eq('player_id', profile.id)
       const { data, error } = await q
@@ -4320,12 +4227,12 @@ export default function Game() {
       setHasNewAnnouncements(hasNewGlobal)
       if (hasNewAdmin) setAdminMsgOpen(true)
       else if (hasNewGlobal) setNewAnnouncementPopup(true)
-    } catch {}
+    } catch { /* 意図的に無視 */ }
   }
 
   const markAllAnnouncementsSeen = () => {
     const ids = announcements.map(a => a.id)
-    try { localStorage.setItem('bf_seenAnnouncements', JSON.stringify(ids)) } catch {}
+    try { localStorage.setItem('bf_seenAnnouncements', JSON.stringify(ids)) } catch { /* 意図的に無視 */ }
     setHasNewAnnouncements(false)
   }
 
@@ -4334,7 +4241,7 @@ export default function Game() {
     const ids = announcements.filter(a => a.target_player_id).map(a => a.id)
     setSeenAdminMsgIds(prev => {
       const next = [...new Set([...prev, ...ids])]
-      try { localStorage.setItem('bf_seenAdminMsgs', JSON.stringify(next)) } catch {}
+      try { localStorage.setItem('bf_seenAdminMsgs', JSON.stringify(next)) } catch { /* 意図的に無視 */ }
       return next
     })
   }
@@ -4668,11 +4575,6 @@ export default function Game() {
   )
 
   if (showOptions) {
-    const boostActive = isBoostActive(profile)
-    // ブーストの日次リセットは朝5時(JST)基準。JST(UTC+9)−5h=UTC+4 の年月日がゲーム内日付（サーバー start_boost と一致）
-    const todayJst = new Date(Date.now() + 4*60*60*1000).toISOString().slice(0,10)
-    const usedToday = profile?.boost_used_date === todayJst
-    const boostMinLeft = boostActive ? Math.ceil((new Date(profile.boost_active_until).getTime() - Date.now())/60000) : 0
     const papiaLocked = profile?.papia_hour_set_at && (Date.now() < new Date(profile.papia_hour_set_at).getTime() + 30*24*60*60*1000)
     const papiaUnlockAt = profile?.papia_hour_set_at ? new Date(new Date(profile.papia_hour_set_at).getTime() + 30*24*60*60*1000) : null
     const pad2 = (n) => String(n).padStart(2,'0')
@@ -4683,7 +4585,7 @@ export default function Game() {
     return (
       <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
         <div style={{ background:'#001020', border:'1px solid #446688', padding:'20px', maxWidth:'460px', width:'100%', fontFamily:'monospace' }}>
-          <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'16px' }}>⚙ 出撃時間/パピア時間設定</div>
+          <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'16px' }}>⚙ 出撃設定</div>
           <div style={{ border:'1px solid #335577', background:'#000a18', padding:'14px', marginBottom:'16px' }}>
             <div style={{ color:'#ffcc44', fontSize:'13px', marginBottom:'6px' }}>⚡ 出撃の待機時間</div>
             <div style={{ color:'#88aacc', fontSize:'11px', lineHeight:'1.7', marginBottom:'12px' }}>
@@ -4749,6 +4651,21 @@ export default function Game() {
               </>
             )}
           </div>
+
+          {/* 🧬 変異ボス出現（char_lv500以上のみ） */}
+          {(profile?.char_lv || 1) >= MUTANT_BOSS_LV && (
+            <div style={{ border:'1px solid #335577', background:'#000a18', padding:'14px', marginBottom:'16px' }}>
+              <div style={{ color:'#ff88cc', fontSize:'13px', marginBottom:'6px' }}>🧬 変異ボスの出現</div>
+              <div style={{ color:'#88aacc', fontSize:'11px', lineHeight:'1.7', marginBottom:'10px' }}>
+                エリア①〜④のボスを<strong style={{color:'#ff88cc'}}>【変異】ボス</strong>（エリア⑤級の強さ・Goldもエリア⑤相当）にします。<br/>
+                OFFにすると通常のボスが出現します（Goldも通常どおり）。
+              </div>
+              <button onClick={toggleMutant}
+                style={{ width:'100%', padding:'12px', background: mutantEnabled?'#2a0018':'#0a0a12', border:`1px solid ${mutantEnabled?'#ff88cc':'#446688'}`, color: mutantEnabled?'#ff88cc':'#88aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>
+                {mutantEnabled ? '✅ 変異ボス：ON（クリックでOFF）' : '⬜ 変異ボス：OFF（クリックでON）'}
+              </button>
+            </div>
+          )}
 
           <button onClick={()=>setShowOptions(false)}
             style={{ width:'100%', padding:'10px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>閉じる</button>
@@ -5322,20 +5239,6 @@ export default function Game() {
     return `Lv${MENU_DEFS[key]?.unlock || 0}で解放`
   }
 
-  // ☰メニュー1項目を描画。段階開放：未到達Lvはロック表示（クリック不可）。
-  const renderMenuBtn = (key) => {
-    const d = MENU_DEFS[key]
-    if (!d) return null
-    if (!isMenuUnlocked(key)) return (
-      <div key={key} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', width:'100%', padding:'10px 16px', borderBottom:'1px solid #002244', fontFamily:'monospace', fontSize:'12px', cursor:'not-allowed', boxSizing:'border-box' }}>
-        <span style={{ color:'#33445a' }}>🔒 {d.label.replace(/^\S+\s/, '')}</span>
-        <span style={{ color:'#886633', fontSize:'9px' }}>{menuLockLabel(key)}</span>
-      </div>
-    )
-    return (
-      <button key={key} onClick={()=>{ nav(d.path); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:d.color, cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>{d.label}</button>
-    )
-  }
 
   // 街画面の施設パネル（グリッド）用：未到達Lvならボタンをロックセルに差し替える。
   // node=解放時に表示する元のボタン。key=MENU_DEFSのキー。
@@ -5605,7 +5508,7 @@ export default function Game() {
             <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
             <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
             <button onClick={()=>{ window.open('https://foamy-cathedral-702.notion.site/BATTLE-FRONTIER-38b3081b1d0180ebbfb8dafcc0b01444', '_blank', 'noopener,noreferrer'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffd700', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📚 攻略データ（Wiki）</button>
-            <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ 出撃時間/パピア時間設定</button>
+            <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ 出撃設定</button>
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
             )}
@@ -6123,7 +6026,7 @@ export default function Game() {
             <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
             <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
             <button onClick={()=>{ window.open('https://foamy-cathedral-702.notion.site/BATTLE-FRONTIER-38b3081b1d0180ebbfb8dafcc0b01444', '_blank', 'noopener,noreferrer'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffd700', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📚 攻略データ（Wiki）</button>
-            <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ 出撃時間/パピア時間設定</button>
+            <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ 出撃設定</button>
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/status'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📊 ステータス詳細[開発]</button>
             )}
@@ -6177,7 +6080,7 @@ export default function Game() {
         {papiaNeedsSetup && (
           <button onClick={()=>setShowOptions(true)}
             style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a1200', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
-            🌟 パピアの出現時間が未設定です！→ 出撃時間/パピア時間設定へ
+            🌟 パピアの出現時間が未設定です！→ 出撃設定へ
           </button>
         )}
         {alchemyReady > 0 && (
@@ -6624,8 +6527,6 @@ export default function Game() {
 // ============================================================
 // サブコンポーネント
 // ============================================================
-function effectiveEvasionRate(rate) { return rate }
-
 function StatBar({ label, val, pct, color }) {
   return (
     <>
