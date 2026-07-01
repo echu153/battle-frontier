@@ -2675,9 +2675,10 @@ export default function Game() {
     const isBossEncounter = Math.random()*100 < bossRate
     const papiaRate = getPapiaEventStatus(profile).active ? 2 : 1
     const isPapiaEncounter = !isBossEncounter && Math.random()*100 < papiaRate
-    // 【変異】段階: char_lv 500以上＋エリア①〜④＋出撃設定でON。ボスは変異ボスに置換、雑魚はGoldのみエリア⑤相当。
-    const mutantStage = selectedArea <= 4 && (profile.char_lv || 1) >= MUTANT_BOSS_LV && mutantEnabled
-    const useMutantBoss = isBossEncounter && mutantStage && MUTANT_BOSSES[selectedArea]
+    // 【変異】段階: char_lv 500以上＋エリア①〜④（トグル無関係の対象判定）。
+    const mutantHigh = selectedArea <= 4 && (profile.char_lv || 1) >= MUTANT_BOSS_LV
+    // 変異ボスの出現は出撃設定ONのときだけ。雑魚Goldの強化は「撃破済みか」だけで決まる（下記）。
+    const useMutantBoss = isBossEncounter && mutantHigh && mutantEnabled && MUTANT_BOSSES[selectedArea]
     const enemyIdx = Math.floor(Math.random() * area.enemies.length)
     const enemy = isPapiaEncounter
       ? { ...PAPIA }
@@ -3707,13 +3708,13 @@ export default function Game() {
     if (expBoosted) expGained = Math.floor(expGained * 1.5)
     const expBoostNote = expBoosted ? '（✨Lv100まで経験値1.5倍）' : ''
     // 出撃ゴールド倍率。★2026-06-20公開: 出撃CD20秒化の補正でエリア1-4を×2・エリア5+を×1.5
-    // 【変異】段階のGold（エリア⑤相当）。変異ボスは常に9000。雑魚は「そのエリアの変異ボスを1回撃破済み」のときのみ強化。
-    const mutantCleared = (profile.mutant_cleared_areas || []).includes(selectedArea)
+    // 【変異】段階のGold（エリア⑤相当）。変異ボス撃破=9000。雑魚は「そのエリアの変異ボスを1回撃破済み」なら強化（トグル無関係）。
+    const mutantCleared = mutantHigh && (profile.mutant_cleared_areas || []).includes(selectedArea)
     const goldGained = (() => {
       if (!win || papiaEscaped) return 0
-      if (mutantStage && !isPapiaEncounter) {
-        if (isBossEncounter) return Math.floor((enemy.gold || 6000) * 1.5 * (tenSec ? 0.5 : 1))  // 変異ボス=エリア⑤相当
-        if (mutantCleared)   return Math.floor((AREAS[4].enemies[enemyIdx]?.gold || 280) * 1.5 * (tenSec ? 0.5 : 1))  // 撃破済みエリアの雑魚
+      if (!isPapiaEncounter) {
+        if (useMutantBoss) return Math.floor((enemy.gold || 6000) * 1.5 * (tenSec ? 0.5 : 1))  // 変異ボス撃破=エリア⑤相当
+        if (!isBossEncounter && mutantCleared) return Math.floor((AREAS[4].enemies[enemyIdx]?.gold || 280) * 1.5 * (tenSec ? 0.5 : 1))  // 撃破済みエリアの雑魚（トグルOFFでも強化）
       }
       const goldMult = (selectedArea <= 4 ? 2 : 1.5) * (tenSec ? 0.5 : 1)
       return Math.floor((enemy.gold || 0) * goldMult)
