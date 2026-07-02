@@ -10,7 +10,11 @@ export default function ActionRpgPage() {
   const navigate = useNavigate()
   const containerRef = useRef(null)
   const gameRef = useRef(null)
-  const [hud, setHud] = useState({ level: 1, exp: 0, expNext: 20, hp: 100, hpMax: 100, mp: 30, mpMax: 30, combo: 0 })
+  const [hud, setHud] = useState({
+    level: 1, exp: 0, expNext: 20, hp: 100, hpMax: 100, mp: 30, mpMax: 30, combo: 0,
+    skills: { wave: { cdLeft: 0, cdTotal: 3000, mp: 8 }, dash: { cdLeft: 0, cdTotal: 5000, mp: 12 } },
+    boss: null,
+  })
   const [notice, setNotice] = useState(true)
 
   useEffect(() => {
@@ -64,6 +68,16 @@ export default function ActionRpgPage() {
         <button onClick={() => navigate('/game')} style={{ padding: '6px 12px', background: 'rgba(0,16,32,0.85)', border: '1px solid #2b6cff', color: '#9cf', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, borderRadius: 4 }}>← 街に戻る</button>
       </div>
 
+      {/* === ボスHPバー(アグロ中のみ表示) === */}
+      {hud.boss && (
+        <div style={{ position: 'absolute', top: 64, left: '50%', transform: 'translateX(-50%)', width: 'min(420px, 70%)', fontFamily: 'monospace', pointerEvents: 'none' }}>
+          <div style={{ textAlign: 'center', color: '#ffb3b3', fontSize: 13, textShadow: '0 1px 2px #000', marginBottom: 2 }}>👑 {hud.boss.name}</div>
+          <div style={{ height: 14, background: '#3a0c0c', borderRadius: 4, border: '1px solid rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+            <div style={{ width: `${Math.max(0, (hud.boss.hp / hud.boss.hpMax) * 100)}%`, height: '100%', background: 'linear-gradient(180deg,#ff6a5c,#c92a1e)', transition: 'width 0.15s' }} />
+          </div>
+        </div>
+      )}
+
       {/* コンボ表示 */}
       {hud.combo > 1 && (
         <div style={{ position: 'absolute', left: 16, top: '42%', fontFamily: 'monospace', color: '#ffd23f', fontWeight: 'bold', textShadow: '0 2px 4px #000', pointerEvents: 'none' }}>
@@ -80,10 +94,16 @@ export default function ActionRpgPage() {
       {/* zIndex=10：左半分の移動パッド(zIndex5)より上に置き、ボタンを確実にタップできるように */}
       <div style={{ position: 'absolute', right: 24, bottom: 28, display: 'flex', alignItems: 'flex-end', gap: 12, userSelect: 'none', zIndex: 10 }}>
         <AutoButton />
-        <SkillButton label="近日" />
-        <SkillButton label="近日" />
+        {/* スキル：向いている方向に発動。CT中は暗転＋残り秒数を表示 */}
+        <SkillButton label="衝撃波" hotkey="1" skill={hud.skills?.wave} mpNow={hud.mp} color="#57c7ff" onFire={() => action('skill:wave')} />
+        <SkillButton label="疾風斬" hotkey="2" skill={hud.skills?.dash} mpNow={hud.mp} color="#ffd23f" onFire={() => action('skill:dash')} />
         {/* 攻撃(大ボタン)：押している間くり返し攻撃(実際の発動はクールタイムで制御) */}
         <AttackButton />
+      </div>
+
+      {/* PC向け操作ヒント */}
+      <div style={{ position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)', fontFamily: 'monospace', fontSize: 10, color: 'rgba(255,255,255,0.45)', pointerEvents: 'none', textShadow: '0 1px 2px #000', whiteSpace: 'nowrap' }}>
+        WASD移動／SPACE攻撃／1・2スキル
       </div>
 
       {/* 趣味制作の注意書き(閉じれる) */}
@@ -164,9 +184,27 @@ function AttackButton() {
   )
 }
 
-function SkillButton({ label }) {
+// スキルボタン：CT中は下から暗転(残り割合)＋中央に残り秒数。MP不足はコスト表示が赤くなる。
+function SkillButton({ label, hotkey, skill, mpNow, color, onFire }) {
+  const sk = skill || { cdLeft: 0, cdTotal: 1, mp: 0 }
+  const cdPct = sk.cdTotal > 0 ? Math.min(1, sk.cdLeft / sk.cdTotal) : 0
+  const noMp = mpNow < sk.mp
+  const ready = cdPct <= 0 && !noMp
   return (
-    <button disabled style={{ width: 58, height: 58, borderRadius: '50%', background: 'rgba(20,30,50,0.7)', border: '2px solid #335', color: '#668', fontFamily: 'monospace', fontSize: 11, cursor: 'not-allowed', touchAction: 'none' }}>{label}</button>
+    <button
+      onPointerDown={(e) => { e.preventDefault(); onFire() }}
+      style={{ position: 'relative', width: 62, height: 62, borderRadius: '50%', overflow: 'hidden', background: 'rgba(15,25,45,0.85)', border: `2px solid ${ready ? color : '#445'}`, color: ready ? '#fff' : '#88a', fontFamily: 'monospace', fontSize: 11, fontWeight: 'bold', cursor: 'pointer', touchAction: 'none', boxShadow: ready ? `0 0 8px ${color}88` : 'none' }}
+    >
+      <div>{label}</div>
+      <div style={{ fontSize: 9, color: noMp ? '#ff8080' : '#7fb6ff' }}>MP{sk.mp}</div>
+      {cdPct > 0 && (
+        <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: `${cdPct * 100}%`, background: 'rgba(0,0,0,0.6)', pointerEvents: 'none' }} />
+      )}
+      {cdPct > 0 && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: '#fff', textShadow: '0 1px 2px #000', pointerEvents: 'none' }}>{Math.ceil(sk.cdLeft / 1000)}</div>
+      )}
+      <div style={{ position: 'absolute', top: 3, right: 8, fontSize: 9, color: '#89a' }}>{hotkey}</div>
+    </button>
   )
 }
 
@@ -189,15 +227,27 @@ function Minimap() {
       const cv = canvasRef.current
       if (!cv) return
       const ctx = cv.getContext('2d')
-      const { worldW, worldH, player, enemies } = e.detail
+      const { worldW, worldH, player, enemies, boss, zone } = e.detail
       ctx.clearRect(0, 0, W, H)
       // 背景
       ctx.fillStyle = '#16301a'; ctx.fillRect(0, 0, W, H)
       const sx = W / worldW, sy = H / worldH
+      // ボス区画(赤く塗る)
+      if (zone) {
+        ctx.fillStyle = 'rgba(255,60,60,0.20)'
+        ctx.fillRect(zone.x * sx, zone.y * sy, zone.w * sx, zone.h * sy)
+        ctx.strokeStyle = 'rgba(255,90,90,0.55)'; ctx.lineWidth = 1
+        ctx.strokeRect(zone.x * sx, zone.y * sy, zone.w * sx, zone.h * sy)
+      }
       // 敵(赤)
       ctx.fillStyle = '#ff4d4d'
       for (const en of enemies) {
         ctx.beginPath(); ctx.arc(en.x * sx, en.y * sy, 2, 0, Math.PI * 2); ctx.fill()
+      }
+      // ボス(オレンジ・大きめ)
+      if (boss) {
+        ctx.fillStyle = '#ffae42'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1
+        ctx.beginPath(); ctx.arc(boss.x * sx, boss.y * sy, 3.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
       }
       // 自分(青・少し大きめ＋白枠)
       ctx.fillStyle = '#4da6ff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1
