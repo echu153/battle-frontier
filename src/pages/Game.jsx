@@ -1697,6 +1697,8 @@ export default function Game() {
   const [alchemyEmpty, setAlchemyEmpty] = useState(0)        // 錬金部屋の空き枠数（街のバナー表示用・is_admin限定先行）
   const [territoryExpandable, setTerritoryExpandable] = useState(false)  // 領地拡大が可能か（街のバナー表示用・is_admin限定先行）
   const [boxAvailable, setBoxAvailable] = useState(0)        // ボス装備進化支援箱の所持数（街のバナー表示用）
+  const [subsidyAvailable, setSubsidyAvailable] = useState(false)  // 国の補助金が未受取か（街のバナー表示用）
+  const [scarecrowState, setScarecrowState] = useState(null)       // かかし修練: 'training'(中) | 'done'(完了・受取待ち) | null
   const [myCountryName, setMyCountryName] = useState('')     // 所属国名（ホーム/プロフィールの所属国表示用・is_admin限定先行）
   const [atWar, setAtWar] = useState(false)                  // 自国が交戦中（active）か。戦争中はホームのHP/MP表示を戦争用に切替
   const [activeWarId, setActiveWarId] = useState(null)       // 交戦中の戦争ID（開戦時の満タン参戦を1戦争1回にするため）
@@ -1974,6 +1976,10 @@ export default function Game() {
           setMyCountryName(c.name || '')
           const affiliated = !c.is_unaffiliated
           setTerritoryExpandable(affiliated && Date.now() >= lastExpand + EXPAND_COOLDOWN_MS && Date.now() >= lockUntil)
+          // 補助金バナー: 加盟国＋貢献度>0＋本日(朝5時JST境界)未受取
+          const subsidyDay = new Date(Date.now() + 9*3600*1000 - 5*3600*1000).toISOString().slice(0, 10)
+          const subAmt = Math.min(Math.max(Math.floor(prof.country_contrib || 0), 0), 300000)
+          setSubsidyAvailable(affiliated && subAmt > 0 && prof.subsidy_claimed_day !== subsidyDay)
         }
       } catch { /* 領地未導入/通信失敗時は既存表示を維持（国名を消さない） */ }
       // 自国が交戦中(active)か。戦争中はホームのHP/MPを戦争用表示(上限+10000)に切替。
@@ -1985,7 +1991,12 @@ export default function Game() {
         setAtWar(!!(w && w.length))
         setActiveWarId(w?.[0]?.id || null)
       } catch { /* 戦争SQL未適用なら無視 */ setAtWar(false); setActiveWarId(null) }
-    } else { setTerritoryExpandable(false); setMyCountryName(''); setAtWar(false); setActiveWarId(null) }
+    } else { setTerritoryExpandable(false); setMyCountryName(''); setAtWar(false); setActiveWarId(null); setSubsidyAvailable(false) }
+    // かかし修練: 中(training)/完了(done・受取待ち)をバナー用に判定
+    try {
+      const { data: sc } = await supabase.from('scarecrow_sessions').select('ends_at').eq('player_id', prof.id).eq('status', 'active').maybeSingle()
+      setScarecrowState(sc ? (new Date(sc.ends_at) > new Date() ? 'training' : 'done') : null)
+    } catch { /* 未導入時は無視 */ }
   }
   // プロフィール確定時＋60秒ごとに再計算（クールダウン明け・錬金完成を取り込む）
   useEffect(() => {
@@ -5597,6 +5608,26 @@ export default function Game() {
               🎁 ボス装備進化支援箱を{boxAvailable}個所持中！→ アイテム画面で使う
             </button>
           )}
+          {scarecrowState === 'done' && (
+            <button onClick={()=>nav('/scarecrow')} style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#0a0800', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              🌾 かかし修練が完了！報酬を受け取れます → 修練場へ
+            </button>
+          )}
+          {scarecrowState === 'training' && (
+            <button onClick={()=>nav('/scarecrow')} style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#0a0800', border:'1px solid #886600', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              🌾 かかし修練中… → 修練場へ
+            </button>
+          )}
+          {profile?.is_fishing && (
+            <button onClick={()=>nav('/fishing')} style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#001420', border:'1px solid #33aadd', color:'#66ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              🎣 釣り中… → 釣り場へ
+            </button>
+          )}
+          {subsidyAvailable && (
+            <button onClick={()=>nav('/territory')} style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              💰 本日の補助金を受け取れます → 領地へ
+            </button>
+          )}
           <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', marginBottom:'8px' }}>
             {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'6px', border:'1px solid #660000', padding:'3px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
@@ -6112,6 +6143,26 @@ export default function Game() {
           <button onClick={()=>nav('/equipment?view=items')}
             style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a0010', border:'1px solid #ff88aa', color:'#ff99cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
             🎁 ボス装備進化支援箱を{boxAvailable}個所持中！→ アイテム画面で使う
+          </button>
+        )}
+        {scarecrowState === 'done' && (
+          <button onClick={()=>nav('/scarecrow')} style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#0a0800', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            🌾 かかし修練が完了！報酬を受け取れます → 修練場へ
+          </button>
+        )}
+        {scarecrowState === 'training' && (
+          <button onClick={()=>nav('/scarecrow')} style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#0a0800', border:'1px solid #886600', color:'#ccaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            🌾 かかし修練中… → 修練場へ
+          </button>
+        )}
+        {profile?.is_fishing && (
+          <button onClick={()=>nav('/fishing')} style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#001420', border:'1px solid #33aadd', color:'#66ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            🎣 釣り中… → 釣り場へ
+          </button>
+        )}
+        {subsidyAvailable && (
+          <button onClick={()=>nav('/territory')} style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            💰 本日の補助金を受け取れます → 領地へ
           </button>
         )}
 
