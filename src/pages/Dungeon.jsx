@@ -452,7 +452,7 @@ export default function Dungeon() {
   // opts.follow=true でキャラの移動に追従（自分が受けたダメージ・回復に使う）
   const popDmg = (x, y, n, opts = {}) => addPop(x, y, `-${n}`, '#ff5555', opts)
   const popHeal = (x, y, n, opts = {}) => addPop(x, y, `+${n}`, '#66ff99', opts)
-  const popExp = (x, y, n) => addPop(x, y, `＋Exp ${n}`, '#8fd0ff', { below: true, follow: true }) // 経験値は明るい青で自分の下に（キャラ追従）
+  const popExp = (x, y, n) => addPop(x, y, `+EXP ${n}`, '#8fd0ff', { below: true, follow: true }) // 経験値は明るい青で自分の下に（キャラ追従）
 
   // レベルアップ演出（キャラの上に虹色アーチで LEVEL UP・約4秒）
   const [levelUp, setLevelUp] = useState(null) // { x, y, id }
@@ -510,7 +510,7 @@ export default function Dungeon() {
     const lucky = charmHasEffect(pet.charm, 'lucky')
     const { data, error } = await supabase.rpc('dungeon_kill', { p_run_id: runIdRef.current, p_floor: floor, p_enemy: name, p_lucky: lucky })
     if (error || !data) { addLog(`⚔ ${name}を撃破！`); return }
-    addLog(`⚔ ${name}を撃破！ ＋EXP${data.exp_gain}${data.lucky ? '🍀' : ''}${data.leveled ? `（Lv${data.level}に！）` : ''}`)
+    addLog(`⚔ ${name}を撃破！ +EXP${data.exp_gain}${data.lucky ? '🍀' : ''}${data.leveled ? `（LV${data.level}に！）` : ''}`)
     // 経験値ポップ（自分の下に青で）＋レベルアップ時は虹アーチ演出
     if (px != null && py != null) {
       if (data.exp_gain > 0) popExp(px, py, data.exp_gain)
@@ -1404,7 +1404,7 @@ export default function Dungeon() {
           </div>
           <div style={{ display: 'flex', gap: 10, fontSize: 12, marginBottom: 12, alignItems: 'center' }}>
             {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4 }} /> : <span style={{ fontSize: 22 }}>{pet.emoji}</span>}
-            <span>{pet.name}　Lv{pet.level ?? 1}{pet.id ? '' : '（ペット未選択＝報酬なし）'}</span>
+            <span>{pet.name}　LV{pet.level ?? 1}{pet.id ? '' : '（ペット未選択＝報酬なし）'}</span>
           </div>
 
           {/* 持ち物プレビュー＆だっしゅつの翼の警告（なくても挑める） */}
@@ -1700,7 +1700,7 @@ export default function Dungeon() {
                 padding: '5px 8px', background: 'linear-gradient(180deg, rgba(0,4,12,0.82) 0%, rgba(0,4,12,0.55) 100%)', borderBottom: '1px solid rgba(80,120,180,0.35)' }}>
                 <div style={{ display: 'flex', gap: 10, fontSize: 11, flexWrap: 'wrap', alignItems: 'center' }}>
                   <span>B{floorNum}/{dungeon?.floors || 10}F</span>
-                  <span style={{ color: '#9fd' }}>Lv{pet.level}{pet.exp != null ? `（EXP ${pet.exp}/${expForLevel(pet.level || 1)}）` : ''}</span>
+                  <span style={{ color: '#9fd' }}>LV{pet.level}{pet.exp != null ? `（EXP ${pet.exp}/${expForLevel(pet.level || 1)}）` : ''}</span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: petHp > pet.maxHp * 0.3 ? '#44ff88' : '#ff5555' }}>
                     {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 14, height: 14, objectFit: 'cover', borderRadius: 3 }} /> : <span>{pet.emoji}</span>}
                     {pet.name} HP {petHp}/{pet.maxHp}
@@ -2050,7 +2050,7 @@ function RewardPanel({ reward, pet }) {
   }
   return (
     <div style={{ background: '#001026', border: '1px solid #335588', padding: 10, margin: '10px auto', maxWidth: 280, fontSize: 12, color: '#cce6ff' }}>
-      <div style={{ color: '#88bbee' }}>Lv{reward.level}（EXP {reward.exp}）</div>
+      <div style={{ color: '#88bbee' }}>LV{reward.level}（EXP {reward.exp}）</div>
       {reward.lootGranted > 0 && (
         <div style={{ marginTop: 4, color: '#bfe6cc', fontSize: 11 }}>
           🎁 持ち帰った戦利品 {reward.lootGranted}個 を入手！

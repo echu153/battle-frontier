@@ -60,7 +60,7 @@ export default function Pets() {
     setLoading(false)
     if (error) {
       const m = String(error.message)
-      flash(m.includes('gold') ? 'ゴールドが足りません' : m.includes('inventory') ? `アイテム袋がいっぱいです（だっしゅつの翼以外は合計${INV_MAX}個まで）` : '購入失敗: ' + m)
+      flash(m.includes('gold') ? 'Goldが足りません' : m.includes('inventory') ? `アイテム袋がいっぱいです（だっしゅつの翼以外は合計${INV_MAX}個まで）` : '購入失敗: ' + m)
       return
     }
     flash(`${PET_ITEMS[key]?.name || 'アイテム'}を${qty}個 購入しました`)
@@ -235,7 +235,7 @@ export default function Pets() {
             {p.is_active && <span style={{ position: 'absolute', top: 2, right: 4, fontSize: 9, color: '#44ff88' }}>選択中</span>}
             <Portrait pet={p} size={44} />
             <div style={{ color: '#cce6ff', fontSize: 11, marginTop: 2 }}>{p.name}</div>
-            <div style={{ color: '#6699cc', fontSize: 10 }}>Lv{p.level}</div>
+            <div style={{ color: '#6699cc', fontSize: 10 }}>LV{p.level}</div>
           </div>
         ))}
       </div>
@@ -246,7 +246,7 @@ export default function Pets() {
           <Portrait pet={selected} size={110} />
           <div style={{ flex: 1 }}>
             <div style={{ color: '#cce6ff', fontSize: 15 }}>{selected.name} <span style={{ color: selected.evolved ? '#ffcc66' : '#6699cc', fontSize: 11 }}>({speciesLabel(selected)})</span></div>
-            <div style={{ color: '#88bbee', fontSize: 12, marginTop: 4 }}>Lv{selected.level}{Number.isFinite(petMaxLevel(selected)) ? `/${petMaxLevel(selected)}` : ''}　HP{sst.maxHp} / {atkLabel(selected)}{sst.atk} / 防{sst.def} / 特防{sst.mdef}</div>
+            <div style={{ color: '#88bbee', fontSize: 12, marginTop: 4 }}>LV{selected.level}{Number.isFinite(petMaxLevel(selected)) ? `/${petMaxLevel(selected)}` : ''}　HP{sst.maxHp} / {atkLabel(selected)}{sst.atk} / 防{sst.def} / 特防{sst.mdef}</div>
             <div style={{ color: '#6699cc', fontSize: 11, marginTop: 2 }}>EXP {selected.exp} / {need}</div>
             {selected.is_active && <div style={{ color: '#88ffaa', fontSize: 11, marginTop: 2 }}>★ 選択中：このペットのステータスがプレイヤーに100%反映中</div>}
           </div>
@@ -280,7 +280,7 @@ export default function Pets() {
               if (!learned) {
                 return (
                   <div key={id} style={{ border: '1px solid #1c2c44', background: '#000810', padding: '6px 8px', opacity: 0.7 }}>
-                    <div style={{ fontSize: 12, color: '#5e7fa0' }}>🔒 Lv{sk.learnLv} で習得</div>
+                    <div style={{ fontSize: 12, color: '#5e7fa0' }}>🔒 LV{sk.learnLv} で習得</div>
                   </div>
                 )
               }
@@ -495,11 +495,11 @@ const HELP_SECTIONS = [
   { t: '🚩 進め方', b: [
     '最初にペットを1体選びます（ヴォル＝物理／アルル＝魔法／ドラム＝防御）。総合力はどれも互角、配分が違うだけ。',
     'ペットを「選択中」にして🕳ダンジョンへ潜り、敵を倒してレベルを上げ、アイテムやチャームを集めて強くしていきます。',
-    'Lv50で「進化」でき、上限が解放されてさらに成長します。',
+    'LV50で「進化」でき、上限が解放されてさらに成長します。',
   ] },
   { t: '⚡ スキルについて', b: [
     'スキルは体当たりで発動します。「たいあたり」は全種族固定（満腹消費なし）で、攻撃と特攻（チャーム込み）の高いほうを参照して攻撃します。',
-    '種族ごとに Lv3/8/20/50/80/120 でスキルを習得。ペット画面でダンジョンに持っていくスキルを最大4つ（たいあたり込み）選べます。',
+    '種族ごとに LV3/8/20/50/80/120 でスキルを習得。ペット画面でダンジョンに持っていくスキルを最大4つ（たいあたり込み）選べます。',
     'スキルは満腹度を消費して発動（強いほど多い）。連打スキルは1発ずつヒットします。ダンジョン内では十字キー横で使うスキルを切り替えられます。',
   ] },
   { t: '📊 ステータスについて', b: [

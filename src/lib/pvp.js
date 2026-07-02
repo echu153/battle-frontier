@@ -623,7 +623,7 @@ function endTurnBuffs(side, ctx, hpBeforeTurn) {
   // 雷鋼の機神鎧: 被ダメで2ターン素早さ+5%
   if (side.ondmgSpdUp > 1 && side.hp < hpBeforeTurn && !(b.spdUp?.turns > 0 && b.spdUp.rate >= side.ondmgSpdUp)) {
     b.spdUp = { turns: 2, rate: side.ondmgSpdUp }
-    logs.push({ text: `⚙ ${side.profile.username}の雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((side.ondmgSpdUp - 1) * 100)}％！`, color: '#66ccff' })
+    logs.push({ text: `⚙ ${side.profile.username}の雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((side.ondmgSpdUp - 1) * 100)}%！`, color: '#66ccff' })
   }
 }
 

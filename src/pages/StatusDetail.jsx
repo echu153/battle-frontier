@@ -303,7 +303,7 @@ export default function StatusDetail() {
                         {pet.is_active && <span style={{ color:'#44ff88', fontSize:'10px' }}> 【出撃中】</span>}
                       </div>
                       <div style={{ fontSize:'10px', color:'#558866', marginBottom:'4px' }}>
-                        {speciesLabel(pet)} Lv{pet.level || 1}
+                        {speciesLabel(pet)} LV{pet.level || 1}
                         {charm && <span style={{ color:'#ff88cc' }}> ・{charmDisplayName(charm)}</span>}
                       </div>
                       <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', fontSize:'10px' }}>

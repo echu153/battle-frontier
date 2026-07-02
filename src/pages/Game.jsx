@@ -2413,7 +2413,7 @@ export default function Game() {
       const bonusExp = grantBonusExpLogs()
       const { data: goldRes, error: goldErr } = await supabase.rpc('apply_dungeon_reward', { p_type:'gold', p_claimed_gold:goldGained, p_claimed_exp:bonusExp })
       if (goldErr || goldRes?.ok === false) { rewardFailed = true; rewardFailReason = goldRes?.reason || goldErr?.message || 'unknown' }
-      else logs.push({ text:`Gold +${goldGained}${lvBonus > 1 ? '（キャラLv300までボーナス ×1.5！）' : ''}`, color:'#ffcc00' })
+      else logs.push({ text:`Gold +${goldGained}${lvBonus > 1 ? '（キャラLV300までボーナス ×1.5！）' : ''}`, color:'#ffcc00' })
     } else if (type === 'stone') {
       const r = Math.random() * 100
       const stoneName = r < 10 ? '強化石(F)' : r < 25 ? '強化石(E)' : r < 55 ? '強化石(D)' : r < 80 ? '強化石(C)' : r < 95 ? '強化石(B)' : '強化石(A)'
@@ -3686,7 +3686,7 @@ export default function Game() {
       // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+5%（既存の上位spdUpは上書きしない）
       if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
         playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
-        logs.push({ text:`⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}％！`, color:'#66ccff' })
+        logs.push({ text:`⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}%！`, color:'#66ccff' })
       }
       if (bossHealCooldown > 0) bossHealCooldown--
       // 毎ターン終了時のHPスナップショット（表示用）
@@ -3706,7 +3706,7 @@ export default function Game() {
     // キャラクターLV100まで経験値1.5倍（サーバー apply_battle_result の検証上限も1.5倍にしてある）
     const expBoosted = expGained > 0 && (profile.char_lv||1) < 100
     if (expBoosted) expGained = Math.floor(expGained * 1.5)
-    const expBoostNote = expBoosted ? '（✨Lv100まで経験値1.5倍）' : ''
+    const expBoostNote = expBoosted ? '（✨LV100まで経験値1.5倍）' : ''
     // 出撃ゴールド倍率。★2026-06-20公開: 出撃CD20秒化の補正でエリア1-4を×2・エリア5+を×1.5
     // 【変異】段階のGold（エリア⑤相当）。変異ボス撃破=9000。雑魚は「そのエリアの変異ボスを1回撃破済み」なら強化（トグル無関係）。
     const mutantCleared = mutantHigh && (profile.mutant_cleared_areas || []).includes(selectedArea)
@@ -5237,7 +5237,7 @@ export default function Game() {
   }
   const menuLockLabel = (key) => {
     if (key === 'alchemy') return 'エリア③ボス撃破で解放'
-    return `Lv${MENU_DEFS[key]?.unlock || 0}で解放`
+    return `LV${MENU_DEFS[key]?.unlock || 0}で解放`
   }
 
 
@@ -6150,7 +6150,7 @@ export default function Game() {
             <StatBar label="MP" val={`${mpCurrent}/${mpMaxEff}`} pct={mpPct} color="#4488ff" />
             {statExpanded && (<>
               <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginTop:'6px' }}>
-                <span>経験値</span><span style={{color:'#cc8800'}}>{profile.exp}/{profile.exp_next}</span>
+                <span>EXP</span><span style={{color:'#cc8800'}}>{profile.exp}/{profile.exp_next}</span>
               </div>
               <div style={{ background:'#001028', height:'5px', border:'1px solid #002244', marginBottom:'4px' }}>
                 <div style={{ height:'100%', width:`${expPct}%`, background:'linear-gradient(90deg,#331100,#cc8800)', transition:'width 0.4s' }} />
@@ -6168,7 +6168,7 @@ export default function Game() {
                 <StatLine label="特殊攻撃力" base={eff.matk - eff.bonus.matk} bonus={eff.bonus.matk} color="#cc44ff" statType="matk" />
                 <StatLine label="特殊防御力" base={eff.mdef - eff.bonus.mdef} bonus={eff.bonus.mdef} color="#44ccff" statType="mdef" />
                 <StatLine label="素早さ"     base={eff.spd  - eff.bonus.spd}  bonus={eff.bonus.spd}  color="#ff8844" statType="spd" />
-                <span>ゴールド: <span style={{color:'#ffcc00'}}>{profile.gold}</span></span>
+                <span>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></span>
               </div>
               {pendingPoints > 0 && (
                 <button onClick={()=>{ setShowStatPanel(true); setStatPoints({hp:0,mp:0,atk:0,def:0,matk:0,mdef:0,spd:0}) }}
@@ -6481,7 +6481,7 @@ export default function Game() {
                     </div>
                     <div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
                       所持金: <span style={{color:'#ffcc00'}}>{profile.gold}G</span>
-                      {!isDying && profile.gold<innCost && <span style={{color:'#ff4444'}}> （ゴールドが足りません）</span>}
+                      {!isDying && profile.gold<innCost && <span style={{color:'#ff4444'}}> （Goldが足りません）</span>}
                     </div>
                     <div style={{ display:'flex', gap:'8px' }}>
                       <button onClick={backToTown} style={{ flex:1, padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 街に戻る</button>

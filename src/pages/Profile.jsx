@@ -402,7 +402,7 @@ export default function Profile() {
                     {src ? <img src={src} alt="" style={{ width:44, height:44, objectFit:'contain', borderRadius:4 }} /> : <div style={{ fontSize:34 }}>{speciesEmoji(pet)}</div>}
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ color:'#cce6ff', fontSize:'12px' }}>{pet.name} <span style={{ color: pet.evolved?'#ffcc66':'#6699cc', fontSize:'10px' }}>({speciesLabel(pet)})</span> {pet.is_active && <span style={{ color:'#44ff88', fontSize:'9px' }}>選択中</span>}</div>
-                      <div style={{ color:'#88bbee', fontSize:'10px', marginTop:'2px' }}>Lv{pet.level}　HP{st.maxHp} / {atkLabel(pet)}{st.atk} / 防{st.def} / 特防{st.mdef}</div>
+                      <div style={{ color:'#88bbee', fontSize:'10px', marginTop:'2px' }}>LV{pet.level}　HP{st.maxHp} / {atkLabel(pet)}{st.atk} / 防{st.def} / 特防{st.mdef}</div>
                       {charm && <div style={{ color:'#9ccbb0', fontSize:'9px', marginTop:'2px' }}>🧿 {charmDisplayName(charm)}</div>}
                     </div>
                   </div>

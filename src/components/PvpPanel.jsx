@@ -100,7 +100,7 @@ export default function PvpPanel({ onClose }) {
             {results.map(p => (
               <button key={p.id} onClick={() => { setOpponent(p); setResults([]); setSearch(p.username) }}
                 style={{ textAlign: 'left', background: '#140c22', border: '1px solid #4a2a6a', color: '#c8a0ff', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>
-                {p.username} <span style={{ color: '#7766aa' }}>Lv{p.char_lv}・{p.class}</span>
+                {p.username} <span style={{ color: '#7766aa' }}>LV{p.char_lv}・{p.class}</span>
               </button>
             ))}
           </div>
@@ -109,7 +109,7 @@ export default function PvpPanel({ onClose }) {
         {opponent && (
           <div style={{ border: '1px solid #6a3a9a', background: '#140c22', padding: '10px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ color: '#e0b0ff', fontSize: '13px' }}>
-              対戦相手: <b>{opponent.username}</b> <span style={{ color: '#7766aa', fontSize: '10px' }}>Lv{opponent.char_lv}・{opponent.class}</span>
+              対戦相手: <b>{opponent.username}</b> <span style={{ color: '#7766aa', fontSize: '10px' }}>LV{opponent.char_lv}・{opponent.class}</span>
             </div>
             <button onClick={runBattle} disabled={battling || !myLoadout}
               style={{ background: battling ? '#140a1c' : '#2a1040', border: `1px solid ${battling ? '#3a2a4a' : '#a060ff'}`, color: battling ? '#5a4a6a' : '#d0a0ff', padding: '8px 18px', cursor: battling ? 'not-allowed' : 'pointer', fontFamily: 'monospace', fontSize: '12px', letterSpacing: '1px' }}>

@@ -398,7 +398,7 @@ function scrollDesc(s) {
     return parts.join('・')
   }
   const tgt = s.target === 'aoe' ? '周囲の敵全体' : `${s.range}マス先まで(斜め可)の敵1体`
-  const pow = s.dice ? 'ランダム威力' : `威力Lv×5×乱数${s.hits > 1 ? `×${s.hits}回` : ''}`
+  const pow = s.dice ? 'ランダム威力' : `威力LV×5×乱数${s.hits > 1 ? `×${s.hits}回` : ''}`
   const ex = [s.drain ? `与ダメの${Math.round(s.drain * 100)}%回復` : '', s.recoil ? `反動${Math.round(s.recoil * 100)}%` : '', s.stun ? `${Math.round(s.stun * 100)}%でしびれ` : ''].filter(Boolean).join('・')
   return `${tgt}に${pow}${ex ? '／' + ex : ''}`
 }
@@ -420,12 +420,12 @@ export const CHARM_STATS = ['hp', 'atk', 'spatk', 'def', 'spdef']
 export const CHARMS = {
   hajimari: { type: 'hajimari', name: 'はじまりのチャーム', emoji: '🔰', effect: null,       short: 'はじまり', desc: '追加能力なし' },
   antidote: { type: 'antidote', name: '解毒のチャーム',     emoji: '🧪', effect: 'antidote', short: '解毒', minFloor: 1,  desc: '毒になる確率が50%減る' },
-  guard:    { type: 'guard',    name: '守りのチャーム',     emoji: '🛡️', effect: 'guard',    short: '防御', minFloor: 1,  desc: '防御＋10%' },
-  mdefup:   { type: 'mdefup',   name: 'とくぼうのチャーム', emoji: '🟩', effect: 'mdefup',   short: '特防', minFloor: 1,  desc: '特防＋10%' },
-  atkup:    { type: 'atkup',    name: '攻撃のチャーム',     emoji: '🟥', effect: 'atkup',    short: '攻撃', minFloor: 10, desc: '攻撃＋10%' },
-  spatkup:  { type: 'spatkup',  name: 'とくこうのチャーム', emoji: '🟪', effect: 'spatkup',  short: '特攻', minFloor: 10, desc: '特攻＋10%' },
-  evade:    { type: 'evade',    name: '回避のチャーム',     emoji: '💨', effect: 'evade',    short: '回避', minFloor: 20, desc: '回避＋5%' },
-  hit:      { type: 'hit',      name: '命中のチャーム',     emoji: '🎯', effect: 'hit',      short: '命中', minFloor: 20, desc: '命中＋5%' },
+  guard:    { type: 'guard',    name: '守りのチャーム',     emoji: '🛡️', effect: 'guard',    short: '防御', minFloor: 1,  desc: '防御+10%' },
+  mdefup:   { type: 'mdefup',   name: 'とくぼうのチャーム', emoji: '🟩', effect: 'mdefup',   short: '特防', minFloor: 1,  desc: '特防+10%' },
+  atkup:    { type: 'atkup',    name: '攻撃のチャーム',     emoji: '🟥', effect: 'atkup',    short: '攻撃', minFloor: 10, desc: '攻撃+10%' },
+  spatkup:  { type: 'spatkup',  name: 'とくこうのチャーム', emoji: '🟪', effect: 'spatkup',  short: '特攻', minFloor: 10, desc: '特攻+10%' },
+  evade:    { type: 'evade',    name: '回避のチャーム',     emoji: '💨', effect: 'evade',    short: '回避', minFloor: 20, desc: '回避+5%' },
+  hit:      { type: 'hit',      name: '命中のチャーム',     emoji: '🎯', effect: 'hit',      short: '命中', minFloor: 20, desc: '命中+5%' },
   lucky:    { type: 'lucky',    name: '幸せのチャーム',     emoji: '🍀', effect: 'lucky',    short: '幸せ', minFloor: 20, rare: true, desc: '撃破時50%で経験値+50%（主人公は10%で経験値+1）' },
 }
 export const getCharm = (t) => CHARMS[t] || CHARMS.hajimari
@@ -445,7 +445,7 @@ export function charmDisplayName(charm) {
     ? `${getCharm(charm.ctype).short}と${getCharm(charm.ctype2).short}のチャーム`
     : getCharm(charm?.ctype).name
   const t = charmTotal(charm)
-  return t > 0 ? `${base}＋${t}` : base
+  return t > 0 ? `${base}+${t}` : base
 }
 // 装備チャームをプレイヤー本体ステへ反映する分（攻→atk / 特攻→matk / 特防→mdef / HPは×CHARM_HP_PER）
 export function charmPlayerBonus(charm) {

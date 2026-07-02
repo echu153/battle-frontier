@@ -136,7 +136,7 @@ export default function KumitePanel({ onClose }) {
                     background: opponent?.id === c.id ? '#13304a' : '#0a1622',
                     border: `1px solid ${opponent?.id === c.id ? '#3aa0e0' : '#244a6a'}`,
                     color: '#a8d0ff', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>
-                  <span><span style={{ color: '#667799' }}>{i + 1}.</span> {c.username} <span style={{ color: '#667799' }}>Lv{c.char_lv}・{c.class}</span></span>
+                  <span><span style={{ color: '#667799' }}>{i + 1}.</span> {c.username} <span style={{ color: '#667799' }}>LV{c.char_lv}・{c.class}</span></span>
                   <span style={{ color: '#44ff88' }}>{c._total}</span>
                 </button>
               ))}
@@ -151,7 +151,7 @@ export default function KumitePanel({ onClose }) {
         {opponent && (
           <div style={{ border: '1px solid #3a6a9a', background: '#0a1622', padding: '10px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ color: '#8ad0ff', fontSize: '13px' }}>
-              対戦相手: <b>{opponent.username}</b> <span style={{ color: '#667799', fontSize: '10px' }}>Lv{opponent.char_lv}・{opponent.class}・総合力{opponent._total}</span>
+              対戦相手: <b>{opponent.username}</b> <span style={{ color: '#667799', fontSize: '10px' }}>LV{opponent.char_lv}・{opponent.class}・総合力{opponent._total}</span>
             </div>
             <button onClick={runBattle} disabled={battling || !myLoadout}
               style={{ background: battling ? '#0a141c' : '#0a2a40', border: `1px solid ${battling ? '#2a3a4a' : '#3aa0e0'}`, color: battling ? '#445566' : '#8ad0ff', padding: '8px 18px', cursor: battling ? 'not-allowed' : 'pointer', fontFamily: 'monospace', fontSize: '12px', letterSpacing: '1px' }}>

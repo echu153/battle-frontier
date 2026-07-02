@@ -264,7 +264,7 @@ export default function Ranking() {
                       {p.name || speciesLabel(p)}{p.evolved && <span style={{ color:'#ffcc00', fontSize:'10px' }}> ✦</span>}
                     </div>
                     <div style={{ color:'#558866', fontSize:'10px', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                      {speciesLabel(p)} Lv{p.level || 1}
+                      {speciesLabel(p)} LV{p.level || 1}
                       {charmName && <span style={{ color:'#ff88cc' }}> ・{charmName}</span>}
                     </div>
                     <div style={{ color:'#446688', fontSize:'9px', marginTop:'1px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>

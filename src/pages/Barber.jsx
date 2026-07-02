@@ -65,7 +65,7 @@ export default function Barber() {
   const doUpload = async () => {
     if (!uploadFile) return
     if (profile.gold < UPLOAD_COST) {
-      showMessage('ゴールドが足りません！（100G必要）', '#ff4444')
+      showMessage('Goldが足りません！（100G必要）', '#ff4444')
       return
     }
     if (uploadBusyRef.current) return  // 連打ガード（二重アップロード/二重課金を防ぐ）
@@ -90,12 +90,12 @@ export default function Barber() {
     // ゴールド消費・アバター更新：最新Goldから減算し、所持が足りる時だけ確定（stale上書き/二重課金防止）
     const { data: fresh } = await supabase.from('profiles').select('gold').eq('id', profile.id).maybeSingle()
     const baseGold = fresh?.gold ?? profile.gold
-    if (baseGold < UPLOAD_COST) { showMessage('ゴールドが足りません！（100G必要）', '#ff4444'); await fetchAll(); return }
+    if (baseGold < UPLOAD_COST) { showMessage('Goldが足りません！（100G必要）', '#ff4444'); await fetchAll(); return }
     const { data: paid } = await supabase.from('profiles').update({
       gold: baseGold - UPLOAD_COST,
       avatar_url: newUrl,
     }).eq('id', profile.id).gte('gold', UPLOAD_COST).select('id')
-    if (!paid || paid.length === 0) { showMessage('ゴールドが足りません！（100G必要）', '#ff4444'); await fetchAll(); return }
+    if (!paid || paid.length === 0) { showMessage('Goldが足りません！（100G必要）', '#ff4444'); await fetchAll(); return }
 
     setUploadFile(null)
     setPreviewUrl(null)
@@ -221,7 +221,7 @@ export default function Barber() {
             📤 アップロードする（100G）
           </button>
           {profile.gold < UPLOAD_COST && (
-            <div style={{ color:'#ff4444', fontSize:'10px', marginTop:'4px', textAlign:'center' }}>ゴールドが足りません</div>
+            <div style={{ color:'#ff4444', fontSize:'10px', marginTop:'4px', textAlign:'center' }}>Goldが足りません</div>
           )}
         </div>
       </div>

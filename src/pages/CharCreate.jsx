@@ -203,8 +203,8 @@ export default function CharCreate() {
                 <span>MP: <span style={{color:'#4488ff'}}>{selectedJob.mp_max}</span></span>
                 <span>攻撃力: <span style={{color:'#ffcc00'}}>{selectedJob.atk}</span></span>
                 <span>防御力: <span style={{color:'#88aaff'}}>{selectedJob.def}</span></span>
-                <span>特殊攻撃: <span style={{color:'#cc44ff'}}>{selectedJob.matk}</span></span>
-                <span>特殊防御: <span style={{color:'#44ccff'}}>{selectedJob.mdef}</span></span>
+                <span>特殊攻撃力: <span style={{color:'#cc44ff'}}>{selectedJob.matk}</span></span>
+                <span>特殊防御力: <span style={{color:'#44ccff'}}>{selectedJob.mdef}</span></span>
                 <span>素早さ: <span style={{color:'#ff8844'}}>{selectedJob.spd}</span></span>
               </div>
               <div style={{ color:'#446688', fontSize:'10px', marginTop:'6px' }}>

@@ -512,7 +512,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       }
       logs.push({ text:`🌫 ${def.name}の状態異常！ 麻痺・やけど・スタンが付与された！`, color:'#aa66ff' })
     }
-    if (def.debuff?.mdef) { playerBuffs.mdefDown = { turns:5, rate: Math.max(0.1, 1 + def.debuff.mdef/100) }; logs.push({ text:`🔻 ${def.name}！ 特殊防御が低下した！`, color:'#88aaff' }) }
+    if (def.debuff?.mdef) { playerBuffs.mdefDown = { turns:5, rate: Math.max(0.1, 1 + def.debuff.mdef/100) }; logs.push({ text:`🔻 ${def.name}！ 特殊防御力が低下した！`, color:'#88aaff' }) }
     doFollowup()
   }
 
@@ -726,7 +726,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+5%（既存の上位spdUpは上書きしない）
     if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
       playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
-      logs.push({ text:`⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}％！`, color:'#66ccff' })
+      logs.push({ text:`⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}%！`, color:'#66ccff' })
     }
     logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:eff.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
     turn++

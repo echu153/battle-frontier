@@ -225,7 +225,7 @@ export default function Smithy() {
     const materialCount = MATERIAL_COUNT(currentPlus)
 
     // ローカルチェック（UX用）
-    if (profile.gold < cost) { showMessage('ゴールドが足りません！', '#ff4444'); setLoading(false); return }
+    if (profile.gold < cost) { showMessage('Goldが足りません！', '#ff4444'); setLoading(false); return }
 
     // ★ サーバーから最新状態を取得（複数タブ同時実行・stale state対策）
     const { data: { user } } = await supabase.auth.getUser()
@@ -236,7 +236,7 @@ export default function Smithy() {
     ])
 
     if (!serverProfile || serverProfile.gold < cost) {
-      showMessage('ゴールドが足りません！', '#ff4444'); setLoading(false); return
+      showMessage('Goldが足りません！', '#ff4444'); setLoading(false); return
     }
 
     const stoneName = STONE_NAMES[rarity]

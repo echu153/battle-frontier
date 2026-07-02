@@ -146,7 +146,7 @@ const PALACE_META = [
     title:'※後日設定' },
 
   { palace:7, name:'【天秤】エルゲルビ', arch:'balanced', dmg:'hybrid',
-    feature:'攻撃と特殊攻撃・防御と特防を平均化／平均値の差が大きいと即死／重い一撃には固定ダメージで反撃',
+    feature:'攻撃と特攻・防御と特防を平均化／平均値の差が大きいと即死／重い一撃には固定ダメージで反撃',
     mods:{ statAverage:true, instakill:true, counterFlat:true },
     title:'※後日設定' },
 

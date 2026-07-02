@@ -379,7 +379,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           playerCritRate  = calcCritRate(halfSpd, BOSS_SPD) + passiveCritBonus + (eff.critBonus || 0)
           playerEvasion   = calcEvasionRate(halfSpd, BOSS_SPD) + (eff.evasionBonus || 0)
           playerExtraRate = calcExtraActionRate(halfSpd, BOSS_SPD)
-          logs.push({ text: `${prefix}${bossName}の「深淵の水葬」！ ${fmt(specialDmg)}ダメージ！ 10ターンの間 素早さ-50％！`, color: '#2299ff' })
+          logs.push({ text: `${prefix}${bossName}の「深淵の水葬」！ ${fmt(specialDmg)}ダメージ！ 10ターンの間 素早さ-50%！`, color: '#2299ff' })
         } else if (isZerugiasu) {
           // 神雷崩撃：本物の麻痺（10ターン・素早さ-20%＋25%で行動不能）
           playerBuffs.paralysis = { turns: 10, skipRate: 0.25, spdRate: 0.8 }
@@ -464,7 +464,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+5%（既存の上位spdUpは上書きしない）
     if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
       playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
-      logs.push({ text: `⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}％！`, color: '#66ccff' })
+      logs.push({ text: `⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}%！`, color: '#66ccff' })
     }
     // リジェネ・遅延ヒール（回復封印中は無効）
     const isHealBlockedTick = playerBuffs.healBlock?.turns > 0
