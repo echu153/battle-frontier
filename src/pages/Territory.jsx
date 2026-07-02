@@ -162,6 +162,25 @@ export default function Territory() {
   const flash = (t, c = '#ffcc44') => { setMsg({ t, c }); setTimeout(() => setMsg(null), 3200) }
   const reload = async () => { if (me) await loadAll(me) }
 
+  // 朝5時(JST)境界の「本日」キー（YYYY-MM-DD）。補助金の受取判定に使う。
+  const subsidyDayKey = () => new Date(Date.now() + 9*3600*1000 - 5*3600*1000).toISOString().slice(0, 10)
+  // 本日の補助金を受け取る（貢献度分・上限30万G・1日1回・朝5時リセット・亡命でリセット=貢献度0）
+  const doClaimSubsidy = async () => {
+    if (busy) return
+    setBusy(true)
+    const { data, error } = await supabase.rpc('claim_country_subsidy')
+    if (error || data?.ok === false) {
+      const r = data?.reason
+      flash(r === 'already_claimed' ? '本日はすでに受け取り済みです'
+        : r === 'no_subsidy' ? '本日受け取れる補助金がありません（貢献度0）'
+        : `受け取り失敗: ${error?.message || r || '不明'}`, '#ff5555')
+    } else {
+      flash(`💰 本日の補助金 ${Number(data.amount).toLocaleString('ja-JP')}G を受け取りました！`)
+      await reload()
+    }
+    setBusy(false)
+  }
+
   const unaffiliated = countries.find(c => c.is_unaffiliated)
   const affiliated = countries.filter(c => !c.is_unaffiliated)
   const myCountry = me?.country_id ? countries.find(c => c.id === me.country_id) : null
@@ -364,6 +383,29 @@ export default function Territory() {
                 : prog?.next
                   ? <span style={{ color:'#88774a' }}>　次の階級「{prog.next}」まで あと {prog.remain}</span>
                   : <span style={{ color:'#88774a' }}>　（自動昇格の最高位・大将）</span>}
+            </div>
+
+            {/* 💰 本日の補助金（貢献度分・上限30万G・1日1回・朝5時リセット） */}
+            <div style={{ marginTop:'10px', padding:'10px', background:'#0a0700', border:'1px solid #4a3a1a', borderRadius:'2px' }}>
+              {(() => {
+                const amount = Math.min(Math.max(Math.floor(me?.country_contrib || 0), 0), 300000)
+                const claimedToday = me?.subsidy_claimed_day === subsidyDayKey()
+                const canClaim = !busy && !claimedToday && amount > 0
+                return (
+                  <>
+                    <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'4px' }}>💰 本日の補助金</div>
+                    <div style={{ color:'#88774a', fontSize:'10px', marginBottom:'6px', lineHeight:'1.6' }}>
+                      貢献度に応じて1日1回Goldを受け取れます（上限30万G・朝5時リセット）。<br/>
+                      本日受け取れる額: <b style={{ color:'#ffe' }}>{amount.toLocaleString('ja-JP')}G</b>
+                    </div>
+                    <button onClick={doClaimSubsidy} disabled={!canClaim}
+                      style={{ width:'100%', padding:'8px', fontFamily:'monospace', fontSize:'12px', cursor: canClaim ? 'pointer' : 'default',
+                        background: canClaim ? '#2a1e02' : '#0a0700', border:`1px solid ${canClaim ? '#ffcc44' : '#4a3a1a'}`, color: canClaim ? '#ffcc44' : '#88774a' }}>
+                      {claimedToday ? '✅ 本日は受け取り済み' : amount <= 0 ? '受け取れる補助金がありません' : '本日の補助金を受け取る'}
+                    </button>
+                  </>
+                )
+              })()}
             </div>
 
             {/* 領地拡大（出撃エリア指定） */}
