@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, areaForFloor, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmsForFloor, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, DEVIL_PAPIA, assetSrc, ASSET_VER } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmsForFloor, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, DEVIL_PAPIA, assetSrc, ASSET_VER } from '../constants/pets'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
@@ -43,7 +43,6 @@ const PET_ATKUP_MULT = 1.3    // ペットの攻撃バフ：攻撃1.3倍
 const DG_SEEDS = ['atk_seed', 'spatk_seed', 'def_seed', 'spdef_seed', 'hp_seed']
 const STONE_RANKS = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS']
 const DG_GEMS = ['peridot', 'lapis', 'ruby', 'sapphire', 'amethyst', 'emerald', 'topaz', 'rosequartz', 'turquoise', 'morganite', 'kunzite', 'citrine', 'onyx', 'opal', 'moonstone', 'petalite']
-const DG_CHARMS = ['antidote', 'guard']
 // エリア別の装備（本編AREASのcommonDrops/rareDropsから武器のみ抽出）
 const AREA_EQUIPS = {
   1: ['木の盾', '木の靴', '粗悪な布', '粗悪な鎧', '粗悪な指輪', '粗悪なピアス', 'ロングソード', 'マチェット', '丈夫な弓', '見習いの杖', '見習い魔導書', '魔導の杖', '魔術教本'],
@@ -108,7 +107,7 @@ const enemyAdjacent = (e, px, py) => {
 }
 
 // ボスフロア生成：正方形の部屋の中央に2×2ボス。雑魚・アイテムなし
-function generateBossFloor(dungeon) {
+function generateBossFloor(_dungeon) {
   const grid = Array.from({ length: MAP_H }, () => Array(MAP_W).fill('#'))
   const RW = 15, RH = 13 // ボス部屋（正方形寄り）
   const rx = Math.floor((MAP_W - RW) / 2), ry = Math.floor((MAP_H - RH) / 2)
@@ -400,6 +399,7 @@ export default function Dungeon() {
   const [cellPx, setCellPx] = useState(0) // 1マスのピクセル幅（床をワールド固定で敷くため）
 
   // グリッドの実寸からマスのpxを測る（レスポンシブ対応）
+  const gridMounted = state != null // グリッドがDOMに存在するか（マウント時だけ計測を張り直す）
   useEffect(() => {
     const measure = () => {
       const el = gridRef.current
@@ -411,7 +411,8 @@ export default function Dungeon() {
     if (ro && gridRef.current) ro.observe(gridRef.current)
     window.addEventListener('resize', measure)
     return () => { if (ro) ro.disconnect(); window.removeEventListener('resize', measure) }
-  }, [state])
+    // グリッドがマウント/アンマウントした時だけ張り直す（1歩ごとの再生成を避ける。サイズ変化はResizeObserverが検知）
+  }, [gridMounted])
 
   // タイル画像（床/壁/階段/アイテム）を選択ダンジョンが決まった時点でプリロード。
   // 初めて見えたマスで画像読込待ちにならず即時表示される。
@@ -1457,7 +1458,6 @@ export default function Dungeon() {
 
   const visible = computeVisible(state.rooms, state.player.x, state.player.y)
   const isVisible = (x, y) => visible.has(x + ',' + y)
-  const isExplored = (x, y) => state.explored.has(x + ',' + y)
 
   // ビューポート描画（プレイヤー中心）
   const ox = state.player.x - Math.floor(VW / 2)
@@ -1668,7 +1668,7 @@ export default function Dungeon() {
         </div>
 
         {/* マップ（ビューポート）。接触時に少し震える戦闘演出 */}
-        <div ref={gridRef} className="bf-dg-grid" style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', willChange: shake ? 'transform' : 'auto', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
+        <div ref={gridRef} className="bf-dg-grid" style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', overflow: 'hidden', willChange: shake ? 'transform' : 'auto', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
           {/* 床はワールド(ダンジョン)に固定＝壁と一緒にスクロール。キャラ移動で床がズレない。1タイル=約4マス */}
           {floorTile && (
             <div style={{ position: 'absolute', inset: 6, backgroundImage: `url(${floorTile})`, backgroundRepeat: 'repeat',
@@ -1971,16 +1971,16 @@ export default function Dungeon() {
           // 中央＝スキル｜移動キー｜アイテム / 左＝移動キー＋(スキル/アイテム) / 右＝その逆
           if (padSide === 'center') {
             return (
-              <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'flex-start', marginTop: 12 }}>
+              <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'flex-start', marginTop: 12, flexWrap: 'wrap' }}>
                 {skillsEl}{padEl}{itemsEl}
               </div>
             )
           }
           return (
-            <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'flex-start', marginTop: 12,
+            <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'flex-start', marginTop: 12, flexWrap: 'wrap',
               flexDirection: padSide === 'right' ? 'row-reverse' : 'row' }}>
               {padEl}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>{skillsEl}{itemsEl}</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>{skillsEl}{itemsEl}</div>
             </div>
           )
         })()}
@@ -2042,21 +2042,6 @@ export default function Dungeon() {
   )
 }
 
-// ログ表示（見出し＋スクロール枠）。スマホ＝下部／PC＝右カラムで共用
-function LogView({ log, height }) {
-  return (
-    <>
-      <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '0 2px 4px', borderBottom: '1px solid #113355' }}>
-        <span style={{ color: '#5588bb' }}>◀ 自分のログ</span>
-        <span style={{ color: '#cc8888' }}>敵のログ ▶</span>
-      </div>
-      <div style={{ background: '#000610', border: '1px solid #113355', borderTop: 'none', padding: 8, height, overflowY: 'auto', fontSize: 11 }}>
-        {log.length === 0 ? <span style={{ color: '#335577' }}>隣のマスをクリック、または矢印で移動。部屋に入ると視界が開ける。👹に触れると戦闘、▼で次の階へ。</span>
-          : log.map((l, i) => <div key={i} style={{ color: i === 0 ? '#aaddff' : l.side === 'right' ? '#cc8888' : '#5588bb', textAlign: l.side === 'right' ? 'right' : 'left' }}>{l.icon && <img src={l.icon} alt="" style={{ width: 13, height: 13, objectFit: 'contain', verticalAlign: 'middle', marginRight: 3 }} />}{l.msg}</div>)}
-      </div>
-    </>
-  )
-}
 
 function RewardPanel({ reward, pet }) {
   if (!reward) {

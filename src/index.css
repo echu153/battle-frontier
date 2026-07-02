@@ -54,6 +54,8 @@
 
 body {
   margin: 0;
+  /* 画面外へはみ出す要素があってもページ全体が拡大縮小(fit)しないよう横あふれを止める */
+  overflow-x: hidden;
 }
 
 #root {
