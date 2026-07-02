@@ -164,7 +164,7 @@ export default function Territory() {
 
   // 朝5時(JST)境界の「本日」キー（YYYY-MM-DD）。補助金の受取判定に使う。
   const subsidyDayKey = () => new Date(Date.now() + 9*3600*1000 - 5*3600*1000).toISOString().slice(0, 10)
-  // 本日の補助金を受け取る（貢献度分・上限30万G・1日1回・朝5時リセット・亡命でリセット=貢献度0）
+  // 本日の補助金を受け取る（貢献度分・上限20万G・1日1回・朝5時リセット・亡命でリセット=貢献度0）
   const doClaimSubsidy = async () => {
     if (busy) return
     setBusy(true)
@@ -385,17 +385,17 @@ export default function Territory() {
                   : <span style={{ color:'#88774a' }}>　（自動昇格の最高位・大将）</span>}
             </div>
 
-            {/* 💰 本日の補助金（貢献度分・上限30万G・1日1回・朝5時リセット） */}
+            {/* 💰 本日の補助金（貢献度分・上限20万G・1日1回・朝5時リセット） */}
             <div style={{ marginTop:'10px', padding:'10px', background:'#0a0700', border:'1px solid #4a3a1a', borderRadius:'2px' }}>
               {(() => {
-                const amount = Math.min(Math.max(Math.floor(me?.country_contrib || 0), 0), 300000)
+                const amount = Math.min(Math.max(Math.floor(me?.country_contrib || 0), 0), 200000)
                 const claimedToday = me?.subsidy_claimed_day === subsidyDayKey()
                 const canClaim = !busy && !claimedToday && amount > 0
                 return (
                   <>
                     <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'4px' }}>💰 本日の補助金</div>
                     <div style={{ color:'#88774a', fontSize:'10px', marginBottom:'6px', lineHeight:'1.6' }}>
-                      貢献度に応じて1日1回Goldを受け取れます（上限30万G・朝5時リセット）。<br/>
+                      貢献度に応じて1日1回Goldを受け取れます（上限20万G・朝5時リセット）。<br/>
                       本日受け取れる額: <b style={{ color:'#ffe' }}>{amount.toLocaleString('ja-JP')}G</b>
                     </div>
                     <button onClick={doClaimSubsidy} disabled={!canClaim}

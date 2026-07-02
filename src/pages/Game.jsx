@@ -1978,7 +1978,7 @@ export default function Game() {
           setTerritoryExpandable(affiliated && Date.now() >= lastExpand + EXPAND_COOLDOWN_MS && Date.now() >= lockUntil)
           // 補助金バナー: 加盟国＋貢献度>0＋本日(朝5時JST境界)未受取
           const subsidyDay = new Date(Date.now() + 9*3600*1000 - 5*3600*1000).toISOString().slice(0, 10)
-          const subAmt = Math.min(Math.max(Math.floor(prof.country_contrib || 0), 0), 300000)
+          const subAmt = Math.min(Math.max(Math.floor(prof.country_contrib || 0), 0), 200000)
           setSubsidyAvailable(affiliated && subAmt > 0 && prof.subsidy_claimed_day !== subsidyDay)
         }
       } catch { /* 領地未導入/通信失敗時は既存表示を維持（国名を消さない） */ }
