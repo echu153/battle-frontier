@@ -314,10 +314,10 @@ export default function Smithy() {
       if (isDev) upd.blessing_count = curBlessing + 1  // 失敗で+1
       await supabase.from('player_equipment').update(upd).eq('id', item.id)
       resultPlus = newPlus
-      setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} が +${newPlus} に下落した…` })
+      setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} が +${newPlus} に下落した…`, blessing: (isDev && blessingCap !== undefined) ? { now: curBlessing + 1, cap: blessingCap } : null })
     } else {
       if (isDev) await supabase.from('player_equipment').update({ blessing_count: curBlessing + 1 }).eq('id', item.id)
-      setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} は変化しなかった` })
+      setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} は変化しなかった`, blessing: (isDev && blessingCap !== undefined) ? { now: curBlessing + 1, cap: blessingCap } : null })
     }
 
     await supabase.from('enhance_logs').insert({
@@ -664,7 +664,14 @@ export default function Smithy() {
                     <div style={{ color: enhanceResult.ok ? '#ffcc00' : '#ff4444', fontSize:'16px', letterSpacing:'2px', marginBottom:'10px' }}>
                       {enhanceResult.ok ? '強化成功！' : '強化失敗…'}
                     </div>
-                    <div style={{ color: enhanceResult.ok ? '#ffeeaa' : '#cc8888', fontSize:'13px', marginBottom:'18px' }}>{enhanceResult.text}</div>
+                    <div style={{ color: enhanceResult.ok ? '#ffeeaa' : '#cc8888', fontSize:'13px', marginBottom: enhanceResult.blessing ? '8px' : '18px' }}>{enhanceResult.text}</div>
+                    {enhanceResult.blessing && (
+                      <div style={{ fontSize:'12px', marginBottom:'18px' }}>
+                        <span style={{ color:'#ffcc44' }}>✨ 匠の祝福 +1</span>
+                        <span style={{ color:'#88aacc' }}>（{enhanceResult.blessing.now} / {enhanceResult.blessing.cap}）</span>
+                        {enhanceResult.blessing.now >= enhanceResult.blessing.cap && <span style={{ color:'#ffcc44' }}> 次で確定成功！</span>}
+                      </div>
+                    )}
                     <div style={{ display:'flex', gap:'8px', justifyContent:'center' }}>
                       <button onClick={() => setEnhanceResult(null)} disabled={loading}
                         style={{ padding:'8px 16px', background:'#1a0800', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
