@@ -34,6 +34,9 @@ const ENHANCE_COST_BY_RANK = {
   sss: [0,  20000, 100000, 200000, 600000,1000000,1500000,2000000,2600000,3200000,4000000,4800000,6000000,7000000,8000000,9000000,10000000],
 }
 const ENHANCE_RATE = { 3:90, 4:80, 5:70, 6:50, 7:40, 8:30, 9:20, 10:10, 11:5, 12:3, 13:2, 14:1, 15:0.5, 16:0.1 }
+// 天井（匠の祝福）：nextPlus ごとの必要ストック数。失敗で装備ごとに+1、成功でリセット。
+// この数に到達すると次の強化が確定成功する（開発限定・is_admin のみ有効）。
+const BLESSING_CAP = { 3:3, 4:4, 5:5, 6:6, 7:8, 8:10, 9:15, 10:20, 11:40, 12:70, 13:100, 14:200, 15:300, 16:400 }
 const MATERIAL_COUNT = (plus) => {
   if (plus <= 5) return 1
   if (plus <= 10) return 2
@@ -206,15 +209,6 @@ export default function Smithy() {
     return found?.quantity || 0
   }
 
-  const consumeStones = async (rarity, count) => {
-    const stoneName = STONE_NAMES[rarity]
-    const found = playerItems.find(pi => pi.items?.name === stoneName)
-    if (!found) return
-    const newQty = (found.quantity || 0) - count
-    if (newQty <= 0) await supabase.from('player_items').delete().eq('id', found.id)
-    else await supabase.from('player_items').update({ quantity: newQty }).eq('id', found.id)
-  }
-
   const doEnhance = async (item, source = 'equip') => {
     setLoading(true)
     const currentPlus = item.enhance_plus || 0
@@ -291,24 +285,38 @@ export default function Smithy() {
       }
     }
 
+    // 天井（匠の祝福）：開発限定。装備ごとに失敗でたまり、規定数で確定成功。
+    const isDev = !!profile?.is_admin
+    const serverItem = (serverEquip || []).find(e => e.id === item.id)
+    const curBlessing = serverItem?.blessing_count || 0
+    const blessingCap = BLESSING_CAP[nextPlus]
+    const pityReady = isDev && blessingCap !== undefined && curBlessing >= blessingCap
+
     // 強化実行
     let success = true
-    if (ENHANCE_RATE[nextPlus] !== undefined) {
+    if (pityReady) {
+      success = true  // 匠の祝福 発動＝確定成功
+    } else if (ENHANCE_RATE[nextPlus] !== undefined) {
       const rate = ENHANCE_RATE[nextPlus]
       success = Math.random() * 100 < rate
     }
 
     let resultPlus = currentPlus
     if (success) {
-      await supabase.from('player_equipment').update({ enhance_plus: nextPlus }).eq('id', item.id)
+      const upd = { enhance_plus: nextPlus }
+      if (isDev) upd.blessing_count = 0  // 成功でリセット
+      await supabase.from('player_equipment').update(upd).eq('id', item.id)
       resultPlus = nextPlus
-      setEnhanceResult({ ok: true, title: '✨ 強化成功！', text: `${item.weapons.name} が +${nextPlus} になった！` })
+      setEnhanceResult({ ok: true, title: '✨ 強化成功！', text: `${item.weapons.name} が +${nextPlus} になった！${pityReady ? '（匠の祝福 発動！）' : ''}` })
     } else if (nextPlus >= 11) {
       const newPlus = Math.max(0, currentPlus - 1)
-      await supabase.from('player_equipment').update({ enhance_plus: newPlus }).eq('id', item.id)
+      const upd = { enhance_plus: newPlus }
+      if (isDev) upd.blessing_count = curBlessing + 1  // 失敗で+1
+      await supabase.from('player_equipment').update(upd).eq('id', item.id)
       resultPlus = newPlus
       setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} が +${newPlus} に下落した…` })
     } else {
+      if (isDev) await supabase.from('player_equipment').update({ blessing_count: curBlessing + 1 }).eq('id', item.id)
       setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} は変化しなかった` })
     }
 
@@ -638,6 +646,12 @@ export default function Smithy() {
           const matEnough = matSource === 'stone' ? stoneCount >= materialCount : sameCount >= materialCount
           const canEnhance = profile.gold >= cost && matEnough
           const successRate = ENHANCE_RATE[nextPlus] !== undefined ? ENHANCE_RATE[nextPlus] : 100
+          // 天井（匠の祝福・開発限定）
+          const isDev = !!profile?.is_admin
+          const blessing = item.blessing_count || 0
+          const blessingCap = BLESSING_CAP[nextPlus]
+          const pityReady = isDev && blessingCap !== undefined && blessing >= blessingCap
+          const effRate = pityReady ? 100 : successRate
           const nextEnhanced = calcEnhancedStats(w, nextPlus, item.evolve_stage || 0)
           const closeModal = () => { setSelectedItem(null); setEnhanceResult(null) }
           return (
@@ -698,10 +712,17 @@ export default function Smithy() {
                         )
                       })}
                     </div>
-                    <div style={{ fontSize:'10px', color:'#446688', marginBottom:'12px' }}>
-                      成功率: <span style={{color: successRate >= 50 ? '#44ff88' : successRate >= 20 ? '#ffcc00' : '#ff4444'}}>{successRate}%</span>
-                      {nextPlus >= 11 && <span style={{color:'#ff4444'}}> ⚠ 失敗すると+が1下がる</span>}
+                    <div style={{ fontSize:'10px', color:'#446688', marginBottom: (isDev && blessingCap !== undefined) ? '4px' : '12px' }}>
+                      成功率: <span style={{color: effRate >= 50 ? '#44ff88' : effRate >= 20 ? '#ffcc00' : '#ff4444'}}>{effRate}%</span>
+                      {pityReady && <span style={{color:'#ffcc44'}}> ✨匠の祝福 発動！</span>}
+                      {nextPlus >= 11 && !pityReady && <span style={{color:'#ff4444'}}> ⚠ 失敗すると+が1下がる</span>}
                     </div>
+                    {isDev && blessingCap !== undefined && (
+                      <div style={{ fontSize:'10px', color:'#446688', marginBottom:'12px' }}>
+                        匠の祝福: <span style={{color: pityReady ? '#ffcc44' : '#88aacc'}}>{blessing} / {blessingCap}</span>
+                        <span style={{ color:'#556677' }}> {pityReady ? '(次で確定成功)' : '(失敗で+1・成功でリセット)'}</span>
+                      </div>
+                    )}
                     <button onClick={() => doEnhance(item, matSource)} disabled={!canEnhance || loading}
                       style={{ width:'100%', padding:'10px', background: canEnhance ? '#1a0800' : '#001', border:`1px solid ${canEnhance ? '#aa6644' : '#002244'}`, color: canEnhance ? '#ffcc88' : '#334455', cursor: canEnhance ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
                       {loading ? '鍛錬中...' : '⚒ 鍛錬する'}
@@ -872,17 +893,10 @@ export default function Smithy() {
                     const w = item.weapons
                     const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
                     const plus = item.enhance_plus || 0
-                    const nextPlus = plus + 1
-                    const rankCosts = ENHANCE_COST_BY_RANK[w.rarity] || ENHANCE_COST_BY_RANK.ss
-                    const cost = rankCosts[nextPlus] || rankCosts[rankCosts.length - 1]
                     const materialCount = MATERIAL_COUNT(plus)
                     const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped && !e.is_favorite && !(e.enhance_plus > 0)).length
                     const stoneCount = getStoneCount(w.rarity)
-                    const totalMaterials = sameCount + stoneCount
-                    const canEnhance = !isArtifactBase && profile.gold >= cost && totalMaterials >= materialCount
-                    const successRate = ENHANCE_RATE[nextPlus] !== undefined ? ENHANCE_RATE[nextPlus] : 100
                     const enhanced = calcEnhancedStats(w, plus, item.evolve_stage || 0)
-                    const nextEnhanced = isArtifactBase ? w : calcEnhancedStats(w, nextPlus, item.evolve_stage || 0)
                     const isSelected = selectedItem?.id === item.id
 
                     return (
