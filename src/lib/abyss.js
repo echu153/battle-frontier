@@ -178,13 +178,16 @@ const FLOOR_REWARD = {
   20: { gold:840000, stone:'A', stoneCount:5, gem:'E', gemCount:3 },
 }
 
+// 匠の秘伝書（階層別）: 3〜7=Ⅰ / 8〜13=Ⅱ / 14以上=Ⅲ（1〜2階は無し）。supabase_takumi_hidensho.sql と一致
+export const abyssBookForFloor = (floor) => floor >= 14 ? 'Ⅲ' : floor >= 8 ? 'Ⅱ' : floor >= 3 ? 'Ⅰ' : null
+
 export const ABYSS_FLOORS = FLOOR_META.map(m => ({
   floor: m.floor,
   name: m.name,
   target: m.target,
   enemy: { ...makeEnemy(m.name, m.target, m.arch, m.dmg), kit: m.kit },
   kit: m.kit,
-  reward: FLOOR_REWARD[m.floor],
+  reward: { ...FLOOR_REWARD[m.floor], book: abyssBookForFloor(m.floor) },
 }))
 
 export const getAbyssFloor = (floor) => ABYSS_FLOORS.find(f => f.floor === floor) || null

@@ -31,10 +31,10 @@ const BOSS_MDEF = 1000
 const BOSS_SPD  = 1200
 
 const TIER_INFO = [
-  { pct: 10, attacks: 50, tier: 'A', label: '貢献度10%以上 or 出撃50回', gold: 150000, stones: ['B','C','D'], gemCount: 2, gemRank: 'D', scaleCount: '8~10', rareChance: '15%', color: '#ffcc00' },
-  { pct:  6, attacks: 20, tier: 'B', label: '貢献度6%以上 or 出撃20回',  gold: 90000, stones: ['C','D','E'], gemCount: 2, gemRank: 'E', scaleCount: '6~8',  rareChance: '8%',  color: '#44aaff' },
-  { pct:  3, attacks:  5, tier: 'C', label: '貢献度3%以上 or 出撃5回',   gold: 30000, stones: ['D','E','F'], gemCount: 2, gemRank: 'F', scaleCount: '4~6',  rareChance: '3%',  color: '#44ff88' },
-  { pct:  0, attacks:  0, tier: 'D', label: '参加',                       gold: 15000, stones: ['E','F'],    gemCount: 2, gemRank: 'F', scaleCount: '1~3',  rareChance: '0%',  color: '#888888' },
+  { pct: 10, attacks: 50, tier: 'A', label: '貢献度10%以上 or 出撃50回', gold: 150000, stones: ['B','C','D'], gemCount: 2, gemRank: 'D', scaleCount: '8~10', rareChance: '15%', book: 'Ⅲ', color: '#ffcc00' },
+  { pct:  6, attacks: 20, tier: 'B', label: '貢献度6%以上 or 出撃20回',  gold: 90000, stones: ['C','D','E'], gemCount: 2, gemRank: 'E', scaleCount: '6~8',  rareChance: '8%',  book: 'Ⅱ', color: '#44aaff' },
+  { pct:  3, attacks:  5, tier: 'C', label: '貢献度3%以上 or 出撃5回',   gold: 30000, stones: ['D','E','F'], gemCount: 2, gemRank: 'F', scaleCount: '4~6',  rareChance: '3%',  book: 'Ⅰ', color: '#44ff88' },
+  { pct:  0, attacks:  0, tier: 'D', label: '参加',                       gold: 15000, stones: ['E','F'],    gemCount: 2, gemRank: 'F', scaleCount: '1~3',  rareChance: '0%',  book: null, color: '#888888' },
 ]
 
 // ★2026-06-20公開: 全プレイヤーの出撃回数ティア保証を A=20 / B=10 / C=5 に（claim_raid_rewards と一致）。
@@ -155,7 +155,6 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   const passiveMatkMult   = hasShinkoka ? 1.1 : 1.0
   const passiveMpCostMult = (hasTenki ? (pe('賢者')?0.5:0.7) : 1.0) * (eff.weaponMpCostMult || 1)  // 天啓：MP消費 通常×0.7／再修練×0.5
   const passiveMatkMultTenki = hasTenki ? (pe('賢者')?1.4:1.2) : 1.0  // 天啓：MATK 通常×1.2／再修練×1.4
-  const passiveHitBonus   = (hasRokkan ? 10 : 0) + (hasSeimitsu ? 10 : 0) + (hasTakaNoMe ? (pe('狩人')?20:10) : 0)
   const effectiveSpdForCalc = eff.spd
 
   // 居合の構え：セット中の通常スキルが全て使用回数1のとき発動（物理ダメージ専用 通常+40%／再修練+70%）
@@ -167,7 +166,6 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
 
   let   playerCritRate  = calcCritRate(effectiveSpdForCalc, BOSS_SPD) + passiveCritBonus + (eff.critBonus || 0)
   const bossCritRate    = Math.max(0, calcCritRate(BOSS_SPD, effectiveSpdForCalc))
-  const playerHitBonus  = (eff.hitBonus || 0) + passiveHitBonus
   let   playerEvasion   = calcEvasionRate(effectiveSpdForCalc, BOSS_SPD) + (eff.evasionBonus || 0)
   let   playerExtraRate = calcExtraActionRate(effectiveSpdForCalc, BOSS_SPD)
   const bossExtraRate   = calcExtraActionRate(BOSS_SPD, effectiveSpdForCalc)
@@ -359,7 +357,6 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
       const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
       const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1) * holyKnightMultE * kabeDefE
-      const pMdef = eff.mdef * (playerBuffs.mdefUp?.rate || 1) * (playerBuffs.defUp?.rate || 1) * holyKnightMultE * kabeDefE
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
       const berserkDmgRate = hasBerserk ? (pe('狂戦士')?1.20:1.15) : 1.0
       const eAtk = boss.atk
@@ -573,7 +570,7 @@ export default function RaidBoss() {
         const serverMs = new Date(sn).getTime() + (t1 - t0) / 2
         clockOffsetRef.current = serverMs - t1
       }
-    } catch {}
+    } catch { /* 意図的に無視 */ }
     setEquipment(eq || [])
     setProficiency(prof2 || [])
     // レイド用スキルセット（raid）。未設定なら出撃(sortie)にフォールバック
@@ -618,6 +615,7 @@ export default function RaidBoss() {
     } else {
       const parts = [`${data.tier}ティア`, `Gold+${fmt(data.gold)}`, `強化石${(data.stones||[]).map(s=>`(${s})`).join('・')}×2`, `宝石(${data.gem_rank})×${data.gem_count}`, `通常素材：${data.mat_name||'素材'}×${data.scale_count}`]
       if (data.got_gyaku) parts.push(`⭐レア素材：${data.rare_name||'レア素材'}×1`)
+      if (data.book) parts.push(`📖${data.book}×1`)
       const bossNm = pendingRewards.find(r => r.raid_id === raidId)?.raid_boss?.boss_name
       setPendingMsg(m => ({ ...m, [raidId]: `✓ ${bossNm ? bossNm + '：' : ''}受け取り完了！ ${parts.join(' / ')}` }))
       setPendingRewards(prev => prev.filter(r => r.raid_id !== raidId))
@@ -992,6 +990,7 @@ export default function RaidBoss() {
                   <div style={{ color: '#ff66cc' }}>宝石({reward.gem_rank}) × {reward.gem_count}個（ランダム種類）</div>
                   <div style={{ color: '#cc8844' }}>通常素材：{reward.mat_name || '黒龍の鱗'} × {reward.scale_count}個</div>
                   {reward.got_gyaku && <div style={{ color: '#ffcc00' }}>⭐ レア素材：{reward.rare_name || '黒龍の逆鱗'} × 1個（レアドロップ！）</div>}
+                  {reward.book && <div style={{ color: '#ffaa44' }}>📖 {reward.book} × 1個</div>}
                   <div style={{ color: '#44ff88', marginTop: '4px' }}>✓ 受け取り完了！</div>
                 </div>
               ) : myPart.reward_claimed ? (
@@ -1133,7 +1132,7 @@ function RewardTable({ isAdmin = false }) {
             <span style={{ color: '#ffcc00' }}>Gold {fmt(t.gold)}</span>
           </div>
           <div style={{ color: '#446688', marginTop: '2px' }}>
-            強化石{t.stones.map(s=>`(${s})`).join('・')}×2　宝石{t.gemRank}×{t.gemCount}　通常素材×{t.scaleCount}{t.tier !== 'D' ? `　レア素材${t.rareChance}` : ''}
+            強化石{t.stones.map(s=>`(${s})`).join('・')}×2　宝石{t.gemRank}×{t.gemCount}　通常素材×{t.scaleCount}{t.tier !== 'D' ? `　レア素材${t.rareChance}` : ''}{t.book ? <span style={{ color: '#ffaa44' }}>　匠の秘伝書{t.book}×1</span> : ''}
           </div>
         </div>
       ))}

@@ -638,7 +638,8 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       logs.push({ text:`💚 装備効果でHPが${playerBuffs.delayHeal.amount}回復した！`, color:'#44ff88' })
     }
     // ポーションは出撃のみ適用（奈落では無限・通常とも発動しない）
-    if (false && !isHealSealed && currentItem) {
+    const POTIONS_ENABLED = false // 奈落ではポーション無効（意図的に無効化）
+    if (POTIONS_ENABLED && !isHealSealed && currentItem) {
       const threshold = currentItem.use_threshold||50
       const effect = currentItem.items.effect
       const isInfinite = effect === 'hp_pct_infinite' || effect === 'mp_pct_infinite'
@@ -1015,6 +1016,7 @@ export default function Abyss() {
                   <div>💰 Gold +{fmt(reward.gold)}</div>
                   {reward.stone && <div>💎 {STONE_NAME(reward.stone)} ×{reward.stone_count}</div>}
                   {reward.gem_count > 0 && <div>💍 宝石（{reward.gem_rank}ランク）×{reward.gem_count}</div>}
+                  {reward.book && <div style={{ color:'#ffaa44' }}>📖 {reward.book} ×1</div>}
                 </div>
                 <div style={{ color:'#cc9944', fontSize:'10px', marginTop:'6px' }}>{reward.floor >= ABYSS_DEFINED_FLOORS ? '現在実装ぶんはここまで。進行は毎週月曜 朝5時にリセット（また1階から）。' : `次は ${floorLabel(reward.floor + 1)}だ。`}</div>
               </div>
@@ -1044,6 +1046,7 @@ function RewardLine({ reward }) {
       <span>💰 {fmt(reward.gold)}G</span>
       <span style={{ marginLeft:'10px' }}>💎 {STONE_NAME(reward.stone)}×{reward.stoneCount}</span>
       <span style={{ marginLeft:'10px' }}>💍 宝石({reward.gem})×{reward.gemCount}</span>
+      {reward.book && <span style={{ marginLeft:'10px', color:'#ffaa44' }}>📖 匠の秘伝書{reward.book}×1</span>}
     </div>
   )
 }
