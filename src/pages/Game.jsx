@@ -137,9 +137,9 @@ export const AREAS = [
   {
     id: 1, name: '始まりの森',
     enemies: [
-      { name:'スライム',   hp:30,  atk:6,   def:3,  matk:0,  mdef:3,  spd:3,  type:'physical', gold:5  },
-      { name:'コウモリ',   hp:37,  atk:7,   def:3,  matk:0,  mdef:3,  spd:15, type:'physical', gold:6  },
-      { name:'毒キノコ',   hp:60,  atk:2,   def:4,  matk:8,  mdef:7,  spd:2,  type:'magical',  gold:8  },
+      { name:'スライム',   hp:30,  atk:6,   def:3,  matk:0,  mdef:3,  spd:3,  type:'physical', gold:20 },
+      { name:'コウモリ',   hp:37,  atk:7,   def:3,  matk:0,  mdef:3,  spd:15, type:'physical', gold:25 },
+      { name:'毒キノコ',   hp:60,  atk:2,   def:4,  matk:8,  mdef:7,  spd:2,  type:'magical',  gold:30 },
     ],
     boss: { name:'ビッグスライム', hp:500, atk:28, def:28, matk:5, mdef:30, spd:15, gold:50, isBoss:true, type:'physical' },
     commonDrops: ['木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス','ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
@@ -151,9 +151,9 @@ export const AREAS = [
   {
     id: 2, name: '荒廃した草原',
     enemies: [
-      { name:'ゴブリン', hp:160, atk:35, def:20, matk:0,  mdef:28, spd:40, type:'physical', gold:20 },
-      { name:'野良犬',   hp:200, atk:45, def:24, matk:0,  mdef:25, spd:45, type:'physical', gold:25 },
-      { name:'盗賊',     hp:240, atk:55, def:28, matk:10, mdef:35, spd:42, type:'physical', gold:30 },
+      { name:'ゴブリン', hp:160, atk:35, def:20, matk:0,  mdef:28, spd:40, type:'physical', gold:40 },
+      { name:'野良犬',   hp:200, atk:45, def:24, matk:0,  mdef:25, spd:45, type:'physical', gold:50 },
+      { name:'盗賊',     hp:240, atk:55, def:28, matk:10, mdef:35, spd:42, type:'physical', gold:60 },
     ],
     boss: { name:'盗賊団のリーダー', hp:2000, atk:84, def:38, matk:20, mdef:55, spd:65, gold:250, isBoss:true, type:'physical' },
     commonDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','強化石(F)','戦士の指輪'],
@@ -165,9 +165,9 @@ export const AREAS = [
   {
     id: 3, name: '古代の洞窟',
     enemies: [
-      { name:'コボルト',   hp:400, atk:100, def:55, matk:0,  mdef:60,  spd:100, type:'physical', gold:60  },
-      { name:'スケルトン', hp:500, atk:120, def:65, matk:30, mdef:75,  spd:110, type:'physical', gold:80  },
-      { name:'ゴーレム',   hp:600, atk:150, def:85, matk:0,  mdef:65,  spd:120, type:'physical', gold:100 },
+      { name:'コボルト',   hp:400, atk:100, def:55, matk:0,  mdef:60,  spd:100, type:'physical', gold:80  },
+      { name:'スケルトン', hp:500, atk:120, def:65, matk:30, mdef:75,  spd:110, type:'physical', gold:100 },
+      { name:'ゴーレム',   hp:600, atk:150, def:85, matk:0,  mdef:65,  spd:120, type:'physical', gold:120 },
     ],
     boss: { name:'古代の番人', hp:8000, atk:210, def:90, matk:80, mdef:110, spd:175, gold:1000, isBoss:true, type:'magical' },
     commonDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','古代の護符'],
@@ -180,8 +180,8 @@ export const AREAS = [
     id: 4, name: '蒼海の入り江',
     enemies: [
       { name:'深海魚人', hp:900,  atk:200, def:220, matk:40,  mdef:200, spd:200, type:'physical', gold:150 },
-      { name:'海賊',     hp:1000, atk:230, def:240, matk:20,  mdef:180, spd:240, type:'physical', gold:180 },
-      { name:'毒クラゲ', hp:800,  atk:80,  def:180, matk:180, mdef:240, spd:210, type:'magical',  gold:160 },
+      { name:'海賊',     hp:1000, atk:230, def:240, matk:20,  mdef:180, spd:240, type:'physical', gold:200 },
+      { name:'毒クラゲ', hp:800,  atk:80,  def:180, matk:180, mdef:240, spd:210, type:'magical',  gold:175 },
     ],
     boss: {
       name:'シーサーペント', hp:18000, atk:680, def:360, matk:550, mdef:400, spd:360, gold:2500, isBoss:true, type:'physical',
@@ -200,9 +200,9 @@ export const AREAS = [
   {
     id: 5, name: '巨峰山脈',
     enemies: [
-      { name:'山岳ゴブリン', hp:1500, atk:640, def:510, matk:0,   mdef:450, spd:380, type:'physical', gold:250 },
-      { name:'岩石ゴーレム', hp:2000, atk:760, def:660, matk:0,   mdef:420, spd:400, type:'physical', gold:300 },
-      { name:'グリフォン',   hp:1800, atk:700, def:540, matk:120, mdef:510, spd:450, type:'physical', gold:280 },
+      { name:'山岳ゴブリン', hp:1500, atk:640, def:510, matk:0,   mdef:450, spd:380, type:'physical', gold:320 },
+      { name:'岩石ゴーレム', hp:2000, atk:760, def:660, matk:0,   mdef:420, spd:400, type:'physical', gold:400 },
+      { name:'グリフォン',   hp:1800, atk:700, def:540, matk:120, mdef:510, spd:450, type:'physical', gold:360 },
     ],
     boss: {
       name:'雷鷲サンダーロック', hp:35000, atk:750, def:960, matk:250, mdef:900, spd:1175, gold:6000, isBoss:true, type:'physical',
@@ -223,19 +223,19 @@ export const AREAS = [
     id: 6, name: '白銀の霊峰',
     enemies: [
       {
-        name:'雪男',       hp:3750, atk:750, def:780, matk:0,   mdef:660, spd:975, type:'physical', gold:400,
+        name:'雪男',       hp:3750, atk:750, def:780, matk:0,   mdef:660, spd:975, type:'physical', gold:480,
         skills: [
           { name:'雪崩拳',       type:'physical', mult:1.4 },
         ],
       },
       {
-        name:'氷河ドラゴン', hp:4500, atk:825, def:840, matk:225, mdef:840, spd:1050, type:'physical', gold:450,
+        name:'氷河ドラゴン', hp:4500, atk:825, def:840, matk:225, mdef:840, spd:1050, type:'physical', gold:600,
         skills: [
           { name:'氷河ブレス', type:'magical',  mult:1.5 },
         ],
       },
       {
-        name:'霜の精霊',   hp:3300, atk:300, def:600, matk:600, mdef:960, spd:1125, type:'magical', gold:420,
+        name:'霜の精霊',   hp:3300, atk:300, def:600, matk:600, mdef:960, spd:1125, type:'magical', gold:540,
         skills: [
           { name:'霜の矢',   type:'magical',  mult:1.3 },
         ],
@@ -260,19 +260,19 @@ export const AREAS = [
     id: 7, name: '煉獄火山',
     enemies: [
       {
-        name:'炎の精霊',   hp:10500, atk:2100, def:1920, matk:1500, mdef:2280, spd:3000, type:'magical', gold:600,
+        name:'炎の精霊',   hp:10500, atk:2100, def:1920, matk:1500, mdef:2280, spd:3000, type:'magical', gold:680,
         skills: [
           { name:'火炎弾', type:'magical',  mult:1.5 },
         ],
       },
       {
-        name:'溶岩ゴーレム', hp:15000, atk:2550, def:2700, matk:0, mdef:1920, spd:3300, type:'physical', gold:700,
+        name:'溶岩ゴーレム', hp:15000, atk:2550, def:2700, matk:0, mdef:1920, spd:3300, type:'physical', gold:800,
         skills: [
           { name:'溶岩拳',   type:'physical', mult:1.6 },
         ],
       },
       {
-        name:'ファイアドレイク', hp:12000, atk:2340, def:2280, matk:900, mdef:2400, spd:3600, type:'physical', gold:650,
+        name:'ファイアドレイク', hp:12000, atk:2340, def:2280, matk:900, mdef:2400, spd:3600, type:'physical', gold:740,
         skills: [
           { name:'炎爪連撃', type:'physical_multi', mult:0.8, hits:2 },
           { name:'業火ブレス', type:'magical',  mult:1.7 },
