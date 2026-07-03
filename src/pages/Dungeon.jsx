@@ -66,6 +66,8 @@ function stoneRankForFloor(floor) {
 // 戦利品枠の抽選：素50 / 強化石10 / 宝石10 / チャーム4 / 装備6（合計80）
 //  チャームはフロア解禁制。20F以降は0.1%で幸せのチャーム（超レア）
 function rollFloorLoot(dungeonId, floor) {
+  // 1%で匠の秘伝書Ⅰ〜Ⅲ（成功率アップ本）をランダムドロップ
+  if (Math.random() < 0.01) return { type: 'book', level: rand(1, 3) }
   const r = Math.random() * 80
   if (r < 50) return { type: 'seed', seedKey: pick(DG_SEEDS), qty: 1 }
   if (r < 60) return { type: 'stone', rank: stoneRankForFloor(floor) }
@@ -542,6 +544,7 @@ export default function Dungeon() {
     if (e.type === 'equip') return { label: e.name, emoji: '🎁' }
     if (e.type === 'charm') return { label: getCharm(e.ctype).name, emoji: getCharm(e.ctype).emoji }
     if (e.type === 'shard') return { label: '神秘の欠片', emoji: '🔮' }
+    if (e.type === 'book') return { label: `匠の秘伝書${['', 'Ⅰ', 'Ⅱ', 'Ⅲ'][e.level] || 'Ⅰ'}`, emoji: '📖' }
     return { label: '?', emoji: '✨' }
   }
 
