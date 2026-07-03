@@ -291,12 +291,11 @@ export default function Smithy() {
       }
     }
 
-    // 天井（匠の祝福）：開発限定。装備ごとに失敗でたまり、規定数で確定成功。
-    const isDev = !!profile?.is_admin
+    // 天井（匠の祝福）：全プレイヤー。装備ごとに失敗でたまり、規定数で確定成功。
     const serverItem = (serverEquip || []).find(e => e.id === item.id)
     const curBlessing = serverItem?.blessing_count || 0
     const blessingCap = BLESSING_CAP[nextPlus]
-    const pityReady = isDev && blessingCap !== undefined && curBlessing >= blessingCap
+    const pityReady = blessingCap !== undefined && curBlessing >= blessingCap
     const baseRate = ENHANCE_RATE[nextPlus] !== undefined ? ENHANCE_RATE[nextPlus] : 100
 
     // 匠の秘伝書：天井発動でなく基礎成功率が100%未満のときだけ1個消費して倍率適用（上限100%）
@@ -326,21 +325,19 @@ export default function Smithy() {
 
     let resultPlus = currentPlus
     if (success) {
-      const upd = { enhance_plus: nextPlus }
-      if (isDev) upd.blessing_count = 0  // 成功でリセット
+      const upd = { enhance_plus: nextPlus, blessing_count: 0 }  // 成功でリセット
       await supabase.from('player_equipment').update(upd).eq('id', item.id)
       resultPlus = nextPlus
       setEnhanceResult({ ok: true, title: '✨ 強化成功！', text: `${item.weapons.name} が +${nextPlus} になった！${pityReady ? '（匠の祝福 発動！）' : usedBook ? `（${usedBook}使用）` : ''}` })
     } else if (nextPlus >= 11) {
       const newPlus = Math.max(0, currentPlus - 1)
-      const upd = { enhance_plus: newPlus }
-      if (isDev) upd.blessing_count = curBlessing + 1  // 失敗で+1
+      const upd = { enhance_plus: newPlus, blessing_count: curBlessing + 1 }  // 失敗で+1
       await supabase.from('player_equipment').update(upd).eq('id', item.id)
       resultPlus = newPlus
-      setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} が +${newPlus} に下落した…${usedBook ? `（${usedBook}使用）` : ''}`, blessing: (isDev && blessingCap !== undefined) ? { now: curBlessing + 1, cap: blessingCap } : null })
+      setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} が +${newPlus} に下落した…${usedBook ? `（${usedBook}使用）` : ''}`, blessing: (blessingCap !== undefined) ? { now: curBlessing + 1, cap: blessingCap } : null })
     } else {
-      if (isDev) await supabase.from('player_equipment').update({ blessing_count: curBlessing + 1 }).eq('id', item.id)
-      setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} は変化しなかった${usedBook ? `（${usedBook}使用）` : ''}`, blessing: (isDev && blessingCap !== undefined) ? { now: curBlessing + 1, cap: blessingCap } : null })
+      await supabase.from('player_equipment').update({ blessing_count: curBlessing + 1 }).eq('id', item.id)
+      setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} は変化しなかった${usedBook ? `（${usedBook}使用）` : ''}`, blessing: (blessingCap !== undefined) ? { now: curBlessing + 1, cap: blessingCap } : null })
     }
 
     await supabase.from('enhance_logs').insert({
@@ -669,11 +666,10 @@ export default function Smithy() {
           const matEnough = matSource === 'stone' ? stoneCount >= materialCount : sameCount >= materialCount
           const canEnhance = profile.gold >= cost && matEnough
           const successRate = ENHANCE_RATE[nextPlus] !== undefined ? ENHANCE_RATE[nextPlus] : 100
-          // 天井（匠の祝福・開発限定）
-          const isDev = !!profile?.is_admin
+          // 天井（匠の祝福・全プレイヤー）
           const blessing = item.blessing_count || 0
           const blessingCap = BLESSING_CAP[nextPlus]
-          const pityReady = isDev && blessingCap !== undefined && blessing >= blessingCap
+          const pityReady = blessingCap !== undefined && blessing >= blessingCap
           // 匠の秘伝書（成功率アップ・全プレイヤー）
           const ownedBooks = HIDEN_NAMES.map(n => ({ name: n, qty: getItemCount(n) })).filter(b => b.qty > 0)
           const bookApplies = !!hidenBook && !pityReady && successRate < 100 && getItemCount(hidenBook) > 0
@@ -764,14 +760,14 @@ export default function Smithy() {
                         </div>
                       </div>
                     )}
-                    <div style={{ fontSize:'10px', color:'#446688', marginBottom: (isDev && blessingCap !== undefined) ? '4px' : '12px' }}>
+                    <div style={{ fontSize:'10px', color:'#446688', marginBottom: (blessingCap !== undefined) ? '4px' : '12px' }}>
                       成功率: {bookApplies && <span style={{color:'#556677', textDecoration:'line-through'}}>{successRate}% </span>}
                       <span style={{color: effRate >= 50 ? '#44ff88' : effRate >= 20 ? '#ffcc00' : '#ff4444'}}>{effRateDisp}%</span>
                       {pityReady && <span style={{color:'#ffcc44'}}> ✨匠の祝福 発動！</span>}
                       {bookApplies && <span style={{color:'#ffcc44'}}> 📖{hidenBook.replace('匠の秘伝書','秘伝書')}</span>}
                       {nextPlus >= 11 && !pityReady && <span style={{color:'#ff4444'}}> ⚠ 失敗すると+が1下がる</span>}
                     </div>
-                    {isDev && blessingCap !== undefined && (
+                    {blessingCap !== undefined && (
                       <div style={{ fontSize:'10px', color:'#446688', marginBottom:'12px' }}>
                         匠の祝福: <span style={{color: pityReady ? '#ffcc44' : '#88aacc'}}>{blessing} / {blessingCap}</span>
                         <span style={{ color:'#556677' }}> {pityReady ? '(次で確定成功)' : '(失敗で+1・成功でリセット)'}</span>
