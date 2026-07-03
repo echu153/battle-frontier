@@ -4228,7 +4228,14 @@ export default function Game() {
     const fetched = data || []
     setAnnouncements(fetched)
     try {
-      const seen = JSON.parse(localStorage.getItem('bf_seenAnnouncements') || '[]')
+      const hadSeenRecord = localStorage.getItem('bf_seenAnnouncements') !== null
+      let seen = JSON.parse(localStorage.getItem('bf_seenAnnouncements') || '[]')
+      // 初回起動（既読記録なし＝新端末/キャッシュ削除後）は、過去の全体お知らせを既読扱いで初期化する。
+      // これをしないとログインのたびに過去分を全部さかのぼらされる。以後の新着のみ通知する。
+      if (!hadSeenRecord) {
+        seen = fetched.filter(a => !a.target_player_id).map(a => a.id)
+        try { localStorage.setItem('bf_seenAnnouncements', JSON.stringify(seen)) } catch { /* 意図的に無視 */ }
+      }
       setSeenAnnouncementIds(seen)
       const seenAdmin = JSON.parse(localStorage.getItem('bf_seenAdminMsgs') || '[]')
       setSeenAdminMsgIds(seenAdmin)
@@ -4245,6 +4252,9 @@ export default function Game() {
   const markAllAnnouncementsSeen = () => {
     const ids = announcements.map(a => a.id)
     try { localStorage.setItem('bf_seenAnnouncements', JSON.stringify(ids)) } catch { /* 意図的に無視 */ }
+    // 一度見たら即NEWを外す。以前はlocalStorageのみ更新でstateが古いまま残り、
+    // 同一セッション中はNEWバッジ・NEW通知が消えなかった。
+    setSeenAnnouncementIds(ids)
     setHasNewAnnouncements(false)
   }
 
