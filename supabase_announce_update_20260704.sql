@@ -1,11 +1,13 @@
 -- お知らせ: 今回アップデート（出撃Gold増加／レイド調整／強化まわり新要素）
 -- category='update'。タイトルに日付は入れない（created_atで自動表示）。
--- ★前回の同名お知らせ（Gold数値が誤っていた版）を入れてしまっている場合に備え、当日分は入れ直す。
-DELETE FROM announcements WHERE title = 'アップデートのお知らせ' AND created_at::date = CURRENT_DATE;
+-- ★前回の同名お知らせ（旧タイトル/Gold数値が誤っていた版）を入れてしまっている場合に備え、当日分は入れ直す。
+DELETE FROM announcements
+ WHERE created_at::date = CURRENT_DATE
+   AND title IN ('アップデートのお知らせ', 'アップデート情報：出撃Gold増量／レイドボス調整／強化に新要素');
 
 INSERT INTO announcements (title, content, category, is_active, created_at)
 VALUES (
-  'アップデートのお知らせ',
+  'アップデート情報：出撃Gold増量／レイドボス調整／強化に新要素',
 $$いつもバトルフロンティアをプレイいただきありがとうございます。
 今回のアップデート内容をお知らせします。
 
@@ -40,6 +42,7 @@ $$いつもバトルフロンティアをプレイいただきありがとうご
 　- レイド報酬：Cティア=Ⅰ／Bティア=Ⅱ／Aティア=Ⅲ
 　- 奈落闘技場：3〜7階=Ⅰ／8〜13階=Ⅱ／14階以上=Ⅲ
 　- ペットダンジョン：低確率でⅠ〜Ⅲのいずれかを入手
+・匠の秘伝書Ⅳ・Ⅴは、今後のアップデートで入手できるようになる予定です。
 
 今後ともバトルフロンティアをよろしくお願いいたします！$$,
   'update',
