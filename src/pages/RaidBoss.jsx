@@ -706,6 +706,10 @@ export default function RaidBoss() {
       } else {
         setBattleLogs(logs)
         setBoss(prev => ({ ...prev, hp_current: data.hp_current, status: data.status }))
+        // 累計50万到達で与ダメ半減中は、実際に通ったダメージ（サーバー確定値）を明示
+        if (data.halved) {
+          setBattleLogs(prev => [...prev, { text: `⚠ このボスへの累計ダメージが50万を超えたため、以降の与ダメージは半減します（実ダメージ ${fmt(data.damage)}）`, color: '#ffaa44' }])
+        }
         setRemaining(raidWaitFor(profile))
         // HP/MP全回復 + 出撃EXP はサーバ側(attack_raid_boss)で付与済み（かかし修練中はEXPなし）
         const newExp = data.exp ?? ((profile.exp || 0) + 10)
@@ -1132,7 +1136,7 @@ function RewardTable({ isAdmin = false }) {
             <span style={{ color: '#ffcc00' }}>Gold {fmt(t.gold)}</span>
           </div>
           <div style={{ color: '#446688', marginTop: '2px' }}>
-            強化石{t.stones.map(s=>`(${s})`).join('・')}×2　宝石{t.gemRank}×{t.gemCount}　通常素材×{t.scaleCount}{t.tier !== 'D' ? `　レア素材${t.rareChance}` : ''}{t.book ? <span style={{ color: '#ffaa44' }}>　匠の秘伝書{t.book}×1</span> : ''}
+            強化石{t.stones.map(s=>`(${s})`).join('・')}×2　宝石{t.gemRank}×{t.gemCount}　通常素材×{t.scaleCount}{t.tier !== 'D' ? `　レア素材${t.rareChance}` : ''}{t.book ? `　匠の秘伝書${t.book}×1` : ''}
           </div>
         </div>
       ))}
