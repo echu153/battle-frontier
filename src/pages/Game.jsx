@@ -3939,6 +3939,12 @@ export default function Game() {
       setBattleLogs([...logs])
     }
 
+    // 【変異】初撃破通知（サーバーが mutant_cleared_areas に記録した時だけ返る）
+    if (rpcResult?.mutant_first_clear) {
+      logs.push({ text: `🧬 エリア${selectedArea}の【変異】を攻略！ 以降このエリアの雑魚はエリア⑤相当のGoldを落とす！`, color: '#cc44ff' })
+      setBattleLogs([...logs])
+    }
+
     // かかし修練場のチャージ完了通知
     if (rpcResult?.scarecrow_charged) {
       logs.push({ text: `🌾 かかし修練場のチャージが1回分完了！（現在${rpcResult.scarecrow_charges}回）`, color: '#ffcc44' })
