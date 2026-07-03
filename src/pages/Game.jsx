@@ -200,9 +200,9 @@ export const AREAS = [
   {
     id: 5, name: '巨峰山脈',
     enemies: [
-      { name:'山岳ゴブリン', hp:1500, atk:640, def:510, matk:0,   mdef:450, spd:380, type:'physical', gold:320 },
-      { name:'岩石ゴーレム', hp:2000, atk:760, def:660, matk:0,   mdef:420, spd:400, type:'physical', gold:400 },
-      { name:'グリフォン',   hp:1800, atk:700, def:540, matk:120, mdef:510, spd:450, type:'physical', gold:360 },
+      { name:'山岳ゴブリン', hp:1500, atk:640, def:510, matk:0,   mdef:450, spd:380, type:'physical', gold:240 },
+      { name:'岩石ゴーレム', hp:2000, atk:760, def:660, matk:0,   mdef:420, spd:400, type:'physical', gold:300 },
+      { name:'グリフォン',   hp:1800, atk:700, def:540, matk:120, mdef:510, spd:450, type:'physical', gold:270 },
     ],
     boss: {
       name:'雷鷲サンダーロック', hp:35000, atk:750, def:960, matk:250, mdef:900, spd:1175, gold:6000, isBoss:true, type:'physical',
@@ -223,19 +223,19 @@ export const AREAS = [
     id: 6, name: '白銀の霊峰',
     enemies: [
       {
-        name:'雪男',       hp:3750, atk:750, def:780, matk:0,   mdef:660, spd:975, type:'physical', gold:480,
+        name:'雪男',       hp:3750, atk:750, def:780, matk:0,   mdef:660, spd:975, type:'physical', gold:350,
         skills: [
           { name:'雪崩拳',       type:'physical', mult:1.4 },
         ],
       },
       {
-        name:'氷河ドラゴン', hp:4500, atk:825, def:840, matk:225, mdef:840, spd:1050, type:'physical', gold:600,
+        name:'氷河ドラゴン', hp:4500, atk:825, def:840, matk:225, mdef:840, spd:1050, type:'physical', gold:450,
         skills: [
           { name:'氷河ブレス', type:'magical',  mult:1.5 },
         ],
       },
       {
-        name:'霜の精霊',   hp:3300, atk:300, def:600, matk:600, mdef:960, spd:1125, type:'magical', gold:540,
+        name:'霜の精霊',   hp:3300, atk:300, def:600, matk:600, mdef:960, spd:1125, type:'magical', gold:400,
         skills: [
           { name:'霜の矢',   type:'magical',  mult:1.3 },
         ],
@@ -260,19 +260,19 @@ export const AREAS = [
     id: 7, name: '煉獄火山',
     enemies: [
       {
-        name:'炎の精霊',   hp:10500, atk:2100, def:1920, matk:1500, mdef:2280, spd:3000, type:'magical', gold:680,
+        name:'炎の精霊',   hp:10500, atk:2100, def:1920, matk:1500, mdef:2280, spd:3000, type:'magical', gold:500,
         skills: [
           { name:'火炎弾', type:'magical',  mult:1.5 },
         ],
       },
       {
-        name:'溶岩ゴーレム', hp:15000, atk:2550, def:2700, matk:0, mdef:1920, spd:3300, type:'physical', gold:800,
+        name:'溶岩ゴーレム', hp:15000, atk:2550, def:2700, matk:0, mdef:1920, spd:3300, type:'physical', gold:600,
         skills: [
           { name:'溶岩拳',   type:'physical', mult:1.6 },
         ],
       },
       {
-        name:'ファイアドレイク', hp:12000, atk:2340, def:2280, matk:900, mdef:2400, spd:3600, type:'physical', gold:740,
+        name:'ファイアドレイク', hp:12000, atk:2340, def:2280, matk:900, mdef:2400, spd:3600, type:'physical', gold:550,
         skills: [
           { name:'炎爪連撃', type:'physical_multi', mult:0.8, hits:2 },
           { name:'業火ブレス', type:'magical',  mult:1.7 },
@@ -3718,17 +3718,18 @@ export default function Game() {
     const expBoosted = expGained > 0 && (profile.char_lv||1) < 100
     if (expBoosted) expGained = Math.floor(expGained * 1.5)
     const expBoostNote = expBoosted ? '（✨LV100まで経験値1.5倍）' : ''
-    // 出撃ゴールド倍率。★2026-06-20公開: 出撃CD20秒化の補正でエリア1-4を×2・エリア5+を×1.5
+    // 出撃ゴールド。雑魚は各エリアの設定値（=10秒モードの取得額）そのまま。20秒モードは2倍。
+    // ★2026-07-04: 旧CD補正のエリア別倍率(×2/×1.5)は廃止。ボスのみ従来補正を維持（設定Goldは据置）。
     // 【変異】段階のGold（エリア⑤相当）。変異ボス撃破=9000。雑魚は「そのエリアの変異ボスを1回撃破済み」なら強化（トグル無関係）。
     const mutantCleared = mutantHigh && (profile.mutant_cleared_areas || []).includes(selectedArea)
     const goldGained = (() => {
       if (!win || papiaEscaped) return 0
       if (!isPapiaEncounter) {
         if (useMutantBoss) return Math.floor((enemy.gold || 6000) * 1.5 * (tenSec ? 0.5 : 1))  // 変異ボス撃破=エリア⑤相当
-        if (!isBossEncounter && mutantCleared) return Math.floor((AREAS[4].enemies[enemyIdx]?.gold || 280) * 1.5 * (tenSec ? 0.5 : 1))  // 撃破済みエリアの雑魚（トグルOFFでも強化）
+        if (!isBossEncounter && mutantCleared) return Math.floor((AREAS[4].enemies[enemyIdx]?.gold || 270) * (tenSec ? 1 : 2))  // 撃破済みエリアの雑魚（エリア⑤相当）
       }
-      const goldMult = (selectedArea <= 4 ? 2 : 1.5) * (tenSec ? 0.5 : 1)
-      return Math.floor((enemy.gold || 0) * goldMult)
+      if (isBossEncounter) return Math.floor((enemy.gold || 0) * (selectedArea <= 4 ? 2 : 1.5) * (tenSec ? 0.5 : 1))  // ボスは従来のCD補正を維持
+      return Math.floor((enemy.gold || 0) * (tenSec ? 1 : 2))  // 雑魚: 10秒=設定値 / 20秒=2倍
     })()
 
 
