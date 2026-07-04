@@ -3955,12 +3955,6 @@ export default function Game() {
       setBattleLogs([...logs])
     }
 
-    // アリーナ守護ボーナス（いずれかの階を守護中は出撃Gold+10%）
-    if (rpcResult?.arena_gold_bonus > 0) {
-      logs.push({ text: `🏛 アリーナ守護ボーナス！ Gold +${rpcResult.arena_gold_bonus}（×1.1）`, color: '#c8a0ff' })
-      setBattleLogs([...logs])
-    }
-
     // ボス装備 進化ドロップ（エリアボス撃破時・サーバー側RNGで血50%/心臓0.5%）
     if (win && isBossEncounter && !isPapiaEncounter) {
       try {

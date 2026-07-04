@@ -86,7 +86,7 @@ export default function ArenaPanel({ onClose }) {
       if (e || data?.ok === false) {
         setError('着席に失敗: ' + (data?.reason || e?.message || 'unknown'))
       } else {
-        setNotice(`${targetFloor}階に着席しました！ 守護中は出撃Gold×1.1・挑戦は不可です。`)
+        setNotice(`${targetFloor}階に着席しました！ 守護中は挑戦できません（負けると次の階へ）。`)
       }
       await reloadBoard()
     } catch (e) {
@@ -148,7 +148,7 @@ export default function ArenaPanel({ onClose }) {
         </div>
 
         <div style={{ color: '#aa88cc', fontSize: '10px', lineHeight: '1.7', marginBottom: '10px' }}>
-          全<b>{FLOORS}階</b>の梯子。<b>目標の階</b>に挑戦し、空席なら着席・占有なら戦闘（<b>1時間に1回</b>・EXP+20）。勝てばその階を守護（<b>出撃Gold×1.1</b>）、負ければ目標が1つ下へ。守護中は挑戦できません。<b>持続HP</b>は挑戦されるたびに削れます（回復なし）。
+          全<b>{FLOORS}階</b>の梯子。<b>目標の階</b>に挑戦し、空席なら着席・占有なら戦闘（<b>1時間に1回</b>・EXP+20）。勝てばその階を守護、負ければ目標が1つ下へ。守護中は挑戦できません。<b>持続HP</b>は挑戦されるたびに削れます（回復なし）。
         </div>
 
         {board === null && !error && <div style={{ color: '#8877aa', fontSize: '12px' }}>データを読込中...</div>}
@@ -159,7 +159,7 @@ export default function ArenaPanel({ onClose }) {
             {myFloor != null ? (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                 <div style={{ color: '#d0a0ff', fontSize: '13px' }}>
-                  🛡 <b>{myFloor}階</b>を守護中 <span style={{ color: '#66dd88', fontSize: '10px', border: '1px solid #2a6a3a', padding: '1px 6px', marginLeft: '6px' }}>出撃Gold ×1.1中</span>
+                  🛡 <b>{myFloor}階</b>を守護中
                 </div>
                 <div style={{ color: '#8877aa', fontSize: '10px' }}>守護中は挑戦できません（負けると次の階へ）</div>
               </div>
