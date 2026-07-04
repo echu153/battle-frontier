@@ -13,6 +13,8 @@ import RaidNotify from '../components/RaidNotify'
 const PvpPanel = lazy(() => import('../components/PvpPanel'))
 // 組み手パネル（対人戦の準備施設・一般公開）も同様に遅延ロード
 const KumitePanel = lazy(() => import('../components/KumitePanel'))
+// アリーナパネル（梯子型対人・一般公開）。pvp.js が ./Game を参照するため遅延ロード
+const ArenaPanel = lazy(() => import('../components/ArenaPanel'))
 // Equipment.jsx 等が './Game' から参照しているため再export
 // ★ステータス計算は lib/stats.js の1実装に統一（表示系と戦闘系で値がズレないように）
 export { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue, calcDefReduction, calcEffectiveStats } from '../lib/stats'
@@ -1653,6 +1655,7 @@ export default function Game() {
   const [showChallengePanel, setShowChallengePanel] = useState(false)
   const [showPvp, setShowPvp] = useState(false)  // 対人戦(PvP)パネル開閉（is_admin限定）
   const [showKumite, setShowKumite] = useState(false)  // 組み手パネル開閉（一般公開）
+  const [showArena, setShowArena] = useState(false)  // アリーナパネル開閉（一般公開）
   const challengePanelRef = useRef(null)
   // 挑戦パネルを開いたら、その位置まで自動スクロール（スマホで画面外に出るのを防ぐ）
   useEffect(() => {
@@ -3952,6 +3955,12 @@ export default function Game() {
       setBattleLogs([...logs])
     }
 
+    // アリーナ守護ボーナス（いずれかの階を守護中は出撃Gold+10%）
+    if (rpcResult?.arena_gold_bonus > 0) {
+      logs.push({ text: `🏛 アリーナ守護ボーナス！ Gold +${rpcResult.arena_gold_bonus}（×1.1）`, color: '#c8a0ff' })
+      setBattleLogs([...logs])
+    }
+
     // ボス装備 進化ドロップ（エリアボス撃破時・サーバー側RNGで血50%/心臓0.5%）
     if (win && isBossEncounter && !isPapiaEncounter) {
       try {
@@ -5911,6 +5920,7 @@ export default function Game() {
                         <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'8px' }}>
                           <div style={{ color:'#ff6464', fontSize:'11px', marginBottom:'8px' }}>挑戦するコンテンツを選択</div>
                           <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場</button>
+                          <button onClick={()=>{ setShowArena(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #a060e0', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏛 アリーナ</button>
                           {profile?.is_admin && (
                             <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                           )}
@@ -5980,6 +5990,7 @@ export default function Game() {
                 <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'10px' }}>
                   <div style={{ color:'#ff6464', fontSize:'11px', marginBottom:'8px' }}>挑戦するコンテンツを選択</div>
                   <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場</button>
+                          <button onClick={()=>{ setShowArena(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #a060e0', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏛 アリーナ</button>
                   {profile?.is_admin && (
                     <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                   )}
@@ -6047,6 +6058,7 @@ export default function Game() {
         <RaidNotify open={raidNotifyOpen} onClose={()=>setRaidNotifyOpen(false)} />
         {showPvp && <Suspense fallback={null}><PvpPanel onClose={()=>setShowPvp(false)} /></Suspense>}
         {showKumite && <Suspense fallback={null}><KumitePanel onClose={()=>setShowKumite(false)} /></Suspense>}
+        {showArena && <Suspense fallback={null}><ArenaPanel onClose={()=>setShowArena(false)} /></Suspense>}
       </div>
     )
   }
@@ -6451,6 +6463,7 @@ export default function Game() {
                           <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'8px' }}>
                             <div style={{ color:'#ff6464', fontSize:'11px', marginBottom:'8px' }}>挑戦するコンテンツを選択</div>
                             <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場</button>
+                          <button onClick={()=>{ setShowArena(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #a060e0', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏛 アリーナ</button>
                             {profile?.is_admin && (
                               <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                             )}
@@ -6520,6 +6533,7 @@ export default function Game() {
                   <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'10px' }}>
                     <div style={{ color:'#ff6464', fontSize:'11px', marginBottom:'8px' }}>挑戦するコンテンツを選択</div>
                     <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場</button>
+                          <button onClick={()=>{ setShowArena(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #a060e0', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏛 アリーナ</button>
                     {profile?.is_admin && (
                       <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                     )}
@@ -6589,6 +6603,7 @@ export default function Game() {
       <RaidNotify open={raidNotifyOpen} onClose={()=>setRaidNotifyOpen(false)} />
       {showPvp && <Suspense fallback={null}><PvpPanel onClose={()=>setShowPvp(false)} /></Suspense>}
       {showKumite && <Suspense fallback={null}><KumitePanel onClose={()=>setShowKumite(false)} /></Suspense>}
+        {showArena && <Suspense fallback={null}><ArenaPanel onClose={()=>setShowArena(false)} /></Suspense>}
     </div>
   )
 }
