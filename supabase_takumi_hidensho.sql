@@ -55,9 +55,9 @@ DECLARE
   v_gyaku_item_id    int;
   v_gyaku_chance     float;
   v_got_gyaku        boolean := false;
-  v_atk_a            int := 20;
-  v_atk_b            int := 10;
-  v_atk_c            int := 5;
+  v_atk_a            int := 40;   -- ★2026-06-26 全員公開: 10秒固定化に伴いティア保証を倍に(sortie_mode_publicと一致)
+  v_atk_b            int := 20;
+  v_atk_c            int := 10;
   v_mat_name         text;
   v_rare_name        text;
   v_book_name        text;   -- ★匠の秘伝書（ティア別）
