@@ -67,7 +67,7 @@ export const FISH_DATA = {
     { rank:'e', name:'グルーパー', statIdx:4 },
     { rank:'d', name:'シイラ', statIdx:0 },
     { rank:'d', name:'バラクーダ', statIdx:1 },
-    { rank:'d', name:'カンパチ', statIdx:2 },
+    { rank:'d', name:'カリブカンパチ', statIdx:2 },
     { rank:'d', name:'ロウニンアジ', statIdx:3 },
     { rank:'d', name:'ターポン', statIdx:4 },
     { rank:'c', name:'キングフィッシュ', statIdx:0 },

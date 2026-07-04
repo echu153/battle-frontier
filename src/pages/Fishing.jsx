@@ -94,7 +94,7 @@ const FISH_DATA = {
     { rank:'e', name:'グルーパー', statIdx:4 },
     { rank:'d', name:'シイラ', statIdx:0 },
     { rank:'d', name:'バラクーダ', statIdx:1 },
-    { rank:'d', name:'カンパチ', statIdx:2 },
+    { rank:'d', name:'カリブカンパチ', statIdx:2 },
     { rank:'d', name:'ロウニンアジ', statIdx:3 },
     { rank:'d', name:'ターポン', statIdx:4 },
     { rank:'c', name:'キングフィッシュ', statIdx:0 },
@@ -368,7 +368,7 @@ useEffect(() => {
         try {
           const res = await supabase.from('player_items').select('*').eq('player_id', profile.id).eq('item_id', stoneItem.id).single()
           existing = res.data
-        } catch {}
+        } catch { /* 意図的に無視 */ }
         if (existing) {
           await supabase.from('player_items').update({ quantity: (existing.quantity||1)+1 }).eq('id', existing.id)
         } else {
