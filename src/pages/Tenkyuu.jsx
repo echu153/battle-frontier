@@ -98,11 +98,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
   let seimitsuStacks = 0  // 精密照準(再修練)：同スキル連続で+10%/クリ+2%・最大3
 
   // ===== 敵スキルAI 状態（kit駆動。十二宮の Phase1 宮は kit 無し＝通常攻撃＋mods） =====
-  let enUsedT75 = false, enUsedT40 = false, enUsedSpecial = false
-  let enLockedSkill = null
-  let prevEnemySkill = ''
   const enPerm = { atkMult:1, matkMult:1, defMult:1, mdefMult:1, spdMult:1, critDmgPlus:0, convertCtoA:false, followupAtk:0 }
-  const enemyProfile = { hp_max: enemyMaxHp, mp_max: 999999, class: '', retraining: {}, username: enemy.name }
 
   // ===== 固有ギミック用の内部状態 =====
   let hpThreshDone = false       // hpThreshAtk を適用済みか
@@ -529,7 +525,6 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
     const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
     const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
-    const defPenN = mods.defPen ? 1 : 0
     const pDef  = mods.defPen ? 1 : eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDefE * holyKnightMultE * kabeDefE
     const pMdef = mods.defPen ? 1 : eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE * kabeDefE
     const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
@@ -755,7 +750,8 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       logs.push({ text:`💚 装備効果でHPが${playerBuffs.delayHeal.amount}回復した！`, color:'#44ff88' })
     }
     // ポーションは出撃のみ適用（天穹では無限・通常とも発動しない）
-    if (false && !isHealSealed && currentItem) {
+    const POTIONS_ENABLED = false // 天穹ではポーション無効（意図的に無効化）
+    if (POTIONS_ENABLED && !isHealSealed && currentItem) {
       const threshold = currentItem.use_threshold||50
       const effect = currentItem.items.effect
       const isInfinite = effect === 'hp_pct_infinite' || effect === 'mp_pct_infinite'

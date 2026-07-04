@@ -43,14 +43,6 @@ const ARTIFACT_EVOLVED = {
   '古びたオーブ':'深淵ノ霊珠',
 }
 
-const WEAPON_TYPE_GROUP = {
-  sword:'physical', axe:'physical', spear:'physical', bow:'physical', dagger:'physical',
-  knuckle:'physical', gun:'physical', katana:'physical',
-  staff:'magical', wand:'magical', tome:'magical', orb:'magical',
-}
-const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'
-
-
 const getProfPrefix = (profLv) => {
   if (profLv >= 300) return '【極】'
   if (profLv >= 200) return '【真】'

@@ -32,7 +32,7 @@ export default function Admin() {
   const init = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
-    const { data: me, error } = await supabase.from('profiles').select('id, is_admin').eq('id', user.id).maybeSingle()
+    const { data: me } = await supabase.from('profiles').select('id, is_admin').eq('id', user.id).maybeSingle()
     if (!me?.is_admin) { nav('/game'); return }
     await fetchAll()
     setLoading(false)

@@ -52,12 +52,6 @@ export default function Skills() {
       supabase.from('skills').select('*').eq('class_name', '共通').order('required_lv'),
     ])
 
-    // 持ち越しスキルを取得
-    const { data: carriedPs } = await supabase
-      .from('player_skills').select('*, skills(*)')
-      .eq('player_id', user.id).eq('is_carried_over', true)
-    const carriedSkills = (carriedPs||[]).map(ps => ps.skills).filter(Boolean)
-
     setAllSkills([...(skills||[])])
 
     // 全習得済みスキル
@@ -372,7 +366,7 @@ export default function Skills() {
   )
 }
 
-function SkillCard({ skill, learned, inSet, skillSets, loading, onSet, canSet, bulkMode, bulkChecked, onBulkToggle, bulkLabel }) {
+function SkillCard({ skill, learned, inSet, _skillSets, loading, onSet, canSet, bulkMode, bulkChecked, onBulkToggle, bulkLabel }) {
   const bulkSelectable = bulkMode && learned && canSet
   return (
     <div onClick={bulkSelectable ? () => onBulkToggle(skill.id) : undefined}

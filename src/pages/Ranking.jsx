@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { calcEffectiveTotal, getTotalRank } from '../lib/stats'
-import { charmPlayerBonus, petPlayerBonus, petStats, applyCharmStats, speciesLabel, speciesEmoji, getCharm, charmDisplayName, petImage } from '../constants/pets'
+import { charmPlayerBonus, petPlayerBonus, petStats, applyCharmStats, speciesLabel, speciesEmoji, charmDisplayName, petImage } from '../constants/pets'
 import { thumbUrl } from '../lib/img'
 
 // ペット1体の能力合計（チャーム込み）。プレイヤー総合力と同じ重み付け。

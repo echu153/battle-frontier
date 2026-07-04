@@ -89,7 +89,7 @@ export default function Exchange() {
   const [exchanging, setExchanging] = useState(null)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
-  const [userId, setUserId] = useState(null)
+  const [, setUserId] = useState(null)
 
   useEffect(() => { init() }, [])
 

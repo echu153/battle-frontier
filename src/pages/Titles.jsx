@@ -13,8 +13,6 @@ const CATEGORY_LABELS = {
 // 未獲得のうちは正体を隠す（？？？？表示）称号か。イベント報酬の称号はサプライズのため伏字にする。
 const isSecretTitle = (title) => title.condition_type === 'event'
 
-const GENERIC_TITLES_KEY = 'generic'
-
 export default function Titles() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)

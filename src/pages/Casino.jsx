@@ -99,7 +99,7 @@ export default function Casino() {
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id) }, [])
 
   useEffect(() => { initCasino() }, [])
-  useEffect(() => { try { localStorage.setItem('bf_casino_at_total', String(atTotalWin)) } catch {} }, [atTotalWin])
+  useEffect(() => { try { localStorage.setItem('bf_casino_at_total', String(atTotalWin)) } catch { /* 意図的に無視 */ } }, [atTotalWin])
 
   // 賭博場を開いた時：サーバーの進行中状態を復元（リロードしてもAT/ダブルアップ等を継続）
   const initCasino = async () => {
@@ -130,7 +130,7 @@ export default function Casino() {
       } else if (s && s.mode && s.mode !== 'normal') {
         setTab('slot')
       }
-    } catch {}
+    } catch { /* 意図的に無視 */ }
   }
 
   const loadDaily = async () => {
@@ -200,7 +200,7 @@ export default function Casino() {
     try {
       const saved = localStorage.getItem('bf_sortie_' + p.id)
       if (saved) { const parsed = JSON.parse(saved); if (parsed && parsed.count > 0) setSortiePending(parsed) }
-    } catch {}
+    } catch { /* 意図的に無視 */ }
     await loadDaily()
   }
 
@@ -208,7 +208,7 @@ export default function Casino() {
     try {
       if (pend.count > 0) localStorage.setItem('bf_sortie_' + profile.id, JSON.stringify(pend))
       else localStorage.removeItem('bf_sortie_' + profile.id)
-    } catch {}
+    } catch { /* 意図的に無視 */ }
   }
 
   const showMessage = (msg, color = '#ffaa00') => {
@@ -434,8 +434,6 @@ export default function Casino() {
       }
     }
   }
-
-  const slotReset = () => { setSlotPhase('idle'); setSlotResult(null); setSlotStopped([false,false,false]); setNavStep(0); setAtResult(null); setTokuAdded(null); pressOrderRef.current = [] }
 
   // 簡易出撃：エリア解放判定
   const isAreaUnlocked = (areaId) => {
@@ -1053,7 +1051,6 @@ export default function Casino() {
         {(() => {
           const remain = sortieRemain()
           const unlocked = isAreaUnlocked(sortieArea)
-          const availableAreas = AREAS.filter(a => isAreaUnlocked(a.id))
           return (
             <div style={{ border:'1px solid #335577', background:'#001020', padding:'14px', marginTop:'16px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>

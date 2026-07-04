@@ -15,7 +15,7 @@ const totalFromEff = (eff) =>
   Math.floor((eff.hp_max / 10) + (eff.mp_max / 5) + eff.atk + eff.def + eff.matk + eff.mdef + eff.spd)
 
 export default function KumitePanel({ onClose }) {
-  const [meId, setMeId] = useState(null)
+  const [, setMeId] = useState(null)
   const [myLoadout, setMyLoadout] = useState(null)
   const [myTotal, setMyTotal] = useState(null)
   const [candidates, setCandidates] = useState(null)  // null=読込中

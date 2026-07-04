@@ -1,3 +1,6 @@
+-- ⚠⚠【2026-07-04 注意】このファイルの apply_battle_result は旧Gold上限(v_normal_golds=[8,30,100,180,300,450,700])。
+-- ⚠⚠ 再適用したら必ず「最後に」supabase_mutant_gold_20260703.sql を流し直すこと。
+-- ⚠⚠ 流さないと現行クライアント(263772e以降)の出撃が全プレイヤー invalid_gold 誤検知→EXP12時間凍結になる。
 -- 経験値1.5倍（キャラクターLV100まで）
 -- apply_battle_result を上書きし、EXP検証上限を char_lv<100 のとき1.5倍にする。
 -- クライアント(Game.jsx)も同条件で expGained を1.5倍して送るため、上限は CEIL で余裕を持たせる。

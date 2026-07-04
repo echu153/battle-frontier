@@ -59,8 +59,6 @@ const getTotalRank = (total) => {
   return { rank:'SSS', color:'#ffcc00' }
 }
 
-const calcTotal = (p) => Math.floor((p.hp_max/10)+(p.mp_max/5)+p.atk+p.def+p.matk+p.mdef+p.spd)
-
 const getProfPrefix = (profLv) => {
   if (profLv >= 300) return '【極】'
   if (profLv >= 200) return '【真】'

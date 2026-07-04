@@ -16,7 +16,7 @@ export default function Pets() {
   const [loading, setLoading] = useState(false)
   const [naming, setNaming] = useState(null) // 命名中のスターター種族 {id,label,...}
   const [nick, setNick] = useState('')
-  const [items, setItems] = useState({}) // 所持アイテム { key: qty }
+  const [, setItems] = useState({}) // 所持アイテム { key: qty }
   const [renaming, setRenaming] = useState(false)
   const [renameInput, setRenameInput] = useState('')
   const [evolveConfirm, setEvolveConfirm] = useState(null) // 進化確認ポップアップ対象のペット
