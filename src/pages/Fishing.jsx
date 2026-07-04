@@ -252,6 +252,24 @@ useEffect(() => {
     const { data: recs } = await supabase.from('fishing_records')
       .select('*').eq('player_id', user.id)
     setRecords(recs || [])
+    // 救済: 旧「カンパチ」同名衝突でカリブ海のカンパチが図鑑登録できなかった不具合の補填。
+    // カリブ海で釣り実績がある人に「カリブカンパチ」が無ければ1回だけ付与（冪等＝入れば以後スキップ）。
+    const recList0 = recs || []
+    const hasCaribbean = recList0.some(r => r.location === 'カリブ海')
+    const hasCaribKanpachi = recList0.some(r => r.location === 'カリブ海' && r.fish_name === 'カリブカンパチ')
+    if (hasCaribbean && !hasCaribKanpachi) {
+      try {
+        const { data: ins } = await supabase.from('fishing_records').insert({
+          player_id: user.id,
+          fish_name: 'カリブカンパチ',
+          fish_rank: 'd',
+          location: 'カリブ海',
+          first_caught_at: new Date().toISOString(),
+          bonus_claimed: false,
+        }).select()
+        if (ins && ins.length) setRecords([...recList0, ...ins])
+      } catch { /* 既に有る等は無視 */ }
+    }
     // 旧仕様（基礎列に直接加算）で消えた釣りボーナスを、fishing_* 専用列へ一度だけ復元
     if (p && !p.fishing_migrated) {
       const { totals, completed } = sumClaimedFishingBonus(recs || [])
