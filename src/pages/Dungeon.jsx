@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmsForFloor, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, DEVIL_PAPIA, assetSrc, ASSET_VER } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmsForFloor, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, bossFor, dgBgm, assetSrc, ASSET_VER } from '../constants/pets'
+import Boss60Sprite from '../components/Boss60Sprite'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 
@@ -49,11 +50,15 @@ const AREA_EQUIPS = {
   2: ['鋼鉄の剣', '鋭利なナイフ', '狩人の弓', '魔導の杖', '魔術教本', '戦士の指輪', '略奪の腕輪'],
   3: ['鋼鉄の剣', '鋭利なナイフ', '狩人の弓', '魔導の杖', '魔術教本', '古代の護符', '秘術の首飾り'],
   4: ['重鋼剣', '双牙短剣', '疾風の弓', '蒼木の杖', '精霊魔導典', '海流の腕輪', '蒼海の大剣', '海狼短剣', '蒼潮の弓', '海晶の杖', '海霊詠唱録', '蒼海の護符'],
+  5: ['山岳の斧', '岩砕の拳', '霞散弾銃', '嵐のオーブ', '峰岳の兜', '岩石鎧', '山岳の靴', '岩石の護符', '雷砕斧', '鷹爪の拳', '雷鳴銃', '雷晶オーブ', '嵐の兜', '雷鷲鎧', '疾風の靴', '峰岳の守護輪'],
+  6: ['氷刃の剣', '霜穿の槍', '吹雪の弓', '氷晶の杖', '凍月刀', '氷晶の護符', '白銀の大剣', '氷河長槍', '極雪の弓', '霜嵐の杖', '凍蒼の刀', '霜の宝珠'],
+  7: ['業火の短剣', '炎のワンド', '煉獄魔導書', '炎の兜', '溶岩鎧', '紅蓮の靴', '溶岩の指輪', 'サラマンダーブレード', 'フェニックスワンド', '煉獄のコデックス', '溶鉄のクラウン', 'ドレイクアーマー', 'ヴァルカンブーツ', '業炎の指輪'],
 }
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
-// 装備が落ちるエリア（フロア→エリア）。d30=①1-5/②6-9/③10-19/④20-29、d10=①1-5/②6-、その他はエリア④寄り
+// 装備が落ちるエリア（フロア→エリア）。d30=①1-5/②6-9/③10-19/④20-29、d60=③〜⑦の5帯、d10=①1-5/②6-
 function equipAreaFor(dungeonId, floor) {
   if (dungeonId === 'd30') return floor <= 5 ? 1 : floor <= 9 ? 2 : floor <= 19 ? 3 : 4
+  if (dungeonId === 'd60') return floor <= 12 ? 3 : floor <= 24 ? 4 : floor <= 36 ? 5 : floor <= 48 ? 6 : 7
   if (dungeonId === 'd10') return floor <= 5 ? 1 : 2
   return 4
 }
@@ -109,7 +114,8 @@ const enemyAdjacent = (e, px, py) => {
 }
 
 // ボスフロア生成：正方形の部屋の中央に2×2ボス。雑魚・アイテムなし
-function generateBossFloor(_dungeon) {
+//  ボス定義はダンジョンごと（d30=デビルパピア / d60=カモルス）。layered=レイヤーアニメ描画（画像なし）
+function generateBossFloor(dungeon) {
   const grid = Array.from({ length: MAP_H }, () => Array(MAP_W).fill('#'))
   const RW = 15, RH = 13 // ボス部屋（正方形寄り）
   const rx = Math.floor((MAP_W - RW) / 2), ry = Math.floor((MAP_H - RH) / 2)
@@ -118,11 +124,12 @@ function generateBossFloor(_dungeon) {
   // プレイヤーは部屋の下端中央
   const player = { x: room.cx, y: ry + RH - 2 }
   // ボスは中央（2×2の左上）
-  const ph = DEVIL_PAPIA.phases[0]
+  const def = bossFor(dungeon?.id)
+  const ph = def.phases[0]
   const boss = {
-    id: 'boss', boss: true, size: DEVIL_PAPIA.size, phase: 0,
+    id: 'boss', boss: true, size: def.size, phase: 0, layered: !!def.layered,
     x: room.cx - 1, y: ry + 2,
-    name: DEVIL_PAPIA.name, type: ph.type, mix: !!ph.mix, image: assetSrc(ph.image),
+    name: def.name, type: ph.type, mix: !!ph.mix, image: ph.image ? assetSrc(ph.image) : null,
     skills: ph.skills, reach: 1, canSwim: false,
     hp: ph.hp, maxHp: ph.hp, atk: ph.atk, def: ph.def, mdef: ph.mdef,
   }
@@ -218,7 +225,7 @@ function generateFloor(floorNum, dungeon) {
       const kind = pool[rand(0, pool.length - 1)]
       // 強さは初登場フロアの値で固定（深い階でも同種は同じ強さ）
       const es = dungeonEnemyStatsFor(dungeon, kind)
-      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: kind.skills || enemySkillsFor(kind.name), canSwim: isAquatic(kind.name), reach: kind.reach || 1, hp: es.maxHp, maxHp: es.maxHp, atk: es.atk, def: es.def, mdef: es.mdef })
+      enemies.push({ id: 'e' + i, x: t.x, y: t.y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: kind.skills || enemySkillsFor(kind.name), canSwim: kind.canSwim ?? isAquatic(kind.name), reach: kind.reach || 1, hp: es.maxHp, maxHp: es.maxHp, atk: es.atk, def: es.def, mdef: es.mdef })
     }
   }
   // アイテム（✨/木の実/おにぎり 全部込み）を1フロア3〜5個ランダム
@@ -334,7 +341,7 @@ export default function Dungeon() {
   const [bgmOn, setBgmOn] = useState(() => localStorage.getItem('bf_dg_bgm') !== 'off') // BGM ON/OFF（全体ONなら既定オン）。追憶の遺跡(d30)でのみ再生
   const [bgmVol, setBgmVol] = useState(() => { const v = parseInt(localStorage.getItem('bf_dg_bgmvol') || '35', 10); return isNaN(v) ? 35 : Math.min(100, Math.max(0, v)) }) // 0〜100
   // 30Fボスはボス専用BGM、それ以外はダンジョンのBGM
-  const bgmSrc = isBossFloor(dungeon?.id, floorNum) ? '/30FBoos.mp3' : (dungeon?.bgm || null)
+  const bgmSrc = dgBgm(dungeon, floorNum)
   const bgmDungeon = !!bgmSrc // BGMが設定されているフロアで再生
   // BGMはWeb Audioでギャップレスにループ（HTMLAudioの継ぎ目をなくす）
   const bgmGainRef = useRef(null)
@@ -623,7 +630,7 @@ export default function Dungeon() {
       const es = dungeonEnemyStatsFor(dungeon, kind)
       spawnSeq.current += 1
       return {
-        id: 'es' + spawnSeq.current, x, y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: kind.skills || enemySkillsFor(kind.name), canSwim: isAquatic(kind.name), reach: kind.reach || 1,
+        id: 'es' + spawnSeq.current, x, y, name: kind.name, type: kind.type, image: pickEnemyImage(kind), skills: kind.skills || enemySkillsFor(kind.name), canSwim: kind.canSwim ?? isAquatic(kind.name), reach: kind.reach || 1,
         hp: es.maxHp, maxHp: es.maxHp, atk: es.atk, def: es.def, mdef: es.mdef,
       }
     }
@@ -907,31 +914,32 @@ export default function Dungeon() {
         else if (sk.selfBuff.kind === 'shield') { setShield(sk.selfBuff.turns); shieldRateRef.current = sk.selfBuff.rate || 0.7; addLog(`🛡 ${sk.name}！被ダメを軽減`) }
       }
       const killed = newHp <= 0
-      // ボスは2段階：第1形態を倒すと第2形態へ（HP全回復・防御down/攻撃up・物理特殊ミックス）
-      if (killed && target.boss && target.phase === 0) {
-        const p2 = DEVIL_PAPIA.phases[1]
-        // 第2形態のステ/HPにするが、画像は第1のまま2秒点滅 → その後第2形態画像へ差し替え
+      // ボスは多段階：最終形態以外を倒すと次形態へ（HP全回復・ステ差し替え）。定義はbossFor(ダンジョン別)
+      const bossDef = target.boss ? bossFor(dungeon?.id) : null
+      if (killed && target.boss && target.phase < bossDef.phases.length - 1) {
+        const np = bossDef.phases[target.phase + 1]
+        // 次形態のステ/HPにするが、画像は現形態のまま2秒点滅 → その後次形態画像へ差し替え（layeredは画像なし＝フィルターで変化）
         enemies = enemies.map((e) => e.id === target.id ? {
-          ...e, phase: 1, type: p2.type, mix: !!p2.mix, image: assetSrc(DEVIL_PAPIA.phases[0].image), skills: p2.skills,
-          hp: p2.hp, maxHp: p2.hp, atk: p2.atk, def: p2.def, mdef: p2.mdef, buff: 0, atkDown: 0, defDown: 0, healedOnce: false, blink: true,
+          ...e, phase: target.phase + 1, type: np.type, mix: !!np.mix, skills: np.skills,
+          hp: np.hp, maxHp: np.hp, atk: np.atk, def: np.def, mdef: np.mdef, buff: 0, atkDown: 0, defDown: 0, healedOnce: false, blink: true,
         } : e)
-        addLog('💀 デビルパピアが力を取り戻していく…！', 'right')
+        addLog(np.transition?.during || `💀 ${target.name}の様子が変わっていく…！`, 'right')
         playSe('bosukeitaihenkazi') // 形態変化SE
         triggerShake('kill')
         applyFx({ pet: { lunge: { dx, dy } }, enemies: {} })
         setState({ ...s, player, enemies })
         busyRef.current = true
         const tid = setTimeout(() => {
-          setState((prev) => prev ? { ...prev, enemies: prev.enemies.map((e) => e.id === target.id ? { ...e, image: assetSrc(p2.image), blink: false } : e) } : prev)
-          addLog('💀 デビルパピア 第2形態！', 'right')
+          setState((prev) => prev ? { ...prev, enemies: prev.enemies.map((e) => e.id === target.id ? { ...e, image: np.image ? assetSrc(np.image) : e.image, blink: false } : e) } : prev)
+          addLog(np.transition?.after || `💀 ${target.name} ${np.label || '次形態'}！`, 'right')
           busyRef.current = false
         }, 2000)
         turnTimers.current.push(tid)
         return
       }
-      if (killed && target.boss && target.phase === 1) {
+      if (killed && target.boss && target.phase >= bossDef.phases.length - 1) {
         // ボス討伐＝ダンジョンクリア。神秘の欠片を確定ドロップ
-        setStatus('cleared'); addLog('🏁 デビルパピアを討伐！ダンジョンクリア！'); enemiesRef.current += 1
+        setStatus('cleared'); addLog(`🏁 ${target.name}を討伐！ダンジョンクリア！`); enemiesRef.current += 1
         grantKill(floorNum, target.name, px, py)
         setState({ ...s, player, enemies: enemies.filter((e) => e.id !== target.id) })
         if (dungeon) setCleared((c) => new Set(c).add(dungeon.id))
@@ -1093,7 +1101,7 @@ export default function Dungeon() {
         // 敵のダメージも 0.9〜1.1 の乱数補正（最低1）
         let dmg = Math.max(1, Math.round(calcDamage(eAtk, guard) * (0.9 + Math.random() * 0.2)))
         // 敵スキル（確率発動）。ボスはHP50%以下で「復讐」を追加
-        const bossPh = e.boss ? DEVIL_PAPIA.phases[e.phase] : null
+        const bossPh = e.boss ? bossFor(dungeon?.id).phases[e.phase] : null
         const lowHp = (e.hp || 0) <= (e.maxHp || 1) * 0.5
         const sks = (lowHp && bossPh?.lowHpSkill) ? [...(e.skills || []), bossPh.lowHpSkill] : (e.skills || [])
         const notes = []
@@ -1567,6 +1575,7 @@ export default function Dungeon() {
                     <div style={{ color: unlocked ? '#6699cc' : '#aa6644', fontSize: 11, marginTop: 2 }}>
                       {d.comingSoon && isAdmin ? '🛠 [開発] テスト挑戦可' : d.comingSoon ? '🔒 近日公開（後日のアップデートで開放）' : unlocked ? 'タップして挑戦' : `${getDungeon(d.requires).name} をクリアで開放`}
                     </div>
+                    {d.hint && unlocked && <div style={{ color: '#557799', fontSize: 10, marginTop: 2 }}>{d.hint}</div>}
                   </div>
                 </div>
               )
@@ -1864,19 +1873,20 @@ export default function Dungeon() {
                     {chips.map((c) => <span key={c.k} style={{ color: c.col, whiteSpace: 'nowrap' }}>{c.label}</span>)}
                   </div>
                 )}
-                {/* ボスHPバー（大） */}
+                {/* ボスHPバー（大）。形態ラベル/色はボス定義(bossFor)から */}
                 {(() => {
                   const boss = state.enemies.find((e) => e.boss)
                   if (!boss) return null
+                  const ph = bossFor(dungeon?.id).phases[boss.phase] || {}
                   const r = Math.max(0, Math.min(1, (boss.hp || 0) / (boss.maxHp || 1)))
                   return (
                     <div style={{ marginTop: 2 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: boss.phase === 1 ? '#ff77aa' : '#ffaa66' }}>
-                        <span>👿 {boss.name}{boss.phase === 1 ? '（第2形態）' : '（第1形態）'}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: ph.barColor || '#ffaa66' }}>
+                        <span>👿 {boss.name}{ph.label ? `（${ph.label}）` : ''}</span>
                         <span>{boss.hp}/{boss.maxHp}</span>
                       </div>
                       <div style={{ height: 7, background: 'rgba(0,4,10,0.85)', border: '1px solid #000', borderRadius: 3, overflow: 'hidden' }}>
-                        <div style={{ width: `${r * 100}%`, height: '100%', background: boss.phase === 1 ? '#ff4488' : '#ff8844', transition: 'width 0.25s ease' }} />
+                        <div style={{ width: `${r * 100}%`, height: '100%', background: ph.barColor || '#ff8844', transition: 'width 0.25s ease' }} />
                       </div>
                     </div>
                   )
@@ -1898,10 +1908,13 @@ export default function Dungeon() {
               : c.paralyze ? 'sepia(0.8) saturate(2.2) hue-rotate(-12deg) brightness(1.08) drop-shadow(0 0 3px #ffe066)'
               : c.poison ? 'sepia(0.6) hue-rotate(230deg) saturate(1.8) drop-shadow(0 0 3px #aa55ff)'
               : 'none'
-            const inner = (c.bossImg && c.img)
-              // ボスは左上セルから2×2マスに広げて表示（overflow visibleで隣にはみ出す）＋頭上HPバー
-              ? <div style={{ position: 'absolute', left: 0, top: 0, width: '200%', height: '200%', zIndex: 4, pointerEvents: 'none' }}>
-                  <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', animation: c.bossE?.blink ? 'bf-boss-blink 0.22s steps(1) infinite' : undefined }} />
+            const inner = (c.bossImg && (c.img || c.bossE?.layered))
+              // ボスは左上セルからsize×sizeマスに広げて表示（overflow visibleで隣にはみ出す）＋頭上HPバー
+              //  layered=カモルス（レイヤー分解アニメスプライト。形態はフィルターで色変化）
+              ? <div style={{ position: 'absolute', left: 0, top: 0, width: `${(c.bossE?.size || 2) * 100}%`, height: `${(c.bossE?.size || 2) * 100}%`, zIndex: 4, pointerEvents: 'none' }}>
+                  {c.bossE?.layered
+                    ? <Boss60Sprite size="100%" phase={c.bossE.phase || 0} blink={!!c.bossE.blink} />
+                    : <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', animation: c.bossE?.blink ? 'bf-boss-blink 0.22s steps(1) infinite' : undefined }} />}
                 </div>
               : c.img
               ? (c.item

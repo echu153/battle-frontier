@@ -170,6 +170,137 @@ const D30E = {
     { name: '帯電', chance: 0.25, type: 'selfbuff' } ] },
 }
 
+// 五霊の大峡谷(d60)の敵定義。F1でd30の20F相当の強さ（推奨LV100）→F59でLV330相当。
+//  ステはd30同様に固定値（初登場フロア基準）。atkは実戦でENEMY_ATK_MULT(0.8)が掛かる。
+//  canSwim: ④の水はAQUATIC名で判定、⑦のマグマは canSwim:true 指定の炎系のみ渡れる
+const D60E = {
+  // --- ③古代の洞窟系 F1-12（d30と同種族・強化版）---
+  kobold:  { name: 'コボルト', type: 'phys', images: ['/koboruto.png', '/koboruto2.png'], stats: { maxHp: 320, atk: 210, def: 140, mdef: 140 }, skills: [
+    { name: '乱舞', chance: 0.30, type: 'heavy', mult: 1.4 },
+    { name: '雄叫び', chance: 0.25, type: 'selfbuff' },
+    { name: 'すね狙い', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
+  skelSword: { name: 'スケルトン（剣）', type: 'phys', image: '/sukerutonken.png', stats: { maxHp: 360, atk: 230, def: 155, mdef: 150 }, skills: [
+    { name: '重斬り', chance: 0.30, type: 'heavy', mult: 1.5 },
+    { name: '骨砕き', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 },
+    { name: '呪詛', chance: 0.25, type: 'weaken', stat: 'mdef', turns: 4 } ] },
+  skelBow: { name: 'スケルトン（弓）', type: 'phys', image: '/sukerutonyumi.png', stats: { maxHp: 300, atk: 250, def: 120, mdef: 120 }, reach: 2, skills: [
+    { name: '連射', chance: 0.30, type: 'heavy', mult: 1.3 },
+    { name: '狙い撃ち', chance: 0.25, type: 'heavy', mult: 1.6 },
+    { name: '毒矢', chance: 0.25, type: 'poison' } ] },
+  golemA: { name: 'ゴーレム（攻）', type: 'spec', image: '/go-remukougeki.png', stats: { maxHp: 400, atk: 280, def: 160, mdef: 160 }, skills: [
+    { name: '岩石砲', chance: 0.30, type: 'spec_heavy', mult: 1.5 },
+    { name: '地響き', chance: 0.30, type: 'heavy', mult: 1.3 },
+    { name: '咆哮', chance: 0.20, type: 'selfbuff' } ] },
+  golemD: { name: 'ゴーレム（守）', type: 'phys', image: '/go-remubougyo.png', stats: { maxHp: 560, atk: 190, def: 260, mdef: 260 }, skills: [
+    { name: '堅守の構え', chance: 0.30, type: 'selfbuff' },
+    { name: '鈍重打', chance: 0.30, type: 'heavy', mult: 1.4 },
+    { name: '防御崩し', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
+  // --- ④蒼海の入り江系 F13-24 ---
+  gyojin: { name: '深海魚人', type: 'spec', image: '/sinkaigyozin.png', stats: { maxHp: 520, atk: 330, def: 220, mdef: 220 }, skills: [
+    { name: '水流弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+    { name: '墨吐き', chance: 0.30, type: 'weaken', stat: 'atk', turns: 4 },
+    { name: '再生', chance: 0.25, type: 'vamp', frac: 0.3 } ] },
+  pirateM: { name: '海賊（男）', type: 'phys', image: '/kaizokuotoko.png', stats: { maxHp: 580, atk: 360, def: 245, mdef: 220 }, reach: 2, skills: [
+    { name: '銃撃', chance: 0.30, type: 'heavy', mult: 1.4 },
+    { name: '鼓舞', chance: 0.25, type: 'selfbuff' },
+    { name: '足払い', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
+  pirateF: { name: '海賊（女）', type: 'spec', image: '/kaizokuonnna.png', stats: { maxHp: 540, atk: 350, def: 215, mdef: 240 }, reach: 2, skills: [
+    { name: '魔弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+    { name: '幻惑', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 },
+    { name: '治癒', chance: 0.25, type: 'vamp', frac: 0.3 } ] },
+  harisen: { name: 'ハリセンボン', type: 'phys', image: '/harisennbonn.png', stats: { maxHp: 620, atk: 380, def: 240, mdef: 240 }, skills: [
+    { name: 'どくのハリ', chance: 0.35, type: 'poison' },
+    { name: '膨張', chance: 0.25, type: 'selfbuff' },
+    { name: '針千本', chance: 0.25, type: 'heavy', mult: 1.5 } ] },
+  dokukurage: { name: '毒クラゲ', type: 'spec', image: '/dokukurage.png', stats: { maxHp: 590, atk: 370, def: 250, mdef: 250 }, skills: [
+    { name: 'どく', chance: 0.45, type: 'poison' },
+    { name: '痺れ毒', chance: 0.25, type: 'paralyze' },
+    { name: '溶解', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 } ] },
+  denkikurage: { name: '電気クラゲ', type: 'spec', image: '/denkikurage.png', stats: { maxHp: 590, atk: 370, def: 250, mdef: 250 }, skills: [
+    { name: 'しびれ', chance: 0.30, type: 'paralyze' },
+    { name: '放電', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+    { name: '帯電', chance: 0.25, type: 'selfbuff' } ] },
+  // --- ⑤巨峰山脈系 F25-36 ---
+  gobuAxe: { name: '山岳ゴブリン（斧）', type: 'phys', image: '/sangakugobuono.png', stats: { maxHp: 820, atk: 520, def: 340, mdef: 310 }, skills: [
+    { name: '斧叩き', chance: 0.30, type: 'heavy', mult: 1.5 },
+    { name: '雄叫び', chance: 0.25, type: 'selfbuff' },
+    { name: '防具砕き', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
+  gobuBow: { name: '山岳ゴブリン（弓）', type: 'phys', image: '/sangakugobuyumi.png', stats: { maxHp: 740, atk: 560, def: 290, mdef: 290 }, reach: 2, skills: [
+    { name: '狙撃', chance: 0.25, type: 'heavy', mult: 1.6 },
+    { name: '連射', chance: 0.30, type: 'heavy', mult: 1.3 },
+    { name: '毒矢', chance: 0.25, type: 'poison' } ] },
+  gorilla: { name: 'マウンテンゴリラ', type: 'phys', image: '/mauntengorira.png', stats: { maxHp: 1050, atk: 600, def: 380, mdef: 320 }, skills: [
+    { name: '剛腕', chance: 0.30, type: 'heavy', mult: 1.6 },
+    { name: 'ドラミング', chance: 0.25, type: 'selfbuff' },
+    { name: '岩投げ', chance: 0.30, type: 'heavy', mult: 1.3 } ] },
+  griffon: { name: 'グリフォン', type: 'phys', image: '/gurihulon.png', stats: { maxHp: 880, atk: 620, def: 330, mdef: 360 }, skills: [
+    { name: '急降下', chance: 0.30, type: 'heavy', mult: 1.6 },
+    { name: '風の刃', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+    { name: 'かく乱', chance: 0.25, type: 'weaken', stat: 'atk', turns: 4 } ] },
+  unicorn: { name: '一角獣', type: 'spec', image: '/ikkakuzyuu.png', stats: { maxHp: 920, atk: 570, def: 350, mdef: 430 }, skills: [
+    { name: '光の角', chance: 0.30, type: 'spec_heavy', mult: 1.5 },
+    { name: '浄化', chance: 0.25, type: 'vamp', frac: 0.3 },
+    { name: '魔法障壁', chance: 0.25, type: 'selfbuff' } ] },
+  ganseki1: { name: '岩石ゴーレム（古）', type: 'phys', image: '/gannsekigo-remu.png', stats: { maxHp: 1400, atk: 480, def: 520, mdef: 450 }, skills: [
+    { name: '堅守の構え', chance: 0.30, type: 'selfbuff' },
+    { name: '岩石落とし', chance: 0.30, type: 'heavy', mult: 1.4 },
+    { name: '防御崩し', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
+  ganseki2: { name: '岩石ゴーレム（新）', type: 'spec', image: '/gansekigo-remumidori.png', stats: { maxHp: 1150, atk: 590, def: 430, mdef: 430 }, skills: [
+    { name: '胞子砲', chance: 0.30, type: 'spec_heavy', mult: 1.5 },
+    { name: '溶解胞子', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 },
+    { name: '地響き', chance: 0.25, type: 'heavy', mult: 1.3 } ] },
+  // --- ⑥白銀の霊峰系 F37-48 ---
+  yeti: { name: '雪男', type: 'phys', image: '/yukiotoko.png', stats: { maxHp: 1500, atk: 850, def: 540, mdef: 480 }, skills: [
+    { name: '雪崩拳', chance: 0.30, type: 'heavy', mult: 1.5 },
+    { name: '咆哮', chance: 0.25, type: 'selfbuff' },
+    { name: '凍てつく打撃', chance: 0.30, type: 'weaken', stat: 'def', turns: 4 } ] },
+  icewolf: { name: '氷狼フェンリル', type: 'phys', image: '/koorirou.png', stats: { maxHp: 1350, atk: 920, def: 500, mdef: 470 }, skills: [
+    { name: '疾走噛み', chance: 0.30, type: 'heavy', mult: 1.6 },
+    { name: '連牙', chance: 0.30, type: 'heavy', mult: 1.3 },
+    { name: '遠吠え', chance: 0.25, type: 'selfbuff' } ] },
+  yukionna: { name: '雪女', type: 'spec', image: '/yukionna.png', stats: { maxHp: 1280, atk: 880, def: 460, mdef: 620 }, skills: [
+    { name: '氷の吐息', chance: 0.30, type: 'paralyze' },
+    { name: '冷気弾', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+    { name: '呪いの雪', chance: 0.30, type: 'weaken', stat: 'atk', turns: 4 } ] },
+  frostSpirit: { name: '霜の精霊', type: 'spec', image: '/simonoseirei.png', stats: { maxHp: 1220, atk: 900, def: 440, mdef: 660 }, skills: [
+    { name: '吹雪', chance: 0.30, type: 'spec_heavy', mult: 1.5 },
+    { name: '霜の矢', chance: 0.30, type: 'spec_heavy', mult: 1.3 },
+    { name: '凍える霧', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 } ] },
+  iceDragon: { name: '氷河ドラゴン', type: 'phys', image: '/hyougadoragon.png', stats: { maxHp: 1750, atk: 950, def: 620, mdef: 640 }, skills: [
+    { name: '氷河ブレス', chance: 0.30, type: 'spec_heavy', mult: 1.5 },
+    { name: '尾撃', chance: 0.30, type: 'heavy', mult: 1.4 },
+    { name: '凍結', chance: 0.25, type: 'paralyze' } ] },
+  iceGolem: { name: '氷結ゴーレム', type: 'phys', image: '/koorigo-remu.png', stats: { maxHp: 2200, atk: 760, def: 800, mdef: 720 }, skills: [
+    { name: '氷壁', chance: 0.30, type: 'selfbuff' },
+    { name: '氷塊落とし', chance: 0.30, type: 'heavy', mult: 1.4 },
+    { name: '凍結の腕', chance: 0.25, type: 'paralyze' } ] },
+  // --- ⑦煉獄火山系 F49-59（canSwim=マグマを渡れる）---
+  hellhound: { name: 'ヘルハウンド', type: 'phys', image: '/heruhaundo.png', stats: { maxHp: 2300, atk: 1250, def: 700, mdef: 640 }, skills: [
+    { name: '灼熱牙', chance: 0.30, type: 'heavy', mult: 1.5 },
+    { name: '火炎ブレス', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+    { name: '咆哮', chance: 0.25, type: 'selfbuff' } ] },
+  magmaslime: { name: 'マグマスライム', type: 'spec', image: '/magumasuraimu.png', canSwim: true, stats: { maxHp: 2100, atk: 1200, def: 720, mdef: 720 }, skills: [
+    { name: '溶解', chance: 0.30, type: 'spec_heavy', mult: 1.5 },
+    { name: '灼熱の飛沫', chance: 0.30, type: 'burn' },
+    { name: '膨張', chance: 0.25, type: 'selfbuff' } ] },
+  fireSpirit: { name: '炎の精霊', type: 'spec', image: '/honoonoseirei.png', canSwim: true, stats: { maxHp: 2000, atk: 1350, def: 620, mdef: 800 }, skills: [
+    { name: '業火', chance: 0.30, type: 'spec_heavy', mult: 1.6 },
+    { name: '火炎弾', chance: 0.30, type: 'spec_heavy', mult: 1.3 },
+    { name: '灼熱', chance: 0.30, type: 'weaken', stat: 'mdef', turns: 4 } ] },
+  firedrake: { name: 'ファイアドレイク', type: 'phys', image: '/faiadoreiku.png', stats: { maxHp: 2700, atk: 1400, def: 780, mdef: 760 }, skills: [
+    { name: '業火ブレス', chance: 0.30, type: 'spec_heavy', mult: 1.6 },
+    { name: '炎爪', chance: 0.30, type: 'heavy', mult: 1.4 },
+    { name: '火だるま', chance: 0.25, type: 'burn' } ] },
+  ifrit: { name: 'イフリート', type: 'spec', image: '/ifuri-to.png', canSwim: true, stats: { maxHp: 2500, atk: 1450, def: 740, mdef: 820 }, skills: [
+    { name: '獄炎', chance: 0.30, type: 'spec_heavy', mult: 1.6 },
+    { name: '火柱', chance: 0.30, type: 'heavy', mult: 1.4 },
+    { name: '業火の吸精', chance: 0.25, type: 'vamp', frac: 0.3 } ] },
+  lavaGolem: { name: '溶岩ゴーレム', type: 'phys', image: '/yougango-remu.png', stats: { maxHp: 3400, atk: 1150, def: 950, mdef: 800 }, skills: [
+    { name: '溶岩拳', chance: 0.30, type: 'heavy', mult: 1.6 },
+    { name: '噴火', chance: 0.30, type: 'spec_heavy', mult: 1.4 },
+    { name: '硬化', chance: 0.25, type: 'selfbuff' } ] },
+}
+
 // ダンジョン定義（まず2種。requires をクリアすると開放。以降は今後追加）
 //  areas: 出現するエリア（深いフロアほど後ろのエリアの敵が出る）
 export const DUNGEONS = [
@@ -208,6 +339,48 @@ export const DUNGEONS = [
       { from: 29, to: 30, enemies: [D30E.harisen, D30E.dokukurage, D30E.denkikurage] }, // 30はボス階で上書き（保険）
     ],
   },
+  // 五霊の大峡谷（60F）。エリア③〜⑦の5帯構成＋60Fボス。開発先行（comingSoon=is_adminのみ挑戦可）
+  //  推奨LV100（F1）〜LV350目安（60Fボス・チャーム込み）。敵はD60E固定ステ
+  {
+    id: 'd60', name: '五霊の大峡谷', floors: 60, requires: 'd30', emoji: '⛰', comingSoon: true,
+    areas: [3, 4, 5, 6, 7], charms: ['antidote', 'guard'],
+    hint: '推奨LV100〜（最深部はLV350目安）',
+    floorTable: [
+      // ③古代の洞窟帯 F1-12
+      { from: 1,  to: 2,  enemies: [D60E.kobold] },
+      { from: 3,  to: 4,  enemies: [D60E.kobold, D60E.skelSword] },
+      { from: 5,  to: 6,  enemies: [D60E.kobold, D60E.skelSword, D60E.skelBow] },
+      { from: 7,  to: 9,  enemies: [D60E.skelSword, D60E.skelBow, D60E.golemA] },
+      { from: 10, to: 12, enemies: [D60E.skelBow, D60E.golemA, D60E.golemD] },
+      // ④蒼海の入り江帯 F13-24（水たまり＝AQUATICの敵のみ泳げる）
+      { from: 13, to: 14, enemies: [D60E.gyojin] },
+      { from: 15, to: 17, enemies: [D60E.gyojin, D60E.pirateM, D60E.pirateF] },
+      { from: 18, to: 19, enemies: [D60E.pirateM, D60E.pirateF, D60E.harisen] },
+      { from: 20, to: 22, enemies: [D60E.harisen, D60E.dokukurage, D60E.denkikurage] },
+      { from: 23, to: 24, enemies: [D60E.pirateM, D60E.harisen, D60E.dokukurage, D60E.denkikurage] },
+      // ⑤巨峰山脈帯 F25-36
+      { from: 25, to: 26, enemies: [D60E.gobuAxe] },
+      { from: 27, to: 28, enemies: [D60E.gobuAxe, D60E.gobuBow] },
+      { from: 29, to: 30, enemies: [D60E.gobuAxe, D60E.gobuBow, D60E.gorilla] },
+      { from: 31, to: 32, enemies: [D60E.gobuBow, D60E.gorilla, D60E.griffon] },
+      { from: 33, to: 34, enemies: [D60E.gorilla, D60E.griffon, D60E.unicorn] },
+      { from: 35, to: 36, enemies: [D60E.griffon, D60E.unicorn, D60E.ganseki1, D60E.ganseki2] },
+      // ⑥白銀の霊峰帯 F37-48
+      { from: 37, to: 38, enemies: [D60E.yeti] },
+      { from: 39, to: 40, enemies: [D60E.yeti, D60E.icewolf] },
+      { from: 41, to: 42, enemies: [D60E.yeti, D60E.icewolf, D60E.yukionna] },
+      { from: 43, to: 44, enemies: [D60E.icewolf, D60E.yukionna, D60E.frostSpirit] },
+      { from: 45, to: 46, enemies: [D60E.yukionna, D60E.frostSpirit, D60E.iceDragon] },
+      { from: 47, to: 48, enemies: [D60E.frostSpirit, D60E.iceDragon, D60E.iceGolem] },
+      // ⑦煉獄火山帯 F49-59（マグマ＝canSwim指定の炎系のみ渡れる）
+      { from: 49, to: 50, enemies: [D60E.hellhound] },
+      { from: 51, to: 52, enemies: [D60E.hellhound, D60E.magmaslime] },
+      { from: 53, to: 54, enemies: [D60E.hellhound, D60E.magmaslime, D60E.fireSpirit] },
+      { from: 55, to: 56, enemies: [D60E.magmaslime, D60E.fireSpirit, D60E.firedrake] },
+      { from: 57, to: 58, enemies: [D60E.fireSpirit, D60E.firedrake, D60E.ifrit] },
+      { from: 59, to: 60, enemies: [D60E.firedrake, D60E.ifrit, D60E.lavaGolem] }, // 60はボス階で上書き（保険）
+    ],
+  },
   // 開発用ダンジョン（is_admin限定・BGMテスト）。深海の廃都
   {
     id: 'ddev', name: '深海の廃都', floors: 5, requires: null, emoji: '🌊', comingSoon: true, dev: true,
@@ -223,12 +396,15 @@ export const DUNGEONS = [
 ]
 export const getDungeon = (id) => DUNGEONS.find((d) => d.id === id) || DUNGEONS[0]
 
+// ボス階判定（d30=30F デビルパピア / d60=60F カモルス）
+export const isBossFloor = (dungeonId, floor) =>
+  (dungeonId === 'd30' && floor === 30) || (dungeonId === 'd60' && floor === 60)
 // 30Fボス：デビルパピア（2×2・移動する・2段階）。第2形態はHP全回復・防御down/攻撃up・物理特殊ミックス
-export const isBossFloor = (dungeonId, floor) => dungeonId === 'd30' && floor === 30
 export const DEVIL_PAPIA = {
   name: 'デビルパピア', size: 2,
   phases: [
     { // 第1形態：防御寄り。物理攻撃＋自己防御バフ
+      label: '第1形態', barColor: '#ff8844',
       hp: 1200, atk: 160, def: 220, mdef: 180, type: 'phys', image: '/debirupapia1.png',
       skills: [
         { name: '守りの構え', chance: 0.35, type: 'selfbuff' },
@@ -237,7 +413,9 @@ export const DEVIL_PAPIA = {
       ],
     },
     { // 第2形態：防御down・攻撃大幅up。物理＋特殊ミックス
+      label: '第2形態', barColor: '#ff4488',
       hp: 3000, atk: 260, def: 160, mdef: 150, type: 'phys', mix: true, image: '/debirupapia2.png',
+      transition: { during: '💀 デビルパピアが力を取り戻していく…！', after: '💀 デビルパピア 第2形態！' },
       // HP50%以下で「復讐」（高威力）。HP50%以下で1度だけ最大HP30%回復
       lowHpSkill: { name: '復讐', chance: 0.45, type: 'spec_heavy', mult: 2.2 },
       reviveHealPct: 0.30,
@@ -250,6 +428,50 @@ export const DEVIL_PAPIA = {
     },
   ],
 }
+// 60Fボス：カモルス・V・ナスB=パピア（2×2・3段階）。
+//  画像はレイヤー分解アニメ（Boss60Sprite）。形態はCSSフィルターで色味変化（layeredプロパティで判別）
+//  難易度目安: LV350＋チャームで討伐。総HP32000・後半ほど防御が下がり攻撃が上がる
+export const KAMORUSU = {
+  name: 'カモルス・V・ナスB=パピア', size: 2, layered: true,
+  phases: [
+    { // 第1形態：装甲形態。超防御・物理砲撃
+      label: '装甲形態', barColor: '#ffd257',
+      hp: 10000, atk: 900, def: 2400, mdef: 2000, type: 'phys',
+      skills: [
+        { name: '重装砲撃', chance: 0.30, type: 'heavy', mult: 1.5 },
+        { name: '守護結界', chance: 0.30, type: 'selfbuff' },
+        { name: 'クリスタル閃光', chance: 0.25, type: 'weaken', stat: 'atk', turns: 4 },
+        { name: 'ビット射出', chance: 0.30, type: 'spec_heavy', mult: 1.3 },
+      ],
+    },
+    { // 第2形態：限界解放。物理特殊ミックス・自己修復
+      label: '限界解放', barColor: '#66ccff',
+      hp: 13000, atk: 1150, def: 1800, mdef: 1800, type: 'phys', mix: true,
+      transition: { during: '⚙ カモルスの装甲が展開し、クリスタルが輝き出す…！', after: '💠 カモルス・V・ナスB=パピア 限界解放！' },
+      skills: [
+        { name: '星片乱舞', chance: 0.30, type: 'heavy', mult: 1.4 },
+        { name: '蒼晶レーザー', chance: 0.30, type: 'spec_heavy', mult: 1.6 },
+        { name: '威圧', chance: 0.25, type: 'weaken', stat: 'def', turns: 4 },
+        { name: '自己修復', chance: 0.25, type: 'vamp', frac: 0.3 },
+      ],
+    },
+    { // 第3形態：コア暴走。防御ダウン・攻撃特化＋低HPで大技
+      label: 'コア暴走', barColor: '#ff4455',
+      hp: 9000, atk: 1400, def: 1100, mdef: 1300, type: 'phys', mix: true,
+      transition: { during: '💥 装甲が砕け散り、コアが露出した…！', after: '🔥 コア暴走——最終形態！' },
+      lowHpSkill: { name: 'ジャッジメント', chance: 0.45, type: 'spec_heavy', mult: 2.2 },
+      reviveHealPct: 0.25,
+      skills: [
+        { name: '終焉光', chance: 0.30, type: 'heavy', mult: 1.6 },
+        { name: '崩壊レーザー', chance: 0.30, type: 'spec_heavy', mult: 1.5 },
+        { name: '電磁拘束', chance: 0.25, type: 'paralyze' },
+        { name: '崩壊の呪縛', chance: 0.25, type: 'weaken', stat: 'def', turns: 4 },
+      ],
+    },
+  ],
+}
+// ダンジョンIDからボス定義を返す
+export const bossFor = (dungeonId) => (dungeonId === 'd60' ? KAMORUSU : DEVIL_PAPIA)
 
 // 敵スキル（攻撃時に確率で発動）。type: poison=毒付与 / heavy=ダメージ倍率 / vamp=与ダメの一部を自己回復
 //  ※毒キノコは毒、盗賊は2つ持ち。名前で引くので敵定義側は変更不要
@@ -516,10 +738,32 @@ export const DUNGEON_TILES = {
 }
 // 水エリア用タイル（追憶の遺跡 20〜29F・深海の廃都で共用）
 const WATER_TILES = { floor: '/水辺床.png', wall: '/mizutamari.png', walls: ['/mizutamari.png'], stairs: '/dg_stairs.png', waterWall: true }
-// 追憶の遺跡(d30)の20〜29Fは水エリア
-export const isWaterFloor = (dungeonId, floor) => dungeonId === 'd30' && floor >= 20 && floor <= 29
-// ダンジョン＋フロアから有効なタイル設定を返す（水エリアは上書き）
-export const dgTilesFor = (dungeonId, floor) => (isWaterFloor(dungeonId, floor) ? WATER_TILES : (DUNGEON_TILES[dungeonId] || null))
+// 追憶の遺跡(d30)の20〜29F・五霊の大峡谷(d60)の13〜24Fは水エリア
+export const isWaterFloor = (dungeonId, floor) =>
+  (dungeonId === 'd30' && floor >= 20 && floor <= 29) || (dungeonId === 'd60' && floor >= 13 && floor <= 24)
+// 五霊の大峡谷(d60)のフロア帯別タイル＆BGM。⑦のマグマは水たまり方式(waterWall)で炎系のみ渡れる
+const D60_MAGMA_TILES = { floor: '/eria7yuka.png', wall: '/eria7kabe.png', walls: ['/eria7kabe.png'], stairs: '/dg_stairs.png', item: '/dg_item.png', waterWall: true }
+const D60_BANDS = [
+  { from: 1,  to: 12, tiles: DUNGEON_TILES.d30, bgm: '/dungeon_bgm.mp3' },   // ③洞窟（d30タイル流用）
+  { from: 13, to: 24, tiles: WATER_TILES, bgm: '/深海の廃都.mp3' },          // ④水辺
+  { from: 25, to: 36, tiles: { floor: '/eria5yuka.png', wall: '/eria5kabe.png', walls: ['/eria5kabe.png'], stairs: '/dg_stairs.png', item: '/dg_item.png' }, bgm: '/yama.mp3' },  // ⑤山岳
+  { from: 37, to: 48, tiles: { floor: '/eria6yuka.png', wall: '/eria6kabe.png', walls: ['/eria6kabe.png'], stairs: '/dg_stairs.png', item: '/dg_item.png' }, bgm: '/yuki.mp3' },  // ⑥氷雪
+  { from: 49, to: 59, tiles: D60_MAGMA_TILES, bgm: '/maguma.mp3' },          // ⑦火山（マグマ）
+  { from: 60, to: 60, tiles: D60_MAGMA_TILES, bgm: '/60Fbosu.mp3' },         // 60Fボス
+]
+const d60BandFor = (floor) => D60_BANDS.find((b) => floor >= b.from && floor <= b.to) || D60_BANDS[0]
+// ダンジョン＋フロアから有効なタイル設定を返す（d60はフロア帯／d30水エリアは上書き）
+export const dgTilesFor = (dungeonId, floor) => {
+  if (dungeonId === 'd60') return d60BandFor(floor).tiles
+  return isWaterFloor(dungeonId, floor) ? WATER_TILES : (DUNGEON_TILES[dungeonId] || null)
+}
+// そのフロアのBGM（d60はフロア帯で切替／d30は30FだけボスBGM／他はダンジョン既定）
+export function dgBgm(dungeon, floor) {
+  if (!dungeon) return null
+  if (dungeon.id === 'd60') return d60BandFor(floor).bgm
+  if (isBossFloor(dungeon.id, floor)) return '/30FBoos.mp3'
+  return dungeon.bgm || null
+}
 // 泳げる（水＝壁を通れる）敵
 const AQUATIC = new Set(['深海魚人', 'ハリセンボン', '毒クラゲ', '電気クラゲ'])
 export const isAquatic = (name) => AQUATIC.has(name)

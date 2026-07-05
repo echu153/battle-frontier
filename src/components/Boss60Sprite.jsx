@@ -16,11 +16,19 @@ const LAYERS = [
   ['crystalsTop', 'b60-bob3 2.2s linear infinite -0.7s'],
 ]
 
-// size: 表示px（正方形）。animated=falseで静止画（一覧表示など負荷を抑えたい場面用）
-export default function Boss60Sprite({ size = 220, animated = true, style }) {
+// 形態(phase)ごとの色味フィルター。0=装甲形態(素) / 1=限界解放(蒼発光) / 2=コア暴走(赤熱)
+const PHASE_FILTER = [
+  undefined,
+  'brightness(1.18) saturate(1.25) drop-shadow(0 0 8px rgba(120,200,255,0.8))',
+  'hue-rotate(-45deg) saturate(1.5) brightness(1.1) drop-shadow(0 0 8px rgba(255,80,60,0.9))',
+]
+
+// size: 表示px or '100%'（正方形）。animated=falseで静止画。phase=形態(0-2)・blink=形態変化中の点滅
+export default function Boss60Sprite({ size = 220, animated = true, phase = 0, blink = false, style }) {
   return (
-    <div style={{ position: 'relative', width: size, height: size, ...style }}>
+    <div style={{ position: 'relative', width: size, height: size, filter: PHASE_FILTER[phase] || undefined, animation: blink ? 'b60-blink 0.22s steps(1) infinite' : undefined, ...style }}>
       <style>{`
+        @keyframes b60-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.15; } }
         @keyframes b60-bob2 {
           0%, 49.99% { transform: translateY(0); }
           50%, 100%  { transform: translateY(1.6%); }
