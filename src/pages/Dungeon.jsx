@@ -300,6 +300,13 @@ export default function Dungeon() {
   useEffect(() => { masterRef.current = masterOn ? masterVol / 100 : 0; try { localStorage.setItem('bf_dg_master2', masterOn ? 'on' : 'off'); localStorage.setItem('bf_dg_mastervol', String(masterVol)) } catch { /* ignore */ } }, [masterOn, masterVol])
   const toggleSe = () => setSeOn((v) => { const n = !v; try { localStorage.setItem('bf_dg_se', n ? 'on' : 'off') } catch { /* ignore */ } return n })
   const [showSettings, setShowSettings] = useState(false) // 設定パネル（歯車）
+  const [minimapOn, setMinimapOn] = useState(() => localStorage.getItem('bf_dg_minimap') !== 'off') // ミニマップ表示（既定オン）
+  const toggleMinimap = () => setMinimapOn((v) => { const n = !v; try { localStorage.setItem('bf_dg_minimap', n ? 'on' : 'off') } catch { /* ignore */ } return n })
+  // AI自動プレイ（開発用バランステスト）。毎回OFFで開始・対象アカウントのみUI表示
+  const [aiAllowed, setAiAllowed] = useState(false)
+  const [aiOn, setAiOn] = useState(false)
+  const [aiSpeed, setAiSpeed] = useState(1) // 1 | 2 | 5
+  const aiBusyRef = useRef(false) // アイテム使用など非同期アクションの二重発火防止
   const [log, setLog] = useState([])
   const [logHidden, setLogHidden] = useState(false) // 2秒間ログ更新が無ければフェードアウト
   useEffect(() => {
@@ -415,6 +422,32 @@ export default function Dungeon() {
     return () => { if (ro) ro.disconnect(); window.removeEventListener('resize', measure) }
     // グリッドがマウント/アンマウントした時だけ張り直す（1歩ごとの再生成を避ける。サイズ変化はResizeObserverが検知）
   }, [gridMounted])
+
+  // ミニマップ（マップ右上）：探索済みの床＋階段＋見えている敵＋自分の位置をドットで描く
+  const miniRef = useRef(null)
+  useEffect(() => {
+    const cv = miniRef.current
+    if (!cv || !state || !minimapOn) return
+    const S = 4 // 1マス=4pxドット
+    cv.width = MAP_W * S; cv.height = MAP_H * S
+    const ctx = cv.getContext('2d')
+    if (!ctx) return
+    ctx.clearRect(0, 0, cv.width, cv.height)
+    const vis = computeVisible(state.rooms, state.player.x, state.player.y)
+    for (const k of state.explored) {
+      const i = k.indexOf(','); const x = +k.slice(0, i), y = +k.slice(i + 1)
+      if (state.grid[y]?.[x] !== '.') continue // 床だけ描く＝部屋と通路の形が浮かぶ
+      ctx.fillStyle = vis.has(k) ? 'rgba(165,195,245,0.55)' : 'rgba(110,140,190,0.28)' // 今見えている所は明るく
+      ctx.fillRect(x * S, y * S, S, S)
+    }
+    ctx.fillStyle = '#55ddaa' // 発見済みの床アイテム
+    for (const it of state.items) if (state.explored.has(it.x + ',' + it.y)) ctx.fillRect(it.x * S + 1, it.y * S + 1, S - 2, S - 2)
+    if (state.explored.has(state.stairs.x + ',' + state.stairs.y)) { ctx.fillStyle = '#ffcc44'; ctx.fillRect(state.stairs.x * S, state.stairs.y * S, S, S) } // 階段
+    ctx.fillStyle = '#ff5555' // 今見えている敵
+    for (const e of state.enemies) for (const [cx, cy] of enemyCells(e)) if (vis.has(cx + ',' + cy)) ctx.fillRect(cx * S, cy * S, S, S)
+    ctx.fillStyle = '#ffffff' // 自分
+    ctx.fillRect(state.player.x * S, state.player.y * S, S, S)
+  }, [state, status, minimapOn])
 
   // タイル画像（床/壁/階段/アイテム）を選択ダンジョンが決まった時点でプリロード。
   // 初めて見えたマスで画像読込待ちにならず即時表示される。
@@ -612,9 +645,11 @@ export default function Dungeon() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { nav('/login'); return }
       userIdRef.current = user.id
-      const { data: prof } = await supabase.from('profiles').select('id, is_admin').eq('id', user.id).maybeSingle()
+      const { data: prof } = await supabase.from('profiles').select('id, is_admin, username').eq('id', user.id).maybeSingle()
       if (!prof) { setAllowed(false); return }
       setIsAdmin(!!prof.is_admin)
+      // AI自動プレイ（開発用バランステスト）：管理者 or テスト用アカウント「おれおれお」のみ
+      setAiAllowed(!!prof.is_admin || prof.username === 'おれおれお')
       // 選択中のペットを読み込む
       const { data: ap } = await supabase.from('pets').select('*').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
       if (ap) {
@@ -1356,6 +1391,70 @@ export default function Dungeon() {
     commitTurn(state, state.player, state.enemies, petHp)
   }
 
+  // ============================================================
+  // AI自動プレイ（開発用バランステスト）
+  //  プレイヤーと同じ操作(tryMove/useItem)だけを使い、同じ情報(視界・探索済み)で判断する。
+  //  優先度: 回復 → 隣接敵を攻撃 → 見える敵へ接近 → 発見済みアイテム → 階段 → 未探索へ
+  // ============================================================
+  const aiTick = () => {
+    if (!aiOn || !state || status !== 'exploring' || busyRef.current || aiBusyRef.current || transition || lockedOut) return
+    const s = state
+    const px = s.player.x, py = s.player.y
+    // ① 回復：空腹ならおにぎり、HP35%以下なら木の実（プレイヤーと同じ消費・1ターン経過）
+    const useAsync = (key) => { aiBusyRef.current = true; Promise.resolve(useItem(key)).finally(() => { aiBusyRef.current = false }) }
+    if (fullness <= 25 && (inventory.onigiri || 0) > 0) { useAsync('onigiri'); return }
+    if (petHp <= pet.maxHp * 0.35 && (inventory.konomi || 0) > 0) { useAsync('konomi'); return }
+    // ② 隣接している敵を攻撃（見えている敵のみ）。スキルの満腹が足りなければたいあたりへ切替
+    const vis = computeVisible(s.rooms, px, py)
+    const seen = (e) => enemyCells(e).some(([cx, cy]) => vis.has(cx + ',' + cy))
+    const adjE = s.enemies.find((e) => seen(e) && (e.boss ? enemyAdjacent(e, px, py) : Math.max(Math.abs(e.x - px), Math.abs(e.y - py)) === 1))
+    if (adjE) {
+      if ((getSkill(selectedSkill).cost || 0) > fullness) { setSelectedSkill('tackle'); return } // 次tickで攻撃
+      const cell = enemyCells(adjE).find(([cx, cy]) => Math.max(Math.abs(cx - px), Math.abs(cy - py)) === 1)
+      if (cell) { tryMove(cell[0] - px, cell[1] - py); return }
+    }
+    // ③ BFS(4方向)で目標へ1歩。敵マスは通れない
+    const enemyCellSet = new Set(s.enemies.flatMap((e) => enemyCells(e).map(([x, y]) => x + ',' + y)))
+    const passable = (x, y) => inBounds(x, y) && s.grid[y][x] === '.' && !enemyCellSet.has(x + ',' + y)
+    // 見える敵の周囲マス＝攻撃位置
+    const enemyAdj = new Set()
+    for (const e of s.enemies) {
+      if (!seen(e)) continue
+      for (const [cx, cy] of enemyCells(e)) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (passable(cx + dx, cy + dy)) enemyAdj.add((cx + dx) + ',' + (cy + dy))
+      }
+    }
+    const bagFull = bagCount() >= bagCapacity(cleared.size)
+    const itemSet = new Set(bagFull ? [] : s.items.filter((it) => s.explored.has(it.x + ',' + it.y)).map((it) => it.x + ',' + it.y)) // 袋が満杯なら拾いに行かない（無限ループ防止）
+    const stairsKey = s.explored.has(s.stairs.x + ',' + s.stairs.y) ? s.stairs.x + ',' + s.stairs.y : null
+    const goalRank = (k) => enemyAdj.has(k) ? 0 : itemSet.has(k) ? 1 : (k === stairsKey ? 2 : (!s.explored.has(k) ? 3 : 99))
+    const startK = px + ',' + py
+    const prev = new Map([[startK, null]])
+    const q = [[px, py]]
+    let goal = null, bestRank = 99
+    while (q.length) {
+      const [cx, cy] = q.shift()
+      const ck = cx + ',' + cy
+      if (ck !== startK) { const r = goalRank(ck); if (r < bestRank) { bestRank = r; goal = ck; if (r === 0) break } } // 同ランク内はBFS順＝最短
+      for (const [ddx, ddy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + ddx, ny = cy + ddy, nk = nx + ',' + ny
+        if (passable(nx, ny) && !prev.has(nk)) { prev.set(nk, ck); q.push([nx, ny]) }
+      }
+    }
+    if (!goal || bestRank === 99) { stepInPlace(); return } // 目標なし（囲まれ等）＝足踏みでターンを進める
+    let k = goal, pk = prev.get(k)
+    while (pk && pk !== startK) { k = pk; pk = prev.get(k) } // 経路をたどって最初の一歩を得る
+    const ci = k.indexOf(',')
+    tryMove(+k.slice(0, ci) - px, +k.slice(ci + 1) - py)
+  }
+  const aiTickRef = useRef(null)
+  aiTickRef.current = aiTick // 毎レンダーで最新のstateを見るtickに差し替え
+  useEffect(() => {
+    if (!aiOn || status !== 'exploring') return
+    const iv = setInterval(() => aiTickRef.current && aiTickRef.current(), Math.round(600 / aiSpeed))
+    return () => clearInterval(iv)
+  }, [aiOn, aiSpeed, status])
+
   const restart = () => { if (dungeon) beginDungeon(dungeon) }
 
   // ダンジョン選択へ戻る（探索中なら現在の進捗で精算）
@@ -1640,6 +1739,14 @@ export default function Dungeon() {
                     ))}
                   </div>
                 </div>
+                {/* ミニマップ */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ color: '#aaccee', fontSize: 11 }}>ミニマップ</span>
+                  <button onClick={toggleMinimap}
+                    style={{ background: minimapOn ? '#101a30' : '#0a0a14', border: `1px solid ${minimapOn ? '#0088ff' : '#334455'}`, color: minimapOn ? '#66bbff' : '#556677', padding: '3px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                    {minimapOn ? '🗺 ON' : '🗺 OFF'}
+                  </button>
+                </div>
                 {!masterOn && <div style={{ color: '#7799aa', fontSize: 10, marginBottom: 6 }}>※「🔊全体」をオンにするとBGM/SEを切り替えられます</div>}
                 {/* BGM */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: bgmOn && bgmDungeon && masterOn ? 4 : 8, opacity: masterOn ? 1 : 0.5 }}>
@@ -1921,6 +2028,12 @@ export default function Dungeon() {
               </div>
             )
           })()}
+          {/* マップ右上：ミニマップ（探索済みの床・階段・見えている敵・自分） */}
+          {minimapOn && (
+            <canvas ref={miniRef} style={{ position: 'absolute', top: 34, right: 8, zIndex: 5, pointerEvents: 'none',
+              width: MAP_W * 4, height: MAP_H * 4, imageRendering: 'pixelated',
+              background: 'rgba(0,4,12,0.72)', border: '1px solid rgba(80,120,180,0.45)', borderRadius: 3, padding: 2 }} />
+          )}
           {/* マップ右下：背景透過の文字だけログ（直近数件・2秒無更新でフェードアウト） */}
           <div style={{ position: 'absolute', right: 8, bottom: 6, zIndex: 4, pointerEvents: 'none',
             width: 'min(62%, 360px)', textAlign: 'right', lineHeight: 1.5,
@@ -2013,11 +2126,26 @@ export default function Dungeon() {
           )
         })()}
         {status === 'exploring' && (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
             <button onClick={giveUp}
               style={{ background: '#1a0808', border: '1px solid #aa4444', color: '#cc6666', padding: '6px 16px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
               🏳 あきらめる
             </button>
+            {/* AI自動プレイ（開発用バランステスト。管理者/テストアカウントのみ表示） */}
+            {aiAllowed && (
+              <>
+                <button onClick={() => setAiOn((v) => !v)}
+                  style={{ background: aiOn ? '#0a2a14' : '#0a1424', border: `1px solid ${aiOn ? '#44cc77' : '#335588'}`, color: aiOn ? '#66ff99' : '#88aacc', padding: '6px 12px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
+                  🤖 AIプレイ{aiOn ? '（ON）' : ''}
+                </button>
+                <select value={aiSpeed} onChange={(e) => setAiSpeed(Number(e.target.value))}
+                  style={{ background: '#0a1424', border: '1px solid #335588', color: '#88aacc', padding: '5px 6px', fontFamily: 'monospace', fontSize: 12, cursor: 'pointer' }}>
+                  <option value={1}>x1</option>
+                  <option value={2}>x2</option>
+                  <option value={5}>x5</option>
+                </select>
+              </>
+            )}
             {/* 開発アカウント用フロアワープ */}
             {isAdmin && dungeon && [29, 30].filter((f) => f <= (dungeon.floors || 10)).map((f) => (
               <button key={f} onClick={() => { if (busyRef.current) return; setFloorNum(f); enterFloor(f, dungeon); floorsRef.current = Math.max(floorsRef.current, f - 1); addLog(`🛠 ${f}Fへワープ（開発）`) }}
