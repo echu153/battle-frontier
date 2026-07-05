@@ -542,9 +542,7 @@ const WEAPON_TYPE_GROUP = {
 const getWeaponGroup = (weaponType) => WEAPON_TYPE_GROUP[weaponType] || 'physical'
 
 const getProfPrefix = (profLv) => {
-  if (profLv >= 2000) return '【伝説】'
-  if (profLv >= 1000) return '【神】'
-  if (profLv >= 600)  return '【覇】'
+  // 熟練度LVは300以上も青天井だが、表示ランクは極(300)で打ち止め（覇/神/伝説は廃止）
   if (profLv >= 300)  return '【極】'
   if (profLv >= 200)  return '【真】'
   if (profLv >= 100)  return '【改】'
