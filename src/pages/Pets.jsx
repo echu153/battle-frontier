@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { SPECIES, STARTERS, SKILLS, skillsForSpecies, MAX_SKILL_SLOTS, SHOP_ITEMS, PET_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage, assetSrc, getCharm, charmDisplayName, charmHpBonus } from '../constants/pets'
+import { validateName } from '../lib/nameFilter'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 // ペット画像はペットページでアップロードしたものだけを使う（avatars/<uid>/pets/ 配下）
@@ -69,6 +70,8 @@ export default function Pets() {
   }
 
   const doRename = async () => {
+    const nameErr = validateName(renameInput, { maxLen: 12, label: 'ペット名' })
+    if (nameErr) { flash(nameErr); return }
     setLoading(true)
     const { error } = await supabase.rpc('pet_use_rename', { p_pet_id: selectedId, p_name: renameInput })
     setLoading(false)
@@ -81,8 +84,10 @@ export default function Pets() {
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 2500) }
 
   const pickStarter = async (sp, name) => {
-    setLoading(true)
     const finalName = (name || '').trim() || sp.label
+    const nameErr = validateName(finalName, { maxLen: 12, label: 'ペット名' })
+    if (nameErr) { flash(nameErr); return }
+    setLoading(true)
     const { error } = await supabase.from('pets').insert({
       owner_id: profile.id, species: sp.id, name: finalName, level: 1, exp: 0, is_active: true,
     })
