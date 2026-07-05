@@ -84,10 +84,10 @@ const MENU_DEFS = {
   abyss:     { label:'⚔ 挑戦/奈落闘技場', color:'#c08cff', path:'/abyss',   unlock:30 },
   territory: { label:'🏰 領地',           color:'#ffcc44', path:'/territory',unlock:0 },
 }
-// 期間限定イベント「出撃ポイントラリー」の開催期間（JST 2026/6/22 05:00 〜 7/6 05:00）。
+// 期間限定イベント「出撃ポイントラリー」の開催期間（JST 2026/6/22 05:00 〜 7/13 05:00・1週間延長）。
 // クライアントの表示判定用（ポイント加算・受取の実体はサーバーRPCが期間管理）。
 export const EVENT_START_MS = Date.UTC(2026, 5, 21, 20, 0, 0) // JST 6/22 05:00
-export const EVENT_END_MS   = Date.UTC(2026, 6, 5, 20, 0, 0)  // JST 7/6 05:00
+export const EVENT_END_MS   = Date.UTC(2026, 6, 12, 20, 0, 0) // JST 7/13 05:00（1週間延長）
 
 // 多段ヒットスキル：行動全体ではなく1発ごとに回避・クリティカル・ダメージ判定する
 export const MULTI_HIT_SKILLS = new Set(['マジックアロー','三連射','メテオストライク','連打','五連殺','飛天三角蹴り','連装銃撃','群れの号令','符術・式打ち'])
@@ -3955,7 +3955,7 @@ export default function Game() {
       setBattleLogs([...logs])
     }
 
-    // ボス装備 進化ドロップ（エリアボス撃破時・サーバー側RNGで血50%/心臓0.5%）
+    // ボス装備 進化ドロップ（エリアボス撃破時・サーバー側RNG。確率は grant_boss_evo_drop 内で管理＝血70%/イベント中90%/心臓0.5%）
     if (win && isBossEncounter && !isPapiaEncounter) {
       try {
         const { data: evoDrop } = await supabase.rpc('grant_boss_evo_drop', { p_area_id: selectedArea })

@@ -13,17 +13,30 @@ const FISH_RANK_LABELS = { f:'F', e:'E', d:'D', c:'C', b:'B', a:'A', s:'S', ss:'
 const FISH_RANK_RATES = { f:25, e:21, d:18, c:15, b:12, a:5, s:3, ss:1, sss:0.1 }
 
 // ============================================================
-// 釣りイベント（JST 2026/6/15 5:00 〜 6/22 4:59）
-//   釣り成功1匹ごとに10%で「スゴイテガナガイエビ」(Sランク・売却1万)を追加獲得。
+// 釣りイベント第2弾（JST 2026/7/6 5:00 〜 7/20 4:59）
+//   釣り成功1匹ごとに50%でイベント限定エビを追加獲得（どちらか1匹だけ）。
+//   内訳: スゴクテガナガイエビ80% / カナリテガナガイエビ20%。
 //   ※魚図鑑(fishing_records)には登録しない。期間は自動で開始/終了。
-//   JST05:00 = UTC前日20:00。開始 6/14 20:00 UTC 〜 終了 6/21 20:00 UTC(6/22 5:00JST)。
+//   JST05:00 = UTC前日20:00。開始 7/5 20:00 UTC 〜 終了 7/19 20:00 UTC(7/20 5:00JST)。
 // ============================================================
-const FISHING_EVENT_START = Date.UTC(2026, 5, 14, 20, 0, 0) // 6/15 05:00 JST
-const FISHING_EVENT_END   = Date.UTC(2026, 5, 21, 20, 0, 0) // 6/22 05:00 JST（4:59まで有効）
-const EVENT_SHRIMP_NAME = 'スゴイテガナガイエビ'
-const EVENT_SHRIMP_RANK = 's'
-const EVENT_SHRIMP_PRICE = 10000
-const EVENT_SHRIMP_RATE = 10 // %（釣り成功1匹ごと）
+const FISHING_EVENT_START = Date.UTC(2026, 6, 5, 20, 0, 0)  // 7/6 05:00 JST
+const FISHING_EVENT_END   = Date.UTC(2026, 6, 19, 20, 0, 0) // 7/20 05:00 JST（4:59まで有効）
+const EVENT_SHRIMP_RATE = 50 // %（釣り成功1匹ごと・当選時はどちらか1匹）
+const EVENT_SHRIMPS = [
+  { name: 'スゴクテガナガイエビ', rank: 's',  price: 10000, weight: 80 },
+  { name: 'カナリテガナガイエビ', rank: 'ss', price: 50000, weight: 20 },
+]
+// 売却価格の逆引き（第1弾「スゴイテガナガイエビ」の未売却分も図鑑登録せず1万Gで売れるよう互換維持）
+const EVENT_SHRIMP_PRICES = {
+  'スゴイテガナガイエビ': 10000,
+  ...Object.fromEntries(EVENT_SHRIMPS.map(s => [s.name, s.price])),
+}
+const drawEventShrimp = () => {
+  const total = EVENT_SHRIMPS.reduce((a, s) => a + s.weight, 0)
+  let r = Math.random() * total
+  for (const s of EVENT_SHRIMPS) { r -= s.weight; if (r <= 0) return s }
+  return EVENT_SHRIMPS[0]
+}
 const isFishingEventActive = (t = Date.now()) => t >= FISHING_EVENT_START && t < FISHING_EVENT_END
 const getFishingEventStatus = () => {
   const now = Date.now()
@@ -206,9 +219,10 @@ const calcCaughtFish = (location, startAt, now) => {
     const fish = drawFish(location, rank)
     if (fish) {
       results.push({ ...fish, location })
-      // 釣りイベント：成功1匹ごとに一定確率でスゴイテガナガイエビを追加獲得
+      // 釣りイベント：成功1匹ごとに一定確率でイベント限定エビを追加獲得（どちらか1匹だけ）
       if (isFishingEventActive(now) && Math.random() * 100 < EVENT_SHRIMP_RATE) {
-        results.push({ isEventShrimp: true, name: EVENT_SHRIMP_NAME, rank: EVENT_SHRIMP_RANK, location })
+        const shrimp = drawEventShrimp()
+        results.push({ isEventShrimp: true, name: shrimp.name, rank: shrimp.rank, location })
       }
     }
     if (Math.random() * 100 < STONE_DROP_RATE) {
@@ -353,12 +367,12 @@ useEffect(() => {
     // 今回売却する対象を固定（処理中に背景で釣れた魚を巻き込み削除しないようID集合を保持）
     const soldIds = caughtFish.map(f => f.id)
     let totalGold = 0
-    const shrimpItems = caughtFish.filter(f => f.fish_name === EVENT_SHRIMP_NAME)
-    const fishItems = caughtFish.filter(f => !f.fish_name?.startsWith('強化石') && f.fish_name !== EVENT_SHRIMP_NAME)
+    const shrimpItems = caughtFish.filter(f => EVENT_SHRIMP_PRICES[f.fish_name] != null)
+    const fishItems = caughtFish.filter(f => !f.fish_name?.startsWith('強化石') && EVENT_SHRIMP_PRICES[f.fish_name] == null)
     const stoneItems = caughtFish.filter(f => f.fish_name?.startsWith('強化石'))
 
-    // 釣りイベント：スゴイテガナガイエビは図鑑登録せず売却のみ（1匹1万）
-    totalGold += shrimpItems.length * EVENT_SHRIMP_PRICE
+    // 釣りイベント：イベント限定エビは図鑑登録せず売却のみ（種類ごとの固定価格）
+    totalGold += shrimpItems.reduce((sum, f) => sum + EVENT_SHRIMP_PRICES[f.fish_name], 0)
 
     // 図鑑は「場所＋魚名」で1件（同名でも場所が違えば別図鑑＝カンパチ等が日本海/カリブ海で重複しない）。
     // 同セッションでの二重挿入も inserted で防ぐ。
@@ -406,7 +420,7 @@ useEffect(() => {
     // 売却済みの釣果のみ削除（処理中に新たに釣れた分は残す）
     await supabase.from('caught_fish').delete().in('id', soldIds)
     await fetchAll()
-    showMessage(`💰 ${totalGold}G獲得！${stoneItems.length > 0 ? `強化石${stoneItems.length}個入手！` : ''}${shrimpItems.length > 0 ? ` ${EVENT_SHRIMP_NAME}×${shrimpItems.length}売却！` : ''}`)
+    showMessage(`💰 ${totalGold}G獲得！${stoneItems.length > 0 ? `強化石${stoneItems.length}個入手！` : ''}${shrimpItems.length > 0 ? ` イベント限定エビ×${shrimpItems.length}売却！` : ''}`)
     } finally { setLoading(false); sellBusyRef.current = false }
   }
 
@@ -493,7 +507,7 @@ const getElapsedText = () => {
     fishSummary[key].count++
   }
   const summaryList = Object.values(fishSummary)
-  const fishSellPrice = (f) => f.name === EVENT_SHRIMP_NAME ? EVENT_SHRIMP_PRICE : (FISH_SELL_PRICE[f.rank?.toLowerCase()] || 5)
+  const fishSellPrice = (f) => EVENT_SHRIMP_PRICES[f.name] ?? (FISH_SELL_PRICE[f.rank?.toLowerCase()] || 5)
   const totalGold = summaryList.filter(f=>!f.isStone).reduce((sum,f) => sum + fishSellPrice(f) * f.count, 0)
 
   return (
@@ -535,7 +549,7 @@ const getElapsedText = () => {
                   🦐 釣りイベント開催中！
                 </div>
                 <div style={{ color:'#88ccff', lineHeight:'1.6' }}>
-                  釣り成功時、一定確率で「{EVENT_SHRIMP_NAME}」（Sランク・売却{EVENT_SHRIMP_PRICE.toLocaleString()}G）を追加で獲得！<br/>
+                  釣り成功時、一定確率でイベント限定の「スゴクテガナガイエビ」（売却10,000G）または「カナリテガナガイエビ」（売却50,000G）を追加で獲得！<br/>
                   <span style={{ color:'#446688' }}>※魚図鑑には登録されません ／ 残り{fishingEvent.remainingDay}日{fishingEvent.remainingHour}時間</span>
                 </div>
               </div>
