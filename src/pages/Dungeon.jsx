@@ -2144,11 +2144,13 @@ export default function Dungeon() {
             </div>
           )
           const itemsEl = (
-            <div key="items" style={{ display: 'grid', gap: 4, alignContent: 'start' }}>
+            // 列は固定幅：名前の長さでボタン幅・位置が変わらないようにする（長い名前は…で省略・個数は右端固定）
+            <div key="items" style={{ display: 'grid', gap: 4, alignContent: 'start', width: 170 }}>
               {DUNGEON_ITEMS.filter((it) => (inventory[it.key] || 0) > 0).map((it) => (
                 <button key={it.key} onClick={() => (dropMode ? dropItem({ kind: 'consumable', key: it.key }) : useItem(it.key))}
-                  style={{ background: dropMode ? '#1a0e08' : '#0a1424', border: `1px solid ${dropMode ? '#cc7755' : '#335588'}`, color: '#cce6ff', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, minWidth: 96, textAlign: 'left' }}>
-                  {it.emoji} {it.name}×{inventory[it.key]}
+                  style={{ background: dropMode ? '#1a0e08' : '#0a1424', border: `1px solid ${dropMode ? '#cc7755' : '#335588'}`, color: '#cce6ff', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.emoji} {it.name}</span>
+                  <span style={{ flexShrink: 0 }}>×{inventory[it.key]}</span>
                 </button>
               ))}
               {DUNGEON_ITEMS.every((it) => (inventory[it.key] || 0) < 1) && (
