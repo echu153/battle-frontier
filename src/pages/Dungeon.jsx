@@ -2130,13 +2130,16 @@ export default function Dungeon() {
               <PadBtn onClick={() => tryMove(-1, 1)}>◣</PadBtn><PadBtn onClick={() => tryMove(0, 1)}>▼</PadBtn><PadBtn onClick={() => tryMove(1, 1)}>◢</PadBtn>
             </div>
           )
+          // スキル/持ち物の列は伸縮式（flex）：折り返しをやめて常に3列が1行に収まる。
+          //  幅が足りない時は名前を…で省略（列ごと下に落ちて位置が変わるのを防ぐ）
+          const colStyle = { display: 'grid', gap: 4, alignContent: 'start', flex: '1 1 0', minWidth: 0, maxWidth: 170 }
           const skillsEl = (
-            <div key="skills" style={{ display: 'grid', gap: 4, alignContent: 'start' }}>
+            <div key="skills" style={colStyle}>
               {(pet.skillSlots || ['tackle']).map((id) => {
                 const on = selectedSkill === id
                 return (
                   <button key={id} onClick={() => setSelectedSkill(id)}
-                    style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: on ? '#cba6ff' : '#5e7fa0', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, minWidth: 110, textAlign: 'left' }}>
+                    style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: on ? '#cba6ff' : '#5e7fa0', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, width: '100%', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {on ? '▶ ' : ''}{getSkill(id).name}{getSkill(id).cost > 0 ? ` (満腹${getSkill(id).cost})` : ''}
                   </button>
                 )
@@ -2144,8 +2147,7 @@ export default function Dungeon() {
             </div>
           )
           const itemsEl = (
-            // 列は固定幅：名前の長さでボタン幅・位置が変わらないようにする（長い名前は…で省略・個数は右端固定）
-            <div key="items" style={{ display: 'grid', gap: 4, alignContent: 'start', width: 170 }}>
+            <div key="items" style={colStyle}>
               {DUNGEON_ITEMS.filter((it) => (inventory[it.key] || 0) > 0).map((it) => (
                 <button key={it.key} onClick={() => (dropMode ? dropItem({ kind: 'consumable', key: it.key }) : useItem(it.key))}
                   style={{ background: dropMode ? '#1a0e08' : '#0a1424', border: `1px solid ${dropMode ? '#cc7755' : '#335588'}`, color: '#cce6ff', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -2158,19 +2160,12 @@ export default function Dungeon() {
               )}
             </div>
           )
-          // 中央＝スキル｜移動キー｜アイテム / 左＝移動キー＋(スキル/アイテム) / 右＝その逆
-          if (padSide === 'center') {
-            return (
-              <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'flex-start', marginTop: 12, flexWrap: 'wrap' }}>
-                {skillsEl}{padEl}{itemsEl}
-              </div>
-            )
-          }
+          // 中央＝スキル｜移動キー｜アイテム / 左＝移動キー｜スキル｜アイテム / 右＝スキル｜アイテム｜移動キー
+          //  ※折り返し無し。持ち物が下に落ちないよう3列固定
+          const order = padSide === 'center' ? [skillsEl, padEl, itemsEl] : padSide === 'right' ? [skillsEl, itemsEl, padEl] : [padEl, skillsEl, itemsEl]
           return (
-            <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'flex-start', marginTop: 12, flexWrap: 'wrap',
-              flexDirection: padSide === 'right' ? 'row-reverse' : 'row' }}>
-              {padEl}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>{skillsEl}{itemsEl}</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'flex-start', marginTop: 12 }}>
+              {order}
             </div>
           )
         })()}
