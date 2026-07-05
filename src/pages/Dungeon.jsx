@@ -136,10 +136,12 @@ function generateFloor(floorNum, dungeon) {
   const rooms = []
   for (let gy = 0; gy < RR; gy++) {
     for (let gx = 0; gx < RC; gx++) {
-      // 最低3×4（幅3・高さ4）以上の部屋にする（小さすぎる部屋を出さない）
-      const rw = rand(3, CW - 2), rh = rand(4, CH - 2)
-      const rx = gx * CW + rand(1, CW - rw - 1)
-      const ry = gy * CH + rand(1, CH - rh - 1)
+      // 最低4×4の部屋にする（小さすぎる部屋を出さない）。
+      // 右/下の余白を2マス以上残す＝隣の部屋とのすき間が必ず3マス以上になり、
+      // 通路の中継線が部屋の壁に沿って走って「横一列の広い出入り口」ができるのを防ぐ
+      const rw = rand(4, CW - 3), rh = rand(4, CH - 3)
+      const rx = gx * CW + rand(1, CW - rw - 2)
+      const ry = gy * CH + rand(1, CH - rh - 2)
       for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) grid[y][x] = '.'
       rooms.push({ x: rx, y: ry, w: rw, h: rh, gx, gy, cx: Math.floor(rx + rw / 2), cy: Math.floor(ry + rh / 2) })
     }
@@ -151,13 +153,17 @@ function generateFloor(floorNum, dungeon) {
   const connect = (a, b) => {
     if (b.gx > a.gx) {
       // 右隣：A右壁→ギャップで縦に曲げ→B左壁（各部屋の入口は1マス）
-      const midX = Math.floor((a.x + a.w + b.x - 1) / 2)
+      // 中継線(midX)は両部屋の壁から1マス以上離す＝壁沿いを通路が走ると
+      // 部屋の床と縦一列で隣接して「広い出入り口」になってしまうため
+      let midX = Math.floor((a.x + a.w + b.x - 1) / 2)
+      midX = Math.max(a.x + a.w + 1, Math.min(b.x - 2, midX))
       carveH(a.cy, a.cx, midX)
       carveV(midX, a.cy, b.cy)
       carveH(b.cy, midX, b.cx)
     } else {
       // 下隣：A下壁→ギャップで横に曲げ→B上壁（各部屋の入口は1マス）
-      const midY = Math.floor((a.y + a.h + b.y - 1) / 2)
+      let midY = Math.floor((a.y + a.h + b.y - 1) / 2)
+      midY = Math.max(a.y + a.h + 1, Math.min(b.y - 2, midY))
       carveV(a.cx, a.cy, midY)
       carveH(midY, a.cx, b.cx)
       carveV(b.cx, midY, b.cy)
