@@ -508,6 +508,16 @@ export default function Dungeon() {
     const tid2 = setTimeout(() => setCheer((c) => (c === id ? 0 : c)), 1000)
     turnTimers.current.push(tid, tid2)
   }
+  // スキルの書の発動エフェクト（攻撃=対象マスに絵文字バースト＋リング / 自分バフ=オーラ＋絵文字上昇）
+  const [scrollFx, setScrollFx] = useState(null) // { id, emoji, cells: [{x,y}], self }
+  const scrollFxSeq = useRef(0)
+  const triggerScrollFx = (cells, emoji, self = false) => {
+    scrollFxSeq.current += 1
+    const id = scrollFxSeq.current
+    setScrollFx({ id, emoji, cells, self })
+    const tid = setTimeout(() => setScrollFx((f) => (f && f.id === id ? null : f)), self ? 1100 : 800)
+    turnTimers.current.push(tid)
+  }
   const spawnSeq = useRef(0) // 湧いた敵の連番ID用
   const dropSeq = useRef(0)  // 床に置いたアイテムの連番ID用
   const turnTimers = useRef([])
@@ -1306,6 +1316,7 @@ export default function Dungeon() {
     // --- 自分バフ系（結界/障壁/聖域） ---
     if (sc.target === 'self') {
       playSe('バフ') // バフSE
+      triggerScrollFx([{ x: px, y: py }], sc.emoji, true) // 自分にオーラ＋絵文字上昇
       if (sc.shieldRate) { setShield(sc.shieldTurns); shieldRateRef.current = sc.shieldRate }
       if (sc.regenPct) { setRegen(sc.regenTurns); regenAmtRef.current = Math.max(1, Math.ceil(pet.maxHp * sc.regenPct)) }
       addLog(`${sc.emoji} ${sc.name}を唱えた！`)
@@ -1331,8 +1342,12 @@ export default function Dungeon() {
         (Math.max(Math.abs(a.x - px), Math.abs(a.y - py))) - (Math.max(Math.abs(b.x - px), Math.abs(b.y - py))))
       if (cand.length) targets = [cand[0]] // 最寄りの1体
     }
-    if (targets.length === 0) { addLog(`${sc.emoji} ${sc.name}！ しかし届く敵がいない…`); commitTurn(state, state.player, state.enemies, petHp); return }
+    if (targets.length === 0) { triggerScrollFx([{ x: px, y: py }], sc.emoji); addLog(`${sc.emoji} ${sc.name}！ しかし届く敵がいない…`); commitTurn(state, state.player, state.enemies, petHp); return }
 
+    playSe('kougeki') // 発動SE
+    // 対象マスに書の絵文字バースト＋リング（ボスは2×2の中心）＋被弾点滅
+    triggerScrollFx(targets.map((t) => ({ x: t.x + ((t.size || 1) - 1) / 2, y: t.y + ((t.size || 1) - 1) / 2 })), sc.emoji)
+    applyFx({ enemies: Object.fromEntries(targets.map((t) => [t.id, { flash: true }])) })
     let enemies = state.enemies
     let healBack = 0
     let totalDealt = 0
@@ -1345,9 +1360,10 @@ export default function Dungeon() {
       const newHp = cur.hp - dealt
       totalDealt += dealt
       popDmg(cur.x, cur.y, dealt)
-      if (sc.stun && Math.random() < sc.stun) addLog(`⚡ ${cur.name}はしびれた！`)
+      const stunned = !!sc.stun && Math.random() < sc.stun // しびれ判定は1回だけ（ログと実効果を一致させる）
+      if (stunned) addLog(`⚡ ${cur.name}はしびれた！`)
       if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== cur.id); enemiesRef.current += 1; grantKill(floorNum, cur.name, px, py) }
-      else enemies = enemies.map((e) => e.id === cur.id ? { ...e, hp: newHp, stun: (sc.stun && Math.random() < sc.stun) ? 1 : (e.stun || 0) } : e)
+      else enemies = enemies.map((e) => e.id === cur.id ? { ...e, hp: newHp, stun: stunned ? 1 : (e.stun || 0) } : e)
     }
     if (sc.drain) healBack = Math.floor(totalDealt * sc.drain)
     addLog(`${sc.emoji} ${sc.name}！ ${targets.length > 1 ? `${targets.length}体に` : ''}${totalDealt}ダメージ`)
@@ -1699,6 +1715,26 @@ export default function Dungeon() {
           25%  { opacity: 1; transform: translate(-50%, -30%) scale(1.3) rotate(20deg); }
           100% { opacity: 0; transform: translate(calc(-50% + var(--dx, 0px)), 240%) scale(0.5) rotate(80deg); }
         }
+        @keyframes bf-scroll-burst {
+          0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+          25%  { opacity: 1; transform: translate(-50%, -50%) scale(1.5); }
+          60%  { opacity: 1; transform: translate(-50%, -52%) scale(1.15); }
+          100% { opacity: 0; transform: translate(-50%, -62%) scale(1.3); }
+        }
+        @keyframes bf-scroll-ring {
+          0%   { opacity: 0.9; transform: translate(-50%, -50%) scale(0.2); }
+          100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+        }
+        @keyframes bf-scroll-aura {
+          0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+          30%  { opacity: 1; }
+          100% { opacity: 0; transform: translate(-50%, -50%) scale(1.3); }
+        }
+        @keyframes bf-scroll-rise {
+          0%   { opacity: 0; transform: translate(-50%, -30%) scale(0.6); }
+          25%  { opacity: 1; transform: translate(-50%, -80%) scale(1.2); }
+          100% { opacity: 0; transform: translate(-50%, -150%) scale(1); }
+        }
         /* マップは画面幅いっぱいに広げる */
         .bf-dg-wrap { max-width: min(96vw, 820px); margin: 0 auto; }
         @media (min-width: 900px) {
@@ -1981,6 +2017,23 @@ export default function Dungeon() {
                 textShadow: '0 0 2px #000, 0 1px 3px #000, 0 0 6px #000, -1px 0 1px #000, 1px 0 1px #000', whiteSpace: 'nowrap',
                 animation: p.below ? 'bf-popexp 1.1s ease-out forwards' : 'bf-popnum 1.5s ease-out forwards',
               }}>{p.text}</span>
+            )
+          })}
+          {/* スキルの書の発動エフェクト（攻撃=対象マスにバースト＋リング / 自分バフ=金色オーラ＋絵文字上昇） */}
+          {scrollFx && scrollFx.cells.map((c, i) => {
+            const vx = c.x - ox, vy = c.y - oy
+            if (vx < -0.5 || vx >= VW || vy < -0.5 || vy >= VH) return null
+            const left = `${((vx + 0.5) / VW) * 100}%`, top = `${((vy + 0.5) / VH) * 100}%`
+            return scrollFx.self ? (
+              <span key={`${scrollFx.id}-${i}`} style={{ position: 'absolute', zIndex: 7, pointerEvents: 'none', left, top }}>
+                <span style={{ position: 'absolute', left: 0, top: 0, width: 52, height: 52, borderRadius: '50%', border: '2px solid rgba(255,235,150,0.9)', boxShadow: '0 0 12px rgba(255,220,120,0.8), inset 0 0 10px rgba(255,220,120,0.5)', animation: 'bf-scroll-aura 1.1s ease-out forwards' }} />
+                <span style={{ position: 'absolute', left: 0, top: 0, fontSize: 22, textShadow: '0 0 6px #000, 0 2px 4px #000', animation: 'bf-scroll-rise 1.1s ease-out forwards' }}>{scrollFx.emoji}</span>
+              </span>
+            ) : (
+              <span key={`${scrollFx.id}-${i}`} style={{ position: 'absolute', zIndex: 7, pointerEvents: 'none', left, top }}>
+                <span style={{ position: 'absolute', left: 0, top: 0, width: 46, height: 46, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.85)', boxShadow: '0 0 10px rgba(255,240,180,0.9)', animation: 'bf-scroll-ring 0.55s ease-out forwards' }} />
+                <span style={{ position: 'absolute', left: 0, top: 0, fontSize: 24, textShadow: '0 0 6px #000, 0 2px 4px #000', animation: 'bf-scroll-burst 0.8s ease-out forwards' }}>{scrollFx.emoji}</span>
+              </span>
             )
           })}
           {/* レベルアップ：キャラの少し上に虹色アーチで LEVEL UP を1文字ずつ＋各文字でキラキラ（約4秒） */}
