@@ -260,7 +260,7 @@ function generateFloor(floorNum, dungeon) {
   const itemCount = rand(3, 5)
   for (let i = 0; i < itemCount; i++) {
     const room = rooms[rand(0, rooms.length - 1)]
-    const t = randInnerTileInRoom(room) // 出入り口（部屋の外周）には置かない
+    const t = randTileInRoom(room) // 部屋全域＝壁際にも落ちる（アイテムは踏めるので出入り口でもOK）
     if (!t) continue
     mark(t.x, t.y)
     // ドロップ確率: 木の実8 / おにぎり8 / スキルの書4(10F+) / 残り80%=素50・石10・宝石10・チャーム4・装備6
@@ -279,7 +279,7 @@ function generateFloor(floorNum, dungeon) {
     const zc = rand(3, 5)
     for (let i = 0; i < zc; i++) {
       const room = rooms[rand(0, rooms.length - 1)]
-      const t = randInnerTileInRoom(room)
+      const t = randTileInRoom(room) // ゼニも壁際に落ちる
       if (!t) continue
       mark(t.x, t.y)
       items.push({ id: 'z' + i, x: t.x, y: t.y, kind: 'zeni' })
@@ -383,7 +383,7 @@ export default function Dungeon() {
   const [bgmOn, setBgmOn] = useState(() => localStorage.getItem('bf_dg_bgm') !== 'off') // BGM ON/OFF（全体ONなら既定オン）。追憶の遺跡(d30)でのみ再生
   const [bgmVol, setBgmVol] = useState(() => { const v = parseInt(localStorage.getItem('bf_dg_bgmvol') || '35', 10); return isNaN(v) ? 35 : Math.min(100, Math.max(0, v)) }) // 0〜100
   // 30Fボスはボス専用BGM、それ以外はダンジョンのBGM
-  const bgmSrc = dgBgm(dungeon, floorNum)
+  const bgmSrc = shop ? '/himitusyoutgen.mp3' : dgBgm(dungeon, floorNum) // 商店中は専用BGM
   const bgmDungeon = !!bgmSrc // BGMが設定されているフロアで再生
   // BGMはWeb Audioでギャップレスにループ（HTMLAudioの継ぎ目をなくす）
   const bgmGainRef = useRef(null)
@@ -2209,7 +2209,7 @@ export default function Dungeon() {
                   <div style={{ textAlign: 'center', marginTop: 12 }}>
                     <button onClick={closeShop}
                       style={{ background: '#001840', border: '1px solid #0088ff', color: '#0088ff', padding: '7px 18px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
-                      ⬇ 店を出て B{shop.next}F へ進む
+                      {shop.next ? `⬇ 店を出て B${shop.next}F へ進む` : '🚪 店を出る（開発）'}
                     </button>
                   </div>
                 </div>
@@ -2432,6 +2432,11 @@ export default function Dungeon() {
                   <option value={5}>x5</option>
                 </select>
               </>
+            )}
+            {/* 開発アカウント用：秘密の商店へ即入店（閉じると現フロアに戻る） */}
+            {isAdmin && dungeon && (dungeon.id === 'd30' || dungeon.id === 'd60') && (
+              <button onClick={() => { if (shopRef.current) return; const so = { stock: rollShopStock(dungeon?.id), bought: {}, next: null }; shopRef.current = so; setShop(so); addLog('🏮 秘密の商店へ（開発）') }}
+                style={{ background: '#1a1204', border: '1px solid #aa8833', color: '#ffd75e', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>🏮 商店</button>
             )}
             {/* 開発アカウント用フロアワープ（d60は帯の境目＋ボス前後） */}
             {isAdmin && dungeon && (dungeon.id === 'd60' ? [13, 25, 37, 49, 59, 60] : [29, 30]).filter((f) => f <= (dungeon.floors || 10)).map((f) => (
