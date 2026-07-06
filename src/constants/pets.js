@@ -768,11 +768,12 @@ export const dgTilesFor = (dungeonId, floor) => {
   if (dungeonId === 'd60') return d60BandFor(floor).tiles
   return isWaterFloor(dungeonId, floor) ? WATER_TILES : (DUNGEON_TILES[dungeonId] || null)
 }
-// そのフロアのBGM（d60はフロア帯で切替／d30は30FだけボスBGM／他はダンジョン既定）
+// そのフロアのBGM（d60はフロア帯で切替／d30は水エリア20-29Fで水曲・30FだけボスBGM／他はダンジョン既定）
 export function dgBgm(dungeon, floor) {
   if (!dungeon) return null
   if (dungeon.id === 'd60') return d60BandFor(floor).bgm
   if (isBossFloor(dungeon.id, floor)) return '/30FBoos.mp3'
+  if (isWaterFloor(dungeon.id, floor)) return '/深海の廃都.mp3' // d30の水エリアはd60水帯と同じ曲
   return dungeon.bgm || null
 }
 // 泳げる（水＝壁を通れる）敵
