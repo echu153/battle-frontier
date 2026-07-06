@@ -79,7 +79,7 @@ BEGIN
     IF NOT FOUND THEN
       v_win_start := (v_jst_date::text || 'T' || lpad(v_slot::text,2,'0') || ':00:00+09:00')::timestamptz;
       INSERT INTO raid_boss (spawn_date, boss_name, hp_max, hp_current, status, spawned_at, slot)
-      VALUES (v_jst_date, raid_boss_for_slot(v_jst_date, v_slot), 2000000, 2000000, 'active', v_win_start, v_slot)
+      VALUES (v_jst_date, raid_boss_for_slot(v_jst_date, v_slot), 5000000, 5000000, 'active', v_win_start, v_slot)
       ON CONFLICT (spawn_date, slot) WHERE is_dev = false DO NOTHING;
       SELECT * INTO v_boss FROM raid_boss WHERE spawn_date=v_jst_date AND slot=v_slot AND is_dev=false;
     END IF;
@@ -137,7 +137,7 @@ BEGIN
   UPDATE raid_boss SET status = 'expired' WHERE is_dev = true AND status = 'active';
   v_date := (now() AT TIME ZONE 'Asia/Tokyo')::date;
   INSERT INTO raid_boss (spawn_date, boss_name, hp_max, hp_current, status, spawned_at, is_dev)
-  VALUES (v_date, p_boss_name, 2000000, 2000000, 'active', now(), true)
+  VALUES (v_date, p_boss_name, 5000000, 5000000, 'active', now(), true)
   RETURNING * INTO v_boss;
   RETURN json_build_object('status','active','id',v_boss.id,'boss_name',v_boss.boss_name,
     'hp_max',v_boss.hp_max,'hp_current',v_boss.hp_current,'spawn_date',v_boss.spawn_date,

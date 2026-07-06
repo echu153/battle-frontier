@@ -152,6 +152,7 @@ DECLARE
   v_new_hp      bigint;
   v_cooldown    int := 10;
   v_expire_at   timestamptz;
+  v_exp_gain    int;
 BEGIN
   v_player_id := auth.uid();
   IF v_player_id IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
@@ -205,13 +206,14 @@ BEGIN
       attack_count   = raid_participants.attack_count + 1,
       last_attack_at = now();
 
-  -- 共有CD更新 + 出撃報酬（HP/MP全回復・EXP+10）
+  -- 共有CD更新 + 出撃報酬（HP/MP全回復・EXP 7〜10 ランダム）
   -- ※ exp は保護トリガー対象のため GUC を立ててから更新する
+  v_exp_gain := floor(random() * 4)::int + 7;  -- 7,8,9,10 のいずれか
   PERFORM set_config('app.allow_stat_change', 'on', true);
   UPDATE profiles SET
     hp_current     = v_profile.hp_max,
     mp_current     = v_profile.mp_max,
-    exp            = COALESCE(exp, 0) + 10,
+    exp            = COALESCE(exp, 0) + v_exp_gain,
     last_action_at = now()
   WHERE id = v_player_id;
 
@@ -219,7 +221,7 @@ BEGIN
     'damage',     v_damage,
     'hp_current', v_new_hp,
     'hp_max',     v_boss.hp_max,
-    'exp',        COALESCE(v_profile.exp, 0) + 10,
+    'exp',        COALESCE(v_profile.exp, 0) + v_exp_gain,
     'status',     CASE WHEN v_new_hp = 0 THEN 'defeated' ELSE 'active' END
   );
 END;

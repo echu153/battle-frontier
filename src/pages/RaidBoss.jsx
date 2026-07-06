@@ -86,17 +86,14 @@ function getBossForTurn(t, name = BOSS_NAME) {
 }
 
 // レイドバトルシミュレーション（最大10ターン）
-// レイドの与ダメ圧縮：分岐点(PIVOT)を境に、未満は火力UP・超過は多いほど逓減するべき乗カーブ。
-//  output = PIVOT * (d/PIVOT)^EXP
-//   ・d = PIVOT(3000) で等倍（損益分岐点）
-//   ・d < 3000 → 出力 > 素ダメ（火力UP）
-//   ・d > 3000 → 出力 < 素ダメ（大きいほど強く逓減）。順位は保たれる（単調増加）。
-//  EXP を小さくするほど高火力をより強く抑制。
-const RAID_DMG_PIVOT = 3000
-const RAID_DMG_EXP = 0.3
+// レイドの与ダメ圧縮：30万(RAID_DMG_CAP)までは等倍、それを超えた分は90%軽減（0.1倍）。
+//   ・d <= 30万 → そのまま
+//   ・d >  30万 → 30万 + (超過分 × 0.1)。順位は保たれる（単調増加）。
+const RAID_DMG_CAP = 300000
 function compressRaidDmg(d) {
   if (d <= 0) return d
-  return Math.max(1, Math.floor(RAID_DMG_PIVOT * Math.pow(d / RAID_DMG_PIVOT, RAID_DMG_EXP)))
+  if (d <= RAID_DMG_CAP) return d
+  return Math.floor(RAID_DMG_CAP + (d - RAID_DMG_CAP) * 0.1)
 }
 
 function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_NAME) {
