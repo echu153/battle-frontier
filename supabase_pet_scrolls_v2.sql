@@ -1,7 +1,8 @@
 -- ============================================================
--- スキルの書 追加5種（初期クラス分・2026-07-07）
+-- スキルの書 追加9種（2026-07-07）
 --   強撃(戦士)/貫通射撃(弓使い)/サンダー(魔法使い)/ヒール(僧侶)/爆裂拳(格闘家)
---   これで全21クラスの書が揃う。pet_item_price を21種対応で上書き。
+--   群れの号令(サモナー)/サラマンド(精霊召喚士)/禁術・神降ろし(式神使い)/やっちゃえ！(ブリーダー)
+--   これで全25クラスの書が揃う。pet_item_price を25種対応で上書き。
 --   ※ pet_grant_item / pet_consume_item は pet_item_price が null でないことを要件に
 --     しているため、これを流さないと新しい書を拾う/使うことができない。
 -- ============================================================
@@ -16,9 +17,10 @@ returns int language sql immutable set search_path = public as $$
     when 'scr_quake' then 0 when 'scr_soul' then 0 when 'scr_inori' then 0 when 'scr_sabaki' then 0
     when 'scr_kori' then 0 when 'scr_mind' then 0 when 'scr_goren' then 0 when 'scr_gun' then 0
     when 'scr_dice' then 0 when 'scr_raikou' then 0 when 'scr_seiiki' then 0 when 'scr_dragon' then 0
-    -- ★初期クラス5種の書（2026-07-07追加）
+    -- ★追加9種の書（2026-07-07・初期6クラス＋サモナー系）
     when 'scr_kyogeki' then 0 when 'scr_kantsu' then 0 when 'scr_thunder' then 0
     when 'scr_heal' then 0 when 'scr_bakuretsu' then 0
+    when 'scr_mure' then 0 when 'scr_salamand' then 0 when 'scr_kamioroshi' then 0 when 'scr_yatchae' then 0
     else null end;
 $$;
 grant execute on function pet_item_price(text) to authenticated;
