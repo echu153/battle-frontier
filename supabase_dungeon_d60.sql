@@ -22,6 +22,7 @@ returns json language plpgsql security definer set search_path = public as $$
 declare
   v_run dungeon_runs%rowtype; v_pet pets%rowtype;
   v_floor int; v_exp_gain int; v_new_exp int; v_new_level int; v_cap int; v_lucky boolean := false;
+  v_already boolean := false; -- ボス討伐済みか（2回目以降はEXP10%）
 begin
   select * into v_run from dungeon_runs where id = p_run_id;
   if not found then raise exception 'run not found'; end if;
@@ -35,7 +36,7 @@ begin
   v_floor := least(greatest(coalesce(p_floor,1), 1), 99);
 
   if v_run.dungeon_id = 'd60' then
-    -- 五霊の大峡谷：敵別EXP（2026-07-07 約55%に圧縮＝レベリングを緩やかに。LV100→350は6周前後の想定）
+    -- 五霊の大峡谷：敵別EXP（2026-07-07再調整: ④以降をさらに緩やかに・⑦上限300）
     v_exp_gain := case p_enemy
       -- ③古代の洞窟帯 F1-12
       when 'コボルト'           then 70
@@ -44,40 +45,45 @@ begin
       when 'ゴーレム（攻）'     then 90
       when 'ゴーレム（守）'     then 95
       -- ④蒼海の入り江帯 F13-24
-      when '深海魚人'           then 115
-      when '海賊（男）'         then 130
-      when '海賊（女）'         then 125
-      when 'ハリセンボン'       then 140
-      when '毒クラゲ'           then 135
-      when '電気クラゲ'         then 135
+      when '深海魚人'           then 100
+      when '海賊（男）'         then 110
+      when '海賊（女）'         then 105
+      when 'ハリセンボン'       then 120
+      when '毒クラゲ'           then 115
+      when '電気クラゲ'         then 115
       -- ⑤巨峰山脈帯 F25-36
-      when '山岳ゴブリン（斧）' then 180
-      when '山岳ゴブリン（弓）' then 190
-      when 'マウンテンゴリラ'   then 215
-      when 'グリフォン'         then 210
-      when '一角獣'             then 205
-      when '岩石ゴーレム（古）' then 240
-      when '岩石ゴーレム（新）' then 230
+      when '山岳ゴブリン（斧）' then 140
+      when '山岳ゴブリン（弓）' then 145
+      when 'マウンテンゴリラ'   then 160
+      when 'グリフォン'         then 155
+      when '一角獣'             then 150
+      when '岩石ゴーレム（古）' then 170
+      when '岩石ゴーレム（新）' then 165
       -- ⑥白銀の霊峰帯 F37-48
-      when '雪男'               then 290
-      when '氷狼フェンリル'     then 310
-      when '雪女'               then 305
-      when '霜の精霊'           then 315
-      when '氷河ドラゴン'       then 360
-      when '氷結ゴーレム'       then 375
-      -- ⑦煉獄火山帯 F49-59
-      when 'ヘルハウンド'       then 430
-      when 'マグマスライム'     then 420
-      when '炎の精霊'           then 470
-      when 'ファイアドレイク'   then 510
-      when 'イフリート'         then 530
-      when '溶岩ゴーレム'       then 550
-      -- 60Fボス
-      when 'カモルス・V・ナスB=パピア' then 15000
+      when '雪男'               then 190
+      when '氷狼フェンリル'     then 200
+      when '雪女'               then 195
+      when '霜の精霊'           then 205
+      when '氷河ドラゴン'       then 220
+      when '氷結ゴーレム'       then 230
+      -- ⑦煉獄火山帯 F49-59（上限300）
+      when 'ヘルハウンド'       then 250
+      when 'マグマスライム'     then 245
+      when '炎の精霊'           then 265
+      when 'ファイアドレイク'   then 280
+      when 'イフリート'         then 290
+      when '溶岩ゴーレム'       then 300
+      -- 60Fボス（初回のみ満額。2回目以降は10%＝下で判定）
+      when 'カモルス・V・ナスB=パピア' then 10000
       else greatest(1, 10 + v_floor) end;
     -- ボスEXPは d60 の60Fのみ（低層での申告連打は通常EXPに是正）
     if p_enemy = 'カモルス・V・ナスB=パピア' and v_floor <> 60 then
       v_exp_gain := greatest(1, 10 + v_floor);
+    end if;
+    -- ★2回目以降のカモルス討伐はEXP10%（初回判定＝cleared_d60）
+    if p_enemy = 'カモルス・V・ナスB=パピア' and v_floor = 60 then
+      select coalesce(cleared_d60, false) into v_already from profiles where id = auth.uid();
+      if v_already then v_exp_gain := 1000; end if;
     end if;
   elsif v_run.dungeon_id = 'd30' then
     v_exp_gain := case p_enemy
@@ -114,6 +120,11 @@ begin
   -- デビルパピアはd30の30Fボスのみ。floorが30以外での「デビルパピア」申告は通常EXPに是正（1000EXP連打防止）
   if p_enemy = 'デビルパピア' and not (v_run.dungeon_id = 'd30' and v_floor = 30) then
     v_exp_gain := greatest(1, 10 + v_floor);
+  end if;
+  -- ★2回目以降のデビルパピア討伐はEXP10%（初回判定＝cleared_d30）
+  if p_enemy = 'デビルパピア' and v_run.dungeon_id = 'd30' and v_floor = 30 then
+    select coalesce(cleared_d30, false) into v_already from profiles where id = auth.uid();
+    if v_already then v_exp_gain := 100; end if;
   end if;
 
   if p_lucky and random() < 0.5 then v_exp_gain := round(v_exp_gain * 1.5)::int; v_lucky := true; end if;
