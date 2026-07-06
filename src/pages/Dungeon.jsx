@@ -340,6 +340,11 @@ export default function Dungeon() {
   const [shield, setShield] = useState(0)         // 結界/障壁＝あと何ターン被ダメ軽減か
   const shieldRateRef = useRef(1)                 // 軽減率（被ダメ×rate）
   const shieldTurnsRef = useRef(0)                // 残ターンの正（stateはrender用。castした同ターンの被弾にも即適用するため）
+  const [zeni, setZeni] = useState(0)                 // ゼニ（ペットダンジョン限定通貨。pet_storageに保存）
+  const [shop, setShop] = useState(null)              // 秘密の商店 { stock, bought, next } 開店中はnull以外
+  const shopRef = useRef(null)                        // 開店中の移動ブロック用
+  const sinceShopRef = useRef(0)                      // 前回の商店からの踏破フロア数
+  const shopAtRef = useRef(20 + Math.floor(Math.random() * 11)) // 次の商店までのフロア数(20〜30)
   const [regen, setRegen] = useState(0)           // 聖域＝あと何ターン毎ターン回復か
   const regenAmtRef = useRef(0)                   // 1ターンの回復量
   const [petAtkUp, setPetAtkUp] = useState(0)     // 自分の攻撃バフ＝あと何ターン攻撃1.3倍か
@@ -516,11 +521,6 @@ export default function Dungeon() {
   }, [dungeon?.id])
   const [cleared, setCleared] = useState(new Set()) // クリア済みダンジョンID
   const [startFloors, setStartFloors] = useState({}) // ダンジョンごとの開始階選択 { dungeonId: floor }
-  const [zeni, setZeni] = useState(0)                 // ゼニ（ペットダンジョン限定通貨。pet_storageに保存）
-  const [shop, setShop] = useState(null)              // 秘密の商店 { stock, bought, next } 開店中はnull以外
-  const shopRef = useRef(null)                        // 開店中の移動ブロック用
-  const sinceShopRef = useRef(0)                      // 前回の商店からの踏破フロア数
-  const shopAtRef = useRef(20 + Math.floor(Math.random() * 11)) // 次の商店までのフロア数(20〜30)
   const [shake, setShake] = useState(null) // 戦闘演出：接触時のマップ揺れ（'hit' | 'kill'）
   const shakeTimer = useRef(null)
   // 接触時にマップを少し震わせる（撃破時はやや大きめ）
