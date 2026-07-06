@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { SPECIES, STARTERS, SKILLS, skillsForSpecies, MAX_SKILL_SLOTS, SHOP_ITEMS, PET_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage, assetSrc, getCharm, charmDisplayName, charmHpBonus } from '../constants/pets'
+import { SPECIES, STARTERS, SKILLS, skillsForSpecies, MAX_SKILL_SLOTS, SHOP_ITEMS, PET_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage, assetSrc, getCharm, charmDisplayName, charmHpBonus, isRibbonType } from '../constants/pets'
 import { validateName } from '../lib/nameFilter'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -115,6 +115,17 @@ export default function Pets() {
     setLoading(false)
     if (error) { flash('装備に失敗: ' + error.message); return }
     flash('チャームを装備した')
+    await fetchAll()
+  }
+
+  // リボン（チャームとは別枠）。null で外す
+  const equipRibbon = async (ribbonId) => {
+    if (!selectedId) return
+    setLoading(true)
+    const { error } = await supabase.rpc('pet_ribbon_equip', { p_pet_id: selectedId, p_ribbon_id: ribbonId })
+    setLoading(false)
+    if (error) { flash('装備に失敗: ' + error.message); return }
+    flash(ribbonId ? 'リボンを装備した' : 'リボンを外した')
     await fetchAll()
   }
 
@@ -303,11 +314,12 @@ export default function Pets() {
           </div>
         </div>
 
-        {/* チャーム（装備でステ反映。強化/継承はチャームページで＝次回） */}
+        {/* チャーム（装備でステ反映。強化/継承はチャームページで） */}
         <div style={{ marginTop: 12, borderTop: '1px solid #223a55', paddingTop: 10 }}>
           <div style={{ color: '#aa88ff', fontSize: 12, marginBottom: 6 }}>🧿 チャーム</div>
           {(() => {
-            const equipped = charms.find((c) => c.id === selected.charm_id)
+            const pures = charms.filter((c) => !isRibbonType(c.ctype))
+            const equipped = pures.find((c) => c.id === selected.charm_id)
             const cdef = getCharm(equipped?.ctype)
             const grown = equipped && (equipped.hp || equipped.atk || equipped.spatk || equipped.def || equipped.spdef)
             return (
@@ -317,7 +329,7 @@ export default function Pets() {
                   {grown ? <span style={{ color: '#88ffaa', fontSize: 10 }}>　HP+{charmHpBonus(equipped)} 攻+{equipped.atk} 特攻+{equipped.spatk} 防+{equipped.def} 特防+{equipped.spdef}</span> : null}
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {charms.map((c) => {
+                  {pures.map((c) => {
                     const d = getCharm(c.ctype); const on = c.id === selected.charm_id
                     return (
                       <button key={c.id} onClick={() => !loading && !on && equipCharm(c.id)}
@@ -328,6 +340,41 @@ export default function Pets() {
                   })}
                 </div>
                 <div style={{ color: '#557799', fontSize: 10, marginTop: 6 }}>※強化・継承はチャームページで。素はダンジョンで拾える</div>
+              </>
+            )
+          })()}
+        </div>
+
+        {/* リボン（チャームとは別枠の装備。d60の37F以降で拾える） */}
+        <div style={{ marginTop: 12, borderTop: '1px solid #223a55', paddingTop: 10 }}>
+          <div style={{ color: '#ff88bb', fontSize: 12, marginBottom: 6 }}>🎀 リボン</div>
+          {(() => {
+            const ribbons = charms.filter((c) => isRibbonType(c.ctype))
+            const equipped = ribbons.find((c) => c.id === selected.ribbon_id)
+            const grown = equipped && (equipped.hp || equipped.atk || equipped.spatk || equipped.def || equipped.spdef)
+            if (ribbons.length === 0) return <div style={{ color: '#557799', fontSize: 10 }}>リボンを持っていません（五霊の大峡谷の37F以降で拾える）</div>
+            return (
+              <>
+                <div style={{ color: '#cce6ff', fontSize: 12, marginBottom: 6 }}>
+                  装備中：{equipped ? `${getCharm(equipped.ctype).emoji} ${charmDisplayName(equipped)}` : '（なし）'}
+                  {grown ? <span style={{ color: '#88ffaa', fontSize: 10 }}>　HP+{charmHpBonus(equipped)} 攻+{equipped.atk} 特攻+{equipped.spatk} 防+{equipped.def} 特防+{equipped.spdef}</span> : null}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {equipped && (
+                    <button onClick={() => !loading && equipRibbon(null)}
+                      style={{ background: '#000a18', border: '1px solid #224466', color: '#88aacc', padding: '5px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>外す</button>
+                  )}
+                  {ribbons.map((c) => {
+                    const d = getCharm(c.ctype); const on = c.id === selected.ribbon_id
+                    return (
+                      <button key={c.id} onClick={() => !loading && !on && equipRibbon(c.id)}
+                        style={{ background: on ? '#2a0f1a' : '#000a18', border: `1px solid ${on ? '#ff88bb' : '#224466'}`, color: '#cce6ff', padding: '5px 8px', cursor: on ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                        {on ? '✓ ' : ''}{d.emoji} {charmDisplayName(c)}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div style={{ color: '#557799', fontSize: 10, marginTop: 6 }}>※強化はチャームページの「凝縮された素」で。チャームと同時に装備できる</div>
               </>
             )
           })()}

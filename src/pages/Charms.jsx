@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { getCharm, CHARM_TOTAL_MAX, CHARM_HP_PER, charmDisplayName, charmTotal, petItemImg } from '../constants/pets'
+import { getCharm, CHARM_TOTAL_MAX, CHARM_HP_PER, charmDisplayName, charmTotal, petItemImg, isRibbonType } from '../constants/pets'
 
 // 素アイコン（画像があれば画像、無ければ絵文字）
 function SeedIcon({ seed, emoji, size = 16 }) {
@@ -20,6 +20,8 @@ const STAT_META = {
   spdef: { label: '特防', seed: 'spdef_seed', emoji: '🟢', per: 1 },
 }
 const STAT_KEYS = ['hp', 'atk', 'spatk', 'def', 'spdef']
+// 凝縮された素の絵文字（丸=通常素 / 四角=凝縮）
+const CEMOJI = { hp: '🟨', atk: '🟥', spatk: '🟪', def: '🟦', spdef: '🟩' }
 
 export default function Charms() {
   const nav = useNavigate()
@@ -46,7 +48,7 @@ export default function Charms() {
     if (!user) { nav('/login'); return }
     const { data: chs } = await supabase.from('player_charms').select('*').eq('owner_id', user.id).order('created_at')
     setCharms(chs || [])
-    const { data: ps } = await supabase.from('pets').select('id, name, charm_id').eq('owner_id', user.id)
+    const { data: ps } = await supabase.from('pets').select('id, name, charm_id, ribbon_id').eq('owner_id', user.id)
     setPets(ps || [])
     // 素は倉庫(pet_storage)に入る
     const { data: its } = await supabase.from('pet_storage').select('item_key, qty').eq('owner_id', user.id)
@@ -54,12 +56,16 @@ export default function Charms() {
     if (chs && chs.length && !chs.find((c) => c.id === selId)) setSelId(chs[0].id)
   }
 
-  const equippedBy = (charmId) => pets.find((p) => p.charm_id === charmId)?.name
+  const equippedBy = (charmId) => pets.find((p) => p.charm_id === charmId || p.ribbon_id === charmId)?.name
 
-  const enhance = async (charmId, stat, times) => {
+  // リボンは「凝縮された素」(*_seed_c)で強化する（RPCも別）
+  const seedKeyFor = (charm, stat) => isRibbonType(charm?.ctype) ? `${STAT_META[stat].seed}_c` : STAT_META[stat].seed
+  const enhance = async (charm, stat, times) => {
     if (times < 1) return
     setLoading(true)
-    const { error } = await supabase.rpc('pet_charm_enhance', { p_charm_id: charmId, p_stat: stat, p_times: times })
+    const rpc = isRibbonType(charm.ctype) ? 'pet_ribbon_enhance' : 'pet_charm_enhance'
+    const idParam = isRibbonType(charm.ctype) ? { p_ribbon_id: charm.id } : { p_charm_id: charm.id }
+    const { error } = await supabase.rpc(rpc, { ...idParam, p_stat: stat, p_times: times })
     setLoading(false)
     if (error) { flash('強化できません（素が無い／上限）'); return }
     await load()
@@ -70,12 +76,25 @@ export default function Charms() {
     if (!targets.length) { flash('強化する能力を選んでください'); return }
     setLoading(true)
     for (const stat of targets) {
-      const have = seeds[STAT_META[stat].seed] || 0
-      if (have > 0) await supabase.rpc('pet_charm_enhance', { p_charm_id: charm.id, p_stat: stat, p_times: have })
+      const have = seeds[seedKeyFor(charm, stat)] || 0
+      if (have > 0) {
+        const rpc = isRibbonType(charm.ctype) ? 'pet_ribbon_enhance' : 'pet_charm_enhance'
+        const idParam = isRibbonType(charm.ctype) ? { p_ribbon_id: charm.id } : { p_charm_id: charm.id }
+        await supabase.rpc(rpc, { ...idParam, p_stat: stat, p_times: have })
+      }
     }
     setLoading(false)
     await load()
     flash('まとめて強化した')
+  }
+  // 凝縮：○○の素10個 → 凝縮された○○の素1個
+  const condense = async (stat, times = 1) => {
+    setLoading(true)
+    const { error } = await supabase.rpc('pet_seed_condense', { p_stat: stat, p_times: times })
+    setLoading(false)
+    if (error) { flash('凝縮できません（素が10個未満）'); return }
+    await load()
+    flash(`凝縮された${STAT_META[stat].label}の素を作った`)
   }
 
   const doInherit = async () => {
@@ -126,6 +145,7 @@ export default function Charms() {
     </div>
   )
 
+  const pures = charms.filter((c) => !isRibbonType(c.ctype))
   const sel = charms.find((c) => c.id === selId)
 
   return (
@@ -149,6 +169,7 @@ export default function Charms() {
           <Btn onClick={() => setTab('enhance')} dim={tab !== 'enhance'}>強化</Btn>
           <Btn onClick={() => setTab('inherit')} dim={tab !== 'inherit'}>継承</Btn>
           <Btn onClick={() => setTab('fuse')} dim={tab !== 'fuse'}>合成</Btn>
+          <Btn onClick={() => setTab('condense')} dim={tab !== 'condense'}>凝縮</Btn>
         </div>
 
         {charms.length === 0 && <div style={{ color: '#557799', fontSize: 12 }}>チャームを持っていません（ダンジョンで拾えます）</div>}
@@ -180,16 +201,16 @@ export default function Charms() {
                   <span style={{ width: 52, fontSize: 11, textAlign: 'right', color: full ? '#ffcc44' : '#88bbee' }}>{total}/{cap}</span>
                 </div>
                 {STAT_KEYS.map((stat) => {
-                  const meta = STAT_META[stat]; const cnt = sel[stat] || 0; const have = seeds[meta.seed] || 0
+                  const meta = STAT_META[stat]; const cnt = sel[stat] || 0; const have = seeds[seedKeyFor(sel, stat)] || 0
                   const shown = cnt * meta.per // 表示上の上昇値（HPは×5）
                   const dis = full || have === 0
                   return (
                     <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
                       <input type="checkbox" checked={!!checked[stat]} onChange={(e) => setChecked((c) => ({ ...c, [stat]: e.target.checked }))} disabled={dis} />
-                      <span style={{ width: 64, fontSize: 11, color: '#cce6ff' }}><SeedIcon seed={meta.seed} emoji={meta.emoji} size={14} />{meta.label}</span>
+                      <span style={{ width: 64, fontSize: 11, color: '#cce6ff' }}><SeedIcon seed={seedKeyFor(sel, stat)} emoji={isRibbonType(sel.ctype) ? CEMOJI[stat] : meta.emoji} size={14} />{meta.label}</span>
                       <span style={{ flex: 1, fontSize: 11, color: '#88bbee' }}>+{shown}{stat === 'hp' && cnt > 0 ? `（${cnt}個）` : ''}</span>
-                      <span style={{ fontSize: 10, color: '#557799', display: 'inline-flex', alignItems: 'center', gap: 2 }}><SeedIcon seed={meta.seed} emoji={meta.emoji} size={12} />{have}</span>
-                      <button onClick={() => !loading && enhance(sel.id, stat, 1)} disabled={dis}
+                      <span style={{ fontSize: 10, color: '#557799', display: 'inline-flex', alignItems: 'center', gap: 2 }}><SeedIcon seed={seedKeyFor(sel, stat)} emoji={isRibbonType(sel.ctype) ? CEMOJI[stat] : meta.emoji} size={12} />{have}</span>
+                      <button onClick={() => !loading && enhance(sel, stat, 1)} disabled={dis}
                         style={{ background: dis ? '#0a0f1a' : '#001830', border: `1px solid ${dis ? '#223344' : '#0088cc'}`, color: dis ? '#445' : '#00aaff', padding: '3px 8px', cursor: dis ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
                         +{meta.per}
                       </button>
@@ -205,14 +226,14 @@ export default function Charms() {
           </>
         )}
 
-        {tab === 'inherit' && charms.length > 0 && (
+        {tab === 'inherit' && pures.length > 0 && (
           <div style={{ border: '1px solid #335588', background: '#00102a', padding: 12 }}>
             <div style={{ color: '#88aacc', fontSize: 11, marginBottom: 8 }}>継承元の能力を継承先へ移します。<span style={{ color: '#ff8866' }}>継承元のチャームは消えます。</span></div>
             {[['from', '継承元（消える）', fromId, setFromId], ['to', '継承先（残る）', toId, setToId]].map(([key, label, val, setter]) => (
               <div key={key} style={{ marginBottom: 10 }}>
                 <div style={{ color: '#6699cc', fontSize: 11, marginBottom: 4 }}>{label}</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {charms.map((c) => {
+                  {pures.map((c) => {
                     const d = getCharm(c.ctype); const on = c.id === val
                     return (
                       <button key={c.id} onClick={() => setter(c.id)}
@@ -228,14 +249,14 @@ export default function Charms() {
           </div>
         )}
 
-        {tab === 'fuse' && charms.length > 0 && (
+        {tab === 'fuse' && pures.length > 0 && (
           <div style={{ border: '1px solid #663388', background: '#0e0820', padding: 12 }}>
             <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔮 神秘の欠片1つで2つの素材を1つのチャームに（効果も両方引継ぎ・成長は合算で合計300まで）。<span style={{ color: '#ff8866' }}>素材2つは無くなり1つにまとまります。合成済みは再合成不可。</span></div>
             {[['base', '素材①', fuseBase, setFuseBase], ['mat', '素材②', fuseMat, setFuseMat]].map(([key, label, val, setter]) => (
               <div key={key} style={{ marginBottom: 10 }}>
                 <div style={{ color: '#9977cc', fontSize: 11, marginBottom: 4 }}>{label}</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {charms.map((c) => {
+                  {pures.map((c) => {
                     const d = getCharm(c.ctype); const on = c.id === val
                     const other = key === 'base' ? fuseMat : fuseBase
                     return (
@@ -270,10 +291,10 @@ export default function Charms() {
             <Btn onClick={() => !loading && doFuse()}>🔮 合成する（欠片×{seeds.shard || 0}）</Btn>
 
             {/* 合成解除 */}
-            {charms.some((c) => c.fused) && (
+            {pures.some((c) => c.fused) && (
               <div style={{ marginTop: 14, borderTop: '1px solid #442266', paddingTop: 10 }}>
                 <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔓 神秘の欠片1つで合成を解除できます（2つ目の効果が外れ、再び合成できるようになります）。<span style={{ color: '#ff8866' }}>成長値はそのまま残ります。</span></div>
-                {charms.filter((c) => c.fused).map((c) => {
+                {pures.filter((c) => c.fused).map((c) => {
                   const d = getCharm(c.ctype); const can = (seeds.shard || 0) >= 1
                   return (
                     <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
@@ -287,6 +308,37 @@ export default function Charms() {
                 })}
               </div>
             )}
+          </div>
+        )}
+        {tab === 'condense' && (
+          <div style={{ border: '1px solid #338866', background: '#001a12', padding: 12 }}>
+            <div style={{ color: '#88ddaa', fontSize: 11, marginBottom: 10 }}>
+              💠 ○○の素10個を「凝縮された○○の素」1個に合成します。凝縮された素は<span style={{ color: '#ff88bb' }}>リボンの強化</span>に使います（リボンも強化合計150まで）。
+            </div>
+            {STAT_KEYS.map((stat) => {
+              const meta = STAT_META[stat]
+              const have = seeds[meta.seed] || 0
+              const haveC = seeds[`${meta.seed}_c`] || 0
+              const canOne = have >= 10
+              const maxTimes = Math.floor(have / 10)
+              return (
+                <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 11 }}>
+                  <span style={{ width: 40, color: '#cce6ff' }}>{meta.label}</span>
+                  <span style={{ width: 78, color: '#88bbee' }}><SeedIcon seed={meta.seed} emoji={meta.emoji} size={13} />素×{have}</span>
+                  <span style={{ color: '#557799' }}>→</span>
+                  <span style={{ width: 86, color: '#88ddaa' }}>{CEMOJI[stat]} 凝縮×{haveC}</span>
+                  <button onClick={() => !loading && canOne && condense(stat, 1)} disabled={!canOne}
+                    style={{ background: canOne ? '#00281a' : '#0a0f1a', border: `1px solid ${canOne ? '#33aa77' : '#223344'}`, color: canOne ? '#66ddaa' : '#445', padding: '3px 8px', cursor: canOne ? 'pointer' : 'default', fontFamily: 'monospace', fontSize: 11 }}>
+                    10→1
+                  </button>
+                  <button onClick={() => !loading && maxTimes > 1 && condense(stat, maxTimes)} disabled={maxTimes < 2}
+                    style={{ background: maxTimes > 1 ? '#00281a' : '#0a0f1a', border: `1px solid ${maxTimes > 1 ? '#33aa77' : '#223344'}`, color: maxTimes > 1 ? '#66ddaa' : '#445', padding: '3px 8px', cursor: maxTimes > 1 ? 'pointer' : 'default', fontFamily: 'monospace', fontSize: 11 }}>
+                    まとめて×{Math.max(maxTimes, 0)}
+                  </button>
+                </div>
+              )
+            })}
+            <div style={{ color: '#557799', fontSize: 10, marginTop: 6 }}>※リボンは五霊の大峡谷の37F以降でドロップ。強化は「強化」タブでリボンを選ぶと凝縮された素を消費します</div>
           </div>
         )}
       </div>

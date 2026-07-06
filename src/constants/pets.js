@@ -572,6 +572,9 @@ export const PET_ITEMS = {
   escape:  { key: 'escape',  name: 'だっしゅつの翼',   emoji: '🪽', price: 500,   dungeon: true,  capped: false, desc: 'ダンジョンからいつでも脱出（使い切り・袋の対象外）' },
   onigiri: { key: 'onigiri', name: 'おにぎり',         emoji: '🍙', price: 200,   dungeon: true,  capped: true, fullness: 30, desc: '満腹度を30回復' },
   konomi:  { key: 'konomi',  name: '木の実',           emoji: '🍒', price: 300,   dungeon: true,  capped: true, healPct: 0.2, desc: '最大HPの20%を回復' },
+  // おいしい系（d60のF25以降で食料抽選時5%。ドロップ専用・非売品）
+  oishii_onigiri: { key: 'oishii_onigiri', name: 'おいしいおにぎり', emoji: '🍱', price: 0, dungeon: true, capped: true, noShop: true, fullness: 60, desc: '満腹度を60回復' },
+  oishii_konomi:  { key: 'oishii_konomi',  name: 'おいしい木の実',   emoji: '🍎', price: 0, dungeon: true, capped: true, noShop: true, healPct: 0.35, desc: '最大HPの35%を回復' },
   rename:  { key: 'rename',  name: 'ニックネーム変更券', emoji: '🎫', price: 100000, dungeon: false, capped: true,  desc: 'ペットの名前を変更できる' },
   shard:   { key: 'shard',   name: '神秘の欠片',       emoji: '🔮', price: 0, dungeon: false, capped: true, noShop: true, desc: 'チャーム合成に使う（30Fボス討伐でドロップ）' },
   // チャーム強化用の素（ダンジョンで拾う。チャームページで使用）
@@ -580,6 +583,12 @@ export const PET_ITEMS = {
   def_seed:   { key: 'def_seed',   name: '防御の素',  emoji: '🔵', img: '/bougyomoto.png',      price: 0, dungeon: false, capped: true, seed: 'def',   up: 1,  desc: 'チャームの防御を+1' },
   spdef_seed: { key: 'spdef_seed', name: '特防の素',  emoji: '🟢', img: '/mahoubougyomoto.png', price: 0, dungeon: false, capped: true, seed: 'spdef', up: 1,  desc: 'チャームの特防を+1' },
   hp_seed:    { key: 'hp_seed',    name: 'HPの素',    emoji: '🟡', img: '/HPmoto.png',         price: 0, dungeon: false, capped: true, seed: 'hp',    up: 5,  desc: 'チャームのHPを+5（消費1）' },
+  // 凝縮された素（リボン強化用。○○の素10個をチャームページで合成して作る）
+  atk_seed_c:   { key: 'atk_seed_c',   name: '凝縮された攻撃の素', emoji: '🟥', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'atk',   up: 1, desc: 'リボンの攻撃を+1（攻撃の素10個から合成）' },
+  spatk_seed_c: { key: 'spatk_seed_c', name: '凝縮された特攻の素', emoji: '🟪', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'spatk', up: 1, desc: 'リボンの特攻を+1（特攻の素10個から合成）' },
+  def_seed_c:   { key: 'def_seed_c',   name: '凝縮された防御の素', emoji: '🟦', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'def',   up: 1, desc: 'リボンの防御を+1（防御の素10個から合成）' },
+  spdef_seed_c: { key: 'spdef_seed_c', name: '凝縮された特防の素', emoji: '🟩', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'spdef', up: 1, desc: 'リボンの特防を+1（特防の素10個から合成）' },
+  hp_seed_c:    { key: 'hp_seed_c',    name: '凝縮されたHPの素',   emoji: '🟨', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'hp',    up: 5, desc: 'リボンのHPを+5（HPの素10個から合成）' },
 }
 
 // ============================================================
@@ -661,10 +670,29 @@ export const CHARMS = {
   evade:    { type: 'evade',    name: '回避のチャーム',     emoji: '💨', effect: 'evade',    short: '回避', minFloor: 20, desc: '回避+5%' },
   hit:      { type: 'hit',      name: '命中のチャーム',     emoji: '🎯', effect: 'hit',      short: '命中', minFloor: 20, desc: '命中+5%' },
   lucky:    { type: 'lucky',    name: '幸せのチャーム',     emoji: '🍀', effect: 'lucky',    short: '幸せ', minFloor: 20, rare: true, desc: '撃破時50%で経験値+50%（主人公は10%で経験値+1）' },
+  // --- d60(五霊の大峡谷)37F以降のドロップ（minFloor無し＝d30では落ちない）---
+  stunres:  { type: 'stunres',  name: 'スタンのチャーム',   emoji: '⚡', effect: 'stunres',  short: 'スタン', desc: 'しびれ(麻痺)になる確率が20%減る' },
+  burnres:  { type: 'burnres',  name: 'やけどのチャーム',   emoji: '🔥', effect: 'burnres',  short: 'やけど', desc: 'やけどになる確率が30%減る' },
+  // リボン（チャームとは別の装備枠。強化は「凝縮された素」を使う）
+  rib_phys: { type: 'rib_phys', name: '物理のリボン',       emoji: '🎀', effect: 'physup',   short: '物理', ribbon: true, desc: '物理ダメージ+5%' },
+  rib_spec: { type: 'rib_spec', name: '特殊のリボン',       emoji: '🎗️', effect: 'specup',   short: '特殊', ribbon: true, desc: '特殊ダメージ+5%' },
+  rib_wall: { type: 'rib_wall', name: '両壁のリボン',       emoji: '🧱', effect: 'wall',     short: '両壁', ribbon: true, desc: '防御・特防+6%' },
 }
 export const getCharm = (t) => CHARMS[t] || CHARMS.hajimari
+// リボン判定（チャームとは別枠の装備）
+export const isRibbonType = (t) => !!CHARMS[t]?.ribbon
 // そのフロアでドロップする通常チャーム（rare=幸せは別枠抽選）
 export const charmsForFloor = (floor) => Object.values(CHARMS).filter((c) => !c.rare && c.minFloor && floor >= c.minFloor).map((c) => c.type)
+// ダンジョン別のチャーム/リボンのドロップ表（d60は専用の解禁帯）
+export function charmDropsFor(dungeonId, floor) {
+  if (dungeonId === 'd60') {
+    const pool = ['guard', 'mdefup', 'atkup', 'spatkup']            // F1-24
+    if (floor >= 25) pool.push('evade', 'hit', 'antidote')          // F25-36で追加
+    if (floor >= 37) pool.push('stunres', 'burnres', 'rib_phys', 'rib_spec', 'rib_wall') // F37-59で追加
+    return pool
+  }
+  return charmsForFloor(floor)
+}
 // チャームが持つ効果一覧（合成で ctype2 を持つと2つ）
 export const charmEffects = (charm) => [charm?.ctype, charm?.ctype2].filter(Boolean).map((t) => getCharm(t).effect).filter(Boolean)
 export const charmHasEffect = (charm, eff) => charmEffects(charm).includes(eff)
@@ -690,22 +718,28 @@ export function charmPlayerBonus(charm) {
     antidote: getCharm(charm.ctype).effect === 'antidote', // 毒確率50%減
   }
 }
-// チャームのステ成長を加算したペットステを返す（ダンジョン/反映で使用）
-export function applyCharmStats(stats, charm) {
-  if (!charm) return { ...stats, atkPhys: stats.atk, atkSpec: stats.atk }
+// チャーム＋リボンのステ成長を加算したペットステを返す（ダンジョン/反映で使用）
+//  ribbon はチャームとは別枠の装備（無ければ従来どおりチャームのみ）
+export function applyCharmStats(stats, charm, ribbon = null) {
+  if (!charm && !ribbon) return { ...stats, atkPhys: stats.atk, atkSpec: stats.atk }
   let { maxHp, atk, def, mdef } = stats
-  maxHp += charmHpBonus(charm)
-  // チャーム込みの物理値/特殊値を両方持つ（たいあたりは高いほうを参照して攻撃する）
-  let atkPhys = atk + (charm.atk || 0)
-  let atkSpec = atk + (charm.spatk || 0)
-  def += charm.def || 0
-  mdef += charm.spdef || 0
-  // 効果（合成で2つ持つことがある）：guard=防御+10% / mdefup=特防+10% / atkup=攻撃+10% / spatkup=特攻+10%
-  const effs = charmEffects(charm)
+  // チャーム/リボン込みの物理値/特殊値を両方持つ（たいあたりは高いほうを参照して攻撃する）
+  let atkPhys = atk, atkSpec = atk
+  for (const c of [charm, ribbon]) {
+    if (!c) continue
+    maxHp += charmHpBonus(c)
+    atkPhys += c.atk || 0
+    atkSpec += c.spatk || 0
+    def += c.def || 0
+    mdef += c.spdef || 0
+  }
+  // 効果（チャームは合成で2つ持つことがある）：guard=防御+10% / mdefup=特防+10% / atkup=攻撃+10% / spatkup=特攻+10% / wall=防御特防+6%
+  const effs = [...charmEffects(charm), ...charmEffects(ribbon)]
   if (effs.includes('guard')) def = Math.round(def * 1.1)
   if (effs.includes('mdefup')) mdef = Math.round(mdef * 1.1)
   if (effs.includes('atkup')) atkPhys = Math.round(atkPhys * 1.1)
   if (effs.includes('spatkup')) atkSpec = Math.round(atkSpec * 1.1)
+  if (effs.includes('wall')) { def = Math.round(def * 1.06); mdef = Math.round(mdef * 1.06) }
   atk = stats.atkType === 'spec' ? atkSpec : atkPhys // 表示用のメイン攻撃値は攻撃タイプ側
   return { ...stats, maxHp, atk, atkPhys, atkSpec, def, mdef }
 }

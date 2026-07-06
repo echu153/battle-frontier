@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmsForFloor, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, bossFor, dgBgm, assetSrc, ASSET_VER } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmDropsFor, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, bossFor, dgBgm, assetSrc, ASSET_VER } from '../constants/pets'
 import Boss60Sprite from '../components/Boss60Sprite'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
@@ -64,27 +64,36 @@ function equipAreaFor(dungeonId, floor) {
   if (dungeonId === 'd10') return floor <= 5 ? 1 : 2
   return 4
 }
-// 強化石ランク：10Fごとに1段上げる（1-9=F/E/D、10-19=E/D/C …）
-function stoneRankForFloor(floor) {
+// 強化石ランク：10Fごとに1段上げる（1-9=F/E/D、10-19=E/D/C …）。d60は帯ごとに底上げ
+function stoneRankForFloor(dungeonId, floor) {
+  if (dungeonId === 'd60') {
+    // 1-24F=E/D/C、25-36F=D/C/B、37-59F=C/B/A
+    const base = floor <= 24 ? 1 : floor <= 36 ? 2 : 3
+    return STONE_RANKS[Math.min(STONE_RANKS.length - 1, base + Math.floor(Math.random() * 3))]
+  }
   const tier = Math.floor((floor - 1) / 10)
   const baseIdx = Math.floor(Math.random() * 3) // 0,1,2 = F,E,D
   return STONE_RANKS[Math.min(STONE_RANKS.length - 1, baseIdx + tier)]
 }
 // 戦利品枠の抽選：素50 / 強化石10 / 宝石10 / チャーム4 / 装備6（合計80）
-//  チャームはフロア解禁制。20F以降は0.1%で幸せのチャーム（超レア）
+//  ※d60の37F以降は装備を1%下げてチャーム/リボンへ（素50/石10/宝石10/チャーム5/装備5）
+//  チャームはフロア解禁制（d60は専用帯=charmDropsFor）。幸せのチャームは20F以降(d60は全F)0.1%
 function rollFloorLoot(dungeonId, floor) {
   // 1%で匠の秘伝書Ⅰ〜Ⅲ（成功率アップ本）をランダムドロップ
   if (Math.random() < 0.01) return { type: 'book', level: rand(1, 3) }
+  const charmCut = (dungeonId === 'd60' && floor >= 37) ? 75 : 74
   const r = Math.random() * 80
   if (r < 50) return { type: 'seed', seedKey: pick(DG_SEEDS), qty: 1 }
-  if (r < 60) return { type: 'stone', rank: stoneRankForFloor(floor) }
+  if (r < 60) return { type: 'stone', rank: stoneRankForFloor(dungeonId, floor) }
   if (r < 70) return { type: 'gem', gemType: pick(DG_GEMS) }
-  if (r < 74) {
-    if (floor >= 20 && Math.random() < 0.001) return { type: 'charm', ctype: 'lucky' } // 0.1% 幸せのチャーム
-    const pool = charmsForFloor(floor)
+  if (r < charmCut) {
+    if ((floor >= 20 || dungeonId === 'd60') && Math.random() < 0.001) return { type: 'charm', ctype: 'lucky' } // 0.1% 幸せのチャーム
+    const pool = charmDropsFor(dungeonId, floor)
     return { type: 'charm', ctype: pool.length ? pick(pool) : 'guard' }
   }
-  return { type: 'equip', name: pick(AREA_EQUIPS[equipAreaFor(dungeonId, floor)] || AREA_EQUIPS[1]) }
+  // 装備：d60の1-12Fはエリア①〜③からランダム、以降はフロア帯のエリア
+  const area = (dungeonId === 'd60' && floor <= 12) ? rand(1, 3) : equipAreaFor(dungeonId, floor)
+  return { type: 'equip', name: pick(AREA_EQUIPS[area] || AREA_EQUIPS[1]) }
 }
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1))
@@ -241,8 +250,10 @@ function generateFloor(floorNum, dungeon) {
     // ドロップ確率: 木の実8 / おにぎり8 / スキルの書4(10F+) / 残り80%=素50・石10・宝石10・チャーム4・装備6
     //  ※床に実アイテムのアイコンを表示（置いてある時点で何か分かる）。✨マーカーは廃止
     const r = Math.random()
-    if (r < 0.08) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'konomi' })
-    else if (r < 0.16) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'onigiri' })
+    // d60のF25以降は食料抽選時さらに5%で「おいしい」上位版が出る
+    const oishii = dungeon?.id === 'd60' && floorNum >= 25 && Math.random() < 0.05
+    if (r < 0.08) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: oishii ? 'oishii_konomi' : 'konomi' })
+    else if (r < 0.16) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: oishii ? 'oishii_onigiri' : 'onigiri' })
     else if (r < 0.20 && (floorNum >= 10 || dungeon?.id === 'd60')) items.push({ id: 's' + i, x: t.x, y: t.y, kind: 'food', key: SCROLL_KEYS[rand(0, SCROLL_KEYS.length - 1)] }) // スキルの書（拾うと袋へ）。d60は1Fから
     else items.push({ id: 'i' + i, x: t.x, y: t.y, kind: 'loot', loot: rollFloorLoot(dungeon?.id, floorNum) })
   }
@@ -580,7 +591,7 @@ export default function Dungeon() {
     let newMax = null
     setPet((p) => {
       if (!p?.species) return p
-      const st = applyCharmStats(petStats({ species: p.species, level: data.level, evolved: p.evolved }), p.charm)
+      const st = applyCharmStats(petStats({ species: p.species, level: data.level, evolved: p.evolved }), p.charm, p.ribbon)
       newMax = st.maxHp
       return { ...p, level: data.level, exp: data.exp, ...st }
     })
@@ -679,12 +690,13 @@ export default function Dungeon() {
       // 選択中のペットを読み込む
       const { data: ap } = await supabase.from('pets').select('*').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
       if (ap) {
-        // 装備中チャームを取得してステに反映（チャーム成長値＋守り＝防御+10%）
-        let charm = null
+        // 装備中チャーム＋リボン（別枠）を取得してステに反映
+        let charm = null, ribbon = null
         if (ap.charm_id) { const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle(); charm = c }
-        const st = applyCharmStats(petStats(ap), charm)
+        if (ap.ribbon_id) { const { data: rb } = await supabase.from('player_charms').select('*').eq('id', ap.ribbon_id).maybeSingle(); ribbon = rb }
+        const st = applyCharmStats(petStats(ap), charm, ribbon)
         const slots = Array.isArray(ap.skill_slots) && ap.skill_slots.length ? ap.skill_slots : ['tackle']
-        setPet({ id: ap.id, species: ap.species, evolved: ap.evolved, charm, name: ap.name, emoji: speciesEmoji(ap), image_url: petImage(ap), skillSlots: slots, level: ap.level, exp: ap.exp, ...st })
+        setPet({ id: ap.id, species: ap.species, evolved: ap.evolved, charm, ribbon, name: ap.name, emoji: speciesEmoji(ap), image_url: petImage(ap), skillSlots: slots, level: ap.level, exp: ap.exp, ...st })
         setSelectedSkill(slots[0])
         setPetHp(st.maxHp)
       }
@@ -892,7 +904,9 @@ export default function Dungeon() {
         else if (p > sp2) { useAtk = p; useType = 'phys' }
       }
       // やけど・ステータスダウン中は攻撃/特攻が下がる。攻撃バフ中は上がる
-      const atkMul = (burned ? 1 - BURN_ATK_DOWN : 1) * (debuff.atk > 0 ? 1 - STAT_DOWN_PCT : 1) * (petAtkUp > 0 ? PET_ATKUP_MULT : 1)
+      // リボン：物理のリボン=物理ダメ+5% / 特殊のリボン=特殊ダメ+5%（攻撃タイプが一致した時のみ）
+      const ribMul = (useType === 'phys' && charmHasEffect(pet.ribbon, 'physup')) || (useType === 'spec' && charmHasEffect(pet.ribbon, 'specup')) ? 1.05 : 1
+      const atkMul = (burned ? 1 - BURN_ATK_DOWN : 1) * (debuff.atk > 0 ? 1 - STAT_DOWN_PCT : 1) * (petAtkUp > 0 ? PET_ATKUP_MULT : 1) * ribMul
       useAtk = useAtk * atkMul
       // 敵の防御。デバフ（防御down）を受けている敵は軽減が弱まる
       const baseGuard = useType === 'spec' ? (target.mdef || 0) : (target.def || 0)
@@ -1114,10 +1128,15 @@ export default function Dungeon() {
         if (e.boss && e.phase === 1 && lowHp && !e.healedOnce && bossPh?.reviveHealPct) {
           reviveHeal = Math.ceil((e.maxHp || 1) * bossPh.reviveHealPct)
         }
-        const antidote = getCharm(pet.charm?.ctype).effect === 'antidote'
+        const antidote = charmHasEffect(pet.charm, 'antidote')
+        const stunres = charmHasEffect(pet.charm, 'stunres')  // スタンのチャーム：麻痺確率20%減
+        const burnres = charmHasEffect(pet.charm, 'burnres')  // やけどのチャーム：やけど確率30%減
         for (const sk of sks) {
-          // 解毒のチャーム装備時は毒の発動確率を50%に
-          const chance = sk.type === 'poison' && antidote ? sk.chance * 0.5 : sk.chance
+          // チャーム耐性：解毒=毒50%減 / スタン=麻痺20%減 / やけど=30%減
+          const chance = sk.type === 'poison' && antidote ? sk.chance * 0.5
+            : sk.type === 'paralyze' && stunres ? sk.chance * 0.8
+            : sk.type === 'burn' && burnres ? sk.chance * 0.7
+            : sk.chance
           if (Math.random() >= chance) continue
           if (sk.type === 'heavy') { dmg = Math.round(dmg * (sk.mult || 1)); notes.push(sk.name) }
           // 溶解液：特殊判定（ペットの特防で軽減）の×mult攻撃。物理の敵でも特防に当たる
