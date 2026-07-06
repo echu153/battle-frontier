@@ -243,7 +243,7 @@ function generateFloor(floorNum, dungeon) {
     const r = Math.random()
     if (r < 0.08) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'konomi' })
     else if (r < 0.16) items.push({ id: 'f' + i, x: t.x, y: t.y, kind: 'food', key: 'onigiri' })
-    else if (r < 0.20 && floorNum >= 10) items.push({ id: 's' + i, x: t.x, y: t.y, kind: 'food', key: SCROLL_KEYS[rand(0, SCROLL_KEYS.length - 1)] }) // スキルの書（拾うと袋へ）
+    else if (r < 0.20 && (floorNum >= 10 || dungeon?.id === 'd60')) items.push({ id: 's' + i, x: t.x, y: t.y, kind: 'food', key: SCROLL_KEYS[rand(0, SCROLL_KEYS.length - 1)] }) // スキルの書（拾うと袋へ）。d60は1Fから
     else items.push({ id: 'i' + i, x: t.x, y: t.y, kind: 'loot', loot: rollFloorLoot(dungeon?.id, floorNum) })
   }
 
@@ -1566,8 +1566,10 @@ export default function Dungeon() {
               {Object.entries(inventory).filter(([, q]) => (q || 0) > 0).map(([k, q]) => {
                 const def = PET_ITEMS[k]
                 return (
-                  <span key={k} style={{ background: '#0a1424', border: '1px solid #335588', color: '#cce6ff', padding: '4px 8px', fontSize: 12 }}>
-                    {def?.emoji || '🔹'} {def?.name || k}×{q}
+                  <span key={k} style={{ background: '#0a1424', border: '1px solid #335588', color: '#cce6ff', padding: '4px 8px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                    {petItemImg(k)
+                      ? <img src={petItemImg(k)} alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} />
+                      : (def?.emoji || '🔹')} {def?.name || k}×{q}
                   </span>
                 )
               })}
@@ -2195,7 +2197,12 @@ export default function Dungeon() {
               {DUNGEON_ITEMS.filter((it) => (inventory[it.key] || 0) > 0).map((it) => (
                 <button key={it.key} onClick={() => (dropMode ? dropItem({ kind: 'consumable', key: it.key }) : useItem(it.key))}
                   style={{ background: dropMode ? '#1a0e08' : '#0a1424', border: `1px solid ${dropMode ? '#cc7755' : '#335588'}`, color: '#cce6ff', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.emoji} {it.name}</span>
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    {petItemImg(it.key)
+                      ? <img src={petItemImg(it.key)} alt="" style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} />
+                      : it.emoji}
+                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</span>
+                  </span>
                   <span style={{ flexShrink: 0 }}>×{inventory[it.key]}</span>
                 </button>
               ))}

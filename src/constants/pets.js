@@ -636,8 +636,9 @@ function scrollDesc(s) {
   return `${tgt}に${pow}${ex ? '／' + ex : ''}`
 }
 // スキルの書をアイテム化して PET_ITEMS に統合（ダンジョンで拾って使う消費アイテム）
+//  アイコンは全書共通の魔導書画像（sukirunosyo.png）。絵文字はログ・発動演出用に残す
 for (const [k, s] of Object.entries(SCROLLS)) {
-  PET_ITEMS[k] = { key: k, name: `${s.name}の書`, emoji: s.emoji, price: 0, dungeon: true, capped: true, scroll: true, desc: scrollDesc(s) }
+  PET_ITEMS[k] = { key: k, name: `${s.name}の書`, emoji: s.emoji, img: '/sukirunosyo.png', price: 0, dungeon: true, capped: true, scroll: true, desc: scrollDesc(s) }
 }
 
 export const SHOP_ITEMS = Object.values(PET_ITEMS).filter((i) => !i.seed && !i.scroll && !i.noShop)   // 商店は素・スキルの書・神秘の欠片を除く
