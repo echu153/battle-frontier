@@ -57,7 +57,8 @@ grant execute on function dungeon_zeni_pickup(uuid, int) to authenticated;
 create or replace function secret_shop_buy(p_run_id uuid, p_kind text, p_key text)
 returns json language plpgsql security definer set search_path = public as $$
 declare
-  v_run dungeon_runs%rowtype; v_price int; v_bal int; v_iid items.id%type; v_exrow record;
+  v_run dungeon_runs%rowtype; v_price int; v_bal int; v_iid items.id%type;
+  v_entry jsonb; v_e jsonb; v_arr jsonb; v_found boolean;
 begin
   select * into v_run from dungeon_runs where id = p_run_id;
   if not found then raise exception 'run not found'; end if;
@@ -90,23 +91,32 @@ begin
   update pet_storage set qty = qty - v_price where owner_id = auth.uid() and item_key = 'zeni';
 
   -- 商品付与（失敗時は全体ロールバック＝ゼニも戻る）
+  -- 書=消耗品として持ち物(pet_items)へ / 石・素=床拾いと同じく持ち帰り袋(pending_loot)へ
+  --   ※袋のアイテムは生還で確定入手・死亡時は半分ロストの対象（床のルート品と同じ扱い）
   if p_kind = 'book' then
     perform pet_grant_item(p_key, 1); -- 袋上限は pet_grant_item 側で検証（超過なら例外）
   elsif p_kind = 'seed' then
-    insert into pet_storage(owner_id, item_key, qty) values (auth.uid(), p_key, 1)
-      on conflict (owner_id, item_key) do update set qty = pet_storage.qty + 1;
+    v_entry := jsonb_build_object('id', gen_random_uuid()::text, 'type', 'seed', 'seedKey', p_key, 'qty', 1);
+    -- 既存の同種seedにスタック（dungeon_pickupと同じ挙動）
+    v_found := false; v_arr := '[]'::jsonb;
+    for v_e in select * from jsonb_array_elements(v_run.pending_loot) loop
+      if not v_found and v_e->>'type' = 'seed' and v_e->>'seedKey' = p_key then
+        v_arr := v_arr || jsonb_set(v_e, '{qty}', to_jsonb(coalesce((v_e->>'qty')::int,1) + 1)); v_found := true;
+      else v_arr := v_arr || v_e; end if;
+    end loop;
+    if not v_found then v_arr := v_arr || v_entry; end if;
+    update dungeon_runs set pending_loot = v_arr where id = p_run_id;
   else -- stone
     select id into v_iid from items where name = '強化石(' || p_key || ')';
-    if v_iid is null then raise exception 'stone item missing'; end if;
-    select id, quantity into v_exrow from player_items where player_id = auth.uid() and item_id = v_iid;
-    if v_exrow.id is not null then update player_items set quantity = coalesce(v_exrow.quantity,0) + 1 where id = v_exrow.id;
-    else insert into player_items(player_id, item_id, quantity, equipped) values (auth.uid(), v_iid, 1, false); end if;
+    if v_iid is null then raise exception 'stone item missing'; end if; -- 存在検証のみ（付与は生還時のdungeon_finish）
+    v_entry := jsonb_build_object('id', gen_random_uuid()::text, 'type', 'stone', 'rank', p_key);
+    update dungeon_runs set pending_loot = pending_loot || v_entry where id = p_run_id;
   end if;
 
   update dungeon_runs set shop_buys = shop_buys + 1 where id = p_run_id;
   select qty into v_bal from pet_storage where owner_id = auth.uid() and item_key = 'zeni';
-  return json_build_object('balance', coalesce(v_bal, 0));
-end; $$;
+  return json_build_object('balance', coalesce(v_bal, 0), 'entry', v_entry);
+end; $;
 grant execute on function secret_shop_buy(uuid, text, text) to authenticated;
 
 -- 4) 裁断：チャーム/リボンを削除して1個につきランダムな素×3を倉庫へ（一括可・最大100個）

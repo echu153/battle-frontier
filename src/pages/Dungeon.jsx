@@ -1407,6 +1407,8 @@ export default function Dungeon() {
   const shopBuy = async (kind, key, slot, price) => {
     if (!shop || shop.bought[slot]) return
     if (zeni < price) { setShopMsg('🪙 ゼニが足りない…'); return }
+    // 石・素は持ち帰り袋に入る＝袋の空きが必要（床拾いと同じ扱い）
+    if ((kind === 'stone' || kind === 'seed') && bagCount() >= bagCapacity(cleared.size)) { setShopMsg('🎒 持ち物がいっぱいで買えない'); return }
     const { data, error } = await supabase.rpc('secret_shop_buy', { p_run_id: runIdRef.current, p_kind: kind, p_key: key })
     if (error) {
       const m = String(error.message)
@@ -1418,9 +1420,10 @@ export default function Dungeon() {
     shopRef.current = so; setShop(so)
     const label = kind === 'book' ? (PET_ITEMS[key]?.name || '書') : kind === 'stone' ? `強化石(${key})` : (PET_ITEMS[key]?.name || '素')
     addLog(`🛒 ${label}を購入した`)
-    setShopMsg(`✅ ${label}を購入した`)
+    setShopMsg(`✅ ${label}を購入した（持ち物へ）`)
     playSe('aitemu')
-    if (kind === 'book') setInventory((inv) => ({ ...inv, [key]: (inv[key] || 0) + 1 })) // 書は持ち物に即反映
+    if (kind === 'book') setInventory((inv) => ({ ...inv, [key]: (inv[key] || 0) + 1 })) // 書は持ち物(消耗品)に即反映
+    else if (data?.entry) addLootToBag(data.entry) // 石・素は持ち帰り袋に反映
   }
   const closeShop = () => {
     const next = shop?.next
