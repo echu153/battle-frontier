@@ -39,6 +39,8 @@ const STAT_DOWN_PCT = 0.30    // 敵のデバフ：対象ステータスを30%�
 const ENEMY_BUFF_MULT = 1.3   // 敵の自己バフ：攻撃1.3倍
 const ENEMY_BUFF_TURNS = 4    // 敵の自己バフ持続
 const PET_ATKUP_MULT = 1.3    // ペットの攻撃バフ：攻撃1.3倍
+// 途中階スタートの一般公開フラグ。false=開発(is_admin)のみ／true=踏破済みダンジョンで全員可
+const START_PICK_PUBLIC = false
 
 // 床に置く戦利品の抽選テーブル（クライアントで決定→床に実アイコン表示→拾得時サーバー検証）
 const DG_SEEDS = ['atk_seed', 'spatk_seed', 'def_seed', 'spdef_seed', 'hp_seed']
@@ -473,6 +475,7 @@ export default function Dungeon() {
     for (const src of dgWallTiles(dungeon.id)) { const im = new Image(); im.src = src }
   }, [dungeon?.id])
   const [cleared, setCleared] = useState(new Set()) // クリア済みダンジョンID
+  const [startFloors, setStartFloors] = useState({}) // ダンジョンごとの開始階選択 { dungeonId: floor }
   const [shake, setShake] = useState(null) // 戦闘演出：接触時のマップ揺れ（'hit' | 'kill'）
   const shakeTimer = useRef(null)
   // 接触時にマップを少し震わせる（撃破時はやや大きめ）
@@ -761,12 +764,13 @@ export default function Dungeon() {
     setPetAtkUp(0)
   }, [])
 
-  // ダンジョンを選んで開始
-  const beginDungeon = (d) => {
+  // ダンジョンを選んで開始（startFloor=途中階スタート。踏破済みダンジョンで最終階の1つ手前まで選べる）
+  const beginDungeon = (d, startFloor = 1) => {
+    const sf = Math.max(1, Math.min(startFloor, (d?.floors || 10) - 1))
     setDungeon(d)
-    setFloorNum(1); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setBurned(false); setDebuff({ atk: 0, def: 0, mdef: 0 }); setShield(0); shieldRateRef.current = 1; setRegen(0); regenAmtRef.current = 0; setPetAtkUp(0); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
-    enterFloor(1, d)
-    playFloorIntro(1, d) // 入場時にダンジョン名・フロア表示
+    setFloorNum(sf); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setBurned(false); setDebuff({ atk: 0, def: 0, mdef: 0 }); setShield(0); shieldRateRef.current = 1; setRegen(0); regenAmtRef.current = 0; setPetAtkUp(0); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
+    enterFloor(sf, d)
+    playFloorIntro(sf, d) // 入場時にダンジョン名・フロア表示
     startRun(pet.id, d.id)
   }
 
@@ -1566,8 +1570,12 @@ export default function Dungeon() {
               // 開発アカウントは comingSoon でも入れる（テスト用）
               const unlocked = (!d.comingSoon || isAdmin) && (!d.requires || cleared.has(d.requires) || isAdmin)
               const isCleared = cleared.has(d.id)
+              // 途中階スタート：踏破済みダンジョンなら最終階の1つ手前まで開始階を選べる
+              //  ※現在は開発先行（is_adminのみ）。一般公開時は START_PICK_PUBLIC を true に
+              const canPickStart = unlocked && (isAdmin || (START_PICK_PUBLIC && isCleared))
+              const sf = startFloors[d.id] || 1
               return (
-                <div key={d.id} onClick={() => unlocked && beginDungeon(d)}
+                <div key={d.id} onClick={() => unlocked && beginDungeon(d, sf)}
                   style={{ border: `1px solid ${unlocked ? '#335588' : '#223344'}`, background: unlocked ? '#00102a' : '#080c14', padding: 12, cursor: unlocked ? 'pointer' : 'default', opacity: unlocked ? 1 : 0.5, display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div style={{ fontSize: 30 }}>{d.emoji}</div>
                   <div style={{ flex: 1 }}>
@@ -1576,6 +1584,18 @@ export default function Dungeon() {
                       {d.comingSoon && isAdmin ? '🛠 [開発] テスト挑戦可' : d.comingSoon ? '🔒 近日公開（後日のアップデートで開放）' : unlocked ? 'タップして挑戦' : `${getDungeon(d.requires).name} をクリアで開放`}
                     </div>
                     {d.hint && unlocked && <div style={{ color: '#557799', fontSize: 10, marginTop: 2 }}>{d.hint}</div>}
+                    {canPickStart && (
+                      <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ color: '#88aacc', fontSize: 10 }}>開始階{isCleared ? '' : '（開発）'}</span>
+                        <select value={sf} onChange={(e) => setStartFloors((s) => ({ ...s, [d.id]: parseInt(e.target.value, 10) }))}
+                          style={{ background: '#0a1424', border: '1px solid #335588', color: '#cce6ff', fontFamily: 'monospace', fontSize: 11, padding: '2px 4px' }}>
+                          {Array.from({ length: Math.max(1, (d.floors || 10) - 1) }, (_, i) => i + 1).map((f) => (
+                            <option key={f} value={f}>B{f}F</option>
+                          ))}
+                        </select>
+                        {sf > 1 && <span style={{ color: '#557799', fontSize: 10 }}>B{sf}Fから開始</span>}
+                      </div>
+                    )}
                   </div>
                 </div>
               )
@@ -2215,8 +2235,8 @@ export default function Dungeon() {
                 </select>
               </>
             )}
-            {/* 開発アカウント用フロアワープ */}
-            {isAdmin && dungeon && [29, 30].filter((f) => f <= (dungeon.floors || 10)).map((f) => (
+            {/* 開発アカウント用フロアワープ（d60は帯の境目＋ボス前後） */}
+            {isAdmin && dungeon && (dungeon.id === 'd60' ? [13, 25, 37, 49, 59, 60] : [29, 30]).filter((f) => f <= (dungeon.floors || 10)).map((f) => (
               <button key={f} onClick={() => { if (busyRef.current) return; setFloorNum(f); enterFloor(f, dungeon); floorsRef.current = Math.max(floorsRef.current, f - 1); addLog(`🛠 ${f}Fへワープ（開発）`) }}
                 style={{ background: '#0a1424', border: '1px solid #335588', color: '#88aacc', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>🛠 {f}F</button>
             ))}
