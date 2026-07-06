@@ -584,7 +584,7 @@ export const PET_ITEMS = {
   spdef_seed: { key: 'spdef_seed', name: '特防の素',  emoji: '🟢', img: '/mahoubougyomoto.png', price: 0, dungeon: false, capped: true, seed: 'spdef', up: 1,  desc: 'チャームの特防を+1' },
   hp_seed:    { key: 'hp_seed',    name: 'HPの素',    emoji: '🟡', img: '/HPmoto.png',         price: 0, dungeon: false, capped: true, seed: 'hp',    up: 5,  desc: 'チャームのHPを+5（消費1）' },
   // ゼニ（ペットダンジョン限定通貨。倉庫表示用。持ち込み/購入不可＝pet_item_priceに登録しない）
-  zeni: { key: 'zeni', name: 'ゼニ', emoji: '🪙', price: 0, dungeon: false, capped: false, noShop: true, desc: 'ペットダンジョン限定の貨幣。ダンジョン内で拾い、秘密の商店で使う' },
+  zeni: { key: 'zeni', name: 'ゼニ', emoji: '🪙', img: '/zeni.png', price: 0, dungeon: false, capped: false, noShop: true, desc: 'ペットダンジョン限定の貨幣。ダンジョン内で拾い、秘密の商店で使う' },
   // 凝縮された素（リボン強化用。○○の素10個をチャームページで合成して作る）
   atk_seed_c:   { key: 'atk_seed_c',   name: '凝縮された攻撃の素', emoji: '🟥', img: '/kougekimoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'atk',   up: 1, desc: 'リボンの攻撃を+1（攻撃の素10個から合成）' },
   spatk_seed_c: { key: 'spatk_seed_c', name: '凝縮された特攻の素', emoji: '🟪', img: '/tokukoumoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'spatk', up: 1, desc: 'リボンの特攻を+1（特攻の素10個から合成）' },
@@ -683,6 +683,8 @@ export const CHARMS = {
 export const getCharm = (t) => CHARMS[t] || CHARMS.hajimari
 // リボン判定（チャームとは別枠の装備）
 export const isRibbonType = (t) => !!CHARMS[t]?.ribbon
+// チャーム/リボンの共通アイコン画像（種類別の絵文字はログ用に残す）
+export const charmIcon = (ctype) => assetSrc(CHARMS[ctype]?.ribbon ? '/ribon.png' : '/ribonntya-mu.png')
 // そのフロアでドロップする通常チャーム（rare=幸せは別枠抽選）
 export const charmsForFloor = (floor) => Object.values(CHARMS).filter((c) => !c.rare && c.minFloor && floor >= c.minFloor).map((c) => c.type)
 // ダンジョン別のチャーム/リボンのドロップ表（d60は専用の解禁帯）

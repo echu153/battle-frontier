@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { SPECIES, STARTERS, SKILLS, skillsForSpecies, MAX_SKILL_SLOTS, SHOP_ITEMS, PET_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage, assetSrc, getCharm, charmDisplayName, charmHpBonus, isRibbonType } from '../constants/pets'
+import { SPECIES, STARTERS, SKILLS, skillsForSpecies, MAX_SKILL_SLOTS, SHOP_ITEMS, PET_ITEMS, INV_MAX, petStats, speciesLabel, speciesEmoji, expForLevel, atkLabel, canEvolve, petMaxLevel, evolvedName, petImage, evolvedImage, assetSrc, getCharm, charmDisplayName, charmHpBonus, isRibbonType, charmIcon } from '../constants/pets'
 import { validateName } from '../lib/nameFilter'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -325,7 +325,7 @@ export default function Pets() {
             return (
               <>
                 <div style={{ color: '#cce6ff', fontSize: 12, marginBottom: 6 }}>
-                  装備中：{cdef.emoji} {equipped ? charmDisplayName(equipped) : cdef.name}
+                  装備中：{equipped ? <img src={charmIcon(equipped.ctype)} alt="" style={{ width: 14, height: 14, objectFit: 'contain', verticalAlign: -2, marginRight: 3 }} /> : cdef.emoji + ' '}{equipped ? charmDisplayName(equipped) : cdef.name}
                   {grown ? <span style={{ color: '#88ffaa', fontSize: 10 }}>　HP+{charmHpBonus(equipped)} 攻+{equipped.atk} 特攻+{equipped.spatk} 防+{equipped.def} 特防+{equipped.spdef}</span> : null}
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -334,7 +334,7 @@ export default function Pets() {
                     return (
                       <button key={c.id} onClick={() => !loading && !on && equipCharm(c.id)}
                         style={{ background: on ? '#170f2a' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: '#cce6ff', padding: '5px 8px', cursor: on ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
-                        {on ? '✓ ' : ''}{d.emoji} {charmDisplayName(c)}
+                        {on ? '✓ ' : ''}<img src={charmIcon(c.ctype)} alt="" style={{ width: 13, height: 13, objectFit: 'contain', verticalAlign: -2, marginRight: 3 }} />{charmDisplayName(c)}
                       </button>
                     )
                   })}
@@ -356,7 +356,7 @@ export default function Pets() {
             return (
               <>
                 <div style={{ color: '#cce6ff', fontSize: 12, marginBottom: 6 }}>
-                  装備中：{equipped ? `${getCharm(equipped.ctype).emoji} ${charmDisplayName(equipped)}` : '（なし）'}
+                  装備中：{equipped ? <><img src={charmIcon(equipped.ctype)} alt="" style={{ width: 14, height: 14, objectFit: 'contain', verticalAlign: -2, marginRight: 3 }} />{charmDisplayName(equipped)}</> : '（なし）'}
                   {grown ? <span style={{ color: '#88ffaa', fontSize: 10 }}>　HP+{charmHpBonus(equipped)} 攻+{equipped.atk} 特攻+{equipped.spatk} 防+{equipped.def} 特防+{equipped.spdef}</span> : null}
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -369,7 +369,7 @@ export default function Pets() {
                     return (
                       <button key={c.id} onClick={() => !loading && !on && equipRibbon(c.id)}
                         style={{ background: on ? '#2a0f1a' : '#000a18', border: `1px solid ${on ? '#ff88bb' : '#224466'}`, color: '#cce6ff', padding: '5px 8px', cursor: on ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
-                        {on ? '✓ ' : ''}{d.emoji} {charmDisplayName(c)}
+                        {on ? '✓ ' : ''}<img src={charmIcon(c.ctype)} alt="" style={{ width: 13, height: 13, objectFit: 'contain', verticalAlign: -2, marginRight: 3 }} />{charmDisplayName(c)}
                       </button>
                     )
                   })}

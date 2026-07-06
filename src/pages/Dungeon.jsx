@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmDropsFor, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, bossFor, dgBgm, assetSrc, ASSET_VER } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmDropsFor, charmIcon, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, bossFor, dgBgm, assetSrc, ASSET_VER } from '../constants/pets'
 import Boss60Sprite from '../components/Boss60Sprite'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
@@ -646,7 +646,7 @@ export default function Dungeon() {
     if (e.type === 'stone') return { label: `強化石(${e.rank})`, emoji: '🪨' }
     if (e.type === 'gem') return { label: `${GEM_DATA[e.gemType]?.name || '宝石'}(F)`, emoji: '💍' }
     if (e.type === 'equip') return { label: e.name, emoji: '🎁' }
-    if (e.type === 'charm') return { label: getCharm(e.ctype).name, emoji: getCharm(e.ctype).emoji }
+    if (e.type === 'charm') return { label: getCharm(e.ctype).name, emoji: getCharm(e.ctype).emoji, img: charmIcon(e.ctype) }
     if (e.type === 'shard') return { label: '神秘の欠片', emoji: '🔮' }
     if (e.type === 'book') return { label: `匠の秘伝書${['', 'Ⅰ', 'Ⅱ', 'Ⅲ'][e.level] || 'Ⅰ'}`, emoji: '📖' }
     return { label: '?', emoji: '✨' }
@@ -1052,7 +1052,7 @@ export default function Dungeon() {
         if (itemHere.kind === 'zeni') {
           // ゼニ：金額はサーバーがフロア帯で抽選して残高(pet_storage)へ加算
           supabase.rpc('dungeon_zeni_pickup', { p_run_id: runIdRef.current, p_floor: floorNum }).then(({ data, error }) => {
-            if (error || !data) return
+            if (error || !data) { addLog('🪙 ゼニを拾えなかった（床に戻した）'); restoreFieldItem(itemHere); return }
             if (typeof data.balance === 'number') setZeni(data.balance)
             addLog(`🪙 ゼニ×${data.amount} を拾った（所持${data.balance}）`)
           })
@@ -1770,7 +1770,7 @@ export default function Dungeon() {
     const it = state.items.find((o) => o.x === x && o.y === y)
     if (it) {
       // 床アイテムは実アイコンを表示（素=画像／食料・スキル書=絵文字／戦利品=lootDisplay）
-      const d = it.kind === 'zeni' ? { emoji: '🪙', img: null }
+      const d = it.kind === 'zeni' ? { emoji: '🪙', img: petItemImg('zeni') }
         : (it.kind === 'food' || it.kind === 'dropFood')
         ? { emoji: PET_ITEMS[it.key]?.emoji || '🎁', img: petItemImg(it.key) }
         : lootDisplay(it.loot) // loot / dropLoot とも it.loot を持つ
@@ -2007,7 +2007,7 @@ export default function Dungeon() {
                     {pet.name} HP {petHp}/{pet.maxHp}
                   </span>
                   <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
-                  {(dungeon?.id === 'd30' || dungeon?.id === 'd60') && <span style={{ color: '#ffd75e' }}>🪙 {zeni}</span>}
+                  {(dungeon?.id === 'd30' || dungeon?.id === 'd60') && <span style={{ color: '#ffd75e', display: 'inline-flex', alignItems: 'center', gap: 3 }}><img src={petItemImg('zeni')} alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} />{zeni}</span>}
                 </div>
                 {chips.length > 0 && (
                   <div style={{ display: 'flex', gap: 8, fontSize: 11, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -2171,7 +2171,7 @@ export default function Dungeon() {
                 <div style={{ background: '#0c0a04', border: '1px solid #aa8833', padding: 14, maxWidth: 360, width: '100%', maxHeight: '92%', overflowY: 'auto' }}>
                   <div style={{ color: '#ffd75e', fontSize: 14, marginBottom: 2 }}>🏮 秘密の商店</div>
                   <div style={{ color: '#997733', fontSize: 10, marginBottom: 8 }}>階段の途中の隠れ店。品はどれも一期一会（各1回まで）</div>
-                  <div style={{ color: '#ffd75e', fontSize: 12, marginBottom: 10 }}>所持 🪙 {zeni}</div>
+                  <div style={{ color: '#ffd75e', fontSize: 12, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 4 }}>所持 <img src={petItemImg('zeni')} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} />{zeni}</div>
                   <div style={{ color: '#cc9944', fontSize: 11, marginBottom: 4 }}>📜 スキルの書（各{SHOP_BOOK_PRICE}ゼニ）</div>
                   {shop.stock.books.map((k, i) => {
                     const slot = 'b' + i; const bought = !!shop.bought[slot]; const can = zeni >= SHOP_BOOK_PRICE

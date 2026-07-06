@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { getCharm, CHARM_TOTAL_MAX, CHARM_HP_PER, charmDisplayName, charmTotal, petItemImg, isRibbonType } from '../constants/pets'
+import { getCharm, CHARM_TOTAL_MAX, CHARM_HP_PER, charmDisplayName, charmTotal, petItemImg, isRibbonType, charmIcon } from '../constants/pets'
+
+// チャーム/リボンの共通アイコン
+function CIcon({ ctype, size = 14 }) {
+  return <img src={charmIcon(ctype)} alt="" style={{ width: size, height: size, objectFit: 'contain', verticalAlign: -2, marginRight: 3 }} />
+}
 
 // 素アイコン（画像があれば画像、無ければ絵文字）
 function SeedIcon({ seed, emoji, size = 16 }) {
@@ -198,7 +203,7 @@ export default function Charms() {
                 return (
                   <button key={c.id} onClick={() => setSelId(c.id)}
                     style={{ background: on ? '#170f2a' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: '#cce6ff', padding: '5px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
-                    {getCharm(c.ctype).emoji} {charmDisplayName(c)}{equippedBy(c.id) ? `（${equippedBy(c.id)}）` : ''}
+                    <CIcon ctype={c.ctype} />{charmDisplayName(c)}{equippedBy(c.id) ? `（${equippedBy(c.id)}）` : ''}
                   </button>
                 )
               })}
@@ -207,7 +212,7 @@ export default function Charms() {
               const total = charmTotal(sel); const cap = sel.fused ? 300 : CHARM_TOTAL_MAX; const full = total >= cap
               return (
               <div style={{ border: '1px solid #335588', background: '#00102a', padding: 12 }}>
-                <div style={{ color: '#cce6ff', fontSize: 14, marginBottom: 2 }}>{getCharm(sel.ctype).emoji} {charmDisplayName(sel)}</div>
+                <div style={{ color: '#cce6ff', fontSize: 14, marginBottom: 2 }}><CIcon ctype={sel.ctype} size={16} />{charmDisplayName(sel)}</div>
                 <div style={{ color: '#6699cc', fontSize: 10, marginBottom: 8 }}>{getCharm(sel.ctype).desc}</div>
                 {/* 強化ゲージ（全能力の合計／150） */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -253,7 +258,7 @@ export default function Charms() {
                     return (
                       <button key={c.id} onClick={() => setter(c.id)}
                         style={{ background: on ? '#170f2a' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: '#cce6ff', padding: '5px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
-                        {on ? '✓ ' : ''}{d.emoji} {charmDisplayName(c)}（HP+{(c.hp || 0) * CHARM_HP_PER}/攻+{c.atk}/特攻+{c.spatk}/防+{c.def}/特防+{c.spdef}）
+                        {on ? '✓ ' : ''}<CIcon ctype={c.ctype} />{charmDisplayName(c)}（HP+{(c.hp || 0) * CHARM_HP_PER}/攻+{c.atk}/特攻+{c.spatk}/防+{c.def}/特防+{c.spdef}）
                       </button>
                     )
                   })}
@@ -277,7 +282,7 @@ export default function Charms() {
                     return (
                       <button key={c.id} onClick={() => !c.fused && c.id !== other && setter(c.id)} disabled={c.fused || c.id === other}
                         style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: (c.fused || c.id === other) ? '#556' : '#cce6ff', padding: '5px 8px', cursor: (c.fused || c.id === other) ? 'not-allowed' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
-                        {on ? '✓ ' : ''}{d.emoji} {charmDisplayName(c)}{c.fused ? '（合成済）' : ''}（計{(c.hp || 0) + (c.atk || 0) + (c.spatk || 0) + (c.def || 0) + (c.spdef || 0)}）
+                        {on ? '✓ ' : ''}<CIcon ctype={c.ctype} />{charmDisplayName(c)}{c.fused ? '（合成済）' : ''}（計{(c.hp || 0) + (c.atk || 0) + (c.spatk || 0) + (c.def || 0) + (c.spdef || 0)}）
                       </button>
                     )
                   })}
@@ -313,7 +318,7 @@ export default function Charms() {
                   const d = getCharm(c.ctype); const can = (seeds.shard || 0) >= 1
                   return (
                     <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                      <span style={{ color: '#cce6ff', fontSize: 11 }}>{d.emoji} {charmDisplayName(c)}{equippedBy(c.id) ? `（${equippedBy(c.id)}）` : ''}</span>
+                      <span style={{ color: '#cce6ff', fontSize: 11 }}><CIcon ctype={c.ctype} />{charmDisplayName(c)}{equippedBy(c.id) ? `（${equippedBy(c.id)}）` : ''}</span>
                       <button onClick={() => !loading && doUnfuse(c.id)} disabled={loading || !can}
                         style={{ background: can ? '#1a0e2a' : '#0a0a14', border: `1px solid ${can ? '#aa66ff' : '#332244'}`, color: can ? '#c8a0ff' : '#556', padding: '4px 8px', cursor: can ? 'pointer' : 'not-allowed', fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap' }}>
                         🔓 合成解除（欠片×1）
@@ -346,7 +351,7 @@ export default function Charms() {
                       return (
                         <button key={c.id} onClick={() => setShredSel((s2) => ({ ...s2, [c.id]: !s2[c.id] }))}
                           style={{ background: on ? '#2a1204' : '#000a18', border: `1px solid ${on ? '#ff9955' : '#224466'}`, color: on ? '#ffcc99' : '#cce6ff', padding: '5px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
-                          {on ? '✂️ ' : ''}{d.emoji} {charmDisplayName(c)}
+                          {on ? '✂️ ' : ''}<CIcon ctype={c.ctype} />{charmDisplayName(c)}
                         </button>
                       )
                     })}
