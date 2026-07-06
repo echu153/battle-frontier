@@ -1651,7 +1651,7 @@ export default function Dungeon() {
         if (e.x === x && e.y === y) return { ch: '👹', img: e.image || null, bg: floorBg, fx: fx.enemies[e.id] || null, bossImg: true, bossE: e }
         return { ch: '', bg: floorBg } // 残り3マスは透過（左上の画像が覆う）
       }
-      return { ch: '👹', img: e.image || null, bg: floorBg, fx: fx.enemies[e.id] || null }
+      return { ch: '👹', img: e.image || null, bg: floorBg, fx: fx.enemies[e.id] || null, enemy: true }
     }
     const it = state.items.find((o) => o.x === x && o.y === y)
     if (it) {
@@ -1953,7 +1953,11 @@ export default function Dungeon() {
               ? (c.item
                   // 床アイテムは小さめ＆全体が見えるよう contain
                   ? <img src={c.img} alt="" style={{ width: '72%', height: '72%', objectFit: 'contain', display: 'block', margin: 'auto' }} />
-                  : <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: statusFilter }} />)
+                  // 敵はシルエットに沿った白の強調線（暗い床でも見やすく）。ペットは状態異常フィルター
+                  : <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block',
+                      filter: c.enemy
+                        ? 'drop-shadow(1px 0 0 rgba(235,245,255,0.9)) drop-shadow(-1px 0 0 rgba(235,245,255,0.9)) drop-shadow(0 1px 0 rgba(235,245,255,0.9)) drop-shadow(0 -1px 0 rgba(235,245,255,0.9))'
+                        : statusFilter }} />)
               : (
                 <span style={{ filter: statusFilter, position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%',
                   color: c.stairsGlow ? (c.water ? '#9ff0ff' : '#ffe680') : undefined,
