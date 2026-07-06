@@ -35,49 +35,49 @@ begin
   v_floor := least(greatest(coalesce(p_floor,1), 1), 99);
 
   if v_run.dungeon_id = 'd60' then
-    -- 五霊の大峡谷：敵別EXP（F1=推奨LV100〜F59=LV330目安に合わせたスケール）
+    -- 五霊の大峡谷：敵別EXP（2026-07-07 約55%に圧縮＝レベリングを緩やかに。LV100→350は6周前後の想定）
     v_exp_gain := case p_enemy
       -- ③古代の洞窟帯 F1-12
-      when 'コボルト'           then 140
-      when 'スケルトン（剣）'   then 160
-      when 'スケルトン（弓）'   then 150
-      when 'ゴーレム（攻）'     then 180
-      when 'ゴーレム（守）'     then 190
+      when 'コボルト'           then 70
+      when 'スケルトン（剣）'   then 80
+      when 'スケルトン（弓）'   then 75
+      when 'ゴーレム（攻）'     then 90
+      when 'ゴーレム（守）'     then 95
       -- ④蒼海の入り江帯 F13-24
-      when '深海魚人'           then 230
-      when '海賊（男）'         then 260
-      when '海賊（女）'         then 250
-      when 'ハリセンボン'       then 280
-      when '毒クラゲ'           then 270
-      when '電気クラゲ'         then 270
+      when '深海魚人'           then 115
+      when '海賊（男）'         then 130
+      when '海賊（女）'         then 125
+      when 'ハリセンボン'       then 140
+      when '毒クラゲ'           then 135
+      when '電気クラゲ'         then 135
       -- ⑤巨峰山脈帯 F25-36
-      when '山岳ゴブリン（斧）' then 400
-      when '山岳ゴブリン（弓）' then 420
-      when 'マウンテンゴリラ'   then 480
-      when 'グリフォン'         then 470
-      when '一角獣'             then 460
-      when '岩石ゴーレム（古）' then 540
-      when '岩石ゴーレム（新）' then 520
+      when '山岳ゴブリン（斧）' then 180
+      when '山岳ゴブリン（弓）' then 190
+      when 'マウンテンゴリラ'   then 215
+      when 'グリフォン'         then 210
+      when '一角獣'             then 205
+      when '岩石ゴーレム（古）' then 240
+      when '岩石ゴーレム（新）' then 230
       -- ⑥白銀の霊峰帯 F37-48
-      when '雪男'               then 680
-      when '氷狼フェンリル'     then 730
-      when '雪女'               then 720
-      when '霜の精霊'           then 740
-      when '氷河ドラゴン'       then 850
-      when '氷結ゴーレム'       then 880
+      when '雪男'               then 290
+      when '氷狼フェンリル'     then 310
+      when '雪女'               then 305
+      when '霜の精霊'           then 315
+      when '氷河ドラゴン'       then 360
+      when '氷結ゴーレム'       then 375
       -- ⑦煉獄火山帯 F49-59
-      when 'ヘルハウンド'       then 1050
-      when 'マグマスライム'     then 1020
-      when '炎の精霊'           then 1150
-      when 'ファイアドレイク'   then 1250
-      when 'イフリート'         then 1300
-      when '溶岩ゴーレム'       then 1350
+      when 'ヘルハウンド'       then 430
+      when 'マグマスライム'     then 420
+      when '炎の精霊'           then 470
+      when 'ファイアドレイク'   then 510
+      when 'イフリート'         then 530
+      when '溶岩ゴーレム'       then 550
       -- 60Fボス
-      when 'カモルス・V・ナスB=パピア' then 30000
-      else greatest(1, 20 + v_floor * 2) end;
+      when 'カモルス・V・ナスB=パピア' then 15000
+      else greatest(1, 10 + v_floor) end;
     -- ボスEXPは d60 の60Fのみ（低層での申告連打は通常EXPに是正）
     if p_enemy = 'カモルス・V・ナスB=パピア' and v_floor <> 60 then
-      v_exp_gain := greatest(1, 20 + v_floor * 2);
+      v_exp_gain := greatest(1, 10 + v_floor);
     end if;
   elsif v_run.dungeon_id = 'd30' then
     v_exp_gain := case p_enemy
