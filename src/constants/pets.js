@@ -432,7 +432,7 @@ export const DEVIL_PAPIA = {
 //  画像はレイヤー分解アニメ（Boss60Sprite）。形態はCSSフィルターで色味変化（layeredプロパティで判別）
 //  難易度目安: LV350＋チャームで討伐。総HP32000・後半ほど防御が下がり攻撃が上がる
 export const KAMORUSU = {
-  name: 'カモルス・V・ナスB=パピア', size: 2, layered: true,
+  name: 'カモルス・V・ナスB=パピア', size: 2, layered: true, visualScale: 1.7, // 判定2×2のまま見た目だけ拡大（足元基準）
   phases: [
     { // 第1形態：装甲形態。超防御・物理砲撃
       label: '装甲形態', barColor: '#ffd257',

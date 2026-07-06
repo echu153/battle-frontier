@@ -129,7 +129,7 @@ function generateBossFloor(dungeon) {
   const def = bossFor(dungeon?.id)
   const ph = def.phases[0]
   const boss = {
-    id: 'boss', boss: true, size: def.size, phase: 0, layered: !!def.layered,
+    id: 'boss', boss: true, size: def.size, phase: 0, layered: !!def.layered, visualScale: def.visualScale || 1,
     x: room.cx - 1, y: ry + 2,
     name: def.name, type: ph.type, mix: !!ph.mix, image: ph.image ? assetSrc(ph.image) : null,
     skills: ph.skills, reach: 1, canSwim: false,
@@ -1931,11 +1931,19 @@ export default function Dungeon() {
             const inner = (c.bossImg && (c.img || c.bossE?.layered))
               // ボスは左上セルからsize×sizeマスに広げて表示（overflow visibleで隣にはみ出す）＋頭上HPバー
               //  layered=カモルス（レイヤー分解アニメスプライト。形態はフィルターで色変化）
-              ? <div style={{ position: 'absolute', left: 0, top: 0, width: `${(c.bossE?.size || 2) * 100}%`, height: `${(c.bossE?.size || 2) * 100}%`, zIndex: 4, pointerEvents: 'none' }}>
-                  {c.bossE?.layered
-                    ? <Boss60Sprite size="100%" phase={c.bossE.phase || 0} blink={!!c.bossE.blink} />
-                    : <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', animation: c.bossE?.blink ? 'bf-boss-blink 0.22s steps(1) infinite' : undefined }} />}
-                </div>
+              //  visualScale: 判定はsize×sizeのまま見た目だけ拡大（足元基準＝上と左右へはみ出す）
+              ? (() => {
+                  const bsz = c.bossE?.size || 2
+                  const bsc = c.bossE?.visualScale || 1
+                  const w = bsz * 100 * bsc
+                  return (
+                    <div style={{ position: 'absolute', left: `${-(w - bsz * 100) / 2}%`, top: `${-(w - bsz * 100)}%`, width: `${w}%`, height: `${w}%`, zIndex: 4, pointerEvents: 'none' }}>
+                      {c.bossE?.layered
+                        ? <Boss60Sprite size="100%" phase={c.bossE.phase || 0} blink={!!c.bossE.blink} />
+                        : <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', animation: c.bossE?.blink ? 'bf-boss-blink 0.22s steps(1) infinite' : undefined }} />}
+                    </div>
+                  )
+                })()
               : c.img
               ? (c.item
                   // 床アイテムは小さめ＆全体が見えるよう contain
