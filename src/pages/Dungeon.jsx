@@ -1330,14 +1330,20 @@ export default function Dungeon() {
     const dmgPerHit = (hits) => Math.max(1, Math.round((lv * 5 / hits) * (0.85 + Math.random() * 0.3)))
     const dmgDice = (d, hits) => Math.max(1, Math.round((lv * 5 / hits) * (d[0] + Math.random() * (d[1] - d[0]))))
 
-    // --- 自分バフ系（結界/障壁/聖域） ---
+    // --- 自分バフ系（結界/障壁/聖域/ヒール） ---
     if (sc.target === 'self') {
       playSe('バフ') // バフSE
       triggerScrollFx([{ x: px, y: py }], sc.emoji, true) // 自分にオーラ＋絵文字上昇
       if (sc.shieldRate) { setShield(sc.shieldTurns); shieldRateRef.current = sc.shieldRate }
       if (sc.regenPct) { setRegen(sc.regenTurns); regenAmtRef.current = Math.max(1, Math.ceil(pet.maxHp * sc.regenPct)) }
-      addLog(`${sc.emoji} ${sc.name}を唱えた！`)
-      commitTurn(state, state.player, state.enemies, petHp) // 1ターン経過
+      let hpAfter = petHp
+      if (sc.healPct) {
+        const heal = Math.ceil(pet.maxHp * sc.healPct)
+        hpAfter = Math.min(pet.maxHp, petHp + heal)
+        if (hpAfter - petHp > 0) popHeal(px, py, hpAfter - petHp, { follow: true })
+      }
+      addLog(`${sc.emoji} ${sc.name}を唱えた！${sc.healPct ? `（HP+${hpAfter - petHp}）` : ''}`)
+      commitTurn(state, state.player, state.enemies, hpAfter) // 1ターン経過（ヒールはHP反映）
       return
     }
 

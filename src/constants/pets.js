@@ -607,6 +607,12 @@ export const SCROLLS = {
   scr_raikou: { name: '雷光斬',       emoji: '⚡', mult: 1.7, hits: 1, range: 1, diag: true, target: 'enemy', stun: 0.3 },
   scr_seiiki: { name: '聖域展開',     emoji: '🕊️', target: 'self', regenPct: 0.1, regenTurns: 4, shieldRate: 0.8, shieldTurns: 4 },
   scr_dragon: { name: 'ドラゴンスラスト', emoji: '🐉', mult: 1.5, hits: 1, range: 1, diag: true, target: 'enemy' },
+  // 初期クラス5種の書（2026-07-07追加。これで全21クラスの書が揃った）
+  scr_kyogeki:   { name: '強撃',       emoji: '💥', mult: 1.7, hits: 1, range: 1, diag: true, target: 'enemy' },                 // 戦士
+  scr_kantsu:    { name: '貫通射撃',   emoji: '🎯', mult: 1.4, hits: 1, range: 2, diag: true, target: 'enemy' },                 // 弓使い
+  scr_thunder:   { name: 'サンダー',   emoji: '🌩️', mult: 1.4, hits: 1, range: 2, diag: true, target: 'enemy', stun: 0.25 },    // 魔法使い
+  scr_heal:      { name: 'ヒール',     emoji: '💚', target: 'self', healPct: 0.35 },                                             // 僧侶
+  scr_bakuretsu: { name: '爆裂拳',     emoji: '👊', mult: 0.9, hits: 2, range: 1, diag: true, target: 'enemy' },                 // 格闘家
 }
 export const SCROLL_KEYS = Object.keys(SCROLLS)
 export const getScroll = (key) => SCROLLS[key]
@@ -617,6 +623,7 @@ function scrollDesc(s) {
     const parts = []
     if (s.shieldRate) parts.push(`${s.shieldTurns}ターン被ダメ${Math.round((1 - s.shieldRate) * 100)}%減`)
     if (s.regenPct) parts.push(`${s.regenTurns}ターン毎ターン最大HP${Math.round(s.regenPct * 100)}%回復`)
+    if (s.healPct) parts.push(`最大HPの${Math.round(s.healPct * 100)}%を即時回復`)
     return parts.join('・')
   }
   const tgt = s.target === 'aoe' ? '周囲の敵全体' : `${s.range}マス先まで(斜め可)の敵1体`
