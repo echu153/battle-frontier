@@ -413,7 +413,7 @@ export const DEVIL_PAPIA = {
       ],
     },
     { // 第2形態：防御down・攻撃大幅up。物理＋特殊ミックス
-      label: '第2形態', barColor: '#ff4488',
+      label: '第2形態', barColor: '#ff4488', visualScale: 1.45, // 全身像なので拡大表示（判定は2×2のまま）
       hp: 3000, atk: 260, def: 160, mdef: 150, type: 'phys', mix: true, image: '/debirupapia2.png',
       transition: { during: '💀 デビルパピアが力を取り戻していく…！', after: '💀 デビルパピア 第2形態！' },
       // HP50%以下で「復讐」（高威力）。HP50%以下で1度だけ最大HP30%回復
@@ -583,12 +583,14 @@ export const PET_ITEMS = {
   def_seed:   { key: 'def_seed',   name: '防御の素',  emoji: '🔵', img: '/bougyomoto.png',      price: 0, dungeon: false, capped: true, seed: 'def',   up: 1,  desc: 'チャームの防御を+1' },
   spdef_seed: { key: 'spdef_seed', name: '特防の素',  emoji: '🟢', img: '/mahoubougyomoto.png', price: 0, dungeon: false, capped: true, seed: 'spdef', up: 1,  desc: 'チャームの特防を+1' },
   hp_seed:    { key: 'hp_seed',    name: 'HPの素',    emoji: '🟡', img: '/HPmoto.png',         price: 0, dungeon: false, capped: true, seed: 'hp',    up: 5,  desc: 'チャームのHPを+5（消費1）' },
+  // ゼニ（ペットダンジョン限定通貨。倉庫表示用。持ち込み/購入不可＝pet_item_priceに登録しない）
+  zeni: { key: 'zeni', name: 'ゼニ', emoji: '🪙', price: 0, dungeon: false, capped: false, noShop: true, desc: 'ペットダンジョン限定の貨幣。ダンジョン内で拾い、秘密の商店で使う' },
   // 凝縮された素（リボン強化用。○○の素10個をチャームページで合成して作る）
-  atk_seed_c:   { key: 'atk_seed_c',   name: '凝縮された攻撃の素', emoji: '🟥', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'atk',   up: 1, desc: 'リボンの攻撃を+1（攻撃の素10個から合成）' },
-  spatk_seed_c: { key: 'spatk_seed_c', name: '凝縮された特攻の素', emoji: '🟪', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'spatk', up: 1, desc: 'リボンの特攻を+1（特攻の素10個から合成）' },
-  def_seed_c:   { key: 'def_seed_c',   name: '凝縮された防御の素', emoji: '🟦', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'def',   up: 1, desc: 'リボンの防御を+1（防御の素10個から合成）' },
-  spdef_seed_c: { key: 'spdef_seed_c', name: '凝縮された特防の素', emoji: '🟩', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'spdef', up: 1, desc: 'リボンの特防を+1（特防の素10個から合成）' },
-  hp_seed_c:    { key: 'hp_seed_c',    name: '凝縮されたHPの素',   emoji: '🟨', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'hp',    up: 5, desc: 'リボンのHPを+5（HPの素10個から合成）' },
+  atk_seed_c:   { key: 'atk_seed_c',   name: '凝縮された攻撃の素', emoji: '🟥', img: '/kougekimoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'atk',   up: 1, desc: 'リボンの攻撃を+1（攻撃の素10個から合成）' },
+  spatk_seed_c: { key: 'spatk_seed_c', name: '凝縮された特攻の素', emoji: '🟪', img: '/tokukoumoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'spatk', up: 1, desc: 'リボンの特攻を+1（特攻の素10個から合成）' },
+  def_seed_c:   { key: 'def_seed_c',   name: '凝縮された防御の素', emoji: '🟦', img: '/bougyomoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'def',   up: 1, desc: 'リボンの防御を+1（防御の素10個から合成）' },
+  spdef_seed_c: { key: 'spdef_seed_c', name: '凝縮された特防の素', emoji: '🟩', img: '/mahoubougyomoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'spdef', up: 1, desc: 'リボンの特防を+1（特防の素10個から合成）' },
+  hp_seed_c:    { key: 'hp_seed_c',    name: '凝縮されたHPの素',   emoji: '🟨', img: '/HPmoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'hp',    up: 5, desc: 'リボンのHPを+5（HPの素10個から合成）' },
 }
 
 // ============================================================

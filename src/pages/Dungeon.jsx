@@ -98,6 +98,22 @@ function rollFloorLoot(dungeonId, floor) {
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1))
 
+// ---- 秘密の商店（20〜30フロアごとに階段の途中で出現。フロア数にはカウントしない）----
+const SHOP_STONE_PRICE = { F: 50, E: 100, D: 200, C: 400, B: 800, A: 1600, S: 3200 }
+const SHOP_BOOK_PRICE = 1000
+const SHOP_SEED_PRICE = 100
+// 在庫：書=ランダム4種(重複なし) / 強化石=4枠(重複あり・A/Sはやや低確率) / 素=ランダム4種(重複なし)
+function rollShopStock(dungeonId) {
+  const books = [...SCROLL_KEYS].sort(() => Math.random() - 0.5).slice(0, 4)
+  const ranks = dungeonId === 'd60' ? ['D', 'C', 'B', 'A', 'S'] : ['F', 'E', 'D', 'C', 'B', 'A']
+  const weight = (rk) => (rk === 'S' ? 0.5 : rk === 'A' ? 0.7 : 1)
+  const totalW = ranks.reduce((s2, rk) => s2 + weight(rk), 0)
+  const rollRank = () => { let x = Math.random() * totalW; for (const rk of ranks) { x -= weight(rk); if (x <= 0) return rk } return ranks[0] }
+  const stones = Array.from({ length: 4 }, rollRank)
+  const seeds = [...DG_SEEDS].sort(() => Math.random() - 0.5).slice(0, 4)
+  return { books, stones, seeds }
+}
+
 // この端末の固有ID（ダンジョンの1端末専用ロック用）。端末ごとに永続。
 const getDeviceId = () => {
   let d = localStorage.getItem('bf_device_id')
@@ -138,7 +154,7 @@ function generateBossFloor(dungeon) {
   const def = bossFor(dungeon?.id)
   const ph = def.phases[0]
   const boss = {
-    id: 'boss', boss: true, size: def.size, phase: 0, layered: !!def.layered, visualScale: def.visualScale || 1,
+    id: 'boss', boss: true, size: def.size, phase: 0, layered: !!def.layered, visualScale: ph.visualScale ?? def.visualScale ?? 1,
     x: room.cx - 1, y: ry + 2,
     name: def.name, type: ph.type, mix: !!ph.mix, image: ph.image ? assetSrc(ph.image) : null,
     skills: ph.skills, reach: 1, canSwim: false,
@@ -257,6 +273,18 @@ function generateFloor(floorNum, dungeon) {
     else if (r < 0.20 && (floorNum >= 10 || dungeon?.id === 'd60')) items.push({ id: 's' + i, x: t.x, y: t.y, kind: 'food', key: SCROLL_KEYS[rand(0, SCROLL_KEYS.length - 1)] }) // スキルの書（拾うと袋へ）。d60は1Fから
     else items.push({ id: 'i' + i, x: t.x, y: t.y, kind: 'loot', loot: rollFloorLoot(dungeon?.id, floorNum) })
   }
+  // ゼニ（ペットダンジョン限定通貨）：通常アイテム抽選とは別枠で1フロア3〜5個。d30/d60のみ
+  // 金額はフロア帯でサーバーが抽選（d30: 10-40/20-50/30-60、d60: 帯ごと30-60〜70-100）
+  if (dungeon?.id === 'd30' || dungeon?.id === 'd60') {
+    const zc = rand(3, 5)
+    for (let i = 0; i < zc; i++) {
+      const room = rooms[rand(0, rooms.length - 1)]
+      const t = randInnerTileInRoom(room)
+      if (!t) continue
+      mark(t.x, t.y)
+      items.push({ id: 'z' + i, x: t.x, y: t.y, kind: 'zeni' })
+    }
+  }
 
   return { grid, rooms, player, enemies, items, stairs, explored: new Set() }
 }
@@ -311,6 +339,7 @@ export default function Dungeon() {
   const [debuff, setDebuff] = useState({ atk: 0, def: 0, mdef: 0 }) // 各ステのダウン残ターン（敵デバフ・30%減）
   const [shield, setShield] = useState(0)         // 結界/障壁＝あと何ターン被ダメ軽減か
   const shieldRateRef = useRef(1)                 // 軽減率（被ダメ×rate）
+  const shieldTurnsRef = useRef(0)                // 残ターンの正（stateはrender用。castした同ターンの被弾にも即適用するため）
   const [regen, setRegen] = useState(0)           // 聖域＝あと何ターン毎ターン回復か
   const regenAmtRef = useRef(0)                   // 1ターンの回復量
   const [petAtkUp, setPetAtkUp] = useState(0)     // 自分の攻撃バフ＝あと何ターン攻撃1.3倍か
@@ -487,6 +516,11 @@ export default function Dungeon() {
   }, [dungeon?.id])
   const [cleared, setCleared] = useState(new Set()) // クリア済みダンジョンID
   const [startFloors, setStartFloors] = useState({}) // ダンジョンごとの開始階選択 { dungeonId: floor }
+  const [zeni, setZeni] = useState(0)                 // ゼニ（ペットダンジョン限定通貨。pet_storageに保存）
+  const [shop, setShop] = useState(null)              // 秘密の商店 { stock, bought, next } 開店中はnull以外
+  const shopRef = useRef(null)                        // 開店中の移動ブロック用
+  const sinceShopRef = useRef(0)                      // 前回の商店からの踏破フロア数
+  const shopAtRef = useRef(20 + Math.floor(Math.random() * 11)) // 次の商店までのフロア数(20〜30)
   const [shake, setShake] = useState(null) // 戦闘演出：接触時のマップ揺れ（'hit' | 'kill'）
   const shakeTimer = useRef(null)
   // 接触時にマップを少し震わせる（撃破時はやや大きめ）
@@ -702,6 +736,8 @@ export default function Dungeon() {
       }
       const { data: its } = await supabase.from('pet_items').select('item_key, qty').eq('owner_id', user.id)
       setInventory(Object.fromEntries((its || []).map((r) => [r.item_key, r.qty])))
+      const { data: zrow } = await supabase.from('pet_storage').select('qty').eq('owner_id', user.id).eq('item_key', 'zeni').maybeSingle()
+      setZeni(zrow?.qty || 0)
       // クリア済みダンジョン（開放判定用）
       const { data: cl } = await supabase.from('dungeon_runs').select('dungeon_id').eq('owner_id', user.id).eq('cleared', true)
       if (cl) setCleared(new Set(cl.map((r) => r.dungeon_id)))
@@ -750,6 +786,9 @@ export default function Dungeon() {
           setTurns(sv.turns)
           setSelectedSkill(sv.selectedSkill || 'tackle')
           if (sv.inventory) setInventory(sv.inventory)
+          if (typeof sv.sinceShop === 'number') sinceShopRef.current = sv.sinceShop
+          if (typeof sv.shopAt === 'number') shopAtRef.current = sv.shopAt
+          if (sv.shop) { shopRef.current = sv.shop; setShop(sv.shop) }
           if (Array.isArray(sv.lootBag)) setLootBag(sv.lootBag)
           setState({ ...sv.state, explored: new Set(sv.state.explored) })
           setStatus('exploring')
@@ -771,7 +810,7 @@ export default function Dungeon() {
     setParalyzed(0)    // 麻痺も次フロアで回復
     setBurned(false)   // やけども次フロアで回復
     setDebuff({ atk: 0, def: 0, mdef: 0 }) // ステータスダウンも次フロアで回復
-    setShield(0); shieldRateRef.current = 1   // バフも次フロアで切れる
+    setShield(0); shieldTurnsRef.current = 0; shieldRateRef.current = 1   // バフも次フロアで切れる
     setRegen(0); regenAmtRef.current = 0
     setPetAtkUp(0)
   }, [])
@@ -780,7 +819,8 @@ export default function Dungeon() {
   const beginDungeon = (d, startFloor = 1) => {
     const sf = Math.max(1, Math.min(startFloor, (d?.floors || 10) - 1))
     setDungeon(d)
-    setFloorNum(sf); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setBurned(false); setDebuff({ atk: 0, def: 0, mdef: 0 }); setShield(0); shieldRateRef.current = 1; setRegen(0); regenAmtRef.current = 0; setPetAtkUp(0); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
+    setFloorNum(sf); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setBurned(false); setDebuff({ atk: 0, def: 0, mdef: 0 }); setShield(0); shieldTurnsRef.current = 0; shieldRateRef.current = 1; setRegen(0); regenAmtRef.current = 0; setPetAtkUp(0); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
+    sinceShopRef.current = 0; shopAtRef.current = 20 + Math.floor(Math.random() * 11); setShop(null); shopRef.current = null
     enterFloor(sf, d)
     playFloorIntro(sf, d) // 入場時にダンジョン名・フロア表示
     startRun(pet.id, d.id)
@@ -794,6 +834,7 @@ export default function Dungeon() {
       const sv = {
         runId: runIdRef.current, dungeonId: dungeon?.id, floorNum, petHp, fullness, turns,
         selectedSkill, inventory, lootBag, kills: enemiesRef.current, floorsCleared: floorsRef.current, itemsCollected: itemsRef.current,
+        sinceShop: sinceShopRef.current, shopAt: shopAtRef.current, shop,
         state: { ...state, explored: [...state.explored] },
       }
       try { localStorage.setItem(key, JSON.stringify(sv)) } catch { /* 容量超過などは無視 */ }
@@ -859,6 +900,7 @@ export default function Dungeon() {
 
   const tryMove = (dx, dy) => {
     ensureBgm() // 操作時にBGM再生を確実に開始（自動再生ブロック対策）
+    if (shopRef.current) return // 秘密の商店中は移動不可
     if (!state || status !== 'exploring' || busyRef.current || transition || lockedOut) return
     let s = state
     const px = s.player.x, py = s.player.y
@@ -929,7 +971,7 @@ export default function Dungeon() {
       if (sk.selfBuff) {
         playSe('バフ') // バフSE（全キャラ共通）
         if (sk.selfBuff.kind === 'atkup') { setPetAtkUp(sk.selfBuff.turns); addLog(`🔺 ${sk.name}！攻撃が上がった`) }
-        else if (sk.selfBuff.kind === 'shield') { setShield(sk.selfBuff.turns); shieldRateRef.current = sk.selfBuff.rate || 0.7; addLog(`🛡 ${sk.name}！被ダメを軽減`) }
+        else if (sk.selfBuff.kind === 'shield') { setShield(sk.selfBuff.turns); shieldTurnsRef.current = sk.selfBuff.turns; shieldRateRef.current = sk.selfBuff.rate || 0.7; addLog(`🛡 ${sk.name}！被ダメを軽減`) }
       }
       const killed = newHp <= 0
       // ボスは多段階：最終形態以外を倒すと次形態へ（HP全回復・ステ差し替え）。定義はbossFor(ダンジョン別)
@@ -939,6 +981,7 @@ export default function Dungeon() {
         // 次形態のステ/HPにするが、画像は現形態のまま2秒点滅 → その後次形態画像へ差し替え（layeredは画像なし＝フィルターで変化）
         enemies = enemies.map((e) => e.id === target.id ? {
           ...e, phase: target.phase + 1, type: np.type, mix: !!np.mix, skills: np.skills,
+          visualScale: np.visualScale ?? bossDef.visualScale ?? e.visualScale, // 形態ごとの表示倍率（パピア第2形態=1.45）
           hp: np.hp, maxHp: np.hp, atk: np.atk, def: np.def, mdef: np.mdef, buff: 0, atkDown: 0, defDown: 0, healedOnce: false, blink: true,
         } : e)
         addLog(np.transition?.during || `💀 ${target.name}の様子が変わっていく…！`, 'right')
@@ -997,7 +1040,7 @@ export default function Dungeon() {
       const itemHere = s.items.find((it) => it.x === nx && it.y === ny)
       let items = s.items
       const isEscapePickup = itemHere && itemHere.kind === 'dropFood' && itemHere.key === 'escape'
-      if (itemHere && !isEscapePickup && bagCount() >= bagCapacity(cleared.size)) {
+      if (itemHere && !isEscapePickup && itemHere.kind !== 'zeni' && bagCount() >= bagCapacity(cleared.size)) {
         // 持ち物が満杯：拾わずに床へ残す（足元のアイテムが何か分かるよう名前を表示）
         const onName = itemHere.kind === 'dropLoot' ? itemHere.loot?.label
           : (itemHere.kind === 'food' || itemHere.kind === 'dropFood') ? (PET_ITEMS[itemHere.key]?.name || 'アイテム')
@@ -1006,7 +1049,14 @@ export default function Dungeon() {
       } else if (itemHere) {
         items = items.filter((it) => it.id !== itemHere.id); itemsRef.current += 1
         { const t = setTimeout(() => playSe('aitemu'), 90); turnTimers.current.push(t) } // アイテム取得SE（ほんの少し遅らせる）
-        if (itemHere.kind === 'food') {
+        if (itemHere.kind === 'zeni') {
+          // ゼニ：金額はサーバーがフロア帯で抽選して残高(pet_storage)へ加算
+          supabase.rpc('dungeon_zeni_pickup', { p_run_id: runIdRef.current, p_floor: floorNum }).then(({ data, error }) => {
+            if (error || !data) return
+            if (typeof data.balance === 'number') setZeni(data.balance)
+            addLog(`🪙 ゼニ×${data.amount} を拾った（所持${data.balance}）`)
+          })
+        } else if (itemHere.kind === 'food') {
           // 床の消耗品をアイテム袋へ（名前は分かっているので即ログ・通信は裏で）
           const fdef = PET_ITEMS[itemHere.key]
           addLog(`${fdef?.emoji || '🎁'} ${fdef?.name || 'アイテム'}を拾って袋に入れた`)
@@ -1040,6 +1090,17 @@ export default function Dungeon() {
         floorsRef.current += 1
         playSe('kaidan') // 階段SE
         if (floorNum >= (dungeon?.floors || 10)) { setStatus('cleared'); addLog('🏁 最深部を踏破！ダンジョンクリア！'); setState({ ...s, player }); if (dungeon) setCleared((c) => new Set(c).add(dungeon.id)); finishRun(true); return }
+        // 秘密の商店：20〜30フロア進むごとに階段の途中で入る（フロア数にはカウントしない）
+        sinceShopRef.current += 1
+        if ((dungeon?.id === 'd30' || dungeon?.id === 'd60') && sinceShopRef.current >= shopAtRef.current && floorNum + 1 < (dungeon?.floors || 10)) {
+          sinceShopRef.current = 0
+          shopAtRef.current = 20 + Math.floor(Math.random() * 11)
+          const so = { stock: rollShopStock(dungeon?.id), bought: {}, next: floorNum + 1 }
+          shopRef.current = so; setShop(so)
+          addLog('🏮 階段の途中に秘密の商店を見つけた…')
+          setState({ ...s, player })
+          return
+        }
         addLog(`⬇ B${floorNum + 1}Fへ降りた`)
         setState({ ...s, player }) // 階段に乗った姿を見せてからフェード
         descendFloor(floorNum + 1)
@@ -1255,7 +1316,7 @@ export default function Dungeon() {
         }
       }
       // バフ・状態の減衰
-      if (shield > 0) setShield((v) => Math.max(0, v - 1))
+      if (shieldTurnsRef.current > 0) { shieldTurnsRef.current -= 1; setShield(shieldTurnsRef.current) }
       if (regen > 0) setRegen((v) => Math.max(0, v - 1))
       if (petAtkUp > 0) setPetAtkUp((v) => Math.max(0, v - 1))
       setFullness(nextFull)
@@ -1291,7 +1352,7 @@ export default function Dungeon() {
     const STEP_MS = 330
     let hpNow = curPetHp
     let diedMid = false
-    const shieldOn = shield > 0 ? shieldRateRef.current : 1 // 結界/障壁の被ダメ軽減
+    const shieldOn = shieldTurnsRef.current > 0 ? shieldRateRef.current : 1 // 結界/障壁の被ダメ軽減（refが正＝castターンも有効）
     attackers.forEach((a, i) => {
       const tid = setTimeout(() => {
         if (diedMid) return // 既に倒れていたら残りの攻撃はなし
@@ -1314,6 +1375,7 @@ export default function Dungeon() {
 
   // 持ち物の使用（食料＝満腹回復・1ターン経過 / だっしゅつの翼＝脱出）
   const useItem = async (key) => {
+    if (shopRef.current) return // 秘密の商店中は使用不可
     if (status !== 'exploring' || busyRef.current || (inventory[key] || 0) < 1) return
     const def = PET_ITEMS[key]
     // だっしゅつの翼は使い切り＝消費確認をはさむ
@@ -1340,6 +1402,30 @@ export default function Dungeon() {
   }
 
   // スキルの書を発動。対象選定（範囲/斜め/全体）→ 威力Lv×2×mult のダメージ＋効果。1ターン消費
+  // ---- 秘密の商店：購入と退店 ----
+  const shopBuy = async (kind, key, slot, price) => {
+    if (!shop || shop.bought[slot]) return
+    if (zeni < price) { addLog('🪙 ゼニが足りない…'); return }
+    const { data, error } = await supabase.rpc('secret_shop_buy', { p_run_id: runIdRef.current, p_kind: kind, p_key: key })
+    if (error) {
+      const m = String(error.message)
+      addLog(m.includes('zeni') ? '🪙 ゼニが足りない…' : m.includes('inventory') ? '🎒 袋がいっぱいで買えない' : '🛒 購入できなかった')
+      return
+    }
+    if (typeof data?.balance === 'number') setZeni(data.balance)
+    const so = { ...shop, bought: { ...shop.bought, [slot]: true } }
+    shopRef.current = so; setShop(so)
+    const label = kind === 'book' ? (PET_ITEMS[key]?.name || '書') : kind === 'stone' ? `強化石(${key})` : (PET_ITEMS[key]?.name || '素')
+    addLog(`🛒 ${label}を購入した`)
+    playSe('aitemu')
+    if (kind === 'book') setInventory((inv) => ({ ...inv, [key]: (inv[key] || 0) + 1 })) // 書は持ち物に即反映
+  }
+  const closeShop = () => {
+    const next = shop?.next
+    shopRef.current = null; setShop(null)
+    if (next) { addLog(`⬇ B${next}Fへ降りた`); descendFloor(next) }
+  }
+
   const castScroll = (key) => {
     const sc = getScroll(key)
     if (!sc || !state) return
@@ -1353,7 +1439,7 @@ export default function Dungeon() {
     if (sc.target === 'self') {
       playSe('バフ') // バフSE
       triggerScrollFx([{ x: px, y: py }], sc.emoji, true) // 自分にオーラ＋絵文字上昇
-      if (sc.shieldRate) { setShield(sc.shieldTurns); shieldRateRef.current = sc.shieldRate }
+      if (sc.shieldRate) { setShield(sc.shieldTurns); shieldTurnsRef.current = sc.shieldTurns; shieldRateRef.current = sc.shieldRate }
       if (sc.regenPct) { setRegen(sc.regenTurns); regenAmtRef.current = Math.max(1, Math.ceil(pet.maxHp * sc.regenPct)) }
       let hpAfter = petHp
       if (sc.healPct) {
@@ -1533,6 +1619,7 @@ export default function Dungeon() {
         const sv = {
           runId: runIdRef.current, dungeonId: dungeon?.id, floorNum, petHp, fullness, turns,
           selectedSkill, inventory, lootBag, kills: enemiesRef.current, floorsCleared: floorsRef.current, itemsCollected: itemsRef.current,
+        sinceShop: sinceShopRef.current, shopAt: shopAtRef.current, shop,
           state: { ...state, explored: [...state.explored] },
         }
         try { localStorage.setItem(saveKey(), JSON.stringify(sv)) } catch { /* 容量超過は無視 */ }
@@ -1683,7 +1770,8 @@ export default function Dungeon() {
     const it = state.items.find((o) => o.x === x && o.y === y)
     if (it) {
       // 床アイテムは実アイコンを表示（素=画像／食料・スキル書=絵文字／戦利品=lootDisplay）
-      const d = (it.kind === 'food' || it.kind === 'dropFood')
+      const d = it.kind === 'zeni' ? { emoji: '🪙', img: null }
+        : (it.kind === 'food' || it.kind === 'dropFood')
         ? { emoji: PET_ITEMS[it.key]?.emoji || '🎁', img: petItemImg(it.key) }
         : lootDisplay(it.loot) // loot / dropLoot とも it.loot を持つ
       return { ch: d.emoji || '🎁', img: d.img || null, item: true, bg: floorBg, overlay: d.img ? null : itemTile }
@@ -1919,6 +2007,7 @@ export default function Dungeon() {
                     {pet.name} HP {petHp}/{pet.maxHp}
                   </span>
                   <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
+                  {(dungeon?.id === 'd30' || dungeon?.id === 'd60') && <span style={{ color: '#ffd75e' }}>🪙 {zeni}</span>}
                 </div>
                 {chips.length > 0 && (
                   <div style={{ display: 'flex', gap: 8, fontSize: 11, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -2068,6 +2157,65 @@ export default function Dungeon() {
               </div>
             </div>
           )}
+          {/* 秘密の商店（階段の途中。閉じると次のフロアへ） */}
+          {shop && (() => {
+            const rowBtn = (bought, can, onClick, children) => (
+              <button onClick={() => !bought && can && onClick()} disabled={bought || !can}
+                style={{ background: bought ? '#0a0f1a' : can ? '#1a1204' : '#0a0f1a', border: `1px solid ${bought ? '#223344' : can ? '#aa8833' : '#443322'}`,
+                  color: bought ? '#556' : can ? '#ffd75e' : '#775533', padding: '3px 8px', cursor: bought || !can ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap' }}>
+                {children}
+              </button>
+            )
+            return (
+              <div style={{ position: 'absolute', inset: 0, zIndex: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,2,8,0.88)', padding: 10 }}>
+                <div style={{ background: '#0c0a04', border: '1px solid #aa8833', padding: 14, maxWidth: 360, width: '100%', maxHeight: '92%', overflowY: 'auto' }}>
+                  <div style={{ color: '#ffd75e', fontSize: 14, marginBottom: 2 }}>🏮 秘密の商店</div>
+                  <div style={{ color: '#997733', fontSize: 10, marginBottom: 8 }}>階段の途中の隠れ店。品はどれも一期一会（各1回まで）</div>
+                  <div style={{ color: '#ffd75e', fontSize: 12, marginBottom: 10 }}>所持 🪙 {zeni}</div>
+                  <div style={{ color: '#cc9944', fontSize: 11, marginBottom: 4 }}>📜 スキルの書（各{SHOP_BOOK_PRICE}ゼニ）</div>
+                  {shop.stock.books.map((k, i) => {
+                    const slot = 'b' + i; const bought = !!shop.bought[slot]; const can = zeni >= SHOP_BOOK_PRICE
+                    return (
+                      <div key={slot} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 4, fontSize: 11, color: '#cce6ff' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <img src={petItemImg(k)} alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} />{PET_ITEMS[k]?.name || k}
+                        </span>
+                        {rowBtn(bought, can, () => shopBuy('book', k, slot, SHOP_BOOK_PRICE), bought ? '購入済' : `🪙${SHOP_BOOK_PRICE}`)}
+                      </div>
+                    )
+                  })}
+                  <div style={{ color: '#cc9944', fontSize: 11, margin: '10px 0 4px' }}>💎 強化石</div>
+                  {shop.stock.stones.map((rk, i) => {
+                    const slot = 's' + i; const bought = !!shop.bought[slot]; const price = SHOP_STONE_PRICE[rk]; const can = zeni >= price
+                    return (
+                      <div key={slot} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 4, fontSize: 11, color: '#cce6ff' }}>
+                        <span>💎 強化石({rk})</span>
+                        {rowBtn(bought, can, () => shopBuy('stone', rk, slot, price), bought ? '購入済' : `🪙${price}`)}
+                      </div>
+                    )
+                  })}
+                  <div style={{ color: '#cc9944', fontSize: 11, margin: '10px 0 4px' }}>🧬 チャームの素（各{SHOP_SEED_PRICE}ゼニ）</div>
+                  {shop.stock.seeds.map((k, i) => {
+                    const slot = 'z' + i; const bought = !!shop.bought[slot]; const can = zeni >= SHOP_SEED_PRICE
+                    return (
+                      <div key={slot} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 4, fontSize: 11, color: '#cce6ff' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {petItemImg(k) ? <img src={petItemImg(k)} alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} /> : (PET_ITEMS[k]?.emoji || '🔹')}{PET_ITEMS[k]?.name || k}
+                        </span>
+                        {rowBtn(bought, can, () => shopBuy('seed', k, slot, SHOP_SEED_PRICE), bought ? '購入済' : `🪙${SHOP_SEED_PRICE}`)}
+                      </div>
+                    )
+                  })}
+                  <div style={{ textAlign: 'center', marginTop: 12 }}>
+                    <button onClick={closeShop}
+                      style={{ background: '#001840', border: '1px solid #0088ff', color: '#0088ff', padding: '7px 18px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
+                      ⬇ 店を出て B{shop.next}F へ進む
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
           {/* フロア遷移演出：暗転＋「ダンジョン名 フロア数」 */}
           {transition && (
             <div style={{ position: 'absolute', inset: 0, zIndex: 10, pointerEvents: 'none',

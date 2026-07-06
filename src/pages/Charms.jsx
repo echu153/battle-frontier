@@ -37,6 +37,7 @@ export default function Charms() {
   const [fuseMat, setFuseMat] = useState(null)   // 合成：吸収して消える側
   const [fuseDone, setFuseDone] = useState(null) // 合成完了演出（結果名）
   const [confirm, setConfirm] = useState(false)
+  const [shredSel, setShredSel] = useState({})  // 裁断で選択中 { id: true }
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
 
@@ -86,6 +87,19 @@ export default function Charms() {
     setLoading(false)
     await load()
     flash('まとめて強化した')
+  }
+  // 裁断：チャーム/リボンを分解してランダムな素を1個につき3個入手（一括可）
+  const doShred = async () => {
+    const ids = Object.keys(shredSel).filter((k) => shredSel[k])
+    if (!ids.length) { flash('裁断するチャーム/リボンを選んでください'); return }
+    if (!window.confirm(ids.length + '個を裁断してランダムな素×' + ids.length * 3 + 'に還元します。元に戻せません。よろしいですか？')) return
+    setLoading(true)
+    const { data, error } = await supabase.rpc('pet_charm_shred', { p_ids: ids })
+    setLoading(false)
+    if (error) { flash('裁断に失敗: ' + error.message); return }
+    setShredSel({})
+    await load()
+    flash('裁断完了！ランダムな素を' + (data?.total ?? ids.length * 3) + '個入手した')
   }
   // 凝縮：○○の素10個 → 凝縮された○○の素1個
   const condense = async (stat, times = 1) => {
@@ -170,6 +184,7 @@ export default function Charms() {
           <Btn onClick={() => setTab('inherit')} dim={tab !== 'inherit'}>継承</Btn>
           <Btn onClick={() => setTab('fuse')} dim={tab !== 'fuse'}>合成</Btn>
           <Btn onClick={() => setTab('condense')} dim={tab !== 'condense'}>凝縮</Btn>
+          <Btn onClick={() => setTab('shred')} dim={tab !== 'shred'}>裁断</Btn>
         </div>
 
         {charms.length === 0 && <div style={{ color: '#557799', fontSize: 12 }}>チャームを持っていません（ダンジョンで拾えます）</div>}
@@ -310,6 +325,42 @@ export default function Charms() {
             )}
           </div>
         )}
+        {tab === 'shred' && (
+          <div style={{ border: '1px solid #885533', background: '#1a0e04', padding: 12 }}>
+            <div style={{ color: '#ddaa77', fontSize: 11, marginBottom: 8 }}>
+              ✂️ チャーム/リボンを裁断すると、1個につき<span style={{ color: '#88ffaa' }}>ランダムな素×3</span>に還元されます。<span style={{ color: '#ff8866' }}>元に戻せません。装備中のものは裁断できません。</span>
+            </div>
+            {(() => {
+              const shreddable = charms.filter((c) => !equippedBy(c.id))
+              if (!shreddable.length) return <div style={{ color: '#557799', fontSize: 11 }}>裁断できるチャーム/リボンがありません</div>
+              const selCount = shreddable.filter((c) => shredSel[c.id]).length
+              return (
+                <>
+                  <div style={{ marginBottom: 8, display: 'flex', gap: 6 }}>
+                    <Btn dim onClick={() => setShredSel(Object.fromEntries(shreddable.map((c) => [c.id, true])))}>すべて選択</Btn>
+                    <Btn dim onClick={() => setShredSel({})}>選択解除</Btn>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                    {shreddable.map((c) => {
+                      const d = getCharm(c.ctype); const on = !!shredSel[c.id]
+                      return (
+                        <button key={c.id} onClick={() => setShredSel((s2) => ({ ...s2, [c.id]: !s2[c.id] }))}
+                          style={{ background: on ? '#2a1204' : '#000a18', border: `1px solid ${on ? '#ff9955' : '#224466'}`, color: on ? '#ffcc99' : '#cce6ff', padding: '5px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                          {on ? '✂️ ' : ''}{d.emoji} {charmDisplayName(c)}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {charms.some((c) => equippedBy(c.id)) && (
+                    <div style={{ color: '#557799', fontSize: 10, marginBottom: 8 }}>※装備中（{charms.filter((c) => equippedBy(c.id)).map((c) => `${getCharm(c.ctype).short}=${equippedBy(c.id)}`).join('・')}）は表示されません</div>
+                  )}
+                  <Btn onClick={() => !loading && doShred()}>✂️ 選択した{selCount}個を裁断（素×{selCount * 3}）</Btn>
+                </>
+              )
+            })()}
+          </div>
+        )}
+
         {tab === 'condense' && (
           <div style={{ border: '1px solid #338866', background: '#001a12', padding: 12 }}>
             <div style={{ color: '#88ddaa', fontSize: 11, marginBottom: 10 }}>
