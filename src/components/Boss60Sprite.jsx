@@ -20,7 +20,7 @@ const LAYERS = [
 const PHASE_FILTER = [
   undefined,
   'brightness(1.18) saturate(1.25) drop-shadow(0 0 8px rgba(120,200,255,0.8))',
-  'hue-rotate(-45deg) saturate(1.5) brightness(1.1) drop-shadow(0 0 8px rgba(255,80,60,0.9))',
+  'sepia(0.65) hue-rotate(-28deg) saturate(2.6) brightness(1.08) drop-shadow(0 0 8px rgba(255,80,60,0.9))',
 ]
 
 // size: 表示px or '100%'（正方形）。animated=falseで静止画。phase=形態(0-2)・blink=形態変化中の点滅
