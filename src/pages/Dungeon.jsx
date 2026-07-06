@@ -1140,6 +1140,7 @@ export default function Dungeon() {
         return ne
       }
       // ボスは2×2ブロックでプレイヤーへ接近（4マス全部が床＆プレイヤー非占有なら移動）
+      //  「移動後に攻撃範囲(隣接)へ入る手」を最優先。同点時も横並び追走にならないようチェビシェフで最終タイブレーク
       if (e.boss) {
         const blockOk = (nx2, ny2) => {
           for (let ddy = 0; ddy < e.size; ddy++) for (let ddx = 0; ddx < e.size; ddx++) {
@@ -1150,10 +1151,14 @@ export default function Dungeon() {
           return true
         }
         const bcx = e.x + 0.5, bcy = e.y + 0.5 // ブロック中心
+        const mdist = (c) => Math.abs(c.x + 0.5 - player.x) + Math.abs(c.y + 0.5 - player.y)
+        const cdist = (c) => Math.max(Math.abs(c.x + 0.5 - player.x), Math.abs(c.y + 0.5 - player.y))
+        const adjAfter = (c) => enemyAdjacent({ ...e, x: c.x, y: c.y }, player.x, player.y) // 移動後に攻撃できるか
+        const mNow = Math.abs(bcx - player.x) + Math.abs(bcy - player.y)
         const moves = [{ x: e.x + 1, y: e.y }, { x: e.x - 1, y: e.y }, { x: e.x, y: e.y + 1 }, { x: e.x, y: e.y - 1 }]
           .filter((c) => blockOk(c.x, c.y))
-          .filter((c) => Math.abs(c.x + 0.5 - player.x) + Math.abs(c.y + 0.5 - player.y) < Math.abs(bcx - player.x) + Math.abs(bcy - player.y))
-          .sort((a, b) => (Math.abs(a.x + 0.5 - player.x) + Math.abs(a.y + 0.5 - player.y)) - (Math.abs(b.x + 0.5 - player.x) + Math.abs(b.y + 0.5 - player.y)))
+          .filter((c) => adjAfter(c) || mdist(c) < mNow) // 近づく手 or 攻撃範囲に入る手のみ
+          .sort((a, b) => ((adjAfter(a) ? 0 : 1) - (adjAfter(b) ? 0 : 1)) || (mdist(a) - mdist(b)) || (cdist(a) - cdist(b)))
         if (moves.length) return { ...e, x: moves[0].x, y: moves[0].y, buff: Math.max(0, (e.buff || 0) - 1), atkDown: Math.max(0, (e.atkDown || 0) - 1), defDown: Math.max(0, (e.defDown || 0) - 1) }
         return { ...e, buff: Math.max(0, (e.buff || 0) - 1), atkDown: Math.max(0, (e.atkDown || 0) - 1), defDown: Math.max(0, (e.defDown || 0) - 1) }
       }
