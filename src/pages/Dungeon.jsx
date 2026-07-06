@@ -342,6 +342,7 @@ export default function Dungeon() {
   const shieldTurnsRef = useRef(0)                // 残ターンの正（stateはrender用。castした同ターンの被弾にも即適用するため）
   const [zeni, setZeni] = useState(0)                 // ゼニ（ペットダンジョン限定通貨。pet_storageに保存）
   const [shop, setShop] = useState(null)              // 秘密の商店 { stock, bought, next } 開店中はnull以外
+  const [shopMsg, setShopMsg] = useState('')          // 商店内の購入結果メッセージ（モーダル内に表示）
   const shopRef = useRef(null)                        // 開店中の移動ブロック用
   const sinceShopRef = useRef(0)                      // 前回の商店からの踏破フロア数
   const shopAtRef = useRef(20 + Math.floor(Math.random() * 11)) // 次の商店までのフロア数(20〜30)
@@ -1405,11 +1406,11 @@ export default function Dungeon() {
   // ---- 秘密の商店：購入と退店 ----
   const shopBuy = async (kind, key, slot, price) => {
     if (!shop || shop.bought[slot]) return
-    if (zeni < price) { addLog('🪙 ゼニが足りない…'); return }
+    if (zeni < price) { setShopMsg('🪙 ゼニが足りない…'); return }
     const { data, error } = await supabase.rpc('secret_shop_buy', { p_run_id: runIdRef.current, p_kind: kind, p_key: key })
     if (error) {
       const m = String(error.message)
-      addLog(m.includes('zeni') ? '🪙 ゼニが足りない…' : m.includes('inventory') ? '🎒 袋がいっぱいで買えない' : '🛒 購入できなかった')
+      setShopMsg(m.includes('zeni') ? '🪙 ゼニが足りない…' : m.includes('full') || m.includes('inventory') ? '🎒 袋がいっぱいで買えない' : '🛒 購入できなかった（' + m.slice(0, 60) + '）')
       return
     }
     if (typeof data?.balance === 'number') setZeni(data.balance)
@@ -1417,12 +1418,13 @@ export default function Dungeon() {
     shopRef.current = so; setShop(so)
     const label = kind === 'book' ? (PET_ITEMS[key]?.name || '書') : kind === 'stone' ? `強化石(${key})` : (PET_ITEMS[key]?.name || '素')
     addLog(`🛒 ${label}を購入した`)
+    setShopMsg(`✅ ${label}を購入した`)
     playSe('aitemu')
     if (kind === 'book') setInventory((inv) => ({ ...inv, [key]: (inv[key] || 0) + 1 })) // 書は持ち物に即反映
   }
   const closeShop = () => {
     const next = shop?.next
-    shopRef.current = null; setShop(null)
+    shopRef.current = null; setShop(null); setShopMsg('')
     if (next) { addLog(`⬇ B${next}Fへ降りた`); descendFloor(next) }
   }
 
@@ -2171,7 +2173,8 @@ export default function Dungeon() {
                 <div style={{ background: '#0c0a04', border: '1px solid #aa8833', padding: 14, maxWidth: 360, width: '100%', maxHeight: '92%', overflowY: 'auto' }}>
                   <div style={{ color: '#ffd75e', fontSize: 14, marginBottom: 2 }}>🏮 秘密の商店</div>
                   <div style={{ color: '#997733', fontSize: 10, marginBottom: 8 }}>階段の途中の隠れ店。品はどれも一期一会（各1回まで）</div>
-                  <div style={{ color: '#ffd75e', fontSize: 12, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 4 }}>所持 <img src={petItemImg('zeni')} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} />{zeni}</div>
+                  <div style={{ color: '#ffd75e', fontSize: 12, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>所持 <img src={petItemImg('zeni')} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} />{zeni}</div>
+                  {shopMsg && <div style={{ color: shopMsg.startsWith('✅') ? '#88ffaa' : '#ff9977', fontSize: 11, marginBottom: 6 }}>{shopMsg}</div>}
                   <div style={{ color: '#cc9944', fontSize: 11, marginBottom: 4 }}>📜 スキルの書（各{SHOP_BOOK_PRICE}ゼニ）</div>
                   {shop.stock.books.map((k, i) => {
                     const slot = 'b' + i; const bought = !!shop.bought[slot]; const can = zeni >= SHOP_BOOK_PRICE

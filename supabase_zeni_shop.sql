@@ -57,7 +57,7 @@ grant execute on function dungeon_zeni_pickup(uuid, int) to authenticated;
 create or replace function secret_shop_buy(p_run_id uuid, p_kind text, p_key text)
 returns json language plpgsql security definer set search_path = public as $$
 declare
-  v_run dungeon_runs%rowtype; v_price int; v_bal int; v_iid uuid; v_exrow record;
+  v_run dungeon_runs%rowtype; v_price int; v_bal int; v_iid items.id%type; v_exrow record;
 begin
   select * into v_run from dungeon_runs where id = p_run_id;
   if not found then raise exception 'run not found'; end if;
