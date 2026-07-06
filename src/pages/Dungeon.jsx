@@ -2315,7 +2315,7 @@ export default function Dungeon() {
           })()}
           {/* マップ右上：ミニマップ（探索済みの床・階段・見えている敵・自分） */}
           {minimapOn && (
-            <canvas ref={miniRef} style={{ position: 'absolute', top: 34, right: 8, zIndex: 5, pointerEvents: 'none',
+            <canvas ref={miniRef} style={{ position: 'absolute', top: 34, right: 8, zIndex: 9, pointerEvents: 'none',
               width: MAP_W * 4, height: MAP_H * 4, imageRendering: 'pixelated',
               background: 'rgba(0,4,12,0.72)', border: '1px solid rgba(80,120,180,0.45)', borderRadius: 3, padding: 2 }} />
           )}
