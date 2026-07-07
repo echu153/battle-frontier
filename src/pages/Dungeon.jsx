@@ -1591,23 +1591,21 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
 
     if (attackers.length === 0) { finalize(curPetHp, false); return }
 
-    // ---- 敵の攻撃は1体ずつワンテンポずつ（最初の1体もひと呼吸おいて） ----
+    // ---- 被ダメージは即時にHPへ反映（全キャラぶんをまとめてすぐ引く）。数字ポップ/SEは1体ずつ後追い演出 ----
     busyRef.current = true
-    const STEP_MS = 330
-    let hpNow = curPetHp
-    let diedMid = false
+    const STEP_MS = 200
     const shieldOn = shieldTurnsRef.current > 0 ? shieldRateRef.current : 1 // 結界/障壁の被ダメ軽減（refが正＝castターンも有効）
+    const dmgs = attackers.map((a) => Math.max(1, Math.round(a.dmg * shieldOn)))
+    const hpAfter = curPetHp - dmgs.reduce((s2, d) => s2 + d, 0)
+    const diedNow = hpAfter <= 0
+    setPetHp(hpAfter) // ★被ダメージを即時反映（演出を待たない）
     attackers.forEach((a, i) => {
       const tid = setTimeout(() => {
-        if (diedMid) return // 既に倒れていたら残りの攻撃はなし
-        // 先にモーション開始（スキル=溜め→踏み込み / 大技=深い溜め→渾身）。
-        // 被ダメSE・ダメージ・フラッシュは踏み込みの瞬間に合わせて遅延させる
-        const impactDelay = a.bigFx ? 420 : a.skillFx ? 280 : 0
+        // 先にモーション開始（スキル=溜め→踏み込み / 大技=深い溜め→渾身）。SE/数字/フラッシュは踏み込みに合わせる
+        const impactDelay = a.bigFx ? 380 : a.skillFx ? 240 : 0
         applyFx({ pet: { flash: true, flashDelay: impactDelay }, enemies: { [a.id]: { lunge: a.lunge, lungeKind: a.bigFx ? 'big' : a.skillFx ? 'skill' : 'normal' } } })
         const impact = () => {
-          if (diedMid) return
-          const dmg = Math.max(1, Math.round(a.dmg * shieldOn))
-          hpNow -= dmg
+          const dmg = dmgs[i]
           playSe('被ダメ') // 被ダメSE（踏み込みと同時）
           popDmg(player.x, player.y, dmg, { follow: true })
           if (a.healShown > 0) popHeal(a.x, a.y, a.healShown)
@@ -1625,9 +1623,8 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
           } else {
             triggerShake('hit')
           }
-          setPetHp(hpNow)
-          if (hpNow <= 0) { diedMid = true; finalize(hpNow, true); return }
-          if (i === attackers.length - 1) finalize(hpNow, false)
+          // 最後の1体の演出後にターン終了処理（満腹/毒/回復など）。HPは既に即時反映済み
+          if (i === attackers.length - 1) finalize(hpAfter, diedNow)
         }
         if (impactDelay > 0) { const tid2 = setTimeout(impact, impactDelay); turnTimers.current.push(tid2) } else impact()
       }, (i + 1) * STEP_MS)
