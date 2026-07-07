@@ -373,8 +373,9 @@ export default function Smithy() {
     // （連打・別端末で同じ装備を二重消費→石を二重生成するのを防ぐ）
     let deleted = 0
     for (const item of selected) {
+      // enhance_plus は 0 または NULL（ドロップ直後は未設定＝NULL）のどちらも「未強化」として消費対象にする
       const { data: del } = await supabase.from('player_equipment').delete()
-        .eq('id', item.id).eq('enhance_plus', 0).select('id')
+        .eq('id', item.id).or('enhance_plus.is.null,enhance_plus.eq.0').select('id')
       if (del && del.length > 0) deleted++
     }
     const count = Math.floor(deleted / 3)   // 実際に消費できた装備3個=強化石1個
