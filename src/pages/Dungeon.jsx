@@ -763,7 +763,10 @@ export default function Dungeon() {
         lootGranted: data.loot_granted || 0,
         lootList: died ? (kept || []) : lootList,
         lostHalf: died && (data.loot_granted || 0) >= 0 && kept !== null,
+        zeniLost: data.zeni_lost || 0,
       })
+      // 戦闘不能でゼニが減った場合は表示を最新残高に同期
+      if (typeof data.zeni_balance === 'number') setZeni(data.zeni_balance)
     }
   }, [lootBag])
 
@@ -2692,6 +2695,9 @@ function RewardPanel({ reward, pet }) {
             <div style={{ marginTop: 2, color: '#9ccbb0', fontSize: 10, lineHeight: 1.6 }}>{reward.lootList.join('、')}</div>
           )}
         </div>
+      )}
+      {reward.zeniLost > 0 && (
+        <div style={{ marginTop: 4, color: '#e6b96c', fontSize: 11 }}>🪙 所持していたゼニの半分（{reward.zeniLost}）を落とした…</div>
       )}
       <div style={{ marginTop: 4, color: '#7799bb', fontSize: 10 }}>※EXPは撃破ごとに付与済み</div>
     </div>
