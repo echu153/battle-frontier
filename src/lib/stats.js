@@ -252,6 +252,7 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
   //  両者を同じ加算枠で合算する（pet.* に集約）。
   const pc = profile.petCharm || {}
   const ps = profile.petStat || {}
+  const sp = pc.sp || null // チャームの特殊能力（フェイトコア抽選。%は最終値に乗算/率は加算）
   const pet = {
     atk:  (pc.atk  || 0) + (ps.atk  || 0),
     def:  (pc.def  || 0) + (ps.def  || 0),
@@ -261,26 +262,28 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
   }
   let defVal = profile.def + bonus.def + (profile.museum_def || 0) + (profile.fishing_def || 0) + (tb.def_bonus || 0) + pet.def
   if (pc.guard) defVal = Math.round(defVal * 1.1)
+  if (sp?.defPct) defVal = Math.round(defVal * (1 + sp.defPct / 100))
+  const spMul = (v, pct) => (pct ? Math.round(v * (1 + pct / 100)) : v)
   return {
-    atk:    finalAtk + (tb.atk_bonus || 0) + pet.atk,
+    atk:    spMul(finalAtk + (tb.atk_bonus || 0) + pet.atk, sp?.atkPct),
     def:    defVal,
-    matk:   finalMatk + (tb.matk_bonus || 0) + pet.matk,
-    mdef:   profile.mdef + bonus.mdef + (profile.museum_mdef || 0) + (profile.fishing_mdef || 0) + (tb.mdef_bonus || 0) + pet.mdef,
+    matk:   spMul(finalMatk + (tb.matk_bonus || 0) + pet.matk, sp?.matkPct),
+    mdef:   spMul(profile.mdef + bonus.mdef + (profile.museum_mdef || 0) + (profile.fishing_mdef || 0) + (tb.mdef_bonus || 0) + pet.mdef, sp?.mdefPct),
     spd:    profile.spd  + bonus.spd  + (profile.museum_spd || 0) + (profile.fishing_spd || 0) + (tb.spd_bonus || 0),
     hp_max: profile.hp_max + bonus.hp + (profile.museum_hp || 0) + (profile.fishing_hp || 0) + (tb.hp_bonus || 0) + pet.hp,
     mp_max: profile.mp_max + bonus.mp + (profile.museum_mp || 0) + (profile.fishing_mp || 0) + (tb.mp_bonus || 0),
     bonus,
-    hitBonus:     hitBonus     + gemAcc.hitBonus,
-    critBonus:    critBonus    + gemAcc.critBonus,
-    evasionBonus: evasionBonus + gemAcc.evasionBonus,
-    critResist:   critResist   + gemAcc.critResist,
+    hitBonus:     hitBonus     + gemAcc.hitBonus     + (sp?.hit || 0),
+    critBonus:    critBonus    + gemAcc.critBonus    + (sp?.crit || 0),
+    evasionBonus: evasionBonus + gemAcc.evasionBonus + (sp?.evade || 0),
+    critResist:   critResist   + gemAcc.critResist   + (sp?.critres || 0),
     defPen:  Math.min(PEN_CAP, gemAcc.defPen/100),
     mdefPen: Math.min(PEN_CAP, gemAcc.mdefPen/100),
     critDmg: gemAcc.critDmg/100,
     ondmgSpdUp: ondmgSpdPct > 0 ? 1 + ondmgSpdPct / 100 : 0, // 被ダメ時に付与する素早さ倍率（例:1.05）。0=効果なし
     extraParaChance: Math.min(100, extraParaChance), // 追加行動ヒット時の麻痺付与率（%）
     // ボス装備 真化効果（戦闘ループが消費）
-    evoDmgTakenMult, evoPhysDmgTakenMult, evoReflectPct, evoAilmentResist,
+    evoDmgTakenMult, evoPhysDmgTakenMult, evoReflectPct, evoAilmentResist: evoAilmentResist + (sp?.ailRes || 0),
     evoHitSpdDown, evoHitBleed, evoHitStun, evoOndmgStun, evoOndmgBurn, evoEvadeSpdUp,
     evoAllskillAtk, evoAllskillMatk,
     weaponDmgMult,   // 武器種固有の与ダメージ倍率（斧=1.10など）
@@ -337,6 +340,7 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
   //  petCharm(装備チャーム) ＋ petStat(本体ステ100%) を「ペット」ソースに合算。
   const pc = profile.petCharm || {}
   const ps = profile.petStat || {}
+  const sp = pc.sp || null // チャームの特殊能力（フェイトコア抽選。%は最終値に乗算/率は加算）
   const pet = {
     atk:(pc.atk||0)+(ps.atk||0), def:(pc.def||0)+(ps.def||0),
     matk:(pc.matk||0)+(ps.matk||0), mdef:(pc.mdef||0)+(ps.mdef||0),

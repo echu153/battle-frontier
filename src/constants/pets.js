@@ -568,6 +568,7 @@ export const PET_ITEMS = {
   oishii_konomi:  { key: 'oishii_konomi',  name: 'おいしい木の実',   emoji: '🍎', price: 0, dungeon: true, capped: true, noShop: true, healPct: 0.35, desc: '最大HPの35%を回復' },
   rename:  { key: 'rename',  name: 'ニックネーム変更券', emoji: '🎫', price: 100000, dungeon: false, capped: true,  desc: 'ペットの名前を変更できる' },
   shard:   { key: 'shard',   name: '神秘の欠片',       emoji: '🔮', price: 0, dungeon: false, capped: true, noShop: true, desc: 'チャーム合成に使う（30Fボス討伐でドロップ）' },
+  fatecore:{ key: 'fatecore', name: 'フェイトコア',     emoji: '🧬', price: 0, dungeon: false, capped: true, noShop: true, desc: 'チャーム/リボンの特殊能力を再抽選する（60Fボス討伐でドロップ）' },
   // チャーム強化用の素（ダンジョンで拾う。チャームページで使用）
   atk_seed:   { key: 'atk_seed',   name: '攻撃の素',  emoji: '🔴', img: '/kougekimoto.png',     price: 0, dungeon: false, capped: true, seed: 'atk',   up: 1,  desc: 'チャームの攻撃を+1' },
   spatk_seed: { key: 'spatk_seed', name: '特攻の素',  emoji: '🟣', img: '/tokukoumoto.png',     price: 0, dungeon: false, capped: true, seed: 'spatk', up: 1,  desc: 'チャームの特攻を+1' },
@@ -674,6 +675,30 @@ export const CHARMS = {
 export const getCharm = (t) => CHARMS[t] || CHARMS.hajimari
 // リボン判定（チャームとは別枠の装備）
 export const isRibbonType = (t) => !!CHARMS[t]?.ribbon
+// リボンを合成したチャームの名前タグ（装備名の先頭に付く）
+export const RIBBON_TAG = { rib_phys: '【物理】', rib_spec: '【特殊】', rib_wall: '【守備】' }
+
+// ============================================================
+// 特殊能力（フェイトコアで抽選。チャーム/リボンの specials 列に保存）
+//  枠数＝構成数（単体=1 / 合成=2 / 合成+リボン=3）。フェイトコア1個で全枠再抽選
+//  プレイヤー本体にも適用（stats.js が charmPlayerBonus 経由で消費）
+// ============================================================
+export const SPECIAL_LABELS = {
+  atk: '攻撃', spatk: '特攻', def: '防御', spdef: '特防',
+  physdmg: '物理ダメージ', specdmg: '特殊ダメージ',
+  res_poison: '毒耐性', res_paralyze: '麻痺耐性', res_burn: 'やけど耐性',
+  hit: '命中', evade: '回避', crit: 'クリティカル率', critres: 'クリティカル抵抗',
+}
+export const specialLabel = (s) => s ? `${SPECIAL_LABELS[s.k] || s.k}+${s.v}%` : ''
+export const charmSpecials = (c) => (Array.isArray(c?.specials) ? c.specials : [])
+// 特殊能力の抽選枠数（単体=1 / 合成=2 / リボン合成済み=3。リボン単体=1）
+export const specialSlots = (c) => 1 + (c?.ctype2 ? 1 : 0) + (c?.ctype3 ? 1 : 0)
+// 複数装備品の特殊能力を種類別に合算（ペット/プレイヤー適用用）
+export function sumSpecials(...items) {
+  const acc = {}
+  for (const c of items) for (const s of charmSpecials(c)) acc[s.k] = (acc[s.k] || 0) + (s.v || 0)
+  return acc
+}
 // チャーム/リボンの共通アイコン画像（種類別の絵文字はログ用に残す）
 export const charmIcon = (ctype) => assetSrc(CHARMS[ctype]?.ribbon ? '/ribon.png' : '/ribonntya-mu.png')
 // そのフロアでドロップする通常チャーム（rare=幸せは別枠抽選）
@@ -688,8 +713,8 @@ export function charmDropsFor(dungeonId, floor) {
   }
   return charmsForFloor(floor)
 }
-// チャームが持つ効果一覧（合成で ctype2 を持つと2つ）
-export const charmEffects = (charm) => [charm?.ctype, charm?.ctype2].filter(Boolean).map((t) => getCharm(t).effect).filter(Boolean)
+// チャームが持つ効果一覧（合成でctype2、リボン合成でctype3を持つと最大3つ）
+export const charmEffects = (charm) => [charm?.ctype, charm?.ctype2, charm?.ctype3].filter(Boolean).map((t) => getCharm(t).effect).filter(Boolean)
 export const charmHasEffect = (charm, eff) => charmEffects(charm).includes(eff)
 // 使用した素の合計数（=強化ゲージ。CHARM_TOTAL_MAX まで）
 export const charmTotal = (c) => (c?.atk || 0) + (c?.spatk || 0) + (c?.def || 0) + (c?.spdef || 0) + (c?.hp || 0)
@@ -697,20 +722,32 @@ export const charmTotal = (c) => (c?.atk || 0) + (c?.spatk || 0) + (c?.def || 0)
 export const charmHpBonus = (c) => (c?.hp || 0) * CHARM_HP_PER
 // 表示名（素を使った分だけ ＋N がつく）
 export function charmDisplayName(charm) {
-  // 合成済みは「○と○のチャーム」（例：攻撃と特防のチャーム）
+  // 合成済みは「○と○のチャーム」。リボン合成済みは先頭に【物理】/【特殊】/【守備】タグ
+  const tag = charm?.ctype3 ? (RIBBON_TAG[charm.ctype3] || '') : ''
   const base = charm?.ctype2
-    ? `${getCharm(charm.ctype).short}と${getCharm(charm.ctype2).short}のチャーム`
-    : getCharm(charm?.ctype).name
+    ? `${tag}${getCharm(charm.ctype).short}と${getCharm(charm.ctype2).short}のチャーム`
+    : `${tag}${getCharm(charm?.ctype).name}`
   const t = charmTotal(charm)
   return t > 0 ? `${base}+${t}` : base
 }
 // 装備チャームをプレイヤー本体ステへ反映する分（攻→atk / 特攻→matk / 特防→mdef / HPは×CHARM_HP_PER）
 export function charmPlayerBonus(charm) {
   if (!charm) return null
+  // 特殊能力をプレイヤー用に集約（%はstats.jsが最終値へ乗算/加算）
+  const sp = sumSpecials(charm)
+  const spAgg = {
+    atkPct: (sp.atk || 0) + (sp.physdmg || 0),   // 物理ダメージ%は攻撃%へ折り込み
+    matkPct: (sp.spatk || 0) + (sp.specdmg || 0), // 特殊ダメージ%は特攻%へ折り込み
+    defPct: sp.def || 0, mdefPct: sp.spdef || 0,
+    hit: sp.hit || 0, evade: sp.evade || 0, crit: sp.crit || 0, critres: sp.critres || 0,
+    ailRes: (sp.res_poison || 0) + (sp.res_paralyze || 0) + (sp.res_burn || 0), // 本編は総合耐性へ合算
+  }
+  const hasSp = Object.values(spAgg).some((v) => v > 0)
   return {
     hp: charmHpBonus(charm), atk: charm.atk || 0, matk: charm.spatk || 0, def: charm.def || 0, mdef: charm.spdef || 0,
-    guard: getCharm(charm.ctype).effect === 'guard',       // 防御+10%
-    antidote: getCharm(charm.ctype).effect === 'antidote', // 毒確率50%減
+    guard: charmEffects(charm).includes('guard'),       // 防御+10%
+    antidote: charmEffects(charm).includes('antidote'), // 毒確率50%減
+    sp: hasSp ? spAgg : null,
   }
 }
 // チャーム＋リボンのステ成長を加算したペットステを返す（ダンジョン/反映で使用）
@@ -735,6 +772,12 @@ export function applyCharmStats(stats, charm, ribbon = null) {
   if (effs.includes('atkup')) atkPhys = Math.round(atkPhys * 1.1)
   if (effs.includes('spatkup')) atkSpec = Math.round(atkSpec * 1.1)
   if (effs.includes('wall')) { def = Math.round(def * 1.06); mdef = Math.round(mdef * 1.06) }
+  // 特殊能力（フェイトコア抽選）のステータス%をペットにも適用
+  const sp = sumSpecials(charm, ribbon)
+  if (sp.atk) atkPhys = Math.round(atkPhys * (1 + sp.atk / 100))
+  if (sp.spatk) atkSpec = Math.round(atkSpec * (1 + sp.spatk / 100))
+  if (sp.def) def = Math.round(def * (1 + sp.def / 100))
+  if (sp.spdef) mdef = Math.round(mdef * (1 + sp.spdef / 100))
   atk = stats.atkType === 'spec' ? atkSpec : atkPhys // 表示用のメイン攻撃値は攻撃タイプ側
   return { ...stats, maxHp, atk, atkPhys, atkSpec, def, mdef }
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmDropsFor, charmIcon, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, bossFor, dgBgm, assetSrc, ASSET_VER } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmDropsFor, charmIcon, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, bossFor, dgBgm, sumSpecials, assetSrc, ASSET_VER } from '../constants/pets'
 import Boss60Sprite from '../components/Boss60Sprite'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
@@ -690,6 +690,7 @@ export default function Dungeon() {
     if (e.type === 'equip') return { label: e.name, emoji: '🎁' }
     if (e.type === 'charm') return { label: getCharm(e.ctype).name, emoji: getCharm(e.ctype).emoji, img: charmIcon(e.ctype) }
     if (e.type === 'shard') return { label: '神秘の欠片', emoji: '🔮' }
+    if (e.type === 'fatecore') return { label: 'フェイトコア', emoji: '🧬' }
     if (e.type === 'book') return { label: `匠の秘伝書${['', 'Ⅰ', 'Ⅱ', 'Ⅲ'][e.level] || 'Ⅰ'}`, emoji: '📖' }
     return { label: '?', emoji: '✨' }
   }
@@ -995,7 +996,11 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
       }
       // やけど・ステータスダウン中は攻撃/特攻が下がる。攻撃バフ中は上がる
       // リボン：物理のリボン=物理ダメ+5% / 特殊のリボン=特殊ダメ+5%（攻撃タイプが一致した時のみ）
-      const ribMul = (useType === 'phys' && charmHasEffect(pet.ribbon, 'physup')) || (useType === 'spec' && charmHasEffect(pet.ribbon, 'specup')) ? 1.05 : 1
+      // ＋特殊能力(フェイトコア)の物理/特殊ダメージ%も加算
+      const spDmg = sumSpecials(pet.charm, pet.ribbon)
+      const ribPct = ((useType === 'phys' && charmHasEffect(pet.ribbon, 'physup')) || (useType === 'spec' && charmHasEffect(pet.ribbon, 'specup')) ? 5 : 0)
+        + (useType === 'phys' ? (spDmg.physdmg || 0) : (spDmg.specdmg || 0))
+      const ribMul = 1 + ribPct / 100
       const atkMul = (burned ? 1 - BURN_ATK_DOWN : 1) * (debuff.atk > 0 ? 1 - STAT_DOWN_PCT : 1) * (petAtkUp > 0 ? PET_ATKUP_MULT : 1) * ribMul
       useAtk = useAtk * atkMul
       // 敵の防御。デバフ（防御down）を受けている敵は軽減が弱まる
@@ -1052,10 +1057,10 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
         grantKill(floorNum, target.name, px, py)
         setState({ ...s, player, enemies: enemies.filter((e) => e.id !== target.id) })
         if (dungeon) setCleared((c) => new Set(c).add(dungeon.id))
-        addLog('🔮 神秘の欠片を手に入れた！')
-        const shardEntry = { type: 'shard' }
+        const bossDrop = dungeon?.id === 'd60' ? { type: 'fatecore' } : { type: 'shard' }
+        addLog(dungeon?.id === 'd60' ? '🧬 フェイトコアを手に入れた！' : '🔮 神秘の欠片を手に入れた！')
         if (runIdRef.current) {
-          supabase.rpc('dungeon_pickup', { p_run_id: runIdRef.current, p_entry: shardEntry }).then(({ data }) => { addLootToBag(data || shardEntry); finishRun(true) }, () => finishRun(true))
+          supabase.rpc('dungeon_pickup', { p_run_id: runIdRef.current, p_entry: bossDrop }).then(({ data }) => { addLootToBag(data || bossDrop); finishRun(true) }, () => finishRun(true))
         } else finishRun(true)
         return
       }
@@ -1211,8 +1216,9 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
       const inRange = cheb >= 1 && cheb <= reach && straight && lineClear && !diagBlocked
       // ボスは4マスのいずれかに隣接で攻撃可能。通常敵はreach判定
       const canAttack = e.boss ? enemyAdjacent(e, player.x, player.y) : (sees && inRange && visNow.has(e.x + ',' + e.y))
-      // 回避のチャーム：5%で敵の攻撃を完全回避
-      if (canAttack && charmHasEffect(pet.charm, 'evade') && Math.random() < 0.05) {
+      // 回避のチャーム：5%で敵の攻撃を完全回避（特殊能力の回避%を加算）
+      const dodgePct = (charmHasEffect(pet.charm, 'evade') ? 5 : 0) + (sumSpecials(pet.charm, pet.ribbon).evade || 0)
+      if (canAttack && dodgePct > 0 && Math.random() < dodgePct / 100) {
         addLog(`💨 ${e.name}の攻撃を回避した！`, 'right')
         return { ...e, atkDown: Math.max(0, (e.atkDown || 0) - 1), defDown: Math.max(0, (e.defDown || 0) - 1) }
       }
@@ -1247,13 +1253,17 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
         const antidote = charmHasEffect(pet.charm, 'antidote')
         const stunres = charmHasEffect(pet.charm, 'stunres')  // スタンのチャーム：麻痺確率20%減
         const burnres = charmHasEffect(pet.charm, 'burnres')  // やけどのチャーム：やけど確率30%減
+        const spRes = sumSpecials(pet.charm, pet.ribbon)      // 特殊能力の状態異常耐性%（確率をさらに減らす）
         let usedBig = false // このターンに大技(lowHpSkill)を放ったか
         for (const sk of sks) {
-          // チャーム耐性：解毒=毒50%減 / スタン=麻痺20%減 / やけど=30%減
-          const chance = sk.type === 'poison' && antidote ? sk.chance * 0.5
+          // チャーム耐性：解毒=毒50%減 / スタン=麻痺20%減 / やけど=30%減。特殊能力耐性はさらに乗算
+          let chance = sk.type === 'poison' && antidote ? sk.chance * 0.5
             : sk.type === 'paralyze' && stunres ? sk.chance * 0.8
             : sk.type === 'burn' && burnres ? sk.chance * 0.7
             : sk.chance
+          if (sk.type === 'poison' && spRes.res_poison) chance *= 1 - spRes.res_poison / 100
+          else if (sk.type === 'paralyze' && spRes.res_paralyze) chance *= 1 - spRes.res_paralyze / 100
+          else if (sk.type === 'burn' && spRes.res_burn) chance *= 1 - spRes.res_burn / 100
           if (Math.random() >= chance) continue
           if (bossPh?.lowHpSkill && sk === bossPh.lowHpSkill) usedBig = true
           if (sk.type === 'heavy') { dmg = Math.round(dmg * (sk.mult || 1)); notes.push(sk.name) }
@@ -1617,10 +1627,10 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
         grantKill(floorNum, cur.name, px, py)
         setState({ ...state, enemies: enemies.filter((e) => e.id !== cur.id) })
         if (dungeon) setCleared((c) => new Set(c).add(dungeon.id))
-        addLog('🔮 神秘の欠片を手に入れた！')
-        const shardEntry2 = { type: 'shard' }
+        const bossDrop2 = dungeon?.id === 'd60' ? { type: 'fatecore' } : { type: 'shard' }
+        addLog(dungeon?.id === 'd60' ? '🧬 フェイトコアを手に入れた！' : '🔮 神秘の欠片を手に入れた！')
         if (runIdRef.current) {
-          supabase.rpc('dungeon_pickup', { p_run_id: runIdRef.current, p_entry: shardEntry2 }).then(({ data }) => { addLootToBag(data || shardEntry2); finishRun(true) }, () => finishRun(true))
+          supabase.rpc('dungeon_pickup', { p_run_id: runIdRef.current, p_entry: bossDrop2 }).then(({ data }) => { addLootToBag(data || bossDrop2); finishRun(true) }, () => finishRun(true))
         } else finishRun(true)
         return
       }

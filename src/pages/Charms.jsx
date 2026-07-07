@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { getCharm, CHARM_TOTAL_MAX, CHARM_HP_PER, charmDisplayName, charmTotal, petItemImg, isRibbonType, charmIcon } from '../constants/pets'
+import { getCharm, CHARM_TOTAL_MAX, CHARM_HP_PER, charmDisplayName, charmTotal, petItemImg, isRibbonType, charmIcon, RIBBON_TAG, charmSpecials, specialLabel, specialSlots } from '../constants/pets'
 
 // チャーム/リボンの共通アイコン
 function CIcon({ ctype, size = 14 }) {
@@ -110,6 +110,20 @@ export default function Charms() {
     const detail = Object.entries(bd).filter(([, n]) => n > 0).map(([k, n]) => `${NAMES[k] || k}×${n}`).join('・')
     flash(`✂️ 裁断完了！${detail || `素を${data?.total ?? ids.length * 3}個入手`}`)
   }
+  // 抽選：フェイトコア1個でチャーム/リボンの特殊能力を全枠再抽選
+  const doReroll = async () => {
+    if (!sel) { flash('抽選するチャーム/リボンを選んでください'); return }
+    if ((seeds.fatecore || 0) < 1) { flash('フェイトコアがありません（60Fボス討伐で入手）'); return }
+    if (charmSpecials(sel).length > 0 && !window.confirm('現在の特殊能力は消えて全枠が再抽選されます。よろしいですか？')) return
+    setLoading(true)
+    const { data, error } = await supabase.rpc('pet_charm_reroll', { p_id: sel.id })
+    setLoading(false)
+    if (error) { flash('抽選に失敗: ' + error.message); return }
+    await load()
+    const rolled = Array.isArray(data?.specials) ? data.specials.map(specialLabel).join('・') : ''
+    flash(`🧬 抽選完了！${rolled}`)
+  }
+
   // 凝縮：○○の素10個 → 凝縮された○○の素1個
   const condense = async (stat, times = 1) => {
     setLoading(true)
@@ -135,12 +149,18 @@ export default function Charms() {
   const doFuse = async () => {
     if (!fuseBase || !fuseMat || fuseBase === fuseMat) { flash('残す側と素材を選んでください'); return }
     if ((seeds.shard || 0) < 1) { flash('神秘の欠片が足りません'); return }
+    const b = charms.find((c) => c.id === fuseBase); const m = charms.find((c) => c.id === fuseMat)
+    const isRibbonFuse = m && isRibbonType(m.ctype)
+    if (isRibbonFuse && (seeds.zeni || 0) < 10000) { flash('ゼニが足りません（リボン合成は🪙10000必要）'); return }
     setLoading(true)
-    const { error } = await supabase.rpc('pet_charm_fuse', { p_base: fuseBase, p_mat: fuseMat })
+    const { error } = isRibbonFuse
+      ? await supabase.rpc('pet_charm_fuse_ribbon', { p_charm: fuseBase, p_ribbon: fuseMat })
+      : await supabase.rpc('pet_charm_fuse', { p_base: fuseBase, p_mat: fuseMat })
     setLoading(false)
     if (error) { flash('合成に失敗: ' + error.message); return }
-    const b = charms.find((c) => c.id === fuseBase); const m = charms.find((c) => c.id === fuseMat)
-    const resultName = b && m ? `${getCharm(b.ctype).short}と${getCharm(m.ctype).short}のチャーム` : 'チャーム'
+    const resultName = isRibbonFuse
+      ? `${RIBBON_TAG[m.ctype] || ''}${getCharm(b.ctype).short}と${getCharm(b.ctype2).short}のチャーム`
+      : (b && m ? `${getCharm(b.ctype).short}と${getCharm(m.ctype).short}のチャーム` : 'チャーム')
     setFuseBase(null); setFuseMat(null)
     await load()
     setFuseDone(resultName)
@@ -194,6 +214,7 @@ export default function Charms() {
           <Btn onClick={() => setTab('fuse')} dim={tab !== 'fuse'}>合成</Btn>
           <Btn onClick={() => setTab('condense')} dim={tab !== 'condense'}>凝縮</Btn>
           <Btn onClick={() => setTab('shred')} dim={tab !== 'shred'}>裁断</Btn>
+          <Btn onClick={() => setTab('reroll')} dim={tab !== 'reroll'}>抽選</Btn>
         </div>
 
         {charms.length === 0 && <div style={{ color: '#557799', fontSize: 12 }}>チャームを持っていません（ダンジョンで拾えます）</div>}
@@ -213,11 +234,14 @@ export default function Charms() {
               })}
             </div>
             {sel && (() => {
-              const total = charmTotal(sel); const cap = sel.fused ? 300 : CHARM_TOTAL_MAX; const full = total >= cap
+              const total = charmTotal(sel); const cap = (sel.fused || isRibbonType(sel.ctype)) ? 300 : CHARM_TOTAL_MAX; const full = total >= cap
               return (
               <div style={{ border: '1px solid #335588', background: '#00102a', padding: 12 }}>
                 <div style={{ color: '#cce6ff', fontSize: 14, marginBottom: 2 }}><CIcon ctype={sel.ctype} size={16} />{charmDisplayName(sel)}</div>
-                <div style={{ color: '#6699cc', fontSize: 10, marginBottom: 8 }}>{getCharm(sel.ctype).desc}</div>
+                <div style={{ color: '#6699cc', fontSize: 10, marginBottom: 4 }}>{getCharm(sel.ctype).desc}{sel.ctype2 ? ` ／ ${getCharm(sel.ctype2).desc}` : ''}{sel.ctype3 ? ` ／ ${getCharm(sel.ctype3).desc}` : ''}</div>
+                {charmSpecials(sel).length > 0 && (
+                  <div style={{ color: '#ffd75e', fontSize: 10, marginBottom: 8 }}>✨ 特殊能力: {charmSpecials(sel).map(specialLabel).join('・')}</div>
+                )}
                 {/* 強化ゲージ（全能力の合計／150） */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                   <span style={{ width: 64, fontSize: 11, color: '#aa88ff' }}>強化合計</span>
@@ -275,17 +299,24 @@ export default function Charms() {
 
         {tab === 'fuse' && pures.length > 0 && (
           <div style={{ border: '1px solid #663388', background: '#0e0820', padding: 12 }}>
-            <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔮 神秘の欠片1つで2つの素材を1つのチャームに（効果も両方引継ぎ・成長は合算で合計300まで）。<span style={{ color: '#ff8866' }}>素材2つは無くなり1つにまとまります。合成済みは再合成不可。</span></div>
-            {[['base', '素材①', fuseBase, setFuseBase], ['mat', '素材②', fuseMat, setFuseMat]].map(([key, label, val, setter]) => (
+            <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔮 神秘の欠片1つで2つの素材を1つのチャームに（効果も両方引継ぎ・成長は合算で合計300まで）。<span style={{ color: '#ff8866' }}>素材2つは無くなり1つにまとまります。</span><br />🎀 <span style={{ color: '#ffd75e' }}>合成済みチャーム＋リボン</span>はさらに合成可能（欠片1＋🪙10000）。装備名の先頭に【物理】等が付き、リボンの効果と＋値を引き継ぎます。リボン同士は合成不可。</div>
+            {[['base', '素材①（残す側）', fuseBase, setFuseBase], ['mat', '素材②（消える側）', fuseMat, setFuseMat]].map(([key, label, val, setter]) => (
               <div key={key} style={{ marginBottom: 10 }}>
                 <div style={{ color: '#9977cc', fontSize: 11, marginBottom: 4 }}>{label}</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {pures.map((c) => {
-                    const d = getCharm(c.ctype); const on = c.id === val
+                  {(key === 'base' ? pures : charms).map((c) => {
+                    const on = c.id === val
                     const other = key === 'base' ? fuseMat : fuseBase
+                    const otherC = charms.find((x) => x.id === other)
+                    const isRib = isRibbonType(c.ctype)
+                    // 選択可否：①=未合成チャーム or 合成済み(リボン枠あき) / ②=未合成チャーム or リボン。
+                    //  組み合わせは チャーム+チャーム / 合成済みチャーム+リボン のみ
+                    let dis = c.id === other
+                    if (key === 'base') dis = dis || (c.fused && c.ctype3) || (otherC && (isRibbonType(otherC.ctype) ? !c.fused : c.fused))
+                    else dis = dis || (!isRib && c.fused) || (isRib && otherC && !otherC.fused)
                     return (
-                      <button key={c.id} onClick={() => !c.fused && c.id !== other && setter(c.id)} disabled={c.fused || c.id === other}
-                        style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: (c.fused || c.id === other) ? '#556' : '#cce6ff', padding: '5px 8px', cursor: (c.fused || c.id === other) ? 'not-allowed' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                      <button key={c.id} onClick={() => !dis && setter(c.id)} disabled={dis}
+                        style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: dis ? '#556' : '#cce6ff', padding: '5px 8px', cursor: dis ? 'not-allowed' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
                         {on ? '✓ ' : ''}<CIcon ctype={c.ctype} />{charmDisplayName(c)}{c.fused ? '（合成済）' : ''}（計{(c.hp || 0) + (c.atk || 0) + (c.spatk || 0) + (c.def || 0) + (c.spdef || 0)}）
                       </button>
                     )
@@ -297,6 +328,21 @@ export default function Charms() {
             {(() => {
               const b = charms.find((c) => c.id === fuseBase); const m = charms.find((c) => c.id === fuseMat)
               if (!b || !m || b.id === m.id) return <div style={{ color: '#557799', fontSize: 11, marginBottom: 8 }}>素材①②を選ぶと合成結果が表示されます</div>
+              if (isRibbonType(m.ctype)) {
+                let st2 = { atk: b.atk + m.atk, spatk: b.spatk + m.spatk, def: b.def + m.def, spdef: b.spdef + m.spdef, hp: b.hp + m.hp }
+                let over2 = (st2.atk + st2.spatk + st2.def + st2.spdef + st2.hp) - 300
+                for (const k of ['hp', 'spdef', 'def', 'spatk', 'atk']) { if (over2 <= 0) break; const cut = Math.min(st2[k], over2); st2[k] -= cut; over2 -= cut }
+                const nm = `${RIBBON_TAG[m.ctype] || ''}${getCharm(b.ctype).short}と${getCharm(b.ctype2).short}のチャーム`
+                return (
+                  <div style={{ border: '1px solid #ffaa66', background: '#20140a', padding: 10, marginBottom: 10, fontSize: 11, color: '#cce6ff' }}>
+                    <div style={{ color: '#ffcc66', marginBottom: 4 }}>➡ リボン合成結果（欠片1＋🪙10000）</div>
+                    <div>🎀 {nm}＋{st2.atk + st2.spatk + st2.def + st2.spdef + st2.hp}</div>
+                    <div style={{ color: '#88bbee', marginTop: 2 }}>HP+{st2.hp * CHARM_HP_PER} / 攻+{st2.atk} / 特攻+{st2.spatk} / 防+{st2.def} / 特防+{st2.spdef}</div>
+                    <div style={{ color: '#aaffaa', marginTop: 2 }}>効果: {[getCharm(b.ctype).desc, getCharm(b.ctype2).desc, getCharm(m.ctype).desc].filter((x) => x && x !== '追加能力なし').join(' ／ ')}</div>
+                    <div style={{ color: '#ffd75e', marginTop: 2 }}>特殊能力枠: 3（フェイトコアで抽選）</div>
+                  </div>
+                )
+              }
               // 成長合算（合計300上限・HP→特防→防→特攻→攻 の順に切り捨て）
               let st = { atk: b.atk + m.atk, spatk: b.spatk + m.spatk, def: b.def + m.def, spdef: b.spdef + m.spdef, hp: b.hp + m.hp }
               let over = (st.atk + st.spatk + st.def + st.spdef + st.hp) - 300
@@ -312,7 +358,7 @@ export default function Charms() {
                 </div>
               )
             })()}
-            <Btn onClick={() => !loading && doFuse()}>🔮 合成する（欠片×{seeds.shard || 0}）</Btn>
+            <Btn onClick={() => !loading && doFuse()}>🔮 合成する（欠片×{seeds.shard || 0}{(() => { const m = charms.find((c) => c.id === fuseMat); return m && isRibbonType(m.ctype) ? ` / 🪙${seeds.zeni || 0}` : '' })()}）</Btn>
 
             {/* 合成解除 */}
             {pures.some((c) => c.fused) && (
@@ -334,6 +380,35 @@ export default function Charms() {
             )}
           </div>
         )}
+        {tab === 'reroll' && (
+          <div style={{ border: '1px solid #886633', background: '#1a1204', padding: 12 }}>
+            <div style={{ color: '#ffd75e', fontSize: 11, marginBottom: 6 }}>
+              🧬 フェイトコア1個で、選んだチャーム/リボンの<span style={{ color: '#88ffaa' }}>特殊能力を全枠再抽選</span>します。枠数は構成数（単体=1／合成=2／リボン合成済み=3）。特殊能力はペットとプレイヤー両方に効きます。
+            </div>
+            <div style={{ color: '#cc9944', fontSize: 12, marginBottom: 10 }}>🧬 フェイトコア×{seeds.fatecore || 0}<span style={{ color: '#775533', fontSize: 10 }}>（五霊の大峡谷の60Fボス討伐で入手）</span></div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {charms.map((c) => {
+                const on = c.id === selId
+                return (
+                  <button key={c.id} onClick={() => setSelId(c.id)}
+                    style={{ background: on ? '#241a04' : '#000a18', border: `1px solid ${on ? '#ffd75e' : '#224466'}`, color: '#cce6ff', padding: '5px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                    {on ? '✓ ' : ''}<CIcon ctype={c.ctype} />{charmDisplayName(c)}（枠{specialSlots(c)}）
+                  </button>
+                )
+              })}
+            </div>
+            {sel && (
+              <div style={{ border: '1px solid #886633', background: '#0f0a02', padding: 10, marginBottom: 10, fontSize: 11 }}>
+                <div style={{ color: '#cce6ff', marginBottom: 4 }}><CIcon ctype={sel.ctype} size={15} />{charmDisplayName(sel)}　<span style={{ color: '#997733' }}>特殊能力枠×{specialSlots(sel)}</span></div>
+                {charmSpecials(sel).length > 0
+                  ? <div style={{ color: '#ffd75e' }}>✨ {charmSpecials(sel).map(specialLabel).join('・')}</div>
+                  : <div style={{ color: '#557799' }}>特殊能力なし（未抽選）</div>}
+              </div>
+            )}
+            <Btn onClick={() => !loading && doReroll()}>🧬 フェイトコアで抽選する（×1消費・全枠再抽選）</Btn>
+          </div>
+        )}
+
         {tab === 'shred' && (
           <div style={{ border: '1px solid #885533', background: '#1a0e04', padding: 12 }}>
             <div style={{ color: '#ddaa77', fontSize: 11, marginBottom: 8 }}>
