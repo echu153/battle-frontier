@@ -258,10 +258,11 @@ function generateFloor(floorNum, dungeon) {
   const start = rooms[rand(0, rooms.length - 1)]
   const player = { x: start.cx, y: start.cy }; mark(player.x, player.y)
 
-  // 階段：開始部屋「以外」のどこかの部屋の「内側」（出入り口を塞がない）
-  const stairCandidates = rooms.filter((r) => r !== start)
-  const stairRoom = stairCandidates[rand(0, stairCandidates.length - 1)] || start
-  let stairs = randInnerTileInRoom(stairRoom) || { x: stairRoom.cx, y: stairRoom.cy }
+  // 階段：全部屋からランダム（開始部屋含む・完全ランダム）。部屋の「内側」に置いて出入り口を塞がない
+  //  ※プレイヤーの立ちマスは occupied 判定で避ける。フォールバックの中心がプレイヤー真下になる場合のみ別マスへ
+  const stairRoom = rooms[rand(0, rooms.length - 1)]
+  let stairs = randInnerTileInRoom(stairRoom) || randTileInRoom(stairRoom) || { x: stairRoom.cx, y: stairRoom.cy }
+  if (stairs.x === player.x && stairs.y === player.y) stairs = { x: start.x, y: start.y } // 部屋の隅（開始と別マス）へ退避
   mark(stairs.x, stairs.y)
 
   // 敵・アイテム配置（開始部屋は避ける）
