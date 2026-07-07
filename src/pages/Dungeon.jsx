@@ -1216,11 +1216,7 @@ export default function Dungeon() {
         const baseGuard = atkType === 'spec' ? (pet.mdef || 0) : (pet.def || 0)
         const guardDown = atkType === 'spec' ? (debuff.mdef > 0) : (debuff.def > 0)
         const guard = guardDown ? baseGuard * (1 - STAT_DOWN_PCT) : baseGuard
-        // 敵の攻撃力（自己バフ中は ENEMY_BUFF_MULT 倍／攻撃ダウン中は減）
-        const eAtk = (e.atk || 1) * ((e.buff || 0) > 0 ? ENEMY_BUFF_MULT : 1) * ((e.atkDown || 0) > 0 ? 1 - STAT_DOWN_PCT : 1) * (raged && bossPh?.rageMult ? bossPh.rageMult : 1)
-        // 敵のダメージも 0.9〜1.1 の乱数補正（最低1）
-        let dmg = Math.max(1, Math.round(calcDamage(eAtk, guard) * (0.9 + Math.random() * 0.2)))
-        // 敵スキル（確率発動）。ボスはHP50%以下で「復讐」を追加
+        // ボス形態情報と怒りバフ判定（eAtkより先に評価する＝宣言前アクセス禁止）
         const bossPh = e.boss ? bossFor(dungeon?.id).phases[e.phase] : null
         const lowHp = (e.hp || 0) <= (e.maxHp || 1) * (bossPh?.lowHpAt ?? 0.5)
         // 怒りバフ：HPがrageAt以下になったら一度だけ与ダメ倍率アップ（永続）
@@ -1230,6 +1226,10 @@ export default function Dungeon() {
           addLog(`💢 ${e.name}の攻撃が激しさを増した！`, 'right')
           playSe('バフ')
         }
+        // 敵の攻撃力（自己バフ中は ENEMY_BUFF_MULT 倍／攻撃ダウン中は減／怒りバフで×rageMult）
+        const eAtk = (e.atk || 1) * ((e.buff || 0) > 0 ? ENEMY_BUFF_MULT : 1) * ((e.atkDown || 0) > 0 ? 1 - STAT_DOWN_PCT : 1) * (raged && bossPh?.rageMult ? bossPh.rageMult : 1)
+        // 敵のダメージも 0.9〜1.1 の乱数補正（最低1）
+        let dmg = Math.max(1, Math.round(calcDamage(eAtk, guard) * (0.9 + Math.random() * 0.2)))
         const sks = (lowHp && bossPh?.lowHpSkill) ? [...(e.skills || []), bossPh.lowHpSkill] : (e.skills || [])
         const notes = []
         let heal = 0; let gotBuff = false; let reviveHeal = 0
