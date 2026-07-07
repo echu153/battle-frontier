@@ -2497,7 +2497,7 @@ export default function Dungeon() {
             )}
             {/* 開発アカウント用フロアワープ（d60は帯の境目＋ボス前後） */}
             {isAdmin && dungeon && (dungeon.id === 'd60' ? [13, 25, 37, 49, 59, 60] : [29, 30]).filter((f) => f <= (dungeon.floors || 10)).map((f) => (
-              <button key={f} onClick={() => { if (busyRef.current) return; setFloorNum(f); enterFloor(f, dungeon); floorsRef.current = Math.max(floorsRef.current, f - 1); addLog(`🛠 ${f}Fへワープ（開発）`) }}
+              <button key={f} onClick={() => { if (busyRef.current || shopRef.current) return; floorsRef.current = Math.max(floorsRef.current, f - 1); addLog(`🛠 ${f}Fへワープ（開発）`); descendFloor(f) }}
                 style={{ background: '#0a1424', border: '1px solid #335588', color: '#88aacc', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>🛠 {f}F</button>
             ))}
           </div>
