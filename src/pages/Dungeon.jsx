@@ -343,6 +343,7 @@ export default function Dungeon() {
   const [zeni, setZeni] = useState(0)                 // ゼニ（ペットダンジョン限定通貨。pet_storageに保存）
   const [shop, setShop] = useState(null)              // 秘密の商店 { stock, bought, next } 開店中はnull以外
   const [shopMsg, setShopMsg] = useState('')          // 商店内の購入結果メッセージ（モーダル内に表示）
+  const [hitFlash, setHitFlash] = useState(null)      // ボススキル被弾の画面フラッシュ { kind:'skill'|'big', id }
   const shopRef = useRef(null)                        // 開店中の移動ブロック用
   const sinceShopRef = useRef(0)                      // 前回の商店からの踏破フロア数
   const shopAtRef = useRef(20 + Math.floor(Math.random() * 11)) // 次の商店までのフロア数(20〜30)
@@ -1022,7 +1023,7 @@ export default function Dungeon() {
         enemies = enemies.map((e) => e.id === target.id ? {
           ...e, phase: target.phase + 1, type: np.type, mix: !!np.mix, skills: np.skills,
           visualScale: np.visualScale ?? bossDef.visualScale ?? e.visualScale, // 形態ごとの表示倍率（パピア第2形態=1.45）
-          hp: np.hp, maxHp: np.hp, atk: np.atk, def: np.def, mdef: np.mdef, buff: 0, atkDown: 0, defDown: 0, healedOnce: false, blink: true,
+          hp: np.hp, maxHp: np.hp, atk: np.atk, def: np.def, mdef: np.mdef, buff: 0, atkDown: 0, defDown: 0, healedOnce: false, charging: false, bigUsed: false, blink: true,
         } : e)
         addLog(np.transition?.during || `💀 ${target.name}の様子が変わっていく…！`, 'right')
         playSe('bosukeitaihenkazi') // 形態変化SE
@@ -1232,6 +1233,7 @@ export default function Dungeon() {
         const antidote = charmHasEffect(pet.charm, 'antidote')
         const stunres = charmHasEffect(pet.charm, 'stunres')  // スタンのチャーム：麻痺確率20%減
         const burnres = charmHasEffect(pet.charm, 'burnres')  // やけどのチャーム：やけど確率30%減
+        let usedBig = false // このターンに大技(lowHpSkill)を放ったか
         for (const sk of sks) {
           // チャーム耐性：解毒=毒50%減 / スタン=麻痺20%減 / やけど=30%減
           const chance = sk.type === 'poison' && antidote ? sk.chance * 0.5
@@ -1239,6 +1241,7 @@ export default function Dungeon() {
             : sk.type === 'burn' && burnres ? sk.chance * 0.7
             : sk.chance
           if (Math.random() >= chance) continue
+          if (bossPh?.lowHpSkill && sk === bossPh.lowHpSkill) usedBig = true
           if (sk.type === 'heavy') { dmg = Math.round(dmg * (sk.mult || 1)); notes.push(sk.name) }
           // 溶解液：特殊判定（ペットの特防で軽減）の×mult攻撃。物理の敵でも特防に当たる
           else if (sk.type === 'spec_heavy') { dmg = Math.max(1, Math.round(calcDamage(Math.round(eAtk * (sk.mult || 1)), pet.mdef || 0) * (0.9 + Math.random() * 0.2))); notes.push(sk.name) }
@@ -1251,8 +1254,14 @@ export default function Dungeon() {
         }
         const healShown = heal > 0 ? Math.min(heal, e.maxHp - e.hp) : 0
         attackers.push({ id: e.id, name: e.name, x: e.x, y: e.y, dmg, notes, healShown,
+          skillFx: !!(e.boss && notes.length > 0), bigFx: usedBig, // ボスのスキル/大技は演出を派手に
           lunge: { dx: Math.sign(player.x - e.x), dy: Math.sign(player.y - e.y) } })
         let ne = { ...e, atkDown: Math.max(0, (e.atkDown || 0) - 1), defDown: Math.max(0, (e.defDown || 0) - 1) } // デバフ減衰
+        // 大技チャージ演出：HP50%以下で大技を控えている間は震える。放ったら解除
+        if (e.boss && bossPh?.lowHpSkill) {
+          if (usedBig) ne = { ...ne, charging: false, bigUsed: true }
+          else if (lowHp && !e.bigUsed) ne = { ...ne, charging: true }
+        }
         if (heal > 0) ne = { ...ne, hp: Math.min(e.maxHp, e.hp + heal) }
         if (reviveHeal > 0) { ne = { ...ne, hp: Math.min(e.maxHp, ne.hp + reviveHeal), healedOnce: true }; addLog(`✨ ${e.name}はHPを回復した！`, 'right') }
         if (gotBuff) ne = { ...ne, buff: ENEMY_BUFF_TURNS }
@@ -1262,6 +1271,9 @@ export default function Dungeon() {
       // ボスは2×2ブロックでプレイヤーへ接近（4マス全部が床＆プレイヤー非占有なら移動）
       //  「移動後に攻撃範囲(隣接)へ入る手」を最優先。同点時も横並び追走にならないようチェビシェフで最終タイブレーク
       if (e.boss) {
+        // 大技チャージ演出（攻撃していないターンでもHP50%以下なら震える）
+        const bossPh2 = bossFor(dungeon?.id).phases[e.phase]
+        e = { ...e, charging: !!(bossPh2?.lowHpSkill && (e.hp || 0) <= (e.maxHp || 1) * 0.5 && !e.bigUsed) }
         const blockOk = (nx2, ny2) => {
           for (let ddy = 0; ddy < e.size; ddy++) for (let ddx = 0; ddx < e.size; ddx++) {
             const cx = nx2 + ddx, cy = ny2 + ddy
@@ -1402,9 +1414,21 @@ export default function Dungeon() {
         popDmg(player.x, player.y, dmg, { follow: true })
         if (a.healShown > 0) popHeal(a.x, a.y, a.healShown)
         const tag = a.notes.length ? `【${a.notes.join('・')}】` : '攻撃'
-        addLog(`${a.name}の${tag}！ ${dmg}ダメージ${shieldOn < 1 ? '🛡' : ''} 💥`, 'right')
+        if (a.bigFx) addLog(`💥💥 ${a.name}の${tag}‼ ${dmg}の致命ダメージ！！${shieldOn < 1 ? '🛡' : ''}`, 'right')
+        else addLog(`${a.name}の${tag}！ ${dmg}ダメージ${shieldOn < 1 ? '🛡' : ''} 💥`, 'right')
         applyFx({ pet: { flash: true }, enemies: { [a.id]: { lunge: a.lunge } } })
-        triggerShake('hit')
+        // ボスのスキルは画面フラッシュ（大技は赤・致命感／通常スキルは橙）＋大技は強シェイク
+        if (a.bigFx) {
+          setHitFlash({ kind: 'big', id: Date.now() })
+          setTimeout(() => setHitFlash((f) => (f && f.kind === 'big' ? null : f)), 700)
+          triggerShake('kill')
+        } else if (a.skillFx) {
+          setHitFlash({ kind: 'skill', id: Date.now() })
+          setTimeout(() => setHitFlash((f) => (f && f.kind === 'skill' ? null : f)), 400)
+          triggerShake('hit')
+        } else {
+          triggerShake('hit')
+        }
         setPetHp(hpNow)
         if (hpNow <= 0) { diedMid = true; finalize(hpNow, true); return }
         if (i === attackers.length - 1) finalize(hpNow, false)
@@ -1845,6 +1869,18 @@ export default function Dungeon() {
   return (
     <div style={{ minHeight: '100vh', background: '#000820', color: '#88ccff', fontFamily: 'monospace', padding: '10px 8px' }}>
       <style>{`
+        @keyframes bf-boss-tremble {
+          0%,100% { transform: translate(0,0); }
+          25% { transform: translate(-2px, 1px); }
+          50% { transform: translate(2px, -1px); }
+          75% { transform: translate(-1px, -1px); }
+        }
+        @keyframes bf-hitflash {
+          0% { opacity: 1; } 100% { opacity: 0; }
+        }
+        @keyframes bf-hitflash-big {
+          0% { opacity: 1; } 55% { opacity: 0.85; } 100% { opacity: 0; }
+        }
         @keyframes bf-dungeon-shake-hit {
           0%,100% { transform: translate(0,0); }
           20% { transform: translate(-3px, 1px); }
@@ -2094,7 +2130,8 @@ export default function Dungeon() {
                   const bsc = c.bossE?.visualScale || 1
                   const w = bsz * 100 * bsc
                   return (
-                    <div style={{ position: 'absolute', left: `${-(w - bsz * 100) / 2}%`, top: `${-(w - bsz * 100)}%`, width: `${w}%`, height: `${w}%`, zIndex: 4, pointerEvents: 'none' }}>
+                    <div style={{ position: 'absolute', left: `${-(w - bsz * 100) / 2}%`, top: `${-(w - bsz * 100)}%`, width: `${w}%`, height: `${w}%`, zIndex: 4, pointerEvents: 'none',
+                      animation: (!c.bossE?.blink && c.bossE?.charging) ? 'bf-boss-tremble 0.12s linear infinite' : undefined }}>
                       {c.bossE?.layered
                         ? <Boss60Sprite size="100%" phase={c.bossE.phase || 0} blink={!!c.bossE.blink} />
                         : <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', animation: c.bossE?.blink ? 'bf-boss-blink 0.22s steps(1) infinite' : undefined }} />}
@@ -2253,6 +2290,14 @@ export default function Dungeon() {
               </div>
             )
           })()}
+          {/* ボススキル被弾フラッシュ（大技=赤 / スキル=橙） */}
+          {hitFlash && (
+            <div key={hitFlash.id} style={{ position: 'absolute', inset: 0, zIndex: 8, pointerEvents: 'none',
+              background: hitFlash.kind === 'big'
+                ? 'radial-gradient(ellipse at center, rgba(255,40,30,0.38) 0%, rgba(130,0,0,0.55) 100%)'
+                : 'radial-gradient(ellipse at center, rgba(255,190,80,0.22) 0%, rgba(140,70,0,0.30) 100%)',
+              animation: hitFlash.kind === 'big' ? 'bf-hitflash-big 0.6s ease-out forwards' : 'bf-hitflash 0.32s ease-out forwards' }} />
+          )}
           {/* フロア遷移演出：暗転＋「ダンジョン名 フロア数」 */}
           {transition && (
             <div style={{ position: 'absolute', inset: 0, zIndex: 15, pointerEvents: 'none',
