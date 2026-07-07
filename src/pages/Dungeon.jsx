@@ -1414,8 +1414,7 @@ export default function Dungeon() {
         popDmg(player.x, player.y, dmg, { follow: true })
         if (a.healShown > 0) popHeal(a.x, a.y, a.healShown)
         const tag = a.notes.length ? `【${a.notes.join('・')}】` : '攻撃'
-        if (a.bigFx) addLog(`💥💥 ${a.name}の${tag}‼ ${dmg}の致命ダメージ！！${shieldOn < 1 ? '🛡' : ''}`, 'right')
-        else addLog(`${a.name}の${tag}！ ${dmg}ダメージ${shieldOn < 1 ? '🛡' : ''} 💥`, 'right')
+        addLog(`${a.name}の${tag}！ ${dmg}ダメージ${shieldOn < 1 ? '🛡' : ''} 💥`, 'right')
         applyFx({ pet: { flash: true }, enemies: { [a.id]: { lunge: a.lunge } } })
         // ボスのスキルは画面フラッシュ（大技は赤・致命感／通常スキルは橙）＋大技は強シェイク
         if (a.bigFx) {
