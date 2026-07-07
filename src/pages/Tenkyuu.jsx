@@ -6,6 +6,7 @@ import { reportDevAccess } from '../lib/devAccess'
 import { getWeaponGroup } from '../lib/stats'
 import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
+import { selectBattleSkillSets } from '../lib/loadout'
 import {
   calcEffectiveStats,
   calcEvasionRate,
@@ -927,13 +928,8 @@ export default function Tenkyuu() {
     setProfile({ ...prof, petCharm, petStat, activePet })
     setEquipment(eq || [])
     setProficiency(prof2 || [])
-    {
-      const all = ss || []
-      const challenge = all.filter(r => r.set_type === 'challenge')
-      const sortie = all.filter(r => (r.set_type || 'sortie') === 'sortie')
-      // アクティブスキルが1つも無いセットは未設定扱い（パッシブのみだと全部通常攻撃になるため）
-      setSkillSets(challenge.some(r => r.skills?.type !== 'パッシブ') ? challenge : sortie)
-    }
+    // 挑戦用スキルセット（challenge・未設定なら出撃にフォールバック）＋パッシブは全セットから常時反映
+    setSkillSets(selectBattleSkillSets(ss, 'challenge'))
     setPlayerItem(pi || null)
     if (prof.ability_title_id) {
       const { data: at } = await supabase.from('titles').select('*').eq('id', prof.ability_title_id).single()
@@ -954,9 +950,7 @@ export default function Tenkyuu() {
     if (curSets.length === 0) {
       const { data: ss2 } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', profile.id).order('slot_order')
       if (Array.isArray(ss2) && ss2.length) {
-        const challenge2 = ss2.filter(r => r.set_type === 'challenge')
-        const sortie2 = ss2.filter(r => (r.set_type || 'sortie') === 'sortie')
-        curSets = challenge2.some(r => r.skills?.type !== 'パッシブ') ? challenge2 : sortie2
+        curSets = selectBattleSkillSets(ss2, 'challenge')
         setSkillSets(curSets)
       }
     }

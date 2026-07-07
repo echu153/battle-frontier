@@ -4,6 +4,7 @@ import { supabase } from '../supabase'
 import { getWeaponGroup } from '../lib/stats'
 import { evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
+import { selectBattleSkillSets } from '../lib/loadout'
 import { pushSupported, pushConfigured, getPushStatus, enableRaidPush, disableRaidPush } from '../lib/push'
 import {
   WAIT_SECONDS,
@@ -576,14 +577,8 @@ export default function RaidBoss() {
     } catch { /* 意図的に無視 */ }
     setEquipment(eq || [])
     setProficiency(prof2 || [])
-    // レイド用スキルセット（raid）。未設定なら出撃(sortie)にフォールバック
-    {
-      const all = ss || []
-      const raid = all.filter(r => r.set_type === 'raid')
-      const sortie = all.filter(r => (r.set_type || 'sortie') === 'sortie')
-      // アクティブスキルが1つも無いセットは未設定扱い（パッシブのみだと全部通常攻撃になるため）
-      setSkillSets(raid.some(r => r.skills?.type !== 'パッシブ') ? raid : sortie)
-    }
+    // レイド用スキルセット（raid・未設定なら出撃にフォールバック）＋パッシブは全セットから常時反映
+    setSkillSets(selectBattleSkillSets(ss, 'raid'))
 
     // 共有CD残り計算（サーバー時刻基準。端末時計がズレていてもCDが解消する）
     if (prof.last_action_at) {
@@ -682,9 +677,7 @@ export default function RaidBoss() {
       if (curSets.length === 0) {
         const { data: ss2 } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', profile.id).order('slot_order')
         if (Array.isArray(ss2) && ss2.length) {
-          const raid2 = ss2.filter(r => r.set_type === 'raid')
-          const sortie2 = ss2.filter(r => (r.set_type || 'sortie') === 'sortie')
-          curSets = raid2.some(r => r.skills?.type !== 'パッシブ') ? raid2 : sortie2
+          curSets = selectBattleSkillSets(ss2, 'raid')
           setSkillSets(curSets)
         }
       }
