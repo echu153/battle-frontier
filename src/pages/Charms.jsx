@@ -41,6 +41,8 @@ export default function Charms() {
   const [fuseBase, setFuseBase] = useState(null) // 合成：残す側
   const [fuseMat, setFuseMat] = useState(null)   // 合成：吸収して消える側
   const [fuseDone, setFuseDone] = useState(null) // 合成完了演出（結果名）
+  const [gainPopup, setGainPopup] = useState(null) // 獲得演出（中央）{ emoji, title, items:[{key,name,n}] }
+  const showGain = (emoji, title, items) => { setGainPopup({ emoji, title, items }); setTimeout(() => setGainPopup(null), 2600) }
   const [confirm, setConfirm] = useState(false)
   const [shredSel, setShredSel] = useState({})  // 裁断で選択中 { id: true }
   const [loading, setLoading] = useState(false)
@@ -108,8 +110,8 @@ export default function Charms() {
     const NAMES = { atk_seed: '攻撃の素', spatk_seed: '特攻の素', def_seed: '防御の素', spdef_seed: '特防の素', hp_seed: 'HPの素' }
     const bd = data?.breakdown || {}
     const total = data?.total ?? ids.length * 3
-    const detail = Object.entries(bd).filter(([, n]) => n > 0).map(([k, n]) => `${NAMES[k] || k}×${n}`).join('・')
-    flash(`✂️ 裁断完了！素を計${total}個入手${detail ? `（${detail}）` : ''}`)
+    const items = Object.entries(bd).filter(([, n]) => n > 0).map(([k, n]) => ({ key: k, name: NAMES[k] || k, n }))
+    showGain('✂️', `裁断完了！素を計${total}個入手`, items)
   }
   // 抽選：フェイトコア1個でチャーム/リボンの特殊能力を全枠再抽選
   const doReroll = async () => {
@@ -132,7 +134,8 @@ export default function Charms() {
     setLoading(false)
     if (error) { flash('凝縮できません（素が10個未満）'); return }
     await load()
-    flash(`💠 凝縮された${STAT_META[stat].label}の素×${data?.made ?? times} を作った`)
+    const made = data?.made ?? times
+    showGain('💠', '凝縮完了！', [{ key: `${STAT_META[stat].seed}_c`, name: `凝縮された${STAT_META[stat].label}の素`, n: made }])
   }
 
   const doInherit = async () => {
@@ -520,6 +523,23 @@ export default function Charms() {
             <div style={{ color: '#c9b6ff', fontSize: 15, marginTop: 8 }}>🧿 {fuseDone}</div>
           </div>
           <style>{`@keyframes bf-fuse-pop{0%{transform:scale(0.5);opacity:0}40%{transform:scale(1.15);opacity:1}100%{transform:scale(1);opacity:1}}`}</style>
+        </div>
+      )}
+
+      {/* 裁断/凝縮などの獲得演出（中央・分かりやすく） */}
+      {gainPopup && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', fontFamily: 'monospace', pointerEvents: 'none' }}>
+          <div style={{ textAlign: 'center', animation: 'bf-fuse-pop 0.5s ease-out', background: '#0a0820', border: '1px solid #66aacc', borderRadius: 10, padding: '18px 26px', boxShadow: '0 0 24px rgba(80,160,220,0.5)' }}>
+            <div style={{ fontSize: 44, marginBottom: 4 }}>{gainPopup.emoji}</div>
+            <div style={{ color: '#ffe680', fontSize: 18, letterSpacing: 1, textShadow: '0 0 12px #66aacc' }}>{gainPopup.title}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 10, alignItems: 'center' }}>
+              {gainPopup.items.map((it) => (
+                <div key={it.key} style={{ color: '#cce6ff', fontSize: 15, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <SeedIcon seed={it.key} emoji="🔹" size={18} />{it.name} <span style={{ color: '#9fe0ff' }}>×{it.n}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
