@@ -480,15 +480,10 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   }
 
   // 累計ダメージに対して圧縮を適用：30万までは等倍・超過分は90%軽減
-  const rawTotal = totalDamage
   totalDamage = compressRaidDmg(totalDamage)
 
   logs.push({ text: `──────────────────`, color: '#223344' })
-  if (rawTotal > RAID_DMG_CAP) {
-    logs.push({ text: `合計 ${fmt(rawTotal)} → ${fmt(totalDamage)} ダメージ（30万超過分は90%軽減）`, color: '#ffcc44' })
-  } else {
-    logs.push({ text: `合計 ${fmt(totalDamage)} ダメージを与えた！`, color: '#ffcc44' })
-  }
+  logs.push({ text: `合計 ${fmt(totalDamage)} ダメージを与えた！`, color: '#ffcc44' })
 
   return { logs, totalDamage, playerDied }
 }
