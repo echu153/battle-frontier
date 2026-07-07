@@ -156,6 +156,7 @@ export default function CardGame() {
     const ch = supabase.channel(roomChannelName(roomInfo.id), {
       config: { presence: { key: myself.id }, broadcast: { self: true } },
     })
+    let hostSeen = false // 初回syncは自分のtrack反映前に来るため、ホスト在室を一度確認してから不在判定する
     ch.on('presence', { event: 'sync' }, () => {
       const st = ch.presenceState()
       const list = Object.keys(st).map((key) => ({ id: key, name: st[key][0]?.name || '?' }))
@@ -169,9 +170,12 @@ export default function CardGame() {
         if (gameRef.current) {
           ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [] } })
         }
+        return // 自分がホストなら不在判定は不要
       }
-      // ホストが消えたら解散
-      if (!list.some((m) => m.id === roomInfo.hostId)) {
+      // ホストが消えたら解散(在室を一度確認できた後のみ判定)
+      if (list.some((m) => m.id === roomInfo.hostId)) {
+        hostSeen = true
+      } else if (hostSeen) {
         showToast('ホストが退室したため部屋は解散しました')
         leaveRoomRef.current?.()
       }
