@@ -3,39 +3,56 @@ import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { supabase } from './supabase'
 import Login from './pages/Login' // 最初に出る画面は即時読み込み（チラつき防止）
 import ErrorBoundary from './components/ErrorBoundary'
+// 動的import(コード分割)の失敗を自動リカバリ。多くは新デプロイで旧タブのチャンクハッシュが変わり、
+// ページ遷移の import が404して「クリックしても何も起きない(空白)」になるケース。
+// 直近10秒以内に未リロードなら1回だけ強制リロードして最新版を取り直す（リロードループ防止）。
+function lazyReload(factory) {
+  return lazy(() => factory().catch((err) => {
+    try {
+      const now = Date.now()
+      const last = Number(sessionStorage.getItem('bf_chunk_reload_at') || 0)
+      if (now - last > 10000) {
+        sessionStorage.setItem('bf_chunk_reload_at', String(now))
+        window.location.reload()
+        return new Promise(() => {}) // リロード中は解決させない
+      }
+    } catch { /* sessionStorage不可でも下でthrow */ }
+    throw err
+  }))
+}
 // 以下はページを開いた時に読み込む（コード分割＝初回ロードを軽く）
-const CharCreate = lazy(() => import('./pages/CharCreate'))
-const Game = lazy(() => import('./pages/Game'))
-const Ranking = lazy(() => import('./pages/Ranking'))
-const Equipment = lazy(() => import('./pages/Equipment'))
-const Skills = lazy(() => import('./pages/Skills'))
-const Shop = lazy(() => import('./pages/Shop'))
-const Smithy = lazy(() => import('./pages/Smithy'))
-const Profile = lazy(() => import('./pages/Profile'))
-const Barber = lazy(() => import('./pages/Barber'))
-const Fishing = lazy(() => import('./pages/Fishing'))
-const Casino = lazy(() => import('./pages/Casino'))
-const Museum = lazy(() => import('./pages/Museum'))
-const RaidBoss = lazy(() => import('./pages/RaidBoss'))
-const Exchange = lazy(() => import('./pages/Exchange'))
-const Titles = lazy(() => import('./pages/Titles'))
-const Admin = lazy(() => import('./pages/Admin'))
-const Moderation = lazy(() => import('./pages/Moderation'))
-const Scarecrow = lazy(() => import('./pages/Scarecrow'))
-const Dungeon = lazy(() => import('./pages/Dungeon'))
-const Pets = lazy(() => import('./pages/Pets'))
-const Charms = lazy(() => import('./pages/Charms'))
-const PetStorage = lazy(() => import('./pages/PetStorage'))
-const StatusDetail = lazy(() => import('./pages/StatusDetail'))
-const Abyss = lazy(() => import('./pages/Abyss'))
-const Tenkyuu = lazy(() => import('./pages/Tenkyuu'))
-const Alchemy = lazy(() => import('./pages/Alchemy'))
-const Idle = lazy(() => import('./pages/Idle'))
-const Territory = lazy(() => import('./pages/Territory'))
-const War = lazy(() => import('./pages/War'))
-const Marketplace = lazy(() => import('./pages/Marketplace'))
-const Event = lazy(() => import('./pages/Event'))
-const ActionRpg = lazy(() => import('./action-rpg/ActionRpgPage')) // アクションRPGプロト(認証不要・独立)
+const CharCreate = lazyReload(() => import('./pages/CharCreate'))
+const Game = lazyReload(() => import('./pages/Game'))
+const Ranking = lazyReload(() => import('./pages/Ranking'))
+const Equipment = lazyReload(() => import('./pages/Equipment'))
+const Skills = lazyReload(() => import('./pages/Skills'))
+const Shop = lazyReload(() => import('./pages/Shop'))
+const Smithy = lazyReload(() => import('./pages/Smithy'))
+const Profile = lazyReload(() => import('./pages/Profile'))
+const Barber = lazyReload(() => import('./pages/Barber'))
+const Fishing = lazyReload(() => import('./pages/Fishing'))
+const Casino = lazyReload(() => import('./pages/Casino'))
+const Museum = lazyReload(() => import('./pages/Museum'))
+const RaidBoss = lazyReload(() => import('./pages/RaidBoss'))
+const Exchange = lazyReload(() => import('./pages/Exchange'))
+const Titles = lazyReload(() => import('./pages/Titles'))
+const Admin = lazyReload(() => import('./pages/Admin'))
+const Moderation = lazyReload(() => import('./pages/Moderation'))
+const Scarecrow = lazyReload(() => import('./pages/Scarecrow'))
+const Dungeon = lazyReload(() => import('./pages/Dungeon'))
+const Pets = lazyReload(() => import('./pages/Pets'))
+const Charms = lazyReload(() => import('./pages/Charms'))
+const PetStorage = lazyReload(() => import('./pages/PetStorage'))
+const StatusDetail = lazyReload(() => import('./pages/StatusDetail'))
+const Abyss = lazyReload(() => import('./pages/Abyss'))
+const Tenkyuu = lazyReload(() => import('./pages/Tenkyuu'))
+const Alchemy = lazyReload(() => import('./pages/Alchemy'))
+const Idle = lazyReload(() => import('./pages/Idle'))
+const Territory = lazyReload(() => import('./pages/Territory'))
+const War = lazyReload(() => import('./pages/War'))
+const Marketplace = lazyReload(() => import('./pages/Marketplace'))
+const Event = lazyReload(() => import('./pages/Event'))
+const ActionRpg = lazyReload(() => import('./action-rpg/ActionRpgPage')) // アクションRPGプロト(認証不要・独立)
 
 function App() {
   const [session, setSession] = useState(undefined)
