@@ -3712,7 +3712,7 @@ export default function Game() {
     const tenSec = is10sMode(profile)
     let expGained = isAtCap ? 0
       : papiaEscaped ? 0
-      : isPapiaEncounter ? 200
+      : isPapiaEncounter ? 150
       : isBossEncounter ? (tenSec ? 7 : 13)
       : tenSec ? (Math.floor(Math.random()*2)+5) : (Math.floor(Math.random()*4)+8)
     // キャラクターLV100まで経験値1.5倍（サーバー apply_battle_result の検証上限も1.5倍にしてある）
