@@ -85,9 +85,22 @@ function getBossForTurn(t, name = BOSS_NAME) {
   }
 }
 
+// レイドの与ダメ制限は2段構え。
+//   仕組みA（累計・サーバー側 attack_raid_boss）：レイド中の累計ダメージが30万に達したら、
+//     それ以降の戦闘ダメージは99%カット（×0.01）。
+//   仕組みB（1ヒット・クライアント側=この関数）：Aと無関係に、1発が1万を超えたら
+//     ダメージ量に応じて段階的に大幅カット（大きいほどカット率UP）。
+//     〜1万:カットなし / 1万〜5万:50%カット / 5万〜10万:80%カット / 10万〜:95%カット
+function cutRaidHit(d) {
+  if (d <= 10000) return d
+  let kept = 10000
+  kept += (Math.min(d, 50000) - 10000) * 0.5            // 1万〜5万：50%カット
+  if (d > 50000)  kept += (Math.min(d, 100000) - 50000) * 0.2  // 5万〜10万：80%カット
+  if (d > 100000) kept += (d - 100000) * 0.05           // 10万〜：95%カット
+  return Math.floor(kept)
+}
+
 // レイドバトルシミュレーション（最大10ターン）
-// ★与ダメ圧縮は「サーバー側でプレイヤーごとの累計貢献」に対して適用する（attack_raid_boss）。
-//   累計30万までは等倍・超過分は90%カット（×0.1）。クライアントは生ダメージを送るだけ。
 function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_NAME) {
   const logs = []
   let playerHp = Math.max(1, profile.hp_current ?? eff.hp_max)
@@ -256,7 +269,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           }
           const skillPhysical = !(cs.skills?.type === '魔法攻撃' || cs.skills?.name === 'サイコブラスト' || res.useMinDef)
           let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * (0.9 + Math.random() * 0.2))
-          if (res.dmg > 0) finalDmg = Math.floor(finalDmg * weakMult(skillPhysical)) // 弱点補正（累計圧縮は最後に適用）
+          if (res.dmg > 0) finalDmg = cutRaidHit(Math.floor(finalDmg * weakMult(skillPhysical))) // 弱点補正＋1ヒット段階カット
           // 第六感（再修練）：魔法攻撃がヒットしたらスタック+1（最大6・戦闘中持続）
           if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks + 1)
           if (res.selfDmg > 0) playerHp = Math.max(1, playerHp - res.selfDmg)
@@ -307,7 +320,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
             const fCrit = Math.random() * 100 < (playerCritRate + (res.bonusCritRate || 0))
             const fCritMult = fCrit ? (1.5 + (eff.critDmg || 0) + passiveCritDmgBonus) : 1.0
             let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * (0.9 + Math.random() * 0.2))
-            fDmg = Math.max(1, Math.floor(fDmg * weakMult(skillPhysical)))
+            fDmg = cutRaidHit(Math.max(1, Math.floor(fDmg * weakMult(skillPhysical))))
             totalDamage += fDmg
             logs.push({ text: `↳ 追撃！${res.followup.label ? `（${res.followup.label}）` : ''} ${bossName}に${fmt(fDmg)}ダメージ！${fCrit ? ' 💥クリティカル！' : ''}`, color: fCrit ? '#ffaa00' : '#ffaa66' })
           }
@@ -325,7 +338,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         const naIaiMult = isMagical ? 1.0 : iaiPhysMult
         const naRokkanMult = (hasRokkan && pe('サイキッカー')) ? (1 + 0.05*Math.min(6, rokkanStacks)) : 1.0
         let finalDmg = Math.floor(baseDmg * critMult * (isArtifact ? 1.3 : 1.0) * passiveDmgMult * tosoMult * naIaiMult * naRokkanMult * (0.9 + Math.random() * 0.2))
-        finalDmg = Math.floor(finalDmg * weakMult(!isMagical)) // 弱点補正（累計圧縮は最後に適用）
+        finalDmg = cutRaidHit(Math.floor(finalDmg * weakMult(!isMagical))) // 弱点補正＋1ヒット段階カット
         // 通常攻撃は精密照準スタックをリセット（連続スキルが途切れる）
         seimitsuStacks = 0; prevSkillName = null
         if (!playerBuffs.healBlock?.turns && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
