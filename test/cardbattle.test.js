@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   CARDS, createGame, applyAction, applyDefenseTimeout, forfeitPlayer,
+  npcChooseAction, isNpcId,
   START_HP, START_MP, HAND_START, MAX_AMULETS, EVOLVE_BONUS,
 } from '../src/lib/cardbattle.js'
 
@@ -301,6 +302,96 @@ test('全カード定義の整合性', () => {
     assert.ok(['weapon', 'defense', 'magic', 'amulet'].includes(c.kind), id + ': kind不正')
     if (c.kind === 'magic') assert.ok(c.mp >= 0, id + ': magicはmp必須')
     if (c.kind === 'amulet') assert.ok(c.count > 0, id + ': amuletはcount必須')
+  }
+})
+
+test('isNpcId', () => {
+  assert.equal(isNpcId('npc-1'), true)
+  assert.equal(isNpcId('a1b2c3'), false)
+  assert.equal(isNpcId(null), false)
+})
+
+test('NPC: 応戦で受けるダメージが最小の防御カードを選ぶ', () => {
+  const players = [{ id: 'h', name: '人間' }, { id: 'npc-1', name: 'NPC' }]
+  const { state } = createGame({ players, seed: 5 })
+  // 人間の手番にする
+  state.turnIndex = state.players.findIndex((p) => p.id === 'h')
+  state.phase = 'main'
+  const npc = state.players.find((p) => p.id === 'npc-1')
+  npc.hand = []
+  const shieldUid = giveCard(state, 'npc-1', 'wood_shield')  // 3軽減 → 3受け
+  const mirrorUid = giveCard(state, 'npc-1', 'mirror_shield') // 反射 → 0受け
+  const uid = giveCard(state, 'h', 'great_sword') // dmg6
+  const r = applyAction(state, { type: 'attack', playerId: 'h', cardUid: uid, targetId: 'npc-1' })
+  assert.equal(r.state.phase, 'defense')
+  const act = npcChooseAction(r.state, 'npc-1')
+  assert.equal(act.type, 'defend')
+  assert.equal(act.cardUid, mirrorUid, 'ミラーシールド(0受け)を選ぶべき')
+  assert.notEqual(act.cardUid, shieldUid)
+})
+
+test('NPC: 小ダメージは防御カードを温存して素受け', () => {
+  const players = [{ id: 'h', name: '人間' }, { id: 'npc-1', name: 'NPC' }]
+  const { state } = createGame({ players, seed: 5 })
+  state.turnIndex = state.players.findIndex((p) => p.id === 'h')
+  state.phase = 'main'
+  const npc = state.players.find((p) => p.id === 'npc-1')
+  npc.hand = []
+  giveCard(state, 'npc-1', 'iron_shield')
+  const uid = giveCard(state, 'h', 'wood_sword') // dmg2
+  const r = applyAction(state, { type: 'attack', playerId: 'h', cardUid: uid, targetId: 'npc-1' })
+  const act = npcChooseAction(r.state, 'npc-1')
+  assert.equal(act.cardUid, null)
+})
+
+test('NPC: HP最少の敵を武器で狙う・トドメ圏内なら進化', () => {
+  const players = [{ id: 'npc-1', name: 'N1' }, { id: 'h1', name: 'A' }, { id: 'h2', name: 'B' }]
+  const { state } = createGame({ players, seed: 8 })
+  state.turnIndex = state.players.findIndex((p) => p.id === 'npc-1')
+  state.phase = 'main'
+  const npc = state.players.find((p) => p.id === 'npc-1')
+  npc.hand = []
+  npc.amulets = [{ uid: 'x1', id: 'guardian', count: 4 }, { uid: 'x2', id: 'spring', count: 3 }] // アミュレット枠は埋めておく
+  giveCard(state, 'npc-1', 'iron_sword') // dmg4 (+進化3=7)
+  state.players.find((p) => p.id === 'h1').hp = 30
+  state.players.find((p) => p.id === 'h2').hp = 6 // 4<6<=7 → 進化でトドメ圏内
+  const act = npcChooseAction(state, 'npc-1')
+  assert.equal(act.type, 'attack')
+  assert.equal(act.targetId, 'h2')
+  assert.equal(act.evolve, true)
+})
+
+test('NPC: 武器なしなら交換かパスで必ずターンが進む', () => {
+  const players = [{ id: 'npc-1', name: 'N1' }, { id: 'h1', name: 'A' }]
+  const { state } = createGame({ players, seed: 8 })
+  state.turnIndex = state.players.findIndex((p) => p.id === 'npc-1')
+  state.phase = 'main'
+  const npc = state.players.find((p) => p.id === 'npc-1')
+  npc.mp = 0
+  npc.amulets = [{ uid: 'x1', id: 'guardian', count: 4 }, { uid: 'x2', id: 'spring', count: 3 }]
+  npc.hand = [{ uid: 'd1', id: 'wood_shield' }, { uid: 'd2', id: 'iron_shield' }]
+  const act = npcChooseAction(state, 'npc-1')
+  assert.equal(act.type, 'pass') // 防御しか持ってない
+  npc.hand.push({ uid: 'm1', id: 'heal' })
+  const act2 = npcChooseAction(state, 'npc-1')
+  assert.equal(act2.type, 'exchange') // 非防御カードは交換に回す
+})
+
+test('NPC同士の対戦: 思考ルーチンだけでゲームが必ず決着する', () => {
+  for (let seed = 1; seed <= 10; seed++) {
+    const players = Array.from({ length: 4 }, (_, i) => ({ id: `npc-${i + 1}`, name: `NPC${i + 1}` }))
+    let { state } = createGame({ players, seed })
+    let guard = 0
+    while (state.phase !== 'ended' && guard < 3000) {
+      guard++
+      const actorId = state.phase === 'defense' ? state.pendingAttack.targetId : state.players[state.turnIndex].id
+      const act = npcChooseAction(state, actorId)
+      assert.ok(act, 'アクションがnull (seed=' + seed + ')')
+      const r = applyAction(state, act)
+      assert.equal(r.error, undefined, `NPCの手が拒否された: ${r.error} (seed=${seed}, action=${JSON.stringify(act)})`)
+      state = r.state
+    }
+    assert.equal(state.phase, 'ended', 'ゲームが終わらない (seed=' + seed + ')')
   }
 })
 

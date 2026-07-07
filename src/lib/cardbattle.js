@@ -514,6 +514,89 @@ export function applyDefenseTimeout(prevState) {
   return applyAction(prevState, { type: 'defend', playerId: prevState.pendingAttack.targetId, cardUid: null })
 }
 
+// ============================================================
+// NPC思考ルーチン(ホストのクライアントが実行)
+// 決定的なヒューリスティック: 同じstateなら必ず同じ手を返す
+// ============================================================
+export function isNpcId(id) { return typeof id === 'string' && id.startsWith('npc-') }
+
+export function npcChooseAction(state, npcId) {
+  const p = getPlayer(state, npcId)
+  if (!p || !p.alive || state.phase === 'ended') return null
+
+  // ---- 応戦: 受けるダメージが最小になる防御カードを選ぶ ----
+  if (state.phase === 'defense') {
+    const pa = state.pendingAttack
+    if (!pa || pa.targetId !== npcId) return null
+    let best = null
+    let bestTaken = pa.dmg
+    for (const c of p.hand) {
+      const d = CARDS[c.id]
+      if (d.kind !== 'defense') continue
+      let taken
+      if (d.evade) taken = pa.sure ? pa.dmg : 0
+      else if (d.reflect) taken = 0
+      else if (d.guard) taken = pa.pierce ? pa.dmg : Math.max(0, pa.dmg - d.guard)
+      else taken = pa.dmg
+      if (taken < bestTaken) { bestTaken = taken; best = c }
+    }
+    // 2以下の小ダメージは防御カードを温存して素受け
+    if (pa.dmg <= 2 && p.hp > 6) best = null
+    return { type: 'defend', playerId: npcId, cardUid: best ? best.uid : null }
+  }
+
+  if (currentPlayer(state).id !== npcId) return null
+  const enemies = alivePlayers(state).filter((q) => q.id !== npcId)
+  if (enemies.length === 0) return { type: 'pass', playerId: npcId }
+  const weakest = enemies.reduce((a, b) => (a.hp <= b.hp ? a : b))
+
+  // 回復(瀕死優先)
+  const megaHeal = p.hand.find((c) => c.id === 'mega_heal')
+  if (p.hp <= 20 && megaHeal && p.mp >= CARDS.mega_heal.mp) return { type: 'magic', playerId: npcId, cardUid: megaHeal.uid }
+  const healC = p.hand.find((c) => c.id === 'heal')
+  if (p.hp <= 25 && healC && p.mp >= CARDS.heal.mp) return { type: 'magic', playerId: npcId, cardUid: healC.uid }
+
+  // アミュレット設置(破滅の宴は自分も食らうのでHPに余裕がある時だけ)
+  if (p.amulets.length < MAX_AMULETS) {
+    const am = p.hand.find((c) => CARDS[c.id].kind === 'amulet' && (c.id !== 'doom_feast' || p.hp > 25))
+    if (am) return { type: 'amulet', playerId: npcId, cardUid: am.uid }
+  }
+
+  // 神罰でトドメ
+  const jud = p.hand.find((c) => c.id === 'judgement')
+  if (jud && p.mp >= CARDS.judgement.mp && weakest.hp <= CARDS.judgement.dmg) {
+    return { type: 'magic', playerId: npcId, cardUid: jud.uid, targetId: weakest.id }
+  }
+  // 毒(MPに余裕がある時・未毒の体力ある敵へ)
+  const pois = p.hand.find((c) => c.id === 'poison_mist')
+  const poisTarget = enemies.find((e) => e.poison === 0 && e.hp > 10)
+  if (pois && p.mp >= CARDS.poison_mist.mp + 4 && poisTarget) {
+    return { type: 'magic', playerId: npcId, cardUid: pois.uid, targetId: poisTarget.id }
+  }
+
+  // 武器: 最大ダメージのものでHP最少の敵を狙う。トドメが刺せるなら進化
+  const weapons = p.hand.filter((c) => CARDS[c.id].kind === 'weapon')
+  if (weapons.length > 0) {
+    let best = weapons[0]
+    for (const c of weapons) if ((CARDS[c.id].dmg || 0) > (CARDS[best.id].dmg || 0)) best = c
+    const def = CARDS[best.id]
+    if (def.aoe || def.multi) return { type: 'attack', playerId: npcId, cardUid: best.uid }
+    const evolve = p.evolveStock > 0 && weakest.hp > def.dmg && weakest.hp <= def.dmg + EVOLVE_BONUS
+    return { type: 'attack', playerId: npcId, cardUid: best.uid, targetId: weakest.id, evolve }
+  }
+
+  // 攻撃魔法で代用
+  const fb = p.hand.find((c) => c.id === 'fireball')
+  if (fb && p.mp >= CARDS.fireball.mp) return { type: 'magic', playerId: npcId, cardUid: fb.uid, targetId: weakest.id }
+  const lt = p.hand.find((c) => c.id === 'lightning')
+  if (lt && p.mp >= CARDS.lightning.mp) return { type: 'magic', playerId: npcId, cardUid: lt.uid }
+
+  // 武器がない: 防御以外のカードを最大3枚交換して引き直す
+  const junk = p.hand.filter((c) => CARDS[c.id].kind !== 'defense').slice(0, 3)
+  if (junk.length > 0) return { type: 'exchange', playerId: npcId, cardUids: junk.map((c) => c.uid) }
+  return { type: 'pass', playerId: npcId }
+}
+
 // 切断プレイヤーの強制敗退(ホストが呼ぶ)
 export function forfeitPlayer(prevState, playerId) {
   const state = JSON.parse(JSON.stringify(prevState))

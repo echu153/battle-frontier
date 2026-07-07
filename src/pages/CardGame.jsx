@@ -4,8 +4,11 @@ import { supabase } from '../supabase'
 import { reportDevAccess } from '../lib/devAccess'
 import {
   CARDS, createGame, applyAction, applyDefenseTimeout, forfeitPlayer,
+  npcChooseAction, isNpcId,
   MAX_PLAYERS, MAX_HP, MAX_MP, DEFENSE_TIMEOUT_SEC,
 } from '../lib/cardbattle'
+
+const NPC_NAMES = ['ゴブ太', 'スラりん', 'ドラ子', 'ケルベロ', 'ゾンビ夫', 'メデュ子', 'オーク蔵']
 
 // ============================================================
 // 幻札(げんさつ)バトル — 開発限定のカードバトル(娯楽・ステ影響なし)
@@ -43,6 +46,7 @@ export default function CardGame() {
   // 部屋の状態
   const [room, setRoom] = useState(null) // { id, title, hostId, hostName }
   const [members, setMembers] = useState([]) // presenceから [{ id, name }]
+  const [npcs, setNpcs] = useState([]) // ホストが追加したNPC [{ id, name }]
   const [game, setGame] = useState(null)
   const [log, setLog] = useState([])
   const [toast, setToast] = useState(null)
@@ -63,6 +67,7 @@ export default function CardGame() {
   const meRef = useRef(null)
   const roomRef = useRef(null)
   const membersRef = useRef([])
+  const npcsRef = useRef([])
   const defTimerRef = useRef(null)
   const logEndRef = useRef(null)
 
@@ -70,6 +75,7 @@ export default function CardGame() {
   useEffect(() => { meRef.current = me }, [me])
   useEffect(() => { roomRef.current = room }, [room])
   useEffect(() => { membersRef.current = members }, [members])
+  useEffect(() => { npcsRef.current = npcs }, [npcs])
   useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [log])
 
   const showToast = (msg) => {
@@ -123,7 +129,7 @@ export default function CardGame() {
     if (!r || r.hostId !== meRef.current?.id || !lobbyChRef.current) return
     await lobbyChRef.current.track({
       roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName,
-      count: membersRef.current.length, status, // waiting | playing
+      count: membersRef.current.length + npcsRef.current.length, status, // waiting | playing
     })
   }, [])
 
@@ -139,15 +145,16 @@ export default function CardGame() {
 
   const hostApply = useCallback((action) => {
     const cur = gameRef.current
-    if (!cur) return
+    if (!cur) return false
     const r = applyAction(cur, action)
     if (r.error) {
       roomChRef.current?.send({ type: 'broadcast', event: 'reject', payload: { playerId: action.playerId, msg: r.error } })
-      return
+      return false
     }
     // 応戦フェーズならタイムアウト期限を刻む
     if (r.state.pendingAttack) r.state.pendingAttack.deadline = Date.now() + DEFENSE_TIMEOUT_SEC * 1000
     hostBroadcast(r.state, r.events)
+    return true
   }, [hostBroadcast])
 
   // ---- 部屋チャンネル(入室) ----
@@ -246,6 +253,7 @@ export default function CardGame() {
     setRoom(null); roomRef.current = null
     setGame(null); gameRef.current = null
     setMembers([]); membersRef.current = []
+    setNpcs([]); npcsRef.current = []
     setLog([]); setSelCard(null); setExchangeMode(false); setExchangeSel([]); setAlchemyCard(null); setPeekInfo(null)
     setView('lobby')
   }, [])
@@ -266,10 +274,24 @@ export default function CardGame() {
     joinRoom({ id: roomId, title, hostId: me.id, hostName: me.name })
   }
 
+  // ---- NPC追加/削除(ホスト・待機中のみ) ----
+  const addNpc = () => {
+    if (membersRef.current.length + npcsRef.current.length >= MAX_PLAYERS) { showToast(`最大${MAX_PLAYERS}人です`); return }
+    const used = new Set(npcsRef.current.map((n) => n.name))
+    const name = NPC_NAMES.find((n) => !used.has(n)) || `NPC${npcsRef.current.length + 1}`
+    setNpcs((prev) => [...prev, { id: `npc-${prev.length + 1}-${Date.now() % 100000}`, name: `🤖${name}` }])
+  }
+  const removeNpc = (id) => setNpcs((prev) => prev.filter((n) => n.id !== id))
+
+  // NPC数が変わったらロビーの人数掲示を更新
+  useEffect(() => {
+    if (room && room.hostId === me?.id) publishRoom(game && game.phase !== 'ended' ? 'playing' : 'waiting')
+  }, [npcs]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ---- ゲーム開始(ホスト) ----
   const startGame = () => {
-    const list = membersRef.current.slice(0, MAX_PLAYERS)
-    if (list.length < 2) { showToast('2人以上必要です'); return }
+    const list = [...membersRef.current, ...npcsRef.current].slice(0, MAX_PLAYERS)
+    if (list.length < 2) { showToast('NPCを追加するか、2人以上で開始してください'); return }
     const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0
     const { state, events } = createGame({ players: list, seed })
     setLog([])
@@ -300,6 +322,34 @@ export default function CardGame() {
     }, wait + 300)
     return () => { if (defTimerRef.current) clearTimeout(defTimerRef.current) }
   }, [game, room, me, hostBroadcast])
+
+  // ---- NPC自動進行(ホストが実行) ----
+  useEffect(() => {
+    if (!room || room.hostId !== me?.id || !game || game.phase === 'ended') return
+    let npcId = null
+    if (game.phase === 'defense') {
+      if (isNpcId(game.pendingAttack?.targetId)) npcId = game.pendingAttack.targetId
+    } else if (game.phase === 'main') {
+      const cur = game.players[game.turnIndex]
+      if (cur?.alive && isNpcId(cur.id)) npcId = cur.id
+    }
+    if (!npcId) return
+    const seq = stateSeqRef.current
+    const t = setTimeout(() => {
+      if (stateSeqRef.current !== seq) return // 既に別の手で進行済み
+      const cur = gameRef.current
+      if (!cur || cur.phase === 'ended') return
+      const action = npcChooseAction(cur, npcId)
+      const ok = action ? hostApply(action) : false
+      if (!ok) {
+        // 想定外の手詰まりでもゲームを止めない(パス/素受けで進める)
+        hostApply(cur.phase === 'defense'
+          ? { type: 'defend', playerId: npcId, cardUid: null }
+          : { type: 'pass', playerId: npcId })
+      }
+    }, 1000)
+    return () => clearTimeout(t)
+  }, [game, room, me, hostApply])
 
   // ---- 応戦の残り秒表示 ----
   useEffect(() => {
@@ -432,17 +482,29 @@ export default function CardGame() {
           {!game && (
             <div>
               <div style={{ color: '#ffcc44', fontSize: '13px', marginBottom: '4px' }}>{room.title}</div>
-              <div style={{ fontSize: '11px', color: '#667788', marginBottom: '16px' }}>ホスト: {room.hostName} ／ {members.length}/{MAX_PLAYERS}人</div>
+              <div style={{ fontSize: '11px', color: '#667788', marginBottom: '16px' }}>ホスト: {room.hostName} ／ {members.length + npcs.length}/{MAX_PLAYERS}人</div>
               <div style={{ marginBottom: '20px' }}>
                 {members.map((m, i) => (
                   <div key={m.id} style={{ padding: '8px 12px', border: '1px solid #223355', background: '#001028', marginBottom: '6px', fontSize: '12px' }}>
                     {i + 1}. {m.name} {m.id === room.hostId && <span style={{ color: '#ffcc44', fontSize: '10px' }}>👑 ホスト</span>} {m.id === me.id && <span style={{ color: '#44ddaa', fontSize: '10px' }}>(あなた)</span>}
                   </div>
                 ))}
+                {npcs.map((n, i) => (
+                  <div key={n.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', border: '1px solid #223355', background: '#0a0d20', marginBottom: '6px', fontSize: '12px' }}>
+                    <span>{members.length + i + 1}. {n.name} <span style={{ color: '#8877aa', fontSize: '10px' }}>NPC</span></span>
+                    {room.hostId === me.id && <button onClick={() => removeNpc(n.id)} style={btnStyle('#ff6644', { fontSize: '10px', padding: '2px 8px' })}>外す</button>}
+                  </div>
+                ))}
               </div>
+              {room.hostId === me.id && (
+                <button onClick={addNpc} disabled={members.length + npcs.length >= MAX_PLAYERS}
+                  style={btnStyle(members.length + npcs.length >= MAX_PLAYERS ? '#445566' : '#aa88ff', { width: '100%', padding: '10px', marginBottom: '8px', opacity: members.length + npcs.length >= MAX_PLAYERS ? 0.5 : 1 })}>
+                  🤖 NPCを追加
+                </button>
+              )}
               {room.hostId === me.id
-                ? <button onClick={startGame} disabled={members.length < 2} style={btnStyle(members.length >= 2 ? '#44ddaa' : '#445566', { width: '100%', padding: '12px', fontSize: '14px', opacity: members.length >= 2 ? 1 : 0.5 })}>
-                    ▶ ゲーム開始 {members.length < 2 && '(2人以上必要)'}
+                ? <button onClick={startGame} disabled={members.length + npcs.length < 2} style={btnStyle(members.length + npcs.length >= 2 ? '#44ddaa' : '#445566', { width: '100%', padding: '12px', fontSize: '14px', opacity: members.length + npcs.length >= 2 ? 1 : 0.5 })}>
+                    ▶ ゲーム開始 {members.length + npcs.length < 2 && '(NPC追加でひとりでも遊べます)'}
                   </button>
                 : <div style={{ textAlign: 'center', color: '#667788', fontSize: '12px' }}>ホストの開始を待っています…</div>}
             </div>
