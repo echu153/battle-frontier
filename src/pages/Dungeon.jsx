@@ -340,7 +340,10 @@ export default function Dungeon() {
   const [shield, setShield] = useState(0)         // 結界/障壁＝あと何ターン被ダメ軽減か
   const shieldRateRef = useRef(1)                 // 軽減率（被ダメ×rate）
   const shieldTurnsRef = useRef(0)                // 残ターンの正（stateはrender用。castした同ターンの被弾にも即適用するため）
-  const [zeni, setZeni] = useState(0)                 // ゼニ（ペットダンジョン限定通貨。pet_storageに保存）
+  const [zeni, setZeni] = useState(0)                 // 所持ゼニ（ダンジョンで拾う。戦闘不能で半分ロスト）pet_storage 'zeni'
+  const [zeniBank, setZeniBank] = useState(0)         // 倉庫ゼニ（安全。任意で預け入れ）pet_storage 'zeni_bank'
+  const [zeniMsg, setZeniMsg] = useState('')          // ゼニ倉庫の出し入れ結果メッセージ
+  const [zeniAmt, setZeniAmt] = useState('')          // 出し入れ金額の入力
   const [shop, setShop] = useState(null)              // 秘密の商店 { stock, bought, next } 開店中はnull以外
   const [shopMsg, setShopMsg] = useState('')          // 商店内の購入結果メッセージ（モーダル内に表示）
   const [hitFlash, setHitFlash] = useState(null)      // ボススキル被弾の画面フラッシュ { kind:'skill'|'big', id }
@@ -795,8 +798,9 @@ export default function Dungeon() {
       }
       const { data: its } = await supabase.from('pet_items').select('item_key, qty').eq('owner_id', user.id)
       setInventory(Object.fromEntries((its || []).map((r) => [r.item_key, r.qty])))
-      const { data: zrow } = await supabase.from('pet_storage').select('qty').eq('owner_id', user.id).eq('item_key', 'zeni').maybeSingle()
-      setZeni(zrow?.qty || 0)
+      const { data: zrows } = await supabase.from('pet_storage').select('item_key, qty').eq('owner_id', user.id).in('item_key', ['zeni', 'zeni_bank'])
+      setZeni((zrows || []).find((r) => r.item_key === 'zeni')?.qty || 0)
+      setZeniBank((zrows || []).find((r) => r.item_key === 'zeni_bank')?.qty || 0)
       // クリア済みダンジョン（開放判定用）
       const { data: cl } = await supabase.from('dungeon_runs').select('dungeon_id').eq('owner_id', user.id).eq('cleared', true)
       if (cl) setCleared(new Set(cl.map((r) => r.dungeon_id)))
@@ -874,6 +878,23 @@ export default function Dungeon() {
     setRegen(0); regenAmtRef.current = 0
     setPetAtkUp(0)
   }, [])
+
+  // ---- ゼニ倉庫：所持(zeni)⇔倉庫(zeni_bank)の出し入れ（街＝ダンジョン選択画面でのみ操作） ----
+  //   預ける=所持を倉庫へ（安全化）／引き出す=倉庫を所持へ（ダンジョンで使う分）
+  const moveZeni = async (dir, amount) => {
+    const amt = Math.floor(Number(amount))
+    if (!Number.isFinite(amt) || amt <= 0) { setZeniMsg('金額を入力してください'); return }
+    const rpc = dir === 'deposit' ? 'zeni_deposit' : 'zeni_withdraw'
+    const { data, error } = await supabase.rpc(rpc, { p_amount: amt })
+    if (error || !data) {
+      const m = error?.message || ''
+      setZeniMsg(m.includes('not enough') ? (dir === 'deposit' ? '所持ゼニが足りません' : '倉庫のゼニが足りません') : '処理できませんでした')
+      return
+    }
+    setZeni(data.zeni ?? 0); setZeniBank(data.zeni_bank ?? 0)
+    setZeniMsg(dir === 'deposit' ? `🪙 ${data.moved ?? amt} を倉庫へ預けた` : `🪙 ${data.moved ?? amt} を引き出した`)
+    setZeniAmt('')
+  }
 
   // ダンジョンを選んで開始（startFloor=途中階スタート。踏破済みダンジョンで最終階の1つ手前まで選べる）
   const beginDungeon = (d, startFloor = 1, confirmed = false) => {
@@ -1863,6 +1884,28 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
               {Object.values(inventory).every((q) => (q || 0) < 1) && <span style={{ color: '#445566', fontSize: 11 }}>（なし）</span>}
             </div>
             <div style={{ marginTop: 6, textAlign: 'right' }}><Btn onClick={() => nav('/pet-storage')}>🏬 倉庫で入れ替える</Btn></div>
+          </div>
+
+          {/* ゼニ倉庫：所持ゼニは戦闘不能で半分失う。倉庫に預けた分は安全 */}
+          <div style={{ background: '#0e0a00', border: '1px solid #8a6a1a', padding: 10, marginBottom: 12 }}>
+            <div style={{ color: '#ffd75e', fontSize: 12, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <img src={petItemImg('zeni')} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} /> ゼニ倉庫
+            </div>
+            <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+              <span style={{ color: '#e6c06c' }}>所持 <b style={{ color: '#ffe08a' }}>{zeni}</b> <span style={{ color: '#997a3a', fontSize: 10 }}>（やられると半分ロスト）</span></span>
+              <span style={{ color: '#7fbf9a' }}>倉庫 <b style={{ color: '#a6e6c2' }}>{zeniBank}</b> <span style={{ color: '#5a8a70', fontSize: 10 }}>（安全）</span></span>
+            </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input type="number" min="1" inputMode="numeric" value={zeniAmt} onChange={(e) => setZeniAmt(e.target.value)} placeholder="金額"
+                style={{ width: 90, background: '#0a1424', border: '1px solid #335588', color: '#cce6ff', fontFamily: 'monospace', fontSize: 12, padding: '4px 6px' }} />
+              <button onClick={() => moveZeni('deposit', zeniAmt)}
+                style={{ background: '#0a1a14', border: '1px solid #2a7a55', color: '#7fe6b0', padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>預ける ▸</button>
+              <button onClick={() => moveZeni('withdraw', zeniAmt)}
+                style={{ background: '#1a1408', border: '1px solid #8a6a1a', color: '#ffd75e', padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>◂ 引き出す</button>
+              <button onClick={() => moveZeni('deposit', zeni)} disabled={zeni <= 0}
+                style={{ background: '#0a1424', border: '1px solid #335588', color: zeni > 0 ? '#88aacc' : '#445566', padding: '4px 8px', cursor: zeni > 0 ? 'pointer' : 'default', fontFamily: 'monospace', fontSize: 11 }}>全部預ける</button>
+            </div>
+            {zeniMsg && <div style={{ color: '#e6c06c', fontSize: 11, marginTop: 6 }}>{zeniMsg}</div>}
           </div>
 
           <div style={{ display: 'grid', gap: 10 }}>
