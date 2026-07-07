@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmDropsFor, charmIcon, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, bossFor, dgBgm, sumSpecials, assetSrc, ASSET_VER, STARTERS } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmDropsFor, charmIcon, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, bossFor, dgBgm, sumSpecials, assetSrc, ASSET_VER, STARTERS, areaForFloor } from '../constants/pets'
 import Boss60Sprite from '../components/Boss60Sprite'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
@@ -28,6 +28,15 @@ const MAX_FULLNESS = 100      // 満腹度の上限（100スタート）
 const HP_REGEN_EVERY = 10     // 満腹なら10ターンごとにHP+1
 const FULLNESS_EVERY = 10     // 10ターンごとに満腹度-1
 const SPAWN_EVERY = 40        // 40ターンごとに敵が1体湧く
+// ---- 天候（五霊の大峡谷のエリア⑤⑥⑦。フロア進入時に40%で発生。エフェクトはごく薄く）----
+//  fog=霧: 敵味方の命中-10% / cold=極寒: 移動の満腹消費2倍 / scorch=灼熱: 15ターン毎に現HPの5%自傷
+const WEATHER_CHANCE = 0.4
+const WEATHER = {
+  fog:    { area: 5, name: '霧',   emoji: '🌫', tint: 'rgba(235,240,245,0.14)', log: '🌫 あたりに白い霧が立ちこめている…（命中-10%）' },
+  cold:   { area: 6, name: '極寒', emoji: '❄', tint: 'rgba(150,200,235,0.12)', log: '❄ 凍てつく寒さだ…（移動での満腹消費が増える）' },
+  scorch: { area: 7, name: '灼熱', emoji: '🔥', tint: 'rgba(235,120,60,0.11)',  log: '🔥 焼けつくような熱気…（15ターンごとにHPが削れる）' },
+}
+const weatherForArea = (area) => Object.keys(WEATHER).find((k) => WEATHER[k].area === area) || null
 const SPAWN_CAP = 12          // フロアの敵がこの数以上なら湧かせない（過密防止）
 // 状態異常
 const PARALYZE_TURNS = 5      // 麻痺の持続ターン
@@ -333,6 +342,8 @@ export default function Dungeon() {
   const [petHp, setPetHp] = useState(FALLBACK_PET.maxHp)
   const [turns, setTurns] = useState(0)
   const [fullness, setFullness] = useState(MAX_FULLNESS)
+  const [weather, setWeather] = useState(null)   // 現フロアの天候（'fog'|'cold'|'scorch'|null）
+  const weatherRef = useRef(null)                // 戦闘/ターン処理から参照（stale回避）
   const [poisoned, setPoisoned] = useState(false) // 毒状態（次フロアで回復）
   const [paralyzed, setParalyzed] = useState(0)   // 麻痺＝あと何ターン麻痺するか（攻撃が確率で失敗）
   const [burned, setBurned] = useState(false)     // やけど（次フロアで回復・攻撃/特攻ダウン）
@@ -612,6 +623,16 @@ export default function Dungeon() {
     const tid2 = setTimeout(() => setCheer((c) => (c === id ? 0 : c)), 1000)
     turnTimers.current.push(tid, tid2)
   }
+  // ダンジョンクリア／ボス撃破の演出（大きく「ダンジョンクリア！」がポップ）
+  const [clearAnim, setClearAnim] = useState(null) // { id, boss }
+  const clearAnimSeq = useRef(0)
+  const triggerClearAnim = (boss = false) => {
+    clearAnimSeq.current += 1
+    const id = clearAnimSeq.current
+    setClearAnim({ id, boss })
+    const tid = setTimeout(() => setClearAnim((c) => (c && c.id === id ? null : c)), 2600)
+    turnTimers.current.push(tid)
+  }
   // スキルの書の発動エフェクト（攻撃=対象マスに絵文字バースト＋リング / 自分バフ=オーラ＋絵文字上昇）
   const [scrollFx, setScrollFx] = useState(null) // { id, emoji, cells: [{x,y}], self }
   const scrollFxSeq = useRef(0)
@@ -883,6 +904,7 @@ export default function Dungeon() {
           if (typeof sv.sinceShop === 'number') sinceShopRef.current = sv.sinceShop
           if (typeof sv.shopAt === 'number') shopAtRef.current = sv.shopAt
           if (typeof sv.startFloor === 'number') startFloorRef.current = sv.startFloor
+          if (sv.weather !== undefined) { weatherRef.current = sv.weather; setWeather(sv.weather) }
           if (sv.shop) { shopRef.current = sv.shop; setShop(sv.shop) }
           if (Array.isArray(sv.lootBag)) setLootBag(sv.lootBag)
           setState({ ...sv.state, explored: new Set(sv.state.explored) })
@@ -910,6 +932,12 @@ export default function Dungeon() {
     setShield(0); shieldTurnsRef.current = 0; shieldRateRef.current = 1   // バフも次フロアで切れる
     setRegen(0); regenAmtRef.current = 0
     setPetAtkUp(0)
+    // 天候ロール（d60のエリア⑤⑥⑦・ボス階を除く。40%で発生）
+    const isBoss = num >= (dg?.floors || 10)
+    const wk = isBoss ? null : weatherForArea(areaForFloor(dg, num))
+    const w = (wk && Math.random() < WEATHER_CHANCE) ? wk : null
+    weatherRef.current = w; setWeather(w)
+    if (w) addLog(WEATHER[w].log)
   }, [])
 
   // ---- ゼニ倉庫：所持(zeni)⇔倉庫(zeni_bank)の出し入れ（街＝ダンジョン選択画面でのみ操作） ----
@@ -970,7 +998,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
       const sv = {
         runId: runIdRef.current, dungeonId: dungeon?.id, floorNum, petHp, fullness, turns,
         selectedSkill, inventory, lootBag, kills: enemiesRef.current, floorsCleared: floorsRef.current, itemsCollected: itemsRef.current,
-        sinceShop: sinceShopRef.current, shopAt: shopAtRef.current, startFloor: startFloorRef.current, shop,
+        sinceShop: sinceShopRef.current, shopAt: shopAtRef.current, startFloor: startFloorRef.current, shop, weather: weatherRef.current,
         state: { ...state, explored: [...state.explored] },
       }
       try { localStorage.setItem(key, JSON.stringify(sv)) } catch { /* 容量超過などは無視 */ }
@@ -1071,6 +1099,16 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
         return
       }
       fullCost = cost
+      // 霧：命中-10%（満腹は消費し1ターン経過。麻痺と同じ扱いで空振り）
+      if (weatherRef.current === 'fog' && Math.random() < 0.1) {
+        addLog('🌫 霧で攻撃が外れた！')
+        applyFx({ pet: { lunge: { dx, dy } } })
+        setState({ ...s })
+        busyRef.current = true
+        const tid = setTimeout(() => commitTurn(s, s.player, s.enemies, curPetHp, fullCost), BREATH_MS)
+        turnTimers.current.push(tid)
+        return
+      }
       playSe('kougeki') // 攻撃SE
       const hits = sk.hits || 1
       // たいあたりは攻撃(物理)と特攻(特殊)の高いほうを参照（チャーム成長を両方活かせる）。
@@ -1141,6 +1179,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
       if (killed && target.boss && target.phase >= bossDef.phases.length - 1) {
         // ボス討伐＝ダンジョンクリア。神秘の欠片を確定ドロップ
         setStatus('cleared'); addLog(`🏁 ${target.name}を討伐！ダンジョンクリア！`); enemiesRef.current += 1
+        triggerClearAnim(true); playSe('kaidan')
         grantKill(floorNum, target.name, px, py)
         setState({ ...s, player, enemies: enemies.filter((e) => e.id !== target.id) })
         if (dungeon) setCleared((c) => new Set(c).add(dungeon.id))
@@ -1251,7 +1290,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
       if (player.x === s.stairs.x && player.y === s.stairs.y) {
         floorsRef.current += 1
         playSe('kaidan') // 階段SE
-        if (floorNum >= (dungeon?.floors || 10)) { setStatus('cleared'); addLog('🏁 最深部を踏破！ダンジョンクリア！'); setState({ ...s, player }); if (dungeon) setCleared((c) => new Set(c).add(dungeon.id)); finishRun(true); return }
+        if (floorNum >= (dungeon?.floors || 10)) { setStatus('cleared'); addLog('🏁 最深部を踏破！ダンジョンクリア！'); triggerClearAnim(false); setState({ ...s, player }); if (dungeon) setCleared((c) => new Set(c).add(dungeon.id)); finishRun(true); return }
         // 秘密の商店：10〜20フロア進むごとに階段の途中で入る（フロア数にはカウントしない）
         // カウントはラン開始フロアを除外し、ダンジョン離脱後も引き継ぐ
         if (floorNum !== startFloorRef.current) { sinceShopRef.current += 1; saveShopCnt() }
@@ -1331,6 +1370,11 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
       const dodgePct = (charmHasEffect(pet.charm, 'evade') ? 5 : 0) + (sumSpecials(pet.charm, pet.ribbon).evade || 0)
       if (canAttack && dodgePct > 0 && Math.random() < dodgePct / 100) {
         addLog(`💨 ${e.name}の攻撃を回避した！`, 'right')
+        return { ...e, atkDown: Math.max(0, (e.atkDown || 0) - 1), defDown: Math.max(0, (e.defDown || 0) - 1) }
+      }
+      // 霧：敵の命中も-10%（外れると空振り）
+      if (canAttack && weatherRef.current === 'fog' && Math.random() < 0.1) {
+        addLog(`🌫 霧で${e.name}の攻撃が外れた！`, 'right')
         return { ...e, atkDown: Math.max(0, (e.atkDown || 0) - 1), defDown: Math.max(0, (e.defDown || 0) - 1) }
       }
       // ボス第2形態は物理/特殊ミックス（攻撃ごとにランダム）
@@ -1471,7 +1515,8 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
       let curHp = hp
       let nextFull = Math.max(0, Math.min(MAX_FULLNESS, fullness - fullCost)) // スキル消費/食料回復を反映
       if (!dead) {
-        if (nextTurns % FULLNESS_EVERY === 0 && nextFull > 0) { nextFull -= 1; if (nextFull === 0) addLog('🍖 満腹度が0になった…！') }
+        // 極寒：満腹の自然減が2倍（移動での消費増。スキル消費fullCostは通常どおり）
+        if (nextTurns % FULLNESS_EVERY === 0 && nextFull > 0) { nextFull = Math.max(0, nextFull - (weatherRef.current === 'cold' ? 2 : 1)); if (nextFull === 0) addLog('🍖 満腹度が0になった…！') }
         if (nextFull <= 0) {
           curHp -= 1; addLog('🥀 空腹で1ダメージ'); popDmg(player.x, player.y, 1, { follow: true })
           if (curHp <= 0) dead = true
@@ -1488,6 +1533,12 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
         if (burned && nextTurns % BURN_INTERVAL === 0) {
           const bd = Math.max(1, Math.ceil(pet.maxHp * BURN_PCT))
           curHp -= bd; addLog(`🔥 やけどで${bd}ダメージ`); popDmg(player.x, player.y, bd, { follow: true })
+          if (curHp <= 0) dead = true
+        }
+        // 灼熱：15ターンごとに現在HPの5%ダメージ（自分だけ・次フロアで消える）
+        if (weatherRef.current === 'scorch' && nextTurns % 15 === 0) {
+          const hd = Math.max(1, Math.ceil(curHp * 0.05))
+          curHp -= hd; addLog(`🔥 灼熱で${hd}ダメージ`); popDmg(player.x, player.y, hd, { follow: true })
           if (curHp <= 0) dead = true
         }
         // 聖域：毎ターン回復
@@ -1735,6 +1786,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
         }
         // 最終形態を書で撃破＝ダンジョンクリア
         setStatus('cleared'); addLog(`🏁 ${cur.name}を討伐！ダンジョンクリア！`); enemiesRef.current += 1
+        triggerClearAnim(true); playSe('kaidan')
         grantKill(floorNum, cur.name, px, py)
         setState({ ...state, enemies: enemies.filter((e) => e.id !== cur.id) })
         if (dungeon) setCleared((c) => new Set(c).add(dungeon.id))
@@ -1874,7 +1926,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
         const sv = {
           runId: runIdRef.current, dungeonId: dungeon?.id, floorNum, petHp, fullness, turns,
           selectedSkill, inventory, lootBag, kills: enemiesRef.current, floorsCleared: floorsRef.current, itemsCollected: itemsRef.current,
-        sinceShop: sinceShopRef.current, shopAt: shopAtRef.current, startFloor: startFloorRef.current, shop,
+        sinceShop: sinceShopRef.current, shopAt: shopAtRef.current, startFloor: startFloorRef.current, shop, weather: weatherRef.current,
           state: { ...state, explored: [...state.explored] },
         }
         try { localStorage.setItem(saveKey(), JSON.stringify(sv)) } catch { /* 容量超過は無視 */ }
@@ -2096,6 +2148,21 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
         @keyframes bf-hitflash {
           0% { opacity: 1; } 100% { opacity: 0; }
         }
+        @keyframes bf-clearpop {
+          0%   { transform: translate(-50%,-50%) scale(0.3); opacity: 0; }
+          18%  { transform: translate(-50%,-50%) scale(1.18); opacity: 1; }
+          32%  { transform: translate(-50%,-50%) scale(0.96); }
+          46%  { transform: translate(-50%,-50%) scale(1.04); }
+          60%  { transform: translate(-50%,-50%) scale(1); opacity: 1; }
+          100% { transform: translate(-50%,-58%) scale(1); opacity: 0; }
+        }
+        @keyframes bf-clearsheen {
+          0% { transform: translateX(-120%); } 100% { transform: translateX(120%); }
+        }
+        @keyframes bf-clearspark {
+          0% { transform: scale(0.2); opacity: 0; }
+          40% { opacity: 1; } 100% { transform: scale(1.6); opacity: 0; }
+        }
         @keyframes bf-hitflash-big {
           0% { opacity: 1; } 55% { opacity: 0.85; } 100% { opacity: 0; }
         }
@@ -2302,9 +2369,15 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
             <div style={{ position: 'absolute', inset: 6, zIndex: 0, pointerEvents: 'none',
               background: 'radial-gradient(ellipse 60% 60% at 50% 50%, rgba(255,210,130,0.16) 0%, rgba(0,0,0,0) 45%), radial-gradient(ellipse 75% 75% at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,2,8,0.72) 100%)' }} />
           )}
+          {/* 天候エフェクト：全体にごく薄いティントを重ねるだけ（プレイの邪魔にならない） */}
+          {weather && (
+            <div style={{ position: 'absolute', inset: 6, zIndex: 4, pointerEvents: 'none', background: WEATHER[weather].tint,
+              mixBlendMode: weather === 'fog' ? 'screen' : 'normal' }} />
+          )}
           {/* ステータス表示（マップ上部に重ねる）。2段目に状態異常（異常時のみ） */}
           {(() => {
             const chips = []
+            if (weather) chips.push({ k: 'weather', label: `${WEATHER[weather].emoji} ${WEATHER[weather].name}`, col: '#cfe3f2' })
             if (poisoned) chips.push({ k: 'poison', label: '☠ 毒', col: '#cc77ff' })
             if (paralyzed > 0) chips.push({ k: 'para', label: `⚡ 麻痺 残${paralyzed}`, col: '#ffe066' })
             if (burned) chips.push({ k: 'burn', label: '🔥 やけど', col: '#ff7755' })
@@ -2532,6 +2605,29 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                 ? 'radial-gradient(ellipse at center, rgba(255,40,30,0.38) 0%, rgba(130,0,0,0.55) 100%)'
                 : 'radial-gradient(ellipse at center, rgba(255,190,80,0.22) 0%, rgba(140,70,0,0.30) 100%)',
               animation: hitFlash.kind === 'big' ? 'bf-hitflash-big 0.6s ease-out forwards' : 'bf-hitflash 0.32s ease-out forwards' }} />
+          )}
+          {/* ダンジョンクリア／ボス撃破の演出：中央に大きくポップ（レベルアップ演出の華やか版） */}
+          {clearAnim && (
+            <div key={clearAnim.id} style={{ position: 'absolute', inset: 0, zIndex: 16, pointerEvents: 'none', overflow: 'hidden' }}>
+              {/* 放射スパーク */}
+              <div style={{ position: 'absolute', left: '50%', top: '50%', width: 260, height: 260, transform: 'translate(-50%,-50%)',
+                background: 'radial-gradient(circle, rgba(255,225,120,0.30) 0%, rgba(255,180,60,0.10) 40%, rgba(0,0,0,0) 70%)',
+                animation: 'bf-clearspark 0.9s ease-out forwards' }} />
+              <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)',
+                animation: 'bf-clearpop 2.6s ease-out forwards', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                {clearAnim.boss && <div style={{ color: '#ffd24a', fontSize: 15, letterSpacing: 4, marginBottom: 4, textShadow: '0 0 8px rgba(255,150,0,0.8)' }}>★ BOSS DEFEATED ★</div>}
+                <div style={{ position: 'relative', display: 'inline-block', padding: '8px 20px', borderRadius: 10,
+                  border: '2px solid #ffcc44', background: 'linear-gradient(180deg, rgba(30,16,60,0.92), rgba(12,6,28,0.92))',
+                  color: '#fff2b0', fontSize: 30, fontWeight: 'bold', letterSpacing: 3, overflow: 'hidden',
+                  textShadow: '0 0 12px rgba(255,190,60,0.9), 0 2px 4px rgba(0,0,0,0.8)', boxShadow: '0 0 24px rgba(255,180,60,0.6)' }}>
+                  🏁 ダンジョンクリア！
+                  {/* きらめきスイープ */}
+                  <div style={{ position: 'absolute', top: 0, bottom: 0, width: '40%',
+                    background: 'linear-gradient(100deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0) 100%)',
+                    animation: 'bf-clearsheen 1.1s ease-in-out 0.25s forwards' }} />
+                </div>
+              </div>
+            </div>
           )}
           {/* フロア遷移演出：暗転＋「ダンジョン名 フロア数」 */}
           {transition && (
