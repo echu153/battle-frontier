@@ -662,9 +662,13 @@ export default function Dungeon() {
   const spawnSeq = useRef(0) // 湧いた敵の連番ID用
   const dropSeq = useRef(0)  // 床に置いたアイテムの連番ID用
   const turnTimers = useRef([])
+  const transTimers = useRef([])  // フロア遷移演出(暗幕)のタイマー。重複時に前回分をクリアして黒幕残りを防ぐ
+  const clearTransTimers = () => { transTimers.current.forEach(clearTimeout); transTimers.current = [] }
+  const initedRef = useRef(false) // マウント初期化(ペット読込＋探索復元)を1回だけに(再実行で技リセット/暗転残りを防ぐ)
   useEffect(() => () => {
     if (shakeTimer.current) clearTimeout(shakeTimer.current)
     turnTimers.current.forEach(clearTimeout)
+    transTimers.current.forEach(clearTimeout)
   }, [])
   const BREATH_MS = 340 // 体当たり後、敵が反撃してくるまでの一呼吸
 
@@ -823,7 +827,9 @@ export default function Dungeon() {
   }, [lootBag])
 
   useEffect(() => {
-    (async () => {
+    if (initedRef.current) return // 初期化は1回だけ（再実行で選択スキルが戻る/暗転が残る不具合を防ぐ）
+    initedRef.current = true
+    ;(async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { nav('/login'); return }
       userIdRef.current = user.id
@@ -1054,13 +1060,15 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
   // フロア遷移演出：階段フェードアウト→暗転→「ダンジョン名 フロア数」を1秒表示→フェードインでフロア表示
   const descendFloor = (next) => {
     busyRef.current = true
+    clearTransTimers() // 進行中の暗転演出があれば止める（重複で黒幕が残るのを防ぐ）
     const hold = isBossFloor(dungeon?.id, next) ? 5000 : 1000 // ボスフロアは長めに見せる
     setTransition({ floor: next, black: 0, title: 0, name: dungeon?.name, emoji: dungeon?.emoji, boss: isBossFloor(dungeon?.id, next) })
-    setTimeout(() => setTransition((t) => t && { ...t, black: 1 }), 30)                 // 暗転フェードイン
-    setTimeout(() => { setFloorNum(next); enterFloor(next, dungeon); setTransition((t) => t && { ...t, title: 1 }) }, 470) // 完全暗転でフロア差替＋タイトル表示
-    setTimeout(() => setTransition((t) => t && { ...t, title: 0 }), 470 + hold)          // タイトルフェードアウト
-    setTimeout(() => setTransition((t) => t && { ...t, black: 0 }), 470 + hold + 450)    // 暗転フェードアウト＝フロア出現
-    setTimeout(() => { setTransition(null); busyRef.current = false }, 470 + hold + 450 + 470)
+    const T = transTimers.current
+    T.push(setTimeout(() => setTransition((t) => t && { ...t, black: 1 }), 30))                 // 暗転フェードイン
+    T.push(setTimeout(() => { setFloorNum(next); enterFloor(next, dungeon); setTransition((t) => t && { ...t, title: 1 }) }, 470)) // 完全暗転でフロア差替＋タイトル表示
+    T.push(setTimeout(() => setTransition((t) => t && { ...t, title: 0 }), 470 + hold))          // タイトルフェードアウト
+    T.push(setTimeout(() => setTransition((t) => t && { ...t, black: 0 }), 470 + hold + 450))    // 暗転フェードアウト＝フロア出現
+    T.push(setTimeout(() => { setTransition(null); busyRef.current = false }, 470 + hold + 450 + 470))
   }
 
   // ダンジョン入場/再開時にも同じ「ダンジョン名 フロア数」演出を出す（フロアは差し替えず現在のまま）。
@@ -1068,11 +1076,20 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
   const playFloorIntro = (floor, dg) => {
     const meta = dg || dungeon
     busyRef.current = true
+    clearTransTimers() // 進行中の暗転演出があれば止める（黒幕が残るのを防ぐ）
     setTransition({ floor, black: 1, title: 1, name: meta?.name, emoji: meta?.emoji })
-    setTimeout(() => setTransition((t) => t && { ...t, title: 0 }), 1000)               // タイトルフェードアウト
-    setTimeout(() => setTransition((t) => t && { ...t, black: 0 }), 1000 + 450)          // 暗転フェードアウト＝フロア出現
-    setTimeout(() => { setTransition(null); busyRef.current = false }, 1000 + 450 + 470)
+    const T = transTimers.current
+    T.push(setTimeout(() => setTransition((t) => t && { ...t, title: 0 }), 1000))               // タイトルフェードアウト
+    T.push(setTimeout(() => setTransition((t) => t && { ...t, black: 0 }), 1000 + 450))          // 暗転フェードアウト＝フロア出現
+    T.push(setTimeout(() => { setTransition(null); busyRef.current = false }, 1000 + 450 + 470))
   }
+
+  // 暗転(黒幕)が異常に長引いたら強制解除する保険（バックグラウンド放置等でタイマーが飛んで黒画面が残る対策）
+  useEffect(() => {
+    if (!transition) return
+    const tid = setTimeout(() => { setTransition(null); busyRef.current = false }, 8000)
+    return () => clearTimeout(tid)
+  }, [transition])
 
   const tryMove = (dx, dy) => {
     ensureBgm() // 操作時にBGM再生を確実に開始（自動再生ブロック対策）
