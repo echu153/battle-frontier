@@ -386,12 +386,12 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* ペット（公開読み取りで他人のも表示） */}
-        {pets.length > 0 && (
+        {/* ペット（公開読み取りで他人のも表示）。選択中のペットのみ表示 */}
+        {(() => { const shown = pets.filter(pt => pt.is_active); return shown.length > 0 && (
           <div style={{ border:'1px solid #5a3a8a', background:'#0c0820', padding:'12px' }}>
             <div style={{ color:'#aa88ff', fontSize:'12px', marginBottom:'8px' }}>🐾 ペット</div>
             <div style={{ display:'grid', gap:'8px' }}>
-              {pets.map(pet => {
+              {shown.map(pet => {
                 const charm = petCharms.find(c => c.id === pet.charm_id)
                 const st = applyCharmStats(petStats(pet), charm)
                 const src = petImage(pet)
@@ -408,7 +408,7 @@ export default function Profile() {
               })}
             </div>
           </div>
-        )}
+        ) })()}
 
         {/* スキルセット */}
         <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
