@@ -177,19 +177,19 @@ export default function Charms() {
     if ((seeds.shard || 0) < 1) { flash('神秘の欠片が足りません'); return }
     const b = charms.find((c) => c.id === fuseBase); const m = charms.find((c) => c.id === fuseMat)
     const isRibbonFuse = m && isRibbonType(m.ctype)
-    if (isRibbonFuse && (seeds.zeni || 0) < 10000) { flash('ゼニが足りません（リボン合成は🪙10000必要）'); return }
+    if (isRibbonFuse && (seeds.zeni || 0) < 10000) { flash('ゼニが足りません（リボン融合は🪙10000必要）'); return }
     setLoading(true)
     const { error } = isRibbonFuse
       ? await supabase.rpc('pet_charm_fuse_ribbon', { p_charm: fuseBase, p_ribbon: fuseMat })
       : await supabase.rpc('pet_charm_fuse', { p_base: fuseBase, p_mat: fuseMat })
     setLoading(false)
-    if (error) { flash('合成に失敗: ' + error.message); return }
+    if (error) { flash((isRibbonFuse ? '融合' : '合成') + 'に失敗: ' + error.message); return }
     const resultName = isRibbonFuse
       ? `${RIBBON_TAG[m.ctype] || ''}${getCharm(b.ctype).short}と${getCharm(b.ctype2).short}のチャーム`
       : (b && m ? `${getCharm(b.ctype).short}と${getCharm(m.ctype).short}のチャーム` : 'チャーム')
     setFuseBase(null); setFuseMat(null)
     await load()
-    setFuseDone(resultName)
+    setFuseDone({ name: resultName, ribbon: isRibbonFuse })
     setTimeout(() => setFuseDone(null), 2200)
   }
 
@@ -214,7 +214,7 @@ export default function Charms() {
     if (error) { flash('解除に失敗: ' + error.message); return }
     setFuseBase(null); setFuseMat(null)
     await load()
-    flash('リボン合成を解除しました（リボンが戻りました）')
+    flash('リボン融合を解除しました（リボンが戻りました）')
   }
 
   const Btn = ({ children, onClick, dim }) => (
@@ -372,7 +372,7 @@ export default function Charms() {
 
         {tab === 'fuse' && pures.length > 0 && (
           <div style={{ border: '1px solid #663388', background: '#0e0820', padding: 12 }}>
-            <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔮 神秘の欠片1つで2つの素材を1つのチャームに（効果も両方引継ぎ・成長は合算で合計300まで）。<span style={{ color: '#ff8866' }}>素材2つは無くなり1つにまとまります。</span><br />🎀 <span style={{ color: '#ffd75e' }}>合成済みチャーム＋リボン</span>はさらに合成可能（欠片1＋🪙10000）。装備名の先頭に【物理】等が付き、リボンの効果と＋値を引き継ぎます。リボン同士は合成不可。</div>
+            <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔮 神秘の欠片1つで2つの素材を1つのチャームに（効果も両方引継ぎ・成長は合算で合計300まで）。<span style={{ color: '#ff8866' }}>素材2つは無くなり1つにまとまります。</span><br />🎀 <span style={{ color: '#ffd75e' }}>合成済みチャーム＋リボン</span>は「融合」できます（欠片1＋🪙10000）。装備名の先頭に【物理】等が付き、リボンの効果と＋値を引き継ぎます。リボン同士は融合不可。</div>
             {[['base', '素材①（残す側）', fuseBase, setFuseBase], ['mat', '素材②（消える側）', fuseMat, setFuseMat]].map(([key, label, val, setter]) => (
               <div key={key} style={{ marginBottom: 10 }}>
                 <div style={{ color: '#9977cc', fontSize: 11, marginBottom: 4 }}>{label}</div>
@@ -408,7 +408,7 @@ export default function Charms() {
                 const nm = `${RIBBON_TAG[m.ctype] || ''}${getCharm(b.ctype).short}と${getCharm(b.ctype2).short}のチャーム`
                 return (
                   <div style={{ border: '1px solid #ffaa66', background: '#20140a', padding: 10, marginBottom: 10, fontSize: 11, color: '#cce6ff' }}>
-                    <div style={{ color: '#ffcc66', marginBottom: 4 }}>➡ リボン合成結果（欠片1＋🪙10000）</div>
+                    <div style={{ color: '#ffcc66', marginBottom: 4 }}>➡ リボン融合結果（欠片1＋🪙10000）</div>
                     <div>🎀 {nm}＋{baseT + ribT}</div>
                     <div style={{ color: '#88bbee', marginTop: 2 }}>本体（上限300）: HP+{(b.hp || 0) * CHARM_HP_PER} / 攻+{b.atk || 0} / 特攻+{b.spatk || 0} / 防+{b.def || 0} / 特防+{b.spdef || 0}</div>
                     <div style={{ color: '#ff9ed0', marginTop: 2 }}>リボン枠（別枠・上限300）: HP+{(m.hp || 0) * CHARM_HP_PER} / 攻+{m.atk || 0} / 特攻+{m.spatk || 0} / 防+{m.def || 0} / 特防+{m.spdef || 0}</div>
@@ -432,7 +432,8 @@ export default function Charms() {
                 </div>
               )
             })()}
-            <Btn onClick={() => !loading && doFuse()}>🔮 合成する（欠片×{seeds.shard || 0}{(() => { const m = charms.find((c) => c.id === fuseMat); return m && isRibbonType(m.ctype) ? ` / 🪙${seeds.zeni || 0}` : '' })()}）</Btn>
+            {(() => { const m = charms.find((c) => c.id === fuseMat); const rib = m && isRibbonType(m.ctype)
+              return <Btn onClick={() => !loading && doFuse()}>{rib ? '🎀 融合する' : '🔮 合成する'}（欠片×{seeds.shard || 0}{rib ? ` / 🪙${seeds.zeni || 0}` : ''}）</Btn> })()}
 
             {/* 合成解除 */}
             {pures.some((c) => c.fused) && (
@@ -456,7 +457,7 @@ export default function Charms() {
             {/* リボン合成の解除（合成と同じ素材：欠片1＋ゼニ10000。リボンが元の種類で戻る） */}
             {pures.some((c) => c.ctype3) && (
               <div style={{ marginTop: 14, borderTop: '1px solid #664422', paddingTop: 10 }}>
-                <div style={{ color: '#ffcc66', fontSize: 11, marginBottom: 8 }}>🎀 リボン合成の解除（欠片1＋🪙10000）。リボンが元の種類で戻ります。<span style={{ color: '#ff8866' }}>チャームの成長値は残りますが、特殊能力（フェイトコア抽選）は全て消えます。</span></div>
+                <div style={{ color: '#ffcc66', fontSize: 11, marginBottom: 8 }}>🎀 リボン融合の解除（欠片1＋🪙10000）。リボンが元の種類で戻ります。<span style={{ color: '#ff8866' }}>チャームの成長値は残りますが、特殊能力（フェイトコア抽選）は全て消えます。</span></div>
                 {pures.filter((c) => c.ctype3).map((c) => {
                   const can = (seeds.shard || 0) >= 1 && (seeds.zeni || 0) >= 10000
                   return (
@@ -476,7 +477,7 @@ export default function Charms() {
         {tab === 'reroll' && (
           <div style={{ border: '1px solid #886633', background: '#1a1204', padding: 12 }}>
             <div style={{ color: '#ffd75e', fontSize: 11, marginBottom: 6 }}>
-              🧬 フェイトコア1個で、選んだチャーム/リボンの<span style={{ color: '#88ffaa' }}>特殊能力を全枠再抽選</span>します。枠数は構成数（単体=1／合成=2／リボン合成済み=3）。特殊能力はペットとプレイヤー両方に効きます。
+              🧬 フェイトコア1個で、選んだチャーム/リボンの<span style={{ color: '#88ffaa' }}>特殊能力を全枠再抽選</span>します。枠数は構成数（単体=1／合成=2／リボン融合済み=3）。特殊能力はペットとプレイヤー両方に効きます。
             </div>
             <div style={{ color: '#cc9944', fontSize: 12, marginBottom: 10 }}>🧬 フェイトコア×{seeds.fatecore || 0}<span style={{ color: '#775533', fontSize: 10 }}>（五霊の大峡谷の60Fボス討伐で入手）</span></div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
@@ -575,9 +576,9 @@ export default function Charms() {
       {fuseDone && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', fontFamily: 'monospace', pointerEvents: 'none' }}>
           <div style={{ textAlign: 'center', animation: 'bf-fuse-pop 0.5s ease-out' }}>
-            <div style={{ fontSize: 52, marginBottom: 6 }}>✨🔮✨</div>
-            <div style={{ color: '#ffe680', fontSize: 20, letterSpacing: 2, textShadow: '0 0 12px #aa77ff' }}>合成完了！</div>
-            <div style={{ color: '#c9b6ff', fontSize: 15, marginTop: 8 }}>🧿 {fuseDone}</div>
+            <div style={{ fontSize: 52, marginBottom: 6 }}>{fuseDone.ribbon ? '✨🎀✨' : '✨🔮✨'}</div>
+            <div style={{ color: '#ffe680', fontSize: 20, letterSpacing: 2, textShadow: '0 0 12px #aa77ff' }}>{fuseDone.ribbon ? '融合完了！' : '合成完了！'}</div>
+            <div style={{ color: '#c9b6ff', fontSize: 15, marginTop: 8 }}>{fuseDone.ribbon ? '🎀' : '🧿'} {fuseDone.name}</div>
           </div>
           <style>{`@keyframes bf-fuse-pop{0%{transform:scale(0.5);opacity:0}40%{transform:scale(1.15);opacity:1}100%{transform:scale(1);opacity:1}}`}</style>
         </div>
