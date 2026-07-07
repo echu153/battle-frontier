@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
+import { reportDevAccess } from '../lib/devAccess'
 import { getWeaponGroup } from '../lib/stats'
 import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
@@ -915,6 +916,8 @@ export default function Tenkyuu() {
       supabase.from('player_items').select('*, items(*)').eq('player_id', user.id).eq('equipped', true).maybeSingle(),
     ])
     if (!prof) { nav('/create'); return }
+    // 開発限定: 非管理者のアクセスを管理者へ通知（表示自体は下の開発中スクリーンでブロック済み）
+    if (!prof.is_admin) reportDevAccess('tenkyuu', '天穹十二宮(/tenkyuu)')
     // 選択中ペットの本体ステ(100%)＋装備チャームをプレイヤーへ反映（街と同じ。これが無いとペット分が戦闘に乗らない）
     let petCharm = null, petStat = null, activePet = null
     try {

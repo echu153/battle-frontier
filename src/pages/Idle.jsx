@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { reportDevAccess } from '../lib/devAccess'
 
 const fmtDur = (min) => {
   if (min <= 0) return '0分'
@@ -94,7 +95,7 @@ export default function Idle() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { nav('/login'); return }
       const { data: me } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
-      if (!me?.is_admin) { nav('/game'); return }
+      if (!me?.is_admin) { reportDevAccess('idle_camp', '自動遠征(/idle)'); nav('/game'); return }
       await load()
       setLoading(false)
       await beat()

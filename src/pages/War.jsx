@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import WarPanel from '../components/WarPanel'
+import { reportDevAccess } from '../lib/devAccess'
 
 export default function War() {
   const nav = useNavigate()
@@ -23,6 +24,8 @@ export default function War() {
         supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
         supabase.from('countries').select('*'),
       ])
+      // 開発限定: 非管理者のアクセスを管理者へ通知（表示自体は下の開発中メッセージでブロック済み）
+      if (prof && !prof.is_admin) reportDevAccess('war', '戦争(/war)')
       setMe(prof || null)
       setCountries(cs || [])
       setLoading(false)

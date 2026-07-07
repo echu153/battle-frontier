@@ -6,6 +6,7 @@ const papiaIcon = '/papia.png'
 import { GEM_DATA, GEM_TYPES, calcDefReduction, calcEffectiveStats } from '../lib/stats'
 import { charmPlayerBonus, petPlayerBonus, petStats } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
+import { reportDevAccess } from '../lib/devAccess'
 import { myAreaShares, dropBonusPP, EXPAND_COOLDOWN_MS, rankColor } from '../lib/territory'
 import AIAssistant from '../components/AIAssistant'
 import RaidNotify from '../components/RaidNotify'
@@ -4040,7 +4041,7 @@ export default function Game() {
   // 出撃できない状態（釣り中/戦争中/HP切れ/BOTチャレンジ）は自動OFFにして空振りループを防ぐ
   useEffect(() => {
     if (!autoSortie) return
-    if (!profile?.is_admin) { setAutoSortie(false); return }
+    if (!profile?.is_admin) { reportDevAccess('auto_sortie', '自動出撃[開発]トグル'); setAutoSortie(false); return }
     const iv = setInterval(() => {
       const p = profileRef.current
       if (!p) return

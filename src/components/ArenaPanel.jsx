@@ -10,11 +10,13 @@ import { supabase } from '../supabase'
 import { BattleLogLine } from '../pages/Game'
 import { simulatePvpBattle } from '../lib/pvp'
 import { loadLoadout } from '../lib/pvpLoadout'
+import { reportDevAccess } from '../lib/devAccess'
 
 const FLOORS = 20
 
 export default function ArenaPanel({ onClose }) {
   const [meId, setMeId] = useState(null)
+  const [blocked, setBlocked] = useState(false)  // 開発限定: 非管理者はブロック＋管理者へ通知
   const [myLoadout, setMyLoadout] = useState(null)   // 自分の戦闘ロードアウト（eff.hp_max等）
   const [board, setBoard] = useState(null)           // null=読込中 / [{floor,...}]
   const [myFloor, setMyFloor] = useState(null)       // 着席中の階（null=非着席）
@@ -54,6 +56,8 @@ export default function ArenaPanel({ onClose }) {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+      const { data: me } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
+      if (!me?.is_admin) { reportDevAccess('arena', 'アリーナパネル'); setBlocked(true); return }
       setMeId(user.id)
       try {
         const [mine] = await Promise.all([loadLoadout(user.id, true), reloadBoard()])
@@ -139,6 +143,15 @@ export default function ArenaPanel({ onClose }) {
   }
 
   const classColor = '#c8a0ff'
+  if (blocked) return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', fontFamily: 'monospace' }}>
+      <div style={{ background: '#0a0616', border: '1px solid #6a3a9a', padding: '24px', textAlign: 'center', color: '#b088dd', fontSize: '13px', lineHeight: '1.9' }}>
+        🏛 アリーナは現在【開発中】です。<br />調整が完了するまでお待ちください。<br />
+        <button onClick={onClose} style={{ marginTop: '12px', padding: '6px 16px', background: 'none', border: '1px solid #6644aa', color: '#9977cc', cursor: 'pointer', fontFamily: 'monospace', fontSize: '12px' }}>閉じる</button>
+      </div>
+    </div>
+  )
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '16px', overflowY: 'auto', fontFamily: 'monospace' }}>
       <div style={{ background: '#0a0616', border: '1px solid #6a3a9a', maxWidth: '720px', width: '100%', padding: '16px', marginTop: '24px' }}>
