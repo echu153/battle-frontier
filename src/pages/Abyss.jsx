@@ -95,6 +95,15 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   const hasGambleBody       = passiveNames.includes('ギャンブルボディ')
   const hasMadokenJutsu     = passiveNames.includes('魔導剣術')
   const hasHolyKnightPassive= passiveNames.includes('聖騎士の心得')
+  // 精霊共鳴（精霊召喚士・再修練1+）：最大MP+20%（開始MPを引き上げ・出撃と同一挙動）
+  if (profile.class === '精霊召喚士' && rtCur >= 1 && passiveNames.includes('精霊共鳴')) {
+    const boostedMp = Math.floor(eff.mp_max * 1.2)
+    playerMp = Math.min(boostedMp, profile.mp_current ?? boostedMp)
+  }
+  // 竜鱗の加護（竜騎士）：防御×1.2（再修練×1.4）＋被ダメ時30%で軽減（-5%／再修練-20%）
+  const hasRyurin  = passiveNames.includes('竜鱗の加護')
+  const ryurinMult = hasRyurin ? (pe('竜騎士') ? 1.4 : 1.2) : 1.0
+  const ryurinReduce = () => (hasRyurin && Math.random() < 0.3) ? (pe('竜騎士') ? 0.80 : 0.95) : 1.0
 
   // 居合の構え：セット中の通常スキルが全て使用回数1のとき発動（物理ダメージ専用 通常+40%／再修練+70%）
   const iaiSetSkills = skillSets.filter(ss => ss.skills && ss.skills.type !== 'パッシブ')
@@ -349,8 +358,8 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
     const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
     const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
-    const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDefE * holyKnightMultE * kabeDefE
-    const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE * kabeDefE
+    const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDefE * holyKnightMultE * kabeDefE * ryurinMult
+    const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE * kabeDefE * ryurinMult
     const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
     const berserkDmgRate = hasBerserk ? (pe('狂戦士')?1.20:1.15) : 1.0
     const isEM = enemy.type === 'magical'
@@ -376,7 +385,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     const playerDefRankReduction = calcDefReduction(isEM ? eff.mdef : eff.def)
     const gambleBodyMult = hasGambleBody ? (pe('ギャンブラー') ? (0.5+Math.random()*0.7) : (0.7+Math.random()*0.6)) : 1.0
     const allinDebuffInMult = playerBuffs.allinDebuff?.turns > 0 ? 1.3 : 1.0
-    const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*evoTakenMult(eff, !isEM)*(0.9+Math.random()*0.2))
+    const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*evoTakenMult(eff, !isEM)*ryurinReduce()*(0.9+Math.random()*0.2))
     playerHp -= finalDmg
     { const refl = evoOnDamaged(eff, finalDmg, enemyBuffs, enemy.name, logs); if (refl > 0) enemyHp -= refl }  // 嵐の重装甲/聖鎧/インフェルノ
     if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null

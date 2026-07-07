@@ -158,6 +158,15 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   const passiveMatkMult   = hasShinkoka ? 1.1 : 1.0
   const passiveMpCostMult = (hasTenki ? (pe('賢者')?0.5:0.7) : 1.0) * (eff.weaponMpCostMult || 1)  // 天啓：MP消費 通常×0.7／再修練×0.5
   const passiveMatkMultTenki = hasTenki ? (pe('賢者')?1.4:1.2) : 1.0  // 天啓：MATK 通常×1.2／再修練×1.4
+  // 精霊共鳴（精霊召喚士・再修練1+）：最大MP+20%（開始MPを引き上げ・出撃と同一挙動）
+  if (profile.class === '精霊召喚士' && rtCur >= 1 && passiveNames.includes('精霊共鳴')) {
+    const boostedMp = Math.floor(eff.mp_max * 1.2)
+    playerMp = Math.min(boostedMp, profile.mp_current ?? boostedMp)
+  }
+  // 竜鱗の加護（竜騎士パッシブ）：防御×1.2（再修練×1.4）＋被ダメ時30%で軽減（-5%／再修練-20%）
+  const hasRyurin  = passiveNames.includes('竜鱗の加護')
+  const ryurinMult = hasRyurin ? (pe('竜騎士') ? 1.4 : 1.2) : 1.0
+  const ryurinReduce = () => (hasRyurin && Math.random() < 0.3) ? (pe('竜騎士') ? 0.80 : 0.95) : 1.0
   const effectiveSpdForCalc = eff.spd
 
   // 居合の構え：セット中の通常スキルが全て使用回数1のとき発動（物理ダメージ専用 通常+40%／再修練+70%）
@@ -215,8 +224,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
       const pAtk  = (eff.atk + madokenBonus + takaAtkBonus) * madokenAtkMult * (playerBuffs.atkUp?.rate  || 1) * (playerBuffs.atkDown?.rate || 1) * (playerBuffs.burn?.turns > 0 ? 0.9 : 1) * evoAtkMult(eff, allSkillsSet)
       const pMatk = (eff.matk - madokenBonus) * (playerBuffs.matkUp?.rate || 1) * passiveMatkMult * passiveMatkMultTenki * (playerBuffs.burn?.turns > 0 ? 0.9 : 1) * evoMatkMult(eff, allSkillsSet)
-      const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1) * holyKnightMult * kabeDefP
-      const pMdef = eff.mdef * (playerBuffs.mdefUp?.rate || 1) * (playerBuffs.defUp?.rate || 1) * holyKnightMult * kabeDefP
+      const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1) * holyKnightMult * kabeDefP * ryurinMult
+      const pMdef = eff.mdef * (playerBuffs.mdefUp?.rate || 1) * (playerBuffs.defUp?.rate || 1) * holyKnightMult * kabeDefP * ryurinMult
       const pSpd  = effectiveSpdForCalc * (playerBuffs.spdUp?.rate || 1) * (playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1)
       const effBuff = { ...eff, atk: pAtk, def: pDef, mdef: pMdef, matk: pMatk, spd: pSpd }
 
@@ -359,7 +368,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       if (playerDied) return  // 死亡後は追撃も含めて行動を止める（死亡後にターン継続する不具合の修正）
       const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
       const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
-      const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1) * holyKnightMultE * kabeDefE
+      const pDef  = eff.def  * (playerBuffs.defUp?.rate  || 1) * holyKnightMultE * kabeDefE * ryurinMult
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
       const berserkDmgRate = hasBerserk ? (pe('狂戦士')?1.20:1.15) : 1.0
       const eAtk = boss.atk
@@ -369,7 +378,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       // ターン4: 特殊スキル（倍率1.5）。ボスごとに効果が異なる
       if (turn === 4 && !isExtra) {
         let specialDmg = Math.max(1, Math.floor(eAtk * eAtk / Math.max(1, eAtk + defForCalc) * 1.5 * (0.9 + Math.random() * 0.2)))
-        specialDmg = Math.max(1, Math.floor(specialDmg * evoTakenMult(eff, false)))  // 真化: 被ダメ%軽減(海竜)
+        specialDmg = Math.max(1, Math.floor(specialDmg * evoTakenMult(eff, false) * ryurinReduce()))  // 真化: 被ダメ%軽減(海竜)＋竜鱗の加護
         playerHp -= specialDmg
         if ((eff.evoReflectPct||0) > 0) { const r = Math.max(1, Math.floor(specialDmg * eff.evoReflectPct/100)); totalDamage += r; logs.push({ text:`🛡 真化効果！ 反射で${fmt(r)}ダメージ！`, color:'#88ccff' }) }
         if (isAmaza) {
@@ -408,7 +417,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       }
       const playerDefRankReduction = calcDefReduction(pDef)
       const gambleBodyMult = hasGambleBody ? (pe('ギャンブラー') ? (0.5+Math.random()*0.7) : (0.7+Math.random()*0.6)) : 1.0
-      const finalDmg = Math.floor(baseDmg * (isCrit ? 1.5 : 1.0) * dmgReduceRate * berserkDmgRate * (1 - playerDefRankReduction) * gambleBodyMult * evoTakenMult(eff, true) * (0.9 + Math.random() * 0.2))
+      const finalDmg = Math.floor(baseDmg * (isCrit ? 1.5 : 1.0) * dmgReduceRate * berserkDmgRate * (1 - playerDefRankReduction) * gambleBodyMult * evoTakenMult(eff, true) * ryurinReduce() * (0.9 + Math.random() * 0.2))
       playerHp -= finalDmg
       if ((eff.evoReflectPct||0) > 0 && finalDmg > 0) { const r = Math.max(1, Math.floor(finalDmg * eff.evoReflectPct/100)); totalDamage += r; logs.push({ text:`🛡 真化効果！ 反射で${fmt(r)}ダメージ！`, color:'#88ccff' }) }
       if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
@@ -470,7 +479,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     const isHealBlockedTick = playerBuffs.healBlock?.turns > 0
     if (playerBuffs.regenHeal?.turns > 0) {
       if (!isHealBlockedTick) {
-        playerHp = Math.min(eff.hp_max, playerHp + playerBuffs.regenHeal.amount)
+        playerHp = Math.min(eff.hp_max, playerHp + Math.floor(playerBuffs.regenHeal.amount * passiveHealMult))
         logs.push({ text: `💚 リジェネ！ HPが${playerBuffs.regenHeal.amount}回復！`, color: '#44ff88' })
       }
     }
