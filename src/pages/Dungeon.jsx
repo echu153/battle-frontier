@@ -1529,22 +1529,29 @@ export default function Dungeon() {
       return
     }
 
-    // --- 攻撃系：対象の敵を選ぶ ---
+    // --- 攻撃系：対象の敵を選ぶ（ボス2×2は最寄りセル基準で判定） ---
     const range = sc.range || 1
+    const nearestDelta = (e) => {
+      // 敵の占有セルのうちプレイヤーに最も近いセルへの差分（size=1なら従来どおり）
+      const n = e.size || 1
+      const cx = Math.min(Math.max(px, e.x), e.x + n - 1)
+      const cy = Math.min(Math.max(py, e.y), e.y + n - 1)
+      return { dx: cx - px, dy: cy - py }
+    }
+    const chebOf = (e) => { const { dx, dy } = nearestDelta(e); return Math.max(Math.abs(dx), Math.abs(dy)) }
     const inLine = (e) => {
-      const dx = e.x - px, dy = e.y - py
+      const { dx, dy } = nearestDelta(e)
       const cheb = Math.max(Math.abs(dx), Math.abs(dy))
       if (cheb < 1 || cheb > range) return false
       const straight = dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy) // 直線(縦横)or斜め
-      if (Math.abs(dx) === Math.abs(dy) && !sc.diag) return false // 斜め不可スキル
+      if (Math.abs(dx) === Math.abs(dy) && dx !== 0 && !sc.diag) return false // 斜め不可スキル
       return straight
     }
     let targets = []
     if (sc.target === 'aoe') {
-      targets = state.enemies.filter((e) => Math.max(Math.abs(e.x - px), Math.abs(e.y - py)) === 1) // 周囲8マス
+      targets = state.enemies.filter((e) => chebOf(e) === 1) // 周囲8マス（ボスは最寄りセルで判定）
     } else {
-      const cand = state.enemies.filter(inLine).sort((a, b) =>
-        (Math.max(Math.abs(a.x - px), Math.abs(a.y - py))) - (Math.max(Math.abs(b.x - px), Math.abs(b.y - py))))
+      const cand = state.enemies.filter(inLine).sort((a, b) => chebOf(a) - chebOf(b))
       if (cand.length) targets = [cand[0]] // 最寄りの1体
     }
     if (targets.length === 0) { triggerScrollFx([{ x: px, y: py }], sc.emoji); addLog(`${sc.emoji} ${sc.name}！ しかし届く敵がいない…`); commitTurn(state, state.player, state.enemies, petHp); return }
@@ -1567,6 +1574,41 @@ export default function Dungeon() {
       popDmg(cur.x, cur.y, dealt)
       const stunned = !!sc.stun && Math.random() < sc.stun // しびれ判定は1回だけ（ログと実効果を一致させる）
       if (stunned) addLog(`⚡ ${cur.name}はしびれた！`)
+      if (newHp <= 0 && cur.boss) {
+        // ボスは書で倒しても体当たりと同じく形態遷移/討伐処理を通す（消滅・進行不能を防ぐ）
+        const bd = bossFor(dungeon?.id)
+        if (cur.phase < bd.phases.length - 1) {
+          const np = bd.phases[cur.phase + 1]
+          enemies = enemies.map((e) => e.id === cur.id ? {
+            ...e, phase: cur.phase + 1, type: np.type, mix: !!np.mix, skills: np.skills,
+            visualScale: np.visualScale ?? bd.visualScale ?? e.visualScale,
+            hp: np.hp, maxHp: np.hp, atk: np.atk, def: np.def, mdef: np.mdef, buff: 0, atkDown: 0, defDown: 0, healedOnce: false, charging: false, bigUsed: false, blink: true,
+          } : e)
+          addLog(np.transition?.during || `💀 ${cur.name}の様子が変わっていく…！`, 'right')
+          playSe('bosukeitaihenkazi')
+          triggerShake('kill')
+          setState({ ...state, enemies })
+          busyRef.current = true
+          const tid2 = setTimeout(() => {
+            setState((prev) => prev ? { ...prev, enemies: prev.enemies.map((e) => e.id === cur.id ? { ...e, image: np.image ? assetSrc(np.image) : e.image, blink: false } : e) } : prev)
+            addLog(np.transition?.after || `💀 ${cur.name} ${np.label || '次形態'}！`, 'right')
+            busyRef.current = false
+          }, 2000)
+          turnTimers.current.push(tid2)
+          return
+        }
+        // 最終形態を書で撃破＝ダンジョンクリア
+        setStatus('cleared'); addLog(`🏁 ${cur.name}を討伐！ダンジョンクリア！`); enemiesRef.current += 1
+        grantKill(floorNum, cur.name, px, py)
+        setState({ ...state, enemies: enemies.filter((e) => e.id !== cur.id) })
+        if (dungeon) setCleared((c) => new Set(c).add(dungeon.id))
+        addLog('🔮 神秘の欠片を手に入れた！')
+        const shardEntry2 = { type: 'shard' }
+        if (runIdRef.current) {
+          supabase.rpc('dungeon_pickup', { p_run_id: runIdRef.current, p_entry: shardEntry2 }).then(({ data }) => { addLootToBag(data || shardEntry2); finishRun(true) }, () => finishRun(true))
+        } else finishRun(true)
+        return
+      }
       if (newHp <= 0) { enemies = enemies.filter((e) => e.id !== cur.id); enemiesRef.current += 1; grantKill(floorNum, cur.name, px, py) }
       else enemies = enemies.map((e) => e.id === cur.id ? { ...e, hp: newHp, stun: stunned ? 1 : (e.stun || 0) } : e)
     }
