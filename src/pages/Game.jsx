@@ -1654,6 +1654,7 @@ export default function Game() {
   const [showPvp, setShowPvp] = useState(false)  // 対人戦(PvP)パネル開閉（is_admin限定）
   const [showKumite, setShowKumite] = useState(false)  // 組み手パネル開閉（一般公開）
   const [showArena, setShowArena] = useState(false)  // アリーナパネル開閉（一般公開）
+  const [autoSortie, setAutoSortie] = useState(false)  // 🔁 自動出撃[開発]（is_admin限定。リロードでOFF＝永続化しない）
   const challengePanelRef = useRef(null)
   // 挑戦パネルを開いたら、その位置まで自動スクロール（スマホで画面外に出るのを防ぐ）
   useEffect(() => {
@@ -4035,6 +4036,25 @@ export default function Game() {
   }
   const logout = async () => { await supabase.auth.signOut(); nav('/login') }
 
+  // 🔁 自動出撃[開発]: ONの間、CD明けごとに選択中エリアへ「街に戻る→出撃」を自動で繰り返す（is_admin限定）
+  // 出撃できない状態（釣り中/戦争中/HP切れ/BOTチャレンジ）は自動OFFにして空振りループを防ぐ
+  useEffect(() => {
+    if (!autoSortie) return
+    if (!profile?.is_admin) { setAutoSortie(false); return }
+    const iv = setInterval(() => {
+      const p = profileRef.current
+      if (!p) return
+      const hpCur = p.hp_current ?? p.hp_max
+      if (hpCur <= 0 || (p.is_dying && hpCur < p.hp_max)) { setAutoSortie(false); return }
+      if (p.is_fishing || atWar || botCheck) { setAutoSortie(false); return }
+      if (!canAct || loading) return
+      if (scene === 'battle') backToTown()
+      else if (scene !== 'town') return
+      doBattle()
+    }, 2000)
+    return () => clearInterval(iv)
+  }, [autoSortie, canAct, loading, scene, botCheck, atWar, profile?.is_admin])
+
   // ⚡ 出撃CDモード（10秒/20秒）の変更（is_admin限定先行・週1回変更不可）
   const setSortieModeMode = async (mode) => {
     if (sortieModeLoading) return
@@ -5522,6 +5542,9 @@ export default function Game() {
     return (
       <div style={{ minHeight:'100vh', background:'#000820', fontFamily:'monospace' }}>
         {botCheckOverlay}
+        {autoSortie && (
+          <button onClick={()=>setAutoSortie(false)} style={{ position:'fixed', bottom:'14px', left:'50%', transform:'translateX(-50%)', zIndex:250, padding:'8px 14px', background:'#1a0e00', border:'1px solid #ffaa44', color:'#ffaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap' }}>🔁 自動出撃中（タップで停止）</button>
+        )}
         <div style={{ background:'#000820', borderBottom:'1px solid #003366', padding:'6px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:100 }}>
           <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
             <div style={{ color:'#ffcc00', fontSize:'13px', letterSpacing:'2px' }}>BATTLE FRONTIER</div>
@@ -5547,6 +5570,9 @@ export default function Game() {
             )}
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/idle'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ffaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🏕 自動遠征[開発]</button>
+            )}
+            {profile?.is_admin && (
+              <button onClick={()=>{ setAutoSortie(v=>!v); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color: autoSortie?'#ff6644':'#ffaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔁 自動出撃[開発] {autoSortie?'ON（タップで停止）':'OFF'}</button>
             )}
             <button onClick={()=>{ nav('/action-rpg'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#9fe', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🗡 アクションRPG <span style={{ fontSize:'9px', color:'#8877aa' }}>(お試し)</span></button>
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
@@ -6066,6 +6092,9 @@ export default function Game() {
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
       {botCheckOverlay}
+        {autoSortie && (
+          <button onClick={()=>setAutoSortie(false)} style={{ position:'fixed', bottom:'14px', left:'50%', transform:'translateX(-50%)', zIndex:250, padding:'8px 14px', background:'#1a0e00', border:'1px solid #ffaa44', color:'#ffaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap' }}>🔁 自動出撃中（タップで停止）</button>
+        )}
       <div style={{ maxWidth:'900px', margin:'0 auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #003366', paddingBottom:'8px', marginBottom:'12px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
@@ -6092,6 +6121,9 @@ export default function Game() {
             )}
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/idle'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ffaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🏕 自動遠征[開発]</button>
+            )}
+            {profile?.is_admin && (
+              <button onClick={()=>{ setAutoSortie(v=>!v); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color: autoSortie?'#ff6644':'#ffaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔁 自動出撃[開発] {autoSortie?'ON（タップで停止）':'OFF'}</button>
             )}
             <button onClick={()=>{ nav('/action-rpg'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#9fe', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🗡 アクションRPG <span style={{ fontSize:'9px', color:'#8877aa' }}>(お試し)</span></button>
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
