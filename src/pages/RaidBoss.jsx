@@ -5,6 +5,7 @@ import { getWeaponGroup } from '../lib/stats'
 import { evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 import { selectBattleSkillSets } from '../lib/loadout'
+import { buildSummon, summonAnnounce, summonAttackDamage, summonAbsorbBasic, summonAbsorbSkill, summonEndOfTurn } from '../lib/summon'
 import { pushSupported, pushConfigured, getPushStatus, enableRaidPush, disableRaidPush } from '../lib/push'
 import {
   WAIT_SECONDS,
@@ -192,7 +193,11 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
 
   playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
 
+  // 召喚系パッシブ（式神召喚／ペット召喚）。ボスへの与ダメは totalDamage に加算、被狙いで tank
+  const summon = buildSummon(profile, passiveNames, profile.activePet)
+
   logs.push({ text: `⚠ ${bossName}が現れた！`, color: '#ff4444' })
+  summonAnnounce(summon, logs)
 
   for (let turn = 1; turn <= 10; turn++) {
     // 骸の壁：ターン1と4の倍数で被ダメ-30%バリア
@@ -215,6 +220,12 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     const boss = getBossForTurn(turn, bossName)
     const enemyBuffs = {} // ボスはデバフ無効なので常に空
     const hpBeforeTurn = playerHp // 雷鋼の機神鎧: このターンに被ダメしたか判定用
+
+    // 召喚（式神／ペット）のターン開始攻撃。ボスへの与ダメを totalDamage に加算
+    {
+      const sEnemy = { def: BOSS_DEF, mdef: BOSS_MDEF, atk: boss.atk, matk: boss.atk, type: 'physical', name: bossName, evasionRate: 0 }
+      totalDamage += summonAttackDamage(summon, sEnemy, enemyBuffs, playerBuffs, eff, rtCur, logs)
+    }
 
     // ========== プレイヤー攻撃 ==========
     const doPlayerAttack = (isExtra = false) => {
@@ -379,8 +390,11 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       if (turn === 4 && !isExtra) {
         let specialDmg = Math.max(1, Math.floor(eAtk * eAtk / Math.max(1, eAtk + defForCalc) * 1.5 * (0.9 + Math.random() * 0.2)))
         specialDmg = Math.max(1, Math.floor(specialDmg * evoTakenMult(eff, false) * ryurinReduce()))  // 真化: 被ダメ%軽減(海竜)＋竜鱗の加護
-        playerHp -= specialDmg
-        if ((eff.evoReflectPct||0) > 0) { const r = Math.max(1, Math.floor(specialDmg * eff.evoReflectPct/100)); totalDamage += r; logs.push({ text:`🛡 真化効果！ 反射で${fmt(r)}ダメージ！`, color:'#88ccff' }) }
+        // ペット召喚：50%でペットがダメージを肩代わり（状態異常は下でプレイヤーに付与）
+        if (!summonAbsorbSkill(summon, specialDmg, logs)) {
+          playerHp -= specialDmg
+          if ((eff.evoReflectPct||0) > 0) { const r = Math.max(1, Math.floor(specialDmg * eff.evoReflectPct/100)); totalDamage += r; logs.push({ text:`🛡 真化効果！ 反射で${fmt(r)}ダメージ！`, color:'#88ccff' }) }
+        }
         if (isAmaza) {
           // 深淵の水葬：10ターンの間 素早さ-50%（クリ・回避・追加行動率を半減SPDで再計算）
           playerBuffs.spdDown = { turns: 10, rate: 0.5 }
@@ -418,11 +432,16 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       const playerDefRankReduction = calcDefReduction(pDef)
       const gambleBodyMult = hasGambleBody ? (pe('ギャンブラー') ? (0.5+Math.random()*0.7) : (0.7+Math.random()*0.6)) : 1.0
       const finalDmg = Math.floor(baseDmg * (isCrit ? 1.5 : 1.0) * dmgReduceRate * berserkDmgRate * (1 - playerDefRankReduction) * gambleBodyMult * evoTakenMult(eff, true) * ryurinReduce() * (0.9 + Math.random() * 0.2))
+      // ペット召喚：50%で敵の通常攻撃をペットが受ける（プレイヤーHP無傷）
+      if (summonAbsorbBasic(summon, { atk: boss.atk, matk: boss.atk, type: 'physical' }, enemyBuffs, turn, logs)) {
+        if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
+      } else {
       playerHp -= finalDmg
       if ((eff.evoReflectPct||0) > 0 && finalDmg > 0) { const r = Math.max(1, Math.floor(finalDmg * eff.evoReflectPct/100)); totalDamage += r; logs.push({ text:`🛡 真化効果！ 反射で${fmt(r)}ダメージ！`, color:'#88ccff' }) }
       if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
       const critText = isCrit ? ' 💥クリティカル！' : ''
       logs.push({ text: `${prefix}${bossName}の攻撃！ あなたに${fmt(finalDmg)}ダメージ…${critText}`, color: isCrit ? '#ff2200' : '#ff6644' })
+      }
       if (playerHp <= 0) {
         playerHp = 0
         logs.push({ text: `力尽きた…（バトル終了）`, color: '#ff4444' })
@@ -463,6 +482,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     for (const k of Object.keys(playerBuffs)) {
       if (playerBuffs[k]?.turns > 0) playerBuffs[k] = { ...playerBuffs[k], turns: playerBuffs[k].turns - 1 }
     }
+    summonEndOfTurn(summon) // ペットの被ダメ軽減ターン減衰
     // 狂乱解除時：skillIndexをマッドラッシュの次に進める
     if (berserkWasActive && (playerBuffs.berserk?.turns ?? 0) === 0 && expandedSkillSet.length > 0) {
       const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk?.lockedSkill)
