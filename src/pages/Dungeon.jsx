@@ -346,8 +346,9 @@ export default function Dungeon() {
   const [hitFlash, setHitFlash] = useState(null)      // ボススキル被弾の画面フラッシュ { kind:'skill'|'big', id }
   const [confirmBox, setConfirmBox] = useState(null)  // ゲーム内確認ポップアップ { msg, okLabel, onOk }
   const shopRef = useRef(null)                        // 開店中の移動ブロック用
-  const sinceShopRef = useRef(0)                      // 前回の商店からの踏破フロア数
+  const sinceShopRef = useRef(0)                      // 前回の商店からの踏破フロア数（ダンジョン離脱後も引き継ぐ）
   const shopAtRef = useRef(20 + Math.floor(Math.random() * 11)) // 次の商店までのフロア数(20〜30)
+  const startFloorRef = useRef(1)                     // このランの開始フロア（商店カウントの対象外）
   const [regen, setRegen] = useState(0)           // 聖域＝あと何ターン毎ターン回復か
   const regenAmtRef = useRef(0)                   // 1ターンの回復量
   const [petAtkUp, setPetAtkUp] = useState(0)     // 自分の攻撃バフ＝あと何ターン攻撃1.3倍か
@@ -630,6 +631,18 @@ export default function Dungeon() {
   const fullHealRef = useRef(null) // レベルアップでHP全回復させる予約（commitTurnで確実に反映）
   const userIdRef = useRef(null)
   const saveKey = () => (userIdRef.current ? `bf_dungeon2_${userIdRef.current}` : null)
+  // 秘密の商店カウントはランを跨いで引き継ぐ（離脱・クリア・死亡でもリセットしない）
+  const shopCntKey = () => (userIdRef.current ? `bf_shop_cnt_${userIdRef.current}` : null)
+  const loadShopCnt = () => {
+    try {
+      const v = JSON.parse(localStorage.getItem(shopCntKey()) || 'null')
+      if (v && typeof v.since === 'number' && typeof v.at === 'number') { sinceShopRef.current = v.since; shopAtRef.current = v.at }
+    } catch { /* 壊れた保存は無視 */ }
+  }
+  const saveShopCnt = () => {
+    const k = shopCntKey(); if (!k) return
+    try { localStorage.setItem(k, JSON.stringify({ since: sinceShopRef.current, at: shopAtRef.current })) } catch { /* 容量超過は無視 */ }
+  }
   const enemiesRef = useRef(0)
   const floorsRef = useRef(0)
   const itemsRef = useRef(0)
@@ -831,6 +844,7 @@ export default function Dungeon() {
           if (sv.inventory) setInventory(sv.inventory)
           if (typeof sv.sinceShop === 'number') sinceShopRef.current = sv.sinceShop
           if (typeof sv.shopAt === 'number') shopAtRef.current = sv.shopAt
+          if (typeof sv.startFloor === 'number') startFloorRef.current = sv.startFloor
           if (sv.shop) { shopRef.current = sv.shop; setShop(sv.shop) }
           if (Array.isArray(sv.lootBag)) setLootBag(sv.lootBag)
           setState({ ...sv.state, explored: new Set(sv.state.explored) })
@@ -869,7 +883,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
     }
     setDungeon(d)
     setFloorNum(sf); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setBurned(false); setDebuff({ atk: 0, def: 0, mdef: 0 }); setShield(0); shieldTurnsRef.current = 0; shieldRateRef.current = 1; setRegen(0); regenAmtRef.current = 0; setPetAtkUp(0); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
-    sinceShopRef.current = 0; shopAtRef.current = 20 + Math.floor(Math.random() * 11); setShop(null); shopRef.current = null
+    startFloorRef.current = sf; loadShopCnt(); setShop(null); shopRef.current = null
     enterFloor(sf, d)
     playFloorIntro(sf, d) // 入場時にダンジョン名・フロア表示
     startRun(pet.id, d.id)
@@ -883,7 +897,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
       const sv = {
         runId: runIdRef.current, dungeonId: dungeon?.id, floorNum, petHp, fullness, turns,
         selectedSkill, inventory, lootBag, kills: enemiesRef.current, floorsCleared: floorsRef.current, itemsCollected: itemsRef.current,
-        sinceShop: sinceShopRef.current, shopAt: shopAtRef.current, shop,
+        sinceShop: sinceShopRef.current, shopAt: shopAtRef.current, startFloor: startFloorRef.current, shop,
         state: { ...state, explored: [...state.explored] },
       }
       try { localStorage.setItem(key, JSON.stringify(sv)) } catch { /* 容量超過などは無視 */ }
@@ -1144,10 +1158,12 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
         playSe('kaidan') // 階段SE
         if (floorNum >= (dungeon?.floors || 10)) { setStatus('cleared'); addLog('🏁 最深部を踏破！ダンジョンクリア！'); setState({ ...s, player }); if (dungeon) setCleared((c) => new Set(c).add(dungeon.id)); finishRun(true); return }
         // 秘密の商店：20〜30フロア進むごとに階段の途中で入る（フロア数にはカウントしない）
-        sinceShopRef.current += 1
+        // カウントはラン開始フロアを除外し、ダンジョン離脱後も引き継ぐ
+        if (floorNum !== startFloorRef.current) { sinceShopRef.current += 1; saveShopCnt() }
         if ((dungeon?.id === 'd30' || dungeon?.id === 'd60') && sinceShopRef.current >= shopAtRef.current && floorNum + 1 < (dungeon?.floors || 10)) {
           sinceShopRef.current = 0
           shopAtRef.current = 20 + Math.floor(Math.random() * 11)
+          saveShopCnt()
           const so = { stock: rollShopStock(dungeon?.id), bought: {}, next: floorNum + 1 }
           addLog('🏮 階段の途中に秘密の商店を見つけた…')
           setState({ ...s, player })
@@ -1763,7 +1779,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
         const sv = {
           runId: runIdRef.current, dungeonId: dungeon?.id, floorNum, petHp, fullness, turns,
           selectedSkill, inventory, lootBag, kills: enemiesRef.current, floorsCleared: floorsRef.current, itemsCollected: itemsRef.current,
-        sinceShop: sinceShopRef.current, shopAt: shopAtRef.current, shop,
+        sinceShop: sinceShopRef.current, shopAt: shopAtRef.current, startFloor: startFloorRef.current, shop,
           state: { ...state, explored: [...state.explored] },
         }
         try { localStorage.setItem(saveKey(), JSON.stringify(sv)) } catch { /* 容量超過は無視 */ }
