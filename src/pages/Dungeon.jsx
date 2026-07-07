@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmDropsFor, charmIcon, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, bossFor, dgBgm, sumSpecials, assetSrc, ASSET_VER } from '../constants/pets'
+import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmDropsFor, charmIcon, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, bossFor, dgBgm, sumSpecials, assetSrc, ASSET_VER, STARTERS } from '../constants/pets'
 import Boss60Sprite from '../components/Boss60Sprite'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
@@ -344,6 +344,8 @@ export default function Dungeon() {
   const [zeniBank, setZeniBank] = useState(0)         // 倉庫ゼニ（安全。任意で預け入れ）pet_storage 'zeni_bank'
   const [zeniMsg, setZeniMsg] = useState('')          // ゼニ倉庫の出し入れ結果メッセージ
   const [zeniAmt, setZeniAmt] = useState('')          // 出し入れ金額の入力
+  const [starterPick, setStarterPick] = useState(null) // クリア報酬のペット選択 { dungeon, options:[species...] }
+  const [starterPicked, setStarterPicked] = useState(null) // 受け取り完了したペット名（表示用）
   const [shop, setShop] = useState(null)              // 秘密の商店 { stock, bought, next } 開店中はnull以外
   const [shopMsg, setShopMsg] = useState('')          // 商店内の購入結果メッセージ（モーダル内に表示）
   const [hitFlash, setHitFlash] = useState(null)      // ボススキル被弾の画面フラッシュ { kind:'skill'|'big', id }
@@ -389,6 +391,7 @@ export default function Dungeon() {
   const [lootBag, setLootBag] = useState([])     // 持ち帰り待ちのルート品（装備/強化石/宝石）。生還で付与
   const [dropMode, setDropMode] = useState(false) // 「捨てる」モード（持ち物を選ぶと足元に置く）
   const [dungeon, setDungeon] = useState(null) // 選択中のダンジョン定義
+  const dungeonRef = useRef(null)              // finishRun等の非同期処理から参照する用（stale回避）
   const [isAdmin, setIsAdmin] = useState(false) // 開発アカウント（comingSoonダンジョンに入れる）
   const [transition, setTransition] = useState(null) // フロア遷移演出 { floor, black, title }
   const [lockedOut, setLockedOut] = useState(false)   // 別端末でプレイ中＝この端末はロック
@@ -771,6 +774,15 @@ export default function Dungeon() {
       // 戦闘不能でゼニが減った場合は表示を最新残高に同期
       if (typeof data.zeni_balance === 'number') setZeni(data.zeni_balance)
     }
+    // クリア報酬：初級の洞窟(d10)/追憶の遺跡(d30)の踏破で「選ばなかったスターター」を1匹選べる
+    const did = dungeonRef.current?.id
+    if (cleared && !died && (did === 'd10' || did === 'd30')) {
+      const { data: sp } = await supabase.rpc('grant_starter_pick', { p_dungeon: did })
+      if (sp?.eligible && Array.isArray(sp.options) && sp.options.length > 0) {
+        setStarterPicked(null)
+        setStarterPick({ dungeon: did, options: sp.options })
+      }
+    }
   }, [lootBag])
 
   useEffect(() => {
@@ -865,6 +877,8 @@ export default function Dungeon() {
     })()
   }, [nav])
 
+  useEffect(() => { dungeonRef.current = dungeon }, [dungeon])
+
   const enterFloor = useCallback((num, dg) => {
     const f = generateFloor(num, dg)
     // 初期視界を記憶に反映
@@ -896,6 +910,21 @@ export default function Dungeon() {
     setZeniAmt('')
   }
 
+  // ---- クリア報酬：選ばなかったスターターを1匹受け取る ----
+  const claimStarter = async (species) => {
+    if (!starterPick) return
+    const { data, error } = await supabase.rpc('claim_starter_pick', { p_dungeon: starterPick.dungeon, p_species: species })
+    if (error || !data?.ok) {
+      const m = error?.message || ''
+      setZeniMsg('') // 無関係メッセージはクリア
+      setStarterPick((s) => (s ? { ...s, err: m.includes('already') ? 'すでに受け取り済みです' : m.includes('owned') ? 'そのペットは所持済みです' : '受け取れませんでした' } : s))
+      return
+    }
+    const sp = STARTERS.find((s) => s.id === species)
+    setStarterPicked(sp?.label || 'ペット')
+    setStarterPick(null)
+  }
+
   // ダンジョンを選んで開始（startFloor=途中階スタート。踏破済みダンジョンで最終階の1つ手前まで選べる）
   const beginDungeon = (d, startFloor = 1, confirmed = false) => {
     const sf = Math.max(1, Math.min(startFloor, (d?.floors || 10) - 1))
@@ -908,6 +937,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
     setDungeon(d)
     setFloorNum(sf); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setBurned(false); setDebuff({ atk: 0, def: 0, mdef: 0 }); setShield(0); shieldTurnsRef.current = 0; shieldRateRef.current = 1; setRegen(0); regenAmtRef.current = 0; setPetAtkUp(0); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
     startFloorRef.current = sf; loadShopCnt(); setShop(null); shopRef.current = null
+    setStarterPick(null); setStarterPicked(null) // 前回クリア報酬の残留UIを消す
     enterFloor(sf, d)
     playFloorIntro(sf, d) // 入場時にダンジョン名・フロア表示
     startRun(pet.id, d.id)
@@ -2702,7 +2732,31 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
           </div>
         )}
         {status === 'cleared' && (
-          <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<RewardPanel reward={reward} pet={pet} /><Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
+          <div style={{ textAlign: 'center', marginTop: 16, color: '#ffcc44' }}>🏁 ダンジョンクリア！<RewardPanel reward={reward} pet={pet} />
+            {starterPick && (
+              <div style={{ background: '#0a0620', border: '1px solid #6a4aa8', padding: 12, margin: '12px auto', maxWidth: 320 }}>
+                <div style={{ color: '#c9b0ff', fontSize: 13, marginBottom: 8 }}>🎁 選ばなかったペットを1匹もらえる！</div>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  {starterPick.options.map((sid) => {
+                    const sp = STARTERS.find((s) => s.id === sid)
+                    if (!sp) return null
+                    return (
+                      <button key={sid} onClick={() => claimStarter(sid)}
+                        style={{ background: '#12082a', border: '1px solid #7a5ac8', color: '#e0d0ff', padding: '8px 12px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 84 }}>
+                        <img src={assetSrc(sp.image)} alt="" style={{ width: 40, height: 40, objectFit: 'contain' }} />
+                        {sp.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div style={{ color: '#8a7ab0', fontSize: 10, marginTop: 8 }}>※選ぶと仲間に加わります（選び直し不可）</div>
+                {starterPick.err && <div style={{ color: '#ff8888', fontSize: 11, marginTop: 6 }}>{starterPick.err}</div>}
+              </div>
+            )}
+            {starterPicked && (
+              <div style={{ color: '#8fe6b0', fontSize: 13, margin: '10px 0' }}>🎉 {starterPicked} を仲間にした！（ペット画面で確認・選択できます）</div>
+            )}
+            <Btn onClick={restart}>もう一度</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
         )}
         {status === 'dead' && (
           <div style={{ textAlign: 'center', marginTop: 16, color: '#ff5555' }}>💀 ペットは力尽きた…<br /><span style={{ fontSize: 11, color: '#cc8888' }}>戦利品のランダム半分を失った…残りは持ち帰った</span><RewardPanel reward={reward} pet={pet} /><Btn onClick={restart}>再挑戦</Btn> <Btn onClick={backToSelect}>ダンジョン選択</Btn> <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn> <Btn onClick={leaveToTown}>街に戻る</Btn></div>
