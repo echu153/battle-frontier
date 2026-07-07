@@ -860,9 +860,10 @@ export default function Dungeon() {
   // ダンジョンを選んで開始（startFloor=途中階スタート。踏破済みダンジョンで最終階の1つ手前まで選べる）
   const beginDungeon = (d, startFloor = 1, confirmed = false) => {
     const sf = Math.max(1, Math.min(startFloor, (d?.floors || 10) - 1))
-    // 途中階スタートはゲーム内ポップアップで確認をはさむ
-    if (sf > 1 && !confirmed) {
-      setConfirmBox({ msg: `B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => beginDungeon(d, sf, true) })
+    // 開始前にゲーム内ポップアップで確認（B1Fからでも出す＝誤タップ防止）
+    if (!confirmed) {
+      setConfirmBox({ msg: `${d?.name || 'ダンジョン'}
+B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => beginDungeon(d, sf, true) })
       return
     }
     setDungeon(d)
