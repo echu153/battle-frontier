@@ -348,10 +348,10 @@ export const DUNGEONS = [
       { from: 29, to: 30, enemies: [D30E.harisen, D30E.dokukurage, D30E.denkikurage] }, // 30はボス階で上書き（保険）
     ],
   },
-  // 五霊の大峡谷（60F）。エリア③〜⑦の5帯構成＋60Fボス。開発先行（comingSoon=is_adminのみ挑戦可）
+  // 五霊の大峡谷（60F）。エリア③〜⑦の5帯構成＋60Fボス。2026-07-07 一般公開（d30クリアで開放）
   //  推奨LV100（F1）〜LV350目安（60Fボス・チャーム込み）。敵はD60E固定ステ
   {
-    id: 'd60', name: '五霊の大峡谷', floors: 60, requires: 'd30', emoji: '⛰', comingSoon: true,
+    id: 'd60', name: '五霊の大峡谷', floors: 60, requires: 'd30', emoji: '⛰',
     areas: [3, 4, 5, 6, 7], charms: ['antidote', 'guard'],
     hint: '推奨LV100〜（最深部はLV350目安）',
     floorTable: [
