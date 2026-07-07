@@ -859,6 +859,7 @@ export default function Dungeon() {
   // ダンジョンを選んで開始（startFloor=途中階スタート。踏破済みダンジョンで最終階の1つ手前まで選べる）
   const beginDungeon = (d, startFloor = 1) => {
     const sf = Math.max(1, Math.min(startFloor, (d?.floors || 10) - 1))
+    if (sf > 1 && !window.confirm(`B${sf}Fから開始しますか？`)) return // 途中階スタートは確認をはさむ
     setDungeon(d)
     setFloorNum(sf); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setBurned(false); setDebuff({ atk: 0, def: 0, mdef: 0 }); setShield(0); shieldTurnsRef.current = 0; shieldRateRef.current = 1; setRegen(0); regenAmtRef.current = 0; setPetAtkUp(0); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
     sinceShopRef.current = 0; shopAtRef.current = 20 + Math.floor(Math.random() * 11); setShop(null); shopRef.current = null

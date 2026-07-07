@@ -126,6 +126,7 @@ returns json language plpgsql security definer set search_path = public as $$
 declare
   v_id uuid; c player_charms%rowtype; v_shredded int := 0; v_total int := 0; v_k text; i int;
   v_keys text[] := array['atk_seed','spatk_seed','def_seed','spdef_seed','hp_seed'];
+  v_bd jsonb := '{}'::jsonb; -- 獲得内訳 { atk_seed: n, ... }
 begin
   if p_ids is null or array_length(p_ids, 1) is null then raise exception 'no ids'; end if;
   if array_length(p_ids, 1) > 100 then raise exception 'too many'; end if;
@@ -142,8 +143,9 @@ begin
       insert into pet_storage(owner_id, item_key, qty) values (auth.uid(), v_k, 1)
         on conflict (owner_id, item_key) do update set qty = pet_storage.qty + 1;
       v_total := v_total + 1;
+      v_bd := jsonb_set(v_bd, array[v_k], to_jsonb(coalesce((v_bd->>v_k)::int, 0) + 1));
     end loop;
   end loop;
-  return json_build_object('shredded', v_shredded, 'total', v_total);
+  return json_build_object('shredded', v_shredded, 'total', v_total, 'breakdown', v_bd);
 end; $$;
 grant execute on function pet_charm_shred(uuid[]) to authenticated;

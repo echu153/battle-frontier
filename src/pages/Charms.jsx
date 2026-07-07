@@ -104,7 +104,11 @@ export default function Charms() {
     if (error) { flash('裁断に失敗: ' + error.message); return }
     setShredSel({})
     await load()
-    flash('裁断完了！ランダムな素を' + (data?.total ?? ids.length * 3) + '個入手した')
+    // 内訳（サーバーのbreakdown）を「攻撃の素×2・HPの素×4」形式で表示
+    const NAMES = { atk_seed: '攻撃の素', spatk_seed: '特攻の素', def_seed: '防御の素', spdef_seed: '特防の素', hp_seed: 'HPの素' }
+    const bd = data?.breakdown || {}
+    const detail = Object.entries(bd).filter(([, n]) => n > 0).map(([k, n]) => `${NAMES[k] || k}×${n}`).join('・')
+    flash(`✂️ 裁断完了！${detail || `素を${data?.total ?? ids.length * 3}個入手`}`)
   }
   // 凝縮：○○の素10個 → 凝縮された○○の素1個
   const condense = async (stat, times = 1) => {

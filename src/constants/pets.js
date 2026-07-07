@@ -381,18 +381,6 @@ export const DUNGEONS = [
       { from: 59, to: 60, enemies: [D60E.firedrake, D60E.ifrit, D60E.lavaGolem] }, // 60はボス階で上書き（保険）
     ],
   },
-  // 開発用ダンジョン（is_admin限定・BGMテスト）。深海の廃都
-  {
-    id: 'ddev', name: '深海の廃都', floors: 5, requires: null, emoji: '🌊', comingSoon: true, dev: true,
-    areas: [4], charms: ['antidote', 'guard'], bgm: '/深海の廃都.mp3',
-    floorTable: [
-      { from: 1, to: 5, enemies: [
-        { name: '毒クラゲ', type: 'spec', image: '/dokukurage.png', statMult: 1.0, skills: [{ name: 'どく', chance: 0.45, type: 'poison' }] },
-        { name: '電気クラゲ', type: 'spec', image: '/denkikurage.png', statMult: 1.0, skills: [{ name: 'しびれ', chance: 0.30, type: 'paralyze' }] },
-        { name: 'ハリセンボン', type: 'phys', image: '/harisennbonn.png', statMult: 1.0, skills: [{ name: 'どくのハリ', chance: 0.35, type: 'poison' }] },
-      ] },
-    ],
-  },
 ]
 export const getDungeon = (id) => DUNGEONS.find((d) => d.id === id) || DUNGEONS[0]
 
@@ -668,7 +656,7 @@ export const CHARM_STATS = ['hp', 'atk', 'spatk', 'def', 'spdef']
 export const CHARMS = {
   hajimari: { type: 'hajimari', name: 'はじまりのチャーム', emoji: '🔰', effect: null,       short: 'はじまり', desc: '追加能力なし' },
   antidote: { type: 'antidote', name: '解毒のチャーム',     emoji: '🧪', effect: 'antidote', short: '解毒', minFloor: 1,  desc: '毒になる確率が50%減る' },
-  guard:    { type: 'guard',    name: '守りのチャーム',     emoji: '🛡️', effect: 'guard',    short: '防御', minFloor: 1,  desc: '防御+10%' },
+  guard:    { type: 'guard',    name: '防御のチャーム',     emoji: '🛡️', effect: 'guard',    short: '防御', minFloor: 1,  desc: '防御+10%' },
   mdefup:   { type: 'mdefup',   name: 'とくぼうのチャーム', emoji: '🟩', effect: 'mdefup',   short: '特防', minFloor: 1,  desc: '特防+10%' },
   atkup:    { type: 'atkup',    name: '攻撃のチャーム',     emoji: '🟥', effect: 'atkup',    short: '攻撃', minFloor: 10, desc: '攻撃+10%' },
   spatkup:  { type: 'spatkup',  name: 'とくこうのチャーム', emoji: '🟪', effect: 'spatkup',  short: '特攻', minFloor: 10, desc: '特攻+10%' },
@@ -778,14 +766,6 @@ export const DUNGEON_TILES = {
     walls:  ['/dg_wall2.png', '/dg_wall3.png', '/dg_wall5.png'],  // 壁3種（マスごとにランダム表示）
     stairs: '/dg_stairs.png',  // 階段
     item:   '/dg_item.png',    // 落ちているアイテム（共通マーカー）
-  },
-  // 深海の廃都(開発用)専用タイル。壁＝水たまり（後で特定モンスターのみ通行可にする予定）
-  ddev: {
-    floor:  '/水辺床.png',       // 床（水辺の地面）
-    wall:   '/mizutamari.png',  // 壁＝水たまり
-    walls:  ['/mizutamari.png'],
-    stairs: '/dg_stairs.png',
-    waterWall: true,            // 壁を「水たまり」として半透明描画（床が透けて水に見える）
   },
   // 初級の洞窟(d10)は従来の色・絵文字のまま（タイル未設定）
 }
