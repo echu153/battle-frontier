@@ -7,6 +7,7 @@ import { getWeaponGroup } from '../lib/stats'
 import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 import { selectBattleSkillSets } from '../lib/loadout'
+import { buildSummon, summonAnnounce, summonAttackDamage, summonAbsorbBasic, summonEndOfTurn } from '../lib/summon'
 import {
   calcEffectiveStats,
   calcEvasionRate,
@@ -157,6 +158,9 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
   const hasRyurin  = passiveNames.includes('竜鱗の加護')
   const ryurinMult = hasRyurin ? (pe('竜騎士') ? 1.4 : 1.2) : 1.0
   const ryurinReduce = () => (hasRyurin && Math.random() < 0.3) ? (pe('竜騎士') ? 0.80 : 0.95) : 1.0
+  // 召喚系パッシブ（式神召喚／ペット召喚）
+  const summon = buildSummon(profile, passiveNames, profile.activePet)
+  summonAnnounce(summon, logs)
 
   // 居合の構え：セット中の通常スキルが全て使用回数1のとき発動（物理ダメージ専用 通常+40%／再修練+70%）
   const iaiSetSkills = skillSets.filter(ss => ss.skills && ss.skills.type !== 'パッシブ')
@@ -532,6 +536,8 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
   }
 
   const doEnemyAttack = (isExtra = false) => {
+    // ペット召喚：50%で敵の通常攻撃をペットが受ける（プレイヤーHP無傷）
+    if (summonAbsorbBasic(summon, { atk: enemy.atk, matk: enemy.matk, type: enemy.type }, enemyBuffs, turn, logs)) return
     const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
     const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
     const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
@@ -600,6 +606,8 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
   // 第3 双子: 片割れ(body)の攻撃。カストル=物理(atk)/ポルックス=特殊(matk)。soloで強化。
   const doBodyAttack = (body, kind, solo) => {
     const isMag = kind === 'magical'
+    // ペット召喚：50%で双子の攻撃をペットが受ける
+    if (summonAbsorbBasic(summon, { atk: body.atk, matk: body.matk, type: isMag ? 'magical' : 'physical' }, enemyBuffs, turn, logs)) return
     const soloMult = solo ? 1.5 : 1.0
     const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
     const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
@@ -649,6 +657,13 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     if (passiveNames.includes('骸の壁') && (turn === 1 || turn % 4 === 0)) {
       playerBuffs.dmgReduce = { turns:999, rate:0.7, isGainoKabe:true }
       logs.push({ text:`💀 骸の壁発動！ 次に攻撃を受けるまで被ダメ-30%！`, color:'#cc44ff' })
+    }
+    // 召喚（式神／ペット）のターン開始攻撃（双子対応のため dmgEnemy 経由）
+    {
+      const sEnemy = { def: enemy.def, mdef: enemy.mdef, atk: enemy.atk, matk: enemy.matk, type: enemy.type, name: enemy.name, evasionRate: 0 }
+      const sd = summonAttackDamage(summon, sEnemy, enemyBuffs, playerBuffs, eff, rtCur, logs)
+      if (sd > 0) dmgEnemy(sd, 'magical')
+      if (enemyHp <= 0) break
     }
     // ===== ターン開始: mods による敵能力スケーリング =====
     if (mods.turnScaleAtk) { const m = 1 + mods.turnScaleAtk * (turn - 1); enPerm.atkMult = m; enPerm.matkMult = m }
@@ -841,6 +856,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const berserkWasActive = playerBuffs.berserk?.turns > 0
     Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns > 0) playerBuffs[k].turns-- })
     Object.keys(enemyBuffs).forEach(k =>  { if (enemyBuffs[k]?.turns  > 0) enemyBuffs[k].turns-- })
+    summonEndOfTurn(summon) // ペットの被ダメ軽減ターン減衰
     if (berserkWasActive && playerBuffs.berserk?.turns === 0 && expandedSkillSet.length > 0) {
       const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk.lockedSkill)
       if (lockedIdx >= 0) skillIndex = lockedIdx + 1

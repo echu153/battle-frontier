@@ -6,6 +6,7 @@ import { getWeaponGroup } from '../lib/stats'
 import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 import { selectBattleSkillSets } from '../lib/loadout'
+import { buildSummon, summonAnnounce, summonAttackDamage, summonAbsorbBasic, summonEndOfTurn } from '../lib/summon'
 import {
   calcEffectiveStats,
   calcEvasionRate,
@@ -104,6 +105,9 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   const hasRyurin  = passiveNames.includes('竜鱗の加護')
   const ryurinMult = hasRyurin ? (pe('竜騎士') ? 1.4 : 1.2) : 1.0
   const ryurinReduce = () => (hasRyurin && Math.random() < 0.3) ? (pe('竜騎士') ? 0.80 : 0.95) : 1.0
+  // 召喚系パッシブ（式神召喚／ペット召喚）
+  const summon = buildSummon(profile, passiveNames, profile.activePet)
+  summonAnnounce(summon, logs)
 
   // 居合の構え：セット中の通常スキルが全て使用回数1のとき発動（物理ダメージ専用 通常+40%／再修練+70%）
   const iaiSetSkills = skillSets.filter(ss => ss.skills && ss.skills.type !== 'パッシブ')
@@ -355,6 +359,8 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   }
 
   const doEnemyAttack = (isExtra = false) => {
+    // ペット召喚：50%で敵の通常攻撃をペットが受ける（プレイヤーHP無傷）
+    if (summonAbsorbBasic(summon, { atk: enemy.atk, matk: enemy.matk, type: enemy.type }, enemyBuffs, turn, logs)) return
     const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
     const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
     const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
@@ -589,6 +595,12 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       logs.push({ text:`🤢 猛毒ダメージ！ ${enemy.name}に${spDmg}ダメージ！`, color:'#aa44ff' })
       if (enemyHp <= 0) break
     }
+    // 召喚（式神／ペット）のターン開始攻撃
+    {
+      const sEnemy = { def: enemy.def, mdef: enemy.mdef, atk: enemy.atk, matk: enemy.matk, type: enemy.type, name: enemy.name, evasionRate: 0 }
+      enemyHp -= summonAttackDamage(summon, sEnemy, enemyBuffs, playerBuffs, eff, rtCur, logs)
+      if (enemyHp <= 0) break
+    }
     if (enemyBuffs.burn?.turns > 0) {
       const burnDmg = Math.floor(enemyMaxHp * 0.02); enemyHp -= burnDmg
       logs.push({ text:`🔥 やけどダメージ！ ${enemy.name}に${burnDmg}ダメージ！`, color:'#ff6622' })
@@ -714,6 +726,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     const berserkWasActive = playerBuffs.berserk?.turns > 0
     Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns > 0) playerBuffs[k].turns-- })
     Object.keys(enemyBuffs).forEach(k =>  { if (enemyBuffs[k]?.turns  > 0) enemyBuffs[k].turns-- })
+    summonEndOfTurn(summon) // ペットの被ダメ軽減ターン減衰
     if (berserkWasActive && playerBuffs.berserk?.turns === 0 && expandedSkillSet.length > 0) {
       const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk.lockedSkill)
       if (lockedIdx >= 0) skillIndex = lockedIdx + 1
