@@ -5320,9 +5320,11 @@ export default function Game() {
     const req2Cl = requires2 ? classLevels.find(x=>x.class_name===requires2) : null
     const req2Lv = req2Cl?req2Cl.lv:0
     const cl = classLevels.find(x=>x.class_name===name)
-    const canChange = name !== profile.class && (requires2
+    // 1度でも転職したことのあるクラス（class_levels に記録あり）は条件なしで再転職可
+    const hasBeenClass = !!cl
+    const canChange = name !== profile.class && (hasBeenClass || (requires2
       ? reqLv>=requiresLv && req2Lv>=requires2Lv
-      : reqLv>=requiresLv)
+      : reqLv>=requiresLv))
     return { name, lv:cl?cl.lv:1, canChange, requires, reqLv, requiresLv, requires2, req2Lv, requires2Lv, requiresItem:req.requiresItem }
   })
 
@@ -5446,7 +5448,7 @@ export default function Game() {
         {(() => {
           const isCurrent = profile.class === 'ギャンブラー'
           const cl = classLevels.find(x=>x.class_name==='ギャンブラー')
-          const canChange = !isCurrent && hasGamblerProof
+          const canChange = !isCurrent && (hasGamblerProof || !!cl)
           return (
             <div style={{ border:`1px solid ${isCurrent?'#445566':canChange?'#886600':'#002244'}`, background:isCurrent?'#001828':'#001028', padding:'8px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -5468,7 +5470,7 @@ export default function Game() {
         {(() => {
           const isCurrent = profile.class === '竜騎士'
           const cl = classLevels.find(x=>x.class_name==='竜騎士')
-          const canChange = !isCurrent && hasDragonKnightProof
+          const canChange = !isCurrent && (hasDragonKnightProof || !!cl)
           return (
             <div style={{ border:`1px solid ${isCurrent?'#445566':canChange?'#886600':'#002244'}`, background:isCurrent?'#001828':'#001028', padding:'8px', marginTop:'8px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -5490,7 +5492,7 @@ export default function Game() {
         {(() => {
           const isCurrent = profile.class === 'ブリーダー'
           const cl = classLevels.find(x=>x.class_name==='ブリーダー')
-          const canChange = !isCurrent && hasBreederProof
+          const canChange = !isCurrent && (hasBreederProof || !!cl)
           return (
             <div style={{ border:`1px solid ${isCurrent?'#445566':canChange?'#886600':'#002244'}`, background:isCurrent?'#001828':'#001028', padding:'8px', marginTop:'8px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
