@@ -98,7 +98,7 @@ function rollFloorLoot(dungeonId, floor) {
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1))
 
-// ---- 秘密の商店（20〜30フロアごとに階段の途中で出現。フロア数にはカウントしない）----
+// ---- 秘密の商店（10〜20フロアごとに階段の途中で出現。フロア数にはカウントしない）----
 const SHOP_STONE_PRICE = { F: 50, E: 100, D: 200, C: 400, B: 800, A: 1600, S: 3200 }
 const SHOP_BOOK_PRICE = 1000
 const SHOP_SEED_PRICE = 100
@@ -347,7 +347,7 @@ export default function Dungeon() {
   const [confirmBox, setConfirmBox] = useState(null)  // ゲーム内確認ポップアップ { msg, okLabel, onOk }
   const shopRef = useRef(null)                        // 開店中の移動ブロック用
   const sinceShopRef = useRef(0)                      // 前回の商店からの踏破フロア数（ダンジョン離脱後も引き継ぐ）
-  const shopAtRef = useRef(20 + Math.floor(Math.random() * 11)) // 次の商店までのフロア数(20〜30)
+  const shopAtRef = useRef(10 + Math.floor(Math.random() * 11)) // 次の商店までのフロア数(10〜20)
   const startFloorRef = useRef(1)                     // このランの開始フロア（商店カウントの対象外）
   const [regen, setRegen] = useState(0)           // 聖域＝あと何ターン毎ターン回復か
   const regenAmtRef = useRef(0)                   // 1ターンの回復量
@@ -1157,12 +1157,12 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
         floorsRef.current += 1
         playSe('kaidan') // 階段SE
         if (floorNum >= (dungeon?.floors || 10)) { setStatus('cleared'); addLog('🏁 最深部を踏破！ダンジョンクリア！'); setState({ ...s, player }); if (dungeon) setCleared((c) => new Set(c).add(dungeon.id)); finishRun(true); return }
-        // 秘密の商店：20〜30フロア進むごとに階段の途中で入る（フロア数にはカウントしない）
+        // 秘密の商店：10〜20フロア進むごとに階段の途中で入る（フロア数にはカウントしない）
         // カウントはラン開始フロアを除外し、ダンジョン離脱後も引き継ぐ
         if (floorNum !== startFloorRef.current) { sinceShopRef.current += 1; saveShopCnt() }
         if ((dungeon?.id === 'd30' || dungeon?.id === 'd60') && sinceShopRef.current >= shopAtRef.current && floorNum + 1 < (dungeon?.floors || 10)) {
           sinceShopRef.current = 0
-          shopAtRef.current = 20 + Math.floor(Math.random() * 11)
+          shopAtRef.current = 10 + Math.floor(Math.random() * 11)
           saveShopCnt()
           const so = { stock: rollShopStock(dungeon?.id), bought: {}, next: floorNum + 1 }
           addLog('🏮 階段の途中に秘密の商店を見つけた…')
