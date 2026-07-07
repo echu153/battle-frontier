@@ -546,7 +546,7 @@ export default function Charms() {
         {tab === 'condense' && (
           <div style={{ border: '1px solid #338866', background: '#001a12', padding: 12 }}>
             <div style={{ color: '#88ddaa', fontSize: 11, marginBottom: 10 }}>
-              💠 ○○の素10個を「凝縮された○○の素」1個に合成します。凝縮された素は<span style={{ color: '#ff88bb' }}>リボンの強化</span>に使います（リボンも強化合計150まで）。
+              💠 ○○の素10個を「凝縮された○○の素」1個に凝縮します。凝縮された素は<span style={{ color: '#ff88bb' }}>リボンの強化</span>と<span style={{ color: '#ffd75e' }}>融合済みチャームのリボン枠強化</span>に使います（いずれも上限300）。
             </div>
             {STAT_KEYS.map((stat) => {
               const meta = STAT_META[stat]
