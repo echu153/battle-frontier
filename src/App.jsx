@@ -53,6 +53,7 @@ const War = lazyReload(() => import('./pages/War'))
 const Marketplace = lazyReload(() => import('./pages/Marketplace'))
 const Event = lazyReload(() => import('./pages/Event'))
 const ActionRpg = lazyReload(() => import('./action-rpg/ActionRpgPage')) // アクションRPGプロト(認証不要・独立)
+const CardGame = lazyReload(() => import('./pages/CardGame')) // 幻札バトル(開発限定・カードゲーム)
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -231,6 +232,7 @@ function App() {
         <Route path="/marketplace" element={session ? <Marketplace /> : <Navigate to="/login" />} />
         <Route path="/event" element={session ? <Event /> : <Navigate to="/login" />} />
         <Route path="/action-rpg" element={session ? <ActionRpg /> : <Navigate to="/login" />} />
+        <Route path="/card-battle" element={session ? <CardGame /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
       </Suspense>

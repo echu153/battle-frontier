@@ -5575,6 +5575,9 @@ export default function Game() {
             {profile?.is_admin && (
               <button onClick={()=>{ setAutoSortie(v=>!v); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color: autoSortie?'#ff6644':'#ffaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔁 自動出撃[開発] {autoSortie?'ON（タップで停止）':'OFF'}</button>
             )}
+            {profile?.is_admin && (
+              <button onClick={()=>{ nav('/card-battle'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎴 幻札バトル[開発]</button>
+            )}
             <button onClick={()=>{ nav('/action-rpg'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#9fe', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🗡 アクションRPG <span style={{ fontSize:'9px', color:'#8877aa' }}>(お試し)</span></button>
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
             <button onClick={()=>{ setRaidNotifyOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8866', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔔 レイド通知</button>
@@ -6125,6 +6128,9 @@ export default function Game() {
             )}
             {profile?.is_admin && (
               <button onClick={()=>{ setAutoSortie(v=>!v); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color: autoSortie?'#ff6644':'#ffaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔁 自動出撃[開発] {autoSortie?'ON（タップで停止）':'OFF'}</button>
+            )}
+            {profile?.is_admin && (
+              <button onClick={()=>{ nav('/card-battle'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎴 幻札バトル[開発]</button>
             )}
             <button onClick={()=>{ nav('/action-rpg'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#9fe', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🗡 アクションRPG <span style={{ fontSize:'9px', color:'#8877aa' }}>(お試し)</span></button>
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
