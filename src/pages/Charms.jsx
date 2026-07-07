@@ -177,7 +177,7 @@ export default function Charms() {
     if ((seeds.shard || 0) < 1) { flash('神秘の欠片が足りません'); return }
     const b = charms.find((c) => c.id === fuseBase); const m = charms.find((c) => c.id === fuseMat)
     const isRibbonFuse = m && isRibbonType(m.ctype)
-    if (isRibbonFuse && (seeds.zeni || 0) < 10000) { flash('ゼニが足りません（リボン融合は🪙10000必要）'); return }
+    if (isRibbonFuse && ((seeds.zeni || 0) + (seeds.zeni_bank || 0)) < 10000) { flash('ゼニが足りません（リボン融合は🪙10000必要・所持＋倉庫）'); return }
     setLoading(true)
     const { error } = isRibbonFuse
       ? await supabase.rpc('pet_charm_fuse_ribbon', { p_charm: fuseBase, p_ribbon: fuseMat })
@@ -207,7 +207,7 @@ export default function Charms() {
   // リボン合成の解除（合成と同じ素材＝欠片1＋ゼニ10000）。リボンが元の種類で戻る
   const doUnfuseRibbon = async (id) => {
     if ((seeds.shard || 0) < 1) { flash('神秘の欠片が足りません'); return }
-    if ((seeds.zeni || 0) < 10000) { flash('ゼニが足りません（リボン解除は🪙10000必要）'); return }
+    if (((seeds.zeni || 0) + (seeds.zeni_bank || 0)) < 10000) { flash('ゼニが足りません（リボン解除は🪙10000必要・所持＋倉庫）'); return }
     setLoading(true)
     const { error } = await supabase.rpc('pet_charm_unfuse_ribbon', { p_charm: id })
     setLoading(false)
@@ -437,7 +437,7 @@ export default function Charms() {
               )
             })()}
             {(() => { const m = charms.find((c) => c.id === fuseMat); const rib = m && isRibbonType(m.ctype)
-              return <Btn onClick={() => !loading && doFuse()}>{rib ? '🎀 融合する' : '🔮 合成する'}（欠片×{seeds.shard || 0}{rib ? ` / 🪙${seeds.zeni || 0}` : ''}）</Btn> })()}
+              return <Btn onClick={() => !loading && doFuse()}>{rib ? '🎀 融合する' : '🔮 合成する'}（欠片×{seeds.shard || 0}{rib ? ` / 🪙${(seeds.zeni || 0) + (seeds.zeni_bank || 0)}` : ''}）</Btn> })()}
 
             {/* 合成解除（合成タブのみ） */}
             {tab === 'fuse' && pures.some((c) => c.fused && !c.ctype3) && (
@@ -463,7 +463,7 @@ export default function Charms() {
               <div style={{ marginTop: 14, borderTop: '1px solid #664422', paddingTop: 10 }}>
                 <div style={{ color: '#ffcc66', fontSize: 11, marginBottom: 8 }}>🎀 リボン融合の解除（欠片1＋🪙10000）。リボンが元の種類で戻ります。<span style={{ color: '#ff8866' }}>チャームの成長値は残りますが、特殊能力（フェイトコア抽選）は全て消えます。</span></div>
                 {pures.filter((c) => c.ctype3).map((c) => {
-                  const can = (seeds.shard || 0) >= 1 && (seeds.zeni || 0) >= 10000
+                  const can = (seeds.shard || 0) >= 1 && ((seeds.zeni || 0) + (seeds.zeni_bank || 0)) >= 10000
                   return (
                     <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
                       <span style={{ color: '#cce6ff', fontSize: 11 }}><CIcon ctype={c.ctype} />{charmDisplayName(c)}{equippedBy(c.id) ? `（${equippedBy(c.id)}）` : ''}</span>

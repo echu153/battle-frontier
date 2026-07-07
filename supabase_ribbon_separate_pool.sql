@@ -18,7 +18,7 @@ alter table player_charms add column if not exists rib_hp    int not null defaul
 -- 2) リボン合成：リボンの+値を rib_* に格納（本体はそのまま・マージ/切り詰めなし）
 create or replace function pet_charm_fuse_ribbon(p_charm uuid, p_ribbon uuid)
 returns json language plpgsql security definer set search_path = public as $$
-declare b player_charms%rowtype; r player_charms%rowtype; v_shard int; v_zeni int;
+declare b player_charms%rowtype; r player_charms%rowtype; v_shard int; v_wallet int; v_bank int; v_from_wallet int;
 begin
   select * into b from player_charms where id = p_charm and owner_id = auth.uid();
   if not found then raise exception 'charm not found'; end if;
@@ -32,13 +32,16 @@ begin
     raise exception 'equipped ribbon cannot be fused';
   end if;
 
-  -- コスト：神秘の欠片1＋ゼニ10000
+  -- コスト：神秘の欠片1＋ゼニ10000（ゼニは所持zeni＋倉庫zeni_bankから支払い。所持を優先消費）
   select coalesce(qty,0) into v_shard from pet_storage where owner_id = auth.uid() and item_key = 'shard';
   if coalesce(v_shard,0) < 1 then raise exception 'not enough shard'; end if;
-  select coalesce(qty,0) into v_zeni from pet_storage where owner_id = auth.uid() and item_key = 'zeni';
-  if coalesce(v_zeni,0) < 10000 then raise exception 'not enough zeni'; end if;
+  select coalesce(qty,0) into v_wallet from pet_storage where owner_id = auth.uid() and item_key = 'zeni';
+  select coalesce(qty,0) into v_bank   from pet_storage where owner_id = auth.uid() and item_key = 'zeni_bank';
+  if coalesce(v_wallet,0) + coalesce(v_bank,0) < 10000 then raise exception 'not enough zeni'; end if;
   update pet_storage set qty = qty - 1 where owner_id = auth.uid() and item_key = 'shard';
-  update pet_storage set qty = qty - 10000 where owner_id = auth.uid() and item_key = 'zeni';
+  v_from_wallet := least(coalesce(v_wallet,0), 10000);
+  if v_from_wallet > 0 then update pet_storage set qty = qty - v_from_wallet where owner_id = auth.uid() and item_key = 'zeni'; end if;
+  if 10000 - v_from_wallet > 0 then update pet_storage set qty = qty - (10000 - v_from_wallet) where owner_id = auth.uid() and item_key = 'zeni_bank'; end if;
 
   -- リボンの+値を rib_* に別枠格納（本体atk等は変更しない）。リボンは削除
   update player_charms set ctype3 = r.ctype,
@@ -78,18 +81,22 @@ grant execute on function pet_charm_enhance_condensed(uuid, text, int) to authen
 -- 4) リボン解除：rib_* の値でリボンを復元し、rib_*/ctype3/特殊能力をクリア（欠片1＋ゼニ10000）
 create or replace function pet_charm_unfuse_ribbon(p_charm uuid)
 returns json language plpgsql security definer set search_path = public as $$
-declare c player_charms%rowtype; v_shard int; v_zeni int;
+declare c player_charms%rowtype; v_shard int; v_wallet int; v_bank int; v_from_wallet int;
 begin
   select * into c from player_charms where id = p_charm and owner_id = auth.uid();
   if not found then raise exception 'charm not found'; end if;
   if c.ctype3 is null then raise exception 'no fused ribbon'; end if;
 
+  -- コスト：神秘の欠片1＋ゼニ10000（ゼニは所持zeni＋倉庫zeni_bankから支払い。所持を優先消費）
   select coalesce(qty,0) into v_shard from pet_storage where owner_id = auth.uid() and item_key = 'shard';
   if coalesce(v_shard,0) < 1 then raise exception 'not enough shard'; end if;
-  select coalesce(qty,0) into v_zeni from pet_storage where owner_id = auth.uid() and item_key = 'zeni';
-  if coalesce(v_zeni,0) < 10000 then raise exception 'not enough zeni'; end if;
+  select coalesce(qty,0) into v_wallet from pet_storage where owner_id = auth.uid() and item_key = 'zeni';
+  select coalesce(qty,0) into v_bank   from pet_storage where owner_id = auth.uid() and item_key = 'zeni_bank';
+  if coalesce(v_wallet,0) + coalesce(v_bank,0) < 10000 then raise exception 'not enough zeni'; end if;
   update pet_storage set qty = qty - 1 where owner_id = auth.uid() and item_key = 'shard';
-  update pet_storage set qty = qty - 10000 where owner_id = auth.uid() and item_key = 'zeni';
+  v_from_wallet := least(coalesce(v_wallet,0), 10000);
+  if v_from_wallet > 0 then update pet_storage set qty = qty - v_from_wallet where owner_id = auth.uid() and item_key = 'zeni'; end if;
+  if 10000 - v_from_wallet > 0 then update pet_storage set qty = qty - (10000 - v_from_wallet) where owner_id = auth.uid() and item_key = 'zeni_bank'; end if;
 
   -- リボンを rib_* の+値ごと復元
   insert into player_charms(owner_id, ctype, atk, spatk, def, spdef, hp)
