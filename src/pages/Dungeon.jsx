@@ -37,6 +37,21 @@ const WEATHER = {
   scorch: { area: 7, name: '灼熱', emoji: '🔥', tint: 'rgba(235,120,60,0.11)',  log: '🔥 焼けつくような熱気…（15ターンごとにHPが削れる）' },
 }
 const weatherForArea = (area) => Object.keys(WEATHER).find((k) => WEATHER[k].area === area) || null
+
+// 控えペットボーナス（非アクティブ所持ペットの素ステ10%合算）を charm 込みステへ加算した最終ステを返す。
+//  ※撃破でのレベルアップ再計算でも同じ処理を通すことで、控えボーナスが消えないようにする
+const applyReserve = (base, rb) => {
+  if (!rb) return base
+  return {
+    ...base,
+    maxHp: base.maxHp + (rb.hp || 0),
+    def: base.def + (rb.def || 0),
+    mdef: base.mdef + (rb.mdef || 0),
+    atk: base.atk + (rb.atk || 0),
+    atkPhys: (base.atkPhys ?? base.atk) + (rb.atk || 0),
+    atkSpec: (base.atkSpec ?? base.atk) + (rb.atk || 0),
+  }
+}
 const SPAWN_CAP = 12          // フロアの敵がこの数以上なら湧かせない（過密防止）
 // 状態異常
 const PARALYZE_TURNS = 5      // 麻痺の持続ターン
@@ -707,7 +722,7 @@ export default function Dungeon() {
     let newMax = null
     setPet((p) => {
       if (!p?.species) return p
-      const st = applyCharmStats(petStats({ species: p.species, level: data.level, evolved: p.evolved }), p.charm, p.ribbon)
+      const st = applyReserve(applyCharmStats(petStats({ species: p.species, level: data.level, evolved: p.evolved }), p.charm, p.ribbon), p.reserveBonus)
       newMax = st.maxHp
       return { ...p, level: data.level, exp: data.exp, ...st }
     })
@@ -832,17 +847,8 @@ export default function Dungeon() {
         let charm = null, ribbon = null
         if (ap.charm_id) { const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle(); charm = c }
         if (ap.ribbon_id) { const { data: rb } = await supabase.from('player_charms').select('*').eq('id', ap.ribbon_id).maybeSingle(); ribbon = rb }
-        const base = applyCharmStats(petStats(ap), charm, ribbon)
         // 控えボーナスを加算（攻撃系は物理/特殊/表示atkすべてに、防御系は各々に）
-        const st = {
-          ...base,
-          maxHp: base.maxHp + reserveBonus.hp,
-          def: base.def + reserveBonus.def,
-          mdef: base.mdef + reserveBonus.mdef,
-          atk: base.atk + reserveBonus.atk,
-          atkPhys: (base.atkPhys ?? base.atk) + reserveBonus.atk,
-          atkSpec: (base.atkSpec ?? base.atk) + reserveBonus.atk,
-        }
+        const st = applyReserve(applyCharmStats(petStats(ap), charm, ribbon), reserveBonus)
         const slots = Array.isArray(ap.skill_slots) && ap.skill_slots.length ? ap.skill_slots : ['tackle']
         setPet({ id: ap.id, species: ap.species, evolved: ap.evolved, charm, ribbon, name: ap.name, emoji: speciesEmoji(ap), image_url: petImage(ap), skillSlots: slots, level: ap.level, exp: ap.exp, reserveBonus, ...st })
         setSelectedSkill(slots[0])
