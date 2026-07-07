@@ -353,7 +353,7 @@ export const DUNGEONS = [
   {
     id: 'd60', name: '五霊の大峡谷', floors: 60, requires: 'd30', emoji: '⛰',
     areas: [3, 4, 5, 6, 7], charms: ['antidote', 'guard'],
-    hint: '推奨LV100〜（最深部はLV350目安）',
+    hint: '推奨LV100〜',
     floorTable: [
       // ③古代の洞窟帯 F1-12
       { from: 1,  to: 2,  enemies: [D60E.kobold] },
