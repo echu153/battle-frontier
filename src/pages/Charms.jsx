@@ -250,7 +250,8 @@ export default function Charms() {
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
           <Btn onClick={() => setTab('enhance')} dim={tab !== 'enhance'}>強化</Btn>
           <Btn onClick={() => setTab('inherit')} dim={tab !== 'inherit'}>継承</Btn>
-          <Btn onClick={() => setTab('fuse')} dim={tab !== 'fuse'}>合成</Btn>
+          <Btn onClick={() => { setTab('fuse'); setFuseBase(null); setFuseMat(null) }} dim={tab !== 'fuse'}>合成</Btn>
+          <Btn onClick={() => { setTab('meld'); setFuseBase(null); setFuseMat(null) }} dim={tab !== 'meld'}>融合</Btn>
           <Btn onClick={() => setTab('condense')} dim={tab !== 'condense'}>凝縮</Btn>
           <Btn onClick={() => setTab('shred')} dim={tab !== 'shred'}>裁断</Btn>
           <Btn onClick={() => setTab('reroll')} dim={tab !== 'reroll'}>抽選</Btn>
@@ -370,37 +371,40 @@ export default function Charms() {
           </div>
         )}
 
-        {tab === 'fuse' && pures.length > 0 && (
-          <div style={{ border: '1px solid #663388', background: '#0e0820', padding: 12 }}>
-            <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔮 神秘の欠片1つで2つの素材を1つのチャームに（効果も両方引継ぎ・成長は合算で合計300まで）。<span style={{ color: '#ff8866' }}>素材2つは無くなり1つにまとまります。</span><br />🎀 <span style={{ color: '#ffd75e' }}>合成済みチャーム＋リボン</span>は「融合」できます（欠片1＋🪙10000）。装備名の先頭に【物理】等が付き、リボンの効果と＋値を引き継ぎます。リボン同士は融合不可。</div>
-            {[['base', '素材①（残す側）', fuseBase, setFuseBase], ['mat', '素材②（消える側）', fuseMat, setFuseMat]].map(([key, label, val, setter]) => (
+        {(tab === 'fuse' || tab === 'meld') && (
+          <div style={{ border: `1px solid ${tab === 'meld' ? '#886633' : '#663388'}`, background: tab === 'meld' ? '#160e08' : '#0e0820', padding: 12 }}>
+            {tab === 'meld'
+              ? <div style={{ color: '#ffd0a0', fontSize: 11, marginBottom: 8 }}>🎀 <span style={{ color: '#ffd75e' }}>合成済みチャーム</span>＋<span style={{ color: '#ffd75e' }}>リボン</span>を融合します（欠片1＋🪙10000）。本体（上限300）とは<span style={{ color: '#ff9ed0' }}>別枠</span>でリボン枠（上限300）が付き合計最大600。装備名の先頭に【物理】等が付きます。リボン同士は融合不可。</div>
+              : <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔮 神秘の欠片1つで2つのチャームを1つに（効果も両方引継ぎ・成長は合算で合計300まで）。<span style={{ color: '#ff8866' }}>素材2つは無くなり1つにまとまります。</span></div>}
+            {[['base', tab === 'meld' ? '合成済みチャーム（残す側）' : '素材①（残す側）', fuseBase, setFuseBase], ['mat', tab === 'meld' ? 'リボン（融合する）' : '素材②（消える側）', fuseMat, setFuseMat]].map(([key, label, val, setter]) => (
               <div key={key} style={{ marginBottom: 10 }}>
                 <div style={{ color: '#9977cc', fontSize: 11, marginBottom: 4 }}>{label}</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {(key === 'base' ? pures : charms).map((c) => {
-                    const on = c.id === val
-                    const other = key === 'base' ? fuseMat : fuseBase
-                    const otherC = charms.find((x) => x.id === other)
-                    const isRib = isRibbonType(c.ctype)
-                    // 選択可否：①=未合成チャーム or 合成済み(リボン枠あき) / ②=未合成チャーム or リボン。
-                    //  組み合わせは チャーム+チャーム / 合成済みチャーム+リボン のみ
-                    let dis = c.id === other
-                    if (key === 'base') dis = dis || (c.fused && c.ctype3) || (otherC && (isRibbonType(otherC.ctype) ? !c.fused : c.fused))
-                    else dis = dis || (!isRib && c.fused) || (isRib && otherC && !otherC.fused)
-                    return (
-                      <button key={c.id} onClick={() => !dis && setter(c.id)} disabled={dis}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: dis ? '#556' : '#cce6ff', padding: '5px 8px', cursor: dis ? 'not-allowed' : 'pointer', fontFamily: 'monospace', fontSize: 11, lineHeight: 1.3, textAlign: 'left' }}>
-                        {on ? '✓ ' : ''}<CIcon ctype={c.ctype} />{charmDisplayName(c)}{c.fused ? '（合成済）' : ''}（計{(c.hp || 0) + (c.atk || 0) + (c.spatk || 0) + (c.def || 0) + (c.spdef || 0)}）
-                      </button>
-                    )
-                  })}
+                  {(() => {
+                    // 合成=未合成の通常チャームのみ / 融合=①合成済み(リボン枠あき)チャーム ②リボン(未装備)のみ
+                    const cands = tab === 'meld'
+                      ? (key === 'base' ? pures.filter((c) => c.fused && !c.ctype3) : charms.filter((c) => isRibbonType(c.ctype) && !equippedBy(c.id)))
+                      : pures.filter((c) => !c.fused)
+                    if (cands.length === 0) return <span style={{ color: '#557799', fontSize: 11 }}>（該当なし）</span>
+                    return cands.map((c) => {
+                      const on = c.id === val
+                      const other = key === 'base' ? fuseMat : fuseBase
+                      const dis = c.id === other
+                      return (
+                        <button key={c.id} onClick={() => !dis && setter(c.id)} disabled={dis}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: dis ? '#556' : '#cce6ff', padding: '5px 8px', cursor: dis ? 'not-allowed' : 'pointer', fontFamily: 'monospace', fontSize: 11, lineHeight: 1.3, textAlign: 'left' }}>
+                          {on ? '✓ ' : ''}<CIcon ctype={c.ctype} />{charmDisplayName(c)}{c.fused ? '（合成済）' : ''}
+                        </button>
+                      )
+                    })
+                  })()}
                 </div>
               </div>
             ))}
             {/* 合成結果のプレビュー */}
             {(() => {
               const b = charms.find((c) => c.id === fuseBase); const m = charms.find((c) => c.id === fuseMat)
-              if (!b || !m || b.id === m.id) return <div style={{ color: '#557799', fontSize: 11, marginBottom: 8 }}>素材①②を選ぶと合成結果が表示されます</div>
+              if (!b || !m || b.id === m.id) return <div style={{ color: '#557799', fontSize: 11, marginBottom: 8 }}>{tab === 'meld' ? 'チャームとリボンを選ぶと融合結果が表示されます' : '素材①②を選ぶと合成結果が表示されます'}</div>
               if (isRibbonType(m.ctype)) {
                 // 別枠合算：本体(b.atk等)はそのまま＋リボン枠(m.atk等)を別枠で保持。合計最大600
                 const baseT = (b.atk || 0) + (b.spatk || 0) + (b.def || 0) + (b.spdef || 0) + (b.hp || 0)
@@ -435,11 +439,11 @@ export default function Charms() {
             {(() => { const m = charms.find((c) => c.id === fuseMat); const rib = m && isRibbonType(m.ctype)
               return <Btn onClick={() => !loading && doFuse()}>{rib ? '🎀 融合する' : '🔮 合成する'}（欠片×{seeds.shard || 0}{rib ? ` / 🪙${seeds.zeni || 0}` : ''}）</Btn> })()}
 
-            {/* 合成解除 */}
-            {pures.some((c) => c.fused) && (
+            {/* 合成解除（合成タブのみ） */}
+            {tab === 'fuse' && pures.some((c) => c.fused && !c.ctype3) && (
               <div style={{ marginTop: 14, borderTop: '1px solid #442266', paddingTop: 10 }}>
                 <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔓 神秘の欠片1つで合成を解除できます（2つ目の効果が外れ、再び合成できるようになります）。<span style={{ color: '#ff8866' }}>成長値は残りますが、特殊能力（フェイトコア抽選）は全て消えます。</span></div>
-                {pures.filter((c) => c.fused).map((c) => {
+                {pures.filter((c) => c.fused && !c.ctype3).map((c) => {
                   const d = getCharm(c.ctype); const can = (seeds.shard || 0) >= 1
                   return (
                     <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
@@ -454,8 +458,8 @@ export default function Charms() {
               </div>
             )}
 
-            {/* リボン合成の解除（合成と同じ素材：欠片1＋ゼニ10000。リボンが元の種類で戻る） */}
-            {pures.some((c) => c.ctype3) && (
+            {/* リボン融合の解除（融合タブのみ・同じ素材：欠片1＋ゼニ10000。リボンが元の種類で戻る） */}
+            {tab === 'meld' && pures.some((c) => c.ctype3) && (
               <div style={{ marginTop: 14, borderTop: '1px solid #664422', paddingTop: 10 }}>
                 <div style={{ color: '#ffcc66', fontSize: 11, marginBottom: 8 }}>🎀 リボン融合の解除（欠片1＋🪙10000）。リボンが元の種類で戻ります。<span style={{ color: '#ff8866' }}>チャームの成長値は残りますが、特殊能力（フェイトコア抽選）は全て消えます。</span></div>
                 {pures.filter((c) => c.ctype3).map((c) => {
