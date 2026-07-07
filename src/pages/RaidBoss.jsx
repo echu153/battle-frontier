@@ -432,6 +432,9 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         return
       }
 
+      // ペット召喚：50%で敵の通常攻撃をペットが受ける（回避判定より前＝他エンジンと統一。受けたらプレイヤーHP無傷・骸の壁も消費しない）
+      if (summonAbsorbBasic(summon, { atk: boss.atk, matk: boss.atk, type: 'physical' }, enemyBuffs, turn, logs)) return
+
       const isCrit = Math.random() * 100 < bossCritRate
       const baseDmg = Math.max(1, Math.floor(eAtk * eAtk / Math.max(1, eAtk + defForCalc)) + Math.floor(Math.random() * 3))
       // プレイヤー回避
@@ -444,16 +447,11 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       const playerDefRankReduction = calcDefReduction(pDef)
       const gambleBodyMult = hasGambleBody ? (pe('ギャンブラー') ? (0.5+Math.random()*0.7) : (0.7+Math.random()*0.6)) : 1.0
       const finalDmg = Math.floor(baseDmg * (isCrit ? 1.5 : 1.0) * dmgReduceRate * berserkDmgRate * (1 - playerDefRankReduction) * gambleBodyMult * evoTakenMult(eff, true) * ryurinReduce() * (0.9 + Math.random() * 0.2))
-      // ペット召喚：50%で敵の通常攻撃をペットが受ける（プレイヤーHP無傷）
-      if (summonAbsorbBasic(summon, { atk: boss.atk, matk: boss.atk, type: 'physical' }, enemyBuffs, turn, logs)) {
-        if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
-      } else {
       playerHp -= finalDmg
       if ((eff.evoReflectPct||0) > 0 && finalDmg > 0) { const r = Math.max(1, Math.floor(finalDmg * eff.evoReflectPct/100)); totalDamage += r; logs.push({ text:`🛡 真化効果！ 反射で${fmt(r)}ダメージ！`, color:'#88ccff' }) }
       if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
       const critText = isCrit ? ' 💥クリティカル！' : ''
       logs.push({ text: `${prefix}${bossName}の攻撃！ あなたに${fmt(finalDmg)}ダメージ…${critText}`, color: isCrit ? '#ff2200' : '#ff6644' })
-      }
       if (playerHp <= 0) {
         playerHp = 0
         logs.push({ text: `力尽きた…（バトル終了）`, color: '#ff4444' })

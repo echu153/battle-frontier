@@ -518,6 +518,9 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     return dmg
   }
 
+  // 敵スキルダメージ：50%でペットが肩代わり（summonAbsorbSkill）。受けなければプレイヤーが被弾
+  const skillHitPlayer = (dmg) => { if (summonAbsorbSkill(summon, dmg, logs)) return; playerHp -= dmg }
+
   // mods: 敵の攻撃が命中したときの追加処理（スタン・状態異常付与・毒追撃）
   const onEnemyHit = () => {
     if (playerHp <= 0) return
@@ -541,7 +544,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       const isMag = enemy.type === 'magical'
       const atkStat = isMag ? eStats.matk : eStats.atk
       const dmg = scaleDamageToPlayer(atkStat * mods.bonusVsStatus.mult, atkStat, isMag ? 'matk' : 'atk', false)
-      playerHp -= dmg
+      skillHitPlayer(dmg)
       logs.push({ text:`↳ ${enemy.name}の追撃！ 弱った身体に${dmg}ダメージ！`, color:'#88dd44' })
     }
   }
@@ -600,7 +603,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const eStats = enemyCastStats()
     const stat = mods.openingBurst.stat === 'matk' ? eStats.matk : eStats.atk
     const dmg = scaleDamageToPlayer(stat * mods.openingBurst.mult, stat, mods.openingBurst.stat === 'matk' ? 'matk' : 'atk', false)
-    playerHp -= dmg
+    skillHitPlayer(dmg)
     logs.push({ text:`💥 ${enemy.name}の開幕奇襲！ あなたに${dmg}ダメージ！`, color:'#ff2200' })
   }
 
@@ -617,9 +620,9 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
   // 第3 双子: 片割れ(body)の攻撃。カストル=物理(atk)/ポルックス=特殊(matk)。soloで強化。
   const doBodyAttack = (body, kind, solo) => {
     const isMag = kind === 'magical'
-    // ペット召喚：50%で双子の攻撃をペットが受ける
-    if (summonAbsorbBasic(summon, { atk: body.atk, matk: body.matk, type: isMag ? 'magical' : 'physical' }, enemyBuffs, turn, logs)) return
     const soloMult = solo ? 1.5 : 1.0
+    // ペット召喚：50%で双子の攻撃をペットが受ける（攻撃力は本体ではなく双子ステ×soloMult）
+    if (summonAbsorbBasic(summon, { atk: (enemy.atk||0)*soloMult, matk: (enemy.matk||0)*soloMult, type: isMag ? 'magical' : 'physical' }, enemyBuffs, turn, logs)) return
     const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
     const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
     const pDef  = eff.def  * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDefE * holyKnightMultE * ryurinMult

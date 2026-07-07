@@ -439,13 +439,16 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     return dmg
   }
 
+  // 敵スキルダメージ：50%でペットが肩代わり（summonAbsorbSkill）。受けなければプレイヤーが被弾
+  const skillHitPlayer = (dmg) => { if (summonAbsorbSkill(summon, dmg, logs)) return; playerHp -= dmg }
+
   // 影強化の追撃（A2.0の物理追撃）
   const doFollowup = () => {
     if (enPerm.followupAtk <= 0) return
     const eStats = enemyCastStats()
     const raw = eStats.atk * enPerm.followupAtk
     const dmg = scaleDamageToPlayer(raw, eStats.atk, 'atk', false)
-    playerHp -= dmg
+    skillHitPlayer(dmg)
     logs.push({ text:`↳ ${enemy.name}の追撃！ あなたに${dmg}ダメージ！`, color:'#ff8866' })
   }
 
@@ -463,7 +466,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       const atkStat = isMag ? eStats.matk : eStats.atk
       const isCrit = Math.random()*100 < enemyCritRate
       finalDmg = scaleDamageToPlayer(res.dmg, atkStat, isMag ? 'matk' : 'atk', isCrit)
-      playerHp -= finalDmg
+      skillHitPlayer(finalDmg)
     }
     if (res.selfDmg > 0) enemyHp = Math.max(0, enemyHp - res.selfDmg)
     if (res.heal > 0) enemyHp = Math.min(enemyMaxHp, enemyHp + (enemyBuffs.healDown?.turns > 0 ? Math.floor(res.heal * enemyBuffs.healDown.rate) : res.heal))
@@ -478,7 +481,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     if (def.name === '鬼影閃' && (playerBuffs.bleed?.stacks || 0) >= 5) {
       const eStats2 = enemyCastStats()
       const bonus = scaleDamageToPlayer(eStats2.atk * (Math.min(1.0, playerBuffs.bleed.stacks * 0.2)) * 1.5, eStats2.atk, 'atk', false)
-      playerHp -= bonus
+      skillHitPlayer(bonus)
       delete playerBuffs.bleed
       logs.push({ text:`🩸 急所突き自動発動！ 出血を爆発させ${bonus}ダメージ！`, color:'#ff3366' })
     }
@@ -488,7 +491,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     if (res.followup && res.followup.dmg > 0) {
       const fCrit = Math.random()*100 < enemyCritRate
       const fDmg = scaleDamageToPlayer(res.followup.dmg, isMag ? eStats.matk : eStats.atk, isMag ? 'matk' : 'atk', fCrit)
-      playerHp -= fDmg
+      skillHitPlayer(fDmg)
       logs.push({ text:`↳ ${enemy.name}の追撃！${res.followup.label?`（${res.followup.label}）`:''} あなたに${fDmg}ダメージ！${fCrit?' 💥クリティカル！':''}`, color:'#ff6655' })
     }
     doFollowup()
@@ -521,7 +524,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       const isCrit = def.critGuaranteed || (Math.random()*100 < enemyCritRate)
       total += scaleDamageToPlayer(raw, atkStat, useStat, isCrit)
     }
-    playerHp -= total
+    skillHitPlayer(total)
     if (def.lifesteal && total > 0) enemyHp = Math.min(enemyMaxHp, enemyHp + Math.floor(total * def.lifesteal))
     logs.push({ text:`💥 ${enemy.name}の「${def.name}」！ あなたに${total}ダメージ！${def.critGuaranteed?' 💥確定クリティカル！':''}`, color:'#ff2200' })
     // 付随効果
