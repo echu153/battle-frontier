@@ -2061,31 +2061,13 @@ export default function Dungeon() {
                     {pet.name} HP {petHp}/{pet.maxHp}
                   </span>
                   <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
-                  {(dungeon?.id === 'd30' || dungeon?.id === 'd60') && <span style={{ color: '#ffd75e', display: 'inline-flex', alignItems: 'center', gap: 3 }}><img src={petItemImg('zeni')} alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} />{zeni}</span>}
                 </div>
                 {chips.length > 0 && (
                   <div style={{ display: 'flex', gap: 8, fontSize: 11, flexWrap: 'wrap', alignItems: 'center' }}>
                     {chips.map((c) => <span key={c.k} style={{ color: c.col, whiteSpace: 'nowrap' }}>{c.label}</span>)}
                   </div>
                 )}
-                {/* ボスHPバー（大）。形態ラベル/色はボス定義(bossFor)から */}
-                {(() => {
-                  const boss = state.enemies.find((e) => e.boss)
-                  if (!boss) return null
-                  const ph = bossFor(dungeon?.id).phases[boss.phase] || {}
-                  const r = Math.max(0, Math.min(1, (boss.hp || 0) / (boss.maxHp || 1)))
-                  return (
-                    <div style={{ marginTop: 2 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: ph.barColor || '#ffaa66' }}>
-                        <span>👿 {boss.name}{ph.label ? `（${ph.label}）` : ''}</span>
-                        <span>{boss.hp}/{boss.maxHp}</span>
-                      </div>
-                      <div style={{ height: 7, background: 'rgba(0,4,10,0.85)', border: '1px solid #000', borderRadius: 3, overflow: 'hidden' }}>
-                        <div style={{ width: `${r * 100}%`, height: '100%', background: ph.barColor || '#ff8844', transition: 'width 0.25s ease' }} />
-                      </div>
-                    </div>
-                  )
-                })()}
+                {/* ボスのHPバー・名前表示は廃止（画面が狭くボスが見切れるため。2026-07-07） */}
               </div>
             )
           })()}
@@ -2450,7 +2432,15 @@ export default function Dungeon() {
           return (
             <div style={{ marginTop: 12, background: '#000610', border: `1px solid ${dropMode ? '#cc7755' : '#113355'}`, padding: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <div style={{ color: '#88aacc', fontSize: 11 }}>🎒 持ち物 <span style={{ color: bagCount() >= bagMax ? '#ff7777' : '#5e7fa0' }}>{bagCount()}/{bagMax}</span>（翼も含む）{dropMode && <span style={{ color: '#ff9966' }}>　捨てるモード：押すと足元に置く</span>}</div>
+                <div style={{ color: '#88aacc', fontSize: 11, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span>🎒 持ち物 <span style={{ color: bagCount() >= bagMax ? '#ff7777' : '#5e7fa0' }}>{bagCount()}/{bagMax}</span></span>
+                  {(dungeon?.id === 'd30' || dungeon?.id === 'd60') && (
+                    <span style={{ color: '#ffd75e', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                      <img src={petItemImg('zeni')} alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} />{zeni}
+                    </span>
+                  )}
+                  {dropMode && <span style={{ color: '#ff9966' }}>捨てるモード：押すと足元に置く</span>}
+                </div>
                 <button onClick={() => setDropMode((d) => !d)}
                   style={{ background: dropMode ? '#2a1000' : '#0a1424', border: `1px solid ${dropMode ? '#ff9966' : '#335588'}`, color: dropMode ? '#ff9966' : '#88aacc', padding: '3px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
                   🗑 捨てる{dropMode ? '（ON）' : ''}
