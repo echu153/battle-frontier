@@ -1023,7 +1023,7 @@ export default function Dungeon() {
         enemies = enemies.map((e) => e.id === target.id ? {
           ...e, phase: target.phase + 1, type: np.type, mix: !!np.mix, skills: np.skills,
           visualScale: np.visualScale ?? bossDef.visualScale ?? e.visualScale, // 形態ごとの表示倍率（パピア第2形態=1.45）
-          hp: np.hp, maxHp: np.hp, atk: np.atk, def: np.def, mdef: np.mdef, buff: 0, atkDown: 0, defDown: 0, healedOnce: false, charging: false, bigUsed: false, blink: true,
+          hp: np.hp, maxHp: np.hp, atk: np.atk, def: np.def, mdef: np.mdef, buff: 0, atkDown: 0, defDown: 0, healedOnce: false, raged: false, bigCount: 0, blink: true,
         } : e)
         addLog(np.transition?.during || `💀 ${target.name}の様子が変わっていく…！`, 'right')
         playSe('bosukeitaihenkazi') // 形態変化SE
@@ -1217,17 +1217,24 @@ export default function Dungeon() {
         const guardDown = atkType === 'spec' ? (debuff.mdef > 0) : (debuff.def > 0)
         const guard = guardDown ? baseGuard * (1 - STAT_DOWN_PCT) : baseGuard
         // 敵の攻撃力（自己バフ中は ENEMY_BUFF_MULT 倍／攻撃ダウン中は減）
-        const eAtk = (e.atk || 1) * ((e.buff || 0) > 0 ? ENEMY_BUFF_MULT : 1) * ((e.atkDown || 0) > 0 ? 1 - STAT_DOWN_PCT : 1)
+        const eAtk = (e.atk || 1) * ((e.buff || 0) > 0 ? ENEMY_BUFF_MULT : 1) * ((e.atkDown || 0) > 0 ? 1 - STAT_DOWN_PCT : 1) * (raged && bossPh?.rageMult ? bossPh.rageMult : 1)
         // 敵のダメージも 0.9〜1.1 の乱数補正（最低1）
         let dmg = Math.max(1, Math.round(calcDamage(eAtk, guard) * (0.9 + Math.random() * 0.2)))
         // 敵スキル（確率発動）。ボスはHP50%以下で「復讐」を追加
         const bossPh = e.boss ? bossFor(dungeon?.id).phases[e.phase] : null
-        const lowHp = (e.hp || 0) <= (e.maxHp || 1) * 0.5
+        const lowHp = (e.hp || 0) <= (e.maxHp || 1) * (bossPh?.lowHpAt ?? 0.5)
+        // 怒りバフ：HPがrageAt以下になったら一度だけ与ダメ倍率アップ（永続）
+        let raged = !!e.raged
+        if (e.boss && bossPh?.rageMult && !raged && (e.hp || 0) <= (e.maxHp || 1) * (bossPh.rageAt ?? 0.5)) {
+          raged = true
+          addLog(`💢 ${e.name}の攻撃が激しさを増した！`, 'right')
+          playSe('バフ')
+        }
         const sks = (lowHp && bossPh?.lowHpSkill) ? [...(e.skills || []), bossPh.lowHpSkill] : (e.skills || [])
         const notes = []
         let heal = 0; let gotBuff = false; let reviveHeal = 0
-        // 第2形態：HP50%以下で1度だけ最大HPの reviveHealPct を回復
-        if (e.boss && e.phase === 1 && lowHp && !e.healedOnce && bossPh?.reviveHealPct) {
+        // 大技形態：lowHpAt以下で1度だけ最大HPの reviveHealPct を回復（パピア=30%以下/カモルス=50%以下）
+        if (e.boss && lowHp && !e.healedOnce && bossPh?.reviveHealPct) {
           reviveHeal = Math.ceil((e.maxHp || 1) * bossPh.reviveHealPct)
         }
         const antidote = charmHasEffect(pet.charm, 'antidote')
@@ -1257,11 +1264,8 @@ export default function Dungeon() {
           skillFx: !!(e.boss && notes.length > 0), bigFx: usedBig, // ボスのスキル/大技は演出を派手に
           lunge: { dx: Math.sign(player.x - e.x), dy: Math.sign(player.y - e.y) } })
         let ne = { ...e, atkDown: Math.max(0, (e.atkDown || 0) - 1), defDown: Math.max(0, (e.defDown || 0) - 1) } // デバフ減衰
-        // 大技チャージ演出：HP50%以下で大技を控えている間は震える。放ったら解除
-        if (e.boss && bossPh?.lowHpSkill) {
-          if (usedBig) ne = { ...ne, charging: false, bigUsed: true }
-          else if (lowHp && !e.bigUsed) ne = { ...ne, charging: true }
-        }
+        if (raged && !e.raged) ne = { ...ne, raged: true } // 怒りバフは永続（この形態の間）
+        if (e.boss && usedBig) ne = { ...ne, bigCount: (e.bigCount || 0) + 1 } // 大技は2回使うと震え解除
         if (heal > 0) ne = { ...ne, hp: Math.min(e.maxHp, e.hp + heal) }
         if (reviveHeal > 0) { ne = { ...ne, hp: Math.min(e.maxHp, ne.hp + reviveHeal), healedOnce: true }; addLog(`✨ ${e.name}はHPを回復した！`, 'right') }
         if (gotBuff) ne = { ...ne, buff: ENEMY_BUFF_TURNS }
@@ -1271,9 +1275,6 @@ export default function Dungeon() {
       // ボスは2×2ブロックでプレイヤーへ接近（4マス全部が床＆プレイヤー非占有なら移動）
       //  「移動後に攻撃範囲(隣接)へ入る手」を最優先。同点時も横並び追走にならないようチェビシェフで最終タイブレーク
       if (e.boss) {
-        // 大技チャージ演出（攻撃していないターンでもHP50%以下なら震える）
-        const bossPh2 = bossFor(dungeon?.id).phases[e.phase]
-        e = { ...e, charging: !!(bossPh2?.lowHpSkill && (e.hp || 0) <= (e.maxHp || 1) * 0.5 && !e.bigUsed) }
         const blockOk = (nx2, ny2) => {
           for (let ddy = 0; ddy < e.size; ddy++) for (let ddx = 0; ddx < e.size; ddx++) {
             const cx = nx2 + ddx, cy = ny2 + ddy
@@ -1589,7 +1590,7 @@ export default function Dungeon() {
           enemies = enemies.map((e) => e.id === cur.id ? {
             ...e, phase: cur.phase + 1, type: np.type, mix: !!np.mix, skills: np.skills,
             visualScale: np.visualScale ?? bd.visualScale ?? e.visualScale,
-            hp: np.hp, maxHp: np.hp, atk: np.atk, def: np.def, mdef: np.mdef, buff: 0, atkDown: 0, defDown: 0, healedOnce: false, charging: false, bigUsed: false, blink: true,
+            hp: np.hp, maxHp: np.hp, atk: np.atk, def: np.def, mdef: np.mdef, buff: 0, atkDown: 0, defDown: 0, healedOnce: false, raged: false, bigCount: 0, blink: true,
           } : e)
           addLog(np.transition?.during || `💀 ${cur.name}の様子が変わっていく…！`, 'right')
           playSe('bosukeitaihenkazi')
@@ -2189,9 +2190,9 @@ export default function Dungeon() {
                   const bsz = c.bossE?.size || 2
                   const bsc = c.bossE?.visualScale || 1
                   const w = bsz * 100 * bsc
-                  // 大技チャージの震え：現在形態に大技があり・未使用・HP50%以下なら震える（HPから直接導出）
+                  // 大技チャージの震え：現在形態に大技があり・使用2回未満・HPがlowHpAt以下なら震える（HPから直接導出）
                   const bph = bossFor(dungeon?.id).phases[c.bossE?.phase || 0]
-                  const trembling = !!(bph?.lowHpSkill && !c.bossE?.bigUsed && (c.bossE?.hp || 0) <= (c.bossE?.maxHp || 1) * 0.5)
+                  const trembling = !!(bph?.lowHpSkill && (c.bossE?.bigCount || 0) < 2 && (c.bossE?.hp || 0) <= (c.bossE?.maxHp || 1) * (bph.lowHpAt ?? 0.5))
                   return (
                     <div style={{ position: 'absolute', left: `${-(w - bsz * 100) / 2}%`, top: `${-(w - bsz * 100)}%`, width: `${w}%`, height: `${w}%`, zIndex: 4, pointerEvents: 'none',
                       animation: (!c.bossE?.blink && trembling) ? 'bf-boss-tremble 0.12s linear infinite' : undefined }}>

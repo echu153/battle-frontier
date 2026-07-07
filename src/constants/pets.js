@@ -416,7 +416,10 @@ export const DEVIL_PAPIA = {
       label: '第2形態', barColor: '#ff4488', visualScale: 1.45, // 全身像なので拡大表示（判定は2×2のまま）
       hp: 3000, atk: 260, def: 160, mdef: 150, type: 'phys', mix: true, image: '/debirupapia2.png',
       transition: { during: '💀 デビルパピアが力を取り戻していく…！', after: '💀 デビルパピア 第2形態！' },
-      // HP50%以下で「復讐」（高威力）。HP50%以下で1度だけ最大HP30%回復
+      // HP50%以下で与ダメ1.2倍の怒りバフを1度だけ自身に付与。
+      // HP30%以下で「復讐」解禁＋1度だけ最大HP30%回復（2026-07-07仕様変更）
+      rageAt: 0.5, rageMult: 1.2,
+      lowHpAt: 0.3,
       lowHpSkill: { name: '復讐', chance: 0.45, type: 'spec_heavy', mult: 2.2 },
       reviveHealPct: 0.30,
       skills: [
