@@ -1408,29 +1408,36 @@ export default function Dungeon() {
     attackers.forEach((a, i) => {
       const tid = setTimeout(() => {
         if (diedMid) return // 既に倒れていたら残りの攻撃はなし
-        const dmg = Math.max(1, Math.round(a.dmg * shieldOn))
-        hpNow -= dmg
-        playSe('被ダメ') // 被ダメSE
-        popDmg(player.x, player.y, dmg, { follow: true })
-        if (a.healShown > 0) popHeal(a.x, a.y, a.healShown)
-        const tag = a.notes.length ? `【${a.notes.join('・')}】` : '攻撃'
-        addLog(`${a.name}の${tag}！ ${dmg}ダメージ${shieldOn < 1 ? '🛡' : ''} 💥`, 'right')
-        applyFx({ pet: { flash: true }, enemies: { [a.id]: { lunge: a.lunge, lungeKind: a.bigFx ? 'big' : a.skillFx ? 'skill' : 'normal' } } })
-        // ボスのスキルは画面フラッシュ（大技は赤・致命感／通常スキルは橙）＋大技は強シェイク
-        if (a.bigFx) {
-          setHitFlash({ kind: 'big', id: Date.now() })
-          setTimeout(() => setHitFlash((f) => (f && f.kind === 'big' ? null : f)), 700)
-          triggerShake('kill')
-        } else if (a.skillFx) {
-          setHitFlash({ kind: 'skill', id: Date.now() })
-          setTimeout(() => setHitFlash((f) => (f && f.kind === 'skill' ? null : f)), 400)
-          triggerShake('hit')
-        } else {
-          triggerShake('hit')
+        // 先にモーション開始（スキル=溜め→踏み込み / 大技=深い溜め→渾身）。
+        // 被ダメSE・ダメージ・フラッシュは踏み込みの瞬間に合わせて遅延させる
+        const impactDelay = a.bigFx ? 420 : a.skillFx ? 280 : 0
+        applyFx({ pet: { flash: true, flashDelay: impactDelay }, enemies: { [a.id]: { lunge: a.lunge, lungeKind: a.bigFx ? 'big' : a.skillFx ? 'skill' : 'normal' } } })
+        const impact = () => {
+          if (diedMid) return
+          const dmg = Math.max(1, Math.round(a.dmg * shieldOn))
+          hpNow -= dmg
+          playSe('被ダメ') // 被ダメSE（踏み込みと同時）
+          popDmg(player.x, player.y, dmg, { follow: true })
+          if (a.healShown > 0) popHeal(a.x, a.y, a.healShown)
+          const tag = a.notes.length ? `【${a.notes.join('・')}】` : '攻撃'
+          addLog(`${a.name}の${tag}！ ${dmg}ダメージ${shieldOn < 1 ? '🛡' : ''} 💥`, 'right')
+          // ボスのスキルは画面フラッシュ（大技は赤・致命感／通常スキルは橙）＋大技は強シェイク
+          if (a.bigFx) {
+            setHitFlash({ kind: 'big', id: Date.now() })
+            setTimeout(() => setHitFlash((f) => (f && f.kind === 'big' ? null : f)), 700)
+            triggerShake('kill')
+          } else if (a.skillFx) {
+            setHitFlash({ kind: 'skill', id: Date.now() })
+            setTimeout(() => setHitFlash((f) => (f && f.kind === 'skill' ? null : f)), 400)
+            triggerShake('hit')
+          } else {
+            triggerShake('hit')
+          }
+          setPetHp(hpNow)
+          if (hpNow <= 0) { diedMid = true; finalize(hpNow, true); return }
+          if (i === attackers.length - 1) finalize(hpNow, false)
         }
-        setPetHp(hpNow)
-        if (hpNow <= 0) { diedMid = true; finalize(hpNow, true); return }
-        if (i === attackers.length - 1) finalize(hpNow, false)
+        if (impactDelay > 0) { const tid2 = setTimeout(impact, impactDelay); turnTimers.current.push(tid2) } else impact()
       }, (i + 1) * STEP_MS)
       turnTimers.current.push(tid)
     })
@@ -2182,9 +2189,12 @@ export default function Dungeon() {
                   const bsz = c.bossE?.size || 2
                   const bsc = c.bossE?.visualScale || 1
                   const w = bsz * 100 * bsc
+                  // 大技チャージの震え：現在形態に大技があり・未使用・HP50%以下なら震える（HPから直接導出）
+                  const bph = bossFor(dungeon?.id).phases[c.bossE?.phase || 0]
+                  const trembling = !!(bph?.lowHpSkill && !c.bossE?.bigUsed && (c.bossE?.hp || 0) <= (c.bossE?.maxHp || 1) * 0.5)
                   return (
                     <div style={{ position: 'absolute', left: `${-(w - bsz * 100) / 2}%`, top: `${-(w - bsz * 100)}%`, width: `${w}%`, height: `${w}%`, zIndex: 4, pointerEvents: 'none',
-                      animation: (!c.bossE?.blink && c.bossE?.charging) ? 'bf-boss-tremble 0.12s linear infinite' : undefined }}>
+                      animation: (!c.bossE?.blink && trembling) ? 'bf-boss-tremble 0.12s linear infinite' : undefined }}>
                       {c.bossE?.layered
                         ? <Boss60Sprite size="100%" phase={c.bossE.phase || 0} blink={!!c.bossE.blink} />
                         : <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', animation: c.bossE?.blink ? 'bf-boss-blink 0.22s steps(1) infinite' : undefined }} />}
@@ -2221,7 +2231,7 @@ export default function Dungeon() {
             const anims = []
             // ボスのスキル=大振り(溜め→踏み込み) / 大技=特大(深い溜め→渾身の一撃)
             if (c.fx?.lunge) anims.push(c.fx.lungeKind === 'big' ? 'bf-lunge-big 0.7s ease-in-out' : c.fx.lungeKind === 'skill' ? 'bf-lunge-skill 0.45s ease-out' : 'bf-lunge 0.26s ease-out')
-            if (c.fx?.flash) anims.push('bf-flash 0.42s ease-in-out')
+            if (c.fx?.flash) anims.push(`bf-flash 0.42s ease-in-out ${c.fx?.flashDelay || 0}ms`)
             if (c.cheer) anims.push('bf-cheer 0.7s ease-in-out') // レベルアップで2回小ジャンプ
             const lmag = c.fx?.lungeKind === 'big' ? 60 : c.fx?.lungeKind === 'skill' ? 50 : 40
             const fxStyle = (c.fx || c.cheer) ? {
