@@ -1415,7 +1415,7 @@ export default function Dungeon() {
         if (a.healShown > 0) popHeal(a.x, a.y, a.healShown)
         const tag = a.notes.length ? `【${a.notes.join('・')}】` : '攻撃'
         addLog(`${a.name}の${tag}！ ${dmg}ダメージ${shieldOn < 1 ? '🛡' : ''} 💥`, 'right')
-        applyFx({ pet: { flash: true }, enemies: { [a.id]: { lunge: a.lunge } } })
+        applyFx({ pet: { flash: true }, enemies: { [a.id]: { lunge: a.lunge, lungeKind: a.bigFx ? 'big' : a.skillFx ? 'skill' : 'normal' } } })
         // ボスのスキルは画面フラッシュ（大技は赤・致命感／通常スキルは橙）＋大技は強シェイク
         if (a.bigFx) {
           setHitFlash({ kind: 'big', id: Date.now() })
@@ -1947,6 +1947,18 @@ export default function Dungeon() {
           0%,100% { transform: translate(0,0); }
           45% { transform: translate(var(--lx,0), var(--ly,0)); }
         }
+        @keyframes bf-lunge-skill {
+          0%,100% { transform: translate(0,0) scale(1); }
+          30% { transform: translate(calc(var(--lx,0) * -0.5), calc(var(--ly,0) * -0.5)) scale(1.06); }
+          62% { transform: translate(var(--lx,0), var(--ly,0)) scale(1.1); }
+        }
+        @keyframes bf-lunge-big {
+          0%,100% { transform: translate(0,0) scale(1); }
+          32% { transform: translate(calc(var(--lx,0) * -0.8), calc(var(--ly,0) * -0.8)) scale(1.12); }
+          46% { transform: translate(calc(var(--lx,0) * -0.8), calc(var(--ly,0) * -0.8)) scale(1.16); }
+          60% { transform: translate(calc(var(--lx,0) * 1.2), calc(var(--ly,0) * 1.2)) scale(1.28); }
+          78% { transform: translate(calc(var(--lx,0) * 0.5), calc(var(--ly,0) * 0.5)) scale(1.12); }
+        }
         /* レベルアップ時に喜んで2回小ジャンプ（間隔短め） */
         @keyframes bf-cheer {
           0%   { transform: translateY(0) scaleY(1); }
@@ -2207,14 +2219,16 @@ export default function Dungeon() {
                 </span>
               )
             const anims = []
-            if (c.fx?.lunge) anims.push('bf-lunge 0.26s ease-out')
+            // ボスのスキル=大振り(溜め→踏み込み) / 大技=特大(深い溜め→渾身の一撃)
+            if (c.fx?.lunge) anims.push(c.fx.lungeKind === 'big' ? 'bf-lunge-big 0.7s ease-in-out' : c.fx.lungeKind === 'skill' ? 'bf-lunge-skill 0.45s ease-out' : 'bf-lunge 0.26s ease-out')
             if (c.fx?.flash) anims.push('bf-flash 0.42s ease-in-out')
             if (c.cheer) anims.push('bf-cheer 0.7s ease-in-out') // レベルアップで2回小ジャンプ
+            const lmag = c.fx?.lungeKind === 'big' ? 60 : c.fx?.lungeKind === 'skill' ? 50 : 40
             const fxStyle = (c.fx || c.cheer) ? {
               width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
               animation: anims.join(', '), willChange: 'transform, opacity',
-              '--lx': c.fx?.lunge ? `${Math.sign(c.fx.lunge.dx) * 40}%` : '0%',
-              '--ly': c.fx?.lunge ? `${Math.sign(c.fx.lunge.dy) * 40}%` : '0%',
+              '--lx': c.fx?.lunge ? `${Math.sign(c.fx.lunge.dx) * lmag}%` : '0%',
+              '--ly': c.fx?.lunge ? `${Math.sign(c.fx.lunge.dy) * lmag}%` : '0%',
             } : null
             const fxKey = c.cheer ? `cheer${c.cheer}` : `fx${fx.t}`
             // 壁マスは「1枚で完結した岩タイル」を1マス＝1枚で表示（複数種からマスごとにランダム）。
