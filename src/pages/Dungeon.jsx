@@ -2529,7 +2529,12 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
               : `0 0 0 0.6px ${c.bg}`
             return (
               <div key={`${vx}-${vy}`} onClick={() => clickable && adjClick(vx, vy)}
-                style={{ position: 'relative', zIndex: c.bossImg ? 3 : c.isPet ? 4 : 1, aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, ...tileStyle, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: gapFill }}>
+                style={{ position: 'relative',
+                  // エンティティ（敵/ボス/アイテム/階段/ペット）は天候ティント(z4)・通路ビネット(z2)より上に置く。
+                  //  ↑これらが敵(旧z1)を覆い、通路周縁の敵がビネットの黒で塗り潰され「透明化」して見える不具合の修正。
+                  //  地形（床/壁/空マス）は従来通りz1で、ビネット・天候の下（＝演出はそのまま効く）。
+                  zIndex: c.isPet ? 7 : c.bossImg ? 6 : (c.enemy || c.item || c.stairsGlow) ? 5 : 1,
+                  aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: c.bg, ...tileStyle, opacity: c.dim ? 0.5 : 1, cursor: clickable ? 'pointer' : 'default', overflow: 'visible', boxShadow: gapFill }}>
                 {fxStyle ? <div key={fxKey} style={fxStyle}>{inner}</div> : inner}
                 {/* 自分のキャラに重ねるHPバー（足元寄り） */}
                 {c.isPet && (() => {
