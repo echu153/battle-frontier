@@ -598,6 +598,7 @@ export default function Dungeon() {
   }, [dungeon?.id])
   const [cleared, setCleared] = useState(new Set()) // クリア済みダンジョンID
   const [startFloors, setStartFloors] = useState({}) // ダンジョンごとの開始階選択 { dungeonId: floor }
+  const [maxReached, setMaxReached] = useState({})   // ダンジョンごとの到達済み最深階 { dungeonId: floor }
   const [shake, setShake] = useState(null) // 戦闘演出：接触時のマップ揺れ（'hit' | 'kill'）
   const shakeTimer = useRef(null)
   // 接触時にマップを少し震わせる（撃破時はやや大きめ）
@@ -864,6 +865,9 @@ export default function Dungeon() {
       // クリア済みダンジョン（開放判定用）
       const { data: cl } = await supabase.from('dungeon_runs').select('dungeon_id').eq('owner_id', user.id).eq('cleared', true)
       if (cl) setCleared(new Set(cl.map((r) => r.dungeon_id)))
+      // 到達済み最深階（途中階スタートの選択上限に使う）
+      const { data: prog } = await supabase.from('dungeon_progress').select('dungeon_id, max_floor').eq('owner_id', user.id)
+      if (prog) setMaxReached(Object.fromEntries(prog.map((r) => [r.dungeon_id, r.max_floor])))
 
       // 中断していた探索を復元。サーバー優先＝どの端末からでも最新状態を続行できる。
       let restored = false
@@ -929,6 +933,8 @@ export default function Dungeon() {
   useEffect(() => { dungeonRef.current = dungeon }, [dungeon])
 
   const enterFloor = useCallback((num, dg) => {
+    // 到達した最深階をサーバーに記録（途中階スタートの上限に使う。fire-and-forget）
+    if (dg?.id && num >= 1) supabase.rpc('dungeon_mark_floor', { p_dungeon: dg.id, p_floor: num }).then(() => {}, () => {})
     const f = generateFloor(num, dg)
     // 初期視界を記憶に反映
     f.explored = computeVisible(f.rooms, f.player.x, f.player.y)
@@ -2044,10 +2050,12 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
               // 開発アカウントは comingSoon でも入れる（テスト用）
               const unlocked = (!d.comingSoon || isAdmin) && (!d.requires || cleared.has(d.requires) || isAdmin)
               const isCleared = cleared.has(d.id)
-              // 途中階スタート：踏破済みダンジョンなら最終階の1つ手前まで開始階を選べる
-              //  ※現在は開発先行（is_adminのみ）。一般公開時は START_PICK_PUBLIC を true に
-              const canPickStart = unlocked && (isAdmin || (START_PICK_PUBLIC && isCleared))
-              const sf = startFloors[d.id] || 1
+              // 途中階スタート：到達した最深階まで（ボス階=最終階は除く）好きな階から開始できる
+              //  reached=そのダンジョンで到達した最深階。管理者は全階（floors-1）まで選べる
+              const reached = isAdmin ? ((d.floors || 10) - 1) : (maxReached[d.id] || 1)
+              const startCap = Math.max(1, Math.min(reached, (d.floors || 10) - 1))
+              const canPickStart = unlocked && startCap >= 2
+              const sf = Math.min(startFloors[d.id] || 1, startCap)
               return (
                 <div key={d.id} onClick={() => unlocked && beginDungeon(d, sf)}
                   style={{ border: `1px solid ${unlocked ? '#335588' : '#223344'}`, background: unlocked ? '#00102a' : '#080c14', padding: 12, cursor: unlocked ? 'pointer' : 'default', opacity: unlocked ? 1 : 0.5, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -2060,13 +2068,14 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                     {d.hint && unlocked && <div style={{ color: '#557799', fontSize: 10, marginTop: 2 }}>{d.hint}</div>}
                     {canPickStart && (
                       <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ color: '#88aacc', fontSize: 10 }}>開始階{isCleared ? '' : '（開発）'}</span>
+                        <span style={{ color: '#88aacc', fontSize: 10 }}>開始階</span>
                         <select value={sf} onChange={(e) => setStartFloors((s) => ({ ...s, [d.id]: parseInt(e.target.value, 10) }))}
                           style={{ background: '#0a1424', border: '1px solid #335588', color: '#cce6ff', fontFamily: 'monospace', fontSize: 11, padding: '2px 4px' }}>
-                          {Array.from({ length: Math.max(1, (d.floors || 10) - 1) }, (_, i) => i + 1).map((f) => (
+                          {Array.from({ length: startCap }, (_, i) => i + 1).map((f) => (
                             <option key={f} value={f}>B{f}F</option>
                           ))}
                         </select>
+                        <span style={{ color: '#557799', fontSize: 10 }}>（到達 B{Math.min(reached, d.floors || 10)}F まで）</span>
                         {sf > 1 && <span style={{ color: '#557799', fontSize: 10 }}>B{sf}Fから開始</span>}
                       </div>
                     )}
