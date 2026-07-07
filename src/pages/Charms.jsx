@@ -178,6 +178,19 @@ export default function Charms() {
     flash('合成を解除しました（2つ目の効果が外れました）')
   }
 
+  // リボン合成の解除（合成と同じ素材＝欠片1＋ゼニ10000）。リボンが元の種類で戻る
+  const doUnfuseRibbon = async (id) => {
+    if ((seeds.shard || 0) < 1) { flash('神秘の欠片が足りません'); return }
+    if ((seeds.zeni || 0) < 10000) { flash('ゼニが足りません（リボン解除は🪙10000必要）'); return }
+    setLoading(true)
+    const { error } = await supabase.rpc('pet_charm_unfuse_ribbon', { p_charm: id })
+    setLoading(false)
+    if (error) { flash('解除に失敗: ' + error.message); return }
+    setFuseBase(null); setFuseMat(null)
+    await load()
+    flash('リボン合成を解除しました（リボンが戻りました）')
+  }
+
   const Btn = ({ children, onClick, dim }) => (
     <button onClick={onClick} style={{ background: dim ? '#0a1424' : '#001840', border: `1px solid ${dim ? '#335588' : '#0088ff'}`, color: dim ? '#88aacc' : '#0088ff', padding: '5px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>{children}</button>
   )
@@ -372,6 +385,25 @@ export default function Charms() {
                       <button onClick={() => !loading && doUnfuse(c.id)} disabled={loading || !can}
                         style={{ background: can ? '#1a0e2a' : '#0a0a14', border: `1px solid ${can ? '#aa66ff' : '#332244'}`, color: can ? '#c8a0ff' : '#556', padding: '4px 8px', cursor: can ? 'pointer' : 'not-allowed', fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap' }}>
                         🔓 合成解除（欠片×1）
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* リボン合成の解除（合成と同じ素材：欠片1＋ゼニ10000。リボンが元の種類で戻る） */}
+            {pures.some((c) => c.ctype3) && (
+              <div style={{ marginTop: 14, borderTop: '1px solid #664422', paddingTop: 10 }}>
+                <div style={{ color: '#ffcc66', fontSize: 11, marginBottom: 8 }}>🎀 リボン合成の解除（欠片1＋🪙10000）。リボンが元の種類で戻ります。<span style={{ color: '#ff8866' }}>チャームの成長値はそのまま残ります。</span></div>
+                {pures.filter((c) => c.ctype3).map((c) => {
+                  const can = (seeds.shard || 0) >= 1 && (seeds.zeni || 0) >= 10000
+                  return (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                      <span style={{ color: '#cce6ff', fontSize: 11 }}><CIcon ctype={c.ctype} />{charmDisplayName(c)}{equippedBy(c.id) ? `（${equippedBy(c.id)}）` : ''}</span>
+                      <button onClick={() => !loading && doUnfuseRibbon(c.id)} disabled={loading || !can}
+                        style={{ background: can ? '#2a1e0a' : '#0a0a14', border: `1px solid ${can ? '#ccaa44' : '#443322'}`, color: can ? '#ffd75e' : '#665', padding: '4px 8px', cursor: can ? 'pointer' : 'not-allowed', fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap' }}>
+                        🎀 リボン解除（欠片×1／🪙10000）
                       </button>
                     </div>
                   )

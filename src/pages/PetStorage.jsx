@@ -6,6 +6,8 @@ import { PET_ITEMS, bagCapacity, petItemImg, SCROLL_KEYS, getScroll } from '../c
 // ダンジョンに持っていける（持ち物へ移せる）アイテム
 // 倉庫から「持ち物」へ取り出せる＝ダンジョンで使う物。スキルの書(SCROLL_KEYS)も対象に含める。
 const DUNGEON_KEYS = new Set(['escape', 'onigiri', 'konomi', ...SCROLL_KEYS])
+// 倉庫一覧に出さないキー（ゼニは通貨＝ダンジョンの「ゼニ倉庫」で管理。倉庫アイテムではない）
+const HIDDEN_KEYS = new Set(['zeni', 'zeni_bank'])
 
 export default function PetStorage() {
   const nav = useNavigate()
@@ -60,7 +62,7 @@ export default function PetStorage() {
   if (allowed === null) return <Center>読み込み中...</Center>
 
   const bagTotal = Object.values(items).reduce((s, q) => s + (q || 0), 0)
-  const storeKeys = Object.keys(storage).filter((k) => (storage[k] || 0) > 0)
+  const storeKeys = Object.keys(storage).filter((k) => (storage[k] || 0) > 0 && !HIDDEN_KEYS.has(k))
   const bagKeys = Object.keys(items).filter((k) => (items[k] || 0) > 0)
 
   return (
