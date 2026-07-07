@@ -714,13 +714,17 @@ export default function RaidBoss() {
           setBattleLogs(prev => [...prev, { text: `⚠ このボスへの累計ダメージが50万を超えたため、以降の与ダメージは半減します（実ダメージ ${fmt(data.damage)}）`, color: '#ffaa44' }])
         }
         setRemaining(raidWaitFor(profile))
-        // HP/MP全回復 + 出撃EXP はサーバ側(attack_raid_boss)で付与済み（かかし修練中はEXPなし）
-        const newExp = data.exp ?? ((profile.exp || 0) + 10)
+        // HP/MP全回復 + 出撃EXP はサーバ側(attack_raid_boss)で付与済み。実際の付与量を表示する。
+        // サーバーが exp_gain を返せばそれを、無ければ (新exp − 旧exp) から算出。
+        const expGain = (typeof data.exp_gain === 'number') ? data.exp_gain
+          : (typeof data.exp === 'number') ? Math.max(0, data.exp - (profile.exp || 0))
+          : 0
+        const newExp = data.exp ?? ((profile.exp || 0) + expGain)
         setProfile(prev => ({ ...prev, hp_current: eff.hp_max, mp_current: eff.mp_max, exp: newExp }))
-        if (data.exp_gained === 0) {
+        if (expGain === 0) {
           setBattleLogs(prev => [...prev, { text: '🌾 かかし修練中のため出撃報酬のEXPはもらえません', color: '#ffcc44' }])
         } else {
-          setBattleLogs(prev => [...prev, { text: 'EXP +10（出撃報酬）', color: '#44ff88' }])
+          setBattleLogs(prev => [...prev, { text: `EXP +${expGain}（出撃報酬）`, color: '#44ff88' }])
         }
         await fetchBoss(profile.id)
       }
