@@ -364,8 +364,8 @@ function doAttack(att, def, isExtra, ctx) {
       // ★直接付与する相手デバフは res.newEnemyBuffs に書く（下で def.buffs = res.newEnemyBuffs に置換されるため、
       //   defBuffs(旧オブジェクト)に書くと捨てられてアイコンも効果も消える）
       if (finalDmg > 0 && att.equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(res.newEnemyBuffs.healDown?.turns > 0)) {
-        res.newEnemyBuffs.healDown = { turns: 2, rate: 0.9 }
-        logs.push({ text: `🗡 ${att.equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemyName}の回復力が2ターンの間-10%！`, color: '#ff8844' })
+        res.newEnemyBuffs.healDown = { turns: 2, rate: 0.7 }
+        logs.push({ text: `🗡 ${att.equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemyName}の回復力が2ターンの間-30%！`, color: '#ff8844' })
       }
       if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(res.newEnemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
         res.newEnemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
@@ -620,7 +620,7 @@ function endTurnBuffs(side, ctx, hpBeforeTurn) {
     logs.push({ text: `💸 ${side.profile.username}のオールインの効果が切れた！ ${reactT}ターンの間全ステータスが低下し、バフが使えない！`, color: '#ff4444' })
   }
   Object.keys(b).forEach(k => { if (b[k]?.turns === 0) delete b[k] })
-  // 雷鋼の機神鎧: 被ダメで2ターン素早さ+5%
+  // 雷鋼の機神鎧: 被ダメで2ターン素早さ+15%
   if (side.ondmgSpdUp > 1 && side.hp < hpBeforeTurn && !(b.spdUp?.turns > 0 && b.spdUp.rate >= side.ondmgSpdUp)) {
     b.spdUp = { turns: 2, rate: side.ondmgSpdUp }
     logs.push({ text: `⚙ ${side.profile.username}の雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((side.ondmgSpdUp - 1) * 100)}%！`, color: '#66ccff' })

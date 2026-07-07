@@ -2787,6 +2787,7 @@ export default function Game() {
 
     const equippedWeaponItem = equipment.find(e => e.slot==='weapon' && e.equipped)
     const ondmgSpdUp = eff.ondmgSpdUp || 0  // 雷鋼の機神鎧: 被ダメ時に付与する素早さ倍率（0=なし）
+    const hasAmagoiShield = equipment.some(e => e.equipped && e.bonus_effect === 'battle_start_ailment_shield')  // 哭雨の羽衣: 5Tごとに異常無効バフ再付与
     const isArtifact = equippedWeaponItem?.bonus_effect === 'artifact'
 
     // 状況別スキルセット：パピア遭遇時はパピア限定セット、それ以外は出撃セット
@@ -3152,11 +3153,18 @@ export default function Game() {
           // 第六感（再修練）：魔法攻撃がヒットしたらスタック+1（最大6・戦闘中持続）
           if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks + 1)
           if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
-            enemyBuffs.healDown = { turns: 2, rate: 0.9 }
-            logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
+            enemyBuffs.healDown = { turns: 2, rate: 0.7 }
+            logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
           }
           if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
-            enemyBuffs.spdDown = { turns: 2, rate: 0.95 }  // 濡羽杖アマザネ: 攻撃ヒット時 対象SPD-5%
+            // 濡羽杖アマザネ: 攻撃ヒット時 2Tの間対象SPD-5%（最大4重複=-20%・ヒット毎に持続リフレッシュ）
+            const curSd = enemyBuffs.spdDown
+            const amzSt = Math.min(4, ((curSd?.turns > 0 && curSd.amazaneStacks) || 0) + 1)
+            const amzRate = Math.round((1 - 0.05 * amzSt) * 100) / 100
+            // 他ソースのより強いspdDownが掛かっている間は上書きしない
+            if (!(curSd?.turns > 0) || curSd.amazaneStacks > 0 || amzRate < curSd.rate) {
+              enemyBuffs.spdDown = { turns: 2, rate: amzRate, amazaneStacks: amzSt }
+            }
           }
           applyEvoHitEffects(finalDmg)
           const healUpMult = playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1
@@ -3235,11 +3243,18 @@ export default function Game() {
         if (enemy.isPapia) finalDmg = 1
         enemyHp -= finalDmg
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
-          enemyBuffs.healDown = { turns: 2, rate: 0.9 }
-          logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
+          enemyBuffs.healDown = { turns: 2, rate: 0.7 }
+          logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
         }
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
-          enemyBuffs.spdDown = { turns: 2, rate: 0.95 }  // 濡羽杖アマザネ: 攻撃ヒット時 対象SPD-5%
+          // 濡羽杖アマザネ: 攻撃ヒット時 2Tの間対象SPD-5%（最大4重複=-20%・ヒット毎に持続リフレッシュ）
+          const curSd = enemyBuffs.spdDown
+          const amzSt = Math.min(4, ((curSd?.turns > 0 && curSd.amazaneStacks) || 0) + 1)
+          const amzRate = Math.round((1 - 0.05 * amzSt) * 100) / 100
+          // 他ソースのより強いspdDownが掛かっている間は上書きしない
+          if (!(curSd?.turns > 0) || curSd.amazaneStacks > 0 || amzRate < curSd.rate) {
+            enemyBuffs.spdDown = { turns: 2, rate: amzRate, amazaneStacks: amzSt }
+          }
         }
         applyEvoHitEffects(finalDmg)
         // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
@@ -3697,10 +3712,15 @@ export default function Game() {
       //   charges 等 turns を持たないバフ（ailmentShield 等）は turns===0 にならず対象外。
       Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns === 0) delete playerBuffs[k] })
       Object.keys(enemyBuffs).forEach(k  => { if (enemyBuffs[k]?.turns === 0)  delete enemyBuffs[k] })
-      // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+5%（既存の上位spdUpは上書きしない）
+      // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+15%（既存の上位spdUpは上書きしない）
       if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
         playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
         logs.push({ text:`⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}%！`, color:'#66ccff' })
+      }
+      // 哭雨の羽衣: 5ターンごとに状態異常無効バフを1回分獲得（未消費分は累積）
+      if (hasAmagoiShield && turn % 5 === 0 && playerHp > 0) {
+        playerBuffs.ailmentShield = { charges: (playerBuffs.ailmentShield?.charges || 0) + 1 }
+        logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color:'#66ccff' })
       }
       if (bossHealCooldown > 0) bossHealCooldown--
       // 毎ターン終了時のHPスナップショット（表示用）

@@ -11,7 +11,7 @@ const RARITY_LABELS = { f:'F', e:'E', d:'D', c:'C', b:'B', a:'A', s:'S', ss:'SS'
 const SLOT_LABELS = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }
 
 const BONUS_EFFECT_DESC = {
-  'hit_heal_down_10_2t': '攻撃ヒット時、2ターンの間対象の回復力-10%',
+  'hit_heal_down_10_2t': '攻撃ヒット時、2ターンの間対象の回復力-30%',
   'open_atk_10_2t':  'バトル開始時、2ターンの間攻撃力+10%',
   'open_atk_20_1t':  'バトル開始時、1ターンの間攻撃力+20%',
   'open_def_10_2t':  'バトル開始時、2ターンの間防御力+10%',
@@ -25,10 +25,10 @@ const BONUS_EFFECT_DESC = {
   'regen_heal_5_3t': 'バトル開始時、3ターンの間毎ターンHP5%回復',
   'delay_heal_10':   'バトル開始時、3ターン後にHP10%回復',
   'artifact':        'アーティファクト（MP消費2倍・スキルダメージ1.3倍）',
-  'hit_spd_down_5':  '攻撃ヒット時、対象の素早さ-5%',
-  'battle_start_ailment_shield': '戦闘開始時、1回だけ状態異常を無効化',
+  'hit_spd_down_5':  '攻撃ヒット時、2ターンの間対象の素早さ-5%（最大4重複）',
+  'battle_start_ailment_shield': '戦闘開始時と5ターンごとに、状態異常を1回無効化するバフを獲得',
   'mdef_pen_5':      '魔法防御貫通+5%',
-  'ondmg_spd_up_5_2t':     '被ダメージ時、2ターンの間素早さ+5%',
+  'ondmg_spd_up_5_2t':     '被ダメージ時、2ターンの間素早さ+15%',
   'extra_hit_paralysis_30':'追加行動の攻撃ヒット時、20%で相手を麻痺',
   ...EVO_EFFECT_LABELS,
 }

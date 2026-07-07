@@ -284,8 +284,8 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
         enemyHp -= finalDmg
         if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks+1)
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
-          enemyBuffs.healDown = { turns: 2, rate: 0.9 }
-          logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
+          enemyBuffs.healDown = { turns: 2, rate: 0.7 }
+          logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
         }
         evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs)
         // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
@@ -354,8 +354,8 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*iaiNormalMult*rokkanMultN*enemyDmgReduceMult2*abyssEnemyDR*(0.9+Math.random()*0.2))
       enemyHp -= finalDmg
       if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
-        enemyBuffs.healDown = { turns: 2, rate: 0.9 }
-        logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-10%！`, color: '#ff8844' })
+        enemyBuffs.healDown = { turns: 2, rate: 0.7 }
+        logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
       }
       evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs)
       const critText = isCrit ? '💥クリティカル！ ' : ''
@@ -762,7 +762,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     // turns===0 の一時バフ/デバフを掃除（truthy読みで永続するのを防ぐ。Game.jsxと同様）
     Object.keys(playerBuffs).forEach(k => { if (playerBuffs[k]?.turns === 0) delete playerBuffs[k] })
     Object.keys(enemyBuffs).forEach(k  => { if (enemyBuffs[k]?.turns === 0)  delete enemyBuffs[k] })
-    // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+5%（既存の上位spdUpは上書きしない）
+    // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+15%（既存の上位spdUpは上書きしない）
     if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
       playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
       logs.push({ text:`⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}%！`, color:'#66ccff' })

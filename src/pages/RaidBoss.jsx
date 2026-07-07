@@ -188,7 +188,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   const isZerugiasu = bossName === BOSS_ZERUGIASU
   const physWeakBoss = isAmaza || isZerugiasu
   const weakMult = (isPhysical) => physWeakBoss ? (isPhysical ? 1.1 : 0.9) : (isPhysical ? 0.9 : 1.1)
-  // 雷鋼の機神鎧：被ダメージ時に2ターン素早さ+5%（eff.ondmgSpdUp = 倍率1.05／0=効果なし）
+  // 雷鋼の機神鎧：被ダメージ時に2ターン素早さ+15%（eff.ondmgSpdUp = 倍率1.15／0=効果なし）
   const ondmgSpdUp = eff.ondmgSpdUp || 0
 
   playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
@@ -500,7 +500,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     }
     // turns===0 の一時バフを掃除（atkUp等は ?.rate||1 で読まれるため、削除しないと永続する。Game.jsxと同様）
     for (const k of Object.keys(playerBuffs)) { if (playerBuffs[k]?.turns === 0) delete playerBuffs[k] }
-    // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+5%（既存の上位spdUpは上書きしない）
+    // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+15%（既存の上位spdUpは上書きしない）
     if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
       playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
       logs.push({ text: `⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}%！`, color: '#66ccff' })
