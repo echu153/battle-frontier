@@ -2945,7 +2945,6 @@ function RewardPanel({ reward, pet }) {
       {reward.zeniLost > 0 && (
         <div style={{ marginTop: 4, color: '#e6b96c', fontSize: 11 }}>🪙 所持していたゼニの半分（{reward.zeniLost}）を落とした…</div>
       )}
-      <div style={{ marginTop: 4, color: '#7799bb', fontSize: 10 }}>※EXPは撃破ごとに付与済み</div>
     </div>
   )
 }
