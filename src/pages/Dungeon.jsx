@@ -254,12 +254,13 @@ function generateFloor(floorNum, dungeon) {
     return randTileInRoom(room)
   }
 
-  // プレイヤー開始：rooms[0] の中心
-  const start = rooms[0]
+  // プレイヤー開始：ランダムな部屋の中心（毎回左上固定にならないように）
+  const start = rooms[rand(0, rooms.length - 1)]
   const player = { x: start.cx, y: start.cy }; mark(player.x, player.y)
 
-  // 階段：開始部屋以外のどこかの部屋の「内側」（出入り口を塞がない）
-  const stairRoom = rooms[rand(1, rooms.length - 1)]
+  // 階段：開始部屋「以外」のどこかの部屋の「内側」（出入り口を塞がない）
+  const stairCandidates = rooms.filter((r) => r !== start)
+  const stairRoom = stairCandidates[rand(0, stairCandidates.length - 1)] || start
   let stairs = randInnerTileInRoom(stairRoom) || { x: stairRoom.cx, y: stairRoom.cy }
   mark(stairs.x, stairs.y)
 
