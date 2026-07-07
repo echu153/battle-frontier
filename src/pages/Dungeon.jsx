@@ -694,13 +694,13 @@ export default function Dungeon() {
   const saveTimer = useRef(null) // サーバー保存のデバウンス用
 
   // ラン開始（選択中ペットがある場合のみ報酬対象）
-  const startRun = useCallback(async (petId, dungeonId = 'd10') => {
+  const startRun = useCallback(async (petId, dungeonId = 'd10', startFloor = 1) => {
     finishedRef.current = false
     enemiesRef.current = 0; floorsRef.current = 0; itemsRef.current = 0
     runIdRef.current = null
     setReward(null)
     if (!petId) return
-    const { data, error } = await supabase.rpc('dungeon_start', { p_pet_id: petId, p_dungeon_id: dungeonId })
+    const { data, error } = await supabase.rpc('dungeon_start', { p_pet_id: petId, p_dungeon_id: dungeonId, p_start_floor: startFloor })
     if (!error) {
       runIdRef.current = data
       setLockedOut(false)
@@ -1001,7 +1001,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
     setStarterPick(null); setStarterPicked(null) // 前回クリア報酬の残留UIを消す
     enterFloor(sf, d)
     playFloorIntro(sf, d) // 入場時にダンジョン名・フロア表示
-    startRun(pet.id, d.id)
+    startRun(pet.id, d.id, sf)
   }
 
   // 探索中はlocalStorageへ保存（リロードで継続）／終了したら破棄
