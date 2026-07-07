@@ -382,7 +382,7 @@ export default function Charms() {
                   <span style={{ width: 40, color: '#cce6ff' }}>{meta.label}</span>
                   <span style={{ width: 78, color: '#88bbee' }}><SeedIcon seed={meta.seed} emoji={meta.emoji} size={13} />素×{have}</span>
                   <span style={{ color: '#557799' }}>→</span>
-                  <span style={{ width: 86, color: '#88ddaa' }}>{CEMOJI[stat]} 凝縮×{haveC}</span>
+                  <span style={{ width: 86, color: '#88ddaa', display: 'inline-flex', alignItems: 'center', gap: 2 }}><SeedIcon seed={`${meta.seed}_c`} emoji={CEMOJI[stat]} size={15} />凝縮×{haveC}</span>
                   <button onClick={() => !loading && canOne && condense(stat, 1)} disabled={!canOne}
                     style={{ background: canOne ? '#00281a' : '#0a0f1a', border: `1px solid ${canOne ? '#33aa77' : '#223344'}`, color: canOne ? '#66ddaa' : '#445', padding: '3px 8px', cursor: canOne ? 'pointer' : 'default', fontFamily: 'monospace', fontSize: 11 }}>
                     10→1
