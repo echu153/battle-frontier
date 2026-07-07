@@ -26,6 +26,60 @@ export function summonAnnounce(s, logs) {
   if (s?.pet?.active) logs.push({ text: `🐾 ペットを召喚！（HP${s.pet.maxHp}）`, color: '#ffcc66' })
 }
 
+// ブリーダーのコマンドスキル名（アクティブ。executeSkillを通さず専用処理）
+export const BREEDER_COMMANDS = new Set(['攻撃して！', '一緒に頑張ろう！', '休憩しよう！', 'やっちゃえ！'])
+
+// ペットの1回攻撃（自動攻撃/コマンド共通）。敵へ与えたダメージを返す（0=回避/不発）
+function petAttackOnce(pet, mult, label, enemy, enemyBuffs, playerBuffs, rtCur, logs) {
+  const eb = enemyBuffs || {}
+  const baseEv = Math.max(0, enemy.evasionRate || 0)
+  if (baseEv > 0 && Math.random() * 100 < baseEv) {
+    logs.push({ text: `🐾 ペットの${label}！ しかし${enemy.name}に回避された！`, color: '#446688' })
+    return 0
+  }
+  const isSpec = pet.atkType === 'spec'
+  const edr = (eb.defDown?.rate || 1) * (eb.defUp?.rate || 1)
+  const emr = (eb.mdefDown?.rate || 1) * (eb.mdefUp?.rate || 1)
+  const adjDef = Math.max(1, Math.floor(isSpec ? (enemy.mdef || 0) * emr : (enemy.def || 0) * edr))
+  const base = pet.atk * mult
+  const dmgUp = playerBuffs?.breederDmgUp?.turns > 0 ? playerBuffs.breederDmgUp.rate : 1.0
+  const d = Math.max(1, Math.floor(base * (base / (base + adjDef)) * dmgUp * (0.9 + Math.random() * 0.2)))
+  let extra = ''
+  if (rtCur >= 1) {
+    if (pet.species === 'flame' && Math.random() * 100 < 30) { const b = eb.bleed; eb.bleed = { stacks: Math.min(5, (b?.stacks || 0) + 1), lastTurn: 0 }; extra = ` ${enemy.name}は出血した！` }
+    else if (pet.species === 'aqua' && Math.random() * 100 < 40) { eb.spdDown = { turns: 3, rate: 0.7 }; extra = ' 素早さ低下！' }
+    else if (pet.species === 'leaf') { const sr = eb.stunResist ?? 1.0; if (Math.random() * 100 < 30 * sr) { eb.stun = { turns: 1 }; eb.stunResist = sr * 0.5; extra = ' スタン！' } }
+  }
+  logs.push({ text: `🐾 ペットの${label}！ ${enemy.name}に${d}ダメージ！${extra}`, color: '#ffaa44' })
+  return d
+}
+
+// ブリーダーのコマンドスキルを処理（executeSkillの前に呼ぶ）。
+//  戻り値 { matched:このスキルがコマンドか, handled:処理したか, mpUsed, enemyDamage, playerHeal }
+//  handled=false（ペット死亡/MP不足）のとき呼び出し側は通常攻撃へフォールバックする
+export function tryPetCommand(skillName, summon, enemy, enemyBuffs, playerBuffs, rtCur, playerMp, mpCost, maxHp, logs, prefix) {
+  if (!BREEDER_COMMANDS.has(skillName)) return { matched: false }
+  const pet = summon?.pet
+  const petAlive = !!(pet?.active && pet.hp > 0)
+  if (!petAlive) {
+    logs.push({ text: `${prefix}${skillName}！ しかしペットがいない…通常攻撃になった！`, color: '#888888' })
+    return { matched: true, handled: false }
+  }
+  if (playerMp < mpCost) return { matched: true, handled: false, mpLack: true }
+  let enemyDamage = 0, playerHeal = 0
+  if (skillName === '攻撃して！') enemyDamage = petAttackOnce(pet, rtCur >= 2 ? 3.5 : 3.0, '攻撃して！', enemy, enemyBuffs, playerBuffs, rtCur, logs)
+  else if (skillName === 'やっちゃえ！') enemyDamage = petAttackOnce(pet, rtCur >= 5 ? 6.0 : 5.0, 'やっちゃえ！', enemy, enemyBuffs, playerBuffs, rtCur, logs)
+  else if (skillName === '一緒に頑張ろう！') { const t = rtCur >= 3 ? 6 : 3; playerBuffs.breederDmgUp = { turns: t, rate: 1.5 }; logs.push({ text: `${prefix}一緒に頑張ろう！ ${t}ターンの間、自分とペットの与ダメージ+50%！`, color: '#ffcc66' }) }
+  else if (skillName === '休憩しよう！') {
+    playerHeal = Math.floor(maxHp * 0.2)
+    const pph = Math.floor(pet.maxHp * 0.2); pet.hp = Math.min(pet.maxHp, pet.hp + pph)
+    let cutTxt = ''
+    if (rtCur >= 4) { playerBuffs.dmgReduce = { turns: 1, rate: 0.7 }; pet.buffs.reduce = 0.3; pet.buffs.reduceTurns = 1; cutTxt = ' 1ターン被ダメ30%カット！' }
+    logs.push({ text: `${prefix}休憩しよう！ 自分のHP+${playerHeal}・ペットのHP+${pph}！${cutTxt}`, color: '#66ddaa' })
+  }
+  return { matched: true, handled: true, mpUsed: mpCost, enemyDamage, playerHeal }
+}
+
 // ターン開始時の召喚攻撃（式神＋ペット自動攻撃）。敵へ与える合計ダメージを返す（呼び出し側が敵HP/totalDamageへ反映）
 //  enemy: { def, mdef, atk, matk, type('magical'で特殊), name, evasionRate(0-100) }
 //  enemyBuffs: 敵の被デバフ（species効果の書き込み先。無いエンジンは {} を渡す）
@@ -46,26 +100,7 @@ export function summonAttackDamage(s, enemy, enemyBuffs, playerBuffs, eff, rtCur
   // ペット召喚 自動攻撃（×1.0）
   const pet = s?.pet
   if (pet?.active && pet.hp > 0) {
-    const baseEv = Math.max(0, enemy.evasionRate || 0)
-    if (baseEv > 0 && Math.random() * 100 < baseEv) {
-      logs.push({ text: `🐾 ペットのこうげき！ しかし${enemy.name}に回避された！`, color: '#446688' })
-    } else {
-      const isSpec = pet.atkType === 'spec'
-      const edr = (eb.defDown?.rate || 1) * (eb.defUp?.rate || 1)
-      const emr = (eb.mdefDown?.rate || 1) * (eb.mdefUp?.rate || 1)
-      const adjDef = Math.max(1, Math.floor(isSpec ? (enemy.mdef || 0) * emr : (enemy.def || 0) * edr))
-      const base = pet.atk * 1.0
-      const dmgUp = playerBuffs?.breederDmgUp?.turns > 0 ? playerBuffs.breederDmgUp.rate : 1.0
-      const d = Math.max(1, Math.floor(base * (base / (base + adjDef)) * dmgUp * (0.9 + Math.random() * 0.2)))
-      dealt += d
-      let extra = ''
-      if (rtCur >= 1) {
-        if (pet.species === 'flame' && Math.random() * 100 < 30) { const b = eb.bleed; eb.bleed = { stacks: Math.min(5, (b?.stacks || 0) + 1), lastTurn: 0 }; extra = ` ${enemy.name}は出血した！` }
-        else if (pet.species === 'aqua' && Math.random() * 100 < 40) { eb.spdDown = { turns: 3, rate: 0.7 }; extra = ' 素早さ低下！' }
-        else if (pet.species === 'leaf') { const sr = eb.stunResist ?? 1.0; if (Math.random() * 100 < 30 * sr) { eb.stun = { turns: 1 }; eb.stunResist = sr * 0.5; extra = ' スタン！' } }
-      }
-      logs.push({ text: `🐾 ペットのこうげき！ ${enemy.name}に${d}ダメージ！${extra}`, color: '#ffaa44' })
-    }
+    dealt += petAttackOnce(pet, 1.0, 'こうげき', enemy, eb, playerBuffs, rtCur, logs)
   }
   return dealt
 }

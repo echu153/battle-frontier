@@ -5,7 +5,7 @@ import { getWeaponGroup } from '../lib/stats'
 import { evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 import { selectBattleSkillSets } from '../lib/loadout'
-import { buildSummon, summonAnnounce, summonAttackDamage, summonAbsorbBasic, summonAbsorbSkill, summonEndOfTurn } from '../lib/summon'
+import { buildSummon, summonAnnounce, summonAttackDamage, summonAbsorbBasic, summonAbsorbSkill, summonEndOfTurn, tryPetCommand, BREEDER_COMMANDS } from '../lib/summon'
 import { pushSupported, pushConfigured, getPushStatus, enableRaidPush, disableRaidPush } from '../lib/push'
 import {
   WAIT_SECONDS,
@@ -261,7 +261,19 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         let mpCost = Math.floor((isArtifact ? (cs?.skills?.mp_cost || 0) * 2 : (cs?.skills?.mp_cost || 0)) * passiveMpCostMult)
         if (cs?.skills?.name === 'マナボルト') mpCost = Math.max(1, Math.floor(playerMp * 0.1))
         if (cs?.skills?.name === '天墜竜閃' && playerBuffs.tenkaiCharge?.turns > 0) mpCost = 0  // 解放ターンはMP消費なし（溜め時に消費済み）
-        if (cs && cs.skills && playerMp >= mpCost) {
+        const isBreederCmd = cs?.skills?.name && BREEDER_COMMANDS.has(cs.skills.name)
+        if (isBreederCmd) {
+          // ブリーダーのコマンドスキル（executeSkillを通さず専用処理）
+          const cmd = tryPetCommand(cs.skills.name, summon, { def: BOSS_DEF, mdef: BOSS_MDEF, atk: boss.atk, matk: boss.atk, type: 'physical', name: bossName, evasionRate: 0 }, enemyBuffs, playerBuffs, rtCur, playerMp, mpCost, eff.hp_max, logs, prefix)
+          if (cmd.handled) {
+            playerMp -= cmd.mpUsed
+            totalDamage += cmd.enemyDamage
+            if (cmd.playerHeal > 0) playerHp = Math.min(eff.hp_max, playerHp + cmd.playerHeal)
+            prevSkillName = cs.skills.name
+            skillUsed = true; skillIndex++
+          }
+          // handled=false（ペット不在/MP不足）は skillUsed=false のまま下の通常攻撃へ
+        } else if (cs && cs.skills && playerMp >= mpCost) {
           playerMp -= mpCost
           const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? (pe('元素使い')?1.50:1.30) : 1.0
           // 精密照準（再修練）：同スキルを連続使用するたびに与ダメ+10%・クリ率+2%（重複3／別スキルでリセット）

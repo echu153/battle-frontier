@@ -6,7 +6,7 @@ import { getWeaponGroup } from '../lib/stats'
 import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 import { selectBattleSkillSets } from '../lib/loadout'
-import { buildSummon, summonAnnounce, summonAttackDamage, summonAbsorbBasic, summonEndOfTurn } from '../lib/summon'
+import { buildSummon, summonAnnounce, summonAttackDamage, summonAbsorbBasic, summonEndOfTurn, tryPetCommand, BREEDER_COMMANDS } from '../lib/summon'
 import {
   calcEffectiveStats,
   calcEvasionRate,
@@ -218,7 +218,19 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       let mpCost = Math.floor((isArtifact ? (cs?.skills?.mp_cost||0)*2 : (cs?.skills?.mp_cost||0)) * passiveMpCostMult)
       if (cs?.skills?.name === 'マナボルト') mpCost = Math.max(1, Math.floor(playerMp * 0.1))
         if (cs?.skills?.name === '天墜竜閃' && playerBuffs.tenkaiCharge?.turns > 0) mpCost = 0  // 解放ターンはMP消費なし（溜め時に消費済み）
-      if (cs && cs.skills && playerMp >= mpCost) {
+      const isBreederCmd = cs?.skills?.name && BREEDER_COMMANDS.has(cs.skills.name)
+      if (isBreederCmd) {
+        // ブリーダーのコマンドスキル（executeSkillを通さず専用処理）
+        const cmd = tryPetCommand(cs.skills.name, summon, { def: enemy.def, mdef: enemy.mdef, atk: enemy.atk, matk: enemy.matk, type: enemy.type, name: enemy.name, evasionRate: 0 }, enemyBuffs, playerBuffs, rtCur, playerMp, mpCost, eff.hp_max, logs, `${turn}ターン目: `)
+        if (cmd.handled) {
+          playerMp -= cmd.mpUsed
+          if (cmd.enemyDamage > 0) enemyHp -= cmd.enemyDamage
+          if (cmd.playerHeal > 0) playerHp = Math.min(eff.hp_max, playerHp + cmd.playerHeal)
+          prevSkillName = cs.skills.name
+          skillUsed = true; skillIndex++
+          if (enemyHp <= 0) { /* 撃破はループ先頭のwhile条件で判定 */ }
+        }
+      } else if (cs && cs.skills && playerMp >= mpCost) {
         playerMp -= mpCost
         const hasGensoKyomei = passiveNames.includes('元素共鳴')
         const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name && cs.skills.type === '魔法攻撃') ? (pe('元素使い')?1.50:1.30) : 1.0
