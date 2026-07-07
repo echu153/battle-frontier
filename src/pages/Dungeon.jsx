@@ -63,8 +63,6 @@ const STAT_DOWN_PCT = 0.30    // 敵のデバフ：対象ステータスを30%�
 const ENEMY_BUFF_MULT = 1.3   // 敵の自己バフ：攻撃1.3倍
 const ENEMY_BUFF_TURNS = 4    // 敵の自己バフ持続
 const PET_ATKUP_MULT = 1.3    // ペットの攻撃バフ：攻撃1.3倍
-// 途中階スタートの一般公開フラグ。false=開発(is_admin)のみ／true=踏破済みダンジョンで全員可
-const START_PICK_PUBLIC = false
 
 // 床に置く戦利品の抽選テーブル（クライアントで決定→床に実アイコン表示→拾得時サーバー検証）
 const DG_SEEDS = ['atk_seed', 'spatk_seed', 'def_seed', 'spdef_seed', 'hp_seed']
