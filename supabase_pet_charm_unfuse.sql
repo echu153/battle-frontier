@@ -35,9 +35,10 @@ begin
     end;
   end if;
 
-  -- 2つ目の効果を外し、合成フラグ解除＋成長値を上限内に補正
+  -- 2つ目の効果を外し、合成フラグ解除＋成長値を上限内に補正＋特殊能力(フェイトコア抽選)を全消去
   update player_charms set ctype2 = null, fused = false,
-    atk = v_atk, spatk = v_spatk, def = v_def, spdef = v_spdef, hp = v_hp
+    atk = v_atk, spatk = v_spatk, def = v_def, spdef = v_spdef, hp = v_hp,
+    specials = '[]'::jsonb
     where id = p_charm and owner_id = auth.uid();
 
   return json_build_object('ok', true);

@@ -2,7 +2,7 @@
 -- リボン合成の解除（2026-07-07）
 --   pet_charm_fuse_ribbon の逆操作。合成と「同じ素材」＝神秘の欠片1＋ゼニ10000を消費。
 --   ・ctype3(リボン合成枠)を外し、そのリボンを元の種類で新規生成（+値0・特殊能力なし）
---   ・チャーム本体の成長値(+ステ)はそのまま維持。ctype3ぶんの特殊能力(3枠目)は除去
+--   ・チャーム本体の成長値(+ステ)はそのまま維持。特殊能力(フェイトコア抽選)は全枠消去
 --   ・装備中でも解除可（チャームは装備継続・戻したリボンは未装備。通常のpet_charm_unfuseと同じ）
 -- 適用順の制約なし（独立機能）
 -- ============================================================
@@ -25,8 +25,8 @@ begin
   v_rib := c.ctype3;
   -- リボンを元の種類で新規生成（+値0・特殊能力なし）
   insert into player_charms(owner_id, ctype) values (auth.uid(), v_rib);
-  -- チャームは現状の+ステを維持し、リボン枠(ctype3)と3枠目の特殊能力を外す
-  update player_charms set ctype3 = null, specials = coalesce(specials, '[]'::jsonb) - 2 where id = p_charm;
+  -- チャームは現状の+ステを維持し、リボン枠(ctype3)を外す＋特殊能力(フェイトコア抽選)を全消去
+  update player_charms set ctype3 = null, specials = '[]'::jsonb where id = p_charm;
   return json_build_object('ribbon', v_rib);
 end; $$;
 grant execute on function pet_charm_unfuse_ribbon(uuid) to authenticated;

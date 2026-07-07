@@ -107,8 +107,9 @@ export default function Charms() {
     // 内訳（サーバーのbreakdown）を「攻撃の素×2・HPの素×4」形式で表示
     const NAMES = { atk_seed: '攻撃の素', spatk_seed: '特攻の素', def_seed: '防御の素', spdef_seed: '特防の素', hp_seed: 'HPの素' }
     const bd = data?.breakdown || {}
+    const total = data?.total ?? ids.length * 3
     const detail = Object.entries(bd).filter(([, n]) => n > 0).map(([k, n]) => `${NAMES[k] || k}×${n}`).join('・')
-    flash(`✂️ 裁断完了！${detail || `素を${data?.total ?? ids.length * 3}個入手`}`)
+    flash(`✂️ 裁断完了！素を計${total}個入手${detail ? `（${detail}）` : ''}`)
   }
   // 抽選：フェイトコア1個でチャーム/リボンの特殊能力を全枠再抽選
   const doReroll = async () => {
@@ -127,11 +128,11 @@ export default function Charms() {
   // 凝縮：○○の素10個 → 凝縮された○○の素1個
   const condense = async (stat, times = 1) => {
     setLoading(true)
-    const { error } = await supabase.rpc('pet_seed_condense', { p_stat: stat, p_times: times })
+    const { data, error } = await supabase.rpc('pet_seed_condense', { p_stat: stat, p_times: times })
     setLoading(false)
     if (error) { flash('凝縮できません（素が10個未満）'); return }
     await load()
-    flash(`凝縮された${STAT_META[stat].label}の素を作った`)
+    flash(`💠 凝縮された${STAT_META[stat].label}の素×${data?.made ?? times} を作った`)
   }
 
   const doInherit = async () => {
@@ -376,7 +377,7 @@ export default function Charms() {
             {/* 合成解除 */}
             {pures.some((c) => c.fused) && (
               <div style={{ marginTop: 14, borderTop: '1px solid #442266', paddingTop: 10 }}>
-                <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔓 神秘の欠片1つで合成を解除できます（2つ目の効果が外れ、再び合成できるようになります）。<span style={{ color: '#ff8866' }}>成長値はそのまま残ります。</span></div>
+                <div style={{ color: '#c8a0ff', fontSize: 11, marginBottom: 8 }}>🔓 神秘の欠片1つで合成を解除できます（2つ目の効果が外れ、再び合成できるようになります）。<span style={{ color: '#ff8866' }}>成長値は残りますが、特殊能力（フェイトコア抽選）は全て消えます。</span></div>
                 {pures.filter((c) => c.fused).map((c) => {
                   const d = getCharm(c.ctype); const can = (seeds.shard || 0) >= 1
                   return (
@@ -395,7 +396,7 @@ export default function Charms() {
             {/* リボン合成の解除（合成と同じ素材：欠片1＋ゼニ10000。リボンが元の種類で戻る） */}
             {pures.some((c) => c.ctype3) && (
               <div style={{ marginTop: 14, borderTop: '1px solid #664422', paddingTop: 10 }}>
-                <div style={{ color: '#ffcc66', fontSize: 11, marginBottom: 8 }}>🎀 リボン合成の解除（欠片1＋🪙10000）。リボンが元の種類で戻ります。<span style={{ color: '#ff8866' }}>チャームの成長値はそのまま残ります。</span></div>
+                <div style={{ color: '#ffcc66', fontSize: 11, marginBottom: 8 }}>🎀 リボン合成の解除（欠片1＋🪙10000）。リボンが元の種類で戻ります。<span style={{ color: '#ff8866' }}>チャームの成長値は残りますが、特殊能力（フェイトコア抽選）は全て消えます。</span></div>
                 {pures.filter((c) => c.ctype3).map((c) => {
                   const can = (seeds.shard || 0) >= 1 && (seeds.zeni || 0) >= 10000
                   return (
