@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { getCharm, CHARM_TOTAL_MAX, CHARM_HP_PER, charmDisplayName, charmTotal, petItemImg, isRibbonType, charmIcon, RIBBON_TAG, charmSpecials, specialLabel, specialSlots } from '../constants/pets'
+import { getCharm, CHARM_TOTAL_MAX, CHARM_HP_PER, charmDisplayName, charmTotal, charmRibTotal, petItemImg, isRibbonType, charmIcon, RIBBON_TAG, charmSpecials, specialLabel, specialSlots } from '../constants/pets'
 
 // チャーム/リボンの共通アイコン
 function CIcon({ ctype, size = 14 }) {
@@ -308,18 +308,25 @@ export default function Charms() {
                   <Btn onClick={() => !loading && bulkEnhance(sel)}>✅ 選択した能力をまとめて強化</Btn>
                 </div>
 
-                {/* リボン合成済みチャーム：凝縮された素での追加強化（合計300を通常の素と共有） */}
-                {sel.ctype3 && (
+                {/* リボン合成済みチャーム：凝縮された素での強化（チャーム本体300とは別枠でリボン側300＝合計最大600） */}
+                {sel.ctype3 && (() => {
+                  const ribTotal = charmRibTotal(sel); const ribFull = ribTotal >= 300
+                  return (
                   <div style={{ marginTop: 12, borderTop: '1px solid #664488', paddingTop: 10 }}>
-                    <div style={{ color: '#ff9ed0', fontSize: 11, marginBottom: 8 }}>🎀 リボン強化（凝縮された素）— このチャームは<span style={{ color: '#ffd75e' }}>凝縮された素</span>でも強化できます（強化合計300を通常の素と共有）。</div>
+                    <div style={{ color: '#ff9ed0', fontSize: 11, marginBottom: 8 }}>🎀 リボン強化（凝縮された素）— チャーム本体（上限300）とは<span style={{ color: '#ffd75e' }}>別枠</span>でリボン側を上限300まで強化できます（合計最大600）。</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <span style={{ width: 64, fontSize: 11, color: '#ff9ed0' }}>リボン合計</span>
+                      <Bar value={ribTotal} max={300} />
+                      <span style={{ width: 52, fontSize: 11, textAlign: 'right', color: ribFull ? '#ffcc44' : '#ff88cc' }}>{ribTotal}/300</span>
+                    </div>
                     {STAT_KEYS.map((stat) => {
-                      const meta = STAT_META[stat]; const haveC = seeds[`${meta.seed}_c`] || 0
-                      const disC = full || haveC === 0
+                      const meta = STAT_META[stat]; const haveC = seeds[`${meta.seed}_c`] || 0; const cnt = sel[`rib_${stat}`] || 0
+                      const disC = ribFull || haveC === 0
                       return (
                         <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
                           <input type="checkbox" checked={!!checkedC[stat]} onChange={(e) => setCheckedC((c) => ({ ...c, [stat]: e.target.checked }))} disabled={disC} />
                           <span style={{ width: 64, fontSize: 11, color: '#cce6ff' }}><SeedIcon seed={`${meta.seed}_c`} emoji={CEMOJI[stat]} size={14} />{meta.label}</span>
-                          <span style={{ flex: 1, fontSize: 11, color: '#88bbee' }}>+{meta.per}/個</span>
+                          <span style={{ flex: 1, fontSize: 11, color: '#88bbee' }}>+{cnt * meta.per}{stat === 'hp' && cnt > 0 ? `（${cnt}個）` : ''}</span>
                           <span style={{ fontSize: 10, color: '#557799', display: 'inline-flex', alignItems: 'center', gap: 2 }}><SeedIcon seed={`${meta.seed}_c`} emoji={CEMOJI[stat]} size={12} />{haveC}</span>
                           <button onClick={() => !loading && enhanceCondensed(sel, stat, 1)} disabled={disC}
                             style={{ background: disC ? '#0a0f1a' : '#2a1020', border: `1px solid ${disC ? '#223344' : '#cc4499'}`, color: disC ? '#445' : '#ff88cc', padding: '3px 8px', cursor: disC ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
@@ -332,7 +339,8 @@ export default function Charms() {
                       <Btn onClick={() => !loading && bulkEnhanceCondensed(sel)}>✅ 凝縮された素でまとめて強化</Btn>
                     </div>
                   </div>
-                )}
+                  )
+                })()}
               </div>
               )
             })()}
@@ -394,15 +402,16 @@ export default function Charms() {
               const b = charms.find((c) => c.id === fuseBase); const m = charms.find((c) => c.id === fuseMat)
               if (!b || !m || b.id === m.id) return <div style={{ color: '#557799', fontSize: 11, marginBottom: 8 }}>素材①②を選ぶと合成結果が表示されます</div>
               if (isRibbonType(m.ctype)) {
-                let st2 = { atk: b.atk + m.atk, spatk: b.spatk + m.spatk, def: b.def + m.def, spdef: b.spdef + m.spdef, hp: b.hp + m.hp }
-                let over2 = (st2.atk + st2.spatk + st2.def + st2.spdef + st2.hp) - 300
-                for (const k of ['hp', 'spdef', 'def', 'spatk', 'atk']) { if (over2 <= 0) break; const cut = Math.min(st2[k], over2); st2[k] -= cut; over2 -= cut }
+                // 別枠合算：本体(b.atk等)はそのまま＋リボン枠(m.atk等)を別枠で保持。合計最大600
+                const baseT = (b.atk || 0) + (b.spatk || 0) + (b.def || 0) + (b.spdef || 0) + (b.hp || 0)
+                const ribT = (m.atk || 0) + (m.spatk || 0) + (m.def || 0) + (m.spdef || 0) + (m.hp || 0)
                 const nm = `${RIBBON_TAG[m.ctype] || ''}${getCharm(b.ctype).short}と${getCharm(b.ctype2).short}のチャーム`
                 return (
                   <div style={{ border: '1px solid #ffaa66', background: '#20140a', padding: 10, marginBottom: 10, fontSize: 11, color: '#cce6ff' }}>
                     <div style={{ color: '#ffcc66', marginBottom: 4 }}>➡ リボン合成結果（欠片1＋🪙10000）</div>
-                    <div>🎀 {nm}＋{st2.atk + st2.spatk + st2.def + st2.spdef + st2.hp}</div>
-                    <div style={{ color: '#88bbee', marginTop: 2 }}>HP+{st2.hp * CHARM_HP_PER} / 攻+{st2.atk} / 特攻+{st2.spatk} / 防+{st2.def} / 特防+{st2.spdef}</div>
+                    <div>🎀 {nm}＋{baseT + ribT}</div>
+                    <div style={{ color: '#88bbee', marginTop: 2 }}>本体（上限300）: HP+{(b.hp || 0) * CHARM_HP_PER} / 攻+{b.atk || 0} / 特攻+{b.spatk || 0} / 防+{b.def || 0} / 特防+{b.spdef || 0}</div>
+                    <div style={{ color: '#ff9ed0', marginTop: 2 }}>リボン枠（別枠・上限300）: HP+{(m.hp || 0) * CHARM_HP_PER} / 攻+{m.atk || 0} / 特攻+{m.spatk || 0} / 防+{m.def || 0} / 特防+{m.spdef || 0}</div>
                     <div style={{ color: '#aaffaa', marginTop: 2 }}>効果: {[getCharm(b.ctype).desc, getCharm(b.ctype2).desc, getCharm(m.ctype).desc].filter((x) => x && x !== '追加能力なし').join(' ／ ')}</div>
                     <div style={{ color: '#ffd75e', marginTop: 2 }}>特殊能力枠: 3（フェイトコアで抽選）</div>
                   </div>

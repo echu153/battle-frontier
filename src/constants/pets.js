@@ -725,10 +725,16 @@ export function charmDropsFor(dungeonId, floor) {
 // チャームが持つ効果一覧（合成でctype2、リボン合成でctype3を持つと最大3つ）
 export const charmEffects = (charm) => [charm?.ctype, charm?.ctype2, charm?.ctype3].filter(Boolean).map((t) => getCharm(t).effect).filter(Boolean)
 export const charmHasEffect = (charm, eff) => charmEffects(charm).includes(eff)
-// 使用した素の合計数（=強化ゲージ。CHARM_TOTAL_MAX まで）
+// チャーム本体の強化合計（atk等・上限300）。=通常の素による強化ゲージ
 export const charmTotal = (c) => (c?.atk || 0) + (c?.spatk || 0) + (c?.def || 0) + (c?.spdef || 0) + (c?.hp || 0)
-// HPボーナス（HPの素は1個=+CHARM_HP_PER）。hp列は「使った個数」を保持
-export const charmHpBonus = (c) => (c?.hp || 0) * CHARM_HP_PER
+// リボン合成枠(rib_*)の強化合計（上限300）。=凝縮された素による強化ゲージ（チャーム本体とは別枠）
+export const charmRibTotal = (c) => (c?.rib_atk || 0) + (c?.rib_spatk || 0) + (c?.rib_def || 0) + (c?.rib_spdef || 0) + (c?.rib_hp || 0)
+// 表示用の総合計（チャーム本体＋リボン枠＝最大600）
+export const charmGrandTotal = (c) => charmTotal(c) + charmRibTotal(c)
+// 各ステの実効成長（チャーム本体＋リボン枠を合算）
+export const cStat = (c, s) => (c?.[s] || 0) + (c?.['rib_' + s] || 0)
+// HPボーナス（HPの素は1個=+CHARM_HP_PER）。hp列は「使った個数」を保持。リボン枠(rib_hp)も合算
+export const charmHpBonus = (c) => cStat(c, 'hp') * CHARM_HP_PER
 // 表示名（素を使った分だけ ＋N がつく）
 export function charmDisplayName(charm) {
   // 合成済みは「○と○のチャーム」。リボン合成済みは先頭に【物理】/【特殊】/【守備】タグ
@@ -736,7 +742,7 @@ export function charmDisplayName(charm) {
   const base = charm?.ctype2
     ? `${tag}${getCharm(charm.ctype).short}と${getCharm(charm.ctype2).short}のチャーム`
     : `${tag}${getCharm(charm?.ctype).name}`
-  const t = charmTotal(charm)
+  const t = charmGrandTotal(charm)
   return t > 0 ? `${base}+${t}` : base
 }
 // 装備チャームをプレイヤー本体ステへ反映する分（攻→atk / 特攻→matk / 特防→mdef / HPは×CHARM_HP_PER）
@@ -753,7 +759,7 @@ export function charmPlayerBonus(charm) {
   }
   const hasSp = Object.values(spAgg).some((v) => v > 0)
   return {
-    hp: charmHpBonus(charm), atk: charm.atk || 0, matk: charm.spatk || 0, def: charm.def || 0, mdef: charm.spdef || 0,
+    hp: charmHpBonus(charm), atk: cStat(charm, 'atk'), matk: cStat(charm, 'spatk'), def: cStat(charm, 'def'), mdef: cStat(charm, 'spdef'),
     guard: charmEffects(charm).includes('guard'),       // 防御+10%
     antidote: charmEffects(charm).includes('antidote'), // 毒確率50%減
     sp: hasSp ? spAgg : null,
@@ -769,10 +775,10 @@ export function applyCharmStats(stats, charm, ribbon = null) {
   for (const c of [charm, ribbon]) {
     if (!c) continue
     maxHp += charmHpBonus(c)
-    atkPhys += c.atk || 0
-    atkSpec += c.spatk || 0
-    def += c.def || 0
-    mdef += c.spdef || 0
+    atkPhys += cStat(c, 'atk')
+    atkSpec += cStat(c, 'spatk')
+    def += cStat(c, 'def')
+    mdef += cStat(c, 'spdef')
   }
   // 効果（チャームは合成で2つ持つことがある）：guard=防御+10% / mdefup=特防+10% / atkup=攻撃+10% / spatkup=特攻+10% / wall=防御特防+6%
   const effs = [...charmEffects(charm), ...charmEffects(ribbon)]
