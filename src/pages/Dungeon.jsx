@@ -344,6 +344,7 @@ export default function Dungeon() {
   const [shop, setShop] = useState(null)              // 秘密の商店 { stock, bought, next } 開店中はnull以外
   const [shopMsg, setShopMsg] = useState('')          // 商店内の購入結果メッセージ（モーダル内に表示）
   const [hitFlash, setHitFlash] = useState(null)      // ボススキル被弾の画面フラッシュ { kind:'skill'|'big', id }
+  const [confirmBox, setConfirmBox] = useState(null)  // ゲーム内確認ポップアップ { msg, okLabel, onOk }
   const shopRef = useRef(null)                        // 開店中の移動ブロック用
   const sinceShopRef = useRef(0)                      // 前回の商店からの踏破フロア数
   const shopAtRef = useRef(20 + Math.floor(Math.random() * 11)) // 次の商店までのフロア数(20〜30)
@@ -857,9 +858,13 @@ export default function Dungeon() {
   }, [])
 
   // ダンジョンを選んで開始（startFloor=途中階スタート。踏破済みダンジョンで最終階の1つ手前まで選べる）
-  const beginDungeon = (d, startFloor = 1) => {
+  const beginDungeon = (d, startFloor = 1, confirmed = false) => {
     const sf = Math.max(1, Math.min(startFloor, (d?.floors || 10) - 1))
-    if (sf > 1 && !window.confirm(`B${sf}Fから開始しますか？`)) return // 途中階スタートは確認をはさむ
+    // 途中階スタートはゲーム内ポップアップで確認をはさむ
+    if (sf > 1 && !confirmed) {
+      setConfirmBox({ msg: `B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => beginDungeon(d, sf, true) })
+      return
+    }
     setDungeon(d)
     setFloorNum(sf); setPetHp(pet.maxHp); setTurns(0); setFullness(MAX_FULLNESS); setPoisoned(false); setParalyzed(0); setBurned(false); setDebuff({ atk: 0, def: 0, mdef: 0 }); setShield(0); shieldTurnsRef.current = 0; shieldRateRef.current = 1; setRegen(0); regenAmtRef.current = 0; setPetAtkUp(0); setLootBag([]); setDropMode(false); setLog([]); setReward(null); setStatus('exploring')
     sinceShopRef.current = 0; shopAtRef.current = 20 + Math.floor(Math.random() * 11); setShop(null); shopRef.current = null
@@ -1760,11 +1765,29 @@ export default function Dungeon() {
   }
 
   // あきらめる（倒された時と同じ仕様＝戦利品ランダム半分ロスト）
-  const giveUp = async () => {
+  const giveUp = () => {
     if (status !== 'exploring' || busyRef.current) return
-    if (!window.confirm('あきらめますか？ 倒された時と同じく、戦利品の一部を失います。')) return
-    setStatus('dead'); addLog('🏳 あきらめた…'); await finishRun(false, true)
+    setConfirmBox({
+      msg: 'あきらめますか？\n倒された時と同じく、戦利品の一部を失います。',
+      okLabel: '🏳 あきらめる',
+      onOk: async () => { setStatus('dead'); addLog('🏳 あきらめた…'); await finishRun(false, true) },
+    })
   }
+
+  // ゲーム内確認ポップアップ（開始階/あきらめる等。選択画面・探索画面の両方で表示）
+  const confirmModal = confirmBox && (
+    <div onClick={() => setConfirmBox(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,2,8,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: 'monospace' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#020a1a', border: '1px solid #3366aa', padding: 20, maxWidth: 320, width: '100%', textAlign: 'center' }}>
+        <div style={{ color: '#cce6ff', fontSize: 13, lineHeight: 1.9, marginBottom: 16, whiteSpace: 'pre-line' }}>{confirmBox.msg}</div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+          <button onClick={() => setConfirmBox(null)}
+            style={{ background: '#0a1424', border: '1px solid #335588', color: '#88aacc', padding: '8px 18px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>やめる</button>
+          <button onClick={() => { const f = confirmBox.onOk; setConfirmBox(null); f && f() }}
+            style={{ background: '#001840', border: '1px solid #0088ff', color: '#00aaff', padding: '8px 18px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>{confirmBox.okLabel || 'OK'}</button>
+        </div>
+      </div>
+    </div>
+  )
 
   if (scarecrowBlock) return <ScarecrowBlockScreen endsAt={scarecrowBlock.ends_at} />
   if (allowed === undefined) return <Center>読み込み中...</Center>
@@ -1850,6 +1873,7 @@ export default function Dungeon() {
           </div>
           <div style={{ color: '#557799', fontSize: 10, marginTop: 12 }}>※さらに深いダンジョンは今後のアップデートで追加予定</div>
         </div>
+        {confirmModal}
       </div>
     )
   }
@@ -2620,6 +2644,7 @@ export default function Dungeon() {
         </div>
 
       </div>
+      {confirmModal}
     </div>
   )
 }
