@@ -399,31 +399,70 @@ export default function Dungeon() {
   const bgmVolRef = useRef(bgmVol)
   useEffect(() => { bgmVolRef.current = bgmVol; try { localStorage.setItem('bf_dg_bgmvol', String(bgmVol)) } catch { /* ignore */ } }, [bgmVol])
   const applyBgmGain = () => { const g = bgmGainRef.current; if (g) g.gain.value = (bgmVolRef.current / 100) * masterRef.current }
-  const stopBgm = () => { const s = bgmSrcRef.current; if (s) { try { s.stop() } catch { /* ignore */ } try { s.disconnect() } catch { /* ignore */ } bgmSrcRef.current = null } bgmCurRef.current = null }
+  const bgmSeqRef = useRef(0) // 連続切替時に古いstartBgmを打ち切るためのトークン
+  // fadeMs>0なら音量を絞ってから停止（曲替え・退場を自然に）
+  const stopBgm = (fadeMs = 0) => {
+    const s = bgmSrcRef.current, g = bgmGainRef.current, ctx = audioCtxRef.current
+    if (s) {
+      if (fadeMs > 0 && g && ctx) {
+        const old = s
+        try {
+          g.gain.cancelScheduledValues(ctx.currentTime)
+          g.gain.setValueAtTime(Math.max(0.0001, g.gain.value), ctx.currentTime)
+          g.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + fadeMs / 1000)
+        } catch { /* ignore */ }
+        setTimeout(() => { try { old.stop() } catch { /* ignore */ } try { old.disconnect() } catch { /* ignore */ } }, fadeMs + 60)
+      } else {
+        try { s.stop() } catch { /* ignore */ } try { s.disconnect() } catch { /* ignore */ }
+      }
+      bgmSrcRef.current = null
+    }
+    bgmCurRef.current = null
+  }
   const startBgm = async (srcPath) => {
     const ctx = audioCtxRef.current
     if (!ctx || !srcPath) return
     if (bgmSrcRef.current && bgmCurRef.current === srcPath) return // 同じ曲が再生中
+    const mySeq = ++bgmSeqRef.current
     if (ctx.state === 'suspended') { try { await ctx.resume() } catch { /* ignore */ } }
     if (!bgmGainRef.current) { const g = ctx.createGain(); g.connect(ctx.destination); bgmGainRef.current = g }
-    applyBgmGain()
     let buf = bgmBufRef.current[srcPath]
     if (!buf) {
       try { const res = await fetch(encodeURI(srcPath) + `?v=${ASSET_VER}`); buf = await ctx.decodeAudioData(await res.arrayBuffer()); bgmBufRef.current[srcPath] = buf }
       catch { return }
     }
-    stopBgm() // 別の曲が鳴っていれば止めて差し替え
+    if (bgmSeqRef.current !== mySeq) return // 待機中に別の曲へ切り替わった
+    const g = bgmGainRef.current
+    const switching = !!bgmSrcRef.current
+    if (switching) {
+      // 現在の曲をフェードアウトしてから差し替え（クロスフェード風）
+      try {
+        g.gain.cancelScheduledValues(ctx.currentTime)
+        g.gain.setValueAtTime(Math.max(0.0001, g.gain.value), ctx.currentTime)
+        g.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.5)
+      } catch { /* ignore */ }
+      await new Promise((r) => setTimeout(r, 520))
+      if (bgmSeqRef.current !== mySeq) return
+    }
+    stopBgm()
     const src = ctx.createBufferSource()
     src.buffer = buf; src.loop = true // バッファ全体をギャップレスにループ
-    src.connect(bgmGainRef.current); src.start(0)
+    src.connect(g); src.start(0)
     bgmSrcRef.current = src; bgmCurRef.current = srcPath
+    // フェードイン（新規再生は短め・曲替えはゆっくり）
+    const target = Math.max(0.0001, (bgmVolRef.current / 100) * masterRef.current)
+    try {
+      g.gain.cancelScheduledValues(ctx.currentTime)
+      g.gain.setValueAtTime(0.0001, ctx.currentTime)
+      g.gain.linearRampToValueAtTime(target, ctx.currentTime + (switching ? 0.8 : 0.25))
+    } catch { applyBgmGain() }
   }
   // 音量（BGM音量×全体音量）を即時反映
   useEffect(() => { applyBgmGain() }, [bgmVol, masterOn, masterVol])
   // 探索中＆ON＆全体ON で再生／それ以外は停止。フロアで曲が変わったら差し替え
   useEffect(() => {
     if (bgmOn && bgmSrc && masterOn && status === 'exploring') startBgm(bgmSrc)
-    else stopBgm()
+    else stopBgm(250)
   }, [bgmOn, bgmSrc, masterOn, status, dungeon])
   useEffect(() => () => stopBgm(), [])
   const ensureBgm = () => { if (bgmOn && bgmSrc && masterOn && (!bgmSrcRef.current || bgmCurRef.current !== bgmSrc)) startBgm(bgmSrc) }
@@ -1097,9 +1136,9 @@ export default function Dungeon() {
           sinceShopRef.current = 0
           shopAtRef.current = 20 + Math.floor(Math.random() * 11)
           const so = { stock: rollShopStock(dungeon?.id), bought: {}, next: floorNum + 1 }
-          shopRef.current = so; setShop(so)
           addLog('🏮 階段の途中に秘密の商店を見つけた…')
           setState({ ...s, player })
+          openShopWithIntro(so)
           return
         }
         addLog(`⬇ B${floorNum + 1}Fへ降りた`)
@@ -1424,6 +1463,16 @@ export default function Dungeon() {
     playSe('aitemu')
     if (kind === 'book') setInventory((inv) => ({ ...inv, [key]: (inv[key] || 0) + 1 })) // 書は持ち物(消耗品)に即反映
     else if (data?.entry) addLootToBag(data.entry) // 石・素は持ち帰り袋に反映
+  }
+  // 秘密の商店へ暗転演出付きで入店（フロア遷移と同じ見せ方。暗転中に開店→タイトル表示→明転）
+  const openShopWithIntro = (so) => {
+    busyRef.current = true
+    setTransition({ floor: 0, black: 0, title: 0, name: dungeon?.name, emoji: dungeon?.emoji, shopTitle: true })
+    setTimeout(() => setTransition((tr) => tr && { ...tr, black: 1 }), 30)
+    setTimeout(() => { shopRef.current = so; setShop(so); setTransition((tr) => tr && { ...tr, title: 1 }) }, 470)
+    setTimeout(() => setTransition((tr) => tr && { ...tr, title: 0 }), 470 + 1000)
+    setTimeout(() => setTransition((tr) => tr && { ...tr, black: 0 }), 470 + 1000 + 450)
+    setTimeout(() => { setTransition(null); busyRef.current = false }, 470 + 1000 + 450 + 470)
   }
   const closeShop = () => {
     const next = shop?.next
@@ -2224,12 +2273,14 @@ export default function Dungeon() {
           })()}
           {/* フロア遷移演出：暗転＋「ダンジョン名 フロア数」 */}
           {transition && (
-            <div style={{ position: 'absolute', inset: 0, zIndex: 10, pointerEvents: 'none',
+            <div style={{ position: 'absolute', inset: 0, zIndex: 15, pointerEvents: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: '#000208', opacity: transition.black, transition: 'opacity 0.45s ease' }}>
               <div style={{ textAlign: 'center', opacity: transition.title, transition: 'opacity 0.4s ease' }}>
                 <div style={{ color: '#c8a0ff', fontSize: 20, letterSpacing: 4 }}>{transition.emoji || dungeon?.emoji} {transition.name || dungeon?.name}</div>
-                <div style={{ color: '#ffcc66', fontSize: 26, letterSpacing: 3, marginTop: 10 }}>B{transition.floor}F</div>
+                {transition.shopTitle
+                  ? <div style={{ color: '#ffd75e', fontSize: 26, letterSpacing: 3, marginTop: 10 }}>🏮 秘密の商店</div>
+                  : <div style={{ color: '#ffcc66', fontSize: 26, letterSpacing: 3, marginTop: 10 }}>B{transition.floor}F</div>}
               </div>
             </div>
           )}
@@ -2441,7 +2492,7 @@ export default function Dungeon() {
             )}
             {/* 開発アカウント用：秘密の商店へ即入店（閉じると現フロアに戻る） */}
             {isAdmin && dungeon && (dungeon.id === 'd30' || dungeon.id === 'd60') && (
-              <button onClick={() => { if (shopRef.current) return; const so = { stock: rollShopStock(dungeon?.id), bought: {}, next: null }; shopRef.current = so; setShop(so); addLog('🏮 秘密の商店へ（開発）') }}
+              <button onClick={() => { if (shopRef.current || busyRef.current) return; addLog('🏮 秘密の商店へ（開発）'); openShopWithIntro({ stock: rollShopStock(dungeon?.id), bought: {}, next: null }) }}
                 style={{ background: '#1a1204', border: '1px solid #aa8833', color: '#ffd75e', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>🏮 商店</button>
             )}
             {/* 開発アカウント用フロアワープ（d60は帯の境目＋ボス前後） */}
