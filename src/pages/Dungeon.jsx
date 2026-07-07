@@ -795,16 +795,35 @@ export default function Dungeon() {
       setIsAdmin(!!prof.is_admin)
       // AI自動プレイ（開発用バランステスト）：管理者 or テスト用アカウント「おれおれお」のみ
       setAiAllowed(!!prof.is_admin || prof.username === 'おれおれお')
-      // 選択中のペットを読み込む
-      const { data: ap } = await supabase.from('pets').select('*').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
+      // 全ペットを読み込む（選択中＝アクティブ＋控えの控えボーナス算出用）
+      const { data: allPets } = await supabase.from('pets').select('*').eq('owner_id', user.id)
+      const ap = (allPets || []).find((p) => p.is_active)
+      // 控えペット（非アクティブ）の素ステ10%を合算してアクティブへ加算（ステータスのみ。チャーム/特殊能力は含めない）
+      const reserve = (allPets || []).filter((p) => !p.is_active)
+      const reserveBonus = reserve.reduce((acc, p) => {
+        const s = petStats(p)
+        acc.hp += Math.floor(s.maxHp * 0.1); acc.atk += Math.floor(s.atk * 0.1)
+        acc.def += Math.floor(s.def * 0.1); acc.mdef += Math.floor(s.mdef * 0.1)
+        return acc
+      }, { hp: 0, atk: 0, def: 0, mdef: 0 })
       if (ap) {
         // 装備中チャーム＋リボン（別枠）を取得してステに反映
         let charm = null, ribbon = null
         if (ap.charm_id) { const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle(); charm = c }
         if (ap.ribbon_id) { const { data: rb } = await supabase.from('player_charms').select('*').eq('id', ap.ribbon_id).maybeSingle(); ribbon = rb }
-        const st = applyCharmStats(petStats(ap), charm, ribbon)
+        const base = applyCharmStats(petStats(ap), charm, ribbon)
+        // 控えボーナスを加算（攻撃系は物理/特殊/表示atkすべてに、防御系は各々に）
+        const st = {
+          ...base,
+          maxHp: base.maxHp + reserveBonus.hp,
+          def: base.def + reserveBonus.def,
+          mdef: base.mdef + reserveBonus.mdef,
+          atk: base.atk + reserveBonus.atk,
+          atkPhys: (base.atkPhys ?? base.atk) + reserveBonus.atk,
+          atkSpec: (base.atkSpec ?? base.atk) + reserveBonus.atk,
+        }
         const slots = Array.isArray(ap.skill_slots) && ap.skill_slots.length ? ap.skill_slots : ['tackle']
-        setPet({ id: ap.id, species: ap.species, evolved: ap.evolved, charm, ribbon, name: ap.name, emoji: speciesEmoji(ap), image_url: petImage(ap), skillSlots: slots, level: ap.level, exp: ap.exp, ...st })
+        setPet({ id: ap.id, species: ap.species, evolved: ap.evolved, charm, ribbon, name: ap.name, emoji: speciesEmoji(ap), image_url: petImage(ap), skillSlots: slots, level: ap.level, exp: ap.exp, reserveBonus, ...st })
         setSelectedSkill(slots[0])
         setPetHp(st.maxHp)
       }
@@ -1148,8 +1167,30 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
         triggerShake('hit')
       }
 
+      // 周囲AoEスキル（Lv150）：主対象に加えて、ペットの周囲8マスにいる敵全体へ同倍率でダメージ
+      //   ※ボスは巻き込まない（形態遷移/討伐は主対象経路のみで処理する）
+      let splashFlash = {}
+      if (sk.aoe) {
+        const chebToPet = (e) => { const n = e.size || 1; const cx = Math.min(Math.max(px, e.x), e.x + n - 1); const cy = Math.min(Math.max(py, e.y), e.y + n - 1); return Math.max(Math.abs(cx - px), Math.abs(cy - py)) }
+        const splash = enemies.filter((e) => e.id !== target.id && !e.boss && chebToPet(e) === 1)
+        if (splash.length) {
+          const killedIds = []
+          enemies = enemies.map((e) => {
+            if (!splash.some((s2) => s2.id === e.id)) return e
+            const g = (useType === 'spec' ? (e.mdef || 0) : (e.def || 0)) * (e.defDown > 0 ? (1 - STAT_DOWN_PCT) : 1)
+            const d = vary(calcDamage(Math.round(useAtk * (sk.mult || 1)), g))
+            popDmg(e.x, e.y, d); addLog(`⚔${skillTag} ${e.name}に${d}ダメージ！`)
+            const hp2 = e.hp - d
+            if (hp2 <= 0) { killedIds.push(e.id); return e }
+            splashFlash[e.id] = { flash: true }
+            return { ...e, hp: hp2 }
+          })
+          for (const e of splash) { if (killedIds.includes(e.id)) { enemiesRef.current += 1; grantKill(floorNum, e.name, e.x, e.y) } }
+          if (killedIds.length) enemies = enemies.filter((e) => !killedIds.includes(e.id))
+        }
+      }
       // 体当たり演出：ペットを相手方向へ突進、被弾した敵を点滅させる
-      applyFx({ pet: { lunge: { dx, dy } }, enemies: killed ? {} : { [target.id]: { flash: true } } })
+      applyFx({ pet: { lunge: { dx, dy } }, enemies: killed ? splashFlash : { [target.id]: { flash: true }, ...splashFlash } })
       // 敵HPを即時反映してから、一呼吸おいて敵のターン（反撃）へ（連打分の表示が終わってから）
       setState({ ...s, player, enemies })
       busyRef.current = true

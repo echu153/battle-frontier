@@ -16,12 +16,12 @@ export const STARTERS = Object.entries(SPECIES).map(([id, s]) => ({ id, ...s }))
 // 現在レベルから次レベルへ上がるのに必要な経験値（レベル×10）。レベルごとに0から貯める
 export const expForLevel = (lv) => (lv || 1) * 10
 export const MAX_LEVEL = 50            // 進化前のレベル上限（Lv50で進化が必要）
-export const MAX_LEVEL_EVOLVED = 9999  // 進化後は実質無限（サーバ側の暴走防止のため大きな値）
+export const MAX_LEVEL_EVOLVED = 400   // 進化後のレベル上限（2026-07-07: 実質無限→400に制定）
 export const EVOLVE_LEVEL = 50         // この Lv で進化できる
 export const EVOLVE_MULT = 1.5         // 進化時に現在ステを ×1.5
 export const EVOLVE_GROW_MULT = 2      // 進化後はレベル成長量 ×2
-// レベル上限：進化前は50、進化後は実質無限（Infinity）
-export const petMaxLevel = (pet) => (pet?.evolved ? Infinity : MAX_LEVEL)
+// レベル上限：進化前は50、進化後は400
+export const petMaxLevel = (pet) => (pet?.evolved ? MAX_LEVEL_EVOLVED : MAX_LEVEL)
 // 進化可能か（Lv50到達・未進化・進化形が定義されている）
 export const canEvolve = (pet) => !!pet && !pet.evolved && (pet.level || 1) >= EVOLVE_LEVEL && !!(SPECIES[pet.species]?.evolve)
 // 進化後の名前（未定義なら null）
@@ -73,7 +73,7 @@ export function petPlayerBonus(pet) {
 // 種族別の習得テーブル。各種族 Lv3/8/20/50/80/120 で1つずつ習得（たいあたりは全種族Lv1固定）。
 // Lvで自動習得。mult=攻撃倍率, hits=攻撃回数, lifesteal=与ダメ回復率, cost=消費満腹度, species=対象種族('all'=全種族)
 export const MAX_SKILL_SLOTS = 4  // 持っていけるスキル数（たいあたり固定込み＝実質3つ選べる）
-export const SKILL_LEARN_LEVELS = [3, 8, 20, 50, 80, 120]
+export const SKILL_LEARN_LEVELS = [3, 8, 20, 50, 80, 120, 150, 200, 300]
 export const SKILLS = {
   // --- 全種族共通（固定）---
   tackle:        { name: 'たいあたり', species: 'all',   learnLv: 1,   mult: 1.0, hits: 1, cost: 0,  fixed: true, desc: '通常の体当たり（満腹消費なし・固定装備）' },
@@ -87,6 +87,9 @@ export const SKILLS = {
   voru_bloodfang:{ name: '月下の吸血牙',   species: 'flame', learnLv: 50,  mult: 1.2,  hits: 1, lifesteal: 0.3, cost: 5, desc: '与ダメの3割を回復する牙（1.2倍／満腹5）' },
   voru_pack:     { name: '群狼乱舞',       species: 'flame', learnLv: 80,  mult: 0.8,  hits: 3, cost: 8, desc: '群れの如く3回連撃（各0.8倍／満腹8）' },
   voru_alpha:    { name: '狼神・絶牙閃',   species: 'flame', learnLv: 120, mult: 3.0,  hits: 1, cost: 12, desc: '狼神の牙を宿す必殺の一撃（3.0倍／満腹12）' },
+  voru_bladestorm:{ name: '牙嵐',          species: 'flame', learnLv: 150, mult: 1.8,  hits: 1, aoe: true, cost: 10, desc: '周囲の敵すべてを牙の嵐で切り裂く（1.8倍・周囲全体／満腹10）' },
+  voru_bloodmoon:{ name: '真月・吸血牙',   species: 'flame', learnLv: 200, mult: 1.6,  hits: 1, lifesteal: 0.5, cost: 10, desc: '月下の吸血牙の真髄。与ダメの5割を回復（1.6倍／満腹10）' },
+  voru_ragnarok: { name: '狼神・絶牙滅閃', species: 'flame', learnLv: 300, mult: 5.0,  hits: 1, cost: 20, desc: '狼神の牙を極めた滅びの一撃（5.0倍／満腹20）' },
 
   // --- 🦊 アルル / アルミラ（特殊・妖術の狐）---
   aruru_foxfire: { name: 'きつね火',       species: 'aqua',  learnLv: 3,   mult: 1.4,  hits: 1, cost: 2,  desc: '青白い狐火を放つ（1.4倍／満腹2）' },
@@ -97,6 +100,9 @@ export const SKILLS = {
   aruru_drain:   { name: '生命吸収術',     species: 'aqua',  learnLv: 50,  mult: 1.2,  hits: 1, lifesteal: 0.3, cost: 5, desc: '与ダメの3割を吸収する術（1.2倍／満腹5）' },
   aruru_ninetail:{ name: '九尾乱舞',       species: 'aqua',  learnLv: 80,  mult: 0.8,  hits: 3, cost: 8, desc: '九つの尾で3連撃（各0.8倍／満腹8）' },
   aruru_celestial:{ name: '天狐・霊滅閃',  species: 'aqua',  learnLv: 120, mult: 3.0,  hits: 1, cost: 12, desc: '天狐の霊力を放つ必殺技（3.0倍／満腹12）' },
+  aruru_foxstorm:{ name: '妖狐乱火',       species: 'aqua',  learnLv: 150, mult: 1.8,  hits: 1, aoe: true, cost: 10, desc: '周囲の敵すべてを妖狐の炎で焼く（1.8倍・周囲全体／満腹10）' },
+  aruru_soulfeast:{ name: '真・生命吸収術', species: 'aqua', learnLv: 200, mult: 1.6,  hits: 1, lifesteal: 0.5, cost: 10, desc: '生命吸収術の極み。与ダメの5割を吸収（1.6倍／満腹10）' },
+  aruru_novae:   { name: '天狐・霊滅滅閃', species: 'aqua',  learnLv: 300, mult: 5.0,  hits: 1, cost: 20, desc: '天狐の霊力を極めた滅びの一撃（5.0倍／満腹20）' },
 
   // --- 🐢 ドラム / ガルガノス（物理・大地と甲羅の守護者）---
   doramu_shell:  { name: 'こうら打ち',     species: 'leaf',  learnLv: 3,   mult: 1.4,  hits: 1, cost: 2,  desc: '硬い甲羅を叩きつける（1.4倍／満腹2）' },
@@ -107,6 +113,9 @@ export const SKILLS = {
   doramu_counter:{ name: 'グランドドレイン', species: 'leaf',  learnLv: 50,  mult: 1.2,  hits: 1, lifesteal: 0.3, cost: 5, desc: '大地に染みた血を吸い上げ、与ダメの3割を回復（1.2倍／満腹5）' },
   doramu_tremor: { name: '連震撃',         species: 'leaf',  learnLv: 80,  mult: 0.8,  hits: 3, cost: 8, desc: '地響きで3連撃（各0.8倍／満腹8）' },
   doramu_guardian:{ name: '守護神・大地崩撃',species: 'leaf', learnLv: 120, mult: 3.0,  hits: 1, cost: 12, desc: '守護神の力で大地ごと砕く（3.0倍／満腹12）' },
+  doramu_quaketremor:{ name: '大震撼',      species: 'leaf',  learnLv: 150, mult: 1.8,  hits: 1, aoe: true, cost: 10, desc: '周囲の敵すべてを大地の揺れで砕く（1.8倍・周囲全体／満腹10）' },
+  doramu_worlddrain:{ name: '真・グランドドレイン', species: 'leaf', learnLv: 200, mult: 1.6, hits: 1, lifesteal: 0.5, cost: 10, desc: 'グランドドレインの極み。与ダメの5割を回復（1.6倍／満腹10）' },
+  doramu_titan:  { name: '守護神・大地崩滅撃', species: 'leaf', learnLv: 300, mult: 5.0,  hits: 1, cost: 20, desc: '守護神の力を極めた滅びの一撃（5.0倍／満腹20）' },
 }
 // その種族が持つスキル一覧（たいあたり＋種族スキル。習得Lv順）
 export const skillsForSpecies = (species) =>
