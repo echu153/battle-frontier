@@ -3,7 +3,7 @@
 --   pet_charm_fuse_ribbon の逆操作。合成と「同じ素材」＝神秘の欠片1＋ゼニ10000を消費。
 --   ・ctype3(リボン合成枠)を外し、そのリボンを元の種類で新規生成（+値0・特殊能力なし）
 --   ・チャーム本体の成長値(+ステ)はそのまま維持。ctype3ぶんの特殊能力(3枠目)は除去
---   ・装備中のチャームは解除不可
+--   ・装備中でも解除可（チャームは装備継続・戻したリボンは未装備。通常のpet_charm_unfuseと同じ）
 -- 適用順の制約なし（独立機能）
 -- ============================================================
 create or replace function pet_charm_unfuse_ribbon(p_charm uuid)
@@ -13,10 +13,6 @@ begin
   select * into c from player_charms where id = p_charm and owner_id = auth.uid();
   if not found then raise exception 'charm not found'; end if;
   if c.ctype3 is null then raise exception 'no fused ribbon'; end if;
-  -- 装備中は解除不可（安全）
-  if exists (select 1 from pets where owner_id = auth.uid() and (charm_id = p_charm or ribbon_id = p_charm)) then
-    raise exception 'equipped charm cannot be unfused';
-  end if;
 
   -- コスト：神秘の欠片1＋ゼニ10000（合成と同じ）
   select coalesce(qty,0) into v_shard from pet_storage where owner_id = auth.uid() and item_key = 'shard';

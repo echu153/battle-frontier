@@ -298,7 +298,7 @@ export default function Charms() {
                     const d = getCharm(c.ctype); const on = c.id === val
                     return (
                       <button key={c.id} onClick={() => setter(c.id)}
-                        style={{ background: on ? '#170f2a' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: '#cce6ff', padding: '5px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: on ? '#170f2a' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: '#cce6ff', padding: '5px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, lineHeight: 1.3, textAlign: 'left' }}>
                         {on ? '✓ ' : ''}<CIcon ctype={c.ctype} />{charmDisplayName(c)}（HP+{(c.hp || 0) * CHARM_HP_PER}/攻+{c.atk}/特攻+{c.spatk}/防+{c.def}/特防+{c.spdef}）
                       </button>
                     )
@@ -329,7 +329,7 @@ export default function Charms() {
                     else dis = dis || (!isRib && c.fused) || (isRib && otherC && !otherC.fused)
                     return (
                       <button key={c.id} onClick={() => !dis && setter(c.id)} disabled={dis}
-                        style={{ background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: dis ? '#556' : '#cce6ff', padding: '5px 8px', cursor: dis ? 'not-allowed' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: on ? '#241640' : '#000a18', border: `1px solid ${on ? '#aa88ff' : '#224466'}`, color: dis ? '#556' : '#cce6ff', padding: '5px 8px', cursor: dis ? 'not-allowed' : 'pointer', fontFamily: 'monospace', fontSize: 11, lineHeight: 1.3, textAlign: 'left' }}>
                         {on ? '✓ ' : ''}<CIcon ctype={c.ctype} />{charmDisplayName(c)}{c.fused ? '（合成済）' : ''}（計{(c.hp || 0) + (c.atk || 0) + (c.spatk || 0) + (c.def || 0) + (c.spdef || 0)}）
                       </button>
                     )
