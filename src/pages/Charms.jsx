@@ -36,6 +36,7 @@ export default function Charms() {
   const [tab, setTab] = useState('enhance')   // enhance | inherit
   const [selId, setSelId] = useState(null)    // 強化対象チャーム
   const [checked, setChecked] = useState({})  // 一括強化で選択中の能力
+  const [checkedC, setCheckedC] = useState({}) // リボン凝縮強化で選択中の能力
   const [fromId, setFromId] = useState(null)  // 継承元
   const [toId, setToId] = useState(null)      // 継承先
   const [fuseBase, setFuseBase] = useState(null) // 合成：残す側
@@ -94,6 +95,27 @@ export default function Charms() {
     setLoading(false)
     await load()
     flash('まとめて強化した')
+  }
+  // リボン合成済みチャーム(ctype3)を「凝縮された素」で強化する（合計300まで）
+  const enhanceCondensed = async (charm, stat, times) => {
+    if (times < 1) return
+    setLoading(true)
+    const { error } = await supabase.rpc('pet_charm_enhance_condensed', { p_charm_id: charm.id, p_stat: stat, p_times: times })
+    setLoading(false)
+    if (error) { flash('強化できません（凝縮された素が無い／上限）'); return }
+    await load()
+  }
+  const bulkEnhanceCondensed = async (charm) => {
+    const targets = STAT_KEYS.filter((k) => checkedC[k])
+    if (!targets.length) { flash('強化する能力を選んでください'); return }
+    setLoading(true)
+    for (const stat of targets) {
+      const have = seeds[`${STAT_META[stat].seed}_c`] || 0
+      if (have > 0) await supabase.rpc('pet_charm_enhance_condensed', { p_charm_id: charm.id, p_stat: stat, p_times: have })
+    }
+    setLoading(false)
+    await load()
+    flash('凝縮された素でまとめて強化した')
   }
   // 裁断：チャーム/リボンを分解してランダムな素を1個につき3個入手（一括可）
   const doShred = async () => {
@@ -285,6 +307,32 @@ export default function Charms() {
                 <div style={{ marginTop: 6 }}>
                   <Btn onClick={() => !loading && bulkEnhance(sel)}>✅ 選択した能力をまとめて強化</Btn>
                 </div>
+
+                {/* リボン合成済みチャーム：凝縮された素での追加強化（合計300を通常の素と共有） */}
+                {sel.ctype3 && (
+                  <div style={{ marginTop: 12, borderTop: '1px solid #664488', paddingTop: 10 }}>
+                    <div style={{ color: '#ff9ed0', fontSize: 11, marginBottom: 8 }}>🎀 リボン強化（凝縮された素）— このチャームは<span style={{ color: '#ffd75e' }}>凝縮された素</span>でも強化できます（強化合計300を通常の素と共有）。</div>
+                    {STAT_KEYS.map((stat) => {
+                      const meta = STAT_META[stat]; const haveC = seeds[`${meta.seed}_c`] || 0
+                      const disC = full || haveC === 0
+                      return (
+                        <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+                          <input type="checkbox" checked={!!checkedC[stat]} onChange={(e) => setCheckedC((c) => ({ ...c, [stat]: e.target.checked }))} disabled={disC} />
+                          <span style={{ width: 64, fontSize: 11, color: '#cce6ff' }}><SeedIcon seed={`${meta.seed}_c`} emoji={CEMOJI[stat]} size={14} />{meta.label}</span>
+                          <span style={{ flex: 1, fontSize: 11, color: '#88bbee' }}>+{meta.per}/個</span>
+                          <span style={{ fontSize: 10, color: '#557799', display: 'inline-flex', alignItems: 'center', gap: 2 }}><SeedIcon seed={`${meta.seed}_c`} emoji={CEMOJI[stat]} size={12} />{haveC}</span>
+                          <button onClick={() => !loading && enhanceCondensed(sel, stat, 1)} disabled={disC}
+                            style={{ background: disC ? '#0a0f1a' : '#2a1020', border: `1px solid ${disC ? '#223344' : '#cc4499'}`, color: disC ? '#445' : '#ff88cc', padding: '3px 8px', cursor: disC ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+                            +{meta.per}
+                          </button>
+                        </div>
+                      )
+                    })}
+                    <div style={{ marginTop: 6 }}>
+                      <Btn onClick={() => !loading && bulkEnhanceCondensed(sel)}>✅ 凝縮された素でまとめて強化</Btn>
+                    </div>
+                  </div>
+                )}
               </div>
               )
             })()}
