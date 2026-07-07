@@ -15,6 +15,7 @@ import {
   calcCritRate,
   calcDefReduction,
   applyEquipmentEffects,
+  ailmentShieldBlocks,
   executeSkill,
   extractStatuses,
   BattleLogLine,
@@ -119,6 +120,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
 
   const equippedWeaponItem = equipment.find(e => e.slot === 'weapon' && e.equipped)
   const ondmgSpdUp = eff.ondmgSpdUp || 0  // 雷鋼の機神鎧: 被ダメ時に付与する素早さ倍率（0=なし）
+  const hasAmagoiShield = equipment.some(e => e.equipped && e.bonus_effect === 'battle_start_ailment_shield')  // 哭雨の羽衣: 5Tごとに異常無効バフ再付与
   const isArtifact = equippedWeaponItem?.bonus_effect === 'artifact'
 
   const passiveNames = skillSets.filter(ss => ss.skills?.type === 'パッシブ').map(ss => ss.skills.name)
@@ -363,6 +365,15 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
           enemyBuffs.healDown = { turns: 2, rate: 0.7 }
           logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
         }
+        if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
+          // 濡羽杖アマザネ: 攻撃ヒット時 2Tの間対象SPD-5%（最大4重複=-20%・ヒット毎に持続リフレッシュ）
+          const curSd = enemyBuffs.spdDown
+          const amzSt = Math.min(4, ((curSd?.turns > 0 && curSd.amazaneStacks) || 0) + 1)
+          const amzRate = Math.round((1 - 0.05 * amzSt) * 100) / 100
+          if (!(curSd?.turns > 0) || curSd.amazaneStacks > 0 || amzRate < curSd.rate) {
+            enemyBuffs.spdDown = { turns: 2, rate: amzRate, amazaneStacks: amzSt }
+          }
+        }
         evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs)
         // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
         if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
@@ -437,6 +448,15 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         enemyBuffs.healDown = { turns: 2, rate: 0.7 }
         logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
       }
+      if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
+        // 濡羽杖アマザネ: 攻撃ヒット時 2Tの間対象SPD-5%（最大4重複=-20%・ヒット毎に持続リフレッシュ）
+        const curSd = enemyBuffs.spdDown
+        const amzSt = Math.min(4, ((curSd?.turns > 0 && curSd.amazaneStacks) || 0) + 1)
+        const amzRate = Math.round((1 - 0.05 * amzSt) * 100) / 100
+        if (!(curSd?.turns > 0) || curSd.amazaneStacks > 0 || amzRate < curSd.rate) {
+          enemyBuffs.spdDown = { turns: 2, rate: amzRate, amazaneStacks: amzSt }
+        }
+      }
       evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs)
       const critText = isCrit ? '💥クリティカル！ ' : ''
       logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
@@ -497,7 +517,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     if (enPerm.convertCtoA) { atk += matk; matk = 0 }
     const def  = enemy.def  * enPerm.defMult  * (enemyBuffs.defUp?.rate || 1)
     const mdef = enemy.mdef * enPerm.mdefMult * (enemyBuffs.defUp?.rate || 1)
-    const spd  = enemy.spd  * enPerm.spdMult  * (enemyBuffs.spdUp?.rate || 1)
+    const spd  = enemy.spd  * enPerm.spdMult  * (enemyBuffs.spdUp?.rate || 1) * (enemyBuffs.spdDown?.turns > 0 ? enemyBuffs.spdDown.rate : 1)
     return { atk, def, matk, mdef, spd, hp_max:enemyMaxHp, mp_max:999999, critDmg:0, defPen:0, mdefPen:0, hitBonus:0, critBonus:0, evasionBonus:0, critResist:0 }
   }
 
@@ -526,7 +546,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     if (playerHp <= 0) return
     // hitStun（獅子レグルス）。プレイヤーの状態異常無効/スタン耐性で防げる
     if (mods.hitStun && !(playerBuffs.statusImmune?.turns > 0)) {
-      if (Math.random() < mods.hitStun) {
+      if (Math.random() < mods.hitStun && !ailmentShieldBlocks(playerBuffs, logs)) {
         playerBuffs.stun = { turns:1 }
         logs.push({ text:`⚡ ${enemy.name}の一撃でスタン！ 次のターン行動できない！`, color:'#ffaa00' })
       }
@@ -534,9 +554,9 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     // statusOnHit（乙女スピカ／天蠍アンタレス）
     if (mods.statusOnHit && mods.statusOnHit.length && !(playerBuffs.statusImmune?.turns > 0)) {
       const st = mods.statusOnHit[(turn - 1) % mods.statusOnHit.length]
-      if (st === 'poison'   && !(playerBuffs.poison?.turns > 0))     { playerBuffs.poison = { turns:5, dmgRate:0.04 }; logs.push({ text:`☠ ${enemy.name}の毒が回った！`, color:'#44ff44' }) }
-      if (st === 'burn'     && !(playerBuffs.burn?.turns > 0))       { playerBuffs.burn = { turns:5, dmgRate:0.02 }; logs.push({ text:`🔥 ${enemy.name}にやけどを負わされた！`, color:'#ff6622' }) }
-      if (st === 'paralysis'&& !(playerBuffs.paralysis?.turns > 0))  { playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }; logs.push({ text:`⚡ ${enemy.name}に麻痺させられた！`, color:'#ffdd44' }) }
+      if (st === 'poison'   && !(playerBuffs.poison?.turns > 0)    && !ailmentShieldBlocks(playerBuffs, logs)) { playerBuffs.poison = { turns:5, dmgRate:0.04 }; logs.push({ text:`☠ ${enemy.name}の毒が回った！`, color:'#44ff44' }) }
+      if (st === 'burn'     && !(playerBuffs.burn?.turns > 0)      && !ailmentShieldBlocks(playerBuffs, logs)) { playerBuffs.burn = { turns:5, dmgRate:0.02 }; logs.push({ text:`🔥 ${enemy.name}にやけどを負わされた！`, color:'#ff6622' }) }
+      if (st === 'paralysis'&& !(playerBuffs.paralysis?.turns > 0) && !ailmentShieldBlocks(playerBuffs, logs)) { playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }; logs.push({ text:`⚡ ${enemy.name}に麻痺させられた！`, color:'#ffdd44' }) }
     }
     // bonusVsStatus（天蠍アンタレス：毒状態の敵に追撃）
     if (mods.bonusVsStatus && playerBuffs[mods.bonusVsStatus.st]?.turns > 0) {
@@ -569,9 +589,10 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const defForCalc = isEM ? Math.max(1, pMdef) : Math.max(1, pDef)
     const baseDmg = Math.max(1, Math.floor(eAtk*eAtk/Math.max(1,eAtk+defForCalc))+Math.floor(Math.random()*3))
     const enemySpdBuff = enemyBuffs.spdUp ? enemyBuffs.spdUp.rate : 1
+    const enemySpdDebuff = enemyBuffs.spdDown?.turns > 0 ? enemyBuffs.spdDown.rate : 1  // 濡羽杖アマザネ/スライムの指輪等
     const playerSpdDebuff = playerBuffs.spdDown ? playerBuffs.spdDown.rate : 1
     const effectivePlayerSpd = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * playerSpdDebuff
-    const effectiveEnemySpd = enemySpd * enemySpdBuff
+    const effectiveEnemySpd = enemySpd * enemySpdBuff * enemySpdDebuff
     // mods.alwaysHit（蒼穹アウストラリス）：必中＝プレイヤー回避無効
     const evasionRate = mods.alwaysHit ? 0 : (calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0) + (hasOnmi ? 5 : 0))
     if (evasionRate > 0 && Math.random()*100 < evasionRate) {
@@ -689,8 +710,11 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     }
     // healBlock（断絶アクベンス）: 回復阻害を付与
     if (mods.healBlock && !healBlockApplied) {
-      healBlockApplied = true; playerBuffs.healSeal = { turns:999 }
-      logs.push({ text:`🚫 ${enemy.name}の断絶！ あなたは回復できない！`, color:'#ff4488' })
+      healBlockApplied = true
+      if (!ailmentShieldBlocks(playerBuffs, logs)) {
+        playerBuffs.healSeal = { turns:999 }
+        logs.push({ text:`🚫 ${enemy.name}の断絶！ あなたは回復できない！`, color:'#ff4488' })
+      }
     }
     // dispelPerTurn（断絶アクベンス）: こちらのバフを解除
     if (mods.dispelPerTurn && turn > 1) {
@@ -895,6 +919,11 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
       playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
       logs.push({ text:`⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}%！`, color:'#66ccff' })
+    }
+    // 哭雨の羽衣: 5ターンごとに状態異常無効バフを再獲得（既にバフがある場合は重複しない）
+    if (hasAmagoiShield && turn % 5 === 0 && playerHp > 0 && !(playerBuffs.ailmentShield?.charges > 0)) {
+      playerBuffs.ailmentShield = { charges: 1 }
+      logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color:'#66ccff' })
     }
     const twinBars = twin ? [
       { name:'カストル', hp:Math.max(0,twin.c.hp), max:twin.c.max, down:twin.c.down },

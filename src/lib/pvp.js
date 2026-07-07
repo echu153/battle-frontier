@@ -29,6 +29,7 @@ import {
   calcCritRate,
   calcDefReduction,
   applyEquipmentEffects,
+  consumeAilmentShield,
   executeSkill,
   extractStatuses,
   MULTI_HIT_SKILLS,
@@ -367,6 +368,15 @@ function doAttack(att, def, isExtra, ctx) {
         res.newEnemyBuffs.healDown = { turns: 2, rate: 0.7 }
         logs.push({ text: `🗡 ${att.equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemyName}の回復力が2ターンの間-30%！`, color: '#ff8844' })
       }
+      if (finalDmg > 0 && att.equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
+        // 濡羽杖アマザネ: 攻撃ヒット時 2Tの間対象SPD-5%（最大4重複=-20%・ヒット毎に持続リフレッシュ）
+        const curSd = res.newEnemyBuffs.spdDown
+        const amzSt = Math.min(4, ((curSd?.turns > 0 && curSd.amazaneStacks) || 0) + 1)
+        const amzRate = Math.round((1 - 0.05 * amzSt) * 100) / 100
+        if (!(curSd?.turns > 0) || curSd.amazaneStacks > 0 || amzRate < curSd.rate) {
+          res.newEnemyBuffs.spdDown = { turns: 2, rate: amzRate, amazaneStacks: amzSt }
+        }
+      }
       if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(res.newEnemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
         res.newEnemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
         logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemyName}を麻痺させた！`, color: '#ffe066' })
@@ -393,6 +403,7 @@ function doAttack(att, def, isExtra, ctx) {
         if (had) logs.push({ text: `💸 オールインの反動中！ バフが効かない！`, color: '#ff4444' })
       }
       att.buffs = res.newPlayerBuffs; def.buffs = res.newEnemyBuffs
+      consumeAilmentShield(defBuffs, def.buffs, logs)  // 哭雨の羽衣: 新規状態異常を1回無効化
       const critInsert = (finalCrit && !isMulti) ? '💥クリティカル！ ' : ''
       const dmgIdx = resLog.indexOf(enemyName + 'に')
       const logWithCrit = critInsert ? (dmgIdx >= 0 ? resLog.slice(0, dmgIdx) + critInsert + resLog.slice(dmgIdx) : resLog + ' ' + critInsert) : resLog
@@ -433,7 +444,9 @@ function doAttack(att, def, isExtra, ctx) {
     let finalDmg = Math.floor(baseDmg * 0.7 * critMult * (att.isArtifact ? 1.3 : 1.0) * att.passiveDmgMult * reduceMult * breederDmgMult * PVP.dmgMult * ctx.atkDmgMult * (0.9 + Math.random() * 0.2))
     if (minDmg > 0) finalDmg = Math.max(finalDmg, minDmg)  // 戦争: 防御無視の最低ダメージ保証
     dealToDef(finalDmg)
+    const prevDefBuffsN = { ...defBuffs }  // 哭雨の羽衣: 新規状態異常の差分検知用
     evoOnHit(eff, finalDmg, defBuffs, enemyName, logs)  // 真化: 通常攻撃ヒット時の敵デバフ（通常攻撃はdef.buffs置換なし）
+    consumeAilmentShield(prevDefBuffsN, defBuffs, logs)
     const critText = isCrit ? '💥クリティカル！ ' : ''
     logs.push({ text: `${prefix}${critText}攻撃！ ${enemyName}に${finalDmg}ダメージ！`, color: '#ffcc00' })
     if (att.buffs.bloodRage?.turns > 0 && finalDmg > 0 && !(att.buffs.healSeal?.turns > 0)) {
@@ -624,6 +637,11 @@ function endTurnBuffs(side, ctx, hpBeforeTurn) {
   if (side.ondmgSpdUp > 1 && side.hp < hpBeforeTurn && !(b.spdUp?.turns > 0 && b.spdUp.rate >= side.ondmgSpdUp)) {
     b.spdUp = { turns: 2, rate: side.ondmgSpdUp }
     logs.push({ text: `⚙ ${side.profile.username}の雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((side.ondmgSpdUp - 1) * 100)}%！`, color: '#66ccff' })
+  }
+  // 哭雨の羽衣: 5ターンごとに状態異常無効バフを再獲得（既にバフがある場合は重複しない）
+  if (ctx.turn % 5 === 0 && !(b.ailmentShield?.charges > 0) && side.equipment?.some(e => e.equipped && e.bonus_effect === 'battle_start_ailment_shield')) {
+    b.ailmentShield = { charges: 1 }
+    logs.push({ text: `🛡 ${side.profile.username}の哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color: '#66ccff' })
   }
 }
 

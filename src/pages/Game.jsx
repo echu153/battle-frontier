@@ -652,6 +652,28 @@ export const applyEquipmentEffects = (equipment, profile, playerBuffs, logs) => 
 }
 
 // ============================================================
+// 哭雨の羽衣: 状態異常無効バフ（全戦闘エンジン共用ヘルパー）
+// ============================================================
+export const AILMENT_KEYS = ['paralysis','burn','poison','severePoisoin','stun','bleed','healSeal','healBlock','curseDmg']
+// 差分検知型: prevBuffs に無かった状態異常が newBuffs に新規付与されていたら1つ無効化して消費
+export const consumeAilmentShield = (prevBuffs, newBuffs, logs) => {
+  if (!(newBuffs.ailmentShield?.charges > 0)) return
+  const got = AILMENT_KEYS.find(k => newBuffs[k] && !prevBuffs?.[k])
+  if (got) {
+    delete newBuffs[got]
+    delete newBuffs.ailmentShield
+    logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を無効化した！`, color:'#66ccff' })
+  }
+}
+// 直接付与型: 付与直前に呼ぶ。バフが残っていれば消費して true（呼び出し側は付与をスキップ）
+export const ailmentShieldBlocks = (playerBuffs, logs) => {
+  if (!(playerBuffs.ailmentShield?.charges > 0)) return false
+  delete playerBuffs.ailmentShield
+  logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を無効化した！`, color:'#66ccff' })
+  return true
+}
+
+// ============================================================
 // プレイヤースキル実行
 // ============================================================
 export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkill = '') => {
@@ -1514,15 +1536,7 @@ export const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, p
     }
   }
   // 哭雨の羽衣: 状態異常無効バフ（1回）。新規付与された状態異常を1つ無効化
-  if (newPlayerBuffs.ailmentShield?.charges > 0) {
-    const ailKeys = ['paralysis','burn','poison','severePoisoin','stun','bleed','healSeal','curseDmg']
-    const got = ailKeys.find(k => newPlayerBuffs[k] && !playerBuffs[k])
-    if (got) {
-      delete newPlayerBuffs[got]
-      newPlayerBuffs.ailmentShield = { charges: newPlayerBuffs.ailmentShield.charges - 1 }
-      logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を無効化した！`, color:'#66ccff' })
-    }
-  }
+  consumeAilmentShield(playerBuffs, newPlayerBuffs, logs)
   // アクアクラウン(真化): 状態異常になる確率-eff.evoAilmentResist%。新規付与された状態異常を確率で無効化
   if ((eff?.evoAilmentResist || 0) > 0) {
     const ailKeys2 = ['paralysis','burn','poison','severePoisoin','stun','bleed','healSeal','curseDmg']
@@ -3313,7 +3327,8 @@ export default function Game() {
 
       // プレイヤーの回避判定（素早さバフ/デバフ考慮）
       const effectivePlayerSpd = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * playerSpdDebuff
-      const effectiveEnemySpd = enemySpd * enemySpdBuff
+      const enemySpdDebuff = enemyBuffs.spdDown?.turns > 0 ? enemyBuffs.spdDown.rate : 1  // 濡羽杖アマザネ/スライムの指輪等
+      const effectiveEnemySpd = enemySpd * enemySpdBuff * enemySpdDebuff
       const evasionRate = calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0) + (hasOnmi ? 5 : 0)
       if (evasionRate > 0 && Math.random()*100 < evasionRate) {
         const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
@@ -3717,9 +3732,9 @@ export default function Game() {
         playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
         logs.push({ text:`⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}%！`, color:'#66ccff' })
       }
-      // 哭雨の羽衣: 5ターンごとに状態異常無効バフを1回分獲得（未消費分は累積）
-      if (hasAmagoiShield && turn % 5 === 0 && playerHp > 0) {
-        playerBuffs.ailmentShield = { charges: (playerBuffs.ailmentShield?.charges || 0) + 1 }
+      // 哭雨の羽衣: 5ターンごとに状態異常無効バフを再獲得（既にバフがある場合は重複しない）
+      if (hasAmagoiShield && turn % 5 === 0 && playerHp > 0 && !(playerBuffs.ailmentShield?.charges > 0)) {
+        playerBuffs.ailmentShield = { charges: 1 }
         logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color:'#66ccff' })
       }
       if (bossHealCooldown > 0) bossHealCooldown--

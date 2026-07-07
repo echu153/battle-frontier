@@ -15,6 +15,7 @@ import {
   calcCritRate,
   calcDefReduction,
   applyEquipmentEffects,
+  ailmentShieldBlocks,
   executeSkill,
 } from './Game'
 
@@ -190,6 +191,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   const weakMult = (isPhysical) => physWeakBoss ? (isPhysical ? 1.1 : 0.9) : (isPhysical ? 0.9 : 1.1)
   // 雷鋼の機神鎧：被ダメージ時に2ターン素早さ+15%（eff.ondmgSpdUp = 倍率1.15／0=効果なし）
   const ondmgSpdUp = eff.ondmgSpdUp || 0
+  const hasAmagoiShield = equipment.some(e => e.equipped && e.bonus_effect === 'battle_start_ailment_shield')  // 哭雨の羽衣: 5Tごとに異常無効バフ再付与
 
   playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
 
@@ -416,17 +418,23 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           playerExtraRate = calcExtraActionRate(halfSpd, BOSS_SPD)
           logs.push({ text: `${prefix}${bossName}の「深淵の水葬」！ ${fmt(specialDmg)}ダメージ！ 10ターンの間 素早さ-50%！`, color: '#2299ff' })
         } else if (isZerugiasu) {
-          // 神雷崩撃：本物の麻痺（10ターン・素早さ-20%＋25%で行動不能）
-          playerBuffs.paralysis = { turns: 10, skipRate: 0.25, spdRate: 0.8 }
-          const paraSpd = Math.floor(effectiveSpdForCalc * 0.8)
-          playerCritRate  = calcCritRate(paraSpd, BOSS_SPD) + passiveCritBonus + (eff.critBonus || 0)
-          playerEvasion   = calcEvasionRate(paraSpd, BOSS_SPD) + (eff.evasionBonus || 0)
-          playerExtraRate = calcExtraActionRate(paraSpd, BOSS_SPD)
-          logs.push({ text: `${prefix}${bossName}の「神雷崩撃」！ ${fmt(specialDmg)}ダメージ！ 麻痺した！（素早さ低下＋行動不能の危険）`, color: '#ffcc00' })
+          // 神雷崩撃：本物の麻痺（10ターン・素早さ-20%＋25%で行動不能）。哭雨の羽衣で無効化可
+          logs.push({ text: `${prefix}${bossName}の「神雷崩撃」！ ${fmt(specialDmg)}ダメージ！`, color: '#ffcc00' })
+          if (!ailmentShieldBlocks(playerBuffs, logs)) {
+            playerBuffs.paralysis = { turns: 10, skipRate: 0.25, spdRate: 0.8 }
+            const paraSpd = Math.floor(effectiveSpdForCalc * 0.8)
+            playerCritRate  = calcCritRate(paraSpd, BOSS_SPD) + passiveCritBonus + (eff.critBonus || 0)
+            playerEvasion   = calcEvasionRate(paraSpd, BOSS_SPD) + (eff.evasionBonus || 0)
+            playerExtraRate = calcExtraActionRate(paraSpd, BOSS_SPD)
+            logs.push({ text: `⚡ 麻痺した！（素早さ低下＋行動不能の危険）`, color: '#ffcc00' })
+          }
         } else {
-          // 暗黒侵食：回復無効を永続化
-          playerBuffs.healBlock = { turns: 999 }
-          logs.push({ text: `${prefix}${bossName}の「暗黒侵食」！ ${fmt(specialDmg)}ダメージ！ 回復が永続的に封印された！`, color: '#aa22ff' })
+          // 暗黒侵食：回復無効を永続化。哭雨の羽衣で無効化可
+          logs.push({ text: `${prefix}${bossName}の「暗黒侵食」！ ${fmt(specialDmg)}ダメージ！`, color: '#aa22ff' })
+          if (!ailmentShieldBlocks(playerBuffs, logs)) {
+            playerBuffs.healBlock = { turns: 999 }
+            logs.push({ text: `🚫 回復が永続的に封印された！`, color: '#aa22ff' })
+          }
         }
         if (playerHp <= 0) { playerHp = 0; logs.push({ text: `力尽きた…（バトル終了）`, color: '#ff4444' }); playerDied = true }
         return
@@ -504,6 +512,11 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
       playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
       logs.push({ text: `⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}%！`, color: '#66ccff' })
+    }
+    // 哭雨の羽衣: 5ターンごとに状態異常無効バフを再獲得（既にバフがある場合は重複しない）
+    if (hasAmagoiShield && turn % 5 === 0 && playerHp > 0 && !(playerBuffs.ailmentShield?.charges > 0)) {
+      playerBuffs.ailmentShield = { charges: 1 }
+      logs.push({ text: `🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color: '#66ccff' })
     }
     // リジェネ・遅延ヒール（回復封印中は無効）
     const isHealBlockedTick = playerBuffs.healBlock?.turns > 0

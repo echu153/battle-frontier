@@ -14,6 +14,8 @@ import {
   calcCritRate,
   calcDefReduction,
   applyEquipmentEffects,
+  consumeAilmentShield,
+  ailmentShieldBlocks,
   executeSkill,
   extractStatuses,
   BattleLogLine,
@@ -65,6 +67,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
 
   const equippedWeaponItem = equipment.find(e => e.slot === 'weapon' && e.equipped)
   const ondmgSpdUp = eff.ondmgSpdUp || 0  // 雷鋼の機神鎧: 被ダメ時に付与する素早さ倍率（0=なし）
+  const hasAmagoiShield = equipment.some(e => e.equipped && e.bonus_effect === 'battle_start_ailment_shield')  // 哭雨の羽衣: 5Tごとに異常無効バフ再付与
   const isArtifact = equippedWeaponItem?.bonus_effect === 'artifact'
 
   const passiveNames = skillSets.filter(ss => ss.skills?.type === 'パッシブ').map(ss => ss.skills.name)
@@ -287,6 +290,15 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
           enemyBuffs.healDown = { turns: 2, rate: 0.7 }
           logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
         }
+        if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
+          // 濡羽杖アマザネ: 攻撃ヒット時 2Tの間対象SPD-5%（最大4重複=-20%・ヒット毎に持続リフレッシュ）
+          const curSd = enemyBuffs.spdDown
+          const amzSt = Math.min(4, ((curSd?.turns > 0 && curSd.amazaneStacks) || 0) + 1)
+          const amzRate = Math.round((1 - 0.05 * amzSt) * 100) / 100
+          if (!(curSd?.turns > 0) || curSd.amazaneStacks > 0 || amzRate < curSd.rate) {
+            enemyBuffs.spdDown = { turns: 2, rate: amzRate, amazaneStacks: amzSt }
+          }
+        }
         evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs)
         // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
         if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
@@ -357,6 +369,15 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
         enemyBuffs.healDown = { turns: 2, rate: 0.7 }
         logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
       }
+      if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
+        // 濡羽杖アマザネ: 攻撃ヒット時 2Tの間対象SPD-5%（最大4重複=-20%・ヒット毎に持続リフレッシュ）
+        const curSd = enemyBuffs.spdDown
+        const amzSt = Math.min(4, ((curSd?.turns > 0 && curSd.amazaneStacks) || 0) + 1)
+        const amzRate = Math.round((1 - 0.05 * amzSt) * 100) / 100
+        if (!(curSd?.turns > 0) || curSd.amazaneStacks > 0 || amzRate < curSd.rate) {
+          enemyBuffs.spdDown = { turns: 2, rate: amzRate, amazaneStacks: amzSt }
+        }
+      }
       evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs)
       const critText = isCrit ? '💥クリティカル！ ' : ''
       logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
@@ -389,9 +410,10 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     const defForCalc = isEM ? Math.max(1, pMdef) : Math.max(1, pDef)
     const baseDmg = Math.max(1, Math.floor(eAtk*eAtk/Math.max(1,eAtk+defForCalc))+Math.floor(Math.random()*3))
     const enemySpdBuff = enemyBuffs.spdUp ? enemyBuffs.spdUp.rate : 1
+    const enemySpdDebuff = enemyBuffs.spdDown?.turns > 0 ? enemyBuffs.spdDown.rate : 1  // 濡羽杖アマザネ/スライムの指輪等
     const playerSpdDebuff = playerBuffs.spdDown ? playerBuffs.spdDown.rate : 1
     const effectivePlayerSpd = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * playerSpdDebuff
-    const effectiveEnemySpd = enemySpd * enemySpdBuff
+    const effectiveEnemySpd = enemySpd * enemySpdBuff * enemySpdDebuff
     const evasionRate = calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0) + (hasOnmi ? 5 : 0)
     if (evasionRate > 0 && Math.random()*100 < evasionRate) {
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
@@ -419,7 +441,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     if (enPerm.convertCtoA) { atk += matk; matk = 0 }
     const def  = enemy.def  * enPerm.defMult  * (enemyBuffs.defUp?.rate || 1)
     const mdef = enemy.mdef * enPerm.mdefMult * (enemyBuffs.defUp?.rate || 1)
-    const spd  = enemy.spd  * enPerm.spdMult  * (enemyBuffs.spdUp?.rate || 1)
+    const spd  = enemy.spd  * enPerm.spdMult  * (enemyBuffs.spdUp?.rate || 1) * (enemyBuffs.spdDown?.turns > 0 ? enemyBuffs.spdDown.rate : 1)
     return { atk, def, matk, mdef, spd, hp_max:enemyMaxHp, mp_max:999999, critDmg:0, defPen:0, mdefPen:0, hitBonus:0, critBonus:0, evasionBonus:0, critResist:0 }
   }
 
@@ -458,6 +480,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     const playerTarget = { name:profile.username, def:eff.def, mdef:eff.mdef, hp:eff.hp_max, hp_max:eff.hp_max, type:'physical' }
     // executeSkill: caster=enemy(eStats/enemyProfile), target=player。
     // 戻り値 newPlayerBuffs=詠唱者(敵)バフ, newEnemyBuffs=対象(プレイヤー)デバフ
+    const prevPlayerBuffs = playerBuffs  // 哭雨の羽衣: 新規状態異常の差分検知用
     const res = executeSkill({ name:def.name }, eStats, enemyProfile, playerTarget, playerBuffs, enemyBuffs, false, prevEnemySkill)
     prevEnemySkill = def.name
     const isMag = enemy.type === 'magical'
@@ -472,8 +495,9 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     if (res.heal > 0) enemyHp = Math.min(enemyMaxHp, enemyHp + (enemyBuffs.healDown?.turns > 0 ? Math.floor(res.heal * enemyBuffs.healDown.rate) : res.heal))
     enemyBuffs = res.newPlayerBuffs
     playerBuffs = res.newEnemyBuffs
+    consumeAilmentShield(prevPlayerBuffs, playerBuffs, logs)  // 哭雨の羽衣: 新規状態異常を1回無効化
     // 確定出血（瞬歩瞬殺/鬼影閃）
-    if (def.guaranteedBleed) {
+    if (def.guaranteedBleed && !ailmentShieldBlocks(playerBuffs, logs)) {
       const b = playerBuffs.bleed
       playerBuffs.bleed = { stacks: Math.min(5, (b?.stacks || 0) + 1), lastTurn: 0 }
     }
@@ -532,14 +556,14 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       playerHp = 0
       logs.push({ text:`☠ ${def.name}の追い打ち！ 致命の一撃で即死した…！`, color:'#ff0000' })
     }
-    if (def.stunGuaranteed) { playerBuffs.stun = { turns:1 }; logs.push({ text:`⚡ スタンした！ 次のターン行動できない！`, color:'#ffaa00' }) }
-    if (def.healBlock) { playerBuffs.healSeal = { turns:999 }; logs.push({ text:`🚫 ${def.name}！ 以降あなたは回復できない！`, color:'#ff4488' }) }
+    if (def.stunGuaranteed && !ailmentShieldBlocks(playerBuffs, logs)) { playerBuffs.stun = { turns:1 }; logs.push({ text:`⚡ スタンした！ 次のターン行動できない！`, color:'#ffaa00' }) }
+    if (def.healBlock && !ailmentShieldBlocks(playerBuffs, logs)) { playerBuffs.healSeal = { turns:999 }; logs.push({ text:`🚫 ${def.name}！ 以降あなたは回復できない！`, color:'#ff4488' }) }
     if (def.dispelPlayerBuffs) { playerBuffs = {}; logs.push({ text:`🌀 ${def.name}！ あなたの強化が全て消し去られた！`, color:'#cc66ff' }) }
     if (def.inflict) {
       for (const st of def.inflict) {
-        if (st === 'paralysis' && !(playerBuffs.paralysis?.turns > 0)) playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }
-        if (st === 'burn') playerBuffs.burn = { turns:5, dmgRate:0.02 }
-        if (st === 'stun') playerBuffs.stun = { turns:1 }
+        if (st === 'paralysis' && !(playerBuffs.paralysis?.turns > 0) && !ailmentShieldBlocks(playerBuffs, logs)) playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }
+        if (st === 'burn' && !(playerBuffs.burn?.turns > 0) && !ailmentShieldBlocks(playerBuffs, logs)) playerBuffs.burn = { turns:5, dmgRate:0.02 }
+        if (st === 'stun' && !ailmentShieldBlocks(playerBuffs, logs)) playerBuffs.stun = { turns:1 }
       }
       logs.push({ text:`🌫 ${def.name}の状態異常！ 麻痺・やけど・スタンが付与された！`, color:'#aa66ff' })
     }
@@ -766,6 +790,11 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
       playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
       logs.push({ text:`⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}%！`, color:'#66ccff' })
+    }
+    // 哭雨の羽衣: 5ターンごとに状態異常無効バフを再獲得（既にバフがある場合は重複しない）
+    if (hasAmagoiShield && turn % 5 === 0 && playerHp > 0 && !(playerBuffs.ailmentShield?.charges > 0)) {
+      playerBuffs.ailmentShield = { charges: 1 }
+      logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color:'#66ccff' })
     }
     logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:eff.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
     turn++
