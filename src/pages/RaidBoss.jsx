@@ -86,15 +86,8 @@ function getBossForTurn(t, name = BOSS_NAME) {
 }
 
 // レイドバトルシミュレーション（最大10ターン）
-// レイドの与ダメ圧縮：1戦闘で与える「累計」ダメージに対して適用する（各ヒットごとではない）。
-//   累計30万(RAID_DMG_CAP)までは等倍、それを超えた分は90%カット（×0.1）。順位は単調増加で保たれる。
-const RAID_DMG_CAP = 300000
-function compressRaidDmg(d) {
-  if (d <= 0) return d
-  if (d <= RAID_DMG_CAP) return d
-  return Math.floor(RAID_DMG_CAP + (d - RAID_DMG_CAP) * 0.1)
-}
-
+// ★与ダメ圧縮は「サーバー側でプレイヤーごとの累計貢献」に対して適用する（attack_raid_boss）。
+//   累計30万までは等倍・超過分は90%カット（×0.1）。クライアントは生ダメージを送るだけ。
 function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_NAME) {
   const logs = []
   let playerHp = Math.max(1, profile.hp_current ?? eff.hp_max)
@@ -475,9 +468,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     }
   }
 
-  // 累計ダメージに対して圧縮を適用：30万までは等倍・超過分は90%軽減
-  totalDamage = compressRaidDmg(totalDamage)
-
+  // 圧縮はサーバー側で累計に適用するため、ここでは生ダメージをそのまま返す
   logs.push({ text: `──────────────────`, color: '#223344' })
   logs.push({ text: `合計 ${fmt(totalDamage)} ダメージを与えた！`, color: '#ffcc44' })
 
