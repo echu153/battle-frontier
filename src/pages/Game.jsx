@@ -3721,8 +3721,8 @@ export default function Game() {
     const expBoostNote = expBoosted ? '（✨LV100まで経験値1.5倍）' : ''
     // 出撃ゴールド。雑魚は各エリアの設定値（=10秒モードの取得額）そのまま。20秒モードは2倍。
     // ★2026-07-04: 旧CD補正のエリア別倍率(×2/×1.5)は廃止。ボスのみ従来補正を維持（設定Goldは据置）。
-    // 【変異】段階のGold（エリア⑤相当）。変異ボス撃破=9000。雑魚は「そのエリアの変異ボスを1回撃破済み」なら強化（トグル無関係）。
-    const mutantCleared = mutantHigh && (profile.mutant_cleared_areas || []).includes(selectedArea)
+    // 【変異】段階のGold（エリア⑤相当）。変異ボス撃破=9000。雑魚は「そのエリアの変異ボスを1回撃破済み」かつ変異トグルON時のみ強化。
+    const mutantCleared = mutantEnabled && mutantHigh && (profile.mutant_cleared_areas || []).includes(selectedArea)
     const goldGained = (() => {
       if (!win || papiaEscaped) return 0
       if (!isPapiaEncounter) {
@@ -3932,6 +3932,7 @@ export default function Game() {
       p_claimed_gold: goldGained,
       p_hp_current: playerHp,
       p_mp_current: playerMp,
+      p_mutant_boss: !!useMutantBoss,  // 実際に変異ボスと戦ったか（トグルOFF＝通常ボスでは変異攻略を記録しない）
     })
 
     // ★サーバーが戦果を拒否した場合は、握り潰さず理由を表示（EXP/Goldが入らない原因の可視化）
