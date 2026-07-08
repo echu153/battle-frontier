@@ -38,6 +38,13 @@ export async function loadLoadout(playerId, isSelf) {
     titleBonus = at || null
   }
 
+  // 紋章の割り振り（未導入/未付与なら無視）
+  let emblemAlloc = null
+  try {
+    const { data: em } = await supabase.from('player_emblem').select('alloc').eq('player_id', playerId).maybeSingle()
+    if (em?.alloc && Object.keys(em.alloc).length > 0) emblemAlloc = em.alloc
+  } catch { /* 紋章未導入時は無視 */ }
+
   // PvPスキルセット（無ければ出撃を流用）
   let skillSets
   if (isSelf) {
@@ -53,7 +60,7 @@ export async function loadLoadout(playerId, isSelf) {
     skillSets = rpc?.skill_sets || []
   }
 
-  const profileWithPet = { ...profile, petStat, petCharm, activePet: pet || null }
+  const profileWithPet = { ...profile, petStat, petCharm, activePet: pet || null, emblemAlloc }
   const eff = calcEffectiveStats(profileWithPet, eq || [], prof || [], titleBonus)
   return { eff, equipment: eq || [], skillSets, proficiency: prof || [], profile: profileWithPet, playerItem: null }
 }

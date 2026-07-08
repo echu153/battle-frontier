@@ -40,6 +40,7 @@ const SOURCE_META = [
   { key:'equip',   label:'装備',   color:'#6699cc' },
   { key:'gem',     label:'宝石',   color:'#ff66cc' },
   { key:'prof',    label:'熟練度', color:'#44ff88' },
+  { key:'emblem',  label:'紋章',   color:'#66ddff' },
   { key:'title',   label:'称号',   color:'#ffaa44' },
   { key:'pet',     label:'ペット', color:'#44ffaa' },
 ]
@@ -110,6 +111,11 @@ export default function StatusDetail() {
     const activeCharm = activePet?.charm_id ? charmMap[activePet.charm_id] : null
     p.petStat = activePet ? petPlayerBonus(activePet) : null
     p.petCharm = activeCharm ? charmPlayerBonus(activeCharm) : null
+    // 紋章の割り振りを反映（未導入/未付与なら無視）
+    try {
+      const { data: em } = await supabase.from('player_emblem').select('alloc').eq('player_id', user.id).maybeSingle()
+      if (em?.alloc && Object.keys(em.alloc).length > 0) p.emblemAlloc = em.alloc
+    } catch { /* 紋章未導入時は無視 */ }
     // 旧仕様で消えた釣りボーナスを fishing_* 列へ一度だけ復元（Fishing.jsx と同一処理）
     if (!p.fishing_migrated) {
       const { totals, completed } = sumClaimedFishingBonus(fr || [])

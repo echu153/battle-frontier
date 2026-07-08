@@ -4,6 +4,7 @@ import { supabase } from '../supabase'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue } from './Game'
 import { gemAllowedSlots, gemSlotCategory, GEM_SLOT_LABEL, calcProfBonus } from '../lib/stats'
 import { EVO_EFFECT_LABELS, evoMultiplier, displayRarity, isShinka, BOSS_LINES } from '../constants/bossEvolution'
+import { getEmblemRank, EMBLEM_RANK_COLOR, emblemAllocTotal } from '../lib/emblem'
 
 const SLOT_LABELS_FULL = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }
 const gemDisplayName = (gemType, rank) => `${GEM_DATA[gemType]?.name || gemType}(${rank})`
@@ -117,6 +118,7 @@ export default function Equipment() {
   const [boxConfirm, setBoxConfirm] = useState(null) // 選択確認中のボスline（OK前の1段確認）
   const [boxToast, setBoxToast] = useState('')       // 獲得トースト（自動消滅）
   const [boxMsg, setBoxMsg] = useState('')
+  const [emblemRow, setEmblemRow] = useState(null)   // 紋章（第5枠・開発限定）: player_emblem行
 
   // 選択券で交換できるS級レイド装備（redeem_raid_ticket の許可リストと一致）
   const RAID_TICKET_CHOICES = [
@@ -149,6 +151,11 @@ export default function Equipment() {
     setAllItems(pi || [])
     const { data: g } = await supabase.from('player_gems').select('*').eq('player_id', user.id)
     setGems(g || [])
+    // 紋章（第5枠・開発限定）。SQL未適用/未付与なら無視
+    try {
+      const { data: em } = await supabase.from('player_emblem').select('*').eq('player_id', user.id).maybeSingle()
+      setEmblemRow(em || null)
+    } catch { /* 紋章未導入時は無視 */ }
   }
 
   // 選択券を1枚消費してS級レイド装備へ交換（fetchAll 定義後に置く＝参照前定義のlint回避）
@@ -508,6 +515,27 @@ export default function Equipment() {
               )
             })}
           </div>
+
+          {/* 第5枠: 紋章（開発限定） */}
+          {profile?.is_admin && (() => {
+            const emLevel = emblemRow?.level || 1
+            const emRank = getEmblemRank(emLevel)
+            const emTotal = emblemAllocTotal(emblemRow?.alloc)
+            return (
+              <div onClick={()=>nav('/emblem')} style={{ border:'1px solid #335588', background:'#001028', padding:'8px', marginBottom:'6px', cursor:'pointer', display:'flex', alignItems:'center', gap:'10px' }}>
+                <img src="/tya-mu.png" alt="紋章" style={{ width:'34px', height:'34px', objectFit:'contain' }} />
+                <div style={{ flex:1 }}>
+                  <div style={{ color:'#446688', fontSize:'10px' }}>紋章 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></div>
+                  <div style={{ fontSize:'11px', marginTop:'2px' }}>
+                    <span style={{ color:'#aaccff' }}>LV {emLevel}</span>
+                    <span style={{ color: EMBLEM_RANK_COLOR[emRank], marginLeft:'8px' }}>ランク {emRank}</span>
+                    <span style={{ color:'#667799', fontSize:'9px', marginLeft:'8px' }}>結晶 {emTotal}振り</span>
+                  </div>
+                </div>
+                <span style={{ color:'#4488ff', fontSize:'11px' }}>強化 ▶</span>
+              </div>
+            )
+          })()}
 
           {/* 持ち物 */}
           <div style={{ border:'1px solid #003366', background:'#001028', padding:'8px' }}>

@@ -4,6 +4,7 @@ import { supabase } from '../supabase'
 // public/ 配下の安定URL参照（ハッシュ付きバンドルだとデプロイ後にキャッシュ不整合で404→画像が出ないため）
 const papiaIcon = '/papia.png'
 import { GEM_DATA, GEM_TYPES, calcDefReduction, calcEffectiveStats } from '../lib/stats'
+import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemResistNewAilments, emblemBlocksAilment } from '../lib/emblemCombat'
 import { charmPlayerBonus, petPlayerBonus, petStats } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
 import { reportDevAccess } from '../lib/devAccess'
@@ -1546,6 +1547,8 @@ export const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, p
       logs.push({ text:`💧 アクアクラウンの真化！ 状態異常を防いだ！`, color:'#66ccff' })
     }
   }
+  // 紋章: 個別状態異常耐性（新規付与された毒/麻痺/やけど/出血/スタンを確率で無効化）
+  emblemResistNewAilments(eff, playerBuffs, newPlayerBuffs, logs)
   return { dmgToPlayer, healEnemy, newPlayerBuffs, newEnemyBuffs }
 }
 
@@ -2150,7 +2153,13 @@ export default function Game() {
         }
       }
     } catch { /* ペット未導入時は無視 */ }
-    setProfile({ ...data, ..._computed, petCharm, petStat, activePet, consecutive_battle_count: 0 })
+    // 紋章の割り振りを反映（未導入/未付与なら無視）
+    let emblemAlloc = null
+    try {
+      const { data: em } = await supabase.from('player_emblem').select('alloc').eq('player_id', user.id).maybeSingle()
+      if (em?.alloc && Object.keys(em.alloc).length > 0) emblemAlloc = em.alloc
+    } catch { /* 紋章未導入時は無視 */ }
+    setProfile({ ...data, ..._computed, petCharm, petStat, activePet, emblemAlloc, consecutive_battle_count: 0 })
     setPendingPoints(data.pending_stat_points || 0)
     // selectedAreaがこのアカウントで解放済みかチェック（別アカウントのlocalStorage値を弾く）
     const unlocked = data.unlocked_areas || [1]
@@ -3139,11 +3148,13 @@ export default function Game() {
           // 半月蹴りの溜め：次のダメージスキルの威力を強化（消費）
           const nextBoostMult = (res.dmg > 0 && playerBuffs.nextSkillBoost) ? playerBuffs.nextSkillBoost.rate : 1.0
           if (nextBoostMult > 1.0 && cs.skills?.name !== '半月蹴り') res.newPlayerBuffs.nextSkillBoost = undefined
+          const isPhysSkill = cs.skills?.type === '物理攻撃'
+          const emMult = emblemDmgMult(eff, isPhysSkill)  // 紋章: 物理/特殊ダメージUP
           // 多段ヒットスキル：1発ごとに回避・クリティカル・ダメージ判定（パピアにも1発ごとに1ダメージ）
           const isMulti = Array.isArray(res.hitDmgs) && res.hitDmgs.length > 0 && res.dmg > 0
           let finalDmg, resLog, multiCritAny = false
           if (isMulti) {
-            const hitMult = defScale * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * nextBoostMult
+            const hitMult = defScale * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * nextBoostMult * emMult
             const parts = []
             finalDmg = 0
             for (const hd of res.hitDmgs) {
@@ -3158,12 +3169,14 @@ export default function Game() {
             }
             resLog = `${res.log.split('！')[0]}！ ${enemy.name}に ${parts.join(' ')}`
           } else {
-            finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * nextBoostMult * (0.9 + Math.random() * 0.2))
+            finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * nextBoostMult * emMult * (0.9 + Math.random() * 0.2))
             if (enemy.isPapia && res.dmg > 0) finalDmg = 1
             resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
           }
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
           enemyHp -= finalDmg
+          // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封じ中は無効）
+          { const emDrain = emblemDrainAmount(eff, finalDmg, isPhysSkill); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(maxHp, playerHp + emDrain); logs.push({ text:`💠 紋章の吸収！ HPが${emDrain}回復！`, color:'#66ddff' }) } }
           // 第六感（再修練）：魔法攻撃がヒットしたらスタック+1（最大6・戦闘中持続）
           if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks + 1)
           if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
@@ -3221,7 +3234,7 @@ export default function Game() {
           if (res.followup && res.followup.dmg > 0) {
             const fCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0))
             const fCritMult = fCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
-            let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * (0.9 + Math.random()*0.2))
+            let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * emMult * (0.9 + Math.random()*0.2))
             if (enemy.isPapia) fDmg = 1
             fDmg = Math.max(1, fDmg)
             enemyHp -= fDmg
@@ -3253,9 +3266,11 @@ export default function Game() {
         const rokkanMultN = (hasRokkan && pe('サイキッカー')) ? (1 + 0.05 * Math.min(6, rokkanStacks)) : 1.0
         // 通常攻撃でスキル連続が途切れる → 精密照準/元素共鳴のチェーンをリセット
         seimitsuStacks = 0; prevSkillName = null
-        let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*iaiNormalMult*rokkanMultN*enemyDmgReduceMult2*breederDmgMult*(0.9+Math.random()*0.2))
+        let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*iaiNormalMult*rokkanMultN*enemyDmgReduceMult2*breederDmgMult*emblemDmgMult(eff, !isMagical)*(0.9+Math.random()*0.2))
         if (enemy.isPapia) finalDmg = 1
         enemyHp -= finalDmg
+        // 紋章: 物理/特殊吸収
+        { const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(maxHp, playerHp + emDrain); logs.push({ text:`💠 紋章の吸収！ HPが${emDrain}回復！`, color:'#66ddff' }) } }
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
           enemyBuffs.healDown = { turns: 2, rate: 0.7 }
           logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
@@ -3494,13 +3509,13 @@ export default function Game() {
       // --- 状態異常ターン開始処理 ---
       // 敵への持続ダメージ
       if (enemyBuffs.severePoisoin?.turns > 0) {
-        const spDmg = Math.floor(enemyMaxHp * 0.05)
+        const spDmg = Math.floor(enemyMaxHp * 0.05 * emblemDotMult(eff, 'poison'))
         enemyHp -= spDmg
         logs.push({ text:`🤢 猛毒ダメージ！ ${enemy.name}に${spDmg}ダメージ！`, color:'#aa44ff' })
         if (enemyHp <= 0) break
       }
       if (enemyBuffs.burn?.turns > 0) {
-        const burnDmg = Math.floor(enemyMaxHp * 0.02)
+        const burnDmg = Math.floor(enemyMaxHp * 0.02 * emblemDotMult(eff, 'burn'))
         enemyHp -= burnDmg
         logs.push({ text:`🔥 やけどダメージ！ ${enemy.name}に${burnDmg}ダメージ！`, color:'#ff6622' })
         if (enemyHp <= 0) break
@@ -3516,7 +3531,7 @@ export default function Game() {
         logs.push({ text:`💚 ${enemy.name}のリジェネ！ HPが${regenAmt}回復した！`, color:'#44ff88' })
       }
       if (enemyBuffs.poison?.turns > 0) {
-        const poisonDmg = Math.floor(enemy.hp * enemyBuffs.poison.dmgRate)
+        const poisonDmg = Math.floor(enemy.hp * enemyBuffs.poison.dmgRate * emblemDotMult(eff, 'poison'))
         enemyHp -= poisonDmg
         logs.push({ text:`☠ 毒ダメージ！ ${enemy.name}に${poisonDmg}ダメージ！`, color:'#44ff44' })
         if (enemyHp <= 0) break
@@ -3686,7 +3701,7 @@ export default function Game() {
 
       // 敵出血ダメージ（敵ターン終了時）
       if (enemyBuffs.bleed) {
-        const bleedDmg = Math.floor(enemyHp * 0.01 * enemyBuffs.bleed.stacks)  // 現在HPの1%×スタック
+        const bleedDmg = Math.floor(enemyHp * 0.01 * enemyBuffs.bleed.stacks * emblemDotMult(eff, 'bleed'))  // 現在HPの1%×スタック（紋章の出血ダメUP込み）
         enemyHp -= bleedDmg
         logs.push({ text:`🩸 出血ダメージ！ ${enemy.name}に${bleedDmg}ダメージ（${enemyBuffs.bleed.stacks}スタック）！`, color:'#ff4466' })
         if (enemyHp <= 0) break
@@ -5984,7 +5999,8 @@ export default function Game() {
                           <button onClick={()=>{ setShowArena(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #a060e0', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏛 アリーナ <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                           )}
                           {profile?.is_admin && (
-                            <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
+                            <><button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
+                            <button onClick={()=>{ nav('/hachigoku'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#260c0a', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🔥 八獄 <span style={{ fontSize:'9px', color:'#aa7766' }}>[開発]</span></button></>
                           )}
                           {profile?.is_admin && (
                             <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
@@ -6056,7 +6072,8 @@ export default function Game() {
                           <button onClick={()=>{ setShowArena(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #a060e0', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏛 アリーナ <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                           )}
                   {profile?.is_admin && (
-                    <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
+                    <><button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
+                            <button onClick={()=>{ nav('/hachigoku'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#260c0a', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🔥 八獄 <span style={{ fontSize:'9px', color:'#aa7766' }}>[開発]</span></button></>
                   )}
                   {profile?.is_admin && (
                     <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
@@ -6540,7 +6557,8 @@ export default function Game() {
                           <button onClick={()=>{ setShowArena(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #a060e0', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏛 アリーナ <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                           )}
                             {profile?.is_admin && (
-                              <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
+                              <><button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
+                            <button onClick={()=>{ nav('/hachigoku'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#260c0a', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🔥 八獄 <span style={{ fontSize:'9px', color:'#aa7766' }}>[開発]</span></button></>
                             )}
                             {profile?.is_admin && (
                               <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
@@ -6612,7 +6630,8 @@ export default function Game() {
                           <button onClick={()=>{ setShowArena(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #a060e0', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏛 アリーナ <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                           )}
                     {profile?.is_admin && (
-                      <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
+                      <><button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
+                            <button onClick={()=>{ nav('/hachigoku'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#260c0a', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🔥 八獄 <span style={{ fontSize:'9px', color:'#aa7766' }}>[開発]</span></button></>
                     )}
                     {profile?.is_admin && (
                       <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>

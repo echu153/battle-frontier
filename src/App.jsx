@@ -46,6 +46,8 @@ const PetStorage = lazyReload(() => import('./pages/PetStorage'))
 const StatusDetail = lazyReload(() => import('./pages/StatusDetail'))
 const Abyss = lazyReload(() => import('./pages/Abyss'))
 const Tenkyuu = lazyReload(() => import('./pages/Tenkyuu'))
+const Hachigoku = lazyReload(() => import('./pages/Hachigoku')) // 八獄(開発限定・紋章育成コンテンツ)
+const Emblem = lazyReload(() => import('./pages/Emblem')) // 紋章(開発限定・第5の装備枠)
 const Alchemy = lazyReload(() => import('./pages/Alchemy'))
 const Idle = lazyReload(() => import('./pages/Idle'))
 const Territory = lazyReload(() => import('./pages/Territory'))
@@ -225,6 +227,8 @@ function App() {
         <Route path="/status" element={session ? <StatusDetail /> : <Navigate to="/login" />} />
         <Route path="/abyss" element={session ? <Abyss /> : <Navigate to="/login" />} />
         <Route path="/tenkyuu" element={session ? <Tenkyuu /> : <Navigate to="/login" />} />
+        <Route path="/hachigoku" element={session ? <Hachigoku /> : <Navigate to="/login" />} />
+        <Route path="/emblem" element={session ? <Emblem /> : <Navigate to="/login" />} />
         <Route path="/alchemy" element={session ? <Alchemy /> : <Navigate to="/login" />} />
         <Route path="/idle" element={session ? <Idle /> : <Navigate to="/login" />} />
         <Route path="/territory" element={session ? <Territory /> : <Navigate to="/login" />} />

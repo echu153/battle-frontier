@@ -21,6 +21,7 @@
 // ============================================================
 import { getWeaponGroup } from './stats'
 import { evoOnHit, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from './evoCombat'
+import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemResistNewAilments, emblemBlocksAilment } from './emblemCombat'
 import { petStats } from '../constants/pets'
 import {
   calcEvasionRate,
@@ -335,11 +336,13 @@ function doAttack(att, def, isExtra, ctx) {
       }
       const allinDebuffOutMult = attBuffs.allinDebuff?.turns > 0 ? 0.7 : 1.0
       const reduceMult = defReduceMult(useMagicalRank)
+      const isPhysSkill = cs.skills?.type === '物理攻撃'
+      const emMult = emblemDmgMult(eff, isPhysSkill)  // 紋章: 物理/特殊ダメージUP
 
       const isMulti = Array.isArray(res.hitDmgs) && res.hitDmgs.length > 0 && res.dmg > 0
       let finalDmg, resLog, multiCritAny = false
       if (isMulti) {
-        const hitMult = defScale * att.passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * reduceMult * PVP.dmgMult * ctx.atkDmgMult
+        const hitMult = defScale * att.passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * reduceMult * PVP.dmgMult * ctx.atkDmgMult * emMult
         const parts = []
         finalDmg = 0
         for (const hd of res.hitDmgs) {
@@ -354,13 +357,15 @@ function doAttack(att, def, isExtra, ctx) {
         if (minDmg > 0) finalDmg = Math.max(finalDmg, minDmg)  // 戦争: 防御無視の最低ダメージ保証（合計）
         resLog = `${res.log.split('！')[0]}！ ${enemyName}に ${parts.join(' ')}`
       } else {
-        finalDmg = Math.floor(res.dmg * defScale * finalCritMult * att.passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * reduceMult * PVP.dmgMult * ctx.atkDmgMult * (0.9 + Math.random() * 0.2))
+        finalDmg = Math.floor(res.dmg * defScale * finalCritMult * att.passiveDmgMult * gensoMult * tosoMult * seimitsuMult * allinDebuffOutMult * reduceMult * PVP.dmgMult * ctx.atkDmgMult * emMult * (0.9 + Math.random() * 0.2))
         if (res.dmg > 0 && minDmg > 0) finalDmg = Math.max(finalDmg, minDmg)  // 戦争: 防御無視の最低ダメージ保証
         resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
       }
       if (res.dmg > 0) att.prevDmgSkillName = cs.skills?.name
       if (res.selfDmg > 0) att.hp = Math.max(0, att.hp - res.selfDmg)
       dealToDef(finalDmg)
+      // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封じ中は無効）
+      { const emDrain = emblemDrainAmount(eff, finalDmg, isPhysSkill); if (emDrain > 0 && !(attBuffs.healSeal?.turns > 0)) { att.hp = Math.min(eff.hp_max, att.hp + emDrain); logs.push({ text: `💠 紋章の吸収！ HPが${emDrain}回復！`, color: '#66ddff' }) } }
       evoOnHit(eff, finalDmg, res.newEnemyBuffs, enemyName, logs)  // 真化: 攻撃ヒット時の敵デバフ（res.newEnemyBuffsに書く＝置換で消えない）
       // ★直接付与する相手デバフは res.newEnemyBuffs に書く（下で def.buffs = res.newEnemyBuffs に置換されるため、
       //   defBuffs(旧オブジェクト)に書くと捨てられてアイコンも効果も消える）
@@ -404,6 +409,7 @@ function doAttack(att, def, isExtra, ctx) {
       }
       att.buffs = res.newPlayerBuffs; def.buffs = res.newEnemyBuffs
       consumeAilmentShield(defBuffs, def.buffs, logs)  // 哭雨の羽衣: 新規状態異常を1回無効化
+      emblemResistNewAilments(def.eff, defBuffs, def.buffs, logs)  // 紋章: 個別状態異常耐性（防御側）
       const critInsert = (finalCrit && !isMulti) ? '💥クリティカル！ ' : ''
       const dmgIdx = resLog.indexOf(enemyName + 'に')
       const logWithCrit = critInsert ? (dmgIdx >= 0 ? resLog.slice(0, dmgIdx) + critInsert + resLog.slice(dmgIdx) : resLog + ' ' + critInsert) : resLog
@@ -412,7 +418,7 @@ function doAttack(att, def, isExtra, ctx) {
       if (res.followup && res.followup.dmg > 0) {
         const fCrit = Math.random() * 100 < (critRate + (res.bonusCritRate || 0))
         const fCritMult = fCrit ? (1.5 + (eff.critDmg || 0) + att.passiveCritDmgBonus) : 1.0
-        let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * att.passiveDmgMult * tosoMult * allinDebuffOutMult * reduceMult * PVP.dmgMult * ctx.atkDmgMult * (0.9 + Math.random() * 0.2))
+        let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * att.passiveDmgMult * tosoMult * allinDebuffOutMult * reduceMult * PVP.dmgMult * ctx.atkDmgMult * emMult * (0.9 + Math.random() * 0.2))
         fDmg = Math.max(1, fDmg)
         dealToDef(fDmg)
         logs.push({ text: `↳ 追撃！${res.followup.label ? `（${res.followup.label}）` : ''} ${enemyName}に${fDmg}ダメージ！${fCrit ? ' 💥クリティカル！' : ''}`, color: fCrit ? '#ffaa00' : '#ffaa66' })
@@ -441,12 +447,15 @@ function doAttack(att, def, isExtra, ctx) {
     const baseDmg = Math.max(1, Math.floor(baseAtk * ratioBaseAtk / Math.max(1, ratioBaseAtk + eDefVal)) + Math.floor(Math.random() * 4))
     const reduceMult = defReduceMult(att.isMagical)
     const breederDmgMult = attBuffs.breederDmgUp?.turns > 0 ? attBuffs.breederDmgUp.rate : 1.0
-    let finalDmg = Math.floor(baseDmg * 0.7 * critMult * (att.isArtifact ? 1.3 : 1.0) * att.passiveDmgMult * reduceMult * breederDmgMult * PVP.dmgMult * ctx.atkDmgMult * (0.9 + Math.random() * 0.2))
+    let finalDmg = Math.floor(baseDmg * 0.7 * critMult * (att.isArtifact ? 1.3 : 1.0) * att.passiveDmgMult * reduceMult * breederDmgMult * PVP.dmgMult * ctx.atkDmgMult * emblemDmgMult(eff, !att.isMagical) * (0.9 + Math.random() * 0.2))
     if (minDmg > 0) finalDmg = Math.max(finalDmg, minDmg)  // 戦争: 防御無視の最低ダメージ保証
     dealToDef(finalDmg)
+    // 紋章: 物理/特殊吸収
+    { const emDrain = emblemDrainAmount(eff, finalDmg, !att.isMagical); if (emDrain > 0 && !(attBuffs.healSeal?.turns > 0)) { att.hp = Math.min(eff.hp_max, att.hp + emDrain); logs.push({ text: `💠 紋章の吸収！ HPが${emDrain}回復！`, color: '#66ddff' }) } }
     const prevDefBuffsN = { ...defBuffs }  // 哭雨の羽衣: 新規状態異常の差分検知用
     evoOnHit(eff, finalDmg, defBuffs, enemyName, logs)  // 真化: 通常攻撃ヒット時の敵デバフ（通常攻撃はdef.buffs置換なし）
     consumeAilmentShield(prevDefBuffsN, defBuffs, logs)
+    emblemResistNewAilments(def.eff, prevDefBuffsN, defBuffs, logs)  // 紋章: 個別状態異常耐性（防御側）
     const critText = isCrit ? '💥クリティカル！ ' : ''
     logs.push({ text: `${prefix}${critText}攻撃！ ${enemyName}に${finalDmg}ダメージ！`, color: '#ffcc00' })
     if (att.buffs.bloodRage?.turns > 0 && finalDmg > 0 && !(att.buffs.healSeal?.turns > 0)) {
@@ -476,9 +485,9 @@ function petAttackPvp(side, opp, mult, label, logs) {
   opp.hp -= dmg
   let extra = ''
   if (side.rtCur >= 1) {
-    if (side.petSpecies === 'flame' && Math.random() * 100 < 30) { const b = opp.buffs.bleed; opp.buffs.bleed = { stacks: Math.min(5, (b?.stacks || 0) + 1), lastTurn: 0 }; extra = ' 出血！' }
+    if (side.petSpecies === 'flame' && Math.random() * 100 < 30 && !emblemBlocksAilment(opp.eff, 'bleed', null)) { const b = opp.buffs.bleed; opp.buffs.bleed = { stacks: Math.min(5, (b?.stacks || 0) + 1), lastTurn: 0 }; extra = ' 出血！' }
     else if (side.petSpecies === 'aqua' && Math.random() * 100 < 40) { opp.buffs.spdDown = { turns: 3, rate: 0.7 }; extra = ' 素早さ低下！' }
-    else if (side.petSpecies === 'leaf') { const sr = opp.buffs.stunResist ?? 1.0; if (Math.random() * 100 < 30 * sr) { opp.buffs.stun = { turns: 1 }; opp.buffs.stunResist = sr * 0.5; extra = ' スタン！' } }
+    else if (side.petSpecies === 'leaf') { const sr = opp.buffs.stunResist ?? 1.0; if (Math.random() * 100 < 30 * sr && !emblemBlocksAilment(opp.eff, 'stun', null)) { opp.buffs.stun = { turns: 1 }; opp.buffs.stunResist = sr * 0.5; extra = ' スタン！' } }
   }
   logs.push({ text: `🐾 ${name}のペットの${label}！ ${opp.profile.username}に${dmg}ダメージ！${extra}`, color: '#ffaa44' })
   return opp.hp <= 0
@@ -493,17 +502,17 @@ function applyTurnStart(side, opp, ctx) {
   const b = side.buffs
 
   if (b.severePoisoin?.turns > 0) {
-    const d = Math.floor(maxHp * 0.05 * ctx.dotMult); side.hp = Math.max(0, side.hp - d)
+    const d = Math.floor(maxHp * 0.05 * ctx.dotMult * emblemDotMult(opp.eff, 'poison')); side.hp = Math.max(0, side.hp - d)
     logs.push({ text: `🤢 猛毒ダメージ！ ${name}に${d}ダメージ！`, color: '#aa44ff' })
     if (side.hp <= 0) return true
   }
   if (b.burn?.turns > 0) {
-    const d = Math.floor(maxHp * 0.02 * ctx.dotMult); side.hp = Math.max(0, side.hp - d)
+    const d = Math.floor(maxHp * 0.02 * ctx.dotMult * emblemDotMult(opp.eff, 'burn')); side.hp = Math.max(0, side.hp - d)
     logs.push({ text: `🔥 やけどダメージ！ ${name}に${d}ダメージ！`, color: '#ff6622' })
     if (side.hp <= 0) return true
   }
   if (b.poison?.turns > 0) {
-    const d = Math.floor(maxHp * b.poison.dmgRate * ctx.dotMult); side.hp = Math.max(0, side.hp - d)
+    const d = Math.floor(maxHp * b.poison.dmgRate * ctx.dotMult * emblemDotMult(opp.eff, 'poison')); side.hp = Math.max(0, side.hp - d)
     logs.push({ text: `☠ 毒ダメージ！ ${name}に${d}ダメージ！`, color: '#44ff44' })
     if (side.hp <= 0) return true
   }
@@ -513,7 +522,7 @@ function applyTurnStart(side, opp, ctx) {
     if (side.hp <= 0) return true
   }
   if (b.bleed) {
-    const d = Math.floor(side.hp * 0.01 * b.bleed.stacks * ctx.dotMult); side.hp = Math.max(0, side.hp - d)
+    const d = Math.floor(side.hp * 0.01 * b.bleed.stacks * ctx.dotMult * emblemDotMult(opp.eff, 'bleed')); side.hp = Math.max(0, side.hp - d)
     logs.push({ text: `🩸 出血ダメージ！ ${name}に${d}ダメージ（${b.bleed.stacks}スタック）！`, color: '#ff4466' })
     if (side.hp <= 0) return true
     b.bleed.lastTurn = (b.bleed.lastTurn || 0) + 1

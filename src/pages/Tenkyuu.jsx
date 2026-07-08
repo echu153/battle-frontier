@@ -5,6 +5,7 @@ import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/Scarecrow
 import { reportDevAccess } from '../lib/devAccess'
 import { getWeaponGroup } from '../lib/stats'
 import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
+import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemResistNewAilments, emblemBlocksAilment } from '../lib/emblemCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 import { selectBattleSkillSets } from '../lib/loadout'
 import { buildSummon, summonAnnounce, summonAttackDamage, summonAbsorbBasic, summonEndOfTurn, tryPetCommand, BREEDER_COMMANDS } from '../lib/summon'
@@ -336,11 +337,13 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         }
         const allinDebuffOutMult = playerBuffs.allinDebuff?.turns > 0 ? 0.7 : 1.0
         const enemyDmgReduceMult = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
+        const isPhysSkill = cs.skills?.type === '物理攻撃'
+        const emMult = emblemDmgMult(eff, isPhysSkill)  // 紋章: 物理/特殊ダメージUP
         // 多段ヒットスキル：1発ごとに回避・クリティカル・ダメージ判定
         const isMulti = Array.isArray(res.hitDmgs) && res.hitDmgs.length > 0 && res.dmg > 0
         let finalDmg, resLog, multiCritAny = false
         if (isMulti) {
-          const hitMult = defScale * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * playerDmgMult * sameSkillMult
+          const hitMult = defScale * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * playerDmgMult * sameSkillMult * emMult
           const parts = []
           finalDmg = 0
           for (const hd of res.hitDmgs) {
@@ -354,12 +357,14 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
           }
           resLog = `${res.log.split('！')[0]}！ ${enemy.name}に ${parts.join(' ')}`
         } else {
-          finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * playerDmgMult * sameSkillMult * (0.9 + Math.random() * 0.2))
+          finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * playerDmgMult * sameSkillMult * emMult * (0.9 + Math.random() * 0.2))
           resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
         }
         if (res.dmg > 0) { lastPlayerHitType = cs.skills?.type === '魔法攻撃' ? 'magical' : 'physical'; prevDmgSkillName = cs.skills?.name }
         if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
         dmgEnemy(finalDmg, actKind)
+        // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封じ中は無効）
+        { const emDrain = emblemDrainAmount(eff, finalDmg, isPhysSkill); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(profile.hp_max, playerHp + emDrain); logs.push({ text:`💠 紋章の吸収！ HPが${emDrain}回復！`, color:'#66ddff' }) } }
         if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks+1)
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
           enemyBuffs.healDown = { turns: 2, rate: 0.7 }
@@ -414,7 +419,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         if (res.followup && res.followup.dmg > 0) {
           const fCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0) + seimitsuCritBonus)
           const fCritMult = fCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
-          let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * playerDmgMult * (0.9 + Math.random()*0.2))
+          let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * playerDmgMult * emMult * (0.9 + Math.random()*0.2))
           fDmg = Math.max(1, fDmg)
           dmgEnemy(fDmg, actKind)
           logs.push({ text:`↳ 追撃！${res.followup.label?`（${res.followup.label}）`:''} ${enemy.name}に${fDmg}ダメージ！${fCrit?' 💥クリティカル！':''}`, color: fCrit?'#ffaa00':'#ffaa66' })
@@ -442,8 +447,10 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       const rokkanMultN = (hasRokkan && pe('サイキッカー')) ? (1 + 0.05 * Math.min(6, rokkanStacks)) : 1.0
       // 通常攻撃でスキル連続が途切れる → 精密照準/元素共鳴のチェーンをリセット
       seimitsuStacks = 0; prevSkillName = null
-      let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*iaiNormalMult*rokkanMultN*enemyDmgReduceMult2*playerDmgMult*(0.9+Math.random()*0.2))
+      let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*iaiNormalMult*rokkanMultN*enemyDmgReduceMult2*playerDmgMult*emblemDmgMult(eff, !isMagical)*(0.9+Math.random()*0.2))
       dmgEnemy(finalDmg, isMagical ? 'magical' : 'physical')
+      // 紋章: 物理/特殊吸収
+      { const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(profile.hp_max, playerHp + emDrain); logs.push({ text:`💠 紋章の吸収！ HPが${emDrain}回復！`, color:'#66ddff' }) } }
       if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
         enemyBuffs.healDown = { turns: 2, rate: 0.7 }
         logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
@@ -546,7 +553,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     if (playerHp <= 0) return
     // hitStun（獅子レグルス）。プレイヤーの状態異常無効/スタン耐性で防げる
     if (mods.hitStun && !(playerBuffs.statusImmune?.turns > 0)) {
-      if (Math.random() < mods.hitStun && !ailmentShieldBlocks(playerBuffs, logs)) {
+      if (Math.random() < mods.hitStun && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'stun', logs)) {
         playerBuffs.stun = { turns:1 }
         logs.push({ text:`⚡ ${enemy.name}の一撃でスタン！ 次のターン行動できない！`, color:'#ffaa00' })
       }
@@ -554,9 +561,9 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     // statusOnHit（乙女スピカ／天蠍アンタレス）
     if (mods.statusOnHit && mods.statusOnHit.length && !(playerBuffs.statusImmune?.turns > 0)) {
       const st = mods.statusOnHit[(turn - 1) % mods.statusOnHit.length]
-      if (st === 'poison'   && !(playerBuffs.poison?.turns > 0)    && !ailmentShieldBlocks(playerBuffs, logs)) { playerBuffs.poison = { turns:5, dmgRate:0.04 }; logs.push({ text:`☠ ${enemy.name}の毒が回った！`, color:'#44ff44' }) }
-      if (st === 'burn'     && !(playerBuffs.burn?.turns > 0)      && !ailmentShieldBlocks(playerBuffs, logs)) { playerBuffs.burn = { turns:5, dmgRate:0.02 }; logs.push({ text:`🔥 ${enemy.name}にやけどを負わされた！`, color:'#ff6622' }) }
-      if (st === 'paralysis'&& !(playerBuffs.paralysis?.turns > 0) && !ailmentShieldBlocks(playerBuffs, logs)) { playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }; logs.push({ text:`⚡ ${enemy.name}に麻痺させられた！`, color:'#ffdd44' }) }
+      if (st === 'poison'   && !(playerBuffs.poison?.turns > 0)    && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'poison', logs)) { playerBuffs.poison = { turns:5, dmgRate:0.04 }; logs.push({ text:`☠ ${enemy.name}の毒が回った！`, color:'#44ff44' }) }
+      if (st === 'burn'     && !(playerBuffs.burn?.turns > 0)      && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'burn', logs)) { playerBuffs.burn = { turns:5, dmgRate:0.02 }; logs.push({ text:`🔥 ${enemy.name}にやけどを負わされた！`, color:'#ff6622' }) }
+      if (st === 'paralysis'&& !(playerBuffs.paralysis?.turns > 0) && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'paralysis', logs)) { playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }; logs.push({ text:`⚡ ${enemy.name}に麻痺させられた！`, color:'#ffdd44' }) }
     }
     // bonusVsStatus（天蠍アンタレス：毒状態の敵に追撃）
     if (mods.bonusVsStatus && playerBuffs[mods.bonusVsStatus.st]?.turns > 0) {
@@ -744,12 +751,12 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
 
     // 敵への持続ダメージ（固定割合DoT＝flatDR貫通）
     if (enemyBuffs.severePoisoin?.turns > 0) {
-      const spDmg = Math.floor(enemyMaxHp * 0.05); dmgEnemy(spDmg, 'both')
+      const spDmg = Math.floor(enemyMaxHp * 0.05 * emblemDotMult(eff, 'poison')); dmgEnemy(spDmg, 'both')
       logs.push({ text:`🤢 猛毒ダメージ！ ${enemy.name}に${spDmg}ダメージ！`, color:'#aa44ff' })
       if (enemyHp <= 0) break
     }
     if (enemyBuffs.burn?.turns > 0) {
-      const burnDmg = Math.floor(enemyMaxHp * 0.02); dmgEnemy(burnDmg, 'both')
+      const burnDmg = Math.floor(enemyMaxHp * 0.02 * emblemDotMult(eff, 'burn')); dmgEnemy(burnDmg, 'both')
       logs.push({ text:`🔥 やけどダメージ！ ${enemy.name}に${burnDmg}ダメージ！`, color:'#ff6622' })
       if (enemyHp <= 0) break
     }
@@ -764,7 +771,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       logs.push({ text:`💚 ${enemy.name}のリジェネ！ HPが${regenAmt}回復した！`, color:'#44ff88' })
     }
     if (enemyBuffs.poison?.turns > 0) {
-      const poisonDmg = Math.floor(enemy.hp * enemyBuffs.poison.dmgRate); dmgEnemy(poisonDmg, 'both')
+      const poisonDmg = Math.floor(enemy.hp * enemyBuffs.poison.dmgRate * emblemDotMult(eff, 'poison')); dmgEnemy(poisonDmg, 'both')
       logs.push({ text:`☠ 毒ダメージ！ ${enemy.name}に${poisonDmg}ダメージ！`, color:'#44ff44' })
       if (enemyHp <= 0) break
     }
@@ -884,7 +891,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     if (playerHp <= 0) break
 
     if (enemyBuffs.bleed) {
-      const bleedDmg = Math.floor(enemyHp * 0.01 * enemyBuffs.bleed.stacks); dmgEnemy(bleedDmg, 'both')
+      const bleedDmg = Math.floor(enemyHp * 0.01 * enemyBuffs.bleed.stacks * emblemDotMult(eff, 'bleed')); dmgEnemy(bleedDmg, 'both')
       logs.push({ text:`🩸 出血ダメージ！ ${enemy.name}に${bleedDmg}ダメージ（${enemyBuffs.bleed.stacks}スタック）！`, color:'#ff4466' })
       if (enemyHp <= 0) break
       enemyBuffs.bleed.lastTurn = (enemyBuffs.bleed.lastTurn || 0) + 1
@@ -992,7 +999,13 @@ export default function Tenkyuu() {
       const { data: ap } = await supabase.from('pets').select('species, level, evolved, charm_id').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
       if (ap) { activePet = ap; petStat = petPlayerBonus(ap); if (ap.charm_id) { const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle(); if (c) petCharm = charmPlayerBonus(c) } }
     } catch { /* ペット未導入時は無視 */ }
-    setProfile({ ...prof, petCharm, petStat, activePet })
+    // 紋章の割り振りを反映（未導入/未付与なら無視）
+    let emblemAlloc = null
+    try {
+      const { data: em } = await supabase.from('player_emblem').select('alloc').eq('player_id', user.id).maybeSingle()
+      if (em?.alloc && Object.keys(em.alloc).length > 0) emblemAlloc = em.alloc
+    } catch { /* 紋章未導入時は無視 */ }
+    setProfile({ ...prof, petCharm, petStat, activePet, emblemAlloc })
     setEquipment(eq || [])
     setProficiency(prof2 || [])
     // 挑戦用スキルセット（challenge・未設定なら出撃にフォールバック）＋パッシブは全セットから常時反映

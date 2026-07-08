@@ -3,6 +3,7 @@
 // Game.jsx / Profile.jsx / Ranking.jsx で共通利用
 // （表示と実効果のロジックズレを防ぐため一元管理）
 // ============================================================
+import { calcEmblemBonus } from './emblem.js'
 
 export const WEAPON_TYPE_GROUP = {
   sword:'physical', axe:'physical', spear:'physical', bow:'physical', dagger:'physical',
@@ -163,6 +164,22 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
   let weaponDmgMult = 1   // 武器種固有: 与ダメージ倍率（斧+10%など）
   let weaponMpCostMult = 1// 武器種固有: 消費MP倍率（魔導書-10%など）
   const gemAcc = { bonus, defPen:0, mdefPen:0, critDmg:0, critBonus:0, critResist:0, hitBonus:0, evasionBonus:0 }
+  // 紋章（第5の装備枠）: profile.emblemAlloc（player_emblem.alloc）から集約
+  //  フラットステはbonusへ（%補正の対象・宝石と同枠）、%系はgemAccへ、
+  //  新メカニクス（与ダメ%/吸収/異常ダメUP/個別耐性）は eff.emblem として戦闘ループが消費
+  const emblem = profile.emblemAlloc ? calcEmblemBonus(profile.emblemAlloc) : null
+  if (emblem) {
+    bonus.atk  += emblem.flat.atk
+    bonus.def  += emblem.flat.def
+    bonus.matk += emblem.flat.matk
+    bonus.mdef += emblem.flat.mdef
+    gemAcc.defPen       += emblem.defPen
+    gemAcc.mdefPen      += emblem.mdefPen
+    gemAcc.critBonus    += emblem.crit
+    gemAcc.critDmg      += emblem.critDmg
+    gemAcc.critResist   += emblem.critResist
+    gemAcc.evasionBonus += emblem.evasion
+  }
   for (const item of equipment) {
     if (!item.equipped || !item.weapons) continue
     applyGemBonus(item, gemAcc)
@@ -288,6 +305,14 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     evoAllskillAtk, evoAllskillMatk,
     weaponDmgMult,   // 武器種固有の与ダメージ倍率（斧=1.10など）
     weaponMpCostMult,// 武器種固有の消費MP倍率（魔導書=0.90など）
+    // 紋章の新メカニクス（戦闘ループが消費。emblemCombat.js のヘルパー経由で使う）
+    //  physDmg/specialDmg=与ダメ%、physDrain/specialDrain=与ダメ吸収%、
+    //  dotUp={bleed,burn,poison}=敵への状態異常ダメUP%、ailRes={poison,paralysis,burn,bleed,stun}=個別耐性%
+    emblem: emblem ? {
+      physDmg: emblem.physDmg, specialDmg: emblem.specialDmg,
+      physDrain: emblem.physDrain, specialDrain: emblem.specialDrain,
+      dotUp: emblem.dotUp, ailRes: emblem.ailRes,
+    } : null,
   }
 }
 
@@ -351,6 +376,22 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
   let atkPct = 0
   const cm = { hitBonus:0, critBonus:0, evasionBonus:0, critResist:0, defPen:0, mdefPen:0, critDmg:0 }
 
+  // 紋章（calcEffectiveStats と一致させる）
+  const emblemBonus = profile.emblemAlloc ? calcEmblemBonus(profile.emblemAlloc) : null
+  const emblem = zeroStats()
+  if (emblemBonus) {
+    emblem.atk  += emblemBonus.flat.atk
+    emblem.def  += emblemBonus.flat.def
+    emblem.matk += emblemBonus.flat.matk
+    emblem.mdef += emblemBonus.flat.mdef
+    cm.defPen       += emblemBonus.defPen
+    cm.mdefPen      += emblemBonus.mdefPen
+    cm.critBonus    += emblemBonus.crit
+    cm.critDmg      += emblemBonus.critDmg
+    cm.critResist   += emblemBonus.critResist
+    cm.evasionBonus += emblemBonus.evasion
+  }
+
   for (const item of equipment) {
     if (!item.equipped || !item.weapons) continue
     addGemTo(item, gem, cm)
@@ -404,10 +445,10 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
 
   // 実効値（matk のみ % 補正 → 称号加算の順）
   // ペットチャームは matk のみ %補正の後に加算（calcEffectiveStats と一致）。def は守りで×1.1。
-  const sumExceptTitle = (k) => base[k] + museum[k] + fishing[k] + equip[k] + gem[k] + prof[k] + pet[k]
-  const preMatk = base.matk + museum.matk + fishing.matk + equip.matk + gem.matk + prof.matk // ペット除く（%補正の対象外）
+  const sumExceptTitle = (k) => base[k] + museum[k] + fishing[k] + equip[k] + gem[k] + prof[k] + emblem[k] + pet[k]
+  const preMatk = base.matk + museum.matk + fishing.matk + equip.matk + gem.matk + prof.matk + emblem.matk // ペット除く（%補正の対象外）
   const effMatk = (matkPct > 0 ? Math.floor(preMatk * (1 + matkPct/100)) : preMatk) + title.matk + pet.matk
-  const preAtk = base.atk + museum.atk + fishing.atk + equip.atk + gem.atk + prof.atk // ペット除く（%補正の対象外）
+  const preAtk = base.atk + museum.atk + fishing.atk + equip.atk + gem.atk + prof.atk + emblem.atk // ペット除く（%補正の対象外）
   const effAtk = (atkPct > 0 ? Math.floor(preAtk * (1 + atkPct/100)) : preAtk) + title.atk + pet.atk
   let effDef = sumExceptTitle('def') + title.def
   if (pc.guard) effDef = Math.round(effDef * 1.1)
@@ -422,7 +463,7 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
   }
 
   return {
-    base, museum, fishing, equip, gem, prof, title, pet, petGuard: !!pc.guard, matkPct, atkPct, effective,
+    base, museum, fishing, equip, gem, prof, emblem, title, pet, petGuard: !!pc.guard, matkPct, atkPct, effective,
     combat: {
       hitBonus: cm.hitBonus, critBonus: cm.critBonus, evasionBonus: cm.evasionBonus,
       critResist: cm.critResist,

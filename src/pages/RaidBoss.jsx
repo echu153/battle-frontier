@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { getWeaponGroup } from '../lib/stats'
 import { evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
+import { emblemDmgMult, emblemDrainAmount, emblemBlocksAilment } from '../lib/emblemCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 import { selectBattleSkillSets } from '../lib/loadout'
 import { buildSummon, summonAnnounce, summonAttackDamage, summonAbsorbBasic, summonAbsorbSkill, summonEndOfTurn, tryPetCommand, BREEDER_COMMANDS } from '../lib/summon'
@@ -303,7 +304,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
             else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + bMdef)
           }
           const skillPhysical = !(cs.skills?.type === '魔法攻撃' || cs.skills?.name === 'サイコブラスト' || res.useMinDef)
-          let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * (0.9 + Math.random() * 0.2))
+          let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * emblemDmgMult(eff, skillPhysical) * (0.9 + Math.random() * 0.2))
           if (res.dmg > 0) finalDmg = cutRaidHit(Math.floor(finalDmg * weakMult(skillPhysical))) // 弱点補正＋1ヒット段階カット
           // 第六感（再修練）：魔法攻撃がヒットしたらスタック+1（最大6・戦闘中持続）
           if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks + 1)
@@ -315,6 +316,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
             logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
           }
           totalDamage += finalDmg
+          // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封印中は無効）
+          { const emDrain = emblemDrainAmount(eff, finalDmg, skillPhysical); if (emDrain > 0 && !isHealBlocked) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text: `💠 紋章の吸収！ HPが${fmt(emDrain)}回復！`, color: '#66ddff' }) } }
           if (!isHealBlocked) {
             const healAmt = Math.floor(res.heal * passiveHealMult)
             playerHp = Math.min(eff.hp_max, playerHp + healAmt)
@@ -354,7 +357,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           if (res.followup && res.followup.dmg > 0) {
             const fCrit = Math.random() * 100 < (playerCritRate + (res.bonusCritRate || 0))
             const fCritMult = fCrit ? (1.5 + (eff.critDmg || 0) + passiveCritDmgBonus) : 1.0
-            let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * (0.9 + Math.random() * 0.2))
+            let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * emblemDmgMult(eff, skillPhysical) * (0.9 + Math.random() * 0.2))
             fDmg = cutRaidHit(Math.max(1, Math.floor(fDmg * weakMult(skillPhysical))))
             totalDamage += fDmg
             logs.push({ text: `↳ 追撃！${res.followup.label ? `（${res.followup.label}）` : ''} ${bossName}に${fmt(fDmg)}ダメージ！${fCrit ? ' 💥クリティカル！' : ''}`, color: fCrit ? '#ffaa00' : '#ffaa66' })
@@ -372,7 +375,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         // 通常攻撃：物理時のみ居合の構えを乗算／第六感スタックを乗算
         const naIaiMult = isMagical ? 1.0 : iaiPhysMult
         const naRokkanMult = (hasRokkan && pe('サイキッカー')) ? (1 + 0.05*Math.min(6, rokkanStacks)) : 1.0
-        let finalDmg = Math.floor(baseDmg * critMult * (isArtifact ? 1.3 : 1.0) * passiveDmgMult * tosoMult * naIaiMult * naRokkanMult * (0.9 + Math.random() * 0.2))
+        let finalDmg = Math.floor(baseDmg * critMult * (isArtifact ? 1.3 : 1.0) * passiveDmgMult * tosoMult * naIaiMult * naRokkanMult * emblemDmgMult(eff, !isMagical) * (0.9 + Math.random() * 0.2))
         finalDmg = cutRaidHit(Math.floor(finalDmg * weakMult(!isMagical))) // 弱点補正＋1ヒット段階カット
         // 通常攻撃は精密照準スタックをリセット（連続スキルが途切れる）
         seimitsuStacks = 0; prevSkillName = null
@@ -382,6 +385,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
         }
         totalDamage += finalDmg
+        // 紋章: 物理/特殊吸収
+        { const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healBlock?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text: `💠 紋章の吸収！ HPが${fmt(emDrain)}回復！`, color: '#66ddff' }) } }
         const critText = isCrit ? ' 💥クリティカル！' : ''
         logs.push({ text: `${prefix}あなたの攻撃！ ${bossName}に${fmt(finalDmg)}ダメージ！${critText}`, color: isCrit ? '#ff4444' : '#ffcc00' })
         if (expandedSkillSet.length > 0) skillIndex++
@@ -420,7 +425,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         } else if (isZerugiasu) {
           // 神雷崩撃：本物の麻痺（10ターン・素早さ-20%＋25%で行動不能）。哭雨の羽衣で無効化可
           logs.push({ text: `${prefix}${bossName}の「神雷崩撃」！ ${fmt(specialDmg)}ダメージ！`, color: '#ffcc00' })
-          if (!ailmentShieldBlocks(playerBuffs, logs)) {
+          if (!ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'paralysis', logs)) {
             playerBuffs.paralysis = { turns: 10, skipRate: 0.25, spdRate: 0.8 }
             const paraSpd = Math.floor(effectiveSpdForCalc * 0.8)
             playerCritRate  = calcCritRate(paraSpd, BOSS_SPD) + passiveCritBonus + (eff.critBonus || 0)
@@ -610,7 +615,13 @@ export default function RaidBoss() {
       const { data: ap } = await supabase.from('pets').select('species, level, evolved, charm_id').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
       if (ap) { activePet = ap; petStat = petPlayerBonus(ap); if (ap.charm_id) { const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle(); if (c) petCharm = charmPlayerBonus(c) } }
     } catch { /* ペット未導入時は無視 */ }
-    setProfile({ ...prof, petCharm, petStat, activePet })
+    // 紋章の割り振りを反映（未導入/未付与なら無視）
+    let emblemAlloc = null
+    try {
+      const { data: em } = await supabase.from('player_emblem').select('alloc').eq('player_id', user.id).maybeSingle()
+      if (em?.alloc && Object.keys(em.alloc).length > 0) emblemAlloc = em.alloc
+    } catch { /* 紋章未導入時は無視 */ }
+    setProfile({ ...prof, petCharm, petStat, activePet, emblemAlloc })
     // 称号ボーナスを取得（戦闘ステータスに反映）
     if (prof.ability_title_id) {
       const { data: at } = await supabase.from('titles').select('*').eq('id', prof.ability_title_id).single()
