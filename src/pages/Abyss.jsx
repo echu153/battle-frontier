@@ -29,6 +29,14 @@ const fmt = (n) => Number(n).toLocaleString()
 const floorLabel = (n) => `地下${n}階`
 const ABYSS_CD = 5  // 奈落の挑戦クールダウン(秒)
 
+// ネットワーク応答が返らない場合に「戦闘中...」で永久停止するのを防ぐタイムアウト付きラッパー。
+// Supabaseのfetchがハングしても一定時間で例外化し、finallyでbattlingを必ず解除できるようにする。
+const withTimeout = (promise, ms = 15000) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ])
+
 // ============================================================
 // 奈落闘技場 戦闘シミュレーション（完全PvE）
 // Game.jsx の doBattle のロジックを忠実に移植したもの。
@@ -928,46 +936,56 @@ export default function Abyss() {
     setBattleFloor(targetFloor)  // 戦う階を固定（勝利後にtargetFloorが進んでも表示を保つ）
     setBattling(true); setScene('battle'); setBattleLogs([]); setReward(null); setResultMsg(null)
 
-    // 共有CDロック（10秒に1回まで）。並行端末/連打対策。
-    const lockTime = new Date(Date.now() - ABYSS_CD * 1000).toISOString()
-    const nowIso = new Date().toISOString()
-    const { data: locked } = await supabase.from('profiles')
-      .update({ last_action_at: nowIso })
-      .eq('id', profile.id)
-      .lt('last_action_at', lockTime)
-      .select('id')
-    if (!locked || locked.length === 0) {
-      setBattling(false); setScene('lobby')
-      const elapsed = (Date.now() - new Date(profile.last_action_at || 0).getTime()) / 1000
-      setRemaining(Math.max(1, ABYSS_CD - elapsed))
-      return
-    }
-    setProfile(p => ({ ...p, last_action_at: nowIso }))
-    setRemaining(ABYSS_CD)
-
-    const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
-    // 読み込み未完了/失敗でstateが空のままだとスキル無し戦闘になるため、空ならDBから取り直す
-    let curSets = skillSets
-    if (curSets.length === 0) {
-      const { data: ss2 } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', profile.id).order('slot_order')
-      if (Array.isArray(ss2) && ss2.length) {
-        curSets = selectBattleSkillSets(ss2, 'challenge')
-        setSkillSets(curSets)
+    // 何が起きても必ず setBattling(false) に到達させ、「戦闘中...」で固まらないようにする。
+    try {
+      // 共有CDロック（10秒に1回まで）。並行端末/連打対策。
+      const lockTime = new Date(Date.now() - ABYSS_CD * 1000).toISOString()
+      const nowIso = new Date().toISOString()
+      const { data: locked } = await withTimeout(supabase.from('profiles')
+        .update({ last_action_at: nowIso })
+        .eq('id', profile.id)
+        .lt('last_action_at', lockTime)
+        .select('id'))
+      if (!locked || locked.length === 0) {
+        setScene('lobby')
+        const elapsed = (Date.now() - new Date(profile.last_action_at || 0).getTime()) / 1000
+        setRemaining(Math.max(1, ABYSS_CD - elapsed))
+        return
       }
-    }
-    const { logs, win, turns } = simulateAbyssBattle(eff, equipment, curSets, profile, { ...floorData.enemy }, playerItem, targetFloor)
-    setBattleLogs(logs)
+      setProfile(p => ({ ...p, last_action_at: nowIso }))
+      setRemaining(ABYSS_CD)
 
-    if (win) {
-      const { data, error } = await supabase.rpc('claim_abyss_floor', { p_floor: targetFloor, p_turns: turns })
-      if (error || data?.error) {
-        setResultMsg((data?.error || error?.message || '報酬の受け取りに失敗しました') + '（SQL未実行の可能性: supabase_abyss.sql を実行してください）')
-      } else {
-        setReward(data)
-        await fetchStatus()
+      const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
+      // 読み込み未完了/失敗でstateが空のままだとスキル無し戦闘になるため、空ならDBから取り直す
+      let curSets = skillSets
+      if (curSets.length === 0) {
+        const { data: ss2 } = await withTimeout(supabase.from('skill_sets').select('*, skills(*)').eq('player_id', profile.id).order('slot_order'))
+        if (Array.isArray(ss2) && ss2.length) {
+          curSets = selectBattleSkillSets(ss2, 'challenge')
+          setSkillSets(curSets)
+        }
       }
+      const { logs, win, turns } = simulateAbyssBattle(eff, equipment, curSets, profile, { ...floorData.enemy }, playerItem, targetFloor)
+      setBattleLogs(logs)
+
+      if (win) {
+        const { data, error } = await withTimeout(supabase.rpc('claim_abyss_floor', { p_floor: targetFloor, p_turns: turns }))
+        if (error || data?.error) {
+          setResultMsg((data?.error || error?.message || '報酬の受け取りに失敗しました') + '（SQL未実行の可能性: supabase_abyss.sql を実行してください）')
+        } else {
+          setReward(data)
+          await withTimeout(fetchStatus())
+        }
+      }
+    } catch (e) {
+      // 戦闘計算の例外・通信タイムアウトなど。ここで握らないと battling が true のまま固まる。
+      console.error('[abyss] handleChallenge failed:', e)
+      setResultMsg(e?.message === 'timeout'
+        ? '通信がタイムアウトしました。時間をおいて再挑戦してください。'
+        : '戦闘処理でエラーが発生しました。再挑戦してください。')
+    } finally {
+      setBattling(false)
     }
-    setBattling(false)
   }
 
   const fmtCountdown = (iso) => {
