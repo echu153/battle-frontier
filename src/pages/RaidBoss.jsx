@@ -296,15 +296,23 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           if (res.dmg > 0) {
             const sType = cs.skills?.type
             // 防御貫通を反映（宝石eff.defPen + スキルres.defPen + 明鏡止水等mukyoPen）。Game.jsxと同構造
+            const skillCls = cs.skills?.class_name
             const buffPen = playerBuffs.mukyoPen?.turns > 0 ? playerBuffs.mukyoPen.rate : 0
+            const spMdefPen = playerBuffs.spiritMdefPen?.turns > 0 ? playerBuffs.spiritMdefPen.rate : 0  // ノクス：魔法防御貫通バフ
             const bDef  = Math.max(1, Math.floor(BOSS_DEF  * (1-(eff.defPen||0))  * (1-Math.min(0.8,(res.defPen||0)+buffPen))))
-            const bMdef = Math.max(1, Math.floor(BOSS_MDEF * (1-(eff.mdefPen||0)) * (1-(res.mdefPen||0))))
-            if (cs.skills?.name === 'サイコブラスト' || res.useMinDef) defScale = effBuff.matk / (effBuff.matk + Math.min(bDef, bMdef))
+            const bMdef = Math.max(1, Math.floor(BOSS_MDEF * (1-(eff.mdefPen||0)) * (1-Math.min(0.8,(res.mdefPen||0)+spMdefPen))))
+            // サイコブラスト/マインドブレイク等、およびサイキッカー・魔銃士の全スキルは敵DEF・MDEFの低い方で軽減（Game.jsxと同構造）
+            const useLowDef = cs.skills?.name === 'サイコブラスト' || res.useMinDef || skillCls === 'サイキッカー' || skillCls === '魔銃士'
+            if (res.physScaleMatk) defScale = effBuff.matk / (effBuff.matk + bDef)  // 物理ダメだが火力参照は特殊攻撃（オオカミ召喚/シルフ等）
+            else if (useLowDef) defScale = effBuff.matk / (effBuff.matk + Math.min(bDef, bMdef))
             else if (sType === '物理攻撃') defScale = effBuff.atk / (effBuff.atk + bDef)
             else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + bMdef)
           }
           const skillPhysical = !(cs.skills?.type === '魔法攻撃' || cs.skills?.name === 'サイコブラスト' || res.useMinDef)
-          let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * emblemDmgMult(eff, skillPhysical) * (0.9 + Math.random() * 0.2))
+          const allinDebuffOutMult = playerBuffs.allinDebuff?.turns > 0 ? 0.7 : 1.0  // オールイン反動中は与ダメ-30%
+          const nextBoostMult = (res.dmg > 0 && playerBuffs.nextSkillBoost) ? playerBuffs.nextSkillBoost.rate : 1.0  // 半月蹴りの溜め（次の一撃強化）
+          if (nextBoostMult > 1.0 && cs.skills?.name !== '半月蹴り') res.newPlayerBuffs.nextSkillBoost = undefined  // 消費
+          let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * nextBoostMult * emblemDmgMult(eff, skillPhysical) * (0.9 + Math.random() * 0.2))
           if (res.dmg > 0) finalDmg = cutRaidHit(Math.floor(finalDmg * weakMult(skillPhysical))) // 弱点補正＋1ヒット段階カット
           // 第六感（再修練）：魔法攻撃がヒットしたらスタック+1（最大6・戦闘中持続）
           if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks + 1)
@@ -319,7 +327,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封印中は無効）
           { const emDrain = emblemDrainAmount(eff, finalDmg, skillPhysical); if (emDrain > 0 && !isHealBlocked) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text: `💠 紋章の吸収！ HPが${fmt(emDrain)}回復！`, color: '#66ddff' }) } }
           if (!isHealBlocked) {
-            const healAmt = Math.floor(res.heal * passiveHealMult)
+            const healAmt = Math.floor(res.heal * passiveHealMult * (playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1))  // ルミナ等の回復力アップを反映
             playerHp = Math.min(eff.hp_max, playerHp + healAmt)
             if (passiveHealReflect && healAmt > 0) {
               const reflectDmg = healAmt  // 神聖加護強化：回復量の100%を反射
@@ -329,8 +337,23 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           } else if (res.heal > 0) {
             logs.push({ text: `回復封印中！ 回復効果が無効化された！`, color: '#aa22ff' })
           }
+          // 魔剣開放/オールインの反動中はバフ系スキルを無効化（Game.jsxと同構造）
+          if (playerBuffs.spellBladeSealed?.turns > 0) {
+            const bk = ['atkUp','matkUp','spdUp','dmgReduce','regenHeal','hitBonus','evasion','bloodRage','statusImmune','holyField','holyAwakening','flashCombo','spellBladeExhaust','nextSkillBoost']
+            for (const k of bk) { if (res.newPlayerBuffs[k] !== playerBuffs[k]) res.newPlayerBuffs[k] = playerBuffs[k] }
+          }
+          if (playerBuffs.allinDebuff?.turns > 0) {
+            const bk = ['atkUp','matkUp','spdUp','dmgReduce','regenHeal','hitBonus','evasion','bloodRage','statusImmune','nextSkillBoost']
+            for (const k of bk) { if (res.newPlayerBuffs[k] !== playerBuffs[k]) res.newPlayerBuffs[k] = playerBuffs[k] }
+          }
           // ボスにはデバフ・状態異常無効（newEnemyBuffsは捨てる）
           playerBuffs = { ...playerBuffs, ...res.newPlayerBuffs }
+          // 精霊共鳴：同じ精霊召喚を3回でtripled→次の行動で確定追加行動（Game.jsxと同構造）
+          if (passiveNames.includes('精霊共鳴') && playerBuffs.spiritCombo?.tripled) {
+            playerBuffs.guaranteedExtra = true
+            playerBuffs.spiritCombo = { ...playerBuffs.spiritCombo, tripled:false }
+            logs.push({ text: `🌟 精霊共鳴！ 精霊の力が高まり、追加行動を得る！`, color:'#ffdd66' })
+          }
           const critText = finalCrit ? ' 💥クリティカル！' : ''
           // ダメージ表記：多段ヒット(res.hitDmgs)はログに合計(res.dmg)の文字列が現れず replace が効かない＝
           // 生のヒット内訳(未圧縮)が表示され、実際の与ダメ(finalDmg)と食い違う。実際の与ダメで作り直す。
@@ -357,7 +380,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           if (res.followup && res.followup.dmg > 0) {
             const fCrit = Math.random() * 100 < (playerCritRate + (res.bonusCritRate || 0))
             const fCritMult = fCrit ? (1.5 + (eff.critDmg || 0) + passiveCritDmgBonus) : 1.0
-            let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * emblemDmgMult(eff, skillPhysical) * (0.9 + Math.random() * 0.2))
+            let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * emblemDmgMult(eff, skillPhysical) * (0.9 + Math.random() * 0.2))
             fDmg = cutRaidHit(Math.max(1, Math.floor(fDmg * weakMult(skillPhysical))))
             totalDamage += fDmg
             logs.push({ text: `↳ 追撃！${res.followup.label ? `（${res.followup.label}）` : ''} ${bossName}に${fmt(fDmg)}ダメージ！${fCrit ? ' 💥クリティカル！' : ''}`, color: fCrit ? '#ffaa00' : '#ffaa66' })
@@ -474,8 +497,12 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
 
     // SPD差による行動順
     const playerFirst = effectiveSpdForCalc >= BOSS_SPD
-    // 天墜竜閃の溜めターンは追加行動なし（Game.jsxと同様。溜め中=tenkaiCharge>0 の間は追撃しない）
-    const canPlayerExtra = () => !(playerBuffs.tenkaiCharge?.turns > 0) && Math.random() * 100 < playerExtraRate
+    // 追加行動判定：精霊共鳴の確定追加行動(guaranteedExtra)を最優先で消費、無ければ素早さ由来の確率
+    const canPlayerExtra = () => {
+      if (playerBuffs.tenkaiCharge?.turns > 0) return false
+      if (playerBuffs.guaranteedExtra) { playerBuffs.guaranteedExtra = false; return true }
+      return Math.random() * 100 < playerExtraRate
+    }
     // 麻痺による行動不能判定（神雷崩撃で付与・25%で行動不能、発動ごとに半減）
     let playerSkipped = false
     if (playerBuffs.paralysis?.turns > 0 && Math.random() < playerBuffs.paralysis.skipRate) {
