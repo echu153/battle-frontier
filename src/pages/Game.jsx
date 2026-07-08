@@ -1194,19 +1194,11 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       break
     }
     case '天墜竜閃': {
-      if (playerBuffs.tenkaiCharge?.turns > 0) {
-        // 解放ターン：大ダメージ＋防御貫通30%
-        result.dmg = Math.floor(eff.atk*(rt>=5?4.5:4.0)*am)  // 威力4.0（再修練5段で4.5）
-        result.defPen = 0.3
-        result.newPlayerBuffs.tenkaiCharge = undefined // 溜め解除
-        result.log = `🐉💥 天墜竜閃・解放！ ${enemy.name}に${result.dmg}の物理ダメージ！（防御貫通）`
-      } else {
-        // 溜めターン：1ターン受けダメ-20%＆待機（追加行動なし）
-        result.newPlayerBuffs.dmgReduce = { turns:1, rate:0.8 }
-        result.newPlayerBuffs.tenkaiCharge = { turns:2 } // 次ターンに解放（ターン経過で1減るので2を入れる）
-        result.charging = true
-        result.log = `🐉 天墜竜閃！ 力を溜めている…（次ターンに解き放つ／受けるダメージ-20%）`
-      }
+      // 溜め廃止：1回の発動で溜め→即攻撃まで行う（大ダメージ＋防御貫通30%）
+      result.dmg = Math.floor(eff.atk*(rt>=5?4.5:4.0)*am)  // 威力4.0（再修練5段で4.5）
+      result.defPen = 0.3
+      result.newPlayerBuffs.tenkaiCharge = undefined // 溜め状態は使わない（残留があれば解除）
+      result.log = `🐉💥 天墜竜閃！ ${enemy.name}に${result.dmg}の物理ダメージ！（防御貫通）`
       break
     }
     // ── サモナー ──
