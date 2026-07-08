@@ -327,15 +327,21 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         if (res.dmg > 0) {
           const sType = cs.skills?.type
           // スキルの防御貫通(res.defPen/res.mdefPen)＋明鏡止水等の貫通バフ(mukyoPen)を反映（Game.jsxと同様）
+          const skillCls = cs.skills?.class_name
           const buffPen = playerBuffs.mukyoPen?.turns > 0 ? playerBuffs.mukyoPen.rate : 0
+          const spMdefPen = playerBuffs.spiritMdefPen?.turns > 0 ? playerBuffs.spiritMdefPen.rate : 0  // ノクス：魔法防御貫通バフ
           const adjED  = Math.max(1, Math.floor((enemy.def ||0)*eDefRate*enPerm.defMult*(1-Math.min(0.8,(res.defPen||0)+buffPen))))
-          const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate*enPerm.mdefMult*(1-(res.mdefPen||0))))
-          if (cs.skills?.name === 'サイコブラスト' || res.useMinDef) {
-            defScale = effBuff.matk / (effBuff.matk + Math.min(adjED, adjEMD))
-          } else if (sType === '物理攻撃') defScale = effBuff.atk  / (effBuff.atk  + adjED)
+          const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate*enPerm.mdefMult*(1-Math.min(0.8,(res.mdefPen||0)+spMdefPen))))
+          // サイコブラスト/マインドブレイク等、およびサイキッカー・魔銃士の全スキルは敵DEF・MDEFの低い方で軽減（Game.jsxと同構造）
+          const useLowDef = cs.skills?.name === 'サイコブラスト' || res.useMinDef || skillCls === 'サイキッカー' || skillCls === '魔銃士'
+          if (res.physScaleMatk) defScale = effBuff.matk / (effBuff.matk + adjED)  // 物理ダメだが火力参照は特殊攻撃（オオカミ召喚/シルフ等）
+          else if (useLowDef) defScale = effBuff.matk / (effBuff.matk + Math.min(adjED, adjEMD))
+          else if (sType === '物理攻撃') defScale = effBuff.atk  / (effBuff.atk  + adjED)
           else if (sType === '魔法攻撃') defScale = effBuff.matk / (effBuff.matk + adjEMD)
         }
         const allinDebuffOutMult = playerBuffs.allinDebuff?.turns > 0 ? 0.7 : 1.0
+        const nextBoostMult = (res.dmg > 0 && playerBuffs.nextSkillBoost) ? playerBuffs.nextSkillBoost.rate : 1.0  // 半月蹴りの溜め（次の一撃強化）
+        if (nextBoostMult > 1.0 && cs.skills?.name !== '半月蹴り') res.newPlayerBuffs.nextSkillBoost = undefined  // 消費
         const enemyDmgReduceMult = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
         const isPhysSkill = cs.skills?.type === '物理攻撃'
         const emMult = emblemDmgMult(eff, isPhysSkill)  // 紋章: 物理/特殊ダメージUP
@@ -343,7 +349,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         const isMulti = Array.isArray(res.hitDmgs) && res.hitDmgs.length > 0 && res.dmg > 0
         let finalDmg, resLog, multiCritAny = false
         if (isMulti) {
-          const hitMult = defScale * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * playerDmgMult * sameSkillMult * emMult
+          const hitMult = defScale * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * nextBoostMult * enemyDmgReduceMult * playerDmgMult * sameSkillMult * emMult
           const parts = []
           finalDmg = 0
           for (const hd of res.hitDmgs) {
@@ -357,7 +363,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
           }
           resLog = `${res.log.split('！')[0]}！ ${enemy.name}に ${parts.join(' ')}`
         } else {
-          finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * playerDmgMult * sameSkillMult * emMult * (0.9 + Math.random() * 0.2))
+          finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * nextBoostMult * enemyDmgReduceMult * playerDmgMult * sameSkillMult * emMult * (0.9 + Math.random() * 0.2))
           resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
         }
         if (res.dmg > 0) { lastPlayerHitType = cs.skills?.type === '魔法攻撃' ? 'magical' : 'physical'; prevDmgSkillName = cs.skills?.name }
@@ -385,7 +391,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
           enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
           logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
         }
-        const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult)
+        const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult * (playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1))  // ルミナ等の回復力アップを反映
         playerHp = Math.min(profile.hp_max, playerHp + healAmt)
         mirrorPlayerHeal(healAmt)
         if (passiveHealReflect && healAmt > 0) {
@@ -394,18 +400,24 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
           logs.push({ text:`✨ 神聖加護の反射！ ${enemy.name}に${reflectDmg}ダメージ！`, color:'#ffdd44' })
         }
         if (playerBuffs.spellBladeSealed?.turns > 0) {
-          const blockedKeys2 = ['atkUp','matkUp','spdUp','dmgReduce','regenHeal','hitBonus','evasion','bloodRage','statusImmune','holyField','holyAwakening','flashCombo','spellBladeExhaust']
+          const blockedKeys2 = ['atkUp','matkUp','spdUp','dmgReduce','regenHeal','hitBonus','evasion','bloodRage','statusImmune','holyField','holyAwakening','flashCombo','spellBladeExhaust','nextSkillBoost']
           const hadBuff2 = blockedKeys2.some(k => res.newPlayerBuffs[k] !== playerBuffs[k] && res.newPlayerBuffs[k] !== undefined)
           for (const k of blockedKeys2) { if (res.newPlayerBuffs[k] !== playerBuffs[k]) res.newPlayerBuffs[k] = playerBuffs[k] }
           if (hadBuff2) logs.push({ text:`⚔ 魔剣開放の反動中！ バフが効かない！`, color:'#ff4444' })
         }
         if (playerBuffs.allinDebuff?.turns > 0) {
-          const blockedKeys = ['atkUp','matkUp','spdUp','dmgReduce','regenHeal','hitBonus','evasion','bloodRage','statusImmune']
+          const blockedKeys = ['atkUp','matkUp','spdUp','dmgReduce','regenHeal','hitBonus','evasion','bloodRage','statusImmune','nextSkillBoost']
           const hadBuff = blockedKeys.some(k => res.newPlayerBuffs[k] !== playerBuffs[k] && res.newPlayerBuffs[k] !== undefined)
           for (const k of blockedKeys) { if (res.newPlayerBuffs[k] !== playerBuffs[k]) res.newPlayerBuffs[k] = playerBuffs[k] }
           if (hadBuff) logs.push({ text:`💸 オールインの反動中！ バフが効かない！`, color:'#ff4444' })
         }
         playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
+        // 精霊共鳴：同じ精霊召喚を3回でtripled→次の行動で確定追加行動（Game.jsxと同構造）
+        if (passiveNames.includes('精霊共鳴') && playerBuffs.spiritCombo?.tripled) {
+          playerBuffs.guaranteedExtra = true
+          playerBuffs.spiritCombo = { ...playerBuffs.spiritCombo, tripled:false }
+          logs.push({ text: `🌟 精霊共鳴！ 精霊の力が高まり、追加行動を得る！`, color:'#ffdd66' })
+        }
         stripEnemyStatuses(buffsBefore)
         mirrorPlayerBuffs(pBuffsBefore)
         const critInsert = (finalCrit && !isMulti) ? '💥クリティカル！ ' : ''
@@ -856,7 +868,9 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     if (!playerSkipped) {
       doPlayerAttack(false)
       if (enemyHp <= 0) break
-      if (!(playerBuffs.tenkaiCharge?.turns > 0) && playerExtraRate > 0 && Math.random()*100 < playerExtraRate) { doPlayerAttack(true); if (enemyHp <= 0) break }
+      const spiritExtra = !!playerBuffs.guaranteedExtra  // 精霊共鳴の確定追加行動
+      if (playerBuffs.guaranteedExtra) playerBuffs.guaranteedExtra = false
+      if (!(playerBuffs.tenkaiCharge?.turns > 0) && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) { doPlayerAttack(true); if (enemyHp <= 0) break }
     }
 
     // 敵のターン
