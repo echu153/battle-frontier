@@ -7,7 +7,7 @@ import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoA
 import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemResistNewAilments, emblemBlocksAilment } from '../lib/emblemCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 import { selectBattleSkillSets } from '../lib/loadout'
-import { buildSummon, summonAnnounce, summonAttackDamage, summonAbsorbBasic, summonEndOfTurn, tryPetCommand, BREEDER_COMMANDS } from '../lib/summon'
+import { buildSummon, summonAnnounce, summonAttackDamage, summonAbsorbBasic, summonAbsorbSkill, summonEndOfTurn, tryPetCommand, BREEDER_COMMANDS } from '../lib/summon'
 import {
   calcEffectiveStats,
   calcEvasionRate,
