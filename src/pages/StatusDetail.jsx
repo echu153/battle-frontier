@@ -20,7 +20,6 @@ import {
   calcStatsBreakdown, calcEffectiveStats, calcDefReduction, getTotalRank,
 } from '../lib/stats'
 import { sumClaimedFishingBonus, toFishingColumns } from '../lib/fishing'
-import { reportDevAccess } from '../lib/devAccess'
 import { petStats, applyCharmStats, speciesLabel, speciesEmoji, charmDisplayName, atkLabel, petImage, charmPlayerBonus, petPlayerBonus } from '../constants/pets'
 
 const STAT_META = [
@@ -82,8 +81,6 @@ export default function StatusDetail() {
     if (!user) { nav('/login'); return }
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     if (!p) { nav('/game'); return }
-    // 開発限定ページ: 非管理者のURL直打ちはブロック＋管理者へ通知
-    if (!p.is_admin) { reportDevAccess('status_detail', 'ステータス詳細(/status)'); nav('/game'); return }
     const [{ data: eq }, { data: prof }, { data: fr }, { count: donCount }, { count: cbCount }] = await Promise.all([
       supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', user.id),
       supabase.from('proficiency').select('*, weapons(*)').eq('player_id', user.id),
