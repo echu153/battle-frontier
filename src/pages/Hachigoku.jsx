@@ -692,32 +692,39 @@ export default function Hachigoku() {
     setBattling(true); setScene('battle'); setBattleLogs([]); setReward(null); setResultMsg(null)
     setRemaining(HACHIGOKU_CD)
 
-    const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
-    let curSets = skillSets
-    if (curSets.length === 0) {
-      const { data: ss2 } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', profile.id).order('slot_order')
-      if (Array.isArray(ss2) && ss2.length) {
-        curSets = selectBattleSkillSets(ss2, 'challenge')
-        setSkillSets(curSets)
+    // 何が起きても必ず setBattling(false) に到達させ、「戦闘中...」で固まらないようにする。
+    try {
+      const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
+      let curSets = skillSets
+      if (curSets.length === 0) {
+        const { data: ss2 } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', profile.id).order('slot_order')
+        if (Array.isArray(ss2) && ss2.length) {
+          curSets = selectBattleSkillSets(ss2, 'challenge')
+          setSkillSets(curSets)
+        }
       }
-    }
-    const { logs, win } = simulateHachigokuBattle(eff, equipment, curSets, profile, { ...enemy })
-    setBattleLogs(logs)
+      const { logs, win } = simulateHachigokuBattle(eff, equipment, curSets, profile, { ...enemy })
+      setBattleLogs(logs)
 
-    if (win) {
-      const diffIdx = HACHIGOKU_DIFFICULTIES.findIndex(d => d.key === selectedDiff)
-      const { data, error } = await supabase.rpc('hachigoku_result', { p_hell: selectedHell, p_diff: diffIdx })
-      if (error || data?.error) {
-        const code = data?.error || error?.message
-        setResultMsg(code === 'daily_limit'
-          ? '本日の挑戦回数（3勝）を使い切っています。報酬はありません。'
-          : `報酬の受け取りに失敗しました（${code}）。SQL未実行の可能性: supabase_emblem_hachigoku.sql を実行してください。`)
-      } else {
-        setReward(data)
-        await fetchStatus()
+      if (win) {
+        const diffIdx = HACHIGOKU_DIFFICULTIES.findIndex(d => d.key === selectedDiff)
+        const { data, error } = await supabase.rpc('hachigoku_result', { p_hell: selectedHell, p_diff: diffIdx })
+        if (error || data?.error) {
+          const code = data?.error || error?.message
+          setResultMsg(code === 'daily_limit'
+            ? '本日の挑戦回数（3勝）を使い切っています。報酬はありません。'
+            : `報酬の受け取りに失敗しました（${code}）。SQL未実行の可能性: supabase_emblem_hachigoku.sql を実行してください。`)
+        } else {
+          setReward(data)
+          await fetchStatus()
+        }
       }
+    } catch (e) {
+      console.error('[hachigoku] handleChallenge failed:', e)
+      setResultMsg('戦闘処理でエラーが発生しました。再挑戦してください。')
+    } finally {
+      setBattling(false)
     }
-    setBattling(false)
   }
 
   if (scarecrowBlock) return <ScarecrowBlockScreen endsAt={scarecrowBlock.ends_at} />

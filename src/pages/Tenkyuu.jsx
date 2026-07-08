@@ -1024,21 +1024,28 @@ export default function Tenkyuu() {
     setBattling(true); setScene('battle'); setBattleLogs([]); setResultWin(null)
     setRemaining(TENKYUU_CD)
 
-    const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
-    // 読み込み未完了/失敗でstateが空のままだとスキル無し戦闘になるため、空ならDBから取り直す
-    let curSets = skillSets
-    if (curSets.length === 0) {
-      const { data: ss2 } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', profile.id).order('slot_order')
-      if (Array.isArray(ss2) && ss2.length) {
-        curSets = selectBattleSkillSets(ss2, 'challenge')
-        setSkillSets(curSets)
+    // 何が起きても必ず setBattling(false) に到達させ、「戦闘中...」で固まらないようにする。
+    try {
+      const eff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
+      // 読み込み未完了/失敗でstateが空のままだとスキル無し戦闘になるため、空ならDBから取り直す
+      let curSets = skillSets
+      if (curSets.length === 0) {
+        const { data: ss2 } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', profile.id).order('slot_order')
+        if (Array.isArray(ss2) && ss2.length) {
+          curSets = selectBattleSkillSets(ss2, 'challenge')
+          setSkillSets(curSets)
+        }
       }
+      const { logs, win } = simulateTenkyuuBattle(eff, equipment, curSets, profile, { ...pd.enemy }, playerItem)
+      setBattleLogs(logs)
+      setResultWin(win)
+      if (win) setCleared(prev => prev.includes(palace) ? prev : [...prev, palace])
+    } catch (e) {
+      console.error('[tenkyuu] handleChallenge failed:', e)
+      setBattleLogs([{ text:'戦闘処理でエラーが発生しました。再挑戦してください。', color:'#ff5555' }])
+    } finally {
+      setBattling(false)
     }
-    const { logs, win } = simulateTenkyuuBattle(eff, equipment, curSets, profile, { ...pd.enemy }, playerItem)
-    setBattleLogs(logs)
-    setResultWin(win)
-    if (win) setCleared(prev => prev.includes(palace) ? prev : [...prev, palace])
-    setBattling(false)
   }
 
   if (scarecrowBlock) return <ScarecrowBlockScreen endsAt={scarecrowBlock.ends_at} />
