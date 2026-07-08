@@ -519,7 +519,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     const isHealSealed = playerBuffs.healSeal?.turns > 0
     if (isHealSealed) logs.push({ text:`🚫 回復封じ中！ 回復効果が無効化された！`, color:'#ff4488' })
     if (!isHealSealed && playerBuffs.regenHeal?.turns > 0) {
-      const healAmt = Math.floor(playerBuffs.regenHeal.amount * passiveHealMult)
+      const healAmt = Math.floor(playerBuffs.regenHeal.amount * passiveHealMult * (playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1))
       playerHp = Math.min(eff.hp_max, playerHp + healAmt)
       logs.push({ text:`💚 回復効果でHPが${healAmt}回復した！`, color:'#44ff88' })
       if (passiveHealReflect && healAmt > 0) {

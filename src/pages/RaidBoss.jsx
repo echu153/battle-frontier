@@ -554,8 +554,14 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     const isHealBlockedTick = playerBuffs.healBlock?.turns > 0
     if (playerBuffs.regenHeal?.turns > 0) {
       if (!isHealBlockedTick) {
-        playerHp = Math.min(eff.hp_max, playerHp + Math.floor(playerBuffs.regenHeal.amount * passiveHealMult))
-        logs.push({ text: `💚 リジェネ！ HPが${playerBuffs.regenHeal.amount}回復！`, color: '#44ff88' })
+        const healAmt = Math.floor(playerBuffs.regenHeal.amount * passiveHealMult * (playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1))
+        playerHp = Math.min(eff.hp_max, playerHp + healAmt)
+        logs.push({ text: `💚 リジェネ！ HPが${fmt(healAmt)}回復！`, color: '#44ff88' })
+        // 神聖加護（聖職者・再修練）：回復量の100%を敵に反射（出撃と同様。奇跡等の毎ターン回復にも乗る）
+        if (passiveHealReflect && healAmt > 0) {
+          totalDamage += healAmt
+          logs.push({ text: `✨ 神聖加護の反射！ ${bossName}に${fmt(healAmt)}ダメージ！`, color: '#ffdd44' })
+        }
       }
     }
     if (playerBuffs.delayHeal?.triggerTurn === turn) {
