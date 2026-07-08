@@ -1052,7 +1052,8 @@ export default function Smithy() {
                   const count = getStoneCount(rarity)
                   const maxTimes = Math.floor(count / 3)
                   const canCraft = maxTimes >= 1
-                  const times = Math.max(1, Math.min(stoneTimes[rarity] || maxTimes, maxTimes))
+                  const rawTimes = stoneTimes[rarity]  // 編集中は文字列('' 含む)を許容し、確定時にクランプする
+                  const times = Math.max(1, Math.min(parseInt(rawTimes, 10) || maxTimes, maxTimes))
                   const nextRarity = STONE_RANKS[STONE_RANKS.indexOf(rarity) + 1]
                   return (
                     <div key={rarity} style={{ border:`1px solid ${canCraft ? '#446600' : '#002244'}`, background:'#001028', padding:'10px', marginBottom:'6px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
@@ -1065,9 +1066,16 @@ export default function Smithy() {
                         {canCraft && (
                           <>
                             <span style={{ color:'#446688', fontSize:'10px' }}>回数</span>
-                            <input type="number" min={1} max={maxTimes} value={times}
-                              onChange={e => { const v = Math.max(1, Math.min(parseInt(e.target.value,10)||1, maxTimes)); setStoneTimes(s => ({ ...s, [rarity]: v })) }}
-                              style={{ width:'48px', background:'#000818', border:'1px solid #224466', color:'#88ccff', fontFamily:'monospace', fontSize:'11px', padding:'2px 4px', textAlign:'center' }} />
+                            {/* スマホは type=number のスピナーが無く入力しづらいため、−/＋ステッパーで回数を確実に増減できるようにする */}
+                            <button onClick={() => setStoneTimes(s => ({ ...s, [rarity]: Math.max(1, times - 1) }))} disabled={times <= 1}
+                              style={{ padding:'2px 8px', background:'#001830', border:'1px solid #224466', color: times<=1?'#334455':'#88ccff', cursor: times<=1?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', lineHeight:1 }}>−</button>
+                            <input type="number" inputMode="numeric" min={1} max={maxTimes}
+                              value={rawTimes === undefined ? times : rawTimes}
+                              onChange={e => setStoneTimes(s => ({ ...s, [rarity]: e.target.value }))}
+                              onBlur={() => setStoneTimes(s => ({ ...s, [rarity]: times }))}
+                              style={{ width:'44px', background:'#000818', border:'1px solid #224466', color:'#88ccff', fontFamily:'monospace', fontSize:'11px', padding:'2px 4px', textAlign:'center' }} />
+                            <button onClick={() => setStoneTimes(s => ({ ...s, [rarity]: Math.min(maxTimes, times + 1) }))} disabled={times >= maxTimes}
+                              style={{ padding:'2px 8px', background:'#001830', border:'1px solid #224466', color: times>=maxTimes?'#334455':'#88ccff', cursor: times>=maxTimes?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', lineHeight:1 }}>＋</button>
                             <button onClick={() => setStoneTimes(s => ({ ...s, [rarity]: maxTimes }))}
                               style={{ padding:'2px 6px', background:'#001830', border:'1px solid #224466', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'9px' }}>最大</button>
                           </>
