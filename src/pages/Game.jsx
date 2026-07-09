@@ -1194,11 +1194,21 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       break
     }
     case '天墜竜閃': {
-      // 溜め廃止：1回の発動で溜め→即攻撃まで行う（大ダメージ＋防御貫通30%）
-      result.dmg = Math.floor(eff.atk*(rt>=5?4.5:4.0)*am)  // 威力4.0（再修練5段で4.5）
-      result.defPen = 0.3
-      result.newPlayerBuffs.tenkaiCharge = undefined // 溜め状態は使わない（残留があれば解除）
-      result.log = `🐉💥 天墜竜閃！ ${enemy.name}に${result.dmg}の物理ダメージ！（防御貫通）`
+      // ため技：1ターン目は力を溜める（ダメージなし・MPはここで消費）、次ターンに大ダメージで解放（防御貫通30%・MP消費なし）。
+      //   溜め状態(tenkaiCharge)は各バトルエンジン(出撃/奈落/天穹/八獄/レイド/PvP)が
+      //   「溜め中は次手番を必ず天墜竜閃(解放)に固定・解放ターンMP無料・溜め中は追加行動なし」で扱う共通インフラを持つ。
+      //   turns:2 はターン終端のバフ減衰(turns--)を1回吸収し、解放ターン開始時に turns>0 を保つための値。
+      if (playerBuffs.tenkaiCharge?.turns > 0) {
+        // 解放ターン
+        result.dmg = Math.floor(eff.atk*(rt>=5?4.5:4.0)*am)  // 威力4.0（再修練5段で4.5）
+        result.defPen = 0.3
+        result.newPlayerBuffs.tenkaiCharge = undefined  // 溜め状態を解除
+        result.log = `🐉💥 天墜竜閃！ ${enemy.name}に${result.dmg}の物理ダメージ！（防御貫通）`
+      } else {
+        // 溜めターン（ダメージなし）
+        result.newPlayerBuffs.tenkaiCharge = { turns: 2 }
+        result.log = `🐉 天墜竜閃！ 竜の力を全身に溜め始めた…！（次のターンに解放）`
+      }
       break
     }
     // ── サモナー ──
