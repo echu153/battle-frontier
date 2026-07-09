@@ -274,6 +274,11 @@ function doAttack(att, def, isExtra, ctx) {
     const lockedIdx = att.expandedSkillSet.findIndex(ss => ss.skills?.name === attBuffs.berserk.lockedSkill)
     if (lockedIdx >= 0) att.skillIndex = lockedIdx
   }
+  // 天墜竜閃の溜め中：次手番を必ず天墜竜閃(解放)に固定（他エンジンと同様）
+  if (attBuffs.tenkaiCharge?.turns > 0) {
+    const tIdx = att.expandedSkillSet.findIndex(ss => ss.skills?.name === '天墜竜閃')
+    if (tIdx >= 0) att.skillIndex = tIdx
+  }
 
   let skillUsed = false
   if (att.expandedSkillSet.length > 0) {
@@ -308,6 +313,7 @@ function doAttack(att, def, isExtra, ctx) {
     }
     if (cs && cs.skills && !BREEDER_PET_SKILLS.has(cs.skills.name) && att.mp >= mpCost) {
       att.mp -= mpCost
+      if (cs.skills.name === '天墜竜閃') att.tenkaiActedThisTurn = true  // 溜め/解放どちらでも当ターンは追加行動なし
       const hasGensoKyomei = att.expandedSkillSet.some(ss => ss.skills?.name === '元素共鳴') // 安全側（パッシブはexpandedに無いので実質false）
       void hasGensoKyomei
       const gensoMult = 1.0  // 元素共鳴はパッシブ枠のため expanded には入らない。PvEと厳密一致は後日。
@@ -596,6 +602,7 @@ function checkSkip(side, ctx) {
 // 1サイドの行動（メイン＋素早さ追加行動）。相手死亡で true。
 function takeTurn(att, def, ctx) {
   if (checkSkip(att, ctx)) return false
+  att.tenkaiActedThisTurn = false  // 天墜竜閃を撃ったターン（溜め・解放とも）は追加行動を出さないための当ターンフラグ
   doAttack(att, def, false, ctx)
   if (def.hp <= 0) return true
   // 精霊共鳴：同じ精霊召喚を3回使うたび確定追加行動
@@ -610,7 +617,8 @@ function takeTurn(att, def, ctx) {
     att.effectiveSpdForCalc * (att.buffs.spdUp ? att.buffs.spdUp.rate : 1),
     def.effectiveSpdForCalc * (def.buffs.spdUp ? def.buffs.spdUp.rate : 1)
   )
-  if (spiritExtra || (extraRate > 0 && Math.random() * 100 < extraRate)) {
+  // 天墜竜閃を使ったターン（溜め・解放とも）は追加行動を出さない
+  if (!att.tenkaiActedThisTurn && (spiritExtra || (extraRate > 0 && Math.random() * 100 < extraRate))) {
     doAttack(att, def, true, ctx)
     if (def.hp <= 0) return true
   }
