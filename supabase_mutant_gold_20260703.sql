@@ -1,8 +1,14 @@
 -- ============================================================
--- 2026-07-04 出撃系サーバー関数の【最終確定版】(v2)
---  ★★ このファイルが apply_battle_result / apply_dungeon_reward の「正」。
+-- ⚠⚠⚠ 【重要・2026-07-10追記】このファイルの apply_battle_result は「9引数版(p_mutant_boss なし)」で【旧版】。
+--   apply_battle_result の最新の正は supabase_mutant_toggle_fix_20260707.sql（10引数版・p_mutant_boss あり）。
+--   ★このファイル全体を再実行すると、7/07で DROP した9引数版が“復活”し、クライアントの10引数呼び出しと
+--     衝突して「Could not choose the best candidate function」エラーになる（2026-07-10に実際発生）。
+--   → apply_battle_result を入れ直したいときは【必ず supabase_mutant_toggle_fix_20260707.sql を最後に実行】すること。
+--   （このファイルの apply_dungeon_reward / mutant_cleared_areas 追加部分は7/07版に内包・後方互換のため残置のみ）
+-- ============================================================
+-- 2026-07-04 出撃系サーバー関数の【確定版】(v2)  ※apply_battle_result は7/07版に置換済み
 --  ★★ 他のSQL(protect_stats/scarecrow/dungeon_block_sortie等)を流したら、
---  ★★ 必ず「最後に」このファイル全体を再適用すること。
+--  ★★ 必ず「最後に」supabase_mutant_toggle_fix_20260707.sql を再適用すること。
 --  ★★ 旧鉄則「protect_statsを常に最後に」は廃止(2026-07-04の全プレイヤー
 --  ★★ invalid_gold誤検知→EXP凍結事故の原因。protect_statsの
 --  ★★ apply_battle_result は旧Gold上限のため)。
@@ -121,12 +127,8 @@ BEGIN
     END IF;
   END IF;
 
-  -- HP上限検証: クライアントが戦闘直前にキャッシュした実効最大HP(eff_hp_max)を上限として信頼する。
-  --   ★再修練でクラスLVが1に戻るとベースhp_max(profiles.hp_max)が激減するが、装備/博物館/釣り/称号/ペットの
-  --     HP加算は据え置きのため、実効HPがベースの5倍を超えうる。旧式の `hp_max*5` 天井で正当な戦果を invalid_hp で
-  --     弾いていた不具合を修正(2026-07-09)。eff_hp_max未キャッシュ時のみ hp_max*5 にフォールバック。
   IF p_hp_current < 0 OR p_hp_current >
-       GREATEST(COALESCE(v_profile.eff_hp_max, v_profile.hp_max * 5), v_profile.hp_max) THEN
+       LEAST(GREATEST(COALESCE(v_profile.eff_hp_max, v_profile.hp_max), v_profile.hp_max), v_profile.hp_max * 5) THEN
     RETURN json_build_object('ok',false,'reason','invalid_hp'); END IF;
 
   -- ★【変異】ボス初撃破: mutant_cleared_areas に記録(全プレイヤー対象)

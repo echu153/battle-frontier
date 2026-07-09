@@ -114,8 +114,12 @@ BEGIN
     END IF;
   END IF;
 
+  -- HP上限検証: クライアントが戦闘直前にキャッシュした実効最大HP(eff_hp_max)を上限として信頼する。
+  --   ★再修練でクラスLVが1に戻るとベースhp_max(profiles.hp_max)が激減するが、装備/博物館/釣り/称号/ペットの
+  --     HP加算は据え置きのため、実効HPがベースの5倍を超えうる。旧式の `hp_max*5` 天井で正当な戦果を invalid_hp で
+  --     弾いていた不具合を修正(2026-07-09)。eff_hp_max未キャッシュ時のみ hp_max*5 にフォールバック。
   IF p_hp_current < 0 OR p_hp_current >
-       LEAST(GREATEST(COALESCE(v_profile.eff_hp_max, v_profile.hp_max), v_profile.hp_max), v_profile.hp_max * 5) THEN
+       GREATEST(COALESCE(v_profile.eff_hp_max, v_profile.hp_max * 5), v_profile.hp_max) THEN
     RETURN json_build_object('ok',false,'reason','invalid_hp'); END IF;
 
   -- ★【変異】ボス初撃破: 実際に変異ボス(p_mutant_boss=true)を倒したときのみ記録
