@@ -2945,6 +2945,10 @@ export default function Game() {
     const enemySpd = enemy.spd||5
     const playerExtraRate = calcExtraActionRate(playerSpd, enemySpd)
     const enemyExtraRate  = calcExtraActionRate(enemySpd, playerSpd)
+    // 天墜竜閃を使ったターンは追加行動を出さない（溜め・解放どちらのターンも）。
+    //   tenkaiChargeの残ターン判定は解放時にクリアされるためタイミングに依存する。
+    //   「このターンに天墜竜閃を撃ったか」を明示フラグで持ち、確実に追加行動を抑止する。
+    let tenkaiActedThisTurn
     const playerCritRate  = calcCritRate(playerSpd, enemySpd) + passiveCritBonus + (eff.critBonus || 0)
     const enemyCritRate   = Math.max(0, calcCritRate(enemySpd, playerSpd) - (eff.critResist||0) - (playerBuffs.critResist?.turns > 0 ? (playerBuffs.critResist.value||0) : 0))
 
@@ -3108,6 +3112,7 @@ export default function Game() {
         }
         if (cs && cs.skills && !BREEDER_PET_SKILLS.has(cs.skills.name) && playerMp >= mpCost) {
           playerMp -= mpCost
+          if (cs.skills.name === '天墜竜閃') tenkaiActedThisTurn = true  // 溜め/解放どちらでも当ターンは追加行動なし
           const hasGensoKyomei = passiveNames.includes('元素共鳴')
           const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name && cs.skills.type === '魔法攻撃') ? (pe('元素使い')?1.50:1.30) : 1.0
           // 精密照準（再修練）：同スキルを連続使用するたびに与ダメ+10%・クリ率+2%（重複3／別スキルでリセット）
@@ -3656,13 +3661,14 @@ export default function Game() {
         playerBuffs.paralysis.skipRate *= 0.5
       }
       if (!playerSkipped) {
+        tenkaiActedThisTurn = false
         doPlayerAttack(false)
         if (enemyHp <= 0) break
         // 精霊共鳴：確定追加行動（消費）
         const spiritExtra = !!playerBuffs.guaranteedExtra
         if (playerBuffs.guaranteedExtra) playerBuffs.guaranteedExtra = false
-        // 天墜竜閃の溜めターンは追加行動なし
-        if (!(playerBuffs.tenkaiCharge?.turns > 0) && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) {
+        // 天墜竜閃を使ったターン（溜め・解放とも）は追加行動なし
+        if (!tenkaiActedThisTurn && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) {
           doPlayerAttack(true); if (enemyHp <= 0) break
         }
       }

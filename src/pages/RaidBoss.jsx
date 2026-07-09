@@ -184,6 +184,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   let   playerEvasion   = calcEvasionRate(effectiveSpdForCalc, BOSS_SPD) + (eff.evasionBonus || 0)
   let   playerExtraRate = calcExtraActionRate(effectiveSpdForCalc, BOSS_SPD)
   const bossExtraRate   = calcExtraActionRate(BOSS_SPD, effectiveSpdForCalc)
+  // 天墜竜閃を使ったターン（溜め・解放とも）は追加行動を出さない（tenkaiChargeは解放時にクリアされタイミング依存になるため明示フラグで抑止）
+  let tenkaiActedThisTurn
 
   // ボス差別化：物理被ダメ+10%/特殊-10% のボス（雨摩座・ゼルギアス）／ヴァルゼノクは逆
   const isAmaza = bossName === '雨摩座'
@@ -278,6 +280,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           // handled=false（ペット不在/MP不足）は skillUsed=false のまま下の通常攻撃へ
         } else if (cs && cs.skills && playerMp >= mpCost) {
           playerMp -= mpCost
+          if (cs.skills.name === '天墜竜閃') tenkaiActedThisTurn = true  // 溜め/解放どちらでも当ターンは追加行動なし
           const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name) ? (pe('元素使い')?1.50:1.30) : 1.0
           // 精密照準（再修練）：同スキルを連続使用するたびに与ダメ+10%・クリ率+2%（重複3／別スキルでリセット）
           if (hasSeimitsu && pe('魔銃士')) seimitsuStacks = (prevSkillName && prevSkillName === cs.skills.name) ? Math.min(3, seimitsuStacks+1) : 0
@@ -499,7 +502,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     const playerFirst = effectiveSpdForCalc >= BOSS_SPD
     // 追加行動判定：精霊共鳴の確定追加行動(guaranteedExtra)を最優先で消費、無ければ素早さ由来の確率
     const canPlayerExtra = () => {
-      if (playerBuffs.tenkaiCharge?.turns > 0) return false
+      if (tenkaiActedThisTurn) return false  // 天墜竜閃を撃ったターン（溜め・解放とも）は追加行動なし
       if (playerBuffs.guaranteedExtra) { playerBuffs.guaranteedExtra = false; return true }
       return Math.random() * 100 < playerExtraRate
     }
@@ -512,6 +515,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     }
     const doPlayerTurn = () => {
       if (playerSkipped) return
+      tenkaiActedThisTurn = false
       doPlayerAttack()
       if (canPlayerExtra()) doPlayerAttack(true)
     }

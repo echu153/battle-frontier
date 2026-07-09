@@ -116,6 +116,8 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
   const enemySpd = enemy.spd || 5
   const playerExtraRate = calcExtraActionRate(playerSpd, enemySpd)
   const enemyExtraRate  = calcExtraActionRate(enemySpd, playerSpd)
+  // 天墜竜閃を使ったターン（溜め・解放とも）は追加行動を出さない（tenkaiChargeは解放時にクリアされタイミング依存になるため明示フラグで抑止）
+  let tenkaiActedThisTurn
   const playerCritRate  = calcCritRate(playerSpd, enemySpd) + (eff.critBonus || 0)
   // 黒縄: 敵クリティカル率ブースト（紋章のクリティカル抵抗で減らせる）
   const enemyCritRate   = Math.max(0, calcCritRate(enemySpd, playerSpd) + (mods.critBoost || 0) - (eff.critResist || 0))
@@ -208,6 +210,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
         }
       } else if (cs && cs.skills && playerMp >= mpCost) {
         playerMp -= mpCost
+        if (cs.skills.name === '天墜竜閃') tenkaiActedThisTurn = true  // 溜め/解放どちらでも当ターンは追加行動なし
         const hasGensoKyomei = passiveNames.includes('元素共鳴')
         const gensoMult = (hasGensoKyomei && prevSkillName && prevSkillName !== cs.skills.name && cs.skills.type === '魔法攻撃') ? (pe('元素使い')?1.50:1.30) : 1.0
         if (hasSeimitsu && pe('魔銃士')) seimitsuStacks = (prevSkillName && prevSkillName === cs.skills.name) ? Math.min(3, seimitsuStacks+1) : 0
@@ -542,11 +545,12 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       playerSkipped = true; playerBuffs.paralysis.skipRate *= 0.5
     }
     if (!playerSkipped) {
+      tenkaiActedThisTurn = false
       doPlayerAttack(false)
       if (enemyHp <= 0) break
       const spiritExtra = !!playerBuffs.guaranteedExtra  // 精霊共鳴の確定追加行動
       if (playerBuffs.guaranteedExtra) playerBuffs.guaranteedExtra = false
-      if (!(playerBuffs.tenkaiCharge?.turns > 0) && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) { doPlayerAttack(true); if (enemyHp <= 0) break }
+      if (!tenkaiActedThisTurn && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) { doPlayerAttack(true); if (enemyHp <= 0) break }
     }
 
     // 敵のターン
