@@ -20,6 +20,8 @@
 --      EXP:   同様に v_hard_exp(=max(上限×3, 100)) 超のみ凍結。それ未満はクランプ。
 --      負数はクライアントバグ扱いで0にクランプ(凍結しない)。
 --   ③ クランプが起きたら戻り値に gold_clamped / exp_clamped=true を返す(監視・調整用)。
+--   ④ 開発アカウント(is_admin)は検知対象外(自動出撃[開発]等の検証用)。
+--      フラグ/凍結/棄却を一切せず、値のみ上限にクランプ。is_adminは自己昇格防止済み=悪用不可。
 --
 --  ★★ これが apply_battle_result の【最新の正】。protect_stats/scarecrow 等を
 --     再適用したら supabase_mutant_toggle_fix_20260707.sql ではなく「このファイル」を
@@ -61,6 +63,7 @@ DECLARE
   v_level_ups integer := 0;
   v_boss_golds   integer[] := ARRAY[50, 250, 1000, 2500, 6000, 12500, 25000];
   v_normal_golds integer[] := ARRAY[30,  60,  120,  200,  400,   600,   800];  -- ★出撃ゴールド再配分(2026-07-03)
+  v_is_admin boolean := false;
   v_mutant_eligible boolean := false;
   v_mutant_first_clear boolean := false;
   v_alch_unlocked boolean := false;
@@ -80,6 +83,11 @@ BEGIN
   END IF;
 
   PERFORM set_config('app.allow_stat_change','on',true);
+
+  -- ★開発アカウント(is_admin)は不正検知の対象外。自動出撃[開発]等の検証で
+  --   フラグ/凍結/棄却されないよう、以降の検知を全てスキップする(値は上限にクランプするのみ)。
+  --   ※is_adminは自己昇格防止(protect_is_admin)済みのため悪用リスクなし。
+  v_is_admin := COALESCE(v_profile.is_admin, false);
 
   SELECT lv INTO v_class_lv FROM class_levels
     WHERE player_id = v_uid AND class_name = v_profile.class;
@@ -111,7 +119,7 @@ BEGIN
 
   -- ★Gold検証(3段): 正規=そのまま / モデルズレ=上限にクランプ(無罰) / 悪質=凍結+棄却
   v_hard_gold := GREATEST(v_max_gold * 3, 100000);
-  IF p_claimed_gold > v_hard_gold THEN
+  IF NOT v_is_admin AND p_claimed_gold > v_hard_gold THEN
     UPDATE profiles SET suspicious_flag=true,
       exp_frozen_until=GREATEST(COALESCE(exp_frozen_until,now()), now()+interval'12 hours')
     WHERE id=v_uid;
@@ -131,7 +139,7 @@ BEGIN
     IF COALESCE(v_profile.char_lv, 1) < 100 THEN v_max_exp := CEIL(v_max_exp * 1.5); END IF;
 
     v_hard_exp := GREATEST(v_max_exp * 3, 100);
-    IF p_claimed_exp > v_hard_exp THEN
+    IF NOT v_is_admin AND p_claimed_exp > v_hard_exp THEN
       UPDATE profiles SET suspicious_flag=true,
         exp_frozen_until=GREATEST(COALESCE(exp_frozen_until,now()), now()+interval'12 hours')
       WHERE id=v_uid;
