@@ -11,7 +11,7 @@
 //    さらに最終倍率 dmgMult で全体量を調整。これにより防御特化が効く。
 //    ※ executeSkill に渡すステ自体は縮小しない＝**回復(ヒール/吸収)量は満額のまま**。
 //  ・回復量は減少なし（×1.0）               … PVP.healMult
-//  ・クリティカル率・回避率は素早さ由来の値を ×1.5（PVP.spdBonusMult＝上限UP）。フラット加算には掛けない。
+//  ・クリティカル率・回避率はどちらも「相手との素早さ差」で決まり、相手の2倍の素早さで上限。素早さ由来ぶんに ×1.5（PVP.spdBonusMult＝上限20%→30%）。フラット加算には掛けない。
 //  ・素早さが速い方が先攻。HP0で決着。50ターンで強制終了＝与えたダメージ総量が多い方の勝ち（同量は引分）。
 //
 // スキルは各自の「出撃」スキルセットを反映（呼び出し側で sortie を渡す）。
@@ -27,7 +27,6 @@ import {
   calcEvasionRate,
   BREEDER_PET_SKILLS,
   calcExtraActionRate,
-  calcCritRate,
   calcDefReduction,
   applyEquipmentEffects,
   consumeAilmentShield,
@@ -44,7 +43,7 @@ const PVP = {
   spdBonusMult: 1.5,  // 対人固有：素早さ由来の回避率/クリティカル率を1.5倍（上限UP：回避20→30% / クリ素早さ補正20→30%）
 }
 // PvP固有の素早さ補正：素早さ由来の「回避率」「クリティカル率」を ×PVP.spdBonusMult（=1.5）。
-// 素の値（calcCritRate / calcEvasionRate）にだけ掛ける＝上限が1.5倍に上がる。
+// どちらも相手との素早さ差(calcEvasionRate)から算出＝相手の2倍の素早さで上限（通常20%→PvP30%）。
 // フラットな装備/パッシブ加算（critBonus/evasionBonus/心眼/隠身 等）には掛けない。
 
 // 1プレイヤー分の戦闘状態を組み立てる。
@@ -143,7 +142,8 @@ function buildSide(input, key, hpBonus = 0) {
     passiveMatkMult, passiveMpCostMult, passiveMatkMultTenki, passiveHitBonus, passiveHealReflect,
     // 速さ由来の命中・クリ
     playerHitBonus: (eff.hitBonus || 0) + passiveHitBonus,
-    baseCritRate: calcCritRate(effectiveSpdForCalc) * PVP.spdBonusMult + passiveCritBonus + (eff.critBonus || 0),
+    // クリ率の素早さ由来ぶんは doAttack で相手との素早さ差から算出（回避と同式）。ここはフラット加算のみ。
+    critFlatBonus: passiveCritBonus + (eff.critBonus || 0),
   }
 }
 
@@ -192,14 +192,18 @@ function doAttack(att, def, isExtra, ctx) {
 
   const prefix = isExtra ? `${profile.username} の追加攻撃！ ` : `${turn}ターン目: ${profile.username} の`
 
-  // クリティカル率（防御側のクリ抵抗で減算）／回避率
-  const critRate = Math.max(0, att.baseCritRate - (def.eff.critResist || 0) - (defBuffs.critResist?.turns > 0 ? (defBuffs.critResist.value || 0) : 0))
+  // 素早さの実効値。クリ率・回避率とも「相手との素早さ差」で決まり、相手の2倍の素早さで上限（回避と同式）。
+  const atkSpdEff = pSpd
+  const defSpdEff = def.effectiveSpdForCalc * (defBuffs.spdUp ? defBuffs.spdUp.rate : 1) * (defBuffs.spdDown ? defBuffs.spdDown.rate : 1)
+
+  // クリティカル率：攻撃側が防御側より速いほど上昇・防御側の2倍で上限（素早さ由来ぶんに×1.5）。
+  //   フラット加算(critFlatBonus=心眼/宝石等)は別枠。防御側のクリ抵抗で減算。
+  const critSpdRate = calcEvasionRate(atkSpdEff, defSpdEff) * PVP.spdBonusMult
+  const critRate = Math.max(0, critSpdRate + att.critFlatBonus - (def.eff.critResist || 0) - (defBuffs.critResist?.turns > 0 ? (defBuffs.critResist.value || 0) : 0))
   const isCrit = Math.random() * 100 < critRate
   const critMult = isCrit ? (1.5 + (eff.critDmg || 0) + att.passiveCritDmgBonus) : 1.0
 
-  // 防御側の回避率
-  const defSpdEff = def.effectiveSpdForCalc * (defBuffs.spdUp ? defBuffs.spdUp.rate : 1) * (defBuffs.spdDown ? defBuffs.spdDown.rate : 1)
-  const atkSpdEff = pSpd
+  // 防御側の回避率（攻撃側より速いほど上昇・攻撃側の2倍で上限）
   const defEvasion = calcEvasionRate(defSpdEff, atkSpdEff) * PVP.spdBonusMult + (def.eff.evasionBonus || 0) + (defBuffs.evasion?.turns > 0 ? defBuffs.evasion.rate * 100 : 0) + (def.hasOnmi ? 5 : 0)
   const buffHitBonus = attBuffs.hitBonus?.turns > 0 ? attBuffs.hitBonus.value : 0
 
