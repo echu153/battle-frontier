@@ -7,6 +7,7 @@
 // ============================================================
 import { supabase } from '../supabase'
 import { calcEffectiveStats, calcEffectiveTotal } from './stats'
+import { computeClassBaseStats } from '../pages/Game'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 
 // 1プレイヤー分の戦闘ロードアウトを読み込む。
@@ -45,8 +46,8 @@ export async function loadLoadout(playerId, isSelf) {
     if (em?.alloc && Object.keys(em.alloc).length > 0) emblemAlloc = em.alloc
   } catch { /* 紋章未導入時は無視 */ }
 
-  // PvPスキルセット（無ければ出撃を流用）
-  let skillSets
+  // PvPスキルセット（無ければ出撃を流用）＋クラスレベル（PvPクラスのステ再計算用）
+  let skillSets, classLevels
   if (isSelf) {
     const { data: ss } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', playerId).order('slot_order')
     const all = ss || []
@@ -54,19 +55,26 @@ export async function loadLoadout(playerId, isSelf) {
     // PvPセットにアクティブスキルが無ければ出撃を流用（パッシブのみ/空だと全部通常攻撃になるため。他セットと同方針）
     const pvpHasActive = pvp.some(r => r.skills?.type !== 'パッシブ')
     skillSets = pvpHasActive ? pvp : all.filter(r => (r.set_type || 'sortie') === 'sortie')
+    const { data: cl } = await supabase.from('class_levels').select('class_name, lv').eq('player_id', playerId)
+    classLevels = cl || []
   } else {
     const { data: rpc } = await supabase.rpc('pvp_get_skillsets', { p_target: playerId })
     if (rpc?.error) throw new Error(rpc.error)
     skillSets = rpc?.skill_sets || []
+    classLevels = rpc?.class_levels || []  // SECURITY DEFINER RPCが相手のclass_levelsも返す（RLS回避）
   }
 
   const profileWithPet = { ...profile, petStat, petCharm, activePet: pet || null, emblemAlloc }
   // PvP専用クラス: profiles.pvp_class があり、かつ実際に「PvPスキルセット」を使う場合のみ、
-  //   そのクラスとして戦う（＝転職したときと同じ扱い）。
-  //   ステはクラス非依存(calcEffectiveStats)なので変更不要＝ステはそのまま、再修練は retraining[pvp_class] の実値。
+  //   そのクラスとして戦う（＝そのクラスに転職したときと同じ扱い）。
   //   ※ pvpセットが空でsortie流用のときは差し替えない（クラスとスキルの不整合を防ぐ）。
   const usingPvpSet = (skillSets || []).some(r => (r.set_type || 'sortie') === 'pvp')
-  if (profile.pvp_class && usingPvpSet) profileWithPet.class = profile.pvp_class
+  if (profile.pvp_class && usingPvpSet) {
+    profileWithPet.class = profile.pvp_class
+    // 基礎ステ列(hp_max/atk/...)を「そのクラスに転職した値」に再計算して上書き。
+    //   calcEffectiveStats が装備/宝石/紋章/ペット等をこの上に乗せる。再修練は retraining[pvp_class] を内部参照。
+    Object.assign(profileWithPet, computeClassBaseStats(profile, classLevels, profile.pvp_class))
+  }
   const eff = calcEffectiveStats(profileWithPet, eq || [], prof || [], titleBonus)
   return { eff, equipment: eq || [], skillSets, proficiency: prof || [], profile: profileWithPet, playerItem: null }
 }

@@ -475,6 +475,46 @@ const calcLvBonus = (className, upToLevel) => {
   }
   return bonus
 }
+
+// ============================================================
+// 指定クラスを「現在クラス」として基礎ステ列(hp_max/atk/...)を再計算する共通関数。
+//  ＝そのクラスに転職したときの値。fetchProfile（現在クラス）と 対人戦(pvpLoadout・pvp_class)で共用。
+//  profileData: { retraining, stat_point_spent } を参照 / classLevels: [{class_name, lv}]
+//  ロジックは fetchProfile のインライン再計算と厳密一致させること（ズレ厳禁）。
+// ============================================================
+export const computeClassBaseStats = (profileData, classLevels, className) => {
+  const statKeys = ['hp_max','mp_max','atk','def','matk','mdef','spd']
+  const base = getBaseClassStats(className)
+  const allClassBonus = Object.fromEntries(statKeys.map(k => [k, 0]))
+  const cl = Array.isArray(classLevels) ? classLevels : []
+  for (const clRow of cl) {
+    const b = calcLvBonus(clRow.class_name, clRow.lv)
+    const isCurrentClass = clRow.class_name === className
+    const isInitialClass = INITIAL_CLASSES.includes(clRow.class_name)
+    const retrainCount = (profileData.retraining || {})[clRow.class_name] || 0
+    // 現在クラス: 100%+再修練★×10% / 非現在・初期クラス: 50%+★×30% / 非現在・通常: min(100%, 50%+★×10%)
+    const rate = isCurrentClass
+      ? (1.0 + retrainCount * 0.1)
+      : isInitialClass
+        ? (0.5 + retrainCount * 0.3)
+        : Math.min(1.0, 0.5 + retrainCount * 0.1)
+    for (const k of statKeys) allClassBonus[k] += Math.floor((b[k] || 0) * rate)
+  }
+  // キャラクターボーナス: 全クラス合計のレベルアップ数に応じて 1LVごとHP+1・5LVごとMP+1
+  const totalLvUps = cl.reduce((s, r) => s + Math.max(0, (r.lv || 1) - 1), 0)
+  allClassBonus.hp_max += totalLvUps
+  allClassBonus.mp_max += Math.floor(totalLvUps / 5)
+  const spent = profileData.stat_point_spent || {}
+  return {
+    hp_max: base.hp_max + allClassBonus.hp_max + (spent.hp  ||0)*10,
+    mp_max: base.mp_max + allClassBonus.mp_max + (spent.mp  ||0)*5,
+    atk:    base.atk   + allClassBonus.atk    + (spent.atk ||0),
+    def:    base.def   + allClassBonus.def    + (spent.def  ||0),
+    matk:   base.matk  + allClassBonus.matk   + (spent.matk||0),
+    mdef:   base.mdef  + allClassBonus.mdef   + (spent.mdef||0),
+    spd:    base.spd   + allClassBonus.spd    + (spent.spd  ||0),
+  }
+}
 const getRetrainingStars = (className, retraining) => {
   const count = (retraining || {})[className] || 0
   return '★'.repeat(count)
@@ -2098,43 +2138,12 @@ export default function Game() {
     setHasDragonKnightProof(!!dkCheck)
     setHasBreederProof(!!bpCheck)
     // クラス成長分を毎回再計算してステータスを上書き（JOB_GROWTH変更が全員に反映される）
-    // 全クラスのレベルアップ分を合算する（転職で積み上げたステータスも反映）
-    const _base = getBaseClassStats(data.class)
-    const _statKeys = ['hp_max','mp_max','atk','def','matk','mdef','spd']
-    const _allClassBonus = Object.fromEntries(_statKeys.map(k => [k, 0]))
-    for (const clRow of (Array.isArray(cl) ? cl : [])) {
-      const b = calcLvBonus(clRow.class_name, clRow.lv)
-      const isCurrentClass = clRow.class_name === data.class
-      const isInitialClass = INITIAL_CLASSES.includes(clRow.class_name)
-      const retrainCount = (data.retraining || {})[clRow.class_name] || 0
-      // 現在クラス: 100% + 再修練★×10%（そのクラスでプレイ中のみ成長分が増加）
-      // 非現在・通常クラス: 50% + 再修練★×10%（最大100%）
-      // 非現在・初期クラス: 50% + 再修練★×30%（キャップなし。初期クラスの再修練価値を強化）
-      const rate = isCurrentClass
-        ? (1.0 + retrainCount * 0.1)
-        : isInitialClass
-          ? (0.5 + retrainCount * 0.3)
-          : Math.min(1.0, 0.5 + retrainCount * 0.1)
-      for (const k of _statKeys) _allClassBonus[k] += Math.floor((b[k] || 0) * rate)
-    }
-    // キャラクターボーナス: 全クラス合計のレベルアップ数に応じて 1LVごとにHP+1・5LVごとにMP+1
-    const _totalLvUps = (Array.isArray(cl) ? cl : []).reduce((s, r) => s + Math.max(0, (r.lv || 1) - 1), 0)
-    _allClassBonus.hp_max += _totalLvUps
-    _allClassBonus.mp_max += Math.floor(_totalLvUps / 5)
-    const _spent = data.stat_point_spent || {}
-    const _computed = {
-      hp_max: _base.hp_max + _allClassBonus.hp_max + (_spent.hp  ||0)*10,
-      mp_max: _base.mp_max + _allClassBonus.mp_max + (_spent.mp  ||0)*5,
-      atk:    _base.atk   + _allClassBonus.atk    + (_spent.atk ||0),
-      def:    _base.def   + _allClassBonus.def    + (_spent.def  ||0),
-      matk:   _base.matk  + _allClassBonus.matk   + (_spent.matk||0),
-      mdef:   _base.mdef  + _allClassBonus.mdef   + (_spent.mdef||0),
-      spd:    _base.spd   + _allClassBonus.spd    + (_spent.spd  ||0),
-    }
+    // 全クラスのレベルアップ分を合算する（転職で積み上げたステータスも反映）。対人戦(pvpLoadout)と共通関数。
+    const _computed = computeClassBaseStats(data, cl, data.class)
     // exp_nextも現在のLVから再計算して同期
     _computed.exp_next = calcExpNext(data.lv, data.is_admin)
     // DBにも書き戻す（Profile・Rankingページが正しい値を読めるようにする）
-    const _needsUpdate = [..._statKeys, 'exp_next'].some(k => data[k] !== _computed[k])
+    const _needsUpdate = ['hp_max','mp_max','atk','def','matk','mdef','spd','exp_next'].some(k => data[k] !== _computed[k])
     if (_needsUpdate) {
       await supabase.from('profiles').update(_computed).eq('id', user.id)
     }
