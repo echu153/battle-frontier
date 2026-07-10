@@ -78,3 +78,33 @@ BEGIN
 END;
 $$;
 GRANT EXECUTE ON FUNCTION pvp_get_skillsets(uuid) TO authenticated;
+
+-- ============================================================
+-- pvp_list_meta(p_ids): 相手一覧（組み手/対人戦の候補）用のメタ情報を一括取得。
+--  各プレイヤーの has_pvp_active（PvPセットにアクティブスキルがあるか）と class_levels を返す。
+--  skill_sets/class_levels はRLS保護のためSECURITY DEFINERで読む。
+--  pvp_class / stat_point_spent / retraining は profiles を直読みできるのでクライアント側で取得。
+-- ============================================================
+CREATE OR REPLACE FUNCTION pvp_list_meta(p_ids uuid[])
+RETURNS json
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE v_result json;
+BEGIN
+  IF auth.uid() IS NULL THEN RETURN json_build_object('error', '未認証です'); END IF;
+  SELECT COALESCE(json_agg(json_build_object(
+    'player_id', p.id,
+    'has_pvp_active', EXISTS(
+      SELECT 1 FROM skill_sets s JOIN skills sk ON sk.id = s.skill_id
+      WHERE s.player_id = p.id AND s.set_type = 'pvp' AND COALESCE(sk.type, '') <> 'パッシブ'
+    ),
+    'class_levels', (
+      SELECT COALESCE(json_agg(json_build_object('class_name', cl.class_name, 'lv', cl.lv)), '[]'::json)
+      FROM class_levels cl WHERE cl.player_id = p.id
+    )
+  )), '[]'::json)
+  INTO v_result
+  FROM profiles p WHERE p.id = ANY(p_ids);
+  RETURN json_build_object('ok', true, 'meta', v_result);
+END;
+$$;
+GRANT EXECUTE ON FUNCTION pvp_list_meta(uuid[]) TO authenticated;

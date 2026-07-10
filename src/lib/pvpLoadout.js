@@ -96,19 +96,23 @@ export async function loadTotalCandidates(excludeId) {
 
   const { data } = await supabase
     .from('profiles')
-    .select('id, username, lv, char_lv, class, hp_max, mp_max, atk, def, matk, mdef, spd, avatar_url, retraining, museum_atk, museum_def, museum_matk, museum_mdef, museum_spd, museum_hp, museum_mp, fishing_atk, fishing_def, fishing_matk, fishing_mdef, fishing_spd, fishing_hp, fishing_mp, ability_title_id')
+    .select('id, username, lv, char_lv, class, pvp_class, stat_point_spent, hp_max, mp_max, atk, def, matk, mdef, spd, avatar_url, retraining, museum_atk, museum_def, museum_matk, museum_mdef, museum_spd, museum_hp, museum_mp, fishing_atk, fishing_def, fishing_matk, fishing_mdef, fishing_spd, fishing_hp, fishing_mp, ability_title_id')
     .order('char_lv', { ascending: false })
     .limit(200)
   const list = (data || []).filter(p => !excluded.has(p.id) && p.id !== excludeId)
   const ids = list.map(p => p.id)
   if (ids.length === 0) return []
 
-  const [{ data: eqData }, { data: profData }, { data: petData }] = await Promise.all([
+  const [{ data: eqData }, { data: profData }, { data: petData }, { data: metaRes }] = await Promise.all([
     supabase.from('player_equipment').select('*, weapons(*)').in('player_id', ids).eq('equipped', true),
     supabase.from('proficiency').select('player_id, equipment_id, prof_lv').in('player_id', ids),
     supabase.from('pets').select('owner_id, species, level, evolved, charm_id').in('owner_id', ids).eq('is_active', true),
+    supabase.rpc('pvp_list_meta', { p_ids: ids }),  // 相手のPvPアクティブ有無＆class_levels（RLS回避）
   ])
   const eqs = eqData || [], profs = profData || []
+  // 対人戦メタ: player_id → { has_pvp_active, class_levels }
+  const metaMap = {}
+  for (const m of (metaRes?.meta || [])) metaMap[m.player_id] = m
 
   const petStatMap = {}, charmMap = {}
   for (const pet of (petData || [])) petStatMap[pet.owner_id] = petPlayerBonus(pet)
@@ -133,9 +137,14 @@ export async function loadTotalCandidates(excludeId) {
     const eq = eqs.filter(e => e.player_id === p.id)
     const pf = profs.filter(x => x.player_id === p.id)
     const tb = p.ability_title_id ? titleMap[p.ability_title_id] : null
-    const pProfile = { ...p, petStat: petStatMap[p.id] || null, petCharm: charmMap[p.id] || null }
+    // 対人戦で実際に戦うクラス＝pvp_class設定あり かつ PvPセットにアクティブスキルあり のとき。
+    //  そのとき基礎ステを「そのクラスに転職した値」に再計算（loadLoadoutの戦闘時と同一ロジック）。
+    const m = metaMap[p.id] || {}
+    const effClass = (p.pvp_class && m.has_pvp_active) ? p.pvp_class : p.class
+    const baseStats = effClass !== p.class ? computeClassBaseStats(p, m.class_levels || [], effClass) : null
+    const pProfile = { ...p, ...(baseStats || {}), class: effClass, petStat: petStatMap[p.id] || null, petCharm: charmMap[p.id] || null }
     return {
-      id: p.id, username: p.username, char_lv: p.char_lv || p.lv, class: p.class, avatar_url: p.avatar_url,
+      id: p.id, username: p.username, char_lv: p.char_lv || p.lv, class: effClass, avatar_url: p.avatar_url,
       _total: calcEffectiveTotal(pProfile, eq, pf, tb),
     }
   }).sort((a, b) => b._total - a._total)
