@@ -12,7 +12,8 @@ import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 
 // 1プレイヤー分の戦闘ロードアウトを読み込む。
 //  isSelf=true なら skill_sets を直接、false なら RPC(pvp_get_skillsets) で取得。
-export async function loadLoadout(playerId, isSelf) {
+//  opts.previewClass: 指定クラスとして eff を計算（スキル画面のステ確認用。usingPvpSetゲートを無視して強制再計算）。
+export async function loadLoadout(playerId, isSelf, opts = {}) {
   const [{ data: profile }, { data: eq }, { data: prof }, { data: pets }] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', playerId).single(),
     supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', playerId).eq('equipped', true),
@@ -69,11 +70,14 @@ export async function loadLoadout(playerId, isSelf) {
   //   そのクラスとして戦う（＝そのクラスに転職したときと同じ扱い）。
   //   ※ pvpセットが空でsortie流用のときは差し替えない（クラスとスキルの不整合を防ぐ）。
   const usingPvpSet = (skillSets || []).some(r => (r.set_type || 'sortie') === 'pvp')
-  if (profile.pvp_class && usingPvpSet) {
-    profileWithPet.class = profile.pvp_class
+  //  ・opts.previewClass 指定時は無条件でそのクラスとして計算（ステ確認用）。
+  //  ・通常は pvp_class があり実際にPvPセットを使うときのみ差し替え（空でsortie流用時は不整合防止のため据え置き）。
+  const overrideClass = opts.previewClass || (profile.pvp_class && usingPvpSet ? profile.pvp_class : null)
+  if (overrideClass) {
+    profileWithPet.class = overrideClass
     // 基礎ステ列(hp_max/atk/...)を「そのクラスに転職した値」に再計算して上書き。
-    //   calcEffectiveStats が装備/宝石/紋章/ペット等をこの上に乗せる。再修練は retraining[pvp_class] を内部参照。
-    Object.assign(profileWithPet, computeClassBaseStats(profile, classLevels, profile.pvp_class))
+    //   calcEffectiveStats が装備/宝石/紋章/ペット等をこの上に乗せる。再修練は retraining[overrideClass] を内部参照。
+    Object.assign(profileWithPet, computeClassBaseStats(profile, classLevels, overrideClass))
   }
   const eff = calcEffectiveStats(profileWithPet, eq || [], prof || [], titleBonus)
   return { eff, equipment: eq || [], skillSets, proficiency: prof || [], profile: profileWithPet, playerItem: null }

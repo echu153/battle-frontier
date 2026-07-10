@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { RETRAINING_ENHANCEMENTS } from './Game'
+import { loadLoadout } from '../lib/pvpLoadout'
 
 const TYPE_COLORS = {
   '物理攻撃': '#ffcc00',
@@ -39,8 +40,25 @@ export default function Skills() {
   const [bulkIds, setBulkIds] = useState([])                // 一括反映で選んだスキルID（選択順）
   const [pvpClass, setPvpClass] = useState(null)            // 対人戦用クラス（null=現クラスで戦う）
   const [ownedClasses, setOwnedClasses] = useState([])      // 就いたことのあるクラス [{class_name, lv}]
+  const [pvpEff, setPvpEff] = useState(null)                // 対人戦で戦うときの実効ステ（プレビュー）
+  const [pvpEffLoading, setPvpEffLoading] = useState(false)
 
   useEffect(() => { fetchAll() }, [])
+
+  // 対人戦タブのとき、実際に戦うときの実効ステ(HP/MP/ABCDS)を戦闘と同じ計算で算出して表示。
+  //  loadLoadout(previewClass) は computeClassBaseStats→calcEffectiveStats を通す＝実戦値と一致。
+  useEffect(() => {
+    if (!profile || selectedSet !== 'pvp') { setPvpEff(null); return }
+    let cancelled = false
+    const ec = pvpClass || profile.class
+    setPvpEffLoading(true)
+    loadLoadout(profile.id, true, { previewClass: ec })
+      .then(res => { if (!cancelled) setPvpEff(res?.eff || null) })
+      .catch(() => { if (!cancelled) setPvpEff(null) })
+      .finally(() => { if (!cancelled) setPvpEffLoading(false) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id, selectedSet, pvpClass])
 
   // 編集中クラス＝対人戦タブでPvPクラスが設定されていればそれ、それ以外は現クラス。
   //  このクラスのスキルを候補に出し、セット可否・再修練表示・自動習得もこのクラス基準で行う。
@@ -310,9 +328,39 @@ export default function Skills() {
               </select>
               <span style={{ color:'#557799', fontSize:'10px' }}>
                 {pvpClass
-                  ? `${pvpClass}として戦う（再修練 ${(profile.retraining || {})[pvpClass] || 0}/5・ステはそのまま）`
+                  ? `${pvpClass}として戦う（再修練 ${(profile.retraining || {})[pvpClass] || 0}/5）`
                   : '出撃と同じ現在のクラスで戦う'}
               </span>
+            </div>
+          )}
+          {/* 対人戦で実際に戦うときの実効ステ（装備/宝石/紋章/ペット/称号込み・戦闘と同じ計算）。 */}
+          {selectedSet === 'pvp' && (
+            <div style={{ border:'1px solid #204a66', background:'#00101e', padding:'8px', marginBottom:'8px' }}>
+              <div style={{ color:'#8ad0ff', fontSize:'10px', marginBottom:'6px' }}>
+                ⚔ この設定で対人戦に出るときのステータス
+                <span style={{ color:'#557799' }}>（{pvpClass || profile.class}・装備込み）</span>
+                {pvpEffLoading && <span style={{ color:'#557799', marginLeft:'6px' }}>計算中…</span>}
+              </div>
+              {pvpEff ? (
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(72px, 1fr))', gap:'4px' }}>
+                  {[
+                    { k:'HP',   v:pvpEff.hp_max, c:'#66dd88' },
+                    { k:'MP',   v:pvpEff.mp_max, c:'#4488ff' },
+                    { k:'攻撃', v:pvpEff.atk,    c:'#ffcc00' },
+                    { k:'防御', v:pvpEff.def,    c:'#88ccff' },
+                    { k:'特攻', v:pvpEff.matk,   c:'#cc88ff' },
+                    { k:'特防', v:pvpEff.mdef,   c:'#88ffcc' },
+                    { k:'素早さ', v:pvpEff.spd,  c:'#ffaa66' },
+                  ].map(s => (
+                    <div key={s.k} style={{ border:'1px solid #123', background:'#000814', padding:'4px 6px', textAlign:'center' }}>
+                      <div style={{ color:'#557799', fontSize:'9px' }}>{s.k}</div>
+                      <div style={{ color:s.c, fontSize:'13px' }}>{Math.round(s.v || 0).toLocaleString()}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ color:'#557799', fontSize:'10px' }}>{pvpEffLoading ? '' : 'ステータスを取得できませんでした。'}</div>
+              )}
             </div>
           )}
           <div style={{ color:'#336688', fontSize:'10px', marginBottom:'8px', lineHeight:'1.6' }}>
