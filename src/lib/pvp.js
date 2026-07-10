@@ -11,8 +11,8 @@
 //    さらに最終倍率 dmgMult で全体量を調整。これにより防御特化が効く。
 //    ※ executeSkill に渡すステ自体は縮小しない＝**回復(ヒール/吸収)量は満額のまま**。
 //  ・回復量は減少なし（×1.0）               … PVP.healMult
-//  ・クリティカル率・回避率はPvEと同じ（素早さ由来の素の値。PvP固有の補正は無し）
-//  ・素早さが速い方が先攻。HP0で決着。ターン上限到達はHP割合が高い方の勝ち（同率は引分）。
+//  ・クリティカル率・回避率は素早さ由来の値を ×1.5（PVP.spdBonusMult＝上限UP）。フラット加算には掛けない。
+//  ・素早さが速い方が先攻。HP0で決着。50ターンで強制終了＝与えたダメージ総量が多い方の勝ち（同量は引分）。
 //
 // スキルは各自の「出撃」スキルセットを反映（呼び出し側で sortie を渡す）。
 // 報酬・永続化は無し（呼び出し側で勝敗のみ一時記録）。
@@ -40,10 +40,12 @@ const PVP = {
   ratioAtkMult: 0.25, // defScale で使う攻撃値の縮小率（小さいほど防御が効く＝防御レバレッジ大）
   dmgMult: 0.125,     // 最終ダメージ倍率（全体量の調整つまみ。0.25→0.125で全体ダメージ半減）
   healMult: 1.0,      // 回復量は減少なし
-  turnCap: 60,        // ターン上限
+  turnCap: 50,        // ターン上限（対人は50ターンで強制終了。戦争は別途WAR_TURN_CAPで上書き）
+  spdBonusMult: 1.5,  // 対人固有：素早さ由来の回避率/クリティカル率を1.5倍（上限UP：回避20→30% / クリ素早さ補正20→30%）
 }
-// PvP固有の素早さ補正（旧：クリ率・回避率を×1.5）は撤廃。
-// クリ率・回避率はPvEと同じく素早さ由来の素の値（calcCritRate / calcEvasionRate）をそのまま使う。
+// PvP固有の素早さ補正：素早さ由来の「回避率」「クリティカル率」を ×PVP.spdBonusMult（=1.5）。
+// 素の値（calcCritRate / calcEvasionRate）にだけ掛ける＝上限が1.5倍に上がる。
+// フラットな装備/パッシブ加算（critBonus/evasionBonus/心眼/隠身 等）には掛けない。
 
 // 1プレイヤー分の戦闘状態を組み立てる。
 //  input: { eff, equipment, skillSets, proficiency, profile, playerItem }
@@ -124,6 +126,7 @@ function buildSide(input, key, hpBonus = 0) {
     // 状態
     hp: eff.hp_max,
     mp: eff.mp_max,
+    dmgDealt: 0,  // 与えたダメージ総量（50ターン到達＝強制終了時の勝敗判定に使用）
     buffs: {},
     skillIndex: 0,
     prevSkillName: null,
@@ -140,7 +143,7 @@ function buildSide(input, key, hpBonus = 0) {
     passiveMatkMult, passiveMpCostMult, passiveMatkMultTenki, passiveHitBonus, passiveHealReflect,
     // 速さ由来の命中・クリ
     playerHitBonus: (eff.hitBonus || 0) + passiveHitBonus,
-    baseCritRate: calcCritRate(effectiveSpdForCalc) + passiveCritBonus + (eff.critBonus || 0),
+    baseCritRate: calcCritRate(effectiveSpdForCalc) * PVP.spdBonusMult + passiveCritBonus + (eff.critBonus || 0),
   }
 }
 
@@ -197,7 +200,7 @@ function doAttack(att, def, isExtra, ctx) {
   // 防御側の回避率
   const defSpdEff = def.effectiveSpdForCalc * (defBuffs.spdUp ? defBuffs.spdUp.rate : 1) * (defBuffs.spdDown ? defBuffs.spdDown.rate : 1)
   const atkSpdEff = pSpd
-  const defEvasion = calcEvasionRate(defSpdEff, atkSpdEff) + (def.eff.evasionBonus || 0) + (defBuffs.evasion?.turns > 0 ? defBuffs.evasion.rate * 100 : 0) + (def.hasOnmi ? 5 : 0)
+  const defEvasion = calcEvasionRate(defSpdEff, atkSpdEff) * PVP.spdBonusMult + (def.eff.evasionBonus || 0) + (defBuffs.evasion?.turns > 0 ? defBuffs.evasion.rate * 100 : 0) + (def.hasOnmi ? 5 : 0)
   const buffHitBonus = attBuffs.hitBonus?.turns > 0 ? attBuffs.hitBonus.value : 0
 
   // 与ダメージを防御側HPへ適用するヘルパ
@@ -208,14 +211,17 @@ function doAttack(att, def, isExtra, ctx) {
       const cut = def.petBuffs.reduceTurns > 0 ? (1 - def.petBuffs.reduce) : 1.0
       const d = Math.max(1, Math.floor(amt * cut))
       def.petHp = Math.max(0, def.petHp - d)
+      att.dmgDealt += d  // 与ダメ総量：ペットに入ったぶんも計上
       ctx.logs.push({ text: `↳ 攻撃は${def.profile.username}のペットに！ ${d}ダメージ（残りHP${def.petHp}）`, color: '#ff8844' })
       if (def.petHp <= 0) ctx.logs.push({ text: `💥 ${def.profile.username}のペットは倒れた…`, color: '#ff4444' })
     } else {
       def.hp -= amt
+      att.dmgDealt += amt  // 与ダメ総量
       // 真化（防御側の装備）: 反射 → 攻撃側へ（嵐の重装甲）。スタン/やけどはPvPのバフ置換仕様の都合で割愛。
       if ((def.eff.evoReflectPct || 0) > 0) {
         const refl = Math.max(1, Math.floor(amt * def.eff.evoReflectPct / 100))
         att.hp -= refl
+        def.dmgDealt += refl  // 反射は防御側が「与えたダメージ」（確定＝回避不可）
         ctx.logs.push({ text: `🛡 真化効果！ ${def.profile.username}が${refl}を反射！`, color: '#88ccff' })
       }
     }
@@ -489,6 +495,7 @@ function petAttackPvp(side, opp, mult, label, logs) {
   const dmgUp = side.buffs.breederDmgUp?.turns > 0 ? side.buffs.breederDmgUp.rate : 1.0
   const dmg = Math.max(1, Math.floor(base * (base / (base + adjDef)) * dmgUp * PVP.dmgMult))
   opp.hp -= dmg
+  side.dmgDealt += dmg  // 与ダメ総量：ペットの攻撃
   let extra = ''
   if (side.rtCur >= 1) {
     if (side.petSpecies === 'flame' && Math.random() * 100 < 30 && !emblemBlocksAilment(opp.eff, 'bleed', null)) { const b = opp.buffs.bleed; opp.buffs.bleed = { stacks: Math.min(5, (b?.stacks || 0) + 1), lastTurn: 0 }; extra = ' 出血！' }
@@ -507,37 +514,38 @@ function applyTurnStart(side, opp, ctx) {
   const maxHp = side.eff.hp_max
   const b = side.buffs
 
+  // 状態異常DoTは「相手が与えたダメージ」（確定＝回避不可）→ opp.dmgDealt に計上
   if (b.severePoisoin?.turns > 0) {
-    const d = Math.floor(maxHp * 0.05 * ctx.dotMult * emblemDotMult(opp.eff, 'poison')); side.hp = Math.max(0, side.hp - d)
+    const d = Math.floor(maxHp * 0.05 * ctx.dotMult * emblemDotMult(opp.eff, 'poison')); side.hp = Math.max(0, side.hp - d); opp.dmgDealt += d
     logs.push({ text: `🤢 猛毒ダメージ！ ${name}に${d}ダメージ！`, color: '#aa44ff' })
     if (side.hp <= 0) return true
   }
   if (b.burn?.turns > 0) {
-    const d = Math.floor(maxHp * 0.02 * ctx.dotMult * emblemDotMult(opp.eff, 'burn')); side.hp = Math.max(0, side.hp - d)
+    const d = Math.floor(maxHp * 0.02 * ctx.dotMult * emblemDotMult(opp.eff, 'burn')); side.hp = Math.max(0, side.hp - d); opp.dmgDealt += d
     logs.push({ text: `🔥 やけどダメージ！ ${name}に${d}ダメージ！`, color: '#ff6622' })
     if (side.hp <= 0) return true
   }
   if (b.poison?.turns > 0) {
-    const d = Math.floor(maxHp * b.poison.dmgRate * ctx.dotMult * emblemDotMult(opp.eff, 'poison')); side.hp = Math.max(0, side.hp - d)
+    const d = Math.floor(maxHp * b.poison.dmgRate * ctx.dotMult * emblemDotMult(opp.eff, 'poison')); side.hp = Math.max(0, side.hp - d); opp.dmgDealt += d
     logs.push({ text: `☠ 毒ダメージ！ ${name}に${d}ダメージ！`, color: '#44ff44' })
     if (side.hp <= 0) return true
   }
   if (b.curseDmg?.turns > 0) {
-    const cd = Math.floor(b.curseDmg.dmg * ctx.dotMult); side.hp = Math.max(0, side.hp - cd)
+    const cd = Math.floor(b.curseDmg.dmg * ctx.dotMult); side.hp = Math.max(0, side.hp - cd); opp.dmgDealt += cd
     logs.push({ text: `💀 呪縛ダメージ！ ${name}に${cd}ダメージ！`, color: '#cc44ff' })
     if (side.hp <= 0) return true
   }
   if (b.bleed) {
-    const d = Math.floor(side.hp * 0.01 * b.bleed.stacks * ctx.dotMult * emblemDotMult(opp.eff, 'bleed')); side.hp = Math.max(0, side.hp - d)
+    const d = Math.floor(side.hp * 0.01 * b.bleed.stacks * ctx.dotMult * emblemDotMult(opp.eff, 'bleed')); side.hp = Math.max(0, side.hp - d); opp.dmgDealt += d
     logs.push({ text: `🩸 出血ダメージ！ ${name}に${d}ダメージ（${b.bleed.stacks}スタック）！`, color: '#ff4466' })
     if (side.hp <= 0) return true
     b.bleed.lastTurn = (b.bleed.lastTurn || 0) + 1
     if (b.bleed.lastTurn >= 3) delete b.bleed
   }
-  // 骸骨：相手へ持続ダメージ
+  // 骸骨：相手へ持続ダメージ（side が与えたダメージ）
   if (b.skeletonDmg?.turns > 0) {
     const d = Math.floor(b.skeletonDmg.dmg * PVP.dmgMult)
-    opp.hp -= d
+    opp.hp -= d; side.dmgDealt += d
     logs.push({ text: `💀 ${name}の骸骨の持続ダメージ！ ${opp.profile.username}に${d}ダメージ！`, color: '#cc44ff' })
     if (opp.hp <= 0) return true
   }
@@ -548,7 +556,7 @@ function applyTurnStart(side, opp, ctx) {
     const matk = side.eff.matk
     const adjEMD = Math.max(1, Math.floor((opp.eff.mdef || 0) * eMdefR))
     const d = Math.max(1, Math.floor(matk * mult * (matk / (matk + adjEMD)) * PVP.dmgMult))
-    opp.hp -= d
+    opp.hp -= d; side.dmgDealt += d
     logs.push({ text: `👹 ${name}の式神の攻撃！ ${opp.profile.username}に${d}ダメージ！`, color: '#cc88ff' })
     if (opp.hp <= 0) return true
   }
@@ -679,7 +687,7 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
   if (opts.startMpB != null) B.mp = Math.min(B.eff.mp_max, Math.max(0, opts.startMpB))
 
   logs.push({ text: `⚔ 対人戦開始！ ${A.profile.username} vs ${B.profile.username}`, color: '#ffcc66' })
-  logs.push({ text: `（与ダメージは防御力で大きく軽減／回復は通常どおり／素早さによる補正は無し）`, color: '#88aacc' })
+  logs.push({ text: `（50ターンで強制終了・与ダメージ総量で勝敗／防御で大きく軽減・回復は通常／素早さで回避・クリ最大1.5倍）`, color: '#88aacc' })
 
   // 開幕の装備効果バフ
   A.buffs = applyEquipmentEffects(A.equipment, { ...A.profile, hp_max: A.eff.hp_max }, A.buffs, logs)
@@ -732,10 +740,13 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
   if (B.hp <= 0 && A.hp > 0) winner = 'A'
   else if (A.hp <= 0 && B.hp > 0) winner = 'B'
   else if (A.hp <= 0 && B.hp <= 0) winner = 'draw'
-  else winner = aHpPct > bHpPct ? 'A' : (bHpPct > aHpPct ? 'B' : 'draw')  // ターン上限：HP割合判定
+  else winner = A.dmgDealt > B.dmgDealt ? 'A' : (B.dmgDealt > A.dmgDealt ? 'B' : 'draw')  // ターン上限：与ダメージ総量で判定
 
   const turns = Math.min(ctx.turn, turnCap)
   const ranOut = A.hp > 0 && B.hp > 0   // ターン上限まで両者生存＝強制終了
+  if (ranOut && !opts.warMode) {
+    logs.push({ text: `⏱ ${turns}ターン経過で強制終了！ 与ダメージ総量で判定 … ${A.profile.username}: ${A.dmgDealt} / ${B.profile.username}: ${B.dmgDealt}`, color: '#88aacc' })
+  }
   if (opts.warMode && ranOut) {
     logs.push({ text: `⚖ 決着がつかなかった（${turns}ターン）`, color: '#cccccc' })
   } else if (winner === 'A') logs.push({ text: `✦ ${A.profile.username} の勝利！（${turns}ターン）`, color: '#ffcc44' })
@@ -745,6 +756,7 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
   // endHp/endMp は絶対値（戦争の持続HP・コア戦のダメージ計測に使用）
   return {
     logs, winner, turns, aHpPct, bHpPct,
+    dmgDealtA: A.dmgDealt, dmgDealtB: B.dmgDealt,   // 与ダメージ総量（表示/検証用）
     endHpA: Math.max(0, A.hp), endMpA: Math.max(0, A.mp),
     endHpB: Math.max(0, B.hp), endMpB: Math.max(0, B.mp),
   }
