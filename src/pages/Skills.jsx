@@ -37,22 +37,30 @@ export default function Skills() {
   const [selectedSet, setSelectedSet] = useState('sortie')  // 編集中のセット種別
   const [bulkMode, setBulkMode] = useState(false)           // まとめて選択モード
   const [bulkIds, setBulkIds] = useState([])                // 一括反映で選んだスキルID（選択順）
+  const [pvpClass, setPvpClass] = useState(null)            // 対人戦用クラス（null=現クラスで戦う）
+  const [ownedClasses, setOwnedClasses] = useState([])      // 就いたことのあるクラス [{class_name, lv}]
 
   useEffect(() => { fetchAll() }, [])
+
+  // 編集中クラス＝対人戦タブでPvPクラスが設定されていればそれ、それ以外は現クラス。
+  //  このクラスのスキルを候補に出し、セット可否・再修練表示・自動習得もこのクラス基準で行う。
+  useEffect(() => {
+    if (!profile) return
+    const ec = (selectedSet === 'pvp' && pvpClass) ? pvpClass : profile.class
+    loadEditClassSkills(ec)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id, selectedSet, pvpClass])
 
   const fetchAll = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     setProfile(p)
+    setPvpClass(p?.pvp_class || null)
 
-    // 現在のクラスのスキル（パッシブ含む全て）+ 共通スキル
-    const [{ data: skills }, { data: commonSkills }] = await Promise.all([
-      supabase.from('skills').select('*').eq('class_name', p.class).order('required_lv'),
-      supabase.from('skills').select('*').eq('class_name', '共通').order('required_lv'),
-    ])
-
-    setAllSkills([...(skills||[])])
+    // 就いたことのあるクラス（対人戦クラスの候補）
+    const { data: cl } = await supabase.from('class_levels').select('class_name, lv').eq('player_id', user.id)
+    setOwnedClasses((cl || []).filter(c => c.class_name))
 
     // 全習得済みスキル
     const { data: ps } = await supabase
@@ -65,16 +73,29 @@ export default function Skills() {
       .eq('player_id', user.id)
       .order('slot_order')
     setSkillSets(ss || [])
+    // allSkills（候補プール）と未習得の自動習得は loadEditClassSkills（編集中クラス基準）が担当。
+  }
 
-    // 現在のクラスのスキル（共通含む）で未習得のものを自動習得
-    // 再修練済みクラスはLV問わず全スキル解放
-    const learnedIds = (ps||[]).map(s => s.skill_id)
-    const retrainingCount = ((p.retraining || {})[p.class] || 0)
-    const toLearn = [...(commonSkills||[]), ...(skills||[])].filter(s =>
-      (retrainingCount > 0 || s.required_lv <= p.lv) && !learnedIds.includes(s.id)
+  // 編集中クラスのスキルを候補プール(allSkills)へロードし、未習得を自動習得する。
+  //  現クラス＝profile.lv でLVゲート、PvP選択クラス＝class_levelsのそのクラスLVでゲート（転職時と同じ解放）。
+  //  再修練済みクラスはLV問わず全解放。
+  const loadEditClassSkills = async (className) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user || !className || !profile) return
+    const [{ data: skills }, { data: commonSkills }] = await Promise.all([
+      supabase.from('skills').select('*').eq('class_name', className).order('required_lv'),
+      supabase.from('skills').select('*').eq('class_name', '共通').order('required_lv'),
+    ])
+    setAllSkills([...(skills || [])])
+    const { data: ps } = await supabase.from('player_skills').select('skill_id').eq('player_id', user.id)
+    const learnedIds = (ps || []).map(s => s.skill_id)
+    const rtCount = ((profile.retraining || {})[className] || 0)
+    const clv = className === profile.class ? profile.lv : (ownedClasses.find(c => c.class_name === className)?.lv || 1)
+    const toLearn = [...(commonSkills || []), ...(skills || [])].filter(s =>
+      !learnedIds.includes(s.id) && (rtCount > 0 || s.required_lv <= clv)
     )
-    for (const skill of toLearn) {
-      await supabase.from('player_skills').insert({ player_id: user.id, skill_id: skill.id })
+    for (const sk of toLearn) {
+      await supabase.from('player_skills').insert({ player_id: user.id, skill_id: sk.id })
     }
     if (toLearn.length > 0) {
       const { data: ps2 } = await supabase.from('player_skills').select('*, skills(*)').eq('player_id', user.id)
@@ -82,11 +103,26 @@ export default function Skills() {
     }
   }
 
+  // 対人戦クラスを設定/解除（就いたことのあるクラスのみ・サーバ側で担保）。
+  const changePvpClass = async (cls) => {
+    setLoading(true); setSetMessage('')
+    const val = cls || null
+    const { data, error } = await supabase.rpc('set_pvp_class', { p_class: val })
+    if (error || !data?.ok) {
+      setSetMessage(data?.reason === 'class_not_owned' ? 'そのクラスにはまだ就いたことがありません。' : '対人戦クラスの設定に失敗しました。')
+      setLoading(false); return
+    }
+    setPvpClass(val)
+    setProfile(prev => prev ? { ...prev, pvp_class: val } : prev)
+    setLoading(false)  // スキル候補は useEffect（pvpClass依存）が再ロード
+  }
+
   const setSkillToSlot = async (skillId, slotOrder) => {
-    // 現在のクラス・共通・持ち越し以外のスキルはセット不可
+    // 編集中クラス（対人戦タブ＝PvPクラス／他＝現クラス）・共通・持ち越し以外のスキルはセット不可
+    const ec = (selectedSet === 'pvp' && pvpClass) ? pvpClass : profile.class
     const playerSkillData = playerSkills.find(ps => ps.skill_id === skillId)
     const skillData = playerSkillData?.skills
-    if (skillData && skillData.class_name !== profile.class && skillData.class_name !== '共通' && !playerSkillData?.is_carried_over) return
+    if (skillData && skillData.class_name !== ec && skillData.class_name !== '共通' && !playerSkillData?.is_carried_over) return
     // パッシブは専用スロット(0)のみ・1個。通常スキルはスロット1〜5のみ。
     const isPassive = skillData?.type === 'パッシブ'
     if (isPassive && slotOrder !== PASSIVE_SLOT) { setSetMessage('パッシブはパッシブ専用スロットにセットしてください。'); return }
@@ -133,10 +169,11 @@ export default function Skills() {
 
   // 選択中スキルを現在のセットへ一括反映（パッシブ→専用スロット、通常→上から順に最大5枠）
   const applyBulk = async () => {
+    const ec = (selectedSet === 'pvp' && pvpClass) ? pvpClass : profile.class
     const chosen = bulkIds
       .map(id => playerSkills.find(ps => ps.skill_id === id))
       .filter(Boolean)
-      .filter(ps => ps.skills && (ps.skills.class_name === profile.class || ps.skills.class_name === '共通' || ps.is_carried_over))
+      .filter(ps => ps.skills && (ps.skills.class_name === ec || ps.skills.class_name === '共通' || ps.is_carried_over))
     const passives = chosen.filter(ps => ps.skills.type === 'パッシブ')
     const actives = chosen.filter(ps => ps.skills.type !== 'パッシブ')
     if (passives.length > 1) { setSetMessage('パッシブは1個までです。1つだけ選んでください。'); return }
@@ -163,6 +200,10 @@ export default function Skills() {
   const learnedIds = playerSkills.map(ps => ps.skill_id)
   const carriedSkillIds = playerSkills.filter(ps => ps.is_carried_over).map(ps => ps.skill_id)
   const curSets = skillSets.filter(ss => setTypeOf(ss) === selectedSet)  // 編集中セットの中身
+  // 編集中クラス（対人戦タブ＝PvPクラス／他＝現クラス）。候補・セット可否・再修練表示の基準。
+  const editClass = (selectedSet === 'pvp' && pvpClass) ? pvpClass : profile.class
+  const editClassLv = editClass === profile.class ? profile.lv : (ownedClasses.find(c => c.class_name === editClass)?.lv || 1)
+  const editRtCount = (profile.retraining || {})[editClass] || 0
 
   // まとめて選択中の各スキルが、どのスロットに入るか（パッシブ／通常①〜⑤）を事前計算
   const CIRCLED = ['①','②','③','④','⑤']
@@ -231,7 +272,11 @@ export default function Skills() {
 
         <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'4px' }}>⚡ スキル</div>
         <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px' }}>
-          クラス: <span style={{color:'#88ccff'}}>{profile.class}</span>　LV: <span style={{color:'#ffcc00'}}>{profile.lv}</span>
+          クラス: <span style={{color:'#88ccff'}}>{editClass}</span>
+          {editRtCount > 0 && <span style={{color:'#ffcc00'}}> {'★'.repeat(editRtCount)}</span>}
+          {selectedSet === 'pvp' && pvpClass && <span style={{color:'#8ad0ff'}}>（対人戦用）</span>}
+          　LV: <span style={{color:'#ffcc00'}}>{editClassLv}</span>
+          <span style={{color:'#446688'}}>　再修練: <span style={{color:'#ffaa44'}}>{editRtCount}/5</span></span>
         </div>
 
         {/* スキルセット */}
@@ -251,6 +296,25 @@ export default function Skills() {
               )
             })}
           </div>
+          {/* 対人戦クラスの選択（対人戦タブのみ）。ステはそのまま・スキル/パッシブ/再修練がそのクラス扱いに。 */}
+          {selectedSet === 'pvp' && (
+            <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'8px', border:'1px solid #204a66', background:'#001526', padding:'8px' }}>
+              <span style={{ color:'#8ad0ff', fontSize:'11px' }}>🥊 対人戦クラス</span>
+              <select value={pvpClass || ''} onChange={e => changePvpClass(e.target.value)} disabled={loading}
+                style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'11px', padding:'3px' }}>
+                <option value="">現在のクラス（{profile.class}）</option>
+                {ownedClasses.filter(c => c.class_name !== profile.class).map(c => {
+                  const rt = (profile.retraining || {})[c.class_name] || 0
+                  return <option key={c.class_name} value={c.class_name}>{c.class_name}{rt > 0 ? ` ★${rt}` : ''}</option>
+                })}
+              </select>
+              <span style={{ color:'#557799', fontSize:'10px' }}>
+                {pvpClass
+                  ? `${pvpClass}として戦う（再修練 ${(profile.retraining || {})[pvpClass] || 0}/5・ステはそのまま）`
+                  : '出撃と同じ現在のクラスで戦う'}
+              </span>
+            </div>
+          )}
           <div style={{ color:'#336688', fontSize:'10px', marginBottom:'8px', lineHeight:'1.6' }}>
             パッシブは専用スロットに1個・常時発動。通常スキルは最大5個（上から順に発動）。<br/>
             <span style={{ color:'#557799' }}>状況ごとに別々のセットを組めます。</span>
@@ -327,13 +391,13 @@ export default function Skills() {
                     ? <span style={{ color:'#44ff88', fontSize:'10px', marginLeft:'8px' }}>（全クラス使用可能）</span>
                     : skills.some(s => carriedSkillIds.includes(s.id))
                       ? <span style={{ color:'#ffaa44', fontSize:'10px', marginLeft:'8px' }}>（再修練持ち越し）</span>
-                      : className !== profile.class && <span style={{ color:'#446688', fontSize:'10px', marginLeft:'8px' }}>（現在のクラスでは使用不可）</span>
+                      : className !== editClass && <span style={{ color:'#446688', fontSize:'10px', marginLeft:'8px' }}>（{selectedSet === 'pvp' && pvpClass ? `対人戦クラス(${editClass})` : '現在のクラス'}では使用不可）</span>
                   }
                 </div>
                 {skills.map(skill => {
                   const inSet = curSets.find(ss => ss.skill_id === skill.id)
                   return (
-                    <SkillCard key={skill.id} skill={skill} learned={true} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={className === profile.class || className === '共通' || carriedSkillIds.includes(skill.id)}
+                    <SkillCard key={skill.id} skill={skill} learned={true} inSet={inSet} skillSets={skillSets} loading={loading} onSet={setSkillToSlot} canSet={className === editClass || className === '共通' || carriedSkillIds.includes(skill.id)}
                       bulkMode={bulkMode} bulkChecked={bulkIds.includes(skill.id)} onBulkToggle={toggleBulk} bulkLabel={bulkLabels[skill.id]} />
                   )
                 })}
@@ -342,15 +406,15 @@ export default function Skills() {
           </div>
         )}
 
-        {RETRAINING_ENHANCEMENTS[profile.class] && (() => {
-          const rtCount = (profile.retraining || {})[profile.class] || 0
+        {RETRAINING_ENHANCEMENTS[editClass] && (() => {
+          const rtCount = editRtCount
           return (
             <div style={{ marginTop:'20px', border:'1px solid #443300', background:'#0a0800', padding:'12px' }}>
-              <div style={{ color:'#ffaa44', fontSize:'12px', marginBottom:'8px' }}>⚡ {profile.class}の再修練強化（{rtCount}/5 発動中）</div>
+              <div style={{ color:'#ffaa44', fontSize:'12px', marginBottom:'8px' }}>⚡ {editClass}の再修練強化（{rtCount}/5 発動中）{selectedSet === 'pvp' && pvpClass && <span style={{ color:'#8ad0ff', fontSize:'10px', marginLeft:'6px' }}>※対人戦クラス</span>}</div>
               <div style={{ color:'#445566', fontSize:'10px', marginBottom:'8px', lineHeight:'1.6', textAlign:'left' }}>
                 神殿で再修練するごとに、上から1つずつ永続強化されます。このクラスでプレイ中のみ有効。
               </div>
-              {RETRAINING_ENHANCEMENTS[profile.class].map((desc, i) => {
+              {RETRAINING_ENHANCEMENTS[editClass].map((desc, i) => {
                 const active = i < rtCount
                 return (
                   <div key={i} style={{ fontSize:'11px', lineHeight:'1.9', color: active ? '#88ffaa' : '#556677', textAlign:'left' }}>

@@ -61,6 +61,12 @@ export async function loadLoadout(playerId, isSelf) {
   }
 
   const profileWithPet = { ...profile, petStat, petCharm, activePet: pet || null, emblemAlloc }
+  // PvP専用クラス: profiles.pvp_class があり、かつ実際に「PvPスキルセット」を使う場合のみ、
+  //   そのクラスとして戦う（＝転職したときと同じ扱い）。
+  //   ステはクラス非依存(calcEffectiveStats)なので変更不要＝ステはそのまま、再修練は retraining[pvp_class] の実値。
+  //   ※ pvpセットが空でsortie流用のときは差し替えない（クラスとスキルの不整合を防ぐ）。
+  const usingPvpSet = (skillSets || []).some(r => (r.set_type || 'sortie') === 'pvp')
+  if (profile.pvp_class && usingPvpSet) profileWithPet.class = profile.pvp_class
   const eff = calcEffectiveStats(profileWithPet, eq || [], prof || [], titleBonus)
   return { eff, equipment: eq || [], skillSets, proficiency: prof || [], profile: profileWithPet, playerItem: null }
 }
