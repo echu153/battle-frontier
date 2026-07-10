@@ -2635,7 +2635,8 @@ export default function Game() {
     setTimeout(() => { battleBusyRef.current = false }, 1500)
     if (botCheck) return  // BOT確認チャレンジ中は出撃不可
     // 自動操作検知（isTrusted=falseはSelenium等ブラウザ自動化ツールの特徴）
-    if (e && !e.isTrusted) { await suspendAccount('自動操作が検出されました'); return }
+    // ※開発アカウント(is_admin)は自動出撃[開発]の検証用に検知対象外
+    if (e && !e.isTrusted && !profile.is_admin) { await suspendAccount('自動操作が検出されました'); return }
     // 未解放エリアへのアクセスガード（localStorage汚染対策）
     const unlockedAreas = profile.unlocked_areas || [1]
     if (!unlockedAreas.includes(selectedArea)) {
@@ -2684,7 +2685,8 @@ export default function Game() {
 
 
     // 街に戻らず連続出撃10回でBOTチャレンジ発動（F5連打＋オートクリック対策）
-    {
+    // ※開発アカウント(is_admin)は自動出撃[開発]の検証用に検知対象外
+    if (!profile.is_admin) {
       const newConsec = (profile.consecutive_battle_count || 0) + 1
       if (newConsec >= 10) {
         await supabase.from('profiles').update({ consecutive_battle_count: 0, suspicious_flag: true }).eq('id', profile.id)
@@ -2771,7 +2773,8 @@ export default function Game() {
     setProfile(p => ({ ...p, last_action_at: now }))
 
     // オートクリッカー検知：出撃間隔が異常に規則的（一定間隔の機械的連打）なら12時間出撃禁止
-    {
+    // ※開発アカウント(is_admin)は自動出撃[開発]の検証用に検知対象外
+    if (!profile.is_admin) {
       const times = sortieTimesRef.current
       times.push(Date.now())
       if (times.length > AUTOCLICK_SAMPLES) times.shift()
