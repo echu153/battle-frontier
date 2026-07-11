@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { getCharm, CHARM_TOTAL_MAX, CHARM_HP_PER, charmDisplayName, charmTotal, charmRibTotal, petItemImg, isRibbonType, charmIcon, RIBBON_TAG, charmSpecials, specialLabel, specialSlots } from '../constants/pets'
+import { useConfirm } from '../components/ConfirmModal'
 
 // チャーム/リボンの共通アイコン
 function CIcon({ ctype, size = 14 }) {
@@ -45,6 +46,7 @@ export default function Charms() {
   const [gainPopup, setGainPopup] = useState(null) // 獲得演出（中央）{ emoji, title, items:[{key,name,n}] }
   const showGain = (emoji, title, items) => { setGainPopup({ emoji, title, items }); setTimeout(() => setGainPopup(null), 2600) }
   const [confirm, setConfirm] = useState(false)
+  const [confirmEl, askConfirm] = useConfirm() // window.confirm代替（PWAで無反応になる不具合対策）
   const [shredSel, setShredSel] = useState({})  // 裁断で選択中 { id: true }
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
@@ -121,7 +123,7 @@ export default function Charms() {
   const doShred = async () => {
     const ids = Object.keys(shredSel).filter((k) => shredSel[k])
     if (!ids.length) { flash('裁断するチャーム/リボンを選んでください'); return }
-    if (!window.confirm(ids.length + '個を裁断してランダムな素×' + ids.length * 3 + 'に還元します。元に戻せません。よろしいですか？')) return
+    if (!(await askConfirm(ids.length + '個を裁断してランダムな素×' + ids.length * 3 + 'に還元します。元に戻せません。よろしいですか？', { okLabel: '✂️ 裁断する' }))) return
     setLoading(true)
     const { data, error } = await supabase.rpc('pet_charm_shred', { p_ids: ids })
     setLoading(false)
@@ -139,7 +141,7 @@ export default function Charms() {
   const doReroll = async () => {
     if (!sel) { flash('抽選するチャーム/リボンを選んでください'); return }
     if ((seeds.fatecore || 0) < 1) { flash('フェイトコアがありません（60Fボス討伐で入手）'); return }
-    if (charmSpecials(sel).length > 0 && !window.confirm('現在の特殊能力は消えて全枠が再抽選されます。よろしいですか？')) return
+    if (charmSpecials(sel).length > 0 && !(await askConfirm('現在の特殊能力は消えて全枠が再抽選されます。よろしいですか？', { okLabel: '🧬 再抽選する' }))) return
     setLoading(true)
     const { data, error } = await supabase.rpc('pet_charm_reroll', { p_id: sel.id })
     setLoading(false)
@@ -622,6 +624,7 @@ export default function Charms() {
           </div>
         )
       })()}
+      {confirmEl}
     </div>
   )
 }

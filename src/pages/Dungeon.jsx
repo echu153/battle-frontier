@@ -1954,22 +1954,31 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
   const backToSelect = async () => { await finishRun(false); setDungeon(null); setStatus('select') }
 
   // 街に戻る：探索中は「中断（進行状況を保存してラン継続）」。クリア/死亡/脱出後はそのまま戻る
+  // 中断保存して街へ。window.confirmはPWA等で無反応になるためゲーム内ポップアップで確認する。
+  const suspendAndLeave = async () => {
+    // デバウンス待たずにサーバーへ即保存（別端末でも続きから再開できるように）
+    if (runIdRef.current && state && pet.id) {
+      const sv = {
+        runId: runIdRef.current, dungeonId: dungeon?.id, floorNum, petHp, fullness, turns,
+        selectedSkill, inventory, lootBag, kills: enemiesRef.current, floorsCleared: floorsRef.current, itemsCollected: itemsRef.current,
+      sinceShop: sinceShopRef.current, shopAt: shopAtRef.current, startFloor: startFloorRef.current, shop, weather: weatherRef.current,
+        state: { ...state, explored: [...state.explored] },
+      }
+      try { localStorage.setItem(saveKey(), JSON.stringify(sv)) } catch { /* 容量超過は無視 */ }
+      try { await supabase.rpc('dungeon_save_state', { p_run_id: runIdRef.current, p_state: sv, p_device: getDeviceId() }) } catch { /* オフライン等は無視 */ }
+      // 中断＝プレイ中ではない。出撃を許可できるよう suspended を立てる
+      try { await supabase.rpc('dungeon_set_suspended', { p_run_id: runIdRef.current, p_suspended: true }) } catch { /* 無視 */ }
+    }
+    nav('/game')
+  }
   const leaveToTown = async () => {
     if (status === 'exploring') {
-      if (!window.confirm('ダンジョンを中断して街に戻りますか？\n（進行状況は保存され、次回続きから再開できます）')) return
-      // デバウンス待たずにサーバーへ即保存（別端末でも続きから再開できるように）
-      if (runIdRef.current && state && pet.id) {
-        const sv = {
-          runId: runIdRef.current, dungeonId: dungeon?.id, floorNum, petHp, fullness, turns,
-          selectedSkill, inventory, lootBag, kills: enemiesRef.current, floorsCleared: floorsRef.current, itemsCollected: itemsRef.current,
-        sinceShop: sinceShopRef.current, shopAt: shopAtRef.current, startFloor: startFloorRef.current, shop, weather: weatherRef.current,
-          state: { ...state, explored: [...state.explored] },
-        }
-        try { localStorage.setItem(saveKey(), JSON.stringify(sv)) } catch { /* 容量超過は無視 */ }
-        try { await supabase.rpc('dungeon_save_state', { p_run_id: runIdRef.current, p_state: sv, p_device: getDeviceId() }) } catch { /* オフライン等は無視 */ }
-        // 中断＝プレイ中ではない。出撃を許可できるよう suspended を立てる
-        try { await supabase.rpc('dungeon_set_suspended', { p_run_id: runIdRef.current, p_suspended: true }) } catch { /* 無視 */ }
-      }
+      setConfirmBox({
+        msg: 'ダンジョンを中断して街に戻りますか？\n（進行状況は保存され、次回続きから再開できます）',
+        okLabel: '🏛 中断して戻る',
+        onOk: suspendAndLeave,
+      })
+      return
     }
     nav('/game')
   }

@@ -17,6 +17,7 @@ import {
   EXPAND_COOLDOWN_MS, fmtRemain, REGIONS,
   AREA_META, computeAreaControl, rankColor,
 } from '../lib/territory'
+import { useConfirm } from '../components/ConfirmModal'
 
 const EMBLEMS = ['🏰','⚔','🦅','🐺','🌙','☀','🔥','❄','🐉','⭐','🛡','👑']
 const MAP_IMG = '/ryouti.png'
@@ -37,6 +38,7 @@ export default function Territory() {
   const [expandMsg, setExpandMsg] = useState(null)  // 領地拡大の結果（ボタン下に表示）
   const [openRosters, setOpenRosters] = useState({})  // 国一覧の国民展開状態 {countryId:true}
   const [descEdit, setDescEdit] = useState(false)     // 自国説明文の編集中
+  const [confirmEl, askConfirm] = useConfirm() // window.confirm代替（PWAで無反応になる不具合対策）
   const [descInput, setDescInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -222,7 +224,7 @@ export default function Territory() {
     const warn = inUnaffiliated
       ? `「${name}」に亡命しますか？`
       : `「${name}」に亡命しますか？\n所属国を移ると、3日間は領地拡大・建国ができません。`
-    if (!window.confirm(warn)) return
+    if (!(await askConfirm(warn, { okLabel: '🏳 亡命する' }))) return
     setBusy(true)
     const { error } = await supabase.rpc('seek_asylum', { p_country_id: cid })
     setBusy(false)
@@ -715,6 +717,7 @@ export default function Territory() {
         </div>
       )}
 
+      {confirmEl}
     </div>
   )
 }
