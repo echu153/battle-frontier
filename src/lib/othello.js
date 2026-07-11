@@ -89,6 +89,64 @@ const WEIGHTS = (() => {
   return w
 })()
 
+// ============================================================
+// 対戦用ゲームステート(シリアライズ可能・ホスト権威型で配信する)
+// players: { [BLACK]: {id,name}, [WHITE]: {id,name} }
+// ============================================================
+
+export const isNpcId = (id) => typeof id === 'string' && id.startsWith('npc-')
+
+export function createGame({ black, white }) {
+  return {
+    board: createBoard(),
+    turn: BLACK,
+    players: { [BLACK]: black, [WHITE]: white },
+    lastMove: null,
+    phase: 'playing', // playing | ended
+    result: null,     // { black, white, winner(BLACK|WHITE|null), forfeit? }
+  }
+}
+
+export function colorOf(state, playerId) {
+  if (state.players[BLACK]?.id === playerId) return BLACK
+  if (state.players[WHITE]?.id === playerId) return WHITE
+  return null
+}
+
+// 着手を検証して適用。成功: { state, events } / 失敗: { error }
+export function applyGameMove(state, playerId, idx) {
+  if (state.phase !== 'playing') return { error: 'ゲームは終了しています' }
+  const color = colorOf(state, playerId)
+  if (!color) return { error: '対局者ではありません' }
+  if (color !== state.turn) return { error: 'あなたの番ではありません' }
+  const board = applyMove(state.board, idx, color)
+  if (!board) return { error: 'そこには置けません' }
+
+  const events = []
+  const next = { ...state, board, lastMove: idx }
+  const opp = opponent(color)
+  if (isGameOver(board)) {
+    const { black, white } = countStones(board)
+    next.phase = 'ended'
+    next.result = { black, white, winner: black > white ? BLACK : white > black ? WHITE : null }
+  } else if (validMoves(board, opp).length > 0) {
+    next.turn = opp
+  } else {
+    next.turn = color
+    events.push({ t: 'pass', name: state.players[opp]?.name || '?' })
+  }
+  return { state: next, events }
+}
+
+// 切断/降参: 相手の勝ち(対局者でない・終局済みならnull)
+export function forfeitGame(state, playerId) {
+  if (state.phase !== 'playing') return null
+  const color = colorOf(state, playerId)
+  if (!color) return null
+  const { black, white } = countStones(state.board)
+  return { ...state, phase: 'ended', result: { black, white, winner: opponent(color), forfeit: true } }
+}
+
 export function cpuChooseMove(board, color) {
   const moves = validMoves(board, color)
   if (moves.length === 0) return null
