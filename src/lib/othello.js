@@ -147,6 +147,173 @@ export function forfeitGame(state, playerId) {
   return { ...state, phase: 'ended', result: { black, white, winner: opponent(color), forfeit: true } }
 }
 
+// ============================================================
+// 多人数オセロ(3〜5人): 人数が1人増えるごとに盤が縦横+1マス
+// 3人=9x9 / 4人=10x10 / 5人=11x11。石の色は 1..人数
+// ルール(Rolit式): 挟める手があればそこにしか置けない。
+// 挟める手が1つもない場合のみ、既存の石に隣接する空きマスへ置ける。
+// これにより盤が埋まるまで全員が必ず打てる(パスなし)。終局=盤面が埋まる or 全員手詰まり
+// ============================================================
+
+export const MAX_MULTI_PLAYERS = 5
+export const multiBoardSize = (playerCount) => 8 + Math.max(0, playerCount - 2)
+
+// 任意サイズの位置重み(角/X/C/辺)
+const weightsCache = {}
+export function weightsFor(size) {
+  if (weightsCache[size]) return weightsCache[size]
+  const w = new Array(size * size).fill(1)
+  const set = (x, y, v) => { w[y * size + x] = v }
+  const e = size - 1
+  for (const [x, y] of [[0, 0], [e, 0], [0, e], [e, e]]) set(x, y, 30)
+  for (const [x, y] of [[1, 1], [e - 1, 1], [1, e - 1], [e - 1, e - 1]]) set(x, y, -12)
+  for (const [x, y] of [[1, 0], [0, 1], [e - 1, 0], [e, 1], [0, e - 1], [1, e], [e, e - 1], [e - 1, e]]) set(x, y, -6)
+  for (let i = 2; i <= e - 2; i++) { set(i, 0, 4); set(i, e, 4); set(0, i, 4); set(e, i, 4) }
+  weightsCache[size] = w
+  return w
+}
+
+// 自分以外の色(混色可)の列を自分の石で挟んだら裏返る
+export function flipsForMulti(board, size, idx, color) {
+  if (board[idx] !== EMPTY) return []
+  const dirs = [-size - 1, -size, -size + 1, -1, 1, size - 1, size, size + 1]
+  const flips = []
+  for (const dir of dirs) {
+    const line = []
+    let prev = idx
+    let cur = idx + dir
+    while (true) {
+      const px = prev % size, cx = cur % size
+      if (cur < 0 || cur >= size * size || Math.abs(cx - px) > 1) break
+      const v = board[cur]
+      if (v === EMPTY) break
+      if (v !== color) { line.push(cur); prev = cur; cur += dir; continue }
+      if (line.length > 0) flips.push(...line)
+      break
+    }
+  }
+  return flips
+}
+
+// 合法手: 挟める手があればそれのみ。なければ石に隣接する空きマス
+export function legalMovesMulti(board, size, color) {
+  const caps = []
+  for (let i = 0; i < size * size; i++) {
+    if (board[i] === EMPTY && flipsForMulti(board, size, i, color).length > 0) caps.push(i)
+  }
+  if (caps.length > 0) return { moves: caps, capture: true }
+  const dirs = [-size - 1, -size, -size + 1, -1, 1, size - 1, size, size + 1]
+  const adj = []
+  for (let i = 0; i < size * size; i++) {
+    if (board[i] !== EMPTY) continue
+    const ix = i % size
+    for (const dir of dirs) {
+      const j = i + dir
+      const jx = j % size
+      if (j < 0 || j >= size * size || Math.abs(jx - ix) > 1) continue
+      if (board[j] !== EMPTY) { adj.push(i); break }
+    }
+  }
+  return { moves: adj, capture: false }
+}
+
+export function countsByColor(board) {
+  const counts = {}
+  for (const v of board) { if (v !== EMPTY) counts[v] = (counts[v] || 0) + 1 }
+  return counts
+}
+
+// playersList: [{id,name}] 3〜5人・並び順=手番順。色は 1..n を順に割り当て
+export function createMultiGame(playersList) {
+  const n = playersList.length
+  const size = multiBoardSize(n)
+  const board = new Array(size * size).fill(EMPTY)
+  const c = Math.floor(size / 2)
+  const spots = [[c - 1, c - 1], [c - 1, c], [c, c], [c, c - 1], [c + 1, c + 1]]
+  const players = playersList.map((p, i) => ({ id: p.id, name: p.name, color: i + 1, left: false }))
+  players.forEach((p, i) => { board[spots[i][1] * size + spots[i][0]] = p.color })
+  return {
+    mode: 'multi', size, board, players,
+    turnIdx: 0, lastMove: null, phase: 'playing', result: null,
+  }
+}
+
+// 現手番の「次」に打てるプレイヤーのindex(いなければ-1=終局)
+function nextTurnIdxMulti(state, board) {
+  const n = state.players.length
+  for (let step = 1; step <= n; step++) {
+    const cand = (state.turnIdx + step) % n
+    const p = state.players[cand]
+    if (p.left) continue
+    if (legalMovesMulti(board, state.size, p.color).moves.length > 0) return cand
+  }
+  return -1
+}
+
+function endMulti(state) {
+  const counts = countsByColor(state.board)
+  const standings = state.players
+    .map((p) => ({ name: p.name, color: p.color, count: counts[p.color] || 0, left: p.left }))
+    .sort((a, b) => (a.left !== b.left) ? (a.left ? 1 : -1) : b.count - a.count)
+  const activeTop = standings.filter((s) => !s.left)
+  const top = activeTop.length > 0 ? activeTop[0].count : -1
+  const winners = activeTop.filter((s) => s.count === top).map((s) => s.color)
+  return { ...state, phase: 'ended', result: { standings, winners } }
+}
+
+export function applyMultiMove(state, playerId, idx) {
+  if (state.phase !== 'playing') return { error: 'ゲームは終了しています' }
+  const cur = state.players[state.turnIdx]
+  if (!cur || cur.id !== playerId) {
+    if (!state.players.some((p) => p.id === playerId)) return { error: '対局者ではありません' }
+    return { error: 'あなたの番ではありません' }
+  }
+  const { moves, capture } = legalMovesMulti(state.board, state.size, cur.color)
+  if (!moves.includes(idx)) return { error: 'そこには置けません' }
+  const board = state.board.slice()
+  board[idx] = cur.color
+  if (capture) { for (const f of flipsForMulti(state.board, state.size, idx, cur.color)) board[f] = cur.color }
+  let next = { ...state, board, lastMove: idx }
+  const ni = nextTurnIdxMulti(next, board)
+  if (ni === -1) next = endMulti(next)
+  else next.turnIdx = ni
+  return { state: next, events: [] }
+}
+
+// 切断: 以後の手番をスキップ(石は盤に残る)。残り1人になったら終局
+export function multiPlayerLeft(state, playerId) {
+  if (state.phase !== 'playing') return null
+  const leaving = state.players.find((p) => p.id === playerId && !p.left)
+  if (!leaving) return null
+  const players = state.players.map((p) => (p.id === playerId ? { ...p, left: true } : p))
+  let next = { ...state, players }
+  if (players.filter((p) => !p.left).length <= 1) return endMulti(next)
+  if (state.players[state.turnIdx].id === playerId) {
+    const ni = nextTurnIdxMulti(next, next.board)
+    if (ni === -1) return endMulti(next)
+    next.turnIdx = ni
+  }
+  return next
+}
+
+// 多人数用CPU: 1=ランダム / 2=裏返し最大 / 3以上=位置重み＋裏返し数の欲張り
+export function cpuChooseMoveMulti(state, level = 3) {
+  const cur = state.players[state.turnIdx]
+  if (!cur) return null
+  const { moves, capture } = legalMovesMulti(state.board, state.size, cur.color)
+  if (moves.length === 0) return null
+  if (level <= 1) return moves[Math.floor(Math.random() * moves.length)]
+  const w = weightsFor(state.size)
+  let best = [], bestScore = -Infinity
+  for (const m of moves) {
+    const flips = capture ? flipsForMulti(state.board, state.size, m, cur.color).length : 0
+    const score = level === 2 ? flips : w[m] + flips * 0.5
+    if (score > bestScore) { bestScore = score; best = [m] }
+    else if (score === bestScore) best.push(m)
+  }
+  return best[Math.floor(Math.random() * best.length)]
+}
+
 // 位置重みだけの1手読み(LV3相当)
 function chooseByWeights(board, color) {
   const moves = validMoves(board, color)

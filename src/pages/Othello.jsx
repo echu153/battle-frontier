@@ -6,6 +6,8 @@ import {
   BLACK, WHITE, EMPTY, SIZE,
   validMoves, countStones, cpuChooseMove,
   createGame, applyGameMove, forfeitGame, colorOf, isNpcId,
+  MAX_MULTI_PLAYERS, multiBoardSize, createMultiGame, applyMultiMove, multiPlayerLeft,
+  legalMovesMulti, countsByColor, cpuChooseMoveMulti,
 } from '../lib/othello'
 
 // ============================================================
@@ -13,18 +15,29 @@ import {
 // 部屋: Supabase Realtime presence(ロビー一覧) + broadcast(ゲーム同期)
 // ホスト権威型: 部屋主のクライアントだけがエンジンを実行しstateを配信
 // SQLテーブル不要(RealtimeチャンネルのみでDBに一切書き込まない)
+// 2人=クラシック8x8 / 3〜5人=多人数モード(人数+1ごとに盤が縦横+1マス)
 // ============================================================
 
 const LOBBY_CHANNEL = 'othello-lobby'
 const roomChannelName = (roomId) => `othello-room-${roomId}`
 
-const NPC_NAMES = ['オセロ丸', 'リバー子', 'カドトリ翁']
+const NPC_NAMES = ['オセロ丸', 'リバー子', 'カドトリ翁', 'スミゾメ', 'シロタエ']
 const CPU_DELAY_MS = 800
 // NPCの強さはidに埋め込む(npc-lv{n}-...)。stateの再配信/観戦でも失われない
 const npcLevelOf = (id) => {
   const m = /^npc-lv(\d)-/.exec(id || '')
   return m ? Number(m[1]) : 3
 }
+
+// 石の色(1..5): 黒/白/赤/青/緑
+const STONE_CSS = {
+  1: 'radial-gradient(circle at 35% 30%, #555, #000)',
+  2: 'radial-gradient(circle at 35% 30%, #fff, #bbb)',
+  3: 'radial-gradient(circle at 35% 30%, #ff8877, #aa1111)',
+  4: 'radial-gradient(circle at 35% 30%, #88aaff, #1133aa)',
+  5: 'radial-gradient(circle at 35% 30%, #88ee99, #117733)',
+}
+const STONE_LABEL = { 1: '黒', 2: '白', 3: '赤', 4: '青', 5: '緑' }
 
 const btnStyle = (color, extra = {}) => ({
   background: 'none', border: `1px solid ${color}`, color, padding: '6px 10px',
@@ -33,7 +46,7 @@ const btnStyle = (color, extra = {}) => ({
 
 const stoneStyle = (color) => ({
   display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', verticalAlign: 'middle',
-  background: color === BLACK ? 'radial-gradient(circle at 35% 30%, #555, #000)' : 'radial-gradient(circle at 35% 30%, #fff, #aaa)',
+  background: STONE_CSS[color] || '#666',
   border: '1px solid #333',
 })
 
@@ -51,7 +64,7 @@ export default function Othello() {
   // 部屋の状態
   const [room, setRoom] = useState(null) // { id, title, hostId, hostName }
   const [members, setMembers] = useState([]) // presenceから [{ id, name }]
-  const [npc, setNpc] = useState(null) // ホストが追加したNPC { id, name }
+  const [npcs, setNpcs] = useState([]) // ホストが追加したNPC [{ id, name, level }]
   const [game, setGame] = useState(null)
   const [toast, setToast] = useState(null)
   const [passNote, setPassNote] = useState(null)
@@ -63,14 +76,14 @@ export default function Othello() {
   const meRef = useRef(null)
   const roomRef = useRef(null)
   const membersRef = useRef([])
-  const npcRef = useRef(null)
+  const npcsRef = useRef([])
   const cpuTimerRef = useRef(null)
 
   useEffect(() => { gameRef.current = game }, [game])
   useEffect(() => { meRef.current = me }, [me])
   useEffect(() => { roomRef.current = room }, [room])
   useEffect(() => { membersRef.current = members }, [members])
-  useEffect(() => { npcRef.current = npc }, [npc])
+  useEffect(() => { npcsRef.current = npcs }, [npcs])
 
   const showToast = (msg) => {
     setToast(msg)
@@ -122,7 +135,7 @@ export default function Othello() {
     if (!r || r.hostId !== meRef.current?.id || !lobbyChRef.current) return
     await lobbyChRef.current.track({
       roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName,
-      count: membersRef.current.length + (npcRef.current ? 1 : 0), status, // waiting | playing
+      count: membersRef.current.length + npcsRef.current.length, status, // waiting | playing
     })
   }, [])
 
@@ -139,7 +152,9 @@ export default function Othello() {
   const hostApply = useCallback((action) => {
     const cur = gameRef.current
     if (!cur) return false
-    const r = applyGameMove(cur, action.playerId, action.idx)
+    const r = cur.mode === 'multi'
+      ? applyMultiMove(cur, action.playerId, action.idx)
+      : applyGameMove(cur, action.playerId, action.idx)
     if (r.error) {
       roomChRef.current?.send({ type: 'broadcast', event: 'reject', payload: { playerId: action.playerId, msg: r.error } })
       return false
@@ -179,11 +194,21 @@ export default function Othello() {
       }
     })
     ch.on('presence', { event: 'leave' }, ({ key }) => {
-      // ホスト: 対局中の切断は不戦勝
-      if (roomInfo.hostId === myself.id && gameRef.current?.phase === 'playing') {
-        const ended = forfeitGame(gameRef.current, key)
+      // ホスト: 対局中の切断は不戦勝(2人) / 手番スキップ(多人数)
+      if (roomInfo.hostId !== myself.id || gameRef.current?.phase !== 'playing') return
+      const cur = gameRef.current
+      if (cur.mode === 'multi') {
+        const leftName = cur.players.find((p) => p.id === key)?.name
+        const ended = multiPlayerLeft(cur, key)
         if (ended) {
-          hostBroadcast(ended, [{ t: 'forfeit', name: gameRef.current.players[colorOf(gameRef.current, key)]?.name || '?' }])
+          hostBroadcast(ended, leftName ? [{ t: 'left', name: leftName }] : [])
+          if (ended.phase === 'ended') publishRoom('waiting')
+        }
+      } else {
+        const color = colorOf(cur, key)
+        const ended = forfeitGame(cur, key)
+        if (ended) {
+          hostBroadcast(ended, [{ t: 'forfeit', name: cur.players[color]?.name || '?' }])
           publishRoom('waiting')
         }
       }
@@ -196,6 +221,7 @@ export default function Othello() {
       for (const ev of payload.events || []) {
         if (ev.t === 'pass') setPassNote(`${ev.name} はパス！`)
         if (ev.t === 'forfeit') showToast(`${ev.name} が切断したため不戦勝`)
+        if (ev.t === 'left') showToast(`${ev.name} が切断しました(手番スキップ)`)
       }
       if (!(payload.events || []).some((ev) => ev.t === 'pass')) setPassNote(null)
     })
@@ -237,7 +263,7 @@ export default function Othello() {
     setRoom(null); roomRef.current = null
     setGame(null); gameRef.current = null
     setMembers([]); membersRef.current = []
-    setNpc(null); npcRef.current = null
+    setNpcs([]); npcsRef.current = []
     setPassNote(null)
     setView('lobby')
   }, [])
@@ -258,32 +284,40 @@ export default function Othello() {
     joinRoom({ id: roomId, title, hostId: me.id, hostName: me.name })
   }
 
+  // ---- 対局席: 入室順(ホスト含む) + NPC で最大5席。あふれた人は観戦 ----
+  const seatedOf = (mems, nps) => [...mems, ...nps].slice(0, MAX_MULTI_PLAYERS)
+  const seated = seatedOf(members, npcs)
+
   // ---- NPC追加/削除(ホスト・対局中以外) ----
   const addNpc = (level) => {
-    const name = NPC_NAMES[Math.floor(Math.random() * NPC_NAMES.length)]
-    setNpc({ id: `npc-lv${level}-${Date.now() % 100000}`, name: `🤖${name} LV${level}`, level })
+    if (membersRef.current.length + npcsRef.current.length >= MAX_MULTI_PLAYERS) { showToast(`最大${MAX_MULTI_PLAYERS}人です`); return }
+    const used = new Set(npcsRef.current.map((n) => n.name.replace(/^🤖| LV\d$/g, '')))
+    const base = NPC_NAMES.find((n) => !used.has(n)) || `NPC${npcsRef.current.length + 1}`
+    setNpcs((prev) => [...prev, { id: `npc-lv${level}-${prev.length + 1}-${Date.now() % 100000}`, name: `🤖${base} LV${level}`, level }])
   }
-  const removeNpc = () => setNpc(null)
+  const removeNpc = (id) => setNpcs((prev) => prev.filter((n) => n.id !== id))
 
-  // NPCの有無が変わったらロビーの人数掲示を更新
+  // NPC数が変わったらロビーの人数掲示を更新
   useEffect(() => {
     if (room && room.hostId === me?.id) publishRoom(game?.phase === 'playing' ? 'playing' : 'waiting')
-  }, [npc]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [npcs]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- 対局者2名の決定: ホスト + (NPC or 最初に入室したゲスト) ----
-  const pickOpponent = () => {
-    if (npcRef.current) return npcRef.current
-    return membersRef.current.find((m) => m.id !== meRef.current.id) || null
-  }
-
-  // ---- ゲーム開始(ホスト・色はランダム) ----
+  // ---- ゲーム開始(ホスト・手番/色はランダム) ----
   const startGame = () => {
-    const opp = pickOpponent()
-    if (!opp) { showToast('対戦相手がいません(NPCを追加するか入室を待ってください)'); return }
-    const hostP = { id: me.id, name: me.name }
-    const [black, white] = Math.random() < 0.5 ? [hostP, opp] : [opp, hostP]
+    const list = seatedOf(membersRef.current, npcsRef.current)
+    if (list.length < 2) { showToast('対戦相手がいません(NPCを追加するか入室を待ってください)'); return }
+    // 手番順をシャッフル
+    const order = list.map((p) => ({ id: p.id, name: p.name }))
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[order[i], order[j]] = [order[j], order[i]]
+    }
     setPassNote(null)
-    hostBroadcast(createGame({ black, white }), [])
+    if (order.length === 2) {
+      hostBroadcast(createGame({ black: order[0], white: order[1] }), [])
+    } else {
+      hostBroadcast(createMultiGame(order), [])
+    }
     publishRoom('playing')
   }
 
@@ -295,14 +329,16 @@ export default function Othello() {
   // ---- NPC自動着手(ホストが実行) ----
   useEffect(() => {
     if (!room || room.hostId !== me?.id || !game || game.phase !== 'playing') return
-    const curPlayer = game.players[game.turn]
+    const curPlayer = game.mode === 'multi' ? game.players[game.turnIdx] : game.players[game.turn]
     if (!curPlayer || !isNpcId(curPlayer.id)) return
     const seq = stateSeqRef.current
     const t = setTimeout(() => {
       if (stateSeqRef.current !== seq) return // 既に別の手で進行済み
       const cur = gameRef.current
       if (!cur || cur.phase !== 'playing') return
-      const mv = cpuChooseMove(cur.board, cur.turn, npcLevelOf(curPlayer.id))
+      const mv = cur.mode === 'multi'
+        ? cpuChooseMoveMulti(cur, npcLevelOf(curPlayer.id))
+        : cpuChooseMove(cur.board, cur.turn, npcLevelOf(curPlayer.id))
       if (mv !== null) hostApply({ playerId: curPlayer.id, idx: mv })
     }, CPU_DELAY_MS)
     cpuTimerRef.current = t
@@ -353,7 +389,7 @@ export default function Othello() {
             />
             <button onClick={createRoom} style={btnStyle('#ffcc44')}>作成</button>
           </div>
-          <div style={{ fontSize: '10px', color: '#668', marginTop: '6px' }}>プレイヤーが来なくてもNPC(CPU)と対局できます</div>
+          <div style={{ fontSize: '10px', color: '#668', marginTop: '6px' }}>最大5人。2人=8×8 / 3人=9×9 / 4人=10×10 / 5人=11×11。NPC(CPU)も混ぜられます</div>
         </div>
 
         <div style={{ fontSize: '12px', color: '#88ccff', marginBottom: '8px' }}>部屋一覧</div>
@@ -373,28 +409,51 @@ export default function Othello() {
 
   // ---- 部屋 ----
   const isHost = room?.hostId === me?.id
-  const myColor = game ? colorOf(game, me.id) : null
-  const isSpectator = game && !myColor
   const playing = game?.phase === 'playing'
-  const isMyTurn = playing && myColor === game.turn
-  const { black, white } = game ? countStones(game.board) : { black: 2, white: 2 }
-  const hints = isMyTurn ? new Set(validMoves(game.board, myColor)) : new Set()
-  const opp = npc || members.find((m) => m.id !== room?.hostId) || null
+  const isMulti = game?.mode === 'multi'
+  const boardSize = isMulti ? game.size : SIZE
+  const boardArr = game ? game.board : new Array(SIZE * SIZE).fill(EMPTY)
+
+  // 自分の手番と置けるマス
+  let myColor = null, isMyTurn = false, isSpectator = false
+  let hints = new Set()
+  if (game) {
+    if (isMulti) {
+      const meP = game.players.find((p) => p.id === me.id)
+      myColor = meP?.color || null
+      isSpectator = !meP
+      isMyTurn = playing && game.players[game.turnIdx]?.id === me.id
+      if (isMyTurn) hints = new Set(legalMovesMulti(game.board, game.size, myColor).moves)
+    } else {
+      myColor = colorOf(game, me.id)
+      isSpectator = !myColor
+      isMyTurn = playing && myColor === game.turn
+      if (isMyTurn) hints = new Set(validMoves(game.board, myColor))
+    }
+  }
 
   let statusMsg = ''
   if (!game) statusMsg = isHost ? '「対局開始」で始められます' : 'ホストの開始を待っています…'
   else if (playing) {
-    const cur = game.players[game.turn]
+    const cur = isMulti ? game.players[game.turnIdx] : game.players[game.turn]
     statusMsg = isMyTurn ? 'あなたの番です' : `${cur?.name || '?'} の番です…`
   } else if (game.result) {
-    const w = game.result.winner ? game.players[game.result.winner] : null
-    statusMsg = w
-      ? `${game.result.forfeit ? '(不戦勝) ' : ''}${w.name} の勝ち！ ⚫${game.result.black} - ⚪${game.result.white}`
-      : `引き分け ⚫${game.result.black} - ⚪${game.result.white}`
+    if (isMulti) {
+      const ws = game.result.winners.map((c) => game.players.find((p) => p.color === c)?.name).filter(Boolean)
+      statusMsg = ws.length === 1 ? `${ws[0]} の勝ち！` : ws.length > 1 ? `引き分け(${ws.join(' / ')})` : '終局'
+    } else {
+      const w = game.result.winner ? game.players[game.result.winner] : null
+      statusMsg = w
+        ? `${game.result.forfeit ? '(不戦勝) ' : ''}${w.name} の勝ち！ ⚫${game.result.black} - ⚪${game.result.white}`
+        : `引き分け ⚫${game.result.black} - ⚪${game.result.white}`
+    }
   }
 
+  const multiCounts = isMulti ? countsByColor(game.board) : null
+  const classicCounts = game && !isMulti ? countStones(game.board) : { black: 2, white: 2 }
+
   return wrap(
-    <div style={{ width: '100%', maxWidth: '480px' }}>
+    <div style={{ width: '100%', maxWidth: '520px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <button onClick={leaveRoom} style={btnStyle('#88ccff')}>← 退室</button>
         <div style={{ color: '#ffcc44', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '55%' }}>{room.title}</div>
@@ -406,25 +465,40 @@ export default function Othello() {
       {/* 対局者/メンバー */}
       <div style={{ border: '1px solid #224466', padding: '8px 12px', marginBottom: '10px', fontSize: '12px' }}>
         {game ? (
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <div style={{ color: playing && game.turn === BLACK ? '#ffcc44' : '#cde' }}>
-              <span style={stoneStyle(BLACK)} /> {game.players[BLACK]?.name}: {black}
+          isMulti ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
+              {game.players.map((p) => {
+                const isTurn = playing && game.players[game.turnIdx]?.id === p.id
+                return (
+                  <div key={p.color} style={{ color: isTurn ? '#ffcc44' : p.left ? '#556' : '#cde', textDecoration: p.left ? 'line-through' : 'none' }}>
+                    <span style={stoneStyle(p.color)} /> {p.name}: {multiCounts[p.color] || 0}
+                  </div>
+                )
+              })}
             </div>
-            <div style={{ color: playing && game.turn === WHITE ? '#ffcc44' : '#cde' }}>
-              <span style={stoneStyle(WHITE)} /> {game.players[WHITE]?.name}: {white}
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ color: playing && game.turn === BLACK ? '#ffcc44' : '#cde' }}>
+                <span style={stoneStyle(BLACK)} /> {game.players[BLACK]?.name}: {classicCounts.black}
+              </div>
+              <div style={{ color: playing && game.turn === WHITE ? '#ffcc44' : '#cde' }}>
+                <span style={stoneStyle(WHITE)} /> {game.players[WHITE]?.name}: {classicCounts.white}
+              </div>
             </div>
-          </div>
+          )
         ) : (
           <div>
-            <div style={{ color: '#88ccff', marginBottom: '4px' }}>対局者</div>
-            <div>1. {room.hostName} (ホスト)</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>2. {opp ? opp.name : '募集中…'}</span>
-              {isHost && npc && <button onClick={removeNpc} style={btnStyle('#ff6644', { padding: '2px 8px', fontSize: '11px' })}>NPC削除</button>}
-            </div>
-            {isHost && !npc && !opp && (
+            <div style={{ color: '#88ccff', marginBottom: '4px' }}>対局者(最大{MAX_MULTI_PLAYERS}人 / 3人以上は盤が拡大: {seated.length >= 2 ? `${multiBoardSize(Math.max(seated.length, 2))}×${multiBoardSize(Math.max(seated.length, 2))}` : '8×8'})</div>
+            {seated.map((p, i) => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>{i + 1}. {p.name}{p.id === room.hostId ? ' (ホスト)' : ''}</span>
+                {isHost && isNpcId(p.id) && <button onClick={() => removeNpc(p.id)} style={btnStyle('#ff6644', { padding: '1px 6px', fontSize: '10px' })}>削除</button>}
+              </div>
+            ))}
+            {seated.length < MAX_MULTI_PLAYERS && <div style={{ color: '#668' }}>{seated.length + 1}. 募集中…</div>}
+            {isHost && seated.length < MAX_MULTI_PLAYERS && (
               <div style={{ marginTop: '6px' }}>
-                <div style={{ color: '#44dd88', fontSize: '11px', marginBottom: '4px' }}>+ NPCを追加(強さを選択 / 9=最強AI)</div>
+                <div style={{ color: '#44dd88', fontSize: '11px', marginBottom: '4px' }}>+ NPCを追加(強さを選択 / 9=最強AI ※3人以上の対局では4以上は同じ思考)</div>
                 <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((lv) => (
                     <button key={lv} onClick={() => addNpc(lv)}
@@ -435,22 +509,27 @@ export default function Othello() {
                 </div>
               </div>
             )}
-            {members.length > (opp && !npc ? 2 : 1) && (
-              <div style={{ color: '#668', marginTop: '4px' }}>観戦: {members.filter((m) => m.id !== room.hostId && m.id !== opp?.id).map((m) => m.name).join(', ')}</div>
+            {members.length + npcs.length > MAX_MULTI_PLAYERS && (
+              <div style={{ color: '#668', marginTop: '4px' }}>観戦: {[...members, ...npcs].slice(MAX_MULTI_PLAYERS).map((m) => m.name).join(', ')}</div>
             )}
           </div>
         )}
         {game && isSpectator && <div style={{ color: '#668', marginTop: '4px' }}>👀 観戦中</div>}
-        {game && myColor && <div style={{ color: '#668', marginTop: '4px' }}>あなたは <span style={stoneStyle(myColor)} /> {myColor === BLACK ? '黒(先手)' : '白(後手)'}</div>}
+        {game && myColor && (
+          <div style={{ color: '#668', marginTop: '4px' }}>
+            あなたは <span style={stoneStyle(myColor)} /> {STONE_LABEL[myColor] || '?'}
+            {!isMulti && (myColor === BLACK ? '(先手)' : '(後手)')}
+          </div>
+        )}
       </div>
 
       {/* 盤面 */}
       <div style={{
-        display: 'grid', gridTemplateColumns: `repeat(${SIZE}, 1fr)`, gap: '2px',
+        display: 'grid', gridTemplateColumns: `repeat(${boardSize}, 1fr)`, gap: '2px',
         background: '#0a3320', border: '3px solid #1a5535', borderRadius: '4px', padding: '4px',
         width: '100%', aspectRatio: '1',
       }}>
-        {(game ? game.board : new Array(SIZE * SIZE).fill(EMPTY)).map((cell, i) => (
+        {boardArr.map((cell, i) => (
           <button
             key={i}
             onClick={() => { if (hints.has(i)) sendMove(i) }}
@@ -463,7 +542,7 @@ export default function Othello() {
             {cell !== EMPTY && (
               <div style={{
                 width: '78%', height: '78%', borderRadius: '50%',
-                background: cell === BLACK ? 'radial-gradient(circle at 35% 30%, #555, #000)' : 'radial-gradient(circle at 35% 30%, #fff, #bbb)',
+                background: STONE_CSS[cell] || '#666',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
               }} />
             )}
@@ -478,6 +557,17 @@ export default function Othello() {
         {statusMsg}
         {passNote && <div style={{ fontSize: '12px', color: '#ff8866', marginTop: '4px' }}>{passNote}</div>}
       </div>
+
+      {/* 多人数の最終結果 */}
+      {isMulti && game.phase === 'ended' && game.result?.standings && (
+        <div style={{ border: '1px solid #224466', padding: '8px 12px', marginTop: '10px', fontSize: '12px', width: '100%' }}>
+          {game.result.standings.map((s, i) => (
+            <div key={s.color} style={{ color: s.left ? '#556' : i === 0 ? '#ffcc44' : '#cde' }}>
+              {i + 1}位 <span style={stoneStyle(s.color)} /> {s.name}: {s.count}{s.left ? ' (切断)' : ''}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
