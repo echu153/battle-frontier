@@ -20,6 +20,11 @@ const roomChannelName = (roomId) => `othello-room-${roomId}`
 
 const NPC_NAMES = ['オセロ丸', 'リバー子', 'カドトリ翁']
 const CPU_DELAY_MS = 800
+// NPCの強さはidに埋め込む(npc-lv{n}-...)。stateの再配信/観戦でも失われない
+const npcLevelOf = (id) => {
+  const m = /^npc-lv(\d)-/.exec(id || '')
+  return m ? Number(m[1]) : 3
+}
 
 const btnStyle = (color, extra = {}) => ({
   background: 'none', border: `1px solid ${color}`, color, padding: '6px 10px',
@@ -254,9 +259,9 @@ export default function Othello() {
   }
 
   // ---- NPC追加/削除(ホスト・対局中以外) ----
-  const addNpc = () => {
+  const addNpc = (level) => {
     const name = NPC_NAMES[Math.floor(Math.random() * NPC_NAMES.length)]
-    setNpc({ id: `npc-${Date.now() % 100000}`, name: `🤖${name}` })
+    setNpc({ id: `npc-lv${level}-${Date.now() % 100000}`, name: `🤖${name} LV${level}`, level })
   }
   const removeNpc = () => setNpc(null)
 
@@ -297,7 +302,7 @@ export default function Othello() {
       if (stateSeqRef.current !== seq) return // 既に別の手で進行済み
       const cur = gameRef.current
       if (!cur || cur.phase !== 'playing') return
-      const mv = cpuChooseMove(cur.board, cur.turn)
+      const mv = cpuChooseMove(cur.board, cur.turn, npcLevelOf(curPlayer.id))
       if (mv !== null) hostApply({ playerId: curPlayer.id, idx: mv })
     }, CPU_DELAY_MS)
     cpuTimerRef.current = t
@@ -415,9 +420,21 @@ export default function Othello() {
             <div>1. {room.hostName} (ホスト)</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span>2. {opp ? opp.name : '募集中…'}</span>
-              {isHost && !npc && !opp && <button onClick={addNpc} style={btnStyle('#44dd88', { padding: '2px 8px', fontSize: '11px' })}>+ NPC追加</button>}
               {isHost && npc && <button onClick={removeNpc} style={btnStyle('#ff6644', { padding: '2px 8px', fontSize: '11px' })}>NPC削除</button>}
             </div>
+            {isHost && !npc && !opp && (
+              <div style={{ marginTop: '6px' }}>
+                <div style={{ color: '#44dd88', fontSize: '11px', marginBottom: '4px' }}>+ NPCを追加(強さを選択 / 9=最強AI)</div>
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((lv) => (
+                    <button key={lv} onClick={() => addNpc(lv)}
+                      style={btnStyle(lv >= 9 ? '#ff6644' : lv >= 7 ? '#ffcc44' : '#44dd88', { padding: '4px 0', fontSize: '12px', width: '32px', textAlign: 'center' })}>
+                      {lv}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {members.length > (opp && !npc ? 2 : 1) && (
               <div style={{ color: '#668', marginTop: '4px' }}>観戦: {members.filter((m) => m.id !== room.hostId && m.id !== opp?.id).map((m) => m.name).join(', ')}</div>
             )}

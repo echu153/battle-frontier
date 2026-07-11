@@ -147,7 +147,8 @@ export function forfeitGame(state, playerId) {
   return { ...state, phase: 'ended', result: { black, white, winner: opponent(color), forfeit: true } }
 }
 
-export function cpuChooseMove(board, color) {
+// 位置重みだけの1手読み(LV3相当)
+function chooseByWeights(board, color) {
   const moves = validMoves(board, color)
   if (moves.length === 0) return null
   let best = []
@@ -158,4 +159,109 @@ export function cpuChooseMove(board, color) {
     else if (score === bestScore) best.push(m)
   }
   return best[Math.floor(Math.random() * best.length)]
+}
+
+// ---- 評価関数(探索用・colorから見たスコア) ----
+// 位置重み + 着手可能数(機動力) + 終盤は石数差
+function evaluate(board, color) {
+  const opp = opponent(color)
+  let pos = 0, empties = 0
+  for (let i = 0; i < 64; i++) {
+    if (board[i] === color) pos += WEIGHTS[i]
+    else if (board[i] === opp) pos -= WEIGHTS[i]
+    else empties++
+  }
+  const mob = validMoves(board, color).length - validMoves(board, opp).length
+  let disc = 0
+  if (empties < 16) {
+    const { black, white } = countStones(board)
+    disc = color === BLACK ? black - white : white - black
+  }
+  return pos * 2 + mob * 6 + disc * 4
+}
+
+// 終局時の確定スコア(勝敗が評価値を必ず支配する大きさ)
+function terminalScore(board, color) {
+  const { black, white } = countStones(board)
+  const diff = color === BLACK ? black - white : white - black
+  return diff * 10000
+}
+
+class SearchTimeout extends Error {}
+
+// negamax + αβ枝刈り。深さが残り空きマス以上なら自動的に完全読みになる
+function negamax(board, color, depth, alpha, beta, ctx) {
+  if ((++ctx.nodes & 255) === 0 && Date.now() > ctx.deadline) throw new SearchTimeout()
+  const moves = validMoves(board, color)
+  if (moves.length === 0) {
+    if (validMoves(board, opponent(color)).length === 0) return terminalScore(board, color)
+    return -negamax(board, opponent(color), depth, -beta, -alpha, ctx) // パス(深さ据置)
+  }
+  if (depth <= 0) return evaluate(board, color)
+  moves.sort((a, b) => WEIGHTS[b] - WEIGHTS[a]) // 枝刈り効率のため良さそうな手から
+  let best = -Infinity
+  for (const m of moves) {
+    const score = -negamax(applyMove(board, m, color), opponent(color), depth - 1, -beta, -alpha, ctx)
+    if (score > best) best = score
+    if (best > alpha) alpha = best
+    if (alpha >= beta) break
+  }
+  return best
+}
+
+// 反復深化: 時間内に読み切れた最深の結果を返す
+function searchBestMove(board, color, maxDepth, timeMs) {
+  const moves = validMoves(board, color)
+  if (moves.length === 0) return null
+  if (moves.length === 1) return moves[0]
+  moves.sort((a, b) => WEIGHTS[b] - WEIGHTS[a])
+  const ctx = { nodes: 0, deadline: Date.now() + timeMs }
+  const empties = board.filter((c) => c === EMPTY).length
+  let best = moves[0]
+  try {
+    for (let depth = 1; depth <= Math.min(maxDepth, empties); depth++) {
+      let depthBest = null, depthScore = -Infinity
+      for (const m of moves) {
+        const score = -negamax(applyMove(board, m, color), opponent(color), depth - 1, -Infinity, -depthScore, ctx)
+        if (score > depthScore) { depthScore = score; depthBest = m }
+      }
+      best = depthBest
+      // 次の反復で先頭から読むよう最善手を並べ替え
+      moves.splice(moves.indexOf(depthBest), 1)
+      moves.unshift(depthBest)
+    }
+  } catch (e) {
+    if (!(e instanceof SearchTimeout)) throw e
+  }
+  return best
+}
+
+// ---- CPU着手(強さ1〜9) ----
+// 1=ランダム / 2=裏返し最大の欲張り / 3=位置重み1手読み
+// 4〜8=αβ探索(深さ2/3/4/5/6) / 9=反復深化で時間いっぱい読む＋終盤は完全読み
+const LEVEL_SEARCH = {
+  4: { depth: 2, ms: 300 },
+  5: { depth: 3, ms: 400 },
+  6: { depth: 4, ms: 500 },
+  7: { depth: 5, ms: 700 },
+  8: { depth: 6, ms: 900 },
+  9: { depth: 64, ms: 1400 },
+}
+
+export function cpuChooseMove(board, color, level = 3) {
+  const moves = validMoves(board, color)
+  if (moves.length === 0) return null
+  if (level <= 1) return moves[Math.floor(Math.random() * moves.length)]
+  if (level === 2) {
+    let best = [], bestFlips = -1
+    for (const m of moves) {
+      const n = flipsFor(board, m, color).length
+      if (n > bestFlips) { bestFlips = n; best = [m] }
+      else if (n === bestFlips) best.push(m)
+    }
+    return best[Math.floor(Math.random() * best.length)]
+  }
+  if (level === 3) return chooseByWeights(board, color)
+  const cfg = LEVEL_SEARCH[Math.min(level, 9)]
+  return searchBestMove(board, color, cfg.depth, cfg.ms)
 }
