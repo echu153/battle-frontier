@@ -112,9 +112,10 @@ export default function CardGame() {
       const st = ch.presenceState()
       const list = []
       for (const key of Object.keys(st)) {
-        for (const meta of st[key]) {
-          if (meta.roomId) list.push(meta)
-        }
+        // 同一ユーザー(key)に古いソケットのmetaが残ることがあるため最新の1件のみ採用
+        // (1ユーザーが立てられる部屋は1つ)
+        const metas = st[key].filter((m) => m.roomId)
+        if (metas.length > 0) list.push(metas[metas.length - 1])
       }
       setRooms(list)
     })
