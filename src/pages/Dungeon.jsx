@@ -1654,16 +1654,26 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
     if (shopRef.current) return // 秘密の商店中は使用不可
     if (status !== 'exploring' || busyRef.current || (inventory[key] || 0) < 1) return
     const def = PET_ITEMS[key]
-    // だっしゅつの翼は使い切り＝消費確認をはさむ
+    // だっしゅつの翼は使い切り＝消費確認をはさむ。
+    //  ※window.confirm はインストール済みPWA/一部モバイルで無反応(常にfalse)になり
+    //    「翼を使えない」不具合の原因になるため、ゲーム内ポップアップ(confirmBox)で確認する。
     if (key === 'escape') {
-      if (!window.confirm('だっしゅつの翼を使ってダンジョンから戻りますか？（1個消費します）')) return
+      setConfirmBox({
+        msg: 'だっしゅつの翼を使ってダンジョンから戻りますか？（1個消費します）',
+        okLabel: '🪽 脱出する',
+        onOk: async () => {
+          if (shopRef.current || status !== 'exploring' || busyRef.current || (inventory.escape || 0) < 1) return
+          const { error } = await supabase.rpc('pet_consume_item', { p_key: 'escape' })
+          if (error) { addLog('アイテムを持っていない'); return }
+          setInventory((inv) => ({ ...inv, escape: (inv.escape || 1) - 1 }))
+          setStatus('escaped'); addLog('🪽 ダンジョンから脱出した'); finishRun(false)
+        },
+      })
+      return
     }
     const { error } = await supabase.rpc('pet_consume_item', { p_key: key })
     if (error) { addLog('アイテムを持っていない'); return }
     setInventory((inv) => ({ ...inv, [key]: (inv[key] || 1) - 1 }))
-    if (key === 'escape') {
-      setStatus('escaped'); addLog('🪽 ダンジョンから脱出した'); finishRun(false); return
-    }
     if (def?.scroll) { castScroll(key); return } // スキルの書を発動（1ターン経過は内部で）
     if (def?.healPct) {
       const heal = Math.ceil(pet.maxHp * def.healPct)
