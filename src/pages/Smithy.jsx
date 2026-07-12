@@ -244,7 +244,7 @@ export default function Smithy() {
     const serverStoneCount = serverStoneItem?.quantity || 0
     const serverSameItems = (serverEquip || []).filter(e =>
       e.weapons?.name === item.weapons.name && e.id !== item.id && !e.equipped && !e.is_favorite && !e.listed
-      && !(e.enhance_plus > 0) && !e.is_bound  // 強化済み(+1以上)/帰属(取引所入手)の装備は素材にしない
+      && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0)  // 強化済み(+1以上)/帰属(取引所入手)の装備は素材にしない
     )
     // 選択した素材だけで足りているか判定（同名装備 or 強化石）
     if (source === 'stone') {
@@ -369,13 +369,15 @@ export default function Smithy() {
     if (selected.some(e => e.is_favorite)) { showMessage('お気に入り装備は加工できません！（★を解除してください）', '#ff4444'); return }
     if (selected.some(e => e.enhance_plus > 0)) { showMessage('強化済み(+1以上)の装備は加工できません！', '#ff4444'); return }
     if (selected.some(e => e.is_bound)) { showMessage('帰属アイテム（取引所で入手）は加工できません！', '#ff4444'); return }
+    if (selected.some(e => e.evolve_stage > 0)) { showMessage('進化・真化させた装備は加工できません！', '#ff4444'); return }
     // 消費する装備を「未強化のまま現存する」条件付きで削除し、実際に削除できた数だけ加工する
     // （連打・別端末で同じ装備を二重消費→石を二重生成するのを防ぐ）
     let deleted = 0
     for (const item of selected) {
       // enhance_plus は 0 または NULL（ドロップ直後は未設定＝NULL）のどちらも「未強化」として消費対象にする
       const { data: del } = await supabase.from('player_equipment').delete()
-        .eq('id', item.id).or('enhance_plus.is.null,enhance_plus.eq.0').select('id')
+        .eq('id', item.id).or('enhance_plus.is.null,enhance_plus.eq.0')
+        .or('evolve_stage.is.null,evolve_stage.eq.0').select('id')
       if (del && del.length > 0) deleted++
     }
     const count = Math.floor(deleted / 3)   // 実際に消費できた装備3個=強化石1個
@@ -654,7 +656,7 @@ export default function Smithy() {
           const rankCosts = ENHANCE_COST_BY_RANK[w.rarity] || ENHANCE_COST_BY_RANK.ss
           const cost = rankCosts[nextPlus] || rankCosts[rankCosts.length - 1]
           const materialCount = MATERIAL_COUNT(plus)
-          const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound).length
+          const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0)).length
           const stoneCount = getStoneCount(w.rarity)
           // 選択中の素材で足りているか
           const matEnough = matSource === 'stone' ? stoneCount >= materialCount : sameCount >= materialCount
@@ -938,7 +940,7 @@ export default function Smithy() {
                     const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
                     const plus = item.enhance_plus || 0
                     const materialCount = MATERIAL_COUNT(plus)
-                    const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound).length
+                    const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0)).length
                     const stoneCount = getStoneCount(w.rarity)
                     const enhanced = calcEnhancedStats(w, plus, item.evolve_stage || 0)
                     const isSelected = selectedItem?.id === item.id
@@ -1010,7 +1012,7 @@ export default function Smithy() {
                   <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>ランク指定でランダムに選んで一気に加工</div>
                   <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
                     {RARITY_ORDER.map(rarity => {
-                      const avail = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound && e.weapons.rarity === rarity), sortKey)
+                      const avail = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0) && e.weapons.rarity === rarity), sortKey)
                       const maxTimes = Math.floor(avail.length / 3)
                       const canPick = maxTimes >= 1
                       const times = Math.min(craftTimes, maxTimes)
@@ -1280,7 +1282,7 @@ export default function Smithy() {
 
 function CraftSelector({ equipment, loading, sortKey, onRequestCraft }) {
   const [selected, setSelected] = useState([])
-  const unequipped = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound), sortKey || 'obtained_asc')
+  const unequipped = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0)), sortKey || 'obtained_asc')
 
   const toggle = (id) => {
     if (selected.includes(id)) { setSelected(selected.filter(s => s !== id)); return }

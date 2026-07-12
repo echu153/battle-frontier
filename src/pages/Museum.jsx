@@ -200,6 +200,7 @@ export default function Museum() {
     if (!groupId) { showMsg('この装備は寄贈できません', '#ff4444'); return }
     if (item.equipped) { showMsg('装備中は寄贈できません。先に外してください', '#ff4444'); return }
     if (item.is_favorite) { showMsg('お気に入り装備は寄贈できません。先に★を解除してください', '#ff4444'); return }
+    if ((item.evolve_stage || 0) > 0) { showMsg('進化・真化させた装備は寄贈できません', '#ff4444'); return }
     const tier = getEnhanceTier(item.enhance_plus || 0)
     if (donations.find(d => d.weapon_name === name && d.enhance_tier === tier)) {
       showMsg('このティアはすでに寄贈済みです', '#ff8844'); return
@@ -210,7 +211,8 @@ export default function Museum() {
     const stat = getMuseumStat(name, item.weapons.weapon_type, item.slot)
     const amount = getBonusAmount(name, groupId, item.enhance_plus || 0)
     // 寄贈する装備を「現存する」条件付きで削除し、削除できた時だけボーナス付与＝二重付与を防ぐ
-    const { data: del } = await supabase.from('player_equipment').delete().eq('id', item.id).select('id')
+    const { data: del } = await supabase.from('player_equipment').delete().eq('id', item.id)
+      .or('evolve_stage.is.null,evolve_stage.eq.0').select('id')
     if (!del || del.length === 0) { showMsg('寄贈に失敗しました（装備が見つかりません）', '#ff4444'); await fetchAll(); return }
     // ボーナスは最新のmuseum_*に加算（複数寄贈時のlost update防止）
     const { data: fresh } = await supabase.from('profiles').select('*').eq('id', profile.id).maybeSingle()
@@ -288,6 +290,7 @@ export default function Museum() {
   for (const item of [...equipment].sort((a, b) => (a.is_favorite ? 1 : 0) - (b.is_favorite ? 1 : 0))) {
     const name = item.weapons?.name
     if (!name || !ITEM_GROUP_MAP[name]) continue
+    if ((item.evolve_stage || 0) > 0) continue  // 進化・真化させた装備は寄贈不可
     const tier = getEnhanceTier(item.enhance_plus || 0)
     const key = `${name}__${tier}`
     if (donatedKeySet.has(key) || seenKeys.has(key)) continue
