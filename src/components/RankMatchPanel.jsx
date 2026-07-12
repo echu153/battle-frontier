@@ -126,8 +126,11 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
           <button onClick={onClose} style={{ background: 'none', border: '1px solid #8a7a44', color: '#ccaa77', padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>✕ 閉じる</button>
         </div>
 
-        <div style={{ border: '1px solid #3a6a4a', background: '#06120a', padding: '6px 10px', marginBottom: '8px', color: '#88ddaa', fontSize: '11px' }}>
+        <div style={{ border: '1px solid #3a6a4a', background: '#06120a', padding: '6px 10px', marginBottom: '8px', color: '#88ddaa', fontSize: '11px', lineHeight: '1.7' }}>
           🧪 <b>ベータ版</b> 開催期間: <b>7月31日 23:59まで</b>
+          <div style={{ color: '#6faf8a', fontSize: '10px', marginTop: '2px' }}>
+            ※ベータ期間中はルールを都度更新する場合があります。あらかじめご了承ください。
+          </div>
         </div>
         <div style={{ border: '1px solid #4a4426', background: '#0c0e06', padding: '8px 10px', marginBottom: '10px', color: '#ccaa88', fontSize: '10px', lineHeight: '1.8', textAlign: 'left' }}>
           <div style={{ color: '#ffd75e', marginBottom: '2px' }}>📜 ルール</div>
