@@ -3,6 +3,7 @@
 // シーズン=月次(JST)。終了後に最終順位に応じてGold報酬（rank_claim_season_reward）。
 // 戦闘エンジンは対人戦/組み手と共通(simulatePvpBattle・HP補正なし)。要SQL: supabase_rank_match.sql
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { BattleLogLine } from '../pages/Game'
 import { simulatePvpBattle } from '../lib/pvp'
@@ -13,7 +14,11 @@ const fmtCd = (sec) => {
   return m > 0 ? `${m}分${String(s).padStart(2, '0')}秒` : `${s}秒`
 }
 
+// ベータ版の開催期間（JST 2026-07-31 23:59まで）。サーバー側(rank_find_opponent)でも同じ期限で判定
+const BETA_END = new Date('2026-07-31T23:59:59+09:00')
+
 export default function RankMatchPanel({ onClose, isAdmin = false }) {
+  const nav = useNavigate()
   const [state, setState] = useState(null)      // rank_get_state の結果
   const [cd, setCd] = useState(0)               // CD残秒（クライアント側カウントダウン）
   const [opponent, setOpponent] = useState(null)
@@ -111,26 +116,33 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
 
   const onCooldown = cd > 0
   const prev = state?.prev_season
+  const betaEnded = Date.now() > BETA_END.getTime()
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '16px', overflowY: 'auto', fontFamily: 'monospace' }}>
       <div style={{ background: '#0a0e06', border: '1px solid #9a8a3a', maxWidth: '680px', width: '100%', padding: '16px', marginTop: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #5a4f1f', paddingBottom: '8px' }}>
-          <div style={{ color: '#ffd75e', fontSize: '15px', letterSpacing: '2px' }}>🏅 ランクマッチ <span style={{ color: '#997733', fontSize: '10px' }}>(開発者限定)</span></div>
+          <div style={{ color: '#ffd75e', fontSize: '15px', letterSpacing: '2px' }}>🏅 ランクマッチ <span style={{ color: '#88ddaa', fontSize: '10px' }}>β</span> <span style={{ color: '#997733', fontSize: '10px' }}>(開発者限定)</span></div>
           <button onClick={onClose} style={{ background: 'none', border: '1px solid #8a7a44', color: '#ccaa77', padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>✕ 閉じる</button>
         </div>
 
+        <div style={{ border: '1px solid #3a6a4a', background: '#06120a', padding: '6px 10px', marginBottom: '8px', color: '#88ddaa', fontSize: '11px' }}>
+          🧪 <b>ベータ版</b> 開催期間: <b>7月31日 23:59まで</b>（ベータ期間の報酬は後日発表）
+        </div>
         <div style={{ border: '1px solid #4a4426', background: '#0c0e06', padding: '8px 10px', marginBottom: '10px', color: '#ccaa88', fontSize: '10px', lineHeight: '1.8' }}>
           <div style={{ color: '#ffd75e', marginBottom: '2px' }}>📜 ルール</div>
           ・初期レート<b>1000</b>。勝利<b>+15</b>／敗北<b>-15</b>（相手とのレート差で±5補正・引き分け0）<br />
           ・レートが変わるのは挑戦した側のみ（対戦相手に選ばれた側は変動なし）<br />
           ・マッチングは<b>レート±100</b>からランダム。<b>マッチ成立で即対戦開始</b>（キャンセル不可）<br />
           ・挑戦は<b>1時間に1回</b><span style={{ color: '#998855' }}>（開発中はCDなし）</span><br />
-          ・シーズン制。<span style={{ color: '#998855' }}>報酬などの詳細は後日発表</span><br />
           ・<b>50ターン</b>で強制終了＝与ダメージ総量で勝敗<br />
           ・防御で大きく軽減・回復は通常<br />
           ・素早さで回避・クリティカル最大<b>1.5倍</b>
         </div>
+        <button onClick={() => nav('/skills?set=pvp')}
+          style={{ width: '100%', padding: '8px', marginBottom: '10px', background: '#0a1424', border: '1px solid #3aa0e0', color: '#8ad0ff', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>
+          ⚡ 対人戦スキル・クラスを設定する（スキル画面へ）
+        </button>
 
         {!state && !error && <div style={{ color: '#998866', fontSize: '12px' }}>データを読込中...</div>}
 
@@ -157,12 +169,12 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
 
         {/* マッチング */}
         {state && (
-          <button onClick={findMatch} disabled={phase !== 'idle' || onCooldown}
+          <button onClick={findMatch} disabled={phase !== 'idle' || onCooldown || betaEnded}
             style={{ width: '100%', padding: '12px', marginBottom: '10px',
-              background: onCooldown ? '#0c0e08' : '#141a06', border: `1px solid ${onCooldown ? '#3a3a2a' : '#c0a83a'}`,
-              color: onCooldown ? '#555544' : '#ffd75e', cursor: (phase !== 'idle' || onCooldown) ? 'not-allowed' : 'pointer',
+              background: (onCooldown || betaEnded) ? '#0c0e08' : '#141a06', border: `1px solid ${(onCooldown || betaEnded) ? '#3a3a2a' : '#c0a83a'}`,
+              color: (onCooldown || betaEnded) ? '#555544' : '#ffd75e', cursor: (phase !== 'idle' || onCooldown || betaEnded) ? 'not-allowed' : 'pointer',
               fontFamily: 'monospace', fontSize: '13px', letterSpacing: '1px' }}>
-            {onCooldown ? `⏳ クールダウン中（残り ${fmtCd(cd)}）` : phase === 'matching' ? 'マッチング中...' : phase === 'battling' ? '⚔ 戦闘中...' : '🎲 ランクマッチ開始（マッチ成立で即対戦）'}
+            {betaEnded ? '🧪 ベータ期間は終了しました' : onCooldown ? `⏳ クールダウン中（残り ${fmtCd(cd)}）` : phase === 'matching' ? 'マッチング中...' : phase === 'battling' ? '⚔ 戦闘中...' : '🎲 ランクマッチ開始（マッチ成立で即対戦）'}
           </button>
         )}
         {/* 開発中はis_adminのCDが0秒（SQL側で免除）のためリセットボタンは通常出ない。万一の保険で残す */}

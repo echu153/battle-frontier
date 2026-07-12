@@ -35,7 +35,11 @@ export default function Skills() {
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('current')
   const [setMessage, setSetMessage] = useState('')
-  const [selectedSet, setSelectedSet] = useState('sortie')  // 編集中のセット種別
+  // 編集中のセット種別。?set=pvp などで初期選択可（ランクマッチ等からの遷移用）
+  const [selectedSet, setSelectedSet] = useState(() => {
+    const p = new URLSearchParams(window.location.search).get('set')
+    return SET_TYPES.some(s => s.key === p) ? p : 'sortie'
+  })
   const [bulkMode, setBulkMode] = useState(false)           // まとめて選択モード
   const [bulkIds, setBulkIds] = useState([])                // 一括反映で選んだスキルID（選択順）
   const [pvpClass, setPvpClass] = useState(null)            // 対人戦用クラス（null=現クラスで戦う）

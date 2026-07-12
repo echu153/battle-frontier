@@ -162,6 +162,11 @@ BEGIN
   END IF;
   -- ▲
 
+  -- ベータ版の開催期間: JST 2026-07-31 23:59まで（延長時はこの日時を変更）
+  IF (now() AT TIME ZONE 'Asia/Tokyo') > timestamp '2026-07-31 23:59:59' THEN
+    RETURN json_build_object('error', 'ベータ期間は終了しました');
+  END IF;
+
   -- 自分の行が無ければ作成（初期レート1000）
   INSERT INTO rank_ratings(player_id, season) VALUES (auth.uid(), v_season)
     ON CONFLICT (player_id, season) DO NOTHING;
