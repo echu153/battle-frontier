@@ -70,8 +70,8 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
       const { data: { user } } = await supabase.auth.getUser()
       if (!meRef.current) meRef.current = await loadLoadout(user.id, true)
       const oppLoadout = await loadLoadout(opponent.id, false)
-      // ランクマッチはHP補正なし（組み手と同じ素のステ）
-      const { logs: blogs, winner: w, turns, aHpPct, bHpPct } = simulatePvpBattle(meRef.current, oppLoadout)
+      // ランクマッチはHP補正なし（組み手と同じ素のステ）。ルール行はパネル常設のためログから省く
+      const { logs: blogs, winner: w, turns, aHpPct, bHpPct } = simulatePvpBattle(meRef.current, oppLoadout, { hideRuleLine: true })
       setLogs(blogs)
       setWinner(w)
       const { data, error: e } = await supabase.rpc('rank_report_result', {
@@ -119,9 +119,15 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
           <button onClick={onClose} style={{ background: 'none', border: '1px solid #8a7a44', color: '#ccaa77', padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>✕ 閉じる</button>
         </div>
 
-        <div style={{ color: '#ccaa88', fontSize: '10px', lineHeight: '1.7', marginBottom: '10px' }}>
-          レート戦。初期レート<b>1000</b>・勝敗でレートが変動します。マッチングは<b>レート±100</b>からランダム、挑戦は<b>1時間に1回</b>。
-          シーズン（月次）終了後、最終順位に応じてGold報酬を受け取れます。HP補正なし＝素のステで、お互いの対人戦（未設定なら出撃）スキルで戦います。
+        <div style={{ border: '1px solid #4a4426', background: '#0c0e06', padding: '8px 10px', marginBottom: '10px', color: '#ccaa88', fontSize: '10px', lineHeight: '1.8' }}>
+          <div style={{ color: '#ffd75e', marginBottom: '2px' }}>📜 ルール</div>
+          ・初期レート<b>1000</b>。勝敗でレートが変動<br />
+          ・マッチングは<b>レート±100</b>からランダム<br />
+          ・挑戦は<b>1時間に1回</b><span style={{ color: '#998855' }}>（開発中はCDなし）</span><br />
+          ・シーズン制。<span style={{ color: '#998855' }}>報酬などの詳細は後日発表</span><br />
+          ・<b>50ターン</b>で強制終了＝与ダメージ総量で勝敗<br />
+          ・防御で大きく軽減・回復は通常<br />
+          ・素早さで回避・クリティカル最大<b>1.5倍</b>
         </div>
 
         {!state && !error && <div style={{ color: '#998866', fontSize: '12px' }}>データを読込中...</div>}
@@ -157,6 +163,7 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
             {onCooldown ? `⏳ クールダウン中（残り ${fmtCd(cd)}）` : phase === 'matching' ? 'マッチング中...' : '🎲 ランクマッチ開始（レート±100）'}
           </button>
         )}
+        {/* 開発中はis_adminのCDが0秒（SQL側で免除）のためリセットボタンは通常出ない。万一の保険で残す */}
         {isAdmin && onCooldown && (
           <button onClick={devResetCd} style={{ width: '100%', padding: '6px', marginTop: '-4px', marginBottom: '10px', background: '#0a0a14', border: '1px dashed #445', color: '#778', cursor: 'pointer', fontFamily: 'monospace', fontSize: '10px' }}>🛠 [開発] CDリセット</button>
         )}
@@ -214,7 +221,7 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
               ))}
             </div>
             <div style={{ color: '#665533', fontSize: '9px', marginTop: '6px' }}>
-              報酬: 1位10万G / 2位7万G / 3位5万G / 〜10位3万G / 〜30位1.5万G / 〜100位8000G / 参加3000G
+              シーズン報酬の詳細は後日発表
             </div>
           </div>
         )}

@@ -83,6 +83,7 @@ LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   v_season      text := rank_current_season();
   v_me          rank_ratings%ROWTYPE;
+  v_is_admin    boolean;
   v_cd_remain   int := 0;
   v_my_rank     int := NULL;
   v_board       json;
@@ -92,15 +93,17 @@ DECLARE
   v_prev_rank   int;
 BEGIN
   IF auth.uid() IS NULL THEN RETURN json_build_object('error', '未認証です'); END IF;
+  SELECT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin) INTO v_is_admin;
   -- ▼開発限定ゲート（一般公開時にこのブロックを削除）
-  IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin) THEN
+  IF NOT v_is_admin THEN
     RETURN json_build_object('error', '開発中の機能です');
   END IF;
   -- ▲
 
   SELECT * INTO v_me FROM rank_ratings WHERE player_id = auth.uid() AND season = v_season;
   IF v_me.player_id IS NOT NULL THEN
-    IF v_me.last_match_at IS NOT NULL THEN
+    -- is_adminはCD免除（開発中は0秒。一般公開後も管理者はCDなしのまま＝他機能と同方針）
+    IF NOT v_is_admin AND v_me.last_match_at IS NOT NULL THEN
       v_cd_remain := GREATEST(0, CEIL(EXTRACT(EPOCH FROM (v_me.last_match_at + interval '1 hour' - now())))::int);
     END IF;
     SELECT 1 + COUNT(*) INTO v_my_rank FROM rank_ratings r
@@ -146,12 +149,14 @@ LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   v_season    text := rank_current_season();
   v_me        rank_ratings%ROWTYPE;
+  v_is_admin  boolean;
   v_opp       record;
   v_cd_remain int;
 BEGIN
   IF auth.uid() IS NULL THEN RETURN json_build_object('error', '未認証です'); END IF;
+  SELECT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin) INTO v_is_admin;
   -- ▼開発限定ゲート（一般公開時にこのブロックを削除）
-  IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin) THEN
+  IF NOT v_is_admin THEN
     RETURN json_build_object('error', '開発中の機能です');
   END IF;
   -- ▲
@@ -161,8 +166,8 @@ BEGIN
     ON CONFLICT (player_id, season) DO NOTHING;
   SELECT * INTO v_me FROM rank_ratings WHERE player_id = auth.uid() AND season = v_season FOR UPDATE;
 
-  -- 挑戦CD: 1時間に1回
-  IF v_me.last_match_at IS NOT NULL AND now() < v_me.last_match_at + interval '1 hour' THEN
+  -- 挑戦CD: 1時間に1回（is_adminは免除＝開発中は0秒。一般公開後も管理者はCDなしのまま）
+  IF NOT v_is_admin AND v_me.last_match_at IS NOT NULL AND now() < v_me.last_match_at + interval '1 hour' THEN
     v_cd_remain := CEIL(EXTRACT(EPOCH FROM (v_me.last_match_at + interval '1 hour' - now())))::int;
     RETURN json_build_object('error', 'クールダウン中です', 'cd_remain', v_cd_remain);
   END IF;

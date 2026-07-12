@@ -698,7 +698,8 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
   if (opts.startMpB != null) B.mp = Math.min(B.eff.mp_max, Math.max(0, opts.startMpB))
 
   logs.push({ text: `⚔ 対人戦開始！ ${A.profile.username} vs ${B.profile.username}`, color: '#ffcc66' })
-  logs.push({ text: `（50ターンで強制終了・与ダメージ総量で勝敗／防御で大きく軽減・回復は通常／素早さで回避・クリ最大1.5倍）`, color: '#88aacc' })
+  // ランクマッチはルールをパネル側に常設表示するため開始ログには出さない（hideRuleLine）
+  if (!opts.hideRuleLine) logs.push({ text: `（50ターンで強制終了・与ダメージ総量で勝敗／防御で大きく軽減・回復は通常／素早さで回避・クリ最大1.5倍）`, color: '#88aacc' })
 
   // 開幕の装備効果バフ
   A.buffs = applyEquipmentEffects(A.equipment, { ...A.profile, hp_max: A.eff.hp_max }, A.buffs, logs)
