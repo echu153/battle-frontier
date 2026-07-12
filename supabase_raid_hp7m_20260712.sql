@@ -1,36 +1,19 @@
 -- ============================================================
--- レイド Phase 2: 21時/22時の2枠・日替わり交互（ヴァルゼノク／雨摩座）
---   ・1日2体: 21:00〜21:30 と 22:00〜22:30（各30分・HP100万）
---   ・日替わりで交互: 偶数日 21時=ヴァルゼノク/22時=雨摩座、奇数日は逆
---   ・各枠は別レイド（参加・貢献・報酬は枠ごと独立）
---   ・管理者テスト出現(is_dev)も内包（Phase1未適用環境でもこの1本でOK）
---   Supabase の SQL Editor でファイル全体を実行してください
+-- レイドボス HP 700万化（2026-07-12）
+--   ① 現在アクティブなレイドボスを即HP700万へ（既存ダメージ分は維持しつつ上限を+）
+--   ② 次回spawn以降もHP700万に（spawn_raid_boss_if_needed / spawn_raid_boss_dev を再定義）
+--   ※ raid_boss_for_slot（3体%3ローテ）は再定義しない＝現行の3体日替わりを維持する。
+--      土台: supabase_raid_phase2_2slots.sql（HP値 5000000→7000000 のみ変更）。
+--   Supabase の SQL Editor で丸ごと実行してください。
 -- ============================================================
 
--- 1) 列追加（is_dev / slot）
-ALTER TABLE raid_boss ADD COLUMN IF NOT EXISTS is_dev boolean NOT NULL DEFAULT false;
-ALTER TABLE raid_boss ADD COLUMN IF NOT EXISTS slot   int;
+-- ① 現在アクティブなレイドボスを即HP700万へ（本番・開発テスト両方）
+UPDATE raid_boss
+SET hp_max     = 7000000,
+    hp_current = hp_current + (7000000 - hp_max)
+WHERE status = 'active' AND hp_max < 7000000;
 
--- 既存の本番行は slot=21 とみなす
-UPDATE raid_boss SET slot = 21 WHERE slot IS NULL AND is_dev = false;
-
--- 2) ユニーク制約を (spawn_date, slot) に（本番のみ・is_devは対象外）
-DROP INDEX IF EXISTS raid_boss_spawn_date_idx;
-DROP INDEX IF EXISTS raid_boss_spawn_date_live_idx;
-CREATE UNIQUE INDEX IF NOT EXISTS raid_boss_date_slot_idx ON raid_boss(spawn_date, slot) WHERE is_dev = false;
-
--- 3) 日付＋枠 → 出現ボス名（日替わり交互）
-CREATE OR REPLACE FUNCTION raid_boss_for_slot(p_date date, p_slot int)
-RETURNS text LANGUAGE sql IMMUTABLE AS $$
-  SELECT CASE
-    WHEN ((p_date - DATE '2000-01-01') % 2) = 0 THEN
-      CASE WHEN p_slot = 21 THEN '黒龍ヴァルゼノク' ELSE '雨摩座' END
-    ELSE
-      CASE WHEN p_slot = 21 THEN '雨摩座' ELSE '黒龍ヴァルゼノク' END
-  END
-$$;
-
--- 4) スポーンRPC（2枠 + 管理者テスト対応）
+-- ② スポーンRPC（2枠 + 管理者テスト対応）を HP700万で再定義
 CREATE OR REPLACE FUNCTION spawn_raid_boss_if_needed()
 RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
@@ -126,7 +109,7 @@ BEGIN
 END;
 $$;
 
--- 5) 管理者テスト用RPC（Phase1未適用でも使えるよう同梱・冪等）
+-- 管理者テスト用RPC（HP700万で再定義）
 CREATE OR REPLACE FUNCTION spawn_raid_boss_dev(p_boss_name text)
 RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
@@ -145,16 +128,3 @@ BEGIN
 END;
 $$;
 GRANT EXECUTE ON FUNCTION spawn_raid_boss_dev(text) TO authenticated;
-
-CREATE OR REPLACE FUNCTION end_raid_boss_dev()
-RETURNS json
-LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE v_admin boolean;
-BEGIN
-  SELECT COALESCE(is_admin, false) INTO v_admin FROM profiles WHERE id = auth.uid();
-  IF NOT COALESCE(v_admin, false) THEN RETURN json_build_object('error', '権限がありません'); END IF;
-  UPDATE raid_boss SET status = 'expired' WHERE is_dev = true AND status = 'active';
-  RETURN json_build_object('ok', true);
-END;
-$$;
-GRANT EXECUTE ON FUNCTION end_raid_boss_dev() TO authenticated;
