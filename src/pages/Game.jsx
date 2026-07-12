@@ -1382,8 +1382,9 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
         result.log = `🌟 浄化の輝き！ ${enemy.name}に${result.dmg}の特殊ダメージ！ HPを${result.heal}回復！`
       } else {
         result.dmg = Math.floor(eff.matk*(2.0+(rt>=5?0.2:0))*am)
-        // 与えたダメージ(クリティカル・軽減込み)の半分を回復。実回復は外側ループで finalDmg から算出。
-        result.drainRate = 0.5
+        // 与えたダメージ(クリティカル・軽減込み)の半分を回復。上限は最大HPの30%(血の狂気/ソウルドレインと統一)。
+        // 実回復は外側ループで finalDmg から算出。
+        result.drainRate = 0.5; result.drainCapPct = 0.3
         result.log = `🌟 ルミナ・レイ！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 与えたダメージの半分を回復！`
       }
       result.newPlayerBuffs.spiritCombo = { name:'ルミナ', count:newCount, tripled: newCount%3===0 }
