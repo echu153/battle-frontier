@@ -1,5 +1,5 @@
 -- ============================================================
--- ランクマッチ（対人戦のレート戦） ※is_admin限定の先行実装
+-- ランクマッチ（対人戦のレート戦） ※一般公開（ベータ・〜JST 2026-07-31 23:59）
 -- ------------------------------------------------------------
 -- ・初期レート1000。変動は挑戦した側のみ＝基準15にレート差補正±5
 --   （勝ち +15±5 / 負け -15±5 / 引き分け 0。防衛側＝対戦相手に選ばれた側は変動なし）
@@ -11,7 +11,8 @@
 --
 -- 適用順: protect_stats 系より後（Gold付与で app.allow_stat_change を使用）。
 --         mutant_gold_20260703.sql(v2) の前後どちらでも可（apply_battle_result等は触らない）。
--- 一般公開時: 各関数の「開発限定ゲート」ブロックを削除する。
+-- 一般公開済み: 開発限定ゲートは撤去済み。is_adminはCD免除のみ残置。
+-- ※初期化する場合は末尾の TRUNCATE を実行（ベータのテストデータをクリア）。
 -- ============================================================
 
 -- ① レートテーブル -------------------------------------------------------------
@@ -94,12 +95,7 @@ DECLARE
   v_prev_rank   int;
 BEGIN
   IF auth.uid() IS NULL THEN RETURN json_build_object('error', '未認証です'); END IF;
-  SELECT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin) INTO v_is_admin;
-  -- ▼開発限定ゲート（一般公開時にこのブロックを削除）
-  IF NOT v_is_admin THEN
-    RETURN json_build_object('error', '開発中の機能です');
-  END IF;
-  -- ▲
+  SELECT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin) INTO v_is_admin;  -- CD免除判定に使用（一般公開済み）
 
   SELECT * INTO v_me FROM rank_ratings WHERE player_id = auth.uid() AND season = v_season;
   IF v_me.player_id IS NOT NULL THEN
@@ -155,12 +151,7 @@ DECLARE
   v_cd_remain int;
 BEGIN
   IF auth.uid() IS NULL THEN RETURN json_build_object('error', '未認証です'); END IF;
-  SELECT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin) INTO v_is_admin;
-  -- ▼開発限定ゲート（一般公開時にこのブロックを削除）
-  IF NOT v_is_admin THEN
-    RETURN json_build_object('error', '開発中の機能です');
-  END IF;
-  -- ▲
+  SELECT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin) INTO v_is_admin;  -- CD免除判定に使用（一般公開済み）
 
   -- ベータ版の開催期間: JST 2026-07-31 23:59まで（延長時はこの日時を変更）
   IF (now() AT TIME ZONE 'Asia/Tokyo') > timestamp '2026-07-31 23:59:59' THEN
@@ -235,11 +226,6 @@ DECLARE
   v_new_me  int;
 BEGIN
   IF auth.uid() IS NULL THEN RETURN json_build_object('error', '未認証です'); END IF;
-  -- ▼開発限定ゲート（一般公開時にこのブロックを削除）
-  IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin) THEN
-    RETURN json_build_object('error', '開発中の機能です');
-  END IF;
-  -- ▲
   IF p_winner NOT IN ('challenger', 'opponent', 'draw') THEN
     RETURN json_build_object('error', 'winner不正');
   END IF;
@@ -295,11 +281,6 @@ DECLARE
   v_reward int;
 BEGIN
   IF auth.uid() IS NULL THEN RETURN json_build_object('error', '未認証です'); END IF;
-  -- ▼開発限定ゲート（一般公開時にこのブロックを削除）
-  IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin) THEN
-    RETURN json_build_object('error', '開発中の機能です');
-  END IF;
-  -- ▲
   IF p_season IS NULL OR p_season >= rank_current_season() THEN
     RETURN json_build_object('error', 'シーズン終了後に受け取れます');
   END IF;
@@ -340,3 +321,8 @@ BEGIN
 END;
 $$;
 GRANT EXECUTE ON FUNCTION rank_dev_reset_cd() TO authenticated;
+
+-- ⑨ [初期化] ベータのテストデータをクリア（全プレイヤーのレート/対戦ログを消去）。
+--    一般公開に切り替える直前に一度だけ実行する。全員が次回からレート1000で再スタート。
+--    ※この行はコメントアウトしてある。実行するときは先頭の "-- " を外す。
+-- TRUNCATE TABLE rank_matches, rank_ratings;

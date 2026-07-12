@@ -122,7 +122,7 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '16px', overflowY: 'auto', fontFamily: 'monospace' }}>
       <div style={{ background: '#0a0e06', border: '1px solid #9a8a3a', maxWidth: '680px', width: '100%', padding: '16px', marginTop: '24px', textAlign: 'left' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #5a4f1f', paddingBottom: '8px' }}>
-          <div style={{ color: '#ffd75e', fontSize: '15px', letterSpacing: '2px' }}>🏅 ランクマッチ <span style={{ color: '#88ddaa', fontSize: '10px' }}>β</span> <span style={{ color: '#997733', fontSize: '10px' }}>(開発者限定)</span></div>
+          <div style={{ color: '#ffd75e', fontSize: '15px', letterSpacing: '2px' }}>🏅 ランクマッチ <span style={{ color: '#88ddaa', fontSize: '10px' }}>β</span></div>
           <button onClick={onClose} style={{ background: 'none', border: '1px solid #8a7a44', color: '#ccaa77', padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>✕ 閉じる</button>
         </div>
 
@@ -137,7 +137,7 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
           ・初期レート<b>1000</b>。勝利<b>+15</b>／敗北<b>-15</b><br />
           ・レートが変わるのは挑戦した側のみ（対戦相手に選ばれた側は変動なし）<br />
           ・マッチングは<b>レート±100</b>からランダム。<b>マッチ成立で即対戦開始</b>（キャンセル不可）<br />
-          ・挑戦は<b>1時間に1回</b><span style={{ color: '#998855' }}>（開発中はCDなし）</span><br />
+          ・挑戦は<b>1時間に1回</b><br />
           <div style={{ color: '#ffd75e', margin: '4px 0 2px' }}>▼対人戦のルール</div>
           ・<b>50ターン</b>で強制終了＝与ダメージ総量で勝敗<br />
           ・防御で大きく軽減・回復は通常<br />
