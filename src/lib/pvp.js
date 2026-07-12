@@ -439,16 +439,16 @@ function doAttack(att, def, isExtra, ctx) {
         dealToDef(fDmg)
         logs.push({ text: `↳ 追撃！${res.followup.label ? `（${res.followup.label}）` : ''} ${enemyName}に${fDmg}ダメージ！${fCrit ? ' 💥クリティカル！' : ''}`, color: fCrit ? '#ffaa00' : '#ffaa66' })
       }
-      // 血の狂気（回復補正は PVP.healMult）
+      // 与ダメ割合回復の1ヒット上限：基本 最大HP20%、クリティカル時35%（回復補正は PVP.healMult）
+      const healCapPct = (finalCrit || multiCritAny) ? 0.35 : 0.20
       if (att.buffs.bloodRage?.turns > 0 && finalDmg > 0 && !(att.buffs.healSeal?.turns > 0)) {
-        const rageCure = Math.min(Math.floor(finalDmg * att.buffs.bloodRage.healRate * PVP.healMult * ctx.healMult), Math.floor(eff.hp_max * 0.3))
+        const rageCure = Math.min(Math.floor(finalDmg * att.buffs.bloodRage.healRate * PVP.healMult * ctx.healMult), Math.floor(eff.hp_max * healCapPct))
         att.hp = Math.min(eff.hp_max, att.hp + rageCure)
         logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
       }
       // 与ダメ割合回復(ソウルドレイン/ルミナ・レイ等)：実際の与ダメージ(クリティカル込み)から回復
       if (res.drainRate > 0 && finalDmg > 0 && !(att.buffs.healSeal?.turns > 0)) {
-        let drainHeal = Math.floor(finalDmg * res.drainRate * PVP.healMult * ctx.healMult)
-        if (res.drainCapPct) drainHeal = Math.min(drainHeal, Math.floor(eff.hp_max * res.drainCapPct))
+        const drainHeal = Math.min(Math.floor(finalDmg * res.drainRate * PVP.healMult * ctx.healMult), Math.floor(eff.hp_max * healCapPct))
         att.hp = Math.min(eff.hp_max, att.hp + drainHeal)
         logs.push({ text: `💚 HPを${drainHeal}回復！`, color: '#66ffaa' })
       }
@@ -482,7 +482,7 @@ function doAttack(att, def, isExtra, ctx) {
     const critText = isCrit ? '💥クリティカル！ ' : ''
     logs.push({ text: `${prefix}${critText}攻撃！ ${enemyName}に${finalDmg}ダメージ！`, color: '#ffcc00' })
     if (att.buffs.bloodRage?.turns > 0 && finalDmg > 0 && !(att.buffs.healSeal?.turns > 0)) {
-      const rageCure = Math.min(Math.floor(finalDmg * att.buffs.bloodRage.healRate * PVP.healMult * ctx.healMult), Math.floor(eff.hp_max * 0.3))
+      const rageCure = Math.min(Math.floor(finalDmg * att.buffs.bloodRage.healRate * PVP.healMult * ctx.healMult), Math.floor(eff.hp_max * (isCrit ? 0.35 : 0.20)))
       att.hp = Math.min(eff.hp_max, att.hp + rageCure)
       logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
     }

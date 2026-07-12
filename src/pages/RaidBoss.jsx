@@ -321,15 +321,16 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks + 1)
           if (res.selfDmg > 0) playerHp = Math.max(1, playerHp - res.selfDmg)
           const isHealBlocked = playerBuffs.healBlock?.turns > 0
+          // 与ダメ割合回復の1ヒット上限：基本 最大HP20%、クリティカル時35%（血の狂気/ソウルドレイン/ルミナ・レイ共通）
+          const healCapPct = finalCrit ? 0.35 : 0.20
           if (!isHealBlocked && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
-            const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
+            const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(eff.hp_max * healCapPct))
             playerHp = Math.min(eff.hp_max, playerHp + rageCure)
             logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
           }
           // 与ダメ割合回復(ソウルドレイン/ルミナ・レイ等)：実際の与ダメージ(クリティカル込み)から回復
           if (!isHealBlocked && res.drainRate > 0 && finalDmg > 0) {
-            let drainHeal = Math.floor(finalDmg * res.drainRate)
-            if (res.drainCapPct) drainHeal = Math.min(drainHeal, Math.floor(eff.hp_max * res.drainCapPct))
+            const drainHeal = Math.min(Math.floor(finalDmg * res.drainRate), Math.floor(eff.hp_max * healCapPct))
             playerHp = Math.min(eff.hp_max, playerHp + drainHeal)
             logs.push({ text: `💚 HPを${drainHeal}回復！`, color: '#66ffaa' })
           }
@@ -413,7 +414,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         // 通常攻撃は精密照準スタックをリセット（連続スキルが途切れる）
         seimitsuStacks = 0; prevSkillName = null
         if (!playerBuffs.healBlock?.turns && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
-          const rageCure = Math.floor(finalDmg * playerBuffs.bloodRage.healRate)
+          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(eff.hp_max * (isCrit ? 0.35 : 0.20)))
           playerHp = Math.min(eff.hp_max, playerHp + rageCure)
           logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
         }

@@ -368,15 +368,16 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
           enemyHp -= fDmg
           logs.push({ text:`↳ 追撃！${res.followup.label?`（${res.followup.label}）`:''} ${enemy.name}に${fDmg}ダメージ！${fCrit?' 💥クリティカル！':''}`, color: fCrit?'#ffaa00':'#ffaa66' })
         }
+        // 与ダメ割合回復の1ヒット上限：基本 最大HP20%、クリティカル時35%（血の狂気/ソウルドレイン/ルミナ・レイ共通）
+        const healCapPct = (finalCrit || multiCritAny) ? 0.35 : 0.20
         if (playerAttacking && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(eff.hp_max * 0.3))
+          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(eff.hp_max * healCapPct))
           playerHp = Math.min(eff.hp_max, playerHp + rageCure)
           logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
         }
         // 与ダメ割合回復(ソウルドレイン/ルミナ・レイ等)：実際の与ダメージ(クリティカル込み)から回復
         if (res.drainRate > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-          let drainHeal = Math.floor(finalDmg * res.drainRate)
-          if (res.drainCapPct) drainHeal = Math.min(drainHeal, Math.floor(eff.hp_max * res.drainCapPct))
+          const drainHeal = Math.min(Math.floor(finalDmg * res.drainRate), Math.floor(eff.hp_max * healCapPct))
           playerHp = Math.min(eff.hp_max, playerHp + drainHeal)
           logs.push({ text:`💚 HPを${drainHeal}回復！`, color:'#66ffaa' })
         }
@@ -419,7 +420,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       const critText = isCrit ? '💥クリティカル！ ' : ''
       logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
       if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-        const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(eff.hp_max * 0.3))
+        const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(eff.hp_max * (isCrit ? 0.35 : 0.20)))
         playerHp = Math.min(eff.hp_max, playerHp + rageCure)
         logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
       }
