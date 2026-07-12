@@ -241,7 +241,7 @@ export default function Exchange() {
               return (
                 <div key={item.id} style={{ border: `1px solid ${canAfford ? '#224433' : '#003366'}`, background: '#001028', padding: '10px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ flex: 1 }}>
+                    <div style={{ flex: 1, textAlign: 'left' }}>
                       <div style={{ color: '#88ccff', fontSize: '12px' }}>{item.reward_weapon_name}{qtyLabel}</div>
                       <div style={{ fontSize: '10px', marginTop: '2px' }}>
                         {costs.map((c, i) => {
