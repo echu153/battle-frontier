@@ -77,7 +77,13 @@ function WeaponCard({ weapon, bonusEffect }) {
   )
 }
 
-const TABS = ['レイドボス']
+const TABS = ['レイドボス', '勇気の証']
+
+// タブごとの所持素材表示に出す素材名
+const TAB_MATERIALS = {
+  'レイドボス': ['黒龍の鱗', '黒龍の逆鱗', '水禍の雫', '雨禍の心核'],
+  '勇気の証': ['勇気の証'],
+}
 
 export default function Exchange() {
   const nav = useNavigate()
@@ -185,22 +191,31 @@ export default function Exchange() {
       </div>
 
       <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-        {/* 所持素材 */}
-        {activeTab === 'レイドボス' && (
-          <div style={{ border: '1px solid #002244', background: '#000e20', padding: '10px', marginBottom: '14px' }}>
-            <div style={{ color: '#446688', fontSize: '10px', marginBottom: '6px' }}>所持素材</div>
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              {['黒龍の鱗', '黒龍の逆鱗', '水禍の雫', '雨禍の心核'].map(name => (
-                <div key={name} style={{ fontSize: '12px' }}>
-                  <span style={{ color: '#556677' }}>{name}: </span>
-                  <span style={{ color: (materials[name] || 0) > 0 ? '#ffcc44' : '#334455' }}>
-                    {materials[name] || 0}個
-                  </span>
-                </div>
-              ))}
+        {/* 勇気の証イベント告知 */}
+        {activeTab === '勇気の証' && (
+          <div style={{ border: '1px solid #3a2a00', background: '#141000', padding: '10px', marginBottom: '10px' }}>
+            <div style={{ color: '#ffcc44', fontSize: '12px', marginBottom: '4px' }}>🎖 レイドボスイベント「勇気の証」</div>
+            <div style={{ color: '#998855', fontSize: '10px', lineHeight: '1.7' }}>
+              期間: 7/13 5:00 〜 7/27 4:59<br />
+              レイドボスの報酬受け取りごとに勇気の証×2、さらにCティア以上の報酬で+1（計3個）を獲得。
             </div>
           </div>
         )}
+
+        {/* 所持素材 */}
+        <div style={{ border: '1px solid #002244', background: '#000e20', padding: '10px', marginBottom: '14px' }}>
+          <div style={{ color: '#446688', fontSize: '10px', marginBottom: '6px' }}>所持素材</div>
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+            {(TAB_MATERIALS[activeTab] || []).map(name => (
+              <div key={name} style={{ fontSize: '12px' }}>
+                <span style={{ color: '#556677' }}>{name}: </span>
+                <span style={{ color: (materials[name] || 0) > 0 ? '#ffcc44' : '#334455' }}>
+                  {materials[name] || 0}個
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* エラー（成功はモーダルで表示） */}
         {error && (
@@ -220,13 +235,14 @@ export default function Exchange() {
             const canAfford = !alreadyDone && costs.every(c => (materials[c.item_name] || 0) >= c.quantity)
             const weapon = weaponMap[item.reward_weapon_name]
 
-            // アイテム報酬（強化石など）は賭博場の景品風スリム表示
-            if (item.reward_type === 'item') {
+            // アイテム／ゴールド報酬は賭博場の景品風スリム表示
+            if (item.reward_type === 'item' || item.reward_type === 'gold') {
+              const qtyLabel = item.reward_type === 'item' && item.reward_qty > 1 ? ` ×${item.reward_qty}` : ''
               return (
                 <div key={item.id} style={{ border: `1px solid ${canAfford ? '#224433' : '#003366'}`, background: '#001028', padding: '10px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ color: '#88ccff', fontSize: '12px' }}>{item.reward_weapon_name}</div>
+                      <div style={{ color: '#88ccff', fontSize: '12px' }}>{item.reward_weapon_name}{qtyLabel}</div>
                       <div style={{ fontSize: '10px', marginTop: '2px' }}>
                         {costs.map((c, i) => {
                           const held = materials[c.item_name] || 0
@@ -334,7 +350,12 @@ export default function Exchange() {
               「{result.reward_name || shopItems.find(i => i.id === result.shopId)?.reward_weapon_name || '報酬'}」{result.reward_qty > 1 ? ` ×${result.reward_qty}` : ''}を獲得した！
             </div>
             <div style={{ color: '#557799', fontSize: '11px', marginBottom: '16px' }}>
-              {(shopItems.find(i => i.id === result.shopId)?.reward_type === 'item') ? 'アイテム欄で確認できます。' : '装備画面で確認できます。'}
+              {(() => {
+                const rt = result.reward_type || shopItems.find(i => i.id === result.shopId)?.reward_type
+                if (rt === 'gold') return '所持ゴールドに加算されました。'
+                if (rt === 'item') return 'アイテム欄で確認できます。'
+                return '装備画面で確認できます。'
+              })()}
             </div>
             <button
               onClick={() => setResult(null)}

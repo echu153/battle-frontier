@@ -723,6 +723,7 @@ export default function RaidBoss() {
       if (data.got_gyaku) parts.push(`⭐レア素材：${data.rare_name||'レア素材'}×1`)
       if (data.book) parts.push(`📖${data.book}×1`)
       if (data.top_rank >= 1 && data.top_rank <= 3) parts.push(`🏅与ダメ${data.top_rank}位ボーナス：Gold+${fmt(data.top_gold)}・📖${data.top_book}×1`)
+      if (data.courage > 0) parts.push(`🎖勇気の証×${data.courage}`)
       const bossNm = pendingRewards.find(r => r.raid_id === raidId)?.raid_boss?.boss_name
       setPendingMsg(m => ({ ...m, [raidId]: `✓ ${bossNm ? bossNm + '：' : ''}受け取り完了！ ${parts.join(' / ')}` }))
       setPendingRewards(prev => prev.filter(r => r.raid_id !== raidId))
@@ -1109,6 +1110,7 @@ export default function RaidBoss() {
                       🏅 与ダメージ{reward.top_rank}位ボーナス！ Gold +{fmt(reward.top_gold)}／📖 {reward.top_book} × 1個
                     </div>
                   )}
+                  {reward.courage > 0 && <div style={{ color: '#ffcc44' }}>🎖 勇気の証 × {reward.courage}個（イベント）</div>}
                   <div style={{ color: '#44ff88', marginTop: '4px' }}>✓ 受け取り完了！</div>
                 </div>
               ) : myPart.reward_claimed ? (
