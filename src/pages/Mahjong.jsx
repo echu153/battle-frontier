@@ -7,6 +7,7 @@ import {
   npcDecide, autoActionFor, isNpcId, doraFromIndicator,
   MIN_MAHJONG_PLAYERS, MAX_MAHJONG_PLAYERS, TURN_SEC, CLAIM_SEC,
 } from '../lib/mahjong'
+import { TileFace, TileBackFace } from '../components/MahjongTile'
 
 // ============================================================
 // 麻雀(雀魂風) — 開発限定のミニゲーム(娯楽・ステ影響なし)
@@ -24,35 +25,30 @@ const btnStyle = (color, extra = {}) => ({
   cursor: 'pointer', fontFamily: 'monospace', fontSize: '12px', ...extra,
 })
 
-// ---- 牌表示 ----
-const suitColor = (k) => (k < 9 ? '#cc4444' : k < 18 ? '#4466cc' : k < 27 ? '#337744' : '#334455')
+// ---- 牌表示(SVG描画) ----
 function Tile({ k, r, small, dim, onClick, sel, disabled }) {
-  const size = small ? { w: 22, h: 30, f: 10 } : { w: 34, h: 46, f: 14 }
+  const size = small ? { w: 24, h: 32 } : { w: 36, h: 48 }
   return (
     <button
       onClick={onClick}
       disabled={disabled || !onClick}
       style={{
         width: size.w, height: size.h, padding: 0,
-        background: r ? '#ffe8e8' : '#f8f4ec',
-        border: sel ? '2px solid #ffcc44' : '1px solid #998',
-        borderRadius: 3, cursor: onClick && !disabled ? 'pointer' : 'default',
-        color: suitColor(k), fontFamily: 'monospace', fontSize: size.f, fontWeight: 'bold',
-        lineHeight: 1.05, opacity: dim ? 0.45 : 1,
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
+        background: 'none',
+        border: sel ? '2px solid #ffcc44' : 'none',
+        borderRadius: 4, cursor: onClick && !disabled ? 'pointer' : 'default',
+        opacity: dim ? 0.45 : 1,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         transform: sel ? 'translateY(-4px)' : 'none',
       }}
     >
-      {k < 27 ? (<>
-        <span>{r ? <span style={{ color: '#cc0000' }}>{KIND_NAMES[k][0]}</span> : KIND_NAMES[k][0]}</span>
-        <span>{KIND_NAMES[k][1]}</span>
-      </>) : <span>{KIND_NAMES[k]}</span>}
+      <TileFace k={k} r={r} w={sel ? size.w - 4 : size.w} h={sel ? size.h - 4 : size.h} />
     </button>
   )
 }
 function TileBack({ small }) {
-  const size = small ? { w: 22, h: 30 } : { w: 34, h: 46 }
-  return <div style={{ width: size.w, height: size.h, background: '#2a4a7a', border: '1px solid #123', borderRadius: 3, display: 'inline-block' }} />
+  const size = small ? { w: 24, h: 32 } : { w: 36, h: 48 }
+  return <span style={{ display: 'inline-flex' }}><TileBackFace w={size.w} h={size.h} /></span>
 }
 
 export default function Mahjong() {
