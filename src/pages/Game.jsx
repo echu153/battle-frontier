@@ -15,6 +15,8 @@ import RaidNotify from '../components/RaidNotify'
 const PvpPanel = lazy(() => import('../components/PvpPanel'))
 // 組み手パネル（対人戦の準備施設・一般公開）も同様に遅延ロード
 const KumitePanel = lazy(() => import('../components/KumitePanel'))
+// ランクマッチ（対人戦のレート戦・is_admin限定の先行実装）
+const RankMatchPanel = lazy(() => import('../components/RankMatchPanel'))
 // アリーナパネル（梯子型対人・一般公開）。pvp.js が ./Game を参照するため遅延ロード
 const ArenaPanel = lazy(() => import('../components/ArenaPanel'))
 // Equipment.jsx 等が './Game' から参照しているため再export
@@ -1717,6 +1719,7 @@ export default function Game() {
   const [showChallengePanel, setShowChallengePanel] = useState(false)
   const [showPvp, setShowPvp] = useState(false)  // 対人戦(PvP)パネル開閉（is_admin限定）
   const [showKumite, setShowKumite] = useState(false)  // 組み手パネル開閉（一般公開）
+  const [showRankMatch, setShowRankMatch] = useState(false)  // ランクマッチ開閉（is_admin限定）
   const [showArena, setShowArena] = useState(false)  // アリーナパネル開閉（一般公開）
   const [autoSortie, setAutoSortie] = useState(false)  // 🔁 自動出撃[開発]（is_admin限定。リロードでOFF＝永続化しない）
   const challengePanelRef = useRef(null)
@@ -6039,7 +6042,8 @@ export default function Game() {
                             <button onClick={()=>{ nav('/hachigoku'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#260c0a', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🔥 八獄 <span style={{ fontSize:'9px', color:'#aa7766' }}>[開発]</span></button></>
                           )}
                           {profile?.is_admin && (
-                            <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                            <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                          <button onClick={()=>{ setShowRankMatch(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#141204', border:'1px solid #c0a83a', color:'#ffd75e', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏅 ランクマッチ <span style={{ fontSize:'9px', color:'#998855' }}>[開発]</span></button></>
                           )}
                         </div>
                       )}
@@ -6112,7 +6116,8 @@ export default function Game() {
                             <button onClick={()=>{ nav('/hachigoku'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#260c0a', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🔥 八獄 <span style={{ fontSize:'9px', color:'#aa7766' }}>[開発]</span></button></>
                   )}
                   {profile?.is_admin && (
-                    <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                    <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                          <button onClick={()=>{ setShowRankMatch(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#141204', border:'1px solid #c0a83a', color:'#ffd75e', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏅 ランクマッチ <span style={{ fontSize:'9px', color:'#998855' }}>[開発]</span></button></>
                   )}
                 </div>
               )}
@@ -6175,6 +6180,7 @@ export default function Game() {
         <RaidNotify open={raidNotifyOpen} onClose={()=>setRaidNotifyOpen(false)} />
         {showPvp && <Suspense fallback={null}><PvpPanel onClose={()=>setShowPvp(false)} /></Suspense>}
         {showKumite && <Suspense fallback={null}><KumitePanel onClose={()=>setShowKumite(false)} /></Suspense>}
+        {showRankMatch && <Suspense fallback={null}><RankMatchPanel isAdmin={!!profile?.is_admin} onClose={()=>setShowRankMatch(false)} /></Suspense>}
         {showArena && <Suspense fallback={null}><ArenaPanel onClose={()=>setShowArena(false)} /></Suspense>}
       </div>
     )
@@ -6601,7 +6607,8 @@ export default function Game() {
                             <button onClick={()=>{ nav('/hachigoku'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#260c0a', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🔥 八獄 <span style={{ fontSize:'9px', color:'#aa7766' }}>[開発]</span></button></>
                             )}
                             {profile?.is_admin && (
-                              <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                              <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                          <button onClick={()=>{ setShowRankMatch(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#141204', border:'1px solid #c0a83a', color:'#ffd75e', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏅 ランクマッチ <span style={{ fontSize:'9px', color:'#998855' }}>[開発]</span></button></>
                             )}
                           </div>
                         )}
@@ -6674,7 +6681,8 @@ export default function Game() {
                             <button onClick={()=>{ nav('/hachigoku'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#260c0a', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🔥 八獄 <span style={{ fontSize:'9px', color:'#aa7766' }}>[開発]</span></button></>
                     )}
                     {profile?.is_admin && (
-                      <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                      <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
+                          <button onClick={()=>{ setShowRankMatch(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#141204', border:'1px solid #c0a83a', color:'#ffd75e', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏅 ランクマッチ <span style={{ fontSize:'9px', color:'#998855' }}>[開発]</span></button></>
                     )}
                   </div>
                 )}
@@ -6739,6 +6747,7 @@ export default function Game() {
       <RaidNotify open={raidNotifyOpen} onClose={()=>setRaidNotifyOpen(false)} />
       {showPvp && <Suspense fallback={null}><PvpPanel onClose={()=>setShowPvp(false)} /></Suspense>}
       {showKumite && <Suspense fallback={null}><KumitePanel onClose={()=>setShowKumite(false)} /></Suspense>}
+      {showRankMatch && <Suspense fallback={null}><RankMatchPanel isAdmin={!!profile?.is_admin} onClose={()=>setShowRankMatch(false)} /></Suspense>}
         {showArena && <Suspense fallback={null}><ArenaPanel onClose={()=>setShowArena(false)} /></Suspense>}
     </div>
   )
