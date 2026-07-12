@@ -441,7 +441,7 @@ function doAttack(att, def, isExtra, ctx) {
       }
       // 血の狂気（回復補正は PVP.healMult）
       if (att.buffs.bloodRage?.turns > 0 && finalDmg > 0 && !(att.buffs.healSeal?.turns > 0)) {
-        const rageCure = Math.min(Math.floor(finalDmg * att.buffs.bloodRage.healRate * PVP.healMult * ctx.healMult), Math.floor(eff.hp_max * 0.2))
+        const rageCure = Math.min(Math.floor(finalDmg * att.buffs.bloodRage.healRate * PVP.healMult * ctx.healMult), Math.floor(eff.hp_max * 0.3))
         att.hp = Math.min(eff.hp_max, att.hp + rageCure)
         logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
       }
@@ -475,7 +475,7 @@ function doAttack(att, def, isExtra, ctx) {
     const critText = isCrit ? '💥クリティカル！ ' : ''
     logs.push({ text: `${prefix}${critText}攻撃！ ${enemyName}に${finalDmg}ダメージ！`, color: '#ffcc00' })
     if (att.buffs.bloodRage?.turns > 0 && finalDmg > 0 && !(att.buffs.healSeal?.turns > 0)) {
-      const rageCure = Math.min(Math.floor(finalDmg * att.buffs.bloodRage.healRate * PVP.healMult * ctx.healMult), Math.floor(eff.hp_max * 0.2))
+      const rageCure = Math.min(Math.floor(finalDmg * att.buffs.bloodRage.healRate * PVP.healMult * ctx.healMult), Math.floor(eff.hp_max * 0.3))
       att.hp = Math.min(eff.hp_max, att.hp + rageCure)
       logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
     }

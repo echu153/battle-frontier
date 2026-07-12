@@ -3260,7 +3260,7 @@ export default function Game() {
             logs.push({ text:`↳ 追撃！${res.followup.label?`（${res.followup.label}）`:''} ${enemy.name}に${fDmg}ダメージ！${fCrit?' 💥クリティカル！':''}`, color: fCrit?'#ffaa00':'#ffaa66' })
           }
           if (playerAttacking && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-            const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(maxHp * 0.2))
+            const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(maxHp * 0.3))
             playerHp = Math.min(maxHp, playerHp + rageCure)
             logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
           }
@@ -3313,7 +3313,7 @@ export default function Game() {
         const critText = isCrit ? '💥クリティカル！ ' : ''
         logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
         if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(maxHp * 0.2))
+          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(maxHp * 0.3))
           playerHp = Math.min(maxHp, playerHp + rageCure)
           logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
         }

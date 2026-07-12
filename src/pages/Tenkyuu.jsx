@@ -440,7 +440,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
           logs.push({ text:`↳ 追撃！${res.followup.label?`（${res.followup.label}）`:''} ${enemy.name}に${fDmg}ダメージ！${fCrit?' 💥クリティカル！':''}`, color: fCrit?'#ffaa00':'#ffaa66' })
         }
         if (playerAttacking && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
+          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.3))
           playerHp = Math.min(profile.hp_max, playerHp + rageCure)
           logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
         }
@@ -485,7 +485,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       if (finalDmg > 0) lastPlayerHitType = isMagical ? 'magical' : 'physical'
       maybeCounterFlat(finalDmg)
       if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-        const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.2))
+        const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(profile.hp_max * 0.3))
         playerHp = Math.min(profile.hp_max, playerHp + rageCure)
         logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
       }

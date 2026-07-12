@@ -4,8 +4,14 @@ import { supabase } from '../supabase'
 import { PET_ITEMS, bagCapacity, petItemImg, SCROLL_KEYS, getScroll } from '../constants/pets'
 
 // ダンジョンに持っていける（持ち物へ移せる）アイテム
-// 倉庫から「持ち物」へ取り出せる＝ダンジョンで使う物。スキルの書(SCROLL_KEYS)も対象に含める。
-const DUNGEON_KEYS = new Set(['escape', 'onigiri', 'konomi', ...SCROLL_KEYS])
+// 倉庫から「持ち物」へ取り出せる＝ダンジョンで使う物。
+// PET_ITEMS の dungeon:true を全て対象にする（おいしいおにぎり/おいしい木の実 等の
+// ドロップ専用食料の取り出し漏れを防ぐ。個別列挙だと新規食料の追加時に取りこぼす）。
+// スキルの書(SCROLL_KEYS)はPET_ITEMSに無いので別途含める。
+const DUNGEON_KEYS = new Set([
+  ...Object.keys(PET_ITEMS).filter((k) => PET_ITEMS[k].dungeon),
+  ...SCROLL_KEYS,
+])
 // 倉庫一覧に出さないキー（ゼニは通貨＝ダンジョンの「ゼニ倉庫」で管理。倉庫アイテムではない）
 const HIDDEN_KEYS = new Set(['zeni', 'zeni_bank'])
 
