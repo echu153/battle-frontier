@@ -57,6 +57,7 @@ const Event = lazyReload(() => import('./pages/Event'))
 const ActionRpg = lazyReload(() => import('./action-rpg/ActionRpgPage')) // アクションRPGプロト(認証不要・独立)
 const CardGame = lazyReload(() => import('./pages/CardGame')) // 幻札バトル(開発限定・カードゲーム)
 const Othello = lazyReload(() => import('./pages/Othello')) // オセロ(開発限定・ミニゲーム)
+const Mahjong = lazyReload(() => import('./pages/Mahjong')) // 麻雀(開発限定・ミニゲーム)
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -239,6 +240,7 @@ function App() {
         <Route path="/action-rpg" element={session ? <ActionRpg /> : <Navigate to="/login" />} />
         <Route path="/card-battle" element={session ? <CardGame /> : <Navigate to="/login" />} />
         <Route path="/othello" element={session ? <Othello /> : <Navigate to="/login" />} />
+        <Route path="/mahjong" element={session ? <Mahjong /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
       </Suspense>

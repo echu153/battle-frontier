@@ -5659,6 +5659,9 @@ export default function Game() {
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/othello'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚫ オセロ[開発]</button>
             )}
+            {profile?.is_admin && (
+              <button onClick={()=>{ nav('/mahjong'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🀄 麻雀[開発]</button>
+            )}
             <button onClick={()=>{ nav('/action-rpg'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#9fe', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🗡 アクションRPG <span style={{ fontSize:'9px', color:'#8877aa' }}>(お試し)</span></button>
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
             <button onClick={()=>{ setRaidNotifyOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8866', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔔 レイド通知</button>
@@ -6215,6 +6218,9 @@ export default function Game() {
             )}
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/othello'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚫ オセロ[開発]</button>
+            )}
+            {profile?.is_admin && (
+              <button onClick={()=>{ nav('/mahjong'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🀄 麻雀[開発]</button>
             )}
             <button onClick={()=>{ nav('/action-rpg'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#9fe', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🗡 アクションRPG <span style={{ fontSize:'9px', color:'#8877aa' }}>(お試し)</span></button>
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
