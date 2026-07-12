@@ -6,6 +6,7 @@ import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, b
 import Boss60Sprite from '../components/Boss60Sprite'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
+import { dgImg, dgImgF, setDgImageNotify } from '../lib/dgImageCache'
 
 
 // ============================================================
@@ -22,6 +23,11 @@ const RC = 3, RR = 2, CW = 9, CH = 9  // 区画を広げ、大きい部屋も出
 const MAP_W = RC * CW, MAP_H = RR * CH
 // 表示ビューポート（プレイヤー中心）
 const VW = 11, VH = 10 // 上部のステータス表示分だけ縦に1行伸ばす
+
+// タイルの色調フィルター（可能ならdgImgFで縮小画像に焼き込み＝マスごとのCSS filterを削減）
+const FLOOR_TILE_FILTER = 'brightness(0.72) saturate(0.95)'
+const WALL_TILE_FILTER = 'brightness(0.4) saturate(0.5) hue-rotate(-8deg)'
+const WATER_WALL_FILTER = 'brightness(0.62) saturate(1.7) hue-rotate(8deg)'
 
 const FALLBACK_PET = { name: '仮ペット', emoji: '🐾', image_url: null, maxHp: 40, atk: 12, def: 4, mdef: 4, atkType: 'phys', skillSlots: ['tackle'] }
 const MAX_FULLNESS = 100      // 満腹度の上限（100スタート）
@@ -584,15 +590,23 @@ export default function Dungeon() {
     ctx.fillRect(state.player.x * S, state.player.y * S, S, S)
   }, [state, status, minimapOn])
 
-  // タイル画像（床/壁/階段/アイテム）を選択ダンジョンが決まった時点でプリロード。
+  // 縮小画像の生成完了で再レンダー（元画像→縮小版への差し替え反映）
+  const [, setImgTick] = useState(0)
+  useEffect(() => {
+    setDgImageNotify(() => setImgTick((t) => t + 1))
+    return () => setDgImageNotify(null)
+  }, [])
+  // タイル画像（床/壁/階段/アイテム）を選択ダンジョンが決まった時点でプリロード＆縮小キャッシュ生成。
   // 初めて見えたマスで画像読込待ちにならず即時表示される。
   useEffect(() => {
     if (!dungeon?.id) return
     for (const key of ['floor', 'stairs', 'item']) {
       const src = dgTileSrc(dungeon.id, key)
-      if (src) { const im = new Image(); im.src = src }
+      if (!src) continue
+      if (key === 'floor') dgImgF(src, 512, FLOOR_TILE_FILTER)
+      else dgImg(src, 192)
     }
-    for (const src of dgWallTiles(dungeon.id)) { const im = new Image(); im.src = src }
+    for (const src of dgWallTiles(dungeon.id)) dgImgF(src, 192, WALL_TILE_FILTER)
   }, [dungeon?.id])
   const [cleared, setCleared] = useState(new Set()) // クリア済みダンジョンID
   const [startFloors, setStartFloors] = useState({}) // ダンジョンごとの開始階選択 { dungeonId: floor }
@@ -2026,7 +2040,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
             <Btn onClick={() => nav('/pets')}>🐾 ペット</Btn>
           </div>
           <div style={{ display: 'flex', gap: 10, fontSize: 12, marginBottom: 12, alignItems: 'center' }}>
-            {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4 }} /> : <span style={{ fontSize: 22 }}>{pet.emoji}</span>}
+            {pet.image_url ? <img src={dgImg(pet.image_url, 96)} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4 }} /> : <span style={{ fontSize: 22 }}>{pet.emoji}</span>}
             <span>{pet.name}　LV{pet.level ?? 1}{pet.id ? '' : '（ペット未選択＝報酬なし）'}</span>
           </div>
 
@@ -2044,7 +2058,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                 return (
                   <span key={k} style={{ background: '#0a1424', border: '1px solid #335588', color: '#cce6ff', padding: '4px 8px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                     {petItemImg(k)
-                      ? <img src={petItemImg(k)} alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} />
+                      ? <img src={dgImg(petItemImg(k), 64)} alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} />
                       : (def?.emoji || '🔹')} {def?.name || k}×{q}
                   </span>
                 )
@@ -2057,7 +2071,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
           {/* ゼニ倉庫：所持ゼニは戦闘不能で半分失う。倉庫に預けた分は安全 */}
           <div style={{ background: '#0e0a00', border: '1px solid #8a6a1a', padding: 10, marginBottom: 12 }}>
             <div style={{ color: '#ffd75e', fontSize: 12, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <img src={petItemImg('zeni')} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} /> ゼニ倉庫
+              <img src={dgImg(petItemImg('zeni'), 64)} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} /> ゼニ倉庫
             </div>
             <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 8, flexWrap: 'wrap' }}>
               <span style={{ color: '#e6c06c' }}>所持 <b style={{ color: '#ffe08a' }}>{zeni}</b> <span style={{ color: '#997a3a', fontSize: 10 }}>（やられると半分ロスト）</span></span>
@@ -2406,12 +2420,15 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
         {/* マップ（ビューポート）。接触時に少し震える戦闘演出 */}
         <div ref={gridRef} className="bf-dg-grid" style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${VW}, 1fr)`, gap: 0, background: '#000208', padding: 6, border: '1px solid #113355', overflow: 'hidden', willChange: shake ? 'transform' : 'auto', animation: shake === 'kill' ? 'bf-dungeon-shake-kill 0.36s ease-in-out' : shake === 'hit' ? 'bf-dungeon-shake-hit 0.22s ease-in-out' : 'none' }}>
           {/* 床はワールド(ダンジョン)に固定＝壁と一緒にスクロール。キャラ移動で床がズレない。1タイル=約4マス */}
-          {floorTile && (
-            <div style={{ position: 'absolute', inset: 6, backgroundImage: `url(${floorTile})`, backgroundRepeat: 'repeat',
-              backgroundSize: cellPx > 0 ? `${cellPx * 4}px auto` : `${(4 / VW) * 100}% auto`,
-              backgroundPosition: cellPx > 0 ? `${-ox * cellPx}px ${-oy * cellPx}px` : 'center',
-              filter: 'brightness(0.72) saturate(0.95)', zIndex: 0, pointerEvents: 'none' }} />
-          )}
+          {floorTile && (() => {
+            const f = dgImgF(floorTile, 512, FLOOR_TILE_FILTER)
+            return (
+              <div style={{ position: 'absolute', inset: 6, backgroundImage: `url(${f.url})`, backgroundRepeat: 'repeat',
+                backgroundSize: cellPx > 0 ? `${cellPx * 4}px auto` : `${(4 / VW) * 100}% auto`,
+                backgroundPosition: cellPx > 0 ? `${-ox * cellPx}px ${-oy * cellPx}px` : 'center',
+                filter: f.baked ? undefined : FLOOR_TILE_FILTER, zIndex: 0, pointerEvents: 'none' }} />
+            )
+          })()}
           {/* 照明・ビネット：中央を明るく端を暗く＝1枚絵のような奥行きを出す */}
           {floorTile && (
             <div style={{ position: 'absolute', inset: 6, zIndex: 0, pointerEvents: 'none',
@@ -2444,7 +2461,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                   <span>B{floorNum}/{dungeon?.floors || 10}F</span>
                   <span style={{ color: '#9fd' }}>LV{pet.level}{pet.exp != null ? `（EXP ${pet.exp}/${expForLevel(pet.level || 1)}）` : ''}</span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: petHp > pet.maxHp * 0.3 ? '#44ff88' : '#ff5555' }}>
-                    {pet.image_url ? <img src={pet.image_url} alt="" style={{ width: 14, height: 14, objectFit: 'cover', borderRadius: 3 }} /> : <span>{pet.emoji}</span>}
+                    {pet.image_url ? <img src={dgImg(pet.image_url, 64)} alt="" style={{ width: 14, height: 14, objectFit: 'cover', borderRadius: 3 }} /> : <span>{pet.emoji}</span>}
                     {pet.name} HP {petHp}/{pet.maxHp}
                   </span>
                   <span style={{ color: fullness > 0 ? '#ffcc44' : '#ff5555' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span>
@@ -2488,17 +2505,17 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                       animation: (!c.bossE?.blink && trembling) ? 'bf-boss-tremble 0.12s linear infinite' : undefined }}>
                       {c.bossE?.layered
                         ? <Boss60Sprite size="100%" phase={c.bossE.phase || 0} blink={!!c.bossE.blink} />
-                        : <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', animation: c.bossE?.blink ? 'bf-boss-blink 0.22s steps(1) infinite' : undefined }} />}
+                        : <img src={dgImg(c.img, 384)} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', animation: c.bossE?.blink ? 'bf-boss-blink 0.22s steps(1) infinite' : undefined }} />}
                     </div>
                   )
                 })()
               : c.img
               ? (c.item
                   // 床アイテムは小さめ＆全体が見えるよう contain
-                  ? <img src={c.img} alt="" style={{ width: '72%', height: '72%', objectFit: 'contain', display: 'block', margin: 'auto' }} />
+                  ? <img src={dgImg(c.img, 192)} alt="" style={{ width: '72%', height: '72%', objectFit: 'contain', display: 'block', margin: 'auto' }} />
                   // d60のF25以降(⑤⑥⑦の新キャラ)のみ細い黒の強調線（暗い床でも見やすく）。
                   //  ③④帯・追憶の遺跡などの旧キャラは縁取りなし。ペットは状態異常フィルター
-                  : <img src={c.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block',
+                  : <img src={dgImg(c.img, 192)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block',
                       filter: (c.enemy && dungeon?.id === 'd60' && floorNum >= 25)
                         ? 'drop-shadow(0.5px 0 0 rgba(0,0,0,0.9)) drop-shadow(-0.5px 0 0 rgba(0,0,0,0.9)) drop-shadow(0 0.5px 0 rgba(0,0,0,0.9)) drop-shadow(0 -0.5px 0 rgba(0,0,0,0.9))'
                         : statusFilter }} />)
@@ -2508,7 +2525,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                   textShadow: c.stairsGlow ? (c.water ? '0 0 6px #33ddee, 0 0 12px #0099bb' : '0 0 6px #ffcc33, 0 0 12px #ff9900') : undefined }}>
                   {c.ch}
                   {/* 階段・アイテムのカスタム画像（無ければonErrorで隠れ絵文字のまま）。水エリアは青緑に色変換 */}
-                  {c.overlay && <img src={c.overlay} alt="" onError={(ev) => { ev.target.style.display = 'none' }}
+                  {c.overlay && <img src={dgImg(c.overlay, 192)} alt="" onError={(ev) => { ev.target.style.display = 'none' }}
                     style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block',
                       filter: c.stairsGlow
                         ? (c.water
@@ -2536,10 +2553,12 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
             // 壁は暗め＋やや寒色グレー寄りにして、暖色の床とハッキリ見分けられるようにする。
             const wallImg = c.wallImg
             const tileStyle = wallImg
-              ? (c.water
+              ? (() => {
                   // 水たまり＝渡れない深い水。床(水辺床)とハッキリ区別できるよう濃い青で暗めに＋縁取り
-                  ? { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.62) saturate(1.7) hue-rotate(8deg)' }
-                  : { backgroundImage: `url(${wallImg})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.4) saturate(0.5) hue-rotate(-8deg)' })
+                  const wFilter = c.water ? WATER_WALL_FILTER : WALL_TILE_FILTER
+                  const wf = dgImgF(wallImg, 192, wFilter)
+                  return { backgroundImage: `url(${wf.url})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: wf.baked ? undefined : wFilter }
+                })()
               : { backgroundImage: 'none' }
             // グリッド線対策：マス間のサブピクセル隙間を「そのマス自身の色」で埋める。
             //  透過の床マスはそのまま（継ぎ目なし）、壁マス・暗いマスは自色（暗）で塞ぐ。
@@ -2605,7 +2624,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                 <div style={{ background: '#0c0a04', border: '1px solid #aa8833', padding: 14, maxWidth: 360, width: '100%', maxHeight: '92%', overflowY: 'auto' }}>
                   <div style={{ color: '#ffd75e', fontSize: 14, marginBottom: 2 }}>🏮 秘密の商店</div>
                   <div style={{ color: '#997733', fontSize: 10, marginBottom: 8 }}>階段の途中の隠れ店。品はどれも一期一会（各1回まで）</div>
-                  <div style={{ color: '#ffd75e', fontSize: 12, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>所持 <img src={petItemImg('zeni')} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} />{zeni}</div>
+                  <div style={{ color: '#ffd75e', fontSize: 12, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>所持 <img src={dgImg(petItemImg('zeni'), 64)} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} />{zeni}</div>
                   {shopMsg && <div style={{ color: shopMsg.startsWith('✅') ? '#88ffaa' : '#ff9977', fontSize: 11, marginBottom: 6 }}>{shopMsg}</div>}
                   <div style={{ color: '#cc9944', fontSize: 11, marginBottom: 4 }}>📜 スキルの書（各{SHOP_BOOK_PRICE}ゼニ）</div>
                   {shop.stock.books.map((k, i) => {
@@ -2613,7 +2632,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                     return (
                       <div key={slot} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 4, fontSize: 11, color: '#cce6ff' }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          <img src={petItemImg(k)} alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} />{PET_ITEMS[k]?.name || k}
+                          <img src={dgImg(petItemImg(k), 64)} alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} />{PET_ITEMS[k]?.name || k}
                         </span>
                         {rowBtn(bought, can, () => shopBuy('book', k, slot, SHOP_BOOK_PRICE), bought ? '購入済' : `🪙${SHOP_BOOK_PRICE}`)}
                       </div>
@@ -2635,7 +2654,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                     return (
                       <div key={slot} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 4, fontSize: 11, color: '#cce6ff' }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          {petItemImg(k) ? <img src={petItemImg(k)} alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} /> : (PET_ITEMS[k]?.emoji || '🔹')}{PET_ITEMS[k]?.name || k}
+                          {petItemImg(k) ? <img src={dgImg(petItemImg(k), 64)} alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} /> : (PET_ITEMS[k]?.emoji || '🔹')}{PET_ITEMS[k]?.name || k}
                         </span>
                         {rowBtn(bought, can, () => shopBuy('seed', k, slot, SHOP_SEED_PRICE), bought ? '購入済' : `🪙${SHOP_SEED_PRICE}`)}
                       </div>
@@ -2798,7 +2817,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                 opacity: 0.45 + 0.55 * ((i + 1) / arr.length), // 古いほど薄く
                 textShadow: '0 1px 2px #000, 0 0 4px #000, 0 0 2px #000',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>{l.icon && <img src={l.icon} alt="" style={{ width: 13, height: 13, objectFit: 'contain', verticalAlign: 'middle', marginRight: 3 }} />}{l.msg}</div>
+              }}>{l.icon && <img src={dgImg(l.icon, 64)} alt="" style={{ width: 13, height: 13, objectFit: 'contain', verticalAlign: 'middle', marginRight: 3 }} />}{l.msg}</div>
             ))}
           </div>
         </div>
@@ -2834,7 +2853,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                   style={{ background: dropMode ? '#1a0e08' : '#0a1424', border: `1px solid ${dropMode ? '#cc7755' : '#335588'}`, color: '#cce6ff', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 2 }}>
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 3 }}>
                     {petItemImg(it.key)
-                      ? <img src={petItemImg(it.key)} alt="" style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} />
+                      ? <img src={dgImg(petItemImg(it.key), 64)} alt="" style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} />
                       : it.emoji}
                     <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</span>
                   </span>
@@ -2865,7 +2884,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                   <span>🎒 持ち物 <span style={{ color: bagCount() >= bagMax ? '#ff7777' : '#5e7fa0' }}>{bagCount()}/{bagMax}</span></span>
                   {(dungeon?.id === 'd30' || dungeon?.id === 'd60') && (
                     <span style={{ color: '#ffd75e', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                      <img src={petItemImg('zeni')} alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} />{zeni}
+                      <img src={dgImg(petItemImg('zeni'), 64)} alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} />{zeni}
                     </span>
                   )}
                   {dropMode && <span style={{ color: '#ff9966' }}>捨てるモード：押すと足元に置く</span>}
@@ -2879,7 +2898,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                 {lootBag.map((l) => (
                   <button key={l.id} onClick={() => dropMode && dropItem({ kind: 'loot', loot: l })}
                     style={{ background: dropMode ? '#1a0e08' : '#0a1a14', border: `1px solid ${dropMode ? '#cc7755' : '#2a5544'}`, color: '#bfe6cc', padding: '6px 10px', cursor: dropMode ? 'pointer' : 'default', fontFamily: 'monospace', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    {l.img ? <img src={l.img} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} /> : l.emoji} {l.label}{(l.qty || 1) > 1 ? `×${l.qty}` : ''}
+                    {l.img ? <img src={dgImg(l.img, 64)} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} /> : l.emoji} {l.label}{(l.qty || 1) > 1 ? `×${l.qty}` : ''}
                   </button>
                 ))}
                 {empty && <span style={{ color: '#445566', fontSize: 11 }}>（戦利品なし。食料・翼はスキル横から使えます）</span>}
@@ -2933,7 +2952,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                     return (
                       <button key={sid} onClick={() => claimStarter(sid)}
                         style={{ background: '#12082a', border: '1px solid #7a5ac8', color: '#e0d0ff', padding: '8px 12px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 84 }}>
-                        <img src={assetSrc(sp.image)} alt="" style={{ width: 40, height: 40, objectFit: 'contain' }} />
+                        <img src={dgImg(assetSrc(sp.image), 128)} alt="" style={{ width: 40, height: 40, objectFit: 'contain' }} />
                         {sp.label}
                       </button>
                     )

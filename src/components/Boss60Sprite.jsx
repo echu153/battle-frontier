@@ -3,6 +3,7 @@
 // 各パーツを離散keyframes（コマ送り＝GIFドット絵風）で別リズム浮遊させる。
 // 画像: public/boss60/*.png（全レイヤー1254×1254の同座標キャンバス。重ねるだけで元絵に戻る）
 import { assetSrc } from '../constants/pets'
+import { dgImg } from '../lib/dgImageCache'
 
 const LAYERS = [
   // [file, animation]
@@ -46,7 +47,7 @@ export default function Boss60Sprite({ size = 220, animated = true, phase = 0, b
         }
       `}</style>
       {LAYERS.map(([name, anim]) => (
-        <img key={name} src={assetSrc(`/boss60/${name}.png`)} alt=""
+        <img key={name} src={dgImg(assetSrc(`/boss60/${name}.png`), 512)} alt=""
           style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%',
             objectFit: 'contain', display: 'block', pointerEvents: 'none',
