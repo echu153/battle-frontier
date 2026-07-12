@@ -40,6 +40,7 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
     return () => clearInterval(iv)
   }, [cd > 0])
 
+  // マッチ成立→即戦闘開始（対戦ボタンなし＝相手を見てから逃げる不正の防止）
   const findMatch = async () => {
     if (phase !== 'idle') return
     setError(''); setNotice(''); setOpponent(null); setLogs([]); setWinner(null); setResult(null)
@@ -50,26 +51,26 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
       if (data?.error) {
         setError(data.error)
         if (data.cd_remain) setCd(data.cd_remain)
+        setPhase('idle')
         return
       }
       setOpponent(data.opponent)
       setNotice(data.resumed
         ? '前回未消化のマッチを再開します。'
-        : `マッチ成立！ レート${data.opponent.rating}の相手が見つかりました。`)
+        : `マッチ成立！ レート${data.opponent.rating}の相手と対戦開始…`)
+      await runBattle(data.opponent)
     } catch (e) {
       setError('マッチングに失敗: ' + e.message)
-    } finally {
       setPhase('idle')
     }
   }
 
-  const runBattle = async () => {
-    if (!opponent || phase !== 'idle') return
+  const runBattle = async (opp) => {
     setPhase('battling'); setError(''); setLogs([]); setWinner(null); setResult(null)
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!meRef.current) meRef.current = await loadLoadout(user.id, true)
-      const oppLoadout = await loadLoadout(opponent.id, false)
+      const oppLoadout = await loadLoadout(opp.id, false)
       // ランクマッチはHP補正なし（組み手と同じ素のステ）。ルール行はパネル常設のためログから省く
       const { logs: blogs, winner: w, turns, aHpPct, bHpPct } = simulatePvpBattle(meRef.current, oppLoadout, { hideRuleLine: true })
       setLogs(blogs)
@@ -121,8 +122,9 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
 
         <div style={{ border: '1px solid #4a4426', background: '#0c0e06', padding: '8px 10px', marginBottom: '10px', color: '#ccaa88', fontSize: '10px', lineHeight: '1.8' }}>
           <div style={{ color: '#ffd75e', marginBottom: '2px' }}>📜 ルール</div>
-          ・初期レート<b>1000</b>。勝敗でレートが変動<br />
-          ・マッチングは<b>レート±100</b>からランダム<br />
+          ・初期レート<b>1000</b>。勝利<b>+15</b>／敗北<b>-15</b>（相手とのレート差で±5補正・引き分け0）<br />
+          ・レートが変わるのは挑戦した側のみ（対戦相手に選ばれた側は変動なし）<br />
+          ・マッチングは<b>レート±100</b>からランダム。<b>マッチ成立で即対戦開始</b>（キャンセル不可）<br />
           ・挑戦は<b>1時間に1回</b><span style={{ color: '#998855' }}>（開発中はCDなし）</span><br />
           ・シーズン制。<span style={{ color: '#998855' }}>報酬などの詳細は後日発表</span><br />
           ・<b>50ターン</b>で強制終了＝与ダメージ総量で勝敗<br />
@@ -155,12 +157,12 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
 
         {/* マッチング */}
         {state && (
-          <button onClick={findMatch} disabled={phase !== 'idle' || onCooldown || !!opponent}
+          <button onClick={findMatch} disabled={phase !== 'idle' || onCooldown}
             style={{ width: '100%', padding: '12px', marginBottom: '10px',
               background: onCooldown ? '#0c0e08' : '#141a06', border: `1px solid ${onCooldown ? '#3a3a2a' : '#c0a83a'}`,
-              color: onCooldown ? '#555544' : '#ffd75e', cursor: (phase !== 'idle' || onCooldown || opponent) ? 'not-allowed' : 'pointer',
+              color: onCooldown ? '#555544' : '#ffd75e', cursor: (phase !== 'idle' || onCooldown) ? 'not-allowed' : 'pointer',
               fontFamily: 'monospace', fontSize: '13px', letterSpacing: '1px' }}>
-            {onCooldown ? `⏳ クールダウン中（残り ${fmtCd(cd)}）` : phase === 'matching' ? 'マッチング中...' : '🎲 ランクマッチ開始（レート±100）'}
+            {onCooldown ? `⏳ クールダウン中（残り ${fmtCd(cd)}）` : phase === 'matching' ? 'マッチング中...' : phase === 'battling' ? '⚔ 戦闘中...' : '🎲 ランクマッチ開始（マッチ成立で即対戦）'}
           </button>
         )}
         {/* 開発中はis_adminのCDが0秒（SQL側で免除）のためリセットボタンは通常出ない。万一の保険で残す */}
@@ -171,16 +173,13 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
         {notice && <div style={{ color: '#ffcc66', fontSize: '11px', marginBottom: '8px' }}>{notice}</div>}
         {error && <div style={{ color: '#ff8899', fontSize: '11px', marginBottom: '8px' }}>{error}</div>}
 
-        {/* 対戦相手＆対戦ボタン */}
+        {/* 対戦相手（マッチ成立と同時に自動で対戦開始＝ボタンなし） */}
         {opponent && (
           <div style={{ border: '1px solid #9a8a3a', background: '#12160a', padding: '10px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
             <div style={{ color: '#ffe699', fontSize: '13px' }}>
               対戦相手: <b>{opponent.username}</b> <span style={{ color: '#998855', fontSize: '10px' }}>LV{opponent.char_lv}・{opponent.class}・レート{opponent.rating}</span>
             </div>
-            <button onClick={runBattle} disabled={phase !== 'idle'}
-              style={{ background: phase !== 'idle' ? '#0c0e08' : '#241c04', border: `1px solid ${phase !== 'idle' ? '#3a3a2a' : '#e0c04a'}`, color: phase !== 'idle' ? '#555544' : '#ffe066', padding: '8px 18px', cursor: phase !== 'idle' ? 'not-allowed' : 'pointer', fontFamily: 'monospace', fontSize: '12px', letterSpacing: '1px' }}>
-              {phase === 'battling' ? '戦闘中...' : '⚔ 対戦する'}
-            </button>
+            {phase === 'battling' && <span style={{ color: '#ffe066', fontSize: '12px' }}>⚔ 戦闘中...</span>}
           </div>
         )}
 

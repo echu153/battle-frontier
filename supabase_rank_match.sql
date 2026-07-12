@@ -1,7 +1,8 @@
 -- ============================================================
 -- ランクマッチ（対人戦のレート戦） ※is_admin限定の先行実装
 -- ------------------------------------------------------------
--- ・初期レート1000。勝敗でElo変動（K=32・両者ゼロサム）
+-- ・初期レート1000。変動は挑戦した側のみ＝基準15にレート差補正±5
+--   （勝ち +15±5 / 負け -15±5 / 引き分け 0。防衛側＝対戦相手に選ばれた側は変動なし）
 -- ・マッチング＝レート±100からランダム（未参加者はレート1000扱い）
 -- ・挑戦は1時間に1回（rank_find_opponent でCD判定）
 -- ・シーズン＝月次（JST・'YYYY-MM'）。終了後に最終順位に応じてGold報酬
@@ -207,7 +208,11 @@ END;
 $$;
 GRANT EXECUTE ON FUNCTION rank_find_opponent() TO authenticated;
 
--- ⑥ 結果確定（Elo変動＋CD起点セット） ------------------------------------------
+-- ⑥ 結果確定（レート変動＋CD起点セット） ----------------------------------------
+--    変動は挑戦した側のみ（対戦相手に選ばれた側＝防衛側は変動なし）。
+--    変動量: 基準15にレート差補正±5（相手が格上なら勝ち増・負け減、格下なら逆）。
+--      補正 = clamp(round((相手レート - 自分レート) / 20), -5, +5)  ※±100マッチなのでちょうど±5
+--      勝ち: +(15 + 補正) / 負け: -(15 - 補正) / 引き分け: 0
 CREATE OR REPLACE FUNCTION rank_report_result(
   p_winner   text,   -- 'challenger' | 'opponent' | 'draw'
   p_turns    int,
@@ -220,11 +225,9 @@ DECLARE
   v_me      rank_ratings%ROWTYPE;
   v_opp_id  uuid;
   v_opp_r   int;
-  v_expect  numeric;
-  v_score   numeric;
+  v_adj     int;
   v_delta   int;
   v_new_me  int;
-  v_new_opp int;
 BEGIN
   IF auth.uid() IS NULL THEN RETURN json_build_object('error', '未認証です'); END IF;
   -- ▼開発限定ゲート（一般公開時にこのブロックを削除）
@@ -246,17 +249,18 @@ BEGIN
   END IF;
   v_opp_id := v_me.pending_opponent;
 
-  -- 相手の行が無ければ作成（初期1000）してロック
-  INSERT INTO rank_ratings(player_id, season) VALUES (v_opp_id, v_season)
-    ON CONFLICT (player_id, season) DO NOTHING;
-  SELECT rating INTO v_opp_r FROM rank_ratings WHERE player_id = v_opp_id AND season = v_season FOR UPDATE;
+  -- 相手の現在レート（未参加なら1000扱い。防衛側のレートは変動させない＝読むだけ）
+  SELECT COALESCE((SELECT rating FROM rank_ratings WHERE player_id = v_opp_id AND season = v_season), 1000)
+    INTO v_opp_r;
 
-  -- Elo（K=32・両者ゼロサム）。挑戦側の期待勝率→変動値
-  v_expect := 1.0 / (1.0 + power(10.0, (v_opp_r - v_me.rating) / 400.0));
-  v_score  := CASE p_winner WHEN 'challenger' THEN 1.0 WHEN 'opponent' THEN 0.0 ELSE 0.5 END;
-  v_delta  := round(32 * (v_score - v_expect))::int;
-  v_new_me  := v_me.rating + v_delta;
-  v_new_opp := v_opp_r - v_delta;
+  -- 変動量: 基準15＋レート差補正（±5）。挑戦側のみ変動
+  v_adj   := LEAST(5, GREATEST(-5, round((v_opp_r - v_me.rating) / 20.0)::int));
+  v_delta := CASE p_winner
+    WHEN 'challenger' THEN 15 + v_adj
+    WHEN 'opponent'   THEN -(15 - v_adj)
+    ELSE 0
+  END;
+  v_new_me := v_me.rating + v_delta;
 
   UPDATE rank_ratings SET
     rating = v_new_me,
@@ -265,12 +269,10 @@ BEGIN
     draws  = draws  + CASE WHEN p_winner = 'draw'       THEN 1 ELSE 0 END,
     last_match_at = now(), pending_opponent = NULL, pending_at = NULL, updated_at = now()
     WHERE player_id = auth.uid() AND season = v_season;
-  UPDATE rank_ratings SET rating = v_new_opp, updated_at = now()
-    WHERE player_id = v_opp_id AND season = v_season;
 
   INSERT INTO rank_matches(season, challenger_id, opponent_id, winner, rating_delta,
                            challenger_rating_after, opponent_rating_after, turns, a_hp_pct, b_hp_pct)
-  VALUES (v_season, auth.uid(), v_opp_id, p_winner, v_delta, v_new_me, v_new_opp,
+  VALUES (v_season, auth.uid(), v_opp_id, p_winner, v_delta, v_new_me, v_opp_r,
           COALESCE(p_turns, 0), COALESCE(p_a_hp_pct, 0), COALESCE(p_b_hp_pct, 0));
 
   RETURN json_build_object('ok', true, 'delta', v_delta, 'new_rating', v_new_me, 'cd_remain', 3600);
