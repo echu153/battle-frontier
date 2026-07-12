@@ -17,7 +17,7 @@ const fmtCd = (sec) => {
 // ベータ版の開催期間（JST 2026-07-31 23:59まで）。サーバー側(rank_find_opponent)でも同じ期限で判定
 const BETA_END = new Date('2026-07-31T23:59:59+09:00')
 
-export default function RankMatchPanel({ onClose, isAdmin = false }) {
+export default function RankMatchPanel({ onClose }) {
   const nav = useNavigate()
   const [state, setState] = useState(null)      // rank_get_state の結果
   const [cd, setCd] = useState(0)               // CD残秒（クライアント側カウントダウン）
@@ -108,12 +108,6 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
     await refresh()
   }
 
-  const devResetCd = async () => {
-    await supabase.rpc('rank_dev_reset_cd')
-    setError(''); setNotice('[開発] CDをリセットしました')
-    await refresh()
-  }
-
   const onCooldown = cd > 0
   const prev = state?.prev_season
   const betaEnded = Date.now() > BETA_END.getTime()
@@ -180,10 +174,6 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
               fontFamily: 'monospace', fontSize: '13px', letterSpacing: '1px' }}>
             {betaEnded ? '🧪 ベータ期間は終了しました' : onCooldown ? `⏳ クールダウン中（残り ${fmtCd(cd)}）` : phase === 'matching' ? 'マッチング中...' : phase === 'battling' ? '⚔ 戦闘中...' : '🎲 ランクマッチ開始'}
           </button>
-        )}
-        {/* 開発中はis_adminのCDが0秒（SQL側で免除）のためリセットボタンは通常出ない。万一の保険で残す */}
-        {isAdmin && onCooldown && (
-          <button onClick={devResetCd} style={{ width: '100%', padding: '6px', marginTop: '-4px', marginBottom: '10px', background: '#0a0a14', border: '1px dashed #445', color: '#778', cursor: 'pointer', fontFamily: 'monospace', fontSize: '10px' }}>🛠 [開発] CDリセット</button>
         )}
 
         {notice && <div style={{ color: '#ffcc66', fontSize: '11px', marginBottom: '8px' }}>{notice}</div>}

@@ -6179,7 +6179,7 @@ export default function Game() {
         <RaidNotify open={raidNotifyOpen} onClose={()=>setRaidNotifyOpen(false)} />
         {showPvp && <Suspense fallback={null}><PvpPanel onClose={()=>setShowPvp(false)} /></Suspense>}
         {showKumite && <Suspense fallback={null}><KumitePanel onClose={()=>setShowKumite(false)} /></Suspense>}
-        {showRankMatch && <Suspense fallback={null}><RankMatchPanel isAdmin={!!profile?.is_admin} onClose={()=>setShowRankMatch(false)} /></Suspense>}
+        {showRankMatch && <Suspense fallback={null}><RankMatchPanel onClose={()=>setShowRankMatch(false)} /></Suspense>}
         {showArena && <Suspense fallback={null}><ArenaPanel onClose={()=>setShowArena(false)} /></Suspense>}
       </div>
     )
@@ -6745,7 +6745,7 @@ export default function Game() {
       <RaidNotify open={raidNotifyOpen} onClose={()=>setRaidNotifyOpen(false)} />
       {showPvp && <Suspense fallback={null}><PvpPanel onClose={()=>setShowPvp(false)} /></Suspense>}
       {showKumite && <Suspense fallback={null}><KumitePanel onClose={()=>setShowKumite(false)} /></Suspense>}
-      {showRankMatch && <Suspense fallback={null}><RankMatchPanel isAdmin={!!profile?.is_admin} onClose={()=>setShowRankMatch(false)} /></Suspense>}
+      {showRankMatch && <Suspense fallback={null}><RankMatchPanel onClose={()=>setShowRankMatch(false)} /></Suspense>}
         {showArena && <Suspense fallback={null}><ArenaPanel onClose={()=>setShowArena(false)} /></Suspense>}
     </div>
   )

@@ -11,7 +11,7 @@
 --
 -- 適用順: protect_stats 系より後（Gold付与で app.allow_stat_change を使用）。
 --         mutant_gold_20260703.sql(v2) の前後どちらでも可（apply_battle_result等は触らない）。
--- 一般公開済み: 開発限定ゲートは撤去済み。is_adminはCD免除のみ残置。
+-- 一般公開済み: 開発限定ゲートは撤去済み。挑戦CD(1時間)は管理者含め全員に適用。
 -- ※初期化する場合は末尾の TRUNCATE を実行（ベータのテストデータをクリア）。
 -- ============================================================
 
@@ -85,7 +85,6 @@ LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   v_season      text := rank_current_season();
   v_me          rank_ratings%ROWTYPE;
-  v_is_admin    boolean;
   v_cd_remain   int := 0;
   v_my_rank     int := NULL;
   v_board       json;
@@ -95,12 +94,11 @@ DECLARE
   v_prev_rank   int;
 BEGIN
   IF auth.uid() IS NULL THEN RETURN json_build_object('error', '未認証です'); END IF;
-  SELECT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin) INTO v_is_admin;  -- CD免除判定に使用（一般公開済み）
 
   SELECT * INTO v_me FROM rank_ratings WHERE player_id = auth.uid() AND season = v_season;
   IF v_me.player_id IS NOT NULL THEN
-    -- is_adminはCD免除（開発中は0秒。一般公開後も管理者はCDなしのまま＝他機能と同方針）
-    IF NOT v_is_admin AND v_me.last_match_at IS NOT NULL THEN
+    -- 挑戦CD: 1時間に1回（管理者含め全員に適用）
+    IF v_me.last_match_at IS NOT NULL THEN
       v_cd_remain := GREATEST(0, CEIL(EXTRACT(EPOCH FROM (v_me.last_match_at + interval '1 hour' - now())))::int);
     END IF;
     SELECT 1 + COUNT(*) INTO v_my_rank FROM rank_ratings r
@@ -146,12 +144,10 @@ LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   v_season    text := rank_current_season();
   v_me        rank_ratings%ROWTYPE;
-  v_is_admin  boolean;
   v_opp       record;
   v_cd_remain int;
 BEGIN
   IF auth.uid() IS NULL THEN RETURN json_build_object('error', '未認証です'); END IF;
-  SELECT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin) INTO v_is_admin;  -- CD免除判定に使用（一般公開済み）
 
   -- ベータ版の開催期間: JST 2026-07-31 23:59まで（延長時はこの日時を変更）
   IF (now() AT TIME ZONE 'Asia/Tokyo') > timestamp '2026-07-31 23:59:59' THEN
@@ -163,8 +159,8 @@ BEGIN
     ON CONFLICT (player_id, season) DO NOTHING;
   SELECT * INTO v_me FROM rank_ratings WHERE player_id = auth.uid() AND season = v_season FOR UPDATE;
 
-  -- 挑戦CD: 1時間に1回（is_adminは免除＝開発中は0秒。一般公開後も管理者はCDなしのまま）
-  IF NOT v_is_admin AND v_me.last_match_at IS NOT NULL AND now() < v_me.last_match_at + interval '1 hour' THEN
+  -- 挑戦CD: 1時間に1回（管理者含め全員に適用）
+  IF v_me.last_match_at IS NOT NULL AND now() < v_me.last_match_at + interval '1 hour' THEN
     v_cd_remain := CEIL(EXTRACT(EPOCH FROM (v_me.last_match_at + interval '1 hour' - now())))::int;
     RETURN json_build_object('error', 'クールダウン中です', 'cd_remain', v_cd_remain);
   END IF;
