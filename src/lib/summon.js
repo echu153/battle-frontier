@@ -7,7 +7,10 @@ import { petStats } from '../constants/pets'
 
 // 召喚状態を構築。profile.class / passiveNames から判定
 export function buildSummon(profile, passiveNames, activePet) {
-  const hasShiki = Array.isArray(passiveNames) && passiveNames.includes('式神召喚')
+  // 式神召喚は式神使い専用パッシブ。ペット召喚(ブリーダー)と同様にクラスで縛る。
+  // （selectBattleSkillSets が全セットのパッシブをユニオンするため、旧クラスのセットに残った
+  //   式神召喚が別クラス=ブリーダー等の戦闘に漏れて「式神の攻撃」が出る不具合を防ぐ）
+  const hasShiki = profile?.class === '式神使い' && Array.isArray(passiveNames) && passiveNames.includes('式神召喚')
   let pet = null
   const ap = activePet || profile?.activePet
   if (profile?.class === 'ブリーダー' && Array.isArray(passiveNames) && passiveNames.includes('ペット召喚') && ap?.species) {
@@ -118,7 +121,7 @@ export function summonAbsorbBasic(s, enemy, enemyBuffs, turn, logs) {
   const cut = pet.buffs.reduceTurns > 0 ? (1 - pet.buffs.reduce) : 1.0
   const dmg = Math.max(1, Math.floor(baseDmg * cut * (0.9 + Math.random() * 0.2)))
   pet.hp = Math.max(0, pet.hp - dmg)
-  logs.push({ text: `${turn}ターン目: ${enemy.name}はペットを攻撃！ ペットに${dmg}ダメージ！（残りHP${pet.hp}）`, color: '#ff8844' })
+  logs.push({ text: `${turn}ターン目: ${enemy.name || '敵'}はペットを攻撃！ ペットに${dmg}ダメージ！（残りHP${pet.hp}）`, color: '#ff8844' })
   if (pet.hp <= 0) logs.push({ text: `💥 ペットは倒れてしまった…`, color: '#ff4444' })
   return true
 }

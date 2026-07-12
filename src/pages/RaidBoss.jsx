@@ -480,7 +480,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       }
 
       // ペット召喚：50%で敵の通常攻撃をペットが受ける（回避判定より前＝他エンジンと統一。受けたらプレイヤーHP無傷・骸の壁も消費しない）
-      if (summonAbsorbBasic(summon, { atk: boss.atk, matk: boss.atk, type: 'physical' }, enemyBuffs, turn, logs)) return
+      if (summonAbsorbBasic(summon, { atk: boss.atk, matk: boss.atk, type: 'physical', name: bossName }, enemyBuffs, turn, logs)) return
 
       const isCrit = Math.random() * 100 < bossCritRate
       const baseDmg = Math.max(1, Math.floor(eAtk * eAtk / Math.max(1, eAtk + defForCalc)) + Math.floor(Math.random() * 3))

@@ -601,7 +601,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
 
   const doEnemyAttack = (isExtra = false) => {
     // ペット召喚：50%で敵の通常攻撃をペットが受ける（プレイヤーHP無傷）
-    if (summonAbsorbBasic(summon, { atk: enemy.atk, matk: enemy.matk, type: enemy.type }, enemyBuffs, turn, logs)) return
+    if (summonAbsorbBasic(summon, { atk: enemy.atk, matk: enemy.matk, type: enemy.type, name: enemy.name }, enemyBuffs, turn, logs)) return
     const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
     const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
     const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
@@ -673,7 +673,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const isMag = kind === 'magical'
     const soloMult = solo ? 1.5 : 1.0
     // ペット召喚：50%で双子の攻撃をペットが受ける（攻撃力は本体ではなく双子ステ×soloMult）
-    if (summonAbsorbBasic(summon, { atk: (enemy.atk||0)*soloMult, matk: (enemy.matk||0)*soloMult, type: isMag ? 'magical' : 'physical' }, enemyBuffs, turn, logs)) return
+    if (summonAbsorbBasic(summon, { atk: (enemy.atk||0)*soloMult, matk: (enemy.matk||0)*soloMult, type: isMag ? 'magical' : 'physical', name: enemy.name }, enemyBuffs, turn, logs)) return
     const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
     const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
     const pDef  = eff.def  * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDefE * holyKnightMultE * ryurinMult

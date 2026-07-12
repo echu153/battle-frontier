@@ -431,7 +431,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
 
   const doEnemyAttack = (isExtra = false) => {
     // ペット召喚：50%で敵の通常攻撃をペットが受ける（プレイヤーHP無傷）
-    if (summonAbsorbBasic(summon, { atk: enemy.atk, matk: enemy.matk, type: enemy.type }, enemyBuffs, turn, logs)) return
+    if (summonAbsorbBasic(summon, { atk: enemy.atk, matk: enemy.matk, type: enemy.type, name: enemy.name }, enemyBuffs, turn, logs)) return
     const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
     const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
     const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
