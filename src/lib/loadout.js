@@ -1,8 +1,10 @@
 // 戦闘用スキルセットの選択（全エンジン共通）
 //  ・アクティブスキルは指定 set_type のセットを使う（アクティブが1つも無ければ sortie にフォールバック）
-//  ・パッシブ（クラスの常時能力）はロードアウトに関わらず【常に全戦闘で有効】。
-//    → どのセットに入れていても、全セットのパッシブをユニオンして必ず反映する（重複はスキル名で除去）。
-//  これにより「レイド/挑戦セットにパッシブを入れ忘れると発動しない」問題を解消する。
+//  ・パッシブは「1セットにつき1個」の仕様。1戦闘で発動するパッシブも【1つだけ】。
+//    → 指定セットのパッシブを最優先で使い、無い場合のみ sortie セットのパッシブを流用する
+//      （「レイド/挑戦セットにパッシブを入れ忘れると発動しない」問題への救済。ここでも1個だけ）。
+//    ※以前は全セットのパッシブをユニオンしていたが、別セットに違うパッシブを入れていると
+//      複数パッシブが同時発動してしまう不具合になっていたため単一化。
 export function selectBattleSkillSets(allRows, setType) {
   const all = Array.isArray(allRows) ? allRows : []
   const isPassive = (r) => r?.skills?.type === 'パッシブ'
@@ -11,8 +13,7 @@ export function selectBattleSkillSets(allRows, setType) {
   // 指定セットにアクティブスキルが無ければ未設定扱いで sortie を使う
   const base = target.some((r) => !isPassive(r)) ? target : sortie
   const active = base.filter((r) => !isPassive(r))
-  // 全セットのパッシブをスキル名で重複除去して集約（＝常に全戦闘で有効）
-  const seen = new Set()
-  const passives = all.filter((r) => isPassive(r) && r.skills?.name && !seen.has(r.skills.name) && seen.add(r.skills.name))
-  return [...active, ...passives]
+  // パッシブは1個のみ：指定セットのもの → 無ければ sortie セットのもの
+  const passive = target.find(isPassive) || sortie.find(isPassive)
+  return passive ? [...active, passive] : [...active]
 }
