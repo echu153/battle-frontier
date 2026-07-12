@@ -120,7 +120,7 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '16px', overflowY: 'auto', fontFamily: 'monospace' }}>
-      <div style={{ background: '#0a0e06', border: '1px solid #9a8a3a', maxWidth: '680px', width: '100%', padding: '16px', marginTop: '24px' }}>
+      <div style={{ background: '#0a0e06', border: '1px solid #9a8a3a', maxWidth: '680px', width: '100%', padding: '16px', marginTop: '24px', textAlign: 'left' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #5a4f1f', paddingBottom: '8px' }}>
           <div style={{ color: '#ffd75e', fontSize: '15px', letterSpacing: '2px' }}>🏅 ランクマッチ <span style={{ color: '#88ddaa', fontSize: '10px' }}>β</span> <span style={{ color: '#997733', fontSize: '10px' }}>(開発者限定)</span></div>
           <button onClick={onClose} style={{ background: 'none', border: '1px solid #8a7a44', color: '#ccaa77', padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>✕ 閉じる</button>
@@ -129,7 +129,7 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
         <div style={{ border: '1px solid #3a6a4a', background: '#06120a', padding: '6px 10px', marginBottom: '8px', color: '#88ddaa', fontSize: '11px' }}>
           🧪 <b>ベータ版</b> 開催期間: <b>7月31日 23:59まで</b>（ベータ期間の報酬は後日発表）
         </div>
-        <div style={{ border: '1px solid #4a4426', background: '#0c0e06', padding: '8px 10px', marginBottom: '10px', color: '#ccaa88', fontSize: '10px', lineHeight: '1.8' }}>
+        <div style={{ border: '1px solid #4a4426', background: '#0c0e06', padding: '8px 10px', marginBottom: '10px', color: '#ccaa88', fontSize: '10px', lineHeight: '1.8', textAlign: 'left' }}>
           <div style={{ color: '#ffd75e', marginBottom: '2px' }}>📜 ルール</div>
           ・初期レート<b>1000</b>。勝利<b>+15</b>／敗北<b>-15</b><br />
           ・レートが変わるのは挑戦した側のみ（対戦相手に選ばれた側は変動なし）<br />
