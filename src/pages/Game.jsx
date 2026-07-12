@@ -1755,6 +1755,7 @@ export default function Game() {
   const [userReplyDrafts, setUserReplyDrafts] = useState({})    // ユーザーの追い返信の下書き {contact_id: 文}
   const [contactPostingId, setContactPostingId] = useState(null) // スレッド追記の送信中ID
   const [adminContactFilter, setAdminContactFilter] = useState('unreplied') // 管理人受信一覧の絞り込み: 'unreplied'=未返信 / 'replied'=返信済み
+  const [newContactIds, setNewContactIds] = useState(() => new Set())  // 管理人がまだ見ていないお問い合わせID（NEW表示用・開いた時点のスナップショット）
   const [showAnnouncements, setShowAnnouncements] = useState(false)
   const [announceTab, setAnnounceTab] = useState('update')   // お知らせモーダルの選択中タブ
   const [announcements, setAnnouncements] = useState([])
@@ -4260,7 +4261,17 @@ export default function Game() {
         }
       }
       setMyContacts(rows)
-      if (isContactAdmin) setUnrepliedContacts(rows.filter(needsAdminReply).length)
+      if (isContactAdmin) {
+        setUnrepliedContacts(rows.filter(needsAdminReply).length)
+        // まだ見ていないお問い合わせに NEW を付ける（localStorage 既読ID管理）。
+        // 開いた時点で未読だったIDをスナップショットして表示に使い、現在の全件を既読として保存。
+        // ※管理人は全件取得するので、保存IDリストは現存する問い合わせ分に収まり肥大化しない。
+        let seen = []
+        try { seen = JSON.parse(localStorage.getItem('bf_seenContacts') || '[]') } catch { /* 意図的に無視 */ }
+        const seenSet = new Set(seen)
+        setNewContactIds(new Set(rows.filter(c => !seenSet.has(c.id)).map(c => c.id)))
+        try { localStorage.setItem('bf_seenContacts', JSON.stringify(rows.map(c => c.id))) } catch { /* 意図的に無視 */ }
+      }
       return rows
     } catch (e) {
       setMyContacts([])
@@ -4930,7 +4941,12 @@ export default function Game() {
               <div key={c.id} style={{ marginBottom:'12px', border:'1px solid #223344', background:'#000818' }}>
                 <div style={{ padding:'10px 12px', borderBottom:'1px solid #112233' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                    <span style={{ color:'#88ccff', fontSize:'11px' }}>{CONTACT_CAT_LABEL[c.category] || c.category}</span>
+                    <span style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                      <span style={{ color:'#88ccff', fontSize:'11px' }}>{CONTACT_CAT_LABEL[c.category] || c.category}</span>
+                      {isContactAdmin && newContactIds.has(c.id) && (
+                        <span style={{ background:'#cc2222', color:'#ffffff', fontSize:'9px', fontWeight:'bold', padding:'1px 5px', borderRadius:'3px', letterSpacing:'0.5px' }}>NEW</span>
+                      )}
+                    </span>
                     <span style={{ color:'#446688', fontSize:'10px' }}>{new Date(c.created_at).toLocaleDateString('ja-JP')}</span>
                   </div>
                   {isContactAdmin && <div style={{ color:'#6699cc', fontSize:'10px', marginTop:'4px' }}>from: {c.player_name || c.player_id}</div>}
