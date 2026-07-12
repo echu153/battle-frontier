@@ -556,7 +556,7 @@ export default function Mahjong() {
   // 鳴き/ロンの反応は目立つ専用パネルに出す
   const claimButtons = []
   if (claimOpts) {
-    const big = (color) => btnStyle(color, { fontSize: 18, padding: '10px 18px', fontWeight: 'bold', background: '#1a0f00' })
+    const big = (color) => btnStyle(color, { fontSize: 18, padding: '10px 18px', fontWeight: 'bold', background: '#1a0f00', whiteSpace: 'nowrap', flexShrink: 0 })
     if (claimOpts.canRon) claimButtons.push(<button key="ron" onClick={() => sendAction({ type: 'ron' })} style={big('#ff4422')}>ロン！</button>)
     if (claimOpts.canPon) claimButtons.push(<button key="pon" onClick={() => sendAction({ type: 'pon' })} style={big('#44dd88')}>ポン</button>)
     if (claimOpts.canMinkan) claimButtons.push(<button key="mkan" onClick={() => sendAction({ type: 'minkan' })} style={big('#44dd88')}>カン</button>)
@@ -567,7 +567,7 @@ export default function Mahjong() {
       }} style={big('#44dd88')}>チー</button>)
     }
     if (claimButtons.length > 0) {
-      claimButtons.push(<button key="pass" onClick={() => sendAction({ type: 'pass' })} style={btnStyle('#99a', { fontSize: 14, padding: '10px 14px', background: '#1a0f00' })}>スルー</button>)
+      claimButtons.push(<button key="pass" onClick={() => sendAction({ type: 'pass' })} style={btnStyle('#99a', { fontSize: 14, padding: '10px 14px', background: '#1a0f00', whiteSpace: 'nowrap', flexShrink: 0 })}>スルー</button>)
     }
   }
 
@@ -643,9 +643,14 @@ export default function Mahjong() {
           position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
           background: '#1a0f00', border: '2px solid #ffcc44', borderRadius: 8,
           padding: '12px 16px', zIndex: 45, display: 'flex', gap: 10, alignItems: 'center',
-          animation: 'mjpulse 1.1s infinite',
+          animation: 'mjpulse 1.1s infinite', whiteSpace: 'nowrap', maxWidth: '96vw', overflowX: 'auto',
         }}>
-          <span style={{ color: '#ffcc44', fontSize: 15, fontWeight: 'bold' }}>⏱{remain}</span>
+          <span style={{ color: '#ffcc44', fontSize: 15, fontWeight: 'bold', flexShrink: 0 }}>⏱{remain}</span>
+          {/* 対象の牌(誰が何を捨てたか) */}
+          <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+            <span style={{ fontSize: 10, color: '#cde' }}>{game.players[game.await.fromSeat]?.name}{game.await.chankan ? 'の加槓' : 'の捨て牌'}</span>
+            <Tile k={game.await.tileKind} r={game.await.tileRed} />
+          </span>
           {claimButtons}
         </div>
       )}
