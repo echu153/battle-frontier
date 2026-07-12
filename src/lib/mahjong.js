@@ -934,6 +934,7 @@ function doKita(st, seat, ev) {
 function settleWin(st, winners, opts, ev) {
   const n = st.players.length
   const results = []
+  for (const seat of winners) ev.push({ t: 'call', seat, what: opts.tsumo ? 'ツモ' : 'ロン' })
   // リーチ棒: 立直宣言牌ロンの場合は宣言不成立(supplied by pendingRiichi remains unpaid)
   st.pendingRiichi = null
   let sticks = st.round.sticks

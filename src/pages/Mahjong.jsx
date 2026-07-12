@@ -80,6 +80,9 @@ export default function Mahjong() {
   const membersRef = useRef([])
   const npcsRef = useRef([])
   const autoRef = useRef(new Set()) // 切断中プレイヤーid(ホスト管理)
+  const pendingBroadcastRef = useRef(false) // ダミー時間中フラグ(ホスト)
+  const splashTimerRef = useRef(null)
+  const [splash, setSplash] = useState(null) // { what, name } 大きな宣言演出
   const npcTimerRef = useRef(null)
   const deadlineTimerRef = useRef(null)
 
@@ -154,6 +157,7 @@ export default function Mahjong() {
   }, [])
 
   const hostApply = useCallback((playerId, action) => {
+    if (pendingBroadcastRef.current) return false // ダミー時間中は操作を受けない
     const cur = gameRef.current
     if (!cur) return false
     const r = applyMahjong(cur, playerId, action)
@@ -161,8 +165,19 @@ export default function Mahjong() {
       roomChRef.current?.send({ type: 'broadcast', event: 'reject', payload: { playerId, msg: r.error } })
       return false
     }
-    hostBroadcast(r.state, r.events)
-    if (r.state.phase !== 'playing') publishRoom('waiting')
+    const finish = () => {
+      pendingBroadcastRef.current = false
+      if (!roomChRef.current) return
+      hostBroadcast(r.state, r.events)
+      if (r.state.phase !== 'playing') publishRoom('waiting')
+    }
+    // ダミー思考時間: 誰も鳴けない打牌でもランダムに間を置き、
+    // 「止まった=誰かが鳴ける」と他家に悟られないようにする
+    const straightTurn = r.state.await?.type === 'turn' && (action.type === 'discard' || action.type === 'riichi')
+    if (straightTurn && Math.random() < 0.45) {
+      pendingBroadcastRef.current = true
+      setTimeout(finish, 500 + Math.random() * 1100)
+    } else finish()
     return true
   }, [hostBroadcast, publishRoom])
 
@@ -208,8 +223,15 @@ export default function Mahjong() {
       gameRef.current = payload.game
       setGame(payload.game)
       setRiichiMode(false); setChiPick(null); setKanPick(null)
-      for (const ev of payload.events || []) {
-        if (ev.t === 'call') showToast(`${payload.game.players[ev.seat]?.name}: ${ev.what}！`)
+      const calls = (payload.events || []).filter((ev) => ev.t === 'call')
+      if (calls.length > 0) {
+        // 大きな宣言演出(雀魂風)
+        setSplash({
+          what: calls.map((c) => c.what).join('・'),
+          name: calls.map((c) => payload.game.players[c.seat]?.name).join(' / '),
+        })
+        if (splashTimerRef.current) clearTimeout(splashTimerRef.current)
+        splashTimerRef.current = setTimeout(() => setSplash(null), 1700)
       }
     })
     ch.on('broadcast', { event: 'action' }, ({ payload }) => {
@@ -243,6 +265,9 @@ export default function Mahjong() {
     if (roomChRef.current) { supabase.removeChannel(roomChRef.current); roomChRef.current = null }
     if (npcTimerRef.current) clearTimeout(npcTimerRef.current)
     if (deadlineTimerRef.current) clearTimeout(deadlineTimerRef.current)
+    if (splashTimerRef.current) clearTimeout(splashTimerRef.current)
+    pendingBroadcastRef.current = false
+    setSplash(null)
     setRoom(null); roomRef.current = null
     setGame(null); gameRef.current = null
     setMembers([]); membersRef.current = []
@@ -314,7 +339,8 @@ export default function Mahjong() {
       const seat = cur.players.findIndex((p) => p.id === actorId)
       const action = isNpcId(actorId) ? npcDecide(cur, seat) : autoActionFor(cur, seat)
       if (action) hostApply(actorId, action)
-    }, game.await.type === 'claims' ? 700 : 1000)
+      // 反応時間をランダム化(鳴き判断の有無を時間で悟られないように)
+    }, game.await.type === 'claims' ? 600 + Math.random() * 1100 : 800 + Math.random() * 800)
     npcTimerRef.current = t
     return () => clearTimeout(t)
   }, [game, room, me, hostApply])
@@ -367,9 +393,23 @@ export default function Mahjong() {
 
   const wrap = (children) => (
     <div style={{ minHeight: '100vh', background: '#0a1a0f', color: '#cde', fontFamily: 'monospace', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px' }}>
+      <style>{`
+        @keyframes mjsplash { 0% { transform: scale(2.4); opacity: 0 } 18% { transform: scale(1); opacity: 1 } 78% { opacity: 1 } 100% { opacity: 0 } }
+        @keyframes mjpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 204, 68, 0.75) } 50% { box-shadow: 0 0 0 10px rgba(255, 204, 68, 0) } }
+      `}</style>
       {children}
       {toast && (
         <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: '#112244', border: '1px solid #4488cc', color: '#cde', padding: '8px 16px', fontSize: 12, zIndex: 50 }}>{toast}</div>
+      )}
+      {splash && (
+        <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 70 }}>
+          <div style={{
+            fontSize: 68, fontWeight: 'bold', color: '#ff4422', fontFamily: "'Hiragino Mincho ProN','Yu Mincho',serif",
+            textShadow: '0 0 24px rgba(0,0,0,0.9), 3px 3px 0 #550000, -2px -2px 0 #ffcc44',
+            animation: 'mjsplash 1.7s ease-out both',
+          }}>{splash.what}！</div>
+          <div style={{ fontSize: 16, color: '#ffcc44', textShadow: '0 0 8px #000', marginTop: 4, animation: 'mjsplash 1.7s ease-out both' }}>{splash.name}</div>
+        </div>
       )}
     </div>
   )
@@ -468,25 +508,32 @@ export default function Mahjong() {
           {game.sanma && game.kitaCounts[seat] > 0 && <span style={{ color: '#dd88ff' }}>北×{game.kitaCounts[seat]}</span>}
           {isTurnSeat && remain !== null && <span style={{ color: '#ff8866' }}>⏱{remain}</span>}
         </div>
-        {/* 鳴き */}
-        {game.melds[seat].length > 0 && (
-          <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-            {game.melds[seat].map((m, i) => (
-              <span key={i} style={{ display: 'inline-flex', gap: 1 }}>
-                {m.type === 'ankan'
-                  ? (<><TileBack small /><Tile k={m.k} small /><Tile k={m.k} small /><TileBack small /></>)
-                  : m.tiles.map((t, j) => <Tile key={j} k={t.k} r={t.r} small />)}
-              </span>
-            ))}
+        {/* 河と鳴きを明確に分離 */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 4, alignItems: 'stretch' }}>
+          <div style={{ flex: 1, background: 'rgba(0,0,0,0.25)', border: '1px dashed #2a4a3a', borderRadius: 4, padding: '3px 4px' }}>
+            <div style={{ fontSize: 9, color: '#5a7a6a', marginBottom: 2 }}>捨て牌</div>
+            <div style={{ display: 'flex', gap: 1, flexWrap: 'wrap', minHeight: 32 }}>
+              {game.discards[seat].map((d, i) => (
+                <span key={i} style={{ transform: d.riichi ? 'rotate(90deg)' : 'none', display: 'inline-block' }}>
+                  <Tile k={d.k} r={d.r} small dim={d.called} />
+                </span>
+              ))}
+            </div>
           </div>
-        )}
-        {/* 河 */}
-        <div style={{ display: 'flex', gap: 1, marginTop: 4, flexWrap: 'wrap', minHeight: 30 }}>
-          {game.discards[seat].map((d, i) => (
-            <span key={i} style={{ transform: d.riichi ? 'rotate(90deg)' : 'none', display: 'inline-block' }}>
-              <Tile k={d.k} r={d.r} small dim={d.called} />
-            </span>
-          ))}
+          {game.melds[seat].length > 0 && (
+            <div style={{ background: 'rgba(255,204,68,0.08)', border: '1px solid #8a7a33', borderRadius: 4, padding: '3px 5px' }}>
+              <div style={{ fontSize: 9, color: '#ccaa44', marginBottom: 2 }}>鳴き(ポン/チー/カン)</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {game.melds[seat].map((m, i) => (
+                  <span key={i} style={{ display: 'inline-flex', gap: 1 }}>
+                    {m.type === 'ankan'
+                      ? (<><TileBack small /><Tile k={m.k} small /><Tile k={m.k} small /><TileBack small /></>)
+                      : m.tiles.map((t, j) => <Tile key={j} k={t.k} r={t.r} small />)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -506,17 +553,22 @@ export default function Mahjong() {
     }
     if (turnOpts.canKita) actionButtons.push(<button key="kita" onClick={() => sendAction({ type: 'kita' })} style={btnStyle('#dd88ff', { fontSize: 14 })}>北抜き</button>)
   }
+  // 鳴き/ロンの反応は目立つ専用パネルに出す
+  const claimButtons = []
   if (claimOpts) {
-    if (claimOpts.canRon) actionButtons.push(<button key="ron" onClick={() => sendAction({ type: 'ron' })} style={btnStyle('#ff6644', { fontSize: 14 })}>ロン！</button>)
-    if (claimOpts.canPon) actionButtons.push(<button key="pon" onClick={() => sendAction({ type: 'pon' })} style={btnStyle('#44dd88', { fontSize: 14 })}>ポン</button>)
-    if (claimOpts.canMinkan) actionButtons.push(<button key="mkan" onClick={() => sendAction({ type: 'minkan' })} style={btnStyle('#44dd88', { fontSize: 14 })}>カン</button>)
+    const big = (color) => btnStyle(color, { fontSize: 18, padding: '10px 18px', fontWeight: 'bold', background: '#1a0f00' })
+    if (claimOpts.canRon) claimButtons.push(<button key="ron" onClick={() => sendAction({ type: 'ron' })} style={big('#ff4422')}>ロン！</button>)
+    if (claimOpts.canPon) claimButtons.push(<button key="pon" onClick={() => sendAction({ type: 'pon' })} style={big('#44dd88')}>ポン</button>)
+    if (claimOpts.canMinkan) claimButtons.push(<button key="mkan" onClick={() => sendAction({ type: 'minkan' })} style={big('#44dd88')}>カン</button>)
     if (claimOpts.chis.length > 0) {
-      actionButtons.push(<button key="chi" onClick={() => {
+      claimButtons.push(<button key="chi" onClick={() => {
         if (claimOpts.chis.length === 1) sendAction({ type: 'chi', chi: claimOpts.chis[0] })
         else setChiPick(claimOpts.chis)
-      }} style={btnStyle('#44dd88', { fontSize: 14 })}>チー</button>)
+      }} style={big('#44dd88')}>チー</button>)
     }
-    actionButtons.push(<button key="pass" onClick={() => sendAction({ type: 'pass' })} style={btnStyle('#668', { fontSize: 14 })}>スルー</button>)
+    if (claimButtons.length > 0) {
+      claimButtons.push(<button key="pass" onClick={() => sendAction({ type: 'pass' })} style={btnStyle('#99a', { fontSize: 14, padding: '10px 14px', background: '#1a0f00' })}>スルー</button>)
+    }
   }
 
   const canDiscard = turnOpts && !turnOpts.riichi
@@ -568,7 +620,7 @@ export default function Mahjong() {
               />
             ))}
             {game.drawn && game.drawnBy === mySeat && (
-              <span style={{ marginLeft: 10 }}>
+              <span style={{ marginLeft: 10, border: '2px solid #ffcc44', borderRadius: 6, padding: 2, boxShadow: '0 0 8px rgba(255,204,68,0.5)' }}>
                 <Tile k={game.drawn.k} r={game.drawn.r}
                   onClick={myTurn ? () => onTileClick(game.drawn) : undefined}
                   dim={riichiMode && !riichiDiscardable(game.drawn.k)}
@@ -584,6 +636,19 @@ export default function Mahjong() {
         </div>
       )}
       {isSpectator && <div style={{ color: '#668', fontSize: 12, marginTop: 6 }}>👀 観戦中</div>}
+
+      {/* 鳴き/ロン反応パネル(目立つ・点滅) */}
+      {claimButtons.length > 0 && !chiPick && (
+        <div style={{
+          position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
+          background: '#1a0f00', border: '2px solid #ffcc44', borderRadius: 8,
+          padding: '12px 16px', zIndex: 45, display: 'flex', gap: 10, alignItems: 'center',
+          animation: 'mjpulse 1.1s infinite',
+        }}>
+          <span style={{ color: '#ffcc44', fontSize: 15, fontWeight: 'bold' }}>⏱{remain}</span>
+          {claimButtons}
+        </div>
+      )}
 
       {/* チー/カン候補選択 */}
       {chiPick && (

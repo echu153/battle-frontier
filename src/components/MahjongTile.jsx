@@ -98,9 +98,7 @@ function Face({ k, r }) {
   // 字牌
   const label = KIND_NAMES[k]
   const color = k === 32 ? GREEN : k === 33 ? RED : INK // 發=緑 中=赤
-  if (k === 31) { // 白=枠のみ
-    return <rect x={12} y={14} width={36} height={52} rx={4} fill="none" stroke={BLUE} strokeWidth={3.5} />
-  }
+  if (k === 31) return null // 白=真っ白
   return (
     <text x={30} y={53} textAnchor="middle" fontSize={40} fontWeight="bold"
       fontFamily="'Hiragino Mincho ProN','Yu Mincho',serif" fill={color}>{label}</text>
