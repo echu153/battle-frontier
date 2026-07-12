@@ -244,7 +244,7 @@ export default function Smithy() {
     const serverStoneCount = serverStoneItem?.quantity || 0
     const serverSameItems = (serverEquip || []).filter(e =>
       e.weapons?.name === item.weapons.name && e.id !== item.id && !e.equipped && !e.is_favorite && !e.listed
-      && !(e.enhance_plus > 0)  // 強化済み(+1以上)の装備は素材にしない
+      && !(e.enhance_plus > 0) && !e.is_bound  // 強化済み(+1以上)/帰属(取引所入手)の装備は素材にしない
     )
     // 選択した素材だけで足りているか判定（同名装備 or 強化石）
     if (source === 'stone') {
@@ -381,12 +381,7 @@ export default function Smithy() {
     const count = Math.floor(deleted / 3)   // 実際に消費できた装備3個=強化石1個
     if (count <= 0) { showMessage('加工に失敗しました（対象装備が見つかりません）', '#ff4444'); await fetchAll(); return }
     const stoneName = STONE_NAMES[rarity]
-    const { data: stoneItem } = await supabase.from('items').select('*').eq('name', stoneName).single()
-    if (stoneItem) {
-      const existing = playerItems.find(pi => pi.item_id === stoneItem.id)
-      if (existing) await supabase.from('player_items').update({ quantity: (existing.quantity||1)+count }).eq('id', existing.id)
-      else await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: count, equipped: false })
-    }
+    await grantMaterial(stoneName, count)  // DBから最新所持を読んで加算（stale stateでの重複行/未反映を防ぐ）
     showMessage(`✨ ${stoneName} を${count}つ作成した！`, '#ffcc00')
     await fetchAll()
     } finally { setLoading(false); craftBusyRef.current = false }
@@ -415,12 +410,7 @@ export default function Smithy() {
     if (newQty <= 0) await supabase.from('player_items').delete().eq('id', existing.id).eq('quantity', 0)
     const nextRarity = STONE_RANKS[stoneIdx + 1]
     const nextStoneName = STONE_NAMES[nextRarity]
-    const { data: nextStoneItem } = await supabase.from('items').select('*').eq('name', nextStoneName).single()
-    if (nextStoneItem) {
-      const nextExisting = playerItems.find(pi => pi.item_id === nextStoneItem.id)
-      if (nextExisting) await supabase.from('player_items').update({ quantity: (nextExisting.quantity||1)+n }).eq('id', nextExisting.id)
-      else await supabase.from('player_items').insert({ player_id: profile.id, item_id: nextStoneItem.id, quantity: n, equipped: false })
-    }
+    await grantMaterial(nextStoneName, n)  // DBから最新所持を読んで加算（stale stateでの重複行/未反映を防ぐ）
     showMessage(`✨ ${nextStoneName} を${n}つ作成した！`, '#ffcc00')
     await fetchAll()
     } finally { setLoading(false); craftBusyRef.current = false }
@@ -515,7 +505,10 @@ export default function Smithy() {
   const grantMaterial = async (name, amount) => {
     const { data: it } = await supabase.from('items').select('id').eq('name', name).maybeSingle()
     if (!it) { showMessage(`アイテム「${name}」が未登録です（SQL未適用）`, '#ff4444'); return false }
-    const existing = playerItems.find(pi => pi.item_id === it.id)
+    // stale state（別タブ/端末で行が増減）だと既存行を見落として重複行を作り「反映されない」ため、DBから最新の所持行を取得
+    const { data: rows } = await supabase.from('player_items')
+      .select('id, quantity').eq('player_id', profile.id).eq('item_id', it.id).limit(1)
+    const existing = rows && rows[0]
     if (existing) await supabase.from('player_items').update({ quantity: (existing.quantity || 0) + amount }).eq('id', existing.id)
     else await supabase.from('player_items').insert({ player_id: profile.id, item_id: it.id, quantity: amount, equipped: false })
     return true
@@ -661,7 +654,7 @@ export default function Smithy() {
           const rankCosts = ENHANCE_COST_BY_RANK[w.rarity] || ENHANCE_COST_BY_RANK.ss
           const cost = rankCosts[nextPlus] || rankCosts[rankCosts.length - 1]
           const materialCount = MATERIAL_COUNT(plus)
-          const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped && !e.is_favorite && !(e.enhance_plus > 0)).length
+          const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound).length
           const stoneCount = getStoneCount(w.rarity)
           // 選択中の素材で足りているか
           const matEnough = matSource === 'stone' ? stoneCount >= materialCount : sameCount >= materialCount
@@ -945,7 +938,7 @@ export default function Smithy() {
                     const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
                     const plus = item.enhance_plus || 0
                     const materialCount = MATERIAL_COUNT(plus)
-                    const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped && !e.is_favorite && !(e.enhance_plus > 0)).length
+                    const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound).length
                     const stoneCount = getStoneCount(w.rarity)
                     const enhanced = calcEnhancedStats(w, plus, item.evolve_stage || 0)
                     const isSelected = selectedItem?.id === item.id
@@ -1017,7 +1010,7 @@ export default function Smithy() {
                   <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>ランク指定でランダムに選んで一気に加工</div>
                   <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
                     {RARITY_ORDER.map(rarity => {
-                      const avail = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && e.weapons.rarity === rarity), sortKey)
+                      const avail = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound && e.weapons.rarity === rarity), sortKey)
                       const maxTimes = Math.floor(avail.length / 3)
                       const canPick = maxTimes >= 1
                       const times = Math.min(craftTimes, maxTimes)
@@ -1287,7 +1280,7 @@ export default function Smithy() {
 
 function CraftSelector({ equipment, loading, sortKey, onRequestCraft }) {
   const [selected, setSelected] = useState([])
-  const unequipped = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0)), sortKey || 'obtained_asc')
+  const unequipped = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound), sortKey || 'obtained_asc')
 
   const toggle = (id) => {
     if (selected.includes(id)) { setSelected(selected.filter(s => s !== id)); return }
