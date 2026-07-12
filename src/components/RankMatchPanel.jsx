@@ -131,10 +131,11 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
         </div>
         <div style={{ border: '1px solid #4a4426', background: '#0c0e06', padding: '8px 10px', marginBottom: '10px', color: '#ccaa88', fontSize: '10px', lineHeight: '1.8' }}>
           <div style={{ color: '#ffd75e', marginBottom: '2px' }}>📜 ルール</div>
-          ・初期レート<b>1000</b>。勝利<b>+15</b>／敗北<b>-15</b>（相手とのレート差で±5補正・引き分け0）<br />
+          ・初期レート<b>1000</b>。勝利<b>+15</b>／敗北<b>-15</b><br />
           ・レートが変わるのは挑戦した側のみ（対戦相手に選ばれた側は変動なし）<br />
           ・マッチングは<b>レート±100</b>からランダム。<b>マッチ成立で即対戦開始</b>（キャンセル不可）<br />
           ・挑戦は<b>1時間に1回</b><span style={{ color: '#998855' }}>（開発中はCDなし）</span><br />
+          <div style={{ color: '#ffd75e', margin: '4px 0 2px' }}>▼対人戦のルール</div>
           ・<b>50ターン</b>で強制終了＝与ダメージ総量で勝敗<br />
           ・防御で大きく軽減・回復は通常<br />
           ・素早さで回避・クリティカル最大<b>1.5倍</b>
@@ -218,11 +219,11 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
           </div>
         )}
 
-        {/* シーズンランキング */}
+        {/* シーズンランキング（上位10人＋自分の順位） */}
         {state?.leaderboard?.length > 0 && (
           <div style={{ border: '1px solid #4a4426', background: '#0a0c06', padding: '10px' }}>
-            <div style={{ color: '#ccaa66', fontSize: '11px', marginBottom: '6px' }}>🏆 シーズンランキング（上位50）</div>
-            <div style={{ display: 'grid', gap: '2px', maxHeight: '240px', overflowY: 'auto' }}>
+            <div style={{ color: '#ccaa66', fontSize: '11px', marginBottom: '6px' }}>🏆 シーズンランキング（上位10）</div>
+            <div style={{ display: 'grid', gap: '2px' }}>
               {state.leaderboard.map((r, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', padding: '3px 6px',
                   background: i < 3 ? '#141204' : 'transparent', color: i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#aa9977' }}>
@@ -231,6 +232,13 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
                 </div>
               ))}
             </div>
+            {/* 自分が上位10圏外なら自身の順位を別表示 */}
+            {state.my_rank != null && state.my_rank > state.leaderboard.length && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', padding: '3px 6px', marginTop: '4px', borderTop: '1px solid #2a2814', background: '#0e1206', color: '#88ddaa' }}>
+                <span>{state.my_rank}. <b>あなた</b> <span style={{ color: '#557755', fontSize: '10px' }}>{state.wins}勝{state.losses}敗</span></span>
+                <span style={{ color: '#ffe699' }}>{state.rating}</span>
+              </div>
+            )}
             <div style={{ color: '#665533', fontSize: '9px', marginTop: '6px' }}>
               シーズン報酬の詳細は後日発表
             </div>

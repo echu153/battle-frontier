@@ -111,13 +111,13 @@ BEGIN
       WHERE r.season = v_season AND r.rating > v_me.rating;
   END IF;
 
-  -- ランキング上位50（集計除外アカウントは非表示）
+  -- ランキング上位10（集計除外アカウントは非表示。自分の順位は my_rank で別途表示）
   SELECT COALESCE(json_agg(t), '[]'::json) INTO v_board FROM (
     SELECT p.username, r.rating, r.wins, r.losses, r.draws
     FROM rank_ratings r JOIN profiles p ON p.id = r.player_id
     WHERE r.season = v_season AND COALESCE(p.exclude_from_ranking, false) = false
     ORDER BY r.rating DESC, r.updated_at ASC
-    LIMIT 50
+    LIMIT 10
   ) t;
 
   -- 直近の過去シーズン（自分が参加した最新のもの）の報酬情報
