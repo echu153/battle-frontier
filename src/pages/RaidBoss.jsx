@@ -722,6 +722,7 @@ export default function RaidBoss() {
       const parts = [`${data.tier}ティア`, `Gold+${fmt(data.gold)}`, `強化石${(data.stones||[]).map(s=>`(${s})`).join('・')}×2`, `宝石(${data.gem_rank})×${data.gem_count}`, `通常素材：${data.mat_name||'素材'}×${data.scale_count}`]
       if (data.got_gyaku) parts.push(`⭐レア素材：${data.rare_name||'レア素材'}×1`)
       if (data.book) parts.push(`📖${data.book}×1`)
+      if (data.top_rank >= 1 && data.top_rank <= 3) parts.push(`🏅与ダメ${data.top_rank}位ボーナス：Gold+${fmt(data.top_gold)}・📖${data.top_book}×1`)
       const bossNm = pendingRewards.find(r => r.raid_id === raidId)?.raid_boss?.boss_name
       setPendingMsg(m => ({ ...m, [raidId]: `✓ ${bossNm ? bossNm + '：' : ''}受け取り完了！ ${parts.join(' / ')}` }))
       setPendingRewards(prev => prev.filter(r => r.raid_id !== raidId))
@@ -1103,6 +1104,11 @@ export default function RaidBoss() {
                   <div style={{ color: '#cc8844' }}>通常素材：{reward.mat_name || '黒龍の鱗'} × {reward.scale_count}個</div>
                   {reward.got_gyaku && <div style={{ color: '#ffcc00' }}>⭐ レア素材：{reward.rare_name || '黒龍の逆鱗'} × 1個（レアドロップ！）</div>}
                   {reward.book && <div style={{ color: '#ffaa44' }}>📖 {reward.book} × 1個</div>}
+                  {reward.top_rank >= 1 && reward.top_rank <= 3 && (
+                    <div style={{ color: '#ffdd44', marginTop: '2px' }}>
+                      🏅 与ダメージ{reward.top_rank}位ボーナス！ Gold +{fmt(reward.top_gold)}／📖 {reward.top_book} × 1個
+                    </div>
+                  )}
                   <div style={{ color: '#44ff88', marginTop: '4px' }}>✓ 受け取り完了！</div>
                 </div>
               ) : myPart.reward_claimed ? (
@@ -1248,7 +1254,11 @@ function RewardTable({ isAdmin = false }) {
           </div>
         </div>
       ))}
+      <div style={{ color: '#ffdd44', fontSize: '10px', marginTop: '8px', lineHeight: 1.7 }}>
+        🏅 与ダメージ上位3名には追加報酬（tier報酬とは別途）: 1位 Gold+100,000＋匠の秘伝書Ⅴ / 2位 Gold+100,000＋匠の秘伝書Ⅳ / 3位 Gold+100,000＋匠の秘伝書Ⅲ
+      </div>
       <div style={{ color: '#334455', fontSize: '10px', marginTop: '6px' }}>※ 出撃回数でもティア保証: {tierAttacks(TIER_INFO[2], isAdmin)}回→C / {tierAttacks(TIER_INFO[1], isAdmin)}回→B / {tierAttacks(TIER_INFO[0], isAdmin)}回→A。時間切れでもその時点の報酬を獲得可</div>
+      <div style={{ color: '#446655', fontSize: '10px', marginTop: '4px', lineHeight: 1.7 }}>※ 討伐支援: 出現から25分経過（残り5分）以降は与ダメージ制限が緩和され討伐しやすくなります。ただしこの間に与えたダメージはランキング（貢献度・与ダメ順位）には加算されません。</div>
     </div>
   )
 }
