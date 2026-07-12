@@ -4,7 +4,7 @@ import { supabase } from '../supabase'
 import { reportDevAccess } from '../lib/devAccess'
 import {
   KIND_NAMES, createMahjongGame, applyMahjong, getTurnOptions, getClaimOptions,
-  npcDecide, autoActionFor, isNpcId, doraFromIndicator,
+  npcDecide, autoActionFor, isNpcId, doraFromIndicator, waitsOf,
   MIN_MAHJONG_PLAYERS, MAX_MAHJONG_PLAYERS, TURN_SEC, CLAIM_SEC,
 } from '../lib/mahjong'
 import { TileFace, TileBackFace } from '../components/MahjongTile'
@@ -26,8 +26,10 @@ const btnStyle = (color, extra = {}) => ({
 })
 
 // ---- 牌表示(SVG描画) ----
-function Tile({ k, r, small, dim, onClick, sel, disabled }) {
+// glow: ドラ=金の光 / 赤5=赤の光
+function Tile({ k, r, small, dim, onClick, sel, disabled, glow }) {
   const size = small ? { w: 24, h: 32 } : { w: 36, h: 48 }
+  const glowShadow = glow ? (r ? '0 0 7px 2px rgba(255,70,50,0.85)' : '0 0 7px 2px rgba(255,215,80,0.85)') : 'none'
   return (
     <button
       onClick={onClick}
@@ -40,6 +42,7 @@ function Tile({ k, r, small, dim, onClick, sel, disabled }) {
         opacity: dim ? 0.45 : 1,
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         transform: sel ? 'translateY(-4px)' : 'none',
+        boxShadow: glowShadow,
       }}
     >
       <TileFace k={k} r={r} w={sel ? size.w - 4 : size.w} h={sel ? size.h - 4 : size.h} />
@@ -67,6 +70,7 @@ export default function Mahjong() {
   const [game, setGame] = useState(null)
   const [toast, setToast] = useState(null)
   const [riichiMode, setRiichiMode] = useState(false)
+  const [hoverWait, setHoverWait] = useState(null) // { k, waits } 打牌候補ホバー時の待ち表示
   const [chiPick, setChiPick] = useState(null) // 複数チー候補
   const [kanPick, setKanPick] = useState(null)
   const [nowTick, setNowTick] = useState(0) // 残り秒表示用
@@ -222,7 +226,7 @@ export default function Mahjong() {
       stateSeqRef.current = payload.seq
       gameRef.current = payload.game
       setGame(payload.game)
-      setRiichiMode(false); setChiPick(null); setKanPick(null)
+      setRiichiMode(false); setChiPick(null); setKanPick(null); setHoverWait(null)
       const calls = (payload.events || []).filter((ev) => ev.t === 'call')
       if (calls.length > 0) {
         // 大きな宣言演出(雀魂風)
@@ -402,13 +406,15 @@ export default function Mahjong() {
         <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: '#112244', border: '1px solid #4488cc', color: '#cde', padding: '8px 16px', fontSize: 12, zIndex: 50 }}>{toast}</div>
       )}
       {splash && (
-        <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 70 }}>
+        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 70 }}>
           <div style={{
-            fontSize: 68, fontWeight: 'bold', color: '#ff4422', fontFamily: "'Hiragino Mincho ProN','Yu Mincho',serif",
-            textShadow: '0 0 24px rgba(0,0,0,0.9), 3px 3px 0 #550000, -2px -2px 0 #ffcc44',
+            display: 'flex', alignItems: 'baseline', gap: 4, maxWidth: '96vw',
+            fontFamily: "'Hiragino Mincho ProN','Yu Mincho',serif", fontWeight: 'bold',
             animation: 'mjsplash 1.7s ease-out both',
-          }}>{splash.what}！</div>
-          <div style={{ fontSize: 16, color: '#ffcc44', textShadow: '0 0 8px #000', marginTop: 4, animation: 'mjsplash 1.7s ease-out both' }}>{splash.name}</div>
+          }}>
+            <span style={{ fontSize: 30, color: '#ffcc44', textShadow: '0 0 12px rgba(0,0,0,0.9), 2px 2px 0 #553300' }}>{splash.name}が</span>
+            <span style={{ fontSize: 66, color: '#ff4422', textShadow: '0 0 24px rgba(0,0,0,0.9), 3px 3px 0 #550000, -2px -2px 0 #ffcc44' }}>{splash.what}！</span>
+          </div>
         </div>
       )}
     </div>
@@ -492,7 +498,31 @@ export default function Mahjong() {
   // ---- 対局画面 ----
   const n = game.players.length
   const dora = game.doraTiles.slice(0, game.doraRevealed)
+  const doraSet = new Set(dora.map(doraFromIndicator))
+  const isGlow = (k, r) => r || doraSet.has(k)
   const windOf = (seat) => WINDS[(seat - game.round.dealer + n) % n]
+
+  // ---- 待ち牌計算(自分用) ----
+  const tileCounts = (tiles) => { const c = new Array(34).fill(0); for (const t of tiles) c[t.k]++; return c }
+  const myHand = mySeat >= 0 ? game.hands[mySeat] : []
+  const myDrawn = game.drawn && game.drawnBy === mySeat ? game.drawn : null
+  const myHand14 = myDrawn ? [...myHand, myDrawn] : myHand
+  // 13枚形(相手の番)ならそのまま待ちを表示
+  const myWaits = (playing && mySeat >= 0 && !myTurn && myHand.length % 3 === 1)
+    ? waitsOf(tileCounts(myHand), game.melds[mySeat].length, game.sanma)
+    : []
+  // 14枚形(打牌前)なら「切ると待ちになる牌」を計算
+  const discardWaits = {} // kind -> waits[]
+  if (playing && myTurn && myHand14.length % 3 === 2 && !game.riichis[mySeat]) {
+    const seen = new Set()
+    for (const t of myHand14) {
+      if (seen.has(t.k)) continue
+      seen.add(t.k)
+      const c = tileCounts(myHand14); c[t.k]--
+      const w = waitsOf(c, game.melds[mySeat].length, game.sanma)
+      if (w.length > 0) discardWaits[t.k] = w
+    }
+  }
 
   const renderPlayerRow = (seat) => {
     const p = game.players[seat]
@@ -515,7 +545,7 @@ export default function Mahjong() {
             <div style={{ display: 'flex', gap: 1, flexWrap: 'wrap', minHeight: 32 }}>
               {game.discards[seat].map((d, i) => (
                 <span key={i} style={{ transform: d.riichi ? 'rotate(90deg)' : 'none', display: 'inline-block' }}>
-                  <Tile k={d.k} r={d.r} small dim={d.called} />
+                  <Tile k={d.k} r={d.r} small dim={d.called} glow={isGlow(d.k, d.r)} />
                 </span>
               ))}
             </div>
@@ -527,8 +557,8 @@ export default function Mahjong() {
                 {game.melds[seat].map((m, i) => (
                   <span key={i} style={{ display: 'inline-flex', gap: 1 }}>
                     {m.type === 'ankan'
-                      ? (<><TileBack small /><Tile k={m.k} small /><Tile k={m.k} small /><TileBack small /></>)
-                      : m.tiles.map((t, j) => <Tile key={j} k={t.k} r={t.r} small />)}
+                      ? (<><TileBack small /><Tile k={m.k} small glow={isGlow(m.k, false)} /><Tile k={m.k} small glow={isGlow(m.k, false)} /><TileBack small /></>)
+                      : m.tiles.map((t, j) => <Tile key={j} k={t.k} r={t.r} small glow={isGlow(t.k, t.r)} />)}
                   </span>
                 ))}
               </div>
@@ -611,20 +641,40 @@ export default function Mahjong() {
       {/* 自分の手牌 */}
       {mySeat >= 0 && game.phase !== 'ended' && (
         <div style={{ marginTop: 8 }}>
+          {/* 待ち表示: ホバー中はその牌を切った時の待ち / 13枚テンパイ時は現在の待ち */}
+          {(hoverWait || myWaits.length > 0) && (
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 6, fontSize: 12, background: 'rgba(255,204,68,0.1)', border: '1px solid #8a7a33', borderRadius: 4, padding: '4px 8px', flexWrap: 'wrap' }}>
+              {hoverWait
+                ? <span style={{ color: '#ffcc44' }}>{KIND_NAMES[hoverWait.k]}切り → 待ち:</span>
+                : <span style={{ color: '#ff6644', fontWeight: 'bold' }}>テンパイ！待ち:</span>}
+              {(hoverWait ? hoverWait.waits : myWaits).map((k) => <Tile key={k} k={k} small glow={isGlow(k, false)} />)}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             {game.hands[mySeat].map((t) => (
-              <Tile key={t.id} k={t.k} r={t.r}
-                onClick={myTurn ? () => onTileClick(t) : undefined}
-                disabled={!!game.riichis[mySeat] || (riichiMode && !riichiDiscardable(t.k))}
-                dim={riichiMode && !riichiDiscardable(t.k)}
-              />
+              <span key={t.id} style={{ position: 'relative', display: 'inline-flex' }}
+                onMouseEnter={discardWaits[t.k] ? () => setHoverWait({ k: t.k, waits: discardWaits[t.k] }) : undefined}
+                onMouseLeave={() => setHoverWait(null)}
+              >
+                <Tile k={t.k} r={t.r} glow={isGlow(t.k, t.r)}
+                  onClick={myTurn ? () => onTileClick(t) : undefined}
+                  disabled={!!game.riichis[mySeat] || (riichiMode && !riichiDiscardable(t.k))}
+                  dim={riichiMode && !riichiDiscardable(t.k)}
+                />
+                {discardWaits[t.k] && <span style={{ position: 'absolute', top: -4, right: -2, width: 8, height: 8, borderRadius: '50%', background: '#44ff88', boxShadow: '0 0 4px #44ff88', pointerEvents: 'none' }} />}
+              </span>
             ))}
             {game.drawn && game.drawnBy === mySeat && (
-              <span style={{ marginLeft: 10, border: '2px solid #ffcc44', borderRadius: 6, padding: 2, boxShadow: '0 0 8px rgba(255,204,68,0.5)' }}>
-                <Tile k={game.drawn.k} r={game.drawn.r}
+              <span
+                style={{ marginLeft: 10, border: '2px solid #ffcc44', borderRadius: 6, padding: 2, boxShadow: '0 0 8px rgba(255,204,68,0.5)', position: 'relative', display: 'inline-flex' }}
+                onMouseEnter={discardWaits[game.drawn.k] ? () => setHoverWait({ k: game.drawn.k, waits: discardWaits[game.drawn.k] }) : undefined}
+                onMouseLeave={() => setHoverWait(null)}
+              >
+                <Tile k={game.drawn.k} r={game.drawn.r} glow={isGlow(game.drawn.k, game.drawn.r)}
                   onClick={myTurn ? () => onTileClick(game.drawn) : undefined}
                   dim={riichiMode && !riichiDiscardable(game.drawn.k)}
                 />
+                {discardWaits[game.drawn.k] && <span style={{ position: 'absolute', top: -6, right: -4, width: 8, height: 8, borderRadius: '50%', background: '#44ff88', boxShadow: '0 0 4px #44ff88', pointerEvents: 'none' }} />}
               </span>
             )}
           </div>
