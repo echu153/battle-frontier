@@ -127,7 +127,7 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
         </div>
 
         <div style={{ border: '1px solid #3a6a4a', background: '#06120a', padding: '6px 10px', marginBottom: '8px', color: '#88ddaa', fontSize: '11px' }}>
-          🧪 <b>ベータ版</b> 開催期間: <b>7月31日 23:59まで</b>（ベータ期間の報酬は後日発表）
+          🧪 <b>ベータ版</b> 開催期間: <b>7月31日 23:59まで</b>
         </div>
         <div style={{ border: '1px solid #4a4426', background: '#0c0e06', padding: '8px 10px', marginBottom: '10px', color: '#ccaa88', fontSize: '10px', lineHeight: '1.8', textAlign: 'left' }}>
           <div style={{ color: '#ffd75e', marginBottom: '2px' }}>📜 ルール</div>
@@ -175,7 +175,7 @@ export default function RankMatchPanel({ onClose, isAdmin = false }) {
               background: (onCooldown || betaEnded) ? '#0c0e08' : '#141a06', border: `1px solid ${(onCooldown || betaEnded) ? '#3a3a2a' : '#c0a83a'}`,
               color: (onCooldown || betaEnded) ? '#555544' : '#ffd75e', cursor: (phase !== 'idle' || onCooldown || betaEnded) ? 'not-allowed' : 'pointer',
               fontFamily: 'monospace', fontSize: '13px', letterSpacing: '1px' }}>
-            {betaEnded ? '🧪 ベータ期間は終了しました' : onCooldown ? `⏳ クールダウン中（残り ${fmtCd(cd)}）` : phase === 'matching' ? 'マッチング中...' : phase === 'battling' ? '⚔ 戦闘中...' : '🎲 ランクマッチ開始（マッチ成立で即対戦）'}
+            {betaEnded ? '🧪 ベータ期間は終了しました' : onCooldown ? `⏳ クールダウン中（残り ${fmtCd(cd)}）` : phase === 'matching' ? 'マッチング中...' : phase === 'battling' ? '⚔ 戦闘中...' : '🎲 ランクマッチ開始'}
           </button>
         )}
         {/* 開発中はis_adminのCDが0秒（SQL側で免除）のためリセットボタンは通常出ない。万一の保険で残す */}
