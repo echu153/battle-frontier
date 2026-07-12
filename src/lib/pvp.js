@@ -445,6 +445,13 @@ function doAttack(att, def, isExtra, ctx) {
         att.hp = Math.min(eff.hp_max, att.hp + rageCure)
         logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
       }
+      // 与ダメ割合回復(ソウルドレイン/ルミナ・レイ等)：実際の与ダメージ(クリティカル込み)から回復
+      if (res.drainRate > 0 && finalDmg > 0 && !(att.buffs.healSeal?.turns > 0)) {
+        let drainHeal = Math.floor(finalDmg * res.drainRate * PVP.healMult * ctx.healMult)
+        if (res.drainCapPct) drainHeal = Math.min(drainHeal, Math.floor(eff.hp_max * res.drainCapPct))
+        att.hp = Math.min(eff.hp_max, att.hp + drainHeal)
+        logs.push({ text: `💚 HPを${drainHeal}回復！`, color: '#66ffaa' })
+      }
       // 神聖覚醒の追撃
       if (att.buffs.holyAwakening?.turns > 0 && finalDmg > 0) {
         const holyBonusDmg = Math.floor((pDef * att.buffs.holyAwakening.defMult + pMdef * att.buffs.holyAwakening.defMult) * PVP.dmgMult * ctx.atkDmgMult)

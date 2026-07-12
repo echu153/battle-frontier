@@ -918,8 +918,10 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     case '骸骨召喚':    result.dmg = Math.floor(eff.matk*(rt>=1?0.8:0.7)*am); result.newPlayerBuffs.skeletonDmg={turns:2,dmg:result.dmg}; result.log = `💀 骸骨召喚！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 2ターン持続！`; break
     case 'ソウルドレイン': {
       result.dmg = Math.floor(eff.matk*(rt>=2?1.4:1.2)*am)
-      result.heal = Math.min(Math.floor(result.dmg*0.2), Math.floor(profile.hp_max*0.2))
-      result.log = `💀 ソウルドレイン！ ${enemy.name}に${result.dmg}の特殊ダメージ！ HPを${result.heal}回復！`; break
+      // 与えたダメージ(クリティカル・軽減込み)の20%を回復。上限は最大HPの30%(血の狂気と統一)。
+      // 実回復は各バトルエンジンの外側ループで finalDmg から算出する（=クリティカルが反映される）。
+      result.drainRate = 0.2; result.drainCapPct = 0.3
+      result.log = `💀 ソウルドレイン！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 与えたダメージの20%を回復！`; break
     }
     case '腐敗霧':      { const fhRate = rt>=4?0.6:0.7; result.newEnemyBuffs.defDown={turns:4,rate:fhRate}; result.newEnemyBuffs.mdefDown={turns:4,rate:fhRate}; result.newEnemyBuffs.severePoisoin={turns:5,dmgRate:0.05}; result.log = `💀 腐敗霧！ 4ターンの間、対象の防御力・特殊防御力低下！ 猛毒状態！`; break }
     case '幽世ノ門': {
@@ -1380,7 +1382,8 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
         result.log = `🌟 浄化の輝き！ ${enemy.name}に${result.dmg}の特殊ダメージ！ HPを${result.heal}回復！`
       } else {
         result.dmg = Math.floor(eff.matk*(2.0+(rt>=5?0.2:0))*am)
-        result.heal = Math.floor(result.dmg*0.5)
+        // 与えたダメージ(クリティカル・軽減込み)の半分を回復。実回復は外側ループで finalDmg から算出。
+        result.drainRate = 0.5
         result.log = `🌟 ルミナ・レイ！ ${enemy.name}に${result.dmg}の特殊ダメージ！ 与えたダメージの半分を回復！`
       }
       result.newPlayerBuffs.spiritCombo = { name:'ルミナ', count:newCount, tripled: newCount%3===0 }
@@ -3263,6 +3266,13 @@ export default function Game() {
             const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(maxHp * 0.3))
             playerHp = Math.min(maxHp, playerHp + rageCure)
             logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
+          }
+          // 与ダメ割合回復(ソウルドレイン/ルミナ・レイ等)：実際の与ダメージ(クリティカル込み)から回復
+          if (res.drainRate > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
+            let drainHeal = Math.floor(finalDmg * res.drainRate)
+            if (res.drainCapPct) drainHeal = Math.min(drainHeal, Math.floor(maxHp * res.drainCapPct))
+            playerHp = Math.min(maxHp, playerHp + drainHeal)
+            logs.push({ text:`💚 HPを${drainHeal}回復！`, color:'#66ffaa' })
           }
           // 神聖覚醒：攻撃ごとに追撃
           if (playerBuffs.holyAwakening?.turns > 0 && finalDmg > 0) {

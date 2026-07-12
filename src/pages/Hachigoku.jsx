@@ -331,6 +331,13 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
           playerHp = Math.min(eff.hp_max, playerHp + rageCure)
           logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
         }
+        // 与ダメ割合回復(ソウルドレイン/ルミナ・レイ等)：実際の与ダメージ(クリティカル込み)から回復
+        if (res.drainRate > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
+          let drainHeal = Math.floor(finalDmg * res.drainRate)
+          if (res.drainCapPct) drainHeal = Math.min(drainHeal, Math.floor(eff.hp_max * res.drainCapPct))
+          playerHp = Math.min(eff.hp_max, playerHp + drainHeal)
+          logs.push({ text:`💚 HPを${drainHeal}回復！`, color:'#66ffaa' })
+        }
         if (playerBuffs.holyAwakening?.turns > 0 && finalDmg > 0) {
           const holyBonusDmg = Math.floor((pDef * playerBuffs.holyAwakening.defMult + pMdef * playerBuffs.holyAwakening.defMult))
           enemyHp -= holyBonusDmg

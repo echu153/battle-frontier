@@ -326,6 +326,13 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
             playerHp = Math.min(eff.hp_max, playerHp + rageCure)
             logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
           }
+          // 与ダメ割合回復(ソウルドレイン/ルミナ・レイ等)：実際の与ダメージ(クリティカル込み)から回復
+          if (!isHealBlocked && res.drainRate > 0 && finalDmg > 0) {
+            let drainHeal = Math.floor(finalDmg * res.drainRate)
+            if (res.drainCapPct) drainHeal = Math.min(drainHeal, Math.floor(eff.hp_max * res.drainCapPct))
+            playerHp = Math.min(eff.hp_max, playerHp + drainHeal)
+            logs.push({ text: `💚 HPを${drainHeal}回復！`, color: '#66ffaa' })
+          }
           totalDamage += finalDmg
           // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封印中は無効）
           { const emDrain = emblemDrainAmount(eff, finalDmg, skillPhysical); if (emDrain > 0 && !isHealBlocked) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text: `💠 紋章の吸収！ HPが${fmt(emDrain)}回復！`, color: '#66ddff' }) } }
