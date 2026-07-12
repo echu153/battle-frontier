@@ -6029,6 +6029,7 @@ export default function Game() {
                         <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット</button>
                         <button onClick={()=>nav('/raid')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ レイドボス</button>
                         {lockOr('abyss', <button key="challenge" onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ padding:'10px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ 挑戦</button>)}
+                        {profile?.is_admin && <button key="rankmatch" onClick={()=>setShowRankMatch(true)} style={{ padding:'10px', background:'#141204', border:'1px solid #c0a83a', color:'#ffd75e', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏅 ランクマッチ <span style={{ fontSize:'9px', color:'#998855' }}>[開発]</span></button>}
                       </div>
                       {showChallengePanel && (
                         <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'8px' }}>
@@ -6042,8 +6043,7 @@ export default function Game() {
                             <button onClick={()=>{ nav('/hachigoku'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#260c0a', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🔥 八獄 <span style={{ fontSize:'9px', color:'#aa7766' }}>[開発]</span></button></>
                           )}
                           {profile?.is_admin && (
-                            <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
-                          <button onClick={()=>{ setShowRankMatch(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#141204', border:'1px solid #c0a83a', color:'#ffd75e', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏅 ランクマッチ <span style={{ fontSize:'9px', color:'#998855' }}>[開発]</span></button></>
+                            <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
                           )}
                         </div>
                       )}
@@ -6116,8 +6116,7 @@ export default function Game() {
                             <button onClick={()=>{ nav('/hachigoku'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#260c0a', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🔥 八獄 <span style={{ fontSize:'9px', color:'#aa7766' }}>[開発]</span></button></>
                   )}
                   {profile?.is_admin && (
-                    <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
-                          <button onClick={()=>{ setShowRankMatch(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#141204', border:'1px solid #c0a83a', color:'#ffd75e', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏅 ランクマッチ <span style={{ fontSize:'9px', color:'#998855' }}>[開発]</span></button></>
+                    <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
                   )}
                 </div>
               )}
@@ -6594,6 +6593,7 @@ export default function Game() {
                           <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット</button>
                           <button onClick={()=>nav('/raid')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ レイドボス</button>
                           {lockOr('abyss', <button key="challenge" onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ padding:'10px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ 挑戦</button>)}
+                          {profile?.is_admin && <button key="rankmatch" onClick={()=>setShowRankMatch(true)} style={{ padding:'10px', background:'#141204', border:'1px solid #c0a83a', color:'#ffd75e', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏅 ランクマッチ <span style={{ fontSize:'9px', color:'#998855' }}>[開発]</span></button>}
                         </div>
                         {showChallengePanel && (
                           <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'8px' }}>
@@ -6607,8 +6607,7 @@ export default function Game() {
                             <button onClick={()=>{ nav('/hachigoku'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#260c0a', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🔥 八獄 <span style={{ fontSize:'9px', color:'#aa7766' }}>[開発]</span></button></>
                             )}
                             {profile?.is_admin && (
-                              <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
-                          <button onClick={()=>{ setShowRankMatch(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#141204', border:'1px solid #c0a83a', color:'#ffd75e', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏅 ランクマッチ <span style={{ fontSize:'9px', color:'#998855' }}>[開発]</span></button></>
+                              <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
                             )}
                           </div>
                         )}
@@ -6681,8 +6680,7 @@ export default function Game() {
                             <button onClick={()=>{ nav('/hachigoku'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#260c0a', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🔥 八獄 <span style={{ fontSize:'9px', color:'#aa7766' }}>[開発]</span></button></>
                     )}
                     {profile?.is_admin && (
-                      <><button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
-                          <button onClick={()=>{ setShowRankMatch(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#141204', border:'1px solid #c0a83a', color:'#ffd75e', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏅 ランクマッチ <span style={{ fontSize:'9px', color:'#998855' }}>[開発]</span></button></>
+                      <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>
                     )}
                   </div>
                 )}
