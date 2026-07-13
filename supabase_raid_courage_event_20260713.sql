@@ -219,13 +219,13 @@ BEGIN
   v_my_eff       := v_participant.damage_dealt + v_participant.attack_count * 500;
   v_contribution := v_my_eff::float / v_total_eff::float;
 
-  IF v_contribution >= 0.10 OR v_participant.attack_count >= v_atk_a THEN
+  IF v_contribution >= 0.07 OR v_participant.attack_count >= v_atk_a THEN
     v_tier := 'A'; v_gold := 150000; v_stone_ranks := ARRAY['B','C','D'];
     v_gem_count := 2; v_gem_rank := 'D'; v_scale_min := 8; v_scale_max := 10; v_gyaku_chance := 0.15;
-  ELSIF v_contribution >= 0.06 OR v_participant.attack_count >= v_atk_b THEN
+  ELSIF v_contribution >= 0.04 OR v_participant.attack_count >= v_atk_b THEN
     v_tier := 'B'; v_gold := 90000; v_stone_ranks := ARRAY['C','D','E'];
     v_gem_count := 2; v_gem_rank := 'E'; v_scale_min := 6; v_scale_max := 8; v_gyaku_chance := 0.08;
-  ELSIF v_contribution >= 0.03 OR v_participant.attack_count >= v_atk_c THEN
+  ELSIF v_contribution >= 0.02 OR v_participant.attack_count >= v_atk_c THEN
     v_tier := 'C'; v_gold := 30000; v_stone_ranks := ARRAY['D','E','F'];
     v_gem_count := 2; v_gem_rank := 'F'; v_scale_min := 4; v_scale_max := 6; v_gyaku_chance := 0.03;
   ELSE
