@@ -78,7 +78,11 @@ END; $$;
 CREATE TABLE IF NOT EXISTS public.marketplace_listings (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   seller_id    uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  equipment_id integer NOT NULL REFERENCES player_equipment(id) ON DELETE CASCADE,
+  -- ※ ON DELETE SET NULL：装備個体(player_equipment)が削除されても取引履歴(sold等)は残す。
+  --   CASCADE だと購入者が装備を博物館へ寄贈=削除した瞬間、その装備を指すsold行が
+  --   巻き添え削除され、買い手の購入履歴からも売り手の売却履歴からも消えてしまう。
+  --   equipment_id は active出品の再照合にのみ使い、履歴表示は weapon_id/bonus で完結する。
+  equipment_id integer REFERENCES player_equipment(id) ON DELETE SET NULL,
   weapon_id    integer NOT NULL REFERENCES weapons(id),
   price        integer NOT NULL,
   base_price   integer NOT NULL,

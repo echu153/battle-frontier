@@ -34,10 +34,11 @@ const BOSS_DEF  = 1000
 const BOSS_MDEF = 1000
 const BOSS_SPD  = 1200
 
+// ★閾値は claim_raid_rewards（サーバー）と一致させること。貢献度: A=10% / B=6% / C=3%、出撃回数: A=40 / B=20 / C=10。
 const TIER_INFO = [
-  { pct:  7, attacks: 50, tier: 'A', label: '貢献度7%以上 or 出撃50回', gold: 150000, stones: ['B','C','D'], gemCount: 2, gemRank: 'D', scaleCount: '8~10', rareChance: '15%', book: 'Ⅲ', color: '#ffcc00' },
-  { pct:  4, attacks: 20, tier: 'B', label: '貢献度4%以上 or 出撃20回',  gold: 90000, stones: ['C','D','E'], gemCount: 2, gemRank: 'E', scaleCount: '6~8',  rareChance: '8%',  book: 'Ⅱ', color: '#44aaff' },
-  { pct:  2, attacks:  5, tier: 'C', label: '貢献度2%以上 or 出撃5回',   gold: 30000, stones: ['D','E','F'], gemCount: 2, gemRank: 'F', scaleCount: '4~6',  rareChance: '3%',  book: 'Ⅰ', color: '#44ff88' },
+  { pct: 10, attacks: 40, tier: 'A', label: '貢献度10%以上 or 出撃40回', gold: 150000, stones: ['B','C','D'], gemCount: 2, gemRank: 'D', scaleCount: '8~10', rareChance: '15%', book: 'Ⅲ', color: '#ffcc00' },
+  { pct:  6, attacks: 20, tier: 'B', label: '貢献度6%以上 or 出撃20回',  gold: 90000, stones: ['C','D','E'], gemCount: 2, gemRank: 'E', scaleCount: '6~8',  rareChance: '8%',  book: 'Ⅱ', color: '#44aaff' },
+  { pct:  3, attacks: 10, tier: 'C', label: '貢献度3%以上 or 出撃10回',   gold: 30000, stones: ['D','E','F'], gemCount: 2, gemRank: 'F', scaleCount: '4~6',  rareChance: '3%',  book: 'Ⅰ', color: '#44ff88' },
   { pct:  0, attacks:  0, tier: 'D', label: '参加',                       gold: 15000, stones: ['E','F'],    gemCount: 2, gemRank: 'F', scaleCount: '1~3',  rareChance: '0%',  book: null, color: '#888888' },
 ]
 
