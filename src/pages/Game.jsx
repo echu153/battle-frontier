@@ -1768,6 +1768,7 @@ export default function Game() {
   const [territoryExpandable, setTerritoryExpandable] = useState(false)  // 領地拡大が可能か（街のバナー表示用・is_admin限定先行）
   const [boxAvailable, setBoxAvailable] = useState(0)        // ボス装備進化支援箱の所持数（街のバナー表示用）
   const [subsidyAvailable, setSubsidyAvailable] = useState(false)  // 国の補助金が未受取か（街のバナー表示用）
+  const [bingoClaimable, setBingoClaimable] = useState(0)   // 初心者ビンゴで受け取れる報酬(マス/ライン)の件数（街のバナー表示用・is_admin限定先行）
   const [scarecrowState, setScarecrowState] = useState(null)       // かかし修練: 'training'(中) | 'done'(完了・受取待ち) | null
   const [myCountryName, setMyCountryName] = useState('')     // 所属国名（ホーム/プロフィールの所属国表示用・is_admin限定先行）
   const [atWar, setAtWar] = useState(false)                  // 自国が交戦中（active）か。戦争中はホームのHP/MP表示を戦争用に切替
@@ -2067,6 +2068,22 @@ export default function Game() {
       const { data: sc } = await supabase.from('scarecrow_sessions').select('ends_at').eq('player_id', prof.id).eq('status', 'active').maybeSingle()
       setScarecrowState(sc ? (new Date(sc.ends_at) > new Date() ? 'training' : 'done') : null)
     } catch { /* 未導入時は無視 */ }
+    // 初心者ビンゴ: 受け取れる報酬（達成済みマス／成立ライン本数）の件数（is_admin限定先行）
+    if (prof.is_admin) {
+      try {
+        const { data: bg } = await supabase.rpc('get_beginner_bingo')
+        if (bg && !bg.dev_only) {
+          const cells = bg.cells || []
+          const claimedCells = bg.claimed_cells || []
+          const claimedLines = bg.claimed_lines || []
+          const lineCount = (bg.lines || []).filter(Boolean).length
+          let n = 0
+          cells.forEach((done, i) => { if (done && !claimedCells.includes(i)) n++ })
+          for (let t = 1; t <= 8; t++) { if (lineCount >= t && !claimedLines.includes(t)) n++ }
+          setBingoClaimable(n)
+        } else setBingoClaimable(0)
+      } catch { /* SQL未適用時は無視 */ setBingoClaimable(0) }
+    } else setBingoClaimable(0)
   }
   // プロフィール確定時＋60秒ごとに再計算（クールダウン明け・錬金完成を取り込む）
   useEffect(() => {
@@ -5720,6 +5737,12 @@ export default function Game() {
               🎉 獲得できる称号があります！（{claimableTitles}件）→ 称号ページへ
             </button>
           )}
+          {bingoClaimable > 0 && (
+            <button onClick={()=>nav('/bingo')}
+              style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a1204', border:'1px solid #ccaa44', color:'#ffdd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              🎯 初心者ビンゴで報酬を受け取れます！（{bingoClaimable}件）→ ビンゴへ
+            </button>
+          )}
           {unreadReplies > 0 && (
             <div style={{ display:'flex', gap:'6px', marginBottom:'8px' }}>
               <button onClick={()=>{ setShowContact(true); setContactView('history'); fetchMyContacts().then(rows => markContactRepliesSeen(rows)) }}
@@ -6282,6 +6305,12 @@ export default function Game() {
           <button onClick={()=>nav('/titles')}
             style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#001a08', border:'1px solid #44aa44', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
             🎉 獲得できる称号があります！（{claimableTitles}件）→ 称号ページへ
+          </button>
+        )}
+        {bingoClaimable > 0 && (
+          <button onClick={()=>nav('/bingo')}
+            style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a1204', border:'1px solid #ccaa44', color:'#ffdd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            🎯 初心者ビンゴで報酬を受け取れます！（{bingoClaimable}件）→ ビンゴへ
           </button>
         )}
         {unreadReplies > 0 && (
