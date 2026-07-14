@@ -72,7 +72,7 @@ export const HACHIGOKU_HELLS = [
     passive: '灼熱の巨躯（受ける特殊ダメージ半減）',
     mods: { onHitAilment: [{ key: 'burn', chance: 30 }], specialTakenMult: 0.5 },
     skill: { name: '焦熱撃', mult: 1.6, every: 3 },
-    ultimate: { name: '焦熱地獄・業火葬', mult: 3.0, hpBelow: 0.5, inflict: ['burn'] },
+    ultimate: { name: '咤破那', mult: 3.0, hpBelow: 0.5, inflict: ['burn'] },
   },
   {
     key: 'hyoketsu', name: '氷結地獄', boss: 'マカハドマ', img: null,
@@ -82,7 +82,7 @@ export const HACHIGOKU_HELLS = [
     desc: '絶対零度の吹雪を操る獄卒。強力な特殊攻撃で凍てつかせる。',
     mods: { onHitAilment: [{ key: 'paralysis', chance: 20 }] },  // 凍結=麻痺として表現
     skill: { name: '氷結波', mult: 1.6, every: 3 },
-    ultimate: { name: '氷結地獄・絶対零度', mult: 3.0, hpBelow: 0.5, inflict: ['paralysis'] },
+    ultimate: { name: '摩訶鉢特摩', mult: 3.0, hpBelow: 0.5, inflict: ['paralysis'] },
   },
   {
     key: 'hariyama', name: '針山地獄', boss: 'アシパトラ', img: null,
@@ -92,7 +92,7 @@ export const HACHIGOKU_HELLS = [
     desc: '刃の翼を持つ獄卒。攻撃は防御を貫通する。',
     mods: { defPen: 0.5 },
     skill: { name: '針山串刺し', mult: 1.6, every: 3 },
-    ultimate: { name: '針山地獄・千刃葬', mult: 3.0, hpBelow: 0.5, inflict: ['bleed'] },
+    ultimate: { name: '阿尸波多羅', mult: 3.0, hpBelow: 0.5, inflict: ['bleed'] },
   },
   {
     key: 'chiike', name: '血池地獄', boss: 'チボンダラ', img: null,
@@ -102,7 +102,7 @@ export const HACHIGOKU_HELLS = [
     desc: '血の池から這い出た獄卒。出血・やけど・猛毒を撒き散らす。',
     mods: { onHitAilment: [{ key: 'bleed', chance: 30 }, { key: 'poison', chance: 25 }, { key: 'burn', chance: 20 }] },
     skill: { name: '血池飛沫', mult: 1.6, every: 3 },
-    ultimate: { name: '血池地獄・血の海嘯', mult: 3.0, hpBelow: 0.5, inflict: ['bleed', 'poison'] },
+    ultimate: { name: '血盆陀羅', mult: 3.0, hpBelow: 0.5, inflict: ['bleed', 'poison'] },
   },
   {
     key: 'gaki', name: '餓鬼地獄', boss: 'プレータ', img: null,
@@ -112,7 +112,7 @@ export const HACHIGOKU_HELLS = [
     desc: '飢えに苦しむ亡者の王。与えた傷からこちらの生気を貪り喰う。',
     mods: { lifesteal: 0.3 },
     skill: { name: '餓鬼の暴食', mult: 1.6, every: 3 },
-    ultimate: { name: '餓鬼地獄・飽食の宴', mult: 3.0, hpBelow: 0.5, lifesteal: 0.5 },
+    ultimate: { name: '薜茘多', mult: 3.0, hpBelow: 0.5, lifesteal: 0.5 },
   },
   {
     key: 'kyokan', name: '叫喚地獄', boss: 'ラウラヴァ', img: null,
@@ -122,7 +122,7 @@ export const HACHIGOKU_HELLS = [
     desc: '悲鳴を糧に肥え太る巨躯の獄卒。生半可な攻撃は通らない。',
     mods: { flatDR: 0.2 },
     skill: { name: '叫喚の咆哮', mult: 1.6, every: 3 },
-    ultimate: { name: '叫喚地獄・魂裂きの絶叫', mult: 3.0, hpBelow: 0.5, inflict: ['stun'] },
+    ultimate: { name: '羅宇羅婆', mult: 3.0, hpBelow: 0.5, inflict: ['stun'] },
   },
   {
     key: 'kokujou', name: '黒縄地獄', boss: 'カーラスートラ', img: null,
@@ -132,7 +132,7 @@ export const HACHIGOKU_HELLS = [
     desc: '黒鉄の縄で罪人を裁く獄卒。急所を的確に打ち抜いてくる。',
     mods: { critBoost: 25, critDmgPlus: 0.5 },
     skill: { name: '黒縄断ち', mult: 1.6, every: 3 },
-    ultimate: { name: '黒縄地獄・断罪の黒縄', mult: 3.0, hpBelow: 0.5, critGuaranteed: true },
+    ultimate: { name: '迦羅修多羅', mult: 3.0, hpBelow: 0.5, critGuaranteed: true },
   },
   {
     key: 'kyogoku', name: '鏡獄地獄', boss: 'ジョウハリ', img: null,
@@ -145,7 +145,7 @@ export const HACHIGOKU_HELLS = [
       { key: 'burn', chance: 15 }, { key: 'bleed', chance: 15 }, { key: 'stun', chance: 8 },
     ] },
     skill: { name: '浄玻璃の裁き', mult: 1.6, every: 3 },
-    ultimate: { name: '鏡獄地獄・罪業万華鏡', mult: 3.0, hpBelow: 0.5, randomAilments: 2 },
+    ultimate: { name: '浄玻璃', mult: 3.0, hpBelow: 0.5, randomAilments: 2 },
   },
 ]
 
