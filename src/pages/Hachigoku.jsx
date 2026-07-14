@@ -777,7 +777,7 @@ export default function Hachigoku() {
     setProfile({ ...prof, petCharm, petStat, activePet, emblemAlloc })
     setEquipment(eq || [])
     setProficiency(prof2 || [])
-    setSkillSets(selectBattleSkillSets(ss, 'challenge'))
+    setSkillSets(selectBattleSkillSets(ss, 'hachigoku'))
     if (prof.ability_title_id) {
       const { data: at } = await supabase.from('titles').select('*').eq('id', prof.ability_title_id).single()
       setAbilityTitle(at || null)
@@ -815,7 +815,7 @@ export default function Hachigoku() {
       if (curSets.length === 0) {
         const { data: ss2 } = await supabase.from('skill_sets').select('*, skills(*)').eq('player_id', profile.id).order('slot_order')
         if (Array.isArray(ss2) && ss2.length) {
-          curSets = selectBattleSkillSets(ss2, 'challenge')
+          curSets = selectBattleSkillSets(ss2, 'hachigoku')
           setSkillSets(curSets)
         }
       }

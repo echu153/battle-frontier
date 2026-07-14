@@ -17,6 +17,7 @@ const SET_TYPES = [
   { key:'sortie',    label:'⚔ 出撃',        color:'#ffcc00' },
   { key:'papia',     label:'🌟 パピア限定',  color:'#ffaa00' },
   { key:'challenge', label:'🕯 挑戦',        color:'#ff6464' },
+  { key:'hachigoku', label:'🔥 八獄',        color:'#ff9977' },
   { key:'raid',      label:'🐉 レイド',      color:'#ff66aa' },
   { key:'pvp',       label:'🥊 対人戦',      color:'#8ad0ff' },
 ]
@@ -308,12 +309,11 @@ export default function Skills() {
           <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'8px' }}>
             {SET_TYPES.map(st => {
               const on = selectedSet === st.key
-              const count = skillSets.filter(ss => setTypeOf(ss) === st.key).length
               return (
                 <button key={st.key} onClick={()=>{ setSelectedSet(st.key); setSetMessage('') }}
                   style={{ flex:'1 1 auto', minWidth:'84px', padding:'6px 4px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
                     background:on?'#0a1630':'#000818', border:`1px solid ${on?st.color:'#223344'}`, color:on?st.color:'#557799' }}>
-                  {st.label}{count>0?`(${count})`:''}
+                  {st.label}
                 </button>
               )
             })}
