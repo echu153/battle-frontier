@@ -912,7 +912,11 @@ export default function Hachigoku() {
                           <div style={{ color: sel ? '#ffbb99' : '#dd9977', fontSize:'14px', fontWeight:'bold' }}>{h.name}　<span style={{ fontSize:'12px' }}>{h.boss}</span></div>
                           <div style={{ color:'#aa6655', fontSize:'10px', marginTop:'4px', lineHeight:'1.7' }}>
                             テーマ：{h.theme}<br/>
-                            ドロップ：{h.crystals.map(k => EMBLEM_CRYSTALS[k]?.name).filter(Boolean).join('、')}
+                            ドロップ：{h.crystals.map((k, i) => {
+                              const nm = EMBLEM_CRYSTALS[k]?.name
+                              if (!nm) return null
+                              return <span key={k} style={{ whiteSpace:'nowrap' }}>{i > 0 ? '、' : ''}{nm}</span>
+                            })}
                           </div>
                         </div>
                       </div>
