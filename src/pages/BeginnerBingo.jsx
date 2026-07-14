@@ -23,17 +23,8 @@ const CELLS = [
   { label: '始まりの森ボス', hint: 'エリア①「始まりの森」のボスを倒す' },   // 8
 ]
 
-// ライン定義（サーバー _bingo_lines と一致させること）
-const LINES = [
-  { cells: [0, 1, 2], label: '横 ①' },
-  { cells: [3, 4, 5], label: '横 ②' },
-  { cells: [6, 7, 8], label: '横 ③' },
-  { cells: [0, 3, 6], label: '縦 ①' },
-  { cells: [1, 4, 7], label: '縦 ②' },
-  { cells: [2, 5, 8], label: '縦 ③' },
-  { cells: [0, 4, 8], label: '斜め ＼' },
-  { cells: [2, 4, 6], label: '斜め ／' },
-]
+// ライン報酬は「達成したライン本数」で解放（idx = 必要本数 1〜8）。どのラインかは不問。
+const LINE_TIERS = [1, 2, 3, 4, 5, 6, 7, 8]
 
 // 報酬行 {kind,idx,rewards:[{type,name,qty}],label} → 表示テキスト
 const fmtReward = (rw) => {
@@ -166,26 +157,26 @@ export default function BeginnerBingo() {
           })}
         </div>
 
-        {/* ライン報酬 */}
-        <div style={{ color: '#ffaa44', fontSize: '12px', marginBottom: '6px', letterSpacing: '1px' }}>▍ライン報酬（横3・縦3・斜め2 = 8ライン）</div>
+        {/* ライン報酬（達成したライン本数で解放） */}
+        <div style={{ color: '#ffaa44', fontSize: '12px', marginBottom: '6px', letterSpacing: '1px' }}>▍ライン報酬（揃えたライン本数で解放・最大8）</div>
         <div style={{ ...box, padding: '8px' }}>
-          {LINES.map((ln, i) => {
-            const done = !!lines[i]
-            const claimed = claimedLines.includes(i)
-            const rw = rewardOf('line', i)
+          {LINE_TIERS.map((n, i) => {
+            const done = lineCount >= n
+            const claimed = claimedLines.includes(n)
+            const rw = rewardOf('line', n)
             return (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 4px', borderBottom: i < LINES.length - 1 ? '1px solid #241c08' : 'none' }}>
+              <div key={n} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 4px', borderBottom: i < LINE_TIERS.length - 1 ? '1px solid #241c08' : 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '12px' }}>{claimed ? '🎁' : (done ? '✅' : '⬜')}</span>
-                  <span style={{ color: done ? '#ffdd88' : '#998866', fontSize: '11px', minWidth: '52px' }}>{ln.label}</span>
+                  <span style={{ color: done ? '#ffdd88' : '#998866', fontSize: '11px', minWidth: '56px' }}>{n}ライン</span>
                   <span style={{ color: '#6a5c3a', fontSize: '9.5px' }}>{fmtReward(rw)}</span>
                 </div>
                 {claimed ? (
                   <span style={{ color: '#66aa66', fontSize: '10px' }}>受取済</span>
                 ) : done ? (
-                  <button disabled={busy} onClick={() => doClaim('line', i)} style={{ background: '#3a2a06', border: '1px solid #ccaa44', color: '#ffdd88', padding: '3px 10px', cursor: busy ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: '10px', borderRadius: '2px' }}>受取</button>
+                  <button disabled={busy} onClick={() => doClaim('line', n)} style={{ background: '#3a2a06', border: '1px solid #ccaa44', color: '#ffdd88', padding: '3px 10px', cursor: busy ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: '10px', borderRadius: '2px' }}>受取</button>
                 ) : (
-                  <span style={{ color: '#4a4230', fontSize: '10px' }}>未成立</span>
+                  <span style={{ color: '#4a4230', fontSize: '10px' }}>あと{n - lineCount}本</span>
                 )}
               </div>
             )

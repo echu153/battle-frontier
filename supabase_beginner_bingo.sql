@@ -37,7 +37,7 @@ CREATE POLICY bingo_state_sel ON beginner_bingo_state
 TRUNCATE beginner_bingo_state;
 
 -- ---------- 3) 報酬設定（event 方式の rewards jsonb）----------
---   kind : 'cell'(idx 0-8) / 'line'(idx 0-7)
+--   kind : 'cell'(idx 0-8=マス) / 'line'(idx 1-8=達成ライン本数)
 --   rewards : [{"type":"gold","qty":N} | {"type":"item","name":..,"qty":N} | {"type":"weapon","name":..}]
 --   label   : 表示用テキスト
 DROP TABLE IF EXISTS beginner_bingo_rewards;
@@ -68,16 +68,16 @@ INSERT INTO beginner_bingo_rewards(kind, idx, rewards, label) VALUES
   ('cell', 7, '[{"type":"item","name":"強化石(B)","qty":3}]'::jsonb,                                   '強化石(B)×3'),
   ('cell', 8, '[{"type":"item","name":"強化石(B)","qty":5}]'::jsonb,                                   '強化石(B)×5');
 
--- ライン報酬（上から 1〜8 = 横上/横中/横下/縦左/縦中/縦右/斜め＼/斜め／）
+-- ライン報酬（★達成した「ライン本数」で解放。idx = 必要ライン数 1〜8。どのラインかは不問）
 INSERT INTO beginner_bingo_rewards(kind, idx, rewards, label) VALUES
-  ('line', 0, '[{"type":"gold","qty":2000}]'::jsonb,                                                   '2000G'),
-  ('line', 1, '[{"type":"gold","qty":3000}]'::jsonb,                                                   '3000G'),
-  ('line', 2, '[{"type":"gold","qty":4000}]'::jsonb,                                                   '4000G'),
-  ('line', 3, '[{"type":"gold","qty":5000}]'::jsonb,                                                   '5000G'),
-  ('line', 4, '[{"type":"weapon","name":"溶岩の指輪"},{"type":"weapon","name":"峰岳の守護輪"}]'::jsonb, '溶岩の指輪＋峰岳の守護輪'),
-  ('line', 5, '[{"type":"gold","qty":10000}]'::jsonb,                                                  '10000G'),
-  ('line', 6, '[{"type":"gold","qty":20000}]'::jsonb,                                                  '20000G'),
-  ('line', 7, '[{"type":"item","name":"初級ボス装備選択箱","qty":1}]'::jsonb,                          '初級ボス装備選択箱');
+  ('line', 1, '[{"type":"gold","qty":2000}]'::jsonb,                                                   '2000G'),
+  ('line', 2, '[{"type":"gold","qty":3000}]'::jsonb,                                                   '3000G'),
+  ('line', 3, '[{"type":"gold","qty":4000}]'::jsonb,                                                   '4000G'),
+  ('line', 4, '[{"type":"gold","qty":5000}]'::jsonb,                                                   '5000G'),
+  ('line', 5, '[{"type":"weapon","name":"溶岩の指輪"},{"type":"weapon","name":"峰岳の守護輪"}]'::jsonb, '溶岩の指輪＋峰岳の守護輪'),
+  ('line', 6, '[{"type":"gold","qty":10000}]'::jsonb,                                                  '10000G'),
+  ('line', 7, '[{"type":"gold","qty":20000}]'::jsonb,                                                  '20000G'),
+  ('line', 8, '[{"type":"item","name":"初級ボス装備選択箱","qty":1}]'::jsonb,                          '初級ボス装備選択箱');
 
 -- ---------- 4) 選択箱アイテム ----------
 INSERT INTO items (name, description, effect, value)
@@ -231,7 +231,7 @@ END;
 $$;
 
 -- ---------- 9) 受取RPC ----------
---   p_kind: 'cell'|'line' / p_idx: cell 0-8, line 0-7
+--   p_kind: 'cell'|'line' / p_idx: cell 0-8(マス) / line 1-8(達成ライン本数)
 CREATE OR REPLACE FUNCTION claim_beginner_bingo(p_kind text, p_idx integer)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
@@ -240,6 +240,7 @@ DECLARE
   v_uid   uuid := auth.uid();
   v_cells boolean[];
   v_lines boolean[];
+  v_lcnt  integer;
   st      beginner_bingo_state%ROWTYPE;
   rw      beginner_bingo_rewards%ROWTYPE;
 BEGIN
@@ -259,8 +260,10 @@ BEGIN
     IF NOT v_cells[p_idx + 1] THEN RETURN jsonb_build_object('ok', false, 'error', 'not_completed'); END IF;
     IF p_idx = ANY(st.claimed_cells) THEN RETURN jsonb_build_object('ok', false, 'error', 'already'); END IF;
   ELSIF p_kind = 'line' THEN
-    IF p_idx < 0 OR p_idx > 7 THEN RETURN jsonb_build_object('ok', false, 'error', 'bad_index'); END IF;
-    IF NOT v_lines[p_idx + 1] THEN RETURN jsonb_build_object('ok', false, 'error', 'not_completed'); END IF;
+    -- ★ p_idx = 必要ライン本数(1〜8)。達成ライン本数が p_idx 以上で解放（どのラインかは不問）
+    IF p_idx < 1 OR p_idx > 8 THEN RETURN jsonb_build_object('ok', false, 'error', 'bad_index'); END IF;
+    v_lcnt := (SELECT count(*) FROM unnest(v_lines) x WHERE x);
+    IF v_lcnt < p_idx THEN RETURN jsonb_build_object('ok', false, 'error', 'not_completed'); END IF;
     IF p_idx = ANY(st.claimed_lines) THEN RETURN jsonb_build_object('ok', false, 'error', 'already'); END IF;
   ELSE
     RETURN jsonb_build_object('ok', false, 'error', 'bad_kind');
