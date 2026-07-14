@@ -707,10 +707,11 @@ export default function Hachigoku() {
   }
 
   const winsLeft = Math.max(0, HACHIGOKU_DAILY_WINS - winsToday)
+  const unlimited = !!profile?.is_admin  // 管理者は回数無制限（開発テスト用・一般公開後も免除）
 
   const handleChallenge = async () => {
     if (!selectedHell || !profile || battling || remaining > 0) return
-    if (winsLeft <= 0) return
+    if (winsLeft <= 0 && !unlimited) return
     const hell = HACHIGOKU_HELLS.find(h => h.key === selectedHell)
     const enemy = makeHachigokuEnemy(selectedHell, selectedDiff)
     if (!hell || !enemy) return
@@ -777,7 +778,7 @@ export default function Hachigoku() {
 
   const hell = selectedHell ? HACHIGOKU_HELLS.find(h => h.key === selectedHell) : null
   const diffIdxOf = (k) => HACHIGOKU_DIFFICULTIES.findIndex(d => d.key === k)
-  const canChallenge = !!selectedHell && winsLeft > 0 && remaining <= 0 && !battling
+  const canChallenge = !!selectedHell && (winsLeft > 0 || unlimited) && remaining <= 0 && !battling
 
   return (
     <div style={{ minHeight:'100vh', background:'#100505', padding:'12px', fontFamily:'monospace' }}>
@@ -791,7 +792,11 @@ export default function Hachigoku() {
           <>
             <div style={{ border:'1px solid #6a2a2a', background:'#1c0808', padding:'12px', marginBottom:'12px' }}>
               <div style={{ color:'#dd9988', fontSize:'12px', lineHeight:'1.9' }}>
-                本日の残り挑戦回数: <span style={{ color: winsLeft > 0 ? '#ffcc66' : '#ff5555', fontWeight:'bold' }}>{winsLeft}</span> ／ {HACHIGOKU_DAILY_WINS}回
+                {unlimited ? (
+                  <>本日の残り挑戦回数: <span style={{ color:'#66ff99', fontWeight:'bold' }}>無制限</span><span style={{ color:'#aa6655', fontSize:'10px', marginLeft:'6px' }}>（管理者・本日{winsToday}勝）</span></>
+                ) : (
+                  <>本日の残り挑戦回数: <span style={{ color: winsLeft > 0 ? '#ffcc66' : '#ff5555', fontWeight:'bold' }}>{winsLeft}</span> ／ {HACHIGOKU_DAILY_WINS}回</>
+                )}
                 <span style={{ color:'#aa6655', fontSize:'10px', marginLeft:'8px' }}>(開発アカウント限定)</span>
               </div>
               <div style={{ color:'#aa6655', fontSize:'10px', marginTop:'4px', lineHeight:'1.7' }}>
@@ -843,7 +848,7 @@ export default function Hachigoku() {
                         </div>
                         <button onClick={(e)=>{ e.stopPropagation(); handleChallenge() }} disabled={!canChallenge}
                           style={{ width:'100%', marginTop:'10px', padding:'12px', background: canChallenge ? '#401510' : '#1c0a08', border:`1px solid ${canChallenge ? '#ff8855' : '#4a2a22'}`, color: canChallenge ? '#ffbb99' : '#6a4a44', cursor: canChallenge ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'13px', letterSpacing:'2px' }}>
-                          {winsLeft <= 0 ? '本日の挑戦回数を使い切った（毎朝5時リセット）'
+                          {winsLeft <= 0 && !unlimited ? '本日の挑戦回数を使い切った（毎朝5時リセット）'
                             : remaining > 0 ? `⏳ ${remaining.toFixed(1)}秒`
                             : `⚔ ${h.name}【${HACHIGOKU_DIFFICULTIES[diffIdxOf(selectedDiff)]?.label}】に挑む`}
                         </button>

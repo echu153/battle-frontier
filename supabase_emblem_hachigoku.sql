@@ -322,13 +322,13 @@ BEGIN
     RETURN json_build_object('error', 'bad_params');
   END IF;
 
-  -- 本日の勝利数チェック（1日3勝まで）
+  -- 本日の勝利数チェック（1日3勝まで）。is_adminは無制限（開発テスト用・一般公開後も管理者は免除）
   INSERT INTO hachigoku_progress (player_id, win_day, win_count)
   VALUES (v_uid, v_today, 0)
   ON CONFLICT (player_id) DO NOTHING;
   SELECT * INTO v_p FROM hachigoku_progress WHERE player_id = v_uid FOR UPDATE;
   IF v_p.win_day = v_today THEN v_wins := v_p.win_count; END IF;
-  IF v_wins >= 3 THEN RETURN json_build_object('error', 'daily_limit'); END IF;
+  IF NOT COALESCE(v_admin, false) AND v_wins >= 3 THEN RETURN json_build_object('error', 'daily_limit'); END IF;
 
   -- 結晶（その地獄の対応結晶からランダムに1個ずつ抽選）
   v_pool := v_crystals -> p_hell;
@@ -386,6 +386,6 @@ BEGIN
 
   RETURN json_build_object('ok', true, 'drops', v_drops,
     'got_soul', v_got_soul, 'got_memory', v_got_memory,
-    'wins_today', v_wins + 1, 'wins_left', 3 - (v_wins + 1));
+    'wins_today', v_wins + 1, 'wins_left', GREATEST(0, 3 - (v_wins + 1)));
 END $$;
 GRANT EXECUTE ON FUNCTION public.hachigoku_result(text, int) TO authenticated;
