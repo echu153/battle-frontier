@@ -39,6 +39,8 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
   const logs = []
   const mods = enemy.mods || {}
   const hellDR = 1 - Math.min(0.9, mods.flatDR || 0)  // 叫喚: 敵の被ダメ一律軽減（DoTは貫通）
+  // 焦熱: 受ける特殊（魔法）ダメージ半減 等。物理/特殊で敵の被ダメ倍率を分ける（DoTは対象外）
+  const typeTakenMult = (isPhys) => isPhys ? (mods.physTakenMult ?? 1) : (mods.specialTakenMult ?? 1)
   let playerHp = eff.hp_max
   let playerMp = eff.mp_max
   let enemyHp = enemy.hp
@@ -98,6 +100,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
   const madokenAtkMult = (hasMadokenJutsu && pe('魔法剣士')) ? 1.1 : 1.0
 
   logs.push({ text:`🔥 獄卒 ${enemy.name}が立ちはだかった！`, color:'#ff6644' })
+  if (enemy.passive) logs.push({ text:`👁 パッシブ「${enemy.passive}」`, color:'#ffaa66' })
 
   playerBuffs = applyEquipmentEffects(equipment, profile, playerBuffs, logs)
 
@@ -174,7 +177,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
           const fCrit = Math.random()*100 < playerCritRate
           const fCritMult = fCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
           const dr = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
-          let fDmg = Math.floor(resPeek.followup.dmg * fScale * fCritMult * passiveDmgMult * dr * hellDR * (0.9 + Math.random()*0.2))
+          let fDmg = Math.floor(resPeek.followup.dmg * fScale * fCritMult * passiveDmgMult * dr * hellDR * typeTakenMult(nextSkill.type === '物理攻撃') * (0.9 + Math.random()*0.2))
           fDmg = Math.max(1, fDmg)
           enemyHp -= fDmg
           logs.push({ text:`↳ 追撃！${resPeek.followup.label?`（${resPeek.followup.label}）`:''} ${enemy.name}に${fDmg}ダメージ！${fCrit?' 💥クリティカル！':''}`, color: fCrit?'#ffaa00':'#ffaa66' })
@@ -247,7 +250,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
         const isMulti = Array.isArray(res.hitDmgs) && res.hitDmgs.length > 0 && res.dmg > 0
         let finalDmg, resLog, multiCritAny = false
         if (isMulti) {
-          const hitMult = defScale * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * nextBoostMult * enemyDmgReduceMult * hellDR * emMult
+          const hitMult = defScale * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * nextBoostMult * enemyDmgReduceMult * hellDR * typeTakenMult(isPhysSkill) * emMult
           const parts = []
           finalDmg = 0
           for (const hd of res.hitDmgs) {
@@ -261,7 +264,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
           }
           resLog = `${res.log.split('！')[0]}！ ${enemy.name}に ${parts.join(' ')}`
         } else {
-          finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * nextBoostMult * enemyDmgReduceMult * hellDR * emMult * (0.9 + Math.random() * 0.2))
+          finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * nextBoostMult * enemyDmgReduceMult * hellDR * typeTakenMult(isPhysSkill) * emMult * (0.9 + Math.random() * 0.2))
           resLog = res.dmg > 0 ? res.log.replace(String(res.dmg), String(finalDmg)) : res.log
         }
         if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
@@ -321,7 +324,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
         if (res.followup && res.followup.dmg > 0) {
           const fCrit = Math.random()*100 < (playerCritRate + (res.bonusCritRate||0) + seimitsuCritBonus)
           const fCritMult = fCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
-          let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * hellDR * emMult * (0.9 + Math.random()*0.2))
+          let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * enemyDmgReduceMult * hellDR * typeTakenMult(isPhysSkill) * emMult * (0.9 + Math.random()*0.2))
           fDmg = Math.max(1, fDmg)
           enemyHp -= fDmg
           logs.push({ text:`↳ 追撃！${res.followup.label?`（${res.followup.label}）`:''} ${enemy.name}に${fDmg}ダメージ！${fCrit?' 💥クリティカル！':''}`, color: fCrit?'#ffaa00':'#ffaa66' })
@@ -356,7 +359,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       const iaiNormalMult = isMagical ? 1.0 : iaiPhysMult
       const rokkanMultN = (hasRokkan && pe('サイキッカー')) ? (1 + 0.05 * Math.min(6, rokkanStacks)) : 1.0
       seimitsuStacks = 0; prevSkillName = null
-      let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*iaiNormalMult*rokkanMultN*enemyDmgReduceMult2*hellDR*emblemDmgMult(eff, !isMagical)*(0.9+Math.random()*0.2))
+      let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*iaiNormalMult*rokkanMultN*enemyDmgReduceMult2*hellDR*typeTakenMult(!isMagical)*emblemDmgMult(eff, !isMagical)*(0.9+Math.random()*0.2))
       enemyHp -= finalDmg
       // 紋章: 物理/特殊吸収
       { const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text:`💠 紋章の吸収！ HPが${emDrain}回復！`, color:'#66ddff' }) } }
@@ -832,6 +835,7 @@ export default function Hachigoku() {
                     {sel && (
                       <div style={{ marginTop:'10px', borderTop:'1px solid #3a1a1a', paddingTop:'10px' }}>
                         <div style={{ color:'#cc8877', fontSize:'11px', lineHeight:'1.7', marginBottom:'8px' }}>{h.desc}</div>
+                        {h.passive && <div style={{ color:'#ffaa66', fontSize:'10px', marginBottom:'8px' }}>👁 パッシブ: {h.passive}</div>}
                         <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }} onClick={e=>e.stopPropagation()}>
                           {HACHIGOKU_DIFFICULTIES.map(d => {
                             const selD = selectedDiff === d.key

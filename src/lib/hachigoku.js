@@ -18,6 +18,9 @@
 //  defPen:0..1                 敵の攻撃がプレイヤー防御を割合無視（針山）
 //  critBoost:n                 敵のクリティカル率+n%（黒縄）
 //  critDmgPlus:n               敵のクリティカル威力+n（黒縄）
+//  specialTakenMult:0..1       敵が受ける特殊（魔法）ダメージの倍率（焦熱=0.5）※DoTは対象外
+//  physTakenMult:0..1          敵が受ける物理ダメージの倍率（将来用）
+// passive: パッシブの表示ラベル（ロビー/戦闘開始時に表示）
 // ============================================================
 
 export const HACHIGOKU_DIFFICULTIES = [
@@ -50,7 +53,8 @@ export const HACHIGOKU_HELLS = [
     crystals: ['chikara', 'butsuri'],
     soul: 'ターパナの魂', memory: 'ターパナの記憶',
     desc: '灼熱の業火を纏う獄卒。強烈な物理攻撃とやけどで焼き尽くす。',
-    mods: { onHitAilment: [{ key: 'burn', chance: 30 }] },
+    passive: '灼熱の巨躯（受ける特殊ダメージ半減）',
+    mods: { onHitAilment: [{ key: 'burn', chance: 30 }], specialTakenMult: 0.5 },
   },
   {
     key: 'hyoketsu', name: '氷結地獄', boss: 'マカハドマ', img: null,
@@ -133,5 +137,6 @@ export function makeHachigokuEnemy(hellKey, diffKey) {
     hp, atk, matk, def: s('def'), mdef: s('mdef'), spd: s('spd'),
     type: hell.type,
     mods: hell.mods || {},
+    passive: hell.passive || null,
   }
 }
