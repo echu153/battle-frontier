@@ -905,8 +905,8 @@ export default function Hachigoku() {
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                       <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
                         {h.img
-                          ? <img src={h.img} alt={h.boss} style={{ width:'44px', height:'44px', objectFit:'contain' }} />
-                          : <div style={{ width:'44px', height:'44px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'26px', background:'#0d0404', border:'1px solid #3a1a1a' }}>👹</div>}
+                          ? <img src={h.img} alt={h.boss} style={{ width:'84px', height:'84px', objectFit:'contain' }} />
+                          : <div style={{ width:'84px', height:'84px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'44px', background:'#0d0404', border:'1px solid #3a1a1a' }}>👹</div>}
                         <div>
                           <div style={{ color: sel ? '#ffbb99' : '#dd9977', fontSize:'14px', fontWeight:'bold' }}>{h.name}　<span style={{ fontSize:'12px' }}>{h.boss}</span></div>
                           <div style={{ color:'#aa6655', fontSize:'10px', marginTop:'2px' }}>テーマ: {h.theme} ／ ドロップ: {h.crystals.length}種の結晶</div>
@@ -957,7 +957,7 @@ export default function Hachigoku() {
             </div>
             {battleInfo.hell.img && (
               <div style={{ textAlign:'center', marginBottom:'10px' }}>
-                <img src={battleInfo.hell.img} alt={battleInfo.hell.boss} style={{ maxWidth:'180px', maxHeight:'180px', objectFit:'contain', filter:'drop-shadow(0 0 12px rgba(255,60,30,0.35))' }} />
+                <img src={battleInfo.hell.img} alt={battleInfo.hell.boss} style={{ maxWidth:'min(320px, 80%)', maxHeight:'320px', objectFit:'contain', filter:'drop-shadow(0 0 14px rgba(255,60,30,0.35))' }} />
               </div>
             )}
             {battling && <div style={{ color:'#cc8866', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
