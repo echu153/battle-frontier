@@ -5403,10 +5403,10 @@ export default function Game() {
   const dungeonAllUsedUp = DUNGEON_LIST.every(d => (dungeonCounts[d.type]||0) >= dungeonDailyLimitFor(profile))
   const charLv = profile.char_lv || profile.lv
   const innCost = isDying ? Math.min(charLv*15,profile.gold) : charLv*2
-  // 公開：開催期間中は全プレイヤーに表示（管理者は期間外でも常時表示）
+  // 公開：開催期間中のみ全プレイヤーに表示（出撃ポイントラリーは終了済み＝バナー非表示）
   const eventVisible = (() => {
     const now = serverNow()
-    return !!profile?.is_admin || (now >= EVENT_START_MS && now < EVENT_END_MS)
+    return now >= EVENT_START_MS && now < EVENT_END_MS
   })()
 
   // 解放判定：基本はキャラLv。錬金部屋のみエリア③ボス撃破（=エリア4解放）が条件。
