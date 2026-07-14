@@ -125,6 +125,7 @@ export default function Equipment() {
   const [areaBox, setAreaBox] = useState(null)  // 初級/中級/上級エリアボス装備選択箱（②報酬）: {name,tier,choices}
   const [areaBoxMsg, setAreaBoxMsg] = useState('')
   const [areaBoxGot, setAreaBoxGot] = useState(null)
+  const [boxWeapons, setBoxWeapons] = useState({})  // 選択箱で選べる装備の weapons 情報（name→row。ステ表示用）
 
   // 選択券で交換できるS級レイド装備（redeem_raid_ticket の許可リストと一致）
   const RAID_TICKET_CHOICES = [
@@ -194,6 +195,45 @@ export default function Equipment() {
       const { data: em } = await supabase.from('player_emblem').select('*').eq('player_id', user.id).maybeSingle()
       setEmblemRow(em || null)
     } catch { /* 紋章未導入時は無視 */ }
+    // 選択箱で選べる装備のステータス（weapons）を読み込み（選択時にステを表示するため）
+    try {
+      const boxNames = [...new Set([
+        ...BEGINNER_BOX_CHOICES.map(c => c.name),
+        ...Object.values(AREA_BOX).flatMap(b => b.choices.map(c => c.name)),
+      ])]
+      const { data: bw } = await supabase.from('weapons').select('*').in('name', boxNames)
+      const map = {}; (bw || []).forEach(w => { map[w.name] = w }); setBoxWeapons(map)
+    } catch { /* weapons取得失敗時はステ非表示 */ }
+  }
+
+  // 選択箱の候補装備のステータス表示（weapons情報から）
+  const renderWeaponInfo = (name) => {
+    const w = boxWeapons[name]
+    if (!w) return null
+    const typeStr = [w.rarity ? `${String(w.rarity).toUpperCase()}級` : '', w.weapon_type || ''].filter(Boolean).join(' ')
+    return (
+      <div style={{ marginTop:'4px' }}>
+        {typeStr && <div style={{ color:'#8899aa', fontSize:'9.5px', marginBottom:'2px' }}>{typeStr}</div>}
+        <div style={{ fontSize:'10px', lineHeight:'1.7' }}>
+          {w.atk_bonus  > 0 && <span style={{ color:'#ffcc00' }}>攻+{w.atk_bonus} </span>}
+          {w.def_bonus  > 0 && <span style={{ color:'#88aaff' }}>防+{w.def_bonus} </span>}
+          {w.matk_bonus > 0 && <span style={{ color:'#cc44ff' }}>特攻+{w.matk_bonus} </span>}
+          {w.mdef_bonus > 0 && <span style={{ color:'#44ccff' }}>特防+{w.mdef_bonus} </span>}
+          {w.spd_bonus  > 0 && <span style={{ color:'#ff8844' }}>速+{w.spd_bonus} </span>}
+          {w.hp_bonus   > 0 && <span style={{ color:'#44ff88' }}>HP+{w.hp_bonus} </span>}
+          {w.mp_bonus   > 0 && <span style={{ color:'#4488ff' }}>MP+{w.mp_bonus} </span>}
+          {w.atk_bonus_pct  > 0 && <span style={{ color:'#ffcc00' }}>攻+{w.atk_bonus_pct}% </span>}
+          {w.matk_bonus_pct > 0 && <span style={{ color:'#cc44ff' }}>特攻+{w.matk_bonus_pct}% </span>}
+          {w.spd_bonus_pct  > 0 && <span style={{ color:'#ff8844' }}>速+{w.spd_bonus_pct}% </span>}
+          {w.hp_bonus_pct   > 0 && <span style={{ color:'#44ff88' }}>HP+{w.hp_bonus_pct}% </span>}
+          {w.mp_bonus_pct   > 0 && <span style={{ color:'#4488ff' }}>MP+{w.mp_bonus_pct}% </span>}
+          {w.hit_bonus  > 0 && <span style={{ color:'#ffaa44' }}>命中+{w.hit_bonus}% </span>}
+          {w.crit_bonus > 0 && <span style={{ color:'#ff6688' }}>クリ+{w.crit_bonus}% </span>}
+          {w.crit_resist > 0 && <span style={{ color:'#66ccff' }}>クリ抵抗+{w.crit_resist}% </span>}
+        </div>
+        {w.effect && <div style={{ color:'#ffaa66', fontSize:'9.5px', marginTop:'2px' }}>{getEffectLabel(w.effect)}</div>}
+      </div>
+    )
   }
 
   // 選択券を1枚消費してS級レイド装備へ交換（fetchAll 定義後に置く＝参照前定義のlint回避）
@@ -1108,6 +1148,7 @@ export default function Equipment() {
                   style={{ textAlign:'left', padding:'10px', background:'#001028', border:'1px solid #0055aa', color:'#cce0ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', opacity: loading ? 0.5 : 1 }}>
                   <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'2px' }}>{c.name}</div>
                   <div style={{ color:'#778899', fontSize:'10px' }}>{c.desc}</div>
+                  {renderWeaponInfo(c.name)}
                 </button>
               ))}
             </div>
@@ -1139,6 +1180,7 @@ export default function Equipment() {
                   style={{ textAlign:'left', padding:'10px', background:'#001028', border:'1px solid #0055aa', color:'#cce0ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', opacity: loading ? 0.5 : 1 }}>
                   <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'2px' }}>{c.name}</div>
                   <div style={{ color:'#778899', fontSize:'10px' }}>{c.desc}</div>
+                  {renderWeaponInfo(c.name)}
                 </button>
               ))}
             </div>
