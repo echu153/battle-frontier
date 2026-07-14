@@ -2084,7 +2084,9 @@ export default function Game() {
           supabase.rpc('get_beginner_bingo', { p_card: 1 }),
           supabase.rpc('get_beginner_bingo', { p_card: 2 }),
         ])
-        setBingoClaimable(countClaimable(bg1) + countClaimable(bg2))
+        // ②は①の全9マス達成後のみ解放＝それまでは②分を数えない
+        const card1Cleared = bg1 && !bg1.dev_only && (bg1.cells || []).length === 9 && (bg1.cells || []).every(Boolean)
+        setBingoClaimable(countClaimable(bg1) + (card1Cleared ? countClaimable(bg2) : 0))
       } catch { /* SQL未適用時は無視 */ setBingoClaimable(0) }
     } else setBingoClaimable(0)
   }

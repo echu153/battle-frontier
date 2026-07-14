@@ -51,6 +51,7 @@ const rewardLines = (arr) => (arr || []).map(r =>
 export default function BeginnerBingo() {
   const nav = useNavigate()
   const [card, setCard] = useState(1)
+  const [card1Cleared, setCard1Cleared] = useState(false)  // ①の全9マス達成で②解放
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -71,11 +72,17 @@ export default function BeginnerBingo() {
     const { data: res, error } = await supabase.rpc('get_beginner_bingo', { p_card: c })
     if (error) { setMsg({ t: `読み込み失敗: ${error.message}`, c: '#ff5555' }); return }
     if (res?.dev_only) { setDevOnly(true); return }
+    // ①の全9マス達成で②を解放
+    if (c === 1) {
+      const cs = res?.cells || []
+      setCard1Cleared(cs.length === 9 && cs.every(Boolean))
+    }
     setData(res)
   }
 
   const switchCard = async (c) => {
     if (c === card) return
+    if (c === 2 && !card1Cleared) { flash('初心者ビンゴ①を全マス達成すると解放されます', '#ffaa44'); return }
     setCard(c); setData(null); setMsg(null)
     await load(c)
   }
@@ -143,7 +150,9 @@ export default function BeginnerBingo() {
 
         <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
           <button onClick={() => switchCard(1)} style={tabBtn(1)}>① 序盤ミッション</button>
-          <button onClick={() => switchCard(2)} style={tabBtn(2)}>② 次のステップ</button>
+          <button onClick={() => switchCard(2)} style={{ ...tabBtn(2), ...(card1Cleared ? {} : { color: '#5a5038', cursor: 'not-allowed' }) }}>
+            {card1Cleared ? '② 次のステップ' : '② 🔒 ①クリアで解放'}
+          </button>
         </div>
 
         {msg && (
