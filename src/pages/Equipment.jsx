@@ -206,11 +206,20 @@ export default function Equipment() {
     } catch { /* weapons取得失敗時はステ非表示 */ }
   }
 
+  // 装備の種別を日本語表記に（英語のカテゴリはSLOT準拠で和訳・具体名の和名はそのまま）
+  const TYPE_JP = { weapon:'武器', armor:'防具', accessory:'装飾品', accessory2:'装飾品', shield:'盾' }
+  const jpType = (w) => { const t = w.weapon_type || w.slot || ''; return TYPE_JP[t] || t }
+  // レアリティのバッジ（普通の装備と同じ見た目・装備名の横に置く）
+  const rarityBadge = (name) => {
+    const w = boxWeapons[name]; if (!w?.rarity) return null
+    const r = String(w.rarity).toLowerCase()
+    return <span style={{ fontSize:'9px', padding:'1px 4px', marginRight:'5px', color: RARITY_COLORS[r] || '#999', border:`1px solid ${RARITY_COLORS[r] || '#999'}` }}>{RARITY_LABELS[r] || String(w.rarity).toUpperCase()}</span>
+  }
   // 選択箱の候補装備のステータス表示（weapons情報から）
   const renderWeaponInfo = (name) => {
     const w = boxWeapons[name]
     if (!w) return null
-    const typeStr = [w.rarity ? `${String(w.rarity).toUpperCase()}級` : '', w.weapon_type || ''].filter(Boolean).join(' ')
+    const typeStr = jpType(w)
     return (
       <div style={{ marginTop:'4px' }}>
         {typeStr && <div style={{ color:'#8899aa', fontSize:'9.5px', marginBottom:'2px' }}>{typeStr}</div>}
@@ -1146,7 +1155,7 @@ export default function Equipment() {
               {BEGINNER_BOX_CHOICES.map(c => (
                 <button key={c.name} onClick={() => redeemBeginnerBossBox(c.name)} disabled={loading}
                   style={{ textAlign:'left', padding:'10px', background:'#001028', border:'1px solid #0055aa', color:'#cce0ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', opacity: loading ? 0.5 : 1 }}>
-                  <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'2px' }}>{c.name}</div>
+                  <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'2px' }}>{rarityBadge(c.name)}{c.name}</div>
                   <div style={{ color:'#778899', fontSize:'10px' }}>{c.desc}</div>
                   {renderWeaponInfo(c.name)}
                 </button>
@@ -1178,7 +1187,7 @@ export default function Equipment() {
               {areaBox.choices.map(c => (
                 <button key={c.name} onClick={() => redeemAreaBossBox(areaBox.tier, c.name)} disabled={loading}
                   style={{ textAlign:'left', padding:'10px', background:'#001028', border:'1px solid #0055aa', color:'#cce0ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', opacity: loading ? 0.5 : 1 }}>
-                  <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'2px' }}>{c.name}</div>
+                  <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'2px' }}>{rarityBadge(c.name)}{c.name}</div>
                   <div style={{ color:'#778899', fontSize:'10px' }}>{c.desc}</div>
                   {renderWeaponInfo(c.name)}
                 </button>
