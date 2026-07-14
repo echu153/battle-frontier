@@ -23,6 +23,7 @@ import {
   MULTI_HIT_SKILLS,
 } from './Game'
 import { HACHIGOKU_HELLS, HACHIGOKU_DIFFICULTIES, HACHIGOKU_DAILY_WINS, HACHIGOKU_DMG_COMPRESS, makeHachigokuEnemy } from '../lib/hachigoku'
+import { EMBLEM_CRYSTALS } from '../lib/emblem'
 
 const fmt = (n) => Number(n).toLocaleString()
 const HACHIGOKU_CD = 5  // 挑戦クールダウン(秒・共有CD)
@@ -903,17 +904,20 @@ export default function Hachigoku() {
                   <div key={h.key} onClick={()=>setSelectedHell(sel ? null : h.key)}
                     style={{ border:`1px solid ${sel ? '#ff8855' : '#5a2a2a'}`, background: sel ? '#2a0e08' : '#180808', padding:'12px', cursor:'pointer' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'10px', flex:1, minWidth:0, textAlign:'left' }}>
                         {h.img
-                          ? <img src={h.img} alt={h.boss} style={{ width:'84px', height:'84px', objectFit:'contain' }} />
-                          : <div style={{ width:'84px', height:'84px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'44px', background:'#0d0404', border:'1px solid #3a1a1a' }}>👹</div>}
-                        <div>
+                          ? <img src={h.img} alt={h.boss} style={{ width:'84px', height:'84px', objectFit:'contain', flexShrink:0 }} />
+                          : <div style={{ width:'84px', height:'84px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'44px', background:'#0d0404', border:'1px solid #3a1a1a', flexShrink:0 }}>👹</div>}
+                        <div style={{ minWidth:0 }}>
                           <div style={{ color: sel ? '#ffbb99' : '#dd9977', fontSize:'14px', fontWeight:'bold' }}>{h.name}　<span style={{ fontSize:'12px' }}>{h.boss}</span></div>
-                          <div style={{ color:'#aa6655', fontSize:'10px', marginTop:'2px' }}>テーマ: {h.theme} ／ ドロップ: {h.crystals.length}種の結晶</div>
+                          <div style={{ color:'#aa6655', fontSize:'10px', marginTop:'4px', lineHeight:'1.7' }}>
+                            テーマ：{h.theme}<br/>
+                            ドロップ：{h.crystals.map(k => EMBLEM_CRYSTALS[k]?.name).filter(Boolean).join('、')}
+                          </div>
                         </div>
                       </div>
-                      <div style={{ textAlign:'right', fontSize:'10px', lineHeight:'1.8' }}>
-                        {maxDiff >= 0 && <div style={{ color:'#66cc88' }}>✓ {HACHIGOKU_DIFFICULTIES[maxDiff]?.label}撃破</div>}
+                      <div style={{ textAlign:'right', fontSize:'10px', lineHeight:'1.8', flexShrink:0, marginLeft:'8px' }}>
+                        {maxDiff >= 0 && <div style={{ color: HACHIGOKU_DIFFICULTIES[maxDiff]?.color || '#66cc88' }}>✓ {HACHIGOKU_DIFFICULTIES[maxDiff]?.label}撃破</div>}
                         {cl?.memory && <div style={{ color:'#cc88ff' }}>📿 記憶 獲得済</div>}
                       </div>
                     </div>
