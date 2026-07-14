@@ -41,9 +41,22 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
   // 与ダメ・敵HPを同率圧縮（撃破ターン数は不変・与ダメ比例回復だけを抑える）
   // DoTは敵最大HP割合ダメージなのでHP圧縮と一緒に自動で縮む（hellDRは掛けない）
   enemy.hp = Math.max(1, Math.round(enemy.hp * HACHIGOKU_DMG_COMPRESS))
-  const hellDR = (1 - Math.min(0.9, mods.flatDR || 0)) * HACHIGOKU_DMG_COMPRESS  // 叫喚: 敵の被ダメ一律軽減（DoTは貫通）＋全地獄共通の与ダメ圧縮
-  // 焦熱: 受ける特殊（魔法）ダメージ半減 等。物理/特殊で敵の被ダメ倍率を分ける（DoTは対象外）
+  const hellDR = (1 - Math.min(0.9, mods.flatDR || 0)) * HACHIGOKU_DMG_COMPRESS  // 敵の被ダメ一律軽減（DoTは貫通）＋全地獄共通の与ダメ圧縮
+  // 焦熱=特殊半減/氷結=物理半減/血池=両方半減 等。物理/特殊で敵の被ダメ倍率を分ける（DoTは対象外）
   const typeTakenMult = (isPhys) => isPhys ? (mods.physTakenMult ?? 1) : (mods.specialTakenMult ?? 1)
+  // 血池: 状態異常DoTダメージ3倍（敵が受けるDoT tickに乗算）
+  const dotTakenMult = mods.dotTakenMult || 1
+  // 餓鬼: プレイヤーの全回復量の倍率（回復スキル/リジェネ/ブラッディロア/紋章吸収/持続回復）
+  const hellHealMult = mods.playerHealMult || 1
+  // 鏡獄: プレイヤーの実効ステ(A/B/C/D/S)を×nで自身に反映（HPは難易度準拠のまま）
+  if (mods.mirrorPlayerStats > 0) {
+    const m = mods.mirrorPlayerStats
+    enemy.atk  = Math.max(1, Math.round(eff.atk  * m))
+    enemy.matk = Math.max(1, Math.round(eff.matk * m))
+    enemy.def  = Math.max(1, Math.round(eff.def  * m))
+    enemy.mdef = Math.max(1, Math.round(eff.mdef * m))
+    enemy.spd  = Math.max(1, Math.round(eff.spd  * m))
+  }
   let playerHp = eff.hp_max
   let playerMp = eff.mp_max
   let enemyHp = enemy.hp
@@ -118,6 +131,10 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
   }
   const allSkillsSet = evoAllSkillsSet(skillSets)
 
+  // 針山: 防御・特防を常時3倍 ／ 叫喚: ターン経過ごとに累積1.1倍（呼び出し時点のturnで算出）
+  const enemyDefMult = () => (mods.selfDefMult || 1) * (mods.defRamp ? Math.pow(mods.defRamp, Math.max(0, turn - 1)) : 1)
+  let permLifesteal = 0  // 餓鬼の大技: 戦闘終了まで与ダメ×nを回復
+
   const playerSpd = effectiveSpdForCalc
   const enemySpd = enemy.spd || 5
   const playerExtraRate = calcExtraActionRate(playerSpd, enemySpd)
@@ -175,7 +192,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       if (nextSkill && !mpLack) {
         const resPeek = executeSkill(nextSkill, effBuff, profile, enemy, enemyBuffs, playerBuffs, isArtifact, prevSkillName)
         if (resPeek.followup && resPeek.followup.dmg > 0) {
-          const adjED = Math.max(1, Math.floor((enemy.def||0)*eDefRate))
+          const adjED = Math.max(1, Math.floor((enemy.def||0)*enemyDefMult()*eDefRate))
           const fScale = effBuff.atk / (effBuff.atk + adjED)
           const fCrit = Math.random()*100 < playerCritRate
           const fCritMult = fCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
@@ -210,7 +227,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
         if (cmd.handled) {
           playerMp -= cmd.mpUsed
           if (cmd.enemyDamage > 0) enemyHp -= Math.floor(cmd.enemyDamage * hellDR)
-          if (cmd.playerHeal > 0) playerHp = Math.min(eff.hp_max, playerHp + cmd.playerHeal)
+          if (cmd.playerHeal > 0) playerHp = Math.min(eff.hp_max, playerHp + Math.floor(cmd.playerHeal * hellHealMult))
           prevSkillName = cs.skills.name
           skillUsed = true; skillIndex++
         }
@@ -235,8 +252,8 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
           const skillCls = cs.skills?.class_name
           const buffPen = playerBuffs.mukyoPen?.turns > 0 ? playerBuffs.mukyoPen.rate : 0
           const spMdefPen = playerBuffs.spiritMdefPen?.turns > 0 ? playerBuffs.spiritMdefPen.rate : 0  // ノクス：魔法防御貫通バフ
-          const adjED  = Math.max(1, Math.floor((enemy.def ||0)*eDefRate*(1-Math.min(0.8,(res.defPen||0)+buffPen))))
-          const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate*(1-Math.min(0.8,(res.mdefPen||0)+spMdefPen))))
+          const adjED  = Math.max(1, Math.floor((enemy.def ||0)*enemyDefMult()*eDefRate*(1-Math.min(0.8,(res.defPen||0)+buffPen))))
+          const adjEMD = Math.max(1, Math.floor((enemy.mdef||0)*enemyDefMult()*eMdefRate*(1-Math.min(0.8,(res.mdefPen||0)+spMdefPen))))
           // サイコブラスト/マインドブレイク等、およびサイキッカー・魔銃士の全スキルは敵DEF・MDEFの低い方で軽減（Game.jsxと同構造）
           const useLowDef = cs.skills?.name === 'サイコブラスト' || res.useMinDef || skillCls === 'サイキッカー' || skillCls === '魔銃士'
           if (res.physScaleMatk) defScale = effBuff.matk / (effBuff.matk + adjED)  // 物理ダメだが火力参照は特殊攻撃（オオカミ召喚/シルフ等）
@@ -273,7 +290,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
         if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
         enemyHp -= finalDmg
         // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封じ中は無効）
-        { const emDrain = emblemDrainAmount(eff, finalDmg, isPhysSkill); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text:`💠 紋章の吸収！ HPが${emDrain}回復！`, color:'#66ddff' }) } }
+        { const emDrain = Math.floor(emblemDrainAmount(eff, finalDmg, isPhysSkill) * hellHealMult); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text:`💠 紋章の吸収！ HPが${emDrain}回復！`, color:'#66ddff' }) } }
         if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks+1)
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
           enemyBuffs.healDown = { turns: 2, rate: 0.7 }
@@ -292,7 +309,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
           enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
           logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
         }
-        const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult * (playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1))  // ルミナ等の回復力アップを反映
+        const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult * hellHealMult * (playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1))  // ルミナ等の回復力アップ＋餓鬼の回復半減を反映
         playerHp = Math.min(eff.hp_max, playerHp + healAmt)
         if (passiveHealReflect && healAmt > 0) {
           const reflectDmg = healAmt
@@ -335,7 +352,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
         // 与ダメ割合回復の1ヒット上限：基本 最大HP20%、クリティカル時35%（血の狂気/ソウルドレイン/ルミナ・レイ共通）
         const healCapPct = (finalCrit || multiCritAny) ? 0.35 : 0.20
         if (playerAttacking && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(eff.hp_max * healCapPct))
+          const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate * hellHealMult), Math.floor(eff.hp_max * healCapPct))
           playerHp = Math.min(eff.hp_max, playerHp + rageCure)
           logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
         }
@@ -356,7 +373,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     }
     if (!skillUsed) {
       const baseAtk = isMagical ? effBuff.matk : effBuff.atk
-      const eDefVal = isMagical ? Math.max(1, Math.floor((enemy.mdef||0)*eMdefRate)) : Math.max(1, Math.floor(enemy.def*eDefRate))
+      const eDefVal = isMagical ? Math.max(1, Math.floor((enemy.mdef||0)*enemyDefMult()*eMdefRate)) : Math.max(1, Math.floor(enemy.def*enemyDefMult()*eDefRate))
       const baseDmg = Math.max(1, Math.floor(baseAtk*baseAtk/Math.max(1,baseAtk+eDefVal))+Math.floor(Math.random()*4))
       const enemyDmgReduceMult2 = enemyBuffs.dmgReduce?.turns > 0 ? enemyBuffs.dmgReduce.rate : 1.0
       const iaiNormalMult = isMagical ? 1.0 : iaiPhysMult
@@ -365,7 +382,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*iaiNormalMult*rokkanMultN*enemyDmgReduceMult2*hellDR*typeTakenMult(!isMagical)*emblemDmgMult(eff, !isMagical)*(0.9+Math.random()*0.2))
       enemyHp -= finalDmg
       // 紋章: 物理/特殊吸収
-      { const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text:`💠 紋章の吸収！ HPが${emDrain}回復！`, color:'#66ddff' }) } }
+      { const emDrain = Math.floor(emblemDrainAmount(eff, finalDmg, !isMagical) * hellHealMult); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text:`💠 紋章の吸収！ HPが${emDrain}回復！`, color:'#66ddff' }) } }
       if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
         enemyBuffs.healDown = { turns: 2, rate: 0.7 }
         logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
@@ -382,7 +399,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       const critText = isCrit ? '💥クリティカル！ ' : ''
       logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
       if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-        const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(eff.hp_max * (isCrit ? 0.35 : 0.20)))
+        const rageCure = Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate * hellHealMult), Math.floor(eff.hp_max * (isCrit ? 0.35 : 0.20)))
         playerHp = Math.min(eff.hp_max, playerHp + rageCure)
         logs.push({ text:`🩸 血の狂気で${rageCure}回復！`, color:'#ff4444' })
       }
@@ -426,8 +443,8 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
     const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
     const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
-    // 針山: 敵の攻撃はプレイヤー防御を割合無視（mods.defPen）
-    const penMult = 1 - (mods.defPen || 0)
+    // 針山: 敵の攻撃はプレイヤー防御を割合無視（mods.defPen）。大技はさらに強い貫通（cast.pen）
+    const penMult = 1 - Math.max(mods.defPen || 0, cast?.pen || 0)
     const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDefE * holyKnightMultE * kabeDefE * ryurinMult * penMult
     const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE * kabeDefE * ryurinMult * penMult
     const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
@@ -455,20 +472,29 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     }
     const enemyDmgDownRate = enemyBuffs.dmgDown?.turns > 0 ? enemyBuffs.dmgDown.rate : 1.0
     // 針山: ランク軽減も無効化される
-    const playerDefRankReduction = mods.defPen ? calcDefReduction(isEM ? eff.mdef : eff.def) * penMult : calcDefReduction(isEM ? eff.mdef : eff.def)
+    const playerDefRankReduction = penMult < 1 ? calcDefReduction(isEM ? eff.mdef : eff.def) * penMult : calcDefReduction(isEM ? eff.mdef : eff.def)
     const gambleBodyMult = hasGambleBody ? (pe('ギャンブラー') ? (0.5+Math.random()*0.7) : (0.7+Math.random()*0.6)) : 1.0
     const allinDebuffInMult = playerBuffs.allinDebuff?.turns > 0 ? 1.3 : 1.0
-    const finalDmg = Math.floor(baseDmg*(isCrit?enemyCritMult:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*evoTakenMult(eff, !isEM)*ryurinReduce()*(0.9+Math.random()*0.2))
+    // 黒縄: クリティカル以外のダメージ半減（mods.nonCritMult）
+    const critOrNotMult = isCrit ? enemyCritMult : (mods.nonCritMult || 1)
+    // 叫喚の大技: 自身と相手の(防御+特防)の差が大きいほど与ダメ増加（最大3倍）
+    let gapMult = 1
+    if (cast?.defGapScale) {
+      const eSum = (enemy.def + enemy.mdef) * enemyDefMult()
+      const pSum = Math.max(1, eff.def + eff.mdef)
+      gapMult = Math.min(3, Math.max(1, 1 + Math.max(0, eSum - pSum) / pSum))
+    }
+    const finalDmg = Math.floor(baseDmg*critOrNotMult*gapMult*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*evoTakenMult(eff, !isEM)*ryurinReduce()*(0.9+Math.random()*0.2))
     playerHp -= finalDmg
     { const refl = evoOnDamaged(eff, finalDmg, enemyBuffs, enemy.name, logs); if (refl > 0) enemyHp -= refl }
     if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
     const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
     const critText = isCrit ? ' 💥クリティカル！' : ''
     logs.push({ text:`${prefix}${enemy.name}の${cast ? `「${cast.name}」` : '攻撃'}！ あなたに${finalDmg}ダメージ…${critText}`, color: cast?.isUlt ? '#ff2266' : isCrit ? '#ff2200' : '#ff6644' })
-    // 餓鬼: 与えたダメージの一定割合を吸収して回復（大技はより多く吸う）
-    const lsRate = Math.max(mods.lifesteal || 0, cast?.lifesteal || 0)
+    // 餓鬼: 与えたダメージの一定割合を吸収して回復（自身の回復2倍＋大技後は永続100%吸収）
+    const lsRate = Math.max(mods.lifesteal || 0, cast?.lifesteal || 0, permLifesteal)
     if (lsRate > 0 && finalDmg > 0 && enemyHp > 0) {
-      const heal = Math.floor(finalDmg * lsRate)
+      const heal = Math.floor(finalDmg * lsRate * (mods.selfHealMult || 1))
       if (heal > 0) {
         enemyHp = Math.min(enemyMaxHp, enemyHp + heal)
         logs.push({ text:`🧛 ${enemy.name}はあなたの生気を喰らい${heal}回復した！`, color:'#cc66aa' })
@@ -477,6 +503,23 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     if (finalDmg > 0) applyOnHitAilments()
     // 大技の確定付与（羽衣/紋章耐性/狂信で防げる）
     if (finalDmg > 0 && cast?.inflict) for (const key of cast.inflict) inflictAilment(key)
+    // 血池の大技: 出血を一気にnスタック
+    if (finalDmg > 0 && (cast?.bleedStacks || 0) > 0 && playerHp > 0 && !(playerBuffs.statusImmune?.turns > 0)
+        && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'bleed', logs)) {
+      const b = playerBuffs.bleed
+      playerBuffs.bleed = { stacks: Math.min(5, (b?.stacks || 0) + cast.bleedStacks), lastTurn: 0 }
+      logs.push({ text:`🩸 傷口が一斉に開いた！ 出血${playerBuffs.bleed.stacks}スタック！`, color:'#ff3366' })
+    }
+    // 大技の追加効果: 自己回復（血池）／永続吸収（餓鬼）
+    if (cast?.selfHealPct > 0 && enemyHp > 0) {
+      const heal = Math.floor(enemyMaxHp * cast.selfHealPct * (mods.selfHealMult || 1))
+      enemyHp = Math.min(enemyMaxHp, enemyHp + heal)
+      logs.push({ text:`💚 ${enemy.name}は血の池に浸りHPを${heal}回復した！`, color:'#44ff88' })
+    }
+    if (cast?.permLifesteal > 0 && permLifesteal < cast.permLifesteal) {
+      permLifesteal = cast.permLifesteal
+      logs.push({ text:`🧛 ${enemy.name}の飢えが臨界に達した！ 以降、与えたダメージをすべて喰らい尽くす！`, color:'#cc66aa' })
+    }
     // 鏡獄の大技: ランダムな状態異常をn種付与
     if (finalDmg > 0 && (cast?.randomAilments || 0) > 0) {
       const pool = ['burn', 'poison', 'paralysis', 'bleed', 'stun'].sort(() => Math.random() - 0.5)
@@ -496,6 +539,8 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       ultUsed = true
       logs.push({ text:`━━ ${enemy.name}が大技を放つ！ ━━`, color:'#ff44aa' })
       doEnemyAttack(false, { ...ult, isUlt: true })
+      // 氷結の大技: 直後に確定で追加行動
+      if (ult.extraAction && playerHp > 0) doEnemyAttack(true)
       return
     }
     const sk = enemy.skill
@@ -511,7 +556,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     }
     // 敵への持続ダメージ（固定割合DoT＝叫喚のflatDRは貫通）
     if (enemyBuffs.severePoisoin?.turns > 0) {
-      const spDmg = Math.floor(enemyMaxHp * 0.05 * emblemDotMult(eff, 'poison')); enemyHp -= spDmg
+      const spDmg = Math.floor(enemyMaxHp * 0.05 * emblemDotMult(eff, 'poison') * dotTakenMult); enemyHp -= spDmg
       logs.push({ text:`🤢 猛毒ダメージ！ ${enemy.name}に${spDmg}ダメージ！`, color:'#aa44ff' })
       if (enemyHp <= 0) break
     }
@@ -522,7 +567,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       if (enemyHp <= 0) break
     }
     if (enemyBuffs.burn?.turns > 0) {
-      const burnDmg = Math.floor(enemyMaxHp * 0.02 * emblemDotMult(eff, 'burn')); enemyHp -= burnDmg
+      const burnDmg = Math.floor(enemyMaxHp * 0.02 * emblemDotMult(eff, 'burn') * dotTakenMult); enemyHp -= burnDmg
       logs.push({ text:`🔥 やけどダメージ！ ${enemy.name}に${burnDmg}ダメージ！`, color:'#ff6622' })
       if (enemyHp <= 0) break
     }
@@ -537,7 +582,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       logs.push({ text:`💚 ${enemy.name}のリジェネ！ HPが${regenAmt}回復した！`, color:'#44ff88' })
     }
     if (enemyBuffs.poison?.turns > 0) {
-      const poisonDmg = Math.floor(enemy.hp * enemyBuffs.poison.dmgRate * emblemDotMult(eff, 'poison')); enemyHp -= poisonDmg
+      const poisonDmg = Math.floor(enemy.hp * enemyBuffs.poison.dmgRate * emblemDotMult(eff, 'poison') * dotTakenMult); enemyHp -= poisonDmg
       logs.push({ text:`☠ 毒ダメージ！ ${enemy.name}に${poisonDmg}ダメージ！`, color:'#44ff44' })
       if (enemyHp <= 0) break
     }
@@ -572,7 +617,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     const isHealSealed = playerBuffs.healSeal?.turns > 0
     if (isHealSealed) logs.push({ text:`🚫 回復封じ中！ 回復効果が無効化された！`, color:'#ff4488' })
     if (!isHealSealed && playerBuffs.regenHeal?.turns > 0) {
-      const healAmt = Math.floor(playerBuffs.regenHeal.amount * passiveHealMult * (playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1))
+      const healAmt = Math.floor(playerBuffs.regenHeal.amount * passiveHealMult * hellHealMult * (playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1))
       playerHp = Math.min(eff.hp_max, playerHp + healAmt)
       logs.push({ text:`💚 回復効果でHPが${healAmt}回復した！`, color:'#44ff88' })
       if (passiveHealReflect && healAmt > 0) {
@@ -581,8 +626,9 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       }
     }
     if (!isHealSealed && playerBuffs.delayHeal && turn === playerBuffs.delayHeal.triggerTurn) {
-      playerHp = Math.min(eff.hp_max, playerHp + playerBuffs.delayHeal.amount)
-      logs.push({ text:`💚 装備効果でHPが${playerBuffs.delayHeal.amount}回復した！`, color:'#44ff88' })
+      { const dAmt = Math.floor(playerBuffs.delayHeal.amount * hellHealMult)
+        playerHp = Math.min(eff.hp_max, playerHp + dAmt)
+        logs.push({ text:`💚 装備効果でHPが${dAmt}回復した！`, color:'#44ff88' }) }
     }
 
     // プレイヤー行動スキップ判定（スタン・麻痺）
@@ -620,7 +666,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     if (playerHp <= 0) break
 
     if (enemyBuffs.bleed) {
-      const bleedDmg = Math.floor(enemyHp * 0.01 * enemyBuffs.bleed.stacks * emblemDotMult(eff, 'bleed')); enemyHp -= bleedDmg
+      const bleedDmg = Math.floor(enemyHp * 0.01 * enemyBuffs.bleed.stacks * emblemDotMult(eff, 'bleed') * dotTakenMult); enemyHp -= bleedDmg
       logs.push({ text:`🩸 出血ダメージ！ ${enemy.name}に${bleedDmg}ダメージ（${enemyBuffs.bleed.stacks}スタック）！`, color:'#ff4466' })
       if (enemyHp <= 0) break
       enemyBuffs.bleed.lastTurn = (enemyBuffs.bleed.lastTurn || 0) + 1

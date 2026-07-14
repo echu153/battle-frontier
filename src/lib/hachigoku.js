@@ -19,16 +19,28 @@
 //  critBoost:n                 敵のクリティカル率+n%（黒縄）
 //  critDmgPlus:n               敵のクリティカル威力+n（黒縄）
 //  specialTakenMult:0..1       敵が受ける特殊（魔法）ダメージの倍率（焦熱=0.5）※DoTは対象外
-//  physTakenMult:0..1          敵が受ける物理ダメージの倍率（将来用）
+//  physTakenMult:0..1          敵が受ける物理ダメージの倍率（氷結=0.5）※DoTは対象外
+//  dotTakenMult:n              敵が受ける状態異常DoTダメージの倍率（血池=3）
+//  selfDefMult:n               敵の防御・特防を常時n倍（針山=3・貫通が有効）
+//  defRamp:n                   ターン経過ごとに敵の防御・特防を累積n倍（叫喚=1.1）
+//  selfHealMult:n              敵自身の回復量n倍（餓鬼=2）
+//  playerHealMult:0..1         プレイヤーの全回復量の倍率（餓鬼=0.5）
+//  nonCritMult:0..1            敵のクリティカル以外の与ダメ倍率（黒縄=0.5）
+//  mirrorPlayerStats:0..1      プレイヤーの実効ステ(A/B/C/D/S)を×nで自身に反映（鏡獄=0.8・HPは難易度準拠）
 // passive: パッシブの表示ラベル（ロビー/戦闘開始時に表示）
 //
 // 【敵スキル】（Hachigoku.jsx の doEnemyTurn が解釈する）
 //  skill:    { name, mult, every }  every ターンごとに使う通常スキル（倍率mult・地獄固有の状態異常判定つき）
-//  ultimate: { name, mult, hpBelow, ... }  HPがhpBelow以下で1度だけ使う大技。追加効果:
+//  ultimate: { name, mult, hpBelow, ... }  HPがhpBelow以下で1度だけ使う大技（必中）。追加効果:
 //    inflict:['burn'|'poison'|'paralysis'|'bleed'|'stun']  確定付与（羽衣/紋章耐性/狂信で防げる）
 //    critGuaranteed:true   確定クリティカル（黒縄）
-//    lifesteal:0..1        この一撃の与ダメ×nを回復（餓鬼）
-//    randomAilments:n      ランダムな状態異常をn種付与（鏡獄）
+//    extraAction:true      大技の直後に確定で追加行動（氷結）
+//    pen:0..1              この一撃はプレイヤーの防御・特防をn割合無視（針山=0.8）
+//    bleedStacks:n         出血をnスタック付与（血池）
+//    selfHealPct:0..1      発動後、自身の最大HP×nを回復（血池=0.3）
+//    permLifesteal:0..1    戦闘終了まで与ダメ×nを回復し続ける（餓鬼=1.0）
+//    defGapScale:true      自身と相手の(防御+特防)の差が大きいほど与ダメ増加・最大3倍（叫喚）
+//    randomAilments:n      ランダムな状態異常をn種付与（鏡獄=3）
 // ============================================================
 
 export const HACHIGOKU_DIFFICULTIES = [
@@ -80,9 +92,10 @@ export const HACHIGOKU_HELLS = [
     crystals: ['chie', 'tokushu'],
     soul: 'マカハドマの魂', memory: 'マカハドマの記憶',
     desc: '絶対零度の吹雪を操る獄卒。強力な特殊攻撃で凍てつかせる。',
-    mods: { onHitAilment: [{ key: 'paralysis', chance: 20 }] },  // 凍結=麻痺として表現
+    passive: '凍魄の鎧（受ける物理ダメージ半減）',
+    mods: { onHitAilment: [{ key: 'paralysis', chance: 20 }], physTakenMult: 0.5 },  // 凍結=麻痺として表現
     skill: { name: '氷結波', mult: 1.6, every: 3 },
-    ultimate: { name: '摩訶鉢特摩', mult: 3.0, hpBelow: 0.5, inflict: ['paralysis'] },
+    ultimate: { name: '摩訶鉢特摩', mult: 3.0, hpBelow: 0.5, inflict: ['paralysis', 'stun'], extraAction: true },
   },
   {
     key: 'hariyama', name: '針山地獄', boss: 'アシパトラ', img: null,
@@ -90,9 +103,10 @@ export const HACHIGOKU_HELLS = [
     crystals: ['hakou', 'hama'],
     soul: 'アシパトラの魂', memory: 'アシパトラの記憶',
     desc: '刃の翼を持つ獄卒。攻撃は防御を貫通する。',
-    mods: { defPen: 0.5 },
+    passive: '針鉄の甲殻（防御・特防3倍 ※貫通が有効）',
+    mods: { defPen: 0.5, selfDefMult: 3 },
     skill: { name: '針山串刺し', mult: 1.6, every: 3 },
-    ultimate: { name: '阿尸波多羅', mult: 3.0, hpBelow: 0.5, inflict: ['bleed'] },
+    ultimate: { name: '阿尸波多羅', mult: 3.0, hpBelow: 0.5, pen: 0.8 },
   },
   {
     key: 'chiike', name: '血池地獄', boss: 'チボンダラ', img: null,
@@ -100,9 +114,13 @@ export const HACHIGOKU_HELLS = [
     crystals: ['resshou', 'kashou', 'moudoku'],
     soul: 'チボンダラの魂', memory: 'チボンダラの記憶',
     desc: '血の池から這い出た獄卒。出血・やけど・猛毒を撒き散らす。',
-    mods: { onHitAilment: [{ key: 'bleed', chance: 30 }, { key: 'poison', chance: 25 }, { key: 'burn', chance: 20 }] },
+    passive: '血肉の泥躯（通常攻撃・スキルダメージ半減／状態異常ダメージ3倍）',
+    mods: {
+      onHitAilment: [{ key: 'bleed', chance: 30 }, { key: 'poison', chance: 25 }, { key: 'burn', chance: 20 }],
+      physTakenMult: 0.5, specialTakenMult: 0.5, dotTakenMult: 3,
+    },
     skill: { name: '血池飛沫', mult: 1.6, every: 3 },
-    ultimate: { name: '血盆陀羅', mult: 3.0, hpBelow: 0.5, inflict: ['bleed', 'poison'] },
+    ultimate: { name: '血盆陀羅', mult: 3.0, hpBelow: 0.5, inflict: ['poison'], bleedStacks: 5, selfHealPct: 0.3 },
   },
   {
     key: 'gaki', name: '餓鬼地獄', boss: 'プレータ', img: null,
@@ -110,9 +128,10 @@ export const HACHIGOKU_HELLS = [
     crystals: ['bkyuushuu', 'tkyuushuu'],
     soul: 'プレータの魂', memory: 'プレータの記憶',
     desc: '飢えに苦しむ亡者の王。与えた傷からこちらの生気を貪り喰う。',
-    mods: { lifesteal: 0.3 },
+    passive: '無底の飢餓（自身の回復2倍／プレイヤーの回復量半減）',
+    mods: { lifesteal: 0.3, selfHealMult: 2, playerHealMult: 0.5 },
     skill: { name: '餓鬼の暴食', mult: 1.6, every: 3 },
-    ultimate: { name: '薜茘多', mult: 3.0, hpBelow: 0.5, lifesteal: 0.5 },
+    ultimate: { name: '薜茘多', mult: 3.0, hpBelow: 0.5, permLifesteal: 1.0 },
   },
   {
     key: 'kyokan', name: '叫喚地獄', boss: 'ラウラヴァ', img: null,
@@ -120,9 +139,10 @@ export const HACHIGOKU_HELLS = [
     crystals: ['shugo', 'kouma', 'kaihi'],
     soul: 'ラウラヴァの魂', memory: 'ラウラヴァの記憶',
     desc: '悲鳴を糧に肥え太る巨躯の獄卒。生半可な攻撃は通らない。',
-    mods: { flatDR: 0.2 },
+    passive: '肥大する慟哭（ターン経過ごとに防御・特防1.1倍）',
+    mods: { defRamp: 1.1 },
     skill: { name: '叫喚の咆哮', mult: 1.6, every: 3 },
-    ultimate: { name: '羅宇羅婆', mult: 3.0, hpBelow: 0.5, inflict: ['stun'] },
+    ultimate: { name: '羅宇羅婆', mult: 3.0, hpBelow: 0.5, defGapScale: true },
   },
   {
     key: 'kokujou', name: '黒縄地獄', boss: 'カーラスートラ', img: null,
@@ -130,7 +150,8 @@ export const HACHIGOKU_HELLS = [
     crystals: ['chimei', 'kaishin', 'kaitai'],
     soul: 'カーラスートラの魂', memory: 'カーラスートラの記憶',
     desc: '黒鉄の縄で罪人を裁く獄卒。急所を的確に打ち抜いてくる。',
-    mods: { critBoost: 25, critDmgPlus: 0.5 },
+    passive: '断罪の目測り（クリティカル率+50%／クリティカル以外のダメージ半減）',
+    mods: { critBoost: 50, nonCritMult: 0.5 },
     skill: { name: '黒縄断ち', mult: 1.6, every: 3 },
     ultimate: { name: '迦羅修多羅', mult: 3.0, hpBelow: 0.5, critGuaranteed: true },
   },
@@ -140,12 +161,13 @@ export const HACHIGOKU_HELLS = [
     crystals: ['boudoku', 'bouma', 'bouka', 'bouketsu', 'bouzetsu'],
     soul: 'ジョウハリの魂', memory: 'ジョウハリの記憶',
     desc: '浄玻璃の鏡に映した罪をあらゆる呪いに変える獄卒。',
+    passive: '浄玻璃の鏡映（プレイヤーのステータスを80%反映）',  // ※戦闘・ステの特別仕様は後日追記予定
     mods: { onHitAilment: [
       { key: 'poison', chance: 20 }, { key: 'paralysis', chance: 15 },
       { key: 'burn', chance: 15 }, { key: 'bleed', chance: 15 }, { key: 'stun', chance: 8 },
-    ] },
+    ], mirrorPlayerStats: 0.8 },
     skill: { name: '浄玻璃の裁き', mult: 1.6, every: 3 },
-    ultimate: { name: '浄玻璃', mult: 3.0, hpBelow: 0.5, randomAilments: 2 },
+    ultimate: { name: '浄玻璃', mult: 3.0, hpBelow: 0.5, randomAilments: 3 },
   },
 ]
 
