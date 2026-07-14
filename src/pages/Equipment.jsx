@@ -206,9 +206,9 @@ export default function Equipment() {
     } catch { /* weapons取得失敗時はステ非表示 */ }
   }
 
-  // 装備の種別を日本語表記に（英語のカテゴリはSLOT準拠で和訳・具体名の和名はそのまま）
-  const TYPE_JP = { weapon:'武器', armor:'防具', accessory:'装飾品', accessory2:'装飾品', shield:'盾' }
-  const jpType = (w) => { const t = w.weapon_type || w.slot || ''; return TYPE_JP[t] || t }
+  // 装備の種別は大分類（武器/防具/装飾品）にまとめて表示。slot(weapon/armor/accessory)基準。
+  const TYPE_JP = { weapon:'武器', armor:'防具', accessory:'装飾品', accessory2:'装飾品', shield:'防具' }
+  const jpType = (w) => TYPE_JP[w.slot] || TYPE_JP[w.weapon_type] || '装備'
   // レアリティのバッジ（普通の装備と同じ見た目・装備名の横に置く）
   const rarityBadge = (name) => {
     const w = boxWeapons[name]; if (!w?.rarity) return null
