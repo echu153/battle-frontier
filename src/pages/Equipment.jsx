@@ -119,9 +119,12 @@ export default function Equipment() {
   const [boxToast, setBoxToast] = useState('')       // 獲得トースト（自動消滅）
   const [boxMsg, setBoxMsg] = useState('')
   const [emblemRow, setEmblemRow] = useState(null)   // 紋章（第5枠・開発限定）: player_emblem行
-  const [bossBoxPopup, setBossBoxPopup] = useState(false)  // 初級ボス装備選択箱（初心者ビンゴ報酬）のポップアップ
+  const [bossBoxPopup, setBossBoxPopup] = useState(false)  // 初級ボス装備選択箱（初心者ビンゴ①報酬）のポップアップ
   const [bossBoxMsg, setBossBoxMsg] = useState('')
   const [bossBoxGot, setBossBoxGot] = useState(null)  // 交換成功で獲得した装備名
+  const [areaBox, setAreaBox] = useState(null)  // 初級/中級/上級エリアボス装備選択箱（②報酬）: {name,tier,choices}
+  const [areaBoxMsg, setAreaBoxMsg] = useState('')
+  const [areaBoxGot, setAreaBoxGot] = useState(null)
 
   // 選択券で交換できるS級レイド装備（redeem_raid_ticket の許可リストと一致）
   const RAID_TICKET_CHOICES = [
@@ -140,6 +143,30 @@ export default function Equipment() {
     { name:'略奪者の短剣',     desc:'エリア②ボス装備・短剣。' },
     { name:'影踏みのブーツ',   desc:'エリア②ボス装備・靴。' },
   ]
+  // 初級/中級/上級エリアボス装備選択箱（②報酬）: redeem_area_boss_box の許可リストと一致
+  const AREA_BOX = {
+    '初級エリアボス装備選択箱': { tier:'初級', choices:[
+      { name:'スライムの指輪', desc:'エリア①ボス装備・指輪。' },
+      { name:'蒼粘剣', desc:'エリア①ボス装備・剣。' },
+      { name:'略奪者の短剣', desc:'エリア②ボス装備・短剣。' },
+      { name:'影踏みのブーツ', desc:'エリア②ボス装備・靴。' },
+      { name:'古代魔導コア', desc:'エリア③ボス装備。' },
+      { name:'虚無の杖', desc:'エリア③ボス装備・杖。' },
+    ]},
+    '中級エリアボス装備選択箱': { tier:'中級', choices:[
+      { name:'海竜の鱗', desc:'エリア④ボス装備。' },
+      { name:'アクアクラウン', desc:'エリア④ボス装備。' },
+      { name:'雷鷲の爪牙', desc:'エリア⑤ボス装備。' },
+      { name:'嵐の重装甲', desc:'エリア⑤ボス装備。' },
+    ]},
+    '上級エリアボス装備選択箱': { tier:'上級', choices:[
+      { name:'絶零の魔導砲', desc:'エリア⑥ボス装備。' },
+      { name:'フロストバーンの聖鎧', desc:'エリア⑥ボス装備。' },
+      { name:'深紅の牙輪', desc:'エリア⑦ボス装備。' },
+      { name:'深紅の魔眼石', desc:'エリア⑦ボス装備。' },
+      { name:'インフェルノバスティオン', desc:'エリア⑦ボス装備。' },
+    ]},
+  }
 
   useEffect(() => { fetchAll() }, [])
 
@@ -192,6 +219,20 @@ export default function Equipment() {
       setBossBoxMsg(data?.error || 'エラーが発生しました')
     } else {
       setBossBoxGot(weaponName)  // ポップアップは閉じず、獲得表示を出す
+      await fetchAll()
+    }
+    setLoading(false)
+  }
+
+  // 初級/中級/上級エリアボス装備選択箱（②報酬）：箱を1個消費して対象エリアのボス装備を受け取る
+  const redeemAreaBossBox = async (tier, weaponName) => {
+    if (loading) return
+    setLoading(true); setAreaBoxMsg(''); setAreaBoxGot(null)
+    const { data, error } = await supabase.rpc('redeem_area_boss_box', { p_tier: tier, p_weapon_name: weaponName })
+    if (error || !data?.ok) {
+      setAreaBoxMsg(data?.error || 'エラーが発生しました')
+    } else {
+      setAreaBoxGot(weaponName)
       await fetchAll()
     }
     setLoading(false)
@@ -635,6 +676,9 @@ export default function Equipment() {
                         ) : pi.items.name === '初級ボス装備選択箱' ? (
                           <button onClick={() => { setBossBoxPopup(true); setBossBoxMsg(''); setBossBoxGot(null) }} disabled={loading}
                             style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
+                        ) : AREA_BOX[pi.items.name] ? (
+                          <button onClick={() => { setAreaBox({ name: pi.items.name, ...AREA_BOX[pi.items.name] }); setAreaBoxMsg(''); setAreaBoxGot(null) }} disabled={loading}
+                            style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
                         ) : pi.items.effect === 'equip_rename' ? (
                           <button onClick={() => { setRenamePopup(pi); setRenameTargetId(null); setRenameText(''); setRenameMsg('') }} disabled={loading}
                             style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
@@ -1069,6 +1113,37 @@ export default function Equipment() {
             </div>
             <button onClick={() => setBossBoxPopup(false)} disabled={loading}
               style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{bossBoxGot ? '閉じる' : 'キャンセル'}</button>
+          </div>
+        </div>
+      )}
+
+      {areaBox && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}
+          onClick={() => { if (!loading) setAreaBox(null) }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'#0a0c1a', border:'1px solid #ffcc44', padding:'20px', maxWidth:'360px', width:'92%', fontFamily:'monospace', maxHeight:'80vh', overflowY:'auto' }}>
+            <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'6px' }}>🎁 {areaBox.name}</div>
+            <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'14px', lineHeight:'1.5' }}>
+              交換する{areaBox.tier}エリアのボス装備を1つ選んでください。<br/>
+              <span style={{ color:'#ff8844' }}>選択すると箱を1個消費します。</span>
+            </div>
+            {areaBoxMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{areaBoxMsg}</div>}
+            {areaBoxGot && (
+              <div style={{ border:'1px solid #2a6a3a', background:'#04140a', padding:'10px', marginBottom:'12px', color:'#44ff88', fontSize:'12px', lineHeight:'1.5' }}>
+                ✨ 「{areaBoxGot}」を獲得しました！<br/>
+                <span style={{ color:'#88ccaa', fontSize:'10px' }}>装備タブで確認・装備できます。</span>
+              </div>
+            )}
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {areaBox.choices.map(c => (
+                <button key={c.name} onClick={() => redeemAreaBossBox(areaBox.tier, c.name)} disabled={loading}
+                  style={{ textAlign:'left', padding:'10px', background:'#001028', border:'1px solid #0055aa', color:'#cce0ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', opacity: loading ? 0.5 : 1 }}>
+                  <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'2px' }}>{c.name}</div>
+                  <div style={{ color:'#778899', fontSize:'10px' }}>{c.desc}</div>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setAreaBox(null)} disabled={loading}
+              style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{areaBoxGot ? '閉じる' : 'キャンセル'}</button>
           </div>
         </div>
       )}

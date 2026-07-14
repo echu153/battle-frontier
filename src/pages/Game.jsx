@@ -2068,20 +2068,23 @@ export default function Game() {
       const { data: sc } = await supabase.from('scarecrow_sessions').select('ends_at').eq('player_id', prof.id).eq('status', 'active').maybeSingle()
       setScarecrowState(sc ? (new Date(sc.ends_at) > new Date() ? 'training' : 'done') : null)
     } catch { /* 未導入時は無視 */ }
-    // 初心者ビンゴ: 受け取れる報酬（達成済みマス／成立ライン本数）の件数（is_admin限定先行）
+    // 初心者ビンゴ①②: 受け取れる報酬（達成済みマス／成立ライン本数）の合計件数（is_admin限定先行）
     if (prof.is_admin) {
       try {
-        const { data: bg } = await supabase.rpc('get_beginner_bingo')
-        if (bg && !bg.dev_only) {
-          const cells = bg.cells || []
-          const claimedCells = bg.claimed_cells || []
-          const claimedLines = bg.claimed_lines || []
+        const countClaimable = (bg) => {
+          if (!bg || bg.dev_only) return 0
+          const cells = bg.cells || [], cc = bg.claimed_cells || [], cl = bg.claimed_lines || []
           const lineCount = (bg.lines || []).filter(Boolean).length
           let n = 0
-          cells.forEach((done, i) => { if (done && !claimedCells.includes(i)) n++ })
-          for (let t = 1; t <= 8; t++) { if (lineCount >= t && !claimedLines.includes(t)) n++ }
-          setBingoClaimable(n)
-        } else setBingoClaimable(0)
+          cells.forEach((done, i) => { if (done && !cc.includes(i)) n++ })
+          for (let t = 1; t <= 8; t++) { if (lineCount >= t && !cl.includes(t)) n++ }
+          return n
+        }
+        const [{ data: bg1 }, { data: bg2 }] = await Promise.all([
+          supabase.rpc('get_beginner_bingo', { p_card: 1 }),
+          supabase.rpc('get_beginner_bingo', { p_card: 2 }),
+        ])
+        setBingoClaimable(countClaimable(bg1) + countClaimable(bg2))
       } catch { /* SQL未適用時は無視 */ setBingoClaimable(0) }
     } else setBingoClaimable(0)
   }
@@ -4071,9 +4074,9 @@ export default function Game() {
       } catch { /* RPC未適用時は無視 */ }
     }
 
-    // 初心者ビンゴ「出撃100回」カウント（サーバーが戦果を適用したときのみ・is_admin限定先行・fire-and-forget）
+    // 初心者ビンゴ①「出撃」カウント（サーバーが戦果を適用したときのみ・is_admin限定先行・fire-and-forget）
     if (profile?.is_admin && !(rpcError || (rpcResult && rpcResult.ok === false))) {
-      supabase.rpc('bingo_bump_sortie').then(() => {}, () => {})
+      supabase.rpc('bingo_bump', { p_key: 'sortie' }).then(() => {}, () => {})
     }
 
     await fetchProfile()

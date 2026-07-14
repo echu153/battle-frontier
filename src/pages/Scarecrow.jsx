@@ -99,6 +99,8 @@ export default function Scarecrow() {
       showMsg(data?.error || 'エラーが発生しました', '#ff4444')
     } else {
       setClaimResult(data)
+      // 初心者ビンゴ②「かかし修練3時間」：修練は最短でも3時間設定なので完了＝達成（RPC側で is_admin 自己ゲート）
+      supabase.rpc('bingo_bump', { p_key: 'scare3h' }).then(() => {}, () => {})
       await fetchState()
     }
     setLoading(false)
