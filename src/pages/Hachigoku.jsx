@@ -955,6 +955,11 @@ export default function Hachigoku() {
             <div style={{ color:'#ff9977', fontSize:'13px', marginBottom:'10px' }}>
               ⚔ {battleInfo.hell.name}【{HACHIGOKU_DIFFICULTIES[diffIdxOf(battleInfo.diff)]?.label}】 {battleInfo.hell.boss} 戦
             </div>
+            {battleInfo.hell.img && (
+              <div style={{ textAlign:'center', marginBottom:'10px' }}>
+                <img src={battleInfo.hell.img} alt={battleInfo.hell.boss} style={{ maxWidth:'180px', maxHeight:'180px', objectFit:'contain', filter:'drop-shadow(0 0 12px rgba(255,60,30,0.35))' }} />
+              </div>
+            )}
             {battling && <div style={{ color:'#cc8866', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
             <div style={{ marginBottom:'12px', maxHeight:'46vh', overflowY:'auto' }}>
               {battleLogs.map((l,i)=>(<BattleLogLine key={i} l={l} />))}

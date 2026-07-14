@@ -87,7 +87,7 @@ export const HACHIGOKU_HELLS = [
     ultimate: { name: '咤破那', mult: 3.0, hpBelow: 0.5, inflict: ['burn'] },
   },
   {
-    key: 'hyoketsu', name: '氷結地獄', boss: 'マカハドマ', img: null,
+    key: 'hyoketsu', name: '氷結地獄', boss: 'マカハドマ', img: '/makahadoma.png',
     theme: '特殊ダメージ', arch: 'caster', type: 'magical',
     crystals: ['chie', 'tokushu'],
     soul: 'マカハドマの魂', memory: 'マカハドマの記憶',
@@ -98,7 +98,7 @@ export const HACHIGOKU_HELLS = [
     ultimate: { name: '摩訶鉢特摩', mult: 3.0, hpBelow: 0.5, inflict: ['paralysis', 'stun'], extraAction: true },
   },
   {
-    key: 'hariyama', name: '針山地獄', boss: 'アシパトラ', img: null,
+    key: 'hariyama', name: '針山地獄', boss: 'アシパトラ', img: '/asipatora.png',
     theme: '貫通効果', arch: 'pierce', type: 'physical',
     crystals: ['hakou', 'hama'],
     soul: 'アシパトラの魂', memory: 'アシパトラの記憶',
@@ -109,7 +109,7 @@ export const HACHIGOKU_HELLS = [
     ultimate: { name: '阿尸波多羅', mult: 3.0, hpBelow: 0.5, pen: 0.8 },
   },
   {
-    key: 'chiike', name: '血池地獄', boss: 'チボンダラ', img: null,
+    key: 'chiike', name: '血池地獄', boss: 'チボンダラ', img: '/tibondara.png',
     theme: '状態異常ダメージ', arch: 'hexer', type: 'physical',
     crystals: ['resshou', 'kashou', 'moudoku'],
     soul: 'チボンダラの魂', memory: 'チボンダラの記憶',
@@ -123,7 +123,7 @@ export const HACHIGOKU_HELLS = [
     ultimate: { name: '血盆陀羅', mult: 3.0, hpBelow: 0.5, inflict: ['poison'], bleedStacks: 5, selfHealPct: 0.3 },
   },
   {
-    key: 'gaki', name: '餓鬼地獄', boss: 'プレータ', img: null,
+    key: 'gaki', name: '餓鬼地獄', boss: 'プレータ', img: null,  // 画像は後日追加予定
     theme: '吸血効果', arch: 'drainer', type: 'physical',
     crystals: ['bkyuushuu', 'tkyuushuu'],
     soul: 'プレータの魂', memory: 'プレータの記憶',
@@ -134,7 +134,7 @@ export const HACHIGOKU_HELLS = [
     ultimate: { name: '薜茘多', mult: 3.0, hpBelow: 0.5, permLifesteal: 1.0 },
   },
   {
-    key: 'kyokan', name: '叫喚地獄', boss: 'ラウラヴァ', img: null,
+    key: 'kyokan', name: '叫喚地獄', boss: 'ラウラヴァ', img: '/raurava.png',
     theme: '耐久', arch: 'tank', type: 'physical',
     crystals: ['shugo', 'kouma', 'kaihi'],
     soul: 'ラウラヴァの魂', memory: 'ラウラヴァの記憶',
@@ -145,7 +145,7 @@ export const HACHIGOKU_HELLS = [
     ultimate: { name: '羅宇羅婆', mult: 3.0, hpBelow: 0.5, defGapScale: true },
   },
   {
-    key: 'kokujou', name: '黒縄地獄', boss: 'カーラスートラ', img: null,
+    key: 'kokujou', name: '黒縄地獄', boss: 'カーラスートラ', img: '/ka-rasu-tora.png',
     theme: 'クリティカル', arch: 'slayer', type: 'physical',
     crystals: ['chimei', 'kaishin', 'kaitai'],
     soul: 'カーラスートラの魂', memory: 'カーラスートラの記憶',
@@ -156,7 +156,7 @@ export const HACHIGOKU_HELLS = [
     ultimate: { name: '迦羅修多羅', mult: 3.0, hpBelow: 0.5, critGuaranteed: true },
   },
   {
-    key: 'kyogoku', name: '鏡獄地獄', boss: 'ジョウハリ', img: null,
+    key: 'kyogoku', name: '鏡獄地獄', boss: 'ジョウハリ', img: '/zyouhari.png',
     theme: '状態異常耐性', arch: 'hexer', type: 'magical',
     crystals: ['boudoku', 'bouma', 'bouka', 'bouketsu', 'bouzetsu'],
     soul: 'ジョウハリの魂', memory: 'ジョウハリの記憶',
