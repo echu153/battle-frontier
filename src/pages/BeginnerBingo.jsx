@@ -81,9 +81,12 @@ export default function BeginnerBingo() {
       flash(map[res?.error] || `受取失敗: ${res?.error || ''}`, '#ff5555')
       return
     }
-    // 獲得内容をポップアップで表示（分かりやすく）
+    // 獲得内容をポップアップで表示（マス／ラインどちらも対象。どのミッションかも明示）
     const lines = rewardLines(res.rewards)
-    setGot({ title: kind === 'line' ? `${idx}ライン達成報酬` : 'ミッション達成報酬', lines: lines.length ? lines : [res.label || '報酬'] })
+    const title = kind === 'line'
+      ? `${idx}ライン達成 報酬`
+      : `「${CELLS[idx]?.label || 'ミッション'}」達成 報酬`
+    setGot({ title, lines: lines.length ? lines : [res.label || '報酬'] })
     await load()
   }
 
