@@ -44,6 +44,7 @@ export default function BeginnerBingo() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [devOnly, setDevOnly] = useState(false)
+  const [got, setGot] = useState(null)   // 受取成功時の獲得内容ポップアップ { title, lines[] }
 
   useEffect(() => {
     (async () => {
@@ -65,6 +66,11 @@ export default function BeginnerBingo() {
 
   const rewardOf = (kind, idx) => (data?.rewards || []).find(r => r.kind === kind && r.idx === idx) || null
 
+  // 報酬配列 [{type,name,qty}] → 表示用の1件ずつのテキスト
+  const rewardLines = (arr) => (arr || []).map(r =>
+    r.type === 'gold' ? `${Number(r.qty || 0).toLocaleString()} Gold` : `${r.name}${(r.qty || 1) > 1 ? ` ×${r.qty}` : ''}`
+  )
+
   const doClaim = async (kind, idx) => {
     setBusy(true)
     const { data: res, error } = await supabase.rpc('claim_beginner_bingo', { p_kind: kind, p_idx: idx })
@@ -75,7 +81,9 @@ export default function BeginnerBingo() {
       flash(map[res?.error] || `受取失敗: ${res?.error || ''}`, '#ff5555')
       return
     }
-    flash(`🎁 受け取りました！ ${fmtReward(res)}`)
+    // 獲得内容をポップアップで表示（分かりやすく）
+    const lines = rewardLines(res.rewards)
+    setGot({ title: kind === 'line' ? `${idx}ライン達成報酬` : 'ミッション達成報酬', lines: lines.length ? lines : [res.label || '報酬'] })
     await load()
   }
 
@@ -191,6 +199,30 @@ export default function BeginnerBingo() {
           ※「初級ボス装備選択箱」は<span style={{ color: '#aa8844' }}>装備タブ</span>から使うと、エリア①〜②のボス装備1つと交換できます。
         </div>
       </div>
+
+      {/* 受取成功ポップアップ（獲得内容をはっきり表示） */}
+      {got && (
+        <div onClick={() => setGot(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '16px' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#140f04', border: '1px solid #ccaa44', borderRadius: '6px', padding: '22px 20px', maxWidth: '340px', width: '100%', fontFamily: 'monospace', textAlign: 'center', boxShadow: '0 0 24px rgba(204,170,68,0.25)' }}>
+            <div style={{ fontSize: '40px', marginBottom: '6px' }}>🎉</div>
+            <div style={{ color: '#ffdd88', fontSize: '15px', letterSpacing: '1px', marginBottom: '4px' }}>報酬を獲得！</div>
+            <div style={{ color: '#9a8a5a', fontSize: '11px', marginBottom: '14px' }}>{got.title}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '18px' }}>
+              {got.lines.map((t, i) => (
+                <div key={i} style={{ background: '#241a06', border: '1px solid #5a4818', borderRadius: '3px', padding: '9px 10px', color: '#ffe6a6', fontSize: '13px' }}>
+                  🎁 {t}
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setGot(null)}
+              style={{ width: '100%', background: '#3a2a06', border: '1px solid #ccaa44', color: '#ffdd88', padding: '9px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '13px', borderRadius: '3px' }}>
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
