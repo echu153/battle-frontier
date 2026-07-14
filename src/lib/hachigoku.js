@@ -123,7 +123,7 @@ export const HACHIGOKU_HELLS = [
     ultimate: { name: '血盆陀羅', mult: 3.0, hpBelow: 0.5, inflict: ['poison'], bleedStacks: 5, selfHealPct: 0.3 },
   },
   {
-    key: 'gaki', name: '餓鬼地獄', boss: 'プレータ', img: null,  // 画像は後日追加予定
+    key: 'gaki', name: '餓鬼地獄', boss: 'プレータ', img: '/pure-ta.png',
     theme: '吸血効果', arch: 'drainer', type: 'physical',
     crystals: ['bkyuushuu', 'tkyuushuu'],
     soul: 'プレータの魂', memory: 'プレータの記憶',
