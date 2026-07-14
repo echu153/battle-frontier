@@ -93,6 +93,11 @@ const MENU_DEFS = {
 export const EVENT_START_MS = Date.UTC(2026, 5, 21, 20, 0, 0) // JST 6/22 05:00
 export const EVENT_END_MS   = Date.UTC(2026, 6, 12, 20, 0, 0) // JST 7/13 05:00（1週間延長）
 
+// レイドボスイベント「勇気の証」の開催期間（JST 2026/7/13 05:00 〜 7/27 05:00）。
+// レイドボスボタンの「🎖イベント中」表示用。期間を過ぎると自動で非表示になる。
+export const RAID_EVENT_START_MS = Date.UTC(2026, 6, 12, 20, 0, 0) // JST 7/13 05:00
+export const RAID_EVENT_END_MS   = Date.UTC(2026, 6, 26, 20, 0, 0) // JST 7/27 05:00
+
 // 多段ヒットスキル：行動全体ではなく1発ごとに回避・クリティカル・ダメージ判定する
 export const MULTI_HIT_SKILLS = new Set(['マジックアロー','三連射','メテオストライク','連打','五連殺','飛天三角蹴り','連装銃撃','群れの号令','符術・式打ち'])
 
@@ -5408,6 +5413,11 @@ export default function Game() {
     const now = serverNow()
     return now >= EVENT_START_MS && now < EVENT_END_MS
   })()
+  // レイドボスイベント「勇気の証」開催中か（期間を過ぎると自動でfalse＝表示が消える）
+  const raidEventActive = (() => {
+    const now = serverNow()
+    return now >= RAID_EVENT_START_MS && now < RAID_EVENT_END_MS
+  })()
 
   // 解放判定：基本はキャラLv。錬金部屋のみエリア③ボス撃破（=エリア4解放）が条件。
   const isMenuUnlocked = (key) => {
@@ -6079,7 +6089,7 @@ export default function Game() {
                         )}
                         <button onClick={()=>nav('/territory')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 領地</button>
                         <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット</button>
-                        <button onClick={()=>nav('/raid')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ レイドボス</button>
+                        <button onClick={()=>nav('/raid')} style={{ padding:'10px', background: raidEventActive ? '#1a1000' : '#001020', border:`1px solid ${raidEventActive ? '#ffaa33' : '#ff6644'}`, color: raidEventActive ? '#ffbb44' : '#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', whiteSpace:'nowrap' }}>⚔ レイドボス{raidEventActive && <span style={{ color:'#ffcc44', fontSize:'10px', marginLeft:'4px' }}>🎖イベント中</span>}</button>
                         {lockOr('abyss', <button key="challenge" onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ padding:'10px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ 挑戦</button>)}
                         <button key="rankmatch" onClick={()=>setShowRankMatch(true)} style={{ padding:'10px', background:'#141204', border:'1px solid #c0a83a', color:'#ffd75e', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏅 ランクマッチ <span style={{ fontSize:'9px', color:'#88ddaa' }}>β</span></button>
                       </div>
@@ -6652,7 +6662,7 @@ export default function Game() {
                           )}
                           <button onClick={()=>nav('/territory')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 領地</button>
                           <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット</button>
-                          <button onClick={()=>nav('/raid')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ レイドボス</button>
+                          <button onClick={()=>nav('/raid')} style={{ padding:'10px', background: raidEventActive ? '#1a1000' : '#001020', border:`1px solid ${raidEventActive ? '#ffaa33' : '#ff6644'}`, color: raidEventActive ? '#ffbb44' : '#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', whiteSpace:'nowrap' }}>⚔ レイドボス{raidEventActive && <span style={{ color:'#ffcc44', fontSize:'10px', marginLeft:'4px' }}>🎖イベント中</span>}</button>
                           {lockOr('abyss', <button key="challenge" onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ padding:'10px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ 挑戦</button>)}
                           <button key="rankmatch" onClick={()=>setShowRankMatch(true)} style={{ padding:'10px', background:'#141204', border:'1px solid #c0a83a', color:'#ffd75e', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏅 ランクマッチ <span style={{ fontSize:'9px', color:'#88ddaa' }}>β</span></button>
                         </div>
