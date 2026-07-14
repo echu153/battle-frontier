@@ -176,29 +176,41 @@ AS $$
 $$;
 
 -- ---------- 7) 取得RPC ----------
+--   progress: ビンゴ開始後の増分（sortie/enhance/boss_kill）。クライアントで各マスの進捗率(%)表示に使う。
 CREATE OR REPLACE FUNCTION get_beginner_bingo()
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
-  v_uid   uuid := auth.uid();
-  v_cells boolean[];
-  v_lines boolean[];
-  st      beginner_bingo_state%ROWTYPE;
+  v_uid     uuid := auth.uid();
+  v_cells   boolean[];
+  v_lines   boolean[];
+  st        beginner_bingo_state%ROWTYPE;
+  p         profiles%ROWTYPE;
+  v_sortie  integer;
+  v_enhance integer;
+  v_boss    integer;
 BEGIN
   IF NOT COALESCE((SELECT is_admin FROM profiles WHERE id = v_uid), false) THEN
     RETURN jsonb_build_object('dev_only', true);
   END IF;
 
-  v_cells := _bingo_cells(v_uid);
+  v_cells := _bingo_cells(v_uid);   -- 基準値(base_*)の記録もここで行われる
   v_lines := _bingo_lines(v_cells);
   SELECT * INTO st FROM beginner_bingo_state WHERE player_id = v_uid;
+  SELECT * INTO p  FROM profiles WHERE id = v_uid;
+
+  -- 開始後の増分（0未満はクランプ）
+  v_sortie  := GREATEST(COALESCE(p.bingo_sortie_count,0) - COALESCE(st.base_sortie,0), 0);
+  v_enhance := GREATEST((COALESCE(p.enhance_success_count,0) + COALESCE(p.enhance_fail_count,0)) - COALESCE(st.base_enhance,0), 0);
+  v_boss    := GREATEST(COALESCE(p.boss_kill_count,0) - COALESCE(st.base_boss_kill,0), 0);
 
   RETURN jsonb_build_object(
     'cells',         to_jsonb(v_cells),
     'lines',         to_jsonb(v_lines),
     'claimed_cells', to_jsonb(COALESCE(st.claimed_cells, '{}')),
     'claimed_lines', to_jsonb(COALESCE(st.claimed_lines, '{}')),
+    'progress',      jsonb_build_object('sortie', v_sortie, 'enhance', v_enhance, 'boss_kill', v_boss),
     'rewards',       (SELECT jsonb_agg(jsonb_build_object(
                         'kind', kind, 'idx', idx, 'rewards', rewards, 'label', label))
                       FROM beginner_bingo_rewards)

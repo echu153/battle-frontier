@@ -11,16 +11,17 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
 // マス定義（index はビンゴ盤の row-major。サーバー _bingo_cells と一致させること）
+//   prog: [progressキー, 目標値]。進捗率(%)表示に使う（ログイン等の一発達成マスは省略）。
 const CELLS = [
-  { label: '出撃10回',    hint: '出撃で通算10回戦う' },                    // 0
-  { label: '出撃30回',    hint: '出撃で通算30回戦う' },                    // 1
-  { label: '出撃50回',    hint: '出撃で通算50回戦う' },                    // 2
-  { label: '出撃100回',   hint: '出撃で通算100回戦う' },                   // 3
-  { label: 'ログイン1日目', hint: 'ゲームにログインする', center: true },   // 4（中央）
-  { label: '強化1回',     hint: '鍛冶屋で装備を1回強化する' },             // 5
-  { label: '強化5回',     hint: '鍛冶屋で装備を5回強化する' },             // 6
-  { label: '強化10回',    hint: '鍛冶屋で装備を10回強化する' },            // 7
-  { label: '始まりの森ボス', hint: 'エリア①「始まりの森」のボスを倒す' },   // 8
+  { label: '出撃10回',    hint: '出撃で通算10回戦う',      prog: ['sortie', 10] },   // 0
+  { label: '出撃30回',    hint: '出撃で通算30回戦う',      prog: ['sortie', 30] },   // 1
+  { label: '出撃50回',    hint: '出撃で通算50回戦う',      prog: ['sortie', 50] },   // 2
+  { label: '出撃100回',   hint: '出撃で通算100回戦う',     prog: ['sortie', 100] },  // 3
+  { label: 'ログイン1日目', hint: 'ゲームにログインする', center: true },            // 4（中央）
+  { label: '強化1回',     hint: '鍛冶屋で装備を1回強化する', prog: ['enhance', 1] },  // 5
+  { label: '強化5回',     hint: '鍛冶屋で装備を5回強化する', prog: ['enhance', 5] },  // 6
+  { label: '強化10回',    hint: '鍛冶屋で装備を10回強化する', prog: ['enhance', 10] },// 7
+  { label: '始まりの森ボス', hint: 'エリア①「始まりの森」のボスを倒す', prog: ['boss_kill', 1] }, // 8
 ]
 
 // ライン報酬は「達成したライン本数」で解放（idx = 必要本数 1〜8）。どのラインかは不問。
@@ -110,6 +111,7 @@ export default function BeginnerBingo() {
   const lines = data?.lines || []
   const claimedCells = data?.claimed_cells || []
   const claimedLines = data?.claimed_lines || []
+  const progress = data?.progress || {}   // { sortie, enhance, boss_kill } 開始後の増分
   const doneCount = cells.filter(Boolean).length
   const lineCount = lines.filter(Boolean).length
 
@@ -142,6 +144,11 @@ export default function BeginnerBingo() {
             const done = !!cells[i]
             const claimed = claimedCells.includes(i)
             const rw = rewardOf('cell', i)
+            // 進捗率（開始後の増分 / 目標値）。目標を持つマスのみ。
+            const raw = c.prog ? (progress[c.prog[0]] || 0) : 0
+            const target = c.prog ? c.prog[1] : 0
+            const cur = c.prog ? Math.min(raw, target) : 0
+            const pct = c.prog ? Math.min(100, Math.round((raw / target) * 100)) : 0
             return (
               <div key={i} style={{
                 border: `1px solid ${done ? '#7a6a1a' : '#2a2418'}`,
@@ -164,7 +171,17 @@ export default function BeginnerBingo() {
                       padding: '3px', cursor: busy ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: '9.5px', borderRadius: '2px',
                     }}>報酬受取</button>
                   ) : (
-                    <div style={{ color: '#5a5038', fontSize: '8.5px', textAlign: 'center' }}>{fmtReward(rw)}</div>
+                    <div style={{ textAlign: 'center' }}>
+                      {c.prog && (
+                        <>
+                          <div style={{ height: '4px', background: '#241c08', borderRadius: '2px', overflow: 'hidden', marginBottom: '2px' }}>
+                            <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg,#5a4818,#ffcc44)' }} />
+                          </div>
+                          <div style={{ color: '#b89a4a', fontSize: '8.5px' }}>{cur}/{target}（{pct}%）</div>
+                        </>
+                      )}
+                      <div style={{ color: '#5a5038', fontSize: '8px', marginTop: '2px' }}>{fmtReward(rw)}</div>
+                    </div>
                   )}
                 </div>
               </div>
