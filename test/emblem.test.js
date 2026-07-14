@@ -10,7 +10,7 @@ import {
   emblemAllocTotal,
   calcEmblemBonus,
 } from '../src/lib/emblem.js'
-import { HACHIGOKU_HELLS, HACHIGOKU_DIFFICULTIES, makeHachigokuEnemy } from '../src/lib/hachigoku.js'
+import { HACHIGOKU_HELLS, HACHIGOKU_DIFFICULTIES, HACHIGOKU_HP_MULT, makeHachigokuEnemy } from '../src/lib/hachigoku.js'
 import { emblemDmgMult, emblemDrainAmount, emblemDotMult } from '../src/lib/emblemCombat.js'
 
 test('getEmblemRank レベル→ランク境界', () => {
@@ -91,7 +91,8 @@ test('makeHachigokuEnemy 総合力が推奨戦闘力に概ね一致', () => {
     for (const d of HACHIGOKU_DIFFICULTIES) {
       const e = makeHachigokuEnemy(h.key, d.key)
       assert.ok(e, `${h.key}/${d.key} 生成失敗`)
-      const total = Math.floor(e.hp / 10 + e.atk + e.def + e.matk + e.mdef + e.spd)
+      // HPは演出上×HACHIGOKU_HP_MULTされているため、配分検証は増量前の値で行う
+      const total = Math.floor(e.hp / HACHIGOKU_HP_MULT / 10 + e.atk + e.def + e.matk + e.mdef + e.spd)
       const ratio = total / d.target
       assert.ok(ratio > 0.95 && ratio < 1.05, `${h.key}/${d.key}: 総合力${total} が目標${d.target}から乖離`)
       // タイプと攻撃ステの整合（magicalはmatk・physicalはatkに寄せる）

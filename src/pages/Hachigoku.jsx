@@ -391,29 +391,37 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     playerAttacking = false
   }
 
-  // 敵の攻撃命中時: 地獄ごとの状態異常付与（哭雨の羽衣/紋章耐性/狂信で防げる）
+  // 状態異常を1件付与（哭雨の羽衣/紋章耐性/狂信で防げる）。付与できたら true
   const AIL_LABEL = { burn:'やけど', poison:'毒', bleed:'出血', paralysis:'麻痺', stun:'スタン' }
+  const inflictAilment = (key) => {
+    if (playerHp <= 0) return false
+    if (playerBuffs.statusImmune?.turns > 0) return false
+    if (key !== 'stun' && key !== 'bleed' && playerBuffs[key]?.turns > 0) return false
+    if (ailmentShieldBlocks(playerBuffs, logs)) return false
+    if (emblemBlocksAilment(eff, key, logs)) return false
+    if (key === 'burn')      playerBuffs.burn = { turns:5, dmgRate:0.02 }
+    else if (key === 'poison')    playerBuffs.poison = { turns:4, dmgRate:0.03 }
+    else if (key === 'paralysis') playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }
+    else if (key === 'stun')      playerBuffs.stun = { turns:1 }
+    else if (key === 'bleed') {
+      const b = playerBuffs.bleed
+      playerBuffs.bleed = { stacks: Math.min(5, (b?.stacks || 0) + 1), lastTurn: 0 }
+    }
+    logs.push({ text:`🌫 ${enemy.name}の獄気！ ${AIL_LABEL[key]}を負わされた！`, color:'#aa66ff' })
+    return true
+  }
+
+  // 敵の攻撃命中時: 地獄ごとの状態異常付与（確率）
   const applyOnHitAilments = () => {
     if (!mods.onHitAilment || playerHp <= 0) return
-    if (playerBuffs.statusImmune?.turns > 0) return
     for (const { key, chance } of mods.onHitAilment) {
       if (Math.random() * 100 >= chance) continue
-      if (key !== 'stun' && key !== 'bleed' && playerBuffs[key]?.turns > 0) continue
-      if (ailmentShieldBlocks(playerBuffs, logs)) continue
-      if (emblemBlocksAilment(eff, key, logs)) continue
-      if (key === 'burn')      playerBuffs.burn = { turns:5, dmgRate:0.02 }
-      else if (key === 'poison')    playerBuffs.poison = { turns:4, dmgRate:0.03 }
-      else if (key === 'paralysis') playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }
-      else if (key === 'stun')      playerBuffs.stun = { turns:1 }
-      else if (key === 'bleed') {
-        const b = playerBuffs.bleed
-        playerBuffs.bleed = { stacks: Math.min(5, (b?.stacks || 0) + 1), lastTurn: 0 }
-      }
-      logs.push({ text:`🌫 ${enemy.name}の獄気！ ${AIL_LABEL[key]}を負わされた！`, color:'#aa66ff' })
+      inflictAilment(key)
     }
   }
 
-  const doEnemyAttack = (isExtra = false) => {
+  // cast: 敵スキル/大技 { name, mult, isUlt, inflict, critGuaranteed, lifesteal, randomAilments }（nullなら通常攻撃）
+  const doEnemyAttack = (isExtra = false, cast = null) => {
     if (summonAbsorbBasic(summon, { atk: enemy.atk, matk: enemy.matk, type: enemy.type, name: enemy.name }, enemyBuffs, turn, logs)) return
     const holyFieldDefE = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
     const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
@@ -429,18 +437,19 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     const eAtk = isEM
       ? (enemy.matk||0) * (enemyBuffs.matkUp ? enemyBuffs.matkUp.rate : 1) * burnDebuffE
       : enemy.atk * (enemyBuffs.atkUp ? enemyBuffs.atkUp.rate : 1) * burnDebuffE
-    const isCrit = Math.random()*100 < enemyCritRate
+    const isCrit = cast?.critGuaranteed ? true : Math.random()*100 < enemyCritRate
     const defForCalc = isEM ? Math.max(1, pMdef) : Math.max(1, pDef)
-    const baseDmg = Math.max(1, Math.floor(eAtk*eAtk/Math.max(1,eAtk+defForCalc))+Math.floor(Math.random()*3))
+    const baseDmg = Math.max(1, Math.floor(eAtk*eAtk/Math.max(1,eAtk+defForCalc) * (cast?.mult || 1))+Math.floor(Math.random()*3))
     const enemySpdBuff = enemyBuffs.spdUp ? enemyBuffs.spdUp.rate : 1
     const enemySpdDebuff = enemyBuffs.spdDown?.turns > 0 ? enemyBuffs.spdDown.rate : 1
     const playerSpdDebuff = playerBuffs.spdDown ? playerBuffs.spdDown.rate : 1
     const effectivePlayerSpd = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * playerSpdDebuff
     const effectiveEnemySpd = enemySpd * enemySpdBuff * enemySpdDebuff
-    const evasionRate = calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0) + (hasOnmi ? 5 : 0)
+    // 大技（isUlt）は必中。通常攻撃・通常スキルは回避可能
+    const evasionRate = cast?.isUlt ? 0 : calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0) + (hasOnmi ? 5 : 0)
     if (evasionRate > 0 && Math.random()*100 < evasionRate) {
       const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
-      logs.push({ text:`${prefix}${enemy.name}の攻撃！ しかし回避した！`, color:'#44ff88' })
+      logs.push({ text:`${prefix}${enemy.name}の${cast ? `「${cast.name}」` : '攻撃'}！ しかし回避した！`, color:'#44ff88' })
       evoOnEvade(eff, playerBuffs, logs)
       return
     }
@@ -455,16 +464,43 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
     const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
     const critText = isCrit ? ' 💥クリティカル！' : ''
-    logs.push({ text:`${prefix}${enemy.name}の攻撃！ あなたに${finalDmg}ダメージ…${critText}`, color:isCrit?'#ff2200':'#ff6644' })
-    // 餓鬼: 与えたダメージの一定割合を吸収して回復
-    if (mods.lifesteal && finalDmg > 0 && enemyHp > 0) {
-      const heal = Math.floor(finalDmg * mods.lifesteal)
+    logs.push({ text:`${prefix}${enemy.name}の${cast ? `「${cast.name}」` : '攻撃'}！ あなたに${finalDmg}ダメージ…${critText}`, color: cast?.isUlt ? '#ff2266' : isCrit ? '#ff2200' : '#ff6644' })
+    // 餓鬼: 与えたダメージの一定割合を吸収して回復（大技はより多く吸う）
+    const lsRate = Math.max(mods.lifesteal || 0, cast?.lifesteal || 0)
+    if (lsRate > 0 && finalDmg > 0 && enemyHp > 0) {
+      const heal = Math.floor(finalDmg * lsRate)
       if (heal > 0) {
         enemyHp = Math.min(enemyMaxHp, enemyHp + heal)
         logs.push({ text:`🧛 ${enemy.name}はあなたの生気を喰らい${heal}回復した！`, color:'#cc66aa' })
       }
     }
     if (finalDmg > 0) applyOnHitAilments()
+    // 大技の確定付与（羽衣/紋章耐性/狂信で防げる）
+    if (finalDmg > 0 && cast?.inflict) for (const key of cast.inflict) inflictAilment(key)
+    // 鏡獄の大技: ランダムな状態異常をn種付与
+    if (finalDmg > 0 && (cast?.randomAilments || 0) > 0) {
+      const pool = ['burn', 'poison', 'paralysis', 'bleed', 'stun'].sort(() => Math.random() - 0.5)
+      let applied = 0
+      for (const key of pool) {
+        if (applied >= cast.randomAilments) break
+        if (inflictAilment(key)) applied++
+      }
+    }
+  }
+
+  // 1ターン分の敵行動: HP50%以下で1度だけ大技 → everyターンごとに通常スキル → 通常攻撃
+  let ultUsed = false
+  const doEnemyTurn = () => {
+    const ult = enemy.ultimate
+    if (ult && !ultUsed && enemyHp / enemyMaxHp <= (ult.hpBelow || 0.5)) {
+      ultUsed = true
+      logs.push({ text:`━━ ${enemy.name}が大技を放つ！ ━━`, color:'#ff44aa' })
+      doEnemyAttack(false, { ...ult, isUlt: true })
+      return
+    }
+    const sk = enemy.skill
+    if (sk && sk.every > 0 && turn % sk.every === 0) { doEnemyAttack(false, sk); return }
+    doEnemyAttack(false)
   }
 
   while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
@@ -577,7 +613,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       enemySkipped = true; enemyBuffs.paralysis.skipRate *= 0.5
     }
     if (!enemySkipped) {
-      doEnemyAttack(false)
+      doEnemyTurn()
       if (playerHp <= 0) break
       if (enemyExtraRate > 0 && Math.random()*100 < enemyExtraRate) doEnemyAttack(true)
     }

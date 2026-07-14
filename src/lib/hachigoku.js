@@ -21,6 +21,14 @@
 //  specialTakenMult:0..1       敵が受ける特殊（魔法）ダメージの倍率（焦熱=0.5）※DoTは対象外
 //  physTakenMult:0..1          敵が受ける物理ダメージの倍率（将来用）
 // passive: パッシブの表示ラベル（ロビー/戦闘開始時に表示）
+//
+// 【敵スキル】（Hachigoku.jsx の doEnemyTurn が解釈する）
+//  skill:    { name, mult, every }  every ターンごとに使う通常スキル（倍率mult・地獄固有の状態異常判定つき）
+//  ultimate: { name, mult, hpBelow, ... }  HPがhpBelow以下で1度だけ使う大技。追加効果:
+//    inflict:['burn'|'poison'|'paralysis'|'bleed'|'stun']  確定付与（羽衣/紋章耐性/狂信で防げる）
+//    critGuaranteed:true   確定クリティカル（黒縄）
+//    lifesteal:0..1        この一撃の与ダメ×nを回復（餓鬼）
+//    randomAilments:n      ランダムな状態異常をn種付与（鏡獄）
 // ============================================================
 
 export const HACHIGOKU_DIFFICULTIES = [
@@ -37,6 +45,9 @@ export const HACHIGOKU_DAILY_WINS = 3  // 1日の勝利回数上限（JST朝5時
 // プレイヤーの与ダメを×0.7し、敵HPも×0.7 → 撃破ターン数は変わらないが、
 // ブラッディロア/紋章吸収などの「与ダメ比例回復」の回復量が3割減る。調整はここ。
 export const HACHIGOKU_DMG_COMPRESS = 0.7
+
+// 敵HP倍率（2026-07-14: ×2に増量。推奨戦闘力の表示は据え置き）
+export const HACHIGOKU_HP_MULT = 2
 
 // アーキタイプ（hpFrac=HPへ割く総合力の割合、w=残り配分・合計1）
 const ARCH = {
@@ -60,6 +71,8 @@ export const HACHIGOKU_HELLS = [
     desc: '灼熱の業火を纏う獄卒。強烈な物理攻撃とやけどで焼き尽くす。',
     passive: '灼熱の巨躯（受ける特殊ダメージ半減）',
     mods: { onHitAilment: [{ key: 'burn', chance: 30 }], specialTakenMult: 0.5 },
+    skill: { name: '焦熱撃', mult: 1.6, every: 3 },
+    ultimate: { name: '焦熱地獄・業火葬', mult: 3.0, hpBelow: 0.5, inflict: ['burn'] },
   },
   {
     key: 'hyoketsu', name: '氷結地獄', boss: 'マカハドマ', img: null,
@@ -68,6 +81,8 @@ export const HACHIGOKU_HELLS = [
     soul: 'マカハドマの魂', memory: 'マカハドマの記憶',
     desc: '絶対零度の吹雪を操る獄卒。強力な特殊攻撃で凍てつかせる。',
     mods: { onHitAilment: [{ key: 'paralysis', chance: 20 }] },  // 凍結=麻痺として表現
+    skill: { name: '氷結波', mult: 1.6, every: 3 },
+    ultimate: { name: '氷結地獄・絶対零度', mult: 3.0, hpBelow: 0.5, inflict: ['paralysis'] },
   },
   {
     key: 'hariyama', name: '針山地獄', boss: 'アシパトラ', img: null,
@@ -76,6 +91,8 @@ export const HACHIGOKU_HELLS = [
     soul: 'アシパトラの魂', memory: 'アシパトラの記憶',
     desc: '刃の翼を持つ獄卒。攻撃は防御を貫通する。',
     mods: { defPen: 0.5 },
+    skill: { name: '針山串刺し', mult: 1.6, every: 3 },
+    ultimate: { name: '針山地獄・千刃葬', mult: 3.0, hpBelow: 0.5, inflict: ['bleed'] },
   },
   {
     key: 'chiike', name: '血池地獄', boss: 'チボンダラ', img: null,
@@ -84,6 +101,8 @@ export const HACHIGOKU_HELLS = [
     soul: 'チボンダラの魂', memory: 'チボンダラの記憶',
     desc: '血の池から這い出た獄卒。出血・やけど・猛毒を撒き散らす。',
     mods: { onHitAilment: [{ key: 'bleed', chance: 30 }, { key: 'poison', chance: 25 }, { key: 'burn', chance: 20 }] },
+    skill: { name: '血池飛沫', mult: 1.6, every: 3 },
+    ultimate: { name: '血池地獄・血の海嘯', mult: 3.0, hpBelow: 0.5, inflict: ['bleed', 'poison'] },
   },
   {
     key: 'gaki', name: '餓鬼地獄', boss: 'プレータ', img: null,
@@ -92,6 +111,8 @@ export const HACHIGOKU_HELLS = [
     soul: 'プレータの魂', memory: 'プレータの記憶',
     desc: '飢えに苦しむ亡者の王。与えた傷からこちらの生気を貪り喰う。',
     mods: { lifesteal: 0.3 },
+    skill: { name: '餓鬼の暴食', mult: 1.6, every: 3 },
+    ultimate: { name: '餓鬼地獄・飽食の宴', mult: 3.0, hpBelow: 0.5, lifesteal: 0.5 },
   },
   {
     key: 'kyokan', name: '叫喚地獄', boss: 'ラウラヴァ', img: null,
@@ -100,6 +121,8 @@ export const HACHIGOKU_HELLS = [
     soul: 'ラウラヴァの魂', memory: 'ラウラヴァの記憶',
     desc: '悲鳴を糧に肥え太る巨躯の獄卒。生半可な攻撃は通らない。',
     mods: { flatDR: 0.2 },
+    skill: { name: '叫喚の咆哮', mult: 1.6, every: 3 },
+    ultimate: { name: '叫喚地獄・魂裂きの絶叫', mult: 3.0, hpBelow: 0.5, inflict: ['stun'] },
   },
   {
     key: 'kokujou', name: '黒縄地獄', boss: 'カーラスートラ', img: null,
@@ -108,6 +131,8 @@ export const HACHIGOKU_HELLS = [
     soul: 'カーラスートラの魂', memory: 'カーラスートラの記憶',
     desc: '黒鉄の縄で罪人を裁く獄卒。急所を的確に打ち抜いてくる。',
     mods: { critBoost: 25, critDmgPlus: 0.5 },
+    skill: { name: '黒縄断ち', mult: 1.6, every: 3 },
+    ultimate: { name: '黒縄地獄・断罪の黒縄', mult: 3.0, hpBelow: 0.5, critGuaranteed: true },
   },
   {
     key: 'kyogoku', name: '鏡獄地獄', boss: 'ジョウハリ', img: null,
@@ -119,6 +144,8 @@ export const HACHIGOKU_HELLS = [
       { key: 'poison', chance: 20 }, { key: 'paralysis', chance: 15 },
       { key: 'burn', chance: 15 }, { key: 'bleed', chance: 15 }, { key: 'stun', chance: 8 },
     ] },
+    skill: { name: '浄玻璃の裁き', mult: 1.6, every: 3 },
+    ultimate: { name: '鏡獄地獄・罪業万華鏡', mult: 3.0, hpBelow: 0.5, randomAilments: 2 },
   },
 ]
 
@@ -131,7 +158,7 @@ export function makeHachigokuEnemy(hellKey, diffKey) {
   if (!hell || !diff) return null
   const a = ARCH[hell.arch]
   const target = diff.target
-  const hp = Math.round(target * a.hpFrac) * 10
+  const hp = Math.round(target * a.hpFrac) * 10 * HACHIGOKU_HP_MULT
   const budget = target * (1 - a.hpFrac)
   const s = (k) => Math.max(1, Math.round(budget * a.w[k]))
   let atk = s('atk'), matk = s('matk')
@@ -143,5 +170,7 @@ export function makeHachigokuEnemy(hellKey, diffKey) {
     type: hell.type,
     mods: hell.mods || {},
     passive: hell.passive || null,
+    skill: hell.skill || null,
+    ultimate: hell.ultimate || null,
   }
 }
