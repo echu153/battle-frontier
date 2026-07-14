@@ -121,6 +121,10 @@ export default function BeginnerBingo() {
           <div><div style={{ color: '#888', fontSize: '10px' }}>ライン</div><div style={{ color: '#ffaa44', fontSize: '15px' }}>{lineCount}/8</div></div>
         </div>
 
+        <div style={{ color: '#6a5c3a', fontSize: '9.5px', marginBottom: '10px', textAlign: 'center' }}>
+          ※ 出撃・強化・ボス撃破は<span style={{ color: '#aa8844' }}>このビンゴを始めてから</span>の回数でカウントされます（過去分は含みません）。
+        </div>
+
         {/* 3×3 ビンゴ盤 */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginBottom: '14px' }}>
           {CELLS.map((c, i) => {

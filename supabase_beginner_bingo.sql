@@ -21,13 +21,22 @@
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bingo_sortie_count integer NOT NULL DEFAULT 0;
 
 -- ---------- 2) 受取状態 ----------
+--   ★ base_* : ビンゴ開始時点（初回 get/claim）の各カウンター値を記録。
+--     以降の達成判定は「現在値 − base_*」＝ビンゴ開始後の増分のみで行う（過去分は計上しない）。
 CREATE TABLE IF NOT EXISTS beginner_bingo_state (
-  player_id     uuid PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
-  claimed_cells integer[]   NOT NULL DEFAULT '{}',   -- 受取済みマス index(0-8)
-  claimed_lines integer[]   NOT NULL DEFAULT '{}',   -- 受取済みライン index(0-7)
-  claimed_full  boolean     NOT NULL DEFAULT false,  -- 未使用（フルコンプ廃止・後方互換で残置）
-  updated_at    timestamptz NOT NULL DEFAULT now()
+  player_id      uuid PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+  claimed_cells  integer[]   NOT NULL DEFAULT '{}',   -- 受取済みマス index(0-8)
+  claimed_lines  integer[]   NOT NULL DEFAULT '{}',   -- 受取済みライン本数(1-8)
+  claimed_full   boolean     NOT NULL DEFAULT false,  -- 未使用（フルコンプ廃止・後方互換で残置）
+  base_sortie    integer     NOT NULL DEFAULT 0,      -- 開始時の bingo_sortie_count
+  base_enhance   integer     NOT NULL DEFAULT 0,      -- 開始時の 強化回数(success+fail)
+  base_boss_kill integer     NOT NULL DEFAULT 0,      -- 開始時の boss_kill_count
+  updated_at     timestamptz NOT NULL DEFAULT now()
 );
+-- 既存テーブルにも基準値カラムを追加（旧版から作り直し時の互換）
+ALTER TABLE beginner_bingo_state ADD COLUMN IF NOT EXISTS base_sortie    integer NOT NULL DEFAULT 0;
+ALTER TABLE beginner_bingo_state ADD COLUMN IF NOT EXISTS base_enhance   integer NOT NULL DEFAULT 0;
+ALTER TABLE beginner_bingo_state ADD COLUMN IF NOT EXISTS base_boss_kill integer NOT NULL DEFAULT 0;
 ALTER TABLE beginner_bingo_state ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS bingo_state_sel ON beginner_bingo_state;
 CREATE POLICY bingo_state_sel ON beginner_bingo_state
@@ -101,34 +110,48 @@ $$;
 
 -- ---------- 6) セル達成判定 helper ----------
 -- 9マスの達成状況を boolean[9] で返す（index はビンゴ盤の row-major）。
+-- ★ ビンゴ開始時点の基準値（base_*）を記録し、以降の「増分」だけで判定する（過去分は計上しない）。
+--   初回呼び出し時に beginner_bingo_state を現在のカウンター値で作成＝その瞬間が起点。
 CREATE OR REPLACE FUNCTION _bingo_cells(p_uid uuid)
 RETURNS boolean[]
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
-  p           profiles%ROWTYPE;
-  v_sortie    integer;
-  v_enhance   integer;
-  v_area1boss boolean;
+  p          profiles%ROWTYPE;
+  st         beginner_bingo_state%ROWTYPE;
+  v_sortie   integer;
+  v_enhance  integer;
+  v_bosskill integer;
 BEGIN
   SELECT * INTO p FROM profiles WHERE id = p_uid;
   IF NOT FOUND THEN RETURN ARRAY[false,false,false,false,false,false,false,false,false]; END IF;
 
-  v_sortie    := COALESCE(p.bingo_sortie_count,0);
-  v_enhance   := COALESCE(p.enhance_success_count,0) + COALESCE(p.enhance_fail_count,0);
-  -- 始まりの森(エリア1)のボスを倒すとエリア2が解放される＝2が unlocked_areas に入る
-  v_area1boss := (2 = ANY(COALESCE(p.unlocked_areas, ARRAY[1])));
+  -- 基準値の記録（初回のみ）。現在のカウンター値をそのまま基準にする＝この時点からの増分で判定。
+  INSERT INTO beginner_bingo_state(player_id, base_sortie, base_enhance, base_boss_kill)
+  VALUES (
+    p_uid,
+    COALESCE(p.bingo_sortie_count,0),
+    COALESCE(p.enhance_success_count,0) + COALESCE(p.enhance_fail_count,0),
+    COALESCE(p.boss_kill_count,0)
+  )
+  ON CONFLICT (player_id) DO NOTHING;
+  SELECT * INTO st FROM beginner_bingo_state WHERE player_id = p_uid;
+
+  -- 開始後の増分（過去分は base_* で相殺）
+  v_sortie   := COALESCE(p.bingo_sortie_count,0) - COALESCE(st.base_sortie,0);
+  v_enhance  := (COALESCE(p.enhance_success_count,0) + COALESCE(p.enhance_fail_count,0)) - COALESCE(st.base_enhance,0);
+  v_bosskill := COALESCE(p.boss_kill_count,0) - COALESCE(st.base_boss_kill,0);
 
   RETURN ARRAY[
-    v_sortie  >= 10,    -- 0 出撃10回
-    v_sortie  >= 30,    -- 1 出撃30回
-    v_sortie  >= 50,    -- 2 出撃50回
-    v_sortie  >= 100,   -- 3 出撃100回
-    true,               -- 4 ログイン1日目（常に達成）
-    v_enhance >= 1,     -- 5 強化1回
-    v_enhance >= 5,     -- 6 強化5回
-    v_enhance >= 10,    -- 7 強化10回
-    v_area1boss         -- 8 始まりの森ボス撃破
+    v_sortie   >= 10,    -- 0 出撃10回（開始後）
+    v_sortie   >= 30,    -- 1 出撃30回
+    v_sortie   >= 50,    -- 2 出撃50回
+    v_sortie   >= 100,   -- 3 出撃100回
+    true,                -- 4 ログイン1日目（常に達成）
+    v_enhance  >= 1,     -- 5 強化1回（開始後）
+    v_enhance  >= 5,     -- 6 強化5回
+    v_enhance  >= 10,    -- 7 強化10回
+    v_bosskill >= 1      -- 8 始まりの森ボス撃破（開始後にボス撃破1回。序盤の初ボス＝始まりの森）
   ];
 END;
 $$;
