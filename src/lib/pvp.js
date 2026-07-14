@@ -225,8 +225,7 @@ function doAttack(att, def, isExtra, ctx) {
       if ((def.eff.evoReflectPct || 0) > 0) {
         const refl = Math.max(1, Math.floor(amt * def.eff.evoReflectPct / 100))
         att.hp -= refl
-        def.dmgDealt += refl  // 反射は防御側が「与えたダメージ」（確定＝回避不可）
-        ctx.logs.push({ text: `🛡 真化効果！ ${def.profile.username}が${refl}を反射！`, color: '#88ccff' })
+        def.dmgDealt += refl  // 反射は防御側が「与えたダメージ」（確定＝回避不可・発動ログなし）
       }
     }
   }

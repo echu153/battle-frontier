@@ -3005,19 +3005,17 @@ export default function Game() {
     const playerHitBonus = (eff.hitBonus || 0) + passiveHitBonus
 
     // ボス装備 真化: プレイヤーの攻撃ヒット時の効果（スライムの指輪=SPD-10% / 略奪者の短剣=出血 / 絶零の魔導砲=スタン）
+    // ※発動ログは出さない（2026-07-14仕様変更: 勝手に発動・表示なし）
     const applyEvoHitEffects = (dmg) => {
       if (dmg <= 0) return
       if (eff.evoHitSpdDown && !(enemyBuffs.spdDown?.turns > 0 && enemyBuffs.spdDown.rate <= 0.9)) {
         enemyBuffs.spdDown = { turns: 2, rate: 0.9 }
-        logs.push({ text:`💧 真化効果！ ${enemy.name}の素早さが2ターン-10%！`, color:'#66ccff' })
       }
       if ((eff.evoHitBleed||0) > 0 && Math.random()*100 < eff.evoHitBleed) {
         enemyBuffs.bleed = { stacks: Math.min(5, (enemyBuffs.bleed?.stacks||0)+1), lastTurn: 0 }
-        logs.push({ text:`🩸 真化効果！ ${enemy.name}が出血した！`, color:'#ff4444' })
       }
       if ((eff.evoHitStun||0) > 0 && !(enemyBuffs.stun?.turns > 0) && Math.random()*100 < eff.evoHitStun) {
         enemyBuffs.stun = { turns: 1 }
-        logs.push({ text:`💫 真化効果！ ${enemy.name}をスタンさせた！`, color:'#ffaa00' })
       }
     }
     // ボス装備 真化: プレイヤー被ダメージ時の効果（嵐の重装甲=反射 / フロストバーンの聖鎧=スタン / インフェルノバスティオン=やけど）
@@ -3026,15 +3024,12 @@ export default function Game() {
       if ((eff.evoReflectPct||0) > 0) {
         const refl = Math.max(1, Math.floor(dmg * eff.evoReflectPct / 100))
         enemyHp -= refl
-        logs.push({ text:`🛡 真化効果！ 受けたダメージの${eff.evoReflectPct}%（${refl}）を反射！`, color:'#88ccff' })
       }
       if ((eff.evoOndmgStun||0) > 0 && !(enemyBuffs.stun?.turns > 0) && Math.random()*100 < eff.evoOndmgStun) {
         enemyBuffs.stun = { turns: 1 }
-        logs.push({ text:`💫 真化効果！ 反撃で${enemy.name}をスタンさせた！`, color:'#ffaa00' })
       }
       if ((eff.evoOndmgBurn||0) > 0 && !(enemyBuffs.burn?.turns > 0) && Math.random()*100 < eff.evoOndmgBurn) {
         enemyBuffs.burn = { turns: 5, dmgRate: 0.02 }
-        logs.push({ text:`🔥 真化効果！ 反撃で${enemy.name}をやけどさせた！`, color:'#ff8844' })
       }
     }
 
@@ -3410,10 +3405,9 @@ export default function Game() {
       if (evasionRate > 0 && Math.random()*100 < evasionRate) {
         const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
         logs.push({ text:`${prefix}${enemy.name}の攻撃！ しかし回避した！`, color:'#44ff88' })
-        // ボス装備 真化: 影踏みのブーツ — 回避時2ターン素早さ+10%
+        // ボス装備 真化: 影踏みのブーツ — 回避時2ターン素早さ+10%（発動ログなし）
         if (eff.evoEvadeSpdUp && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= 1.1)) {
           playerBuffs.spdUp = { turns: 2, rate: 1.1 }
-          logs.push({ text:`💨 真化効果！ 回避して素早さ+10%（2ターン）！`, color:'#66ccff' })
         }
         return
       }
