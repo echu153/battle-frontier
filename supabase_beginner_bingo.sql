@@ -17,7 +17,8 @@
 --   bingo_sortie_count : 出撃回数（bingo_bump_sortie で加算）。出撃10/30/50/100の判定に使用。
 --   ※ 強化回数は既存の enhance_success_count/enhance_fail_count を使用（新カウンタ不要）。
 --   ※ ログイン1日目は常に達成扱い（プレイ中＝ログイン済み）。
---   ※ 始まりの森ボスは unlocked_areas にエリア2が含まれるか（エリア1ボス撃破）で判定。
+--   ※ 始まりの森ボスは boss_kill_count の開始後増分≥1（=ボス撃破。序盤の初ボス＝始まりの森）で判定。
+--   ★ 強化/出撃/ボス撃破は「ビンゴ開始時点からの増分」で判定（過去分は計上しない。§2/§6参照）。
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bingo_sortie_count integer NOT NULL DEFAULT 0;
 
 -- ---------- 2) 受取状態 ----------
