@@ -33,6 +33,11 @@ export const HACHIGOKU_DIFFICULTIES = [
 
 export const HACHIGOKU_DAILY_WINS = 3  // 1日の勝利回数上限（JST朝5時リセット）
 
+// 与ダメ・敵HPの同率圧縮（全地獄共通・戦闘エンジンが適用）
+// プレイヤーの与ダメを×0.7し、敵HPも×0.7 → 撃破ターン数は変わらないが、
+// ブラッディロア/紋章吸収などの「与ダメ比例回復」の回復量が3割減る。調整はここ。
+export const HACHIGOKU_DMG_COMPRESS = 0.7
+
 // アーキタイプ（hpFrac=HPへ割く総合力の割合、w=残り配分・合計1）
 const ARCH = {
   brute:  { hpFrac: 0.38, w: { atk: 0.40, def: 0.18, matk: 0.02, mdef: 0.14, spd: 0.26 } }, // 物理アタッカー

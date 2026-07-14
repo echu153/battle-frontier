@@ -22,7 +22,7 @@ import {
   BattleLogLine,
   MULTI_HIT_SKILLS,
 } from './Game'
-import { HACHIGOKU_HELLS, HACHIGOKU_DIFFICULTIES, HACHIGOKU_DAILY_WINS, makeHachigokuEnemy } from '../lib/hachigoku'
+import { HACHIGOKU_HELLS, HACHIGOKU_DIFFICULTIES, HACHIGOKU_DAILY_WINS, HACHIGOKU_DMG_COMPRESS, makeHachigokuEnemy } from '../lib/hachigoku'
 
 const fmt = (n) => Number(n).toLocaleString()
 const HACHIGOKU_CD = 5  // 挑戦クールダウン(秒・共有CD)
@@ -38,7 +38,10 @@ const HACHIGOKU_CD = 5  // 挑戦クールダウン(秒・共有CD)
 function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
   const logs = []
   const mods = enemy.mods || {}
-  const hellDR = 1 - Math.min(0.9, mods.flatDR || 0)  // 叫喚: 敵の被ダメ一律軽減（DoTは貫通）
+  // 与ダメ・敵HPを同率圧縮（撃破ターン数は不変・与ダメ比例回復だけを抑える）
+  // DoTは敵最大HP割合ダメージなのでHP圧縮と一緒に自動で縮む（hellDRは掛けない）
+  enemy.hp = Math.max(1, Math.round(enemy.hp * HACHIGOKU_DMG_COMPRESS))
+  const hellDR = (1 - Math.min(0.9, mods.flatDR || 0)) * HACHIGOKU_DMG_COMPRESS  // 叫喚: 敵の被ダメ一律軽減（DoTは貫通）＋全地獄共通の与ダメ圧縮
   // 焦熱: 受ける特殊（魔法）ダメージ半減 等。物理/特殊で敵の被ダメ倍率を分ける（DoTは対象外）
   const typeTakenMult = (isPhys) => isPhys ? (mods.physTakenMult ?? 1) : (mods.specialTakenMult ?? 1)
   let playerHp = eff.hp_max
