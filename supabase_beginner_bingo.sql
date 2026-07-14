@@ -19,6 +19,12 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bingo_d10_count     integer NOT NU
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bingo_fish3h_count  integer NOT NULL DEFAULT 0; -- 3h以上の釣り放置回収(②)
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bingo_scare3h_count integer NOT NULL DEFAULT 0; -- 3h以上のかかし修練完了(②)
 
+-- 旧版のシグネチャを掃除（p_card導入前の関数が残るとオーバーロード曖昧化するため）
+DROP FUNCTION IF EXISTS get_beginner_bingo();
+DROP FUNCTION IF EXISTS claim_beginner_bingo(text, integer);
+DROP FUNCTION IF EXISTS _bingo_cells(uuid);
+DROP FUNCTION IF EXISTS bingo_mark(text);
+
 -- ---------- 2) 受取状態（player×card）----------
 DROP TABLE IF EXISTS beginner_bingo_state;
 CREATE TABLE beginner_bingo_state (
