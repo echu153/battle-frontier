@@ -1,33 +1,31 @@
 -- ============================================================
--- 初心者ビンゴミッション（is_admin 開発限定・先行実装）
+-- 初心者ビンゴミッション①（is_admin 開発限定・先行実装）
 -- ------------------------------------------------------------
--- 3×3ビンゴ（中央=出撃100回で固定）。
---   マス達成 → マス報酬 / ライン成立 → ライン報酬(横3+縦3+斜め2=最大8) / 全9マス → フルコンプ報酬。
--- 報酬は beginner_bingo_rewards テーブルで管理（あとで UPDATE で具体値を差し替え）。
--- サーバー権威型：達成判定と報酬付与は SECURITY DEFINER RPC 内でのみ行う。
--- ※ is_admin 限定先行。一般公開時は各RPC冒頭の is_admin チェックを外す。
+-- 3×3ビンゴ。中央=ログイン1日目。マス達成→マス報酬 / ライン成立→ライン報酬(横3+縦3+斜め2=8)。
+--   ※フルコンプ報酬は無し（8ラインのクリア報酬がコンプ相当）。
+-- 報酬は beginner_bingo_rewards テーブルで管理。付与内容は event 方式の rewards jsonb
+--   （[{"type":"gold","qty":N}] / [{"type":"item","name":"強化石(B)","qty":3}] /
+--    [{"type":"weapon","name":"溶岩の指輪"}] ）＝ claim_event_reward と同じ付与ロジック。
+-- サーバー権威型：達成判定・付与は SECURITY DEFINER RPC 内でのみ行う。is_admin 限定先行。
 --
--- 単独実行可（他SQLへの依存なし。protect_stats の保護列には触れない）。
+-- 単独実行可（protect_stats の保護列には触れない。gold付与時のみ GUC を許可）。
+-- ※ 旧版(v1)からの作り直し：報酬テーブルは構造が変わったため DROP して再作成。
+--   受取状態は dev検証のためリセット（マス定義が変わったので旧受取記録は無効）。
 -- ============================================================
 
 -- ---------- 1) 進捗列（profiles）----------
---   bingo_sortie_count : 出撃回数（bingo_bump_sortie で加算）
---   bingo_fish_3h      : 3時間以上の釣り放置を1回でも回収した
---   bingo_scarecrow_3h : 3時間以上のかかし修練を1回でも完了した
---   cleared_d10        : 初級の洞窟(d10)を踏破した
---   ※ protect_stats の保護対象外の新規列（クライアント直更新は可能だが、
---     先行の開発限定機能のため不正対策は後回し＝残タスク）。
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bingo_sortie_count  integer NOT NULL DEFAULT 0;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bingo_fish_3h       boolean NOT NULL DEFAULT false;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bingo_scarecrow_3h  boolean NOT NULL DEFAULT false;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS cleared_d10         boolean NOT NULL DEFAULT false;
+--   bingo_sortie_count : 出撃回数（bingo_bump_sortie で加算）。出撃10/30/50/100の判定に使用。
+--   ※ 強化回数は既存の enhance_success_count/enhance_fail_count を使用（新カウンタ不要）。
+--   ※ ログイン1日目は常に達成扱い（プレイ中＝ログイン済み）。
+--   ※ 始まりの森ボスは unlocked_areas にエリア2が含まれるか（エリア1ボス撃破）で判定。
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bingo_sortie_count integer NOT NULL DEFAULT 0;
 
 -- ---------- 2) 受取状態 ----------
 CREATE TABLE IF NOT EXISTS beginner_bingo_state (
   player_id     uuid PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
   claimed_cells integer[]   NOT NULL DEFAULT '{}',   -- 受取済みマス index(0-8)
   claimed_lines integer[]   NOT NULL DEFAULT '{}',   -- 受取済みライン index(0-7)
-  claimed_full  boolean     NOT NULL DEFAULT false,  -- フルコンプ報酬受取済み
+  claimed_full  boolean     NOT NULL DEFAULT false,  -- 未使用（フルコンプ廃止・後方互換で残置）
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE beginner_bingo_state ENABLE ROW LEVEL SECURITY;
@@ -35,19 +33,19 @@ DROP POLICY IF EXISTS bingo_state_sel ON beginner_bingo_state;
 CREATE POLICY bingo_state_sel ON beginner_bingo_state
   FOR SELECT USING (player_id = auth.uid());
 -- 直接の書き込みポリシーは作らない（更新は SECURITY DEFINER RPC 経由のみ）。
+-- マス定義が変わったため旧受取記録をリセット（dev限定・is_admin のみ影響）。
+TRUNCATE beginner_bingo_state;
 
--- ---------- 3) 報酬設定（あとで UPDATE で具体値を入れる）----------
---   kind : 'cell'(idx 0-8) / 'line'(idx 0-7) / 'full'(idx 0)
---   gold : 付与Gold
---   items: [{"name":"強化石（Ｆ）","qty":3}, ...] 形式。items.name で id を引いて付与。
---          強化石・宝石・回数券なども items テーブルの1行なのでこれで表現できる。
---   label: 管理用メモ（任意）
-CREATE TABLE IF NOT EXISTS beginner_bingo_rewards (
-  kind  text    NOT NULL,
-  idx   integer NOT NULL,
-  gold  bigint  NOT NULL DEFAULT 0,
-  items jsonb   NOT NULL DEFAULT '[]'::jsonb,
-  label text,
+-- ---------- 3) 報酬設定（event 方式の rewards jsonb）----------
+--   kind : 'cell'(idx 0-8) / 'line'(idx 0-7)
+--   rewards : [{"type":"gold","qty":N} | {"type":"item","name":..,"qty":N} | {"type":"weapon","name":..}]
+--   label   : 表示用テキスト
+DROP TABLE IF EXISTS beginner_bingo_rewards;
+CREATE TABLE beginner_bingo_rewards (
+  kind    text    NOT NULL,
+  idx     integer NOT NULL,
+  rewards jsonb   NOT NULL DEFAULT '[]'::jsonb,
+  label   text,
   PRIMARY KEY (kind, idx)
 );
 ALTER TABLE beginner_bingo_rewards ENABLE ROW LEVEL SECURITY;
@@ -55,22 +53,38 @@ DROP POLICY IF EXISTS bingo_rewards_sel ON beginner_bingo_rewards;
 CREATE POLICY bingo_rewards_sel ON beginner_bingo_rewards
   FOR SELECT USING (true);   -- 報酬内容は全員が閲覧可（表示用）
 
--- 初期行（すべて gold=0 の仮値。あとで下記の例のように UPDATE して具体値を入れる）:
---   UPDATE beginner_bingo_rewards SET gold=1000                       WHERE kind='cell';
---   UPDATE beginner_bingo_rewards SET gold=5000                       WHERE kind='line';
---   UPDATE beginner_bingo_rewards SET gold=50000, items='[{"name":"強化石（Ａ）","qty":1}]'::jsonb WHERE kind='full';
-INSERT INTO beginner_bingo_rewards(kind, idx, gold)
-  SELECT 'cell', g, 0 FROM generate_series(0,8) g
-  ON CONFLICT (kind, idx) DO NOTHING;
-INSERT INTO beginner_bingo_rewards(kind, idx, gold)
-  SELECT 'line', g, 0 FROM generate_series(0,7) g
-  ON CONFLICT (kind, idx) DO NOTHING;
-INSERT INTO beginner_bingo_rewards(kind, idx, gold)
-  VALUES ('full', 0, 0)
-  ON CONFLICT (kind, idx) DO NOTHING;
+-- マス報酬（盤: row-major・中央 idx4=ログイン1日目）
+--   0:出撃10 1:出撃30 2:出撃50
+--   3:出撃100 4:ログイン1日目 5:強化1
+--   6:強化5 7:強化10 8:始まりの森ボス
+INSERT INTO beginner_bingo_rewards(kind, idx, rewards, label) VALUES
+  ('cell', 0, '[{"type":"weapon","name":"溶岩の指輪"},{"type":"weapon","name":"峰岳の守護輪"}]'::jsonb, '溶岩の指輪＋峰岳の守護輪'),
+  ('cell', 1, '[{"type":"item","name":"強化石(B)","qty":1}]'::jsonb,                                   '強化石(B)×1'),
+  ('cell', 2, '[{"type":"item","name":"強化石(B)","qty":2}]'::jsonb,                                   '強化石(B)×2'),
+  ('cell', 3, '[{"type":"item","name":"強化石(B)","qty":3}]'::jsonb,                                   '強化石(B)×3'),
+  ('cell', 4, '[{"type":"weapon","name":"蒼海の大剣"},{"type":"weapon","name":"炎のワンド"}]'::jsonb,    '蒼海の大剣＋炎のワンド'),
+  ('cell', 5, '[{"type":"weapon","name":"疾風の靴"},{"type":"weapon","name":"溶岩鎧"}]'::jsonb,          '疾風の靴＋溶岩鎧'),
+  ('cell', 6, '[{"type":"item","name":"強化石(B)","qty":2},{"type":"gold","qty":10000}]'::jsonb,        '強化石(B)×2＋10000G'),
+  ('cell', 7, '[{"type":"item","name":"強化石(B)","qty":3}]'::jsonb,                                   '強化石(B)×3'),
+  ('cell', 8, '[{"type":"item","name":"強化石(B)","qty":5}]'::jsonb,                                   '強化石(B)×5');
 
--- ---------- 4) 進捗更新RPC（クライアントから呼ぶ）----------
--- 出撃1回ごとに +1
+-- ライン報酬（上から 1〜8 = 横上/横中/横下/縦左/縦中/縦右/斜め＼/斜め／）
+INSERT INTO beginner_bingo_rewards(kind, idx, rewards, label) VALUES
+  ('line', 0, '[{"type":"gold","qty":2000}]'::jsonb,                                                   '2000G'),
+  ('line', 1, '[{"type":"gold","qty":3000}]'::jsonb,                                                   '3000G'),
+  ('line', 2, '[{"type":"gold","qty":4000}]'::jsonb,                                                   '4000G'),
+  ('line', 3, '[{"type":"gold","qty":5000}]'::jsonb,                                                   '5000G'),
+  ('line', 4, '[{"type":"weapon","name":"溶岩の指輪"},{"type":"weapon","name":"峰岳の守護輪"}]'::jsonb, '溶岩の指輪＋峰岳の守護輪'),
+  ('line', 5, '[{"type":"gold","qty":10000}]'::jsonb,                                                  '10000G'),
+  ('line', 6, '[{"type":"gold","qty":20000}]'::jsonb,                                                  '20000G'),
+  ('line', 7, '[{"type":"item","name":"初級ボス装備選択箱","qty":1}]'::jsonb,                          '初級ボス装備選択箱');
+
+-- ---------- 4) 選択箱アイテム ----------
+INSERT INTO items (name, description, effect, value)
+SELECT '初級ボス装備選択箱', 'エリア①〜②のボス装備1つと交換できる選択箱。初心者ビンゴ報酬。', 'material', 0
+WHERE NOT EXISTS (SELECT 1 FROM items WHERE name = '初級ボス装備選択箱');
+
+-- ---------- 5) 出撃カウント加算RPC（クライアントから呼ぶ）----------
 CREATE OR REPLACE FUNCTION bingo_bump_sortie()
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
@@ -85,66 +99,36 @@ BEGIN
 END;
 $$;
 
--- 3時間セッション達成フラグ / d10踏破フラグの立て（キー指定）
-CREATE OR REPLACE FUNCTION bingo_mark(p_key text)
-RETURNS void
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
-AS $$
-BEGIN
-  IF NOT COALESCE((SELECT is_admin FROM profiles WHERE id = auth.uid()), false) THEN
-    RETURN;
-  END IF;
-  IF p_key = 'fish_3h' THEN
-    UPDATE profiles SET bingo_fish_3h = true WHERE id = auth.uid();
-  ELSIF p_key = 'scarecrow_3h' THEN
-    UPDATE profiles SET bingo_scarecrow_3h = true WHERE id = auth.uid();
-  ELSIF p_key = 'd10' THEN
-    UPDATE profiles SET cleared_d10 = true WHERE id = auth.uid();
-  END IF;
-END;
-$$;
-
--- ---------- 5) セル達成判定 helper ----------
+-- ---------- 6) セル達成判定 helper ----------
 -- 9マスの達成状況を boolean[9] で返す（index はビンゴ盤の row-major）。
---   0:強化10回 1:かかし3h 2:レイド参加1回
---   3:博物館寄贈5個 4:出撃100回(中央) 5:上位職転職
---   6:始まりの森ボス 7:釣り放置3h 8:初級洞窟踏破
 CREATE OR REPLACE FUNCTION _bingo_cells(p_uid uuid)
 RETURNS boolean[]
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
-  p             profiles%ROWTYPE;
-  v_enhance     integer;
-  v_donations   integer;
-  v_raid        boolean;
-  v_advanced    boolean;
-  v_area1boss   boolean;
+  p           profiles%ROWTYPE;
+  v_sortie    integer;
+  v_enhance   integer;
+  v_area1boss boolean;
 BEGIN
   SELECT * INTO p FROM profiles WHERE id = p_uid;
   IF NOT FOUND THEN RETURN ARRAY[false,false,false,false,false,false,false,false,false]; END IF;
 
+  v_sortie    := COALESCE(p.bingo_sortie_count,0);
   v_enhance   := COALESCE(p.enhance_success_count,0) + COALESCE(p.enhance_fail_count,0);
-  v_donations := (SELECT count(*) FROM museum_donations WHERE player_id = p_uid);
-  v_raid      := EXISTS (SELECT 1 FROM raid_participants WHERE player_id = p_uid);
-  v_advanced  := EXISTS (
-                   SELECT 1 FROM class_levels
-                    WHERE player_id = p_uid
-                      AND class_name NOT IN ('戦士','弓使い','魔法使い','僧侶','格闘家')
-                 );
   -- 始まりの森(エリア1)のボスを倒すとエリア2が解放される＝2が unlocked_areas に入る
   v_area1boss := (2 = ANY(COALESCE(p.unlocked_areas, ARRAY[1])));
 
   RETURN ARRAY[
-    v_enhance   >= 10,                        -- 0 強化10回
-    COALESCE(p.bingo_scarecrow_3h,false),     -- 1 かかし修練3h
-    v_raid,                                   -- 2 レイド参加1回
-    v_donations >= 5,                         -- 3 博物館寄贈5個
-    COALESCE(p.bingo_sortie_count,0) >= 100,  -- 4 出撃100回(中央)
-    v_advanced,                               -- 5 上位職に転職
-    v_area1boss,                              -- 6 始まりの森ボス撃破
-    COALESCE(p.bingo_fish_3h,false),          -- 7 釣り放置3h
-    COALESCE(p.cleared_d10,false)             -- 8 初級洞窟踏破
+    v_sortie  >= 10,    -- 0 出撃10回
+    v_sortie  >= 30,    -- 1 出撃30回
+    v_sortie  >= 50,    -- 2 出撃50回
+    v_sortie  >= 100,   -- 3 出撃100回
+    true,               -- 4 ログイン1日目（常に達成）
+    v_enhance >= 1,     -- 5 強化1回
+    v_enhance >= 5,     -- 6 強化5回
+    v_enhance >= 10,    -- 7 強化10回
+    v_area1boss         -- 8 始まりの森ボス撃破
   ];
 END;
 $$;
@@ -167,7 +151,7 @@ AS $$
   ];
 $$;
 
--- ---------- 6) 取得RPC ----------
+-- ---------- 7) 取得RPC ----------
 CREATE OR REPLACE FUNCTION get_beginner_bingo()
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
@@ -191,46 +175,63 @@ BEGIN
     'lines',         to_jsonb(v_lines),
     'claimed_cells', to_jsonb(COALESCE(st.claimed_cells, '{}')),
     'claimed_lines', to_jsonb(COALESCE(st.claimed_lines, '{}')),
-    'claimed_full',  COALESCE(st.claimed_full, false),
     'rewards',       (SELECT jsonb_agg(jsonb_build_object(
-                        'kind', kind, 'idx', idx, 'gold', gold, 'items', items, 'label', label))
+                        'kind', kind, 'idx', idx, 'rewards', rewards, 'label', label))
                       FROM beginner_bingo_rewards)
   );
 END;
 $$;
 
--- ---------- 7) 報酬付与 helper ----------
-CREATE OR REPLACE FUNCTION _bingo_grant(p_uid uuid, p_gold bigint, p_items jsonb)
+-- ---------- 8) 報酬付与 helper（event 方式の rewards jsonb を付与）----------
+CREATE OR REPLACE FUNCTION _bingo_grant(p_uid uuid, p_rewards jsonb)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
-  it       jsonb;
+  v_entry  jsonb;
+  v_type   text;
   v_name   text;
   v_qty    integer;
   v_itemid bigint;
+  v_weapon weapons%ROWTYPE;
+  v_i      integer;
 BEGIN
-  IF COALESCE(p_gold,0) > 0 THEN
-    UPDATE profiles SET gold = COALESCE(gold,0) + p_gold WHERE id = p_uid;  -- gold は保護対象外
-  END IF;
-  IF p_items IS NOT NULL AND jsonb_typeof(p_items) = 'array' THEN
-    FOR it IN SELECT * FROM jsonb_array_elements(p_items) LOOP
-      v_name := it->>'name';
-      v_qty  := GREATEST(COALESCE((it->>'qty')::int, 1), 1);
-      IF v_name IS NULL THEN CONTINUE; END IF;
+  IF p_rewards IS NULL OR jsonb_typeof(p_rewards) <> 'array' THEN RETURN; END IF;
+  PERFORM set_config('app.allow_stat_change','on',true);  -- gold付与の保護トリガー許可
+
+  FOR v_entry IN SELECT * FROM jsonb_array_elements(p_rewards) LOOP
+    v_type := v_entry->>'type';
+    v_name := v_entry->>'name';
+    v_qty  := GREATEST(COALESCE((v_entry->>'qty')::int, 1), 1);
+
+    IF v_type = 'gold' THEN
+      UPDATE profiles SET gold = COALESCE(gold,0) + v_qty WHERE id = p_uid;
+
+    ELSIF v_type = 'item' THEN
       SELECT id INTO v_itemid FROM items WHERE name = v_name LIMIT 1;
-      IF v_itemid IS NULL THEN CONTINUE; END IF;   -- 未知アイテム名はスキップ
-      INSERT INTO player_items(player_id, item_id, quantity)
-        VALUES (p_uid, v_itemid, v_qty)
+      IF v_itemid IS NULL THEN RAISE EXCEPTION '報酬アイテムが見つかりません: %', v_name; END IF;
+      INSERT INTO player_items(player_id, item_id, quantity, equipped)
+        VALUES (p_uid, v_itemid, v_qty, false)
         ON CONFLICT (player_id, item_id)
-        DO UPDATE SET quantity = player_items.quantity + EXCLUDED.quantity;
-    END LOOP;
-  END IF;
+        DO UPDATE SET quantity = player_items.quantity + v_qty;
+
+    ELSIF v_type = 'weapon' THEN
+      SELECT * INTO v_weapon FROM weapons WHERE name = v_name LIMIT 1;
+      IF NOT FOUND THEN RAISE EXCEPTION '報酬装備が見つかりません: %', v_name; END IF;
+      FOR v_i IN 1..v_qty LOOP
+        INSERT INTO player_equipment (player_id, weapon_id, slot, equipped, enhance_plus, bonus_effect)
+        VALUES (p_uid, v_weapon.id, v_weapon.slot, false, 0, NULL);
+      END LOOP;
+
+    ELSE
+      RAISE EXCEPTION '不明な報酬タイプです: %', v_type;
+    END IF;
+  END LOOP;
 END;
 $$;
 
--- ---------- 8) 受取RPC ----------
---   p_kind: 'cell'|'line'|'full' / p_idx: cell 0-8, line 0-7, full 0
+-- ---------- 9) 受取RPC ----------
+--   p_kind: 'cell'|'line' / p_idx: cell 0-8, line 0-7
 CREATE OR REPLACE FUNCTION claim_beginner_bingo(p_kind text, p_idx integer)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
@@ -249,12 +250,10 @@ BEGIN
   v_cells := _bingo_cells(v_uid);
   v_lines := _bingo_lines(v_cells);
 
-  -- 受取状態行を用意
   INSERT INTO beginner_bingo_state(player_id) VALUES (v_uid)
     ON CONFLICT (player_id) DO NOTHING;
   SELECT * INTO st FROM beginner_bingo_state WHERE player_id = v_uid FOR UPDATE;
 
-  -- 達成判定 & 重複受取チェック
   IF p_kind = 'cell' THEN
     IF p_idx < 0 OR p_idx > 8 THEN RETURN jsonb_build_object('ok', false, 'error', 'bad_index'); END IF;
     IF NOT v_cells[p_idx + 1] THEN RETURN jsonb_build_object('ok', false, 'error', 'not_completed'); END IF;
@@ -263,34 +262,67 @@ BEGIN
     IF p_idx < 0 OR p_idx > 7 THEN RETURN jsonb_build_object('ok', false, 'error', 'bad_index'); END IF;
     IF NOT v_lines[p_idx + 1] THEN RETURN jsonb_build_object('ok', false, 'error', 'not_completed'); END IF;
     IF p_idx = ANY(st.claimed_lines) THEN RETURN jsonb_build_object('ok', false, 'error', 'already'); END IF;
-  ELSIF p_kind = 'full' THEN
-    IF p_idx <> 0 THEN RETURN jsonb_build_object('ok', false, 'error', 'bad_index'); END IF;
-    IF NOT (SELECT bool_and(c) FROM unnest(v_cells) c) THEN RETURN jsonb_build_object('ok', false, 'error', 'not_completed'); END IF;
-    IF st.claimed_full THEN RETURN jsonb_build_object('ok', false, 'error', 'already'); END IF;
   ELSE
     RETURN jsonb_build_object('ok', false, 'error', 'bad_kind');
   END IF;
 
-  -- 報酬取得＆付与
   SELECT * INTO rw FROM beginner_bingo_rewards WHERE kind = p_kind AND idx = p_idx;
   IF FOUND THEN
-    PERFORM _bingo_grant(v_uid, rw.gold, rw.items);
+    PERFORM _bingo_grant(v_uid, rw.rewards);
   END IF;
 
-  -- 受取記録
   IF p_kind = 'cell' THEN
     UPDATE beginner_bingo_state SET claimed_cells = array_append(claimed_cells, p_idx), updated_at = now() WHERE player_id = v_uid;
-  ELSIF p_kind = 'line' THEN
-    UPDATE beginner_bingo_state SET claimed_lines = array_append(claimed_lines, p_idx), updated_at = now() WHERE player_id = v_uid;
   ELSE
-    UPDATE beginner_bingo_state SET claimed_full = true, updated_at = now() WHERE player_id = v_uid;
+    UPDATE beginner_bingo_state SET claimed_lines = array_append(claimed_lines, p_idx), updated_at = now() WHERE player_id = v_uid;
   END IF;
 
-  RETURN jsonb_build_object('ok', true, 'gold', COALESCE(rw.gold,0), 'items', COALESCE(rw.items,'[]'::jsonb));
+  RETURN jsonb_build_object('ok', true, 'rewards', COALESCE(rw.rewards,'[]'::jsonb), 'label', rw.label);
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION bingo_bump_sortie()                 TO authenticated;
-GRANT EXECUTE ON FUNCTION bingo_mark(text)                    TO authenticated;
-GRANT EXECUTE ON FUNCTION get_beginner_bingo()                TO authenticated;
-GRANT EXECUTE ON FUNCTION claim_beginner_bingo(text, integer) TO authenticated;
+-- ---------- 10) 初級ボス装備選択箱の交換RPC ----------
+--   箱1個を消費し、エリア①〜②のボス装備1つを付与。
+CREATE OR REPLACE FUNCTION redeem_beginner_boss_box(p_weapon_name text)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE
+  v_uid     uuid := auth.uid();
+  v_box_id  bigint;
+  v_held    integer;
+  v_weapon  weapons%ROWTYPE;
+  v_allowed text[] := ARRAY['スライムの指輪','蒼粘剣','略奪者の短剣','影踏みのブーツ'];
+BEGIN
+  IF v_uid IS NULL THEN RETURN jsonb_build_object('ok', false, 'error', '未認証'); END IF;
+  IF NOT (p_weapon_name = ANY(v_allowed)) THEN
+    RETURN jsonb_build_object('ok', false, 'error', '選択できない装備です');
+  END IF;
+
+  SELECT id INTO v_box_id FROM items WHERE name = '初級ボス装備選択箱' LIMIT 1;
+  IF v_box_id IS NULL THEN RETURN jsonb_build_object('ok', false, 'error', '選択箱アイテムが存在しません'); END IF;
+
+  -- 同時交換の複製防止：所持行をロックしてから消費
+  SELECT COALESCE(quantity,0) INTO v_held FROM player_items
+    WHERE player_id = v_uid AND item_id = v_box_id FOR UPDATE;
+  IF v_held < 1 THEN RETURN jsonb_build_object('ok', false, 'error', '選択箱を所持していません'); END IF;
+
+  SELECT * INTO v_weapon FROM weapons WHERE name = p_weapon_name LIMIT 1;
+  IF NOT FOUND THEN RETURN jsonb_build_object('ok', false, 'error', '装備が見つかりません'); END IF;
+
+  UPDATE player_items SET quantity = quantity - 1
+    WHERE player_id = v_uid AND item_id = v_box_id AND quantity >= 1;
+  IF NOT FOUND THEN RETURN jsonb_build_object('ok', false, 'error', '選択箱の消費に失敗しました'); END IF;
+  DELETE FROM player_items WHERE player_id = v_uid AND item_id = v_box_id AND quantity <= 0;
+
+  INSERT INTO player_equipment (player_id, weapon_id, slot, equipped, enhance_plus, bonus_effect)
+  VALUES (v_uid, v_weapon.id, v_weapon.slot, false, 0, NULL);
+
+  RETURN jsonb_build_object('ok', true, 'weapon', p_weapon_name);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION bingo_bump_sortie()                  TO authenticated;
+GRANT EXECUTE ON FUNCTION get_beginner_bingo()                 TO authenticated;
+GRANT EXECUTE ON FUNCTION claim_beginner_bingo(text, integer)  TO authenticated;
+GRANT EXECUTE ON FUNCTION redeem_beginner_boss_box(text)       TO authenticated;

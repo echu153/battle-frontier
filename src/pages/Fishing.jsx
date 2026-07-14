@@ -344,11 +344,6 @@ useEffect(() => {
       fishing_location: null,
       fishing_started_at: null,
     }).eq('id', profile.id)
-    // 初心者ビンゴ「釣り放置3時間」：3時間以上放置してから回収したらフラグを立てる（is_admin限定先行）
-    if (profile.is_admin && profile.fishing_started_at) {
-      const idleSec = (now.getTime() - new Date(profile.fishing_started_at).getTime()) / 1000
-      if (idleSec >= 3 * 3600) supabase.rpc('bingo_mark', { p_key: 'fish_3h' }).then(() => {}, () => {})
-    }
     // 時の結晶ドロップ（1匹ごと1%・サーバー側抽選＝改ざん不可。錬金解放後のみ有効）
     let crystalMsg = ''
     if (results.length > 0) {

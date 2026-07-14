@@ -831,10 +831,6 @@ export default function Dungeon() {
     }
     // クリア報酬：初級の洞窟(d10)/追憶の遺跡(d30)の踏破で「選ばなかったスターター」を1匹選べる
     const did = dungeonRef.current?.id
-    // 初心者ビンゴ「初級の洞窟を踏破」（RPC側で is_admin 自己ゲート・fire-and-forget）
-    if (cleared && !died && did === 'd10') {
-      supabase.rpc('bingo_mark', { p_key: 'd10' }).then(() => {}, () => {})
-    }
     if (cleared && !died && (did === 'd10' || did === 'd30')) {
       const { data: sp } = await supabase.rpc('grant_starter_pick', { p_dungeon: did })
       if (sp?.eligible && Array.isArray(sp.options) && sp.options.length > 0) {

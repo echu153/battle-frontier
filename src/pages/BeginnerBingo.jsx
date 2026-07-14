@@ -1,8 +1,9 @@
 // ============================================================
-// 初心者ビンゴミッション（is_admin 限定・先行実装）
-//   3×3ビンゴ（中央=出撃100回で固定）。
-//   マス達成→マス報酬 / ライン成立→ライン報酬(横3+縦3+斜め2=最大8) / 全9マス→フルコンプ報酬。
+// 初心者ビンゴミッション①（is_admin 開発限定・先行実装）
+//   3×3ビンゴ（中央=ログイン1日目）。マス達成→マス報酬 / ライン成立→ライン報酬(横3+縦3+斜め2=8)。
+//   ※フルコンプ報酬は無し（8ラインのクリア報酬がコンプ相当）。
 //   達成判定・報酬付与はすべて SECURITY DEFINER RPC（get/claim_beginner_bingo）で行う。
+//   ライン8報酬「初級ボス装備選択箱」は装備タブで redeem（redeem_beginner_boss_box）。
 //   ※ 一般公開時はサーバー側RPCの is_admin チェックを外す。
 // ============================================================
 import { useEffect, useState } from 'react'
@@ -11,15 +12,15 @@ import { supabase } from '../supabase'
 
 // マス定義（index はビンゴ盤の row-major。サーバー _bingo_cells と一致させること）
 const CELLS = [
-  { label: '強化10回',        hint: '鍛冶屋で装備を10回強化する' },              // 0
-  { label: 'かかし修練3時間',  hint: 'かかし修練場で3時間以上の修練を完了する' },  // 1
-  { label: 'レイド参加1回',    hint: 'レイドボスに1回参加する' },                 // 2
-  { label: '博物館に5個寄贈',  hint: '博物館に装備を5個寄贈する' },               // 3
-  { label: '出撃100回',        hint: '出撃で通算100回戦う', center: true },       // 4（中央固定）
-  { label: '上位職に転職',     hint: '上位クラスへ転職する' },                    // 5
-  { label: '始まりの森ボス',   hint: 'エリア①「始まりの森」のボスを倒す' },       // 6
-  { label: '釣り放置3時間',    hint: '釣りを3時間以上放置してから回収する' },      // 7
-  { label: '初級の洞窟を踏破', hint: 'ダンジョン「初級の洞窟」を踏破する' },       // 8
+  { label: '出撃10回',    hint: '出撃で通算10回戦う' },                    // 0
+  { label: '出撃30回',    hint: '出撃で通算30回戦う' },                    // 1
+  { label: '出撃50回',    hint: '出撃で通算50回戦う' },                    // 2
+  { label: '出撃100回',   hint: '出撃で通算100回戦う' },                   // 3
+  { label: 'ログイン1日目', hint: 'ゲームにログインする', center: true },   // 4（中央）
+  { label: '強化1回',     hint: '鍛冶屋で装備を1回強化する' },             // 5
+  { label: '強化5回',     hint: '鍛冶屋で装備を5回強化する' },             // 6
+  { label: '強化10回',    hint: '鍛冶屋で装備を10回強化する' },            // 7
+  { label: '始まりの森ボス', hint: 'エリア①「始まりの森」のボスを倒す' },   // 8
 ]
 
 // ライン定義（サーバー _bingo_lines と一致させること）
@@ -34,11 +35,15 @@ const LINES = [
   { cells: [2, 4, 6], label: '斜め ／' },
 ]
 
-const fmtReward = (r) => {
-  const parts = []
-  if (r && r.gold > 0) parts.push(`${Number(r.gold).toLocaleString()}G`)
-  ;(r?.items || []).forEach(it => parts.push(`${it.name}×${it.qty || 1}`))
-  return parts.length ? parts.join(' / ') : '（報酬未設定）'
+// 報酬行 {kind,idx,rewards:[{type,name,qty}],label} → 表示テキスト
+const fmtReward = (rw) => {
+  if (rw?.label) return rw.label
+  const arr = rw?.rewards || []
+  const parts = arr.map(r => {
+    if (r.type === 'gold') return `${Number(r.qty || 0).toLocaleString()}G`
+    return `${r.name}${(r.qty || 1) > 1 ? `×${r.qty}` : ''}`
+  })
+  return parts.length ? parts.join(' ＋ ') : '（報酬未設定）'
 }
 
 export default function BeginnerBingo() {
@@ -79,8 +84,7 @@ export default function BeginnerBingo() {
       flash(map[res?.error] || `受取失敗: ${res?.error || ''}`, '#ff5555')
       return
     }
-    const gained = fmtReward({ gold: res.gold, items: res.items })
-    flash(`🎁 受け取りました！ ${gained}`)
+    flash(`🎁 受け取りました！ ${fmtReward(res)}`)
     await load()
   }
 
@@ -104,10 +108,8 @@ export default function BeginnerBingo() {
   const lines = data?.lines || []
   const claimedCells = data?.claimed_cells || []
   const claimedLines = data?.claimed_lines || []
-  const claimedFull = !!data?.claimed_full
   const doneCount = cells.filter(Boolean).length
   const lineCount = lines.filter(Boolean).length
-  const allDone = doneCount === 9
 
   const box = { border: '1px solid #3a2a0a', background: '#120e04', padding: '12px', marginBottom: '12px', borderRadius: '2px' }
 
@@ -115,7 +117,7 @@ export default function BeginnerBingo() {
     <div style={{ minHeight: '100vh', background: '#0a0812', padding: '16px', fontFamily: 'monospace' }}>
       <div style={{ maxWidth: '680px', margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #3a2a0a', paddingBottom: '8px', marginBottom: '12px', position: 'sticky', top: 0, zIndex: 30, paddingTop: '8px', background: '#0a0812' }}>
-          <div style={{ color: '#ffcc44', fontSize: '15px', letterSpacing: '3px' }}>🎯 初心者ビンゴ</div>
+          <div style={{ color: '#ffcc44', fontSize: '15px', letterSpacing: '3px' }}>🎯 初心者ビンゴ①</div>
           <button onClick={() => nav('/game')} style={{ background: 'none', border: '1px solid #0088ff', color: '#0088ff', padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>← 街に戻る</button>
         </div>
 
@@ -126,7 +128,6 @@ export default function BeginnerBingo() {
         <div style={{ ...box, display: 'flex', justifyContent: 'space-around', textAlign: 'center' }}>
           <div><div style={{ color: '#888', fontSize: '10px' }}>マス</div><div style={{ color: '#ffcc44', fontSize: '15px' }}>{doneCount}/9</div></div>
           <div><div style={{ color: '#888', fontSize: '10px' }}>ライン</div><div style={{ color: '#ffaa44', fontSize: '15px' }}>{lineCount}/8</div></div>
-          <div><div style={{ color: '#888', fontSize: '10px' }}>フルコンプ</div><div style={{ color: allDone ? '#44ff88' : '#666', fontSize: '15px' }}>{allDone ? '達成' : '未'}</div></div>
         </div>
 
         {/* 3×3 ビンゴ盤 */}
@@ -139,7 +140,7 @@ export default function BeginnerBingo() {
               <div key={i} style={{
                 border: `1px solid ${done ? '#7a6a1a' : '#2a2418'}`,
                 background: c.center ? '#1a1404' : (done ? '#161002' : '#0e0b04'),
-                borderRadius: '3px', padding: '8px 6px', minHeight: '96px',
+                borderRadius: '3px', padding: '8px 6px', minHeight: '104px',
                 display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
                 boxShadow: c.center ? 'inset 0 0 0 1px #7a5a1a' : 'none',
               }}>
@@ -166,7 +167,7 @@ export default function BeginnerBingo() {
         </div>
 
         {/* ライン報酬 */}
-        <div style={{ color: '#ffaa44', fontSize: '12px', marginBottom: '6px', letterSpacing: '1px' }}>▍ライン報酬（横3・縦3・斜め2 = 最大8）</div>
+        <div style={{ color: '#ffaa44', fontSize: '12px', marginBottom: '6px', letterSpacing: '1px' }}>▍ライン報酬（横3・縦3・斜め2 = 8ライン）</div>
         <div style={{ ...box, padding: '8px' }}>
           {LINES.map((ln, i) => {
             const done = !!lines[i]
@@ -191,20 +192,8 @@ export default function BeginnerBingo() {
           })}
         </div>
 
-        {/* フルコンプ報酬 */}
-        <div style={{ color: '#44ff88', fontSize: '12px', marginBottom: '6px', letterSpacing: '1px' }}>▍フルコンプ報酬（全9マス達成）</div>
-        <div style={{ ...box, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderColor: allDone ? '#2a6a3a' : '#3a2a0a' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '14px' }}>{claimedFull ? '🎁' : (allDone ? '🏆' : '🔒')}</span>
-            <span style={{ color: allDone ? '#88ffaa' : '#998866', fontSize: '11px' }}>{fmtReward(rewardOf('full', 0))}</span>
-          </div>
-          {claimedFull ? (
-            <span style={{ color: '#66aa66', fontSize: '10px' }}>受取済</span>
-          ) : allDone ? (
-            <button disabled={busy} onClick={() => doClaim('full', 0)} style={{ background: '#0a3a1a', border: '1px solid #44cc77', color: '#88ffaa', padding: '4px 14px', cursor: busy ? 'default' : 'pointer', fontFamily: 'monospace', fontSize: '11px', borderRadius: '2px' }}>受取</button>
-          ) : (
-            <span style={{ color: '#4a4230', fontSize: '10px' }}>あと{9 - doneCount}マス</span>
-          )}
+        <div style={{ color: '#6a5c3a', fontSize: '10px', lineHeight: '1.6' }}>
+          ※「初級ボス装備選択箱」は<span style={{ color: '#aa8844' }}>装備タブ</span>から使うと、エリア①〜②のボス装備1つと交換できます。
         </div>
       </div>
     </div>

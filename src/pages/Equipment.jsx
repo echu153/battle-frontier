@@ -119,6 +119,9 @@ export default function Equipment() {
   const [boxToast, setBoxToast] = useState('')       // 獲得トースト（自動消滅）
   const [boxMsg, setBoxMsg] = useState('')
   const [emblemRow, setEmblemRow] = useState(null)   // 紋章（第5枠・開発限定）: player_emblem行
+  const [bossBoxPopup, setBossBoxPopup] = useState(false)  // 初級ボス装備選択箱（初心者ビンゴ報酬）のポップアップ
+  const [bossBoxMsg, setBossBoxMsg] = useState('')
+  const [bossBoxGot, setBossBoxGot] = useState(null)  // 交換成功で獲得した装備名
 
   // 選択券で交換できるS級レイド装備（redeem_raid_ticket の許可リストと一致）
   const RAID_TICKET_CHOICES = [
@@ -128,6 +131,14 @@ export default function Equipment() {
     { name:'哭雨の羽衣',       desc:'S級防具。特攻20 特防80。戦闘開始時と5Tごとに、状態異常を1回無効化するバフを獲得。' },
     { name:'雷鋼の機神鎧',     desc:'S級防具。防御60 特防40。被ダメージ時、2T素早さ+15%。' },
     { name:'蒼雷の短刃',       desc:'S級短剣。攻撃40 素早さ60。追加行動の攻撃ヒット時、20%で麻痺。' },
+  ]
+
+  // 初級ボス装備選択箱で選べるエリア①〜②のボス装備（redeem_beginner_boss_box の許可リストと一致）
+  const BEGINNER_BOX_CHOICES = [
+    { name:'スライムの指輪',   desc:'エリア①ボス装備・指輪。' },
+    { name:'蒼粘剣',           desc:'エリア①ボス装備・剣。' },
+    { name:'略奪者の短剣',     desc:'エリア②ボス装備・短剣。' },
+    { name:'影踏みのブーツ',   desc:'エリア②ボス装備・靴。' },
   ]
 
   useEffect(() => { fetchAll() }, [])
@@ -167,6 +178,20 @@ export default function Equipment() {
       setTicketMsg(data?.error || 'エラーが発生しました')
     } else {
       setTicketGot(weaponName)  // ポップアップは閉じず、獲得表示を出す
+      await fetchAll()
+    }
+    setLoading(false)
+  }
+
+  // 初級ボス装備選択箱：箱を1個消費して、選んだエリア①〜②のボス装備を受け取る（サーバーRPCで処理）
+  const redeemBeginnerBossBox = async (weaponName) => {
+    if (loading) return
+    setLoading(true); setBossBoxMsg(''); setBossBoxGot(null)
+    const { data, error } = await supabase.rpc('redeem_beginner_boss_box', { p_weapon_name: weaponName })
+    if (error || !data?.ok) {
+      setBossBoxMsg(data?.error || 'エラーが発生しました')
+    } else {
+      setBossBoxGot(weaponName)  // ポップアップは閉じず、獲得表示を出す
       await fetchAll()
     }
     setLoading(false)
@@ -607,6 +632,9 @@ export default function Equipment() {
                         ) : pi.items.name === 'Sレアレイドボス装備選択券' ? (
                           <button onClick={() => { setTicketPopup(true); setTicketMsg(''); setTicketGot(null) }} disabled={loading}
                             style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
+                        ) : pi.items.name === '初級ボス装備選択箱' ? (
+                          <button onClick={() => { setBossBoxPopup(true); setBossBoxMsg(''); setBossBoxGot(null) }} disabled={loading}
+                            style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
                         ) : pi.items.effect === 'equip_rename' ? (
                           <button onClick={() => { setRenamePopup(pi); setRenameTargetId(null); setRenameText(''); setRenameMsg('') }} disabled={loading}
                             style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
@@ -1010,6 +1038,37 @@ export default function Equipment() {
             </div>
             <button onClick={() => setTicketPopup(false)} disabled={loading}
               style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{ticketGot ? '閉じる' : 'キャンセル'}</button>
+          </div>
+        </div>
+      )}
+
+      {bossBoxPopup && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}
+          onClick={() => { if (!loading) setBossBoxPopup(false) }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'#0a0c1a', border:'1px solid #ffcc44', padding:'20px', maxWidth:'360px', width:'92%', fontFamily:'monospace', maxHeight:'80vh', overflowY:'auto' }}>
+            <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'6px' }}>🎁 初級ボス装備選択箱</div>
+            <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'14px', lineHeight:'1.5' }}>
+              交換するエリア①〜②のボス装備を1つ選んでください。<br/>
+              <span style={{ color:'#ff8844' }}>選択すると箱を1個消費します。</span>
+            </div>
+            {bossBoxMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{bossBoxMsg}</div>}
+            {bossBoxGot && (
+              <div style={{ border:'1px solid #2a6a3a', background:'#04140a', padding:'10px', marginBottom:'12px', color:'#44ff88', fontSize:'12px', lineHeight:'1.5' }}>
+                ✨ 「{bossBoxGot}」を獲得しました！<br/>
+                <span style={{ color:'#88ccaa', fontSize:'10px' }}>装備タブで確認・装備できます。</span>
+              </div>
+            )}
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {BEGINNER_BOX_CHOICES.map(c => (
+                <button key={c.name} onClick={() => redeemBeginnerBossBox(c.name)} disabled={loading}
+                  style={{ textAlign:'left', padding:'10px', background:'#001028', border:'1px solid #0055aa', color:'#cce0ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', opacity: loading ? 0.5 : 1 }}>
+                  <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'2px' }}>{c.name}</div>
+                  <div style={{ color:'#778899', fontSize:'10px' }}>{c.desc}</div>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setBossBoxPopup(false)} disabled={loading}
+              style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{bossBoxGot ? '閉じる' : 'キャンセル'}</button>
           </div>
         </div>
       )}
