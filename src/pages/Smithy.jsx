@@ -47,6 +47,11 @@ const MATERIAL_COUNT = (plus) => {
   return 4
 }
 
+// 強者の結晶：+11以上の強化で使用すると、失敗しても強化値が下落しない（開発限定）。
+// 鍛冶屋の加工でエリアボス装備10個から作成できる。
+const CRYSTAL_NAME = '強者の結晶'
+const CRYSTAL_EQUIP_COST = 10  // 加工に必要なエリアボス装備の数
+
 // エリアボス装備は真化(evolve_stage 5)しないと+11以上に強化できない（+10が上限）
 const bossEnhanceCapped = (item) =>
   isEvolvableEquip(item.weapons?.name) && !isShinka(item) && (item.enhance_plus || 0) >= 10
@@ -202,6 +207,9 @@ export default function Smithy() {
   const [hidenBook, setHidenBook] = useState(null)          // 使用する匠の秘伝書名（null=使わない）
   const [craftTimes, setCraftTimes] = useState(1)            // 加工(装備→強化石)の作成回数（1回=装備3個→強化石1個）
   const [stoneTimes, setStoneTimes] = useState({})           // 強化石→上位 の作成回数（ランク別・1回=強化石3個→上位1個）
+  const [useCrystal, setUseCrystal] = useState(true)         // 強者の結晶を使う（+11以上・失敗時の下落防止）。所持時は自動オン
+  const [enhanceConfirm, setEnhanceConfirm] = useState(null) // 結晶なしで+11以上を強化する際の確認 { item, source, book }
+  const [crystalTimes, setCrystalTimes] = useState(1)        // 強者の結晶 加工回数（1回=エリアボス装備10個→結晶1個）
 
   useEffect(() => { fetchAll() }, [])
 
@@ -229,7 +237,7 @@ export default function Smithy() {
 
   const getItemCount = (name) => playerItems.find(pi => pi.items?.name === name)?.quantity || 0
 
-  const doEnhance = async (item, source = 'equip', bookName = null) => {
+  const doEnhance = async (item, source = 'equip', bookName = null, useCrystalOpt = false) => {
     setLoading(true)
     const currentPlus = item.enhance_plus || 0
     const nextPlus = currentPlus + 1
@@ -348,11 +356,20 @@ export default function Smithy() {
       resultPlus = nextPlus
       setEnhanceResult({ ok: true, title: '✨ 強化成功！', text: `${item.weapons.name} が +${nextPlus} になった！${pityReady ? '（匠の祝福 発動！）' : usedBook ? `（${usedBook}使用）` : ''}` })
     } else if (nextPlus >= 11) {
-      const newPlus = Math.max(0, currentPlus - 1)
-      const upd = { enhance_plus: newPlus, blessing_count: curBlessing + 1 }  // 失敗で+1
-      await supabase.from('player_equipment').update(upd).eq('id', item.id)
-      resultPlus = newPlus
-      setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} が +${newPlus} に下落した…${usedBook ? `（${usedBook}使用）` : ''}`, blessing: (blessingCap !== undefined) ? { now: curBlessing + 1, cap: blessingCap } : null })
+      // 強者の結晶が有効なら、失敗時の下落を1個消費して防ぐ（成功時は消費しない）
+      let crystalUsed = false
+      if (useCrystalOpt) crystalUsed = await consumeMaterial(CRYSTAL_NAME, 1)
+      if (crystalUsed) {
+        await supabase.from('player_equipment').update({ blessing_count: curBlessing + 1 }).eq('id', item.id)
+        resultPlus = currentPlus
+        setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} は変化しなかった（🛡 ${CRYSTAL_NAME}で下落を防いだ！）`, blessing: (blessingCap !== undefined) ? { now: curBlessing + 1, cap: blessingCap } : null })
+      } else {
+        const newPlus = Math.max(0, currentPlus - 1)
+        const upd = { enhance_plus: newPlus, blessing_count: curBlessing + 1 }  // 失敗で+1
+        await supabase.from('player_equipment').update(upd).eq('id', item.id)
+        resultPlus = newPlus
+        setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} が +${newPlus} に下落した…${usedBook ? `（${usedBook}使用）` : ''}`, blessing: (blessingCap !== undefined) ? { now: curBlessing + 1, cap: blessingCap } : null })
+      }
     } else {
       await supabase.from('player_equipment').update({ blessing_count: curBlessing + 1 }).eq('id', item.id)
       setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} は変化しなかった${usedBook ? `（${usedBook}使用）` : ''}`, blessing: (blessingCap !== undefined) ? { now: curBlessing + 1, cap: blessingCap } : null })
@@ -436,6 +453,36 @@ export default function Smithy() {
     } finally { setLoading(false); craftBusyRef.current = false }
   }
 
+
+  // 強者の結晶を加工（エリアボス装備10個 → 結晶1個）。開発限定。
+  const craftCrystalFromBossEquips = async (times = 1) => {
+    if (craftBusyRef.current) return
+    craftBusyRef.current = true
+    setLoading(true)
+    try {
+      // 未強化・未進化・未装備・お気に入り/帰属でないエリアボス装備のみ対象
+      const avail = equipment.filter(e =>
+        isEvolvableEquip(e.weapons?.name) && !e.equipped && !e.is_favorite
+        && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0))
+      const maxTimes = Math.floor(avail.length / CRYSTAL_EQUIP_COST)
+      if (maxTimes < 1) { showMessage(`エリアボス装備が${CRYSTAL_EQUIP_COST}個必要です！（対象${avail.length}個）`, '#ff4444'); return }
+      const n = Math.max(1, Math.min(Math.floor(times) || 1, maxTimes))
+      const picks = avail.slice(0, n * CRYSTAL_EQUIP_COST)
+      // 「未強化のまま現存する」条件付きで削除し、実際に削除できた数だけ加工（連打・別端末での二重消費を防ぐ）
+      let deleted = 0
+      for (const item of picks) {
+        const { data: del } = await supabase.from('player_equipment').delete()
+          .eq('id', item.id).or('enhance_plus.is.null,enhance_plus.eq.0')
+          .or('evolve_stage.is.null,evolve_stage.eq.0').select('id')
+        if (del && del.length > 0) deleted++
+      }
+      const count = Math.floor(deleted / CRYSTAL_EQUIP_COST)
+      if (count <= 0) { showMessage('加工に失敗しました（対象装備が見つかりません）', '#ff4444'); await fetchAll(); return }
+      const ok = await grantMaterial(CRYSTAL_NAME, count)
+      if (ok) showMessage(`✨ ${CRYSTAL_NAME} を${count}個作成した！`, '#ffcc00')
+      await fetchAll()
+    } finally { setLoading(false); craftBusyRef.current = false }
+  }
 
   // 再評価：種類固定で値のみ再抽選（要：再鑑定済み＝スロット生成済み）
   const doReEval = async (item) => {
@@ -691,7 +738,21 @@ export default function Smithy() {
           const effRate = pityReady ? 100 : Math.min(100, successRate * (bookApplies ? HIDEN_MULT[hidenBook] : 1))
           const effRateDisp = Math.round(effRate * 10) / 10
           const nextEnhanced = calcEnhancedStats(w, nextPlus, item.evolve_stage || 0)
+          // 強者の結晶（+11以上の失敗時 下落防止・開発限定）
+          const isDev = !!profile.is_admin
+          const crystalOwned = getItemCount(CRYSTAL_NAME)
+          const dropRisk = nextPlus >= 11                       // +11以上は失敗で下落
+          const crystalActive = isDev && dropRisk && useCrystal && crystalOwned > 0
           const closeModal = () => { setSelectedItem(null); setEnhanceResult(null); setHidenBook(null) }
+          // 強化ボタン押下：+11以上を結晶なしで強化しようとしたら確認ダイアログ
+          const onEnhanceClick = () => {
+            const book = bookApplies ? hidenBook : null
+            if (isDev && dropRisk && !crystalActive) {
+              setEnhanceConfirm({ item, source: matSource, book })
+            } else {
+              doEnhance(item, matSource, book, crystalActive)
+            }
+          }
           return (
             <div style={{ position:'fixed', inset:0, background:'rgba(0,4,16,0.85)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
               <div style={{ background:'#0a0800', border:'1px solid #aa6644', padding:'20px', maxWidth:'380px', width:'100%', fontFamily:'monospace' }}>
@@ -788,13 +849,29 @@ export default function Smithy() {
                         <span style={{ color:'#556677' }}> {pityReady ? '(次で確定成功)' : '(失敗で+1・成功でリセット)'}</span>
                       </div>
                     )}
+                    {/* 強者の結晶（+11以上の失敗時 下落防止・開発限定） */}
+                    {isDev && dropRisk && !bossCapped && (
+                      <div style={{ border:`1px solid ${crystalActive ? '#7755cc' : '#334455'}`, background: crystalActive ? '#120a24' : '#000818', padding:'8px', marginBottom:'10px' }}>
+                        {crystalOwned > 0 ? (
+                          <label style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontSize:'11px', color: crystalActive ? '#cbaaff' : '#88aacc' }}>
+                            <input type="checkbox" checked={useCrystal} onChange={e => setUseCrystal(e.target.checked)} style={{ cursor:'pointer' }} />
+                            <span>🛡 {CRYSTAL_NAME} を使う（所持{crystalOwned}個）</span>
+                          </label>
+                        ) : (
+                          <div style={{ fontSize:'10px', color:'#66788a' }}>🛡 {CRYSTAL_NAME}：未所持（加工でエリアボス装備{CRYSTAL_EQUIP_COST}個から作成）</div>
+                        )}
+                        <div style={{ fontSize:'9px', color: crystalActive ? '#9977cc' : '#ff6644', marginTop:'4px' }}>
+                          {crystalActive ? '失敗しても強化値は下落しません（失敗時に1個消費）' : '⚠ 失敗すると強化値が下落します'}
+                        </div>
+                      </div>
+                    )}
                     {bossCapped && (
                       <div style={{ fontSize:'11px', color:'#ff9944', border:'1px solid #663300', background:'#180c00', padding:'7px', marginBottom:'10px', textAlign:'center', lineHeight:'1.5' }}>
                         ⚠ このエリアボス装備は+10が上限です。<br/>
                         <span style={{ color:'#ffcc00' }}>真化</span>させると+11以上に強化できます。
                       </div>
                     )}
-                    <button onClick={() => doEnhance(item, matSource, bookApplies ? hidenBook : null)} disabled={!canEnhance || loading}
+                    <button onClick={onEnhanceClick} disabled={!canEnhance || loading}
                       style={{ width:'100%', padding:'10px', background: canEnhance ? '#1a0800' : '#001', border:`1px solid ${canEnhance ? '#aa6644' : '#002244'}`, color: canEnhance ? '#ffcc88' : '#334455', cursor: canEnhance ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
                       {loading ? '鍛錬中...' : (bossCapped ? '真化が必要です' : '⚒ 鍛錬する')}
                     </button>
@@ -808,6 +885,28 @@ export default function Smithy() {
             </div>
           )
         })()}
+
+        {/* +11以上を結晶なしで強化する確認ダイアログ */}
+        {enhanceConfirm && (
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,4,16,0.9)', zIndex:400, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
+            <div style={{ background:'#0a0800', border:'1px solid #ff6644', padding:'22px', maxWidth:'360px', width:'100%' }}>
+              <div style={{ fontSize:'26px', textAlign:'center', marginBottom:'10px' }}>⚠</div>
+              <div style={{ color:'#ffaa66', fontSize:'13px', textAlign:'center', lineHeight:1.7, marginBottom:'18px' }}>
+                このまま強化すると失敗時に強化値が下落します<br/>強化を続けますか？
+              </div>
+              <div style={{ display:'flex', gap:'10px', justifyContent:'center' }}>
+                <button onClick={() => { const c = enhanceConfirm; setEnhanceConfirm(null); doEnhance(c.item, c.source, c.book, false) }} disabled={loading}
+                  style={{ background:'#1a0800', border:'1px solid #aa6644', color:'#ffcc88', padding:'8px 20px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+                  強化を続ける
+                </button>
+                <button onClick={() => setEnhanceConfirm(null)} disabled={loading}
+                  style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'8px 20px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+                  やめる
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 進化ポップアップ */}
         {evolveTarget && (() => {
@@ -1009,8 +1108,9 @@ export default function Smithy() {
         {/* 加工タブ */}
         {tab === 'craft' && (
           <div>
-            <div style={{ display:'flex', gap:'4px', marginBottom:'12px' }}>
-              {[{id:'equipment', label:'装備→強化石'}, {id:'stone', label:'強化石→上位強化石'}].map(t => (
+            <div style={{ display:'flex', gap:'4px', marginBottom:'12px', flexWrap:'wrap' }}>
+              {[{id:'equipment', label:'装備→強化石'}, {id:'stone', label:'強化石→上位強化石'},
+                ...(profile.is_admin ? [{id:'crystal', label:'ボス装備→強者の結晶'}] : [])].map(t => (
                 <button key={t.id} onClick={() => setCraftTab(t.id)}
                   style={{ padding:'5px 10px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
                     background: craftTab === t.id ? '#001840' : '#000818',
@@ -1108,6 +1208,46 @@ export default function Smithy() {
                 })}
               </div>
             )}
+            {craftTab === 'crystal' && profile.is_admin && (() => {
+              const avail = equipment.filter(e =>
+                isEvolvableEquip(e.weapons?.name) && !e.equipped && !e.is_favorite
+                && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0))
+              const maxTimes = Math.floor(avail.length / CRYSTAL_EQUIP_COST)
+              const canCraft = maxTimes >= 1
+              const times = Math.max(1, Math.min(Math.floor(crystalTimes) || 1, Math.max(1, maxTimes)))
+              const owned = getItemCount(CRYSTAL_NAME)
+              return (
+                <div>
+                  <div style={{ color:'#446688', fontSize:'11px', marginBottom:'10px', lineHeight:1.6 }}>
+                    エリアボス装備{CRYSTAL_EQUIP_COST}個から <span style={{ color:'#cbaaff' }}>{CRYSTAL_NAME}</span> を1個作成できます。<br/>
+                    強者の結晶は<span style={{ color:'#cbaaff' }}>+11以上の強化で使用</span>すると、失敗しても強化値が下落しません。<br/>
+                    <span style={{ color:'#556677' }}>※未強化・未進化・未装備・お気に入り/帰属でないエリアボス装備が対象</span>
+                  </div>
+                  <div style={{ color:'#446688', fontSize:'10px', marginBottom:'10px' }}>所持: <span style={{ color:'#cbaaff' }}>{CRYSTAL_NAME} {owned}個</span></div>
+                  <div style={{ border:`1px solid ${canCraft ? '#5544aa' : '#002244'}`, background:'#000818', padding:'12px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', flexWrap:'wrap' }}>
+                      <span style={{ color:'#88ccff', fontSize:'12px' }}>対象エリアボス装備: <span style={{ color: canCraft ? '#44ff88' : '#ff4444' }}>{avail.length}個</span></span>
+                      <span style={{ color:'#446688', fontSize:'10px' }}>→ 最大 {maxTimes}個 作成可</span>
+                    </div>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+                      <span style={{ color:'#446688', fontSize:'10px' }}>作成回数</span>
+                      <button onClick={() => setCrystalTimes(t => Math.max(1, t - 1))} disabled={!canCraft || times <= 1}
+                        style={{ padding:'2px 8px', background:'#100a24', border:'1px solid #4433aa', color: times<=1?'#334455':'#cbaaff', cursor: times<=1?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', lineHeight:1 }}>−</button>
+                      <span style={{ color:'#cbaaff', fontSize:'12px', minWidth:'40px', textAlign:'center' }}>{canCraft ? times : 0}回</span>
+                      <button onClick={() => setCrystalTimes(t => Math.min(maxTimes, t + 1))} disabled={!canCraft || times >= maxTimes}
+                        style={{ padding:'2px 8px', background:'#100a24', border:'1px solid #4433aa', color: times>=maxTimes?'#334455':'#cbaaff', cursor: times>=maxTimes?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', lineHeight:1 }}>＋</button>
+                      <button onClick={() => setCrystalTimes(maxTimes)} disabled={!canCraft}
+                        style={{ padding:'2px 6px', background:'#100a24', border:'1px solid #4433aa', color: canCraft?'#cbaaff':'#334455', cursor: canCraft?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'9px' }}>最大</button>
+                      <span style={{ color:'#446688', fontSize:'10px' }}>（装備{canCraft?times*CRYSTAL_EQUIP_COST:CRYSTAL_EQUIP_COST}個 → 結晶{canCraft?times:1}個）</span>
+                    </div>
+                    <button onClick={() => craftCrystalFromBossEquips(times)} disabled={!canCraft || loading}
+                      style={{ width:'100%', marginTop:'10px', padding:'9px', background: canCraft ? '#160e2e' : '#001', border:`1px solid ${canCraft ? '#7755cc' : '#002244'}`, color: canCraft ? '#cbaaff' : '#334455', cursor: canCraft ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'12px' }}>
+                      {loading ? '加工中...' : `🛡 ${CRYSTAL_NAME}を作成する`}
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
           </div>
         )}
 
