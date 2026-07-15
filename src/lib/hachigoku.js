@@ -39,6 +39,7 @@
 //    bleedStacks:n         出血をnスタック付与（血池）
 //    selfHealPct:0..1      発動後、自身の最大HP×nを回復（血池=0.3）
 //    permLifesteal:0..1    戦闘終了まで与ダメ×nを回復し続ける（餓鬼=1.0）
+//    permBleed:true        戦闘終了まで攻撃命中ごとに出血を確定付与（血池）
 //    defGapScale:true      自身と相手の(防御+特防)の差が大きいほど与ダメ増加・最大3倍（叫喚）
 //    randomAilments:n      ランダムな状態異常をn種付与（鏡獄=3）
 // ============================================================
@@ -120,7 +121,7 @@ export const HACHIGOKU_HELLS = [
       physTakenMult: 0.5, specialTakenMult: 0.5, dotTakenMult: 3,
     },
     skill: { name: '血池飛沫', mult: 1.6, every: 3 },
-    ultimate: { name: '血盆陀羅', mult: 3.0, hpBelow: 0.5, inflict: ['poison'], bleedStacks: 5, selfHealPct: 0.3 },
+    ultimate: { name: '血盆陀羅', mult: 1.4, hpBelow: 0.5, inflict: ['poison'], bleedStacks: 5, selfHealPct: 0.3, permBleed: true },
   },
   {
     key: 'gaki', name: '餓鬼地獄', boss: 'プレータ', img: '/pure-ta.png',

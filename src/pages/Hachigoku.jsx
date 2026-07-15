@@ -135,6 +135,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
   // 針山: 防御・特防を常時3倍 ／ 叫喚: ターン経過ごとに累積1.1倍（呼び出し時点のturnで算出）
   const enemyDefMult = () => (mods.selfDefMult || 1) * (mods.defRamp ? Math.pow(mods.defRamp, Math.max(0, turn - 1)) : 1)
   let permLifesteal = 0  // 餓鬼の大技: 戦闘終了まで与ダメ×nを回復
+  let permBleed = false  // 血池の大技: 以降、攻撃命中ごとに出血を確定付与
 
   const playerSpd = effectiveSpdForCalc
   const enemySpd = enemy.spd || 5
@@ -502,6 +503,8 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       }
     }
     if (finalDmg > 0) applyOnHitAilments()
+    // 血池の大技発動後: 以降の攻撃命中ごとに出血を確定付与（羽衣/紋章耐性/狂信で防げる）
+    if (finalDmg > 0 && permBleed) inflictAilment('bleed')
     // 大技の確定付与（羽衣/紋章耐性/狂信で防げる）
     if (finalDmg > 0 && cast?.inflict) for (const key of cast.inflict) inflictAilment(key)
     // 血池の大技: 出血を一気にnスタック
@@ -520,6 +523,10 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     if (cast?.permLifesteal > 0 && permLifesteal < cast.permLifesteal) {
       permLifesteal = cast.permLifesteal
       logs.push({ text:`🧛 ${enemy.name}の飢えが臨界に達した！ 以降、与えたダメージをすべて喰らい尽くす！`, color:'#cc66aa' })
+    }
+    if (cast?.permBleed && !permBleed) {
+      permBleed = true
+      logs.push({ text:`🩸 ${enemy.name}の刃が血に飢えた！ 以降、攻撃を受けるたびに出血する！`, color:'#ff3366' })
     }
     // 鏡獄の大技: ランダムな状態異常をn種付与
     if (finalDmg > 0 && (cast?.randomAilments || 0) > 0) {
