@@ -47,6 +47,20 @@ const MATERIAL_COUNT = (plus) => {
   return 4
 }
 
+// エリアボス装備は真化(evolve_stage 5)しないと+11以上に強化できない（+10が上限）
+const bossEnhanceCapped = (item) =>
+  isEvolvableEquip(item.weapons?.name) && !isShinka(item) && (item.enhance_plus || 0) >= 10
+
+// 強化に必要なGold。エリアボス装備は +10まで=Aランク費用 / +11以降=Sランク費用、
+// それ以外は装備自身のレアリティ費用。
+const enhanceGoldCost = (item, nextPlus) => {
+  const rarity = isEvolvableEquip(item.weapons?.name)
+    ? (nextPlus <= 10 ? 'a' : 's')
+    : item.weapons.rarity
+  const rankCosts = ENHANCE_COST_BY_RANK[rarity] || ENHANCE_COST_BY_RANK.ss
+  return rankCosts[nextPlus] || rankCosts[rankCosts.length - 1]
+}
+
 const STONE_RANKS = ['f','e','d','c','b','a','s','ss','sss']
 const STONE_NAMES = {
   f:'強化石(F)', e:'強化石(E)', d:'強化石(D)', c:'強化石(C)',
@@ -220,9 +234,13 @@ export default function Smithy() {
     const currentPlus = item.enhance_plus || 0
     const nextPlus = currentPlus + 1
     const rarity = item.weapons.rarity
-    const rankCosts = ENHANCE_COST_BY_RANK[rarity] || ENHANCE_COST_BY_RANK.ss
-    const cost = rankCosts[nextPlus] || rankCosts[rankCosts.length - 1]
+    const cost = enhanceGoldCost(item, nextPlus)
     const materialCount = MATERIAL_COUNT(currentPlus)
+
+    // エリアボス装備は真化しないと+11以上に強化不可
+    if (isEvolvableEquip(item.weapons.name) && !isShinka(item) && nextPlus >= 11) {
+      showMessage('真化させると+11以上に強化できます', '#ffcc00'); setLoading(false); return
+    }
 
     // ローカルチェック（UX用）
     if (profile.gold < cost) { showMessage('Goldが足りません！', '#ff4444'); setLoading(false); return }
@@ -653,14 +671,15 @@ export default function Smithy() {
           const w = item.weapons
           const plus = item.enhance_plus || 0
           const nextPlus = plus + 1
-          const rankCosts = ENHANCE_COST_BY_RANK[w.rarity] || ENHANCE_COST_BY_RANK.ss
-          const cost = rankCosts[nextPlus] || rankCosts[rankCosts.length - 1]
+          const cost = enhanceGoldCost(item, nextPlus)
           const materialCount = MATERIAL_COUNT(plus)
           const sameCount = equipment.filter(e => e.weapons.name === w.name && e.id !== item.id && !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0)).length
           const stoneCount = getStoneCount(w.rarity)
           // 選択中の素材で足りているか
           const matEnough = matSource === 'stone' ? stoneCount >= materialCount : sameCount >= materialCount
-          const canEnhance = profile.gold >= cost && matEnough
+          // エリアボス装備は真化しないと+11以上に強化不可（+10が上限）
+          const bossCapped = bossEnhanceCapped(item)
+          const canEnhance = profile.gold >= cost && matEnough && !bossCapped
           const successRate = ENHANCE_RATE[nextPlus] !== undefined ? ENHANCE_RATE[nextPlus] : 100
           // 天井（匠の祝福・全プレイヤー）
           const blessing = item.blessing_count || 0
@@ -769,9 +788,15 @@ export default function Smithy() {
                         <span style={{ color:'#556677' }}> {pityReady ? '(次で確定成功)' : '(失敗で+1・成功でリセット)'}</span>
                       </div>
                     )}
+                    {bossCapped && (
+                      <div style={{ fontSize:'11px', color:'#ff9944', border:'1px solid #663300', background:'#180c00', padding:'7px', marginBottom:'10px', textAlign:'center', lineHeight:'1.5' }}>
+                        ⚠ このエリアボス装備は+10が上限です。<br/>
+                        <span style={{ color:'#ffcc00' }}>真化</span>させると+11以上に強化できます。
+                      </div>
+                    )}
                     <button onClick={() => doEnhance(item, matSource, bookApplies ? hidenBook : null)} disabled={!canEnhance || loading}
                       style={{ width:'100%', padding:'10px', background: canEnhance ? '#1a0800' : '#001', border:`1px solid ${canEnhance ? '#aa6644' : '#002244'}`, color: canEnhance ? '#ffcc88' : '#334455', cursor: canEnhance ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
-                      {loading ? '鍛錬中...' : '⚒ 鍛錬する'}
+                      {loading ? '鍛錬中...' : (bossCapped ? '真化が必要です' : '⚒ 鍛錬する')}
                     </button>
                     <button onClick={closeModal} disabled={loading}
                       style={{ width:'100%', padding:'7px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
