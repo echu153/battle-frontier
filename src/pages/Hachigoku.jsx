@@ -850,9 +850,17 @@ export default function Hachigoku() {
   const [remaining, setRemaining] = useState(0)
   const cdRef = useRef(null)
   const logsEndRef = useRef(null)
+  const cardRefs = useRef({})  // 地獄カードごとのDOM参照（選択時にスクロールして合わせる）
 
   useEffect(() => { init() }, [])
   useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [battleLogs])
+
+  // 地獄カードを選ぶと、展開した内容が見切れないよう選択カードへスクロールして合わせる（奈落と同様）
+  useEffect(() => {
+    if (!selectedHell) return
+    const el = cardRefs.current[selectedHell]
+    if (el) requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }, [selectedHell])
 
   useEffect(() => {
     clearInterval(cdRef.current)
@@ -1014,8 +1022,8 @@ export default function Hachigoku() {
                 const cl = clears[h.key]
                 const maxDiff = cl?.maxDiff ?? -1
                 return (
-                  <div key={h.key} onClick={()=>setSelectedHell(sel ? null : h.key)}
-                    style={{ border:`1px solid ${sel ? '#ff8855' : '#5a2a2a'}`, background: sel ? '#2a0e08' : '#180808', padding:'12px', cursor:'pointer' }}>
+                  <div key={h.key} ref={el => { cardRefs.current[h.key] = el }} onClick={()=>setSelectedHell(sel ? null : h.key)}
+                    style={{ border:`1px solid ${sel ? '#ff8855' : '#5a2a2a'}`, background: sel ? '#2a0e08' : '#180808', padding:'12px', cursor:'pointer', scrollMarginTop:'56px' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                       <div style={{ display:'flex', alignItems:'center', gap:'10px', flex:1, minWidth:0, textAlign:'left' }}>
                         {h.img
