@@ -22,7 +22,7 @@
 //  physTakenMult:0..1          敵が受ける物理ダメージの倍率（氷結=0.5）※DoTは対象外
 //  dotTakenMult:n              敵が受ける状態異常DoTダメージの倍率（血池=3）
 //  selfDefMult:n               敵の防御・特防を常時n倍（針山=3・貫通が有効）
-//  defRamp:n                   ターン経過ごとに敵の防御・特防を累積n倍（叫喚=1.1）
+//  defRamp:n                   ターン経過ごとに敵の防御・特防を累積n倍（叫喚=1.2）
 //  selfHealMult:n              敵自身の回復量n倍（餓鬼=2）
 //  playerHealMult:0..1         プレイヤーの全回復量の倍率（餓鬼=0.5）
 //  nonCritMult:0..1            敵のクリティカル以外の与ダメ倍率（黒縄=0.5）
@@ -114,7 +114,7 @@ export const HACHIGOKU_HELLS = [
     crystals: ['resshou', 'kashou', 'moudoku'],
     soul: 'チボンダラの魂', memory: 'チボンダラの記憶',
     desc: '血の池から這い出た獄卒。出血・やけど・猛毒を撒き散らす。',
-    passive: '血肉の泥躯（通常攻撃・スキルダメージ半減／状態異常ダメージ3倍）',
+    passive: '血肉の泥躯（受ける通常攻撃・スキルダメージ半減／受ける状態異常ダメージ3倍）',
     mods: {
       onHitAilment: [{ key: 'bleed', chance: 30 }, { key: 'poison', chance: 25 }, { key: 'burn', chance: 20 }],
       physTakenMult: 0.5, specialTakenMult: 0.5, dotTakenMult: 3,
@@ -139,8 +139,8 @@ export const HACHIGOKU_HELLS = [
     crystals: ['shugo', 'kouma', 'kaihi'],
     soul: 'ラウラヴァの魂', memory: 'ラウラヴァの記憶',
     desc: '悲鳴を糧に肥え太る巨躯の獄卒。生半可な攻撃は通らない。',
-    passive: '肥大する慟哭（ターン経過ごとに防御・特防1.1倍）',
-    mods: { defRamp: 1.1 },
+    passive: '肥大する慟哭（ターン経過ごとに防御・特防1.2倍）',
+    mods: { defRamp: 1.2 },
     skill: { name: '叫喚の咆哮', mult: 1.6, every: 3 },
     ultimate: { name: '羅宇羅婆', mult: 3.0, hpBelow: 0.5, defGapScale: true },
   },
