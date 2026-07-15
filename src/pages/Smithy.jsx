@@ -454,23 +454,23 @@ export default function Smithy() {
   }
 
 
-  // 強者の結晶を加工（エリアボス装備10個 → 結晶1個）。開発限定。
-  const craftCrystalFromBossEquips = async (times = 1) => {
+  // 強者の結晶を加工（選択したエリアボス装備 CRYSTAL_EQUIP_COST 個ごと → 結晶1個）。開発限定。
+  const craftCrystalFromSelectedIds = async (selectedIds) => {
     if (craftBusyRef.current) return
     craftBusyRef.current = true
     setLoading(true)
     try {
-      // 未強化・未進化・未装備・お気に入り/帰属でないエリアボス装備のみ対象
-      const avail = equipment.filter(e =>
-        isEvolvableEquip(e.weapons?.name) && !e.equipped && !e.is_favorite
-        && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0))
-      const maxTimes = Math.floor(avail.length / CRYSTAL_EQUIP_COST)
-      if (maxTimes < 1) { showMessage(`エリアボス装備が${CRYSTAL_EQUIP_COST}個必要です！（対象${avail.length}個）`, '#ff4444'); return }
-      const n = Math.max(1, Math.min(Math.floor(times) || 1, maxTimes))
-      const picks = avail.slice(0, n * CRYSTAL_EQUIP_COST)
+      const selected = selectedIds.map(id => equipment.find(e => e.id === id)).filter(Boolean)
+      if (selected.length < CRYSTAL_EQUIP_COST || selected.length % CRYSTAL_EQUIP_COST !== 0) {
+        showMessage(`エリアボス装備を${CRYSTAL_EQUIP_COST}の倍数で選択してください！`, '#ff4444'); return
+      }
+      if (!selected.every(e => isEvolvableEquip(e.weapons?.name))) { showMessage('エリアボス装備のみ加工できます！', '#ff4444'); return }
+      if (selected.some(e => e.equipped || e.is_favorite || e.is_bound || (e.enhance_plus > 0) || (e.evolve_stage > 0))) {
+        showMessage('装備中/お気に入り/帰属/強化済/進化済は加工できません！', '#ff4444'); return
+      }
       // 「未強化のまま現存する」条件付きで削除し、実際に削除できた数だけ加工（連打・別端末での二重消費を防ぐ）
       let deleted = 0
-      for (const item of picks) {
+      for (const item of selected) {
         const { data: del } = await supabase.from('player_equipment').delete()
           .eq('id', item.id).or('enhance_plus.is.null,enhance_plus.eq.0')
           .or('evolve_stage.is.null,evolve_stage.eq.0').select('id')
@@ -638,6 +638,7 @@ export default function Smithy() {
     const c = craftConfirm
     setCraftConfirm(null)
     if (c.type === 'equipment') craftStoneFromSelectedItems(c.selectedIds)
+    else if (c.type === 'crystal') craftCrystalFromSelectedIds(c.selectedIds)
     else craftStoneFromStones(c.rarity, c.times || 1)
   }
 
@@ -664,6 +665,24 @@ export default function Smithy() {
                 <div style={{ textAlign:'center', color:'#446688', fontSize:'11px', marginBottom:'4px' }}>↓</div>
                 <div style={{ textAlign:'center', color:'#ffcc00', fontSize:'13px', marginBottom:'16px' }}>
                   {STONE_NAMES[craftConfirm.rarity]} × {Math.floor((craftConfirm.items?.length || 0) / 3)}
+                </div>
+              </>
+            )}
+
+            {craftConfirm.type === 'crystal' && (
+              <>
+                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'10px' }}>以下のエリアボス装備{craftConfirm.items.length}個を消費して{CRYSTAL_NAME}に加工します</div>
+                <div style={{ marginBottom:'12px', maxHeight:'34vh', overflowY:'auto' }}>
+                  {craftConfirm.items.map(item => (
+                    <div key={item.id} style={{ color:'#88ccff', fontSize:'11px', padding:'5px 8px', borderBottom:'1px solid #002244', display:'flex', alignItems:'center', gap:'6px' }}>
+                      <span style={{ fontSize:'9px', padding:'1px 4px', color:RARITY_COLORS[item.weapons.rarity], border:`1px solid ${RARITY_COLORS[item.weapons.rarity]}` }}>{RARITY_LABELS[item.weapons.rarity]}</span>
+                      <span>{item.weapons.name}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ textAlign:'center', color:'#446688', fontSize:'11px', marginBottom:'4px' }}>↓</div>
+                <div style={{ textAlign:'center', color:'#cbaaff', fontSize:'13px', marginBottom:'16px' }}>
+                  🛡 {CRYSTAL_NAME} × {Math.floor((craftConfirm.items?.length || 0) / CRYSTAL_EQUIP_COST)}
                 </div>
               </>
             )}
@@ -1224,7 +1243,10 @@ export default function Smithy() {
                     <span style={{ color:'#556677' }}>※未強化・未進化・未装備・お気に入り/帰属でないエリアボス装備が対象</span>
                   </div>
                   <div style={{ color:'#446688', fontSize:'10px', marginBottom:'10px' }}>所持: <span style={{ color:'#cbaaff' }}>{CRYSTAL_NAME} {owned}個</span></div>
-                  <div style={{ border:`1px solid ${canCraft ? '#5544aa' : '#002244'}`, background:'#000818', padding:'12px' }}>
+
+                  {/* ランダム一括 */}
+                  <div style={{ border:`1px solid ${canCraft ? '#5544aa' : '#002244'}`, background:'#000818', padding:'12px', marginBottom:'12px' }}>
+                    <div style={{ color:'#cbaaff', fontSize:'11px', marginBottom:'8px' }}>ランダム一括</div>
                     <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', flexWrap:'wrap' }}>
                       <span style={{ color:'#88ccff', fontSize:'12px' }}>対象エリアボス装備: <span style={{ color: canCraft ? '#44ff88' : '#ff4444' }}>{avail.length}個</span></span>
                       <span style={{ color:'#446688', fontSize:'10px' }}>→ 最大 {maxTimes}個 作成可</span>
@@ -1240,11 +1262,22 @@ export default function Smithy() {
                         style={{ padding:'2px 6px', background:'#100a24', border:'1px solid #4433aa', color: canCraft?'#cbaaff':'#334455', cursor: canCraft?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'9px' }}>最大</button>
                       <span style={{ color:'#446688', fontSize:'10px' }}>（装備{canCraft?times*CRYSTAL_EQUIP_COST:CRYSTAL_EQUIP_COST}個 → 結晶{canCraft?times:1}個）</span>
                     </div>
-                    <button onClick={() => craftCrystalFromBossEquips(times)} disabled={!canCraft || loading}
+                    <button onClick={() => {
+                        const shuffled = [...avail].sort(() => Math.random() - 0.5)
+                        const picked = shuffled.slice(0, times * CRYSTAL_EQUIP_COST)
+                        setCraftConfirm({ type:'crystal', items:picked, selectedIds:picked.map(i=>i.id) })
+                      }} disabled={!canCraft || loading}
                       style={{ width:'100%', marginTop:'10px', padding:'9px', background: canCraft ? '#160e2e' : '#001', border:`1px solid ${canCraft ? '#7755cc' : '#002244'}`, color: canCraft ? '#cbaaff' : '#334455', cursor: canCraft ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'12px' }}>
-                      {loading ? '加工中...' : `🛡 ${CRYSTAL_NAME}を作成する`}
+                      {loading ? '加工中...' : `🛡 ランダムで${canCraft?times:1}個作成する`}
                     </button>
                   </div>
+
+                  {/* 手動選択 */}
+                  <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>または手動で{CRYSTAL_EQUIP_COST}の倍数を選択:</div>
+                  <CrystalCraftSelector equipment={equipment} loading={loading} sortKey={sortKey} onRequestCraft={(ids) => {
+                    const items = ids.map(id => equipment.find(e => e.id === id)).filter(Boolean)
+                    setCraftConfirm({ type:'crystal', items, selectedIds:ids })
+                  }} />
                 </div>
               )
             })()}
@@ -1491,6 +1524,63 @@ function CraftSelector({ equipment, loading, sortKey, onRequestCraft }) {
               <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>{RARITY_LABELS[w.rarity]}</span>
               <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>{w.name}</span>
               {item.enhance_plus > 0 && <span style={{color:'#ffcc00', fontSize:'10px'}}>+{item.enhance_plus}</span>}
+            </div>
+            <div style={{ fontSize:'10px', color:'#446688' }}>
+              {w.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻+{w.atk_bonus} </span>}
+              {w.def_bonus  > 0 && <span style={{color:'#88aaff'}}>防+{w.def_bonus} </span>}
+              {w.matk_bonus > 0 && <span style={{color:'#cc44ff'}}>特攻+{w.matk_bonus} </span>}
+              {w.mdef_bonus > 0 && <span style={{color:'#44ccff'}}>特防+{w.mdef_bonus} </span>}
+              {w.spd_bonus  > 0 && <span style={{color:'#ff8844'}}>速+{w.spd_bonus} </span>}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// 強者の結晶 用：エリアボス装備を手動選択（CRYSTAL_EQUIP_COST の倍数・ランク不問）
+function CrystalCraftSelector({ equipment, loading, sortKey, onRequestCraft }) {
+  const [selected, setSelected] = useState([])
+  const avail = sortEquipment(equipment.filter(e =>
+    isEvolvableEquip(e.weapons?.name) && !e.equipped && !e.is_favorite
+    && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0)), sortKey || 'obtained_asc')
+
+  const toggle = (id) => {
+    setSelected(sel => sel.includes(id) ? sel.filter(s => s !== id) : [...sel, id])
+  }
+  const readyCount = Math.floor(selected.length / CRYSTAL_EQUIP_COST)
+  const canCraft = selected.length >= CRYSTAL_EQUIP_COST && selected.length % CRYSTAL_EQUIP_COST === 0
+  const selectMax = () => setSelected(avail.slice(0, Math.floor(avail.length / CRYSTAL_EQUIP_COST) * CRYSTAL_EQUIP_COST).map(e => e.id))
+
+  return (
+    <div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px', padding:'8px', border:'1px solid #3a2a66', background:'#0a0818', flexWrap:'wrap', gap:'6px' }}>
+        <div style={{ fontSize:'11px', color:'#446688' }}>
+          選択中: <span style={{ color: canCraft ? '#cbaaff' : '#ffcc00' }}>{selected.length}個</span>
+          <span style={{ color:'#446688', marginLeft:'8px' }}>→ 🛡 {CRYSTAL_NAME} ×{readyCount}</span>
+          {!canCraft && selected.length > 0 && <span style={{ color:'#ff6644', marginLeft:'8px' }}>（{CRYSTAL_EQUIP_COST}の倍数で選択）</span>}
+        </div>
+        <div style={{ display:'flex', gap:'6px' }}>
+          <button onClick={selectMax} disabled={avail.length < CRYSTAL_EQUIP_COST}
+            style={{ padding:'4px 8px', background:'#100a24', border:'1px solid #4433aa', color: avail.length<CRYSTAL_EQUIP_COST?'#334455':'#cbaaff', cursor: avail.length<CRYSTAL_EQUIP_COST?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>最大選択</button>
+          <button onClick={() => setSelected([])} disabled={selected.length===0}
+            style={{ padding:'4px 8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>クリア</button>
+          <button onClick={() => { onRequestCraft(selected); setSelected([]) }} disabled={!canCraft || loading}
+            style={{ padding:'4px 10px', background: canCraft?'#160e2e':'#001', border:`1px solid ${canCraft?'#7755cc':'#002244'}`, color: canCraft?'#cbaaff':'#334455', cursor: canCraft?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'10px' }}>加工する</button>
+        </div>
+      </div>
+      {avail.length === 0 && <div style={{ color:'#334455', fontSize:'11px', padding:'10px' }}>加工できるエリアボス装備がありません</div>}
+      {avail.map(item => {
+        const w = item.weapons
+        const isSelected = selected.includes(item.id)
+        return (
+          <div key={item.id} onClick={() => toggle(item.id)}
+            style={{ border:`2px solid ${isSelected ? '#7755cc' : '#002244'}`, background: isSelected ? '#120a24' : '#001028', padding:'8px', marginBottom:'4px', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+              {isSelected && <span style={{color:'#cbaaff', fontSize:'12px'}}>✓</span>}
+              <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>{RARITY_LABELS[w.rarity]}</span>
+              <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>{w.name}</span>
             </div>
             <div style={{ fontSize:'10px', color:'#446688' }}>
               {w.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻+{w.atk_bonus} </span>}
