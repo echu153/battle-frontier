@@ -1273,7 +1273,7 @@ export default function Smithy() {
                   </div>
 
                   {/* 手動選択 */}
-                  <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>または手動で{CRYSTAL_EQUIP_COST}の倍数を選択:</div>
+                  <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>または手動で{CRYSTAL_EQUIP_COST}個選択:</div>
                   <CrystalCraftSelector equipment={equipment} loading={loading} sortKey={sortKey} onRequestCraft={(ids) => {
                     const items = ids.map(id => equipment.find(e => e.id === id)).filter(Boolean)
                     setCraftConfirm({ type:'crystal', items, selectedIds:ids })
@@ -1546,24 +1546,27 @@ function CrystalCraftSelector({ equipment, loading, sortKey, onRequestCraft }) {
     isEvolvableEquip(e.weapons?.name) && !e.equipped && !e.is_favorite
     && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0)), sortKey || 'obtained_asc')
 
+  // 1回の加工は CRYSTAL_EQUIP_COST 個ちょうど（結晶1個）。上限に達したら他は選択不可。
   const toggle = (id) => {
-    setSelected(sel => sel.includes(id) ? sel.filter(s => s !== id) : [...sel, id])
+    setSelected(sel => {
+      if (sel.includes(id)) return sel.filter(s => s !== id)
+      if (sel.length >= CRYSTAL_EQUIP_COST) return sel  // 10個で打ち止め
+      return [...sel, id]
+    })
   }
-  const readyCount = Math.floor(selected.length / CRYSTAL_EQUIP_COST)
-  const canCraft = selected.length >= CRYSTAL_EQUIP_COST && selected.length % CRYSTAL_EQUIP_COST === 0
-  const selectMax = () => setSelected(avail.slice(0, Math.floor(avail.length / CRYSTAL_EQUIP_COST) * CRYSTAL_EQUIP_COST).map(e => e.id))
+  const canCraft = selected.length === CRYSTAL_EQUIP_COST
+  const selectMax = () => setSelected(avail.slice(0, CRYSTAL_EQUIP_COST).map(e => e.id))
 
   return (
     <div>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px', padding:'8px', border:'1px solid #3a2a66', background:'#0a0818', flexWrap:'wrap', gap:'6px' }}>
         <div style={{ fontSize:'11px', color:'#446688' }}>
-          選択中: <span style={{ color: canCraft ? '#cbaaff' : '#ffcc00' }}>{selected.length}個</span>
-          <span style={{ color:'#446688', marginLeft:'8px' }}>→ 🛡 {CRYSTAL_NAME} ×{readyCount}</span>
-          {!canCraft && selected.length > 0 && <span style={{ color:'#ff6644', marginLeft:'8px' }}>（{CRYSTAL_EQUIP_COST}の倍数で選択）</span>}
+          選択中: <span style={{ color: canCraft ? '#cbaaff' : '#ffcc00' }}>{selected.length}/{CRYSTAL_EQUIP_COST}</span>
+          <span style={{ color:'#446688', marginLeft:'8px' }}>→ 🛡 {CRYSTAL_NAME} ×{canCraft ? 1 : 0}</span>
         </div>
         <div style={{ display:'flex', gap:'6px' }}>
           <button onClick={selectMax} disabled={avail.length < CRYSTAL_EQUIP_COST}
-            style={{ padding:'4px 8px', background:'#100a24', border:'1px solid #4433aa', color: avail.length<CRYSTAL_EQUIP_COST?'#334455':'#cbaaff', cursor: avail.length<CRYSTAL_EQUIP_COST?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>最大選択</button>
+            style={{ padding:'4px 8px', background:'#100a24', border:'1px solid #4433aa', color: avail.length<CRYSTAL_EQUIP_COST?'#334455':'#cbaaff', cursor: avail.length<CRYSTAL_EQUIP_COST?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'10px' }}>{CRYSTAL_EQUIP_COST}個選択</button>
           <button onClick={() => setSelected([])} disabled={selected.length===0}
             style={{ padding:'4px 8px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>クリア</button>
           <button onClick={() => { onRequestCraft(selected); setSelected([]) }} disabled={!canCraft || loading}
@@ -1574,9 +1577,10 @@ function CrystalCraftSelector({ equipment, loading, sortKey, onRequestCraft }) {
       {avail.map(item => {
         const w = item.weapons
         const isSelected = selected.includes(item.id)
+        const isDisabled = !isSelected && selected.length >= CRYSTAL_EQUIP_COST  // 上限到達で未選択はグレーアウト
         return (
-          <div key={item.id} onClick={() => toggle(item.id)}
-            style={{ border:`2px solid ${isSelected ? '#7755cc' : '#002244'}`, background: isSelected ? '#120a24' : '#001028', padding:'8px', marginBottom:'4px', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div key={item.id} onClick={() => !isDisabled && toggle(item.id)}
+            style={{ border:`2px solid ${isSelected ? '#7755cc' : '#002244'}`, background: isSelected ? '#120a24' : '#001028', padding:'8px', marginBottom:'4px', cursor: isDisabled ? 'not-allowed' : 'pointer', opacity: isDisabled ? 0.4 : 1, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
               {isSelected && <span style={{color:'#cbaaff', fontSize:'12px'}}>✓</span>}
               <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>{RARITY_LABELS[w.rarity]}</span>
