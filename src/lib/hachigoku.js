@@ -26,7 +26,8 @@
 //  selfHealMult:n              敵自身の回復量n倍（餓鬼=2）
 //  playerHealMult:0..1         プレイヤーの全回復量の倍率（餓鬼=0.5）
 //  nonCritMult:0..1            敵のクリティカル以外の与ダメ倍率（黒縄=0.5）
-//  mirrorPlayerStats:0..1      プレイヤーの実効ステ(A/B/C/D/S)を×nで自身に反映（鏡獄=0.8・HPは難易度準拠）
+//  mirrorPlayerStats:0..1      プレイヤーの実効ステ(A/B/C/D/S)を×nで自身に反映（HPは難易度準拠・現在未使用の汎用mod）
+//  reflectAilments:true        プレイヤーが敵に付与した状態異常を、同じものプレイヤーへ跳ね返す（鏡獄）
 // passive: パッシブの表示ラベル（ロビー/戦闘開始時に表示）
 //
 // 【敵スキル】（Hachigoku.jsx の doEnemyTurn が解釈する）
@@ -42,7 +43,9 @@
 //    permLifesteal:0..1    戦闘終了まで与ダメ×nを回復し続ける（餓鬼=1.0）
 //    permBleed:true        戦闘終了まで攻撃命中ごとに出血を確定付与（血池）
 //    defGapScale:true      自身と相手の(防御+特防)の差が大きいほど与ダメ増加・最大3倍（叫喚）
-//    randomAilments:n      ランダムな状態異常をn種付与（鏡獄=3）
+//    randomAilments:n      ランダムな状態異常をn種付与（現在未使用の汎用効果）
+//    mirrorAllSkills:true  プレイヤーのセット中アクティブスキルを全て撃ち返す（鏡獄）
+//    mirrorFrac:n          mirrorAllSkills時の効果倍率（鏡獄=1/3）
 // ============================================================
 
 export const HACHIGOKU_DIFFICULTIES = [
@@ -164,13 +167,13 @@ export const HACHIGOKU_HELLS = [
     crystals: ['boudoku', 'bouma', 'bouka', 'bouketsu', 'bouzetsu'],
     soul: 'ジョウハリの魂', memory: 'ジョウハリの記憶',
     desc: '浄玻璃の鏡に映した罪をあらゆる呪いに変える獄卒。',
-    passive: '浄玻璃の鏡映（プレイヤーのステータスを80%反映）',  // ※戦闘・ステの特別仕様は後日追記予定
+    passive: '浄玻璃の鏡映（与えた状態異常をすべて反射する）',
     mods: { onHitAilment: [
       { key: 'poison', chance: 20 }, { key: 'paralysis', chance: 15 },
       { key: 'burn', chance: 15 }, { key: 'bleed', chance: 15 }, { key: 'stun', chance: 8 },
-    ], mirrorPlayerStats: 0.8 },
+    ], reflectAilments: true },
     skill: { name: '浄玻璃の裁き', mult: 1.6, every: 3 },
-    ultimate: { name: '浄玻璃', mult: 3.0, hpBelow: 0.5, randomAilments: 3 },
+    ultimate: { name: '浄玻璃', hpBelow: 0.5, mirrorAllSkills: true, mirrorFrac: 1 / 3 },
   },
 ]
 

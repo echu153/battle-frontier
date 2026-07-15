@@ -153,6 +153,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
 
   const doPlayerAttack = (isExtra = false) => {
     playerAttacking = true
+    const enemyAilBefore = snapshotEnemyAil()  // 鏡獄: 状態異常反射の差分検知用
     const holyFieldDef = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
     const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
     const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
@@ -408,12 +409,13 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       }
       if (expandedSkillSet.length > 0) skillIndex++
     }
+    reflectNewAilments(enemyAilBefore)  // 鏡獄: この攻撃で敵に付けた状態異常を跳ね返す
     playerAttacking = false
   }
 
   // 状態異常を1件付与（哭雨の羽衣/紋章耐性/狂信で防げる）。付与できたら true
   const AIL_LABEL = { burn:'やけど', poison:'毒', bleed:'出血', paralysis:'麻痺', stun:'スタン' }
-  const inflictAilment = (key) => {
+  const inflictAilment = (key, msg) => {
     if (playerHp <= 0) return false
     if (playerBuffs.statusImmune?.turns > 0) return false
     if (key !== 'stun' && key !== 'bleed' && playerBuffs[key]?.turns > 0) return false
@@ -427,7 +429,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       const b = playerBuffs.bleed
       playerBuffs.bleed = { stacks: Math.min(5, (b?.stacks || 0) + 1), lastTurn: 0 }
     }
-    logs.push({ text:`🌫 ${enemy.name}の獄気！ ${AIL_LABEL[key]}を負わされた！`, color:'#aa66ff' })
+    logs.push({ text: msg || `🌫 ${enemy.name}の獄気！ ${AIL_LABEL[key]}を負わされた！`, color:'#aa66ff' })
     return true
   }
 
@@ -437,6 +439,25 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     for (const { key, chance } of mods.onHitAilment) {
       if (Math.random() * 100 >= chance) continue
       inflictAilment(key)
+    }
+  }
+
+  // 鏡獄: 状態異常反射。プレイヤーが敵に付与した状態異常を、同じものプレイヤーへ跳ね返す。
+  const AIL_REFLECT_KEYS = ['burn', 'poison', 'severePoisoin', 'bleed', 'paralysis', 'stun']
+  const snapshotEnemyAil = () => {
+    if (!mods.reflectAilments) return null
+    const s = {}
+    for (const k of AIL_REFLECT_KEYS) s[k] = k === 'bleed' ? (enemyBuffs.bleed?.stacks || 0) : (enemyBuffs[k]?.turns > 0 ? 1 : 0)
+    return s
+  }
+  const reflectNewAilments = (before) => {
+    if (!mods.reflectAilments || !before || playerHp <= 0) return
+    for (const k of AIL_REFLECT_KEYS) {
+      const now = k === 'bleed' ? (enemyBuffs.bleed?.stacks || 0) : (enemyBuffs[k]?.turns > 0 ? 1 : 0)
+      if (now > before[k]) {
+        const rk = k === 'severePoisoin' ? 'poison' : k  // 猛毒は毒として反射
+        inflictAilment(rk, `🪞 ${enemy.name}の鏡映！ 与えた${AIL_LABEL[rk]}が跳ね返った！`)
+      }
     }
   }
 
@@ -555,6 +576,41 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     }
   }
 
+  // 鏡獄の大技: プレイヤーがセットしている全アクティブスキルを1ターンで撃ち返す（効果は1/3）
+  const castMirrorSkills = (ult) => {
+    const frac = ult.mirrorFrac || (1 / 3)
+    const activeSkills = skillSets.filter(ss => ss.skills && ss.skills.type !== 'パッシブ').map(ss => ss.skills)
+    const seen = new Set(), uniq = []
+    for (const sk of activeSkills) { if (sk?.name && !seen.has(sk.name)) { seen.add(sk.name); uniq.push(sk) } }
+    if (uniq.length === 0) { doEnemyAttack(false, { ...ult, isUlt: true }); return }  // スキル未設定なら通常大技
+    const casterStats = { atk: enemy.atk, matk: enemy.matk, def: enemy.def, mdef: enemy.mdef, spd: enemy.spd, hp_max: enemyMaxHp, mp_max: 999999, critDmg:0, defPen:0, mdefPen:0, hitBonus:0, critBonus:0, evasionBonus:0, critResist:0 }
+    const casterProfile = { hp_max: enemyMaxHp, mp_max: 999999, class:'', retraining:{}, username: enemy.name }
+    const playerTarget = { name: profile.username, def: eff.def, mdef: eff.mdef, hp: eff.hp_max, hp_max: eff.hp_max, type:'physical' }
+    for (const sk of uniq) {
+      if (playerHp <= 0) break
+      const before = snapshotEnemyAil()
+      // executeSkill: caster=敵, target=プレイヤー。newEnemyBuffs=対象(プレイヤー)デバフ / newPlayerBuffs=詠唱者(敵)バフ
+      const res = executeSkill({ name: sk.name }, casterStats, casterProfile, playerTarget, playerBuffs, enemyBuffs, false, null)
+      const isPhys = sk.type === '物理攻撃'
+      if (res.dmg > 0) {
+        const atkStat = isPhys ? casterStats.atk : casterStats.matk
+        const pDef = isPhys ? eff.def : eff.mdef
+        const defScale = atkStat / (atkStat + Math.max(1, pDef))
+        const rankRed = calcDefReduction(isPhys ? eff.def : eff.mdef)
+        const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
+        let dmg = Math.max(0, Math.floor(res.dmg * defScale * (1 - rankRed) * dmgReduceRate * evoTakenMult(eff, isPhys) * frac * (0.9 + Math.random() * 0.2)))
+        playerHp -= dmg
+        logs.push({ text:`🪞 ${enemy.name}が「${sk.name}」を映し返す！ あなたに${dmg}ダメージ！`, color:'#cc66ff' })
+      } else {
+        logs.push({ text:`🪞 ${enemy.name}が「${sk.name}」を映し返す！`, color:'#cc66ff' })
+      }
+      // スキルの自己回復ぶんは敵が1/3回復
+      if (res.heal > 0 && enemyHp > 0) { const h = Math.floor(res.heal * frac); if (h > 0) { enemyHp = Math.min(enemyMaxHp, enemyHp + h); logs.push({ text:`💚 ${enemy.name}はHPを${h}回復した！`, color:'#44ff88' }) } }
+      // スキルが付与する状態異常は敵バフ(enemyBuffs=対象プレイヤー)へ反映済み → 反射パッシブは無関係にそのまま
+      playerBuffs = res.newEnemyBuffs
+    }
+  }
+
   // 1ターン分の敵行動: HP50%以下で1度だけ大技 → everyターンごとに通常スキル → 通常攻撃
   let ultUsed = false
   let dispel75Done = false  // HP75%以下の自動バフ解除を1度だけ発動させるフラグ
@@ -564,6 +620,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       ultUsed = true
       dispelPlayerBuffs()  // 大技使用時に自動バフ解除（行動には含まれない）
       logs.push({ text:`━━ ${enemy.name}が大技を放つ！ ━━`, color:'#ff44aa' })
+      if (ult.mirrorAllSkills) { castMirrorSkills(ult); return }
       doEnemyAttack(false, { ...ult, isUlt: true })
       // 氷結の大技: 直後に確定で追加行動
       if (ult.extraAction && playerHp > 0) doEnemyAttack(true)
