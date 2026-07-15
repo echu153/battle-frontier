@@ -3,7 +3,7 @@
 // ------------------------------------------------------------
 // ・全プレイヤーに1つ自動付与（player_emblem テーブル・LV1/上限値1から）
 // ・レベル＝結晶を振れる「上限値」。レベルが上がってもステは増えない。
-// ・レベルアップは八獄でドロップする「紋章の欠片」を消費（emblem_level_up RPC）
+// ・レベルアップは八獄でドロップする「紋章の成長石」を消費（emblem_level_up RPC）
 // ・LV100/125/150/175 で上限開放が必要（八獄ボス8体の魂、175は＋記憶8種）
 // ・能力は「結晶」を1個使うごとに+1（1項目MAX50・合計はレベルまで）
 // ・現状【is_admin開発限定】で公開
@@ -42,7 +42,7 @@ export const EMBLEM_CAP_UNLOCK_COST = [
   { souls: 10, memories: true },   // LV175 → 200（＋各地獄HELL初回クリアの記憶 各1）
 ]
 
-// レベルアップに必要な「紋章の欠片」数（次のレベル nextLv に上がるコスト）
+// レベルアップに必要な「紋章の成長石」数（次のレベル nextLv に上がるコスト）
 // LV2〜50:1個 / 51〜100:2個 / 101〜150:3個 / 151〜200:4個（合計約500個）
 export const emblemLevelUpCost = (nextLv) => {
   if (nextLv <= 50) return 1
@@ -143,4 +143,4 @@ export const calcEmblemBonus = (alloc) => {
 }
 
 // ===== 八獄（はちごく）関連の紋章素材 =====
-export const EMBLEM_SHARD_NAME = '紋章の欠片'
+export const EMBLEM_SHARD_NAME = '紋章の成長石'

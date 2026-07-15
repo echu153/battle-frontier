@@ -1010,7 +1010,7 @@ export default function Hachigoku() {
                 <span style={{ color:'#aa6655', fontSize:'10px', marginLeft:'8px' }}>(開発アカウント限定)</span>
               </div>
               <div style={{ color:'#aa6655', fontSize:'10px', marginTop:'4px', lineHeight:'1.7' }}>
-                八つの地獄の主に挑み、紋章を鍛える<span style={{ color:'#ffaa88' }}>結晶・紋章の欠片・獄卒の魂</span>を勝ち取ろう（報酬は確率ドロップ）。<br/>
+                八つの地獄の主に挑み、紋章を鍛える<span style={{ color:'#ffaa88' }}>結晶・紋章の成長石・獄卒の魂</span>を勝ち取ろう（報酬は確率ドロップ）。<br/>
                 挑戦は1日{HACHIGOKU_DAILY_WINS}回まで（毎朝5時リセット）。<span style={{ color:'#88ccff' }}>敗北しても回数は減りません。</span><br/>
                 各地獄の<span style={{ color:'#cc66ff' }}>Hell初回クリア</span>で紋章の最終上限開放に必要な「記憶」を獲得。
               </div>
@@ -1100,7 +1100,7 @@ export default function Hachigoku() {
                 <div style={{ color:'#ffcc44', fontSize:'13px', marginBottom:'6px' }}>🎉 勝利！ 報酬獲得（残り{reward.wins_left}回）</div>
                 <div style={{ fontSize:'11px', color:'#ffcc66', lineHeight:'1.9' }}>
                   {Object.entries(reward.drops || {}).map(([name, n]) => (
-                    <div key={name}>{name.includes('魂') ? '👹' : name.includes('記憶') ? '📿' : name.includes('欠片') ? '🧩' : '💠'} {name} ×{n}</div>
+                    <div key={name}>{name.includes('魂') ? '👹' : name.includes('記憶') ? '📿' : name.includes('成長石') ? '🧩' : '💠'} {name} ×{n}</div>
                   ))}
                   {Object.keys(reward.drops || {}).length === 0 && <div>（今回はドロップなし…）</div>}
                 </div>

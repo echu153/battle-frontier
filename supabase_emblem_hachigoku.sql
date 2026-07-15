@@ -3,7 +3,7 @@
 --   【is_admin開発限定の先行実装】一般公開時は各RPCの is_admin チェックを外す
 --   ・player_emblem: 紋章本体（LV/上限開放段階/結晶の割り振り）
 --   ・hachigoku_progress: 1日3勝カウント（JST朝5時リセット）＋クリア記録
---   ・アイテム: 紋章の欠片 / 魂8種 / 記憶8種 / 結晶22種
+--   ・アイテム: 紋章の成長石 / 魂8種 / 記憶8種 / 結晶22種
 --   ・RPC: emblem_get / emblem_level_up / emblem_unlock_cap / emblem_allocate
 --          / hachigoku_result（勝利報酬の確率ドロップ・サーバー権威）
 --   ※apply_battle_result 系には一切触れないため、SQL適用順の鉄則
@@ -41,7 +41,7 @@ CREATE POLICY "own hachigoku select" ON public.hachigoku_progress
 
 -- 2) アイテム定義 ---------------------------------------------
 INSERT INTO items (name, description, effect, value) VALUES
-  ('紋章の欠片', '紋章の力を宿した欠片。集めると紋章のレベルを上げられる。', 'material', 0),
+  ('紋章の成長石', '紋章の力を宿した石。集めると紋章のレベルを上げられる。', 'material', 0),
   -- 魂（紋章の上限開放素材・八獄ボスがドロップ）
   ('ターパナの魂',       '焦熱地獄の主ターパナの魂。紋章の上限開放に使う。', 'material', 0),
   ('マカハドマの魂',     '氷結地獄の主マカハドマの魂。紋章の上限開放に使う。', 'material', 0),
@@ -84,6 +84,12 @@ INSERT INTO items (name, description, effect, value) VALUES
   ('防血の結晶',     '紋章に力を注ぐ結晶。出血耐性+0.4%。',            'material', 0),
   ('防絶の結晶',     '紋章に力を注ぐ結晶。スタン耐性+0.2%。',          'material', 0)
 ON CONFLICT DO NOTHING;
+
+-- 旧名「紋章の欠片」を適用済みなら「紋章の成長石」に改名（所持分もそのまま引き継がれる）
+UPDATE items SET name = '紋章の成長石',
+  description = '紋章の力を宿した石。集めると紋章のレベルを上げられる。'
+ WHERE name = '紋章の欠片'
+   AND NOT EXISTS (SELECT 1 FROM items WHERE name = '紋章の成長石');
 
 -- 3) 共通ヘルパー ---------------------------------------------
 -- アイテムを名前で付与
@@ -146,7 +152,7 @@ BEGIN
 END $$;
 GRANT EXECUTE ON FUNCTION public.emblem_get() TO authenticated;
 
--- レベルアップ（紋章の欠片を消費・p_times回まとめて）
+-- レベルアップ（紋章の成長石を消費・p_times回まとめて）
 --   コスト: 次LV2〜50=1個 / 51〜100=2個 / 101〜150=3個 / 151〜200=4個
 CREATE OR REPLACE FUNCTION public.emblem_level_up(p_times int DEFAULT 1)
 RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
@@ -174,7 +180,7 @@ BEGIN
     v_ups := v_ups + 1;
   END LOOP;
   IF v_ups = 0 THEN RETURN json_build_object('error', 'cap_reached', 'cap', v_cap); END IF;
-  IF NOT public._emblem_consume_item(v_uid, '紋章の欠片', v_cost) THEN
+  IF NOT public._emblem_consume_item(v_uid, '紋章の成長石', v_cost) THEN
     RETURN json_build_object('error', 'not_enough_shards', 'cost', v_cost);
   END IF;
   UPDATE player_emblem SET level = level + v_ups, updated_at = now() WHERE player_id = v_uid;
@@ -274,10 +280,10 @@ GRANT EXECUTE ON FUNCTION public.emblem_allocate(text, int) TO authenticated;
 -- 5) RPC: 八獄 勝利報酬（サーバー権威・確率ドロップ）------------
 --   p_hell: 地獄キー / p_diff: 0=Easy 1=Normal 2=Hard 3=EXTREME 4=Hell
 --   1日3勝まで（JST朝5時リセット）。敗北時はこのRPCを呼ばない＝ノーカウント。
---   ドロップ（難易度 0..4）:
---     結晶: [60%×1, 100%×1, 100%×1+50%×1, 100%×2, 100%×2+50%×1]（その地獄の対応結晶からランダム）
---     欠片: [60%×1, 100%×1, 100%×1+30%×1, 100%×2, 100%×3]
---     魂:   [0.5%, 2%, 6%, 15%, 40%]
+--   ドロップ（難易度 0..4）※結晶は「その地獄の対応結晶“各種”ごと」に個別抽選:
+--     結晶(各種): Easy=80%×1 / Normal=1+50%×1 / Hard=1+90%×1 / EXTREME=2+50%×1 / Hell=2+90%×1
+--     紋章の成長石: Easy=1 / Normal=1〜2 / Hard=2〜3 / EXTREME=3〜4 / Hell=4〜5（範囲は均等乱数）
+--     魂:   [1%, 3%, 6%, 15%, 40%]
 --     記憶: Hell(4) 初回クリアで確定1個
 CREATE OR REPLACE FUNCTION public.hachigoku_result(p_hell text, p_diff int)
 RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
@@ -330,36 +336,40 @@ BEGIN
   IF v_p.win_day = v_today THEN v_wins := v_p.win_count; END IF;
   IF NOT COALESCE(v_admin, false) AND v_wins >= 3 THEN RETURN json_build_object('error', 'daily_limit'); END IF;
 
-  -- 結晶（その地獄の対応結晶からランダムに1個ずつ抽選）
+  -- 結晶（その地獄の対応結晶“各種”ごとに個別抽選）
+  --   Easy=80%×1 / Normal=1+50%×1 / Hard=1+90%×1 / EXTREME=2+50%×1 / Hell=2+90%×1
   v_pool := v_crystals -> p_hell;
-  v_crystal_count := (ARRAY[
-    CASE WHEN random() < 0.6 THEN 1 ELSE 0 END,      -- Easy
-    1,                                                -- Normal
-    1 + CASE WHEN random() < 0.5 THEN 1 ELSE 0 END,   -- Hard
-    2,                                                -- EXTREME
-    2 + CASE WHEN random() < 0.5 THEN 1 ELSE 0 END    -- Hell
-  ])[p_diff + 1];
-  FOR i IN 1..v_crystal_count LOOP
-    v_name := v_pool ->> floor(random() * jsonb_array_length(v_pool))::int;
-    PERFORM public._emblem_grant_item(v_uid, v_name, 1);
-    v_drops := jsonb_set(v_drops, ARRAY[v_name], to_jsonb(COALESCE((v_drops ->> v_name)::int, 0) + 1));
+  FOR i IN 0 .. jsonb_array_length(v_pool) - 1 LOOP
+    v_name := v_pool ->> i;
+    v_crystal_count := (ARRAY[
+      CASE WHEN random() < 0.8 THEN 1 ELSE 0 END,          -- Easy
+      1 + CASE WHEN random() < 0.5 THEN 1 ELSE 0 END,       -- Normal
+      1 + CASE WHEN random() < 0.9 THEN 1 ELSE 0 END,       -- Hard
+      2 + CASE WHEN random() < 0.5 THEN 1 ELSE 0 END,       -- EXTREME
+      2 + CASE WHEN random() < 0.9 THEN 1 ELSE 0 END        -- Hell
+    ])[p_diff + 1];
+    IF v_crystal_count > 0 THEN
+      PERFORM public._emblem_grant_item(v_uid, v_name, v_crystal_count);
+      v_drops := jsonb_set(v_drops, ARRAY[v_name], to_jsonb(v_crystal_count));
+    END IF;
   END LOOP;
 
-  -- 紋章の欠片
+  -- 紋章の成長石（難易度別の範囲を均等乱数で）
+  --   Easy=1 / Normal=1〜2 / Hard=2〜3 / EXTREME=3〜4 / Hell=4〜5
   v_shard_count := (ARRAY[
-    CASE WHEN random() < 0.6 THEN 1 ELSE 0 END,
     1,
-    1 + CASE WHEN random() < 0.3 THEN 1 ELSE 0 END,
-    2,
-    3
+    1 + floor(random() * 2)::int,   -- 1〜2
+    2 + floor(random() * 2)::int,   -- 2〜3
+    3 + floor(random() * 2)::int,   -- 3〜4
+    4 + floor(random() * 2)::int    -- 4〜5
   ])[p_diff + 1];
   IF v_shard_count > 0 THEN
-    PERFORM public._emblem_grant_item(v_uid, '紋章の欠片', v_shard_count);
-    v_drops := jsonb_set(v_drops, ARRAY['紋章の欠片'], to_jsonb(v_shard_count));
+    PERFORM public._emblem_grant_item(v_uid, '紋章の成長石', v_shard_count);
+    v_drops := jsonb_set(v_drops, ARRAY['紋章の成長石'], to_jsonb(v_shard_count));
   END IF;
 
   -- 魂（確率）
-  v_soul_rate := (ARRAY[0.005, 0.02, 0.06, 0.15, 0.40])[p_diff + 1];
+  v_soul_rate := (ARRAY[0.01, 0.03, 0.06, 0.15, 0.40])[p_diff + 1];
   IF random() < v_soul_rate THEN
     PERFORM public._emblem_grant_item(v_uid, v_boss || 'の魂', 1);
     v_drops := jsonb_set(v_drops, ARRAY[v_boss || 'の魂'], to_jsonb(1));

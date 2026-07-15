@@ -51,10 +51,10 @@ export default function Emblem() {
     const { data, error } = await supabase.rpc('emblem_level_up', { p_times: times })
     if (error || data?.error) {
       const code = data?.error || error?.message
-      setMsg(code === 'not_enough_shards' ? `紋章の欠片が足りません（必要: ${data?.cost}個）`
+      setMsg(code === 'not_enough_shards' ? `紋章の成長石が足りません（必要: ${data?.cost}個）`
         : code === 'cap_reached' ? `レベル上限です（上限開放が必要）` : `失敗しました（${code}）`)
     } else {
-      setMsg(`✨ 紋章がLV${data.level}になった！（欠片${data.used_shards}個消費）`)
+      setMsg(`✨ 紋章がLV${data.level}になった！（成長石${data.used_shards}個消費）`)
     }
     await refresh(); setBusy(false)
   }
@@ -146,13 +146,13 @@ export default function Emblem() {
                 （残り <span style={{ color: freePoints > 0 ? '#66ff99' : '#667799' }}>{freePoints}</span>）
               </div>
               <div style={{ color:'#667799', fontSize:'10px', marginTop:'2px' }}>
-                🧩 紋章の欠片: <span style={{ color:'#ffcc66' }}>{fmt(shards)}</span>個
+                🧩 紋章の成長石: <span style={{ color:'#ffcc66' }}>{fmt(shards)}</span>個
               </div>
             </div>
           </div>
           <div style={{ color:'#556688', fontSize:'10px', marginTop:'8px', lineHeight:'1.7' }}>
             第5の装備枠。レベルが上がるごとに「上限値」が+1され、八獄で得た結晶を振って能力を強化できる（1項目MAX{EMBLEM_ALLOC_MAX}）。<br/>
-            レベルアップには八獄でドロップする「紋章の欠片」を使う（LV2〜50: 1個／〜100: 2個／〜150: 3個／〜200: 4個）。
+            レベルアップには八獄でドロップする「紋章の成長石」を使う（LV2〜50: 1個／〜100: 2個／〜150: 3個／〜200: 4個）。
           </div>
           {/* レベルアップ・上限開放 */}
           <div style={{ display:'flex', gap:'6px', marginTop:'10px', flexWrap:'wrap' }}>
@@ -160,7 +160,7 @@ export default function Emblem() {
               <>
                 <button disabled={busy || shards < (nextCost||1)} onClick={()=>doLevelUp(1)}
                   style={{ padding:'8px 12px', background:'#102040', border:'1px solid #4488ff', color: shards >= (nextCost||1) ? '#88bbff' : '#445577', cursor: shards >= (nextCost||1) ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>
-                  ⬆ LVアップ（欠片{nextCost}個）
+                  ⬆ LVアップ（成長石{nextCost}個）
                 </button>
                 <button disabled={busy || shards <= 0} onClick={()=>doLevelUp(10)}
                   style={{ padding:'8px 12px', background:'#102040', border:'1px solid #4488ff', color: shards > 0 ? '#88bbff' : '#445577', cursor: shards > 0 ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>
