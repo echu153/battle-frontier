@@ -132,8 +132,9 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
   }
   const allSkillsSet = evoAllSkillsSet(skillSets)
 
-  // 針山: 防御・特防を常時3倍 ／ 叫喚: ターン経過ごとに累積1.1倍（呼び出し時点のturnで算出）
-  const enemyDefMult = () => (mods.selfDefMult || 1) * (mods.defRamp ? Math.pow(mods.defRamp, Math.max(0, turn - 1)) : 1)
+  // 針山: 防御・特防を常時3倍 ／ 叫喚: ターン経過ごとに累積1.1倍（呼び出し時点のturnで算出）／ 大技の自己防御バフ
+  let ultDefMult = 1  // 針山の大技: 発動後、防御・特防を追加でn倍
+  const enemyDefMult = () => (mods.selfDefMult || 1) * (mods.defRamp ? Math.pow(mods.defRamp, Math.max(0, turn - 1)) : 1) * ultDefMult
   let permLifesteal = 0  // 餓鬼の大技: 戦闘終了まで与ダメ×nを回復
   let permBleed = false  // 血池の大技: 以降、攻撃命中ごとに出血を確定付与
 
@@ -439,6 +440,16 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     }
   }
 
+  // 全ボス共通: プレイヤーの強化バフを解除（状態異常デバフは残す）。行動には含まれない。
+  const EMBLEM_POS_BUFFS = ['atkUp','matkUp','spdUp','defUp','mdefUp','dmgReduce','regenHeal','evasion','hitBonus','bloodRage','statusImmune','holyField','holyAwakening','flashCombo','critResist','healUp','ailmentShield','nextSkillBoost','mukyoPen','tenkaiCharge']
+  const dispelPlayerBuffs = () => {
+    let removed = 0
+    for (const k of EMBLEM_POS_BUFFS) {
+      if (playerBuffs[k] && (playerBuffs[k].turns > 0 || playerBuffs[k].turns === undefined || playerBuffs[k].charges > 0)) { delete playerBuffs[k]; removed++ }
+    }
+    if (removed > 0) logs.push({ text:`🌀 ${enemy.name}の獄気！ あなたの強化を${removed}つ解除した！`, color:'#cc66ff' })
+  }
+
   // cast: 敵スキル/大技 { name, mult, isUlt, inflict, critGuaranteed, lifesteal, randomAilments }（nullなら通常攻撃）
   const doEnemyAttack = (isExtra = false, cast = null) => {
     if (summonAbsorbBasic(summon, { atk: enemy.atk, matk: enemy.matk, type: enemy.type, name: enemy.name }, enemyBuffs, turn, logs)) return
@@ -528,6 +539,11 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       permBleed = true
       logs.push({ text:`🩸 ${enemy.name}の刃が血に飢えた！ 以降、攻撃を受けるたびに出血する！`, color:'#ff3366' })
     }
+    // 針山の大技: 発動後、自身の防御・特防をn倍（パッシブの3倍にさらに乗算）
+    if (cast?.selfDefBoost > 1 && ultDefMult < cast.selfDefBoost) {
+      ultDefMult = cast.selfDefBoost
+      logs.push({ text:`🛡 ${enemy.name}の甲殻が硬質化！ 防御・特殊防御が${cast.selfDefBoost}倍になった！`, color:'#88ccff' })
+    }
     // 鏡獄の大技: ランダムな状態異常をn種付与
     if (finalDmg > 0 && (cast?.randomAilments || 0) > 0) {
       const pool = ['burn', 'poison', 'paralysis', 'bleed', 'stun'].sort(() => Math.random() - 0.5)
@@ -541,10 +557,12 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
 
   // 1ターン分の敵行動: HP50%以下で1度だけ大技 → everyターンごとに通常スキル → 通常攻撃
   let ultUsed = false
+  let dispel75Done = false  // HP75%以下の自動バフ解除を1度だけ発動させるフラグ
   const doEnemyTurn = () => {
     const ult = enemy.ultimate
     if (ult && !ultUsed && enemyHp / enemyMaxHp <= (ult.hpBelow || 0.5)) {
       ultUsed = true
+      dispelPlayerBuffs()  // 大技使用時に自動バフ解除（行動には含まれない）
       logs.push({ text:`━━ ${enemy.name}が大技を放つ！ ━━`, color:'#ff44aa' })
       doEnemyAttack(false, { ...ult, isUlt: true })
       // 氷結の大技: 直後に確定で追加行動
@@ -655,6 +673,12 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       const spiritExtra = !!playerBuffs.guaranteedExtra  // 精霊共鳴の確定追加行動
       if (playerBuffs.guaranteedExtra) playerBuffs.guaranteedExtra = false
       if (!tenkaiActedThisTurn && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) { doPlayerAttack(true); if (enemyHp <= 0) break }
+    }
+
+    // 全ボス共通: HP75%以下に落ちた最初のターンに自動でプレイヤーのバフ解除（行動には含まれない・スタン中でも発動）
+    if (!dispel75Done && enemyHp / enemyMaxHp <= 0.75) {
+      dispel75Done = true
+      dispelPlayerBuffs()
     }
 
     // 敵のターン

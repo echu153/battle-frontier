@@ -35,7 +35,8 @@
 //    inflict:['burn'|'poison'|'paralysis'|'bleed'|'stun']  確定付与（羽衣/紋章耐性/狂信で防げる）
 //    critGuaranteed:true   確定クリティカル（黒縄）
 //    extraAction:true      大技の直後に確定で追加行動（氷結）
-//    pen:0..1              この一撃はプレイヤーの防御・特防をn割合無視（針山=0.8）
+//    pen:0..1              この一撃はプレイヤーの防御・特防をn割合無視
+//    selfDefBoost:n        発動後、自身の防御・特防をn倍（針山=3・パッシブ3倍にさらに乗算）
 //    bleedStacks:n         出血をnスタック付与（血池）
 //    selfHealPct:0..1      発動後、自身の最大HP×nを回復（血池=0.3）
 //    permLifesteal:0..1    戦闘終了まで与ダメ×nを回復し続ける（餓鬼=1.0）
@@ -105,9 +106,10 @@ export const HACHIGOKU_HELLS = [
     soul: 'アシパトラの魂', memory: 'アシパトラの記憶',
     desc: '刃の翼を持つ獄卒。攻撃は防御を貫通する。',
     passive: '針鉄の甲殻（防御・特防3倍 ※貫通が有効）',
+    // ※大技 阿尸波多羅は自身の防御・特防をさらに3倍（合計9倍）にする
     mods: { defPen: 0.5, selfDefMult: 3 },
     skill: { name: '針山串刺し', mult: 1.6, every: 3 },
-    ultimate: { name: '阿尸波多羅', mult: 3.0, hpBelow: 0.5, pen: 0.8 },
+    ultimate: { name: '阿尸波多羅', mult: 3.0, hpBelow: 0.5, selfDefBoost: 3 },
   },
   {
     key: 'chiike', name: '血池地獄', boss: 'チボンダラ', img: '/tibondara.png',
