@@ -484,12 +484,15 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
     const berserkDmgRate = hasBerserk ? (pe('狂戦士')?1.20:1.15) : 1.0
     const isEM = enemy.type === 'magical'
+    const isHybrid = !!mods.hybridAttack  // 両刀: A(攻撃)とC(特攻)の平均で殴り、対プレイヤーは低い方の防御を参照
     const burnDebuffE = enemyBuffs.burn?.turns > 0 ? 0.9 : 1.0
-    const eAtk = isEM
+    const eAtk = isHybrid
+      ? (((enemy.atk||0) * (enemyBuffs.atkUp ? enemyBuffs.atkUp.rate : 1) + (enemy.matk||0) * (enemyBuffs.matkUp ? enemyBuffs.matkUp.rate : 1)) / 2) * burnDebuffE
+      : isEM
       ? (enemy.matk||0) * (enemyBuffs.matkUp ? enemyBuffs.matkUp.rate : 1) * burnDebuffE
       : enemy.atk * (enemyBuffs.atkUp ? enemyBuffs.atkUp.rate : 1) * burnDebuffE
     const isCrit = cast?.critGuaranteed ? true : Math.random()*100 < enemyCritRate
-    const defForCalc = isEM ? Math.max(1, pMdef) : Math.max(1, pDef)
+    const defForCalc = isHybrid ? Math.max(1, Math.min(pDef, pMdef)) : isEM ? Math.max(1, pMdef) : Math.max(1, pDef)
     const baseDmg = Math.max(1, Math.floor(eAtk*eAtk/Math.max(1,eAtk+defForCalc) * (cast?.mult || 1))+Math.floor(Math.random()*3))
     const enemySpdBuff = enemyBuffs.spdUp ? enemyBuffs.spdUp.rate : 1
     const enemySpdDebuff = enemyBuffs.spdDown?.turns > 0 ? enemyBuffs.spdDown.rate : 1
@@ -505,8 +508,9 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       return
     }
     const enemyDmgDownRate = enemyBuffs.dmgDown?.turns > 0 ? enemyBuffs.dmgDown.rate : 1.0
-    // 針山: ランク軽減も無効化される
-    const playerDefRankReduction = penMult < 1 ? calcDefReduction(isEM ? eff.mdef : eff.def) * penMult : calcDefReduction(isEM ? eff.mdef : eff.def)
+    // 針山: ランク軽減も無効化される ／ 両刀: 低い方の防御ランクを参照
+    const rankDefStat = isHybrid ? Math.min(eff.def, eff.mdef) : (isEM ? eff.mdef : eff.def)
+    const playerDefRankReduction = penMult < 1 ? calcDefReduction(rankDefStat) * penMult : calcDefReduction(rankDefStat)
     const gambleBodyMult = hasGambleBody ? (pe('ギャンブラー') ? (0.5+Math.random()*0.7) : (0.7+Math.random()*0.6)) : 1.0
     const allinDebuffInMult = playerBuffs.allinDebuff?.turns > 0 ? 1.3 : 1.0
     // 黒縄: クリティカル以外のダメージ半減（mods.nonCritMult）
@@ -576,9 +580,22 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     }
   }
 
-  // 鏡獄の大技: プレイヤーがセットしている全アクティブスキルを1ターンで撃ち返す（効果は1/3）
+  // 鏡獄の大技: プレイヤーがセットしている全アクティブスキルを1ターンで撃ち返す（効果は mirrorFrac 倍）
+  //  ・攻撃スキル→プレイヤーへダメージ ・回復スキル→敵が回復 ・強化スキル→敵に自己バフ（いずれも frac 倍）
+  const MIRROR_BOSS_BUFFS = ['atkUp','matkUp','defUp','mdefUp','spdUp','dmgReduce','regen','regenHeal','statusImmune','holyField','holyAwakening','bloodRage','evasion','hitBonus','critResist','healUp']
+  const MIRROR_MULT_KEYS = new Set(['atkUp','matkUp','defUp','mdefUp','spdUp','dmgReduce'])
+  const scaleBossBuff = (k, v, frac) => {
+    if (!v || typeof v !== 'object') return v
+    const c = { ...v }
+    if (typeof c.rate === 'number') c.rate = MIRROR_MULT_KEYS.has(k) ? 1 + (c.rate - 1) * frac : c.rate * frac
+    if (typeof c.amount === 'number') c.amount = Math.max(1, Math.floor(c.amount * frac))
+    if (typeof c.value === 'number') c.value = c.value * frac
+    if (typeof c.healRate === 'number') c.healRate = c.healRate * frac
+    if (typeof c.dmg === 'number') c.dmg = Math.max(1, Math.floor(c.dmg * frac))
+    return c
+  }
   const castMirrorSkills = (ult) => {
-    const frac = ult.mirrorFrac || (1 / 3)
+    const frac = ult.mirrorFrac || (1 / 4)
     const activeSkills = skillSets.filter(ss => ss.skills && ss.skills.type !== 'パッシブ').map(ss => ss.skills)
     const seen = new Set(), uniq = []
     for (const sk of activeSkills) { if (sk?.name && !seen.has(sk.name)) { seen.add(sk.name); uniq.push(sk) } }
@@ -588,10 +605,10 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     const playerTarget = { name: profile.username, def: eff.def, mdef: eff.mdef, hp: eff.hp_max, hp_max: eff.hp_max, type:'physical' }
     for (const sk of uniq) {
       if (playerHp <= 0) break
-      const before = snapshotEnemyAil()
       // executeSkill: caster=敵, target=プレイヤー。newEnemyBuffs=対象(プレイヤー)デバフ / newPlayerBuffs=詠唱者(敵)バフ
       const res = executeSkill({ name: sk.name }, casterStats, casterProfile, playerTarget, playerBuffs, enemyBuffs, false, null)
       const isPhys = sk.type === '物理攻撃'
+      let noteBuff = false, noteHeal = 0
       if (res.dmg > 0) {
         const atkStat = isPhys ? casterStats.atk : casterStats.matk
         const pDef = isPhys ? eff.def : eff.mdef
@@ -604,9 +621,16 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       } else {
         logs.push({ text:`🪞 ${enemy.name}が「${sk.name}」を映し返す！`, color:'#cc66ff' })
       }
-      // スキルの自己回復ぶんは敵が1/3回復
-      if (res.heal > 0 && enemyHp > 0) { const h = Math.floor(res.heal * frac); if (h > 0) { enemyHp = Math.min(enemyMaxHp, enemyHp + h); logs.push({ text:`💚 ${enemy.name}はHPを${h}回復した！`, color:'#44ff88' }) } }
-      // スキルが付与する状態異常は敵バフ(enemyBuffs=対象プレイヤー)へ反映済み → 反射パッシブは無関係にそのまま
+      // 回復スキル: 敵が frac 倍回復
+      if (res.heal > 0 && enemyHp > 0) { const h = Math.floor(res.heal * frac); if (h > 0) { noteHeal = h; enemyHp = Math.min(enemyMaxHp, enemyHp + h) } }
+      // 強化スキル: 敵の自己バフ（res.newPlayerBuffs）を frac 倍で反映
+      for (const k of MIRROR_BOSS_BUFFS) {
+        const nv = res.newPlayerBuffs?.[k]
+        if (nv && nv !== enemyBuffs[k]) { enemyBuffs[k] = scaleBossBuff(k, nv, frac); noteBuff = true }
+      }
+      if (noteHeal > 0) logs.push({ text:`💚 ${enemy.name}はHPを${noteHeal}回復した！`, color:'#44ff88' })
+      if (noteBuff) logs.push({ text:`✦ ${enemy.name}は自らを強化した！`, color:'#ff99dd' })
+      // スキルが付与する状態異常デバフは playerBuffs へ反映
       playerBuffs = res.newEnemyBuffs
     }
   }

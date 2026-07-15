@@ -28,6 +28,7 @@
 //  nonCritMult:0..1            敵のクリティカル以外の与ダメ倍率（黒縄=0.5）
 //  mirrorPlayerStats:0..1      プレイヤーの実効ステ(A/B/C/D/S)を×nで自身に反映（HPは難易度準拠・現在未使用の汎用mod）
 //  reflectAilments:true        プレイヤーが敵に付与した状態異常を、同じものプレイヤーへ跳ね返す（鏡獄）
+//  hybridAttack:true           通常攻撃/スキルがA(攻撃)とC(特攻)の平均を火力に、対プレイヤーは低い方の防御を参照（鏡獄・両刀）
 // passive: パッシブの表示ラベル（ロビー/戦闘開始時に表示）
 //
 // 【敵スキル】（Hachigoku.jsx の doEnemyTurn が解釈する）
@@ -167,11 +168,12 @@ export const HACHIGOKU_HELLS = [
     crystals: ['boudoku', 'bouma', 'bouka', 'bouketsu', 'bouzetsu'],
     soul: 'ジョウハリの魂', memory: 'ジョウハリの記憶',
     desc: '浄玻璃の鏡に映した罪をあらゆる呪いに変える獄卒。',
-    passive: '浄玻璃の鏡映（与えた状態異常をすべて反射する）',
+    passive: '浄玻璃の鏡映（与えた状態異常をすべて反射する／両刀）',
+    dualWield: true,  // A=Cの両刀。通常攻撃はA/C両参照・大技で物理/特殊どちらのスキル反射も機能する
     mods: { onHitAilment: [
       { key: 'poison', chance: 20 }, { key: 'paralysis', chance: 15 },
       { key: 'burn', chance: 15 }, { key: 'bleed', chance: 15 }, { key: 'stun', chance: 8 },
-    ], reflectAilments: true },
+    ], reflectAilments: true, hybridAttack: true },
     skill: { name: '浄玻璃の裁き', mult: 1.6, every: 3 },
     ultimate: { name: '浄玻璃', hpBelow: 0.5, mirrorAllSkills: true, mirrorFrac: 1 / 4 },
   },
@@ -190,12 +192,16 @@ export function makeHachigokuEnemy(hellKey, diffKey) {
   const budget = target * (1 - a.hpFrac)
   const s = (k) => Math.max(1, Math.round(budget * a.w[k]))
   let atk = s('atk'), matk = s('matk')
-  if (hell.type === 'magical') { matk += atk; atk = 0 }
+  if (hell.dualWield) {
+    // 両刀: 攻撃予算を合算し A=C に。総合力は片方ぶんの攻撃として扱う（ハイブリッド攻撃の実効値）
+    const both = atk + matk; atk = both; matk = both
+  } else if (hell.type === 'magical') { matk += atk; atk = 0 }
   else { atk += matk; matk = 0 }
   return {
     name: `${hell.boss}【${diff.label}】`,
     hp, atk, matk, def: s('def'), mdef: s('mdef'), spd: s('spd'),
     type: hell.type,
+    dualWield: !!hell.dualWield,
     mods: hell.mods || {},
     passive: hell.passive || null,
     skill: hell.skill || null,

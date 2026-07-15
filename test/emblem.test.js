@@ -92,11 +92,14 @@ test('makeHachigokuEnemy 総合力が推奨戦闘力に概ね一致', () => {
       const e = makeHachigokuEnemy(h.key, d.key)
       assert.ok(e, `${h.key}/${d.key} 生成失敗`)
       // HPは演出上×HACHIGOKU_HP_MULTされているため、配分検証は増量前の値で行う
-      const total = Math.floor(e.hp / HACHIGOKU_HP_MULT / 10 + e.atk + e.def + e.matk + e.mdef + e.spd)
+      // 両刀(dualWield)はA=Cなので攻撃はどちらか片方だけを実効値として数える
+      const atkPart = e.dualWield ? e.atk : e.atk + e.matk
+      const total = Math.floor(e.hp / HACHIGOKU_HP_MULT / 10 + atkPart + e.def + e.mdef + e.spd)
       const ratio = total / d.target
       assert.ok(ratio > 0.95 && ratio < 1.05, `${h.key}/${d.key}: 総合力${total} が目標${d.target}から乖離`)
-      // タイプと攻撃ステの整合（magicalはmatk・physicalはatkに寄せる）
-      if (e.type === 'magical') assert.equal(e.atk, 0)
+      // タイプと攻撃ステの整合（両刀はA=C・magicalはmatk・physicalはatkに寄せる）
+      if (e.dualWield) assert.equal(e.atk, e.matk)
+      else if (e.type === 'magical') assert.equal(e.atk, 0)
       else assert.equal(e.matk, 0)
     }
   }
