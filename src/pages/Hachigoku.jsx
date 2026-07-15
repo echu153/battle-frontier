@@ -600,6 +600,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
     const seen = new Set(), uniq = []
     for (const sk of activeSkills) { if (sk?.name && !seen.has(sk.name)) { seen.add(sk.name); uniq.push(sk) } }
     if (uniq.length === 0) { doEnemyAttack(false, { ...ult, isUlt: true }); return }  // スキル未設定なら通常大技
+    logs.push({ text:`🪞 ${enemy.name}の「${ult.name}」！ あなたの技をすべて鏡に映し出す…！`, color:'#cc66ff' })
     const casterStats = { atk: enemy.atk, matk: enemy.matk, def: enemy.def, mdef: enemy.mdef, spd: enemy.spd, hp_max: enemyMaxHp, mp_max: 999999, critDmg:0, defPen:0, mdefPen:0, hitBonus:0, critBonus:0, evasionBonus:0, critResist:0 }
     const casterProfile = { hp_max: enemyMaxHp, mp_max: 999999, class:'', retraining:{}, username: enemy.name }
     const playerTarget = { name: profile.username, def: eff.def, mdef: eff.mdef, hp: eff.hp_max, hp_max: eff.hp_max, type:'physical' }
