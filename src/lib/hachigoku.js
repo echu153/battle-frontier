@@ -45,7 +45,7 @@
 //    defGapScale:true      自身と相手の(防御+特防)の差が大きいほど与ダメ増加・最大3倍（叫喚）
 //    randomAilments:n      ランダムな状態異常をn種付与（現在未使用の汎用効果）
 //    mirrorAllSkills:true  プレイヤーのセット中アクティブスキルを全て撃ち返す（鏡獄）
-//    mirrorFrac:n          mirrorAllSkills時の効果倍率（鏡獄=1/3）
+//    mirrorFrac:n          mirrorAllSkills時の効果倍率（鏡獄=1/4）
 // ============================================================
 
 export const HACHIGOKU_DIFFICULTIES = [
@@ -173,7 +173,7 @@ export const HACHIGOKU_HELLS = [
       { key: 'burn', chance: 15 }, { key: 'bleed', chance: 15 }, { key: 'stun', chance: 8 },
     ], reflectAilments: true },
     skill: { name: '浄玻璃の裁き', mult: 1.6, every: 3 },
-    ultimate: { name: '浄玻璃', hpBelow: 0.5, mirrorAllSkills: true, mirrorFrac: 1 / 3 },
+    ultimate: { name: '浄玻璃', hpBelow: 0.5, mirrorAllSkills: true, mirrorFrac: 1 / 4 },
   },
 ]
 
