@@ -362,7 +362,7 @@ export default function Smithy() {
       if (crystalUsed) {
         await supabase.from('player_equipment').update({ blessing_count: curBlessing + 1 }).eq('id', item.id)
         resultPlus = currentPlus
-        setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} は変化しなかった（🛡 ${CRYSTAL_NAME}で下落を防いだ！）`, blessing: (blessingCap !== undefined) ? { now: curBlessing + 1, cap: blessingCap } : null })
+        setEnhanceResult({ ok: false, title: '💔 強化失敗…', text: `${item.weapons.name} は変化しなかった\n（🛡 ${CRYSTAL_NAME}で下落を防いだ！）`, blessing: (blessingCap !== undefined) ? { now: curBlessing + 1, cap: blessingCap } : null })
       } else {
         const newPlus = Math.max(0, currentPlus - 1)
         const upd = { enhance_plus: newPlus, blessing_count: curBlessing + 1 }  // 失敗で+1
@@ -782,7 +782,7 @@ export default function Smithy() {
                     <div style={{ color: enhanceResult.ok ? '#ffcc00' : '#ff4444', fontSize:'16px', letterSpacing:'2px', marginBottom:'10px' }}>
                       {enhanceResult.ok ? '強化成功！' : '強化失敗…'}
                     </div>
-                    <div style={{ color: enhanceResult.ok ? '#ffeeaa' : '#cc8888', fontSize:'13px', marginBottom: enhanceResult.blessing ? '8px' : '18px' }}>{enhanceResult.text}</div>
+                    <div style={{ color: enhanceResult.ok ? '#ffeeaa' : '#cc8888', fontSize:'13px', marginBottom: enhanceResult.blessing ? '8px' : '18px', whiteSpace:'pre-line' }}>{enhanceResult.text}</div>
                     {enhanceResult.blessing && (
                       <div style={{ fontSize:'12px', marginBottom:'18px' }}>
                         <span style={{ color:'#ffcc44' }}>✨ 匠の祝福 +1</span>
