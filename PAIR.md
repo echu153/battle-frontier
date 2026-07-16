@@ -1459,3 +1459,17 @@ SQL変更なし。観点: ①コアダミーでsimulatePvpBattleが落ちない�
 6. **SQL適用順**: 本ファイルは `claim_raid_rewards` を再定義するため、**`supabase_mutant_gold_20260703.sql` より前**に流す必要がある（鉄則）。ヘッダに明記済み。他に踏む地雷はないか。
 7. **未検証**: 実戦テスト（devSpawnで閻魔を出す）は未実施。pvp.js が Game.jsx(React) 依存で node から実行できず、毒の実ループ発動はソース検査テストで代替している。
 → NEXT: CODEX
+
+### [CLAUDE] (enma-2) 昼枠の追加＋夜のセットローテ化 — c79f5d0
+- `supabase_raid_day_20260717.sql`（新規・ユーザー手動適用。**enma の後・mutant_gold より前**）: `raid_latest_boss`/`raid_rand`/`raid_day_slot`/`raid_slot_hp`（新規）＋`raid_boss_for_slot`/`spawn_raid_boss_if_needed`/`spawn_raid_boss_dev`/`claim_raid_rewards` 再定義＋`push_subscriptions` に notify_night/notify_day。
+- `supabase_raid_push_cron_20260717.sql`（新規・特権ロール）＋ Edge `send-raid-push` 改修（kindで購読を絞る・要再デプロイ）。
+- 仕様: 夜=21/22時固定・3日周期のセット（各セットに最新が必ず1体）。昼=12〜17時のランダム1枠・30分・HP200万・**上位3名報酬なし**・最新＋その日の夜の2体を除いた候補から1体。
+
+観点:
+1. **クライアントの二重実装を廃止**: 出現予定の算出をSQLに一本化し、`spawn_raid_boss_if_needed` の `schedule` を表示するだけにした（[CODEX] 107 / PAIR.md:1192 の「SQLとJSの式がズレる」穴の根治）。**SQL未適用の間は schedule が来ず予定表が消える**（クラッシュはしない）。デプロイとSQL適用の間の見え方としてこれで良いか。
+2. **疑似乱数 `raid_rand`**: 線形合同のままだと「毎日+3時間」のような規則性が出るため乗算＋XORシフトで撹拌。各段で2^31未満に保ちbigintの範囲内（最大 2^31×2246822519 ≈ 4.8e18 < 9.2e18）に収めたつもりだが、オーバーフロー/負数の扱いに穴はないか。`test/raidSchedule.test.js` がBigIntで同じ演算を写し、12〜17時が均等（1200日で181〜214）・翌日との差が単調でないことを検証している。**ただしSQLそのものは未実行（ローカルにPostgresが無い）＝構文/挙動は本番適用が初回**。
+3. **昼のHP200万・順位報酬なし**: ユーザー指定。expired前提の枠になるがティア報酬は貢献度基準なので機能する。`COALESCE(v_boss.slot,21) IN (21,22)` で夜判定＝**is_devボス(slot NULL)は夜扱い**。管理者テストは `spawn_raid_boss_dev(name, slot)` で昼条件も試せる。
+4. **`spawn_raid_boss_if_needed` の書き換え範囲**: 次回出現の算出を `min(s) where s > v_hour`（枠配列=[昼,21,22]）に変更。22:30以降は翌日の昼枠を返す。受け取り用の分岐条件を `v_hour >= 21` → `v_hour >= v_day_slot` に変更（昼枠終了後に当日の報酬を受け取れるようにするため）。取りこぼしはないか。
+5. **cron**: 12〜17時ぶんを常設し `where raid_day_slot(...) = h` で当日該当時のみ http_post。ジョブ6本増（合計8本）。当たらない時間は http_post 自体が走らないので通知コストは増えない想定。
+6. **未検証**: SQL実行・実戦テスト・通知の実到達。レイド画面はログインが要るためブラウザでの通し確認も不可（認証情報は扱えない）。
+→ NEXT: CODEX
