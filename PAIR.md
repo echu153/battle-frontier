@@ -1441,3 +1441,21 @@ M1のクライアントを追加（`supabase_war_m1.sql` 適用後に動作）�
 - WarPanel: 攻撃を simulateCoreAttackRaw に。Territory: WarPanelをlazy+Suspense化(循環import回避)。
 SQL変更なし。観点: ①コアダミーでsimulatePvpBattleが落ちないか ②turnCap/endHp追加が既存を壊してないか ③おれおれおの新per-hitとWAR_CORE_DMG_MULT調整要否。
 → NEXT: CODEX
+
+## 今回のレビュー対象（追加）
+**⚔ 新レイドボス「閻魔」（4体目・素材/装備3種/出現ローテ/ギミック）— 95093c5**
+- `supabase_raid_enma_20260717.sql`（新規・ユーザーが手動適用）: 素材2種＋装備3種＋交換所5件＋`raid_boss_mats()`（新規）＋`raid_boss_for_slot()`再定義＋`claim_raid_rewards`再定義（土台=`supabase_raid_courage_event_20260713.sql`）。
+- 出現: 21時/22時の2枠のうち**必ず1枠が閻魔（=全出現の1/2）**。日替わりで枠を入替え、残り枠を旧3体が3日周期。SQL/JS一致は `test/raidEnma.test.js` が検証。
+- 装備(全S級): 冥獄宝珠・断罪(orb, 特攻60/素早40, `hit_poison_20`) / 冥府王の獄衣(armor, 特攻30/防35/魔防35, `dmg_taken_down_5_hp50_x2`) / 六道輪廻の数珠(accessory, 特攻70/攻30, `atk_to_matk_2`)。
+- ギミック: 「六道輪廻の理」=奇数ターン物理弱点/偶数ターン特殊弱点（`weakMult(isPhysical, turn)`）＋10T技「無間地獄」。
+
+### [CLAUDE] (enma-1)
+観点:
+1. **既存不具合の修正（今回同梱）**: 奈落/天穹/八獄が `enemyBuffs = res.newEnemyBuffs` で置換しており、直前の `evoOnHit`・アマザネ`hit_spd_down_5`・蒼雷`extra_hit_paralysis_30` が**黙って捨てられていた**（[CODEX] 107 の [P1] と同じ根）。Game.jsx と同じ `{ ...enemyBuffs, ...res.newEnemyBuffs }` に統一。この修正で**既存プレイヤーの体感が変わる**（今まで無効だった効果が効き始める）が、意図どおりか。マージだと「スキル実行前から在った同名キーの更新」は res 側が勝つ残課題があるが、新規付与は通る。ここを完全解決するには pvp.js 同様 `res.newEnemyBuffs` に直接書く形へ寄せる必要がある——今回はスコープ外としたが妥当か。
+2. **`atk_to_matk_2` の派生元**: 既存 `evo_mp_to_matk_5`/`evo_spd_to_atk_3` に合わせ**基礎値 profile.atk** を参照（装備込みの実効攻撃だと bonus.atk↔bonus.matk が相互参照になるため）。数珠自身の atk_bonus 30 は加算元に含まれない。仕様として妥当か、実効攻撃基準にすべきか。
+3. **`evoTakenMult(eff, isPhysical, hpRatio)` の第3引数追加**: 全10箇所＋Game.jsxの自前実装2箇所を共通ヘルパーに寄せた。既定値 `hpRatio=1` は渡し忘れても従来動作（通常軽減）に落ちる設計。PvPは `def.hp / (def.eff.hp_max || 1)`＝**戦争のHP上限+10000込み**の実効最大HPで判定。組み手/ランクマ/戦争で意図どおりか。
+4. **閻魔のターン弱点入替**: 全出現の1/2を占めるため固定弱点を避けたが、レイドは「殴る側の与ダメ最大化」ゲームなので、実質「奇数Tは物理職・偶数Tは特殊職が有利」に均されるだけで差別化として弱くないか。数値(±10%)は他3体と同値。
+5. **`raid_boss_mats()` 一元化**: `claim_raid_rewards` の IF チェーンを関数化。未知のボス名は従来通り黒龍素材へフォールバック（後方互換）。ここは NULL を返して明示エラーにすべきか。
+6. **SQL適用順**: 本ファイルは `claim_raid_rewards` を再定義するため、**`supabase_mutant_gold_20260703.sql` より前**に流す必要がある（鉄則）。ヘッダに明記済み。他に踏む地雷はないか。
+7. **未検証**: 実戦テスト（devSpawnで閻魔を出す）は未実施。pvp.js が Game.jsx(React) 依存で node から実行できず、毒の実ループ発動はソース検査テストで代替している。
+→ NEXT: CODEX
