@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
+import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/IdleGuard'
 import { petStats, speciesEmoji, petImage, getSkill, PET_ITEMS, DUNGEON_ITEMS, bagCapacity, expForLevel, DUNGEONS, getDungeon, enemiesForFloor, dungeonEnemyStatsFor, pickEnemyImage, enemySkillsFor, POISON_INTERVAL, POISON_PCT, getCharm, applyCharmStats, charmHasEffect, charmDropsFor, charmIcon, dgTileSrc, dgWallTiles, dgWallVariant, dgWaterWall, isWaterFloor, isAquatic, SCROLL_KEYS, getScroll, petItemImg, isBossFloor, bossFor, dgBgm, sumSpecials, assetSrc, ASSET_VER, STARTERS, areaForFloor } from '../constants/pets'
 import Boss60Sprite from '../components/Boss60Sprite'
 import { GEM_DATA } from './Game'

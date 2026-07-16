@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
+import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/IdleGuard'
 // 魚データ／ボーナス規則は src/lib/fishing.js が唯一の正。ここで再定義しないこと
 // （二重定義していた頃、片方だけ直してもう片方がズレる不具合が繰り返し起きた）。
 import {

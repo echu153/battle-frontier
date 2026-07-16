@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
+import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/IdleGuard'
 import { reportDevAccess } from '../lib/devAccess'
 import { getWeaponGroup } from '../lib/stats'
 import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'

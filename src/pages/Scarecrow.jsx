@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { useFishingBlock, FishingBlockScreen } from '../components/IdleGuard'
 
 // かかし修練場
 // ・出撃100回（簡易出撃を除く）で1回チャージ、週5回まで（月曜朝5時リセット）
@@ -35,6 +36,7 @@ function Countdown({ targetIso, onFinish }) {
 
 export default function Scarecrow() {
   const nav = useNavigate()
+  const fishingBlock = useFishingBlock()  // 放置系の排他: 釣り中は修練不可
   const [state, setState] = useState(null)
   const [selectedHours, setSelectedHours] = useState(3)
   const [loading, setLoading] = useState(false)
@@ -105,6 +107,9 @@ export default function Scarecrow() {
     }
     setLoading(false)
   }
+
+  // 放置系の排他: 釣り中はかかし修練を開始できない（サーバー側でも弾いている）
+  if (fishingBlock) return <FishingBlockScreen location={fishingBlock.fishing_location} />
 
   if (loadError) {
     return (

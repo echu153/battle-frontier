@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
+import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/IdleGuard'
 import { AREAS, getEffectiveCap, generateDropBonus, ARTIFACT_BASE_NAMES } from './Game'
 
 const SLOT_SYMBOLS = ['7️⃣', '⭐', '🔔', '🍇', '🍒', '🍋']
