@@ -2,7 +2,12 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/ScarecrowGuard'
-import { sumClaimedFishingBonus, toFishingColumns } from '../lib/fishing'
+// 魚データ／ボーナス規則は src/lib/fishing.js が唯一の正。ここで再定義しないこと
+// （二重定義していた頃、片方だけ直してもう片方がズレる不具合が繰り返し起きた）。
+import {
+  FISH_DATA, COMPLETE_BONUS, FISHING_LOCATIONS, calcFishBonus,
+  sumClaimedFishingBonus, toFishingColumns,
+} from '../lib/fishing'
 
 const FISH_SELL_PRICE = { f:150, e:450, d:1200, c:3000, b:7500, a:18000, s:45000, ss:120000, sss:300000 }
 const FISH_RANK_COLORS = {
@@ -49,133 +54,13 @@ const getFishingEventStatus = () => {
   }
 }
 
-const FISH_RANK_BONUS_STATS = {
-  f:   ['atk','def','matk','mdef','spd'],
-  e:   ['atk','def','matk','mdef','spd'],
-  d:   ['atk','def','matk','mdef','spd'],
-  c:   ['def','mdef','spd'],
-  b:   ['atk','matk','spd'],
-  a:   ['hp','mp'],
-  s:   ['def','mdef'],
-  ss:  ['atk','matk','spd'],
-  sss: ['hp'],
-}
-// 図鑑(魚ごと)ボーナスは現行の3倍（コンプリートボーナスは据え置き）
-const FISH_RANK_BONUS_AMOUNT = { f:3, e:3, d:3, c:3, b:3, a:null, s:9, ss:9, sss:300 }
-const FISH_A_BONUS = { hp_max:30, mp_max:15 }
-const FISH_SSS_BONUS = { hp_max:300 }
-
-const FISH_DATA = {
-  日本海: [
-    { rank:'f', name:'アジ', statIdx:0 },
-    { rank:'f', name:'イワシ', statIdx:1 },
-    { rank:'f', name:'サバ', statIdx:2 },
-    { rank:'f', name:'カタクチイワシ', statIdx:3 },
-    { rank:'f', name:'キス', statIdx:4 },
-    { rank:'e', name:'カサゴ', statIdx:0 },
-    { rank:'e', name:'メバル', statIdx:1 },
-    { rank:'e', name:'ベラ', statIdx:2 },
-    { rank:'e', name:'コノシロ', statIdx:3 },
-    { rank:'e', name:'小ダイ', statIdx:4 },
-    { rank:'d', name:'クロダイ', statIdx:0 },
-    { rank:'d', name:'シーバス', statIdx:1 },
-    { rank:'d', name:'ヒラメ', statIdx:2 },
-    { rank:'d', name:'ホウボウ', statIdx:3 },
-    { rank:'d', name:'アイナメ', statIdx:4 },
-    { rank:'c', name:'真鯛', statIdx:0 },
-    { rank:'c', name:'ワラサ', statIdx:1 },
-    { rank:'c', name:'アオリイカ', statIdx:2 },
-    { rank:'b', name:'ブリ', statIdx:0 },
-    { rank:'b', name:'カンパチ', statIdx:1 },
-    { rank:'b', name:'石鯛', statIdx:2 },
-    { rank:'a', name:'マグロ', statIdx:0 },
-    { rank:'a', name:'巨大真鯛', statIdx:1 },
-    { rank:'s', name:'リュウグウノツカイ', statIdx:0 },
-    { rank:'ss', name:'ダイオウイカ', statIdx:0 },
-    { rank:'sss', name:'シロナガスクジラ', statIdx:0 },
-  ],
-  カリブ海: [
-    { rank:'f', name:'ブルータン', statIdx:0 },
-    { rank:'f', name:'クイーンエンゼル', statIdx:1 },
-    { rank:'f', name:'サージェントメジャー', statIdx:2 },
-    { rank:'f', name:'フレンチグラント', statIdx:3 },
-    { rank:'f', name:'パロットフィッシュ幼魚', statIdx:4 },
-    { rank:'e', name:'カマス', statIdx:0 },
-    { rank:'e', name:'フエダイ', statIdx:1 },
-    { rank:'e', name:'ハタ', statIdx:2 },
-    { rank:'e', name:'カサゴ系', statIdx:3 },
-    { rank:'e', name:'グルーパー', statIdx:4 },
-    { rank:'d', name:'シイラ', statIdx:0 },
-    { rank:'d', name:'バラクーダ', statIdx:1 },
-    { rank:'d', name:'カリブカンパチ', statIdx:2 },
-    { rank:'d', name:'ロウニンアジ', statIdx:3 },
-    { rank:'d', name:'ターポン', statIdx:4 },
-    { rank:'c', name:'キングフィッシュ', statIdx:0 },
-    { rank:'c', name:'シロカジキ', statIdx:1 },
-    { rank:'c', name:'マヒマヒ', statIdx:2 },
-    { rank:'b', name:'ナポレオンフィッシュ', statIdx:0 },
-    { rank:'b', name:'ハンマーヘッドシャーク', statIdx:1 },
-    { rank:'b', name:'タイガーシャーク', statIdx:2 },
-    { rank:'a', name:'ブルーマーリン', statIdx:0 },
-    { rank:'a', name:'ホホジロザメ', statIdx:1 },
-    { rank:'s', name:'ジンベエザメ', statIdx:0 },
-    { rank:'ss', name:'マッコウクジラ', statIdx:0 },
-    { rank:'sss', name:'ダイオウホウズキイカ', statIdx:0 },
-  ],
-  ミミミッミ川: [
-    { rank:'f', name:'ミハゼ', statIdx:0 },
-    { rank:'f', name:'カワピヨ', statIdx:1 },
-    { rank:'f', name:'チビナマ', statIdx:2 },
-    { rank:'f', name:'ミミコイ', statIdx:3 },
-    { rank:'f', name:'ハネビレ', statIdx:4 },
-    { rank:'e', name:'シマミミウオ', statIdx:0 },
-    { rank:'e', name:'ミミマス', statIdx:1 },
-    { rank:'e', name:'青ヒレナマズ', statIdx:2 },
-    { rank:'e', name:'ミズハネ', statIdx:3 },
-    { rank:'e', name:'カワツノ魚', statIdx:4 },
-    { rank:'d', name:'銀鱗ミミマス', statIdx:0 },
-    { rank:'d', name:'オオヒレナマズ', statIdx:1 },
-    { rank:'d', name:'双尾ゴイ', statIdx:2 },
-    { rank:'d', name:'水晶魚', statIdx:3 },
-    { rank:'d', name:'月光アユ', statIdx:4 },
-    { rank:'c', name:'深川ナマズ', statIdx:0 },
-    { rank:'c', name:'雷光ウナギ', statIdx:1 },
-    { rank:'c', name:'蒼水龍魚', statIdx:2 },
-    { rank:'b', name:'金鱗龍魚', statIdx:0 },
-    { rank:'b', name:'古代ナマズ', statIdx:1 },
-    { rank:'b', name:'深淵ウナギ', statIdx:2 },
-    { rank:'a', name:'奈落ナマズ', statIdx:0 },
-    { rank:'a', name:'神雷ウナギ', statIdx:1 },
-    { rank:'s', name:'ミミミ龍魚', statIdx:0 },
-    { rank:'ss', name:'超巨大奈落ナマズ', statIdx:0 },
-    { rank:'sss', name:'ミミミッミ神龍', statIdx:0 },
-  ],
-}
-
-const COMPLETE_BONUS = {
-  日本海:      { atk:30, matk:30, spd:30 },
-  カリブ海:    { def:30, mdef:30 },
-  ミミミッミ川: { hp_max:500, mp_max:250 },
-}
-
-const LOCATIONS = ['日本海', 'カリブ海', 'ミミミッミ川']
+const LOCATIONS = FISHING_LOCATIONS
 const MIN_INTERVAL = 5 * 60
 const MAX_INTERVAL = 15 * 60
 const STONE_DROP_RATE = 3
 const STONE_RANKS = ['f','e','d','c']
 const STONE_WEIGHTS = { f:40, e:30, d:20, c:10 }
 const STONE_NAMES = { f:'強化石(F)', e:'強化石(E)', d:'強化石(D)', c:'強化石(C)' }
-
-const calcFishBonus = (fish, rank) => {
-  const stats = FISH_RANK_BONUS_STATS[rank] || []
-  const stat = stats[fish.statIdx]
-  if (!stat) return null
-  if (rank === 'a') return FISH_A_BONUS
-  if (rank === 'sss') return FISH_SSS_BONUS
-  const amount = FISH_RANK_BONUS_AMOUNT[rank] || 1
-  const statMap = { atk:'atk', def:'def', matk:'matk', mdef:'mdef', spd:'spd', hp:'hp_max', mp:'mp_max' }
-  return { [statMap[stat] || stat]: amount }
-}
 
 const drawFishRank = () => {
   const r = Math.random() * 100
