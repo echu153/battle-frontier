@@ -3,8 +3,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue } from './Game'
 import { gemAllowedSlots, gemSlotCategory, GEM_SLOT_LABEL, calcProfBonus } from '../lib/stats'
-import { EVO_EFFECT_LABELS, evoMultiplier, displayRarity, isShinka, BOSS_LINES } from '../constants/bossEvolution'
+import { evoMultiplier, displayRarity, isShinka, BOSS_LINES } from '../constants/bossEvolution'
 import { getEmblemRank, EMBLEM_RANK_COLOR, emblemAllocTotal } from '../lib/emblem'
+import { effectLabel } from '../constants/effectLabels'
 
 const SLOT_LABELS_FULL = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }
 const gemDisplayName = (gemType, rank) => `${GEM_DATA[gemType]?.name || gemType}(${rank})`
@@ -51,28 +52,7 @@ const getProfPrefix = (profLv) => {
   return ''
 }
 
-const getEffectLabel = (effect) => {
-  const labels = {
-    'open_atk_10_2t':'【開幕2T・攻撃力+10%】','open_atk_20_1t':'【開幕1T・攻撃力+20%】',
-    'open_def_10_2t':'【開幕2T・防御力+10%】','open_def_20_1t':'【開幕1T・防御力+20%】',
-    'open_matk_10_2t':'【開幕2T・特殊攻撃力+10%】','open_matk_20_1t':'【開幕1T・特殊攻撃力+20%】',
-    'open_mdef_10_2t':'【開幕2T・特殊防御力+10%】','open_mdef_20_1t':'【開幕1T・特殊防御力+20%】',
-    'open_spd_10_2t':'【開幕2T・素早さ+10%】','open_spd_20_1t':'【開幕1T・素早さ+20%】',
-    'delay_heal_10':'【3T後・HP10%回復】','regen_heal_5_3t':'【開幕3T・毎T HP5%回復】',
-    'artifact':'【消費MP2倍・スキルダメージ1.3倍】',
-    'hit_spd_down_5':'【攻撃ヒット時・2Tの間対象の素早さ-5%（最大4重複）】',
-    'hit_heal_down_10_2t':'【攻撃ヒット時・対象の回復力2T-30%】',
-    'mdef_pen_5':'【魔法防御貫通+5%】',
-    'battle_start_ailment_shield':'【開幕＆5Tごと・状態異常を1回無効化】',
-    'ondmg_spd_up_5_2t':'【被ダメージ時・2ターン素早さ+15%】',
-    'extra_hit_paralysis_30':'【追加行動の攻撃ヒット時・20%で相手を麻痺】',
-    'hit_poison_20':'【攻撃ヒット時・20%で相手を毒】',
-    'dmg_taken_down_5_hp50_x2':'【被ダメージ-5%（HP半分以下で-10%）】',
-    'atk_to_matk_2':'【攻撃力の2%を特殊攻撃に加算】',
-    ...EVO_EFFECT_LABELS,
-  }
-  return labels[effect] || effect
-}
+const getEffectLabel = (effect) => effectLabel(effect)  // 定義は src/constants/effectLabels.js に一元化
 
 // enhance_plus(1.5倍)＋進化(基礎×(1+0.2*stage))による強化後ステータス計算（古びた○○除外）
 const calcEnhancedStats = (weapon, plus, evolveStage = 0) => {

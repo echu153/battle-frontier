@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { EVO_EFFECT_LABELS } from '../constants/bossEvolution'
+import { EFFECT_DESC } from '../constants/effectLabels'
 
 const RARITY_COLORS = {
   f:'#888888', e:'#6699cc', d:'#ff8844', c:'#44bb44',
@@ -10,19 +10,6 @@ const RARITY_COLORS = {
 const RARITY_LABELS = { f:'F', e:'E', d:'D', c:'C', b:'B', a:'A', s:'S', ss:'SS', sss:'SSS' }
 const SLOT_LABELS = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }
 
-const BONUS_EFFECT_DESC = {
-  'hit_heal_down_10_2t': '攻撃ヒット時、2ターンの間対象の回復力-30%',
-  'open_atk_10_2t':  'バトル開始時、2ターンの間攻撃力+10%',
-  'open_def_10_2t':  'バトル開始時、2ターンの間防御力+10%',
-  'open_matk_10_2t': 'バトル開始時、2ターンの間特殊攻撃力+10%',
-  'open_mdef_10_2t': 'バトル開始時、2ターンの間特殊防御力+10%',
-  'open_spd_10_2t':  'バトル開始時、2ターンの間素早さ+10%',
-  'regen_heal_5_3t': 'バトル開始時、3ターンの間毎ターンHP5%回復',
-  'artifact':        'アーティファクト（出品不可）',
-  'hit_spd_down_5':  '攻撃ヒット時、2ターンの間対象の素早さ-5%（最大4重複）',
-  'mdef_pen_5':      '魔法防御貫通+5%',
-  ...EVO_EFFECT_LABELS,
-}
 
 // クライアント側でも基準価格を算出（サーバーと同じロジック。表示・スライダー用）
 function basePriceOf(weapon) {
@@ -75,7 +62,7 @@ function WeaponCard({ weapon, bonusEffect, enhancePlus, right, bonus }) {
   if (!weapon) return null
   const rarity = weapon.rarity?.toLowerCase() || 'f'
   const color = RARITY_COLORS[rarity] || '#888888'
-  const effectDesc = BONUS_EFFECT_DESC[bonusEffect] || null
+  const effectDesc = EFFECT_DESC[bonusEffect] || null
   const bonuses = bonusList(bonus)
   const stats = [
     weapon.atk_bonus      > 0 && ['攻撃',   weapon.atk_bonus,      '#ffcc00'],

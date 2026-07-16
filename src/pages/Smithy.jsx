@@ -2,11 +2,12 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import {
-  BOSS_LINES, EQUIP_TO_LINE, EVO_COST, EVO_EFFECT_LABELS,
+  BOSS_LINES, EQUIP_TO_LINE, EVO_COST,
   MAX_EVO_STAGE, BLOOD_PER_HEART, evoMultiplier, isEvolvableEquip,
   displayRarity, isShinka,
 } from '../constants/bossEvolution'
 import { isRaidEquip } from '../constants/raidEquipment'
+import { effectLabel } from '../constants/effectLabels'
 
 const SLOT_LABELS = { weapon:'武器', armor:'防具', accessory:'装飾品', accessory2:'装飾品' }
 const RARITY_COLORS = {
@@ -94,25 +95,7 @@ const EFFECT_POOL = [
 ]
 const RE_EVAL_SHEETS = { f:1, e:2, d:5, c:10, b:30, a:50, s:150, ss:300, sss:1000 }
 
-const getEffectLabel = (effect) => {
-  const labels = {
-    'open_atk_10_2t':'【開幕2T・攻撃力+10%】','open_atk_20_1t':'【開幕1T・攻撃力+20%】',
-    'open_def_10_2t':'【開幕2T・防御力+10%】','open_def_20_1t':'【開幕1T・防御力+20%】',
-    'open_matk_10_2t':'【開幕2T・特殊攻撃力+10%】','open_matk_20_1t':'【開幕1T・特殊攻撃力+20%】',
-    'open_mdef_10_2t':'【開幕2T・特殊防御力+10%】','open_mdef_20_1t':'【開幕1T・特殊防御力+20%】',
-    'open_spd_10_2t':'【開幕2T・素早さ+10%】','open_spd_20_1t':'【開幕1T・素早さ+20%】',
-    'delay_heal_10':'【3T後・HP10%回復】','regen_heal_5_3t':'【開幕3T・毎T HP5%回復】',
-    'artifact':'【消費MP2倍・スキルダメージ1.3倍】',
-    'hit_spd_down_5':'【攻撃ヒット時・2Tの間対象の素早さ-5%（最大4重複）】',
-    'hit_heal_down_10_2t':'【攻撃ヒット時・対象の回復力2T-30%】',
-    'mdef_pen_5':'【魔法防御貫通+5%】',
-    'battle_start_ailment_shield':'【開幕＆5Tごと・状態異常を1回無効化】',
-    'ondmg_spd_up_5_2t':'【被ダメージ時・2ターン素早さ+15%】',
-    'extra_hit_paralysis_30':'【追加行動の攻撃ヒット時・20%で相手を麻痺】',
-    ...EVO_EFFECT_LABELS,
-  }
-  return labels[effect] || effect
-}
+const getEffectLabel = (effect) => effectLabel(effect)  // 定義は src/constants/effectLabels.js に一元化
 
 const generateBonusSlots = (rarity, hasFixedEffect = false) => {
   const config = RARITY_BONUS_CONFIG[rarity]
