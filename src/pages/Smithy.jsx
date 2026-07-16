@@ -6,6 +6,7 @@ import {
   MAX_EVO_STAGE, BLOOD_PER_HEART, evoMultiplier, isEvolvableEquip,
   displayRarity, isShinka,
 } from '../constants/bossEvolution'
+import { isRaidEquip } from '../constants/raidEquipment'
 
 const SLOT_LABELS = { weapon:'武器', armor:'防具', accessory:'装飾品', accessory2:'装飾品' }
 const RARITY_COLORS = {
@@ -1154,9 +1155,12 @@ export default function Smithy() {
                     <span style={{ color:'#446688', fontSize:'9px' }}>（1回＝装備3個→強化石1個）</span>
                   </div>
                   <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>ランク指定でランダムに選んで一気に加工</div>
+                  <div style={{ color:'#886644', fontSize:'9px', marginBottom:'6px' }}>※ エリアボス装備・レイドボス装備はランダム加工の対象外（手動選択でのみ加工できます）</div>
                   <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
                     {RARITY_ORDER.map(rarity => {
-                      const avail = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0) && e.weapons.rarity === rarity), sortKey)
+                      // エリアボス装備/レイドボス装備は入手難度が高いため、ランダム加工の対象から除外（手動選択でのみ加工可）
+                      const avail = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0)
+                        && !isEvolvableEquip(e.weapons?.name) && !isRaidEquip(e.weapons?.name) && e.weapons.rarity === rarity), sortKey)
                       const maxTimes = Math.floor(avail.length / 3)
                       const canPick = maxTimes >= 1
                       const times = Math.min(craftTimes, maxTimes)
