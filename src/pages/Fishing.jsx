@@ -382,13 +382,14 @@ useEffect(() => {
     // 図鑑は「場所＋魚名」で1件（同名でも場所が違えば別図鑑＝カンパチ等が日本海/カリブ海で重複しない）。
     // 同セッションでの二重挿入も inserted で防ぐ。
     const inserted = new Set(records.map(r => `${r.location}|${r.fish_name}`))
+    let dexFailed = 0
     for (const fish of fishItems) {
       const rankKey = fish.fish_rank?.toLowerCase() || 'f'
       totalGold += FISH_SELL_PRICE[rankKey] || 50
       const key = `${fish.location}|${fish.fish_name}`
       if (!inserted.has(key)) {
         inserted.add(key)
-        await supabase.from('fishing_records').insert({
+        const { error: dexErr } = await supabase.from('fishing_records').insert({
           player_id: profile.id,
           fish_name: fish.fish_name,
           fish_rank: fish.fish_rank,
@@ -396,6 +397,8 @@ useEffect(() => {
           first_caught_at: new Date().toISOString(),
           bonus_claimed: false,
         })
+        // 登録失敗を握り潰すと図鑑が無言で???のまま残るので気付けるようにする
+        if (dexErr) { dexFailed++; console.error('[fishing] 図鑑登録に失敗', key, dexErr) }
       }
     }
     for (const stone of stoneItems) {
@@ -425,7 +428,11 @@ useEffect(() => {
     // 売却済みの釣果のみ削除（処理中に新たに釣れた分は残す）
     await supabase.from('caught_fish').delete().in('id', soldIds)
     await fetchAll()
+    if (dexFailed > 0) {
+      showMessage(`💰 ${totalGold}G獲得！（魚図鑑の登録に${dexFailed}件失敗しました）`, '#ffaa44')
+    } else {
     showMessage(`💰 ${totalGold}G獲得！${stoneItems.length > 0 ? `強化石${stoneItems.length}個入手！` : ''}${shrimpItems.length > 0 ? ` イベント限定エビ×${shrimpItems.length}売却！` : ''}`)
+    }
     } finally { setLoading(false); sellBusyRef.current = false }
   }
 
