@@ -1,7 +1,10 @@
 // ============================================================
 // レイド通知 配信 Edge Function（send-raid-push）
-//   ・cron（pg_cron→pg_net）が毎日21時/22時(JST)に x-cron-secret 付きで叩く。
-//   ・push_subscriptions を service_role で全件読み、各エンドポイントへ Web Push（ペイロード無し＝VAPID認証のみ）。
+//   ・cron（pg_cron→pg_net）が x-cron-secret 付きで叩く。body の kind で夜/昼を切り替える。
+//       {"kind":"night"} … 毎日21時/22時(JST)の固定枠 → notify_night=true の購読へ
+//       {"kind":"day"}   … 12〜17時(JST)のランダム枠  → notify_day=true の購読へ
+//       （cron側が raid_day_slot で当日の昼枠の時刻だけ叩くので、ここでは時刻判定をしない）
+//   ・push_subscriptions を service_role で読み、各エンドポイントへ Web Push（ペイロード無し＝VAPID認証のみ）。
 //   ・無効購読(404/410)はテーブルから削除。通知の中身は Service Worker(sw.js) の push ハンドラが固定文言で出す。
 //
 // シークレット:
@@ -70,10 +73,20 @@ Deno.serve(async (req) => {
   }
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return json({ error: 'vapid_not_configured' }, 503)
 
+  // kind: 'night'（21時/22時の固定枠）| 'day'（12〜17時のランダム枠）。
+  // 購読者は夜/昼を別々にON/OFFできるので、対応する列が true の購読だけに送る。
+  // 旧cron（body無し）から叩かれた場合は夜として扱う。
+  let kind = 'night'
+  try {
+    const body = await req.json()
+    if (body?.kind === 'day') kind = 'day'
+  } catch { /* body無し＝旧cron。夜扱い */ }
+  const column = kind === 'day' ? 'notify_day' : 'notify_night'
+
   const svc = createClient(SUPABASE_URL, SERVICE_KEY)
-  const { data: subs, error } = await svc.from('push_subscriptions').select('endpoint')
+  const { data: subs, error } = await svc.from('push_subscriptions').select('endpoint').eq(column, true)
   if (error) { console.error('[send-raid-push] db error'); return json({ error: 'db' }, 500) }
-  if (!subs || subs.length === 0) return json({ ok: true, sent: 0 })
+  if (!subs || subs.length === 0) return json({ ok: true, sent: 0, kind })
 
   let key: CryptoKey
   try { key = await importVapidKey() } catch (e) { console.error('[send-raid-push] key', String(e)); return json({ error: 'vapid_key' }, 500) }
@@ -111,6 +124,6 @@ Deno.serve(async (req) => {
     await svc.from('push_subscriptions').delete().in('endpoint', stale)
   }
 
-  console.log(`[send-raid-push] sent=${sent} stale=${stale.length} total=${subs.length}`)
-  return json({ ok: true, sent, stale: stale.length, total: subs.length })
+  console.log(`[send-raid-push] kind=${kind} sent=${sent} stale=${stale.length} total=${subs.length}`)
+  return json({ ok: true, kind, sent, stale: stale.length, total: subs.length })
 })

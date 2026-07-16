@@ -37,7 +37,9 @@ export const getPushStatus = async () => {
 }
 
 // 通知をONにする（許可要求→購読→DB保存）。成功で 'on'、失敗は throw。
-export const enableRaidPush = async () => {
+// 通知の対象枠（夜=21時/22時の固定枠 / 昼=12〜17時のランダム枠）。
+// サーバー(send-raid-push)は notify_night / notify_day 列を見て送信先を絞る。
+export const enableRaidPush = async (kinds = { night: true, day: true }) => {
   if (!pushSupported()) throw new Error('unsupported')
   if (!pushConfigured()) throw new Error('not_configured')
   const perm = await Notification.requestPermission()
@@ -62,11 +64,38 @@ export const enableRaidPush = async () => {
       user_id: user.id,
       p256dh: j.keys?.p256dh || null,
       auth: j.keys?.auth || null,
+      notify_night: kinds.night !== false,
+      notify_day: kinds.day !== false,
     },
     { onConflict: 'endpoint' },
   )
   if (error) throw error
   return 'on'
+}
+
+// この端末の購読が「夜/昼どちらを受け取るか」を読む。未購読なら null。
+export const getPushKinds = async () => {
+  try {
+    const reg = await navigator.serviceWorker.ready
+    const sub = await reg.pushManager.getSubscription()
+    if (!sub) return null
+    const { data } = await supabase.from('push_subscriptions')
+      .select('notify_night, notify_day').eq('endpoint', sub.endpoint).maybeSingle()
+    if (!data) return null
+    return { night: data.notify_night !== false, day: data.notify_day !== false }
+  } catch { return null }  // 列が無い(SQL未適用)/オフライン時は既定表示にフォールバック
+}
+
+// 夜/昼の受け取り設定を更新する（購読済みの端末のみ）。
+export const setPushKinds = async (kinds) => {
+  const reg = await navigator.serviceWorker.ready
+  const sub = await reg.pushManager.getSubscription()
+  if (!sub) throw new Error('not_subscribed')
+  const { error } = await supabase.from('push_subscriptions')
+    .update({ notify_night: !!kinds.night, notify_day: !!kinds.day })
+    .eq('endpoint', sub.endpoint)
+  if (error) throw error
+  return kinds
 }
 
 // 通知をOFFにする（DB削除→購読解除）。

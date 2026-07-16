@@ -1,30 +1,17 @@
 // ============================================================
-// レイドボスの出現スケジュール
-//  ・21時/22時の2枠のうち「必ず1枠」が閻魔（＝全出現の1/2）。
-//    残り1枠を旧3体（ヴァルゼノク/雨摩座/ゼルギアス）が3日周期で回る。
-//  ・時間帯が偏らないよう、閻魔の枠は日替わりで21時↔22時を入れ替える。
+// レイドボスの表示リソース（名前→画像／色）
 //
-//  ★ サーバーの raid_boss_for_slot（supabase_raid_enma_20260717.sql）と必ず一致させること。
-//    ズレると「本日の出現予告」と実際に出現するボスが食い違う。
-//    一致は test/raidEnma.test.js が検証している。
+//  ★ 出現スケジュール（どの枠に何が出るか・昼枠が何時か）はここで計算しない。
+//    サーバーの spawn_raid_boss_if_needed が返す 'schedule' をそのまま表示すること。
+//    以前はクライアントにも同じ式を置いていたが、サーバーとズレると
+//    「本日の予告」と実際の出現が食い違うため、算出はSQL側の一箇所に寄せた。
+//    定義: supabase_raid_day_20260717.sql（raid_boss_for_slot / raid_day_slot）
 // ============================================================
 
 export const BOSS_VARUZENOKU = '黒龍ヴァルゼノク'
 export const BOSS_AMAZA      = '雨摩座'
 export const BOSS_ZERUGIASU  = '雷鋼機神ゼルギアス'
 export const BOSS_ENMA       = '閻魔'
-
-// 閻魔でない方の枠を回る旧3体
-export const RAID_BOSS_CYCLE = [BOSS_VARUZENOKU, BOSS_AMAZA, BOSS_ZERUGIASU]
-
-// epochDays/baseDays は「1970-01-01 からの日数」と「2000-01-01 からの日数」。差が SQL の
-// (spawn_date - DATE '2000-01-01') と一致する。slot は 21 か 22。
-export const raidBossForSlot = (epochDays, baseDays, slot) => {
-  const d = epochDays - baseDays
-  const enmaAt21 = (((d % 2) + 2) % 2) === 0   // 偶数日は21時が閻魔／奇数日は22時
-  if ((slot === 21) === enmaAt21) return BOSS_ENMA
-  return RAID_BOSS_CYCLE[(((d % 3) + 3) % 3)]
-}
 
 // ボス名 → 表示画像
 export const RAID_IMG_VER = '2'  // 画像差し替え時に上げるとキャッシュを無効化

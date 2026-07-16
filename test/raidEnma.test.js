@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { calcEffectiveStats } from '../src/lib/stats.js'
 import { evoOnHit, evoTakenMult } from '../src/lib/evoCombat.js'
-import { raidBossForSlot, bossImage, bossColor } from '../src/lib/raidSchedule.js'
+import { bossImage, bossColor } from '../src/lib/raidSchedule.js'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -75,49 +75,6 @@ test('冥府王の獄衣: 被ダメ-5%、HP半分以下で-10%（境界はちょ
 test('冥府王の獄衣: hpRatio を渡し忘れても全快扱いで軽減は効く（呼び出し漏れで無効化されない）', () => {
   const eff = { gokuiTakenPct: 5 }
   assert.equal(evoTakenMult(eff, true), 0.95)
-})
-
-// ── SQL とクライアントの出現ローテ一致（ズレると予告と実出現が食い違う） ──
-// SQL: 21時枠は d が偶数なら閻魔 / それ以外の枠は旧3体を3日周期
-const sqlBossForSlot = (d, slot) => {
-  const enmaAt21 = (((d % 2) + 2) % 2) === 0
-  if ((slot === 21) === enmaAt21) return '閻魔'
-  return ['黒龍ヴァルゼノク', '雨摩座', '雷鋼機神ゼルギアス'][(((d % 3) + 3) % 3)]
-}
-
-test('出現ローテ: 毎日2枠のうち必ず1枠が閻魔（＝全出現の1/2）', () => {
-  for (let d = 0; d < 60; d++) {
-    const pair = [sqlBossForSlot(d, 21), sqlBossForSlot(d, 22)]
-    assert.equal(pair.filter(n => n === '閻魔').length, 1, `d=${d} の枠: ${pair.join(' / ')}`)
-  }
-})
-
-test('出現ローテ: 閻魔の時間帯は日替わり・旧3体は6日で各2回', () => {
-  assert.equal(sqlBossForSlot(0, 21), '閻魔')   // 偶数日は21時
-  assert.equal(sqlBossForSlot(1, 22), '閻魔')   // 奇数日は22時
-  const counts = {}
-  for (let d = 0; d < 6; d++) for (const slot of [21, 22]) {
-    const n = sqlBossForSlot(d, slot)
-    counts[n] = (counts[n] || 0) + 1
-  }
-  assert.equal(counts['閻魔'], 6)
-  assert.equal(counts['黒龍ヴァルゼノク'], 2)
-  assert.equal(counts['雨摩座'], 2)
-  assert.equal(counts['雷鋼機神ゼルギアス'], 2)
-})
-
-test('クライアントの raidBossForSlot が SQL と同じ結果を返す', () => {
-  for (let d = 0; d < 40; d++) for (const slot of [21, 22]) {
-    assert.equal(raidBossForSlot(d, 0, slot), sqlBossForSlot(d, slot), `d=${d} slot=${slot} でSQLと不一致`)
-  }
-})
-
-test('bossImage / bossColor が閻魔を含む全ボスを解決する', () => {
-  assert.ok(bossImage('閻魔').startsWith('/enma.png'))
-  assert.ok(bossImage('雨摩座').startsWith('/amaza.png'))
-  assert.ok(bossImage('雷鋼機神ゼルギアス').startsWith('/zerugiasu.png'))
-  assert.ok(bossImage('黒龍ヴァルゼノク').startsWith('/varuzenoku.png'))
-  assert.equal(bossColor('閻魔'), '#cc66ff')
 })
 
 // ── 配線の再発防止 ──

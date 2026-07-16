@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { getWeaponGroup } from '../lib/stats'
 import { evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
-import { BOSS_VARUZENOKU, BOSS_AMAZA, BOSS_ZERUGIASU, BOSS_ENMA, raidBossForSlot, bossImage, bossColor } from '../lib/raidSchedule'
+import { BOSS_VARUZENOKU, BOSS_AMAZA, BOSS_ZERUGIASU, BOSS_ENMA, bossImage, bossColor } from '../lib/raidSchedule'
 import { emblemDmgMult, emblemDrainAmount, emblemBlocksAilment } from '../lib/emblemCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 import { selectBattleSkillSets } from '../lib/loadout'
 import { buildSummon, summonAnnounce, summonAttackDamage, summonAbsorbBasic, summonAbsorbSkill, summonEndOfTurn, tryPetCommand, BREEDER_COMMANDS } from '../lib/summon'
-import { pushSupported, pushConfigured, getPushStatus, enableRaidPush, disableRaidPush } from '../lib/push'
+import { pushSupported, pushConfigured, getPushStatus, enableRaidPush, disableRaidPush, getPushKinds, setPushKinds } from '../lib/push'
 import {
   WAIT_SECONDS,
   calcEffectiveStats,
@@ -608,7 +608,10 @@ export default function RaidBoss() {
   const [skillSets, setSkillSets] = useState([])
   const [boss, setBoss] = useState(undefined)
   const [nextSpawn, setNextSpawn] = useState(null)
-  const [nextBossName, setNextBossName] = useState(null)  // 次回出現ボス名（2枠日替わり）
+  const [nextBossName, setNextBossName] = useState(null)  // 次回出現ボス名（サーバー算出）
+  // 本日の出現予定 [{slot, kind, boss_name, hp_max}]。サーバー(spawn_raid_boss_if_needed)が返す値をそのまま表示する。
+  // ここでクライアントが独自に時刻/ボスを計算すると、サーバーとズレて「予告と実出現が食い違う」ため計算しない。
+  const [schedule, setSchedule] = useState(null)
   const [participants, setParticipants] = useState([])
   const [myPart, setMyPart] = useState(null)
   const [scene, setScene] = useState('boss') // 'boss' | 'battle'
@@ -744,6 +747,7 @@ export default function RaidBoss() {
 
     setNextSpawn(data.next_spawn || null)
     setNextBossName(data.next_boss_name || null)
+    setSchedule(Array.isArray(data.schedule) ? data.schedule : null)  // SQL未適用時はnull＝予定表を出さない
 
     if (data.status === 'waiting') {
       setBoss(false)
@@ -766,9 +770,10 @@ export default function RaidBoss() {
   }
 
   // 【開発】管理者がテスト用にボスを即出現/終了（is_devフラグ・一般プレイヤーには見えない）
-  const devSpawn = async (name) => {
+  // p_slot: 21=夜の条件（HP700万・順位報酬あり）/ 12〜17=昼の条件（HP200万・順位報酬なし）
+  const devSpawn = async (name, slot = 21) => {
     const { data: { user } } = await supabase.auth.getUser()
-    const { error } = await supabase.rpc('spawn_raid_boss_dev', { p_boss_name: name })
+    const { error } = await supabase.rpc('spawn_raid_boss_dev', { p_boss_name: name, p_slot: slot })
     if (error) { alert('開発スポーン失敗: ' + error.message); return }
     await fetchBoss(user.id)
     setScene('boss')
@@ -867,23 +872,16 @@ export default function RaidBoss() {
   const canAct = remaining <= 0
 
   const jst = jstNow()
-  // 各枠（21:00 / 22:00）の30分前から予告（20:30〜 と 21:30〜）
-  const isPreSpawn = boss === false && ((jst.getHours() === 20 && jst.getMinutes() >= 30) || (jst.getHours() === 21 && jst.getMinutes() >= 30))
+  const curHM = jst.getHours() * 60 + jst.getMinutes()
+  const slotActive = (slot) => curHM >= slot * 60 && curHM < slot * 60 + 30  // 出現中の枠か
+  // 各枠の30分前から予告（本日の予定にある全枠が対象）
+  const isPreSpawn = boss === false && (schedule || []).some(s => curHM >= s.slot * 60 - 30 && curHM < s.slot * 60)
   const getPreSpawnTarget = () => {
     if (nextSpawn) return nextSpawn
     const t = jstNow(); t.setHours(21, 0, 0, 0)
     return t.toISOString()
   }
   const previewName = nextBossName || BOSS_NAME
-
-  // 本日のレイドスケジュール（21時/22時の出現ボス）。サーバーの日替わり交互と一致させる
-  const epochDays = Math.floor(Date.UTC(jst.getFullYear(), jst.getMonth(), jst.getDate()) / 86400000)
-  const baseDays  = Math.floor(Date.UTC(2000, 0, 1) / 86400000)
-  // 2枠のうち必ず1枠が閻魔／残り1枠を旧3体が3日周期。サーバ raid_boss_for_slot と一致させる
-  const slot21Boss = raidBossForSlot(epochDays, baseDays, 21)
-  const slot22Boss = raidBossForSlot(epochDays, baseDays, 22)
-  const curHM = jst.getHours() * 60 + jst.getMinutes()
-  const slotActive = (start) => curHM >= start && curHM < start + 30  // 出現中の枠か
 
   const base = { minHeight: '100vh', background: '#000820', color: '#aaccff', fontFamily: 'monospace', padding: '16px', boxSizing: 'border-box' }
 
@@ -900,21 +898,30 @@ export default function RaidBoss() {
         </div>
         <div style={{ color:'#ff4444', fontSize:'14px', marginBottom:'12px' }}>⚔ レイドボス</div>
 
-        {/* 本日の出現スケジュール（21時/22時） */}
-        <div style={{ border:'1px solid #2a2a44', background:'#080814', padding:'10px 12px', marginBottom:'14px' }}>
-          <div style={{ color:'#8899bb', fontSize:'11px', marginBottom:'6px' }}>🗓 本日のレイドボス（JST）</div>
-          {[{ t:'21:00〜21:30', start:21*60, name:slot21Boss }, { t:'22:00〜22:30', start:22*60, name:slot22Boss }].map(s => {
-            const live = slotActive(s.start)
-            return (
-              <div key={s.t} style={{ display:'flex', alignItems:'center', gap:'10px', fontSize:'12px', padding:'2px 0' }}>
-                <span style={{ color: live ? '#ffcc44' : '#667799', minWidth:'92px' }}>{s.t}</span>
-                <span style={{ color: bossColor(s.name), fontWeight:'bold' }}>{s.name}</span>
-                {live && <span style={{ color:'#44ff88', fontSize:'10px' }}>● 出現中</span>}
-              </div>
-            )
-          })}
-          <div style={{ color:'#556688', fontSize:'9px', marginTop:'6px' }}>※ 各30分・HP700万。2枠のうち1枠は必ず閻魔（出現する時間帯は日替わり）。もう1枠は他の3体が3日周期で回ります。</div>
-        </div>
+        {/* 本日の出現スケジュール（昼枠＋21時/22時）。中身はサーバーが返した schedule をそのまま表示 */}
+        {schedule && (
+          <div style={{ border:'1px solid #2a2a44', background:'#080814', padding:'10px 12px', marginBottom:'14px' }}>
+            <div style={{ color:'#8899bb', fontSize:'11px', marginBottom:'6px' }}>🗓 本日のレイドボス（JST）</div>
+            {schedule.map(s => {
+              const live = slotActive(s.slot)
+              const hh = String(s.slot).padStart(2, '0')
+              return (
+                <div key={s.slot} style={{ display:'flex', alignItems:'center', gap:'10px', fontSize:'12px', padding:'2px 0' }}>
+                  <span style={{ color: live ? '#ffcc44' : '#667799', minWidth:'104px' }}>
+                    {s.kind === 'day' ? '☀' : '🌙'} {hh}:00〜{hh}:30
+                  </span>
+                  <span style={{ color: bossColor(s.boss_name), fontWeight:'bold' }}>{s.boss_name}</span>
+                  <span style={{ color:'#556688', fontSize:'10px' }}>HP{Math.floor((s.hp_max || 0) / 10000)}万</span>
+                  {live && <span style={{ color:'#44ff88', fontSize:'10px' }}>● 出現中</span>}
+                </div>
+              )
+            })}
+            <div style={{ color:'#556688', fontSize:'9px', marginTop:'6px', lineHeight:1.6 }}>
+              ※ 各30分。夜（21時・22時）は毎日固定で、2枠のうち1枠は必ず最新ボス。<br />
+              ※ 昼は12〜17時のうち毎日ランダムな1回だけ。最新ボスとその日の夜に出るボスは昼には出ません（HPは低めですが、与ダメージ上位3名の追加報酬はありません）。
+            </div>
+          </div>
+        )}
 
       {/* 未受取の過去レイド報酬（次のボスが出て画面から消えた分の救済） */}
       {pendingRewards.length > 0 && (
@@ -952,6 +959,7 @@ export default function RaidBoss() {
             <button onClick={() => devSpawn(BOSS_VARUZENOKU)} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ヴァルゼノクを今出現</button>
             <button onClick={() => devSpawn(BOSS_ZERUGIASU)} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ゼルギアスを今出現</button>
             <button onClick={() => devSpawn(BOSS_ENMA)} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>閻魔を今出現</button>
+            <button onClick={() => devSpawn(schedule?.find(s => s.kind === 'day')?.boss_name || BOSS_AMAZA, schedule?.find(s => s.kind === 'day')?.slot || 12)} style={{ padding:'5px 10px', background:'#2a1a0e', border:'1px solid #ffaa44', color:'#ffcc88', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>本日の昼枠を今出現（HP200万・順位報酬なし）</button>
             <button onClick={devEnd} style={{ padding:'5px 10px', background:'#1a0a0a', border:'1px solid #aa4444', color:'#ff8888', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>テストボス終了</button>
           </div>
         </div>
@@ -968,7 +976,7 @@ export default function RaidBoss() {
           ) : (
             <div style={{ border: '1px solid #002244', background: '#000e20', padding: '12px', marginBottom: '16px' }}>
               <div style={{ color: '#446688', fontSize: '12px', marginBottom: '4px' }}>現在レイドボスは出現していません</div>
-              <div style={{ color: '#556677', fontSize: '11px' }}>次の出現{nextBossName ? `（${nextBossName}）` : ''}: {nextSpawn ? <Countdown targetIso={nextSpawn} /> : '毎日21:00／22:00 JST'}</div>
+              <div style={{ color: '#556677', fontSize: '11px' }}>次の出現{nextBossName ? `（${nextBossName}）` : ''}: {nextSpawn ? <Countdown targetIso={nextSpawn} /> : '本日の予定を確認してください'}</div>
             </div>
           )}
 
@@ -980,7 +988,7 @@ export default function RaidBoss() {
               onError={e => { e.target.style.display = 'none' }} />
             <div style={{ textAlign: 'center', marginBottom: '8px' }}>
               <div style={{ color: '#ff4444', fontSize: '16px', letterSpacing: '1px' }}>{previewName}</div>
-              <div style={{ color: '#446688', fontSize: '10px', marginTop: '2px' }}>毎日21:00／22:00 JST出現（各30分・3体が日替わり）/ HP 7,000,000</div>
+              <div style={{ color: '#446688', fontSize: '10px', marginTop: '2px' }}>出現時刻は上の「本日のレイドボス」を参照（各30分）</div>
             </div>
             <div style={{ fontSize: '10px', color: '#335566', lineHeight: '1.8' }}>
               全プレイヤーで協力して討伐！貢献度に応じてリワードが変わります。
@@ -1189,6 +1197,7 @@ function RaidPushSettings() {
   const [status, setStatus] = useState('loading') // loading|unsupported|notconfigured|denied|on|off
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
+  const [kinds, setKinds] = useState({ night: true, day: true })  // 夜=21/22時・昼=12〜17時のランダム枠
 
   useEffect(() => {
     let cancelled = false
@@ -1197,17 +1206,45 @@ function RaidPushSettings() {
       if (!pushSupported()) s = 'unsupported'
       else if (!pushConfigured()) s = 'notconfigured'
       else s = await getPushStatus()
-      if (!cancelled) setStatus(s)
+      if (cancelled) return
+      setStatus(s)
+      if (s === 'on') {
+        const k = await getPushKinds()
+        if (!cancelled && k) setKinds(k)
+      }
     })()
     return () => { cancelled = true }
   }, [])
+
+  // 夜/昼の受け取り切替。両方OFFにしたら通知そのものをOFFにする（届かないのにONと表示しない）
+  const toggleKind = async (key) => {
+    if (busy || status !== 'on') return
+    const next = { ...kinds, [key]: !kinds[key] }
+    setBusy(true); setMsg('')
+    try {
+      if (!next.night && !next.day) {
+        setStatus(await disableRaidPush())
+        setKinds({ night: true, day: true })
+        setMsg('レイド通知をOFFにしました。')
+      } else {
+        await setPushKinds(next)
+        setKinds(next)
+        setMsg(`通知する枠を更新しました（${[next.night && '夜', next.day && '昼'].filter(Boolean).join('・')}）。`)
+      }
+    } catch {
+      setMsg('うまくいきませんでした。時間を置いて、もう一度お試しください。')
+    } finally { setBusy(false) }
+  }
 
   const toggle = async () => {
     if (busy) return
     setBusy(true); setMsg('')
     try {
       if (status === 'on') { setStatus(await disableRaidPush()); setMsg('レイド通知をOFFにしました。') }
-      else { setStatus(await enableRaidPush()); setMsg('レイド通知をONにしました。毎日21時・22時にお知らせします。') }
+      else {
+        setStatus(await enableRaidPush(kinds))
+        setMsg('レイド通知をONにしました。出現時刻にお知らせします。')
+      }
     } catch (e) {
       const m = e?.message || ''
       if (m === 'denied') setMsg('通知が許可されていません。端末／ブラウザの設定で通知を許可してください。')
@@ -1225,7 +1262,8 @@ function RaidPushSettings() {
     <div style={{ border: '1px solid #1a4a3a', background: '#001810', padding: '14px', marginTop: '16px' }}>
       <div style={{ color: '#44ddaa', fontSize: '13px', marginBottom: '8px' }}>🔔 レイド通知設定</div>
       <p style={{ fontSize: '12px', lineHeight: 1.7, color: '#88bbaa', margin: '0 0 10px' }}>
-        ONにすると、レイドボスが出現する<b style={{ color: '#aaffdd' }}>毎日21時・22時</b>に、アプリを閉じていても端末へ通知が届きます。
+        ONにすると、レイドボスの出現時刻に、アプリを閉じていても端末へ通知が届きます。
+        <b style={{ color: '#aaffdd' }}>夜（21時・22時）</b>と<b style={{ color: '#aaffdd' }}>昼（12〜17時のどこか1回）</b>は別々に選べます。
       </p>
       {status === 'unsupported' && <p style={{ fontSize: '11px', color: '#cc9944', margin: '0 0 8px' }}>この端末／ブラウザは通知に対応していません。</p>}
       {status === 'notconfigured' && <p style={{ fontSize: '11px', color: '#cc9944', margin: '0 0 8px' }}>通知はまだ準備中です（サーバー設定待ち）。</p>}
@@ -1239,6 +1277,21 @@ function RaidPushSettings() {
         }}>
           {busy ? '…処理中' : isOn ? '✅ 通知ON（タップでOFF）' : '🔔 レイド通知をONにする'}
         </button>
+      )}
+      {isOn && (
+        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+          {[{ key: 'night', label: '🌙 夜 21時・22時' }, { key: 'day', label: '☀ 昼 12〜17時' }].map(k => (
+            <button key={k.key} onClick={() => toggleKind(k.key)} disabled={busy} style={{
+              flex: 1, padding: '8px', borderRadius: '6px', cursor: busy ? 'default' : 'pointer',
+              fontFamily: 'monospace', fontSize: '11px',
+              background: kinds[k.key] ? '#0a3a2a' : '#0a1018',
+              border: `1px solid ${kinds[k.key] ? '#44ddaa' : '#334455'}`,
+              color: kinds[k.key] ? '#44ddaa' : '#667788',
+            }}>
+              {kinds[k.key] ? '✓ ' : '　'}{k.label}
+            </button>
+          ))}
+        </div>
       )}
       {msg && <p style={{ fontSize: '11px', color: '#9bd', marginTop: '8px', lineHeight: 1.6 }}>{msg}</p>}
       <p style={{ fontSize: '10px', color: '#557', marginTop: '10px', lineHeight: 1.6 }}>
@@ -1266,6 +1319,7 @@ function RewardTable({ isAdmin = false }) {
       ))}
       <div style={{ color: '#ffdd44', fontSize: '10px', marginTop: '8px', lineHeight: 1.7 }}>
         🏅 与ダメージ上位3名には追加報酬（tier報酬とは別途）: 1位 Gold+100,000＋匠の秘伝書Ⅴ / 2位 Gold+100,000＋匠の秘伝書Ⅳ / 3位 Gold+100,000＋匠の秘伝書Ⅲ
+        <br />※ 上位3名の追加報酬は夜（21時・22時）の枠のみ。昼の枠には付きません（ティア報酬・素材・秘伝書は同じです）。
       </div>
       <div style={{ color: '#334455', fontSize: '10px', marginTop: '6px' }}>※ 出撃回数でもティア保証: {tierAttacks(TIER_INFO[2], isAdmin)}回→C / {tierAttacks(TIER_INFO[1], isAdmin)}回→B / {tierAttacks(TIER_INFO[0], isAdmin)}回→A。時間切れでもその時点の報酬を獲得可</div>
       <div style={{ color: '#446655', fontSize: '10px', marginTop: '4px', lineHeight: 1.7 }}>※ 討伐支援: 出現から25分経過（残り5分）以降は与ダメージ制限が緩和され討伐しやすくなります。ただしこの間に与えたダメージはランキング（貢献度・与ダメ順位）には加算されません。</div>
