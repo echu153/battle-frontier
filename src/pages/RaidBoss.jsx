@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { getWeaponGroup } from '../lib/stats'
 import { evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
+import { BOSS_VARUZENOKU, BOSS_AMAZA, BOSS_ZERUGIASU, BOSS_ENMA, raidBossForSlot, bossImage, bossColor } from '../lib/raidSchedule'
 import { emblemDmgMult, emblemDrainAmount, emblemBlocksAilment } from '../lib/emblemCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
 import { selectBattleSkillSets } from '../lib/loadout'
@@ -23,13 +24,7 @@ import {
 const POLL_MS = 5000
 // レイド出撃CD。★2026-06-26 全員公開: レイドは10秒固定（10/20モードに関係なく）。
 const raidWaitFor = () => 10
-const BOSS_NAME = '黒龍ヴァルゼノク'
-const BOSS_ZERUGIASU = '雷鋼機神ゼルギアス'
-// レイドボスの3体ローテ（21時/22時の2枠を3日周期で全員が回る）
-const RAID_BOSS_CYCLE = ['黒龍ヴァルゼノク', '雨摩座', '雷鋼機神ゼルギアス']
-// レイドボスの表示画像（ボス名→画像）
-const RAID_IMG_VER = '2'  // 画像差し替え時に上げるとキャッシュを無効化
-const bossImage = (name) => (name === '雨摩座' ? '/amaza.png' : name === BOSS_ZERUGIASU ? '/zerugiasu.png' : '/varuzenoku.png') + `?v=${RAID_IMG_VER}`
+const BOSS_NAME = BOSS_VARUZENOKU
 const BOSS_DEF  = 1000
 const BOSS_MDEF = 1000
 const BOSS_SPD  = 1200
@@ -189,10 +184,16 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   let tenkaiActedThisTurn
 
   // ボス差別化：物理被ダメ+10%/特殊-10% のボス（雨摩座・ゼルギアス）／ヴァルゼノクは逆
-  const isAmaza = bossName === '雨摩座'
+  const isAmaza = bossName === BOSS_AMAZA
   const isZerugiasu = bossName === BOSS_ZERUGIASU
+  const isEnma = bossName === BOSS_ENMA
   const physWeakBoss = isAmaza || isZerugiasu
-  const weakMult = (isPhysical) => physWeakBoss ? (isPhysical ? 1.1 : 0.9) : (isPhysical ? 0.9 : 1.1)
+  // 閻魔は「六道輪廻の理」：奇数ターンは物理が通り、偶数ターンは特殊が通る（弱点がターンで入れ替わる）。
+  // 全出現の1/2を占めるため、片方のビルドだけが刺さる固定弱点にはしない。
+  const weakMult = (isPhysical, turn) => {
+    if (isEnma) return (turn % 2 === 1) === isPhysical ? 1.1 : 0.9
+    return physWeakBoss ? (isPhysical ? 1.1 : 0.9) : (isPhysical ? 0.9 : 1.1)
+  }
   // 雷鋼の機神鎧：被ダメージ時に2ターン素早さ+15%（eff.ondmgSpdUp = 倍率1.15／0=効果なし）
   const ondmgSpdUp = eff.ondmgSpdUp || 0
   const hasAmagoiShield = equipment.some(e => e.equipped && e.bonus_effect === 'battle_start_ailment_shield')  // 哭雨の羽衣: 5Tごとに異常無効バフ再付与
@@ -217,13 +218,19 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
 
     // ターン10: 滅びの一撃（強制終了）
     if (turn === 10) {
-      const t10name = isAmaza ? '水禍創世' : isZerugiasu ? '神雷終焉' : '滅びの咆哮'
+      const t10name = isAmaza ? '水禍創世' : isZerugiasu ? '神雷終焉' : isEnma ? '無間地獄' : '滅びの咆哮'
       logs.push({ text: `${turn}ターン目: ${bossName}の「${t10name}」！`, color: '#ff0000' })
       logs.push({ text: `999,999の壊滅ダメージ！（なんとか生き延びた…HP→1）`, color: '#ff4444' })
       break
     }
 
     const boss = getBossForTurn(turn, bossName)
+    // 閻魔「六道輪廻の理」：どちらの攻撃が通るターンかを毎ターン明示する（弱点が入れ替わるため）
+    if (isEnma) {
+      logs.push(turn % 2 === 1
+        ? { text: `⚖ 閻魔の天秤が罪業に傾く（このターンは物理が通る）`, color: '#cc66ff' }
+        : { text: `⚖ 閻魔の天秤が業火に傾く（このターンは特殊が通る）`, color: '#cc66ff' })
+    }
     const enemyBuffs = {} // ボスはデバフ無効なので常に空
     const hpBeforeTurn = playerHp // 雷鋼の機神鎧: このターンに被ダメしたか判定用
 
@@ -317,7 +324,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           const nextBoostMult = (res.dmg > 0 && playerBuffs.nextSkillBoost) ? playerBuffs.nextSkillBoost.rate : 1.0  // 半月蹴りの溜め（次の一撃強化）
           if (nextBoostMult > 1.0 && cs.skills?.name !== '半月蹴り') res.newPlayerBuffs.nextSkillBoost = undefined  // 消費
           let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * nextBoostMult * emblemDmgMult(eff, skillPhysical) * (0.9 + Math.random() * 0.2))
-          if (res.dmg > 0) finalDmg = cutRaidHit(Math.floor(finalDmg * weakMult(skillPhysical))) // 弱点補正＋1ヒット段階カット
+          if (res.dmg > 0) finalDmg = cutRaidHit(Math.floor(finalDmg * weakMult(skillPhysical, turn))) // 弱点補正＋1ヒット段階カット
           // 第六感（再修練）：魔法攻撃がヒットしたらスタック+1（最大6・戦闘中持続）
           if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks + 1)
           if (res.selfDmg > 0) playerHp = Math.max(1, playerHp - res.selfDmg)
@@ -393,7 +400,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
             const fCrit = Math.random() * 100 < (playerCritRate + (res.bonusCritRate || 0))
             const fCritMult = fCrit ? (1.5 + (eff.critDmg || 0) + passiveCritDmgBonus) : 1.0
             let fDmg = Math.floor(res.followup.dmg * defScale * fCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * emblemDmgMult(eff, skillPhysical) * (0.9 + Math.random() * 0.2))
-            fDmg = cutRaidHit(Math.max(1, Math.floor(fDmg * weakMult(skillPhysical))))
+            fDmg = cutRaidHit(Math.max(1, Math.floor(fDmg * weakMult(skillPhysical, turn))))
             totalDamage += fDmg
             logs.push({ text: `↳ 追撃！${res.followup.label ? `（${res.followup.label}）` : ''} ${bossName}に${fmt(fDmg)}ダメージ！${fCrit ? ' 💥クリティカル！' : ''}`, color: fCrit ? '#ffaa00' : '#ffaa66' })
           }
@@ -411,7 +418,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         const naIaiMult = isMagical ? 1.0 : iaiPhysMult
         const naRokkanMult = (hasRokkan && pe('サイキッカー')) ? (1 + 0.05*Math.min(6, rokkanStacks)) : 1.0
         let finalDmg = Math.floor(baseDmg * critMult * (isArtifact ? 1.3 : 1.0) * passiveDmgMult * tosoMult * naIaiMult * naRokkanMult * emblemDmgMult(eff, !isMagical) * (0.9 + Math.random() * 0.2))
-        finalDmg = cutRaidHit(Math.floor(finalDmg * weakMult(!isMagical))) // 弱点補正＋1ヒット段階カット
+        finalDmg = cutRaidHit(Math.floor(finalDmg * weakMult(!isMagical, turn))) // 弱点補正＋1ヒット段階カット
         // 通常攻撃は精密照準スタックをリセット（連続スキルが途切れる）
         seimitsuStacks = 0; prevSkillName = null
         if (!playerBuffs.healBlock?.turns && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
@@ -443,7 +450,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       // ターン4: 特殊スキル（倍率1.5）。ボスごとに効果が異なる
       if (turn === 4 && !isExtra) {
         let specialDmg = Math.max(1, Math.floor(eAtk * eAtk / Math.max(1, eAtk + defForCalc) * 1.5 * (0.9 + Math.random() * 0.2)))
-        specialDmg = Math.max(1, Math.floor(specialDmg * evoTakenMult(eff, false) * ryurinReduce()))  // 真化: 被ダメ%軽減(海竜)＋竜鱗の加護
+        specialDmg = Math.max(1, Math.floor(specialDmg * evoTakenMult(eff, false, playerHp / eff.hp_max) * ryurinReduce()))  // 真化: 被ダメ%軽減(海竜)＋竜鱗の加護
         // ペット召喚：50%でペットがダメージを肩代わり（状態異常は下でプレイヤーに付与）
         if (!summonAbsorbSkill(summon, specialDmg, logs)) {
           playerHp -= specialDmg
@@ -494,7 +501,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       }
       const playerDefRankReduction = calcDefReduction(pDef)
       const gambleBodyMult = hasGambleBody ? (pe('ギャンブラー') ? (0.5+Math.random()*0.7) : (0.7+Math.random()*0.6)) : 1.0
-      const finalDmg = Math.floor(baseDmg * (isCrit ? 1.5 : 1.0) * dmgReduceRate * berserkDmgRate * (1 - playerDefRankReduction) * gambleBodyMult * evoTakenMult(eff, true) * ryurinReduce() * (0.9 + Math.random() * 0.2))
+      const finalDmg = Math.floor(baseDmg * (isCrit ? 1.5 : 1.0) * dmgReduceRate * berserkDmgRate * (1 - playerDefRankReduction) * gambleBodyMult * evoTakenMult(eff, true, playerHp / eff.hp_max) * ryurinReduce() * (0.9 + Math.random() * 0.2))
       playerHp -= finalDmg
       if ((eff.evoReflectPct||0) > 0 && finalDmg > 0) { const r = Math.max(1, Math.floor(finalDmg * eff.evoReflectPct/100)); totalDamage += r }
       if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
@@ -872,10 +879,9 @@ export default function RaidBoss() {
   // 本日のレイドスケジュール（21時/22時の出現ボス）。サーバーの日替わり交互と一致させる
   const epochDays = Math.floor(Date.UTC(jst.getFullYear(), jst.getMonth(), jst.getDate()) / 86400000)
   const baseDays  = Math.floor(Date.UTC(2000, 0, 1) / 86400000)
-  // 3体ローテ（%3）: 21時=cycle[d] / 22時=cycle[d+1]。サーバ raid_boss_for_slot と一致させる
-  const cycleIdx   = (((epochDays - baseDays) % 3) + 3) % 3
-  const slot21Boss = RAID_BOSS_CYCLE[cycleIdx]
-  const slot22Boss = RAID_BOSS_CYCLE[(cycleIdx + 1) % 3]
+  // 2枠のうち必ず1枠が閻魔／残り1枠を旧3体が3日周期。サーバ raid_boss_for_slot と一致させる
+  const slot21Boss = raidBossForSlot(epochDays, baseDays, 21)
+  const slot22Boss = raidBossForSlot(epochDays, baseDays, 22)
   const curHM = jst.getHours() * 60 + jst.getMinutes()
   const slotActive = (start) => curHM >= start && curHM < start + 30  // 出現中の枠か
 
@@ -902,12 +908,12 @@ export default function RaidBoss() {
             return (
               <div key={s.t} style={{ display:'flex', alignItems:'center', gap:'10px', fontSize:'12px', padding:'2px 0' }}>
                 <span style={{ color: live ? '#ffcc44' : '#667799', minWidth:'92px' }}>{s.t}</span>
-                <span style={{ color: s.name==='雨摩座' ? '#66bbff' : s.name===BOSS_ZERUGIASU ? '#ffdd44' : '#ff6666', fontWeight:'bold' }}>{s.name}</span>
+                <span style={{ color: bossColor(s.name), fontWeight:'bold' }}>{s.name}</span>
                 {live && <span style={{ color:'#44ff88', fontSize:'10px' }}>● 出現中</span>}
               </div>
             )
           })}
-          <div style={{ color:'#556688', fontSize:'9px', marginTop:'6px' }}>※ 各30分・HP700万。3体が日替わりで入れ替わります（3日周期で全員登場）。</div>
+          <div style={{ color:'#556688', fontSize:'9px', marginTop:'6px' }}>※ 各30分・HP700万。2枠のうち1枠は必ず閻魔（出現する時間帯は日替わり）。もう1枠は他の3体が3日周期で回ります。</div>
         </div>
 
       {/* 未受取の過去レイド報酬（次のボスが出て画面から消えた分の救済） */}
@@ -942,9 +948,10 @@ export default function RaidBoss() {
         <div style={{ border:'1px solid #3a2a6a', background:'#0a0820', padding:'10px', marginBottom:'12px' }}>
           <div style={{ color:'#a890ff', fontSize:'11px', marginBottom:'6px' }}>🔧 開発テスト（管理者のみ・一般には非表示）</div>
           <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
-            <button onClick={() => devSpawn('雨摩座')} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>雨摩座を今出現</button>
-            <button onClick={() => devSpawn('黒龍ヴァルゼノク')} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ヴァルゼノクを今出現</button>
-            <button onClick={() => devSpawn('雷鋼機神ゼルギアス')} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ゼルギアスを今出現</button>
+            <button onClick={() => devSpawn(BOSS_AMAZA)} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>雨摩座を今出現</button>
+            <button onClick={() => devSpawn(BOSS_VARUZENOKU)} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ヴァルゼノクを今出現</button>
+            <button onClick={() => devSpawn(BOSS_ZERUGIASU)} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ゼルギアスを今出現</button>
+            <button onClick={() => devSpawn(BOSS_ENMA)} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>閻魔を今出現</button>
             <button onClick={devEnd} style={{ padding:'5px 10px', background:'#1a0a0a', border:'1px solid #aa4444', color:'#ff8888', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>テストボス終了</button>
           </div>
         </div>

@@ -17,6 +17,10 @@ export const evoOnHit = (eff, dmg, enemyBuffs, enemyName, logs) => {
   if ((eff.evoHitStun||0) > 0 && !(enemyBuffs.stun?.turns > 0) && Math.random()*100 < eff.evoHitStun) {
     enemyBuffs.stun = { turns: 1 }
   }
+  // 冥獄宝珠・断罪（レイド装備）: 攻撃ヒット時 eff.hitPoisonChance% で毒。毒の数値は毒矢と同じ（4T・敵HPの3%/T）
+  if ((eff.hitPoisonChance||0) > 0 && !(enemyBuffs.poison?.turns > 0) && Math.random()*100 < eff.hitPoisonChance) {
+    enemyBuffs.poison = { turns: 4, dmgRate: 0.03 }
+  }
 }
 
 // プレイヤーが被ダメージした時：反撃の状態異常付与＋反射。反射ダメージ量を返す（敵HPに反映するのは呼び出し側）。
@@ -45,9 +49,17 @@ export const evoOnEvade = (eff, playerBuffs, logs) => {
   }
 }
 
-// 被ダメージ%軽減倍率（海竜の鱗=全体-5% / 蒼粘剣=物理-10%）
-export const evoTakenMult = (eff, isPhysical) =>
-  (eff?.evoDmgTakenMult || 1) * (isPhysical ? (eff?.evoPhysDmgTakenMult || 1) : 1)
+// 冥府王の獄衣: 被ダメージ-5%。HPが半分以下なら軽減率が2倍(-10%)になる。
+//  hpRatio = 被弾時点の playerHp / hp_max。呼び出し側が渡さない場合は全快扱い（=通常の軽減率）。
+const gokuiTakenMult = (eff, hpRatio) => {
+  const pct = eff?.gokuiTakenPct || 0
+  if (pct <= 0) return 1
+  return 1 - (pct * ((hpRatio ?? 1) <= 0.5 ? 2 : 1)) / 100
+}
+
+// 被ダメージ%軽減倍率（海竜の鱗=全体-5% / 蒼粘剣=物理-10% / 冥府王の獄衣=全体-5%かつ瀕死で-10%）
+export const evoTakenMult = (eff, isPhysical, hpRatio = 1) =>
+  (eff?.evoDmgTakenMult || 1) * (isPhysical ? (eff?.evoPhysDmgTakenMult || 1) : 1) * gokuiTakenMult(eff, hpRatio)
 
 // 全アクティブスキルスロット(5枠)を埋めているか
 export const evoAllSkillsSet = (activeSkillSets) =>

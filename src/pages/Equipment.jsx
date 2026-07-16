@@ -66,6 +66,9 @@ const getEffectLabel = (effect) => {
     'battle_start_ailment_shield':'【開幕＆5Tごと・状態異常を1回無効化】',
     'ondmg_spd_up_5_2t':'【被ダメージ時・2ターン素早さ+15%】',
     'extra_hit_paralysis_30':'【追加行動の攻撃ヒット時・20%で相手を麻痺】',
+    'hit_poison_20':'【攻撃ヒット時・20%で相手を毒】',
+    'dmg_taken_down_5_hp50_x2':'【被ダメージ-5%（HP半分以下で-10%）】',
+    'atk_to_matk_2':'【攻撃力の2%を特殊攻撃に加算】',
     ...EVO_EFFECT_LABELS,
   }
   return labels[effect] || effect

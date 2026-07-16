@@ -332,7 +332,8 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
           for (const k of blockedKeys) { if (res.newPlayerBuffs[k] !== playerBuffs[k]) res.newPlayerBuffs[k] = playerBuffs[k] }
           if (hadBuff) logs.push({ text:`💸 オールインの反動中！ バフが効かない！`, color:'#ff4444' })
         }
-        playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
+        // 直前に付与した装備デバフ(毒/出血/素早さダウン等)を捨てないようマージ（=で置換すると消える。Game.jsxと同構造）
+        playerBuffs = { ...playerBuffs, ...res.newPlayerBuffs }; enemyBuffs = { ...enemyBuffs, ...res.newEnemyBuffs }
         // 精霊共鳴：同じ精霊召喚を3回でtripled→次の行動で確定追加行動（Game.jsxと同構造）
         if (passiveNames.includes('精霊共鳴') && playerBuffs.spiritCombo?.tripled) {
           playerBuffs.guaranteedExtra = true
@@ -522,7 +523,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       const pSum = Math.max(1, eff.def + eff.mdef)
       gapMult = Math.min(3, Math.max(1, 1 + Math.max(0, eSum - pSum) / pSum))
     }
-    const finalDmg = Math.floor(baseDmg*critOrNotMult*gapMult*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*evoTakenMult(eff, !isEM)*ryurinReduce()*(0.9+Math.random()*0.2))
+    const finalDmg = Math.floor(baseDmg*critOrNotMult*gapMult*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*evoTakenMult(eff, !isEM, playerHp / eff.hp_max)*ryurinReduce()*(0.9+Math.random()*0.2))
     playerHp -= finalDmg
     { const refl = evoOnDamaged(eff, finalDmg, enemyBuffs, enemy.name, logs); if (refl > 0) enemyHp -= refl }
     if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
@@ -616,7 +617,7 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
         const defScale = atkStat / (atkStat + Math.max(1, pDef))
         const rankRed = calcDefReduction(isPhys ? eff.def : eff.mdef)
         const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
-        let dmg = Math.max(0, Math.floor(res.dmg * defScale * (1 - rankRed) * dmgReduceRate * evoTakenMult(eff, isPhys) * frac * (0.9 + Math.random() * 0.2)))
+        let dmg = Math.max(0, Math.floor(res.dmg * defScale * (1 - rankRed) * dmgReduceRate * evoTakenMult(eff, isPhys, playerHp / eff.hp_max) * frac * (0.9 + Math.random() * 0.2)))
         playerHp -= dmg
         logs.push({ text:`🪞 ${enemy.name}が「${sk.name}」を映し返す！ あなたに${dmg}ダメージ！`, color:'#cc66ff' })
       } else {

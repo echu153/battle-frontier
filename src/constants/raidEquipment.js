@@ -15,6 +15,9 @@ export const RAID_EQUIP_NAMES = new Set([
   '雷鋼の機神鎧',       // 雷鋼機神ゼルギアス
   '蒼雷の短刃',         // 雷鋼機神ゼルギアス
   '神雷の環',           // 雷鋼機神ゼルギアス
+  '冥獄宝珠・断罪',     // 閻魔
+  '冥府王の獄衣',       // 閻魔
+  '六道輪廻の数珠',     // 閻魔
 ])
 
 export const isRaidEquip = (name) => RAID_EQUIP_NAMES.has(name)

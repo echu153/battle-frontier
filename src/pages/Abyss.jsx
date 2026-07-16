@@ -346,7 +346,8 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
           for (const k of blockedKeys) { if (res.newPlayerBuffs[k] !== playerBuffs[k]) res.newPlayerBuffs[k] = playerBuffs[k] }
           if (hadBuff) logs.push({ text:`💸 オールインの反動中！ バフが効かない！`, color:'#ff4444' })
         }
-        playerBuffs = res.newPlayerBuffs; enemyBuffs = res.newEnemyBuffs
+        // 直前に付与した装備デバフ(毒/出血/素早さダウン等)を捨てないようマージ（=で置換すると消える。Game.jsxと同構造）
+        playerBuffs = { ...playerBuffs, ...res.newPlayerBuffs }; enemyBuffs = { ...enemyBuffs, ...res.newEnemyBuffs }
         // 精霊共鳴：同じ精霊召喚を3回でtripled→次の行動で確定追加行動（Game.jsxと同構造）
         if (passiveNames.includes('精霊共鳴') && playerBuffs.spiritCombo?.tripled) {
           playerBuffs.guaranteedExtra = true
@@ -463,7 +464,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     const playerDefRankReduction = calcDefReduction(isEM ? eff.mdef : eff.def)
     const gambleBodyMult = hasGambleBody ? (pe('ギャンブラー') ? (0.5+Math.random()*0.7) : (0.7+Math.random()*0.6)) : 1.0
     const allinDebuffInMult = playerBuffs.allinDebuff?.turns > 0 ? 1.3 : 1.0
-    const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*evoTakenMult(eff, !isEM)*ryurinReduce()*(0.9+Math.random()*0.2))
+    const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*evoTakenMult(eff, !isEM, playerHp / eff.hp_max)*ryurinReduce()*(0.9+Math.random()*0.2))
     playerHp -= finalDmg
     { const refl = evoOnDamaged(eff, finalDmg, enemyBuffs, enemy.name, logs); if (refl > 0) enemyHp -= refl }  // 嵐の重装甲/聖鎧/インフェルノ
     if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
@@ -494,7 +495,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     const rankRed = calcDefReduction(rankStat)
     const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
     // ボス装備 真化: 被ダメ%軽減（海竜/蒼粘）＋ 反撃/反射（嵐/聖鎧/インフェルノ）。敵スキルダメージの共通経路。
-    const dmg = Math.max(0, Math.floor(raw * defScale * critMult * (1 - rankRed) * dmgReduceRate * evoTakenMult(eff, useStat !== 'matk') * (0.9 + Math.random()*0.2)))
+    const dmg = Math.max(0, Math.floor(raw * defScale * critMult * (1 - rankRed) * dmgReduceRate * evoTakenMult(eff, useStat !== 'matk', playerHp / eff.hp_max) * (0.9 + Math.random()*0.2)))
     const refl = evoOnDamaged(eff, dmg, enemyBuffs, enemy.name, logs); if (refl > 0) enemyHp -= refl
     return dmg
   }

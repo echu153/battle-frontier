@@ -4,6 +4,7 @@ import { supabase } from '../supabase'
 // public/ 配下の安定URL参照（ハッシュ付きバンドルだとデプロイ後にキャッシュ不整合で404→画像が出ないため）
 const papiaIcon = '/papia.png'
 import { GEM_DATA, GEM_TYPES, calcDefReduction, calcEffectiveStats } from '../lib/stats'
+import { evoOnHit, evoTakenMult } from '../lib/evoCombat'
 import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemResistNewAilments, emblemBlocksAilment } from '../lib/emblemCombat'
 import { charmPlayerBonus, petPlayerBonus, petStats } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
@@ -3004,20 +3005,10 @@ export default function Game() {
     // プレイヤーの命中ボーナス（アクアクラウンなど）
     const playerHitBonus = (eff.hitBonus || 0) + passiveHitBonus
 
-    // ボス装備 真化: プレイヤーの攻撃ヒット時の効果（スライムの指輪=SPD-10% / 略奪者の短剣=出血 / 絶零の魔導砲=スタン）
-    // ※発動ログは出さない（2026-07-14仕様変更: 勝手に発動・表示なし）
-    const applyEvoHitEffects = (dmg) => {
-      if (dmg <= 0) return
-      if (eff.evoHitSpdDown && !(enemyBuffs.spdDown?.turns > 0 && enemyBuffs.spdDown.rate <= 0.9)) {
-        enemyBuffs.spdDown = { turns: 2, rate: 0.9 }
-      }
-      if ((eff.evoHitBleed||0) > 0 && Math.random()*100 < eff.evoHitBleed) {
-        enemyBuffs.bleed = { stacks: Math.min(5, (enemyBuffs.bleed?.stacks||0)+1), lastTurn: 0 }
-      }
-      if ((eff.evoHitStun||0) > 0 && !(enemyBuffs.stun?.turns > 0) && Math.random()*100 < eff.evoHitStun) {
-        enemyBuffs.stun = { turns: 1 }
-      }
-    }
+    // 攻撃ヒット時の装備効果（真化: スライムの指輪=SPD-10% / 略奪者の短剣=出血 / 絶零の魔導砲=スタン、
+    // レイド: 冥獄宝珠・断罪=毒）。※発動ログは出さない（2026-07-14仕様変更: 勝手に発動・表示なし）
+    // 実体は evoCombat.evoOnHit（奈落/天穹/八獄/PvPと共通）。ここに再実装すると片方だけ更新されて挙動が割れる。
+    const applyEvoHitEffects = (dmg) => evoOnHit(eff, dmg, enemyBuffs, enemy.name, logs)
     // ボス装備 真化: プレイヤー被ダメージ時の効果（嵐の重装甲=反射 / フロストバーンの聖鎧=スタン / インフェルノバスティオン=やけど）
     const onPlayerDamaged = (dmg) => {
       if (dmg <= 0) return
@@ -3418,8 +3409,8 @@ export default function Game() {
       const gambleBodyMult = hasGambleBody ? (pe('ギャンブラー') ? (0.5 + Math.random()*0.7) : (0.7 + Math.random()*0.6)) : 1.0  // 通常0.7〜1.3／再修練0.5〜1.2
       const allinDebuffInMult = playerBuffs.allinDebuff?.turns > 0 ? 1.3 : 1.0
       // ボス装備 真化: 被ダメージ%軽減（海竜の鱗=全体-5% / 蒼粘剣=物理-10%）
-      const evoTakenMult = (eff.evoDmgTakenMult||1) * (!isEM ? (eff.evoPhysDmgTakenMult||1) : 1)
-      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*ryurinReduce()*evoTakenMult*(0.9+Math.random()*0.2))
+      const takenMult = evoTakenMult(eff, !isEM, playerHp / maxHp)
+      const finalDmg = Math.floor(baseDmg*(isCrit?1.5:1.0)*dmgReduceRate*berserkDmgRate*enemyDmgDownRate*(1-playerDefRankReduction)*gambleBodyMult*allinDebuffInMult*ryurinReduce()*takenMult*(0.9+Math.random()*0.2))
       playerHp -= finalDmg
       onPlayerDamaged(finalDmg)
       if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
@@ -3539,8 +3530,8 @@ export default function Game() {
         if (petHp <= 0) logs.push({ text:`💥 ペットは倒れてしまった…`, color:'#ff4444' })
       } else {
         // ボス装備 真化: 被ダメージ%軽減（プレイヤーが受ける時のみ・敵スキルにも適用）
-        const evoTakenMult = (eff.evoDmgTakenMult||1) * (isPhysical ? (eff.evoPhysDmgTakenMult||1) : 1)
-        if (evoTakenMult !== 1) dmg = Math.max(1, Math.floor(dmg * evoTakenMult))
+        const takenMult = evoTakenMult(eff, isPhysical, playerHp / maxHp)
+        if (takenMult !== 1) dmg = Math.max(1, Math.floor(dmg * takenMult))
         playerHp -= dmg
         onPlayerDamaged(dmg)
         // 陰陽結界：敵スキルダメージでも軽減分の一定割合を回復

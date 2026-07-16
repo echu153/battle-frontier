@@ -153,6 +153,10 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
   let critResist = 0
   let ondmgSpdPct = 0     // 雷鋼の機神鎧: 被ダメージ時に素早さを一定時間アップ（%）
   let extraParaChance = 0 // 蒼雷の短刃: 追加行動の攻撃ヒット時に相手を麻痺させる確率（%）
+  // 閻魔装備
+  let hitPoisonChance = 0 // 冥獄宝珠・断罪: 攻撃ヒット時に毒を付与する確率（%）
+  let gokuiTakenPct   = 0 // 冥府王の獄衣: 被ダメージ軽減（%）。HPが半分以下なら2倍になる（判定は戦闘側）
+  let atkToMatk       = 0 // 六道輪廻の数珠: 攻撃力の一定%を特殊攻撃に加算（%）
   // ボス装備 進化(真化)効果。bonus_effectで判定しスロット非依存で集約 → eff.* として戦闘ループが消費
   let evoMpToMatk = 0, evoSpdToAtk = 0               // 古代魔導コア / 雷鷲の爪牙（ステ派生）
   let evoDmgTakenMult = 1, evoPhysDmgTakenMult = 1   // 海竜の鱗 / 蒼粘剣（被ダメ%軽減）
@@ -211,6 +215,9 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     if (item.bonus_effect === 'mdef_pen_5') gemAcc.mdefPen += 5  // 水禍の蒼珠: 魔法防御貫通+5%
     if (item.bonus_effect === 'ondmg_spd_up_5_2t') ondmgSpdPct += 15     // 雷鋼の機神鎧: 被ダメ時 2T素早さ+15%（2026-07-08 5%→15%に強化）
     if (item.slot === 'weapon' && item.bonus_effect === 'extra_hit_paralysis_30') extraParaChance += 20  // 蒼雷の短刃（20%にナーフ）
+    if (item.slot === 'weapon' && item.bonus_effect === 'hit_poison_20') hitPoisonChance = 20  // 冥獄宝珠・断罪: 攻撃ヒット時20%で毒
+    if (item.bonus_effect === 'dmg_taken_down_5_hp50_x2') gokuiTakenPct = 5  // 冥府王の獄衣: 被ダメ-5%（HP半分以下で-10%）
+    if (item.bonus_effect === 'atk_to_matk_2') atkToMatk += 2  // 六道輪廻の数珠: 攻撃力の2%を特攻へ
     // ボス装備 真化効果（スロット非依存・5段で付与される bonus_effect）
     switch (item.bonus_effect) {
       case 'evo_mp_to_matk_5':          evoMpToMatk += 5; break
@@ -258,6 +265,9 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
   // ボス装備 真化の派生ステ（基礎値ベース）: 古代魔導コア MP→特攻 / 雷鷲の爪牙 素早さ→攻撃
   if (evoMpToMatk > 0) bonus.matk += Math.floor((profile.mp_max || 0) * evoMpToMatk / 100)
   if (evoSpdToAtk > 0) bonus.atk  += Math.floor((profile.spd    || 0) * evoSpdToAtk / 100)
+  // 六道輪廻の数珠: 攻撃力の2%を特殊攻撃に加算。派生元は基礎値（profile.atk）＝真化の派生ステと同じ規則。
+  // 装備込みの実効攻撃を参照すると bonus.atk と bonus.matk が相互参照になるため基礎値で確定させる。
+  if (atkToMatk > 0) bonus.matk += Math.floor((profile.atk || 0) * atkToMatk / 100)
   // museum_* / fishing_* は永続ボーナス専用列（基礎列の再計算で消えないよう分離）
   const baseMatk = profile.matk + bonus.matk + (profile.museum_matk || 0) + (profile.fishing_matk || 0)
   const finalMatk = matkPct > 0 ? Math.floor(baseMatk * (1 + matkPct/100)) : baseMatk
@@ -299,6 +309,9 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     critDmg: gemAcc.critDmg/100,
     ondmgSpdUp: ondmgSpdPct > 0 ? 1 + ondmgSpdPct / 100 : 0, // 被ダメ時に付与する素早さ倍率（例:1.05）。0=効果なし
     extraParaChance: Math.min(100, extraParaChance), // 追加行動ヒット時の麻痺付与率（%）
+    // 閻魔装備（戦闘ループが消費）
+    hitPoisonChance: Math.min(100, hitPoisonChance), // 冥獄宝珠・断罪: 攻撃ヒット時の毒付与率（%）
+    gokuiTakenPct,                                   // 冥府王の獄衣: 被ダメ軽減%（HP半分以下で2倍。evoCombat.evoTakenMult が適用）
     // ボス装備 真化効果（戦闘ループが消費）
     evoDmgTakenMult, evoPhysDmgTakenMult, evoReflectPct, evoAilmentResist: evoAilmentResist + (sp?.ailRes || 0),
     evoHitSpdDown, evoHitBleed, evoHitStun, evoOndmgStun, evoOndmgBurn, evoEvadeSpdUp,

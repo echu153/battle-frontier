@@ -233,7 +233,7 @@ function doAttack(att, def, isExtra, ctx) {
   const defReduceMult = (useMagical) => {
     const rankRed = calcDefReduction(useMagical ? def.eff.mdef : def.eff.def)
     const dr = defBuffs.dmgReduce?.turns > 0 ? defBuffs.dmgReduce.rate : 1.0
-    return (1 - rankRed) * dr * evoTakenMult(def.eff, !useMagical)
+    return (1 - rankRed) * dr * evoTakenMult(def.eff, !useMagical, def.hp / (def.eff.hp_max || 1))
   }
 
   // 次に使うスキルを覗き見（MP不足判定・必中判定）
