@@ -22,6 +22,19 @@
 --  ※ 通知cron（supabase_raid_push_cron_20260717.sql）は特権ロールで別途実行。
 -- ============================================================
 
+-- 0) ボス→ドロップ素材（supabase_raid_enma_20260717.sql と同一内容。
+--    このファイルの claim_raid_rewards が参照するため、適用順を間違えても壊れないよう同梱する）
+CREATE OR REPLACE FUNCTION raid_boss_mats(p_boss text)
+RETURNS text[] LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE p_boss
+    WHEN '雨摩座'             THEN ARRAY['水禍の雫',     '雨禍の心核']
+    WHEN '雷鋼機神ゼルギアス' THEN ARRAY['雷鋼片',       '神雷炉心']
+    WHEN '閻魔'               THEN ARRAY['獄王の断罪片', '閻魔の審判核']
+    WHEN '黒龍ヴァルゼノク'   THEN ARRAY['黒龍の鱗',     '黒龍の逆鱗']
+    ELSE ARRAY['黒龍の鱗', '黒龍の逆鱗']  -- 未知のボス名は従来通り黒龍素材（後方互換）
+  END
+$$;
+
 -- 1) 最新ボス（新ボスを追加したらこの1関数だけ直す。昼の除外＝ここが唯一の定義）
 CREATE OR REPLACE FUNCTION raid_latest_boss()
 RETURNS text LANGUAGE sql IMMUTABLE AS $$ SELECT '閻魔'::text $$;
@@ -193,6 +206,9 @@ END;
 $$;
 
 -- 8) 管理者テスト用: 昼枠の条件（HP200万・順位報酬なし）でも試せるよう slot を指定できるようにする
+--    ※旧版 spawn_raid_boss_dev(text) を先に落とす。残したまま2引数版(DEFAULT付き)を足すと
+--      引数1個の呼び出しがどちらとも解決できず "function is not unique" になる。
+DROP FUNCTION IF EXISTS spawn_raid_boss_dev(text);
 CREATE OR REPLACE FUNCTION spawn_raid_boss_dev(p_boss_name text, p_slot int DEFAULT NULL)
 RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
