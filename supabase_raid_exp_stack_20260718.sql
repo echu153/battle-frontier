@@ -1,7 +1,7 @@
 -- ============================================================
 -- レイドEXPスタック（レベル上限で戦う時のEXPを貯めて後で自動反映）
 --   ・現在クラスがレベル上限に達している間は、レイドの出撃報酬EXP(7〜10)を
---     profiles.raid_exp_stack に「貯める」（最大100）。exp自体には加算しない。
+--     profiles.raid_exp_stack に「貯める」（最大200。2026-07-18に100→200へ拡張）。exp自体には加算しない。
 --   ・レベル上限が解放される等でクラスLVが上限未満になると、次のレイド攻撃時に
 --     貯めたスタックを今回のEXPと一緒にまとめてexpへ反映（＝後で自動反映）。
 --   土台: supabase_raid_top3_relax25_20260712.sql（attack_raid_boss 最新版）
@@ -128,8 +128,8 @@ BEGIN
   PERFORM set_config('app.allow_stat_change', 'on', true);
 
   IF v_is_at_cap THEN
-    -- 上限到達中：EXPは加算せず「EXPスタック」に貯める（最大100）
-    v_stack_after := LEAST(100, v_stack_before + v_exp_gain);
+    -- 上限到達中：EXPは加算せず「EXPスタック」に貯める（最大200）
+    v_stack_after := LEAST(200, v_stack_before + v_exp_gain);
     v_stack_added := v_stack_after - v_stack_before;
     v_exp_applied := 0;
     UPDATE profiles SET
@@ -163,7 +163,7 @@ BEGIN
     'at_cap',         v_is_at_cap,
     'stack_gain',     v_stack_added,                       -- 今回スタックに貯まった量
     'stack_drained',  CASE WHEN NOT v_is_at_cap THEN v_stack_before ELSE 0 END,  -- 反映されたスタック量
-    'raid_exp_stack', v_stack_after,                       -- 更新後のスタック（0〜100）
+    'raid_exp_stack', v_stack_after,                       -- 更新後のスタック（0〜200）
     'status',         CASE WHEN v_new_hp = 0 THEN 'defeated' ELSE 'active' END
   );
 END;

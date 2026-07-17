@@ -831,7 +831,7 @@ export default function RaidBoss() {
         }
         setRemaining(raidWaitFor(profile))
         // HP/MP全回復 + 出撃EXP はサーバ側(attack_raid_boss)で付与済み。実際の付与量を表示する。
-        // レベル上限中はEXPが「EXPスタック(最大100)」に貯まり、上限未満に戻ると次の攻撃でまとめて反映される。
+        // レベル上限中はEXPが「EXPスタック(最大200)」に貯まり、上限未満に戻ると次の攻撃でまとめて反映される。
         const applied     = (typeof data.exp_gain === 'number') ? data.exp_gain
           : (typeof data.exp === 'number') ? Math.max(0, data.exp - (profile.exp || 0)) : 0
         const newExp      = data.exp ?? ((profile.exp || 0) + applied)
@@ -843,9 +843,9 @@ export default function RaidBoss() {
         if (atCap) {
           // レベル上限：EXPはスタックへ
           if (stackGain > 0) {
-            setBattleLogs(prev => [...prev, { text: `⭐ レベル上限のためEXPをスタック +${stackGain}（${raidStack}/100）`, color: '#ffcc44' }])
+            setBattleLogs(prev => [...prev, { text: `⭐ レベル上限のためEXPをスタック +${stackGain}（${raidStack}/200）`, color: '#ffcc44' }])
           } else {
-            setBattleLogs(prev => [...prev, { text: `⭐ EXPスタックが満タンです（100/100）`, color: '#ffaa44' }])
+            setBattleLogs(prev => [...prev, { text: `⭐ EXPスタックが満タンです（200/200）`, color: '#ffaa44' }])
           }
         } else {
           // 上限未満：貯めたスタックがあれば先に反映を表示
@@ -1133,7 +1133,7 @@ export default function RaidBoss() {
               </button>
               {(profile?.raid_exp_stack || 0) > 0 && (
                 <div style={{ marginTop: '10px', fontSize: '10px', color: '#ffcc44', textAlign: 'center' }}>
-                  ⭐ EXPスタック: {profile.raid_exp_stack}/100
+                  ⭐ EXPスタック: {profile.raid_exp_stack}/200
                   <span style={{ color: '#778899' }}>（レベル上限中に貯まったEXP。上限が解放されると次の挑戦で自動反映）</span>
                 </div>
               )}
