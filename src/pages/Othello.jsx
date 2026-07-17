@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { reportDevAccess } from '../lib/devAccess'
 import {
   BLACK, WHITE, EMPTY, SIZE,
   validMoves, countStones, cpuChooseMove,
@@ -21,6 +22,8 @@ const LOBBY_CHANNEL = 'othello-lobby'
 const roomChannelName = (roomId) => `othello-room-${roomId}`
 
 const NPC_NAMES = ['オセロ丸', 'リバー子', 'カドトリ翁', 'スミゾメ', 'シロタエ']
+// 定型スタンプ(押すと全員の画面に数秒表示されて消える)
+const STAMPS = ['よろしくお願いします', 'こんにちわ', 'さようなら', '余裕ですね', 'ぐわー', 'ほわー']
 const CPU_DELAY_MS = 800
 // NPCの強さはidに埋め込む(npc-lv{n}-...)。stateの再配信/観戦でも失われない
 const npcLevelOf = (id) => {
@@ -52,6 +55,7 @@ const stoneStyle = (color) => ({
 export default function Othello() {
   const nav = useNavigate()
   const [me, setMe] = useState(null) // { id, name }
+  const [blocked, setBlocked] = useState(false)
   const [loading, setLoading] = useState(true)
 
   // view: lobby | room
@@ -67,6 +71,9 @@ export default function Othello() {
   const [toast, setToast] = useState(null)
   const [passNote, setPassNote] = useState(null)
   const [lastResult, setLastResult] = useState(null) // 直前の対局結果(待機画面に表示)
+  const [stamps, setStamps] = useState([]) // 表示中スタンプ [{ id, name, text }]
+  const stampSeqRef = useRef(0)
+  const stampCdRef = useRef(0) // 連打防止クールダウン
 
   const lobbyChRef = useRef(null)
   const roomChRef = useRef(null)
@@ -89,15 +96,21 @@ export default function Othello() {
     setTimeout(() => setToast(null), 2500)
   }
 
-  // ---- 認証(一般公開・2026-07-17) ----
+  // ---- 認証 + is_adminゲート(2026-07-17 一旦開発限定に戻し) ----
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { nav('/login'); return }
-      const { data: prof } = await supabase.from('profiles').select('username').eq('id', user.id).maybeSingle()
+      const { data: prof } = await supabase.from('profiles').select('username, is_admin').eq('id', user.id).maybeSingle()
       if (cancelled) return
-      setMe({ id: user.id, name: prof?.username || '名無し' })
+      if (!prof?.is_admin) {
+        reportDevAccess('othello', '盤上遊戯「双極盤」(/othello)')
+        setBlocked(true)
+        setLoading(false)
+        return
+      }
+      setMe({ id: user.id, name: prof.username || '名無し' })
       setLoading(false)
     })()
     return () => { cancelled = true }
@@ -238,6 +251,11 @@ export default function Othello() {
       showToast('部屋が解散されました')
       leaveRoomRef.current?.()
     })
+    ch.on('broadcast', { event: 'stamp' }, ({ payload }) => {
+      const id = ++stampSeqRef.current
+      setStamps((prev) => [...prev.slice(-3), { id, name: payload.name, text: payload.text }])
+      setTimeout(() => setStamps((prev) => prev.filter((s) => s.id !== id)), 2600)
+    })
     ch.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         await ch.track({ name: myself.name, joinedAt: Date.now(), spectator: asSpectator })
@@ -269,6 +287,7 @@ export default function Othello() {
     setNpcs([]); npcsRef.current = []
     setPassNote(null)
     setLastResult(null)
+    setStamps([])
     setView('lobby')
   }, [])
   const leaveRoomRef = useRef(leaveRoom)
@@ -352,6 +371,14 @@ export default function Othello() {
     roomChRef.current?.send({ type: 'broadcast', event: 'action', payload: { action: { playerId: me.id, idx } } })
   }
 
+  // ---- スタンプ送信(観戦者含む全員・1.5秒クールダウン) ----
+  const sendStamp = (text) => {
+    const now = Date.now()
+    if (now - stampCdRef.current < 1500) return
+    stampCdRef.current = now
+    roomChRef.current?.send({ type: 'broadcast', event: 'stamp', payload: { name: meRef.current.name, text } })
+  }
+
   // ---- NPC自動着手(ホストが実行) ----
   useEffect(() => {
     if (!room || room.hostId !== me?.id || !game || game.phase !== 'playing') return
@@ -377,6 +404,15 @@ export default function Othello() {
   if (loading) {
     return <div style={{ minHeight: '100vh', background: '#000a14', color: '#88ccff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' }}>読み込み中…</div>
   }
+  if (blocked) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#000a14', color: '#ff6644', display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' }}>
+        <div>この機能は現在開発中です</div>
+        <button onClick={() => nav('/game')} style={btnStyle('#88ccff', { padding: '8px 16px' })}>街に戻る</button>
+      </div>
+    )
+  }
+
   const wrap = (children) => (
     <div style={{ minHeight: '100vh', background: '#000a14', color: '#cde', fontFamily: 'monospace', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px' }}>
       {children}
@@ -392,7 +428,7 @@ export default function Othello() {
       <div style={{ width: '100%', maxWidth: '480px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
           <button onClick={() => nav('/game')} style={btnStyle('#88ccff')}>← 街に戻る</button>
-          <div style={{ color: '#ffcc44', fontSize: '13px' }}>⚫ 盤上遊戯「双極盤」</div>
+          <div style={{ color: '#ffcc44', fontSize: '13px' }}>⚫ 盤上遊戯「双極盤」[開発]</div>
           <div style={{ width: '76px' }} />
         </div>
 
@@ -588,6 +624,29 @@ export default function Othello() {
         {statusMsg}
         {passNote && <div style={{ fontSize: '12px', color: '#ff8866', marginTop: '4px' }}>{passNote}</div>}
       </div>
+
+      {/* スタンプバー(観戦者も送れる) */}
+      <div style={{ display: 'flex', gap: '5px', marginTop: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+        {STAMPS.map((s) => (
+          <button key={s} onClick={() => sendStamp(s)} style={btnStyle('#6699cc', { padding: '4px 8px', fontSize: '11px', borderRadius: '10px' })}>{s}</button>
+        ))}
+      </div>
+
+      {/* スタンプ表示(数秒で消える) */}
+      <style>{'@keyframes okstamp { 0% { transform: translateY(8px) scale(0.8); opacity: 0 } 15% { transform: none; opacity: 1 } 80% { opacity: 1 } 100% { opacity: 0 } }'}</style>
+      {stamps.length > 0 && (
+        <div style={{ position: 'fixed', top: '18%', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center', zIndex: 55, pointerEvents: 'none' }}>
+          {stamps.map((s) => (
+            <div key={s.id} style={{
+              background: 'rgba(10,20,40,0.92)', border: '1px solid #ffcc44', borderRadius: '14px',
+              padding: '6px 14px', fontSize: '13px', color: '#fff', whiteSpace: 'nowrap',
+              animation: 'okstamp 2.6s ease-out both', boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
+            }}>
+              <span style={{ color: '#ffcc44' }}>{s.name}</span>: {s.text}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 観戦者一覧 */}
       {game && (() => {
