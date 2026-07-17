@@ -183,8 +183,12 @@ export default function Othello() {
     let hostSeen = false // 初回syncは自分のtrack反映前に来るため、ホスト在室を一度確認してから不在判定する
     ch.on('presence', { event: 'sync' }, () => {
       const st = ch.presenceState()
-      const list = Object.keys(st).map((key) => ({ id: key, name: st[key][0]?.name || '?', spectator: !!st[key][0]?.spectator }))
-      list.sort((a, b) => (st[a.id][0]?.joinedAt || 0) - (st[b.id][0]?.joinedAt || 0))
+      // 再track(観戦切替など)で同一キーに古いmetaが残ることがあるため常に最新のmetaを読む
+      const list = Object.keys(st).map((key) => {
+        const meta = st[key][st[key].length - 1]
+        return { id: key, name: meta?.name || '?', spectator: !!meta?.spectator, joinedAt: meta?.joinedAt || 0 }
+      })
+      list.sort((a, b) => a.joinedAt - b.joinedAt)
       // 部屋の上限 = 席5 + 観戦100。入室順であふれた人は自動退室(UIには明記しない)
       const cap = MAX_MULTI_PLAYERS + 100
       if (list.length > cap && list.findIndex((m) => m.id === myself.id) >= cap) {

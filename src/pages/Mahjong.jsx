@@ -207,8 +207,12 @@ export default function Mahjong() {
     let hostSeen = false
     ch.on('presence', { event: 'sync' }, () => {
       const st = ch.presenceState()
-      const list = Object.keys(st).map((key) => ({ id: key, name: st[key][0]?.name || '?', spectator: !!st[key][0]?.spectator }))
-      list.sort((a, b) => (st[a.id][0]?.joinedAt || 0) - (st[b.id][0]?.joinedAt || 0))
+      // 再trackで同一キーに古いmetaが残ることがあるため常に最新のmetaを読む
+      const list = Object.keys(st).map((key) => {
+        const meta = st[key][st[key].length - 1]
+        return { id: key, name: meta?.name || '?', spectator: !!meta?.spectator, joinedAt: meta?.joinedAt || 0 }
+      })
+      list.sort((a, b) => a.joinedAt - b.joinedAt)
       // 部屋の上限 = 席4 + 観戦100。入室順であふれた人は自動退室(UIには明記しない)
       const cap = MAX_MAHJONG_PLAYERS + 100
       if (list.length > cap && list.findIndex((m) => m.id === myself.id) >= cap) {
