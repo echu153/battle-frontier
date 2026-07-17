@@ -4078,6 +4078,12 @@ export default function Game() {
       setBattleLogs([...logs])
     }
 
+    // レイドEXPスタックの反映通知（レベル上限中に貯めたレイドEXPが、上限未満での出撃で反映された）
+    if (rpcResult?.raid_stack_drained > 0) {
+      logs.push({ text: `✨ レイドで貯めたEXPスタック +${rpcResult.raid_stack_drained} を反映！`, color: '#88ccff' })
+      setBattleLogs([...logs])
+    }
+
     // かかし修練場のチャージ完了通知
     if (rpcResult?.scarecrow_charged) {
       logs.push({ text: `🌾 かかし修練場のチャージが1回分完了！（現在${rpcResult.scarecrow_charges}回）`, color: '#ffcc44' })
