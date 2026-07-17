@@ -71,6 +71,18 @@ export default function Mahjong() {
   const [toast, setToast] = useState(null)
   const [riichiMode, setRiichiMode] = useState(false)
   const [hoverWait, setHoverWait] = useState(null) // { k, waits } 打牌候補ホバー時の待ち表示
+  const [lastResult, setLastResult] = useState(null) // 直前の対局結果(待機画面に表示)
+
+  // 終局後は結果を数秒見せて待機画面へ戻る
+  useEffect(() => {
+    if (game?.phase !== 'ended' || !game.finalStandings) return
+    const t = setTimeout(() => {
+      setLastResult(game.finalStandings.map((s, i) => `${i + 1}位 ${s.name}(${s.score})`).join(' / '))
+      setGame(null)
+      gameRef.current = null
+    }, 7000)
+    return () => clearTimeout(t)
+  }, [game])
   const [chiPick, setChiPick] = useState(null) // 複数チー候補
   const [kanPick, setKanPick] = useState(null)
   const [nowTick, setNowTick] = useState(0) // 残り秒表示用
@@ -186,7 +198,8 @@ export default function Mahjong() {
   }, [hostBroadcast, publishRoom])
 
   // ---- 部屋 ----
-  const joinRoom = useCallback((roomInfo) => {
+  // asSpectator: trueなら観戦専用(席決めから除外)
+  const joinRoom = useCallback((roomInfo, asSpectator = false) => {
     const myself = meRef.current
     const ch = supabase.channel(roomChannelName(roomInfo.id), {
       config: { presence: { key: myself.id }, broadcast: { self: true } },
@@ -194,7 +207,7 @@ export default function Mahjong() {
     let hostSeen = false
     ch.on('presence', { event: 'sync' }, () => {
       const st = ch.presenceState()
-      const list = Object.keys(st).map((key) => ({ id: key, name: st[key][0]?.name || '?' }))
+      const list = Object.keys(st).map((key) => ({ id: key, name: st[key][0]?.name || '?', spectator: !!st[key][0]?.spectator }))
       list.sort((a, b) => (st[a.id][0]?.joinedAt || 0) - (st[b.id][0]?.joinedAt || 0))
       setMembers(list)
       membersRef.current = list
@@ -250,7 +263,7 @@ export default function Mahjong() {
       leaveRoomRef.current?.()
     })
     ch.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') await ch.track({ name: myself.name, joinedAt: Date.now() })
+      if (status === 'SUBSCRIBED') await ch.track({ name: myself.name, joinedAt: Date.now(), spectator: asSpectator })
     })
     roomChRef.current = ch
     setRoom(roomInfo); roomRef.current = roomInfo
@@ -258,6 +271,7 @@ export default function Mahjong() {
     setGame(null); gameRef.current = null
     stateSeqRef.current = 0
     autoRef.current = new Set()
+    setLastResult(null)
   }, [hostApply, publishRoom])
 
   const leaveRoom = useCallback(() => {
@@ -276,6 +290,7 @@ export default function Mahjong() {
     setGame(null); gameRef.current = null
     setMembers([]); membersRef.current = []
     setNpcs([]); npcsRef.current = []
+    setLastResult(null)
     setView('lobby')
   }, [])
   const leaveRoomRef = useRef(leaveRoom)
@@ -294,9 +309,9 @@ export default function Mahjong() {
     joinRoom({ id: roomId, title, hostId: me.id, hostName: me.name })
   }
 
-  const seated = [...members, ...npcs].slice(0, MAX_MAHJONG_PLAYERS)
+  const seated = [...members.filter((m) => !m.spectator), ...npcs].slice(0, MAX_MAHJONG_PLAYERS)
   const addNpc = () => {
-    if (membersRef.current.length + npcsRef.current.length >= MAX_MAHJONG_PLAYERS) { showToast(`最大${MAX_MAHJONG_PLAYERS}人です`); return }
+    if (membersRef.current.filter((m) => !m.spectator).length + npcsRef.current.length >= MAX_MAHJONG_PLAYERS) { showToast(`最大${MAX_MAHJONG_PLAYERS}人です`); return }
     const used = new Set(npcsRef.current.map((n) => n.name))
     const base = NPC_NAMES.find((n) => !used.has(`🀄${n}`)) || `NPC${npcsRef.current.length + 1}`
     setNpcs((prev) => [...prev, { id: `npc-lv3-${prev.length + 1}-${Date.now() % 100000}`, name: `🀄${base}` }])
@@ -307,7 +322,7 @@ export default function Mahjong() {
   }, [npcs]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const startGame = () => {
-    const list = [...membersRef.current, ...npcsRef.current].slice(0, MAX_MAHJONG_PLAYERS)
+    const list = [...membersRef.current.filter((m) => !m.spectator), ...npcsRef.current].slice(0, MAX_MAHJONG_PLAYERS)
     if (list.length < MIN_MAHJONG_PLAYERS) { showToast(`麻雀は${MIN_MAHJONG_PLAYERS}人から。NPCを追加してください`); return }
     const order = list.map((p) => ({ id: p.id, name: p.name }))
     for (let i = order.length - 1; i > 0; i--) {
@@ -449,7 +464,14 @@ export default function Mahjong() {
               <div style={{ fontSize: 13 }}>{r.title}</div>
               <div style={{ fontSize: 10, color: '#668' }}>主: {r.hostName} / {r.count}人 / {r.status === 'playing' ? '🟢 対局中(観戦可)' : '🟡 募集中'}</div>
             </div>
-            <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName })} style={btnStyle(r.status === 'playing' ? '#88ccff' : '#44dd88')}>{r.status === 'playing' ? '観戦入室' : '入室'}</button>
+            {r.status === 'playing' ? (
+              <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName })} style={btnStyle('#88ccff')}>観戦入室</button>
+            ) : (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName })} style={btnStyle('#44dd88')}>プレイ</button>
+                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName }, true)} style={btnStyle('#88ccff')}>観戦</button>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -476,6 +498,11 @@ export default function Mahjong() {
           {isHost ? <button onClick={startGame} style={btnStyle('#ffcc44')}>対局開始</button> : <div style={{ width: 60 }} />}
         </div>
         <div style={{ border: '1px solid #224466', padding: '8px 12px', fontSize: 12 }}>
+          {lastResult && (
+            <div style={{ border: '1px solid #665522', background: 'rgba(255,204,68,0.07)', padding: '4px 8px', marginBottom: 6, color: '#ffcc44', fontSize: 11 }}>
+              前回の結果: {lastResult}
+            </div>
+          )}
           <div style={{ color: '#88ccff', marginBottom: 4 }}>対局者(3人=サンマ / 4人=四麻)</div>
           {seated.map((p, i) => (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -487,9 +514,11 @@ export default function Mahjong() {
           {isHost && seated.length < MAX_MAHJONG_PLAYERS && (
             <button onClick={addNpc} style={btnStyle('#44dd88', { marginTop: 6, padding: '2px 8px', fontSize: 11 })}>+ NPC追加</button>
           )}
-          {[...members, ...npcs].length > MAX_MAHJONG_PLAYERS && (
-            <div style={{ color: '#668', marginTop: 4 }}>観戦: {[...members, ...npcs].slice(MAX_MAHJONG_PLAYERS).map((m) => m.name).join(', ')}</div>
-          )}
+          {(() => {
+            const specs = members.filter((m) => !seated.some((s) => s.id === m.id))
+            if (specs.length === 0) return null
+            return <div style={{ color: '#668', marginTop: 4 }}>▼ 観戦者: {specs.map((m) => m.name).join('　')}</div>
+          })()}
         </div>
       </div>
     )

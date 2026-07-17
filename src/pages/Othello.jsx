@@ -68,6 +68,7 @@ export default function Othello() {
   const [game, setGame] = useState(null)
   const [toast, setToast] = useState(null)
   const [passNote, setPassNote] = useState(null)
+  const [lastResult, setLastResult] = useState(null) // 直前の対局結果(待機画面に表示)
 
   const lobbyChRef = useRef(null)
   const roomChRef = useRef(null)
@@ -166,7 +167,8 @@ export default function Othello() {
   }, [hostBroadcast, publishRoom])
 
   // ---- 部屋チャンネル(入室) ----
-  const joinRoom = useCallback((roomInfo) => {
+  // asSpectator: trueなら観戦専用(席決めから除外)
+  const joinRoom = useCallback((roomInfo, asSpectator = false) => {
     const myself = meRef.current
     const ch = supabase.channel(roomChannelName(roomInfo.id), {
       config: { presence: { key: myself.id }, broadcast: { self: true } },
@@ -174,7 +176,7 @@ export default function Othello() {
     let hostSeen = false // 初回syncは自分のtrack反映前に来るため、ホスト在室を一度確認してから不在判定する
     ch.on('presence', { event: 'sync' }, () => {
       const st = ch.presenceState()
-      const list = Object.keys(st).map((key) => ({ id: key, name: st[key][0]?.name || '?' }))
+      const list = Object.keys(st).map((key) => ({ id: key, name: st[key][0]?.name || '?', spectator: !!st[key][0]?.spectator }))
       list.sort((a, b) => (st[a.id][0]?.joinedAt || 0) - (st[b.id][0]?.joinedAt || 0))
       setMembers(list)
       membersRef.current = list
@@ -239,7 +241,7 @@ export default function Othello() {
     })
     ch.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        await ch.track({ name: myself.name, joinedAt: Date.now() })
+        await ch.track({ name: myself.name, joinedAt: Date.now(), spectator: asSpectator })
       }
     })
     roomChRef.current = ch
@@ -250,6 +252,7 @@ export default function Othello() {
     gameRef.current = null
     stateSeqRef.current = 0
     setPassNote(null)
+    setLastResult(null)
   }, [hostApply, hostBroadcast, publishRoom])
 
   // ---- 退室 ----
@@ -266,6 +269,7 @@ export default function Othello() {
     setMembers([]); membersRef.current = []
     setNpcs([]); npcsRef.current = []
     setPassNote(null)
+    setLastResult(null)
     setView('lobby')
   }, [])
   const leaveRoomRef = useRef(leaveRoom)
@@ -285,13 +289,35 @@ export default function Othello() {
     joinRoom({ id: roomId, title, hostId: me.id, hostName: me.name })
   }
 
-  // ---- 対局席: 入室順(ホスト含む) + NPC で最大5席。あふれた人は観戦 ----
-  const seatedOf = (mems, nps) => [...mems, ...nps].slice(0, MAX_MULTI_PLAYERS)
+  // ---- 対局席: 入室順(ホスト含む・観戦希望を除く) + NPC で最大5席。あふれた人は観戦 ----
+  const seatedOf = (mems, nps) => [...mems.filter((m) => !m.spectator), ...nps].slice(0, MAX_MULTI_PLAYERS)
   const seated = seatedOf(members, npcs)
+
+  // ---- 勝敗確定後は結果を数秒見せて待機画面へ戻る ----
+  useEffect(() => {
+    if (game?.phase !== 'ended' || !game.result) return
+    const t = setTimeout(() => {
+      let txt
+      if (game.mode === 'multi') {
+        txt = game.result.standings
+          .map((s, i) => `${i + 1}位 ${s.name}(${s.count})${s.left ? '×' : ''}`)
+          .join(' / ')
+      } else {
+        const w = game.result.winner ? game.players[game.result.winner] : null
+        txt = w
+          ? `${game.result.forfeit ? '(不戦勝) ' : ''}${w.name}の勝ち ⚫${game.result.black}-⚪${game.result.white}`
+          : `引き分け ⚫${game.result.black}-⚪${game.result.white}`
+      }
+      setLastResult(txt)
+      setGame(null)
+      gameRef.current = null
+    }, 5000)
+    return () => clearTimeout(t)
+  }, [game])
 
   // ---- NPC追加/削除(ホスト・対局中以外) ----
   const addNpc = (level) => {
-    if (membersRef.current.length + npcsRef.current.length >= MAX_MULTI_PLAYERS) { showToast(`最大${MAX_MULTI_PLAYERS}人です`); return }
+    if (membersRef.current.filter((m) => !m.spectator).length + npcsRef.current.length >= MAX_MULTI_PLAYERS) { showToast(`最大${MAX_MULTI_PLAYERS}人です`); return }
     const used = new Set(npcsRef.current.map((n) => n.name.replace(/^🤖| LV\d$/g, '')))
     const base = NPC_NAMES.find((n) => !used.has(n)) || `NPC${npcsRef.current.length + 1}`
     setNpcs((prev) => [...prev, { id: `npc-lv${level}-${prev.length + 1}-${Date.now() % 100000}`, name: `🤖${base} LV${level}`, level }])
@@ -401,7 +427,14 @@ export default function Othello() {
               <div style={{ fontSize: '13px' }}>{r.title}</div>
               <div style={{ fontSize: '10px', color: '#668' }}>主: {r.hostName} / {r.count}人 / {r.status === 'playing' ? '🟢 対局中(観戦可)' : '🟡 募集中'}</div>
             </div>
-            <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName })} style={btnStyle(r.status === 'playing' ? '#88ccff' : '#44dd88')}>{r.status === 'playing' ? '観戦入室' : '入室'}</button>
+            {r.status === 'playing' ? (
+              <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName })} style={btnStyle('#88ccff')}>観戦入室</button>
+            ) : (
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName })} style={btnStyle('#44dd88')}>プレイ</button>
+                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName }, true)} style={btnStyle('#88ccff')}>観戦</button>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -489,6 +522,11 @@ export default function Othello() {
           )
         ) : (
           <div>
+            {lastResult && (
+              <div style={{ border: '1px solid #665522', background: 'rgba(255,204,68,0.07)', padding: '4px 8px', marginBottom: '6px', color: '#ffcc44', fontSize: '11px' }}>
+                前回の結果: {lastResult}
+              </div>
+            )}
             <div style={{ color: '#88ccff', marginBottom: '4px' }}>対局者(最大{MAX_MULTI_PLAYERS}人 / 3人以上は盤が拡大: {seated.length >= 2 ? `${multiBoardSize(Math.max(seated.length, 2))}×${multiBoardSize(Math.max(seated.length, 2))}` : '8×8'})</div>
             {seated.map((p, i) => (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -510,9 +548,11 @@ export default function Othello() {
                 </div>
               </div>
             )}
-            {members.length + npcs.length > MAX_MULTI_PLAYERS && (
-              <div style={{ color: '#668', marginTop: '4px' }}>観戦: {[...members, ...npcs].slice(MAX_MULTI_PLAYERS).map((m) => m.name).join(', ')}</div>
-            )}
+            {(() => {
+              const specs = members.filter((m) => !seated.some((s) => s.id === m.id))
+              if (specs.length === 0) return null
+              return <div style={{ color: '#668', marginTop: '4px' }}>▼ 観戦者: {specs.map((m) => m.name).join('　')}</div>
+            })()}
           </div>
         )}
         {game && isSpectator && <div style={{ color: '#668', marginTop: '4px' }}>👀 観戦中</div>}
