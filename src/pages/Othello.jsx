@@ -22,8 +22,9 @@ const LOBBY_CHANNEL = 'othello-lobby'
 const roomChannelName = (roomId) => `othello-room-${roomId}`
 
 const NPC_NAMES = ['オセロ丸', 'リバー子', 'カドトリ翁', 'スミゾメ', 'シロタエ']
-// 定型スタンプ(押すと全員の画面に数秒表示されて消える)
-const STAMPS = ['よろしくお願いします', 'こんにちわ', 'さようなら', '余裕ですね', 'ぐわー', 'ほわー']
+// 定型スタンプ(押すと全員の画面に数秒表示されて消える)。対局者と観戦者でセットが異なる
+const STAMPS_PLAYER = ['よろしくお願いします', 'こんにちわ', 'さようなら', '余裕ですね', '対あり', 'すごいすごい！', '助かります', '悩みますね', 'GG']
+const STAMPS_SPECTATOR = ['こんにちわ', 'ぐわー', 'ほわー', 'うぃー', 'GG']
 const CPU_DELAY_MS = 800
 // NPCの強さはidに埋め込む(npc-lv{n}-...)。stateの再配信/観戦でも失われない
 const npcLevelOf = (id) => {
@@ -253,7 +254,7 @@ export default function Othello() {
     })
     ch.on('broadcast', { event: 'stamp' }, ({ payload }) => {
       const id = ++stampSeqRef.current
-      setStamps((prev) => [...prev.slice(-3), { id, name: payload.name, text: payload.text }])
+      setStamps((prev) => [...prev.slice(-5), { id, name: payload.name, text: payload.text, senderId: payload.senderId }])
       setTimeout(() => setStamps((prev) => prev.filter((s) => s.id !== id)), 2600)
     })
     ch.subscribe(async (status) => {
@@ -376,7 +377,27 @@ export default function Othello() {
     const now = Date.now()
     if (now - stampCdRef.current < 1500) return
     stampCdRef.current = now
-    roomChRef.current?.send({ type: 'broadcast', event: 'stamp', payload: { name: meRef.current.name, text } })
+    roomChRef.current?.send({ type: 'broadcast', event: 'stamp', payload: { name: meRef.current.name, text, senderId: meRef.current.id } })
+  }
+
+  // 対局者のスタンプ吹き出し(名前の下に表示)
+  const stampBubbleStyle = {
+    background: 'rgba(10,20,40,0.92)', border: '1px solid #ffcc44', borderRadius: '12px',
+    padding: '4px 10px', fontSize: '12px', color: '#fff', whiteSpace: 'nowrap',
+    animation: 'okstamp 2.6s ease-out both', boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
+  }
+  const stampBubbles = (playerId, align = 'left') => {
+    const list = stamps.filter((s) => s.senderId === playerId)
+    if (list.length === 0) return null
+    return (
+      <div style={{
+        position: 'absolute', top: '100%', [align]: 0, marginTop: '4px',
+        display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 55, pointerEvents: 'none',
+        alignItems: align === 'right' ? 'flex-end' : 'flex-start',
+      }}>
+        {list.map((s) => <div key={s.id} style={stampBubbleStyle}>{s.text}</div>)}
+      </div>
+    )
   }
 
   // ---- NPC自動着手(ホストが実行) ----
@@ -530,19 +551,22 @@ export default function Othello() {
               {game.players.map((p) => {
                 const isTurn = playing && game.players[game.turnIdx]?.id === p.id
                 return (
-                  <div key={p.color} style={{ color: isTurn ? '#ffcc44' : p.left ? '#556' : '#cde', textDecoration: p.left ? 'line-through' : 'none' }}>
+                  <div key={p.color} style={{ color: isTurn ? '#ffcc44' : p.left ? '#556' : '#cde', textDecoration: p.left ? 'line-through' : 'none', position: 'relative' }}>
                     <span style={stoneStyle(p.color)} /> {p.name}: {multiCounts[p.color] || 0}
+                    {stampBubbles(p.id, 'left')}
                   </div>
                 )
               })}
             </div>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <div style={{ color: playing && game.turn === BLACK ? '#ffcc44' : '#cde' }}>
+              <div style={{ color: playing && game.turn === BLACK ? '#ffcc44' : '#cde', position: 'relative' }}>
                 <span style={stoneStyle(BLACK)} /> {game.players[BLACK]?.name}: {classicCounts.black}
+                {stampBubbles(game.players[BLACK]?.id, 'left')}
               </div>
-              <div style={{ color: playing && game.turn === WHITE ? '#ffcc44' : '#cde' }}>
+              <div style={{ color: playing && game.turn === WHITE ? '#ffcc44' : '#cde', position: 'relative' }}>
                 <span style={stoneStyle(WHITE)} /> {game.players[WHITE]?.name}: {classicCounts.white}
+                {stampBubbles(game.players[WHITE]?.id, 'right')}
               </div>
             </div>
           )
@@ -555,9 +579,10 @@ export default function Othello() {
             )}
             <div style={{ color: '#88ccff', marginBottom: '4px' }}>対局者(最大{MAX_MULTI_PLAYERS}人 / 3人以上は盤が拡大: {seated.length >= 2 ? `${multiBoardSize(Math.max(seated.length, 2))}×${multiBoardSize(Math.max(seated.length, 2))}` : '8×8'})</div>
             {seated.map((p, i) => (
-              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
                 <span>{i + 1}. {p.name}{p.id === room.hostId ? ' (ホスト)' : ''}</span>
                 {isHost && isNpcId(p.id) && <button onClick={() => removeNpc(p.id)} style={btnStyle('#ff6644', { padding: '1px 6px', fontSize: '10px' })}>削除</button>}
+                {stampBubbles(p.id, 'left')}
               </div>
             ))}
             {seated.length < MAX_MULTI_PLAYERS && <div style={{ color: '#668' }}>{seated.length + 1}. 募集中…</div>}
@@ -625,28 +650,41 @@ export default function Othello() {
         {passNote && <div style={{ fontSize: '12px', color: '#ff8866', marginTop: '4px' }}>{passNote}</div>}
       </div>
 
-      {/* スタンプバー(観戦者も送れる) */}
-      <div style={{ display: 'flex', gap: '5px', marginTop: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-        {STAMPS.map((s) => (
-          <button key={s} onClick={() => sendStamp(s)} style={btnStyle('#6699cc', { padding: '4px 8px', fontSize: '11px', borderRadius: '10px' })}>{s}</button>
-        ))}
-      </div>
+      {/* スタンプバー(対局者と観戦者でセットが異なる) */}
+      {(() => {
+        const amSpectator = game ? isSpectator : !seated.some((s) => s.id === me.id)
+        const set = amSpectator ? STAMPS_SPECTATOR : STAMPS_PLAYER
+        return (
+          <div style={{ display: 'flex', gap: '5px', marginTop: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {set.map((s) => (
+              <button key={s} onClick={() => sendStamp(s)} style={btnStyle('#6699cc', { padding: '4px 8px', fontSize: '11px', borderRadius: '10px' })}>{s}</button>
+            ))}
+          </div>
+        )
+      })()}
 
-      {/* スタンプ表示(数秒で消える) */}
+      {/* 観戦者のスタンプは下部に表示(対局者のは名前の下) */}
       <style>{'@keyframes okstamp { 0% { transform: translateY(8px) scale(0.8); opacity: 0 } 15% { transform: none; opacity: 1 } 80% { opacity: 1 } 100% { opacity: 0 } }'}</style>
-      {stamps.length > 0 && (
-        <div style={{ position: 'fixed', top: '18%', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center', zIndex: 55, pointerEvents: 'none' }}>
-          {stamps.map((s) => (
-            <div key={s.id} style={{
-              background: 'rgba(10,20,40,0.92)', border: '1px solid #ffcc44', borderRadius: '14px',
-              padding: '6px 14px', fontSize: '13px', color: '#fff', whiteSpace: 'nowrap',
-              animation: 'okstamp 2.6s ease-out both', boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
-            }}>
-              <span style={{ color: '#ffcc44' }}>{s.name}</span>: {s.text}
-            </div>
-          ))}
-        </div>
-      )}
+      {(() => {
+        const seatedIds = new Set(game
+          ? (isMulti ? game.players.map((p) => p.id) : [game.players[BLACK]?.id, game.players[WHITE]?.id])
+          : seated.map((s) => s.id))
+        const specStamps = stamps.filter((s) => !seatedIds.has(s.senderId))
+        if (specStamps.length === 0) return null
+        return (
+          <div style={{ position: 'fixed', bottom: '64px', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center', zIndex: 55, pointerEvents: 'none' }}>
+            {specStamps.map((s) => (
+              <div key={s.id} style={{
+                background: 'rgba(10,20,40,0.92)', border: '1px solid #88ccff', borderRadius: '14px',
+                padding: '6px 14px', fontSize: '13px', color: '#fff', whiteSpace: 'nowrap',
+                animation: 'okstamp 2.6s ease-out both', boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
+              }}>
+                <span style={{ color: '#88ccff' }}>👀{s.name}</span>: {s.text}
+              </div>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* 観戦者一覧 */}
       {game && (() => {
