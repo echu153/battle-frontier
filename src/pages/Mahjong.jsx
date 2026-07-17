@@ -727,6 +727,19 @@ export default function Mahjong() {
         </div>
       )}
 
+      {/* 観戦者一覧 */}
+      {(() => {
+        const seatedIds = new Set(game.players.map((p) => p.id))
+        const specs = members.filter((m) => !seatedIds.has(m.id))
+        if (specs.length === 0) return null
+        return (
+          <div style={{ marginTop: 10, fontSize: 12, textAlign: 'center', width: '100%' }}>
+            <div style={{ color: '#668', marginBottom: 2 }}>▼ 観戦者</div>
+            <div style={{ color: '#88ccff' }}>{specs.map((s) => s.name).join('　')}</div>
+          </div>
+        )
+      })()}
+
       {/* 局結果 */}
       {game.phase === 'roundEnd' && game.roundResult && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60 }}>

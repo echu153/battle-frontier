@@ -559,6 +559,19 @@ export default function Othello() {
         {passNote && <div style={{ fontSize: '12px', color: '#ff8866', marginTop: '4px' }}>{passNote}</div>}
       </div>
 
+      {/* 観戦者一覧 */}
+      {game && (() => {
+        const seatedIds = new Set(isMulti ? game.players.map((p) => p.id) : [game.players[BLACK]?.id, game.players[WHITE]?.id])
+        const specs = members.filter((m) => !seatedIds.has(m.id))
+        if (specs.length === 0) return null
+        return (
+          <div style={{ marginTop: '10px', fontSize: '12px', textAlign: 'center', width: '100%' }}>
+            <div style={{ color: '#668', marginBottom: '2px' }}>▼ 観戦者</div>
+            <div style={{ color: '#88ccff' }}>{specs.map((s) => s.name).join('　')}</div>
+          </div>
+        )
+      })()}
+
       {/* 多人数の最終結果 */}
       {isMulti && game.phase === 'ended' && game.result?.standings && (
         <div style={{ border: '1px solid #224466', padding: '8px 12px', marginTop: '10px', fontSize: '12px', width: '100%' }}>
