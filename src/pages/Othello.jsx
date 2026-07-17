@@ -75,6 +75,7 @@ export default function Othello() {
   const [stamps, setStamps] = useState([]) // 表示中スタンプ [{ id, name, text }]
   const stampSeqRef = useRef(0)
   const stampCdRef = useRef(0) // 連打防止クールダウン
+  const myJoinedAtRef = useRef(0) // 入室時刻(観戦切替時も席順を維持するため保持)
 
   const lobbyChRef = useRef(null)
   const roomChRef = useRef(null)
@@ -259,7 +260,8 @@ export default function Othello() {
     })
     ch.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        await ch.track({ name: myself.name, joinedAt: Date.now(), spectator: asSpectator })
+        myJoinedAtRef.current = Date.now()
+        await ch.track({ name: myself.name, joinedAt: myJoinedAtRef.current, spectator: asSpectator })
       }
     })
     roomChRef.current = ch
@@ -370,6 +372,11 @@ export default function Othello() {
   // ---- 着手送信(全員共通・ホストも同じ経路) ----
   const sendMove = (idx) => {
     roomChRef.current?.send({ type: 'broadcast', event: 'action', payload: { action: { playerId: me.id, idx } } })
+  }
+
+  // ---- プレイ⇔観戦の切替(ホストも可・presenceを再trackするだけ) ----
+  const setSpectatorMode = (next) => {
+    roomChRef.current?.track({ name: meRef.current.name, joinedAt: myJoinedAtRef.current, spectator: next })
   }
 
   // ---- スタンプ送信(観戦者含む全員・1.5秒クールダウン) ----
@@ -607,6 +614,15 @@ export default function Othello() {
               const specs = members.filter((m) => !seated.some((s) => s.id === m.id))
               if (specs.length === 0) return null
               return <div style={{ color: '#668', marginTop: '4px' }}>▼ 観戦者: {specs.map((m) => m.name).join('　')}</div>
+            })()}
+            {/* プレイ⇔観戦の切替(ホストも可) */}
+            {(() => {
+              const meSpec = !!members.find((m) => m.id === me.id)?.spectator
+              return (
+                <button onClick={() => setSpectatorMode(!meSpec)} style={btnStyle(meSpec ? '#44dd88' : '#88ccff', { marginTop: '8px', padding: '4px 10px', fontSize: '11px' })}>
+                  {meSpec ? '⚔ 対局に参加する' : '👀 観戦にまわる'}
+                </button>
+              )
             })()}
           </div>
         )}
