@@ -5736,9 +5736,7 @@ export default function Game() {
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/card-battle'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎴 幻札バトル[開発]</button>
             )}
-            {profile?.is_admin && (
-              <button onClick={()=>{ nav('/othello'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚫ 盤上遊戯「双極盤」[開発]</button>
-            )}
+            <button onClick={()=>{ nav('/othello'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚫ 盤上遊戯「双極盤」</button>
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/mahjong'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🀄 麻雀[開発]</button>
             )}
@@ -6154,6 +6152,13 @@ export default function Game() {
                         <button key="kumite" onClick={()=>setShowKumite(true)} style={{ padding:'10px', background:'#001020', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🥊 組み手</button>
                       </div>
                       </MenuCat>
+                      <MenuCat title="娯楽" catKey="fun" accordion={acc} open={!!openMenuCats.fun} onToggle={toggleMenuCat}>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                        <button key="othello" onClick={()=>nav('/othello')} style={{ padding:'10px', background:'#001020', border:'1px solid #44dd88', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚫ 双極盤</button>
+                        {profile?.is_admin && <button key="mahjong" onClick={()=>nav('/mahjong')} style={{ padding:'10px', background:'#001020', border:'1px solid #88dd66', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🀄 麻雀 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
+                        {profile?.is_admin && <button key="cardbattle" onClick={()=>nav('/card-battle')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎴 幻札バトル <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
+                      </div>
+                      </MenuCat>
                       <MenuCat title="放置コンテンツ" catKey="idle" accordion={acc} open={!!openMenuCats.idle} onToggle={toggleMenuCat}>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                         {lockOr('fishing', <button key="fishing" onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場</button>)}
@@ -6308,9 +6313,7 @@ export default function Game() {
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/card-battle'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎴 幻札バトル[開発]</button>
             )}
-            {profile?.is_admin && (
-              <button onClick={()=>{ nav('/othello'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚫ 盤上遊戯「双極盤」[開発]</button>
-            )}
+            <button onClick={()=>{ nav('/othello'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚫ 盤上遊戯「双極盤」</button>
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/mahjong'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🀄 麻雀[開発]</button>
             )}
@@ -6726,6 +6729,13 @@ export default function Game() {
                           {lockOr('casino', <button key="casino" onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場へ</button>)}
                           {lockOr('barber', <button key="barber" onClick={()=>nav('/barber')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff88cc', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>✂ 美容院へ</button>)}
                           <button key="kumite" onClick={()=>setShowKumite(true)} style={{ padding:'10px', background:'#001020', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🥊 組み手</button>
+                        </div>
+                        </MenuCat>
+                        <MenuCat title="娯楽" catKey="fun" accordion={acc} open={!!openMenuCats.fun} onToggle={toggleMenuCat}>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                          <button key="othello" onClick={()=>nav('/othello')} style={{ padding:'10px', background:'#001020', border:'1px solid #44dd88', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚫ 双極盤</button>
+                          {profile?.is_admin && <button key="mahjong" onClick={()=>nav('/mahjong')} style={{ padding:'10px', background:'#001020', border:'1px solid #88dd66', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🀄 麻雀 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
+                          {profile?.is_admin && <button key="cardbattle" onClick={()=>nav('/card-battle')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎴 幻札バトル <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
                         </div>
                         </MenuCat>
                         <MenuCat title="放置コンテンツ" catKey="idle" accordion={acc} open={!!openMenuCats.idle} onToggle={toggleMenuCat}>
