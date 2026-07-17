@@ -831,16 +831,29 @@ export default function RaidBoss() {
         }
         setRemaining(raidWaitFor(profile))
         // HP/MP全回復 + 出撃EXP はサーバ側(attack_raid_boss)で付与済み。実際の付与量を表示する。
-        // サーバーが exp_gain を返せばそれを、無ければ (新exp − 旧exp) から算出。
-        const expGain = (typeof data.exp_gain === 'number') ? data.exp_gain
-          : (typeof data.exp === 'number') ? Math.max(0, data.exp - (profile.exp || 0))
-          : 0
-        const newExp = data.exp ?? ((profile.exp || 0) + expGain)
-        setProfile(prev => ({ ...prev, hp_current: eff.hp_max, mp_current: eff.mp_max, exp: newExp }))
-        if (expGain === 0) {
-          setBattleLogs(prev => [...prev, { text: '🌾 かかし修練中のため出撃報酬のEXPはもらえません', color: '#ffcc44' }])
+        // レベル上限中はEXPが「EXPスタック(最大100)」に貯まり、上限未満に戻ると次の攻撃でまとめて反映される。
+        const applied     = (typeof data.exp_gain === 'number') ? data.exp_gain
+          : (typeof data.exp === 'number') ? Math.max(0, data.exp - (profile.exp || 0)) : 0
+        const newExp      = data.exp ?? ((profile.exp || 0) + applied)
+        const atCap       = !!data.at_cap
+        const stackGain   = Number(data.stack_gain) || 0        // 今回スタックに貯まった量
+        const stackDrained = Number(data.stack_drained) || 0    // 今回反映されたスタック量
+        const raidStack   = (typeof data.raid_exp_stack === 'number') ? data.raid_exp_stack : (profile.raid_exp_stack || 0)
+        setProfile(prev => ({ ...prev, hp_current: eff.hp_max, mp_current: eff.mp_max, exp: newExp, raid_exp_stack: raidStack }))
+        if (atCap) {
+          // レベル上限：EXPはスタックへ
+          if (stackGain > 0) {
+            setBattleLogs(prev => [...prev, { text: `⭐ レベル上限のためEXPをスタック +${stackGain}（${raidStack}/100）`, color: '#ffcc44' }])
+          } else {
+            setBattleLogs(prev => [...prev, { text: `⭐ EXPスタックが満タンです（100/100）`, color: '#ffaa44' }])
+          }
         } else {
-          setBattleLogs(prev => [...prev, { text: `EXP +${expGain}（出撃報酬）`, color: '#44ff88' }])
+          // 上限未満：貯めたスタックがあれば先に反映を表示
+          if (stackDrained > 0) {
+            setBattleLogs(prev => [...prev, { text: `✨ 貯めたEXPスタック +${stackDrained} を反映！`, color: '#88ccff' }])
+          }
+          const base = Math.max(0, applied - stackDrained)
+          setBattleLogs(prev => [...prev, { text: `EXP +${base}（出撃報酬）`, color: '#44ff88' }])
         }
         await fetchBoss(profile.id)
       }
@@ -1103,6 +1116,12 @@ export default function RaidBoss() {
               >
                 {canAct ? `⚔ ${boss?.boss_name || BOSS_NAME}に挑戦する！` : '準備中...'}
               </button>
+              {(profile?.raid_exp_stack || 0) > 0 && (
+                <div style={{ marginTop: '10px', fontSize: '10px', color: '#ffcc44', textAlign: 'center' }}>
+                  ⭐ EXPスタック: {profile.raid_exp_stack}/100
+                  <span style={{ color: '#778899' }}>（レベル上限中に貯まったEXP。上限が解放されると次の挑戦で自動反映）</span>
+                </div>
+              )}
             </div>
           )}
 
