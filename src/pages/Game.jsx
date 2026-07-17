@@ -1791,6 +1791,10 @@ export default function Game() {
   const [hasNewAnnouncements, setHasNewAnnouncements] = useState(false)
   const [retrainingModal, setRetrainingModal] = useState(false)
   const [raidStatus, setRaidStatus] = useState(null) // null | 'active' | 'pre' | 'defeated' | 'expired'
+  // 本日のレイド予定 [{slot, kind, boss_name}]。サーバー(spawn_raid_boss_if_needed)が返す値をそのまま使う。
+  // 昼枠は日替わりで時刻が変わるため、クライアントでは計算しない。
+  const [raidSchedule, setRaidSchedule] = useState(null)
+  const [raidNextSpawn, setRaidNextSpawn] = useState(null) // 次の枠の開始時刻(ISO)。サーバー算出
   const [raidPreCountdown, setRaidPreCountdown] = useState('')
   const [raidBossData, setRaidBossData] = useState(null) // { boss, participants }
   const [selectedCarrySkill, setSelectedCarrySkill] = useState(null)
@@ -1910,13 +1914,11 @@ export default function Game() {
   }, [profile])
 
   // レイドボス出現前カウントダウン（preステータス中、1秒ごと更新）
+  //   次の枠はサーバーが返す raidNextSpawn を使う（昼枠は日替わりで時刻が変わるため21時固定にできない）
   useEffect(() => {
-    if (raidStatus !== 'pre') { setRaidPreCountdown(''); return }
+    if (raidStatus !== 'pre' || !raidNextSpawn) { setRaidPreCountdown(''); return }
     const update = () => {
-      const jstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
-      const spawn = new Date(jstNow)
-      spawn.setHours(21, 0, 0, 0)
-      const diff = Math.max(0, spawn - jstNow)
+      const diff = Math.max(0, new Date(raidNextSpawn) - new Date())
       const m = Math.floor(diff / 60000)
       const s = Math.floor((diff % 60000) / 1000)
       setRaidPreCountdown(`${m}:${String(s).padStart(2,'0')}`)
@@ -1924,39 +1926,67 @@ export default function Game() {
     update()
     const id = setInterval(update, 1000)
     return () => clearInterval(id)
-  }, [raidStatus])
+  }, [raidStatus, raidNextSpawn])
 
-  // レイドボス状態チェック（60秒ごと）
+  // レイドボス状態チェック
+  //   ・本日の枠（昼1枠＋21時・22時）はサーバーが返す schedule を唯一の情報源にする。
+  //     昼枠は日替わりで時刻が変わるので、クライアントで時刻を計算しないこと。
+  //   ・枠の時間帯（30分前〜終了）以外は通信しない（Egress削減）。街にタブを開いているだけで
+  //     ずっとDBを叩かないための制限で、これは維持したまま昼枠を対象に加えている。
   useEffect(() => {
+    let slots = null   // [{slot, kind, boss_name}] 本日の予定。初回の1回だけ取得して使い回す
+    let stopped = false
+
+    const jstNow = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
+    // 枠の30分前〜枠の終了(+30分)の間か
+    const nearSlot = (h, m) => (slots || []).some(s => {
+      const cur = h * 60 + m, start = s.slot * 60
+      return cur >= start - 30 && cur < start + 30
+    })
+
     const checkRaid = async () => {
-      const jstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
-      const h = jstNow.getHours(), m = jstNow.getMinutes()
-      // レイド時間帯（20:30〜23:59）以外は通信せず即終了（Egress削減）。
-      // 昼間は街にタブを開いているだけで30秒ごとにDBを叩いていたため、その無駄を排除。
-      const inRaidWindow = h > 20 || (h === 20 && m >= 30)
-      if (!inRaidWindow) { setRaidStatus(null); setRaidBossData(null); return }
+      const now = jstNow()
+      const h = now.getHours(), m = now.getMinutes()
+      // 予定が未取得なら1回だけ取りに行く（waiting応答でも schedule は返る）
+      if (!slots) {
+        const { data } = await supabase.rpc('spawn_raid_boss_if_needed')
+        if (stopped) return
+        if (Array.isArray(data?.schedule)) slots = data.schedule
+        else slots = [{ slot: 21, kind: 'night' }, { slot: 22, kind: 'night' }]  // SQL未適用時の保険
+        setRaidSchedule(slots)
+        setRaidNextSpawn(data?.next_spawn || null)
+        applyRaidData(data, h, m)
+        return
+      }
+      if (!nearSlot(h, m)) { setRaidStatus(null); setRaidBossData(null); return }
       const { data } = await supabase.rpc('spawn_raid_boss_if_needed')
+      if (stopped) return
+      setRaidNextSpawn(data?.next_spawn || null)
+      applyRaidData(data, h, m)
+    }
+
+    const applyRaidData = (data, h, m) => {
       const status = data?.status
       if (status === 'active' || status === 'defeated' || status === 'expired') {
         setRaidStatus(status)
         if (data?.id) {
-          const { data: parts } = await supabase
-            .from('raid_participants')
+          supabase.from('raid_participants')
             .select('player_id, damage_dealt, attack_count, reward_claimed, profiles(username)')
             .eq('raid_id', data.id)
             .order('damage_dealt', { ascending: false })
             .limit(5)
-          setRaidBossData({ boss: data, participants: parts || [] })
+            .then(({ data: parts }) => { if (!stopped) setRaidBossData({ boss: data, participants: parts || [] }) })
         }
-      } else if (h === 20 && m >= 30) {
-        setRaidStatus('pre'); setRaidBossData(null)
+      } else if (nearSlot(h, m)) {
+        setRaidStatus('pre'); setRaidBossData(null)   // 枠の30分前〜（まだ出ていない）
       } else {
         setRaidStatus(null); setRaidBossData(null)
       }
     }
+
     checkRaid()
-    const id = setInterval(checkRaid, 30000) // 30秒ごと（21時スポーン検知を早める）
-    return () => clearInterval(id)
+    const id = setInterval(checkRaid, 30000) // 30秒ごと（スポーン検知を早める）
+    return () => { stopped = true; clearInterval(id) }
   }, [])
 
   // 獲得可能な称号があれば街にバナーを表示
@@ -5368,6 +5398,12 @@ export default function Game() {
   // JST日付を保存し、スマホで確認すればPCでも当日は再確認不要にする。
   const raidJstDateStr = () => new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'})).toISOString().slice(0,10)
   const raidNoticeSeenToday = profile.raid_seen_date === raidJstDateStr()
+  // 本日のレイド出現時刻の表示（例: 13:00・21:00・22:00 JST）。サーバーの予定をそのまま並べる。
+  // 予定がまだ来ていない/SQL未適用のときは夜の固定枠だけを出す。
+  const raidSlotsLabel = () => {
+    const slots = raidSchedule?.length ? raidSchedule.map(s => s.slot) : [21, 22]
+    return slots.map(h => `${String(h).padStart(2, '0')}:00`).join('・') + ' JST'
+  }
   const markRaidNoticeSeen = async () => {
     const d = raidJstDateStr()
     if (profile.raid_seen_date === d) return
@@ -6015,7 +6051,7 @@ export default function Game() {
                       if (raidNoticeSeenToday) return null
                       return (
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                          <span style={{ fontSize:'10px', color:'#335566' }}>毎日21:00 JST 出現</span>
+                          <span style={{ fontSize:'10px', color:'#335566' }}>本日 {raidSlotsLabel()} 出現</span>
                           <button onClick={()=>{ markRaidNoticeSeen(); nav('/raid') }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'3px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>確認する</button>
                         </div>
                       )
@@ -6596,7 +6632,7 @@ export default function Game() {
                         if (raidNoticeSeenToday) return null
                         return (
                           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                            <span style={{ fontSize:'10px', color:'#335566' }}>毎日21:00 JST 出現</span>
+                            <span style={{ fontSize:'10px', color:'#335566' }}>本日 {raidSlotsLabel()} 出現</span>
                             <button onClick={()=>{ markRaidNoticeSeen(); nav('/raid') }} style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'3px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>確認する</button>
                           </div>
                         )
