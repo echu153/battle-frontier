@@ -395,7 +395,11 @@ export default function Othello() {
         display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 55, pointerEvents: 'none',
         alignItems: align === 'right' ? 'flex-end' : 'flex-start',
       }}>
-        {list.map((s) => <div key={s.id} style={stampBubbleStyle}>{s.text}</div>)}
+        {list.map((s) => (
+          <div key={s.id} style={stampBubbleStyle}>
+            <span style={{ color: '#ffcc44' }}>{s.name}</span>: {s.text}
+          </div>
+        ))}
       </div>
     )
   }
