@@ -2104,8 +2104,8 @@ export default function Game() {
       const { data: sc } = await supabase.from('scarecrow_sessions').select('ends_at').eq('player_id', prof.id).eq('status', 'active').maybeSingle()
       setScarecrowState(sc ? (new Date(sc.ends_at) > new Date() ? 'training' : 'done') : null)
     } catch { /* 未導入時は無視 */ }
-    // 初心者ビンゴ①②: 受け取れる報酬（達成済みマス／成立ライン本数）の合計件数（is_admin限定先行）
-    if (prof.is_admin) {
+    // 初心者ビンゴ①②: 受け取れる報酬（達成済みマス／成立ライン本数）の合計件数（一般公開）
+    {
       try {
         const countClaimable = (bg) => {
           if (!bg || bg.dev_only) return 0
@@ -2124,7 +2124,7 @@ export default function Game() {
         const card1Cleared = bg1 && !bg1.dev_only && (bg1.cells || []).length === 9 && (bg1.cells || []).every(Boolean)
         setBingoClaimable(countClaimable(bg1) + (card1Cleared ? countClaimable(bg2) : 0))
       } catch { /* SQL未適用時は無視 */ setBingoClaimable(0) }
-    } else setBingoClaimable(0)
+    }
   }
   // プロフィール確定時＋60秒ごとに再計算（クールダウン明け・錬金完成を取り込む）
   useEffect(() => {
@@ -4096,8 +4096,8 @@ export default function Game() {
       } catch { /* RPC未適用時は無視 */ }
     }
 
-    // 初心者ビンゴ①「出撃」カウント（サーバーが戦果を適用したときのみ・is_admin限定先行・fire-and-forget）
-    if (profile?.is_admin && !(rpcError || (rpcResult && rpcResult.ok === false))) {
+    // 初心者ビンゴ①「出撃」カウント（サーバーが戦果を適用したときのみ・fire-and-forget）
+    if (!(rpcError || (rpcResult && rpcResult.ok === false))) {
       supabase.rpc('bingo_bump', { p_key: 'sortie' }).then(() => {}, () => {})
     }
 
@@ -5742,9 +5742,7 @@ export default function Game() {
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/mahjong'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🀄 麻雀[開発]</button>
             )}
-            {profile?.is_admin && (
-              <button onClick={()=>{ nav('/bingo'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎯 初心者ビンゴ[開発]</button>
-            )}
+            <button onClick={()=>{ nav('/bingo'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎯 初心者ビンゴ</button>
             <button onClick={()=>{ nav('/action-rpg'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#9fe', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🗡 アクションRPG <span style={{ fontSize:'9px', color:'#8877aa' }}>(お試し)</span></button>
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
             <button onClick={()=>{ setRaidNotifyOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8866', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔔 レイド通知</button>
@@ -6321,9 +6319,7 @@ export default function Game() {
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/mahjong'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🀄 麻雀[開発]</button>
             )}
-            {profile?.is_admin && (
-              <button onClick={()=>{ nav('/bingo'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎯 初心者ビンゴ[開発]</button>
-            )}
+            <button onClick={()=>{ nav('/bingo'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎯 初心者ビンゴ</button>
             <button onClick={()=>{ nav('/action-rpg'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#9fe', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🗡 アクションRPG <span style={{ fontSize:'9px', color:'#8877aa' }}>(お試し)</span></button>
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
             <button onClick={()=>{ setRaidNotifyOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8866', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔔 レイド通知</button>

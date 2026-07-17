@@ -229,8 +229,8 @@ useEffect(() => {
       fishing_location: null,
       fishing_started_at: null,
     }).eq('id', profile.id)
-    // 初心者ビンゴ②「釣り放置3時間」：3時間以上放置してから回収したら加算（is_admin限定先行・RPC側でも自己ゲート）
-    if (profile.is_admin && profile.fishing_started_at) {
+    // 初心者ビンゴ②「釣り放置3時間」：3時間以上放置してから回収したら加算
+    if (profile.fishing_started_at) {
       const idleSec = (now.getTime() - new Date(profile.fishing_started_at).getTime()) / 1000
       if (idleSec >= 3 * 3600) supabase.rpc('bingo_bump', { p_key: 'fish3h' }).then(() => {}, () => {})
     }

@@ -6,7 +6,8 @@
 -- ★ 達成判定は「そのビンゴを始めてからの増分／開始後の状態変化」のみ（過去分は計上しない）。
 --   初回 get/claim 時に beginner_bingo_state.base(jsonb) へ現在値スナップショットを記録＝起点。
 -- 報酬は beginner_bingo_rewards(card,kind,idx,rewards jsonb)。付与は claim_event_reward と同ロジック。
--- サーバー権威型：判定・付与は SECURITY DEFINER RPC 内でのみ。is_admin 限定先行。
+-- サーバー権威型：判定・付与は SECURITY DEFINER RPC 内でのみ。**一般公開済**（認証ユーザー全員）。
+--   ※ bingo_bump のカウンタ(出撃/初級洞窟/釣り3h/かかし3h)はクライアント申告＝改ざん余地あり（残・要サーバー権威化）。
 --
 -- ※ 全体を再実行するとビンゴ受取状態はリセットされます（状態テーブルをdrop再作成・dev限定）。
 -- 単独実行可（protect_stats の保護列には触れない。gold付与時のみ GUC 許可）。
@@ -110,7 +111,7 @@ RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 BEGIN
-  IF NOT COALESCE((SELECT is_admin FROM profiles WHERE id = auth.uid()), false) THEN RETURN; END IF;
+  IF auth.uid() IS NULL THEN RETURN; END IF;
   IF    p_key = 'sortie'  THEN UPDATE profiles SET bingo_sortie_count  = LEAST(COALESCE(bingo_sortie_count,0)+1,1000000)  WHERE id = auth.uid();
   ELSIF p_key = 'd10'     THEN UPDATE profiles SET bingo_d10_count     = LEAST(COALESCE(bingo_d10_count,0)+1,1000000)     WHERE id = auth.uid();
   ELSIF p_key = 'fish3h'  THEN UPDATE profiles SET bingo_fish3h_count  = LEAST(COALESCE(bingo_fish3h_count,0)+1,1000000)  WHERE id = auth.uid();
@@ -244,9 +245,7 @@ DECLARE
   ev      jsonb; v_cells boolean[]; v_lines boolean[];
   st      beginner_bingo_state%ROWTYPE;
 BEGIN
-  IF NOT COALESCE((SELECT is_admin FROM profiles WHERE id = v_uid), false) THEN
-    RETURN jsonb_build_object('dev_only', true);
-  END IF;
+  IF v_uid IS NULL THEN RETURN jsonb_build_object('dev_only', true); END IF;
   ev := _bingo_eval(v_uid, p_card);
   v_cells := ARRAY(SELECT jsonb_array_elements_text(ev->'cells')::boolean);
   v_lines := _bingo_lines(v_cells);
@@ -308,9 +307,7 @@ DECLARE
   ev jsonb; v_cells boolean[]; v_lines boolean[]; v_lcnt int;
   st beginner_bingo_state%ROWTYPE; rw beginner_bingo_rewards%ROWTYPE;
 BEGIN
-  IF NOT COALESCE((SELECT is_admin FROM profiles WHERE id = v_uid), false) THEN
-    RETURN jsonb_build_object('ok', false, 'error', 'dev_only');
-  END IF;
+  IF v_uid IS NULL THEN RETURN jsonb_build_object('ok', false, 'error', 'unauth'); END IF;
   ev := _bingo_eval(v_uid, p_card);
   v_cells := ARRAY(SELECT jsonb_array_elements_text(ev->'cells')::boolean);
   v_lines := _bingo_lines(v_cells);
