@@ -742,15 +742,14 @@ export default function Smithy() {
           const effRateDisp = Math.round(effRate * 10) / 10
           const nextEnhanced = calcEnhancedStats(w, nextPlus, item.evolve_stage || 0)
           // 強者の結晶（+11以上の失敗時 下落防止・開発限定）
-          const isDev = !!profile.is_admin
           const crystalOwned = getItemCount(CRYSTAL_NAME)
           const dropRisk = nextPlus >= 11                       // +11以上は失敗で下落
-          const crystalActive = isDev && dropRisk && useCrystal && crystalOwned > 0
+          const crystalActive = dropRisk && useCrystal && crystalOwned > 0
           const closeModal = () => { setSelectedItem(null); setEnhanceResult(null); setHidenBook(null) }
           // 強化ボタン押下：+11以上を結晶なしで強化しようとしたら確認ダイアログ
           const onEnhanceClick = () => {
             const book = bookApplies ? hidenBook : null
-            if (isDev && dropRisk && !crystalActive) {
+            if (dropRisk && !crystalActive) {
               setEnhanceConfirm({ item, source: matSource, book })
             } else {
               doEnhance(item, matSource, book, crystalActive)
@@ -853,7 +852,7 @@ export default function Smithy() {
                       </div>
                     )}
                     {/* 強者の結晶（+11以上の失敗時 下落防止・開発限定） */}
-                    {isDev && dropRisk && !bossCapped && (
+                    {dropRisk && !bossCapped && (
                       <div style={{ border:`1px solid ${crystalActive ? '#7755cc' : '#334455'}`, background: crystalActive ? '#120a24' : '#000818', padding:'8px', marginBottom:'10px' }}>
                         {crystalOwned > 0 ? (
                           <label style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontSize:'11px', color: crystalActive ? '#cbaaff' : '#88aacc' }}>
@@ -1113,7 +1112,7 @@ export default function Smithy() {
           <div>
             <div style={{ display:'flex', gap:'4px', marginBottom:'12px', flexWrap:'wrap' }}>
               {[{id:'equipment', label:'装備→強化石'}, {id:'stone', label:'強化石→上位強化石'},
-                ...(profile.is_admin ? [{id:'crystal', label:'ボス装備→強者の結晶'}] : [])].map(t => (
+                {id:'crystal', label:'ボス装備→強者の結晶'}].map(t => (
                 <button key={t.id} onClick={() => setCraftTab(t.id)}
                   style={{ padding:'5px 10px', fontFamily:'monospace', fontSize:'11px', cursor:'pointer',
                     background: craftTab === t.id ? '#001840' : '#000818',
@@ -1214,7 +1213,7 @@ export default function Smithy() {
                 })}
               </div>
             )}
-            {craftTab === 'crystal' && profile.is_admin && (() => {
+            {craftTab === 'crystal' && (() => {
               const avail = equipment.filter(e =>
                 isEvolvableEquip(e.weapons?.name) && !e.equipped && !e.is_favorite
                 && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0))
