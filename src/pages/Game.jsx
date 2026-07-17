@@ -5736,9 +5736,7 @@ export default function Game() {
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/card-battle'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎴 幻札バトル[開発]</button>
             )}
-            {profile?.is_admin && (
-              <button onClick={()=>{ nav('/othello'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚫ 盤上遊戯「双極盤」[開発]</button>
-            )}
+            <button onClick={()=>{ nav('/othello'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚫ 盤上遊戯「双極盤」</button>
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/mahjong'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🀄 麻雀[開発]</button>
             )}
@@ -6154,7 +6152,7 @@ export default function Game() {
                       </MenuCat>
                       <MenuCat title="娯楽" catKey="fun" accordion={acc} open={!!openMenuCats.fun} onToggle={toggleMenuCat}>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                        {profile?.is_admin && <button key="othello" onClick={()=>nav('/othello')} style={{ padding:'10px', background:'#001020', border:'1px solid #44dd88', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚫ 双極盤 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
+                        <button key="othello" onClick={()=>nav('/othello')} style={{ padding:'10px', background:'#001020', border:'1px solid #44dd88', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚫ 双極盤</button>
                         {profile?.is_admin && <button key="mahjong" onClick={()=>nav('/mahjong')} style={{ padding:'10px', background:'#001020', border:'1px solid #88dd66', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🀄 麻雀 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
                         {profile?.is_admin && <button key="cardbattle" onClick={()=>nav('/card-battle')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎴 幻札バトル <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
                       </div>
@@ -6313,9 +6311,7 @@ export default function Game() {
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/card-battle'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎴 幻札バトル[開発]</button>
             )}
-            {profile?.is_admin && (
-              <button onClick={()=>{ nav('/othello'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚫ 盤上遊戯「双極盤」[開発]</button>
-            )}
+            <button onClick={()=>{ nav('/othello'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚫ 盤上遊戯「双極盤」</button>
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/mahjong'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🀄 麻雀[開発]</button>
             )}
@@ -6733,7 +6729,7 @@ export default function Game() {
                         </MenuCat>
                         <MenuCat title="娯楽" catKey="fun" accordion={acc} open={!!openMenuCats.fun} onToggle={toggleMenuCat}>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                          {profile?.is_admin && <button key="othello" onClick={()=>nav('/othello')} style={{ padding:'10px', background:'#001020', border:'1px solid #44dd88', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚫ 双極盤 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
+                          <button key="othello" onClick={()=>nav('/othello')} style={{ padding:'10px', background:'#001020', border:'1px solid #44dd88', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚫ 双極盤</button>
                           {profile?.is_admin && <button key="mahjong" onClick={()=>nav('/mahjong')} style={{ padding:'10px', background:'#001020', border:'1px solid #88dd66', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🀄 麻雀 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
                           {profile?.is_admin && <button key="cardbattle" onClick={()=>nav('/card-battle')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎴 幻札バトル <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
                         </div>

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { reportDevAccess } from '../lib/devAccess'
 import {
   BLACK, WHITE, EMPTY, SIZE,
   validMoves, countStones, cpuChooseMove,
@@ -56,7 +55,6 @@ const stoneStyle = (color) => ({
 export default function Othello() {
   const nav = useNavigate()
   const [me, setMe] = useState(null) // { id, name }
-  const [blocked, setBlocked] = useState(false)
   const [loading, setLoading] = useState(true)
 
   // view: lobby | room
@@ -98,21 +96,15 @@ export default function Othello() {
     setTimeout(() => setToast(null), 2500)
   }
 
-  // ---- 認証 + is_adminゲート(2026-07-17 一旦開発限定に戻し) ----
+  // ---- 認証(一般公開・2026-07-18) ----
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { nav('/login'); return }
-      const { data: prof } = await supabase.from('profiles').select('username, is_admin').eq('id', user.id).maybeSingle()
+      const { data: prof } = await supabase.from('profiles').select('username').eq('id', user.id).maybeSingle()
       if (cancelled) return
-      if (!prof?.is_admin) {
-        reportDevAccess('othello', '盤上遊戯「双極盤」(/othello)')
-        setBlocked(true)
-        setLoading(false)
-        return
-      }
-      setMe({ id: user.id, name: prof.username || '名無し' })
+      setMe({ id: user.id, name: prof?.username || '名無し' })
       setLoading(false)
     })()
     return () => { cancelled = true }
@@ -440,15 +432,6 @@ export default function Othello() {
   if (loading) {
     return <div style={{ minHeight: '100vh', background: '#000a14', color: '#88ccff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' }}>読み込み中…</div>
   }
-  if (blocked) {
-    return (
-      <div style={{ minHeight: '100vh', background: '#000a14', color: '#ff6644', display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' }}>
-        <div>この機能は現在開発中です</div>
-        <button onClick={() => nav('/game')} style={btnStyle('#88ccff', { padding: '8px 16px' })}>街に戻る</button>
-      </div>
-    )
-  }
-
   const wrap = (children) => (
     <div style={{ minHeight: '100vh', background: '#000a14', color: '#cde', fontFamily: 'monospace', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px' }}>
       {children}
@@ -464,7 +447,7 @@ export default function Othello() {
       <div style={{ width: '100%', maxWidth: '480px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
           <button onClick={() => nav('/game')} style={btnStyle('#88ccff')}>← 街に戻る</button>
-          <div style={{ color: '#ffcc44', fontSize: '13px' }}>⚫ 盤上遊戯「双極盤」[開発]</div>
+          <div style={{ color: '#ffcc44', fontSize: '13px' }}>⚫ 盤上遊戯「双極盤」</div>
           <div style={{ width: '76px' }} />
         </div>
 
