@@ -209,6 +209,13 @@ export default function Mahjong() {
       const st = ch.presenceState()
       const list = Object.keys(st).map((key) => ({ id: key, name: st[key][0]?.name || '?', spectator: !!st[key][0]?.spectator }))
       list.sort((a, b) => (st[a.id][0]?.joinedAt || 0) - (st[b.id][0]?.joinedAt || 0))
+      // 部屋の上限 = 席4 + 観戦100。入室順であふれた人は自動退室(UIには明記しない)
+      const cap = MAX_MAHJONG_PLAYERS + 100
+      if (list.length > cap && list.findIndex((m) => m.id === myself.id) >= cap) {
+        showToast('満員のため入室できません')
+        leaveRoomRef.current?.()
+        return
+      }
       setMembers(list)
       membersRef.current = list
       if (roomInfo.hostId === myself.id) {
