@@ -11,7 +11,7 @@ import {
 } from '../lib/othello'
 
 // ============================================================
-// オセロ — 開発限定のミニゲーム(娯楽・ステ影響なし)
+// 盤上遊戯「双極盤」(オセロ) — 開発限定のミニゲーム(娯楽・ステ影響なし)
 // 部屋: Supabase Realtime presence(ロビー一覧) + broadcast(ゲーム同期)
 // ホスト権威型: 部屋主のクライアントだけがエンジンを実行しstateを配信
 // SQLテーブル不要(RealtimeチャンネルのみでDBに一切書き込まない)
@@ -99,7 +99,7 @@ export default function Othello() {
       const { data: prof } = await supabase.from('profiles').select('username, is_admin').eq('id', user.id).maybeSingle()
       if (cancelled) return
       if (!prof?.is_admin) {
-        reportDevAccess('othello', 'オセロ(/othello)')
+        reportDevAccess('othello', '盤上遊戯「双極盤」(/othello)')
         setBlocked(true)
         setLoading(false)
         return
@@ -376,7 +376,7 @@ export default function Othello() {
       <div style={{ width: '100%', maxWidth: '480px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
           <button onClick={() => nav('/game')} style={btnStyle('#88ccff')}>← 街に戻る</button>
-          <div style={{ color: '#ffcc44', fontSize: '14px' }}>⚫ オセロ[開発]</div>
+          <div style={{ color: '#ffcc44', fontSize: '13px' }}>⚫ 盤上遊戯「双極盤」[開発]</div>
           <div style={{ width: '76px' }} />
         </div>
 
@@ -401,7 +401,7 @@ export default function Othello() {
               <div style={{ fontSize: '13px' }}>{r.title}</div>
               <div style={{ fontSize: '10px', color: '#668' }}>主: {r.hostName} / {r.count}人 / {r.status === 'playing' ? '🟢 対局中(観戦可)' : '🟡 募集中'}</div>
             </div>
-            <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName })} style={btnStyle('#44dd88')}>入室</button>
+            <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName })} style={btnStyle(r.status === 'playing' ? '#88ccff' : '#44dd88')}>{r.status === 'playing' ? '観戦入室' : '入室'}</button>
           </div>
         ))}
       </div>

@@ -449,7 +449,7 @@ export default function Mahjong() {
               <div style={{ fontSize: 13 }}>{r.title}</div>
               <div style={{ fontSize: 10, color: '#668' }}>主: {r.hostName} / {r.count}人 / {r.status === 'playing' ? '🟢 対局中(観戦可)' : '🟡 募集中'}</div>
             </div>
-            <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName })} style={btnStyle('#44dd88')}>入室</button>
+            <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName })} style={btnStyle(r.status === 'playing' ? '#88ccff' : '#44dd88')}>{r.status === 'playing' ? '観戦入室' : '入室'}</button>
           </div>
         ))}
       </div>
