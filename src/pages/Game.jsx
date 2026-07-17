@@ -4029,6 +4029,13 @@ export default function Game() {
       setBattleLogs([...logs])
     }
 
+    // ★レイドEXPスタック反映（サーバー apply_battle_result と同じ条件で合算＝レベルアップ表示・スキル習得を一致させる）
+    if (!isAtCap && !frozenExp && (profile.raid_exp_stack || 0) > 0) {
+      newExp += profile.raid_exp_stack
+      logs.push({ text:`✨ レイドで貯めたEXPスタック +${profile.raid_exp_stack} を反映！`, color:'#88ccff' })
+      setBattleLogs([...logs])
+    }
+
     if (!isAtCap && !frozenExp) {
       while (newExp >= newExpNext && newLv < cap) {
         newExp -= newExpNext; newLv++; newExpNext = calcExpNext(newLv, profile.is_admin)
@@ -4075,12 +4082,6 @@ export default function Game() {
     // 【変異】初撃破通知（サーバーが mutant_cleared_areas に記録した時だけ返る）
     if (rpcResult?.mutant_first_clear) {
       logs.push({ text: `🧬 エリア${selectedArea}の【変異】を攻略！ 以降このエリアの雑魚はエリア⑤相当のGoldを落とす！`, color: '#cc44ff' })
-      setBattleLogs([...logs])
-    }
-
-    // レイドEXPスタックの反映通知（レベル上限中に貯めたレイドEXPが、上限未満での出撃で反映された）
-    if (rpcResult?.raid_stack_drained > 0) {
-      logs.push({ text: `✨ レイドで貯めたEXPスタック +${rpcResult.raid_stack_drained} を反映！`, color: '#88ccff' })
       setBattleLogs([...logs])
     }
 

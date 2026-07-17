@@ -1037,10 +1037,25 @@ export default function RaidBoss() {
             <div ref={logsEndRef} />
           </div>
 
+          {/* もう一度挑戦（バトル終了後・ボス生存中）：戻ってスクロールせずに連続挑戦できる */}
+          {!battling && boss.status === 'active' && (
+            <button
+              onClick={handleAttack}
+              disabled={!canAct}
+              style={{ width: '100%', padding: '14px', marginBottom: '8px',
+                background: canAct ? '#1a0000' : '#001020',
+                border: `1px solid ${canAct ? '#ff4444' : '#003366'}`,
+                color: canAct ? '#ff6666' : '#446688',
+                cursor: canAct ? 'pointer' : 'not-allowed',
+                fontFamily: 'monospace', fontSize: '14px', letterSpacing: '2px' }}
+            >
+              {canAct ? '⚔ もう一度挑戦する！' : `⏳ 次の挑戦まで ${remaining.toFixed(1)}秒`}
+            </button>
+          )}
           {/* 戻るボタン（バトル終了後） */}
           {!battling && (
             <button
-              onClick={() => setScene('boss')}
+              onClick={() => { setScene('boss'); window.scrollTo({ top: 0 }) }}
               style={{ width: '100%', padding: '12px', background: '#001020', border: '1px solid #0088ff', color: '#0088ff', cursor: 'pointer', fontFamily: 'monospace', fontSize: '13px' }}
             >
               ← 戻る
