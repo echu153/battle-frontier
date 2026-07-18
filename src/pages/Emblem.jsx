@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { reportDevAccess } from '../lib/devAccess'
 import {
-  EMBLEM_CRYSTALS, EMBLEM_ALLOC_MAX, EMBLEM_MAX_LEVEL,
+  EMBLEM_CRYSTALS, EMBLEM_CRYSTAL_KEYS, EMBLEM_ALLOC_MAX, EMBLEM_MAX_LEVEL,
   getEmblemRank, EMBLEM_RANK_COLOR, emblemLevelCap, EMBLEM_CAP_UNLOCK_COST,
   emblemLevelUpCost, emblemAllocTotal, calcEmblemBonus, EMBLEM_SHARD_NAME,
 } from '../lib/emblem'
@@ -183,10 +183,6 @@ export default function Emblem() {
               </div>
             ) : <div style={{ fontSize:'10px', color:'#556677' }}>結晶を割り振ると効果が表示されます</div>}
           </div>
-          <div style={{ color:'#556688', fontSize:'10px', marginTop:'8px', lineHeight:'1.7' }}>
-            第5の装備枠。レベルが上がるごとに「上限値」が+1され、八獄で得た結晶を振って能力を強化できる（1項目MAX{EMBLEM_ALLOC_MAX}）。<br/>
-            レベルアップには八獄でドロップする「紋章の成長石」を使う（LV2〜50: 1個／〜100: 2個／〜150: 3個／〜200: 4個）。
-          </div>
           {/* レベルアップ・上限開放 */}
           <div style={{ display:'flex', gap:'6px', marginTop:'10px', flexWrap:'wrap' }}>
             {!atCap && (
@@ -217,41 +213,37 @@ export default function Emblem() {
 
         {msg && <div style={{ border:'1px solid #4466aa', background:'#0c1430', padding:'10px', marginBottom:'10px', color:'#aaccff', fontSize:'11px' }}>{msg}</div>}
 
-        {/* 結晶割り振り（地獄ごとにグループ） */}
-        {HACHIGOKU_HELLS.map(h => (
-          <div key={h.key} style={{ border:'1px solid #2a3a6a', background:'#0a1022', padding:'10px', marginBottom:'8px' }}>
-            <div style={{ color:'#88aadd', fontSize:'11px', marginBottom:'6px' }}>
-              {h.name}（{h.boss}）<span style={{ color:'#556688', fontSize:'9px', marginLeft:'6px' }}>{h.theme}</span>
-            </div>
-            {h.crystals.map(key => {
-              const c = EMBLEM_CRYSTALS[key]
-              const cur = alloc[key] || 0
-              const owned = items[c.name] || 0
-              const maxed = cur >= EMBLEM_ALLOC_MAX
-              const canPlus = !busy && !maxed && owned > 0 && freePoints > 0
-              const plus10 = Math.min(10, EMBLEM_ALLOC_MAX - cur, owned, freePoints)
-              return (
-                <div key={key} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'5px 0', borderTop:'1px solid #16203a' }}>
-                  <div style={{ fontSize:'11px' }}>
-                    <span style={{ color:'#aaccff' }}>{c.name}</span>
-                    <span style={{ color:'#667799', fontSize:'9px', marginLeft:'6px' }}>{c.label} +{c.per}{c.unit}/1振り</span>
-                    <div style={{ fontSize:'9px', color:'#556688', marginTop:'1px' }}>
-                      振り: <span style={{ color: maxed ? '#ffcc66' : '#88bbff' }}>{cur}</span>/{EMBLEM_ALLOC_MAX}
-                      　効果: <span style={{ color:'#66ff99' }}>+{Math.round(c.per * cur * 10) / 10}{c.unit}</span>
-                      　所持: <span style={{ color: owned > 0 ? '#ffcc66' : '#556688' }}>{owned}</span>
-                    </div>
-                  </div>
-                  <div style={{ display:'flex', gap:'4px' }}>
-                    <button disabled={!canPlus} onClick={()=>doAllocate(key, 1)}
-                      style={{ padding:'4px 10px', background: canPlus ? '#102040' : '#0a0e1c', border:`1px solid ${canPlus ? '#4488ff' : '#223355'}`, color: canPlus ? '#88bbff' : '#445577', cursor: canPlus ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>+1</button>
-                    <button disabled={!canPlus || plus10 < 2} onClick={()=>doAllocate(key, plus10)}
-                      style={{ padding:'4px 8px', background: canPlus && plus10 >= 2 ? '#102040' : '#0a0e1c', border:`1px solid ${canPlus && plus10 >= 2 ? '#4488ff' : '#223355'}`, color: canPlus && plus10 >= 2 ? '#88bbff' : '#445577', cursor: canPlus && plus10 >= 2 ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>+{plus10 >= 2 ? plus10 : 'n'}</button>
+        {/* 結晶割り振り（全結晶をまとめて一覧） */}
+        <div style={{ border:'1px solid #2a3a6a', background:'#0a1022', padding:'10px', marginBottom:'8px' }}>
+          <div style={{ color:'#88aadd', fontSize:'11px', marginBottom:'6px' }}>結晶の割り振り <span style={{ color:'#556688', fontSize:'9px', marginLeft:'6px' }}>1項目MAX{EMBLEM_ALLOC_MAX}・合計は上限値まで</span></div>
+          {EMBLEM_CRYSTAL_KEYS.map(key => {
+            const c = EMBLEM_CRYSTALS[key]
+            const cur = alloc[key] || 0
+            const owned = items[c.name] || 0
+            const maxed = cur >= EMBLEM_ALLOC_MAX
+            const canPlus = !busy && !maxed && owned > 0 && freePoints > 0
+            const plus10 = Math.min(10, EMBLEM_ALLOC_MAX - cur, owned, freePoints)
+            return (
+              <div key={key} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'5px 0', borderTop:'1px solid #16203a' }}>
+                <div style={{ fontSize:'11px' }}>
+                  <span style={{ color:'#aaccff' }}>{c.name}</span>
+                  <span style={{ color:'#667799', fontSize:'9px', marginLeft:'6px' }}>{c.label} +{c.per}{c.unit}/1振り</span>
+                  <div style={{ fontSize:'9px', color:'#556688', marginTop:'1px' }}>
+                    振り: <span style={{ color: maxed ? '#ffcc66' : '#88bbff' }}>{cur}</span>/{EMBLEM_ALLOC_MAX}
+                    　効果: <span style={{ color:'#66ff99' }}>+{Math.round(c.per * cur * 10) / 10}{c.unit}</span>
+                    　所持: <span style={{ color: owned > 0 ? '#ffcc66' : '#556688' }}>{owned}</span>
                   </div>
                 </div>
-              )
-            })}
-          </div>
-        ))}
+                <div style={{ display:'flex', gap:'4px' }}>
+                  <button disabled={!canPlus} onClick={()=>doAllocate(key, 1)}
+                    style={{ padding:'4px 10px', background: canPlus ? '#102040' : '#0a0e1c', border:`1px solid ${canPlus ? '#4488ff' : '#223355'}`, color: canPlus ? '#88bbff' : '#445577', cursor: canPlus ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>+1</button>
+                  <button disabled={!canPlus || plus10 < 2} onClick={()=>doAllocate(key, plus10)}
+                    style={{ padding:'4px 8px', background: canPlus && plus10 >= 2 ? '#102040' : '#0a0e1c', border:`1px solid ${canPlus && plus10 >= 2 ? '#4488ff' : '#223355'}`, color: canPlus && plus10 >= 2 ? '#88bbff' : '#445577', cursor: canPlus && plus10 >= 2 ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>+{plus10 >= 2 ? plus10 : 'n'}</button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
 
         {/* 魂・記憶の所持状況 */}
         <div style={{ border:'1px solid #2a3a6a', background:'#0a1022', padding:'10px', marginBottom:'20px' }}>
@@ -264,6 +256,14 @@ export default function Emblem() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* 説明（画面下部にまとめて） */}
+        <div style={{ border:'1px solid #223a5a', background:'#080e1c', padding:'10px', marginBottom:'24px', color:'#667799', fontSize:'10px', lineHeight:'1.8' }}>
+          <div style={{ color:'#88aadd', marginBottom:'4px' }}>▼ 紋章について</div>
+          第5の装備枠。レベルが上がるごとに「上限値」が+1され、八獄で得た結晶を振って能力を強化できる（1項目MAX{EMBLEM_ALLOC_MAX}）。<br/>
+          レベルアップには八獄でドロップする「紋章の成長石」を使う（LV2〜50: 1個／〜100: 2個／〜150: 3個／〜200: 4個）。<br/>
+          LV100/125/150/175 で上限開放が必要（各地獄の魂を消費。175→200 は各地獄Hell初回クリアの「記憶」も必要）。
         </div>
       </div>
     </div>
