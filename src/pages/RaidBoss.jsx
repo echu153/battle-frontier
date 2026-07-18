@@ -770,7 +770,7 @@ export default function RaidBoss() {
   }
 
   // 【開発】管理者がテスト用にボスを即出現/終了（is_devフラグ・一般プレイヤーには見えない）
-  // p_slot: 21=夜の条件（HP700万・順位報酬あり）/ 12〜17=昼の条件（HP200万・順位報酬なし）
+  // p_slot: 21=夜の条件（HP700万・順位報酬あり）/ 12〜17=昼の条件（HP300万・順位報酬なし）
   const devSpawn = async (name, slot = 21) => {
     const { data: { user } } = await supabase.auth.getUser()
     const { error } = await supabase.rpc('spawn_raid_boss_dev', { p_boss_name: name, p_slot: slot })
@@ -972,7 +972,7 @@ export default function RaidBoss() {
             <button onClick={() => devSpawn(BOSS_VARUZENOKU)} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ヴァルゼノクを今出現</button>
             <button onClick={() => devSpawn(BOSS_ZERUGIASU)} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>ゼルギアスを今出現</button>
             <button onClick={() => devSpawn(BOSS_ENMA)} style={{ padding:'5px 10px', background:'#1a0e2a', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>閻魔を今出現</button>
-            <button onClick={() => devSpawn(schedule?.find(s => s.kind === 'day')?.boss_name || BOSS_AMAZA, schedule?.find(s => s.kind === 'day')?.slot || 12)} style={{ padding:'5px 10px', background:'#2a1a0e', border:'1px solid #ffaa44', color:'#ffcc88', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>本日の昼枠を今出現（HP200万・順位報酬なし）</button>
+            <button onClick={() => devSpawn(schedule?.find(s => s.kind === 'day')?.boss_name || BOSS_AMAZA, schedule?.find(s => s.kind === 'day')?.slot || 12)} style={{ padding:'5px 10px', background:'#2a1a0e', border:'1px solid #ffaa44', color:'#ffcc88', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>本日の昼枠を今出現（HP300万・順位報酬なし）</button>
             <button onClick={devEnd} style={{ padding:'5px 10px', background:'#1a0a0a', border:'1px solid #aa4444', color:'#ff8888', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>テストボス終了</button>
           </div>
         </div>

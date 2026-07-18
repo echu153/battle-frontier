@@ -7,7 +7,7 @@
 --          d%3=1 → 21時=雨摩座     / 22時=閻魔(最新)
 --          d%3=2 → 21時=閻魔(最新) / 22時=雷鋼機神ゼルギアス
 --
---  【昼】12〜17時のうち毎日ランダムな1枠に1体だけ出現（30分・HP200万）。
+--  【昼】12〜17時のうち毎日ランダムな1枠に1体だけ出現（30分・HP300万）。
 --        出るボスは「最新」と「その日の夜に出る2体」を除いた候補から1体。
 --          例) 夜が 閻魔＋ヴァルゼノク の日 → 昼は 雨摩座 か ゼルギアス
 --        昼は与ダメージ上位3名の追加報酬なし（ティア報酬・素材・秘伝書は夜と同じ）。
@@ -61,10 +61,10 @@ RETURNS int LANGUAGE sql IMMUTABLE AS $$
   SELECT 12 + (raid_rand(p_date - DATE '2000-01-01', 0) % 6)
 $$;
 
--- 4) 枠ごとのHP（昼は人が少ない時間帯なので低め）
+-- 4) 枠ごとのHP（昼は人が少ない時間帯なので低め。2026-07-18: 200万→300万）
 CREATE OR REPLACE FUNCTION raid_slot_hp(p_slot int)
 RETURNS int LANGUAGE sql IMMUTABLE AS $$
-  SELECT CASE WHEN p_slot IN (21, 22) THEN 7000000 ELSE 2000000 END
+  SELECT CASE WHEN p_slot IN (21, 22) THEN 7000000 ELSE 3000000 END
 $$;
 
 -- 5) 枠ごとの出現ボス（夜=セットローテ / 昼=最新とその日の夜の2体を除いた候補から1体）
@@ -205,7 +205,7 @@ BEGIN
 END;
 $$;
 
--- 8) 管理者テスト用: 昼枠の条件（HP200万・順位報酬なし）でも試せるよう slot を指定できるようにする
+-- 8) 管理者テスト用: 昼枠の条件（HP300万・順位報酬なし）でも試せるよう slot を指定できるようにする
 --    ※旧版 spawn_raid_boss_dev(text) を先に落とす。残したまま2引数版(DEFAULT付き)を足すと
 --      引数1個の呼び出しがどちらとも解決できず "function is not unique" になる。
 DROP FUNCTION IF EXISTS spawn_raid_boss_dev(text);
