@@ -119,6 +119,31 @@ export default function Emblem() {
   const canUnlock = atCap && capStage < 4
   const unlockCost = canUnlock ? EMBLEM_CAP_UNLOCK_COST[capStage] : null
   const bonus = calcEmblemBonus(alloc)
+  // 上昇しているステータスだけをチップ化
+  const effChips = [
+    bonus.flat.atk  > 0 && `攻撃+${bonus.flat.atk}`,
+    bonus.flat.def  > 0 && `防御+${bonus.flat.def}`,
+    bonus.flat.matk > 0 && `特攻+${bonus.flat.matk}`,
+    bonus.flat.mdef > 0 && `特防+${bonus.flat.mdef}`,
+    bonus.physDmg   > 0 && `物理ダメ+${bonus.physDmg}%`,
+    bonus.specialDmg> 0 && `特殊ダメ+${bonus.specialDmg}%`,
+    bonus.defPen    > 0 && `物防貫通+${bonus.defPen}%`,
+    bonus.mdefPen   > 0 && `特防貫通+${bonus.mdefPen}%`,
+    bonus.dotUp.bleed  > 0 && `出血ダメ+${bonus.dotUp.bleed}%`,
+    bonus.dotUp.burn   > 0 && `やけどダメ+${bonus.dotUp.burn}%`,
+    bonus.dotUp.poison > 0 && `毒ダメ+${bonus.dotUp.poison}%`,
+    bonus.physDrain > 0 && `物理吸収+${bonus.physDrain}%`,
+    bonus.specialDrain > 0 && `特殊吸収+${bonus.specialDrain}%`,
+    bonus.evasion   > 0 && `回避+${bonus.evasion}%`,
+    bonus.crit      > 0 && `クリ率+${bonus.crit}%`,
+    bonus.critDmg   > 0 && `クリ威力+${bonus.critDmg}%`,
+    bonus.critResist> 0 && `クリ抵抗+${bonus.critResist}%`,
+    bonus.ailRes.poison    > 0 && `毒耐性+${bonus.ailRes.poison}%`,
+    bonus.ailRes.paralysis > 0 && `麻痺耐性+${bonus.ailRes.paralysis}%`,
+    bonus.ailRes.burn      > 0 && `やけど耐性+${bonus.ailRes.burn}%`,
+    bonus.ailRes.bleed     > 0 && `出血耐性+${bonus.ailRes.bleed}%`,
+    bonus.ailRes.stun      > 0 && `スタン耐性+${bonus.ailRes.stun}%`,
+  ].filter(Boolean)
 
   return (
     <div style={{ minHeight:'100vh', background:'#050a18', padding:'12px', fontFamily:'monospace' }}>
@@ -133,22 +158,30 @@ export default function Emblem() {
 
         {/* 紋章本体 */}
         <div style={{ border:'1px solid #2a3a6a', background:'#0a1022', padding:'12px', marginBottom:'10px' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
-            <img src="/tya-mu.png" alt="紋章" style={{ width:'56px', height:'56px', objectFit:'contain' }} />
-            <div style={{ flex:1 }}>
-              <div style={{ display:'flex', alignItems:'baseline', gap:'10px' }}>
-                <span style={{ color:'#aaccff', fontSize:'15px', fontWeight:'bold' }}>LV {level}</span>
-                <span style={{ color: EMBLEM_RANK_COLOR[rank], fontSize:'14px', fontWeight:'bold' }}>ランク {rank}</span>
-                <span style={{ color:'#667799', fontSize:'10px' }}>上限 LV{cap}{capStage < 4 ? '（開放可能: 最大200）' : '（最大）'}</span>
-              </div>
-              <div style={{ color:'#8899bb', fontSize:'11px', marginTop:'4px' }}>
-                上限値: <span style={{ color:'#ffcc66' }}>{total}</span> ／ {level} 使用中
-                （残り <span style={{ color: freePoints > 0 ? '#66ff99' : '#667799' }}>{freePoints}</span>）
-              </div>
-              <div style={{ color:'#667799', fontSize:'10px', marginTop:'2px' }}>
-                🧩 紋章の成長石: <span style={{ color:'#ffcc66' }}>{fmt(shards)}</span>個
-              </div>
+          <div>
+            <div style={{ display:'flex', alignItems:'baseline', gap:'10px', flexWrap:'wrap' }}>
+              <span style={{ color:'#aaccff', fontSize:'15px', fontWeight:'bold' }}>LV {level}</span>
+              <span style={{ color: EMBLEM_RANK_COLOR[rank], fontSize:'14px', fontWeight:'bold' }}>ランク {rank}</span>
+              <span style={{ color:'#667799', fontSize:'10px' }}>上限 LV{cap}{capStage < 4 ? '（開放可能: 最大200）' : '（最大）'}</span>
             </div>
+            <div style={{ color:'#8899bb', fontSize:'11px', marginTop:'4px' }}>
+              上限値: <span style={{ color:'#ffcc66' }}>{total}</span> ／ {level} 使用中
+              （残り <span style={{ color: freePoints > 0 ? '#66ff99' : '#667799' }}>{freePoints}</span>）
+            </div>
+            <div style={{ color:'#667799', fontSize:'10px', marginTop:'2px' }}>
+              🧩 紋章の成長石: <span style={{ color:'#ffcc66' }}>{fmt(shards)}</span>個
+            </div>
+          </div>
+          {/* 現在の上昇ステータス（チップ表示） */}
+          <div style={{ marginTop:'8px', paddingTop:'8px', borderTop:'1px solid #1a2540' }}>
+            <div style={{ color:'#88aadd', fontSize:'10px', marginBottom:'5px' }}>現在の上昇ステータス</div>
+            {effChips.length > 0 ? (
+              <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                {effChips.map((c, i) => (
+                  <span key={i} style={{ fontSize:'10px', color:'#66dd99', background:'#02201a', border:'1px solid #1a4a3a', borderRadius:'3px', padding:'2px 6px' }}>{c}</span>
+                ))}
+              </div>
+            ) : <div style={{ fontSize:'10px', color:'#556677' }}>結晶を割り振ると効果が表示されます</div>}
           </div>
           <div style={{ color:'#556688', fontSize:'10px', marginTop:'8px', lineHeight:'1.7' }}>
             第5の装備枠。レベルが上がるごとに「上限値」が+1され、八獄で得た結晶を振って能力を強化できる（1項目MAX{EMBLEM_ALLOC_MAX}）。<br/>
@@ -183,35 +216,6 @@ export default function Emblem() {
         </div>
 
         {msg && <div style={{ border:'1px solid #4466aa', background:'#0c1430', padding:'10px', marginBottom:'10px', color:'#aaccff', fontSize:'11px' }}>{msg}</div>}
-
-        {/* 現在の効果まとめ */}
-        {total > 0 && (
-          <div style={{ border:'1px solid #2a3a6a', background:'#0a1022', padding:'10px', marginBottom:'10px', fontSize:'10px', color:'#88aadd', lineHeight:'1.8' }}>
-            <span style={{ color:'#aaccff' }}>▼ 紋章の効果: </span>
-            {bonus.flat.atk > 0 && <span>攻撃+{bonus.flat.atk} </span>}
-            {bonus.flat.matk > 0 && <span>特攻+{bonus.flat.matk} </span>}
-            {bonus.flat.def > 0 && <span>防御+{bonus.flat.def} </span>}
-            {bonus.flat.mdef > 0 && <span>特防+{bonus.flat.mdef} </span>}
-            {bonus.physDmg > 0 && <span>物理ダメ+{bonus.physDmg}% </span>}
-            {bonus.specialDmg > 0 && <span>特殊ダメ+{bonus.specialDmg}% </span>}
-            {bonus.defPen > 0 && <span>物防貫通+{bonus.defPen}% </span>}
-            {bonus.mdefPen > 0 && <span>特防貫通+{bonus.mdefPen}% </span>}
-            {bonus.dotUp.bleed > 0 && <span>出血ダメ+{bonus.dotUp.bleed}% </span>}
-            {bonus.dotUp.burn > 0 && <span>やけどダメ+{bonus.dotUp.burn}% </span>}
-            {bonus.dotUp.poison > 0 && <span>毒ダメ+{bonus.dotUp.poison}% </span>}
-            {bonus.physDrain > 0 && <span>物理吸収+{bonus.physDrain}% </span>}
-            {bonus.specialDrain > 0 && <span>特殊吸収+{bonus.specialDrain}% </span>}
-            {bonus.evasion > 0 && <span>回避+{bonus.evasion}% </span>}
-            {bonus.crit > 0 && <span>クリ率+{bonus.crit}% </span>}
-            {bonus.critDmg > 0 && <span>クリ威力+{bonus.critDmg}% </span>}
-            {bonus.critResist > 0 && <span>クリ抵抗+{bonus.critResist}% </span>}
-            {bonus.ailRes.poison > 0 && <span>毒耐性+{bonus.ailRes.poison}% </span>}
-            {bonus.ailRes.paralysis > 0 && <span>麻痺耐性+{bonus.ailRes.paralysis}% </span>}
-            {bonus.ailRes.burn > 0 && <span>やけど耐性+{bonus.ailRes.burn}% </span>}
-            {bonus.ailRes.bleed > 0 && <span>出血耐性+{bonus.ailRes.bleed}% </span>}
-            {bonus.ailRes.stun > 0 && <span>スタン耐性+{bonus.ailRes.stun}% </span>}
-          </div>
-        )}
 
         {/* 結晶割り振り（地獄ごとにグループ） */}
         {HACHIGOKU_HELLS.map(h => (

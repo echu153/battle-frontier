@@ -618,7 +618,6 @@ export default function Equipment() {
           {profile?.is_admin && (() => {
             const emLevel = emblemRow?.level || 1
             const emRank = getEmblemRank(emLevel)
-            const emTotal = emblemAllocTotal(emblemRow?.alloc)
             const b = calcEmblemBonus(emblemRow?.alloc)
             // 上昇しているステータスだけをチップで表示
             const effChips = [
@@ -652,7 +651,6 @@ export default function Equipment() {
                     <span style={{ color:'#446688', fontSize:'10px' }}>紋章 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></span>
                     <span style={{ color:'#aaccff', fontSize:'11px', marginLeft:'8px' }}>LV {emLevel}</span>
                     <span style={{ color: EMBLEM_RANK_COLOR[emRank], fontSize:'11px', marginLeft:'8px' }}>ランク {emRank}</span>
-                    <span style={{ color:'#667799', fontSize:'9px', marginLeft:'8px' }}>結晶 {emTotal}振り</span>
                   </div>
                   <span style={{ color:'#4488ff', fontSize:'11px' }}>強化 ▶</span>
                 </div>
