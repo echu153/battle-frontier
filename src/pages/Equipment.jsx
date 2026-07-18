@@ -4,7 +4,7 @@ import { supabase } from '../supabase'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue } from './Game'
 import { gemAllowedSlots, gemSlotCategory, GEM_SLOT_LABEL, calcProfBonus } from '../lib/stats'
 import { evoMultiplier, displayRarity, isShinka, BOSS_LINES } from '../constants/bossEvolution'
-import { getEmblemRank, EMBLEM_RANK_COLOR, emblemAllocTotal } from '../lib/emblem'
+import { getEmblemRank, EMBLEM_RANK_COLOR, emblemAllocTotal, calcEmblemBonus } from '../lib/emblem'
 import { effectLabel } from '../constants/effectLabels'
 
 const SLOT_LABELS_FULL = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }
@@ -619,18 +619,48 @@ export default function Equipment() {
             const emLevel = emblemRow?.level || 1
             const emRank = getEmblemRank(emLevel)
             const emTotal = emblemAllocTotal(emblemRow?.alloc)
+            const b = calcEmblemBonus(emblemRow?.alloc)
+            // 上昇しているステータスだけをチップで表示
+            const effChips = [
+              b.flat.atk  > 0 && `攻撃+${b.flat.atk}`,
+              b.flat.def  > 0 && `防御+${b.flat.def}`,
+              b.flat.matk > 0 && `特攻+${b.flat.matk}`,
+              b.flat.mdef > 0 && `特防+${b.flat.mdef}`,
+              b.physDmg   > 0 && `物理ダメ+${b.physDmg}%`,
+              b.specialDmg> 0 && `特殊ダメ+${b.specialDmg}%`,
+              b.defPen    > 0 && `物防貫通+${b.defPen}%`,
+              b.mdefPen   > 0 && `特防貫通+${b.mdefPen}%`,
+              b.dotUp.bleed > 0 && `出血ダメ+${b.dotUp.bleed}%`,
+              b.dotUp.burn  > 0 && `やけどダメ+${b.dotUp.burn}%`,
+              b.dotUp.poison> 0 && `毒ダメ+${b.dotUp.poison}%`,
+              b.physDrain > 0 && `物理吸収+${b.physDrain}%`,
+              b.specialDrain > 0 && `特殊吸収+${b.specialDrain}%`,
+              b.evasion   > 0 && `回避+${b.evasion}%`,
+              b.crit      > 0 && `クリ率+${b.crit}%`,
+              b.critDmg   > 0 && `クリ威力+${b.critDmg}%`,
+              b.critResist> 0 && `クリ抵抗+${b.critResist}%`,
+              b.ailRes.poison    > 0 && `毒耐性+${b.ailRes.poison}%`,
+              b.ailRes.paralysis > 0 && `麻痺耐性+${b.ailRes.paralysis}%`,
+              b.ailRes.burn      > 0 && `やけど耐性+${b.ailRes.burn}%`,
+              b.ailRes.bleed     > 0 && `出血耐性+${b.ailRes.bleed}%`,
+              b.ailRes.stun      > 0 && `スタン耐性+${b.ailRes.stun}%`,
+            ].filter(Boolean)
             return (
-              <div onClick={()=>nav('/emblem')} style={{ border:'1px solid #335588', background:'#001028', padding:'8px', marginBottom:'6px', cursor:'pointer', display:'flex', alignItems:'center', gap:'10px' }}>
-                <img src="/tya-mu.png" alt="紋章" style={{ width:'34px', height:'34px', objectFit:'contain' }} />
-                <div style={{ flex:1 }}>
-                  <div style={{ color:'#446688', fontSize:'10px' }}>紋章 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></div>
-                  <div style={{ fontSize:'11px', marginTop:'2px' }}>
-                    <span style={{ color:'#aaccff' }}>LV {emLevel}</span>
-                    <span style={{ color: EMBLEM_RANK_COLOR[emRank], marginLeft:'8px' }}>ランク {emRank}</span>
+              <div onClick={()=>nav('/emblem')} style={{ border:'1px solid #335588', background:'#001028', padding:'8px', marginBottom:'6px', cursor:'pointer' }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <div>
+                    <span style={{ color:'#446688', fontSize:'10px' }}>紋章 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></span>
+                    <span style={{ color:'#aaccff', fontSize:'11px', marginLeft:'8px' }}>LV {emLevel}</span>
+                    <span style={{ color: EMBLEM_RANK_COLOR[emRank], fontSize:'11px', marginLeft:'8px' }}>ランク {emRank}</span>
                     <span style={{ color:'#667799', fontSize:'9px', marginLeft:'8px' }}>結晶 {emTotal}振り</span>
                   </div>
+                  <span style={{ color:'#4488ff', fontSize:'11px' }}>強化 ▶</span>
                 </div>
-                <span style={{ color:'#4488ff', fontSize:'11px' }}>強化 ▶</span>
+                <div style={{ marginTop:'5px', display:'flex', flexWrap:'wrap', gap:'3px' }}>
+                  {effChips.length > 0 ? effChips.map((c, i) => (
+                    <span key={i} style={{ fontSize:'9px', color:'#66dd99', background:'#02201a', border:'1px solid #1a4a3a', borderRadius:'3px', padding:'1px 5px' }}>{c}</span>
+                  )) : <span style={{ fontSize:'9px', color:'#556677' }}>結晶を割り振ると効果が表示されます</span>}
+                </div>
               </div>
             )
           })()}
