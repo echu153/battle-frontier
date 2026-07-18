@@ -247,77 +247,24 @@ useEffect(() => {
     setLoading(false)
   }
 
-  // 売却
+  // 売却（サーバーRPCで削除・図鑑登録・強化石付与・Gold加算を原子的に実行。
+  //   旧クライアント処理はGold付与後の釣果削除が失敗しても検知できず、
+  //   釣果が残留して何度でも売却できる不具合があったためRPCへ移行）
   const sellAll = async () => {
     if (caughtFish.length === 0) return
     if (sellBusyRef.current) return  // 連打ガード（二重売却＝Gold/石の二重付与を防ぐ）
     sellBusyRef.current = true
     setLoading(true)
     try {
-    // 今回売却する対象を固定（処理中に背景で釣れた魚を巻き込み削除しないようID集合を保持）
-    const soldIds = caughtFish.map(f => f.id)
-    let totalGold = 0
-    const shrimpItems = caughtFish.filter(f => EVENT_SHRIMP_PRICES[f.fish_name] != null)
-    const fishItems = caughtFish.filter(f => !f.fish_name?.startsWith('強化石') && EVENT_SHRIMP_PRICES[f.fish_name] == null)
-    const stoneItems = caughtFish.filter(f => f.fish_name?.startsWith('強化石'))
-
-    // 釣りイベント：イベント限定エビは図鑑登録せず売却のみ（種類ごとの固定価格）
-    totalGold += shrimpItems.reduce((sum, f) => sum + EVENT_SHRIMP_PRICES[f.fish_name], 0)
-
-    // 図鑑は「場所＋魚名」で1件（同名でも場所が違えば別図鑑＝カンパチ等が日本海/カリブ海で重複しない）。
-    // 同セッションでの二重挿入も inserted で防ぐ。
-    const inserted = new Set(records.map(r => `${r.location}|${r.fish_name}`))
-    let dexFailed = 0
-    for (const fish of fishItems) {
-      const rankKey = fish.fish_rank?.toLowerCase() || 'f'
-      totalGold += FISH_SELL_PRICE[rankKey] || 50
-      const key = `${fish.location}|${fish.fish_name}`
-      if (!inserted.has(key)) {
-        inserted.add(key)
-        const { error: dexErr } = await supabase.from('fishing_records').insert({
-          player_id: profile.id,
-          fish_name: fish.fish_name,
-          fish_rank: fish.fish_rank,
-          location: fish.location,
-          first_caught_at: new Date().toISOString(),
-          bonus_claimed: false,
-        })
-        // 登録失敗を握り潰すと図鑑が無言で???のまま残るので気付けるようにする
-        if (dexErr) { dexFailed++; console.error('[fishing] 図鑑登録に失敗', key, dexErr) }
+      const { data, error } = await supabase.rpc('sell_caught_fish')
+      if (error || !data?.ok) {
+        console.error('[fishing] 売却に失敗', error || data)
+        showMessage('売却に失敗しました。もう一度お試しください。', '#ff4444')
+        await fetchAll()
+        return
       }
-    }
-    for (const stone of stoneItems) {
-      const { data: stoneItem } = await supabase.from('items').select('*').eq('name', stone.fish_name).single()
-      if (stoneItem) {
-        let existing = null
-        try {
-          const res = await supabase.from('player_items').select('*').eq('player_id', profile.id).eq('item_id', stoneItem.id).single()
-          existing = res.data
-        } catch { /* 意図的に無視 */ }
-        if (existing) {
-          await supabase.from('player_items').update({ quantity: (existing.quantity||1)+1 }).eq('id', existing.id)
-        } else {
-          await supabase.from('player_items').insert({ player_id: profile.id, item_id: stoneItem.id, quantity: 1, equipped: false })
-        }
-      }
-    }
-    // Goldは最新値に加算（stale上書き防止）。更新が失敗したら釣果を削除せず中断＝データ損失を防ぐ
-    const { data: freshProf } = await supabase.from('profiles').select('gold').eq('id', profile.id).maybeSingle()
-    const baseGold = freshProf?.gold ?? profile.gold
-    const { error: goldErr } = await supabase.from('profiles').update({ gold: baseGold + totalGold }).eq('id', profile.id)
-    if (goldErr) {
-      showMessage('売却に失敗しました。もう一度お試しください。', '#ff4444')
       await fetchAll()
-      return
-    }
-    // 売却済みの釣果のみ削除（処理中に新たに釣れた分は残す）
-    await supabase.from('caught_fish').delete().in('id', soldIds)
-    await fetchAll()
-    if (dexFailed > 0) {
-      showMessage(`💰 ${totalGold}G獲得！（魚図鑑の登録に${dexFailed}件失敗しました）`, '#ffaa44')
-    } else {
-    showMessage(`💰 ${totalGold}G獲得！${stoneItems.length > 0 ? `強化石${stoneItems.length}個入手！` : ''}${shrimpItems.length > 0 ? ` イベント限定エビ×${shrimpItems.length}売却！` : ''}`)
-    }
+      showMessage(`💰 ${data.gold}G獲得！${data.stones > 0 ? `強化石${data.stones}個入手！` : ''}${data.shrimp > 0 ? ` イベント限定エビ×${data.shrimp}売却！` : ''}`)
     } finally { setLoading(false); sellBusyRef.current = false }
   }
 
