@@ -196,12 +196,31 @@ export function flipsForMulti(board, size, idx, color) {
 }
 
 // 合法手: 挟める手があればそれのみ。なければ石に隣接する空きマス
-export function legalMovesMulti(board, size, color) {
+// protectColors(生存プレイヤーの色一覧)を渡すと「他プレイヤーの石を0個にする手」を除外する。
+// 全滅させる手しか無い場合のみ許可(手詰まり防止)。全滅からの復帰石も同ルールで自動的に守られる。
+export function legalMovesMulti(board, size, color, protectColors = null) {
   const caps = []
   for (let i = 0; i < size * size; i++) {
     if (board[i] === EMPTY && flipsForMulti(board, size, i, color).length > 0) caps.push(i)
   }
-  if (caps.length > 0) return { moves: caps, capture: true }
+  if (caps.length > 0) {
+    if (protectColors && protectColors.length > 0) {
+      const counts = countsByColor(board)
+      // 既に0個のプレイヤーは保護対象から外す(全手が「0個のまま」判定になり保護が壊れるため)
+      const alive = protectColors.filter((c) => c !== color && (counts[c] || 0) > 0)
+      if (alive.length > 0) {
+        const safe = caps.filter((m) => {
+          const flipped = {}
+          for (const f of flipsForMulti(board, size, m, color)) {
+            flipped[board[f]] = (flipped[board[f]] || 0) + 1
+          }
+          return !alive.some((c) => (counts[c] || 0) - (flipped[c] || 0) <= 0)
+        })
+        if (safe.length > 0) return { moves: safe, capture: true }
+      }
+    }
+    return { moves: caps, capture: true }
+  }
   const dirs = [-size - 1, -size, -size + 1, -1, 1, size - 1, size, size + 1]
   const adj = []
   for (let i = 0; i < size * size; i++) {
@@ -229,9 +248,14 @@ export function createMultiGame(playersList) {
   const size = multiBoardSize(n)
   const board = new Array(size * size).fill(EMPTY)
   const c = Math.floor(size / 2)
-  const spots = [[c - 1, c - 1], [c - 1, c], [c, c], [c, c - 1], [c + 1, c + 1]]
+  // 初期配置は1人2個の2段ブロック(上段=手番順/下段=逆順)。
+  // 旧配置(1人1個)は開始直後に単独石が挟まれて即全滅する欠陥があった
+  const x0 = c - Math.floor(n / 2)
   const players = playersList.map((p, i) => ({ id: p.id, name: p.name, color: i + 1, left: false }))
-  players.forEach((p, i) => { board[spots[i][1] * size + spots[i][0]] = p.color })
+  players.forEach((p, i) => {
+    board[(c - 1) * size + (x0 + i)] = p.color
+    board[c * size + (x0 + (n - 1 - i))] = p.color
+  })
   return {
     mode: 'multi', size, board, players,
     turnIdx: 0, lastMove: null, phase: 'playing', result: null,
@@ -268,7 +292,8 @@ export function applyMultiMove(state, playerId, idx) {
     if (!state.players.some((p) => p.id === playerId)) return { error: '対局者ではありません' }
     return { error: 'あなたの番ではありません' }
   }
-  const { moves, capture } = legalMovesMulti(state.board, state.size, cur.color)
+  const protect = state.players.filter((p) => !p.left).map((p) => p.color)
+  const { moves, capture } = legalMovesMulti(state.board, state.size, cur.color, protect)
   if (!moves.includes(idx)) return { error: 'そこには置けません' }
   const board = state.board.slice()
   board[idx] = cur.color
@@ -300,7 +325,8 @@ export function multiPlayerLeft(state, playerId) {
 export function cpuChooseMoveMulti(state, level = 3) {
   const cur = state.players[state.turnIdx]
   if (!cur) return null
-  const { moves, capture } = legalMovesMulti(state.board, state.size, cur.color)
+  const protect = state.players.filter((p) => !p.left).map((p) => p.color)
+  const { moves, capture } = legalMovesMulti(state.board, state.size, cur.color, protect)
   if (moves.length === 0) return null
   if (level <= 1) return moves[Math.floor(Math.random() * moves.length)]
   const w = weightsFor(state.size)

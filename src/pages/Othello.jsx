@@ -502,7 +502,7 @@ export default function Othello() {
       myColor = meP?.color || null
       isSpectator = !meP
       isMyTurn = playing && game.players[game.turnIdx]?.id === me.id
-      if (isMyTurn) hints = new Set(legalMovesMulti(game.board, game.size, myColor).moves)
+      if (isMyTurn) hints = new Set(legalMovesMulti(game.board, game.size, myColor, game.players.filter((p) => !p.left).map((p) => p.color)).moves)
     } else {
       myColor = colorOf(game, me.id)
       isSpectator = !myColor
@@ -576,6 +576,7 @@ export default function Othello() {
               </div>
             )}
             <div style={{ color: '#88ccff', marginBottom: '4px' }}>対局者(最大{MAX_MULTI_PLAYERS}人 / 3人以上は盤が拡大: {seated.length >= 2 ? `${multiBoardSize(Math.max(seated.length, 2))}×${multiBoardSize(Math.max(seated.length, 2))}` : '8×8'})</div>
+            {seated.length >= 3 && <div style={{ color: '#446688', fontSize: '10px', marginBottom: '4px' }}>※3人以上: 初期配置は各2個・他プレイヤーの石を全滅させる手は打てません(その手しか無い場合を除く)</div>}
             {seated.map((p, i) => (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
                 <span>{i + 1}. {p.name}{p.id === room.hostId ? ' (ホスト)' : ''}</span>
