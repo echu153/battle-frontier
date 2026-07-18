@@ -18,6 +18,7 @@ export default function Emblem() {
   const [items, setItems] = useState({})       // name -> quantity
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [allocConfirm, setAllocConfirm] = useState(null)  // 結晶割り振りの確認ポップアップ { key, count }
 
   useEffect(() => { init() }, [])
 
@@ -235,9 +236,9 @@ export default function Emblem() {
                   </div>
                 </div>
                 <div style={{ display:'flex', gap:'4px' }}>
-                  <button disabled={!canPlus} onClick={()=>doAllocate(key, 1)}
+                  <button disabled={!canPlus} onClick={()=>setAllocConfirm({ key, count: 1 })}
                     style={{ padding:'4px 10px', background: canPlus ? '#102040' : '#0a0e1c', border:`1px solid ${canPlus ? '#4488ff' : '#223355'}`, color: canPlus ? '#88bbff' : '#445577', cursor: canPlus ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>+1</button>
-                  <button disabled={!canPlus || plus10 < 2} onClick={()=>doAllocate(key, plus10)}
+                  <button disabled={!canPlus || plus10 < 2} onClick={()=>setAllocConfirm({ key, count: plus10 })}
                     style={{ padding:'4px 8px', background: canPlus && plus10 >= 2 ? '#102040' : '#0a0e1c', border:`1px solid ${canPlus && plus10 >= 2 ? '#4488ff' : '#223355'}`, color: canPlus && plus10 >= 2 ? '#88bbff' : '#445577', cursor: canPlus && plus10 >= 2 ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>+{plus10 >= 2 ? plus10 : 'n'}</button>
                 </div>
               </div>
@@ -266,6 +267,39 @@ export default function Emblem() {
           LV100/125/150/175 で上限開放が必要（各地獄の魂を消費。175→200 は各地獄Hell初回クリアの「記憶」も必要）。
         </div>
       </div>
+
+      {/* 結晶割り振りの確認ポップアップ（割り振りは取り消せないため） */}
+      {allocConfirm && (() => {
+        const c = EMBLEM_CRYSTALS[allocConfirm.key]
+        const n = allocConfirm.count
+        const cur = alloc[allocConfirm.key] || 0
+        const after = cur + n
+        const r1 = (v) => Math.round(v * 10) / 10
+        return (
+          <div onClick={()=>setAllocConfirm(null)}
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.72)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:'16px' }}>
+            <div onClick={e=>e.stopPropagation()}
+              style={{ border:'1px solid #4488ff', background:'#0a1022', padding:'16px', maxWidth:'360px', width:'100%', fontFamily:'monospace' }}>
+              <div style={{ color:'#aaccff', fontSize:'13px', marginBottom:'10px' }}>💠 結晶を割り振りますか？</div>
+              <div style={{ fontSize:'11px', color:'#8899bb', lineHeight:'1.9' }}>
+                <div><span style={{ color:'#aaccff' }}>{c.name}</span> ×<span style={{ color:'#ffcc66' }}>{n}</span> を使用</div>
+                <div>振り: {cur} → <span style={{ color:'#88bbff' }}>{after}</span> / {EMBLEM_ALLOC_MAX}</div>
+                <div>{c.label}: +{r1(c.per * cur)}{c.unit} → <span style={{ color:'#66ff99' }}>+{r1(c.per * after)}{c.unit}</span></div>
+                <div style={{ color:'#667799', fontSize:'10px' }}>上限値の残り: {freePoints} → {freePoints - n}</div>
+              </div>
+              <div style={{ color:'#cc8844', fontSize:'10px', marginTop:'8px', lineHeight:'1.7' }}>
+                ※割り振った結晶は戻せません（振り直し不可）。
+              </div>
+              <div style={{ display:'flex', gap:'6px', marginTop:'12px' }}>
+                <button disabled={busy} onClick={async ()=>{ const t = allocConfirm; setAllocConfirm(null); await doAllocate(t.key, t.count) }}
+                  style={{ flex:1, padding:'9px', background:'#102040', border:'1px solid #4488ff', color:'#88bbff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>割り振る</button>
+                <button onClick={()=>setAllocConfirm(null)}
+                  style={{ flex:1, padding:'9px', background:'#14192c', border:'1px solid #445577', color:'#8899bb', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>キャンセル</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
