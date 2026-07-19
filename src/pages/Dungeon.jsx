@@ -2466,7 +2466,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                 <div style={{ display: 'flex', gap: 10, fontSize: 11, flexWrap: 'wrap', alignItems: 'center' }}>
                   <span>B{floorNum}/{dungeon?.floors || 10}F</span>
                   <span style={{ color: '#9fd' }}>LV{pet.level}{pet.exp != null ? `（EXP ${pet.exp}/${expForLevel(pet.level || 1)}）` : ''}</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: petHp > pet.maxHp * 0.3 ? '#44ff88' : '#ff5555' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: petHp > pet.maxHp * 0.2 ? '#44ff88' : '#ff5555' }}>
                     {pet.image_url ? <img src={dgImg(pet.image_url, 64)} alt="" style={{ width: 14, height: 14, objectFit: 'cover', borderRadius: 3 }} /> : <span>{pet.emoji}</span>}
                     {pet.name} HP {petHp}/{pet.maxHp}
                   </span>
@@ -2583,7 +2583,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                 {/* 自分のキャラに重ねるHPバー（足元寄り） */}
                 {c.isPet && (() => {
                   const ratio = Math.max(0, Math.min(1, petHp / (pet.maxHp || 1)))
-                  const barCol = ratio > 0.5 ? '#44dd66' : ratio > 0.25 ? '#ffcc33' : '#ff4444'
+                  const barCol = ratio > 0.5 ? '#44dd66' : ratio > 0.2 ? '#ffcc33' : '#ff4444'
                   return (
                     <div style={{ position: 'absolute', left: '8%', right: '8%', bottom: '4%', height: 4, background: 'rgba(0,4,10,0.85)', border: '1px solid #000', borderRadius: 2, overflow: 'hidden', zIndex: 5, pointerEvents: 'none' }}>
                       <div style={{ width: `${ratio * 100}%`, height: '100%', background: barCol, transition: 'width 0.25s ease, background 0.25s ease' }} />
