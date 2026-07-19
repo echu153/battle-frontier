@@ -7,6 +7,7 @@ import Boss60Sprite from '../components/Boss60Sprite'
 import { GEM_DATA } from './Game'
 import SortiePanel from '../components/SortiePanel'
 import { dgImg, dgImgF, setDgImageNotify } from '../lib/dgImageCache'
+import ItemHint from '../components/ItemHint'
 
 
 // ============================================================
@@ -2060,11 +2061,12 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
               {Object.entries(inventory).filter(([, q]) => (q || 0) > 0).map(([k, q]) => {
                 const def = PET_ITEMS[k]
                 return (
-                  <span key={k} style={{ background: '#0a1424', border: '1px solid #335588', color: '#cce6ff', padding: '4px 8px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                  <ItemHint key={k} name={def?.name || k} desc={def?.desc}
+                    style={{ background: '#0a1424', border: '1px solid #335588', color: '#cce6ff', padding: '4px 8px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                     {petItemImg(k)
                       ? <img src={dgImg(petItemImg(k), 64)} alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} />
                       : (def?.emoji || '🔹')} {def?.name || k}×{q}
-                  </span>
+                  </ItemHint>
                 )
               })}
               {Object.values(inventory).every((q) => (q || 0) < 1) && <span style={{ color: '#445566', fontSize: 11 }}>（なし）</span>}
@@ -2853,7 +2855,8 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
           const itemsEl = (
             <div key="items" style={colStyle}>
               {DUNGEON_ITEMS.filter((it) => (inventory[it.key] || 0) > 0).map((it) => (
-                <button key={it.key} onClick={() => (dropMode ? dropItem({ kind: 'consumable', key: it.key }) : useItem(it.key))}
+                <ItemHint key={it.key} name={it.name} desc={it.desc} style={{ display: 'block', width: '100%' }}>
+                <button onClick={() => (dropMode ? dropItem({ kind: 'consumable', key: it.key }) : useItem(it.key))}
                   style={{ background: dropMode ? '#1a0e08' : '#0a1424', border: `1px solid ${dropMode ? '#cc7755' : '#335588'}`, color: '#cce6ff', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 2 }}>
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 3 }}>
                     {petItemImg(it.key)
@@ -2863,6 +2866,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                   </span>
                   <span style={{ flexShrink: 0 }}>×{inventory[it.key]}</span>
                 </button>
+                </ItemHint>
               ))}
               {DUNGEON_ITEMS.every((it) => (inventory[it.key] || 0) < 1) && (
                 <span style={{ color: '#445566', fontSize: 10 }}>使えるアイテムなし</span>

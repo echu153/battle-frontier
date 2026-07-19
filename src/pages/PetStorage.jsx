@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { PET_ITEMS, bagCapacity, petItemImg, SCROLL_KEYS, getScroll } from '../constants/pets'
+import ItemHint from '../components/ItemHint'
 
 // ダンジョンに持っていける（持ち物へ移せる）アイテム
 // 倉庫から「持ち物」へ取り出せる＝ダンジョンで使う物。
@@ -130,8 +131,10 @@ function ItemRow({ k, qty, children }) {
   const img = petItemImg(k)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #224466', background: '#000a18', padding: '8px 10px' }}>
-      {img ? <img src={img} alt="" style={{ width: 22, height: 22, objectFit: 'contain' }} /> : <span style={{ fontSize: 20 }}>{def?.emoji || '🔹'}</span>}
-      <span style={{ flex: 1, color: '#cce6ff', fontSize: 13 }}>{def?.name || k} <span style={{ color: '#6699cc', fontSize: 11 }}>×{qty}</span></span>
+      <ItemHint name={def?.name || k} desc={def?.desc} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        {img ? <img src={img} alt="" style={{ width: 22, height: 22, objectFit: 'contain' }} /> : <span style={{ fontSize: 20 }}>{def?.emoji || '🔹'}</span>}
+        <span style={{ flex: 1, color: '#cce6ff', fontSize: 13 }}>{def?.name || k} <span style={{ color: '#6699cc', fontSize: 11 }}>×{qty}</span></span>
+      </ItemHint>
       {children}
     </div>
   )
