@@ -16,7 +16,9 @@ export default function ItemHint({ name, desc, children, style, onAction, action
   if (!desc) return <span style={style}>{children}</span>
 
   // スマホ: タップを横取りしてポップアップを開く（内側ボタンのonClickは発火させない）
-  const capture = isTouch ? (e) => { e.preventDefault(); e.stopPropagation(); setShow(true) } : undefined
+  // ※ ポータル先のポップアップ内のクリックもReactツリー経由でここを通るため、
+  //    表示中は横取りしない（閉じる/使うボタンが反応しなくなる）
+  const capture = isTouch ? (e) => { if (show) return; e.preventDefault(); e.stopPropagation(); setShow(true) } : undefined
 
   return (
     <span title={`${name}\n${desc}`} style={style} onClickCapture={capture}>
