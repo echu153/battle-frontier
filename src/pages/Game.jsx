@@ -1843,6 +1843,16 @@ export default function Game() {
     }
   }, [])
 
+  // /game?open=… で街の特定パネルを直接開く（初心者ビンゴの誘導などから使用）
+  useEffect(() => {
+    const open = new URLSearchParams(window.location.search).get('open')
+    if (!open) return
+    if (open === 'rankmatch') setShowRankMatch(true)
+    else if (open === 'temple') { setScene('temple'); setTempleMessage('') }
+    // URLに残すとリロードで再度開いてしまうのでパラメータは消す
+    window.history.replaceState(null, '', '/game')
+  }, [])
+
   // 初めて瀕死状態になったとき、宿屋で回復するよう1回だけ案内する
   useEffect(() => {
     if (profile?.is_dying && !localStorage.getItem('bf_dying_tip_seen')) {

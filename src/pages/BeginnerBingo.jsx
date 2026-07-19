@@ -11,28 +11,29 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
 // マス定義（index=row-major。サーバー _bingo_eval と一致させること）
+//   to=未達成マスをタップしたときの移動先（場所がわからず詰まる初心者向けの誘導）
 const CELLS_BY_CARD = {
   1: [
-    { label: '出撃10回',    hint: '出撃で通算10回戦う' },
-    { label: '出撃30回',    hint: '出撃で通算30回戦う' },
-    { label: '出撃50回',    hint: '出撃で通算50回戦う' },
-    { label: '出撃100回',   hint: '出撃で通算100回戦う' },
+    { label: '出撃10回',    hint: '出撃で通算10回戦う', to: '/game', place: '街（出撃）' },
+    { label: '出撃30回',    hint: '出撃で通算30回戦う', to: '/game', place: '街（出撃）' },
+    { label: '出撃50回',    hint: '出撃で通算50回戦う', to: '/game', place: '街（出撃）' },
+    { label: '出撃100回',   hint: '出撃で通算100回戦う', to: '/game', place: '街（出撃）' },
     { label: 'ログイン1日目', hint: 'ゲームにログインする', center: true },
-    { label: '強化1回',     hint: '鍛冶屋で装備を1回強化する' },
-    { label: '強化5回',     hint: '鍛冶屋で装備を5回強化する' },
-    { label: '強化10回',    hint: '鍛冶屋で装備を10回強化する' },
-    { label: '始まりの森ボス', hint: 'エリア①「始まりの森」のボスを倒す' },
+    { label: '強化1回',     hint: '鍛冶屋で装備を1回強化する', to: '/smithy', place: '鍛冶屋' },
+    { label: '強化5回',     hint: '鍛冶屋で装備を5回強化する', to: '/smithy', place: '鍛冶屋' },
+    { label: '強化10回',    hint: '鍛冶屋で装備を10回強化する', to: '/smithy', place: '鍛冶屋' },
+    { label: '始まりの森ボス', hint: 'エリア①「始まりの森」のボスを倒す', to: '/game', place: '街（出撃）' },
   ],
   2: [
-    { label: 'ランクマッチ挑戦', hint: 'ランクマッチに1回挑戦する' },
-    { label: '釣り放置3時間',   hint: '釣りを3時間以上放置して回収する' },
-    { label: 'かかし修練3時間', hint: 'かかし修練を3時間以上完了する' },
-    { label: '初級の洞窟を踏破', hint: 'ダンジョン「初級の洞窟」を踏破する' },
-    { label: 'レイド参加',      hint: 'レイドボスに1回参加する', center: true },
-    { label: '上位職に転職',    hint: '上位クラスへ転職する' },
-    { label: '博物館に5個寄贈', hint: '博物館に装備を5個寄贈する' },
-    { label: '国に所属する',    hint: '非加盟国以外の国に所属／建国する' },
-    { label: '奈落 地下5階',    hint: '奈落闘技場の地下5階の敵を倒す' },
+    { label: 'ランクマッチ挑戦', hint: 'ランクマッチに1回挑戦する', to: '/game?open=rankmatch', place: 'ランクマッチ' },
+    { label: '釣り放置3時間',   hint: '釣りを3時間以上放置して回収する', to: '/fishing', place: '釣り堀' },
+    { label: 'かかし修練3時間', hint: 'かかし修練を3時間以上完了する', to: '/scarecrow', place: 'かかし修練場' },
+    { label: '初級の洞窟を踏破', hint: 'ダンジョン「初級の洞窟」を踏破する', to: '/dungeon', place: 'ペットダンジョン' },
+    { label: 'レイド参加',      hint: 'レイドボスに1回参加する', center: true, to: '/raid', place: 'レイドボス' },
+    { label: '上位職に転職',    hint: '上位クラスへ転職する', to: '/game?open=temple', place: '神殿' },
+    { label: '博物館に5個寄贈', hint: '博物館に装備を5個寄贈する', to: '/museum', place: '博物館' },
+    { label: '国に所属する',    hint: '非加盟国以外の国に所属／建国する', to: '/territory', place: '領地・国' },
+    { label: '奈落 地下5階',    hint: '奈落闘技場の地下5階の敵を倒す', to: '/abyss', place: '奈落闘技場' },
   ],
 }
 
@@ -165,7 +166,8 @@ export default function BeginnerBingo() {
         </div>
 
         <div style={{ color: '#6a5c3a', fontSize: '9.5px', marginBottom: '10px', textAlign: 'center' }}>
-          ※ 各ミッションは<span style={{ color: '#aa8844' }}>このビンゴを始めてから</span>の達成でカウントされます（過去分は含みません）。
+          ※ 各ミッションは<span style={{ color: '#aa8844' }}>このビンゴを始めてから</span>の達成でカウントされます（過去分は含みません）。<br />
+          ※ 未達成のマスを<span style={{ color: '#66aaff' }}>タップするとその場所へ移動</span>できます。
         </div>
 
         {/* 3×3 ビンゴ盤 */}
@@ -178,13 +180,17 @@ export default function BeginnerBingo() {
             const target = prog[i]?.[1] ?? 0
             const pct = target > 0 ? Math.min(100, Math.round((cur / target) * 100)) : 0
             const showBar = target > 1  // 目標2以上のマスだけ進捗バー表示
+            const canGo = !done && !!c.to  // 未達成マスはタップでその場所へ移動できる
             return (
-              <div key={i} style={{
+              <div key={i}
+                onClick={canGo ? () => nav(c.to) : undefined}
+                style={{
                 border: `1px solid ${done ? '#7a6a1a' : '#2a2418'}`,
                 background: c.center ? '#1a1404' : (done ? '#161002' : '#0e0b04'),
                 borderRadius: '3px', padding: '8px 6px', minHeight: '104px',
                 display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
                 boxShadow: c.center ? 'inset 0 0 0 1px #7a5a1a' : 'none',
+                cursor: canGo ? 'pointer' : 'default',
               }}>
                 <div>
                   <div style={{ fontSize: '15px', textAlign: 'center', marginBottom: '2px' }}>{claimed ? '🎁' : (done ? '✅' : '⬜')}</div>
@@ -210,6 +216,9 @@ export default function BeginnerBingo() {
                         </>
                       )}
                       <div style={{ color: '#5a5038', fontSize: '8px', marginTop: '2px' }}>{fmtReward(rw)}</div>
+                      {canGo && (
+                        <div style={{ color: '#66aaff', fontSize: '8.5px', marginTop: '3px' }}>▶ {c.place}へ移動</div>
+                      )}
                     </div>
                   )}
                 </div>
