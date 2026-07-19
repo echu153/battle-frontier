@@ -23,6 +23,7 @@ import {
   MULTI_HIT_SKILLS,
 } from './Game'
 import { ABYSS_FLOOR_COUNT, ABYSS_DEFINED_FLOORS, getAbyssFloor } from '../lib/abyss'
+import { isEvent20260720Active } from '../lib/event20260720'
 
 const STONE_NAME = (r) => `強化石(${r})`
 const fmt = (n) => Number(n).toLocaleString()
@@ -1060,6 +1061,16 @@ export default function Abyss() {
               )}
             </div>
 
+            {isEvent20260720Active() && (
+              <div style={{ border:'1px solid #cc44ff', background:'#12001a', padding:'10px', marginBottom:'12px', textAlign:'center' }}>
+                <div style={{ color:'#dd88ff', fontSize:'12px', marginBottom:'4px' }}>🎉 奈落闘技場イベント開催中！</div>
+                <div style={{ color:'#bb99cc', fontSize:'11px', lineHeight:'1.7' }}>
+                  期間中、フロア報酬（Gold・強化石・宝石・秘伝書）が <span style={{ color:'#ffcc44' }}>2倍</span>！<br/>
+                  期間: 2026/7/20 5:00 〜 8/3 4:59
+                </div>
+              </div>
+            )}
+
             {/* 撃破済みの階（グレーアウトで上に積まれる） */}
             {Array.from({ length: status.cleared_floor || 0 }, (_, i) => i + 1).map(f => {
               const fd = getAbyssFloor(f)
@@ -1134,7 +1145,7 @@ export default function Abyss() {
                   <div>💰 Gold +{fmt(reward.gold)}</div>
                   {reward.stone && <div>💎 {STONE_NAME(reward.stone)} ×{reward.stone_count}</div>}
                   {reward.gem_count > 0 && <div>💍 宝石（{reward.gem_rank}ランク）×{reward.gem_count}</div>}
-                  {reward.book && <div>📖 {reward.book} ×1</div>}
+                  {reward.book && <div>📖 {reward.book} ×{reward.book_count || 1}</div>}
                 </div>
                 <div style={{ color:'#cc9944', fontSize:'10px', marginTop:'6px' }}>{reward.floor >= ABYSS_DEFINED_FLOORS ? '現在実装ぶんはここまで。進行は毎週月曜 朝5時にリセット（また1階から）。' : `次は ${floorLabel(reward.floor + 1)}だ。`}</div>
               </div>
@@ -1159,12 +1170,15 @@ export default function Abyss() {
 
 function RewardLine({ reward }) {
   if (!reward) return null
+  // 奈落闘技場イベント(2026/7/20〜8/3)中は報酬2倍。サーバー側 claim_abyss_floor と一致させること
+  const mul = isEvent20260720Active() ? 2 : 1
   return (
     <div style={{ fontSize:'11px', color:'#ccaa66', lineHeight:'1.8' }}>
-      <span>💰 {fmt(reward.gold)}G</span>
-      <span style={{ marginLeft:'10px' }}>💎 {STONE_NAME(reward.stone)}×{reward.stoneCount}</span>
-      <span style={{ marginLeft:'10px' }}>💍 宝石({reward.gem})×{reward.gemCount}</span>
-      {reward.book && <span style={{ marginLeft:'10px' }}>📖 匠の秘伝書{reward.book}×1</span>}
+      <span>💰 {fmt(reward.gold * mul)}G</span>
+      <span style={{ marginLeft:'10px' }}>💎 {STONE_NAME(reward.stone)}×{reward.stoneCount * mul}</span>
+      <span style={{ marginLeft:'10px' }}>💍 宝石({reward.gem})×{reward.gemCount * mul}</span>
+      {reward.book && <span style={{ marginLeft:'10px' }}>📖 匠の秘伝書{reward.book}×{mul}</span>}
+      {mul > 1 && <span style={{ marginLeft:'10px', color:'#dd88ff' }}>🎉 イベント2倍中</span>}
     </div>
   )
 }

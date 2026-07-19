@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useFishingBlock, FishingBlockScreen } from '../components/IdleGuard'
+import { isEvent20260720Active, scarecrowChargeNeed } from '../lib/event20260720'
 
 // かかし修練場
 // ・出撃100回（簡易出撃を除く）で1回チャージ、週5回まで（月曜朝5時リセット）
@@ -127,6 +128,9 @@ export default function Scarecrow() {
 
   const session = state.session
   const finished = session && (session.finished || new Date(session.ends_at) <= new Date())
+  const eventActive = isEvent20260720Active()
+  const expMul = eventActive ? 2 : 1
+  const chargeNeed = scarecrowChargeNeed()
 
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
@@ -137,6 +141,16 @@ export default function Scarecrow() {
         </div>
 
         <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'12px' }}>🌾 かかし修練場</div>
+
+        {eventActive && (
+          <div style={{ border:'1px solid #cc44ff', background:'#12001a', padding:'10px', marginBottom:'12px', textAlign:'center' }}>
+            <div style={{ color:'#dd88ff', fontSize:'12px', marginBottom:'4px' }}>🎉 かかし修練場イベント開催中！</div>
+            <div style={{ color:'#bb99cc', fontSize:'11px', lineHeight:'1.7' }}>
+              獲得EXP <span style={{ color:'#ffcc44' }}>2倍</span>！ チャージに必要な出撃回数が <span style={{ color:'#ffcc44' }}>50回→10回</span>！<br/>
+              期間: 2026/7/20 5:00 〜 8/3 4:59
+            </div>
+          </div>
+        )}
 
         {message && (
           <div style={{ color: messageColor, fontSize:'12px', textAlign:'center', padding:'8px', border:`1px solid ${messageColor}`, marginBottom:'12px' }}>{message}</div>
@@ -171,15 +185,15 @@ export default function Scarecrow() {
           </div>
           <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
             <span style={{ color:'#446688', fontSize:'11px' }}>次のチャージまで</span>
-            <span style={{ color:'#88ccff', fontSize:'11px' }}>{(state.earned || 0) >= 5 ? '今週の獲得上限に到達' : `出撃あと${Math.max(0, 50 - (state.progress || 0))}回`}</span>
+            <span style={{ color:'#88ccff', fontSize:'11px' }}>{(state.earned || 0) >= 5 ? '今週の獲得上限に到達' : `出撃あと${Math.max(0, chargeNeed - (state.progress || 0))}回`}</span>
           </div>
           {(state.earned || 0) < 5 && (
             <div style={{ background:'#001028', height:'6px', border:'1px solid #002244' }}>
-              <div style={{ height:'100%', width:`${Math.min(100, ((state.progress || 0) / 50) * 100)}%`, background:'linear-gradient(90deg,#332200,#ffcc44)' }} />
+              <div style={{ height:'100%', width:`${Math.min(100, ((state.progress || 0) / chargeNeed) * 100)}%`, background:'linear-gradient(90deg,#332200,#ffcc44)' }} />
             </div>
           )}
           <div style={{ color:'#334455', fontSize:'10px', marginTop:'6px' }}>
-            ※ 出撃50回で1回チャージ（簡易出撃は対象外）。獲得は週5回まで・毎週月曜朝5時にリセット
+            ※ 出撃{chargeNeed}回で1回チャージ（簡易出撃は対象外）。獲得は週5回まで・毎週月曜朝5時にリセット
           </div>
         </div>
 
@@ -252,7 +266,7 @@ export default function Scarecrow() {
                     color: selectedHours === o.hours ? '#ffcc44' : '#446688',
                     cursor:'pointer', fontFamily:'monospace', fontSize:'12px',
                   }}>
-                  {o.hours}時間<br/><span style={{ fontSize:'10px' }}>EXP {o.exp}</span>
+                  {o.hours}時間<br/><span style={{ fontSize:'10px' }}>EXP {o.exp * expMul}{eventActive && <span style={{ color:'#dd88ff' }}> (2倍)</span>}</span>
                 </button>
               ))}
             </div>
@@ -273,7 +287,7 @@ export default function Scarecrow() {
         {/* 説明 */}
         <div style={{ border:'1px solid #112233', background:'#000810', padding:'12px', fontSize:'11px', color:'#446688', lineHeight:'1.9', textAlign:'left' }}>
           <div style={{ color:'#335566', marginBottom:'4px' }}>📖 かかし修練場とは</div>
-          ● 出撃50回ごとに修練回数が1回チャージされる（簡易出撃はカウントされない）<br/>
+          ● 出撃{chargeNeed}回ごとに修練回数が1回チャージされる（簡易出撃はカウントされない）<br/>
           ● チャージの獲得は週5回まで（消費しても週の獲得上限は増えない）。毎週月曜朝5時にリセット<br/>
           ● 3〜8時間を設定して開始。<span style={{ color:'#ffcc44' }}>設定した時間まで解除しなければ経験値を獲得</span><br/>
           ● 1回でも解除すると経験値はもらえない（修練回数も戻らない）<br/>
