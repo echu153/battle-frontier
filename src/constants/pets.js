@@ -570,10 +570,10 @@ export function bagCapacity(clearedDungeonCount) {
 //  dungeon=true: ダンジョンで使用可能 / capped=true: アイテム袋の上限(INV_MAX)の対象（だっしゅつの翼以外すべて）
 export const PET_ITEMS = {
   escape:  { key: 'escape',  name: 'だっしゅつの翼',   emoji: '🪽', price: 500,   dungeon: true,  capped: false, desc: 'ダンジョンからいつでも脱出（使い切り・袋の対象外）' },
-  onigiri: { key: 'onigiri', name: 'おにぎり',         emoji: '🍙', price: 200,   dungeon: true,  capped: true, fullness: 30, desc: '満腹度を30回復' },
+  onigiri: { key: 'onigiri', name: 'おにぎり',         emoji: '🍙', price: 200,   dungeon: true,  capped: true, fullness: 50, desc: '満腹度を50回復' },
   konomi:  { key: 'konomi',  name: '木の実',           emoji: '🍒', price: 300,   dungeon: true,  capped: true, healPct: 0.2, desc: '最大HPの20%を回復' },
   // おいしい系（d60のF25以降で食料抽選時5%。ドロップ専用・非売品）
-  oishii_onigiri: { key: 'oishii_onigiri', name: 'おいしいおにぎり', emoji: '🍱', price: 0, dungeon: true, capped: true, noShop: true, fullness: 60, desc: '満腹度を60回復' },
+  oishii_onigiri: { key: 'oishii_onigiri', name: 'おいしいおにぎり', emoji: '🍱', price: 0, dungeon: true, capped: true, noShop: true, fullness: 100, desc: '満腹度を100回復' },
   oishii_konomi:  { key: 'oishii_konomi',  name: 'おいしい木の実',   emoji: '🍎', price: 0, dungeon: true, capped: true, noShop: true, healPct: 0.35, desc: '最大HPの35%を回復' },
   rename:  { key: 'rename',  name: 'ニックネーム変更券', emoji: '🎫', price: 100000, dungeon: false, capped: true,  desc: 'ペットの名前を変更できる' },
   shard:   { key: 'shard',   name: '神秘の欠片',       emoji: '🔮', price: 0, dungeon: false, capped: true, noShop: true, desc: 'チャーム合成に使う（30Fボス討伐でドロップ）' },
@@ -643,7 +643,7 @@ function scrollDesc(s) {
     return parts.join('・')
   }
   const tgt = s.target === 'aoe' ? '周囲の敵全体' : `${s.range}マス先まで(斜め可)の敵1体`
-  const pow = s.dice ? 'ランダム威力' : `威力LV×5×乱数${s.hits > 1 ? `×${s.hits}回` : ''}`
+  const pow = s.dice ? 'ランダム威力' : `威力LV×5${s.hits > 1 ? `×${s.hits}回` : ''}`
   const ex = [s.drain ? `与ダメの${Math.round(s.drain * 100)}%回復` : '', s.recoil ? `反動${Math.round(s.recoil * 100)}%` : '', s.stun ? `${Math.round(s.stun * 100)}%でしびれ` : ''].filter(Boolean).join('・')
   return `${tgt}に${pow}${ex ? '／' + ex : ''}`
 }
