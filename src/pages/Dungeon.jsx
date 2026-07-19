@@ -2855,7 +2855,9 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
           const itemsEl = (
             <div key="items" style={colStyle}>
               {DUNGEON_ITEMS.filter((it) => (inventory[it.key] || 0) > 0).map((it) => (
-                <ItemHint key={it.key} name={it.name} desc={it.desc} style={{ display: 'block', width: '100%' }}>
+                <ItemHint key={it.key} name={it.name} desc={it.desc} style={{ display: 'block', width: '100%' }}
+                  actionLabel={dropMode ? '捨てる' : '使う'}
+                  onAction={() => (dropMode ? dropItem({ kind: 'consumable', key: it.key }) : useItem(it.key))}>
                 <button onClick={() => (dropMode ? dropItem({ kind: 'consumable', key: it.key }) : useItem(it.key))}
                   style={{ background: dropMode ? '#1a0e08' : '#0a1424', border: `1px solid ${dropMode ? '#cc7755' : '#335588'}`, color: '#cce6ff', padding: '6px 8px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 2 }}>
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 3 }}>
