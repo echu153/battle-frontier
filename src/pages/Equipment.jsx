@@ -803,7 +803,7 @@ export default function Equipment() {
                         </div>
                         <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
                           {item.is_bound && (
-                            <span title="帰属（取引所で入手・出品/加工不可）" style={{ fontSize:'9px', padding:'2px 5px', color:'#cc88ff', border:'1px solid #6644aa', borderRadius:'3px' }}>帰属</span>
+                            <span title="帰属（取引所で入手・再出品不可／強化・加工は可）" style={{ fontSize:'9px', padding:'2px 5px', color:'#cc88ff', border:'1px solid #6644aa', borderRadius:'3px' }}>帰属</span>
                           )}
                           <button onClick={() => toggleFavorite(item)} disabled={loading}
                             title={item.is_favorite ? 'お気に入り解除（加工・寄贈できるようになる）' : 'お気に入り登録（加工・寄贈されなくなる）'}

@@ -387,7 +387,6 @@ export default function Smithy() {
     if (!selected.every(e => e.weapons.rarity === rarity)) { showMessage('同じランクの装備を選択してください！', '#ff4444'); return }
     if (selected.some(e => e.is_favorite)) { showMessage('お気に入り装備は加工できません！（★を解除してください）', '#ff4444'); return }
     if (selected.some(e => e.enhance_plus > 0)) { showMessage('強化済み(+1以上)の装備は加工できません！', '#ff4444'); return }
-    if (selected.some(e => e.is_bound)) { showMessage('帰属アイテム（取引所で入手）は加工できません！', '#ff4444'); return }
     if (selected.some(e => e.evolve_stage > 0)) { showMessage('進化・真化させた装備は加工できません！', '#ff4444'); return }
     // 消費する装備を「未強化のまま現存する」条件付きで削除し、実際に削除できた数だけ加工する
     // （連打・別端末で同じ装備を二重消費→石を二重生成するのを防ぐ）
@@ -449,8 +448,8 @@ export default function Smithy() {
         showMessage(`エリアボス装備を${CRYSTAL_EQUIP_COST}の倍数で選択してください！`, '#ff4444'); return
       }
       if (!selected.every(e => isEvolvableEquip(e.weapons?.name))) { showMessage('エリアボス装備のみ加工できます！', '#ff4444'); return }
-      if (selected.some(e => e.equipped || e.is_favorite || e.is_bound || (e.enhance_plus > 0) || (e.evolve_stage > 0))) {
-        showMessage('装備中/お気に入り/帰属/強化済/進化済は加工できません！', '#ff4444'); return
+      if (selected.some(e => e.equipped || e.is_favorite || (e.enhance_plus > 0) || (e.evolve_stage > 0))) {
+        showMessage('装備中/お気に入り/強化済/進化済は加工できません！', '#ff4444'); return
       }
       // 「未強化のまま現存する」条件付きで削除し、実際に削除できた数だけ加工（連打・別端末での二重消費を防ぐ）
       let deleted = 0
@@ -1141,7 +1140,7 @@ export default function Smithy() {
                   <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
                     {RARITY_ORDER.map(rarity => {
                       // エリアボス装備/レイドボス装備は入手難度が高いため、ランダム加工の対象から除外（手動選択でのみ加工可）
-                      const avail = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0)
+                      const avail = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !(e.evolve_stage > 0)
                         && !isEvolvableEquip(e.weapons?.name) && !isRaidEquip(e.weapons?.name) && e.weapons.rarity === rarity), sortKey)
                       const maxTimes = Math.floor(avail.length / 3)
                       const canPick = maxTimes >= 1
@@ -1216,7 +1215,7 @@ export default function Smithy() {
             {craftTab === 'crystal' && (() => {
               const avail = equipment.filter(e =>
                 isEvolvableEquip(e.weapons?.name) && !e.equipped && !e.is_favorite
-                && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0))
+                && !(e.enhance_plus > 0) && !(e.evolve_stage > 0))
               const maxTimes = Math.floor(avail.length / CRYSTAL_EQUIP_COST)
               const canCraft = maxTimes >= 1
               const times = Math.max(1, Math.min(Math.floor(crystalTimes) || 1, Math.max(1, maxTimes)))
@@ -1226,7 +1225,7 @@ export default function Smithy() {
                   <div style={{ color:'#446688', fontSize:'11px', marginBottom:'10px', lineHeight:1.6 }}>
                     エリアボス装備{CRYSTAL_EQUIP_COST}個から <span style={{ color:'#cbaaff' }}>{CRYSTAL_NAME}</span> を1個作成できます。<br/>
                     強者の結晶は<span style={{ color:'#cbaaff' }}>+11以上の強化で使用</span>すると、失敗しても強化値が下落しません。<br/>
-                    <span style={{ color:'#556677' }}>※未強化・未進化・未装備・お気に入り/帰属でないエリアボス装備が対象</span>
+                    <span style={{ color:'#556677' }}>※未強化・未進化・未装備・お気に入りでないエリアボス装備が対象</span>
                   </div>
                   <div style={{ color:'#446688', fontSize:'10px', marginBottom:'10px' }}>所持: <span style={{ color:'#cbaaff' }}>{CRYSTAL_NAME} {owned}個</span></div>
 
@@ -1466,7 +1465,7 @@ export default function Smithy() {
 
 function CraftSelector({ equipment, loading, sortKey, onRequestCraft }) {
   const [selected, setSelected] = useState([])
-  const unequipped = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0)), sortKey || 'obtained_asc')
+  const unequipped = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !(e.evolve_stage > 0)), sortKey || 'obtained_asc')
 
   const toggle = (id) => {
     if (selected.includes(id)) { setSelected(selected.filter(s => s !== id)); return }
@@ -1530,7 +1529,7 @@ function CrystalCraftSelector({ equipment, loading, sortKey, onRequestCraft }) {
   const [selected, setSelected] = useState([])
   const avail = sortEquipment(equipment.filter(e =>
     isEvolvableEquip(e.weapons?.name) && !e.equipped && !e.is_favorite
-    && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0)), sortKey || 'obtained_asc')
+    && !(e.enhance_plus > 0) && !(e.evolve_stage > 0)), sortKey || 'obtained_asc')
 
   // 1回の加工は CRYSTAL_EQUIP_COST 個ちょうど（結晶1個）。上限に達したら他は選択不可。
   const toggle = (id) => {

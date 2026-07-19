@@ -549,7 +549,7 @@ export default function Marketplace() {
             <div style={{ color:'#44ff88', fontSize:'15px', letterSpacing:'2px', marginBottom:'12px' }}>購入の確認</div>
             <div style={{ color:'#aaccff', fontSize:'13px', marginBottom:'6px' }}>{confirmBuy.weapons?.name}</div>
             <div style={{ color:'#ffcc44', fontSize:'16px', marginBottom:'8px' }}>{yen(confirmBuy.price)}G</div>
-            <div style={{ color:'#557799', fontSize:'10px', marginBottom:'18px' }}>購入後は帰属（取引・加工不可／強化は可）になります</div>
+            <div style={{ color:'#557799', fontSize:'10px', marginBottom:'18px' }}>購入後は帰属（取引所への再出品は不可／強化・加工は可）になります</div>
             <div style={{ display:'flex', gap:'10px' }}>
               <button onClick={() => setConfirmBuy(null)} style={{ flex:1, padding:'10px', background:'none', border:'1px solid #445566', color:'#778899', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>やめる</button>
               <button onClick={() => doBuy(confirmBuy)} style={{ flex:2, padding:'10px', background:'#001a00', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>購入する</button>
