@@ -840,7 +840,10 @@ export default function RaidBoss() {
         const stackDrained = Number(data.stack_drained) || 0    // 今回反映されたスタック量
         const raidStack   = (typeof data.raid_exp_stack === 'number') ? data.raid_exp_stack : (profile.raid_exp_stack || 0)
         setProfile(prev => ({ ...prev, hp_current: eff.hp_max, mp_current: eff.mp_max, exp: newExp, raid_exp_stack: raidStack }))
-        if (atCap) {
+        if (data.scarecrow_active) {
+          // かかし修練中：出撃自体は可能だが出撃報酬EXPなし（スタックにも貯まらない）
+          setBattleLogs(prev => [...prev, { text: '🌾 かかし修練中のため出撃報酬EXPはありません', color: '#ffaa44' }])
+        } else if (atCap) {
           // レベル上限：EXPはスタックへ
           if (stackGain > 0) {
             setBattleLogs(prev => [...prev, { text: `⭐ レベル上限のためEXPをスタック +${stackGain}（${raidStack}/200）`, color: '#ffcc44' }])
