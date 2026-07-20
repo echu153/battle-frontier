@@ -1136,11 +1136,12 @@ export default function Smithy() {
                     <span style={{ color:'#446688', fontSize:'9px' }}>（1回＝装備3個→強化石1個）</span>
                   </div>
                   <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>ランク指定でランダムに選んで一気に加工</div>
-                  <div style={{ color:'#886644', fontSize:'9px', marginBottom:'6px' }}>※ エリアボス装備・レイドボス装備はランダム加工の対象外（手動選択でのみ加工できます）</div>
+                  <div style={{ color:'#886644', fontSize:'9px', marginBottom:'6px' }}>※ エリアボス装備・レイドボス装備・帰属装備（取引所で購入）はランダム加工の対象外（手動選択でのみ加工できます）</div>
                   <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
                     {RARITY_ORDER.map(rarity => {
                       // エリアボス装備/レイドボス装備は入手難度が高いため、ランダム加工の対象から除外（手動選択でのみ加工可）
-                      const avail = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !(e.evolve_stage > 0)
+                      // 帰属(取引所購入)はランダム抽選から除外＝買った装備を気づかず加工して失う事故を防ぐ（手動選択でのみ加工可）
+                      const avail = sortEquipment(equipment.filter(e => !e.equipped && !e.is_favorite && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0)
                         && !isEvolvableEquip(e.weapons?.name) && !isRaidEquip(e.weapons?.name) && e.weapons.rarity === rarity), sortKey)
                       const maxTimes = Math.floor(avail.length / 3)
                       const canPick = maxTimes >= 1
@@ -1213,9 +1214,10 @@ export default function Smithy() {
               </div>
             )}
             {craftTab === 'crystal' && (() => {
+              // 帰属(取引所購入)はランダム抽選から除外＝買った装備を気づかず加工して失う事故を防ぐ（手動選択でのみ加工可）
               const avail = equipment.filter(e =>
                 isEvolvableEquip(e.weapons?.name) && !e.equipped && !e.is_favorite
-                && !(e.enhance_plus > 0) && !(e.evolve_stage > 0))
+                && !(e.enhance_plus > 0) && !e.is_bound && !(e.evolve_stage > 0))
               const maxTimes = Math.floor(avail.length / CRYSTAL_EQUIP_COST)
               const canCraft = maxTimes >= 1
               const times = Math.max(1, Math.min(Math.floor(crystalTimes) || 1, Math.max(1, maxTimes)))
@@ -1509,6 +1511,7 @@ function CraftSelector({ equipment, loading, sortKey, onRequestCraft }) {
               <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>{RARITY_LABELS[w.rarity]}</span>
               <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>{w.name}</span>
               {item.enhance_plus > 0 && <span style={{color:'#ffcc00', fontSize:'10px'}}>+{item.enhance_plus}</span>}
+              {item.is_bound && <span style={{ fontSize:'9px', padding:'1px 4px', color:'#cc88ff', border:'1px solid #6644aa' }}>帰属</span>}
             </div>
             <div style={{ fontSize:'10px', color:'#446688' }}>
               {w.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻+{w.atk_bonus} </span>}
@@ -1570,6 +1573,7 @@ function CrystalCraftSelector({ equipment, loading, sortKey, onRequestCraft }) {
               {isSelected && <span style={{color:'#cbaaff', fontSize:'12px'}}>✓</span>}
               <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[w.rarity], border:`1px solid ${RARITY_COLORS[w.rarity]}` }}>{RARITY_LABELS[w.rarity]}</span>
               <span style={{ color: RARITY_COLORS[w.rarity], fontSize:'12px' }}>{w.name}</span>
+              {item.is_bound && <span style={{ fontSize:'9px', padding:'1px 4px', color:'#cc88ff', border:'1px solid #6644aa' }}>帰属</span>}
             </div>
             <div style={{ fontSize:'10px', color:'#446688' }}>
               {w.atk_bonus  > 0 && <span style={{color:'#ffcc00'}}>攻+{w.atk_bonus} </span>}
