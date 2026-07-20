@@ -58,6 +58,7 @@ const ActionRpg = lazyReload(() => import('./action-rpg/ActionRpgPage')) // ア�
 const CardGame = lazyReload(() => import('./pages/CardGame')) // 幻札バトル(開発限定・カードゲーム)
 const Othello = lazyReload(() => import('./pages/Othello')) // オセロ(開発限定・ミニゲーム)
 const Mahjong = lazyReload(() => import('./pages/Mahjong')) // 麻雀(開発限定・ミニゲーム)
+const Cards = lazyReload(() => import('./pages/Cards')) // トランプ広場(開発限定・大富豪/スピード/7ならべ/ババ抜き)
 const BeginnerBingo = lazyReload(() => import('./pages/BeginnerBingo')) // 初心者ビンゴ(開発限定・ミッション)
 
 function App() {
@@ -242,6 +243,7 @@ function App() {
         <Route path="/card-battle" element={session ? <CardGame /> : <Navigate to="/login" />} />
         <Route path="/othello" element={session ? <Othello /> : <Navigate to="/login" />} />
         <Route path="/mahjong" element={session ? <Mahjong /> : <Navigate to="/login" />} />
+        <Route path="/cards" element={session ? <Cards /> : <Navigate to="/login" />} />
         <Route path="/bingo" element={session ? <BeginnerBingo /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>

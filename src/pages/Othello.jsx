@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { wagerJoin, wagerReport, MAX_BET } from '../lib/wager'
 import {
   BLACK, WHITE, EMPTY, SIZE,
   validMoves, countStones, cpuChooseMove,
@@ -61,6 +62,8 @@ export default function Othello() {
   const [view, setView] = useState('lobby')
   const [rooms, setRooms] = useState([])
   const [roomTitle, setRoomTitle] = useState('')
+  const [bet, setBet] = useState(0) // 💰賭けGold(0=なし)
+  const [betBusy, setBetBusy] = useState(false)
 
   // 部屋の状態
   const [room, setRoom] = useState(null) // { id, title, hostId, hostName }
@@ -74,6 +77,9 @@ export default function Othello() {
   const stampSeqRef = useRef(0)
   const stampCdRef = useRef(0) // 連打防止クールダウン
   const myJoinedAtRef = useRef(0) // 入室時刻(観戦切替時も席順を維持するため保持)
+  const wagerKeyRef = useRef(null) // 進行中の賭けキー
+  const betPendingRef = useRef(null) // ホスト: 供託待ち { key, need:Set, ok:Set, start:fn }
+  const reportedRef = useRef(new Set()) // 精算報告済みの賭けキー
 
   const lobbyChRef = useRef(null)
   const roomChRef = useRef(null)
@@ -135,7 +141,7 @@ export default function Othello() {
     const r = roomRef.current
     if (!r || r.hostId !== meRef.current?.id || !lobbyChRef.current) return
     await lobbyChRef.current.track({
-      roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName,
+      roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName, bet: r.bet || 0,
       count: membersRef.current.length + npcsRef.current.length, status, // waiting | playing
     })
   }, [])
@@ -146,7 +152,7 @@ export default function Othello() {
     stateSeqRef.current += 1
     roomChRef.current?.send({
       type: 'broadcast', event: 'state',
-      payload: { seq: stateSeqRef.current, game: newState, events },
+      payload: { seq: stateSeqRef.current, game: newState, events, wagerKey: wagerKeyRef.current },
     })
   }, [])
 
@@ -230,13 +236,69 @@ export default function Othello() {
       if (gameRef.current && payload.seq < stateSeqRef.current) return // 途中参加向け再配信は初回のみ受理
       stateSeqRef.current = payload.seq
       gameRef.current = payload.game
+      wagerKeyRef.current = payload.wagerKey || null
       setGame(payload.game)
+      setBetBusy(false)
       for (const ev of payload.events || []) {
         if (ev.t === 'pass') setPassNote(`${ev.name} はパス！`)
         if (ev.t === 'forfeit') showToast(`${ev.name} が切断したため不戦勝`)
         if (ev.t === 'left') showToast(`${ev.name} が切断しました(手番スキップ)`)
       }
       if (!(payload.events || []).some((ev) => ev.t === 'pass')) setPassNote(null)
+      // 賭け精算: 終局時に各対局者(人間)が勝者を報告(過半数一致で払い出し)
+      const g = payload.game
+      if (g?.phase === 'ended' && payload.wagerKey && !reportedRef.current.has(payload.wagerKey)) {
+        const seatedIds = g.mode === 'multi' ? g.players.map((p) => p.id) : [g.players[BLACK]?.id, g.players[WHITE]?.id]
+        if (seatedIds.includes(myself.id)) {
+          reportedRef.current.add(payload.wagerKey)
+          let winnerId = null
+          if (g.mode === 'multi') {
+            if (g.result?.winners?.length === 1) winnerId = g.players.find((p) => p.color === g.result.winners[0])?.id || null
+          } else if (g.result?.winner) {
+            winnerId = g.players[g.result.winner]?.id || null
+          }
+          if (winnerId && isNpcId(winnerId)) winnerId = null // NPC勝ちは返金
+          wagerReport(payload.wagerKey, winnerId).then((res) => {
+            if (res?.status === 'settled') {
+              const wName = g.mode === 'multi'
+                ? g.players.find((p) => p.id === winnerId)?.name
+                : Object.values(g.players).find((p) => p?.id === winnerId)?.name
+              showToast(`💰 精算完了: ${wName} が ${res.pot}G 獲得！`)
+            } else if (res?.status === 'refunded') {
+              showToast('💰 引き分け/NPC勝ちのため全員に返金されました')
+            } else if (res?.error) showToast(`💰 ${res.error}`)
+          })
+        }
+      }
+    })
+    // ---- 賭けの供託フロー ----
+    ch.on('broadcast', { event: 'betcall' }, async ({ payload }) => {
+      if (!payload.humanIds.includes(myself.id)) return
+      setBetBusy(true)
+      const res = await wagerJoin(payload.key, 'othello', roomInfo.bet || 0)
+      if (res?.ok) ch.send({ type: 'broadcast', event: 'betok', payload: { playerId: myself.id, key: payload.key } })
+      else ch.send({ type: 'broadcast', event: 'betfail', payload: { playerId: myself.id, key: payload.key, msg: res?.error || '供託に失敗しました' } })
+    })
+    ch.on('broadcast', { event: 'betok' }, ({ payload }) => {
+      const bp = betPendingRef.current
+      if (roomInfo.hostId !== myself.id || !bp || bp.key !== payload.key) return
+      bp.ok.add(payload.playerId)
+      if ([...bp.need].every((id) => bp.ok.has(id))) {
+        betPendingRef.current = null
+        setBetBusy(false)
+        bp.start(bp.key)
+      }
+    })
+    ch.on('broadcast', { event: 'betfail' }, ({ payload }) => {
+      if (roomInfo.hostId === myself.id && betPendingRef.current?.key === payload.key) {
+        betPendingRef.current = null
+        ch.send({ type: 'broadcast', event: 'betabort', payload: { key: payload.key, msg: `${payload.msg}(対局中止)` } })
+      }
+    })
+    ch.on('broadcast', { event: 'betabort' }, async ({ payload }) => {
+      setBetBusy(false)
+      showToast(`💰 ${payload.msg}`)
+      await wagerReport(payload.key, null) // 供託済みなら返金希望を報告
     })
     ch.on('broadcast', { event: 'action' }, ({ payload }) => {
       if (roomInfo.hostId !== myself.id) return // エンジンはホストのみ実行
@@ -269,6 +331,9 @@ export default function Othello() {
     stateSeqRef.current = 0
     setPassNote(null)
     setLastResult(null)
+    wagerKeyRef.current = null
+    betPendingRef.current = null
+    setBetBusy(false)
   }, [hostApply, hostBroadcast, publishRoom])
 
   // ---- 退室 ----
@@ -287,6 +352,9 @@ export default function Othello() {
     setPassNote(null)
     setLastResult(null)
     setStamps([])
+    wagerKeyRef.current = null
+    betPendingRef.current = null
+    setBetBusy(false)
     setView('lobby')
   }, [])
   const leaveRoomRef = useRef(leaveRoom)
@@ -301,9 +369,10 @@ export default function Othello() {
 
   // ---- 部屋を立てる ----
   const createRoom = () => {
+    const b = Math.max(0, Math.min(MAX_BET, Math.floor(Number(bet) || 0)))
     const title = roomTitle.trim() || `${me.name}の部屋`
     const roomId = (crypto.randomUUID?.() || String(Math.random()).slice(2)).slice(0, 13)
-    joinRoom({ id: roomId, title, hostId: me.id, hostName: me.name })
+    joinRoom({ id: roomId, title, hostId: me.id, hostName: me.name, bet: b })
   }
 
   // ---- 対局席: 入室順(ホスト含む・観戦希望を除く) + NPC で最大5席。あふれた人は観戦 ----
@@ -347,6 +416,16 @@ export default function Othello() {
   }, [npcs]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- ゲーム開始(ホスト・手番/色はランダム) ----
+  const actuallyStart = (order, wKey) => {
+    wagerKeyRef.current = wKey
+    setPassNote(null)
+    if (order.length === 2) {
+      hostBroadcast(createGame({ black: order[0], white: order[1] }), [])
+    } else {
+      hostBroadcast(createMultiGame(order), [])
+    }
+    publishRoom('playing')
+  }
   const startGame = () => {
     const list = seatedOf(membersRef.current, npcsRef.current)
     if (list.length < 2) { showToast('対戦相手がいません(NPCを追加するか入室を待ってください)'); return }
@@ -356,13 +435,23 @@ export default function Othello() {
       const j = Math.floor(Math.random() * (i + 1))
       ;[order[i], order[j]] = [order[j], order[i]]
     }
-    setPassNote(null)
-    if (order.length === 2) {
-      hostBroadcast(createGame({ black: order[0], white: order[1] }), [])
+    // 賭けあり(人間2人以上)なら先に全員の供託を待つ
+    const humans = order.filter((p) => !isNpcId(p.id)).map((p) => p.id)
+    const roomBet = roomRef.current?.bet || 0
+    if (roomBet > 0 && humans.length >= 2) {
+      const key = `${roomRef.current.id}:${Date.now()}`
+      betPendingRef.current = { key, need: new Set(humans), ok: new Set(), start: (k) => actuallyStart(order, k) }
+      setBetBusy(true)
+      roomChRef.current?.send({ type: 'broadcast', event: 'betcall', payload: { key, humanIds: humans } })
+      setTimeout(() => {
+        if (betPendingRef.current?.key === key) {
+          betPendingRef.current = null
+          roomChRef.current?.send({ type: 'broadcast', event: 'betabort', payload: { key, msg: '供託が揃いませんでした(対局中止)' } })
+        }
+      }, 15000)
     } else {
-      hostBroadcast(createMultiGame(order), [])
+      actuallyStart(order, null)
     }
-    publishRoom('playing')
   }
 
   // ---- 着手送信(全員共通・ホストも同じ経路) ----
@@ -453,6 +542,16 @@ export default function Othello() {
 
         <div style={{ border: '1px solid #224466', padding: '12px', marginBottom: '14px' }}>
           <div style={{ fontSize: '12px', color: '#88ccff', marginBottom: '8px' }}>部屋を立てる</div>
+          <div style={{ fontSize: '11px', color: '#88ccff', marginBottom: '4px' }}>💰 賭けGold(0=賭けなし・人間2人以上で成立・1位総取り)</div>
+          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '8px' }}>
+            {[0, 100, 1000, 10000, 100000].map((b) => (
+              <button key={b} onClick={() => setBet(b)} style={btnStyle(Number(bet) === b ? '#ffcc44' : '#446688', { fontSize: '11px' })}>
+                {b === 0 ? 'なし' : `${b.toLocaleString()}G`}
+              </button>
+            ))}
+            <input type="number" value={bet} min={0} max={MAX_BET} onChange={(e) => setBet(e.target.value)}
+              style={{ width: '100px', background: '#001122', border: '1px solid #224466', color: '#ffcc44', padding: '4px 6px', fontFamily: 'monospace', fontSize: '11px' }} />
+          </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <input
               value={roomTitle} onChange={(e) => setRoomTitle(e.target.value)} maxLength={20}
@@ -469,15 +568,18 @@ export default function Othello() {
         {rooms.map((r) => (
           <div key={r.roomId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #224466', padding: '10px 12px', marginBottom: '8px' }}>
             <div>
-              <div style={{ fontSize: '13px' }}>{r.title}</div>
+              <div style={{ fontSize: '13px' }}>
+                {r.title}
+                {r.bet > 0 && <span style={{ color: '#ffaa00', marginLeft: '6px' }}>💰{Number(r.bet).toLocaleString()}G</span>}
+              </div>
               <div style={{ fontSize: '10px', color: '#668' }}>主: {r.hostName} / {r.count}人 / {r.status === 'playing' ? '🟢 対局中(観戦可)' : '🟡 募集中'}</div>
             </div>
             {r.status === 'playing' ? (
-              <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName })} style={btnStyle('#88ccff')}>観戦入室</button>
+              <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName, bet: r.bet || 0 })} style={btnStyle('#88ccff')}>観戦入室</button>
             ) : (
               <div style={{ display: 'flex', gap: '6px' }}>
-                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName })} style={btnStyle('#44dd88')}>プレイ</button>
-                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName }, true)} style={btnStyle('#88ccff')}>観戦</button>
+                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName, bet: r.bet || 0 })} style={btnStyle('#44dd88')}>プレイ</button>
+                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName, bet: r.bet || 0 }, true)} style={btnStyle('#88ccff')}>観戦</button>
               </div>
             )}
           </div>
@@ -537,7 +639,7 @@ export default function Othello() {
         <button onClick={leaveRoom} style={btnStyle('#88ccff')}>← 退室</button>
         <div style={{ color: '#ffcc44', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '55%' }}>{room.title}</div>
         {isHost ? (
-          <button onClick={startGame} disabled={playing} style={btnStyle(playing ? '#446' : '#ffcc44', { opacity: playing ? 0.5 : 1 })}>{game ? '再戦' : '対局開始'}</button>
+          <button onClick={startGame} disabled={playing || betBusy} style={btnStyle(playing || betBusy ? '#446' : '#ffcc44', { opacity: playing || betBusy ? 0.5 : 1 })}>{betBusy ? '供託待ち…' : game ? '再戦' : '対局開始'}</button>
         ) : <div style={{ width: '60px' }} />}
       </div>
 
@@ -570,6 +672,11 @@ export default function Othello() {
           )
         ) : (
           <div>
+            {(room.bet || 0) > 0 && (
+              <div style={{ border: '1px solid #8a6a22', background: 'rgba(255,170,0,0.08)', padding: '4px 8px', marginBottom: '6px', color: '#ffaa00', fontSize: '11px' }}>
+                💰 賭け対局: 1人 {Number(room.bet).toLocaleString()}G(人間2人以上で成立・勝者総取り・NPC勝ち/引き分けは返金)
+              </div>
+            )}
             {lastResult && (
               <div style={{ border: '1px solid #665522', background: 'rgba(255,204,68,0.07)', padding: '4px 8px', marginBottom: '6px', color: '#ffcc44', fontSize: '11px' }}>
                 前回の結果: {lastResult}
