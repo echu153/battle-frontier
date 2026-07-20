@@ -515,7 +515,7 @@ export default function Marketplace() {
                   <div key={l.id} style={{ border:'1px solid #143a28', background:'#001028', padding:'10px' }}>
                     <WeaponCard weapon={l.weapons} bonusEffect={l.bonus_effect} bonus={l.bonus} />
                     <div style={{ display:'flex', justifyContent:'space-between', marginTop:'6px', fontSize:'10px', color:'#557799' }}>
-                      <span>出品者: <span style={{ color:'#88ccff' }}>{l.seller?.username || '???'}</span> ／ {fmtDate(l.sold_at)}</span>
+                      <span>出品者: <span style={{ color:'#88ccff' }}>{l.seller?.username || '退会したユーザー'}</span> ／ {fmtDate(l.sold_at)}</span>
                       <span style={{ color:'#ff8866' }}>-{yen(l.price)}G</span>
                     </div>
                   </div>
@@ -530,7 +530,7 @@ export default function Marketplace() {
                   <div key={l.id} style={{ border:'1px solid #3a3014', background:'#001028', padding:'10px' }}>
                     <WeaponCard weapon={l.weapons} bonusEffect={l.bonus_effect} bonus={l.bonus} />
                     <div style={{ display:'flex', justifyContent:'space-between', marginTop:'6px', fontSize:'10px', color:'#557799' }}>
-                      <span>購入者: <span style={{ color:'#88ccff' }}>{l.buyer?.username || '???'}</span> ／ {fmtDate(l.sold_at)}</span>
+                      <span>購入者: <span style={{ color:'#88ccff' }}>{l.buyer?.username || '退会したユーザー'}</span> ／ {fmtDate(l.sold_at)}</span>
                       <span style={{ color:'#44ff88' }}>+{yen(Math.floor(l.price * 0.8))}G</span>
                     </div>
                   </div>
