@@ -9,6 +9,7 @@ import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemResistNewAilment
 import { charmPlayerBonus, petPlayerBonus, petStats } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
 import { reportDevAccess } from '../lib/devAccess'
+import { isEvent20260720Active } from '../lib/event20260720'
 import { myAreaShares, dropBonusPP, EXPAND_COOLDOWN_MS, rankColor } from '../lib/territory'
 import AIAssistant from '../components/AIAssistant'
 import RaidNotify from '../components/RaidNotify'
@@ -5456,6 +5457,8 @@ export default function Game() {
     const now = serverNow()
     return now >= RAID_EVENT_START_MS && now < RAID_EVENT_END_MS
   })()
+  // かかし修練場＋奈落闘技場イベント(JST 2026/7/20 5:00〜8/3 4:59)開催中か（期間を過ぎると自動で非表示）
+  const scAbyssEventActive = isEvent20260720Active(serverNow())
 
   // 解放判定：基本はキャラLv。錬金部屋のみエリア③ボス撃破（=エリア4解放）が条件。
   const isMenuUnlocked = (key) => {
@@ -6125,13 +6128,13 @@ export default function Game() {
                         <button onClick={()=>nav('/territory')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 領地</button>
                         <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット</button>
                         <button onClick={()=>nav('/raid')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', whiteSpace:'nowrap' }}>⚔ レイドボス{raidEventActive && <span style={{ color:'#ffcc44', fontSize:'10px', marginLeft:'4px' }}>🎖イベント中</span>}</button>
-                        {lockOr('abyss', <button key="challenge" onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ padding:'10px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ 挑戦</button>)}
+                        {lockOr('abyss', <button key="challenge" onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ padding:'10px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ 挑戦{scAbyssEventActive && <span style={{ color:'#ffcc44', fontSize:'10px', marginLeft:'4px' }}>🎉イベント中</span>}</button>)}
                         <button key="rankmatch" onClick={()=>setShowRankMatch(true)} style={{ padding:'10px', background:'#141204', border:'1px solid #c0a83a', color:'#ffd75e', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏅 ランクマッチ <span style={{ fontSize:'9px', color:'#88ddaa' }}>β</span></button>
                       </div>
                       {showChallengePanel && (
                         <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'8px' }}>
                           <div style={{ color:'#ff6464', fontSize:'11px', marginBottom:'8px' }}>挑戦するコンテンツを選択</div>
-                          <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場</button>
+                          <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場{scAbyssEventActive && <span style={{ color:'#ffcc44', fontSize:'10px', marginLeft:'6px' }}>🎉報酬2倍イベント中</span>}</button>
                           {profile?.is_admin && (
                           <button onClick={()=>{ setShowArena(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #a060e0', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏛 アリーナ <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                           )}
@@ -6177,7 +6180,7 @@ export default function Game() {
                       <MenuCat title="放置コンテンツ" catKey="idle" accordion={acc} open={!!openMenuCats.idle} onToggle={toggleMenuCat}>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                         {lockOr('fishing', <button key="fishing" onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場</button>)}
-                        {lockOr('scarecrow', <button key="scarecrow" onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場</button>)}
+                        {lockOr('scarecrow', <button key="scarecrow" onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場{scAbyssEventActive && <span style={{ color:'#dd88ff', fontSize:'10px', marginLeft:'4px' }}>🎉イベント中</span>}</button>)}
                         {lockOr('alchemy', <button key="alchemy" onClick={()=>nav('/alchemy')} style={{ padding:'10px', background:'#001020', border:'1px solid #1a8a6a', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🧪 錬金部屋</button>)}
                       </div>
                       </MenuCat>
@@ -6198,7 +6201,7 @@ export default function Game() {
                 <button onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場</button>
                 <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場</button>
                 <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所</button>
-                <button onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場</button>
+                <button onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場{scAbyssEventActive && <span style={{ color:'#dd88ff', fontSize:'10px', marginLeft:'4px' }}>🎉イベント中</span>}</button>
                 <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット</button>
                 <button onClick={()=>setShowKumite(true)} style={{ padding:'10px', background:'#001020', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🥊 組み手</button>
               </div>
@@ -6211,7 +6214,7 @@ export default function Game() {
               {showChallengePanel && (
                 <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'10px' }}>
                   <div style={{ color:'#ff6464', fontSize:'11px', marginBottom:'8px' }}>挑戦するコンテンツを選択</div>
-                  <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場</button>
+                  <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場{scAbyssEventActive && <span style={{ color:'#ffcc44', fontSize:'10px', marginLeft:'6px' }}>🎉報酬2倍イベント中</span>}</button>
                           {profile?.is_admin && (
                           <button onClick={()=>{ setShowArena(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #a060e0', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏛 アリーナ <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                           )}
@@ -6702,13 +6705,13 @@ export default function Game() {
                           <button onClick={()=>nav('/territory')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 領地</button>
                           <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット</button>
                           <button onClick={()=>nav('/raid')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', whiteSpace:'nowrap' }}>⚔ レイドボス{raidEventActive && <span style={{ color:'#ffcc44', fontSize:'10px', marginLeft:'4px' }}>🎖イベント中</span>}</button>
-                          {lockOr('abyss', <button key="challenge" onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ padding:'10px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ 挑戦</button>)}
+                          {lockOr('abyss', <button key="challenge" onClick={()=>setShowChallengePanel(!showChallengePanel)} style={{ padding:'10px', background:'#1a0a0e', border:'1px solid #e05a62', color:'#ff6464', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚔ 挑戦{scAbyssEventActive && <span style={{ color:'#ffcc44', fontSize:'10px', marginLeft:'4px' }}>🎉イベント中</span>}</button>)}
                           <button key="rankmatch" onClick={()=>setShowRankMatch(true)} style={{ padding:'10px', background:'#141204', border:'1px solid #c0a83a', color:'#ffd75e', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏅 ランクマッチ <span style={{ fontSize:'9px', color:'#88ddaa' }}>β</span></button>
                         </div>
                         {showChallengePanel && (
                           <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'8px' }}>
                             <div style={{ color:'#ff6464', fontSize:'11px', marginBottom:'8px' }}>挑戦するコンテンツを選択</div>
-                            <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場</button>
+                            <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場{scAbyssEventActive && <span style={{ color:'#ffcc44', fontSize:'10px', marginLeft:'6px' }}>🎉報酬2倍イベント中</span>}</button>
                           {profile?.is_admin && (
                           <button onClick={()=>{ setShowArena(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #a060e0', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏛 アリーナ <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                           )}
@@ -6754,7 +6757,7 @@ export default function Game() {
                         <MenuCat title="放置コンテンツ" catKey="idle" accordion={acc} open={!!openMenuCats.idle} onToggle={toggleMenuCat}>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
                           {lockOr('fishing', <button key="fishing" onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>)}
-                          {lockOr('scarecrow', <button key="scarecrow" onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場へ</button>)}
+                          {lockOr('scarecrow', <button key="scarecrow" onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場へ{scAbyssEventActive && <span style={{ color:'#dd88ff', fontSize:'10px', marginLeft:'4px' }}>🎉イベント中</span>}</button>)}
                           {lockOr('alchemy', <button key="alchemy" onClick={()=>nav('/alchemy')} style={{ padding:'10px', background:'#001020', border:'1px solid #1a8a6a', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🧪 錬金部屋へ</button>)}
                         </div>
                         </MenuCat>
@@ -6775,7 +6778,7 @@ export default function Game() {
                   <button onClick={()=>nav('/casino')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffaa00', color:'#ffaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎰 賭博場へ</button>
                   <button onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>
                   <button onClick={()=>nav('/exchange')} style={{ padding:'10px', background:'#001020', border:'1px solid #ff6644', color:'#ff6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🔄 交換所へ</button>
-                  <button onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場へ</button>
+                  <button onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場へ{scAbyssEventActive && <span style={{ color:'#dd88ff', fontSize:'10px', marginLeft:'4px' }}>🎉イベント中</span>}</button>
                   <button onClick={()=>nav('/pets')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa88ff', color:'#aa88ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🐾 ペット</button>
                   <button onClick={()=>setShowKumite(true)} style={{ padding:'10px', background:'#001020', border:'1px solid #5ab0e0', color:'#8ad0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🥊 組み手</button>
                 </div>
@@ -6788,7 +6791,7 @@ export default function Game() {
                 {showChallengePanel && (
                   <div ref={challengePanelRef} style={{ border:'1px solid #8a3a44', background:'#160809', padding:'10px', marginTop:'10px' }}>
                     <div style={{ color:'#ff6464', fontSize:'11px', marginBottom:'8px' }}>挑戦するコンテンツを選択</div>
-                    <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場</button>
+                    <button onClick={()=>{ nav('/abyss'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', background:'#1a0c2a', border:'1px solid #a060ff', color:'#d0a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🕯 奈落闘技場{scAbyssEventActive && <span style={{ color:'#ffcc44', fontSize:'10px', marginLeft:'6px' }}>🎉報酬2倍イベント中</span>}</button>
                           {profile?.is_admin && (
                           <button onClick={()=>{ setShowArena(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #a060e0', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏛 アリーナ <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                           )}
