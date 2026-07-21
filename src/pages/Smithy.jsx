@@ -470,7 +470,7 @@ export default function Smithy() {
   // 再評価：種類固定で値のみ再抽選（要：再鑑定済み＝スロット生成済み）
   const doReEval = async (item) => {
     setLoading(true)
-    const rarity = item.weapons.rarity
+    const rarity = displayRarity(item)  // 真化ボス装備はSランク扱い（スロット数/値域/必要枚数）
     const needed = RE_EVAL_SHEETS[rarity]
     const sheetItem = playerItems.find(pi => pi.items?.name === '再評価依頼書')
     const owned = sheetItem?.quantity || 0
@@ -515,7 +515,7 @@ export default function Smithy() {
   // 再鑑定：全ボーナス再抽選（種類・値ともに引き直し）
   const doReAppraise = async (item) => {
     setLoading(true)
-    const rarity = item.weapons.rarity
+    const rarity = displayRarity(item)  // 真化ボス装備はSランク扱い（スロット数/値域/必要枚数）
     const needed = RE_EVAL_SHEETS[rarity]
     const sheetItem = playerItems.find(pi => pi.items?.name === '再鑑定依頼書')
     const owned = sheetItem?.quantity || 0
@@ -1288,7 +1288,7 @@ export default function Smithy() {
                   {slotItems.map(item => {
                     const w = item.weapons
                     const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
-                    const rarity = w.rarity
+                    const rarity = displayRarity(item)  // 真化ボス装備はSランク扱い（必要枚数表示も一致させる）
                     const needed = RE_EVAL_SHEETS[rarity]
                     const evalOwned = playerItems.find(pi=>pi.items?.name==='再評価依頼書')?.quantity||0
                     const appOwned = playerItems.find(pi=>pi.items?.name==='再鑑定依頼書')?.quantity||0
