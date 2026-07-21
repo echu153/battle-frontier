@@ -11,11 +11,13 @@ export const isRed = (c) => !c.joker && (c.s === 1 || c.s === 2)
 export const isNpcId = (id) => typeof id === 'string' && id.startsWith('npc-')
 
 export const GAME_DEFS = {
-  daifugo: { name: '大富豪', min: 2, max: 5 },
+  daifugo: { name: '大富豪', min: 4, max: 4 },
   speed: { name: 'スピード', min: 2, max: 2 },
-  sevens: { name: '7ならべ', min: 2, max: 5 },
+  sevens: { name: '7ならべ', min: 4, max: 4 },
   oldmaid: { name: 'ババ抜き', min: 2, max: 5 },
 }
+// 人数表示("4人" / "2〜5人")
+export const playersLabel = (d) => (d.min === d.max ? `${d.min}人` : `${d.min}〜${d.max}人`)
 export const TURN_SEC_TRUMP = 25
 
 function makeDeck(withJoker) {

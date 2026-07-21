@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { reportDevAccess } from '../lib/devAccess'
 import {
-  GAME_DEFS, TURN_SEC_TRUMP, cardLabel, isRed, isNpcId,
+  GAME_DEFS, playersLabel, TURN_SEC_TRUMP, cardLabel, isRed, isNpcId,
   createTrumpGame, applyTrump, npcTrump, autoTrump, trumpWinnerId,
   sevensPlayable, speedCanAnyPlay, dfSetStrength, SUIT_LABEL, RANK_LABEL,
 } from '../lib/trump'
@@ -409,7 +409,7 @@ export default function Cards() {
     const s = settingsRef.current
     const d = GAME_DEFS[s.gameType]
     const list = [...membersRef.current.filter((m) => !m.spectator), ...npcsRef.current].slice(0, d.max)
-    if (list.length < d.min) { showToast(`${d.name}は${d.min}人から。NPCを追加してください`); return }
+    if (list.length < d.min) { showToast(`${d.name}は${playersLabel(d)}です。NPCを追加してください`); return }
     const order = list.map((p) => ({ id: p.id, name: p.name }))
     for (let i = order.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1))
@@ -613,7 +613,7 @@ export default function Cards() {
                 {Object.entries(GAME_DEFS).map(([key, d]) => (
                   <button key={key} onClick={() => updateSettings({ gameType: key })}
                     style={btnStyle(settings.gameType === key ? '#ffcc44' : '#446688', { fontSize: 11, background: settings.gameType === key ? 'rgba(255,204,68,0.1)' : 'none' })}>
-                    {d.name}({d.min}〜{d.max})
+                    {d.name}({playersLabel(d)})
                   </button>
                 ))}
               </div>
@@ -662,7 +662,7 @@ export default function Cards() {
               前回の結果: {lastResult}
             </div>
           )}
-          <div style={{ color: '#88ccff', marginBottom: 4 }}>対局者({def.min}〜{def.max}人)</div>
+          <div style={{ color: '#88ccff', marginBottom: 4 }}>対局者({playersLabel(def)})</div>
           {seated.map((p, i) => (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span>{i + 1}. {p.name}{p.id === room.hostId ? ' (ホスト)' : ''}</span>
