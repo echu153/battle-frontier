@@ -70,6 +70,7 @@ export default function Cards() {
   const [roomTitle, setRoomTitle] = useState('')
   const [gameType, setGameType] = useState('daifugo')
   const [bet, setBet] = useState(0)
+  const [dfRules, setDfRules] = useState({ kaidan: false, shibari: false, miyako: false }) // 大富豪の選択ルール
 
   const [room, setRoom] = useState(null) // { id, title, hostId, hostName, gameType, bet }
   const [members, setMembers] = useState([])
@@ -95,6 +96,7 @@ export default function Cards() {
   const wagerKeyRef = useRef(null)
   const betPendingRef = useRef(null) // ホスト: { key, need:Set, ok:Set, order }
   const reportedRef = useRef(new Set())
+  const lastChampionRef = useRef(null) // 都落ち用: この部屋の前回大富豪(1位)のid
 
   useEffect(() => { gameRef.current = game }, [game])
   useEffect(() => { meRef.current = me }, [me])
@@ -145,7 +147,7 @@ export default function Cards() {
     if (!r || r.hostId !== meRef.current?.id || !lobbyChRef.current) return
     await lobbyChRef.current.track({
       roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName,
-      gameType: r.gameType, bet: r.bet,
+      gameType: r.gameType, bet: r.bet, rules: r.rules || null,
       count: membersRef.current.length + npcsRef.current.length, status,
     })
   }, [])
@@ -176,7 +178,10 @@ export default function Cards() {
   // ---- 対局開始(ホスト)。賭けありなら先に全員の供託を待つ ----
   const actuallyStart = useCallback((order, wKey) => {
     wagerKeyRef.current = wKey
-    hostBroadcast(createTrumpGame(roomRef.current.gameType, order), [])
+    hostBroadcast(createTrumpGame(roomRef.current.gameType, order, {
+      rules: roomRef.current.rules || {},
+      champion: lastChampionRef.current,
+    }), [])
     publishRoom('playing')
   }, [hostBroadcast, publishRoom])
 
@@ -234,6 +239,12 @@ export default function Cards() {
       for (const ev of payload.events || []) {
         if (ev.t === 'revolution') showToast(ev.on ? '⚡ 革命！' : '⚡ 革命返し！')
         if (ev.t === 'burst') showToast(`💥 ${payload.game.players[ev.seat]?.name} バースト！`)
+        if (ev.t === 'shibari') showToast(`🔒 しばり発生！(${ev.suits.map((s) => SUIT_LABEL[s]).join('')})`)
+        if (ev.t === 'miyako') showToast(`⛰ ${payload.game.players[ev.seat]?.name} 都落ち！`)
+      }
+      // 都落ち用: この部屋の直近の大富豪(1位)を記録
+      if (payload.game.phase === 'ended' && payload.game.mode === 'daifugo') {
+        lastChampionRef.current = trumpWinnerId(payload.game)
       }
       // 賭け精算: 終局時に各参加者(人間)が勝者を報告
       const g = payload.game
@@ -311,6 +322,7 @@ export default function Cards() {
     stateSeqRef.current = 0
     autoRef.current = new Set()
     wagerKeyRef.current = null
+    lastChampionRef.current = null
     setLastResult(null)
     setBetBusy(false)
   }, [hostApply, publishRoom, actuallyStart])
@@ -346,7 +358,12 @@ export default function Cards() {
     const b = Math.max(0, Math.min(MAX_BET, Math.floor(Number(bet) || 0)))
     const title = roomTitle.trim() || `${me.name}の${GAME_DEFS[gameType].name}`
     const roomId = (crypto.randomUUID?.() || String(Math.random()).slice(2)).slice(0, 13)
-    joinRoom({ id: roomId, title, hostId: me.id, hostName: me.name, gameType, bet: b })
+    joinRoom({ id: roomId, title, hostId: me.id, hostName: me.name, gameType, bet: b, rules: gameType === 'daifugo' ? dfRules : null })
+  }
+  const rulesLabel = (rules) => {
+    if (!rules) return ''
+    const on = [rules.kaidan && '階段', rules.shibari && 'しばり', rules.miyako && '都落ち'].filter(Boolean)
+    return on.length > 0 ? on.join('/') : ''
   }
 
   const def = room ? GAME_DEFS[room.gameType] : null
@@ -519,6 +536,20 @@ export default function Cards() {
               </button>
             ))}
           </div>
+          {gameType === 'daifugo' && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, color: '#88ccff', marginBottom: 4 }}>大富豪の追加ルール</div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {[['kaidan', '階段'], ['shibari', 'しばり'], ['miyako', '都落ち']].map(([key, label]) => (
+                  <button key={key} onClick={() => setDfRules((r) => ({ ...r, [key]: !r[key] }))}
+                    style={btnStyle(dfRules[key] ? '#ffcc44' : '#446688', { fontSize: 11, background: dfRules[key] ? 'rgba(255,204,68,0.1)' : 'none' })}>
+                    {dfRules[key] ? '✓ ' : ''}{label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 9, color: '#668', marginTop: 3 }}>階段=同スート3枚以上の連番 / しばり=スート一致で以後同スート限定 / 都落ち=前回1位が1位を逃すと即最下位(2戦目から)</div>
+            </div>
+          )}
           <div style={{ fontSize: 11, color: '#88ccff', marginBottom: 4 }}>💰 賭けGold(0=賭けなし・人間2人以上で成立・1位総取り)</div>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
             {BET_PRESETS.map((b) => (
@@ -548,14 +579,17 @@ export default function Cards() {
                 <span style={{ color: '#ffcc44' }}>[{GAME_DEFS[r.gameType]?.name}]</span> {r.title}
                 {r.bet > 0 && <span style={{ color: '#ffaa00', marginLeft: 6 }}>💰{Number(r.bet).toLocaleString()}G</span>}
               </div>
-              <div style={{ fontSize: 10, color: '#668' }}>主: {r.hostName} / {r.count}人 / {r.status === 'playing' ? '🟢 対局中(観戦可)' : '🟡 募集中'}</div>
+              <div style={{ fontSize: 10, color: '#668' }}>
+                主: {r.hostName} / {r.count}人 / {r.status === 'playing' ? '🟢 対局中(観戦可)' : '🟡 募集中'}
+                {rulesLabel(r.rules) && <span style={{ color: '#aa88cc' }}> / {rulesLabel(r.rules)}</span>}
+              </div>
             </div>
             {r.status === 'playing' ? (
-              <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName, gameType: r.gameType, bet: r.bet })} style={btnStyle('#88ccff')}>観戦入室</button>
+              <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName, gameType: r.gameType, bet: r.bet, rules: r.rules })} style={btnStyle('#88ccff')}>観戦入室</button>
             ) : (
               <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName, gameType: r.gameType, bet: r.bet })} style={btnStyle('#44dd88')}>プレイ</button>
-                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName, gameType: r.gameType, bet: r.bet }, true)} style={btnStyle('#88ccff')}>観戦</button>
+                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName, gameType: r.gameType, bet: r.bet, rules: r.rules })} style={btnStyle('#44dd88')}>プレイ</button>
+                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName, gameType: r.gameType, bet: r.bet, rules: r.rules }, true)} style={btnStyle('#88ccff')}>観戦</button>
               </div>
             )}
           </div>
@@ -591,7 +625,10 @@ export default function Cards() {
               前回の結果: {lastResult}
             </div>
           )}
-          <div style={{ color: '#88ccff', marginBottom: 4 }}>対局者({def.min}〜{def.max}人)</div>
+          <div style={{ color: '#88ccff', marginBottom: 4 }}>
+            対局者({def.min}〜{def.max}人)
+            {room.gameType === 'daifugo' && rulesLabel(room.rules) && <span style={{ color: '#aa88cc', marginLeft: 8 }}>ルール: {rulesLabel(room.rules)}</span>}
+          </div>
           {seated.map((p, i) => (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span>{i + 1}. {p.name}{p.id === room.hostId ? ' (ホスト)' : ''}</span>
@@ -734,7 +771,7 @@ export default function Cards() {
     const myHand = mySeat >= 0 ? game.players[mySeat].hand : []
     const toggleSel = (id) => setSelCards((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
     const selObjs = selCards.map((id) => myHand.find((c) => c.id === id)).filter(Boolean)
-    const canPlay = myTurn && selObjs.length > 0 && dfSetStrength(selObjs, game.field, game.revolution) !== null
+    const canPlay = myTurn && selObjs.length > 0 && dfSetStrength(selObjs, game.field, game.revolution, game.rules) !== null
     return wrap(
       <div style={{ width: '100%', maxWidth: 560 }}>
         {header}
@@ -746,6 +783,7 @@ export default function Cards() {
             </span>
           ))}
           {game.revolution && <span style={{ color: '#ff4444' }}>⚡革命中</span>}
+          {game.field?.lock && <span style={{ color: '#ffcc44' }}>🔒しばり({game.field.lock.map((s) => SUIT_LABEL[s]).join('')})</span>}
         </div>
         <div style={{ background: '#0a2a18', border: '2px solid #1a5535', borderRadius: 6, padding: 10, minHeight: 70, display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center', width: '100%' }}>
           {game.field

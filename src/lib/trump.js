@@ -42,13 +42,15 @@ const activeCount = (players) => players.filter((p) => !p.out).length
 
 // ============================================================
 // 大富豪
-// 強さ: 3<4<..<K<A<2<JOKER。革命(4枚以上)で反転(JOKERは常に最強)
-// 8切り(場が流れて同じ人が出し直し)。階段/しばり/都落ちなし(v1)
+// 強さ: 3<4<..<K<A<2<JOKER。革命(4枚以上・4枚以上の階段も)で反転(JOKERは常に最強)
+// 8切り(場が流れて同じ人が出し直し)
+// 選択ルール: 階段(同スート3枚以上の連番) / しばり(スート一致で以後同スート限定) /
+//             都落ち(前回1位が今回1位を取れなかった時点で最下位確定)
 // ============================================================
 const dfStrength = (r) => (r >= 3 ? r : r + 13) // 3..13 / A=14 / 2=15
 const DF_JOKER_STRENGTH = 16
 
-export function createDaifugo(playersIn) {
+export function createDaifugo(playersIn, rules = {}, championId = null) {
   const deck = makeDeck(true)
   const players = playersIn.map((p) => ({ id: p.id, name: p.name, hand: [], out: false, rank: 0 }))
   let i = 0
@@ -56,29 +58,56 @@ export function createDaifugo(playersIn) {
   for (const p of players) sortDf(p.hand)
   return {
     mode: 'daifugo', players,
-    turn: 0, field: null, // { cards, count, strength }
+    rules: { kaidan: !!rules.kaidan, shibari: !!rules.shibari, miyako: !!rules.miyako },
+    champion: rules.miyako && championId && players.some((p) => p.id === championId) ? championId : null,
+    turn: 0, field: null, // { cards, count, strength, type, suits, lock }
     lastPlayer: null, passed: players.map(() => false),
-    revolution: false, rankNext: 1, phase: 'playing', result: null,
+    revolution: false, rankNext: 1, rankBottom: players.length,
+    phase: 'playing', result: null,
   }
 }
 function sortDf(hand) {
   hand.sort((a, b) => (a.joker ? 99 : dfStrength(a.r)) - (b.joker ? 99 : dfStrength(b.r)))
 }
 
-// 出せる組み合わせか検証して実効強さを返す(不正ならnull)
-export function dfSetStrength(cards, field, revolution) {
-  if (cards.length === 0 || cards.length > 4) return null
+// 出せる組み合わせか検証。OK: { strength, type:'set'|'seq', suits } / NG: null
+export function dfSetStrength(cards, field, revolution, rules = {}) {
+  if (cards.length === 0) return null
   const nonJ = cards.filter((c) => !c.joker)
-  if (nonJ.length > 0 && !nonJ.every((c) => c.r === nonJ[0].r)) return null
-  const strength = nonJ.length > 0 ? dfStrength(nonJ[0].r) : DF_JOKER_STRENGTH
+  let type = 'set', strength
+  if (nonJ.length > 0 && !nonJ.every((c) => c.r === nonJ[0].r)) {
+    // 階段: 同スート3枚以上の連番(ジョーカーは穴埋め可)
+    if (!rules.kaidan || cards.length < 3 || cards.length > 13) return null
+    if (!nonJ.every((c) => c.s === nonJ[0].s)) return null
+    const ds = [...new Set(nonJ.map((c) => dfStrength(c.r)))].sort((a, b) => a - b)
+    if (ds.length !== nonJ.length) return null // 同ランク重複は階段にならない
+    const span = ds[ds.length - 1] - ds[0] + 1
+    if (span !== cards.length) return null // ジョーカーで穴がちょうど埋まる形のみ
+    type = 'seq'
+    strength = ds[0]
+  } else {
+    if (cards.length > 4) return null
+    strength = nonJ.length > 0 ? dfStrength(nonJ[0].r) : DF_JOKER_STRENGTH
+  }
+  const suits = nonJ.map((c) => c.s).sort((a, b) => a - b)
   if (field) {
     if (cards.length !== field.count) return null
+    if ((field.type || 'set') !== type) return null
     const beats = revolution && strength !== DF_JOKER_STRENGTH && field.strength !== DF_JOKER_STRENGTH
       ? strength < field.strength
       : strength > field.strength
     if (!beats) return null
+    // しばり: ロック中はスート構成が一致しないと出せない(ジョーカーは自由)
+    if (rules.shibari && field.lock) {
+      const lock = [...field.lock]
+      for (const s of suits) {
+        const i = lock.indexOf(s)
+        if (i === -1) return null
+        lock.splice(i, 1)
+      }
+    }
   }
-  return strength
+  return { strength, type, suits }
 }
 
 export function applyDaifugo(state, playerId, action) {
@@ -99,14 +128,25 @@ export function applyDaifugo(state, playerId, action) {
   if (action.type !== 'play') return { error: '不明な操作です' }
   const cards = (action.cardIds || []).map((id) => me.hand.find((c) => c.id === id)).filter(Boolean)
   if (cards.length !== (action.cardIds || []).length) return { error: 'その札は持っていません' }
-  const strength = dfSetStrength(cards, st.field, st.revolution)
-  if (strength === null) return { error: 'その出し方はできません' }
+  const res = dfSetStrength(cards, st.field, st.revolution, st.rules)
+  if (res === null) return { error: 'その出し方はできません' }
+
+  // しばり: 直前の場とスート構成が一致したらロック発生(以後そのスートのみ)
+  let lock = null
+  if (st.rules.shibari && st.field) {
+    lock = st.field.lock || null
+    if (!lock && st.field.suits?.length > 0 && res.suits.length > 0 &&
+        st.field.suits.join(',') === res.suits.join(',')) {
+      lock = res.suits
+      ev.push({ t: 'shibari', suits: res.suits })
+    }
+  }
 
   me.hand = me.hand.filter((c) => !cards.some((x) => x.id === c.id))
   const isKiri = cards.some((c) => !c.joker && c.r === 8) // 8切り
   const isRev = cards.length >= 4
   if (isRev) { st.revolution = !st.revolution; ev.push({ t: 'revolution', on: st.revolution }) }
-  st.field = { cards, count: cards.length, strength }
+  st.field = { cards, count: cards.length, strength: res.strength, type: res.type, suits: res.suits, lock }
   st.lastPlayer = seat
   st.passed = st.players.map(() => false)
   ev.push({ t: 'play', seat, cards: cards.map(cardLabel) })
@@ -115,6 +155,15 @@ export function applyDaifugo(state, playerId, action) {
     me.out = true
     me.rank = st.rankNext++
     ev.push({ t: 'out', seat, rank: me.rank })
+    // 都落ち: 前回1位が今回1位を取れなかった時点で最下位確定
+    if (me.rank === 1 && st.rules.miyako && st.champion && st.champion !== me.id) {
+      const chSeat = st.players.findIndex((p) => p.id === st.champion && !p.out)
+      if (chSeat >= 0) {
+        st.players[chSeat].out = true
+        st.players[chSeat].rank = st.rankBottom--
+        ev.push({ t: 'miyako', seat: chSeat })
+      }
+    }
   }
   if (isKiri) {
     st.field = null
@@ -182,13 +231,13 @@ export function npcDaifugo(state, seat) {
   for (const g of ordered) {
     if (g.length >= state.field.count) {
       const cards = g.slice(0, state.field.count)
-      if (dfSetStrength(cards, state.field, state.revolution) !== null) {
+      if (dfSetStrength(cards, state.field, state.revolution, state.rules) !== null) {
         return { type: 'play', cardIds: cards.map((c) => c.id) }
       }
     }
   }
   if (jokers.length && state.field.count === 1 &&
-      dfSetStrength([jokers[0]], state.field, state.revolution) !== null) {
+      dfSetStrength([jokers[0]], state.field, state.revolution, state.rules) !== null) {
     return { type: 'play', cardIds: [jokers[0].id] }
   }
   return { type: 'pass' }
@@ -459,8 +508,8 @@ export function npcSpeed(state, seat) {
 // ============================================================
 // 共通ディスパッチ
 // ============================================================
-export function createTrumpGame(gameType, players) {
-  if (gameType === 'daifugo') return createDaifugo(players)
+export function createTrumpGame(gameType, players, opts = {}) {
+  if (gameType === 'daifugo') return createDaifugo(players, opts.rules || {}, opts.champion || null)
   if (gameType === 'speed') return createSpeed(players)
   if (gameType === 'sevens') return createSevens(players)
   if (gameType === 'oldmaid') return createOldMaid(players)
