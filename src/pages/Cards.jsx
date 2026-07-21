@@ -68,9 +68,10 @@ export default function Cards() {
   const [view, setView] = useState('lobby')
   const [rooms, setRooms] = useState([])
   const [roomTitle, setRoomTitle] = useState('')
-  const [gameType, setGameType] = useState('daifugo')
-  const [bet, setBet] = useState(0)
-  const [dfRules, setDfRules] = useState({ kaidan: false, shibari: false, miyako: false }) // 大富豪の選択ルール
+  // 部屋の設定はホストが入室後に決める(全員へbroadcast同期)
+  const DEFAULT_SETTINGS = { gameType: 'daifugo', rules: { kaidan: false, shibari: false, miyako: false }, bet: 0 }
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS)
+  const settingsRef = useRef(DEFAULT_SETTINGS)
 
   const [room, setRoom] = useState(null) // { id, title, hostId, hostName, gameType, bet }
   const [members, setMembers] = useState([])
@@ -103,6 +104,7 @@ export default function Cards() {
   useEffect(() => { roomRef.current = room }, [room])
   useEffect(() => { membersRef.current = members }, [members])
   useEffect(() => { npcsRef.current = npcs }, [npcs])
+  useEffect(() => { settingsRef.current = settings }, [settings])
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
 
@@ -145,12 +147,22 @@ export default function Cards() {
   const publishRoom = useCallback(async (status) => {
     const r = roomRef.current
     if (!r || r.hostId !== meRef.current?.id || !lobbyChRef.current) return
+    const s = settingsRef.current
     await lobbyChRef.current.track({
       roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName,
-      gameType: r.gameType, bet: r.bet, rules: r.rules || null,
+      gameType: s.gameType, bet: s.bet, rules: s.gameType === 'daifugo' ? s.rules : null,
       count: membersRef.current.length + npcsRef.current.length, status,
     })
   }, [])
+
+  // ---- 部屋設定の変更(ホストのみ・全員へ同期) ----
+  const updateSettings = useCallback((patch) => {
+    const next = { ...settingsRef.current, ...patch }
+    settingsRef.current = next
+    setSettings(next)
+    roomChRef.current?.send({ type: 'broadcast', event: 'settings', payload: { settings: next } })
+    publishRoom(gameRef.current?.phase === 'playing' ? 'playing' : 'waiting')
+  }, [publishRoom])
 
   // ---- ホスト: エンジン適用→配信 ----
   const hostBroadcast = useCallback((newState, events = []) => {
@@ -178,8 +190,9 @@ export default function Cards() {
   // ---- 対局開始(ホスト)。賭けありなら先に全員の供託を待つ ----
   const actuallyStart = useCallback((order, wKey) => {
     wagerKeyRef.current = wKey
-    hostBroadcast(createTrumpGame(roomRef.current.gameType, order, {
-      rules: roomRef.current.rules || {},
+    const s = settingsRef.current
+    hostBroadcast(createTrumpGame(s.gameType, order, {
+      rules: s.rules || {},
       champion: lastChampionRef.current,
     }), [])
     publishRoom('playing')
@@ -199,7 +212,7 @@ export default function Cards() {
         return { id: key, name: meta?.name || '?', spectator: !!meta?.spectator, joinedAt: meta?.joinedAt || 0 }
       })
       list.sort((a, b) => a.joinedAt - b.joinedAt)
-      const cap = GAME_DEFS[roomInfo.gameType].max + 100
+      const cap = 5 + 100 // 席(最大5) + 観戦100
       if (list.length > cap && list.findIndex((m) => m.id === myself.id) >= cap) {
         showToast('満員のため入室できません')
         leaveRoomRef.current?.()
@@ -210,6 +223,8 @@ export default function Cards() {
       if (roomInfo.hostId === myself.id) {
         for (const m of list) autoRef.current.delete(m.id)
         publishRoom(gameRef.current && gameRef.current.phase === 'playing' ? 'playing' : 'waiting')
+        // 途中参加者に現在の設定とstateを再配信
+        ch.send({ type: 'broadcast', event: 'settings', payload: { settings: settingsRef.current } })
         if (gameRef.current) {
           ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [], wagerKey: wagerKeyRef.current } })
         }
@@ -276,11 +291,16 @@ export default function Cards() {
       showToast('部屋が解散されました')
       leaveRoomRef.current?.()
     })
+    // ---- 部屋設定の同期 ----
+    ch.on('broadcast', { event: 'settings' }, ({ payload }) => {
+      settingsRef.current = payload.settings
+      setSettings(payload.settings)
+    })
     // ---- 賭けの供託フロー ----
     ch.on('broadcast', { event: 'betcall' }, async ({ payload }) => {
       if (!payload.humanIds.includes(myself.id)) return
       setBetBusy(true)
-      const res = await wagerJoin(payload.key, roomInfo.gameType, roomInfo.bet)
+      const res = await wagerJoin(payload.key, payload.gameType, payload.bet)
       if (res?.ok) {
         ch.send({ type: 'broadcast', event: 'betok', payload: { playerId: myself.id, key: payload.key } })
       } else {
@@ -323,9 +343,11 @@ export default function Cards() {
     autoRef.current = new Set()
     wagerKeyRef.current = null
     lastChampionRef.current = null
+    settingsRef.current = DEFAULT_SETTINGS
+    setSettings(DEFAULT_SETTINGS)
     setLastResult(null)
     setBetBusy(false)
-  }, [hostApply, publishRoom, actuallyStart])
+  }, [hostApply, publishRoom, actuallyStart]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const leaveRoom = useCallback(() => {
     const r = roomRef.current
@@ -355,10 +377,9 @@ export default function Cards() {
   }, [])
 
   const createRoom = () => {
-    const b = Math.max(0, Math.min(MAX_BET, Math.floor(Number(bet) || 0)))
-    const title = roomTitle.trim() || `${me.name}の${GAME_DEFS[gameType].name}`
+    const title = roomTitle.trim() || `${me.name}の部屋`
     const roomId = (crypto.randomUUID?.() || String(Math.random()).slice(2)).slice(0, 13)
-    joinRoom({ id: roomId, title, hostId: me.id, hostName: me.name, gameType, bet: b, rules: gameType === 'daifugo' ? dfRules : null })
+    joinRoom({ id: roomId, title, hostId: me.id, hostName: me.name })
   }
   const rulesLabel = (rules) => {
     if (!rules) return ''
@@ -366,7 +387,7 @@ export default function Cards() {
     return on.length > 0 ? on.join('/') : ''
   }
 
-  const def = room ? GAME_DEFS[room.gameType] : null
+  const def = GAME_DEFS[settings.gameType] || GAME_DEFS.daifugo
   const seated = room ? [...members.filter((m) => !m.spectator), ...npcs].slice(0, def.max) : []
 
   const addNpc = () => {
@@ -385,19 +406,21 @@ export default function Cards() {
   }
 
   const startGame = () => {
-    const list = [...membersRef.current.filter((m) => !m.spectator), ...npcsRef.current].slice(0, def.max)
-    if (list.length < def.min) { showToast(`${def.name}は${def.min}人から。NPCを追加してください`); return }
+    const s = settingsRef.current
+    const d = GAME_DEFS[s.gameType]
+    const list = [...membersRef.current.filter((m) => !m.spectator), ...npcsRef.current].slice(0, d.max)
+    if (list.length < d.min) { showToast(`${d.name}は${d.min}人から。NPCを追加してください`); return }
     const order = list.map((p) => ({ id: p.id, name: p.name }))
     for (let i = order.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1))
       ;[order[i], order[j]] = [order[j], order[i]]
     }
     const humans = order.filter((p) => !isNpcId(p.id)).map((p) => p.id)
-    if (room.bet > 0 && humans.length >= 2) {
-      const key = `${room.id}:${Date.now()}`
+    if (s.bet > 0 && humans.length >= 2) {
+      const key = `${roomRef.current.id}:${Date.now()}`
       betPendingRef.current = { key, need: new Set(humans), ok: new Set(), order }
       setBetBusy(true)
-      roomChRef.current?.send({ type: 'broadcast', event: 'betcall', payload: { key, humanIds: humans } })
+      roomChRef.current?.send({ type: 'broadcast', event: 'betcall', payload: { key, humanIds: humans, gameType: s.gameType, bet: s.bet } })
       // 15秒で不成立
       setTimeout(() => {
         if (betPendingRef.current?.key === key) {
@@ -528,47 +551,15 @@ export default function Cards() {
         </div>
         <div style={{ border: '1px solid #224466', padding: 12, marginBottom: 14 }}>
           <div style={{ fontSize: 12, color: '#88ccff', marginBottom: 8 }}>部屋を立てる</div>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
-            {Object.entries(GAME_DEFS).map(([key, d]) => (
-              <button key={key} onClick={() => setGameType(key)}
-                style={btnStyle(gameType === key ? '#ffcc44' : '#446688', { fontSize: 12, background: gameType === key ? 'rgba(255,204,68,0.1)' : 'none' })}>
-                {d.name}({d.min}〜{d.max}人)
-              </button>
-            ))}
-          </div>
-          {gameType === 'daifugo' && (
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: '#88ccff', marginBottom: 4 }}>大富豪の追加ルール</div>
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {[['kaidan', '階段'], ['shibari', 'しばり'], ['miyako', '都落ち']].map(([key, label]) => (
-                  <button key={key} onClick={() => setDfRules((r) => ({ ...r, [key]: !r[key] }))}
-                    style={btnStyle(dfRules[key] ? '#ffcc44' : '#446688', { fontSize: 11, background: dfRules[key] ? 'rgba(255,204,68,0.1)' : 'none' })}>
-                    {dfRules[key] ? '✓ ' : ''}{label}
-                  </button>
-                ))}
-              </div>
-              <div style={{ fontSize: 9, color: '#668', marginTop: 3 }}>階段=同スート3枚以上の連番 / しばり=スート一致で以後同スート限定 / 都落ち=前回1位が1位を逃すと即最下位(2戦目から)</div>
-            </div>
-          )}
-          <div style={{ fontSize: 11, color: '#88ccff', marginBottom: 4 }}>💰 賭けGold(0=賭けなし・人間2人以上で成立・1位総取り)</div>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
-            {BET_PRESETS.map((b) => (
-              <button key={b} onClick={() => setBet(b)}
-                style={btnStyle(Number(bet) === b ? '#ffcc44' : '#446688', { fontSize: 11 })}>
-                {b === 0 ? 'なし' : `${b.toLocaleString()}G`}
-              </button>
-            ))}
-            <input type="number" value={bet} min={0} max={MAX_BET} onChange={(e) => setBet(e.target.value)}
-              style={{ width: 100, background: '#001122', border: '1px solid #224466', color: '#ffcc44', padding: '4px 6px', fontFamily: 'monospace', fontSize: 11 }} />
-          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
               value={roomTitle} onChange={(e) => setRoomTitle(e.target.value)} maxLength={20}
-              placeholder={`${me.name}の${GAME_DEFS[gameType].name}`}
+              placeholder={`${me.name}の部屋`}
               style={{ flex: 1, background: '#001122', border: '1px solid #224466', color: '#cde', padding: '6px 8px', fontFamily: 'monospace', fontSize: 12 }}
             />
             <button onClick={createRoom} style={btnStyle('#ffcc44')}>作成</button>
           </div>
+          <div style={{ fontSize: 10, color: '#668', marginTop: 6 }}>ゲームの種類・ルール・賭けGoldは部屋に入ってからホストが設定します</div>
         </div>
         <div style={{ fontSize: 12, color: '#88ccff', marginBottom: 8 }}>部屋一覧</div>
         {rooms.length === 0 && <div style={{ fontSize: 12, color: '#668' }}>現在開いている部屋はありません</div>}
@@ -585,11 +576,11 @@ export default function Cards() {
               </div>
             </div>
             {r.status === 'playing' ? (
-              <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName, gameType: r.gameType, bet: r.bet, rules: r.rules })} style={btnStyle('#88ccff')}>観戦入室</button>
+              <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName })} style={btnStyle('#88ccff')}>観戦入室</button>
             ) : (
               <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName, gameType: r.gameType, bet: r.bet, rules: r.rules })} style={btnStyle('#44dd88')}>プレイ</button>
-                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName, gameType: r.gameType, bet: r.bet, rules: r.rules }, true)} style={btnStyle('#88ccff')}>観戦</button>
+                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName })} style={btnStyle('#44dd88')}>プレイ</button>
+                <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName }, true)} style={btnStyle('#88ccff')}>観戦</button>
               </div>
             )}
           </div>
@@ -614,10 +605,56 @@ export default function Cards() {
           <div style={{ color: '#ffcc44', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '48%' }}>[{def.name}] {room.title}</div>
           {isHost ? <button onClick={startGame} disabled={betBusy} style={btnStyle('#ffcc44', { opacity: betBusy ? 0.5 : 1 })}>{betBusy ? '供託待ち…' : '対局開始'}</button> : <div style={{ width: 60 }} />}
         </div>
+        <div style={{ border: '1px solid #224466', padding: '8px 12px', fontSize: 12, marginBottom: 10 }}>
+          <div style={{ color: '#88ccff', marginBottom: 6 }}>ゲーム設定{!isHost && '(ホストが変更できます)'}</div>
+          {isHost ? (
+            <>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+                {Object.entries(GAME_DEFS).map(([key, d]) => (
+                  <button key={key} onClick={() => updateSettings({ gameType: key })}
+                    style={btnStyle(settings.gameType === key ? '#ffcc44' : '#446688', { fontSize: 11, background: settings.gameType === key ? 'rgba(255,204,68,0.1)' : 'none' })}>
+                    {d.name}({d.min}〜{d.max})
+                  </button>
+                ))}
+              </div>
+              {settings.gameType === 'daifugo' && (
+                <div style={{ marginBottom: 6 }}>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {[['kaidan', '階段'], ['shibari', 'しばり'], ['miyako', '都落ち']].map(([key, label]) => (
+                      <button key={key} onClick={() => updateSettings({ rules: { ...settings.rules, [key]: !settings.rules[key] } })}
+                        style={btnStyle(settings.rules[key] ? '#ffcc44' : '#446688', { fontSize: 11, background: settings.rules[key] ? 'rgba(255,204,68,0.1)' : 'none' })}>
+                        {settings.rules[key] ? '✓ ' : ''}{label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 9, color: '#668', marginTop: 3 }}>階段=同スート3枚以上の連番 / しばり=スート一致で以後同スート限定 / 都落ち=前回1位が1位を逃すと即最下位(2戦目から)</div>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: '#ffaa00' }}>💰</span>
+                {BET_PRESETS.map((b) => (
+                  <button key={b} onClick={() => updateSettings({ bet: b })}
+                    style={btnStyle(Number(settings.bet) === b ? '#ffcc44' : '#446688', { fontSize: 11 })}>
+                    {b === 0 ? '賭けなし' : `${b.toLocaleString()}G`}
+                  </button>
+                ))}
+                <input type="number" value={settings.bet} min={0} max={MAX_BET}
+                  onChange={(e) => updateSettings({ bet: Math.max(0, Math.min(MAX_BET, Math.floor(Number(e.target.value) || 0))) })}
+                  style={{ width: 90, background: '#001122', border: '1px solid #224466', color: '#ffaa00', padding: '4px 6px', fontFamily: 'monospace', fontSize: 11 }} />
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 12 }}>
+              <span style={{ color: '#ffcc44' }}>{def.name}</span>
+              {settings.gameType === 'daifugo' && rulesLabel(settings.rules) && <span style={{ color: '#aa88cc', marginLeft: 8 }}>{rulesLabel(settings.rules)}</span>}
+              <span style={{ color: '#ffaa00', marginLeft: 8 }}>{settings.bet > 0 ? `💰${Number(settings.bet).toLocaleString()}G` : '賭けなし'}</span>
+            </div>
+          )}
+        </div>
         <div style={{ border: '1px solid #224466', padding: '8px 12px', fontSize: 12 }}>
-          {room.bet > 0 && (
+          {settings.bet > 0 && (
             <div style={{ border: '1px solid #8a6a22', background: 'rgba(255,170,0,0.08)', padding: '4px 8px', marginBottom: 6, color: '#ffaa00', fontSize: 11 }}>
-              💰 賭け対局: 1人 {Number(room.bet).toLocaleString()}G(人間2人以上で成立・1位総取り・NPC勝ち/引き分けは返金)
+              💰 賭け対局: 1人 {Number(settings.bet).toLocaleString()}G(人間2人以上で成立・1位総取り・NPC勝ち/引き分けは返金)
             </div>
           )}
           {lastResult && (
@@ -625,10 +662,7 @@ export default function Cards() {
               前回の結果: {lastResult}
             </div>
           )}
-          <div style={{ color: '#88ccff', marginBottom: 4 }}>
-            対局者({def.min}〜{def.max}人)
-            {room.gameType === 'daifugo' && rulesLabel(room.rules) && <span style={{ color: '#aa88cc', marginLeft: 8 }}>ルール: {rulesLabel(room.rules)}</span>}
-          </div>
+          <div style={{ color: '#88ccff', marginBottom: 4 }}>対局者({def.min}〜{def.max}人)</div>
           {seated.map((p, i) => (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span>{i + 1}. {p.name}{p.id === room.hostId ? ' (ホスト)' : ''}</span>
@@ -657,7 +691,7 @@ export default function Cards() {
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, width: '100%' }}>
       <button onClick={leaveRoom} style={btnStyle('#88ccff')}>← 退室</button>
       <div style={{ color: '#ffcc44', fontSize: 12 }}>
-        [{def.name}] {room.bet > 0 && wagerKeyRef.current ? `💰${Number(room.bet).toLocaleString()}G` : ''}
+        [{GAME_DEFS[game.mode]?.name || def.name}] {settings.bet > 0 && wagerKeyRef.current ? `💰${Number(settings.bet).toLocaleString()}G` : ''}
       </div>
       <div style={{ fontSize: 11, color: '#668' }}>{mySeat === -1 ? '👀 観戦中' : ''}</div>
     </div>
