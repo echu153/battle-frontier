@@ -732,7 +732,7 @@ export default function Cards() {
               <span style={{ color: '#668', marginLeft: 8 }}>{p.out ? `${p.rank}位あがり` : `残り${p.hand.length}枚`}</span>
               {playing && game.turn === s && <span style={{ color: '#ff8866', marginLeft: 8 }}>← 引く番</span>}
             </div>
-            <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
               {s === mySeat
                 ? p.hand.map((c) => <TCard key={c.id} c={c} small />)
                 : p.hand.map((c, i) => (
@@ -781,7 +781,7 @@ export default function Cards() {
         </div>
         {mySeat >= 0 && game.phase !== 'ended' && (
           <div style={{ marginTop: 8 }}>
-            <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', justifyContent: 'center' }}>
               {myHand.map((c) => {
                 const ok = sevensPlayable(game, c)
                 return <TCard key={c.id} c={c} sel={false} dim={myTurn && !ok}
@@ -789,9 +789,11 @@ export default function Cards() {
               })}
             </div>
             {myTurn && (
-              <button onClick={() => sendAction({ type: 'pass' })} style={btnStyle('#ff8866', { marginTop: 8 })}>
-                パス(残{3 - game.players[mySeat].passes}回 / 0で💥バースト)
-              </button>
+              <div style={{ textAlign: 'center' }}>
+                <button onClick={() => sendAction({ type: 'pass' })} style={btnStyle('#ff8866', { marginTop: 8 })}>
+                  パス(残{3 - game.players[mySeat].passes}回 / 0で💥バースト)
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -826,14 +828,14 @@ export default function Cards() {
         </div>
         {mySeat >= 0 && game.phase !== 'ended' && (
           <div style={{ marginTop: 8 }}>
-            <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', justifyContent: 'center' }}>
               {myHand.map((c) => (
                 <TCard key={c.id} c={c} sel={selCards.includes(c.id)}
                   onClick={myTurn ? () => toggleSel(c.id) : undefined} />
               ))}
             </div>
             {myTurn && (
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'center' }}>
                 <button onClick={() => { sendAction({ type: 'play', cardIds: selCards }); }} disabled={!canPlay}
                   style={btnStyle(canPlay ? '#ffcc44' : '#445', { fontSize: 14, opacity: canPlay ? 1 : 0.5 })}>出す({selCards.length}枚)</button>
                 {game.field && <button onClick={() => sendAction({ type: 'pass' })} style={btnStyle('#ff8866', { fontSize: 14 })}>パス</button>}
@@ -848,16 +850,26 @@ export default function Cards() {
 
   // ---- スピード ----
   if (game.mode === 'speed') {
-    const opSeat = mySeat === 0 ? 1 : 0
+    // 1タップ即出し: タップした札を出せる台札へ自動で出す(選択式は同期でリセットされ押し負けるため)
+    const speedAdjOk = (a, b) => { const d = Math.abs(a - b); return d === 1 || d === 12 }
+    const quickPlay = (slot) => {
+      const c = game.players[mySeat]?.slots[slot]
+      if (!c) return
+      for (let p = 0; p < 2; p++) {
+        const pile = game.piles[p]
+        if (pile && speedAdjOk(c.r, pile.r)) { sendAction({ type: 'play', slot, pile: p }); return }
+      }
+    }
     const renderSide = (seat, mine) => {
       const p = game.players[seat]
       return (
         <div style={{ border: '1px solid #223355', padding: 8, width: '100%' }}>
-          <div style={{ fontSize: 11, color: '#cde', marginBottom: 4 }}>{p.name}{mine ? '(あなた)' : ''} <span style={{ color: '#668' }}>山札{p.stock.length}枚</span></div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ fontSize: 11, color: '#cde', marginBottom: 4, textAlign: 'center' }}>{p.name}{mine ? '(あなた)' : ''} <span style={{ color: '#668' }}>山札{p.stock.length}枚</span></div>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
             {p.slots.map((c, i) => c
-              ? <TCard key={c.id} c={c} sel={mine && selCards[0] === i}
-                  onClick={mine && playing ? () => setSelCards([i]) : undefined} />
+              ? <TCard key={c.id} c={c}
+                  sel={mine && playing && game.piles.some((t) => t && speedAdjOk(c.r, t.r))}
+                  onClick={mine && playing ? () => quickPlay(i) : undefined} />
               : <div key={i} style={{ width: 38, height: 54 }} />)}
           </div>
         </div>
@@ -868,18 +880,13 @@ export default function Cards() {
         {header}
         {mySeat !== 0 && renderSide(0, mySeat === 0)}
         {mySeat === 0 && renderSide(1, false)}
-        {mySeat === -1 && null}
         <div style={{ display: 'flex', gap: 20, justifyContent: 'center', margin: '10px 0', alignItems: 'center' }}>
           {game.piles.map((c, i) => (
-            <button key={i} onClick={mySeat >= 0 && playing && selCards.length > 0 ? () => { sendAction({ type: 'play', slot: selCards[0], pile: i }); setSelCards([]) } : undefined}
-              disabled={!(mySeat >= 0 && playing && selCards.length > 0)}
-              style={{ background: 'none', border: selCards.length > 0 ? '2px dashed #ffcc44' : 'none', borderRadius: 6, padding: 4, cursor: selCards.length > 0 ? 'pointer' : 'default' }}>
-              {c ? <TCard c={c} /> : <div style={{ width: 38, height: 54 }} />}
-            </button>
+            <span key={i}>{c ? <TCard c={c} /> : <div style={{ width: 38, height: 54 }} />}</span>
           ))}
         </div>
         {renderSide(mySeat >= 0 ? mySeat : 1, mySeat >= 0)}
-        {mySeat >= 0 && playing && <div style={{ fontSize: 11, color: '#9fd', textAlign: 'center', marginTop: 6 }}>自分の札をタップ → 台札(±1)をタップ。早い者勝ち！</div>}
+        {mySeat >= 0 && playing && <div style={{ fontSize: 11, color: '#9fd', textAlign: 'center', marginTop: 6 }}>光っている札をタップすると台札(±1)に出ます。早い者勝ち！</div>}
         {resultPanel}
       </div>
     )
