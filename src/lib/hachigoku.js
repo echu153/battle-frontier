@@ -54,7 +54,8 @@ export const HACHIGOKU_DIFFICULTIES = [
   { key: 'normal',  label: 'Normal',  target: 12000, color: '#4488ff' },
   { key: 'hard',    label: 'Hard',    target: 25000, color: '#ff8844' },
   { key: 'extreme', label: 'EXTREME', target: 40000, color: '#ff4444' },
-  { key: 'hell',    label: 'Hell',    target: 60000, color: '#cc44ff' },
+  // Hellのみ statMult で全ステータスを底上げ（推奨47,000程度で勝ててしまったため強化。表示上の推奨は60,000のまま）
+  { key: 'hell',    label: 'Hell',    target: 60000, color: '#cc44ff', statMult: 1.3 },
 ]
 
 export const HACHIGOKU_DAILY_WINS = 3  // 1日の勝利回数上限（JST朝5時リセット）
@@ -189,9 +190,10 @@ export function makeHachigokuEnemy(hellKey, diffKey) {
   const diff = HACHIGOKU_DIFFICULTIES.find(d => d.key === diffKey)
   if (!hell || !diff) return null
   const a = ARCH[hell.arch]
+  const sm = diff.statMult || 1  // 難易度別の全ステ底上げ倍率（Hell=1.3）
   const target = diff.target
-  const hp = Math.round(target * a.hpFrac) * 10 * HACHIGOKU_HP_MULT
-  const budget = target * (1 - a.hpFrac)
+  const hp = Math.round(target * a.hpFrac * sm) * 10 * HACHIGOKU_HP_MULT
+  const budget = target * (1 - a.hpFrac) * sm
   const s = (k) => Math.max(1, Math.round(budget * a.w[k]))
   let atk = s('atk'), matk = s('matk')
   if (hell.dualWield) {

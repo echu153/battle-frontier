@@ -93,8 +93,9 @@ test('makeHachigokuEnemy 総合力が推奨戦闘力に概ね一致', () => {
       assert.ok(e, `${h.key}/${d.key} 生成失敗`)
       // HPは演出上×HACHIGOKU_HP_MULTされているため、配分検証は増量前の値で行う
       // 両刀(dualWield)はA=Cなので攻撃はどちらか片方だけを実効値として数える
+      // statMult(Hell=1.3)は全ステ一律の底上げなので割り戻して配分を検証する
       const atkPart = e.dualWield ? e.atk : e.atk + e.matk
-      const total = Math.floor(e.hp / HACHIGOKU_HP_MULT / 10 + atkPart + e.def + e.mdef + e.spd)
+      const total = Math.floor((e.hp / HACHIGOKU_HP_MULT / 10 + atkPart + e.def + e.mdef + e.spd) / (d.statMult || 1))
       const ratio = total / d.target
       assert.ok(ratio > 0.95 && ratio < 1.05, `${h.key}/${d.key}: 総合力${total} が目標${d.target}から乖離`)
       // タイプと攻撃ステの整合（両刀はA=C・magicalはmatk・physicalはatkに寄せる）
