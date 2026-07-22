@@ -94,7 +94,7 @@ export default function Emblem() {
   if (!profile.is_admin) {
     return (
       <div style={{ minHeight:'100vh', background:'#050a18', padding:'12px', fontFamily:'monospace' }}>
-        <div style={{ maxWidth:'640px', margin:'0 auto' }}>
+        <div style={{ maxWidth:'640px', margin:'0' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #1f3a5a', paddingBottom:'8px', marginBottom:'12px', paddingTop:'8px' }}>
             <div style={{ color:'#88bbff', fontSize:'16px', letterSpacing:'3px' }}>💠 紋章</div>
             <button onClick={()=>nav('/game')} style={{ background:'none', border:'1px solid #4466aa', color:'#7799cc', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏰 街に戻る</button>
@@ -148,7 +148,7 @@ export default function Emblem() {
 
   return (
     <div style={{ minHeight:'100vh', background:'#050a18', padding:'12px', fontFamily:'monospace' }}>
-      <div style={{ maxWidth:'680px', margin:'0 auto' }}>
+      <div style={{ maxWidth:'680px', margin:'0' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #1f3a5a', paddingBottom:'8px', marginBottom:'12px', position:'sticky', top:0, zIndex:30, paddingTop:'8px', background:'#050a18' }}>
           <div style={{ color:'#88bbff', fontSize:'16px', letterSpacing:'3px' }}>💠 紋章</div>
           <div style={{ display:'flex', gap:'6px' }}>
