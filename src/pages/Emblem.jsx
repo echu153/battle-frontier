@@ -205,11 +205,39 @@ export default function Emblem() {
               </button>
             )}
           </div>
-          {canUnlock && (
-            <div style={{ color:'#997744', fontSize:'10px', marginTop:'6px' }}>
-              ※開放には八獄8体すべての魂が各{unlockCost.souls}個必要{unlockCost.memories ? '。さらに各地獄Hell初回クリアの「記憶」8種も必要' : ''}。
-            </div>
-          )}
+          {canUnlock && (() => {
+            // 必要素材の内訳（8体ぶん）と所持数・不足を表示
+            const rows = HACHIGOKU_HELLS.map(h => {
+              const soulHave = items[h.soul] || 0
+              const memHave = items[h.memory] || 0
+              const soulOk = soulHave >= unlockCost.souls
+              const memOk = !unlockCost.memories || memHave >= 1
+              return { h, soulHave, memHave, soulOk, memOk }
+            })
+            const allOk = rows.every(r => r.soulOk && r.memOk)
+            return (
+              <div style={{ marginTop:'8px', border:'1px solid #4a3a10', background:'#1a1405', padding:'8px' }}>
+                <div style={{ color:'#ffcc66', fontSize:'11px', marginBottom:'5px' }}>
+                  🔓 LV{cap} → LV{[100,125,150,175,200][Math.min(capStage + 1, 4)]} の開放に必要な素材
+                </div>
+                <div style={{ color:'#bb9955', fontSize:'10px', marginBottom:'6px' }}>
+                  八獄8体すべての魂が<span style={{ color:'#ffcc66' }}>各{unlockCost.souls}個</span>
+                  {unlockCost.memories ? <>＋各地獄Hell初回クリアの記憶が<span style={{ color:'#cc88ff' }}>各1個</span></> : ''}
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px 10px', fontSize:'10px' }}>
+                  {rows.map(({ h, soulHave, memHave, soulOk, memOk }) => (
+                    <div key={h.key} style={{ color:'#8899bb' }}>
+                      <span style={{ color: soulOk && memOk ? '#66dd99' : '#ff8877' }}>{soulOk && memOk ? '✓' : '✗'}</span>
+                      {' '}{h.boss}: 魂 <span style={{ color: soulOk ? '#66dd99' : '#ff8877' }}>{soulHave}</span>
+                      <span style={{ color:'#66809f' }}>/{unlockCost.souls}</span>
+                      {unlockCost.memories && <>　記憶 <span style={{ color: memOk ? '#cc88ff' : '#ff8877' }}>{memHave}</span><span style={{ color:'#66809f' }}>/1</span></>}
+                    </div>
+                  ))}
+                </div>
+                {!allOk && <div style={{ color:'#ff8877', fontSize:'10px', marginTop:'6px' }}>※ ✗の素材が不足しています。八獄で集めましょう。</div>}
+              </div>
+            )
+          })()}
         </div>
 
         {msg && <div style={{ border:'1px solid #4466aa', background:'#0c1430', padding:'10px', marginBottom:'10px', color:'#aaccff', fontSize:'11px' }}>{msg}</div>}
