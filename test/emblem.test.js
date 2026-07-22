@@ -105,6 +105,72 @@ test('makeHachigokuEnemy 総合力が推奨戦闘力に概ね一致', () => {
   }
 })
 
+// SQL(emblem_level_up)のレベルアップ処理をそのまま再現するシミュレータ。
+//   v_cap := ARRAY[100,125,150,175,200][cap_stage+1]
+//   FOR 1..p_times: v_next=level+ups+1; EXIT WHEN v_next > v_cap; cost += costOf(v_next); ups++
+//   ups=0 なら 'cap_reached'
+const simLevelUp = (level, capStage, times) => {
+  const cap = [100, 125, 150, 175, 200][Math.min(capStage, 4)]
+  let cost = 0, ups = 0
+  for (let i = 0; i < times; i++) {
+    const next = level + ups + 1
+    if (next > cap) break
+    cost += next <= 50 ? 1 : next <= 100 ? 2 : next <= 150 ? 3 : 4
+    ups++
+  }
+  if (ups === 0) return { error: 'cap_reached', cap }
+  return { ok: true, level: level + ups, used_shards: cost, ups }
+}
+
+test('LV1から上げ続けるとcap_stage=0では必ずLV100で止まり、以降は cap_reached', () => {
+  let level = 1
+  let totalCost = 0
+  let guard = 0
+  // 実際に +10 ずつ上げ続ける（UIの「まとめて+10」と同じ）
+  while (guard++ < 100) {
+    const r = simLevelUp(level, 0, 10)
+    if (r.error) break
+    level = r.level
+    totalCost += r.used_shards
+  }
+  assert.equal(level, 100, `LV100で止まるはずが LV${level}`)
+  // 止まった後は何度呼んでも cap_reached（LV101以上にならない）
+  const after = simLevelUp(level, 0, 10)
+  assert.equal(after.error, 'cap_reached')
+  assert.equal(after.cap, 100)
+  assert.equal(simLevelUp(level, 0, 1).error, 'cap_reached')
+  // LV1→100 の総コスト: LV2〜50=1×49 + LV51〜100=2×50 = 149個
+  assert.equal(totalCost, 149)
+  // クライアント側の上限判定も一致（LV100で上限到達＝開放ボタンが出る）
+  assert.equal(emblemLevelCap(0), 100)
+  assert.equal(level >= emblemLevelCap(0), true)
+  assert.equal(getEmblemRank(100), 'B')
+})
+
+test('上限開放するとLV100を超えて上げられる（cap_stage=1で125まで）', () => {
+  // 開放前はLV100で頭打ち
+  assert.equal(simLevelUp(100, 0, 25).error, 'cap_reached')
+  // 開放後(cap_stage=1)は125まで上がり、そこで再び止まる
+  const r = simLevelUp(100, 1, 25)
+  assert.equal(r.ok, true)
+  assert.equal(r.level, 125)
+  assert.equal(r.ups, 25)
+  assert.equal(r.used_shards, 25 * 3)  // LV101〜125は1回3個
+  assert.equal(simLevelUp(125, 1, 10).error, 'cap_reached')
+  // 最終段階(cap_stage=4)は200で打ち止め
+  const r2 = simLevelUp(199, 4, 10)
+  assert.equal(r2.level, 200)
+  assert.equal(simLevelUp(200, 4, 10).error, 'cap_reached')
+  assert.equal(getEmblemRank(200), 'SSS')
+})
+
+test('emblemLevelUpCost（クライアント表示）がSQLのコスト計算と一致する', () => {
+  for (let lv = 2; lv <= 200; lv++) {
+    const sqlCost = lv <= 50 ? 1 : lv <= 100 ? 2 : lv <= 150 ? 3 : 4
+    assert.equal(emblemLevelUpCost(lv), sqlCost, `LV${lv}のコスト不一致`)
+  }
+})
+
 test('八獄の結晶キーはすべて emblem.js に存在する', () => {
   const covered = new Set()
   for (const h of HACHIGOKU_HELLS) {
