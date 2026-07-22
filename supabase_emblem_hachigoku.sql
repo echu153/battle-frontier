@@ -280,8 +280,8 @@ GRANT EXECUTE ON FUNCTION public.emblem_allocate(text, int) TO authenticated;
 -- 5) RPC: 八獄 勝利報酬（サーバー権威・確率ドロップ）------------
 --   p_hell: 地獄キー / p_diff: 0=Easy 1=Normal 2=Hard 3=EXTREME 4=Hell
 --   1日3勝まで（JST朝5時リセット）。敗北時はこのRPCを呼ばない＝ノーカウント。
---   ドロップ（難易度 0..4）※結晶は「その地獄の対応結晶“各種”ごと」に個別抽選:
---     結晶(各種): Easy=80%×1 / Normal=1+50%×1 / Hard=1+90%×1 / EXTREME=2+50%×1 / Hell=2+90%×1
+--   ドロップ（難易度 0..4）※結晶は個数を決めてから対応結晶グループからランダム抽選:
+--     結晶: Easy=1+60%×1 / Normal=2+60%×1+20%×1 / Hard=3+同 / EXTREME=4+同 / Hell=5+同
 --     紋章の成長石: Easy=1 / Normal=1〜2 / Hard=2〜3 / EXTREME=3〜4 / Hell=4〜5（範囲は均等乱数）
 --     魂:   [1%, 3%, 6%, 15%, 40%]
 --     記憶: Hell(4) 初回クリアで確定1個
@@ -336,22 +336,21 @@ BEGIN
   IF v_p.win_day = v_today THEN v_wins := v_p.win_count; END IF;
   IF NOT COALESCE(v_admin, false) AND v_wins >= 3 THEN RETURN json_build_object('error', 'daily_limit'); END IF;
 
-  -- 結晶（その地獄の対応結晶“各種”ごとに個別抽選）
-  --   Easy=80%×1 / Normal=1+50%×1 / Hard=1+90%×1 / EXTREME=2+50%×1 / Hell=2+90%×1
+  -- 結晶（個数を決めてから、その地獄の対応結晶グループから1個ずつランダム抽選）
+  --   Easy=1 / Normal=2 / Hard=3 / EXTREME=4 / Hell=5 を基礎に、
+  --   Easyのみ +60%で1個、Normal以上は +60%で1個 かつ +20%でさらに1個
   v_pool := v_crystals -> p_hell;
-  FOR i IN 0 .. jsonb_array_length(v_pool) - 1 LOOP
-    v_name := v_pool ->> i;
-    v_crystal_count := (ARRAY[
-      CASE WHEN random() < 0.8 THEN 1 ELSE 0 END,          -- Easy
-      1 + CASE WHEN random() < 0.5 THEN 1 ELSE 0 END,       -- Normal
-      1 + CASE WHEN random() < 0.9 THEN 1 ELSE 0 END,       -- Hard
-      2 + CASE WHEN random() < 0.5 THEN 1 ELSE 0 END,       -- EXTREME
-      2 + CASE WHEN random() < 0.9 THEN 1 ELSE 0 END        -- Hell
-    ])[p_diff + 1];
-    IF v_crystal_count > 0 THEN
-      PERFORM public._emblem_grant_item(v_uid, v_name, v_crystal_count);
-      v_drops := jsonb_set(v_drops, ARRAY[v_name], to_jsonb(v_crystal_count));
-    END IF;
+  v_crystal_count := (ARRAY[
+    1 + CASE WHEN random() < 0.6 THEN 1 ELSE 0 END,                                              -- Easy
+    2 + CASE WHEN random() < 0.6 THEN 1 ELSE 0 END + CASE WHEN random() < 0.2 THEN 1 ELSE 0 END, -- Normal
+    3 + CASE WHEN random() < 0.6 THEN 1 ELSE 0 END + CASE WHEN random() < 0.2 THEN 1 ELSE 0 END, -- Hard
+    4 + CASE WHEN random() < 0.6 THEN 1 ELSE 0 END + CASE WHEN random() < 0.2 THEN 1 ELSE 0 END, -- EXTREME
+    5 + CASE WHEN random() < 0.6 THEN 1 ELSE 0 END + CASE WHEN random() < 0.2 THEN 1 ELSE 0 END  -- Hell
+  ])[p_diff + 1];
+  FOR i IN 1..v_crystal_count LOOP
+    v_name := v_pool ->> floor(random() * jsonb_array_length(v_pool))::int;
+    PERFORM public._emblem_grant_item(v_uid, v_name, 1);
+    v_drops := jsonb_set(v_drops, ARRAY[v_name], to_jsonb(COALESCE((v_drops ->> v_name)::int, 0) + 1));
   END LOOP;
 
   -- 紋章の成長石（難易度別の範囲を均等乱数で）
