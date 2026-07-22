@@ -75,7 +75,9 @@ const ARCH = {
   hexer:  { hpFrac: 0.34, w: { atk: 0.24, def: 0.16, matk: 0.20, mdef: 0.18, spd: 0.22 } }, // 状態異常型
   drainer:{ hpFrac: 0.40, w: { atk: 0.30, def: 0.16, matk: 0.14, mdef: 0.16, spd: 0.24 } }, // 吸血型
   tank:   { hpFrac: 0.46, w: { atk: 0.22, def: 0.30, matk: 0.02, mdef: 0.26, spd: 0.20 } }, // 耐久型
-  slayer: { hpFrac: 0.30, w: { atk: 0.38, def: 0.12, matk: 0.02, mdef: 0.14, spd: 0.34 } }, // クリティカル型
+  // クリティカル型（黒縄）: クリ率+50%とクリ倍率で実効火力が高くなりすぎるため、
+  //   攻撃を大きく削ってHP・防御・特防へ振り替え（殴られる痛さを抑え、代わりに長期戦にする）
+  slayer: { hpFrac: 0.40, w: { atk: 0.26, def: 0.20, matk: 0.02, mdef: 0.22, spd: 0.30 } }, // クリティカル型
 }
 
 // 8地獄の定義。crystals は emblem.js の EMBLEM_CRYSTALS のキー。
