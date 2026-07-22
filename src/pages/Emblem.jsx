@@ -225,21 +225,28 @@ export default function Emblem() {
             const canPlus = !busy && !maxed && owned > 0 && freePoints > 0
             const plus10 = Math.min(10, EMBLEM_ALLOC_MAX - cur, owned, freePoints)
             return (
-              <div key={key} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'5px 0', borderTop:'1px solid #16203a' }}>
-                <div style={{ fontSize:'11px' }}>
-                  <span style={{ color:'#aaccff' }}>{c.name}</span>
-                  <span style={{ color:'#667799', fontSize:'9px', marginLeft:'6px' }}>{c.label} +{c.per}{c.unit}/1振り</span>
-                  <div style={{ fontSize:'9px', color:'#556688', marginTop:'1px' }}>
-                    振り: <span style={{ color: maxed ? '#ffcc66' : '#88bbff' }}>{cur}</span>/{EMBLEM_ALLOC_MAX}
-                    　効果: <span style={{ color:'#66ff99' }}>+{Math.round(c.per * cur * 10) / 10}{c.unit}</span>
-                    　所持: <span style={{ color: owned > 0 ? '#ffcc66' : '#556688' }}>{owned}</span>
+              <div key={key} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderTop:'1px solid #22345c' }}>
+                <div style={{ fontSize:'12px', lineHeight:'1.6' }}>
+                  <div>
+                    <span style={{ color:'#cfe4ff', fontWeight:'bold' }}>{c.name}</span>
+                    <span style={{ color:'#8fa8c8', fontSize:'11px', marginLeft:'6px' }}>{c.label} +{c.per}{c.unit}／1振り</span>
+                  </div>
+                  <div style={{ fontSize:'11px', color:'#8fa8c8', marginTop:'3px' }}>
+                    振り <span style={{ color: maxed ? '#ffcc66' : '#9ccdff', fontWeight:'bold' }}>{cur}</span>
+                    <span style={{ color:'#66809f' }}>/{EMBLEM_ALLOC_MAX}</span>
+                    <span style={{ margin:'0 6px', color:'#3a4a66' }}>|</span>
+                    現在 <span style={{ color:'#7dffb0', fontWeight:'bold' }}>+{Math.round(c.per * cur * 10) / 10}{c.unit}</span>
+                    <span style={{ margin:'0 6px', color:'#3a4a66' }}>|</span>
+                    MAX <span style={{ color:'#ffd479' }}>+{Math.round(c.per * EMBLEM_ALLOC_MAX * 10) / 10}{c.unit}</span>
+                    <span style={{ margin:'0 6px', color:'#3a4a66' }}>|</span>
+                    所持 <span style={{ color: owned > 0 ? '#ffd479' : '#66809f', fontWeight: owned > 0 ? 'bold' : 'normal' }}>{owned}</span>
                   </div>
                 </div>
                 <div style={{ display:'flex', gap:'4px' }}>
                   <button disabled={!canPlus} onClick={()=>setAllocConfirm({ key, count: 1 })}
-                    style={{ padding:'4px 10px', background: canPlus ? '#102040' : '#0a0e1c', border:`1px solid ${canPlus ? '#4488ff' : '#223355'}`, color: canPlus ? '#88bbff' : '#445577', cursor: canPlus ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>+1</button>
+                    style={{ padding:'6px 12px', background: canPlus ? '#13305e' : '#0a0e1c', border:`1px solid ${canPlus ? '#59a0ff' : '#223355'}`, color: canPlus ? '#bcd9ff' : '#44556b', cursor: canPlus ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'12px' }}>+1</button>
                   <button disabled={!canPlus || plus10 < 2} onClick={()=>setAllocConfirm({ key, count: plus10 })}
-                    style={{ padding:'4px 8px', background: canPlus && plus10 >= 2 ? '#102040' : '#0a0e1c', border:`1px solid ${canPlus && plus10 >= 2 ? '#4488ff' : '#223355'}`, color: canPlus && plus10 >= 2 ? '#88bbff' : '#445577', cursor: canPlus && plus10 >= 2 ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>+{plus10 >= 2 ? plus10 : 'n'}</button>
+                    style={{ padding:'6px 10px', background: canPlus && plus10 >= 2 ? '#13305e' : '#0a0e1c', border:`1px solid ${canPlus && plus10 >= 2 ? '#59a0ff' : '#223355'}`, color: canPlus && plus10 >= 2 ? '#bcd9ff' : '#44556b', cursor: canPlus && plus10 >= 2 ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'12px' }}>+{plus10 >= 2 ? plus10 : 'n'}</button>
                 </div>
               </div>
             )
