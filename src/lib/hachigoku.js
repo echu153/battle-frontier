@@ -203,6 +203,8 @@ export function makeHachigokuEnemy(hellKey, diffKey) {
     name: `${hell.boss}【${diff.label}】`,
     hp, atk, matk, def: s('def'), mdef: s('mdef'), spd: s('spd'),
     type: hell.type,
+    diff: diff.key,           // 難易度キー（Hell限定ギミックの判定用）
+    isHell: diff.key === 'hell',
     dualWield: !!hell.dualWield,
     mods: hell.mods || {},
     passive: hell.passive || null,

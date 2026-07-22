@@ -463,8 +463,10 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
   }
 
   // 全ボス共通: プレイヤーの強化バフを解除（状態異常デバフは残す）。行動には含まれない。
+  // ※Hell限定ギミック。Easy〜EXTREMEでは発動しない。
   const EMBLEM_POS_BUFFS = ['atkUp','matkUp','spdUp','defUp','mdefUp','dmgReduce','regenHeal','evasion','hitBonus','bloodRage','statusImmune','holyField','holyAwakening','flashCombo','critResist','healUp','ailmentShield','nextSkillBoost','mukyoPen','tenkaiCharge']
   const dispelPlayerBuffs = () => {
+    if (!enemy.isHell) return
     let removed = 0
     for (const k of EMBLEM_POS_BUFFS) {
       if (playerBuffs[k] && (playerBuffs[k].turns > 0 || playerBuffs[k].turns === undefined || playerBuffs[k].charges > 0)) { delete playerBuffs[k]; removed++ }
@@ -758,8 +760,8 @@ function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
       if (!tenkaiActedThisTurn && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) { doPlayerAttack(true); if (enemyHp <= 0) break }
     }
 
-    // 全ボス共通: HP75%以下に落ちた最初のターンに自動でプレイヤーのバフ解除（行動には含まれない・スタン中でも発動）
-    if (!dispel75Done && enemyHp / enemyMaxHp <= 0.75) {
+    // Hell限定: HP75%以下に落ちた最初のターンに自動でプレイヤーのバフ解除（行動には含まれない・スタン中でも発動）
+    if (enemy.isHell && !dispel75Done && enemyHp / enemyMaxHp <= 0.75) {
       dispel75Done = true
       dispelPlayerBuffs()
     }
@@ -1063,7 +1065,8 @@ export default function Hachigoku() {
                           })}
                         </div>
                         <div style={{ marginTop:'8px', fontSize:'10px', color:'#aa6655' }}>
-                          対応する結晶: {h.crystals.length}種 ／ 魂ドロップ率は高難易度ほどUP（Hellで大幅UP）
+                          対応する結晶: {h.crystals.length}種 ／ 魂ドロップ率は高難易度ほどUP（Hellで大幅UP）<br/>
+                          <span style={{ color:'#cc88ff' }}>Hellのみ: HP75%到達時と大技使用時にプレイヤーの強化バフを解除</span>
                         </div>
                         <button onClick={(e)=>{ e.stopPropagation(); handleChallenge() }} disabled={!canChallenge}
                           style={{ width:'100%', marginTop:'10px', padding:'12px', background: canChallenge ? '#401510' : '#1c0a08', border:`1px solid ${canChallenge ? '#ff8855' : '#4a2a22'}`, color: canChallenge ? '#ffbb99' : '#6a4a44', cursor: canChallenge ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'13px', letterSpacing:'2px' }}>
