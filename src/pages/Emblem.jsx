@@ -93,7 +93,7 @@ export default function Emblem() {
   // 開発アカウント限定
   if (!profile.is_admin) {
     return (
-      <div style={{ minHeight:'100vh', background:'#050a18', padding:'12px', fontFamily:'monospace' }}>
+      <div style={{ minHeight:'100vh', background:'#050a18', padding:'12px', fontFamily:'monospace', textAlign:'left' }}>
         <div style={{ maxWidth:'640px', margin:'0' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #1f3a5a', paddingBottom:'8px', marginBottom:'12px', paddingTop:'8px' }}>
             <div style={{ color:'#88bbff', fontSize:'16px', letterSpacing:'3px' }}>💠 紋章</div>
@@ -147,7 +147,7 @@ export default function Emblem() {
   ].filter(Boolean)
 
   return (
-    <div style={{ minHeight:'100vh', background:'#050a18', padding:'12px', fontFamily:'monospace' }}>
+    <div style={{ minHeight:'100vh', background:'#050a18', padding:'12px', fontFamily:'monospace', textAlign:'left' }}>
       <div style={{ maxWidth:'680px', margin:'0' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #1f3a5a', paddingBottom:'8px', marginBottom:'12px', position:'sticky', top:0, zIndex:30, paddingTop:'8px', background:'#050a18' }}>
           <div style={{ color:'#88bbff', fontSize:'16px', letterSpacing:'3px' }}>💠 紋章</div>
