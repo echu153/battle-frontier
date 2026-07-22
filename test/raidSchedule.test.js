@@ -112,9 +112,10 @@ test('昼: 2つの候補の両方が選ばれる（片方に固定されない�
   }
 })
 
-test('昼枠のHPは200万・夜は700万', () => {
+test('昼枠のHPは400万・夜は700万', () => {
+  // ※昼のHPは 200万→300万→400万 と再調整済み（80f7d11）。数値を変えたらここも更新すること。
   const fn = daySql.match(/CREATE OR REPLACE FUNCTION raid_slot_hp[\s\S]*?\$\$;/)[0]
-  assert.ok(fn.includes('7000000') && fn.includes('2000000'), 'raid_slot_hp のHPが想定と違う')
+  assert.ok(fn.includes('7000000') && fn.includes('4000000'), 'raid_slot_hp のHPが想定と違う')
   assert.ok(fn.includes('p_slot IN (21, 22)'), '夜/昼の判定が slot ではない')
 })
 
