@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1200px; height:675px; overflow:hidden; }
+  body {
+    position:relative; font-family:'Yu Gothic','Meiryo',sans-serif;
+    background:
+      radial-gradient(circle at 74% 50%, rgba(70,130,255,0.34), transparent 44%),
+      radial-gradient(circle at 22% 22%, rgba(150,90,255,0.22), transparent 46%),
+      linear-gradient(135deg,#070c22 0%,#0c1236 46%,#05081c 100%);
+    color:#fff;
+  }
+  .vignette { position:absolute; inset:0; box-shadow:inset 0 0 220px 60px rgba(0,0,0,0.82); pointer-events:none; }
+  .stars { position:absolute; inset:0; background:
+      radial-gradient(2px 2px at 12% 30%, rgba(150,200,255,0.7), transparent),
+      radial-gradient(1.5px 1.5px at 33% 75%, rgba(180,160,255,0.6), transparent),
+      radial-gradient(2px 2px at 55% 18%, rgba(160,210,255,0.6), transparent),
+      radial-gradient(1.5px 1.5px at 60% 60%, rgba(200,180,255,0.5), transparent),
+      radial-gradient(2px 2px at 88% 78%, rgba(150,200,255,0.55), transparent); }
+
+  .emblem { position:absolute; right:20px; top:50%; transform:translateY(-50%);
+    width:560px; height:560px; }
+  .emblem::before { content:''; position:absolute; inset:70px;
+    background:radial-gradient(circle, rgba(90,160,255,0.55), transparent 66%); filter:blur(18px); }
+  .emblem img { position:relative; width:100%; height:100%; object-fit:contain;
+    filter:drop-shadow(0 0 34px rgba(80,150,255,0.65)); }
+
+  .badge { position:absolute; top:52px; left:64px; font-size:20px; font-weight:700; letter-spacing:3px;
+    color:#bcd8ff; border:2px solid rgba(90,150,255,0.55); background:rgba(12,24,60,0.62);
+    padding:8px 18px; border-radius:22px; }
+
+  .title { position:absolute; top:112px; left:60px; }
+  .title .jp { font-size:150px; font-weight:900; line-height:0.92; letter-spacing:6px;
+    background:linear-gradient(180deg,#fdf1c8 0%,#8fc0ff 52%,#3f7ce0 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 0 40px rgba(70,130,255,0.5); filter:drop-shadow(0 6px 10px rgba(0,0,0,0.6)); }
+  .title .en { font-size:30px; font-weight:700; letter-spacing:16px; color:#9cc4ff; margin-top:2px; margin-left:6px; }
+
+  .sub { position:absolute; top:352px; left:66px; font-size:33px; font-weight:800; color:#fff;
+    text-shadow:0 3px 10px rgba(0,0,0,0.8); }
+  .sub small { display:block; font-size:24px; font-weight:700; color:#bcd2f5; margin-top:6px; }
+
+  .tags { position:absolute; top:472px; left:66px; display:flex; gap:12px; }
+  .tag { font-size:22px; font-weight:800; color:#dbe8ff; background:rgba(24,44,100,0.6);
+    border:1.5px solid rgba(90,150,255,0.55); border-radius:8px; padding:8px 16px; }
+  .unlock { position:absolute; top:540px; left:70px; font-size:22px; font-weight:700; color:#a8c6ff; }
+  .unlock b { color:#5fa0ff; }
+
+  .brand { position:absolute; left:64px; bottom:34px; }
+  .brand .name { font-size:26px; font-weight:900; letter-spacing:2px; color:#f4be5b; }
+  .brand .hash { font-size:15px; font-weight:700; color:#a9c2e6; margin-top:3px; }
+</style></head>
+<body>
+  <div class="stars"></div>
+
+  <div class="emblem"><img src="/_promo_emblem_icon.png" alt=""></div>
+
+  <div class="badge">🔮 新コンテンツ</div>
+
+  <div class="title">
+    <div class="jp">紋章</div>
+    <div class="en">EMBLEM</div>
+  </div>
+
+  <div class="sub">第5の装備枠、解放。
+    <small>22種の結晶で、自分だけの強化を刻め。</small>
+  </div>
+
+  <div class="tags">
+    <div class="tag">LV最大200</div>
+    <div class="tag">結晶22種</div>
+    <div class="tag">ランク F → SSS</div>
+  </div>
+  <div class="unlock">▶ <b>エリア⑤踏破</b>で解放 ／ 八獄の素材で鍛える</div>
+
+  <div class="brand">
+    <div class="name">BATTLE FRONTIER</div>
+    <div class="hash">#ブラウザRPG</div>
+  </div>
+
+  <div class="vignette"></div>
+</body></html>
