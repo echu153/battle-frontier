@@ -9,6 +9,7 @@ import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemResistNewAilment
 import { charmPlayerBonus, petPlayerBonus, petStats } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
 import { reportDevAccess } from '../lib/devAccess'
+import { isHachigokuUnlocked } from '../lib/hachigoku'
 import { isEvent20260720Active } from '../lib/event20260720'
 import { myAreaShares, dropBonusPP, EXPAND_COOLDOWN_MS, rankColor } from '../lib/territory'
 import AIAssistant from '../components/AIAssistant'
@@ -6142,8 +6143,10 @@ export default function Game() {
                           <button onClick={()=>{ setShowArena(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #a060e0', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🏛 アリーナ <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                           )}
                           {profile?.is_admin && (
-                            <><button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
-                            <button onClick={()=>{ nav('/hachigoku'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#260c0a', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🔥 八獄 <span style={{ fontSize:'9px', color:'#aa7766' }}>[開発]</span></button></>
+                            <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
+                          )}
+                          {isHachigokuUnlocked(profile) && (
+                            <button onClick={()=>{ nav('/hachigoku'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#260c0a', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🔥 八獄</button>
                           )}
                           {profile?.is_admin && (
                             <button onClick={()=>{ setShowPvp(true); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#1a0a14', border:'1px solid #e05a8a', color:'#ff8ab0', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>⚔ 対人戦 <span style={{ fontSize:'9px', color:'#aa7788' }}>[開発]</span></button>

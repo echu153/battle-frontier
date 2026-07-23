@@ -153,13 +153,14 @@ RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
 DECLARE
   v_uid uuid := auth.uid();
   v_admin boolean;
+  v_area_ok boolean;
   v_e player_emblem%ROWTYPE;
   v_p hachigoku_progress%ROWTYPE;
   v_wins int := 0;
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('error', 'not_authenticated'); END IF;
-  SELECT is_admin INTO v_admin FROM profiles WHERE id = v_uid;
-  IF NOT COALESCE(v_admin, false) THEN RETURN json_build_object('error', 'dev_only'); END IF;  -- ★一般公開時に削除
+  SELECT is_admin, COALESCE(unlocked_areas, ARRAY[1]) @> ARRAY[6] INTO v_admin, v_area_ok FROM profiles WHERE id = v_uid;
+  IF NOT COALESCE(v_admin, false) AND NOT COALESCE(v_area_ok, false) THEN RETURN json_build_object('error', 'locked'); END IF;  -- エリア⑤踏破(unlocked_areas@>6)または管理者で解放
   INSERT INTO player_emblem (player_id) VALUES (v_uid) ON CONFLICT (player_id) DO NOTHING;
   SELECT * INTO v_e FROM player_emblem WHERE player_id = v_uid;
   SELECT * INTO v_p FROM hachigoku_progress WHERE player_id = v_uid;
@@ -178,6 +179,7 @@ RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
 DECLARE
   v_uid uuid := auth.uid();
   v_admin boolean;
+  v_area_ok boolean;
   v_e player_emblem%ROWTYPE;
   v_cap int;
   v_cost int := 0;
@@ -186,8 +188,8 @@ DECLARE
   i int;
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('error', 'not_authenticated'); END IF;
-  SELECT is_admin INTO v_admin FROM profiles WHERE id = v_uid;
-  IF NOT COALESCE(v_admin, false) THEN RETURN json_build_object('error', 'dev_only'); END IF;  -- ★一般公開時に削除
+  SELECT is_admin, COALESCE(unlocked_areas, ARRAY[1]) @> ARRAY[6] INTO v_admin, v_area_ok FROM profiles WHERE id = v_uid;
+  IF NOT COALESCE(v_admin, false) AND NOT COALESCE(v_area_ok, false) THEN RETURN json_build_object('error', 'locked'); END IF;  -- エリア⑤踏破(unlocked_areas@>6)または管理者で解放
   IF p_times IS NULL OR p_times < 1 OR p_times > 200 THEN RETURN json_build_object('error', 'bad_times'); END IF;
   INSERT INTO player_emblem (player_id) VALUES (v_uid) ON CONFLICT (player_id) DO NOTHING;
   SELECT * INTO v_e FROM player_emblem WHERE player_id = v_uid FOR UPDATE;
@@ -213,6 +215,7 @@ RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
 DECLARE
   v_uid uuid := auth.uid();
   v_admin boolean;
+  v_area_ok boolean;
   v_e player_emblem%ROWTYPE;
   v_cap int;
   v_souls int;
@@ -221,8 +224,8 @@ DECLARE
   v_n text;
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('error', 'not_authenticated'); END IF;
-  SELECT is_admin INTO v_admin FROM profiles WHERE id = v_uid;
-  IF NOT COALESCE(v_admin, false) THEN RETURN json_build_object('error', 'dev_only'); END IF;  -- ★一般公開時に削除
+  SELECT is_admin, COALESCE(unlocked_areas, ARRAY[1]) @> ARRAY[6] INTO v_admin, v_area_ok FROM profiles WHERE id = v_uid;
+  IF NOT COALESCE(v_admin, false) AND NOT COALESCE(v_area_ok, false) THEN RETURN json_build_object('error', 'locked'); END IF;  -- エリア⑤踏破(unlocked_areas@>6)または管理者で解放
   SELECT * INTO v_e FROM player_emblem WHERE player_id = v_uid FOR UPDATE;
   IF NOT FOUND THEN RETURN json_build_object('error', 'no_emblem'); END IF;
   IF v_e.cap_stage >= 4 THEN RETURN json_build_object('error', 'max_stage'); END IF;
@@ -258,6 +261,7 @@ RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
 DECLARE
   v_uid uuid := auth.uid();
   v_admin boolean;
+  v_area_ok boolean;
   v_e player_emblem%ROWTYPE;
   v_item text;
   v_cur int;
@@ -273,8 +277,8 @@ DECLARE
   }'::jsonb;
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('error', 'not_authenticated'); END IF;
-  SELECT is_admin INTO v_admin FROM profiles WHERE id = v_uid;
-  IF NOT COALESCE(v_admin, false) THEN RETURN json_build_object('error', 'dev_only'); END IF;  -- ★一般公開時に削除
+  SELECT is_admin, COALESCE(unlocked_areas, ARRAY[1]) @> ARRAY[6] INTO v_admin, v_area_ok FROM profiles WHERE id = v_uid;
+  IF NOT COALESCE(v_admin, false) AND NOT COALESCE(v_area_ok, false) THEN RETURN json_build_object('error', 'locked'); END IF;  -- エリア⑤踏破(unlocked_areas@>6)または管理者で解放
   IF p_count IS NULL OR p_count < 1 OR p_count > 50 THEN RETURN json_build_object('error', 'bad_count'); END IF;
   v_item := v_map ->> p_key;
   IF v_item IS NULL THEN RETURN json_build_object('error', 'bad_key'); END IF;
@@ -309,6 +313,7 @@ RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
 DECLARE
   v_uid uuid := auth.uid();
   v_admin boolean;
+  v_area_ok boolean;
   v_today date := public._hachigoku_today();
   v_p hachigoku_progress%ROWTYPE;
   v_wins int := 0;
@@ -340,8 +345,8 @@ DECLARE
   i int;
 BEGIN
   IF v_uid IS NULL THEN RETURN json_build_object('error', 'not_authenticated'); END IF;
-  SELECT is_admin INTO v_admin FROM profiles WHERE id = v_uid;
-  IF NOT COALESCE(v_admin, false) THEN RETURN json_build_object('error', 'dev_only'); END IF;  -- ★一般公開時に削除
+  SELECT is_admin, COALESCE(unlocked_areas, ARRAY[1]) @> ARRAY[6] INTO v_admin, v_area_ok FROM profiles WHERE id = v_uid;
+  IF NOT COALESCE(v_admin, false) AND NOT COALESCE(v_area_ok, false) THEN RETURN json_build_object('error', 'locked'); END IF;  -- エリア⑤踏破(unlocked_areas@>6)または管理者で解放
   v_boss := v_bosses ->> p_hell;
   IF v_boss IS NULL OR p_diff IS NULL OR p_diff < 0 OR p_diff > 4 THEN
     RETURN json_build_object('error', 'bad_params');
@@ -353,7 +358,7 @@ BEGIN
   ON CONFLICT (player_id) DO NOTHING;
   SELECT * INTO v_p FROM hachigoku_progress WHERE player_id = v_uid FOR UPDATE;
   IF v_p.win_day = v_today THEN v_wins := v_p.win_count; END IF;
-  IF NOT COALESCE(v_admin, false) AND v_wins >= 3 THEN RETURN json_build_object('error', 'daily_limit'); END IF;
+  IF NOT COALESCE(v_admin, false) AND v_wins >= 5 THEN RETURN json_build_object('error', 'daily_limit'); END IF;
 
   -- 結晶（個数を決めてから、その地獄の対応結晶グループから1個ずつランダム抽選）
   --   Easy=1 / Normal=2 / Hard=3 / EXTREME=4 / Hell=5 を基礎に、
@@ -414,6 +419,6 @@ BEGIN
 
   RETURN json_build_object('ok', true, 'drops', v_drops,
     'got_soul', v_got_soul, 'got_memory', v_got_memory,
-    'wins_today', v_wins + 1, 'wins_left', GREATEST(0, 3 - (v_wins + 1)));
+    'wins_today', v_wins + 1, 'wins_left', GREATEST(0, 5 - (v_wins + 1)));
 END $$;
 GRANT EXECUTE ON FUNCTION public.hachigoku_result(text, int) TO authenticated;

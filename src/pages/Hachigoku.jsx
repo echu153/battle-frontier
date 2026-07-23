@@ -22,7 +22,7 @@ import {
   BattleLogLine,
   MULTI_HIT_SKILLS,
 } from './Game'
-import { HACHIGOKU_HELLS, HACHIGOKU_DIFFICULTIES, HACHIGOKU_DAILY_WINS, HACHIGOKU_DMG_COMPRESS, makeHachigokuEnemy } from '../lib/hachigoku'
+import { HACHIGOKU_HELLS, HACHIGOKU_DIFFICULTIES, HACHIGOKU_DAILY_WINS, HACHIGOKU_DMG_COMPRESS, makeHachigokuEnemy, isHachigokuUnlocked } from '../lib/hachigoku'
 import { EMBLEM_CRYSTALS } from '../lib/emblem'
 
 const fmt = (n) => Number(n).toLocaleString()
@@ -495,7 +495,10 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
       : isEM
       ? (enemy.matk||0) * (enemyBuffs.matkUp ? enemyBuffs.matkUp.rate : 1) * burnDebuffE
       : enemy.atk * (enemyBuffs.atkUp ? enemyBuffs.atkUp.rate : 1) * burnDebuffE
-    const isCrit = cast?.critGuaranteed ? true : Math.random()*100 < enemyCritRate
+    // 大技の高クリ率(critChance)は会耐(eff.critResist)で下げられる。critGuaranteedは会耐無視の確定クリ（下位互換）
+    const isCrit = cast?.critGuaranteed ? true
+      : cast?.critChance ? Math.random()*100 < Math.max(0, cast.critChance - (eff.critResist || 0))
+      : Math.random()*100 < enemyCritRate
     const defForCalc = isHybrid ? Math.max(1, Math.min(pDef, pMdef)) : isEM ? Math.max(1, pMdef) : Math.max(1, pDef)
     const baseDmg = Math.max(1, Math.floor(eAtk*eAtk/Math.max(1,eAtk+defForCalc) * (cast?.mult || 1))+Math.floor(Math.random()*3))
     const enemySpdBuff = enemyBuffs.spdUp ? enemyBuffs.spdUp.rate : 1
@@ -906,8 +909,8 @@ export default function Hachigoku() {
       supabase.from('skill_sets').select('*, skills(*)').eq('player_id', user.id).order('slot_order'),
     ])
     if (!prof) { nav('/create'); return }
-    // 開発限定: 非管理者のアクセスを管理者へ通知（表示自体は開発中スクリーンでブロック済み）
-    if (!prof.is_admin) reportDevAccess('hachigoku', '八獄(/hachigoku)')
+    // エリア⑤踏破で解放。未踏破アクセスは管理者へ通知（表示は下のロック画面でブロック）
+    if (!isHachigokuUnlocked(prof)) reportDevAccess('hachigoku', '八獄(/hachigoku)')
     let petCharm = null, petStat = null, activePet = null
     try {
       const { data: ap } = await supabase.from('pets').select('species, level, evolved, charm_id').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
@@ -973,7 +976,7 @@ export default function Hachigoku() {
         if (error || data?.error) {
           const code = data?.error || error?.message
           setResultMsg(code === 'daily_limit'
-            ? '本日の挑戦回数（3勝）を使い切っています。報酬はありません。'
+            ? '本日の挑戦回数（5勝）を使い切っています。報酬はありません。'
             : `報酬の受け取りに失敗しました（${code}）。SQL未実行の可能性: supabase_emblem_hachigoku.sql を実行してください。`)
         } else {
           setReward(data)
@@ -993,8 +996,8 @@ export default function Hachigoku() {
     return <div style={{ color:'#ff8866', textAlign:'center', marginTop:'40vh', fontFamily:'monospace' }}>読み込み中...</div>
   }
 
-  // 開発アカウント限定
-  if (!profile.is_admin) {
+  // エリア⑤踏破で解放（管理者は常時可）
+  if (!isHachigokuUnlocked(profile)) {
     return (
       <div style={{ minHeight:'100vh', background:'#100505', padding:'12px', fontFamily:'monospace' }}>
         <div style={{ maxWidth:'640px', margin:'0 auto' }}>
@@ -1003,7 +1006,7 @@ export default function Hachigoku() {
             <button onClick={()=>nav('/game')} style={{ background:'none', border:'1px solid #aa4444', color:'#cc7766', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏰 街に戻る</button>
           </div>
           <div style={{ border:'1px solid #6a2a2a', background:'#220a0a', padding:'24px', textAlign:'center', color:'#dd9988', fontSize:'13px', lineHeight:'1.9' }}>
-            🚧 八獄は現在【開発中】です。<br/>調整が完了するまでお待ちください。
+            🔒 八獄は<span style={{ color:'#ffaa88' }}>エリア⑤を踏破</span>すると挑戦できます。<br/>まずは冒険を進めて第5エリアのボスを倒しましょう。
           </div>
         </div>
       </div>

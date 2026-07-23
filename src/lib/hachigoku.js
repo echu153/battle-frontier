@@ -35,7 +35,8 @@
 //  skill:    { name, mult, every }  every ターンごとに使う通常スキル（倍率mult・地獄固有の状態異常判定つき）
 //  ultimate: { name, mult, hpBelow, ... }  HPがhpBelow以下で1度だけ使う大技（必中）。追加効果:
 //    inflict:['burn'|'poison'|'paralysis'|'bleed'|'stun']  確定付与（羽衣/紋章耐性/狂信で防げる）
-//    critGuaranteed:true   確定クリティカル（黒縄）
+//    critChance:n          クリティカル率n%（会耐=eff.critResistで下げられる。黒縄=100）
+//    critGuaranteed:true   確定クリティカル（会耐無視・下位互換）
 //    extraAction:true      大技の直後に確定で追加行動（氷結）
 //    pen:0..1              この一撃はプレイヤーの防御・特防をn割合無視
 //    selfDefBoost:n        発動後、自身の防御・特防をn倍（現在未使用の汎用効果・パッシブと乗算）
@@ -58,7 +59,12 @@ export const HACHIGOKU_DIFFICULTIES = [
   { key: 'hell',    label: 'Hell',    target: 60000, color: '#cc44ff', statMult: 1.3 },
 ]
 
-export const HACHIGOKU_DAILY_WINS = 3  // 1日の勝利回数上限（JST朝5時リセット）
+export const HACHIGOKU_DAILY_WINS = 5  // 1日の勝利回数上限（JST朝5時リセット）
+
+// 紋章・八獄の解放条件: エリア⑤踏破（unlocked_areasに6が含まれる）または管理者
+export const HACHIGOKU_UNLOCK_AREA = 6  // エリア5踏破で6が解放される
+export const isHachigokuUnlocked = (profile) =>
+  !!profile?.is_admin || (profile?.unlocked_areas || [1]).includes(HACHIGOKU_UNLOCK_AREA)
 
 // 与ダメ・敵HPの同率圧縮（全地獄共通・戦闘エンジンが適用）
 // プレイヤーの与ダメを×0.7し、敵HPも×0.7 → 撃破ターン数は変わらないが、
@@ -164,7 +170,7 @@ export const HACHIGOKU_HELLS = [
     passive: '断罪の目測り（クリティカル率+50%／クリティカル以外のダメージ半減）',
     mods: { critBoost: 50, nonCritMult: 0.5 },
     skill: { name: '黒縄断ち', mult: 1.6, every: 3 },
-    ultimate: { name: '迦羅修多羅', mult: 2.0, hpBelow: 0.5, critGuaranteed: true },
+    ultimate: { name: '迦羅修多羅', mult: 2.0, hpBelow: 0.5, critChance: 100 },
   },
   {
     key: 'kyogoku', name: '鏡獄地獄', boss: 'ジョウハリ', img: '/zyouhari.png',

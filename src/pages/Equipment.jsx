@@ -5,6 +5,7 @@ import { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue } from './Game'
 import { gemAllowedSlots, gemSlotCategory, GEM_SLOT_LABEL, calcProfBonus } from '../lib/stats'
 import { evoMultiplier, displayRarity, isShinka, BOSS_LINES } from '../constants/bossEvolution'
 import { getEmblemRank, EMBLEM_RANK_COLOR, emblemAllocTotal, calcEmblemBonus } from '../lib/emblem'
+import { isHachigokuUnlocked } from '../lib/hachigoku'
 import { effectLabel } from '../constants/effectLabels'
 
 const SLOT_LABELS_FULL = { weapon:'武器', armor:'防具', accessory:'装飾品①', accessory2:'装飾品②' }
@@ -614,8 +615,8 @@ export default function Equipment() {
             })}
           </div>
 
-          {/* 第5枠: 紋章（開発限定） */}
-          {profile?.is_admin && (() => {
+          {/* 第5枠: 紋章（エリア⑤踏破で解放） */}
+          {isHachigokuUnlocked(profile) && (() => {
             const emLevel = emblemRow?.level || 1
             const emRank = getEmblemRank(emblemAllocTotal(emblemRow?.alloc))  // ランクは結晶の使用個数で決まる
             const b = calcEmblemBonus(emblemRow?.alloc)

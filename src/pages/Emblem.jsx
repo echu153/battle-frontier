@@ -7,7 +7,7 @@ import {
   getEmblemRank, EMBLEM_RANK_COLOR, emblemLevelCap, EMBLEM_CAP_UNLOCK_COST,
   emblemLevelUpCost, emblemAllocTotal, calcEmblemBonus, EMBLEM_SHARD_NAME,
 } from '../lib/emblem'
-import { HACHIGOKU_HELLS } from '../lib/hachigoku'
+import { HACHIGOKU_HELLS, isHachigokuUnlocked } from '../lib/hachigoku'
 
 const fmt = (n) => Number(n).toLocaleString()
 
@@ -27,9 +27,9 @@ export default function Emblem() {
     if (!user) { nav('/login'); return }
     const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     if (!prof) { nav('/create'); return }
-    if (!prof.is_admin) reportDevAccess('emblem', '紋章(/emblem)')
+    if (!isHachigokuUnlocked(prof)) reportDevAccess('emblem', '紋章(/emblem)')
     setProfile(prof)
-    if (prof.is_admin) await refresh()
+    if (isHachigokuUnlocked(prof)) await refresh()
   }
 
   const refresh = async () => {
@@ -90,8 +90,8 @@ export default function Emblem() {
 
   if (!profile) return <div style={{ color:'#66ddff', textAlign:'center', marginTop:'40vh', fontFamily:'monospace' }}>読み込み中...</div>
 
-  // 開発アカウント限定
-  if (!profile.is_admin) {
+  // エリア⑤踏破で解放（管理者は常時可）
+  if (!isHachigokuUnlocked(profile)) {
     return (
       <div style={{ minHeight:'100vh', background:'#050a18', padding:'12px', fontFamily:'monospace', textAlign:'left' }}>
         <div style={{ maxWidth:'640px', margin:'0' }}>
@@ -100,7 +100,7 @@ export default function Emblem() {
             <button onClick={()=>nav('/game')} style={{ background:'none', border:'1px solid #4466aa', color:'#7799cc', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏰 街に戻る</button>
           </div>
           <div style={{ border:'1px solid #2a3a6a', background:'#0a1022', padding:'24px', textAlign:'center', color:'#88aadd', fontSize:'13px', lineHeight:'1.9' }}>
-            🚧 紋章は現在【開発中】です。<br/>調整が完了するまでお待ちください。
+            🔒 紋章は<span style={{ color:'#aaccff' }}>エリア⑤を踏破</span>すると解放されます。<br/>八獄で結晶を集めて能力を強化しましょう。
           </div>
         </div>
       </div>
