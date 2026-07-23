@@ -30,7 +30,7 @@ CREATE POLICY "emblem select all" ON public.player_emblem
 CREATE TABLE IF NOT EXISTS public.hachigoku_progress (
   player_id uuid PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
   win_day   date,                        -- JST朝5時基準の「その日」
-  win_count int NOT NULL DEFAULT 0,      -- その日の勝利数（上限3）
+  win_count int NOT NULL DEFAULT 0,      -- その日の勝利数（上限5）
   clears    jsonb NOT NULL DEFAULT '{}'::jsonb,  -- {地獄キー: {"maxDiff": 0..4, "memory": true}}
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -302,7 +302,7 @@ GRANT EXECUTE ON FUNCTION public.emblem_allocate(text, int) TO authenticated;
 
 -- 5) RPC: 八獄 勝利報酬（サーバー権威・確率ドロップ）------------
 --   p_hell: 地獄キー / p_diff: 0=Easy 1=Normal 2=Hard 3=EXTREME 4=Hell
---   1日3勝まで（JST朝5時リセット）。敗北時はこのRPCを呼ばない＝ノーカウント。
+--   1日5勝まで（JST朝5時リセット）。敗北時はこのRPCを呼ばない＝ノーカウント。
 --   ドロップ（難易度 0..4）※結晶は個数を決めてから対応結晶グループからランダム抽選:
 --     結晶: Easy=1+60%×1 / Normal=2+60%×1+20%×1 / Hard=3+同 / EXTREME=4+同 / Hell=5+同
 --     紋章の成長石: Easy=1 / Normal=1〜2 / Hard=2〜3 / EXTREME=3〜4 / Hell=4〜5（範囲は均等乱数）
@@ -352,7 +352,7 @@ BEGIN
     RETURN json_build_object('error', 'bad_params');
   END IF;
 
-  -- 本日の勝利数チェック（1日3勝まで）。is_adminは無制限（開発テスト用・一般公開後も管理者は免除）
+  -- 本日の勝利数チェック（1日5勝まで）。is_adminは無制限（開発テスト用・一般公開後も管理者は免除）
   INSERT INTO hachigoku_progress (player_id, win_day, win_count)
   VALUES (v_uid, v_today, 0)
   ON CONFLICT (player_id) DO NOTHING;
