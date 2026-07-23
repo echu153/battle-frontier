@@ -311,26 +311,26 @@ export const AREAS = [
     id: 8, name: '蒼天の浮遊城',
     enemies: [
       {
-        name:'天翼のハーピー', hp:16000, atk:3100, def:2700, matk:0, mdef:2900, spd:4800, type:'physical', gold:700,
+        name:'天翼のハーピー', hp:20000, atk:4200, def:3600, matk:0, mdef:3800, spd:5600, type:'physical', gold:700,
         skills: [
           { name:'烈風爪', type:'physical', mult:1.5 },
         ],
       },
       {
-        name:'雷雲の精霊', hp:15000, atk:400, def:2500, matk:3300, mdef:3400, spd:4500, type:'magical', gold:750,
+        name:'雷雲の精霊', hp:19000, atk:500, def:3300, matk:4400, mdef:4400, spd:5300, type:'magical', gold:750,
         skills: [
           { name:'雷雲弾', type:'magical', mult:1.6 },
         ],
       },
       {
-        name:'天空騎士グリフィオン', hp:23000, atk:3600, def:3700, matk:200, mdef:3000, spd:4200, type:'physical', gold:800,
+        name:'天空騎士グリフィオン', hp:28000, atk:4800, def:4800, matk:300, mdef:3900, spd:5000, type:'physical', gold:800,
         skills: [
           { name:'蒼天突撃', type:'physical', mult:1.6 },
         ],
       },
     ],
     boss: {
-      name:'天空覇龍ウラノス', hp:280000, atk:5000, def:4500, matk:4500, mdef:4000, spd:4000, gold:60000, isBoss:true, type:'physical',
+      name:'天空覇龍ウラノス', hp:280000, atk:10000, def:9000, matk:9000, mdef:8000, spd:8000, gold:60000, isBoss:true, type:'physical',
       skills: [
         { name:'天翔閃',    type:'physical', mult:2.0 },
         { name:'雷鳴嵐撃',  type:'magical',  mult:2.2, paralysisRate:0.3 },
