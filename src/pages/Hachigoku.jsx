@@ -36,7 +36,7 @@ const HACHIGOKU_CD = 5  // 挑戦クールダウン(秒・共有CD)
 //  ・EXP/Goldなし（報酬はサーバRPC hachigoku_result で付与）
 // 戻り値: { logs, win }
 // ============================================================
-function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
+export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enemy) {
   const logs = []
   const mods = enemy.mods || {}
   // 与ダメ・敵HPを同率圧縮（撃破ターン数は不変・与ダメ比例回復だけを抑える）
