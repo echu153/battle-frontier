@@ -1,8 +1,8 @@
 -- ============================================================
 -- 紋章（第5の装備枠）＋ 八獄（はちごく）
---   【is_admin開発限定の先行実装】一般公開時は各RPCの is_admin チェックを外す
+--   【アクセス制限】エリア⑤踏破(unlocked_areas @> ARRAY[6])または管理者で解放
 --   ・player_emblem: 紋章本体（LV/上限開放段階/結晶の割り振り）
---   ・hachigoku_progress: 1日3勝カウント（JST朝5時リセット）＋クリア記録
+--   ・hachigoku_progress: 1日5勝カウント（JST朝5時リセット）＋クリア記録
 --   ・アイテム: 紋章の成長石 / 魂8種 / 記憶8種 / 結晶22種
 --   ・RPC: emblem_get / emblem_level_up / emblem_unlock_cap / emblem_allocate
 --          / hachigoku_result（勝利報酬の確率ドロップ・サーバー権威）
