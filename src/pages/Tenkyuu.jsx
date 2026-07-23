@@ -388,7 +388,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
             enemyBuffs.spdDown = { turns: 2, rate: amzRate, amazaneStacks: amzSt }
           }
         }
-        evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs)
+        evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs, isMulti ? multiCritAny : finalCrit)
         // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
         if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
           enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
@@ -488,7 +488,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
           enemyBuffs.spdDown = { turns: 2, rate: amzRate, amazaneStacks: amzSt }
         }
       }
-      evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs)
+      evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs, isCrit)
       const critText = isCrit ? '💥クリティカル！ ' : ''
       logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
       if (finalDmg > 0) lastPlayerHitType = isMagical ? 'magical' : 'physical'

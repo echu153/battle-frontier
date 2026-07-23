@@ -383,7 +383,7 @@ function doAttack(att, def, isExtra, ctx) {
       dealToDef(finalDmg)
       // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封じ中は無効）
       { const emDrain = emblemDrainAmount(eff, finalDmg, isPhysSkill); if (emDrain > 0 && !(attBuffs.healSeal?.turns > 0)) { att.hp = Math.min(eff.hp_max, att.hp + emDrain); logs.push({ text: `💠 紋章の吸収！ HPが${emDrain}回復！`, color: '#66ddff' }) } }
-      evoOnHit(eff, finalDmg, res.newEnemyBuffs, enemyName, logs)  // 真化: 攻撃ヒット時の敵デバフ（res.newEnemyBuffsに書く＝置換で消えない）
+      evoOnHit(eff, finalDmg, res.newEnemyBuffs, enemyName, logs, isMulti ? multiCritAny : finalCrit)  // 真化: 攻撃ヒット時の敵デバフ（res.newEnemyBuffsに書く＝置換で消えない）
       // ★直接付与する相手デバフは res.newEnemyBuffs に書く（下で def.buffs = res.newEnemyBuffs に置換されるため、
       //   defBuffs(旧オブジェクト)に書くと捨てられてアイコンも効果も消える）
       if (finalDmg > 0 && att.equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(res.newEnemyBuffs.healDown?.turns > 0)) {
@@ -477,7 +477,7 @@ function doAttack(att, def, isExtra, ctx) {
     // 紋章: 物理/特殊吸収
     { const emDrain = emblemDrainAmount(eff, finalDmg, !att.isMagical); if (emDrain > 0 && !(attBuffs.healSeal?.turns > 0)) { att.hp = Math.min(eff.hp_max, att.hp + emDrain); logs.push({ text: `💠 紋章の吸収！ HPが${emDrain}回復！`, color: '#66ddff' }) } }
     const prevDefBuffsN = { ...defBuffs }  // 哭雨の羽衣: 新規状態異常の差分検知用
-    evoOnHit(eff, finalDmg, defBuffs, enemyName, logs)  // 真化: 通常攻撃ヒット時の敵デバフ（通常攻撃はdef.buffs置換なし）
+    evoOnHit(eff, finalDmg, defBuffs, enemyName, logs, isCrit)  // 真化: 通常攻撃ヒット時の敵デバフ（通常攻撃はdef.buffs置換なし）
     consumeAilmentShield(prevDefBuffsN, defBuffs, logs)
     emblemResistNewAilments(def.eff, prevDefBuffsN, defBuffs, logs)  // 紋章: 個別状態異常耐性（防御側）
     const critText = isCrit ? '💥クリティカル！ ' : ''

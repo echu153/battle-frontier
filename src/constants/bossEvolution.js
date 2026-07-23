@@ -75,12 +75,12 @@ export const BOSS_LINES = [
     ],
   },
   {
-    // エリア⑧ 天空覇龍ウラノス: 進化・真化は可能だが特殊能力なし（真化=基礎ステ×2＋S表示のみ）
+    // エリア⑧ 天空覇龍ウラノス: A級ボス装備・進化/真化可。真化でクリティカル系スタック能力を解放。
     area: 8, boss: '天空覇龍ウラノス', blood: '覇龍の血', heart: '覇龍の心臓',
     equips: [
-      { name: 'ウラノスの天砲', effect: null },
-      { name: '覇龍の聖鎧',     effect: null },
-      { name: '蒼天龍の指輪',   effect: null },
+      { name: 'ウラノスの天砲', effect: 'evo_hit_critdmg_5_x4' },
+      { name: '覇龍の聖鎧',     effect: 'evo_ondmg_reduce_1_x10' },
+      { name: '蒼天龍の指輪',   effect: 'evo_crit_atkmatk_1_x15' },
     ],
   },
 ]
@@ -102,6 +102,9 @@ export const EVO_EFFECT_LABELS = {
   evo_allskill_atk_10:       '【真化・全スキルセット時 攻撃+10%】',
   evo_allskill_matk_10:      '【真化・全スキルセット時 特攻+10%】',
   evo_ondmg_burn_50:         '【真化・被ダメージ時 50%で相手をやけど】',
+  evo_hit_critdmg_5_x4:      '【真化・攻撃ヒット時 クリティカル威力+5%（最大4重複）】',
+  evo_ondmg_reduce_1_x10:    '【真化・被ダメージ時 ダメージ軽減+1%（最大10重複）】',
+  evo_crit_atkmatk_1_x15:    '【真化・クリティカル時 攻撃・特攻+1%（最大15重複）】',
 }
 
 // 装備名 → 所属ボスライン（血/心臓/特殊能力）の逆引き

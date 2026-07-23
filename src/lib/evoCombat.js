@@ -6,21 +6,51 @@
 //    可視の効果が無く「発動してない」ように見えるため、反射時のみログを出す（logs引数を使用）
 // ============================================================
 
-// プレイヤーの攻撃が敵にヒットした時：敵に状態異常を付与（enemyBuffs を破壊的に更新）
-export const evoOnHit = (eff, dmg, enemyBuffs, enemyName, logs) => {
-  if (!eff || dmg <= 0 || !enemyBuffs) return
-  if (eff.evoHitSpdDown && !(enemyBuffs.spdDown?.turns > 0 && enemyBuffs.spdDown.rate <= 0.9)) {
-    enemyBuffs.spdDown = { turns: 2, rate: 0.9 }
+// 天空⑧ 真化スタック効果の初期化。eff は戦闘ごとに calcEffectiveStats で新規生成されるので
+//  スタック値・基準値を eff に直接保持してよい（戦闘をまたいで漏れない）。
+const initEvoStacks = (eff) => {
+  if (!eff || eff._evoStackInit) return
+  eff._evoStackInit = true
+  eff._critDmgBase = eff.critDmg || 0   // 天砲: クリ威力の基準（指輪の固有クリ威力等を含む）
+  eff._atkBase  = eff.atk  || 0         // 指輪: 攻撃の基準
+  eff._matkBase = eff.matk || 0         // 指輪: 特攻の基準
+  eff._tenpaStack  = 0                  // ウラノスの天砲: クリ威力+5%×最大4
+  eff._ringStack   = 0                  // 蒼天龍の指輪: 攻/特攻+1%×最大15
+  eff._seigaiStack = 0                  // 覇龍の聖鎧: 被ダメ軽減+1%×最大10
+}
+
+// プレイヤーの攻撃が敵にヒットした時：敵に状態異常を付与＋自己スタック蓄積（enemyBuffs/eff を破壊的に更新）
+//  isCrit = そのヒットがクリティカルだったか（指輪の発動判定に使用）
+export const evoOnHit = (eff, dmg, enemyBuffs, _enemyName, _logs, isCrit = false) => {
+  if (!eff || dmg <= 0) return
+  if (enemyBuffs) {
+    if (eff.evoHitSpdDown && !(enemyBuffs.spdDown?.turns > 0 && enemyBuffs.spdDown.rate <= 0.9)) {
+      enemyBuffs.spdDown = { turns: 2, rate: 0.9 }
+    }
+    if ((eff.evoHitBleed||0) > 0 && Math.random()*100 < eff.evoHitBleed) {
+      enemyBuffs.bleed = { stacks: Math.min(5, (enemyBuffs.bleed?.stacks||0)+1), lastTurn: 0 }
+    }
+    if ((eff.evoHitStun||0) > 0 && !(enemyBuffs.stun?.turns > 0) && Math.random()*100 < eff.evoHitStun) {
+      enemyBuffs.stun = { turns: 1 }
+    }
+    // 冥獄宝珠・断罪（レイド装備）: 攻撃ヒット時 eff.hitPoisonChance% で毒。毒の数値は毒矢と同じ（4T・敵HPの3%/T）
+    if ((eff.hitPoisonChance||0) > 0 && !(enemyBuffs.poison?.turns > 0) && Math.random()*100 < eff.hitPoisonChance) {
+      enemyBuffs.poison = { turns: 4, dmgRate: 0.03 }
+    }
   }
-  if ((eff.evoHitBleed||0) > 0 && Math.random()*100 < eff.evoHitBleed) {
-    enemyBuffs.bleed = { stacks: Math.min(5, (enemyBuffs.bleed?.stacks||0)+1), lastTurn: 0 }
+  // 天空⑧ ウラノスの天砲（真化）: 攻撃ヒット時 クリ威力+5%（最大4重複）。eff.critDmg に畳み込む＝各エンジンのクリ式が自動反映。
+  if (eff.evoHitCritDmg) {
+    initEvoStacks(eff)
+    if (eff._tenpaStack < 4) { eff._tenpaStack++; eff.critDmg = eff._critDmgBase + eff._tenpaStack * 0.05 }
   }
-  if ((eff.evoHitStun||0) > 0 && !(enemyBuffs.stun?.turns > 0) && Math.random()*100 < eff.evoHitStun) {
-    enemyBuffs.stun = { turns: 1 }
-  }
-  // 冥獄宝珠・断罪（レイド装備）: 攻撃ヒット時 eff.hitPoisonChance% で毒。毒の数値は毒矢と同じ（4T・敵HPの3%/T）
-  if ((eff.hitPoisonChance||0) > 0 && !(enemyBuffs.poison?.turns > 0) && Math.random()*100 < eff.hitPoisonChance) {
-    enemyBuffs.poison = { turns: 4, dmgRate: 0.03 }
+  // 天空⑧ 蒼天龍の指輪（真化）: クリティカル時 攻撃・特攻+1%（最大15重複）。eff.atk/matk を基準×倍率で更新。
+  if (eff.evoCritAtkMatk && isCrit) {
+    initEvoStacks(eff)
+    if (eff._ringStack < 15) {
+      eff._ringStack++
+      eff.atk  = Math.round(eff._atkBase  * (1 + eff._ringStack * 0.01))
+      eff.matk = Math.round(eff._matkBase * (1 + eff._ringStack * 0.01))
+    }
   }
 }
 
@@ -45,7 +75,7 @@ export const evoOnDamaged = (eff, dmg, enemyBuffs, enemyName, logs) => {
 }
 
 // プレイヤーが回避した時：自分に素早さバフ（playerBuffs を破壊的に更新）
-export const evoOnEvade = (eff, playerBuffs, logs) => {
+export const evoOnEvade = (eff, playerBuffs, _logs) => {
   if (!eff || !playerBuffs) return
   if (eff.evoEvadeSpdUp && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= 1.1)) {
     playerBuffs.spdUp = { turns: 2, rate: 1.1 }
@@ -60,9 +90,18 @@ const gokuiTakenMult = (eff, hpRatio) => {
   return 1 - (pct * ((hpRatio ?? 1) <= 0.5 ? 2 : 1)) / 100
 }
 
-// 被ダメージ%軽減倍率（海竜の鱗=全体-5% / 蒼粘剣=物理-10% / 冥府王の獄衣=全体-5%かつ瀕死で-10%）
-export const evoTakenMult = (eff, isPhysical, hpRatio = 1) =>
-  (eff?.evoDmgTakenMult || 1) * (isPhysical ? (eff?.evoPhysDmgTakenMult || 1) : 1) * gokuiTakenMult(eff, hpRatio)
+// 被ダメージ%軽減倍率（海竜の鱗=全体-5% / 蒼粘剣=物理-10% / 冥府王の獄衣=全体-5%かつ瀕死で-10%
+//  / 天空⑧ 覇龍の聖鎧=被ダメ毎に-1%累積・最大-10%）
+//  ※聖鎧のスタックは「今回の被弾に現スタックを適用→その後+1」。被弾ごとに1回呼ばれる前提（各エンジンの
+//    被ダメ計算箇所で1回。多段攻撃は1発ごとに加算）。
+export const evoTakenMult = (eff, isPhysical, hpRatio = 1) => {
+  const base = (eff?.evoDmgTakenMult || 1) * (isPhysical ? (eff?.evoPhysDmgTakenMult || 1) : 1) * gokuiTakenMult(eff, hpRatio)
+  if (!eff?.evoDmgReduceStack) return base
+  initEvoStacks(eff)
+  const mult = base * (1 - eff._seigaiStack * 0.01)
+  if (eff._seigaiStack < 10) eff._seigaiStack++
+  return mult
+}
 
 // 全アクティブスキルスロット(5枠)を埋めているか
 export const evoAllSkillsSet = (activeSkillSets) =>

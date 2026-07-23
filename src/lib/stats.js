@@ -174,6 +174,7 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
   let evoOndmgStun = 0, evoOndmgBurn = 0             // フロストバーンの聖鎧 / インフェルノバスティオン（被ダメ時）
   let evoEvadeSpdUp = false                          // 影踏みのブーツ（回避時）
   let evoAllskillAtk = 0, evoAllskillMatk = 0        // 深紅の牙輪 / 深紅の魔眼石（全スキルセット時・条件は戦闘側で判定）
+  let evoHitCritDmg = false, evoCritAtkMatk = false, evoDmgReduceStack = false  // 天空⑧: 天砲/指輪/聖鎧（スタック型・戦闘側で累積）
   let weaponDmgMult = 1   // 武器種固有: 与ダメージ倍率（斧+10%など）
   let weaponMpCostMult = 1// 武器種固有: 消費MP倍率（魔導書-10%など）
   const gemAcc = { bonus, defPen:0, mdefPen:0, critDmg:0, critBonus:0, critResist:0, hitBonus:0, evasionBonus:0 }
@@ -246,6 +247,9 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
       case 'evo_evade_spd_up_10_2t':    evoEvadeSpdUp = true; break
       case 'evo_allskill_atk_10':       evoAllskillAtk = 10; break
       case 'evo_allskill_matk_10':      evoAllskillMatk = 10; break
+      case 'evo_hit_critdmg_5_x4':      evoHitCritDmg = true; break
+      case 'evo_ondmg_reduce_1_x10':    evoDmgReduceStack = true; break
+      case 'evo_crit_atkmatk_1_x15':    evoCritAtkMatk = true; break
     }
     if (item.slot === 'weapon') {
       // 武器種ごとの固有能力（装備中の武器のみ）
@@ -327,6 +331,7 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     evoDmgTakenMult, evoPhysDmgTakenMult, evoReflectPct, evoAilmentResist: evoAilmentResist + (sp?.ailRes || 0),
     evoHitSpdDown, evoHitBleed, evoHitStun, evoOndmgStun, evoOndmgBurn, evoEvadeSpdUp,
     evoAllskillAtk, evoAllskillMatk,
+    evoHitCritDmg, evoCritAtkMatk, evoDmgReduceStack,  // 天空⑧ 真化スタック（天砲/指輪/聖鎧）
     weaponDmgMult,   // 武器種固有の与ダメージ倍率（斧=1.10など）
     weaponMpCostMult,// 武器種固有の消費MP倍率（魔導書=0.90など）
     // 紋章の新メカニクス（戦闘ループが消費。emblemCombat.js のヘルパー経由で使う）

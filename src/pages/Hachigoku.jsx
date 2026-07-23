@@ -309,7 +309,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
             enemyBuffs.spdDown = { turns: 2, rate: amzRate, amazaneStacks: amzSt }
           }
         }
-        evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs)
+        evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs, isMulti ? multiCritAny : finalCrit)
         if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
           enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
           logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
@@ -401,7 +401,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
           enemyBuffs.spdDown = { turns: 2, rate: amzRate, amazaneStacks: amzSt }
         }
       }
-      evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs)
+      evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs, isCrit)
       const critText = isCrit ? '💥クリティカル！ ' : ''
       logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
       if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {

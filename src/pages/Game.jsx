@@ -3118,7 +3118,7 @@ export default function Game() {
     // 攻撃ヒット時の装備効果（真化: スライムの指輪=SPD-10% / 略奪者の短剣=出血 / 絶零の魔導砲=スタン、
     // レイド: 冥獄宝珠・断罪=毒）。※発動ログは出さない（2026-07-14仕様変更: 勝手に発動・表示なし）
     // 実体は evoCombat.evoOnHit（奈落/天穹/八獄/PvPと共通）。ここに再実装すると片方だけ更新されて挙動が割れる。
-    const applyEvoHitEffects = (dmg) => evoOnHit(eff, dmg, enemyBuffs, enemy.name, logs)
+    const applyEvoHitEffects = (dmg, crit) => evoOnHit(eff, dmg, enemyBuffs, enemy.name, logs, crit)
     // ボス装備 真化: プレイヤー被ダメージ時の効果（嵐の重装甲=反射 / フロストバーンの聖鎧=スタン / インフェルノバスティオン=やけど）
     const onPlayerDamaged = (dmg) => {
       if (dmg <= 0) return
@@ -3345,7 +3345,7 @@ export default function Game() {
               enemyBuffs.spdDown = { turns: 2, rate: amzRate, amazaneStacks: amzSt }
             }
           }
-          applyEvoHitEffects(finalDmg)
+          applyEvoHitEffects(finalDmg, isMulti ? multiCritAny : finalCrit)
           const healUpMult = playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1
           const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult * healUpMult)
           playerHp = Math.min(maxHp, playerHp + healAmt)
@@ -3445,7 +3445,7 @@ export default function Game() {
             enemyBuffs.spdDown = { turns: 2, rate: amzRate, amazaneStacks: amzSt }
           }
         }
-        applyEvoHitEffects(finalDmg)
+        applyEvoHitEffects(finalDmg, isCrit)
         // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
         if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
           enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
