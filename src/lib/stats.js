@@ -4,6 +4,15 @@
 // （表示と実効果のロジックズレを防ぐため一元管理）
 // ============================================================
 import { calcEmblemBonus } from './emblem.js'
+import { EQUIP_TO_LINE, MAX_EVO_STAGE } from '../constants/bossEvolution.js'
+
+// 真化(5段)済みのボス装備は、保存済み player_equipment.bonus_effect がズレ/欠落していても
+// 正典（bossEvolution の name→effect）から真化効果を必ず引く（真化スキルが発動しない不具合の根本対処）。
+// 非ボス装備や未真化(5段未満)は従来どおり保存済み bonus_effect をそのまま使う。
+const resolveBonusEffect = (item, weaponName) =>
+  ((item.evolve_stage || 0) >= MAX_EVO_STAGE && EQUIP_TO_LINE[weaponName])
+    ? EQUIP_TO_LINE[weaponName].effect
+    : item.bonus_effect
 
 export const WEAPON_TYPE_GROUP = {
   sword:'physical', axe:'physical', spear:'physical', bow:'physical', dagger:'physical',
@@ -219,7 +228,8 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     if (item.bonus_effect === 'dmg_taken_down_5_hp50_x2') gokuiTakenPct = 5  // 冥府王の獄衣: 被ダメ-5%（HP半分以下で-10%）
     if (item.bonus_effect === 'atk_to_matk_2') atkToMatk += 2  // 六道輪廻の数珠: 攻撃力の2%を特攻へ
     // ボス装備 真化効果（スロット非依存・5段で付与される bonus_effect）
-    switch (item.bonus_effect) {
+    // ※真化済みなら保存値がズレていても正典から解決（reflect等が発動しない不具合の根本対処）
+    switch (resolveBonusEffect(item, w.name)) {
       case 'evo_mp_to_matk_5':          evoMpToMatk += 5; break
       case 'evo_spd_to_atk_3':          evoSpdToAtk += 3; break
       case 'evo_mdef_pen_10':           gemAcc.mdefPen += 10; break
@@ -432,10 +442,11 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
     cm.hitBonus     += item.bonus_hit     || 0
     cm.critBonus    += item.bonus_crit    || 0
     cm.evasionBonus += item.bonus_evasion || 0
-    // ボス装備 真化の派生ステ（calcEffectiveStats と一致させる）
-    if (item.bonus_effect === 'evo_mp_to_matk_5') equip.matk += Math.floor((profile.mp_max||0) * 0.05)
-    if (item.bonus_effect === 'evo_spd_to_atk_3') equip.atk  += Math.floor((profile.spd||0)    * 0.03)
-    if (item.bonus_effect === 'evo_mdef_pen_10')  cm.mdefPen += 10
+    // ボス装備 真化の派生ステ（calcEffectiveStats と一致させる。真化済みは正典から解決）
+    const evoEff2 = resolveBonusEffect(item, w.name)
+    if (evoEff2 === 'evo_mp_to_matk_5') equip.matk += Math.floor((profile.mp_max||0) * 0.05)
+    if (evoEff2 === 'evo_spd_to_atk_3') equip.atk  += Math.floor((profile.spd||0)    * 0.03)
+    if (evoEff2 === 'evo_mdef_pen_10')  cm.mdefPen += 10
     if (item.slot === 'weapon') {
       // 武器種ごとの固有能力（calcEffectiveStats と一致させる）
       const wp = WEAPON_TYPE_PASSIVE[w.weapon_type]

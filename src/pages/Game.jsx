@@ -1127,6 +1127,18 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     case 'ギャンブルボディ': result.log = `🎭 ギャンブルボディ【パッシブ】 被ダメ×0.7〜1.3（再修練：×0.5〜1.2）`; break
     case 'オールイン': {
       if (playerBuffs.allinDebuff?.turns > 0) { result.log = `💸 オールイン！ 反動中のため使用できない！`; break }
+      // 効果継続中の重ね掛けは残ターンをリセットさせず、即座に反動デバフへ移行させる
+      // （バフをかけ直して反動を回避＝デメリット無しで永続化する悪用を防ぐ。全戦闘共通=executeSkillで一元処理）
+      if (playerBuffs.allinActive?.turns > 0) {
+        const reactT = playerBuffs.allinActive.reactTurns || 4
+        result.newPlayerBuffs.atkUp = { turns:0 }
+        result.newPlayerBuffs.matkUp = { turns:0 }
+        result.newPlayerBuffs.spdUp = { turns:0 }
+        result.newPlayerBuffs.dmgReduce = { turns:0 }
+        result.newPlayerBuffs.allinActive = undefined  // =undefinedにして各戦闘の「turns===0で反動移行」ハンドラの二重発火を防ぐ
+        result.newPlayerBuffs.allinDebuff = { turns:reactT, rate:0.7 }
+        result.log = `💸 オールインを重ね掛け！ 賭けが崩れて即座に反動！ ${reactT}ターンの間 全ステータス低下＆バフ不可！`; break
+      }
       const aiT = rt>=4?6:4
       result.newPlayerBuffs.atkUp = { turns:aiT, rate:1.5 }
       result.newPlayerBuffs.matkUp = { turns:aiT, rate:1.5 }
@@ -1167,6 +1179,16 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
     case '魔剣開放': {
       if (playerBuffs.spellBladeSealed?.turns > 0) {
         result.log = `⚔ 魔剣開放！ バフ不可状態のため発動できない！`; break
+      }
+      // 効果継続中の重ね掛けは残ターンをリセットさせず、即座にバフ不可（反動）へ移行させる
+      // （かけ直しで反動を回避＝2倍バフを永続化する悪用を防ぐ。全戦闘共通=executeSkillで一元処理）
+      if (playerBuffs.spellBladeExhaust?.turns > 0) {
+        const sealNow = playerBuffs.spellBladeExhaust.sealTurns || 4
+        result.newPlayerBuffs.atkUp = { turns:0 }
+        result.newPlayerBuffs.matkUp = { turns:0 }
+        result.newPlayerBuffs.spellBladeExhaust = undefined  // =undefinedにして各戦闘の反動移行ハンドラの二重発火を防ぐ
+        result.newPlayerBuffs.spellBladeSealed = { turns:sealNow }
+        result.log = `⚔ 魔剣開放を重ね掛け！ 魔力が暴走し即座に反動！ ${sealNow}ターンの間バフ不可状態！`; break
       }
       result.newPlayerBuffs.atkUp  = { turns:4, rate:2.0 }
       result.newPlayerBuffs.matkUp = { turns:4, rate:2.0 }

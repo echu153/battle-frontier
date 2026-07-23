@@ -558,6 +558,21 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       const lockedIdx = expandedSkillSet.findIndex(ss => ss.skills?.name === playerBuffs.berserk?.lockedSkill)
       if (lockedIdx >= 0) skillIndex = lockedIdx + 1
     }
+    // 魔剣開放：バフ期間終了後にバフ不可状態へ移行（他戦闘と同構造。無いと反動が発生しなかった）
+    if (playerBuffs.spellBladeExhaust?.turns === 0) {
+      const sealT = playerBuffs.spellBladeExhaust.sealTurns || 4
+      delete playerBuffs.spellBladeExhaust
+      playerBuffs.spellBladeSealed = { turns: sealT }
+      logs.push({ text:`⚔ 魔剣開放の反動！ ${sealT}ターンの間バフ不可状態になった！`, color:'#ff4444' })
+    }
+    // オールイン：バフ期間終了後にデバフへ移行（他戦闘と同構造。無いと反動が発生しなかった）
+    if (playerBuffs.allinActive?.turns === 0) {
+      const reactT = playerBuffs.allinActive.reactTurns || 2
+      delete playerBuffs.allinActive
+      delete playerBuffs.atkUp; delete playerBuffs.matkUp; delete playerBuffs.spdUp; delete playerBuffs.dmgReduce
+      playerBuffs.allinDebuff = { turns: reactT, rate: 0.7 }
+      logs.push({ text:`💸 オールインの効果が切れた！ ${reactT}ターンの間全ステータスが低下し、バフが使えない！`, color:'#ff4444' })
+    }
     // turns===0 の一時バフを掃除（atkUp等は ?.rate||1 で読まれるため、削除しないと永続する。Game.jsxと同様）
     for (const k of Object.keys(playerBuffs)) { if (playerBuffs[k]?.turns === 0) delete playerBuffs[k] }
     // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+15%（既存の上位spdUpは上書きしない）
