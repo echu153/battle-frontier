@@ -25,6 +25,28 @@ export async function wagerReport(key, winnerId) {
   }
 }
 
+// 在室ハートビート(切断者だけを離脱指定できるようにするためのプレゼンス更新)
+export async function wagerPing(key) {
+  try {
+    const { data, error } = await supabase.rpc('wager_ping', { p_key: key })
+    if (error) return { error: error.message }
+    return data || { error: '不明なエラー' }
+  } catch (e) {
+    return { error: e.message }
+  }
+}
+
+// 無効試合(切断)処理: 落ちた人(loserId)を負け扱いにし、残った人へポットを払い出す
+export async function wagerForfeit(key, loserId) {
+  try {
+    const { data, error } = await supabase.rpc('wager_forfeit', { p_key: key, p_loser: loserId })
+    if (error) return { error: error.message }
+    return data || { error: '不明なエラー' }
+  } catch (e) {
+    return { error: e.message }
+  }
+}
+
 // 放置された賭けの返金(2時間後)
 export async function wagerRefundStale(key) {
   try {

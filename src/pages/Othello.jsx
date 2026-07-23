@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { wagerJoin, wagerReport, MAX_BET } from '../lib/wager'
+import { wagerJoin, wagerReport, wagerForfeit, wagerPing, MAX_BET } from '../lib/wager'
 import {
   BLACK, WHITE, EMPTY, SIZE,
   validMoves, countStones, cpuChooseMove,
@@ -80,6 +80,7 @@ export default function Othello() {
   const wagerKeyRef = useRef(null) // 進行中の賭けキー
   const betPendingRef = useRef(null) // ホスト: 供託待ち { key, need:Set, ok:Set, start:fn }
   const reportedRef = useRef(new Set()) // 精算報告済みの賭けキー
+  const settleWagerRef = useRef(null)
 
   const lobbyChRef = useRef(null)
   const roomChRef = useRef(null)
@@ -171,6 +172,46 @@ export default function Othello() {
     return true
   }, [hostBroadcast, publishRoom])
 
+  // ---- 賭け精算(切断=無効試合なら落ちた人を負けにして残りへ払い出す) ----
+  const settleWager = useCallback(async (key, lostIds, winnerId, nameOf) => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+    if (lostIds && lostIds.length > 0) {
+      showToast('💰 相手の切断を確認中…精算まで少しお待ちください')
+      // 切断者を負け扱いにする。プレゼンス確定(~40秒)まで数回リトライ
+      const pending = new Set(lostIds)
+      for (let attempt = 0; attempt < 6 && pending.size > 0; attempt++) {
+        for (const lid of [...pending]) {
+          const r = await wagerForfeit(key, lid)
+          if (r?.status === 'settled') {
+            showToast(`💰 相手の切断により ${nameOf(r.winner) || '?'} が ${r.pot}G 獲得！`)
+            return
+          }
+          if (r?.forfeited || r?.status === 'refunded') pending.delete(lid)
+        }
+        if (pending.size > 0) await sleep(15000)
+      }
+    }
+    const w = winnerId && !(lostIds || []).includes(winnerId) ? winnerId : null
+    const res = await wagerReport(key, w)
+    if (res?.status === 'settled') showToast(`💰 精算完了: ${nameOf(w)} が ${res.pot}G 獲得！`)
+    else if (res?.status === 'refunded') showToast('💰 引き分け/NPC勝ちのため全員に返金されました')
+    else if (res?.error) showToast(`💰 ${res.error}`)
+  }, [])
+  useEffect(() => { settleWagerRef.current = settleWager }, [settleWager])
+
+  // ---- 賭け中は在室ハートビート(切断者だけを離脱指定できるように) ----
+  const inWagerMatch = !!(room && game?.phase === 'playing' && wagerKeyRef.current && me
+    && (game.mode === 'multi'
+      ? game.players?.some((p) => p.id === me.id)
+      : (game.players?.[BLACK]?.id === me.id || game.players?.[WHITE]?.id === me.id)))
+  useEffect(() => {
+    if (!inWagerMatch) return
+    const key = wagerKeyRef.current
+    wagerPing(key)
+    const iv = setInterval(() => wagerPing(key), 15000)
+    return () => clearInterval(iv)
+  }, [inWagerMatch])
+
   // ---- 部屋チャンネル(入室) ----
   // asSpectator: trueなら観戦専用(席決めから除外)
   const joinRoom = useCallback((roomInfo, asSpectator = false) => {
@@ -208,6 +249,23 @@ export default function Othello() {
       if (list.some((m) => m.id === roomInfo.hostId)) {
         hostSeen = true
       } else if (hostSeen) {
+        // 進行中の賭けがあれば、居なくなった対局者(ホスト含む)を負け扱いにして精算してから退室
+        const g = gameRef.current
+        const wk = wagerKeyRef.current
+        if (g && wk && !reportedRef.current.has(wk)) {
+          const seated = g.mode === 'multi' ? g.players.map((p) => p.id) : [g.players[BLACK]?.id, g.players[WHITE]?.id]
+          if (seated.includes(myself.id)) {
+            const present = new Set(list.map((m) => m.id))
+            const lostIds = seated.filter((id) => id && id !== myself.id && !isNpcId(id) && !present.has(id))
+            if (lostIds.length > 0) {
+              reportedRef.current.add(wk)
+              const nameOf = (id) => g.mode === 'multi'
+                ? g.players.find((p) => p.id === id)?.name
+                : Object.values(g.players).find((p) => p?.id === id)?.name
+              settleWagerRef.current?.(wk, lostIds, null, nameOf)
+            }
+          }
+        }
         showToast('ホストが退室したため部屋は解散しました')
         leaveRoomRef.current?.()
       }
@@ -251,6 +309,20 @@ export default function Othello() {
         const seatedIds = g.mode === 'multi' ? g.players.map((p) => p.id) : [g.players[BLACK]?.id, g.players[WHITE]?.id]
         if (seatedIds.includes(myself.id)) {
           reportedRef.current.add(payload.wagerKey)
+          // 名前解決(勝者トースト用)
+          const nameOf = (id) => g.mode === 'multi'
+            ? g.players.find((p) => p.id === id)?.name
+            : Object.values(g.players).find((p) => p?.id === id)?.name
+          // 切断した席 = 無効試合の原因 → 負け扱いにする
+          let lostIds = []
+          if (g.mode === 'multi') {
+            lostIds = g.players.filter((p) => p.left && !isNpcId(p.id)).map((p) => p.id)
+          } else if (g.result?.forfeit && g.result?.winner) {
+            const loserColor = g.result.winner === BLACK ? WHITE : BLACK
+            const lid = g.players[loserColor]?.id
+            if (lid && !isNpcId(lid)) lostIds = [lid]
+          }
+          // 通常の勝者(離脱者・NPCは除外)
           let winnerId = null
           if (g.mode === 'multi') {
             if (g.result?.winners?.length === 1) winnerId = g.players.find((p) => p.color === g.result.winners[0])?.id || null
@@ -258,16 +330,7 @@ export default function Othello() {
             winnerId = g.players[g.result.winner]?.id || null
           }
           if (winnerId && isNpcId(winnerId)) winnerId = null // NPC勝ちは返金
-          wagerReport(payload.wagerKey, winnerId).then((res) => {
-            if (res?.status === 'settled') {
-              const wName = g.mode === 'multi'
-                ? g.players.find((p) => p.id === winnerId)?.name
-                : Object.values(g.players).find((p) => p?.id === winnerId)?.name
-              showToast(`💰 精算完了: ${wName} が ${res.pot}G 獲得！`)
-            } else if (res?.status === 'refunded') {
-              showToast('💰 引き分け/NPC勝ちのため全員に返金されました')
-            } else if (res?.error) showToast(`💰 ${res.error}`)
-          })
+          settleWagerRef.current(payload.wagerKey, lostIds, winnerId, nameOf)
         }
       }
     })

@@ -7,7 +7,7 @@ import {
   createTrumpGame, applyTrump, npcTrump, autoTrump, trumpWinnerId,
   sevensPlayable, speedCanAnyPlay, dfSetStrength, SUIT_LABEL, RANK_LABEL,
 } from '../lib/trump'
-import { wagerJoin, wagerReport, MAX_BET } from '../lib/wager'
+import { wagerJoin, wagerReport, wagerForfeit, wagerPing, MAX_BET } from '../lib/wager'
 
 // ============================================================
 // トランプ広場 — 開発限定(大富豪/スピード/7ならべ/ババ抜き)
@@ -98,6 +98,7 @@ export default function Cards() {
   const betPendingRef = useRef(null) // ホスト: { key, need:Set, ok:Set, order }
   const reportedRef = useRef(new Set())
   const lastChampionRef = useRef(null) // 都落ち用: この部屋の前回大富豪(1位)のid
+  const settleWagerRef = useRef(null)
 
   useEffect(() => { gameRef.current = game }, [game])
   useEffect(() => { meRef.current = me }, [me])
@@ -170,7 +171,10 @@ export default function Cards() {
     stateSeqRef.current += 1
     roomChRef.current?.send({
       type: 'broadcast', event: 'state',
-      payload: { seq: stateSeqRef.current, game: newState, events, wagerKey: wagerKeyRef.current },
+      payload: {
+        seq: stateSeqRef.current, game: newState, events, wagerKey: wagerKeyRef.current,
+        disconnected: [...autoRef.current], // 切断して自動プレイ中の席(無効試合精算で負け扱いにする)
+      },
     })
   }, [])
 
@@ -197,6 +201,50 @@ export default function Cards() {
     }), [])
     publishRoom('playing')
   }, [hostBroadcast, publishRoom])
+
+  // ---- 賭け精算(切断=無効試合なら落ちた人を負けにして残りへ払い出す) ----
+  const settleWager = useCallback(async (key, g, lostIds) => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+    if (lostIds && lostIds.length > 0) {
+      showToast('💰 相手の切断を確認中…精算まで少しお待ちください')
+      // 切断者を負け扱いにする。プレゼンス確定(~40秒)まで数回リトライ
+      const pending = new Set(lostIds)
+      for (let attempt = 0; attempt < 6 && pending.size > 0; attempt++) {
+        for (const lid of [...pending]) {
+          const r = await wagerForfeit(key, lid)
+          if (r?.status === 'settled') {
+            const wName = g.players.find((p) => p.id === r.winner)?.name
+            showToast(`💰 相手の切断により ${wName || '?'} が ${r.pot}G 獲得！`)
+            return
+          }
+          if (r?.forfeited || r?.status === 'refunded') pending.delete(lid) // 離脱確定/精算済
+        }
+        if (pending.size > 0) await sleep(15000)
+      }
+    }
+    // 離脱者確定後、残りアクティブで通常の勝者報告(離脱者・NPCは勝者から除外)
+    const wid = trumpWinnerId(g)
+    const winnerHuman = wid && !isNpcId(wid) && !(lostIds || []).includes(wid) ? wid : null
+    const res = await wagerReport(key, winnerHuman)
+    if (res?.status === 'settled') {
+      const wName = g.players.find((p) => p.id === winnerHuman)?.name
+      showToast(`💰 精算完了: ${wName} が ${res.pot}G 獲得！`)
+    } else if (res?.status === 'refunded') {
+      showToast('💰 引き分け/NPC勝ちのため全員に返金されました')
+    } else if (res?.error) showToast(`💰 ${res.error}`)
+  }, [])
+  useEffect(() => { settleWagerRef.current = settleWager }, [settleWager])
+
+  // ---- 賭け中は在室ハートビート(切断者だけを離脱指定できるように) ----
+  const inWagerMatch = !!(room && game?.phase === 'playing' && wagerKeyRef.current
+    && me && game.players?.some((p) => p.id === me.id))
+  useEffect(() => {
+    if (!inWagerMatch) return
+    const key = wagerKeyRef.current
+    wagerPing(key)
+    const iv = setInterval(() => wagerPing(key), 15000)
+    return () => clearInterval(iv)
+  }, [inWagerMatch])
 
   // ---- 部屋 ----
   const joinRoom = useCallback((roomInfo, asSpectator = false) => {
@@ -226,12 +274,26 @@ export default function Cards() {
         // 途中参加者に現在の設定とstateを再配信
         ch.send({ type: 'broadcast', event: 'settings', payload: { settings: settingsRef.current } })
         if (gameRef.current) {
-          ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [], wagerKey: wagerKeyRef.current } })
+          ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [], wagerKey: wagerKeyRef.current, disconnected: [...autoRef.current] } })
         }
         return
       }
       if (list.some((m) => m.id === roomInfo.hostId)) hostSeen = true
       else if (hostSeen) {
+        // 進行中の賭けがあれば、居なくなった対局者(ホスト含む)を負け扱いにして精算してから退室
+        const g = gameRef.current
+        const wk = wagerKeyRef.current
+        if (g && wk && !reportedRef.current.has(wk)) {
+          const seated = g.players.map((p) => p.id)
+          if (seated.includes(myself.id)) {
+            const present = new Set(list.map((m) => m.id))
+            const lostIds = seated.filter((id) => id && id !== myself.id && !isNpcId(id) && !present.has(id))
+            if (lostIds.length > 0) {
+              reportedRef.current.add(wk)
+              settleWagerRef.current?.(wk, g, lostIds)
+            }
+          }
+        }
         showToast('ホストが退室したため部屋は解散しました')
         leaveRoomRef.current?.()
       }
@@ -267,16 +329,10 @@ export default function Cards() {
         const meSeated = g.players.some((p) => p.id === myself.id)
         if (meSeated) {
           reportedRef.current.add(payload.wagerKey)
-          const wid = trumpWinnerId(g)
-          const winnerHuman = wid && !isNpcId(wid) ? wid : null
-          wagerReport(payload.wagerKey, winnerHuman).then((res) => {
-            if (res?.status === 'settled') {
-              const wName = g.players.find((p) => p.id === winnerHuman)?.name
-              showToast(`💰 精算完了: ${wName} が ${res.pot}G 獲得！`)
-            } else if (res?.status === 'refunded') {
-              showToast('💰 引き分け/NPC勝ちのため全員に返金されました')
-            } else if (res?.error) showToast(`💰 ${res.error}`)
-          })
+          // 切断して自動プレイ中だった席は「無効試合の原因」= 負け扱いにする
+          const disc = new Set(payload.disconnected || [])
+          const lostIds = g.players.filter((p) => disc.has(p.id) && !isNpcId(p.id)).map((p) => p.id)
+          settleWagerRef.current(payload.wagerKey, g, lostIds)
         }
       }
     })
