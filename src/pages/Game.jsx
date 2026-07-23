@@ -2001,6 +2001,16 @@ export default function Game() {
 
     const applyRaidData = (data, h, m) => {
       const status = data?.status
+      // 昼枠のレイドは終了後もサーバーが夕方以降ずっと「その日の最後のボス」として返す。
+      // そのため夜枠の30分前(=出現前ウィンドウ)でも古い昼の討伐/失敗(defeated/expired)が返り、
+      // 出現前カウントダウンが表示されない不具合があった。
+      // → 過去枠が「終了から30分超」で、かつ次の枠の30分前(nearSlot)に入っているなら pre を優先する。
+      //   直近に終わった枠（受け取り待ち）は従来どおり結果/報酬バナーを残す。
+      const endedMs   = data?.spawned_at ? new Date(data.spawned_at).getTime() + 30 * 60000 : 0
+      const staleEnded = endedMs > 0 && (Date.now() - endedMs > 30 * 60000)
+      if ((status === 'defeated' || status === 'expired') && staleEnded && nearSlot(h, m)) {
+        setRaidStatus('pre'); setRaidBossData(null); return
+      }
       if (status === 'active' || status === 'defeated' || status === 'expired') {
         setRaidStatus(status)
         if (data?.id) {
