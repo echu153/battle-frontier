@@ -76,6 +76,7 @@ export default function Mahjong() {
   const [stamps, setStamps] = useState([]) // 表示中スタンプ
   const stampSeqRef = useRef(0)
   const stampCdRef = useRef(0)
+  const hostGraceRef = useRef(null) // ホスト不在の猶予タイマー(リロード復帰待ち)
 
   // 終局後は結果を数秒見せて待機画面へ戻る
   useEffect(() => {
@@ -235,10 +236,17 @@ export default function Mahjong() {
         }
         return
       }
-      if (list.some((m) => m.id === roomInfo.hostId)) hostSeen = true
-      else if (hostSeen) {
-        showToast('ホストが退室したため部屋は解散しました')
-        leaveRoomRef.current?.()
+      // ホストが消えたら15秒待って解散(リロード復帰の猶予)
+      if (list.some((m) => m.id === roomInfo.hostId)) {
+        hostSeen = true
+        if (hostGraceRef.current) { clearTimeout(hostGraceRef.current); hostGraceRef.current = null }
+      } else if (hostSeen && !hostGraceRef.current) {
+        hostGraceRef.current = setTimeout(() => {
+          hostGraceRef.current = null
+          if (membersRef.current.some((m) => m.id === roomInfo.hostId)) return // ホスト復帰済み
+          showToast('ホストが退室したため部屋は解散しました')
+          leaveRoomRef.current?.()
+        }, 15000)
       }
     })
     ch.on('presence', { event: 'leave' }, ({ key }) => {
@@ -282,9 +290,20 @@ export default function Mahjong() {
       setStamps((prev) => [...prev.slice(-4), { id, name: payload.name, text: payload.text }])
       setTimeout(() => setStamps((prev) => prev.filter((s) => s.id !== id)), 2600)
     })
-    ch.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') await ch.track({ name: myself.name, joinedAt: Date.now(), spectator: asSpectator })
+    // リロード復帰者からの状態要求: 誰でも持っていれば現在のstateを返す(ホストのリロードにも対応)
+    ch.on('broadcast', { event: 'statereq' }, () => {
+      if (gameRef.current) {
+        ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [] } })
+      }
     })
+    ch.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await ch.track({ name: myself.name, joinedAt: Date.now(), spectator: asSpectator })
+        ch.send({ type: 'broadcast', event: 'statereq', payload: {} }) // リロード復帰時の状態再取得
+      }
+    })
+    // リロードしても部屋に戻れるよう保存(明示退室/解散でクリア)
+    try { sessionStorage.setItem('bf-mahjong-room', JSON.stringify({ roomInfo, spectator: asSpectator })) } catch { /* 無視 */ }
     roomChRef.current = ch
     setRoom(roomInfo); roomRef.current = roomInfo
     setView('room')
@@ -312,16 +331,30 @@ export default function Mahjong() {
     setNpcs([]); npcsRef.current = []
     setLastResult(null)
     setStamps([])
+    if (hostGraceRef.current) { clearTimeout(hostGraceRef.current); hostGraceRef.current = null }
+    try { sessionStorage.removeItem('bf-mahjong-room') } catch { /* 無視 */ }
     setView('lobby')
   }, [])
   const leaveRoomRef = useRef(leaveRoom)
   useEffect(() => { leaveRoomRef.current = leaveRoom }, [leaveRoom])
+
+  // ---- リロード復帰: 保存済みの部屋があれば自動で入り直す ----
+  useEffect(() => {
+    if (!me || roomRef.current) return
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('bf-mahjong-room') || 'null')
+      if (saved?.roomInfo) joinRoom(saved.roomInfo, !!saved.spectator)
+    } catch { /* 無視 */ }
+  }, [me]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => {
     if (roomChRef.current) supabase.removeChannel(roomChRef.current)
     if (lobbyChRef.current) supabase.removeChannel(lobbyChRef.current)
     if (npcTimerRef.current) clearTimeout(npcTimerRef.current)
     if (deadlineTimerRef.current) clearTimeout(deadlineTimerRef.current)
+    if (hostGraceRef.current) clearTimeout(hostGraceRef.current)
+    // 街へ戻る等のページ遷移では部屋の保存を消す(リロードではこのクリーンアップは走らないので残る)
+    try { sessionStorage.removeItem('bf-mahjong-room') } catch { /* 無視 */ }
   }, [])
 
   const createRoom = () => {

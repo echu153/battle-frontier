@@ -76,6 +76,8 @@ export default function Othello() {
   const stampSeqRef = useRef(0)
   const stampCdRef = useRef(0) // 連打防止クールダウン
   const myJoinedAtRef = useRef(0) // 入室時刻(観戦切替時も席順を維持するため保持)
+  const hostGraceRef = useRef(null) // ホスト不在の猶予タイマー(リロード復帰待ち)
+  const pendingLeaveRef = useRef(new Map()) // ホスト: 切断者の不戦勝猶予タイマー playerId→timeout
   const wagerKeyRef = useRef(null) // 進行中の賭けキー
   const betPendingRef = useRef(null) // ホスト: 供託待ち { key, need:Set, ok:Set, start:fn }
   const reportedRef = useRef(new Set()) // 精算報告済みの賭けキー
@@ -244,50 +246,68 @@ export default function Othello() {
         }
         return
       }
-      // ホストが消えたら解散(在室を一度確認できた後のみ判定)
+      // 復帰した人の不戦勝猶予タイマーを解除
+      for (const m of list) {
+        const t = pendingLeaveRef.current.get(m.id)
+        if (t) { clearTimeout(t); pendingLeaveRef.current.delete(m.id) }
+      }
+      // ホストが消えたら15秒待って解散(リロード復帰の猶予)
       if (list.some((m) => m.id === roomInfo.hostId)) {
         hostSeen = true
-      } else if (hostSeen) {
-        // 進行中の賭けがあれば、居なくなった対局者(ホスト含む)を負け扱いにして精算してから退室
-        const g = gameRef.current
-        const wk = wagerKeyRef.current
-        if (g && wk && !reportedRef.current.has(wk)) {
-          const seated = g.mode === 'multi' ? g.players.map((p) => p.id) : [g.players[BLACK]?.id, g.players[WHITE]?.id]
-          if (seated.includes(myself.id)) {
-            const present = new Set(list.map((m) => m.id))
-            const lostIds = seated.filter((id) => id && id !== myself.id && !isNpcId(id) && !present.has(id))
-            if (lostIds.length > 0) {
-              reportedRef.current.add(wk)
-              const nameOf = (id) => g.mode === 'multi'
-                ? g.players.find((p) => p.id === id)?.name
-                : Object.values(g.players).find((p) => p?.id === id)?.name
-              settleWagerRef.current?.(wk, lostIds, null, nameOf)
+        if (hostGraceRef.current) { clearTimeout(hostGraceRef.current); hostGraceRef.current = null }
+      } else if (hostSeen && !hostGraceRef.current) {
+        hostGraceRef.current = setTimeout(() => {
+          hostGraceRef.current = null
+          if (membersRef.current.some((m) => m.id === roomInfo.hostId)) return // ホスト復帰済み
+          // 進行中の賭けがあれば、居なくなった対局者(ホスト含む)を負け扱いにして精算してから退室
+          const g = gameRef.current
+          const wk = wagerKeyRef.current
+          if (g && wk && !reportedRef.current.has(wk)) {
+            const seated2 = g.mode === 'multi' ? g.players.map((p) => p.id) : [g.players[BLACK]?.id, g.players[WHITE]?.id]
+            if (seated2.includes(myself.id)) {
+              const present = new Set(membersRef.current.map((m) => m.id))
+              const lostIds = seated2.filter((id) => id && id !== myself.id && !isNpcId(id) && !present.has(id))
+              if (lostIds.length > 0) {
+                reportedRef.current.add(wk)
+                const nameOf = (id) => g.mode === 'multi'
+                  ? g.players.find((p) => p.id === id)?.name
+                  : Object.values(g.players).find((p) => p?.id === id)?.name
+                settleWagerRef.current?.(wk, lostIds, null, nameOf)
+              }
             }
           }
-        }
-        showToast('ホストが退室したため部屋は解散しました')
-        leaveRoomRef.current?.()
+          showToast('ホストが退室したため部屋は解散しました')
+          leaveRoomRef.current?.()
+        }, 15000)
       }
     })
     ch.on('presence', { event: 'leave' }, ({ key }) => {
-      // ホスト: 対局中の切断は不戦勝(2人) / 手番スキップ(多人数)
+      // ホスト: 対局中の切断は15秒待ってから不戦勝(2人)/手番スキップ(多人数)。
+      // リロード等で戻ってきたらsyncでタイマー解除される
       if (roomInfo.hostId !== myself.id || gameRef.current?.phase !== 'playing') return
-      const cur = gameRef.current
-      if (cur.mode === 'multi') {
-        const leftName = cur.players.find((p) => p.id === key)?.name
-        const ended = multiPlayerLeft(cur, key)
-        if (ended) {
-          hostBroadcast(ended, leftName ? [{ t: 'left', name: leftName }] : [])
-          if (ended.phase === 'ended') publishRoom('waiting')
+      if (pendingLeaveRef.current.has(key)) return
+      const t = setTimeout(() => {
+        pendingLeaveRef.current.delete(key)
+        if (membersRef.current.some((m) => m.id === key)) return // 復帰済み
+        const cur = gameRef.current
+        if (cur?.phase !== 'playing') return
+        if (cur.mode === 'multi') {
+          const leftName = cur.players.find((p) => p.id === key)?.name
+          const ended = multiPlayerLeft(cur, key)
+          if (ended) {
+            hostBroadcast(ended, leftName ? [{ t: 'left', name: leftName }] : [])
+            if (ended.phase === 'ended') publishRoom('waiting')
+          }
+        } else {
+          const color = colorOf(cur, key)
+          const ended = forfeitGame(cur, key)
+          if (ended) {
+            hostBroadcast(ended, [{ t: 'forfeit', name: cur.players[color]?.name || '?' }])
+            publishRoom('waiting')
+          }
         }
-      } else {
-        const color = colorOf(cur, key)
-        const ended = forfeitGame(cur, key)
-        if (ended) {
-          hostBroadcast(ended, [{ t: 'forfeit', name: cur.players[color]?.name || '?' }])
-          publishRoom('waiting')
-        }
-      }
+      }, 15000)
+      pendingLeaveRef.current.set(key, t)
     })
     ch.on('broadcast', { event: 'state' }, ({ payload }) => {
       if (gameRef.current && payload.seq < stateSeqRef.current) return // 途中参加向け再配信は初回のみ受理
@@ -373,6 +393,12 @@ export default function Othello() {
       showToast('部屋が解散されました')
       leaveRoomRef.current?.()
     })
+    // リロード復帰者からの状態要求: 誰でも持っていれば現在のstateを返す(ホストのリロードにも対応)
+    ch.on('broadcast', { event: 'statereq' }, () => {
+      if (gameRef.current) {
+        ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [], wagerKey: wagerKeyRef.current } })
+      }
+    })
     ch.on('broadcast', { event: 'stamp' }, ({ payload }) => {
       const id = ++stampSeqRef.current
       setStamps((prev) => [...prev.slice(-5), { id, name: payload.name, text: payload.text, senderId: payload.senderId }])
@@ -382,8 +408,11 @@ export default function Othello() {
       if (status === 'SUBSCRIBED') {
         myJoinedAtRef.current = Date.now()
         await ch.track({ name: myself.name, joinedAt: myJoinedAtRef.current, spectator: asSpectator })
+        ch.send({ type: 'broadcast', event: 'statereq', payload: {} }) // リロード復帰時の状態再取得
       }
     })
+    // リロードしても部屋に戻れるよう保存(明示退室/解散でクリア)
+    try { sessionStorage.setItem('bf-othello-room', JSON.stringify({ roomInfo, spectator: asSpectator })) } catch { /* 無視 */ }
     roomChRef.current = ch
     setRoom(roomInfo)
     roomRef.current = roomInfo
@@ -414,20 +443,36 @@ export default function Othello() {
     setPassNote(null)
     setLastResult(null)
     setStamps([])
-    setStampCat(null)
     wagerKeyRef.current = null
     betPendingRef.current = null
     setBetBusy(false)
+    if (hostGraceRef.current) { clearTimeout(hostGraceRef.current); hostGraceRef.current = null }
+    for (const t of pendingLeaveRef.current.values()) clearTimeout(t)
+    pendingLeaveRef.current = new Map()
+    try { sessionStorage.removeItem('bf-othello-room') } catch { /* 無視 */ }
     setView('lobby')
   }, [])
   const leaveRoomRef = useRef(leaveRoom)
   useEffect(() => { leaveRoomRef.current = leaveRoom }, [leaveRoom])
+
+  // ---- リロード復帰: 保存済みの部屋があれば自動で入り直す ----
+  useEffect(() => {
+    if (!me || roomRef.current) return
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('bf-othello-room') || 'null')
+      if (saved?.roomInfo) joinRoom(saved.roomInfo, !!saved.spectator)
+    } catch { /* 無視 */ }
+  }, [me]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // アンマウント時にチャンネルを確実に掃除
   useEffect(() => () => {
     if (roomChRef.current) supabase.removeChannel(roomChRef.current)
     if (lobbyChRef.current) supabase.removeChannel(lobbyChRef.current)
     if (cpuTimerRef.current) clearTimeout(cpuTimerRef.current)
+    if (hostGraceRef.current) clearTimeout(hostGraceRef.current)
+    for (const t of pendingLeaveRef.current.values()) clearTimeout(t)
+    // 街へ戻る等のページ遷移では部屋の保存を消す(リロードではこのクリーンアップは走らないので残る)
+    try { sessionStorage.removeItem('bf-othello-room') } catch { /* 無視 */ }
   }, [])
 
   // ---- 部屋を立てる ----

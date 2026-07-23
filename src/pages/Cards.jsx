@@ -99,6 +99,7 @@ export default function Cards() {
   const deadlineTimerRef = useRef(null)
   const myJoinedAtRef = useRef(0)
   const wagerKeyRef = useRef(null)
+  const hostGraceRef = useRef(null) // ホスト不在の猶予タイマー(リロード復帰待ち)
   const betPendingRef = useRef(null) // ホスト: { key, need:Set, ok:Set, order }
   const reportedRef = useRef(new Set())
   const lastChampionRef = useRef(null) // 都落ち用: この部屋の前回大富豪(1位)のid
@@ -167,6 +168,11 @@ export default function Cards() {
     setSettings(next)
     roomChRef.current?.send({ type: 'broadcast', event: 'settings', payload: { settings: next } })
     publishRoom(gameRef.current?.phase === 'playing' ? 'playing' : 'waiting')
+    // リロード復帰用に設定も保存
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('bf-cards-room') || 'null')
+      if (saved) sessionStorage.setItem('bf-cards-room', JSON.stringify({ ...saved, settings: next }))
+    } catch { /* 無視 */ }
   }, [publishRoom])
 
   // ---- ホスト: エンジン適用→配信 ----
@@ -282,24 +288,31 @@ export default function Cards() {
         }
         return
       }
-      if (list.some((m) => m.id === roomInfo.hostId)) hostSeen = true
-      else if (hostSeen) {
-        // 進行中の賭けがあれば、居なくなった対局者(ホスト含む)を負け扱いにして精算してから退室
-        const g = gameRef.current
-        const wk = wagerKeyRef.current
-        if (g && wk && !reportedRef.current.has(wk)) {
-          const seated = g.players.map((p) => p.id)
-          if (seated.includes(myself.id)) {
-            const present = new Set(list.map((m) => m.id))
-            const lostIds = seated.filter((id) => id && id !== myself.id && !isNpcId(id) && !present.has(id))
-            if (lostIds.length > 0) {
-              reportedRef.current.add(wk)
-              settleWagerRef.current?.(wk, g, lostIds)
+      // ホストが消えたら15秒待って解散(リロード復帰の猶予)
+      if (list.some((m) => m.id === roomInfo.hostId)) {
+        hostSeen = true
+        if (hostGraceRef.current) { clearTimeout(hostGraceRef.current); hostGraceRef.current = null }
+      } else if (hostSeen && !hostGraceRef.current) {
+        hostGraceRef.current = setTimeout(() => {
+          hostGraceRef.current = null
+          if (membersRef.current.some((m) => m.id === roomInfo.hostId)) return // ホスト復帰済み
+          // 進行中の賭けがあれば、居なくなった対局者(ホスト含む)を負け扱いにして精算してから退室
+          const g = gameRef.current
+          const wk = wagerKeyRef.current
+          if (g && wk && !reportedRef.current.has(wk)) {
+            const seated2 = g.players.map((p) => p.id)
+            if (seated2.includes(myself.id)) {
+              const present = new Set(membersRef.current.map((m) => m.id))
+              const lostIds = seated2.filter((id) => id && id !== myself.id && !isNpcId(id) && !present.has(id))
+              if (lostIds.length > 0) {
+                reportedRef.current.add(wk)
+                settleWagerRef.current?.(wk, g, lostIds)
+              }
             }
           }
-        }
-        showToast('ホストが退室したため部屋は解散しました')
-        leaveRoomRef.current?.()
+          showToast('ホストが退室したため部屋は解散しました')
+          leaveRoomRef.current?.()
+        }, 15000)
       }
     })
     ch.on('presence', { event: 'leave' }, ({ key }) => {
@@ -356,6 +369,13 @@ export default function Cards() {
       setStamps((prev) => [...prev.slice(-4), { id, name: payload.name, text: payload.text }])
       setTimeout(() => setStamps((prev) => prev.filter((s) => s.id !== id)), 2600)
     })
+    // リロード復帰者からの状態要求: 誰でも持っていれば現在のstate/設定を返す(ホストのリロードにも対応)
+    ch.on('broadcast', { event: 'statereq' }, () => {
+      if (gameRef.current) {
+        ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [], wagerKey: wagerKeyRef.current } })
+      }
+      ch.send({ type: 'broadcast', event: 'settings', payload: { settings: settingsRef.current } })
+    })
     // ---- 部屋設定の同期 ----
     ch.on('broadcast', { event: 'settings' }, ({ payload }) => {
       settingsRef.current = payload.settings
@@ -398,6 +418,7 @@ export default function Cards() {
       if (status === 'SUBSCRIBED') {
         myJoinedAtRef.current = Date.now()
         await ch.track({ name: myself.name, joinedAt: myJoinedAtRef.current, spectator: asSpectator })
+        ch.send({ type: 'broadcast', event: 'statereq', payload: {} }) // リロード復帰時の状態再取得
       }
     })
     roomChRef.current = ch
@@ -412,6 +433,8 @@ export default function Cards() {
     setSettings(DEFAULT_SETTINGS)
     setLastResult(null)
     setBetBusy(false)
+    // リロードしても部屋に戻れるよう保存(明示退室/解散でクリア)
+    try { sessionStorage.setItem('bf-cards-room', JSON.stringify({ roomInfo, spectator: asSpectator, settings: settingsRef.current })) } catch { /* 無視 */ }
   }, [hostApply, publishRoom, actuallyStart]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const leaveRoom = useCallback(() => {
@@ -430,16 +453,33 @@ export default function Cards() {
     setLastResult(null); setSelCards([]); setBetBusy(false)
     setStamps([])
     betPendingRef.current = null
+    if (hostGraceRef.current) { clearTimeout(hostGraceRef.current); hostGraceRef.current = null }
+    try { sessionStorage.removeItem('bf-cards-room') } catch { /* 無視 */ }
     setView('lobby')
   }, [])
   const leaveRoomRef = useRef(leaveRoom)
   useEffect(() => { leaveRoomRef.current = leaveRoom }, [leaveRoom])
+
+  // ---- リロード復帰: 保存済みの部屋があれば自動で入り直す(設定も復元) ----
+  useEffect(() => {
+    if (!me || roomRef.current) return
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('bf-cards-room') || 'null')
+      if (saved?.roomInfo) {
+        joinRoom(saved.roomInfo, !!saved.spectator)
+        if (saved.settings) { settingsRef.current = saved.settings; setSettings(saved.settings) }
+      }
+    } catch { /* 無視 */ }
+  }, [me]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => {
     if (roomChRef.current) supabase.removeChannel(roomChRef.current)
     if (lobbyChRef.current) supabase.removeChannel(lobbyChRef.current)
     if (npcTimerRef.current) clearTimeout(npcTimerRef.current)
     if (deadlineTimerRef.current) clearTimeout(deadlineTimerRef.current)
+    if (hostGraceRef.current) clearTimeout(hostGraceRef.current)
+    // 街へ戻る等のページ遷移では部屋の保存を消す(リロードではこのクリーンアップは走らないので残る)
+    try { sessionStorage.removeItem('bf-cards-room') } catch { /* 無視 */ }
   }, [])
 
   const createRoom = () => {
