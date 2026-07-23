@@ -48,8 +48,7 @@ SELECT '蒼穹の鎧',   'armor',     'armor',     'a', 0,  25, 0,  25, 0  WHERE
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
 SELECT '天翼の護符', 'accessory', 'accessory', 'a', 0,  0,  30, 0,  20 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天翼の護符');
 
--- --- bossDrops (S級・進化可能・特殊能力なし) ---
--- --- bossDrops (A級・進化/真化可。真化で特殊能力＝§5参照) ---
+-- --- bossDrops (A級・進化/真化可。真化でクリティカル系スタック能力を解放＝クライアント実装) ---
 --   ウラノスの天砲: 攻35 特攻35 ＋ クリティカル率10%
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus, crit_bonus, crit_resist, crit_dmg)
 SELECT 'ウラノスの天砲', 'gun',       'weapon',    'a', 35, 0,  35, 0,  0,  10, 0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='ウラノスの天砲');
