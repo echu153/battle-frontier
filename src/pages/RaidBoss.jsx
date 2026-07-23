@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { getWeaponGroup } from '../lib/stats'
-import { evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
+import { evoOnHit, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
 import { BOSS_VARUZENOKU, BOSS_AMAZA, BOSS_ZERUGIASU, BOSS_ENMA, bossImage, bossColor } from '../lib/raidSchedule'
 import { emblemDmgMult, emblemDrainAmount, emblemBlocksAilment } from '../lib/emblemCombat'
 import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
@@ -325,6 +325,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           if (nextBoostMult > 1.0 && cs.skills?.name !== '半月蹴り') res.newPlayerBuffs.nextSkillBoost = undefined  // 消費
           let finalDmg = Math.floor(res.dmg * defScale * finalCritMult * passiveDmgMult * gensoMult * tosoMult * seimitsuMult * iaiMult * rokkanMult * allinDebuffOutMult * nextBoostMult * emblemDmgMult(eff, skillPhysical) * (0.9 + Math.random() * 0.2))
           if (res.dmg > 0) finalDmg = cutRaidHit(Math.floor(finalDmg * weakMult(skillPhysical, turn))) // 弱点補正＋1ヒット段階カット
+          evoOnHit(eff, finalDmg, enemyBuffs, bossName, logs, finalCrit)  // 真化: 攻撃ヒット時のスタック（天砲/指輪・ボスはデバフ無効）
           // 第六感（再修練）：魔法攻撃がヒットしたらスタック+1（最大6・戦闘中持続）
           if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks + 1)
           if (res.selfDmg > 0) playerHp = Math.max(1, playerHp - res.selfDmg)
@@ -419,6 +420,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         const naRokkanMult = (hasRokkan && pe('サイキッカー')) ? (1 + 0.05*Math.min(6, rokkanStacks)) : 1.0
         let finalDmg = Math.floor(baseDmg * critMult * (isArtifact ? 1.3 : 1.0) * passiveDmgMult * tosoMult * naIaiMult * naRokkanMult * emblemDmgMult(eff, !isMagical) * (0.9 + Math.random() * 0.2))
         finalDmg = cutRaidHit(Math.floor(finalDmg * weakMult(!isMagical, turn))) // 弱点補正＋1ヒット段階カット
+        evoOnHit(eff, finalDmg, enemyBuffs, bossName, logs, isCrit)  // 真化: 攻撃ヒット時のスタック（天砲/指輪・ボスはデバフ無効）
         // 通常攻撃は精密照準スタックをリセット（連続スキルが途切れる）
         seimitsuStacks = 0; prevSkillName = null
         if (!playerBuffs.healBlock?.turns && playerBuffs.bloodRage?.turns > 0 && finalDmg > 0) {
