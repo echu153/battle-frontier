@@ -13,37 +13,37 @@
 --   スケールは既存S級(レイド装備=primary80前後)を踏襲。common=A / rare・boss=S。
 --   ボス装備(§末尾3種)は特殊能力なし=固定ステのみ。真化で基礎ステ×2。
 
--- --- commonDrops (A級) ---
+-- --- commonDrops (A級・ステ合計50) ---
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '蒼天の剣',   'sword',     'weapon',    'a', 46, 0,  0,  0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='蒼天の剣');
+SELECT '蒼天の剣',   'sword',     'weapon',    'a', 50, 0,  0,  0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='蒼天の剣');
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '天翼の短剣', 'dagger',    'weapon',    'a', 38, 0,  0,  0,  14 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天翼の短剣');
+SELECT '天翼の短剣', 'dagger',    'weapon',    'a', 38, 0,  0,  0,  12 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天翼の短剣');
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
 SELECT '疾風天弓',   'bow',       'weapon',    'a', 42, 0,  0,  0,  8  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='疾風天弓');
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '蒼雲の杖',   'staff',     'weapon',    'a', 0,  0,  46, 0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='蒼雲の杖');
+SELECT '蒼雲の杖',   'staff',     'weapon',    'a', 0,  0,  50, 0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='蒼雲の杖');
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '天空魔導書', 'tome',      'weapon',    'a', 0,  0,  44, 0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天空魔導書');
+SELECT '天空魔導書', 'tome',      'weapon',    'a', 0,  0,  50, 0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天空魔導書');
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '天羽の鎧',   'armor',     'armor',     'a', 0,  42, 0,  42, 0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天羽の鎧');
+SELECT '天羽の鎧',   'armor',     'armor',     'a', 0,  25, 0,  25, 0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天羽の鎧');
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '蒼天の指輪', 'accessory', 'accessory', 'a', 22, 0,  22, 0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='蒼天の指輪');
+SELECT '蒼天の指輪', 'accessory', 'accessory', 'a', 25, 0,  25, 0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='蒼天の指輪');
 
--- --- rareDrops (A級・雑魚ドロップは common/rare とも A) ---
+-- --- rareDrops (A級・ステ合計50・雑魚ドロップは common/rare とも A) ---
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '蒼天大剣',   'sword',     'weapon',    'a', 78, 0,  0,  0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='蒼天大剣');
+SELECT '蒼天大剣',   'sword',     'weapon',    'a', 50, 0,  0,  0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='蒼天大剣');
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '天翔短剣',   'dagger',    'weapon',    'a', 64, 0,  0,  0,  20 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天翔短剣');
+SELECT '天翔短剣',   'dagger',    'weapon',    'a', 35, 0,  0,  0,  15 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天翔短剣');
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '天穿弓',     'bow',       'weapon',    'a', 70, 0,  0,  0,  12 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天穿弓');
+SELECT '天穿弓',     'bow',       'weapon',    'a', 40, 0,  0,  0,  10 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天穿弓');
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '蒼天霊杖',   'staff',     'weapon',    'a', 0,  0,  78, 0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='蒼天霊杖');
+SELECT '蒼天霊杖',   'staff',     'weapon',    'a', 0,  0,  50, 0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='蒼天霊杖');
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '天空霊典',   'tome',      'weapon',    'a', 0,  0,  72, 0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天空霊典');
+SELECT '天空霊典',   'tome',      'weapon',    'a', 0,  0,  50, 0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天空霊典');
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '蒼穹の鎧',   'armor',     'armor',     'a', 0,  68, 0,  68, 0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='蒼穹の鎧');
+SELECT '蒼穹の鎧',   'armor',     'armor',     'a', 0,  25, 0,  25, 0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='蒼穹の鎧');
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '天翼の護符', 'accessory', 'accessory', 'a', 0,  0,  34, 0,  22 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天翼の護符');
+SELECT '天翼の護符', 'accessory', 'accessory', 'a', 0,  0,  30, 0,  20 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天翼の護符');
 
 -- --- bossDrops (S級・進化可能・特殊能力なし) ---
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
