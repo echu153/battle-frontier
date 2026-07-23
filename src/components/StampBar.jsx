@@ -30,7 +30,8 @@ export function StampBar({ spectator, players = [], onSend }) {
   const [targetMode, setTargetMode] = useState(false)
   const cats = spectator ? STAMP_SPECTATOR_CATS : STAMP_PLAYER_CATS
   const cur = cats.find((c) => c.key === cat)
-  const send = (text) => { onSend(text); setCat(null); setTargetMode(false) }
+  // 送信してもパネルは閉じない(×かカテゴリ再タップで閉じる)
+  const send = (text) => { onSend(text); setTargetMode(false) }
   return (
     <div style={{ marginTop: '10px', width: '100%' }}>
       <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
