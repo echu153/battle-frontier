@@ -172,6 +172,40 @@ test('emblemLevelUpCost（クライアント表示）がSQLのコスト計算と
   }
 })
 
+test('calcEffectiveStats: 紋章の全能力が実効ステへ正しく変換される（吸収/クリ抵抗等の特殊系含む）', async () => {
+  const { calcEffectiveStats } = await import('../src/lib/stats.js')
+  const base = { hp_max: 1000, mp_max: 500, atk: 1000, def: 1000, matk: 1000, mdef: 1000, spd: 1000, class: '', retraining: {} }
+  const alloc = {}
+  for (const k of EMBLEM_CRYSTAL_KEYS) alloc[k] = 50  // 全結晶MAX振り
+  const noEm = calcEffectiveStats(base, [], [], null)
+  const em = calcEffectiveStats({ ...base, emblemAlloc: alloc }, [], [], null)
+  // フラットステ（仕様書のMAX値どおり）
+  assert.equal(em.atk - noEm.atk, 1250)
+  assert.equal(em.def - noEm.def, 1500)
+  assert.equal(em.matk - noEm.matk, 1250)
+  assert.equal(em.mdef - noEm.mdef, 1500)
+  // 貫通（%→小数変換・PEN_CAP以下）
+  assert.ok(Math.abs(em.defPen - 0.15) < 1e-9)
+  assert.ok(Math.abs(em.mdefPen - 0.15) < 1e-9)
+  // クリ系（クリ率/威力/抵抗）と回避
+  assert.equal(em.critBonus - (noEm.critBonus || 0), 10)
+  assert.ok(Math.abs(em.critDmg - 0.5) < 1e-9)   // +50% → 0.5（エンジンは 1.5+eff.critDmg で使用）
+  assert.equal(em.critResist - (noEm.critResist || 0), 15)
+  assert.equal(em.evasionBonus - (noEm.evasionBonus || 0), 5)
+  // 新メカニクス（eff.emblem 経由・戦闘ループが消費）
+  assert.equal(em.emblem.physDrain, 10)      // 物理吸収（ライフスティール）
+  assert.equal(em.emblem.specialDrain, 10)   // 特殊吸収
+  assert.equal(em.emblem.physDmg, 15)
+  assert.equal(em.emblem.specialDmg, 15)
+  assert.deepEqual(em.emblem.dotUp, { bleed: 50, burn: 50, poison: 50 })
+  assert.deepEqual(em.emblem.ailRes, { poison: 20, paralysis: 20, burn: 20, bleed: 20, stun: 10 })
+  // 紋章なしなら emblem フィールドは null（全エンジンで素通し）
+  assert.equal(noEm.emblem, null)
+  // 吸収の実額（1000ダメージ×10%=100）
+  assert.equal(emblemDrainAmount(em, 1000, true), 100)
+  assert.equal(emblemDrainAmount(em, 1000, false), 100)
+})
+
 test('八獄の結晶キーはすべて emblem.js に存在する', () => {
   const covered = new Set()
   for (const h of HACHIGOKU_HELLS) {

@@ -176,7 +176,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   const madokenAtkMult = (hasMadokenJutsu && pe('魔法剣士')) ? 1.1 : 1.0  // 魔導剣術強化：攻撃力×1.1
 
   let   playerCritRate  = calcCritRate(effectiveSpdForCalc, BOSS_SPD) + passiveCritBonus + (eff.critBonus || 0)
-  const bossCritRate    = Math.max(0, calcCritRate(BOSS_SPD, effectiveSpdForCalc))
+  const bossCritRate    = Math.max(0, calcCritRate(BOSS_SPD, effectiveSpdForCalc) - (eff.critResist || 0))  // クリティカル抵抗（紋章/オニキス）を反映（他エンジンと統一）
   let   playerEvasion   = calcEvasionRate(effectiveSpdForCalc, BOSS_SPD) + (eff.evasionBonus || 0)
   let   playerExtraRate = calcExtraActionRate(effectiveSpdForCalc, BOSS_SPD)
   const bossExtraRate   = calcExtraActionRate(BOSS_SPD, effectiveSpdForCalc)

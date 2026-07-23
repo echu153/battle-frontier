@@ -617,7 +617,7 @@ export default function Equipment() {
           {/* 第5枠: 紋章（開発限定） */}
           {profile?.is_admin && (() => {
             const emLevel = emblemRow?.level || 1
-            const emRank = getEmblemRank(emLevel)
+            const emRank = getEmblemRank(emblemAllocTotal(emblemRow?.alloc))  // ランクは結晶の使用個数で決まる
             const b = calcEmblemBonus(emblemRow?.alloc)
             // 上昇しているステータスだけをチップで表示
             const effChips = [

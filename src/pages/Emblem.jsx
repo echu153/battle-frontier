@@ -111,8 +111,8 @@ export default function Emblem() {
   const capStage = emblem?.cap_stage || 0
   const alloc = emblem?.alloc || {}
   const cap = emblemLevelCap(capStage)
-  const rank = getEmblemRank(level)
   const total = emblemAllocTotal(alloc)
+  const rank = getEmblemRank(total)  // ランクは「結晶を使った個数」で決まる
   const freePoints = Math.max(0, level - total)
   const shards = items[EMBLEM_SHARD_NAME] || 0
   const nextCost = level < cap ? emblemLevelUpCost(level + 1) : null
