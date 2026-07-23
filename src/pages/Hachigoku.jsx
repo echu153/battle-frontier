@@ -875,6 +875,7 @@ export default function Hachigoku() {
   const [reward, setReward] = useState(null)
   const [resultMsg, setResultMsg] = useState(null)
   const [remaining, setRemaining] = useState(0)
+  const [devUnlimited, setDevUnlimited] = useState(false)  // 🔧 開発無限モード（is_admin限定・OFF=1日5勝モードで実プレイヤーと同条件・リロードでOFF）
   const cdRef = useRef(null)
   const logsEndRef = useRef(null)
   const cardRefs = useRef({})  // 地獄カードごとのDOM参照（選択時にスクロールして合わせる）
@@ -944,7 +945,7 @@ export default function Hachigoku() {
   }
 
   const winsLeft = Math.max(0, HACHIGOKU_DAILY_WINS - winsToday)
-  const unlimited = !!profile?.is_admin  // 管理者は回数無制限（開発テスト用・一般公開後も免除）
+  const unlimited = !!profile?.is_admin && devUnlimited  // 管理者が開発無限モードON時のみ回数無制限（OFF=1日5勝で実プレイヤーと同条件）
 
   const handleChallenge = async () => {
     if (!selectedHell || !profile || battling || remaining > 0) return
@@ -972,7 +973,7 @@ export default function Hachigoku() {
 
       if (win) {
         const diffIdx = HACHIGOKU_DIFFICULTIES.findIndex(d => d.key === selectedDiff)
-        const { data, error } = await supabase.rpc('hachigoku_result', { p_hell: selectedHell, p_diff: diffIdx })
+        const { data, error } = await supabase.rpc('hachigoku_result', { p_hell: selectedHell, p_diff: diffIdx, p_dev_unlimited: unlimited })
         if (error || data?.error) {
           const code = data?.error || error?.message
           setResultMsg(code === 'daily_limit'
@@ -1030,12 +1031,16 @@ export default function Hachigoku() {
             <div style={{ border:'1px solid #6a2a2a', background:'#1c0808', padding:'12px', marginBottom:'12px' }}>
               <div style={{ color:'#dd9988', fontSize:'12px', lineHeight:'1.9' }}>
                 {unlimited ? (
-                  <>本日の残り挑戦回数: <span style={{ color:'#66ff99', fontWeight:'bold' }}>無制限</span><span style={{ color:'#aa6655', fontSize:'10px', marginLeft:'6px' }}>（管理者・本日{winsToday}勝）</span></>
+                  <>本日の残り挑戦回数: <span style={{ color:'#66ff99', fontWeight:'bold' }}>無制限</span><span style={{ color:'#aa6655', fontSize:'10px', marginLeft:'6px' }}>（開発無限モード・本日{winsToday}勝）</span></>
                 ) : (
                   <>本日の残り挑戦回数: <span style={{ color: winsLeft > 0 ? '#ffcc66' : '#ff5555', fontWeight:'bold' }}>{winsLeft}</span> ／ {HACHIGOKU_DAILY_WINS}回</>
                 )}
-                <span style={{ color:'#aa6655', fontSize:'10px', marginLeft:'8px' }}>(開発アカウント限定)</span>
               </div>
+              {profile?.is_admin && (
+                <button onClick={()=>setDevUnlimited(v=>!v)} style={{ marginTop:'8px', background: devUnlimited ? '#0a2a14' : '#26120a', border:`1px solid ${devUnlimited ? '#44cc77' : '#aa7744'}`, color: devUnlimited ? '#66ff99' : '#ffbb66', padding:'5px 12px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+                  🔧 {devUnlimited ? '開発無限モード（タップで1日5勝モードへ）' : '1日5勝モード（タップで開発無限モードへ）'}
+                </button>
+              )}
               <div style={{ color:'#aa6655', fontSize:'10px', marginTop:'4px', lineHeight:'1.7' }}>
                 八つの地獄の主に挑み、紋章を鍛える<span style={{ color:'#ffaa88' }}>結晶・紋章の成長石・獄卒の魂</span>を勝ち取ろう（報酬は確率ドロップ）。<br/>
                 挑戦は1日{HACHIGOKU_DAILY_WINS}回まで（毎朝5時リセット）。<span style={{ color:'#88ccff' }}>敗北しても回数は減りません。</span><br/>

@@ -302,13 +302,17 @@ GRANT EXECUTE ON FUNCTION public.emblem_allocate(text, int) TO authenticated;
 
 -- 5) RPC: 八獄 勝利報酬（サーバー権威・確率ドロップ）------------
 --   p_hell: 地獄キー / p_diff: 0=Easy 1=Normal 2=Hard 3=EXTREME 4=Hell
+--   p_dev_unlimited: 管理者の「開発無限モード」フラグ。true かつ is_admin のときだけ1日5勝上限を免除。
+--                    非管理者がtrueを送っても is_admin=false のため免除されない（サーバー側で担保）。
 --   1日5勝まで（JST朝5時リセット）。敗北時はこのRPCを呼ばない＝ノーカウント。
 --   ドロップ（難易度 0..4）※結晶は個数を決めてから対応結晶グループからランダム抽選:
 --     結晶: Easy=1+60%×1 / Normal=2+60%×1+20%×1 / Hard=3+同 / EXTREME=4+同 / Hell=5+同
 --     紋章の成長石: Easy=1 / Normal=1〜2 / Hard=2〜3 / EXTREME=3〜4 / Hell=4〜5（範囲は均等乱数）
 --     魂:   [1%, 3%, 6%, 15%, 40%]
 --     記憶: Hell(4) 初回クリアで確定1個
-CREATE OR REPLACE FUNCTION public.hachigoku_result(p_hell text, p_diff int)
+-- 旧2引数版が存在する場合は削除（3引数版へ移行・オーバーロード重複防止）
+DROP FUNCTION IF EXISTS public.hachigoku_result(text, int);
+CREATE OR REPLACE FUNCTION public.hachigoku_result(p_hell text, p_diff int, p_dev_unlimited boolean DEFAULT false)
 RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
 DECLARE
   v_uid uuid := auth.uid();
@@ -352,13 +356,15 @@ BEGIN
     RETURN json_build_object('error', 'bad_params');
   END IF;
 
-  -- 本日の勝利数チェック（1日5勝まで）。is_adminは無制限（開発テスト用・一般公開後も管理者は免除）
+  -- 本日の勝利数チェック（1日5勝まで）。管理者が開発無限モード(p_dev_unlimited=true)を指定した時のみ免除。
   INSERT INTO hachigoku_progress (player_id, win_day, win_count)
   VALUES (v_uid, v_today, 0)
   ON CONFLICT (player_id) DO NOTHING;
   SELECT * INTO v_p FROM hachigoku_progress WHERE player_id = v_uid FOR UPDATE;
   IF v_p.win_day = v_today THEN v_wins := v_p.win_count; END IF;
-  IF NOT COALESCE(v_admin, false) AND v_wins >= 5 THEN RETURN json_build_object('error', 'daily_limit'); END IF;
+  IF v_wins >= 5 AND NOT (COALESCE(v_admin, false) AND COALESCE(p_dev_unlimited, false)) THEN
+    RETURN json_build_object('error', 'daily_limit');
+  END IF;
 
   -- 結晶（個数を決めてから、その地獄の対応結晶グループから1個ずつランダム抽選）
   --   Easy=1 / Normal=2 / Hard=3 / EXTREME=4 / Hell=5 を基礎に、
@@ -421,4 +427,4 @@ BEGIN
     'got_soul', v_got_soul, 'got_memory', v_got_memory,
     'wins_today', v_wins + 1, 'wins_left', GREATEST(0, 5 - (v_wins + 1)));
 END $$;
-GRANT EXECUTE ON FUNCTION public.hachigoku_result(text, int) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.hachigoku_result(text, int, boolean) TO authenticated;
