@@ -1023,7 +1023,10 @@ export default function Hachigoku() {
       <div style={{ maxWidth:'680px', margin:'0 auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #5a1f1f', paddingBottom:'8px', marginBottom:'12px', position:'sticky', top:0, zIndex:30, paddingTop:'8px', background:'#100505' }}>
           <div style={{ color:'#ff9977', fontSize:'16px', letterSpacing:'3px' }}>🔥 八獄</div>
-          <button onClick={()=>nav('/game')} style={{ background:'none', border:'1px solid #aa4444', color:'#cc7766', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏰 街に戻る</button>
+          <div style={{ display:'flex', gap:'6px' }}>
+            <button onClick={()=>nav('/emblem')} style={{ background:'none', border:'1px solid #a060e0', color:'#c8a0ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🔮 紋章</button>
+            <button onClick={()=>nav('/game')} style={{ background:'none', border:'1px solid #aa4444', color:'#cc7766', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏰 街に戻る</button>
+          </div>
         </div>
 
         {scene === 'lobby' && (
