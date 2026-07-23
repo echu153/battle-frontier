@@ -8,6 +8,7 @@ import {
   MIN_MAHJONG_PLAYERS, MAX_MAHJONG_PLAYERS, TURN_SEC, CLAIM_SEC,
 } from '../lib/mahjong'
 import { TileFace, TileBackFace } from '../components/MahjongTile'
+import { StampBar, StampOverlay } from '../components/StampBar'
 
 // ============================================================
 // 麻雀(雀魂風) — 開発限定のミニゲーム(娯楽・ステ影響なし)
@@ -72,6 +73,9 @@ export default function Mahjong() {
   const [riichiMode, setRiichiMode] = useState(false)
   const [hoverWait, setHoverWait] = useState(null) // { k, waits } 打牌候補ホバー時の待ち表示
   const [lastResult, setLastResult] = useState(null) // 直前の対局結果(待機画面に表示)
+  const [stamps, setStamps] = useState([]) // 表示中スタンプ
+  const stampSeqRef = useRef(0)
+  const stampCdRef = useRef(0)
 
   // 終局後は結果を数秒見せて待機画面へ戻る
   useEffect(() => {
@@ -273,6 +277,11 @@ export default function Mahjong() {
       showToast('部屋が解散されました')
       leaveRoomRef.current?.()
     })
+    ch.on('broadcast', { event: 'stamp' }, ({ payload }) => {
+      const id = ++stampSeqRef.current
+      setStamps((prev) => [...prev.slice(-4), { id, name: payload.name, text: payload.text }])
+      setTimeout(() => setStamps((prev) => prev.filter((s) => s.id !== id)), 2600)
+    })
     ch.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') await ch.track({ name: myself.name, joinedAt: Date.now(), spectator: asSpectator })
     })
@@ -302,6 +311,7 @@ export default function Mahjong() {
     setMembers([]); membersRef.current = []
     setNpcs([]); npcsRef.current = []
     setLastResult(null)
+    setStamps([])
     setView('lobby')
   }, [])
   const leaveRoomRef = useRef(leaveRoom)
@@ -346,6 +356,14 @@ export default function Mahjong() {
 
   const sendAction = useCallback((action) => {
     roomChRef.current?.send({ type: 'broadcast', event: 'action', payload: { playerId: meRef.current.id, action } })
+  }, [])
+
+  // ---- スタンプ送信(1.5秒クールダウン) ----
+  const sendStamp = useCallback((text) => {
+    const now = Date.now()
+    if (now - stampCdRef.current < 1500) return
+    stampCdRef.current = now
+    roomChRef.current?.send({ type: 'broadcast', event: 'stamp', payload: { name: meRef.current.name, text, senderId: meRef.current.id } })
   }, [])
 
   // ---- NPC/切断者の自動進行(ホスト) ----
@@ -531,6 +549,8 @@ export default function Mahjong() {
             return <div style={{ color: '#668', marginTop: 4 }}>▼ 観戦者: {specs.map((m) => m.name).join('　')}</div>
           })()}
         </div>
+        <StampBar spectator={!seated.some((s) => s.id === me.id)} players={seated} onSend={sendStamp} />
+        <StampOverlay stamps={stamps} bottom={150} />
       </div>
     )
   }
@@ -779,6 +799,10 @@ export default function Mahjong() {
           </div>
         )
       })()}
+
+      {/* スタンプ(観戦者は応援カテゴリ付き) */}
+      <StampBar spectator={mySeat === -1} players={game.players.map((p) => ({ id: p.id, name: p.name }))} onSend={sendStamp} />
+      <StampOverlay stamps={stamps} bottom={150} />
 
       {/* 局結果 */}
       {game.phase === 'roundEnd' && game.roundResult && (

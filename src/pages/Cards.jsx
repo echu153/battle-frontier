@@ -8,6 +8,7 @@ import {
   sevensPlayable, speedCanAnyPlay, dfSetStrength, SUIT_LABEL, RANK_LABEL,
 } from '../lib/trump'
 import { wagerJoin, wagerReport, wagerForfeit, wagerPing, MAX_BET } from '../lib/wager'
+import { StampBar, StampOverlay } from '../components/StampBar'
 
 // ============================================================
 // トランプ広場 — 開発限定(大富豪/スピード/7ならべ/ババ抜き)
@@ -81,6 +82,9 @@ export default function Cards() {
   const [lastResult, setLastResult] = useState(null)
   const [selCards, setSelCards] = useState([]) // 大富豪: 選択中cardId / スピード: [slot]
   const [betBusy, setBetBusy] = useState(false)
+  const [stamps, setStamps] = useState([]) // 表示中スタンプ
+  const stampSeqRef = useRef(0)
+  const stampCdRef = useRef(0)
 
   const lobbyChRef = useRef(null)
   const roomChRef = useRef(null)
@@ -347,6 +351,11 @@ export default function Cards() {
       showToast('部屋が解散されました')
       leaveRoomRef.current?.()
     })
+    ch.on('broadcast', { event: 'stamp' }, ({ payload }) => {
+      const id = ++stampSeqRef.current
+      setStamps((prev) => [...prev.slice(-4), { id, name: payload.name, text: payload.text }])
+      setTimeout(() => setStamps((prev) => prev.filter((s) => s.id !== id)), 2600)
+    })
     // ---- 部屋設定の同期 ----
     ch.on('broadcast', { event: 'settings' }, ({ payload }) => {
       settingsRef.current = payload.settings
@@ -419,6 +428,7 @@ export default function Cards() {
     setMembers([]); membersRef.current = []
     setNpcs([]); npcsRef.current = []
     setLastResult(null); setSelCards([]); setBetBusy(false)
+    setStamps([])
     betPendingRef.current = null
     setView('lobby')
   }, [])
@@ -491,6 +501,14 @@ export default function Cards() {
 
   const sendAction = useCallback((action) => {
     roomChRef.current?.send({ type: 'broadcast', event: 'action', payload: { playerId: meRef.current.id, action } })
+  }, [])
+
+  // ---- スタンプ送信(1.5秒クールダウン) ----
+  const sendStamp = useCallback((text) => {
+    const now = Date.now()
+    if (now - stampCdRef.current < 1500) return
+    stampCdRef.current = now
+    roomChRef.current?.send({ type: 'broadcast', event: 'stamp', payload: { name: meRef.current.name, text, senderId: meRef.current.id } })
   }, [])
 
   // ---- NPC/切断者の自動進行(ホスト・ターン制) ----
@@ -651,6 +669,15 @@ export default function Cards() {
   const playing = game?.phase === 'playing'
   const myTurn = playing && game.mode !== 'speed' && game.turn === mySeat
   const meSpec = !!members.find((m) => m.id === me.id)?.spectator
+  // スタンプ(共通コンポーネント)。観戦者は応援カテゴリ付きの別セット
+  const amSpectator = game ? mySeat === -1 : (meSpec || !seated.some((s) => s.id === me.id))
+  const cheerTargets = game ? game.players.map((p) => ({ id: p.id, name: p.name })) : seated
+  const stampUI = (
+    <>
+      <StampBar spectator={amSpectator} players={cheerTargets} onSend={sendStamp} />
+      <StampOverlay stamps={stamps} />
+    </>
+  )
 
   // ---- 待機画面 ----
   if (!game) {
@@ -738,6 +765,7 @@ export default function Cards() {
             {meSpec ? '⚔ 対局に参加する' : '👀 観戦にまわる'}
           </button>
         </div>
+        {stampUI}
       </div>
     )
   }
@@ -800,6 +828,7 @@ export default function Cards() {
         ))}
         {myTurn && <div style={{ color: '#9fd', fontSize: 12, textAlign: 'center' }}>▲ {game.players[target]?.name} の札を1枚タップして引く</div>}
         {resultPanel}
+        {stampUI}
       </div>
     )
   }
@@ -854,6 +883,7 @@ export default function Cards() {
           </div>
         )}
         {resultPanel}
+        {stampUI}
       </div>
     )
   }
@@ -900,6 +930,7 @@ export default function Cards() {
           </div>
         )}
         {resultPanel}
+        {stampUI}
       </div>
     )
   }
@@ -944,6 +975,7 @@ export default function Cards() {
         {renderSide(mySeat >= 0 ? mySeat : 1, mySeat >= 0)}
         {mySeat >= 0 && playing && <div style={{ fontSize: 11, color: '#9fd', textAlign: 'center', marginTop: 6 }}>光っている札をタップすると台札(±1)に出ます。早い者勝ち！</div>}
         {resultPanel}
+        {stampUI}
       </div>
     )
   }
