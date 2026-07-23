@@ -331,3 +331,113 @@ END;
 $function$;
 
 GRANT EXECUTE ON FUNCTION public.apply_battle_result(integer, boolean, boolean, boolean, boolean, integer, integer, integer, integer, boolean) TO authenticated;
+
+
+-- ===== 5) 領地システムをエリア⑧まで拡張 =====
+--   supabase_territory.sql の expand_territory / tick_npc_countries を⑧対応に差し替え。
+--   変更点: expand上限 p_area>7→>8、NPC領地配分 v_gain/7.0→/8.0・FOR a IN 1..7→1..8。
+--   これで⑧も領地戦・領地シェアによる装備ドロップ率ボーナス(最大+2%)の対象になる。
+CREATE OR REPLACE FUNCTION public.expand_territory(p_power numeric, p_area int)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path = public
+AS $function$
+DECLARE
+  v_uid     uuid := auth.uid();
+  v_cid     uuid;
+  v_unaff   boolean;
+  v_last    timestamptz;
+  v_contrib numeric;
+  v_rank    text;
+  v_unlocked int[];
+  v_admin   boolean;
+  v_lock    timestamptz;
+  v_power   numeric := least(greatest(coalesce(p_power,0),0), 100000);
+  v_gain    numeric;
+  v_terr    numeric;
+  v_area_amt numeric;
+  v_newrank text;
+BEGIN
+  IF v_uid IS NULL THEN RAISE EXCEPTION 'ログインが必要です'; END IF;
+  IF p_area IS NULL OR p_area < 1 OR p_area > 8 THEN
+    RAISE EXCEPTION '出撃エリアを選択してください';
+  END IF;
+
+  SELECT country_id, last_expand_at, country_contrib, country_rank, unlocked_areas, is_admin, territory_locked_until
+    INTO v_cid, v_last, v_contrib, v_rank, v_unlocked, v_admin, v_lock
+    FROM public.profiles WHERE id = v_uid FOR UPDATE;
+
+  IF v_cid IS NULL THEN RAISE EXCEPTION '国に所属していません'; END IF;
+  SELECT is_unaffiliated INTO v_unaff FROM public.countries WHERE id = v_cid;
+  IF v_unaff IS TRUE THEN RAISE EXCEPTION '非加盟国では領地を広げられません'; END IF;
+
+  IF v_admin IS NOT TRUE AND v_lock IS NOT NULL AND now() < v_lock THEN
+    RAISE EXCEPTION '所属国を移った直後は3日間 領地を広げられません（% まで）', to_char(v_lock, 'MM/DD HH24:MI');
+  END IF;
+
+  IF NOT (p_area = ANY(coalesce(v_unlocked, ARRAY[1]))) THEN
+    RAISE EXCEPTION 'そのエリアはまだ解放されていません';
+  END IF;
+
+  IF v_last IS NOT NULL AND now() - v_last < interval '1 hour' THEN
+    RAISE EXCEPTION '領地拡大は1時間に1回までです';
+  END IF;
+
+  v_gain := floor((10 + v_power / 20.0) * (0.9 + random() * 0.2));
+
+  UPDATE public.countries SET territory = territory + v_gain WHERE id = v_cid
+  RETURNING territory INTO v_terr;
+
+  INSERT INTO public.country_area_territory (country_id, area_id, amount)
+  VALUES (v_cid, p_area, v_gain)
+  ON CONFLICT (country_id, area_id) DO UPDATE SET amount = country_area_territory.amount + v_gain
+  RETURNING amount INTO v_area_amt;
+
+  v_contrib := coalesce(v_contrib,0) + v_gain;
+
+  IF v_rank IN ('元帥','副元帥','参謀') THEN
+    v_newrank := v_rank;
+  ELSE
+    v_newrank := public.territory_rank_for_contrib(v_contrib);
+  END IF;
+
+  UPDATE public.profiles
+     SET country_contrib = v_contrib, last_expand_at = now(), country_rank = v_newrank
+   WHERE id = v_uid;
+
+  RETURN jsonb_build_object('gain', v_gain, 'territory', v_terr, 'area', p_area, 'area_amount', v_area_amt, 'contrib', v_contrib, 'rank', v_newrank);
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.tick_npc_countries()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path = public
+AS $function$
+DECLARE
+  r        record;
+  v_elapsed numeric;
+  v_gain    numeric;
+  v_per     numeric;
+  a         int;
+BEGIN
+  FOR r IN SELECT id, npc_rate, npc_last_tick FROM public.countries WHERE is_npc LOOP
+    IF r.npc_rate IS NULL OR r.npc_rate <= 0 THEN CONTINUE; END IF;
+    v_elapsed := extract(epoch FROM (now() - coalesce(r.npc_last_tick, now()))) / 3600.0;
+    v_gain := floor(r.npc_rate * v_elapsed);
+    IF v_gain < 1 THEN CONTINUE; END IF;
+    v_per := v_gain / 8.0;                        -- 8エリアへ均等配分
+    UPDATE public.countries
+       SET territory = territory + v_gain,
+           npc_last_tick = coalesce(npc_last_tick, now()) + make_interval(secs => (v_gain / r.npc_rate) * 3600)
+     WHERE id = r.id;
+    FOR a IN 1..8 LOOP
+      INSERT INTO public.country_area_territory (country_id, area_id, amount)
+      VALUES (r.id, a, v_per)
+      ON CONFLICT (country_id, area_id) DO UPDATE SET amount = country_area_territory.amount + v_per;
+    END LOOP;
+  END LOOP;
+END;
+$function$;

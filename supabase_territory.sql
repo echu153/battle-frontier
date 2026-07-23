@@ -282,7 +282,7 @@ END;
 $function$;
 
 -- ===== 7) エリア別領地（出撃エリアごとに領地を蓄積）=====
--- ・各エリア(1〜7)ごとに国の領地量を保持。シェア最大の国がそのエリアを支配。
+-- ・各エリア(1〜8)ごとに国の領地量を保持。シェア最大の国がそのエリアを支配。
 -- ・将来: 支配国の国民はそのエリアで装備ドロップ率が上昇（最大+3%）。←実装は後日。
 CREATE TABLE IF NOT EXISTS public.country_area_territory (
   country_id uuid NOT NULL REFERENCES public.countries(id) ON DELETE CASCADE,
@@ -296,7 +296,7 @@ CREATE POLICY cat_select_all ON public.country_area_territory FOR SELECT USING (
 
 -- ===== 8) 領地拡大（1時間に1回・総合力依存・出撃エリア指定）=====
 -- p_power = クライアントが計算した総合力。先行公開(is_admin限定)のため簡易採用。
--- p_area  = 出撃エリア(1〜7)。プレイヤーの解放済みエリア(unlocked_areas)に含まれること。
+-- p_area  = 出撃エリア(1〜8)。プレイヤーの解放済みエリア(unlocked_areas)に含まれること。
 -- クールダウン(1h)はサーバ側で厳密判定。獲得量は power を上限クランプして算出。
 DROP FUNCTION IF EXISTS public.expand_territory(numeric);
 CREATE OR REPLACE FUNCTION public.expand_territory(p_power numeric, p_area int)
@@ -322,7 +322,7 @@ DECLARE
   v_newrank text;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'ログインが必要です'; END IF;
-  IF p_area IS NULL OR p_area < 1 OR p_area > 7 THEN
+  IF p_area IS NULL OR p_area < 1 OR p_area > 8 THEN
     RAISE EXCEPTION '出撃エリアを選択してください';
   END IF;
 
@@ -474,12 +474,12 @@ BEGIN
     v_elapsed := extract(epoch FROM (now() - coalesce(r.npc_last_tick, now()))) / 3600.0;
     v_gain := floor(r.npc_rate * v_elapsed);
     IF v_gain < 1 THEN CONTINUE; END IF;         -- 1未満は次回に持ち越し（端数を失わない）
-    v_per := v_gain / 7.0;                        -- 7エリアへ均等配分
+    v_per := v_gain / 8.0;                        -- 8エリアへ均等配分
     UPDATE public.countries
        SET territory = territory + v_gain,
            npc_last_tick = coalesce(npc_last_tick, now()) + make_interval(secs => (v_gain / r.npc_rate) * 3600)
      WHERE id = r.id;
-    FOR a IN 1..7 LOOP
+    FOR a IN 1..8 LOOP
       INSERT INTO public.country_area_territory (country_id, area_id, amount)
       VALUES (r.id, a, v_per)
       ON CONFLICT (country_id, area_id) DO UPDATE SET amount = country_area_territory.amount + v_per;
