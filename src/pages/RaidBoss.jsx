@@ -454,7 +454,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         // ペット召喚：50%でペットがダメージを肩代わり（状態異常は下でプレイヤーに付与）
         if (!summonAbsorbSkill(summon, specialDmg, logs)) {
           playerHp -= specialDmg
-          if ((eff.evoReflectPct||0) > 0) { const r = Math.max(1, Math.floor(specialDmg * eff.evoReflectPct/100)); totalDamage += r }
+          if ((eff.evoReflectPct||0) > 0) { const r = Math.max(1, Math.floor(specialDmg * eff.evoReflectPct/100)); totalDamage += r; logs.push({ text:`🛡 真化・反射！ ${bossName}に${fmt(r)}ダメージ！`, color:'#66ccff' }) }
         }
         if (isAmaza) {
           // 深淵の水葬：10ターンの間 素早さ-50%（クリ・回避・追加行動率を半減SPDで再計算）
@@ -503,7 +503,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       const gambleBodyMult = hasGambleBody ? (pe('ギャンブラー') ? (0.5+Math.random()*0.7) : (0.7+Math.random()*0.6)) : 1.0
       const finalDmg = Math.floor(baseDmg * (isCrit ? 1.5 : 1.0) * dmgReduceRate * berserkDmgRate * (1 - playerDefRankReduction) * gambleBodyMult * evoTakenMult(eff, true, playerHp / eff.hp_max) * ryurinReduce() * (0.9 + Math.random() * 0.2))
       playerHp -= finalDmg
-      if ((eff.evoReflectPct||0) > 0 && finalDmg > 0) { const r = Math.max(1, Math.floor(finalDmg * eff.evoReflectPct/100)); totalDamage += r }
+      if ((eff.evoReflectPct||0) > 0 && finalDmg > 0) { const r = Math.max(1, Math.floor(finalDmg * eff.evoReflectPct/100)); totalDamage += r; logs.push({ text:`🛡 真化・反射！ ${bossName}に${fmt(r)}ダメージ！`, color:'#66ccff' }) }
       if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
       const critText = isCrit ? ' 💥クリティカル！' : ''
       logs.push({ text: `${prefix}${bossName}の攻撃！ あなたに${fmt(finalDmg)}ダメージ…${critText}`, color: isCrit ? '#ff2200' : '#ff6644' })

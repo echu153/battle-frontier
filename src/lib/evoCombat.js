@@ -2,7 +2,8 @@
 // ボス装備 真化トリガー効果（複数の戦闘エンジン共通ヘルパー）
 //  - eff.* フラグは stats.js calcEffectiveStats が公開（進化装備未所持なら全て0/false/1）
 //  - Game.jsx の出撃ループと同じ挙動を Abyss/Tenkyuu/PvP/Raid でも再現するため共通化
-//  - 発動ログは出さない（2026-07-14仕様変更: 勝手に発動・表示なし。logs引数は互換のため残置）
+//  - 発動ログは基本出さない（2026-07-14仕様: 勝手に発動・表示なし）。ただし反射だけは
+//    可視の効果が無く「発動してない」ように見えるため、反射時のみログを出す（logs引数を使用）
 // ============================================================
 
 // プレイヤーの攻撃が敵にヒットした時：敵に状態異常を付与（enemyBuffs を破壊的に更新）
@@ -29,6 +30,8 @@ export const evoOnDamaged = (eff, dmg, enemyBuffs, enemyName, logs) => {
   if (!eff || dmg <= 0) return reflect
   if ((eff.evoReflectPct||0) > 0) {
     reflect = Math.max(1, Math.floor(dmg * eff.evoReflectPct / 100))
+    // 反射は他の真化と違い可視の効果が無い（敵HPが減るだけ）ため、発動が分かるようログを出す
+    if (logs) logs.push({ text:`🛡 真化・反射！ ${enemyName}に${reflect}ダメージ！`, color:'#66ccff' })
   }
   if (enemyBuffs) {
     if ((eff.evoOndmgStun||0) > 0 && !(enemyBuffs.stun?.turns > 0) && Math.random()*100 < eff.evoOndmgStun) {

@@ -3079,6 +3079,8 @@ export default function Game() {
       if ((eff.evoReflectPct||0) > 0) {
         const refl = Math.max(1, Math.floor(dmg * eff.evoReflectPct / 100))
         enemyHp -= refl
+        // 反射は可視の効果が無い（敵HPが減るだけ）ため、発動が分かるようログを出す
+        logs.push({ text:`🛡 真化・反射！ ${enemy.name}に${refl}ダメージ！`, color:'#66ccff' })
       }
       if ((eff.evoOndmgStun||0) > 0 && !(enemyBuffs.stun?.turns > 0) && Math.random()*100 < eff.evoOndmgStun) {
         enemyBuffs.stun = { turns: 1 }
