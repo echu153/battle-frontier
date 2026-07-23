@@ -649,7 +649,7 @@ export default function Equipment() {
               <div onClick={()=>nav('/emblem')} style={{ border:'1px solid #335588', background:'#001028', padding:'8px', marginBottom:'6px', cursor:'pointer' }}>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                   <div>
-                    <span style={{ color:'#446688', fontSize:'10px' }}>紋章 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></span>
+                    <span style={{ color:'#446688', fontSize:'10px' }}>紋章</span>
                     <span style={{ color:'#aaccff', fontSize:'11px', marginLeft:'8px' }}>LV {emLevel}</span>
                     <span style={{ color: EMBLEM_RANK_COLOR[emRank], fontSize:'11px', marginLeft:'8px' }}>ランク {emRank}</span>
                   </div>
