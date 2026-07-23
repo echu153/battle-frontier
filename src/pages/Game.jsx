@@ -155,7 +155,7 @@ export const AREAS = [
       { name:'コウモリ',   hp:37,  atk:7,   def:3,  matk:0,  mdef:3,  spd:15, type:'physical', gold:25 },
       { name:'毒キノコ',   hp:60,  atk:2,   def:4,  matk:8,  mdef:7,  spd:2,  type:'magical',  gold:30 },
     ],
-    boss: { name:'ビッグスライム', hp:500, atk:28, def:28, matk:5, mdef:30, spd:15, gold:50, isBoss:true, type:'physical' },
+    boss: { name:'ビッグスライム', hp:500, atk:28, def:28, matk:5, mdef:30, spd:15, gold:100, isBoss:true, type:'physical' },
     commonDrops: ['木の盾','木の靴','粗悪な布','粗悪な鎧','粗悪な指輪','粗悪なピアス','ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書'],
     rareDrops: ['ロングソード','マチェット','丈夫な弓','見習いの杖','見習い魔導書','魔導の杖','魔術教本'],
     bossDrops: ['スライムの指輪','蒼粘剣'],
@@ -169,7 +169,7 @@ export const AREAS = [
       { name:'野良犬',   hp:200, atk:45, def:24, matk:0,  mdef:25, spd:45, type:'physical', gold:50 },
       { name:'盗賊',     hp:240, atk:55, def:28, matk:10, mdef:35, spd:42, type:'physical', gold:60 },
     ],
-    boss: { name:'盗賊団のリーダー', hp:2000, atk:84, def:38, matk:20, mdef:55, spd:65, gold:250, isBoss:true, type:'physical' },
+    boss: { name:'盗賊団のリーダー', hp:2000, atk:84, def:38, matk:20, mdef:55, spd:65, gold:500, isBoss:true, type:'physical' },
     commonDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','強化石(F)','戦士の指輪'],
     rareDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','略奪の腕輪'],
     bossDrops: ['略奪者の短剣','影踏みのブーツ'],
@@ -183,7 +183,7 @@ export const AREAS = [
       { name:'スケルトン', hp:500, atk:120, def:65, matk:30, mdef:75,  spd:110, type:'physical', gold:100 },
       { name:'ゴーレム',   hp:600, atk:150, def:85, matk:0,  mdef:65,  spd:120, type:'physical', gold:120 },
     ],
-    boss: { name:'古代の番人', hp:8000, atk:210, def:90, matk:80, mdef:110, spd:175, gold:1000, isBoss:true, type:'magical' },
+    boss: { name:'古代の番人', hp:8000, atk:210, def:90, matk:80, mdef:110, spd:175, gold:2000, isBoss:true, type:'magical' },
     commonDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','古代の護符'],
     rareDrops: ['鋼鉄の剣','鋭利なナイフ','狩人の弓','魔導の杖','魔術教本','秘術の首飾り'],
     bossDrops: ['古代魔導コア','虚無の杖'],
@@ -198,7 +198,7 @@ export const AREAS = [
       { name:'毒クラゲ', hp:800,  atk:80,  def:180, matk:180, mdef:240, spd:210, type:'magical',  gold:175 },
     ],
     boss: {
-      name:'シーサーペント', hp:18000, atk:680, def:360, matk:550, mdef:400, spd:360, gold:2500, isBoss:true, type:'physical',
+      name:'シーサーペント', hp:18000, atk:680, def:360, matk:550, mdef:400, spd:360, gold:5000, isBoss:true, type:'physical',
       skills: [
         { name:'海嵐の一撃', type:'physical', mult:1.6 },
         { name:'深海波動',   type:'magical',  mult:1.5 },
@@ -219,7 +219,7 @@ export const AREAS = [
       { name:'グリフォン',   hp:1800, atk:700, def:540, matk:120, mdef:510, spd:450, type:'physical', gold:270 },
     ],
     boss: {
-      name:'雷鷲サンダーロック', hp:35000, atk:750, def:960, matk:250, mdef:900, spd:1175, gold:6000, isBoss:true, type:'physical',
+      name:'雷鷲サンダーロック', hp:35000, atk:750, def:960, matk:250, mdef:900, spd:1175, gold:9000, isBoss:true, type:'physical',
       skills: [
         { name:'雷爪乱舞', type:'physical_multi', mult:0.7, hits:3 },
         { name:'雷光閃',   type:'physical', mult:1.8, paralysisRate:0.3 },
@@ -256,7 +256,7 @@ export const AREAS = [
       },
     ],
     boss: {
-      name:'氷霊フロストバーン', hp:60000, atk:850, def:1700, matk:2000, mdef:1800, spd:1400, gold:12500, isBoss:true, type:'magical',
+      name:'氷霊フロストバーン', hp:60000, atk:850, def:1700, matk:2000, mdef:1800, spd:1400, gold:18750, isBoss:true, type:'magical',
       skills: [
         { name:'氷柱連打',   type:'magical_multi', mult:0.5, hits:4 },
         { name:'絶対零度',   type:'magical',  mult:2.2, stunRate:0.3 },
@@ -294,7 +294,7 @@ export const AREAS = [
       },
     ],
     boss: {
-      name:'深紅のサラマンダー', hp:200000, atk:3750, def:4200, matk:2100, mdef:3450, spd:3150, gold:25000, isBoss:true, type:'physical',
+      name:'深紅のサラマンダー', hp:200000, atk:3750, def:4200, matk:2100, mdef:3450, spd:3150, gold:37500, isBoss:true, type:'physical',
       skills: [
         { name:'溶岩爪撃',   type:'physical', mult:2.0, burnRate:0.3 },
         { name:'業火放射',   type:'magical',  mult:2.2, debuff:'mdefDown', debuffRate:0.8, debuffTurns:3 },
@@ -330,7 +330,7 @@ export const AREAS = [
       },
     ],
     boss: {
-      name:'天空覇龍ウラノス', hp:280000, atk:5000, def:4500, matk:4500, mdef:4000, spd:4000, gold:40000, isBoss:true, type:'physical',
+      name:'天空覇龍ウラノス', hp:280000, atk:5000, def:4500, matk:4500, mdef:4000, spd:4000, gold:60000, isBoss:true, type:'physical',
       skills: [
         { name:'天翔閃',    type:'physical', mult:2.0 },
         { name:'雷鳴嵐撃',  type:'magical',  mult:2.2, paralysisRate:0.3 },
@@ -3932,7 +3932,8 @@ export default function Game() {
     if (expBoosted) expGained = Math.floor(expGained * 1.5)
     const expBoostNote = expBoosted ? '（✨LV100まで経験値1.5倍）' : ''
     // 出撃ゴールド。雑魚は各エリアの設定値（=10秒モードの取得額）そのまま。20秒モードは2倍。
-    // ★2026-07-04: 旧CD補正のエリア別倍率(×2/×1.5)は廃止。ボスのみ従来補正を維持（設定Goldは据置）。
+    // ★2026-07-24: エリア別Gold倍率(×2/×1.5)を撤廃。ボスの設定Goldに倍率を織り込み済み（もらえる額は不変）。
+    //   ＝ボスも雑魚と同じく「設定Gold=20秒モードの取得額」。10秒モードのみ従来どおり半減。
     // 【変異】段階のGold（エリア⑤相当）。変異ボス撃破=9000。雑魚は「そのエリアの変異ボスを1回撃破済み」かつ変異トグルON時のみ強化。
     const mutantCleared = mutantEnabled && mutantHigh && (profile.mutant_cleared_areas || []).includes(selectedArea)
     const goldGained = (() => {
@@ -3941,7 +3942,7 @@ export default function Game() {
         if (useMutantBoss) return Math.floor((enemy.gold || 6000) * 1.5 * (tenSec ? 0.5 : 1))  // 変異ボス撃破=エリア⑤相当
         if (!isBossEncounter && mutantCleared) return Math.floor((AREAS[4].enemies[enemyIdx]?.gold || 270) * (tenSec ? 1 : 2))  // 撃破済みエリアの雑魚（エリア⑤相当）
       }
-      if (isBossEncounter) return Math.floor((enemy.gold || 0) * (selectedArea <= 4 ? 2 : 1.5) * (tenSec ? 0.5 : 1))  // ボスは従来のCD補正を維持
+      if (isBossEncounter) return Math.floor((enemy.gold || 0) * (tenSec ? 0.5 : 1))  // ボス: 設定Gold=20秒取得額（倍率は織込済み）。10秒は半減
       return Math.floor((enemy.gold || 0) * (tenSec ? 1 : 2))  // 雑魚: 10秒=設定値 / 20秒=2倍
     })()
 

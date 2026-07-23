@@ -131,11 +131,11 @@ GRANT EXECUTE ON FUNCTION public.grant_boss_evo_drop(integer) TO authenticated;
 
 -- ===== 4) apply_battle_result: エリア⑧のGold検証上限とエリア解放を追加 =====
 --   ベース = supabase_event_20260720_scarecrow_abyss.sql の全文(10引数版・かかしイベント込み)。
---   変更点は4箇所のみ:
---     ・v_boss_golds   に ⑧=40000 を追加
---     ・v_normal_golds に ⑧=800 を追加
---     ・Gold上限判定 BETWEEN 1 AND 7 → BETWEEN 1 AND 8 (ボス/雑魚の2行)
---     ・エリア解放 p_area_id < 7 → p_area_id < 8 (⑦撃破で⑧が解放されるように)
+--   変更点:
+--     ・エリア⑧対応: Gold上限判定 BETWEEN 1 AND 8、エリア解放 p_area_id < 8
+--     ・★エリア別Gold倍率(×2/×1.5)を撤廃(2026-07-24): v_boss_golds=倍率織込済の実値／
+--       v_normal_golds=各エリア最大敵Gold×2の実値／v_max_goldへの一律倍率行を削除。
+--       クライアントもボスGold設定値に倍率を織り込み済み＝もらえる額は不変。⑧雑魚の凍結バグも解消。
 CREATE OR REPLACE FUNCTION public.apply_battle_result(p_area_id integer, p_is_boss boolean, p_is_papia boolean, p_papia_escaped boolean, p_win boolean, p_claimed_exp integer, p_claimed_gold integer, p_hp_current integer, p_mp_current integer, p_mutant_boss boolean DEFAULT false)
  RETURNS json
  LANGUAGE plpgsql
@@ -156,8 +156,10 @@ DECLARE
   v_new_boss_rate numeric;
   v_new_unlocked integer[];
   v_level_ups integer := 0;
-  v_boss_golds   integer[] := ARRAY[50, 250, 1000, 2500, 6000, 12500, 25000, 40000];  -- ★⑧=40000追加
-  v_normal_golds integer[] := ARRAY[30,  60,  120,  200,  400,   600,   800,   800];  -- ★⑧=800追加
+  -- ★2026-07-24: エリア別Gold倍率(×2/×1.5)を撤廃。ボス上限=倍率を織り込んだ実取得額、
+  --   雑魚上限=「各エリア最大敵Gold×2(20秒モード)」の実値。これで v_max_gold への一律倍率行を廃止。
+  v_boss_golds   integer[] := ARRAY[100, 500, 2000, 5000, 9000, 18750, 37500, 60000];  -- ボス取得額(織込済)
+  v_normal_golds integer[] := ARRAY[60,  120,  240,  400,  600,   900,  1200,  1600];  -- 雑魚上限=最大敵Gold×2
   v_mutant_eligible boolean := false;
   v_mutant_first_clear boolean := false;
   v_alch_unlocked boolean := false;
@@ -192,8 +194,8 @@ BEGIN
   IF NOT p_win OR p_papia_escaped OR p_is_papia THEN v_max_gold := 0;
   ELSIF p_is_boss AND p_area_id BETWEEN 1 AND 8 THEN v_max_gold := v_boss_golds[p_area_id];    -- ★1 AND 8
   ELSIF p_area_id BETWEEN 1 AND 8 THEN v_max_gold := v_normal_golds[p_area_id];                -- ★1 AND 8
-  ELSE v_max_gold := 800; END IF;
-  v_max_gold := CEIL(v_max_gold * (CASE WHEN p_area_id BETWEEN 1 AND 4 THEN 2.0 ELSE 1.5 END));
+  ELSE v_max_gold := 1600; END IF;
+  -- ★2026-07-24: エリア別倍率(×2/×1.5)行は撤廃（上限は上記配列の実値をそのまま使用）。
 
   -- ★【変異】対応(char_lv500以上・エリア①〜④)。クライアントの請求と一致させる:
   --   ・変異ボス撃破(p_mutant_boss=true) = floor(6000*1.5)          = 9000
