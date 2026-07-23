@@ -2,82 +2,64 @@
 <html lang="ja"><head><meta charset="utf-8">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1200px; height:675px; overflow:hidden; }
-  body {
-    position:relative; font-family:'Yu Gothic','Meiryo',sans-serif;
-    background:
-      radial-gradient(circle at 74% 50%, rgba(70,130,255,0.34), transparent 44%),
-      radial-gradient(circle at 22% 22%, rgba(150,90,255,0.22), transparent 46%),
-      linear-gradient(135deg,#070c22 0%,#0c1236 46%,#05081c 100%);
-    color:#fff;
-  }
-  .vignette { position:absolute; inset:0; box-shadow:inset 0 0 220px 60px rgba(0,0,0,0.82); pointer-events:none; }
-  .stars { position:absolute; inset:0; background:
-      radial-gradient(2px 2px at 12% 30%, rgba(150,200,255,0.7), transparent),
-      radial-gradient(1.5px 1.5px at 33% 75%, rgba(180,160,255,0.6), transparent),
-      radial-gradient(2px 2px at 55% 18%, rgba(160,210,255,0.6), transparent),
-      radial-gradient(1.5px 1.5px at 60% 60%, rgba(200,180,255,0.5), transparent),
-      radial-gradient(2px 2px at 88% 78%, rgba(150,200,255,0.55), transparent); }
+  html,body { width:1200px; height:900px; overflow:hidden; }
+  body { position:relative; font-family:'Yu Gothic','Meiryo',sans-serif;
+    background:linear-gradient(135deg,#0a1030 0%,#0c1338 50%,#070b22 100%); color:#eaf0ff; padding:44px 52px; }
+  .head { display:flex; align-items:center; gap:20px; border-bottom:2px solid #2a3a72; padding-bottom:20px; }
+  .head .icon { width:92px; height:92px; object-fit:contain; filter:drop-shadow(0 0 14px rgba(90,150,255,0.6)); }
+  .head .t1 { font-size:46px; font-weight:900; color:#bcd6ff; letter-spacing:2px; }
+  .head .t2 { font-size:23px; font-weight:700; color:#8fa8d8; margin-top:4px; }
+  .head .badge { margin-left:auto; font-size:20px; font-weight:800; color:#0a1030; background:#7fb0ff;
+    padding:8px 18px; border-radius:8px; }
 
-  .emblem { position:absolute; right:20px; top:50%; transform:translateY(-50%);
-    width:560px; height:560px; }
-  .emblem::before { content:''; position:absolute; inset:70px;
-    background:radial-gradient(circle, rgba(90,160,255,0.55), transparent 66%); filter:blur(18px); }
-  .emblem img { position:relative; width:100%; height:100%; object-fit:contain;
-    filter:drop-shadow(0 0 34px rgba(80,150,255,0.65)); }
+  .lead { font-size:25px; font-weight:700; line-height:1.6; color:#dfe8ff; margin:22px 2px 20px; }
+  .lead b { color:#7fb0ff; }
 
-  .badge { position:absolute; top:52px; left:64px; font-size:20px; font-weight:700; letter-spacing:3px;
-    color:#bcd8ff; border:2px solid rgba(90,150,255,0.55); background:rgba(12,24,60,0.62);
-    padding:8px 18px; border-radius:22px; }
+  .sec { background:rgba(20,32,74,0.5); border:1px solid #263a70; border-left:5px solid #5a8cff;
+    border-radius:8px; padding:16px 20px; margin-bottom:14px; }
+  .sec h3 { font-size:22px; font-weight:800; color:#9cc0ff; margin-bottom:10px; }
+  .row { display:flex; gap:12px; font-size:21px; line-height:1.5; margin:7px 0; color:#e6edff; }
+  .row .k { flex:0 0 176px; font-weight:800; color:#bcd6ff; }
+  .row .v { flex:1; }
+  .row .v b { color:#ffd98a; font-weight:800; }
 
-  .title { position:absolute; top:112px; left:60px; }
-  .title .jp { font-size:150px; font-weight:900; line-height:0.92; letter-spacing:6px;
-    background:linear-gradient(180deg,#fdf1c8 0%,#8fc0ff 52%,#3f7ce0 100%);
-    -webkit-background-clip:text; background-clip:text; color:transparent;
-    text-shadow:0 0 40px rgba(70,130,255,0.5); filter:drop-shadow(0 6px 10px rgba(0,0,0,0.6)); }
-  .title .en { font-size:30px; font-weight:700; letter-spacing:16px; color:#9cc4ff; margin-top:2px; margin-left:6px; }
-
-  .sub { position:absolute; top:352px; left:66px; font-size:33px; font-weight:800; color:#fff;
-    text-shadow:0 3px 10px rgba(0,0,0,0.8); }
-  .sub small { display:block; font-size:24px; font-weight:700; color:#bcd2f5; margin-top:6px; }
-
-  .tags { position:absolute; top:472px; left:66px; display:flex; gap:12px; }
-  .tag { font-size:22px; font-weight:800; color:#dbe8ff; background:rgba(24,44,100,0.6);
-    border:1.5px solid rgba(90,150,255,0.55); border-radius:8px; padding:8px 16px; }
-  .unlock { position:absolute; top:540px; left:70px; font-size:22px; font-weight:700; color:#a8c6ff; }
-  .unlock b { color:#5fa0ff; }
-
-  .brand { position:absolute; left:64px; bottom:34px; }
-  .brand .name { font-size:26px; font-weight:900; letter-spacing:2px; color:#f4be5b; }
-  .brand .hash { font-size:15px; font-weight:700; color:#a9c2e6; margin-top:3px; }
+  .foot { position:absolute; left:52px; right:52px; bottom:34px; display:flex; align-items:center; justify-content:space-between; }
+  .foot .unlock { font-size:23px; font-weight:800; color:#ffd98a; }
+  .foot .unlock span { color:#7fb0ff; }
+  .foot .brand { font-size:22px; font-weight:900; color:#f4be5b; letter-spacing:1px; }
 </style></head>
 <body>
-  <div class="stars"></div>
-
-  <div class="emblem"><img src="/_promo_emblem_icon.png" alt=""></div>
-
-  <div class="badge">🔮 新コンテンツ</div>
-
-  <div class="title">
-    <div class="jp">紋章</div>
-    <div class="en">EMBLEM</div>
+  <div class="head">
+    <img class="icon" src="/_promo_emblem_icon.png" alt="">
+    <div>
+      <div class="t1">紋章（もんしょう）</div>
+      <div class="t2">第5の装備枠を追加する新コンテンツ</div>
+    </div>
+    <div class="badge">UPDATE</div>
   </div>
 
-  <div class="sub">第5の装備枠、解放。
-    <small>22種の結晶で、自分だけの強化を刻め。</small>
+  <div class="lead">装備画面に<b>5つ目の枠「紋章」</b>が追加。結晶を割り振って、<b>自分だけの能力</b>を伸ばせます（全員に1個配布）。</div>
+
+  <div class="sec">
+    <h3>■ 育て方</h3>
+    <div class="row"><div class="k">LVアップ</div><div class="v">「紋章の成長石」を使ってLVを上げる（<b>最大LV200</b>）。LVは結晶を割り振れる数です。</div></div>
+    <div class="row"><div class="k">結晶を割り振る</div><div class="v"><b>全22種</b>の結晶を割り振ると能力が上昇（1種につき最大50個）。</div></div>
+    <div class="row"><div class="k">上限開放</div><div class="v">八獄で得る「獄卒の魂」「記憶」で、LV上限を100→200へ段階的に開放。</div></div>
+    <div class="row"><div class="k">ランク</div><div class="v">割り振った結晶の合計個数で <b>F → SSS</b> に上昇。</div></div>
   </div>
 
-  <div class="tags">
-    <div class="tag">LV最大200</div>
-    <div class="tag">結晶22種</div>
-    <div class="tag">ランク F → SSS</div>
-  </div>
-  <div class="unlock">▶ <b>エリア⑤踏破</b>で解放 ／ 八獄の素材で鍛える</div>
-
-  <div class="brand">
-    <div class="name">BATTLE FRONTIER</div>
-    <div class="hash">#ブラウザRPG</div>
+  <div class="sec">
+    <h3>■ 結晶で伸ばせる能力（22種）</h3>
+    <div class="row"><div class="v">攻撃・防御・特殊攻撃・特殊防御／物理・特殊ダメージ／防御貫通／吸血／出血・やけど・毒ダメージ／回避・クリティカル率／威力／クリティカル抵抗／各種状態異常耐性</div></div>
   </div>
 
-  <div class="vignette"></div>
+  <div class="sec">
+    <h3>■ 効果が反映される場面</h3>
+    <div class="row"><div class="v">出撃・レイド・奈落・天穹をはじめ、対人系の戦闘にも反映されます。</div></div>
+  </div>
+
+  <div class="foot">
+    <div class="unlock">▶ 開放条件：<span>エリア⑤を踏破</span></div>
+    <div class="brand">BATTLE FRONTIER</div>
+  </div>
 </body></html>

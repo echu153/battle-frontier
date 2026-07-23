@@ -2,83 +2,74 @@
 <html lang="ja"><head><meta charset="utf-8">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1200px; height:675px; overflow:hidden; }
-  body {
-    position:relative; font-family:'Yu Gothic','Meiryo',sans-serif;
-    background:
-      radial-gradient(circle at 78% 30%, rgba(255,90,40,0.30), transparent 42%),
-      radial-gradient(circle at 20% 80%, rgba(180,20,20,0.28), transparent 45%),
-      linear-gradient(135deg,#1a0605 0%,#2a0a08 45%,#100303 100%);
-    color:#fff;
-  }
-  .vignette { position:absolute; inset:0; box-shadow:inset 0 0 220px 60px rgba(0,0,0,0.85); pointer-events:none; }
-  .embers { position:absolute; inset:0; background:
-      radial-gradient(2px 2px at 15% 25%, rgba(255,180,90,0.6), transparent),
-      radial-gradient(2px 2px at 40% 70%, rgba(255,140,60,0.5), transparent),
-      radial-gradient(1.5px 1.5px at 65% 20%, rgba(255,200,120,0.5), transparent),
-      radial-gradient(2px 2px at 85% 55%, rgba(255,120,50,0.5), transparent),
-      radial-gradient(1.5px 1.5px at 55% 88%, rgba(255,170,80,0.5), transparent); }
+  html,body { width:1200px; height:900px; overflow:hidden; }
+  body { position:relative; font-family:'Yu Gothic','Meiryo',sans-serif;
+    background:linear-gradient(135deg,#1c0605 0%,#280a07 50%,#120303 100%); color:#ffeee6; padding:44px 52px; }
+  .head { display:flex; align-items:center; gap:18px; border-bottom:2px solid #6a2a24; padding-bottom:20px; }
+  .head .t1 { font-size:46px; font-weight:900; color:#ffb499; letter-spacing:2px; }
+  .head .t2 { font-size:23px; font-weight:700; color:#d69a86; margin-top:4px; }
+  .head .badge { margin-left:auto; font-size:20px; font-weight:800; color:#1c0605; background:#ff8a5f;
+    padding:8px 18px; border-radius:8px; }
 
-  .badge { position:absolute; top:52px; left:64px; font-size:20px; font-weight:700; letter-spacing:3px;
-    color:#ffcf9a; border:2px solid rgba(255,120,60,0.55); background:rgba(40,10,6,0.6);
-    padding:8px 18px; border-radius:22px; }
+  .lead { font-size:25px; font-weight:700; line-height:1.6; color:#ffe4d8; margin:20px 2px 18px; }
+  .lead b { color:#ff8a5f; }
 
-  .title { position:absolute; top:108px; left:60px; }
-  .title .jp { font-size:150px; font-weight:900; line-height:0.92; letter-spacing:6px;
-    background:linear-gradient(180deg,#ffe1c0 0%,#ff9a5a 55%,#e0521d 100%);
-    -webkit-background-clip:text; background-clip:text; color:transparent;
-    text-shadow:0 0 40px rgba(255,90,30,0.5); filter:drop-shadow(0 6px 10px rgba(0,0,0,0.6)); }
-  .title .en { font-size:30px; font-weight:700; letter-spacing:14px; color:#ffb488; margin-top:2px; margin-left:6px; }
+  .sec { background:rgba(74,20,14,0.42); border:1px solid #6a2a24; border-left:5px solid #ff6a44;
+    border-radius:8px; padding:15px 20px; margin-bottom:13px; }
+  .sec h3 { font-size:22px; font-weight:800; color:#ffb08a; margin-bottom:9px; }
+  .row { display:flex; gap:12px; font-size:21px; line-height:1.5; margin:6px 0; color:#ffe9e0; }
+  .row .k { flex:0 0 168px; font-weight:800; color:#ffc4ad; }
+  .row .v { flex:1; }
+  .row .v b { color:#ffd98a; font-weight:800; }
 
-  .sub { position:absolute; top:355px; left:66px; font-size:34px; font-weight:800; color:#fff;
-    text-shadow:0 3px 10px rgba(0,0,0,0.8); }
-  .tags { position:absolute; top:410px; left:66px; display:flex; gap:12px; }
-  .tag { font-size:22px; font-weight:800; color:#ffe0c2; background:rgba(120,30,14,0.55);
-    border:1.5px solid rgba(255,120,60,0.55); border-radius:8px; padding:8px 16px; }
-  .unlock { position:absolute; top:474px; left:70px; font-size:23px; font-weight:700; color:#ffd08a; }
-  .unlock b { color:#ff7a4a; }
+  .roster { display:flex; align-items:flex-end; gap:4px; margin-top:6px; }
+  .roster img { height:96px; width:auto; object-fit:contain; filter:drop-shadow(0 3px 5px rgba(0,0,0,0.6)); }
 
-  .roster { position:absolute; left:0; right:0; bottom:0; height:150px;
-    display:flex; align-items:flex-end; justify-content:center; gap:6px;
-    background:linear-gradient(0deg, rgba(0,0,0,0.72), transparent); padding:0 26px 8px; }
-  .roster img { height:150px; width:auto; object-fit:contain; filter:drop-shadow(0 4px 8px rgba(0,0,0,0.7)); }
-  .roster img.hero { height:172px; margin:0 2px -6px; filter:drop-shadow(0 0 22px rgba(255,90,40,0.55)); }
-
-  .brand { position:absolute; right:60px; top:56px; text-align:right; }
-  .brand .name { font-size:30px; font-weight:900; letter-spacing:2px; color:#f4be5b; }
-  .brand .hash { font-size:16px; font-weight:700; color:#e6c6a6; margin-top:4px; }
+  .foot { position:absolute; left:52px; right:52px; bottom:32px; display:flex; align-items:center; justify-content:space-between; }
+  .foot .unlock { font-size:23px; font-weight:800; color:#ffd98a; }
+  .foot .unlock span { color:#ff8a5f; }
+  .foot .brand { font-size:22px; font-weight:900; color:#f4be5b; letter-spacing:1px; }
 </style></head>
 <body>
-  <div class="embers"></div>
-
-  <div class="badge">🔥 新コンテンツ</div>
-  <div class="brand">
-    <div class="name">BATTLE FRONTIER</div>
-    <div class="hash">#ブラウザRPG</div>
+  <div class="head">
+    <div>
+      <div class="t1">🔥 八獄（はちごく）</div>
+      <div class="t2">8つの地獄の主に挑む高難度コンテンツ</div>
+    </div>
+    <div class="badge">UPDATE</div>
   </div>
 
-  <div class="title">
-    <div class="jp">八獄</div>
-    <div class="en">HACHIGOKU</div>
+  <div class="lead">8体の地獄の主に挑む挑戦コンテンツ。勝つと、<b>「紋章」を育てる素材</b>が手に入ります。</div>
+
+  <div class="sec">
+    <h3>■ 挑戦ルール</h3>
+    <div class="row"><div class="k">難易度</div><div class="v">Easy ／ Normal ／ Hard ／ EXTREME ／ Hell の<b>5段階</b>。</div></div>
+    <div class="row"><div class="k">挑戦回数</div><div class="v"><b>1日5勝まで</b>（毎朝5時リセット）。敗北しても回数は減りません。</div></div>
+    <div class="row"><div class="k">推奨戦闘力</div><div class="v">Easy 5,000 ／ Normal 12,000 ／ Hard 25,000 ／ EXTREME 40,000 ／ Hell 60,000（目安）。</div></div>
   </div>
 
-  <div class="sub">八つの地獄の主に、挑め。</div>
-  <div class="tags">
-    <div class="tag">8地獄 × 5難易度</div>
-    <div class="tag">Easy 〜 HELL</div>
-  </div>
-  <div class="unlock">▶ <b>エリア⑤踏破</b>で開放 ／ 勝てば紋章を鍛える素材を獲得</div>
-
-  <div class="roster">
-    <img src="/hatigokuta-pana.png" alt="">
-    <img src="/makahadoma.png" alt="">
-    <img src="/asipatora.png" alt="">
-    <img src="/tibondara.png" alt="">
-    <img class="hero" src="/ka-rasu-tora.png" alt="">
-    <img src="/pure-ta.png" alt="">
-    <img src="/raurava.png" alt="">
-    <img src="/zyouhari.png" alt="">
+  <div class="sec">
+    <h3>■ 地獄の主（8体）</h3>
+    <div class="row"><div class="v">各ボスに弱点（物理・特殊・状態異常・貫通 など）と固有のパッシブ・大技があります。相手に合わせて装備とスキルを組み替えて挑みましょう。</div></div>
+    <div class="roster">
+      <img src="/hatigokuta-pana.png" alt="">
+      <img src="/makahadoma.png" alt="">
+      <img src="/asipatora.png" alt="">
+      <img src="/tibondara.png" alt="">
+      <img src="/pure-ta.png" alt="">
+      <img src="/raurava.png" alt="">
+      <img src="/ka-rasu-tora.png" alt="">
+      <img src="/zyouhari.png" alt="">
+    </div>
   </div>
 
-  <div class="vignette"></div>
+  <div class="sec">
+    <h3>■ 報酬（勝利時・すべて紋章の育成素材）</h3>
+    <div class="row"><div class="v">結晶 ／ 紋章の成長石 ／ 獄卒の魂（上限開放用）／ 記憶（各地獄のHell初回クリアで確定）。</div></div>
+  </div>
+
+  <div class="foot">
+    <div class="unlock">▶ 開放条件：<span>エリア⑤を踏破</span></div>
+    <div class="brand">BATTLE FRONTIER</div>
+  </div>
 </body></html>
