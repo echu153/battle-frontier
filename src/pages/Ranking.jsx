@@ -41,7 +41,7 @@ export default function Ranking() {
         .limit(200)
       const list = (data || []).filter(p => !excluded.has(p.id))
       const ids = list.map(p => p.id)
-      let eqs = [], profs = [], titleMap = {}, charmMap = {}, petStatMap = {}
+      let eqs = [], profs = [], titleMap = {}, charmMap = {}, petStatMap = {}, emblemMap = {}
       if (ids.length > 0) {
         const [{ data: eqData }, { data: profData }, { data: petData }] = await Promise.all([
           supabase.from('player_equipment').select('*, weapons(*)').in('player_id', ids).eq('equipped', true),
@@ -51,6 +51,11 @@ export default function Ranking() {
         ])
         eqs = eqData || []
         profs = profData || []
+        // 紋章の割り振りも総合力に反映（未導入なら無視）
+        try {
+          const { data: emRows } = await supabase.from('player_emblem').select('player_id, alloc').in('player_id', ids)
+          for (const e of (emRows || [])) if (e.alloc && Object.keys(e.alloc).length > 0) emblemMap[e.player_id] = e.alloc
+        } catch { /* 紋章未導入時は無視 */ }
         for (const pet of (petData || [])) petStatMap[pet.owner_id] = petPlayerBonus(pet)
         const charmIds = [...new Set((petData || []).map(p => p.charm_id).filter(Boolean))]
         if (charmIds.length > 0) {
@@ -71,7 +76,7 @@ export default function Ranking() {
         const eq = eqs.filter(e => e.player_id === p.id)
         const pf = profs.filter(x => x.player_id === p.id)
         const tb = p.ability_title_id ? titleMap[p.ability_title_id] : null
-        const pProfile = { ...p, petStat: petStatMap[p.id] || null, petCharm: charmMap[p.id] || null }
+        const pProfile = { ...p, petStat: petStatMap[p.id] || null, petCharm: charmMap[p.id] || null, emblemAlloc: emblemMap[p.id] || null }
         return { ...p, _total: calcEffectiveTotal(pProfile, eq, pf, tb) }
       })
       const sorted = withTotal.sort((a, b) => b._total - a._total).slice(0, 50)

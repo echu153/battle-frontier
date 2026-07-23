@@ -133,6 +133,13 @@ export async function loadTotalCandidates(excludeId) {
     for (const t of (titlesData || [])) titleMap[t.id] = t
   }
 
+  // 紋章の割り振り（候補者側の総合力にも反映＝自分の総合力と対称にしてマッチングのズレを防ぐ）
+  const emblemMap = {}
+  try {
+    const { data: emRows } = await supabase.from('player_emblem').select('player_id, alloc').in('player_id', ids)
+    for (const e of (emRows || [])) if (e.alloc && Object.keys(e.alloc).length > 0) emblemMap[e.player_id] = e.alloc
+  } catch { /* 紋章未導入時は無視 */ }
+
   return list.map(p => {
     const eq = eqs.filter(e => e.player_id === p.id)
     const pf = profs.filter(x => x.player_id === p.id)
@@ -142,7 +149,7 @@ export async function loadTotalCandidates(excludeId) {
     const m = metaMap[p.id] || {}
     const effClass = (p.pvp_class && m.has_pvp_active) ? p.pvp_class : p.class
     const baseStats = effClass !== p.class ? computeClassBaseStats(p, m.class_levels || [], effClass) : null
-    const pProfile = { ...p, ...(baseStats || {}), class: effClass, petStat: petStatMap[p.id] || null, petCharm: charmMap[p.id] || null }
+    const pProfile = { ...p, ...(baseStats || {}), class: effClass, petStat: petStatMap[p.id] || null, petCharm: charmMap[p.id] || null, emblemAlloc: emblemMap[p.id] || null }
     return {
       id: p.id, username: p.username, char_lv: p.char_lv || p.lv, class: effClass, avatar_url: p.avatar_url,
       _total: calcEffectiveTotal(pProfile, eq, pf, tb),
