@@ -40,7 +40,31 @@ CREATE POLICY "own hachigoku select" ON public.hachigoku_progress
   FOR SELECT USING (auth.uid() = player_id);
 
 -- 2) アイテム定義 ---------------------------------------------
-INSERT INTO items (name, description, effect, value) VALUES
+-- 2-0) 旧名「紋章の欠片」→「紋章の成長石」の移行（必ずINSERTより前に実行・冪等）
+--   ・旧のみ存在: 改名
+--   ・新旧両方存在（過去に不発マイグレーションを踏んだDB）: 所持を新IDへ合算して旧を削除
+DO $mig$
+DECLARE v_old items.id%TYPE; v_new items.id%TYPE;
+BEGIN
+  SELECT id INTO v_old FROM items WHERE name = '紋章の欠片' LIMIT 1;
+  SELECT id INTO v_new FROM items WHERE name = '紋章の成長石' LIMIT 1;
+  IF v_old IS NOT NULL AND v_new IS NULL THEN
+    UPDATE items SET name = '紋章の成長石',
+      description = '紋章の力を宿した石。集めると紋章のレベルを上げられる。'
+     WHERE id = v_old;
+  ELSIF v_old IS NOT NULL AND v_new IS NOT NULL THEN
+    INSERT INTO player_items (player_id, item_id, quantity, equipped)
+      SELECT player_id, v_new, quantity, false FROM player_items WHERE item_id = v_old
+    ON CONFLICT (player_id, item_id) DO UPDATE SET quantity = player_items.quantity + EXCLUDED.quantity;
+    DELETE FROM player_items WHERE item_id = v_old;
+    DELETE FROM items WHERE id = v_old;
+  END IF;
+END $mig$;
+
+-- 2-1) アイテム作成（items.name はUNIQUE制約が無いため NOT EXISTS 方式＝再実行しても重複しない）
+INSERT INTO items (name, description, effect, value)
+SELECT v.name, v.description, v.effect, v.value
+FROM (VALUES
   ('紋章の成長石', '紋章の力を宿した石。集めると紋章のレベルを上げられる。', 'material', 0),
   -- 魂（紋章の上限開放素材・八獄ボスがドロップ）
   ('ターパナの魂',       '焦熱地獄の主ターパナの魂。紋章の上限開放に使う。', 'material', 0),
@@ -83,13 +107,8 @@ INSERT INTO items (name, description, effect, value) VALUES
   ('防火の結晶',     '紋章に力を注ぐ結晶。やけど耐性+0.4%。',          'material', 0),
   ('防血の結晶',     '紋章に力を注ぐ結晶。出血耐性+0.4%。',            'material', 0),
   ('防絶の結晶',     '紋章に力を注ぐ結晶。スタン耐性+0.2%。',          'material', 0)
-ON CONFLICT DO NOTHING;
-
--- 旧名「紋章の欠片」を適用済みなら「紋章の成長石」に改名（所持分もそのまま引き継がれる）
-UPDATE items SET name = '紋章の成長石',
-  description = '紋章の力を宿した石。集めると紋章のレベルを上げられる。'
- WHERE name = '紋章の欠片'
-   AND NOT EXISTS (SELECT 1 FROM items WHERE name = '紋章の成長石');
+) AS v(name, description, effect, value)
+WHERE NOT EXISTS (SELECT 1 FROM items i WHERE i.name = v.name);
 
 -- 3) 共通ヘルパー ---------------------------------------------
 -- アイテムを名前で付与
