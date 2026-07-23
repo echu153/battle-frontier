@@ -124,10 +124,11 @@ export const HACHIGOKU_HELLS = [
     crystals: ['resshou', 'kashou', 'moudoku'],
     soul: 'チボンダラの魂', memory: 'チボンダラの記憶',
     desc: '血の池から這い出た獄卒。出血・やけど・猛毒を撒き散らす。',
-    passive: '血肉の泥躯（受ける通常攻撃・スキルダメージ半減／受ける状態異常ダメージ3倍）',
+    passive: '血肉の泥躯（受ける通常攻撃・スキルダメージ-30%／受ける状態異常ダメージ4倍）',
     mods: {
       onHitAilment: [{ key: 'bleed', chance: 30 }, { key: 'poison', chance: 25 }, { key: 'burn', chance: 20 }],
-      physTakenMult: 0.5, specialTakenMult: 0.5, dotTakenMult: 3,
+      // 直接ダメは-30%に緩和（状態異常なしでも削れる）／状態異常DoTは4倍で「状態異常が最も有効」を維持
+      physTakenMult: 0.7, specialTakenMult: 0.7, dotTakenMult: 4,
     },
     skill: { name: '血池飛沫', mult: 1.6, every: 3 },
     ultimate: { name: '血盆陀羅', mult: 1.4, hpBelow: 0.5, inflict: ['poison'], bleedStacks: 5, selfHealPct: 0.3, permBleed: true },
