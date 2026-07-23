@@ -117,6 +117,12 @@ export default function Emblem() {
   const shards = items[EMBLEM_SHARD_NAME] || 0
   const nextCost = level < cap ? emblemLevelUpCost(level + 1) : null
   const atCap = level >= cap
+  // 所持している成長石で上げられる最大回数（上限まで・端数は残す）
+  const maxLevelUps = (() => {
+    let lv = level, s = shards, n = 0
+    while (lv < cap && s >= emblemLevelUpCost(lv + 1)) { s -= emblemLevelUpCost(lv + 1); lv++; n++ }
+    return n
+  })()
   const canUnlock = atCap && capStage < 4
   const unlockCost = canUnlock ? EMBLEM_CAP_UNLOCK_COST[capStage] : null
   const bonus = calcEmblemBonus(alloc)
@@ -195,6 +201,10 @@ export default function Emblem() {
                 <button disabled={busy || shards <= 0} onClick={()=>doLevelUp(10)}
                   style={{ padding:'8px 12px', background:'#102040', border:'1px solid #4488ff', color: shards > 0 ? '#88bbff' : '#445577', cursor: shards > 0 ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>
                   ⬆ まとめて+10
+                </button>
+                <button disabled={busy || maxLevelUps <= 0} onClick={()=>doLevelUp(maxLevelUps)}
+                  style={{ padding:'8px 12px', background:'#0a2436', border:'1px solid #44ccaa', color: maxLevelUps > 0 ? '#66ffcc' : '#445577', cursor: maxLevelUps > 0 ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'11px' }}>
+                  ⬆ 全部使う{maxLevelUps > 0 ? `（+${maxLevelUps}）` : ''}
                 </button>
               </>
             )}
