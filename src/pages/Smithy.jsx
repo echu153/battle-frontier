@@ -174,6 +174,7 @@ export default function Smithy() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
   const [equipment, setEquipment] = useState([])
+  const [donations, setDonations] = useState([])  // 博物館の寄贈済み(weapon_name, enhance_tier)
   const [playerItems, setPlayerItems] = useState([])
   const [tab, setTab] = useState('enhance')
   const [loading, setLoading] = useState(false)
@@ -206,6 +207,11 @@ export default function Smithy() {
     setEquipment((eq || []).filter(e => !e.listed))  // 取引所に出品中の装備は隠す
     const { data: pi } = await supabase.from('player_items').select('*, items(*)').eq('player_id', user.id)
     setPlayerItems(pi || [])
+    // 博物館の寄贈済みティア（装備名にマーク表示するため。未導入なら無視）
+    try {
+      const { data: dons } = await supabase.from('museum_donations').select('weapon_name, enhance_tier').eq('player_id', user.id)
+      setDonations(dons || [])
+    } catch { /* 博物館未導入時は無視 */ }
   }
 
   const showMessage = (msg, color = '#44ff88') => {
@@ -613,6 +619,30 @@ export default function Smithy() {
   }
 
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
+
+  // 博物館の寄贈済みティア: weapon_name → Set<tier(0:未強化 / 1:+5以上 / 2:+9以上)>
+  const donatedTierMap = {}
+  for (const d of donations) {
+    if (!donatedTierMap[d.weapon_name]) donatedTierMap[d.weapon_name] = new Set()
+    donatedTierMap[d.weapon_name].add(d.enhance_tier)
+  }
+  // 装備名の横に付ける寄贈済みマーク（未/＋5/＋9・寄贈済みティアのみ表示）
+  const DONATE_MARKS = [
+    { tier: 0, label: '未', color: '#88ccff' },
+    { tier: 1, label: '+5', color: '#44ff88' },
+    { tier: 2, label: '+9', color: '#ffcc00' },
+  ]
+  const DonatedMarks = ({ name }) => {
+    const tiers = donatedTierMap[name]
+    if (!tiers || tiers.size === 0) return null
+    return (
+      <span title="博物館 寄贈済みティア（未強化 / +5以上 / +9以上）" style={{ display:'inline-flex', gap:'3px', marginLeft:'4px' }}>
+        {DONATE_MARKS.filter(m => tiers.has(m.tier)).map(m => (
+          <span key={m.tier} style={{ fontSize:'8px', lineHeight:'12px', padding:'0 3px', color:m.color, border:`1px solid ${m.color}`, borderRadius:'2px' }}>🏛{m.label}</span>
+        ))}
+      </span>
+    )
+  }
 
   const slots = ['weapon', 'armor', 'accessory', 'accessory2']
 
@@ -1080,6 +1110,7 @@ export default function Smithy() {
                           <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
                             <span style={{ fontSize:'9px', padding:'1px 4px', color: RARITY_COLORS[displayRarity(item)], border:`1px solid ${RARITY_COLORS[displayRarity(item)]}` }}>{RARITY_LABELS[displayRarity(item)]}</span>
                             <span style={{ color: RARITY_COLORS[displayRarity(item)], fontSize:'12px' }}>{w.name}{isShinka(item)?'★':''}{plus > 0 ? ` +${plus}` : ''}</span>
+                            <DonatedMarks name={w.name} />
                             {item.equipped && <span style={{ color:'#0088ff', fontSize:'10px' }}>装備中</span>}
                             {isArtifactBase && <span style={{ color:'#446688', fontSize:'10px' }}>強化不可</span>}
                           </div>

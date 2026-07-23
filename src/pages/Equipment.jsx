@@ -77,7 +77,6 @@ export default function Equipment() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
   const [equipment, setEquipment] = useState([])
-  const [donations, setDonations] = useState([])  // 博物館の寄贈済み(weapon_name, enhance_tier)
   const [proficiency, setProficiency] = useState([])
   const [allItems, setAllItems] = useState([])
   const [searchParams] = useSearchParams()
@@ -175,11 +174,6 @@ export default function Equipment() {
     setAllItems(pi || [])
     const { data: g } = await supabase.from('player_gems').select('*').eq('player_id', user.id)
     setGems(g || [])
-    // 博物館の寄贈済みティア（装備名にマーク表示するため。未導入なら無視）
-    try {
-      const { data: dons } = await supabase.from('museum_donations').select('weapon_name, enhance_tier').eq('player_id', user.id)
-      setDonations(dons || [])
-    } catch { /* 博物館未導入時は無視 */ }
     // 紋章（第5枠・開発限定）。SQL未適用/未付与なら無視
     try {
       const { data: em } = await supabase.from('player_emblem').select('*').eq('player_id', user.id).maybeSingle()
@@ -564,30 +558,6 @@ export default function Equipment() {
 
   if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
 
-  // 博物館の寄贈済みティア: weapon_name → Set<tier(0:未強化 / 1:+5以上 / 2:+9以上)>
-  const donatedTierMap = {}
-  for (const d of donations) {
-    if (!donatedTierMap[d.weapon_name]) donatedTierMap[d.weapon_name] = new Set()
-    donatedTierMap[d.weapon_name].add(d.enhance_tier)
-  }
-  // 装備名の横に付ける寄贈済みマーク（未/＋5/＋9・寄贈済みティアのみ表示）
-  const DONATE_MARKS = [
-    { tier: 0, label: '未', color: '#88ccff' },
-    { tier: 1, label: '+5', color: '#44ff88' },
-    { tier: 2, label: '+9', color: '#ffcc00' },
-  ]
-  const DonatedMarks = ({ name }) => {
-    const tiers = donatedTierMap[name]
-    if (!tiers || tiers.size === 0) return null
-    return (
-      <span title="博物館 寄贈済みティア（未強化 / +5以上 / +9以上）" style={{ display:'inline-flex', gap:'3px', marginLeft:'4px' }}>
-        {DONATE_MARKS.filter(m => tiers.has(m.tier)).map(m => (
-          <span key={m.tier} style={{ fontSize:'8px', lineHeight:'12px', padding:'0 3px', color:m.color, border:`1px solid ${m.color}`, borderRadius:'2px' }}>🏛{m.label}</span>
-        ))}
-      </span>
-    )
-  }
-
   const slots = ['weapon', 'armor', 'accessory']
   const equippedSlots = ['weapon', 'armor', 'accessory', 'accessory2']
   const filteredEquipment = sortEquipment(equipment.filter(e => tab === 'accessory' ? (e.slot === 'accessory' || e.slot === 'accessory2') : e.slot === tab), sortKey)
@@ -831,7 +801,6 @@ export default function Equipment() {
                           </span>
                           {item.custom_name && <span style={{ color:'#667788', fontSize:'9px' }}>({w.name})</span>}
                           {plus > 0 && !isArtifactBase && <span style={{ color:'#ffcc00', fontSize:'11px', fontWeight:'bold' }}>+{plus}</span>}
-                          <DonatedMarks name={w.name} />
                         </div>
                         <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
                           {item.is_bound && (
