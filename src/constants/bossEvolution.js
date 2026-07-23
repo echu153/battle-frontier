@@ -74,6 +74,15 @@ export const BOSS_LINES = [
       { name: 'インフェルノバスティオン', effect: 'evo_ondmg_burn_50' },
     ],
   },
+  {
+    // エリア⑧ 天空覇龍ウラノス: 進化・真化は可能だが特殊能力なし（真化=基礎ステ×2＋S表示のみ）
+    area: 8, boss: '天空覇龍ウラノス', blood: '覇龍の血', heart: '覇龍の心臓',
+    equips: [
+      { name: 'ウラノスの天砲', effect: null },
+      { name: '覇龍の聖鎧',     effect: null },
+      { name: '蒼天龍の指輪',   effect: null },
+    ],
+  },
 ]
 
 // 真化（5段）で解放される特殊能力ラベル

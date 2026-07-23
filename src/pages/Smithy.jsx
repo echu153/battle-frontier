@@ -950,7 +950,9 @@ export default function Smithy() {
                     {evolveResult.maxed && (
                       <>
                         <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'6px' }}>ランク <span style={{ fontSize:'10px', padding:'1px 5px', border:'1px solid #ffcc00' }}>S</span> に昇格！</div>
-                        <div style={{ color:'#ffcc00', fontSize:'11px', marginBottom:'14px' }}>特殊能力獲得: {getEffectLabel(line.effect)}</div>
+                        {line.effect
+                          ? <div style={{ color:'#ffcc00', fontSize:'11px', marginBottom:'14px' }}>特殊能力獲得: {getEffectLabel(line.effect)}</div>
+                          : <div style={{ color:'#ffcc00', fontSize:'11px', marginBottom:'14px' }}>基礎ステータス×2！</div>}
                       </>
                     )}
                     <div style={{ display:'flex', gap:'8px', justifyContent:'center', marginTop:'8px' }}>
@@ -997,11 +999,13 @@ export default function Smithy() {
                       <div style={{ fontSize:'9px', color: isShinka ? '#ffcc00' : '#66ccff', marginBottom:'3px', textAlign:'center' }}>進化後（基礎×{nextMult.toFixed(1)}）</div>
                       <div style={{ fontSize:'12px', textAlign:'center' }}>{statRow(nextMult)}</div>
                     </div>
-                    {/* 特殊能力 */}
+                    {/* 特殊能力（無い装備は基礎ステ強化のみ） */}
                     <div style={{ fontSize:'10px', color:'#66ccff', marginBottom:'8px' }}>
-                      特殊能力: {isShinka
-                        ? <span style={{ color:'#ffcc00' }}>{getEffectLabel(line.effect)} を獲得</span>
-                        : <span style={{ color:'#445566' }}>{getEffectLabel(line.effect)}（真化で解放）</span>}
+                      {line.effect
+                        ? <>特殊能力: {isShinka
+                            ? <span style={{ color:'#ffcc00' }}>{getEffectLabel(line.effect)} を獲得</span>
+                            : <span style={{ color:'#445566' }}>{getEffectLabel(line.effect)}（真化で解放）</span>}</>
+                        : <span style={{ color:'#445566' }}>特殊能力なし（真化で基礎ステータス×2）</span>}
                     </div>
                     {/* コスト */}
                     <div style={{ fontSize:'10px', color:'#446688', marginBottom:'12px' }}>
@@ -1434,9 +1438,11 @@ export default function Smithy() {
                     )}
 
                     <div style={{ fontSize:'10px', color:'#66ccff', marginBottom:'6px' }}>
-                      特殊能力: {maxed
-                        ? <span style={{ color:'#ffcc00' }}>{getEffectLabel(line.effect)}</span>
-                        : <span style={{ color:'#445566' }}>{getEffectLabel(line.effect)}（真化で解放）</span>}
+                      {line.effect
+                        ? <>特殊能力: {maxed
+                            ? <span style={{ color:'#ffcc00' }}>{getEffectLabel(line.effect)}</span>
+                            : <span style={{ color:'#445566' }}>{getEffectLabel(line.effect)}（真化で解放）</span>}</>
+                        : <span style={{ color:'#445566' }}>特殊能力なし（真化で基礎ステータス×2）</span>}
                     </div>
 
                     {maxed ? (

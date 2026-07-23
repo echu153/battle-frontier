@@ -10,7 +10,7 @@ const sortieWaitFor = () => SORTIE_WAIT
 const AUTOCLICK_SAMPLES = 12
 const AUTOCLICK_SPREAD_MS = 1200
 const SORTIE_STREAK_LIMIT = 20
-const AREA_PASS_EFFECT = { 2:'casino_area_2', 3:'casino_area_3', 4:'casino_area_4', 5:'casino_area_5', 6:'casino_area_6', 7:'casino_area_7' }
+const AREA_PASS_EFFECT = { 2:'casino_area_2', 3:'casino_area_3', 4:'casino_area_4', 5:'casino_area_5', 6:'casino_area_6', 7:'casino_area_7', 8:'casino_area_8' }
 const DEV_ACCOUNTS = []
 const expIsFrozen = (p) => !!(p && (p.exp_frozen || (p.exp_frozen_until && new Date(p.exp_frozen_until) > new Date())))
 

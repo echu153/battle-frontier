@@ -25,7 +25,7 @@ const expIsFrozen = (p) => !!(p && (p.exp_frozen || (p.exp_frozen_until && new D
 const AUTOCLICK_SAMPLES = 12   // オートクリッカー検知：直近サンプル数
 const AUTOCLICK_SPREAD_MS = 1200 // 出撃間隔のばらつき許容幅(ms)。これ未満なら機械的連打とみなす
 const SORTIE_STREAK_LIMIT = 20  // カジノで遊ばず簡易出撃が連続したらBOTチャレンジ発動する回数
-const AREA_PASS_EFFECT = { 2:'casino_area_2', 3:'casino_area_3', 4:'casino_area_4', 5:'casino_area_5', 6:'casino_area_6', 7:'casino_area_7' }
+const AREA_PASS_EFFECT = { 2:'casino_area_2', 3:'casino_area_3', 4:'casino_area_4', 5:'casino_area_5', 6:'casino_area_6', 7:'casino_area_7', 8:'casino_area_8' }
 
 const EXCHANGE_RATE = 100 // 100G = 1メダル（SQLのrateと一致させること）
 const EXCHANGE_OPTIONS = [1, 5, 10, 50, 100, 1000]

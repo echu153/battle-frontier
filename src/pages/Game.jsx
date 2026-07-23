@@ -307,6 +307,42 @@ export const AREAS = [
     rareDrops:   ['サラマンダーブレード','フェニックスワンド','煉獄のコデックス','溶鉄のクラウン','ドレイクアーマー','ヴァルカンブーツ','業炎の指輪'],
     bossDrops:   ['深紅の牙輪','深紅の魔眼石','インフェルノバスティオン'],
   },
+  {
+    id: 8, name: '蒼天の浮遊城',
+    enemies: [
+      {
+        name:'天翼のハーピー', hp:16000, atk:3100, def:2700, matk:0, mdef:2900, spd:4800, type:'physical', gold:700,
+        skills: [
+          { name:'烈風爪', type:'physical', mult:1.5 },
+        ],
+      },
+      {
+        name:'雷雲の精霊', hp:15000, atk:400, def:2500, matk:3300, mdef:3400, spd:4500, type:'magical', gold:750,
+        skills: [
+          { name:'雷雲弾', type:'magical', mult:1.6 },
+        ],
+      },
+      {
+        name:'天空騎士グリフィオン', hp:23000, atk:3600, def:3700, matk:200, mdef:3000, spd:4200, type:'physical', gold:800,
+        skills: [
+          { name:'蒼天突撃', type:'physical', mult:1.6 },
+        ],
+      },
+    ],
+    boss: {
+      name:'天空覇龍ウラノス', hp:280000, atk:5000, def:4500, matk:4500, mdef:4000, spd:4000, gold:40000, isBoss:true, type:'physical',
+      skills: [
+        { name:'天翔閃',    type:'physical', mult:2.0 },
+        { name:'雷鳴嵐撃',  type:'magical',  mult:2.2, paralysisRate:0.3 },
+        { name:'蒼天の加護', type:'buff',    effect:'atkMatkUp', atkRate:1.7, matkRate:1.7, turns:5 },
+        { name:'天恵の息吹', type:'heal',    rate:0.25, regenRate:0.03, regenTurns:4 },
+      ],
+      specialMove: { name:'天墜滅撃', type:'physical', mult:2.5, defDownRate:0.9, turns:3 },
+    },
+    commonDrops: ['蒼天の剣','天翼の短剣','疾風天弓','蒼雲の杖','天空魔導書','天羽の鎧','蒼天の指輪'],
+    rareDrops:   ['蒼天大剣','天翔短剣','天穿弓','蒼天霊杖','天空霊典','蒼穹の鎧','天翼の護符'],
+    bossDrops:   ['ウラノスの天砲','覇龍の聖鎧','蒼天龍の指輪'],
+  },
 ]
 
 // ============================================================
@@ -4051,7 +4087,7 @@ export default function Game() {
     // 3ターン以内のボス撃破で次エリアの簡易出撃許可証を付与（一度きり）
     if (win && isBossEncounter && turn <= 3) {
       const passArea = selectedArea
-      if (passArea >= 2 && passArea <= 7) {
+      if (passArea >= 2 && passArea <= 8) {
         const passEffect = `casino_area_${passArea}`
         const { data: passItem } = await supabase.from('items').select('*').eq('effect', passEffect).maybeSingle()
         if (passItem) {
