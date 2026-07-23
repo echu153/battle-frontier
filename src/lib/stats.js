@@ -218,6 +218,7 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
     if (w.hit_bonus > 0) hitBonus += w.hit_bonus
     critBonus   += w.crit_bonus  || 0   // 武器固有クリティカル率
     critResist  += w.crit_resist || 0   // 武器固有クリティカル抵抗
+    gemAcc.critDmg += w.crit_dmg || 0   // 武器固有クリティカル威力（%。最終値で/100）
     hitBonus    += item.bonus_hit     || 0
     critBonus   += item.bonus_crit    || 0
     evasionBonus += item.bonus_evasion || 0
@@ -439,6 +440,7 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
     if (w.hit_bonus > 0) cm.hitBonus += w.hit_bonus
     cm.critBonus    += w.crit_bonus  || 0
     cm.critResist   += w.crit_resist || 0
+    cm.critDmg      += w.crit_dmg    || 0   // 武器固有クリティカル威力（%。最終値で/100）
     cm.hitBonus     += item.bonus_hit     || 0
     cm.critBonus    += item.bonus_crit    || 0
     cm.evasionBonus += item.bonus_evasion || 0

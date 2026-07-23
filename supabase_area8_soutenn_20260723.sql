@@ -10,8 +10,11 @@
 -- ============================================================
 
 -- ===== 1) 新装備 (weapons) =====
---   スケールは既存S級(レイド装備=primary80前後)を踏襲。common=A / rare・boss=S。
---   ボス装備(§末尾3種)は特殊能力なし=固定ステのみ。真化で基礎ステ×2。
+--   雑魚ドロップ(common/rare)=A級・ステ合計50。ボスドロップ3種もA級(進化/真化可)。
+--   クリティカル列を用意（既存環境にあれば無視）。crit_dmg=クリティカル威力(%)。
+ALTER TABLE weapons ADD COLUMN IF NOT EXISTS crit_bonus  numeric DEFAULT 0;
+ALTER TABLE weapons ADD COLUMN IF NOT EXISTS crit_resist numeric DEFAULT 0;
+ALTER TABLE weapons ADD COLUMN IF NOT EXISTS crit_dmg    numeric DEFAULT 0;
 
 -- --- commonDrops (A級・ステ合計50) ---
 INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
@@ -46,12 +49,16 @@ INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk
 SELECT '天翼の護符', 'accessory', 'accessory', 'a', 0,  0,  30, 0,  20 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='天翼の護符');
 
 -- --- bossDrops (S級・進化可能・特殊能力なし) ---
-INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT 'ウラノスの天砲', 'gun',       'weapon',    's', 95,  0,   95,  0,   0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='ウラノスの天砲');
-INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '覇龍の聖鎧',     'armor',     'armor',     's', 0,   110, 0,   110, 0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='覇龍の聖鎧');
-INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus)
-SELECT '蒼天龍の指輪',   'accessory', 'accessory', 's', 42,  0,   42,  0,   32 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='蒼天龍の指輪');
+-- --- bossDrops (A級・進化/真化可。真化で特殊能力＝§5参照) ---
+--   ウラノスの天砲: 攻35 特攻35 ＋ クリティカル率10%
+INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus, crit_bonus, crit_resist, crit_dmg)
+SELECT 'ウラノスの天砲', 'gun',       'weapon',    'a', 35, 0,  35, 0,  0,  10, 0,  0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='ウラノスの天砲');
+--   覇龍の聖鎧: 防25 特防25 ＋ クリティカル抵抗10%
+INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus, crit_bonus, crit_resist, crit_dmg)
+SELECT '覇龍の聖鎧',     'armor',     'armor',     'a', 0,  25, 0,  25, 0,  0,  10, 0  WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='覇龍の聖鎧');
+--   蒼天龍の指輪: 攻25 特攻25 速10 ＋ クリティカル威力10%
+INSERT INTO weapons (name, weapon_type, slot, rarity, atk_bonus, def_bonus, matk_bonus, mdef_bonus, spd_bonus, crit_bonus, crit_resist, crit_dmg)
+SELECT '蒼天龍の指輪',   'accessory', 'accessory', 'a', 25, 0,  25, 0,  10, 0,  0,  10 WHERE NOT EXISTS (SELECT 1 FROM weapons WHERE name='蒼天龍の指輪');
 
 
 -- ===== 2) アイテム (許可証・進化素材) =====
