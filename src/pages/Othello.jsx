@@ -22,9 +22,16 @@ const LOBBY_CHANNEL = 'othello-lobby'
 const roomChannelName = (roomId) => `othello-room-${roomId}`
 
 const NPC_NAMES = ['オセロ丸', 'リバー子', 'カドトリ翁', 'スミゾメ', 'シロタエ']
-// 定型スタンプ(押すと全員の画面に数秒表示されて消える)。対局者と観戦者でセットが異なる
-const STAMPS_PLAYER = ['よろしくお願いします', 'こんにちわ', 'さようなら', '余裕ですね', '対あり', 'すごいすごい！', '助かります', '悩みますね', 'GG']
-const STAMPS_SPECTATOR = ['こんにちわ', 'ぐわー', 'ほわー', 'うぃー', 'GG']
+// 定型スタンプ(カテゴリを押すと展開→文言を押すと全員の画面に数秒表示されて消える)
+// ※「決め台詞」カテゴリは文言が決まったら追加予定
+const STAMP_CATS = [
+  { key: 'greet', label: '👋挨拶', items: ['よろしくお願いします', 'こんにちわ', 'こんばんは', 'さようなら', 'また遊ぼう'] },
+  { key: 'thanks', label: '🙏感謝', items: ['ありがとう！', '助かります', '感謝です！', 'ナイス！', 'おかげさまで'] },
+  { key: 'sorry', label: '💦謝罪', items: ['ごめんなさい', 'すみません！', '今のはわざとじゃない', 'お待たせしました', '許して'] },
+  { key: 'praise', label: '👏賞賛', items: ['すごいすごい！', 'うまい！', '天才か？', '完敗です', 'お見事！'] },
+  { key: 'surprise', label: '😲驚き', items: ['ぐわー', 'ほわー', 'えぇ！？', 'まじか…', 'そんなー'] },
+  { key: 'thinking', label: '🤔思考中', items: ['悩みますね', 'ちょっと待って', 'うーん…', '考え中…', '長考します'] },
+]
 const CPU_DELAY_MS = 800
 // NPCの強さはidに埋め込む(npc-lv{n}-...)。stateの再配信/観戦でも失われない
 const npcLevelOf = (id) => {
@@ -74,6 +81,7 @@ export default function Othello() {
   const [passNote, setPassNote] = useState(null)
   const [lastResult, setLastResult] = useState(null) // 直前の対局結果(待機画面に表示)
   const [stamps, setStamps] = useState([]) // 表示中スタンプ [{ id, name, text }]
+  const [stampCat, setStampCat] = useState(null) // 展開中のスタンプカテゴリkey
   const stampSeqRef = useRef(0)
   const stampCdRef = useRef(0) // 連打防止クールダウン
   const myJoinedAtRef = useRef(0) // 入室時刻(観戦切替時も席順を維持するため保持)
@@ -415,6 +423,7 @@ export default function Othello() {
     setPassNote(null)
     setLastResult(null)
     setStamps([])
+    setStampCat(null)
     wagerKeyRef.current = null
     betPendingRef.current = null
     setBetBusy(false)
@@ -828,18 +837,29 @@ export default function Othello() {
         {passNote && <div style={{ fontSize: '12px', color: '#ff8866', marginTop: '4px' }}>{passNote}</div>}
       </div>
 
-      {/* スタンプバー(対局者と観戦者でセットが異なる) */}
-      {(() => {
-        const amSpectator = game ? isSpectator : !seated.some((s) => s.id === me.id)
-        const set = amSpectator ? STAMPS_SPECTATOR : STAMPS_PLAYER
-        return (
-          <div style={{ display: 'flex', gap: '5px', marginTop: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            {set.map((s) => (
-              <button key={s} onClick={() => sendStamp(s)} style={btnStyle('#6699cc', { padding: '4px 8px', fontSize: '11px', borderRadius: '10px' })}>{s}</button>
+      {/* スタンプバー(カテゴリを押すと文言が展開される) */}
+      <div style={{ marginTop: '10px', width: '100%' }}>
+        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          {STAMP_CATS.map((cat) => (
+            <button key={cat.key} onClick={() => setStampCat(stampCat === cat.key ? null : cat.key)}
+              style={btnStyle(stampCat === cat.key ? '#ffcc44' : '#6699cc', {
+                padding: '4px 10px', fontSize: '11px', borderRadius: '10px',
+                background: stampCat === cat.key ? 'rgba(255,204,68,0.12)' : 'none',
+              })}>
+              {cat.label}
+            </button>
+          ))}
+        </div>
+        {stampCat && (
+          <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '6px', padding: '6px', border: '1px solid #334466', borderRadius: '8px', background: 'rgba(20,35,60,0.5)' }}>
+            {STAMP_CATS.find((c) => c.key === stampCat)?.items.map((s) => (
+              <button key={s} onClick={() => { sendStamp(s); setStampCat(null) }}
+                style={btnStyle('#88ccff', { padding: '4px 9px', fontSize: '11px', borderRadius: '10px' })}>{s}</button>
             ))}
+            <button onClick={() => setStampCat(null)} style={btnStyle('#668', { padding: '4px 8px', fontSize: '11px', borderRadius: '10px' })}>×</button>
           </div>
-        )
-      })()}
+        )}
+      </div>
 
       {/* 観戦者のスタンプは下部に表示(対局者のは名前の下) */}
       <style>{'@keyframes okstamp { 0% { transform: translateY(8px) scale(0.8); opacity: 0 } 15% { transform: none; opacity: 1 } 80% { opacity: 1 } 100% { opacity: 0 } }'}</style>
