@@ -307,26 +307,6 @@ export default function Profile() {
               )
             })}
           </div>
-          {/* 紋章（第5の装備枠）の寄与。攻撃/防御/特攻/特防への加算は上のABCD値に含まれる */}
-          {profile.emblemAlloc && (() => {
-            const emRank = getEmblemRank(emblemAllocTotal(profile.emblemAlloc))
-            const chips = emblemEffectChips(profile.emblemAlloc)
-            return (
-              <div style={{ marginTop:'10px', paddingTop:'8px', borderTop:'1px solid #113355' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'6px' }}>
-                  <span style={{ color:'#88bbff', fontSize:'11px' }}>💠 紋章</span>
-                  <span style={{ color:'#aaccff', fontSize:'11px' }}>LV{profile.emblemLevel || 1}</span>
-                  <span style={{ color: EMBLEM_RANK_COLOR[emRank] || '#88bbff', fontSize:'11px' }}>ランク{emRank}</span>
-                  <span style={{ color:'#556677', fontSize:'9px' }}>（上のステータスに加算済み）</span>
-                </div>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
-                  {chips.map((c, i) => (
-                    <span key={i} style={{ fontSize:'10px', color:'#66dd99', background:'#02201a', border:'1px solid #1a4a3a', borderRadius:'3px', padding:'2px 6px' }}>{c}</span>
-                  ))}
-                </div>
-              </div>
-            )
-          })()}
         </div>
 
         {/* 装備中（カード式） */}
@@ -393,6 +373,27 @@ export default function Profile() {
               </div>
             )
           })}
+          {/* 第5枠: 紋章。他の装備と同じカード形式で表示（能力は上のステータスに加算済み） */}
+          {profile.emblemAlloc && (() => {
+            const emRank = getEmblemRank(emblemAllocTotal(profile.emblemAlloc))
+            const chips = emblemEffectChips(profile.emblemAlloc)
+            return (
+              <div key="emblem" style={{ border:'1px solid #24406a', background:'#000c1e', padding:'10px', textAlign:'center' }}>
+                <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>紋章</div>
+                <div style={{ fontSize:'12px', marginBottom:'4px' }}>
+                  <span style={{ color:'#aaccff' }}>💠 紋章 LV{profile.emblemLevel || 1}</span>
+                  <span style={{ color: EMBLEM_RANK_COLOR[emRank] || '#88bbff', marginLeft:'6px' }}>ランク{emRank}</span>
+                </div>
+                {chips.length > 0 && (
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', justifyContent:'center' }}>
+                    {chips.map((c, i) => (
+                      <span key={i} style={{ fontSize:'10px', color:'#66dd99', background:'#02201a', border:'1px solid #1a4a3a', borderRadius:'3px', padding:'2px 6px' }}>{c}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
           </div>
         </div>
 
