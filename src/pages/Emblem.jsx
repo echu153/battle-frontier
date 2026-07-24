@@ -5,7 +5,7 @@ import { reportDevAccess } from '../lib/devAccess'
 import {
   EMBLEM_CRYSTALS, EMBLEM_CRYSTAL_KEYS, EMBLEM_ALLOC_MAX, EMBLEM_MAX_LEVEL,
   getEmblemRank, EMBLEM_RANK_COLOR, emblemLevelCap, EMBLEM_CAP_UNLOCK_COST,
-  emblemLevelUpCost, emblemAllocTotal, calcEmblemBonus, EMBLEM_SHARD_NAME,
+  emblemLevelUpCost, emblemAllocTotal, emblemEffectChips, EMBLEM_SHARD_NAME,
 } from '../lib/emblem'
 import { HACHIGOKU_HELLS, isHachigokuUnlocked } from '../lib/hachigoku'
 
@@ -125,32 +125,8 @@ export default function Emblem() {
   })()
   const canUnlock = atCap && capStage < 4
   const unlockCost = canUnlock ? EMBLEM_CAP_UNLOCK_COST[capStage] : null
-  const bonus = calcEmblemBonus(alloc)
-  // 上昇しているステータスだけをチップ化
-  const effChips = [
-    bonus.flat.atk  > 0 && `攻撃+${bonus.flat.atk}`,
-    bonus.flat.def  > 0 && `防御+${bonus.flat.def}`,
-    bonus.flat.matk > 0 && `特攻+${bonus.flat.matk}`,
-    bonus.flat.mdef > 0 && `特防+${bonus.flat.mdef}`,
-    bonus.physDmg   > 0 && `物理ダメ+${bonus.physDmg}%`,
-    bonus.specialDmg> 0 && `特殊ダメ+${bonus.specialDmg}%`,
-    bonus.defPen    > 0 && `物防貫通+${bonus.defPen}%`,
-    bonus.mdefPen   > 0 && `特防貫通+${bonus.mdefPen}%`,
-    bonus.dotUp.bleed  > 0 && `出血ダメ+${bonus.dotUp.bleed}%`,
-    bonus.dotUp.burn   > 0 && `やけどダメ+${bonus.dotUp.burn}%`,
-    bonus.dotUp.poison > 0 && `毒ダメ+${bonus.dotUp.poison}%`,
-    bonus.physDrain > 0 && `物理吸収+${bonus.physDrain}%`,
-    bonus.specialDrain > 0 && `特殊吸収+${bonus.specialDrain}%`,
-    bonus.evasion   > 0 && `回避+${bonus.evasion}%`,
-    bonus.crit      > 0 && `クリ率+${bonus.crit}%`,
-    bonus.critDmg   > 0 && `クリ威力+${bonus.critDmg}%`,
-    bonus.critResist> 0 && `クリ抵抗+${bonus.critResist}%`,
-    bonus.ailRes.poison    > 0 && `毒耐性+${bonus.ailRes.poison}%`,
-    bonus.ailRes.paralysis > 0 && `麻痺耐性+${bonus.ailRes.paralysis}%`,
-    bonus.ailRes.burn      > 0 && `やけど耐性+${bonus.ailRes.burn}%`,
-    bonus.ailRes.bleed     > 0 && `出血耐性+${bonus.ailRes.bleed}%`,
-    bonus.ailRes.stun      > 0 && `スタン耐性+${bonus.ailRes.stun}%`,
-  ].filter(Boolean)
+  // 上昇しているステータスだけをチップ化（Profile等と共通の emblemEffectChips を使用）
+  const effChips = emblemEffectChips(alloc)
 
   return (
     <div style={{ minHeight:'100vh', background:'#050a18', padding:'12px', fontFamily:'monospace', textAlign:'left' }}>

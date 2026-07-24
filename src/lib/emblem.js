@@ -143,5 +143,34 @@ export const calcEmblemBonus = (alloc) => {
   return b
 }
 
+// 紋章の「上昇している能力」をチップ文字列の配列にして返す（Emblem/Profile 等で共用）
+export const emblemEffectChips = (alloc) => {
+  const bonus = calcEmblemBonus(alloc)
+  return [
+    bonus.flat.atk  > 0 && `攻撃+${bonus.flat.atk}`,
+    bonus.flat.def  > 0 && `防御+${bonus.flat.def}`,
+    bonus.flat.matk > 0 && `特攻+${bonus.flat.matk}`,
+    bonus.flat.mdef > 0 && `特防+${bonus.flat.mdef}`,
+    bonus.physDmg   > 0 && `物理ダメ+${bonus.physDmg}%`,
+    bonus.specialDmg> 0 && `特殊ダメ+${bonus.specialDmg}%`,
+    bonus.defPen    > 0 && `物防貫通+${bonus.defPen}%`,
+    bonus.mdefPen   > 0 && `特防貫通+${bonus.mdefPen}%`,
+    bonus.dotUp.bleed  > 0 && `出血ダメ+${bonus.dotUp.bleed}%`,
+    bonus.dotUp.burn   > 0 && `やけどダメ+${bonus.dotUp.burn}%`,
+    bonus.dotUp.poison > 0 && `毒ダメ+${bonus.dotUp.poison}%`,
+    bonus.physDrain > 0 && `物理吸収+${bonus.physDrain}%`,
+    bonus.specialDrain > 0 && `特殊吸収+${bonus.specialDrain}%`,
+    bonus.evasion   > 0 && `回避+${bonus.evasion}%`,
+    bonus.crit      > 0 && `クリ率+${bonus.crit}%`,
+    bonus.critDmg   > 0 && `クリ威力+${bonus.critDmg}%`,
+    bonus.critResist> 0 && `クリ抵抗+${bonus.critResist}%`,
+    bonus.ailRes.poison    > 0 && `毒耐性+${bonus.ailRes.poison}%`,
+    bonus.ailRes.paralysis > 0 && `麻痺耐性+${bonus.ailRes.paralysis}%`,
+    bonus.ailRes.burn      > 0 && `やけど耐性+${bonus.ailRes.burn}%`,
+    bonus.ailRes.bleed     > 0 && `出血耐性+${bonus.ailRes.bleed}%`,
+    bonus.ailRes.stun      > 0 && `スタン耐性+${bonus.ailRes.stun}%`,
+  ].filter(Boolean)
+}
+
 // ===== 八獄（はちごく）関連の紋章素材 =====
 export const EMBLEM_SHARD_NAME = '紋章の成長石'

@@ -6,6 +6,7 @@ import { rankColor } from '../lib/territory'
 import { petStats, speciesLabel, speciesEmoji, petImage, atkLabel, applyCharmStats, charmDisplayName, charmPlayerBonus, petPlayerBonus } from '../constants/pets'
 import { evoMultiplier, displayRarity, isShinka } from '../constants/bossEvolution'
 import { effectLabel } from '../constants/effectLabels'
+import { getEmblemRank, EMBLEM_RANK_COLOR, emblemAllocTotal, emblemEffectChips } from '../lib/emblem'
 
 const gemBonusText = (gemType, rank) => {
   const g = GEM_DATA[gemType]; if (!g) return ''
@@ -144,12 +145,12 @@ export default function Profile() {
     const activePet = (petList || []).find(pt => pt.is_active)
     const activeCharm = activePet?.charm_id ? (chList || []).find(c => c.id === activePet.charm_id) : null
     // 紋章の割り振りも反映（未導入/未付与なら無視）。他人のも player_emblem は全員SELECT可
-    let emblemAlloc = null
+    let emblemAlloc = null, emblemLevel = 0
     try {
-      const { data: em } = await supabase.from('player_emblem').select('alloc').eq('player_id', targetId).maybeSingle()
-      if (em?.alloc && Object.keys(em.alloc).length > 0) emblemAlloc = em.alloc
+      const { data: em } = await supabase.from('player_emblem').select('alloc, level').eq('player_id', targetId).maybeSingle()
+      if (em?.alloc && Object.keys(em.alloc).length > 0) { emblemAlloc = em.alloc; emblemLevel = em.level || 1 }
     } catch { /* 紋章未導入時は無視 */ }
-    setProfile(prev => prev ? { ...prev, petStat: activePet ? petPlayerBonus(activePet) : null, petCharm: activeCharm ? charmPlayerBonus(activeCharm) : null, emblemAlloc } : prev)
+    setProfile(prev => prev ? { ...prev, petStat: activePet ? petPlayerBonus(activePet) : null, petCharm: activeCharm ? charmPlayerBonus(activeCharm) : null, emblemAlloc, emblemLevel } : prev)
     if (p?.ability_title_id) {
       const { data: at } = await supabase.from('titles').select('*').eq('id', p.ability_title_id).single()
       setAbilityTitle(at || null)
@@ -306,6 +307,26 @@ export default function Profile() {
               )
             })}
           </div>
+          {/* 紋章（第5の装備枠）の寄与。攻撃/防御/特攻/特防への加算は上のABCD値に含まれる */}
+          {profile.emblemAlloc && (() => {
+            const emRank = getEmblemRank(emblemAllocTotal(profile.emblemAlloc))
+            const chips = emblemEffectChips(profile.emblemAlloc)
+            return (
+              <div style={{ marginTop:'10px', paddingTop:'8px', borderTop:'1px solid #113355' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'6px' }}>
+                  <span style={{ color:'#88bbff', fontSize:'11px' }}>💠 紋章</span>
+                  <span style={{ color:'#aaccff', fontSize:'11px' }}>LV{profile.emblemLevel || 1}</span>
+                  <span style={{ color: EMBLEM_RANK_COLOR[emRank] || '#88bbff', fontSize:'11px' }}>ランク{emRank}</span>
+                  <span style={{ color:'#556677', fontSize:'9px' }}>（上のステータスに加算済み）</span>
+                </div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                  {chips.map((c, i) => (
+                    <span key={i} style={{ fontSize:'10px', color:'#66dd99', background:'#02201a', border:'1px solid #1a4a3a', borderRadius:'3px', padding:'2px 6px' }}>{c}</span>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
         </div>
 
         {/* 装備中（カード式） */}
