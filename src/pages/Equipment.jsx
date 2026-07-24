@@ -782,7 +782,7 @@ export default function Equipment() {
                   const baseW = calcEnhancedStats(w, 0, item.evolve_stage || 0)
                   const isArtifactBase = ARTIFACT_BASE_NAMES.includes(w.name)
                   const prof = tab === 'weapon' ? proficiency.find(p => p.equipment_id === item.id) : null
-                  const profBonus = prof ? calcProfBonus(prof, w) : {}
+                  const profBonus = prof ? calcProfBonus(prof, w, item.evolve_stage || 0) : {}
                   const profPct = prof ? Math.min(100, (prof.prof_exp / 100) * 100) : 0
                   const profPrefix = prof ? getProfPrefix(prof.prof_lv) : ''
                   const canAwaken = isArtifactBase && prof && prof.prof_lv >= 300

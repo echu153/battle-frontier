@@ -121,7 +121,9 @@ const applyGemBonus = (item, acc) => {
 // LV1001〜2000:+1%/50LV
 // LV2001〜:    +1%/100LV
 // 対象：atk/def/matk/mdef/spd/hp/mp の固定ボーナスのみ（%ボーナスは対象外）
-export const calcProfBonus = (prof, weapon) => {
+// evolveStage: ボス装備 真化（進化）で上がった基礎ステを参照する。表示の「元:」＝ceil(基礎×進化倍率)と一致
+//   （進化倍率 = 1+0.2×stage・5段=真化で×2.0）。強化(+N)は基礎ステ扱いではないため対象外。
+export const calcProfBonus = (prof, weapon, evolveStage = 0) => {
   if (!prof || !weapon) return {}
   const profLv = prof.prof_lv || 0
   let rate
@@ -140,14 +142,17 @@ export const calcProfBonus = (prof, weapon) => {
       + Math.floor(lv2000 / 100) * 0.01
   }
   if (rate <= 0) return {}
+  // 真化で上がった基礎ステを参照（0のステは0のまま・ceilで「元:」表示と一致）
+  const evoMult = 1 + 0.2 * (evolveStage || 0)
+  const evo = (v) => (v > 0 ? Math.ceil(v * evoMult) : 0)
   const result = {}
-  const atk  = Math.floor((weapon.atk_bonus ||0) * rate); if (atk  > 0) result.atk  = atk
-  const def  = Math.floor((weapon.def_bonus ||0) * rate); if (def  > 0) result.def  = def
-  const matk = Math.floor((weapon.matk_bonus||0) * rate); if (matk > 0) result.matk = matk
-  const mdef = Math.floor((weapon.mdef_bonus||0) * rate); if (mdef > 0) result.mdef = mdef
-  const spd  = Math.floor((weapon.spd_bonus ||0) * rate); if (spd  > 0) result.spd  = spd
-  const hp   = Math.floor((weapon.hp_bonus  ||0) * rate); if (hp   > 0) result.hp   = hp
-  const mp   = Math.floor((weapon.mp_bonus  ||0) * rate); if (mp   > 0) result.mp   = mp
+  const atk  = Math.floor(evo(weapon.atk_bonus)  * rate); if (atk  > 0) result.atk  = atk
+  const def  = Math.floor(evo(weapon.def_bonus)  * rate); if (def  > 0) result.def  = def
+  const matk = Math.floor(evo(weapon.matk_bonus) * rate); if (matk > 0) result.matk = matk
+  const mdef = Math.floor(evo(weapon.mdef_bonus) * rate); if (mdef > 0) result.mdef = mdef
+  const spd  = Math.floor(evo(weapon.spd_bonus)  * rate); if (spd  > 0) result.spd  = spd
+  const hp   = Math.floor(evo(weapon.hp_bonus)   * rate); if (hp   > 0) result.hp   = hp
+  const mp   = Math.floor(evo(weapon.mp_bonus)   * rate); if (mp   > 0) result.mp   = mp
   return result
 }
 
@@ -266,7 +271,7 @@ export const calcEffectiveStats = (profile, equipment, proficiency, titleBonus =
       }
       const prof = proficiency.find(p => p.equipment_id === item.id)
       if (prof) {
-        const pb = calcProfBonus(prof, w)
+        const pb = calcProfBonus(prof, w, item.evolve_stage || 0)
         bonus.atk  += pb.atk  || 0
         bonus.def  += pb.def  || 0
         bonus.matk += pb.matk || 0
@@ -467,7 +472,7 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
       }
       const pr = proficiency.find(p => p.equipment_id === item.id)
       if (pr) {
-        const pb = calcProfBonus(pr, w)
+        const pb = calcProfBonus(pr, w, item.evolve_stage || 0)
         prof.atk += pb.atk||0; prof.def += pb.def||0; prof.matk += pb.matk||0
         prof.mdef += pb.mdef||0; prof.spd += pb.spd||0; prof.hp += pb.hp||0; prof.mp += pb.mp||0
       }
