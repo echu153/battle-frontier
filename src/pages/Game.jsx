@@ -614,7 +614,7 @@ const getTotalRank = (total) => {
 export const calcExpNext = (lv, _isAdmin = false) => {
   let base
   if (lv >= 100) {
-    // LV100超（再修練でキャップ500になったクラス）の必要経験値。LV251+は一律base180（500まで同じ）
+    // LV100超（再修練でキャップ解放したクラス＝初期職300/上位職500）の必要経験値。LV251+は一律base180（500まで同じ）
     base = lv <= 150 ? 150 : lv <= 200 ? 160 : lv <= 250 ? 170 : 180
   } else {
     const lvInBlock = (lv - 1) % 100
