@@ -29,6 +29,10 @@ const STONE_NAME = (r) => `強化石(${r})`
 const fmt = (n) => Number(n).toLocaleString()
 const floorLabel = (n) => `地下${n}階`
 const ABYSS_CD = 5  // 奈落の挑戦クールダウン(秒)
+// 奈落 20〜30階の一般公開日時（JST 2026/7/27 5:00）。それまでは is_admin 限定（開発先行）。
+// ※サーバ側 claim_abyss_floor / get_abyss_status も同じゲートを持つ（本番の権威）。
+const ABYSS_NEWFLOOR_FROM = 20
+const ABYSS_NEWFLOOR_UNLOCK_MS = Date.parse('2026-07-27T05:00:00+09:00')
 
 // ネットワーク応答が返らない場合に「戦闘中...」で永久停止するのを防ぐタイムアウト付きラッパー。
 // Supabaseのfetchがハングしても一定時間で例外化し、finallyでbattlingを必ず解除できるようにする。
@@ -953,13 +957,17 @@ export default function Abyss() {
   const targetFloor = status?.next_floor || 1
   const floorData = getAbyssFloor(targetFloor)
   const isAllCleared = (status?.cleared_floor || 0) >= ABYSS_FLOOR_COUNT
-  // 次の階がまだ未実装（16階以降など）：制覇ではないが今は挑戦できない
+  // 次の階がまだ未実装：制覇ではないが今は挑戦できない
   const notYetAvailable = !isAllCleared && !floorData
-  const canChallenge = !!status?.can_challenge && !isAllCleared && !notYetAvailable && remaining <= 0 && !battling
+  // 20〜30階は 2026/7/27 5:00(JST) から一般公開。それまでは is_admin のみ挑戦可。
+  const abyssNewFloorsOpen = !!profile?.is_admin || Date.now() >= ABYSS_NEWFLOOR_UNLOCK_MS
+  const newFloorLocked = !isAllCleared && targetFloor >= ABYSS_NEWFLOOR_FROM && !abyssNewFloorsOpen
+  const canChallenge = !!status?.can_challenge && !isAllCleared && !notYetAvailable && !newFloorLocked && remaining <= 0 && !battling
 
   const handleChallenge = async () => {
     if (!floorData || !profile || battling) return
     if (!status?.can_challenge) return
+    if (newFloorLocked) return  // 20〜30階は公開前(is_admin以外)は挑戦不可
     if (remaining > 0) return
     setBattleFloor(targetFloor)  // 戦う階を固定（勝利後にtargetFloorが進んでも表示を保つ）
     setBattling(true); setScene('battle'); setBattleLogs([]); setReward(null); setResultMsg(null)
@@ -1091,6 +1099,12 @@ export default function Abyss() {
               <div style={{ border:'1px solid #6a5a9a', background:'#120c1e', padding:'24px', textAlign:'center' }}>
                 <div style={{ color:'#b0a0dd', fontSize:'14px', marginBottom:'8px' }}>🚧 {floorLabel(ABYSS_DEFINED_FLOORS)}まで制覇！</div>
                 <div style={{ color:'#9988bb', fontSize:'11px', lineHeight:'1.8' }}>{floorLabel(targetFloor)}以降は現在準備中です。<br/>続きの実装をお待ちください。</div>
+              </div>
+            ) : newFloorLocked ? (
+              <div style={{ border:'1px solid #6a5a9a', background:'#120c1e', padding:'24px', textAlign:'center' }}>
+                <div style={{ color:'#b0a0dd', fontSize:'14px', marginBottom:'8px' }}>🚧 {floorLabel(ABYSS_NEWFLOOR_FROM - 1)}まで制覇！</div>
+                <div style={{ color:'#9988bb', fontSize:'11px', lineHeight:'1.8' }}>{floorLabel(ABYSS_NEWFLOOR_FROM)}〜{floorLabel(ABYSS_FLOOR_COUNT)}は <span style={{ color:'#ffcc66' }}>2026/7/27 5:00</span> 公開予定です。<br/>続きの挑戦をお待ちください。</div>
+                {profile?.is_admin && <div style={{ color:'#cc66ff', fontSize:'10px', marginTop:'8px' }}>［開発］公開前のため一般には非表示。管理者のみ挑戦可。</div>}
               </div>
             ) : !status.can_challenge ? (
               <div style={{ border:'1px solid #aa4466', background:'#1a0a14', padding:'20px', textAlign:'center' }}>

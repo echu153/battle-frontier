@@ -3,6 +3,9 @@
 -- ------------------------------------------------------------
 -- ・全体を 20階 → 30階 に拡張する。
 --   20階 = 複数職ボス／21〜25階 = 新クラス5職／26〜30階 = 複数職ボス。
+-- ・【公開ゲート】20〜30階は JST 2026/7/27 5:00 から一般公開。それまでは is_admin のみ
+--   挑戦可（開発先行）。claim_abyss_floor / get_abyss_status の両方が同じ時刻＋is_admin
+--   判定を持つ（サーバが本番の権威）。→ このSQLは今すぐ適用してよい（時刻まで自動で開発限定）。
 -- ・claim_abyss_floor / get_abyss_status の上限「20」を「30」へ引き上げ。
 -- ・報酬テーブル(20〜30)・匠の秘伝書(階層別)を更新。
 --
@@ -44,6 +47,8 @@ DECLARE
   v_reset      timestamptz;
   v_eff        int;
   v_next       int;
+  v_is_admin   boolean;
+  v_max        int;   -- 挑戦可能な最深階（20〜30階は公開前 is_admin 以外 19 で頭打ち）
 BEGIN
   v_player_id := auth.uid();
   IF v_player_id IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
@@ -53,6 +58,10 @@ BEGIN
     v_row.cleared_floor := 0;
     v_row.last_clear_week := NULL;
   END IF;
+
+  -- 20〜30階は 2026/7/27 5:00(JST) から一般公開。それまでは is_admin のみ 20階以降に進める。
+  SELECT COALESCE(is_admin, false) INTO v_is_admin FROM profiles WHERE id = v_player_id;
+  v_max := CASE WHEN v_is_admin OR now() >= '2026-07-27 05:00:00+09'::timestamptz THEN 30 ELSE 19 END;
 
   v_shifted := (now() AT TIME ZONE 'Asia/Tokyo') - interval '5 hours';
   v_week    := date_trunc('week', v_shifted)::date;
@@ -64,11 +73,11 @@ BEGIN
     v_eff := 0;
   END IF;
 
-  v_next := LEAST(v_eff + 1, 30);
+  v_next := LEAST(v_eff + 1, v_max);
 
   RETURN json_build_object(
     'cleared_floor', v_eff,
-    'can_challenge', (v_eff < 30),   -- 全30階制覇までは週内いつでも挑戦可
+    'can_challenge', (v_eff < v_max),   -- 公開分を制覇までは週内いつでも挑戦可
     'next_floor',    v_next,
     'reset_at',      v_reset
   );
@@ -105,12 +114,21 @@ DECLARE
   v_eff            int;
   v_book_name      text;
   v_book_item_id   int;
+  v_is_admin       boolean;
   -- ★イベント(2026/7/20〜8/3): 報酬2倍（終了後は 1）
   v_mul            int := CASE WHEN bf_event_20260720_active() THEN 2 ELSE 1 END;
 BEGIN
   v_player_id := auth.uid();
   IF v_player_id IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
   IF p_floor < 1 OR p_floor > 30 THEN RETURN json_build_object('error', '不正なフロアです'); END IF;
+
+  -- 20〜30階は 2026/7/27 5:00(JST) から一般公開。それまでは is_admin のみ挑戦可（開発先行）。
+  IF p_floor >= 20 THEN
+    SELECT COALESCE(is_admin, false) INTO v_is_admin FROM profiles WHERE id = v_player_id;
+    IF NOT v_is_admin AND now() < '2026-07-27 05:00:00+09'::timestamptz THEN
+      RETURN json_build_object('error', '地下20階以降は 2026/7/27 5:00 に公開予定です');
+    END IF;
+  END IF;
 
   -- 奈落ウィーク（毎週月曜 朝5時JSTが境界）
   v_shifted := (now() AT TIME ZONE 'Asia/Tokyo') - interval '5 hours';
