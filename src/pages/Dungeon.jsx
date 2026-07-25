@@ -131,6 +131,8 @@ const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1))
 const SHOP_STONE_PRICE = { F: 50, E: 100, D: 200, C: 400, B: 800, A: 1600, S: 3200 }
 const SHOP_BOOK_PRICE = 1000
 const SHOP_SEED_PRICE = 100
+// 商店インスタンスID（サーバーがスロット単位で購入済みを判定するための識別子）
+const newShopId = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
 // 在庫：書=ランダム4種(重複なし) / 強化石=4枠(重複あり・A/Sはやや低確率) / 素=ランダム4種(重複なし)
 function rollShopStock(dungeonId) {
   const books = [...SCROLL_KEYS].sort(() => Math.random() - 0.5).slice(0, 4)
@@ -1347,7 +1349,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
           sinceShopRef.current = 0
           shopAtRef.current = 10 + Math.floor(Math.random() * 11)
           saveShopCnt()
-          const so = { stock: rollShopStock(dungeon?.id), bought: {}, next: floorNum + 1 }
+          const so = { id: newShopId(), stock: rollShopStock(dungeon?.id), bought: {}, next: floorNum + 1 }
           addLog('🏮 階段の途中に秘密の商店を見つけた…')
           setState({ ...s, player })
           openShopWithIntro(so)
@@ -1723,12 +1725,14 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
     const pending = { ...cur, bought: { ...cur.bought, [slot]: true } }
     shopRef.current = pending; setShop(pending)
     try {
-      const { data, error } = await supabase.rpc('secret_shop_buy', { p_run_id: runIdRef.current, p_kind: kind, p_key: key })
+      const { data, error } = await supabase.rpc('secret_shop_buy', { p_run_id: runIdRef.current, p_kind: kind, p_key: key, p_shop_id: cur.id || null, p_slot: slot })
       if (error) {
-        // 失敗時は購入済みフラグを戻す（最新の shopRef を基点に）
+        const m = String(error.message)
+        // サーバーが「購入済みスロット」を弾いた場合は購入済みのまま維持（戻さない）
+        if (m.includes('already bought')) { setShopMsg('🛒 その品は購入済み'); return }
+        // それ以外の失敗は購入済みフラグを戻す（最新の shopRef を基点に）
         const rb = { ...shopRef.current, bought: { ...shopRef.current.bought, [slot]: false } }
         shopRef.current = rb; setShop(rb)
-        const m = String(error.message)
         setShopMsg(m.includes('zeni') ? '🪙 ゼニが足りない…' : m.includes('full') || m.includes('inventory') ? '🎒 袋がいっぱいで買えない' : '🛒 購入できなかった（' + m.slice(0, 60) + '）')
         return
       }
@@ -2954,7 +2958,7 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
             )}
             {/* 開発アカウント用：秘密の商店へ即入店（閉じると現フロアに戻る） */}
             {isAdmin && dungeon && (dungeon.id === 'd30' || dungeon.id === 'd60') && (
-              <button onClick={() => { if (shopRef.current || busyRef.current) return; addLog('🏮 秘密の商店へ（開発）'); openShopWithIntro({ stock: rollShopStock(dungeon?.id), bought: {}, next: null }) }}
+              <button onClick={() => { if (shopRef.current || busyRef.current) return; addLog('🏮 秘密の商店へ（開発）'); openShopWithIntro({ id: newShopId(), stock: rollShopStock(dungeon?.id), bought: {}, next: null }) }}
                 style={{ background: '#1a1204', border: '1px solid #aa8833', color: '#ffd75e', padding: '6px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>🏮 商店</button>
             )}
             {/* 開発アカウント用フロアワープ（d60は帯の境目＋ボス前後） */}
