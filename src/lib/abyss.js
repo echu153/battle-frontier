@@ -187,6 +187,7 @@ const FLOOR_META = [
           trigger40:'フレイムバースト',
           special: sp('万象崩滅', { atk:1.8, matk:1.8, hits:2, inflict:['burn','paralysis','stun'] }) } },
   { floor:30, name:'奈落の支配者アビスロード', target:50000, arch:'balanced', dmg:'hybrid', // 全職集大成(最終)
+    revive:{ hpFrac:0.5, allStatsMult:2 }, // HP0で1度だけ最大HP50%で復活し、全ステータス2倍
     kit:{ normal: sp('虚無の刃', { atk:1.6, matk:1.6 }),
           normalLow: sp('冥滅の波動', { atk:1.8, matk:1.8, hits:2 }),
           trigger75:{ name:'絶対君臨', buff:{ atkMult:1.5, matkMult:1.5 }, duration:10 },
@@ -249,7 +250,7 @@ export const ABYSS_FLOORS = FLOOR_META.map(m => ({
   floor: m.floor,
   name: m.name,
   target: m.target,
-  enemy: { ...makeEnemy(m.name, m.target, m.arch, m.dmg), kit: m.kit },
+  enemy: { ...makeEnemy(m.name, m.target, m.arch, m.dmg), kit: m.kit, revive: m.revive || null },
   kit: m.kit,
   reward: { ...FLOOR_REWARD[m.floor], book: abyssBookForFloor(m.floor) },
 }))

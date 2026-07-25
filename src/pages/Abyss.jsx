@@ -60,7 +60,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   let playerMp = eff.mp_max
   let enemyHp = enemy.hp
   const enemyMaxHp = enemy.hp
-  let turn = 1, skillIndex = 0
+  let turn = 1, skillIndex = 0, turnCap = 50, reviveUsed = false
   let playerBuffs = {}, enemyBuffs = {}
   let currentItem = playerItem ? { ...playerItem } : null
   let itemUsed = false
@@ -667,7 +667,9 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     }
   }
 
-  while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
+  // 敵の1度きり復活（30階=enemy.revive: 最大HP50%で復活し全ステ2倍）に対応するため外側ループで再入場する。
+  while (true) {
+  while (playerHp > 0 && enemyHp > 0 && turn <= turnCap) {
     const hpBeforeTurn = playerHp  // 雷鋼の機神鎧: このターンに被ダメしたか判定用
     if (passiveNames.includes('骸の壁') && (turn === 1 || turn % 4 === 0)) {
       playerBuffs.dmgReduce = { turns:999, rate:0.7, isGainoKabe:true }
@@ -847,9 +849,22 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:eff.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
     turn++
   }
+  // ── 1度きりの復活（enemy.revive）: HP0だが復活が残り、プレイヤー生存・ターン上限内なら復活 ──
+  if (enemyHp <= 0 && enemy.revive && !reviveUsed && playerHp > 0 && turn <= turnCap) {
+    reviveUsed = true
+    const frac = enemy.revive.hpFrac ?? 0.5
+    const rm = enemy.revive.allStatsMult || 2
+    enemyHp = Math.max(1, Math.round(enemyMaxHp * frac))
+    enPerm.atkMult *= rm; enPerm.matkMult *= rm; enPerm.defMult *= rm; enPerm.mdefMult *= rm; enPerm.spdMult *= rm
+    turnCap += 50  // 第2形態ぶんターン上限を延長
+    logs.push({ text:`💀✦ ${enemy.name}は倒れた…かに見えた！ 最大HPの${Math.round(frac*100)}%で復活し、全ステータスが${rm}倍になった！`, color:'#ff2266' })
+    continue  // 外側ループで戦闘を再開
+  }
+  break
+  }
 
   const win = enemyHp <= 0
-  const turns = Math.min(turn, 50)  // 撃破にかかったターン数（ランキングのタイブレーク用）
+  const turns = Math.min(turn, turnCap)  // 撃破にかかったターン数（ランキングのタイブレーク用）
   logs.push(win
     ? { text:`${enemy.name}を ${turns}ターンで倒した！`, color:'#44ff88' }
     : { text:`敗北… また挑もう。`, color:'#ff4444' })
