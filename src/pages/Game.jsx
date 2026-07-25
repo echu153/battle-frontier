@@ -9,7 +9,7 @@ import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemResistNewAilment
 import { charmPlayerBonus, petPlayerBonus, petStats } from '../constants/pets'
 import { countClaimableTitles } from '../lib/titles'
 import { reportDevAccess } from '../lib/devAccess'
-import { isHachigokuUnlocked } from '../lib/hachigoku'
+import { isHachigokuUnlocked, HACHIGOKU_DAILY_WINS } from '../lib/hachigoku'
 import { isEvent20260720Active } from '../lib/event20260720'
 import { myAreaShares, dropBonusPP, EXPAND_COOLDOWN_MS, rankColor } from '../lib/territory'
 import AIAssistant from '../components/AIAssistant'
@@ -1836,6 +1836,7 @@ export default function Game() {
   const [boxAvailable, setBoxAvailable] = useState(0)        // ボス装備進化支援箱の所持数（街のバナー表示用）
   const [subsidyAvailable, setSubsidyAvailable] = useState(false)  // 国の補助金が未受取か（街のバナー表示用）
   const [bingoClaimable, setBingoClaimable] = useState(0)   // 初心者ビンゴで受け取れる報酬(マス/ライン)の件数（街のバナー表示用・is_admin限定先行）
+  const [hachigokuWinsLeft, setHachigokuWinsLeft] = useState(0)   // 八獄の本日残り挑戦回数（街バナー用。挑戦権あり＆未消化で表示）
   const [scarecrowState, setScarecrowState] = useState(null)       // かかし修練: 'training'(中) | 'done'(完了・受取待ち) | null
   const [myCountryName, setMyCountryName] = useState('')     // 所属国名（ホーム/プロフィールの所属国表示用・is_admin限定先行）
   const [atWar, setAtWar] = useState(false)                  // 自国が交戦中（active）か。戦争中はホームのHP/MP表示を戦争用に切替
@@ -2206,6 +2207,14 @@ export default function Game() {
         setBingoClaimable(countClaimable(bg1) + (card1Cleared ? countClaimable(bg2) : 0))
       } catch { /* SQL未適用時は無視 */ setBingoClaimable(0) }
     }
+    // 八獄: 挑戦権があり本日の回数を使い切っていなければバナー表示（emblem_getがwins_todayを返す）
+    if (isHachigokuUnlocked(prof)) {
+      try {
+        const { data: em } = await supabase.rpc('emblem_get')
+        if (em && !em.error) setHachigokuWinsLeft(Math.max(0, HACHIGOKU_DAILY_WINS - (em.wins_today || 0)))
+        else setHachigokuWinsLeft(0)
+      } catch { /* 八獄SQL未適用時は無視 */ setHachigokuWinsLeft(0) }
+    } else { setHachigokuWinsLeft(0) }
   }
   // プロフィール確定時＋60秒ごとに再計算（クールダウン明け・錬金完成を取り込む）
   useEffect(() => {
@@ -5872,6 +5881,12 @@ export default function Game() {
               🎯 初心者ビンゴで報酬を受け取れます！（{bingoClaimable}件）→ ビンゴへ
             </button>
           )}
+          {hachigokuWinsLeft > 0 && (
+            <button onClick={()=>nav('/hachigoku')}
+              style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a0806', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              🔥 八獄に挑戦できます！（本日あと{hachigokuWinsLeft}回）→ 八獄へ
+            </button>
+          )}
           {unreadReplies > 0 && (
             <div style={{ display:'flex', gap:'6px', marginBottom:'8px' }}>
               <button onClick={()=>{ setShowContact(true); setContactView('history'); fetchMyContacts().then(rows => markContactRepliesSeen(rows)) }}
@@ -6446,6 +6461,12 @@ export default function Game() {
           <button onClick={()=>nav('/bingo')}
             style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a1204', border:'1px solid #ccaa44', color:'#ffdd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
             🎯 初心者ビンゴで報酬を受け取れます！（{bingoClaimable}件）→ ビンゴへ
+          </button>
+        )}
+        {hachigokuWinsLeft > 0 && (
+          <button onClick={()=>nav('/hachigoku')}
+            style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a0806', border:'1px solid #ff7755', color:'#ffaa88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            🔥 八獄に挑戦できます！（本日あと{hachigokuWinsLeft}回）→ 八獄へ
           </button>
         )}
         {unreadReplies > 0 && (
