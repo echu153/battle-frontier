@@ -146,15 +146,59 @@ const FLOOR_META = [
           trigger75:{ name:'影歩き', permanent:true, critDmgPlus:0.5 }, // 永続・クリ威力+50%
           trigger40:{ name:'絶影', custom:true, permanent:true, buff:{ atkMult:2, spdMult:2 } }, // AS永続2倍
           special: sp('断首', { atk:3.0, executeHpBelow:10 }) } }, // 与ダメ後HP10以下なら即死
-  // 20階は後日追加
+  // ── 20階=複数職ボス / 21〜25階=新クラス5職 / 26〜30階=複数職ボス（2026-07-26追加）──
+  // ※通常/trigger枠は executeSkill で処理される実在スキル名のみ使用。
+  //   ペットコマンド・式神召喚・各パッシブは executeSkill 対象外のため custom(sp) で表現。
+  { floor:20, name:'双牙の門番ガルヴァス',   target:20000, arch:'balanced', dmg:'hybrid', // 侍＋元素使い
+    kit:{ normal:'居合斬', normalLow:'アクアショット', trigger75:'明鏡止水', trigger40:'フレイムバースト',
+          special: sp('双牙・崩天', { atk:1.6, matk:1.6, hits:2 }) } },
+  { floor:21, name:'紫電剣のロレンツォ',     target:23000, arch:'balanced', dmg:'hybrid', // 魔法剣士
+    kit:{ normal:'雷光斬', normalLow:'エレメンタルエッジ', trigger75:'魔剣開放', trigger40:'閃光',
+          special: sp('魔剣・星霜', { atk:2.0, matk:2.0 }) } },
+  { floor:22, name:'陰陽師ヨミジ',           target:26000, arch:'arcane', dmg:'mag', // 式神使い
+    kit:{ normal:'符術・式打ち', normalLow:'呪符・魂削り', trigger75:'陰陽結界', trigger40:'禁術・神降ろし',
+          special: sp('百鬼夜行', { matk:2.6, inflict:['paralysis','burn'], debuff:{ mdef:-25 } }) } },
+  { floor:23, name:'精霊王フィオレ',         target:29000, arch:'arcane', dmg:'mag', // 精霊召喚士
+    kit:{ normal:'サラマンド', normalLow:'ノクス', trigger75:'ノーム', trigger40:'シルフ',
+          special: sp('六精・崩界', { matk:1.6, hits:2, inflict:['burn','paralysis'] }) } },
+  { floor:24, name:'竜騎将ヴォルガ',         target:32000, arch:'warrior', dmg:'phys', // 竜騎士
+    kit:{ normal:'ドラゴンスラスト', normalLow:'ドラゴンファング', trigger75:'ドラゴンロア', // ロア=対象の攻/特攻-30%
+          trigger40: sp('竜牙連咬', { atk:1.4, hits:2 }),
+          special: sp('天墜竜閃', { atk:4.5, critGuaranteed:true }) } }, // 溜め技を確定クリ大技で表現
+  { floor:25, name:'獣王ベルナ',             target:33000, arch:'monk', dmg:'phys', // ブリーダー(ペット共闘)
+    kit:{ normal: sp('連携の爪', { atk:1.3, hits:2 }),
+          normalLow: sp('猛獣の咆哮', { atk:1.6, hits:2 }),
+          trigger75:{ name:'一緒に頑張ろう！', buff:{ atkMult:1.5 }, duration:3 }, // 与ダメ強化(3T)
+          trigger40: sp('やっちゃえ！', { atk:2.2, hits:2 }),
+          special: sp('獣王覚醒・共闘', { atk:3.0, hits:2, lifesteal:0.3 }) } },
+  { floor:26, name:'業火の闘鬼ゴウエン',     target:36000, arch:'monk', dmg:'phys', // 狂戦士＋体術師
+    kit:{ normal:'マッドラッシュ', normalLow:'五連殺', trigger75:'ブラッティロア', trigger40:'破衝掌',
+          special: sp('業火爆砕拳', { atk:2.8, hits:2 }) } },
+  { floor:27, name:'呪詛の大司教モルドレッド', target:39000, arch:'arcane', dmg:'mag', // 死霊使い＋異端審問官
+    kit:{ normal:'ソウルドレイン', normalLow:'聖なる裁き', trigger75:'腐敗霧', trigger40:'断罪',
+          special: sp('冥府の呪詛', { matk:2.6, healBlock:true, inflict:['paralysis'] }) } },
+  { floor:28, name:'竜牙の剣鬼ザンゲツ',     target:42000, arch:'warrior', dmg:'phys', // 竜騎士＋侍
+    kit:{ normal:'居合斬', normalLow:'ドラゴンスラスト', trigger75:'明鏡止水', trigger40:'月影',
+          special: sp('竜牙一閃・斬鉄', { atk:2.9, hits:2, critGuaranteed:true }) } },
+  { floor:29, name:'万象の魔導王アルカ',     target:45000, arch:'arcane', dmg:'hybrid', // 賢者＋元素使い＋魔銃士
+    kit:{ normal:'メテオストライク', normalLow:'連装銃撃',
+          trigger75:{ name:'氷の障壁', duration:10 },
+          trigger40:'フレイムバースト',
+          special: sp('万象崩滅', { atk:1.8, matk:1.8, hits:2, inflict:['burn','paralysis','stun'] }) } },
+  { floor:30, name:'奈落の支配者アビスロード', target:50000, arch:'balanced', dmg:'hybrid', // 全職集大成(最終)
+    kit:{ normal: sp('虚無の刃', { atk:1.6, matk:1.6 }),
+          normalLow: sp('冥滅の波動', { atk:1.8, matk:1.8, hits:2 }),
+          trigger75:{ name:'絶対君臨', buff:{ atkMult:1.5, matkMult:1.5 }, duration:10 },
+          trigger40: sp('次元断裂', { atk:2.0, matk:2.0, dispelPlayerBuffs:true, inflict:['paralysis','stun'] }),
+          special: sp('終焉ノ宣告', { atk:2.2, matk:2.2, hits:2, healBlock:true, executeHpBelow:15, lifesteal:0.3 }) } },
 ]
 
-export const ABYSS_FLOOR_COUNT = 20  // 全体の予定階層数（実装済みは FLOOR_META の数）
+export const ABYSS_FLOOR_COUNT = 30  // 全体の予定階層数（実装済みは FLOOR_META の数）
 export const ABYSS_DEFINED_FLOORS = FLOOR_META.length
 
 // 階層ごとの報酬（表示用）。サーバ側 claim_abyss_floor の付与内容と一致させること。
 // stone: 強化石ランク, gem: 宝石ランク。
-// 宝石報酬は F・E ランクのみ（1〜10階=F / 11〜20階=E）。ランクを上げない代わりに個数で還元。
+// 宝石ランク: 1〜10=F / 11〜20=E / 21〜26=D / 27〜30=C。強化石: 〜20=A天井 / 21〜30=S。
 const FLOOR_REWARD = {
   1:  { gold:3000,   stone:'F', stoneCount:1, gem:'F', gemCount:1 },
   2:  { gold:5000,   stone:'F', stoneCount:2, gem:'F', gemCount:1 },
@@ -174,12 +218,31 @@ const FLOOR_REWARD = {
   16: { gold:380000, stone:'A', stoneCount:2, gem:'E', gemCount:2 },
   17: { gold:460000, stone:'A', stoneCount:3, gem:'E', gemCount:2 },
   18: { gold:560000, stone:'A', stoneCount:3, gem:'E', gemCount:3 },
-  19: { gold:680000, stone:'A', stoneCount:4, gem:'E', gemCount:3 },
-  20: { gold:840000, stone:'A', stoneCount:5, gem:'E', gemCount:3 },
+  19: { gold:680000,  stone:'A', stoneCount:4, gem:'E', gemCount:3 },
+  20: { gold:840000,  stone:'A', stoneCount:4, gem:'E', gemCount:3 },
+  21: { gold:1000000, stone:'S', stoneCount:1, gem:'D', gemCount:2 },
+  22: { gold:1000000, stone:'S', stoneCount:1, gem:'D', gemCount:2 },
+  23: { gold:1000000, stone:'S', stoneCount:2, gem:'D', gemCount:2 },
+  24: { gold:1000000, stone:'S', stoneCount:2, gem:'D', gemCount:3 },
+  25: { gold:1000000, stone:'S', stoneCount:3, gem:'D', gemCount:3 },
+  26: { gold:1200000, stone:'S', stoneCount:3, gem:'D', gemCount:3 },
+  27: { gold:1200000, stone:'S', stoneCount:3, gem:'C', gemCount:1 },
+  28: { gold:1200000, stone:'S', stoneCount:4, gem:'C', gemCount:1 },
+  29: { gold:1200000, stone:'S', stoneCount:4, gem:'C', gemCount:1 },
+  30: { gold:1500000, stone:'S', stoneCount:4, gem:'C', gemCount:2 },
 }
 
-// 匠の秘伝書（階層別）: 3〜7=Ⅰ / 8〜13=Ⅱ / 14以上=Ⅲ（1〜2階は無し）。supabase_takumi_hidensho.sql と一致
-export const abyssBookForFloor = (floor) => floor >= 14 ? 'Ⅲ' : floor >= 8 ? 'Ⅱ' : floor >= 3 ? 'Ⅰ' : null
+// 匠の秘伝書（階層別）: 3〜7=Ⅰ / 8〜13=Ⅱ / 14〜19=Ⅲ / 20=Ⅳ / 21〜25=Ⅲ / 26〜30=Ⅳ（1〜2階は無し）
+// ※supabase_abyss_floor30_20260726.sql の CASE と一致させること
+export const abyssBookForFloor = (floor) => {
+  if (floor >= 26) return 'Ⅳ'
+  if (floor >= 21) return 'Ⅲ'
+  if (floor === 20) return 'Ⅳ'
+  if (floor >= 14) return 'Ⅲ'
+  if (floor >= 8)  return 'Ⅱ'
+  if (floor >= 3)  return 'Ⅰ'
+  return null
+}
 
 export const ABYSS_FLOORS = FLOOR_META.map(m => ({
   floor: m.floor,
