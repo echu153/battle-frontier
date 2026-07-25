@@ -384,6 +384,7 @@ export default function Dungeon() {
   const [hitFlash, setHitFlash] = useState(null)      // ボススキル被弾の画面フラッシュ { kind:'skill'|'big', id }
   const [confirmBox, setConfirmBox] = useState(null)  // ゲーム内確認ポップアップ { msg, okLabel, onOk }
   const shopRef = useRef(null)                        // 開店中の移動ブロック用
+  const buyingRef = useRef(false)                     // 購入処理中フラグ（連打による多重購入/復活バグ対策）
   const sinceShopRef = useRef(0)                      // 前回の商店からの踏破フロア数（ダンジョン離脱後も引き継ぐ）
   const shopAtRef = useRef(10 + Math.floor(Math.random() * 11)) // 次の商店までのフロア数(10〜20)
   const startFloorRef = useRef(1)                     // このランの開始フロア（商店カウントの対象外）
@@ -1709,25 +1710,38 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
   // スキルの書を発動。対象選定（範囲/斜め/全体）→ 威力Lv×2×mult のダメージ＋効果。1ターン消費
   // ---- 秘密の商店：購入と退店 ----
   const shopBuy = async (kind, key, slot, price) => {
-    if (!shop || shop.bought[slot]) return
+    // 最新の商店状態は shopRef を正とする（クロージャの shop は連打時に古くなり、
+    // 別スロットの購入が先に買った品を「未購入」に上書きして復活させてしまうため）
+    const cur = shopRef.current
+    if (!cur || cur.bought[slot]) return
+    if (buyingRef.current) return // 購入処理中の連打は無視（多重購入/二重支払い防止）
     if (zeni < price) { setShopMsg('🪙 ゼニが足りない…'); return }
     // 石・素は持ち帰り袋に入る＝袋の空きが必要（床拾いと同じ扱い）
     if ((kind === 'stone' || kind === 'seed') && bagCount() >= bagCapacity(cleared.size)) { setShopMsg('🎒 持ち物がいっぱいで買えない'); return }
-    const { data, error } = await supabase.rpc('secret_shop_buy', { p_run_id: runIdRef.current, p_kind: kind, p_key: key })
-    if (error) {
-      const m = String(error.message)
-      setShopMsg(m.includes('zeni') ? '🪙 ゼニが足りない…' : m.includes('full') || m.includes('inventory') ? '🎒 袋がいっぱいで買えない' : '🛒 購入できなかった（' + m.slice(0, 60) + '）')
-      return
+    // 先にスロットを購入済みへ（同期）＝await中の再クリックをUI/ガード両方で確実に弾く
+    buyingRef.current = true
+    const pending = { ...cur, bought: { ...cur.bought, [slot]: true } }
+    shopRef.current = pending; setShop(pending)
+    try {
+      const { data, error } = await supabase.rpc('secret_shop_buy', { p_run_id: runIdRef.current, p_kind: kind, p_key: key })
+      if (error) {
+        // 失敗時は購入済みフラグを戻す（最新の shopRef を基点に）
+        const rb = { ...shopRef.current, bought: { ...shopRef.current.bought, [slot]: false } }
+        shopRef.current = rb; setShop(rb)
+        const m = String(error.message)
+        setShopMsg(m.includes('zeni') ? '🪙 ゼニが足りない…' : m.includes('full') || m.includes('inventory') ? '🎒 袋がいっぱいで買えない' : '🛒 購入できなかった（' + m.slice(0, 60) + '）')
+        return
+      }
+      if (typeof data?.balance === 'number') setZeni(data.balance)
+      const label = kind === 'book' ? (PET_ITEMS[key]?.name || '書') : kind === 'stone' ? `強化石(${key})` : (PET_ITEMS[key]?.name || '素')
+      addLog(`🛒 ${label}を購入した`)
+      setShopMsg(`✅ ${label}を購入した（持ち物へ）`)
+      playSe('aitemu')
+      if (kind === 'book') setInventory((inv) => ({ ...inv, [key]: (inv[key] || 0) + 1 })) // 書は持ち物(消耗品)に即反映
+      else if (data?.entry) addLootToBag(data.entry) // 石・素は持ち帰り袋に反映
+    } finally {
+      buyingRef.current = false
     }
-    if (typeof data?.balance === 'number') setZeni(data.balance)
-    const so = { ...shop, bought: { ...shop.bought, [slot]: true } }
-    shopRef.current = so; setShop(so)
-    const label = kind === 'book' ? (PET_ITEMS[key]?.name || '書') : kind === 'stone' ? `強化石(${key})` : (PET_ITEMS[key]?.name || '素')
-    addLog(`🛒 ${label}を購入した`)
-    setShopMsg(`✅ ${label}を購入した（持ち物へ）`)
-    playSe('aitemu')
-    if (kind === 'book') setInventory((inv) => ({ ...inv, [key]: (inv[key] || 0) + 1 })) // 書は持ち物(消耗品)に即反映
-    else if (data?.entry) addLootToBag(data.entry) // 石・素は持ち帰り袋に反映
   }
   // 秘密の商店へ暗転演出付きで入店（フロア遷移と同じ見せ方。暗転中に開店→タイトル表示→明転）
   const openShopWithIntro = (so) => {
