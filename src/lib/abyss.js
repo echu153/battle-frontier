@@ -166,11 +166,12 @@ const FLOOR_META = [
           trigger40: sp('竜牙連咬', { atk:1.4, hits:2 }),
           special: sp('天墜竜閃', { atk:4.5, critGuaranteed:true }) } }, // 溜め技を確定クリ大技で表現
   { floor:25, name:'獣王ベルナ',             target:33000, arch:'monk', dmg:'phys', // ブリーダー(ペット共闘)
-    kit:{ normal: sp('連携の爪', { atk:1.3, hits:2 }),
-          normalLow: sp('猛獣の咆哮', { atk:1.6, hits:2 }),
-          trigger75:{ name:'一緒に頑張ろう！', buff:{ atkMult:1.5 }, duration:3 }, // 与ダメ強化(3T)
-          trigger40: sp('やっちゃえ！', { atk:2.2, hits:2 }),
-          special: sp('獣王覚醒・共闘', { atk:3.0, hits:2, lifesteal:0.3 }) } },
+    // ※atkが高い階のため、ブリーダー本来の高倍率(やっちゃえ×5〜6等)はそのまま使わず、24階(竜騎士)と釣り合う水準へ抑制。
+    kit:{ normal: sp('連携の爪', { atk:1.1, hits:2 }),        // 計2.2
+          normalLow: sp('猛獣の咆哮', { atk:1.3, hits:2 }),    // 計2.6
+          trigger75:{ name:'一緒に頑張ろう！', buff:{ atkMult:1.3 }, duration:3 }, // 与ダメ強化(3T)・雪だるま抑制
+          trigger40: sp('やっちゃえ！', { atk:1.5, hits:2 }),  // 計3.0
+          special: sp('獣王覚醒・共闘', { atk:2.3, hits:2, lifesteal:0.25 }) } }, // 計4.6
   { floor:26, name:'業火の闘鬼ゴウエン',     target:36000, arch:'monk', dmg:'phys', // 狂戦士＋体術師
     kit:{ normal:'マッドラッシュ', normalLow:'五連殺', trigger75:'ブラッティロア', trigger40:'破衝掌',
           special: sp('業火爆砕拳', { atk:2.8, hits:2 }) } },
