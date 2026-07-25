@@ -197,6 +197,8 @@ export default function Charms() {
 
   const doUnfuse = async (id) => {
     if ((seeds.shard || 0) < 1) { flash('神秘の欠片が足りません'); return }
+    const c = charms.find((x) => x.id === id)
+    if (!(await askConfirm(`${c ? charmDisplayName(c) : 'このチャーム'} の合成を解除します（🔮神秘の欠片×1消費）。\n2つ目の効果が外れ、特殊能力（フェイトコア抽選）は全て消えます。\nよろしいですか？`, { okLabel: '🔓 合成解除する' }))) return
     setLoading(true)
     const { error } = await supabase.rpc('pet_charm_unfuse', { p_charm: id })
     setLoading(false)
@@ -210,6 +212,8 @@ export default function Charms() {
   const doUnfuseRibbon = async (id) => {
     if ((seeds.shard || 0) < 1) { flash('神秘の欠片が足りません'); return }
     if (((seeds.zeni || 0) + (seeds.zeni_bank || 0)) < 10000) { flash('ゼニが足りません（リボン解除は🪙10000必要・所持＋倉庫）'); return }
+    const c = charms.find((x) => x.id === id)
+    if (!(await askConfirm(`${c ? charmDisplayName(c) : 'このチャーム'} のリボン融合を解除します（🔮神秘の欠片×1＋🪙10000消費）。\nリボンが元の種類で戻り、特殊能力（フェイトコア抽選）は全て消えます。\nよろしいですか？`, { okLabel: '🎀 リボン解除する' }))) return
     setLoading(true)
     const { error } = await supabase.rpc('pet_charm_unfuse_ribbon', { p_charm: id })
     setLoading(false)
@@ -438,8 +442,8 @@ export default function Charms() {
                 </div>
               )
             })()}
-            {(() => { const m = charms.find((c) => c.id === fuseMat); const rib = m && isRibbonType(m.ctype)
-              return <Btn onClick={() => !loading && doFuse()}>{rib ? '🎀 融合する' : '🔮 合成する'}（欠片×{seeds.shard || 0}{rib ? ` / 🪙${(seeds.zeni || 0) + (seeds.zeni_bank || 0)}` : ''}）</Btn> })()}
+            {(() => { const m = charms.find((c) => c.id === fuseMat); const rib = m && isRibbonType(m.ctype); const bal = (seeds.zeni || 0) + (seeds.zeni_bank || 0)
+              return <Btn onClick={() => !loading && doFuse()}>{rib ? '🎀 融合する' : '🔮 合成する'}（🔮欠片×1{rib ? ` ＋ 🪙10000（所持${bal}）` : `／所持欠片${seeds.shard || 0}`}）</Btn> })()}
 
             {/* 合成解除（合成タブのみ） */}
             {tab === 'fuse' && pures.some((c) => c.fused && !c.ctype3) && (
