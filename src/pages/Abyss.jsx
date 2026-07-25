@@ -54,8 +54,8 @@ const withTimeout = (promise, ms = 15000) =>
 // ============================================================
 function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerItem, floor = 1) {
   const logs = []
-  // 奈落限定ルール: 敵は階数×2%の被ダメージ軽減（プレイヤーの与ダメに乗算）
-  const abyssEnemyDR = 1 - Math.min(0.9, floor * 0.02)
+  // 奈落限定ルール: 敵は階数×2%の被ダメージ軽減（プレイヤーの与ダメに乗算）。上限30%。
+  const abyssEnemyDR = 1 - Math.min(0.3, floor * 0.02)
   let playerHp = eff.hp_max
   let playerMp = eff.mp_max
   let enemyHp = enemy.hp
