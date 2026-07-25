@@ -856,6 +856,8 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     const rm = enemy.revive.allStatsMult || 2
     enemyHp = Math.max(1, Math.round(enemyMaxHp * frac))
     enPerm.atkMult *= rm; enPerm.matkMult *= rm; enPerm.defMult *= rm; enPerm.mdefMult *= rm; enPerm.spdMult *= rm
+    // 第2形態では大技(trigger75/40・大技)を撃ち直す＝トリガーフラグとロックをリセット
+    enUsedT75 = false; enUsedT40 = false; enUsedSpecial = false; enLockedSkill = null
     turnCap += 50  // 第2形態ぶんターン上限を延長
     logs.push({ text:`💀✦ ${enemy.name}は倒れた…かに見えた！ 最大HPの${Math.round(frac*100)}%で復活し、全ステータスが${rm}倍になった！`, color:'#ff2266' })
     continue  // 外側ループで戦闘を再開
