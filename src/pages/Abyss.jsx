@@ -1179,6 +1179,7 @@ export default function Abyss() {
                   {reward.stone && <div>💎 {STONE_NAME(reward.stone)} ×{reward.stone_count}</div>}
                   {reward.gem_count > 0 && <div>💍 宝石（{reward.gem_rank}ランク）×{reward.gem_count}</div>}
                   {reward.book && <div>📖 {reward.book} ×{reward.book_count || 1}</div>}
+                  {reward.crystal_count > 0 && <div>🔷 強者の結晶 ×{reward.crystal_count}</div>}
                 </div>
                 <div style={{ color:'#cc9944', fontSize:'10px', marginTop:'6px' }}>{reward.floor >= ABYSS_DEFINED_FLOORS ? '現在実装ぶんはここまで。進行は毎週月曜 朝5時にリセット（また1階から）。' : `次は ${floorLabel(reward.floor + 1)}だ。`}</div>
               </div>
@@ -1211,6 +1212,7 @@ function RewardLine({ reward }) {
       <span style={{ marginLeft:'10px' }}>💎 {STONE_NAME(reward.stone)}×{reward.stoneCount * mul}</span>
       <span style={{ marginLeft:'10px' }}>💍 宝石({reward.gem})×{reward.gemCount * mul}</span>
       {reward.book && <span style={{ marginLeft:'10px' }}>📖 匠の秘伝書{reward.book}×{mul}</span>}
+      {reward.crystal > 0 && <span style={{ marginLeft:'10px', color:'#66ddff' }}>🔷 強者の結晶×{reward.crystal}</span>}
       {mul > 1 && <span style={{ marginLeft:'10px', color:'#dd88ff' }}>🎉 イベント2倍中</span>}
     </div>
   )

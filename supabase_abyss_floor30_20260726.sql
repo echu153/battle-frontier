@@ -18,17 +18,17 @@
 --      イベント終了後は false を返すため v_mul=1 で通常挙動になる。
 --
 -- 【報酬(20〜30)】※ src/lib/abyss.js の FLOOR_REWARD と一致させること
---   20: 840,000 / A×4 / 宝石E×3 / 秘伝書Ⅳ
+--   20: 840,000 / A×4 / 宝石E×3 / 秘伝書Ⅳ / 強者の結晶×1
 --   21: 1,000,000 / S×1 / 宝石D×2 / 秘伝書Ⅲ
 --   22: 1,000,000 / S×1 / 宝石D×2 / 秘伝書Ⅲ
 --   23: 1,000,000 / S×2 / 宝石D×2 / 秘伝書Ⅲ
 --   24: 1,000,000 / S×2 / 宝石D×3 / 秘伝書Ⅲ
---   25: 1,000,000 / S×3 / 宝石D×3 / 秘伝書Ⅲ
+--   25: 1,000,000 / S×3 / 宝石D×3 / 秘伝書Ⅲ / 強者の結晶×2
 --   26: 1,200,000 / S×3 / 宝石D×3 / 秘伝書Ⅳ
 --   27: 1,200,000 / S×3 / 宝石C×1 / 秘伝書Ⅳ
 --   28: 1,200,000 / S×4 / 宝石C×1 / 秘伝書Ⅳ
 --   29: 1,200,000 / S×4 / 宝石C×1 / 秘伝書Ⅳ
---   30: 1,500,000 / S×4 / 宝石C×2 / 秘伝書Ⅳ
+--   30: 1,500,000 / S×4 / 宝石C×2 / 秘伝書Ⅳ / 強者の結晶×3
 --
 -- 実行はユーザー側（Supabase SQL Editor）で行う。
 -- ============================================================
@@ -114,6 +114,8 @@ DECLARE
   v_eff            int;
   v_book_name      text;
   v_book_item_id   int;
+  v_crystal_count  int := 0;   -- 強者の結晶（節目報酬: 20/25/30階）
+  v_crystal_item_id int;
   v_is_admin       boolean;
   -- ★イベント(2026/7/20〜8/3): 報酬2倍（終了後は 1）
   v_mul            int := CASE WHEN bf_event_20260720_active() THEN 2 ELSE 1 END;
@@ -204,6 +206,9 @@ BEGIN
     WHEN p_floor >= 26             THEN '匠の秘伝書Ⅳ'
     ELSE NULL END;
 
+  -- 強者の結晶（節目報酬）: 20階=1 / 25階=2 / 30階=3。イベント倍率は掛けない（固定ボーナス）。
+  v_crystal_count := CASE p_floor WHEN 20 THEN 1 WHEN 25 THEN 2 WHEN 30 THEN 3 ELSE 0 END;
+
   -- Gold付与
   UPDATE profiles SET gold = gold + v_gold WHERE id = v_player_id;
 
@@ -240,6 +245,16 @@ BEGIN
     END IF;
   END IF;
 
+  -- 強者の結晶付与（20/25/30階のみ・固定個数）
+  IF v_crystal_count > 0 THEN
+    SELECT id INTO v_crystal_item_id FROM items WHERE name = '強者の結晶' LIMIT 1;
+    IF v_crystal_item_id IS NOT NULL THEN
+      INSERT INTO player_items (player_id, item_id, quantity, equipped)
+      VALUES (v_player_id, v_crystal_item_id, v_crystal_count, false)
+      ON CONFLICT (player_id, item_id) DO UPDATE SET quantity = player_items.quantity + v_crystal_count;
+    END IF;
+  END IF;
+
   -- 進行更新（撃破階を前進＋今週クリア済みフラグ）
   UPDATE abyss_progress
   SET cleared_floor = p_floor,
@@ -259,6 +274,7 @@ BEGIN
     'gem_count',   v_gem_count,
     'book',        v_book_name,
     'book_count',  CASE WHEN v_book_name IS NULL THEN 0 ELSE v_mul END,
+    'crystal_count', v_crystal_count,
     'event_x2',    (v_mul > 1),
     'reset_at',    v_reset
   );

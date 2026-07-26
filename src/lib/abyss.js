@@ -245,17 +245,17 @@ const FLOOR_REWARD = {
   17: { gold:460000, stone:'A', stoneCount:3, gem:'E', gemCount:2 },
   18: { gold:560000, stone:'A', stoneCount:3, gem:'E', gemCount:3 },
   19: { gold:680000,  stone:'A', stoneCount:4, gem:'E', gemCount:3 },
-  20: { gold:840000,  stone:'A', stoneCount:4, gem:'E', gemCount:3 },
+  20: { gold:840000,  stone:'A', stoneCount:4, gem:'E', gemCount:3, crystal:1 }, // 節目報酬: 強者の結晶
   21: { gold:1000000, stone:'S', stoneCount:1, gem:'D', gemCount:2 },
   22: { gold:1000000, stone:'S', stoneCount:1, gem:'D', gemCount:2 },
   23: { gold:1000000, stone:'S', stoneCount:2, gem:'D', gemCount:2 },
   24: { gold:1000000, stone:'S', stoneCount:2, gem:'D', gemCount:3 },
-  25: { gold:1000000, stone:'S', stoneCount:3, gem:'D', gemCount:3 },
+  25: { gold:1000000, stone:'S', stoneCount:3, gem:'D', gemCount:3, crystal:2 }, // 節目報酬: 強者の結晶
   26: { gold:1200000, stone:'S', stoneCount:3, gem:'D', gemCount:3 },
   27: { gold:1200000, stone:'S', stoneCount:3, gem:'C', gemCount:1 },
   28: { gold:1200000, stone:'S', stoneCount:4, gem:'C', gemCount:1 },
   29: { gold:1200000, stone:'S', stoneCount:4, gem:'C', gemCount:1 },
-  30: { gold:1500000, stone:'S', stoneCount:4, gem:'C', gemCount:2 },
+  30: { gold:1500000, stone:'S', stoneCount:4, gem:'C', gemCount:2, crystal:3 }, // 節目報酬: 強者の結晶
 }
 
 // 匠の秘伝書（階層別）: 3〜7=Ⅰ / 8〜13=Ⅱ / 14〜19=Ⅲ / 20=Ⅳ / 21〜25=Ⅲ / 26〜30=Ⅳ（1〜2階は無し）
