@@ -91,10 +91,10 @@ const MENU_DEFS = {
   abyss:     { label:'⚔ 挑戦/奈落闘技場', color:'#c08cff', path:'/abyss',   unlock:30 },
   territory: { label:'🏰 領地',           color:'#ffcc44', path:'/territory',unlock:0 },
 }
-// 期間限定イベント「出撃ポイントラリー」の開催期間（JST 2026/6/22 05:00 〜 7/13 05:00・1週間延長）。
+// 期間限定イベント「夏の出撃ポイントラリー」の開催期間（JST 2026/7/27 05:00 〜 8/17 05:00）。
 // クライアントの表示判定用（ポイント加算・受取の実体はサーバーRPCが期間管理）。
-export const EVENT_START_MS = Date.UTC(2026, 5, 21, 20, 0, 0) // JST 6/22 05:00
-export const EVENT_END_MS   = Date.UTC(2026, 6, 12, 20, 0, 0) // JST 7/13 05:00（1週間延長）
+export const EVENT_START_MS = Date.UTC(2026, 6, 26, 20, 0, 0) // JST 7/27 05:00
+export const EVENT_END_MS   = Date.UTC(2026, 7, 16, 20, 0, 0) // JST 8/17 05:00
 
 // レイドボスイベント「勇気の証」の開催期間（JST 2026/7/13 05:00 〜 7/27 05:00）。
 // レイドボスボタンの「🎖イベント中」表示用。期間を過ぎると自動で非表示になる。

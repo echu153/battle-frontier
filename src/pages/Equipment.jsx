@@ -109,6 +109,9 @@ export default function Equipment() {
   const [areaBox, setAreaBox] = useState(null)  // 初級/中級/上級エリアボス装備選択箱（②報酬）: {name,tier,choices}
   const [areaBoxMsg, setAreaBoxMsg] = useState('')
   const [areaBoxGot, setAreaBoxGot] = useState(null)
+  const [artBox, setArtBox] = useState(false)  // アーティファクト装備選択箱（夏イベント報酬）のポップアップ
+  const [artBoxMsg, setArtBoxMsg] = useState('')
+  const [artBoxGot, setArtBoxGot] = useState(null)
   const [boxWeapons, setBoxWeapons] = useState({})  // 選択箱で選べる装備の weapons 情報（name→row。ステ表示用）
 
   // 選択券で交換できるS級レイド装備（redeem_raid_ticket の許可リストと一致）
@@ -152,6 +155,19 @@ export default function Equipment() {
       { name:'インフェルノバスティオン', desc:'エリア⑦ボス装備。' },
     ]},
   }
+  // アーティファクト装備選択箱（夏イベント報酬）: redeem_artifact_box の許可リストと一致
+  const ARTIFACT_BOX_CHOICES = [
+    { name:'黒星ノ断剣',   desc:'アーティファクト・剣。' },
+    { name:'血哭ノ短刃',   desc:'アーティファクト・短剣。' },
+    { name:'月影ノ断弓',   desc:'アーティファクト・弓。' },
+    { name:'奈落ノ処刑斧', desc:'アーティファクト・斧。' },
+    { name:'斬月ノ終刀',   desc:'アーティファクト・刀。' },
+    { name:'虚無ノ閃砲',   desc:'アーティファクト・銃。' },
+    { name:'星喰ノ導杖',   desc:'アーティファクト・杖。' },
+    { name:'終焉ノ魔書',   desc:'アーティファクト・魔導書。' },
+    { name:'冥哭ノ長槍',   desc:'アーティファクト・槍。' },
+    { name:'深淵ノ霊珠',   desc:'アーティファクト・オーブ。' },
+  ]
 
   useEffect(() => { fetchAll() }, [])
 
@@ -184,6 +200,7 @@ export default function Equipment() {
       const boxNames = [...new Set([
         ...BEGINNER_BOX_CHOICES.map(c => c.name),
         ...Object.values(AREA_BOX).flatMap(b => b.choices.map(c => c.name)),
+        ...ARTIFACT_BOX_CHOICES.map(c => c.name),
       ])]
       const { data: bw } = await supabase.from('weapons').select('*').in('name', boxNames)
       const map = {}; (bw || []).forEach(w => { map[w.name] = w }); setBoxWeapons(map)
@@ -266,6 +283,20 @@ export default function Equipment() {
       setAreaBoxMsg(data?.error || 'エラーが発生しました')
     } else {
       setAreaBoxGot(weaponName)
+      await fetchAll()
+    }
+    setLoading(false)
+  }
+
+  // アーティファクト装備選択箱：箱を1個消費して、選んだアーティファクト武器を受け取る（サーバーRPC）
+  const redeemArtifactBox = async (weaponName) => {
+    if (loading) return
+    setLoading(true); setArtBoxMsg(''); setArtBoxGot(null)
+    const { data, error } = await supabase.rpc('redeem_artifact_box', { p_weapon_name: weaponName })
+    if (error || !data?.ok) {
+      setArtBoxMsg(data?.error || 'エラーが発生しました')
+    } else {
+      setArtBoxGot(weaponName)
       await fetchAll()
     }
     setLoading(false)
@@ -740,6 +771,9 @@ export default function Equipment() {
                         ) : AREA_BOX[pi.items.name] ? (
                           <button onClick={() => { setAreaBox({ name: pi.items.name, ...AREA_BOX[pi.items.name] }); setAreaBoxMsg(''); setAreaBoxGot(null) }} disabled={loading}
                             style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
+                        ) : pi.items.name === 'アーティファクト装備選択箱' ? (
+                          <button onClick={() => { setArtBox(true); setArtBoxMsg(''); setArtBoxGot(null) }} disabled={loading}
+                            style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
                         ) : pi.items.effect === 'equip_rename' ? (
                           <button onClick={() => { setRenamePopup(pi); setRenameTargetId(null); setRenameText(''); setRenameMsg('') }} disabled={loading}
                             style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
@@ -1207,6 +1241,38 @@ export default function Equipment() {
             </div>
             <button onClick={() => setAreaBox(null)} disabled={loading}
               style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{areaBoxGot ? '閉じる' : 'キャンセル'}</button>
+          </div>
+        </div>
+      )}
+
+      {artBox && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}
+          onClick={() => { if (!loading) setArtBox(false) }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'#0a0c1a', border:'1px solid #cc88ff', padding:'20px', maxWidth:'360px', width:'92%', fontFamily:'monospace', maxHeight:'80vh', overflowY:'auto' }}>
+            <div style={{ color:'#cc88ff', fontSize:'14px', marginBottom:'6px' }}>🏺 アーティファクト装備選択箱</div>
+            <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'14px', lineHeight:'1.5' }}>
+              受け取るアーティファクト武器を1つ選んでください。<br/>
+              <span style={{ color:'#ff8844' }}>選択すると箱を1個消費します。</span>
+            </div>
+            {artBoxMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{artBoxMsg}</div>}
+            {artBoxGot && (
+              <div style={{ border:'1px solid #2a6a3a', background:'#04140a', padding:'10px', marginBottom:'12px', color:'#44ff88', fontSize:'12px', lineHeight:'1.5' }}>
+                ✨ 「{artBoxGot}」を獲得しました！<br/>
+                <span style={{ color:'#88ccaa', fontSize:'10px' }}>装備タブで確認・装備できます。</span>
+              </div>
+            )}
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {ARTIFACT_BOX_CHOICES.map(c => (
+                <button key={c.name} onClick={() => redeemArtifactBox(c.name)} disabled={loading}
+                  style={{ textAlign:'left', padding:'10px', background:'#001028', border:'1px solid #7755aa', color:'#cce0ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', opacity: loading ? 0.5 : 1 }}>
+                  <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'2px' }}>{rarityBadge(c.name)}{c.name}</div>
+                  <div style={{ color:'#778899', fontSize:'10px' }}>{c.desc}</div>
+                  {renderWeaponInfo(c.name)}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setArtBox(false)} disabled={loading}
+              style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{artBoxGot ? '閉じる' : 'キャンセル'}</button>
           </div>
         </div>
       )}

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
-const EVENT_KEY = 'sortie_2026_06'
+const EVENT_KEY = 'sortie_2026_07'
 
 // 選択券で交換できるS級レイド装備（redeem_raid_ticket の許可リストと一致）
 const TICKET_ITEM = 'Sレアレイドボス装備選択券'
@@ -150,7 +150,7 @@ export default function Event() {
         <button onClick={() => nav('/game')} style={{ background:'none', border:'1px solid #0088ff', color:'#0088ff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>← 街に戻る</button>
       </div>
 
-      <div style={{ color:'#ffcc44', fontSize:'15px', marginBottom:'4px' }}>🎫 出撃イベント</div>
+      <div style={{ color:'#ffcc44', fontSize:'15px', marginBottom:'4px' }}>🎫 {config?.name || '出撃イベント'}</div>
       <div style={{ color:'#9fc1e0', fontSize:'12px', marginBottom:'12px', lineHeight:'1.9' }}>
         出撃でポイントを獲得し、累計ポイントで報酬を受け取れます。<br/>
         獲得ポイントは出撃時間モードで変化します。<br/>
