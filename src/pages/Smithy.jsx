@@ -52,6 +52,8 @@ const MATERIAL_COUNT = (plus) => {
 // 強者の結晶：+11以上の強化で使用すると、失敗しても強化値が下落しない（開発限定）。
 // 鍛冶屋の加工でエリアボス装備10個から作成できる。
 const CRYSTAL_NAME = '強者の結晶'
+// ＋11確定強化石：所持していると強化画面で選択でき、Gold・素材・成功判定なしで確定で+11にする（1個消費）。
+const PLUS11_STONE_NAME = '＋11確定強化石'
 const CRYSTAL_EQUIP_COST = 10  // 加工に必要なエリアボス装備の数
 
 // エリアボス装備は真化(evolve_stage 5)しないと+11以上に強化できない（+10が上限）
@@ -378,6 +380,27 @@ export default function Smithy() {
       else await supabase.from('profiles').update({ enhance_fail_count: (pr.enhance_fail_count||0)+1 }).eq('id', user.id)
     }
 
+    await fetchAll()
+    setLoading(false)
+  }
+
+  // ＋11確定強化石：Gold・素材・成功判定なしで確定で+11にする（1個消費）。現在+11未満のみ。
+  const doPlus11 = async (item) => {
+    setLoading(true)
+    const currentPlus = item.enhance_plus || 0
+    if (currentPlus >= 11) { showMessage('すでに+11以上です', '#ffcc00'); setLoading(false); return }
+    // エリアボス装備は真化しないと+11以上にできない
+    if (isEvolvableEquip(item.weapons.name) && !isShinka(item)) {
+      showMessage('真化させると+11以上に強化できます', '#ffcc00'); setLoading(false); return
+    }
+    const { data: { user } } = await supabase.auth.getUser()
+    const used = await consumeMaterial(PLUS11_STONE_NAME, 1)  // 楽観ロック付き消費
+    if (!used) { showMessage(`${PLUS11_STONE_NAME}が足りません！`, '#ff4444'); await fetchAll(); setLoading(false); return }
+    await supabase.from('player_equipment').update({ enhance_plus: 11, blessing_count: 0 }).eq('id', item.id)
+    await supabase.from('enhance_logs').insert({
+      player_id: user.id, weapon_name: item.weapons.name, from_plus: currentPlus, to_plus: 11, success: true,
+    })
+    setEnhanceResult({ ok: true, title: '✨ 強化成功！', text: `${item.weapons.name} が +11 になった！\n（🔨 ${PLUS11_STONE_NAME}使用）` })
     await fetchAll()
     setLoading(false)
   }
@@ -774,6 +797,9 @@ export default function Smithy() {
           const crystalOwned = getItemCount(CRYSTAL_NAME)
           const dropRisk = nextPlus >= 11                       // +11以上は失敗で下落
           const crystalActive = dropRisk && useCrystal && crystalOwned > 0
+          // ＋11確定強化石：所持していて現在+11未満・真化条件を満たすときのみ選択可
+          const plus11Owned = getItemCount(PLUS11_STONE_NAME)
+          const canPlus11 = plus11Owned > 0 && plus < 11 && !(isEvolvableEquip(w.name) && !isShinka(item))
           const closeModal = () => { setSelectedItem(null); setEnhanceResult(null); setHidenBook(null) }
           // 強化ボタン押下：+11以上を結晶なしで強化しようとしたら確認ダイアログ
           const onEnhanceClick = () => {
@@ -906,6 +932,12 @@ export default function Smithy() {
                       style={{ width:'100%', padding:'10px', background: canEnhance ? '#1a0800' : '#001', border:`1px solid ${canEnhance ? '#aa6644' : '#002244'}`, color: canEnhance ? '#ffcc88' : '#334455', cursor: canEnhance ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
                       {loading ? '鍛錬中...' : (bossCapped ? '真化が必要です' : '⚒ 鍛錬する')}
                     </button>
+                    {canPlus11 && (
+                      <button onClick={() => doPlus11(item)} disabled={loading}
+                        style={{ width:'100%', padding:'10px', background:'#12002a', border:'1px solid #aa66ff', color:'#dab6ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
+                        🔨 {PLUS11_STONE_NAME}で +11 にする（所持{plus11Owned}）
+                      </button>
+                    )}
                     <button onClick={closeModal} disabled={loading}
                       style={{ width:'100%', padding:'7px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
                       やめる
