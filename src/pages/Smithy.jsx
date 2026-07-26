@@ -196,6 +196,7 @@ export default function Smithy() {
   const [stoneTimes, setStoneTimes] = useState({})           // 強化石→上位 の作成回数（ランク別・1回=強化石3個→上位1個）
   const [useCrystal, setUseCrystal] = useState(true)         // 強者の結晶を使う（+11以上・失敗時の下落防止）。所持時は自動オン
   const [enhanceConfirm, setEnhanceConfirm] = useState(null) // 結晶なしで+11以上を強化する際の確認 { item, source, book }
+  const [plus11Confirm, setPlus11Confirm] = useState(null)   // ＋11確定強化石の使用確認 { item }
   const [crystalTimes, setCrystalTimes] = useState(1)        // 強者の結晶 加工回数（1回=エリアボス装備10個→結晶1個）
 
   useEffect(() => { fetchAll() }, [])
@@ -933,7 +934,7 @@ export default function Smithy() {
                       {loading ? '鍛錬中...' : (bossCapped ? '真化が必要です' : '⚒ 鍛錬する')}
                     </button>
                     {canPlus11 && (
-                      <button onClick={() => doPlus11(item)} disabled={loading}
+                      <button onClick={() => setPlus11Confirm(item)} disabled={loading}
                         style={{ width:'100%', padding:'10px', background:'#12002a', border:'1px solid #aa66ff', color:'#dab6ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
                         🔨 {PLUS11_STONE_NAME}で +11 にする（所持{plus11Owned}）
                       </button>
@@ -963,6 +964,30 @@ export default function Smithy() {
                   強化を続ける
                 </button>
                 <button onClick={() => setEnhanceConfirm(null)} disabled={loading}
+                  style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'8px 20px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+                  やめる
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ＋11確定強化石 使用確認ダイアログ */}
+        {plus11Confirm && (
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,4,16,0.9)', zIndex:400, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
+            <div style={{ background:'#0a0800', border:'1px solid #aa66ff', padding:'22px', maxWidth:'360px', width:'100%' }}>
+              <div style={{ fontSize:'26px', textAlign:'center', marginBottom:'10px' }}>🔨</div>
+              <div style={{ color:'#dab6ff', fontSize:'13px', textAlign:'center', lineHeight:1.7, marginBottom:'18px' }}>
+                {PLUS11_STONE_NAME}を1個使って<br/>
+                <span style={{ color:'#ffcc00' }}>{plus11Confirm.weapons?.name}</span> を確定で <span style={{ color:'#ffcc00' }}>+11</span> にします。<br/>
+                使用しますか？
+              </div>
+              <div style={{ display:'flex', gap:'10px', justifyContent:'center' }}>
+                <button onClick={() => { const c = plus11Confirm; setPlus11Confirm(null); doPlus11(c) }} disabled={loading}
+                  style={{ background:'#12002a', border:'1px solid #aa66ff', color:'#dab6ff', padding:'8px 20px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+                  使用する
+                </button>
+                <button onClick={() => setPlus11Confirm(null)} disabled={loading}
                   style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'8px 20px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
                   やめる
                 </button>
