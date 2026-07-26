@@ -173,23 +173,47 @@ const FLOOR_META = [
           trigger40: sp('やっちゃえ！', { atk:1.5, hits:2 }),  // 計3.0
           special: sp('獣王覚醒・共闘', { atk:2.3, hits:2, lifesteal:0.25 }) } }, // 計4.6
   { floor:26, name:'業火の闘鬼ゴウエン',     target:36000, arch:'monk', dmg:'phys', // 狂戦士＋体術師
-    kit:{ normal:'マッドラッシュ', normalLow:'五連殺', trigger75:'ブラッティロア', trigger40:'破衝掌',
-          special: sp('業火爆砕拳', { atk:2.8, hits:2 }) } },
+    kit:{ normal:'マッドラッシュ', normalLow:'五連殺',
+          // 連携: 闘気練成(攻撃+50%)→剛炎連拳(2連)→爆砕撃。バフを乗せてから高倍率を叩き込む。
+          combo:[ { name:'闘気練成', buff:{ atkMult:1.5 }, duration:3 },
+                  sp('剛炎連拳', { atk:1.4, hits:2 }),
+                  sp('爆砕撃', { atk:2.0 }) ],
+          trigger75:'ブラッティロア', trigger40:'破衝掌',
+          special: sp('業火爆砕拳', { atk:3.0, hits:2 }) } },
   { floor:27, name:'呪詛の大司教モルドレッド', target:39000, arch:'arcane', dmg:'mag', // 死霊使い＋異端審問官
-    kit:{ normal:'ソウルドレイン', normalLow:'聖なる裁き', trigger75:'腐敗霧', trigger40:'断罪',
-          special: sp('冥府の呪詛', { matk:2.6, healBlock:true, inflict:['paralysis'] }) } },
+    kit:{ normal:'ソウルドレイン', normalLow:'聖なる裁き',
+          // 連携: 呪詛増幅(特攻+50%)→冥呪弾(2連)→魂喰らい(吸収)。増幅後に叩き込みつつHP回収。
+          combo:[ { name:'呪詛増幅', buff:{ matkMult:1.5 }, duration:3 },
+                  sp('冥呪弾', { matk:1.6, hits:2 }),
+                  sp('魂喰らい', { matk:2.0, lifesteal:0.3 }) ],
+          trigger75:'腐敗霧', trigger40:'断罪',
+          special: sp('冥府の呪詛', { matk:3.0, healBlock:true, inflict:['paralysis'] }) } },
   { floor:28, name:'竜牙の剣鬼ザンゲツ',     target:42000, arch:'warrior', dmg:'phys', // 竜騎士＋侍
-    kit:{ normal:'居合斬', normalLow:'ドラゴンスラスト', trigger75:'明鏡止水', trigger40:'月影',
-          special: sp('竜牙一閃・斬鉄', { atk:2.9, hits:2, critGuaranteed:true }) } },
+    kit:{ normal:'居合斬', normalLow:'ドラゴンスラスト',
+          // 連携: 気を研ぐ(攻撃+40%)→居合斬→竜牙返し(2連)。剣技と竜牙をつなぐ。
+          combo:[ { name:'気を研ぐ', buff:{ atkMult:1.4 }, duration:3 },
+                  '居合斬',
+                  sp('竜牙返し', { atk:1.8, hits:2 }) ],
+          trigger75:'明鏡止水', trigger40:'月影',
+          special: sp('竜牙一閃・斬鉄', { atk:3.2, hits:2, critGuaranteed:true }) } },
   { floor:29, name:'万象の魔導王アルカ',     target:45000, arch:'arcane', dmg:'hybrid', // 賢者＋元素使い＋魔銃士
     kit:{ normal:'メテオストライク', normalLow:'連装銃撃',
+          // 連携: 魔力過充填(特攻+50%/攻撃+30%)→魔閃連弾(2連)→極大魔弾。充填してから撃ち切る。
+          combo:[ { name:'魔力過充填', buff:{ matkMult:1.5, atkMult:1.3 }, duration:3 },
+                  sp('魔閃連弾', { atk:1.0, matk:1.4, hits:2 }),
+                  sp('極大魔弾', { matk:2.2 }) ],
           trigger75:{ name:'氷の障壁', duration:10 },
           trigger40:'フレイムバースト',
-          special: sp('万象崩滅', { atk:1.8, matk:1.8, hits:2, inflict:['burn','paralysis','stun'] }) } },
+          special: sp('万象崩滅', { atk:2.0, matk:2.0, hits:2, inflict:['burn','paralysis','stun'] }) } },
   { floor:30, name:'奈落の支配者アビスロード', target:50000, arch:'balanced', dmg:'hybrid', // 全職集大成(最終)
     revive:{ hpFrac:0.5, allStatsMult:2 }, // HP0で1度だけ最大HP50%で復活し、全ステータス2倍
     kit:{ normal: sp('虚無の刃', { atk:1.6, matk:1.6 }),
           normalLow: sp('冥滅の波動', { atk:1.8, matk:1.8, hits:2 }),
+          // 連携（自己バフ無し＝絶対君臨と競合させない）: 虚無の刃→冥滅の波動(2連)→次元の牙(2連)を巡回。
+          // 絶対君臨(+50%)が乗った状態でこの複合連撃を回すのが本ボスのコンボ。
+          combo:[ sp('虚無の刃', { atk:1.7, matk:1.7 }),
+                  sp('冥滅の波動', { atk:1.7, matk:1.7, hits:2 }),
+                  sp('次元の牙', { atk:1.5, matk:1.5, hits:2 }) ],
           trigger75:{ name:'絶対君臨', buff:{ atkMult:1.5, matkMult:1.5 }, duration:10 },
           trigger40: sp('次元断裂', { atk:2.0, matk:2.0, dispelPlayerBuffs:true, inflict:['paralysis','stun'] }),
           special: sp('終焉ノ宣告', { atk:2.2, matk:2.2, hits:2, healBlock:true, executeHpBelow:15, lifesteal:0.3 }) } },

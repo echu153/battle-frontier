@@ -72,6 +72,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
   // ===== 敵スキルAI 状態（kit駆動） =====
   // 敵はMP消費なしでスキル撃ち放題。HP閾値で発動スキルが1度だけ切り替わる。
   let enUsedT75 = false, enUsedT40 = false, enUsedSpecial = false
+  let enComboIdx = 0                  // kit.combo（連携ローテ）の現在位置。通常行動時にこれを1つずつ回す
   let enLockedSkill = null           // persist/thenOnly でロックされたスキル（毎ターンこれ）
   let prevEnemySkill = ''
   // 永続強化（絶影/天の祝福/影強化 など custom大技で付与）
@@ -657,6 +658,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     let slot, isSpecial = false
     if (!enUsedSpecial && hpRate <= 0.15)      { slot = kit.special;   enUsedSpecial = true; isSpecial = true }
     else if (!enUsedT40 && hpRate <= 0.40)     { slot = kit.trigger40; enUsedT40 = true }
+    else if (kit.combo)                        { slot = kit.combo[enComboIdx % kit.combo.length]; enComboIdx++ } // 連携ローテ（設置バフ→高倍率技）
     else                                       { slot = (hpRate <= 0.60 && kit.normalLow) ? kit.normalLow : kit.normal }
     const def = (typeof slot === 'string') ? { name: slot } : slot
     resolveSlot(def)
