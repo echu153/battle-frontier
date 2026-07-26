@@ -1837,6 +1837,38 @@ export default function Game() {
   const [subsidyAvailable, setSubsidyAvailable] = useState(false)  // 国の補助金が未受取か（街のバナー表示用）
   const [bingoClaimable, setBingoClaimable] = useState(0)   // 初心者ビンゴで受け取れる報酬(マス/ライン)の件数（街のバナー表示用・is_admin限定先行）
   const [hachigokuWinsLeft, setHachigokuWinsLeft] = useState(0)   // 八獄の本日残り挑戦回数（街バナー用。挑戦権あり＆未消化で表示）
+  const [gifts, setGifts] = useState([])            // 未受取のプレゼント（街バナー＋受け取りモーダル用）
+  const [showGiftPanel, setShowGiftPanel] = useState(false)
+  // プレゼント受け取り: claim_gift RPCでアイテム付与＋claimedに。成功したら一覧から除く。
+  const claimGift = async (giftId) => {
+    const { data, error } = await supabase.rpc('claim_gift', { p_gift_id: giftId })
+    if (error || data?.error) { alert(data?.error || error?.message || '受け取りに失敗しました'); return }
+    setGifts(prev => prev.filter(g => g.id !== giftId))
+  }
+  // プレゼント受け取りモーダル（PC/モバイル両returnで共有）
+  const giftModal = showGiftPanel && (
+    <div onClick={()=>setShowGiftPanel(false)} style={{ position:'fixed', inset:0, background:'rgba(0,4,16,0.85)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:'#0a0616', border:'1px solid #aa66ff', padding:'20px', maxWidth:'380px', width:'100%' }}>
+        <div style={{ color:'#dab6ff', fontSize:'14px', textAlign:'center', marginBottom:'14px', letterSpacing:'2px' }}>🎁 プレゼント</div>
+        {gifts.length === 0 ? (
+          <div style={{ color:'#88aacc', fontSize:'12px', textAlign:'center', padding:'20px 0' }}>受け取れるプレゼントはありません</div>
+        ) : gifts.map(g => (
+          <div key={g.id} style={{ border:'1px solid #33224a', background:'#120a24', padding:'12px', marginBottom:'10px' }}>
+            <div style={{ color:'#ffcc66', fontSize:'13px', marginBottom:'4px' }}>{g.item_name} ×{g.quantity}</div>
+            {g.message && <div style={{ color:'#9988bb', fontSize:'11px', lineHeight:1.6, marginBottom:'8px' }}>{g.message}</div>}
+            <button onClick={()=>claimGift(g.id)}
+              style={{ width:'100%', padding:'8px', background:'#12002a', border:'1px solid #aa66ff', color:'#dab6ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              🎁 受け取る
+            </button>
+          </div>
+        ))}
+        <button onClick={()=>setShowGiftPanel(false)}
+          style={{ width:'100%', padding:'8px', marginTop:'4px', background:'none', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+          閉じる
+        </button>
+      </div>
+    </div>
+  )
   const [scarecrowState, setScarecrowState] = useState(null)       // かかし修練: 'training'(中) | 'done'(完了・受取待ち) | null
   const [myCountryName, setMyCountryName] = useState('')     // 所属国名（ホーム/プロフィールの所属国表示用・is_admin限定先行）
   const [atWar, setAtWar] = useState(false)                  // 自国が交戦中（active）か。戦争中はホームのHP/MP表示を戦争用に切替
@@ -2289,6 +2321,13 @@ export default function Game() {
         .select('quantity, items!inner(effect)').eq('player_id', user.id).eq('items.effect', 'boss_blood_box').maybeSingle()
       setBoxAvailable(boxRow?.quantity || 0)
     } catch { setBoxAvailable(0) }
+    // プレゼント(未受取ギフト)チェック（街バナー＋受け取りモーダル用）
+    try {
+      const { data: giftRows } = await supabase.from('player_gifts')
+        .select('id, item_name, quantity, message').eq('player_id', user.id).eq('claimed', false)
+        .order('created_at', { ascending: true })
+      setGifts(giftRows || [])
+    } catch { setGifts([]) }
     if (Array.isArray(cl)) setClassLevels(cl)
     setHasGamblerProof(!!gpCheck)
     setHasDragonKnightProof(!!dkCheck)
@@ -5933,6 +5972,13 @@ export default function Game() {
               🗺 領地を広げられます！→ 領地へ
             </button>
           )}
+          {gifts.length > 0 && (
+            <button onClick={()=>setShowGiftPanel(true)}
+              style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#160a24', border:'1px solid #cc88ff', color:'#dab6ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+              🎁 プレゼントが届いています！（{gifts.length}件）→ 受け取る
+            </button>
+          )}
+          {giftModal}
           {boxAvailable > 0 && (
             <button onClick={()=>nav('/equipment?view=items')}
               style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a0010', border:'1px solid #ff88aa', color:'#ff99cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
@@ -6515,6 +6561,13 @@ export default function Game() {
             🗺 領地を広げられます！→ 領地へ
           </button>
         )}
+        {gifts.length > 0 && (
+          <button onClick={()=>setShowGiftPanel(true)}
+            style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#160a24', border:'1px solid #cc88ff', color:'#dab6ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
+            🎁 プレゼントが届いています！（{gifts.length}件）→ 受け取る
+          </button>
+        )}
+        {giftModal}
         {boxAvailable > 0 && (
           <button onClick={()=>nav('/equipment?view=items')}
             style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a0010', border:'1px solid #ff88aa', color:'#ff99cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
