@@ -5568,11 +5568,12 @@ export default function Game() {
   const dungeonAllUsedUp = DUNGEON_LIST.every(d => (dungeonCounts[d.type]||0) >= dungeonDailyLimitFor(profile))
   const charLv = profile.char_lv || profile.lv
   const innCost = isDying ? Math.min(charLv*15,profile.gold) : charLv*2
-  // 公開：開催期間中のみ全プレイヤーに表示（出撃ポイントラリーは終了済み＝バナー非表示）
-  const eventVisible = (() => {
-    const now = serverNow()
-    return now >= EVENT_START_MS && now < EVENT_END_MS
-  })()
+  // テスト中：開発(is_admin)のみ表示。公開時は下の期間ゲート版に戻す。
+  const eventVisible = !!profile?.is_admin
+  // const eventVisible = (() => {
+  //   const now = serverNow()
+  //   return now >= EVENT_START_MS && now < EVENT_END_MS
+  // })()
   // レイドボスイベント「勇気の証」開催中か（期間を過ぎると自動でfalse＝表示が消える）
   const raidEventActive = (() => {
     const now = serverNow()

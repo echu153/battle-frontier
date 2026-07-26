@@ -38,6 +38,10 @@ export default function Event() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
 
+    // テスト中：開発(is_admin)のみアクセス可。公開時はこの3行を削除する。
+    const { data: prof } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
+    if (!prof?.is_admin) { nav('/game'); return }
+
     const cfgR = await supabase.from('event_config').select('*').eq('event_key', EVENT_KEY).maybeSingle()
     const ptsR = await supabase.from('event_points').select('points').eq('event_key', EVENT_KEY).eq('player_id', user.id).maybeSingle()
     const rwR  = await supabase.from('event_rewards').select('threshold, label, weapon_names').eq('event_key', EVENT_KEY).order('threshold')
