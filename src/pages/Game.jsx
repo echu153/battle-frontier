@@ -1903,6 +1903,9 @@ export default function Game() {
   const [seenAnnouncementIds, setSeenAnnouncementIds] = useState(() => {
     try { return JSON.parse(localStorage.getItem('bf_seenAnnouncements') || '[]') } catch { return [] }
   })
+  // 開いた時点で未読だったお知らせID（NEW表示用のスナップショット）。開くと全件既読化するが、
+  // この表示中は未読だった行にNEWを出し続ける（お問い合わせのNEWと同じ方式）。
+  const [newAnnouncementIds, setNewAnnouncementIds] = useState(() => new Set())
   const sortieTimesRef = useRef([])  // オートクリッカー検知：出撃時刻の履歴
   const botCheckTimerRef = useRef(null)  // BOT確認チャレンジのタイマー
   const botCheckActiveRef = useRef(false)  // チャレンジ中フラグ
@@ -4561,6 +4564,15 @@ export default function Game() {
     } catch { /* 意図的に無視 */ }
   }
 
+  // お知らせパネルを開く：開いた時点で未読だったIDをスナップショットしてから全件既読化する。
+  //   これで📢ボタンのNEWは即消えつつ、一覧の未読行にはこの表示中だけNEWバッジが残る。
+  const openAnnouncementsPanel = () => {
+    const unread = announcements.filter(a => !seenAnnouncementIds.includes(a.id)).map(a => a.id)
+    setNewAnnouncementIds(new Set(unread))
+    setShowAnnouncements(true)
+    markAllAnnouncementsSeen()
+  }
+
   const markAllAnnouncementsSeen = () => {
     const ids = announcements.map(a => a.id)
     try { localStorage.setItem('bf_seenAnnouncements', JSON.stringify(ids)) } catch { /* 意図的に無視 */ }
@@ -5416,7 +5428,7 @@ export default function Game() {
           ))}
         </div>
         <div style={{ display:'flex', gap:'10px', justifyContent:'center' }}>
-          <button onClick={()=>{ setNewAnnouncementPopup(false); setShowAnnouncements(true); markAllAnnouncementsSeen() }}
+          <button onClick={()=>{ setNewAnnouncementPopup(false); openAnnouncementsPanel() }}
             style={{ background:'#1a0800', border:'1px solid #ff8844', color:'#ff8844', padding:'8px 20px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
             詳しく見る
           </button>
@@ -5450,7 +5462,7 @@ export default function Game() {
         <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'10px', flexShrink:0 }}>
           {ANNOUNCE_TABS.map(t => {
             const on = announceTab === t.key
-            const hasNew = announcements.some(a => a.title !== 'MAINTENANCE' && annCat(a) === t.key && !seenAnnouncementIds.includes(a.id))
+            const hasNew = announcements.some(a => a.title !== 'MAINTENANCE' && annCat(a) === t.key && newAnnouncementIds.has(a.id))
             return (
               <button key={t.key} onClick={()=>{ setAnnounceTab(t.key); setOpenAnnouncementId(null) }}
                 style={{ flex:'1 1 56px', minWidth:'56px', padding:'6px 2px', background: on?'#1a0c00':'#000818', border:`1px solid ${on?'#ff8844':'#223344'}`, color: on?'#ffaa66':'#557799', cursor:'pointer', fontFamily:'monospace', fontSize:'10px', position:'relative', whiteSpace:'nowrap' }}>
@@ -5463,7 +5475,7 @@ export default function Game() {
         <div style={{ overflowY:'auto', flex:1 }}>
         {tabAnns.length === 0 && <div style={{ color:'#446688', fontSize:'12px' }}>このカテゴリのお知らせはありません</div>}
         {tabAnns.map(a => {
-          const isNew = !seenAnnouncementIds.includes(a.id)
+          const isNew = newAnnouncementIds.has(a.id)
           return (
             <div key={a.id} style={{ marginBottom:'8px', border:`1px solid ${isNew?'#443300':'#002244'}`, background:'#000818' }}>
               <button onClick={()=>setOpenAnnouncementId(openAnnouncementId===a.id?null:a.id)}
@@ -5852,7 +5864,7 @@ export default function Game() {
             <div style={{ color:'#ffcc00', fontSize:'13px', letterSpacing:'2px' }}>BATTLE FRONTIER</div>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-            <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen() }} style={{ background:'none', border:`1px solid ${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, color:`${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', position:'relative' }}>
+            <button onClick={()=>{ openAnnouncementsPanel() }} style={{ background:'none', border:`1px solid ${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, color:`${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', position:'relative' }}>
               📢{hasNewAnnouncements && <span style={{ marginLeft:'2px', background:'#ff4400', color:'#fff', fontSize:'7px', padding:'1px 3px', borderRadius:'2px', verticalAlign:'middle' }}>NEW</span>}
             </button>
             <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📖</button>
@@ -5863,7 +5875,7 @@ export default function Game() {
         {showMenu && (
           <div style={{ position:'fixed', top:'40px', right:'12px', background:'#001040', border:'1px solid #446688', zIndex:200, minWidth:'120px' }}>
             {/* ★2026-06-20公開: 全プレイヤーに新メニュー（お知らせ/ヘルプ/オプション）。施設は街本文の☰メニュー▼から */}
-            <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
+            <button onClick={()=>{ openAnnouncementsPanel(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
             <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
             <button onClick={()=>{ window.open('https://foamy-cathedral-702.notion.site/BATTLE-FRONTIER-38b3081b1d0180ebbfb8dafcc0b01444', '_blank', 'noopener,noreferrer'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffd700', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📚 攻略データ（Wiki）</button>
             <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ 出撃設定</button>
@@ -6442,7 +6454,7 @@ export default function Game() {
             <div style={{ color:'#ffcc00', fontSize:'16px', letterSpacing:'3px' }}>BATTLE FRONTIER</div>
           </div>
           <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-            <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen() }} style={{ background:'none', border:`1px solid ${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, color:`${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', position:'relative' }}>
+            <button onClick={()=>{ openAnnouncementsPanel() }} style={{ background:'none', border:`1px solid ${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, color:`${hasNewAnnouncements?'#ffaa22':'#ff8844'}`, padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', position:'relative' }}>
               📢 お知らせ{hasNewAnnouncements && <span style={{ marginLeft:'4px', background:'#ff4400', color:'#fff', fontSize:'8px', padding:'1px 4px', borderRadius:'2px', verticalAlign:'middle' }}>NEW</span>}
             </button>
             <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true) }} style={{ background:'none', border:'1px solid #44aaff', color:'#44aaff', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>📖 ガイド</button>
@@ -6453,7 +6465,7 @@ export default function Game() {
         {showMenu && (
           <div style={{ position:'fixed', top:'48px', right:'16px', background:'#001040', border:'1px solid #446688', zIndex:200, minWidth:'150px' }}>
             {/* ★2026-06-20公開: 全プレイヤーに新メニュー（お知らせ/ヘルプ/オプション）。施設は街本文の☰メニュー▼から */}
-            <button onClick={()=>{ setShowAnnouncements(true); markAllAnnouncementsSeen(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
+            <button onClick={()=>{ openAnnouncementsPanel(); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff8844', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📢 お知らせ</button>
             <button onClick={()=>{ setGuideView("select"); setOpenGuideId(null); setOpenHelpId(null); setShowGuide(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📖 ヘルプ</button>
             <button onClick={()=>{ window.open('https://foamy-cathedral-702.notion.site/BATTLE-FRONTIER-38b3081b1d0180ebbfb8dafcc0b01444', '_blank', 'noopener,noreferrer'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffd700', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>📚 攻略データ（Wiki）</button>
             <button onClick={()=>{ setShowOptions(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚙ 出撃設定</button>
