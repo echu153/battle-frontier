@@ -384,11 +384,11 @@ export default function Smithy() {
     setLoading(false)
   }
 
-  // ＋11確定強化石：Gold・素材・成功判定なしで確定で+11にする（1個消費）。現在+11未満のみ。
+  // ＋11確定強化石：Gold・素材・成功判定なしで確定で+11にする（1個消費）。+10の装備のみ。
   const doPlus11 = async (item) => {
     setLoading(true)
     const currentPlus = item.enhance_plus || 0
-    if (currentPlus >= 11) { showMessage('すでに+11以上です', '#ffcc00'); setLoading(false); return }
+    if (currentPlus !== 10) { showMessage('+10の武器にのみ使用できます', '#ffcc00'); setLoading(false); return }
     // エリアボス装備は真化しないと+11以上にできない
     if (isEvolvableEquip(item.weapons.name) && !isShinka(item)) {
       showMessage('真化させると+11以上に強化できます', '#ffcc00'); setLoading(false); return
@@ -797,9 +797,9 @@ export default function Smithy() {
           const crystalOwned = getItemCount(CRYSTAL_NAME)
           const dropRisk = nextPlus >= 11                       // +11以上は失敗で下落
           const crystalActive = dropRisk && useCrystal && crystalOwned > 0
-          // ＋11確定強化石：所持していて現在+11未満・真化条件を満たすときのみ選択可
+          // ＋11確定強化石：所持していて現在+10・真化条件を満たすときのみ選択可（+10→+11専用）
           const plus11Owned = getItemCount(PLUS11_STONE_NAME)
-          const canPlus11 = plus11Owned > 0 && plus < 11 && !(isEvolvableEquip(w.name) && !isShinka(item))
+          const canPlus11 = plus11Owned > 0 && plus === 10 && !(isEvolvableEquip(w.name) && !isShinka(item))
           const closeModal = () => { setSelectedItem(null); setEnhanceResult(null); setHidenBook(null) }
           // 強化ボタン押下：+11以上を結晶なしで強化しようとしたら確認ダイアログ
           const onEnhanceClick = () => {
