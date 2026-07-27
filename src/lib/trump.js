@@ -60,7 +60,10 @@ export function createDaifugo(playersIn, rules = {}, championId = null) {
   for (const p of players) sortDf(p.hand)
   return {
     mode: 'daifugo', players,
-    rules: { kaidan: !!rules.kaidan, shibari: !!rules.shibari, miyako: !!rules.miyako, kakumei: rules.kakumei !== false },
+    rules: {
+      kaidan: !!rules.kaidan, shibari: !!rules.shibari, miyako: !!rules.miyako,
+      kakumei: rules.kakumei !== false, spade3: rules.spade3 !== false,
+    },
     champion: rules.miyako && championId && players.some((p) => p.id === championId) ? championId : null,
     turn: 0, field: null, // { cards, count, strength, type, suits, lock }
     lastPlayer: null, passed: players.map(() => false),
@@ -92,6 +95,13 @@ export function dfSetStrength(cards, field, revolution, rules = {}) {
     strength = nonJ.length > 0 ? dfStrength(nonJ[0].r) : DF_JOKER_STRENGTH
   }
   const suits = nonJ.map((c) => c.s).sort((a, b) => a - b)
+  // スペ3返し: ジョーカー単騎には♠3単騎で返せる(革命の有無を問わず・既定ON)
+  const isSpade3 = cards.length === 1 && !cards[0].joker && cards[0].s === 0 && cards[0].r === 3
+  const fieldIsLoneJoker = !!field && field.count === 1 && field.strength === DF_JOKER_STRENGTH
+  if (field && isSpade3 && fieldIsLoneJoker && rules.spade3 !== false) {
+    if (rules.shibari && field.lock && !field.lock.includes(0)) return null // しばり中は♠固定時のみ
+    return { strength, type, suits, spade3: true }
+  }
   if (field) {
     if (cards.length !== field.count) return null
     if ((field.type || 'set') !== type) return null
@@ -167,6 +177,13 @@ export function applyDaifugo(state, playerId, action) {
       }
     }
   }
+  // スペ3返し: ジョーカーを流して同じ人が出し直し(8切りと同じ扱い)
+  if (res.spade3) {
+    st.field = null
+    ev.push({ t: 'clear', spade3: true })
+    st.turn = me.out ? nextActive(st.players, seat) : seat
+    return finishDfIfOver(st, ev)
+  }
   if (isKiri) {
     st.field = null
     ev.push({ t: 'clear', kiri: true })
@@ -229,6 +246,11 @@ export function npcDaifugo(state, seat) {
     if (g) return { type: 'play', cardIds: g.slice(0, 3).map((c) => c.id) }
     if (jokers.length) return { type: 'play', cardIds: [jokers[0].id] }
     return { type: 'pass' }
+  }
+  // スペ3返し: ジョーカー単騎が場にあれば♠3で返す
+  const spade3 = me.hand.find((c) => !c.joker && c.s === 0 && c.r === 3)
+  if (spade3 && dfSetStrength([spade3], state.field, state.revolution, state.rules)?.spade3) {
+    return { type: 'play', cardIds: [spade3.id] }
   }
   for (const g of ordered) {
     if (g.length >= state.field.count) {

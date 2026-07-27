@@ -70,7 +70,7 @@ export default function Cards() {
   const [rooms, setRooms] = useState([])
   const [roomTitle, setRoomTitle] = useState('')
   // 部屋の設定はホストが入室後に決める(全員へbroadcast同期)
-  const DEFAULT_SETTINGS = { gameType: 'daifugo', rules: { kakumei: true, kaidan: false, shibari: false, miyako: false }, bet: 0, matchLen: 3 }
+  const DEFAULT_SETTINGS = { gameType: 'daifugo', rules: { kakumei: true, spade3: true, kaidan: false, shibari: false, miyako: false }, bet: 0, matchLen: 3 }
   const DF_MATCH_PTS = [4, 2, 1, 0] // 大富豪マッチ: 順位ごとの獲得pt(1位→4位)
   const rankColor = (r) => (r === 1 ? '#ffcc44' : r === 2 ? '#c8d2e0' : r === 3 ? '#cc8850' : '#7788aa') // 金/銀/銅/灰
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
@@ -408,6 +408,7 @@ export default function Cards() {
       for (const ev of evs) {
         if (ev.t === 'revolution') fx.push(ev.on ? '⚡革命！' : '⚡革命返し！')
         if (ev.t === 'clear' && ev.kiri) fx.push('✂8切り！')
+        if (ev.t === 'clear' && ev.spade3) fx.push('♠3返し！')
         if (ev.t === 'shibari') fx.push(`🔒しばり！(${ev.suits.map((s) => SUIT_LABEL[s]).join('')})`)
         if (ev.t === 'miyako') fx.push(`⛰${payload.game.players[ev.seat]?.name} 都落ち！`)
         if (ev.t === 'burst') fx.push(`💥${payload.game.players[ev.seat]?.name} バースト！`)
@@ -418,8 +419,8 @@ export default function Cards() {
         if (splashTimerRef.current) clearTimeout(splashTimerRef.current)
         splashTimerRef.current = setTimeout(() => setSplash(null), 1600)
       }
-      // 8切り: 出したカードを一瞬場に見せてから流す
-      if (evs.some((e) => e.t === 'clear' && e.kiri) && playEv?.cardObjs) {
+      // 8切り/スペ3返し: 出したカードを一瞬場に見せてから流す
+      if (evs.some((e) => e.t === 'clear' && (e.kiri || e.spade3)) && playEv?.cardObjs) {
         setKiriFlash(playEv.cardObjs)
         if (kiriTimerRef.current) clearTimeout(kiriTimerRef.current)
         kiriTimerRef.current = setTimeout(() => setKiriFlash(null), 1300)
@@ -588,7 +589,7 @@ export default function Cards() {
   }
   const rulesLabel = (rules) => {
     if (!rules) return ''
-    const on = [rules.kakumei === false && '革命なし', rules.kaidan && '階段', rules.shibari && 'しばり', rules.miyako && '都落ち'].filter(Boolean)
+    const on = [rules.kakumei === false && '革命なし', rules.spade3 === false && 'スペ3なし', rules.kaidan && '階段', rules.shibari && 'しばり', rules.miyako && '都落ち'].filter(Boolean)
     return on.length > 0 ? on.join('/') : ''
   }
 
@@ -863,8 +864,8 @@ export default function Cards() {
               {settings.gameType === 'daifugo' && (
                 <div style={{ marginBottom: 6 }}>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                    {[['kakumei', '革命'], ['kaidan', '階段'], ['shibari', 'しばり'], ['miyako', '都落ち']].map(([key, label]) => {
-                      const on = key === 'kakumei' ? settings.rules.kakumei !== false : !!settings.rules[key]
+                    {[['kakumei', '革命'], ['spade3', 'スペ3返し'], ['kaidan', '階段'], ['shibari', 'しばり'], ['miyako', '都落ち']].map(([key, label]) => {
+                      const on = (key === 'kakumei' || key === 'spade3') ? settings.rules[key] !== false : !!settings.rules[key]
                       return (
                         <button key={key} onClick={() => updateSettings({ rules: { ...settings.rules, [key]: !on } })}
                           style={btnStyle(on ? '#ffcc44' : '#446688', { fontSize: 11, background: on ? 'rgba(255,204,68,0.1)' : 'none' })}>
@@ -873,7 +874,7 @@ export default function Cards() {
                       )
                     })}
                   </div>
-                  <div style={{ fontSize: 9, color: '#668', marginTop: 3 }}>革命=4枚以上出しで強さ反転 / 階段=同スート3枚以上の連番 / しばり=スート一致で以後同スート限定 / 都落ち=前回1位が1位を逃すと即最下位(2戦目から)</div>
+                  <div style={{ fontSize: 9, color: '#668', marginTop: 3 }}>革命=4枚以上出しで強さ反転 / スペ3返し=ジョーカー単騎に♠3で返せる(場が流れる) / 階段=同スート3枚以上の連番 / しばり=スート一致で以後同スート限定 / 都落ち=前回1位が1位を逃すと即最下位(2戦目から)</div>
                   <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 6 }}>
                     <span style={{ fontSize: 11, color: '#88ccff' }}>マッチ:</span>
                     {[3, 5, 7].map((n) => (
@@ -1131,8 +1132,8 @@ export default function Cards() {
           <div style={{ width: 108, border: '1px solid #334466', borderRadius: 6, padding: '4px 8px', fontSize: 11, flexShrink: 0 }}>
             {matchInfo && <div style={{ color: '#ffcc44', marginBottom: 2 }}>🏁第{Math.min(matchInfo.round, matchInfo.len)}/{matchInfo.len}戦</div>}
             <div style={{ color: '#88ccff', marginBottom: 2 }}>ルール</div>
-            {[['kakumei', '革命'], ['kaidan', '階段'], ['shibari', 'しばり'], ['miyako', '都落ち']].map(([k, l]) => {
-              const on = k === 'kakumei' ? game.rules?.kakumei !== false : !!game.rules?.[k]
+            {[['kakumei', '革命'], ['spade3', 'スペ3返し'], ['kaidan', '階段'], ['shibari', 'しばり'], ['miyako', '都落ち']].map(([k, l]) => {
+              const on = (k === 'kakumei' || k === 'spade3') ? game.rules?.[k] !== false : !!game.rules?.[k]
               return <div key={k} style={{ color: on ? '#ffcc44' : '#445566' }}>{on ? '✓ ' : '－ '}{l}</div>
             })}
             {game.revolution && <div style={{ color: '#ff4444', marginTop: 2 }}>⚡革命中</div>}
