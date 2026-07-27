@@ -5891,12 +5891,8 @@ export default function Game() {
               <button onClick={()=>{ nav('/card-battle'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎴 幻札バトル[開発]</button>
             )}
             <button onClick={()=>{ nav('/othello'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚫ 盤上遊戯「双極盤」</button>
-            {profile?.is_admin && (
-              <button onClick={()=>{ nav('/mahjong'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🀄 麻雀[開発]</button>
-            )}
-            {profile?.is_admin && (
-              <button onClick={()=>{ nav('/cards'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#dd88aa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🃏 トランプ広場[開発]</button>
-            )}
+            <button onClick={()=>{ nav('/mahjong'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🀄 麻雀</button>
+            <button onClick={()=>{ nav('/cards'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#dd88aa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🃏 トランプ広場</button>
             <button onClick={()=>{ nav('/bingo'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎯 初心者ビンゴ</button>
             <button onClick={()=>{ nav('/action-rpg'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#9fe', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🗡 アクションRPG <span style={{ fontSize:'9px', color:'#8877aa' }}>(お試し)</span></button>
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
@@ -6322,9 +6318,9 @@ export default function Game() {
                       <MenuCat title="娯楽" catKey="fun" accordion={acc} open={!!openMenuCats.fun} onToggle={toggleMenuCat}>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                         <button key="othello" onClick={()=>nav('/othello')} style={{ padding:'10px', background:'#001020', border:'1px solid #44dd88', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚫ 双極盤</button>
-                        {profile?.is_admin && <button key="mahjong" onClick={()=>nav('/mahjong')} style={{ padding:'10px', background:'#001020', border:'1px solid #88dd66', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🀄 麻雀 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
+                        <button key="mahjong" onClick={()=>nav('/mahjong')} style={{ padding:'10px', background:'#001020', border:'1px solid #88dd66', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🀄 麻雀</button>
                         {profile?.is_admin && <button key="cardbattle" onClick={()=>nav('/card-battle')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎴 幻札バトル <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
-                        {profile?.is_admin && <button key="trump" onClick={()=>nav('/cards')} style={{ padding:'10px', background:'#001020', border:'1px solid #dd88aa', color:'#dd88aa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🃏 トランプ広場 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
+                        <button key="trump" onClick={()=>nav('/cards')} style={{ padding:'10px', background:'#001020', border:'1px solid #dd88aa', color:'#dd88aa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🃏 トランプ広場</button>
                       </div>
                       </MenuCat>
                       <MenuCat title="放置コンテンツ" catKey="idle" accordion={acc} open={!!openMenuCats.idle} onToggle={toggleMenuCat}>
@@ -6481,12 +6477,8 @@ export default function Game() {
               <button onClick={()=>{ nav('/card-battle'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎴 幻札バトル[開発]</button>
             )}
             <button onClick={()=>{ nav('/othello'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>⚫ 盤上遊戯「双極盤」</button>
-            {profile?.is_admin && (
-              <button onClick={()=>{ nav('/mahjong'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🀄 麻雀[開発]</button>
-            )}
-            {profile?.is_admin && (
-              <button onClick={()=>{ nav('/cards'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#dd88aa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🃏 トランプ広場[開発]</button>
-            )}
+            <button onClick={()=>{ nav('/mahjong'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🀄 麻雀</button>
+            <button onClick={()=>{ nav('/cards'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#dd88aa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🃏 トランプ広場</button>
             <button onClick={()=>{ nav('/bingo'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎯 初心者ビンゴ</button>
             <button onClick={()=>{ nav('/action-rpg'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#9fe', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🗡 アクションRPG <span style={{ fontSize:'9px', color:'#8877aa' }}>(お試し)</span></button>
             <button onClick={()=>{ setAiOpen(true); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🤖 AI戦闘民族ジェミータ（β版）</button>
@@ -6914,9 +6906,9 @@ export default function Game() {
                         <MenuCat title="娯楽" catKey="fun" accordion={acc} open={!!openMenuCats.fun} onToggle={toggleMenuCat}>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
                           <button key="othello" onClick={()=>nav('/othello')} style={{ padding:'10px', background:'#001020', border:'1px solid #44dd88', color:'#44dd88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚫ 双極盤</button>
-                          {profile?.is_admin && <button key="mahjong" onClick={()=>nav('/mahjong')} style={{ padding:'10px', background:'#001020', border:'1px solid #88dd66', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🀄 麻雀 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
+                          <button key="mahjong" onClick={()=>nav('/mahjong')} style={{ padding:'10px', background:'#001020', border:'1px solid #88dd66', color:'#88dd66', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🀄 麻雀</button>
                           {profile?.is_admin && <button key="cardbattle" onClick={()=>nav('/card-battle')} style={{ padding:'10px', background:'#001020', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎴 幻札バトル <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
-                        {profile?.is_admin && <button key="trump" onClick={()=>nav('/cards')} style={{ padding:'10px', background:'#001020', border:'1px solid #dd88aa', color:'#dd88aa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🃏 トランプ広場 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
+                        <button key="trump" onClick={()=>nav('/cards')} style={{ padding:'10px', background:'#001020', border:'1px solid #dd88aa', color:'#dd88aa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🃏 トランプ広場</button>
                         </div>
                         </MenuCat>
                         <MenuCat title="放置コンテンツ" catKey="idle" accordion={acc} open={!!openMenuCats.idle} onToggle={toggleMenuCat}>

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { reportDevAccess } from '../lib/devAccess'
 import {
   KIND_NAMES, DEFAULT_MJ_RULES, createMahjongGame, applyMahjong, getTurnOptions, getClaimOptions,
   npcDecide, autoActionFor, isNpcId, doraFromIndicator, waitsOf,
@@ -62,7 +61,6 @@ function TileBack({ small }) {
 export default function Mahjong() {
   const nav = useNavigate()
   const [me, setMe] = useState(null)
-  const [blocked, setBlocked] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const [view, setView] = useState('lobby')
@@ -187,15 +185,9 @@ export default function Mahjong() {
     ;(async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { nav('/login'); return }
-      const { data: prof } = await supabase.from('profiles').select('username, is_admin').eq('id', user.id).maybeSingle()
+      const { data: prof } = await supabase.from('profiles').select('username').eq('id', user.id).maybeSingle()
       if (cancelled) return
-      if (!prof?.is_admin) {
-        reportDevAccess('mahjong', '麻雀(/mahjong)')
-        setBlocked(true)
-        setLoading(false)
-        return
-      }
-      setMe({ id: user.id, name: prof.username || '名無し' })
+      setMe({ id: user.id, name: prof?.username || '名無し' })
       setLoading(false)
     })()
     return () => { cancelled = true }
@@ -635,15 +627,6 @@ export default function Mahjong() {
   if (loading) {
     return <div style={{ minHeight: '100vh', background: '#0a1a0f', color: '#88ccff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' }}>読み込み中…</div>
   }
-  if (blocked) {
-    return (
-      <div style={{ minHeight: '100vh', background: '#0a1a0f', color: '#ff6644', display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' }}>
-        <div>この機能は現在開発中です</div>
-        <button onClick={() => nav('/game')} style={btnStyle('#88ccff', { padding: '8px 16px' })}>街に戻る</button>
-      </div>
-    )
-  }
-
   const wrap = (children) => (
     <div style={{ minHeight: '100vh', background: '#0a1a0f', color: '#cde', fontFamily: 'monospace', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px' }}>
       <style>{`
@@ -675,7 +658,7 @@ export default function Mahjong() {
       <div style={{ width: '100%', maxWidth: 520 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <button onClick={() => nav('/game')} style={btnStyle('#88ccff')}>← 街に戻る</button>
-          <div style={{ color: '#ffcc44', fontSize: 14 }}>🀄 麻雀[開発]</div>
+          <div style={{ color: '#ffcc44', fontSize: 14 }}>🀄 麻雀</div>
           <div style={{ width: 76 }} />
         </div>
         <div style={{ border: '1px solid #224466', padding: 12, marginBottom: 14 }}>
