@@ -71,7 +71,8 @@ export default function Cards() {
   const [roomTitle, setRoomTitle] = useState('')
   // 部屋の設定はホストが入室後に決める(全員へbroadcast同期)
   const DEFAULT_SETTINGS = { gameType: 'daifugo', rules: { kaidan: false, shibari: false, miyako: false }, bet: 0, matchLen: 3 }
-  const DF_MATCH_PTS = [3, 2, 1, 0] // 大富豪マッチ: 順位ごとの獲得pt(1位→4位)
+  const DF_MATCH_PTS = [4, 2, 1, 0] // 大富豪マッチ: 順位ごとの獲得pt(1位→4位)
+  const rankColor = (r) => (r === 1 ? '#ffcc44' : r === 2 ? '#c8d2e0' : r === 3 ? '#cc8850' : '#7788aa') // 金/銀/銅/灰
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const settingsRef = useRef(DEFAULT_SETTINGS)
 
@@ -878,7 +879,7 @@ export default function Cards() {
                         {n}戦
                       </button>
                     ))}
-                    <span style={{ fontSize: 9, color: '#668' }}>順位でpt獲得(1位3/2位2/3位1/4位0)・合計ptで最終順位</span>
+                    <span style={{ fontSize: 9, color: '#668' }}>順位でpt獲得(1位4/2位2/3位1/4位0)・合計ptで最終順位</span>
                   </div>
                 </div>
               )}
@@ -961,6 +962,19 @@ export default function Cards() {
     </div>
   )
 
+  // ターン制ゲーム共通: 誰のターンかを大きく表示
+  const turnBanner = playing && game.mode !== 'speed' && game.players[game.turn] ? (
+    <div style={{
+      textAlign: 'center', fontSize: 14, fontWeight: 'bold', width: '100%',
+      color: game.players[game.turn].id === me.id ? '#ffcc44' : '#88ccff',
+      background: game.players[game.turn].id === me.id ? 'rgba(255,204,68,0.12)' : 'rgba(68,136,204,0.08)',
+      border: `1px solid ${game.players[game.turn].id === me.id ? '#8a7a33' : '#335577'}`,
+      borderRadius: 8, padding: '4px 0', margin: '2px 0 8px',
+    }}>
+      ▶ {game.players[game.turn].id === me.id ? 'あなた' : game.players[game.turn].name}のターン
+    </div>
+  ) : null
+
   const resultPanel = game.phase === 'ended' && (
     <div style={{ border: '1px solid #ffcc44', padding: 10, marginTop: 10, width: '100%' }}>
       <div style={{ color: '#ffcc44', fontSize: 13, marginBottom: 6 }}>結果</div>
@@ -970,7 +984,7 @@ export default function Cards() {
         </div>
       ) : (
         game.result.ranking.map((r) => (
-          <div key={r.seat} style={{ fontSize: 12, color: r.rank === 1 ? '#ffcc44' : '#cde' }}>
+          <div key={r.seat} style={{ fontSize: 12, color: rankColor(r.rank) }}>
             {r.rank}位 {r.name}{r.burst ? ' (バースト)' : ''}
             {game.mode === 'daifugo' && matchInfo && <span style={{ color: '#88ccff', marginLeft: 6 }}>+{DF_MATCH_PTS[r.rank - 1] || 0}pt</span>}
           </div>
@@ -985,7 +999,7 @@ export default function Cards() {
           {Object.keys(matchInfo.points)
             .sort((a, b) => (matchInfo.points[b] - matchInfo.points[a]) || ((matchInfo.lastRanks[a] || 9) - (matchInfo.lastRanks[b] || 9)))
             .map((id, i) => (
-              <div key={id} style={{ fontSize: 12, color: i === 0 ? '#ffcc44' : '#cde' }}>
+              <div key={id} style={{ fontSize: 12, color: rankColor(i + 1) }}>
                 {matchInfo.over ? `${i + 1}位 ` : ''}{matchInfo.names[id]}: {matchInfo.points[id]}pt
               </div>
             ))}
@@ -1005,6 +1019,7 @@ export default function Cards() {
     return wrap(
       <div style={{ width: '100%', maxWidth: 560 }}>
         {header}
+        {turnBanner}
         {game.players.map((p, s) => (
           <div key={s} style={{ border: `1px solid ${playing && game.turn === s ? '#ffcc44' : '#223355'}`, padding: '6px 8px', marginBottom: 6, background: s === mySeat ? '#101830' : 'transparent' }}>
             <div style={{ fontSize: 12, marginBottom: 4 }}>
@@ -1035,6 +1050,7 @@ export default function Cards() {
     return wrap(
       <div style={{ width: '100%', maxWidth: 600 }}>
         {header}
+        {turnBanner}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 11, marginBottom: 6 }}>
           {game.players.map((p, s) => (
             <span key={s} style={{ color: playing && game.turn === s ? '#ffcc44' : p.out ? '#556' : '#cde' }}>
@@ -1093,6 +1109,7 @@ export default function Cards() {
     return wrap(
       <div style={{ width: '100%', maxWidth: 560 }}>
         {header}
+        {turnBanner}
         <div style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'stretch' }}>
           {/* プレイヤーは縦並び・パス欄は固定幅(テキストがずれない) */}
           <div style={{ flex: 1, border: '1px solid #223355', borderRadius: 6, padding: '4px 8px' }}>
@@ -1102,7 +1119,7 @@ export default function Cards() {
                   {playing && game.turn === s ? '▶ ' : ''}{p.name}
                 </span>
                 {matchInfo && <span style={{ width: 34, textAlign: 'right', color: '#88ccff' }}>{matchInfo.points[p.id] || 0}pt</span>}
-                <span style={{ width: 44, textAlign: 'right', color: '#668' }}>{p.out ? `${p.rank}位` : `${p.hand.length}枚`}</span>
+                <span style={{ width: 44, textAlign: 'right', color: p.out ? rankColor(p.rank) : '#668' }}>{p.out ? `${p.rank}位` : `${p.hand.length}枚`}</span>
                 <span style={{ width: 40, textAlign: 'center', color: '#ff8866' }}>{game.passed[s] && !p.out ? 'パス' : ''}</span>
               </div>
             ))}
@@ -1181,6 +1198,7 @@ export default function Cards() {
     return wrap(
       <div style={{ width: '100%', maxWidth: 420 }}>
         {header}
+        {turnBanner}
         {mySeat !== 0 && renderSide(0, mySeat === 0)}
         {mySeat === 0 && renderSide(1, false)}
         <div style={{ display: 'flex', gap: 20, justifyContent: 'center', margin: '10px 0', alignItems: 'center' }}>
