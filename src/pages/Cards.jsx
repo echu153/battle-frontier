@@ -731,10 +731,17 @@ export default function Cards() {
     return () => clearInterval(iv)
   }, [room, me, hostApply, game?.mode, game?.phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- 終局後は結果を数秒見せて待機画面へ ----
+  // ---- 終局後は結果を数秒見せて次へ ----
+  //   大富豪マッチが継続中(最終戦でない)なら、ホストが同じ席(NPC含む)で次戦を自動開始する。
+  //   他クライアントは次戦のbroadcastで自動的に新しい盤面へ切り替わる(待機画面には戻さない)。
+  //   それ以外(マッチ最終戦/スピード等)は結果を数秒見せて待機画面へ。
   useEffect(() => {
     if (game?.phase !== 'ended' || !game.result) return
     const t = setTimeout(() => {
+      if (game.mode === 'daifugo' && matchRef.current && !matchRef.current.over) {
+        if (room?.hostId === me?.id) startGame()
+        return
+      }
       let txt
       if (game.mode === 'speed') {
         txt = game.result.winner === null ? '引き分け' : `${game.players[game.result.winner].name}の勝ち！`
@@ -746,7 +753,7 @@ export default function Cards() {
       gameRef.current = null
     }, 6000)
     return () => clearTimeout(t)
-  }, [game])
+  }, [game, room, me]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ============================================================
   // 描画
@@ -1156,9 +1163,9 @@ export default function Cards() {
             </div>
             {myTurn && (
               <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'center' }}>
-                <button onClick={() => { sendAction({ type: 'play', cardIds: selCards }); }} disabled={!canPlay}
-                  style={btnStyle(canPlay ? '#ffcc44' : '#445', { fontSize: 14, opacity: canPlay ? 1 : 0.5 })}>出す({selCards.length}枚)</button>
-                {game.field && <button onClick={() => sendAction({ type: 'pass' })} style={btnStyle('#ff8866', { fontSize: 14 })}>パス</button>}
+                <button onClick={() => { sendAction({ type: 'play', cardIds: selObjs.map((c) => c.id) }); setSelCards([]) }} disabled={!canPlay}
+                  style={btnStyle(canPlay ? '#ffcc44' : '#445', { fontSize: 14, opacity: canPlay ? 1 : 0.5 })}>出す({selObjs.length}枚)</button>
+                {game.field && <button onClick={() => { sendAction({ type: 'pass' }); setSelCards([]) }} style={btnStyle('#ff8866', { fontSize: 14 })}>パス</button>}
               </div>
             )}
           </div>
@@ -1208,17 +1215,22 @@ export default function Cards() {
         <div style={{ display: 'flex', gap: 20, justifyContent: 'center', margin: '10px 0', alignItems: 'center' }}>
           {game.piles.map((c, i) => {
             const ok = !!(selCard && c && speedAdjOk(selCard.r, c.r))
+            const clickable = mySeat >= 0 && playing && !!selCard
+            // ★台札はdivにする(内側のTCard=disabled buttonをbuttonで包むと入れ子ボタンになり、
+            //   タップが内側に吸われてplayToが発火しない=札が出せなくなるため)。
+            //   内側はpointerEvents:noneでクリックを外側divへ通す。
             return (
-              <button key={i} onClick={mySeat >= 0 && playing && selCard ? () => playTo(i) : undefined}
-                disabled={!(mySeat >= 0 && playing && selCard)}
+              <div key={i} role="button" onClick={clickable ? () => playTo(i) : undefined}
                 style={{
                   background: 'none', borderRadius: 8, padding: 4,
                   border: ok ? '2px dashed #ffcc44' : '2px solid transparent',
                   boxShadow: ok ? '0 0 10px rgba(255,204,68,0.5)' : 'none',
-                  cursor: selCard ? 'pointer' : 'default',
+                  cursor: clickable ? 'pointer' : 'default',
                 }}>
-                {c ? <TCard c={c} /> : <div style={{ width: 38, height: 54 }} />}
-              </button>
+                <span style={{ pointerEvents: 'none', display: 'inline-flex' }}>
+                  {c ? <TCard c={c} /> : <div style={{ width: 38, height: 54 }} />}
+                </span>
+              </div>
             )
           })}
         </div>
