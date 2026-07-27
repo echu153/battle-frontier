@@ -3,12 +3,16 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { reportDevAccess } from '../lib/devAccess'
 import {
-  KIND_NAMES, createMahjongGame, applyMahjong, getTurnOptions, getClaimOptions,
+  KIND_NAMES, DEFAULT_MJ_RULES, createMahjongGame, applyMahjong, getTurnOptions, getClaimOptions,
   npcDecide, autoActionFor, isNpcId, doraFromIndicator, waitsOf,
   MIN_MAHJONG_PLAYERS, MAX_MAHJONG_PLAYERS, TURN_SEC, CLAIM_SEC,
 } from '../lib/mahjong'
 import { TileFace, TileBackFace } from '../components/MahjongTile'
 import { StampBar, StampOverlay } from '../components/StampBar'
+import { wagerJoin, wagerReport, wagerForfeit, wagerPing, wagerSettleRanked, MAX_BET } from '../lib/wager'
+
+const BET_PRESETS = [0, 100, 1000, 10000, 100000]
+const rankColor = (r) => (r === 1 ? '#ffcc44' : r === 2 ? '#c8d2e0' : r === 3 ? '#cc8850' : '#7788aa')
 
 // ============================================================
 // 麻雀(雀魂風) — 開発限定のミニゲーム(娯楽・ステ影響なし)
@@ -77,6 +81,16 @@ export default function Mahjong() {
   const stampSeqRef = useRef(0)
   const stampCdRef = useRef(0)
   const hostGraceRef = useRef(null) // ホスト不在の猶予タイマー(リロード復帰待ち)
+  // 部屋設定(ホストが部屋内で変更・全員へ同期)
+  const DEFAULT_SETTINGS = { rules: { ...DEFAULT_MJ_RULES }, bet: 0 }
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS)
+  const settingsRef = useRef(DEFAULT_SETTINGS)
+  const [betBusy, setBetBusy] = useState(false)
+  const wagerKeyRef = useRef(null)
+  const betPendingRef = useRef(null)
+  const reportedRef = useRef(new Set())
+  const settleWagerRef = useRef(null)
+  const myJoinedAtRef = useRef(0)
 
   // 終局後は結果を数秒見せて待機画面へ戻る
   useEffect(() => {
@@ -112,8 +126,60 @@ export default function Mahjong() {
   useEffect(() => { roomRef.current = room }, [room])
   useEffect(() => { membersRef.current = members }, [members])
   useEffect(() => { npcsRef.current = npcs }, [npcs])
+  useEffect(() => { settingsRef.current = settings }, [settings])
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500) }
+
+  // ---- 賭け精算(順位分配・切断者は負け扱い) ----
+  const settleWager = useCallback(async (key, g, lostIds) => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+    const nameOf = (id) => g.players.find((p) => p.id === id)?.name || '?'
+    if (lostIds && lostIds.length > 0) {
+      showToast('💰 切断を確認中…精算まで少しお待ちください')
+      const pending = new Set(lostIds)
+      for (let attempt = 0; attempt < 6 && pending.size > 0; attempt++) {
+        for (const lid of [...pending]) {
+          const r = await wagerForfeit(key, lid)
+          if (r?.status === 'settled') { showToast(`💰 切断により ${nameOf(r.winner)} が ${r.pot}G 獲得！`); return }
+          if (r?.forfeited || r?.status === 'refunded') pending.delete(lid)
+        }
+        if (pending.size > 0) await sleep(15000)
+      }
+    }
+    // 最終順位(素点順)で分配。NPC・離脱者は除外
+    const excluded = new Set(lostIds || [])
+    const ranked = (g.finalStandings || [])
+      .map((s) => g.players[s.seat].id)
+      .filter((id) => !isNpcId(id) && !excluded.has(id))
+    if (ranked.length >= 2) {
+      const res = await wagerSettleRanked(key, ranked)
+      if (res?.status === 'settled') { showToast(`💰 分配精算完了！ 1位 ${nameOf(ranked[0])} が ${res.top_gain ?? res.pot}G 獲得`); return }
+      if (res?.status === 'refunded') { showToast('💰 全員に返金されました'); return }
+      if (res?.error?.includes('SQL更新')) {
+        const res2 = await wagerReport(key, ranked[0])
+        if (res2?.status === 'settled') showToast(`💰 精算完了: ${nameOf(ranked[0])} が ${res2.pot}G 獲得！`)
+        else if (res2?.error) showToast(`💰 ${res2.error}`)
+        return
+      }
+      if (res?.error) showToast(`💰 ${res.error}`)
+      return
+    }
+    const res = await wagerReport(key, null)
+    if (res?.status === 'refunded') showToast('💰 全員に返金されました')
+    else if (res?.error) showToast(`💰 ${res.error}`)
+  }, [])
+  useEffect(() => { settleWagerRef.current = settleWager }, [settleWager])
+
+  // ---- 賭け中は在室ハートビート ----
+  const inWagerMatch = !!(room && game?.phase === 'playing' && wagerKeyRef.current && me
+    && game.players?.some((p) => p.id === me.id))
+  useEffect(() => {
+    if (!inWagerMatch) return
+    const key = wagerKeyRef.current
+    wagerPing(key)
+    const iv = setInterval(() => wagerPing(key), 15000)
+    return () => clearInterval(iv)
+  }, [inWagerMatch])
 
   // ---- 認証 + is_adminゲート ----
   useEffect(() => {
@@ -157,11 +223,26 @@ export default function Mahjong() {
   const publishRoom = useCallback(async (status) => {
     const r = roomRef.current
     if (!r || r.hostId !== meRef.current?.id || !lobbyChRef.current) return
+    const s = settingsRef.current
     await lobbyChRef.current.track({
       roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName,
+      bet: s.bet || 0, hanchan: !!s.rules?.hanchan,
       count: membersRef.current.length + npcsRef.current.length, status,
     })
   }, [])
+
+  // ---- 部屋設定の変更(ホストのみ・全員へ同期) ----
+  const updateSettings = useCallback((patch) => {
+    const next = { ...settingsRef.current, ...patch }
+    settingsRef.current = next
+    setSettings(next)
+    roomChRef.current?.send({ type: 'broadcast', event: 'settings', payload: { settings: next } })
+    publishRoom(gameRef.current?.phase === 'playing' ? 'playing' : 'waiting')
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('bf-mahjong-room') || 'null')
+      if (saved) sessionStorage.setItem('bf-mahjong-room', JSON.stringify({ ...saved, settings: next }))
+    } catch { /* 無視 */ }
+  }, [publishRoom])
 
   // ---- ホスト: エンジン適用→配信 ----
   const hostBroadcast = useCallback((newState, events = []) => {
@@ -173,7 +254,10 @@ export default function Mahjong() {
     stateSeqRef.current += 1
     roomChRef.current?.send({
       type: 'broadcast', event: 'state',
-      payload: { seq: stateSeqRef.current, game: newState, events },
+      payload: {
+        seq: stateSeqRef.current, game: newState, events,
+        wagerKey: wagerKeyRef.current, disconnected: [...autoRef.current],
+      },
     })
   }, [])
 
@@ -261,8 +345,26 @@ export default function Mahjong() {
       if (gameRef.current && payload.seq < stateSeqRef.current) return
       stateSeqRef.current = payload.seq
       gameRef.current = payload.game
+      wagerKeyRef.current = payload.wagerKey || null
       setGame(payload.game)
+      setBetBusy(false)
       setRiichiMode(false); setChiPick(null); setKanPick(null); setHoverWait(null)
+      // 途中流局/流し満貫の演出
+      for (const ev of payload.events || []) {
+        if (ev.t === 'abort') setSplash({ what: ev.label, name: '途中流局' })
+        if (ev.t === 'nagashi') setSplash({ what: '流し満貫', name: ev.seats.map((s) => payload.game.players[s]?.name).join(' / ') })
+        if (ev.t === 'pao') showToast(`⚠ ${payload.game.players[ev.paoSeat]?.name} の責任払い(パオ)`)
+      }
+      // 賭け精算(終局時のみ)
+      const g = payload.game
+      if (g.phase === 'ended' && payload.wagerKey && !reportedRef.current.has(payload.wagerKey)) {
+        if (g.players.some((p) => p.id === myself.id)) {
+          reportedRef.current.add(payload.wagerKey)
+          const disc = new Set(payload.disconnected || [])
+          const lostIds = g.players.filter((p) => disc.has(p.id) && !isNpcId(p.id)).map((p) => p.id)
+          settleWagerRef.current?.(payload.wagerKey, g, lostIds)
+        }
+      }
       const calls = (payload.events || []).filter((ev) => ev.t === 'call')
       if (calls.length > 0) {
         // 大きな宣言演出(雀魂風)
@@ -290,28 +392,69 @@ export default function Mahjong() {
       setStamps((prev) => [...prev.slice(-4), { id, name: payload.name, text: payload.text }])
       setTimeout(() => setStamps((prev) => prev.filter((s) => s.id !== id)), 2600)
     })
+    // ---- 部屋設定の同期 ----
+    ch.on('broadcast', { event: 'settings' }, ({ payload }) => {
+      settingsRef.current = payload.settings
+      setSettings(payload.settings)
+    })
+    // ---- 賭けの供託フロー ----
+    ch.on('broadcast', { event: 'betcall' }, async ({ payload }) => {
+      if (!payload.humanIds.includes(myself.id)) return
+      setBetBusy(true)
+      const res = await wagerJoin(payload.key, 'mahjong', payload.bet)
+      if (res?.ok) ch.send({ type: 'broadcast', event: 'betok', payload: { playerId: myself.id, key: payload.key } })
+      else ch.send({ type: 'broadcast', event: 'betfail', payload: { playerId: myself.id, key: payload.key, msg: res?.error || '供託に失敗しました' } })
+    })
+    ch.on('broadcast', { event: 'betok' }, ({ payload }) => {
+      const bp = betPendingRef.current
+      if (roomInfo.hostId !== myself.id || !bp || bp.key !== payload.key) return
+      bp.ok.add(payload.playerId)
+      if ([...bp.need].every((id) => bp.ok.has(id))) {
+        betPendingRef.current = null
+        setBetBusy(false)
+        bp.start(bp.key)
+      }
+    })
+    ch.on('broadcast', { event: 'betfail' }, ({ payload }) => {
+      if (roomInfo.hostId === myself.id && betPendingRef.current?.key === payload.key) {
+        betPendingRef.current = null
+        ch.send({ type: 'broadcast', event: 'betabort', payload: { key: payload.key, msg: `${payload.msg}(対局中止)` } })
+      }
+    })
+    ch.on('broadcast', { event: 'betabort' }, async ({ payload }) => {
+      setBetBusy(false)
+      showToast(`💰 ${payload.msg}`)
+      await wagerReport(payload.key, null)
+    })
     // リロード復帰者からの状態要求: 誰でも持っていれば現在のstateを返す(ホストのリロードにも対応)
     ch.on('broadcast', { event: 'statereq' }, () => {
       if (gameRef.current) {
-        ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [] } })
+        ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [], wagerKey: wagerKeyRef.current, disconnected: [...autoRef.current] } })
       }
+      ch.send({ type: 'broadcast', event: 'settings', payload: { settings: settingsRef.current } })
     })
     ch.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        await ch.track({ name: myself.name, joinedAt: Date.now(), spectator: asSpectator })
+        myJoinedAtRef.current = Date.now()
+        await ch.track({ name: myself.name, joinedAt: myJoinedAtRef.current, spectator: asSpectator })
         ch.send({ type: 'broadcast', event: 'statereq', payload: {} }) // リロード復帰時の状態再取得
       }
     })
     // リロードしても部屋に戻れるよう保存(明示退室/解散でクリア)
-    try { sessionStorage.setItem('bf-mahjong-room', JSON.stringify({ roomInfo, spectator: asSpectator })) } catch { /* 無視 */ }
+    try { sessionStorage.setItem('bf-mahjong-room', JSON.stringify({ roomInfo, spectator: asSpectator, settings: settingsRef.current })) } catch { /* 無視 */ }
     roomChRef.current = ch
     setRoom(roomInfo); roomRef.current = roomInfo
     setView('room')
     setGame(null); gameRef.current = null
     stateSeqRef.current = 0
     autoRef.current = new Set()
+    wagerKeyRef.current = null
+    betPendingRef.current = null
+    setBetBusy(false)
+    settingsRef.current = DEFAULT_SETTINGS
+    setSettings(DEFAULT_SETTINGS)
     setLastResult(null)
-  }, [hostApply, publishRoom])
+  }, [hostApply, publishRoom]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const leaveRoom = useCallback(() => {
     const r = roomRef.current
@@ -331,6 +474,9 @@ export default function Mahjong() {
     setNpcs([]); npcsRef.current = []
     setLastResult(null)
     setStamps([])
+    wagerKeyRef.current = null
+    betPendingRef.current = null
+    setBetBusy(false)
     if (hostGraceRef.current) { clearTimeout(hostGraceRef.current); hostGraceRef.current = null }
     try { sessionStorage.removeItem('bf-mahjong-room') } catch { /* 無視 */ }
     setView('lobby')
@@ -343,7 +489,10 @@ export default function Mahjong() {
     if (!me || roomRef.current) return
     try {
       const saved = JSON.parse(sessionStorage.getItem('bf-mahjong-room') || 'null')
-      if (saved?.roomInfo) joinRoom(saved.roomInfo, !!saved.spectator)
+      if (saved?.roomInfo) {
+        joinRoom(saved.roomInfo, !!saved.spectator)
+        if (saved.settings) { settingsRef.current = saved.settings; setSettings(saved.settings) }
+      }
     } catch { /* 無視 */ }
   }, [me]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -383,8 +532,31 @@ export default function Mahjong() {
       const j = Math.floor(Math.random() * (i + 1))
       ;[order[i], order[j]] = [order[j], order[i]]
     }
-    hostBroadcast(createMahjongGame({ players: order }), [])
-    publishRoom('playing')
+    const s = settingsRef.current
+    const actuallyStart = (wKey) => {
+      wagerKeyRef.current = wKey
+      hostBroadcast(createMahjongGame({ players: order, rules: s.rules }), [])
+      publishRoom('playing')
+    }
+    // 賭けあり(人間2人以上)なら先に全員の供託を待つ
+    const humans = order.filter((p) => !isNpcId(p.id)).map((p) => p.id)
+    if (s.bet > 0 && humans.length >= 2) {
+      const key = `${roomRef.current.id}:${Date.now()}`
+      betPendingRef.current = { key, need: new Set(humans), ok: new Set(), start: actuallyStart }
+      setBetBusy(true)
+      roomChRef.current?.send({ type: 'broadcast', event: 'betcall', payload: { key, humanIds: humans, bet: s.bet } })
+      setTimeout(() => {
+        if (betPendingRef.current?.key === key) {
+          betPendingRef.current = null
+          roomChRef.current?.send({ type: 'broadcast', event: 'betabort', payload: { key, msg: '供託が揃いませんでした(対局中止)' } })
+        }
+      }, 15000)
+    } else actuallyStart(null)
+  }
+
+  // ---- プレイ⇔観戦の切替 ----
+  const setSpectatorMode = (next) => {
+    roomChRef.current?.track({ name: meRef.current.name, joinedAt: myJoinedAtRef.current, spectator: next })
   }
 
   const sendAction = useCallback((action) => {
@@ -524,7 +696,11 @@ export default function Mahjong() {
           <div key={r.roomId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #224466', padding: '10px 12px', marginBottom: 8 }}>
             <div>
               <div style={{ fontSize: 13 }}>{r.title}</div>
-              <div style={{ fontSize: 10, color: '#668' }}>主: {r.hostName} / {r.count}人 / {r.status === 'playing' ? '🟢 対局中(観戦可)' : '🟡 募集中'}</div>
+              <div style={{ fontSize: 10, color: '#668' }}>
+                主: {r.hostName} / {r.count}人 / {r.status === 'playing' ? '🟢 対局中(観戦可)' : '🟡 募集中'}
+                <span style={{ color: '#aa88cc' }}> / {r.hanchan ? '半荘' : '東風'}</span>
+                {r.bet > 0 && <span style={{ color: '#ffaa00' }}> / 💰{Number(r.bet).toLocaleString()}G</span>}
+              </div>
             </div>
             {r.status === 'playing' ? (
               <button onClick={() => joinRoom({ id: r.roomId, title: r.title, hostId: r.hostId, hostName: r.hostName })} style={btnStyle('#88ccff')}>観戦入室</button>
@@ -557,9 +733,64 @@ export default function Mahjong() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <button onClick={leaveRoom} style={btnStyle('#88ccff')}>← 退室</button>
           <div style={{ color: '#ffcc44', fontSize: 13 }}>{room.title}</div>
-          {isHost ? <button onClick={startGame} style={btnStyle('#ffcc44')}>対局開始</button> : <div style={{ width: 60 }} />}
+          {isHost
+            ? <button onClick={startGame} disabled={betBusy} style={btnStyle(betBusy ? '#446' : '#ffcc44', { opacity: betBusy ? 0.5 : 1 })}>{betBusy ? '供託待ち…' : '対局開始'}</button>
+            : <div style={{ width: 60 }} />}
+        </div>
+        {/* ゲーム設定(ホストが変更・全員へ同期) */}
+        <div style={{ border: '1px solid #224466', padding: '8px 12px', fontSize: 12, marginBottom: 10 }}>
+          <div style={{ color: '#88ccff', marginBottom: 6 }}>ゲーム設定{!isHost && '(ホストが変更できます)'}</div>
+          {isHost ? (
+            <>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+                {[[false, '東風戦'], [true, '半荘戦']].map(([v, label]) => (
+                  <button key={label} onClick={() => updateSettings({ rules: { ...settings.rules, hanchan: v } })}
+                    style={btnStyle(!!settings.rules.hanchan === v ? '#ffcc44' : '#446688', { fontSize: 11, background: !!settings.rules.hanchan === v ? 'rgba(255,204,68,0.1)' : 'none' })}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+                {[['kuikae', '喰い替え許可'], ['agariyame', 'アガリやめ'], ['nagashi', '流し満貫'], ['uma', 'ウマ・オカ'], ['tochu', '途中流局']].map(([k, label]) => {
+                  const on = k === 'kuikae' ? !!settings.rules.kuikae : settings.rules[k] !== false
+                  return (
+                    <button key={k} onClick={() => updateSettings({ rules: { ...settings.rules, [k]: !on } })}
+                      style={btnStyle(on ? '#ffcc44' : '#446688', { fontSize: 11, background: on ? 'rgba(255,204,68,0.1)' : 'none' })}>
+                      {on ? '✓ ' : ''}{label}
+                    </button>
+                  )
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: '#ffaa00' }}>💰</span>
+                {BET_PRESETS.map((b) => (
+                  <button key={b} onClick={() => updateSettings({ bet: b })}
+                    style={btnStyle(Number(settings.bet) === b ? '#ffcc44' : '#446688', { fontSize: 11 })}>
+                    {b === 0 ? '賭けなし' : `${b.toLocaleString()}G`}
+                  </button>
+                ))}
+                <input type="number" value={settings.bet} min={0} max={MAX_BET}
+                  onChange={(e) => updateSettings({ bet: Math.max(0, Math.min(MAX_BET, Math.floor(Number(e.target.value) || 0))) })}
+                  style={{ width: 90, background: '#001122', border: '1px solid #224466', color: '#ffaa00', padding: '4px 6px', fontFamily: 'monospace', fontSize: 11 }} />
+              </div>
+              <div style={{ fontSize: 9, color: '#668', marginTop: 4 }}>賭けは人間2人以上で成立・最終順位で分配(1位60%以上)・NPC勝ち/引き分けは返金</div>
+            </>
+          ) : (
+            <div style={{ fontSize: 12 }}>
+              <span style={{ color: '#ffcc44' }}>{settings.rules.hanchan ? '半荘戦' : '東風戦'}</span>
+              <span style={{ color: '#aa88cc', marginLeft: 8 }}>
+                {[settings.rules.kuikae && '喰い替え可', settings.rules.agariyame !== false && 'アガリやめ', settings.rules.nagashi !== false && '流し満貫', settings.rules.uma !== false && 'ウマ', settings.rules.tochu !== false && '途中流局'].filter(Boolean).join('/')}
+              </span>
+              <span style={{ color: '#ffaa00', marginLeft: 8 }}>{settings.bet > 0 ? `💰${Number(settings.bet).toLocaleString()}G` : '賭けなし'}</span>
+            </div>
+          )}
         </div>
         <div style={{ border: '1px solid #224466', padding: '8px 12px', fontSize: 12 }}>
+          {settings.bet > 0 && (
+            <div style={{ border: '1px solid #8a6a22', background: 'rgba(255,170,0,0.08)', padding: '4px 8px', marginBottom: 6, color: '#ffaa00', fontSize: 11 }}>
+              💰 賭け対局: 1人 {Number(settings.bet).toLocaleString()}G
+            </div>
+          )}
           {lastResult && (
             <div style={{ border: '1px solid #665522', background: 'rgba(255,204,68,0.07)', padding: '4px 8px', marginBottom: 6, color: '#ffcc44', fontSize: 11 }}>
               前回の結果: {lastResult}
@@ -580,6 +811,14 @@ export default function Mahjong() {
             const specs = members.filter((m) => !seated.some((s) => s.id === m.id))
             if (specs.length === 0) return null
             return <div style={{ color: '#668', marginTop: 4 }}>▼ 観戦者: {specs.map((m) => m.name).join('　')}</div>
+          })()}
+          {(() => {
+            const meSpec = !!members.find((m) => m.id === me.id)?.spectator
+            return (
+              <button onClick={() => setSpectatorMode(!meSpec)} style={btnStyle(meSpec ? '#44dd88' : '#88ccff', { marginTop: 8, padding: '4px 10px', fontSize: 11 })}>
+                {meSpec ? '⚔ 対局に参加する' : '👀 観戦にまわる'}
+              </button>
+            )
           })()}
         </div>
         <StampBar spectator={!seated.some((s) => s.id === me.id)} players={seated} onSend={sendStamp} />
@@ -675,6 +914,7 @@ export default function Mahjong() {
       }} style={btnStyle('#44dd88', { fontSize: 14 })}>カン</button>)
     }
     if (turnOpts.canKita) actionButtons.push(<button key="kita" onClick={() => sendAction({ type: 'kita' })} style={btnStyle('#dd88ff', { fontSize: 14 })}>北抜き</button>)
+    if (turnOpts.canKyuushu) actionButtons.push(<button key="kyuushu" onClick={() => sendAction({ type: 'kyuushu' })} style={btnStyle('#88ccff', { fontSize: 14 })}>九種九牌</button>)
   }
   // 鳴き/ロンの反応は目立つ専用パネルに出す
   const claimButtons = []
@@ -715,7 +955,8 @@ export default function Mahjong() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <button onClick={leaveRoom} style={btnStyle('#88ccff')}>← 退室</button>
         <div style={{ fontSize: 12, color: '#ffcc44' }}>
-          東{game.round.num}局 {game.round.honba > 0 ? `${game.round.honba}本場` : ''} 供託{game.round.sticks}
+          {WINDS[game.round.wind || 0]}{game.round.num}局 {game.round.honba > 0 ? `${game.round.honba}本場` : ''} 供託{game.round.sticks}
+          {wagerKeyRef.current && settings.bet > 0 && <span style={{ color: '#ffaa00', marginLeft: 6 }}>💰{Number(settings.bet).toLocaleString()}G</span>}
         </div>
         <div style={{ fontSize: 11, color: '#668' }}>山 {game.wall.length}枚</div>
       </div>
@@ -726,6 +967,19 @@ export default function Mahjong() {
         {dora.map((k, i) => <Tile key={i} k={k} small />)}
         <span style={{ color: '#668', marginLeft: 6 }}>(ドラ: {dora.map((k) => KIND_NAMES[doraFromIndicator(k)]).join(' ')})</span>
       </div>
+
+      {/* ターンバナー */}
+      {playing && game.await?.type === 'turn' && game.players[game.await.seat] && (
+        <div style={{
+          textAlign: 'center', fontSize: 14, fontWeight: 'bold', width: '100%',
+          color: game.await.seat === mySeat ? '#ffcc44' : '#88ccff',
+          background: game.await.seat === mySeat ? 'rgba(255,204,68,0.12)' : 'rgba(68,136,204,0.08)',
+          border: `1px solid ${game.await.seat === mySeat ? '#8a7a33' : '#335577'}`,
+          borderRadius: 8, padding: '4px 0', margin: '2px 0 8px',
+        }}>
+          ▶ {game.await.seat === mySeat ? 'あなた' : game.players[game.await.seat].name}のターン
+        </div>
+      )}
 
       {/* 各家 */}
       {game.players.map((_, s) => (s !== mySeat ? renderPlayerRow(s) : null))}
@@ -875,12 +1129,28 @@ export default function Mahjong() {
               ))
             ) : (
               <div>
-                <div style={{ color: '#ffcc44', fontSize: 15, marginBottom: 8 }}>流局</div>
-                {game.players.map((p, s) => (
-                  <div key={s} style={{ fontSize: 12, marginBottom: 4 }}>
-                    {p.name}: {game.roundResult.tenpai[s] ? <span style={{ color: '#44dd88' }}>テンパイ</span> : <span style={{ color: '#668' }}>ノーテン</span>}
-                  </div>
-                ))}
+                {game.roundResult.type === 'abort' ? (
+                  <>
+                    <div style={{ color: '#ff8866', fontSize: 15, marginBottom: 8 }}>途中流局({game.roundResult.label})</div>
+                    <div style={{ fontSize: 11, color: '#668' }}>点棒の移動なし・親は流れません(本場+1)</div>
+                  </>
+                ) : game.roundResult.type === 'nagashi' ? (
+                  <>
+                    <div style={{ color: '#ffcc44', fontSize: 15, marginBottom: 8 }}>🎊 流し満貫</div>
+                    {game.roundResult.results.map((r, i) => (
+                      <div key={i} style={{ fontSize: 12, marginBottom: 4 }}>{r.name}: +{r.gain}点</div>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    <div style={{ color: '#ffcc44', fontSize: 15, marginBottom: 8 }}>流局</div>
+                    {game.players.map((p, s) => (
+                      <div key={s} style={{ fontSize: 12, marginBottom: 4 }}>
+                        {p.name}: {game.roundResult.tenpai?.[s] ? <span style={{ color: '#44dd88' }}>テンパイ</span> : <span style={{ color: '#668' }}>ノーテン</span>}
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             )}
             <div style={{ fontSize: 12, color: '#88ccff', marginTop: 8 }}>
@@ -901,8 +1171,9 @@ export default function Mahjong() {
         <div style={{ border: '1px solid #ffcc44', padding: 12, marginTop: 10 }}>
           <div style={{ color: '#ffcc44', fontSize: 14, marginBottom: 8 }}>最終結果</div>
           {game.finalStandings.map((s, i) => (
-            <div key={s.seat} style={{ fontSize: 13, color: i === 0 ? '#ffcc44' : '#cde' }}>
+            <div key={s.seat} style={{ fontSize: 13, color: rankColor(i + 1) }}>
               {i + 1}位 {s.name}: {s.score}点
+              {s.pt !== undefined && <span style={{ color: s.pt >= 0 ? '#44dd88' : '#ff8866', marginLeft: 8 }}>{s.pt >= 0 ? '+' : ''}{s.pt}pt</span>}
             </div>
           ))}
           {isHost && <button onClick={startGame} style={btnStyle('#ffcc44', { marginTop: 10 })}>もう一局</button>}

@@ -458,13 +458,27 @@ export const isNpcId = (id) => typeof id === 'string' && id.startsWith('npc-')
 const clone = (o) => JSON.parse(JSON.stringify(o))
 const sortHand = (h) => h.sort((a, b) => a.k - b.k || (a.r ? -1 : 1) - (b.r ? -1 : 1) || a.id - b.id)
 
-export function createMahjongGame({ players }) {
+// 既定ルール(雀魂準拠)。hanchan=半荘(東南戦) / agariyame=オーラス親の和了やめ
+export const DEFAULT_MJ_RULES = {
+  hanchan: false,     // false=東風戦 / true=半荘戦
+  kuikae: false,      // 喰い替えを許可するか(既定は禁止)
+  agariyame: true,    // オーラス親のトップ目和了やめ・テンパイやめ
+  nagashi: true,      // 流し満貫
+  uma: true,          // ウマ・オカ(順位点)を最終結果に付ける
+  tochu: true,        // 途中流局(九種九牌/四風連打/四家立直/四槓散了/三家和)
+}
+const UMA_4 = [20, 10, -10, -20] // 順位点(1位→4位)
+const UMA_3 = [20, 0, -20]
+
+export function createMahjongGame({ players, rules = {} }) {
   const sanma = players.length === 3
+  const r = { ...DEFAULT_MJ_RULES, ...rules }
   const st = {
-    mode: 'mahjong', sanma,
+    mode: 'mahjong', sanma, rules: r,
     players: players.map((p) => ({ id: p.id, name: p.name, score: sanma ? 35000 : 25000, auto: false })),
-    round: { num: 1, honba: 0, sticks: 0, dealer: 0 }, // 東{num}局
-    maxRounds: players.length, // 東風戦
+    round: { wind: 0, num: 1, honba: 0, sticks: 0, dealer: 0 }, // wind: 0=東場 1=南場
+    maxRounds: players.length,           // 1場あたりの局数
+    maxWind: r.hanchan ? 1 : 0,          // 0=東風戦(東場まで) / 1=半荘戦(南場まで)
     phase: 'playing',
     roundResult: null,
     finalStandings: null,
@@ -505,6 +519,10 @@ function startRound(st) {
   st.kakanPending = null
   st.rinshanFlag = false
   st.roundResult = null
+  st.kanBy = []          // 各カンの実行者(四槓散了判定用)
+  st.pao = []            // パオ(責任払い): [seat] -> 責任者seat
+  st.kuikaeBan = []      // 鳴き直後の喰い替え禁止牌 [seat] -> kind[]
+  st.nagashiAlive = st.players.map(() => true) // 流し満貫の候補(么九牌のみ切り+鳴かれていない)
   st.phase = 'playing'
   st.turn = st.round.dealer
   drawTile(st, st.turn)
@@ -552,7 +570,7 @@ function winResult(st, seat, kind, opts) {
     winKind: kind,
     tsumo: !!opts.tsumo,
     riichi: !!ri, doubleRiichi: !!ri?.double, ippatsu: !!ri?.ippatsu,
-    seatWind: seatWindOf(st, seat), roundWind: EAST,
+    seatWind: seatWindOf(st, seat), roundWind: EAST + (st.round.wind || 0),
     doraKinds: liveDora(st), uraKinds: ri ? liveUra(st) : [],
     akaCount, kitaCount: st.kitaCounts[seat],
     haitei: !!opts.haitei, houtei: !!opts.houtei, rinshan: !!opts.rinshan, chankan: !!opts.chankan,
@@ -576,8 +594,14 @@ function isFuriten(st, seat) {
 // ---- 手番プレイヤーの選択肢 ----
 export function getTurnOptions(st, seat) {
   if (st.phase !== 'playing' || st.await?.type !== 'turn' || st.await.seat !== seat) return null
-  const opts = { canTsumo: false, riichiTiles: [], kans: [], canKita: false, riichi: !!st.riichis[seat] }
+  const opts = { canTsumo: false, riichiTiles: [], kans: [], canKita: false, canKyuushu: false, riichi: !!st.riichis[seat] }
   const drawn = st.drawn
+  // 九種九牌: 第1ツモ(自分の1巡目・鳴きなし)で么九牌が9種類以上
+  if (st.rules?.tochu !== false && drawn && st.turnsTaken[seat] === 1 && !st.anyCalls) {
+    const c = countsOf([...st.hands[seat], drawn])
+    const kinds = KOKUSHI_KINDS.filter((k) => c[k] > 0).length
+    if (kinds >= 9) opts.canKyuushu = true
+  }
   if (drawn) {
     const firstTurn = st.turnsTaken[seat] === 1 && !st.anyCalls
     const r = winResult(st, seat, drawn.k, {
@@ -677,6 +701,12 @@ export function applyMahjong(state, playerId, action) {
       case 'tsumo': return doTsumo(st, seat, ev)
       case 'kan': return doKan(st, seat, action, ev)
       case 'kita': return doKita(st, seat, ev)
+      case 'kyuushu': {
+        requireTurn(st, seat)
+        const o = getTurnOptions(st, seat)
+        if (!o?.canKyuushu) return { error: '九種九牌を宣言できません' }
+        return abortiveDraw(st, 'kyuushu', ev)
+      }
       case 'ron': return doClaim(st, seat, { claim: 'ron' }, ev)
       case 'pon': return doClaim(st, seat, { claim: 'pon' }, ev)
       case 'minkan': return doClaim(st, seat, { claim: 'minkan' }, ev)
@@ -701,6 +731,10 @@ function doDiscard(st, seat, action, ev, riichi) {
   if (idx === -1) return { error: 'その牌は持っていません' }
   const tile = hand14[idx]
   if (st.riichis[seat] && st.drawn && tile.id !== st.drawn.id) return { error: 'リーチ中はツモ切りのみです' }
+  // 喰い替え禁止(鳴いた直後に同じ牌・筋の牌は切れない)
+  if (st.rules?.kuikae === false && (st.kuikaeBan?.[seat] || []).includes(tile.k)) {
+    return { error: '喰い替えはできません' }
+  }
   if (riichi) {
     const opts = getTurnOptions(st, seat)
     if (!opts.riichiTiles.includes(tile.k)) return { error: 'その牌ではリーチできません' }
@@ -715,8 +749,28 @@ function doDiscard(st, seat, action, ev, riichi) {
   // 一発消滅(リーチ後の自分の打牌)
   if (st.riichis[seat]?.ippatsu && !riichi) st.riichis[seat].ippatsu = false
   st.discards[seat].push({ id: tile.id, k: tile.k, r: tile.r, riichi })
+  if (st.kuikaeBan) st.kuikaeBan[seat] = [] // 打牌したら喰い替え制限は解除
+  if (!isTermHonor(tile.k) || st.melds[seat].length > 0) st.nagashiAlive[seat] = false // 流し満貫の候補から外れる
   if (riichi) st.pendingRiichi = { seat, double: st.turnsTaken[seat] === 1 && !st.anyCalls }
   ev.push({ t: 'discard', seat, kind: tile.k })
+  // ---- 途中流局: 九種九牌は打牌前に宣言する形だが、ここでは四風連打/四家立直を判定 ----
+  const tochu = st.rules?.tochu !== false
+  if (tochu) {
+    // 四風連打: 開局から全員が同じ風牌を1枚ずつ切った(鳴きなし)
+    const n = st.players.length
+    if (!st.anyCalls && n === 4 && st.discards.every((d) => d.length === 1)
+        && st.discards.every((d) => d[0].k === st.discards[0][0].k) && st.discards[0][0].k >= EAST && st.discards[0][0].k <= NORTH) {
+      return abortiveDraw(st, 'suufonrenda', ev)
+    }
+    // 四家立直: 4人全員がリーチ(この宣言が通った時点)
+    if (riichi && st.riichis.filter(Boolean).length + 1 >= n && n >= 4) {
+      st.pendingRiichi = null
+      st.riichis[seat] = { double: false, ippatsu: false }
+      st.players[seat].score -= 1000
+      st.round.sticks++
+      return abortiveDraw(st, 'suuchariichi', ev)
+    }
+  }
   return openClaims(st, seat, tile, ev, false)
 }
 
@@ -778,6 +832,10 @@ function resolveClaims(st, ev) {
     }
   }
   if (rons.length > 0) {
+    // 三家和(4人戦で3人同時ロン)は途中流局
+    if (st.rules?.tochu !== false && n === 4 && rons.length >= 3) {
+      return abortiveDraw(st, 'sanchaho', ev)
+    }
     return settleWin(st, rons.sort((a, b) => ((a - fromSeat + n) % n) - ((b - fromSeat + n) % n)),
       { tsumo: false, fromSeat, winKind: tileKind, winRed: tileRed, chankan }, ev)
   }
@@ -801,6 +859,7 @@ function resolveClaims(st, ev) {
     const disc = st.discards[fromSeat]
     const called = disc[disc.length - 1]
     called.called = true
+    st.nagashiAlive[fromSeat] = false // 鳴かれたので流し満貫の候補から外れる
     const takeTiles = (seat, kind, count) => {
       const taken = []
       // 赤でない牌から使う(赤は手元に残す)
@@ -817,6 +876,8 @@ function resolveClaims(st, ev) {
       const mine = takeTiles(seat, tileKind, 2)
       st.melds[seat].push({ type: 'pon', k: tileKind, tiles: [...mine, calledTile], from: fromSeat })
       ev.push({ t: 'call', seat, what: 'ポン' })
+      st.kuikaeBan[seat] = [tileKind] // 喰い替え禁止: ポンした牌と同じ牌は切れない
+      checkPao(st, seat, fromSeat)    // パオ(責任払い)判定
       st.drawn = null
       st.await = { type: 'turn', seat, deadline: 0 }
       st.turn = seat
@@ -827,8 +888,12 @@ function resolveClaims(st, ev) {
       const mine = takeTiles(seat, tileKind, 3)
       st.melds[seat].push({ type: 'minkan', k: tileKind, tiles: [...mine, calledTile], from: fromSeat })
       st.kanCount++
+      st.kanBy.push(seat)
+      checkPao(st, seat, fromSeat)   // パオ(責任払い)判定
       if (st.doraRevealed < 5) st.doraRevealed++
       ev.push({ t: 'call', seat, what: 'カン' })
+      const ab = checkSuukaikan(st, ev)
+      if (ab) return ab
       st.turn = seat
       drawTile(st, seat, true)
       st.rinshanFlag = true
@@ -839,6 +904,14 @@ function resolveClaims(st, ev) {
     const t2 = takeTiles(seat, chi[1], 1)
     st.melds[seat].push({ type: 'chi', k: Math.min(tileKind, chi[0], chi[1]), tiles: [...t1, ...t2, calledTile], from: fromSeat })
     ev.push({ t: 'call', seat, what: 'チー' })
+    // 喰い替え禁止: 鳴いた牌と同じ牌 + 順子の反対側(筋)の牌は切れない
+    {
+      const ban = [tileKind]
+      const lo = Math.min(chi[0], chi[1]), hi = Math.max(chi[0], chi[1])
+      if (tileKind === lo - 1 && numOf(hi) <= 8 && suitOf(hi + 1) === suitOf(hi)) ban.push(hi + 1)
+      if (tileKind === hi + 1 && numOf(lo) >= 2 && suitOf(lo - 1) === suitOf(lo)) ban.push(lo - 1)
+      st.kuikaeBan[seat] = ban
+    }
     st.drawn = null
     st.await = { type: 'turn', seat, deadline: 0 }
     st.turn = seat
@@ -878,10 +951,29 @@ function doKan(st, seat, action, ev) {
     st.drawn = null
     st.melds[seat].push({ type: 'ankan', k: kan.kind, tiles, from: null })
     st.kanCount++
+    st.kanBy.push(seat)
     if (st.doraRevealed < 5) st.doraRevealed++
     st.anyCalls = true
     for (let s = 0; s < st.players.length; s++) if (st.riichis[s]) st.riichis[s].ippatsu = false
     ev.push({ t: 'call', seat, what: 'カン' })
+    const ab = checkSuukaikan(st, ev)
+    if (ab) return ab
+    // 国士無双の暗槓に対する槍槓(大明槓と同じくロンのみ受け付ける)
+    const kokushiRon = st.players.some((p, s) => {
+      if (s === seat || st.melds[s].length > 0) return false
+      const cc = countsOf(st.hands[s]); cc[kan.kind]++
+      return isWinningHand(cc, 0) && KOKUSHI_KINDS.includes(kan.kind)
+    })
+    if (kokushiRon) {
+      st.kokushiAnkan = true
+      const r = openClaims(st, seat, tiles[0], ev, true)
+      st.kokushiAnkan = false
+      // 誰もロンしなければ continueKokushiAnkan 経由で嶺上へ(kakanPendingで代用)
+      if (r.state.await?.type === 'claims') {
+        r.state.kakanPending = { seat, kind: kan.kind, tileId: tiles[0].id, tileRed: false, tile: tiles[0], ankan: true }
+        return r
+      }
+    }
     st.turn = seat
     drawTile(st, seat, true)
     st.rinshanFlag = true
@@ -899,12 +991,20 @@ function doKan(st, seat, action, ev) {
 }
 
 function continueKakan(st, ev) {
-  const { seat, kind, tile } = st.kakanPending
+  const { seat, kind, tile, ankan } = st.kakanPending
+  st.kakanPending = null
+  if (ankan) {
+    // 国士の槍槓が起きなかった暗槓: 既に成立済みなので嶺上ツモへ進むだけ
+    st.turn = seat
+    drawTile(st, seat, true)
+    st.rinshanFlag = true
+    return { state: st, events: ev }
+  }
   const meld = st.melds[seat].find((m) => m.type === 'pon' && m.k === kind)
   meld.type = 'kakan'
   meld.tiles = [...meld.tiles, tile]
-  st.kakanPending = null
   st.kanCount++
+  st.kanBy.push(seat)
   if (st.doraRevealed < 5) st.doraRevealed++
   st.anyCalls = true
   for (let s = 0; s < st.players.length; s++) if (st.riichis[s]) st.riichis[s].ippatsu = false
@@ -951,7 +1051,24 @@ function settleWin(st, winners, opts, ev) {
     const isDealer = seat === st.round.dealer
     const pay = calcPayments(r, isDealer, !!opts.tsumo, st.sanma)
     let gain = 0
-    if (opts.tsumo) {
+    // パオ(責任払い): 役満をその鳴きで確定させた者が支払う
+    //   ツモ和了 → 責任者が全額 / ロン和了 → 責任者と放銃者で折半
+    const paoSeat = (r.yakuman > 0 && st.pao?.[seat] !== undefined && st.pao[seat] !== null) ? st.pao[seat] : null
+    if (paoSeat !== null && paoSeat !== seat) {
+      const full = (isDealer ? 6 : 4) * (r.yakuman > 0 ? 8000 * r.yakuman : 0)
+      const honbaAll = honba * 300
+      if (opts.tsumo) {
+        const amount = full + honbaAll
+        st.players[paoSeat].score -= amount
+        gain += amount
+      } else {
+        const half = Math.ceil(full / 2 / 100) * 100
+        st.players[paoSeat].score -= half + (first ? honbaAll / 2 : 0)
+        st.players[opts.fromSeat].score -= (full - half) + (first ? honbaAll / 2 : 0)
+        gain += full + (first ? honbaAll : 0)
+      }
+      ev.push({ t: 'pao', seat, paoSeat })
+    } else if (opts.tsumo) {
       if (isDealer) {
         for (let s = 0; s < n; s++) {
           if (s === seat) continue
@@ -991,9 +1108,69 @@ function settleWin(st, winners, opts, ev) {
   return finishRound(st, dealerWon, !dealerWon, ev)
 }
 
+// ---- 途中流局(九種九牌/四風連打/四家立直/四槓散了/三家和) ----
+// 点棒移動なし・親は流れない(連荘)・本場+1
+const ABORT_LABEL = {
+  kyuushu: '九種九牌', suufonrenda: '四風連打', suuchariichi: '四家立直',
+  suukaikan: '四槓散了', sanchaho: '三家和',
+}
+// パオ(責任払い)判定: 鳴かせたことで大三元/大四喜の3つ目・4つ目を確定させた者は責任を負う
+// meldsは鳴き適用後の状態。fromSeat=鳴かれた側
+function checkPao(st, seat, fromSeat) {
+  if (fromSeat === null || fromSeat === undefined || fromSeat === seat) return
+  const open = st.melds[seat].filter((m) => m.type !== 'ankan')
+  const dragons = open.filter((m) => m.k >= HAKU).length
+  const winds = open.filter((m) => m.k >= EAST && m.k <= NORTH).length
+  if (dragons === 3 || winds === 4) st.pao[seat] = fromSeat
+}
+
+// 四槓散了: 4つのカンが2人以上に分散していたら流局(1人で4つ=四槓子なので続行)
+function checkSuukaikan(st, ev) {
+  if (st.rules?.tochu === false) return null
+  if (st.kanCount < 4) return null
+  const uniq = new Set(st.kanBy)
+  if (uniq.size <= 1) return null
+  return abortiveDraw(st, 'suukaikan', ev)
+}
+
+function abortiveDraw(st, reason, ev) {
+  st.roundResult = { type: 'abort', reason, label: ABORT_LABEL[reason] || '途中流局', dealerRepeat: true }
+  ev.push({ t: 'abort', reason, label: ABORT_LABEL[reason] || '途中流局' })
+  return finishRound(st, true, false, ev)
+}
+
 // ---- 流局 ----
 function settleDraw(st, ev) {
   const n = st.players.length
+  // 流し満貫: 自分の捨て牌が全て么九牌で1枚も鳴かれていない → 満貫のツモ和了相当
+  if (st.rules?.nagashi !== false) {
+    const nagashiSeats = []
+    for (let s = 0; s < n; s++) {
+      if (!st.nagashiAlive?.[s]) continue
+      const d = st.discards[s]
+      if (d.length > 0 && d.every((x) => isTermHonor(x.k) && !x.called)) nagashiSeats.push(s)
+    }
+    if (nagashiSeats.length > 0) {
+      const results = []
+      for (const seat of nagashiSeats) {
+        const isDealer = seat === st.round.dealer
+        const pay = calcPayments({ yakuman: 0, totalHan: 5, fu: 30 }, isDealer, true, st.sanma)
+        let gain = 0
+        for (let s = 0; s < n; s++) {
+          if (s === seat) continue
+          const amount = isDealer ? pay.each : (s === st.round.dealer ? pay.fromDealer : pay.fromOthers)
+          st.players[s].score -= amount
+          gain += amount
+        }
+        st.players[seat].score += gain
+        results.push({ seat, name: st.players[seat].name, gain, rank: '流し満貫' })
+      }
+      const dealerNagashi = nagashiSeats.includes(st.round.dealer)
+      st.roundResult = { type: 'nagashi', results, dealerRepeat: dealerNagashi }
+      ev.push({ t: 'nagashi', seats: nagashiSeats })
+      return finishRound(st, dealerNagashi, !dealerNagashi, ev)
+    }
+  }
   const tenpai = []
   for (let s = 0; s < n; s++) tenpai.push(seatWaits(st, s).length > 0)
   const tCount = tenpai.filter(Boolean).length
@@ -1017,10 +1194,22 @@ function finishRound(st, dealerRepeat, resetHonba, ev) {
   else st.round.honba = 0
   st.await = null
   st.drawn = null
-  // トビ or 規定局数終了
+  const n = st.players.length
   const busted = st.players.some((p) => p.score < 0)
-  const isLast = st.round.num >= st.maxRounds
-  st.roundResult.gameOver = busted || (!dealerRepeat && isLast)
+  const isLastRound = (st.round.wind || 0) >= st.maxWind && st.round.num >= st.maxRounds // オーラス
+  let over = busted
+  if (!over && isLastRound) {
+    if (!dealerRepeat) over = true
+    else if (st.rules?.agariyame !== false) {
+      // アガリやめ/テンパイやめ: オーラス親が連荘条件を満たしてもトップなら終局
+      const dScore = st.players[st.round.dealer].score
+      const top = Math.max(...st.players.map((p) => p.score))
+      if (dScore >= top) over = true
+    }
+    // 連荘上限(無限ループ防止): オーラスは本場が規定を超えたら強制終了
+    if (!over && st.round.honba >= 8) over = true
+  }
+  st.roundResult.gameOver = over
   st.phase = 'roundEnd'
   return { state: st, events: ev }
 }
@@ -1033,24 +1222,41 @@ function doNext(st, ev) {
     order[0].scoreWithSticks = true
     st.players[order[0].seat].score += st.round.sticks * 1000
     st.round.sticks = 0
-    st.finalStandings = st.players.map((p, i) => ({ seat: i, name: p.name, score: p.score }))
+    // ウマ・オカ(順位点): 素点を1000で割った差分 + 順位点。同点は上家優先
+    const n = st.players.length
+    const base = st.sanma ? 35000 : 25000
+    const uma = st.sanma ? UMA_3 : UMA_4
+    const ranked = st.players.map((p, i) => ({ seat: i, name: p.name, score: p.score }))
       .sort((a, b) => b.score - a.score || a.seat - b.seat)
+    st.finalStandings = ranked.map((r, i) => ({
+      ...r,
+      uma: st.rules?.uma !== false ? uma[i] ?? 0 : 0,
+      pt: st.rules?.uma !== false
+        ? Math.round(((r.score - base) / 1000 + (uma[i] ?? 0)) * 10) / 10
+        : Math.round(((r.score - base) / 1000) * 10) / 10,
+    }))
     st.phase = 'ended'
     st.roundResult = null
     return { state: st, events: ev }
   }
   if (!st.roundResult.dealerRepeat) {
     st.round.dealer = (st.round.dealer + 1) % st.players.length
-    st.round.num++
+    if (st.round.num >= st.maxRounds) { st.round.wind = (st.round.wind || 0) + 1; st.round.num = 1 }
+    else st.round.num++
   }
   startRound(st)
   return { state: st, events: ev }
 }
 
 // ---- タイムアウト時の自動行動 ----
+// 喰い替え禁止で打てない牌か
+const banned = (st, seat, kind) =>
+  st.rules?.kuikae === false && (st.kuikaeBan?.[seat] || []).includes(kind)
+
 export function autoActionFor(st, seat) {
   if (st.await?.type === 'turn' && st.await.seat === seat) {
-    const tile = st.drawn || st.hands[seat][st.hands[seat].length - 1]
+    const pool = st.drawn ? [st.drawn, ...st.hands[seat]] : [...st.hands[seat]]
+    const tile = pool.find((t) => !banned(st, seat, t.k)) || pool[0]
     return { type: 'discard', tileId: tile.id }
   }
   if (st.await?.type === 'claims' && st.await.pending.includes(seat)) return { type: 'pass' }
@@ -1086,10 +1292,33 @@ export function npcDecide(st, seat) {
     }
     if (best) return { type: 'riichi', tileId: best.id }
   }
+  // ---- 守備(ベタオリ): リーチ者がいて自分が2シャンテン以上なら現物を優先して切る ----
+  {
+    const riichiSeats = st.riichis.map((r, s) => (r ? s : -1)).filter((s) => s >= 0 && s !== seat)
+    if (riichiSeats.length > 0) {
+      const myShanten = shanten(countsOf(hand14), st.melds[seat].length)
+      if (myShanten >= 2) {
+        // 全リーチ者の河にある牌 = 完全な安牌
+        const safe = hand14.filter((t) => !banned(st, seat, t.k)
+          && riichiSeats.every((rs) => st.discards[rs].some((d) => d.k === t.k)))
+        if (safe.length > 0) {
+          // 同じ安牌なら手牌に多い牌から処理(重なりを崩さない範囲で)
+          const c = countsOf(hand14)
+          safe.sort((a, b) => c[a.k] - c[b.k])
+          return { type: 'discard', tileId: safe[0].id }
+        }
+        // 安牌がなければ字牌 → 端牌の順で被害の小さそうな牌
+        const risky = hand14.filter((t) => !banned(st, seat, t.k))
+        risky.sort((a, b) => (isHonor(b.k) ? 2 : isTerminal(b.k) ? 1 : 0) - (isHonor(a.k) ? 2 : isTerminal(a.k) ? 1 : 0))
+        if (risky.length > 0) return { type: 'discard', tileId: risky[0].id }
+      }
+    }
+  }
   // 通常打牌: シャンテンが最小になる牌、同値なら孤立字牌/端牌から
   let best = null, bestKey = null
   const seen = new Set()
   for (const t of hand14) {
+    if (banned(st, seat, t.k)) continue // 喰い替え禁止牌は選ばない
     if (seen.has(t.k + (t.r ? 100 : 0))) continue
     seen.add(t.k + (t.r ? 100 : 0))
     const cc = countsOf(hand14.filter((x) => x.id !== t.id))
@@ -1106,5 +1335,6 @@ export function npcDecide(st, seat) {
     const key = sh * 1000 - waste
     if (bestKey === null || key < bestKey) { bestKey = key; best = t }
   }
+  if (!best) best = hand14.find((t) => !banned(st, seat, t.k)) || hand14[0] // 全部禁止の異常系
   return { type: 'discard', tileId: best.id }
 }
