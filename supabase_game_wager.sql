@@ -147,10 +147,20 @@ begin
   end if;
 
   if v_val = 'refund' then
-    -- 返金はアクティブ参加者のみ(離脱者は掛け金を失う)
-    foreach v_uid in array v_active loop
-      update profiles set gold = gold + v_row.bet where id = v_uid;
-    end loop;
+    -- 返金はアクティブ参加者のみ(離脱者は掛け金を失う)。
+    -- 離脱者の供託分はポットの残りとしてアクティブ全員へ均等に上乗せ(Goldを焼却しない)
+    declare
+      v_active_n int := coalesce(array_length(v_active, 1), 0);
+      v_extra bigint := 0;
+    begin
+      if v_active_n > 0 then
+        v_extra := (v_row.pot - v_row.bet * v_active_n) / v_active_n;
+        if v_extra < 0 then v_extra := 0; end if;
+      end if;
+      foreach v_uid in array v_active loop
+        update profiles set gold = gold + v_row.bet + v_extra where id = v_uid;
+      end loop;
+    end;
     update game_wagers set status = 'refunded', settled_at = now() where key = p_key;
     return jsonb_build_object('ok', true, 'status', 'refunded', 'refund', v_row.bet);
   end if;
@@ -201,10 +211,16 @@ begin
     return jsonb_build_object('ok', true, 'status', v_row.status, 'forfeited', p_loser);
   end if;
 
-  -- プレゼンス確認: 相手がまだ居る(40秒以内に確認済み)なら離脱指定不可
+  -- 【重要】既に結果報告を出している相手は離脱指定できない。
+  -- (対局を最後まで打ち切って報告した人を「切断者」に仕立てる後出し総取りを防ぐ)
+  if v_row.reports ? p_loser::text then
+    return jsonb_build_object('error', '相手は結果を報告済みです(離脱指定できません)');
+  end if;
+
+  -- プレゼンス確認: 相手がまだ居る(120秒以内に確認済み)なら離脱指定不可
   v_now := extract(epoch from now())::bigint;
   v_seen := nullif(v_row.last_seen ->> p_loser::text, '')::bigint;
-  if v_seen is not null and v_now - v_seen <= 40 then
+  if v_seen is not null and v_now - v_seen <= 120 then
     return jsonb_build_object('error', 'まだ切断が確定していません');
   end if;
 

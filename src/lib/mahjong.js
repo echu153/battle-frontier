@@ -691,7 +691,7 @@ export function getClaimOptions(st, seat) {
 export function applyMahjong(state, playerId, action) {
   const st = clone(state)
   const seat = st.players.findIndex((p) => p.id === playerId)
-  if (seat === -1 && action.type !== 'next') return { error: '対局者ではありません' }
+  if (seat === -1) return { error: '対局者ではありません' } // 観戦者は局送りも含め一切操作できない
   const ev = []
 
   try {
@@ -712,7 +712,11 @@ export function applyMahjong(state, playerId, action) {
       case 'minkan': return doClaim(st, seat, { claim: 'minkan' }, ev)
       case 'chi': return doClaim(st, seat, { claim: 'chi', chi: action.chi }, ev)
       case 'pass': return doClaim(st, seat, { claim: 'pass' }, ev)
-      case 'next': return doNext(st, ev)
+      case 'next': {
+        // 局送りは対局者のみ(観戦者が勝手に進めるのを防ぐ)
+        if (seat === -1) return { error: '対局者ではありません' }
+        return doNext(st, ev)
+      }
       default: return { error: '不明な操作です' }
     }
   } catch (e) {

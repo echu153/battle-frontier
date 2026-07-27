@@ -169,7 +169,8 @@ export default function Mahjong() {
   useEffect(() => { settleWagerRef.current = settleWager }, [settleWager])
 
   // ---- 賭け中は在室ハートビート ----
-  const inWagerMatch = !!(room && game?.phase === 'playing' && wagerKeyRef.current && me
+  // 終局後も精算が終わるまで継続する(終局直後に「切断した」と後出しで申告されるのを防ぐ)
+  const inWagerMatch = !!(room && game && wagerKeyRef.current && me
     && game.players?.some((p) => p.id === me.id))
   useEffect(() => {
     if (!inWagerMatch) return
@@ -225,6 +226,8 @@ export default function Mahjong() {
 
   // ---- 部屋設定の変更(ホストのみ・全員へ同期) ----
   const updateSettings = useCallback((patch) => {
+    // 賭けが進行中は設定を変更できない(供託額の偽装・途中変更を防ぐ)
+    if (wagerKeyRef.current) { showToast('賭け対局の進行中は設定を変更できません'); return }
     const next = { ...settingsRef.current, ...patch }
     settingsRef.current = next
     setSettings(next)
@@ -308,7 +311,7 @@ export default function Mahjong() {
         for (const m of list) autoRef.current.delete(m.id)
         publishRoom(gameRef.current && gameRef.current.phase !== 'ended' ? 'playing' : 'waiting')
         if (gameRef.current) {
-          ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [] } })
+          ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [], wagerKey: wagerKeyRef.current, disconnected: [...autoRef.current] } })
         }
         return
       }
@@ -392,8 +395,19 @@ export default function Mahjong() {
     // ---- 賭けの供託フロー ----
     ch.on('broadcast', { event: 'betcall' }, async ({ payload }) => {
       if (!payload.humanIds.includes(myself.id)) return
+      // 供託額はホストの申告ではなく「自分が画面で見ている設定値」を使う(額の偽装対策)
+      const myBet = settingsRef.current.bet
+      if (!myBet || myBet <= 0 || myBet !== payload.bet) {
+        ch.send({ type: 'broadcast', event: 'betfail', payload: { playerId: myself.id, key: payload.key, msg: '賭け設定が一致しません' } })
+        return
+      }
+      // 観戦者は供託しない(席に着いている人だけ)
+      if (membersRef.current.find((m) => m.id === myself.id)?.spectator) {
+        ch.send({ type: 'broadcast', event: 'betfail', payload: { playerId: myself.id, key: payload.key, msg: '観戦者は参加できません' } })
+        return
+      }
       setBetBusy(true)
-      const res = await wagerJoin(payload.key, 'mahjong', payload.bet)
+      const res = await wagerJoin(payload.key, 'mahjong', myBet)
       if (res?.ok) ch.send({ type: 'broadcast', event: 'betok', payload: { playerId: myself.id, key: payload.key } })
       else ch.send({ type: 'broadcast', event: 'betfail', payload: { playerId: myself.id, key: payload.key, msg: res?.error || '供託に失敗しました' } })
     })
@@ -917,7 +931,6 @@ export default function Mahjong() {
     }
   }
 
-  const canDiscard = turnOpts && !turnOpts.riichi
   const riichiDiscardable = (k) => !riichiMode || turnOpts?.riichiTiles.includes(k)
   const onTileClick = (t) => {
     if (!turnOpts) return
@@ -1139,12 +1152,13 @@ export default function Mahjong() {
             <div style={{ fontSize: 12, color: '#88ccff', marginTop: 8 }}>
               {game.players.map((p, s) => <div key={s}>{p.name}: {p.score}点</div>)}
             </div>
-            {isHost && (
+            {/* 局送りは対局者なら誰でも(ホストが観戦中でも進行が止まらないように) */}
+            {mySeat >= 0 && (
               <button onClick={() => sendAction({ type: 'next' })} style={btnStyle('#ffcc44', { marginTop: 12, fontSize: 14 })}>
                 {game.roundResult.gameOver ? '最終結果へ' : '次の局へ'}
               </button>
             )}
-            {!isHost && <div style={{ fontSize: 11, color: '#668', marginTop: 10 }}>ホストの進行を待っています…</div>}
+            {mySeat === -1 && <div style={{ fontSize: 11, color: '#668', marginTop: 10 }}>対局者の進行を待っています…</div>}
           </div>
         </div>
       )}

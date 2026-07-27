@@ -138,8 +138,9 @@ export function applyDaifugo(state, playerId, action) {
     return afterDfAction(st, seat, ev)
   }
   if (action.type !== 'play') return { error: '不明な操作です' }
-  const cards = (action.cardIds || []).map((id) => me.hand.find((c) => c.id === id)).filter(Boolean)
-  if (cards.length !== (action.cardIds || []).length) return { error: 'その札は持っていません' }
+  if (!Array.isArray(action.cardIds)) return { error: '不正な操作です' }
+  const cards = action.cardIds.map((id) => me.hand.find((c) => c.id === id)).filter(Boolean)
+  if (cards.length !== action.cardIds.length) return { error: 'その札は持っていません' }
   const res = dfSetStrength(cards, st.field, st.revolution, st.rules)
   if (res === null) return { error: 'その出し方はできません' }
 
@@ -482,7 +483,7 @@ export function applySpeed(state, playerId, action) {
   const ev = []
 
   if (action.type === 'flip') {
-    // ホストのみ(ページ側で担保)。手詰まり時に山からめくる
+    // 手詰まり時に山からめくる(ホストが呼ぶ。観戦者の乱用防止に手詰まりを必須条件にする)
     if (speedCanAnyPlay(st)) return { error: 'まだ出せる札があります' }
     let flipped = false
     st.players.forEach((p, i) => {
@@ -540,11 +541,17 @@ export function createTrumpGame(gameType, players, opts = {}) {
   throw new Error('unknown game')
 }
 export function applyTrump(state, playerId, action) {
-  if (state.mode === 'daifugo') return applyDaifugo(state, playerId, action)
-  if (state.mode === 'speed') return applySpeed(state, playerId, action)
-  if (state.mode === 'sevens') return applySevens(state, playerId, action)
-  if (state.mode === 'oldmaid') return applyOldMaid(state, playerId, action)
-  return { error: 'unknown game' }
+  // 不正なactionでホストの進行が止まらないよう例外は必ず{error}に変換する
+  try {
+    if (!action || typeof action !== 'object') return { error: '不正な操作です' }
+    if (state.mode === 'daifugo') return applyDaifugo(state, playerId, action)
+    if (state.mode === 'speed') return applySpeed(state, playerId, action)
+    if (state.mode === 'sevens') return applySevens(state, playerId, action)
+    if (state.mode === 'oldmaid') return applyOldMaid(state, playerId, action)
+    return { error: 'unknown game' }
+  } catch (e) {
+    return { error: `エンジンエラー: ${e.message}` }
+  }
 }
 export function npcTrump(state, seat) {
   if (state.mode === 'daifugo') return npcDaifugo(state, seat)

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import {
-  GAME_DEFS, playersLabel, TURN_SEC_TRUMP, cardLabel, isRed, isNpcId,
+  GAME_DEFS, playersLabel, TURN_SEC_TRUMP, isRed, isNpcId,
   createTrumpGame, applyTrump, npcTrump, autoTrump, trumpWinnerId,
   sevensPlayable, speedCanAnyPlay, dfSetStrength, SUIT_LABEL, RANK_LABEL,
 } from '../lib/trump'
@@ -170,6 +170,11 @@ export default function Cards() {
       showToast('賭けマッチ進行中はゲームを変更できません')
       return
     }
+    // 賭けが進行中は額/種別を変更できない(供託額の偽装・途中変更を防ぐ)
+    if (wagerKeyRef.current && (patch.bet !== undefined || patch.gameType)) {
+      showToast('賭け対局の進行中は設定を変更できません')
+      return
+    }
     const next = { ...settingsRef.current, ...patch }
     settingsRef.current = next
     setSettings(next)
@@ -231,7 +236,9 @@ export default function Cards() {
     // 大富豪はマッチ(ポイント制)。新規開始ならここで生成(供託完了後なので空マッチができない)
     if (s.gameType === 'daifugo') {
       if (!matchRef.current || matchRef.current.over) {
-        matchRef.current = { len: s.matchLen || 3, round: 1, points: {}, names: {}, lastRanks: {}, over: false }
+        // betters = 供託した人(初戦の人間参加者)。途中参加者を分配対象に混ぜない
+        const betters = wKey ? order.filter((p) => !isNpcId(p.id)).map((p) => p.id) : []
+        matchRef.current = { len: s.matchLen || 3, round: 1, points: {}, names: {}, lastRanks: {}, over: false, betters }
       }
       setMatchInfo(matchRef.current)
     } else {
@@ -271,8 +278,10 @@ export default function Cards() {
     let rankedIds = []
     if (match && g.mode === 'daifugo') {
       // 大富豪マッチ: 合計ptで順位(同点は最終戦の順位→id順で決定的に)
+      // ※供託したのは初戦の参加者だけなので、途中参加者(match.pointsにしか居ない人)は分配対象外
+      const betters = new Set(match.betters || Object.keys(match.points))
       rankedIds = Object.keys(match.points)
-        .filter((id) => !isNpcId(id) && !excluded.has(id))
+        .filter((id) => !isNpcId(id) && !excluded.has(id) && betters.has(id))
         .sort((a, b) => (match.points[b] - match.points[a])
           || ((match.lastRanks[a] || 9) - (match.lastRanks[b] || 9))
           || a.localeCompare(b))
@@ -309,7 +318,8 @@ export default function Cards() {
   useEffect(() => { settleWagerRef.current = settleWager }, [settleWager])
 
   // ---- 賭け中は在室ハートビート(切断者だけを離脱指定できるように) ----
-  const inWagerMatch = !!(room && game?.phase === 'playing' && wagerKeyRef.current
+  // 終局後も精算が終わるまで継続する(終局直後に「切断した」と後出しで申告されるのを防ぐ)
+  const inWagerMatch = !!(room && game && wagerKeyRef.current
     && me && game.players?.some((p) => p.id === me.id))
   useEffect(() => {
     if (!inWagerMatch) return
@@ -471,8 +481,20 @@ export default function Cards() {
     // ---- 賭けの供託フロー ----
     ch.on('broadcast', { event: 'betcall' }, async ({ payload }) => {
       if (!payload.humanIds.includes(myself.id)) return
+      // 供託額はホストの申告ではなく「自分が画面で見ている設定値」を使う(額の偽装対策)
+      const myBet = settingsRef.current.bet
+      const myType = settingsRef.current.gameType
+      if (!myBet || myBet <= 0 || myBet !== payload.bet || myType !== payload.gameType) {
+        ch.send({ type: 'broadcast', event: 'betfail', payload: { playerId: myself.id, key: payload.key, msg: '賭け設定が一致しません' } })
+        return
+      }
+      // 観戦者は供託しない(席に着いている人だけ)
+      if (membersRef.current.find((m) => m.id === myself.id)?.spectator) {
+        ch.send({ type: 'broadcast', event: 'betfail', payload: { playerId: myself.id, key: payload.key, msg: '観戦者は参加できません' } })
+        return
+      }
       setBetBusy(true)
-      const res = await wagerJoin(payload.key, payload.gameType, payload.bet)
+      const res = await wagerJoin(payload.key, myType, myBet)
       if (res?.ok) {
         ch.send({ type: 'broadcast', event: 'betok', payload: { playerId: myself.id, key: payload.key } })
       } else {
@@ -690,14 +712,13 @@ export default function Cards() {
   }, [game, room, me, hostApply])
 
   // ---- スピード: NPC着手+手詰まりめくり(ホスト) ----
+  // NPCの着手と手詰まり時のめくりを1秒間隔のインターバルで回す
+  // (setGameで再描画を誘発する方式だと人間の思考中ずっと再レンダリングし続けるため)
   useEffect(() => {
-    if (!room || room.hostId !== me?.id || !game || game.phase !== 'playing' || game.mode !== 'speed') return
-    const seq = stateSeqRef.current
-    const t = setTimeout(() => {
-      if (stateSeqRef.current !== seq) return
+    if (!room || room.hostId !== me?.id || !game || game.mode !== 'speed' || game.phase !== 'playing') return
+    const iv = setInterval(() => {
       const cur = gameRef.current
-      if (!cur || cur.phase !== 'playing') return
-      // NPC/切断者が出せるなら1枚出す
+      if (!cur || cur.mode !== 'speed' || cur.phase !== 'playing') return
       for (let s = 0; s < 2; s++) {
         const pid = cur.players[s].id
         if (isNpcId(pid) || autoRef.current.has(pid)) {
@@ -705,17 +726,10 @@ export default function Cards() {
           if (a) { hostApply(pid, a); return }
         }
       }
-      // 誰も出せない → めくる
       if (!speedCanAnyPlay(cur)) hostApply(meRef.current.id, { type: 'flip' })
-      else {
-        // 人間の思考待ち: 状態は変わらないので再スケジュールのためダミー更新はせず再走查
-        stateSeqRef.current += 0
-        setGame((g) => (g === cur ? { ...cur } : g)) // 再評価トリガー
-      }
     }, 1000)
-    npcTimerRef.current = t
-    return () => clearTimeout(t)
-  }, [game, room, me, hostApply])
+    return () => clearInterval(iv)
+  }, [room, me, hostApply, game?.mode, game?.phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- 終局後は結果を数秒見せて待機画面へ ----
   useEffect(() => {
@@ -897,7 +911,7 @@ export default function Cards() {
         <div style={{ border: '1px solid #224466', padding: '8px 12px', fontSize: 12 }}>
           {settings.bet > 0 && (
             <div style={{ border: '1px solid #8a6a22', background: 'rgba(255,170,0,0.08)', padding: '4px 8px', marginBottom: 6, color: '#ffaa00', fontSize: 11 }}>
-              💰 賭け対局: 1人 {Number(settings.bet).toLocaleString()}G(人間2人以上で成立・1位総取り・NPC勝ち/引き分けは返金)
+              💰 賭け対局: 1人 {Number(settings.bet).toLocaleString()}G(人間2人以上で成立・最終順位で分配(1位60%以上)・NPC勝ち/引き分けは返金)
             </div>
           )}
           {lastResult && (
