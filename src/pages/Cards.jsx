@@ -325,10 +325,12 @@ export default function Cards() {
     ch.on('broadcast', { event: 'state' }, ({ payload }) => {
       if (gameRef.current && payload.seq < stateSeqRef.current) return
       stateSeqRef.current = payload.seq
+      // 選択はカードid基準なので途中同期では消さない(新しい対局の開始時のみクリア)
+      const prevG = gameRef.current
+      if (!prevG || (prevG.phase !== 'playing' && payload.game.phase === 'playing')) setSelCards([])
       gameRef.current = payload.game
       wagerKeyRef.current = payload.wagerKey || null
       setGame(payload.game)
-      setSelCards([])
       setBetBusy(false)
       for (const ev of payload.events || []) {
         if (ev.t === 'revolution') showToast(ev.on ? '⚡ 革命！' : '⚡ 革命返し！')
@@ -977,15 +979,17 @@ export default function Cards() {
 
   // ---- スピード ----
   if (game.mode === 'speed') {
-    // 1タップ即出し: タップした札を出せる台札へ自動で出す(選択式は同期でリセットされ押し負けるため)
+    // 2タップ式: 札をタップして選択(カードid基準なので同期が入っても選択は消えない)→台札をタップして置く
     const speedAdjOk = (a, b) => { const d = Math.abs(a - b); return d === 1 || d === 12 }
-    const quickPlay = (slot) => {
-      const c = game.players[mySeat]?.slots[slot]
-      if (!c) return
-      for (let p = 0; p < 2; p++) {
-        const pile = game.piles[p]
-        if (pile && speedAdjOk(c.r, pile.r)) { sendAction({ type: 'play', slot, pile: p }); return }
-      }
+    const mySlots = mySeat >= 0 ? game.players[mySeat].slots : []
+    const selId = selCards[0] ?? null
+    const selCard = selId !== null ? mySlots.find((c) => c && c.id === selId) : null // 手放したら自然に無効
+    const playTo = (pileIdx) => {
+      if (!selCard) return
+      const slot = mySlots.findIndex((c) => c && c.id === selCard.id)
+      if (slot === -1) { setSelCards([]); return }
+      sendAction({ type: 'play', slot, pile: pileIdx })
+      setSelCards([])
     }
     const renderSide = (seat, mine) => {
       const p = game.players[seat]
@@ -995,8 +999,9 @@ export default function Cards() {
           <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
             {p.slots.map((c, i) => c
               ? <TCard key={c.id} c={c}
-                  sel={mine && playing && game.piles.some((t) => t && speedAdjOk(c.r, t.r))}
-                  onClick={mine && playing ? () => quickPlay(i) : undefined} />
+                  sel={mine && playing && selCard?.id === c.id}
+                  dim={mine && playing && selCard && selCard.id !== c.id}
+                  onClick={mine && playing ? () => setSelCards(selCard?.id === c.id ? [] : [c.id]) : undefined} />
               : <div key={i} style={{ width: 38, height: 54 }} />)}
           </div>
         </div>
@@ -1008,12 +1013,28 @@ export default function Cards() {
         {mySeat !== 0 && renderSide(0, mySeat === 0)}
         {mySeat === 0 && renderSide(1, false)}
         <div style={{ display: 'flex', gap: 20, justifyContent: 'center', margin: '10px 0', alignItems: 'center' }}>
-          {game.piles.map((c, i) => (
-            <span key={i}>{c ? <TCard c={c} /> : <div style={{ width: 38, height: 54 }} />}</span>
-          ))}
+          {game.piles.map((c, i) => {
+            const ok = !!(selCard && c && speedAdjOk(selCard.r, c.r))
+            return (
+              <button key={i} onClick={mySeat >= 0 && playing && selCard ? () => playTo(i) : undefined}
+                disabled={!(mySeat >= 0 && playing && selCard)}
+                style={{
+                  background: 'none', borderRadius: 8, padding: 4,
+                  border: ok ? '2px dashed #ffcc44' : '2px solid transparent',
+                  boxShadow: ok ? '0 0 10px rgba(255,204,68,0.5)' : 'none',
+                  cursor: selCard ? 'pointer' : 'default',
+                }}>
+                {c ? <TCard c={c} /> : <div style={{ width: 38, height: 54 }} />}
+              </button>
+            )
+          })}
         </div>
         {renderSide(mySeat >= 0 ? mySeat : 1, mySeat >= 0)}
-        {mySeat >= 0 && playing && <div style={{ fontSize: 11, color: '#9fd', textAlign: 'center', marginTop: 6 }}>光っている札をタップすると台札(±1)に出ます。早い者勝ち！</div>}
+        {mySeat >= 0 && playing && (
+          <div style={{ fontSize: 11, color: '#9fd', textAlign: 'center', marginTop: 6 }}>
+            {selCard ? '置きたい台札(±1)をタップ！' : '出したい札をタップ → 台札をタップ。早い者勝ち！'}
+          </div>
+        )}
         {resultPanel}
         {stampUI}
       </div>
