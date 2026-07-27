@@ -61,6 +61,27 @@ const Mahjong = lazyReload(() => import('./pages/Mahjong')) // 麻雀(開発限�
 const Cards = lazyReload(() => import('./pages/Cards')) // トランプ広場(開発限定・大富豪/スピード/7ならべ/ババ抜き)
 const BeginnerBingo = lazyReload(() => import('./pages/BeginnerBingo')) // 初心者ビンゴ(開発限定・ミッション)
 
+// ページ遷移時の「読み込み中」(Suspense fallback)。チャンク取得がハング/失敗して一定時間
+// 解決しない＝固まった場合の保険として、1回だけ最新版を取り直す(強制リロード)。
+// lazyReloadはimportがreject時のみ効くため、ハングや直近リロード済みで固まったケースをここで救う。
+// 30秒ガードでリロードループを防止(リロード後も固まるなら再リロードせず表示のまま)。
+function LoadingFallback() {
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        const now = Date.now()
+        const last = Number(sessionStorage.getItem('bf_stuck_reload_at') || 0)
+        if (now - last > 30000) {
+          sessionStorage.setItem('bf_stuck_reload_at', String(now))
+          window.location.reload()
+        }
+      } catch { /* sessionStorage不可なら何もしない */ }
+    }, 10000)
+    return () => clearTimeout(t)
+  }, [])
+  return <div style={{ minHeight: '100vh', background: '#000820', color: '#0088ff', fontFamily: 'monospace', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>読み込み中...</div>
+}
+
 function App() {
   const [session, setSession] = useState(undefined)
   const [hasChar, setHasChar] = useState(undefined)
@@ -202,7 +223,7 @@ function App() {
   return (
     <BrowserRouter>
       <ErrorBoundary>
-      <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000820', color: '#0088ff', fontFamily: 'monospace', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>読み込み中...</div>}>
+      <Suspense fallback={<LoadingFallback />}>
       <Routes>
         <Route path="/login" element={isPasswordRecovery || !session ? <Login isPasswordRecovery={isPasswordRecovery} /> : <Navigate to={hasChar ? '/game' : '/create'} />} />
         <Route path="/create" element={session && !hasChar ? <CharCreate /> : <Navigate to={!session ? '/login' : '/game'} />} />
