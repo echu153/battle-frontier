@@ -130,6 +130,9 @@ function App() {
       setSession(session)
       if (session) checkChar(session.user.id)
       else setHasChar(false)
+    }).catch(() => {
+      // getSession失敗時もロード画面(session/hasChar=undefined)で固まらせない＝ログインへ
+      setSession(null); setHasChar(false)
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
       if (event === 'PASSWORD_RECOVERY') {
@@ -193,14 +196,31 @@ function App() {
     return () => { cancelled = true; if (handle != null) cancel(handle) }
   }, [session, hasChar])
 
-  const checkChar = async (userId) => {
-    const { data } = await supabase.from('profiles').select('id, is_suspended, suspension_reason').eq('id', userId).single()
-    if (data?.is_suspended) {
-      setSuspended(true)
-      await supabase.auth.signOut()
-      return
+  // キャラ有無の判定。profilesクエリがネット瞬断/ハングで失敗すると hasChar が undefined の
+  // まま「読み込み中」で永久に固まる穴があったため、タイムアウト＋リトライ＋最終フォールバックで
+  // 必ず hasChar を確定させる(リロード時の固まりの主因)。
+  const checkChar = async (userId, attempt = 0) => {
+    const withTimeout = (p, ms) => Promise.race([
+      p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms)),
+    ])
+    try {
+      const { data, error } = await withTimeout(
+        supabase.from('profiles').select('id, is_suspended, suspension_reason').eq('id', userId).maybeSingle(),
+        8000,
+      )
+      if (error) throw error
+      if (data?.is_suspended) {
+        setSuspended(true)
+        await supabase.auth.signOut()
+        return
+      }
+      setHasChar(!!data)  // 行なし(新規)=false→/create、行あり=true
+    } catch {
+      // 取得失敗(瞬断/タイムアウト)。数回リトライし、それでもダメなら固まらせず先へ進める
+      // (セッションあり=作成済みとみなす。誤判定でも各ページが/createへ誘導する)。
+      if (attempt < 3) { setTimeout(() => checkChar(userId, attempt + 1), 1500); return }
+      setHasChar(true)
     }
-    setHasChar(!!data)
   }
 
   if (session === undefined || hasChar === undefined) {
