@@ -47,6 +47,17 @@ export async function wagerForfeit(key, loserId) {
   }
 }
 
+// 順位に応じた分配精算(複数人ゲーム・1位60%以上)。rankingIds=賭け参加者を順位順に
+export async function wagerSettleRanked(key, rankingIds) {
+  try {
+    const { data, error } = await supabase.rpc('wager_settle_ranked', { p_key: key, p_ranking: rankingIds })
+    if (error) return { error: error.message.includes('function') ? '賭け機能のSQL更新が必要です' : error.message }
+    return data || { error: '不明なエラー' }
+  } catch (e) {
+    return { error: e.message }
+  }
+}
+
 // 放置された賭けの返金(2時間後)
 export async function wagerRefundStale(key) {
   try {

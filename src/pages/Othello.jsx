@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { wagerJoin, wagerReport, wagerForfeit, wagerPing, MAX_BET } from '../lib/wager'
+import { wagerJoin, wagerReport, wagerForfeit, wagerPing, wagerSettleRanked, MAX_BET } from '../lib/wager'
 import { StampBar } from '../components/StampBar'
 import {
   BLACK, WHITE, EMPTY, SIZE,
@@ -174,7 +174,7 @@ export default function Othello() {
   }, [hostBroadcast, publishRoom])
 
   // ---- 賭け精算(切断=無効試合なら落ちた人を負けにして残りへ払い出す) ----
-  const settleWager = useCallback(async (key, lostIds, winnerId, nameOf) => {
+  const settleWager = useCallback(async (key, lostIds, rankedIds, nameOf) => {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
     if (lostIds && lostIds.length > 0) {
       showToast('💰 相手の切断を確認中…精算まで少しお待ちください')
@@ -192,10 +192,25 @@ export default function Othello() {
         if (pending.size > 0) await sleep(15000)
       }
     }
-    const w = winnerId && !(lostIds || []).includes(winnerId) ? winnerId : null
-    const res = await wagerReport(key, w)
-    if (res?.status === 'settled') showToast(`💰 精算完了: ${nameOf(w)} が ${res.pot}G 獲得！`)
-    else if (res?.status === 'refunded') showToast('💰 引き分け/NPC勝ちのため全員に返金されました')
+    // 多人数戦は順位分配(2人=70%…ではなく勝者総取り相当のn=2表を含めSQL側の分配率で処理)
+    const ranked = (rankedIds || []).filter((id) => !(lostIds || []).includes(id) && !isNpcId(id))
+    if (ranked.length >= 2) {
+      const res = await wagerSettleRanked(key, ranked)
+      if (res?.status === 'settled') { showToast(`💰 分配精算完了！ 1位 ${nameOf(ranked[0])} が ${res.top_gain ?? res.pot}G 獲得`); return }
+      if (res?.status === 'refunded') { showToast('💰 全員に返金されました'); return }
+      if (res?.error && res.error.includes('SQL更新')) {
+        // SQL未更新環境では従来の勝者総取りにフォールバック
+        const res2 = await wagerReport(key, ranked[0])
+        if (res2?.status === 'settled') showToast(`💰 精算完了: ${nameOf(ranked[0])} が ${res2.pot}G 獲得！`)
+        else if (res2?.error) showToast(`💰 ${res2.error}`)
+        return
+      }
+      if (res?.error) showToast(`💰 ${res.error}`)
+      return // pending含む
+    }
+    // 分配できない(引き分け/NPC勝ち等) → 返金
+    const res = await wagerReport(key, null)
+    if (res?.status === 'refunded') showToast('💰 引き分け/NPC勝ちのため全員に返金されました')
     else if (res?.error) showToast(`💰 ${res.error}`)
   }, [])
   useEffect(() => { settleWagerRef.current = settleWager }, [settleWager])
@@ -341,15 +356,18 @@ export default function Othello() {
             const lid = g.players[loserColor]?.id
             if (lid && !isNpcId(lid)) lostIds = [lid]
           }
-          // 通常の勝者(離脱者・NPCは除外)
-          let winnerId = null
+          // 順位リスト(多人数=石数順位で分配 / 2人=勝者総取り)。1位タイやNPC勝ちは返金へ
+          let rankedIds = null
           if (g.mode === 'multi') {
-            if (g.result?.winners?.length === 1) winnerId = g.players.find((p) => p.color === g.result.winners[0])?.id || null
+            if (g.result?.winners?.length === 1) {
+              rankedIds = g.result.standings.map((s) => g.players.find((p) => p.color === s.color)?.id).filter(Boolean)
+            }
           } else if (g.result?.winner) {
-            winnerId = g.players[g.result.winner]?.id || null
+            const wId = g.players[g.result.winner]?.id
+            const lId = g.players[g.result.winner === BLACK ? WHITE : BLACK]?.id
+            if (wId && !isNpcId(wId)) rankedIds = [wId, lId].filter(Boolean)
           }
-          if (winnerId && isNpcId(winnerId)) winnerId = null // NPC勝ちは返金
-          settleWagerRef.current(payload.wagerKey, lostIds, winnerId, nameOf)
+          settleWagerRef.current(payload.wagerKey, lostIds, rankedIds, nameOf)
         }
       }
     })

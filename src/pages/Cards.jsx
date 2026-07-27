@@ -7,7 +7,7 @@ import {
   createTrumpGame, applyTrump, npcTrump, autoTrump, trumpWinnerId,
   sevensPlayable, speedCanAnyPlay, dfSetStrength, SUIT_LABEL, RANK_LABEL,
 } from '../lib/trump'
-import { wagerJoin, wagerReport, wagerForfeit, wagerPing, MAX_BET } from '../lib/wager'
+import { wagerJoin, wagerReport, wagerForfeit, wagerPing, wagerSettleRanked, MAX_BET } from '../lib/wager'
 import { StampBar, StampOverlay } from '../components/StampBar'
 
 // ============================================================
@@ -70,7 +70,8 @@ export default function Cards() {
   const [rooms, setRooms] = useState([])
   const [roomTitle, setRoomTitle] = useState('')
   // 部屋の設定はホストが入室後に決める(全員へbroadcast同期)
-  const DEFAULT_SETTINGS = { gameType: 'daifugo', rules: { kaidan: false, shibari: false, miyako: false }, bet: 0 }
+  const DEFAULT_SETTINGS = { gameType: 'daifugo', rules: { kaidan: false, shibari: false, miyako: false }, bet: 0, matchLen: 3 }
+  const DF_MATCH_PTS = [3, 2, 1, 0] // 大富豪マッチ: 順位ごとの獲得pt(1位→4位)
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const settingsRef = useRef(DEFAULT_SETTINGS)
 
@@ -89,6 +90,8 @@ export default function Cards() {
   const splashTimerRef = useRef(null)
   const [kiriFlash, setKiriFlash] = useState(null) // 8切り: 流れる前に一瞬場に見せるカード
   const kiriTimerRef = useRef(null)
+  const [matchInfo, setMatchInfo] = useState(null) // 大富豪マッチ { len, round, points, names, lastRanks, over }
+  const matchRef = useRef(null)
 
   const lobbyChRef = useRef(null)
   const roomChRef = useRef(null)
@@ -167,6 +170,11 @@ export default function Cards() {
 
   // ---- 部屋設定の変更(ホストのみ・全員へ同期) ----
   const updateSettings = useCallback((patch) => {
+    // 賭けありの大富豪マッチ進行中はゲーム変更不可(供託がマッチ全体に乗っているため)
+    if (patch.gameType && patch.gameType !== 'daifugo' && matchRef.current && !matchRef.current.over && wagerKeyRef.current) {
+      showToast('賭けマッチ進行中はゲームを変更できません')
+      return
+    }
     const next = { ...settingsRef.current, ...patch }
     settingsRef.current = next
     setSettings(next)
@@ -187,10 +195,25 @@ export default function Cards() {
       type: 'broadcast', event: 'state',
       payload: {
         seq: stateSeqRef.current, game: newState, events, wagerKey: wagerKeyRef.current,
+        match: matchRef.current, // 大富豪マッチの進行状況
         disconnected: [...autoRef.current], // 切断して自動プレイ中の席(無効試合精算で負け扱いにする)
       },
     })
   }, [])
+
+  // 大富豪マッチ: 局が終わるたびにポイントを加算(ホストのみ)
+  const hostUpdateMatch = useCallback((endedState) => {
+    const m = matchRef.current
+    if (!m || endedState.mode !== 'daifugo' || endedState.phase !== 'ended') return
+    for (const r of endedState.result.ranking) {
+      const p = endedState.players[r.seat]
+      m.points[p.id] = (m.points[p.id] || 0) + (DF_MATCH_PTS[r.rank - 1] || 0)
+      m.names[p.id] = p.name
+      m.lastRanks[p.id] = r.rank
+    }
+    if (m.round >= m.len) m.over = true
+    else m.round += 1
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const hostApply = useCallback((playerId, action) => {
     const cur = gameRef.current
@@ -200,15 +223,26 @@ export default function Cards() {
       roomChRef.current?.send({ type: 'broadcast', event: 'reject', payload: { playerId, msg: r.error } })
       return false
     }
+    if (r.state.phase === 'ended') hostUpdateMatch(r.state) // 大富豪マッチのpt加算(broadcast前)
     hostBroadcast(r.state, r.events)
     if (r.state.phase !== 'playing') publishRoom('waiting')
     return true
-  }, [hostBroadcast, publishRoom])
+  }, [hostBroadcast, publishRoom, hostUpdateMatch])
 
   // ---- 対局開始(ホスト)。賭けありなら先に全員の供託を待つ ----
   const actuallyStart = useCallback((order, wKey) => {
     wagerKeyRef.current = wKey
     const s = settingsRef.current
+    // 大富豪はマッチ(ポイント制)。新規開始ならここで生成(供託完了後なので空マッチができない)
+    if (s.gameType === 'daifugo') {
+      if (!matchRef.current || matchRef.current.over) {
+        matchRef.current = { len: s.matchLen || 3, round: 1, points: {}, names: {}, lastRanks: {}, over: false }
+      }
+      setMatchInfo(matchRef.current)
+    } else {
+      matchRef.current = null
+      setMatchInfo(null)
+    }
     hostBroadcast(createTrumpGame(s.gameType, order, {
       rules: s.rules || {},
       champion: lastChampionRef.current,
@@ -217,7 +251,7 @@ export default function Cards() {
   }, [hostBroadcast, publishRoom])
 
   // ---- 賭け精算(切断=無効試合なら落ちた人を負けにして残りへ払い出す) ----
-  const settleWager = useCallback(async (key, g, lostIds) => {
+  const settleWager = useCallback(async (key, g, lostIds, match = null) => {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
     if (lostIds && lostIds.length > 0) {
       showToast('💰 相手の切断を確認中…精算まで少しお待ちください')
@@ -236,16 +270,46 @@ export default function Cards() {
         if (pending.size > 0) await sleep(15000)
       }
     }
-    // 離脱者確定後、残りアクティブで通常の勝者報告(離脱者・NPCは勝者から除外)
-    const wid = trumpWinnerId(g)
-    const winnerHuman = wid && !isNpcId(wid) && !(lostIds || []).includes(wid) ? wid : null
-    const res = await wagerReport(key, winnerHuman)
-    if (res?.status === 'settled') {
-      const wName = g.players.find((p) => p.id === winnerHuman)?.name
-      showToast(`💰 精算完了: ${wName} が ${res.pot}G 獲得！`)
-    } else if (res?.status === 'refunded') {
-      showToast('💰 引き分け/NPC勝ちのため全員に返金されました')
-    } else if (res?.error) showToast(`💰 ${res.error}`)
+    // 離脱者確定後、順位に応じた分配で精算(NPC・離脱者は分配から除外)
+    // 分配率: 2人=勝者総取り / 3人=70/30/0 / 4人=60/25/15/0 / 5人=60/20/15/5/0(1位は常に60%以上)
+    const excluded = new Set(lostIds || [])
+    let rankedIds = []
+    if (match && g.mode === 'daifugo') {
+      // 大富豪マッチ: 合計ptで順位(同点は最終戦の順位→id順で決定的に)
+      rankedIds = Object.keys(match.points)
+        .filter((id) => !isNpcId(id) && !excluded.has(id))
+        .sort((a, b) => (match.points[b] - match.points[a])
+          || ((match.lastRanks[a] || 9) - (match.lastRanks[b] || 9))
+          || a.localeCompare(b))
+    } else if (g.mode === 'speed') {
+      const wid = g.result?.winner != null ? g.players[g.result.winner]?.id : null
+      if (wid) rankedIds = [wid, ...g.players.map((p) => p.id).filter((id) => id !== wid)].filter((id) => !isNpcId(id) && !excluded.has(id))
+    } else if (g.result?.ranking) {
+      rankedIds = g.result.ranking.map((r) => g.players[r.seat].id).filter((id) => !isNpcId(id) && !excluded.has(id))
+    }
+    if (rankedIds.length >= 2) {
+      const res = await wagerSettleRanked(key, rankedIds)
+      if (res?.status === 'settled') {
+        const names = rankedIds.map((id) => g.players.find((p) => p.id === id)?.name || match?.names?.[id] || '?')
+        showToast(`💰 分配精算完了！ 1位 ${names[0]} が ${res.top_gain ?? res.pot}G 獲得`)
+        return
+      }
+      if (res?.status === 'refunded') { showToast('💰 全員に返金されました'); return }
+      if (res?.error && !res.error.includes('SQL更新')) { showToast(`💰 ${res.error}`); return }
+      // SQL未更新環境では従来の勝者総取りにフォールバック
+      if (res?.error) {
+        const winnerHuman = rankedIds[0] || null
+        const res2 = await wagerReport(key, winnerHuman)
+        if (res2?.status === 'settled') showToast(`💰 精算完了: ${g.players.find((p) => p.id === winnerHuman)?.name} が ${res2.pot}G 獲得！`)
+        else if (res2?.error) showToast(`💰 ${res2.error}`)
+        return
+      }
+      return // pending(他の参加者の報告待ち)
+    }
+    // 分配対象が2人未満(引き分け等) → 返金
+    const res = await wagerReport(key, null)
+    if (res?.status === 'refunded') showToast('💰 引き分けのため全員に返金されました')
+    else if (res?.error) showToast(`💰 ${res.error}`)
   }, [])
   useEffect(() => { settleWagerRef.current = settleWager }, [settleWager])
 
@@ -288,7 +352,7 @@ export default function Cards() {
         // 途中参加者に現在の設定とstateを再配信
         ch.send({ type: 'broadcast', event: 'settings', payload: { settings: settingsRef.current } })
         if (gameRef.current) {
-          ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [], wagerKey: wagerKeyRef.current, disconnected: [...autoRef.current] } })
+          ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [], wagerKey: wagerKeyRef.current, match: matchRef.current, disconnected: [...autoRef.current] } })
         }
         return
       }
@@ -363,16 +427,20 @@ export default function Cards() {
       if (payload.game.phase === 'ended' && payload.game.mode === 'daifugo') {
         lastChampionRef.current = trumpWinnerId(payload.game)
       }
-      // 賭け精算: 終局時に各参加者(人間)が勝者を報告
+      // 大富豪マッチの進行状況を同期
+      matchRef.current = payload.match || null
+      setMatchInfo(payload.match || null)
+      // 賭け精算: 終局時に分配報告(大富豪マッチは最終戦が終わるまで精算しない)
       const g = payload.game
-      if (g.phase === 'ended' && payload.wagerKey && !reportedRef.current.has(payload.wagerKey)) {
+      const matchOngoing = g.mode === 'daifugo' && payload.match && !payload.match.over
+      if (g.phase === 'ended' && payload.wagerKey && !matchOngoing && !reportedRef.current.has(payload.wagerKey)) {
         const meSeated = g.players.some((p) => p.id === myself.id)
         if (meSeated) {
           reportedRef.current.add(payload.wagerKey)
           // 切断して自動プレイ中だった席は「無効試合の原因」= 負け扱いにする
           const disc = new Set(payload.disconnected || [])
           const lostIds = g.players.filter((p) => disc.has(p.id) && !isNpcId(p.id)).map((p) => p.id)
-          settleWagerRef.current(payload.wagerKey, g, lostIds)
+          settleWagerRef.current(payload.wagerKey, g, lostIds, payload.match || null)
         }
       }
     })
@@ -395,7 +463,7 @@ export default function Cards() {
     // リロード復帰者からの状態要求: 誰でも持っていれば現在のstate/設定を返す(ホストのリロードにも対応)
     ch.on('broadcast', { event: 'statereq' }, () => {
       if (gameRef.current) {
-        ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [], wagerKey: wagerKeyRef.current } })
+        ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [], wagerKey: wagerKeyRef.current, match: matchRef.current } })
       }
       ch.send({ type: 'broadcast', event: 'settings', payload: { settings: settingsRef.current } })
     })
@@ -452,6 +520,8 @@ export default function Cards() {
     autoRef.current = new Set()
     wagerKeyRef.current = null
     lastChampionRef.current = null
+    matchRef.current = null
+    setMatchInfo(null)
     settingsRef.current = DEFAULT_SETTINGS
     setSettings(DEFAULT_SETTINGS)
     setLastResult(null)
@@ -478,6 +548,8 @@ export default function Cards() {
     setSplash(null); setKiriFlash(null)
     if (splashTimerRef.current) clearTimeout(splashTimerRef.current)
     if (kiriTimerRef.current) clearTimeout(kiriTimerRef.current)
+    matchRef.current = null
+    setMatchInfo(null)
     betPendingRef.current = null
     if (hostGraceRef.current) { clearTimeout(hostGraceRef.current); hostGraceRef.current = null }
     try { sessionStorage.removeItem('bf-cards-room') } catch { /* 無視 */ }
@@ -548,6 +620,16 @@ export default function Cards() {
       ;[order[i], order[j]] = [order[j], order[i]]
     }
     const humans = order.filter((p) => !isNpcId(p.id)).map((p) => p.id)
+    // ---- 大富豪マッチ(3/5/7戦のポイント制) ----
+    if (s.gameType === 'daifugo' && matchRef.current && !matchRef.current.over) {
+      // マッチ継続中: 供託は初戦で済んでいるので同じ賭けキーで次戦へ(マッチ生成はactuallyStart側)
+      actuallyStart(order, wagerKeyRef.current)
+      return
+    }
+    if (s.gameType !== 'daifugo' && matchRef.current && !matchRef.current.over && wagerKeyRef.current) {
+      showToast('大富豪マッチが進行中です(終わるまで他のゲームは開始できません)')
+      return
+    }
     if (s.bet > 0 && humans.length >= 2) {
       const key = `${roomRef.current.id}:${Date.now()}`
       betPendingRef.current = { key, need: new Set(humans), ok: new Set(), order }
@@ -788,6 +870,16 @@ export default function Cards() {
                     ))}
                   </div>
                   <div style={{ fontSize: 9, color: '#668', marginTop: 3 }}>階段=同スート3枚以上の連番 / しばり=スート一致で以後同スート限定 / 都落ち=前回1位が1位を逃すと即最下位(2戦目から)</div>
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 6 }}>
+                    <span style={{ fontSize: 11, color: '#88ccff' }}>マッチ:</span>
+                    {[3, 5, 7].map((n) => (
+                      <button key={n} onClick={() => updateSettings({ matchLen: n })}
+                        style={btnStyle((settings.matchLen || 3) === n ? '#ffcc44' : '#446688', { fontSize: 11 })}>
+                        {n}戦
+                      </button>
+                    ))}
+                    <span style={{ fontSize: 9, color: '#668' }}>順位でpt獲得(1位3/2位2/3位1/4位0)・合計ptで最終順位</span>
+                  </div>
                 </div>
               )}
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -806,6 +898,7 @@ export default function Cards() {
           ) : (
             <div style={{ fontSize: 12 }}>
               <span style={{ color: '#ffcc44' }}>{def.name}</span>
+              {settings.gameType === 'daifugo' && <span style={{ color: '#88ccff', marginLeft: 8 }}>{settings.matchLen || 3}戦マッチ</span>}
               {settings.gameType === 'daifugo' && rulesLabel(settings.rules) && <span style={{ color: '#aa88cc', marginLeft: 8 }}>{rulesLabel(settings.rules)}</span>}
               <span style={{ color: '#ffaa00', marginLeft: 8 }}>{settings.bet > 0 ? `💰${Number(settings.bet).toLocaleString()}G` : '賭けなし'}</span>
             </div>
@@ -820,6 +913,16 @@ export default function Cards() {
           {lastResult && (
             <div style={{ border: '1px solid #665522', background: 'rgba(255,204,68,0.07)', padding: '4px 8px', marginBottom: 6, color: '#ffcc44', fontSize: 11 }}>
               前回の結果: {lastResult}
+            </div>
+          )}
+          {/* 大富豪マッチの途中経過 */}
+          {matchInfo && !matchInfo.over && (
+            <div style={{ border: '1px solid #335577', background: 'rgba(68,136,204,0.08)', padding: '4px 8px', marginBottom: 6, fontSize: 11 }}>
+              <span style={{ color: '#88ccff' }}>🏁 マッチ進行中: 第{matchInfo.round}戦/{matchInfo.len}戦</span>
+              <span style={{ color: '#cde', marginLeft: 8 }}>
+                {Object.keys(matchInfo.points).sort((a, b) => matchInfo.points[b] - matchInfo.points[a]).map((id) => `${matchInfo.names[id]} ${matchInfo.points[id]}pt`).join(' / ')}
+              </span>
+              {isHost && <span style={{ color: '#ffcc44', marginLeft: 8 }}>「対局開始」で次戦へ</span>}
             </div>
           )}
           <div style={{ color: '#88ccff', marginBottom: 4 }}>対局者({playersLabel(def)})</div>
@@ -869,8 +972,24 @@ export default function Cards() {
         game.result.ranking.map((r) => (
           <div key={r.seat} style={{ fontSize: 12, color: r.rank === 1 ? '#ffcc44' : '#cde' }}>
             {r.rank}位 {r.name}{r.burst ? ' (バースト)' : ''}
+            {game.mode === 'daifugo' && matchInfo && <span style={{ color: '#88ccff', marginLeft: 6 }}>+{DF_MATCH_PTS[r.rank - 1] || 0}pt</span>}
           </div>
         ))
+      )}
+      {/* 大富豪マッチの累計/最終結果 */}
+      {game.mode === 'daifugo' && matchInfo && (
+        <div style={{ marginTop: 8, borderTop: '1px solid #334466', paddingTop: 6 }}>
+          <div style={{ color: matchInfo.over ? '#ffcc44' : '#88ccff', fontSize: 12, marginBottom: 4 }}>
+            {matchInfo.over ? `🏆 マッチ終了！(全${matchInfo.len}戦)` : `🏁 マッチ途中経過(次は第${matchInfo.round}戦/${matchInfo.len}戦)`}
+          </div>
+          {Object.keys(matchInfo.points)
+            .sort((a, b) => (matchInfo.points[b] - matchInfo.points[a]) || ((matchInfo.lastRanks[a] || 9) - (matchInfo.lastRanks[b] || 9)))
+            .map((id, i) => (
+              <div key={id} style={{ fontSize: 12, color: i === 0 ? '#ffcc44' : '#cde' }}>
+                {matchInfo.over ? `${i + 1}位 ` : ''}{matchInfo.names[id]}: {matchInfo.points[id]}pt
+              </div>
+            ))}
+        </div>
       )}
       <div style={{ fontSize: 10, color: '#668', marginTop: 6 }}>まもなく待機画面に戻ります…</div>
     </div>
@@ -982,6 +1101,7 @@ export default function Cards() {
                 <span style={{ flex: 1, color: playing && game.turn === s ? '#ffcc44' : p.out ? '#556' : '#cde', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {playing && game.turn === s ? '▶ ' : ''}{p.name}
                 </span>
+                {matchInfo && <span style={{ width: 34, textAlign: 'right', color: '#88ccff' }}>{matchInfo.points[p.id] || 0}pt</span>}
                 <span style={{ width: 44, textAlign: 'right', color: '#668' }}>{p.out ? `${p.rank}位` : `${p.hand.length}枚`}</span>
                 <span style={{ width: 40, textAlign: 'center', color: '#ff8866' }}>{game.passed[s] && !p.out ? 'パス' : ''}</span>
               </div>
@@ -989,6 +1109,7 @@ export default function Cards() {
           </div>
           {/* 適用ルールと現在の状態 */}
           <div style={{ width: 108, border: '1px solid #334466', borderRadius: 6, padding: '4px 8px', fontSize: 11, flexShrink: 0 }}>
+            {matchInfo && <div style={{ color: '#ffcc44', marginBottom: 2 }}>🏁第{Math.min(matchInfo.round, matchInfo.len)}/{matchInfo.len}戦</div>}
             <div style={{ color: '#88ccff', marginBottom: 2 }}>ルール</div>
             {[['kaidan', '階段'], ['shibari', 'しばり'], ['miyako', '都落ち']].map(([k, l]) => (
               <div key={k} style={{ color: game.rules?.[k] ? '#ffcc44' : '#445566' }}>{game.rules?.[k] ? '✓ ' : '－ '}{l}</div>

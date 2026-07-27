@@ -273,6 +273,87 @@ begin
 end;
 $$;
 
+-- ---- 順位に応じた分配精算(複数人ゲーム用・2026-07-19追加) ----
+-- p_ranking: 賭け参加者(離脱者を除く)を最終順位順に並べたUUID配列。
+-- 分配率(1位は常に60%以上):
+--   2人: 100/0  3人: 70/30/0  4人: 60/25/15/0  5人以上: 60/20/15/5/0…
+-- 過半数(アクティブ参加者の50%超)が同じ順位列を報告した時点で分配して確定。
+-- 端数(100%に満たない余り)は1位に加算。
+create or replace function public.wager_settle_ranked(p_key text, p_ranking uuid[])
+returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_row game_wagers;
+  v_val text;
+  v_active uuid[];
+  v_need int;
+  v_agree int;
+  v_n int;
+  v_shares int[];
+  v_amount bigint;
+  v_paid bigint := 0;
+  v_i int;
+begin
+  perform set_config('app.allow_stat_change', 'on', true);
+  select * into v_row from game_wagers where key = p_key for update;
+  if v_row is null then return jsonb_build_object('error', '賭けが見つかりません'); end if;
+  if v_row.status <> 'open' then return jsonb_build_object('ok', true, 'status', v_row.status); end if;
+  if not (auth.uid() = any(v_row.participants)) then
+    return jsonb_build_object('error', '参加者ではありません');
+  end if;
+  if auth.uid() = any(v_row.forfeited) then
+    return jsonb_build_object('error', '離脱扱いのため報告できません');
+  end if;
+
+  -- ランキングは「アクティブ参加者の並べ替え」であること(重複・欠け・部外者を拒否)
+  select array(select u from unnest(v_row.participants) u where not (u = any(v_row.forfeited))) into v_active;
+  v_n := coalesce(array_length(p_ranking, 1), 0);
+  if v_n <> coalesce(array_length(v_active, 1), 0)
+     or exists (select 1 from unnest(p_ranking) r where not (r = any(v_active)))
+     or (select count(distinct r) from unnest(p_ranking) r) <> v_n then
+    return jsonb_build_object('error', '順位の内容が不正です');
+  end if;
+  if v_n < 2 then return jsonb_build_object('error', '2人以上必要です'); end if;
+
+  v_val := array_to_string(p_ranking, ',');
+  update game_wagers
+     set reports = reports || jsonb_build_object(auth.uid()::text, v_val),
+         last_seen = last_seen || jsonb_build_object(auth.uid()::text, extract(epoch from now())::bigint)
+   where key = p_key
+  returning * into v_row;
+
+  v_need := v_n / 2 + 1;
+  select count(*) into v_agree
+    from jsonb_each_text(v_row.reports) r
+   where r.value = v_val and r.key::uuid = any(v_active);
+  if v_agree < v_need then
+    return jsonb_build_object('ok', true, 'pending', true);
+  end if;
+
+  v_shares := case
+    when v_n = 2 then array[100, 0]
+    when v_n = 3 then array[70, 30, 0]
+    when v_n = 4 then array[60, 25, 15, 0]
+    else array[60, 20, 15, 5, 0, 0, 0, 0]
+  end;
+  for v_i in 2..v_n loop
+    v_amount := v_row.pot * v_shares[v_i] / 100;
+    if v_amount > 0 then
+      update profiles set gold = gold + v_amount where id = p_ranking[v_i];
+      v_paid := v_paid + v_amount;
+    end if;
+  end loop;
+  -- 1位は自分の取り分+端数(常に60%以上)
+  update profiles set gold = gold + (v_row.pot - v_paid) where id = p_ranking[1];
+  update game_wagers set status = 'settled', winner = p_ranking[1], settled_at = now() where key = p_key;
+  return jsonb_build_object('ok', true, 'status', 'settled', 'pot', v_row.pot, 'winner', p_ranking[1], 'top_gain', v_row.pot - v_paid);
+end;
+$$;
+
+revoke all on function public.wager_settle_ranked(text, uuid[]) from public, anon;
+grant execute on function public.wager_settle_ranked(text, uuid[]) to authenticated;
+
 revoke all on function public.wager_join(text, text, bigint) from public, anon;
 revoke all on function public.wager_report(text, uuid) from public, anon;
 revoke all on function public.wager_refund_stale(text) from public, anon;
