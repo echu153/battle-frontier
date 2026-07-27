@@ -120,15 +120,27 @@ export default function Cards() {
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
 
-  // ---- 認証 + is_adminゲート ----
+  // ---- 認証 ----
+  //   ※プロフィール取得が失敗(ネットワーク瞬断等)しても loading を必ず解除する。
+  //     以前は profiles クエリが reject すると setLoading(false) に到達せず「読み込み中」で
+  //     永久に固まる穴があった(finallyで確実に解除する)。
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { nav('/login'); return }
-      const { data: prof } = await supabase.from('profiles').select('username').eq('id', user.id).maybeSingle()
+      let user
+      try {
+        const r = await supabase.auth.getUser()
+        user = r?.data?.user || null
+      } catch { user = null }
       if (cancelled) return
-      setMe({ id: user.id, name: prof?.username || '名無し' })
+      if (!user) { nav('/login'); return }
+      let name = '名無し'
+      try {
+        const { data: prof } = await supabase.from('profiles').select('username').eq('id', user.id).maybeSingle()
+        if (prof?.username) name = prof.username
+      } catch { /* プロフィール取得失敗でも入室は許可(名前は既定) */ }
+      if (cancelled) return
+      setMe({ id: user.id, name })
       setLoading(false)
     })()
     return () => { cancelled = true }

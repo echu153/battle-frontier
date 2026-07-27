@@ -6,7 +6,7 @@
 //    （まずキャッシュで即表示→裏で更新）＝ダンジョン再入場などが軽くなる
 //  - Supabase等のクロスオリジン(API/データ)とGET以外は一切触らない＝余計な遅延やデータ事故なし
 
-const VERSION = 'bf-v2'
+const VERSION = 'bf-v3'
 const STATIC_CACHE = `bf-static-${VERSION}`
 
 self.addEventListener('install', () => {
