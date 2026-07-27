@@ -33,52 +33,61 @@ export function StampBar({ spectator, players = [], onSend }) {
   // 送信してもパネルは閉じない(×かカテゴリ再タップで閉じる)
   const send = (text) => { onSend(text); setTargetMode(false) }
   return (
-    <div style={{ marginTop: '10px', width: '100%' }}>
-      <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
-        {cats.map((c) => (
-          <button key={c.key} onClick={() => { setCat(cat === c.key ? null : c.key); setTargetMode(false) }}
-            style={btn(cat === c.key ? '#ffcc44' : '#6699cc', {
-              padding: '4px 10px',
-              background: cat === c.key ? 'rgba(255,204,68,0.12)' : 'none',
-            })}>
-            {c.label}
-          </button>
-        ))}
-      </div>
-      {cur && (
-        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '6px', padding: '6px', border: '1px solid #334466', borderRadius: '8px', background: 'rgba(20,35,60,0.5)' }}>
-          {targetMode ? (
-            <>
-              <span style={{ color: '#ffcc44', fontSize: '11px', alignSelf: 'center' }}>誰を応援する？</span>
-              {players.map((p) => (
-                <button key={p.id} onClick={() => send(`${p.name}頑張れ！`)} style={btn('#44dd88')}>{p.name}</button>
-              ))}
-              <button onClick={() => setTargetMode(false)} style={btn('#668')}>戻る</button>
-            </>
-          ) : (
-            <>
-              {cur.items.map((it, i) => {
-                const isTarget = typeof it === 'object' && it.target
-                const label = isTarget ? it.label : it
-                return (
-                  <button key={i}
-                    onClick={() => (isTarget ? setTargetMode(true) : send(it))}
-                    style={btn(isTarget ? '#44dd88' : '#88ccff')}>
-                    {label}
-                  </button>
-                )
-              })}
-              <button onClick={() => setCat(null)} style={btn('#668', { padding: '4px 8px' })}>×</button>
-            </>
-          )}
+    <>
+      {/* 固定バーの分だけレイアウトに空間を確保(手札の増減でバーが動かないように) */}
+      <div style={{ height: '56px' }} />
+      <div style={{
+        position: 'fixed', bottom: '8px', left: '50%', transform: 'translateX(-50%)',
+        width: 'min(96vw, 560px)', zIndex: 45,
+        display: 'flex', flexDirection: 'column', gap: '6px',
+      }}>
+        {/* 展開パネルは上方向に開く(カテゴリ列は常に同じ位置) */}
+        {cur && (
+          <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center', padding: '6px', border: '1px solid #334466', borderRadius: '8px', background: 'rgba(13,20,38,0.95)' }}>
+            {targetMode ? (
+              <>
+                <span style={{ color: '#ffcc44', fontSize: '11px', alignSelf: 'center' }}>誰を応援する？</span>
+                {players.map((p) => (
+                  <button key={p.id} onClick={() => send(`${p.name}頑張れ！`)} style={btn('#44dd88')}>{p.name}</button>
+                ))}
+                <button onClick={() => setTargetMode(false)} style={btn('#668')}>戻る</button>
+              </>
+            ) : (
+              <>
+                {cur.items.map((it, i) => {
+                  const isTarget = typeof it === 'object' && it.target
+                  const label = isTarget ? it.label : it
+                  return (
+                    <button key={i}
+                      onClick={() => (isTarget ? setTargetMode(true) : send(it))}
+                      style={btn(isTarget ? '#44dd88' : '#88ccff')}>
+                      {label}
+                    </button>
+                  )
+                })}
+                <button onClick={() => setCat(null)} style={btn('#668', { padding: '4px 8px' })}>×</button>
+              </>
+            )}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center', padding: '5px 6px', border: '1px solid #223355', borderRadius: '10px', background: 'rgba(13,20,38,0.92)' }}>
+          {cats.map((c) => (
+            <button key={c.key} onClick={() => { setCat(cat === c.key ? null : c.key); setTargetMode(false) }}
+              style={btn(cat === c.key ? '#ffcc44' : '#6699cc', {
+                padding: '4px 10px',
+                background: cat === c.key ? 'rgba(255,204,68,0.12)' : 'none',
+              })}>
+              {c.label}
+            </button>
+          ))}
         </div>
-      )}
-    </div>
+      </div>
+    </>
   )
 }
 
 // 受信スタンプの簡易表示(画面下部中央・名前付き)
-export function StampOverlay({ stamps, bottom = 64 }) {
+export function StampOverlay({ stamps, bottom = 110 }) {
   if (!stamps || stamps.length === 0) return null
   return (
     <>
