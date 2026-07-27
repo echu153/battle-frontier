@@ -85,6 +85,10 @@ export default function Cards() {
   const [stamps, setStamps] = useState([]) // 表示中スタンプ
   const stampSeqRef = useRef(0)
   const stampCdRef = useRef(0)
+  const [splash, setSplash] = useState(null) // 大きな演出文言(8切り！/革命！など)
+  const splashTimerRef = useRef(null)
+  const [kiriFlash, setKiriFlash] = useState(null) // 8切り: 流れる前に一瞬場に見せるカード
+  const kiriTimerRef = useRef(null)
 
   const lobbyChRef = useRef(null)
   const roomChRef = useRef(null)
@@ -332,11 +336,28 @@ export default function Cards() {
       wagerKeyRef.current = payload.wagerKey || null
       setGame(payload.game)
       setBetBusy(false)
-      for (const ev of payload.events || []) {
-        if (ev.t === 'revolution') showToast(ev.on ? '⚡ 革命！' : '⚡ 革命返し！')
-        if (ev.t === 'burst') showToast(`💥 ${payload.game.players[ev.seat]?.name} バースト！`)
-        if (ev.t === 'shibari') showToast(`🔒 しばり発生！(${ev.suits.map((s) => SUIT_LABEL[s]).join('')})`)
-        if (ev.t === 'miyako') showToast(`⛰ ${payload.game.players[ev.seat]?.name} 都落ち！`)
+      // 特殊イベントは大きな演出文言で表示(8切り/革命/しばり/階段/都落ち/バースト)
+      const evs = payload.events || []
+      const fx = []
+      const playEv = evs.find((e) => e.t === 'play')
+      for (const ev of evs) {
+        if (ev.t === 'revolution') fx.push(ev.on ? '⚡革命！' : '⚡革命返し！')
+        if (ev.t === 'clear' && ev.kiri) fx.push('✂8切り！')
+        if (ev.t === 'shibari') fx.push(`🔒しばり！(${ev.suits.map((s) => SUIT_LABEL[s]).join('')})`)
+        if (ev.t === 'miyako') fx.push(`⛰${payload.game.players[ev.seat]?.name} 都落ち！`)
+        if (ev.t === 'burst') fx.push(`💥${payload.game.players[ev.seat]?.name} バースト！`)
+        if (ev.t === 'play' && ev.seq) fx.push('📶階段！')
+      }
+      if (fx.length > 0) {
+        setSplash(fx.join('　'))
+        if (splashTimerRef.current) clearTimeout(splashTimerRef.current)
+        splashTimerRef.current = setTimeout(() => setSplash(null), 1600)
+      }
+      // 8切り: 出したカードを一瞬場に見せてから流す
+      if (evs.some((e) => e.t === 'clear' && e.kiri) && playEv?.cardObjs) {
+        setKiriFlash(playEv.cardObjs)
+        if (kiriTimerRef.current) clearTimeout(kiriTimerRef.current)
+        kiriTimerRef.current = setTimeout(() => setKiriFlash(null), 1300)
       }
       // 都落ち用: この部屋の直近の大富豪(1位)を記録
       if (payload.game.phase === 'ended' && payload.game.mode === 'daifugo') {
@@ -454,6 +475,9 @@ export default function Cards() {
     setNpcs([]); npcsRef.current = []
     setLastResult(null); setSelCards([]); setBetBusy(false)
     setStamps([])
+    setSplash(null); setKiriFlash(null)
+    if (splashTimerRef.current) clearTimeout(splashTimerRef.current)
+    if (kiriTimerRef.current) clearTimeout(kiriTimerRef.current)
     betPendingRef.current = null
     if (hostGraceRef.current) { clearTimeout(hostGraceRef.current); hostGraceRef.current = null }
     try { sessionStorage.removeItem('bf-cards-room') } catch { /* 無視 */ }
@@ -649,9 +673,20 @@ export default function Cards() {
 
   const wrap = (children) => (
     <div style={{ minHeight: '100vh', background: '#0d1020', color: '#cde', fontFamily: 'monospace', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 12 }}>
+      <style>{'@keyframes cfsplash { 0% { transform: scale(2.2); opacity: 0 } 18% { transform: scale(1); opacity: 1 } 78% { opacity: 1 } 100% { opacity: 0 } }'}</style>
       {children}
       {toast && (
         <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: '#112244', border: '1px solid #4488cc', color: '#cde', padding: '8px 16px', fontSize: 12, zIndex: 60, whiteSpace: 'nowrap' }}>{toast}</div>
+      )}
+      {splash && (
+        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 70 }}>
+          <div style={{
+            fontSize: 44, fontWeight: 'bold', color: '#ff4422', textAlign: 'center',
+            fontFamily: "'Hiragino Mincho ProN','Yu Mincho',serif",
+            textShadow: '0 0 24px rgba(0,0,0,0.9), 3px 3px 0 #550000, -2px -2px 0 #ffcc44',
+            animation: 'cfsplash 1.6s ease-out both', maxWidth: '94vw',
+          }}>{splash}</div>
+        </div>
       )}
     </div>
   )
@@ -939,20 +974,35 @@ export default function Cards() {
     return wrap(
       <div style={{ width: '100%', maxWidth: 560 }}>
         {header}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 11, marginBottom: 6 }}>
-          {game.players.map((p, s) => (
-            <span key={s} style={{ color: playing && game.turn === s ? '#ffcc44' : p.out ? '#556' : '#cde' }}>
-              {p.name}: {p.out ? `${p.rank}位` : `${p.hand.length}枚`}
-              {game.passed[s] && !p.out ? <span style={{ color: '#668' }}>(パス)</span> : ''}
-            </span>
-          ))}
-          {game.revolution && <span style={{ color: '#ff4444' }}>⚡革命中</span>}
-          {game.field?.lock && <span style={{ color: '#ffcc44' }}>🔒しばり({game.field.lock.map((s) => SUIT_LABEL[s]).join('')})</span>}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'stretch' }}>
+          {/* プレイヤーは縦並び・パス欄は固定幅(テキストがずれない) */}
+          <div style={{ flex: 1, border: '1px solid #223355', borderRadius: 6, padding: '4px 8px' }}>
+            {game.players.map((p, s) => (
+              <div key={s} style={{ display: 'flex', alignItems: 'center', fontSize: 12, padding: '2px 0' }}>
+                <span style={{ flex: 1, color: playing && game.turn === s ? '#ffcc44' : p.out ? '#556' : '#cde', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {playing && game.turn === s ? '▶ ' : ''}{p.name}
+                </span>
+                <span style={{ width: 44, textAlign: 'right', color: '#668' }}>{p.out ? `${p.rank}位` : `${p.hand.length}枚`}</span>
+                <span style={{ width: 40, textAlign: 'center', color: '#ff8866' }}>{game.passed[s] && !p.out ? 'パス' : ''}</span>
+              </div>
+            ))}
+          </div>
+          {/* 適用ルールと現在の状態 */}
+          <div style={{ width: 108, border: '1px solid #334466', borderRadius: 6, padding: '4px 8px', fontSize: 11, flexShrink: 0 }}>
+            <div style={{ color: '#88ccff', marginBottom: 2 }}>ルール</div>
+            {[['kaidan', '階段'], ['shibari', 'しばり'], ['miyako', '都落ち']].map(([k, l]) => (
+              <div key={k} style={{ color: game.rules?.[k] ? '#ffcc44' : '#445566' }}>{game.rules?.[k] ? '✓ ' : '－ '}{l}</div>
+            ))}
+            {game.revolution && <div style={{ color: '#ff4444', marginTop: 2 }}>⚡革命中</div>}
+            {game.field?.lock && <div style={{ color: '#ffcc44', marginTop: 2 }}>🔒{game.field.lock.map((s) => SUIT_LABEL[s]).join('')}しばり中</div>}
+          </div>
         </div>
         <div style={{ background: '#0a2a18', border: '2px solid #1a5535', borderRadius: 6, padding: 10, minHeight: 70, display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center', width: '100%' }}>
           {game.field
             ? game.field.cards.map((c) => <TCard key={c.id} c={c} />)
-            : <span style={{ color: '#557', fontSize: 12 }}>場は空(好きな札を出せます)</span>}
+            : kiriFlash
+              ? kiriFlash.map((c) => <TCard key={c.id} c={c} sel />)
+              : <span style={{ color: '#557', fontSize: 12 }}>場は空(好きな札を出せます)</span>}
         </div>
         {mySeat >= 0 && game.phase !== 'ended' && (
           <div style={{ marginTop: 8 }}>

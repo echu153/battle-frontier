@@ -151,7 +151,7 @@ export function applyDaifugo(state, playerId, action) {
   st.field = { cards, count: cards.length, strength: res.strength, type: res.type, suits: res.suits, lock }
   st.lastPlayer = seat
   st.passed = st.players.map(() => false)
-  ev.push({ t: 'play', seat, cards: cards.map(cardLabel) })
+  ev.push({ t: 'play', seat, cards: cards.map(cardLabel), cardObjs: cards, seq: res.type === 'seq' })
 
   if (me.hand.length === 0) {
     me.out = true
