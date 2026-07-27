@@ -60,7 +60,7 @@ export function createDaifugo(playersIn, rules = {}, championId = null) {
   for (const p of players) sortDf(p.hand)
   return {
     mode: 'daifugo', players,
-    rules: { kaidan: !!rules.kaidan, shibari: !!rules.shibari, miyako: !!rules.miyako },
+    rules: { kaidan: !!rules.kaidan, shibari: !!rules.shibari, miyako: !!rules.miyako, kakumei: rules.kakumei !== false },
     champion: rules.miyako && championId && players.some((p) => p.id === championId) ? championId : null,
     turn: 0, field: null, // { cards, count, strength, type, suits, lock }
     lastPlayer: null, passed: players.map(() => false),
@@ -146,7 +146,7 @@ export function applyDaifugo(state, playerId, action) {
 
   me.hand = me.hand.filter((c) => !cards.some((x) => x.id === c.id))
   const isKiri = cards.some((c) => !c.joker && c.r === 8) // 8切り
-  const isRev = cards.length >= 4
+  const isRev = cards.length >= 4 && st.rules.kakumei !== false // 革命(ルールでOFF可)
   if (isRev) { st.revolution = !st.revolution; ev.push({ t: 'revolution', on: st.revolution }) }
   st.field = { cards, count: cards.length, strength: res.strength, type: res.type, suits: res.suits, lock }
   st.lastPlayer = seat

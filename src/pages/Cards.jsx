@@ -70,7 +70,7 @@ export default function Cards() {
   const [rooms, setRooms] = useState([])
   const [roomTitle, setRoomTitle] = useState('')
   // 部屋の設定はホストが入室後に決める(全員へbroadcast同期)
-  const DEFAULT_SETTINGS = { gameType: 'daifugo', rules: { kaidan: false, shibari: false, miyako: false }, bet: 0, matchLen: 3 }
+  const DEFAULT_SETTINGS = { gameType: 'daifugo', rules: { kakumei: true, kaidan: false, shibari: false, miyako: false }, bet: 0, matchLen: 3 }
   const DF_MATCH_PTS = [4, 2, 1, 0] // 大富豪マッチ: 順位ごとの獲得pt(1位→4位)
   const rankColor = (r) => (r === 1 ? '#ffcc44' : r === 2 ? '#c8d2e0' : r === 3 ? '#cc8850' : '#7788aa') // 金/銀/銅/灰
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
@@ -588,7 +588,7 @@ export default function Cards() {
   }
   const rulesLabel = (rules) => {
     if (!rules) return ''
-    const on = [rules.kaidan && '階段', rules.shibari && 'しばり', rules.miyako && '都落ち'].filter(Boolean)
+    const on = [rules.kakumei === false && '革命なし', rules.kaidan && '階段', rules.shibari && 'しばり', rules.miyako && '都落ち'].filter(Boolean)
     return on.length > 0 ? on.join('/') : ''
   }
 
@@ -863,14 +863,17 @@ export default function Cards() {
               {settings.gameType === 'daifugo' && (
                 <div style={{ marginBottom: 6 }}>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                    {[['kaidan', '階段'], ['shibari', 'しばり'], ['miyako', '都落ち']].map(([key, label]) => (
-                      <button key={key} onClick={() => updateSettings({ rules: { ...settings.rules, [key]: !settings.rules[key] } })}
-                        style={btnStyle(settings.rules[key] ? '#ffcc44' : '#446688', { fontSize: 11, background: settings.rules[key] ? 'rgba(255,204,68,0.1)' : 'none' })}>
-                        {settings.rules[key] ? '✓ ' : ''}{label}
-                      </button>
-                    ))}
+                    {[['kakumei', '革命'], ['kaidan', '階段'], ['shibari', 'しばり'], ['miyako', '都落ち']].map(([key, label]) => {
+                      const on = key === 'kakumei' ? settings.rules.kakumei !== false : !!settings.rules[key]
+                      return (
+                        <button key={key} onClick={() => updateSettings({ rules: { ...settings.rules, [key]: !on } })}
+                          style={btnStyle(on ? '#ffcc44' : '#446688', { fontSize: 11, background: on ? 'rgba(255,204,68,0.1)' : 'none' })}>
+                          {on ? '✓ ' : ''}{label}
+                        </button>
+                      )
+                    })}
                   </div>
-                  <div style={{ fontSize: 9, color: '#668', marginTop: 3 }}>階段=同スート3枚以上の連番 / しばり=スート一致で以後同スート限定 / 都落ち=前回1位が1位を逃すと即最下位(2戦目から)</div>
+                  <div style={{ fontSize: 9, color: '#668', marginTop: 3 }}>革命=4枚以上出しで強さ反転 / 階段=同スート3枚以上の連番 / しばり=スート一致で以後同スート限定 / 都落ち=前回1位が1位を逃すと即最下位(2戦目から)</div>
                   <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 6 }}>
                     <span style={{ fontSize: 11, color: '#88ccff' }}>マッチ:</span>
                     {[3, 5, 7].map((n) => (
@@ -1128,9 +1131,10 @@ export default function Cards() {
           <div style={{ width: 108, border: '1px solid #334466', borderRadius: 6, padding: '4px 8px', fontSize: 11, flexShrink: 0 }}>
             {matchInfo && <div style={{ color: '#ffcc44', marginBottom: 2 }}>🏁第{Math.min(matchInfo.round, matchInfo.len)}/{matchInfo.len}戦</div>}
             <div style={{ color: '#88ccff', marginBottom: 2 }}>ルール</div>
-            {[['kaidan', '階段'], ['shibari', 'しばり'], ['miyako', '都落ち']].map(([k, l]) => (
-              <div key={k} style={{ color: game.rules?.[k] ? '#ffcc44' : '#445566' }}>{game.rules?.[k] ? '✓ ' : '－ '}{l}</div>
-            ))}
+            {[['kakumei', '革命'], ['kaidan', '階段'], ['shibari', 'しばり'], ['miyako', '都落ち']].map(([k, l]) => {
+              const on = k === 'kakumei' ? game.rules?.kakumei !== false : !!game.rules?.[k]
+              return <div key={k} style={{ color: on ? '#ffcc44' : '#445566' }}>{on ? '✓ ' : '－ '}{l}</div>
+            })}
             {game.revolution && <div style={{ color: '#ff4444', marginTop: 2 }}>⚡革命中</div>}
             {game.field?.lock && <div style={{ color: '#ffcc44', marginTop: 2 }}>🔒{game.field.lock.map((s) => SUIT_LABEL[s]).join('')}しばり中</div>}
           </div>
