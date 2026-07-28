@@ -484,11 +484,23 @@ export default function Cards() {
         ch.send({ type: 'broadcast', event: 'state', payload: { seq: stateSeqRef.current, game: gameRef.current, events: [], wagerKey: wagerKeyRef.current, match: matchRef.current } })
       }
       ch.send({ type: 'broadcast', event: 'settings', payload: { settings: settingsRef.current } })
+      // NPCはホストのローカル状態なので、ホストだけが配信元になる(下のnpcs同期)
+      if (roomInfo.hostId === myself.id) {
+        ch.send({ type: 'broadcast', event: 'npcs', payload: { npcs: npcsRef.current } })
+      }
     })
     // ---- 部屋設定の同期 ----
     ch.on('broadcast', { event: 'settings' }, ({ payload }) => {
       settingsRef.current = payload.settings
       setSettings(payload.settings)
+    })
+    // ---- NPCの同期(ホスト→全員) ----
+    //   NPCはホストのローカル状態のため、以前はゲスト側の待機画面に出ず「一戦終わるとNPCが
+    //   抜けた」ように見えていた(対局中はホスト配信の盤面に居るので見える)。ホストが変更時と
+    //   復帰要求時に配信し、ゲストはそれをそのまま表示に使う。
+    ch.on('broadcast', { event: 'npcs' }, ({ payload }) => {
+      if (roomInfo.hostId === myself.id) return // ホストは自分の状態が正
+      setNpcs(payload.npcs || [])
     })
     // ---- 賭けの供託フロー ----
     ch.on('broadcast', { event: 'betcall' }, async ({ payload }) => {
@@ -632,7 +644,10 @@ export default function Cards() {
   }
   const removeNpc = (id) => setNpcs((prev) => prev.filter((n) => n.id !== id))
   useEffect(() => {
-    if (room && room.hostId === me?.id) publishRoom(game?.phase === 'playing' ? 'playing' : 'waiting')
+    if (!room || room.hostId !== me?.id) return
+    publishRoom(game?.phase === 'playing' ? 'playing' : 'waiting')
+    // NPCの増減をゲストにも反映(ゲスト側の待機画面からNPCが消えて見える問題の対策)
+    roomChRef.current?.send({ type: 'broadcast', event: 'npcs', payload: { npcs } })
   }, [npcs]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const setSpectatorMode = (next) => {
