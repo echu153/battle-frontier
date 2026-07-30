@@ -93,6 +93,9 @@ export default function Cards() {
   const splashTimerRef = useRef(null)
   const [kiriFlash, setKiriFlash] = useState(null) // 8切り: 流れる前に一瞬場に見せるカード
   const kiriTimerRef = useRef(null)
+  const [omSel, setOmSel] = useState(null)         // ババ抜き: 並べ替えで選択中の位置
+  const [moveFlash, setMoveFlash] = useState(null) // 並べ替えの演出 { seat, from, to }
+  const moveTimerRef = useRef(null)
   const [deadline, setDeadline] = useState(null) // 持ち時間の期限(全員共通)
   const [nowTick, setNowTick] = useState(0)      // 残り秒の再描画用
   const [clearFlash, setClearFlash] = useState(null) // 場が流れる直前の様子 { cards, passedSeats }
@@ -214,6 +217,22 @@ export default function Cards() {
   }, [publishRoom])
 
   // ---- ホスト: エンジン適用→配信 ----
+  // 手番が変わった時だけ持ち時間をリセットする(並べ替え等では延長させない)
+  const deadlineRef = useRef(null)
+  const turnKeyRef = useRef(null)
+  const hostDeadline = useCallback((st) => {
+    const timed = (st.phase === 'playing' || st.phase === 'exchange') && st.mode !== 'speed'
+    if (!timed) { deadlineRef.current = null; turnKeyRef.current = null; return null }
+    const key = st.phase === 'exchange'
+      ? `ex:${(st.exchange?.pending || []).join(',')}`
+      : `turn:${st.turn}`
+    if (key !== turnKeyRef.current || !deadlineRef.current) {
+      deadlineRef.current = Date.now() + TURN_SEC_TRUMP * 1000
+      turnKeyRef.current = key
+    }
+    return deadlineRef.current
+  }, [])
+
   const hostBroadcast = useCallback((newState, events = []) => {
     gameRef.current = newState
     stateSeqRef.current += 1
@@ -223,12 +242,12 @@ export default function Cards() {
         seq: stateSeqRef.current, game: newState, events, wagerKey: wagerKeyRef.current,
         match: matchRef.current, // 大富豪マッチの進行状況
         disconnected: [...autoRef.current], // 切断して自動プレイ中の席(無効試合精算で負け扱いにする)
-        // 持ち時間の期限(全員で同じカウントダウンを表示するため)
-        deadline: (newState.phase === 'playing' || newState.phase === 'exchange') && newState.mode !== 'speed'
-          ? Date.now() + TURN_SEC_TRUMP * 1000 : null,
+        // 持ち時間の期限。手番(または交換の未提出者)が変わった時だけ更新するので、
+        // 手札の並べ替えなど手番を消費しない操作では時間が延びない
+        deadline: hostDeadline(newState),
       },
     })
-  }, [])
+  }, [hostDeadline])
 
   // 大富豪マッチ: 局が終わるたびにポイントを加算(ホストのみ)
   const hostUpdateMatch = useCallback((endedState) => {
@@ -454,6 +473,12 @@ export default function Cards() {
           const nm = payload.game.players[ev.seat]?.id === myself.id ? 'あなた' : payload.game.players[ev.seat]?.name
           fx.push({ name: nm, main: '🎉 上がり！', sub: `${ev.rank}位` })
         }
+        // ババ抜きの並べ替え: 動いた位置を光らせる(中身は見えない)
+        if (ev.t === 'shuffleMove') {
+          setMoveFlash({ seat: ev.seat, from: ev.from, to: ev.to })
+          if (moveTimerRef.current) clearTimeout(moveTimerRef.current)
+          moveTimerRef.current = setTimeout(() => setMoveFlash(null), 900)
+        }
         // カード交換の結果は一呼吸おいて内容を見せる
         if (ev.t === 'exchangeDone') {
           setExchangeInfo(ev.moves)
@@ -516,6 +541,11 @@ export default function Cards() {
       const id = ++stampSeqRef.current
       setStamps((prev) => [...prev.slice(-4), { id, name: payload.name, text: payload.text }])
       setTimeout(() => setStamps((prev) => prev.filter((s) => s.id !== id)), 2600)
+    })
+    // 持ち時間切れ(ランダムな手が自動で出される)
+    ch.on('broadcast', { event: 'timeup' }, ({ payload }) => {
+      const nm = gameRef.current?.players[payload.seat]?.name
+      showToast(`⏱ ${nm || '?'} 時間切れ(自動で出しました)`)
     })
     // リロード復帰者からの状態要求: 誰でも持っていれば現在のstate/設定を返す(ホストのリロードにも対応)
     ch.on('broadcast', { event: 'statereq' }, () => {
@@ -629,6 +659,9 @@ export default function Cards() {
     setLastResult(null); setSelCards([]); setBetBusy(false)
     setStamps([])
     setSplash(null); setKiriFlash(null); setClearFlash(null); setExchangeInfo(null)
+    setOmSel(null); setMoveFlash(null)
+    if (moveTimerRef.current) clearTimeout(moveTimerRef.current)
+    deadlineRef.current = null; turnKeyRef.current = null; setDeadline(null)
     if (splashTimerRef.current) clearTimeout(splashTimerRef.current)
     if (kiriTimerRef.current) clearTimeout(kiriTimerRef.current)
     if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
@@ -804,6 +837,8 @@ export default function Cards() {
     if (!room || room.hostId !== me?.id || !game || game.mode === 'speed') return
     if (game.phase !== 'playing' && game.phase !== 'exchange') return
     const seq = stateSeqRef.current
+    // 残り時間で発火(並べ替え等で状態が更新されても持ち時間が延びない)
+    const wait = Math.max(0, (deadlineRef.current || Date.now() + TURN_SEC_TRUMP * 1000) - Date.now())
     const t = setTimeout(() => {
       if (stateSeqRef.current !== seq) return
       const cur = gameRef.current
@@ -823,7 +858,7 @@ export default function Cards() {
         roomChRef.current?.send({ type: 'broadcast', event: 'timeup', payload: { seat: cur.turn } })
         hostApply(cur.players[cur.turn].id, action)
       }
-    }, TURN_SEC_TRUMP * 1000)
+    }, wait + 300)
     deadlineTimerRef.current = t
     return () => clearTimeout(t)
   }, [game, room, me, hostApply])
@@ -1274,12 +1309,48 @@ export default function Cards() {
             </div>
             <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
               {s === mySeat
-                ? p.hand.map((c) => <TCard key={c.id} c={c} small />)
+                ? p.hand.map((c, i) => (
+                  <span key={c.id} style={{
+                    display: 'inline-flex',
+                    // 自分が動かした札は少し浮かせて位置がわかるように
+                    transform: moveFlash?.seat === s && moveFlash.to === i ? 'translateY(-4px)' : 'none',
+                    transition: 'transform 0.2s',
+                  }}>
+                    <TCard c={c} small sel={omSel === i}
+                      onClick={p.out ? undefined : () => setOmSel(omSel === i ? null : i)} />
+                  </span>
+                ))
                 : p.hand.map((c, i) => (
-                  <TBack key={c.id} small
-                    onClick={myTurn && s === target ? () => sendAction({ type: 'draw', index: i }) : undefined} />
+                  <span key={c.id} style={{
+                    display: 'inline-flex',
+                    // 他人の手札: 動いた札を光らせて「入れ替えた」ことがわかるように
+                    transform: moveFlash?.seat === s && moveFlash.to === i ? 'translateY(-5px)' : 'none',
+                    transition: 'transform 0.25s',
+                    boxShadow: moveFlash?.seat === s && (moveFlash.to === i || moveFlash.from === i)
+                      ? '0 0 8px 2px rgba(255,204,68,0.9)' : 'none',
+                    borderRadius: 4,
+                  }}>
+                    <TBack small
+                      onClick={myTurn && s === target ? () => sendAction({ type: 'draw', index: i }) : undefined} />
+                  </span>
                 ))}
             </div>
+            {/* 自分の手札の並べ替え(心理戦用・いつでも動かせる) */}
+            {s === mySeat && !p.out && playing && (
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center', marginTop: 4 }}>
+                <button
+                  onClick={() => { if (omSel !== null && omSel > 0) { sendAction({ type: 'shuffleMove', index: omSel, dir: 'left' }); setOmSel(omSel - 1) } }}
+                  disabled={omSel === null || omSel === 0}
+                  style={btnStyle(omSel !== null && omSel > 0 ? '#ffcc44' : '#445', { padding: '2px 12px', fontSize: 14, opacity: omSel !== null && omSel > 0 ? 1 : 0.4 })}>←</button>
+                <span style={{ fontSize: 10, color: omSel === null ? '#668' : '#ffcc44' }}>
+                  {omSel === null ? '札をタップして選ぶと並べ替えできます' : '選択中の札を移動'}
+                </span>
+                <button
+                  onClick={() => { if (omSel !== null && omSel < p.hand.length - 1) { sendAction({ type: 'shuffleMove', index: omSel, dir: 'right' }); setOmSel(omSel + 1) } }}
+                  disabled={omSel === null || omSel >= p.hand.length - 1}
+                  style={btnStyle(omSel !== null && omSel < p.hand.length - 1 ? '#ffcc44' : '#445', { padding: '2px 12px', fontSize: 14, opacity: omSel !== null && omSel < p.hand.length - 1 ? 1 : 0.4 })}>→</button>
+              </div>
+            )}
           </div>
         ))}
         {myTurn && <div style={{ color: '#9fd', fontSize: 12, textAlign: 'center' }}>▲ {game.players[target]?.name} の札を1枚タップして引く</div>}

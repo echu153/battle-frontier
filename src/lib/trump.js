@@ -75,6 +75,8 @@ export const GAME_HELP = {
       '自分の番に、次の人の手札（裏向き）から1枚引く。',
       '同じ数字が2枚そろうと自動で捨てられる。',
       '手札を先に無くした順に上位。最後にJOKERを持っていた人が最下位。',
+      '自分の札をタップして ← → で並べ替えできる（いつでも・何回でも）。',
+      '並べ替えると他の人には「どの位置が動いたか」だけが光って見える。中身は見えない。',
     ],
     special: {},
     always: null,
@@ -606,6 +608,20 @@ export function applyOldMaid(state, playerId, action) {
   const seat = st.players.findIndex((p) => p.id === playerId)
   if (seat === -1) return { error: '対局者ではありません' }
   if (st.phase !== 'playing') return { error: 'ゲームは終了しています' }
+  // ---- 手札の並べ替え(心理戦用・自分の番でなくても随時できる) ----
+  // 他プレイヤーには「どの位置が動いたか」だけが伝わる(中身は見えない)
+  if (action.type === 'shuffleMove') {
+    const me = st.players[seat]
+    if (me.out) return { error: 'すでに上がっています' }
+    const from = action.index | 0
+    const dir = action.dir === 'right' ? 1 : -1
+    const to = from + dir
+    if (from < 0 || from >= me.hand.length) return { error: 'その位置に札はありません' }
+    if (to < 0 || to >= me.hand.length) return { error: 'これ以上動かせません' }
+    const [card] = me.hand.splice(from, 1)
+    me.hand.splice(to, 0, card)
+    return { state: st, events: [{ t: 'shuffleMove', seat, from, to }] }
+  }
   if (st.turn !== seat) return { error: 'あなたの番ではありません' }
   if (action.type !== 'draw') return { error: '不明な操作です' }
   const target = nextActive(st.players, seat)
