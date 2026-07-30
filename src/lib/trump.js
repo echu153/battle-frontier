@@ -209,8 +209,10 @@ function doDfExchange(st, seat, action, ev) {
   ev.push({
     t: 'exchangeDone',
     moves: moves.map((m) => ({
+      from: m.from, to: m.to,
       fromName: st.players[m.from].name, toName: st.players[m.to].name,
-      cards: m.cards.map(cardLabel), auto: !!ex.pairs.find((p) => p.from === m.from)?.auto,
+      cards: m.cards.map(cardLabel), cardObjs: m.cards,
+      auto: !!ex.pairs.find((p) => p.from === m.from)?.auto,
     })),
   })
   st.exchange = null
@@ -380,12 +382,15 @@ function afterDfAction(st, seat, ev) {
     .filter((i) => !st.players[i].out && i !== st.lastPlayer)
   const allPassed = others.every((i) => st.passed[i])
   if (allPassed) {
+    // 流れる直前の場と「誰がパスしていたか」を演出用に残す(UIが一瞬見せてから流す)
+    const shownCards = st.field?.cards || null
+    const passedSeats = st.passed.map((v, i) => (v ? i : -1)).filter((i) => i >= 0)
     st.field = null
     st.passed = st.players.map(() => false)
     st.turn = st.lastPlayer !== null && !st.players[st.lastPlayer].out
       ? st.lastPlayer
       : nextActive(st.players, st.lastPlayer ?? seat)
-    ev.push({ t: 'clear' })
+    ev.push({ t: 'clear', cards: shownCards, passedSeats })
   } else {
     // 次のパスしていないアクティブへ
     let c = seat

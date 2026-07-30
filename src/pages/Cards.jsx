@@ -93,6 +93,10 @@ export default function Cards() {
   const splashTimerRef = useRef(null)
   const [kiriFlash, setKiriFlash] = useState(null) // 8切り: 流れる前に一瞬場に見せるカード
   const kiriTimerRef = useRef(null)
+  const [clearFlash, setClearFlash] = useState(null) // 場が流れる直前の様子 { cards, passedSeats }
+  const clearTimerRef = useRef(null)
+  const [exchangeInfo, setExchangeInfo] = useState(null) // カード交換の結果(一呼吸おいて表示)
+  const exchangeTimerRef = useRef(null)
   const [matchInfo, setMatchInfo] = useState(null) // 大富豪マッチ { len, round, points, names, lastRanks, over }
   const matchRef = useRef(null)
 
@@ -436,7 +440,24 @@ export default function Cards() {
         if (ev.t === 'burst') fx.push(`💥${payload.game.players[ev.seat]?.name} バースト！`)
         if (ev.t === 'play' && ev.seq) fx.push('📶階段！')
         if (ev.t === 'foul') fx.push(`🚫${ev.name} 反則上がり！(${ev.reasons.join('・')})`)
-        if (ev.t === 'exchangeDone') showToast('🔄 カード交換が成立しました')
+        // 誰が上がったかを演出で出す
+        if (ev.t === 'out') {
+          const nm = payload.game.players[ev.seat]?.id === myself.id ? 'あなた' : payload.game.players[ev.seat]?.name
+          fx.push(`🎉${nm} が上がり！(${ev.rank}位)`)
+        }
+        // カード交換の結果は一呼吸おいて内容を見せる
+        if (ev.t === 'exchangeDone') {
+          setExchangeInfo(ev.moves)
+          if (exchangeTimerRef.current) clearTimeout(exchangeTimerRef.current)
+          exchangeTimerRef.current = setTimeout(() => setExchangeInfo(null), 8000)
+        }
+      }
+      // 場が流れる時: 直前の場と「パス」表示を一瞬見せてから消す
+      const clearEv = evs.find((e) => e.t === 'clear' && !e.kiri && !e.spade3)
+      if (clearEv?.cards) {
+        setClearFlash({ cards: clearEv.cards, passedSeats: clearEv.passedSeats || [] })
+        if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
+        clearTimerRef.current = setTimeout(() => setClearFlash(null), 1400)
       }
       if (fx.length > 0) {
         setSplash(fx.join('　'))
@@ -598,9 +619,11 @@ export default function Cards() {
     setNpcs([]); npcsRef.current = []
     setLastResult(null); setSelCards([]); setBetBusy(false)
     setStamps([])
-    setSplash(null); setKiriFlash(null)
+    setSplash(null); setKiriFlash(null); setClearFlash(null); setExchangeInfo(null)
     if (splashTimerRef.current) clearTimeout(splashTimerRef.current)
     if (kiriTimerRef.current) clearTimeout(kiriTimerRef.current)
+    if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
+    if (exchangeTimerRef.current) clearTimeout(exchangeTimerRef.current)
     matchRef.current = null
     setMatchInfo(null)
     betPendingRef.current = null
@@ -1276,7 +1299,10 @@ export default function Cards() {
                   width: 44, textAlign: 'right', fontWeight: !p.out && p.hand.length <= 6 ? 'bold' : 'normal',
                   color: p.out ? rankColor(p.rank) : p.hand.length <= 3 ? '#ff4444' : p.hand.length <= 6 ? '#ffcc44' : '#668',
                 }}>{p.out ? `${p.rank}位` : `${p.hand.length}枚`}</span>
-                <span style={{ width: 40, textAlign: 'center', color: '#ff8866' }}>{game.passed[s] && !p.out ? 'パス' : ''}</span>
+                {/* パス表示。場が流れた直後も一瞬だけ残して「最後のパス」が見えるようにする */}
+                <span style={{ width: 40, textAlign: 'center', color: '#ff8866' }}>
+                  {!p.out && (game.passed[s] || clearFlash?.passedSeats?.includes(s)) ? 'パス' : ''}
+                </span>
               </div>
             ))}
           </div>
@@ -1294,19 +1320,51 @@ export default function Cards() {
         </div>
         {/* 場: 誰が出したかを表示 */}
         <div style={{ background: '#0a2a18', border: '2px solid #1a5535', borderRadius: 6, padding: '6px 10px 10px', minHeight: 84, width: '100%' }}>
-          <div style={{ fontSize: 11, textAlign: 'center', marginBottom: 4, minHeight: 15, color: '#7ab88f' }}>
+          <div style={{ fontSize: 11, textAlign: 'center', marginBottom: 4, minHeight: 15, color: clearFlash ? '#ff8866' : '#7ab88f' }}>
             {game.field
               ? <>{game.players[game.field.by]?.id === me.id ? 'あなた' : game.players[game.field.by]?.name} が出した札</>
-              : kiriFlash ? '' : ''}
+              : clearFlash ? '全員パス → 場が流れます' : ''}
           </div>
           <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center', minHeight: 54 }}>
             {game.field
               ? game.field.cards.map((c) => <TCard key={c.id} c={c} />)
               : kiriFlash
                 ? kiriFlash.map((c) => <TCard key={c.id} c={c} sel />)
-                : <span style={{ color: '#557', fontSize: 12 }}>場は空(好きな札を出せます)</span>}
+                : clearFlash
+                  ? clearFlash.cards.map((c) => <TCard key={c.id} c={c} dim />)
+                  : <span style={{ color: '#557', fontSize: 12 }}>場は空(好きな札を出せます)</span>}
           </div>
         </div>
+        {/* カード交換の結果(成立後に一呼吸おいて内容を見せる) */}
+        {exchangeInfo && (
+          <div style={{ border: '2px solid #ffcc44', background: 'rgba(255,204,68,0.1)', borderRadius: 8, padding: '8px 10px', marginTop: 8, fontSize: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <span style={{ color: '#ffcc44' }}>🔄 カード交換の結果</span>
+              <button onClick={() => setExchangeInfo(null)} style={btnStyle('#88ccff', { padding: '2px 8px', fontSize: 11 })}>✕</button>
+            </div>
+            {/* 自分がもらった札・渡した札を先に強調 */}
+            {mySeat >= 0 && exchangeInfo.filter((m) => m.to === mySeat).map((m, i) => (
+              <div key={'r' + i} style={{ marginBottom: 6 }}>
+                <div style={{ color: '#44dd88', marginBottom: 2 }}>▼ あなたが受け取った札（{m.fromName} から）</div>
+                <div style={{ display: 'flex', gap: 3 }}>{m.cardObjs.map((c) => <TCard key={c.id} c={c} sel />)}</div>
+              </div>
+            ))}
+            {mySeat >= 0 && exchangeInfo.filter((m) => m.from === mySeat).map((m, i) => (
+              <div key={'g' + i} style={{ marginBottom: 6 }}>
+                <div style={{ color: '#ff8866', marginBottom: 2 }}>▲ あなたが渡した札（{m.toName} へ{m.auto ? '・自動' : ''}）</div>
+                <div style={{ display: 'flex', gap: 3 }}>{m.cardObjs.map((c) => <TCard key={c.id} c={c} small dim />)}</div>
+              </div>
+            ))}
+            {/* 全体の流れ */}
+            <div style={{ borderTop: '1px solid #665522', paddingTop: 4, marginTop: 2, color: '#cde', lineHeight: 1.7 }}>
+              {exchangeInfo.map((m, i) => (
+                <div key={i} style={{ opacity: m.from === mySeat || m.to === mySeat ? 1 : 0.7 }}>
+                  {m.fromName} → {m.toName}: {m.cards.join(' ')}{m.auto ? '（自動）' : ''}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {/* カード交換フェーズ(2戦目以降) */}
         {game.phase === 'exchange' && (() => {
           const ex = game.exchange
