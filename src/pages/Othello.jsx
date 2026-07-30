@@ -77,6 +77,8 @@ export default function Othello() {
   const [stamps, setStamps] = useState([]) // 表示中スタンプ [{ id, name, text }]
   const stampSeqRef = useRef(0)
   const stampCdRef = useRef(0) // 連打防止クールダウン
+  const [ready, setReady] = useState(false) // 自分の準備OK
+  const readyRef = useRef(false)
   const myJoinedAtRef = useRef(0) // 入室時刻(観戦切替時も席順を維持するため保持)
   const hostGraceRef = useRef(null) // ホスト不在の猶予タイマー(リロード復帰待ち)
   const pendingLeaveRef = useRef(new Map()) // ホスト: 切断者の不戦勝猶予タイマー playerId→timeout
@@ -99,6 +101,7 @@ export default function Othello() {
   useEffect(() => { meRef.current = me }, [me])
   useEffect(() => { roomRef.current = room }, [room])
   useEffect(() => { membersRef.current = members }, [members])
+  useEffect(() => { readyRef.current = ready }, [ready])
   useEffect(() => { npcsRef.current = npcs }, [npcs])
 
   const showToast = (msg) => {
@@ -243,7 +246,7 @@ export default function Othello() {
       // 再track(観戦切替など)で同一キーに古いmetaが残ることがあるため常に最新のmetaを読む
       const list = Object.keys(st).map((key) => {
         const meta = st[key][st[key].length - 1]
-        return { id: key, name: meta?.name || '?', spectator: !!meta?.spectator, joinedAt: meta?.joinedAt || 0 }
+        return { id: key, name: meta?.name || '?', spectator: !!meta?.spectator, ready: !!meta?.ready, joinedAt: meta?.joinedAt || 0 }
       })
       list.sort((a, b) => a.joinedAt - b.joinedAt)
       // 部屋の上限 = 席5 + 観戦100。入室順であふれた人は自動退室(UIには明記しない)
@@ -429,7 +432,7 @@ export default function Othello() {
       if (status === 'SUBSCRIBED') {
         // 再接続(SUBSCRIBEDは再購読でも発火)で席順が入れ替わらないよう初回の時刻を保持
         if (!myJoinedAtRef.current) myJoinedAtRef.current = Date.now()
-        await ch.track({ name: myself.name, joinedAt: myJoinedAtRef.current, spectator: asSpectator })
+        await ch.track({ name: myself.name, joinedAt: myJoinedAtRef.current, spectator: asSpectator, ready: readyRef.current })
         ch.send({ type: 'broadcast', event: 'statereq', payload: {} }) // リロード復帰時の状態再取得
       }
     })
@@ -471,6 +474,7 @@ export default function Othello() {
     if (hostGraceRef.current) { clearTimeout(hostGraceRef.current); hostGraceRef.current = null }
     for (const t of pendingLeaveRef.current.values()) clearTimeout(t)
     pendingLeaveRef.current = new Map()
+    setReady(false); readyRef.current = false
     try { sessionStorage.removeItem('bf-othello-room') } catch { /* 無視 */ }
     setView('lobby')
   }, [])
@@ -559,6 +563,12 @@ export default function Othello() {
   const startGame = () => {
     const list = seatedOf(membersRef.current, npcsRef.current)
     if (list.length < 2) { showToast('対戦相手がいません(NPCを追加するか入室を待ってください)'); return }
+    // ホスト以外の対局者(人間)が全員「準備OK」でないと開始できない(NPCは対象外)
+    const notReady = list.filter((p) => !isNpcId(p.id) && p.id !== roomRef.current.hostId && !p.ready)
+    if (notReady.length > 0) {
+      showToast(`準備OKが揃っていません: ${notReady.map((p) => p.name).join(`・`)}`)
+      return
+    }
     // 手番順をシャッフル
     const order = list.map((p) => ({ id: p.id, name: p.name }))
     for (let i = order.length - 1; i > 0; i--) {
@@ -590,8 +600,17 @@ export default function Othello() {
   }
 
   // ---- プレイ⇔観戦の切替(ホストも可・presenceを再trackするだけ) ----
+  // ---- 準備OKの切替(presenceに載せて全員へ同期) ----
+  const toggleReady = () => {
+    const next = !readyRef.current
+    readyRef.current = next
+    setReady(next)
+    const meSpec = !!membersRef.current.find((m) => m.id === meRef.current.id)?.spectator
+    roomChRef.current?.track({ name: meRef.current.name, joinedAt: myJoinedAtRef.current, spectator: meSpec, ready: next })
+  }
+
   const setSpectatorMode = (next) => {
-    roomChRef.current?.track({ name: meRef.current.name, joinedAt: myJoinedAtRef.current, spectator: next })
+    roomChRef.current?.track({ name: meRef.current.name, joinedAt: myJoinedAtRef.current, spectator: next, ready: next ? false : readyRef.current })
   }
 
   // ---- スタンプ送信(観戦者含む全員・1.5秒クールダウン) ----
@@ -817,6 +836,7 @@ export default function Othello() {
             {seated.map((p, i) => (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
                 <span>{i + 1}. {p.name}{p.id === room.hostId ? ' (ホスト)' : ''}</span>
+                {(() => { if (isNpcId(p.id) || p.id === room.hostId) return null; return p.ready ? <span style={{ color: '#44dd88', marginLeft: 6 }}>✓準備OK</span> : <span style={{ color: '#886', marginLeft: 6 }}>準備中…</span> })()}
                 {isHost && isNpcId(p.id) && <button onClick={() => removeNpc(p.id)} style={btnStyle('#ff6644', { padding: '1px 6px', fontSize: '10px' })}>削除</button>}
                 {stampBubbles(p.id, 'left')}
               </div>
@@ -844,9 +864,16 @@ export default function Othello() {
             {(() => {
               const meSpec = !!members.find((m) => m.id === me.id)?.spectator
               return (
-                <button onClick={() => setSpectatorMode(!meSpec)} style={btnStyle(meSpec ? '#44dd88' : '#88ccff', { marginTop: '8px', padding: '4px 10px', fontSize: '11px' })}>
-                  {meSpec ? '⚔ 対局に参加する' : '👀 観戦にまわる'}
-                </button>
+                <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+                  {!meSpec && me.id !== room.hostId && (
+                    <button onClick={toggleReady} style={btnStyle(ready ? '#44dd88' : '#ffcc44', { padding: '4px 10px', fontSize: '11px', background: ready ? 'rgba(68,221,136,0.12)' : 'rgba(255,204,68,0.12)' })}>
+                      {ready ? '✓ 準備OK（取消）' : '準備OKにする'}
+                    </button>
+                  )}
+                  <button onClick={() => setSpectatorMode(!meSpec)} style={btnStyle(meSpec ? '#44dd88' : '#88ccff', { padding: '4px 10px', fontSize: '11px' })}>
+                    {meSpec ? '⚔ 対局に参加する' : '👀 観戦にまわる'}
+                  </button>
+                </div>
               )
             })()}
           </div>

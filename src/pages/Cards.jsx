@@ -113,6 +113,8 @@ export default function Cards() {
   const autoRef = useRef(new Set())
   const npcTimerRef = useRef(null)
   const deadlineTimerRef = useRef(null)
+  const [ready, setReady] = useState(false) // 自分の準備OK
+  const readyRef = useRef(false)
   const myJoinedAtRef = useRef(0)
   const wagerKeyRef = useRef(null)
   const hostGraceRef = useRef(null) // ホスト不在の猶予タイマー(リロード復帰待ち)
@@ -126,6 +128,7 @@ export default function Cards() {
   useEffect(() => { meRef.current = me }, [me])
   useEffect(() => { roomRef.current = room }, [room])
   useEffect(() => { membersRef.current = members }, [members])
+  useEffect(() => { readyRef.current = ready }, [ready])
   useEffect(() => { npcsRef.current = npcs }, [npcs])
   useEffect(() => { settingsRef.current = settings }, [settings])
 
@@ -367,7 +370,7 @@ export default function Cards() {
       const st = ch.presenceState()
       const list = Object.keys(st).map((key) => {
         const meta = st[key][st[key].length - 1]
-        return { id: key, name: meta?.name || '?', spectator: !!meta?.spectator, joinedAt: meta?.joinedAt || 0 }
+        return { id: key, name: meta?.name || '?', spectator: !!meta?.spectator, ready: !!meta?.ready, joinedAt: meta?.joinedAt || 0 }
       })
       list.sort((a, b) => a.joinedAt - b.joinedAt)
       const cap = 5 + 100 // 席(最大5) + 観戦100
@@ -588,7 +591,7 @@ export default function Cards() {
       if (status === 'SUBSCRIBED') {
         // 再接続(SUBSCRIBEDは再購読でも発火)で席順が入れ替わらないよう初回の時刻を保持
         if (!myJoinedAtRef.current) myJoinedAtRef.current = Date.now()
-        await ch.track({ name: myself.name, joinedAt: myJoinedAtRef.current, spectator: asSpectator })
+        await ch.track({ name: myself.name, joinedAt: myJoinedAtRef.current, spectator: asSpectator, ready: readyRef.current })
         ch.send({ type: 'broadcast', event: 'statereq', payload: {} }) // リロード復帰時の状態再取得
       }
     })
@@ -634,6 +637,7 @@ export default function Cards() {
     setMatchInfo(null)
     betPendingRef.current = null
     if (hostGraceRef.current) { clearTimeout(hostGraceRef.current); hostGraceRef.current = null }
+    setReady(false); readyRef.current = false
     try { sessionStorage.removeItem('bf-cards-room') } catch { /* 無視 */ }
     setView('lobby')
   }, [])
@@ -690,8 +694,17 @@ export default function Cards() {
     roomChRef.current?.send({ type: 'broadcast', event: 'npcs', payload: { npcs } })
   }, [npcs]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---- 準備OKの切替(presenceに載せて全員へ同期) ----
+  const toggleReady = () => {
+    const next = !readyRef.current
+    readyRef.current = next
+    setReady(next)
+    const meSpec = !!membersRef.current.find((m) => m.id === meRef.current.id)?.spectator
+    roomChRef.current?.track({ name: meRef.current.name, joinedAt: myJoinedAtRef.current, spectator: meSpec, ready: next })
+  }
+
   const setSpectatorMode = (next) => {
-    roomChRef.current?.track({ name: meRef.current.name, joinedAt: myJoinedAtRef.current, spectator: next })
+    roomChRef.current?.track({ name: meRef.current.name, joinedAt: myJoinedAtRef.current, spectator: next, ready: next ? false : readyRef.current })
   }
 
   const startGame = () => {
@@ -699,6 +712,12 @@ export default function Cards() {
     const d = GAME_DEFS[s.gameType]
     const list = [...membersRef.current.filter((m) => !m.spectator), ...npcsRef.current].slice(0, d.max)
     if (list.length < d.min) { showToast(`${d.name}は${playersLabel(d)}です。NPCを追加してください`); return }
+    // ホスト以外の対局者(人間)が全員「準備OK」でないと開始できない(NPCは対象外)
+    const notReady = list.filter((p) => !isNpcId(p.id) && p.id !== roomRef.current.hostId && !p.ready)
+    if (notReady.length > 0) {
+      showToast(`準備OKが揃っていません: ${notReady.map((p) => p.name).join(`・`)}`)
+      return
+    }
     const order = list.map((p) => ({ id: p.id, name: p.name }))
     for (let i = order.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1))
@@ -1138,6 +1157,7 @@ export default function Cards() {
           {seated.map((p, i) => (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span>{i + 1}. {p.name}{p.id === room.hostId ? ' (ホスト)' : ''}</span>
+              {(() => { if (isNpcId(p.id) || p.id === room.hostId) return null; return p.ready ? <span style={{ color: '#44dd88', marginLeft: 6 }}>✓準備OK</span> : <span style={{ color: '#886', marginLeft: 6 }}>準備中…</span> })()}
               {isHost && isNpcId(p.id) && <button onClick={() => removeNpc(p.id)} style={btnStyle('#ff6644', { padding: '1px 6px', fontSize: 10 })}>削除</button>}
             </div>
           ))}
@@ -1150,9 +1170,17 @@ export default function Cards() {
             if (specs.length === 0) return null
             return <div style={{ color: '#668', marginTop: 4 }}>▼ 観戦者: {specs.map((m) => m.name).join('　')}</div>
           })()}
-          <button onClick={() => setSpectatorMode(!meSpec)} style={btnStyle(meSpec ? '#44dd88' : '#88ccff', { marginTop: 8, padding: '4px 10px', fontSize: 11 })}>
-            {meSpec ? '⚔ 対局に参加する' : '👀 観戦にまわる'}
-          </button>
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+            {/* 準備OK(ホスト以外の対局者が全員押すまでホストは開始できない) */}
+            {!meSpec && me.id !== room.hostId && (
+              <button onClick={toggleReady} style={btnStyle(ready ? '#44dd88' : '#ffcc44', { padding: '4px 10px', fontSize: 11, background: ready ? 'rgba(68,221,136,0.12)' : 'rgba(255,204,68,0.12)' })}>
+                {ready ? '✓ 準備OK（取消）' : '準備OKにする'}
+              </button>
+            )}
+            <button onClick={() => setSpectatorMode(!meSpec)} style={btnStyle(meSpec ? '#44dd88' : '#88ccff', { padding: '4px 10px', fontSize: 11 })}>
+              {meSpec ? '⚔ 対局に参加する' : '👀 観戦にまわる'}
+            </button>
+          </div>
         </div>
         {stampUI}
         {helpPanelBody}
