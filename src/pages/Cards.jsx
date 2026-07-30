@@ -884,44 +884,56 @@ export default function Cards() {
       <div onClick={() => setShowHelp(false)}
         style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 80, padding: 12 }}>
         <div onClick={(e) => e.stopPropagation()}
-          style={{ background: '#0d1728', border: '2px solid #4488cc', borderRadius: 10, padding: 14, maxWidth: 520, width: '100%', maxHeight: '86vh', overflowY: 'auto' }}>
+          style={{
+            background: '#0d1728', border: '2px solid #4488cc', borderRadius: 10, padding: 14,
+            maxWidth: 520, width: '100%', maxHeight: '86vh', overflowY: 'auto',
+            textAlign: 'left', // 親の中央寄せを継承しない(本文は必ず左揃え)
+          }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div style={{ color: '#ffcc44', fontSize: 15 }}>📖 {h.name}のルール</div>
             <button onClick={() => setShowHelp(false)} style={btnStyle('#88ccff', { padding: '4px 10px' })}>閉じる</button>
           </div>
-          <div style={{ fontSize: 12, lineHeight: 1.7, color: '#cde' }}>
-            {h.basic.map((line, i) => <div key={i} style={{ marginBottom: 4 }}>・{line}</div>)}
-          </div>
+          {/* 箇条書きは「・」をぶら下げインデントにして折り返しを揃える */}
+          <ul style={{ fontSize: 12, lineHeight: 1.8, color: '#cde', margin: 0, paddingLeft: '1.1em', listStyle: 'disc' }}>
+            {h.basic.map((line, i) => <li key={i} style={{ marginBottom: 6 }}>{line}</li>)}
+          </ul>
           {h.always && (
-            <div style={{ marginTop: 10, border: '1px solid #8a7a33', background: 'rgba(255,204,68,0.07)', borderRadius: 6, padding: '6px 10px' }}>
-              <div style={{ color: '#ffcc44', fontSize: 12 }}>{h.always[0]}（常に有効）</div>
-              <div style={{ fontSize: 12, color: '#cde', lineHeight: 1.6 }}>{h.always[1]}</div>
+            <div style={{ marginTop: 12, border: '1px solid #8a7a33', background: 'rgba(255,204,68,0.07)', borderRadius: 6, padding: '8px 10px' }}>
+              <div style={{ color: '#ffcc44', fontSize: 12, marginBottom: 2 }}>{h.always[0]}（常に有効）</div>
+              <div style={{ fontSize: 12, color: '#cde', lineHeight: 1.8 }}>{h.always[1]}</div>
             </div>
           )}
           {Object.keys(h.special).length > 0 && (
-            <div style={{ marginTop: 10 }}>
-              <div style={{ color: '#88ccff', fontSize: 12, marginBottom: 4 }}>この部屋の特殊ルール</div>
+            <div style={{ marginTop: 12 }}>
+              <div style={{ color: '#88ccff', fontSize: 12, marginBottom: 6 }}>この部屋の特殊ルール</div>
               {Object.entries(h.special).map(([key, [label, desc]]) => {
                 const on = (key === 'kakumei' || key === 'spade3') ? rules[key] !== false : !!rules[key]
                 return (
-                  <div key={key} style={{ marginBottom: 6, opacity: on ? 1 : 0.45 }}>
-                    <span style={{ color: on ? '#ffcc44' : '#7788aa', fontSize: 12 }}>{on ? '✓ ' : '－ '}{label}</span>
-                    <span style={{ color: on ? '#ff8866' : '#556', fontSize: 10, marginLeft: 6 }}>{on ? 'あり' : 'なし'}</span>
-                    <div style={{ fontSize: 12, color: '#cde', lineHeight: 1.6 }}>{desc}</div>
+                  <div key={key} style={{
+                    marginBottom: 8, paddingLeft: 8,
+                    borderLeft: `2px solid ${on ? '#8a7a33' : '#2a3344'}`,
+                    opacity: on ? 1 : 0.5,
+                  }}>
+                    <div style={{ marginBottom: 1 }}>
+                      <span style={{ color: on ? '#ffcc44' : '#7788aa', fontSize: 12 }}>{on ? '✓ ' : '－ '}{label}</span>
+                      <span style={{ color: on ? '#ff8866' : '#556', fontSize: 10, marginLeft: 6 }}>{on ? 'あり' : 'なし'}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#cde', lineHeight: 1.8 }}>{desc}</div>
                   </div>
                 )
               })}
             </div>
           )}
           {h.match && matchInfo && (
-            <div style={{ marginTop: 10, border: '1px solid #335577', background: 'rgba(68,136,204,0.08)', borderRadius: 6, padding: '6px 10px', fontSize: 12, color: '#cde', lineHeight: 1.6 }}>
+            <div style={{ marginTop: 12, border: '1px solid #335577', background: 'rgba(68,136,204,0.08)', borderRadius: 6, padding: '8px 10px', fontSize: 12, color: '#cde', lineHeight: 1.8 }}>
               {h.match}
               <div style={{ color: '#88ccff', marginTop: 2 }}>現在: 第{Math.min(matchInfo.round, matchInfo.len)}戦 / 全{matchInfo.len}戦</div>
             </div>
           )}
           {settings.bet > 0 && wagerKeyRef.current && (
-            <div style={{ marginTop: 10, border: '1px solid #8a6a22', background: 'rgba(255,170,0,0.08)', borderRadius: 6, padding: '6px 10px', fontSize: 11, color: '#ffaa00', lineHeight: 1.6 }}>
-              💰 賭け対局中（1人 {Number(settings.bet).toLocaleString()}G）。最終順位で分配されます（2人=勝者総取り / 3人=70:30 / 4人=60:25:15 / 5人=60:20:15:5）。
+            <div style={{ marginTop: 12, border: '1px solid #8a6a22', background: 'rgba(255,170,0,0.08)', borderRadius: 6, padding: '8px 10px', fontSize: 11, color: '#ffaa00', lineHeight: 1.8 }}>
+              💰 賭け対局中（1人 {Number(settings.bet).toLocaleString()}G）。<br />
+              最終順位で分配されます（2人=勝者総取り / 3人=70:30 / 4人=60:25:15 / 5人=60:20:15:5）。
             </div>
           )}
         </div>
