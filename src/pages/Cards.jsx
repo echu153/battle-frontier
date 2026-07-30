@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import {
-  GAME_DEFS, GAME_HELP, playersLabel, TURN_SEC_TRUMP, isRed, isNpcId,
+  GAME_DEFS, GAME_HELP, playersLabel, TURN_SEC_TRUMP, isRed, isNpcId, randomTrump,
   createTrumpGame, applyTrump, npcTrump, autoTrump, trumpWinnerId,
   sevensPlayable, speedCanAnyPlay, dfSetStrength, SUIT_LABEL, RANK_LABEL,
 } from '../lib/trump'
@@ -93,6 +93,8 @@ export default function Cards() {
   const splashTimerRef = useRef(null)
   const [kiriFlash, setKiriFlash] = useState(null) // 8切り: 流れる前に一瞬場に見せるカード
   const kiriTimerRef = useRef(null)
+  const [deadline, setDeadline] = useState(null) // 持ち時間の期限(全員共通)
+  const [nowTick, setNowTick] = useState(0)      // 残り秒の再描画用
   const [clearFlash, setClearFlash] = useState(null) // 場が流れる直前の様子 { cards, passedSeats }
   const clearTimerRef = useRef(null)
   const [exchangeInfo, setExchangeInfo] = useState(null) // カード交換の結果(一呼吸おいて表示)
@@ -218,6 +220,9 @@ export default function Cards() {
         seq: stateSeqRef.current, game: newState, events, wagerKey: wagerKeyRef.current,
         match: matchRef.current, // 大富豪マッチの進行状況
         disconnected: [...autoRef.current], // 切断して自動プレイ中の席(無効試合精算で負け扱いにする)
+        // 持ち時間の期限(全員で同じカウントダウンを表示するため)
+        deadline: (newState.phase === 'playing' || newState.phase === 'exchange') && newState.mode !== 'speed'
+          ? Date.now() + TURN_SEC_TRUMP * 1000 : null,
       },
     })
   }, [])
@@ -426,24 +431,25 @@ export default function Cards() {
       gameRef.current = payload.game
       wagerKeyRef.current = payload.wagerKey || null
       setGame(payload.game)
+      setDeadline(payload.deadline || null)
       setBetBusy(false)
       // 特殊イベントは大きな演出文言で表示(8切り/革命/しばり/階段/都落ち/バースト)
       const evs = payload.events || []
       const fx = []
       const playEv = evs.find((e) => e.t === 'play')
       for (const ev of evs) {
-        if (ev.t === 'revolution') fx.push(ev.on ? '⚡革命！' : '⚡革命返し！')
-        if (ev.t === 'clear' && ev.kiri) fx.push('✂8切り！')
-        if (ev.t === 'clear' && ev.spade3) fx.push('♠3返し！')
-        if (ev.t === 'shibari') fx.push(`🔒しばり！(${ev.suits.map((s) => SUIT_LABEL[s]).join('')})`)
-        if (ev.t === 'miyako') fx.push(`⛰${payload.game.players[ev.seat]?.name} 都落ち！`)
-        if (ev.t === 'burst') fx.push(`💥${payload.game.players[ev.seat]?.name} バースト！`)
-        if (ev.t === 'play' && ev.seq) fx.push('📶階段！')
-        if (ev.t === 'foul') fx.push(`🚫${ev.name} 反則上がり！(${ev.reasons.join('・')})`)
+        if (ev.t === 'revolution') fx.push({ main: ev.on ? '⚡ 革命！' : '⚡ 革命返し！' })
+        if (ev.t === 'clear' && ev.kiri) fx.push({ main: '✂ 8切り！' })
+        if (ev.t === 'clear' && ev.spade3) fx.push({ main: '♠3返し！' })
+        if (ev.t === 'shibari') fx.push({ main: '🔒 しばり！', sub: ev.suits.map((s) => SUIT_LABEL[s]).join('') + ' 限定' })
+        if (ev.t === 'miyako') fx.push({ name: payload.game.players[ev.seat]?.name, main: '⛰ 都落ち！' })
+        if (ev.t === 'burst') fx.push({ name: payload.game.players[ev.seat]?.name, main: '💥 バースト！' })
+        if (ev.t === 'play' && ev.seq) fx.push({ main: '📶 階段！' })
+        if (ev.t === 'foul') fx.push({ name: ev.name, main: '🚫 反則上がり！', sub: ev.reasons.join('・') + ' で上がったため最下位' })
         // 誰が上がったかを演出で出す
         if (ev.t === 'out') {
           const nm = payload.game.players[ev.seat]?.id === myself.id ? 'あなた' : payload.game.players[ev.seat]?.name
-          fx.push(`🎉${nm} が上がり！(${ev.rank}位)`)
+          fx.push({ name: nm, main: '🎉 上がり！', sub: `${ev.rank}位` })
         }
         // カード交換の結果は一呼吸おいて内容を見せる
         if (ev.t === 'exchangeDone') {
@@ -460,9 +466,9 @@ export default function Cards() {
         clearTimerRef.current = setTimeout(() => setClearFlash(null), 1400)
       }
       if (fx.length > 0) {
-        setSplash(fx.join('　'))
+        setSplash(fx)
         if (splashTimerRef.current) clearTimeout(splashTimerRef.current)
-        splashTimerRef.current = setTimeout(() => setSplash(null), 1600)
+        splashTimerRef.current = setTimeout(() => setSplash(null), 1800)
       }
       // 8切り/スペ3返し: 出したカードを一瞬場に見せてから流す
       if (evs.some((e) => e.t === 'clear' && (e.kiri || e.spade3)) && playEv?.cardObjs) {
@@ -730,6 +736,14 @@ export default function Cards() {
     roomChRef.current?.send({ type: 'broadcast', event: 'action', payload: { playerId: meRef.current.id, action } })
   }, [])
 
+  // ---- 残り時間の1秒ごと更新 ----
+  useEffect(() => {
+    if (!deadline) return
+    const iv = setInterval(() => setNowTick(Date.now()), 500)
+    return () => clearInterval(iv)
+  }, [deadline])
+  const remainSec = deadline ? Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) : null
+
   // ---- スタンプ送信(1.5秒クールダウン) ----
   const sendStamp = useCallback((text) => {
     const now = Date.now()
@@ -784,8 +798,12 @@ export default function Cards() {
         return
       }
       if (cur.phase !== 'playing') return
-      const action = autoTrump(cur, cur.turn)
-      if (action) hostApply(cur.players[cur.turn].id, action)
+      // 時間切れ: 出せる手からランダムに選んで出す
+      const action = randomTrump(cur, cur.turn) || autoTrump(cur, cur.turn)
+      if (action) {
+        roomChRef.current?.send({ type: 'broadcast', event: 'timeup', payload: { seat: cur.turn } })
+        hostApply(cur.players[cur.turn].id, action)
+      }
     }, TURN_SEC_TRUMP * 1000)
     deadlineTimerRef.current = t
     return () => clearTimeout(t)
@@ -849,18 +867,39 @@ export default function Cards() {
         <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: '#112244', border: '1px solid #4488cc', color: '#cde', padding: '8px 16px', fontSize: 12, zIndex: 60, whiteSpace: 'nowrap' }}>{toast}</div>
       )}
       {/* 演出文言は画面下寄り(手札より下の余白)に出す。場のカードや手札に被らないように */}
+      {/* 演出: 名前/本文/補足を縦に分けて表示(文字が潰れないように) */}
       {splash && (
         <div style={{
-          position: 'fixed', left: 0, right: 0, bottom: '20vh',
-          display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 70,
+          position: 'fixed', left: 0, right: 0, bottom: '18vh',
+          display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center',
+          pointerEvents: 'none', zIndex: 70, padding: '0 8px',
         }}>
-          <div style={{
-            fontSize: 40, fontWeight: 'bold', color: '#ff4422', textAlign: 'center',
-            fontFamily: "'Hiragino Mincho ProN','Yu Mincho',serif",
-            textShadow: '0 0 24px rgba(0,0,0,0.95), 3px 3px 0 #550000, -2px -2px 0 #ffcc44',
-            animation: 'cfsplash 1.6s ease-out both', maxWidth: '94vw',
-            background: 'rgba(10,16,32,0.55)', borderRadius: 12, padding: '4px 18px',
-          }}>{splash}</div>
+          {(Array.isArray(splash) ? splash : [{ main: splash }]).map((fx, i) => (
+            <div key={i} style={{
+              animation: 'cfsplash 1.8s ease-out both',
+              background: 'rgba(10,16,32,0.72)', borderRadius: 12, padding: '6px 20px',
+              textAlign: 'center', maxWidth: '96vw',
+              fontFamily: "'Hiragino Mincho ProN','Yu Mincho',serif", fontWeight: 'bold',
+            }}>
+              {fx.name && (
+                <div style={{
+                  fontSize: 20, color: '#ffcc44', lineHeight: 1.25,
+                  textShadow: '0 0 10px rgba(0,0,0,0.95), 2px 2px 0 #553300',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '90vw',
+                }}>{fx.name}</div>
+              )}
+              <div style={{
+                fontSize: 38, color: '#ff4422', lineHeight: 1.2, whiteSpace: 'nowrap',
+                textShadow: '0 0 24px rgba(0,0,0,0.95), 3px 3px 0 #550000, -2px -2px 0 #ffcc44',
+              }}>{fx.main}</div>
+              {fx.sub && (
+                <div style={{
+                  fontSize: 15, color: '#ffddaa', lineHeight: 1.4, marginTop: 2,
+                  textShadow: '0 0 8px rgba(0,0,0,0.95)',
+                }}>{fx.sub}</div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -1144,6 +1183,11 @@ export default function Cards() {
       borderRadius: 8, padding: '4px 0', margin: '2px 0 8px',
     }}>
       ▶ {game.players[game.turn].id === me.id ? 'あなた' : game.players[game.turn].name}のターン
+      {remainSec !== null && (
+        <span style={{ marginLeft: 10, color: remainSec <= 10 ? '#ff4444' : remainSec <= 20 ? '#ffcc44' : '#88ccff' }}>
+          ⏱{remainSec}秒
+        </span>
+      )}
     </div>
   ) : null
 
@@ -1355,14 +1399,13 @@ export default function Cards() {
                 <div style={{ display: 'flex', gap: 3 }}>{m.cardObjs.map((c) => <TCard key={c.id} c={c} small dim />)}</div>
               </div>
             ))}
-            {/* 全体の流れ */}
-            <div style={{ borderTop: '1px solid #665522', paddingTop: 4, marginTop: 2, color: '#cde', lineHeight: 1.7 }}>
-              {exchangeInfo.map((m, i) => (
-                <div key={i} style={{ opacity: m.from === mySeat || m.to === mySeat ? 1 : 0.7 }}>
-                  {m.fromName} → {m.toName}: {m.cards.join(' ')}{m.auto ? '（自動）' : ''}
-                </div>
-              ))}
-            </div>
+            {/* 自分が関わっていない交換は見せない(観戦者には全体の有無だけ伝える) */}
+            {mySeat === -1 && (
+              <div style={{ color: '#668', lineHeight: 1.7 }}>交換が行われました（内容は対局者のみ確認できます）</div>
+            )}
+            {mySeat >= 0 && !exchangeInfo.some((m) => m.from === mySeat || m.to === mySeat) && (
+              <div style={{ color: '#668', lineHeight: 1.7 }}>あなたは今回の交換の対象外です</div>
+            )}
           </div>
         )}
         {/* カード交換フェーズ(2戦目以降) */}
@@ -1372,7 +1415,12 @@ export default function Cards() {
           const iMustPick = !!myPair && ex.pending.includes(mySeat)
           return (
             <div style={{ border: '2px solid #ffcc44', background: 'rgba(255,204,68,0.08)', borderRadius: 8, padding: '8px 10px', marginTop: 8, fontSize: 12 }}>
-              <div style={{ color: '#ffcc44', marginBottom: 4 }}>🔄 カード交換</div>
+              <div style={{ color: '#ffcc44', marginBottom: 4 }}>
+                🔄 カード交換
+                {remainSec !== null && (
+                  <span style={{ marginLeft: 8, color: remainSec <= 10 ? '#ff4444' : '#88ccff' }}>⏱{remainSec}秒</span>
+                )}
+              </div>
               <div style={{ color: '#cde', lineHeight: 1.7 }}>
                 {ex.pairs.filter((p) => p.auto).map((p, i) => (
                   <div key={i}>・{game.players[p.from].name} → {game.players[p.to].name} に強い札{p.count}枚（自動）</div>

@@ -81,7 +81,7 @@ export const GAME_HELP = {
     match: null,
   },
 }
-export const TURN_SEC_TRUMP = 25
+export const TURN_SEC_TRUMP = 60 // 1人の持ち時間(秒)
 
 function makeDeck(withJoker) {
   const d = []
@@ -778,6 +778,70 @@ export function autoTrump(state, seat) {
   if (state.mode === 'sevens') return npcSevens(state, seat) // 出せなければpass(バーストあり得る)
   if (state.mode === 'daifugo') {
     if (!state.field) return npcDaifugo(state, seat) // リードは必ず出す
+    return { type: 'pass' }
+  }
+  return null
+}
+
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
+
+// 持ち時間切れの手: 出せる手の中からランダムに選ぶ(出せなければパス/自動処理)
+export function randomTrump(state, seat) {
+  if (state.mode === 'daifugo' && state.phase === 'exchange') return dfExchangeAuto(state, seat)
+  if (state.mode === 'oldmaid') return npcOldMaid(state, seat) // 引く位置はもともとランダム
+  if (state.mode === 'sevens') {
+    const playable = state.players[seat].hand.filter((c) => sevensPlayable(state, c))
+    if (playable.length === 0) return { type: 'pass' }
+    return { type: 'play', cardId: pick(playable).id }
+  }
+  if (state.mode === 'speed') {
+    const me = state.players[seat]
+    const cand = []
+    me.slots.forEach((c, s) => {
+      if (!c) return
+      state.piles.forEach((t, p) => {
+        if (t && (Math.abs(c.r - t.r) === 1 || Math.abs(c.r - t.r) === 12)) cand.push({ type: 'play', slot: s, pile: p })
+      })
+    })
+    return cand.length > 0 ? pick(cand) : null
+  }
+  if (state.mode === 'daifugo') {
+    const me = state.players[seat]
+    const cands = []
+    // 同じ数字の組(1〜4枚)とジョーカー、階段(有効時)から出せる手を集める
+    const byRank = {}
+    for (const c of me.hand) {
+      if (c.joker) continue
+      ;(byRank[c.r] = byRank[c.r] || []).push(c)
+    }
+    const jokers = me.hand.filter((c) => c.joker)
+    const tryAdd = (cards) => {
+      if (cards.length === 0) return
+      if (dfSetStrength(cards, state.field, state.revolution, state.rules) !== null) cands.push(cards)
+    }
+    for (const g of Object.values(byRank)) {
+      for (let n = 1; n <= g.length; n++) tryAdd(g.slice(0, n))
+      for (const j of jokers) tryAdd([...g.slice(0, 1), j]) // ジョーカー混ぜの2枚
+    }
+    for (const j of jokers) tryAdd([j])
+    if (state.rules?.kaidan) {
+      const bySuit = {}
+      for (const c of me.hand) {
+        if (c.joker) continue
+        ;(bySuit[c.s] = bySuit[c.s] || []).push(c)
+      }
+      for (const list of Object.values(bySuit)) {
+        const sorted = [...list].sort((a, b) => a.r - b.r)
+        for (let i = 0; i < sorted.length; i++) {
+          for (let len = 3; i + len <= sorted.length; len++) tryAdd(sorted.slice(i, i + len))
+        }
+      }
+    }
+    // 反則上がりになる手は最後の手段にする
+    const safe = cands.filter((cs) => !dfIsFoulFinish(state, seat, cs))
+    if (safe.length > 0) return { type: 'play', cardIds: pick(safe).map((c) => c.id) }
+    if (state.field) return { type: 'pass' } // 反則しかないならパス
+    if (cands.length > 0) return { type: 'play', cardIds: pick(cands).map((c) => c.id) }
     return { type: 'pass' }
   }
   return null
