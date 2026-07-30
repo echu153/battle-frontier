@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import {
-  GAME_DEFS, playersLabel, TURN_SEC_TRUMP, isRed, isNpcId,
+  GAME_DEFS, GAME_HELP, playersLabel, TURN_SEC_TRUMP, isRed, isNpcId,
   createTrumpGame, applyTrump, npcTrump, autoTrump, trumpWinnerId,
   sevensPlayable, speedCanAnyPlay, dfSetStrength, SUIT_LABEL, RANK_LABEL,
 } from '../lib/trump'
@@ -85,6 +85,7 @@ export default function Cards() {
   const [stamps, setStamps] = useState([]) // 表示中スタンプ
   const stampSeqRef = useRef(0)
   const stampCdRef = useRef(0)
+  const [showHelp, setShowHelp] = useState(false) // 対局中のルール確認パネル
   const [splash, setSplash] = useState(null) // 大きな演出文言(8切り！/革命！など)
   const splashTimerRef = useRef(null)
   const [kiriFlash, setKiriFlash] = useState(null) // 8切り: 流れる前に一瞬場に見せるカード
@@ -873,6 +874,61 @@ export default function Cards() {
     </>
   )
 
+  const helpPanelBody = showHelp && (() => {
+    // 対局中はその局のルール、待機中は現在の部屋設定を表示
+    const mode = game?.mode || settings.gameType
+    const h = GAME_HELP[mode]
+    if (!h) return null
+    const rules = game?.rules || settings.rules || {}
+    return (
+      <div onClick={() => setShowHelp(false)}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 80, padding: 12 }}>
+        <div onClick={(e) => e.stopPropagation()}
+          style={{ background: '#0d1728', border: '2px solid #4488cc', borderRadius: 10, padding: 14, maxWidth: 520, width: '100%', maxHeight: '86vh', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ color: '#ffcc44', fontSize: 15 }}>📖 {h.name}のルール</div>
+            <button onClick={() => setShowHelp(false)} style={btnStyle('#88ccff', { padding: '4px 10px' })}>閉じる</button>
+          </div>
+          <div style={{ fontSize: 12, lineHeight: 1.7, color: '#cde' }}>
+            {h.basic.map((line, i) => <div key={i} style={{ marginBottom: 4 }}>・{line}</div>)}
+          </div>
+          {h.always && (
+            <div style={{ marginTop: 10, border: '1px solid #8a7a33', background: 'rgba(255,204,68,0.07)', borderRadius: 6, padding: '6px 10px' }}>
+              <div style={{ color: '#ffcc44', fontSize: 12 }}>{h.always[0]}（常に有効）</div>
+              <div style={{ fontSize: 12, color: '#cde', lineHeight: 1.6 }}>{h.always[1]}</div>
+            </div>
+          )}
+          {Object.keys(h.special).length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ color: '#88ccff', fontSize: 12, marginBottom: 4 }}>この部屋の特殊ルール</div>
+              {Object.entries(h.special).map(([key, [label, desc]]) => {
+                const on = (key === 'kakumei' || key === 'spade3') ? rules[key] !== false : !!rules[key]
+                return (
+                  <div key={key} style={{ marginBottom: 6, opacity: on ? 1 : 0.45 }}>
+                    <span style={{ color: on ? '#ffcc44' : '#7788aa', fontSize: 12 }}>{on ? '✓ ' : '－ '}{label}</span>
+                    <span style={{ color: on ? '#ff8866' : '#556', fontSize: 10, marginLeft: 6 }}>{on ? 'あり' : 'なし'}</span>
+                    <div style={{ fontSize: 12, color: '#cde', lineHeight: 1.6 }}>{desc}</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {h.match && matchInfo && (
+            <div style={{ marginTop: 10, border: '1px solid #335577', background: 'rgba(68,136,204,0.08)', borderRadius: 6, padding: '6px 10px', fontSize: 12, color: '#cde', lineHeight: 1.6 }}>
+              {h.match}
+              <div style={{ color: '#88ccff', marginTop: 2 }}>現在: 第{Math.min(matchInfo.round, matchInfo.len)}戦 / 全{matchInfo.len}戦</div>
+            </div>
+          )}
+          {settings.bet > 0 && wagerKeyRef.current && (
+            <div style={{ marginTop: 10, border: '1px solid #8a6a22', background: 'rgba(255,170,0,0.08)', borderRadius: 6, padding: '6px 10px', fontSize: 11, color: '#ffaa00', lineHeight: 1.6 }}>
+              💰 賭け対局中（1人 {Number(settings.bet).toLocaleString()}G）。最終順位で分配されます（2人=勝者総取り / 3人=70:30 / 4人=60:25:15 / 5人=60:20:15:5）。
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  })()
+
   // ---- 待機画面 ----
   if (!game) {
     return wrap(
@@ -883,7 +939,10 @@ export default function Cards() {
           {isHost ? <button onClick={startGame} disabled={betBusy} style={btnStyle('#ffcc44', { opacity: betBusy ? 0.5 : 1 })}>{betBusy ? '供託待ち…' : '対局開始'}</button> : <div style={{ width: 60 }} />}
         </div>
         <div style={{ border: '1px solid #224466', padding: '8px 12px', fontSize: 12, marginBottom: 10 }}>
-          <div style={{ color: '#88ccff', marginBottom: 6 }}>ゲーム設定{!isHost && '(ホストが変更できます)'}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ color: '#88ccff' }}>ゲーム設定{!isHost && '(ホストが変更できます)'}</span>
+            <button onClick={() => setShowHelp(true)} style={btnStyle('#88ccff', { padding: '3px 8px', fontSize: 11 })}>📖 ルール</button>
+          </div>
           {isHost ? (
             <>
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -984,21 +1043,24 @@ export default function Cards() {
           </button>
         </div>
         {stampUI}
+        {helpPanelBody}
       </div>
     )
   }
 
   // ---- ゲーム画面(共通ヘッダー) ----
   const header = (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, width: '100%' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, width: '100%', gap: 6 }}>
       <button onClick={leaveRoom} style={btnStyle('#88ccff')}>← 退室</button>
-      <div style={{ color: '#ffcc44', fontSize: 12 }}>
+      <div style={{ color: '#ffcc44', fontSize: 12, flex: 1, textAlign: 'center' }}>
         [{GAME_DEFS[game.mode]?.name || def.name}] {settings.bet > 0 && wagerKeyRef.current ? `💰${Number(settings.bet).toLocaleString()}G` : ''}
+        {mySeat === -1 && <span style={{ color: '#668', marginLeft: 6 }}>👀観戦中</span>}
       </div>
-      <div style={{ fontSize: 11, color: '#668' }}>{mySeat === -1 ? '👀 観戦中' : ''}</div>
+      <button onClick={() => setShowHelp(true)} style={btnStyle('#88ccff', { padding: '6px 9px' })}>📖 ルール</button>
     </div>
   )
 
+  // ---- 対局中のルール確認パネル ----
   // ターン制ゲーム共通: 誰のターンかを大きく表示
   const turnBanner = playing && game.mode !== 'speed' && game.players[game.turn] ? (
     <div style={{
@@ -1077,6 +1139,7 @@ export default function Cards() {
         {myTurn && <div style={{ color: '#9fd', fontSize: 12, textAlign: 'center' }}>▲ {game.players[target]?.name} の札を1枚タップして引く</div>}
         {resultPanel}
         {stampUI}
+        {helpPanelBody}
       </div>
     )
   }
@@ -1133,6 +1196,7 @@ export default function Cards() {
         )}
         {resultPanel}
         {stampUI}
+        {helpPanelBody}
       </div>
     )
   }
@@ -1199,6 +1263,7 @@ export default function Cards() {
         )}
         {resultPanel}
         {stampUI}
+        {helpPanelBody}
       </div>
     )
   }
@@ -1269,6 +1334,7 @@ export default function Cards() {
         )}
         {resultPanel}
         {stampUI}
+        {helpPanelBody}
       </div>
     )
   }
