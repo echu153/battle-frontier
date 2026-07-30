@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import {
   GAME_DEFS, GAME_HELP, playersLabel, TURN_SEC_TRUMP, isRed, isNpcId, randomTrump,
-  createTrumpGame, applyTrump, npcTrump, autoTrump, trumpWinnerId,
+  createTrumpGame, applyTrump, npcTrump, autoTrump, trumpWinnerId, dfMatchStandings,
   sevensPlayable, speedCanAnyPlay, dfSetStrength, SUIT_LABEL, RANK_LABEL,
 } from '../lib/trump'
 import { wagerJoin, wagerReport, wagerForfeit, wagerPing, wagerSettleRanked, MAX_BET } from '../lib/wager'
 import { StampBar, StampOverlay } from '../components/StampBar'
 import { RoomChat } from '../components/RoomChat'
 import { InvitePanel } from '../components/InvitePanel'
+import { FinalResult } from '../components/FinalResult'
 import { containsNgWord } from '../lib/nameFilter'
 
 // ============================================================
@@ -101,6 +102,9 @@ export default function Cards() {
   const splashTimerRef = useRef(null)
   const [kiriFlash, setKiriFlash] = useState(null) // 8切り: 流れる前に一瞬場に見せるカード
   const kiriTimerRef = useRef(null)
+  const [showFinal, setShowFinal] = useState(false) // 最終結果の表示(自動では消さない)
+  const showFinalRef = useRef(false)
+  const finalShownRef = useRef(null) // 表示済みの終局キー(再配信で開き直さないため)
   const [omSel, setOmSel] = useState(null)         // ババ抜き: 並べ替えで選択中の位置
   const [moveFlash, setMoveFlash] = useState(null) // 並べ替えの演出 { seat, from, to }
   const moveTimerRef = useRef(null)
@@ -140,6 +144,7 @@ export default function Cards() {
   useEffect(() => { roomRef.current = room }, [room])
   useEffect(() => { membersRef.current = members }, [members])
   useEffect(() => { readyRef.current = ready }, [ready])
+  useEffect(() => { showFinalRef.current = showFinal }, [showFinal])
   useEffect(() => { npcsRef.current = npcs }, [npcs])
   useEffect(() => { settingsRef.current = settings }, [settings])
 
@@ -348,11 +353,10 @@ export default function Cards() {
       // 大富豪マッチ: 合計ptで順位(同点は最終戦の順位→id順で決定的に)
       // ※供託したのは初戦の参加者だけなので、途中参加者(match.pointsにしか居ない人)は分配対象外
       const betters = new Set(match.betters || Object.keys(match.points))
-      rankedIds = Object.keys(match.points)
-        .filter((id) => !isNpcId(id) && !excluded.has(id) && betters.has(id))
-        .sort((a, b) => (match.points[b] - match.points[a])
-          || ((match.lastRanks[a] || 9) - (match.lastRanks[b] || 9))
-          || a.localeCompare(b))
+      // 最終結果画面と同じ順序で分配する(dfMatchStandingsに一本化。別ソートにすると表示とズレる)
+      rankedIds = dfMatchStandings(match, {
+        ids: Object.keys(match.points).filter((id) => !isNpcId(id) && !excluded.has(id) && betters.has(id)),
+      }).map((r) => r.id)
     } else if (g.mode === 'speed') {
       const wid = g.result?.winner != null ? g.players[g.result.winner]?.id : null
       if (wid) rankedIds = [wid, ...g.players.map((p) => p.id).filter((id) => id !== wid)].filter((id) => !isNpcId(id) && !excluded.has(id))
@@ -685,6 +689,7 @@ export default function Cards() {
     setStamps([])
     setSplash(null); setKiriFlash(null); setClearFlash(null); setExchangeInfo(null)
     setOmSel(null); setMoveFlash(null)
+    setShowFinal(false); showFinalRef.current = false; finalShownRef.current = null
     if (moveTimerRef.current) clearTimeout(moveTimerRef.current)
     deadlineRef.current = null; turnKeyRef.current = null; setDeadline(null)
     if (splashTimerRef.current) clearTimeout(splashTimerRef.current)
@@ -931,29 +936,50 @@ export default function Cards() {
     return () => clearInterval(iv)
   }, [room, me, hostApply, game?.mode, game?.phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- 終局後は結果を数秒見せて次へ ----
-  //   大富豪マッチが継続中(最終戦でない)なら、ホストが同じ席(NPC含む)で次戦を自動開始する。
-  //   他クライアントは次戦のbroadcastで自動的に新しい盤面へ切り替わる(待機画面には戻さない)。
-  //   それ以外(マッチ最終戦/スピード等)は結果を数秒見せて待機画面へ。
-  useEffect(() => {
-    if (game?.phase !== 'ended' || !game.result) return
-    const t = setTimeout(() => {
-      if (game.mode === 'daifugo' && matchRef.current && !matchRef.current.over) {
-        if (room?.hostId === me?.id) startGame()
-        return
-      }
-      let txt
-      if (game.mode === 'speed') {
-        txt = game.result.winner === null ? '引き分け' : `${game.players[game.result.winner].name}の勝ち！`
+  // ---- マッチ最終順位(表示・分配で共通のdfMatchStandingsを使う) ----
+  const matchStandings = useCallback((m) => dfMatchStandings(m), [])
+
+  // ---- 結果を閉じて待機画面へ(自動では戻らない。プレイヤーが任意のタイミングで押す) ----
+  const returnToWaiting = useCallback(() => {
+    const g = gameRef.current
+    const m = matchRef.current
+    if (g?.result) {
+      // 待機画面に残す「前回の結果」。マッチならその最終順位、単発ならその対局の順位
+      if (g.mode === 'speed') {
+        setLastResult(g.result.winner === null ? '引き分け' : `${g.players[g.result.winner].name}の勝ち！`)
+      } else if (g.mode === 'daifugo' && m?.over) {
+        setLastResult(matchStandings(m).map((r) => `${r.rank}位 ${r.name}(${r.pt}pt)`).join(' / '))
       } else {
-        txt = game.result.ranking.map((r) => `${r.rank}位 ${r.name}`).join(' / ')
+        setLastResult(g.result.ranking.map((r) => `${r.rank}位 ${r.name}`).join(' / '))
       }
-      setLastResult(txt)
-      setGame(null)
-      gameRef.current = null
-    }, 6000)
-    return () => clearTimeout(t)
-  }, [game, room, me]) // eslint-disable-line react-hooks/exhaustive-deps
+    }
+    setShowFinal(false)
+    setGame(null)
+    gameRef.current = null
+    deadlineRef.current = null; turnKeyRef.current = null; setDeadline(null)
+  }, [matchStandings])
+
+  // ---- 終局時の扱い ----
+  //   大富豪マッチが継続中(最終戦でない)なら、6秒だけ結果を見せてホストが次戦を自動開始する。
+  //   最終戦/単発ゲームの結果は「最終結果」として自動で消さない(returnToWaitingを押すまで残す)。
+  useEffect(() => {
+    if (game?.phase !== 'ended' || !game.result) {
+      finalShownRef.current = null
+      if (showFinalRef.current) setShowFinal(false)
+      return
+    }
+    const m = matchRef.current
+    if (game.mode === 'daifugo' && m && !m.over) {
+      const t = setTimeout(() => { if (room?.hostId === me?.id) startGame() }, 6000)
+      return () => clearTimeout(t)
+    }
+    // 同じ終局でstateが再配信されても、閉じた最終結果を再度開かない
+    const key = `${game.mode}|${m?.round || 0}|${m?.over ? 1 : 0}|${game.result.ranking ? game.result.ranking.map((r) => r.seat).join(',') : game.result.winner}`
+    if (finalShownRef.current !== key) {
+      finalShownRef.current = key
+      setShowFinal(true)
+    }
+  }, [game, room, me, showFinal]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ============================================================
   // 描画
@@ -1225,7 +1251,16 @@ export default function Cards() {
               💰 賭け対局: 1人 {Number(settings.bet).toLocaleString()}G(人間2人以上で成立・最終順位で分配(1位60%以上)・NPC勝ち/引き分けは返金)
             </div>
           )}
-          {lastResult && (
+          {/* 前回のマッチ最終結果(次のマッチを始めるまで残す) */}
+          {matchInfo?.over && (
+            <div style={{ border: '1px solid #8a6a22', background: 'rgba(255,204,68,0.07)', padding: '6px 8px', marginBottom: 6, fontSize: 11 }}>
+              <div style={{ color: '#ffcc44', marginBottom: 2 }}>🏆 前回のマッチ最終結果(全{matchInfo.len}戦)</div>
+              {matchStandings(matchInfo).map((r) => (
+                <div key={r.id} style={{ color: rankColor(r.rank) }}>{r.rank}位 {r.name}: {r.pt}pt</div>
+              ))}
+            </div>
+          )}
+          {lastResult && !matchInfo?.over && (
             <div style={{ border: '1px solid #665522', background: 'rgba(255,204,68,0.07)', padding: '4px 8px', marginBottom: 6, color: '#ffcc44', fontSize: 11 }}>
               前回の結果: {lastResult}
             </div>
@@ -1307,39 +1342,82 @@ export default function Cards() {
     </div>
   ) : null
 
+  // マッチが継続中(次戦が自動で始まる)か、これが最終結果か
+  const matchGoing = game.mode === 'daifugo' && matchInfo && !matchInfo.over
+  const isFinalEnd = game.phase === 'ended' && !matchGoing
+  const standings = game.mode === 'daifugo' && matchInfo ? matchStandings(matchInfo) : []
+  // 最終結果に並べる行: 大富豪マッチは合計ptの最終順位、それ以外はその対局の順位
+  const finalRows = game.phase !== 'ended' ? [] : (
+    game.mode === 'daifugo' && matchInfo
+      ? standings.map((r) => ({ key: r.id, rank: r.rank, name: r.name, sub: `${r.pt}pt` }))
+      : game.mode === 'speed'
+        ? (game.result.winner === null
+          ? [{ key: 'draw', rank: 0, name: '引き分け', sub: `残り ${game.result.left[0]} - ${game.result.left[1]}` }]
+          : game.players
+            .map((p, s) => ({ key: p.id, rank: s === game.result.winner ? 1 : 2, name: p.name, sub: `残り${game.result.left[s]}枚` }))
+            .sort((a, b) => a.rank - b.rank))
+        : game.result.ranking.map((r) => ({
+          key: r.seat, rank: r.rank, name: r.name,
+          sub: [r.burst ? 'バースト' : null, r.foul ? `🚫反則(${r.foul})` : null].filter(Boolean).join(' '),
+        }))
+  )
+
   const resultPanel = game.phase === 'ended' && (
-    <div style={{ border: '1px solid #ffcc44', padding: 10, marginTop: 10, width: '100%' }}>
-      <div style={{ color: '#ffcc44', fontSize: 13, marginBottom: 6 }}>結果</div>
-      {game.mode === 'speed' ? (
-        <div style={{ fontSize: 13 }}>{game.result.winner === null ? '引き分け' : `🏆 ${game.players[game.result.winner].name} の勝ち！`}
-          <span style={{ color: '#668', fontSize: 11, marginLeft: 8 }}>残り枚数 {game.result.left[0]} - {game.result.left[1]}</span>
+    <>
+      <div style={{ border: '1px solid #ffcc44', padding: 10, marginTop: 10, width: '100%' }}>
+        <div style={{ color: '#ffcc44', fontSize: 13, marginBottom: 6 }}>
+          {matchGoing ? `第${Math.max(1, matchInfo.round - 1)}戦の結果` : '結果'}
         </div>
-      ) : (
-        game.result.ranking.map((r) => (
-          <div key={r.seat} style={{ fontSize: 12, color: rankColor(r.rank) }}>
-            {r.rank}位 {r.name}{r.burst ? ' (バースト)' : ''}
-            {r.foul && <span style={{ color: '#ff4444', marginLeft: 4 }}>🚫反則上がり({r.foul})</span>}
-            {game.mode === 'daifugo' && matchInfo && <span style={{ color: '#88ccff', marginLeft: 6 }}>+{DF_MATCH_PTS[r.rank - 1] || 0}pt</span>}
+        {game.mode === 'speed' ? (
+          <div style={{ fontSize: 13 }}>{game.result.winner === null ? '引き分け' : `🏆 ${game.players[game.result.winner].name} の勝ち！`}
+            <span style={{ color: '#668', fontSize: 11, marginLeft: 8 }}>残り枚数 {game.result.left[0]} - {game.result.left[1]}</span>
           </div>
-        ))
-      )}
-      {/* 大富豪マッチの累計/最終結果 */}
-      {game.mode === 'daifugo' && matchInfo && (
-        <div style={{ marginTop: 8, borderTop: '1px solid #334466', paddingTop: 6 }}>
-          <div style={{ color: matchInfo.over ? '#ffcc44' : '#88ccff', fontSize: 12, marginBottom: 4 }}>
-            {matchInfo.over ? `🏆 マッチ終了！(全${matchInfo.len}戦)` : `🏁 マッチ途中経過(次は第${matchInfo.round}戦/${matchInfo.len}戦)`}
-          </div>
-          {Object.keys(matchInfo.points)
-            .sort((a, b) => (matchInfo.points[b] - matchInfo.points[a]) || ((matchInfo.lastRanks[a] || 9) - (matchInfo.lastRanks[b] || 9)))
-            .map((id, i) => (
-              <div key={id} style={{ fontSize: 12, color: rankColor(i + 1) }}>
-                {matchInfo.over ? `${i + 1}位 ` : ''}{matchInfo.names[id]}: {matchInfo.points[id]}pt
+        ) : (
+          game.result.ranking.map((r) => (
+            <div key={r.seat} style={{ fontSize: 12, color: rankColor(r.rank) }}>
+              {r.rank}位 {r.name}{r.burst ? ' (バースト)' : ''}
+              {r.foul && <span style={{ color: '#ff4444', marginLeft: 4 }}>🚫反則上がり({r.foul})</span>}
+              {game.mode === 'daifugo' && matchInfo && <span style={{ color: '#88ccff', marginLeft: 6 }}>+{DF_MATCH_PTS[r.rank - 1] || 0}pt</span>}
+            </div>
+          ))
+        )}
+        {/* 大富豪マッチの累計/最終順位 */}
+        {game.mode === 'daifugo' && matchInfo && (
+          <div style={{ marginTop: 8, borderTop: '1px solid #334466', paddingTop: 6 }}>
+            <div style={{ color: matchInfo.over ? '#ffcc44' : '#88ccff', fontSize: 12, marginBottom: 4 }}>
+              {matchInfo.over ? `🏆 マッチ終了！(全${matchInfo.len}戦)` : `🏁 マッチ途中経過(次は第${matchInfo.round}戦/${matchInfo.len}戦)`}
+            </div>
+            {standings.map((r) => (
+              <div key={r.id} style={{ fontSize: 12, color: rankColor(r.rank) }}>
+                {matchInfo.over ? `${r.rank}位 ` : ''}{r.name}: {r.pt}pt
               </div>
             ))}
-        </div>
+          </div>
+        )}
+        {matchGoing ? (
+          <div style={{ fontSize: 10, color: '#668', marginTop: 6 }}>まもなく次の対局が始まります…</div>
+        ) : (
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+            <button onClick={returnToWaiting} style={btnStyle('#ffcc44', { padding: '4px 12px', fontSize: 12 })}>待機画面に戻る</button>
+            {!showFinal && <button onClick={() => setShowFinal(true)} style={btnStyle('#88ccff', { padding: '4px 12px', fontSize: 12 })}>最終結果をもう一度見る</button>}
+          </div>
+        )}
+      </div>
+
+      {/* 最終結果(全画面)。自動では消えない=見逃さない。盤面を見たい時は「盤面を確認」で閉じる */}
+      {isFinalEnd && showFinal && (
+        <FinalResult
+          subtitle={game.mode === 'daifugo' && matchInfo ? `${def.name} 全${matchInfo.len}戦 マッチ終了` : def.name}
+          rows={finalRows}
+          footNote={game.mode === 'daifugo' && matchInfo
+            ? `最終戦の順位: ${game.result.ranking.map((r) => `${r.rank}位 ${r.name}`).join(' / ')}`
+            : null}
+          betNote={settings.bet > 0 ? '💰 賭けの精算結果は画面下の通知に出ます' : null}
+          onClose={() => setShowFinal(false)}
+          onReturn={returnToWaiting}
+        />
       )}
-      <div style={{ fontSize: 10, color: '#668', marginTop: 6 }}>まもなく待機画面に戻ります…</div>
-    </div>
+    </>
   )
 
   // ---- ババ抜き ----

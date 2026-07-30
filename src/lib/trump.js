@@ -863,6 +863,19 @@ export function randomTrump(state, seat) {
   return null
 }
 // 勝者(1位)のid。スピードは winner seat。引き分けはnull
+// 大富豪マッチの最終順位。合計pt降順 → 同点は最終戦の順位が上の人 → それも同じならid順(決定的)。
+// ※表示(最終結果画面)と賭けの分配で必ず同じ順序を使うこと。別々にソートすると
+//   「画面の1位」と「払い出しの1位」がズレる。opts.idsで対象を絞れる(NPC/離脱者の除外用)。
+export function dfMatchStandings(match, { ids = null } = {}) {
+  if (!match || !match.points) return []
+  const src = ids || Object.keys(match.points)
+  return src.slice()
+    .sort((a, b) => ((match.points[b] || 0) - (match.points[a] || 0))
+      || ((match.lastRanks?.[a] || 9) - (match.lastRanks?.[b] || 9))
+      || String(a).localeCompare(String(b)))
+    .map((id, i) => ({ id, rank: i + 1, name: match.names?.[id] || '?', pt: match.points[id] || 0 }))
+}
+
 export function trumpWinnerId(state) {
   if (state.phase !== 'ended') return null
   if (state.mode === 'speed') {
