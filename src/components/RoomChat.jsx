@@ -56,12 +56,21 @@ export function RoomChat({ messages, onSend, meId }) {
       </div>
       <div ref={listRef} style={{ height: '180px', overflowY: 'auto', padding: '6px 10px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
         {messages.length === 0 && <div style={{ color: '#667', fontSize: '12px' }}>メッセージはまだありません</div>}
-        {messages.map((m) => (
-          <div key={m.id} style={{ wordBreak: 'break-word', lineHeight: 1.4 }}>
-            <span style={{ color: m.senderId === meId ? '#ffcc44' : '#88ccff', fontSize: '11px', marginRight: '6px' }}>{m.name}</span>
-            <span style={{ color: '#eee' }}>{m.text}</span>
-          </div>
-        ))}
+        {messages.map((m) => {
+          const mine = m.senderId === meId
+          return (
+            <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start' }}>
+              {!mine && <span style={{ color: '#88ccff', fontSize: '10px', margin: '0 4px 1px' }}>{m.name}</span>}
+              <div style={{
+                maxWidth: '85%', wordBreak: 'break-word', lineHeight: 1.4, color: '#eee',
+                background: mine ? 'rgba(255,204,68,0.18)' : '#1c2a44',
+                border: `1px solid ${mine ? '#aa8830' : '#334'}`,
+                borderRadius: mine ? '10px 10px 3px 10px' : '3px 10px 10px 10px',
+                padding: '4px 9px',
+              }}>{m.text}</div>
+            </div>
+          )
+        })}
       </div>
       <div style={{ display: 'flex', gap: '6px', padding: '6px', borderTop: '1px solid #334' }}>
         <input
