@@ -1,12 +1,9 @@
 // 最終結果の全画面表示(自動では消えない。「盤面を確認」で閉じ、「待機画面に戻る」で待機へ)
 // rows: [{ key, rank, name, sub }] rank=1が優勝(0なら順位表示なし=引き分け)
 const RANK_COLORS = ['#ffdd44', '#cccccc', '#cc8844', '#889']
+const rankColorOf = (rank) => RANK_COLORS[rank - 1] || '#889'
 
-export function rankColorOf(rank) {
-  return RANK_COLORS[rank - 1] || '#889'
-}
-
-export function FinalResult({ subtitle, rows = [], footNote, betNote, onClose, onReturn }) {
+export function FinalResult({ subtitle, rows = [], headline, footNote, betNote, onClose, onReturn }) {
   const champ = rows.find((r) => r.rank === 1)
   return (
     <div style={{
@@ -20,7 +17,9 @@ export function FinalResult({ subtitle, rows = [], footNote, betNote, onClose, o
       }}>
         <div style={{ color: '#ffcc44', fontSize: 17, textAlign: 'center', marginBottom: 4 }}>🏆 最終結果</div>
         {subtitle && <div style={{ color: '#88ccff', fontSize: 11, textAlign: 'center', marginBottom: 12, wordBreak: 'break-word' }}>{subtitle}</div>}
-        {champ && (
+        {headline ? (
+          <div style={{ textAlign: 'center', color: '#ffdd66', fontSize: 15, marginBottom: 12, wordBreak: 'break-word', lineHeight: 1.5 }}>{headline}</div>
+        ) : champ && (
           <div style={{ textAlign: 'center', color: '#ffdd66', fontSize: 15, marginBottom: 12, wordBreak: 'break-word', lineHeight: 1.5 }}>
             👑 優勝<br />{champ.name}
           </div>
@@ -32,7 +31,8 @@ export function FinalResult({ subtitle, rows = [], footNote, betNote, onClose, o
             background: r.rank === 1 ? 'rgba(255,204,68,0.08)' : 'transparent',
             padding: '6px 10px', marginBottom: 6,
           }}>
-            <span style={{ color: rankColorOf(r.rank), fontSize: 13, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {/* 長い名前は省略せず折り返す(誰の結果か分からなくなるため) */}
+            <span style={{ color: rankColorOf(r.rank), fontSize: 13, flex: '1 1 auto', minWidth: 0, wordBreak: 'break-word', lineHeight: 1.4 }}>
               {r.rank > 0 ? `${r.rank}位 ` : ''}{r.name}
             </span>
             <span style={{ color: '#88ccff', fontSize: 12, flexShrink: 0 }}>{r.sub}</span>

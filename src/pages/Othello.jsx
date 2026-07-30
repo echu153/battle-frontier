@@ -5,6 +5,7 @@ import { wagerJoin, wagerReport, wagerForfeit, wagerPing, wagerSettleRanked, MAX
 import { StampBar } from '../components/StampBar'
 import { RoomChat } from '../components/RoomChat'
 import { InvitePanel } from '../components/InvitePanel'
+import { FinalResult } from '../components/FinalResult'
 import { containsNgWord } from '../lib/nameFilter'
 import {
   BLACK, WHITE, EMPTY, SIZE,
@@ -66,6 +67,9 @@ export default function Othello() {
   const [view, setView] = useState('lobby')
   const [rooms, setRooms] = useState([])
   const [lobbyNonce, setLobbyNonce] = useState(0) // 🔄でロビーを購読し直して一覧を引き直す
+  const [showFinal, setShowFinal] = useState(false) // 最終結果の表示(自動では消さない)
+  const showFinalRef = useRef(false)
+  const finalShownRef = useRef(null) // 表示済みの終局キー(再配信で開き直さないため)
   const [roomTitle, setRoomTitle] = useState('')
   const [bet, setBet] = useState(0) // 💰賭けGold(0=なし)
   const [betBusy, setBetBusy] = useState(false)
@@ -110,6 +114,7 @@ export default function Othello() {
   useEffect(() => { roomRef.current = room }, [room])
   useEffect(() => { membersRef.current = members }, [members])
   useEffect(() => { readyRef.current = ready }, [ready])
+  useEffect(() => { showFinalRef.current = showFinal }, [showFinal])
   useEffect(() => { npcsRef.current = npcs }, [npcs])
 
   const showToast = (msg) => {
@@ -131,6 +136,18 @@ export default function Othello() {
     return () => { cancelled = true }
   }, [nav])
 
+  // ---- ホスト: ロビーへ部屋情報を掲示 ----
+  //   ロビーのuseEffectより前に定義する(後ろに置くと参照が巻き上げになりReact Compilerの最適化が外れる)
+  const publishRoom = useCallback(async (status) => {
+    const r = roomRef.current
+    if (!r || r.hostId !== meRef.current?.id || !lobbyChRef.current) return
+    await lobbyChRef.current.track({
+      roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName, bet: r.bet || 0,
+      count: membersRef.current.length + npcsRef.current.length, status, // waiting | playing
+    })
+  }, [])
+  const publishStatus = () => (gameRef.current && gameRef.current.phase === 'playing' ? 'playing' : 'waiting')
+
   // ---- ロビー: 部屋一覧(presence) ----
   useEffect(() => {
     if (!me) return
@@ -149,26 +166,16 @@ export default function Othello() {
     // 再接続(SUBSCRIBEDは再購読でも発火)でロビーのtrackは消えるため、掲示中の部屋を再掲示する
     // (これが消えたままだと他の人から「部屋が見つからない」状態になる)
     ch.subscribe((status) => {
-      if (status === 'SUBSCRIBED') publishRoom(gameRef.current && gameRef.current.phase === 'playing' ? 'playing' : 'waiting')
+      if (status === 'SUBSCRIBED') publishRoom(publishStatus())
     })
     lobbyChRef.current = ch
     return () => { supabase.removeChannel(ch); lobbyChRef.current = null }
   }, [me, lobbyNonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- ホスト: ロビーへ部屋情報を掲示 ----
-  const publishRoom = useCallback(async (status) => {
-    const r = roomRef.current
-    if (!r || r.hostId !== meRef.current?.id || !lobbyChRef.current) return
-    await lobbyChRef.current.track({
-      roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName, bet: r.bet || 0,
-      count: membersRef.current.length + npcsRef.current.length, status, // waiting | playing
-    })
-  }, [])
-
   // 掲示のキープアライブ: 電波の瞬断などでtrackが落ちて一覧から消えたままになるのを防ぐ
   useEffect(() => {
     if (!room || room.hostId !== me?.id) return
-    const iv = setInterval(() => publishRoom(gameRef.current && gameRef.current.phase === 'playing' ? 'playing' : 'waiting'), 25000)
+    const iv = setInterval(() => publishRoom(publishStatus()), 25000)
     return () => clearInterval(iv)
   }, [room, me, publishRoom])
 
@@ -493,6 +500,7 @@ export default function Othello() {
     setPassNote(null)
     setLastResult(null)
     setStamps([])
+    setShowFinal(false); showFinalRef.current = false; finalShownRef.current = null
     wagerKeyRef.current = null
     betPendingRef.current = null
     setBetBusy(false)
@@ -538,27 +546,45 @@ export default function Othello() {
   const seatedOf = (mems, nps) => [...mems.filter((m) => !m.spectator), ...nps].slice(0, MAX_MULTI_PLAYERS)
   const seated = seatedOf(members, npcs)
 
-  // ---- 勝敗確定後は結果を数秒見せて待機画面へ戻る ----
-  useEffect(() => {
-    if (game?.phase !== 'ended' || !game.result) return
-    const t = setTimeout(() => {
+  // ---- 結果を閉じて待機画面へ(自動では戻らない。任意のタイミングで押す) ----
+  const returnToWaiting = useCallback(() => {
+    const g = gameRef.current
+    if (g?.result) {
       let txt
-      if (game.mode === 'multi') {
-        txt = game.result.standings
+      if (g.mode === 'multi') {
+        txt = g.result.standings
           .map((s, i) => `${i + 1}位 ${s.name}(${s.count})${s.left ? '×' : ''}`)
           .join(' / ')
       } else {
-        const w = game.result.winner ? game.players[game.result.winner] : null
+        const w = g.result.winner ? g.players[g.result.winner] : null
         txt = w
-          ? `${game.result.forfeit ? '(不戦勝) ' : ''}${w.name}の勝ち ⚫${game.result.black}-⚪${game.result.white}`
-          : `引き分け ⚫${game.result.black}-⚪${game.result.white}`
+          ? `${g.result.forfeit ? '(不戦勝) ' : ''}${w.name}の勝ち ⚫${g.result.black}-⚪${g.result.white}`
+          : `引き分け ⚫${g.result.black}-⚪${g.result.white}`
       }
       setLastResult(txt)
-      setGame(null)
-      gameRef.current = null
-    }, 5000)
-    return () => clearTimeout(t)
-  }, [game])
+    }
+    setShowFinal(false)
+    setGame(null)
+    gameRef.current = null
+  }, [])
+
+  // ---- 勝敗確定で最終結果を表示(自動では消さない=見逃さない) ----
+  useEffect(() => {
+    if (game?.phase !== 'ended' || !game.result) {
+      finalShownRef.current = null
+      if (showFinalRef.current) setShowFinal(false)
+      return
+    }
+    // 同じ終局でstateが再配信されても、閉じた最終結果を開き直さない
+    const r = game.result
+    const key = game.mode === 'multi'
+      ? `m|${r.standings.map((s) => `${s.name}:${s.count}`).join(',')}`
+      : `s|${r.winner}|${r.black}|${r.white}`
+    if (finalShownRef.current !== key) {
+      finalShownRef.current = key
+      setShowFinal(true)
+    }
+  }, [game, showFinal])
 
   // ---- NPC追加/削除(ホスト・対局中以外) ----
   const addNpc = (level) => {
@@ -1030,6 +1056,42 @@ export default function Othello() {
           ))}
         </div>
       )}
+
+      {/* 終局後の操作(自動では戻らない。任意のタイミングで待機画面へ) */}
+      {game.phase === 'ended' && (
+        <div style={{ display: 'flex', gap: '8px', marginTop: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button onClick={returnToWaiting} style={btnStyle('#ffcc44', { padding: '6px 14px', fontSize: '12px' })}>待機画面に戻る</button>
+          {!showFinal && <button onClick={() => setShowFinal(true)} style={btnStyle('#88ccff', { padding: '6px 14px', fontSize: '12px' })}>最終結果をもう一度見る</button>}
+        </div>
+      )}
+
+      {/* 最終結果(全画面・自動では消えない) */}
+      {game.phase === 'ended' && game.result && showFinal && (() => {
+        const r = game.result
+        const rows = isMulti
+          ? r.standings.map((s, i) => ({
+            key: s.color, rank: i + 1,
+            name: `${STONE_LABEL[s.color] || '?'} ${s.name}`,
+            sub: `${s.count}個${s.left ? ' (切断)' : ''}`,
+          }))
+          : [BLACK, WHITE].map((c) => ({
+            key: c,
+            rank: r.winner ? (c === r.winner ? 1 : 2) : 0,
+            name: `${STONE_LABEL[c]} ${game.players[c]?.name || '?'}`,
+            sub: `${c === BLACK ? r.black : r.white}個`,
+          })).sort((a, b) => a.rank - b.rank)
+        return (
+          <FinalResult
+            subtitle={isMulti ? `双極盤 ${game.players.length}人戦` : '双極盤'}
+            rows={rows}
+            headline={!isMulti && !r.winner ? '引き分け' : null}
+            footNote={r.forfeit ? '相手の退室による不戦勝です' : null}
+            betNote={room.bet > 0 ? '💰 賭けの精算結果は画面下の通知に出ます' : null}
+            onClose={() => setShowFinal(false)}
+            onReturn={returnToWaiting}
+          />
+        )
+      })()}
     </div>
   )
 }

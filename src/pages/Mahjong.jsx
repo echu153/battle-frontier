@@ -10,6 +10,7 @@ import { TileFace, TileBackFace } from '../components/MahjongTile'
 import { StampBar, StampOverlay } from '../components/StampBar'
 import { RoomChat } from '../components/RoomChat'
 import { InvitePanel } from '../components/InvitePanel'
+import { FinalResult } from '../components/FinalResult'
 import { containsNgWord } from '../lib/nameFilter'
 import { wagerJoin, wagerReport, wagerForfeit, wagerPing, wagerSettleRanked, MAX_BET } from '../lib/wager'
 
@@ -102,16 +103,25 @@ export default function Mahjong() {
   const readyRef = useRef(false)
   const myJoinedAtRef = useRef(0)
 
-  // 終局後は結果を数秒見せて待機画面へ戻る
+  const [showFinal, setShowFinal] = useState(false) // 最終結果の表示(自動では消さない)
+  const showFinalRef = useRef(false)
+  const finalShownRef = useRef(null) // 表示済みの終局キー(再配信で開き直さないため)
+  useEffect(() => { showFinalRef.current = showFinal }, [showFinal])
+
+  // 終局で最終結果を表示(自動では消さない=見逃さない。任意のタイミングで待機画面へ)
   useEffect(() => {
-    if (game?.phase !== 'ended' || !game.finalStandings) return
-    const t = setTimeout(() => {
-      setLastResult(game.finalStandings.map((s, i) => `${i + 1}位 ${s.name}(${s.score})`).join(' / '))
-      setGame(null)
-      gameRef.current = null
-    }, 7000)
-    return () => clearTimeout(t)
-  }, [game])
+    if (game?.phase !== 'ended' || !game.finalStandings) {
+      finalShownRef.current = null
+      if (showFinalRef.current) setShowFinal(false)
+      return
+    }
+    // 同じ終局でstateが再配信されても、閉じた最終結果を開き直さない
+    const key = game.finalStandings.map((s) => `${s.seat}:${s.score}`).join(',')
+    if (finalShownRef.current !== key) {
+      finalShownRef.current = key
+      setShowFinal(true)
+    }
+  }, [game, showFinal])
   const [chiPick, setChiPick] = useState(null) // 複数チー候補
   const [kanPick, setKanPick] = useState(null)
   const [nowTick, setNowTick] = useState(0) // 残り秒表示用
@@ -207,6 +217,20 @@ export default function Mahjong() {
     return () => { cancelled = true }
   }, [nav])
 
+  // ---- ホスト: ロビーへ卓情報を掲示 ----
+  //   ロビーのuseEffectより前に定義する(後ろに置くと参照が巻き上げになりReact Compilerの最適化が外れる)
+  const publishRoom = useCallback(async (status) => {
+    const r = roomRef.current
+    if (!r || r.hostId !== meRef.current?.id || !lobbyChRef.current) return
+    const s = settingsRef.current
+    await lobbyChRef.current.track({
+      roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName,
+      bet: s.bet || 0, hanchan: !!s.rules?.hanchan,
+      count: membersRef.current.length + npcsRef.current.length, status,
+    })
+  }, [])
+  const publishStatus = () => (gameRef.current && gameRef.current.phase !== 'ended' ? 'playing' : 'waiting')
+
   // ---- ロビー ----
   useEffect(() => {
     if (!me) return
@@ -224,27 +248,16 @@ export default function Mahjong() {
     // 再接続(SUBSCRIBEDは再購読でも発火)でロビーのtrackは消えるため、掲示中の卓を再掲示する
     // (これが消えたままだと他の人から「卓が見つからない」状態になる)
     ch.subscribe((status) => {
-      if (status === 'SUBSCRIBED') publishRoom(gameRef.current && gameRef.current.phase !== 'ended' ? 'playing' : 'waiting')
+      if (status === 'SUBSCRIBED') publishRoom(publishStatus())
     })
     lobbyChRef.current = ch
     return () => { supabase.removeChannel(ch); lobbyChRef.current = null }
   }, [me, lobbyNonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const publishRoom = useCallback(async (status) => {
-    const r = roomRef.current
-    if (!r || r.hostId !== meRef.current?.id || !lobbyChRef.current) return
-    const s = settingsRef.current
-    await lobbyChRef.current.track({
-      roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName,
-      bet: s.bet || 0, hanchan: !!s.rules?.hanchan,
-      count: membersRef.current.length + npcsRef.current.length, status,
-    })
-  }, [])
-
   // 掲示のキープアライブ: 電波の瞬断などでtrackが落ちて一覧から消えたままになるのを防ぐ
   useEffect(() => {
     if (!room || room.hostId !== me?.id) return
-    const iv = setInterval(() => publishRoom(gameRef.current && gameRef.current.phase !== 'ended' ? 'playing' : 'waiting'), 25000)
+    const iv = setInterval(() => publishRoom(publishStatus()), 25000)
     return () => clearInterval(iv)
   }, [room, me, publishRoom])
 
@@ -512,6 +525,7 @@ export default function Mahjong() {
     setNpcs([]); npcsRef.current = []
     setLastResult(null)
     setStamps([])
+    setShowFinal(false); showFinalRef.current = false; finalShownRef.current = null
     wagerKeyRef.current = null
     betPendingRef.current = null
     setBetBusy(false)
@@ -647,6 +661,17 @@ export default function Mahjong() {
     roomChRef.current.send({ type: 'broadcast', event: 'chat', payload: { name: meRef.current.name, senderId: meRef.current.id, text: t } })
     return true
   }
+
+  // ---- 結果を閉じて待機画面へ(自動では戻らない。任意のタイミングで押す) ----
+  const returnToWaiting = useCallback(() => {
+    const g = gameRef.current
+    if (g?.finalStandings) {
+      setLastResult(g.finalStandings.map((s, i) => `${i + 1}位 ${s.name}(${s.score})`).join(' / '))
+    }
+    setShowFinal(false)
+    setGame(null)
+    gameRef.current = null
+  }, [])
 
   // ---- NPC/切断者の自動進行(ホスト) ----
   useEffect(() => {
@@ -1259,8 +1284,26 @@ export default function Mahjong() {
               {s.pt !== undefined && <span style={{ color: s.pt >= 0 ? '#44dd88' : '#ff8866', marginLeft: 8 }}>{s.pt >= 0 ? '+' : ''}{s.pt}pt</span>}
             </div>
           ))}
-          {isHost && <button onClick={startGame} style={btnStyle('#ffcc44', { marginTop: 10 })}>もう一局</button>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            {isHost && <button onClick={startGame} style={btnStyle('#ffcc44')}>もう一局</button>}
+            <button onClick={returnToWaiting} style={btnStyle('#ffcc44')}>待機画面に戻る</button>
+            {!showFinal && <button onClick={() => setShowFinal(true)} style={btnStyle('#88ccff')}>最終結果をもう一度見る</button>}
+          </div>
         </div>
+      )}
+
+      {/* 最終結果(全画面・自動では消えない) */}
+      {game.phase === 'ended' && game.finalStandings && showFinal && (
+        <FinalResult
+          subtitle={`${game.players.length}人 ${game.rules?.hanchan ? '半荘戦' : '東風戦'} 終了`}
+          rows={game.finalStandings.map((s, i) => ({
+            key: s.seat, rank: i + 1, name: s.name,
+            sub: `${s.score}点${s.pt !== undefined ? ` / ${s.pt >= 0 ? '+' : ''}${s.pt}pt` : ''}`,
+          }))}
+          betNote={settings.bet > 0 ? '💰 賭けの精算結果は画面下の通知に出ます' : null}
+          onClose={() => setShowFinal(false)}
+          onReturn={returnToWaiting}
+        />
       )}
     </div>
   )

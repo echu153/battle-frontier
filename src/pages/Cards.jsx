@@ -176,6 +176,20 @@ export default function Cards() {
     return () => { cancelled = true }
   }, [nav])
 
+  // ---- ホスト: ロビーへ部屋情報を掲示 ----
+  //   ロビーのuseEffectより前に定義する(後ろに置くと参照が巻き上げになりReact Compilerの最適化が外れる)
+  const publishRoom = useCallback(async (status) => {
+    const r = roomRef.current
+    if (!r || r.hostId !== meRef.current?.id || !lobbyChRef.current) return
+    const s = settingsRef.current
+    await lobbyChRef.current.track({
+      roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName,
+      gameType: s.gameType, bet: s.bet, rules: s.gameType === 'daifugo' ? s.rules : null,
+      count: membersRef.current.length + npcsRef.current.length, status,
+    })
+  }, [])
+  const publishStatus = () => (gameRef.current?.phase === 'playing' ? 'playing' : 'waiting')
+
   // ---- ロビー ----
   useEffect(() => {
     if (!me) return
@@ -192,27 +206,16 @@ export default function Cards() {
     // 再接続(SUBSCRIBEDは再購読でも発火)でロビーのtrackは消えるため、掲示中の部屋を再掲示する
     // (これが消えたままだと他の人から「部屋が見つからない」状態になる)
     ch.subscribe((status) => {
-      if (status === 'SUBSCRIBED') publishRoom(gameRef.current?.phase === 'playing' ? 'playing' : 'waiting')
+      if (status === 'SUBSCRIBED') publishRoom(publishStatus())
     })
     lobbyChRef.current = ch
     return () => { supabase.removeChannel(ch); lobbyChRef.current = null }
   }, [me, lobbyNonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const publishRoom = useCallback(async (status) => {
-    const r = roomRef.current
-    if (!r || r.hostId !== meRef.current?.id || !lobbyChRef.current) return
-    const s = settingsRef.current
-    await lobbyChRef.current.track({
-      roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName,
-      gameType: s.gameType, bet: s.bet, rules: s.gameType === 'daifugo' ? s.rules : null,
-      count: membersRef.current.length + npcsRef.current.length, status,
-    })
-  }, [])
-
   // 掲示のキープアライブ: 電波の瞬断などでtrackが落ちて一覧から消えたままになるのを防ぐ
   useEffect(() => {
     if (!room || room.hostId !== me?.id) return
-    const iv = setInterval(() => publishRoom(gameRef.current?.phase === 'playing' ? 'playing' : 'waiting'), 25000)
+    const iv = setInterval(() => publishRoom(publishStatus()), 25000)
     return () => clearInterval(iv)
   }, [room, me, publishRoom])
 
