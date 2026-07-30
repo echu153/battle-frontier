@@ -8,6 +8,8 @@ import {
 } from '../lib/trump'
 import { wagerJoin, wagerReport, wagerForfeit, wagerPing, wagerSettleRanked, MAX_BET } from '../lib/wager'
 import { StampBar, StampOverlay } from '../components/StampBar'
+import { RoomChat } from '../components/RoomChat'
+import { containsNgWord } from '../lib/nameFilter'
 
 // ============================================================
 // トランプ広場 — 開発限定(大富豪/スピード/7ならべ/ババ抜き)
@@ -88,6 +90,10 @@ export default function Cards() {
   const [stamps, setStamps] = useState([]) // 表示中スタンプ
   const stampSeqRef = useRef(0)
   const stampCdRef = useRef(0)
+  const [chatOn, setChatOn] = useState(false) // 運営(is_admin)が建てた部屋のみフリーチャット解放
+  const [chatMsgs, setChatMsgs] = useState([])
+  const chatSeqRef = useRef(0)
+  const chatCdRef = useRef(0)
   const [showHelp, setShowHelp] = useState(false) // 対局中のルール確認パネル
   const [splash, setSplash] = useState(null) // 大きな演出文言(8切り！/革命！など)
   const splashTimerRef = useRef(null)
@@ -542,6 +548,12 @@ export default function Cards() {
       setStamps((prev) => [...prev.slice(-4), { id, name: payload.name, text: payload.text }])
       setTimeout(() => setStamps((prev) => prev.filter((s) => s.id !== id)), 2600)
     })
+    // チャット受信(運営部屋のみUI表示。受信側でもNGワードは破棄)
+    ch.on('broadcast', { event: 'chat' }, ({ payload }) => {
+      if (typeof payload?.text !== 'string' || containsNgWord(payload.text)) return
+      const id = ++chatSeqRef.current
+      setChatMsgs((prev) => [...prev.slice(-99), { id, name: String(payload.name ?? '?').slice(0, 16), senderId: payload.senderId, text: payload.text.slice(0, 100) }])
+    })
     // 持ち時間切れ(ランダムな手が自動で出される)
     ch.on('broadcast', { event: 'timeup' }, ({ payload }) => {
       const nm = gameRef.current?.players[payload.seat]?.name
@@ -804,6 +816,29 @@ export default function Cards() {
     roomChRef.current?.send({ type: 'broadcast', event: 'stamp', payload: { name: meRef.current.name, text, senderId: meRef.current.id } })
   }, [])
 
+  // ---- チャット(運営が建てた部屋のみ) ----
+  useEffect(() => {
+    let alive = true
+    setChatOn(false); setChatMsgs([])
+    const hostId = room?.hostId
+    if (!hostId) return
+    supabase.from('profiles').select('is_admin').eq('id', hostId).maybeSingle()
+      .then(({ data }) => { if (alive && data?.is_admin) setChatOn(true) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [room?.hostId])
+
+  const sendChat = (text) => {
+    const t = (text ?? '').trim().slice(0, 100)
+    if (!t || !roomChRef.current || !meRef.current) return false
+    if (containsNgWord(t)) { showToast('使用できない言葉が含まれています'); return false }
+    const now = Date.now()
+    if (now - chatCdRef.current < 2000) { showToast('少し間をあけてください'); return false }
+    chatCdRef.current = now
+    roomChRef.current.send({ type: 'broadcast', event: 'chat', payload: { name: meRef.current.name, senderId: meRef.current.id, text: t } })
+    return true
+  }
+
   // ---- NPC/切断者の自動進行(ホスト・ターン制＋大富豪の交換フェーズ) ----
   useEffect(() => {
     if (!room || room.hostId !== me?.id || !game || game.mode === 'speed') return
@@ -1021,6 +1056,7 @@ export default function Cards() {
     <>
       <StampBar spectator={amSpectator} players={cheerTargets} onSend={sendStamp} />
       <StampOverlay stamps={stamps} />
+      {chatOn && <RoomChat messages={chatMsgs} onSend={sendChat} meId={me?.id} />}
     </>
   )
 

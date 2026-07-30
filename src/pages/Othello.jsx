@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { wagerJoin, wagerReport, wagerForfeit, wagerPing, wagerSettleRanked, MAX_BET } from '../lib/wager'
 import { StampBar } from '../components/StampBar'
+import { RoomChat } from '../components/RoomChat'
+import { containsNgWord } from '../lib/nameFilter'
 import {
   BLACK, WHITE, EMPTY, SIZE,
   validMoves, countStones, cpuChooseMove,
@@ -77,6 +79,10 @@ export default function Othello() {
   const [stamps, setStamps] = useState([]) // 表示中スタンプ [{ id, name, text }]
   const stampSeqRef = useRef(0)
   const stampCdRef = useRef(0) // 連打防止クールダウン
+  const [chatOn, setChatOn] = useState(false) // 運営(is_admin)が建てた部屋のみフリーチャット解放
+  const [chatMsgs, setChatMsgs] = useState([])
+  const chatSeqRef = useRef(0)
+  const chatCdRef = useRef(0)
   const [ready, setReady] = useState(false) // 自分の準備OK
   const readyRef = useRef(false)
   const myJoinedAtRef = useRef(0) // 入室時刻(観戦切替時も席順を維持するため保持)
@@ -427,6 +433,12 @@ export default function Othello() {
       setStamps((prev) => [...prev.slice(-5), { id, name: payload.name, text: payload.text, senderId: payload.senderId }])
       setTimeout(() => setStamps((prev) => prev.filter((s) => s.id !== id)), 2600)
     })
+    // チャット受信(運営部屋のみUI表示。受信側でもNGワードは破棄)
+    ch.on('broadcast', { event: 'chat' }, ({ payload }) => {
+      if (typeof payload?.text !== 'string' || containsNgWord(payload.text)) return
+      const id = ++chatSeqRef.current
+      setChatMsgs((prev) => [...prev.slice(-99), { id, name: String(payload.name ?? '?').slice(0, 16), senderId: payload.senderId, text: payload.text.slice(0, 100) }])
+    })
     myJoinedAtRef.current = 0 // 新しい入室なので入室時刻をリセット(再接続時のみ保持される)
     ch.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
@@ -619,6 +631,29 @@ export default function Othello() {
     if (now - stampCdRef.current < 1500) return
     stampCdRef.current = now
     roomChRef.current?.send({ type: 'broadcast', event: 'stamp', payload: { name: meRef.current.name, text, senderId: meRef.current.id } })
+  }
+
+  // ---- チャット(運営が建てた部屋のみ) ----
+  useEffect(() => {
+    let alive = true
+    setChatOn(false); setChatMsgs([])
+    const hostId = room?.hostId
+    if (!hostId) return
+    supabase.from('profiles').select('is_admin').eq('id', hostId).maybeSingle()
+      .then(({ data }) => { if (alive && data?.is_admin) setChatOn(true) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [room?.hostId])
+
+  const sendChat = (text) => {
+    const t = (text ?? '').trim().slice(0, 100)
+    if (!t || !roomChRef.current || !meRef.current) return false
+    if (containsNgWord(t)) { showToast('使用できない言葉が含まれています'); return false }
+    const now = Date.now()
+    if (now - chatCdRef.current < 2000) { showToast('少し間をあけてください'); return false }
+    chatCdRef.current = now
+    roomChRef.current.send({ type: 'broadcast', event: 'chat', payload: { name: meRef.current.name, senderId: meRef.current.id, text: t } })
+    return true
   }
 
   // 対局者のスタンプ吹き出し(名前の下に表示)
@@ -930,6 +965,7 @@ export default function Othello() {
           : seated
         return <StampBar spectator={amSpectator} players={cheerTargets} onSend={sendStamp} />
       })()}
+      {chatOn && <RoomChat messages={chatMsgs} onSend={sendChat} meId={me?.id} />}
 
       {/* 観戦者のスタンプは下部に表示(対局者のは名前の下) */}
       <style>{'@keyframes okstamp { 0% { transform: translateY(8px) scale(0.8); opacity: 0 } 15% { transform: none; opacity: 1 } 80% { opacity: 1 } 100% { opacity: 0 } }'}</style>

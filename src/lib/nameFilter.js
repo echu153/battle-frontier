@@ -43,6 +43,15 @@ const ALLOWED_NAME_RE = /^[ぁ-んァ-ヶー一-龯a-zA-Zａ-ｚＡ-Ｚ0-9０-�
 
 // 名前を検証。問題なければ null、NGならエラーメッセージ文字列を返す。
 // opts.maxLen: 最大文字数（既定16）／opts.label: エラー文言に使う呼称（既定「名前」）
+// チャット等の自由入力テキストにNGワードが含まれるか(部分一致のみ)
+export function containsNgWord(text) {
+  const lower = (text ?? '').toLowerCase()
+  for (const w of [...NG_WORDS_PARTIAL, ...NG_WORDS_EXTRA]) {
+    if (lower.includes(w.toLowerCase())) return true
+  }
+  return false
+}
+
 export function validateName(name, { maxLen = 16, label = '名前' } = {}) {
   const trimmed = (name ?? '').trim()
   if (trimmed.length === 0) return `${label}を入力してください`
