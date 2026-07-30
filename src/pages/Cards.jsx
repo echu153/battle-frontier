@@ -796,13 +796,18 @@ export default function Cards() {
       {toast && (
         <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: '#112244', border: '1px solid #4488cc', color: '#cde', padding: '8px 16px', fontSize: 12, zIndex: 60, whiteSpace: 'nowrap' }}>{toast}</div>
       )}
+      {/* 演出文言は画面下寄り(手札より下の余白)に出す。場のカードや手札に被らないように */}
       {splash && (
-        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 70 }}>
+        <div style={{
+          position: 'fixed', left: 0, right: 0, bottom: '20vh',
+          display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 70,
+        }}>
           <div style={{
-            fontSize: 44, fontWeight: 'bold', color: '#ff4422', textAlign: 'center',
+            fontSize: 40, fontWeight: 'bold', color: '#ff4422', textAlign: 'center',
             fontFamily: "'Hiragino Mincho ProN','Yu Mincho',serif",
-            textShadow: '0 0 24px rgba(0,0,0,0.9), 3px 3px 0 #550000, -2px -2px 0 #ffcc44',
+            textShadow: '0 0 24px rgba(0,0,0,0.95), 3px 3px 0 #550000, -2px -2px 0 #ffcc44',
             animation: 'cfsplash 1.6s ease-out both', maxWidth: '94vw',
+            background: 'rgba(10,16,32,0.55)', borderRadius: 12, padding: '4px 18px',
           }}>{splash}</div>
         </div>
       )}
