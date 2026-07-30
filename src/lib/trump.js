@@ -38,6 +38,10 @@ export const GAME_HELP = {
       miyako: ['都落ち', '前の対局の1位が今回1位を取れなかった瞬間、その場で最下位が確定する（2戦目以降）。'],
     },
     always: ['8切り', '8を含めて出すと場が流れ、出した人がもう一度好きな札を出せる。'],
+    alwaysMore: [
+      ['反則上がり', '最後の1手が「その時いちばん強い数字（通常は2・革命中は3）」「JOKER」「8切り」だと反則負けで最下位になる。'],
+      ['カード交換', '2戦目以降は開始前に交換。最下位→1位に強い札2枚・3位→2位に強い札1枚（自動）、1位→最下位に好きな2枚・2位→3位に好きな1枚（選択）。'],
+    ],
     match: 'マッチ戦: 各局の順位でポイントを獲得（1位4pt・2位2pt・3位1pt・4位0pt）。合計ptで最終順位が決まります。',
   },
   speed: {
@@ -111,24 +115,118 @@ const activeCount = (players) => players.filter((p) => !p.out).length
 const dfStrength = (r) => (r >= 3 ? r : r + 13) // 3..13 / A=14 / 2=15
 const DF_JOKER_STRENGTH = 16
 
-export function createDaifugo(playersIn, rules = {}, championId = null) {
+// prevRanking: 前の局の順位順プレイヤーid配列(2戦目以降のカード交換に使う)
+export function createDaifugo(playersIn, rules = {}, championId = null, prevRanking = null) {
   const deck = makeDeck(true)
   const players = playersIn.map((p) => ({ id: p.id, name: p.name, hand: [], out: false, rank: 0 }))
   let i = 0
   while (deck.length > 0) { players[i % players.length].hand.push(deck.pop()); i++ }
   for (const p of players) sortDf(p.hand)
-  return {
+  const st = {
     mode: 'daifugo', players,
     rules: {
       kaidan: !!rules.kaidan, shibari: !!rules.shibari, miyako: !!rules.miyako,
       kakumei: rules.kakumei !== false, spade3: rules.spade3 !== false,
     },
     champion: rules.miyako && championId && players.some((p) => p.id === championId) ? championId : null,
-    turn: 0, field: null, // { cards, count, strength, type, suits, lock }
+    turn: 0, field: null, // { cards, count, strength, type, suits, lock, by }
     lastPlayer: null, passed: players.map(() => false),
     revolution: false, rankNext: 1, rankBottom: players.length,
-    phase: 'playing', result: null,
+    phase: 'playing', result: null, exchange: null,
   }
+  // ---- カード交換(2戦目以降・4人以上) ----
+  // 最下位→1位に最強2枚 / 3位→2位に最強1枚(自動)
+  // 1位→最下位に好きな2枚 / 2位→3位に好きな1枚(選択)。すべて同時に成立する
+  if (prevRanking && players.length >= 4) {
+    const seatOf = (id) => players.findIndex((p) => p.id === id)
+    const n = players.length
+    const pairs = [] // { from, to, count, auto }
+    const top = seatOf(prevRanking[0]), bottom = seatOf(prevRanking[n - 1])
+    const second = seatOf(prevRanking[1]), third = seatOf(prevRanking[n - 2])
+    if (top >= 0 && bottom >= 0 && top !== bottom) {
+      pairs.push({ from: bottom, to: top, count: 2, auto: true })
+      pairs.push({ from: top, to: bottom, count: 2, auto: false })
+    }
+    if (second >= 0 && third >= 0 && second !== third && second !== bottom && third !== top) {
+      pairs.push({ from: third, to: second, count: 1, auto: true })
+      pairs.push({ from: second, to: third, count: 1, auto: false })
+    }
+    if (pairs.length > 0) {
+      st.phase = 'exchange'
+      st.exchange = {
+        pairs,
+        picks: {},   // seat -> cardIds(選択側の提出内容)
+        pending: pairs.filter((p) => !p.auto).map((p) => p.from),
+      }
+    }
+  }
+  return st
+}
+
+// 交換で自動的に渡す札(最強からcount枚)。革命は考慮しない(局開始時は常に通常の強さ)
+function dfStrongest(hand, count) {
+  return [...hand]
+    .sort((a, b) => (b.joker ? 99 : dfStrength(b.r)) - (a.joker ? 99 : dfStrength(a.r)))
+    .slice(0, count)
+}
+
+// 交換の提出(選択側)。全員揃ったら一斉に交換して対局開始
+function doDfExchange(st, seat, action, ev) {
+  const ex = st.exchange
+  if (!ex) return { error: '交換フェーズではありません' }
+  if (!ex.pending.includes(seat)) return { error: '提出済みです' }
+  const pair = ex.pairs.find((p) => !p.auto && p.from === seat)
+  if (!pair) return { error: '交換の対象ではありません' }
+  if (!Array.isArray(action.cardIds) || action.cardIds.length !== pair.count) {
+    return { error: `${pair.count}枚選んでください` }
+  }
+  const hand = st.players[seat].hand
+  const uniq = [...new Set(action.cardIds)]
+  if (uniq.length !== pair.count || uniq.some((id) => !hand.find((c) => c.id === id))) {
+    return { error: 'その札は持っていません' }
+  }
+  ex.picks[seat] = uniq
+  ex.pending = ex.pending.filter((s) => s !== seat)
+  ev.push({ t: 'exchangeSubmit', seat })
+  if (ex.pending.length > 0) return { state: st, events: ev }
+
+  // ---- 全員提出 → 一斉交換 ----
+  const moves = [] // { from, to, cards }
+  for (const p of ex.pairs) {
+    const cards = p.auto
+      ? dfStrongest(st.players[p.from].hand, p.count)
+      : ex.picks[p.from].map((id) => st.players[p.from].hand.find((c) => c.id === id))
+    moves.push({ from: p.from, to: p.to, cards })
+  }
+  for (const m of moves) {
+    const ids = new Set(m.cards.map((c) => c.id))
+    st.players[m.from].hand = st.players[m.from].hand.filter((c) => !ids.has(c.id))
+  }
+  for (const m of moves) {
+    st.players[m.to].hand.push(...m.cards)
+  }
+  for (const p of st.players) sortDf(p.hand)
+  ev.push({
+    t: 'exchangeDone',
+    moves: moves.map((m) => ({
+      fromName: st.players[m.from].name, toName: st.players[m.to].name,
+      cards: m.cards.map(cardLabel), auto: !!ex.pairs.find((p) => p.from === m.from)?.auto,
+    })),
+  })
+  st.exchange = null
+  st.phase = 'playing'
+  // 前局の最下位から開始(伝統的な進行)
+  return { state: st, events: ev }
+}
+
+// 交換フェーズでの自動提出(NPC/時間切れ): 最も弱い札を出す
+export function dfExchangeAuto(st, seat) {
+  const pair = st.exchange?.pairs.find((p) => !p.auto && p.from === seat)
+  if (!pair) return null
+  const weakest = [...st.players[seat].hand]
+    .sort((a, b) => (a.joker ? 99 : dfStrength(a.r)) - (b.joker ? 99 : dfStrength(b.r)))
+    .slice(0, pair.count)
+  return { type: 'exchange', cardIds: weakest.map((c) => c.id) }
 }
 function sortDf(hand) {
   hand.sort((a, b) => (a.joker ? 99 : dfStrength(a.r)) - (b.joker ? 99 : dfStrength(b.r)))
@@ -185,10 +283,15 @@ export function applyDaifugo(state, playerId, action) {
   const st = clone(state)
   const seat = st.players.findIndex((p) => p.id === playerId)
   if (seat === -1) return { error: '対局者ではありません' }
+  const ev = []
+  // カード交換フェーズ(2戦目以降)
+  if (st.phase === 'exchange') {
+    if (action.type !== 'exchange') return { error: 'カード交換中です' }
+    return doDfExchange(st, seat, action, ev)
+  }
   if (st.phase !== 'playing') return { error: 'ゲームは終了しています' }
   if (st.turn !== seat) return { error: 'あなたの番ではありません' }
   const me = st.players[seat]
-  const ev = []
 
   if (action.type === 'pass') {
     if (!st.field) return { error: '場が空の時はパスできません' }
@@ -218,12 +321,28 @@ export function applyDaifugo(state, playerId, action) {
   const isKiri = cards.some((c) => !c.joker && c.r === 8) // 8切り
   const isRev = cards.length >= 4 && st.rules.kakumei !== false // 革命(ルールでOFF可)
   if (isRev) { st.revolution = !st.revolution; ev.push({ t: 'revolution', on: st.revolution }) }
-  st.field = { cards, count: cards.length, strength: res.strength, type: res.type, suits: res.suits, lock }
+  st.field = { cards, count: cards.length, strength: res.strength, type: res.type, suits: res.suits, lock, by: seat }
   st.lastPlayer = seat
   st.passed = st.players.map(() => false)
   ev.push({ t: 'play', seat, cards: cards.map(cardLabel), cardObjs: cards, seq: res.type === 'seq' })
 
   if (me.hand.length === 0) {
+    // ---- 反則上がり: 最後の一手が「その時点で最強の札」「JOKER」「8切り」なら反則負け(最下位) ----
+    const topRank = st.revolution ? 3 : 2 // 革命中は3が最強
+    const foulReasons = []
+    if (cards.some((c) => c.joker)) foulReasons.push('JOKER')
+    if (cards.some((c) => !c.joker && c.r === topRank)) foulReasons.push(topRank === 2 ? '2' : '3')
+    if (isKiri) foulReasons.push('8切り')
+    if (foulReasons.length > 0) {
+      me.out = true
+      me.foul = foulReasons.join('・')
+      me.rank = st.rankBottom--
+      ev.push({ t: 'foul', seat, name: me.name, reasons: foulReasons, rank: me.rank })
+      // 反則上がりでも場は流れる(8切りなら次はこの人の下家から)
+      if (isKiri) { st.field = null; ev.push({ t: 'clear', kiri: true }) }
+      st.turn = nextActive(st.players, seat)
+      return finishDfIfOver(st, ev)
+    }
     me.out = true
     me.rank = st.rankNext++
     ev.push({ t: 'out', seat, rank: me.rank })
@@ -284,10 +403,22 @@ function finishDfIfOver(st, ev) {
     const last = st.players.find((p) => !p.out)
     if (last) { last.out = true; last.rank = st.rankNext++ }
     st.phase = 'ended'
-    st.result = { ranking: st.players.map((p, i) => ({ seat: i, name: p.name, rank: p.rank })).sort((a, b) => a.rank - b.rank) }
+    st.result = {
+      ranking: st.players
+        .map((p, i) => ({ seat: i, name: p.name, rank: p.rank, foul: p.foul || null }))
+        .sort((a, b) => a.rank - b.rank),
+    }
     ev.push({ t: 'end' })
   }
   return { state: st, events: ev }
+}
+
+// その手を出すと反則上がりになるか(手札を出し切る場合のみ判定)
+export function dfIsFoulFinish(state, seat, cards) {
+  if (state.players[seat].hand.length !== cards.length) return false
+  const topRank = state.revolution ? 3 : 2
+  return cards.some((c) => c.joker) || cards.some((c) => !c.joker && c.r === topRank)
+    || cards.some((c) => !c.joker && c.r === 8)
 }
 
 export function npcDaifugo(state, seat) {
@@ -300,8 +431,17 @@ export function npcDaifugo(state, seat) {
   const jokers = me.hand.filter((c) => c.joker)
   const sorted = Object.values(groups).sort((a, b) => dfStrength(a[0].r) - dfStrength(b[0].r))
   const ordered = state.revolution ? [...sorted].reverse() : sorted
+  // 反則上がりになる手は避ける(他に手があるうちは選ばない)
+  const okFinish = (cards) => !dfIsFoulFinish(state, seat, cards)
   if (!state.field) {
     // リード: いちばん弱いグループを全部出す(革命は狙わない=最大3枚)
+    for (const g of ordered) {
+      const cards = g.slice(0, 3)
+      if (okFinish(cards)) return { type: 'play', cardIds: cards.map((c) => c.id) }
+      if (g.length > 1 && okFinish(g.slice(0, 1))) return { type: 'play', cardIds: [g[0].id] }
+    }
+    if (jokers.length && okFinish([jokers[0]])) return { type: 'play', cardIds: [jokers[0].id] }
+    // 反則しかない場合は仕方なく最弱を出す
     const g = ordered[0]
     if (g) return { type: 'play', cardIds: g.slice(0, 3).map((c) => c.id) }
     if (jokers.length) return { type: 'play', cardIds: [jokers[0].id] }
@@ -309,21 +449,27 @@ export function npcDaifugo(state, seat) {
   }
   // スペ3返し: ジョーカー単騎が場にあれば♠3で返す
   const spade3 = me.hand.find((c) => !c.joker && c.s === 0 && c.r === 3)
-  if (spade3 && dfSetStrength([spade3], state.field, state.revolution, state.rules)?.spade3) {
+  if (spade3 && dfSetStrength([spade3], state.field, state.revolution, state.rules)?.spade3
+      && okFinish([spade3])) {
     return { type: 'play', cardIds: [spade3.id] }
   }
+  const fallbacks = []
   for (const g of ordered) {
     if (g.length >= state.field.count) {
       const cards = g.slice(0, state.field.count)
       if (dfSetStrength(cards, state.field, state.revolution, state.rules) !== null) {
-        return { type: 'play', cardIds: cards.map((c) => c.id) }
+        if (okFinish(cards)) return { type: 'play', cardIds: cards.map((c) => c.id) }
+        fallbacks.push(cards)
       }
     }
   }
   if (jokers.length && state.field.count === 1 &&
       dfSetStrength([jokers[0]], state.field, state.revolution, state.rules) !== null) {
-    return { type: 'play', cardIds: [jokers[0].id] }
+    if (okFinish([jokers[0]])) return { type: 'play', cardIds: [jokers[0].id] }
+    fallbacks.push([jokers[0]])
   }
+  // 出せる手が反則上がりだけなら、パスできる場面ではパスを選ぶ
+  if (fallbacks.length > 0 && !state.field) return { type: 'play', cardIds: fallbacks[0].map((c) => c.id) }
   return { type: 'pass' }
 }
 
@@ -593,7 +739,7 @@ export function npcSpeed(state, seat) {
 // 共通ディスパッチ
 // ============================================================
 export function createTrumpGame(gameType, players, opts = {}) {
-  if (gameType === 'daifugo') return createDaifugo(players, opts.rules || {}, opts.champion || null)
+  if (gameType === 'daifugo') return createDaifugo(players, opts.rules || {}, opts.champion || null, opts.prevRanking || null)
   if (gameType === 'speed') return createSpeed(players)
   if (gameType === 'sevens') return createSevens(players)
   if (gameType === 'oldmaid') return createOldMaid(players)
@@ -613,6 +759,7 @@ export function applyTrump(state, playerId, action) {
   }
 }
 export function npcTrump(state, seat) {
+  if (state.mode === 'daifugo' && state.phase === 'exchange') return dfExchangeAuto(state, seat)
   if (state.mode === 'daifugo') return npcDaifugo(state, seat)
   if (state.mode === 'speed') return npcSpeed(state, seat)
   if (state.mode === 'sevens') return npcSevens(state, seat)
@@ -621,6 +768,7 @@ export function npcTrump(state, seat) {
 }
 // ターンタイムアウト時の自動行動(スピードは対象外)
 export function autoTrump(state, seat) {
+  if (state.mode === 'daifugo' && state.phase === 'exchange') return dfExchangeAuto(state, seat)
   if (state.mode === 'oldmaid') return npcOldMaid(state, seat)
   if (state.mode === 'sevens') return npcSevens(state, seat) // 出せなければpass(バーストあり得る)
   if (state.mode === 'daifugo') {

@@ -110,6 +110,7 @@ export default function Cards() {
   const betPendingRef = useRef(null) // ホスト: { key, need:Set, ok:Set, order }
   const reportedRef = useRef(new Set())
   const lastChampionRef = useRef(null) // 都落ち用: この部屋の前回大富豪(1位)のid
+  const lastRankingRef = useRef(null)   // カード交換用: 前局の順位順id配列
   const settleWagerRef = useRef(null)
 
   useEffect(() => { gameRef.current = game }, [game])
@@ -261,6 +262,7 @@ export default function Cards() {
     hostBroadcast(createTrumpGame(s.gameType, order, {
       rules: s.rules || {},
       champion: lastChampionRef.current,
+      prevRanking: lastRankingRef.current, // 2戦目以降のカード交換に使う
     }), [])
     publishRoom('playing')
   }, [hostBroadcast, publishRoom])
@@ -430,6 +432,8 @@ export default function Cards() {
         if (ev.t === 'miyako') fx.push(`⛰${payload.game.players[ev.seat]?.name} 都落ち！`)
         if (ev.t === 'burst') fx.push(`💥${payload.game.players[ev.seat]?.name} バースト！`)
         if (ev.t === 'play' && ev.seq) fx.push('📶階段！')
+        if (ev.t === 'foul') fx.push(`🚫${ev.name} 反則上がり！(${ev.reasons.join('・')})`)
+        if (ev.t === 'exchangeDone') showToast('🔄 カード交換が成立しました')
       }
       if (fx.length > 0) {
         setSplash(fx.join('　'))
@@ -442,9 +446,10 @@ export default function Cards() {
         if (kiriTimerRef.current) clearTimeout(kiriTimerRef.current)
         kiriTimerRef.current = setTimeout(() => setKiriFlash(null), 1300)
       }
-      // 都落ち用: この部屋の直近の大富豪(1位)を記録
+      // 都落ち・カード交換用: 直近の順位を記録
       if (payload.game.phase === 'ended' && payload.game.mode === 'daifugo') {
         lastChampionRef.current = trumpWinnerId(payload.game)
+        lastRankingRef.current = payload.game.result?.ranking?.map((r) => payload.game.players[r.seat].id) || null
       }
       // 大富豪マッチの進行状況を同期
       matchRef.current = payload.match || null
@@ -705,33 +710,51 @@ export default function Cards() {
     roomChRef.current?.send({ type: 'broadcast', event: 'stamp', payload: { name: meRef.current.name, text, senderId: meRef.current.id } })
   }, [])
 
-  // ---- NPC/切断者の自動進行(ホスト・ターン制) ----
+  // ---- NPC/切断者の自動進行(ホスト・ターン制＋大富豪の交換フェーズ) ----
   useEffect(() => {
-    if (!room || room.hostId !== me?.id || !game || game.phase !== 'playing' || game.mode === 'speed') return
-    const p = game.players[game.turn]
-    const isBot = isNpcId(p.id) || autoRef.current.has(p.id)
-    if (!isBot) return
+    if (!room || room.hostId !== me?.id || !game || game.mode === 'speed') return
+    if (game.phase !== 'playing' && game.phase !== 'exchange') return
+    // 交換フェーズ: 未提出のNPC/切断者を自動提出させる
+    const seat = game.phase === 'exchange'
+      ? game.exchange.pending.find((s) => isNpcId(game.players[s].id) || autoRef.current.has(game.players[s].id))
+      : game.turn
+    if (seat === undefined) return
+    const p = game.players[seat]
+    if (!isNpcId(p.id) && !autoRef.current.has(p.id)) return
     const seq = stateSeqRef.current
     const t = setTimeout(() => {
       if (stateSeqRef.current !== seq) return
       const cur = gameRef.current
-      if (!cur || cur.phase !== 'playing') return
-      const seat = cur.turn
-      const action = isNpcId(cur.players[seat].id) ? npcTrump(cur, seat) : autoTrump(cur, seat)
-      if (action) hostApply(cur.players[seat].id, action)
+      if (!cur || (cur.phase !== 'playing' && cur.phase !== 'exchange')) return
+      const s = cur.phase === 'exchange'
+        ? cur.exchange.pending.find((x) => isNpcId(cur.players[x].id) || autoRef.current.has(cur.players[x].id))
+        : cur.turn
+      if (s === undefined) return
+      const action = isNpcId(cur.players[s].id) ? npcTrump(cur, s) : autoTrump(cur, s)
+      if (action) hostApply(cur.players[s].id, action)
     }, 900)
     npcTimerRef.current = t
     return () => clearTimeout(t)
   }, [game, room, me, hostApply])
 
-  // ---- ターンタイムアウト(ホスト・ターン制) ----
+  // ---- ターン/交換のタイムアウト(ホスト) ----
   useEffect(() => {
-    if (!room || room.hostId !== me?.id || !game || game.phase !== 'playing' || game.mode === 'speed') return
+    if (!room || room.hostId !== me?.id || !game || game.mode === 'speed') return
+    if (game.phase !== 'playing' && game.phase !== 'exchange') return
     const seq = stateSeqRef.current
     const t = setTimeout(() => {
       if (stateSeqRef.current !== seq) return
       const cur = gameRef.current
-      if (!cur || cur.phase !== 'playing') return
+      if (!cur) return
+      if (cur.phase === 'exchange') {
+        // 未提出者を自動提出(弱い札を渡す)
+        for (const s of [...cur.exchange.pending]) {
+          const a = autoTrump(cur, s)
+          if (a) { hostApply(cur.players[s].id, a); return }
+        }
+        return
+      }
+      if (cur.phase !== 'playing') return
       const action = autoTrump(cur, cur.turn)
       if (action) hostApply(cur.players[cur.turn].id, action)
     }, TURN_SEC_TRUMP * 1000)
@@ -904,8 +927,12 @@ export default function Cards() {
           </ul>
           {h.always && (
             <div style={{ marginTop: 12, border: '1px solid #8a7a33', background: 'rgba(255,204,68,0.07)', borderRadius: 6, padding: '8px 10px' }}>
-              <div style={{ color: '#ffcc44', fontSize: 12, marginBottom: 2 }}>{h.always[0]}（常に有効）</div>
-              <div style={{ fontSize: 12, color: '#cde', lineHeight: 1.8 }}>{h.always[1]}</div>
+              {[h.always, ...(h.alwaysMore || [])].map(([label, desc], i) => (
+                <div key={i} style={{ marginTop: i > 0 ? 8 : 0 }}>
+                  <div style={{ color: '#ffcc44', fontSize: 12, marginBottom: 2 }}>{label}（常に有効）</div>
+                  <div style={{ fontSize: 12, color: '#cde', lineHeight: 1.8 }}>{desc}</div>
+                </div>
+              ))}
             </div>
           )}
           {Object.keys(h.special).length > 0 && (
@@ -1102,6 +1129,7 @@ export default function Cards() {
         game.result.ranking.map((r) => (
           <div key={r.seat} style={{ fontSize: 12, color: rankColor(r.rank) }}>
             {r.rank}位 {r.name}{r.burst ? ' (バースト)' : ''}
+            {r.foul && <span style={{ color: '#ff4444', marginLeft: 4 }}>🚫反則上がり({r.foul})</span>}
             {game.mode === 'daifugo' && matchInfo && <span style={{ color: '#88ccff', marginLeft: 6 }}>+{DF_MATCH_PTS[r.rank - 1] || 0}pt</span>}
           </div>
         ))
@@ -1237,7 +1265,11 @@ export default function Cards() {
                   {playing && game.turn === s ? '▶ ' : ''}{p.name}
                 </span>
                 {matchInfo && <span style={{ width: 34, textAlign: 'right', color: '#88ccff' }}>{matchInfo.points[p.id] || 0}pt</span>}
-                <span style={{ width: 44, textAlign: 'right', color: p.out ? rankColor(p.rank) : '#668' }}>{p.out ? `${p.rank}位` : `${p.hand.length}枚`}</span>
+                {/* 残り枚数は少なくなるほど警告色(6枚以下=黄 / 3枚以下=赤) */}
+                <span style={{
+                  width: 44, textAlign: 'right', fontWeight: !p.out && p.hand.length <= 6 ? 'bold' : 'normal',
+                  color: p.out ? rankColor(p.rank) : p.hand.length <= 3 ? '#ff4444' : p.hand.length <= 6 ? '#ffcc44' : '#668',
+                }}>{p.out ? `${p.rank}位` : `${p.hand.length}枚`}</span>
                 <span style={{ width: 40, textAlign: 'center', color: '#ff8866' }}>{game.passed[s] && !p.out ? 'パス' : ''}</span>
               </div>
             ))}
@@ -1254,26 +1286,87 @@ export default function Cards() {
             {game.field?.lock && <div style={{ color: '#ffcc44', marginTop: 2 }}>🔒{game.field.lock.map((s) => SUIT_LABEL[s]).join('')}しばり中</div>}
           </div>
         </div>
-        <div style={{ background: '#0a2a18', border: '2px solid #1a5535', borderRadius: 6, padding: 10, minHeight: 70, display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-          {game.field
-            ? game.field.cards.map((c) => <TCard key={c.id} c={c} />)
-            : kiriFlash
-              ? kiriFlash.map((c) => <TCard key={c.id} c={c} sel />)
-              : <span style={{ color: '#557', fontSize: 12 }}>場は空(好きな札を出せます)</span>}
+        {/* 場: 誰が出したかを表示 */}
+        <div style={{ background: '#0a2a18', border: '2px solid #1a5535', borderRadius: 6, padding: '6px 10px 10px', minHeight: 84, width: '100%' }}>
+          <div style={{ fontSize: 11, textAlign: 'center', marginBottom: 4, minHeight: 15, color: '#7ab88f' }}>
+            {game.field
+              ? <>{game.players[game.field.by]?.id === me.id ? 'あなた' : game.players[game.field.by]?.name} が出した札</>
+              : kiriFlash ? '' : ''}
+          </div>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center', minHeight: 54 }}>
+            {game.field
+              ? game.field.cards.map((c) => <TCard key={c.id} c={c} />)
+              : kiriFlash
+                ? kiriFlash.map((c) => <TCard key={c.id} c={c} sel />)
+                : <span style={{ color: '#557', fontSize: 12 }}>場は空(好きな札を出せます)</span>}
+          </div>
         </div>
+        {/* カード交換フェーズ(2戦目以降) */}
+        {game.phase === 'exchange' && (() => {
+          const ex = game.exchange
+          const myPair = mySeat >= 0 ? ex.pairs.find((p) => !p.auto && p.from === mySeat) : null
+          const iMustPick = !!myPair && ex.pending.includes(mySeat)
+          return (
+            <div style={{ border: '2px solid #ffcc44', background: 'rgba(255,204,68,0.08)', borderRadius: 8, padding: '8px 10px', marginTop: 8, fontSize: 12 }}>
+              <div style={{ color: '#ffcc44', marginBottom: 4 }}>🔄 カード交換</div>
+              <div style={{ color: '#cde', lineHeight: 1.7 }}>
+                {ex.pairs.filter((p) => p.auto).map((p, i) => (
+                  <div key={i}>・{game.players[p.from].name} → {game.players[p.to].name} に強い札{p.count}枚（自動）</div>
+                ))}
+                {ex.pairs.filter((p) => !p.auto).map((p, i) => (
+                  <div key={i} style={{ color: ex.pending.includes(p.from) ? '#ffcc44' : '#668' }}>
+                    ・{game.players[p.from].name} → {game.players[p.to].name} に好きな札{p.count}枚
+                    {ex.pending.includes(p.from) ? '（選択中…）' : '（提出済み）'}
+                  </div>
+                ))}
+              </div>
+              {iMustPick && (
+                <div style={{ marginTop: 6, color: '#ffcc44' }}>
+                  渡す札を{myPair.count}枚選んでください（{selObjs.length}/{myPair.count}）
+                </div>
+              )}
+            </div>
+          )
+        })()}
         {mySeat >= 0 && game.phase !== 'ended' && (
           <div style={{ marginTop: 8 }}>
             <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', justifyContent: 'center' }}>
-              {myHand.map((c) => (
-                <TCard key={c.id} c={c} sel={selCards.includes(c.id)}
-                  onClick={myTurn ? () => toggleSel(c.id) : undefined} />
-              ))}
+              {myHand.map((c) => {
+                const inExchange = game.phase === 'exchange'
+                const canTap = inExchange
+                  ? !!game.exchange.pairs.find((p) => !p.auto && p.from === mySeat) && game.exchange.pending.includes(mySeat)
+                  : myTurn
+                return (
+                  <TCard key={c.id} c={c} sel={selCards.includes(c.id)}
+                    onClick={canTap ? () => toggleSel(c.id) : undefined} />
+                )
+              })}
             </div>
-            {myTurn && (
+            {/* 交換の提出ボタン */}
+            {game.phase === 'exchange' && (() => {
+              const myPair = game.exchange.pairs.find((p) => !p.auto && p.from === mySeat)
+              if (!myPair || !game.exchange.pending.includes(mySeat)) return null
+              const ok = selObjs.length === myPair.count
+              return (
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'center' }}>
+                  <button onClick={() => { sendAction({ type: 'exchange', cardIds: selObjs.map((c) => c.id) }); setSelCards([]) }} disabled={!ok}
+                    style={btnStyle(ok ? '#ffcc44' : '#445', { fontSize: 14, opacity: ok ? 1 : 0.5 })}>
+                    この{myPair.count}枚を渡す
+                  </button>
+                </div>
+              )
+            })()}
+            {myTurn && game.phase === 'playing' && (
               <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'center' }}>
                 <button onClick={() => { sendAction({ type: 'play', cardIds: selObjs.map((c) => c.id) }); setSelCards([]) }} disabled={!canPlay}
                   style={btnStyle(canPlay ? '#ffcc44' : '#445', { fontSize: 14, opacity: canPlay ? 1 : 0.5 })}>出す({selObjs.length}枚)</button>
                 {game.field && <button onClick={() => { sendAction({ type: 'pass' }); setSelCards([]) }} style={btnStyle('#ff8866', { fontSize: 14 })}>パス</button>}
+              </div>
+            )}
+            {/* 反則上がりの注意 */}
+            {myTurn && game.phase === 'playing' && myHand.length <= 3 && (
+              <div style={{ fontSize: 10, color: '#ff8866', textAlign: 'center', marginTop: 4 }}>
+                ⚠ 最後の1手が {game.revolution ? '3' : '2'}・JOKER・8切り だと反則上がり（最下位）になります
               </div>
             )}
           </div>
