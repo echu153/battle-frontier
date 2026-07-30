@@ -15,6 +15,8 @@ import { StampBar, StampOverlay } from '../components/StampBar'
 // Gold賭け(任意): supabase_game_wager.sql の供託/過半数一致精算を使用
 // ============================================================
 
+// 切断とみなすまでの猶予。スマホで画面を離れても1分程度は部屋が保たれるようにする
+const DISCONNECT_GRACE = 75000
 const LOBBY_CHANNEL = 'trump-lobby'
 const roomChannelName = (roomId) => `trump-room-${roomId}`
 const NPC_NAMES = ['トラン子', 'カード丸', 'ジョー化', 'スペ太', 'ハート美']
@@ -68,7 +70,8 @@ export default function Cards() {
   const [rooms, setRooms] = useState([])
   const [roomTitle, setRoomTitle] = useState('')
   // 部屋の設定はホストが入室後に決める(全員へbroadcast同期)
-  const DEFAULT_SETTINGS = { gameType: 'daifugo', rules: { kakumei: true, spade3: true, kaidan: false, shibari: false, miyako: false }, bet: 0, matchLen: 3 }
+  // 大富豪のルールは既定で全部ON(ホストが個別にOFFにできる)
+  const DEFAULT_SETTINGS = { gameType: 'daifugo', rules: { kakumei: true, spade3: true, kaidan: true, shibari: true, miyako: true }, bet: 0, matchLen: 3 }
   const DF_MATCH_PTS = [4, 2, 1, 0] // 大富豪マッチ: 順位ごとの獲得pt(1位→4位)
   const rankColor = (r) => (r === 1 ? '#ffcc44' : r === 2 ? '#c8d2e0' : r === 3 ? '#cc8850' : '#7788aa') // 金/銀/銅/灰
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
@@ -400,7 +403,7 @@ export default function Cards() {
           }
           showToast('ホストが退室したため部屋は解散しました')
           leaveRoomRef.current?.()
-        }, 15000)
+        }, DISCONNECT_GRACE)
       }
     })
     ch.on('presence', { event: 'leave' }, ({ key }) => {
@@ -553,9 +556,11 @@ export default function Cards() {
       // 供託済みの人は返金希望を報告(過半数一致で返金)
       await wagerReport(payload.key, null)
     })
+    myJoinedAtRef.current = 0 // 新しい入室なので入室時刻をリセット(再接続時のみ保持される)
     ch.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        myJoinedAtRef.current = Date.now()
+        // 再接続(SUBSCRIBEDは再購読でも発火)で席順が入れ替わらないよう初回の時刻を保持
+        if (!myJoinedAtRef.current) myJoinedAtRef.current = Date.now()
         await ch.track({ name: myself.name, joinedAt: myJoinedAtRef.current, spectator: asSpectator })
         ch.send({ type: 'broadcast', event: 'statereq', payload: {} }) // リロード復帰時の状態再取得
       }
@@ -730,7 +735,8 @@ export default function Cards() {
         ? cur.exchange.pending.find((x) => isNpcId(cur.players[x].id) || autoRef.current.has(cur.players[x].id))
         : cur.turn
       if (s === undefined) return
-      const action = isNpcId(cur.players[s].id) ? npcTrump(cur, s) : autoTrump(cur, s)
+      // 切断者もNPCと同じ思考で代打ち(復帰したら操作権が戻る)
+      const action = npcTrump(cur, s) || autoTrump(cur, s)
       if (action) hostApply(cur.players[s].id, action)
     }, 900)
     npcTimerRef.current = t

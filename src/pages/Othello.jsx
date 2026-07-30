@@ -19,6 +19,8 @@ import {
 // 2人=クラシック8x8 / 3〜5人=多人数モード(人数+1ごとに盤が縦横+1マス)
 // ============================================================
 
+// 切断とみなすまでの猶予。スマホで画面を離れても1分程度は部屋が保たれるようにする
+const DISCONNECT_GRACE = 75000
 const LOBBY_CHANNEL = 'othello-lobby'
 const roomChannelName = (roomId) => `othello-room-${roomId}`
 
@@ -293,7 +295,7 @@ export default function Othello() {
           }
           showToast('ホストが退室したため部屋は解散しました')
           leaveRoomRef.current?.()
-        }, 15000)
+        }, DISCONNECT_GRACE)
       }
     })
     ch.on('presence', { event: 'leave' }, ({ key }) => {
@@ -321,7 +323,7 @@ export default function Othello() {
             publishRoom('waiting')
           }
         }
-      }, 15000)
+      }, DISCONNECT_GRACE)
       pendingLeaveRef.current.set(key, t)
     })
     ch.on('broadcast', { event: 'state' }, ({ payload }) => {
@@ -422,9 +424,11 @@ export default function Othello() {
       setStamps((prev) => [...prev.slice(-5), { id, name: payload.name, text: payload.text, senderId: payload.senderId }])
       setTimeout(() => setStamps((prev) => prev.filter((s) => s.id !== id)), 2600)
     })
+    myJoinedAtRef.current = 0 // 新しい入室なので入室時刻をリセット(再接続時のみ保持される)
     ch.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        myJoinedAtRef.current = Date.now()
+        // 再接続(SUBSCRIBEDは再購読でも発火)で席順が入れ替わらないよう初回の時刻を保持
+        if (!myJoinedAtRef.current) myJoinedAtRef.current = Date.now()
         await ch.track({ name: myself.name, joinedAt: myJoinedAtRef.current, spectator: asSpectator })
         ch.send({ type: 'broadcast', event: 'statereq', payload: {} }) // リロード復帰時の状態再取得
       }

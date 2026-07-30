@@ -19,6 +19,8 @@ const rankColor = (r) => (r === 1 ? '#ffcc44' : r === 2 ? '#c8d2e0' : r === 3 ? 
 // ホスト権威型・SQLテーブル不要。4人東風戦 / 3人サンマ東風戦
 // ============================================================
 
+// 切断とみなすまでの猶予。スマホで画面を離れても1分程度は部屋が保たれるようにする
+const DISCONNECT_GRACE = 75000
 const LOBBY_CHANNEL = 'mahjong-lobby'
 const roomChannelName = (roomId) => `mahjong-room-${roomId}`
 const NPC_NAMES = ['ツモ吉', 'ロン子', 'カン太', 'ポン美']
@@ -325,7 +327,7 @@ export default function Mahjong() {
           if (membersRef.current.some((m) => m.id === roomInfo.hostId)) return // ホスト復帰済み
           showToast('ホストが退室したため部屋は解散しました')
           leaveRoomRef.current?.()
-        }, 15000)
+        }, DISCONNECT_GRACE)
       }
     })
     ch.on('presence', { event: 'leave' }, ({ key }) => {
@@ -439,9 +441,11 @@ export default function Mahjong() {
       }
       ch.send({ type: 'broadcast', event: 'settings', payload: { settings: settingsRef.current } })
     })
+    myJoinedAtRef.current = 0 // 新しい入室なので入室時刻をリセット(再接続時のみ保持される)
     ch.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        myJoinedAtRef.current = Date.now()
+        // 再接続(SUBSCRIBEDは再購読でも発火)で席順が入れ替わらないよう初回の時刻を保持
+        if (!myJoinedAtRef.current) myJoinedAtRef.current = Date.now()
         await ch.track({ name: myself.name, joinedAt: myJoinedAtRef.current, spectator: asSpectator })
         ch.send({ type: 'broadcast', event: 'statereq', payload: {} }) // リロード復帰時の状態再取得
       }
@@ -596,7 +600,8 @@ export default function Mahjong() {
       const cur = gameRef.current
       if (!cur || cur.phase !== 'playing') return
       const seat = cur.players.findIndex((p) => p.id === actorId)
-      const action = isNpcId(actorId) ? npcDecide(cur, seat) : autoActionFor(cur, seat)
+      // 切断者もNPCと同じ思考で代打ち(復帰したら操作権が戻る)
+      const action = npcDecide(cur, seat) || autoActionFor(cur, seat)
       if (action) hostApply(actorId, action)
       // 反応時間をランダム化(鳴き判断の有無を時間で悟られないように)
     }, game.await.type === 'claims' ? 600 + Math.random() * 1100 : 800 + Math.random() * 800)
