@@ -255,8 +255,8 @@ export function dfSetStrength(cards, field, revolution, rules = {}) {
   // スペ3返し: ジョーカー単騎には♠3単騎で返せる(革命の有無を問わず・既定ON)
   const isSpade3 = cards.length === 1 && !cards[0].joker && cards[0].s === 0 && cards[0].r === 3
   const fieldIsLoneJoker = !!field && field.count === 1 && field.strength === DF_JOKER_STRENGTH
+  // しばり中でもスペ3返しは通す(ジョーカーを流す特例なのでロックの制限を受けない)
   if (field && isSpade3 && fieldIsLoneJoker && rules.spade3 !== false) {
-    if (rules.shibari && field.lock && !field.lock.includes(0)) return null // しばり中は♠固定時のみ
     return { strength, type, suits, spade3: true }
   }
   if (field) {
