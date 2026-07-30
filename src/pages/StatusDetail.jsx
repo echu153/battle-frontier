@@ -20,7 +20,7 @@ import {
   calcStatsBreakdown, calcEffectiveStats, calcDefReduction, getTotalRank,
 } from '../lib/stats'
 import { sumClaimedFishingBonus, toFishingColumns } from '../lib/fishing'
-import { petStats, applyCharmStats, speciesLabel, speciesEmoji, charmDisplayName, atkLabel, petImage, charmPlayerBonus, petPlayerBonus } from '../constants/pets'
+import { petStats, applyCharmStats, speciesLabel, speciesEmoji, charmDisplayName, atkLabel, petImage, charmPlayerBonus, petPlayerBonus, charmSpecials, specialLabel } from '../constants/pets'
 
 const STAT_META = [
   { key:'hp',   label:'HP',         color:'#00cc44', rankType:'hp'  },
@@ -58,6 +58,8 @@ const getStatRank = (val, type) => {
 }
 
 const pct1 = (v) => `${(v * 100).toFixed(1)}%`
+// チャーム特殊能力（フェイトコア抽選）の%は最終値への乗算。ステータス別の対応キー。
+const SP_PCT_KEY = { atk:'atkPct', def:'defPct', matk:'matkPct', mdef:'mdefPct' }
 
 const STAT_JP = { atk:'攻撃力', def:'防御力', matk:'特殊攻撃力', mdef:'特殊防御力', spd:'素早さ', hp_max:'HP', mp_max:'MP' }
 // 内訳バケット（bd.museum 等）のキー（hp/mp）用ラベル
@@ -96,7 +98,8 @@ export default function StatusDetail() {
     const { data: petRows } = await supabase.from('pets').select('*').eq('owner_id', user.id)
     const petList = (petRows || []).sort((a, b) => (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0))
     setPets(petList)
-    const charmIds = [...new Set(petList.map(p => p.charm_id).filter(Boolean))]
+    // チャームとリボンは別枠の装備。ペット表示ステはどちらも含める（Dungeon.jsx と同じ）
+    const charmIds = [...new Set(petList.flatMap(p => [p.charm_id, p.ribbon_id]).filter(Boolean))]
     let charmMap = {}
     if (charmIds.length > 0) {
       const { data: charmRows } = await supabase.from('player_charms').select('*').in('id', charmIds)
@@ -141,6 +144,15 @@ export default function StatusDetail() {
     const ref = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
     const refMap = { atk:ref.atk, def:ref.def, matk:ref.matk, mdef:ref.mdef, spd:ref.spd, hp:ref.hp_max, mp:ref.mp_max }
     const diffs = STAT_META.filter(s => refMap[s.key] !== eff[s.key]).map(s => `${s.label}:${eff[s.key]}≠${refMap[s.key]}`)
+    // 戦闘補正（命中/回避/クリ/貫通）も突き合わせる。ここが抜けると
+    // フェイトコアの回避+○%のような「率だけの補正」の取りこぼしを検知できない。
+    const COMBAT_KEYS = [
+      ['hitBonus','命中'], ['evasionBonus','回避'], ['critBonus','クリ率'], ['critResist','クリ抵抗'],
+      ['defPen','防御貫通'], ['mdefPen','特防貫通'], ['critDmg','クリ威力'],
+    ]
+    for (const [k, label] of COMBAT_KEYS) {
+      if (ref[k] !== bd.combat[k]) diffs.push(`${label}:${bd.combat[k]}≠${ref[k]}`)
+    }
     if (diffs.length) reconcileWarn = diffs.join(' / ')
   }
 
@@ -211,6 +223,11 @@ export default function StatusDetail() {
                         ペット(守り) ×1.10
                       </span>
                     )}
+                    {SP_PCT_KEY[s.key] && bd.petSp?.[SP_PCT_KEY[s.key]] > 0 && (
+                      <span style={{ fontSize:'10px', color:'#ff88cc', border:'1px solid #ff88cc44', background:'#000c1c', padding:'1px 6px' }}>
+                        チャーム特殊能力 ×{(1 + bd.petSp[SP_PCT_KEY[s.key]]/100).toFixed(2)}
+                      </span>
+                    )}
                     {chips.length === 0 && bd.matkPct === 0 && <span style={{ fontSize:'10px', color:'#334455' }}>ボーナスなし</span>}
                   </div>
                 </div>
@@ -225,7 +242,7 @@ export default function StatusDetail() {
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', fontSize:'11px' }}>
             <Row label="物理ダメージ軽減（防御）" value={pct1(calcDefReduction(eff.def))} color="#88aaff" />
             <Row label="特殊ダメージ軽減（特防）" value={pct1(calcDefReduction(eff.mdef))} color="#44ccff" />
-            <Row label="クリティカル率（装備/宝石）" value={`+${bd.combat.critBonus}%`} color="#ffcc00" />
+            <Row label="クリティカル率" value={`+${bd.combat.critBonus}%`} color="#ffcc00" />
             <Row label="クリティカル抵抗" value={`+${bd.combat.critResist}%`} color="#88ccff" />
             <Row label="クリティカル威力" value={`+${pct1(bd.combat.critDmg)}`} color="#ff8844" />
             <Row label="命中補正" value={`+${bd.combat.hitBonus}%`} color="#ffaa44" />
@@ -235,7 +252,8 @@ export default function StatusDetail() {
           </div>
           <div style={{ color:'#446688', fontSize:'10px', marginTop:'8px', lineHeight:'1.6' }}>
             ※ ダメージ軽減率は防御/特防の値から滑らかに算出（F=1%〜SSS=30%）。<br />
-            ※ 貫通は最大80%でキャップ。
+            ※ 貫通は最大80%でキャップ。<br />
+            ※ 装備/宝石/紋章に加え、出撃中ペットのチャーム特殊能力（フェイトコア）も含みます。
           </div>
         </div>
 
@@ -294,7 +312,9 @@ export default function StatusDetail() {
             <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
               {pets.map(pet => {
                 const charm = pet.charm_id ? petCharms[pet.charm_id] : null
-                const st = applyCharmStats(petStats(pet), charm || null)
+                const ribbon = pet.ribbon_id ? petCharms[pet.ribbon_id] : null
+                const st = applyCharmStats(petStats(pet), charm || null, ribbon || null)
+                const specials = [...charmSpecials(charm), ...charmSpecials(ribbon)]
                 const power = Math.floor(st.maxHp / 10) + st.atk + st.def + st.mdef
                 const img = petImage(pet)
                 return (
@@ -311,7 +331,15 @@ export default function StatusDetail() {
                       <div style={{ fontSize:'10px', color:'#558866', marginBottom:'4px' }}>
                         {speciesLabel(pet)} LV{pet.level || 1}
                         {charm && <span style={{ color:'#ff88cc' }}> ・{charmDisplayName(charm)}</span>}
+                        {ribbon && <span style={{ color:'#ff88cc' }}> ・{charmDisplayName(ribbon)}</span>}
                       </div>
+                      {specials.length > 0 && (
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', fontSize:'10px', marginBottom:'4px' }}>
+                          {specials.map((s, i) => (
+                            <span key={i} style={{ color:'#ff88cc', border:'1px solid #5a2a44', background:'#000c1c', padding:'1px 6px' }}>🧬 {specialLabel(s)}</span>
+                          ))}
+                        </div>
+                      )}
                       <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', fontSize:'10px' }}>
                         <span style={{ color:'#00cc44', border:'1px solid #1a5a3a', background:'#000c1c', padding:'1px 6px' }}>HP {st.maxHp}</span>
                         <span style={{ color:'#ffcc00', border:'1px solid #5a4a1a', background:'#000c1c', padding:'1px 6px' }}>{atkLabel(pet)} {st.atk}</span>
@@ -329,7 +357,8 @@ export default function StatusDetail() {
             </div>
           )}
           <div style={{ fontSize:'10px', color:'#446688', lineHeight:'1.7', marginTop:'8px' }}>
-            ※ 表示ステータスは装備中チャームの補正を含みます。能力合計は <span style={{ color:'#88ccff' }}>🐾 ペットランキング</span> と同じ計算（HP/10＋攻撃＋防御＋特防）です。
+            ※ 表示ステータスは装備中チャーム／リボンの補正を含みます。能力合計は <span style={{ color:'#88ccff' }}>🐾 ペットランキング</span> と同じ計算（HP/10＋攻撃＋防御＋特防）です。<br />
+            ※ 🧬 はフェイトコアの特殊能力。プレイヤー本体へ反映されるのは<span style={{ color:'#88ccff' }}>出撃中ペットのチャーム</span>の分（上の各ステータス／戦闘補正に反映済み）です。
           </div>
         </div>
 

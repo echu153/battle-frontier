@@ -408,6 +408,8 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
 
   let matkPct = 0
   let atkPct = 0
+  // 派生ステ（calcEffectiveStats と同じく「合算してから一度だけ」算出する）
+  let evoMpToMatk = 0, evoSpdToAtk = 0, atkToMatk = 0
   const cm = { hitBonus:0, critBonus:0, evasionBonus:0, critResist:0, defPen:0, mdefPen:0, critDmg:0 }
 
   // 紋章（calcEffectiveStats と一致させる）
@@ -456,9 +458,12 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
     cm.evasionBonus += item.bonus_evasion || 0
     // ボス装備 真化の派生ステ（calcEffectiveStats と一致させる。真化済みは正典から解決）
     const evoEff2 = resolveBonusEffect(item, w.name)
-    if (evoEff2 === 'evo_mp_to_matk_5') equip.matk += Math.floor((profile.mp_max||0) * 0.05)
-    if (evoEff2 === 'evo_spd_to_atk_3') equip.atk  += Math.floor((profile.spd||0)    * 0.03)
-    if (evoEff2 === 'evo_mdef_pen_10')  cm.mdefPen += 10
+    if (evoEff2 === 'evo_mp_to_matk_5') evoMpToMatk += 5
+    if (evoEff2 === 'evo_spd_to_atk_3') evoSpdToAtk += 3
+    if (evoEff2 === 'evo_mdef_pen_10')  cm.mdefPen  += 10
+    // 保存済み bonus_effect をそのまま見る効果（calcEffectiveStats と一致させる）
+    if (item.bonus_effect === 'mdef_pen_5')    cm.mdefPen += 5  // 水禍の蒼珠: 特殊防御貫通+5%
+    if (item.bonus_effect === 'atk_to_matk_2') atkToMatk  += 2  // 六道輪廻の数珠: 攻撃力の2%を特攻へ
     if (item.slot === 'weapon') {
       // 武器種ごとの固有能力（calcEffectiveStats と一致させる）
       const wp = WEAPON_TYPE_PASSIVE[w.weapon_type]
@@ -479,8 +484,21 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
     }
   }
 
+  // ボス装備 真化 / 閻魔装備の派生ステ（基礎値ベース・装備ソースへ計上。calcEffectiveStats と一致）
+  if (evoMpToMatk > 0) equip.matk += Math.floor((profile.mp_max || 0) * evoMpToMatk / 100)
+  if (evoSpdToAtk > 0) equip.atk  += Math.floor((profile.spd    || 0) * evoSpdToAtk / 100)
+  if (atkToMatk   > 0) equip.matk += Math.floor((profile.atk    || 0) * atkToMatk   / 100)
+
+  // チャームの特殊能力（フェイトコア抽選）の率系（calcEffectiveStats と一致）
+  cm.hitBonus     += sp?.hit     || 0
+  cm.critBonus    += sp?.crit    || 0
+  cm.evasionBonus += sp?.evade   || 0
+  cm.critResist   += sp?.critres || 0
+
   // 実効値（matk のみ % 補正 → 称号加算の順）
   // ペットチャームは matk のみ %補正の後に加算（calcEffectiveStats と一致）。def は守りで×1.1。
+  // 最後にチャーム特殊能力の%（sp）を最終値へ乗算する（calcEffectiveStats の spMul と同じ順序）。
+  const spMul = (v, pctv) => (pctv ? Math.round(v * (1 + pctv / 100)) : v)
   const sumExceptTitle = (k) => base[k] + museum[k] + fishing[k] + equip[k] + gem[k] + prof[k] + emblem[k] + pet[k]
   const preMatk = base.matk + museum.matk + fishing.matk + equip.matk + gem.matk + prof.matk + emblem.matk // ペット除く（%補正の対象外）
   const effMatk = (matkPct > 0 ? Math.floor(preMatk * (1 + matkPct/100)) : preMatk) + title.matk + pet.matk
@@ -488,11 +506,12 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
   const effAtk = (atkPct > 0 ? Math.floor(preAtk * (1 + atkPct/100)) : preAtk) + title.atk + pet.atk
   let effDef = sumExceptTitle('def') + title.def
   if (pc.guard) effDef = Math.round(effDef * 1.1)
+  if (sp?.defPct) effDef = Math.round(effDef * (1 + sp.defPct / 100))
   const effective = {
-    atk:  effAtk,
+    atk:  spMul(effAtk, sp?.atkPct),
     def:  effDef,
-    matk: effMatk,
-    mdef: sumExceptTitle('mdef') + title.mdef,
+    matk: spMul(effMatk, sp?.matkPct),
+    mdef: spMul(sumExceptTitle('mdef') + title.mdef, sp?.mdefPct),
     spd:  sumExceptTitle('spd') + title.spd,
     hp:   sumExceptTitle('hp') + title.hp,
     mp:   sumExceptTitle('mp') + title.mp,
@@ -500,6 +519,8 @@ export const calcStatsBreakdown = (profile, equipment, proficiency, titleBonus =
 
   return {
     base, museum, fishing, equip, gem, prof, emblem, title, pet, petGuard: !!pc.guard, matkPct, atkPct, effective,
+    // チャーム特殊能力（フェイトコア抽選）の内訳。%系は最終値への乗算、率系は combat に合算済み。
+    petSp: sp ? { ...sp } : null,
     combat: {
       hitBonus: cm.hitBonus, critBonus: cm.critBonus, evasionBonus: cm.evasionBonus,
       critResist: cm.critResist,
