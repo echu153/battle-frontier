@@ -9,6 +9,7 @@ import {
 import { TileFace, TileBackFace } from '../components/MahjongTile'
 import { StampBar, StampOverlay } from '../components/StampBar'
 import { RoomChat } from '../components/RoomChat'
+import { InvitePanel } from '../components/InvitePanel'
 import { containsNgWord } from '../lib/nameFilter'
 import { wagerJoin, wagerReport, wagerForfeit, wagerPing, wagerSettleRanked, MAX_BET } from '../lib/wager'
 
@@ -69,6 +70,7 @@ export default function Mahjong() {
 
   const [view, setView] = useState('lobby')
   const [rooms, setRooms] = useState([])
+  const [lobbyNonce, setLobbyNonce] = useState(0) // 🔄でロビーを購読し直して一覧を引き直す
   const [roomTitle, setRoomTitle] = useState('')
 
   const [room, setRoom] = useState(null)
@@ -219,10 +221,14 @@ export default function Mahjong() {
       }
       setRooms(list)
     })
-    ch.subscribe()
+    // 再接続(SUBSCRIBEDは再購読でも発火)でロビーのtrackは消えるため、掲示中の卓を再掲示する
+    // (これが消えたままだと他の人から「卓が見つからない」状態になる)
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED') publishRoom(gameRef.current && gameRef.current.phase !== 'ended' ? 'playing' : 'waiting')
+    })
     lobbyChRef.current = ch
     return () => { supabase.removeChannel(ch); lobbyChRef.current = null }
-  }, [me])
+  }, [me, lobbyNonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const publishRoom = useCallback(async (status) => {
     const r = roomRef.current
@@ -234,6 +240,13 @@ export default function Mahjong() {
       count: membersRef.current.length + npcsRef.current.length, status,
     })
   }, [])
+
+  // 掲示のキープアライブ: 電波の瞬断などでtrackが落ちて一覧から消えたままになるのを防ぐ
+  useEffect(() => {
+    if (!room || room.hostId !== me?.id) return
+    const iv = setInterval(() => publishRoom(gameRef.current && gameRef.current.phase !== 'ended' ? 'playing' : 'waiting'), 25000)
+    return () => clearInterval(iv)
+  }, [room, me, publishRoom])
 
   // ---- 部屋設定の変更(ホストのみ・全員へ同期) ----
   const updateSettings = useCallback((patch) => {
@@ -746,7 +759,10 @@ export default function Mahjong() {
           </div>
           <div style={{ fontSize: 10, color: '#668', marginTop: 6 }}>4人=東風戦 / 3人=サンマ東風戦(2〜8萬なし・北抜きドラ・ツモ損)。赤5あり・NPC可</div>
         </div>
-        <div style={{ fontSize: 12, color: '#88ccff', marginBottom: 8 }}>卓一覧</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: '#88ccff' }}>卓一覧</div>
+          <button onClick={() => setLobbyNonce((n) => n + 1)} style={btnStyle('#88ccff', { padding: '2px 10px', fontSize: 11 })}>🔄 更新</button>
+        </div>
         {rooms.length === 0 && <div style={{ fontSize: 12, color: '#668' }}>現在開いている卓はありません</div>}
         {rooms.map((r) => (
           <div key={r.roomId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #224466', padding: '10px 12px', marginBottom: 8 }}>
@@ -869,6 +885,7 @@ export default function Mahjong() {
             if (specs.length === 0) return null
             return <div style={{ color: '#668', marginTop: 4 }}>▼ 観戦者: {specs.map((m) => m.name).join('　')}</div>
           })()}
+          <InvitePanel me={me} room={room} path="/mahjong" />
           {(() => {
             const meSpec = !!members.find((m) => m.id === me.id)?.spectator
             return (

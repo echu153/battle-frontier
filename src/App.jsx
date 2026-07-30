@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { supabase } from './supabase'
 import Login from './pages/Login' // 最初に出る画面は即時読み込み（チラつき防止）
 import ErrorBoundary from './components/ErrorBoundary'
+import { InviteListener } from './components/InviteListener'
 // 動的import(コード分割)の失敗を自動リカバリ。多くは新デプロイで旧タブのチャンクハッシュが変わり、
 // ページ遷移の import が404して「クリックしても何も起きない(空白)」になるケース。
 // 直近10秒以内に未リロードなら1回だけ強制リロードして最新版を取り直す（リロードループ防止）。
@@ -243,6 +244,7 @@ function App() {
   return (
     <BrowserRouter>
       <ErrorBoundary>
+      {session && <InviteListener userId={session.user.id} />}
       <Suspense fallback={<LoadingFallback />}>
       <Routes>
         <Route path="/login" element={isPasswordRecovery || !session ? <Login isPasswordRecovery={isPasswordRecovery} /> : <Navigate to={hasChar ? '/game' : '/create'} />} />

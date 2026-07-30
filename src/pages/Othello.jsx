@@ -4,6 +4,7 @@ import { supabase } from '../supabase'
 import { wagerJoin, wagerReport, wagerForfeit, wagerPing, wagerSettleRanked, MAX_BET } from '../lib/wager'
 import { StampBar } from '../components/StampBar'
 import { RoomChat } from '../components/RoomChat'
+import { InvitePanel } from '../components/InvitePanel'
 import { containsNgWord } from '../lib/nameFilter'
 import {
   BLACK, WHITE, EMPTY, SIZE,
@@ -64,6 +65,7 @@ export default function Othello() {
   // view: lobby | room
   const [view, setView] = useState('lobby')
   const [rooms, setRooms] = useState([])
+  const [lobbyNonce, setLobbyNonce] = useState(0) // 🔄でロビーを購読し直して一覧を引き直す
   const [roomTitle, setRoomTitle] = useState('')
   const [bet, setBet] = useState(0) // 💰賭けGold(0=なし)
   const [betBusy, setBetBusy] = useState(false)
@@ -144,10 +146,14 @@ export default function Othello() {
       }
       setRooms(list)
     })
-    ch.subscribe()
+    // 再接続(SUBSCRIBEDは再購読でも発火)でロビーのtrackは消えるため、掲示中の部屋を再掲示する
+    // (これが消えたままだと他の人から「部屋が見つからない」状態になる)
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED') publishRoom(gameRef.current && gameRef.current.phase === 'playing' ? 'playing' : 'waiting')
+    })
     lobbyChRef.current = ch
     return () => { supabase.removeChannel(ch); lobbyChRef.current = null }
-  }, [me])
+  }, [me, lobbyNonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- ホスト: ロビーへ部屋情報を掲示 ----
   const publishRoom = useCallback(async (status) => {
@@ -158,6 +164,13 @@ export default function Othello() {
       count: membersRef.current.length + npcsRef.current.length, status, // waiting | playing
     })
   }, [])
+
+  // 掲示のキープアライブ: 電波の瞬断などでtrackが落ちて一覧から消えたままになるのを防ぐ
+  useEffect(() => {
+    if (!room || room.hostId !== me?.id) return
+    const iv = setInterval(() => publishRoom(gameRef.current && gameRef.current.phase === 'playing' ? 'playing' : 'waiting'), 25000)
+    return () => clearInterval(iv)
+  }, [room, me, publishRoom])
 
   // ---- ゲーム進行(ホストのみ): エンジン適用→配信 ----
   const hostBroadcast = useCallback((newState, events = []) => {
@@ -747,7 +760,10 @@ export default function Othello() {
           <div style={{ fontSize: '10px', color: '#668', marginTop: '6px' }}>最大5人。2人=8×8 / 3人=9×9 / 4人=10×10 / 5人=11×11。NPC(CPU)も混ぜられます</div>
         </div>
 
-        <div style={{ fontSize: '12px', color: '#88ccff', marginBottom: '8px' }}>部屋一覧</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <div style={{ fontSize: '12px', color: '#88ccff' }}>部屋一覧</div>
+          <button onClick={() => setLobbyNonce((n) => n + 1)} style={btnStyle('#88ccff', { padding: '2px 10px', fontSize: '11px' })}>🔄 更新</button>
+        </div>
         {rooms.length === 0 && <div style={{ fontSize: '12px', color: '#668' }}>現在開いている部屋はありません</div>}
         {rooms.map((r) => (
           <div key={r.roomId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #224466', padding: '10px 12px', marginBottom: '8px' }}>
@@ -895,6 +911,7 @@ export default function Othello() {
               if (specs.length === 0) return null
               return <div style={{ color: '#668', marginTop: '4px' }}>▼ 観戦者: {specs.map((m) => m.name).join('　')}</div>
             })()}
+            <InvitePanel me={me} room={room} path="/othello" />
             {/* プレイ⇔観戦の切替(ホストも可) */}
             {(() => {
               const meSpec = !!members.find((m) => m.id === me.id)?.spectator

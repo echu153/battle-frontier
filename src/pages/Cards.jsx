@@ -9,6 +9,7 @@ import {
 import { wagerJoin, wagerReport, wagerForfeit, wagerPing, wagerSettleRanked, MAX_BET } from '../lib/wager'
 import { StampBar, StampOverlay } from '../components/StampBar'
 import { RoomChat } from '../components/RoomChat'
+import { InvitePanel } from '../components/InvitePanel'
 import { containsNgWord } from '../lib/nameFilter'
 
 // ============================================================
@@ -70,6 +71,7 @@ export default function Cards() {
 
   const [view, setView] = useState('lobby')
   const [rooms, setRooms] = useState([])
+  const [lobbyNonce, setLobbyNonce] = useState(0) // 🔄でロビーを購読し直して一覧を引き直す
   const [roomTitle, setRoomTitle] = useState('')
   // 部屋の設定はホストが入室後に決める(全員へbroadcast同期)
   // 大富豪のルールは既定で全部ON(ホストが個別にOFFにできる)
@@ -182,10 +184,14 @@ export default function Cards() {
       }
       setRooms(list)
     })
-    ch.subscribe()
+    // 再接続(SUBSCRIBEDは再購読でも発火)でロビーのtrackは消えるため、掲示中の部屋を再掲示する
+    // (これが消えたままだと他の人から「部屋が見つからない」状態になる)
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED') publishRoom(gameRef.current?.phase === 'playing' ? 'playing' : 'waiting')
+    })
     lobbyChRef.current = ch
     return () => { supabase.removeChannel(ch); lobbyChRef.current = null }
-  }, [me])
+  }, [me, lobbyNonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const publishRoom = useCallback(async (status) => {
     const r = roomRef.current
@@ -197,6 +203,13 @@ export default function Cards() {
       count: membersRef.current.length + npcsRef.current.length, status,
     })
   }, [])
+
+  // 掲示のキープアライブ: 電波の瞬断などでtrackが落ちて一覧から消えたままになるのを防ぐ
+  useEffect(() => {
+    if (!room || room.hostId !== me?.id) return
+    const iv = setInterval(() => publishRoom(gameRef.current?.phase === 'playing' ? 'playing' : 'waiting'), 25000)
+    return () => clearInterval(iv)
+  }, [room, me, publishRoom])
 
   // ---- 部屋設定の変更(ホストのみ・全員へ同期) ----
   const updateSettings = useCallback((patch) => {
@@ -1015,7 +1028,10 @@ export default function Cards() {
           </div>
           <div style={{ fontSize: 10, color: '#668', marginTop: 6 }}>ゲームの種類・ルール・賭けGoldは部屋に入ってからホストが設定します</div>
         </div>
-        <div style={{ fontSize: 12, color: '#88ccff', marginBottom: 8 }}>部屋一覧</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: '#88ccff' }}>部屋一覧</div>
+          <button onClick={() => setLobbyNonce((n) => n + 1)} style={btnStyle('#88ccff', { padding: '2px 10px', fontSize: 11 })}>🔄 更新</button>
+        </div>
         {rooms.length === 0 && <div style={{ fontSize: 12, color: '#668' }}>現在開いている部屋はありません</div>}
         {rooms.map((r) => (
           <div key={r.roomId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #224466', padding: '10px 12px', marginBottom: 8 }}>
@@ -1241,6 +1257,7 @@ export default function Cards() {
             if (specs.length === 0) return null
             return <div style={{ color: '#668', marginTop: 4 }}>▼ 観戦者: {specs.map((m) => m.name).join('　')}</div>
           })()}
+          <InvitePanel me={me} room={room} path="/cards" />
           <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
             {/* 準備OK(ホスト以外の対局者が全員押すまでホストは開始できない) */}
             {!meSpec && me.id !== room.hostId && (
