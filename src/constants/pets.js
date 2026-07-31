@@ -746,8 +746,9 @@ export function charmDisplayName(charm) {
   return t > 0 ? `${base}+${t}` : base
 }
 // 装備チャームをプレイヤー本体ステへ反映する分（攻→atk / 特攻→matk / 特防→mdef / HPは×CHARM_HP_PER）
-//  ribbon（チャーム別枠の装備）は特殊能力（フェイトコア抽選）のみプレイヤーへ反映する。
-//  リボンのステ成長（凝縮された素）と基礎効果（物理+5%等）は従来どおりペット専用。
+//  ribbon（チャーム別枠の装備）も同じくプレイヤーへ反映する（特殊能力＋ステ成長）。
+//  基礎効果（物理+5%/特殊+5%/防御特防+6%）はペット専用＝チャームの atkup/wall 等と同じ扱い
+//  （プレイヤーへ効くチャーム効果は guard/antidote のみ）。
 export function charmPlayerBonus(charm, ribbon = null) {
   if (!charm && !ribbon) return null
   // 特殊能力をプレイヤー用に集約（%はstats.jsが最終値へ乗算/加算）
@@ -761,7 +762,12 @@ export function charmPlayerBonus(charm, ribbon = null) {
   }
   const hasSp = Object.values(spAgg).some((v) => v > 0)
   return {
-    hp: charmHpBonus(charm), atk: cStat(charm, 'atk'), matk: cStat(charm, 'spatk'), def: cStat(charm, 'def'), mdef: cStat(charm, 'spdef'),
+    // ステ成長はチャーム＋リボンを合算（リボンは凝縮された素の分）
+    hp:   charmHpBonus(charm)     + charmHpBonus(ribbon),
+    atk:  cStat(charm, 'atk')     + cStat(ribbon, 'atk'),
+    matk: cStat(charm, 'spatk')   + cStat(ribbon, 'spatk'),
+    def:  cStat(charm, 'def')     + cStat(ribbon, 'def'),
+    mdef: cStat(charm, 'spdef')   + cStat(ribbon, 'spdef'),
     guard: charmEffects(charm).includes('guard'),       // 防御+10%
     antidote: charmEffects(charm).includes('antidote'), // 毒確率50%減
     sp: hasSp ? spAgg : null,

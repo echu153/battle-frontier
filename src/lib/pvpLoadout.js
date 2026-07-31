@@ -23,7 +23,7 @@ export async function loadLoadout(playerId, isSelf, opts = {}) {
   ])
   if (!profile) throw new Error('プロフィールが見つかりません')
 
-  // ペット本体ステ(100%)＋装備チャーム／リボンを反映（Ranking/街と同方式。リボンは特殊能力のみ）
+  // ペット本体ステ(100%)＋装備チャーム／リボンを反映（Ranking/街と同方式。リボンの基礎効果のみペット専用）
   let petStat = null, petCharm = null
   const pet = (pets || [])[0]
   if (pet) {
@@ -114,7 +114,7 @@ export async function loadTotalCandidates(excludeId) {
 
   const petStatMap = {}
   for (const pet of (petData || [])) petStatMap[pet.owner_id] = petPlayerBonus(pet)
-  const charmMap = await loadCharmBonusMap(petData)  // チャーム＋リボン（リボンは特殊能力のみ）
+  const charmMap = await loadCharmBonusMap(petData)  // チャーム＋リボン（リボンの基礎効果のみペット専用）
 
   const titleMap = {}
   const titleIds = [...new Set(list.map(p => p.ability_title_id).filter(Boolean))]

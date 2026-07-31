@@ -2357,7 +2357,7 @@ export default function Game() {
       if (ap) {
         activePet = ap
         petStat = petPlayerBonus(ap)
-        petCharm = await loadCharmBonus(ap)  // チャーム＋リボン（リボンは特殊能力のみ）
+        petCharm = await loadCharmBonus(ap)  // チャーム＋リボン（リボンの基礎効果のみペット専用）
       }
     } catch { /* ペット未導入時は無視 */ }
     // 紋章の割り振りを反映（未導入/未付与なら無視）

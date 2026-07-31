@@ -86,7 +86,7 @@ export default function Territory() {
       ])
       const activePet = (pets || [])[0] || null
       const petStat = activePet ? petPlayerBonus(activePet) : null
-      const petCharm = activePet ? await loadCharmBonus(activePet) : null  // チャーム＋リボン（リボンは特殊能力のみ）
+      const petCharm = activePet ? await loadCharmBonus(activePet) : null  // チャーム＋リボン（リボンの基礎効果のみペット専用）
       let tb = null
       if (prof.ability_title_id) {
         const { data: t } = await supabase.from('titles').select('*').eq('id', prof.ability_title_id).maybeSingle()
@@ -106,7 +106,7 @@ export default function Territory() {
         supabase.from('proficiency').select('player_id, equipment_id, prof_lv').in('player_id', ids),
         supabase.from('pets').select(PET_STAT_SELECT).in('owner_id', ids).eq('is_active', true),
       ])
-      const charmMap = await loadCharmBonusMap(pets)  // チャーム＋リボン（リボンは特殊能力のみ）
+      const charmMap = await loadCharmBonusMap(pets)  // チャーム＋リボン（リボンの基礎効果のみペット専用）
       const petStatMap = {}
       for (const pet of (pets || [])) petStatMap[pet.owner_id] = petPlayerBonus(pet)
       const titleIds = [...new Set(list.map(m => m.ability_title_id).filter(Boolean))]
