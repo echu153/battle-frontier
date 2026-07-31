@@ -58,7 +58,7 @@ export default function Ranking() {
           for (const e of (emRows || [])) if (e.alloc && Object.keys(e.alloc).length > 0) emblemMap[e.player_id] = e.alloc
         } catch { /* 紋章未導入時は無視 */ }
         for (const pet of (petData || [])) petStatMap[pet.owner_id] = petPlayerBonus(pet)
-        charmMap = await loadCharmBonusMap(petData)  // チャーム＋リボン（リボンの基礎効果のみペット専用）
+        charmMap = await loadCharmBonusMap(petData)  // チャーム＋リボン（リボンは特殊能力のみ引き継ぎ）
       }
       const titleIds = [...new Set(list.map(p => p.ability_title_id).filter(Boolean))]
       if (titleIds.length > 0) {

@@ -1025,7 +1025,7 @@ export default function Tenkyuu() {
     let petCharm = null, petStat = null, activePet = null
     try {
       const { data: ap } = await supabase.from('pets').select(PET_STAT_SELECT).eq('owner_id', user.id).eq('is_active', true).maybeSingle()
-      if (ap) { activePet = ap; petStat = petPlayerBonus(ap); petCharm = await loadCharmBonus(ap) }  // チャーム＋リボン（リボンの基礎効果のみペット専用）
+      if (ap) { activePet = ap; petStat = petPlayerBonus(ap); petCharm = await loadCharmBonus(ap) }  // チャーム＋リボン（リボンは特殊能力のみ引き継ぎ）
     } catch { /* ペット未導入時は無視 */ }
     // 紋章の割り振りを反映（未導入/未付与なら無視）
     let emblemAlloc = null

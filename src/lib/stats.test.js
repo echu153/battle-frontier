@@ -110,30 +110,30 @@ test('装備%補正はすべて表示対象になっている', () => {
   }
 })
 
-// リボン（チャーム別枠の装備）の特殊能力とステ成長がプレイヤーへ乗る。
-//  チャーム回避3% + リボン回避3% = +6%。基礎効果（物理+5%等）はペット専用のまま。
-test('リボンの特殊能力とステ成長がプレイヤーに乗る', () => {
+// リボン（チャーム別枠の装備）は特殊能力だけをプレイヤーへ引き継ぐ。
+//  チャーム回避3% + リボン回避3% = +6%。リボン自体のステータスはペット専用。
+test('リボンの特殊能力はプレイヤーへ／リボンのステはペット専用', () => {
   const charm = { ctype: 'evade', atk: 20, specials: [{ k: 'evade', v: 3 }] }
   const ribbon = { ctype: 'rib_phys', atk: 100, rib_def: 50, hp: 3, specials: [{ k: 'evade', v: 3 }] }
   const only = charmPlayerBonus(charm)
   const both = charmPlayerBonus(charm, ribbon)
   assert.equal(only.sp.evade, 3)
   assert.equal(both.sp.evade, 6)
-  assert.equal(both.atk, only.atk + 100)          // リボンの atk 成長
-  assert.equal(both.def, only.def + 50)           // 凝縮枠(rib_*)も合算
-  assert.ok(both.hp > only.hp)                    // HPは個数×CHARM_HP_PER
+  assert.equal(both.atk, only.atk, 'リボンのステ成長はプレイヤーに乗せない')
+  assert.equal(both.def, only.def)
+  assert.equal(both.hp, only.hp)
 
   const plain = calcStatsBreakdown({ ...baseProfile(), petCharm: only }, [equip()], [], null)
   const withRibbon = calcStatsBreakdown({ ...baseProfile(), petCharm: both }, [equip()], [], null)
   assert.equal(withRibbon.combat.evasionBonus, plain.combat.evasionBonus + 3)
-  assert.equal(withRibbon.effective.atk, plain.effective.atk + 100)
+  assert.equal(withRibbon.effective.atk, plain.effective.atk)
 })
 
-// リボン単体（チャーム未装備）でも特殊能力・ステ成長が拾える
-test('チャーム未装備でもリボン分が反映される', () => {
+// リボン単体（チャーム未装備）でも特殊能力は拾う。ステは乗せない。
+test('チャーム未装備でもリボンの特殊能力が反映される', () => {
   const bonus = charmPlayerBonus(null, { ctype: 'rib_spec', atk: 40, specials: [{ k: 'atk', v: 5 }] })
   assert.equal(bonus.sp.atkPct, 5)
-  assert.equal(bonus.atk, 40)
+  assert.equal(bonus.atk, 0)
   assert.equal(charmPlayerBonus(null, null), null)
 })
 
