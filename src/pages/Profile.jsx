@@ -142,15 +142,17 @@ export default function Profile() {
     const { data: chList } = await supabase.from('player_charms').select('*').eq('owner_id', targetId)
     setPetCharms(chList || [])
     // 街と同じくアクティブペットの本体ステ(100%)＋装備チャームを総合力に反映
+    //  リボンはチャーム別枠の装備。特殊能力（フェイトコア）のみプレイヤーへ乗る
     const activePet = (petList || []).find(pt => pt.is_active)
     const activeCharm = activePet?.charm_id ? (chList || []).find(c => c.id === activePet.charm_id) : null
+    const activeRibbon = activePet?.ribbon_id ? (chList || []).find(c => c.id === activePet.ribbon_id) : null
     // 紋章の割り振りも反映（未導入/未付与なら無視）。他人のも player_emblem は全員SELECT可
     let emblemAlloc = null, emblemLevel = 0
     try {
       const { data: em } = await supabase.from('player_emblem').select('alloc, level').eq('player_id', targetId).maybeSingle()
       if (em?.alloc && Object.keys(em.alloc).length > 0) { emblemAlloc = em.alloc; emblemLevel = em.level || 1 }
     } catch { /* 紋章未導入時は無視 */ }
-    setProfile(prev => prev ? { ...prev, petStat: activePet ? petPlayerBonus(activePet) : null, petCharm: activeCharm ? charmPlayerBonus(activeCharm) : null, emblemAlloc, emblemLevel } : prev)
+    setProfile(prev => prev ? { ...prev, petStat: activePet ? petPlayerBonus(activePet) : null, petCharm: charmPlayerBonus(activeCharm || null, activeRibbon || null), emblemAlloc, emblemLevel } : prev)
     if (p?.ability_title_id) {
       const { data: at } = await supabase.from('titles').select('*').eq('id', p.ability_title_id).single()
       setAbilityTitle(at || null)

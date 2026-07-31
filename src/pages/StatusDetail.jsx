@@ -110,10 +110,12 @@ export default function StatusDetail() {
       setPetCharms(charmMap)
     }
     // 街と同じく、出撃中ペットの本体ステ(100%)＋装備チャーム補正を総合力（実効ステ）へ反映
+    //  リボンはチャーム別枠の装備。特殊能力（フェイトコア）のみプレイヤーへ乗る
     const activePet = petList.find(pt => pt.is_active)
     const activeCharm = activePet?.charm_id ? charmMap[activePet.charm_id] : null
+    const activeRibbon = activePet?.ribbon_id ? charmMap[activePet.ribbon_id] : null
     p.petStat = activePet ? petPlayerBonus(activePet) : null
-    p.petCharm = activeCharm ? charmPlayerBonus(activeCharm) : null
+    p.petCharm = charmPlayerBonus(activeCharm || null, activeRibbon || null)
     // 紋章の割り振りを反映（未導入/未付与なら無視）
     try {
       const { data: em } = await supabase.from('player_emblem').select('alloc').eq('player_id', user.id).maybeSingle()
@@ -259,7 +261,7 @@ export default function StatusDetail() {
           <div style={{ color:'#446688', fontSize:'10px', marginTop:'8px', lineHeight:'1.6' }}>
             ※ ダメージ軽減率は防御/特防の値から滑らかに算出（F=1%〜SSS=30%）。<br />
             ※ 貫通は最大80%でキャップ。<br />
-            ※ 装備/宝石/紋章に加え、出撃中ペットのチャーム特殊能力（フェイトコア）も含みます。
+            ※ 装備/宝石/紋章に加え、出撃中ペットのチャーム／リボンの特殊能力（フェイトコア）も含みます。
           </div>
         </div>
 
@@ -364,7 +366,7 @@ export default function StatusDetail() {
           )}
           <div style={{ fontSize:'10px', color:'#446688', lineHeight:'1.7', marginTop:'8px' }}>
             ※ 表示ステータスは装備中チャーム／リボンの補正を含みます。能力合計は <span style={{ color:'#88ccff' }}>🐾 ペットランキング</span> と同じ計算（HP/10＋攻撃＋防御＋特防）です。<br />
-            ※ 🧬 はフェイトコアの特殊能力。プレイヤー本体へ反映されるのは<span style={{ color:'#88ccff' }}>出撃中ペットのチャーム</span>の分（上の各ステータス／戦闘補正に反映済み）です。
+            ※ 🧬 はフェイトコアの特殊能力。プレイヤー本体へ反映されるのは<span style={{ color:'#88ccff' }}>出撃中ペットのチャーム／リボン</span>の分（上の各ステータス／戦闘補正に反映済み）です。
           </div>
         </div>
 

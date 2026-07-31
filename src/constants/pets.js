@@ -746,10 +746,12 @@ export function charmDisplayName(charm) {
   return t > 0 ? `${base}+${t}` : base
 }
 // 装備チャームをプレイヤー本体ステへ反映する分（攻→atk / 特攻→matk / 特防→mdef / HPは×CHARM_HP_PER）
-export function charmPlayerBonus(charm) {
-  if (!charm) return null
+//  ribbon（チャーム別枠の装備）は特殊能力（フェイトコア抽選）のみプレイヤーへ反映する。
+//  リボンのステ成長（凝縮された素）と基礎効果（物理+5%等）は従来どおりペット専用。
+export function charmPlayerBonus(charm, ribbon = null) {
+  if (!charm && !ribbon) return null
   // 特殊能力をプレイヤー用に集約（%はstats.jsが最終値へ乗算/加算）
-  const sp = sumSpecials(charm)
+  const sp = sumSpecials(charm, ribbon)
   const spAgg = {
     atkPct: (sp.atk || 0) + (sp.physdmg || 0),   // 物理ダメージ%は攻撃%へ折り込み
     matkPct: (sp.spatk || 0) + (sp.specdmg || 0), // 特殊ダメージ%は特攻%へ折り込み

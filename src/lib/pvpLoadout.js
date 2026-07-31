@@ -8,7 +8,8 @@
 import { supabase } from '../supabase'
 import { calcEffectiveStats, calcEffectiveTotal } from './stats'
 import { computeClassBaseStats } from '../pages/Game'
-import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
+import { petPlayerBonus } from '../constants/pets'
+import { loadCharmBonus, loadCharmBonusMap, PET_STAT_SELECT } from './petBonus'
 
 // 1プレイヤー分の戦闘ロードアウトを読み込む。
 //  isSelf=true なら skill_sets を直接、false なら RPC(pvp_get_skillsets) で取得。
@@ -18,19 +19,16 @@ export async function loadLoadout(playerId, isSelf, opts = {}) {
     supabase.from('profiles').select('*').eq('id', playerId).single(),
     supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', playerId).eq('equipped', true),
     supabase.from('proficiency').select('player_id, equipment_id, prof_lv').eq('player_id', playerId),
-    supabase.from('pets').select('owner_id, species, level, evolved, charm_id').eq('owner_id', playerId).eq('is_active', true),
+    supabase.from('pets').select(PET_STAT_SELECT).eq('owner_id', playerId).eq('is_active', true),
   ])
   if (!profile) throw new Error('プロフィールが見つかりません')
 
-  // ペット本体ステ(100%)＋装備チャームを反映（Ranking/街と同方式）
+  // ペット本体ステ(100%)＋装備チャーム／リボンを反映（Ranking/街と同方式。リボンは特殊能力のみ）
   let petStat = null, petCharm = null
   const pet = (pets || [])[0]
   if (pet) {
     petStat = petPlayerBonus(pet)
-    if (pet.charm_id) {
-      const { data: charm } = await supabase.from('player_charms').select('*').eq('id', pet.charm_id).maybeSingle()
-      if (charm) petCharm = charmPlayerBonus(charm)
-    }
+    petCharm = await loadCharmBonus(pet)
   }
 
   // 称号ボーナス
@@ -106,7 +104,7 @@ export async function loadTotalCandidates(excludeId) {
   const [{ data: eqData }, { data: profData }, { data: petData }, { data: metaRes }] = await Promise.all([
     supabase.from('player_equipment').select('*, weapons(*)').in('player_id', ids).eq('equipped', true),
     supabase.from('proficiency').select('player_id, equipment_id, prof_lv').in('player_id', ids),
-    supabase.from('pets').select('owner_id, species, level, evolved, charm_id').in('owner_id', ids).eq('is_active', true),
+    supabase.from('pets').select(PET_STAT_SELECT).in('owner_id', ids).eq('is_active', true),
     supabase.rpc('pvp_list_meta', { p_ids: ids }),  // 相手のPvPアクティブ有無＆class_levels（RLS回避）
   ])
   const eqs = eqData || [], profs = profData || []
@@ -114,17 +112,9 @@ export async function loadTotalCandidates(excludeId) {
   const metaMap = {}
   for (const m of (metaRes?.meta || [])) metaMap[m.player_id] = m
 
-  const petStatMap = {}, charmMap = {}
+  const petStatMap = {}
   for (const pet of (petData || [])) petStatMap[pet.owner_id] = petPlayerBonus(pet)
-  const charmIds = [...new Set((petData || []).map(p => p.charm_id).filter(Boolean))]
-  if (charmIds.length > 0) {
-    const { data: charmRows } = await supabase.from('player_charms').select('*').in('id', charmIds)
-    const charmById = {}
-    for (const c of (charmRows || [])) charmById[c.id] = c
-    for (const pet of (petData || [])) {
-      if (pet.charm_id && charmById[pet.charm_id]) charmMap[pet.owner_id] = charmPlayerBonus(charmById[pet.charm_id])
-    }
-  }
+  const charmMap = await loadCharmBonusMap(petData)  // チャーム＋リボン（リボンは特殊能力のみ）
 
   const titleMap = {}
   const titleIds = [...new Set(list.map(p => p.ability_title_id).filter(Boolean))]

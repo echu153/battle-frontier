@@ -11,7 +11,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { calcEffectiveTotal } from '../lib/stats'
-import { charmPlayerBonus, petPlayerBonus } from '../constants/pets'
+import { petPlayerBonus } from '../constants/pets'
+import { loadCharmBonus, loadCharmBonusMap, PET_STAT_SELECT } from '../lib/petBonus'
 import {
   FOUND_MIN_CHARLV, MAX_COUNTRIES, rankOrder, rankProgress,
   EXPAND_COOLDOWN_MS, fmtRemain, REGIONS,
@@ -81,16 +82,11 @@ export default function Territory() {
       const [{ data: eq }, { data: pf }, { data: pets }] = await Promise.all([
         supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', prof.id).eq('equipped', true),
         supabase.from('proficiency').select('player_id, equipment_id, prof_lv').eq('player_id', prof.id),
-        supabase.from('pets').select('owner_id, species, level, evolved, charm_id').eq('owner_id', prof.id).eq('is_active', true),
+        supabase.from('pets').select(PET_STAT_SELECT).eq('owner_id', prof.id).eq('is_active', true),
       ])
       const activePet = (pets || [])[0] || null
       const petStat = activePet ? petPlayerBonus(activePet) : null
-      let petCharm = null
-      const charmId = (pets || []).find(p => p.charm_id)?.charm_id
-      if (charmId) {
-        const { data: c } = await supabase.from('player_charms').select('*').eq('id', charmId).maybeSingle()
-        if (c) petCharm = charmPlayerBonus(c)
-      }
+      const petCharm = activePet ? await loadCharmBonus(activePet) : null  // チャーム＋リボン（リボンは特殊能力のみ）
       let tb = null
       if (prof.ability_title_id) {
         const { data: t } = await supabase.from('titles').select('*').eq('id', prof.ability_title_id).maybeSingle()
@@ -108,20 +104,11 @@ export default function Territory() {
       const [{ data: eqs }, { data: profs }, { data: pets }] = await Promise.all([
         supabase.from('player_equipment').select('*, weapons(*)').in('player_id', ids).eq('equipped', true),
         supabase.from('proficiency').select('player_id, equipment_id, prof_lv').in('player_id', ids),
-        supabase.from('pets').select('owner_id, species, level, evolved, charm_id').in('owner_id', ids).eq('is_active', true),
+        supabase.from('pets').select(PET_STAT_SELECT).in('owner_id', ids).eq('is_active', true),
       ])
-      const charmIds = [...new Set((pets || []).map(p => p.charm_id).filter(Boolean))]
-      const charmById = {}
-      if (charmIds.length) {
-        const { data: cr } = await supabase.from('player_charms').select('*').in('id', charmIds)
-        for (const c of (cr || [])) charmById[c.id] = c
-      }
-      const charmMap = {}
+      const charmMap = await loadCharmBonusMap(pets)  // チャーム＋リボン（リボンは特殊能力のみ）
       const petStatMap = {}
-      for (const pet of (pets || [])) {
-        petStatMap[pet.owner_id] = petPlayerBonus(pet)
-        if (pet.charm_id && charmById[pet.charm_id]) charmMap[pet.owner_id] = charmPlayerBonus(charmById[pet.charm_id])
-      }
+      for (const pet of (pets || [])) petStatMap[pet.owner_id] = petPlayerBonus(pet)
       const titleIds = [...new Set(list.map(m => m.ability_title_id).filter(Boolean))]
       const titleMap = {}
       if (titleIds.length) {

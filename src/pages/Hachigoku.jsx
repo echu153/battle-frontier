@@ -5,7 +5,8 @@ import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/IdleGuard
 import { getWeaponGroup } from '../lib/stats'
 import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
 import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemBlocksAilment } from '../lib/emblemCombat'
-import { petPlayerBonus, charmPlayerBonus } from '../constants/pets'
+import { petPlayerBonus } from '../constants/pets'
+import { loadCharmBonus, PET_STAT_SELECT } from '../lib/petBonus'
 import { selectBattleSkillSets } from '../lib/loadout'
 import { reportDevAccess } from '../lib/devAccess'
 import { buildSummon, summonAnnounce, summonAttackDamage, summonAbsorbBasic, summonEndOfTurn, tryPetCommand, BREEDER_COMMANDS } from '../lib/summon'
@@ -914,8 +915,8 @@ export default function Hachigoku() {
     if (!isHachigokuUnlocked(prof)) reportDevAccess('hachigoku', '八獄(/hachigoku)')
     let petCharm = null, petStat = null, activePet = null
     try {
-      const { data: ap } = await supabase.from('pets').select('species, level, evolved, charm_id').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
-      if (ap) { activePet = ap; petStat = petPlayerBonus(ap); if (ap.charm_id) { const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle(); if (c) petCharm = charmPlayerBonus(c) } }
+      const { data: ap } = await supabase.from('pets').select(PET_STAT_SELECT).eq('owner_id', user.id).eq('is_active', true).maybeSingle()
+      if (ap) { activePet = ap; petStat = petPlayerBonus(ap); petCharm = await loadCharmBonus(ap) }  // チャーム＋リボン（リボンは特殊能力のみ）
     } catch { /* ペット未導入時は無視 */ }
     // 紋章の割り振りを反映（未導入/未付与なら無視）
     let emblemAlloc = null

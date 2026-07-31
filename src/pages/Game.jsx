@@ -6,7 +6,8 @@ const papiaIcon = '/papia.png'
 import { GEM_DATA, GEM_TYPES, calcDefReduction, calcEffectiveStats } from '../lib/stats'
 import { evoOnHit, evoTakenMult } from '../lib/evoCombat'
 import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemResistNewAilments, emblemBlocksAilment } from '../lib/emblemCombat'
-import { charmPlayerBonus, petPlayerBonus, petStats } from '../constants/pets'
+import { petPlayerBonus, petStats } from '../constants/pets'
+import { loadCharmBonus, PET_STAT_SELECT } from '../lib/petBonus'
 import { countClaimableTitles } from '../lib/titles'
 import { reportDevAccess } from '../lib/devAccess'
 import { isHachigokuUnlocked, HACHIGOKU_DAILY_WINS } from '../lib/hachigoku'
@@ -2352,14 +2353,11 @@ export default function Game() {
     let petStat = null
     let activePet = null
     try {
-      const { data: ap } = await supabase.from('pets').select('species, level, evolved, charm_id').eq('owner_id', user.id).eq('is_active', true).maybeSingle()
+      const { data: ap } = await supabase.from('pets').select(PET_STAT_SELECT).eq('owner_id', user.id).eq('is_active', true).maybeSingle()
       if (ap) {
         activePet = ap
         petStat = petPlayerBonus(ap)
-        if (ap.charm_id) {
-          const { data: c } = await supabase.from('player_charms').select('*').eq('id', ap.charm_id).maybeSingle()
-          if (c) petCharm = charmPlayerBonus(c)
-        }
+        petCharm = await loadCharmBonus(ap)  // チャーム＋リボン（リボンは特殊能力のみ）
       }
     } catch { /* ペット未導入時は無視 */ }
     // 紋章の割り振りを反映（未導入/未付与なら無視）

@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { calcEffectiveTotal, getTotalRank } from '../lib/stats'
-import { charmPlayerBonus, petPlayerBonus, petStats, applyCharmStats, speciesLabel, speciesEmoji, charmDisplayName, petImage } from '../constants/pets'
+import { petPlayerBonus, petStats, applyCharmStats, speciesLabel, speciesEmoji, charmDisplayName, petImage } from '../constants/pets'
+import { loadCharmBonusMap, PET_STAT_SELECT } from '../lib/petBonus'
 import { thumbUrl } from '../lib/img'
 
-// ペット1体の能力合計（チャーム込み）。プレイヤー総合力と同じ重み付け。
-const petTotalPower = (pet, charm) => {
-  const st = applyCharmStats(petStats(pet), charm || null)
+// ペット1体の能力合計（チャーム＋リボン込み）。プレイヤー総合力と同じ重み付け。
+const petTotalPower = (pet, charm, ribbon) => {
+  const st = applyCharmStats(petStats(pet), charm || null, ribbon || null)
   return Math.floor(st.maxHp / 10) + st.atk + st.def + st.mdef
 }
 
@@ -47,7 +48,7 @@ export default function Ranking() {
           supabase.from('player_equipment').select('*, weapons(*)').in('player_id', ids).eq('equipped', true),
           supabase.from('proficiency').select('player_id, equipment_id, prof_lv').in('player_id', ids),
           // 街と同じくアクティブペットの本体ステ(100%)＋装備チャームを総合力に反映
-          supabase.from('pets').select('owner_id, species, level, evolved, charm_id').in('owner_id', ids).eq('is_active', true),
+          supabase.from('pets').select(PET_STAT_SELECT).in('owner_id', ids).eq('is_active', true),
         ])
         eqs = eqData || []
         profs = profData || []
@@ -57,15 +58,7 @@ export default function Ranking() {
           for (const e of (emRows || [])) if (e.alloc && Object.keys(e.alloc).length > 0) emblemMap[e.player_id] = e.alloc
         } catch { /* 紋章未導入時は無視 */ }
         for (const pet of (petData || [])) petStatMap[pet.owner_id] = petPlayerBonus(pet)
-        const charmIds = [...new Set((petData || []).map(p => p.charm_id).filter(Boolean))]
-        if (charmIds.length > 0) {
-          const { data: charmRows } = await supabase.from('player_charms').select('*').in('id', charmIds)
-          const charmById = {}
-          for (const c of (charmRows || [])) charmById[c.id] = c
-          for (const pet of (petData || [])) {
-            if (pet.charm_id && charmById[pet.charm_id]) charmMap[pet.owner_id] = charmPlayerBonus(charmById[pet.charm_id])
-          }
-        }
+        charmMap = await loadCharmBonusMap(petData)  // チャーム＋リボン（リボンは特殊能力のみ）
       }
       const titleIds = [...new Set(list.map(p => p.ability_title_id).filter(Boolean))]
       if (titleIds.length > 0) {
@@ -102,10 +95,10 @@ export default function Ranking() {
       setAbyssPlayers((Array.isArray(abyssData) ? abyssData : []).filter(p => !excluded.has(p.id)))
 
       // ペット能力合計ランキング（チャーム込み・1体ごと）
-      const { data: allPets } = await supabase.from('pets').select('id, owner_id, name, species, level, evolved, image_url, charm_id')
+      const { data: allPets } = await supabase.from('pets').select('id, owner_id, name, species, level, evolved, image_url, charm_id, ribbon_id')
       const petList = (allPets || []).filter(p => !excluded.has(p.owner_id))
-      // チャーム読み込み
-      const petCharmIds = [...new Set(petList.map(p => p.charm_id).filter(Boolean))]
+      // チャーム／リボン読み込み（リボンはチャーム別枠の装備。ペットステには両方乗る）
+      const petCharmIds = [...new Set(petList.flatMap(p => [p.charm_id, p.ribbon_id]).filter(Boolean))]
       let petCharmById = {}
       if (petCharmIds.length > 0) {
         const { data: pcRows } = await supabase.from('player_charms').select('*').in('id', petCharmIds)
@@ -120,7 +113,8 @@ export default function Ranking() {
       }
       const petsWithPower = petList.map(p => {
         const charm = p.charm_id ? petCharmById[p.charm_id] : null
-        return { ...p, _charm: charm, _owner: ownerById[p.owner_id] || null, _power: petTotalPower(p, charm) }
+        const ribbon = p.ribbon_id ? petCharmById[p.ribbon_id] : null
+        return { ...p, _charm: charm, _ribbon: ribbon, _owner: ownerById[p.owner_id] || null, _power: petTotalPower(p, charm, ribbon) }
       }).sort((a, b) => b._power - a._power).slice(0, 50)
       setPetRanking(petsWithPower)
 
@@ -240,7 +234,7 @@ export default function Ranking() {
             {petRanking.map((p, i) => {
               const medal = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
               const isMe = p.owner_id === currentUserId
-              const charmName = p._charm ? charmDisplayName(p._charm) : null
+              const charmName = [p._charm, p._ribbon].filter(Boolean).map(charmDisplayName).join('・') || null
               return (
                 <div key={p.id}
                   onClick={() => p._owner && nav(`/profile/${p.owner_id}`)}
