@@ -57,16 +57,31 @@ function WeaponCard({ weapon, bonusEffect }) {
 
 const TABS = ['レイドボス', '勇気の証']
 
+// レイドボスタブ内のボス別カテゴリ。素材2種で交換項目をボスへ振り分ける。
+// ★レイドボスを追加したらここに1エントリ足すこと（漏れると「その他」へ入る）
+const RAID_BOSSES = [
+  { key:'varuzenoku', label:'黒龍ヴァルゼノク', short:'ヴァルゼノク', color:'#ff6666', mats:['黒龍の鱗', '黒龍の逆鱗'] },
+  { key:'amaza',      label:'雨摩座',           short:'雨摩座',       color:'#66bbff', mats:['水禍の雫', '雨禍の心核'] },
+  { key:'zerugiasu',  label:'雷鋼機神ゼルギアス', short:'ゼルギアス',  color:'#ffdd44', mats:['雷鋼片', '神雷炉心'] },
+  { key:'enma',       label:'閻魔',             short:'閻魔',         color:'#cc66ff', mats:['獄王の断罪片', '閻魔の審判核'] },
+]
+const OTHER_BOSS = { key:'other', label:'その他', short:'その他', color:'#88ccff', mats:[] }
+// 交換項目 → どのボスのものか（必要素材から判定。該当なしは「その他」）
+const bossKeyOf = (item) => {
+  const names = (item.cost_items || []).map(c => c.item_name)
+  return RAID_BOSSES.find(b => names.some(n => b.mats.includes(n)))?.key || OTHER_BOSS.key
+}
+
 // タブごとの所持素材表示に出す素材名
 const TAB_MATERIALS = {
-  // ★レイドボスを追加したら素材2種をここにも足すこと（漏れると所持数が表示されない）
-  'レイドボス': ['黒龍の鱗', '黒龍の逆鱗', '水禍の雫', '雨禍の心核', '雷鋼片', '神雷炉心', '獄王の断罪片', '閻魔の審判核'],
+  'レイドボス': RAID_BOSSES.flatMap(b => b.mats),
   '勇気の証': ['勇気の証'],
 }
 
 export default function Exchange() {
   const nav = useNavigate()
   const [activeTab, setActiveTab] = useState('レイドボス')
+  const [activeBoss, setActiveBoss] = useState(RAID_BOSSES[0].key)  // レイドボスタブ内のボス別カテゴリ
   const [shopItems, setShopItems] = useState([])
   const [weaponMap, setWeaponMap] = useState({})
   const [records, setRecords] = useState([])
@@ -131,7 +146,20 @@ export default function Exchange() {
     setExchanging(null)
   }
 
-  const tabItems = shopItems.filter(i => (i.tab || 'レイドボス') === activeTab)
+  const isRaidTab = activeTab === 'レイドボス'
+  const rawTabItems = shopItems.filter(i => (i.tab || 'レイドボス') === activeTab)
+  // レイドボスタブはボス別カテゴリで絞り込む。「その他」は該当項目があるときだけ出す。
+  const bossCats = isRaidTab
+    ? [...RAID_BOSSES, ...(rawTabItems.some(i => bossKeyOf(i) === OTHER_BOSS.key) ? [OTHER_BOSS] : [])]
+    : []
+  const currentBoss = bossCats.find(b => b.key === activeBoss) || bossCats[0] || null
+  const tabItems = isRaidTab && currentBoss
+    ? rawTabItems.filter(i => bossKeyOf(i) === currentBoss.key)
+    : rawTabItems
+  // 所持素材の表示は、選んでいるボスの素材だけに絞る（「その他」は全素材）
+  const shownMaterials = isRaidTab
+    ? (currentBoss && currentBoss.mats.length > 0 ? currentBoss.mats : TAB_MATERIALS['レイドボス'])
+    : (TAB_MATERIALS[activeTab] || [])
 
   const base = {
     minHeight: '100vh',
@@ -170,6 +198,29 @@ export default function Exchange() {
       </div>
 
       <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+        {/* ボス別カテゴリ（レイドボスタブのみ） */}
+        {isRaidTab && (
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+            {bossCats.map(b => {
+              const on = currentBoss?.key === b.key
+              return (
+                <button key={b.key} onClick={() => { setActiveBoss(b.key); setResult(null); setError(null) }}
+                  style={{
+                    padding: '6px 12px',
+                    background: on ? '#001840' : '#000e20',
+                    border: `1px solid ${on ? b.color : '#12395e'}`,
+                    color: on ? b.color : '#557799',
+                    cursor: 'pointer',
+                    fontFamily: 'monospace',
+                    fontSize: '11px',
+                  }}>
+                  {b.short}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         {/* 勇気の証イベント告知 */}
         {activeTab === '勇気の証' && (
           <div style={{ border: '1px solid #3a2a00', background: '#141000', padding: '10px', marginBottom: '10px' }}>
@@ -183,9 +234,11 @@ export default function Exchange() {
 
         {/* 所持素材 */}
         <div style={{ border: '1px solid #002244', background: '#000e20', padding: '10px', marginBottom: '14px' }}>
-          <div style={{ color: '#446688', fontSize: '10px', marginBottom: '6px' }}>所持素材</div>
+          <div style={{ color: '#446688', fontSize: '10px', marginBottom: '6px' }}>
+            所持素材{isRaidTab && currentBoss && currentBoss.mats.length > 0 && `（${currentBoss.label}）`}
+          </div>
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-            {(TAB_MATERIALS[activeTab] || []).map(name => (
+            {shownMaterials.map(name => (
               <div key={name} style={{ fontSize: '12px' }}>
                 <span style={{ color: '#556677' }}>{name}: </span>
                 <span style={{ color: (materials[name] || 0) > 0 ? '#ffcc44' : '#334455' }}>
@@ -307,7 +360,7 @@ export default function Exchange() {
 
           {tabItems.length === 0 && (
             <div style={{ color: '#446688', fontSize: '12px', textAlign: 'center', padding: '40px' }}>
-              現在交換できるアイテムはありません
+              {isRaidTab && currentBoss ? `${currentBoss.label}の交換アイテムはありません` : '現在交換できるアイテムはありません'}
             </div>
           )}
         </div>
