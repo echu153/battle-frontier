@@ -6,6 +6,7 @@ import { StampBar } from '../components/StampBar'
 import { RoomChat } from '../components/RoomChat'
 import { InvitePanel } from '../components/InvitePanel'
 import { FinalResult } from '../components/FinalResult'
+import { publishRoomDb, closeRoomDb, listRoomsDb, mergeRooms } from '../lib/gameRooms'
 import { containsNgWord } from '../lib/nameFilter'
 import {
   BLACK, WHITE, EMPTY, SIZE,
@@ -67,6 +68,7 @@ export default function Othello() {
   const [view, setView] = useState('lobby')
   const [rooms, setRooms] = useState([])
   const [lobbyNonce, setLobbyNonce] = useState(0) // 🔄でロビーを購読し直して一覧を引き直す
+  const [dbRooms, setDbRooms] = useState([])      // DBに保存された部屋(presenceの取りこぼし対策)
   const [showFinal, setShowFinal] = useState(false) // 最終結果の表示(自動では消さない)
   const showFinalRef = useRef(false)
   const finalShownRef = useRef(null) // 表示済みの終局キー(再配信で開き直さないため)
@@ -138,12 +140,16 @@ export default function Othello() {
 
   // ---- ホスト: ロビーへ部屋情報を掲示 ----
   //   ロビーのuseEffectより前に定義する(後ろに置くと参照が巻き上げになりReact Compilerの最適化が外れる)
+  //   presence(即時)とDB(耐久・90秒猶予)の両方へ出す。presenceだけだとホストの通信が
+  //   一瞬切れただけで他の人の一覧から部屋が消えてしまう。
   const publishRoom = useCallback(async (status) => {
     const r = roomRef.current
-    if (!r || r.hostId !== meRef.current?.id || !lobbyChRef.current) return
+    if (!r || r.hostId !== meRef.current?.id) return
+    const meta = { bet: r.bet || 0, count: membersRef.current.length + npcsRef.current.length }
+    publishRoomDb('othello', r, status, meta)
+    if (!lobbyChRef.current) return
     await lobbyChRef.current.track({
-      roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName, bet: r.bet || 0,
-      count: membersRef.current.length + npcsRef.current.length, status, // waiting | playing
+      roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName, ...meta, status, // waiting | playing
     })
   }, [])
   const publishStatus = () => (gameRef.current && gameRef.current.phase === 'playing' ? 'playing' : 'waiting')
@@ -171,6 +177,19 @@ export default function Othello() {
     lobbyChRef.current = ch
     return () => { supabase.removeChannel(ch); lobbyChRef.current = null }
   }, [me, lobbyNonce]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- DB側の部屋一覧(ロビー表示中のみ12秒ごと。presenceが落ちていても見つかるように) ----
+  useEffect(() => {
+    if (!me || view !== 'lobby') return
+    let alive = true
+    const pull = async () => {
+      const list = await listRoomsDb('othello')
+      if (alive) setDbRooms(list)
+    }
+    pull()
+    const iv = setInterval(pull, 12000)
+    return () => { alive = false; clearInterval(iv) }
+  }, [me, view, lobbyNonce])
 
   // 掲示のキープアライブ: 電波の瞬断などでtrackが落ちて一覧から消えたままになるのを防ぐ
   useEffect(() => {
@@ -500,6 +519,7 @@ export default function Othello() {
     setPassNote(null)
     setLastResult(null)
     setStamps([])
+    if (r && r.hostId === meRef.current?.id) closeRoomDb(r.id) // DB側の掲示も消す
     setShowFinal(false); showFinalRef.current = false; finalShownRef.current = null
     wagerKeyRef.current = null
     betPendingRef.current = null
@@ -525,6 +545,12 @@ export default function Othello() {
 
   // アンマウント時にチャンネルを確実に掃除
   useEffect(() => () => {
+    // 街へ戻る等のページ遷移: ホストなら部屋を畳む(DB掲示を残すと幽霊部屋になる)
+    const r = roomRef.current
+    if (r && r.hostId === meRef.current?.id) {
+      roomChRef.current?.send({ type: 'broadcast', event: 'closed', payload: {} })
+      closeRoomDb(r.id)
+    }
     if (roomChRef.current) supabase.removeChannel(roomChRef.current)
     if (lobbyChRef.current) supabase.removeChannel(lobbyChRef.current)
     if (cpuTimerRef.current) clearTimeout(cpuTimerRef.current)
@@ -755,6 +781,8 @@ export default function Othello() {
 
   // ---- ロビー ----
   if (view === 'lobby') {
+    // presence(即時)とDB(耐久)をマージ。どちらか片方にしか無い部屋も見つかるようにする
+    const roomList = mergeRooms(rooms, dbRooms)
     return wrap(
       <div style={{ width: '100%', maxWidth: '480px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
@@ -790,8 +818,8 @@ export default function Othello() {
           <div style={{ fontSize: '12px', color: '#88ccff' }}>部屋一覧</div>
           <button onClick={() => setLobbyNonce((n) => n + 1)} style={btnStyle('#88ccff', { padding: '2px 10px', fontSize: '11px' })}>🔄 更新</button>
         </div>
-        {rooms.length === 0 && <div style={{ fontSize: '12px', color: '#668' }}>現在開いている部屋はありません</div>}
-        {rooms.map((r) => (
+        {roomList.length === 0 && <div style={{ fontSize: '12px', color: '#668' }}>現在開いている部屋はありません</div>}
+        {roomList.map((r) => (
           <div key={r.roomId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #224466', padding: '10px 12px', marginBottom: '8px' }}>
             <div>
               <div style={{ fontSize: '13px' }}>

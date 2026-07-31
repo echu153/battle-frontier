@@ -12,6 +12,7 @@ import { RoomChat } from '../components/RoomChat'
 import { InvitePanel } from '../components/InvitePanel'
 import { FinalResult } from '../components/FinalResult'
 import { containsNgWord } from '../lib/nameFilter'
+import { publishRoomDb, closeRoomDb, listRoomsDb, mergeRooms } from '../lib/gameRooms'
 
 // ============================================================
 // トランプ広場 — 開発限定(大富豪/スピード/7ならべ/ババ抜き)
@@ -73,6 +74,7 @@ export default function Cards() {
   const [view, setView] = useState('lobby')
   const [rooms, setRooms] = useState([])
   const [lobbyNonce, setLobbyNonce] = useState(0) // 🔄でロビーを購読し直して一覧を引き直す
+  const [dbRooms, setDbRooms] = useState([])      // DBに保存された部屋(presenceの取りこぼし対策)
   const [roomTitle, setRoomTitle] = useState('')
   // 部屋の設定はホストが入室後に決める(全員へbroadcast同期)
   // 大富豪のルールは既定で全部ON(ホストが個別にOFFにできる)
@@ -178,14 +180,20 @@ export default function Cards() {
 
   // ---- ホスト: ロビーへ部屋情報を掲示 ----
   //   ロビーのuseEffectより前に定義する(後ろに置くと参照が巻き上げになりReact Compilerの最適化が外れる)
+  //   presence(即時)とDB(耐久・90秒猶予)の両方へ出す。presenceだけだとホストの通信が
+  //   一瞬切れただけで他の人の一覧から部屋が消えてしまう。
   const publishRoom = useCallback(async (status) => {
     const r = roomRef.current
-    if (!r || r.hostId !== meRef.current?.id || !lobbyChRef.current) return
+    if (!r || r.hostId !== meRef.current?.id) return
     const s = settingsRef.current
-    await lobbyChRef.current.track({
-      roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName,
+    const meta = {
       gameType: s.gameType, bet: s.bet, rules: s.gameType === 'daifugo' ? s.rules : null,
-      count: membersRef.current.length + npcsRef.current.length, status,
+      count: membersRef.current.length + npcsRef.current.length,
+    }
+    publishRoomDb('cards', r, status, meta)
+    if (!lobbyChRef.current) return
+    await lobbyChRef.current.track({
+      roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName, ...meta, status,
     })
   }, [])
   const publishStatus = () => (gameRef.current?.phase === 'playing' ? 'playing' : 'waiting')
@@ -211,6 +219,19 @@ export default function Cards() {
     lobbyChRef.current = ch
     return () => { supabase.removeChannel(ch); lobbyChRef.current = null }
   }, [me, lobbyNonce]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- DB側の部屋一覧(ロビー表示中のみ12秒ごと。presenceが落ちていても見つかるように) ----
+  useEffect(() => {
+    if (!me || view !== 'lobby') return
+    let alive = true
+    const pull = async () => {
+      const list = await listRoomsDb('cards')
+      if (alive) setDbRooms(list)
+    }
+    pull()
+    const iv = setInterval(pull, 12000)
+    return () => { alive = false; clearInterval(iv) }
+  }, [me, view, lobbyNonce])
 
   // 掲示のキープアライブ: 電波の瞬断などでtrackが落ちて一覧から消えたままになるのを防ぐ
   useEffect(() => {
@@ -680,6 +701,7 @@ export default function Cards() {
     if (r && r.hostId === meRef.current?.id) {
       roomChRef.current?.send({ type: 'broadcast', event: 'closed', payload: {} })
       lobbyChRef.current?.untrack()
+      closeRoomDb(r.id) // DB側の掲示も消す(残すと90秒だけ幽霊部屋が出る)
     }
     if (roomChRef.current) { supabase.removeChannel(roomChRef.current); roomChRef.current = null }
     if (npcTimerRef.current) clearTimeout(npcTimerRef.current)
@@ -723,6 +745,12 @@ export default function Cards() {
   }, [me]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => {
+    // 街へ戻る等のページ遷移: ホストなら部屋を畳む(DB掲示を残すと幽霊部屋になる)
+    const r = roomRef.current
+    if (r && r.hostId === meRef.current?.id) {
+      roomChRef.current?.send({ type: 'broadcast', event: 'closed', payload: {} })
+      closeRoomDb(r.id)
+    }
     if (roomChRef.current) supabase.removeChannel(roomChRef.current)
     if (lobbyChRef.current) supabase.removeChannel(lobbyChRef.current)
     if (npcTimerRef.current) clearTimeout(npcTimerRef.current)
@@ -1038,6 +1066,8 @@ export default function Cards() {
 
   // ---- ロビー ----
   if (view === 'lobby') {
+    // presence(即時)とDB(耐久)をマージ。どちらか片方にしか無い部屋も見つかるようにする
+    const roomList = mergeRooms(rooms, dbRooms)
     return wrap(
       <div style={{ width: '100%', maxWidth: 520 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -1061,8 +1091,8 @@ export default function Cards() {
           <div style={{ fontSize: 12, color: '#88ccff' }}>部屋一覧</div>
           <button onClick={() => setLobbyNonce((n) => n + 1)} style={btnStyle('#88ccff', { padding: '2px 10px', fontSize: 11 })}>🔄 更新</button>
         </div>
-        {rooms.length === 0 && <div style={{ fontSize: 12, color: '#668' }}>現在開いている部屋はありません</div>}
-        {rooms.map((r) => (
+        {roomList.length === 0 && <div style={{ fontSize: 12, color: '#668' }}>現在開いている部屋はありません</div>}
+        {roomList.map((r) => (
           <div key={r.roomId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #224466', padding: '10px 12px', marginBottom: 8 }}>
             <div>
               <div style={{ fontSize: 13 }}>

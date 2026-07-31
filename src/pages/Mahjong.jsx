@@ -11,6 +11,7 @@ import { StampBar, StampOverlay } from '../components/StampBar'
 import { RoomChat } from '../components/RoomChat'
 import { InvitePanel } from '../components/InvitePanel'
 import { FinalResult } from '../components/FinalResult'
+import { publishRoomDb, closeRoomDb, listRoomsDb, mergeRooms } from '../lib/gameRooms'
 import { containsNgWord } from '../lib/nameFilter'
 import { wagerJoin, wagerReport, wagerForfeit, wagerPing, wagerSettleRanked, MAX_BET } from '../lib/wager'
 
@@ -72,6 +73,7 @@ export default function Mahjong() {
   const [view, setView] = useState('lobby')
   const [rooms, setRooms] = useState([])
   const [lobbyNonce, setLobbyNonce] = useState(0) // 🔄でロビーを購読し直して一覧を引き直す
+  const [dbRooms, setDbRooms] = useState([])      // DBに保存された卓(presenceの取りこぼし対策)
   const [roomTitle, setRoomTitle] = useState('')
 
   const [room, setRoom] = useState(null)
@@ -219,14 +221,20 @@ export default function Mahjong() {
 
   // ---- ホスト: ロビーへ卓情報を掲示 ----
   //   ロビーのuseEffectより前に定義する(後ろに置くと参照が巻き上げになりReact Compilerの最適化が外れる)
+  //   presence(即時)とDB(耐久・90秒猶予)の両方へ出す。presenceだけだとホストの通信が
+  //   一瞬切れただけで他の人の一覧から卓が消えてしまう。
   const publishRoom = useCallback(async (status) => {
     const r = roomRef.current
-    if (!r || r.hostId !== meRef.current?.id || !lobbyChRef.current) return
+    if (!r || r.hostId !== meRef.current?.id) return
     const s = settingsRef.current
-    await lobbyChRef.current.track({
-      roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName,
+    const meta = {
       bet: s.bet || 0, hanchan: !!s.rules?.hanchan,
-      count: membersRef.current.length + npcsRef.current.length, status,
+      count: membersRef.current.length + npcsRef.current.length,
+    }
+    publishRoomDb('mahjong', r, status, meta)
+    if (!lobbyChRef.current) return
+    await lobbyChRef.current.track({
+      roomId: r.id, title: r.title, hostId: r.hostId, hostName: r.hostName, ...meta, status,
     })
   }, [])
   const publishStatus = () => (gameRef.current && gameRef.current.phase !== 'ended' ? 'playing' : 'waiting')
@@ -253,6 +261,19 @@ export default function Mahjong() {
     lobbyChRef.current = ch
     return () => { supabase.removeChannel(ch); lobbyChRef.current = null }
   }, [me, lobbyNonce]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- DB側の卓一覧(ロビー表示中のみ12秒ごと。presenceが落ちていても見つかるように) ----
+  useEffect(() => {
+    if (!me || view !== 'lobby') return
+    let alive = true
+    const pull = async () => {
+      const list = await listRoomsDb('mahjong')
+      if (alive) setDbRooms(list)
+    }
+    pull()
+    const iv = setInterval(pull, 12000)
+    return () => { alive = false; clearInterval(iv) }
+  }, [me, view, lobbyNonce])
 
   // 掲示のキープアライブ: 電波の瞬断などでtrackが落ちて一覧から消えたままになるのを防ぐ
   useEffect(() => {
@@ -512,6 +533,7 @@ export default function Mahjong() {
     if (r && r.hostId === meRef.current?.id) {
       roomChRef.current?.send({ type: 'broadcast', event: 'closed', payload: {} })
       lobbyChRef.current?.untrack()
+      closeRoomDb(r.id) // DB側の掲示も消す(残すと90秒だけ幽霊卓が出る)
     }
     if (roomChRef.current) { supabase.removeChannel(roomChRef.current); roomChRef.current = null }
     if (npcTimerRef.current) clearTimeout(npcTimerRef.current)
@@ -550,6 +572,12 @@ export default function Mahjong() {
   }, [me]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => {
+    // 街へ戻る等のページ遷移: ホストなら卓を畳む(DB掲示を残すと幽霊卓になる)
+    const r = roomRef.current
+    if (r && r.hostId === meRef.current?.id) {
+      roomChRef.current?.send({ type: 'broadcast', event: 'closed', payload: {} })
+      closeRoomDb(r.id)
+    }
     if (roomChRef.current) supabase.removeChannel(roomChRef.current)
     if (lobbyChRef.current) supabase.removeChannel(lobbyChRef.current)
     if (npcTimerRef.current) clearTimeout(npcTimerRef.current)
@@ -765,6 +793,8 @@ export default function Mahjong() {
 
   // ---- ロビー ----
   if (view === 'lobby') {
+    // presence(即時)とDB(耐久)をマージ。どちらか片方にしか無い卓も見つかるようにする
+    const roomList = mergeRooms(rooms, dbRooms)
     return wrap(
       <div style={{ width: '100%', maxWidth: 520 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -788,8 +818,8 @@ export default function Mahjong() {
           <div style={{ fontSize: 12, color: '#88ccff' }}>卓一覧</div>
           <button onClick={() => setLobbyNonce((n) => n + 1)} style={btnStyle('#88ccff', { padding: '2px 10px', fontSize: 11 })}>🔄 更新</button>
         </div>
-        {rooms.length === 0 && <div style={{ fontSize: 12, color: '#668' }}>現在開いている卓はありません</div>}
-        {rooms.map((r) => (
+        {roomList.length === 0 && <div style={{ fontSize: 12, color: '#668' }}>現在開いている卓はありません</div>}
+        {roomList.map((r) => (
           <div key={r.roomId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #224466', padding: '10px 12px', marginBottom: 8 }}>
             <div>
               <div style={{ fontSize: 13 }}>{r.title}</div>
