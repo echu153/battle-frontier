@@ -17,7 +17,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import {
-  calcStatsBreakdown, calcEffectiveStats, calcDefReduction, getTotalRank,
+  calcStatsBreakdown, calcEffectiveStats, calcDefReduction, getTotalRank, EQUIP_PCT_STAT_KEY,
 } from '../lib/stats'
 import { sumClaimedFishingBonus, toFishingColumns } from '../lib/fishing'
 import { petStats, applyCharmStats, speciesLabel, speciesEmoji, charmDisplayName, atkLabel, petImage, charmPlayerBonus, petPlayerBonus, charmSpecials, specialLabel } from '../constants/pets'
@@ -60,6 +60,9 @@ const getStatRank = (val, type) => {
 const pct1 = (v) => `${(v * 100).toFixed(1)}%`
 // チャーム特殊能力（フェイトコア抽選）の%は最終値への乗算。ステータス別の対応キー。
 const SP_PCT_KEY = { atk:'atkPct', def:'defPct', matk:'matkPct', mdef:'mdefPct' }
+// 装備の%補正（武器種の固有能力・武器の atk/matk_bonus_pct）。対応ステータスのみ表示。
+// 正は stats.js（表示漏れを stats.test.js で検知するため）。
+const EQUIP_PCT_KEY = EQUIP_PCT_STAT_KEY
 
 const STAT_JP = { atk:'攻撃力', def:'防御力', matk:'特殊攻撃力', mdef:'特殊防御力', spd:'素早さ', hp_max:'HP', mp_max:'MP' }
 // 内訳バケット（bd.museum 等）のキー（hp/mp）用ラベル
@@ -213,9 +216,9 @@ export default function StatusDetail() {
                         {c.label} +{c.val}
                       </span>
                     ))}
-                    {s.key === 'matk' && bd.matkPct > 0 && (
+                    {EQUIP_PCT_KEY[s.key] && bd[EQUIP_PCT_KEY[s.key]] > 0 && (
                       <span style={{ fontSize:'10px', color:'#cc44ff', border:'1px solid #cc44ff44', background:'#000c1c', padding:'1px 6px' }}>
-                        装備%補正 ×{(1 + bd.matkPct/100).toFixed(2)}
+                        装備%補正 ×{(1 + bd[EQUIP_PCT_KEY[s.key]]/100).toFixed(2)}
                       </span>
                     )}
                     {s.key === 'def' && bd.petGuard && (
@@ -228,7 +231,10 @@ export default function StatusDetail() {
                         チャーム特殊能力 ×{(1 + bd.petSp[SP_PCT_KEY[s.key]]/100).toFixed(2)}
                       </span>
                     )}
-                    {chips.length === 0 && bd.matkPct === 0 && <span style={{ fontSize:'10px', color:'#334455' }}>ボーナスなし</span>}
+                    {chips.length === 0 && !(EQUIP_PCT_KEY[s.key] && bd[EQUIP_PCT_KEY[s.key]] > 0)
+                      && !(s.key === 'def' && bd.petGuard)
+                      && !(SP_PCT_KEY[s.key] && bd.petSp?.[SP_PCT_KEY[s.key]] > 0)
+                      && <span style={{ fontSize:'10px', color:'#334455' }}>ボーナスなし</span>}
                   </div>
                 </div>
               )

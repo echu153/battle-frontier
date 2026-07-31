@@ -44,6 +44,11 @@ export const WEAPON_TYPE_PASSIVE_LABEL = {
   spear:'防御貫通+5%', orb:'特殊防御貫通+5%', tome:'消費MP-10%',
 }
 
+// 装備由来の%補正（武器種の固有能力・武器の atk/matk_bonus_pct）を
+// どのステータスに表示するかの正。calcStatsBreakdown が返す *Pct を必ずここへ載せること
+// （載せ忘れると銃の攻撃+3%のようにステータス詳細で表示だけ抜ける）。stats.test.js が検知する。
+export const EQUIP_PCT_STAT_KEY = { atk: 'atkPct', matk: 'matkPct' }
+
 export const ARTIFACT_BASE_NAMES_SET = new Set([
   '古びた剣','古びた短剣','古びた弓','古びた斧','古びた刀',
   '古びた銃','古びた杖','古びた魔導書','古びた槍','古びたオーブ'

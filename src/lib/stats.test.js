@@ -8,7 +8,7 @@
 // ============================================================
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calcEffectiveStats, calcStatsBreakdown } from './stats.js'
+import { calcEffectiveStats, calcStatsBreakdown, EQUIP_PCT_STAT_KEY } from './stats.js'
 
 const baseProfile = () => ({
   atk: 400, def: 350, matk: 300, mdef: 320, spd: 280, hp_max: 5000, mp_max: 1200,
@@ -86,6 +86,27 @@ test('フェイトコアの回避%が戦闘補正に乗る', () => {
     { ...baseProfile(), petCharm: { sp: sp({ evade: 6 }) } }, [equip()], [], null,
   )
   assert.equal(withSp.combat.evasionBonus, plain.combat.evasionBonus + 6)
+})
+
+// 銃の固有能力（攻撃/特殊攻撃+3%）が攻撃・特攻の両方に乗る
+test('銃の固有能力が攻撃%・特攻%の両方に乗る', () => {
+  const gun = equip({ weapon_type: 'gun', name: 'テスト銃', weapons: { atk_bonus: 100, matk_bonus: 100 } })
+  const bd = calcStatsBreakdown(baseProfile(), [gun], [], null)
+  assert.equal(bd.atkPct, 3)
+  assert.equal(bd.matkPct, 3)
+})
+
+// ステータス詳細の「装備%補正」表示漏れ検知:
+// calcStatsBreakdown が返す *Pct は必ず EQUIP_PCT_STAT_KEY に載っていること
+// （銃の攻撃+3%が詳細ページに出ていなかった不具合の再発防止）
+test('装備%補正はすべて表示対象になっている', () => {
+  const bd = calcStatsBreakdown(baseProfile(), [equip()], [], null)
+  const shown = new Set(Object.values(EQUIP_PCT_STAT_KEY))
+  const pctKeys = Object.keys(bd).filter(k => k.endsWith('Pct'))
+  assert.ok(pctKeys.length > 0)
+  for (const k of pctKeys) {
+    assert.ok(shown.has(k), `${k} が EQUIP_PCT_STAT_KEY に無い＝ステータス詳細で表示されない`)
+  }
 })
 
 // 攻撃+10% のチャームは最終攻撃力へ乗算される

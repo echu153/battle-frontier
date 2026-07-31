@@ -33,6 +33,7 @@ export default function Event() {
   const [nowMs, setNowMs] = useState(0)
   const [gotPopup, setGotPopup] = useState(null)  // 受取時の「○○を獲得した！」ポップアップ
   const [weaponMap, setWeaponMap] = useState({})  // ボス装備報酬のステータス（name→weapon行）
+  const [redeemConfirm, setRedeemConfirm] = useState(null)  // 選択券交換の確認（誤タップ防止の1段確認）
 
   const init = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -119,6 +120,7 @@ export default function Event() {
       setGotPopup({ name: weaponName, note: '装備画面で確認できます。' })
       await init()
     }
+    setRedeemConfirm(null)
     setBusy(null)
   }
 
@@ -191,7 +193,7 @@ export default function Event() {
                     <div style={{ color:'#ffcc00', fontSize:'12px' }}>{c.name}</div>
                     <div style={{ color:'#778899', fontSize:'10px' }}>{c.desc}</div>
                   </div>
-                  <button onClick={() => redeem(c.name)} disabled={!!busy}
+                  <button onClick={() => { setRedeemConfirm(c); setErr(null); setMsg(null) }} disabled={!!busy}
                     style={{ padding:'8px 12px', background:'#001a00', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', whiteSpace:'nowrap' }}>
                     {busy === 'ticket:' + c.name ? '処理中...' : '交換'}
                   </button>
@@ -252,6 +254,27 @@ export default function Event() {
           })}
         </div>
       </div>
+
+      {redeemConfirm && (
+        <div onClick={() => { if (!busy) setRedeemConfirm(null) }}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.82)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:300, padding:'16px' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:'#0a0c1a', border:'1px solid #ffcc44', padding:'20px', maxWidth:'340px', width:'92%', fontFamily:'monospace' }}>
+            <div style={{ color:'#ffcc44', fontSize:'13px', marginBottom:'10px' }}>🎟 選択券で交換しますか？</div>
+            <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'14px', lineHeight:'1.6', textAlign:'center' }}>
+              <span style={{ color:'#ffcc00', fontSize:'13px' }}>{redeemConfirm.name}</span> を受け取ります。<br/>
+              <span style={{ color:'#ff8844', fontSize:'11px' }}>券を1枚消費します。よろしいですか？</span>
+            </div>
+            <div style={{ color:'#778899', fontSize:'10px', marginBottom:'14px', lineHeight:'1.6' }}>{redeemConfirm.desc}</div>
+            <div style={{ display:'flex', gap:'8px' }}>
+              <button onClick={() => redeem(redeemConfirm.name)} disabled={!!busy}
+                style={{ flex:1, padding:'10px', background:'#001a00', border:'1px solid #44ff88', color:'#44ff88', cursor: busy ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'12px', opacity: busy ? 0.5 : 1 }}>{busy ? '処理中...' : 'OK'}</button>
+              <button onClick={() => setRedeemConfirm(null)} disabled={!!busy}
+                style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>戻る</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {gotPopup && (
         <div onClick={() => setGotPopup(null)}

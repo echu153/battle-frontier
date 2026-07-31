@@ -113,6 +113,8 @@ export default function Equipment() {
   const [artBoxMsg, setArtBoxMsg] = useState('')
   const [artBoxGot, setArtBoxGot] = useState(null)
   const [boxWeapons, setBoxWeapons] = useState({})  // 選択箱で選べる装備の weapons 情報（name→row。ステ表示用）
+  // 選択箱／選択券の交換確認（誤タップ防止の1段確認）: {kind:'ticket'|'beginner'|'area'|'artifact', name, cost}
+  const [pickConfirm, setPickConfirm] = useState(null)
 
   // 選択券で交換できるS級レイド装備（redeem_raid_ticket の許可リストと一致）
   const RAID_TICKET_CHOICES = [
@@ -246,6 +248,27 @@ export default function Equipment() {
     )
   }
 
+  // 選択箱／選択券の交換確認パネル（誤タップ防止。OKを押すまで消費しない）
+  const renderPickConfirm = (accent, onOk) => (
+    <>
+      <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'16px', lineHeight:'1.6', textAlign:'center' }}>
+        <span style={{ color:accent, fontSize:'13px' }}>{pickConfirm.name}</span> を受け取ります。<br/>
+        <span style={{ color:'#ff8844', fontSize:'11px' }}>{pickConfirm.cost}を1{pickConfirm.unit}消費します。よろしいですか？</span>
+      </div>
+      {renderWeaponInfo(pickConfirm.name) && (
+        <div style={{ border:'1px solid #223344', background:'#000c1c', padding:'8px', marginBottom:'14px' }}>
+          {renderWeaponInfo(pickConfirm.name)}
+        </div>
+      )}
+      <div style={{ display:'flex', gap:'8px' }}>
+        <button onClick={onOk} disabled={loading}
+          style={{ flex:1, padding:'10px', background:'#001028', border:`1px solid ${accent}`, color:accent, cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'12px', opacity: loading ? 0.5 : 1 }}>{loading ? '処理中...' : 'OK'}</button>
+        <button onClick={() => setPickConfirm(null)} disabled={loading}
+          style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>戻る</button>
+      </div>
+    </>
+  )
+
   // 選択券を1枚消費してS級レイド装備へ交換（fetchAll 定義後に置く＝参照前定義のlint回避）
   const redeemRaidTicket = async (weaponName) => {
     if (loading) return
@@ -257,6 +280,7 @@ export default function Equipment() {
       setTicketGot(weaponName)  // ポップアップは閉じず、獲得表示を出す
       await fetchAll()
     }
+    setPickConfirm(null)
     setLoading(false)
   }
 
@@ -271,6 +295,7 @@ export default function Equipment() {
       setBossBoxGot(weaponName)  // ポップアップは閉じず、獲得表示を出す
       await fetchAll()
     }
+    setPickConfirm(null)
     setLoading(false)
   }
 
@@ -285,6 +310,7 @@ export default function Equipment() {
       setAreaBoxGot(weaponName)
       await fetchAll()
     }
+    setPickConfirm(null)
     setLoading(false)
   }
 
@@ -299,6 +325,7 @@ export default function Equipment() {
       setArtBoxGot(weaponName)
       await fetchAll()
     }
+    setPickConfirm(null)
     setLoading(false)
   }
 
@@ -1152,14 +1179,15 @@ export default function Equipment() {
 
       {ticketPopup && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}
-          onClick={() => { if (!loading) setTicketPopup(false) }}>
+          onClick={() => { if (!loading) { setTicketPopup(false); setPickConfirm(null) } }}>
           <div onClick={e => e.stopPropagation()} style={{ background:'#0a0c1a', border:'1px solid #ffcc44', padding:'20px', maxWidth:'360px', width:'92%', fontFamily:'monospace', maxHeight:'80vh', overflowY:'auto' }}>
             <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'6px' }}>🎫 Sレアレイドボス装備選択券</div>
+            {ticketMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{ticketMsg}</div>}
+            {pickConfirm?.kind === 'ticket' ? renderPickConfirm('#ffcc44', () => redeemRaidTicket(pickConfirm.name)) : (<>
             <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'14px', lineHeight:'1.5' }}>
               交換するS級レイド装備を1つ選んでください。<br/>
               <span style={{ color:'#ff8844' }}>選択すると券を1枚消費します。</span>
             </div>
-            {ticketMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{ticketMsg}</div>}
             {ticketGot && (
               <div style={{ border:'1px solid #2a6a3a', background:'#04140a', padding:'10px', marginBottom:'12px', color:'#44ff88', fontSize:'12px', lineHeight:'1.5' }}>
                 ✨ 「{ticketGot}」を獲得しました！<br/>
@@ -1168,7 +1196,7 @@ export default function Equipment() {
             )}
             <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
               {RAID_TICKET_CHOICES.map(c => (
-                <button key={c.name} onClick={() => redeemRaidTicket(c.name)} disabled={loading}
+                <button key={c.name} onClick={() => { setPickConfirm({ kind:'ticket', name:c.name, cost:'券', unit:'枚' }); setTicketMsg(''); setTicketGot(null) }} disabled={loading}
                   style={{ textAlign:'left', padding:'10px', background:'#001028', border:'1px solid #0055aa', color:'#cce0ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', opacity: loading ? 0.5 : 1 }}>
                   <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'2px' }}>{c.name}</div>
                   <div style={{ color:'#778899', fontSize:'10px' }}>{c.desc}</div>
@@ -1177,20 +1205,22 @@ export default function Equipment() {
             </div>
             <button onClick={() => setTicketPopup(false)} disabled={loading}
               style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{ticketGot ? '閉じる' : 'キャンセル'}</button>
+            </>)}
           </div>
         </div>
       )}
 
       {bossBoxPopup && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}
-          onClick={() => { if (!loading) setBossBoxPopup(false) }}>
+          onClick={() => { if (!loading) { setBossBoxPopup(false); setPickConfirm(null) } }}>
           <div onClick={e => e.stopPropagation()} style={{ background:'#0a0c1a', border:'1px solid #ffcc44', padding:'20px', maxWidth:'360px', width:'92%', fontFamily:'monospace', maxHeight:'80vh', overflowY:'auto' }}>
             <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'6px' }}>🎁 初級ボス装備選択箱</div>
+            {bossBoxMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{bossBoxMsg}</div>}
+            {pickConfirm?.kind === 'beginner' ? renderPickConfirm('#ffcc44', () => redeemBeginnerBossBox(pickConfirm.name)) : (<>
             <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'14px', lineHeight:'1.5' }}>
               交換するエリア①〜②のボス装備を1つ選んでください。<br/>
               <span style={{ color:'#ff8844' }}>選択すると箱を1個消費します。</span>
             </div>
-            {bossBoxMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{bossBoxMsg}</div>}
             {bossBoxGot && (
               <div style={{ border:'1px solid #2a6a3a', background:'#04140a', padding:'10px', marginBottom:'12px', color:'#44ff88', fontSize:'12px', lineHeight:'1.5' }}>
                 ✨ 「{bossBoxGot}」を獲得しました！<br/>
@@ -1199,7 +1229,7 @@ export default function Equipment() {
             )}
             <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
               {BEGINNER_BOX_CHOICES.map(c => (
-                <button key={c.name} onClick={() => redeemBeginnerBossBox(c.name)} disabled={loading}
+                <button key={c.name} onClick={() => { setPickConfirm({ kind:'beginner', name:c.name, cost:'箱', unit:'個' }); setBossBoxMsg(''); setBossBoxGot(null) }} disabled={loading}
                   style={{ textAlign:'left', padding:'10px', background:'#001028', border:'1px solid #0055aa', color:'#cce0ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', opacity: loading ? 0.5 : 1 }}>
                   <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'2px' }}>{rarityBadge(c.name)}{c.name}</div>
                   <div style={{ color:'#778899', fontSize:'10px' }}>{c.desc}</div>
@@ -1209,20 +1239,22 @@ export default function Equipment() {
             </div>
             <button onClick={() => setBossBoxPopup(false)} disabled={loading}
               style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{bossBoxGot ? '閉じる' : 'キャンセル'}</button>
+            </>)}
           </div>
         </div>
       )}
 
       {areaBox && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}
-          onClick={() => { if (!loading) setAreaBox(null) }}>
+          onClick={() => { if (!loading) { setAreaBox(null); setPickConfirm(null) } }}>
           <div onClick={e => e.stopPropagation()} style={{ background:'#0a0c1a', border:'1px solid #ffcc44', padding:'20px', maxWidth:'360px', width:'92%', fontFamily:'monospace', maxHeight:'80vh', overflowY:'auto' }}>
             <div style={{ color:'#ffcc44', fontSize:'14px', marginBottom:'6px' }}>🎁 {areaBox.name}</div>
+            {areaBoxMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{areaBoxMsg}</div>}
+            {pickConfirm?.kind === 'area' ? renderPickConfirm('#ffcc44', () => redeemAreaBossBox(areaBox.tier, pickConfirm.name)) : (<>
             <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'14px', lineHeight:'1.5' }}>
               交換する{areaBox.tier}エリアのボス装備を1つ選んでください。<br/>
               <span style={{ color:'#ff8844' }}>選択すると箱を1個消費します。</span>
             </div>
-            {areaBoxMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{areaBoxMsg}</div>}
             {areaBoxGot && (
               <div style={{ border:'1px solid #2a6a3a', background:'#04140a', padding:'10px', marginBottom:'12px', color:'#44ff88', fontSize:'12px', lineHeight:'1.5' }}>
                 ✨ 「{areaBoxGot}」を獲得しました！<br/>
@@ -1231,7 +1263,7 @@ export default function Equipment() {
             )}
             <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
               {areaBox.choices.map(c => (
-                <button key={c.name} onClick={() => redeemAreaBossBox(areaBox.tier, c.name)} disabled={loading}
+                <button key={c.name} onClick={() => { setPickConfirm({ kind:'area', name:c.name, cost:'箱', unit:'個' }); setAreaBoxMsg(''); setAreaBoxGot(null) }} disabled={loading}
                   style={{ textAlign:'left', padding:'10px', background:'#001028', border:'1px solid #0055aa', color:'#cce0ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', opacity: loading ? 0.5 : 1 }}>
                   <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'2px' }}>{rarityBadge(c.name)}{c.name}</div>
                   <div style={{ color:'#778899', fontSize:'10px' }}>{c.desc}</div>
@@ -1241,20 +1273,22 @@ export default function Equipment() {
             </div>
             <button onClick={() => setAreaBox(null)} disabled={loading}
               style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{areaBoxGot ? '閉じる' : 'キャンセル'}</button>
+            </>)}
           </div>
         </div>
       )}
 
       {artBox && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}
-          onClick={() => { if (!loading) setArtBox(false) }}>
+          onClick={() => { if (!loading) { setArtBox(false); setPickConfirm(null) } }}>
           <div onClick={e => e.stopPropagation()} style={{ background:'#0a0c1a', border:'1px solid #cc88ff', padding:'20px', maxWidth:'360px', width:'92%', fontFamily:'monospace', maxHeight:'80vh', overflowY:'auto' }}>
             <div style={{ color:'#cc88ff', fontSize:'14px', marginBottom:'6px' }}>🏺 アーティファクト装備選択箱</div>
+            {artBoxMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{artBoxMsg}</div>}
+            {pickConfirm?.kind === 'artifact' ? renderPickConfirm('#cc88ff', () => redeemArtifactBox(pickConfirm.name)) : (<>
             <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'14px', lineHeight:'1.5' }}>
               受け取るアーティファクト武器を1つ選んでください。<br/>
               <span style={{ color:'#ff8844' }}>選択すると箱を1個消費します。</span>
             </div>
-            {artBoxMsg && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'10px' }}>{artBoxMsg}</div>}
             {artBoxGot && (
               <div style={{ border:'1px solid #2a6a3a', background:'#04140a', padding:'10px', marginBottom:'12px', color:'#44ff88', fontSize:'12px', lineHeight:'1.5' }}>
                 ✨ 「{artBoxGot}」を獲得しました！<br/>
@@ -1263,7 +1297,7 @@ export default function Equipment() {
             )}
             <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
               {ARTIFACT_BOX_CHOICES.map(c => (
-                <button key={c.name} onClick={() => redeemArtifactBox(c.name)} disabled={loading}
+                <button key={c.name} onClick={() => { setPickConfirm({ kind:'artifact', name:c.name, cost:'箱', unit:'個' }); setArtBoxMsg(''); setArtBoxGot(null) }} disabled={loading}
                   style={{ textAlign:'left', padding:'10px', background:'#001028', border:'1px solid #7755aa', color:'#cce0ff', cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'11px', opacity: loading ? 0.5 : 1 }}>
                   <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'2px' }}>{rarityBadge(c.name)}{c.name}</div>
                   <div style={{ color:'#778899', fontSize:'10px' }}>{c.desc}</div>
@@ -1273,6 +1307,7 @@ export default function Equipment() {
             </div>
             <button onClick={() => setArtBox(false)} disabled={loading}
               style={{ width:'100%', marginTop:'12px', padding:'8px', background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>{artBoxGot ? '閉じる' : 'キャンセル'}</button>
+            </>)}
           </div>
         </div>
       )}
