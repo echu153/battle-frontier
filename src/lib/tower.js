@@ -24,6 +24,14 @@ export const sortiesToMidBoss = (floor) => 30 + floor * 10
 // 中ボスの出現率（しきい値到達後の塔出撃ごと・天井なし）
 export const MID_BOSS_RATE = 0.05
 
+// 塔出撃1回で得られるGold（2026-08-03確定）。
+// 敵データの gold は調整用シミュレータの仮値で、街の出撃の何十倍もあり
+// 経済を壊すため、出撃では使わずこの式で固定する。中ボスに当たっても同額。
+export const towerSortieGold = (floor) => floor * 300
+
+// 層主挑戦（6連戦）の間に無限ポーションで回復できる回数の上限（道中を含む・2026-08-03確定）
+export const RUN_POTION_LIMIT = 5
+
 // 塔出撃1回で得られる塔EXP（層によらず固定）
 export const TOWER_EXP_PER_SORTIE = 100
 

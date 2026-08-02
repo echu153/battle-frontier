@@ -51,9 +51,12 @@ CREATE TABLE IF NOT EXISTS tower_player (
   run_stage     int     NOT NULL DEFAULT 0,    -- 0..5（BOSS_RUN_STAGES の添字）
   run_hp        bigint,
   run_mp        bigint,
+  run_potion    int     NOT NULL DEFAULT 0,  -- この連戦で無限ポーションを使った回数（上限5回）
   run_started_at timestamptz,
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
+-- 既存のテーブルには CREATE TABLE IF NOT EXISTS では列が足されないので明示的に足す
+ALTER TABLE tower_player ADD COLUMN IF NOT EXISTS run_potion int NOT NULL DEFAULT 0;
 ALTER TABLE tower_player ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tower_player_select_own ON tower_player;
 CREATE POLICY tower_player_select_own ON tower_player
@@ -156,10 +159,8 @@ LANGUAGE sql IMMUTABLE AS $$
       WHEN 5 THEN 280000   WHEN 6 THEN 460000   WHEN 7 THEN 760000   WHEN 8 THEN 1300000
       WHEN 9 THEN 2300000  WHEN 10 THEN 4000000 ELSE 0 END
   ELSE
-    CASE p_floor
-      WHEN 1 THEN 8000     WHEN 2 THEN 16000    WHEN 3 THEN 28000    WHEN 4 THEN 48000
-      WHEN 5 THEN 80000    WHEN 6 THEN 130000   WHEN 7 THEN 220000   WHEN 8 THEN 380000
-      WHEN 9 THEN 650000   WHEN 10 THEN 1100000 ELSE 0 END
+    -- 塔出撃は「層数×300」で固定（2026-08-03確定）。中ボスに当たっても同額。
+    GREATEST(0, p_floor) * 300
   END
 $$;
 
@@ -296,7 +297,7 @@ BEGIN
     'max_floor',   v_tp.max_floor,
     'run', CASE WHEN v_tp.run_floor IS NULL THEN NULL ELSE json_build_object(
       'floor', v_tp.run_floor, 'stage', v_tp.run_stage,
-      'hp', v_tp.run_hp, 'mp', v_tp.run_mp, 'started_at', v_tp.run_started_at
+      'hp', v_tp.run_hp, 'mp', v_tp.run_mp, 'potion', COALESCE(v_tp.run_potion, 0), 'started_at', v_tp.run_started_at
     ) END,
     'floors',      v_floors
   );
@@ -432,7 +433,10 @@ BEGIN
 END; $$;
 
 -- 1戦終えるごとに呼ぶ（HP/MPを持ち越したままステージを進める）
-CREATE OR REPLACE FUNCTION tower_run_save(p_stage int, p_hp bigint, p_mp bigint)
+-- 旧シグネチャ（3引数）は残すと呼び出しが曖昧になるので落とす
+DROP FUNCTION IF EXISTS tower_run_save(int, bigint, bigint);
+
+CREATE OR REPLACE FUNCTION tower_run_save(p_stage int, p_hp bigint, p_mp bigint, p_potion int DEFAULT 0)
 RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE v_pid uuid; v_tp tower_player%ROWTYPE; v_block text;
@@ -452,6 +456,8 @@ BEGIN
 
   UPDATE tower_player
     SET run_stage = LEAST(p_stage, 6), run_hp = GREATEST(p_hp, 0), run_mp = GREATEST(p_mp, 0),
+        -- 無限ポーションの使用回数は減らせない（リロードで上限を戻す抜け道を塞ぐ）
+        run_potion = GREATEST(COALESCE(run_potion, 0), LEAST(GREATEST(COALESCE(p_potion, 0), 0), 99)),
         updated_at = now()
     WHERE player_id = v_pid;
   RETURN json_build_object('ok', true, 'stage', LEAST(p_stage, 6));
@@ -684,7 +690,7 @@ GRANT EXECUTE ON FUNCTION tower_can_act()                           TO authentic
 GRANT EXECUTE ON FUNCTION get_tower_status()                        TO authenticated;
 GRANT EXECUTE ON FUNCTION tower_sortie_result(int, boolean, boolean, int, int) TO authenticated;
 GRANT EXECUTE ON FUNCTION tower_run_start(int, bigint, bigint)      TO authenticated;
-GRANT EXECUTE ON FUNCTION tower_run_save(int, bigint, bigint)       TO authenticated;
+GRANT EXECUTE ON FUNCTION tower_run_save(int, bigint, bigint, int)  TO authenticated;
 GRANT EXECUTE ON FUNCTION tower_run_abort()                         TO authenticated;
 GRANT EXECUTE ON FUNCTION tower_boss_clear(int, int, int)           TO authenticated;
 GRANT EXECUTE ON FUNCTION tower_tree_set(jsonb)                     TO authenticated;

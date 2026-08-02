@@ -17,7 +17,7 @@ import {
   getFloor, MAX_IMPLEMENTED_FLOOR, BOSS_RUN_STAGES,
   TREE_NODES, TREE_LINES, TREE_MAX_STEPS, TREE_STEP_PCT,
   maxStepsAt, nextUnlock, treeSpent, treeResetCost,
-  MID_BOSS_RATE, isMonumentFloor,
+  MID_BOSS_RATE, isMonumentFloor, towerSortieGold, RUN_POTION_LIMIT,
 } from '../lib/tower'
 import { simulateTowerBattle, buildStageEnemies, buildSortieEnemies, towerTreeEffects } from '../lib/towerBattle'
 
@@ -128,7 +128,7 @@ export default function Tower() {
         setSelFloor(next ? next.floor : Math.min(MAX_IMPLEMENTED_FLOOR, (data.max_floor || 0) + 1) || 1)
       }
       if (data.run) {
-        setRunInfo({ floor: data.run.floor, stage: data.run.stage, hp: Number(data.run.hp), mp: Number(data.run.mp), resumed: true })
+        setRunInfo({ floor: data.run.floor, stage: data.run.stage, hp: Number(data.run.hp), mp: Number(data.run.mp), potionUsed: Number(data.run.potion || 0), resumed: true })
       }
     }
   }
@@ -190,7 +190,7 @@ export default function Tower() {
       const exp = 1 + (Math.random() < tr.expPlus ? 1 : 0)
       const { data, error } = await withTimeout(supabase.rpc('tower_sortie_result', {
         p_floor: floor, p_won: res.win, p_mid_defeat: isMid && res.win,
-        p_gold: res.gold, p_exp: res.win ? exp : 0,
+        p_gold: res.win ? towerSortieGold(floor) : 0, p_exp: res.win ? exp : 0,
       }))
       if (error || data?.error) {
         setMsg(data?.error || error?.message || '結果の反映に失敗しました')
@@ -217,7 +217,7 @@ export default function Tower() {
       const hpMax = Math.floor(eff.hp_max * tr.hpMult)
       const { data, error } = await withTimeout(supabase.rpc('tower_run_start', { p_floor: floor, p_hp: hpMax, p_mp: eff.mp_max }))
       if (error || data?.error) { setMsg(data?.error || error?.message || '連戦を開始できませんでした'); return }
-      setRunInfo({ floor, stage: 0, hp: hpMax, mp: eff.mp_max })
+      setRunInfo({ floor, stage: 0, hp: hpMax, mp: eff.mp_max, potionUsed: 0 })
       setScene('battle')
     } catch (e) {
       setMsg(e?.message === 'timeout' ? '通信がタイムアウトしました。' : '開始処理でエラーが発生しました。')
@@ -241,6 +241,7 @@ export default function Tower() {
         eff: buildEff(), equipment, skillSets, profile,
         enemies, floorData: fd, tree: treeAlloc, targetMode,
         startHp: runInfo.hp, startMp: runInfo.mp, playerItem,
+        potionUsed: runInfo.potionUsed || 0, potionLimit: RUN_POTION_LIMIT,
       })
       setLogs(res.logs)
       if (res.itemUsed) await consumeItem()
@@ -260,9 +261,9 @@ export default function Tower() {
         await withTimeout(fetchStatus())
         return
       }
-      const { data, error } = await withTimeout(supabase.rpc('tower_run_save', { p_stage: stage + 1, p_hp: res.hp, p_mp: res.mp }))
+      const { data, error } = await withTimeout(supabase.rpc('tower_run_save', { p_stage: stage + 1, p_hp: res.hp, p_mp: res.mp, p_potion: res.potionUsed }))
       if (error || data?.error) { setMsg(data?.error || error?.message || '進行の保存に失敗しました'); return }
-      setRunInfo({ ...runInfo, stage: stage + 1, hp: res.hp, mp: res.mp, hpMax: res.hpMax, mpMax: res.mpMax })
+      setRunInfo({ ...runInfo, stage: stage + 1, hp: res.hp, mp: res.mp, hpMax: res.hpMax, mpMax: res.mpMax, potionUsed: res.potionUsed })
       setGain({ win: true, stageLabel: BOSS_RUN_STAGES[stage].label, hp: res.hp, mp: res.mp, hpMax: res.hpMax, mpMax: res.mpMax })
     } catch (e) {
       setMsg(e?.message === 'timeout' ? '通信がタイムアウトしました。' : '戦闘処理でエラーが発生しました。')
@@ -366,6 +367,9 @@ export default function Tower() {
         {inRun && (
           <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '8px 10px', marginBottom: '8px', fontSize: '11px', color: C.text }}>
             持ち越し HP <span style={{ color: C.ok }}>{fmt(runInfo.hp)}</span> ／ MP <span style={{ color: C.accent }}>{fmt(runInfo.mp)}</span>
+            <span style={{ color: C.gold, marginLeft: '10px' }}>
+              🧪 無限ポーション 残り{Math.max(0, RUN_POTION_LIMIT - (runInfo.potionUsed || 0))}/{RUN_POTION_LIMIT}回
+            </span>
             <div style={{ color: C.dim, fontSize: '10px', marginTop: '3px' }}>連戦の間、HP・MPは回復しません。中断してもこの状態から再開します。</div>
           </div>
         )}

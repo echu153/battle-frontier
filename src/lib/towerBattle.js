@@ -47,6 +47,8 @@ export function simulateTowerBattle({
   tree = {}, targetMode = DEFAULT_TARGET_MODE,
   startHp = null, startMp = null,
   playerItem = null,      // 装備中のアイテム（塔でも街と同じように使える）
+  potionUsed = 0,         // 無限ポーションをこの連戦で何回使ったか（持ち越す）
+  potionLimit = Infinity, // 無限ポーションの回復回数の上限（層主挑戦は道中含めて5回）
   turnCap: turnCapIn = null,
 }) {
   const logs = []
@@ -59,7 +61,7 @@ export function simulateTowerBattle({
     logs.push({ text: `力尽きている…（HPが残っていない）`, color: '#ff4444' })
     return {
       logs, win: false, turns: 0, hp: 0, mp: Math.max(0, startMp || 0),
-      hpMax: eff.hp_max, mpMax: eff.mp_max, itemUsed: false, gold: 0,
+      hpMax: eff.hp_max, mpMax: eff.mp_max, itemUsed: false, gold: 0, potionUsed: Math.max(0, potionUsed || 0),
     }
   }
   let playerHp = startHp == null ? eff.hp_max : Math.min(eff.hp_max, Math.max(1, startHp))
@@ -76,6 +78,7 @@ export function simulateTowerBattle({
   //  DBの数量減らしは戦闘後に呼び出し側が行う（この関数は同期・副作用なしに保つ）
   let currentItem = playerItem ? { ...playerItem } : null
   let itemUsed = false        // 使い切りアイテムを消費したか
+  let potionCount = Math.max(0, potionUsed || 0)   // 無限ポーションの累計使用回数
   // 地響き（10層）：敵の攻撃が当たるたび、こちらの素早さが下がっていく（最大-50%）
   let quakeStacks = 0
   let quakeStep = 0
@@ -932,24 +935,40 @@ export function simulateTowerBattle({
       const effect = currentItem.items.effect
       const isInfinite = effect === 'hp_pct_infinite' || effect === 'mp_pct_infinite'
       const onCooldown = (playerBuffs.potionCooldown?.turns || 0) > 0
-      const canUse = isInfinite ? !onCooldown : !itemUsed
+      // 無限ポーションは層主挑戦の間だけ回数上限がある（道中を含めて数える）
+      const potionLeft = potionLimit - potionCount
+      const canUse = isInfinite ? (!onCooldown && potionLeft > 0) : !itemUsed
+      // 上限に達したことを1度だけ知らせる
+      if (isInfinite && !onCooldown && potionLeft <= 0 && !playerBuffs.potionLimitNoticed) {
+        const low = (effect === 'hp_pct_infinite' && playerHp / eff.hp_max * 100 <= threshold)
+          || (effect === 'mp_pct_infinite' && playerMp / eff.mp_max * 100 <= threshold)
+        if (low) {
+          playerBuffs.potionLimitNoticed = true
+          logs.push({ text: `🚫 ${currentItem.items.name}はこの挑戦ではもう使えない（${potionLimit}回まで）`, color: '#ff8844' })
+        }
+      }
+      const usedInfinite = () => {
+        potionCount++
+        playerBuffs.potionCooldown = { turns: 5 }
+        const left = potionLimit - potionCount
+        logs.push({
+          text: `⏳ 5ターンのクールダウンが入った！${Number.isFinite(potionLimit) ? `（残り${Math.max(0, left)}回）` : ''}`,
+          color: '#aaaaaa',
+        })
+      }
       if (canUse) {
         if ((effect === 'hp_pct' || effect === 'hp_pct_infinite') && playerHp / eff.hp_max * 100 <= threshold) {
           const healAmt = Math.floor(eff.hp_max * currentItem.items.value / 100)
           playerHp = Math.min(eff.hp_max, playerHp + healAmt)
           logs.push({ text: `🧪 ${currentItem.items.name}を使用！ HPが${healAmt}回復した！`, color: '#44ff88' })
-          if (isInfinite) {
-            playerBuffs.potionCooldown = { turns: 5 }
-            logs.push({ text: `⏳ 5ターンのクールダウンが入った！`, color: '#aaaaaa' })
-          } else { itemUsed = true; currentItem = null }
+          if (isInfinite) usedInfinite()
+          else { itemUsed = true; currentItem = null }
         } else if ((effect === 'mp_pct' || effect === 'mp_pct_infinite') && playerMp / eff.mp_max * 100 <= threshold) {
           const healAmt = Math.floor(eff.mp_max * currentItem.items.value / 100)
           playerMp = Math.min(eff.mp_max, playerMp + healAmt)
           logs.push({ text: `🧪 ${currentItem.items.name}を使用！ MPが${healAmt}回復した！`, color: '#4488ff' })
-          if (isInfinite) {
-            playerBuffs.potionCooldown = { turns: 5 }
-            logs.push({ text: `⏳ 5ターンのクールダウンが入った！`, color: '#aaaaaa' })
-          } else { itemUsed = true; currentItem = null }
+          if (isInfinite) usedInfinite()
+          else { itemUsed = true; currentItem = null }
         }
       }
     }
@@ -1066,7 +1085,8 @@ export function simulateTowerBattle({
     logs, win, turns,
     hp: Math.max(0, playerHp), mp: Math.max(0, playerMp),
     hpMax: eff.hp_max, mpMax: eff.mp_max,
-    itemUsed,   // 使い切りアイテムを消費した＝呼び出し側でDBの数量を減らす
+    itemUsed,     // 使い切りアイテムを消費した＝呼び出し側でDBの数量を減らす
+    potionUsed: potionCount,   // 無限ポーションの累計使用回数（連戦の次の戦へ持ち越す）
     gold: win ? enemies.reduce((s, e) => s + (e.isSummoned ? 0 : (e.gold || 0)), 0) : 0,
   }
 }
