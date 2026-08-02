@@ -6306,6 +6306,9 @@ export default function Game() {
                           {profile?.is_admin && (
                             <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                           )}
+                          {profile?.is_admin && (
+                            <button onClick={()=>{ nav('/tower'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1020', border:'1px solid #7fd4ff', color:'#7fd4ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🗼 星霜百層塔 <span style={{ fontSize:'9px', color:'#5f7099' }}>[開発]</span></button>
+                          )}
                         </div>
                       )}
                       </MenuCat>
@@ -6386,6 +6389,9 @@ export default function Game() {
                   {profile?.is_admin && (
                     <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                   )}
+                          {profile?.is_admin && (
+                            <button onClick={()=>{ nav('/tower'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1020', border:'1px solid #7fd4ff', color:'#7fd4ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🗼 星霜百層塔 <span style={{ fontSize:'9px', color:'#5f7099' }}>[開発]</span></button>
+                          )}
                 </div>
               )}
                 </>
@@ -6894,6 +6900,9 @@ export default function Game() {
                             {profile?.is_admin && (
                               <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                             )}
+                          {profile?.is_admin && (
+                            <button onClick={()=>{ nav('/tower'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1020', border:'1px solid #7fd4ff', color:'#7fd4ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🗼 星霜百層塔 <span style={{ fontSize:'9px', color:'#5f7099' }}>[開発]</span></button>
+                          )}
                           </div>
                         )}
                         </MenuCat>
@@ -6974,6 +6983,9 @@ export default function Game() {
                     {profile?.is_admin && (
                       <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                     )}
+                          {profile?.is_admin && (
+                            <button onClick={()=>{ nav('/tower'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1020', border:'1px solid #7fd4ff', color:'#7fd4ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🗼 星霜百層塔 <span style={{ fontSize:'9px', color:'#5f7099' }}>[開発]</span></button>
+                          )}
                   </div>
                 )}
                   </>

@@ -145,6 +145,65 @@ BEGIN
   RETURN NULL;
 END; $$;
 
+-- ------------------------------------------------------------
+-- Gold と 通常EXP の付与（街の出撃と同じ扱い）
+--  ⚠ profiles.exp は protect_stats の保護列なので、
+--    set_config('app.allow_stat_change','on',true) を立てないと
+--    「不正な操作です（ステータスはサーバ経由でのみ変更できます）」で弾かれる。
+--  ⚠ EXPを足すだけではレベルが上がらないので、出撃と同じ繰り上がり処理を行う。
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION tower_grant_rewards(p_uid uuid, p_gold int, p_exp int)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_profile  profiles%ROWTYPE;
+  v_frozen   boolean;
+  v_class_lv int;
+  v_cap      int;
+  v_new_exp  int; v_new_lv int; v_new_next int; v_new_pending int; v_new_char_lv int;
+BEGIN
+  SELECT * INTO v_profile FROM profiles WHERE id = p_uid;
+  IF NOT FOUND THEN RETURN; END IF;
+
+  PERFORM set_config('app.allow_stat_change','on',true);  -- ★保護トリガー許可
+
+  IF COALESCE(p_gold, 0) > 0 THEN
+    UPDATE profiles SET gold = COALESCE(gold, 0) + p_gold WHERE id = p_uid;
+  END IF;
+
+  IF COALESCE(p_exp, 0) <= 0 THEN RETURN; END IF;
+
+  -- EXP凍結中／クラスLVが上限のときは通常EXPを入れない（出撃と同じ）
+  v_frozen := COALESCE(v_profile.exp_frozen, false)
+    OR (v_profile.exp_frozen_until IS NOT NULL AND v_profile.exp_frozen_until > now());
+  SELECT lv INTO v_class_lv FROM class_levels
+    WHERE player_id = p_uid AND class_name = v_profile.class;
+  v_class_lv := COALESCE(v_class_lv, v_profile.lv);
+  v_cap := public.class_level_cap(v_profile.class, v_profile.retraining);
+  IF v_frozen OR v_class_lv >= v_cap THEN RETURN; END IF;
+
+  v_new_exp      := COALESCE(v_profile.exp, 0) + p_exp;
+  v_new_lv       := v_profile.lv;
+  v_new_next     := calc_exp_next(v_new_lv);
+  v_new_pending  := COALESCE(v_profile.pending_stat_points, 0);
+  v_new_char_lv  := COALESCE(v_profile.char_lv, 1);
+  WHILE v_new_exp >= v_new_next AND v_new_lv < v_cap LOOP
+    v_new_exp     := v_new_exp - v_new_next;
+    v_new_lv      := v_new_lv + 1;
+    v_new_next    := calc_exp_next(v_new_lv);
+    v_new_pending := v_new_pending + 1;
+    v_new_char_lv := v_new_char_lv + 1;
+  END LOOP;
+  IF v_new_lv >= v_cap THEN v_new_exp := 0; v_new_next := calc_exp_next(v_cap); END IF;
+
+  UPDATE profiles SET
+    exp = v_new_exp, exp_next = v_new_next, lv = v_new_lv,
+    pending_stat_points = v_new_pending, char_lv = v_new_char_lv
+  WHERE id = p_uid;
+  UPDATE class_levels SET lv = v_new_lv, exp = v_new_exp
+    WHERE player_id = p_uid AND class_name = v_profile.class;
+END; $$;
+
 -- クライアントが戦闘を始める前に確認するための入口（権威は各RPC側の同じチェック）
 CREATE OR REPLACE FUNCTION tower_can_act() RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
@@ -293,12 +352,9 @@ BEGIN
   ON CONFLICT (player_id) DO UPDATE
     SET tower_exp = tower_player.tower_exp + tower_exp_per_sortie(), updated_at = now();
 
-  -- Gold と 通常EXP（勝った時だけ）。profiles の保護列(atk/def等)は触らない。
+  -- Gold と 通常EXP（勝った時だけ）。街の出撃と同じ扱い（レベルアップまで処理する）
   IF p_won AND (v_gold > 0 OR v_exp > 0) THEN
-    UPDATE profiles SET
-      gold = COALESCE(gold, 0) + v_gold,
-      exp  = COALESCE(exp, 0)  + v_exp
-    WHERE id = v_pid;
+    PERFORM tower_grant_rewards(v_pid, v_gold, v_exp);
   END IF;
 
   RETURN json_build_object(
@@ -457,10 +513,7 @@ BEGIN
     v_first := (v_rows > 0);   -- 1行入った＝サーバーで最初の1人だった
   END IF;
 
-  UPDATE profiles SET
-    gold = COALESCE(gold, 0) + v_gold,
-    exp  = COALESCE(exp, 0)  + v_exp
-  WHERE id = v_pid;
+  PERFORM tower_grant_rewards(v_pid, v_gold, v_exp);
 
   RETURN json_build_object(
     'ok', true, 'floor', p_floor,

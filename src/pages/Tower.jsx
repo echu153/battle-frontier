@@ -2,7 +2,7 @@
 // 星霜百層塔（せいそうひゃくそうとう）
 // ------------------------------------------------------------
 // ・現状 is_admin 限定の開発先行（サーバ側 tower_can_enter() が本番の権威）
-// ・入口は「⚔ 挑戦」＝ /abyss のタブから切り替える
+// ・入口は街メニューの「⚔ 挑戦」→「🗼 星霜百層塔」（/tower の独立ページ）
 // ・内部推奨戦闘力は開発上の目安であり、画面には出さない
 // ============================================================
 import { useState, useEffect, useRef } from 'react'
@@ -287,16 +287,29 @@ export default function Tower() {
     await fetchStatus()
   }
 
+
+  // 独立したページなので、他の画面と同じガワ（ヘッダ＋街に戻る）を持つ
+  const Shell = ({ children }) => (
+    <div style={{ minHeight: '100vh', background: C.bg, padding: '12px', fontFamily: 'monospace' }}>
+      <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${C.line}`, paddingBottom: '8px', marginBottom: '12px', position: 'sticky', top: 0, zIndex: 30, paddingTop: '8px', background: C.bg }}>
+          <div style={{ color: C.accent, fontSize: '16px', letterSpacing: '3px' }}>🗼 星霜百層塔</div>
+          <button onClick={() => nav('/game')} style={{ background: 'none', border: `1px solid ${C.line}`, color: C.text, padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>🏰 街に戻る</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+
   // ============================================================
   if (!profile || !status) {
     return <div style={{ color: C.accent, textAlign: 'center', marginTop: '30vh', fontFamily: 'monospace' }}>読み込み中...</div>
   }
   if (status.error) {
     return (
-      <div style={{ padding: '20px', fontFamily: 'monospace', color: C.ng, textAlign: 'center' }}>
-        <div style={{ marginBottom: '8px' }}>🗼 星霜百層塔</div>
-        <div style={{ fontSize: '12px', color: C.dim }}>{status.error}</div>
-      </div>
+      <Shell>
+        <div style={{ padding: '20px', color: C.ng, textAlign: 'center', fontSize: '12px' }}>{status.error}</div>
+      </Shell>
     )
   }
 
@@ -309,10 +322,10 @@ export default function Tower() {
     const inRun = !!runInfo
     const stageLabel = inRun ? BOSS_RUN_STAGES[runInfo.stage]?.label : null
     return (
-      <div style={{ fontFamily: 'monospace' }}>
+      <Shell>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
           <div style={{ color: C.accent, fontSize: '13px' }}>
-            🗼 {floorLabel(inRun ? runInfo.floor : selFloor)}
+            {floorLabel(inRun ? runInfo.floor : selFloor)}
             {inRun && <span style={{ color: C.gold, marginLeft: '8px' }}>層主への道 {runInfo.stage + 1}/{BOSS_RUN_STAGES.length}（{stageLabel}）</span>}
           </div>
           {!busy && (
@@ -373,7 +386,7 @@ export default function Tower() {
                 <div style={{ color: C.ok }}>勝利！ Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ 塔EXP +{fmt(gain.towerExp)}</div>
                 {gain.midCleared && <div style={{ color: C.gold }}>⚔ 中ボスを撃破！ 層主に挑めるようになった。</div>}
                 {gain.mid && !gain.midCleared && <div style={{ color: C.ng }}>中ボスが現れたが、退けられた…</div>}
-                <div style={{ color: C.dim }}>この層の探索 {fmt(gain.count)} / {fmt(gain.need)} 回</div>
+                <div style={{ color: C.dim }}>この層の出撃 {fmt(gain.count)} / {fmt(gain.need)} 回</div>
               </>
             )}
           </div>
@@ -390,21 +403,21 @@ export default function Tower() {
           )}
           {!inRun && !gain?.cleared && (
             <button onClick={() => doSortie(selFloor)} disabled={busy} style={btn(C.accent, busy)}>
-              {busy ? '戦闘中...' : 'もう一度 探索する'}
+              {busy ? '戦闘中...' : 'もう一度 出撃する'}
             </button>
           )}
         </div>
-      </div>
+      </Shell>
     )
   }
 
   // ── ロビー ──────────────────────────────────────────────────
   return (
-    <div style={{ fontFamily: 'monospace' }}>
+    <Shell>
       {/* 塔LV・タブ */}
       <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '10px 12px', marginBottom: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px' }}>
-          <div style={{ color: C.accent, fontSize: '13px' }}>🗼 星霜百層塔</div>
+          <div style={{ color: C.dim, fontSize: '11px' }}>階層</div>
           <div style={{ color: C.text, fontSize: '11px' }}>
             塔LV <span style={{ color: C.gold, fontSize: '14px' }}>{status.tower_lv}</span>
             <span style={{ color: C.dim, marginLeft: '8px' }}>{fmt(status.exp_in_lv)} / {fmt(status.exp_to_next)}</span>
@@ -449,54 +462,57 @@ export default function Tower() {
             <button onClick={() => nav('/skills')} style={btn(C.dim)}>スキル設定で変更 ↗</button>
           </div>
 
-          {floors.map(f => {
-            const data = getFloor(f.floor)
-            const open = f.unlocked
-            const isSel = f.floor === selFloor
-            return (
-              <div key={f.floor}
-                onClick={() => open && setSelFloor(f.floor)}
-                style={{
-                  border: `1px solid ${isSel ? C.accent : C.line}`, background: open ? (isSel ? '#0d1730' : C.panel) : '#080a12',
-                  padding: '10px 12px', marginBottom: '6px', cursor: open ? 'pointer' : 'default', opacity: open ? 1 : 0.45,
-                }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ color: f.boss_cleared ? C.dim : C.text, fontSize: '12px' }}>
-                    {isMonumentFloor(f.floor) && '🗿 '}{floorLabel(f.floor)}　<span style={{ color: C.dim }}>{data?.boss || '？'}</span>
-                  </div>
-                  <div style={{ fontSize: '10px', color: f.boss_cleared ? C.ok : open ? C.gold : C.dim }}>
-                    {f.boss_cleared ? '✓ 踏破' : open ? (f.mid_defeated ? '層主に挑戦可' : `探索 ${f.sortie_count}/${f.need}`) : '未解放'}
-                  </div>
+          {/* 層の選択（街の出撃のエリア選択と同じプルダウン形式） */}
+          <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '12px', marginBottom: '10px' }}>
+            <div style={{ color: C.text, fontSize: '11px', marginBottom: '6px' }}>挑む層</div>
+            <select
+              value={selFloor}
+              onChange={e => setSelFloor(Number(e.target.value))}
+              disabled={busy || !!runInfo}
+              style={{
+                width: '100%', background: '#001028', border: `1px solid ${C.accent}`, color: C.accent,
+                fontFamily: 'monospace', fontSize: '13px', padding: '8px',
+              }}>
+              {floors.map(f => (
+                <option key={f.floor} value={f.floor} disabled={!f.unlocked}>
+                  {floorLabel(f.floor)}　{getFloor(f.floor)?.boss || '？'}
+                  {f.boss_cleared ? '（踏破済）' : f.unlocked ? '' : '（未解放）'}
+                </option>
+              ))}
+            </select>
+
+            {sel?.unlocked && fd && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', fontSize: '11px' }}>
+                  <span style={{ color: C.text }}>
+                    {isMonumentFloor(selFloor) && '🗿 '}層主「<span style={{ color: C.gold }}>{fd.boss}</span>」
+                  </span>
+                  <span style={{ color: sel.boss_cleared ? C.ok : sel.mid_defeated ? C.gold : C.dim, fontSize: '10px' }}>
+                    {sel.boss_cleared ? '✓ 踏破済' : sel.mid_defeated ? '層主に挑戦可' : `出撃 ${sel.sortie_count}/${sel.need}`}
+                  </span>
                 </div>
-                {open && !f.boss_cleared && (
+                {!sel.boss_cleared && (
                   <div style={{ height: '3px', background: '#101830', marginTop: '6px' }}>
-                    <div style={{ height: '100%', width: `${Math.min(100, (f.sortie_count / Math.max(1, f.need)) * 100)}%`, background: f.mid_defeated ? C.gold : C.accent }} />
+                    <div style={{ height: '100%', width: `${Math.min(100, (sel.sortie_count / Math.max(1, sel.need)) * 100)}%`, background: sel.mid_defeated ? C.gold : C.accent }} />
                   </div>
                 )}
-              </div>
-            )
-          })}
-
-          {/* 選択中の層の操作 */}
-          {sel?.unlocked && fd && (
-            <div style={{ border: `1px solid ${C.accent}`, background: C.panel, padding: '12px', marginTop: '10px' }}>
-              <div style={{ color: C.accent, fontSize: '13px', marginBottom: '4px' }}>{floorLabel(selFloor)}　層主「{fd.boss}」</div>
-              <div style={{ color: C.dim, fontSize: '10px', lineHeight: '1.8', marginBottom: '10px' }}>
-                探索を <span style={{ color: C.text }}>{fmt(sel.need)}</span> 回こなすと中ボスが現れるようになります（1回の探索につき{Math.round(MID_BOSS_RATE * 100)}%）。<br />
-                中ボスを倒すと層主へ挑戦できます。層主への道は<span style={{ color: C.gold }}>{BOSS_RUN_STAGES.length}連戦</span>で、その間HP・MPは回復しません。<br />
-                探索・連戦の開始時はHP・MPが満タンになります（街のHPとは別枠）。
-              </div>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button onClick={() => doSortie(selFloor)} disabled={busy || !!runInfo} style={btn(C.accent, busy || !!runInfo)}>🔍 探索する</button>
-                <button onClick={() => (runInfo ? setScene('battle') : startRun(selFloor))} disabled={busy || !sel.mid_defeated} style={btn(C.gold, busy || !sel.mid_defeated)}>
-                  ⚔ 層主に挑む
-                </button>
-              </div>
-              {!sel.mid_defeated && sel.sortie_count >= sel.need && (
-                <div style={{ color: C.gold, fontSize: '10px', marginTop: '8px' }}>中ボスが出現するようになりました。探索を続けて遭遇を狙いましょう。</div>
-              )}
-            </div>
-          )}
+                <div style={{ color: C.dim, fontSize: '10px', lineHeight: '1.8', margin: '10px 0' }}>
+                  出撃を <span style={{ color: C.text }}>{fmt(sel.need)}</span> 回こなすと中ボスが現れるようになります（1回の出撃につき{Math.round(MID_BOSS_RATE * 100)}%）。<br />
+                  中ボスを倒すと層主へ挑戦できます。層主への道は<span style={{ color: C.gold }}>{BOSS_RUN_STAGES.length}連戦</span>で、その間HP・MPは回復しません。<br />
+                  出撃・連戦の開始時はHP・MPが満タンになります（街のHPとは別枠）。
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button onClick={() => doSortie(selFloor)} disabled={busy || !!runInfo} style={btn(C.accent, busy || !!runInfo)}>⚔ 出撃する</button>
+                  <button onClick={() => (runInfo ? setScene('battle') : startRun(selFloor))} disabled={busy || !sel.mid_defeated} style={btn(C.gold, busy || !sel.mid_defeated)}>
+                    🗼 層主に挑む
+                  </button>
+                </div>
+                {!sel.mid_defeated && sel.sortie_count >= sel.need && (
+                  <div style={{ color: C.gold, fontSize: '10px', marginTop: '8px' }}>中ボスが出現するようになりました。出撃を続けて遭遇を狙いましょう。</div>
+                )}
+              </>
+            )}
+          </div>
         </>
       )}
 
@@ -560,8 +576,7 @@ export default function Tower() {
           ))}
         </div>
       )}
-
-    </div>
+    </Shell>
   )
 }
 

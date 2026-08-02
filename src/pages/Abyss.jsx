@@ -24,7 +24,6 @@ import {
   MULTI_HIT_SKILLS,
 } from './Game'
 import { ABYSS_FLOOR_COUNT, ABYSS_DEFINED_FLOORS, getAbyssFloor } from '../lib/abyss'
-import Tower from './Tower'
 import { isEvent20260720Active } from '../lib/event20260720'
 
 const STONE_NAME = (r) => `強化石(${r})`
@@ -887,7 +886,6 @@ export default function Abyss() {
   const [playerItem, setPlayerItem] = useState(null)
   const [abilityTitle, setAbilityTitle] = useState(null)
   const [status, setStatus] = useState(null)   // { cleared_floor, can_challenge, next_floor, reset_at }
-  const [mainTab, setMainTab] = useState('abyss')  // 'abyss' | 'tower'（塔は is_admin 限定）
   const [scene, setScene] = useState('lobby')   // 'lobby' | 'battle'
   const [battleLogs, setBattleLogs] = useState([])
   const [battling, setBattling] = useState(false)
@@ -1070,27 +1068,11 @@ export default function Abyss() {
       <div style={{ maxWidth:'640px', margin:'0 auto' }}>
         {/* ヘッダー */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #3a1f5a', paddingBottom:'8px', marginBottom:'12px', position:'sticky', top:0, zIndex:30, paddingTop:'8px', background:'#0a0612' }}>
-          <div style={{ color:'#c08cff', fontSize:'16px', letterSpacing:'3px' }}>{mainTab === 'tower' ? '🗼 星霜百層塔' : '🕯 奈落闘技場'}</div>
+          <div style={{ color:'#c08cff', fontSize:'16px', letterSpacing:'3px' }}>🕯 奈落闘技場</div>
           <button onClick={()=>nav('/game')} style={{ background:'none', border:'1px solid #6644aa', color:'#9977cc', padding:'4px 10px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>🏰 街に戻る</button>
         </div>
 
-        {/* 挑戦コンテンツの切り替え（塔は開発限定＝is_adminのみタブを出す。サーバ側 tower_can_enter() が本番の権威） */}
-        {profile?.is_admin && (
-          <div style={{ display:'flex', gap:'6px', marginBottom:'12px' }}>
-            {[{ k:'abyss', label:'🕯 奈落闘技場' }, { k:'tower', label:'🗼 星霜百層塔 [開発]' }].map(t => (
-              <button key={t.k} onClick={()=>setMainTab(t.k)} style={{
-                background: mainTab === t.k ? '#241038' : '#0d0a14',
-                border:`1px solid ${mainTab === t.k ? '#c08cff' : '#3a2a5a'}`,
-                color: mainTab === t.k ? '#c08cff' : '#7a6a9a',
-                padding:'5px 12px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px',
-              }}>{t.label}</button>
-            ))}
-          </div>
-        )}
-
-        {mainTab === 'tower' && <Tower />}
-
-        {mainTab === 'abyss' && scene === 'lobby' && (
+        {scene === 'lobby' && (
           <>
             {/* 進行状況 */}
             <div style={{ border:'1px solid #4a2a6a', background:'#150a22', padding:'12px', marginBottom:'10px' }}>
@@ -1178,7 +1160,7 @@ export default function Abyss() {
           </>
         )}
 
-        {mainTab === 'abyss' && scene === 'battle' && (() => {
+        {scene === 'battle' && (() => {
           const bf = battleFloor || targetFloor
           const bEnemy = getAbyssFloor(bf)?.enemy
           return (
