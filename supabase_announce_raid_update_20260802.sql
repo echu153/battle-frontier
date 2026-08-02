@@ -1,12 +1,14 @@
 -- ============================================================
 -- お知らせ: レイドボスのアップデート（出撃ボーナスEXP／強者の結晶／かかし中のEXP）
---   announcements へ INSERT。category='update'。タイトルに日付は入れない(created_atで自動表示)。
+--   announcements へ INSERT。category='update'。
+--   ★タイトルは「アップデート情報：○○」で固定・末尾は体言止め（「〜しました」を付けない）。
+--     日付は入れない(created_atで自動表示)。
 --   ★ supabase_raid_update_20260802.sql を適用してから流すこと。
 --   対象コミット: 9a9f2ab / 1ef0df4
 -- ============================================================
 INSERT INTO announcements (title, content, category, is_active, created_at)
 VALUES (
-  'レイドボスのアップデートのお知らせ',
+  'アップデート情報：レイドに出撃ボーナスEXPと強者の結晶を追加',
 $$いつもプレイいただきありがとうございます。
 レイドボスに以下のアップデートを行いました。
 
