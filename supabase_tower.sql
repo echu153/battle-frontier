@@ -118,6 +118,45 @@ LANGUAGE sql IMMUTABLE AS $$
   -- SELECT COALESCE(p_profile.is_admin, false) OR COALESCE(p_profile.char_lv, 1) >= 1000
 $$;
 
+-- 塔で行動できない状態なら理由を返す（行動できるなら NULL）
+-- 条件は街の出撃とまったく同じ: 釣り中／かかし修練中／ペットダンジョン探索中(中断中を除く)
+CREATE OR REPLACE FUNCTION tower_idle_block(p_uid uuid) RETURNS text
+LANGUAGE plpgsql STABLE SECURITY DEFINER AS $$
+DECLARE v_flag boolean;
+BEGIN
+  SELECT COALESCE(is_fishing, false) INTO v_flag FROM profiles WHERE id = p_uid;
+  IF COALESCE(v_flag, false) THEN
+    RETURN '🎣 釣り中は塔に入れません。先に釣りを終了してください。';
+  END IF;
+
+  SELECT true INTO v_flag FROM scarecrow_sessions
+    WHERE player_id = p_uid AND status = 'active' AND ends_at > now() LIMIT 1;
+  IF COALESCE(v_flag, false) THEN
+    RETURN '🌾 かかし修練中は塔に入れません。修練が終わるまで待ちましょう。';
+  END IF;
+
+  v_flag := NULL;
+  SELECT true INTO v_flag FROM dungeon_runs
+    WHERE owner_id = p_uid AND status = 'active' AND COALESCE(suspended, false) = false LIMIT 1;
+  IF COALESCE(v_flag, false) THEN
+    RETURN '🕳 ダンジョン探索中は塔に入れません。中断するか終えてからにしましょう。';
+  END IF;
+
+  RETURN NULL;
+END; $$;
+
+-- クライアントが戦闘を始める前に確認するための入口（権威は各RPC側の同じチェック）
+CREATE OR REPLACE FUNCTION tower_can_act() RETURNS json
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE v_pid uuid; v_block text;
+BEGIN
+  v_pid := auth.uid();
+  IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
+  v_block := tower_idle_block(v_pid);
+  IF v_block IS NOT NULL THEN RETURN json_build_object('error', v_block); END IF;
+  RETURN json_build_object('ok', true);
+END; $$;
+
 -- ============================================================
 -- 3. 状況取得
 -- ============================================================
@@ -206,6 +245,7 @@ DECLARE
   v_need    int;
   v_gold    int;
   v_exp     int;
+  v_block   text;
 BEGIN
   v_pid := auth.uid();
   IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
@@ -217,6 +257,9 @@ BEGIN
   IF NOT tower_can_enter(v_profile) THEN
     RETURN json_build_object('error', 'まだ塔には入れません');
   END IF;
+  -- 街の出撃と同じ排他（釣り／かかし／ペットダンジョン）
+  v_block := tower_idle_block(v_pid);
+  IF v_block IS NOT NULL THEN RETURN json_build_object('error', v_block); END IF;
 
   -- その層が解放されているか（1層は常に可・2層以降は前の層の層主撃破が必要）
   IF p_floor > 1 THEN
@@ -276,13 +319,15 @@ CREATE OR REPLACE FUNCTION tower_run_start(p_floor int, p_hp bigint, p_mp bigint
 RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
-  v_pid uuid; v_profile profiles%ROWTYPE; v_mid boolean; v_prev boolean;
+  v_pid uuid; v_profile profiles%ROWTYPE; v_mid boolean; v_prev boolean; v_block text;
 BEGIN
   v_pid := auth.uid();
   IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
   SELECT * INTO v_profile FROM profiles WHERE id = v_pid;
   IF NOT tower_can_enter(v_profile) THEN RETURN json_build_object('error', 'まだ塔には入れません'); END IF;
   IF p_floor < 1 OR p_floor > tower_max_floor() THEN RETURN json_build_object('error', '層が不正です'); END IF;
+  v_block := tower_idle_block(v_pid);
+  IF v_block IS NOT NULL THEN RETURN json_build_object('error', v_block); END IF;
 
   IF p_floor > 1 THEN
     SELECT COALESCE(boss_cleared, false) INTO v_prev
@@ -310,10 +355,12 @@ END; $$;
 CREATE OR REPLACE FUNCTION tower_run_save(p_stage int, p_hp bigint, p_mp bigint)
 RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE v_pid uuid; v_tp tower_player%ROWTYPE;
+DECLARE v_pid uuid; v_tp tower_player%ROWTYPE; v_block text;
 BEGIN
   v_pid := auth.uid();
   IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
+  v_block := tower_idle_block(v_pid);
+  IF v_block IS NOT NULL THEN RETURN json_build_object('error', v_block); END IF;
   SELECT * INTO v_tp FROM tower_player WHERE player_id = v_pid;
   IF NOT FOUND OR v_tp.run_floor IS NULL THEN
     RETURN json_build_object('error', '進行中の連戦がありません');
@@ -361,9 +408,12 @@ DECLARE
   v_gold  int;
   v_exp   int;
   v_new   boolean := false;
+  v_block text;
 BEGIN
   v_pid := auth.uid();
   IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
+  v_block := tower_idle_block(v_pid);
+  IF v_block IS NOT NULL THEN RETURN json_build_object('error', v_block); END IF;
 
   SELECT * INTO v_tp FROM tower_player WHERE player_id = v_pid;
   IF NOT FOUND OR v_tp.run_floor IS DISTINCT FROM p_floor THEN
@@ -548,6 +598,7 @@ END; $$;
 -- ============================================================
 -- 9. 権限
 -- ============================================================
+GRANT EXECUTE ON FUNCTION tower_can_act()                           TO authenticated;
 GRANT EXECUTE ON FUNCTION get_tower_status()                        TO authenticated;
 GRANT EXECUTE ON FUNCTION tower_sortie_result(int, boolean, boolean, int, int) TO authenticated;
 GRANT EXECUTE ON FUNCTION tower_run_start(int, bigint, bigint)      TO authenticated;

@@ -102,9 +102,16 @@ export default function Tower() {
     }
   }
 
-  const buildEff = () => {
-    const base = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
-    return base
+  const buildEff = () => calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
+
+  // 街の出撃と同じ排他（釣り／かかし／ペットダンジョン）。
+  // 権威はサーバー側の各RPCだが、戦闘を回す前に弾いて空振りを防ぐ。
+  const idleBlocked = async () => {
+    try {
+      const { data } = await withTimeout(supabase.rpc('tower_can_act'), 8000)
+      if (data?.error) { setMsg(data.error); setScene('lobby'); return true }
+    } catch { /* 通信不調ならサーバー側の判定に任せる */ }
+    return false
   }
 
   const treeAlloc = status?.tree_alloc || {}
@@ -118,6 +125,7 @@ export default function Tower() {
     if (!fd) return
     setBusy(true); setScene('battle'); setLogs([]); setMsg(null); setGain(null)
     try {
+      if (await idleBlocked()) return
       const fp = (status.floors || []).find(f => f.floor === floor)
       const midOpen = !!fp && !fp.mid_defeated && fp.sortie_count >= fp.need
       const { enemies, isMid } = buildSortieEnemies(fd, midOpen ? MID_BOSS_RATE : 0)
@@ -149,6 +157,7 @@ export default function Tower() {
     if (busy) return
     setBusy(true); setMsg(null); setGain(null); setLogs([])
     try {
+      if (await idleBlocked()) return
       const eff = buildEff()
       const hpMax = Math.floor(eff.hp_max * tr.hpMult)
       const { data, error } = await withTimeout(supabase.rpc('tower_run_start', { p_floor: floor, p_hp: hpMax, p_mp: eff.mp_max }))
@@ -167,6 +176,8 @@ export default function Tower() {
     if (!fd) return
     setBusy(true); setLogs([]); setMsg(null); setGain(null)
     try {
+      // 連戦の途中でも毎戦チェックする（別端末で釣りを始める等の抜け道を塞ぐ）
+      if (await idleBlocked()) return
       const stage = runInfo.stage
       const enemies = buildStageEnemies(fd, stage)
       const res = simulateTowerBattle({
