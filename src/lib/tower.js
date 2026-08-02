@@ -495,14 +495,9 @@ export const BOSS_RUN_STAGES = [
 // 石碑に載せる層（10層ごとの節目だけ）
 export const isMonumentFloor = (floor) => floor % 10 === 0
 
-// スキルの対象設定（複数敵がいるときの狙い方）
-export const TARGET_MODES = [
-  { key: 'top',      label: '上から順番' },
-  { key: 'random',   label: 'ランダム' },
-  { key: 'hp_high',  label: 'HPが高い敵から' },
-  { key: 'hp_low',   label: 'HPが低い敵から' },
-]
-export const DEFAULT_TARGET_MODE = 'top'
+// スキルの対象設定（複数敵がいるときの狙い方）は塔専用ではなくなったので
+// src/lib/loadout.js が正。ここは既存の import を壊さないための再エクスポート。
+export { TARGET_MODES, DEFAULT_TARGET_MODE } from './loadout'
 
 // 敵の総合力（開発用の確認）
 export const enemyTotal = (e) =>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { RETRAINING_ENHANCEMENTS } from './Game'
 import { loadLoadout } from '../lib/pvpLoadout'
+import { TARGET_MODES, isTargetMode, pickTargetMode } from '../lib/loadout'
 
 const TYPE_COLORS = {
   '物理攻撃': '#ffcc00',
@@ -47,6 +48,7 @@ export default function Skills() {
   const [ownedClasses, setOwnedClasses] = useState([])      // 就いたことのあるクラス [{class_name, lv}]
   const [pvpEff, setPvpEff] = useState(null)                // 対人戦で戦うときの実効ステ（プレビュー）
   const [pvpEffLoading, setPvpEffLoading] = useState(false)
+  const [targetOptions, setTargetOptions] = useState([])    // 複数敵がいるときの狙い方（セットごと）
 
   useEffect(() => { fetchAll() }, [])
 
@@ -96,7 +98,25 @@ export default function Skills() {
       .eq('player_id', user.id)
       .order('slot_order')
     setSkillSets(ss || [])
+
+    // 複数敵がいるときの狙い方（セットごと）。SQL未適用の環境でも落ちないよう握りつぶす。
+    try {
+      const { data: opt } = await supabase.from('skill_set_options').select('set_type, target_mode').eq('player_id', user.id)
+      setTargetOptions(opt || [])
+    } catch { /* 未適用なら初期値(上から順番)のまま */ }
     // allSkills（候補プール）と未習得の自動習得は loadEditClassSkills（編集中クラス基準）が担当。
+  }
+
+  // 狙い方の保存（セット種別ごとに1つ）
+  const changeTargetMode = async (mode) => {
+    if (!profile || !isTargetMode(mode)) return
+    setTargetOptions(prev => {
+      const rest = prev.filter(r => r.set_type !== selectedSet)
+      return [...rest, { set_type: selectedSet, target_mode: mode }]
+    })
+    const { error } = await supabase.from('skill_set_options')
+      .upsert({ player_id: profile.id, set_type: selectedSet, target_mode: mode }, { onConflict: 'player_id,set_type' })
+    if (error) setSetMessage('狙い方を保存できませんでした（supabase_skill_target_mode.sql が未実行かもしれません）')
   }
 
   // 編集中クラスのスキルを候補プール(allSkills)へロードし、未習得を自動習得する。
@@ -318,6 +338,18 @@ export default function Skills() {
               )
             })}
           </div>
+          {/* 複数の敵が同時に出る戦闘で、スキルがどれを狙うか（このセット全体で1つ） */}
+          <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'8px', border:'1px solid #204a66', background:'#001526', padding:'8px' }}>
+            <span style={{ color:'#8ad0ff', fontSize:'11px' }}>🎯 敵が複数のとき狙う相手</span>
+            <select value={pickTargetMode(targetOptions, selectedSet)} onChange={e => changeTargetMode(e.target.value)} disabled={loading}
+              style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'11px', padding:'3px' }}>
+              {TARGET_MODES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+            </select>
+            <span style={{ color:'#557799', fontSize:'10px' }}>
+              スキルは自動発動で対象を選べないため、ここで決めます。倒したら同じ設定で次の敵へ
+            </span>
+          </div>
+
           {/* 対人戦クラスの選択（対人戦タブのみ）。ステはそのまま・スキル/パッシブ/再修練がそのクラス扱いに。 */}
           {selectedSet === 'pvp' && (
             <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'8px', border:'1px solid #204a66', background:'#001526', padding:'8px' }}>

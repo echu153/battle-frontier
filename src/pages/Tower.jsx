@@ -11,13 +11,13 @@ import { supabase } from '../supabase'
 import { calcEffectiveStats } from '../lib/stats'
 import { petPlayerBonus } from '../constants/pets'
 import { loadCharmBonus, PET_STAT_SELECT } from '../lib/petBonus'
-import { selectBattleSkillSets } from '../lib/loadout'
+import { selectBattleSkillSets, pickTargetMode, TARGET_MODES } from '../lib/loadout'
 import { BattleLogLine } from './Game'
 import {
   getFloor, MAX_IMPLEMENTED_FLOOR, BOSS_RUN_STAGES,
   TREE_NODES, TREE_LINES, TREE_MAX_STEPS, TREE_STEP_PCT,
   maxStepsAt, nextUnlock, treeSpent, treeResetCost,
-  TARGET_MODES, DEFAULT_TARGET_MODE, MID_BOSS_RATE, isMonumentFloor,
+  MID_BOSS_RATE, isMonumentFloor,
 } from '../lib/tower'
 import { simulateTowerBattle, buildStageEnemies, buildSortieEnemies, towerTreeEffects } from '../lib/towerBattle'
 
@@ -51,7 +51,8 @@ export default function Tower() {
   const [runInfo, setRunInfo] = useState(null)   // { floor, stage, hp, mp, hpMax, mpMax, done }
   const [monument, setMonument] = useState(null)
   const [treeDraft, setTreeDraft] = useState(null)
-  const [imgFail, setImgFail] = useState({})   // 画像が無い層（5層以降）は文字だけに戻す
+  const [imgFail, setImgFail] = useState({})   // 画像が無い層は文字だけに戻す
+  const [targetOptions, setTargetOptions] = useState([])   // 狙う相手（スキル設定画面で決める）
   const logsEndRef = useRef(null)
 
   useEffect(() => { init() }, [])
@@ -81,6 +82,10 @@ export default function Tower() {
     setEquipment(eq || [])
     setProficiency(pr || [])
     setSkillSets(selectBattleSkillSets(ss, 'challenge'))
+    try {
+      const { data: opt } = await supabase.from('skill_set_options').select('set_type, target_mode').eq('player_id', user.id)
+      setTargetOptions(opt || [])
+    } catch { /* 未適用なら初期値(上から順番) */ }
     if (prof.ability_title_id) {
       const { data: at } = await supabase.from('titles').select('*').eq('id', prof.ability_title_id).single()
       setAbilityTitle(at || null)
@@ -115,7 +120,8 @@ export default function Tower() {
   }
 
   const treeAlloc = status?.tree_alloc || {}
-  const targetMode = status?.target_mode || DEFAULT_TARGET_MODE
+  // 狙う相手はスキル設定画面の「挑戦」セットの設定に従う（塔は挑戦セットを使うため）
+  const targetMode = pickTargetMode(targetOptions, 'challenge')
   const tr = towerTreeEffects(treeAlloc)
 
   // ── 塔出撃（雑魚1体・HP/MP満タン） ──────────────────────────
@@ -223,12 +229,6 @@ export default function Tower() {
     if (monument) return
     const { data } = await supabase.rpc('get_tower_monument')
     setMonument(data || [])
-  }
-
-  const saveTargetMode = async (mode) => {
-    const { data, error } = await supabase.rpc('tower_set_target_mode', { p_mode: mode })
-    if (error || data?.error) { setMsg(data?.error || error?.message || '設定を保存できませんでした'); return }
-    setStatus(s => ({ ...s, target_mode: mode }))
   }
 
   // ── ツリー ─────────────────────────────────────────────────
@@ -415,14 +415,12 @@ export default function Tower() {
             </div>
           )}
 
-          {/* 対象設定 */}
-          <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '10px', marginBottom: '10px' }}>
-            <div style={{ color: C.text, fontSize: '11px', marginBottom: '6px' }}>🎯 敵が複数いるときに狙う相手</div>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              {TARGET_MODES.map(m => (
-                <button key={m.key} onClick={() => saveTargetMode(m.key)} style={tabBtn(targetMode === m.key)}>{m.label}</button>
-              ))}
-            </div>
+          {/* 狙う相手（設定はスキル設定画面の「挑戦」セット側にある） */}
+          <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '10px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ color: C.text, fontSize: '11px' }}>
+              🎯 敵が複数のとき狙う相手: <span style={{ color: C.gold }}>{TARGET_MODES.find(m => m.key === targetMode)?.label}</span>
+            </span>
+            <button onClick={() => nav('/skills')} style={btn(C.dim)}>スキル設定で変更 ↗</button>
           </div>
 
           {floors.map(f => {
