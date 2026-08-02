@@ -699,14 +699,22 @@ export function simulateTowerBattle({
 
   const basicAttack = (en) => ({ name: '攻撃', type: en.type === 'magical' ? 'magical' : 'physical', mult: 1.0 })
 
-  // 行動に使うスキルを選ぶ。
-  // ⚠ 強化スキル(type:'buff')は選ばない＝敵の手数を食わない。
-  //    層ごとの突破ラインを測ったシミュレータが同じ扱いだったため、そこに合わせている
-  //    （強化スキルを行動枠に入れると、調整済みの難易度からずれる）。
+  // その強化スキルの効果が既に乗っているか（乗っているなら選び直す＝棒立ちを避ける）
+  const buffAlreadyOn = (en, sk) => {
+    if (sk.effect === 'defMdefUp') return en.buffs.defUp?.turns > 0
+    if (sk.effect === 'atkSpdUp') return en.buffs.atkUp?.turns > 0 && en.buffs.spdUp?.turns > 0
+    if (sk.effect === 'atkUp') return en.buffs.atkUp?.turns > 0
+    return false
+  }
+
+  // 行動に使うスキルを選ぶ（強化スキルも含む＝設計どおり手数を1つ使って自己強化する）
   const pickEnemySkill = (en) => {
-    const pool = (en.skills || []).filter(s => s.type !== 'buff')
+    const pool = en.skills || []
     if (!pool.length || Math.random() >= 0.9) return basicAttack(en)
-    return pool[Math.floor(Math.random() * pool.length)]
+    let sk = pool[Math.floor(Math.random() * pool.length)]
+    // 既に効果が乗っている強化スキルを引いたときだけ、1度だけ引き直す
+    if (sk.type === 'buff' && buffAlreadyOn(en, sk)) sk = pool[Math.floor(Math.random() * pool.length)]
+    return sk
   }
 
   // 敵1体ぶんの通常行動（回避判定つき）
