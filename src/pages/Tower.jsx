@@ -53,6 +53,7 @@ export default function Tower() {
   const [treeDraft, setTreeDraft] = useState(null)
   const [imgFail, setImgFail] = useState({})   // 画像が無い層は文字だけに戻す
   const [targetOptions, setTargetOptions] = useState([])   // 狙う相手（スキル設定画面で決める）
+  const [playerItem, setPlayerItem] = useState(null)       // 装備中のアイテム（塔でも街と同じく使える）
   const logsEndRef = useRef(null)
 
   useEffect(() => { init() }, [])
@@ -61,12 +62,14 @@ export default function Tower() {
   const init = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { nav('/login'); return }
-    const [{ data: prof }, { data: eq }, { data: pr }, { data: ss }] = await Promise.all([
+    const [{ data: prof }, { data: eq }, { data: pr }, { data: ss }, { data: pi }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('player_equipment').select('*, weapons(*)').eq('player_id', user.id),
       supabase.from('proficiency').select('*, weapons(*)').eq('player_id', user.id),
       supabase.from('skill_sets').select('*, skills(*)').eq('player_id', user.id).order('slot_order'),
+      supabase.from('player_items').select('*, items(*)').eq('player_id', user.id).eq('equipped', true).maybeSingle(),
     ])
+    setPlayerItem(pi || null)
     if (!prof) { nav('/create'); return }
     let petCharm = null, petStat = null, activePet = null
     try {
@@ -109,6 +112,25 @@ export default function Tower() {
 
   const buildEff = () => calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
 
+  // 使い切りアイテムを消費したらDBの数量を減らす（街の出撃と同じ）。
+  // 無限ポーションは消費しないので何もしない。
+  const consumeItem = async () => {
+    const it = playerItem
+    if (!it?.items) return
+    const eff = it.items.effect
+    if (eff === 'hp_pct_infinite' || eff === 'mp_pct_infinite') return
+    const newQty = (it.quantity || 1) - 1
+    try {
+      if (newQty <= 0) {
+        await supabase.from('player_items').delete().eq('id', it.id).gt('quantity', 0)
+        setPlayerItem(null)
+      } else {
+        await supabase.from('player_items').update({ quantity: newQty }).eq('id', it.id).gte('quantity', it.quantity)
+        setPlayerItem({ ...it, quantity: newQty })
+      }
+    } catch { /* 失敗しても戦闘結果は確定させる */ }
+  }
+
   // 街の出撃と同じ排他（釣り／かかし／ペットダンジョン）。
   // 権威はサーバー側の各RPCだが、戦闘を回す前に弾いて空振りを防ぐ。
   const idleBlocked = async () => {
@@ -137,9 +159,10 @@ export default function Tower() {
       const { enemies, isMid } = buildSortieEnemies(fd, midOpen ? MID_BOSS_RATE : 0)
       const res = simulateTowerBattle({
         eff: buildEff(), equipment, skillSets, profile,
-        enemies, floorData: fd, tree: treeAlloc, targetMode,
+        enemies, floorData: fd, tree: treeAlloc, targetMode, playerItem,
       })
       setLogs(res.logs)
+      if (res.itemUsed) await consumeItem()
       const exp = 1 + (Math.random() < tr.expPlus ? 1 : 0)
       const { data, error } = await withTimeout(supabase.rpc('tower_sortie_result', {
         p_floor: floor, p_won: res.win, p_mid_defeat: isMid && res.win,
@@ -186,12 +209,15 @@ export default function Tower() {
       if (await idleBlocked()) return
       const stage = runInfo.stage
       const enemies = buildStageEnemies(fd, stage)
+      // 使い切りアイテムは連戦を通して1個。使った後の戦は持っていない扱いにする
+      const itemForStage = runInfo.itemGone ? null : playerItem
       const res = simulateTowerBattle({
         eff: buildEff(), equipment, skillSets, profile,
         enemies, floorData: fd, tree: treeAlloc, targetMode,
-        startHp: runInfo.hp, startMp: runInfo.mp,
+        startHp: runInfo.hp, startMp: runInfo.mp, playerItem: itemForStage,
       })
       setLogs(res.logs)
+      if (res.itemUsed) await consumeItem()
       if (!res.win) {
         await withTimeout(supabase.rpc('tower_run_abort'))
         setRunInfo(null)
@@ -210,7 +236,7 @@ export default function Tower() {
       }
       const { data, error } = await withTimeout(supabase.rpc('tower_run_save', { p_stage: stage + 1, p_hp: res.hp, p_mp: res.mp }))
       if (error || data?.error) { setMsg(data?.error || error?.message || '進行の保存に失敗しました'); return }
-      setRunInfo({ ...runInfo, stage: stage + 1, hp: res.hp, mp: res.mp, hpMax: res.hpMax, mpMax: res.mpMax })
+      setRunInfo({ ...runInfo, stage: stage + 1, hp: res.hp, mp: res.mp, hpMax: res.hpMax, mpMax: res.mpMax, itemGone: runInfo.itemGone || res.itemUsed })
       setGain({ win: true, stageLabel: BOSS_RUN_STAGES[stage].label, hp: res.hp, mp: res.mp, hpMax: res.hpMax, mpMax: res.mpMax })
     } catch (e) {
       setMsg(e?.message === 'timeout' ? '通信がタイムアウトしました。' : '戦闘処理でエラーが発生しました。')

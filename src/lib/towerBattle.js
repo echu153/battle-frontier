@@ -20,7 +20,7 @@ import {
   evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult,
 } from './evoCombat'
 import {
-  emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemResistNewAilments, emblemBlocksAilment,
+  emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemBlocksAilment,
 } from './emblemCombat'
 import {
   buildSummon, summonAnnounce, summonAttackDamage, summonAbsorbBasic, summonAbsorbSkill,
@@ -28,128 +28,15 @@ import {
 } from './summon'
 import {
   calcEvasionRate, calcExtraActionRate, calcCritRate,
-  applyEquipmentEffects, consumeAilmentShield, ailmentShieldBlocks,
+  applyEquipmentEffects, ailmentShieldBlocks,
   executeSkill, extractStatuses, MULTI_HIT_SKILLS,
 } from '../pages/Game'
-import { treeBonus, BOSS_RUN_STAGES, DEFAULT_TARGET_MODE } from './tower'
+import { makeEnemy, towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies, DEFAULT_TARGET_MODE } from './tower'
+// 敵の組み立てとツリー換算は tower.js（純粋データ側）が正。ここから使う側のために再エクスポートする
+export { towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies }
 
 // 塔で追加した状態異常キー（executeSkill 側の AILMENT_KEYS には無いもの）
 const TOWER_AILMENTS = ['poison', 'burn', 'bleed', 'stun', 'paralysis', 'curse']
-
-// ============================================================
-// 塔スキルツリー → 実効ボーナス
-//  treeBonus() は各ノードの「%」を返す（1段=0.5%・上限50段=25%）
-// ============================================================
-export function towerTreeEffects(alloc) {
-  const b = treeBonus(alloc)
-  return {
-    physDmgMult:  1 + b.phys_dmg / 100,
-    magDmgMult:   1 + b.mag_dmg / 100,
-    critRate:     b.crit_rate,             // %加算
-    critDmg:      b.crit_dmg / 100,        // 倍率加算
-    physPen:      b.phys_pen / 100,
-    magPen:       b.mag_pen / 100,
-    hpMult:       1 + b.max_hp / 100,
-    takenMult:    1 - b.dmg_taken / 100,
-    ailResist:    b.ail_resist / 100,      // 状態異常の発生率に (1-x) を掛ける
-    pctResist:    b.pct_resist / 100,      // 割合ダメージに (1-x) を掛ける
-    critResist:   b.crit_resist,           // %減算
-    evasion:      b.evasion,               // %加算
-    spdMult:      1 + b.spd / 100,
-    mpCostMult:   1 - b.mp_cost / 100,
-    killHeal:     b.kill_heal / 100,
-    ailRate:      b.ail_rate / 100,        // 付与に失敗したときの再判定確率
-    expPlus:      b.exp_plus / 100,        // 通常EXP+1の確率
-  }
-}
-
-// ツリーを反映した実効ステータス（塔の中だけの値）
-export function applyTreeToStats(eff, tr) {
-  return {
-    ...eff,
-    hp_max:       Math.floor(eff.hp_max * tr.hpMult),
-    spd:          Math.floor(eff.spd * tr.spdMult),
-    critBonus:    (eff.critBonus || 0) + tr.critRate,
-    critDmg:      (eff.critDmg || 0) + tr.critDmg,
-    critResist:   (eff.critResist || 0) + tr.critResist,
-    evasionBonus: (eff.evasionBonus || 0) + tr.evasion,
-    defPen:       Math.min(PEN_CAP, (eff.defPen || 0) + tr.physPen),
-    mdefPen:      Math.min(PEN_CAP, (eff.mdefPen || 0) + tr.magPen),
-  }
-}
-
-// ============================================================
-// 敵インスタンスの生成
-// ============================================================
-let uidSeq = 0
-function makeEnemy(def, opts = {}) {
-  const statRate = opts.statRate || 1
-  const hpRate = opts.hpRate || 1
-  return {
-    uid: ++uidSeq,
-    name: opts.name || def.name,
-    hp: Math.max(1, Math.floor(def.hp * hpRate * (opts.scaleHpByStat ? statRate : 1))),
-    maxHp: Math.max(1, Math.floor(def.hp * hpRate * (opts.scaleHpByStat ? statRate : 1))),
-    atk: Math.floor((def.atk || 0) * statRate),
-    def: Math.floor((def.def || 0) * statRate),
-    matk: Math.floor((def.matk || 0) * statRate),
-    mdef: Math.floor((def.mdef || 0) * statRate),
-    spd: Math.max(1, Math.floor((def.spd || 1) * statRate)),
-    type: def.type || 'physical',
-    gold: Math.floor((def.gold || 0) * (opts.goldRate ?? 1)),
-    skills: def.skills || [],
-    mods: def.mods || {},
-    phases: def.phases || null,
-    summonDef: def.summon || null,
-    summonLoop: def.summonLoop || null,
-    summonMid: def.summonMid || null,
-    empower: def.empower || null,
-    cleanse: def.cleanse || null,
-    selfHeal: def.selfHeal || null,
-    specialMove: def.specialMove || null,
-    isBoss: !!opts.isBoss,
-    isSummoned: !!opts.isSummoned,
-    // ── 実行時の状態 ──
-    buffs: {},
-    perm: { atk: 1, matk: 1, def: 1, mdef: 1, spd: 1 },
-    skillIdx: 0,
-    turnCount: 0,
-    phaseIdx: -1,
-    defRamp: 1,
-    lastPlayerSkill: null,   // 適応（6層）用
-    used: {},                // once系トリガーの発火済みフラグ
-  }
-}
-
-// 連戦の各ステージに出てくる敵を組み立てる
-export function buildStageEnemies(floorData, stageIdx) {
-  const stage = BOSS_RUN_STAGES[stageIdx]
-  if (!stage || !floorData) return []
-  if (stage.kind === 'mid') return [makeEnemy(floorData.midBoss, { isBoss: true })]
-  if (stage.kind === 'boss') {
-    const list = [makeEnemy(floorData.floorBoss, { isBoss: true })]
-    for (const es of (floorData.floorBoss.escorts || [])) {
-      for (let i = 0; i < (es.count || 1); i++) list.push(makeEnemy(floorData.enemies[es.enemyIndex]))
-    }
-    return list
-  }
-  // 雑魚戦：同じ種類が重なることもある
-  const list = []
-  for (let i = 0; i < (stage.count || 1); i++) {
-    const def = floorData.enemies[Math.floor(Math.random() * floorData.enemies.length)]
-    list.push(makeEnemy(def))
-  }
-  return list
-}
-
-// 塔出撃（雑魚1体・しきい値到達後は5%で中ボス）
-export function buildSortieEnemies(floorData, midChance) {
-  if (midChance > 0 && Math.random() < midChance) {
-    return { enemies: [makeEnemy(floorData.midBoss, { isBoss: true })], isMid: true }
-  }
-  const def = floorData.enemies[Math.floor(Math.random() * floorData.enemies.length)]
-  return { enemies: [makeEnemy(def)], isMid: false }
-}
 
 // ============================================================
 // 本体
@@ -159,6 +46,7 @@ export function simulateTowerBattle({
   enemies: enemyList, floorData,
   tree = {}, targetMode = DEFAULT_TARGET_MODE,
   startHp = null, startMp = null,
+  playerItem = null,      // 装備中のアイテム（塔でも街と同じように使える）
   turnCap: turnCapIn = null,
 }) {
   const logs = []
@@ -176,6 +64,10 @@ export function simulateTowerBattle({
   let playerAttacking = false
   let rokkanStacks = 0
   let seimitsuStacks = 0
+  // アイテム（街の出撃と同じ挙動。使い切り＝1戦闘1個／無限＝5ターンのクールダウン）
+  //  DBの数量減らしは戦闘後に呼び出し側が行う（この関数は同期・副作用なしに保つ）
+  let currentItem = playerItem ? { ...playerItem } : null
+  let itemUsed = false        // 使い切りアイテムを消費したか
   // 地響き（10層）：敵の攻撃が当たるたび、こちらの素早さが下がっていく（最大-50%）
   let quakeStacks = 0
   let quakeStep = 0
@@ -340,14 +232,17 @@ export function simulateTowerBattle({
   // ============================================================
   // プレイヤーの行動
   // ============================================================
-  const playerDefStats = () => {
+  // forDefense=true のときだけ竜鱗の加護（竜騎士）の防御倍率を乗せる。
+  // 街の出撃・奈落と同じで、攻撃側の計算（神聖覚醒の追撃）には乗せない。
+  const playerDefStats = (forDefense = false) => {
+    const ryu = forDefense ? ryurinMult : 1.0
     const holyFieldDef = playerBuffs.holyField?.turns > 0 ? playerBuffs.holyField.rate : 1.0
     const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士') ? 2.0 : 1.5) : 1.0
     const kabeDef = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
     const defDown = playerBuffs.defDown?.turns > 0 ? playerBuffs.defDown.rate : 1.0
     const mdefDown = playerBuffs.mdefDown?.turns > 0 ? playerBuffs.mdefDown.rate : 1.0
-    const pDef = eff.def * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * defDown * holyFieldDef * holyKnightMult * kabeDef
-    const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * mdefDown * holyFieldDef * holyKnightMult * kabeDef
+    const pDef = eff.def * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * defDown * holyFieldDef * holyKnightMult * kabeDef * ryu
+    const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * mdefDown * holyFieldDef * holyKnightMult * kabeDef * ryu
     return { pDef, pMdef }
   }
 
@@ -661,7 +556,7 @@ export function simulateTowerBattle({
   // 敵スキルによるプレイヤーへのダメージ
   const damagePlayer = (en, raw, offStat, useStat, opts = {}) => {
     if (summonAbsorbSkill(summon, raw, logs)) return { dmg: 0, isCrit: false }
-    const { pDef, pMdef } = playerDefStats()
+    const { pDef, pMdef } = playerDefStats(true)   // 被弾側＝竜鱗の加護を乗せる
     let defStat = useStat === 'matk' ? pMdef : pDef
     if (opts.defPen) defStat *= (1 - opts.defPen)
     const rankStat = useStat === 'matk' ? eff.mdef : eff.def
@@ -1023,6 +918,33 @@ export function simulateTowerBattle({
       playerHp = Math.min(eff.hp_max, playerHp + playerBuffs.delayHeal.amount)
       logs.push({ text: `💚 装備効果でHPが${playerBuffs.delayHeal.amount}回復した！`, color: '#44ff88' })
     }
+    // アイテムの自動使用（Game.jsx の出撃と同じ条件）
+    if (!isHealSealed && currentItem?.items) {
+      const threshold = currentItem.use_threshold || 50
+      const effect = currentItem.items.effect
+      const isInfinite = effect === 'hp_pct_infinite' || effect === 'mp_pct_infinite'
+      const onCooldown = (playerBuffs.potionCooldown?.turns || 0) > 0
+      const canUse = isInfinite ? !onCooldown : !itemUsed
+      if (canUse) {
+        if ((effect === 'hp_pct' || effect === 'hp_pct_infinite') && playerHp / eff.hp_max * 100 <= threshold) {
+          const healAmt = Math.floor(eff.hp_max * currentItem.items.value / 100)
+          playerHp = Math.min(eff.hp_max, playerHp + healAmt)
+          logs.push({ text: `🧪 ${currentItem.items.name}を使用！ HPが${healAmt}回復した！`, color: '#44ff88' })
+          if (isInfinite) {
+            playerBuffs.potionCooldown = { turns: 5 }
+            logs.push({ text: `⏳ 5ターンのクールダウンが入った！`, color: '#aaaaaa' })
+          } else { itemUsed = true; currentItem = null }
+        } else if ((effect === 'mp_pct' || effect === 'mp_pct_infinite') && playerMp / eff.mp_max * 100 <= threshold) {
+          const healAmt = Math.floor(eff.mp_max * currentItem.items.value / 100)
+          playerMp = Math.min(eff.mp_max, playerMp + healAmt)
+          logs.push({ text: `🧪 ${currentItem.items.name}を使用！ MPが${healAmt}回復した！`, color: '#4488ff' })
+          if (isInfinite) {
+            playerBuffs.potionCooldown = { turns: 5 }
+            logs.push({ text: `⏳ 5ターンのクールダウンが入った！`, color: '#aaaaaa' })
+          } else { itemUsed = true; currentItem = null }
+        }
+      }
+    }
 
     // ── プレイヤーの行動 ──
     let playerSkipped = false
@@ -1129,6 +1051,7 @@ export function simulateTowerBattle({
     logs, win, turns,
     hp: Math.max(0, playerHp), mp: Math.max(0, playerMp),
     hpMax: eff.hp_max, mpMax: eff.mp_max,
+    itemUsed,   // 使い切りアイテムを消費した＝呼び出し側でDBの数量を減らす
     gold: win ? enemies.reduce((s, e) => s + (e.isSummoned ? 0 : (e.gold || 0)), 0) : 0,
   }
 }

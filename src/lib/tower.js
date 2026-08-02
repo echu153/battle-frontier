@@ -1,3 +1,4 @@
+import { PEN_CAP } from './stats.js'
 // ============================================================
 // 星霜百層塔（せいそうひゃくそうとう）データ定義
 // ------------------------------------------------------------
@@ -91,18 +92,23 @@ export const TREE_LINES = [
   { key: 'etc', label: 'その他' },
 ]
 
+// 振り分けの段数を安全に読む。tree_alloc は jsonb なので数値以外が入りうる。
+// NaN を通すとダメージ計算まで NaN が伝播して戦闘が壊れるため、ここで潰す。
+const stepOf = (alloc, key) => {
+  const raw = Number((alloc || {})[key])
+  if (!Number.isFinite(raw)) return 0
+  return Math.max(0, Math.min(TREE_MAX_STEPS, Math.floor(raw)))
+}
+
 // 振り分け alloc（{key: 段数}）から実効ボーナス（%）を返す
 export const treeBonus = (alloc) => {
   const out = {}
-  for (const n of TREE_NODES) {
-    const step = Math.max(0, Math.min(TREE_MAX_STEPS, (alloc || {})[n.key] || 0))
-    out[n.key] = step * TREE_STEP_PCT
-  }
+  for (const n of TREE_NODES) out[n.key] = stepOf(alloc, n.key) * TREE_STEP_PCT
   return out
 }
 // 使用済みポイント
 export const treeSpent = (alloc) =>
-  TREE_NODES.reduce((s, n) => s + Math.max(0, Math.min(TREE_MAX_STEPS, (alloc || {})[n.key] || 0)), 0)
+  TREE_NODES.reduce((s, n) => s + stepOf(alloc, n.key), 0)
 
 // 振り直しにかかるGold（塔LVに比例）
 export const treeResetCost = (lv) => 10000 * Math.max(1, lv)
@@ -497,8 +503,123 @@ export const isMonumentFloor = (floor) => floor % 10 === 0
 
 // スキルの対象設定（複数敵がいるときの狙い方）は塔専用ではなくなったので
 // src/lib/loadout.js が正。ここは既存の import を壊さないための再エクスポート。
-export { TARGET_MODES, DEFAULT_TARGET_MODE } from './loadout'
+export { TARGET_MODES, DEFAULT_TARGET_MODE } from './loadout.js'
 
 // 敵の総合力（開発用の確認）
 export const enemyTotal = (e) =>
   Math.floor(e.hp / 10 + e.atk + e.def + e.matk + e.mdef + e.spd)
+
+// ============================================================
+// 塔スキルツリー → 実効ボーナス
+//  treeBonus() は各ノードの「%」を返す（1段=0.5%・上限50段=25%）
+// ============================================================
+export function towerTreeEffects(alloc) {
+  const b = treeBonus(alloc)
+  return {
+    physDmgMult:  1 + b.phys_dmg / 100,
+    magDmgMult:   1 + b.mag_dmg / 100,
+    critRate:     b.crit_rate,             // %加算
+    critDmg:      b.crit_dmg / 100,        // 倍率加算
+    physPen:      b.phys_pen / 100,
+    magPen:       b.mag_pen / 100,
+    hpMult:       1 + b.max_hp / 100,
+    takenMult:    1 - b.dmg_taken / 100,
+    ailResist:    b.ail_resist / 100,      // 状態異常の発生率に (1-x) を掛ける
+    pctResist:    b.pct_resist / 100,      // 割合ダメージに (1-x) を掛ける
+    critResist:   b.crit_resist,           // %減算
+    evasion:      b.evasion,               // %加算
+    spdMult:      1 + b.spd / 100,
+    mpCostMult:   1 - b.mp_cost / 100,
+    killHeal:     b.kill_heal / 100,
+    ailRate:      b.ail_rate / 100,        // 付与に失敗したときの再判定確率
+    expPlus:      b.exp_plus / 100,        // 通常EXP+1の確率
+  }
+}
+
+// ツリーを反映した実効ステータス（塔の中だけの値）
+export function applyTreeToStats(eff, tr) {
+  return {
+    ...eff,
+    hp_max:       Math.floor(eff.hp_max * tr.hpMult),
+    spd:          Math.floor(eff.spd * tr.spdMult),
+    critBonus:    (eff.critBonus || 0) + tr.critRate,
+    critDmg:      (eff.critDmg || 0) + tr.critDmg,
+    critResist:   (eff.critResist || 0) + tr.critResist,
+    evasionBonus: (eff.evasionBonus || 0) + tr.evasion,
+    defPen:       Math.min(PEN_CAP, (eff.defPen || 0) + tr.physPen),
+    mdefPen:      Math.min(PEN_CAP, (eff.mdefPen || 0) + tr.magPen),
+  }
+}
+
+// ============================================================
+// 敵インスタンスの生成
+// ============================================================
+let uidSeq = 0
+export function makeEnemy(def, opts = {}) {
+  const statRate = opts.statRate || 1
+  const hpRate = opts.hpRate || 1
+  return {
+    uid: ++uidSeq,
+    name: opts.name || def.name,
+    hp: Math.max(1, Math.floor(def.hp * hpRate * (opts.scaleHpByStat ? statRate : 1))),
+    maxHp: Math.max(1, Math.floor(def.hp * hpRate * (opts.scaleHpByStat ? statRate : 1))),
+    atk: Math.floor((def.atk || 0) * statRate),
+    def: Math.floor((def.def || 0) * statRate),
+    matk: Math.floor((def.matk || 0) * statRate),
+    mdef: Math.floor((def.mdef || 0) * statRate),
+    spd: Math.max(1, Math.floor((def.spd || 1) * statRate)),
+    type: def.type || 'physical',
+    gold: Math.floor((def.gold || 0) * (opts.goldRate ?? 1)),
+    skills: def.skills || [],
+    mods: def.mods || {},
+    phases: def.phases || null,
+    summonDef: def.summon || null,
+    summonLoop: def.summonLoop || null,
+    summonMid: def.summonMid || null,
+    empower: def.empower || null,
+    cleanse: def.cleanse || null,
+    selfHeal: def.selfHeal || null,
+    specialMove: def.specialMove || null,
+    isBoss: !!opts.isBoss,
+    isSummoned: !!opts.isSummoned,
+    // ── 実行時の状態 ──
+    buffs: {},
+    perm: { atk: 1, matk: 1, def: 1, mdef: 1, spd: 1 },
+    skillIdx: 0,
+    turnCount: 0,
+    phaseIdx: -1,
+    defRamp: 1,
+    lastPlayerSkill: null,   // 適応（6層）用
+    used: {},                // once系トリガーの発火済みフラグ
+  }
+}
+
+// 連戦の各ステージに出てくる敵を組み立てる
+export function buildStageEnemies(floorData, stageIdx) {
+  const stage = BOSS_RUN_STAGES[stageIdx]
+  if (!stage || !floorData) return []
+  if (stage.kind === 'mid') return [makeEnemy(floorData.midBoss, { isBoss: true })]
+  if (stage.kind === 'boss') {
+    const list = [makeEnemy(floorData.floorBoss, { isBoss: true })]
+    for (const es of (floorData.floorBoss.escorts || [])) {
+      for (let i = 0; i < (es.count || 1); i++) list.push(makeEnemy(floorData.enemies[es.enemyIndex]))
+    }
+    return list
+  }
+  // 雑魚戦：同じ種類が重なることもある
+  const list = []
+  for (let i = 0; i < (stage.count || 1); i++) {
+    const def = floorData.enemies[Math.floor(Math.random() * floorData.enemies.length)]
+    list.push(makeEnemy(def))
+  }
+  return list
+}
+
+// 塔出撃（雑魚1体・しきい値到達後は5%で中ボス）
+export function buildSortieEnemies(floorData, midChance) {
+  if (midChance > 0 && Math.random() < midChance) {
+    return { enemies: [makeEnemy(floorData.midBoss, { isBoss: true })], isMid: true }
+  }
+  const def = floorData.enemies[Math.floor(Math.random() * floorData.enemies.length)]
+  return { enemies: [makeEnemy(def)], isMid: false }
+}
