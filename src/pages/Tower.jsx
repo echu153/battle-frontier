@@ -41,7 +41,7 @@ export default function Tower() {
   const [skillSets, setSkillSets] = useState([])
   const [abilityTitle, setAbilityTitle] = useState(null)
   const [status, setStatus] = useState(null)
-  const [tab, setTab] = useState('floors')       // floors | tree | monument | ranking
+  const [tab, setTab] = useState('floors')       // floors | tree | monument（到達層ランキングは /ranking のタブへ）
   const [scene, setScene] = useState('lobby')    // lobby | battle
   const [selFloor, setSelFloor] = useState(1)
   const [logs, setLogs] = useState([])
@@ -50,8 +50,8 @@ export default function Tower() {
   const [gain, setGain] = useState(null)
   const [runInfo, setRunInfo] = useState(null)   // { floor, stage, hp, mp, hpMax, mpMax, done }
   const [monument, setMonument] = useState(null)
-  const [ranking, setRanking] = useState(null)
   const [treeDraft, setTreeDraft] = useState(null)
+  const [imgFail, setImgFail] = useState({})   // 画像が無い層（5層以降）は文字だけに戻す
   const logsEndRef = useRef(null)
 
   useEffect(() => { init() }, [])
@@ -224,11 +224,6 @@ export default function Tower() {
     const { data } = await supabase.rpc('get_tower_monument')
     setMonument(data || [])
   }
-  const openRanking = async () => {
-    setTab('ranking')
-    const { data } = await supabase.rpc('get_tower_ranking', { p_limit: 50 })
-    setRanking(data || [])
-  }
 
   const saveTargetMode = async (mode) => {
     const { data, error } = await supabase.rpc('tower_set_target_mode', { p_mode: mode })
@@ -298,6 +293,23 @@ export default function Tower() {
             <button onClick={() => { setScene('lobby'); setLogs([]); setGain(null) }} style={btn(C.dim)}>← 戻る</button>
           )}
         </div>
+
+        {/* 層主・中ボスの立ち絵（中ボスは層主の画像を流用。画像が無い層は出さない） */}
+        {inRun && ['mid', 'boss'].includes(BOSS_RUN_STAGES[runInfo.stage]?.kind) && !imgFail[runInfo.floor] && (
+          <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+            <img
+              src={`/tou/${runInfo.floor}sou.png`}
+              alt={getFloor(runInfo.floor)?.boss || ''}
+              onError={() => setImgFail(s => ({ ...s, [runInfo.floor]: true }))}
+              style={{ maxWidth: '100%', maxHeight: '34vh', objectFit: 'contain', filter: 'drop-shadow(0 0 12px rgba(127,212,255,0.25))' }}
+            />
+            <div style={{ color: C.gold, fontSize: '12px', marginTop: '2px' }}>
+              {BOSS_RUN_STAGES[runInfo.stage]?.kind === 'boss'
+                ? getFloor(runInfo.floor)?.boss
+                : getFloor(runInfo.floor)?.midBoss?.name}
+            </div>
+          </div>
+        )}
 
         {inRun && (
           <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '8px 10px', marginBottom: '8px', fontSize: '11px', color: C.text }}>
@@ -384,7 +396,7 @@ export default function Tower() {
         <button onClick={() => setTab('floors')} style={tabBtn(tab === 'floors')}>層</button>
         <button onClick={() => setTab('tree')} style={tabBtn(tab === 'tree')}>塔スキル</button>
         <button onClick={openMonument} style={tabBtn(tab === 'monument')}>石碑</button>
-        <button onClick={openRanking} style={tabBtn(tab === 'ranking')}>到達層</button>
+        <button onClick={() => nav('/ranking')} style={tabBtn(false)}>到達層 ↗</button>
       </div>
 
       {msg && <div style={{ color: C.ng, fontSize: '11px', marginBottom: '8px' }}>{msg}</div>}
@@ -525,21 +537,6 @@ export default function Tower() {
         </div>
       )}
 
-      {/* ── 到達層ランキング ── */}
-      {tab === 'ranking' && (
-        <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '12px' }}>
-          <div style={{ color: C.accent, fontSize: '12px', marginBottom: '4px' }}>🏆 到達層ランキング</div>
-          <div style={{ color: C.dim, fontSize: '10px', marginBottom: '10px' }}>同じ層なら、先に到達した者が上位。</div>
-          {ranking === null && <div style={{ color: C.dim, fontSize: '11px' }}>読み込み中...</div>}
-          {ranking?.length === 0 && <div style={{ color: C.dim, fontSize: '11px' }}>まだ誰も層主を倒していません。</div>}
-          {ranking?.map((r, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${C.line}`, padding: '7px 2px', fontSize: '11px' }}>
-              <span style={{ color: i < 3 ? C.gold : C.text }}>{i + 1}. {r.username}</span>
-              <span style={{ color: C.accent }}>{floorLabel(r.max_floor)}</span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

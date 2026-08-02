@@ -582,7 +582,8 @@ LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
   RETURN (
     SELECT COALESCE(json_agg(r), '[]'::json) FROM (
-      SELECT p.username, p.avatar_url, t.max_floor, t.max_floor_at
+      SELECT p.id, p.username, p.avatar_url, p.class, p.lv, p.char_lv, p.retraining,
+             t.max_floor, t.max_floor_at
       FROM tower_player t
       JOIN profiles p ON p.id = t.player_id
       WHERE t.max_floor > 0

@@ -18,9 +18,11 @@ export default function Ranking() {
   const [museumPlayers, setMuseumPlayers] = useState([])
   const [medalPlayers, setMedalPlayers] = useState([])
   const [abyssPlayers, setAbyssPlayers] = useState([])
+  const [towerPlayers, setTowerPlayers] = useState([])
   const [petRanking, setPetRanking] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState(null)
+  const [isAdmin, setIsAdmin] = useState(false)   // 星霜百層塔は開発限定なのでタブ自体を出さない
   const [tab, setTab] = useState('total')
 
   useEffect(() => {
@@ -94,6 +96,18 @@ export default function Ranking() {
       const { data: abyssData } = await supabase.rpc('get_abyss_ranking')
       setAbyssPlayers((Array.isArray(abyssData) ? abyssData : []).filter(p => !excluded.has(p.id)))
 
+      // 星霜百層塔 到達層ランキング（開発限定。SQL未適用の環境でも落ちないよう握りつぶす）
+      if (user) {
+        try {
+          const { data: me } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
+          if (me?.is_admin) {
+            setIsAdmin(true)
+            const { data: towerData } = await supabase.rpc('get_tower_ranking', { p_limit: 50 })
+            setTowerPlayers((Array.isArray(towerData) ? towerData : []).filter(p => !excluded.has(p.id)))
+          }
+        } catch { /* 塔のSQL未適用なら出さないだけ */ }
+      }
+
       // ペット能力合計ランキング（チャーム込み・1体ごと）
       const { data: allPets } = await supabase.from('pets').select('id, owner_id, name, species, level, evolved, image_url, charm_id, ribbon_id')
       const petList = (allPets || []).filter(p => !excluded.has(p.owner_id))
@@ -149,7 +163,9 @@ export default function Ranking() {
 
         {/* タブ切り替え */}
         <div style={{ display:'flex', gap:'6px', marginBottom:'12px' }}>
-          {[{ id:'total', label:'🏆 総合力' }, { id:'abyss', label:'🕯 奈落' }, { id:'museum', label:'🏛 寄贈数' }, { id:'medal', label:'🎫 メダル' }, { id:'pet', label:'🐾 ペット' }].map(t => (
+          {[{ id:'total', label:'🏆 総合力' }, { id:'abyss', label:'🕯 奈落' },
+            ...(isAdmin ? [{ id:'tower', label:'🗼 塔' }] : []),
+            { id:'museum', label:'🏛 寄贈数' }, { id:'medal', label:'🎫 メダル' }, { id:'pet', label:'🐾 ペット' }].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{
                 flex:1, padding:'8px', fontFamily:'monospace', fontSize:'12px', cursor:'pointer',
@@ -164,7 +180,7 @@ export default function Ranking() {
 
         {/* 見出し */}
         <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'10px', textAlign:'center', letterSpacing:'2px' }}>
-          {tab === 'total' ? '🏆 総合力ランキング' : tab === 'pet' ? '🐾 ペット能力ランキング（チャーム込み）' : tab === 'abyss' ? '🕯 奈落闘技場 踏破ランキング' : tab === 'museum' ? '🏛 寄贈数ランキング' : '🎫 1日最高収支メダルランキング'}
+          {tab === 'total' ? '🏆 総合力ランキング' : tab === 'pet' ? '🐾 ペット能力ランキング（チャーム込み）' : tab === 'abyss' ? '🕯 奈落闘技場 踏破ランキング' : tab === 'tower' ? '🗼 星霜百層塔 到達層ランキング' : tab === 'museum' ? '🏛 寄贈数ランキング' : '🎫 1日最高収支メダルランキング'}
         </div>
 
         {loading ? (
@@ -343,6 +359,57 @@ export default function Ranking() {
                 まだ寄贈したプレイヤーがいません
               </div>
             )}
+          </div>
+        ) : tab === 'tower' ? (
+          <div>
+            {towerPlayers.map((p, i) => {
+              const medal = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
+              const isMe = p.id === currentUserId
+              const stars = getStars(p)
+              return (
+                <div key={p.id}
+                  onClick={() => nav(`/profile/${p.id}`)}
+                  style={{
+                    display:'flex', alignItems:'center', gap:'8px',
+                    padding:'8px 10px', marginBottom:'4px',
+                    border:`1px solid ${isMe ? '#0066cc' : '#26355c'}`,
+                    background: isMe ? '#001830' : i === 0 ? '#0d1730' : '#0b1020',
+                    cursor:'pointer', borderRadius:'2px',
+                  }}
+                >
+                  <div style={{ minWidth:'28px', textAlign:'center' }}>
+                    {medal
+                      ? <span style={{ fontSize:'16px' }}>{medal}</span>
+                      : <span style={{ color:'#446688', fontSize:'11px' }}>{i+1}</span>
+                    }
+                  </div>
+                  {p.avatar_url
+                    ? <img src={thumbUrl(p.avatar_url)} alt="avatar" loading="lazy" decoding="async" width="36" height="36" style={{ width:'36px', height:'36px', objectFit:'cover', flexShrink:0 }} />
+                    : <div style={{ width:'36px', height:'36px', background:'#001428', border:'1px solid #26355c', flexShrink:0 }} />
+                  }
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ color: isMe ? '#44ff88' : '#88ccff', fontSize:'12px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {p.username}{isMe && <span style={{color:'#44ff88', fontSize:'10px'}}> (自分)</span>}
+                    </div>
+                    <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>
+                      {p.class}<span style={{color:'#ffcc00'}}>{stars}</span> <span style={{color:'#ffcc00'}}>LV{p.char_lv || p.lv}</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ color:'#7fd4ff', fontSize:'15px', fontWeight:'bold' }}>🗼 {p.max_floor}層</div>
+                    <div style={{ color:'#5f7099', fontSize:'10px' }}>到達層</div>
+                  </div>
+                </div>
+              )
+            })}
+            {towerPlayers.length === 0 && (
+              <div style={{ color:'#334455', padding:'20px', textAlign:'center', fontSize:'12px' }}>
+                まだ誰も層主を倒していません
+              </div>
+            )}
+            <div style={{ color:'#5f7099', fontSize:'10px', textAlign:'center', marginTop:'8px' }}>
+              同じ層なら、先に到達した者が上位
+            </div>
           </div>
         ) : tab === 'medal' ? (
           <div>
