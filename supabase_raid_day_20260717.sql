@@ -230,6 +230,9 @@ $$;
 GRANT EXECUTE ON FUNCTION spawn_raid_boss_dev(text, int) TO authenticated;
 
 -- 9) claim_raid_rewards 再定義
+--    ⚠ 2026-08-02: claim_raid_rewards の「最後に流す正」は
+--       【supabase_raid_update_20260802.sql】（強者の結晶ドロップ入り）へ移りました。
+--       このファイルを後から流すと強者の結晶が出なくなります。必ず 20260802 を最後に。
 --    ベース: supabase_raid_enma_20260717.sql（raid_boss_mats 一元化版）
 --    変更点: 昼枠（slot が21/22以外）は与ダメージ上位3名の追加報酬を付けない
 CREATE OR REPLACE FUNCTION claim_raid_rewards(p_raid_id uuid)

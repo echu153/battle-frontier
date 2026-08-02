@@ -31,12 +31,26 @@ const BOSS_MDEF = 1000
 const BOSS_SPD  = 1200
 
 // ★閾値は claim_raid_rewards（サーバー）と一致させること。貢献度: A=7% / B=4% / C=2%、出撃回数: A=40 / B=20 / C=10。
+// ★crystalChance = 強者の結晶のドロップ率（supabase_raid_update_20260802.sql・A8%/B5%/C3%・Dは無し）
 const TIER_INFO = [
-  { pct:  7, attacks: 40, tier: 'A', label: '貢献度7%以上 or 出撃40回', gold: 150000, stones: ['B','C','D'], gemCount: 2, gemRank: 'D', scaleCount: '8~10', rareChance: '15%', book: 'Ⅲ', color: '#ffcc00' },
-  { pct:  4, attacks: 20, tier: 'B', label: '貢献度4%以上 or 出撃20回',  gold: 90000, stones: ['C','D','E'], gemCount: 2, gemRank: 'E', scaleCount: '6~8',  rareChance: '8%',  book: 'Ⅱ', color: '#44aaff' },
-  { pct:  2, attacks: 10, tier: 'C', label: '貢献度2%以上 or 出撃10回',   gold: 30000, stones: ['D','E','F'], gemCount: 2, gemRank: 'F', scaleCount: '4~6',  rareChance: '3%',  book: 'Ⅰ', color: '#44ff88' },
-  { pct:  0, attacks:  0, tier: 'D', label: '参加',                       gold: 15000, stones: ['E','F'],    gemCount: 2, gemRank: 'F', scaleCount: '1~3',  rareChance: '0%',  book: null, color: '#888888' },
+  { pct:  7, attacks: 40, tier: 'A', label: '貢献度7%以上 or 出撃40回', gold: 150000, stones: ['B','C','D'], gemCount: 2, gemRank: 'D', scaleCount: '8~10', rareChance: '15%', book: 'Ⅲ', crystalChance: '8%', color: '#ffcc00' },
+  { pct:  4, attacks: 20, tier: 'B', label: '貢献度4%以上 or 出撃20回',  gold: 90000, stones: ['C','D','E'], gemCount: 2, gemRank: 'E', scaleCount: '6~8',  rareChance: '8%',  book: 'Ⅱ', crystalChance: '5%', color: '#44aaff' },
+  { pct:  2, attacks: 10, tier: 'C', label: '貢献度2%以上 or 出撃10回',   gold: 30000, stones: ['D','E','F'], gemCount: 2, gemRank: 'F', scaleCount: '4~6',  rareChance: '3%',  book: 'Ⅰ', crystalChance: '3%', color: '#44ff88' },
+  { pct:  0, attacks:  0, tier: 'D', label: '参加',                       gold: 15000, stones: ['E','F'],    gemCount: 2, gemRank: 'F', scaleCount: '1~3',  rareChance: '0%',  book: null, crystalChance: null, color: '#888888' },
 ]
+
+// ★出撃回数によるEXPボーナス（attack_raid_boss と一致させること・supabase_raid_update_20260802.sql）
+//   そのレイドでの累計出撃回数に応じて、基本EXP（7〜10）へ加算される。
+const RAID_EXP_BONUS = [
+  { attacks: 50, bonus: 6 },
+  { attacks: 40, bonus: 5 },
+  { attacks: 30, bonus: 3 },
+  { attacks: 20, bonus: 2 },
+  { attacks: 10, bonus: 1 },
+]
+function raidExpBonus(attackCount = 0) {
+  return RAID_EXP_BONUS.find(b => attackCount >= b.attacks)?.bonus || 0
+}
 
 // ★2026-06-20公開: 全プレイヤーの出撃回数ティア保証を A=20 / B=10 / C=5 に（claim_raid_rewards と一致）。
 // ★2026-06-26 全員公開: レイド10秒固定で出撃回数が増えるため、出撃回数ティア保証を倍に（A=40/B=20/C=10）。
@@ -750,6 +764,7 @@ export default function RaidBoss() {
     } else {
       const parts = [`${data.tier}ティア`, `Gold+${fmt(data.gold)}`, `強化石${(data.stones||[]).map(s=>`(${s})`).join('・')}×2`, `宝石(${data.gem_rank})×${data.gem_count}`, `通常素材：${data.mat_name||'素材'}×${data.scale_count}`]
       if (data.got_gyaku) parts.push(`⭐レア素材：${data.rare_name||'レア素材'}×1`)
+      if (data.got_crystal) parts.push(`💠強者の結晶×1`)
       if (data.book) parts.push(`📖${data.book}×1`)
       if (data.top_rank >= 1 && data.top_rank <= 3) parts.push(`🏅与ダメ${data.top_rank}位ボーナス：Gold+${fmt(data.top_gold)}・📖${data.top_book}×1`)
       if (data.courage > 0) parts.push(`🎖勇気の証×${data.courage}`)
@@ -874,7 +889,17 @@ export default function RaidBoss() {
             setBattleLogs(prev => [...prev, { text: `✨ 貯めたEXPスタック +${stackDrained} を反映！`, color: '#88ccff' }])
           }
           const base = Math.max(0, applied - stackDrained)
-          setBattleLogs(prev => [...prev, { text: `EXP +${base}（出撃報酬）`, color: '#44ff88' }])
+          // 出撃回数ボーナス（サーバーが返す exp_bonus が正。未適用SQL時は回数から推定）
+          const bonus = (typeof data.exp_bonus === 'number')
+            ? data.exp_bonus
+            : raidExpBonus(Number(data.attack_count) || 0)
+          const cnt = Number(data.attack_count) || 0
+          setBattleLogs(prev => [...prev, {
+            text: bonus > 0
+              ? `EXP +${base}（出撃報酬 ＋出撃${cnt}回ボーナス+${bonus}）`
+              : `EXP +${base}（出撃報酬）`,
+            color: '#44ff88',
+          }])
         }
         await fetchBoss(profile.id)
       }
@@ -1152,6 +1177,17 @@ export default function RaidBoss() {
               >
                 {canAct ? `⚔ ${boss?.boss_name || BOSS_NAME}に挑戦する！` : '準備中...'}
               </button>
+              {/* 出撃回数EXPボーナス（次の出撃で乗る分＝現在の回数+1で判定） */}
+              {(() => {
+                const cnt = Number(myPart?.attack_count || 0)
+                const next = raidExpBonus(cnt + 1)
+                if (next <= 0) return null
+                return (
+                  <div style={{ marginTop: '10px', fontSize: '10px', color: '#88ddff', textAlign: 'center' }}>
+                    ⚔ 出撃{cnt}回　次の出撃報酬EXPボーナス +{next}
+                  </div>
+                )
+              })()}
               {(profile?.raid_exp_stack || 0) > 0 && (
                 <div style={{ marginTop: '10px', fontSize: '10px', color: '#ffcc44', textAlign: 'center' }}>
                   ⭐ EXPスタック: {profile.raid_exp_stack}/200
@@ -1175,6 +1211,7 @@ export default function RaidBoss() {
                   <div style={{ color: '#ff66cc' }}>宝石({reward.gem_rank}) × {reward.gem_count}個（ランダム種類）</div>
                   <div style={{ color: '#cc8844' }}>通常素材：{reward.mat_name || '黒龍の鱗'} × {reward.scale_count}個</div>
                   {reward.got_gyaku && <div style={{ color: '#ffcc00' }}>⭐ レア素材：{reward.rare_name || '黒龍の逆鱗'} × 1個（レアドロップ！）</div>}
+                  {reward.got_crystal && <div style={{ color: '#88ddff' }}>💠 強者の結晶 × 1個（レアドロップ！）</div>}
                   {reward.book && <div style={{ color: '#ffaa44' }}>📖 {reward.book} × 1個</div>}
                   {reward.top_rank >= 1 && reward.top_rank <= 3 && (
                     <div style={{ color: '#ffdd44', marginTop: '2px' }}>
@@ -1268,13 +1305,19 @@ function RewardTable({ isAdmin = false }) {
             <span style={{ color: '#ffcc00' }}>Gold {fmt(t.gold)}</span>
           </div>
           <div style={{ color: '#446688', marginTop: '2px' }}>
-            強化石{t.stones.map(s=>`(${s})`).join('・')}×2　宝石{t.gemRank}×{t.gemCount}　通常素材×{t.scaleCount}{t.tier !== 'D' ? `　レア素材${t.rareChance}` : ''}{t.book ? `　匠の秘伝書${t.book}×1` : ''}
+            強化石{t.stones.map(s=>`(${s})`).join('・')}×2　宝石{t.gemRank}×{t.gemCount}　通常素材×{t.scaleCount}{t.tier !== 'D' ? `　レア素材${t.rareChance}` : ''}{t.book ? `　匠の秘伝書${t.book}×1` : ''}{t.crystalChance ? `　強者の結晶${t.crystalChance}` : ''}
           </div>
         </div>
       ))}
       <div style={{ color: '#ffdd44', fontSize: '10px', marginTop: '8px', lineHeight: 1.7 }}>
         🏅 与ダメージ上位3名には追加報酬（tier報酬とは別途）: 1位 Gold+100,000＋匠の秘伝書Ⅴ / 2位 Gold+100,000＋匠の秘伝書Ⅳ / 3位 Gold+100,000＋匠の秘伝書Ⅲ
         <br />※ 上位3名の追加報酬は夜（21時・22時）の枠のみ。昼の枠には付きません（ティア報酬・素材・秘伝書は同じです）。
+      </div>
+      <div style={{ color: '#88ddff', fontSize: '10px', marginTop: '6px', lineHeight: 1.7 }}>
+        ⚔ 出撃回数EXPボーナス: そのレイドでの出撃回数が増えるほど、1回あたりの出撃報酬EXPが増えます（基本EXPに加算）。
+        <br />{RAID_EXP_BONUS.slice().reverse().map((b, i, arr) => (
+          i === arr.length - 1 ? `${b.attacks}回〜 +${b.bonus}` : `${b.attacks}〜${arr[i + 1].attacks - 1}回 +${b.bonus} / `
+        )).join('')}
       </div>
       <div style={{ color: '#334455', fontSize: '10px', marginTop: '6px' }}>※ 出撃回数でもティア保証: {tierAttacks(TIER_INFO[2], isAdmin)}回→C / {tierAttacks(TIER_INFO[1], isAdmin)}回→B / {tierAttacks(TIER_INFO[0], isAdmin)}回→A。時間切れでもその時点の報酬を獲得可</div>
       <div style={{ color: '#446655', fontSize: '10px', marginTop: '4px', lineHeight: 1.7 }}>※ 討伐支援: 出現から25分経過（残り5分）以降は与ダメージ制限が緩和され討伐しやすくなります。ただしこの間に与えたダメージはランキング（貢献度・与ダメ順位）には加算されません。</div>
