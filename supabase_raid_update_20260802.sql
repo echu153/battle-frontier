@@ -4,9 +4,12 @@
 --        そのレイドでの累計出撃回数（raid_participants.attack_count）に応じて加算。
 --        10〜19回 +1 / 20〜29回 +2 / 30〜39回 +3 / 40〜49回 +5 / 50回〜 +6
 --        （基本EXPは従来どおり7〜10のランダム。ボーナスはその上に加算）
---        ※かかし修練中はボーナス込みで0（従来どおり）。レベル上限中はEXPスタックに乗る。
+--        ※レベル上限中はボーナス込みでEXPスタックに乗る。
 --   ② ティア報酬に「強者の結晶」を低確率で追加
 --        A 8% / B 5% / C 3%（Dティアは無し）
+--   ③ 仕様変更: かかし修練中でもレイドの出撃報酬EXPを付与する（ユーザー指示・2026-08-02）
+--        supabase_raid_scarecrow_noexp_fix_20260720.sql で「修練中はEXPなし」にしていたが、
+--        仕様として取りやめ。scarecrow_is_active による分岐を撤去した。
 --
 --   ★★ 以後、attack_raid_boss / claim_raid_rewards の「最後に流す正」は【このファイル】。
 --      ベース: attack_raid_boss     = supabase_raid_scarecrow_noexp_fix_20260720.sql
@@ -58,8 +61,6 @@ DECLARE
   v_stack_after  int;
   v_stack_added  int;
   v_exp_applied  int;
-  -- かかし修練中は出撃報酬EXPなし（スタックへの蓄積・反映もなし）
-  v_sc_active   boolean;
 BEGIN
   v_player_id := auth.uid();
   IF v_player_id IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
@@ -82,8 +83,8 @@ BEGIN
   IF NOT FOUND THEN RETURN json_build_object('error', 'キャラクターが見つかりません'); END IF;
   IF v_profile.is_suspended THEN RETURN json_build_object('error', 'アカウント停止中'); END IF;
 
-  -- かかし修練中（時間経過前）判定。出撃自体は可・EXPのみなし（supabase_scarecrow.sql のヘルパー）
-  v_sc_active := scarecrow_is_active(v_player_id);
+  -- ★かかし修練中でも出撃報酬EXPは付与する（2026-08-02 仕様変更）。
+  --   以前あった scarecrow_is_active による除外はここで廃止。復活させないこと。
 
   -- クールダウン確認（共有CD: last_action_at を使用）
   IF v_profile.last_action_at IS NOT NULL THEN
@@ -144,13 +145,8 @@ BEGIN
     WHEN v_atk_count >= 10 THEN 1
     ELSE 0 END;
 
-  -- 出撃報酬EXP（基本7〜10ランダム ＋ 出撃回数ボーナス・かかし修練中は0）
-  IF v_sc_active THEN
-    v_exp_bonus := 0;
-    v_exp_gain  := 0;
-  ELSE
-    v_exp_gain := floor(random() * 4)::int + 7 + v_exp_bonus;
-  END IF;
+  -- 出撃報酬EXP（基本7〜10ランダム ＋ 出撃回数ボーナス）
+  v_exp_gain := floor(random() * 4)::int + 7 + v_exp_bonus;
 
   -- レベル上限判定（現在クラスのレベル vs キャップ。apply_battle_result と同じロジック）
   SELECT lv INTO v_class_lv FROM class_levels
@@ -164,17 +160,7 @@ BEGIN
 
   PERFORM set_config('app.allow_stat_change', 'on', true);
 
-  IF v_sc_active THEN
-    -- かかし修練中: EXPなし・スタックにも貯めず反映もしない（HP/MP回復とCD更新のみ）
-    v_stack_after := v_stack_before;
-    v_stack_added := 0;
-    v_exp_applied := 0;
-    UPDATE profiles SET
-      hp_current     = v_profile.hp_max,
-      mp_current     = v_profile.mp_max,
-      last_action_at = now()
-    WHERE id = v_player_id;
-  ELSIF v_is_at_cap THEN
+  IF v_is_at_cap THEN
     -- 上限到達中：EXPは加算せず「EXPスタック」に貯める（最大200）
     v_stack_after := LEAST(200, v_stack_before + v_exp_gain);
     v_stack_added := v_stack_after - v_stack_before;
@@ -206,13 +192,12 @@ BEGIN
     'hp_max',         v_boss.hp_max,
     'over25',         v_over25,
     'exp',            COALESCE(v_profile.exp, 0) + v_exp_applied,
-    'exp_gain',       v_exp_applied,                       -- 実際にexpへ反映された量（上限中・修練中は0）
-    'exp_bonus',      v_exp_bonus,                         -- ★出撃回数ボーナス分（修練中は0）
+    'exp_gain',       v_exp_applied,                       -- 実際にexpへ反映された量（上限中は0）
+    'exp_bonus',      v_exp_bonus,                         -- ★出撃回数ボーナス分
     'attack_count',   v_atk_count,                         -- ★このレイドでの累計出撃回数
     'at_cap',         v_is_at_cap,
-    'scarecrow_active', v_sc_active,                       -- かかし修練中（EXPなしの理由表示用）
     'stack_gain',     v_stack_added,                       -- 今回スタックに貯まった量
-    'stack_drained',  CASE WHEN NOT v_is_at_cap AND NOT v_sc_active THEN v_stack_before ELSE 0 END,  -- 反映されたスタック量
+    'stack_drained',  CASE WHEN NOT v_is_at_cap THEN v_stack_before ELSE 0 END,  -- 反映されたスタック量
     'raid_exp_stack', v_stack_after,                       -- 更新後のスタック（0〜200）
     'status',         CASE WHEN v_new_hp = 0 THEN 'defeated' ELSE 'active' END
   );

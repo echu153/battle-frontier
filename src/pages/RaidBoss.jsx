@@ -873,10 +873,8 @@ export default function RaidBoss() {
         const stackDrained = Number(data.stack_drained) || 0    // 今回反映されたスタック量
         const raidStack   = (typeof data.raid_exp_stack === 'number') ? data.raid_exp_stack : (profile.raid_exp_stack || 0)
         setProfile(prev => ({ ...prev, hp_current: eff.hp_max, mp_current: eff.mp_max, exp: newExp, raid_exp_stack: raidStack }))
-        if (data.scarecrow_active) {
-          // かかし修練中：出撃自体は可能だが出撃報酬EXPなし（スタックにも貯まらない）
-          setBattleLogs(prev => [...prev, { text: '🌾 かかし修練中のため出撃報酬EXPはありません', color: '#ffaa44' }])
-        } else if (atCap) {
+        // ※かかし修練中でもレイドの出撃報酬EXPは入る（2026-08-02 仕様変更）
+        if (atCap) {
           // レベル上限：EXPはスタックへ
           if (stackGain > 0) {
             setBattleLogs(prev => [...prev, { text: `⭐ レベル上限のためEXPをスタック +${stackGain}（${raidStack}/200）`, color: '#ffcc44' }])
@@ -893,10 +891,9 @@ export default function RaidBoss() {
           const bonus = (typeof data.exp_bonus === 'number')
             ? data.exp_bonus
             : raidExpBonus(Number(data.attack_count) || 0)
-          const cnt = Number(data.attack_count) || 0
           setBattleLogs(prev => [...prev, {
             text: bonus > 0
-              ? `EXP +${base}（出撃報酬 ＋出撃${cnt}回ボーナス+${bonus}）`
+              ? `EXP +${base}（出撃報酬・出撃ボーナス+${bonus}）`
               : `EXP +${base}（出撃報酬）`,
             color: '#44ff88',
           }])
@@ -1177,17 +1174,6 @@ export default function RaidBoss() {
               >
                 {canAct ? `⚔ ${boss?.boss_name || BOSS_NAME}に挑戦する！` : '準備中...'}
               </button>
-              {/* 出撃回数EXPボーナス（次の出撃で乗る分＝現在の回数+1で判定） */}
-              {(() => {
-                const cnt = Number(myPart?.attack_count || 0)
-                const next = raidExpBonus(cnt + 1)
-                if (next <= 0) return null
-                return (
-                  <div style={{ marginTop: '10px', fontSize: '10px', color: '#88ddff', textAlign: 'center' }}>
-                    ⚔ 出撃{cnt}回　次の出撃報酬EXPボーナス +{next}
-                  </div>
-                )
-              })()}
               {(profile?.raid_exp_stack || 0) > 0 && (
                 <div style={{ marginTop: '10px', fontSize: '10px', color: '#ffcc44', textAlign: 'center' }}>
                   ⭐ EXPスタック: {profile.raid_exp_stack}/200

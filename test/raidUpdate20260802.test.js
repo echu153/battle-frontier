@@ -41,11 +41,18 @@ test('SQL: ボーナスは基本EXP(7〜10)に加算される', () => {
     '基本EXPにボーナスが加算されていない')
 })
 
-test('SQL: かかし修練中はボーナス込みでEXP0（リグレッション防止）', () => {
-  assert.ok(/v_sc_active := scarecrow_is_active\(v_player_id\)/.test(attackFn),
-    'かかし修練チェックが消えている（2026-07-20と同じリグレッション）')
-  assert.ok(/IF v_sc_active THEN\s+v_exp_bonus := 0;\s+v_exp_gain\s+:= 0;/.test(attackFn),
-    'かかし修練中にボーナスが0になっていない')
+test('SQL: かかし修練中でも出撃報酬EXPが入る（2026-08-02 仕様変更）', () => {
+  // 旧SQL(supabase_raid_scarecrow_noexp_fix_20260720.sql)を後から流すと修練中0に戻る。
+  // このファイルが「最後に流す正」である限り、scarecrow 分岐は存在してはいけない。
+  const code = attackFn.replace(/--[^\n]*/g, '')  // コメントで「廃止した」と書いてあるだけの行は除く
+  assert.ok(!/scarecrow_is_active/.test(code), 'かかし修練による除外が復活している')
+  assert.ok(!/v_sc_active/.test(code), 'かかし修練中フラグの分岐が残っている')
+  assert.ok(/v_exp_gain := floor\(random\(\) \* 4\)::int \+ 7 \+ v_exp_bonus;/.test(attackFn),
+    'EXP付与が無条件になっていない')
+})
+
+test('クライアント: かかし修練中のEXPなし表示が残っていない', () => {
+  assert.ok(!/scarecrow_active/.test(jsx), 'RaidBoss.jsx に修練中EXPなしの分岐が残っている')
 })
 
 test('クライアント: EXPボーナス表がSQLと一致している', () => {
