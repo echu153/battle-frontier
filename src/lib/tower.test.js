@@ -188,7 +188,7 @@ test('出撃Goldと無限ポーションの上限（2026-08-03確定）', () => 
   assert.equal(towerSortieGold(1), 300)
   assert.equal(towerSortieGold(10), 3000)
   assert.equal(towerSortieGold(100), 30000)
-  assert.equal(RUN_POTION_LIMIT, 5)
+  assert.equal(RUN_POTION_LIMIT, 2)
 })
 
 test('深層のHPを見越して保存はbigintでなければならない', () => {

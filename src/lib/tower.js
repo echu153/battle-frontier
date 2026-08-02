@@ -30,7 +30,8 @@ export const MID_BOSS_RATE = 0.05
 export const towerSortieGold = (floor) => floor * 300
 
 // 層主挑戦（6連戦）の間に無限ポーションで回復できる回数の上限（道中を含む・2026-08-03確定）
-export const RUN_POTION_LIMIT = 5
+// ※5回では無限ポーションの5ターンCDに阻まれてほぼ届かず素通りだったため2回にした
+export const RUN_POTION_LIMIT = 2
 
 // 塔出撃1回で得られる塔EXP（層によらず固定）
 export const TOWER_EXP_PER_SORTIE = 100

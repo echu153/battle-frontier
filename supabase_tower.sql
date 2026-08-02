@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS tower_player (
   run_stage     int     NOT NULL DEFAULT 0,    -- 0..5（BOSS_RUN_STAGES の添字）
   run_hp        bigint,
   run_mp        bigint,
-  run_potion    int     NOT NULL DEFAULT 0,  -- この連戦で無限ポーションを使った回数（上限5回）
+  run_potion    int     NOT NULL DEFAULT 0,  -- この連戦で無限ポーションを使った回数（上限2回）
   run_started_at timestamptz,
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
