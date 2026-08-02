@@ -4162,32 +4162,15 @@ export default function Game() {
       setBattleLogs([...logs])
     }
 
-    // ★レイドEXPスタック反映（サーバー apply_battle_result と同じ条件で合算＝レベルアップ表示・スキル習得を一致させる）
-    if (!isAtCap && !frozenExp && (profile.raid_exp_stack || 0) > 0) {
-      newExp += profile.raid_exp_stack
-      logs.push({ text:`✨ レイドで貯めたEXPスタック +${profile.raid_exp_stack} を反映！`, color:'#88ccff' })
-      setBattleLogs([...logs])
-    }
-
+    // ★レイドEXPスタック・レベルアップは「サーバー確定値」で表示する（2026-08-02）
+    //   以前はここでクライアント試算のレベルアップを先に表示していたため、サーバーが上限扱い等で
+    //   EXPを加算しなかった場合に「LVUP表示→リロードで元のLVに戻る」が永久に繰り返された。
+    //   ここでは試算のみ行い、表示とスキル習得は apply_battle_result の応答後にまとめて行う。
+    const localStack = (!isAtCap && !frozenExp) ? (profile.raid_exp_stack || 0) : 0
+    newExp += localStack
     if (!isAtCap && !frozenExp) {
       while (newExp >= newExpNext && newLv < cap) {
         newExp -= newExpNext; newLv++; newExpNext = calcExpNext(newLv, profile.is_admin)
-        logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${newLv}！ ステータスポイント+1`, color:'#cc44ff' })
-        setBattleLogs([...logs])
-        const { data: lvupSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class).eq('required_lv', newLv)
-        const { data: alreadyLearned } = await supabase.from('player_skills').select('skill_id').eq('player_id', profile.id)
-        const alreadyIds = (alreadyLearned||[]).map(s => s.skill_id)
-        for (const skill of (lvupSkills||[])) {
-          if (!alreadyIds.includes(skill.id)) {
-            await supabase.from('player_skills').insert({ player_id:profile.id, skill_id:skill.id })
-            logs.push({ text:`⚡ スキル「${skill.name}」を習得した！`, color:'#cc44ff' })
-            setBattleLogs([...logs])
-          }
-        }
-      }
-      if (newLv >= cap) {
-        logs.push({ text:`🎯 ${profile.class}がレベルキャップ(LV${cap})に到達！`, color:'#ffcc00' })
-        setBattleLogs([...logs])
       }
     }
 
@@ -4209,6 +4192,42 @@ export default function Game() {
     if (rpcError || (rpcResult && rpcResult.ok === false)) {
       const reason = rpcResult?.reason || rpcError?.message || 'unknown'
       logs.push({ text: `⚠ サーバーが戦果を適用しませんでした（理由: ${reason}）。EXP/Goldは反映されていません。`, color: '#ff4444' })
+      setBattleLogs([...logs])
+    }
+
+    // ★EXPスタック反映・レベルアップ・スキル習得（サーバー確定値ベース）
+    //   new_lv / stack_drained を返さない旧SQL適用時のみクライアント試算にフォールバックする。
+    const applied = !(rpcError || (rpcResult && rpcResult.ok === false))
+    const stackDrained = typeof rpcResult?.stack_drained === 'number'
+      ? rpcResult.stack_drained
+      : (applied ? localStack : 0)
+    if (stackDrained > 0) {
+      logs.push({ text:`✨ レイドで貯めたEXPスタック +${stackDrained} を反映！`, color:'#88ccff' })
+      setBattleLogs([...logs])
+    }
+    const confirmedLv = applied
+      ? (typeof rpcResult?.new_lv === 'number' ? rpcResult.new_lv : newLv)
+      : profile.lv
+    if (rpcResult?.at_cap && expGained > 0) {
+      logs.push({ text:`⚠ サーバー側でレベル上限扱いのため、EXPは加算されませんでした。`, color:'#ff8844' })
+      setBattleLogs([...logs])
+    }
+    for (let lvUp = profile.lv + 1; lvUp <= confirmedLv; lvUp++) {
+      logs.push({ text:`★ LEVEL UP！ ${profile.class} LV${lvUp}！ ステータスポイント+1`, color:'#cc44ff' })
+      setBattleLogs([...logs])
+      const { data: lvupSkills } = await supabase.from('skills').select('*').eq('class_name', profile.class).eq('required_lv', lvUp)
+      const { data: alreadyLearned } = await supabase.from('player_skills').select('skill_id').eq('player_id', profile.id)
+      const alreadyIds = (alreadyLearned||[]).map(s => s.skill_id)
+      for (const skill of (lvupSkills||[])) {
+        if (!alreadyIds.includes(skill.id)) {
+          await supabase.from('player_skills').insert({ player_id:profile.id, skill_id:skill.id })
+          logs.push({ text:`⚡ スキル「${skill.name}」を習得した！`, color:'#cc44ff' })
+          setBattleLogs([...logs])
+        }
+      }
+    }
+    if (applied && !isAtCap && !frozenExp && confirmedLv >= cap) {
+      logs.push({ text:`🎯 ${profile.class}がレベルキャップ(LV${cap})に到達！`, color:'#ffcc00' })
       setBattleLogs([...logs])
     }
 

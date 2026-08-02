@@ -1,3 +1,5 @@
+-- ※ クラスLVキャップは public.class_level_cap(class, retraining) が唯一の正（初期職300/上位職500）。
+--    定義は supabase_levelcap_stack_fix_20260802.sql。このファイル単体を流す場合は先に同ファイルを適用すること。
 -- ============================================================
 -- 全プレイヤーのEXP正規化（本番公開 2026-06-20）
 --   必要EXPが全プレイヤーで「floor(base/2)+10」へ変わったため、超過しているexpを
@@ -28,7 +30,7 @@ BEGIN
     v_pend := COALESCE(r.pending_stat_points, 0);
     v_clv  := COALESCE(r.char_lv, 1);
     v_ups  := 0;
-    v_cap := CASE WHEN COALESCE((r.retraining ->> r.class)::int, 0) >= 5 THEN 300 ELSE 100 END;
+    v_cap := public.class_level_cap(r.class, r.retraining);
 
     LOOP
       v_next := floor((CASE

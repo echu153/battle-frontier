@@ -1,3 +1,5 @@
+-- ※ クラスLVキャップは public.class_level_cap(class, retraining) が唯一の正（初期職300/上位職500）。
+--    定義は supabase_levelcap_stack_fix_20260802.sql。このファイル単体を流す場合は先に同ファイルを適用すること。
 -- ============================================================
 -- 管理者(is_admin)のEXP超過を即時正規化（2026-06-20）
 --   背景: calc_exp_next を半減(is_admin先行)した結果、半減前に貯まっていた exp が
@@ -32,7 +34,7 @@ BEGIN
     v_clv  := COALESCE(r.char_lv, 1);
     v_ups  := 0;
     -- 当該クラスの有効キャップ（再修練5回で300、それ以外100）
-    v_cap := CASE WHEN COALESCE((r.retraining ->> r.class)::int, 0) >= 5 THEN 300 ELSE 100 END;
+    v_cap := public.class_level_cap(r.class, r.retraining);
 
     LOOP
       v_next := floor((CASE

@@ -1,3 +1,5 @@
+-- ※ クラスLVキャップは public.class_level_cap(class, retraining) が唯一の正（初期職300/上位職500）。
+--    定義は supabase_levelcap_stack_fix_20260802.sql。このファイル単体を流す場合は先に同ファイルを適用すること。
 -- ============================================================
 -- かかし修練場＋奈落闘技場イベント (JST 2026/7/20 5:00 〜 2026/8/3 4:59)
 --   ・かかし修練場: 獲得EXP 2倍 ＋ チャージ必要出撃回数 50回→10回
@@ -87,8 +89,7 @@ BEGIN
   SELECT lv INTO v_class_lv FROM class_levels
     WHERE player_id = v_uid AND class_name = v_profile.class;
   v_class_lv := COALESCE(v_class_lv, v_profile.lv);
-  v_cap := CASE WHEN COALESCE((v_profile.retraining ->> v_profile.class)::int, 0) >= 5
-                THEN 300 ELSE 100 END;
+  v_cap := public.class_level_cap(v_profile.class, v_profile.retraining);
   v_is_at_cap := v_class_lv >= v_cap;
   v_exp_frozen := COALESCE(v_profile.exp_frozen, false) OR
     (v_profile.exp_frozen_until IS NOT NULL AND v_profile.exp_frozen_until > now());

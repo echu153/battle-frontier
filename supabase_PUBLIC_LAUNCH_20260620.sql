@@ -1,3 +1,5 @@
+-- ※ クラスLVキャップは public.class_level_cap(class, retraining) が唯一の正（初期職300/上位職500）。
+--    定義は supabase_levelcap_stack_fix_20260802.sql。このファイル単体を流す場合は先に同ファイルを適用すること。
 -- ⚠⚠【2026-07-04 注意】このファイルの apply_battle_result は旧Gold上限(v_normal_golds=[8,30,100,180,300,450,700])。
 -- ⚠⚠ 再適用したら必ず「最後に」supabase_mutant_gold_20260703.sql を流し直すこと。
 -- ⚠⚠ 流さないと現行クライアント(263772e以降)の出撃が全プレイヤー invalid_gold 誤検知→EXP12時間凍結になる。
@@ -702,8 +704,7 @@ BEGIN
   SELECT lv INTO v_class_lv FROM class_levels
     WHERE player_id = v_uid AND class_name = v_profile.class;
   v_class_lv := COALESCE(v_class_lv, v_profile.lv);
-  v_cap := CASE WHEN COALESCE((v_profile.retraining ->> v_profile.class)::int, 0) >= 5
-                THEN 300 ELSE 100 END;
+  v_cap := public.class_level_cap(v_profile.class, v_profile.retraining);
   v_is_at_cap := v_class_lv >= v_cap;
   v_exp_frozen := COALESCE(v_profile.exp_frozen, false) OR
     (v_profile.exp_frozen_until IS NOT NULL AND v_profile.exp_frozen_until > now());
@@ -861,8 +862,7 @@ BEGIN
   SELECT lv INTO v_class_lv FROM class_levels
     WHERE player_id = v_uid AND class_name = v_profile.class;
   v_class_lv := COALESCE(v_class_lv, v_profile.lv);
-  v_cap := CASE WHEN COALESCE((v_profile.retraining ->> v_profile.class)::int, 0) >= 5
-                THEN 300 ELSE 100 END;
+  v_cap := public.class_level_cap(v_profile.class, v_profile.retraining);
   v_is_at_cap := v_class_lv >= v_cap;
 
   IF p_type = 'gold' THEN
@@ -1083,7 +1083,7 @@ BEGIN
     v_pend := COALESCE(r.pending_stat_points, 0);
     v_clv  := COALESCE(r.char_lv, 1);
     v_ups  := 0;
-    v_cap := CASE WHEN COALESCE((r.retraining ->> r.class)::int, 0) >= 5 THEN 300 ELSE 100 END;
+    v_cap := public.class_level_cap(r.class, r.retraining);
 
     LOOP
       v_next := floor((CASE
