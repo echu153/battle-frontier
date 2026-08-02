@@ -145,6 +145,24 @@ BEGIN
   RETURN NULL;
 END; $$;
 
+-- 層ごとに「正当に入りうるGoldの上限」（src/lib/tower.js の敵データから算出）。
+-- クライアント申告のGoldをここで頭打ちにする。上限を大きく取ると
+-- 改造クライアントから1回で桁違いのGoldを請求できてしまうため、実値ちょうどに合わせる。
+CREATE OR REPLACE FUNCTION tower_gold_cap(p_floor int, p_is_boss boolean) RETURNS int
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE WHEN p_is_boss THEN
+    CASE p_floor
+      WHEN 1 THEN 25000    WHEN 2 THEN 50900    WHEN 3 THEN 90000    WHEN 4 THEN 160000
+      WHEN 5 THEN 280000   WHEN 6 THEN 460000   WHEN 7 THEN 760000   WHEN 8 THEN 1300000
+      WHEN 9 THEN 2300000  WHEN 10 THEN 4000000 ELSE 0 END
+  ELSE
+    CASE p_floor
+      WHEN 1 THEN 8000     WHEN 2 THEN 16000    WHEN 3 THEN 28000    WHEN 4 THEN 48000
+      WHEN 5 THEN 80000    WHEN 6 THEN 130000   WHEN 7 THEN 220000   WHEN 8 THEN 380000
+      WHEN 9 THEN 650000   WHEN 10 THEN 1100000 ELSE 0 END
+  END
+$$;
+
 -- ------------------------------------------------------------
 -- Gold と 通常EXP の付与（街の出撃と同じ扱い）
 --  ⚠ profiles.exp は protect_stats の保護列なので、
@@ -329,9 +347,15 @@ BEGIN
     END IF;
   END IF;
 
-  -- 不正値の抑止（クライアント申告のGold/EXPに上限を掛ける）
-  v_gold := LEAST(GREATEST(COALESCE(p_gold, 0), 0), 20000000);
-  v_exp  := LEAST(GREATEST(COALESCE(p_exp,  0), 0), 100);
+  -- 不正値の抑止：申告Goldが層ごとの正当な上限を超えていたら
+  -- 不審フラグを立てて拒否する（街の apply_battle_result と同じ扱い）
+  IF COALESCE(p_gold, 0) < 0 OR COALESCE(p_gold, 0) > tower_gold_cap(p_floor, false) THEN
+    UPDATE profiles SET suspicious_flag = true WHERE id = v_pid;
+    RETURN json_build_object('error', 'Goldの申告が不正です');
+  END IF;
+  v_gold := COALESCE(p_gold, 0);
+  -- 塔の通常EXPは1回1（ツリーの「取得経験値+1の確率」で最大2）
+  v_exp  := LEAST(GREATEST(COALESCE(p_exp,  0), 0), 2);
 
   INSERT INTO tower_progress (player_id, floor, sortie_count)
     VALUES (v_pid, p_floor, 1)
@@ -480,8 +504,12 @@ BEGIN
     RETURN json_build_object('error', '連戦が最後まで進んでいません');
   END IF;
 
-  v_gold := LEAST(GREATEST(COALESCE(p_gold, 0), 0), 20000000);
-  v_exp  := LEAST(GREATEST(COALESCE(p_exp,  0), 0), 100);
+  IF COALESCE(p_gold, 0) < 0 OR COALESCE(p_gold, 0) > tower_gold_cap(p_floor, true) THEN
+    UPDATE profiles SET suspicious_flag = true WHERE id = v_pid;
+    RETURN json_build_object('error', 'Goldの申告が不正です');
+  END IF;
+  v_gold := COALESCE(p_gold, 0);
+  v_exp  := LEAST(GREATEST(COALESCE(p_exp,  0), 0), 2);
 
   -- 初クリアかどうか
   SELECT NOT COALESCE(boss_cleared, false) INTO v_new

@@ -33,6 +33,23 @@ const C = {
   dim: '#5f7099', accent: '#7fd4ff', gold: '#ffcc66', ok: '#66dd99', ng: '#ff6688',
 }
 
+// ページのガワ（ヘッダ＋街に戻る）。
+// ⚠コンポーネントの中で定義すると、状態が変わるたびに型が変わって
+//   中身が丸ごと作り直され、入力欄のフォーカスやスクロール位置が飛ぶ。必ず外に置く。
+function Shell({ nav, children }) {
+  return (
+    <div style={{ minHeight: '100vh', background: C.bg, padding: '12px', fontFamily: 'monospace' }}>
+      <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${C.line}`, paddingBottom: '8px', marginBottom: '12px', position: 'sticky', top: 0, zIndex: 30, paddingTop: '8px', background: C.bg }}>
+          <div style={{ color: C.accent, fontSize: '16px', letterSpacing: '3px' }}>🗼 星霜百層塔</div>
+          <button onClick={() => nav('/game')} style={{ background: 'none', border: `1px solid ${C.line}`, color: C.text, padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>🏰 街に戻る</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 export default function Tower() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
@@ -55,6 +72,8 @@ export default function Tower() {
   const [targetOptions, setTargetOptions] = useState([])   // 狙う相手（スキル設定画面で決める）
   const [playerItem, setPlayerItem] = useState(null)       // 装備中のアイテム（塔でも街と同じく使える）
   const logsEndRef = useRef(null)
+  const floorPickedRef = useRef(false)   // 最前線への自動合わせは初回だけ
+  const busyRef = useRef(false)          // 連打で二重に戦闘が走るのを防ぐ（stateは反映が1テンポ遅れる）
 
   useEffect(() => { init() }, [])
   useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [logs])
@@ -101,9 +120,13 @@ export default function Tower() {
     if (error) { setStatus({ error: 'SQL未実行の可能性があります（supabase_tower.sql）' }); return }
     setStatus(data)
     if (data && !data.error) {
-      // 最前線＝まだ層主を倒していない一番手前の層
-      const next = (data.floors || []).find(f => f.unlocked && !f.boss_cleared)
-      setSelFloor(next ? next.floor : Math.min(MAX_IMPLEMENTED_FLOOR, (data.max_floor || 0) + 1) || 1)
+      // 選んでいる層は保つ。初回だけ最前線（まだ層主を倒していない一番手前の層）に合わせる。
+      // 毎回上書きすると、踏破済みの層を周回しているときに勝手に飛ばされる。
+      if (!floorPickedRef.current) {
+        floorPickedRef.current = true
+        const next = (data.floors || []).find(f => f.unlocked && !f.boss_cleared)
+        setSelFloor(next ? next.floor : Math.min(MAX_IMPLEMENTED_FLOOR, (data.max_floor || 0) + 1) || 1)
+      }
       if (data.run) {
         setRunInfo({ floor: data.run.floor, stage: data.run.stage, hp: Number(data.run.hp), mp: Number(data.run.mp), resumed: true })
       }
@@ -148,9 +171,10 @@ export default function Tower() {
 
   // ── 塔出撃（雑魚1体・HP/MP満タン） ──────────────────────────
   const doSortie = async (floor) => {
-    if (busy) return
+    if (busy || busyRef.current) return
     const fd = getFloor(floor)
     if (!fd) return
+    busyRef.current = true
     setBusy(true); setScene('battle'); setLogs([]); setMsg(null); setGain(null)
     try {
       if (await idleBlocked()) return
@@ -177,13 +201,15 @@ export default function Tower() {
     } catch (e) {
       setMsg(e?.message === 'timeout' ? '通信がタイムアウトしました。' : '戦闘処理でエラーが発生しました。')
     } finally {
+      busyRef.current = false
       setBusy(false)
     }
   }
 
   // ── 層主連戦：開始 ──────────────────────────────────────────
   const startRun = async (floor) => {
-    if (busy) return
+    if (busy || busyRef.current) return
+    busyRef.current = true
     setBusy(true); setMsg(null); setGain(null); setLogs([])
     try {
       if (await idleBlocked()) return
@@ -195,26 +221,26 @@ export default function Tower() {
       setScene('battle')
     } catch (e) {
       setMsg(e?.message === 'timeout' ? '通信がタイムアウトしました。' : '開始処理でエラーが発生しました。')
-    } finally { setBusy(false) }
+    } finally { busyRef.current = false; setBusy(false) }
   }
 
   // ── 層主連戦：1戦ぶん進める ─────────────────────────────────
   const runStage = async () => {
-    if (busy || !runInfo) return
+    if (busy || busyRef.current || !runInfo) return
     const fd = getFloor(runInfo.floor)
     if (!fd) return
+    busyRef.current = true
     setBusy(true); setLogs([]); setMsg(null); setGain(null)
     try {
       // 連戦の途中でも毎戦チェックする（別端末で釣りを始める等の抜け道を塞ぐ）
       if (await idleBlocked()) return
       const stage = runInfo.stage
       const enemies = buildStageEnemies(fd, stage)
-      // 使い切りアイテムは連戦を通して1個。使った後の戦は持っていない扱いにする
-      const itemForStage = runInfo.itemGone ? null : playerItem
+      // アイテムは街の出撃と同じく「1戦闘に1個」。連戦の各戦で使える（使うたび在庫は減る）
       const res = simulateTowerBattle({
         eff: buildEff(), equipment, skillSets, profile,
         enemies, floorData: fd, tree: treeAlloc, targetMode,
-        startHp: runInfo.hp, startMp: runInfo.mp, playerItem: itemForStage,
+        startHp: runInfo.hp, startMp: runInfo.mp, playerItem,
       })
       setLogs(res.logs)
       if (res.itemUsed) await consumeItem()
@@ -236,11 +262,11 @@ export default function Tower() {
       }
       const { data, error } = await withTimeout(supabase.rpc('tower_run_save', { p_stage: stage + 1, p_hp: res.hp, p_mp: res.mp }))
       if (error || data?.error) { setMsg(data?.error || error?.message || '進行の保存に失敗しました'); return }
-      setRunInfo({ ...runInfo, stage: stage + 1, hp: res.hp, mp: res.mp, hpMax: res.hpMax, mpMax: res.mpMax, itemGone: runInfo.itemGone || res.itemUsed })
+      setRunInfo({ ...runInfo, stage: stage + 1, hp: res.hp, mp: res.mp, hpMax: res.hpMax, mpMax: res.mpMax })
       setGain({ win: true, stageLabel: BOSS_RUN_STAGES[stage].label, hp: res.hp, mp: res.mp, hpMax: res.hpMax, mpMax: res.mpMax })
     } catch (e) {
       setMsg(e?.message === 'timeout' ? '通信がタイムアウトしました。' : '戦闘処理でエラーが発生しました。')
-    } finally { setBusy(false) }
+    } finally { busyRef.current = false; setBusy(false) }
   }
 
   const abortRun = async () => {
@@ -288,26 +314,13 @@ export default function Tower() {
   }
 
 
-  // 独立したページなので、他の画面と同じガワ（ヘッダ＋街に戻る）を持つ
-  const Shell = ({ children }) => (
-    <div style={{ minHeight: '100vh', background: C.bg, padding: '12px', fontFamily: 'monospace' }}>
-      <div style={{ maxWidth: '640px', margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${C.line}`, paddingBottom: '8px', marginBottom: '12px', position: 'sticky', top: 0, zIndex: 30, paddingTop: '8px', background: C.bg }}>
-          <div style={{ color: C.accent, fontSize: '16px', letterSpacing: '3px' }}>🗼 星霜百層塔</div>
-          <button onClick={() => nav('/game')} style={{ background: 'none', border: `1px solid ${C.line}`, color: C.text, padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>🏰 街に戻る</button>
-        </div>
-        {children}
-      </div>
-    </div>
-  )
-
   // ============================================================
   if (!profile || !status) {
     return <div style={{ color: C.accent, textAlign: 'center', marginTop: '30vh', fontFamily: 'monospace' }}>読み込み中...</div>
   }
   if (status.error) {
     return (
-      <Shell>
+      <Shell nav={nav}>
         <div style={{ padding: '20px', color: C.ng, textAlign: 'center', fontSize: '12px' }}>{status.error}</div>
       </Shell>
     )
@@ -322,7 +335,7 @@ export default function Tower() {
     const inRun = !!runInfo
     const stageLabel = inRun ? BOSS_RUN_STAGES[runInfo.stage]?.label : null
     return (
-      <Shell>
+      <Shell nav={nav}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
           <div style={{ color: C.accent, fontSize: '13px' }}>
             {floorLabel(inRun ? runInfo.floor : selFloor)}
@@ -413,7 +426,7 @@ export default function Tower() {
 
   // ── ロビー ──────────────────────────────────────────────────
   return (
-    <Shell>
+    <Shell nav={nav}>
       {/* 塔LV・タブ */}
       <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '10px 12px', marginBottom: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px' }}>

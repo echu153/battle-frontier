@@ -168,6 +168,22 @@ test('対象設定', () => {
   assert.ok(isTargetMode('random') && !isTargetMode('xxx'))
 })
 
+test('SQLのGold上限が層ごとの実値と一致している', async () => {
+  // クライアント申告のGoldはサーバーで頭打ちにする。上限が実値より大きいと
+  // 改造クライアントから桁違いのGoldを請求できてしまう。
+  const fs = await import('node:fs')
+  const sql = fs.readFileSync('supabase_tower.sql', 'utf8')
+  assert.ok(!/20000000/.test(sql), '緩すぎる上限(2000万)が残っていない')
+  assert.ok(/suspicious_flag = true/.test(sql), '超過時に不審フラグを立てる')
+  for (const f of TOWER_FLOORS) {
+    const mobMax = Math.max(...f.enemies.map(e => e.gold), f.midBoss.gold)
+    const escorts = (f.floorBoss.escorts || []).reduce((a, e) => a + f.enemies[e.enemyIndex].gold * (e.count || 1), 0)
+    const bossMax = f.floorBoss.gold + escorts
+    assert.ok(new RegExp(`WHEN ${f.floor} THEN ${mobMax}\\b`).test(sql), `${f.floor}層の出撃上限 ${mobMax} がSQLにある`)
+    assert.ok(new RegExp(`WHEN ${f.floor} THEN ${bossMax}\\b`).test(sql), `${f.floor}層の層主上限 ${bossMax} がSQLにある`)
+  }
+})
+
 test('深層のHPを見越して保存はbigintでなければならない', () => {
   // 10層時点では int4 に収まるが、1.2倍複利で伸ばすと100層で確実に溢れる。
   // SQL側の run_hp / tower_exp が bigint であることの根拠。

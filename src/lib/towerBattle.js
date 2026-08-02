@@ -54,6 +54,14 @@ export function simulateTowerBattle({
   const eff = applyTreeToStats(rawEff, tr)
 
   const enemies = enemyList.slice()
+  // 持ち越しHPが0以下＝前の戦闘で相打ちになっている。1に切り上げて生き返らせない
+  if (startHp != null && startHp <= 0) {
+    logs.push({ text: `力尽きている…（HPが残っていない）`, color: '#ff4444' })
+    return {
+      logs, win: false, turns: 0, hp: 0, mp: Math.max(0, startMp || 0),
+      hpMax: eff.hp_max, mpMax: eff.mp_max, itemUsed: false, gold: 0,
+    }
+  }
   let playerHp = startHp == null ? eff.hp_max : Math.min(eff.hp_max, Math.max(1, startHp))
   let playerMp = startMp == null ? eff.mp_max : Math.min(eff.mp_max, Math.max(0, startMp))
   let turn = 1
@@ -1041,11 +1049,18 @@ export function simulateTowerBattle({
     turn++
   }
 
-  const win = alive().length === 0
+  // 相打ち（最後の一撃と同時に屈折の反射などで倒れる）は勝ちにしない。
+  // 勝ち扱いにすると残HP0で連戦を続けられてしまう。
+  const win = alive().length === 0 && playerHp > 0
   const turns = Math.min(turn, turnCap)
   logs.push(win
     ? { text: `${turns}ターンで勝利した！`, color: '#44ff88' }
-    : { text: playerHp <= 0 ? `敗北… また挑もう。` : `決着がつかなかった…（${turnCap}ターン）`, color: '#ff4444' })
+    : {
+      text: playerHp <= 0
+        ? (alive().length === 0 ? `相打ち… こちらも力尽きた。` : `敗北… また挑もう。`)
+        : `決着がつかなかった…（${turnCap}ターン）`,
+      color: '#ff4444',
+    })
 
   return {
     logs, win, turns,
