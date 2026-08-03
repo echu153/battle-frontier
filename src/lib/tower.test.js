@@ -178,6 +178,11 @@ test('Goldはサーバーが決める（クライアント申告を受け取ら�
   assert.ok(sql.includes('v_gold := tower_boss_gold(p_floor, v_new)'), '層主はサーバー計算（初回判定込み）')
   // v_gold を p_gold から作っていない＝クライアント申告を使っていない
   assert.ok(!sql.includes('v_gold := COALESCE(p_gold'), 'クライアント申告のGoldを使っていない')
+  // 通常EXPも街の出撃と同じ量をサーバーが決める（雑魚8〜11/ボス13、10秒モードは5〜6/7）
+  assert.ok(sql.includes('v_exp  := tower_battle_exp(v_pid'), 'EXPもサーバー計算')
+  assert.ok(!sql.includes('LEAST(GREATEST(COALESCE(p_exp'), 'クライアント申告のEXPを使っていない')
+  assert.ok(sql.includes('8 + floor(random() * 4)::int'), '雑魚EXPが街と同じ8〜11')
+  assert.ok(sql.includes('WHEN v_ten THEN 7 ELSE 13 END'), 'ボスEXPが街と同じ13(10秒は7)')
   assert.ok(!/20000000/.test(sql), '緩すぎる上限(2000万)が残っていない')
 })
 

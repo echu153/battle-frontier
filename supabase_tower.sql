@@ -165,6 +165,41 @@ $$;
 -- 旧: 申告Goldの上限チェック用。サーバー計算に変えたので不要
 DROP FUNCTION IF EXISTS tower_gold_cap(int, boolean);
 
+-- 通常EXPも街の出撃とまったく同じ量にする（2026-08-03確定）。Goldと同じくサーバーが決める。
+--   雑魚 : 20秒モード 8〜11 / 10秒モード 5〜6
+--   ボス : 20秒モード 13    / 10秒モード 7       （中ボス・層主）
+--   キャラLV100未満は1.5倍（街と同じ）
+--   さらに塔ツリー「取得経験値+1の確率」で +1（1段0.5%・最大50段=25%）
+CREATE OR REPLACE FUNCTION tower_battle_exp(p_uid uuid, p_is_boss boolean) RETURNS int
+LANGUAGE plpgsql AS $$
+DECLARE
+  v_profile profiles%ROWTYPE;
+  v_ten   boolean;
+  v_exp   int;
+  v_raw   text;
+  v_steps int := 0;
+BEGIN
+  SELECT * INTO v_profile FROM profiles WHERE id = p_uid;
+  IF NOT FOUND THEN RETURN 0; END IF;
+  v_ten := COALESCE(v_profile.sortie_mode, 20) = 10;
+
+  IF p_is_boss THEN
+    v_exp := CASE WHEN v_ten THEN 7 ELSE 13 END;
+  ELSE
+    v_exp := CASE WHEN v_ten THEN 5 + floor(random() * 2)::int
+                  ELSE 8 + floor(random() * 4)::int END;
+  END IF;
+
+  IF COALESCE(v_profile.char_lv, 1) < 100 THEN v_exp := floor(v_exp * 1.5); END IF;
+
+  -- ツリーの「取得経験値+1の確率」。tree_alloc は jsonb なので数値以外が入りうる
+  SELECT tree_alloc->>'exp_plus' INTO v_raw FROM tower_player WHERE player_id = p_uid;
+  IF v_raw ~ '^[0-9]+$' THEN v_steps := LEAST(50, v_raw::int); END IF;
+  IF v_steps > 0 AND random() < v_steps * 0.005 THEN v_exp := v_exp + 1; END IF;
+
+  RETURN v_exp;
+END; $$;
+
 -- ------------------------------------------------------------
 -- Gold と 通常EXP の付与（街の出撃と同じ扱い）
 --  ⚠ profiles.exp は protect_stats の保護列なので、
@@ -309,7 +344,7 @@ END; $$;
 --    p_won        : 勝ったか
 --    p_mid_defeat : この出撃で中ボスを倒したか
 --    p_gold       : 使わない（Goldはサーバーが決める。互換のため引数だけ残してある）
---    p_exp        : 通常EXP（キャラLV用）
+--    p_exp        : 使わない（EXPもサーバーが決める。互換のため引数だけ残してある）
 -- ============================================================
 CREATE OR REPLACE FUNCTION tower_sortie_result(
   p_floor int, p_won boolean, p_mid_defeat boolean DEFAULT false,
@@ -349,10 +384,10 @@ BEGIN
     END IF;
   END IF;
 
-  -- Goldはサーバーが決める（p_gold は受け取らない＝改ざんできない）
+  -- Gold・EXPともサーバーが決める（p_gold / p_exp は受け取らない＝改ざんできない）
   v_gold := tower_sortie_gold(p_floor);
-  -- 塔の通常EXPは1回1（ツリーの「取得経験値+1の確率」で最大2）
-  v_exp  := LEAST(GREATEST(COALESCE(p_exp,  0), 0), 2);
+  -- 中ボスに当たった出撃はボス扱い（街のボス遭遇と同じ量）
+  v_exp  := tower_battle_exp(v_pid, COALESCE(p_mid_defeat, false));
 
   INSERT INTO tower_progress (player_id, floor, sortie_count)
     VALUES (v_pid, p_floor, 1)
@@ -511,10 +546,10 @@ BEGIN
     FROM tower_progress WHERE player_id = v_pid AND floor = p_floor;
   v_new := COALESCE(v_new, true);
 
-  -- Goldはサーバーが決める（p_gold は受け取らない＝改ざんできない）
-  -- 初回だけ層数×100万、2回目以降は出撃と同じ層数×300
+  -- Gold・EXPともサーバーが決める（p_gold / p_exp は受け取らない＝改ざんできない）
+  -- Goldは初回だけ層数×100万、2回目以降は出撃と同じ層数×300
   v_gold := tower_boss_gold(p_floor, v_new);
-  v_exp  := LEAST(GREATEST(COALESCE(p_exp,  0), 0), 2);
+  v_exp  := tower_battle_exp(v_pid, true);
 
   INSERT INTO tower_progress (player_id, floor, boss_cleared, first_clear_at)
     VALUES (v_pid, p_floor, true, now())

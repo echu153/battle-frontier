@@ -181,6 +181,10 @@ export default function Tower() {
   // 狙う相手はスキル設定画面の「挑戦」セットの設定に従う（塔は挑戦セットを使うため）
   const targetMode = pickTargetMode(targetOptions, 'challenge')
   const tr = towerTreeEffects(treeAlloc)
+  // 出撃クールダウン（街の出撃と同じ effWait・アンカーも last_action_at を共有）
+  const sortieWait = profile ? effWait(profile) : 20
+  const canSortie = remaining <= 0 && !busy
+  const timerPct = Math.min(100, ((sortieWait - remaining) / sortieWait) * 100)
 
   // ── 塔出撃（雑魚1体・HP/MP満タン） ──────────────────────────
   const doSortie = async (floor) => {
@@ -220,10 +224,9 @@ export default function Tower() {
       })
       setLogs(res.logs)
       if (res.itemUsed) await consumeItem()
-      const exp = 1 + (Math.random() < tr.expPlus ? 1 : 0)
+      // Gold・EXPはサーバーが決める（クライアントからは申告しない）
       const { data, error } = await withTimeout(supabase.rpc('tower_sortie_result', {
         p_floor: floor, p_won: res.win, p_mid_defeat: isMid && res.win,
-        p_exp: res.win ? exp : 0,   // Goldはサーバーが決める（申告しない）
       }))
       if (error || data?.error) {
         setMsg(data?.error || error?.message || '結果の反映に失敗しました')
@@ -286,8 +289,8 @@ export default function Tower() {
         return
       }
       if (stage >= BOSS_RUN_STAGES.length - 1) {
-        const exp = 1 + (Math.random() < tr.expPlus ? 1 : 0)
-        const { data, error } = await withTimeout(supabase.rpc('tower_boss_clear', { p_floor: runInfo.floor, p_exp: exp }))
+        // Gold・EXPはサーバーが決める（クライアントからは申告しない）
+        const { data, error } = await withTimeout(supabase.rpc('tower_boss_clear', { p_floor: runInfo.floor }))
         if (error || data?.error) { setMsg(data?.error || error?.message || '撃破の反映に失敗しました'); return }
         setRunInfo(null)
         setGain({ win: true, cleared: true, floor: runInfo.floor, gold: data.gold, exp: data.exp, firstClear: data.first_clear, monument: data.monument })
@@ -512,16 +515,23 @@ export default function Tower() {
             <button onClick={() => nav('/skills')} style={btn(C.dim)}>スキル設定で変更 ↗</button>
           </div>
 
-          {/* 層の選択（街の出撃のエリア選択と同じプルダウン形式） */}
+          {/* 出撃パネル（街の出撃と同じ形：タイマー→層選択→大きな出撃ボタン） */}
           <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '12px', marginBottom: '10px' }}>
-            <div style={{ color: C.text, fontSize: '11px', marginBottom: '6px' }}>挑む層</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '3px' }}>
+              <span style={{ color: C.dim }}>次の行動まで</span>
+              <span style={{ color: canSortie ? C.ok : C.gold }}>{canSortie ? '▶ 出撃可能！' : `${remaining.toFixed(1)}秒`}</span>
+            </div>
+            <div style={{ background: '#001028', height: '6px', border: '1px solid #002244', marginBottom: '10px' }}>
+              <div style={{ height: '100%', width: `${timerPct}%`, background: canSortie ? C.ok : 'linear-gradient(90deg,#003366,#0088ff)', transition: 'width 0.2s' }} />
+            </div>
+
             <select
               value={selFloor}
               onChange={e => setSelFloor(Number(e.target.value))}
               disabled={busy || !!runInfo}
               style={{
-                width: '100%', background: '#001028', border: `1px solid ${C.accent}`, color: C.accent,
-                fontFamily: 'monospace', fontSize: '13px', padding: '8px',
+                width: '100%', background: '#001028', border: '1px solid #0044aa', color: '#88ccff',
+                padding: '8px', fontFamily: 'monospace', fontSize: '12px', marginBottom: '8px',
               }}>
               {/* 挑戦できる層だけ出す。未解放の層は存在ごと見せない（層主の名前も伏せる） */}
               {floors.filter(f => f.unlocked).map(f => (
@@ -534,32 +544,50 @@ export default function Tower() {
 
             {sel?.unlocked && fd && (
               <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', fontSize: '11px' }}>
-                  <span style={{ color: C.text }}>
-                    {isMonumentFloor(selFloor) && '🗿 '}
-                    {/* 層主の名前は倒すまで伏せる */}
-                    層主「<span style={{ color: C.gold }}>{sel.boss_cleared ? fd.boss : '？？？'}</span>」
-                  </span>
-                  <span style={{ color: sel.boss_cleared ? C.ok : sel.mid_defeated ? C.gold : C.dim, fontSize: '10px' }}>
-                    {sel.boss_cleared ? '✓ 踏破済' : sel.mid_defeated ? '層主に挑戦可' : '探索中'}
-                  </span>
+                <div style={{ background: '#001626', border: `1px solid ${C.line}`, padding: '7px 10px', marginBottom: '8px', fontSize: '11px', lineHeight: '1.6', borderRadius: '3px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: C.text }}>
+                      {isMonumentFloor(selFloor) && '🗿 '}
+                      {/* 層主の名前は倒すまで伏せる */}
+                      層主「<span style={{ color: C.gold }}>{sel.boss_cleared ? fd.boss : '？？？'}</span>」
+                    </span>
+                    <span style={{ color: sel.boss_cleared ? C.ok : sel.mid_defeated ? C.gold : C.dim, fontSize: '10px' }}>
+                      {sel.boss_cleared ? '✓ 踏破済' : sel.mid_defeated ? '層主に挑戦可' : '探索中'}
+                    </span>
+                  </div>
+                  {!sel.mid_defeated && sel.sortie_count >= sel.need && (
+                    <div style={{ color: C.gold, fontSize: '10px', marginTop: '4px' }}>💡 中ボスの気配がする。出撃を続けて遭遇を狙おう。</div>
+                  )}
                 </div>
-                <div style={{ color: C.dim, fontSize: '10px', lineHeight: '1.8', margin: '10px 0' }}>
+
+                <button onClick={() => doSortie(selFloor)} disabled={!canSortie || busy || !!runInfo}
+                  style={{
+                    width: '100%', padding: '14px', background: '#001840',
+                    border: `1px solid ${canSortie && !runInfo ? C.gold : '#003366'}`,
+                    color: canSortie && !runInfo ? C.gold : '#446688',
+                    cursor: canSortie && !runInfo ? 'pointer' : 'not-allowed',
+                    fontFamily: 'monospace', fontSize: '14px', letterSpacing: '2px', marginBottom: '10px',
+                  }}>
+                  {runInfo ? '⚔ 連戦中（出撃不可）' : busy ? '⏳ 戦闘中...' : canSortie ? `⚔ ${floorLabel(selFloor)}へ出撃！` : '⏳ 待機中...'}
+                </button>
+
+                <button onClick={() => (runInfo ? setScene('battle') : startRun(selFloor))} disabled={busy || !sel.mid_defeated}
+                  style={{
+                    width: '100%', padding: '12px', background: '#0a1020',
+                    border: `1px solid ${sel.mid_defeated && !busy ? C.accent : '#333'}`,
+                    color: sel.mid_defeated && !busy ? C.accent : '#333',
+                    cursor: sel.mid_defeated && !busy ? 'pointer' : 'not-allowed',
+                    fontFamily: 'monospace', fontSize: '13px', marginBottom: '10px',
+                    opacity: sel.mid_defeated ? 1 : 0.4,
+                  }}>
+                  {sel.mid_defeated ? `🗼 層主に挑む（${BOSS_RUN_STAGES.length}連戦）` : '🗼 層主に挑む（中ボス撃破が必要）'}
+                </button>
+
+                <div style={{ color: C.dim, fontSize: '10px', lineHeight: '1.7' }}>
                   出撃を重ねると、やがて中ボスが現れるようになります。<br />
                   中ボスを倒すと層主へ挑戦できます。層主への道は<span style={{ color: C.gold }}>{BOSS_RUN_STAGES.length}連戦</span>で、その間HP・MPは回復しません。<br />
                   出撃・連戦の開始時はHP・MPが満タンになります（街のHPとは別枠）。
                 </div>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <button onClick={() => doSortie(selFloor)} disabled={busy || !!runInfo || remaining > 0} style={btn(C.accent, busy || !!runInfo || remaining > 0)}>
-                    {remaining > 0 ? `⏳ ${remaining.toFixed(1)}秒` : '⚔ 出撃する'}
-                  </button>
-                  <button onClick={() => (runInfo ? setScene('battle') : startRun(selFloor))} disabled={busy || !sel.mid_defeated} style={btn(C.gold, busy || !sel.mid_defeated)}>
-                    🗼 層主に挑む
-                  </button>
-                </div>
-                {!sel.mid_defeated && sel.sortie_count >= sel.need && (
-                  <div style={{ color: C.gold, fontSize: '10px', marginTop: '8px' }}>中ボスの気配がする。出撃を続けて遭遇を狙いましょう。</div>
-                )}
               </>
             )}
           </div>
