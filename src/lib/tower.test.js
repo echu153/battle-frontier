@@ -7,7 +7,7 @@ import {
   TOWER_FLOORS, getFloor, MAX_IMPLEMENTED_FLOOR, BOSS_RUN_STAGES,
   towerTarget, sortiesToMidBoss, towerExpToNext, towerLevelFromExp, TOWER_EXP_PER_SORTIE,
   TREE_NODES, TREE_MAX_STEPS, maxStepsAt, nextUnlock, treeBonus, treeSpent, treeResetCost,
-  isMonumentFloor, MID_BOSS_RATE, towerSortieGold, RUN_POTION_LIMIT,
+  isMonumentFloor, MID_BOSS_RATE, towerSortieGold, towerBossGold, RUN_POTION_LIMIT,
   buildStageEnemies, buildSortieEnemies, towerTreeEffects, applyTreeToStats,
 } from './tower.js'
 import { TARGET_MODES, DEFAULT_TARGET_MODE, pickTargetMode, isTargetMode } from './loadout.js'
@@ -175,19 +175,19 @@ test('SQLのGold上限が層ごとの実値と一致している', async () => {
   const sql = fs.readFileSync('supabase_tower.sql', 'utf8')
   assert.ok(!/20000000/.test(sql), '緩すぎる上限(2000万)が残っていない')
   assert.ok(/suspicious_flag = true/.test(sql), '超過時に不審フラグを立てる')
-  // 出撃は「層数×300」で固定（敵データの gold は仮値なので使わない）
-  assert.ok(/GREATEST\(0, p_floor\) \* 300/.test(sql), '出撃のGoldが層数×300でSQLに入っている')
-  for (const f of TOWER_FLOORS) {
-    const escorts = (f.floorBoss.escorts || []).reduce((a, e) => a + f.enemies[e.enemyIndex].gold * (e.count || 1), 0)
-    const bossMax = f.floorBoss.gold + escorts
-    assert.ok(new RegExp(`WHEN ${f.floor} THEN ${bossMax}\\b`).test(sql), `${f.floor}層の層主上限 ${bossMax} がSQLにある`)
-  }
+  // 出撃は「層数×300」、層主撃破は「層数×100万」で固定（敵データの gold は仮値なので使わない）
+  assert.ok(sql.includes('GREATEST(0, p_floor) * 300'), '出撃のGoldが層数×300でSQLに入っている')
+  assert.ok(sql.includes('GREATEST(0, p_floor) * 1000000'), '層主のGoldが層数×100万でSQLに入っている')
 })
 
 test('出撃Goldと無限ポーションの上限（2026-08-03確定）', () => {
   assert.equal(towerSortieGold(1), 300)
   assert.equal(towerSortieGold(10), 3000)
   assert.equal(towerSortieGold(100), 30000)
+  assert.equal(towerBossGold(1), 1000000)
+  assert.equal(towerBossGold(10), 10000000)
+  // int4(約21億)を超えないこと。100層でも1億なので余裕がある
+  assert.ok(towerBossGold(100) < 2147483647, '100層でもint4に収まる')
   assert.equal(RUN_POTION_LIMIT, 2)
 })
 

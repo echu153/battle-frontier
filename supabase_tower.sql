@@ -154,10 +154,8 @@ END; $$;
 CREATE OR REPLACE FUNCTION tower_gold_cap(p_floor int, p_is_boss boolean) RETURNS int
 LANGUAGE sql IMMUTABLE AS $$
   SELECT CASE WHEN p_is_boss THEN
-    CASE p_floor
-      WHEN 1 THEN 25000    WHEN 2 THEN 50900    WHEN 3 THEN 90000    WHEN 4 THEN 160000
-      WHEN 5 THEN 280000   WHEN 6 THEN 460000   WHEN 7 THEN 760000   WHEN 8 THEN 1300000
-      WHEN 9 THEN 2300000  WHEN 10 THEN 4000000 ELSE 0 END
+    -- 層主撃破は「層数×100万」で固定（2026-08-03確定）
+    GREATEST(0, p_floor) * 1000000
   ELSE
     -- 塔出撃は「層数×300」で固定（2026-08-03確定）。中ボスに当たっても同額。
     GREATEST(0, p_floor) * 300
