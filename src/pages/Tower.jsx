@@ -439,7 +439,6 @@ export default function Tower() {
                 <div style={{ color: C.ok }}>勝利！ Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ 塔EXP +{fmt(gain.towerExp)}</div>
                 {gain.midCleared && <div style={{ color: C.gold }}>⚔ 中ボスを撃破！ 層主に挑めるようになった。</div>}
                 {gain.mid && !gain.midCleared && <div style={{ color: C.ng }}>中ボスが現れたが、退けられた…</div>}
-                <div style={{ color: C.dim }}>この層の出撃 {fmt(gain.count)} 回目</div>
               </>
             )}
           </div>
