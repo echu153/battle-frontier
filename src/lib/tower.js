@@ -29,9 +29,10 @@ export const MID_BOSS_RATE = 0.05
 // 経済を壊すため、出撃では使わずこの式で固定する。中ボスに当たっても同額。
 export const towerSortieGold = (floor) => floor * 300
 
-// 層主を撃破したときのGold（2026-08-03確定）。中ボス撃破ではなく層主戦の完走報酬。
-// 一度倒した層は何度でも挑戦できるので、これが周回できる収入になる。
-export const towerBossGold = (floor) => floor * 1000000
+// 層主を撃破したときのGold（2026-08-03確定）。
+// 初回だけ層数×100万、2回目以降は出撃と同じ層数×300（周回で稼げないようにする）。
+// ※実際に付与する額はサーバーが決める。ここは表示・テスト用の同じ式。
+export const towerBossGold = (floor, isFirstClear) => isFirstClear ? floor * 1000000 : towerSortieGold(floor)
 
 // 層主挑戦（6連戦）の間に無限ポーションで回復できる回数の上限（道中を含む・2026-08-03確定）
 // ※5回では無限ポーションの5ターンCDに阻まれてほぼ届かず素通りだったため2回にした

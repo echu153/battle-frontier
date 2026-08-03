@@ -148,19 +148,22 @@ BEGIN
   RETURN NULL;
 END; $$;
 
--- 層ごとに「正当に入りうるGoldの上限」（src/lib/tower.js の敵データから算出）。
--- クライアント申告のGoldをここで頭打ちにする。上限を大きく取ると
--- 改造クライアントから1回で桁違いのGoldを請求できてしまうため、実値ちょうどに合わせる。
-CREATE OR REPLACE FUNCTION tower_gold_cap(p_floor int, p_is_boss boolean) RETURNS int
+-- Goldは層と初回かどうかだけで決まるので、クライアントの申告を受け取らず
+-- サーバーが計算する。これで改ざんの余地そのものが無くなる。
+--   出撃    : 層数×300（中ボスに当たっても同額）
+--   層主撃破: 初回だけ層数×100万、2回目以降は出撃と同じ層数×300
+CREATE OR REPLACE FUNCTION tower_sortie_gold(p_floor int) RETURNS int
+LANGUAGE sql IMMUTABLE AS $$ SELECT GREATEST(0, p_floor) * 300 $$;
+
+CREATE OR REPLACE FUNCTION tower_boss_gold(p_floor int, p_first boolean) RETURNS int
 LANGUAGE sql IMMUTABLE AS $$
-  SELECT CASE WHEN p_is_boss THEN
-    -- 層主撃破は「層数×100万」で固定（2026-08-03確定）
-    GREATEST(0, p_floor) * 1000000
-  ELSE
-    -- 塔出撃は「層数×300」で固定（2026-08-03確定）。中ボスに当たっても同額。
-    GREATEST(0, p_floor) * 300
-  END
+  SELECT CASE WHEN p_first
+    THEN GREATEST(0, p_floor) * 1000000
+    ELSE tower_sortie_gold(p_floor) END
 $$;
+
+-- 旧: 申告Goldの上限チェック用。サーバー計算に変えたので不要
+DROP FUNCTION IF EXISTS tower_gold_cap(int, boolean);
 
 -- ------------------------------------------------------------
 -- Gold と 通常EXP の付与（街の出撃と同じ扱い）
@@ -305,7 +308,7 @@ END; $$;
 -- 4. 塔出撃の結果を反映
 --    p_won        : 勝ったか
 --    p_mid_defeat : この出撃で中ボスを倒したか
---    p_gold       : クライアントが計算したGold（サーバ側で上限を検証）
+--    p_gold       : 使わない（Goldはサーバーが決める。互換のため引数だけ残してある）
 --    p_exp        : 通常EXP（キャラLV用）
 -- ============================================================
 CREATE OR REPLACE FUNCTION tower_sortie_result(
@@ -346,13 +349,8 @@ BEGIN
     END IF;
   END IF;
 
-  -- 不正値の抑止：申告Goldが層ごとの正当な上限を超えていたら
-  -- 不審フラグを立てて拒否する（街の apply_battle_result と同じ扱い）
-  IF COALESCE(p_gold, 0) < 0 OR COALESCE(p_gold, 0) > tower_gold_cap(p_floor, false) THEN
-    UPDATE profiles SET suspicious_flag = true WHERE id = v_pid;
-    RETURN json_build_object('error', 'Goldの申告が不正です');
-  END IF;
-  v_gold := COALESCE(p_gold, 0);
+  -- Goldはサーバーが決める（p_gold は受け取らない＝改ざんできない）
+  v_gold := tower_sortie_gold(p_floor);
   -- 塔の通常EXPは1回1（ツリーの「取得経験値+1の確率」で最大2）
   v_exp  := LEAST(GREATEST(COALESCE(p_exp,  0), 0), 2);
 
@@ -508,17 +506,15 @@ BEGIN
     RETURN json_build_object('error', '連戦が最後まで進んでいません');
   END IF;
 
-  IF COALESCE(p_gold, 0) < 0 OR COALESCE(p_gold, 0) > tower_gold_cap(p_floor, true) THEN
-    UPDATE profiles SET suspicious_flag = true WHERE id = v_pid;
-    RETURN json_build_object('error', 'Goldの申告が不正です');
-  END IF;
-  v_gold := COALESCE(p_gold, 0);
-  v_exp  := LEAST(GREATEST(COALESCE(p_exp,  0), 0), 2);
-
-  -- 初クリアかどうか
+  -- 初クリアかどうか（Goldの額がこれで変わるので先に判定する）
   SELECT NOT COALESCE(boss_cleared, false) INTO v_new
     FROM tower_progress WHERE player_id = v_pid AND floor = p_floor;
   v_new := COALESCE(v_new, true);
+
+  -- Goldはサーバーが決める（p_gold は受け取らない＝改ざんできない）
+  -- 初回だけ層数×100万、2回目以降は出撃と同じ層数×300
+  v_gold := tower_boss_gold(p_floor, v_new);
+  v_exp  := LEAST(GREATEST(COALESCE(p_exp,  0), 0), 2);
 
   INSERT INTO tower_progress (player_id, floor, boss_cleared, first_clear_at)
     VALUES (v_pid, p_floor, true, now())

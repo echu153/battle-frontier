@@ -17,7 +17,7 @@ import {
   getFloor, MAX_IMPLEMENTED_FLOOR, BOSS_RUN_STAGES,
   TREE_NODES, TREE_LINES, TREE_MAX_STEPS, TREE_STEP_PCT,
   maxStepsAt, nextUnlock, treeSpent, treeResetCost,
-  MID_BOSS_RATE, isMonumentFloor, towerSortieGold, towerBossGold, RUN_POTION_LIMIT,
+  MID_BOSS_RATE, isMonumentFloor, RUN_POTION_LIMIT,
 } from '../lib/tower'
 import { simulateTowerBattle, buildStageEnemies, buildSortieEnemies, towerTreeEffects } from '../lib/towerBattle'
 
@@ -190,7 +190,7 @@ export default function Tower() {
       const exp = 1 + (Math.random() < tr.expPlus ? 1 : 0)
       const { data, error } = await withTimeout(supabase.rpc('tower_sortie_result', {
         p_floor: floor, p_won: res.win, p_mid_defeat: isMid && res.win,
-        p_gold: res.win ? towerSortieGold(floor) : 0, p_exp: res.win ? exp : 0,
+        p_exp: res.win ? exp : 0,   // Goldはサーバーが決める（申告しない）
       }))
       if (error || data?.error) {
         setMsg(data?.error || error?.message || '結果の反映に失敗しました')
@@ -254,7 +254,7 @@ export default function Tower() {
       }
       if (stage >= BOSS_RUN_STAGES.length - 1) {
         const exp = 1 + (Math.random() < tr.expPlus ? 1 : 0)
-        const { data, error } = await withTimeout(supabase.rpc('tower_boss_clear', { p_floor: runInfo.floor, p_gold: towerBossGold(runInfo.floor), p_exp: exp }))
+        const { data, error } = await withTimeout(supabase.rpc('tower_boss_clear', { p_floor: runInfo.floor, p_exp: exp }))
         if (error || data?.error) { setMsg(data?.error || error?.message || '撃破の反映に失敗しました'); return }
         setRunInfo(null)
         setGain({ win: true, cleared: true, floor: runInfo.floor, gold: data.gold, exp: data.exp, firstClear: data.first_clear, monument: data.monument })

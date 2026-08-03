@@ -168,26 +168,30 @@ test('対象設定', () => {
   assert.ok(isTargetMode('random') && !isTargetMode('xxx'))
 })
 
-test('SQLのGold上限が層ごとの実値と一致している', async () => {
-  // クライアント申告のGoldはサーバーで頭打ちにする。上限が実値より大きいと
-  // 改造クライアントから桁違いのGoldを請求できてしまう。
+test('Goldはサーバーが決める（クライアント申告を受け取らない）', async () => {
   const fs = await import('node:fs')
   const sql = fs.readFileSync('supabase_tower.sql', 'utf8')
+  // 額は層と初回かどうかだけで決まるので、サーバー側で計算する
+  assert.ok(sql.includes('GREATEST(0, p_floor) * 300'), '出撃Goldが層数×300でSQLにある')
+  assert.ok(sql.includes('GREATEST(0, p_floor) * 1000000'), '層主の初回Goldが層数×100万でSQLにある')
+  assert.ok(sql.includes('v_gold := tower_sortie_gold(p_floor)'), '出撃はサーバー計算')
+  assert.ok(sql.includes('v_gold := tower_boss_gold(p_floor, v_new)'), '層主はサーバー計算（初回判定込み）')
+  // v_gold を p_gold から作っていない＝クライアント申告を使っていない
+  assert.ok(!sql.includes('v_gold := COALESCE(p_gold'), 'クライアント申告のGoldを使っていない')
   assert.ok(!/20000000/.test(sql), '緩すぎる上限(2000万)が残っていない')
-  assert.ok(/suspicious_flag = true/.test(sql), '超過時に不審フラグを立てる')
-  // 出撃は「層数×300」、層主撃破は「層数×100万」で固定（敵データの gold は仮値なので使わない）
-  assert.ok(sql.includes('GREATEST(0, p_floor) * 300'), '出撃のGoldが層数×300でSQLに入っている')
-  assert.ok(sql.includes('GREATEST(0, p_floor) * 1000000'), '層主のGoldが層数×100万でSQLに入っている')
 })
 
 test('出撃Goldと無限ポーションの上限（2026-08-03確定）', () => {
   assert.equal(towerSortieGold(1), 300)
   assert.equal(towerSortieGold(10), 3000)
   assert.equal(towerSortieGold(100), 30000)
-  assert.equal(towerBossGold(1), 1000000)
-  assert.equal(towerBossGold(10), 10000000)
+  // 層主は初回だけ層数×100万、2回目以降は出撃と同額
+  assert.equal(towerBossGold(1, true), 1000000)
+  assert.equal(towerBossGold(10, true), 10000000)
+  assert.equal(towerBossGold(1, false), 300)
+  assert.equal(towerBossGold(10, false), 3000)
   // int4(約21億)を超えないこと。100層でも1億なので余裕がある
-  assert.ok(towerBossGold(100) < 2147483647, '100層でもint4に収まる')
+  assert.ok(towerBossGold(100, true) < 2147483647, '100層でもint4に収まる')
   assert.equal(RUN_POTION_LIMIT, 2)
 })
 
