@@ -439,24 +439,24 @@ export default function Tower() {
                 <div style={{ color: C.ok }}>勝利！ Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ 塔EXP +{fmt(gain.towerExp)}</div>
                 {gain.midCleared && <div style={{ color: C.gold }}>⚔ 中ボスを撃破！ 層主に挑めるようになった。</div>}
                 {gain.mid && !gain.midCleared && <div style={{ color: C.ng }}>中ボスが現れたが、退けられた…</div>}
-                <div style={{ color: C.dim }}>この層の出撃 {fmt(gain.count)} / {fmt(gain.need)} 回</div>
+                <div style={{ color: C.dim }}>この層の出撃 {fmt(gain.count)} 回目</div>
               </>
             )}
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+        <div style={{ marginTop: '10px' }}>
           {inRun && (
             <>
-              <button onClick={runStage} disabled={busy} style={btn(C.gold, busy)}>
-                {busy ? '戦闘中...' : `${stageLabel} に挑む`}
+              <button onClick={runStage} disabled={busy} style={bigBtn(C.gold, busy)}>
+                {busy ? '⏳ 戦闘中...' : `⚔ ${stageLabel} に挑む`}
               </button>
               <button onClick={abortRun} disabled={busy} style={btn(C.ng, busy)}>連戦を中断</button>
             </>
           )}
           {!inRun && !gain?.cleared && (
-            <button onClick={() => doSortie(selFloor)} disabled={busy || remaining > 0} style={btn(C.accent, busy || remaining > 0)}>
-              {busy ? '戦闘中...' : remaining > 0 ? `⏳ ${remaining.toFixed(1)}秒` : 'もう一度 出撃する'}
+            <button onClick={() => doSortie(selFloor)} disabled={busy || remaining > 0} style={bigBtn(C.gold, busy || remaining > 0)}>
+              {busy ? '⏳ 戦闘中...' : remaining > 0 ? `⏳ ${remaining.toFixed(1)}秒` : `⚔ ${floorLabel(selFloor)}へ出撃！`}
             </button>
           )}
         </div>
@@ -561,25 +561,12 @@ export default function Tower() {
                 </div>
 
                 <button onClick={() => doSortie(selFloor)} disabled={!canSortie || busy || !!runInfo}
-                  style={{
-                    width: '100%', padding: '14px', background: '#001840',
-                    border: `1px solid ${canSortie && !runInfo ? C.gold : '#003366'}`,
-                    color: canSortie && !runInfo ? C.gold : '#446688',
-                    cursor: canSortie && !runInfo ? 'pointer' : 'not-allowed',
-                    fontFamily: 'monospace', fontSize: '14px', letterSpacing: '2px', marginBottom: '10px',
-                  }}>
+                  style={bigBtn(C.gold, !canSortie || busy || !!runInfo)}>
                   {runInfo ? '⚔ 連戦中（出撃不可）' : busy ? '⏳ 戦闘中...' : canSortie ? `⚔ ${floorLabel(selFloor)}へ出撃！` : '⏳ 待機中...'}
                 </button>
 
                 <button onClick={() => (runInfo ? setScene('battle') : startRun(selFloor))} disabled={busy || !sel.mid_defeated}
-                  style={{
-                    width: '100%', padding: '12px', background: '#0a1020',
-                    border: `1px solid ${sel.mid_defeated && !busy ? C.accent : '#333'}`,
-                    color: sel.mid_defeated && !busy ? C.accent : '#333',
-                    cursor: sel.mid_defeated && !busy ? 'pointer' : 'not-allowed',
-                    fontFamily: 'monospace', fontSize: '13px', marginBottom: '10px',
-                    opacity: sel.mid_defeated ? 1 : 0.4,
-                  }}>
+                  style={bigBtn(C.accent, busy || !sel.mid_defeated)}>
                   {sel.mid_defeated ? `🗼 層主に挑む（${BOSS_RUN_STAGES.length}連戦）` : '🗼 層主に挑む（中ボス撃破が必要）'}
                 </button>
 
@@ -664,6 +651,14 @@ const btn = (color, disabled = false) => ({
   color: disabled ? '#3f4a68' : color,
   padding: '7px 14px', cursor: disabled ? 'default' : 'pointer',
   fontFamily: 'monospace', fontSize: '11px',
+})
+// 出撃・連戦などの主要ボタン。街の出撃ボタンと同じ大きさに揃える
+const bigBtn = (color, disabled = false) => ({
+  width: '100%', padding: '14px', background: '#001840',
+  border: `1px solid ${disabled ? '#003366' : color}`,
+  color: disabled ? '#446688' : color,
+  cursor: disabled ? 'not-allowed' : 'pointer',
+  fontFamily: 'monospace', fontSize: '14px', letterSpacing: '2px', marginBottom: '10px',
 })
 const tabBtn = (on) => ({
   background: on ? '#12203c' : '#0a0d18',
