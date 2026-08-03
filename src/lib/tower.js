@@ -53,11 +53,14 @@ export const towerLevelFromExp = (totalExp) => {
 
 // ============================================================
 // 塔スキルツリー（全17ノード・効果は塔の中だけで有効）
-//  ・1段 = 0.5%／1ノードの上限 = 50段（+25%）
+//  ・1段 = 0.5%（会心威力+/最大HP+/会心耐性+ だけ1段=1%）／1ノードの上限 = 50段
 //  ・10段ごとに解放に必要な塔LVがある
 // ============================================================
+// 1段あたりの効果（%）。既定は0.5%だが、ノードごとに step で上書きできる
 export const TREE_STEP_PCT = 0.5
 export const TREE_MAX_STEPS = 50
+// そのノードの1段あたりの%（TREE_NODES の step 指定が優先）
+export const stepPctOf = (key) => TREE_NODES.find(n => n.key === key)?.step ?? TREE_STEP_PCT
 
 // 段数の解放しきい値（この段数を超えて振るには、対応する塔LVが必要）
 export const TREE_UNLOCK = [
@@ -82,15 +85,15 @@ export const TREE_NODES = [
   { key: 'phys_dmg',   line: 'atk', name: '物理ダメージ+',       desc: '物理攻撃の与ダメージが上がる' },
   { key: 'mag_dmg',    line: 'atk', name: '特殊ダメージ+',       desc: '特殊攻撃の与ダメージが上がる' },
   { key: 'crit_rate',  line: 'atk', name: '会心率+',             desc: 'クリティカルの発生率が上がる' },
-  { key: 'crit_dmg',   line: 'atk', name: '会心威力+',           desc: 'クリティカルの威力が上がる' },
+  { key: 'crit_dmg',   line: 'atk', name: '会心威力+',           desc: 'クリティカルの威力が上がる', step: 1.0 },
   { key: 'phys_pen',   line: 'atk', name: '物理貫通+',           desc: '相手の防御を無視する。4層の硬化に効く' },
   { key: 'mag_pen',    line: 'atk', name: '特殊貫通+',           desc: '相手の特殊防御を無視する。4層の硬化に効く' },
   // ── 守 ──
-  { key: 'max_hp',     line: 'def', name: '最大HP+',             desc: '最大HPが上がる。6連戦を持ち越すので効果が大きい' },
+  { key: 'max_hp',     line: 'def', name: '最大HP+',             desc: '最大HPが上がる。6連戦を持ち越すので効果が大きい', step: 1.0 },
   { key: 'dmg_taken',  line: 'def', name: '被ダメージ-',         desc: '受けるダメージが減る' },
   { key: 'ail_resist', line: 'def', name: '状態異常耐性+',       desc: '3層の毒・6層の呪い・8層のやけど・10層のスタンに効く' },
   { key: 'pct_resist', line: 'def', name: '割合ダメージ耐性+',   desc: '最大HPの割合で削る効果を軽減。3層の毒沼・9層の毒に効く' },
-  { key: 'crit_resist',line: 'def', name: '会心耐性+',           desc: '相手のクリティカル率を下げる。8層のやけど連動に効く' },
+  { key: 'crit_resist',line: 'def', name: '会心耐性+',           desc: '相手のクリティカル率を下げる。8層のやけど連動に効く', step: 1.0 },
   { key: 'evasion',    line: 'def', name: '回避率+',             desc: '相手の攻撃を回避しやすくなる' },
   // ── その他 ──
   { key: 'spd',        line: 'etc', name: '素早さ+',             desc: '行動順・会心率・回避に乗る。5層の暴風・10層の地響きに効く' },
@@ -117,7 +120,7 @@ const stepOf = (alloc, key) => {
 // 振り分け alloc（{key: 段数}）から実効ボーナス（%）を返す
 export const treeBonus = (alloc) => {
   const out = {}
-  for (const n of TREE_NODES) out[n.key] = stepOf(alloc, n.key) * TREE_STEP_PCT
+  for (const n of TREE_NODES) out[n.key] = stepOf(alloc, n.key) * (n.step ?? TREE_STEP_PCT)
   return out
 }
 // 使用済みポイント

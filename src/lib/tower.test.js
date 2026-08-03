@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import {
   TOWER_FLOORS, getFloor, MAX_IMPLEMENTED_FLOOR, BOSS_RUN_STAGES,
   towerTarget, sortiesToMidBoss, towerExpToNext, towerLevelFromExp, TOWER_EXP_PER_SORTIE,
-  TREE_NODES, TREE_MAX_STEPS, maxStepsAt, nextUnlock, treeBonus, treeSpent, treeResetCost,
+  TREE_NODES, TREE_MAX_STEPS, TREE_STEP_PCT, stepPctOf, maxStepsAt, nextUnlock, treeBonus, treeSpent, treeResetCost,
   isMonumentFloor, MID_BOSS_RATE, towerSortieGold, towerBossGold, RUN_POTION_LIMIT,
   buildStageEnemies, buildSortieEnemies, towerTreeEffects, applyTreeToStats,
 } from './tower.js'
@@ -116,13 +116,23 @@ test('ツリーの振り分けが壊れた値でも数値のまま', () => {
   assert.equal(treeResetCost(50), 500000)
 })
 
+test('1段あたりの効果（既定0.5%・一部1%）', () => {
+  // 2026-08-03: 会心威力+/最大HP+/会心耐性+ だけ1段=1%
+  const oneP = ['crit_dmg', 'max_hp', 'crit_resist']
+  for (const n of TREE_NODES) {
+    const want = oneP.includes(n.key) ? 1.0 : TREE_STEP_PCT
+    assert.equal(stepPctOf(n.key), want, `${n.key} の1段あたり`)
+    assert.equal(treeBonus({ [n.key]: 10 })[n.key], want * 10, `${n.key} を10段振ったとき`)
+  }
+})
+
 test('ツリーのフル振りが仕様どおりの倍率になる', () => {
   const full = towerTreeEffects(Object.fromEntries(TREE_NODES.map(n => [n.key, TREE_MAX_STEPS])))
-  assert.ok(Math.abs(full.hpMult - 1.25) < 1e-9, '最大HP+25%')
+  assert.ok(Math.abs(full.hpMult - 1.50) < 1e-9, '最大HPは1段1%なのでフル振りで+50%')
   assert.ok(Math.abs(full.takenMult - 0.75) < 1e-9, '被ダメ-25%')
   assert.ok(full.physPen <= 0.8 && full.magPen <= 0.8, '貫通が上限0.8以内')
   const eff = applyTreeToStats({ hp_max: 10000, spd: 1000, critBonus: 0, critDmg: 0, critResist: 0, evasionBonus: 0, defPen: 0, mdefPen: 0 }, full)
-  assert.equal(eff.hp_max, 12500)
+  assert.equal(eff.hp_max, 15000)
   assert.equal(eff.spd, 1250)
   assert.ok(eff.defPen <= 0.8 && eff.mdefPen <= 0.8)
 })

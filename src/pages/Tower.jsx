@@ -15,7 +15,7 @@ import { selectBattleSkillSets, pickTargetMode, TARGET_MODES } from '../lib/load
 import { BattleLogLine, effWait } from './Game'
 import {
   getFloor, MAX_IMPLEMENTED_FLOOR, BOSS_RUN_STAGES,
-  TREE_NODES, TREE_LINES, TREE_MAX_STEPS, TREE_STEP_PCT,
+  TREE_NODES, TREE_LINES, TREE_MAX_STEPS, stepPctOf,
   maxStepsAt, nextUnlock, treeSpent, treeResetCost,
   MID_BOSS_RATE, isMonumentFloor, RUN_POTION_LIMIT,
 } from '../lib/tower'
@@ -585,7 +585,7 @@ export default function Tower() {
         <>
           <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '10px', marginBottom: '10px', fontSize: '11px', color: C.text }}>
             残りポイント <span style={{ color: remainPt > 0 ? C.gold : C.dim, fontSize: '14px' }}>{Math.max(0, remainPt)}</span>
-            <span style={{ color: C.dim, marginLeft: '10px' }}>1ノード {maxSteps}段まで（1段 {TREE_STEP_PCT}%）</span>
+            <span style={{ color: C.dim, marginLeft: '10px' }}>1ノード {maxSteps}段まで</span>
             <div style={{ color: C.dim, fontSize: '10px', marginTop: '4px' }}>
               効果は<span style={{ color: C.text }}>塔の中だけ</span>で有効です。
               {nextUnlock(towerLv)
@@ -606,7 +606,7 @@ export default function Tower() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <button onClick={() => bump(n.key, -1)} style={stepBtn(v > 0)}>−</button>
                         <span style={{ color: v > 0 ? C.gold : C.dim, fontSize: '11px', minWidth: '64px', textAlign: 'center' }}>
-                          {v}/{maxSteps}（{(v * TREE_STEP_PCT).toFixed(1)}%）
+                          {v}/{maxSteps}（{(v * stepPctOf(n.key)).toFixed(1)}%）
                         </span>
                         <button onClick={() => bump(n.key, +1)} style={stepBtn(remainPt > 0 && v < maxSteps)}>＋</button>
                       </div>
