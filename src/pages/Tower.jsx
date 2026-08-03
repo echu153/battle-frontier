@@ -12,7 +12,7 @@ import { calcEffectiveStats } from '../lib/stats'
 import { petPlayerBonus } from '../constants/pets'
 import { loadCharmBonus, PET_STAT_SELECT } from '../lib/petBonus'
 import { selectBattleSkillSets, pickTargetMode, TARGET_MODES } from '../lib/loadout'
-import { BattleLogLine } from './Game'
+import { BattleLogLine, effWait } from './Game'
 import {
   getFloor, MAX_IMPLEMENTED_FLOOR, BOSS_RUN_STAGES,
   TREE_NODES, TREE_LINES, TREE_MAX_STEPS, TREE_STEP_PCT,
@@ -74,9 +74,22 @@ export default function Tower() {
   const logsEndRef = useRef(null)
   const floorPickedRef = useRef(false)   // 最前線への自動合わせは初回だけ
   const busyRef = useRef(false)          // 連打で二重に戦闘が走るのを防ぐ（stateは反映が1テンポ遅れる）
+  const [remaining, setRemaining] = useState(0)  // 塔出撃のクールダウン残り秒
+  const cdRef = useRef(null)
 
   useEffect(() => { init() }, [])
   useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [logs])
+
+  // 出撃クールダウンのカウントダウン
+  useEffect(() => {
+    clearInterval(cdRef.current)
+    if (remaining > 0) {
+      cdRef.current = setInterval(() => {
+        setRemaining(prev => { if (prev <= 0.2) { clearInterval(cdRef.current); return 0 } return prev - 0.2 })
+      }, 200)
+    }
+    return () => clearInterval(cdRef.current)
+  }, [remaining])
 
   const init = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -171,13 +184,33 @@ export default function Tower() {
 
   // ── 塔出撃（雑魚1体・HP/MP満タン） ──────────────────────────
   const doSortie = async (floor) => {
-    if (busy || busyRef.current) return
+    if (busy || busyRef.current || remaining > 0) return
     const fd = getFloor(floor)
     if (!fd) return
     busyRef.current = true
     setBusy(true); setScene('battle'); setLogs([]); setMsg(null); setGain(null)
     try {
       if (await idleBlocked()) return
+      // 街の出撃と同じクールダウン。アンカーも profiles.last_action_at を共有するので
+      // 街とまたいで連打することもできない。条件付きUPDATEで別端末からの同時実行も弾く。
+      {
+        const wait = effWait(profile)
+        const lockTime = new Date(Date.now() - wait * 1000).toISOString()
+        const nowIso = new Date().toISOString()
+        const { data: locked } = await withTimeout(supabase.from('profiles')
+          .update({ last_action_at: nowIso })
+          .eq('id', profile.id)
+          .lt('last_action_at', lockTime)
+          .select('id'))
+        if (!locked || locked.length === 0) {
+          setScene('lobby')
+          const elapsed = (Date.now() - new Date(profile.last_action_at || 0).getTime()) / 1000
+          setRemaining(Math.max(1, wait - elapsed))
+          return
+        }
+        setProfile(p => ({ ...p, last_action_at: nowIso }))
+        setRemaining(wait)
+      }
       const fp = (status.floors || []).find(f => f.floor === floor)
       const midOpen = !!fp && !fp.mid_defeated && fp.sortie_count >= fp.need
       const { enemies, isMid } = buildSortieEnemies(fd, midOpen ? MID_BOSS_RATE : 0)
@@ -419,8 +452,8 @@ export default function Tower() {
             </>
           )}
           {!inRun && !gain?.cleared && (
-            <button onClick={() => doSortie(selFloor)} disabled={busy} style={btn(C.accent, busy)}>
-              {busy ? '戦闘中...' : 'もう一度 出撃する'}
+            <button onClick={() => doSortie(selFloor)} disabled={busy || remaining > 0} style={btn(C.accent, busy || remaining > 0)}>
+              {busy ? '戦闘中...' : remaining > 0 ? `⏳ ${remaining.toFixed(1)}秒` : 'もう一度 出撃する'}
             </button>
           )}
         </div>
@@ -490,10 +523,11 @@ export default function Tower() {
                 width: '100%', background: '#001028', border: `1px solid ${C.accent}`, color: C.accent,
                 fontFamily: 'monospace', fontSize: '13px', padding: '8px',
               }}>
-              {floors.map(f => (
-                <option key={f.floor} value={f.floor} disabled={!f.unlocked}>
-                  {floorLabel(f.floor)}　{getFloor(f.floor)?.boss || '？'}
-                  {f.boss_cleared ? '（踏破済）' : f.unlocked ? '' : '（未解放）'}
+              {/* 挑戦できる層だけ出す。未解放の層は存在ごと見せない（層主の名前も伏せる） */}
+              {floors.filter(f => f.unlocked).map(f => (
+                <option key={f.floor} value={f.floor}>
+                  {floorLabel(f.floor)}
+                  {f.boss_cleared ? `　${getFloor(f.floor)?.boss || ''}（踏破済）` : ''}
                 </option>
               ))}
             </select>
@@ -502,30 +536,29 @@ export default function Tower() {
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', fontSize: '11px' }}>
                   <span style={{ color: C.text }}>
-                    {isMonumentFloor(selFloor) && '🗿 '}層主「<span style={{ color: C.gold }}>{fd.boss}</span>」
+                    {isMonumentFloor(selFloor) && '🗿 '}
+                    {/* 層主の名前は倒すまで伏せる */}
+                    層主「<span style={{ color: C.gold }}>{sel.boss_cleared ? fd.boss : '？？？'}</span>」
                   </span>
                   <span style={{ color: sel.boss_cleared ? C.ok : sel.mid_defeated ? C.gold : C.dim, fontSize: '10px' }}>
-                    {sel.boss_cleared ? '✓ 踏破済' : sel.mid_defeated ? '層主に挑戦可' : `出撃 ${sel.sortie_count}/${sel.need}`}
+                    {sel.boss_cleared ? '✓ 踏破済' : sel.mid_defeated ? '層主に挑戦可' : '探索中'}
                   </span>
                 </div>
-                {!sel.boss_cleared && (
-                  <div style={{ height: '3px', background: '#101830', marginTop: '6px' }}>
-                    <div style={{ height: '100%', width: `${Math.min(100, (sel.sortie_count / Math.max(1, sel.need)) * 100)}%`, background: sel.mid_defeated ? C.gold : C.accent }} />
-                  </div>
-                )}
                 <div style={{ color: C.dim, fontSize: '10px', lineHeight: '1.8', margin: '10px 0' }}>
-                  出撃を <span style={{ color: C.text }}>{fmt(sel.need)}</span> 回こなすと中ボスが現れるようになります（1回の出撃につき{Math.round(MID_BOSS_RATE * 100)}%）。<br />
+                  出撃を重ねると、やがて中ボスが現れるようになります。<br />
                   中ボスを倒すと層主へ挑戦できます。層主への道は<span style={{ color: C.gold }}>{BOSS_RUN_STAGES.length}連戦</span>で、その間HP・MPは回復しません。<br />
                   出撃・連戦の開始時はHP・MPが満タンになります（街のHPとは別枠）。
                 </div>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <button onClick={() => doSortie(selFloor)} disabled={busy || !!runInfo} style={btn(C.accent, busy || !!runInfo)}>⚔ 出撃する</button>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button onClick={() => doSortie(selFloor)} disabled={busy || !!runInfo || remaining > 0} style={btn(C.accent, busy || !!runInfo || remaining > 0)}>
+                    {remaining > 0 ? `⏳ ${remaining.toFixed(1)}秒` : '⚔ 出撃する'}
+                  </button>
                   <button onClick={() => (runInfo ? setScene('battle') : startRun(selFloor))} disabled={busy || !sel.mid_defeated} style={btn(C.gold, busy || !sel.mid_defeated)}>
                     🗼 層主に挑む
                   </button>
                 </div>
                 {!sel.mid_defeated && sel.sortie_count >= sel.need && (
-                  <div style={{ color: C.gold, fontSize: '10px', marginTop: '8px' }}>中ボスが出現するようになりました。出撃を続けて遭遇を狙いましょう。</div>
+                  <div style={{ color: C.gold, fontSize: '10px', marginTop: '8px' }}>中ボスの気配がする。出撃を続けて遭遇を狙いましょう。</div>
                 )}
               </>
             )}
