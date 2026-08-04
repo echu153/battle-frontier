@@ -203,17 +203,9 @@ export function simulateTowerBattle({
     logs.push({ text: `🩸 ${en.name}が${heal}吸収した！`, color: '#ff6688' })
   }
 
-  // 雑魚を倒したときのHP回復（ツリー）
   const onEnemyDown = (en) => {
     if (en.hp > 0) return
     logs.push({ text: `☠ ${en.name}を倒した！`, color: '#88ffaa' })
-    if (!en.isBoss && tr.killHeal > 0 && playerHp > 0 && !(playerBuffs.healSeal?.turns > 0)) {
-      const heal = Math.floor(eff.hp_max * tr.killHeal)
-      if (heal > 0) {
-        playerHp = Math.min(eff.hp_max, playerHp + heal)
-        logs.push({ text: `💚 タワーの加護！ HPが${heal}回復した！`, color: '#66ffaa' })
-      }
-    }
   }
 
   // 対象選択（プレイヤーの対象設定）
@@ -1094,6 +1086,16 @@ export function simulateTowerBattle({
   // 勝ち扱いにすると残HP0で連戦を続けられてしまう。
   const win = alive().length === 0 && playerHp > 0
   const turns = Math.min(turn, turnCap)
+
+  // エンドポイント「戦闘ごとにHP回復」：1戦終えるごとに最大HPの一定割合を回復する。
+  // 連戦のHP持ち越しを戻すためのものなので、勝った戦闘の終わりに1回だけ乗せる。
+  if (win && tr.killHeal > 0 && playerHp > 0) {
+    const heal = Math.floor(eff.hp_max * tr.killHeal)
+    if (heal > 0) {
+      playerHp = Math.min(eff.hp_max, playerHp + heal)
+      logs.push({ text: `💚 タワーの加護！ 戦闘を終えてHPが${heal}回復した！`, color: '#66ffaa' })
+    }
+  }
   logs.push(win
     ? { text: `${turns}ターンで勝利した！`, color: '#44ff88' }
     : {

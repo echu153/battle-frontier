@@ -103,7 +103,7 @@ export const TREE_NODES = [
   // ── その他 ──
   { key: 'spd',        line: 'etc', name: '素早さ+',             desc: '行動順・会心率・回避に乗る。5層の暴風・10層の地響きに効く' },
   { key: 'mp_cost',    line: 'etc', name: 'MP消費-',             desc: 'スキルの消費MPが減る。連戦のMP枯渇対策' },
-  { key: 'kill_heal',  line: 'etc', name: '雑魚撃破ごとにHP回復', desc: '雑魚を倒すたびに最大HPの一定割合を回復する' },
+  { key: 'kill_heal',  line: 'etc', name: '戦闘ごとにHP回復',     desc: '1戦を勝ち抜くたびに最大HPの一定割合を回復する。連戦の消耗を戻せる' },
   { key: 'ail_rate',   line: 'etc', name: '状態異常の付与率+',   desc: 'こちらが与える状態異常の成功率が上がる' },
   { key: 'exp_plus',   line: 'etc', name: '取得経験値+1の確率',  desc: 'タワーの中で得た通常EXPが+1される確率。エンドEXPには乗らない' },
 ]
