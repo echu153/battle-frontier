@@ -334,3 +334,17 @@ test('解放条件がクライアントとSQLで一致している（一般公�
   // 開発限定のまま公開したつもりになる事故を防ぐ
   assert.ok(!/SELECT COALESCE\(p_profile\.is_admin, false\)\s*\$\$/.test(towerSql), 'is_admin 限定のままになっていない')
 })
+
+test('クールダウンの残り秒数はサーバーが返す（端末の時計ズレで早く0にならない）', async () => {
+  const fs = await import('node:fs')
+  const client = fs.readFileSync('src/pages/Tower.jsx', 'utf8')
+  // サーバーが秒数で返し、クライアントはそれをそのまま使う
+  assert.ok(towerSql.includes("'cd_left'"), 'SQLが残り秒数を返していない')
+  assert.ok(client.includes('data.cd_left'), 'クライアントが cd_left を使っていない')
+  // ⚠ここが再発ポイント: 端末の Date.now() と last_action_at を引き算してはいけない。
+  //   端末の時計が数秒進んでいると「出撃可能」と誤表示され、押した先で弾かれる。
+  assert.ok(!/Date\.now\(\)\s*-\s*new Date\(\s*data\.last_action_at/.test(client),
+    '端末の時計とサーバーの時刻を突き合わせている')
+  // 境目ちょうどの押下に猶予がある
+  assert.ok(towerSql.includes("+ interval '0.5 second'"), 'クールダウン判定に猶予が無い')
+})

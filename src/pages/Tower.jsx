@@ -236,10 +236,12 @@ export default function Tower() {
         const next = (data.floors || []).find(f => f.unlocked && !f.boss_cleared)
         setSelFloor(next ? next.floor : Math.min(MAX_IMPLEMENTED_FLOOR, (data.max_floor || 0) + 1) || 1)
       }
-      // 街で出撃した直後にタワーを開いた場合でも、残りクールダウンを正しく表示する
-      if (data.last_action_at) {
-        const left = (data.wait || 20) - (Date.now() - new Date(data.last_action_at).getTime()) / 1000
-        if (left > 0) setRemaining(left)
+      // 残りクールダウンはサーバーが秒数で返したものをそのまま使う。
+      // ⚠端末の時計とサーバーの時刻を突き合わせてはいけない。
+      //   端末が数秒進んでいると「出撃可能」と誤表示され、押した先でサーバーに弾かれる。
+      if (data.cd_left != null) {
+        const left = Number(data.cd_left)
+        if (Number.isFinite(left) && left > 0) setRemaining(left)
       }
       if (data.run) {
         setRunInfo({ floor: data.run.floor, stage: data.run.stage, hp: Number(data.run.hp), mp: Number(data.run.mp), potionUsed: Number(data.run.potion || 0), resumed: true })

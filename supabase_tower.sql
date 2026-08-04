@@ -464,6 +464,13 @@ BEGIN
     'max_floor',   v_tp.max_floor,
     'run_dropped', v_dropped,
     'last_action_at', v_profile.last_action_at,
+    -- ★残りクールダウンは秒数でサーバーが返す。
+    --   端末の時計が数秒進んでいると、クライアント側で now() と引き算した瞬間に
+    --   「もう出撃できる」と誤表示され、押した先でサーバーに弾かれていた。
+    'cd_left', GREATEST(0, EXTRACT(EPOCH FROM (
+      COALESCE(v_profile.last_action_at, now() - interval '1 day')
+      + make_interval(secs => CASE WHEN COALESCE(v_profile.sortie_mode, 20) = 10 THEN 10 ELSE 20 END)
+      - now()))),
     'wait',        CASE WHEN COALESCE(v_profile.sortie_mode, 20) = 10 THEN 10 ELSE 20 END,
     'run', CASE WHEN v_tp.run_floor IS NULL THEN NULL ELSE json_build_object(
       'floor', v_tp.run_floor, 'stage', v_tp.run_stage,
@@ -534,7 +541,8 @@ BEGIN
   WITH upd AS (
     UPDATE profiles SET last_action_at = now()
      WHERE id = v_pid
-       AND (last_action_at IS NULL OR last_action_at <= now() - make_interval(secs => v_wait))
+       -- 0.5秒の猶予。境目ちょうどで押したときに往復遅延や丸めで弾かれるのを防ぐ
+       AND (last_action_at IS NULL OR last_action_at <= now() - make_interval(secs => v_wait) + interval '0.5 second')
      RETURNING 1
   ) SELECT count(*) INTO v_locked FROM upd;
   IF v_locked = 0 THEN
