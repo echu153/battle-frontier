@@ -70,8 +70,21 @@ function ResultBox({ gain }) {
       ) : (
         <>
           <div style={{ color: C.ok }}>勝利！ Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ エンドEXP +{fmt(gain.towerExp)}</div>
-          {gain.midCleared && <div style={{ color: C.gold }}>⚔ 強敵を撃破！ エリアボスに挑めるようになった。</div>}
           {gain.mid && !gain.midCleared && <div style={{ color: C.ng }}>強敵が現れたが、退けられた…</div>}
+          {gain.midCleared && (
+            <div style={{
+              border: `2px solid ${C.gold}`, background: '#1a1400', padding: '12px',
+              marginTop: '8px', textAlign: 'center', lineHeight: '1.7',
+            }}>
+              <div style={{ color: C.gold, fontSize: '18px', letterSpacing: '2px' }}>⚔ 強敵 撃破！</div>
+              <div style={{ color: '#ffe9a8', fontSize: '13px', marginTop: '4px' }}>
+                エリアボスへの道が開かれた
+              </div>
+              <div style={{ color: C.dim, fontSize: '10px', marginTop: '6px' }}>
+                下の「🗼 エリアボスに挑む」から挑戦できます
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -583,7 +596,7 @@ export default function Tower() {
 
                 <button onClick={() => (runInfo ? setScene('battle') : startRun(selFloor))} disabled={busy || !sel.mid_defeated}
                   style={bigBtn(C.accent, busy || !sel.mid_defeated)}>
-                  {sel.mid_defeated ? `🗼 エリアボスに挑む（${BOSS_RUN_STAGES.length}連戦）` : '🗼 エリアボスに挑む（強敵撃破が必要）'}
+                  {sel.mid_defeated ? '🗼 エリアボスに挑む' : '🗼 エリアボスに挑む（強敵撃破が必要）'}
                 </button>
 
                 <div style={{ color: C.dim, fontSize: '10px', lineHeight: '1.7' }}>
