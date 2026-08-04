@@ -83,8 +83,17 @@ LANGUAGE sql IMMUTABLE AS $$ SELECT 10 $$;              -- 実装済みの最終
 CREATE OR REPLACE FUNCTION tower_sorties_to_mid(p_floor int) RETURNS int
 LANGUAGE sql IMMUTABLE AS $$ SELECT 30 + p_floor * 10 $$;
 
-CREATE OR REPLACE FUNCTION tower_exp_per_sortie() RETURNS int
-LANGUAGE sql IMMUTABLE AS $$ SELECT 100 $$;
+-- 塔出撃1回で得られる塔EXP（20〜30のランダム・2026-08-03確定）
+-- ⚠ 乱数なので、1回の処理の中で複数回呼ばない（呼ぶたび違う値になる）。
+--   必ず変数に受けてから使うこと。
+CREATE OR REPLACE FUNCTION tower_sortie_tower_exp() RETURNS int
+LANGUAGE sql VOLATILE AS $$ SELECT 20 + floor(random() * 11)::int $$;
+
+-- 層主撃破で得られる塔EXP。初回だけ1000、2回目以降は出撃と同じ
+CREATE OR REPLACE FUNCTION tower_boss_tower_exp(p_first boolean) RETURNS int
+LANGUAGE sql VOLATILE AS $$
+  SELECT CASE WHEN p_first THEN 1000 ELSE tower_sortie_tower_exp() END
+$$;
 
 -- 塔LV lv → lv+1 に必要な塔EXP = 5 × lv²
 CREATE OR REPLACE FUNCTION tower_exp_to_next(p_lv int) RETURNS bigint
@@ -359,6 +368,7 @@ DECLARE
   v_need    int;
   v_gold    int;
   v_exp     int;
+  v_texp    int;
   v_block   text;
 BEGIN
   v_pid := auth.uid();
@@ -404,9 +414,11 @@ BEGIN
   END IF;
 
   -- 塔EXPは勝敗にかかわらず1出撃ぶん入る（出撃したこと自体が積み上がる）
-  INSERT INTO tower_player (player_id, tower_exp) VALUES (v_pid, tower_exp_per_sortie())
+  -- ⚠乱数なので1回だけ引いて、加算にも戻り値にも同じ値を使う
+  v_texp := tower_sortie_tower_exp();
+  INSERT INTO tower_player (player_id, tower_exp) VALUES (v_pid, v_texp)
   ON CONFLICT (player_id) DO UPDATE
-    SET tower_exp = tower_player.tower_exp + tower_exp_per_sortie(), updated_at = now();
+    SET tower_exp = tower_player.tower_exp + v_texp, updated_at = now();
 
   -- Gold と 通常EXP（勝った時だけ）。街の出撃と同じ扱い（レベルアップまで処理する）
   IF p_won AND (v_gold > 0 OR v_exp > 0) THEN
@@ -419,7 +431,7 @@ BEGIN
     'mid_open',     (v_cnt >= v_need),
     'gold',         CASE WHEN p_won THEN v_gold ELSE 0 END,
     'exp',          CASE WHEN p_won THEN v_exp ELSE 0 END,
-    'tower_exp',    tower_exp_per_sortie()
+    'tower_exp',    v_texp
   );
 END; $$;
 
@@ -524,6 +536,7 @@ DECLARE
   v_rows  int := 0;
   v_gold  int;
   v_exp   int;
+  v_texp  int;
   v_new   boolean := false;
   v_block text;
 BEGIN
@@ -559,9 +572,13 @@ BEGIN
         updated_at = now();
 
   -- 到達層の更新（ランキング用）
+  -- 塔EXP：初回撃破だけ1000、2回目以降は出撃と同じ（乱数なので1回だけ引く）
+  v_texp := tower_boss_tower_exp(v_new);
+
   UPDATE tower_player
     SET max_floor    = GREATEST(COALESCE(max_floor, 0), p_floor),
         max_floor_at = CASE WHEN p_floor > COALESCE(max_floor, 0) THEN now() ELSE max_floor_at END,
+        tower_exp    = tower_exp + v_texp,
         run_floor = NULL, run_stage = 0, run_hp = NULL, run_mp = NULL, run_started_at = NULL,
         updated_at = now()
     WHERE player_id = v_pid;
@@ -582,7 +599,7 @@ BEGIN
     'ok', true, 'floor', p_floor,
     'first_clear', v_new,          -- そのプレイヤーにとって初クリアか
     'monument', COALESCE(v_first, false), -- 石碑に名前が刻まれたか（サーバー初）
-    'gold', v_gold, 'exp', v_exp
+    'gold', v_gold, 'exp', v_exp, 'tower_exp', v_texp
   );
 END; $$;
 
@@ -711,6 +728,9 @@ BEGIN
     ) r
   );
 END; $$;
+
+-- 旧: 塔EXP固定100。20〜30の乱数（tower_sortie_tower_exp）に変えたので不要
+DROP FUNCTION IF EXISTS tower_exp_per_sortie();
 
 -- ============================================================
 -- 9. 権限

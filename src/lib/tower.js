@@ -38,8 +38,12 @@ export const towerBossGold = (floor, isFirstClear) => isFirstClear ? floor * 100
 // ※5回では無限ポーションの5ターンCDに阻まれてほぼ届かず素通りだったため2回にした
 export const RUN_POTION_LIMIT = 2
 
-// 塔出撃1回で得られる塔EXP（層によらず固定）
-export const TOWER_EXP_PER_SORTIE = 100
+// 塔出撃1回で得られる塔EXP（層によらず20〜30のランダム・2026-08-03確定）
+// 層主撃破は初回だけ1000、2回目以降は出撃と同じ
+// ※実際に付与する値はサーバーが決める。ここは表示・テスト用の同じ定義。
+export const TOWER_EXP_MIN = 20
+export const TOWER_EXP_MAX = 30
+export const BOSS_FIRST_TOWER_EXP = 1000
 
 // 塔LV lv → lv+1 に必要な塔EXP
 export const towerExpToNext = (lv) => 5 * lv * lv

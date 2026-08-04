@@ -39,7 +39,9 @@ const C = {
 function Shell({ nav, children }) {
   return (
     <div style={{ minHeight: '100vh', background: C.bg, padding: '12px', fontFamily: 'monospace' }}>
-      <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+      {/* index.css の #root に text-align:center があるので、ここで左揃えに戻す。
+          中央寄せしたい所（読み込み中・層主の立ち絵など）は個別に指定している */}
+      <div style={{ maxWidth: '640px', margin: '0 auto', textAlign: 'left' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${C.line}`, paddingBottom: '8px', marginBottom: '12px', position: 'sticky', top: 0, zIndex: 30, paddingTop: '8px', background: C.bg }}>
           <div style={{ color: C.accent, fontSize: '16px', letterSpacing: '3px' }}>🗼 星霜百層塔</div>
           <button onClick={() => nav('/game')} style={{ background: 'none', border: `1px solid ${C.line}`, color: C.text, padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>🏰 街に戻る</button>
@@ -293,7 +295,7 @@ export default function Tower() {
         const { data, error } = await withTimeout(supabase.rpc('tower_boss_clear', { p_floor: runInfo.floor }))
         if (error || data?.error) { setMsg(data?.error || error?.message || '撃破の反映に失敗しました'); return }
         setRunInfo(null)
-        setGain({ win: true, cleared: true, floor: runInfo.floor, gold: data.gold, exp: data.exp, firstClear: data.first_clear, monument: data.monument })
+        setGain({ win: true, cleared: true, floor: runInfo.floor, gold: data.gold, exp: data.exp, towerExp: data.tower_exp, firstClear: data.first_clear, monument: data.monument })
         await withTimeout(fetchStatus())
         return
       }
@@ -425,7 +427,7 @@ export default function Tower() {
                 <div style={{ color: C.gold, fontSize: '13px' }}>👑 {floorLabel(gain.floor)}の層主を撃破！</div>
                 {gain.firstClear && <div style={{ color: C.ok }}>この層を初めて踏破した！ 次の層が解放された。</div>}
                 {gain.monument && <div style={{ color: C.gold }}>🗿 石碑に名前が刻まれた！（サーバー最初の踏破者）</div>}
-                <div>Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)}</div>
+                <div>Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ 塔EXP +{fmt(gain.towerExp)}</div>
               </>
             ) : gain.win === false ? (
               <div style={{ color: C.ng }}>敗北…{gain.stageLabel ? `（${gain.stageLabel}）` : ''} 連戦は最初からやり直しになります。</div>

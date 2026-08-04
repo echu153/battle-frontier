@@ -5,7 +5,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   TOWER_FLOORS, getFloor, MAX_IMPLEMENTED_FLOOR, BOSS_RUN_STAGES,
-  towerTarget, sortiesToMidBoss, towerExpToNext, towerLevelFromExp, TOWER_EXP_PER_SORTIE,
+  towerTarget, sortiesToMidBoss, towerExpToNext, towerLevelFromExp, TOWER_EXP_MIN, TOWER_EXP_MAX, BOSS_FIRST_TOWER_EXP,
   TREE_NODES, TREE_MAX_STEPS, TREE_STEP_PCT, stepPctOf, maxStepsAt, nextUnlock, treeBonus, treeSpent, treeResetCost,
   isMonumentFloor, MID_BOSS_RATE, towerSortieGold, towerBossGold, RUN_POTION_LIMIT,
   buildStageEnemies, buildSortieEnemies, towerTreeEffects, applyTreeToStats,
@@ -69,7 +69,9 @@ test('内部推奨力と必要出撃数', () => {
   assert.equal(sortiesToMidBoss(1), 40)
   assert.equal(sortiesToMidBoss(10), 130)
   assert.equal(MID_BOSS_RATE, 0.05)
-  assert.equal(TOWER_EXP_PER_SORTIE, 100)
+  assert.equal(TOWER_EXP_MIN, 20)
+  assert.equal(TOWER_EXP_MAX, 30)
+  assert.equal(BOSS_FIRST_TOWER_EXP, 1000)
 })
 
 test('塔LVと累計EXPが往復する', () => {
