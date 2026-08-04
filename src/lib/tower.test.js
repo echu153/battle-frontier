@@ -255,3 +255,67 @@ test('深いエリアのHPを見越して保存はbigintでなければならな
   assert.ok(at10 < 2147483647, '戦闘エリア10時点は int4 に収まる')
   assert.ok(520000 * Math.pow(1.2, 90) > 2147483647, '戦闘エリア100想定は int4 を超える')
 })
+
+// ============================================================
+// 公開前の穴埋め（2026-08-04）が SQL に入っているかの回帰テスト
+// クライアントとSQLで規則がズレたらここで落ちる
+// ============================================================
+import { readFileSync } from 'node:fs'
+const towerSql = readFileSync(new URL('../../supabase_tower.sql', import.meta.url), 'utf8')
+
+test('SQL: 内部ヘルパを PUBLIC から剥がしている（EXP/LVを任意に取れる穴を塞ぐ）', () => {
+  // ※ DOブロックの中の anon/authenticated 向け REVOKE と取り違えないよう、
+  //   「FROM PUBLIC;」で終わる行そのものを見る
+  const revoked = new Set(
+    [...towerSql.matchAll(/^REVOKE ALL ON FUNCTION public\.([a-z_]+)\(.*\)\s+FROM PUBLIC;$/gm)].map(m => m[1])
+  )
+  for (const fn of ['tower_grant_rewards', 'tower_idle_block', 'tower_battle_exp', 'tower_hp_cap', 'tower_mp_cap']) {
+    assert.ok(revoked.has(fn), `${fn} を PUBLIC から REVOKE していない`)
+  }
+  // REVOKE を流し忘れても穴が開かないよう、関数の中でも本人確認する
+  assert.match(towerSql, /p_uid IS DISTINCT FROM auth\.uid\(\)/)
+})
+
+test('SQL: 連戦のステージは1つずつしか進められない（6連戦の飛ばしを塞ぐ）', () => {
+  assert.match(towerSql, /p_stage IS DISTINCT FROM v_tp\.run_stage \+ 1/)
+})
+
+test('SQL: エリアボス撃破は連戦を条件付きUPDATEで取り切ってから報酬を配る（二重取得を塞ぐ）', () => {
+  const i = towerSql.indexOf('FUNCTION tower_boss_clear')
+  const body = towerSql.slice(i, towerSql.indexOf('END; $$;', i))
+  assert.ok(body.indexOf('AND run_stage >= 5') > 0, '連戦の取り切り条件が無い')
+  assert.ok(body.indexOf('run_floor = NULL') < body.indexOf('tower_grant_rewards'), '報酬より先に連戦を消していない')
+})
+
+test('SQL: 出撃のクールダウンをサーバーが確保する', () => {
+  const i = towerSql.indexOf('FUNCTION tower_sortie_result')
+  const body = towerSql.slice(i, towerSql.indexOf('END; $$;', i))
+  assert.ok(body.includes('last_action_at <= now() - make_interval'), 'サーバー側CDが無い')
+  assert.ok(body.includes('連戦中は出撃できません'), '連戦中の出撃を塞いでいない')
+})
+
+test('SQL: 連戦のHP/MPはサーバーで上限クランプする', () => {
+  assert.ok((towerSql.match(/tower_hp_cap\(v_pid\)/g) || []).length >= 2, 'run_start/run_save の両方でクランプしていない')
+})
+
+test('SQL: 戦争中はタワーに入れない', () => {
+  assert.ok(towerSql.includes('⚔ 戦争中はタワーに入れません。'))
+})
+
+test('SQL: 石碑は退会しても消えない（外部キーCASCADEを外している）', () => {
+  assert.ok(towerSql.includes('DROP CONSTRAINT IF EXISTS tower_first_clear_player_id_fkey'))
+  assert.ok(!/player_id   uuid NOT NULL REFERENCES profiles\(id\) ON DELETE CASCADE,\n  username/.test(towerSql))
+})
+
+test('SQL: 中断した連戦は失敗として畳む（敗北の取り消しを塞ぐ）', () => {
+  assert.match(towerSql, /run_pending boolean NOT NULL DEFAULT false/)
+  assert.ok(towerSql.includes('FUNCTION tower_run_begin'))
+  const i = towerSql.indexOf('FUNCTION get_tower_status')
+  const body = towerSql.slice(i, towerSql.indexOf('END; $$;', i))
+  assert.ok(body.includes('COALESCE(v_tp.run_pending, false)'), '状況取得で中断を畳んでいない')
+})
+
+test('SQL: エリアボス撃破が監査ログに残る', () => {
+  assert.ok(towerSql.includes('CREATE TABLE IF NOT EXISTS tower_logs'))
+  assert.ok(towerSql.includes("tower_log(v_pid, 'boss_clear'"))
+})

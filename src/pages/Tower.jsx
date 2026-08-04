@@ -236,9 +236,18 @@ export default function Tower() {
         const next = (data.floors || []).find(f => f.unlocked && !f.boss_cleared)
         setSelFloor(next ? next.floor : Math.min(MAX_IMPLEMENTED_FLOOR, (data.max_floor || 0) + 1) || 1)
       }
+      // 街で出撃した直後にタワーを開いた場合でも、残りクールダウンを正しく表示する
+      if (data.last_action_at) {
+        const left = (data.wait || 20) - (Date.now() - new Date(data.last_action_at).getTime()) / 1000
+        if (left > 0) setRemaining(left)
+      }
       if (data.run) {
         setRunInfo({ floor: data.run.floor, stage: data.run.stage, hp: Number(data.run.hp), mp: Number(data.run.mp), potionUsed: Number(data.run.potion || 0), resumed: true })
+      } else {
+        setRunInfo(null)
       }
+      // 戦闘の結果を返さないまま離脱した連戦は、サーバー側で失敗として畳まれている
+      if (data.run_dropped) setMsg('前の戦闘が中断されたため、連戦は最初からになります。')
     }
   }
 
@@ -300,26 +309,9 @@ export default function Tower() {
     setBusy(true); setLogs([]); setMsg(null); setGain(null)
     try {
       if (await idleBlocked()) return
-      // 街の出撃と同じクールダウン。アンカーも profiles.last_action_at を共有するので
-      // 街とまたいで連打することもできない。条件付きUPDATEで別端末からの同時実行も弾く。
-      {
-        const wait = effWait(profile)
-        const lockTime = new Date(Date.now() - wait * 1000).toISOString()
-        const nowIso = new Date().toISOString()
-        const { data: locked } = await withTimeout(supabase.from('profiles')
-          .update({ last_action_at: nowIso })
-          .eq('id', profile.id)
-          .lt('last_action_at', lockTime)
-          .select('id'))
-        if (!locked || locked.length === 0) {
-          setScene('lobby')
-          const elapsed = (Date.now() - new Date(profile.last_action_at || 0).getTime()) / 1000
-          setRemaining(Math.max(1, wait - elapsed))
-          return
-        }
-        setProfile(p => ({ ...p, last_action_at: nowIso }))
-        setRemaining(wait)
-      }
+      // ★2026-08-04: クールダウンの確保はサーバー(tower_sortie_result)が条件付きUPDATEで行う。
+      //   ここでの先行UPDATEは、改造クライアントが好きな基準時刻を送れば素通りできたので廃止した。
+      //   下のタイマーは表示用（サーバーが弾いたら残り秒を戻す）。
       const fp = (status.floors || []).find(f => f.floor === floor)
       const midOpen = !!fp && !fp.mid_defeated && fp.sortie_count >= fp.need
       const { enemies, isMid } = buildSortieEnemies(fd, midOpen ? MID_BOSS_RATE : 0)
@@ -335,7 +327,11 @@ export default function Tower() {
       }))
       if (error || data?.error) {
         setMsg(data?.error || error?.message || '結果の反映に失敗しました')
+        // サーバーがクールダウンで弾いた場合は、残り時間を丸ごと待たせる（報酬も入らない）
+        if (data?.cooldown) { setLogs([]); setRemaining(Math.max(1, Number(data.retry_after) || sortieWait)) }
       } else {
+        setRemaining(data.wait || sortieWait)
+        setProfile(p => ({ ...p, last_action_at: new Date().toISOString() }))
         setGain({ win: res.win, gold: data.gold, exp: data.exp, towerExp: data.tower_exp, count: data.sortie_count, need: data.need, mid: isMid, midCleared: isMid && res.win })
         await withTimeout(fetchStatus())
       }
@@ -376,6 +372,17 @@ export default function Tower() {
     try {
       // 連戦の途中でも毎戦チェックする（別端末で釣りを始める等の抜け道を塞ぐ）
       if (await idleBlocked()) return
+      // ★2026-08-04: 戦闘の開始をサーバーに宣言してから戦う。
+      //   結果を返さずに離脱した連戦は、次に開こうとした時点で失敗になる。
+      {
+        const { data: bg, error: bgErr } = await withTimeout(supabase.rpc('tower_run_begin'))
+        if (bgErr || bg?.error) {
+          setMsg(bg?.error || bgErr?.message || '連戦を続行できませんでした')
+          if (bg?.aborted) { setRunInfo(null); setScene('lobby'); setBossShot(null) }
+          await withTimeout(fetchStatus())
+          return
+        }
+      }
       const stage = runInfo.stage
       // 立ち絵はエリアボス戦の間だけ出す。強敵を倒した直後に次がボスでも、まだ出さない
       setBossShot(BOSS_RUN_STAGES[stage]?.kind === 'boss' ? runInfo.floor : null)

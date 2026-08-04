@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS tower_player (
 );
 -- 既存のテーブルには CREATE TABLE IF NOT EXISTS では列が足されないので明示的に足す
 ALTER TABLE tower_player ADD COLUMN IF NOT EXISTS run_potion int NOT NULL DEFAULT 0;
+-- 1戦の開始を宣言したがまだ結果が返っていない（通信を切って敗北を消す抜け道を塞ぐ）
+ALTER TABLE tower_player ADD COLUMN IF NOT EXISTS run_pending boolean NOT NULL DEFAULT false;
 ALTER TABLE tower_player ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tower_player_select_own ON tower_player;
 CREATE POLICY tower_player_select_own ON tower_player
@@ -65,14 +67,94 @@ CREATE POLICY tower_player_select_own ON tower_player
 -- 石碑：エリアボスのサーバー初討伐者（10エリアごとの節目だけ記録）
 CREATE TABLE IF NOT EXISTS tower_first_clear (
   floor       int  PRIMARY KEY,                -- ユニーク制約で最初のINSERTだけが通る
-  player_id   uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  -- ★2026-08-04: profiles への外部キーは張らない。ON DELETE CASCADE だと
+  --   退会で石碑の行ごと消えてしまい、「名前を焼き込む」意味が無かった。
+  player_id   uuid,
   username    text NOT NULL,                   -- 改名・退会後も石碑に残すため名前を焼き込む
   cleared_at  timestamptz NOT NULL DEFAULT now()
 );
+-- 既存環境の作り直し（外部キーを外し、退会しても石碑に名前が残るようにする）
+ALTER TABLE tower_first_clear DROP CONSTRAINT IF EXISTS tower_first_clear_player_id_fkey;
+ALTER TABLE tower_first_clear ALTER COLUMN player_id DROP NOT NULL;
 ALTER TABLE tower_first_clear ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tower_first_clear_select_all ON tower_first_clear;
 CREATE POLICY tower_first_clear_select_all ON tower_first_clear
   FOR SELECT USING (true);   -- 石碑は全員が見られる
+
+-- ============================================================
+-- 1.5 監査ログ（エリアボス撃破と不審な呼び出しだけ残す）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS tower_logs (
+  id         bigserial PRIMARY KEY,
+  player_id  uuid NOT NULL,
+  kind       text NOT NULL,          -- boss_clear | suspicious
+  floor      int,
+  gold       bigint,
+  exp        int,
+  detail     text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE tower_logs ENABLE ROW LEVEL SECURITY;
+-- 閲覧は運営のみ（RLSポリシーを作らない＝一般クライアントからは読めない）
+CREATE INDEX IF NOT EXISTS tower_logs_player_idx ON tower_logs (player_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS tower_logs_kind_idx   ON tower_logs (kind, created_at DESC);
+
+CREATE OR REPLACE FUNCTION tower_log(p_uid uuid, p_kind text, p_floor int, p_gold bigint, p_exp int, p_detail text)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  INSERT INTO tower_logs (player_id, kind, floor, gold, exp, detail)
+  VALUES (p_uid, p_kind, p_floor, p_gold, p_exp, p_detail);
+EXCEPTION WHEN OTHERS THEN NULL;   -- ログの失敗で本処理を止めない
+END; $$;
+
+CREATE OR REPLACE FUNCTION tower_hp_cap(p_uid uuid) RETURNS bigint
+LANGUAGE plpgsql STABLE SECURITY DEFINER AS $$
+DECLARE v_p profiles%ROWTYPE; v_raw text; v_steps int := 0; v_base bigint;
+BEGIN
+  SELECT * INTO v_p FROM profiles WHERE id = p_uid;
+  IF NOT FOUND THEN RETURN 0; END IF;
+  -- 街の invalid_hp 判定と同じ考え方（実効最大を信頼しつつ基礎の5倍でガード）
+  v_base := LEAST(GREATEST(COALESCE(v_p.eff_hp_max, v_p.hp_max), v_p.hp_max), v_p.hp_max * 5);
+  SELECT tree_alloc->>'max_hp' INTO v_raw FROM tower_player WHERE player_id = p_uid;
+  IF v_raw ~ '^[0-9]+$' THEN v_steps := LEAST(50, v_raw::int); END IF;   -- 最大HP+は1段1%
+  RETURN GREATEST(1, (v_base * (100 + v_steps) / 100)::bigint);
+END; $$;
+
+CREATE OR REPLACE FUNCTION tower_mp_cap(p_uid uuid) RETURNS bigint
+LANGUAGE plpgsql STABLE SECURITY DEFINER AS $$
+DECLARE v_mp bigint;
+BEGIN
+  SELECT GREATEST(1, COALESCE(mp_max, 1) * 5) INTO v_mp FROM profiles WHERE id = p_uid;
+  RETURN COALESCE(v_mp, 1);
+END; $$;
+
+CREATE OR REPLACE FUNCTION tower_run_begin()
+RETURNS json
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE v_pid uuid; v_tp tower_player%ROWTYPE; v_block text;
+BEGIN
+  v_pid := auth.uid();
+  IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
+  v_block := tower_idle_block(v_pid);
+  IF v_block IS NOT NULL THEN RETURN json_build_object('error', v_block); END IF;
+
+  SELECT * INTO v_tp FROM tower_player WHERE player_id = v_pid;
+  IF NOT FOUND OR v_tp.run_floor IS NULL THEN
+    RETURN json_build_object('error', '進行中の連戦がありません');
+  END IF;
+  IF v_tp.run_pending THEN
+    -- 前の戦闘の結果が返っていない＝離脱した扱いで連戦を終わらせる
+    UPDATE tower_player SET run_floor = NULL, run_stage = 0, run_hp = NULL, run_mp = NULL,
+           run_potion = 0, run_pending = false, run_started_at = NULL, updated_at = now()
+      WHERE player_id = v_pid;
+    PERFORM tower_log(v_pid, 'suspicious', v_tp.run_floor, NULL, NULL, '戦闘の結果が返らないまま再開しようとした');
+    RETURN json_build_object('error', '前の戦闘が中断されたため、連戦は最初からになります', 'aborted', true);
+  END IF;
+
+  UPDATE tower_player SET run_pending = true, updated_at = now() WHERE player_id = v_pid;
+  RETURN json_build_object('ok', true, 'stage', v_tp.run_stage);
+END; $$;
 
 -- ============================================================
 -- 2. 定数（クライアントの src/lib/tower.js と必ず一致させること）
@@ -134,13 +216,14 @@ $$;
 -- 条件は街の出撃とまったく同じ: 釣り中／かかし修練中／ペットダンジョン探索中(中断中を除く)
 CREATE OR REPLACE FUNCTION tower_idle_block(p_uid uuid) RETURNS text
 LANGUAGE plpgsql STABLE SECURITY DEFINER AS $$
-DECLARE v_flag boolean;
+DECLARE v_flag boolean; v_country uuid;
 BEGIN
   SELECT COALESCE(is_fishing, false) INTO v_flag FROM profiles WHERE id = p_uid;
   IF COALESCE(v_flag, false) THEN
     RETURN '🎣 釣り中はタワーに入れません。先に釣りを終了してください。';
   END IF;
 
+  v_flag := NULL;
   SELECT true INTO v_flag FROM scarecrow_sessions
     WHERE player_id = p_uid AND status = 'active' AND ends_at > now() LIMIT 1;
   IF COALESCE(v_flag, false) THEN
@@ -153,6 +236,22 @@ BEGIN
   IF COALESCE(v_flag, false) THEN
     RETURN '🕳 ダンジョン探索中はタワーに入れません。中断するか終えてからにしましょう。';
   END IF;
+
+  -- ★2026-08-04追加: 戦争中は街の出撃ができないので、タワーも同じく入れない
+  BEGIN
+    SELECT country_id INTO v_country FROM profiles WHERE id = p_uid;
+    IF v_country IS NOT NULL THEN
+      v_flag := NULL;
+      SELECT true INTO v_flag FROM wars
+        WHERE status = 'active'
+          AND (attacker_country_id = v_country OR defender_country_id = v_country)
+        LIMIT 1;
+      IF COALESCE(v_flag, false) THEN
+        RETURN '⚔ 戦争中はタワーに入れません。';
+      END IF;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN NULL;   -- 戦争SQL未適用の環境では判定しない
+  END;
 
   RETURN NULL;
 END; $$;
@@ -226,6 +325,12 @@ DECLARE
   v_cap      int;
   v_new_exp  int; v_new_lv int; v_new_next int; v_new_pending int; v_new_char_lv int;
 BEGIN
+  -- ★他人ぶん／外部からの直接呼び出しを拒否する。
+  --   タワーのRPCから呼ばれる場合、auth.uid() は呼び出したプレイヤー自身なので必ず一致する。
+  IF auth.uid() IS NOT NULL AND p_uid IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION '不正な操作です';
+  END IF;
+
   SELECT * INTO v_profile FROM profiles WHERE id = p_uid;
   IF NOT FOUND THEN RETURN; END IF;
 
@@ -294,6 +399,7 @@ DECLARE
   v_used    bigint;
   v_i       int;
   v_floors  json;
+  v_dropped boolean := false;
 BEGIN
   v_pid := auth.uid();
   IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
@@ -311,8 +417,16 @@ BEGIN
     SELECT * INTO v_tp FROM tower_player WHERE player_id = v_pid;
   END IF;
 
+  -- ★B-3: 戦闘を宣言したまま結果が返っていない＝離脱。連戦は失敗として畳む。
+  IF v_tp.run_floor IS NOT NULL AND COALESCE(v_tp.run_pending, false) THEN
+    UPDATE tower_player SET run_floor = NULL, run_stage = 0, run_hp = NULL, run_mp = NULL,
+           run_potion = 0, run_pending = false, run_started_at = NULL, updated_at = now()
+      WHERE player_id = v_pid;
+    SELECT * INTO v_tp FROM tower_player WHERE player_id = v_pid;
+    v_dropped := true;
+  END IF;
+
   v_lv := tower_level_from_exp(v_tp.tower_exp);
-  -- エンドレベルまでに消費した累計EXP → 現在LV内の余剰を出す
   v_used := 0;
   FOR v_i IN 1 .. (v_lv - 1) LOOP v_used := v_used + tower_exp_to_next(v_i); END LOOP;
 
@@ -322,7 +436,6 @@ BEGIN
     'need',         tower_sorties_to_mid(f.floor),
     'mid_defeated', COALESCE(p.mid_defeated, false),
     'boss_cleared', COALESCE(p.boss_cleared, false),
-    -- 戦闘エリア1は常に解放。戦闘エリア2以降は前のエリアのエリアボスを倒していれば解放
     'unlocked',     (f.floor = 1 OR COALESCE(prev.boss_cleared, false))
   ) ORDER BY f.floor), '[]'::json) INTO v_floors
   FROM generate_series(1, tower_max_floor()) AS f(floor)
@@ -340,6 +453,9 @@ BEGIN
     'tree_alloc',  v_tp.tree_alloc,
     'target_mode', v_tp.target_mode,
     'max_floor',   v_tp.max_floor,
+    'run_dropped', v_dropped,
+    'last_action_at', v_profile.last_action_at,
+    'wait',        CASE WHEN COALESCE(v_profile.sortie_mode, 20) = 10 THEN 10 ELSE 20 END,
     'run', CASE WHEN v_tp.run_floor IS NULL THEN NULL ELSE json_build_object(
       'floor', v_tp.run_floor, 'stage', v_tp.run_stage,
       'hp', v_tp.run_hp, 'mp', v_tp.run_mp, 'potion', COALESCE(v_tp.run_potion, 0), 'started_at', v_tp.run_started_at
@@ -370,6 +486,9 @@ DECLARE
   v_exp     int;
   v_texp    int;
   v_block   text;
+  v_run     int;
+  v_wait    int;
+  v_locked  int := 0;
 BEGIN
   v_pid := auth.uid();
   IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
@@ -381,11 +500,17 @@ BEGIN
   IF NOT tower_can_enter(v_profile) THEN
     RETURN json_build_object('error', 'まだエンドレスタワーには入れません');
   END IF;
-  -- 街の出撃と同じ排他（釣り／かかし／ペットダンジョン）
+  -- 街の出撃と同じ排他（釣り／かかし／ペットダンジョン／戦争）
   v_block := tower_idle_block(v_pid);
   IF v_block IS NOT NULL THEN RETURN json_build_object('error', v_block); END IF;
 
-  -- そのエリアが解放されているか（戦闘エリア1は常に可・戦闘エリア2以降は前のエリアのエリアボス撃破が必要）
+  -- ★B-4: 連戦の途中は通常出撃できない（クライアントのボタン制御だけでは別タブから抜けられた）
+  SELECT run_floor INTO v_run FROM tower_player WHERE player_id = v_pid;
+  IF v_run IS NOT NULL THEN
+    RETURN json_build_object('error', '連戦中は出撃できません');
+  END IF;
+
+  -- そのエリアが解放されているか
   IF p_floor > 1 THEN
     SELECT COALESCE(boss_cleared, false) INTO v_prev
       FROM tower_progress WHERE player_id = v_pid AND floor = p_floor - 1;
@@ -394,9 +519,23 @@ BEGIN
     END IF;
   END IF;
 
+  -- ★C-1: クールダウンをサーバーで確保する（街と同じ 20秒／10秒モードは10秒）。
+  --   条件付きUPDATEなので、同時に何本投げても1本しか通らない。
+  v_wait := CASE WHEN COALESCE(v_profile.sortie_mode, 20) = 10 THEN 10 ELSE 20 END;
+  WITH upd AS (
+    UPDATE profiles SET last_action_at = now()
+     WHERE id = v_pid
+       AND (last_action_at IS NULL OR last_action_at <= now() - make_interval(secs => v_wait))
+     RETURNING 1
+  ) SELECT count(*) INTO v_locked FROM upd;
+  IF v_locked = 0 THEN
+    RETURN json_build_object('error', 'まだ出撃できません（クールダウン中）', 'cooldown', true,
+      'retry_after', GREATEST(0, EXTRACT(EPOCH FROM
+        (COALESCE(v_profile.last_action_at, now()) + make_interval(secs => v_wait) - now()))));
+  END IF;
+
   -- Gold・EXPともサーバーが決める（p_gold / p_exp は受け取らない＝改ざんできない）
   v_gold := tower_sortie_gold(p_floor);
-  -- 強敵に当たった出撃はボス扱い（街のボス遭遇と同じ量）
   v_exp  := tower_battle_exp(v_pid, COALESCE(p_mid_defeat, false));
 
   INSERT INTO tower_progress (player_id, floor, sortie_count)
@@ -407,20 +546,16 @@ BEGIN
 
   v_need := tower_sorties_to_mid(p_floor);
 
-  -- 強敵撃破：しきい値に到達していなければ受け付けない
   IF p_mid_defeat AND p_won AND v_cnt >= v_need THEN
     UPDATE tower_progress SET mid_defeated = true, updated_at = now()
       WHERE player_id = v_pid AND floor = p_floor;
   END IF;
 
-  -- エンドEXPは勝敗にかかわらず1出撃ぶん入る（出撃したこと自体が積み上がる）
-  -- ⚠乱数なので1回だけ引いて、加算にも戻り値にも同じ値を使う
   v_texp := tower_sortie_tower_exp();
   INSERT INTO tower_player (player_id, tower_exp) VALUES (v_pid, v_texp)
   ON CONFLICT (player_id) DO UPDATE
     SET tower_exp = tower_player.tower_exp + v_texp, updated_at = now();
 
-  -- Gold と 通常EXP（勝った時だけ）。街の出撃と同じ扱い（レベルアップまで処理する）
   IF p_won AND (v_gold > 0 OR v_exp > 0) THEN
     PERFORM tower_grant_rewards(v_pid, v_gold, v_exp);
   END IF;
@@ -431,7 +566,8 @@ BEGIN
     'mid_open',     (v_cnt >= v_need),
     'gold',         CASE WHEN p_won THEN v_gold ELSE 0 END,
     'exp',          CASE WHEN p_won THEN v_exp ELSE 0 END,
-    'tower_exp',    v_texp
+    'tower_exp',    v_texp,
+    'wait',         v_wait
   );
 END; $$;
 
@@ -444,6 +580,7 @@ RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   v_pid uuid; v_profile profiles%ROWTYPE; v_mid boolean; v_prev boolean; v_block text;
+  v_hp bigint; v_mp bigint;
 BEGIN
   v_pid := auth.uid();
   IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
@@ -465,14 +602,18 @@ BEGIN
     RETURN json_build_object('error', 'まず強敵を倒してください');
   END IF;
 
-  INSERT INTO tower_player (player_id, run_floor, run_stage, run_hp, run_mp, run_started_at)
-    VALUES (v_pid, p_floor, 0, GREATEST(p_hp, 0), GREATEST(p_mp, 0), now())
+  -- ★C-2: 申告値をそのまま信じない
+  v_hp := LEAST(GREATEST(COALESCE(p_hp, 0), 0), tower_hp_cap(v_pid));
+  v_mp := LEAST(GREATEST(COALESCE(p_mp, 0), 0), tower_mp_cap(v_pid));
+
+  INSERT INTO tower_player (player_id, run_floor, run_stage, run_hp, run_mp, run_potion, run_pending, run_started_at)
+    VALUES (v_pid, p_floor, 0, v_hp, v_mp, 0, false, now())
   ON CONFLICT (player_id) DO UPDATE
     SET run_floor = p_floor, run_stage = 0,
-        run_hp = GREATEST(p_hp, 0), run_mp = GREATEST(p_mp, 0),
+        run_hp = v_hp, run_mp = v_mp, run_potion = 0, run_pending = false,
         run_started_at = now(), updated_at = now();
 
-  RETURN json_build_object('ok', true, 'floor', p_floor, 'stage', 0);
+  RETURN json_build_object('ok', true, 'floor', p_floor, 'stage', 0, 'hp', v_hp, 'mp', v_mp);
 END; $$;
 
 -- 1戦終えるごとに呼ぶ（HP/MPを持ち越したままステージを進める）
@@ -482,7 +623,7 @@ DROP FUNCTION IF EXISTS tower_run_save(int, bigint, bigint);
 CREATE OR REPLACE FUNCTION tower_run_save(p_stage int, p_hp bigint, p_mp bigint, p_potion int DEFAULT 0)
 RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE v_pid uuid; v_tp tower_player%ROWTYPE; v_block text;
+DECLARE v_pid uuid; v_tp tower_player%ROWTYPE; v_block text; v_hp bigint; v_mp bigint;
 BEGIN
   v_pid := auth.uid();
   IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
@@ -492,18 +633,29 @@ BEGIN
   IF NOT FOUND OR v_tp.run_floor IS NULL THEN
     RETURN json_build_object('error', '進行中の連戦がありません');
   END IF;
-  -- 巻き戻し防止：ステージは前に進むときだけ受け付ける
-  IF p_stage <= v_tp.run_stage THEN
+
+  -- ★A-2: ステージは必ず1つずつしか進めない
+  IF p_stage IS DISTINCT FROM v_tp.run_stage + 1 THEN
+    PERFORM tower_log(v_pid, 'suspicious', v_tp.run_floor, NULL, NULL,
+      format('ステージ飛ばし: %s → %s', v_tp.run_stage, p_stage));
+    RETURN json_build_object('error', 'ステージが不正です');
+  END IF;
+  -- 最終ステージ（添字5）の次は無い。撃破は tower_boss_clear で確定する。
+  IF p_stage > 5 THEN
     RETURN json_build_object('error', 'ステージが不正です');
   END IF;
 
+  v_hp := LEAST(GREATEST(COALESCE(p_hp, 0), 0), tower_hp_cap(v_pid));
+  v_mp := LEAST(GREATEST(COALESCE(p_mp, 0), 0), tower_mp_cap(v_pid));
+
   UPDATE tower_player
-    SET run_stage = LEAST(p_stage, 6), run_hp = GREATEST(p_hp, 0), run_mp = GREATEST(p_mp, 0),
+    SET run_stage = p_stage, run_hp = v_hp, run_mp = v_mp,
         -- 無限ポーションの使用回数は減らせない（リロードで上限を戻す抜け道を塞ぐ）
         run_potion = GREATEST(COALESCE(run_potion, 0), LEAST(GREATEST(COALESCE(p_potion, 0), 0), 99)),
+        run_pending = false,
         updated_at = now()
     WHERE player_id = v_pid;
-  RETURN json_build_object('ok', true, 'stage', LEAST(p_stage, 6));
+  RETURN json_build_object('ok', true, 'stage', p_stage, 'hp', v_hp, 'mp', v_mp);
 END; $$;
 
 -- 連戦を破棄（敗北・自主放棄）
@@ -516,7 +668,7 @@ BEGIN
   IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
   UPDATE tower_player
     SET run_floor = NULL, run_stage = 0, run_hp = NULL, run_mp = NULL,
-        run_started_at = NULL, updated_at = now()
+        run_potion = 0, run_pending = false, run_started_at = NULL, updated_at = now()
     WHERE player_id = v_pid;
   RETURN json_build_object('ok', true);
 END; $$;
@@ -529,38 +681,48 @@ CREATE OR REPLACE FUNCTION tower_boss_clear(p_floor int, p_gold int DEFAULT 0, p
 RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
-  v_pid   uuid;
-  v_tp    tower_player%ROWTYPE;
-  v_name  text;
-  v_first boolean := false;
-  v_rows  int := 0;
-  v_gold  int;
-  v_exp   int;
-  v_texp  int;
-  v_new   boolean := false;
-  v_block text;
+  v_pid    uuid;
+  v_name   text;
+  v_first  boolean := false;
+  v_rows   int := 0;
+  v_claim  int := 0;
+  v_gold   int;
+  v_exp    int;
+  v_texp   int;
+  v_new    boolean := false;
+  v_block  text;
 BEGIN
   v_pid := auth.uid();
   IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
   v_block := tower_idle_block(v_pid);
   IF v_block IS NOT NULL THEN RETURN json_build_object('error', v_block); END IF;
 
-  SELECT * INTO v_tp FROM tower_player WHERE player_id = v_pid;
-  IF NOT FOUND OR v_tp.run_floor IS DISTINCT FROM p_floor THEN
-    RETURN json_build_object('error', 'このエリアの連戦を行っていません');
-  END IF;
-  -- 6戦目（添字5）まで進んでいなければエリアボスを倒せるはずがない
-  IF v_tp.run_stage < 5 THEN
-    RETURN json_build_object('error', '連戦が最後まで進んでいません');
-  END IF;
-
   -- 初クリアかどうか（Goldの額がこれで変わるので先に判定する）
   SELECT NOT COALESCE(boss_cleared, false) INTO v_new
     FROM tower_progress WHERE player_id = v_pid AND floor = p_floor;
   v_new := COALESCE(v_new, true);
+  v_texp := tower_boss_tower_exp(v_new);
 
-  -- Gold・EXPともサーバーが決める（p_gold / p_exp は受け取らない＝改ざんできない）
-  -- Goldは初回だけエリア数×100万、2回目以降は出撃と同じエリア数×300
+  -- ★A-3: ここで連戦を「取り切る」。条件を満たす行が無ければ何も起きない＝報酬も出ない。
+  WITH upd AS (
+    UPDATE tower_player
+       SET max_floor    = GREATEST(COALESCE(max_floor, 0), p_floor),
+           max_floor_at = CASE WHEN p_floor > COALESCE(max_floor, 0) THEN now() ELSE max_floor_at END,
+           tower_exp    = tower_exp + v_texp,
+           run_floor = NULL, run_stage = 0, run_hp = NULL, run_mp = NULL,
+           run_potion = 0, run_pending = false, run_started_at = NULL,
+           updated_at = now()
+     WHERE player_id = v_pid
+       AND run_floor = p_floor
+       AND run_stage >= 5      -- 6戦目（添字5）まで進んでいなければ倒せるはずがない
+     RETURNING 1
+  ) SELECT count(*) INTO v_claim FROM upd;
+
+  IF v_claim = 0 THEN
+    PERFORM tower_log(v_pid, 'suspicious', p_floor, NULL, NULL, '連戦が成立していないのに撃破を申告した');
+    RETURN json_build_object('error', 'このエリアの連戦が最後まで進んでいません');
+  END IF;
+
   v_gold := tower_boss_gold(p_floor, v_new);
   v_exp  := tower_battle_exp(v_pid, true);
 
@@ -571,35 +733,24 @@ BEGIN
         first_clear_at = COALESCE(tower_progress.first_clear_at, now()),
         updated_at = now();
 
-  -- 到達エリアの更新（ランキング用）
-  -- エンドEXP：初回撃破だけ1000、2回目以降は出撃と同じ（乱数なので1回だけ引く）
-  v_texp := tower_boss_tower_exp(v_new);
-
-  UPDATE tower_player
-    SET max_floor    = GREATEST(COALESCE(max_floor, 0), p_floor),
-        max_floor_at = CASE WHEN p_floor > COALESCE(max_floor, 0) THEN now() ELSE max_floor_at END,
-        tower_exp    = tower_exp + v_texp,
-        run_floor = NULL, run_stage = 0, run_hp = NULL, run_mp = NULL, run_started_at = NULL,
-        updated_at = now()
-    WHERE player_id = v_pid;
-
-  -- 石碑：最初の1つは10層（最初にここまで来た者だけ）。それ以降は1層ごとに、
-  --       その層をサーバーで最初に踏破した1人を記録する。
+  -- 石碑：最初の1つは10層。それ以降は1層ごとに、その層を最初に踏破した1人を記録する。
   IF p_floor >= 10 THEN
     SELECT username INTO v_name FROM profiles WHERE id = v_pid;
     INSERT INTO tower_first_clear (floor, player_id, username)
       VALUES (p_floor, v_pid, COALESCE(v_name, '？'))
     ON CONFLICT (floor) DO NOTHING;
     GET DIAGNOSTICS v_rows = ROW_COUNT;
-    v_first := (v_rows > 0);   -- 1行入った＝サーバーで最初の1人だった
+    v_first := (v_rows > 0);
   END IF;
 
   PERFORM tower_grant_rewards(v_pid, v_gold, v_exp);
+  PERFORM tower_log(v_pid, 'boss_clear', p_floor, v_gold, v_exp,
+    CASE WHEN v_new THEN '初回踏破' ELSE '周回' END);
 
   RETURN json_build_object(
     'ok', true, 'floor', p_floor,
-    'first_clear', v_new,          -- そのプレイヤーにとって初クリアか
-    'monument', COALESCE(v_first, false), -- 石碑に名前が刻まれたか（サーバー初）
+    'first_clear', v_new,
+    'monument', COALESCE(v_first, false),
     'gold', v_gold, 'exp', v_exp, 'tower_exp', v_texp
   );
 END; $$;
@@ -736,6 +887,25 @@ DROP FUNCTION IF EXISTS tower_exp_per_sortie();
 -- ============================================================
 -- 9. 権限
 -- ============================================================
+-- ★内部ヘルパは外から直接呼べないようにする。
+--   PostgreSQL は新規関数の EXECUTE を既定で PUBLIC に与えるため、これが無いと
+--   tower_grant_rewards(自分のuuid, 0, 20億) のような直接呼び出しが通ってしまう。
+REVOKE ALL ON FUNCTION public.tower_grant_rewards(uuid, int, int) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.tower_idle_block(uuid)              FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.tower_battle_exp(uuid, boolean)     FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.tower_hp_cap(uuid)                  FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.tower_mp_cap(uuid)                  FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.tower_log(uuid, text, int, bigint, int, text) FROM PUBLIC;
+DO $$ BEGIN
+  EXECUTE 'REVOKE ALL ON FUNCTION public.tower_grant_rewards(uuid, int, int) FROM anon, authenticated';
+  EXECUTE 'REVOKE ALL ON FUNCTION public.tower_idle_block(uuid) FROM anon, authenticated';
+  EXECUTE 'REVOKE ALL ON FUNCTION public.tower_battle_exp(uuid, boolean) FROM anon, authenticated';
+  EXECUTE 'REVOKE ALL ON FUNCTION public.tower_hp_cap(uuid) FROM anon, authenticated';
+  EXECUTE 'REVOKE ALL ON FUNCTION public.tower_mp_cap(uuid) FROM anon, authenticated';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+GRANT EXECUTE ON FUNCTION tower_run_begin()                         TO authenticated;
 GRANT EXECUTE ON FUNCTION tower_can_act()                           TO authenticated;
 GRANT EXECUTE ON FUNCTION get_tower_status()                        TO authenticated;
 GRANT EXECUTE ON FUNCTION tower_sortie_result(int, boolean, boolean, int, int) TO authenticated;
