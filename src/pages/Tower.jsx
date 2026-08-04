@@ -672,6 +672,11 @@ export default function Tower() {
                   {f.boss_cleared ? `　${getFloor(f.floor)?.boss || ''}（踏破済）` : ''}
                 </option>
               ))}
+              {/* 調整で閉じている層があることを一覧の中でも分かるようにする。
+                  何層まであるかは伏せたいので「◯層以降」の1行にまとめる */}
+              {OPEN_MAX_FLOOR < MAX_IMPLEMENTED_FLOOR && (
+                <option value="" disabled>{floorLabel(OPEN_MAX_FLOOR + 1)}以降　🔧 調整中</option>
+              )}
             </select>
 
             {sel?.unlocked && fd && (
