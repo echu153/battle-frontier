@@ -7,7 +7,7 @@ import {
   TOWER_FLOORS, getFloor, MAX_IMPLEMENTED_FLOOR, BOSS_RUN_STAGES,
   towerTarget, sortiesToMidBoss, towerExpToNext, towerLevelFromExp, TOWER_EXP_MIN, TOWER_EXP_MAX, BOSS_FIRST_TOWER_EXP,
   TREE_NODES, TREE_MAX_STEPS, TREE_STEP_PCT, stepPctOf, maxStepsAt, nextUnlock, treeBonus, treeSpent, treeResetCost,
-  isMonumentFloor, MID_BOSS_RATE, towerSortieGold, towerBossGold, RUN_POTION_LIMIT,
+  isMonumentFloor, MID_BOSS_RATE, towerSortieGold, towerBossGold, RUN_POTION_LIMIT, MAX_END_LEVEL,
   buildStageEnemies, buildSortieEnemies, towerTreeEffects, applyTreeToStats,
 } from './tower.js'
 import { TARGET_MODES, DEFAULT_TARGET_MODE, pickTargetMode, isTargetMode } from './loadout.js'
@@ -74,7 +74,7 @@ test('内部推奨力と必要出撃数', () => {
   assert.equal(BOSS_FIRST_TOWER_EXP, 1000)
 })
 
-test('タワーLVと累計EXPが往復する', () => {
+test('エンドレベルと累計EXPが往復する', () => {
   for (const lv of [1, 2, 10, 50, 100, 200]) {
     let total = 0
     for (let i = 1; i < lv; i++) total += towerExpToNext(i)
@@ -87,16 +87,31 @@ test('タワーLVと累計EXPが往復する', () => {
   assert.equal(towerLevelFromExp(-100).lv, 1)
 })
 
-test('ツリーの段数解放', () => {
+test('ツリーの段数解放（2026-08-03: 上限を500へ広げた）', () => {
   assert.equal(maxStepsAt(1), 10)
   assert.equal(maxStepsAt(49), 10)
   assert.equal(maxStepsAt(50), 20)
   assert.equal(maxStepsAt(100), 30)
-  assert.equal(maxStepsAt(150), 40)
-  assert.equal(maxStepsAt(200), 50)
-  assert.equal(maxStepsAt(9999), TREE_MAX_STEPS)
-  assert.equal(nextUnlock(200), null)
+  assert.equal(maxStepsAt(199), 30)
+  assert.equal(maxStepsAt(200), 40)
+  assert.equal(maxStepsAt(349), 40)
+  assert.equal(maxStepsAt(350), 50)
+  assert.equal(maxStepsAt(500), TREE_MAX_STEPS)
+  assert.equal(nextUnlock(350), null)
   assert.equal(nextUnlock(1).lv, 50)
+})
+
+test('エンドレベルの上限は500', () => {
+  assert.equal(MAX_END_LEVEL, 500)
+  // 上限に達したらEXPをいくら積んでも上がらない
+  const huge = towerLevelFromExp(999999999)
+  assert.equal(huge.lv, MAX_END_LEVEL, '上限で頭打ち')
+  // SQL側の打ち止めと一致していること
+  return import('node:fs').then(fs => {
+    const sql = fs.readFileSync('supabase_tower.sql', 'utf8')
+    assert.ok(sql.includes('WHILE v_lv < 500'), 'SQLの打ち止めも500')
+    assert.ok(sql.includes('WHEN p_lv >= 350 THEN 50'), 'SQLの段数解放も350で50段')
+  })
 })
 
 test('ツリーの振り分けが壊れた値でも数値のまま', () => {

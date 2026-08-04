@@ -37,11 +37,11 @@ DROP POLICY IF EXISTS tower_progress_select_own ON tower_progress;
 CREATE POLICY tower_progress_select_own ON tower_progress
   FOR SELECT USING (auth.uid() = player_id);
 
--- プレイヤーごとのタワーの状態（タワーEXP・タワーLV・ツリー・進行中の連戦）
+-- プレイヤーごとのタワーの状態（エンドEXP・エンドレベル・ツリー・進行中の連戦）
 -- ※深いエリアの敵HPが天文学的になるため、HPを保存する列はすべて bigint
 CREATE TABLE IF NOT EXISTS tower_player (
   player_id     uuid    PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
-  tower_exp     bigint  NOT NULL DEFAULT 0,    -- 累計のタワーEXP
+  tower_exp     bigint  NOT NULL DEFAULT 0,    -- 累計のエンドEXP
   tree_alloc    jsonb   NOT NULL DEFAULT '{}'::jsonb, -- {ノードkey: 段数}
   target_mode   text    NOT NULL DEFAULT 'top',-- 複数敵がいるときの狙い方 top/random/hp_high/hp_low
   max_floor     int     NOT NULL DEFAULT 0,    -- 到達エリア（ランキング用。エリアボスを倒した最高層）
@@ -83,40 +83,40 @@ LANGUAGE sql IMMUTABLE AS $$ SELECT 10 $$;              -- 実装済みの最終
 CREATE OR REPLACE FUNCTION tower_sorties_to_mid(p_floor int) RETURNS int
 LANGUAGE sql IMMUTABLE AS $$ SELECT 30 + p_floor * 10 $$;
 
--- 出撃1回で得られるタワーEXP（20〜30のランダム・2026-08-03確定）
+-- 出撃1回で得られるエンドEXP（20〜30のランダム・2026-08-03確定）
 -- ⚠ 乱数なので、1回の処理の中で複数回呼ばない（呼ぶたび違う値になる）。
 --   必ず変数に受けてから使うこと。
 CREATE OR REPLACE FUNCTION tower_sortie_tower_exp() RETURNS int
 LANGUAGE sql VOLATILE AS $$ SELECT 20 + floor(random() * 11)::int $$;
 
--- エリアボス撃破で得られるタワーEXP。初回だけ1000、2回目以降は出撃と同じ
+-- エリアボス撃破で得られるエンドEXP。初回だけ1000、2回目以降は出撃と同じ
 CREATE OR REPLACE FUNCTION tower_boss_tower_exp(p_first boolean) RETURNS int
 LANGUAGE sql VOLATILE AS $$
   SELECT CASE WHEN p_first THEN 1000 ELSE tower_sortie_tower_exp() END
 $$;
 
--- タワーLV lv → lv+1 に必要なタワーEXP = 50 × lv（2026-08-03変更・直線）
+-- エンドレベル lv → lv+1 に必要なエンドEXP = 50 × lv（2026-08-03変更・直線）
 CREATE OR REPLACE FUNCTION tower_exp_to_next(p_lv int) RETURNS bigint
 LANGUAGE sql IMMUTABLE AS $$ SELECT (50::bigint * p_lv) $$;
 
--- 累計タワーEXPからタワーLVを求める
+-- 累計エンドEXPからエンドレベルを求める（上限500）
 CREATE OR REPLACE FUNCTION tower_level_from_exp(p_exp bigint) RETURNS int
 LANGUAGE plpgsql IMMUTABLE AS $$
 DECLARE v_lv int := 1; v_rest bigint := COALESCE(p_exp, 0);
 BEGIN
-  WHILE v_lv < 9999 AND v_rest >= tower_exp_to_next(v_lv) LOOP
+  WHILE v_lv < 500 AND v_rest >= tower_exp_to_next(v_lv) LOOP
     v_rest := v_rest - tower_exp_to_next(v_lv);
     v_lv := v_lv + 1;
   END LOOP;
   RETURN v_lv;
 END; $$;
 
--- タワーLVで1ノードに振れる最大段数（10段ごとに解放・上限50段）
+-- エンドレベルで1ノードに振れる最大段数（10段ごとに解放・上限50段）
 CREATE OR REPLACE FUNCTION tower_max_steps(p_lv int) RETURNS int
 LANGUAGE sql IMMUTABLE AS $$
   SELECT CASE
-    WHEN p_lv >= 200 THEN 50
-    WHEN p_lv >= 150 THEN 40
+    WHEN p_lv >= 350 THEN 50
+    WHEN p_lv >= 200 THEN 40
     WHEN p_lv >= 100 THEN 30
     WHEN p_lv >=  50 THEN 20
     ELSE 10 END
@@ -312,7 +312,7 @@ BEGIN
   END IF;
 
   v_lv := tower_level_from_exp(v_tp.tower_exp);
-  -- タワーLVまでに消費した累計EXP → 現在LV内の余剰を出す
+  -- エンドレベルまでに消費した累計EXP → 現在LV内の余剰を出す
   v_used := 0;
   FOR v_i IN 1 .. (v_lv - 1) LOOP v_used := v_used + tower_exp_to_next(v_i); END LOOP;
 
@@ -413,7 +413,7 @@ BEGIN
       WHERE player_id = v_pid AND floor = p_floor;
   END IF;
 
-  -- タワーEXPは勝敗にかかわらず1出撃ぶん入る（出撃したこと自体が積み上がる）
+  -- エンドEXPは勝敗にかかわらず1出撃ぶん入る（出撃したこと自体が積み上がる）
   -- ⚠乱数なので1回だけ引いて、加算にも戻り値にも同じ値を使う
   v_texp := tower_sortie_tower_exp();
   INSERT INTO tower_player (player_id, tower_exp) VALUES (v_pid, v_texp)
@@ -572,7 +572,7 @@ BEGIN
         updated_at = now();
 
   -- 到達エリアの更新（ランキング用）
-  -- タワーEXP：初回撃破だけ1000、2回目以降は出撃と同じ（乱数なので1回だけ引く）
+  -- エンドEXP：初回撃破だけ1000、2回目以降は出撃と同じ（乱数なので1回だけ引く）
   v_texp := tower_boss_tower_exp(v_new);
 
   UPDATE tower_player
@@ -638,7 +638,7 @@ BEGIN
     END IF;
     IF v_val < 0 THEN RETURN json_build_object('error', '段数が不正です'); END IF;
     IF v_val > v_max THEN
-      RETURN json_build_object('error', 'タワーLVが足りません（現在は1ノード' || v_max || '段まで）');
+      RETURN json_build_object('error', 'エンドレベルが足りません（現在は1ノード' || v_max || '段まで）');
     END IF;
     v_sum := v_sum + v_val;
   END LOOP;
@@ -651,7 +651,7 @@ BEGIN
   RETURN json_build_object('ok', true, 'spent', v_sum, 'tower_lv', v_lv);
 END; $$;
 
--- 振り直し（Goldを消費して全部戻す）。費用はタワーLVに比例。
+-- 振り直し（Goldを消費して全部戻す）。費用はエンドレベルに比例。
 CREATE OR REPLACE FUNCTION tower_tree_reset()
 RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
@@ -729,7 +729,7 @@ BEGIN
   );
 END; $$;
 
--- 旧: タワーEXP固定100。20〜30の乱数（tower_sortie_tower_exp）に変えたので不要
+-- 旧: エンドEXP固定100。20〜30の乱数（tower_sortie_tower_exp）に変えたので不要
 DROP FUNCTION IF EXISTS tower_exp_per_sortie();
 
 -- ============================================================

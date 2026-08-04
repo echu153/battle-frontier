@@ -38,28 +38,28 @@ export const towerBossGold = (floor, isFirstClear) => isFirstClear ? floor * 100
 // ※5回では無限ポーションの5ターンCDに阻まれてほぼ届かず素通りだったため2回にした
 export const RUN_POTION_LIMIT = 2
 
-// 出撃1回で得られるタワーEXP（戦闘エリアによらず20〜30のランダム・2026-08-03確定）
+// 出撃1回で得られるエンドEXP（戦闘エリアによらず20〜30のランダム・2026-08-03確定）
 // エリアボス撃破は初回だけ1000、2回目以降は出撃と同じ
 // ※実際に付与する値はサーバーが決める。ここは表示・テスト用の同じ定義。
 export const TOWER_EXP_MIN = 20
 export const TOWER_EXP_MAX = 30
 export const BOSS_FIRST_TOWER_EXP = 1000
 
-// タワーLV lv → lv+1 に必要なタワーEXP（2026-08-03変更: 5×LV² は伸びが急すぎたので直線に）
+// エンドレベル lv → lv+1 に必要なエンドEXP（2026-08-03変更: 5×LV² は伸びが急すぎたので直線に）
 //  累計 = 25×LV×(LV-1)。平均25EXP/回なので、出撃回数の目安は LV50=2,450 / LV100=9,900 / LV200=4.0万
 export const towerExpToNext = (lv) => 50 * lv
 
-// 累計のタワーEXPからタワーLVと余剰EXPを求める
+// 累計のエンドEXPからエンドレベルと余剰EXPを求める
 export const towerLevelFromExp = (totalExp) => {
   let lv = 1, rest = totalExp || 0
-  while (rest >= towerExpToNext(lv) && lv < 9999) { rest -= towerExpToNext(lv); lv++ }
+  while (rest >= towerExpToNext(lv) && lv < MAX_END_LEVEL) { rest -= towerExpToNext(lv); lv++ }
   return { lv, rest, next: towerExpToNext(lv) }
 }
 
 // ============================================================
 // エンドポイント（全17ノード・効果はタワーの中だけで有効）
 //  ・1段 = 0.5%（会心威力+/最大HP+/会心耐性+ だけ1段=1%）／1ノードの上限 = 50段
-//  ・10段ごとに解放に必要なタワーLVがある
+//  ・10段ごとに解放に必要なエンドレベルがある
 // ============================================================
 // 1段あたりの効果（%）。既定は0.5%だが、ノードごとに step で上書きできる
 export const TREE_STEP_PCT = 0.5
@@ -67,22 +67,25 @@ export const TREE_MAX_STEPS = 50
 // そのノードの1段あたりの%（TREE_NODES の step 指定が優先）
 export const stepPctOf = (key) => TREE_NODES.find(n => n.key === key)?.step ?? TREE_STEP_PCT
 
-// 段数の解放しきい値（この段数を超えて振るには、対応するタワーLVが必要）
+// エンドレベルの上限（2026-08-03確定）。ここで打ち止め＝以降EXPを稼いでも上がらない
+export const MAX_END_LEVEL = 500
+
+// 段数の解放しきい値（この段数を超えて振るには、対応するエンドレベルが必要）
 export const TREE_UNLOCK = [
   { upTo: 10, lv: 1 },
   { upTo: 20, lv: 50 },
   { upTo: 30, lv: 100 },
-  { upTo: 40, lv: 150 },
-  { upTo: 50, lv: 200 },
+  { upTo: 40, lv: 200 },
+  { upTo: 50, lv: 350 },
 ]
 
-// タワーLV lv のときに1ノードへ振れる最大段数
+// エンドレベル lv のときに1ノードへ振れる最大段数
 export const maxStepsAt = (lv) => {
   let max = 0
   for (const t of TREE_UNLOCK) if (lv >= t.lv) max = t.upTo
   return max
 }
-// 次の解放段数と必要なタワーLV（すべて解放済みなら null）
+// 次の解放段数と必要なエンドレベル（すべて解放済みなら null）
 export const nextUnlock = (lv) => TREE_UNLOCK.find(t => lv < t.lv) || null
 
 export const TREE_NODES = [
@@ -105,7 +108,7 @@ export const TREE_NODES = [
   { key: 'mp_cost',    line: 'etc', name: 'MP消費-',             desc: 'スキルの消費MPが減る。連戦のMP枯渇対策' },
   { key: 'kill_heal',  line: 'etc', name: '雑魚撃破ごとにHP回復', desc: '雑魚を倒すたびに最大HPの一定割合を回復する' },
   { key: 'ail_rate',   line: 'etc', name: '状態異常の付与率+',   desc: 'こちらが与える状態異常の成功率が上がる' },
-  { key: 'exp_plus',   line: 'etc', name: '取得経験値+1の確率',  desc: 'タワーの中で得た通常EXPが+1される確率。タワーEXPには乗らない' },
+  { key: 'exp_plus',   line: 'etc', name: '取得経験値+1の確率',  desc: 'タワーの中で得た通常EXPが+1される確率。エンドEXPには乗らない' },
 ]
 
 export const TREE_LINES = [
@@ -132,7 +135,7 @@ export const treeBonus = (alloc) => {
 export const treeSpent = (alloc) =>
   TREE_NODES.reduce((s, n) => s + stepOf(alloc, n.key), 0)
 
-// 振り直しにかかるGold（タワーLVに比例）
+// 振り直しにかかるGold（エンドレベルに比例）
 export const treeResetCost = (lv) => 10000 * Math.max(1, lv)
 
 // ============================================================

@@ -427,7 +427,7 @@ export default function Tower() {
                 <div style={{ color: C.gold, fontSize: '13px' }}>👑 {floorLabel(gain.floor)}のエリアボスを撃破！</div>
                 {gain.firstClear && <div style={{ color: C.ok }}>このエリアを初めて踏破した！ 次のエリアが解放された。</div>}
                 {gain.monument && <div style={{ color: C.gold }}>🗿 石碑に名前が刻まれた！（サーバー最初の踏破者）</div>}
-                <div>Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ タワーEXP +{fmt(gain.towerExp)}</div>
+                <div>Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ エンドEXP +{fmt(gain.towerExp)}</div>
               </>
             ) : gain.win === false ? (
               <div style={{ color: C.ng }}>敗北…{gain.stageLabel ? `（${gain.stageLabel}）` : ''} 連戦は最初からやり直しになります。</div>
@@ -438,7 +438,7 @@ export default function Tower() {
               </>
             ) : (
               <>
-                <div style={{ color: C.ok }}>勝利！ Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ タワーEXP +{fmt(gain.towerExp)}</div>
+                <div style={{ color: C.ok }}>勝利！ Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ エンドEXP +{fmt(gain.towerExp)}</div>
                 {gain.midCleared && <div style={{ color: C.gold }}>⚔ 中ボスを撃破！ エリアボスに挑めるようになった。</div>}
                 {gain.mid && !gain.midCleared && <div style={{ color: C.ng }}>中ボスが現れたが、退けられた…</div>}
               </>
@@ -468,12 +468,12 @@ export default function Tower() {
   // ── ロビー ──────────────────────────────────────────────────
   return (
     <Shell nav={nav}>
-      {/* タワーLV・タブ */}
+      {/* エンドレベル・タブ */}
       <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '10px 12px', marginBottom: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px' }}>
           <div style={{ color: C.dim, fontSize: '11px' }}>階層</div>
           <div style={{ color: C.text, fontSize: '11px' }}>
-            タワーLV <span style={{ color: C.gold, fontSize: '14px' }}>{status.tower_lv}</span>
+            エンドレベル <span style={{ color: C.gold, fontSize: '14px' }}>{status.tower_lv}</span>
             <span style={{ color: C.dim, marginLeft: '8px' }}>{fmt(status.exp_in_lv)} / {fmt(status.exp_to_next)}</span>
           </div>
         </div>
@@ -591,7 +591,7 @@ export default function Tower() {
             <div style={{ color: C.dim, fontSize: '10px', marginTop: '4px' }}>
               効果は<span style={{ color: C.text }}>タワーの中だけ</span>で有効です。
               {nextUnlock(towerLv)
-                ? `タワーLV${nextUnlock(towerLv).lv}で ${nextUnlock(towerLv).upTo}段まで解放。`
+                ? `エンドレベル${nextUnlock(towerLv).lv}で ${nextUnlock(towerLv).upTo}段まで解放。`
                 : `全段（${TREE_MAX_STEPS}段）解放済み。`}
             </div>
           </div>
