@@ -206,10 +206,12 @@ test('EXP曲線がクライアントとSQLで一致している', async () => {
   const head = sql.indexOf('CREATE OR REPLACE FUNCTION tower_exp_to_next')
   assert.ok(head >= 0, 'SQLに tower_exp_to_next がある')
   const line = sql.slice(head, sql.indexOf(';', head))
-  const m = line.match(/SELECT\s*\(([^)]*)\)/)
+  // 「SELECT 〜 $$」の間をまるごと取る（LEAST(...) のように括弧が入れ子でも切れないように）
+  const m = line.match(/SELECT\s+([\s\S]*?)\s*\$\$/)
   assert.ok(m, 'SQLの tower_exp_to_next の式が読めた')
-  const sqlExpr = m[1].replace(/::bigint/g, '')
-  for (const lv of [1, 5, 50, 200]) {
+  // SQLの式をそのままJSで評価できる形に直す（LEAST/GREATEST は Math.min/max に）
+  const sqlExpr = m[1].replace(/::bigint/g, '').replace(/LEAST/g, 'Math.min').replace(/GREATEST/g, 'Math.max')
+  for (const lv of [1, 5, 50, 200, 350, 399, 400, 401, 500, 849]) {
     // eslint-disable-next-line no-new-func
     const sqlVal = Function('p_lv', `return ${sqlExpr}`)(lv)
     assert.equal(sqlVal, towerExpToNext(lv), `LV${lv} の必要EXPが一致`)

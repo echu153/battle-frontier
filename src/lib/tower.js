@@ -46,8 +46,10 @@ export const TOWER_EXP_MAX = 30
 export const BOSS_FIRST_TOWER_EXP = 1000
 
 // エンドレベル lv → lv+1 に必要なエンドEXP（2026-08-03変更: 5×LV² は伸びが急すぎたので直線に）
-//  累計 = 25×LV×(LV-1)。平均25EXP/回なので、出撃回数の目安は LV50=2,450 / LV100=9,900 / LV200=4.0万
-export const towerExpToNext = (lv) => 50 * lv
+//  2026-08-04: エンドポイントの段数解放はLV350で打ち止め（50段）なので、
+//  それ以降まで必要EXPが伸び続ける意味がない。LV400からは一定（50×400=20,000）にする。
+export const TOWER_EXP_FLAT_FROM = 400
+export const towerExpToNext = (lv) => 50 * Math.min(lv, TOWER_EXP_FLAT_FROM)
 
 // 累計のエンドEXPからエンドレベルと余剰EXPを求める
 export const towerLevelFromExp = (totalExp) => {

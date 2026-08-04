@@ -187,8 +187,9 @@ LANGUAGE sql VOLATILE AS $$
 $$;
 
 -- エンドレベル lv → lv+1 に必要なエンドEXP = 50 × lv（2026-08-03変更・直線）
+-- 2026-08-04: 段数解放はLV350で打ち止めなので、LV400以降は一定（50×400=20,000）にする。
 CREATE OR REPLACE FUNCTION tower_exp_to_next(p_lv int) RETURNS bigint
-LANGUAGE sql IMMUTABLE AS $$ SELECT (50::bigint * p_lv) $$;
+LANGUAGE sql IMMUTABLE AS $$ SELECT (50::bigint * LEAST(p_lv, 400)) $$;
 
 -- 累計エンドEXPからエンドレベルを求める（上限850＝全17ノードを50段まで埋め切れる値）
 CREATE OR REPLACE FUNCTION tower_level_from_exp(p_exp bigint) RETURNS int
