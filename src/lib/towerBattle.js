@@ -740,11 +740,17 @@ export function simulateTowerBattle({
     if (sm.playerHealMult) { playerBuffs.healBlockRate = { turns: sm.turns || 4, rate: sm.playerHealMult }; logs.push({ text: `🚫 回復量が下がった…`, color: '#ff4488' }) }
   }
 
-  // 召喚
-  const spawn = (def, opts, why) => {
-    const en = makeEnemy(def, { ...opts, isSummoned: true })
-    enemies.push(en)
-    logs.push({ text: `✦ ${why} ${en.name}が現れた！`, color: '#ff88cc' })
+  // 召喚。設定された体数をまとめて呼び、ログは1行だけ出す
+  // （同じ行が体数ぶん並ぶと何が起きたのか読み取りづらいため）
+  const spawn = (def, opts, why, count = 1) => {
+    const n = Math.max(1, Math.floor(count) || 1)
+    let name = ''
+    for (let k = 0; k < n; k++) {
+      const en = makeEnemy(def, { ...opts, isSummoned: true })
+      enemies.push(en)
+      name = en.name
+    }
+    logs.push({ text: `✦ ${why} ${name}が${n > 1 ? `${n}体` : ''}現れた！`, color: '#ff88cc' })
   }
 
   // 敵のターン開始時トリガー（段階変化・強化・浄化・回復・召喚）
@@ -762,7 +768,7 @@ export function simulateTowerBattle({
           if (p.atkMult) { en.perm.atk *= p.atkMult; en.perm.matk *= p.atkMult }
           if (p.spdMult) en.perm.spd *= p.spdMult
           if (p.summonOnEnter && floorData) {
-            for (let k = 0; k < (p.summonOnEnter.count || 1); k++) spawn(floorData.enemies[p.summonOnEnter.enemyIndex], {}, `${en.name}の呼び声！`)
+            spawn(floorData.enemies[p.summonOnEnter.enemyIndex], {}, `${en.name}の呼び声！`, p.summonOnEnter.count || 1)
           }
         }
         en.phaseIdx = idx
@@ -791,15 +797,13 @@ export function simulateTowerBattle({
     // 取り巻き召喚（戦闘エリア1）
     if (en.summonDef && floorData && !en.used.summon && rate <= en.summonDef.hpBelow) {
       en.used.summon = true
-      for (let k = 0; k < (en.summonDef.count || 1); k++) spawn(floorData.enemies[en.summonDef.enemyIndex], {}, `${en.name}の号令！`)
+      spawn(floorData.enemies[en.summonDef.enemyIndex], {}, `${en.name}の号令！`, en.summonDef.count || 1)
     }
     // 強敵級の召喚（戦闘エリア7）
     if (en.summonMid && floorData && !en.used.summonMid && rate <= en.summonMid.hpBelow) {
       en.used.summonMid = true
       const sr = en.summonMid.statRate || 0.5
-      for (let k = 0; k < (en.summonMid.count || 1); k++) {
-        spawn(floorData.midBoss, { statRate: sr, hpRate: sr }, `${en.name}が呼び寄せた！`)
-      }
+      spawn(floorData.midBoss, { statRate: sr, hpRate: sr }, `${en.name}が呼び寄せた！`, en.summonMid.count || 1)
     }
     // 定期召喚（戦闘エリア4）
     if (en.summonLoop && floorData) {
