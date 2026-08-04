@@ -3218,7 +3218,7 @@ export default function Game() {
       // 宝石の防御貫通/魔法防御貫通（敵DEF/MDEFを%無視）を倍率に折り込む
       const eDefRate  = (enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1) * (enemyBuffs.defUp  ? enemyBuffs.defUp.rate  : 1) * (1 - (eff.defPen || 0))
       const eMdefRate = (enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1) * (enemyBuffs.mdefUp ? enemyBuffs.mdefUp.rate : 1) * (1 - (eff.mdefPen || 0))
-      const prefix = isExtra ? `↳ ${profile.username} の` : `${turn}ターン目: ${profile.username} の`
+      const prefix = isExtra ? `↳ ${profile.username} の` : `${profile.username} の`
       const isCrit = Math.random()*100 < playerCritRate
       const critMult = isCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
 
@@ -3538,7 +3538,7 @@ export default function Game() {
         const cut = petBuffs.reduceTurns > 0 ? (1 - petBuffs.reduce) : 1.0
         let dmg = Math.max(1, Math.floor(baseDmg * cut * (0.9 + Math.random()*0.2)))
         petHp = Math.max(0, petHp - dmg)
-        const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
+        const prefix = isExtra ? '↳ ' : ''
         logs.push({ text:`${prefix}${enemy.name}はペットを攻撃！ ペットに${dmg}ダメージ！（残りHP${petHp}）`, color:'#ff8844' })
         if (petHp <= 0) logs.push({ text:`💥 ペットは倒れてしまった…`, color:'#ff4444' })
         return
@@ -3568,7 +3568,7 @@ export default function Game() {
       const effectiveEnemySpd = enemySpd * enemySpdBuff * enemySpdDebuff
       const evasionRate = calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0) + (hasOnmi ? 5 : 0)
       if (evasionRate > 0 && Math.random()*100 < evasionRate) {
-        const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
+        const prefix = isExtra ? '↳ ' : ''
         logs.push({ text:`${prefix}${enemy.name}の攻撃！ しかし回避した！`, color:'#44ff88' })
         // ボス装備 真化: 影踏みのブーツ — 回避時2ターン素早さ+10%（発動ログなし）
         if (eff.evoEvadeSpdUp && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= 1.1)) {
@@ -3597,7 +3597,7 @@ export default function Game() {
           logs.push({ text:`🔯 陰陽結界！ 軽減した分から${healBack}回復した！`, color:'#66ddaa' })
         }
       }
-      const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
+      const prefix = isExtra ? '↳ ' : ''
       const critText = isCrit ? ' 💥クリティカル！' : ''
       logs.push({ text:`${prefix}${enemy.name}の攻撃！ あなたに${finalDmg}ダメージ…${critText}`, color:isCrit?'#ff2200':'#ff6644' })
     }
@@ -3871,11 +3871,11 @@ export default function Game() {
       // プレイヤー行動スキップ判定（スタン・麻痺）
       let playerSkipped = false
       if (playerBuffs.stun?.turns > 0) {
-        logs.push({ text:`${turn}ターン目: スタン！ あなたは行動できない！`, color:'#ffaa00' })
+        logs.push({ text:`スタン！ あなたは行動できない！`, color:'#ffaa00' })
         playerSkipped = true
         delete playerBuffs.stun
       } else if (playerBuffs.paralysis?.turns > 0 && Math.random() < playerBuffs.paralysis.skipRate) {
-        logs.push({ text:`${turn}ターン目: 麻痺で行動不能！`, color:'#ffaa00' })
+        logs.push({ text:`麻痺で行動不能！`, color:'#ffaa00' })
         playerSkipped = true
         playerBuffs.paralysis.skipRate *= 0.5
       }
@@ -3897,20 +3897,20 @@ export default function Game() {
       if (enemy.isPapia) {
         const papiaMsg = PAPIA_TURNS[turn - 1] || '逃走'
         if (turn >= 6) {
-          logs.push({ text:`${turn}ターン目: ${papiaMsg}！ パピアは逃げた！`, color:'#ff8844' })
+          logs.push({ text:`${papiaMsg}！ パピアは逃げた！`, color:'#ff8844' })
           papiaEscaped = true
           break
         }
-        logs.push({ text:`${turn}ターン目: ${papiaMsg}`, color:'#ff8844' })
+        logs.push({ text:`${papiaMsg}`, color:'#ff8844' })
       } else {
         // 敵行動スキップ判定（スタン・麻痺）
         let enemySkipped = false
         if (enemyBuffs.stun?.turns > 0) {
-          logs.push({ text:`${turn}ターン目: ${enemy.name}はスタンして行動できない！`, color:'#ffaa00' })
+          logs.push({ text:`${enemy.name}はスタンして行動できない！`, color:'#ffaa00' })
           enemySkipped = true
           delete enemyBuffs.stun
         } else if (enemyBuffs.paralysis?.turns > 0 && Math.random() < enemyBuffs.paralysis.skipRate) {
-          logs.push({ text:`${turn}ターン目: ${enemy.name}は麻痺で行動不能！`, color:'#ffaa00' })
+          logs.push({ text:`${enemy.name}は麻痺で行動不能！`, color:'#ffaa00' })
           enemySkipped = true
           enemyBuffs.paralysis.skipRate *= 0.5
         }

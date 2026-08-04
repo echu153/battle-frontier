@@ -121,7 +121,7 @@ export function summonAbsorbBasic(s, enemy, enemyBuffs, turn, logs) {
   const cut = pet.buffs.reduceTurns > 0 ? (1 - pet.buffs.reduce) : 1.0
   const dmg = Math.max(1, Math.floor(baseDmg * cut * (0.9 + Math.random() * 0.2)))
   pet.hp = Math.max(0, pet.hp - dmg)
-  logs.push({ text: `${turn}ターン目: ${enemy.name || '敵'}はペットを攻撃！ ペットに${dmg}ダメージ！（残りHP${pet.hp}）`, color: '#ff8844' })
+  logs.push({ text: `${enemy.name || '敵'}はペットを攻撃！ ペットに${dmg}ダメージ！（残りHP${pet.hp}）`, color: '#ff8844' })
   if (pet.hp <= 0) logs.push({ text: `💥 ペットは倒れてしまった…`, color: '#ff4444' })
   return true
 }

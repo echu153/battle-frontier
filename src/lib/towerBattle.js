@@ -287,7 +287,7 @@ export function simulateTowerBattle({
     const eMdefRate = (enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1) * (enemyBuffs.mdefUp ? enemyBuffs.mdefUp.rate : 1) * (1 - (eff.mdefPen || 0))
     const enBaseDef = eStats.def
     const enBaseMdef = eStats.mdef
-    const prefix = isExtra ? `↳ ${profile.username} の` : `${turn}ターン目: ${profile.username} の`
+    const prefix = isExtra ? `↳ ${profile.username} の` : `${profile.username} の`
     const isCrit = Math.random() * 100 < playerCritRate
     const critMult = isCrit ? (1.5 + (eff.critDmg || 0) + passiveCritDmgBonus) : 1.0
 
@@ -344,7 +344,7 @@ export function simulateTowerBattle({
       if (cs?.skills?.name === '天墜竜閃' && playerBuffs.tenkaiCharge?.turns > 0) mpCost = 0
       const isBreederCmd = cs?.skills?.name && BREEDER_COMMANDS.has(cs.skills.name)
       if (isBreederCmd) {
-        const cmd = tryPetCommand(cs.skills.name, summon, { def: enBaseDef, mdef: enBaseMdef, atk: eStats.atk, matk: eStats.matk, type: target.type, name: target.name, evasionRate: 0 }, enemyBuffs, playerBuffs, rtCur, playerMp, mpCost, eff.hp_max, logs, `${turn}ターン目: `)
+        const cmd = tryPetCommand(cs.skills.name, summon, { def: enBaseDef, mdef: enBaseMdef, atk: eStats.atk, matk: eStats.matk, type: target.type, name: target.name, evasionRate: 0 }, enemyBuffs, playerBuffs, rtCur, playerMp, mpCost, eff.hp_max, logs, ``)
         if (cmd.handled) {
           playerMp -= cmd.mpUsed
           if (cmd.enemyDamage > 0) { const d = Math.max(1, Math.floor(cmd.enemyDamage * towerOutMult(true))); target.hp -= d; applyReflect(target, d) }
@@ -627,7 +627,7 @@ export function simulateTowerBattle({
   const enemyAct = (en, forced = null, isExtra = false) => {
     const eStats = enemyStats(en)
     const sk = forced || pickEnemySkill(en)
-    const prefix = isExtra ? `↳ ` : `${turn}ターン目: `
+    const prefix = isExtra ? '↳ ' : ''
 
     // 自己強化
     if (sk.type === 'buff') {
@@ -711,7 +711,7 @@ export function simulateTowerBattle({
     const eStats = enemyStats(en)
     const e = en.mods.erupt
     const r = damagePlayer(en, eStats.atk * (e.mult || 1.8), eStats.atk, 'atk', { defPen: e.defPen || 0.3 })
-    logs.push({ text: `🌋 ${turn}ターン目: ${en.name}の噴火！ あなたに${r?.dmg || 0}ダメージ…（必中）`, color: '#ff3300' })
+    logs.push({ text: `🌋 ${en.name}の噴火！ あなたに${r?.dmg || 0}ダメージ…（必中）`, color: '#ff3300' })
     if (e.burn && playerHp > 0) inflict('burn', 1.0, { turns: 5, dmgRate: 0.02 }, `🔥 やけどを負った！`)
   }
 
@@ -1001,10 +1001,10 @@ export function simulateTowerBattle({
     // ── プレイヤーの行動 ──
     let playerSkipped = false
     if (playerBuffs.stun?.turns > 0) {
-      logs.push({ text: `${turn}ターン目: スタン！ あなたは行動できない！`, color: '#ffaa00' })
+      logs.push({ text: `スタン！ あなたは行動できない！`, color: '#ffaa00' })
       playerSkipped = true; delete playerBuffs.stun
     } else if (playerBuffs.paralysis?.turns > 0 && Math.random() < playerBuffs.paralysis.skipRate) {
-      logs.push({ text: `${turn}ターン目: 麻痺で行動不能！`, color: '#ffaa00' })
+      logs.push({ text: `麻痺で行動不能！`, color: '#ffaa00' })
       playerSkipped = true; playerBuffs.paralysis.skipRate *= 0.5
     }
     if (!playerSkipped) {
@@ -1025,12 +1025,12 @@ export function simulateTowerBattle({
     for (const en of enemies.slice()) {
       if (en.hp <= 0 || playerHp <= 0) continue
       if (en.buffs.stun?.turns > 0) {
-        logs.push({ text: `${turn}ターン目: ${en.name}はスタンして行動できない！`, color: '#ffaa00' })
+        logs.push({ text: `${en.name}はスタンして行動できない！`, color: '#ffaa00' })
         delete en.buffs.stun
         continue
       }
       if (en.buffs.paralysis?.turns > 0 && Math.random() < en.buffs.paralysis.skipRate) {
-        logs.push({ text: `${turn}ターン目: ${en.name}は麻痺で行動不能！`, color: '#ffaa00' })
+        logs.push({ text: `${en.name}は麻痺で行動不能！`, color: '#ffaa00' })
         en.buffs.paralysis.skipRate *= 0.5
         continue
       }

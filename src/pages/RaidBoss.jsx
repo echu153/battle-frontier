@@ -222,6 +222,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
   summonAnnounce(summon, logs)
 
   for (let turn = 1; turn <= 10; turn++) {
+    // レイドはHP/MPバーの見出しが出ないので、ここでターンの区切りを入れる
+    logs.push({ text: `━ ${turn}ターン ━`, color: '#7fa8d0' })
     // 骸の壁：ターン1と4の倍数で被ダメ-30%バリア
     if (hasGainoKabe && (turn === 1 || turn % 4 === 0)) {
       playerBuffs.dmgReduce = { turns: 999, rate: 0.7, isGainoKabe: true }
@@ -234,7 +236,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     // ターン10: 滅びの一撃（強制終了）
     if (turn === 10) {
       const t10name = isAmaza ? '水禍創世' : isZerugiasu ? '神雷終焉' : isEnma ? '無間地獄' : '滅びの咆哮'
-      logs.push({ text: `${turn}ターン目: ${bossName}の「${t10name}」！`, color: '#ff0000' })
+      logs.push({ text: `${bossName}の「${t10name}」！`, color: '#ff0000' })
       logs.push({ text: `999,999の壊滅ダメージ！（なんとか生き延びた…HP→1）`, color: '#ff4444' })
       break
     }
@@ -268,7 +270,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       const pSpd  = effectiveSpdForCalc * (playerBuffs.spdUp?.rate || 1) * (playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1)
       const effBuff = { ...eff, atk: pAtk, def: pDef, mdef: pMdef, matk: pMatk, spd: pSpd }
 
-      const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
+      const prefix = isExtra ? '↳ ' : ''
       const isCrit = Math.random() * 100 < playerCritRate
       const critMult = isCrit ? (1.5 + (eff.critDmg || 0) + passiveCritDmgBonus) : 1.0
 
@@ -462,7 +464,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       const berserkDmgRate = hasBerserk ? (pe('狂戦士')?1.20:1.15) : 1.0
       const eAtk = boss.atk
       const defForCalc = Math.max(1, pDef)
-      const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
+      const prefix = isExtra ? '↳ ' : ''
 
       // ターン4: 特殊スキル（倍率1.5）。ボスごとに効果が異なる
       if (turn === 4 && !isExtra) {
@@ -542,7 +544,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     // 麻痺による行動不能判定（神雷崩撃で付与・25%で行動不能、発動ごとに半減）
     let playerSkipped = false
     if (playerBuffs.paralysis?.turns > 0 && Math.random() < playerBuffs.paralysis.skipRate) {
-      logs.push({ text: `${turn}ターン目: 麻痺で行動不能！`, color: '#ffaa00' })
+      logs.push({ text: `麻痺で行動不能！`, color: '#ffaa00' })
       playerSkipped = true
       playerBuffs.paralysis.skipRate *= 0.5
     }

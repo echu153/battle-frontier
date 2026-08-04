@@ -169,7 +169,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
     const eDefRate  = (enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1) * (enemyBuffs.defUp  ? enemyBuffs.defUp.rate  : 1) * (1 - (eff.defPen || 0))
     const eMdefRate = (enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1) * (enemyBuffs.mdefUp ? enemyBuffs.mdefUp.rate : 1) * (1 - (eff.mdefPen || 0))
-    const prefix = isExtra ? `↳ ${profile.username} の` : `${turn}ターン目: ${profile.username} の`
+    const prefix = isExtra ? `↳ ${profile.username} の` : `${profile.username} の`
     const isCrit = Math.random()*100 < playerCritRate
     const critMult = isCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
 
@@ -228,7 +228,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
       if (cs?.skills?.name === '天墜竜閃' && playerBuffs.tenkaiCharge?.turns > 0) mpCost = 0
       const isBreederCmd = cs?.skills?.name && BREEDER_COMMANDS.has(cs.skills.name)
       if (isBreederCmd) {
-        const cmd = tryPetCommand(cs.skills.name, summon, { def: enemy.def, mdef: enemy.mdef, atk: enemy.atk, matk: enemy.matk, type: enemy.type, name: enemy.name, evasionRate: 0 }, enemyBuffs, playerBuffs, rtCur, playerMp, mpCost, eff.hp_max, logs, `${turn}ターン目: `)
+        const cmd = tryPetCommand(cs.skills.name, summon, { def: enemy.def, mdef: enemy.mdef, atk: enemy.atk, matk: enemy.matk, type: enemy.type, name: enemy.name, evasionRate: 0 }, enemyBuffs, playerBuffs, rtCur, playerMp, mpCost, eff.hp_max, logs, ``)
         if (cmd.handled) {
           playerMp -= cmd.mpUsed
           // 召喚ダメージは物理/特殊が混在するため、被ダメ半減パッシブは強い方の軽減を適用（迂回防止）
@@ -510,7 +510,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     // 大技（isUlt）は必中。通常攻撃・通常スキルは回避可能
     const evasionRate = cast?.isUlt ? 0 : calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0) + (hasOnmi ? 5 : 0)
     if (evasionRate > 0 && Math.random()*100 < evasionRate) {
-      const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
+      const prefix = isExtra ? '↳ ' : ''
       logs.push({ text:`${prefix}${enemy.name}の${cast ? `「${cast.name}」` : '攻撃'}！ しかし回避した！`, color:'#44ff88' })
       evoOnEvade(eff, playerBuffs, logs)
       return
@@ -534,7 +534,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     playerHp -= finalDmg
     { const refl = evoOnDamaged(eff, finalDmg, enemyBuffs, enemy.name, logs); if (refl > 0) enemyHp -= refl }
     if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
-    const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
+    const prefix = isExtra ? '↳ ' : ''
     const critText = isCrit ? ' 💥クリティカル！' : ''
     logs.push({ text:`${prefix}${enemy.name}の${cast ? `「${cast.name}」` : '攻撃'}！ あなたに${finalDmg}ダメージ…${critText}`, color: cast?.isUlt ? '#ff2266' : isCrit ? '#ff2200' : '#ff6644' })
     // 餓鬼: 与えたダメージの一定割合を吸収して回復（自身の回復2倍＋大技後は永続100%吸収）
@@ -776,10 +776,10 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     // プレイヤー行動スキップ判定（スタン・麻痺）
     let playerSkipped = false
     if (playerBuffs.stun?.turns > 0) {
-      logs.push({ text:`${turn}ターン目: スタン！ あなたは行動できない！`, color:'#ffaa00' })
+      logs.push({ text:`スタン！ あなたは行動できない！`, color:'#ffaa00' })
       playerSkipped = true; delete playerBuffs.stun
     } else if (playerBuffs.paralysis?.turns > 0 && Math.random() < playerBuffs.paralysis.skipRate) {
-      logs.push({ text:`${turn}ターン目: 麻痺で行動不能！`, color:'#ffaa00' })
+      logs.push({ text:`麻痺で行動不能！`, color:'#ffaa00' })
       playerSkipped = true; playerBuffs.paralysis.skipRate *= 0.5
     }
     if (!playerSkipped) {
@@ -800,10 +800,10 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     // 敵のターン
     let enemySkipped = false
     if (enemyBuffs.stun?.turns > 0) {
-      logs.push({ text:`${turn}ターン目: ${enemy.name}はスタンして行動できない！`, color:'#ffaa00' })
+      logs.push({ text:`${enemy.name}はスタンして行動できない！`, color:'#ffaa00' })
       enemySkipped = true; delete enemyBuffs.stun
     } else if (enemyBuffs.paralysis?.turns > 0 && Math.random() < enemyBuffs.paralysis.skipRate) {
-      logs.push({ text:`${turn}ターン目: ${enemy.name}は麻痺で行動不能！`, color:'#ffaa00' })
+      logs.push({ text:`${enemy.name}は麻痺で行動不能！`, color:'#ffaa00' })
       enemySkipped = true; enemyBuffs.paralysis.skipRate *= 0.5
     }
     if (!enemySkipped) {

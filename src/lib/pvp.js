@@ -158,7 +158,6 @@ const defenderEnemyObj = (def) => ({
 // att が def を攻撃する（PvE doPlayerAttack の対称版）
 function doAttack(att, def, isExtra, ctx) {
   const logs = ctx.logs
-  const turn = ctx.turn
   const eff = att.eff
   const attBuffs = att.buffs
   const defBuffs = def.buffs
@@ -190,7 +189,7 @@ function doAttack(att, def, isExtra, ctx) {
   const eDefRate  = (defBuffs.defDown  ? defBuffs.defDown.rate  : 1) * (defBuffs.defUp  ? defBuffs.defUp.rate  : 1) * (1 - (eff.defPen  || 0))
   const eMdefRate = (defBuffs.mdefDown ? defBuffs.mdefDown.rate : 1) * (defBuffs.mdefUp ? defBuffs.mdefUp.rate : 1) * (1 - (eff.mdefPen || 0))
 
-  const prefix = isExtra ? `↳ ${profile.username} の` : `${turn}ターン目: ${profile.username} の`
+  const prefix = isExtra ? `↳ ${profile.username} の` : `${profile.username} の`
 
   // 素早さの実効値。クリ率・回避率とも「相手との素早さ差」で決まり、相手の2倍の素早さで上限（回避と同式）。
   const atkSpdEff = pSpd
@@ -609,11 +608,11 @@ function checkSkip(side, ctx) {
   const b = side.buffs
   const name = side.profile.username
   if (b.stun?.turns > 0) {
-    ctx.logs.push({ text: `${ctx.turn}ターン目: ${name}はスタンして行動できない！`, color: '#ffaa00' })
+    ctx.logs.push({ text: `${name}はスタンして行動できない！`, color: '#ffaa00' })
     delete b.stun; return true
   }
   if (b.paralysis?.turns > 0 && Math.random() < b.paralysis.skipRate) {
-    ctx.logs.push({ text: `${ctx.turn}ターン目: ${name}は麻痺で行動不能！`, color: '#ffaa00' })
+    ctx.logs.push({ text: `${name}は麻痺で行動不能！`, color: '#ffaa00' })
     b.paralysis.skipRate *= 0.5; return true
   }
   return false

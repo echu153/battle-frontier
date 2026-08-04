@@ -230,7 +230,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
     const eDefRate  = (enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1) * (enemyBuffs.defUp  ? enemyBuffs.defUp.rate  : 1) * (1 - (eff.defPen || 0))
     const eMdefRate = (enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1) * (enemyBuffs.mdefUp ? enemyBuffs.mdefUp.rate : 1) * (1 - (eff.mdefPen || 0))
-    const prefix = isExtra ? `↳ ${profile.username} の` : `${turn}ターン目: ${profile.username} の`
+    const prefix = isExtra ? `↳ ${profile.username} の` : `${profile.username} の`
     const isCrit = Math.random()*100 < playerCritRate
     const critMult = isCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
 
@@ -297,7 +297,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       const isBreederCmd = cs?.skills?.name && BREEDER_COMMANDS.has(cs.skills.name)
       if (isBreederCmd) {
         // ブリーダーのコマンドスキル（executeSkillを通さず専用処理・双子対応dmgEnemy経由）
-        const cmd = tryPetCommand(cs.skills.name, summon, { def: enemy.def, mdef: enemy.mdef, atk: enemy.atk, matk: enemy.matk, type: enemy.type, name: enemy.name, evasionRate: 0 }, enemyBuffs, playerBuffs, rtCur, playerMp, mpCost, eff.hp_max, logs, `${turn}ターン目: `)
+        const cmd = tryPetCommand(cs.skills.name, summon, { def: enemy.def, mdef: enemy.mdef, atk: enemy.atk, matk: enemy.matk, type: enemy.type, name: enemy.name, evasionRate: 0 }, enemyBuffs, playerBuffs, rtCur, playerMp, mpCost, eff.hp_max, logs, ``)
         if (cmd.handled) {
           playerMp -= cmd.mpUsed
           if (cmd.enemyDamage > 0) dmgEnemy(cmd.enemyDamage, 'magical')
@@ -628,7 +628,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     // mods.alwaysHit（蒼穹アウストラリス）：必中＝プレイヤー回避無効
     const evasionRate = mods.alwaysHit ? 0 : (calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0) + (hasOnmi ? 5 : 0))
     if (evasionRate > 0 && Math.random()*100 < evasionRate) {
-      const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
+      const prefix = isExtra ? '↳ ' : ''
       logs.push({ text:`${prefix}${enemy.name}の攻撃！ しかし回避した！`, color:'#44ff88' })
       evoOnEvade(eff, playerBuffs, logs)  // 影踏みのブーツ
       return
@@ -644,7 +644,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     playerHp -= finalDmg
     { const refl = evoOnDamaged(eff, finalDmg, enemyBuffs, enemy.name, logs); if (refl > 0) dmgEnemy(refl, 'physical') }
     if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
-    const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
+    const prefix = isExtra ? '↳ ' : ''
     const critText = isCrit ? ' 💥クリティカル！' : ''
     const escalateText = (mods.escalatingHit && enemyActionStreak > 1) ? ` 🌀連撃×${enemyActionStreak}！` : ''
     logs.push({ text:`${prefix}${enemy.name}の攻撃！ あなたに${finalDmg}ダメージ…${critText}${escalateText}`, color:isCrit?'#ff2200':'#ff6644' })
@@ -686,7 +686,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const baseDmg = Math.max(1, Math.floor(eAtk*eAtk/Math.max(1,eAtk+defForCalc))+Math.floor(Math.random()*3))
     const evasionRate = calcEvasionRate(effectiveSpdForCalc, enemy.spd) + (eff.evasionBonus||0) + (playerBuffs.evasion?.turns>0?playerBuffs.evasion.rate*100:0) + (hasOnmi?5:0)
     if (evasionRate > 0 && Math.random()*100 < evasionRate) {
-      logs.push({ text:`${turn}ターン目: ${body.name}の攻撃！ しかし回避した！`, color:'#44ff88' }); evoOnEvade(eff, playerBuffs, logs); return
+      logs.push({ text:`${body.name}の攻撃！ しかし回避した！`, color:'#44ff88' }); evoOnEvade(eff, playerBuffs, logs); return
     }
     const dmgReduceRate = playerBuffs.dmgReduce?.turns>0 ? playerBuffs.dmgReduce.rate : 1.0
     const playerDefRankReduction = calcDefReduction(isMag ? eff.mdef : eff.def)
@@ -694,7 +694,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     finalDmg = capPlayerDmg(finalDmg)
     playerHp -= finalDmg
     if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
-    logs.push({ text:`${turn}ターン目: ${body.name}の${isMag?'特殊攻撃':'攻撃'}！ あなたに${finalDmg}ダメージ…${isCrit?' 💥クリティカル！':''}${solo?' 🔥孤影の昂ぶり！':''}`, color:isCrit?'#ff2200':'#ff6644' })
+    logs.push({ text:`${body.name}の${isMag?'特殊攻撃':'攻撃'}！ あなたに${finalDmg}ダメージ…${isCrit?' 💥クリティカル！':''}${solo?' 🔥孤影の昂ぶり！':''}`, color:isCrit?'#ff2200':'#ff6644' })
   }
 
   // 第3 双子の1ターン: 蘇生カウント → 生存している片割れが攻撃（カストル物理/ポルックス特殊）
@@ -882,10 +882,10 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     // プレイヤー行動スキップ判定（スタン・麻痺）
     let playerSkipped = false
     if (playerBuffs.stun?.turns > 0) {
-      logs.push({ text:`${turn}ターン目: スタン！ あなたは行動できない！`, color:'#ffaa00' })
+      logs.push({ text:`スタン！ あなたは行動できない！`, color:'#ffaa00' })
       playerSkipped = true; delete playerBuffs.stun
     } else if (playerBuffs.paralysis?.turns > 0 && Math.random() < playerBuffs.paralysis.skipRate) {
-      logs.push({ text:`${turn}ターン目: 麻痺で行動不能！`, color:'#ffaa00' })
+      logs.push({ text:`麻痺で行動不能！`, color:'#ffaa00' })
       playerSkipped = true; playerBuffs.paralysis.skipRate *= 0.5
     }
     if (!playerSkipped) {
@@ -905,10 +905,10 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       if (enemyBuffs.stun) delete enemyBuffs.stun
       if (enemyBuffs.paralysis) delete enemyBuffs.paralysis
     } else if (enemyBuffs.stun?.turns > 0) {
-      logs.push({ text:`${turn}ターン目: ${enemy.name}はスタンして行動できない！`, color:'#ffaa00' })
+      logs.push({ text:`${enemy.name}はスタンして行動できない！`, color:'#ffaa00' })
       enemySkipped = true; delete enemyBuffs.stun
     } else if (enemyBuffs.paralysis?.turns > 0 && Math.random() < enemyBuffs.paralysis.skipRate) {
-      logs.push({ text:`${turn}ターン目: ${enemy.name}は麻痺で行動不能！`, color:'#ffaa00' })
+      logs.push({ text:`${enemy.name}は麻痺で行動不能！`, color:'#ffaa00' })
       enemySkipped = true; enemyBuffs.paralysis.skipRate *= 0.5
     }
     if (!enemySkipped) {
