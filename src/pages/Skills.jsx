@@ -346,7 +346,12 @@ export default function Skills() {
           </div>
           {/* 複数の敵が同時に出る戦闘で、スキルがどれを狙うか（このセット全体で1つ） */}
           <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'8px', border:'1px solid #204a66', background:'#001526', padding:'8px' }}>
-            <span style={{ color:'#8ad0ff', fontSize:'11px' }}>🎯 敵が複数のとき狙う相手</span>
+            {/* どのセットの設定かを明示する。セットごとに別々に保存されるので、
+                これが無いと「出撃」セットで変えて別コンテンツに反映されないと誤解される */}
+            <span style={{ color:'#8ad0ff', fontSize:'11px' }}>
+              🎯 敵が複数のとき狙う相手
+              <span style={{ color:'#557799', marginLeft:'4px' }}>（{SET_TYPES.find(s => s.key === selectedSet)?.label} の設定）</span>
+            </span>
             <select value={pickTargetMode(targetOptions, selectedSet)} onChange={e => changeTargetMode(e.target.value)} disabled={loading}
               style={{ background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'11px', padding:'3px' }}>
               {TARGET_MODES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}

@@ -348,3 +348,14 @@ test('クールダウンの残り秒数はサーバーが返す（端末の時�
   // 境目ちょうどの押下に猶予がある
   assert.ok(towerSql.includes("+ interval '0.5 second'"), 'クールダウン判定に猶予が無い')
 })
+
+test('狙い方の設定先とタワーが読むセットが一致している', async () => {
+  const fs = await import('node:fs')
+  const tower = fs.readFileSync('src/pages/Tower.jsx', 'utf8')
+  const reads = (tower.match(/pickTargetMode\(targetOptions, '([a-z]+)'\)/) || [])[1]
+  const links = (tower.match(/nav\('\/skills\?set=([a-z]+)'\)/) || [])[1]
+  assert.ok(reads, 'タワーが読むセット種別が見つからない')
+  // ⚠set を付けずに /skills へ飛ばすと「出撃」セットが開き、そこで変えても反映されない
+  assert.equal(links, reads, 'スキル設定へのリンクが、タワーが読むセットを開いていない')
+  assert.ok(isTargetMode('hp_low') && isTargetMode('top'), '対象設定の値')
+})

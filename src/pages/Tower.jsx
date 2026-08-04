@@ -601,8 +601,11 @@ export default function Tower() {
           <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '10px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ color: C.text, fontSize: '11px' }}>
               🎯 敵が複数のとき狙う相手: <span style={{ color: C.gold }}>{TARGET_MODES.find(m => m.key === targetMode)?.label}</span>
+              <span style={{ color: C.dim, marginLeft: '6px' }}>（「🕯 挑戦」セットの設定）</span>
             </span>
-            <button onClick={() => nav('/skills')} style={btn(C.dim)}>スキル設定で変更 ↗</button>
+            {/* ⚠set=challenge を必ず付ける。付けないとスキル設定は「出撃」セットで開き、
+                そちらの狙い方を変えてもタワーには反映されない */}
+            <button onClick={() => nav('/skills?set=challenge')} style={btn(C.dim)}>スキル設定で変更 ↗</button>
           </div>
 
           {/* 出撃パネル（街の出撃と同じ形：タイマー→エリア選択→大きな出撃ボタン） */}
