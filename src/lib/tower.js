@@ -67,9 +67,6 @@ export const TREE_MAX_STEPS = 50
 // そのノードの1段あたりの%（TREE_NODES の step 指定が優先）
 export const stepPctOf = (key) => TREE_NODES.find(n => n.key === key)?.step ?? TREE_STEP_PCT
 
-// エンドレベルの上限（2026-08-03確定）。ここで打ち止め＝以降EXPを稼いでも上がらない
-export const MAX_END_LEVEL = 500
-
 // 段数の解放しきい値（この段数を超えて振るには、対応するエンドレベルが必要）
 export const TREE_UNLOCK = [
   { upTo: 10, lv: 1 },
@@ -110,6 +107,10 @@ export const TREE_NODES = [
   { key: 'ail_rate',   line: 'etc', name: '状態異常の付与率+',   desc: 'こちらが与える状態異常の成功率が上がる' },
   { key: 'exp_plus',   line: 'etc', name: '取得経験値+1の確率',  desc: 'タワーの中で得た通常EXPが+1される確率。エンドEXPには乗らない' },
 ]
+
+// エンドレベルの上限（2026-08-03確定）。全17ノードを50段まで埋め切れる値にしてある。
+// ノードを増やしたら自動で上限も伸びる（SQL側の打ち止めも合わせること）。
+export const MAX_END_LEVEL = TREE_NODES.length * TREE_MAX_STEPS   // = 850
 
 export const TREE_LINES = [
   { key: 'atk', label: '攻' },

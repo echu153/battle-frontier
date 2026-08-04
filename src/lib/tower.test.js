@@ -101,17 +101,19 @@ test('ツリーの段数解放（2026-08-03: 上限を500へ広げた）', () =>
   assert.equal(nextUnlock(1).lv, 50)
 })
 
-test('エンドレベルの上限は500', () => {
-  assert.equal(MAX_END_LEVEL, 500)
+test('エンドレベルの上限は850（全ノードを埋め切れる値）', async () => {
+  // 17ノード × 50段 = 850。上限まで行けば全部埋まる
+  assert.equal(MAX_END_LEVEL, 850)
+  assert.equal(MAX_END_LEVEL, TREE_NODES.length * TREE_MAX_STEPS, 'ノード数×最大段数と一致')
+  const full = Object.fromEntries(TREE_NODES.map(n => [n.key, TREE_MAX_STEPS]))
+  assert.equal(treeSpent(full), MAX_END_LEVEL, '全ノードフル振りに必要なポイント＝上限')
   // 上限に達したらEXPをいくら積んでも上がらない
-  const huge = towerLevelFromExp(999999999)
-  assert.equal(huge.lv, MAX_END_LEVEL, '上限で頭打ち')
+  assert.equal(towerLevelFromExp(999999999).lv, MAX_END_LEVEL, '上限で頭打ち')
   // SQL側の打ち止めと一致していること
-  return import('node:fs').then(fs => {
-    const sql = fs.readFileSync('supabase_tower.sql', 'utf8')
-    assert.ok(sql.includes('WHILE v_lv < 500'), 'SQLの打ち止めも500')
-    assert.ok(sql.includes('WHEN p_lv >= 350 THEN 50'), 'SQLの段数解放も350で50段')
-  })
+  const fs = await import('node:fs')
+  const sql = fs.readFileSync('supabase_tower.sql', 'utf8')
+  assert.ok(sql.includes('WHILE v_lv < 850'), 'SQLの打ち止めも850')
+  assert.ok(sql.includes('WHEN p_lv >= 350 THEN 50'), 'SQLの段数解放も350で50段')
 })
 
 test('ツリーの振り分けが壊れた値でも数値のまま', () => {

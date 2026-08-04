@@ -99,12 +99,12 @@ $$;
 CREATE OR REPLACE FUNCTION tower_exp_to_next(p_lv int) RETURNS bigint
 LANGUAGE sql IMMUTABLE AS $$ SELECT (50::bigint * p_lv) $$;
 
--- 累計エンドEXPからエンドレベルを求める（上限500）
+-- 累計エンドEXPからエンドレベルを求める（上限850＝全17ノードを50段まで埋め切れる値）
 CREATE OR REPLACE FUNCTION tower_level_from_exp(p_exp bigint) RETURNS int
 LANGUAGE plpgsql IMMUTABLE AS $$
 DECLARE v_lv int := 1; v_rest bigint := COALESCE(p_exp, 0);
 BEGIN
-  WHILE v_lv < 500 AND v_rest >= tower_exp_to_next(v_lv) LOOP
+  WHILE v_lv < 850 AND v_rest >= tower_exp_to_next(v_lv) LOOP
     v_rest := v_rest - tower_exp_to_next(v_lv);
     v_lv := v_lv + 1;
   END LOOP;
