@@ -7077,26 +7077,43 @@ export function BattleLogLine({ l }) {
     const enemyCols = Array.isArray(l.twin)
       ? l.twin.map((b, i) => col(`e${i}`, `${b.name}${b.down ? '（蘇生中）' : ''}`, b.hp, b.max, Math.max(0, Math.min(100, (b.hp / b.max) * 100)), b.down ? '#8866aa' : '#ff6655', null, 'flex-end'))
       : col('e', l.enemyName, l.enemyHp, l.enemyMax, ePct, '#ff6655', l.enemyStatus, 'flex-end', l.enemyMp, l.enemyMpMax)
+    // ペットは味方側。VSの上（自分の下）に置く
+    const petBar = l.petMax == null ? null : (
+      <div style={{ marginTop:'4px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', fontSize:'9px', color:'#ffcc66', gap:'4px' }}>
+          <span>🐾 ペット{l.petHp <= 0 ? '（戦闘不能）' : ''}</span>
+          <span style={{ flexShrink:0, fontWeight:'bold' }}>{Math.max(0,l.petHp).toLocaleString()} / {l.petMax.toLocaleString()}</span>
+        </div>
+        <div style={{ background:'#2a1f10', height:'5px', border:'1px solid #5a4420' }}>
+          <div style={{ height:'100%', width:`${Math.max(0, Math.min(100,(l.petHp/Math.max(1,l.petMax))*100))}%`, background:'linear-gradient(90deg,#a70,#ffaa44)' }} />
+        </div>
+      </div>
+    )
+    // 味方と敵の境目。縦積みは横線＋VS、横並びは真ん中にVSを置く
+    const vsMark = l.vertical ? (
+      <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+        <div style={{ flex:1, height:'1px', background:'#3a5a80' }} />
+        <span style={{ fontSize:'10px', color:'#ffcc66', fontWeight:'bold', letterSpacing:'2px' }}>VS</span>
+        <div style={{ flex:1, height:'1px', background:'#3a5a80' }} />
+      </div>
+    ) : (
+      <div style={{ flexShrink:0, alignSelf:'center', color:'#ffcc66', fontSize:'11px', fontWeight:'bold', letterSpacing:'1px', padding:'0 2px' }}>VS</div>
+    )
     return (
       <div style={{ borderBottom:'1px solid #24405e', padding:'6px 6px', background:'#16263c', borderRadius:'3px', margin:'2px 0' }}>
         <div style={{ fontSize:'9px', color:'#7fa8d0', marginBottom:'3px', textAlign:'center' }}>━ {l.turn}ターン終了時 ━</div>
         {/* l.vertical=true で縦積み。敵が3体以上出るコンテンツ(エンドレスタワー)では
             横に並べると名前が潰れるため。既定は従来どおり横並び */}
-        <div style={{ display:'flex', flexDirection: l.vertical ? 'column' : 'row', gap: l.vertical ? '6px' : '12px', alignItems: l.vertical ? 'stretch' : 'flex-end' }}>
-          {col('p', l.playerName, l.playerHp, l.playerMax, pPct, '#33dd66', l.playerStatus, 'flex-start', l.playerMp, l.playerMpMax)}
-          {enemyCols}
-        </div>
-        {l.petMax != null && (
-          <div style={{ marginTop:'4px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', fontSize:'9px', color:'#ffcc66', gap:'4px' }}>
-              <span>🐾 ペット{l.petHp <= 0 ? '（戦闘不能）' : ''}</span>
-              <span style={{ flexShrink:0, fontWeight:'bold' }}>{Math.max(0,l.petHp).toLocaleString()} / {l.petMax.toLocaleString()}</span>
-            </div>
-            <div style={{ background:'#2a1f10', height:'5px', border:'1px solid #5a4420' }}>
-              <div style={{ height:'100%', width:`${Math.max(0, Math.min(100,(l.petHp/Math.max(1,l.petMax))*100))}%`, background:'linear-gradient(90deg,#a70,#ffaa44)' }} />
-            </div>
+        <div style={{ display:'flex', flexDirection: l.vertical ? 'column' : 'row', gap: l.vertical ? '6px' : '8px', alignItems: l.vertical ? 'stretch' : 'flex-end' }}>
+          <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', justifyContent:'flex-end' }}>
+            {col('p', l.playerName, l.playerHp, l.playerMax, pPct, '#33dd66', l.playerStatus, 'flex-start', l.playerMp, l.playerMpMax)}
+            {petBar}
           </div>
-        )}
+          {vsMark}
+          {l.vertical
+            ? <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>{enemyCols}</div>
+            : enemyCols}
+        </div>
       </div>
     )
   }
