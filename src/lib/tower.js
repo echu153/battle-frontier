@@ -3,7 +3,7 @@ import { PEN_CAP } from './stats.js'
 // エンドレスタワーデータ定義
 // ------------------------------------------------------------
 // ・解放条件: キャラLV1000（現状は is_admin 限定の開発先行）
-// ・戦闘エリア1の流れ:
+// ・1層の流れ:
 //     ① 出撃を (30 + エリア数×10) 回こなす → 強敵が5%で出現するようになる
 //     ② 強敵を撃破 → そのエリアのエリアボスに挑戦できる（以降いつでも何度でも）
 //     ③ エリアボス挑戦 = 雑魚1体 → 雑魚1体 → 雑魚2体 → 雑魚3体 → 強敵 → エリアボス の6連戦
@@ -91,17 +91,17 @@ export const TREE_NODES = [
   { key: 'mag_dmg',    line: 'atk', name: '特殊ダメージ+',       desc: '特殊攻撃の与ダメージが上がる' },
   { key: 'crit_rate',  line: 'atk', name: '会心率+',             desc: 'クリティカルの発生率が上がる' },
   { key: 'crit_dmg',   line: 'atk', name: '会心威力+',           desc: 'クリティカルの威力が上がる', step: 1.0 },
-  { key: 'phys_pen',   line: 'atk', name: '物理貫通+',           desc: '相手の防御を無視する。戦闘エリア4の硬化に効く' },
-  { key: 'mag_pen',    line: 'atk', name: '特殊貫通+',           desc: '相手の特殊防御を無視する。戦闘エリア4の硬化に効く' },
+  { key: 'phys_pen',   line: 'atk', name: '物理貫通+',           desc: '相手の防御を無視する。4層の硬化に効く' },
+  { key: 'mag_pen',    line: 'atk', name: '特殊貫通+',           desc: '相手の特殊防御を無視する。4層の硬化に効く' },
   // ── 守 ──
   { key: 'max_hp',     line: 'def', name: '最大HP+',             desc: '最大HPが上がる。6連戦を持ち越すので効果が大きい', step: 1.0 },
   { key: 'dmg_taken',  line: 'def', name: '被ダメージ-',         desc: '受けるダメージが減る' },
-  { key: 'ail_resist', line: 'def', name: '状態異常耐性+',       desc: '戦闘エリア3の毒・戦闘エリア6の呪い・戦闘エリア8のやけど・戦闘エリア10のスタンに効く' },
-  { key: 'pct_resist', line: 'def', name: '割合ダメージ耐性+',   desc: '最大HPの割合で削る効果を軽減。戦闘エリア3の毒沼・戦闘エリア9の毒に効く' },
-  { key: 'crit_resist',line: 'def', name: '会心耐性+',           desc: '相手のクリティカル率を下げる。戦闘エリア8のやけど連動に効く', step: 1.0 },
+  { key: 'ail_resist', line: 'def', name: '状態異常耐性+',       desc: '3層の毒・6層の呪い・8層のやけど・10層のスタンに効く' },
+  { key: 'pct_resist', line: 'def', name: '割合ダメージ耐性+',   desc: '最大HPの割合で削る効果を軽減。3層の毒沼・9層の毒に効く' },
+  { key: 'crit_resist',line: 'def', name: '会心耐性+',           desc: '相手のクリティカル率を下げる。8層のやけど連動に効く', step: 1.0 },
   { key: 'evasion',    line: 'def', name: '回避率+',             desc: '相手の攻撃を回避しやすくなる' },
   // ── その他 ──
-  { key: 'spd',        line: 'etc', name: '素早さ+',             desc: '行動順・会心率・回避に乗る。戦闘エリア5の暴風・戦闘エリア10の地響きに効く' },
+  { key: 'spd',        line: 'etc', name: '素早さ+',             desc: '行動順・会心率・回避に乗る。5層の暴風・10層の地響きに効く' },
   { key: 'mp_cost',    line: 'etc', name: 'MP消費-',             desc: 'スキルの消費MPが減る。連戦のMP枯渇対策' },
   { key: 'kill_heal',  line: 'etc', name: '雑魚撃破ごとにHP回復', desc: '雑魚を倒すたびに最大HPの一定割合を回復する' },
   { key: 'ail_rate',   line: 'etc', name: '状態異常の付与率+',   desc: 'こちらが与える状態異常の成功率が上がる' },
@@ -524,8 +524,10 @@ export const BOSS_RUN_STAGES = [
   { kind: 'boss', count: 1, label: 'エリアボス' },
 ]
 
-// 石碑に載せる層（10エリアごとの節目だけ）
-export const isMonumentFloor = (floor) => floor % 10 === 0
+// 石碑に名前が載る層。最初の1つは10層（最初にここまで来た者だけ）で、
+// それ以降は1層ごとに、その層を最初に踏破した者の名を刻む。
+export const MONUMENT_FIRST_FLOOR = 10
+export const isMonumentFloor = (floor) => floor >= MONUMENT_FIRST_FLOOR
 
 // スキルの対象設定（複数敵がいるときの狙い方）はタワー専用ではなくなったので
 // src/lib/loadout.js が正。ここは既存の import を壊さないための再エクスポート。

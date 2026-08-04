@@ -53,6 +53,28 @@ function StatBar({ label, cur, max, color, track }) {
   )
 }
 
+// エンドポイントの説明文。全部同じ色だと読みにくいので、
+//  1文目＝何が上がるか（明るい色）／2文目以降＝どこで効くかの補足（暗い色）
+//  文中の「N層」だけ金色にして、対象の層をひと目で拾えるようにする
+function NodeDesc({ text }) {
+  const parts = String(text || '').split('。').filter(s => s.length > 0)
+  const paint = (s) => s.split(/(\d+層)/).map((seg, j) => (
+    /^\d+層$/.test(seg)
+      ? <span key={j} style={{ color: C.gold }}>{seg}</span>
+      : <span key={j}>{seg}</span>
+  ))
+  return (
+    <div style={{ marginTop: '3px', fontSize: '10px', lineHeight: '1.6' }}>
+      {parts.map((p, i) => (
+        <div key={i} style={{ color: i === 0 ? '#9fb6e0' : C.dim }}>
+          {i > 0 && <span style={{ color: '#3f5a86' }}>└ </span>}
+          {paint(p)}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // 戦闘ログ。通常の出撃では画面を切り替えず、出撃パネルの下にそのまま出す
 function BattleLog({ logs, busy, endRef }) {
   return (
@@ -652,11 +674,11 @@ export default function Tower() {
           <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '10px', marginBottom: '10px', fontSize: '11px', color: C.text }}>
             残りエンドポイント <span style={{ color: remainPt > 0 ? C.gold : C.dim, fontSize: '14px' }}>{Math.max(0, remainPt)}</span>
             <span style={{ color: C.dim, marginLeft: '10px' }}>1ノード {maxSteps}段まで</span>
-            <div style={{ color: C.dim, fontSize: '10px', marginTop: '4px' }}>
-              効果は<span style={{ color: C.text }}>タワーの中だけ</span>で有効です。
+            <div style={{ color: C.dim, fontSize: '10px', marginTop: '4px', lineHeight: '1.7' }}>
+              効果は<span style={{ color: C.accent }}>エンドレスタワーの中だけ</span>で有効です。<br />
               {nextUnlock(towerLv)
-                ? `エンドレベル${nextUnlock(towerLv).lv}で ${nextUnlock(towerLv).upTo}段まで解放。`
-                : `全段（${TREE_MAX_STEPS}段）解放済み。`}
+                ? <>エンドレベル<span style={{ color: C.gold }}>{nextUnlock(towerLv).lv}</span>で <span style={{ color: C.gold }}>{nextUnlock(towerLv).upTo}段</span>まで解放。</>
+                : <span style={{ color: C.ok }}>全段（{TREE_MAX_STEPS}段）解放済み。</span>}
             </div>
           </div>
 
@@ -677,7 +699,7 @@ export default function Tower() {
                         <button onClick={() => bump(n.key, +1)} style={stepBtn(remainPt > 0 && v < maxSteps)}>＋</button>
                       </div>
                     </div>
-                    <div style={{ color: C.dim, fontSize: '10px', marginTop: '3px' }}>{n.desc}</div>
+                    <NodeDesc text={n.desc} />
                   </div>
                 )
               })}
@@ -696,7 +718,10 @@ export default function Tower() {
       {tab === 'monument' && (
         <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '12px' }}>
           <div style={{ color: C.gold, fontSize: '12px', marginBottom: '4px' }}>🗿 踏破の石碑</div>
-          <div style={{ color: C.dim, fontSize: '10px', marginBottom: '10px' }}>10層ごとの節目を、サーバーで最初に踏破した者の名が刻まれる。</div>
+          <div style={{ color: C.dim, fontSize: '10px', marginBottom: '10px', lineHeight: '1.7' }}>
+            まず<span style={{ color: C.gold }}>10層</span>に最初に到達した者の名が刻まれる。<br />
+            そこから先は<span style={{ color: C.gold }}>1層ごと</span>に、その層を最初に踏破した者の名が刻まれる。
+          </div>
           {monument === null && <div style={{ color: C.dim, fontSize: '11px' }}>読み込み中...</div>}
           {monument?.map(m => (
             <div key={m.floor} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${C.line}`, padding: '8px 2px', fontSize: '11px' }}>

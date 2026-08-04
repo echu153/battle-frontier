@@ -583,8 +583,9 @@ BEGIN
         updated_at = now()
     WHERE player_id = v_pid;
 
-  -- 石碑：10エリアごとの節目だけ、サーバーで最初の1人を記録する
-  IF p_floor % 10 = 0 THEN
+  -- 石碑：最初の1つは10層（最初にここまで来た者だけ）。それ以降は1層ごとに、
+  --       その層をサーバーで最初に踏破した1人を記録する。
+  IF p_floor >= 10 THEN
     SELECT username INTO v_name FROM profiles WHERE id = v_pid;
     INSERT INTO tower_first_clear (floor, player_id, username)
       VALUES (p_floor, v_pid, COALESCE(v_name, '？'))
@@ -704,7 +705,7 @@ BEGIN
       'username', c.username,
       'cleared_at', c.cleared_at
     ) ORDER BY f.floor), '[]'::json)
-    FROM generate_series(10, tower_max_floor(), 10) AS f(floor)
+    FROM generate_series(10, tower_max_floor(), 1) AS f(floor)
     LEFT JOIN tower_first_clear c ON c.floor = f.floor
   );
 END; $$;

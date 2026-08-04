@@ -181,9 +181,9 @@ test('出撃の強敵抽選', () => {
   assert.ok(Math.abs(mid / 5000 - 0.05) < 0.02, `出現率がほぼ5% (実測 ${(mid / 50).toFixed(1)}%)`)
 })
 
-test('石碑は10エリアごと', () => {
-  assert.ok(isMonumentFloor(10) && isMonumentFloor(100))
-  assert.ok(!isMonumentFloor(1) && !isMonumentFloor(9) && !isMonumentFloor(11))
+test('石碑は10層から。それ以降は1層ごと（9層までは刻まれない）', () => {
+  assert.ok(!isMonumentFloor(1) && !isMonumentFloor(9))
+  assert.ok(isMonumentFloor(10) && isMonumentFloor(11) && isMonumentFloor(100))
 })
 
 test('対象設定', () => {
