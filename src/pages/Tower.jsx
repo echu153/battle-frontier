@@ -22,7 +22,7 @@ import {
 import { simulateTowerBattle, buildStageEnemies, buildSortieEnemies, towerTreeEffects } from '../lib/towerBattle'
 
 const fmt = (n) => Number(n || 0).toLocaleString()
-const floorLabel = (n) => `戦闘エリア${n}`
+const floorLabel = (n) => `${n}層`   // 分類名は「戦闘エリア」、個々は「N層」と呼ぶ
 
 // 通信がハングしても「戦闘中...」で固まらないようにする
 const withTimeout = (promise, ms = 15000) =>
@@ -71,7 +71,7 @@ function ResultBox({ gain }) {
     <div style={{ border: `1px solid ${gain.win ? C.ok : C.ng}`, background: C.panel, padding: '10px', marginTop: '8px', fontSize: '11px', color: C.text, lineHeight: '1.9' }}>
       {gain.cleared ? (
         <>
-          <div style={{ color: C.gold, fontSize: '13px' }}>👑 戦闘エリア{gain.floor}のエリアボスを撃破！</div>
+          <div style={{ color: C.gold, fontSize: '13px' }}>👑 {gain.floor}層のエリアボスを撃破！</div>
           {gain.firstClear && <div style={{ color: C.ok }}>このエリアを初めて踏破した！ 次のエリアが解放された。</div>}
           {gain.monument && <div style={{ color: C.gold }}>🗿 石碑に名前が刻まれた！（サーバー最初の踏破者）</div>}
           <div>Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ エンドEXP +{fmt(gain.towerExp)}</div>
@@ -466,8 +466,8 @@ export default function Tower() {
           )}
         </div>
 
-        {/* エリアボス・強敵の立ち絵（強敵はエリアボスの画像を流用。画像が無い層は出さない） */}
-        {inRun && ['mid', 'boss'].includes(BOSS_RUN_STAGES[runInfo.stage]?.kind) && !imgFail[runInfo.floor] && (
+        {/* 立ち絵はエリアボス戦だけ。道中や強敵では出さない（画像が無い層も出さない） */}
+        {inRun && BOSS_RUN_STAGES[runInfo.stage]?.kind === 'boss' && !imgFail[runInfo.floor] && (
           <div style={{ textAlign: 'center', marginBottom: '8px' }}>
             <img
               src={`/tou/${runInfo.floor}sou.png`}
@@ -476,9 +476,7 @@ export default function Tower() {
               style={{ maxWidth: '100%', maxHeight: '34vh', objectFit: 'contain', filter: 'drop-shadow(0 0 12px rgba(127,212,255,0.25))' }}
             />
             <div style={{ color: C.gold, fontSize: '12px', marginTop: '2px' }}>
-              {BOSS_RUN_STAGES[runInfo.stage]?.kind === 'boss'
-                ? getFloor(runInfo.floor)?.boss
-                : getFloor(runInfo.floor)?.midBoss?.name}
+              {getFloor(runInfo.floor)?.boss}
             </div>
           </div>
         )}
@@ -695,7 +693,7 @@ export default function Tower() {
       {tab === 'monument' && (
         <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '12px' }}>
           <div style={{ color: C.gold, fontSize: '12px', marginBottom: '4px' }}>🗿 踏破の石碑</div>
-          <div style={{ color: C.dim, fontSize: '10px', marginBottom: '10px' }}>10エリアごとの節目を、サーバーで最初に踏破した者の名が刻まれる。</div>
+          <div style={{ color: C.dim, fontSize: '10px', marginBottom: '10px' }}>10層ごとの節目を、サーバーで最初に踏破した者の名が刻まれる。</div>
           {monument === null && <div style={{ color: C.dim, fontSize: '11px' }}>読み込み中...</div>}
           {monument?.map(m => (
             <div key={m.floor} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${C.line}`, padding: '8px 2px', fontSize: '11px' }}>

@@ -7187,7 +7187,9 @@ export function BattleLogLine({ l }) {
     return (
       <div style={{ borderBottom:'1px solid #24405e', padding:'6px 6px', background:'#16263c', borderRadius:'3px', margin:'2px 0' }}>
         <div style={{ fontSize:'9px', color:'#7fa8d0', marginBottom:'3px', textAlign:'center' }}>━ {l.turn}ターン終了時 ━</div>
-        <div style={{ display:'flex', gap:'12px', alignItems:'flex-end' }}>
+        {/* l.vertical=true で縦積み。敵が3体以上出るコンテンツ(エンドレスタワー)では
+            横に並べると名前が潰れるため。既定は従来どおり横並び */}
+        <div style={{ display:'flex', flexDirection: l.vertical ? 'column' : 'row', gap: l.vertical ? '6px' : '12px', alignItems: l.vertical ? 'stretch' : 'flex-end' }}>
           {col('p', l.playerName, l.playerHp, l.playerMax, pPct, '#33dd66', l.playerStatus, 'flex-start', l.playerMp, l.playerMpMax)}
           {enemyCols}
         </div>

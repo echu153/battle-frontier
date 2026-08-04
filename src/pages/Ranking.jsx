@@ -396,7 +396,7 @@ export default function Ranking() {
                     </div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ color:'#7fd4ff', fontSize:'15px', fontWeight:'bold' }}>🗼 エリア{p.max_floor}</div>
+                    <div style={{ color:'#7fd4ff', fontSize:'15px', fontWeight:'bold' }}>🗼 {p.max_floor}層</div>
                     <div style={{ color:'#5f7099', fontSize:'10px' }}>到達エリア</div>
                   </div>
                 </div>

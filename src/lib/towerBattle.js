@@ -1061,6 +1061,7 @@ export function simulateTowerBattle({
     const front = alive()[0]
     logs.push({
       type: 'hp', turn,
+      vertical: true,   // 敵が最大4体出るので縦積みで表示する
       playerHp: Math.max(0, playerHp), playerMax: eff.hp_max, playerName: profile.username,
       playerMp: Math.max(0, playerMp), playerMpMax: eff.mp_max,
       playerStatus: extractStatuses(playerBuffs),
