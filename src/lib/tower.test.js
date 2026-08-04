@@ -8,6 +8,7 @@ import {
   towerTarget, sortiesToMidBoss, towerExpToNext, towerLevelFromExp, TOWER_EXP_MIN, TOWER_EXP_MAX, BOSS_FIRST_TOWER_EXP,
   TREE_NODES, TREE_MAX_STEPS, TREE_STEP_PCT, stepPctOf, maxStepsAt, nextUnlock, treeBonus, treeSpent, treeResetCost,
   isMonumentFloor, MID_BOSS_RATE, towerSortieGold, towerBossGold, RUN_POTION_LIMIT, MAX_END_LEVEL,
+  isTowerUnlocked, TOWER_UNLOCK_CHAR_LV,
   buildStageEnemies, buildSortieEnemies, towerTreeEffects, applyTreeToStats,
 } from './tower.js'
 import { TARGET_MODES, DEFAULT_TARGET_MODE, pickTargetMode, isTargetMode } from './loadout.js'
@@ -320,4 +321,16 @@ test('SQL: 中断した連戦は失敗として畳む（敗北の取り消しを
 test('SQL: エリアボス撃破が監査ログに残る', () => {
   assert.ok(towerSql.includes('CREATE TABLE IF NOT EXISTS tower_logs'))
   assert.ok(towerSql.includes("tower_log(v_pid, 'boss_clear'"))
+})
+
+test('解放条件がクライアントとSQLで一致している（一般公開 2026-08-04）', () => {
+  const m = towerSql.match(/char_lv, 1\) >= (\d+)/)
+  assert.ok(m, 'SQLの tower_can_enter に char_lv の条件がある')
+  assert.equal(Number(m[1]), TOWER_UNLOCK_CHAR_LV, 'クライアントとSQLで解放LVが一致')
+  assert.equal(isTowerUnlocked({ char_lv: TOWER_UNLOCK_CHAR_LV - 1 }), false)
+  assert.equal(isTowerUnlocked({ char_lv: TOWER_UNLOCK_CHAR_LV }), true)
+  assert.equal(isTowerUnlocked({ is_admin: true, char_lv: 1 }), true, '開発アカウントは常に入れる')
+  assert.equal(isTowerUnlocked(null), false)
+  // 開発限定のまま公開したつもりになる事故を防ぐ
+  assert.ok(!/SELECT COALESCE\(p_profile\.is_admin, false\)\s*\$\$/.test(towerSql), 'is_admin 限定のままになっていない')
 })

@@ -214,12 +214,11 @@ LANGUAGE sql IMMUTABLE AS $$
     ELSE 10 END
 $$;
 
--- エンドレスタワーに入れるか（現状 is_admin 限定。一般公開時は char_lv >= 1000 へ切り替える）
+-- エンドレスタワーに入れるか（2026-08-04 一般公開・解放条件はキャラクターLV1000）
+-- ⚠ここを変えたら クライアントの src/lib/tower.js の TOWER_UNLOCK_CHAR_LV も合わせること
 CREATE OR REPLACE FUNCTION tower_can_enter(p_profile profiles) RETURNS boolean
 LANGUAGE sql IMMUTABLE AS $$
-  SELECT COALESCE(p_profile.is_admin, false)
-  -- 一般公開時はこちらに差し替える:
-  -- SELECT COALESCE(p_profile.is_admin, false) OR COALESCE(p_profile.char_lv, 1) >= 1000
+  SELECT COALESCE(p_profile.is_admin, false) OR COALESCE(p_profile.char_lv, 1) >= 1000
 $$;
 
 -- エンドレスタワーで行動できない状態なら理由を返す（行動できるなら NULL）

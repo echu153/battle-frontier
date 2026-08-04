@@ -11,6 +11,7 @@ import { loadCharmBonus, PET_STAT_SELECT } from '../lib/petBonus'
 import { countClaimableTitles } from '../lib/titles'
 import { reportDevAccess } from '../lib/devAccess'
 import { isHachigokuUnlocked, HACHIGOKU_DAILY_WINS } from '../lib/hachigoku'
+import { isTowerUnlocked } from '../lib/tower'
 import { isEvent20260720Active } from '../lib/event20260720'
 import { myAreaShares, dropBonusPP, EXPAND_COOLDOWN_MS, rankColor } from '../lib/territory'
 import { richSegments, RICH } from '../lib/battleLogRich'
@@ -6259,8 +6260,8 @@ export default function Game() {
                           {profile?.is_admin && (
                             <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                           )}
-                          {profile?.is_admin && (
-                            <button onClick={()=>{ nav('/tower'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1020', border:'1px solid #7fd4ff', color:'#7fd4ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🗼 エンドレスタワー <span style={{ fontSize:'9px', color:'#5f7099' }}>[開発]</span></button>
+                          {isTowerUnlocked(profile) && (
+                            <button onClick={()=>{ nav('/tower'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1020', border:'1px solid #7fd4ff', color:'#7fd4ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🗼 エンドレスタワー</button>
                           )}
                         </div>
                       )}
@@ -6340,8 +6341,8 @@ export default function Game() {
                   {profile?.is_admin && (
                     <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                   )}
-                          {profile?.is_admin && (
-                            <button onClick={()=>{ nav('/tower'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1020', border:'1px solid #7fd4ff', color:'#7fd4ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🗼 エンドレスタワー <span style={{ fontSize:'9px', color:'#5f7099' }}>[開発]</span></button>
+                          {isTowerUnlocked(profile) && (
+                            <button onClick={()=>{ nav('/tower'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1020', border:'1px solid #7fd4ff', color:'#7fd4ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🗼 エンドレスタワー</button>
                           )}
                 </div>
               )}
@@ -6820,8 +6821,8 @@ export default function Game() {
                             {profile?.is_admin && (
                               <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                             )}
-                          {profile?.is_admin && (
-                            <button onClick={()=>{ nav('/tower'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1020', border:'1px solid #7fd4ff', color:'#7fd4ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🗼 エンドレスタワー <span style={{ fontSize:'9px', color:'#5f7099' }}>[開発]</span></button>
+                          {isTowerUnlocked(profile) && (
+                            <button onClick={()=>{ nav('/tower'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1020', border:'1px solid #7fd4ff', color:'#7fd4ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🗼 エンドレスタワー</button>
                           )}
                           </div>
                         )}
@@ -6901,8 +6902,8 @@ export default function Game() {
                     {profile?.is_admin && (
                       <button onClick={()=>{ nav('/tenkyuu'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#150a26', border:'1px solid #8a60ff', color:'#c8a0ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🌌 天穹十二宮 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>
                     )}
-                          {profile?.is_admin && (
-                            <button onClick={()=>{ nav('/tower'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1020', border:'1px solid #7fd4ff', color:'#7fd4ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🗼 エンドレスタワー <span style={{ fontSize:'9px', color:'#5f7099' }}>[開発]</span></button>
+                          {isTowerUnlocked(profile) && (
+                            <button onClick={()=>{ nav('/tower'); setShowChallengePanel(false) }} style={{ width:'100%', padding:'12px', marginTop:'8px', background:'#0a1020', border:'1px solid #7fd4ff', color:'#7fd4ff', cursor:'pointer', fontFamily:'monospace', fontSize:'13px' }}>🗼 エンドレスタワー</button>
                           )}
                   </div>
                 )}

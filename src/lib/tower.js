@@ -514,6 +514,12 @@ export const TOWER_FLOORS = [
 ]
 
 export const MAX_IMPLEMENTED_FLOOR = TOWER_FLOORS.length
+
+// エンドレスタワーの解放条件（2026-08-04 一般公開）。
+// ⚠ここを変えたら SQL の tower_can_enter() も必ず合わせること（権威はサーバー側）。
+export const TOWER_UNLOCK_CHAR_LV = 1000
+export const isTowerUnlocked = (profile) =>
+  !!profile?.is_admin || (profile?.char_lv || 1) >= TOWER_UNLOCK_CHAR_LV
 export const getFloor = (n) => TOWER_FLOORS.find(f => f.floor === n) || null
 
 // エリアボス挑戦の連戦構成（1〜戦闘エリア10）。数字は enemies から引く体数

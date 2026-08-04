@@ -22,8 +22,8 @@ export default function Ranking() {
   const [petRanking, setPetRanking] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState(null)
-  // エンドレスタワーは開発限定なのでタブ自体を出さない。null=判定中（この間はタブを出さず、
-  // 場所だけ確保しておく。後から1つ増えてタブが動くのを防ぐため）
+  // 2026-08-04 エンドレスタワーを一般公開したので、タワータブは全員に出す。
+  // isAdmin は開発限定コンテンツを足したときのために残してある（null=判定中）。
   const [isAdmin, setIsAdmin] = useState(null)
   const [tab, setTab] = useState('total')
 
@@ -31,7 +31,7 @@ export default function Ranking() {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) setCurrentUserId(user.id)
-      // タブの数を先に確定させる。重い集計より先に投げて、タブが後から増えないようにする。
+      // タブの数はもう is_admin で変わらないが、開発限定コンテンツを足すときのために先に取る
       let admin = false
       if (user) {
         try {
@@ -107,13 +107,11 @@ export default function Ranking() {
       const { data: abyssData } = await supabase.rpc('get_abyss_ranking')
       setAbyssPlayers((Array.isArray(abyssData) ? abyssData : []).filter(p => !excluded.has(p.id)))
 
-      // エンドレスタワー 到達エリアランキング（開発限定。SQL未適用の環境でも落ちないよう握りつぶす）
-      if (admin) {
-        try {
-          const { data: towerData } = await supabase.rpc('get_tower_ranking', { p_limit: 50 })
-          setTowerPlayers((Array.isArray(towerData) ? towerData : []).filter(p => !excluded.has(p.id)))
-        } catch { /* 塔のSQL未適用なら出さないだけ */ }
-      }
+      // エンドレスタワー 到達エリアランキング（SQL未適用の環境でも落ちないよう握りつぶす）
+      try {
+        const { data: towerData } = await supabase.rpc('get_tower_ranking', { p_limit: 50 })
+        setTowerPlayers((Array.isArray(towerData) ? towerData : []).filter(p => !excluded.has(p.id)))
+      } catch { /* 塔のSQL未適用なら出さないだけ */ }
 
       // ペット能力合計ランキング（チャーム込み・1体ごと）
       const { data: allPets } = await supabase.from('pets').select('id, owner_id, name, species, level, evolved, image_url, charm_id, ribbon_id')
@@ -173,7 +171,7 @@ export default function Ranking() {
         {(() => {
           const tabs = [
             { id:'total', label:'🏆 総合力' }, { id:'abyss', label:'🕯 奈落' },
-            ...(isAdmin ? [{ id:'tower', label:'🗼 タワー' }] : []),
+                    { id:'tower', label:'🗼 タワー' },
             { id:'museum', label:'🏛 寄贈数' }, { id:'medal', label:'🎫 メダル' }, { id:'pet', label:'🐾 ペット' },
           ]
           const cols = Math.ceil(tabs.length / 2)   // 必ず2行に収める
