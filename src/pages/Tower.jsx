@@ -20,6 +20,7 @@ import {
   MID_BOSS_RATE, isMonumentFloor, RUN_POTION_LIMIT, makeEnemy,
 } from '../lib/tower'
 import { simulateTowerBattle, buildStageEnemies, buildSortieEnemies, towerTreeEffects } from '../lib/towerBattle'
+import { simulateAll } from '../lib/towerSim'
 
 const fmt = (n) => Number(n || 0).toLocaleString()
 const floorLabel = (n) => `${n}層`   // 分類名は「戦闘エリア」、個々は「N層」と呼ぶ
@@ -169,6 +170,13 @@ export default function Tower() {
   // 開発用のテスト対戦（is_admin限定）。相手を選んで1戦だけ試す
   const [devFloor, setDevFloor] = useState(1)
   const [devTarget, setDevTarget] = useState('boss')
+  // 全上位職の一括シミュレーション（開発用）
+  const [simRows, setSimRows] = useState(null)
+  const [simBusy, setSimBusy] = useState(false)
+  const [simProgress, setSimProgress] = useState('')
+  const [simFrom, setSimFrom] = useState(5)
+  const [simTo, setSimTo] = useState(7)
+  const [simTries, setSimTries] = useState(10)
   const [targetOptions, setTargetOptions] = useState([])   // 狙う相手（スキル設定画面で決める）
   const [playerItem, setPlayerItem] = useState(null)       // 装備中のアイテム（タワーでも街と同じく使える）
   const logsEndRef = useRef(null)
@@ -455,6 +463,31 @@ export default function Tower() {
     } finally { busyRef.current = false; setBusy(false) }
   }
 
+  // ── 開発用：全上位職を再修練5のスキルセットで回して突破率を出す ──────
+  //   ⚠自分（おれおれお）の実効ステータス・装備・紋章・ペット・エンドポイントを
+  //     そのまま使う。クラスとスキルの対応は skills テーブルから読む。
+  //     模擬プレイヤーで測っても実態と合わないので、ここで実データを使う。
+  const runSim = async () => {
+    if (simBusy) return
+    setSimBusy(true); setSimRows(null); setSimProgress('準備中...')
+    try {
+      const from = Math.max(1, Math.min(MAX_IMPLEMENTED_FLOOR, simFrom))
+      const to = Math.max(from, Math.min(MAX_IMPLEMENTED_FLOOR, simTo))
+      const floors = []
+      for (let i = from; i <= to; i++) floors.push(i)
+      const rows = await simulateAll({
+        supabase, eff: buildEff(), equipment, profile,
+        tree: treeAlloc, targetMode, playerItem,
+        floors, tries: simTries,
+        onProgress: (done, total, cls, floor) => setSimProgress(`${done}/${total}  ${cls} / ${floorLabel(floor)}`),
+      })
+      setSimRows({ rows, floors })
+      setSimProgress('')
+    } catch (e) {
+      setSimProgress('失敗: ' + (e?.message || e))
+    } finally { setSimBusy(false) }
+  }
+
   const abortRun = async () => {
     if (!window.confirm('連戦を中断します。HPは回復せず、次はまた1戦目からになります。よろしいですか？')) return
     await supabase.rpc('tower_run_abort')
@@ -736,6 +769,72 @@ export default function Tower() {
                       style={{ ...bigBtn('#c8a0ff', busy), marginTop: '8px' }}>
                       {busy ? '⏳ 戦闘中...' : '🧪 この相手と戦う'}
                     </button>
+
+                    {/* 全上位職を再修練5のスキルセットで回して突破率を出す。
+                        自分の実効ステータス（装備・紋章・ペット・エンドポイント込み）を使う */}
+                    <div style={{ borderTop: '1px solid #33285a', marginTop: '12px', paddingTop: '10px' }}>
+                      <div style={{ color: '#c8a0ff', fontSize: '11px', marginBottom: '6px' }}>
+                        📊 全上位職シミュレーション
+                        <span style={{ color: C.dim, marginLeft: '6px' }}>いまの自分の装備・ステータスで、19職ぶん6連戦を回します</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', fontSize: '11px', color: C.text }}>
+                        <span>層</span>
+                        <input type="number" min="1" max={MAX_IMPLEMENTED_FLOOR} value={simFrom}
+                          onChange={e => setSimFrom(Number(e.target.value))}
+                          style={{ width: '52px', background: '#001028', border: '1px solid #6a44aa', color: '#c8a0ff', padding: '5px', fontFamily: 'monospace' }} />
+                        <span>〜</span>
+                        <input type="number" min="1" max={MAX_IMPLEMENTED_FLOOR} value={simTo}
+                          onChange={e => setSimTo(Number(e.target.value))}
+                          style={{ width: '52px', background: '#001028', border: '1px solid #6a44aa', color: '#c8a0ff', padding: '5px', fontFamily: 'monospace' }} />
+                        <span style={{ marginLeft: '6px' }}>各</span>
+                        <input type="number" min="1" max="50" value={simTries}
+                          onChange={e => setSimTries(Number(e.target.value))}
+                          style={{ width: '52px', background: '#001028', border: '1px solid #6a44aa', color: '#c8a0ff', padding: '5px', fontFamily: 'monospace' }} />
+                        <span>回</span>
+                      </div>
+                      <button onClick={runSim} disabled={simBusy}
+                        style={{ ...bigBtn('#c8a0ff', simBusy), marginTop: '8px' }}>
+                        {simBusy ? `⏳ ${simProgress}` : '📊 全上位職で回す'}
+                      </button>
+                      {!simBusy && simProgress && <div style={{ color: C.ng, fontSize: '10px', marginTop: '4px' }}>{simProgress}</div>}
+
+                      {simRows && (
+                        <div style={{ marginTop: '10px', overflowX: 'auto' }}>
+                          <table style={{ borderCollapse: 'collapse', fontSize: '10px', width: '100%' }}>
+                            <thead>
+                              <tr>
+                                <th style={{ textAlign: 'left', color: C.dim, padding: '3px 6px', borderBottom: '1px solid #33285a' }}>クラス</th>
+                                {simRows.floors.map(fl => (
+                                  <th key={fl} style={{ color: C.dim, padding: '3px 6px', borderBottom: '1px solid #33285a', whiteSpace: 'nowrap' }}>{floorLabel(fl)}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {simRows.rows.map(r => (
+                                <tr key={r.cls} title={r.skills.join(' / ')}>
+                                  <td style={{ color: C.text, padding: '3px 6px', whiteSpace: 'nowrap' }}>{r.cls}</td>
+                                  {simRows.floors.map(fl => {
+                                    const v = r.rates[fl] ?? 0
+                                    const col = v >= 0.5 ? C.ng : v > 0 ? C.gold : C.ok
+                                    return (
+                                      <td key={fl} style={{ color: col, padding: '3px 6px', textAlign: 'center', fontWeight: v >= 0.5 ? 'bold' : 'normal' }}>
+                                        {Math.round(v * 100)}%
+                                      </td>
+                                    )
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          <div style={{ color: C.dim, fontSize: '9px', marginTop: '6px', lineHeight: '1.6' }}>
+                            数値は6連戦の突破率。<span style={{ color: C.ng }}>赤=50%以上（抜けられる）</span> ／
+                            <span style={{ color: C.gold }}> 黄=たまに抜ける</span> ／
+                            <span style={{ color: C.ok }}> 緑=0%（抜けられない）</span><br />
+                            クラス名にカーソルを合わせると、使ったスキルの並びが出ます。
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
