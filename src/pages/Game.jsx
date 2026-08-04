@@ -1768,7 +1768,6 @@ export default function Game() {
   // 領地：自国のエリア別シェア（装備ドロップ率ボーナス用）。{ areaId: 0..1 }
   const [areaShareMap, setAreaShareMap] = useState({})
   const [regenRemaining, setRegenRemaining] = useState(0)
-  const [innMessage, setInnMessage] = useState('')
   const [equipment, setEquipment] = useState([])
   const [proficiency, setProficiency] = useState([])
   const [classLevels, setClassLevels] = useState([])
@@ -1876,7 +1875,6 @@ export default function Game() {
   const [activeWarId, setActiveWarId] = useState(null)       // 交戦中の戦争ID（開戦時の満タン参戦を1戦争1回にするため）
   const warFilledRef = useRef(null)                          // 満タン参戦を適用済みの戦争ID（多重適用ガード）
   const [showGuide, setShowGuide] = useState(false)
-  const [showDyingTip, setShowDyingTip] = useState(false)  // 初めて瀕死になったとき1回だけ案内
   const [openGuideId, setOpenGuideId] = useState(null)
   const [guideView, setGuideView] = useState('select')  // 'select' | 'guide' | 'help'
   const [openHelpId, setOpenHelpId] = useState(null)
@@ -1912,7 +1910,6 @@ export default function Game() {
   const botCheckActiveRef = useRef(false)  // チャレンジ中フラグ
   const botCheckDeadlineRef = useRef(null)  // タイマー一時停止用：期限の絶対時刻
   const regenningRef = useRef(false)
-  const innBusyRef = useRef(false)  // 宿屋利用の二重実行ガード（連打対策）
   const battleBusyRef = useRef(false)  // 出撃の二重発火ガード（スマホ2連タップ対策）
   const clockOffsetRef = useRef(0)  // サーバー時刻 - 端末時刻(ms)。クールダウンのズレ補正用
   const serverNow = () => Date.now() + clockOffsetRef.current
@@ -1950,14 +1947,6 @@ export default function Game() {
     // URLに残すとリロードで再度開いてしまうのでパラメータは消す
     window.history.replaceState(null, '', '/game')
   }, [])
-
-  // 初めて瀕死状態になったとき、宿屋で回復するよう1回だけ案内する
-  useEffect(() => {
-    if (profile?.is_dying && !localStorage.getItem('bf_dying_tip_seen')) {
-      localStorage.setItem('bf_dying_tip_seen', '1')
-      setShowDyingTip(true)
-    }
-  }, [profile?.is_dying])
 
   // サーバー時刻オフセットを測定（端末時計のズレでクールダウンが解消しない問題の対策）
   useEffect(() => {
@@ -2317,6 +2306,26 @@ export default function Game() {
     ])
     setExpDungeonTicket(ticketRow ? { id: ticketRow.id, quantity: ticketRow.quantity } : null)
     if (!data) { nav('/create'); return }
+    // ★2026-08-03 宿屋廃止: 街にいる間は常に全快に戻す（回復手段が無くなったため詰まないように）。
+    //   戦争中だけは例外＝HPの削り合いが戦争の中身なので触らない（戦争の仕様はこれまで通り）。
+    if ((data.hp_current ?? 0) < (data.hp_max ?? 0) || data.is_dying) {
+      let inWar = false
+      if (data.country_id) {
+        try {
+          const { data: w } = await supabase.from('wars').select('id').eq('status', 'active')
+            .or(`attacker_country_id.eq.${data.country_id},defender_country_id.eq.${data.country_id}`).limit(1)
+          inWar = !!(w && w.length)
+        } catch { /* 戦争SQL未適用なら非戦争扱い */ }
+      }
+      if (!inWar) {
+        try {
+          await supabase.from('profiles')
+            .update({ hp_current: data.hp_max, mp_current: data.mp_max, is_dying: false })
+            .eq('id', user.id)
+          data.hp_current = data.hp_max; data.mp_current = data.mp_max; data.is_dying = false
+        } catch { /* 失敗しても表示は続ける */ }
+      }
+    }
     // ログイン特典: ボス装備進化支援箱（7/31までログインで全員に1回付与）。サーバーRPCが二重付与・締切を判定。
     try { await supabase.rpc('claim_evo_support_box') } catch { /* 未適用時は無視 */ }
     // 進化支援箱の所持チェック（街バナー用）
@@ -2416,7 +2425,6 @@ export default function Game() {
   const doRegen = async () => {
     if (!profile) return
     if (regenningRef.current) return  // 多重起動ガード
-    if (innBusyRef.current) return    // 宿屋利用中は回復処理と競合させない（宿屋の全回復が上書きされるのを防ぐ）
     regenningRef.current = true
     try {
       // ★ サーバーから最新のHP/MP/瀕死/前回回復時刻を取得（古いクロージャで上書きしないため）
@@ -2998,8 +3006,11 @@ export default function Game() {
     const isAtCap = currentClassLv >= cap
 
     const logs = []
-    let playerHp = Math.min(hpCurrent, maxHp)
-    let playerMp = Math.min(profile.mp_current ?? maxMp, maxMp)
+    // ★2026-08-03 宿屋廃止: どの戦闘も常に満タンから始める（戦闘後もHP/MPは持ち越さない）。
+    //   戦争中は出撃できない(canBattle)ので、戦争のHP消耗とは競合しない。
+    //   エンドレスタワーのエリアボス連戦だけは例外で、あちらは専用プールで持ち越す。
+    let playerHp = maxHp
+    let playerMp = maxMp
     let enemyHp = enemy.hp
     let turn = 1, skillIndex = 0
     let playerBuffs = {}, enemyBuffs = {}
@@ -4013,9 +4024,6 @@ export default function Game() {
       }
     }
 
-    if (playerHp === 0) {
-      logs.push({ text:`⚠ 瀕死状態！宿屋でHP全回復してください。`, color:'#ff4444' })
-    }
     setBattleLogs(logs)
 
     if (win && !isPapiaEncounter) {
@@ -4183,8 +4191,10 @@ export default function Game() {
       p_win: win,
       p_claimed_exp: expGained,
       p_claimed_gold: goldGained,
-      p_hp_current: playerHp,
-      p_mp_current: playerMp,
+      // ★宿屋廃止: 戦闘でHP/MPは減らさない。常に満タンをサーバーへ保存する。
+      //   直前に eff_hp_max を maxHp で同期しているので invalid_hp にはならない。
+      p_hp_current: maxHp,
+      p_mp_current: maxMp,
       p_mutant_boss: !!useMutantBoss,  // 実際に変異ボスと戦ったか（トグルOFF＝通常ボスでは変異攻略を記録しない）
     })
 
@@ -4264,45 +4274,6 @@ export default function Game() {
     setLoading(false)
   }
 
-  const useInn = async () => {
-    if (loading || innBusyRef.current) return  // 連打・二重実行ガード（refで同期的に即ブロック）
-    if (atWar) { setInnMessage('⚔ 戦争中は宿屋を利用できません。'); return }  // 戦争中はHP/MP共有のため宿屋禁止
-    innBusyRef.current = true
-    setLoading(true)
-    const isDying = profile.is_dying||false
-    const charLvForCost = profile.char_lv || profile.lv
-    const normalCost = charLvForCost*2
-    const dyingCost = charLvForCost*15
-
-    // ★ サーバーから最新のゴールドを取得（複数タブ同時利用対策）
-    const { data: serverProfile } = await supabase.from('profiles').select('gold, hp_max, mp_max').eq('id', profile.id).single()
-    if (!serverProfile) { setLoading(false); innBusyRef.current = false; return }
-    const serverCost = isDying ? Math.min(dyingCost, serverProfile.gold) : normalCost
-    if (!isDying && serverProfile.gold < normalCost) { setLoading(false); innBusyRef.current = false; return }
-
-    // 装備・釣り等込みの実効最大まで全回復する
-    const _innEff = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
-
-    // ★ 楽観ロック: ゴールドが読み取り時と同じ場合のみ更新（別タブが先に利用してたら失敗）
-    const { data: locked } = await supabase.from('profiles').update({
-      hp_current: _innEff.hp_max,
-      mp_current: _innEff.mp_max,
-      gold: serverProfile.gold - serverCost,
-      is_dying: false,
-      last_regen_at: new Date().toISOString(),  // 自然回復タイマーをリセット（回復直後の上書き発火を防ぐ）
-    }).eq('id', profile.id).eq('gold', serverProfile.gold).select('id')
-
-    if (!locked || locked.length === 0) {
-      await fetchProfile()
-      setLoading(false)
-      innBusyRef.current = false
-      return
-    }
-    await fetchProfile()
-    setLoading(false)
-    setInnMessage('HPとMPが回復しました！')
-    setTimeout(() => { setInnMessage(''); setScene('town'); innBusyRef.current = false }, 1500)
-  }
 
   const confirmStatPoints = async () => {
     const total = Object.values(statPoints).reduce((a,b)=>a+b,0)
@@ -4642,7 +4613,7 @@ export default function Game() {
       content: `● レベルアップで自動習得。スキルページでスロット（最大5個）にセット
 ● 戦闘ではスロット順に上から繰り返し使用する
 ● パッシブスキルはセットで常時発動（パッシブは1つまで）
-● MPが足りないとスキルが発動しない（宿屋でMP補充）
+● MPが足りないとスキルが発動しない（戦闘ごとに全回復する）
 ● 転職するとセット中のスキルは全て外れるので、転職後にセットし直そう`,
     },
     {
@@ -4654,13 +4625,6 @@ export default function Game() {
       id: 'm_item', title: '🎒 アイテム',
       content: `● 所持している回復・補助アイテムや各種素材を確認・使用できる
 ● 回数券などの便利アイテムもここから使う`,
-    },
-    {
-      id: 'm_inn', title: '🏨 宿屋',
-      content: `● 戦闘でHPが0になると「瀕死状態」になり出撃不可になる
-● 宿屋でHP・MPを全回復（Goldがかかる）
-● 瀕死状態の回復は通常よりGoldが多くかかる
-● 時間経過でも自然回復する（瀕死状態も回復する）`,
     },
     {
       id: 'm_temple', title: '⛩ 神殿（クラス・転職）',
@@ -4751,7 +4715,7 @@ export default function Game() {
 ● クラスレベル：現在のクラスのレベル
 ● キャラクターレベル：これまで上げた全クラスのレベルの合計
 ● 総合力：各ステータスの合計（強さの目安）
-● Gold：宿屋・商店・強化など様々な用途で使用する
+● Gold：商店・強化など様々な用途で使用する
 
 【ステータスポイント】
 ● レベルアップ時に1獲得し、好きなステータスに割り振れる
@@ -4759,7 +4723,7 @@ export default function Game() {
 ● 1ptあたりの上昇量：HP +10 ／ MP +5 ／ 攻撃・防御・特攻・特防・素早さは各 +1
 
 【各種ステータス（総合力に反映）】
-● HP：体力。0になると瀕死状態になり出撃できなくなる
+● HP：体力。0になるとその戦闘は敗北になる
 ● MP：スキルの発動に消費する。足りないとスキルが出ず通常攻撃になる
 ● 攻撃：物理攻撃に影響
 ● 防御：物理攻撃へのダメージ軽減率に影響
@@ -4783,8 +4747,8 @@ export default function Game() {
 ● 攻撃%などの倍率ボーナスも実効値・表示に反映される
 
 【回復】
-● HP/MPは宿屋で全回復（Goldが必要）。時間経過でも自然回復する
-● 瀕死状態の回復は通常よりGoldが多くかかる`,
+● HP/MPは戦闘を始めるたびに全回復する（手間もGoldもかからない）
+● エンドレスタワーのエリアボス連戦だけは例外で、連戦の間はHP/MPを持ち越す`,
     },
     {
       id: 'h_class', title: '🎭 クラス',
@@ -5392,23 +5356,6 @@ export default function Game() {
     </div>
   ) }
 
-  if (showDyingTip) return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.88)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
-      <div style={{ background:'#1a0000', border:'2px solid #ff4444', padding:'28px 24px', maxWidth:'380px', width:'100%', textAlign:'center' }}>
-        <div style={{ color:'#ff4444', fontSize:'24px', marginBottom:'8px' }}>⚠</div>
-        <div style={{ color:'#ff4444', fontSize:'15px', marginBottom:'14px', letterSpacing:'2px' }}>瀕死状態になりました</div>
-        <div style={{ color:'#ffaaaa', fontSize:'12px', lineHeight:'1.9', marginBottom:'20px', textAlign:'left' }}>
-          HPが0になり、このままでは<span style={{color:'#ff6666'}}>出撃できません</span>。<br/>
-          街の<span style={{color:'#ffcc44'}}>宿屋</span>でHPを全回復してから、また冒険に出かけましょう。
-        </div>
-        <button onClick={()=>setShowDyingTip(false)}
-          style={{ width:'100%', padding:'12px', background:'#000810', border:'1px solid #ff4444', color:'#ff6666', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', letterSpacing:'1px' }}>
-          OK
-        </button>
-      </div>
-    </div>
-  )
-
   if (adminMsgOpen) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'monospace' }}>
       <div style={{ background:'#001040', border:'2px solid #ffcc44', padding:'24px', maxWidth:'460px', width:'100%', maxHeight:'90vh', overflowY:'auto' }}>
@@ -5584,7 +5531,8 @@ export default function Game() {
     const m = Math.ceil((diffMs % 3600000) / 60000)
     return `${h}時間${m}分`
   })() : null
-  const canBattle = !isBanned && !atWar && (!isDying || hpCurrent >= hpMaxEff)
+  // ★宿屋廃止: HPは戦闘ごとに全回復するので瀕死で出撃を止めない
+  const canBattle = !isBanned && !atWar
   const hpPct = Math.min(100,(hpCurrent/hpMaxDisp)*100)
   const mpPct = Math.min(100,(mpCurrent/mpMaxEff)*100)
   const expPct = Math.min(100,(profile.exp/profile.exp_next)*100)
@@ -5596,7 +5544,6 @@ export default function Game() {
   // デイリーダンジョン：全種使い切ったらパネル自体を開けない／残り合計
   const dungeonAllUsedUp = DUNGEON_LIST.every(d => (dungeonCounts[d.type]||0) >= dungeonDailyLimitFor(profile))
   const charLv = profile.char_lv || profile.lv
-  const innCost = isDying ? Math.min(charLv*15,profile.gold) : charLv*2
   // 公開：開催期間中のみ全プレイヤーに表示（期間を過ぎると自動で非表示）。
   const eventVisible = (() => {
     const now = serverNow()
@@ -6031,7 +5978,6 @@ export default function Game() {
             </button>
           )}
           <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', marginBottom:'8px' }}>
-            {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'6px', border:'1px solid #660000', padding:'3px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
               {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width: NEW_UI ? '76px' : '48px', height: NEW_UI ? '76px' : '48px', objectFit:'cover', flexShrink:0 }} />}
               <div style={{ flex:1, textAlign: NEW_UI ? 'left' : undefined, display: NEW_UI ? 'flex' : undefined, justifyContent: NEW_UI ? 'space-between' : undefined, alignItems: NEW_UI ? 'flex-start' : undefined }}>
@@ -6125,7 +6071,6 @@ export default function Game() {
             <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
               {!NEW_UI && <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>}
               {isBanned && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #880000', padding:'8px', background:'#200000' }}>⛔ 出撃禁止中（残り{banRemaining}）<br/><span style={{color:'#884444',fontSize:'10px'}}>異常な行動が検出されました</span></div>}
-              {isDying && !isBanned && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'6px', background:'#1a0000' }}>⚠ 瀕死状態です。宿屋でHP全回復してください。</div>}
               {isAtCap && <div style={{ color:'#ff8844', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #664400', padding:'4px', background:'#1a0800' }}>⚠ {profile.class}はレベルキャップ(LV{cap})に達しています</div>}
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
                 <span style={{ color:'#446688' }}>次の行動まで</span>
@@ -6240,7 +6185,7 @@ export default function Game() {
               })()}
               <button onClick={(e)=>doBattle(e)} disabled={!canAct||loading||!canBattle}
                 style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
-                {atWar?'⚔ 戦争中（出撃不可）':isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
+                {atWar?'⚔ 戦争中（出撃不可）':isBanned?'⛔ 出撃禁止中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
               </button>
               <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAllUsedUp||loading||isBanned}
                 style={{ width:'100%', padding:'12px', background:'#0a001a', border:`1px solid ${dungeonAllUsedUp||isBanned?'#333':'#cc44ff'}`, color:dungeonAllUsedUp||isBanned?'#333':'#cc44ff', cursor:dungeonAllUsedUp||isBanned?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'13px', marginBottom:'10px', opacity:dungeonAllUsedUp||isBanned?0.4:1 }}>
@@ -6322,7 +6267,6 @@ export default function Game() {
                       </MenuCat>
                       <MenuCat title="施設" catKey="facility" accordion={acc} open={!!openMenuCats.facility} onToggle={toggleMenuCat}>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                        <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋</button>
                         <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿</button>
                         <button onClick={()=>nav('/shop')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🛒 商店</button>
                         <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋</button>
@@ -6357,7 +6301,6 @@ export default function Game() {
                 <>
               {facilitiesExpanded && (
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋</button>
                 <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿</button>
                 <button onClick={()=>nav('/shop')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🛒 商店</button>
                 <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋</button>
@@ -6399,35 +6342,6 @@ export default function Game() {
             </div>
           )}
 
-          {scene==='inn' && (
-            <div style={{ border:'1px solid #0088aa', background:'#001030', padding:'20px', textAlign:'center' }}>
-              <div style={{ color:'#00aacc', fontSize:'14px', marginBottom:'16px' }}>🏨 宿屋</div>
-              {innMessage ? (
-                <div style={{ color:'#44ff88', fontSize:'14px', padding:'20px' }}>{innMessage}</div>
-              ) : (
-                <>
-                  <div style={{ color:'#88ccff', fontSize:'12px', lineHeight:'2', marginBottom:'16px' }}>
-                    {isDying
-                      ? profile.gold < charLv*15
-                        ? <>これはひどいお姿で…。<br/><span style={{color:'#ffcc00'}}>{charLv*15}G</span> のところ、所持金 <span style={{color:'#ffcc00'}}>{innCost}G</span> で承ります。</>
-                        : <>これはひどいお姿で…。<br/>特別なお手当として <span style={{color:'#ffcc00'}}>{innCost}G</span> でございます。</>
-                      : <>一泊 <span style={{color:'#ffcc00'}}>{innCost}G</span> でございます。<br/>ゆっくりお休みになりますか？</>}
-                  </div>
-                  <div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
-                    所持金: <span style={{color:'#ffcc00'}}>{profile.gold}G</span>
-                    {!isDying && profile.gold<innCost && <span style={{color:'#ff4444'}}> （不足）</span>}
-                  </div>
-                  <div style={{ display:'flex', gap:'8px' }}>
-                    <button onClick={backToTown} style={{ flex:1, padding:'10px', background:'#001', border:'1px solid #446688', color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>戻る</button>
-                    <button onClick={useInn} disabled={loading||atWar||(!isDying&&profile.gold<innCost)}
-                      style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor:(loading||atWar||(!isDying&&profile.gold<innCost))?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', opacity:(loading||atWar||(!isDying&&profile.gold<innCost))?0.4:1 }}>
-                      {atWar ? '戦争中は利用不可' : '利用する'}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
 
           {scene==='temple' && TempleContent()}
 
@@ -6624,7 +6538,6 @@ export default function Game() {
 
         <div style={{ display:'grid', gridTemplateColumns:'220px 1fr', gap:'12px' }}>
           <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', alignSelf:'start' }}>
-            {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #660000', padding:'4px', background:'#1a0000' }}>⚠ 瀕死状態　HP全回復まで出撃不可</div>}
             <div style={{ borderBottom:'1px dashed #003366', paddingBottom:'8px', marginBottom:'8px' }}>
               {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width:'60px', height:'60px', objectFit:'cover', display:'block', margin:'0 auto 6px' }} />}
               <div style={{ color:'#ffcc00', fontSize:'12px', textAlign:'center' }}>
@@ -6718,7 +6631,6 @@ export default function Game() {
             {scene==='town' && (
               <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', marginBottom:'8px' }}>
                 {!NEW_UI && <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'8px' }}>🏰 街</div>}
-                {isDying && <div style={{ color:'#ff4444', fontSize:'11px', textAlign:'center', marginBottom:'10px', border:'1px solid #660000', padding:'8px', background:'#1a0000' }}>⚠ 瀕死状態です。宿屋でHP全回復してください。</div>}
                 {isAtCap && <div style={{ color:'#ff8844', fontSize:'11px', textAlign:'center', marginBottom:'8px', border:'1px solid #664400', padding:'4px', background:'#1a0800' }}>⚠ {profile.class}はレベルキャップ(LV{cap})に達しています</div>}
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
                   <span style={{ color:'#446688' }}>次の行動まで</span>
@@ -6842,7 +6754,7 @@ export default function Game() {
                 })()}
                 <button onClick={(e)=>doBattle(e)} disabled={!canAct||loading||!canBattle}
                   style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${canAct&&canBattle?'#ffcc00':'#003366'}`, color:canAct&&canBattle?'#ffcc00':'#446688', cursor:canAct&&canBattle?'pointer':'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
-                  {atWar?'⚔ 戦争中（出撃不可）':isBanned?'⛔ 出撃禁止中':isDying&&!canBattle?'💀 瀕死中（HP全回復まで出撃不可）':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
+                  {atWar?'⚔ 戦争中（出撃不可）':isBanned?'⛔ 出撃禁止中':canAct?`⚔ ${AREAS.find(a=>a.id===selectedArea)?.name}へ出撃！`:'⏳ 待機中...'}
                 </button>
                 <button onClick={()=>setShowDungeonPanel(!showDungeonPanel)} disabled={dungeonAllUsedUp||loading}
                   style={{ width:'100%', padding:'10px', background:'#0a001a', border:`1px solid ${dungeonAllUsedUp?'#333':'#cc44ff'}`, color:dungeonAllUsedUp?'#333':'#cc44ff', cursor:dungeonAllUsedUp?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px', opacity:dungeonAllUsedUp?0.4:1 }}>
@@ -6916,7 +6828,6 @@ export default function Game() {
                         </MenuCat>
                         <MenuCat title="施設" catKey="facility" accordion={acc} open={!!openMenuCats.facility} onToggle={toggleMenuCat}>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                          <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋へ</button>
                           <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿へ</button>
                           <button onClick={()=>nav('/shop')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🛒 商店へ</button>
                           <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋へ</button>
@@ -6951,7 +6862,6 @@ export default function Game() {
                   <>
                 {facilitiesExpanded && (
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                  <button onClick={()=>{ setScene('inn'); setInnMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #0088aa', color:'#00aacc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏨 宿屋へ</button>
                   <button onClick={()=>{ setScene('temple'); setTempleMessage('') }} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ccaa00', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⛩ 神殿へ</button>
                   <button onClick={()=>nav('/shop')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aa44', color:'#44aa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🛒 商店へ</button>
                   <button onClick={()=>nav('/smithy')} style={{ padding:'10px', background:'#001020', border:'1px solid #aa6644', color:'#aa6644', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>⚒ 鍛冶屋へ</button>
@@ -6993,35 +6903,6 @@ export default function Game() {
               </div>
             )}
 
-            {scene==='inn' && (
-              <div style={{ border:'1px solid #0088aa', background:'#001030', padding:'20px', textAlign:'center' }}>
-                <div style={{ color:'#00aacc', fontSize:'14px', marginBottom:'16px' }}>🏨 宿屋</div>
-                {innMessage ? (
-                  <div style={{ color:'#44ff88', fontSize:'14px', padding:'20px' }}>{innMessage}</div>
-                ) : (
-                  <>
-                    <div style={{ color:'#88ccff', fontSize:'12px', lineHeight:'2', marginBottom:'16px' }}>
-                      {isDying
-                        ? profile.gold < charLv*15
-                          ? <>これはひどいお姿で…。特別なお手当が必要でございます。<br/><span style={{color:'#ffcc00'}}>{charLv*15}G</span> のところ、所持金 <span style={{color:'#ffcc00'}}>{innCost}G</span> で承ります。</>
-                          : <>これはひどいお姿で…。特別なお手当として <span style={{color:'#ffcc00'}}>{innCost}G</span> でございます。</>
-                        : <>一泊 <span style={{color:'#ffcc00'}}>{innCost}G</span> でございます。<br/>ゆっくりお休みになりますか？</>}
-                    </div>
-                    <div style={{ color:'#446688', fontSize:'11px', marginBottom:'16px' }}>
-                      所持金: <span style={{color:'#ffcc00'}}>{profile.gold}G</span>
-                      {!isDying && profile.gold<innCost && <span style={{color:'#ff4444'}}> （Goldが足りません）</span>}
-                    </div>
-                    <div style={{ display:'flex', gap:'8px' }}>
-                      <button onClick={backToTown} style={{ flex:1, padding:'10px', background:'#001840', border:'1px solid #0088ff', color:'#0088ff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏰 街に戻る</button>
-                      <button onClick={useInn} disabled={loading||atWar||(!isDying&&profile.gold<innCost)}
-                        style={{ flex:2, padding:'10px', background:'#001830', border:'1px solid #0088aa', color:'#00aacc', cursor:(loading||atWar||(!isDying&&profile.gold<innCost))?'not-allowed':'pointer', fontFamily:'monospace', fontSize:'12px', opacity:(loading||atWar||(!isDying&&profile.gold<innCost))?0.4:1 }}>
-                        {atWar ? '戦争中は利用不可' : '利用する'}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
 
             {scene==='temple' && TempleContent()}
 
