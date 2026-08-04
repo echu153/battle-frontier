@@ -3720,6 +3720,17 @@ export default function Game() {
     }
     if (petActive) logs.push({ text:`🐾 ペットを召喚！（HP${petMaxHp}）`, color:'#ffcc66' })
 
+    // 戦闘状況（HP/MPバー）は1ターンごとではなく「1回の行動ごと」に出す。
+    // プレイヤーが動いた直後・追加行動の直後・敵が動いた直後にそれぞれ呼ぶ。
+    let lastHpSig = ''
+    const pushHp = () => {
+      // 直前と全く同じ状況なら出さない（行動が空振りしたときに同じバーが並ばないように）
+      const sig = `${playerHp}/${enemyHp}/${petHp}`
+      if (sig === lastHpSig && logs[logs.length-1]?.type === 'hp') return
+      lastHpSig = sig
+      logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:maxHp, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs), petHp: petActive ? Math.max(0,petHp) : null, petMax: petActive ? petMaxHp : null })
+    }
+
     while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
       const hpBeforeTurn = playerHp  // 雷鋼の機神鎧: このターンに被ダメしたか判定用
       if (passiveNames.includes('骸の壁') && (turn === 1 || turn % 4 === 0)) {
@@ -3876,13 +3887,14 @@ export default function Game() {
       if (!playerSkipped) {
         tenkaiActedThisTurn = false
         doPlayerAttack(false)
+        pushHp()
         if (enemyHp <= 0) break
         // 精霊共鳴：確定追加行動（消費）
         const spiritExtra = !!playerBuffs.guaranteedExtra
         if (playerBuffs.guaranteedExtra) playerBuffs.guaranteedExtra = false
         // 天墜竜閃を使ったターン（溜め・解放とも）は追加行動なし
         if (!tenkaiActedThisTurn && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) {
-          doPlayerAttack(true); if (enemyHp <= 0) break
+          doPlayerAttack(true); pushHp(); if (enemyHp <= 0) break
         }
       }
 
@@ -3974,8 +3986,8 @@ export default function Game() {
         logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color:'#66ccff' })
       }
       if (bossHealCooldown > 0) bossHealCooldown--
-      // 毎ターン終了時のHPスナップショット（表示用）
-      logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:maxHp, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs), petHp: petActive ? Math.max(0,petHp) : null, petMax: petActive ? petMaxHp : null })
+      // 敵の行動が終わった時点の状況
+      pushHp()
       turn++
     }
 

@@ -143,6 +143,7 @@ export default function Tower() {
   const [monument, setMonument] = useState(null)
   const [treeDraft, setTreeDraft] = useState(null)
   const [imgFail, setImgFail] = useState({})   // 画像が無い層は文字だけに戻す
+  const [bossShot, setBossShot] = useState(null)   // 立ち絵を出す層（エリアボス戦を表示している間だけ入る）
   const [targetOptions, setTargetOptions] = useState([])   // 狙う相手（スキル設定画面で決める）
   const [playerItem, setPlayerItem] = useState(null)       // 装備中のアイテム（タワーでも街と同じく使える）
   const logsEndRef = useRef(null)
@@ -336,6 +337,7 @@ export default function Tower() {
       const hpMax = Math.floor(eff.hp_max * tr.hpMult)
       const { data, error } = await withTimeout(supabase.rpc('tower_run_start', { p_floor: floor, p_hp: hpMax, p_mp: eff.mp_max }))
       if (error || data?.error) { setMsg(data?.error || error?.message || '連戦を開始できませんでした'); return }
+      setBossShot(null)
       setRunInfo({ floor, stage: 0, hp: hpMax, mp: eff.mp_max, potionUsed: 0 })
       setScene('battle')
     } catch (e) {
@@ -354,6 +356,8 @@ export default function Tower() {
       // 連戦の途中でも毎戦チェックする（別端末で釣りを始める等の抜け道を塞ぐ）
       if (await idleBlocked()) return
       const stage = runInfo.stage
+      // 立ち絵はエリアボス戦の間だけ出す。強敵を倒した直後に次がボスでも、まだ出さない
+      setBossShot(BOSS_RUN_STAGES[stage]?.kind === 'boss' ? runInfo.floor : null)
       const enemies = buildStageEnemies(fd, stage)
       // アイテムは街の出撃と同じく「1戦闘に1個」。連戦の各戦で使える（使うたび在庫は減る）
       const res = simulateTowerBattle({
@@ -392,7 +396,7 @@ export default function Tower() {
   const abortRun = async () => {
     if (!window.confirm('連戦を中断します。HPは回復せず、次はまた1戦目からになります。よろしいですか？')) return
     await supabase.rpc('tower_run_abort')
-    setRunInfo(null); setScene('lobby'); setLogs([]); setGain(null)
+    setRunInfo(null); setScene('lobby'); setLogs([]); setGain(null); setBossShot(null)
     await fetchStatus()
   }
 
@@ -462,21 +466,21 @@ export default function Tower() {
             {inRun && <span style={{ color: C.gold, marginLeft: '8px' }}>エリアボスへの道 {runInfo.stage + 1}/{BOSS_RUN_STAGES.length}（{stageLabel}）</span>}
           </div>
           {!busy && (
-            <button onClick={() => { setScene('lobby'); setLogs([]); setGain(null) }} style={btn(C.dim)}>← 戻る</button>
+            <button onClick={() => { setScene('lobby'); setLogs([]); setGain(null); setBossShot(null) }} style={btn(C.dim)}>← 戻る</button>
           )}
         </div>
 
-        {/* 立ち絵はエリアボス戦だけ。道中や強敵では出さない（画像が無い層も出さない） */}
-        {inRun && BOSS_RUN_STAGES[runInfo.stage]?.kind === 'boss' && !imgFail[runInfo.floor] && (
+        {/* 立ち絵はエリアボスと戦っている間だけ。道中や強敵の結果画面では出さない（画像が無い層も出さない） */}
+        {bossShot && !imgFail[bossShot] && (
           <div style={{ textAlign: 'center', marginBottom: '8px' }}>
             <img
-              src={`/tou/${runInfo.floor}sou.png`}
-              alt={getFloor(runInfo.floor)?.boss || ''}
-              onError={() => setImgFail(s => ({ ...s, [runInfo.floor]: true }))}
+              src={`/tou/${bossShot}sou.png`}
+              alt={getFloor(bossShot)?.boss || ''}
+              onError={() => setImgFail(s => ({ ...s, [bossShot]: true }))}
               style={{ maxWidth: '100%', maxHeight: '34vh', objectFit: 'contain', filter: 'drop-shadow(0 0 12px rgba(127,212,255,0.25))' }}
             />
             <div style={{ color: C.gold, fontSize: '12px', marginTop: '2px' }}>
-              {getFloor(runInfo.floor)?.boss}
+              {getFloor(bossShot)?.boss}
             </div>
           </div>
         )}
@@ -507,7 +511,7 @@ export default function Tower() {
             </>
           )}
           {!inRun && (
-            <button onClick={() => { setScene('lobby'); setLogs([]); setGain(null) }} style={bigBtn(C.accent)}>
+            <button onClick={() => { setScene('lobby'); setLogs([]); setGain(null); setBossShot(null) }} style={bigBtn(C.accent)}>
               ← 戦闘エリアの選択へ戻る
             </button>
           )}

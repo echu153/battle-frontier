@@ -711,6 +711,24 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
   // minDmgPct: 防御無視の最低ダメージ保証（相手最大HPの割合）。戦争で戦闘力差があっても少し通す用。0=無効。
   const ctx = { logs, turn: 1, atkDmgMult: opts.atkDmgMult ?? 1, dotMult: opts.dotMult ?? 1, healMult: opts.healMult ?? 1, minDmgPct: opts.minDmgPct ?? 0 }
 
+  // 戦闘状況（HP/MPバー）は1ターンごとではなく「1回の行動ごと」に出す。
+  let lastHpSig = ''
+  const pushHp = () => {
+    // 直前と全く同じ状況なら出さない
+    const sig = `${A.hp}/${A.mp}/${B.hp}/${B.mp}`
+    if (sig === lastHpSig && logs[logs.length-1]?.type === 'hp') return
+    lastHpSig = sig
+    logs.push({
+      type: 'hp', turn: ctx.turn,
+      playerHp: Math.max(0, A.hp), playerMax: A.eff.hp_max, playerName: A.profile.username,
+      enemyHp: Math.max(0, B.hp), enemyMax: B.eff.hp_max, enemyName: B.profile.username,
+      playerMp: Math.max(0, A.mp), playerMpMax: A.eff.mp_max,
+      enemyMp: Math.max(0, B.mp), enemyMpMax: B.eff.mp_max,
+      playerStatus: extractStatuses(A.buffs), enemyStatus: extractStatuses(B.buffs),
+      petHp: A.petActive ? Math.max(0, A.petHp) : null, petMax: A.petActive ? A.petMaxHp : null,
+    })
+  }
+
   while (A.hp > 0 && B.hp > 0 && ctx.turn <= turnCap) {
     // 先攻＝素早さが速い方（完全同値はランダム）
     const aSpd = A.effectiveSpdForCalc * (A.buffs.spdUp ? A.buffs.spdUp.rate : 1)
@@ -728,22 +746,19 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
 
     // 行動（先攻→後攻）
     const first = order[0], second = order[1]
-    if (takeTurn(first, second, ctx) || second.hp <= 0) break
-    if (takeTurn(second, first, ctx) || first.hp <= 0) break
+    const firstEnded = takeTurn(first, second, ctx)
+    pushHp()
+    if (firstEnded || second.hp <= 0) break
+    const secondEnded = takeTurn(second, first, ctx)
+    pushHp()
+    if (secondEnded || first.hp <= 0) break
 
     // ターン終了: バフ更新
     endTurnBuffs(A, ctx, aHpBefore)
     endTurnBuffs(B, ctx, bHpBefore)
 
-    logs.push({
-      type: 'hp', turn: ctx.turn,
-      playerHp: Math.max(0, A.hp), playerMax: A.eff.hp_max, playerName: A.profile.username,
-      enemyHp: Math.max(0, B.hp), enemyMax: B.eff.hp_max, enemyName: B.profile.username,
-      playerMp: Math.max(0, A.mp), playerMpMax: A.eff.mp_max,
-      enemyMp: Math.max(0, B.mp), enemyMpMax: B.eff.mp_max,
-      playerStatus: extractStatuses(A.buffs), enemyStatus: extractStatuses(B.buffs),
-      petHp: A.petActive ? Math.max(0, A.petHp) : null, petMax: A.petActive ? A.petMaxHp : null,
-    })
+    // ターンの終わりの状況
+    pushHp()
     ctx.turn++
   }
 

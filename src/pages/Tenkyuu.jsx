@@ -719,6 +719,20 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     playerHp = 0
   }
 
+    // 戦闘状況（HP/MPバー）は1ターンごとではなく「1回の行動ごと」に出す。
+    let lastHpSig = ''
+    const pushHp = () => {
+      // 直前と全く同じ状況なら出さない
+      const sig = `${playerHp}/${enemyHp}`
+      if (sig === lastHpSig && logs[logs.length-1]?.type === 'hp') return
+      lastHpSig = sig
+      const twinBars = twin ? [
+        { name:'カストル', hp:Math.max(0,twin.c.hp), max:twin.c.max, down:twin.c.down },
+        { name:'ポルックス', hp:Math.max(0,twin.p.hp), max:twin.p.max, down:twin.p.down },
+      ] : undefined
+      logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:profile.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:twin ? (twin.c.max+twin.p.max) : enemyMaxHp, enemyName:enemy.name, twin:twinBars, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
+    }
+
   while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
     const hpBeforeTurn = playerHp  // 雷鋼の機神鎧: このターンに被ダメしたか判定用
     if (passiveNames.includes('骸の壁') && (turn === 1 || turn % 4 === 0)) {
@@ -881,10 +895,11 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     if (!playerSkipped) {
       tenkaiActedThisTurn = false
       doPlayerAttack(false)
+      pushHp()
       if (enemyHp <= 0) break
       const spiritExtra = !!playerBuffs.guaranteedExtra  // 精霊共鳴の確定追加行動
       if (playerBuffs.guaranteedExtra) playerBuffs.guaranteedExtra = false
-      if (!tenkaiActedThisTurn && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) { doPlayerAttack(true); if (enemyHp <= 0) break }
+      if (!tenkaiActedThisTurn && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) { doPlayerAttack(true); pushHp(); if (enemyHp <= 0) break }
     }
 
     // 敵のターン
@@ -960,11 +975,8 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       playerBuffs.ailmentShield = { charges: 1 }
       logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color:'#66ccff' })
     }
-    const twinBars = twin ? [
-      { name:'カストル', hp:Math.max(0,twin.c.hp), max:twin.c.max, down:twin.c.down },
-      { name:'ポルックス', hp:Math.max(0,twin.p.hp), max:twin.p.max, down:twin.p.down },
-    ] : undefined
-    logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:profile.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:twin ? (twin.c.max+twin.p.max) : enemyMaxHp, enemyName:enemy.name, twin:twinBars, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
+    // 敵の行動が終わった時点の状況
+    pushHp()
     turn++
   }
 

@@ -672,6 +672,16 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
 
   // 敵の1度きり復活（30階=enemy.revive: 最大HP50%で復活し全ステ2倍）に対応するため外側ループで再入場する。
   while (true) {
+    // 戦闘状況（HP/MPバー）は1ターンごとではなく「1回の行動ごと」に出す。
+    let lastHpSig = ''
+    const pushHp = () => {
+      // 直前と全く同じ状況なら出さない
+      const sig = `${playerHp}/${enemyHp}`
+      if (sig === lastHpSig && logs[logs.length-1]?.type === 'hp') return
+      lastHpSig = sig
+      logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:eff.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
+    }
+
   while (playerHp > 0 && enemyHp > 0 && turn <= turnCap) {
     const hpBeforeTurn = playerHp  // 雷鋼の機神鎧: このターンに被ダメしたか判定用
     if (passiveNames.includes('骸の壁') && (turn === 1 || turn % 4 === 0)) {
@@ -784,10 +794,11 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     if (!playerSkipped) {
       tenkaiActedThisTurn = false
       doPlayerAttack(false)
+      pushHp()
       if (enemyHp <= 0) break
       const spiritExtra = !!playerBuffs.guaranteedExtra  // 精霊共鳴の確定追加行動
       if (playerBuffs.guaranteedExtra) playerBuffs.guaranteedExtra = false
-      if (!tenkaiActedThisTurn && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) { doPlayerAttack(true); if (enemyHp <= 0) break }
+      if (!tenkaiActedThisTurn && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) { doPlayerAttack(true); pushHp(); if (enemyHp <= 0) break }
     }
 
     // 敵のターン
@@ -849,7 +860,8 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       playerBuffs.ailmentShield = { charges: 1 }
       logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color:'#66ccff' })
     }
-    logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:eff.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
+    // 敵の行動が終わった時点の状況
+    pushHp()
     turn++
   }
   // ── 1度きりの復活（enemy.revive）: HP0だが復活が残り、プレイヤー生存・ターン上限内なら復活 ──
