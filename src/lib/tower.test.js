@@ -359,3 +359,17 @@ test('狙い方の設定先とタワーが読むセットが一致している',
   assert.equal(links, reads, 'スキル設定へのリンクが、タワーが読むセットを開いていない')
   assert.ok(isTargetMode('hp_low') && isTargetMode('top'), '対象設定の値')
 })
+
+test('敵の強さのつまみが有効な範囲にある', async () => {
+  const { ENEMY_SKILL_POWER, ENEMY_ATK_POWER } = await import('./tower.js')
+  // 事故で極端な値が入ったまま出さないための歯止め
+  assert.ok(ENEMY_SKILL_POWER >= 1 && ENEMY_SKILL_POWER <= 3, `技威力のつまみ(${ENEMY_SKILL_POWER})が範囲外`)
+  assert.ok(ENEMY_ATK_POWER >= 1 && ENEMY_ATK_POWER <= 2, `攻撃力のつまみ(${ENEMY_ATK_POWER})が範囲外`)
+  // 実際に敵へ効いていること（つまみを上げたのに反映されない事故を防ぐ）
+  const { makeEnemy, TOWER_FLOORS } = await import('./tower.js')
+  const def = TOWER_FLOORS[0].floorBoss
+  assert.equal(makeEnemy(def).atk, Math.floor(def.atk * ENEMY_ATK_POWER), '攻撃力のつまみが敵に乗っていない')
+  const battle = (await import('node:fs')).readFileSync('src/lib/towerBattle.js', 'utf8')
+  assert.ok(battle.includes('(sk.mult || 1) * ENEMY_SKILL_POWER'), '技威力のつまみが敵スキルに乗っていない')
+  assert.ok(battle.includes("(sm.mult || 2.5) * ENEMY_SKILL_POWER"), '技威力のつまみが大技に乗っていない')
+})

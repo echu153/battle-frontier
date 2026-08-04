@@ -32,7 +32,7 @@ import {
   applyEquipmentEffects, ailmentShieldBlocks,
   executeSkill, extractStatuses, MULTI_HIT_SKILLS,
 } from '../pages/Game'
-import { makeEnemy, towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies, DEFAULT_TARGET_MODE } from './tower'
+import { makeEnemy, towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies, DEFAULT_TARGET_MODE, ENEMY_SKILL_POWER } from './tower'
 // 敵の組み立てとツリー換算は tower.js（純粋データ側）が正。ここから使う側のために再エクスポートする
 export { towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies }
 
@@ -676,7 +676,7 @@ export function simulateTowerBattle({
     const hits = sk.type === 'physical_multi' ? (sk.hits || 2) : 1
     let total = 0, anyCrit = false
     for (let h = 0; h < hits; h++) {
-      const r = damagePlayer(en, offStat * (sk.mult || 1), offStat, useStat, { defPen: sk.defPen })
+      const r = damagePlayer(en, offStat * (sk.mult || 1) * ENEMY_SKILL_POWER, offStat, useStat, { defPen: sk.defPen })
       if (!r) continue
       total += r.dmg; if (r.isCrit) anyCrit = true
       if (playerHp <= 0) break
@@ -728,7 +728,7 @@ export function simulateTowerBattle({
     const eStats = enemyStats(en)
     const isMag = sm.type === 'magical'
     const off = isMag ? eStats.matk : eStats.atk
-    const r = damagePlayer(en, off * (sm.mult || 2.5), off, isMag ? 'matk' : 'atk')
+    const r = damagePlayer(en, off * (sm.mult || 2.5) * ENEMY_SKILL_POWER, off, isMag ? 'matk' : 'atk')
     logs.push({ text: `💥 ${en.name}の「${sm.name}」！ あなたに${r?.dmg || 0}ダメージ！`, color: '#ff2200' })
     if (playerHp <= 0) return
     if (sm.defDownRate) { playerBuffs.defDown = { turns: sm.turns || 3, rate: sm.defDownRate }; logs.push({ text: `🔻 防御力が大きく下がった…`, color: '#88aaff' }) }

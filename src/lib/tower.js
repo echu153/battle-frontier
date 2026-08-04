@@ -24,6 +24,18 @@ export const sortiesToMidBoss = (floor) => 30 + floor * 10
 // 強敵の出現率（しきい値到達後の出撃ごと・天井なし）
 export const MID_BOSS_RATE = 0.05
 
+// 敵の技の威力をまとめて上げ下げするつまみ（2026-08-04追加）。
+//  1.0 = 各敵データの mult をそのまま使う。1.5 なら全ての技が1.5倍の威力になる。
+//  ⚠敵のステータス自体は動かさない。ステを一律で伸ばすと体感難易度が倍率の約3乗で
+//    跳ね上がるが、技の威力だけならほぼ線形に効くので調整しやすい。
+//  ⚠通常攻撃には掛からない（技を持たない雑魚が置いていかれないように）。
+export const ENEMY_SKILL_POWER = 1.5
+
+// 敵の攻撃力・特殊攻撃力だけをまとめて上げ下げするつまみ（2026-08-04追加）。
+//  防御やHPは動かさないので「削り切るまでのターン数」は変わらず、被ダメージだけが増える
+//  ＝連戦の消耗が効くようになる。
+export const ENEMY_ATK_POWER = 1.3
+
 // 出撃1回で得られるGold（2026-08-03確定）。
 // 敵データの gold は調整用シミュレータの仮値で、街の出撃の何十倍もあり
 // 経済を壊すため、出撃では使わずこの式で固定する。強敵に当たっても同額。
@@ -599,9 +611,9 @@ export function makeEnemy(def, opts = {}) {
     name: opts.name || def.name,
     hp: Math.max(1, Math.floor(def.hp * hpRate * (opts.scaleHpByStat ? statRate : 1))),
     maxHp: Math.max(1, Math.floor(def.hp * hpRate * (opts.scaleHpByStat ? statRate : 1))),
-    atk: Math.floor((def.atk || 0) * statRate),
+    atk: Math.floor((def.atk || 0) * statRate * ENEMY_ATK_POWER),
     def: Math.floor((def.def || 0) * statRate),
-    matk: Math.floor((def.matk || 0) * statRate),
+    matk: Math.floor((def.matk || 0) * statRate * ENEMY_ATK_POWER),
     mdef: Math.floor((def.mdef || 0) * statRate),
     spd: Math.max(1, Math.floor((def.spd || 1) * statRate)),
     type: def.type || 'physical',
