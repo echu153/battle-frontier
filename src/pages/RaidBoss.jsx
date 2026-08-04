@@ -360,7 +360,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           }
           totalDamage += finalDmg
           // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封印中は無効）
-          { const emDrain = emblemDrainAmount(eff, finalDmg, skillPhysical); if (emDrain > 0 && !isHealBlocked) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text: `💠 紋章の吸収！ HPが${fmt(emDrain)}回復！`, color: '#66ddff' }) } }
+          { const emKind = (skillPhysical) ? '物理' : '特殊'; const emDrain = emblemDrainAmount(eff, finalDmg, skillPhysical); if (emDrain > 0 && !isHealBlocked) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text: `💠 ${emKind}吸収により${fmt(emDrain)}回復！`, color: '#66ddff' }) } }
           if (!isHealBlocked) {
             const healAmt = Math.floor(res.heal * passiveHealMult * (playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1))  // ルミナ等の回復力アップを反映
             playerHp = Math.min(eff.hp_max, playerHp + healAmt)
@@ -445,7 +445,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         }
         totalDamage += finalDmg
         // 紋章: 物理/特殊吸収
-        { const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healBlock?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text: `💠 紋章の吸収！ HPが${fmt(emDrain)}回復！`, color: '#66ddff' }) } }
+        { const emKind = (!isMagical) ? '物理' : '特殊'; const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healBlock?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text: `💠 ${emKind}吸収により${fmt(emDrain)}回復！`, color: '#66ddff' }) } }
         const critText = isCrit ? ' 💥クリティカル！' : ''
         logs.push({ text: `${prefix}あなたの攻撃！ ${bossName}に${fmt(finalDmg)}ダメージ！${critText}`, color: isCrit ? '#ff4444' : '#ffcc00' })
         if (expandedSkillSet.length > 0) skillIndex++

@@ -296,7 +296,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
         if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
         enemyHp -= finalDmg
         // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封じ中は無効）
-        { const emDrain = Math.floor(emblemDrainAmount(eff, finalDmg, isPhysSkill) * hellHealMult); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text:`💠 紋章の吸収！ HPが${emDrain}回復！`, color:'#66ddff' }) } }
+        { const emKind = (isPhysSkill) ? '物理' : '特殊'; const emDrain = Math.floor(emblemDrainAmount(eff, finalDmg, isPhysSkill) * hellHealMult); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text:`💠 ${emKind}吸収により${emDrain}回復！`, color:'#66ddff' }) } }
         if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks+1)
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
           enemyBuffs.healDown = { turns: 2, rate: 0.7 }
@@ -389,7 +389,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
       let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*iaiNormalMult*rokkanMultN*enemyDmgReduceMult2*hellDR*typeTakenMult(!isMagical)*emblemDmgMult(eff, !isMagical)*(0.9+Math.random()*0.2))
       enemyHp -= finalDmg
       // 紋章: 物理/特殊吸収
-      { const emDrain = Math.floor(emblemDrainAmount(eff, finalDmg, !isMagical) * hellHealMult); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text:`💠 紋章の吸収！ HPが${emDrain}回復！`, color:'#66ddff' }) } }
+      { const emKind = (!isMagical) ? '物理' : '特殊'; const emDrain = Math.floor(emblemDrainAmount(eff, finalDmg, !isMagical) * hellHealMult); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text:`💠 ${emKind}吸収により${emDrain}回復！`, color:'#66ddff' }) } }
       if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
         enemyBuffs.healDown = { turns: 2, rate: 0.7 }
         logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })

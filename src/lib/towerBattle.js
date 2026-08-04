@@ -423,7 +423,7 @@ export function simulateTowerBattle({
         target.hp -= finalDmg
         if (target.mods?.adapt && finalDmg > 0) target.lastPlayerSkill = cs.skills.name
 
-        { const emDrain = emblemDrainAmount(eff, finalDmg, isPhysSkill); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + Math.floor(emDrain * healOutMult())); logs.push({ text: `💠 紋章の吸収！ HPが${emDrain}回復！`, color: '#66ddff' }) } }
+        { const emKind = (isPhysSkill) ? '物理' : '特殊'; const emDrain = emblemDrainAmount(eff, finalDmg, isPhysSkill); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + Math.floor(emDrain * healOutMult())); logs.push({ text: `💠 ${emKind}吸収により${emDrain}回復！`, color: '#66ddff' }) } }
         if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks + 1)
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
           enemyBuffs.healDown = { turns: 2, rate: 0.7 }
@@ -519,7 +519,7 @@ export function simulateTowerBattle({
       seimitsuStacks = 0; prevSkillName = null
       const finalDmg = Math.floor(baseDmg * 0.7 * critMult * (isArtifact ? 1.3 : 1.0) * passiveDmgMult * iaiNormalMult * rokkanMultN * enemyDmgReduceMult2 * emblemDmgMult(eff, !isMagical) * towerMult * (0.9 + Math.random() * 0.2))
       target.hp -= finalDmg
-      { const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + Math.floor(emDrain * healOutMult())); logs.push({ text: `💠 紋章の吸収！ HPが${emDrain}回復！`, color: '#66ddff' }) } }
+      { const emKind = (!isMagical) ? '物理' : '特殊'; const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + Math.floor(emDrain * healOutMult())); logs.push({ text: `💠 ${emKind}吸収により${emDrain}回復！`, color: '#66ddff' }) } }
       evoOnHit(eff, finalDmg, enemyBuffs, target.name, logs, isCrit)
       logs.push({ text: `${prefix}${isCrit ? '💥クリティカル！ ' : ''}攻撃！ ${target.name}に${finalDmg}ダメージ！`, color: '#ffcc00' })
       if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {

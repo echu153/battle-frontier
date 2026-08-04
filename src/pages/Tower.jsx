@@ -153,7 +153,6 @@ export default function Tower() {
   const cdRef = useRef(null)
 
   useEffect(() => { init() }, [])
-  useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [logs])
 
   // 出撃クールダウンのカウントダウン
   useEffect(() => {
@@ -463,7 +462,7 @@ export default function Tower() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
           <div style={{ color: C.accent, fontSize: '13px' }}>
             {floorLabel(inRun ? runInfo.floor : selFloor)}
-            {inRun && <span style={{ color: C.gold, marginLeft: '8px' }}>エリアボスへの道 {runInfo.stage + 1}/{BOSS_RUN_STAGES.length}（{stageLabel}）</span>}
+            {inRun && <span style={{ color: C.gold, marginLeft: '8px' }}>エリアボスへの道 {runInfo.stage}/{BOSS_RUN_STAGES.length} 突破 ─ 次は {stageLabel}</span>}
           </div>
           {!busy && (
             <button onClick={() => { setScene('lobby'); setLogs([]); setGain(null); setBossShot(null) }} style={btn(C.dim)}>← 戻る</button>
@@ -554,7 +553,7 @@ export default function Tower() {
         <>
           {runInfo && (
             <div style={{ border: `1px solid ${C.gold}`, background: '#181203', padding: '10px', marginBottom: '10px' }}>
-              <div style={{ color: C.gold, fontSize: '12px' }}>⚔ {floorLabel(runInfo.floor)} の連戦が進行中（{BOSS_RUN_STAGES[runInfo.stage]?.label}）</div>
+              <div style={{ color: C.gold, fontSize: '12px' }}>⚔ {floorLabel(runInfo.floor)} の連戦が進行中（{runInfo.stage}/{BOSS_RUN_STAGES.length} 突破 ─ 次は {BOSS_RUN_STAGES[runInfo.stage]?.label}）</div>
               <div style={{ color: C.dim, fontSize: '10px', margin: '4px 0 8px' }}>HP {fmt(runInfo.hp)} ／ MP {fmt(runInfo.mp)} の状態から再開します。</div>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <button onClick={() => setScene('battle')} style={btn(C.gold)}>続きから</button>

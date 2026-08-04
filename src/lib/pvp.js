@@ -382,7 +382,7 @@ function doAttack(att, def, isExtra, ctx) {
       if (res.selfDmg > 0) att.hp = Math.max(0, att.hp - res.selfDmg)
       dealToDef(finalDmg)
       // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封じ中は無効）
-      { const emDrain = emblemDrainAmount(eff, finalDmg, isPhysSkill); if (emDrain > 0 && !(attBuffs.healSeal?.turns > 0)) { att.hp = Math.min(eff.hp_max, att.hp + emDrain); logs.push({ text: `💠 紋章の吸収！ HPが${emDrain}回復！`, color: '#66ddff' }) } }
+      { const emKind = (isPhysSkill) ? '物理' : '特殊'; const emDrain = emblemDrainAmount(eff, finalDmg, isPhysSkill); if (emDrain > 0 && !(attBuffs.healSeal?.turns > 0)) { att.hp = Math.min(eff.hp_max, att.hp + emDrain); logs.push({ text: `💠 ${emKind}吸収により${emDrain}回復！`, color: '#66ddff' }) } }
       evoOnHit(eff, finalDmg, res.newEnemyBuffs, enemyName, logs, isMulti ? multiCritAny : finalCrit)  // 真化: 攻撃ヒット時の敵デバフ（res.newEnemyBuffsに書く＝置換で消えない）
       // ★直接付与する相手デバフは res.newEnemyBuffs に書く（下で def.buffs = res.newEnemyBuffs に置換されるため、
       //   defBuffs(旧オブジェクト)に書くと捨てられてアイコンも効果も消える）
@@ -475,7 +475,7 @@ function doAttack(att, def, isExtra, ctx) {
     if (minDmg > 0) finalDmg = Math.max(finalDmg, minDmg)  // 戦争: 防御無視の最低ダメージ保証
     dealToDef(finalDmg)
     // 紋章: 物理/特殊吸収
-    { const emDrain = emblemDrainAmount(eff, finalDmg, !att.isMagical); if (emDrain > 0 && !(attBuffs.healSeal?.turns > 0)) { att.hp = Math.min(eff.hp_max, att.hp + emDrain); logs.push({ text: `💠 紋章の吸収！ HPが${emDrain}回復！`, color: '#66ddff' }) } }
+    { const emKind = (!att.isMagical) ? '物理' : '特殊'; const emDrain = emblemDrainAmount(eff, finalDmg, !att.isMagical); if (emDrain > 0 && !(attBuffs.healSeal?.turns > 0)) { att.hp = Math.min(eff.hp_max, att.hp + emDrain); logs.push({ text: `💠 ${emKind}吸収により${emDrain}回復！`, color: '#66ddff' }) } }
     const prevDefBuffsN = { ...defBuffs }  // 哭雨の羽衣: 新規状態異常の差分検知用
     evoOnHit(eff, finalDmg, defBuffs, enemyName, logs, isCrit)  // 真化: 通常攻撃ヒット時の敵デバフ（通常攻撃はdef.buffs置換なし）
     consumeAilmentShield(prevDefBuffsN, defBuffs, logs)
