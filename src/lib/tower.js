@@ -36,6 +36,17 @@ export const ENEMY_SKILL_POWER = 1.5
 //  ＝連戦の消耗が効くようになる。
 export const ENEMY_ATK_POWER = 1.3
 
+// 道中の雑魚だけ別枠で強くする（2026-08-04）。強敵・エリアボスには掛からない。
+//  連戦は雑魚戦から始まるので、ここが緩いと最後まで無傷で到達できてしまう。
+export const MOB_ATK_POWER = 2.0
+
+// 敵が受けるダメージの倍率（＝プレイヤーの与ダメージ）。
+//  プレイヤーの火力が敵のHPに対して高すぎたため絞る。1.0で等倍・0.7で3割減。
+//  ⚠敵のHPは増やさない。HPを増やすと与ダメージ割合回復（血の狂気・紋章の吸収など）が
+//    そのぶん伸びてしまい、体感が変わらないため。
+export const ENEMY_DMG_TAKEN = 0.7   // 強敵・エリアボス
+export const MOB_DMG_TAKEN   = 0.5   // 道中の雑魚
+
 // 出撃1回で得られるGold（2026-08-03確定）。
 // 敵データの gold は調整用シミュレータの仮値で、街の出撃の何十倍もあり
 // 経済を壊すため、出撃では使わずこの式で固定する。強敵に当たっても同額。
@@ -611,12 +622,14 @@ export function makeEnemy(def, opts = {}) {
     name: opts.name || def.name,
     hp: Math.max(1, Math.floor(def.hp * hpRate * (opts.scaleHpByStat ? statRate : 1))),
     maxHp: Math.max(1, Math.floor(def.hp * hpRate * (opts.scaleHpByStat ? statRate : 1))),
-    atk: Math.floor((def.atk || 0) * statRate * ENEMY_ATK_POWER),
+    atk: Math.floor((def.atk || 0) * statRate * (opts.isBoss ? ENEMY_ATK_POWER : MOB_ATK_POWER)),
     def: Math.floor((def.def || 0) * statRate),
-    matk: Math.floor((def.matk || 0) * statRate * ENEMY_ATK_POWER),
+    matk: Math.floor((def.matk || 0) * statRate * (opts.isBoss ? ENEMY_ATK_POWER : MOB_ATK_POWER)),
     mdef: Math.floor((def.mdef || 0) * statRate),
     spd: Math.max(1, Math.floor((def.spd || 1) * statRate)),
     type: def.type || 'physical',
+    // この敵が受けるダメージの倍率（強敵・エリアボスと雑魚で別）
+    dmgTaken: opts.isBoss ? ENEMY_DMG_TAKEN : MOB_DMG_TAKEN,
     gold: Math.floor((def.gold || 0) * (opts.goldRate ?? 1)),
     skills: def.skills || [],
     mods: def.mods || {},

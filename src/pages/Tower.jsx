@@ -17,7 +17,7 @@ import {
   getFloor, MAX_IMPLEMENTED_FLOOR, BOSS_RUN_STAGES,
   TREE_NODES, TREE_LINES, TREE_MAX_STEPS, stepPctOf,
   maxStepsAt, nextUnlock, treeSpent, treeResetCost,
-  MID_BOSS_RATE, isMonumentFloor, RUN_POTION_LIMIT,
+  MID_BOSS_RATE, isMonumentFloor, RUN_POTION_LIMIT, makeEnemy,
 } from '../lib/tower'
 import { simulateTowerBattle, buildStageEnemies, buildSortieEnemies, towerTreeEffects } from '../lib/towerBattle'
 
@@ -166,6 +166,9 @@ export default function Tower() {
   const [treeDraft, setTreeDraft] = useState(null)
   const [imgFail, setImgFail] = useState({})   // 画像が無い層は文字だけに戻す
   const [bossShot, setBossShot] = useState(null)   // 立ち絵を出す層（エリアボス戦を表示している間だけ入る）
+  // 開発用のテスト対戦（is_admin限定）。相手を選んで1戦だけ試す
+  const [devFloor, setDevFloor] = useState(1)
+  const [devTarget, setDevTarget] = useState('boss')
   const [targetOptions, setTargetOptions] = useState([])   // 狙う相手（スキル設定画面で決める）
   const [playerItem, setPlayerItem] = useState(null)       // 装備中のアイテム（タワーでも街と同じく使える）
   const logsEndRef = useRef(null)
@@ -427,6 +430,31 @@ export default function Tower() {
     } finally { busyRef.current = false; setBusy(false) }
   }
 
+  // ── 開発用：相手を選んで1戦だけ試す ──────────────────────
+  //   ローカルで戦闘を回すだけ。RPCは呼ばず、報酬・進行・クールダウンに一切触らない。
+  const devFight = () => {
+    if (busy || busyRef.current) return
+    const fd = getFloor(devFloor)
+    if (!fd) return
+    busyRef.current = true
+    setBusy(true); setLogs([]); setMsg(null); setGain(null)
+    try {
+      let enemies
+      if (devTarget === 'boss') enemies = buildStageEnemies(fd, BOSS_RUN_STAGES.length - 1)
+      else if (devTarget === 'mid') enemies = [makeEnemy(fd.midBoss, { isBoss: true })]
+      else if (devTarget === 'mobs3') enemies = buildStageEnemies(fd, 3)
+      else enemies = [makeEnemy(fd.enemies[Number(devTarget)] || fd.enemies[0])]
+      setBossShot(devTarget === 'boss' ? devFloor : null)
+      const res = simulateTowerBattle({
+        eff: buildEff(), equipment, skillSets, profile,
+        enemies, floorData: fd, tree: treeAlloc, targetMode, playerItem,
+      })
+      setLogs(res.logs)
+      setGain({ win: res.win, gold: 0, exp: 0, towerExp: 0, dev: true })
+      setScene('battle')
+    } finally { busyRef.current = false; setBusy(false) }
+  }
+
   const abortRun = async () => {
     if (!window.confirm('連戦を中断します。HPは回復せず、次はまた1戦目からになります。よろしいですか？')) return
     await supabase.rpc('tower_run_abort')
@@ -662,6 +690,38 @@ export default function Tower() {
                   style={bigBtn(C.accent, busy || !sel.mid_defeated)}>
                   {sel.mid_defeated ? '🗼 エリアボスに挑む' : '🗼 エリアボスに挑む（強敵撃破が必要）'}
                 </button>
+
+                {/* 開発用：相手を選んで1戦だけ試す。is_admin のみ。
+                    ローカルで戦闘を回すだけで、報酬・進行・クールダウンには一切触らない */}
+                {profile?.is_admin && (
+                  <div style={{ border: '1px dashed #8a60ff', background: '#0e0820', padding: '10px', margin: '10px 0' }}>
+                    <div style={{ color: '#c8a0ff', fontSize: '11px', marginBottom: '6px' }}>
+                      🧪 テスト対戦 <span style={{ fontSize: '9px', color: '#8877aa' }}>[開発]</span>
+                      <span style={{ color: C.dim, marginLeft: '6px' }}>報酬なし・進行に影響しません</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <select value={devFloor} onChange={e => setDevFloor(Number(e.target.value))}
+                        style={{ background: '#001028', border: '1px solid #6a44aa', color: '#c8a0ff', padding: '6px', fontFamily: 'monospace', fontSize: '11px' }}>
+                        {Array.from({ length: MAX_IMPLEMENTED_FLOOR }, (_, i) => i + 1).map(n => (
+                          <option key={n} value={n}>{floorLabel(n)}</option>
+                        ))}
+                      </select>
+                      <select value={devTarget} onChange={e => setDevTarget(e.target.value)}
+                        style={{ background: '#001028', border: '1px solid #6a44aa', color: '#c8a0ff', padding: '6px', fontFamily: 'monospace', fontSize: '11px', flex: 1, minWidth: '160px' }}>
+                        <option value="boss">エリアボス（取り巻き込み）</option>
+                        <option value="mid">強敵</option>
+                        <option value="mobs3">雑魚3体</option>
+                        {(getFloor(devFloor)?.enemies || []).map((e, i) => (
+                          <option key={i} value={String(i)}>雑魚: {e.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button onClick={devFight} disabled={busy}
+                      style={{ ...bigBtn('#c8a0ff', busy), marginTop: '8px' }}>
+                      {busy ? '⏳ 戦闘中...' : '🧪 この相手と戦う'}
+                    </button>
+                  </div>
+                )}
 
                 <div style={{ color: C.dim, fontSize: '10px', lineHeight: '1.7' }}>
                   出撃を重ねると、やがて強敵が現れるようになります。<br />

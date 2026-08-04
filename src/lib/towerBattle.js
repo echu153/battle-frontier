@@ -174,7 +174,8 @@ export function simulateTowerBattle({
 
   // 敵が受けるダメージの倍率（装甲・三頭・暴走の軽減）
   const enemyTakenMult = (en, isPhys) => {
-    let m = 1
+    // ★敵ごとの被ダメージ倍率（雑魚は半分・強敵/エリアボスは7割）。makeEnemy が持たせる
+    let m = en.dmgTaken ?? 1
     const mods = en.mods || {}
     if (isPhys && mods.physTakenMult) m *= mods.physTakenMult
     if (!isPhys && mods.magTakenMult) m *= mods.magTakenMult

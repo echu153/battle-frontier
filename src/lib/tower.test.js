@@ -368,8 +368,38 @@ test('敵の強さのつまみが有効な範囲にある', async () => {
   // 実際に敵へ効いていること（つまみを上げたのに反映されない事故を防ぐ）
   const { makeEnemy, TOWER_FLOORS } = await import('./tower.js')
   const def = TOWER_FLOORS[0].floorBoss
-  assert.equal(makeEnemy(def).atk, Math.floor(def.atk * ENEMY_ATK_POWER), '攻撃力のつまみが敵に乗っていない')
+  // 雑魚とボスでつまみが分かれているので、ボス側（isBoss）で確認する
+  assert.equal(makeEnemy(def, { isBoss: true }).atk, Math.floor(def.atk * ENEMY_ATK_POWER), '攻撃力のつまみがボスに乗っていない')
   const battle = (await import('node:fs')).readFileSync('src/lib/towerBattle.js', 'utf8')
   assert.ok(battle.includes('(sk.mult || 1) * ENEMY_SKILL_POWER'), '技威力のつまみが敵スキルに乗っていない')
   assert.ok(battle.includes("(sm.mult || 2.5) * ENEMY_SKILL_POWER"), '技威力のつまみが大技に乗っていない')
+})
+
+test('雑魚と強敵/エリアボスで強さのつまみが分かれている', async () => {
+  const t = await import('./tower.js')
+  const { MOB_ATK_POWER, ENEMY_ATK_POWER, MOB_DMG_TAKEN, ENEMY_DMG_TAKEN, makeEnemy, TOWER_FLOORS } = t
+  assert.ok(MOB_ATK_POWER >= 1 && MOB_ATK_POWER <= 4, `雑魚の火力(${MOB_ATK_POWER})が範囲外`)
+  assert.ok(MOB_DMG_TAKEN > 0 && MOB_DMG_TAKEN <= 1, `雑魚の被ダメ(${MOB_DMG_TAKEN})が範囲外`)
+  assert.ok(ENEMY_DMG_TAKEN > 0 && ENEMY_DMG_TAKEN <= 1, `ボスの被ダメ(${ENEMY_DMG_TAKEN})が範囲外`)
+  const fd = TOWER_FLOORS[0]
+  const mob = makeEnemy(fd.enemies[0])
+  const boss = makeEnemy(fd.floorBoss, { isBoss: true })
+  assert.equal(mob.atk, Math.floor(fd.enemies[0].atk * MOB_ATK_POWER), '雑魚に雑魚用の火力が乗っていない')
+  assert.equal(boss.atk, Math.floor(fd.floorBoss.atk * ENEMY_ATK_POWER), 'ボスにボス用の火力が乗っていない')
+  assert.equal(mob.dmgTaken, MOB_DMG_TAKEN)
+  assert.equal(boss.dmgTaken, ENEMY_DMG_TAKEN)
+  // 被ダメ倍率が戦闘エンジンで実際に使われていること
+  const battle = (await import('node:fs')).readFileSync('src/lib/towerBattle.js', 'utf8')
+  assert.ok(battle.includes('let m = en.dmgTaken ?? 1'), '被ダメ倍率が戦闘に反映されていない')
+})
+
+test('開発用のテスト対戦はサーバーに何も送らない', async () => {
+  const fs = await import('node:fs')
+  const s = fs.readFileSync('src/pages/Tower.jsx', 'utf8')
+  const i = s.indexOf('const devFight = () =>')
+  assert.ok(i > 0, 'テスト対戦が見つからない')
+  const body = s.slice(i, s.indexOf('const abortRun', i))
+  // 報酬・進行・クールダウンに一切触らないこと
+  assert.ok(!/supabase\./.test(body), 'テスト対戦がサーバーを呼んでいる')
+  assert.ok(s.includes('{profile?.is_admin && ('), 'テスト対戦が is_admin で閉じられていない')
 })
