@@ -22,13 +22,24 @@ export default function Ranking() {
   const [petRanking, setPetRanking] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState(null)
-  const [isAdmin, setIsAdmin] = useState(false)   // エンドレスタワーは開発限定なのでタブ自体を出さない
+  // エンドレスタワーは開発限定なのでタブ自体を出さない。null=判定中（この間はタブを出さず、
+  // 場所だけ確保しておく。後から1つ増えてタブが動くのを防ぐため）
+  const [isAdmin, setIsAdmin] = useState(null)
   const [tab, setTab] = useState('total')
 
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) setCurrentUserId(user.id)
+      // タブの数を先に確定させる。重い集計より先に投げて、タブが後から増えないようにする。
+      let admin = false
+      if (user) {
+        try {
+          const { data: me } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
+          admin = !!me?.is_admin
+        } catch { /* 取れなければ一般表示 */ }
+      }
+      setIsAdmin(admin)
       // ランキング集計除外アカウント（dev/テスト用）。列が無い環境でも落ちないよう握りつぶす。
       let excluded = new Set()
       try {
@@ -97,14 +108,10 @@ export default function Ranking() {
       setAbyssPlayers((Array.isArray(abyssData) ? abyssData : []).filter(p => !excluded.has(p.id)))
 
       // エンドレスタワー 到達エリアランキング（開発限定。SQL未適用の環境でも落ちないよう握りつぶす）
-      if (user) {
+      if (admin) {
         try {
-          const { data: me } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
-          if (me?.is_admin) {
-            setIsAdmin(true)
-            const { data: towerData } = await supabase.rpc('get_tower_ranking', { p_limit: 50 })
-            setTowerPlayers((Array.isArray(towerData) ? towerData : []).filter(p => !excluded.has(p.id)))
-          }
+          const { data: towerData } = await supabase.rpc('get_tower_ranking', { p_limit: 50 })
+          setTowerPlayers((Array.isArray(towerData) ? towerData : []).filter(p => !excluded.has(p.id)))
         } catch { /* 塔のSQL未適用なら出さないだけ */ }
       }
 
@@ -170,6 +177,15 @@ export default function Ranking() {
             { id:'museum', label:'🏛 寄贈数' }, { id:'medal', label:'🎫 メダル' }, { id:'pet', label:'🐾 ペット' },
           ]
           const cols = Math.ceil(tabs.length / 2)   // 必ず2行に収める
+          // 判定中は場所だけ確保して何も出さない。先に出してから塔のタブが増えると
+          // 他のタブの位置がずれて見えるため、全部そろってから同時に出す。
+          if (isAdmin === null) return (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'5px', marginBottom:'12px', visibility:'hidden' }}>
+              {[0, 1, 2, 3, 4, 5].map(i => (
+                <div key={i} style={{ padding:'7px 2px', fontFamily:'monospace', fontSize:'12px', border:'1px solid transparent' }}>　</div>
+              ))}
+            </div>
+          )
           return (
             <div style={{ display:'grid', gridTemplateColumns:`repeat(${cols}, 1fr)`, gap:'5px', marginBottom:'12px' }}>
               {tabs.map(t => (
