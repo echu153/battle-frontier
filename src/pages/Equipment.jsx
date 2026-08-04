@@ -1287,7 +1287,7 @@ export default function Equipment() {
             {pickConfirm?.kind === 'artifact' ? renderPickConfirm('#cc88ff', () => redeemArtifactBox(pickConfirm.name)) : (<>
             <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'14px', lineHeight:'1.5' }}>
               受け取るアーティファクト武器を1つ選んでください。<br/>
-              <span style={{ color:'#44ccff' }}>【特殊能力】{getEffectLabel('artifact')}</span><br/>
+              <span style={{ color:'#44ccff' }}>特殊能力: 【MP消費2倍・スキルダメージ1.3倍】</span><br/>
               <span style={{ color:'#ff8844' }}>選択すると箱を1個消費します。</span>
             </div>
             {artBoxGot && (
