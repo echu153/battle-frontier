@@ -116,7 +116,13 @@ export default function Skills() {
     })
     const { error } = await supabase.from('skill_set_options')
       .upsert({ player_id: profile.id, set_type: selectedSet, target_mode: mode }, { onConflict: 'player_id,set_type' })
-    if (error) setSetMessage('狙い方を保存できませんでした（supabase_skill_target_mode.sql が未実行かもしれません）')
+    if (error) {
+      // 原因の切り分け用にコードを残す（42P01=テーブルが無い / 42501=権限）
+      console.error('skill_set_options upsert failed', error)
+      setSetMessage(error.code === '42P01'
+        ? '狙い方の保存先がまだ用意されていません。運営にご連絡ください。'
+        : `狙い方を保存できませんでした（${error.code || error.message || '原因不明'}）`)
+    }
   }
 
   // 編集中クラスのスキルを候補プール(allSkills)へロードし、未習得を自動習得する。
