@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/IdleGuard'
 import { getWeaponGroup } from '../lib/stats'
-import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
+import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult, evoBlocksAilment, evoResistNewAilments } from '../lib/evoCombat'
 import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemResistNewAilments, emblemBlocksAilment } from '../lib/emblemCombat'
 import { petPlayerBonus } from '../constants/pets'
 import { loadCharmBonus, PET_STAT_SELECT } from '../lib/petBonus'
@@ -425,6 +425,11 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
         }
       }
       evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs, isCrit)
+      // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
+      if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
+        enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
+        logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
+      }
       const critText = isCrit ? '💥クリティカル！ ' : ''
       logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
       if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
@@ -543,8 +548,9 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     playerBuffs = res.newEnemyBuffs
     consumeAilmentShield(prevPlayerBuffs, playerBuffs, logs)  // 哭雨の羽衣: 新規状態異常を1回無効化
     emblemResistNewAilments(eff, prevPlayerBuffs, playerBuffs, logs)  // 紋章: 個別状態異常耐性
+    evoResistNewAilments(eff, prevPlayerBuffs, playerBuffs, logs)     // アクアクラウン(真化): 状態異常確率-5%
     // 確定出血（瞬歩瞬殺/鬼影閃）
-    if (def.guaranteedBleed && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'bleed', logs)) {
+    if (def.guaranteedBleed && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'bleed', logs) && !evoBlocksAilment(eff, 'bleed', logs)) {
       const b = playerBuffs.bleed
       playerBuffs.bleed = { stacks: Math.min(5, (b?.stacks || 0) + 1), lastTurn: 0 }
     }
@@ -603,14 +609,14 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
       playerHp = 0
       logs.push({ text:`☠ ${def.name}の追い打ち！ 致命の一撃で即死した…！`, color:'#ff0000' })
     }
-    if (def.stunGuaranteed && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'stun', logs)) { playerBuffs.stun = { turns:1 }; logs.push({ text:`⚡ スタンした！ 次のターン行動できない！`, color:'#ffaa00' }) }
-    if (def.healBlock && !ailmentShieldBlocks(playerBuffs, logs)) { playerBuffs.healSeal = { turns:999 }; logs.push({ text:`🚫 ${def.name}！ 以降あなたは回復できない！`, color:'#ff4488' }) }
+    if (def.stunGuaranteed && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'stun', logs) && !evoBlocksAilment(eff, 'stun', logs)) { playerBuffs.stun = { turns:1 }; logs.push({ text:`⚡ スタンした！ 次のターン行動できない！`, color:'#ffaa00' }) }
+    if (def.healBlock && !ailmentShieldBlocks(playerBuffs, logs) && !evoBlocksAilment(eff, 'healSeal', logs)) { playerBuffs.healSeal = { turns:999 }; logs.push({ text:`🚫 ${def.name}！ 以降あなたは回復できない！`, color:'#ff4488' }) }
     if (def.dispelPlayerBuffs) { playerBuffs = {}; logs.push({ text:`🌀 ${def.name}！ あなたの強化が全て消し去られた！`, color:'#cc66ff' }) }
     if (def.inflict) {
       for (const st of def.inflict) {
-        if (st === 'paralysis' && !(playerBuffs.paralysis?.turns > 0) && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'paralysis', logs)) playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }
-        if (st === 'burn' && !(playerBuffs.burn?.turns > 0) && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'burn', logs)) playerBuffs.burn = { turns:5, dmgRate:0.02 }
-        if (st === 'stun' && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'stun', logs)) playerBuffs.stun = { turns:1 }
+        if (st === 'paralysis' && !(playerBuffs.paralysis?.turns > 0) && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'paralysis', logs) && !evoBlocksAilment(eff, 'paralysis', logs)) playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }
+        if (st === 'burn' && !(playerBuffs.burn?.turns > 0) && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'burn', logs) && !evoBlocksAilment(eff, 'burn', logs)) playerBuffs.burn = { turns:5, dmgRate:0.02 }
+        if (st === 'stun' && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'stun', logs) && !evoBlocksAilment(eff, 'stun', logs)) playerBuffs.stun = { turns:1 }
       }
       logs.push({ text:`🌫 ${def.name}の状態異常！ 麻痺・やけど・スタンが付与された！`, color:'#aa66ff' })
     }

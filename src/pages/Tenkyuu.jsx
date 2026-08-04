@@ -4,7 +4,7 @@ import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/IdleGuard'
 import { reportDevAccess } from '../lib/devAccess'
 import { getWeaponGroup } from '../lib/stats'
-import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
+import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult, evoBlocksAilment } from '../lib/evoCombat'
 import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemResistNewAilments, emblemBlocksAilment } from '../lib/emblemCombat'
 import { petPlayerBonus } from '../constants/pets'
 import { loadCharmBonus, PET_STAT_SELECT } from '../lib/petBonus'
@@ -490,6 +490,11 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         }
       }
       evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs, isCrit)
+      // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
+      if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
+        enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
+        logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
+      }
       const critText = isCrit ? '💥クリティカル！ ' : ''
       logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
       if (finalDmg > 0) lastPlayerHitType = isMagical ? 'magical' : 'physical'
@@ -578,7 +583,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     if (playerHp <= 0) return
     // hitStun（獅子レグルス）。プレイヤーの状態異常無効/スタン耐性で防げる
     if (mods.hitStun && !(playerBuffs.statusImmune?.turns > 0)) {
-      if (Math.random() < mods.hitStun && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'stun', logs)) {
+      if (Math.random() < mods.hitStun && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'stun', logs) && !evoBlocksAilment(eff, 'stun', logs)) {
         playerBuffs.stun = { turns:1 }
         logs.push({ text:`⚡ ${enemy.name}の一撃でスタン！ 次のターン行動できない！`, color:'#ffaa00' })
       }
@@ -586,9 +591,9 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     // statusOnHit（乙女スピカ／天蠍アンタレス）
     if (mods.statusOnHit && mods.statusOnHit.length && !(playerBuffs.statusImmune?.turns > 0)) {
       const st = mods.statusOnHit[(turn - 1) % mods.statusOnHit.length]
-      if (st === 'poison'   && !(playerBuffs.poison?.turns > 0)    && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'poison', logs)) { playerBuffs.poison = { turns:5, dmgRate:0.04 }; logs.push({ text:`☠ ${enemy.name}の毒が回った！`, color:'#44ff44' }) }
-      if (st === 'burn'     && !(playerBuffs.burn?.turns > 0)      && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'burn', logs)) { playerBuffs.burn = { turns:5, dmgRate:0.02 }; logs.push({ text:`🔥 ${enemy.name}にやけどを負わされた！`, color:'#ff6622' }) }
-      if (st === 'paralysis'&& !(playerBuffs.paralysis?.turns > 0) && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'paralysis', logs)) { playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }; logs.push({ text:`⚡ ${enemy.name}に麻痺させられた！`, color:'#ffdd44' }) }
+      if (st === 'poison'   && !(playerBuffs.poison?.turns > 0)    && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'poison', logs) && !evoBlocksAilment(eff, 'poison', logs)) { playerBuffs.poison = { turns:5, dmgRate:0.04 }; logs.push({ text:`☠ ${enemy.name}の毒が回った！`, color:'#44ff44' }) }
+      if (st === 'burn'     && !(playerBuffs.burn?.turns > 0)      && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'burn', logs) && !evoBlocksAilment(eff, 'burn', logs)) { playerBuffs.burn = { turns:5, dmgRate:0.02 }; logs.push({ text:`🔥 ${enemy.name}にやけどを負わされた！`, color:'#ff6622' }) }
+      if (st === 'paralysis'&& !(playerBuffs.paralysis?.turns > 0) && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'paralysis', logs) && !evoBlocksAilment(eff, 'paralysis', logs)) { playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }; logs.push({ text:`⚡ ${enemy.name}に麻痺させられた！`, color:'#ffdd44' }) }
     }
     // bonusVsStatus（天蠍アンタレス：毒状態の敵に追撃）
     if (mods.bonusVsStatus && playerBuffs[mods.bonusVsStatus.st]?.turns > 0) {
@@ -753,7 +758,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     // healBlock（断絶アクベンス）: 回復阻害を付与
     if (mods.healBlock && !healBlockApplied) {
       healBlockApplied = true
-      if (!ailmentShieldBlocks(playerBuffs, logs)) {
+      if (!ailmentShieldBlocks(playerBuffs, logs) && !evoBlocksAilment(eff, 'healSeal', logs)) {
         playerBuffs.healSeal = { turns:999 }
         logs.push({ text:`🚫 ${enemy.name}の断絶！ あなたは回復できない！`, color:'#ff4488' })
       }

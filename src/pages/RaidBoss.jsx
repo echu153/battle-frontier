@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { getWeaponGroup } from '../lib/stats'
-import { evoOnHit, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
+import { evoOnHit, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult, evoBlocksAilment } from '../lib/evoCombat'
 import { BOSS_VARUZENOKU, BOSS_AMAZA, BOSS_ZERUGIASU, BOSS_ENMA, bossImage, bossColor } from '../lib/raidSchedule'
 import { emblemDmgMult, emblemDrainAmount, emblemBlocksAilment } from '../lib/emblemCombat'
 import { petPlayerBonus } from '../constants/pets'
@@ -486,7 +486,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         } else if (isZerugiasu) {
           // 神雷崩撃：本物の麻痺（10ターン・素早さ-20%＋25%で行動不能）。哭雨の羽衣で無効化可
           logs.push({ text: `${prefix}${bossName}の「神雷崩撃」！ ${fmt(specialDmg)}ダメージ！`, color: '#ffcc00' })
-          if (!ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'paralysis', logs)) {
+          if (!ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'paralysis', logs) && !evoBlocksAilment(eff, 'paralysis', logs)) {
             playerBuffs.paralysis = { turns: 10, skipRate: 0.25, spdRate: 0.8 }
             const paraSpd = Math.floor(effectiveSpdForCalc * 0.8)
             playerCritRate  = calcCritRate(paraSpd, BOSS_SPD) + passiveCritBonus + (eff.critBonus || 0)
@@ -497,7 +497,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         } else {
           // 暗黒侵食：回復無効を永続化。哭雨の羽衣で無効化可
           logs.push({ text: `${prefix}${bossName}の「暗黒侵食」！ ${fmt(specialDmg)}ダメージ！`, color: '#aa22ff' })
-          if (!ailmentShieldBlocks(playerBuffs, logs)) {
+          if (!ailmentShieldBlocks(playerBuffs, logs) && !evoBlocksAilment(eff, 'healSeal', logs)) {
             playerBuffs.healBlock = { turns: 999 }
             logs.push({ text: `🚫 回復が永続的に封印された！`, color: '#aa22ff' })
           }

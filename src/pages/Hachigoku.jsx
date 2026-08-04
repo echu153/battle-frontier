@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useScarecrowBlock, ScarecrowBlockScreen } from '../components/IdleGuard'
 import { getWeaponGroup } from '../lib/stats'
-import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from '../lib/evoCombat'
+import { evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult, evoBlocksAilment } from '../lib/evoCombat'
 import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemBlocksAilment } from '../lib/emblemCombat'
 import { petPlayerBonus } from '../constants/pets'
 import { loadCharmBonus, PET_STAT_SELECT } from '../lib/petBonus'
@@ -403,6 +403,11 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
         }
       }
       evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs, isCrit)
+      // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
+      if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
+        enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
+        logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
+      }
       const critText = isCrit ? '💥クリティカル！ ' : ''
       logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
       if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
@@ -424,6 +429,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     if (key !== 'stun' && key !== 'bleed' && playerBuffs[key]?.turns > 0) return false
     if (ailmentShieldBlocks(playerBuffs, logs)) return false
     if (emblemBlocksAilment(eff, key, logs)) return false
+    if (evoBlocksAilment(eff, key, logs)) return false  // アクアクラウン(真化)
     if (key === 'burn')      playerBuffs.burn = { turns:5, dmgRate:0.02 }
     else if (key === 'poison')    playerBuffs.poison = { turns:4, dmgRate:0.03 }
     else if (key === 'paralysis') playerBuffs.paralysis = { turns:4, skipRate:0.25, spdRate:0.8 }
@@ -555,7 +561,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     if (finalDmg > 0 && cast?.inflict) for (const key of cast.inflict) inflictAilment(key)
     // 血池の大技: 出血を一気にnスタック
     if (finalDmg > 0 && (cast?.bleedStacks || 0) > 0 && playerHp > 0 && !(playerBuffs.statusImmune?.turns > 0)
-        && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'bleed', logs)) {
+        && !ailmentShieldBlocks(playerBuffs, logs) && !emblemBlocksAilment(eff, 'bleed', logs) && !evoBlocksAilment(eff, 'bleed', logs)) {
       const b = playerBuffs.bleed
       playerBuffs.bleed = { stacks: Math.min(5, (b?.stacks || 0) + cast.bleedStacks), lastTurn: 0 }
       logs.push({ text:`🩸 傷口が一斉に開いた！ 出血${playerBuffs.bleed.stacks}スタック！`, color:'#ff3366' })
@@ -653,7 +659,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
             : (newPB[k] && !prevPB[k])
           if (!isNew) continue
           const resKey = k === 'severePoisoin' ? 'poison' : k
-          if (prevPB.statusImmune?.turns > 0 || ailmentShieldBlocks(newPB, logs) || emblemBlocksAilment(eff, resKey, logs)) {
+          if (prevPB.statusImmune?.turns > 0 || ailmentShieldBlocks(newPB, logs) || emblemBlocksAilment(eff, resKey, logs) || evoBlocksAilment(eff, resKey, logs)) {
             if (k === 'bleed') { if (prevPB.bleed) newPB.bleed = prevPB.bleed; else delete newPB.bleed }
             else delete newPB[k]
           }

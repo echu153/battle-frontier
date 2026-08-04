@@ -20,7 +20,7 @@
 // 戻り値: { logs, winner /* 'A' | 'B' | 'draw' */, turns, aHpPct, bHpPct }
 // ============================================================
 import { getWeaponGroup } from './stats'
-import { evoOnHit, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult } from './evoCombat'
+import { evoOnHit, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult, evoBlocksAilment, evoResistNewAilments } from './evoCombat'
 import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemResistNewAilments, emblemBlocksAilment } from './emblemCombat'
 import { petStats } from '../constants/pets'
 import {
@@ -206,6 +206,21 @@ function doAttack(att, def, isExtra, ctx) {
   const defEvasion = calcEvasionRate(defSpdEff, atkSpdEff) * PVP.spdBonusMult + (def.eff.evasionBonus || 0) + (defBuffs.evasion?.turns > 0 ? defBuffs.evasion.rate * 100 : 0) + (def.hasOnmi ? 5 : 0)
   const buffHitBonus = attBuffs.hitBonus?.turns > 0 ? attBuffs.hitBonus.value : 0
 
+  // 真化の被ダメージ時トリガー（フロストバーンの聖鎧=スタン / インフェルノバスティオン=やけど）を
+  // 攻撃側へ付ける予約。att.buffs はスキル解決後に res.newPlayerBuffs へ置換されるため、
+  // dealToDef の中で直接書くと捨てられる。ここに溜めて行動の最後（applyOndmgAilments）で適用する。
+  const ondmgPending = []
+  const applyOndmgAilments = () => {
+    for (const key of ondmgPending.splice(0)) {
+      if (att.hp <= 0) return
+      if (key === 'stun' && att.buffs.stun?.turns > 0) continue
+      if (key === 'burn' && att.buffs.burn?.turns > 0) continue
+      if (emblemBlocksAilment(att.eff, key, ctx.logs) || evoBlocksAilment(att.eff, key, ctx.logs)) continue
+      if (key === 'stun') { att.buffs.stun = { turns: 1 }; ctx.logs.push({ text: `❄ ${def.profile.username}の真化・氷結！ ${att.profile.username}はスタンした！`, color: '#66ccff' }) }
+      else { att.buffs.burn = { turns: 5, dmgRate: 0.02 }; ctx.logs.push({ text: `🔥 ${def.profile.username}の真化・業火！ ${att.profile.username}はやけどを負った！`, color: '#ff6622' }) }
+    }
+  }
+
   // 与ダメージを防御側HPへ適用するヘルパ
   // ブリーダー：防御側のペット生存時は50%でペットが受ける
   const dealToDef = (amt) => {
@@ -220,7 +235,10 @@ function doAttack(att, def, isExtra, ctx) {
     } else {
       def.hp -= amt
       att.dmgDealt += amt  // 与ダメ総量
-      // 真化（防御側の装備）: 反射 → 攻撃側へ（嵐の重装甲）。スタン/やけどはPvPのバフ置換仕様の都合で割愛。
+      // 真化（防御側の装備）: 反射 → 攻撃側へ（嵐の重装甲）。
+      // スタン/やけど（聖鎧/インフェルノ）は予約して行動の最後に付ける（バフ置換で消えるため）。
+      if ((def.eff.evoOndmgStun || 0) > 0 && Math.random() * 100 < def.eff.evoOndmgStun) ondmgPending.push('stun')
+      if ((def.eff.evoOndmgBurn || 0) > 0 && Math.random() * 100 < def.eff.evoOndmgBurn) ondmgPending.push('burn')
       if ((def.eff.evoReflectPct || 0) > 0) {
         const refl = Math.max(1, Math.floor(amt * def.eff.evoReflectPct / 100))
         att.hp -= refl
@@ -276,6 +294,7 @@ function doAttack(att, def, isExtra, ctx) {
       }
     }
     if (att.expandedSkillSet.length > 0) att.skillIndex++
+    applyOndmgAilments()
     return
   }
 
@@ -316,6 +335,7 @@ function doAttack(att, def, isExtra, ctx) {
           logs.push({ text: `${prefix}休憩しよう！ 自分のHP+${ph}・ペットのHP+${pph}！${cutTxt}`, color: '#66ddaa' })
         }
         att.skillIndex++
+        applyOndmgAilments()
         return
       } else {
         logs.push({ text: `${prefix}${cs.skills.name}！ しかしペットがいない…通常攻撃になった！`, color: '#888888' })
@@ -426,6 +446,7 @@ function doAttack(att, def, isExtra, ctx) {
       att.buffs = res.newPlayerBuffs; def.buffs = res.newEnemyBuffs
       consumeAilmentShield(defBuffs, def.buffs, logs)  // 哭雨の羽衣: 新規状態異常を1回無効化
       emblemResistNewAilments(def.eff, defBuffs, def.buffs, logs)  // 紋章: 個別状態異常耐性（防御側）
+      evoResistNewAilments(def.eff, defBuffs, def.buffs, logs)     // アクアクラウン(真化): 状態異常確率-5%
       const critInsert = (finalCrit && !isMulti) ? '💥クリティカル！ ' : ''
       const dmgIdx = resLog.indexOf(enemyName + 'に')
       const logWithCrit = critInsert ? (dmgIdx >= 0 ? resLog.slice(0, dmgIdx) + critInsert + resLog.slice(dmgIdx) : resLog + ' ' + critInsert) : resLog
@@ -477,8 +498,14 @@ function doAttack(att, def, isExtra, ctx) {
     { const emKind = (!att.isMagical) ? '物理' : '特殊'; const emDrain = emblemDrainAmount(eff, finalDmg, !att.isMagical); if (emDrain > 0 && !(attBuffs.healSeal?.turns > 0)) { att.hp = Math.min(eff.hp_max, att.hp + emDrain); logs.push({ text: `💠 ${emKind}吸収により${emDrain}回復！`, color: '#66ddff' }) } }
     const prevDefBuffsN = { ...defBuffs }  // 哭雨の羽衣: 新規状態異常の差分検知用
     evoOnHit(eff, finalDmg, defBuffs, enemyName, logs, isCrit)  // 真化: 通常攻撃ヒット時の敵デバフ（通常攻撃はdef.buffs置換なし）
+    // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
+    if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(defBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
+      defBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
+      logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemyName}を麻痺させた！`, color: '#ffe066' })
+    }
     consumeAilmentShield(prevDefBuffsN, defBuffs, logs)
     emblemResistNewAilments(def.eff, prevDefBuffsN, defBuffs, logs)  // 紋章: 個別状態異常耐性（防御側）
+    evoResistNewAilments(def.eff, prevDefBuffsN, defBuffs, logs)     // アクアクラウン(真化): 状態異常確率-5%
     const critText = isCrit ? '💥クリティカル！ ' : ''
     logs.push({ text: `${prefix}${critText}攻撃！ ${enemyName}に${finalDmg}ダメージ！`, color: '#ffcc00' })
     if (att.buffs.bloodRage?.turns > 0 && finalDmg > 0 && !(att.buffs.healSeal?.turns > 0)) {
@@ -491,6 +518,9 @@ function doAttack(att, def, isExtra, ctx) {
     if (attBuffs.kinjutsuLock) attBuffs.kinjutsuLock = undefined
     if (att.expandedSkillSet.length > 0) att.skillIndex++
   }
+  // 真化の被ダメトリガー（聖鎧のスタン／インフェルノのやけど）を攻撃側へ反映。
+  // att.buffs の置換が終わったこの位置で適用する（dealToDef内で直接書くと捨てられる）
+  applyOndmgAilments()
 }
 
 // ブリーダー：ペットの攻撃（自動攻撃・コマンド共通）。opp へダメージ。死亡時 true。
@@ -509,9 +539,9 @@ function petAttackPvp(side, opp, mult, label, logs) {
   side.dmgDealt += dmg  // 与ダメ総量：ペットの攻撃
   let extra = ''
   if (side.rtCur >= 1) {
-    if (side.petSpecies === 'flame' && Math.random() * 100 < 30 && !emblemBlocksAilment(opp.eff, 'bleed', null)) { const b = opp.buffs.bleed; opp.buffs.bleed = { stacks: Math.min(5, (b?.stacks || 0) + 1), lastTurn: 0 }; extra = ' 出血！' }
+    if (side.petSpecies === 'flame' && Math.random() * 100 < 30 && !emblemBlocksAilment(opp.eff, 'bleed', null) && !evoBlocksAilment(opp.eff, 'bleed', null)) { const b = opp.buffs.bleed; opp.buffs.bleed = { stacks: Math.min(5, (b?.stacks || 0) + 1), lastTurn: 0 }; extra = ' 出血！' }
     else if (side.petSpecies === 'aqua' && Math.random() * 100 < 40) { opp.buffs.spdDown = { turns: 3, rate: 0.7 }; extra = ' 素早さ低下！' }
-    else if (side.petSpecies === 'leaf') { const sr = opp.buffs.stunResist ?? 1.0; if (Math.random() * 100 < 30 * sr && !emblemBlocksAilment(opp.eff, 'stun', null)) { opp.buffs.stun = { turns: 1 }; opp.buffs.stunResist = sr * 0.5; extra = ' スタン！' } }
+    else if (side.petSpecies === 'leaf') { const sr = opp.buffs.stunResist ?? 1.0; if (Math.random() * 100 < 30 * sr && !emblemBlocksAilment(opp.eff, 'stun', null) && !evoBlocksAilment(opp.eff, 'stun', null)) { opp.buffs.stun = { turns: 1 }; opp.buffs.stunResist = sr * 0.5; extra = ' スタン！' } }
   }
   logs.push({ text: `🐾 ${name}のペットの${label}！ ${opp.profile.username}に${dmg}ダメージ！${extra}`, color: '#ffaa44' })
   return opp.hp <= 0

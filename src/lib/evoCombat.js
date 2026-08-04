@@ -74,6 +74,34 @@ export const evoOnDamaged = (eff, dmg, enemyBuffs, enemyName, logs) => {
   return reflect
 }
 
+// ============================================================
+// アクアクラウン（真化）: 状態異常になる確率 -eff.evoAilmentResist%
+//  哭雨の羽衣(ailmentShieldBlocks) / 紋章耐性(emblemBlocksAilment) と同じ列に並べて使う。
+//  ※以前は出撃(Game.jsx)にべた書きで、奈落/八獄/タワー/天穹/レイド/対人戦では効いていなかった。
+//    新しい戦闘エンジンを足したら必ずこの2つを通すこと（test/equipEffectCoverage.test.js が検査）。
+// ============================================================
+const EVO_AIL_KEYS = ['paralysis', 'burn', 'poison', 'severePoisoin', 'stun', 'bleed', 'healSeal', 'curseDmg']
+
+// 直接付与サイト用: 付与しようとしている状態異常1件を確率で無効化（trueで付与を止める）
+export const evoBlocksAilment = (eff, _ailKey, logs) => {
+  const pct = eff?.evoAilmentResist || 0
+  if (pct > 0 && Math.random() * 100 < pct) {
+    logs?.push({ text: `💧 アクアクラウンの真化！ 状態異常を防いだ！`, color: '#66ccff' })
+    return true
+  }
+  return false
+}
+
+// 差分検知型: 敵スキル解決後、新規付与された状態異常を1つ確率で無効化（curBuffs を破壊的に更新）
+export const evoResistNewAilments = (eff, prevBuffs, curBuffs, logs) => {
+  if (!((eff?.evoAilmentResist || 0) > 0) || !curBuffs) return
+  const got = EVO_AIL_KEYS.find(k => curBuffs[k] && !prevBuffs?.[k])
+  if (got && Math.random() * 100 < eff.evoAilmentResist) {
+    delete curBuffs[got]
+    logs?.push({ text: `💧 アクアクラウンの真化！ 状態異常を防いだ！`, color: '#66ccff' })
+  }
+}
+
 // プレイヤーが回避した時：自分に素早さバフ（playerBuffs を破壊的に更新）
 export const evoOnEvade = (eff, playerBuffs, _logs) => {
   if (!eff || !playerBuffs) return

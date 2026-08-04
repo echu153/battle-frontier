@@ -18,6 +18,7 @@
 import { getWeaponGroup, calcDefReduction, PEN_CAP } from './stats'
 import {
   evoOnHit, evoOnDamaged, evoOnEvade, evoTakenMult, evoAllSkillsSet, evoAtkMult, evoMatkMult,
+  evoBlocksAilment,
 } from './evoCombat'
 import {
   emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemBlocksAilment,
@@ -430,6 +431,11 @@ export function simulateTowerBattle({
           if (!(curSd?.turns > 0) || curSd.amazaneStacks > 0 || amzRate < curSd.rate) enemyBuffs.spdDown = { turns: 2, rate: amzRate, amazaneStacks: amzSt }
         }
         evoOnHit(eff, finalDmg, enemyBuffs, target.name, logs, isMulti ? multiCritAny : finalCrit)
+        // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
+        if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
+          enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
+          logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${target.name}を麻痺させた！`, color: '#ffe066' })
+        }
         const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult * (playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1) * healOutMult())
         playerHp = Math.min(eff.hp_max, playerHp + healAmt)
         if (passiveHealReflect && healAmt > 0) { target.hp -= healAmt; logs.push({ text: `✨ 神聖加護の反射！ ${target.name}に${healAmt}ダメージ！`, color: '#ffdd44' }) }
@@ -516,6 +522,11 @@ export function simulateTowerBattle({
       target.hp -= finalDmg
       { const emKind = (!isMagical) ? '物理' : '特殊'; const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + Math.floor(emDrain * healOutMult())); logs.push({ text: `💠 ${emKind}吸収により${emDrain}回復！`, color: '#66ddff' }) } }
       evoOnHit(eff, finalDmg, enemyBuffs, target.name, logs, isCrit)
+      // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
+      if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
+        enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
+        logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${target.name}を麻痺させた！`, color: '#ffe066' })
+      }
       logs.push({ text: `${prefix}${isCrit ? '💥クリティカル！ ' : ''}攻撃！ ${target.name}に${finalDmg}ダメージ！`, color: '#ffcc00' })
       if (playerBuffs.bloodRage?.turns > 0 && finalDmg > 0 && !(playerBuffs.healSeal?.turns > 0)) {
         const rageCure = Math.floor(Math.min(Math.floor(finalDmg * playerBuffs.bloodRage.healRate), Math.floor(eff.hp_max * (isCrit ? 0.35 : 0.20))) * healOutMult())
@@ -549,6 +560,7 @@ export function simulateTowerBattle({
     if (Math.random() >= chance * (1 - tr.ailResist)) return false
     if (ailmentShieldBlocks(playerBuffs, logs)) return false
     if (emblemBlocksAilment(eff, key, logs)) return false
+    if (evoBlocksAilment(eff, key, logs)) return false  // アクアクラウン(真化)
     if (key === 'bleed') {
       const b = playerBuffs.bleed
       playerBuffs.bleed = { stacks: Math.min(5, (b?.stacks || 0) + (payload?.stacks || 1)), lastTurn: 0 }

@@ -4,7 +4,7 @@ import { supabase } from '../supabase'
 // public/ 配下の安定URL参照（ハッシュ付きバンドルだとデプロイ後にキャッシュ不整合で404→画像が出ないため）
 const papiaIcon = '/papia.png'
 import { GEM_DATA, GEM_TYPES, calcDefReduction, calcEffectiveStats } from '../lib/stats'
-import { evoOnHit, evoTakenMult } from '../lib/evoCombat'
+import { evoOnHit, evoTakenMult, evoResistNewAilments } from '../lib/evoCombat'
 import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemResistNewAilments, emblemBlocksAilment } from '../lib/emblemCombat'
 import { petPlayerBonus, petStats } from '../constants/pets'
 import { loadCharmBonus, PET_STAT_SELECT } from '../lib/petBonus'
@@ -1657,14 +1657,8 @@ export const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, p
   // 哭雨の羽衣: 状態異常無効バフ（1回）。新規付与された状態異常を1つ無効化
   consumeAilmentShield(playerBuffs, newPlayerBuffs, logs)
   // アクアクラウン(真化): 状態異常になる確率-eff.evoAilmentResist%。新規付与された状態異常を確率で無効化
-  if ((eff?.evoAilmentResist || 0) > 0) {
-    const ailKeys2 = ['paralysis','burn','poison','severePoisoin','stun','bleed','healSeal','curseDmg']
-    const got2 = ailKeys2.find(k => newPlayerBuffs[k] && !playerBuffs[k])
-    if (got2 && Math.random()*100 < eff.evoAilmentResist) {
-      delete newPlayerBuffs[got2]
-      logs.push({ text:`💧 アクアクラウンの真化！ 状態異常を防いだ！`, color:'#66ccff' })
-    }
-  }
+  // （実体は evoCombat.evoResistNewAilments＝奈落/八獄/タワー/天穹/レイド/対人戦と共通）
+  evoResistNewAilments(eff, playerBuffs, newPlayerBuffs, logs)
   // 紋章: 個別状態異常耐性（新規付与された毒/麻痺/やけど/出血/スタンを確率で無効化）
   emblemResistNewAilments(eff, playerBuffs, newPlayerBuffs, logs)
   return { dmgToPlayer, healEnemy, newPlayerBuffs, newEnemyBuffs }
@@ -3409,6 +3403,11 @@ export default function Game() {
             }
           }
           applyEvoHitEffects(finalDmg, isMulti ? multiCritAny : finalCrit)
+          // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺（スキルも通常攻撃も対象）
+          if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
+            enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
+            logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
+          }
           const healUpMult = playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1
           const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult * healUpMult)
           playerHp = Math.min(maxHp, playerHp + healAmt)
