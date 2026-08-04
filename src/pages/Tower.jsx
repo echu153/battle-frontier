@@ -320,11 +320,13 @@ export default function Tower() {
         enemies, floorData: fd, tree: treeAlloc, targetMode, playerItem,
       })
       setLogs(res.logs)
-      if (res.itemUsed) await consumeItem()
       // Gold・EXPはサーバーが決める（クライアントからは申告しない）
       const { data, error } = await withTimeout(supabase.rpc('tower_sortie_result', {
         p_floor: floor, p_won: res.win, p_mid_defeat: isMid && res.win,
       }))
+      // ★アイテムの消費はサーバーが結果を受け付けてから。
+      //   先に消すと、クールダウン等で弾かれたときに使い切りアイテムだけ失われる。
+      if (!error && !data?.error && res.itemUsed) await consumeItem()
       if (error || data?.error) {
         setMsg(data?.error || error?.message || '結果の反映に失敗しました')
         // サーバーがクールダウンで弾いた場合は、残り時間を丸ごと待たせる（報酬も入らない）
@@ -395,9 +397,9 @@ export default function Tower() {
         potionUsed: runInfo.potionUsed || 0, potionLimit: RUN_POTION_LIMIT,
       })
       setLogs(res.logs)
-      if (res.itemUsed) await consumeItem()
       if (!res.win) {
         await withTimeout(supabase.rpc('tower_run_abort'))
+        if (res.itemUsed) await consumeItem()
         setRunInfo(null)
         setGain({ win: false, stageLabel: BOSS_RUN_STAGES[stage].label })
         await withTimeout(fetchStatus())
@@ -407,6 +409,7 @@ export default function Tower() {
         // Gold・EXPはサーバーが決める（クライアントからは申告しない）
         const { data, error } = await withTimeout(supabase.rpc('tower_boss_clear', { p_floor: runInfo.floor }))
         if (error || data?.error) { setMsg(data?.error || error?.message || '撃破の反映に失敗しました'); return }
+        if (res.itemUsed) await consumeItem()
         setRunInfo(null)
         setGain({ win: true, cleared: true, floor: runInfo.floor, gold: data.gold, exp: data.exp, towerExp: data.tower_exp, firstClear: data.first_clear, monument: data.monument })
         await withTimeout(fetchStatus())
@@ -414,6 +417,7 @@ export default function Tower() {
       }
       const { data, error } = await withTimeout(supabase.rpc('tower_run_save', { p_stage: stage + 1, p_hp: res.hp, p_mp: res.mp, p_potion: res.potionUsed }))
       if (error || data?.error) { setMsg(data?.error || error?.message || '進行の保存に失敗しました'); return }
+      if (res.itemUsed) await consumeItem()
       setRunInfo({ ...runInfo, stage: stage + 1, hp: res.hp, mp: res.mp, hpMax: res.hpMax, mpMax: res.mpMax, potionUsed: res.potionUsed })
       setGain({ win: true, stageLabel: BOSS_RUN_STAGES[stage].label, hp: res.hp, mp: res.mp, hpMax: res.hpMax, mpMax: res.mpMax })
     } catch (e) {

@@ -42,7 +42,7 @@ const TOWER_AILMENTS = ['poison', 'burn', 'bleed', 'stun', 'paralysis', 'curse']
 // 本体
 // ============================================================
 export function simulateTowerBattle({
-  eff: rawEff, equipment, skillSets, profile,
+  eff: rawEff, equipment: equipmentIn, skillSets: skillSetsIn, profile,
   enemies: enemyList, floorData,
   tree = {}, targetMode = DEFAULT_TARGET_MODE,
   startHp = null, startMp = null,
@@ -51,6 +51,9 @@ export function simulateTowerBattle({
   potionLimit = Infinity, // 無限ポーションの回復回数の上限（エリアボス挑戦は道中含めて5回）
   turnCap: turnCapIn = null,
 }) {
+  // 読み込みに失敗した等で null が来ても戦闘そのものは成立させる（落とさない）
+  const equipment = Array.isArray(equipmentIn) ? equipmentIn : []
+  const skillSets = Array.isArray(skillSetsIn) ? skillSetsIn : []
   const logs = []
   const tr = towerTreeEffects(tree)
   const eff = applyTreeToStats(rawEff, tr)

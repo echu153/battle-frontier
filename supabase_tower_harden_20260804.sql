@@ -37,7 +37,16 @@ CREATE INDEX IF NOT EXISTS tower_logs_kind_idx   ON tower_logs (kind, created_at
 CREATE OR REPLACE FUNCTION tower_log(p_uid uuid, p_kind text, p_floor int, p_gold bigint, p_exp int, p_detail text)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE v_recent boolean;
 BEGIN
+  -- 不審な呼び出しは連打できるので、同じプレイヤーぶんは1分に1件までに絞る
+  -- （ログを膨らませること自体を攻撃に使われないようにする）
+  IF p_kind = 'suspicious' THEN
+    SELECT true INTO v_recent FROM tower_logs
+      WHERE player_id = p_uid AND kind = 'suspicious' AND created_at > now() - interval '1 minute'
+      LIMIT 1;
+    IF COALESCE(v_recent, false) THEN RETURN; END IF;
+  END IF;
   INSERT INTO tower_logs (player_id, kind, floor, gold, exp, detail)
   VALUES (p_uid, p_kind, p_floor, p_gold, p_exp, p_detail);
 EXCEPTION WHEN OTHERS THEN NULL;   -- ログの失敗で本処理を止めない
