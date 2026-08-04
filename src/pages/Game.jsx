@@ -13,6 +13,7 @@ import { reportDevAccess } from '../lib/devAccess'
 import { isHachigokuUnlocked, HACHIGOKU_DAILY_WINS } from '../lib/hachigoku'
 import { isEvent20260720Active } from '../lib/event20260720'
 import { myAreaShares, dropBonusPP, EXPAND_COOLDOWN_MS, rankColor } from '../lib/territory'
+import { richSegments, RICH } from '../lib/battleLogRich'
 import AIAssistant from '../components/AIAssistant'
 import RaidNotify from '../components/RaidNotify'
 // 対人戦(PvP)パネルは循環import回避のため遅延ロード（pvp.js が ./Game を参照するため）
@@ -7117,7 +7118,14 @@ export function BattleLogLine({ l }) {
       </div>
     )
   }
-  return <div style={{ color:l.color, fontSize:'12px', lineHeight:'2', borderBottom:'1px solid #001428', padding:'2px 0', textAlign:'left' }}>{l.text}</div>
+  // スキル名・ダメージ・回復量・クリティカルだけ色と太さを変えて読みやすくする（味方も敵も同じ規則）
+  return (
+    <div style={{ color:l.color, fontSize:'12px', lineHeight:'2', borderBottom:'1px solid #001428', padding:'2px 0', textAlign:'left' }}>
+      {richSegments(l.text).map((s, i) => s.kind
+        ? <span key={i} style={RICH[s.kind]}>{s.text}</span>
+        : <span key={i}>{s.text}</span>)}
+    </div>
+  )
 }
 
 function StatMini({ label, base, bonus, color, type }) {
