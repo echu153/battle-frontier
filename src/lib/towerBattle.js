@@ -1,14 +1,14 @@
 // ============================================================
-// 星霜百層塔 戦闘エンジン
+// エンドレスタワー 戦闘エンジン
 // ------------------------------------------------------------
-// 奈落闘技場（Abyss.jsx の simulateAbyssBattle）を土台に、塔専用の要件を足したもの。
-// 街の通常出撃には手を入れず、塔専用に複製している（RaidBoss / Abyss / Hachigoku と同じ方針）。
+// 奈落闘技場（Abyss.jsx の simulateAbyssBattle）を土台に、タワー専用の要件を足したもの。
+// 街の通常出撃には手を入れず、タワー専用に複製している（RaidBoss / Abyss / Hachigoku と同じ方針）。
 //
-// 塔だけの相違点：
+// タワーだけの相違点：
 //  ・敵が複数体（スキルの対象はプレイヤーの「対象設定」で決まる）
-//  ・HP/MPは呼び出し側から受け取り、戦闘後の残量を返す（層主連戦の持ち越し）
-//  ・塔スキルツリーのボーナスが乗る（塔の中だけ）
-//  ・層主のギミック（装甲・吸血・毒沼・硬化・暴風・適応・屈折・噴火・三頭・暴走）を実装
+//  ・HP/MPは呼び出し側から受け取り、戦闘後の残量を返す（エリアボス連戦の持ち越し）
+//  ・エンドポイントのボーナスが乗る（タワーの中だけ）
+//  ・エリアボスのギミック（装甲・吸血・毒沼・硬化・暴風・適応・屈折・噴火・三頭・暴走）を実装
 //
 // 敵スキルは src/lib/tower.js の自前スキーマ（type: physical / magical /
 // physical_multi / buff / debuff）で完結しており、executeSkill は通さない。
@@ -35,7 +35,7 @@ import { makeEnemy, towerTreeEffects, applyTreeToStats, buildStageEnemies, build
 // 敵の組み立てとツリー換算は tower.js（純粋データ側）が正。ここから使う側のために再エクスポートする
 export { towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies }
 
-// 塔で追加した状態異常キー（executeSkill 側の AILMENT_KEYS には無いもの）
+// タワーで追加した状態異常キー（executeSkill 側の AILMENT_KEYS には無いもの）
 const TOWER_AILMENTS = ['poison', 'burn', 'bleed', 'stun', 'paralysis', 'curse']
 
 // ============================================================
@@ -46,9 +46,9 @@ export function simulateTowerBattle({
   enemies: enemyList, floorData,
   tree = {}, targetMode = DEFAULT_TARGET_MODE,
   startHp = null, startMp = null,
-  playerItem = null,      // 装備中のアイテム（塔でも街と同じように使える）
+  playerItem = null,      // 装備中のアイテム（タワーでも街と同じように使える）
   potionUsed = 0,         // 無限ポーションをこの連戦で何回使ったか（持ち越す）
-  potionLimit = Infinity, // 無限ポーションの回復回数の上限（層主挑戦は道中含めて5回）
+  potionLimit = Infinity, // 無限ポーションの回復回数の上限（エリアボス挑戦は道中含めて5回）
   turnCap: turnCapIn = null,
 }) {
   const logs = []
@@ -79,7 +79,7 @@ export function simulateTowerBattle({
   let currentItem = playerItem ? { ...playerItem } : null
   let itemUsed = false        // 使い切りアイテムを消費したか
   let potionCount = Math.max(0, potionUsed || 0)   // 無限ポーションの累計使用回数
-  // 地響き（10層）：敵の攻撃が当たるたび、こちらの素早さが下がっていく（最大-50%）
+  // 地響き（戦闘エリア10）：敵の攻撃が当たるたび、こちらの素早さが下がっていく（最大-50%）
   let quakeStacks = 0
   let quakeStep = 0
   let quakeMax = 0
@@ -183,7 +183,7 @@ export function simulateTowerBattle({
     return m
   }
 
-  // 屈折（7層）：受けたダメージの一定割合を跳ね返す。1発あたり プレイヤー最大HPの reflectCap まで
+  // 屈折（戦闘エリア7）：受けたダメージの一定割合を跳ね返す。1発あたり プレイヤー最大HPの reflectCap まで
   const applyReflect = (en, dmg) => {
     const rate = en.mods?.reflect || 0
     if (rate <= 0 || dmg <= 0 || playerHp <= 0) return
@@ -193,7 +193,7 @@ export function simulateTowerBattle({
     logs.push({ text: `🔷 ${en.name}の屈折！ ${back}ダメージ跳ね返された！`, color: '#88ccff' })
   }
 
-  // 吸血（2層）
+  // 吸血（戦闘エリア2）
   const applyLifesteal = (en, dmg) => {
     const rate = en.mods?.lifesteal || 0
     if (rate <= 0 || dmg <= 0) return
@@ -211,7 +211,7 @@ export function simulateTowerBattle({
       const heal = Math.floor(eff.hp_max * tr.killHeal)
       if (heal > 0) {
         playerHp = Math.min(eff.hp_max, playerHp + heal)
-        logs.push({ text: `💚 塔の加護！ HPが${heal}回復した！`, color: '#66ffaa' })
+        logs.push({ text: `💚 タワーの加護！ HPが${heal}回復した！`, color: '#66ffaa' })
       }
     }
   }
@@ -274,7 +274,7 @@ export function simulateTowerBattle({
 
     const { pDef, pMdef } = playerDefStats()
     const burnDebuffP = playerBuffs.burn?.turns > 0 ? 0.9 : 1.0
-    const curseP = playerBuffs.curse?.turns > 0 ? (playerBuffs.curse.rate ?? 0.9) : 1.0  // 6層の呪い：与ダメ-10%
+    const curseP = playerBuffs.curse?.turns > 0 ? (playerBuffs.curse.rate ?? 0.9) : 1.0  // 戦闘エリア6の呪い：与ダメ-10%
     const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * (pe('魔法剣士') ? 0.6 : 0.3)) : 0
     const pMatk = (eff.matk - madokenBonus) * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * (playerBuffs.matkDown?.turns > 0 ? playerBuffs.matkDown.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP * evoMatkMult(eff, allSkillsSet)
     const pAtk = (eff.atk + madokenBonus + takaAtkBonus) * madokenAtkMult * (playerBuffs.atkUp ? playerBuffs.atkUp.rate : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP * evoAtkMult(eff, allSkillsSet)
@@ -291,7 +291,7 @@ export function simulateTowerBattle({
     const isCrit = Math.random() * 100 < playerCritRate
     const critMult = isCrit ? (1.5 + (eff.critDmg || 0) + passiveCritDmgBonus) : 1.0
 
-    // executeSkill が参照する敵オブジェクト（塔の敵を街の敵の形に合わせる）
+    // executeSkill が参照する敵オブジェクト（タワーの敵を街の敵の形に合わせる）
     const enemyForSkill = { name: target.name, hp: target.hp, hp_max: target.maxHp, atk: eStats.atk, def: enBaseDef, matk: eStats.matk, mdef: enBaseMdef, spd: eStats.spd, type: target.type }
 
     const buffHitBonus = playerBuffs.hitBonus?.turns > 0 ? playerBuffs.hitBonus.value : 0
@@ -314,7 +314,7 @@ export function simulateTowerBattle({
     const baseEnemyEvasion = Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit)
     const effectiveEnemyEvasion = (isSureHit || isSelfSkill || isMultiHitSkill) ? 0 : baseEnemyEvasion
 
-    // 適応（6層）：直前に当てたのと同じスキルは2発目が無効化される
+    // 適応（戦闘エリア6）：直前に当てたのと同じスキルは2発目が無効化される
     const adaptActive = !!target.mods?.adapt && !mpLack && !!nextSkillName && target.lastPlayerSkill === nextSkillName
 
     if (effectiveEnemyEvasion > 0 && Math.random() * 100 < effectiveEnemyEvasion) {
@@ -333,7 +333,7 @@ export function simulateTowerBattle({
       if (tIdx >= 0) skillIndex = tIdx
     }
 
-    // 与ダメージにかかる塔側の倍率
+    // 与ダメージにかかるタワー側の倍率
     const towerOutMult = (isPhys) => (isPhys ? tr.physDmgMult : tr.magDmgMult) * curseP * enemyTakenMult(target, isPhys)
 
     let skillUsed = false
@@ -461,7 +461,7 @@ export function simulateTowerBattle({
             for (const k of TOWER_AILMENTS.concat(['severePoisoin'])) {
               if (!prevEnemyBuffSnapshot[k] && re.newEnemyBuffs?.[k]) {
                 target.buffs[k] = re.newEnemyBuffs[k]
-                logs.push({ text: `🌫 塔の加護！ ${target.name}に状態異常が通った！`, color: '#bb88ff' })
+                logs.push({ text: `🌫 タワーの加護！ ${target.name}に状態異常が通った！`, color: '#bb88ff' })
               }
             }
           }
@@ -534,7 +534,7 @@ export function simulateTowerBattle({
     playerAttacking = false
   }
 
-  // 3層の「回復力低下」：生きている敵のうち最も厳しい倍率を採用
+  // 戦闘エリア3の「回復力低下」：生きている敵のうち最も厳しい倍率を採用
   function healOutMult() {
     let m = 1
     for (const en of alive()) {
@@ -574,7 +574,7 @@ export function simulateTowerBattle({
     const defScale = offStat / (offStat + Math.max(1, defStat))
     const eStats = enemyStats(en)
     let critRate = Math.max(0, calcCritRate(eStats.spd, eff.spd) - (eff.critResist || 0) - (playerBuffs.critResist?.turns > 0 ? (playerBuffs.critResist.value || 0) : 0))
-    if (en.mods?.critVsBurn && playerBuffs.burn?.turns > 0) critRate += en.mods.critVsBurn   // 8層：やけど中はクリ率+
+    if (en.mods?.critVsBurn && playerBuffs.burn?.turns > 0) critRate += en.mods.critVsBurn   // 戦闘エリア8：やけど中はクリ率+
     const isCrit = Math.random() * 100 < critRate
     const rankRed = calcDefReduction(rankStat)
     const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
@@ -590,7 +590,7 @@ export function simulateTowerBattle({
     if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
     const refl = evoOnDamaged(eff, dmg, en.buffs, en.name, logs); if (refl > 0) en.hp -= refl
     applyLifesteal(en, dmg)
-    // 地響き（10層）：命中するたびにこちらの素早さが下がる
+    // 地響き（戦闘エリア10）：命中するたびにこちらの素早さが下がる
     if (dmg > 0 && en.mods?.quake) {
       const q = en.mods.quake
       quakeStep = q.spdDown || 0.05
@@ -706,7 +706,7 @@ export function simulateTowerBattle({
     }
   }
 
-  // 噴火（8層）：必中・防御一部無視・やけど
+  // 噴火（戦闘エリア8）：必中・防御一部無視・やけど
   const doErupt = (en) => {
     const eStats = enemyStats(en)
     const e = en.mods.erupt
@@ -768,7 +768,7 @@ export function simulateTowerBattle({
         en.phaseIdx = idx
       }
     }
-    // 強化（3層）
+    // 強化（戦闘エリア3）
     if (en.empower && !en.used.empower && rate <= en.empower.hpBelow) {
       en.used.empower = true
       const m = en.empower.allStatMult || 1.3
@@ -781,19 +781,19 @@ export function simulateTowerBattle({
       for (const k of ['defDown', 'mdefDown', 'atkDown', 'matkDown', 'spdDown', 'poison', 'burn', 'bleed', 'severePoisoin', 'paralysis', 'stun', 'dmgReduce', 'healDown']) delete en.buffs[k]
       logs.push({ text: `🌀 ${en.name}が身にまとった弱体を振り払った！`, color: '#cc66ff' })
     }
-    // 自己回復（10層）
+    // 自己回復（戦闘エリア10）
     if (en.selfHeal && !en.used.selfHeal && rate <= en.selfHeal.hpBelow) {
       en.used.selfHeal = true
       const h = Math.floor(en.maxHp * (en.selfHeal.healPct || 0.2))
       en.hp = Math.min(en.maxHp, en.hp + h)
       logs.push({ text: `💚 ${en.name}が${h}回復した！`, color: '#44ff88' })
     }
-    // 取り巻き召喚（1層）
+    // 取り巻き召喚（戦闘エリア1）
     if (en.summonDef && floorData && !en.used.summon && rate <= en.summonDef.hpBelow) {
       en.used.summon = true
       for (let k = 0; k < (en.summonDef.count || 1); k++) spawn(floorData.enemies[en.summonDef.enemyIndex], {}, `${en.name}の号令！`)
     }
-    // 中ボス級の召喚（7層）
+    // 中ボス級の召喚（戦闘エリア7）
     if (en.summonMid && floorData && !en.used.summonMid && rate <= en.summonMid.hpBelow) {
       en.used.summonMid = true
       const sr = en.summonMid.statRate || 0.5
@@ -801,7 +801,7 @@ export function simulateTowerBattle({
         spawn(floorData.midBoss, { statRate: sr, hpRate: sr }, `${en.name}が呼び寄せた！`)
       }
     }
-    // 定期召喚（4層）
+    // 定期召喚（戦闘エリア4）
     if (en.summonLoop && floorData) {
       const sl = en.summonLoop
       if (en.turnCount > 0 && en.turnCount % (sl.everyTurns || 2) === 0) {
@@ -809,7 +809,7 @@ export function simulateTowerBattle({
         if (aliveSummons < (sl.maxAlive || 3)) spawn(floorData.enemies[sl.enemyIndex], { hpRate: sl.hpRate || 0.25 }, `${en.name}が呼び寄せた！`)
       }
     }
-    // 硬化（4層）：ターンごとに防御が上がっていく
+    // 硬化（戦闘エリア4）：ターンごとに防御が上がっていく
     if (en.mods?.defRamp) en.defRamp *= en.mods.defRamp
   }
 
@@ -817,12 +817,12 @@ export function simulateTowerBattle({
     en.turnCount++
     enemyTriggers(en)
     if (playerHp <= 0 || en.hp <= 0) return
-    // 噴火（8層）：通常行動とは別枠（手数を食わない）
+    // 噴火（戦闘エリア8）：通常行動とは別枠（手数を食わない）
     if (en.mods?.erupt && en.turnCount % (en.mods.erupt.everyTurns || 3) === 0) {
       doErupt(en)
       if (playerHp <= 0) return
     }
-    // 暴風（5層）：確率でこのターンの行動が2回になる
+    // 暴風（戦闘エリア5）：確率でこのターンの行動が2回になる
     const acts = (en.mods?.doubleActRate && Math.random() < en.mods.doubleActRate) ? 2 : 1
     if (acts > 1) logs.push({ text: `🌪 ${en.name}は暴風をまとい、続けて動く！`, color: '#88ddff' })
     for (let a = 0; a < acts; a++) {
@@ -896,7 +896,7 @@ export function simulateTowerBattle({
       logs.push({ text: `☠ 毒ダメージ！ あなたに${d}ダメージ！`, color: '#44ff44' })
       if (playerHp <= 0) break
     }
-    // 毒沼（3層・9層の蛇）：生きている敵のうち最も強い割合を採用
+    // 毒沼（戦闘エリア3・戦闘エリア9の蛇）：生きている敵のうち最も強い割合を採用
     {
       let field = 0
       for (const en of alive()) {
@@ -935,7 +935,7 @@ export function simulateTowerBattle({
       const effect = currentItem.items.effect
       const isInfinite = effect === 'hp_pct_infinite' || effect === 'mp_pct_infinite'
       const onCooldown = (playerBuffs.potionCooldown?.turns || 0) > 0
-      // 無限ポーションは層主挑戦の間だけ回数上限がある（道中を含めて数える）
+      // 無限ポーションはエリアボス挑戦の間だけ回数上限がある（道中を含めて数える）
       const potionLeft = potionLimit - potionCount
       const canUse = isInfinite ? (!onCooldown && potionLeft > 0) : !itemUsed
       // 上限に達したことを1度だけ知らせる

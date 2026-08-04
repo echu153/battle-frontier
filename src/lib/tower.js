@@ -1,14 +1,14 @@
 import { PEN_CAP } from './stats.js'
 // ============================================================
-// 星霜百層塔（せいそうひゃくそうとう）データ定義
+// エンドレスタワーデータ定義
 // ------------------------------------------------------------
 // ・解放条件: キャラLV1000（現状は is_admin 限定の開発先行）
-// ・1層の流れ:
-//     ① 塔出撃を (30 + 層数×10) 回こなす → 中ボスが5%で出現するようになる
-//     ② 中ボスを撃破 → その層の層主に挑戦できる（以降いつでも何度でも）
-//     ③ 層主挑戦 = 雑魚1体 → 雑魚1体 → 雑魚2体 → 雑魚3体 → 中ボス → 層主 の6連戦
+// ・戦闘エリア1の流れ:
+//     ① 出撃を (30 + エリア数×10) 回こなす → 中ボスが5%で出現するようになる
+//     ② 中ボスを撃破 → そのエリアのエリアボスに挑戦できる（以降いつでも何度でも）
+//     ③ エリアボス挑戦 = 雑魚1体 → 雑魚1体 → 雑魚2体 → 雑魚3体 → 中ボス → エリアボス の6連戦
 //        この連戦中はHP/MPが一切回復しない（持ち越し）
-// ・入場時のHP/MPは満タン固定の「塔専用プール」。街の hp_current/mp_current とは切り離す
+// ・入場時のHP/MPは満タン固定の「タワー専用プール」。街の hp_current/mp_current とは切り離す
 // ・アイテムは街と同じように普通に使える（無限ポーション含む）
 // ・内部推奨力 = 2万 × 1.2^(層-1)。開発上の目安であり、プレイヤーには表示しない
 //
@@ -18,37 +18,38 @@ import { PEN_CAP } from './stats.js'
 // 内部推奨力（開発用の目安。UIには出さない）
 export const towerTarget = (floor) => Math.round(20000 * Math.pow(1.2, floor - 1))
 
-// 層主に挑戦できるようになるまでに必要な塔出撃の回数
+// エリアボスに挑戦できるようになるまでに必要な出撃の回数
 export const sortiesToMidBoss = (floor) => 30 + floor * 10
 
-// 中ボスの出現率（しきい値到達後の塔出撃ごと・天井なし）
+// 中ボスの出現率（しきい値到達後の出撃ごと・天井なし）
 export const MID_BOSS_RATE = 0.05
 
-// 塔出撃1回で得られるGold（2026-08-03確定）。
+// 出撃1回で得られるGold（2026-08-03確定）。
 // 敵データの gold は調整用シミュレータの仮値で、街の出撃の何十倍もあり
 // 経済を壊すため、出撃では使わずこの式で固定する。中ボスに当たっても同額。
 export const towerSortieGold = (floor) => floor * 300
 
-// 層主を撃破したときのGold（2026-08-03確定）。
-// 初回だけ層数×100万、2回目以降は出撃と同じ層数×300（周回で稼げないようにする）。
+// エリアボスを撃破したときのGold（2026-08-03確定）。
+// 初回だけエリア数×100万、2回目以降は出撃と同じエリア数×300（周回で稼げないようにする）。
 // ※実際に付与する額はサーバーが決める。ここは表示・テスト用の同じ式。
 export const towerBossGold = (floor, isFirstClear) => isFirstClear ? floor * 1000000 : towerSortieGold(floor)
 
-// 層主挑戦（6連戦）の間に無限ポーションで回復できる回数の上限（道中を含む・2026-08-03確定）
+// エリアボス挑戦（6連戦）の間に無限ポーションで回復できる回数の上限（道中を含む・2026-08-03確定）
 // ※5回では無限ポーションの5ターンCDに阻まれてほぼ届かず素通りだったため2回にした
 export const RUN_POTION_LIMIT = 2
 
-// 塔出撃1回で得られる塔EXP（層によらず20〜30のランダム・2026-08-03確定）
-// 層主撃破は初回だけ1000、2回目以降は出撃と同じ
+// 出撃1回で得られるタワーEXP（戦闘エリアによらず20〜30のランダム・2026-08-03確定）
+// エリアボス撃破は初回だけ1000、2回目以降は出撃と同じ
 // ※実際に付与する値はサーバーが決める。ここは表示・テスト用の同じ定義。
 export const TOWER_EXP_MIN = 20
 export const TOWER_EXP_MAX = 30
 export const BOSS_FIRST_TOWER_EXP = 1000
 
-// 塔LV lv → lv+1 に必要な塔EXP
-export const towerExpToNext = (lv) => 5 * lv * lv
+// タワーLV lv → lv+1 に必要なタワーEXP（2026-08-03変更: 5×LV² は伸びが急すぎたので直線に）
+//  累計 = 25×LV×(LV-1)。平均25EXP/回なので、出撃回数の目安は LV50=2,450 / LV100=9,900 / LV200=4.0万
+export const towerExpToNext = (lv) => 50 * lv
 
-// 累計の塔EXPから塔LVと余剰EXPを求める
+// 累計のタワーEXPからタワーLVと余剰EXPを求める
 export const towerLevelFromExp = (totalExp) => {
   let lv = 1, rest = totalExp || 0
   while (rest >= towerExpToNext(lv) && lv < 9999) { rest -= towerExpToNext(lv); lv++ }
@@ -56,9 +57,9 @@ export const towerLevelFromExp = (totalExp) => {
 }
 
 // ============================================================
-// 塔スキルツリー（全17ノード・効果は塔の中だけで有効）
+// エンドポイント（全17ノード・効果はタワーの中だけで有効）
 //  ・1段 = 0.5%（会心威力+/最大HP+/会心耐性+ だけ1段=1%）／1ノードの上限 = 50段
-//  ・10段ごとに解放に必要な塔LVがある
+//  ・10段ごとに解放に必要なタワーLVがある
 // ============================================================
 // 1段あたりの効果（%）。既定は0.5%だが、ノードごとに step で上書きできる
 export const TREE_STEP_PCT = 0.5
@@ -66,7 +67,7 @@ export const TREE_MAX_STEPS = 50
 // そのノードの1段あたりの%（TREE_NODES の step 指定が優先）
 export const stepPctOf = (key) => TREE_NODES.find(n => n.key === key)?.step ?? TREE_STEP_PCT
 
-// 段数の解放しきい値（この段数を超えて振るには、対応する塔LVが必要）
+// 段数の解放しきい値（この段数を超えて振るには、対応するタワーLVが必要）
 export const TREE_UNLOCK = [
   { upTo: 10, lv: 1 },
   { upTo: 20, lv: 50 },
@@ -75,13 +76,13 @@ export const TREE_UNLOCK = [
   { upTo: 50, lv: 200 },
 ]
 
-// 塔LV lv のときに1ノードへ振れる最大段数
+// タワーLV lv のときに1ノードへ振れる最大段数
 export const maxStepsAt = (lv) => {
   let max = 0
   for (const t of TREE_UNLOCK) if (lv >= t.lv) max = t.upTo
   return max
 }
-// 次の解放段数と必要な塔LV（すべて解放済みなら null）
+// 次の解放段数と必要なタワーLV（すべて解放済みなら null）
 export const nextUnlock = (lv) => TREE_UNLOCK.find(t => lv < t.lv) || null
 
 export const TREE_NODES = [
@@ -90,21 +91,21 @@ export const TREE_NODES = [
   { key: 'mag_dmg',    line: 'atk', name: '特殊ダメージ+',       desc: '特殊攻撃の与ダメージが上がる' },
   { key: 'crit_rate',  line: 'atk', name: '会心率+',             desc: 'クリティカルの発生率が上がる' },
   { key: 'crit_dmg',   line: 'atk', name: '会心威力+',           desc: 'クリティカルの威力が上がる', step: 1.0 },
-  { key: 'phys_pen',   line: 'atk', name: '物理貫通+',           desc: '相手の防御を無視する。4層の硬化に効く' },
-  { key: 'mag_pen',    line: 'atk', name: '特殊貫通+',           desc: '相手の特殊防御を無視する。4層の硬化に効く' },
+  { key: 'phys_pen',   line: 'atk', name: '物理貫通+',           desc: '相手の防御を無視する。戦闘エリア4の硬化に効く' },
+  { key: 'mag_pen',    line: 'atk', name: '特殊貫通+',           desc: '相手の特殊防御を無視する。戦闘エリア4の硬化に効く' },
   // ── 守 ──
   { key: 'max_hp',     line: 'def', name: '最大HP+',             desc: '最大HPが上がる。6連戦を持ち越すので効果が大きい', step: 1.0 },
   { key: 'dmg_taken',  line: 'def', name: '被ダメージ-',         desc: '受けるダメージが減る' },
-  { key: 'ail_resist', line: 'def', name: '状態異常耐性+',       desc: '3層の毒・6層の呪い・8層のやけど・10層のスタンに効く' },
-  { key: 'pct_resist', line: 'def', name: '割合ダメージ耐性+',   desc: '最大HPの割合で削る効果を軽減。3層の毒沼・9層の毒に効く' },
-  { key: 'crit_resist',line: 'def', name: '会心耐性+',           desc: '相手のクリティカル率を下げる。8層のやけど連動に効く', step: 1.0 },
+  { key: 'ail_resist', line: 'def', name: '状態異常耐性+',       desc: '戦闘エリア3の毒・戦闘エリア6の呪い・戦闘エリア8のやけど・戦闘エリア10のスタンに効く' },
+  { key: 'pct_resist', line: 'def', name: '割合ダメージ耐性+',   desc: '最大HPの割合で削る効果を軽減。戦闘エリア3の毒沼・戦闘エリア9の毒に効く' },
+  { key: 'crit_resist',line: 'def', name: '会心耐性+',           desc: '相手のクリティカル率を下げる。戦闘エリア8のやけど連動に効く', step: 1.0 },
   { key: 'evasion',    line: 'def', name: '回避率+',             desc: '相手の攻撃を回避しやすくなる' },
   // ── その他 ──
-  { key: 'spd',        line: 'etc', name: '素早さ+',             desc: '行動順・会心率・回避に乗る。5層の暴風・10層の地響きに効く' },
+  { key: 'spd',        line: 'etc', name: '素早さ+',             desc: '行動順・会心率・回避に乗る。戦闘エリア5の暴風・戦闘エリア10の地響きに効く' },
   { key: 'mp_cost',    line: 'etc', name: 'MP消費-',             desc: 'スキルの消費MPが減る。連戦のMP枯渇対策' },
   { key: 'kill_heal',  line: 'etc', name: '雑魚撃破ごとにHP回復', desc: '雑魚を倒すたびに最大HPの一定割合を回復する' },
   { key: 'ail_rate',   line: 'etc', name: '状態異常の付与率+',   desc: 'こちらが与える状態異常の成功率が上がる' },
-  { key: 'exp_plus',   line: 'etc', name: '取得経験値+1の確率',  desc: '塔の中で得た通常EXPが+1される確率。塔EXPには乗らない' },
+  { key: 'exp_plus',   line: 'etc', name: '取得経験値+1の確率',  desc: 'タワーの中で得た通常EXPが+1される確率。タワーEXPには乗らない' },
 ]
 
 export const TREE_LINES = [
@@ -131,20 +132,20 @@ export const treeBonus = (alloc) => {
 export const treeSpent = (alloc) =>
   TREE_NODES.reduce((s, n) => s + stepOf(alloc, n.key), 0)
 
-// 振り直しにかかるGold（塔LVに比例）
+// 振り直しにかかるGold（タワーLVに比例）
 export const treeResetCost = (lv) => 10000 * Math.max(1, lv)
 
 // ============================================================
-// 敵データ（1〜10層）
+// 敵データ（1〜戦闘エリア10）
 //  ・総合力 = floor(hp/10 + atk + def + matk + mdef + spd)（敵はMP=0）
 //  ・skills: type は physical / magical / physical_multi / buff / debuff
-//  ・mods / phases が層主のギミック本体
+//  ・mods / phases がエリアボスのギミック本体
 // ============================================================
 const E = (name, hp, atk, def, matk, mdef, spd, type, gold, skills, extra = {}) =>
   ({ name, hp, atk, def, matk, mdef, spd, type, gold, skills, ...extra })
 
 export const TOWER_FLOORS = [
-  // ── 1層 装甲 ──
+  // ── 戦闘エリア1 装甲 ──
   {
     floor: 1, boss: 'アーマードミノタウロス',
     enemies: [
@@ -177,7 +178,7 @@ export const TOWER_FLOORS = [
       specialMove: { name: '圧砕の鉄槌', type: 'physical', mult: 2.5, defDownRate: 0.8, turns: 3 },
     }),
   },
-  // ── 2層 吸血 ──
+  // ── 戦闘エリア2 吸血 ──
   {
     floor: 2, boss: 'ブラッドダイアウルフ',
     enemies: [
@@ -210,7 +211,7 @@ export const TOWER_FLOORS = [
       specialMove: { name: '紅蓮の顎', type: 'physical', mult: 2.5, bleedStacks: 3 },
     }),
   },
-  // ── 3層 毒沼 ──
+  // ── 戦闘エリア3 毒沼 ──
   {
     floor: 3, boss: 'ポイズントードキング',
     enemies: [
@@ -242,10 +243,10 @@ export const TOWER_FLOORS = [
       empower: { hpBelow: 0.7, allStatMult: 1.3, once: true, undispellable: true },
       cleanse: { hpBelow: 0.5, once: true },
       specialMove: { name: '毒沼葬', type: 'magical', mult: 2.5, poisonStacks: 3 },
-      // 層主のHP143,000のうち18,000は両刀ぶんの上乗せ（判定総合力には数えない）
+      // エリアボスのHP143,000のうち18,000は両刀ぶんの上乗せ（判定総合力には数えない）
     }),
   },
-  // ── 4層 硬化 ──
+  // ── 戦闘エリア4 硬化 ──
   {
     floor: 4, boss: 'エンペラースカラベ',
     enemies: [
@@ -279,7 +280,7 @@ export const TOWER_FLOORS = [
       specialMove: { name: '黄金崩し', type: 'physical', mult: 2.5, defDownRate: 0.8, turns: 3 },
     }),
   },
-  // ── 5層 暴風 ──
+  // ── 戦闘エリア5 暴風 ──
   {
     floor: 5, boss: 'ストームグリフォン',
     enemies: [
@@ -312,7 +313,7 @@ export const TOWER_FLOORS = [
       specialMove: { name: '天嵐爆砕', type: 'physical', mult: 2.5, effect: 'spdDown', rate: 0.7, turns: 3 },
     }),
   },
-  // ── 6層 適応 ──
+  // ── 戦闘エリア6 適応 ──
   {
     floor: 6, boss: 'ファントムデュラハン',
     enemies: [
@@ -346,7 +347,7 @@ export const TOWER_FLOORS = [
       specialMove: { name: '首無しの断罪', type: 'physical', mult: 2.5, healSealTurns: 4 },
     }),
   },
-  // ── 7層 屈折 ──
+  // ── 戦闘エリア7 屈折 ──
   {
     floor: 7, boss: 'プリズムドラゴン',
     enemies: [
@@ -381,7 +382,7 @@ export const TOWER_FLOORS = [
       specialMove: { name: 'プリズムノヴァ', type: 'magical', mult: 2.5, effect: 'allStatDown', rate: 0.85, turns: 3 },
     }),
   },
-  // ── 8層 噴火＋やけど連動 ──
+  // ── 戦闘エリア8 噴火＋やけど連動 ──
   {
     floor: 8, boss: 'ヴォルケーノサイクロプス',
     enemies: [
@@ -415,7 +416,7 @@ export const TOWER_FLOORS = [
       specialMove: { name: '大噴火', type: 'physical', mult: 2.5, burn: true, playerHealMult: 0.5, turns: 4 },
     }),
   },
-  // ── 9層 三頭 ──
+  // ── 戦闘エリア9 三頭 ──
   {
     floor: 9, boss: 'アビスキマイラ',
     enemies: [
@@ -460,7 +461,7 @@ export const TOWER_FLOORS = [
       specialMove: { name: '三獣咆哮', type: 'magical', mult: 2.5, effect: 'allStatDown', rate: 0.85, turns: 3 },
     }),
   },
-  // ── 10層 暴走＋地響き ──
+  // ── 戦闘エリア10 暴走＋地響き ──
   {
     floor: 10, boss: 'カオスベヒモス',
     enemies: [
@@ -509,20 +510,20 @@ export const TOWER_FLOORS = [
 export const MAX_IMPLEMENTED_FLOOR = TOWER_FLOORS.length
 export const getFloor = (n) => TOWER_FLOORS.find(f => f.floor === n) || null
 
-// 層主挑戦の連戦構成（1〜10層）。数字は enemies から引く体数
+// エリアボス挑戦の連戦構成（1〜戦闘エリア10）。数字は enemies から引く体数
 export const BOSS_RUN_STAGES = [
   { kind: 'mobs', count: 1, label: '1戦目' },
   { kind: 'mobs', count: 1, label: '2戦目' },
   { kind: 'mobs', count: 2, label: '3戦目' },
   { kind: 'mobs', count: 3, label: '4戦目' },
   { kind: 'mid',  count: 1, label: '中ボス' },
-  { kind: 'boss', count: 1, label: '層主' },
+  { kind: 'boss', count: 1, label: 'エリアボス' },
 ]
 
-// 石碑に載せる層（10層ごとの節目だけ）
+// 石碑に載せる層（10エリアごとの節目だけ）
 export const isMonumentFloor = (floor) => floor % 10 === 0
 
-// スキルの対象設定（複数敵がいるときの狙い方）は塔専用ではなくなったので
+// スキルの対象設定（複数敵がいるときの狙い方）はタワー専用ではなくなったので
 // src/lib/loadout.js が正。ここは既存の import を壊さないための再エクスポート。
 export { TARGET_MODES, DEFAULT_TARGET_MODE } from './loadout.js'
 
@@ -531,7 +532,7 @@ export const enemyTotal = (e) =>
   Math.floor(e.hp / 10 + e.atk + e.def + e.matk + e.mdef + e.spd)
 
 // ============================================================
-// 塔スキルツリー → 実効ボーナス
+// エンドポイント → 実効ボーナス
 //  treeBonus() は各ノードの「%」を返す（1段=0.5%・上限50段=25%）
 // ============================================================
 export function towerTreeEffects(alloc) {
@@ -557,7 +558,7 @@ export function towerTreeEffects(alloc) {
   }
 }
 
-// ツリーを反映した実効ステータス（塔の中だけの値）
+// ツリーを反映した実効ステータス（タワーの中だけの値）
 export function applyTreeToStats(eff, tr) {
   return {
     ...eff,
@@ -610,7 +611,7 @@ export function makeEnemy(def, opts = {}) {
     turnCount: 0,
     phaseIdx: -1,
     defRamp: 1,
-    lastPlayerSkill: null,   // 適応（6層）用
+    lastPlayerSkill: null,   // 適応（戦闘エリア6）用
     used: {},                // once系トリガーの発火済みフラグ
   }
 }
@@ -636,7 +637,7 @@ export function buildStageEnemies(floorData, stageIdx) {
   return list
 }
 
-// 塔出撃（雑魚1体・しきい値到達後は5%で中ボス）
+// 出撃（雑魚1体・しきい値到達後は5%で中ボス）
 export function buildSortieEnemies(floorData, midChance) {
   if (midChance > 0 && Math.random() < midChance) {
     return { enemies: [makeEnemy(floorData.midBoss, { isBoss: true })], isMid: true }

@@ -1,4 +1,4 @@
-// 星霜百層塔のデータと数式の回帰テスト（node --test で動く純粋な部分だけ）
+// エンドレスタワーのデータと数式の回帰テスト（node --test で動く純粋な部分だけ）
 //  ・戦闘エンジン(towerBattle.js)は pages/Game.jsx を読むため node --test では動かない。
 //    エンジンの総合テストは scratchpad の _towerTest.mjs（esbuildでバンドルして実行）。
 import { test } from 'node:test'
@@ -17,7 +17,7 @@ test('層データが揃っている', () => {
   assert.equal(MAX_IMPLEMENTED_FLOOR, 10)
   for (const f of TOWER_FLOORS) {
     assert.equal(f.enemies.length, 3, `${f.floor}層の雑魚は3種`)
-    assert.equal(f.floorBoss.name, f.boss, `${f.floor}層の層主名が一致`)
+    assert.equal(f.floorBoss.name, f.boss, `${f.floor}層のエリアボス名が一致`)
     assert.ok(f.midBoss && f.floorBoss.specialMove?.name, `${f.floor}層に中ボスと大技がある`)
   }
 })
@@ -38,7 +38,7 @@ test('敵のステータスとスキルに矛盾がない', () => {
   }
 })
 
-test('層主のギミックの参照先が実在する', () => {
+test('エリアボスのギミックの参照先が実在する', () => {
   for (const f of TOWER_FLOORS) {
     const b = f.floorBoss
     if (b.summon) assert.ok(f.enemies[b.summon.enemyIndex], `${f.floor}層 召喚`)
@@ -55,7 +55,7 @@ test('層主のギミックの参照先が実在する', () => {
   }
 })
 
-test('層が進むほど層主が強い', () => {
+test('層が進むほどエリアボスが強い', () => {
   for (let i = 1; i < TOWER_FLOORS.length; i++) {
     const cur = TOWER_FLOORS[i].floorBoss, prev = TOWER_FLOORS[i - 1].floorBoss
     assert.ok(cur.hp > prev.hp, `${i + 1}層のHP`)
@@ -74,7 +74,7 @@ test('内部推奨力と必要出撃数', () => {
   assert.equal(BOSS_FIRST_TOWER_EXP, 1000)
 })
 
-test('塔LVと累計EXPが往復する', () => {
+test('タワーLVと累計EXPが往復する', () => {
   for (const lv of [1, 2, 10, 50, 100, 200]) {
     let total = 0
     for (let i = 1; i < lv; i++) total += towerExpToNext(i)
@@ -157,14 +157,14 @@ test('連戦の構成', () => {
   assert.equal(buildStageEnemies(null, 0).length, 0, 'floorDataがnull')
 })
 
-test('塔出撃の中ボス抽選', () => {
+test('出撃の中ボス抽選', () => {
   assert.equal(buildSortieEnemies(getFloor(1), 0).isMid, false, '確率0なら出ない')
   let mid = 0
   for (let i = 0; i < 5000; i++) if (buildSortieEnemies(getFloor(1), 0.05).isMid) mid++
   assert.ok(Math.abs(mid / 5000 - 0.05) < 0.02, `出現率がほぼ5% (実測 ${(mid / 50).toFixed(1)}%)`)
 })
 
-test('石碑は10層ごと', () => {
+test('石碑は10エリアごと', () => {
   assert.ok(isMonumentFloor(10) && isMonumentFloor(100))
   assert.ok(!isMonumentFloor(1) && !isMonumentFloor(9) && !isMonumentFloor(11))
 })
@@ -180,14 +180,33 @@ test('対象設定', () => {
   assert.ok(isTargetMode('random') && !isTargetMode('xxx'))
 })
 
+test('EXP曲線がクライアントとSQLで一致している', async () => {
+  // 一度ここがズレて「クライアントは50×LV / SQLは5×LV²」の状態になった。
+  // 表示と実際の繰り上がりが食い違うので必ず突き合わせる。
+  const fs = await import('node:fs')
+  const sql = fs.readFileSync('supabase_tower.sql', 'utf8')
+  // 「SELECT (…)」の中身だけ取り出して、クライアント側の式と値を突き合わせる
+  const head = sql.indexOf('CREATE OR REPLACE FUNCTION tower_exp_to_next')
+  assert.ok(head >= 0, 'SQLに tower_exp_to_next がある')
+  const line = sql.slice(head, sql.indexOf(';', head))
+  const m = line.match(/SELECT\s*\(([^)]*)\)/)
+  assert.ok(m, 'SQLの tower_exp_to_next の式が読めた')
+  const sqlExpr = m[1].replace(/::bigint/g, '')
+  for (const lv of [1, 5, 50, 200]) {
+    // eslint-disable-next-line no-new-func
+    const sqlVal = Function('p_lv', `return ${sqlExpr}`)(lv)
+    assert.equal(sqlVal, towerExpToNext(lv), `LV${lv} の必要EXPが一致`)
+  }
+})
+
 test('Goldはサーバーが決める（クライアント申告を受け取らない）', async () => {
   const fs = await import('node:fs')
   const sql = fs.readFileSync('supabase_tower.sql', 'utf8')
   // 額は層と初回かどうかだけで決まるので、サーバー側で計算する
-  assert.ok(sql.includes('GREATEST(0, p_floor) * 300'), '出撃Goldが層数×300でSQLにある')
-  assert.ok(sql.includes('GREATEST(0, p_floor) * 1000000'), '層主の初回Goldが層数×100万でSQLにある')
+  assert.ok(sql.includes('GREATEST(0, p_floor) * 300'), '出撃Goldがエリア数×300でSQLにある')
+  assert.ok(sql.includes('GREATEST(0, p_floor) * 1000000'), 'エリアボスの初回Goldがエリア数×100万でSQLにある')
   assert.ok(sql.includes('v_gold := tower_sortie_gold(p_floor)'), '出撃はサーバー計算')
-  assert.ok(sql.includes('v_gold := tower_boss_gold(p_floor, v_new)'), '層主はサーバー計算（初回判定込み）')
+  assert.ok(sql.includes('v_gold := tower_boss_gold(p_floor, v_new)'), 'エリアボスはサーバー計算（初回判定込み）')
   // v_gold を p_gold から作っていない＝クライアント申告を使っていない
   assert.ok(!sql.includes('v_gold := COALESCE(p_gold'), 'クライアント申告のGoldを使っていない')
   // 通常EXPも街の出撃と同じ量をサーバーが決める（雑魚8〜11/ボス13、10秒モードは5〜6/7）
@@ -202,20 +221,20 @@ test('出撃Goldと無限ポーションの上限（2026-08-03確定）', () => 
   assert.equal(towerSortieGold(1), 300)
   assert.equal(towerSortieGold(10), 3000)
   assert.equal(towerSortieGold(100), 30000)
-  // 層主は初回だけ層数×100万、2回目以降は出撃と同額
+  // エリアボスは初回だけエリア数×100万、2回目以降は出撃と同額
   assert.equal(towerBossGold(1, true), 1000000)
   assert.equal(towerBossGold(10, true), 10000000)
   assert.equal(towerBossGold(1, false), 300)
   assert.equal(towerBossGold(10, false), 3000)
-  // int4(約21億)を超えないこと。100層でも1億なので余裕がある
-  assert.ok(towerBossGold(100, true) < 2147483647, '100層でもint4に収まる')
+  // int4(約21億)を超えないこと。戦闘エリア100でも1億なので余裕がある
+  assert.ok(towerBossGold(100, true) < 2147483647, '戦闘エリア100でもint4に収まる')
   assert.equal(RUN_POTION_LIMIT, 2)
 })
 
-test('深層のHPを見越して保存はbigintでなければならない', () => {
-  // 10層時点では int4 に収まるが、1.2倍複利で伸ばすと100層で確実に溢れる。
+test('深いエリアのHPを見越して保存はbigintでなければならない', () => {
+  // 戦闘エリア10時点では int4 に収まるが、1.2倍複利で伸ばすと戦闘エリア100で確実に溢れる。
   // SQL側の run_hp / tower_exp が bigint であることの根拠。
   const at10 = Math.max(...TOWER_FLOORS.map(f => f.floorBoss.hp))
-  assert.ok(at10 < 2147483647, '10層時点は int4 に収まる')
-  assert.ok(520000 * Math.pow(1.2, 90) > 2147483647, '100層想定は int4 を超える')
+  assert.ok(at10 < 2147483647, '戦闘エリア10時点は int4 に収まる')
+  assert.ok(520000 * Math.pow(1.2, 90) > 2147483647, '戦闘エリア100想定は int4 を超える')
 })

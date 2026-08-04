@@ -1,8 +1,8 @@
 // ============================================================
-// 星霜百層塔（せいそうひゃくそうとう）
+// エンドレスタワー
 // ------------------------------------------------------------
 // ・現状 is_admin 限定の開発先行（サーバ側 tower_can_enter() が本番の権威）
-// ・入口は街メニューの「⚔ 挑戦」→「🗼 星霜百層塔」（/tower の独立ページ）
+// ・入口は街メニューの「⚔ 挑戦」→「🗼 エンドレスタワー」（/tower の独立ページ）
 // ・内部推奨戦闘力は開発上の目安であり、画面には出さない
 // ============================================================
 import { useState, useEffect, useRef } from 'react'
@@ -22,7 +22,7 @@ import {
 import { simulateTowerBattle, buildStageEnemies, buildSortieEnemies, towerTreeEffects } from '../lib/towerBattle'
 
 const fmt = (n) => Number(n || 0).toLocaleString()
-const floorLabel = (n) => `${n}層`
+const floorLabel = (n) => `戦闘エリア${n}`
 
 // 通信がハングしても「戦闘中...」で固まらないようにする
 const withTimeout = (promise, ms = 15000) =>
@@ -40,10 +40,10 @@ function Shell({ nav, children }) {
   return (
     <div style={{ minHeight: '100vh', background: C.bg, padding: '12px', fontFamily: 'monospace' }}>
       {/* index.css の #root に text-align:center があるので、ここで左揃えに戻す。
-          中央寄せしたい所（読み込み中・層主の立ち絵など）は個別に指定している */}
+          中央寄せしたい所（読み込み中・エリアボスの立ち絵など）は個別に指定している */}
       <div style={{ maxWidth: '640px', margin: '0 auto', textAlign: 'left' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${C.line}`, paddingBottom: '8px', marginBottom: '12px', position: 'sticky', top: 0, zIndex: 30, paddingTop: '8px', background: C.bg }}>
-          <div style={{ color: C.accent, fontSize: '16px', letterSpacing: '3px' }}>🗼 星霜百層塔</div>
+          <div style={{ color: C.accent, fontSize: '16px', letterSpacing: '3px' }}>🗼 エンドレスタワー</div>
           <button onClick={() => nav('/game')} style={{ background: 'none', border: `1px solid ${C.line}`, color: C.text, padding: '4px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px' }}>🏰 街に戻る</button>
         </div>
         {children}
@@ -60,7 +60,7 @@ export default function Tower() {
   const [skillSets, setSkillSets] = useState([])
   const [abilityTitle, setAbilityTitle] = useState(null)
   const [status, setStatus] = useState(null)
-  const [tab, setTab] = useState('floors')       // floors | tree | monument（到達層ランキングは /ranking のタブへ）
+  const [tab, setTab] = useState('floors')       // floors | tree | monument（到達エリアランキングは /ranking のタブへ）
   const [scene, setScene] = useState('lobby')    // lobby | battle
   const [selFloor, setSelFloor] = useState(1)
   const [logs, setLogs] = useState([])
@@ -72,11 +72,11 @@ export default function Tower() {
   const [treeDraft, setTreeDraft] = useState(null)
   const [imgFail, setImgFail] = useState({})   // 画像が無い層は文字だけに戻す
   const [targetOptions, setTargetOptions] = useState([])   // 狙う相手（スキル設定画面で決める）
-  const [playerItem, setPlayerItem] = useState(null)       // 装備中のアイテム（塔でも街と同じく使える）
+  const [playerItem, setPlayerItem] = useState(null)       // 装備中のアイテム（タワーでも街と同じく使える）
   const logsEndRef = useRef(null)
   const floorPickedRef = useRef(false)   // 最前線への自動合わせは初回だけ
   const busyRef = useRef(false)          // 連打で二重に戦闘が走るのを防ぐ（stateは反映が1テンポ遅れる）
-  const [remaining, setRemaining] = useState(0)  // 塔出撃のクールダウン残り秒
+  const [remaining, setRemaining] = useState(0)  // 出撃のクールダウン残り秒
   const cdRef = useRef(null)
 
   useEffect(() => { init() }, [])
@@ -135,8 +135,8 @@ export default function Tower() {
     if (error) { setStatus({ error: 'SQL未実行の可能性があります（supabase_tower.sql）' }); return }
     setStatus(data)
     if (data && !data.error) {
-      // 選んでいる層は保つ。初回だけ最前線（まだ層主を倒していない一番手前の層）に合わせる。
-      // 毎回上書きすると、踏破済みの層を周回しているときに勝手に飛ばされる。
+      // 選んでいる戦闘エリアは保つ。初回だけ最前線（まだエリアボスを倒していない一番手前のエリア）に合わせる。
+      // 毎回上書きすると、踏破済みのエリアを周回しているときに勝手に飛ばされる。
       if (!floorPickedRef.current) {
         floorPickedRef.current = true
         const next = (data.floors || []).find(f => f.unlocked && !f.boss_cleared)
@@ -180,7 +180,7 @@ export default function Tower() {
   }
 
   const treeAlloc = status?.tree_alloc || {}
-  // 狙う相手はスキル設定画面の「挑戦」セットの設定に従う（塔は挑戦セットを使うため）
+  // 狙う相手はスキル設定画面の「挑戦」セットの設定に従う（タワーは挑戦セットを使うため）
   const targetMode = pickTargetMode(targetOptions, 'challenge')
   const tr = towerTreeEffects(treeAlloc)
   // 出撃クールダウン（街の出撃と同じ effWait・アンカーも last_action_at を共有）
@@ -188,7 +188,7 @@ export default function Tower() {
   const canSortie = remaining <= 0 && !busy
   const timerPct = Math.min(100, ((sortieWait - remaining) / sortieWait) * 100)
 
-  // ── 塔出撃（雑魚1体・HP/MP満タン） ──────────────────────────
+  // ── 出撃（雑魚1体・HP/MP満タン） ──────────────────────────
   const doSortie = async (floor) => {
     if (busy || busyRef.current || remaining > 0) return
     const fd = getFloor(floor)
@@ -244,7 +244,7 @@ export default function Tower() {
     }
   }
 
-  // ── 層主連戦：開始 ──────────────────────────────────────────
+  // ── エリアボス連戦：開始 ──────────────────────────────────────────
   const startRun = async (floor) => {
     if (busy || busyRef.current) return
     busyRef.current = true
@@ -262,7 +262,7 @@ export default function Tower() {
     } finally { busyRef.current = false; setBusy(false) }
   }
 
-  // ── 層主連戦：1戦ぶん進める ─────────────────────────────────
+  // ── エリアボス連戦：1戦ぶん進める ─────────────────────────────────
   const runStage = async () => {
     if (busy || busyRef.current || !runInfo) return
     const fd = getFloor(runInfo.floor)
@@ -378,14 +378,14 @@ export default function Tower() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
           <div style={{ color: C.accent, fontSize: '13px' }}>
             {floorLabel(inRun ? runInfo.floor : selFloor)}
-            {inRun && <span style={{ color: C.gold, marginLeft: '8px' }}>層主への道 {runInfo.stage + 1}/{BOSS_RUN_STAGES.length}（{stageLabel}）</span>}
+            {inRun && <span style={{ color: C.gold, marginLeft: '8px' }}>エリアボスへの道 {runInfo.stage + 1}/{BOSS_RUN_STAGES.length}（{stageLabel}）</span>}
           </div>
           {!busy && (
             <button onClick={() => { setScene('lobby'); setLogs([]); setGain(null) }} style={btn(C.dim)}>← 戻る</button>
           )}
         </div>
 
-        {/* 層主・中ボスの立ち絵（中ボスは層主の画像を流用。画像が無い層は出さない） */}
+        {/* エリアボス・中ボスの立ち絵（中ボスはエリアボスの画像を流用。画像が無い層は出さない） */}
         {inRun && ['mid', 'boss'].includes(BOSS_RUN_STAGES[runInfo.stage]?.kind) && !imgFail[runInfo.floor] && (
           <div style={{ textAlign: 'center', marginBottom: '8px' }}>
             <img
@@ -424,10 +424,10 @@ export default function Tower() {
           <div style={{ border: `1px solid ${gain.win ? C.ok : C.ng}`, background: C.panel, padding: '10px', marginTop: '8px', fontSize: '11px', color: C.text, lineHeight: '1.9' }}>
             {gain.cleared ? (
               <>
-                <div style={{ color: C.gold, fontSize: '13px' }}>👑 {floorLabel(gain.floor)}の層主を撃破！</div>
-                {gain.firstClear && <div style={{ color: C.ok }}>この層を初めて踏破した！ 次の層が解放された。</div>}
+                <div style={{ color: C.gold, fontSize: '13px' }}>👑 {floorLabel(gain.floor)}のエリアボスを撃破！</div>
+                {gain.firstClear && <div style={{ color: C.ok }}>このエリアを初めて踏破した！ 次のエリアが解放された。</div>}
                 {gain.monument && <div style={{ color: C.gold }}>🗿 石碑に名前が刻まれた！（サーバー最初の踏破者）</div>}
-                <div>Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ 塔EXP +{fmt(gain.towerExp)}</div>
+                <div>Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ タワーEXP +{fmt(gain.towerExp)}</div>
               </>
             ) : gain.win === false ? (
               <div style={{ color: C.ng }}>敗北…{gain.stageLabel ? `（${gain.stageLabel}）` : ''} 連戦は最初からやり直しになります。</div>
@@ -438,8 +438,8 @@ export default function Tower() {
               </>
             ) : (
               <>
-                <div style={{ color: C.ok }}>勝利！ Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ 塔EXP +{fmt(gain.towerExp)}</div>
-                {gain.midCleared && <div style={{ color: C.gold }}>⚔ 中ボスを撃破！ 層主に挑めるようになった。</div>}
+                <div style={{ color: C.ok }}>勝利！ Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ タワーEXP +{fmt(gain.towerExp)}</div>
+                {gain.midCleared && <div style={{ color: C.gold }}>⚔ 中ボスを撃破！ エリアボスに挑めるようになった。</div>}
                 {gain.mid && !gain.midCleared && <div style={{ color: C.ng }}>中ボスが現れたが、退けられた…</div>}
               </>
             )}
@@ -468,12 +468,12 @@ export default function Tower() {
   // ── ロビー ──────────────────────────────────────────────────
   return (
     <Shell nav={nav}>
-      {/* 塔LV・タブ */}
+      {/* タワーLV・タブ */}
       <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '10px 12px', marginBottom: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px' }}>
           <div style={{ color: C.dim, fontSize: '11px' }}>階層</div>
           <div style={{ color: C.text, fontSize: '11px' }}>
-            塔LV <span style={{ color: C.gold, fontSize: '14px' }}>{status.tower_lv}</span>
+            タワーLV <span style={{ color: C.gold, fontSize: '14px' }}>{status.tower_lv}</span>
             <span style={{ color: C.dim, marginLeft: '8px' }}>{fmt(status.exp_in_lv)} / {fmt(status.exp_to_next)}</span>
           </div>
         </div>
@@ -481,20 +481,20 @@ export default function Tower() {
           <div style={{ height: '100%', width: `${Math.min(100, (status.exp_in_lv / Math.max(1, status.exp_to_next)) * 100)}%`, background: C.accent }} />
         </div>
         <div style={{ color: C.dim, fontSize: '10px', marginTop: '5px' }}>
-          到達 {status.max_floor > 0 ? floorLabel(status.max_floor) : '—'} ／ 塔スキルポイント 残り {Math.max(0, status.tower_lv - (status.spent || 0))}
+          到達 {status.max_floor > 0 ? floorLabel(status.max_floor) : '—'} ／ エンドポイント 残り {Math.max(0, status.tower_lv - (status.spent || 0))}
         </div>
       </div>
 
       <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
-        <button onClick={() => setTab('floors')} style={tabBtn(tab === 'floors')}>層</button>
-        <button onClick={() => setTab('tree')} style={tabBtn(tab === 'tree')}>塔スキル</button>
+        <button onClick={() => setTab('floors')} style={tabBtn(tab === 'floors')}>戦闘エリア</button>
+        <button onClick={() => setTab('tree')} style={tabBtn(tab === 'tree')}>エンドポイント</button>
         <button onClick={openMonument} style={tabBtn(tab === 'monument')}>石碑</button>
-        <button onClick={() => nav('/ranking')} style={tabBtn(false)}>到達層 ↗</button>
+        <button onClick={() => nav('/ranking')} style={tabBtn(false)}>到達エリア ↗</button>
       </div>
 
       {msg && <div style={{ color: C.ng, fontSize: '11px', marginBottom: '8px' }}>{msg}</div>}
 
-      {/* ── 層選択 ── */}
+      {/* ── エリア選択 ── */}
       {tab === 'floors' && (
         <>
           {runInfo && (
@@ -516,7 +516,7 @@ export default function Tower() {
             <button onClick={() => nav('/skills')} style={btn(C.dim)}>スキル設定で変更 ↗</button>
           </div>
 
-          {/* 出撃パネル（街の出撃と同じ形：タイマー→層選択→大きな出撃ボタン） */}
+          {/* 出撃パネル（街の出撃と同じ形：タイマー→エリア選択→大きな出撃ボタン） */}
           <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '12px', marginBottom: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '3px' }}>
               <span style={{ color: C.dim }}>次の行動まで</span>
@@ -534,7 +534,7 @@ export default function Tower() {
                 width: '100%', background: '#001028', border: '1px solid #0044aa', color: '#88ccff',
                 padding: '8px', fontFamily: 'monospace', fontSize: '12px', marginBottom: '8px',
               }}>
-              {/* 挑戦できる層だけ出す。未解放の層は存在ごと見せない（層主の名前も伏せる） */}
+              {/* 挑戦できる戦闘エリアだけ出す。未解放のエリアは存在ごと見せない（エリアボスの名前も伏せる） */}
               {floors.filter(f => f.unlocked).map(f => (
                 <option key={f.floor} value={f.floor}>
                   {floorLabel(f.floor)}
@@ -549,11 +549,11 @@ export default function Tower() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: C.text }}>
                       {isMonumentFloor(selFloor) && '🗿 '}
-                      {/* 層主の名前は倒すまで伏せる */}
-                      層主「<span style={{ color: C.gold }}>{sel.boss_cleared ? fd.boss : '？？？'}</span>」
+                      {/* エリアボスの名前は倒すまで伏せる */}
+                      エリアボス「<span style={{ color: C.gold }}>{sel.boss_cleared ? fd.boss : '？？？'}</span>」
                     </span>
                     <span style={{ color: sel.boss_cleared ? C.ok : sel.mid_defeated ? C.gold : C.dim, fontSize: '10px' }}>
-                      {sel.boss_cleared ? '✓ 踏破済' : sel.mid_defeated ? '層主に挑戦可' : '探索中'}
+                      {sel.boss_cleared ? '✓ 踏破済' : sel.mid_defeated ? 'エリアボスに挑戦可' : '探索中'}
                     </span>
                   </div>
                   {!sel.mid_defeated && sel.sortie_count >= sel.need && (
@@ -568,12 +568,12 @@ export default function Tower() {
 
                 <button onClick={() => (runInfo ? setScene('battle') : startRun(selFloor))} disabled={busy || !sel.mid_defeated}
                   style={bigBtn(C.accent, busy || !sel.mid_defeated)}>
-                  {sel.mid_defeated ? `🗼 層主に挑む（${BOSS_RUN_STAGES.length}連戦）` : '🗼 層主に挑む（中ボス撃破が必要）'}
+                  {sel.mid_defeated ? `🗼 エリアボスに挑む（${BOSS_RUN_STAGES.length}連戦）` : '🗼 エリアボスに挑む（中ボス撃破が必要）'}
                 </button>
 
                 <div style={{ color: C.dim, fontSize: '10px', lineHeight: '1.7' }}>
                   出撃を重ねると、やがて中ボスが現れるようになります。<br />
-                  中ボスを倒すと層主へ挑戦できます。層主への道は<span style={{ color: C.gold }}>{BOSS_RUN_STAGES.length}連戦</span>で、その間HP・MPは回復しません。<br />
+                  中ボスを倒すとエリアボスへ挑戦できます。エリアボスへの道は<span style={{ color: C.gold }}>{BOSS_RUN_STAGES.length}連戦</span>で、その間HP・MPは回復しません。<br />
                   出撃・連戦の開始時はHP・MPが満タンになります（街のHPとは別枠）。
                 </div>
               </>
@@ -586,12 +586,12 @@ export default function Tower() {
       {tab === 'tree' && (
         <>
           <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '10px', marginBottom: '10px', fontSize: '11px', color: C.text }}>
-            残りポイント <span style={{ color: remainPt > 0 ? C.gold : C.dim, fontSize: '14px' }}>{Math.max(0, remainPt)}</span>
+            残りエンドポイント <span style={{ color: remainPt > 0 ? C.gold : C.dim, fontSize: '14px' }}>{Math.max(0, remainPt)}</span>
             <span style={{ color: C.dim, marginLeft: '10px' }}>1ノード {maxSteps}段まで</span>
             <div style={{ color: C.dim, fontSize: '10px', marginTop: '4px' }}>
-              効果は<span style={{ color: C.text }}>塔の中だけ</span>で有効です。
+              効果は<span style={{ color: C.text }}>タワーの中だけ</span>で有効です。
               {nextUnlock(towerLv)
-                ? `塔LV${nextUnlock(towerLv).lv}で ${nextUnlock(towerLv).upTo}段まで解放。`
+                ? `タワーLV${nextUnlock(towerLv).lv}で ${nextUnlock(towerLv).upTo}段まで解放。`
                 : `全段（${TREE_MAX_STEPS}段）解放済み。`}
             </div>
           </div>
@@ -632,7 +632,7 @@ export default function Tower() {
       {tab === 'monument' && (
         <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '12px' }}>
           <div style={{ color: C.gold, fontSize: '12px', marginBottom: '4px' }}>🗿 踏破の石碑</div>
-          <div style={{ color: C.dim, fontSize: '10px', marginBottom: '10px' }}>10層ごとの節目を、サーバーで最初に踏破した者の名が刻まれる。</div>
+          <div style={{ color: C.dim, fontSize: '10px', marginBottom: '10px' }}>10エリアごとの節目を、サーバーで最初に踏破した者の名が刻まれる。</div>
           {monument === null && <div style={{ color: C.dim, fontSize: '11px' }}>読み込み中...</div>}
           {monument?.map(m => (
             <div key={m.floor} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${C.line}`, padding: '8px 2px', fontSize: '11px' }}>

@@ -1,12 +1,12 @@
 -- ============================================================
--- 星霜百層塔（せいそうひゃくそうとう）
+-- エンドレスタワー
 -- ------------------------------------------------------------
 -- ・現状 is_admin 限定の開発先行。一般公開時の解放条件はキャラLV1000。
--- ・1層の流れ:
---     ① 塔出撃を (30 + 層数×10) 回こなす → 中ボスが5%で出現するようになる
---     ② 中ボスを撃破 → その層の層主に挑戦できる（以降いつでも何度でも）
---     ③ 層主挑戦 = 6連戦。HP/MPは連戦中いっさい回復しない（持ち越し）
--- ・HP/MPは「塔専用プール」。profiles.hp_current/mp_current とは完全に切り離す。
+-- ・戦闘エリア1の流れ:
+--     ① 出撃を (30 + エリア数×10) 回こなす → 中ボスが5%で出現するようになる
+--     ② 中ボスを撃破 → そのエリアのエリアボスに挑戦できる（以降いつでも何度でも）
+--     ③ エリアボス挑戦 = 6連戦。HP/MPは連戦中いっさい回復しない（持ち越し）
+-- ・HP/MPは「タワー専用プール」。profiles.hp_current/mp_current とは完全に切り離す。
 --   → profiles の保護列を一切書かないので protect_stats トリガーに触れない。
 -- ・報酬は未設計。このSQLでは Gold と通常EXP だけを付与する（apply_battle_result は触らない）。
 --
@@ -21,13 +21,13 @@
 -- 1. テーブル
 -- ============================================================
 
--- 層ごとの進捗（出撃カウンタ・中ボス撃破・層主撃破）
+-- エリアごとの進捗（出撃カウンタ・中ボス撃破・エリアボス撃破）
 CREATE TABLE IF NOT EXISTS tower_progress (
   player_id      uuid    NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   floor          int     NOT NULL,
-  sortie_count   int     NOT NULL DEFAULT 0,   -- その層で塔出撃した回数（永久保存）
-  mid_defeated   boolean NOT NULL DEFAULT false, -- 中ボスを倒した＝層主に挑戦できる
-  boss_cleared   boolean NOT NULL DEFAULT false, -- 層主を倒した＝次の層が解放
+  sortie_count   int     NOT NULL DEFAULT 0,   -- そのエリアで出撃した回数（永久保存）
+  mid_defeated   boolean NOT NULL DEFAULT false, -- 中ボスを倒した＝エリアボスに挑戦できる
+  boss_cleared   boolean NOT NULL DEFAULT false, -- エリアボスを倒した＝次のエリアが解放
   first_clear_at timestamptz,
   updated_at     timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (player_id, floor)
@@ -37,16 +37,16 @@ DROP POLICY IF EXISTS tower_progress_select_own ON tower_progress;
 CREATE POLICY tower_progress_select_own ON tower_progress
   FOR SELECT USING (auth.uid() = player_id);
 
--- プレイヤーごとの塔の状態（塔EXP・塔LV・ツリー・進行中の連戦）
--- ※深層の敵HPが天文学的になるため、HPを保存する列はすべて bigint
+-- プレイヤーごとのタワーの状態（タワーEXP・タワーLV・ツリー・進行中の連戦）
+-- ※深いエリアの敵HPが天文学的になるため、HPを保存する列はすべて bigint
 CREATE TABLE IF NOT EXISTS tower_player (
   player_id     uuid    PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
-  tower_exp     bigint  NOT NULL DEFAULT 0,    -- 累計の塔EXP
+  tower_exp     bigint  NOT NULL DEFAULT 0,    -- 累計のタワーEXP
   tree_alloc    jsonb   NOT NULL DEFAULT '{}'::jsonb, -- {ノードkey: 段数}
   target_mode   text    NOT NULL DEFAULT 'top',-- 複数敵がいるときの狙い方 top/random/hp_high/hp_low
-  max_floor     int     NOT NULL DEFAULT 0,    -- 到達層（ランキング用。層主を倒した最高層）
-  max_floor_at  timestamptz,                   -- その到達層に初めて到達した時刻（同率のタイブレーク）
-  -- 進行中の層主連戦（中断してもここから再開する。抜け道を塞ぐためHPごと保存）
+  max_floor     int     NOT NULL DEFAULT 0,    -- 到達エリア（ランキング用。エリアボスを倒した最高層）
+  max_floor_at  timestamptz,                   -- その到達エリアに初めて到達した時刻（同率のタイブレーク）
+  -- 進行中のエリアボス連戦（中断してもここから再開する。抜け道を塞ぐためHPごと保存）
   run_floor     int,                           -- NULL = 連戦していない
   run_stage     int     NOT NULL DEFAULT 0,    -- 0..5（BOSS_RUN_STAGES の添字）
   run_hp        bigint,
@@ -62,7 +62,7 @@ DROP POLICY IF EXISTS tower_player_select_own ON tower_player;
 CREATE POLICY tower_player_select_own ON tower_player
   FOR SELECT USING (auth.uid() = player_id);
 
--- 石碑：層主のサーバー初討伐者（10層ごとの節目だけ記録）
+-- 石碑：エリアボスのサーバー初討伐者（10エリアごとの節目だけ記録）
 CREATE TABLE IF NOT EXISTS tower_first_clear (
   floor       int  PRIMARY KEY,                -- ユニーク制約で最初のINSERTだけが通る
   player_id   uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -78,28 +78,28 @@ CREATE POLICY tower_first_clear_select_all ON tower_first_clear
 -- 2. 定数（クライアントの src/lib/tower.js と必ず一致させること）
 -- ============================================================
 CREATE OR REPLACE FUNCTION tower_max_floor() RETURNS int
-LANGUAGE sql IMMUTABLE AS $$ SELECT 10 $$;              -- 実装済みの最終層
+LANGUAGE sql IMMUTABLE AS $$ SELECT 10 $$;              -- 実装済みの最終エリア
 
 CREATE OR REPLACE FUNCTION tower_sorties_to_mid(p_floor int) RETURNS int
 LANGUAGE sql IMMUTABLE AS $$ SELECT 30 + p_floor * 10 $$;
 
--- 塔出撃1回で得られる塔EXP（20〜30のランダム・2026-08-03確定）
+-- 出撃1回で得られるタワーEXP（20〜30のランダム・2026-08-03確定）
 -- ⚠ 乱数なので、1回の処理の中で複数回呼ばない（呼ぶたび違う値になる）。
 --   必ず変数に受けてから使うこと。
 CREATE OR REPLACE FUNCTION tower_sortie_tower_exp() RETURNS int
 LANGUAGE sql VOLATILE AS $$ SELECT 20 + floor(random() * 11)::int $$;
 
--- 層主撃破で得られる塔EXP。初回だけ1000、2回目以降は出撃と同じ
+-- エリアボス撃破で得られるタワーEXP。初回だけ1000、2回目以降は出撃と同じ
 CREATE OR REPLACE FUNCTION tower_boss_tower_exp(p_first boolean) RETURNS int
 LANGUAGE sql VOLATILE AS $$
   SELECT CASE WHEN p_first THEN 1000 ELSE tower_sortie_tower_exp() END
 $$;
 
--- 塔LV lv → lv+1 に必要な塔EXP = 5 × lv²
+-- タワーLV lv → lv+1 に必要なタワーEXP = 50 × lv（2026-08-03変更・直線）
 CREATE OR REPLACE FUNCTION tower_exp_to_next(p_lv int) RETURNS bigint
-LANGUAGE sql IMMUTABLE AS $$ SELECT (5::bigint * p_lv * p_lv) $$;
+LANGUAGE sql IMMUTABLE AS $$ SELECT (50::bigint * p_lv) $$;
 
--- 累計塔EXPから塔LVを求める
+-- 累計タワーEXPからタワーLVを求める
 CREATE OR REPLACE FUNCTION tower_level_from_exp(p_exp bigint) RETURNS int
 LANGUAGE plpgsql IMMUTABLE AS $$
 DECLARE v_lv int := 1; v_rest bigint := COALESCE(p_exp, 0);
@@ -111,7 +111,7 @@ BEGIN
   RETURN v_lv;
 END; $$;
 
--- 塔LVで1ノードに振れる最大段数（10段ごとに解放・上限50段）
+-- タワーLVで1ノードに振れる最大段数（10段ごとに解放・上限50段）
 CREATE OR REPLACE FUNCTION tower_max_steps(p_lv int) RETURNS int
 LANGUAGE sql IMMUTABLE AS $$
   SELECT CASE
@@ -122,7 +122,7 @@ LANGUAGE sql IMMUTABLE AS $$
     ELSE 10 END
 $$;
 
--- 塔に入れるか（現状 is_admin 限定。一般公開時は char_lv >= 1000 へ切り替える）
+-- エンドレスタワーに入れるか（現状 is_admin 限定。一般公開時は char_lv >= 1000 へ切り替える）
 CREATE OR REPLACE FUNCTION tower_can_enter(p_profile profiles) RETURNS boolean
 LANGUAGE sql IMMUTABLE AS $$
   SELECT COALESCE(p_profile.is_admin, false)
@@ -130,7 +130,7 @@ LANGUAGE sql IMMUTABLE AS $$
   -- SELECT COALESCE(p_profile.is_admin, false) OR COALESCE(p_profile.char_lv, 1) >= 1000
 $$;
 
--- 塔で行動できない状態なら理由を返す（行動できるなら NULL）
+-- エンドレスタワーで行動できない状態なら理由を返す（行動できるなら NULL）
 -- 条件は街の出撃とまったく同じ: 釣り中／かかし修練中／ペットダンジョン探索中(中断中を除く)
 CREATE OR REPLACE FUNCTION tower_idle_block(p_uid uuid) RETURNS text
 LANGUAGE plpgsql STABLE SECURITY DEFINER AS $$
@@ -138,20 +138,20 @@ DECLARE v_flag boolean;
 BEGIN
   SELECT COALESCE(is_fishing, false) INTO v_flag FROM profiles WHERE id = p_uid;
   IF COALESCE(v_flag, false) THEN
-    RETURN '🎣 釣り中は塔に入れません。先に釣りを終了してください。';
+    RETURN '🎣 釣り中はタワーに入れません。先に釣りを終了してください。';
   END IF;
 
   SELECT true INTO v_flag FROM scarecrow_sessions
     WHERE player_id = p_uid AND status = 'active' AND ends_at > now() LIMIT 1;
   IF COALESCE(v_flag, false) THEN
-    RETURN '🌾 かかし修練中は塔に入れません。修練が終わるまで待ちましょう。';
+    RETURN '🌾 かかし修練中はタワーに入れません。修練が終わるまで待ちましょう。';
   END IF;
 
   v_flag := NULL;
   SELECT true INTO v_flag FROM dungeon_runs
     WHERE owner_id = p_uid AND status = 'active' AND COALESCE(suspended, false) = false LIMIT 1;
   IF COALESCE(v_flag, false) THEN
-    RETURN '🕳 ダンジョン探索中は塔に入れません。中断するか終えてからにしましょう。';
+    RETURN '🕳 ダンジョン探索中はタワーに入れません。中断するか終えてからにしましょう。';
   END IF;
 
   RETURN NULL;
@@ -159,8 +159,8 @@ END; $$;
 
 -- Goldは層と初回かどうかだけで決まるので、クライアントの申告を受け取らず
 -- サーバーが計算する。これで改ざんの余地そのものが無くなる。
---   出撃    : 層数×300（中ボスに当たっても同額）
---   層主撃破: 初回だけ層数×100万、2回目以降は出撃と同じ層数×300
+--   出撃    : エリア数×300（中ボスに当たっても同額）
+--   エリアボス撃破: 初回だけエリア数×100万、2回目以降は出撃と同じエリア数×300
 CREATE OR REPLACE FUNCTION tower_sortie_gold(p_floor int) RETURNS int
 LANGUAGE sql IMMUTABLE AS $$ SELECT GREATEST(0, p_floor) * 300 $$;
 
@@ -176,9 +176,9 @@ DROP FUNCTION IF EXISTS tower_gold_cap(int, boolean);
 
 -- 通常EXPも街の出撃とまったく同じ量にする（2026-08-03確定）。Goldと同じくサーバーが決める。
 --   雑魚 : 20秒モード 8〜11 / 10秒モード 5〜6
---   ボス : 20秒モード 13    / 10秒モード 7       （中ボス・層主）
+--   ボス : 20秒モード 13    / 10秒モード 7       （中ボス・エリアボス）
 --   キャラLV100未満は1.5倍（街と同じ）
---   さらに塔ツリー「取得経験値+1の確率」で +1（1段0.5%・最大50段=25%）
+--   さらにエンドポイント「取得経験値+1の確率」で +1（1段0.5%・最大50段=25%）
 CREATE OR REPLACE FUNCTION tower_battle_exp(p_uid uuid, p_is_boss boolean) RETURNS int
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -301,7 +301,7 @@ BEGIN
   SELECT * INTO v_profile FROM profiles WHERE id = v_pid;
   IF NOT FOUND THEN RETURN json_build_object('error', 'プロフィールがありません'); END IF;
   IF NOT tower_can_enter(v_profile) THEN
-    RETURN json_build_object('error', 'まだ塔には入れません', 'locked', true);
+    RETURN json_build_object('error', 'まだエンドレスタワーには入れません', 'locked', true);
   END IF;
 
   SELECT * INTO v_tp FROM tower_player WHERE player_id = v_pid;
@@ -312,7 +312,7 @@ BEGIN
   END IF;
 
   v_lv := tower_level_from_exp(v_tp.tower_exp);
-  -- 塔LVまでに消費した累計EXP → 現在LV内の余剰を出す
+  -- タワーLVまでに消費した累計EXP → 現在LV内の余剰を出す
   v_used := 0;
   FOR v_i IN 1 .. (v_lv - 1) LOOP v_used := v_used + tower_exp_to_next(v_i); END LOOP;
 
@@ -322,7 +322,7 @@ BEGIN
     'need',         tower_sorties_to_mid(f.floor),
     'mid_defeated', COALESCE(p.mid_defeated, false),
     'boss_cleared', COALESCE(p.boss_cleared, false),
-    -- 1層は常に解放。2層以降は前の層の層主を倒していれば解放
+    -- 戦闘エリア1は常に解放。戦闘エリア2以降は前のエリアのエリアボスを倒していれば解放
     'unlocked',     (f.floor = 1 OR COALESCE(prev.boss_cleared, false))
   ) ORDER BY f.floor), '[]'::json) INTO v_floors
   FROM generate_series(1, tower_max_floor()) AS f(floor)
@@ -349,7 +349,7 @@ BEGIN
 END; $$;
 
 -- ============================================================
--- 4. 塔出撃の結果を反映
+-- 4. 出撃の結果を反映
 --    p_won        : 勝ったか
 --    p_mid_defeat : この出撃で中ボスを倒したか
 --    p_gold       : 使わない（Goldはサーバーが決める。互換のため引数だけ残してある）
@@ -374,23 +374,23 @@ BEGIN
   v_pid := auth.uid();
   IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
   IF p_floor < 1 OR p_floor > tower_max_floor() THEN
-    RETURN json_build_object('error', '層が不正です');
+    RETURN json_build_object('error', 'エリアが不正です');
   END IF;
 
   SELECT * INTO v_profile FROM profiles WHERE id = v_pid;
   IF NOT tower_can_enter(v_profile) THEN
-    RETURN json_build_object('error', 'まだ塔には入れません');
+    RETURN json_build_object('error', 'まだエンドレスタワーには入れません');
   END IF;
   -- 街の出撃と同じ排他（釣り／かかし／ペットダンジョン）
   v_block := tower_idle_block(v_pid);
   IF v_block IS NOT NULL THEN RETURN json_build_object('error', v_block); END IF;
 
-  -- その層が解放されているか（1層は常に可・2層以降は前の層の層主撃破が必要）
+  -- そのエリアが解放されているか（戦闘エリア1は常に可・戦闘エリア2以降は前のエリアのエリアボス撃破が必要）
   IF p_floor > 1 THEN
     SELECT COALESCE(boss_cleared, false) INTO v_prev
       FROM tower_progress WHERE player_id = v_pid AND floor = p_floor - 1;
     IF NOT COALESCE(v_prev, false) THEN
-      RETURN json_build_object('error', 'この層はまだ解放されていません');
+      RETURN json_build_object('error', 'このエリアはまだ解放されていません');
     END IF;
   END IF;
 
@@ -413,7 +413,7 @@ BEGIN
       WHERE player_id = v_pid AND floor = p_floor;
   END IF;
 
-  -- 塔EXPは勝敗にかかわらず1出撃ぶん入る（出撃したこと自体が積み上がる）
+  -- タワーEXPは勝敗にかかわらず1出撃ぶん入る（出撃したこと自体が積み上がる）
   -- ⚠乱数なので1回だけ引いて、加算にも戻り値にも同じ値を使う
   v_texp := tower_sortie_tower_exp();
   INSERT INTO tower_player (player_id, tower_exp) VALUES (v_pid, v_texp)
@@ -436,7 +436,7 @@ BEGIN
 END; $$;
 
 -- ============================================================
--- 5. 層主連戦：開始 / 進行の保存 / 破棄
+-- 5. エリアボス連戦：開始 / 進行の保存 / 破棄
 --    中断してもHPごとサーバーに残るので「離脱して回復して戻る」抜け道がない。
 -- ============================================================
 CREATE OR REPLACE FUNCTION tower_run_start(p_floor int, p_hp bigint, p_mp bigint)
@@ -448,15 +448,15 @@ BEGIN
   v_pid := auth.uid();
   IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
   SELECT * INTO v_profile FROM profiles WHERE id = v_pid;
-  IF NOT tower_can_enter(v_profile) THEN RETURN json_build_object('error', 'まだ塔には入れません'); END IF;
-  IF p_floor < 1 OR p_floor > tower_max_floor() THEN RETURN json_build_object('error', '層が不正です'); END IF;
+  IF NOT tower_can_enter(v_profile) THEN RETURN json_build_object('error', 'まだエンドレスタワーには入れません'); END IF;
+  IF p_floor < 1 OR p_floor > tower_max_floor() THEN RETURN json_build_object('error', 'エリアが不正です'); END IF;
   v_block := tower_idle_block(v_pid);
   IF v_block IS NOT NULL THEN RETURN json_build_object('error', v_block); END IF;
 
   IF p_floor > 1 THEN
     SELECT COALESCE(boss_cleared, false) INTO v_prev
       FROM tower_progress WHERE player_id = v_pid AND floor = p_floor - 1;
-    IF NOT COALESCE(v_prev, false) THEN RETURN json_build_object('error', 'この層はまだ解放されていません'); END IF;
+    IF NOT COALESCE(v_prev, false) THEN RETURN json_build_object('error', 'このエリアはまだ解放されていません'); END IF;
   END IF;
 
   SELECT COALESCE(mid_defeated, false) INTO v_mid
@@ -522,7 +522,7 @@ BEGIN
 END; $$;
 
 -- ============================================================
--- 6. 層主撃破
+-- 6. エリアボス撃破
 --    連戦の最終ステージまで進んでいることをサーバ側で検証してから確定する。
 -- ============================================================
 CREATE OR REPLACE FUNCTION tower_boss_clear(p_floor int, p_gold int DEFAULT 0, p_exp int DEFAULT 0)
@@ -547,9 +547,9 @@ BEGIN
 
   SELECT * INTO v_tp FROM tower_player WHERE player_id = v_pid;
   IF NOT FOUND OR v_tp.run_floor IS DISTINCT FROM p_floor THEN
-    RETURN json_build_object('error', 'この層の連戦を行っていません');
+    RETURN json_build_object('error', 'このエリアの連戦を行っていません');
   END IF;
-  -- 6戦目（添字5）まで進んでいなければ層主を倒せるはずがない
+  -- 6戦目（添字5）まで進んでいなければエリアボスを倒せるはずがない
   IF v_tp.run_stage < 5 THEN
     RETURN json_build_object('error', '連戦が最後まで進んでいません');
   END IF;
@@ -560,7 +560,7 @@ BEGIN
   v_new := COALESCE(v_new, true);
 
   -- Gold・EXPともサーバーが決める（p_gold / p_exp は受け取らない＝改ざんできない）
-  -- Goldは初回だけ層数×100万、2回目以降は出撃と同じ層数×300
+  -- Goldは初回だけエリア数×100万、2回目以降は出撃と同じエリア数×300
   v_gold := tower_boss_gold(p_floor, v_new);
   v_exp  := tower_battle_exp(v_pid, true);
 
@@ -571,8 +571,8 @@ BEGIN
         first_clear_at = COALESCE(tower_progress.first_clear_at, now()),
         updated_at = now();
 
-  -- 到達層の更新（ランキング用）
-  -- 塔EXP：初回撃破だけ1000、2回目以降は出撃と同じ（乱数なので1回だけ引く）
+  -- 到達エリアの更新（ランキング用）
+  -- タワーEXP：初回撃破だけ1000、2回目以降は出撃と同じ（乱数なので1回だけ引く）
   v_texp := tower_boss_tower_exp(v_new);
 
   UPDATE tower_player
@@ -583,7 +583,7 @@ BEGIN
         updated_at = now()
     WHERE player_id = v_pid;
 
-  -- 石碑：10層ごとの節目だけ、サーバーで最初の1人を記録する
+  -- 石碑：10エリアごとの節目だけ、サーバーで最初の1人を記録する
   IF p_floor % 10 = 0 THEN
     SELECT username INTO v_name FROM profiles WHERE id = v_pid;
     INSERT INTO tower_first_clear (floor, player_id, username)
@@ -604,7 +604,7 @@ BEGIN
 END; $$;
 
 -- ============================================================
--- 7. 塔スキルツリー
+-- 7. エンドポイント
 -- ============================================================
 -- 振り分けの保存。段数上限・解放条件・所持ポイントをサーバ側で検証する。
 CREATE OR REPLACE FUNCTION tower_tree_set(p_alloc jsonb)
@@ -627,7 +627,7 @@ BEGIN
   v_pid := auth.uid();
   IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
   SELECT * INTO v_tp FROM tower_player WHERE player_id = v_pid;
-  IF NOT FOUND THEN RETURN json_build_object('error', '塔のデータがありません'); END IF;
+  IF NOT FOUND THEN RETURN json_build_object('error', 'エンドレスタワーのデータがありません'); END IF;
 
   v_lv  := tower_level_from_exp(v_tp.tower_exp);
   v_max := tower_max_steps(v_lv);
@@ -638,7 +638,7 @@ BEGIN
     END IF;
     IF v_val < 0 THEN RETURN json_build_object('error', '段数が不正です'); END IF;
     IF v_val > v_max THEN
-      RETURN json_build_object('error', '塔LVが足りません（現在は1ノード' || v_max || '段まで）');
+      RETURN json_build_object('error', 'タワーLVが足りません（現在は1ノード' || v_max || '段まで）');
     END IF;
     v_sum := v_sum + v_val;
   END LOOP;
@@ -651,7 +651,7 @@ BEGIN
   RETURN json_build_object('ok', true, 'spent', v_sum, 'tower_lv', v_lv);
 END; $$;
 
--- 振り直し（Goldを消費して全部戻す）。費用は塔LVに比例。
+-- 振り直し（Goldを消費して全部戻す）。費用はタワーLVに比例。
 CREATE OR REPLACE FUNCTION tower_tree_reset()
 RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER AS $$
@@ -660,7 +660,7 @@ BEGIN
   v_pid := auth.uid();
   IF v_pid IS NULL THEN RETURN json_build_object('error', '未認証'); END IF;
   SELECT * INTO v_tp FROM tower_player WHERE player_id = v_pid;
-  IF NOT FOUND THEN RETURN json_build_object('error', '塔のデータがありません'); END IF;
+  IF NOT FOUND THEN RETURN json_build_object('error', 'エンドレスタワーのデータがありません'); END IF;
 
   v_lv   := tower_level_from_exp(v_tp.tower_exp);
   v_cost := 10000::bigint * GREATEST(1, v_lv);
@@ -692,7 +692,7 @@ BEGIN
 END; $$;
 
 -- ============================================================
--- 8. 石碑・到達層ランキング（どちらも全員が見られる）
+-- 8. 石碑・到達エリアランキング（どちらも全員が見られる）
 -- ============================================================
 CREATE OR REPLACE FUNCTION get_tower_monument()
 RETURNS json
@@ -722,14 +722,14 @@ BEGIN
       WHERE t.max_floor > 0
         AND COALESCE(p.exclude_from_ranking, false) = false
         AND COALESCE(p.is_suspended, false) = false
-      -- 到達層の降順 → 同じ層なら到達が早かった順
+      -- 到達エリアの降順 → 同じエリアなら到達が早かった順
       ORDER BY t.max_floor DESC, t.max_floor_at ASC NULLS LAST
       LIMIT LEAST(GREATEST(COALESCE(p_limit, 50), 1), 200)
     ) r
   );
 END; $$;
 
--- 旧: 塔EXP固定100。20〜30の乱数（tower_sortie_tower_exp）に変えたので不要
+-- 旧: タワーEXP固定100。20〜30の乱数（tower_sortie_tower_exp）に変えたので不要
 DROP FUNCTION IF EXISTS tower_exp_per_sortie();
 
 -- ============================================================

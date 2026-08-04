@@ -22,7 +22,7 @@ export default function Ranking() {
   const [petRanking, setPetRanking] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState(null)
-  const [isAdmin, setIsAdmin] = useState(false)   // 星霜百層塔は開発限定なのでタブ自体を出さない
+  const [isAdmin, setIsAdmin] = useState(false)   // エンドレスタワーは開発限定なのでタブ自体を出さない
   const [tab, setTab] = useState('total')
 
   useEffect(() => {
@@ -96,7 +96,7 @@ export default function Ranking() {
       const { data: abyssData } = await supabase.rpc('get_abyss_ranking')
       setAbyssPlayers((Array.isArray(abyssData) ? abyssData : []).filter(p => !excluded.has(p.id)))
 
-      // 星霜百層塔 到達層ランキング（開発限定。SQL未適用の環境でも落ちないよう握りつぶす）
+      // エンドレスタワー 到達エリアランキング（開発限定。SQL未適用の環境でも落ちないよう握りつぶす）
       if (user) {
         try {
           const { data: me } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
@@ -164,7 +164,7 @@ export default function Ranking() {
         {/* タブ切り替え */}
         <div style={{ display:'flex', gap:'6px', marginBottom:'12px' }}>
           {[{ id:'total', label:'🏆 総合力' }, { id:'abyss', label:'🕯 奈落' },
-            ...(isAdmin ? [{ id:'tower', label:'🗼 塔' }] : []),
+            ...(isAdmin ? [{ id:'tower', label:'🗼 タワー' }] : []),
             { id:'museum', label:'🏛 寄贈数' }, { id:'medal', label:'🎫 メダル' }, { id:'pet', label:'🐾 ペット' }].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{
@@ -180,7 +180,7 @@ export default function Ranking() {
 
         {/* 見出し */}
         <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'10px', textAlign:'center', letterSpacing:'2px' }}>
-          {tab === 'total' ? '🏆 総合力ランキング' : tab === 'pet' ? '🐾 ペット能力ランキング（チャーム込み）' : tab === 'abyss' ? '🕯 奈落闘技場 踏破ランキング' : tab === 'tower' ? '🗼 星霜百層塔 到達層ランキング' : tab === 'museum' ? '🏛 寄贈数ランキング' : '🎫 1日最高収支メダルランキング'}
+          {tab === 'total' ? '🏆 総合力ランキング' : tab === 'pet' ? '🐾 ペット能力ランキング（チャーム込み）' : tab === 'abyss' ? '🕯 奈落闘技場 踏破ランキング' : tab === 'tower' ? '🗼 エンドレスタワー 到達エリアランキング' : tab === 'museum' ? '🏛 寄贈数ランキング' : '🎫 1日最高収支メダルランキング'}
         </div>
 
         {loading ? (
@@ -396,19 +396,19 @@ export default function Ranking() {
                     </div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ color:'#7fd4ff', fontSize:'15px', fontWeight:'bold' }}>🗼 {p.max_floor}層</div>
-                    <div style={{ color:'#5f7099', fontSize:'10px' }}>到達層</div>
+                    <div style={{ color:'#7fd4ff', fontSize:'15px', fontWeight:'bold' }}>🗼 エリア{p.max_floor}</div>
+                    <div style={{ color:'#5f7099', fontSize:'10px' }}>到達エリア</div>
                   </div>
                 </div>
               )
             })}
             {towerPlayers.length === 0 && (
               <div style={{ color:'#334455', padding:'20px', textAlign:'center', fontSize:'12px' }}>
-                まだ誰も層主を倒していません
+                まだ誰もエリアボスを倒していません
               </div>
             )}
             <div style={{ color:'#5f7099', fontSize:'10px', textAlign:'center', marginTop:'8px' }}>
-              同じ層なら、先に到達した者が上位
+              同じエリアなら、先に到達した者が上位
             </div>
           </div>
         ) : tab === 'medal' ? (
