@@ -5,7 +5,7 @@
 // ・入口は街メニューの「⚔ 挑戦」→「🗼 エンドレスタワー」（/tower の独立ページ）
 // ・内部推奨戦闘力は開発上の目安であり、画面には出さない
 // ============================================================
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { calcEffectiveStats } from '../lib/stats'
@@ -36,6 +36,22 @@ const C = {
 // ⚠以下のコンポーネントは Tower() の中で定義しないこと。
 //   中で定義すると状態が変わるたびに型が変わり、中身が丸ごと作り直されて
 //   プルダウンのフォーカスやスクロール位置が飛ぶ。
+
+// HP/MPのバー（連戦の持ち越し表示に使う）
+function StatBar({ label, cur, max, color, track }) {
+  const pct = Math.max(0, Math.min(100, (cur / Math.max(1, max)) * 100))
+  return (
+    <div style={{ marginBottom: '4px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#b8d0e8', gap: '4px' }}>
+        <span>{label}</span>
+        <span style={{ color, fontWeight: 'bold', flexShrink: 0 }}>{fmt(Math.max(0, cur))} / {fmt(max)}</span>
+      </div>
+      <div style={{ background: track, height: '6px', border: `1px solid ${C.line}` }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: `linear-gradient(90deg,#0a3,${color})` }} />
+      </div>
+    </div>
+  )
+}
 
 // 戦闘ログ。通常の出撃では画面を切り替えず、出撃パネルの下にそのまま出す
 function BattleLog({ logs, busy, endRef }) {
@@ -239,6 +255,14 @@ export default function Tower() {
   // 狙う相手はスキル設定画面の「挑戦」セットの設定に従う（タワーは挑戦セットを使うため）
   const targetMode = pickTargetMode(targetOptions, 'challenge')
   const tr = towerTreeEffects(treeAlloc)
+  // 連戦のHP/MPバー用の最大値。runInfo には再開時に入っていないことがあるので
+  // プレイヤーの実効ステから毎回出す（エンドポイントの最大HP+も乗せる）
+  const runMax = useMemo(() => {
+    if (!profile) return { hp: 1, mp: 1 }
+    const e = calcEffectiveStats(profile, equipment, proficiency, abilityTitle)
+    return { hp: Math.floor(e.hp_max * tr.hpMult), mp: e.mp_max }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, equipment, proficiency, abilityTitle, tr.hpMult])
   // 出撃クールダウン（街の出撃と同じ effWait・アンカーも last_action_at を共有）
   const sortieWait = profile ? effWait(profile) : 20
   const canSortie = remaining <= 0 && !busy
@@ -461,10 +485,11 @@ export default function Tower() {
 
         {inRun && (
           <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '8px 10px', marginBottom: '8px', fontSize: '11px', color: C.text }}>
-            持ち越し HP <span style={{ color: C.ok }}>{fmt(runInfo.hp)}</span> ／ MP <span style={{ color: C.accent }}>{fmt(runInfo.mp)}</span>
-            <span style={{ color: C.gold, marginLeft: '10px' }}>
+            <StatBar label="HP" cur={runInfo.hp} max={runMax.hp} color="#33dd66" track="#13243a" />
+            <StatBar label="MP" cur={runInfo.mp} max={runMax.mp} color="#3a78d8" track="#11203a" />
+            <div style={{ color: C.gold, marginTop: '6px' }}>
               🧪 無限ポーション 残り{Math.max(0, RUN_POTION_LIMIT - (runInfo.potionUsed || 0))}/{RUN_POTION_LIMIT}回
-            </span>
+            </div>
             <div style={{ color: C.dim, fontSize: '10px', marginTop: '3px' }}>連戦の間、HP・MPは回復しません。中断してもこの状態から再開します。</div>
           </div>
         )}

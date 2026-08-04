@@ -1057,13 +1057,21 @@ export function simulateTowerBattle({
       logs.push({ text: `🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color: '#66ccff' })
     }
 
+    // 敵は倒した相手も含めて全員ぶんバーを出す（誰を倒したか・残りが誰かを見えるようにする）
     const front = alive()[0]
     logs.push({
       type: 'hp', turn,
       playerHp: Math.max(0, playerHp), playerMax: eff.hp_max, playerName: profile.username,
+      playerMp: Math.max(0, playerMp), playerMpMax: eff.mp_max,
+      playerStatus: extractStatuses(playerBuffs),
+      // twin: BattleLogLine が1体ずつバーを描く。撃破済みは名前に印を付ける
+      twin: enemies.map(e => ({
+        name: e.hp > 0 ? e.name : `${e.name}（撃破）`,
+        hp: Math.max(0, e.hp), max: e.maxHp,
+      })),
+      // 単体表示にフォールバックしたとき用（twin が優先される）
       enemyHp: Math.max(0, front?.hp || 0), enemyMax: front?.maxHp || 1, enemyName: front?.name || '—',
-      playerStatus: extractStatuses(playerBuffs), enemyStatus: extractStatuses(front?.buffs || {}),
-      others: alive().slice(1).map(e => ({ name: e.name, hp: Math.max(0, e.hp), max: e.maxHp })),
+      enemyStatus: extractStatuses(front?.buffs || {}),
     })
     turn++
   }
