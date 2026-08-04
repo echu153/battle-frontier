@@ -538,6 +538,12 @@ export const TOWER_FLOORS = [
 
 export const MAX_IMPLEMENTED_FLOOR = TOWER_FLOORS.length
 
+// いま挑戦できる最大の層（2026-08-04）。データは10層ぶんあるが、
+// 5層以降はボスが想定より弱く調整中なので一時的に閉じている。
+// ⚠SQL の tower_max_floor() と必ず同じ値にすること（権威はサーバー側）。
+//   調整が終わったら両方を 10 に戻す。
+export const OPEN_MAX_FLOOR = 4
+
 // エンドレスタワーの解放条件（2026-08-04 一般公開）。
 // ⚠ここを変えたら SQL の tower_can_enter() も必ず合わせること（権威はサーバー側）。
 export const TOWER_UNLOCK_CHAR_LV = 1000

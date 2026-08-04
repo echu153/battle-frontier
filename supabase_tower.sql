@@ -168,8 +168,11 @@ END; $$;
 -- ============================================================
 -- 2. 定数（クライアントの src/lib/tower.js と必ず一致させること）
 -- ============================================================
+-- いま挑戦できる最大の層。データは10層ぶんあるが、5層以降はボスが想定より弱く
+-- 調整中のため一時的に閉じている（2026-08-04）。調整が終わったら 10 に戻す。
+-- ⚠クライアントの OPEN_MAX_FLOOR と必ず同じ値にすること。
 CREATE OR REPLACE FUNCTION tower_max_floor() RETURNS int
-LANGUAGE sql IMMUTABLE AS $$ SELECT 10 $$;              -- 実装済みの最終エリア
+LANGUAGE sql IMMUTABLE AS $$ SELECT 4 $$;
 
 CREATE OR REPLACE FUNCTION tower_sorties_to_mid(p_floor int) RETURNS int
 LANGUAGE sql IMMUTABLE AS $$ SELECT 30 + p_floor * 10 $$;
@@ -424,6 +427,15 @@ BEGIN
     INSERT INTO tower_player (player_id) VALUES (v_pid)
       ON CONFLICT (player_id) DO NOTHING;
     SELECT * INTO v_tp FROM tower_player WHERE player_id = v_pid;
+  END IF;
+
+  -- 閉じた層（調整中）で進行中の連戦は畳む。入口を塞いでも途中の連戦だけ残ると詰まるため。
+  IF v_tp.run_floor IS NOT NULL AND v_tp.run_floor > tower_max_floor() THEN
+    UPDATE tower_player SET run_floor = NULL, run_stage = 0, run_hp = NULL, run_mp = NULL,
+           run_potion = 0, run_pending = false, run_started_at = NULL, updated_at = now()
+      WHERE player_id = v_pid;
+    SELECT * INTO v_tp FROM tower_player WHERE player_id = v_pid;
+    v_dropped := true;
   END IF;
 
   -- ★B-3: 戦闘を宣言したまま結果が返っていない＝離脱。連戦は失敗として畳む。

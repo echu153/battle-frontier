@@ -8,7 +8,7 @@ import {
   towerTarget, sortiesToMidBoss, towerExpToNext, towerLevelFromExp, TOWER_EXP_MIN, TOWER_EXP_MAX, BOSS_FIRST_TOWER_EXP,
   TREE_NODES, TREE_MAX_STEPS, TREE_STEP_PCT, stepPctOf, maxStepsAt, nextUnlock, treeBonus, treeSpent, treeResetCost,
   isMonumentFloor, MID_BOSS_RATE, towerSortieGold, towerBossGold, RUN_POTION_LIMIT, MAX_END_LEVEL,
-  isTowerUnlocked, TOWER_UNLOCK_CHAR_LV,
+  isTowerUnlocked, TOWER_UNLOCK_CHAR_LV, OPEN_MAX_FLOOR,
   buildStageEnemies, buildSortieEnemies, towerTreeEffects, applyTreeToStats,
 } from './tower.js'
 import { TARGET_MODES, DEFAULT_TARGET_MODE, pickTargetMode, isTargetMode } from './loadout.js'
@@ -402,4 +402,14 @@ test('開発用のテスト対戦はサーバーに何も送らない', async ()
   // 報酬・進行・クールダウンに一切触らないこと
   assert.ok(!/supabase\./.test(body), 'テスト対戦がサーバーを呼んでいる')
   assert.ok(s.includes('{profile?.is_admin && ('), 'テスト対戦が is_admin で閉じられていない')
+})
+
+test('公開している層がクライアントとSQLで一致している', () => {
+  // データは10層ぶんあるが、調整中は途中までしか開けない。
+  // 片方だけ変えると「選べるのに出撃が弾かれる」状態になるので必ず突き合わせる。
+  const head = towerSql.indexOf('FUNCTION tower_max_floor()')
+  const m = towerSql.slice(head, head + 200).match(/SELECT\s+(\d+)/)
+  assert.ok(m, 'SQLの tower_max_floor が読めない')
+  assert.equal(Number(m[1]), OPEN_MAX_FLOOR, '公開層がクライアントとSQLでズレている')
+  assert.ok(OPEN_MAX_FLOOR >= 1 && OPEN_MAX_FLOOR <= MAX_IMPLEMENTED_FLOOR, '公開層が実装済みの範囲外')
 })

@@ -14,7 +14,7 @@ import { loadCharmBonus, PET_STAT_SELECT } from '../lib/petBonus'
 import { selectBattleSkillSets, pickTargetMode, TARGET_MODES } from '../lib/loadout'
 import { BattleLogLine, effWait } from './Game'
 import {
-  getFloor, MAX_IMPLEMENTED_FLOOR, BOSS_RUN_STAGES,
+  getFloor, MAX_IMPLEMENTED_FLOOR, OPEN_MAX_FLOOR, BOSS_RUN_STAGES,
   TREE_NODES, TREE_LINES, TREE_MAX_STEPS, stepPctOf,
   maxStepsAt, nextUnlock, treeSpent, treeResetCost,
   MID_BOSS_RATE, isMonumentFloor, RUN_POTION_LIMIT, makeEnemy,
@@ -237,7 +237,7 @@ export default function Tower() {
       if (!floorPickedRef.current) {
         floorPickedRef.current = true
         const next = (data.floors || []).find(f => f.unlocked && !f.boss_cleared)
-        setSelFloor(next ? next.floor : Math.min(MAX_IMPLEMENTED_FLOOR, (data.max_floor || 0) + 1) || 1)
+        setSelFloor(next ? next.floor : Math.min(OPEN_MAX_FLOOR, (data.max_floor || 0) + 1) || 1)
       }
       // 残りクールダウンはサーバーが秒数で返したものをそのまま使う。
       // ⚠端末の時計とサーバーの時刻を突き合わせてはいけない。
@@ -622,6 +622,17 @@ export default function Tower() {
                 <button onClick={() => setScene('battle')} style={btn(C.gold)}>続きから</button>
                 <button onClick={abortRun} style={btn(C.ng)}>中断する</button>
               </div>
+            </div>
+          )}
+
+          {/* 調整で一時的に閉じている層があることを伝える */}
+          {OPEN_MAX_FLOOR < MAX_IMPLEMENTED_FLOOR && (
+            <div style={{ border: `1px solid ${C.gold}`, background: '#181203', padding: '10px', marginBottom: '10px', color: C.gold, fontSize: '11px', lineHeight: '1.7' }}>
+              🔧 現在 <b>{floorLabel(OPEN_MAX_FLOOR)}まで</b>挑戦できます。<br />
+              <span style={{ color: C.text }}>
+                {floorLabel(OPEN_MAX_FLOOR + 1)}以降はエリアボスの強さを調整中のため、一時的に閉じています。
+                これまでの進行状況はそのまま残ります。
+              </span>
             </div>
           )}
 
