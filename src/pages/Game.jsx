@@ -7085,30 +7085,32 @@ export function BattleLogLine({ l }) {
         </div>
       </div>
     )
-    // 味方と敵の境目。縦積みは横線＋VS、横並びは真ん中にVSを置く
-    const vsMark = l.vertical ? (
-      <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-        <div style={{ flex:1, height:'1px', background:'#3a5a80' }} />
-        <span style={{ fontSize:'10px', color:'#ffcc66', fontWeight:'bold', letterSpacing:'2px' }}>VS</span>
-        <div style={{ flex:1, height:'1px', background:'#3a5a80' }} />
+    // 味方と敵の境目。常に真ん中の縦線＋VSで左右に分ける
+    const vsMark = (
+      <div style={{ flexShrink:0, alignSelf:'stretch', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'2px', padding:'0 1px' }}>
+        <div style={{ flex:1, width:'1px', background:'#3a5a80', minHeight:'4px' }} />
+        <span style={{ color:'#ffcc66', fontSize:'10px', fontWeight:'bold', letterSpacing:'1px' }}>VS</span>
+        <div style={{ flex:1, width:'1px', background:'#3a5a80', minHeight:'4px' }} />
       </div>
-    ) : (
-      <div style={{ flexShrink:0, alignSelf:'center', color:'#ffcc66', fontSize:'11px', fontWeight:'bold', letterSpacing:'1px', padding:'0 2px' }}>VS</div>
     )
     return (
       <div style={{ borderBottom:'1px solid #24405e', padding:'6px 6px', background:'#16263c', borderRadius:'3px', margin:'2px 0' }}>
         <div style={{ fontSize:'9px', color:'#7fa8d0', marginBottom:'3px', textAlign:'center' }}>━ {l.turn}ターン ━</div>
-        {/* l.vertical=true で縦積み。敵が3体以上出るコンテンツ(エンドレスタワー)では
-            横に並べると名前が潰れるため。既定は従来どおり横並び */}
-        <div style={{ display:'flex', flexDirection: l.vertical ? 'column' : 'row', gap: l.vertical ? '6px' : '8px', alignItems: l.vertical ? 'stretch' : 'flex-end' }}>
-          <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', justifyContent:'flex-end' }}>
+        {/* 味方は左・敵は右。敵が複数のとき(l.vertical)は右側の中で縦に積む。
+            上下に分けると誰が味方か分かりにくいので、必ず左右で向かい合わせる */}
+        <div style={{ display:'flex', flexDirection:'row', gap:'8px', alignItems: l.vertical ? 'flex-start' : 'flex-end' }}>
+          {/* 左右の枠はブロック要素にする。中の col が持つ flex:1 を効かせないことで、
+              敵が複数いても味方側のバーが縦に間延びしない */}
+          <div style={{ flex:1, minWidth:0 }}>
             {col('p', l.playerName, l.playerHp, l.playerMax, pPct, '#33dd66', l.playerStatus, 'flex-start', l.playerMp, l.playerMpMax)}
             {petBar}
           </div>
           {vsMark}
-          {l.vertical
-            ? <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>{enemyCols}</div>
-            : enemyCols}
+          <div style={{ flex:1, minWidth:0 }}>
+            {Array.isArray(enemyCols)
+              ? enemyCols.map((e, i) => <div key={i} style={{ marginTop: i > 0 ? '6px' : 0 }}>{e}</div>)
+              : enemyCols}
+          </div>
         </div>
       </div>
     )
