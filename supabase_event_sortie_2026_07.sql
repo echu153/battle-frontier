@@ -161,7 +161,9 @@ INSERT INTO event_rewards (event_key, threshold, label) VALUES
 UPDATE event_rewards SET weapon_names = NULL WHERE event_key = 'sortie_2026_07';
 
 -- ===== 3) アーティファクト装備選択箱の交換RPC =====
---   箱1個を消費し、アーティファクト武器10種から1つを付与（bonus_effectは無し＝武器固有能力で発動）
+--   箱1個を消費し、アーティファクト武器10種から1つを付与
+--   ※bonus_effect='artifact' 必須（＝MP消費2倍・スキルダメージ1.3倍の特殊能力。覚醒と同じ値）。
+--     NULLにすると特殊能力なしの只の武器になる（2026-08-04 修正・supabase_artifact_box_effect_fix_20260804.sql）
 CREATE OR REPLACE FUNCTION public.redeem_artifact_box(p_weapon_name text)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
@@ -193,7 +195,7 @@ BEGIN
   IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'error','選択箱の消費に失敗しました'); END IF;
   DELETE FROM player_items WHERE player_id = v_uid AND item_id = v_box_id AND quantity <= 0;
   INSERT INTO player_equipment (player_id, weapon_id, slot, equipped, enhance_plus, bonus_effect)
-  VALUES (v_uid, v_weapon.id, v_weapon.slot, false, 0, NULL);
+  VALUES (v_uid, v_weapon.id, v_weapon.slot, false, 0, 'artifact');
   RETURN jsonb_build_object('ok',true,'weapon',p_weapon_name);
 END;
 $$;
