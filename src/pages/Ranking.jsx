@@ -161,22 +161,32 @@ export default function Ranking() {
           </button>
         </div>
 
-        {/* タブ切り替え */}
-        <div style={{ display:'flex', gap:'6px', marginBottom:'12px' }}>
-          {[{ id:'total', label:'🏆 総合力' }, { id:'abyss', label:'🕯 奈落' },
+        {/* タブ切り替え。1行に詰めると「総合力」などが途中で折り返して読めないので、
+            2行のグリッドにして1つあたりの横幅を稼ぐ（どのタブも同じ大きさ・文字は折り返さない） */}
+        {(() => {
+          const tabs = [
+            { id:'total', label:'🏆 総合力' }, { id:'abyss', label:'🕯 奈落' },
             ...(isAdmin ? [{ id:'tower', label:'🗼 タワー' }] : []),
-            { id:'museum', label:'🏛 寄贈数' }, { id:'medal', label:'🎫 メダル' }, { id:'pet', label:'🐾 ペット' }].map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              style={{
-                flex:1, padding:'8px', fontFamily:'monospace', fontSize:'12px', cursor:'pointer',
-                background: tab === t.id ? '#1a1000' : '#000e1a',
-                border:`1px solid ${tab === t.id ? '#ffcc00' : '#003366'}`,
-                color: tab === t.id ? '#ffcc00' : '#446688',
-              }}>
-              {t.label}
-            </button>
-          ))}
-        </div>
+            { id:'museum', label:'🏛 寄贈数' }, { id:'medal', label:'🎫 メダル' }, { id:'pet', label:'🐾 ペット' },
+          ]
+          const cols = Math.ceil(tabs.length / 2)   // 必ず2行に収める
+          return (
+            <div style={{ display:'grid', gridTemplateColumns:`repeat(${cols}, 1fr)`, gap:'5px', marginBottom:'12px' }}>
+              {tabs.map(t => (
+                <button key={t.id} onClick={() => setTab(t.id)}
+                  style={{
+                    padding:'7px 2px', fontFamily:'monospace', fontSize:'12px', cursor:'pointer',
+                    whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+                    background: tab === t.id ? '#1a1000' : '#000e1a',
+                    border:`1px solid ${tab === t.id ? '#ffcc00' : '#003366'}`,
+                    color: tab === t.id ? '#ffcc00' : '#446688',
+                  }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )
+        })()}
 
         {/* 見出し */}
         <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'10px', textAlign:'center', letterSpacing:'2px' }}>
