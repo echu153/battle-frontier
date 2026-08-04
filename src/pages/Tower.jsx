@@ -33,9 +33,52 @@ const C = {
   dim: '#5f7099', accent: '#7fd4ff', gold: '#ffcc66', ok: '#66dd99', ng: '#ff6688',
 }
 
-// ページのガワ（ヘッダ＋街に戻る）。
-// ⚠コンポーネントの中で定義すると、状態が変わるたびに型が変わって
-//   中身が丸ごと作り直され、入力欄のフォーカスやスクロール位置が飛ぶ。必ず外に置く。
+// ⚠以下のコンポーネントは Tower() の中で定義しないこと。
+//   中で定義すると状態が変わるたびに型が変わり、中身が丸ごと作り直されて
+//   プルダウンのフォーカスやスクロール位置が飛ぶ。
+
+// 戦闘ログ。通常の出撃では画面を切り替えず、出撃パネルの下にそのまま出す
+function BattleLog({ logs, busy, endRef }) {
+  return (
+    <div style={{ border: `1px solid ${C.line}`, background: '#05070f', padding: '10px', maxHeight: '52vh', overflowY: 'auto', fontSize: '11px', lineHeight: '1.8' }}>
+      {logs.length === 0 && !busy && <div style={{ color: C.dim }}>まだ戦っていません。</div>}
+      {logs.map((l, i) => <BattleLogLine key={i} l={l} />)}
+      <div ref={endRef} />
+    </div>
+  )
+}
+
+// 戦闘結果（出撃・連戦の両方で使う）
+function ResultBox({ gain }) {
+  if (!gain) return null
+  return (
+    <div style={{ border: `1px solid ${gain.win ? C.ok : C.ng}`, background: C.panel, padding: '10px', marginTop: '8px', fontSize: '11px', color: C.text, lineHeight: '1.9' }}>
+      {gain.cleared ? (
+        <>
+          <div style={{ color: C.gold, fontSize: '13px' }}>👑 戦闘エリア{gain.floor}のエリアボスを撃破！</div>
+          {gain.firstClear && <div style={{ color: C.ok }}>このエリアを初めて踏破した！ 次のエリアが解放された。</div>}
+          {gain.monument && <div style={{ color: C.gold }}>🗿 石碑に名前が刻まれた！（サーバー最初の踏破者）</div>}
+          <div>Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ エンドEXP +{fmt(gain.towerExp)}</div>
+        </>
+      ) : gain.win === false ? (
+        <div style={{ color: C.ng }}>敗北…{gain.stageLabel ? `（${gain.stageLabel}）` : ''}{gain.stageLabel ? ' 連戦は最初からやり直しになります。' : ''}</div>
+      ) : gain.stageLabel ? (
+        <>
+          <div style={{ color: C.ok }}>{gain.stageLabel} を突破！</div>
+          <div>残り HP {fmt(gain.hp)} ／ MP {fmt(gain.mp)}</div>
+        </>
+      ) : (
+        <>
+          <div style={{ color: C.ok }}>勝利！ Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ エンドEXP +{fmt(gain.towerExp)}</div>
+          {gain.midCleared && <div style={{ color: C.gold }}>⚔ 中ボスを撃破！ エリアボスに挑めるようになった。</div>}
+          {gain.mid && !gain.midCleared && <div style={{ color: C.ng }}>中ボスが現れたが、退けられた…</div>}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ページのガワ（ヘッダ＋街に戻る）
 function Shell({ nav, children }) {
   return (
     <div style={{ minHeight: '100vh', background: C.bg, padding: '12px', fontFamily: 'monospace' }}>
@@ -194,7 +237,8 @@ export default function Tower() {
     const fd = getFloor(floor)
     if (!fd) return
     busyRef.current = true
-    setBusy(true); setScene('battle'); setLogs([]); setMsg(null); setGain(null)
+    // 通常の出撃は画面を切り替えない。街の出撃と同じく、この画面の下にログを出す
+    setBusy(true); setLogs([]); setMsg(null); setGain(null)
     try {
       if (await idleBlocked()) return
       // 街の出撃と同じクールダウン。アンカーも profiles.last_action_at を共有するので
@@ -412,39 +456,10 @@ export default function Tower() {
           </div>
         )}
 
-        <div style={{ border: `1px solid ${C.line}`, background: '#05070f', padding: '10px', maxHeight: '52vh', overflowY: 'auto', fontSize: '11px', lineHeight: '1.8' }}>
-          {logs.length === 0 && !busy && <div style={{ color: C.dim }}>まだ戦っていません。</div>}
-          {logs.map((l, i) => <BattleLogLine key={i} l={l} />)}
-          <div ref={logsEndRef} />
-        </div>
+        <BattleLog logs={logs} busy={busy} endRef={logsEndRef} />
 
         {msg && <div style={{ color: C.ng, fontSize: '11px', marginTop: '8px' }}>{msg}</div>}
-
-        {gain && (
-          <div style={{ border: `1px solid ${gain.win ? C.ok : C.ng}`, background: C.panel, padding: '10px', marginTop: '8px', fontSize: '11px', color: C.text, lineHeight: '1.9' }}>
-            {gain.cleared ? (
-              <>
-                <div style={{ color: C.gold, fontSize: '13px' }}>👑 {floorLabel(gain.floor)}のエリアボスを撃破！</div>
-                {gain.firstClear && <div style={{ color: C.ok }}>このエリアを初めて踏破した！ 次のエリアが解放された。</div>}
-                {gain.monument && <div style={{ color: C.gold }}>🗿 石碑に名前が刻まれた！（サーバー最初の踏破者）</div>}
-                <div>Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ エンドEXP +{fmt(gain.towerExp)}</div>
-              </>
-            ) : gain.win === false ? (
-              <div style={{ color: C.ng }}>敗北…{gain.stageLabel ? `（${gain.stageLabel}）` : ''} 連戦は最初からやり直しになります。</div>
-            ) : gain.stageLabel ? (
-              <>
-                <div style={{ color: C.ok }}>{gain.stageLabel} を突破！</div>
-                <div>残り HP {fmt(gain.hp)} ／ MP {fmt(gain.mp)}</div>
-              </>
-            ) : (
-              <>
-                <div style={{ color: C.ok }}>勝利！ Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ エンドEXP +{fmt(gain.towerExp)}</div>
-                {gain.midCleared && <div style={{ color: C.gold }}>⚔ 中ボスを撃破！ エリアボスに挑めるようになった。</div>}
-                {gain.mid && !gain.midCleared && <div style={{ color: C.ng }}>中ボスが現れたが、退けられた…</div>}
-              </>
-            )}
-          </div>
-        )}
+        <ResultBox gain={gain} />
 
         <div style={{ marginTop: '10px' }}>
           {inRun && (
@@ -455,9 +470,9 @@ export default function Tower() {
               <button onClick={abortRun} disabled={busy} style={btn(C.ng, busy)}>連戦を中断</button>
             </>
           )}
-          {!inRun && !gain?.cleared && (
-            <button onClick={() => doSortie(selFloor)} disabled={busy || remaining > 0} style={bigBtn(C.gold, busy || remaining > 0)}>
-              {busy ? '⏳ 戦闘中...' : remaining > 0 ? `⏳ ${remaining.toFixed(1)}秒` : `⚔ ${floorLabel(selFloor)}へ出撃！`}
+          {!inRun && (
+            <button onClick={() => { setScene('lobby'); setLogs([]); setGain(null) }} style={bigBtn(C.accent)}>
+              ← 戦闘エリアの選択へ戻る
             </button>
           )}
         </div>
@@ -471,7 +486,7 @@ export default function Tower() {
       {/* エンドレベル・タブ */}
       <div style={{ border: `1px solid ${C.line}`, background: C.panel, padding: '10px 12px', marginBottom: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px' }}>
-          <div style={{ color: C.dim, fontSize: '11px' }}>階層</div>
+          <div style={{ color: C.dim, fontSize: '11px' }}>進行状況</div>
           <div style={{ color: C.text, fontSize: '11px' }}>
             エンドレベル <span style={{ color: C.gold, fontSize: '14px' }}>{status.tower_lv}</span>
             <span style={{ color: C.dim, marginLeft: '8px' }}>{fmt(status.exp_in_lv)} / {fmt(status.exp_to_next)}</span>
@@ -579,6 +594,16 @@ export default function Tower() {
               </>
             )}
           </div>
+
+          {/* 出撃の結果とログ。画面は切り替えず、ここに出す（街の出撃と同じ） */}
+          {(logs.length > 0 || busy) && (
+            <>
+              <ResultBox gain={gain} />
+              <div style={{ marginTop: '8px' }}>
+                <BattleLog logs={logs} busy={busy} endRef={logsEndRef} />
+              </div>
+            </>
+          )}
         </>
       )}
 
