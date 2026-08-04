@@ -18,7 +18,7 @@ test('層データが揃っている', () => {
   for (const f of TOWER_FLOORS) {
     assert.equal(f.enemies.length, 3, `${f.floor}層の雑魚は3種`)
     assert.equal(f.floorBoss.name, f.boss, `${f.floor}層のエリアボス名が一致`)
-    assert.ok(f.midBoss && f.floorBoss.specialMove?.name, `${f.floor}層に中ボスと大技がある`)
+    assert.ok(f.midBoss && f.floorBoss.specialMove?.name, `${f.floor}層に強敵と大技がある`)
   }
 })
 
@@ -174,7 +174,7 @@ test('連戦の構成', () => {
   assert.equal(buildStageEnemies(null, 0).length, 0, 'floorDataがnull')
 })
 
-test('出撃の中ボス抽選', () => {
+test('出撃の強敵抽選', () => {
   assert.equal(buildSortieEnemies(getFloor(1), 0).isMid, false, '確率0なら出ない')
   let mid = 0
   for (let i = 0; i < 5000; i++) if (buildSortieEnemies(getFloor(1), 0.05).isMid) mid++

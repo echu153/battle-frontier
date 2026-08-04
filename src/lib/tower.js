@@ -4,9 +4,9 @@ import { PEN_CAP } from './stats.js'
 // ------------------------------------------------------------
 // ・解放条件: キャラLV1000（現状は is_admin 限定の開発先行）
 // ・戦闘エリア1の流れ:
-//     ① 出撃を (30 + エリア数×10) 回こなす → 中ボスが5%で出現するようになる
-//     ② 中ボスを撃破 → そのエリアのエリアボスに挑戦できる（以降いつでも何度でも）
-//     ③ エリアボス挑戦 = 雑魚1体 → 雑魚1体 → 雑魚2体 → 雑魚3体 → 中ボス → エリアボス の6連戦
+//     ① 出撃を (30 + エリア数×10) 回こなす → 強敵が5%で出現するようになる
+//     ② 強敵を撃破 → そのエリアのエリアボスに挑戦できる（以降いつでも何度でも）
+//     ③ エリアボス挑戦 = 雑魚1体 → 雑魚1体 → 雑魚2体 → 雑魚3体 → 強敵 → エリアボス の6連戦
 //        この連戦中はHP/MPが一切回復しない（持ち越し）
 // ・入場時のHP/MPは満タン固定の「タワー専用プール」。街の hp_current/mp_current とは切り離す
 // ・アイテムは街と同じように普通に使える（無限ポーション含む）
@@ -21,12 +21,12 @@ export const towerTarget = (floor) => Math.round(20000 * Math.pow(1.2, floor - 1
 // エリアボスに挑戦できるようになるまでに必要な出撃の回数
 export const sortiesToMidBoss = (floor) => 30 + floor * 10
 
-// 中ボスの出現率（しきい値到達後の出撃ごと・天井なし）
+// 強敵の出現率（しきい値到達後の出撃ごと・天井なし）
 export const MID_BOSS_RATE = 0.05
 
 // 出撃1回で得られるGold（2026-08-03確定）。
 // 敵データの gold は調整用シミュレータの仮値で、街の出撃の何十倍もあり
-// 経済を壊すため、出撃では使わずこの式で固定する。中ボスに当たっても同額。
+// 経済を壊すため、出撃では使わずこの式で固定する。強敵に当たっても同額。
 export const towerSortieGold = (floor) => floor * 300
 
 // エリアボスを撃破したときのGold（2026-08-03確定）。
@@ -520,7 +520,7 @@ export const BOSS_RUN_STAGES = [
   { kind: 'mobs', count: 1, label: '2戦目' },
   { kind: 'mobs', count: 2, label: '3戦目' },
   { kind: 'mobs', count: 3, label: '4戦目' },
-  { kind: 'mid',  count: 1, label: '中ボス' },
+  { kind: 'mid',  count: 1, label: '強敵' },
   { kind: 'boss', count: 1, label: 'エリアボス' },
 ]
 
@@ -641,7 +641,7 @@ export function buildStageEnemies(floorData, stageIdx) {
   return list
 }
 
-// 出撃（雑魚1体・しきい値到達後は5%で中ボス）
+// 出撃（雑魚1体・しきい値到達後は5%で強敵）
 export function buildSortieEnemies(floorData, midChance) {
   if (midChance > 0 && Math.random() < midChance) {
     return { enemies: [makeEnemy(floorData.midBoss, { isBoss: true })], isMid: true }

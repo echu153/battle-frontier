@@ -70,8 +70,8 @@ function ResultBox({ gain }) {
       ) : (
         <>
           <div style={{ color: C.ok }}>勝利！ Gold +{fmt(gain.gold)} ／ EXP +{fmt(gain.exp)} ／ エンドEXP +{fmt(gain.towerExp)}</div>
-          {gain.midCleared && <div style={{ color: C.gold }}>⚔ 中ボスを撃破！ エリアボスに挑めるようになった。</div>}
-          {gain.mid && !gain.midCleared && <div style={{ color: C.ng }}>中ボスが現れたが、退けられた…</div>}
+          {gain.midCleared && <div style={{ color: C.gold }}>⚔ 強敵を撃破！ エリアボスに挑めるようになった。</div>}
+          {gain.mid && !gain.midCleared && <div style={{ color: C.ng }}>強敵が現れたが、退けられた…</div>}
         </>
       )}
     </div>
@@ -429,7 +429,7 @@ export default function Tower() {
           )}
         </div>
 
-        {/* エリアボス・中ボスの立ち絵（中ボスはエリアボスの画像を流用。画像が無い層は出さない） */}
+        {/* エリアボス・強敵の立ち絵（強敵はエリアボスの画像を流用。画像が無い層は出さない） */}
         {inRun && ['mid', 'boss'].includes(BOSS_RUN_STAGES[runInfo.stage]?.kind) && !imgFail[runInfo.floor] && (
           <div style={{ textAlign: 'center', marginBottom: '8px' }}>
             <img
@@ -572,7 +572,7 @@ export default function Tower() {
                     </span>
                   </div>
                   {!sel.mid_defeated && sel.sortie_count >= sel.need && (
-                    <div style={{ color: C.gold, fontSize: '10px', marginTop: '4px' }}>💡 中ボスの気配がする。出撃を続けて遭遇を狙おう。</div>
+                    <div style={{ color: C.gold, fontSize: '10px', marginTop: '4px' }}>💡 強敵の気配がする。出撃を続けて遭遇を狙おう。</div>
                   )}
                 </div>
 
@@ -583,12 +583,12 @@ export default function Tower() {
 
                 <button onClick={() => (runInfo ? setScene('battle') : startRun(selFloor))} disabled={busy || !sel.mid_defeated}
                   style={bigBtn(C.accent, busy || !sel.mid_defeated)}>
-                  {sel.mid_defeated ? `🗼 エリアボスに挑む（${BOSS_RUN_STAGES.length}連戦）` : '🗼 エリアボスに挑む（中ボス撃破が必要）'}
+                  {sel.mid_defeated ? `🗼 エリアボスに挑む（${BOSS_RUN_STAGES.length}連戦）` : '🗼 エリアボスに挑む（強敵撃破が必要）'}
                 </button>
 
                 <div style={{ color: C.dim, fontSize: '10px', lineHeight: '1.7' }}>
-                  出撃を重ねると、やがて中ボスが現れるようになります。<br />
-                  中ボスを倒すとエリアボスへ挑戦できます。エリアボスへの道は<span style={{ color: C.gold }}>{BOSS_RUN_STAGES.length}連戦</span>で、その間HP・MPは回復しません。<br />
+                  出撃を重ねると、やがて強敵が現れるようになります。<br />
+                  強敵を倒すとエリアボスへ挑戦できます。エリアボスへの道は<span style={{ color: C.gold }}>{BOSS_RUN_STAGES.length}連戦</span>で、その間HP・MPは回復しません。<br />
                   出撃・連戦の開始時はHP・MPが満タンになります（街のHPとは別枠）。
                 </div>
               </>

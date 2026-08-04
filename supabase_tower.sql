@@ -3,8 +3,8 @@
 -- ------------------------------------------------------------
 -- ・現状 is_admin 限定の開発先行。一般公開時の解放条件はキャラLV1000。
 -- ・戦闘エリア1の流れ:
---     ① 出撃を (30 + エリア数×10) 回こなす → 中ボスが5%で出現するようになる
---     ② 中ボスを撃破 → そのエリアのエリアボスに挑戦できる（以降いつでも何度でも）
+--     ① 出撃を (30 + エリア数×10) 回こなす → 強敵が5%で出現するようになる
+--     ② 強敵を撃破 → そのエリアのエリアボスに挑戦できる（以降いつでも何度でも）
 --     ③ エリアボス挑戦 = 6連戦。HP/MPは連戦中いっさい回復しない（持ち越し）
 -- ・HP/MPは「タワー専用プール」。profiles.hp_current/mp_current とは完全に切り離す。
 --   → profiles の保護列を一切書かないので protect_stats トリガーに触れない。
@@ -21,12 +21,12 @@
 -- 1. テーブル
 -- ============================================================
 
--- エリアごとの進捗（出撃カウンタ・中ボス撃破・エリアボス撃破）
+-- エリアごとの進捗（出撃カウンタ・強敵撃破・エリアボス撃破）
 CREATE TABLE IF NOT EXISTS tower_progress (
   player_id      uuid    NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   floor          int     NOT NULL,
   sortie_count   int     NOT NULL DEFAULT 0,   -- そのエリアで出撃した回数（永久保存）
-  mid_defeated   boolean NOT NULL DEFAULT false, -- 中ボスを倒した＝エリアボスに挑戦できる
+  mid_defeated   boolean NOT NULL DEFAULT false, -- 強敵を倒した＝エリアボスに挑戦できる
   boss_cleared   boolean NOT NULL DEFAULT false, -- エリアボスを倒した＝次のエリアが解放
   first_clear_at timestamptz,
   updated_at     timestamptz NOT NULL DEFAULT now(),
@@ -159,7 +159,7 @@ END; $$;
 
 -- Goldは層と初回かどうかだけで決まるので、クライアントの申告を受け取らず
 -- サーバーが計算する。これで改ざんの余地そのものが無くなる。
---   出撃    : エリア数×300（中ボスに当たっても同額）
+--   出撃    : エリア数×300（強敵に当たっても同額）
 --   エリアボス撃破: 初回だけエリア数×100万、2回目以降は出撃と同じエリア数×300
 CREATE OR REPLACE FUNCTION tower_sortie_gold(p_floor int) RETURNS int
 LANGUAGE sql IMMUTABLE AS $$ SELECT GREATEST(0, p_floor) * 300 $$;
@@ -176,7 +176,7 @@ DROP FUNCTION IF EXISTS tower_gold_cap(int, boolean);
 
 -- 通常EXPも街の出撃とまったく同じ量にする（2026-08-03確定）。Goldと同じくサーバーが決める。
 --   雑魚 : 20秒モード 8〜11 / 10秒モード 5〜6
---   ボス : 20秒モード 13    / 10秒モード 7       （中ボス・エリアボス）
+--   ボス : 20秒モード 13    / 10秒モード 7       （強敵・エリアボス）
 --   キャラLV100未満は1.5倍（街と同じ）
 --   さらにエンドポイント「取得経験値+1の確率」で +1（1段0.5%・最大50段=25%）
 CREATE OR REPLACE FUNCTION tower_battle_exp(p_uid uuid, p_is_boss boolean) RETURNS int
@@ -351,7 +351,7 @@ END; $$;
 -- ============================================================
 -- 4. 出撃の結果を反映
 --    p_won        : 勝ったか
---    p_mid_defeat : この出撃で中ボスを倒したか
+--    p_mid_defeat : この出撃で強敵を倒したか
 --    p_gold       : 使わない（Goldはサーバーが決める。互換のため引数だけ残してある）
 --    p_exp        : 使わない（EXPもサーバーが決める。互換のため引数だけ残してある）
 -- ============================================================
@@ -396,7 +396,7 @@ BEGIN
 
   -- Gold・EXPともサーバーが決める（p_gold / p_exp は受け取らない＝改ざんできない）
   v_gold := tower_sortie_gold(p_floor);
-  -- 中ボスに当たった出撃はボス扱い（街のボス遭遇と同じ量）
+  -- 強敵に当たった出撃はボス扱い（街のボス遭遇と同じ量）
   v_exp  := tower_battle_exp(v_pid, COALESCE(p_mid_defeat, false));
 
   INSERT INTO tower_progress (player_id, floor, sortie_count)
@@ -407,7 +407,7 @@ BEGIN
 
   v_need := tower_sorties_to_mid(p_floor);
 
-  -- 中ボス撃破：しきい値に到達していなければ受け付けない
+  -- 強敵撃破：しきい値に到達していなければ受け付けない
   IF p_mid_defeat AND p_won AND v_cnt >= v_need THEN
     UPDATE tower_progress SET mid_defeated = true, updated_at = now()
       WHERE player_id = v_pid AND floor = p_floor;
@@ -462,7 +462,7 @@ BEGIN
   SELECT COALESCE(mid_defeated, false) INTO v_mid
     FROM tower_progress WHERE player_id = v_pid AND floor = p_floor;
   IF NOT COALESCE(v_mid, false) THEN
-    RETURN json_build_object('error', 'まず中ボスを倒してください');
+    RETURN json_build_object('error', 'まず強敵を倒してください');
   END IF;
 
   INSERT INTO tower_player (player_id, run_floor, run_stage, run_hp, run_mp, run_started_at)

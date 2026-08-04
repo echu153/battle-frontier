@@ -793,7 +793,7 @@ export function simulateTowerBattle({
       en.used.summon = true
       for (let k = 0; k < (en.summonDef.count || 1); k++) spawn(floorData.enemies[en.summonDef.enemyIndex], {}, `${en.name}の号令！`)
     }
-    // 中ボス級の召喚（戦闘エリア7）
+    // 強敵級の召喚（戦闘エリア7）
     if (en.summonMid && floorData && !en.used.summonMid && rate <= en.summonMid.hpBelow) {
       en.used.summonMid = true
       const sr = en.summonMid.statRate || 0.5
