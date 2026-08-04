@@ -230,7 +230,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
     const eDefRate  = (enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1) * (enemyBuffs.defUp  ? enemyBuffs.defUp.rate  : 1) * (1 - (eff.defPen || 0))
     const eMdefRate = (enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1) * (enemyBuffs.mdefUp ? enemyBuffs.mdefUp.rate : 1) * (1 - (eff.mdefPen || 0))
-    const prefix = isExtra ? `${profile.username} の追加攻撃！ ` : `${turn}ターン目: ${profile.username} の`
+    const prefix = isExtra ? `↳ ${profile.username} の` : `${turn}ターン目: ${profile.username} の`
     const isCrit = Math.random()*100 < playerCritRate
     const critMult = isCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
 
@@ -628,7 +628,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     // mods.alwaysHit（蒼穹アウストラリス）：必中＝プレイヤー回避無効
     const evasionRate = mods.alwaysHit ? 0 : (calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0) + (hasOnmi ? 5 : 0))
     if (evasionRate > 0 && Math.random()*100 < evasionRate) {
-      const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+      const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
       logs.push({ text:`${prefix}${enemy.name}の攻撃！ しかし回避した！`, color:'#44ff88' })
       evoOnEvade(eff, playerBuffs, logs)  // 影踏みのブーツ
       return
@@ -644,7 +644,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     playerHp -= finalDmg
     { const refl = evoOnDamaged(eff, finalDmg, enemyBuffs, enemy.name, logs); if (refl > 0) dmgEnemy(refl, 'physical') }
     if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
-    const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+    const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
     const critText = isCrit ? ' 💥クリティカル！' : ''
     const escalateText = (mods.escalatingHit && enemyActionStreak > 1) ? ` 🌀連撃×${enemyActionStreak}！` : ''
     logs.push({ text:`${prefix}${enemy.name}の攻撃！ あなたに${finalDmg}ダメージ…${critText}${escalateText}`, color:isCrit?'#ff2200':'#ff6644' })
@@ -719,13 +719,8 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     playerHp = 0
   }
 
-    // 戦闘状況（HP/MPバー）は1ターンごとではなく「1回の行動ごと」に出す。
-    let lastHpSig = ''
+    // 戦闘状況（HP/MPバー）は各ターンの先頭に1回だけ出す。
     const pushHp = () => {
-      // 直前と全く同じ状況なら出さない
-      const sig = `${playerHp}/${enemyHp}`
-      if (sig === lastHpSig && logs[logs.length-1]?.type === 'hp') return
-      lastHpSig = sig
       const twinBars = twin ? [
         { name:'カストル', hp:Math.max(0,twin.c.hp), max:twin.c.max, down:twin.c.down },
         { name:'ポルックス', hp:Math.max(0,twin.p.hp), max:twin.p.max, down:twin.p.down },
@@ -734,6 +729,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     }
 
   while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
+    pushHp()
     const hpBeforeTurn = playerHp  // 雷鋼の機神鎧: このターンに被ダメしたか判定用
     if (passiveNames.includes('骸の壁') && (turn === 1 || turn % 4 === 0)) {
       playerBuffs.dmgReduce = { turns:999, rate:0.7, isGainoKabe:true }
@@ -895,11 +891,10 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     if (!playerSkipped) {
       tenkaiActedThisTurn = false
       doPlayerAttack(false)
-      pushHp()
       if (enemyHp <= 0) break
       const spiritExtra = !!playerBuffs.guaranteedExtra  // 精霊共鳴の確定追加行動
       if (playerBuffs.guaranteedExtra) playerBuffs.guaranteedExtra = false
-      if (!tenkaiActedThisTurn && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) { doPlayerAttack(true); pushHp(); if (enemyHp <= 0) break }
+      if (!tenkaiActedThisTurn && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) { logs.push({ text:'⚡ 追加行動！', color:'#ffdd44' }); doPlayerAttack(true); if (enemyHp <= 0) break }
     }
 
     // 敵のターン
@@ -926,6 +921,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         const cap = mods.extraActionCap || 1
         let extras = 0
         while (extras < cap && enemyExtraRate > 0 && Math.random()*100 < enemyExtraRate) {
+          logs.push({ text:'⚡ 追加行動！', color:'#ffdd44' })
           doEnemyAttack(true); extras++
           if (playerHp <= 0) break
         }
@@ -975,8 +971,6 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       playerBuffs.ailmentShield = { charges: 1 }
       logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color:'#66ccff' })
     }
-    // 敵の行動が終わった時点の状況
-    pushHp()
     turn++
   }
 

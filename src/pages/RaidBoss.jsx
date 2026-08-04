@@ -268,7 +268,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       const pSpd  = effectiveSpdForCalc * (playerBuffs.spdUp?.rate || 1) * (playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1)
       const effBuff = { ...eff, atk: pAtk, def: pDef, mdef: pMdef, matk: pMatk, spd: pSpd }
 
-      const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+      const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
       const isCrit = Math.random() * 100 < playerCritRate
       const critMult = isCrit ? (1.5 + (eff.critDmg || 0) + passiveCritDmgBonus) : 1.0
 
@@ -462,7 +462,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       const berserkDmgRate = hasBerserk ? (pe('狂戦士')?1.20:1.15) : 1.0
       const eAtk = boss.atk
       const defForCalc = Math.max(1, pDef)
-      const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+      const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
 
       // ターン4: 特殊スキル（倍率1.5）。ボスごとに効果が異なる
       if (turn === 4 && !isExtra) {
@@ -550,15 +550,15 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       if (playerSkipped) return
       tenkaiActedThisTurn = false
       doPlayerAttack()
-      if (canPlayerExtra()) doPlayerAttack(true)
+      if (canPlayerExtra()) { logs.push({ text: '⚡ 追加行動！', color: '#ffdd44' }); doPlayerAttack(true) }
     }
     if (playerFirst) {
       doPlayerTurn()
       doBossAttack()
-      if (Math.random() * 100 < bossExtraRate) doBossAttack(true)
+      if (Math.random() * 100 < bossExtraRate) { logs.push({ text: '⚡ 追加行動！', color: '#ffdd44' }); doBossAttack(true) }
     } else {
       doBossAttack()
-      if (Math.random() * 100 < bossExtraRate) doBossAttack(true)
+      if (Math.random() * 100 < bossExtraRate) { logs.push({ text: '⚡ 追加行動！', color: '#ffdd44' }); doBossAttack(true) }
       doPlayerTurn()
     }
 

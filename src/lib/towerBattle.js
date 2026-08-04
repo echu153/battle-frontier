@@ -287,7 +287,7 @@ export function simulateTowerBattle({
     const eMdefRate = (enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1) * (enemyBuffs.mdefUp ? enemyBuffs.mdefUp.rate : 1) * (1 - (eff.mdefPen || 0))
     const enBaseDef = eStats.def
     const enBaseMdef = eStats.mdef
-    const prefix = isExtra ? `${profile.username} の追加攻撃！ ` : `${turn}ターン目: ${profile.username} の`
+    const prefix = isExtra ? `↳ ${profile.username} の` : `${turn}ターン目: ${profile.username} の`
     const isCrit = Math.random() * 100 < playerCritRate
     const critMult = isCrit ? (1.5 + (eff.critDmg || 0) + passiveCritDmgBonus) : 1.0
 
@@ -627,7 +627,7 @@ export function simulateTowerBattle({
   const enemyAct = (en, forced = null, isExtra = false) => {
     const eStats = enemyStats(en)
     const sk = forced || pickEnemySkill(en)
-    const prefix = isExtra ? `追加行動！ ` : `${turn}ターン目: `
+    const prefix = isExtra ? `↳ ` : `${turn}ターン目: `
 
     // 自己強化
     if (sk.type === 'buff') {
@@ -833,18 +833,16 @@ export function simulateTowerBattle({
     }
     // 素早さによる追加行動（通常攻撃）
     const ex = calcExtraActionRate(enemyStats(en).spd, playerSpdNow())
-    if (ex > 0 && Math.random() * 100 < ex) enemyAct(en, basicAttack(en), true)
+    if (ex > 0 && Math.random() * 100 < ex) {
+      logs.push({ text: '⚡ 追加行動！', color: '#ffdd44' })
+      enemyAct(en, basicAttack(en), true)
+    }
   }
 
-  // 戦闘状況（HP/MPバー）は1ターンごとではなく「1回の行動ごと」に出す。
+  // 戦闘状況（HP/MPバー）は各ターンの先頭に1回だけ出す。
   // 敵は倒した相手も含めて全員ぶんバーを出す（誰を倒したか・残りが誰かを見えるようにする）
-  let lastHpSig = ''
   const pushHp = () => {
     const front = alive()[0]
-    // 直前と全く同じ状況なら出さない（最後の敵の行動とターン末が重なるケース）
-    const sig = `${playerHp}/${playerMp}/${enemies.map(e => Math.max(0, e.hp)).join(',')}`
-    if (sig === lastHpSig && logs[logs.length - 1]?.type === 'hp') return
-    lastHpSig = sig
     logs.push({
       type: 'hp', turn,
       vertical: true,   // 敵が最大4体出るので縦積みで表示する
@@ -866,6 +864,7 @@ export function simulateTowerBattle({
   // メインループ
   // ============================================================
   while (playerHp > 0 && alive().length > 0 && turn <= turnCap) {
+    pushHp()
     const hpBeforeTurn = playerHp
     if (passiveNames.includes('骸の壁') && (turn === 1 || turn % 4 === 0)) {
       playerBuffs.dmgReduce = { turns: 999, rate: 0.7, isGainoKabe: true }
@@ -1010,15 +1009,14 @@ export function simulateTowerBattle({
     }
     if (!playerSkipped) {
       doPlayerAttack(false)
-      pushHp()
       if (alive().length === 0) break
       const front = pickTarget()
       const playerExtraRate = front ? calcExtraActionRate(playerSpdNow(), enemyStats(front).spd) : 0
       const spiritExtra = !!playerBuffs.guaranteedExtra
       if (playerBuffs.guaranteedExtra) playerBuffs.guaranteedExtra = false
       if (spiritExtra || (playerExtraRate > 0 && Math.random() * 100 < playerExtraRate)) {
+        logs.push({ text: '⚡ 追加行動！', color: '#ffdd44' })
         doPlayerAttack(true)
-        pushHp()
         if (alive().length === 0) break
       }
     }
@@ -1037,7 +1035,6 @@ export function simulateTowerBattle({
         continue
       }
       doEnemyTurn(en)
-      pushHp()   // 敵が1体行動するごとに状況を出す
     }
     if (playerHp <= 0) break
 
@@ -1086,8 +1083,6 @@ export function simulateTowerBattle({
       logs.push({ text: `🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color: '#66ccff' })
     }
 
-    // 敵の行動が終わった時点の状況
-    pushHp()
     turn++
   }
 

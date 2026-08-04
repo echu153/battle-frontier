@@ -190,7 +190,7 @@ function doAttack(att, def, isExtra, ctx) {
   const eDefRate  = (defBuffs.defDown  ? defBuffs.defDown.rate  : 1) * (defBuffs.defUp  ? defBuffs.defUp.rate  : 1) * (1 - (eff.defPen  || 0))
   const eMdefRate = (defBuffs.mdefDown ? defBuffs.mdefDown.rate : 1) * (defBuffs.mdefUp ? defBuffs.mdefUp.rate : 1) * (1 - (eff.mdefPen || 0))
 
-  const prefix = isExtra ? `${profile.username} の追加攻撃！ ` : `${turn}ターン目: ${profile.username} の`
+  const prefix = isExtra ? `↳ ${profile.username} の` : `${turn}ターン目: ${profile.username} の`
 
   // 素早さの実効値。クリ率・回避率とも「相手との素早さ差」で決まり、相手の2倍の素早さで上限（回避と同式）。
   const atkSpdEff = pSpd
@@ -639,6 +639,7 @@ function takeTurn(att, def, ctx) {
   )
   // 天墜竜閃を使ったターン（溜め・解放とも）は追加行動を出さない
   if (!att.tenkaiActedThisTurn && (spiritExtra || (extraRate > 0 && Math.random() * 100 < extraRate))) {
+    ctx.logs.push({ text: '⚡ 追加行動！', color: '#ffdd44' })
     doAttack(att, def, true, ctx)
     if (def.hp <= 0) return true
   }
@@ -711,13 +712,8 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
   // minDmgPct: 防御無視の最低ダメージ保証（相手最大HPの割合）。戦争で戦闘力差があっても少し通す用。0=無効。
   const ctx = { logs, turn: 1, atkDmgMult: opts.atkDmgMult ?? 1, dotMult: opts.dotMult ?? 1, healMult: opts.healMult ?? 1, minDmgPct: opts.minDmgPct ?? 0 }
 
-  // 戦闘状況（HP/MPバー）は1ターンごとではなく「1回の行動ごと」に出す。
-  let lastHpSig = ''
+  // 戦闘状況（HP/MPバー）は各ターンの先頭に1回だけ出す。
   const pushHp = () => {
-    // 直前と全く同じ状況なら出さない
-    const sig = `${A.hp}/${A.mp}/${B.hp}/${B.mp}`
-    if (sig === lastHpSig && logs[logs.length-1]?.type === 'hp') return
-    lastHpSig = sig
     logs.push({
       type: 'hp', turn: ctx.turn,
       playerHp: Math.max(0, A.hp), playerMax: A.eff.hp_max, playerName: A.profile.username,
@@ -730,6 +726,7 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
   }
 
   while (A.hp > 0 && B.hp > 0 && ctx.turn <= turnCap) {
+    pushHp()
     // 先攻＝素早さが速い方（完全同値はランダム）
     const aSpd = A.effectiveSpdForCalc * (A.buffs.spdUp ? A.buffs.spdUp.rate : 1)
     const bSpd = B.effectiveSpdForCalc * (B.buffs.spdUp ? B.buffs.spdUp.rate : 1)
@@ -746,19 +743,13 @@ export function simulatePvpBattle(inputA, inputB, opts = {}) {
 
     // 行動（先攻→後攻）
     const first = order[0], second = order[1]
-    const firstEnded = takeTurn(first, second, ctx)
-    pushHp()
-    if (firstEnded || second.hp <= 0) break
-    const secondEnded = takeTurn(second, first, ctx)
-    pushHp()
-    if (secondEnded || first.hp <= 0) break
+    if (takeTurn(first, second, ctx) || second.hp <= 0) break
+    if (takeTurn(second, first, ctx) || first.hp <= 0) break
 
     // ターン終了: バフ更新
     endTurnBuffs(A, ctx, aHpBefore)
     endTurnBuffs(B, ctx, bHpBefore)
 
-    // ターンの終わりの状況
-    pushHp()
     ctx.turn++
   }
 

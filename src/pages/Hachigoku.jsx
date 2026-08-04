@@ -169,7 +169,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
     const eDefRate  = (enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1) * (enemyBuffs.defUp  ? enemyBuffs.defUp.rate  : 1) * (1 - (eff.defPen || 0))
     const eMdefRate = (enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1) * (enemyBuffs.mdefUp ? enemyBuffs.mdefUp.rate : 1) * (1 - (eff.mdefPen || 0))
-    const prefix = isExtra ? `${profile.username} の追加攻撃！ ` : `${turn}ターン目: ${profile.username} の`
+    const prefix = isExtra ? `↳ ${profile.username} の` : `${turn}ターン目: ${profile.username} の`
     const isCrit = Math.random()*100 < playerCritRate
     const critMult = isCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
 
@@ -510,7 +510,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     // 大技（isUlt）は必中。通常攻撃・通常スキルは回避可能
     const evasionRate = cast?.isUlt ? 0 : calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0) + (hasOnmi ? 5 : 0)
     if (evasionRate > 0 && Math.random()*100 < evasionRate) {
-      const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+      const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
       logs.push({ text:`${prefix}${enemy.name}の${cast ? `「${cast.name}」` : '攻撃'}！ しかし回避した！`, color:'#44ff88' })
       evoOnEvade(eff, playerBuffs, logs)
       return
@@ -534,7 +534,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     playerHp -= finalDmg
     { const refl = evoOnDamaged(eff, finalDmg, enemyBuffs, enemy.name, logs); if (refl > 0) enemyHp -= refl }
     if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
-    const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+    const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
     const critText = isCrit ? ' 💥クリティカル！' : ''
     logs.push({ text:`${prefix}${enemy.name}の${cast ? `「${cast.name}」` : '攻撃'}！ あなたに${finalDmg}ダメージ…${critText}`, color: cast?.isUlt ? '#ff2266' : isCrit ? '#ff2200' : '#ff6644' })
     // 餓鬼: 与えたダメージの一定割合を吸収して回復（自身の回復2倍＋大技後は永続100%吸収）
@@ -683,17 +683,13 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     doEnemyAttack(false)
   }
 
-    // 戦闘状況（HP/MPバー）は1ターンごとではなく「1回の行動ごと」に出す。
-    let lastHpSig = ''
+    // 戦闘状況（HP/MPバー）は各ターンの先頭に1回だけ出す。
     const pushHp = () => {
-      // 直前と全く同じ状況なら出さない
-      const sig = `${playerHp}/${enemyHp}`
-      if (sig === lastHpSig && logs[logs.length-1]?.type === 'hp') return
-      lastHpSig = sig
       logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:eff.hp_max, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs) })
     }
 
   while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
+    pushHp()
     const hpBeforeTurn = playerHp
     if (passiveNames.includes('骸の壁') && (turn === 1 || turn % 4 === 0)) {
       playerBuffs.dmgReduce = { turns:999, rate:0.7, isGainoKabe:true }
@@ -789,11 +785,10 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     if (!playerSkipped) {
       tenkaiActedThisTurn = false
       doPlayerAttack(false)
-      pushHp()
       if (enemyHp <= 0) break
       const spiritExtra = !!playerBuffs.guaranteedExtra  // 精霊共鳴の確定追加行動
       if (playerBuffs.guaranteedExtra) playerBuffs.guaranteedExtra = false
-      if (!tenkaiActedThisTurn && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) { doPlayerAttack(true); pushHp(); if (enemyHp <= 0) break }
+      if (!tenkaiActedThisTurn && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) { logs.push({ text:'⚡ 追加行動！', color:'#ffdd44' }); doPlayerAttack(true); if (enemyHp <= 0) break }
     }
 
     // Hell限定: HP75%以下に落ちた最初のターンに自動でプレイヤーのバフ解除（行動には含まれない・スタン中でも発動）
@@ -814,7 +809,10 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     if (!enemySkipped) {
       doEnemyTurn()
       if (playerHp <= 0) break
-      if (enemyExtraRate > 0 && Math.random()*100 < enemyExtraRate) doEnemyAttack(true)
+      if (enemyExtraRate > 0 && Math.random()*100 < enemyExtraRate) {
+        logs.push({ text:'⚡ 追加行動！', color:'#ffdd44' })
+        doEnemyAttack(true)
+      }
     }
     if (playerHp <= 0) break
 
@@ -857,8 +855,6 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
       playerBuffs.ailmentShield = { charges: 1 }
       logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color:'#66ccff' })
     }
-    // 敵の行動が終わった時点の状況
-    pushHp()
     turn++
   }
 

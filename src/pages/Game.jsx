@@ -3218,7 +3218,7 @@ export default function Game() {
       // 宝石の防御貫通/魔法防御貫通（敵DEF/MDEFを%無視）を倍率に折り込む
       const eDefRate  = (enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1) * (enemyBuffs.defUp  ? enemyBuffs.defUp.rate  : 1) * (1 - (eff.defPen || 0))
       const eMdefRate = (enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1) * (enemyBuffs.mdefUp ? enemyBuffs.mdefUp.rate : 1) * (1 - (eff.mdefPen || 0))
-      const prefix = isExtra ? `${profile.username} の追加攻撃！ ` : `${turn}ターン目: ${profile.username} の`
+      const prefix = isExtra ? `↳ ${profile.username} の` : `${turn}ターン目: ${profile.username} の`
       const isCrit = Math.random()*100 < playerCritRate
       const critMult = isCrit ? (1.5 + (eff.critDmg||0) + passiveCritDmgBonus) : 1.0
 
@@ -3538,7 +3538,7 @@ export default function Game() {
         const cut = petBuffs.reduceTurns > 0 ? (1 - petBuffs.reduce) : 1.0
         let dmg = Math.max(1, Math.floor(baseDmg * cut * (0.9 + Math.random()*0.2)))
         petHp = Math.max(0, petHp - dmg)
-        const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+        const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
         logs.push({ text:`${prefix}${enemy.name}はペットを攻撃！ ペットに${dmg}ダメージ！（残りHP${petHp}）`, color:'#ff8844' })
         if (petHp <= 0) logs.push({ text:`💥 ペットは倒れてしまった…`, color:'#ff4444' })
         return
@@ -3568,7 +3568,7 @@ export default function Game() {
       const effectiveEnemySpd = enemySpd * enemySpdBuff * enemySpdDebuff
       const evasionRate = calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0) + (hasOnmi ? 5 : 0)
       if (evasionRate > 0 && Math.random()*100 < evasionRate) {
-        const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+        const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
         logs.push({ text:`${prefix}${enemy.name}の攻撃！ しかし回避した！`, color:'#44ff88' })
         // ボス装備 真化: 影踏みのブーツ — 回避時2ターン素早さ+10%（発動ログなし）
         if (eff.evoEvadeSpdUp && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= 1.1)) {
@@ -3597,7 +3597,7 @@ export default function Game() {
           logs.push({ text:`🔯 陰陽結界！ 軽減した分から${healBack}回復した！`, color:'#66ddaa' })
         }
       }
-      const prefix = isExtra ? '追加攻撃！ ' : `${turn}ターン目: `
+      const prefix = isExtra ? '↳ ' : `${turn}ターン目: `
       const critText = isCrit ? ' 💥クリティカル！' : ''
       logs.push({ text:`${prefix}${enemy.name}の攻撃！ あなたに${finalDmg}ダメージ…${critText}`, color:isCrit?'#ff2200':'#ff6644' })
     }
@@ -3721,18 +3721,12 @@ export default function Game() {
     }
     if (petActive) logs.push({ text:`🐾 ペットを召喚！（HP${petMaxHp}）`, color:'#ffcc66' })
 
-    // 戦闘状況（HP/MPバー）は1ターンごとではなく「1回の行動ごと」に出す。
-    // プレイヤーが動いた直後・追加行動の直後・敵が動いた直後にそれぞれ呼ぶ。
-    let lastHpSig = ''
-    const pushHp = () => {
-      // 直前と全く同じ状況なら出さない（行動が空振りしたときに同じバーが並ばないように）
-      const sig = `${playerHp}/${enemyHp}/${petHp}`
-      if (sig === lastHpSig && logs[logs.length-1]?.type === 'hp') return
-      lastHpSig = sig
-      logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:maxHp, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs), petHp: petActive ? Math.max(0,petHp) : null, petMax: petActive ? petMaxHp : null })
-    }
+    // 戦闘状況（HP/MPバー）は各ターンの先頭に1回だけ出す。
+    // 被弾のたびに挟むと流れが追えないので、そのターンに入った時点の状況だけを見せる。
+    const pushHp = () => logs.push({ type:'hp', turn, playerHp:Math.max(0,playerHp), playerMax:maxHp, playerName:profile.username, enemyHp:Math.max(0,enemyHp), enemyMax:enemyMaxHp, enemyName:enemy.name, playerStatus:extractStatuses(playerBuffs), enemyStatus:extractStatuses(enemyBuffs), petHp: petActive ? Math.max(0,petHp) : null, petMax: petActive ? petMaxHp : null })
 
     while (playerHp > 0 && enemyHp > 0 && turn <= 50) {
+      pushHp()
       const hpBeforeTurn = playerHp  // 雷鋼の機神鎧: このターンに被ダメしたか判定用
       if (passiveNames.includes('骸の壁') && (turn === 1 || turn % 4 === 0)) {
         playerBuffs.dmgReduce = { turns:999, rate:0.7, isGainoKabe:true }
@@ -3888,14 +3882,14 @@ export default function Game() {
       if (!playerSkipped) {
         tenkaiActedThisTurn = false
         doPlayerAttack(false)
-        pushHp()
         if (enemyHp <= 0) break
         // 精霊共鳴：確定追加行動（消費）
         const spiritExtra = !!playerBuffs.guaranteedExtra
         if (playerBuffs.guaranteedExtra) playerBuffs.guaranteedExtra = false
         // 天墜竜閃を使ったターン（溜め・解放とも）は追加行動なし
         if (!tenkaiActedThisTurn && (spiritExtra || (playerExtraRate > 0 && Math.random()*100 < playerExtraRate))) {
-          doPlayerAttack(true); pushHp(); if (enemyHp <= 0) break
+          logs.push({ text:'⚡ 追加行動！', color:'#ffdd44' })
+          doPlayerAttack(true); if (enemyHp <= 0) break
         }
       }
 
@@ -3928,7 +3922,10 @@ export default function Game() {
             doEnemyAttack(false)
           }
           if (playerHp <= 0) break
-          if (enemyExtraRate > 0 && Math.random()*100 < enemyExtraRate) doEnemyAttack(true)
+          if (enemyExtraRate > 0 && Math.random()*100 < enemyExtraRate) {
+            logs.push({ text:'⚡ 追加行動！', color:'#ffdd44' })
+            doEnemyAttack(true)
+          }
         }
       }
       if (playerHp <= 0) break
@@ -3987,8 +3984,6 @@ export default function Game() {
         logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color:'#66ccff' })
       }
       if (bossHealCooldown > 0) bossHealCooldown--
-      // 敵の行動が終わった時点の状況
-      pushHp()
       turn++
     }
 
@@ -7102,7 +7097,7 @@ export function BattleLogLine({ l }) {
     )
     return (
       <div style={{ borderBottom:'1px solid #24405e', padding:'6px 6px', background:'#16263c', borderRadius:'3px', margin:'2px 0' }}>
-        <div style={{ fontSize:'9px', color:'#7fa8d0', marginBottom:'3px', textAlign:'center' }}>━ {l.turn}ターン終了時 ━</div>
+        <div style={{ fontSize:'9px', color:'#7fa8d0', marginBottom:'3px', textAlign:'center' }}>━ {l.turn}ターン ━</div>
         {/* l.vertical=true で縦積み。敵が3体以上出るコンテンツ(エンドレスタワー)では
             横に並べると名前が潰れるため。既定は従来どおり横並び */}
         <div style={{ display:'flex', flexDirection: l.vertical ? 'column' : 'row', gap: l.vertical ? '6px' : '8px', alignItems: l.vertical ? 'stretch' : 'flex-end' }}>
