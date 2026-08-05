@@ -415,18 +415,27 @@ test('公開している層がクライアントとSQLで一致している', ()
   assert.ok(OPEN_MAX_FLOOR >= 1 && OPEN_MAX_FLOOR <= MAX_IMPLEMENTED_FLOOR, '公開層が実装済みの範囲外')
 })
 
-test('層ごとの倍率は1〜4層に一切掛からない', () => {
-  // 1〜4層は一般公開中。上の層を重くするときに巻き添えで難しくすると
-  // 今遊んでいる人が進めなくなるので、ここは絶対に1.0のまま。
-  for (const f of [1, 2, 3, 4]) assert.equal(floorPowerOf(f), 1, `${f}層に倍率が掛かっている`)
-  // 5層以降は必ず1より大きく、層が上がるほど重くなる（同値も許さない）
-  for (let f = 5; f <= 12; f++) {
-    assert.ok(floorPowerOf(f) > 1, `${f}層の倍率が1以下`)
-    assert.ok(floorPowerOf(f) > floorPowerOf(f - 1), `${f}層が前の層より重くなっていない`)
+test('外側のつまみは使わない（データに書いてある数字＝実戦値）', async () => {
+  // 2026-08-06: つまみの分を敵データへ焼き込んだ。
+  // 「データの攻撃9,300 → 実戦18,135」のように、データを読んでも強さが分からない
+  // 状態に戻さないための歯止め。難易度は敵データの数値だけで表す。
+  const t = await import('./tower.js')
+  for (const k of ['ENEMY_ATK_POWER', 'MOB_ATK_POWER', 'ENEMY_SKILL_POWER']) {
+    assert.equal(t[k], 1.0, `${k} が1.0でない。強さは敵データ側で表すこと`)
   }
-  // 表の外は最後の値から一定ずつ伸びる
-  const last = FLOOR_POWER[FLOOR_POWER.length - 1]
-  assert.equal(floorPowerOf(FLOOR_POWER.length + 1), last + FLOOR_POWER_STEP)
+  for (let f = 1; f <= 12; f++) assert.equal(floorPowerOf(f), 1, `${f}層に隠れた倍率が掛かっている`)
+  assert.ok(FLOOR_POWER.every(v => v === 1), 'FLOOR_POWER に1以外が入っている')
+  assert.equal(typeof FLOOR_POWER_STEP, 'number')
+
+  // プレイヤーの与ダメージ側の倍率だけは敵ステータスで表現できないので残る
+  assert.ok(t.ENEMY_DMG_TAKEN > 0 && t.ENEMY_DMG_TAKEN <= 1)
+  assert.ok(t.MOB_DMG_TAKEN > 0 && t.MOB_DMG_TAKEN <= 1)
+
+  // makeEnemy がデータの値をそのまま返すこと（途中で何も掛からない）
+  const def = TOWER_FLOORS[5].floorBoss
+  const en = t.makeEnemy(def, { isBoss: true })
+  assert.equal(en.atk, def.atk, 'ボスの攻撃力がデータと違う')
+  assert.equal(en.matk, def.matk, 'ボスの特殊攻撃力がデータと違う')
 })
 
 test('層ごとの倍率は敵の攻撃力にだけ乗り、HP・防御には乗らない', async () => {
