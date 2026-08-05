@@ -32,7 +32,7 @@ import {
   applyEquipmentEffects, ailmentShieldBlocks,
   executeSkill, extractStatuses, MULTI_HIT_SKILLS,
 } from '../pages/Game'
-import { makeEnemy, towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies, DEFAULT_TARGET_MODE, ENEMY_SKILL_POWER } from './tower'
+import { makeEnemy, towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies, DEFAULT_TARGET_MODE, ENEMY_SKILL_POWER, floorPowerOf } from './tower'
 // 敵の組み立てとツリー換算は tower.js（純粋データ側）が正。ここから使う側のために再エクスポートする
 export { towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies }
 
@@ -58,6 +58,9 @@ export function simulateTowerBattle({
   const logs = []
   const tr = towerTreeEffects(tree)
   const eff = applyTreeToStats(rawEff, tr)
+
+  // 層ごとの係数。敵が持っていればそれを使う（開発パネルの単体テストなど floorData 無しでも動く）
+  const floorPow = enemyList[0]?.floorPower ?? floorPowerOf(floorData?.floor)
 
   const enemies = enemyList.slice()
   // 持ち越しHPが0以下＝前の戦闘で相打ちになっている。1に切り上げて生き返らせない
@@ -677,7 +680,7 @@ export function simulateTowerBattle({
     const hits = sk.type === 'physical_multi' ? (sk.hits || 2) : 1
     let total = 0, anyCrit = false
     for (let h = 0; h < hits; h++) {
-      const r = damagePlayer(en, offStat * (sk.mult || 1) * ENEMY_SKILL_POWER, offStat, useStat, { defPen: sk.defPen })
+      const r = damagePlayer(en, offStat * (sk.mult || 1) * ENEMY_SKILL_POWER * floorPow, offStat, useStat, { defPen: sk.defPen })
       if (!r) continue
       total += r.dmg; if (r.isCrit) anyCrit = true
       if (playerHp <= 0) break
@@ -729,7 +732,7 @@ export function simulateTowerBattle({
     const eStats = enemyStats(en)
     const isMag = sm.type === 'magical'
     const off = isMag ? eStats.matk : eStats.atk
-    const r = damagePlayer(en, off * (sm.mult || 2.5) * ENEMY_SKILL_POWER, off, isMag ? 'matk' : 'atk')
+    const r = damagePlayer(en, off * (sm.mult || 2.5) * ENEMY_SKILL_POWER * floorPow, off, isMag ? 'matk' : 'atk')
     logs.push({ text: `💥 ${en.name}の「${sm.name}」！ あなたに${r?.dmg || 0}ダメージ！`, color: '#ff2200' })
     if (playerHp <= 0) return
     if (sm.defDownRate) { playerBuffs.defDown = { turns: sm.turns || 3, rate: sm.defDownRate }; logs.push({ text: `🔻 防御力が大きく下がった…`, color: '#88aaff' }) }
@@ -754,7 +757,8 @@ export function simulateTowerBattle({
     const n = Math.max(1, Math.floor(count) || 1)
     let name = ''
     for (let k = 0; k < n; k++) {
-      const en = makeEnemy(def, { ...opts, isSummoned: true })
+      // 層ごとの係数は召喚された敵にも引き継ぐ（引き継がないと上の層で援軍だけ弱くなる）
+      const en = makeEnemy(def, { floorPower: floorPow, ...opts, isSummoned: true })
       enemies.push(en)
       name = en.name
     }

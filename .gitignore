@@ -26,3 +26,5 @@ dist-ssr
 # Claude Code 個人設定（秘密情報を含み得るためコミットしない）
 .claude/settings.local.json
 _sim_data.json
+# 調整用シミュレータの esbuild 出力（生成物なので追跡しない）
+_*_b.mjs

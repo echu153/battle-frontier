@@ -47,6 +47,27 @@ export const MOB_ATK_POWER = 2.0
 export const ENEMY_DMG_TAKEN = 0.7   // 強敵・エリアボス
 export const MOB_DMG_TAKEN   = 0.5   // 道中の雑魚
 
+// ============================================================
+// 層ごとの敵の強さ（2026-08-05追加）
+// ------------------------------------------------------------
+// 上の4つのつまみは全層に一律で掛かるため、6層を止められる水準まで上げると
+// 公開中の1〜4層まで巻き添えになる（実測: 現状比×1.5で1〜4層の踏破率が大きく落ちる）。
+// 層ごとに係数を持たせて、上の層だけを重くする。
+//  ・掛かるのは「敵の攻撃力・特殊攻撃力」と「技の威力」だけ。
+//    HP・防御は動かさない（削り切るターン数を変えず、被ダメージだけを増やすため）。
+//  ・1〜4層は 1.0 固定。公開中なので絶対に動かさないこと。
+//  ・表に無い層は最後の値から +FLOOR_POWER_STEP ずつ伸ばす。
+// 実測の根拠（おれおれお 総合力55,833・エンドポイント28点振り・全19上位職）:
+//    5層 ×1.0→43〜100% / 6層 ×1.0→0〜100%・×1.5→0〜3%・×1.8→全職0%
+export const FLOOR_POWER = [1, 1, 1, 1, 1.15, 1.5, 1.7, 1.9, 2.1, 2.3]
+export const FLOOR_POWER_STEP = 0.2
+export const floorPowerOf = (floor) => {
+  const i = (floor | 0) - 1
+  if (i < 0) return 1
+  if (i < FLOOR_POWER.length) return FLOOR_POWER[i]
+  return FLOOR_POWER[FLOOR_POWER.length - 1] + (i - FLOOR_POWER.length + 1) * FLOOR_POWER_STEP
+}
+
 // 出撃1回で得られるGold（2026-08-03確定）。
 // 敵データの gold は調整用シミュレータの仮値で、街の出撃の何十倍もあり
 // 経済を壊すため、出撃では使わずこの式で固定する。強敵に当たっても同額。
@@ -623,14 +644,17 @@ let uidSeq = 0
 export function makeEnemy(def, opts = {}) {
   const statRate = opts.statRate || 1
   const hpRate = opts.hpRate || 1
+  // 層ごとの係数。攻撃力・特殊攻撃力にだけ掛ける（HP・防御・素早さには掛けない）
+  const fp = opts.floorPower || 1
+  const atkPower = (opts.isBoss ? ENEMY_ATK_POWER : MOB_ATK_POWER) * fp
   return {
     uid: ++uidSeq,
     name: opts.name || def.name,
     hp: Math.max(1, Math.floor(def.hp * hpRate * (opts.scaleHpByStat ? statRate : 1))),
     maxHp: Math.max(1, Math.floor(def.hp * hpRate * (opts.scaleHpByStat ? statRate : 1))),
-    atk: Math.floor((def.atk || 0) * statRate * (opts.isBoss ? ENEMY_ATK_POWER : MOB_ATK_POWER)),
+    atk: Math.floor((def.atk || 0) * statRate * atkPower),
     def: Math.floor((def.def || 0) * statRate),
-    matk: Math.floor((def.matk || 0) * statRate * (opts.isBoss ? ENEMY_ATK_POWER : MOB_ATK_POWER)),
+    matk: Math.floor((def.matk || 0) * statRate * atkPower),
     mdef: Math.floor((def.mdef || 0) * statRate),
     spd: Math.max(1, Math.floor((def.spd || 1) * statRate)),
     type: def.type || 'physical',
@@ -649,6 +673,8 @@ export function makeEnemy(def, opts = {}) {
     specialMove: def.specialMove || null,
     isBoss: !!opts.isBoss,
     isSummoned: !!opts.isSummoned,
+    // 層ごとの係数。技の威力にも掛けるので、戦闘中に呼ばれる召喚へも引き継ぐ
+    floorPower: fp,
     // ── 実行時の状態 ──
     buffs: {},
     perm: { atk: 1, matk: 1, def: 1, mdef: 1, spd: 1 },
@@ -665,11 +691,12 @@ export function makeEnemy(def, opts = {}) {
 export function buildStageEnemies(floorData, stageIdx) {
   const stage = BOSS_RUN_STAGES[stageIdx]
   if (!stage || !floorData) return []
-  if (stage.kind === 'mid') return [makeEnemy(floorData.midBoss, { isBoss: true })]
+  const fp = floorPowerOf(floorData.floor)
+  if (stage.kind === 'mid') return [makeEnemy(floorData.midBoss, { isBoss: true, floorPower: fp })]
   if (stage.kind === 'boss') {
-    const list = [makeEnemy(floorData.floorBoss, { isBoss: true })]
+    const list = [makeEnemy(floorData.floorBoss, { isBoss: true, floorPower: fp })]
     for (const es of (floorData.floorBoss.escorts || [])) {
-      for (let i = 0; i < (es.count || 1); i++) list.push(makeEnemy(floorData.enemies[es.enemyIndex]))
+      for (let i = 0; i < (es.count || 1); i++) list.push(makeEnemy(floorData.enemies[es.enemyIndex], { floorPower: fp }))
     }
     return list
   }
@@ -677,16 +704,17 @@ export function buildStageEnemies(floorData, stageIdx) {
   const list = []
   for (let i = 0; i < (stage.count || 1); i++) {
     const def = floorData.enemies[Math.floor(Math.random() * floorData.enemies.length)]
-    list.push(makeEnemy(def))
+    list.push(makeEnemy(def, { floorPower: fp }))
   }
   return list
 }
 
 // 出撃（雑魚1体・しきい値到達後は5%で強敵）
 export function buildSortieEnemies(floorData, midChance) {
+  const fp = floorPowerOf(floorData.floor)
   if (midChance > 0 && Math.random() < midChance) {
-    return { enemies: [makeEnemy(floorData.midBoss, { isBoss: true })], isMid: true }
+    return { enemies: [makeEnemy(floorData.midBoss, { isBoss: true, floorPower: fp })], isMid: true }
   }
   const def = floorData.enemies[Math.floor(Math.random() * floorData.enemies.length)]
-  return { enemies: [makeEnemy(def)], isMid: false }
+  return { enemies: [makeEnemy(def, { floorPower: fp })], isMid: false }
 }

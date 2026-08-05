@@ -9,6 +9,7 @@ import {
   TREE_NODES, TREE_MAX_STEPS, TREE_STEP_PCT, stepPctOf, maxStepsAt, nextUnlock, treeBonus, treeSpent, treeResetCost,
   isMonumentFloor, MID_BOSS_RATE, towerSortieGold, towerBossGold, RUN_POTION_LIMIT, MAX_END_LEVEL,
   isTowerUnlocked, TOWER_UNLOCK_CHAR_LV, OPEN_MAX_FLOOR,
+  FLOOR_POWER, FLOOR_POWER_STEP, floorPowerOf,
   buildStageEnemies, buildSortieEnemies, towerTreeEffects, applyTreeToStats,
 } from './tower.js'
 import { TARGET_MODES, DEFAULT_TARGET_MODE, pickTargetMode, isTargetMode } from './loadout.js'
@@ -412,4 +413,49 @@ test('公開している層がクライアントとSQLで一致している', ()
   assert.ok(m, 'SQLの tower_max_floor が読めない')
   assert.equal(Number(m[1]), OPEN_MAX_FLOOR, '公開層がクライアントとSQLでズレている')
   assert.ok(OPEN_MAX_FLOOR >= 1 && OPEN_MAX_FLOOR <= MAX_IMPLEMENTED_FLOOR, '公開層が実装済みの範囲外')
+})
+
+test('層ごとの倍率は1〜4層に一切掛からない', () => {
+  // 1〜4層は一般公開中。上の層を重くするときに巻き添えで難しくすると
+  // 今遊んでいる人が進めなくなるので、ここは絶対に1.0のまま。
+  for (const f of [1, 2, 3, 4]) assert.equal(floorPowerOf(f), 1, `${f}層に倍率が掛かっている`)
+  // 5層以降は必ず1より大きく、層が上がるほど重くなる（同値も許さない）
+  for (let f = 5; f <= 12; f++) {
+    assert.ok(floorPowerOf(f) > 1, `${f}層の倍率が1以下`)
+    assert.ok(floorPowerOf(f) > floorPowerOf(f - 1), `${f}層が前の層より重くなっていない`)
+  }
+  // 表の外は最後の値から一定ずつ伸びる
+  const last = FLOOR_POWER[FLOOR_POWER.length - 1]
+  assert.equal(floorPowerOf(FLOOR_POWER.length + 1), last + FLOOR_POWER_STEP)
+})
+
+test('層ごとの倍率は敵の攻撃力にだけ乗り、HP・防御には乗らない', async () => {
+  const { makeEnemy, ENEMY_ATK_POWER } = await import('./tower.js')
+  // HPや防御まで伸ばすと「削り切るターン数」が変わり、
+  // 与ダメージ割合回復（血の狂気・紋章の吸収）とかみ合って体感が読めなくなる。
+  const fd = getFloor(6)
+  const plain = makeEnemy(fd.floorBoss, { isBoss: true })
+  const scaled = makeEnemy(fd.floorBoss, { isBoss: true, floorPower: 2 })
+  assert.equal(scaled.hp, plain.hp, 'HPに倍率が乗っている')
+  assert.equal(scaled.def, plain.def, '防御に倍率が乗っている')
+  assert.equal(scaled.mdef, plain.mdef, '特殊防御に倍率が乗っている')
+  assert.equal(scaled.spd, plain.spd, '素早さに倍率が乗っている')
+  assert.equal(scaled.atk, Math.floor(fd.floorBoss.atk * ENEMY_ATK_POWER * 2), '攻撃力に倍率が乗っていない')
+  // 1〜4層の敵が今までと同じであること（倍率を入れる前と同じ式）
+  const f1 = getFloor(1)
+  assert.equal(buildStageEnemies(f1, BOSS_RUN_STAGES.length - 1)[0].atk,
+    Math.floor(f1.floorBoss.atk * ENEMY_ATK_POWER), '1層のボスの攻撃力が変わっている')
+})
+
+test('層ごとの倍率が技の威力と召喚にも届いている', async () => {
+  const fs = await import('node:fs')
+  const battle = fs.readFileSync('src/lib/towerBattle.js', 'utf8')
+  // 技の威力（通常技・大技の両方）
+  assert.equal((battle.match(/ENEMY_SKILL_POWER \* floorPow/g) || []).length, 2,
+    '敵の技の威力に層ごとの倍率が掛かっていない')
+  // 戦闘中に湧く援軍。引き継がないと上の層で援軍だけ弱くなる
+  assert.ok(battle.includes('makeEnemy(def, { floorPower: floorPow'),
+    '召喚された敵に層ごとの倍率が引き継がれていない')
+  // 敵が倍率を持ち歩いていること（floorData が無い開発テスト対戦でも効かせるため）
+  assert.equal(buildStageEnemies(getFloor(6), 0)[0].floorPower, floorPowerOf(6))
 })
