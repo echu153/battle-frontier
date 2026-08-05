@@ -211,7 +211,7 @@ export const TOWER_FLOORS = [
       { name: '威嚇の咆哮', type: 'debuff', effect: 'atkDown', rate: 0.8, turns: 3 },
       { name: '突進踏み',   type: 'physical_multi', mult: 1.2, hits: 2 },
     ], { mods: { physTakenMult: 0.9 } }),
-    floorBoss: E('アーマードミノタウロス', 70000, 4290, 4200, 0, 3400, 2200, 'physical', 25000, [
+    floorBoss: E('アーマードミノタウロス', 70000, 4534, 4200, 0, 3400, 2200, 'physical', 25000, [
       { name: '装甲突進',   type: 'physical',       mult: 2.7 },
       { name: '鉄角の乱打', type: 'physical_multi', mult: 1.2, hits: 3 },
       { name: '戦鬼の構え', type: 'buff', effect: 'defMdefUp', defRate: 1.3, mdefRate: 1.3, turns: 3 },
@@ -277,7 +277,7 @@ export const TOWER_FLOORS = [
       { name: '毒霧',     type: 'magical',  mult: 2.25, poisonRate: 0.5 },
       { name: '沼の構え', type: 'buff', effect: 'defMdefUp', defRate: 1.3, mdefRate: 1.3, turns: 3 },
     ], { mods: { poisonField: 0.015, playerHealMult: 0.75 } }),
-    floorBoss: E('ポイズントードキング', 143000, 3900, 5000, 2340, 4600, 2950, 'physical', 90000, [
+    floorBoss: E('ポイズントードキング', 143000, 6728, 5000, 4037, 4600, 2950, 'physical', 90000, [
       { name: '毒液噴射', type: 'magical',        mult: 2.55, poisonRate: 1.0 },
       { name: '粘着の舌', type: 'physical',       mult: 2.25, effect: 'spdDown', rate: 0.7, turns: 3 },
       { name: '沼の顎',   type: 'physical_multi', mult: 1.05, hits: 2 },
@@ -312,7 +312,7 @@ export const TOWER_FLOORS = [
       { name: '砂塵',       type: 'magical',  mult: 2.25 },
       { name: '甲殻硬化',   type: 'buff', effect: 'defMdefUp', defRate: 1.3, mdefRate: 1.3, turns: 3 },
     ], { mods: { defRamp: 1.12 } }),
-    floorBoss: E('エンペラースカラベ', 175000, 5720, 6200, 2990, 5600, 3100, 'physical', 160000, [
+    floorBoss: E('エンペラースカラベ', 175000, 8534, 6200, 4461, 5600, 3100, 'physical', 160000, [
       { name: '皇甲の顎', type: 'physical',       mult: 2.55 },
       { name: '砂嵐',     type: 'magical',        mult: 2.25 },
       { name: '黄金の顎', type: 'physical_multi', mult: 1.05, hits: 2 },
