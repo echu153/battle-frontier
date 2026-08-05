@@ -82,7 +82,13 @@ const mirrorEquipment = (equip, kind) => {
   })
 }
 
+// 第6引数に倍率を渡すと「今より何倍強いプレイヤーなら抜けられるか」を測れる。
+// 上の層はおれおれおでは全滅して見分けがつかないので、階段になっているかの確認に使う。
+const GROW = Number(process.argv[6] || 1)
+
 function reallocate(prof, kind) {
+  const g = (v) => Math.round((v || 0) * GROW)
+  prof = { ...prof, hp_max: g(prof.hp_max), mp_max: g(prof.mp_max), def: g(prof.def), mdef: g(prof.mdef), spd: g(prof.spd), atk: g(prof.atk), matk: g(prof.matk) }
   const keep = { hp_max: prof.hp_max, mp_max: prof.mp_max, def: prof.def, mdef: prof.mdef, spd: prof.spd }
   const offense = (prof.atk || 0) + (prof.matk || 0)
   const r = RATIO[kind]

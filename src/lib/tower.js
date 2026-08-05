@@ -328,25 +328,25 @@ export const TOWER_FLOORS = [
   {
     floor: 5, boss: 'ストームグリフォン',
     enemies: [
-      E('疾風のハーピー', 56000, 5979, 2800, 0, 3200, 4500, 'physical', 5000, [
+      E('疾風のハーピー', 61500, 6570, 3077, 0, 3516, 4945, 'physical', 5000, [
         { name: '烈風爪', type: 'physical',       mult: 2.25 },
         { name: '旋風撃', type: 'physical_multi', mult: 1.05, hits: 2 },
       ]),
-      E('雷雲イーグル', 58000, 9200, 3200, 0, 3000, 2700, 'physical', 5600, [
+      E('雷雲イーグル', 58900, 6806, 4515, 0, 4311, 2741, 'physical', 5600, [
         { name: '急降下', type: 'physical', mult: 2.55 },
         { name: '雷嘴',   type: 'physical', mult: 1.95, paralysisRate: 0.3 },
       ]),
-      E('暴風の精霊', 54000, 0, 3000, 7129, 4400, 2800, 'magical', 6200, [
+      E('暴風の精霊', 57600, 0, 3604, 6806, 5099, 2989, 'magical', 6200, [
         { name: '暴風弾', type: 'magical', mult: 2.25 },
         { name: '乱気流', type: 'magical', mult: 1.8, effect: 'spdDown', rate: 0.8, turns: 3 },
       ]),
     ],
-    midBoss: E('ゲイルグリフォン', 129000, 6727, 5000, 3587, 4300, 4800, 'physical', 80000, [
+    midBoss: E('ゲイルグリフォン', 130500, 6804, 5057, 3628, 4349, 4855, 'physical', 80000, [
       { name: '疾風の爪', type: 'physical', mult: 2.55 },
       { name: '風刃',     type: 'magical',  mult: 2.25 },
       { name: '風の加護', type: 'buff', effect: 'atkSpdUp', atkRate: 1.2, spdRate: 1.4, turns: 3 },
     ]),
-    floorBoss: E('ストームグリフォン', 195000, 8820, 6300, 5083, 5700, 7000, 'physical', 280000, [
+    floorBoss: E('ストームグリフォン', 200600, 9074, 6482, 5230, 5864, 7202, 'physical', 280000, [
       { name: '暴風の爪', type: 'physical',       mult: 2.4 },
       { name: '雷嵐',     type: 'magical',        mult: 2.1, paralysisRate: 0.3 },
       { name: '烈風連撃', type: 'physical_multi', mult: 0.9, hits: 2 },
@@ -361,25 +361,25 @@ export const TOWER_FLOORS = [
   {
     floor: 6, boss: 'ファントムデュラハン',
     enemies: [
-      E('亡霊騎士', 62000, 14400, 3900, 0, 3700, 3800, 'physical', 8000, [
+      E('亡霊騎士', 75900, 16786, 5201, 0, 4956, 4654, 'physical', 8000, [
         { name: '亡霊剣',   type: 'physical',       mult: 2.4 },
         { name: '怨嗟の斬', type: 'physical_multi', mult: 1.05, hits: 2, curseRate: 0.2 },
       ]),
-      E('首なし従者', 72000, 10200, 5200, 0, 3800, 2800, 'physical', 9000, [
+      E('首なし従者', 96600, 13690, 6979, 0, 5100, 3758, 'physical', 9000, [
         { name: '鎧砕き',     type: 'physical', mult: 2.25, effect: 'defDown', rate: 0.85, turns: 3, chance: 0.3 },
         { name: '虚ろな一撃', type: 'physical', mult: 1.8, stunRate: 0.2 },
       ]),
-      E('呪詛の霊灯', 58000, 0, 3400, 11400, 5600, 3800, 'magical', 10000, [
+      E('呪詛の霊灯', 75800, 0, 4442, 14893, 7316, 4964, 'magical', 10000, [
         { name: '呪詛の火', type: 'magical', mult: 2.25, curseRate: 0.4 },
         { name: '鬼火',     type: 'magical', mult: 1.8, burnRate: 0.3 },
       ], { mods: { curseRate: 0.15 } }),
     ],
-    midBoss: E('シェイドデュラハン', 150000, 10140, 5800, 5460, 5000, 4900, 'physical', 130000, [
+    midBoss: E('シェイドデュラハン', 197500, 13351, 7637, 7189, 6584, 6452, 'physical', 130000, [
       { name: '首狩りの一閃', type: 'physical', mult: 2.55, extraActionRate: 0.15 },
       { name: '冥火',         type: 'magical',  mult: 2.25, burnRate: 0.5 },
       { name: '亡者の構え',   type: 'buff', effect: 'defMdefUp', defRate: 1.3, mdefRate: 1.3, turns: 3 },
     ], { mods: { adapt: true, curseRate: 0.2 } }),
-    floorBoss: E('ファントムデュラハン', 240000, 18135, 7600, 10335, 6900, 3600, 'physical', 460000, [
+    floorBoss: E('ファントムデュラハン', 296200, 22381, 9379, 12755, 8515, 4443, 'physical', 460000, [
       { name: '断頭の一閃', type: 'physical',       mult: 2.55, stunRate: 0.2 },
       { name: '冥界の炎',   type: 'magical',        mult: 2.25, burnRate: 1.0 },
       { name: '怨霊乱舞',   type: 'physical_multi', mult: 1.05, hits: 2, effect: 'mdefDown', rate: 0.9, turns: 3, stack: 3 },
@@ -395,25 +395,25 @@ export const TOWER_FLOORS = [
   {
     floor: 7, boss: 'プリズムドラゴン',
     enemies: [
-      E('光晶ドレイク', 62000, 0, 4000, 15640, 6200, 3800, 'magical', 13000, [
+      E('光晶ドレイク', 81400, 0, 5249, 20523, 8136, 4986, 'magical', 13000, [
         { name: '光晶ブレス', type: 'magical', mult: 2.4 },
         { name: '乱反射',     type: 'magical', mult: 1.95, effect: 'mdefDown', rate: 0.85, turns: 3, chance: 0.3 },
       ]),
-      E('稜光のワイバーン', 66000, 17680, 4300, 0, 4000, 4600, 'physical', 14500, [
+      E('稜光のワイバーン', 83500, 21031, 6106, 0, 5726, 5819, 'physical', 14500, [
         { name: '稜光爪',   type: 'physical',       mult: 2.4 },
         { name: '閃光旋回', type: 'physical_multi', mult: 1.05, hits: 2, effect: 'spdDown', rate: 0.85, turns: 3, chance: 0.2 },
       ]),
-      E('虹鱗のリザードマン', 76000, 13600, 5800, 0, 4400, 2900, 'physical', 16000, [
+      E('虹鱗のリザードマン', 104200, 18647, 7953, 0, 6033, 3976, 'physical', 16000, [
         { name: '虹鱗の一撃', type: 'physical', mult: 2.25 },
         { name: '鱗返し',     type: 'physical', mult: 1.8, effect: 'defDown', rate: 0.85, turns: 3, chance: 0.3 },
       ]),
     ],
-    midBoss: E('クリスタルドラゴン', 172000, 12818, 6500, 7072, 5700, 5300, 'physical', 220000, [
+    midBoss: E('クリスタルドラゴン', 230500, 17178, 8711, 9477, 7639, 7103, 'physical', 220000, [
       { name: '晶牙',     type: 'physical', mult: 2.55 },
       { name: '屈折光線', type: 'magical',  mult: 2.25, paralysisRate: 0.3 },
       { name: '結晶硬化', type: 'buff', effect: 'defMdefUp', defRate: 1.3, mdefRate: 1.3, turns: 3 },
     ], { mods: { reflect: 0.10, reflectCap: 0.02 } }),
-    floorBoss: E('プリズムドラゴン', 290000, 23647, 8700, 14586, 7900, 4300, 'physical', 760000, [
+    floorBoss: E('プリズムドラゴン', 343900, 28041, 10317, 17296, 9368, 5099, 'physical', 760000, [
       { name: '虹閃牙',     type: 'physical',       mult: 2.55, paralysisRate: 0.2 },
       { name: '七彩の吐息', type: 'magical',        mult: 2.4, effect: 'mdefDown', rate: 0.9, turns: 3, stack: 3 },
       { name: '稜光乱舞',   type: 'physical_multi', mult: 1.05, hits: 2, effect: 'spdDown', rate: 0.85, turns: 3, chance: 0.3 },
@@ -430,25 +430,25 @@ export const TOWER_FLOORS = [
   {
     floor: 8, boss: 'ヴォルケーノサイクロプス',
     enemies: [
-      E('溶岩の単眼鬼', 78000, 28880, 5200, 0, 4800, 4300, 'physical', 22000, [
+      E('溶岩の単眼鬼', 86300, 22403, 10540, 0, 10097, 4760, 'physical', 22000, [
         { name: '溶岩拳',   type: 'physical',       mult: 2.55, burnRate: 0.3 },
         { name: '熔解乱打', type: 'physical_multi', mult: 1.05, hits: 2, effect: 'defDown', rate: 0.85, turns: 3, chance: 0.2 },
       ]),
-      E('噴火の岩塊', 92000, 20520, 7400, 0, 5200, 2500, 'physical', 25000, [
+      E('噴火の岩塊', 115800, 22403, 11036, 0, 8265, 3148, 'physical', 25000, [
         { name: '岩塊落とし', type: 'physical', mult: 2.25, stunRate: 0.2 },
         { name: '灼熱の飛礫', type: 'physical', mult: 1.8, burnRate: 0.3 },
       ]),
-      E('火山の火霊', 72000, 0, 4600, 21280, 7400, 4900, 'magical', 28000, [
+      E('火山の火霊', 89500, 0, 7752, 22403, 11233, 6094, 'magical', 28000, [
         { name: '火柱', type: 'magical', mult: 2.4, burnRate: 0.4 },
         { name: '熱波', type: 'magical', mult: 1.95, effect: 'mdefDown', rate: 0.85, turns: 3, chance: 0.3 },
       ]),
     ],
-    midBoss: E('マグマサイクロプス', 205000, 17290, 7700, 9632, 6800, 5600, 'physical', 380000, [
+    midBoss: E('マグマサイクロプス', 266500, 22403, 10050, 12523, 8879, 7281, 'physical', 380000, [
       { name: '剛腕振り下ろし', type: 'physical', mult: 2.55 },
       { name: '溶岩弾',         type: 'magical',  mult: 2.25, burnRate: 0.5 },
       { name: '岩の守り',       type: 'buff', effect: 'defMdefUp', defRate: 1.3, mdefRate: 1.3, turns: 3 },
     ], { mods: { erupt: { everyTurns: 4, mult: 2.7, defPen: 0.3, burn: true }, critVsBurn: 15 } }),
-    floorBoss: E('ヴォルケーノサイクロプス', 350000, 22723, 9900, 14078, 9000, 4700, 'physical', 1300000, [
+    floorBoss: E('ヴォルケーノサイクロプス', 460100, 29871, 13014, 18507, 11831, 6179, 'physical', 1300000, [
       { name: '灼熱の豪腕', type: 'physical',       mult: 2.7, burnRate: 0.3 },
       { name: '火砕流',     type: 'magical',        mult: 2.4, effect: 'defDown', rate: 0.9, turns: 3, stack: 3 },
       { name: '巨腕乱打',   type: 'physical_multi', mult: 1.05, hits: 2, stunRate: 0.25 },
@@ -464,20 +464,20 @@ export const TOWER_FLOORS = [
   {
     floor: 9, boss: 'アビスキマイラ',
     enemies: [
-      E('深淵の獅子頭', 92000, 38640, 6300, 0, 5800, 5100, 'physical', 38000, [
+      E('深淵の獅子頭', 95800, 26515, 13419, 0, 12898, 5310, 'physical', 38000, [
         { name: '獅咬',     type: 'physical',       mult: 2.7, effect: 'defDown', rate: 0.85, turns: 3, chance: 0.3 },
         { name: '裂爪乱舞', type: 'physical_multi', mult: 1.05, hits: 2, stunRate: 0.2 },
       ]),
-      E('淵底の蛇尾', 86000, 0, 5600, 28560, 8800, 5800, 'magical', 43000, [
+      E('淵底の蛇尾', 101500, 0, 10214, 26515, 13992, 6848, 'magical', 43000, [
         { name: '蛇毒牙', type: 'magical', mult: 2.4, poisonRate: 0.4 },
         { name: '毒霧',   type: 'magical', mult: 1.95, effect: 'mdefDown', rate: 0.85, turns: 3, chance: 0.3 },
       ]),
-      E('虚無の山羊', 104000, 0, 8600, 21840, 8400, 3000, 'magical', 48000, [
+      E('虚無の山羊', 134800, 0, 12048, 26515, 11788, 3889, 'magical', 48000, [
         { name: '魔眼の光', type: 'magical', mult: 2.25, paralysisRate: 0.2 },
         { name: '呪縛の瞳', type: 'magical', mult: 1.8, effect: 'spdDown', rate: 0.85, turns: 3, chance: 0.3 },
       ]),
     ],
-    midBoss: E('ダスクキマイラ', 245000, 22932, 9200, 12831, 8100, 6200, 'physical', 650000, [
+    midBoss: E('ダスクキマイラ', 308100, 26515, 12733, 16137, 11350, 7797, 'physical', 650000, [
       { name: '三獣爪',   type: 'physical', mult: 2.55 },
       { name: '混沌吐息', type: 'magical',  mult: 2.25, poisonRate: 0.4 },
       { name: '獣毛の守り', type: 'buff', effect: 'defMdefUp', defRate: 1.3, mdefRate: 1.3, turns: 3 },
@@ -488,7 +488,7 @@ export const TOWER_FLOORS = [
         { above: 0.34, magTaken: 0.92, physTaken: 0.92 },
       ],
     }),
-    floorBoss: E('アビスキマイラ', 420000, 26481, 11000, 17745, 10200, 5300, 'physical', 2300000, [
+    floorBoss: E('アビスキマイラ', 560700, 35353, 14685, 23690, 13617, 7076, 'physical', 2300000, [
       { name: '獅咬爪',     type: 'physical',       mult: 2.7, effect: 'defDown', rate: 0.85, turns: 3, chance: 0.3 },
       { name: '蛇尾猛毒',   type: 'magical',        mult: 2.4, poisonRate: 0.6 },
       { name: '三獣乱撃',   type: 'physical_multi', mult: 1.05, hits: 2, stunRate: 0.25 },
@@ -509,20 +509,20 @@ export const TOWER_FLOORS = [
   {
     floor: 10, boss: 'カオスベヒモス',
     enemies: [
-      E('混沌の巨腕', 110000, 50599, 7600, 0, 6900, 6200, 'physical', 65000, [
+      E('混沌の巨腕', 108600, 27824, 18575, 0, 17883, 6122, 'physical', 65000, [
         { name: '巨腕叩きつけ', type: 'physical',       mult: 2.7, effect: 'defDown', rate: 0.85, turns: 3, chance: 0.3 },
         { name: '大地砕き',     type: 'physical_multi', mult: 1.05, hits: 2, stunRate: 0.25 },
       ]),
-      E('混沌の牙獣', 98000, 43240, 7000, 0, 6600, 9900, 'physical', 73000, [
+      E('混沌の牙獣', 104100, 27824, 16475, 0, 16051, 10511, 'physical', 73000, [
         { name: '疾牙',     type: 'physical', mult: 2.55 },
         { name: '追い立て', type: 'physical', mult: 1.95, effect: 'spdDown', rate: 0.85, turns: 3, chance: 0.4 },
       ]),
-      E('混沌の瞳', 100000, 0, 6800, 37720, 10700, 7000, 'magical', 82000, [
+      E('混沌の瞳', 112500, 0, 14963, 27824, 19350, 7877, 'magical', 82000, [
         { name: '混沌視線',   type: 'magical', mult: 2.4, paralysisRate: 0.3 },
         { name: '虚空の脈動', type: 'magical', mult: 1.95, effect: 'mdefDown', rate: 0.85, turns: 3, chance: 0.3 },
       ]),
     ],
-    midBoss: E('レイジベヒモス', 295000, 30198, 11000, 16744, 9700, 7400, 'physical', 1100000, [
+    midBoss: E('レイジベヒモス', 356700, 27824, 17648, 20247, 16076, 8948, 'physical', 1100000, [
       { name: '憤怒の一撃', type: 'physical', mult: 2.55 },
       { name: '咆哮衝波',   type: 'magical',  mult: 2.25, effect: 'atkMatkDown', rate: 0.85, turns: 3, chance: 0.3 },
       { name: '猛り立ち',   type: 'buff', effect: 'atkUp', atkRate: 1.3, turns: 3 },
@@ -530,7 +530,7 @@ export const TOWER_FLOORS = [
       mods: { quake: { spdDown: 0.05, maxStacks: 6 } },
       phases: [{ above: 1.00 }, { above: 0.60, atkMult: 1.25 }, { above: 0.30, atkMult: 1.25 }],
     }),
-    floorBoss: E('カオスベヒモス', 520000, 27208, 13200, 18239, 12200, 9600, 'physical', 4000000, [
+    floorBoss: E('カオスベヒモス', 709000, 37098, 17998, 24869, 16635, 13090, 'physical', 4000000, [
       { name: '崩落の一撃', type: 'physical',       mult: 2.7, effect: 'defDown', rate: 0.85, turns: 3, chance: 0.3 },
       { name: '混沌の波動', type: 'magical',        mult: 2.4, effect: 'mdefDown', rate: 0.85, turns: 3, chance: 0.3 },
       { name: '地裂踏破',   type: 'physical_multi', mult: 1.05, hits: 2, stunRate: 0.3 },
