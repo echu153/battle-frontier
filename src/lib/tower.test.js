@@ -372,7 +372,7 @@ test('敵の強さのつまみが有効な範囲にある', async () => {
   // 雑魚とボスでつまみが分かれているので、ボス側（isBoss）で確認する
   assert.equal(makeEnemy(def, { isBoss: true }).atk, Math.floor(def.atk * ENEMY_ATK_POWER), '攻撃力のつまみがボスに乗っていない')
   const battle = (await import('node:fs')).readFileSync('src/lib/towerBattle.js', 'utf8')
-  assert.ok(battle.includes('(sk.mult || 1) * ENEMY_SKILL_POWER'), '技威力のつまみが敵スキルに乗っていない')
+  assert.ok(battle.includes('(sk.mult || 1) * skillPowerOf(sk)'), '技威力のつまみが敵スキルに乗っていない')
   assert.ok(battle.includes("(sm.mult || 2.5) * ENEMY_SKILL_POWER"), '技威力のつまみが大技に乗っていない')
 })
 
@@ -450,11 +450,21 @@ test('層ごとの倍率は敵の攻撃力にだけ乗り、HP・防御には乗
 test('層ごとの倍率が技の威力と召喚にも届いている', async () => {
   const fs = await import('node:fs')
   const battle = fs.readFileSync('src/lib/towerBattle.js', 'utf8')
-  // 技の威力（通常技・大技の両方）
-  assert.equal((battle.match(/ENEMY_SKILL_POWER \* floorPow/g) || []).length, 2,
-    '敵の技の威力に層ごとの倍率が掛かっていない')
+  // 層ごとの倍率を掛けるのは makeEnemy の1箇所だけ。ダメージ計算でも掛けると
+  // 技だけ係数の2乗になる（2026-08-06に一度やらかしている）。
+  assert.equal((battle.match(/\* floorPow\b/g) || []).length, 0,
+    'ダメージ計算で層ごとの倍率を再度掛けている（makeEnemy と二重になる）')
+  // 技の威力つまみは 通常技（skillPowerOf 経由）・大技・噴火 の3箇所すべてに掛かること
+  assert.equal((battle.match(/\* ENEMY_SKILL_POWER/g) || []).length, 2,
+    '大技・噴火のどちらかに技の威力つまみが掛かっていない')
+  assert.ok(/\* skillPowerOf\(sk\)/.test(battle), '通常技が skillPowerOf を通っていない')
+  assert.ok(/e\.mult \|\| 1\.8\) \* ENEMY_SKILL_POWER/.test(battle),
+    '8層の噴火に技の威力つまみが掛かっていない')
+  // 通常攻撃はつまみの対象外（倍率1.5を自前で持つ）
+  assert.ok(/mult: 1\.5, isBasic: true/.test(battle), '通常攻撃が倍率を自前で持っていない')
+  assert.ok(/sk\?\.isBasic \? 1 : ENEMY_SKILL_POWER/.test(battle), '通常攻撃がつまみの対象外になっていない')
   // 戦闘中に湧く援軍。引き継がないと上の層で援軍だけ弱くなる
-  assert.ok(battle.includes('makeEnemy(def, { floorPower: floorPow'),
+  assert.ok(battle.includes('makeEnemy(def, { floorPower: summonFloorPower'),
     '召喚された敵に層ごとの倍率が引き継がれていない')
   // 敵が倍率を持ち歩いていること（floorData が無い開発テスト対戦でも効かせるため）
   assert.equal(buildStageEnemies(getFloor(6), 0)[0].floorPower, floorPowerOf(6))

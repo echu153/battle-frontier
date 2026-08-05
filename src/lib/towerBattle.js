@@ -59,8 +59,13 @@ export function simulateTowerBattle({
   const tr = towerTreeEffects(tree)
   const eff = applyTreeToStats(rawEff, tr)
 
-  // 層ごとの係数。敵が持っていればそれを使う（開発パネルの単体テストなど floorData 無しでも動く）
-  const floorPow = enemyList[0]?.floorPower ?? floorPowerOf(floorData?.floor)
+  // 技の威力つまみ。通常攻撃には掛けない（tower.js の ENEMY_SKILL_POWER のコメントどおり）。
+  //  ⚠層ごとの係数は makeEnemy が攻撃力・特殊攻撃力に掛けている。
+  //    ここで再度掛けると技だけ係数の2乗になるため、ダメージ計算では掛けないこと。
+  const skillPowerOf = (sk) => (sk?.isBasic ? 1 : ENEMY_SKILL_POWER)
+
+  // 戦闘中に湧く援軍へ引き継ぐための層ごとの係数（makeEnemy に渡す用。ダメージ計算には使わない）
+  const summonFloorPower = enemyList[0]?.floorPower ?? floorPowerOf(floorData?.floor)
 
   const enemies = enemyList.slice()
   // 持ち越しHPが0以下＝前の戦闘で相打ちになっている。1に切り上げて生き返らせない
@@ -614,7 +619,10 @@ export function simulateTowerBattle({
     return { dmg, isCrit }
   }
 
-  const basicAttack = (en) => ({ name: '攻撃', type: en.type === 'magical' ? 'magical' : 'physical', mult: 1.0 })
+// 通常攻撃。isBasic を立てて「技の威力つまみ」の対象外にする。
+//  ⚠倍率1.5は、つまみが掛かっていた頃（攻撃力×1.0×ENEMY_SKILL_POWER 1.5）と
+//    同じ威力にするための値。ここを1.0に戻すと公開中の1〜4層が弱くなる。
+const basicAttack = (en) => ({ name: '攻撃', type: en.type === 'magical' ? 'magical' : 'physical', mult: 1.5, isBasic: true })
 
   // その強化スキルの効果が既に乗っているか（乗っているなら選び直す＝棒立ちを避ける）
   const buffAlreadyOn = (en, sk) => {
@@ -680,7 +688,9 @@ export function simulateTowerBattle({
     const hits = sk.type === 'physical_multi' ? (sk.hits || 2) : 1
     let total = 0, anyCrit = false
     for (let h = 0; h < hits; h++) {
-      const r = damagePlayer(en, offStat * (sk.mult || 1) * ENEMY_SKILL_POWER * floorPow, offStat, useStat, { defPen: sk.defPen })
+      // 層ごとの係数は makeEnemy で攻撃力・特殊攻撃力に既に掛かっている（offStat に含まれる）。
+      // ここで再度掛けると技だけ係数の2乗になるので掛けない。
+      const r = damagePlayer(en, offStat * (sk.mult || 1) * skillPowerOf(sk), offStat, useStat, { defPen: sk.defPen })
       if (!r) continue
       total += r.dmg; if (r.isCrit) anyCrit = true
       if (playerHp <= 0) break
@@ -721,7 +731,9 @@ export function simulateTowerBattle({
   const doErupt = (en) => {
     const eStats = enemyStats(en)
     const e = en.mods.erupt
-    const r = damagePlayer(en, eStats.atk * (e.mult || 1.8), eStats.atk, 'atk', { defPen: e.defPen || 0.3 })
+    // ⚠ここだけ技の威力つまみを貰い損ねていて、8層の目玉ギミックが想定の1/1.5しか
+    //   出ていなかった（2026-08-06修正）。他の技と同じ扱いにする。
+    const r = damagePlayer(en, eStats.atk * (e.mult || 1.8) * ENEMY_SKILL_POWER, eStats.atk, 'atk', { defPen: e.defPen || 0.3 })
     logs.push({ text: `🌋 ${en.name}の噴火！ あなたに${r?.dmg || 0}ダメージ…（必中）`, color: '#ff3300' })
     if (e.burn && playerHp > 0) inflict('burn', 1.0, { turns: 5, dmgRate: 0.02 }, `🔥 やけどを負った！`)
   }
@@ -732,7 +744,7 @@ export function simulateTowerBattle({
     const eStats = enemyStats(en)
     const isMag = sm.type === 'magical'
     const off = isMag ? eStats.matk : eStats.atk
-    const r = damagePlayer(en, off * (sm.mult || 2.5) * ENEMY_SKILL_POWER * floorPow, off, isMag ? 'matk' : 'atk')
+    const r = damagePlayer(en, off * (sm.mult || 2.5) * ENEMY_SKILL_POWER, off, isMag ? 'matk' : 'atk')
     logs.push({ text: `💥 ${en.name}の「${sm.name}」！ あなたに${r?.dmg || 0}ダメージ！`, color: '#ff2200' })
     if (playerHp <= 0) return
     if (sm.defDownRate) { playerBuffs.defDown = { turns: sm.turns || 3, rate: sm.defDownRate }; logs.push({ text: `🔻 防御力が大きく下がった…`, color: '#88aaff' }) }
@@ -758,7 +770,7 @@ export function simulateTowerBattle({
     let name = ''
     for (let k = 0; k < n; k++) {
       // 層ごとの係数は召喚された敵にも引き継ぐ（引き継がないと上の層で援軍だけ弱くなる）
-      const en = makeEnemy(def, { floorPower: floorPow, ...opts, isSummoned: true })
+      const en = makeEnemy(def, { floorPower: summonFloorPower, ...opts, isSummoned: true })
       enemies.push(en)
       name = en.name
     }
