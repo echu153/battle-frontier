@@ -2,8 +2,8 @@
 // ボス装備 真化トリガー効果（複数の戦闘エンジン共通ヘルパー）
 //  - eff.* フラグは stats.js calcEffectiveStats が公開（進化装備未所持なら全て0/false/1）
 //  - Game.jsx の出撃ループと同じ挙動を Abyss/Tenkyuu/PvP/Raid でも再現するため共通化
-//  - 発動ログは基本出さない（2026-07-14仕様: 勝手に発動・表示なし）。ただし反射だけは
-//    可視の効果が無く「発動してない」ように見えるため、反射時のみログを出す（logs引数を使用）
+//  - 発動ログは出さない（2026-07-14仕様: 勝手に発動・表示なし）。装備の出所もログに書かない。
+//    ただし反射だけは敵HPが動くため、出所を伏せて事象のみログに残す（logs引数を使用）
 // ============================================================
 
 // 天空⑧ 真化スタック効果の初期化。eff は戦闘ごとに calcEffectiveStats で新規生成されるので
@@ -60,8 +60,8 @@ export const evoOnDamaged = (eff, dmg, enemyBuffs, enemyName, logs) => {
   if (!eff || dmg <= 0) return reflect
   if ((eff.evoReflectPct||0) > 0) {
     reflect = Math.max(1, Math.floor(dmg * eff.evoReflectPct / 100))
-    // 反射は他の真化と違い可視の効果が無い（敵HPが減るだけ）ため、発動が分かるようログを出す
-    if (logs) logs.push({ text:`🛡 真化・反射！ ${enemyName}に${reflect}ダメージ！`, color:'#66ccff' })
+    // 敵HPが理由なく減って見えないよう事象だけ残す（出所＝真化かどうかは書かない）
+    if (logs) logs.push({ text:`🛡 反射！ ${enemyName}に${reflect}ダメージ！`, color:'#66ccff' })
   }
   if (enemyBuffs) {
     if ((eff.evoOndmgStun||0) > 0 && !(enemyBuffs.stun?.turns > 0) && Math.random()*100 < eff.evoOndmgStun) {
@@ -83,23 +83,19 @@ export const evoOnDamaged = (eff, dmg, enemyBuffs, enemyName, logs) => {
 const EVO_AIL_KEYS = ['paralysis', 'burn', 'poison', 'severePoisoin', 'stun', 'bleed', 'healSeal', 'curseDmg']
 
 // 直接付与サイト用: 付与しようとしている状態異常1件を確率で無効化（trueで付与を止める）
-export const evoBlocksAilment = (eff, _ailKey, logs) => {
+//  ログは出さない（装備の出所を書かない方針）。付与が起きないだけなので画面上の数値は動かない。
+//  _logs は各エンジンの呼び出しの字面を変えないために残す（未使用）。
+export const evoBlocksAilment = (eff, _ailKey, _logs) => {
   const pct = eff?.evoAilmentResist || 0
-  if (pct > 0 && Math.random() * 100 < pct) {
-    logs?.push({ text: `💧 アクアクラウンの真化！ 状態異常を防いだ！`, color: '#66ccff' })
-    return true
-  }
-  return false
+  return pct > 0 && Math.random() * 100 < pct
 }
 
 // 差分検知型: 敵スキル解決後、新規付与された状態異常を1つ確率で無効化（curBuffs を破壊的に更新）
-export const evoResistNewAilments = (eff, prevBuffs, curBuffs, logs) => {
+//  ログは出さない（装備の出所を書かない方針）。_logs は呼び出しの字面を変えないために残す（未使用）。
+export const evoResistNewAilments = (eff, prevBuffs, curBuffs, _logs) => {
   if (!((eff?.evoAilmentResist || 0) > 0) || !curBuffs) return
   const got = EVO_AIL_KEYS.find(k => curBuffs[k] && !prevBuffs?.[k])
-  if (got && Math.random() * 100 < eff.evoAilmentResist) {
-    delete curBuffs[got]
-    logs?.push({ text: `💧 アクアクラウンの真化！ 状態異常を防いだ！`, color: '#66ccff' })
-  }
+  if (got && Math.random() * 100 < eff.evoAilmentResist) delete curBuffs[got]
 }
 
 // プレイヤーが回避した時：自分に素早さバフ（playerBuffs を破壊的に更新）

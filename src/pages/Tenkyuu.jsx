@@ -122,7 +122,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
 
   const equippedWeaponItem = equipment.find(e => e.slot === 'weapon' && e.equipped)
   const ondmgSpdUp = eff.ondmgSpdUp || 0  // 雷鋼の機神鎧: 被ダメ時に付与する素早さ倍率（0=なし）
-  const hasAmagoiShield = equipment.some(e => e.equipped && e.bonus_effect === 'battle_start_ailment_shield')  // 哭雨の羽衣: 5Tごとに異常無効バフ再付与
+  const hasAmagoiShield = equipment.some(e => e.equipped && e.bonus_effect === 'battle_start_ailment_shield')  // 5Tごとに異常無効バフ再付与する装備
   const isArtifact = equippedWeaponItem?.bonus_effect === 'artifact'
 
   const passiveNames = skillSets.filter(ss => ss.skills?.type === 'パッシブ').map(ss => ss.skills.name)
@@ -374,11 +374,12 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
         dmgEnemy(finalDmg, actKind)
         // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封じ中は無効）
-        { const emKind = (isPhysSkill) ? '物理' : '特殊'; const emDrain = emblemDrainAmount(eff, finalDmg, isPhysSkill); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(profile.hp_max, playerHp + emDrain); logs.push({ text:`💠 ${emKind}吸収により${emDrain}回復！`, color:'#66ddff' }) } }
+        // ログは出所を書かずHPが動いた事実だけ残す（装備/紋章の効果はステータスに乗るだけの扱い）
+        { const emDrain = emblemDrainAmount(eff, finalDmg, isPhysSkill); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(profile.hp_max, playerHp + emDrain); logs.push({ text:`💚 HPが${emDrain}回復した！`, color:'#44ff88' }) } }
         if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks+1)
+        // 回復力ダウンは効果だけ適用しログは出さない（装備由来の出所表記をしない方針）
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
           enemyBuffs.healDown = { turns: 2, rate: 0.7 }
-          logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
         }
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
           // 濡羽杖アマザネ: 攻撃ヒット時 2Tの間対象SPD-5%（最大4重複=-20%・ヒット毎に持続リフレッシュ）
@@ -390,10 +391,9 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
           }
         }
         evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs, isMulti ? multiCritAny : finalCrit)
-        // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
+        // 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺（効果のみ・発動ログは出さない）
         if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
           enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
-          logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
         }
         const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult * (playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1))  // ルミナ等の回復力アップを反映
         playerHp = Math.min(profile.hp_max, playerHp + healAmt)
@@ -474,11 +474,11 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
       seimitsuStacks = 0; prevSkillName = null
       let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*iaiNormalMult*rokkanMultN*enemyDmgReduceMult2*playerDmgMult*emblemDmgMult(eff, !isMagical)*(0.9+Math.random()*0.2))
       dmgEnemy(finalDmg, isMagical ? 'magical' : 'physical')
-      // 紋章: 物理/特殊吸収
-      { const emKind = (!isMagical) ? '物理' : '特殊'; const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(profile.hp_max, playerHp + emDrain); logs.push({ text:`💠 ${emKind}吸収により${emDrain}回復！`, color:'#66ddff' }) } }
+      // 紋章: 物理/特殊吸収（ログは出所を書かずHPが動いた事実だけ残す）
+      { const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(profile.hp_max, playerHp + emDrain); logs.push({ text:`💚 HPが${emDrain}回復した！`, color:'#44ff88' }) } }
+      // 回復力ダウンは効果だけ適用しログは出さない（同上）
       if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
         enemyBuffs.healDown = { turns: 2, rate: 0.7 }
-        logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
       }
       if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
         // 濡羽杖アマザネ: 攻撃ヒット時 2Tの間対象SPD-5%（最大4重複=-20%・ヒット毎に持続リフレッシュ）
@@ -490,10 +490,9 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
         }
       }
       evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs, isCrit)
-      // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
+      // 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺（効果のみ・発動ログは出さない）
       if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
         enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
-        logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
       }
       const critText = isCrit ? '💥クリティカル！ ' : ''
       logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
@@ -857,7 +856,8 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     }
     if (!isHealSealed && playerBuffs.delayHeal && turn === playerBuffs.delayHeal.triggerTurn) {
       playerHp = Math.min(profile.hp_max, playerHp + playerBuffs.delayHeal.amount)
-      logs.push({ text:`💚 装備効果でHPが${playerBuffs.delayHeal.amount}回復した！`, color:'#44ff88' })
+      // HPが動くので事象は残し、出所（装備）だけ書かない
+      logs.push({ text:`💚 HPが${playerBuffs.delayHeal.amount}回復した！`, color:'#44ff88' })
     }
     // ポーションは出撃のみ適用（天穹では無限・通常とも発動しない）
     const POTIONS_ENABLED = false // 天穹ではポーション無効（意図的に無効化）
@@ -969,12 +969,11 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+15%（既存の上位spdUpは上書きしない）
     if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
       playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
-      logs.push({ text:`⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}%！`, color:'#66ccff' })
     }
-    // 哭雨の羽衣: 5ターンごとに状態異常無効バフを再獲得（既にバフがある場合は重複しない）
+    // 5ターンごとに状態異常無効バフを再獲得（既にバフがある場合は重複しない）
+    // 付与だけ行いログは出さない（装備由来の出所表記をしない方針）
     if (hasAmagoiShield && turn % 5 === 0 && playerHp > 0 && !(playerBuffs.ailmentShield?.charges > 0)) {
       playerBuffs.ailmentShield = { charges: 1 }
-      logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color:'#66ccff' })
     }
     turn++
   }

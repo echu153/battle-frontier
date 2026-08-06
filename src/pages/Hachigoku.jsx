@@ -296,11 +296,11 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
         if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
         enemyHp -= finalDmg
         // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封じ中は無効）
-        { const emKind = (isPhysSkill) ? '物理' : '特殊'; const emDrain = Math.floor(emblemDrainAmount(eff, finalDmg, isPhysSkill) * hellHealMult); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text:`💠 ${emKind}吸収により${emDrain}回復！`, color:'#66ddff' }) } }
+        // HPが動くので事象は残すが、出所（紋章）は書かない
+        { const emDrain = Math.floor(emblemDrainAmount(eff, finalDmg, isPhysSkill) * hellHealMult); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text:`💚 HPが${emDrain}回復した！`, color:'#44ff88' }) } }
         if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks+1)
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
-          enemyBuffs.healDown = { turns: 2, rate: 0.7 }
-          logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
+          enemyBuffs.healDown = { turns: 2, rate: 0.7 }  // 装備由来なので無言で付与（発動ログは出さない）
         }
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
           const curSd = enemyBuffs.spdDown
@@ -312,8 +312,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
         }
         evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs, isMulti ? multiCritAny : finalCrit)
         if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
-          enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
-          logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
+          enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }  // 装備由来なので無言で付与（発動ログは出さない）
         }
         const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult * hellHealMult * (playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1))  // ルミナ等の回復力アップ＋餓鬼の回復半減を反映
         playerHp = Math.min(eff.hp_max, playerHp + healAmt)
@@ -389,10 +388,10 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
       let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*iaiNormalMult*rokkanMultN*enemyDmgReduceMult2*hellDR*typeTakenMult(!isMagical)*emblemDmgMult(eff, !isMagical)*(0.9+Math.random()*0.2))
       enemyHp -= finalDmg
       // 紋章: 物理/特殊吸収
-      { const emKind = (!isMagical) ? '物理' : '特殊'; const emDrain = Math.floor(emblemDrainAmount(eff, finalDmg, !isMagical) * hellHealMult); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text:`💠 ${emKind}吸収により${emDrain}回復！`, color:'#66ddff' }) } }
+      // HPが動くので事象は残すが、出所（紋章）は書かない
+      { const emDrain = Math.floor(emblemDrainAmount(eff, finalDmg, !isMagical) * hellHealMult); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text:`💚 HPが${emDrain}回復した！`, color:'#44ff88' }) } }
       if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
-        enemyBuffs.healDown = { turns: 2, rate: 0.7 }
-        logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
+        enemyBuffs.healDown = { turns: 2, rate: 0.7 }  // 装備由来なので無言で付与（発動ログは出さない）
       }
       if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
         const curSd = enemyBuffs.spdDown
@@ -403,10 +402,9 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
         }
       }
       evoOnHit(eff, finalDmg, enemyBuffs, enemy.name, logs, isCrit)
-      // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
+      // 装備由来: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺（無言で付与）
       if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
         enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
-        logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
       }
       const critText = isCrit ? '💥クリティカル！ ' : ''
       logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
@@ -421,7 +419,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     playerAttacking = false
   }
 
-  // 状態異常を1件付与（哭雨の羽衣/紋章耐性/狂信で防げる）。付与できたら true
+  // 状態異常を1件付与（装備のシールド ailmentShield/紋章耐性/狂信で防げる）。付与できたら true
   const AIL_LABEL = { burn:'やけど', poison:'毒', bleed:'出血', paralysis:'麻痺', stun:'スタン' }
   const inflictAilment = (key, msg) => {
     if (playerHp <= 0) return false
@@ -649,7 +647,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
       if (noteHeal > 0) logs.push({ text:`💚 ${enemy.name}はHPを${noteHeal}回復した！`, color:'#44ff88' })
       if (noteBuff) logs.push({ text:`✦ ${enemy.name}は自らを強化した！`, color:'#ff99dd' })
       // スキルが付与する状態異常デバフは playerBuffs へ反映。
-      // ただし「新規に付いた状態異常」には通常経路と同じ防御判定（狂信/哭雨の羽衣/紋章耐性）を適用する
+      // ただし「新規に付いた状態異常」には通常経路と同じ防御判定（狂信/装備のシールド/紋章耐性）を適用する
       {
         const newPB = res.newEnemyBuffs
         const MIRROR_AILS = ['burn', 'poison', 'severePoisoin', 'paralysis', 'stun', 'bleed', 'healSeal', 'curseDmg']
@@ -776,7 +774,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     if (!isHealSealed && playerBuffs.delayHeal && turn === playerBuffs.delayHeal.triggerTurn) {
       { const dAmt = Math.floor(playerBuffs.delayHeal.amount * hellHealMult)
         playerHp = Math.min(eff.hp_max, playerHp + dAmt)
-        logs.push({ text:`💚 装備効果でHPが${dAmt}回復した！`, color:'#44ff88' }) }
+        logs.push({ text:`💚 HPが${dAmt}回復した！`, color:'#44ff88' }) }  // HPが動くので事象は残し、出所だけ外す
     }
 
     // プレイヤー行動スキップ判定（スタン・麻痺）
@@ -855,11 +853,9 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
     Object.keys(enemyBuffs).forEach(k  => { if (enemyBuffs[k]?.turns === 0)  delete enemyBuffs[k] })
     if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
       playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
-      logs.push({ text:`⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}%！`, color:'#66ccff' })
     }
     if (hasAmagoiShield && turn % 5 === 0 && playerHp > 0 && !(playerBuffs.ailmentShield?.charges > 0)) {
-      playerBuffs.ailmentShield = { charges: 1 }
-      logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color:'#66ccff' })
+      playerBuffs.ailmentShield = { charges: 1 }  // 装備由来なので無言で付与（発動ログは出さない）
     }
     turn++
   }
@@ -1137,7 +1133,9 @@ export default function Hachigoku() {
             </div>
             {battleInfo.hell.img && (
               <div style={{ textAlign:'center', marginBottom:'10px' }}>
-                <img src={battleInfo.hell.img} alt={battleInfo.hell.boss} style={{ maxWidth:'min(320px, 80%)', maxHeight:'320px', objectFit:'contain', filter:'drop-shadow(0 0 14px rgba(255,60,30,0.35))' }} />
+                {/* 立ち絵は正方形(1254x1254)。上限が小さすぎて枠を使い切れていなかったので広げた。
+                    画面が低いときのために vh 側の上限も持たせる（下のログ枠46vhと合わせて90vh） */}
+                <img src={battleInfo.hell.img} alt={battleInfo.hell.boss} style={{ maxWidth:'100%', maxHeight:'min(440px, 44vh)', objectFit:'contain', filter:'drop-shadow(0 0 14px rgba(255,60,30,0.35))' }} />
               </div>
             )}
             {battling && <div style={{ color:'#cc8866', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}

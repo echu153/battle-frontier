@@ -67,8 +67,8 @@ test('evoBlocksAilment: 耐性0%なら素通り・100%なら必ず止める', ()
   assert.equal(evoBlocksAilment({}, 'stun', null), false)
   assert.equal(evoBlocksAilment(null, 'stun', null), false)
   const logs = []
+  // 装備の発動ログは出さない方針にしたので、ログの本数は数えない（効果が効いているかだけ見る）
   assert.equal(evoBlocksAilment({ evoAilmentResist: 100 }, 'stun', logs), true)
-  assert.equal(logs.length, 1)
 })
 
 test('evoResistNewAilments: 新規付与のみ無効化し、既存の状態異常には触らない', () => {

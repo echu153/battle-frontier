@@ -38,31 +38,26 @@ const EMBLEM_RES_KEYS = {
   poison: 'poison', severePoisoin: 'poison',  // 猛毒も毒耐性で判定
   paralysis: 'paralysis', burn: 'burn', bleed: 'bleed', stun: 'stun',
 }
-const EMBLEM_AIL_LABEL = { poison:'毒', severePoisoin:'猛毒', paralysis:'麻痺', burn:'やけど', bleed:'出血', stun:'スタン' }
 // 直接付与サイト用: 付与しようとしている状態異常1件を確率で無効化（trueで付与を止める）
 // 例: if (!ailmentShieldBlocks(...) && !emblemBlocksAilment(eff, 'stun', logs)) playerBuffs.stun = ...
-export const emblemBlocksAilment = (eff, ailKey, logs) => {
+// 発動ログは出さない（紋章という出所を書かない方針。付与が起きないだけで画面の数値は動かない）。
+// _logs は各エンジンの呼び出しの字面を変えないために残す（未使用）。
+export const emblemBlocksAilment = (eff, ailKey, _logs) => {
   const em = eff?.emblem
   if (!em) return false
   const resKey = EMBLEM_RES_KEYS[ailKey]
   const pct = (resKey && em.ailRes?.[resKey]) || 0
-  if (pct > 0 && Math.random() * 100 < pct) {
-    logs?.push({ text: `🛡 紋章の加護！ ${EMBLEM_AIL_LABEL[ailKey] || ailKey}を無効化した！`, color: '#66ddff' })
-    return true
-  }
-  return false
+  return pct > 0 && Math.random() * 100 < pct
 }
 
-export const emblemResistNewAilments = (eff, prevBuffs, curBuffs, logs) => {
+// こちらも発動ログは出さない（_logs は未使用）。
+export const emblemResistNewAilments = (eff, prevBuffs, curBuffs, _logs) => {
   const em = eff?.emblem
   if (!em || !curBuffs) return
   for (const [ailKey, resKey] of Object.entries(EMBLEM_RES_KEYS)) {
     if (!curBuffs[ailKey]) continue
     if (prevBuffs && prevBuffs[ailKey]) continue  // 既存の異常（新規付与ではない）
     const pct = em.ailRes?.[resKey] || 0
-    if (pct > 0 && Math.random() * 100 < pct) {
-      delete curBuffs[ailKey]
-      logs?.push({ text: `🛡 紋章の加護！ ${EMBLEM_AIL_LABEL[ailKey]}を無効化した！`, color: '#66ddff' })
-    }
+    if (pct > 0 && Math.random() * 100 < pct) delete curBuffs[ailKey]
   }
 }

@@ -362,7 +362,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           }
           totalDamage += finalDmg
           // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封印中は無効）
-          { const emKind = (skillPhysical) ? '物理' : '特殊'; const emDrain = emblemDrainAmount(eff, finalDmg, skillPhysical); if (emDrain > 0 && !isHealBlocked) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text: `💠 ${emKind}吸収により${fmt(emDrain)}回復！`, color: '#66ddff' }) } }
+          // ログは出所（紋章の吸収）を書かず回復した事象だけ残す（HPが動くため無言にはしない）
+          { const emDrain = emblemDrainAmount(eff, finalDmg, skillPhysical); if (emDrain > 0 && !isHealBlocked) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text: `💚 HPが${fmt(emDrain)}回復した！`, color: '#44ff88' }) } }
           if (!isHealBlocked) {
             const healAmt = Math.floor(res.heal * passiveHealMult * (playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1))  // ルミナ等の回復力アップを反映
             playerHp = Math.min(eff.hp_max, playerHp + healAmt)
@@ -446,8 +447,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
           logs.push({ text: `🩸 血の狂気で${rageCure}回復！`, color: '#ff4444' })
         }
         totalDamage += finalDmg
-        // 紋章: 物理/特殊吸収
-        { const emKind = (!isMagical) ? '物理' : '特殊'; const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healBlock?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text: `💠 ${emKind}吸収により${fmt(emDrain)}回復！`, color: '#66ddff' }) } }
+        // 紋章: 物理/特殊吸収（ログは出所を書かず回復した事象だけ残す）
+        { const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healBlock?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + emDrain); logs.push({ text: `💚 HPが${fmt(emDrain)}回復した！`, color: '#44ff88' }) } }
         const critText = isCrit ? ' 💥クリティカル！' : ''
         logs.push({ text: `${prefix}あなたの攻撃！ ${bossName}に${fmt(finalDmg)}ダメージ！${critText}`, color: isCrit ? '#ff4444' : '#ffcc00' })
         if (expandedSkillSet.length > 0) skillIndex++
@@ -473,7 +474,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
         // ペット召喚：50%でペットがダメージを肩代わり（状態異常は下でプレイヤーに付与）
         if (!summonAbsorbSkill(summon, specialDmg, logs)) {
           playerHp -= specialDmg
-          if ((eff.evoReflectPct||0) > 0) { const r = Math.max(1, Math.floor(specialDmg * eff.evoReflectPct/100)); totalDamage += r; logs.push({ text:`🛡 真化・反射！ ${bossName}に${fmt(r)}ダメージ！`, color:'#66ccff' }) }
+          // 反射（装備由来という出所は書かない。敵HPが動くのでダメージの事象自体は残す）
+          if ((eff.evoReflectPct||0) > 0) { const r = Math.max(1, Math.floor(specialDmg * eff.evoReflectPct/100)); totalDamage += r; logs.push({ text:`🛡 反射！ ${bossName}に${fmt(r)}ダメージ！`, color:'#66ccff' }) }
         }
         if (isAmaza) {
           // 深淵の水葬：10ターンの間 素早さ-50%（クリ・回避・追加行動率を半減SPDで再計算）
@@ -522,7 +524,8 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
       const gambleBodyMult = hasGambleBody ? (pe('ギャンブラー') ? (0.5+Math.random()*0.7) : (0.7+Math.random()*0.6)) : 1.0
       const finalDmg = Math.floor(baseDmg * (isCrit ? 1.5 : 1.0) * dmgReduceRate * berserkDmgRate * (1 - playerDefRankReduction) * gambleBodyMult * evoTakenMult(eff, true, playerHp / eff.hp_max) * ryurinReduce() * (0.9 + Math.random() * 0.2))
       playerHp -= finalDmg
-      if ((eff.evoReflectPct||0) > 0 && finalDmg > 0) { const r = Math.max(1, Math.floor(finalDmg * eff.evoReflectPct/100)); totalDamage += r; logs.push({ text:`🛡 真化・反射！ ${bossName}に${fmt(r)}ダメージ！`, color:'#66ccff' }) }
+      // 反射（装備由来という出所は書かない。totalDamageへの加算は報酬計算に必要なので必ず残す）
+      if ((eff.evoReflectPct||0) > 0 && finalDmg > 0) { const r = Math.max(1, Math.floor(finalDmg * eff.evoReflectPct/100)); totalDamage += r; logs.push({ text:`🛡 反射！ ${bossName}に${fmt(r)}ダメージ！`, color:'#66ccff' }) }
       if (playerBuffs.dmgReduce?.isGainoKabe) playerBuffs.dmgReduce = null
       const critText = isCrit ? ' 💥クリティカル！' : ''
       logs.push({ text: `${prefix}${bossName}の攻撃！ あなたに${fmt(finalDmg)}ダメージ…${critText}`, color: isCrit ? '#ff2200' : '#ff6644' })
@@ -597,12 +600,11 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+15%（既存の上位spdUpは上書きしない）
     if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
       playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
-      logs.push({ text: `⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}%！`, color: '#66ccff' })
     }
     // 哭雨の羽衣: 5ターンごとに状態異常無効バフを再獲得（既にバフがある場合は重複しない）
+    // 付与は無言（装備の出所はログに出さない仕様。画面上の数値は動かないので事象ごと省略）
     if (hasAmagoiShield && turn % 5 === 0 && playerHp > 0 && !(playerBuffs.ailmentShield?.charges > 0)) {
       playerBuffs.ailmentShield = { charges: 1 }
-      logs.push({ text: `🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color: '#66ccff' })
     }
     // リジェネ・遅延ヒール（回復封印中は無効）
     const isHealBlockedTick = playerBuffs.healBlock?.turns > 0
@@ -621,7 +623,7 @@ function simulateRaidBattle(eff, equipment, skillSets, profile, bossName = BOSS_
     if (playerBuffs.delayHeal?.triggerTurn === turn) {
       if (!isHealBlockedTick) {
         playerHp = Math.min(eff.hp_max, playerHp + playerBuffs.delayHeal.amount)
-        logs.push({ text: `💚 ${playerBuffs.delayHeal.amount}HP回復！`, color: '#44ff88' })
+        logs.push({ text: `💚 HPが${fmt(playerBuffs.delayHeal.amount)}回復した！`, color: '#44ff88' })
       }
     }
   }
@@ -1042,7 +1044,7 @@ export default function RaidBoss() {
           <div style={{ border: '1px solid #440000', background: '#0a0010', padding: '14px', marginBottom: '16px' }}>
             <div style={{ color: '#446688', fontSize: '10px', marginBottom: '8px' }}>次回出現ボス</div>
             <img src={bossImage(previewName)} alt={previewName}
-              style={{ width: '100%', maxHeight: '180px', objectFit: 'contain', display: 'block', marginBottom: '8px' }}
+              style={{ width: '100%', maxHeight: 'min(280px, 32vh)', objectFit: 'contain', display: 'block', marginBottom: '8px' }}
               onError={e => { e.target.style.display = 'none' }} />
             <div style={{ textAlign: 'center', marginBottom: '8px' }}>
               <div style={{ color: '#ff4444', fontSize: '16px', letterSpacing: '1px' }}>{previewName}</div>
@@ -1117,7 +1119,7 @@ export default function RaidBoss() {
           <div style={{ border: `1px solid ${boss.status === 'active' ? '#660000' : '#446600'}`, background: '#0a0010', padding: '20px', marginBottom: '16px' }}>
             <div style={{ textAlign: 'center', marginBottom: '12px' }}>
               <img src={bossImage(boss.boss_name)} alt={boss.boss_name || BOSS_NAME}
-                style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', display: 'block' }}
+                style={{ width: '100%', maxHeight: 'min(320px, 38vh)', objectFit: 'contain', display: 'block' }}
                 onError={e => { e.target.style.display = 'none' }} />
               <div style={{ color: '#ff4444', fontSize: '16px', letterSpacing: '2px', marginTop: '8px' }}>
                 {boss.boss_name || BOSS_NAME}{boss.is_dev && <span style={{ color: '#8a60ff', fontSize: '10px', marginLeft: '6px' }}>[開発テスト]</span>}

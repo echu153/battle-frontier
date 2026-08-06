@@ -79,7 +79,7 @@ function NodeDesc({ text }) {
 // 戦闘ログ。通常の出撃では画面を切り替えず、出撃パネルの下にそのまま出す
 function BattleLog({ logs, busy, endRef }) {
   return (
-    <div style={{ border: `1px solid ${C.line}`, background: '#05070f', padding: '10px', maxHeight: '52vh', overflowY: 'auto', fontSize: '11px', lineHeight: '1.8' }}>
+    <div style={{ border: `1px solid ${C.line}`, background: '#05070f', padding: '10px', maxHeight: '34vh', overflowY: 'auto', fontSize: '11px', lineHeight: '1.8' }}>
       {logs.length === 0 && !busy && <div style={{ color: C.dim }}>まだ戦っていません。</div>}
       {logs.map((l, i) => <BattleLogLine key={i} l={l} />)}
       <div ref={endRef} />
@@ -566,14 +566,17 @@ export default function Tower() {
           )}
         </div>
 
-        {/* 立ち絵はエリアボスと戦っている間だけ。道中や強敵の結果画面では出さない（画像が無い層も出さない） */}
+        {/* 立ち絵はエリアボスと戦っている間だけ。道中や強敵の結果画面では出さない（画像が無い層も出さない）
+            ⚠サイズは「幅を基準・高さは上限」で指定すること。立ち絵は全部縦長（縦横比0.66〜0.93）なので
+            maxHeightだけで縛ると高さが先に決まって横幅が25vh前後にしかならず、枠の半分も使えない。
+            objectFit:contain なので高さの上限に当たっても歪まない。下のログ枠(34vh)と合わせて86vh。 */}
         {bossShot && !imgFail[bossShot] && (
           <div style={{ textAlign: 'center', marginBottom: '8px' }}>
             <img
               src={`/tou/${bossShot}sou.png`}
               alt={getFloor(bossShot)?.boss || ''}
               onError={() => setImgFail(s => ({ ...s, [bossShot]: true }))}
-              style={{ maxWidth: '100%', maxHeight: '34vh', objectFit: 'contain', filter: 'drop-shadow(0 0 12px rgba(127,212,255,0.25))' }}
+              style={{ width: '100%', maxHeight: '52vh', objectFit: 'contain', filter: 'drop-shadow(0 0 12px rgba(127,212,255,0.25))' }}
             />
             <div style={{ color: C.gold, fontSize: '12px', marginTop: '2px' }}>
               {getFloor(bossShot)?.boss}

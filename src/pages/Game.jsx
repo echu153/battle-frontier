@@ -720,24 +720,26 @@ export const generateDropBonus = (weapon) => {
   return result
 }
 
-export const applyEquipmentEffects = (equipment, profile, playerBuffs, logs) => {
+export const applyEquipmentEffects = (equipment, profile, playerBuffs, _logs) => {
   const newBuffs = { ...playerBuffs }
   for (const item of equipment) {
     if (!item.equipped || !item.bonus_effect) continue
     const effect = item.bonus_effect
-    if (effect === 'open_atk_10_2t')  { newBuffs.atkUp  = { turns:2, rate:1.1 }; logs.push({ text:`✨ 装備効果発動！ 2ターンの間攻撃力+10%！`, color:'#ffcc00' }) }
-    if (effect === 'open_atk_20_1t')  { newBuffs.atkUp  = { turns:1, rate:1.2 }; logs.push({ text:`✨ 装備効果発動！ 1ターンの間攻撃力+20%！`, color:'#ffcc00' }) }
-    if (effect === 'open_def_10_2t')  { newBuffs.defUp  = { turns:2, rate:1.1 }; logs.push({ text:`✨ 装備効果発動！ 2ターンの間防御力+10%！`, color:'#88aaff' }) }
-    if (effect === 'open_def_20_1t')  { newBuffs.defUp  = { turns:1, rate:1.2 }; logs.push({ text:`✨ 装備効果発動！ 1ターンの間防御力+20%！`, color:'#88aaff' }) }
-    if (effect === 'open_matk_10_2t') { newBuffs.matkUp = { turns:2, rate:1.1 }; logs.push({ text:`✨ 装備効果発動！ 2ターンの間特殊攻撃力+10%！`, color:'#cc44ff' }) }
-    if (effect === 'open_matk_20_1t') { newBuffs.matkUp = { turns:1, rate:1.2 }; logs.push({ text:`✨ 装備効果発動！ 1ターンの間特殊攻撃力+20%！`, color:'#cc44ff' }) }
-    if (effect === 'open_mdef_10_2t') { newBuffs.mdefUp = { turns:2, rate:1.1 }; logs.push({ text:`✨ 装備効果発動！ 2ターンの間特殊防御力+10%！`, color:'#44ccff' }) }
-    if (effect === 'open_mdef_20_1t') { newBuffs.mdefUp = { turns:1, rate:1.2 }; logs.push({ text:`✨ 装備効果発動！ 1ターンの間特殊防御力+20%！`, color:'#44ccff' }) }
-    if (effect === 'open_spd_10_2t')  { newBuffs.spdUp  = { turns:2, rate:1.1 }; logs.push({ text:`✨ 装備効果発動！ 2ターンの間素早さ+10%！`, color:'#ff8844' }) }
-    if (effect === 'open_spd_20_1t')  { newBuffs.spdUp  = { turns:1, rate:1.2 }; logs.push({ text:`✨ 装備効果発動！ 1ターンの間素早さ+20%！`, color:'#ff8844' }) }
-    if (effect === 'regen_heal_5_3t') { newBuffs.regenHeal = { turns:3, amount:Math.floor(profile.hp_max*0.05) }; logs.push({ text:`✨ 装備効果発動！ 3ターンの間毎ターンHP5%回復！`, color:'#44ff88' }) }
-    if (effect === 'delay_heal_10')   { newBuffs.delayHeal = { triggerTurn:3, amount:Math.floor(profile.hp_max*0.1) }; logs.push({ text:`✨ 装備効果発動！ 3ターン後にHP10%回復！`, color:'#44ff88' }) }
-    if (effect === 'battle_start_ailment_shield') { newBuffs.ailmentShield = { charges:1 }; logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を1回無効化する！`, color:'#66ccff' }) }
+    // 装備の効果が発動したことはログに書かない（2026-07-14仕様: 勝手に発動・表示なし）。
+    // バフはステータスのアイコンに出るので、付与だけ行えば伝わる。
+    if (effect === 'open_atk_10_2t')  { newBuffs.atkUp  = { turns:2, rate:1.1 } }
+    if (effect === 'open_atk_20_1t')  { newBuffs.atkUp  = { turns:1, rate:1.2 } }
+    if (effect === 'open_def_10_2t')  { newBuffs.defUp  = { turns:2, rate:1.1 } }
+    if (effect === 'open_def_20_1t')  { newBuffs.defUp  = { turns:1, rate:1.2 } }
+    if (effect === 'open_matk_10_2t') { newBuffs.matkUp = { turns:2, rate:1.1 } }
+    if (effect === 'open_matk_20_1t') { newBuffs.matkUp = { turns:1, rate:1.2 } }
+    if (effect === 'open_mdef_10_2t') { newBuffs.mdefUp = { turns:2, rate:1.1 } }
+    if (effect === 'open_mdef_20_1t') { newBuffs.mdefUp = { turns:1, rate:1.2 } }
+    if (effect === 'open_spd_10_2t')  { newBuffs.spdUp  = { turns:2, rate:1.1 } }
+    if (effect === 'open_spd_20_1t')  { newBuffs.spdUp  = { turns:1, rate:1.2 } }
+    if (effect === 'regen_heal_5_3t') { newBuffs.regenHeal = { turns:3, amount:Math.floor(profile.hp_max*0.05) } }
+    if (effect === 'delay_heal_10')   { newBuffs.delayHeal = { triggerTurn:3, amount:Math.floor(profile.hp_max*0.1) } }
+    if (effect === 'battle_start_ailment_shield') { newBuffs.ailmentShield = { charges:1 } }
   }
   return newBuffs
 }
@@ -747,20 +749,19 @@ export const applyEquipmentEffects = (equipment, profile, playerBuffs, logs) => 
 // ============================================================
 export const AILMENT_KEYS = ['paralysis','burn','poison','severePoisoin','stun','bleed','healSeal','healBlock','curseDmg']
 // 差分検知型: prevBuffs に無かった状態異常が newBuffs に新規付与されていたら1つ無効化して消費
-export const consumeAilmentShield = (prevBuffs, newBuffs, logs) => {
+// 無効化ログは出さない（装備由来の出所を表示しない仕様）。第3引数は呼び出し側の字面を保つため残す
+export const consumeAilmentShield = (prevBuffs, newBuffs, _logs) => {
   if (!(newBuffs.ailmentShield?.charges > 0)) return
   const got = AILMENT_KEYS.find(k => newBuffs[k] && !prevBuffs?.[k])
   if (got) {
     delete newBuffs[got]
     delete newBuffs.ailmentShield
-    logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を無効化した！`, color:'#66ccff' })
   }
 }
 // 直接付与型: 付与直前に呼ぶ。バフが残っていれば消費して true（呼び出し側は付与をスキップ）
-export const ailmentShieldBlocks = (playerBuffs, logs) => {
+export const ailmentShieldBlocks = (playerBuffs, _logs) => {
   if (!(playerBuffs.ailmentShield?.charges > 0)) return false
   delete playerBuffs.ailmentShield
-  logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を無効化した！`, color:'#66ccff' })
   return true
 }
 
@@ -3182,8 +3183,8 @@ export default function Game() {
       if ((eff.evoReflectPct||0) > 0) {
         const refl = Math.max(1, Math.floor(dmg * eff.evoReflectPct / 100))
         enemyHp -= refl
-        // 反射は可視の効果が無い（敵HPが減るだけ）ため、発動が分かるようログを出す
-        logs.push({ text:`🛡 真化・反射！ ${enemy.name}に${refl}ダメージ！`, color:'#66ccff' })
+        // 敵HPが減るので事象だけは残す。ただし出所（真化）は書かない
+        logs.push({ text:`🛡 反射！ ${enemy.name}に${refl}ダメージ！`, color:'#66ccff' })
       }
       if ((eff.evoOndmgStun||0) > 0 && !(enemyBuffs.stun?.turns > 0) && Math.random()*100 < eff.evoOndmgStun) {
         enemyBuffs.stun = { turns: 1 }
@@ -3384,13 +3385,13 @@ export default function Game() {
           }
           if (res.selfDmg > 0) playerHp = Math.max(0, playerHp - res.selfDmg)
           enemyHp -= finalDmg
-          // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封じ中は無効）
-          { const emKind = (isPhysSkill) ? '物理' : '特殊'; const emDrain = emblemDrainAmount(eff, finalDmg, isPhysSkill); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(maxHp, playerHp + emDrain); logs.push({ text:`💠 ${emKind}吸収により${emDrain}回復！`, color:'#66ddff' }) } }
+          // 紋章: 物理/特殊吸収（与ダメの一定割合を回復・回復封じ中は無効）。出所は書かずHPが増える事象だけ残す
+          { const emDrain = emblemDrainAmount(eff, finalDmg, isPhysSkill); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(maxHp, playerHp + emDrain); logs.push({ text:`💚 HPが${emDrain}回復した！`, color:'#44ff88' }) } }
           // 第六感（再修練）：魔法攻撃がヒットしたらスタック+1（最大6・戦闘中持続）
           if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks + 1)
+          // 装備由来の発動ログは出さない（効果の付与だけ行う）
           if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
             enemyBuffs.healDown = { turns: 2, rate: 0.7 }
-            logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
           }
           if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
             // 濡羽杖アマザネ: 攻撃ヒット時 2Tの間対象SPD-5%（最大4重複=-20%・ヒット毎に持続リフレッシュ）
@@ -3403,10 +3404,9 @@ export default function Game() {
             }
           }
           applyEvoHitEffects(finalDmg, isMulti ? multiCritAny : finalCrit)
-          // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺（スキルも通常攻撃も対象）
+          // 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺（スキルも通常攻撃も対象）。装備由来の発動ログは出さない
           if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
             enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
-            logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
           }
           const healUpMult = playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1
           const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult * healUpMult)
@@ -3491,11 +3491,11 @@ export default function Game() {
         let finalDmg = Math.floor(baseDmg*0.7*critMult*(isArtifact?1.3:1.0)*passiveDmgMult*iaiNormalMult*rokkanMultN*enemyDmgReduceMult2*breederDmgMult*emblemDmgMult(eff, !isMagical)*(0.9+Math.random()*0.2))
         if (enemy.isPapia) finalDmg = 1
         enemyHp -= finalDmg
-        // 紋章: 物理/特殊吸収
-        { const emKind = (!isMagical) ? '物理' : '特殊'; const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(maxHp, playerHp + emDrain); logs.push({ text:`💠 ${emKind}吸収により${emDrain}回復！`, color:'#66ddff' }) } }
+        // 紋章: 物理/特殊吸収。出所は書かずHPが増える事象だけ残す
+        { const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(maxHp, playerHp + emDrain); logs.push({ text:`💚 HPが${emDrain}回復した！`, color:'#44ff88' }) } }
+        // 装備由来の発動ログは出さない（効果の付与だけ行う）
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
           enemyBuffs.healDown = { turns: 2, rate: 0.7 }
-          logs.push({ text: `🗡 ${equippedWeaponItem?.weapons?.name || '武器'}の効果！ ${enemy.name}の回復力が2ターンの間-30%！`, color: '#ff8844' })
         }
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
           // 濡羽杖アマザネ: 攻撃ヒット時 2Tの間対象SPD-5%（最大4重複=-20%・ヒット毎に持続リフレッシュ）
@@ -3508,10 +3508,9 @@ export default function Game() {
           }
         }
         applyEvoHitEffects(finalDmg, isCrit)
-        // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
+        // 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺。装備由来の発動ログは出さない
         if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
           enemyBuffs.paralysis = { turns: 3, skipRate: 0.25, spdRate: 0.8 }
-          logs.push({ text: `⚡ 蒼雷の短刃の追撃！ ${enemy.name}を麻痺させた！`, color: '#ffe066' })
         }
         const critText = isCrit ? '💥クリティカル！ ' : ''
         logs.push({ text:`${prefix}${critText}攻撃！ ${enemy.name}に${finalDmg}ダメージ！`, color:'#ffcc00' })
@@ -3827,7 +3826,8 @@ export default function Game() {
       }
       if (!isHealSealed && playerBuffs.delayHeal && turn === playerBuffs.delayHeal.triggerTurn) {
         playerHp = Math.min(maxHp, playerHp + playerBuffs.delayHeal.amount)
-        logs.push({ text:`💚 装備効果でHPが${playerBuffs.delayHeal.amount}回復した！`, color:'#44ff88' })
+        // 出所（装備効果）は書かず、HPが増える事象だけ残す
+        logs.push({ text:`💚 HPが${playerBuffs.delayHeal.amount}回復した！`, color:'#44ff88' })
       }
       if (!isHealSealed && currentItem) {
         const threshold = currentItem.use_threshold||50
@@ -3976,12 +3976,10 @@ export default function Game() {
       // 雷鋼の機神鎧: このターンに被ダメージしたら2ターン素早さ+15%（既存の上位spdUpは上書きしない）
       if (ondmgSpdUp > 1 && playerHp < hpBeforeTurn && !(playerBuffs.spdUp?.turns > 0 && playerBuffs.spdUp.rate >= ondmgSpdUp)) {
         playerBuffs.spdUp = { turns: 2, rate: ondmgSpdUp }
-        logs.push({ text:`⚙ 雷鋼の機神鎧が起動！ 2ターンの間 素早さ+${Math.round((ondmgSpdUp - 1) * 100)}%！`, color:'#66ccff' })
       }
-      // 哭雨の羽衣: 5ターンごとに状態異常無効バフを再獲得（既にバフがある場合は重複しない）
+      // 5ターンごとに状態異常無効バフを再獲得（既にバフがある場合は重複しない）。装備由来の発動ログは出さない
       if (hasAmagoiShield && turn % 5 === 0 && playerHp > 0 && !(playerBuffs.ailmentShield?.charges > 0)) {
         playerBuffs.ailmentShield = { charges: 1 }
-        logs.push({ text:`🛡 哭雨の羽衣の加護！ 状態異常を1回無効化するバフを獲得！`, color:'#66ccff' })
       }
       if (bossHealCooldown > 0) bossHealCooldown--
       turn++
