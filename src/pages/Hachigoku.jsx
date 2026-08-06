@@ -1133,9 +1133,7 @@ export default function Hachigoku() {
             </div>
             {battleInfo.hell.img && (
               <div style={{ textAlign:'center', marginBottom:'10px' }}>
-                {/* 立ち絵は正方形(1254x1254)。上限が小さすぎて枠を使い切れていなかったので広げた。
-                    画面が低いときのために vh 側の上限も持たせる（下のログ枠46vhと合わせて90vh） */}
-                <img src={battleInfo.hell.img} alt={battleInfo.hell.boss} style={{ maxWidth:'100%', maxHeight:'min(440px, 44vh)', objectFit:'contain', filter:'drop-shadow(0 0 14px rgba(255,60,30,0.35))' }} />
+                <img src={battleInfo.hell.img} alt={battleInfo.hell.boss} style={{ maxWidth:'min(320px, 80%)', maxHeight:'320px', objectFit:'contain', filter:'drop-shadow(0 0 14px rgba(255,60,30,0.35))' }} />
               </div>
             )}
             {battling && <div style={{ color:'#cc8866', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}

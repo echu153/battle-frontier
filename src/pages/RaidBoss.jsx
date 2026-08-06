@@ -1044,7 +1044,7 @@ export default function RaidBoss() {
           <div style={{ border: '1px solid #440000', background: '#0a0010', padding: '14px', marginBottom: '16px' }}>
             <div style={{ color: '#446688', fontSize: '10px', marginBottom: '8px' }}>次回出現ボス</div>
             <img src={bossImage(previewName)} alt={previewName}
-              style={{ width: '100%', maxHeight: 'min(280px, 32vh)', objectFit: 'contain', display: 'block', marginBottom: '8px' }}
+              style={{ width: '100%', maxHeight: '180px', objectFit: 'contain', display: 'block', marginBottom: '8px' }}
               onError={e => { e.target.style.display = 'none' }} />
             <div style={{ textAlign: 'center', marginBottom: '8px' }}>
               <div style={{ color: '#ff4444', fontSize: '16px', letterSpacing: '1px' }}>{previewName}</div>
@@ -1119,7 +1119,7 @@ export default function RaidBoss() {
           <div style={{ border: `1px solid ${boss.status === 'active' ? '#660000' : '#446600'}`, background: '#0a0010', padding: '20px', marginBottom: '16px' }}>
             <div style={{ textAlign: 'center', marginBottom: '12px' }}>
               <img src={bossImage(boss.boss_name)} alt={boss.boss_name || BOSS_NAME}
-                style={{ width: '100%', maxHeight: 'min(320px, 38vh)', objectFit: 'contain', display: 'block' }}
+                style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', display: 'block' }}
                 onError={e => { e.target.style.display = 'none' }} />
               <div style={{ color: '#ff4444', fontSize: '16px', letterSpacing: '2px', marginTop: '8px' }}>
                 {boss.boss_name || BOSS_NAME}{boss.is_dev && <span style={{ color: '#8a60ff', fontSize: '10px', marginLeft: '6px' }}>[開発テスト]</span>}

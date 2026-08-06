@@ -55,21 +55,18 @@ function StatBar({ label, cur, max, color, track }) {
 }
 
 // エンドポイントの説明文。全部同じ色だと読みにくいので、
-//  1文目＝何が上がるか（明るい色）／2文目以降＝どこで効くかの補足（暗い色）
-//  文中の「N層」だけ金色にして、対象の層をひと目で拾えるようにする
+//  1文目＝何が上がるか（明るい色）／2文目以降＝補足（暗い色）
+//  ⚠説明文に「N層の◯◯に効く」と書かない（2026-08-07）。どの層にどのギミックがあるかは
+//    プレイヤーが自分で当たって知ること。攻略のヒントを先渡ししない。
+//    以前は文中の「N層」を金色にする処理があったが、その書き方をやめたので消した。
 function NodeDesc({ text }) {
   const parts = String(text || '').split('。').filter(s => s.length > 0)
-  const paint = (s) => s.split(/(\d+層)/).map((seg, j) => (
-    /^\d+層$/.test(seg)
-      ? <span key={j} style={{ color: C.gold }}>{seg}</span>
-      : <span key={j}>{seg}</span>
-  ))
   return (
     <div style={{ marginTop: '3px', fontSize: '10px', lineHeight: '1.6' }}>
       {parts.map((p, i) => (
         <div key={i} style={{ color: i === 0 ? '#9fb6e0' : C.dim }}>
           {i > 0 && <span style={{ color: '#3f5a86' }}>└ </span>}
-          {paint(p)}
+          {p}
         </div>
       ))}
     </div>
@@ -79,7 +76,7 @@ function NodeDesc({ text }) {
 // 戦闘ログ。通常の出撃では画面を切り替えず、出撃パネルの下にそのまま出す
 function BattleLog({ logs, busy, endRef }) {
   return (
-    <div style={{ border: `1px solid ${C.line}`, background: '#05070f', padding: '10px', maxHeight: '34vh', overflowY: 'auto', fontSize: '11px', lineHeight: '1.8' }}>
+    <div style={{ border: `1px solid ${C.line}`, background: '#05070f', padding: '10px', maxHeight: '52vh', overflowY: 'auto', fontSize: '11px', lineHeight: '1.8' }}>
       {logs.length === 0 && !busy && <div style={{ color: C.dim }}>まだ戦っていません。</div>}
       {logs.map((l, i) => <BattleLogLine key={i} l={l} />)}
       <div ref={endRef} />
@@ -567,16 +564,17 @@ export default function Tower() {
         </div>
 
         {/* 立ち絵はエリアボスと戦っている間だけ。道中や強敵の結果画面では出さない（画像が無い層も出さない）
-            ⚠サイズは「幅を基準・高さは上限」で指定すること。立ち絵は全部縦長（縦横比0.66〜0.93）なので
-            maxHeightだけで縛ると高さが先に決まって横幅が25vh前後にしかならず、枠の半分も使えない。
-            objectFit:contain なので高さの上限に当たっても歪まない。下のログ枠(34vh)と合わせて86vh。 */}
+            サイズは「幅を基準・高さは上限」で指定する（objectFit:contain なので上限に当たっても歪まない）。
+            32vh はユーザーが実際に見て決めた値。立ち絵は全部縦長（縦横比0.66〜0.93）なので、
+            この上限だと横幅は枠の26〜68%までしか伸びない。上げ下げの指示があるまでこの値を動かさない。
+            下のログ枠(52vh)と合わせて84vh。八獄・レイドの立ち絵はこことは別物なので巻き添えで触らない。 */}
         {bossShot && !imgFail[bossShot] && (
           <div style={{ textAlign: 'center', marginBottom: '8px' }}>
             <img
               src={`/tou/${bossShot}sou.png`}
               alt={getFloor(bossShot)?.boss || ''}
               onError={() => setImgFail(s => ({ ...s, [bossShot]: true }))}
-              style={{ width: '100%', maxHeight: '52vh', objectFit: 'contain', filter: 'drop-shadow(0 0 12px rgba(127,212,255,0.25))' }}
+              style={{ width: '100%', maxHeight: '32vh', objectFit: 'contain', filter: 'drop-shadow(0 0 12px rgba(127,212,255,0.25))' }}
             />
             <div style={{ color: C.gold, fontSize: '12px', marginTop: '2px' }}>
               {getFloor(bossShot)?.boss}
