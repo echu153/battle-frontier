@@ -32,7 +32,7 @@ import {
   applyEquipmentEffects, ailmentShieldBlocks,
   executeSkill, extractStatuses, MULTI_HIT_SKILLS,
 } from '../pages/Game'
-import { makeEnemy, towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies, DEFAULT_TARGET_MODE, ENEMY_SKILL_POWER, floorPowerOf } from './tower'
+import { makeEnemy, towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies, DEFAULT_TARGET_MODE, ENEMY_SKILL_POWER } from './tower'
 // 敵の組み立てとツリー換算は tower.js（純粋データ側）が正。ここから使う側のために再エクスポートする
 export { towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies }
 
@@ -64,8 +64,8 @@ export function simulateTowerBattle({
   //    ここで再度掛けると技だけ係数の2乗になるため、ダメージ計算では掛けないこと。
   const skillPowerOf = (sk) => (sk?.isBasic ? 1 : ENEMY_SKILL_POWER)
 
-  // 戦闘中に湧く援軍へ引き継ぐための層ごとの係数（makeEnemy に渡す用。ダメージ計算には使わない）
-  const summonFloorPower = enemyList[0]?.floorPower ?? floorPowerOf(floorData?.floor)
+  // 戦闘中に湧く援軍へ引き継ぐ層番号。被ダメージ倍率が層で変わるので、渡さないと援軍だけ緩くなる
+  const summonFloor = enemyList[0]?.floor ?? floorData?.floor ?? 1
 
   const enemies = enemyList.slice()
   // 持ち越しHPが0以下＝前の戦闘で相打ちになっている。1に切り上げて生き返らせない
@@ -771,8 +771,8 @@ const basicAttack = (en) => ({ name: '攻撃', type: en.type === 'magical' ? 'ma
     const n = Math.max(1, Math.floor(count) || 1)
     let name = ''
     for (let k = 0; k < n; k++) {
-      // 層ごとの係数は召喚された敵にも引き継ぐ（引き継がないと上の層で援軍だけ弱くなる）
-      const en = makeEnemy(def, { floorPower: summonFloorPower, ...opts, isSummoned: true })
+      // 層番号は召喚された敵にも引き継ぐ（引き継がないと上の層で援軍だけ緩くなる）
+      const en = makeEnemy(def, { floor: summonFloor, ...opts, isSummoned: true })
       enemies.push(en)
       name = en.name
     }

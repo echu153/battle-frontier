@@ -17,7 +17,7 @@ import {
   getFloor, MAX_IMPLEMENTED_FLOOR, OPEN_MAX_FLOOR, BOSS_RUN_STAGES,
   TREE_NODES, TREE_LINES, TREE_MAX_STEPS, stepPctOf,
   maxStepsAt, nextUnlock, treeSpent, treeResetCost,
-  MID_BOSS_RATE, isMonumentFloor, RUN_POTION_LIMIT, makeEnemy, floorPowerOf,
+  MID_BOSS_RATE, isMonumentFloor, RUN_POTION_LIMIT, makeEnemy,
 } from '../lib/tower'
 import { simulateTowerBattle, buildStageEnemies, buildSortieEnemies, towerTreeEffects } from '../lib/towerBattle'
 import { simulateAll } from '../lib/towerSim'
@@ -445,11 +445,11 @@ export default function Tower() {
     setBusy(true); setLogs([]); setMsg(null); setGain(null)
     try {
       let enemies
-      const fp = floorPowerOf(devFloor)   // 層ごとの係数。本番と同じ強さでテストする
+      const fl = devFloor   // 層番号。被ダメージ倍率が層で変わるので本番と同じ層を渡す
       if (devTarget === 'boss') enemies = buildStageEnemies(fd, BOSS_RUN_STAGES.length - 1)
-      else if (devTarget === 'mid') enemies = [makeEnemy(fd.midBoss, { isBoss: true, floorPower: fp })]
+      else if (devTarget === 'mid') enemies = [makeEnemy(fd.midBoss, { isBoss: true, floor: fl })]
       else if (devTarget === 'mobs3') enemies = buildStageEnemies(fd, 3)
-      else enemies = [makeEnemy(fd.enemies[Number(devTarget)] || fd.enemies[0], { floorPower: fp })]
+      else enemies = [makeEnemy(fd.enemies[Number(devTarget)] || fd.enemies[0], { floor: fl })]
       setBossShot(devTarget === 'boss' ? devFloor : null)
       const res = simulateTowerBattle({
         eff: buildEff(), equipment, skillSets, profile,

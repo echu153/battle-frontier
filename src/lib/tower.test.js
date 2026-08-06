@@ -9,7 +9,6 @@ import {
   TREE_NODES, TREE_MAX_STEPS, TREE_STEP_PCT, stepPctOf, maxStepsAt, nextUnlock, treeBonus, treeSpent, treeResetCost,
   isMonumentFloor, MID_BOSS_RATE, towerSortieGold, towerBossGold, RUN_POTION_LIMIT, MAX_END_LEVEL,
   isTowerUnlocked, TOWER_UNLOCK_CHAR_LV, OPEN_MAX_FLOOR,
-  FLOOR_POWER, FLOOR_POWER_STEP, floorPowerOf,
   buildStageEnemies, buildSortieEnemies, towerTreeEffects, applyTreeToStats,
 } from './tower.js'
 import { TARGET_MODES, DEFAULT_TARGET_MODE, pickTargetMode, isTargetMode } from './loadout.js'
@@ -423,9 +422,6 @@ test('外側のつまみは使わない（データに書いてある数字＝�
   for (const k of ['ENEMY_ATK_POWER', 'MOB_ATK_POWER', 'ENEMY_SKILL_POWER']) {
     assert.equal(t[k], 1.0, `${k} が1.0でない。強さは敵データ側で表すこと`)
   }
-  for (let f = 1; f <= 12; f++) assert.equal(floorPowerOf(f), 1, `${f}層に隠れた倍率が掛かっている`)
-  assert.ok(FLOOR_POWER.every(v => v === 1), 'FLOOR_POWER に1以外が入っている')
-  assert.equal(typeof FLOOR_POWER_STEP, 'number')
 
   // プレイヤーの与ダメージ側の倍率だけは敵ステータスで表現できないので残る
   assert.ok(t.ENEMY_DMG_TAKEN > 0 && t.ENEMY_DMG_TAKEN <= 1)
@@ -438,32 +434,43 @@ test('外側のつまみは使わない（データに書いてある数字＝�
   assert.equal(en.matk, def.matk, 'ボスの特殊攻撃力がデータと違う')
 })
 
-test('層ごとの倍率は敵の攻撃力にだけ乗り、HP・防御には乗らない', async () => {
-  const { makeEnemy, ENEMY_ATK_POWER } = await import('./tower.js')
-  // HPや防御まで伸ばすと「削り切るターン数」が変わり、
-  // 与ダメージ割合回復（血の狂気・紋章の吸収）とかみ合って体感が読めなくなる。
+test('層ごとの傾斜は被ダメージ倍率だけで、敵のステータスは層で変わらない', async () => {
+  const { makeEnemy, FLOOR_DMG_TAKEN, floorDmgTakenOf } = await import('./tower.js')
+  // 敵の強さはデータの数値がそのまま実戦値。層番号を渡してもステータスは動かない。
   const fd = getFloor(6)
-  const plain = makeEnemy(fd.floorBoss, { isBoss: true })
-  const scaled = makeEnemy(fd.floorBoss, { isBoss: true, floorPower: 2 })
-  assert.equal(scaled.hp, plain.hp, 'HPに倍率が乗っている')
-  assert.equal(scaled.def, plain.def, '防御に倍率が乗っている')
-  assert.equal(scaled.mdef, plain.mdef, '特殊防御に倍率が乗っている')
-  assert.equal(scaled.spd, plain.spd, '素早さに倍率が乗っている')
-  assert.equal(scaled.atk, Math.floor(fd.floorBoss.atk * ENEMY_ATK_POWER * 2), '攻撃力に倍率が乗っていない')
-  // 1〜4層の敵が今までと同じであること（倍率を入れる前と同じ式）
-  const f1 = getFloor(1)
-  assert.equal(buildStageEnemies(f1, BOSS_RUN_STAGES.length - 1)[0].atk,
-    Math.floor(f1.floorBoss.atk * ENEMY_ATK_POWER), '1層のボスの攻撃力が変わっている')
+  const a = makeEnemy(fd.floorBoss, { isBoss: true, floor: 1 })
+  const b = makeEnemy(fd.floorBoss, { isBoss: true, floor: 10 })
+  for (const k of ['hp', 'atk', 'def', 'matk', 'mdef', 'spd']) {
+    assert.equal(b[k], a[k], `${k} が層番号で変わっている（強さはデータの数値で表すこと）`)
+  }
+  // 変わるのは被ダメージ倍率だけ
+  assert.equal(a.dmgTaken, floorDmgTakenOf(1, true))
+  assert.equal(b.dmgTaken, floorDmgTakenOf(10, true))
+  assert.ok(b.dmgTaken < a.dmgTaken, '上の層のほうが敵の受けるダメージが多い')
+
+  // 1〜4層は一般公開中。エンドポイント対策の傾斜を巻き添えで掛けない
+  for (let f = 1; f <= 4; f++) {
+    assert.equal(FLOOR_DMG_TAKEN[f - 1].boss, 0.7, `${f}層のボスの被ダメージ倍率が動いている`)
+    assert.equal(FLOOR_DMG_TAKEN[f - 1].mob, 0.5, `${f}層の雑魚の被ダメージ倍率が動いている`)
+  }
+  // 5層以降は単調に絞る（緩めた層があると階段が崩れる）
+  for (let f = 5; f < FLOOR_DMG_TAKEN.length; f++) {
+    assert.ok(FLOOR_DMG_TAKEN[f].boss <= FLOOR_DMG_TAKEN[f - 1].boss, `${f + 1}層のボスで傾斜が戻っている`)
+    assert.ok(FLOOR_DMG_TAKEN[f].mob <= FLOOR_DMG_TAKEN[f - 1].mob, `${f + 1}層の雑魚で傾斜が戻っている`)
+  }
+  for (const r of FLOOR_DMG_TAKEN) {
+    assert.ok(r.boss > 0 && r.boss <= 1 && r.mob > 0 && r.mob <= 1, '被ダメージ倍率が0〜1の外にある')
+    assert.ok(r.mob < r.boss, '雑魚のほうが柔らかい、という関係が崩れている')
+  }
+  // 表の外（11層以降）は最後の層の値を使う
+  assert.equal(floorDmgTakenOf(99, true), FLOOR_DMG_TAKEN[FLOOR_DMG_TAKEN.length - 1].boss)
 })
 
-test('層ごとの倍率が技の威力と召喚にも届いている', async () => {
+test('層ごとの被ダメージ倍率が実戦の敵に届いている', async () => {
   const fs = await import('node:fs')
+  const { floorDmgTakenOf } = await import('./tower.js')
   const battle = fs.readFileSync('src/lib/towerBattle.js', 'utf8')
-  // 層ごとの倍率を掛けるのは makeEnemy の1箇所だけ。ダメージ計算でも掛けると
-  // 技だけ係数の2乗になる（2026-08-06に一度やらかしている）。
-  assert.equal((battle.match(/\* floorPow\b/g) || []).length, 0,
-    'ダメージ計算で層ごとの倍率を再度掛けている（makeEnemy と二重になる）')
-  // 技の威力つまみは 通常技（skillPowerOf 経由）・大技・噴火 の3箇所すべてに掛かること
+  // 技の威力つまみは 大技・噴火 の2箇所。通常技は skillPowerOf 経由
   assert.equal((battle.match(/\* ENEMY_SKILL_POWER/g) || []).length, 2,
     '大技・噴火のどちらかに技の威力つまみが掛かっていない')
   assert.ok(/\* skillPowerOf\(sk\)/.test(battle), '通常技が skillPowerOf を通っていない')
@@ -472,9 +479,13 @@ test('層ごとの倍率が技の威力と召喚にも届いている', async ()
   // 通常攻撃はつまみの対象外（倍率1.5を自前で持つ）
   assert.ok(/mult: 1\.5, isBasic: true/.test(battle), '通常攻撃が倍率を自前で持っていない')
   assert.ok(/sk\?\.isBasic \? 1 : ENEMY_SKILL_POWER/.test(battle), '通常攻撃がつまみの対象外になっていない')
-  // 戦闘中に湧く援軍。引き継がないと上の層で援軍だけ弱くなる
-  assert.ok(battle.includes('makeEnemy(def, { floorPower: summonFloorPower'),
-    '召喚された敵に層ごとの倍率が引き継がれていない')
-  // 敵が倍率を持ち歩いていること（floorData が無い開発テスト対戦でも効かせるため）
-  assert.equal(buildStageEnemies(getFloor(6), 0)[0].floorPower, floorPowerOf(6))
+  // 戦闘中に湧く援軍。層番号を引き継がないと援軍だけ緩くなる
+  assert.ok(battle.includes('makeEnemy(def, { floor: summonFloor'),
+    '召喚された敵に層番号が引き継がれていない')
+  // 連戦・出撃のどちらの組み立てでも層番号が乗ること
+  const boss6 = buildStageEnemies(getFloor(6), BOSS_RUN_STAGES.length - 1)[0]
+  assert.equal(boss6.floor, 6, '連戦の敵に層番号が乗っていない')
+  assert.equal(boss6.dmgTaken, floorDmgTakenOf(6, true), '連戦の敵に層ごとの被ダメージ倍率が乗っていない')
+  const mob10 = buildStageEnemies(getFloor(10), 0)[0]
+  assert.equal(mob10.dmgTaken, floorDmgTakenOf(10, false), '雑魚に層ごとの被ダメージ倍率が乗っていない')
 })

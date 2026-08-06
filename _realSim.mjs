@@ -10,6 +10,7 @@ import fs from 'node:fs'
 import { calcEffectiveStats, calcEffectiveTotal } from './src/lib/stats.js'
 import { petPlayerBonus, charmPlayerBonus } from './src/constants/pets.js'
 import { runBossRun, ADVANCED_CLASSES } from './src/lib/towerSim.js'
+import { maxStepsAt } from './src/lib/tower.js'
 import { PHYSICAL_CLASSES, MAGICAL_CLASSES } from './src/lib/aiAssistant.js'
 
 const data = JSON.parse(fs.readFileSync('_sim_data.json', 'utf8'))
@@ -19,12 +20,35 @@ const baseProfile = D.profile
 const equipment = D.equipment || []
 const proficiency = D.proficiency || []
 const title = D.title || null
-// エンドポイント。実データは未振りだが、第5引数に 'alloc' を渡すと
-// エンドLV28ぶん（28点・1ノード10段まで）を振った想定でも測れる。
-const ALLOC_ON = process.argv[5] === 'alloc'
-const treeOf = (kind) => ALLOC_ON
-  ? { max_hp: 10, dmg_taken: 10, [kind === 'mag' ? 'mag_dmg' : 'phys_dmg']: 8 }
-  : (D.tower_player?.tree_alloc || {})
+// エンドポイント。実データは未振りなので、第5引数で「何点振った想定か」を渡す。
+//   'alloc'  … エンドLV28ぶん（おれおれおの現在の持ち点）
+//   数字     … その点数を強い順に振り切った想定（例: 200）
+// 段数の上限はエンドLVで決まる（1ノード10段→LV50で20段→100で30→200で40→350で50）。
+// ⚠エンドポイントは塔の中でしか効かないので、敵を設計するときは
+//   「振った側」で見ないと、上の層ほど実態より難しく見積もることになる。
+const ARG5 = process.argv[5]
+const END_PT = ARG5 === 'alloc' ? 28 : (Number(ARG5) || 0)
+
+// 強い順に上限まで埋めていく。攻撃を伸ばすノードは物理職/魔法職で入れ替える
+const PRIORITY = (kind) => [
+  'dmg_taken', kind === 'mag' ? 'mag_dmg' : 'phys_dmg', 'max_hp', 'crit_dmg', 'crit_rate',
+  kind === 'mag' ? 'mag_pen' : 'phys_pen', 'evasion', 'ail_resist', 'crit_resist',
+  'kill_heal', 'spd', 'pct_resist', 'mp_cost',
+  kind === 'mag' ? 'phys_dmg' : 'mag_dmg', kind === 'mag' ? 'phys_pen' : 'mag_pen',
+  'ail_rate', 'exp_plus',
+]
+const buildTree = (kind, pt) => {
+  const cap = maxStepsAt(pt)
+  const out = {}
+  let left = pt
+  for (const key of PRIORITY(kind)) {
+    if (left <= 0) break
+    const put = Math.min(cap, left)
+    if (put > 0) { out[key] = put; left -= put }
+  }
+  return out
+}
+const treeOf = (kind) => END_PT > 0 ? buildTree(kind, END_PT) : (D.tower_player?.tree_alloc || {})
 const tree = D.tower_player?.tree_alloc || {}
 
 // ペット・チャーム・紋章を profile に載せる（街と同じ組み立て）
