@@ -489,3 +489,30 @@ test('層ごとの被ダメージ倍率が実戦の敵に届いている', async
   const mob10 = buildStageEnemies(getFloor(10), 0)[0]
   assert.equal(mob10.dmgTaken, floorDmgTakenOf(10, false), '雑魚に層ごとの被ダメージ倍率が乗っていない')
 })
+
+test('長期戦の回復阻害（20ターン超から1ターンごとに5%・40ターンで0）', async () => {
+  const { longFightHealMult, LONG_FIGHT_FROM, LONG_FIGHT_HEAL_CUT } = await import('./tower.js')
+  assert.equal(LONG_FIGHT_FROM, 20)
+  assert.equal(LONG_FIGHT_HEAL_CUT, 0.05)
+  // 20ターン目までは一切効かない（普通の戦闘の邪魔をしない）
+  for (const t of [1, 5, 19, 20]) assert.equal(longFightHealMult(t), 1, `${t}ターン目で既に効いている`)
+  assert.ok(Math.abs(longFightHealMult(21) - 0.95) < 1e-9)
+  assert.ok(Math.abs(longFightHealMult(30) - 0.50) < 1e-9)
+  assert.equal(longFightHealMult(40), 0, '40ターンで完全に効かなくなる')
+  assert.equal(longFightHealMult(100), 0, '40ターンを過ぎても負にならない')
+
+  // プレイヤーの回復が1つも素通りしていないこと。
+  // どれか1つでも抜けると持久型がそこだけで粘れて意味がなくなる。
+  const fs = await import('node:fs')
+  const battle = fs.readFileSync('src/lib/towerBattle.js', 'utf8')
+  assert.ok(/return m \* longFightHealMult\(turn\)/.test(battle),
+    'healOutMult に長期戦の回復阻害が入っていない')
+  // playerHp を増やしている箇所は、戦闘後の「戦闘ごとにHP回復」以外すべて healOutMult を通る
+  const heals = battle.split('\n').filter(l => /playerHp = Math\.min\(eff\.hp_max, playerHp \+/.test(l))
+  assert.ok(heals.length >= 10, `回復箇所が少なすぎる（${heals.length}件）。検出漏れの疑い`)
+  for (const l of heals) {
+    if (/tr\.killHeal|playerHp \+ heal\)/.test(l)) continue   // 戦闘を終えたあとの回復は対象外
+    assert.ok(/healOutMult\(\)/.test(l) || /healAmt|rageCure|drainHeal|dHeal|\bh\)/.test(l),
+      `healOutMult を通っていない回復がある: ${l.trim().slice(0, 90)}`)
+  }
+})

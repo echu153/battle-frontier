@@ -80,6 +80,21 @@ export const floorDmgTakenOf = (floor, isBoss) => {
 //   2026-08-06に敵データへ焼き込んで全部1.0になり、2026-08-07に削除した。
 //   層ごとの強さは TOWER_FLOORS の数値そのもので表す。同じものを作り直さないこと。
 
+// ============================================================
+// 長期戦の回復阻害（2026-08-07追加）
+// ------------------------------------------------------------
+// 聖騎士・聖職者のような持久型が、削り切れないまま回復で粘り続けて
+// 層が上がっても勝率が落ちない状態になっていた（5層で100%/97%）。
+// 20ターンを過ぎたら1ターンごとに回復量を5%ずつ削り、40ターンで完全に効かなくする。
+// 敵の数値を上げて潰そうとすると他の職が先に全滅するので、時間のほうを止める。
+//
+// ⚠プレイヤー側の回復すべてに掛ける（スキル・吸収・血の狂気・リジェネ・ポーション）。
+//   どれか1つでも素通りさせると、そこだけで粘れてしまい意味がなくなる。
+export const LONG_FIGHT_FROM = 20      // このターンまでは影響なし
+export const LONG_FIGHT_HEAL_CUT = 0.05  // 超えた1ターンごとに減る割合
+export const longFightHealMult = (turn) =>
+  Math.max(0, 1 - Math.max(0, (turn | 0) - LONG_FIGHT_FROM) * LONG_FIGHT_HEAL_CUT)
+
 // 出撃1回で得られるGold（2026-08-03確定）。
 // 敵データの gold は調整用シミュレータの仮値で、街の出撃の何十倍もあり
 // 経済を壊すため、出撃では使わずこの式で固定する。強敵に当たっても同額。
@@ -295,7 +310,7 @@ export const TOWER_FLOORS = [
       { name: '毒霧',     type: 'magical',  mult: 2.25, poisonRate: 0.5 },
       { name: '沼の構え', type: 'buff', effect: 'defMdefUp', defRate: 1.3, mdefRate: 1.3, turns: 3 },
     ], { mods: { poisonField: 0.015, playerHealMult: 0.75 } }),
-    floorBoss: E('ポイズントードキング', 157300, 6728, 5500, 4037, 5060, 2950, 'physical', 90000, [
+    floorBoss: E('ポイズントードキング', 157300, 3900, 5500, 2340, 5060, 2950, 'physical', 90000, [
       { name: '毒液噴射', type: 'magical',        mult: 2.55, poisonRate: 1.0 },
       { name: '粘着の舌', type: 'physical',       mult: 2.25, effect: 'spdDown', rate: 0.7, turns: 3 },
       { name: '沼の顎',   type: 'physical_multi', mult: 1.05, hits: 2 },
@@ -330,7 +345,7 @@ export const TOWER_FLOORS = [
       { name: '砂塵',       type: 'magical',  mult: 2.25 },
       { name: '甲殻硬化',   type: 'buff', effect: 'defMdefUp', defRate: 1.3, mdefRate: 1.3, turns: 3 },
     ], { mods: { defRamp: 1.12 } }),
-    floorBoss: E('エンペラースカラベ', 192500, 8534, 6820, 4461, 6160, 3100, 'physical', 160000, [
+    floorBoss: E('エンペラースカラベ', 192500, 5720, 6820, 2990, 6160, 3100, 'physical', 160000, [
       { name: '皇甲の顎', type: 'physical',       mult: 2.55 },
       { name: '砂嵐',     type: 'magical',        mult: 2.25 },
       { name: '黄金の顎', type: 'physical_multi', mult: 1.05, hits: 2 },

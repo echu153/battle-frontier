@@ -32,7 +32,7 @@ import {
   applyEquipmentEffects, ailmentShieldBlocks,
   executeSkill, extractStatuses, MULTI_HIT_SKILLS, isSelfTargetSkill,
 } from '../pages/Game'
-import { makeEnemy, towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies, DEFAULT_TARGET_MODE, ENEMY_SKILL_POWER } from './tower'
+import { makeEnemy, towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies, DEFAULT_TARGET_MODE, ENEMY_SKILL_POWER, longFightHealMult, LONG_FIGHT_FROM } from './tower'
 // 敵の組み立てとツリー換算は tower.js（純粋データ側）が正。ここから使う側のために再エクスポートする
 export { towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies }
 
@@ -552,6 +552,7 @@ export function simulateTowerBattle({
   }
 
   // 戦闘エリア3の「回復力低下」：生きている敵のうち最も厳しい倍率を採用
+  // ＋ 長期戦の回復阻害（20ターン超から1ターンごとに5%ずつ・40ターンで0）
   function healOutMult() {
     let m = 1
     for (const en of alive()) {
@@ -559,7 +560,7 @@ export function simulateTowerBattle({
       if (v && v < m) m = v
     }
     if (playerBuffs.healBlockRate?.turns > 0) m *= playerBuffs.healBlockRate.rate
-    return m
+    return m * longFightHealMult(turn)
   }
 
   // ============================================================
@@ -895,6 +896,11 @@ const basicAttack = (en) => ({ name: '攻撃', type: en.type === 'magical' ? 'ma
   // ============================================================
   while (playerHp > 0 && alive().length > 0 && turn <= turnCap) {
     pushHp()
+    // 長期戦の回復阻害が始まったことは1回だけ知らせる。
+    // 黙って回復量が落ちると「回復が効かない不具合」に見えるため。
+    if (turn === LONG_FIGHT_FROM + 1) {
+      logs.push({ text: `⏳ 戦いが長引いている… ここから回復量がターンごとに落ちていく！`, color: '#ff8844' })
+    }
     const hpBeforeTurn = playerHp
     if (passiveNames.includes('骸の壁') && (turn === 1 || turn % 4 === 0)) {
       playerBuffs.dmgReduce = { turns: 999, rate: 0.7, isGainoKabe: true }
@@ -981,9 +987,10 @@ const basicAttack = (en) => ({ name: '攻撃', type: en.type === 'magical' ? 'ma
       logs.push({ text: `💚 回復効果でHPが${h}回復した！`, color: '#44ff88' })
     }
     if (!isHealSealed && playerBuffs.delayHeal && turn === playerBuffs.delayHeal.triggerTurn) {
-      playerHp = Math.min(eff.hp_max, playerHp + playerBuffs.delayHeal.amount)
+      const dHeal = Math.floor(playerBuffs.delayHeal.amount * healOutMult())
+      playerHp = Math.min(eff.hp_max, playerHp + dHeal)
       // 出所（装備）は書かない。HPは動くので回復した事象だけ残す
-      logs.push({ text: `💚 HPが${playerBuffs.delayHeal.amount}回復した！`, color: '#44ff88' })
+      logs.push({ text: `💚 HPが${dHeal}回復した！`, color: '#44ff88' })
     }
     // アイテムの自動使用（Game.jsx の出撃と同じ条件）
     if (!isHealSealed && currentItem?.items) {
@@ -1014,7 +1021,8 @@ const basicAttack = (en) => ({ name: '攻撃', type: en.type === 'magical' ? 'ma
       }
       if (canUse) {
         if ((effect === 'hp_pct' || effect === 'hp_pct_infinite') && playerHp / eff.hp_max * 100 <= threshold) {
-          const healAmt = Math.floor(eff.hp_max * currentItem.items.value / 100)
+          // ポーションも長期戦の回復阻害を通す。ここを素通りさせると持久型がここだけで粘れる
+          const healAmt = Math.floor(eff.hp_max * currentItem.items.value / 100 * healOutMult())
           playerHp = Math.min(eff.hp_max, playerHp + healAmt)
           logs.push({ text: `🧪 ${currentItem.items.name}を使用！ HPが${healAmt}回復した！`, color: '#44ff88' })
           if (isInfinite) usedInfinite()
