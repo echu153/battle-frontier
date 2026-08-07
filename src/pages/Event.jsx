@@ -110,6 +110,20 @@ export default function Event() {
     setBusy(null)
   }
 
+  // 達成済み・未受取をまとめて受け取る（サーバー側で1件ずつ独立に付与＝一部失敗しても残りは受け取れる）
+  const claimAll = async () => {
+    if (busy) return
+    setBusy('all'); setErr(null); setMsg(null)
+    const { data, error } = await supabase.rpc('claim_event_rewards_all', { p_event_key: EVENT_KEY })
+    if (error || data?.error) {
+      setErr(data?.error || 'エラーが発生しました')
+    } else {
+      setGotPopup({ items: data.items || [], count: data.count, failed: data.failed || 0 })
+      await init()
+    }
+    setBusy(null)
+  }
+
   const redeem = async (weaponName) => {
     if (busy) return
     setBusy('ticket:' + weaponName); setErr(null); setMsg(null)
@@ -144,6 +158,8 @@ export default function Event() {
   // 次の未達マイルストーン（プログレスバー用）
   const nextReward = rewards.find(r => r.threshold > points)
   const maxThreshold = rewards.length ? rewards[rewards.length - 1].threshold : 2000
+  // 達成済みで未受取の件数（一括受け取りボタン用）
+  const claimableCount = rewards.filter(r => points >= r.threshold && !claimed.has(r.threshold)).length
 
   return (
     <div style={base}>
@@ -180,6 +196,12 @@ export default function Event() {
           <div style={{ color:'#557799', fontSize:'10px', marginTop:'6px' }}>
             {nextReward ? `次の報酬まで あと ${fmt(nextReward.threshold - points)}pt（${nextReward.threshold}pt: ${nextReward.label}）` : '全マイルストーン到達！'}
           </div>
+          {claimableCount > 0 && (
+            <button onClick={claimAll} disabled={!!busy}
+              style={{ width:'100%', marginTop:'12px', padding:'10px', background:'#001a00', border:'1px solid #44ff88', color:'#44ff88', cursor: busy ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'13px', opacity: busy ? 0.5 : 1 }}>
+              {busy === 'all' ? '受け取り中...' : `🎁 未受取の報酬をまとめて受け取る（${claimableCount}件）`}
+            </button>
+          )}
         </div>
 
         {/* 選択券交換 */}
@@ -282,7 +304,26 @@ export default function Event() {
           <div onClick={e => e.stopPropagation()}
             style={{ background:'#0a0c1a', border:'1px solid #ffcc44', padding:'24px', maxWidth:'340px', width:'92%', fontFamily:'monospace', textAlign:'center' }}>
             <div style={{ fontSize:'30px', marginBottom:'8px' }}>🎉</div>
-            <div style={{ color:'#ffcc00', fontSize:'15px', marginBottom:'6px', lineHeight:'1.5' }}>「{gotPopup.name}」を獲得した！</div>
+            {gotPopup.items ? (
+              <>
+                <div style={{ color:'#ffcc00', fontSize:'15px', marginBottom:'8px', lineHeight:'1.5' }}>報酬{gotPopup.count}件を受け取った！</div>
+                <div style={{ maxHeight:'46vh', overflowY:'auto', border:'1px solid #113355', background:'#000a18', padding:'8px 10px', textAlign:'left' }}>
+                  {gotPopup.items.map(it => (
+                    <div key={it.threshold} style={{ fontSize:'11px', lineHeight:'1.8', display:'flex', gap:'8px' }}>
+                      <span style={{ color:'#557799', minWidth:'46px' }}>{it.threshold}pt</span>
+                      <span style={{ color:'#cce0ff' }}>{it.label}</span>
+                    </div>
+                  ))}
+                </div>
+                {gotPopup.failed > 0 && (
+                  <div style={{ color:'#ff8844', fontSize:'11px', marginTop:'8px', lineHeight:'1.6' }}>
+                    {gotPopup.failed}件は受け取れませんでした。未受取のまま残っているので、時間をおいて再度お試しください。
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ color:'#ffcc00', fontSize:'15px', marginBottom:'6px', lineHeight:'1.5' }}>「{gotPopup.name}」を獲得した！</div>
+            )}
             {gotPopup.note && <div style={{ color:'#88ccaa', fontSize:'11px', marginBottom:'4px' }}>{gotPopup.note}</div>}
             <button onClick={() => setGotPopup(null)}
               style={{ width:'100%', marginTop:'14px', padding:'10px', background:'#001a00', border:'1px solid #44ff88', color:'#44ff88', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>OK</button>
