@@ -134,17 +134,22 @@ const getMuseumStat = (name, weaponType, slot) => {
 const getEnhanceTier = (plus) => plus >= 9 ? 2 : plus >= 5 ? 1 : 0
 const TIER_LABELS = ['未強化', '+5以上', '+9以上']
 const TIER_COLORS = ['#88ccff', '#44ff88', '#ffcc00']
-const COMPLETE_BONUS_MULT = [1, 3, 5]
+// コンプリートボーナスの強化ティア倍率（2026-08-08: +5=3→4倍 / +9=5→10倍）
+const COMPLETE_BONUS_MULT = [1, 4, 10]
 
-// 寄贈で付与される能力の全体倍率（寄贈ボーナス・コンプリートボーナス共通）
+// 寄贈ボーナスの全体倍率（コンプリートボーナスには掛からない＝COMPLETE_BONUS_MULT側で完結）
 const MUSEUM_BONUS_MULT = 2
 
+// 強化ティア別の素の値。2026-08-08に +5を2倍・+9を5倍へ引き上げ
+//   通常 [1,2,4]→[1,4,20] / レア [2,3,6]→[2,6,30] / ボス [8,13,20]→[8,26,100]
+// ★変更したら supabase_museum_rebalance_20260808.sql の tier_new / cmult も必ず合わせること
+//   （既存プレイヤーの museum_* はそのSQLで全再計算しているため）
 const getBonusAmount = (name, groupId, enhancePlus) => {
   const tier = getEnhanceTier(enhancePlus)
-  if (BOSS_DROPS.has(name)) return [8, 13, 20][tier] * MUSEUM_BONUS_MULT
-  if (RARE_DROPS.has(name)) return [2, 3, 6][tier] * MUSEUM_BONUS_MULT
+  if (BOSS_DROPS.has(name)) return [8, 26, 100][tier] * MUSEUM_BONUS_MULT
+  if (RARE_DROPS.has(name)) return [2, 6, 30][tier] * MUSEUM_BONUS_MULT
   const mult = MUSEUM_GROUPS.find(g => g.id === groupId)?.areaMultiplier || 1
-  return [1, 2, 4][tier] * mult * MUSEUM_BONUS_MULT
+  return [1, 4, 20][tier] * mult * MUSEUM_BONUS_MULT
 }
 
 const museumCol = (stat) =>
@@ -343,7 +348,7 @@ export default function Museum() {
           <div>
             <div style={{ color:'#446688', fontSize:'11px', marginBottom:'12px', lineHeight:'1.6', background:'#000c1c', border:'1px solid #001428', padding:'8px' }}>
               同名装備は「未強化」「+5以上」「+9以上」の3ティアそれぞれ寄贈可能。<br />
-              強化値が高いほど大きなボーナス。<br />
+              強化値が高いほど大きなボーナス（+9以上は未強化の10倍以上）。<br />
               <span style={{ color:'#ff8844' }}>⚠ 寄贈した装備は消費されます</span>
             </div>
 
