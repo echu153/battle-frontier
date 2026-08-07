@@ -30,7 +30,7 @@ import {
 import {
   calcEvasionRate, calcExtraActionRate, calcCritRate,
   applyEquipmentEffects, ailmentShieldBlocks,
-  executeSkill, extractStatuses, MULTI_HIT_SKILLS,
+  executeSkill, extractStatuses, MULTI_HIT_SKILLS, isSelfTargetSkill,
 } from '../pages/Game'
 import { makeEnemy, towerTreeEffects, applyTreeToStats, buildStageEnemies, buildSortieEnemies, DEFAULT_TARGET_MODE, ENEMY_SKILL_POWER } from './tower'
 // 敵の組み立てとツリー換算は tower.js（純粋データ側）が正。ここから使う側のために再エクスポートする
@@ -313,7 +313,7 @@ export function simulateTowerBattle({
       if (mpLack) logs.push({ text: `💧 MPが足りなくてスキルが使えない！`, color: '#6699ff' })
     }
     const isSureHit = !mpLack && nextSkillName === '絶影狙撃'
-    const isSelfSkill = !mpLack && nextSkill && (nextSkill.type === '強化' || nextSkill.type === '回復')
+    const isSelfSkill = !mpLack && isSelfTargetSkill(nextSkill, playerBuffs)
     const isMultiHitSkill = !mpLack && nextSkill && MULTI_HIT_SKILLS.has(nextSkill.name)
     const skillExtraHit = (nextSkillName === '連装銃撃' && profile.class === '魔銃士' && rtCur >= 2) ? 10 : 0
     const baseEnemyEvasion = Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit)

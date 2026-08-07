@@ -107,6 +107,31 @@ export const RAID_EVENT_END_MS   = Date.UTC(2026, 6, 26, 20, 0, 0) // JST 7/27 0
 // 多段ヒットスキル：行動全体ではなく1発ごとに回避・クリティカル・ダメージ判定する
 export const MULTI_HIT_SKILLS = new Set(['マジックアロー','三連射','メテオストライク','連打','五連殺','飛天三角蹴り','連装銃撃','群れの号令','符術・式打ち'])
 
+// 自分にかけるだけのスキル（executeSkill で敵にダメージも状態異常も与えないもの）。
+//  相手に何も飛ばさない行動なので回避されない＝不発にならない。
+//  ※DBの skills.type が '強化'/'回復' 以外になっている技を拾うための保険。
+//    型だけに頼ると、登録が攻撃扱いのバフ技が相手に「回避」されて不発になる（組み手で発覚）。
+//  executeSkill にバフ技を足したら、ここにも足すこと（selfTargetSkills.test.js が検出する）。
+export const SELF_TARGET_SKILLS = new Set([
+  '防御態勢','応急手当','駆け足','精神統一','ヒール','プロテク','祈祷',
+  '明鏡止水','ブラッティロア','狩猟本能','影歩き','奇跡','祈りの結界','狂信','氷の障壁','残心',
+  '第六感','精神集中','闘争本能','精密照準','強化装填','ギャンブルボディ','オールイン',
+  '魔導剣術','魔剣開放','聖騎士の心得','聖域展開','神聖覚醒','竜鱗の加護','魔力供給','陰陽結界',
+])
+
+// 「自分にかけるだけ」の行動か。true なら回避判定をしない（全戦闘エンジン共通）。
+//  buffs = 使う側のバフ。ウンディーネは3段目だけダメージ0の自己バフ（静水の加護）になる。
+export const isSelfTargetSkill = (skill, buffs = {}) => {
+  if (!skill) return false
+  if (skill.type === '強化' || skill.type === '回復') return true
+  if (SELF_TARGET_SKILLS.has(skill.name)) return true
+  if (skill.name === 'ウンディーネ') {
+    const cnt = buffs.spiritCombo?.name === 'ウンディーネ' ? (buffs.spiritCombo.count || 0) : 0
+    if (cnt >= 2) return true
+  }
+  return false
+}
+
 // 精霊召喚士の精霊召喚スキル（連続使用で 1段目→2段目→3段目 にエスカレート）
 export const SPIRIT_SUMMONS = new Set(['サラマンド','ウンディーネ','シルフ','ノーム','ルミナ','ノクス'])
 
@@ -3236,16 +3261,14 @@ export default function Game() {
       }
       const isSureHit = !mpLack && nextSkillName === '絶影狙撃'
       // バフ・回復スキルは自分にかけるものなので敵に回避されない（MP不足時は通常攻撃なので回避判定あり）
-      const isSelfSkill = !mpLack && nextSkill && (nextSkill.type === '強化' || nextSkill.type === '回復')
+      //  ウンディーネ3段目（静水の加護＝ダメージ0の自己バフ）も isSelfTargetSkill が拾う
+      const isSelfSkill = !mpLack && isSelfTargetSkill(nextSkill, playerBuffs)
       // 多段ヒットスキルは行動全体の回避判定をスキップし、1発ごとに回避判定する
       const isMultiHitSkill = !mpLack && nextSkill && MULTI_HIT_SKILLS.has(nextSkill.name)
-      // ウンディーネ3段目（静水の加護）はダメージ0の自己バフなので回避対象外
-      const isOndoBuff = !mpLack && nextSkill?.name === 'ウンディーネ' &&
-        (playerBuffs.spiritCombo?.name === 'ウンディーネ' ? (playerBuffs.spiritCombo.count || 0) : 0) >= 2
       // 連装銃撃の再修練強化：このスキルの命中+10%
       const skillExtraHit = (nextSkillName === '連装銃撃' && profile.class === '魔銃士' && rtCur >= 2) ? 10 : 0
       const baseEnemyEvasion = Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit) + (enemy.isPapia ? 50 : 0)
-      const effectiveEnemyEvasion = (isSureHit || isSelfSkill || isMultiHitSkill || isOndoBuff) ? 0 : baseEnemyEvasion
+      const effectiveEnemyEvasion = (isSureHit || isSelfSkill || isMultiHitSkill) ? 0 : baseEnemyEvasion
       if (effectiveEnemyEvasion > 0 && Math.random()*100 < effectiveEnemyEvasion) {
         logs.push({ text:`${prefix}${nextSkillName && !mpLack ? `${nextSkillName}！` : '攻撃！'} しかし${enemy.name}に回避された！`, color:'#446688' })
         // 追撃系（鬼影閃の影歩き追撃など）はメインが回避されても独立ヒットとして発動する

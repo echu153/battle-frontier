@@ -22,6 +22,7 @@ import {
   extractStatuses,
   BattleLogLine,
   MULTI_HIT_SKILLS,
+  isSelfTargetSkill,
 } from './Game'
 import {
   TENKYUU_PALACES,
@@ -250,7 +251,7 @@ function simulateTenkyuuBattle(effRaw, equipment, skillSets, profileRaw, enemy, 
     }
     const isSureHit = !mpLack && nextSkillName === '絶影狙撃'
     // バフ・回復スキルは自分にかけるものなので敵に回避されない（MP不足時は通常攻撃なので回避判定あり）
-    const isSelfSkill = !mpLack && nextSkill && (nextSkill.type === '強化' || nextSkill.type === '回復')
+    const isSelfSkill = !mpLack && isSelfTargetSkill(nextSkill, playerBuffs)
     // 多段ヒットスキルは行動全体の回避判定をスキップし、1発ごとに回避判定する
     const isMultiHitSkill = !mpLack && nextSkill && MULTI_HIT_SKILLS.has(nextSkill.name)
     const skillExtraHit = (nextSkillName === '連装銃撃' && profile.class === '魔銃士' && rtCur >= 2) ? 10 : 0

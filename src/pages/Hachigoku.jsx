@@ -22,6 +22,7 @@ import {
   extractStatuses,
   BattleLogLine,
   MULTI_HIT_SKILLS,
+  isSelfTargetSkill,
 } from './Game'
 import { HACHIGOKU_HELLS, HACHIGOKU_DIFFICULTIES, HACHIGOKU_DAILY_WINS, HACHIGOKU_DMG_COMPRESS, makeHachigokuEnemy, isHachigokuUnlocked } from '../lib/hachigoku'
 import { EMBLEM_CRYSTALS } from '../lib/emblem'
@@ -187,7 +188,7 @@ export function simulateHachigokuBattle(eff, equipment, skillSets, profile, enem
       if (mpLack) logs.push({ text:`💧 MPが足りなくてスキルが使えない！`, color:'#6699ff' })
     }
     const isSureHit = !mpLack && nextSkillName === '絶影狙撃'
-    const isSelfSkill = !mpLack && nextSkill && (nextSkill.type === '強化' || nextSkill.type === '回復')
+    const isSelfSkill = !mpLack && isSelfTargetSkill(nextSkill, playerBuffs)
     const isMultiHitSkill = !mpLack && nextSkill && MULTI_HIT_SKILLS.has(nextSkill.name)
     const skillExtraHit = (nextSkillName === '連装銃撃' && profile.class === '魔銃士' && rtCur >= 2) ? 10 : 0
     const baseEnemyEvasion = Math.max(0, enemyEvasionRate - playerHitBonus - buffHitBonus - skillExtraHit)

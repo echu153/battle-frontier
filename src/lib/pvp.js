@@ -33,6 +33,7 @@ import {
   executeSkill,
   extractStatuses,
   MULTI_HIT_SKILLS,
+  isSelfTargetSkill,
 } from '../pages/Game'
 
 const PVP = {
@@ -270,7 +271,7 @@ function doAttack(att, def, isExtra, ctx) {
     if (mpLack) logs.push({ text: `💧 ${profile.username}はMPが足りなくてスキルが使えない！`, color: '#6699ff' })
   }
   const isSureHit = !mpLack && nextSkillName === '絶影狙撃'
-  const isSelfSkill = !mpLack && nextSkill && (nextSkill.type === '強化' || nextSkill.type === '回復')
+  const isSelfSkill = !mpLack && isSelfTargetSkill(nextSkill, attBuffs)
   const isMultiHitSkill = !mpLack && nextSkill && MULTI_HIT_SKILLS.has(nextSkill.name)
   const skillExtraHit = (nextSkillName === '連装銃撃' && profile.class === '魔銃士' && att.rtCur >= 2) ? 10 : 0
   const baseDefEvasion = Math.max(0, defEvasion - att.playerHitBonus - buffHitBonus - skillExtraHit)
