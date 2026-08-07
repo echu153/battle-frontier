@@ -1789,7 +1789,6 @@ export default function Game() {
   const [selectedArea, setSelectedArea] = useState(() => Number(localStorage.getItem('selectedArea') || 1))
   // 領地：自国のエリア別シェア（装備ドロップ率ボーナス用）。{ areaId: 0..1 }
   const [areaShareMap, setAreaShareMap] = useState({})
-  const [regenRemaining, setRegenRemaining] = useState(0)
   const [equipment, setEquipment] = useState([])
   const [proficiency, setProficiency] = useState([])
   const [classLevels, setClassLevels] = useState([])
@@ -1940,7 +1939,6 @@ export default function Game() {
   const clockOffsetRef = useRef(0)  // サーバー時刻 - 端末時刻(ms)。クールダウンのズレ補正用
   const serverNow = () => Date.now() + clockOffsetRef.current
   const lastRemTickRef = useRef(-1)    // 出撃CD表示の前回tick(0.1秒単位)。再描画抑制用
-  const lastRegenSecRef = useRef(-1)   // 自然回復表示の前回秒。再描画抑制用
   // クールダウン終了時刻（端末時計基準の相対値）。サーバーの成功/残り秒数レスポンスから設定するため
   // 時計のズレ・オフセット推定誤差の影響を受けない。null の間は last_action_at から計算（初期表示用）
   const cdEndRef = useRef(null)
@@ -2023,15 +2021,9 @@ export default function Game() {
         lastRemTickRef.current = remTick
         setRemaining(rem)
       }
+      // 自然回復は街に表示しない（戦闘は常に全回復スタート）が、戦争はHPを街と共有するので処理は残す
       const regenElapsed = (Date.now()-new Date(profile.last_regen_at).getTime())/1000
-      const regenRem = Math.max(0, REGEN_SECONDS-regenElapsed)
-      // 自然回復は整数秒表示なので、秒が変わった時だけ更新（常時5回/秒の再描画を防ぐ）
-      const regenSec = Math.ceil(regenRem)
-      if (regenSec !== lastRegenSecRef.current) {
-        lastRegenSecRef.current = regenSec
-        setRegenRemaining(regenRem)
-      }
-      if (regenRem === 0) doRegen()
+      if (regenElapsed >= REGEN_SECONDS) doRegen()
     }, 200)
     return () => clearInterval(id)
   }, [profile])
@@ -5608,12 +5600,10 @@ export default function Game() {
   })() : null
   // ★宿屋廃止: HPは戦闘ごとに全回復するので瀕死で出撃を止めない
   const canBattle = !isBanned && !atWar
-  const hpPct = Math.min(100,(hpCurrent/hpMaxDisp)*100)
-  const mpPct = Math.min(100,(mpCurrent/mpMaxEff)*100)
+  // ★宿屋廃止(0e77af8)でHP/MPは戦闘ごとに全回復するため、街のHP/MPはバーをやめて数値だけ表示にした
   const expPct = Math.min(100,(profile.exp/profile.exp_next)*100)
   const _waitSecs = effWait(profile, serverNow())
   const timerPct = ((_waitSecs-remaining)/_waitSecs)*100
-  const regenPct = ((REGEN_SECONDS-regenRemaining)/REGEN_SECONDS)*100
   const unlockedAreas = profile.unlocked_areas||[1]
   const availableAreas = AREAS.filter(a=>unlockedAreas.includes(a.id))
   // デイリーダンジョン：全種使い切ったらパネル自体を開けない／残り合計
@@ -6090,16 +6080,10 @@ export default function Game() {
                 <span>⚔ 戦争中</span><span style={{ color:'#cc8866', fontSize:'10px' }}>HP上限 +{WAR_HP_BONUS.toLocaleString()}（満タン参戦）</span>
               </div>
             )}
-            <MiniBar label="HP" val={`${hpCurrent}/${hpMaxDisp}`} pct={hpPct} color={isDying?'#ff2200':(atWar?'#ff6644':'#00cc44')} />
-            <MiniBar label="MP" val={`${mpCurrent}/${mpMaxEff}`} pct={mpPct} color="#4488ff" />
+            <StatValue label="HP" val={`${hpCurrent}/${hpMaxDisp}`} color={isDying?'#ff2200':(atWar?'#ff6644':'#00cc44')} size="10px" />
+            <StatValue label="MP" val={`${mpCurrent}/${mpMaxEff}`} color="#4488ff" size="10px" />
             {statExpanded && (<>
               <MiniBar label="EXP" val={`${profile.exp}/${profile.exp_next}`} pct={expPct} color="#cc8800" />
-              <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#446688', marginBottom:'2px' }}>
-                <span>自然回復</span><span style={{color:'#44ccff'}}>{regenRemaining>0?`${Math.ceil(regenRemaining)}秒`:'回復中...'}</span>
-              </div>
-              <div style={{ background:'#001028', height:'3px', border:'1px solid #002244', marginBottom:'8px' }}>
-                <div style={{ height:'100%', width:`${regenPct}%`, background:'linear-gradient(90deg,#003333,#44ccff)' }} />
-              </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'2px', fontSize:'10px', marginBottom:'6px' }}>
                 <StatMini label="攻撃" base={eff.atk  - eff.bonus.atk}  bonus={eff.bonus.atk}  color="#ffcc00" type="atk" />
                 <StatMini label="防御" base={eff.def  - eff.bonus.def}  bonus={eff.bonus.def}  color="#88aaff" type="def" />
@@ -6645,8 +6629,8 @@ export default function Game() {
                 <span>⚔ 戦争中</span><span style={{ color:'#cc8866', fontSize:'10px' }}>HP上限 +{WAR_HP_BONUS.toLocaleString()}（満タン参戦）</span>
               </div>
             )}
-            <StatBar label="HP" val={`${hpCurrent}/${hpMaxDisp}`} pct={hpPct} color={isDying?'#ff2200':(atWar?'#ff6644':'#00cc44')} />
-            <StatBar label="MP" val={`${mpCurrent}/${mpMaxEff}`} pct={mpPct} color="#4488ff" />
+            <StatValue label="HP" val={`${hpCurrent}/${hpMaxDisp}`} color={isDying?'#ff2200':(atWar?'#ff6644':'#00cc44')} />
+            <StatValue label="MP" val={`${mpCurrent}/${mpMaxEff}`} color="#4488ff" />
             {statExpanded && (<>
               <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginTop:'6px' }}>
                 <span>EXP</span><span style={{color:'#cc8800'}}>{profile.exp}/{profile.exp_next}</span>
@@ -6654,14 +6638,7 @@ export default function Game() {
               <div style={{ background:'#001028', height:'5px', border:'1px solid #002244', marginBottom:'4px' }}>
                 <div style={{ height:'100%', width:`${expPct}%`, background:'linear-gradient(90deg,#331100,#cc8800)', transition:'width 0.4s' }} />
               </div>
-              <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginBottom:'2px' }}>
-                <span>自然回復まで</span>
-                <span style={{color:'#44ccff'}}>{regenRemaining>0?`${Math.ceil(regenRemaining)}秒`:'回復中...'}</span>
-              </div>
-              <div style={{ background:'#001028', height:'4px', border:'1px solid #002244', marginBottom:'8px' }}>
-                <div style={{ height:'100%', width:`${regenPct}%`, background:'linear-gradient(90deg,#003333,#44ccff)', transition:'width 0.2s' }} />
-              </div>
-              <div style={{ fontSize:'11px', display:'grid', gridTemplateColumns:'1fr', gap:'2px', color:'#446688', marginBottom:'8px' }}>
+              <div style={{ fontSize:'11px', display:'grid', gridTemplateColumns:'1fr', gap:'2px', color:'#446688', marginTop:'6px', marginBottom:'8px' }}>
                 <StatLine label="攻撃力"     base={eff.atk  - eff.bonus.atk}  bonus={eff.bonus.atk}  color="#ffcc00" statType="atk" />
                 <StatLine label="防御力"     base={eff.def  - eff.bonus.def}  bonus={eff.bonus.def}  color="#88aaff" statType="def" />
                 <StatLine label="特殊攻撃力" base={eff.matk - eff.bonus.matk} bonus={eff.bonus.matk} color="#cc44ff" statType="matk" />
@@ -7018,16 +6995,12 @@ export default function Game() {
 // ============================================================
 // サブコンポーネント
 // ============================================================
-function StatBar({ label, val, pct, color }) {
+// HP/MPの数値のみ表示（宿屋廃止＝戦闘は常に全回復スタートのため、街ではバーを出さない）
+function StatValue({ label, val, color, size = '11px' }) {
   return (
-    <>
-      <div style={{ fontSize:'11px', display:'flex', justifyContent:'space-between', color:'#446688', marginBottom:'2px' }}>
-        <span>{label}</span><span style={{color}}>{val}</span>
-      </div>
-      <div style={{ background:'#001028', height:'5px', border:'1px solid #002244', marginBottom:'4px' }}>
-        <div style={{ height:'100%', width:`${pct}%`, background:`linear-gradient(90deg,#001,${color})` }} />
-      </div>
-    </>
+    <div style={{ fontSize:size, display:'flex', justifyContent:'space-between', color:'#446688', marginBottom:'4px' }}>
+      <span>{label}</span><span style={{ color, fontWeight:'bold' }}>{val}</span>
+    </div>
   )
 }
 
