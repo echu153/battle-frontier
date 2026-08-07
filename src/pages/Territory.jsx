@@ -15,8 +15,8 @@ import { petPlayerBonus } from '../constants/pets'
 import { loadCharmBonus, loadCharmBonusMap, PET_STAT_SELECT } from '../lib/petBonus'
 import {
   FOUND_MIN_CHARLV, MAX_COUNTRIES, rankOrder, rankProgress,
-  EXPAND_COOLDOWN_MS, fmtRemain, REGIONS,
-  AREA_META, computeAreaControl, rankColor,
+  EXPAND_COOLDOWN_MS, MODE_CHANGE_COOLDOWN_MS, fmtRemain, REGIONS,
+  AREA_META, computeAreaControl, rankColor, expandGain, autoExpandGain,
 } from '../lib/territory'
 import { useConfirm } from '../components/ConfirmModal'
 
@@ -142,9 +142,10 @@ export default function Territory() {
     const p = fresh || prof
     setMe(p)
     setPower(await computePower(p))
-    // 出撃エリアの初期選択（解放済みエリアの先頭）
+    // 出撃エリアの初期選択（保存済みエリア → 直前の選択 → 解放済みエリアの先頭）
     const unlocked = (p.unlocked_areas && p.unlocked_areas.length ? p.unlocked_areas : [1])
-    setExpandArea(prev => (prev && unlocked.includes(prev)) ? prev : unlocked[0])
+    const saved = (p.expand_area && unlocked.includes(p.expand_area)) ? p.expand_area : null
+    setExpandArea(prev => saved || ((prev && unlocked.includes(prev)) ? prev : unlocked[0]))
     offsetRef.current = 0
   }
 
@@ -236,6 +237,41 @@ export default function Territory() {
     if (error) { flash(`保存失敗: ${error.message}`, '#ff5555'); return }
     setDescEdit(false)
     flash('国の説明を更新しました')
+    await reload()
+  }
+
+  // 拡大方法（'manual'=このページで満額 / 'auto'=ホーム画面で1/10量を自動）。変更は7日に1回。
+  const expandMode = me?.expand_mode === 'auto' ? 'auto' : 'manual'
+  const modeChanged = me?.expand_mode_changed_at ? new Date(me.expand_mode_changed_at).getTime() : 0
+  const modeRemain = me?.is_admin ? 0 : Math.max(0, modeChanged + MODE_CHANGE_COOLDOWN_MS - Date.now())
+
+  // 自動拡大の対象エリアをサーバーに保存（未適用環境ではローカル選択のみ）
+  const pickArea = async (id) => {
+    setExpandArea(id)
+    await supabase.rpc('set_expand_area', { p_area: id })
+  }
+
+  const doSetMode = async (mode) => {
+    if (busy || mode === expandMode) return
+    const ok = await askConfirm(
+      mode === 'auto'
+        ? '拡大方法を「自動」に変更しますか？\nホーム画面を開いている間、選んだエリアの領地を1時間ごとに自動で広げます（獲得量は手動の10分の1）。\n※次に変更できるのは7日後です。'
+        : '拡大方法を「手動」に変更しますか？\nこのページのボタンで満額の領地拡大ができるようになります（自動拡大は止まります）。\n※次に変更できるのは7日後です。',
+      { okLabel: '変更する' })
+    if (!ok) return
+    setBusy(true)
+    const { data, error } = await supabase.rpc('set_expand_mode', { p_mode: mode })
+    if (error || data?.ok === false) {
+      setBusy(false)
+      flash(data?.reason === 'cooldown'
+        ? `拡大方法の変更は7日に1回です（次に変更できるまで 残り ${fmtRemain(new Date(data.next_at).getTime() - Date.now())}）`
+        : `変更失敗: ${error?.message || data?.reason || '不明'}`, '#ff5555')
+      return
+    }
+    // 自動にした時点の選択エリアを保存（未選択のまま自動が動かないようにする）
+    if (mode === 'auto' && expandArea) await supabase.rpc('set_expand_area', { p_area: expandArea })
+    setBusy(false)
+    flash(mode === 'auto' ? '🤖 拡大方法を「自動」にしました（ホーム画面で自動拡大されます）' : '✋ 拡大方法を「手動」にしました')
     await reload()
   }
 
@@ -385,6 +421,7 @@ export default function Territory() {
                     <div style={{ color:'#ffcc44', fontSize:'12px', marginBottom:'4px' }}>💰 本日の補助金</div>
                     <div style={{ color:'#88774a', fontSize:'10px', marginBottom:'6px', lineHeight:'1.6' }}>
                       貢献度に応じて1日1回Goldを受け取れます（上限20万G・朝5時リセット）。<br/>
+                      ホーム画面を開くと自動で受け取ります（ここからでも受け取れます）。<br/>
                       本日受け取れる額: <b style={{ color:'#ffe' }}>{amount.toLocaleString('ja-JP')}G</b>
                     </div>
                     <button onClick={doClaimSubsidy} disabled={!canClaim}
@@ -403,13 +440,40 @@ export default function Territory() {
               <div style={{ color:'#bbaa77', fontSize:'11px', marginBottom:'8px' }}>
                 出撃エリアを選んで拡大すると、そのエリアの領地が増えます。国の総領地と貢献度にも同量加算されます。
               </div>
-              {/* エリア選択（全7エリア。未到達は「？？？」で選択不可） */}
+
+              {/* 拡大方法（手動＝満額を自分で／自動＝ホーム画面で1/10量。変更は7日に1回） */}
+              <div style={{ marginBottom:'10px', padding:'8px', background:'#0a0700', border:'1px solid #4a3a1a', borderRadius:'2px' }}>
+                <div style={{ color:'#ffcc44', fontSize:'11px', marginBottom:'5px' }}>⚙ 拡大方法（変更は7日に1回）</div>
+                <div style={{ display:'flex', gap:'6px', marginBottom:'6px' }}>
+                  {[['manual','✋ 手動','このページで満額'],['auto','🤖 自動','ホームで自動・1/10量']].map(([k, lbl, sub]) => {
+                    const sel = expandMode === k
+                    const dis = busy || sel || modeRemain > 0
+                    return (
+                      <button key={k} disabled={dis} onClick={() => doSetMode(k)}
+                        style={{ flex:1, padding:'6px', fontFamily:'monospace', cursor: dis ? 'default' : 'pointer',
+                          background: sel ? '#2a1e02' : '#020100', border:`1px solid ${sel ? '#ffcc44' : '#4a3a1a'}`,
+                          color: sel ? '#ffcc44' : (modeRemain > 0 ? '#5a4a2a' : '#bbaa77') }}>
+                        <div style={{ fontSize:'12px' }}>{lbl}</div>
+                        <div style={{ fontSize:'9px', marginTop:'2px' }}>{sub}</div>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div style={{ color:'#88774a', fontSize:'10px', lineHeight:'1.6' }}>
+                  {expandMode === 'auto'
+                    ? <>ホーム画面を開いている間、クールダウンが明けるたびに下で選んだエリアの領地を自動で広げます（1回あたり約 <b style={{ color:'#ffe' }}>{autoExpandGain(power)}</b>）。</>
+                    : <>下のボタンを押して自分で広げます（1回あたり約 <b style={{ color:'#ffe' }}>{expandGain(power)}</b>）。</>}
+                  {modeRemain > 0 && <><br/>次に拡大方法を変更できるまで 残り {fmtRemain(modeRemain)}</>}
+                </div>
+              </div>
+
+              {/* エリア選択（全8エリア。未到達は「？？？」で選択不可。自動拡大の対象にもなる） */}
               <div style={{ display:'flex', flexWrap:'wrap', gap:'5px', marginBottom:'8px' }}>
                 {AREA_META.map(a => {
                   const unlocked = myUnlockedSet.has(a.id)
                   const sel = expandArea === a.id
                   return (
-                    <button key={a.id} disabled={!unlocked} onClick={() => unlocked && setExpandArea(a.id)}
+                    <button key={a.id} disabled={!unlocked} onClick={() => unlocked && pickArea(a.id)}
                       style={{ padding:'5px 8px', fontFamily:'monospace', fontSize:'11px', cursor: unlocked ? 'pointer' : 'default', textAlign:'left',
                         background: sel ? '#2a1e02' : '#020100', border:`1px solid ${sel ? '#ffcc44' : '#4a3a1a'}`, color: !unlocked ? '#5a4a2a' : (sel ? '#ffcc44' : '#bbaa77') }}>
                       {areaLabel(a.id)}
@@ -417,16 +481,29 @@ export default function Territory() {
                   )
                 })}
               </div>
-              <button disabled={busy || locked || expandRemain > 0 || !expandArea} onClick={doExpand}
-                style={{ padding:'8px 16px', fontFamily:'monospace', fontSize:'13px', cursor: (busy || locked || expandRemain > 0 || !expandArea) ? 'default' : 'pointer',
-                  background: (locked || expandRemain > 0) ? '#1a1200' : '#2a1e02', border:`1px solid ${(locked || expandRemain > 0) ? '#403010' : '#ffcc44'}`,
-                  color: (locked || expandRemain > 0) ? '#88774a' : '#ffcc44' }}>
-                {locked
-                  ? `亡命ロック中 残り ${fmtRemain(lockRemain)}`
-                  : expandRemain > 0
-                    ? `クールダウン中 残り ${fmtRemain(expandRemain)}`
-                    : `${areaLabel(expandArea)}の領地を広げる`}
-              </button>
+              {(() => {
+                const isAuto = expandMode === 'auto'
+                const dis = busy || isAuto || locked || expandRemain > 0 || !expandArea
+                const off = isAuto || locked || expandRemain > 0
+                return (
+                  <button disabled={dis} onClick={doExpand}
+                    style={{ padding:'8px 16px', fontFamily:'monospace', fontSize:'13px', cursor: dis ? 'default' : 'pointer',
+                      background: off ? '#1a1200' : '#2a1e02', border:`1px solid ${off ? '#403010' : '#ffcc44'}`,
+                      color: off ? '#88774a' : '#ffcc44' }}>
+                    {isAuto
+                      ? `🤖 自動拡大モード中（${areaLabel(expandArea)}）　` + (locked
+                          ? `亡命ロック中 残り ${fmtRemain(lockRemain)}`
+                          : expandRemain > 0
+                            ? `次の自動拡大まで ${fmtRemain(expandRemain)}`
+                            : 'ホーム画面を開くと拡大されます')
+                      : locked
+                        ? `亡命ロック中 残り ${fmtRemain(lockRemain)}`
+                        : expandRemain > 0
+                          ? `クールダウン中 残り ${fmtRemain(expandRemain)}`
+                          : `${areaLabel(expandArea)}の領地を広げる`}
+                  </button>
+                )
+              })()}
               {expandMsg && (
                 <div style={{ color:expandMsg.c, fontSize:'12px', marginTop:'8px', border:`1px solid ${expandMsg.c}55`, background:'#0a0700', padding:'6px 10px', borderRadius:'2px' }}>{expandMsg.t}</div>
               )}

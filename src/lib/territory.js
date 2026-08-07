@@ -78,6 +78,14 @@ export const expandGain = (power) => {
   return Math.floor(10 + p / 20)
 }
 
+// 領地拡大の方法。'manual'=領地ページのボタンで満額 / 'auto'=ホーム画面で自動（1/10量）。
+// 変更は7日に1回（SQL set_expand_mode と一致）。
+export const EXPAND_MODES = ['manual', 'auto']
+export const AUTO_EXPAND_DIVISOR = 10                              // 自動拡大の効率（手動の1/10）
+export const MODE_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000     // 拡大方法の変更CD: 7日
+// 自動拡大1回の獲得量の目安（乱数0.9〜1.1倍の中央値。SQL auto_expand_territory と一致）
+export const autoExpandGain = (power) => Math.max(1, Math.floor(expandGain(power) / AUTO_EXPAND_DIVISOR))
+
 // 出撃エリア(1〜7)。Game.jsx の AREAS と id/名前を一致させること。
 // 領地拡大時にエリアを選び、そのエリアの領地が増える。
 export const AREA_META = [

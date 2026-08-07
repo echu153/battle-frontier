@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 // public/ 配下の安定URL参照（ハッシュ付きバンドルだとデプロイ後にキャッシュ不整合で404→画像が出ないため）
 const papiaIcon = '/papia.png'
-import { GEM_DATA, GEM_TYPES, calcDefReduction, calcEffectiveStats } from '../lib/stats'
+import { GEM_DATA, GEM_TYPES, calcDefReduction, calcEffectiveStats, calcEffectiveTotal } from '../lib/stats'
 import { evoOnHit, evoTakenMult, evoResistNewAilments } from '../lib/evoCombat'
 import { emblemDmgMult, emblemDrainAmount, emblemDotMult, emblemResistNewAilments, emblemBlocksAilment } from '../lib/emblemCombat'
 import { petPlayerBonus, petStats } from '../constants/pets'
@@ -13,7 +13,7 @@ import { reportDevAccess } from '../lib/devAccess'
 import { isHachigokuUnlocked, HACHIGOKU_DAILY_WINS } from '../lib/hachigoku'
 import { isTowerUnlocked } from '../lib/tower'
 import { isEvent20260720Active } from '../lib/event20260720'
-import { myAreaShares, dropBonusPP, EXPAND_COOLDOWN_MS, rankColor } from '../lib/territory'
+import { myAreaShares, dropBonusPP, EXPAND_COOLDOWN_MS, rankColor, AREA_META } from '../lib/territory'
 import { richSegments, RICH } from '../lib/battleLogRich'
 import AIAssistant from '../components/AIAssistant'
 import RaidNotify from '../components/RaidNotify'
@@ -1856,7 +1856,11 @@ export default function Game() {
   const [alchemyEmpty, setAlchemyEmpty] = useState(0)        // 錬金部屋の空き枠数（街のバナー表示用・is_admin限定先行）
   const [territoryExpandable, setTerritoryExpandable] = useState(false)  // 領地拡大が可能か（街のバナー表示用・is_admin限定先行）
   const [boxAvailable, setBoxAvailable] = useState(0)        // ボス装備進化支援箱の所持数（街のバナー表示用）
-  const [subsidyAvailable, setSubsidyAvailable] = useState(false)  // 国の補助金が未受取か（街のバナー表示用）
+  const [autoNotices, setAutoNotices] = useState([])         // 領地の自動処理（補助金受け取り・自動拡大）の結果通知（街のバナー表示用）
+  const powerRef = useRef(0)                                 // 総合力（自動拡大でサーバーへ渡す）
+  const autoTerritoryBusyRef = useRef(false)                 // 領地の自動処理の多重発火ガード
+  // 同じ文言は重ねない。10件で打ち止め（連続ログイン等での積み上がり防止）。
+  const pushAutoNotice = (t) => setAutoNotices(list => (list.includes(t) ? list : [...list, t].slice(-10)))
   const [bingoClaimable, setBingoClaimable] = useState(0)   // 初心者ビンゴで受け取れる報酬(マス/ライン)の件数（街のバナー表示用・is_admin限定先行）
   const [hachigokuWinsLeft, setHachigokuWinsLeft] = useState(0)   // 八獄の本日残り挑戦回数（街バナー用。挑戦権あり＆未消化で表示）
   const [gifts, setGifts] = useState([])            // 未受取のプレゼント（街バナー＋受け取りモーダル用）
@@ -2211,11 +2215,11 @@ export default function Game() {
         if (!error && c) {
           setMyCountryName(c.name || '')
           const affiliated = !c.is_unaffiliated
-          setTerritoryExpandable(affiliated && Date.now() >= lastExpand + EXPAND_COOLDOWN_MS && Date.now() >= lockUntil)
-          // 補助金バナー: 加盟国＋貢献度>0＋本日(朝5時JST境界)未受取
-          const subsidyDay = new Date(Date.now() + 9*3600*1000 - 5*3600*1000).toISOString().slice(0, 10)
-          const subAmt = Math.min(Math.max(Math.floor(prof.country_contrib || 0), 0), 200000)
-          setSubsidyAvailable(affiliated && subAmt > 0 && prof.subsidy_claimed_day !== subsidyDay)
+          // 拡大バナーは手動モードのみ（自動モードはここで勝手に拡大するので案内不要）
+          setTerritoryExpandable(affiliated && prof.expand_mode !== 'auto'
+            && Date.now() >= lastExpand + EXPAND_COOLDOWN_MS && Date.now() >= lockUntil)
+          // 補助金の自動受け取り／自動モードの領地拡大
+          await runAutoTerritory(prof, affiliated)
         }
       } catch { /* 領地未導入/通信失敗時は既存表示を維持（国名を消さない） */ }
       // 自国が交戦中(active)か。戦争中はホームのHP/MPを戦争用表示(上限+10000)に切替。
@@ -2227,7 +2231,7 @@ export default function Game() {
         setAtWar(!!(w && w.length))
         setActiveWarId(w?.[0]?.id || null)
       } catch { /* 戦争SQL未適用なら無視 */ setAtWar(false); setActiveWarId(null) }
-    } else { setTerritoryExpandable(false); setMyCountryName(''); setAtWar(false); setActiveWarId(null); setSubsidyAvailable(false) }
+    } else { setTerritoryExpandable(false); setMyCountryName(''); setAtWar(false); setActiveWarId(null) }
     // かかし修練: 中(training)/完了(done・受取待ち)をバナー用に判定
     try {
       const { data: sc } = await supabase.from('scarecrow_sessions').select('ends_at').eq('player_id', prof.id).eq('status', 'active').maybeSingle()
@@ -2270,6 +2274,48 @@ export default function Game() {
     const id = setInterval(() => refreshTownNotices(profile), 60000)
     return () => clearInterval(id)
   }, [profile?.id, profile?.is_admin, profile?.country_id, profile?.last_expand_at, profile?.territory_locked_until])
+
+  // 総合力（装備・熟練度・称号・ペット込み）。領地の自動拡大でサーバーへ渡すため常に最新を保持する。
+  useEffect(() => {
+    if (!profile) return
+    try { powerRef.current = calcEffectiveTotal(profile, equipment, proficiency, abilityTitle) } catch { /* 計算不能時は前回値を据え置き */ }
+  }, [profile, equipment, proficiency, abilityTitle])
+
+  // 領地の自動処理（ホームを開いている間だけ動く）
+  //   ①本日の補助金: 未受取なら自動で受け取る（サーバーで1日1回・朝5時JSTリセットを判定）
+  //   ②自動拡大モード: 拡大クールダウン明けなら、領地ページで選んだエリアを1/10効率で自動拡大
+  //   いずれも上限判定はサーバー(RPC)が権威。ここのチェックは無駄打ちを減らすためだけのもの。
+  const runAutoTerritory = async (prof, affiliated) => {
+    if (!affiliated || autoTerritoryBusyRef.current) return
+    autoTerritoryBusyRef.current = true
+    try {
+      let changed = false
+      const subsidyDay = new Date(Date.now() + 9*3600*1000 - 5*3600*1000).toISOString().slice(0, 10)
+      const subAmt = Math.min(Math.max(Math.floor(prof.country_contrib || 0), 0), 200000)
+      if (subAmt > 0 && prof.subsidy_claimed_day !== subsidyDay) {
+        const { data } = await supabase.rpc('claim_country_subsidy')
+        if (data?.ok !== false && Number(data?.amount) > 0) {
+          pushAutoNotice(`💰 本日の補助金 ${Number(data.amount).toLocaleString('ja-JP')}G を受け取りました`)
+          changed = true
+        }
+      }
+      const lastExpand = prof.last_expand_at ? new Date(prof.last_expand_at).getTime() : 0
+      const lockUntil = prof.territory_locked_until ? new Date(prof.territory_locked_until).getTime() : 0
+      const power = powerRef.current || 0
+      // power未算出(0)のうちは呼ばない。獲得量が総合力依存のため、少ない量でCDを消費させない。
+      if (prof.expand_mode === 'auto' && power > 0
+          && Date.now() >= lastExpand + EXPAND_COOLDOWN_MS && Date.now() >= lockUntil) {
+        const { data } = await supabase.rpc('auto_expand_territory', { p_power: power })
+        if (data?.ok && Number(data.gain) > 0) {
+          const an = AREA_META.find(a => a.id === data.area)?.name || `エリア${data.area}`
+          pushAutoNotice(`🗺 ${an}の領地を ${Number(data.gain).toLocaleString('ja-JP')} 広げました（自動拡大）`)
+          changed = true
+        }
+      }
+      if (changed) await fetchProfile()
+    } catch { /* 領地SQL未適用・通信失敗時は次回の再計算で再試行 */ }
+    finally { autoTerritoryBusyRef.current = false }
+  }
 
   // 満タン参戦: 交戦中(active)を検知したら war_self_buff RPC を呼ぶ（サーバー権威・1戦争1回・冪等）。
   // 実効最大HP(装備込み)を渡し、war_participants.hp_maxを実効値へ自己上書き＋現在HPを戦争上限へ満タン化。
@@ -6001,11 +6047,13 @@ export default function Game() {
               🎣 釣り中… → 釣り場へ
             </button>
           )}
-          {subsidyAvailable && (
-            <button onClick={()=>nav('/territory')} style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
-              💰 本日の補助金を受け取れます → 領地へ
+          {/* 領地の自動処理の結果（補助金の自動受け取り・自動拡大）。タップで消える */}
+          {autoNotices.map(t => (
+            <button key={t} onClick={()=>setAutoNotices(l => l.filter(x => x !== t))}
+              style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>
+              {t}　<span style={{ color:'#88774a', fontSize:'10px' }}>（タップで閉じる）</span>
             </button>
-          )}
+          ))}
           <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', marginBottom:'8px' }}>
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
               {profile.avatar_url && <img src={profile.avatar_url} alt="avatar" style={{ width: NEW_UI ? '76px' : '48px', height: NEW_UI ? '76px' : '48px', objectFit:'cover', flexShrink:0 }} />}
@@ -6559,11 +6607,13 @@ export default function Game() {
             🎣 釣り中… → 釣り場へ
           </button>
         )}
-        {subsidyAvailable && (
-          <button onClick={()=>nav('/territory')} style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>
-            💰 本日の補助金を受け取れます → 領地へ
+        {/* 領地の自動処理の結果（補助金の自動受け取り・自動拡大）。クリックで消える */}
+        {autoNotices.map(t => (
+          <button key={t} onClick={()=>setAutoNotices(l => l.filter(x => x !== t))}
+            style={{ width:'100%', padding:'8px', marginBottom:'12px', background:'#1a1400', border:'1px solid #ffcc44', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>
+            {t}　<span style={{ color:'#88774a', fontSize:'10px' }}>（クリックで閉じる）</span>
           </button>
-        )}
+        ))}
 
         <div style={{ display:'grid', gridTemplateColumns:'220px 1fr', gap:'12px' }}>
           <div style={{ border:`1px solid ${isDying?'#660000':'#0044aa'}`, background:'#001040', padding:'10px', alignSelf:'start' }}>
