@@ -957,17 +957,26 @@ const basicAttack = (en) => ({ name: '攻撃', type: en.type === 'magical' ? 'ma
       logs.push({ text: `☠ 毒ダメージ！ あなたに${d}ダメージ！`, color: '#44ff44' })
       if (playerHp <= 0) break
     }
-    // 毒沼（戦闘エリア3・戦闘エリア9の蛇）：生きている敵のうち最も強い割合を採用
+    // 毎ターンの割合ダメージ（最大HPの一定割合・防御では止まらない）
+    //  生きている敵のうち最も強い割合を採用する。呼び名は敵ごとに変えられる
+    //  （3層=毒沼／9層の蛇=毒沼／5層以降のエリアボス=層ごとの名前）。
     {
-      let field = 0
+      let field = 0, fName = '毒沼', fIcon = '🟢', fColor = '#66cc44'
       for (const en of alive()) {
-        field = Math.max(field, en.mods?.poisonField || 0, currentPhase(en)?.poisonField || 0)
+        const ph = currentPhase(en)
+        const v = Math.max(en.mods?.poisonField || 0, ph?.poisonField || 0)
+        if (v > field) {
+          field = v
+          fName = ph?.fieldName || en.mods?.fieldName || '毒沼'
+          fIcon = ph?.fieldIcon || en.mods?.fieldIcon || '🟢'
+          fColor = ph?.fieldColor || en.mods?.fieldColor || '#66cc44'
+        }
       }
       if (field > 0) {
         const d = Math.floor(eff.hp_max * field * (1 - tr.pctResist))
         if (d > 0) {
           playerHp = Math.max(0, playerHp - d)
-          logs.push({ text: `🟢 毒沼のダメージ！ あなたに${d}ダメージ！`, color: '#66cc44' })
+          logs.push({ text: `${fIcon} ${fName}のダメージ！ あなたに${d}ダメージ！`, color: fColor })
           if (playerHp <= 0) break
         }
       }
