@@ -6080,17 +6080,20 @@ export default function Game() {
                 <span>⚔ 戦争中</span><span style={{ color:'#cc8866', fontSize:'10px' }}>HP上限 +{WAR_HP_BONUS.toLocaleString()}（満タン参戦）</span>
               </div>
             )}
-            <StatValue label="HP" val={`${hpCurrent}/${hpMaxDisp}`} color={isDying?'#ff2200':(atWar?'#ff6644':'#00cc44')} size="10px" />
-            <StatValue label="MP" val={`${mpCurrent}/${mpMaxEff}`} color="#4488ff" size="10px" />
-            {statExpanded && (<>
-              <MiniBar label="EXP" val={`${profile.exp}/${profile.exp_next}`} pct={expPct} color="#cc8800" />
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'2px', fontSize:'10px', marginBottom:'6px' }}>
+            {/* HP/MPも他のステータスと同じ枠で表示（閉じている間はHP/MPだけ出す） */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'2px', fontSize:'10px', marginBottom:'6px' }}>
+              <StatMini label="HP" base={hpMaxDisp} bonus={0} text={hpMpText(hpCurrent, hpMaxDisp)} color={isDying?'#ff2200':(atWar?'#ff6644':'#00cc44')} type="hp" />
+              <StatMini label="MP" base={mpMaxEff}  bonus={0} text={hpMpText(mpCurrent, mpMaxEff)}  color="#4488ff" type="mp" />
+              {statExpanded && (<>
                 <StatMini label="攻撃" base={eff.atk  - eff.bonus.atk}  bonus={eff.bonus.atk}  color="#ffcc00" type="atk" />
                 <StatMini label="防御" base={eff.def  - eff.bonus.def}  bonus={eff.bonus.def}  color="#88aaff" type="def" />
                 <StatMini label="特攻" base={eff.matk - eff.bonus.matk} bonus={eff.bonus.matk} color="#cc44ff" type="matk" />
                 <StatMini label="特防" base={eff.mdef - eff.bonus.mdef} bonus={eff.bonus.mdef} color="#44ccff" type="mdef" />
                 <StatMini label="速さ" base={eff.spd  - eff.bonus.spd}  bonus={eff.bonus.spd}  color="#ff8844" type="spd" />
-              </div>
+              </>)}
+            </div>
+            {statExpanded && (<>
+              <MiniBar label="EXP" val={`${profile.exp}/${profile.exp_next}`} pct={expPct} color="#cc8800" />
               {pendingPoints > 0 && (
                 <button onClick={()=>{ setShowStatPanel(true); setStatPoints({hp:0,mp:0,atk:0,def:0,matk:0,mdef:0,spd:0}) }}
                   style={{ width:'100%', padding:'6px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
@@ -6629,22 +6632,25 @@ export default function Game() {
                 <span>⚔ 戦争中</span><span style={{ color:'#cc8866', fontSize:'10px' }}>HP上限 +{WAR_HP_BONUS.toLocaleString()}（満タン参戦）</span>
               </div>
             )}
-            <StatValue label="HP" val={`${hpCurrent}/${hpMaxDisp}`} color={isDying?'#ff2200':(atWar?'#ff6644':'#00cc44')} />
-            <StatValue label="MP" val={`${mpCurrent}/${mpMaxEff}`} color="#4488ff" />
-            {statExpanded && (<>
-              <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginTop:'6px' }}>
-                <span>EXP</span><span style={{color:'#cc8800'}}>{profile.exp}/{profile.exp_next}</span>
-              </div>
-              <div style={{ background:'#001028', height:'5px', border:'1px solid #002244', marginBottom:'4px' }}>
-                <div style={{ height:'100%', width:`${expPct}%`, background:'linear-gradient(90deg,#331100,#cc8800)', transition:'width 0.4s' }} />
-              </div>
-              <div style={{ fontSize:'11px', display:'grid', gridTemplateColumns:'1fr', gap:'2px', color:'#446688', marginTop:'6px', marginBottom:'8px' }}>
+            {/* HP/MPも他のステータスと同じ行で表示（閉じている間はHP/MPだけ出す） */}
+            <div style={{ fontSize:'11px', display:'grid', gridTemplateColumns:'1fr', gap:'2px', color:'#446688', marginBottom:'8px' }}>
+              <StatLine label="HP" base={hpMaxDisp} bonus={0} text={hpMpText(hpCurrent, hpMaxDisp)} color={isDying?'#ff2200':(atWar?'#ff6644':'#00cc44')} statType="hp" />
+              <StatLine label="MP" base={mpMaxEff}  bonus={0} text={hpMpText(mpCurrent, mpMaxEff)}  color="#4488ff" statType="mp" />
+              {statExpanded && (<>
                 <StatLine label="攻撃力"     base={eff.atk  - eff.bonus.atk}  bonus={eff.bonus.atk}  color="#ffcc00" statType="atk" />
                 <StatLine label="防御力"     base={eff.def  - eff.bonus.def}  bonus={eff.bonus.def}  color="#88aaff" statType="def" />
                 <StatLine label="特殊攻撃力" base={eff.matk - eff.bonus.matk} bonus={eff.bonus.matk} color="#cc44ff" statType="matk" />
                 <StatLine label="特殊防御力" base={eff.mdef - eff.bonus.mdef} bonus={eff.bonus.mdef} color="#44ccff" statType="mdef" />
                 <StatLine label="素早さ"     base={eff.spd  - eff.bonus.spd}  bonus={eff.bonus.spd}  color="#ff8844" statType="spd" />
                 <span>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></span>
+              </>)}
+            </div>
+            {statExpanded && (<>
+              <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688' }}>
+                <span>EXP</span><span style={{color:'#cc8800'}}>{profile.exp}/{profile.exp_next}</span>
+              </div>
+              <div style={{ background:'#001028', height:'5px', border:'1px solid #002244', marginBottom:'4px' }}>
+                <div style={{ height:'100%', width:`${expPct}%`, background:'linear-gradient(90deg,#331100,#cc8800)', transition:'width 0.4s' }} />
               </div>
               {pendingPoints > 0 && (
                 <button onClick={()=>{ setShowStatPanel(true); setStatPoints({hp:0,mp:0,atk:0,def:0,matk:0,mdef:0,spd:0}) }}
@@ -6995,21 +7001,16 @@ export default function Game() {
 // ============================================================
 // サブコンポーネント
 // ============================================================
-// HP/MPの数値のみ表示（宿屋廃止＝戦闘は常に全回復スタートのため、街ではバーを出さない）
-function StatValue({ label, val, color, size = '11px' }) {
-  return (
-    <div style={{ fontSize:size, display:'flex', justifyContent:'space-between', color:'#446688', marginBottom:'4px' }}>
-      <span>{label}</span><span style={{ color, fontWeight:'bold' }}>{val}</span>
-    </div>
-  )
-}
+// HP/MPの表示文字列。宿屋廃止(0e77af8)で通常は常に満タンなので、満タンなら最大値だけ＝
+// 他のステータスと同じ「数字ひとつ」に揃える。戦争などで削れている時だけ「現在/最大」を出す。
+const hpMpText = (cur, max) => (cur >= max ? `${max}` : `${cur}/${max}`)
 
-function StatLine({ label, base, bonus, color, statType }) {
+function StatLine({ label, base, bonus, color, statType, text }) {
   const rank = getStatRank(base+bonus, statType)
   return (
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
       <span>
-        {label}: <span style={{color}}>{base+bonus}</span>
+        {label}: <span style={{color}}>{text ?? base+bonus}</span>
         {bonus > 0 && <span style={{color:'#44ccff', fontSize:'10px'}}> (+{bonus})</span>}
       </span>
       <span style={{ color:rank.color, fontSize:'10px', fontWeight:'bold' }}>{rank.rank}</span>
@@ -7169,13 +7170,13 @@ export function BattleLogLine({ l }) {
   )
 }
 
-function StatMini({ label, base, bonus, color, type }) {
+function StatMini({ label, base, bonus, color, type, text }) {
   const rank = getStatRank(base+bonus, type)
   return (
     <div style={{ background:'#000818', border:'1px solid #002244', padding:'3px 6px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
       <span style={{ color:'#446688', fontSize:'9px' }}>{label}</span>
       <span>
-        <span style={{color, fontSize:'10px'}}>{base+bonus}</span>
+        <span style={{color, fontSize:'10px'}}>{text ?? base+bonus}</span>
         <span style={{color:rank.color, fontSize:'9px', marginLeft:'2px'}}>{rank.rank}</span>
       </span>
     </div>
