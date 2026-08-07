@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 
+// 個数の増減ボタン（-10 / - / + / +10 共通）
+const qtyBtnStyle = { background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 5px', fontFamily:'monospace', fontSize:'11px', minWidth:'20px' }
+
 export default function Shop() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
@@ -125,19 +128,20 @@ export default function Shop() {
                 {owned && <span style={{ color:'#446688', fontSize:'10px' }}>所持: {owned.quantity}個</span>}
               </div>
               <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px' }}>{item.description}</div>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'6px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
                   <span style={{ color:'#446688', fontSize:'10px' }}>個数:</span>
-                  <button onClick={() => setQuantity(item.id, qty - 1)}
-                    style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 6px', fontFamily:'monospace', fontSize:'12px' }}>-</button>
+                  {/* まとめ買い用に10単位のボタンも置く（鑑定書などを大量に買うとき用） */}
+                  <button onClick={() => setQuantity(item.id, qty - 10)} style={qtyBtnStyle}>-10</button>
+                  <button onClick={() => setQuantity(item.id, qty - 1)} style={qtyBtnStyle}>-</button>
                   <input
                     type="number" value={quantities[item.id] === '' ? '' : qty} min={1} max={999}
                     onChange={e => onQuantityInput(item.id, e.target.value)}
                     onBlur={() => onQuantityBlur(item.id)}
                     style={{ width:'40px', background:'#001028', border:'1px solid #003366', color:'#88ccff', textAlign:'center', fontFamily:'monospace', fontSize:'12px', padding:'2px' }}
                   />
-                  <button onClick={() => setQuantity(item.id, qty + 1)}
-                    style={{ background:'#001', border:'1px solid #446688', color:'#88ccff', cursor:'pointer', padding:'0 6px', fontFamily:'monospace', fontSize:'12px' }}>+</button>
+                  <button onClick={() => setQuantity(item.id, qty + 1)} style={qtyBtnStyle}>+</button>
+                  <button onClick={() => setQuantity(item.id, qty + 10)} style={qtyBtnStyle}>+10</button>
                 </div>
                 <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
                   <span style={{ color:'#ffcc00', fontSize:'12px' }}>{totalCost.toLocaleString()}G</span>

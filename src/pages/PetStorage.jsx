@@ -100,7 +100,7 @@ export default function PetStorage() {
                     {isDungeon
                       ? <QtyMove sel={sel[k] || 1} max={max} loading={loading}
                           onSet={(n) => setQty(k, n, max)} onMove={() => move(k, true, max)} label="→持ち物" />
-                      : <span style={{ color: '#5e7fa0', fontSize: 10 }}>{k.endsWith('_seed') ? 'チャーム強化で使用' : 'ここで使用'}</span>}
+                      : <span style={{ color: '#5e7fa0', fontSize: 10 }}>{PET_ITEMS[k]?.useAt || 'ダンジョンには持ち込めません'}</span>}
                   </ItemRow>
                 )
               })}

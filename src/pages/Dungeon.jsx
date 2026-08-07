@@ -1673,9 +1673,34 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
 
   // 持ち物の使用（食料＝満腹回復・1ターン経過 / だっしゅつの翼＝脱出）
   const useItem = async (key) => {
-    if (shopRef.current) return // 秘密の商店中は使用不可
     if (status !== 'exploring' || busyRef.current || (inventory[key] || 0) < 1) return
     const def = PET_ITEMS[key]
+    // 秘密の商店（階段の途中）では回復アイテム（HP回復・満腹回復）だけ使える。
+    //  盤面は前のフロアのまま置き去りなので commitTurn は呼ばない＝ターンは進まない。
+    //  だっしゅつの翼・スキルの書は盤面を触るので店内では使えない（店を出てから）。
+    if (shopRef.current) {
+      if (!def?.healPct && !def?.fullness) { setShopMsg('🏮 店内では回復アイテムだけ使える'); return }
+      // 店内はターンが進まない＝満タンで使っても完全に無駄になるので、その場合は消費しない
+      if (def.healPct && petHp >= pet.maxHp) { setShopMsg('💚 HPは満タン'); return }
+      if (def.fullness && fullness >= MAX_FULLNESS) { setShopMsg('🍖 満腹度は満タン'); return }
+      const { error } = await supabase.rpc('pet_consume_item', { p_key: key })
+      if (error) { setShopMsg('アイテムを持っていない'); return }
+      setInventory((inv) => ({ ...inv, [key]: (inv[key] || 1) - 1 }))
+      if (def.healPct) {
+        const healed = Math.min(pet.maxHp, petHp + Math.ceil(pet.maxHp * def.healPct))
+        const gain = healed - petHp
+        setPetHp(healed)
+        addLog(`${def.emoji} ${def.name}を食べた（HP+${gain}）`)
+        setShopMsg(`✅ ${def.name}を食べた（HP+${gain}）`)
+      } else {
+        const nextFull = Math.min(MAX_FULLNESS, fullness + def.fullness)
+        const gain = nextFull - fullness
+        setFullness(nextFull)
+        addLog(`${def.emoji} ${def.name}を食べた（満腹+${gain}）`)
+        setShopMsg(`✅ ${def.name}を食べた（満腹+${gain}）`)
+      }
+      return
+    }
     // だっしゅつの翼は使い切り＝消費確認をはさむ。
     //  ※window.confirm はインストール済みPWA/一部モバイルで無反応(常にfalse)になり
     //    「翼を使えない」不具合の原因になるため、ゲーム内ポップアップ(confirmBox)で確認する。
@@ -2648,7 +2673,13 @@ B${sf}Fから開始しますか？`, okLabel: '⬇ 開始する', onOk: () => be
                 <div style={{ background: '#0c0a04', border: '1px solid #aa8833', padding: 14, maxWidth: 360, width: '100%', maxHeight: '92%', overflowY: 'auto' }}>
                   <div style={{ color: '#ffd75e', fontSize: 14, marginBottom: 2 }}>🏮 秘密の商店</div>
                   <div style={{ color: '#997733', fontSize: 10, marginBottom: 8 }}>階段の途中の隠れ店。品はどれも一期一会（各1回まで）</div>
-                  <div style={{ color: '#ffd75e', fontSize: 12, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>所持 <img src={dgImg(petItemImg('zeni'), 64)} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} />{zeni}</div>
+                  <div style={{ color: '#ffd75e', fontSize: 12, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>所持 <img src={dgImg(petItemImg('zeni'), 64)} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} />{zeni}</div>
+                  {/* 店内でも回復アイテムは使える（画面下の持ち物から。ターンは進まない）ので現在値を出す */}
+                  <div style={{ color: '#997733', fontSize: 10, marginBottom: 6, lineHeight: 1.5 }}>
+                    <span style={{ color: petHp > pet.maxHp * 0.2 ? '#88ffaa' : '#ff8888' }}>HP {petHp}/{pet.maxHp}</span>
+                    　<span style={{ color: fullness > 0 ? '#ffcc44' : '#ff8888' }}>🍖 満腹 {fullness}/{MAX_FULLNESS}</span><br />
+                    ※画面下の持ち物から回復アイテムを使えます（店内ではターンは進みません）
+                  </div>
                   {shopMsg && <div style={{ color: shopMsg.startsWith('✅') ? '#88ffaa' : '#ff9977', fontSize: 11, marginBottom: 6 }}>{shopMsg}</div>}
                   <div style={{ color: '#cc9944', fontSize: 11, marginBottom: 4 }}>📜 スキルの書（各{SHOP_BOOK_PRICE}ゼニ）</div>
                   {shop.stock.books.map((k, i) => {

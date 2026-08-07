@@ -449,10 +449,13 @@ export default function Pets() {
                         <div style={{ color: '#ffd866', fontSize: 11, marginTop: 2 }}>{it.price.toLocaleString()}G / 個</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
+                        {/* まとめ買い用に10単位のボタンも置く（おにぎり・木の実を大量に買うとき用） */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end', marginBottom: 4 }}>
+                          <button onClick={() => setQ(it.key, q - 10)} style={qtyBtn10}>-10</button>
                           <button onClick={() => setQ(it.key, q - 1)} style={qtyBtn}>−</button>
                           <span style={{ color: '#cce6ff', fontSize: 13, minWidth: 22, textAlign: 'center' }}>{q}</span>
                           <button onClick={() => setQ(it.key, q + 1)} style={qtyBtn}>＋</button>
+                          <button onClick={() => setQ(it.key, q + 10)} style={qtyBtn10}>+10</button>
                         </div>
                         <Btn onClick={() => !loading && buyItem(it.key, q)}>{(it.price * q).toLocaleString()}G 購入</Btn>
                       </div>
@@ -541,6 +544,8 @@ function Btn({ children, onClick }) {
   return <button onClick={onClick} style={{ background: '#001840', border: '1px solid #0088ff', color: '#0088ff', padding: '6px 12px', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>{children}</button>
 }
 const qtyBtn = { background: '#001028', border: '1px solid #335588', color: '#88bbee', width: 22, height: 22, cursor: 'pointer', fontFamily: 'monospace', fontSize: 13, lineHeight: '18px', padding: 0 }
+// 10単位の増減ボタン（まとめ買い用。数字が入るので幅は広め）
+const qtyBtn10 = { ...qtyBtn, width: 30, fontSize: 10 }
 
 // ペットシステムの説明ヘルプ
 const HELP_SECTIONS = [

@@ -568,6 +568,8 @@ export function bagCapacity(clearedDungeonCount) {
 }
 // ペットアイテム定義（価格はサーバーRPC pet_item_price と一致させること）
 //  dungeon=true: ダンジョンで使用可能 / capped=true: アイテム袋の上限(INV_MAX)の対象（だっしゅつの翼以外すべて）
+//  useAt: 倉庫画面での案内文（dungeon=false＝持ち物へ移せない物の「どこで使うか」）。
+//         倉庫には使用ボタンが無いので、必ず実際の使用先の画面名を書くこと
 export const PET_ITEMS = {
   escape:  { key: 'escape',  name: 'だっしゅつの翼',   emoji: '🪽', price: 500,   dungeon: true,  capped: false, desc: 'ダンジョンからいつでも脱出（使い切り・袋の対象外）' },
   onigiri: { key: 'onigiri', name: 'おにぎり',         emoji: '🍙', price: 200,   dungeon: true,  capped: true, fullness: 50, desc: '満腹度を50回復' },
@@ -575,23 +577,23 @@ export const PET_ITEMS = {
   // おいしい系（d60のF25以降で食料抽選時5%。ドロップ専用・非売品）
   oishii_onigiri: { key: 'oishii_onigiri', name: 'おいしいおにぎり', emoji: '🍱', price: 0, dungeon: true, capped: true, noShop: true, fullness: 100, desc: '満腹度を100回復' },
   oishii_konomi:  { key: 'oishii_konomi',  name: 'おいしい木の実',   emoji: '🍎', price: 0, dungeon: true, capped: true, noShop: true, healPct: 0.35, desc: '最大HPの35%を回復' },
-  rename:  { key: 'rename',  name: 'ニックネーム変更券', emoji: '🎫', price: 100000, dungeon: false, capped: true,  desc: 'ペットの名前を変更できる' },
-  shard:   { key: 'shard',   name: '神秘の欠片',       emoji: '🔮', price: 0, dungeon: false, capped: true, noShop: true, desc: 'チャーム合成に使う（30Fボス討伐でドロップ）' },
-  fatecore:{ key: 'fatecore', name: 'フェイトコア',     emoji: '🧬', price: 0, dungeon: false, capped: true, noShop: true, desc: 'チャーム/リボンの特殊能力を再抽選する（60Fボス討伐でドロップ）' },
+  rename:  { key: 'rename',  name: 'ニックネーム変更券', emoji: '🎫', price: 100000, dungeon: false, capped: true,  useAt: 'ペット画面で使用', desc: 'ペットの名前を変更できる' },
+  shard:   { key: 'shard',   name: '神秘の欠片',       emoji: '🔮', price: 0, dungeon: false, capped: true, noShop: true, useAt: 'チャーム画面で使用', desc: 'チャーム合成に使う（30Fボス討伐でドロップ）' },
+  fatecore:{ key: 'fatecore', name: 'フェイトコア',     emoji: '🧬', price: 0, dungeon: false, capped: true, noShop: true, useAt: 'チャーム画面で使用', desc: 'チャーム/リボンの特殊能力を再抽選する（60Fボス討伐でドロップ）' },
   // チャーム強化用の素（ダンジョンで拾う。チャームページで使用）
-  atk_seed:   { key: 'atk_seed',   name: '攻撃の素',  emoji: '🔴', img: '/kougekimoto.png',     price: 0, dungeon: false, capped: true, seed: 'atk',   up: 1,  desc: 'チャームの攻撃を+1' },
-  spatk_seed: { key: 'spatk_seed', name: '特攻の素',  emoji: '🟣', img: '/tokukoumoto.png',     price: 0, dungeon: false, capped: true, seed: 'spatk', up: 1,  desc: 'チャームの特攻を+1' },
-  def_seed:   { key: 'def_seed',   name: '防御の素',  emoji: '🔵', img: '/bougyomoto.png',      price: 0, dungeon: false, capped: true, seed: 'def',   up: 1,  desc: 'チャームの防御を+1' },
-  spdef_seed: { key: 'spdef_seed', name: '特防の素',  emoji: '🟢', img: '/mahoubougyomoto.png', price: 0, dungeon: false, capped: true, seed: 'spdef', up: 1,  desc: 'チャームの特防を+1' },
-  hp_seed:    { key: 'hp_seed',    name: 'HPの素',    emoji: '🟡', img: '/HPmoto.png',         price: 0, dungeon: false, capped: true, seed: 'hp',    up: 5,  desc: 'チャームのHPを+5（消費1）' },
+  atk_seed:   { key: 'atk_seed',   name: '攻撃の素',  emoji: '🔴', img: '/kougekimoto.png',     price: 0, dungeon: false, capped: true, seed: 'atk',   up: 1,  useAt: 'チャーム強化で使用', desc: 'チャームの攻撃を+1' },
+  spatk_seed: { key: 'spatk_seed', name: '特攻の素',  emoji: '🟣', img: '/tokukoumoto.png',     price: 0, dungeon: false, capped: true, seed: 'spatk', up: 1,  useAt: 'チャーム強化で使用', desc: 'チャームの特攻を+1' },
+  def_seed:   { key: 'def_seed',   name: '防御の素',  emoji: '🔵', img: '/bougyomoto.png',      price: 0, dungeon: false, capped: true, seed: 'def',   up: 1,  useAt: 'チャーム強化で使用', desc: 'チャームの防御を+1' },
+  spdef_seed: { key: 'spdef_seed', name: '特防の素',  emoji: '🟢', img: '/mahoubougyomoto.png', price: 0, dungeon: false, capped: true, seed: 'spdef', up: 1,  useAt: 'チャーム強化で使用', desc: 'チャームの特防を+1' },
+  hp_seed:    { key: 'hp_seed',    name: 'HPの素',    emoji: '🟡', img: '/HPmoto.png',         price: 0, dungeon: false, capped: true, seed: 'hp',    up: 5,  useAt: 'チャーム強化で使用', desc: 'チャームのHPを+5（消費1）' },
   // ゼニ（ペットダンジョン限定通貨。倉庫表示用。持ち込み/購入不可＝pet_item_priceに登録しない）
   zeni: { key: 'zeni', name: 'ゼニ', emoji: '🪙', img: '/zeni.png', price: 0, dungeon: false, capped: false, noShop: true, desc: 'ペットダンジョン限定の貨幣。ダンジョン内で拾い、秘密の商店で使う' },
   // 凝縮された素（リボン強化用。○○の素10個をチャームページで合成して作る）
-  atk_seed_c:   { key: 'atk_seed_c',   name: '凝縮された攻撃の素', emoji: '🟥', img: '/kougekimoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'atk',   up: 1, desc: 'リボンの攻撃を+1（攻撃の素10個から合成）' },
-  spatk_seed_c: { key: 'spatk_seed_c', name: '凝縮された特攻の素', emoji: '🟪', img: '/tokukoumoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'spatk', up: 1, desc: 'リボンの特攻を+1（特攻の素10個から合成）' },
-  def_seed_c:   { key: 'def_seed_c',   name: '凝縮された防御の素', emoji: '🟦', img: '/bougyomoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'def',   up: 1, desc: 'リボンの防御を+1（防御の素10個から合成）' },
-  spdef_seed_c: { key: 'spdef_seed_c', name: '凝縮された特防の素', emoji: '🟩', img: '/mahoubougyomoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'spdef', up: 1, desc: 'リボンの特防を+1（特防の素10個から合成）' },
-  hp_seed_c:    { key: 'hp_seed_c',    name: '凝縮されたHPの素',   emoji: '🟨', img: '/HPmoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'hp',    up: 5, desc: 'リボンのHPを+5（HPの素10個から合成）' },
+  atk_seed_c:   { key: 'atk_seed_c',   name: '凝縮された攻撃の素', emoji: '🟥', img: '/kougekimoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'atk',   up: 1, useAt: 'リボン強化で使用', desc: 'リボンの攻撃を+1（攻撃の素10個から合成）' },
+  spatk_seed_c: { key: 'spatk_seed_c', name: '凝縮された特攻の素', emoji: '🟪', img: '/tokukoumoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'spatk', up: 1, useAt: 'リボン強化で使用', desc: 'リボンの特攻を+1（特攻の素10個から合成）' },
+  def_seed_c:   { key: 'def_seed_c',   name: '凝縮された防御の素', emoji: '🟦', img: '/bougyomoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'def',   up: 1, useAt: 'リボン強化で使用', desc: 'リボンの防御を+1（防御の素10個から合成）' },
+  spdef_seed_c: { key: 'spdef_seed_c', name: '凝縮された特防の素', emoji: '🟩', img: '/mahoubougyomoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'spdef', up: 1, useAt: 'リボン強化で使用', desc: 'リボンの特防を+1（特防の素10個から合成）' },
+  hp_seed_c:    { key: 'hp_seed_c',    name: '凝縮されたHPの素',   emoji: '🟨', img: '/HPmoto_c.png', price: 0, dungeon: false, capped: true, noShop: true, cseed: 'hp',    up: 5, useAt: 'リボン強化で使用', desc: 'リボンのHPを+5（HPの素10個から合成）' },
 }
 
 // ============================================================
