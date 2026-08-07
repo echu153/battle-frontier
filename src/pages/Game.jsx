@@ -6080,20 +6080,20 @@ export default function Game() {
                 <span>⚔ 戦争中</span><span style={{ color:'#cc8866', fontSize:'10px' }}>HP上限 +{WAR_HP_BONUS.toLocaleString()}（満タン参戦）</span>
               </div>
             )}
-            {/* HP/MPも他のステータスと同じ枠で表示（閉じている間はHP/MPだけ出す） */}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'2px', fontSize:'10px', marginBottom:'6px' }}>
-              <StatMini label="HP" base={hpMaxDisp} bonus={0} text={hpMpText(hpCurrent, hpMaxDisp)} color={isDying?'#ff2200':(atWar?'#ff6644':'#00cc44')} type="hp" />
-              <StatMini label="MP" base={mpMaxEff}  bonus={0} text={hpMpText(mpCurrent, mpMaxEff)}  color="#4488ff" type="mp" />
-              {statExpanded && (<>
+            {statExpanded && (<>
+              {/* 上の列はHP/MPだけ。枠は下のステータスと同じ幅に揃える */}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'2px', fontSize:'10px', marginBottom:'6px' }}>
+                <StatMini label="HP" base={hpMaxDisp} bonus={0} text={hpMpText(hpCurrent, hpMaxDisp)} color={isDying?'#ff2200':(atWar?'#ff6644':'#00cc44')} type="hp" />
+                <StatMini label="MP" base={mpMaxEff}  bonus={0} text={hpMpText(mpCurrent, mpMaxEff)}  color="#4488ff" type="mp" />
+              </div>
+              <MiniBar label="EXP" val={`${profile.exp}/${profile.exp_next}`} pct={expPct} color="#cc8800" />
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'2px', fontSize:'10px', marginBottom:'6px' }}>
                 <StatMini label="攻撃" base={eff.atk  - eff.bonus.atk}  bonus={eff.bonus.atk}  color="#ffcc00" type="atk" />
                 <StatMini label="防御" base={eff.def  - eff.bonus.def}  bonus={eff.bonus.def}  color="#88aaff" type="def" />
                 <StatMini label="特攻" base={eff.matk - eff.bonus.matk} bonus={eff.bonus.matk} color="#cc44ff" type="matk" />
                 <StatMini label="特防" base={eff.mdef - eff.bonus.mdef} bonus={eff.bonus.mdef} color="#44ccff" type="mdef" />
                 <StatMini label="速さ" base={eff.spd  - eff.bonus.spd}  bonus={eff.bonus.spd}  color="#ff8844" type="spd" />
-              </>)}
-            </div>
-            {statExpanded && (<>
-              <MiniBar label="EXP" val={`${profile.exp}/${profile.exp_next}`} pct={expPct} color="#cc8800" />
+              </div>
               {pendingPoints > 0 && (
                 <button onClick={()=>{ setShowStatPanel(true); setStatPoints({hp:0,mp:0,atk:0,def:0,matk:0,mdef:0,spd:0}) }}
                   style={{ width:'100%', padding:'6px', background:'#1a0030', border:'1px solid #cc44ff', color:'#cc44ff', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
@@ -6632,25 +6632,25 @@ export default function Game() {
                 <span>⚔ 戦争中</span><span style={{ color:'#cc8866', fontSize:'10px' }}>HP上限 +{WAR_HP_BONUS.toLocaleString()}（満タン参戦）</span>
               </div>
             )}
-            {/* HP/MPも他のステータスと同じ行で表示（閉じている間はHP/MPだけ出す） */}
-            <div style={{ fontSize:'11px', display:'grid', gridTemplateColumns:'1fr', gap:'2px', color:'#446688', marginBottom:'8px' }}>
-              <StatLine label="HP" base={hpMaxDisp} bonus={0} text={hpMpText(hpCurrent, hpMaxDisp)} color={isDying?'#ff2200':(atWar?'#ff6644':'#00cc44')} statType="hp" />
-              <StatLine label="MP" base={mpMaxEff}  bonus={0} text={hpMpText(mpCurrent, mpMaxEff)}  color="#4488ff" statType="mp" />
-              {statExpanded && (<>
+            {statExpanded && (<>
+              {/* 上の行はHP/MPだけ。表記は下のステータスと同じ形に揃える */}
+              <div style={{ fontSize:'11px', display:'grid', gridTemplateColumns:'1fr', gap:'2px', color:'#446688', marginBottom:'6px' }}>
+                <StatLine label="HP" base={hpMaxDisp} bonus={0} text={hpMpText(hpCurrent, hpMaxDisp)} color={isDying?'#ff2200':(atWar?'#ff6644':'#00cc44')} statType="hp" />
+                <StatLine label="MP" base={mpMaxEff}  bonus={0} text={hpMpText(mpCurrent, mpMaxEff)}  color="#4488ff" statType="mp" />
+              </div>
+              <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688' }}>
+                <span>EXP</span><span style={{color:'#cc8800'}}>{profile.exp}/{profile.exp_next}</span>
+              </div>
+              <div style={{ background:'#001028', height:'5px', border:'1px solid #002244', marginBottom:'4px' }}>
+                <div style={{ height:'100%', width:`${expPct}%`, background:'linear-gradient(90deg,#331100,#cc8800)', transition:'width 0.4s' }} />
+              </div>
+              <div style={{ fontSize:'11px', display:'grid', gridTemplateColumns:'1fr', gap:'2px', color:'#446688', marginTop:'6px', marginBottom:'8px' }}>
                 <StatLine label="攻撃力"     base={eff.atk  - eff.bonus.atk}  bonus={eff.bonus.atk}  color="#ffcc00" statType="atk" />
                 <StatLine label="防御力"     base={eff.def  - eff.bonus.def}  bonus={eff.bonus.def}  color="#88aaff" statType="def" />
                 <StatLine label="特殊攻撃力" base={eff.matk - eff.bonus.matk} bonus={eff.bonus.matk} color="#cc44ff" statType="matk" />
                 <StatLine label="特殊防御力" base={eff.mdef - eff.bonus.mdef} bonus={eff.bonus.mdef} color="#44ccff" statType="mdef" />
                 <StatLine label="素早さ"     base={eff.spd  - eff.bonus.spd}  bonus={eff.bonus.spd}  color="#ff8844" statType="spd" />
                 <span>Gold: <span style={{color:'#ffcc00'}}>{profile.gold}</span></span>
-              </>)}
-            </div>
-            {statExpanded && (<>
-              <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688' }}>
-                <span>EXP</span><span style={{color:'#cc8800'}}>{profile.exp}/{profile.exp_next}</span>
-              </div>
-              <div style={{ background:'#001028', height:'5px', border:'1px solid #002244', marginBottom:'4px' }}>
-                <div style={{ height:'100%', width:`${expPct}%`, background:'linear-gradient(90deg,#331100,#cc8800)', transition:'width 0.4s' }} />
               </div>
               {pendingPoints > 0 && (
                 <button onClick={()=>{ setShowStatPanel(true); setStatPoints({hp:0,mp:0,atk:0,def:0,matk:0,mdef:0,spd:0}) }}
