@@ -553,3 +553,18 @@ test('ポーションは回復量が0なら消費しない', async () => {
   const guard = block.indexOf('if (healAmt > 0) {')
   assert.ok(guard > 0 && guard < use, '消費(usedInfinite)が判定の外にある')
 })
+
+test('武器の効果はスキルと通常攻撃の両方に乗る（タワーだけ抜けていた）', async () => {
+  // 2026-08-07: towerBattle.js の通常攻撃側にだけ hit_heal_down_10_2t / hit_spd_down_5 が
+  // 無く、タワーでのみ通常攻撃に武器の効果が効いていなかった。
+  // 他の全エンジンは両方に置いてある。
+  const fs = await import('node:fs')
+  for (const f of ['src/lib/towerBattle.js', 'src/pages/Game.jsx', 'src/pages/Abyss.jsx',
+    'src/pages/Hachigoku.jsx', 'src/pages/Tenkyuu.jsx']) {
+    const src = fs.readFileSync(f, 'utf8')
+    for (const key of ['hit_heal_down_10_2t', 'hit_spd_down_5']) {
+      const n = (src.match(new RegExp(key, 'g')) || []).length
+      assert.ok(n >= 2, `${f}: ${key} が ${n} 箇所しかない。スキル側と通常攻撃側の両方に要る`)
+    }
+  }
+})

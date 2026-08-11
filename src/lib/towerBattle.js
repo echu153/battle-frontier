@@ -540,6 +540,18 @@ export function simulateTowerBattle({
       // 吸収の出所（紋章）は書かない。ただしHPは実際に動くので回復した事象だけ残す
       { const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { const emHeal = Math.floor(emDrain * healOutMult()); playerHp = Math.min(eff.hp_max, playerHp + emHeal); logs.push({ text: `💚 HPが${emHeal}回復した！`, color: '#44ff88' }) } }
       evoOnHit(eff, finalDmg, enemyBuffs, target.name, logs, isCrit)
+      // ⚠武器の効果はスキル側（434〜441行）と通常攻撃側の両方に置くこと。
+      //   タワーだけ通常攻撃側が抜けていて、他の全エンジン（出撃・奈落・八獄・天穹）では
+      //   両方に乗っていた＝タワーでだけ通常攻撃に武器の効果が効かなかった。
+      if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
+        enemyBuffs.healDown = { turns: 2, rate: 0.7 }
+      }
+      if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_spd_down_5') {
+        const curSd = enemyBuffs.spdDown
+        const amzSt = Math.min(4, ((curSd?.turns > 0 && curSd.amazaneStacks) || 0) + 1)
+        const amzRate = Math.round((1 - 0.05 * amzSt) * 100) / 100
+        if (!(curSd?.turns > 0) || curSd.amazaneStacks > 0 || amzRate < curSd.rate) enemyBuffs.spdDown = { turns: 2, rate: amzRate, amazaneStacks: amzSt }
+      }
       // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
       // 麻痺の付与は残すが、どの装備のおかげかは書かないので発動ログは出さない
       if (isExtra && finalDmg > 0 && (eff?.extraParaChance || 0) > 0 && !(enemyBuffs.paralysis?.turns > 0) && Math.random() * 100 < eff.extraParaChance) {
