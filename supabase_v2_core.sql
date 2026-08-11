@@ -41,10 +41,16 @@ create table if not exists public.v2_profiles (
 
 -- 転職回数（あるけみすとの転生回数に相当）
 alter table public.v2_profiles add column if not exists job_changes int not null default 0;
--- 職業。開始時はノーブル。job_counts は職業ごとの転職回数 {"戦士":3}、proofs は所持している証 ["侍の証"]
+-- 職業。開始時はノーブル。job_counts は職業ごとの転職回数 {"戦士":3}
+-- proofs は所持している証の個数 {"侍の証":2}。証は転職で1個消費するので個数で持つ
 alter table public.v2_profiles add column if not exists class      text  not null default 'ノーブル';
 alter table public.v2_profiles add column if not exists job_counts jsonb not null default '{}'::jsonb;
-alter table public.v2_profiles add column if not exists proofs     jsonb not null default '[]'::jsonb;
+alter table public.v2_profiles add column if not exists proofs     jsonb not null default '{}'::jsonb;
+-- proofs を配列（初版の ["侍の証"]）で作っていた場合は個数の形へ移行する
+alter table public.v2_profiles alter column proofs set default '{}'::jsonb;
+update public.v2_profiles p set proofs = (
+  select coalesce(jsonb_object_agg(e.value, 1), '{}'::jsonb) from jsonb_array_elements_text(p.proofs) e
+) where jsonb_typeof(p.proofs) = 'array';
 
 -- 名前は大文字小文字を無視して一意
 create unique index if not exists v2_profiles_username_lower_idx
@@ -256,6 +262,7 @@ declare
   v_cls     public.v2_classes;
   v_jobs    int;
   v_counts  jsonb;
+  v_proofs  jsonb;
   v_stat    int[] := c_init;
   v_alloc   int[] := array[0, 0, 0, 0, 0, 0, 0, 0];
   v_points  int;
@@ -289,8 +296,8 @@ begin
   if v_missing > 0 then
     return jsonb_build_object('ok', false, 'error', '転職回数が足りません');
   end if;
-  -- 条件②：証
-  if v_cls.req_proof is not null and not (v_row.proofs ? v_cls.req_proof) then
+  -- 条件②：証（転職で1個消費する）
+  if v_cls.req_proof is not null and coalesce((v_row.proofs ->> v_cls.req_proof)::int, 0) < 1 then
     return jsonb_build_object('ok', false, 'error', format('%sがありません', v_cls.req_proof));
   end if;
 
@@ -307,8 +314,19 @@ begin
   v_counts := jsonb_set(v_counts, array[v_cls.id],
                         to_jsonb(coalesce((v_counts ->> v_cls.id)::int, 0) + 1), true);
 
+  -- 証を1個消費する（0になったキーは残さない）
+  v_proofs := coalesce(v_row.proofs, '{}'::jsonb);
+  if v_cls.req_proof is not null then
+    if coalesce((v_proofs ->> v_cls.req_proof)::int, 0) <= 1 then
+      v_proofs := v_proofs - v_cls.req_proof;
+    else
+      v_proofs := jsonb_set(v_proofs, array[v_cls.req_proof],
+                            to_jsonb((v_proofs ->> v_cls.req_proof)::int - 1), true);
+    end if;
+  end if;
+
   update public.v2_profiles set
-    lv = 1, exp = 0, job_changes = v_jobs, class = v_cls.id, job_counts = v_counts,
+    lv = 1, exp = 0, job_changes = v_jobs, class = v_cls.id, job_counts = v_counts, proofs = v_proofs,
     hp = v_stat[1], mp = v_stat[2], str = v_stat[3], dex = v_stat[4],
     agi = v_stat[5], int_stat = v_stat[6], vit = v_stat[7], luk = v_stat[8],
     updated_at = now()
@@ -320,6 +338,7 @@ begin
     'job_changes', v_jobs,
     'class', v_cls.id,
     'points', v_points,
+    'used_proof', v_cls.req_proof,
     'alloc', jsonb_build_object(
       'hp', v_alloc[1], 'mp', v_alloc[2], 'str', v_alloc[3], 'dex', v_alloc[4],
       'agi', v_alloc[5], 'int_stat', v_alloc[6], 'vit', v_alloc[7], 'luk', v_alloc[8]),
@@ -359,8 +378,9 @@ revoke all on function public.v2_debug_gain_exp(int) from public;
 revoke all on function public.v2_debug_gain_exp(int) from anon;
 grant execute on function public.v2_debug_gain_exp(int) to authenticated;
 
--- 証の入手手段（ドロップ等）はまだ無いので、確認用に is_admin だけ全種類を自分に配れる。
--- 入手コンテンツを作ったら、そちらから proofs に追加する（このRPCは残さない/公開しない）。
+-- 証の入手手段（ドロップ等）はまだ無いので、確認用に is_admin だけ全種類を1個ずつ足せる。
+-- 証は転職で1個消費するため、押すたびに在庫が増える。
+-- 入手コンテンツを作ったら、そちらから proofs に足す（このRPCは残さない/公開しない）。
 create or replace function public.v2_debug_grant_proofs()
 returns jsonb
 language plpgsql
@@ -371,6 +391,7 @@ declare
   v_uid   uuid := auth.uid();
   v_admin boolean;
   v_row   public.v2_profiles;
+  v_new   jsonb;
 begin
   if v_uid is null then
     return jsonb_build_object('ok', false, 'error', 'ログインが必要です');
@@ -379,15 +400,18 @@ begin
   if not coalesce(v_admin, false) then
     return jsonb_build_object('ok', false, 'error', '開発限定の機能です');
   end if;
-  update public.v2_profiles set
-    proofs = (select coalesce(jsonb_agg(distinct p), '[]'::jsonb)
-              from (select req_proof as p from public.v2_classes where req_proof is not null) s),
-    updated_at = now()
-  where id = v_uid
-  returning * into v_row;
+  select * into v_row from public.v2_profiles where id = v_uid for update;
   if not found then
     return jsonb_build_object('ok', false, 'error', 'キャラクターがありません');
   end if;
+  select coalesce(jsonb_object_agg(c.req_proof,
+                  coalesce((v_row.proofs ->> c.req_proof)::int, 0) + 1), '{}'::jsonb)
+    into v_new
+  from (select distinct req_proof from public.v2_classes where req_proof is not null) c;
+
+  update public.v2_profiles set proofs = coalesce(v_row.proofs, '{}'::jsonb) || v_new, updated_at = now()
+  where id = v_uid
+  returning * into v_row;
   return jsonb_build_object('ok', true, 'profile', to_jsonb(v_row));
 end;
 $$;

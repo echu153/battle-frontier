@@ -3,7 +3,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  START_CLASS, TIER_LABEL, TIER_ORDER, proofOf, missingReqs, canBecome, reqText, totalJobChanges,
+  START_CLASS, TIER_LABEL, TIER_ORDER, proofOf, proofCount, hasProof,
+  missingReqs, canBecome, reqText, totalJobChanges,
 } from './classes.js'
 
 const noble   = { id:START_CLASS, tier:'start',    req_jobs:{}, req_proof:null }
@@ -25,36 +26,44 @@ test('初期職は条件なしで転職できる', () => {
 })
 
 test('開始時の職業(ノーブル)には転職できない', () => {
-  assert.equal(canBecome(noble, { jobCounts:{}, proofs:[] }), false)
+  assert.equal(canBecome(noble, { jobCounts:{}, proofs:{} }), false)
+})
+
+test('証の所持は個数で持つ（転職で1個消費するため）', () => {
+  assert.equal(proofCount({ 侍の証:2 }, '侍の証'), 2)
+  assert.equal(proofCount({}, '侍の証'), 0)
+  assert.equal(proofCount(null, '侍の証'), 0)
+  assert.equal(hasProof({ 侍の証:1 }, '侍の証'), true)
+  assert.equal(hasProof({ 侍の証:0 }, '侍の証'), false)  // 使い切ったら条件を満たさない
 })
 
 test('上位職は転職回数と証の両方が要る', () => {
-  const none = { jobCounts:{}, proofs:[] }
+  const none = { jobCounts:{}, proofs:{} }
   assert.equal(canBecome(samurai, none), false)
   assert.deepEqual(missingReqs(samurai, none), ['戦士で転職3回（あと3回）', '侍の証'])
 
   // 回数だけ足りている
-  assert.deepEqual(missingReqs(samurai, { jobCounts:{ 戦士:3 }, proofs:[] }), ['侍の証'])
+  assert.deepEqual(missingReqs(samurai, { jobCounts:{ 戦士:3 }, proofs:{} }), ['侍の証'])
   // 証だけある
-  assert.deepEqual(missingReqs(samurai, { jobCounts:{ 戦士:2 }, proofs:['侍の証'] }), ['戦士で転職3回（あと1回）'])
+  assert.deepEqual(missingReqs(samurai, { jobCounts:{ 戦士:2 }, proofs:{ 侍の証:1 } }), ['戦士で転職3回（あと1回）'])
   // 両方そろった
-  assert.equal(canBecome(samurai, { jobCounts:{ 戦士:3 }, proofs:['侍の証'] }), true)
-  // 超過していてもよい
-  assert.equal(canBecome(samurai, { jobCounts:{ 戦士:9 }, proofs:['侍の証'] }), true)
+  assert.equal(canBecome(samurai, { jobCounts:{ 戦士:3 }, proofs:{ 侍の証:1 } }), true)
+  // 使い切った証では転職できない
+  assert.equal(canBecome(samurai, { jobCounts:{ 戦士:9 }, proofs:{ 侍の証:0 } }), false)
 })
 
 test('複合上位職は2つの初期職の回数がどちらも要る', () => {
-  const half = { jobCounts:{ 戦士:5, 魔法使い:1 }, proofs:['魔法剣士の証'] }
+  const half = { jobCounts:{ 戦士:5, 魔法使い:1 }, proofs:{ 魔法剣士の証:1 } }
   assert.deepEqual(missingReqs(magicSword, half), ['魔法使いで転職3回（あと2回）'])
   assert.equal(canBecome(magicSword, half), false)
-  assert.equal(canBecome(magicSword, { jobCounts:{ 戦士:3, 魔法使い:3 }, proofs:['魔法剣士の証'] }), true)
-  assert.equal(reqText(magicSword), '戦士で転職3回 ／ 魔法使いで転職3回 ／ 魔法剣士の証')
+  assert.equal(canBecome(magicSword, { jobCounts:{ 戦士:3, 魔法使い:3 }, proofs:{ 魔法剣士の証:1 } }), true)
+  assert.equal(reqText(magicSword), '戦士で転職3回 ／ 魔法使いで転職3回 ／ 魔法剣士の証（転職時に1個消費）')
 })
 
 test('特殊職は証だけで転職できる', () => {
-  assert.equal(canBecome(gambler, { jobCounts:{}, proofs:[] }), false)
-  assert.equal(canBecome(gambler, { jobCounts:{}, proofs:['ギャンブラーの証'] }), true)
-  assert.equal(reqText(gambler), 'ギャンブラーの証')
+  assert.equal(canBecome(gambler, { jobCounts:{}, proofs:{} }), false)
+  assert.equal(canBecome(gambler, { jobCounts:{}, proofs:{ ギャンブラーの証:1 } }), true)
+  assert.equal(reqText(gambler), 'ギャンブラーの証（転職時に1個消費）')
 })
 
 test('区分のラベルが揃っている', () => {

@@ -29,14 +29,18 @@ export const TIER_COLOR = {
 // 必要な証の名前。職業名から導出する（マスタの req_proof と一致する）
 export const proofOf = (classId) => `${classId}の証`
 
+// 証は転職で1個消費する。所持は「証の名前 → 個数」の形（v2_profiles.proofs）
+export const proofCount = (proofs, name) => (proofs?.[name] || 0)
+export const hasProof = (proofs, name) => proofCount(proofs, name) > 0
+
 // 条件のうち、まだ満たしていないものを日本語で返す（空配列＝転職できる）
-export const missingReqs = (cls, { jobCounts = {}, proofs = [] } = {}) => {
+export const missingReqs = (cls, { jobCounts = {}, proofs = {} } = {}) => {
   const out = []
   for (const [job, need] of Object.entries(cls?.req_jobs || {})) {
     const have = jobCounts[job] || 0
     if (have < need) out.push(`${job}で転職${need}回（あと${need - have}回）`)
   }
-  if (cls?.req_proof && !proofs.includes(cls.req_proof)) out.push(cls.req_proof)
+  if (cls?.req_proof && !hasProof(proofs, cls.req_proof)) out.push(cls.req_proof)
   return out
 }
 
@@ -48,7 +52,7 @@ export const canBecome = (cls, state) =>
 export const reqText = (cls) => {
   if (!cls) return ''
   const parts = Object.entries(cls.req_jobs || {}).map(([job, n]) => `${job}で転職${n}回`)
-  if (cls.req_proof) parts.push(cls.req_proof)
+  if (cls.req_proof) parts.push(`${cls.req_proof}（転職時に1個消費）`)
   return parts.length ? parts.join(' ／ ') : '条件なし'
 }
 

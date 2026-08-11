@@ -7,7 +7,7 @@ import {
   STAT_KEYS, STAT_DEFS, MAX_LV, ROLLS_PER_LV, JOB_CHANGE_POWER,
   calcPower, expToNext, expPerLv, canJobChange,
 } from '../lib/stats.js'
-import { TIER_LABEL, TIER_ORDER, TIER_COLOR, missingReqs, canBecome, reqText } from '../lib/classes.js'
+import { TIER_LABEL, TIER_ORDER, TIER_COLOR, missingReqs, canBecome, reqText, proofCount } from '../lib/classes.js'
 
 // ============================================================
 // バトルフロンティアⅡ（リメイク版）ホーム — 開発限定
@@ -105,6 +105,7 @@ export default function V2Home() {
       job: data.job_changes,
       className: data.class,
       points: data.points,
+      usedProof: data.used_proof,
       gains: STAT_KEYS.filter(k => alloc[k] > 0).map(k => `${STAT_DEFS[k].label}+${alloc[k]}`).join(' / ') || 'なし',
     }, ...l].slice(0, 12))
   }
@@ -119,7 +120,7 @@ export default function V2Home() {
   }
 
   // 転職条件の判定に使う状態（サーバー側 v2_change_job と同じ条件を画面にも出す）
-  const jobState = { jobCounts: prof?.job_counts || {}, proofs: prof?.proofs || [] }
+  const jobState = { jobCounts: prof?.job_counts || {}, proofs: prof?.proofs || {} }
 
   if (loading) {
     return <div style={{ minHeight:'100vh', background:'#000820', color:'#0088ff', fontFamily:'monospace', padding:'40px', textAlign:'center' }}>読み込み中...</div>
@@ -248,6 +249,7 @@ export default function V2Home() {
                                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px' }}>
                                   <span style={{ color: ok ? TIER_COLOR[tier] : '#446688', fontSize:'12px' }}>
                                     {c.id}{prof.job_counts?.[c.id] > 0 && <span style={{ color:'#556677', fontSize:'9px', marginLeft:'5px' }}>×{prof.job_counts[c.id]}</span>}
+                                    {c.req_proof && <span style={{ color: proofCount(jobState.proofs, c.req_proof) > 0 ? '#ffaa44' : '#664433', fontSize:'9px', marginLeft:'6px' }}>証{proofCount(jobState.proofs, c.req_proof)}個</span>}
                                   </span>
                                   {selectable && confirmJob !== c.id && (
                                     <button onClick={() => setConfirmJob(c.id)} disabled={busy} style={{ ...btn(TIER_COLOR[tier]), padding:'4px 8px', fontSize:'11px' }}>転職</button>
@@ -276,6 +278,7 @@ export default function V2Home() {
                   })}
                   <div style={{ color:'#446688', fontSize:'9px', lineHeight:'1.8' }}>
                     ×N＝その職業で転職した回数。上位職の条件はこの回数を見ます。
+                    証は転職のときに1個消費します（同じ職業に戻るにはもう1個要ります）。
                     職業による能力差はまだありません（スキルを実装するときに付けます）。
                   </div>
                 </div>
@@ -308,6 +311,7 @@ export default function V2Home() {
                       <>
                         <span style={{ color:'#ff88cc' }}>🔄 転職{l.job}回目 → {l.className}</span>
                         <span style={{ color:'#446688', marginLeft:'8px', fontSize:'10px' }}>戦闘力{l.points}分を振り分け</span>
+                        {l.usedProof && <span style={{ color:'#ffaa44', marginLeft:'6px', fontSize:'9px' }}>{l.usedProof}を1個消費</span>}
                       </>
                     ) : (
                       <>
