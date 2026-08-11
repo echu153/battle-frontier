@@ -594,7 +594,7 @@ export default function Smithy() {
     return true
   }
 
-  // 血→心臓 変換（血50 → 心臓1）
+  // 血→心臓 変換（血20 → 心臓1）
   const doConvertHeart = async (line) => {
     if (craftBusyRef.current) return
     craftBusyRef.current = true; setLoading(true)
@@ -1447,7 +1447,7 @@ export default function Smithy() {
         {tab === 'evolve' && (
           <div>
             <div style={{ color:'#446688', fontSize:'11px', marginBottom:'10px', lineHeight:1.6 }}>
-              エリアボスを倒すと「○○の血(50%)」「○○の心臓(0.5%)」をドロップ。血{BLOOD_PER_HEART}個で心臓1個に変換できます。<br/>
+              エリアボスを倒すと「○○の血(90%)」「○○の心臓(0.5%)」をドロップ。血{BLOOD_PER_HEART}個で心臓1個に変換できます。<br/>
               ボス装備のみ5段階まで進化（段階ごとに基礎ステ上昇）。<span style={{color:'#ffcc00'}}>5段階＝真化</span>で基礎ステ×2＋レアS＋特殊能力を獲得。
             </div>
 

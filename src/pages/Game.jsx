@@ -4324,7 +4324,7 @@ export default function Game() {
       setBattleLogs([...logs])
     }
 
-    // ボス装備 進化ドロップ（エリアボス撃破時・サーバー側RNG。確率は grant_boss_evo_drop 内で管理＝血70%/イベント中90%/心臓0.5%）
+    // ボス装備 進化ドロップ（エリアボス撃破時・サーバー側RNG。確率は grant_boss_evo_drop 内で管理＝血90%/心臓0.5%）
     if (win && isBossEncounter && !isPapiaEncounter) {
       try {
         const { data: evoDrop } = await supabase.rpc('grant_boss_evo_drop', { p_area_id: selectedArea })
