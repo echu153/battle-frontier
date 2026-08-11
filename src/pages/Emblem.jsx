@@ -6,6 +6,7 @@ import {
   EMBLEM_CRYSTALS, EMBLEM_CRYSTAL_KEYS, EMBLEM_ALLOC_MAX, EMBLEM_MAX_LEVEL,
   getEmblemRank, EMBLEM_RANK_COLOR, emblemLevelCap, EMBLEM_CAP_UNLOCK_COST,
   emblemLevelUpCost, emblemAllocTotal, emblemEffectChips, EMBLEM_SHARD_NAME,
+  emblemCrystalOwned,
 } from '../lib/emblem'
 import { HACHIGOKU_HELLS, isHachigokuUnlocked } from '../lib/hachigoku'
 
@@ -234,7 +235,7 @@ export default function Emblem() {
           {EMBLEM_CRYSTAL_KEYS.map(key => {
             const c = EMBLEM_CRYSTALS[key]
             const cur = alloc[key] || 0
-            const owned = items[c.name] || 0
+            const owned = emblemCrystalOwned(items, key)  // 旧名(改心の結晶)の在庫も合算
             const maxed = cur >= EMBLEM_ALLOC_MAX
             const canPlus = !busy && !maxed && owned > 0 && freePoints > 0
             const plus10 = Math.min(10, EMBLEM_ALLOC_MAX - cur, owned, freePoints)

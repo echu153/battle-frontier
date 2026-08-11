@@ -9,6 +9,8 @@ import {
   emblemLevelUpCost,
   emblemAllocTotal,
   calcEmblemBonus,
+  EMBLEM_CRYSTAL_BY_NAME,
+  emblemCrystalOwned,
 } from '../src/lib/emblem.js'
 import { HACHIGOKU_HELLS, HACHIGOKU_DIFFICULTIES, HACHIGOKU_HP_MULT, makeHachigokuEnemy } from '../src/lib/hachigoku.js'
 import { emblemDmgMult, emblemDrainAmount, emblemDotMult } from '../src/lib/emblemCombat.js'
@@ -45,9 +47,22 @@ test('emblemLevelUpCost 欠片コスト（SQLのemblem_level_upと一致させ�
   assert.equal(emblemLevelUpCost(200), 4)
 })
 
+test('結晶名にクリティカルの誤字「改心」が混入していない（旧名は所持数だけ合算）', () => {
+  for (const key of EMBLEM_CRYSTAL_KEYS) {
+    assert.ok(!EMBLEM_CRYSTALS[key].name.includes('改心'),
+      `${key}: 結晶名が誤字「改心」になっている（正: 会心） -> ${EMBLEM_CRYSTALS[key].name}`)
+  }
+  assert.equal(EMBLEM_CRYSTALS.kaishin.name, '会心の結晶')
+  // 旧名（DB改名SQL適用前の在庫）も同じkeyへ引けて、所持数は合算される
+  assert.equal(EMBLEM_CRYSTAL_BY_NAME['会心の結晶'], 'kaishin')
+  assert.equal(EMBLEM_CRYSTAL_BY_NAME['改心の結晶'], 'kaishin')
+  assert.equal(emblemCrystalOwned({ '改心の結晶': 3, '会心の結晶': 2 }, 'kaishin'), 5)
+  assert.equal(emblemCrystalOwned({ '力の結晶': 7 }, 'chikara'), 7)
+})
+
 test('MAX50振りの合計値が仕様書のMAX値と一致する', () => {
   // 仕様: 力/知恵=1250, 守護/抗魔=1500, 物理/特殊/破甲/破魔/会耐=15,
-  //  裂傷/火傷/猛毒/致命=50, 吸収=10, 回避=5, 改心/防絶=10, 防毒/防麻/防火/防血=20
+  //  裂傷/火傷/猛毒/致命=50, 吸収=10, 回避=5, 会心/防絶=10, 防毒/防麻/防火/防血=20
   const expect = {
     chikara: 1250, chie: 1250, shugo: 1500, kouma: 1500,
     butsuri: 15, tokushu: 15, hakou: 15, hama: 15, kaitai: 15,

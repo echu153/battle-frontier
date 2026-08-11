@@ -70,7 +70,8 @@ export const EMBLEM_CRYSTALS = {
   shugo:      { name: '守護の結晶',     label: '防御',              per: 30,  unit: '',  kind: 'flat', stat: 'def' },
   kouma:      { name: '抗魔の結晶',     label: '特殊防御',          per: 30,  unit: '',  kind: 'flat', stat: 'mdef' },
   kaihi:      { name: '回避の結晶',     label: '回避率',            per: 0.1, unit: '%', kind: 'pct',  key: 'evasion' },
-  kaishin:    { name: '改心の結晶',     label: 'クリティカル率',    per: 0.2, unit: '%', kind: 'pct',  key: 'crit' },
+  // legacy: 旧名（誤字）。DBのアイテム名を改名するSQLを流すまでは旧名の在庫も所持数に数える
+  kaishin:    { name: '会心の結晶',     label: 'クリティカル率',    per: 0.2, unit: '%', kind: 'pct',  key: 'crit', legacy: '改心の結晶' },
   chimei:     { name: '致命の結晶',     label: 'クリティカル威力',  per: 1,   unit: '%', kind: 'pct',  key: 'critDmg' },
   kaitai:     { name: '会耐の結晶',     label: 'クリティカル抵抗',  per: 0.3, unit: '%', kind: 'pct',  key: 'critResist' },
   boudoku:    { name: '防毒の結晶',     label: '毒/猛毒耐性',       per: 0.4, unit: '%', kind: 'res',  key: 'poison' },
@@ -81,10 +82,19 @@ export const EMBLEM_CRYSTALS = {
 }
 export const EMBLEM_ALLOC_MAX = 50  // 1項目に振れる最大
 export const EMBLEM_CRYSTAL_KEYS = Object.keys(EMBLEM_CRYSTALS)
-// 結晶アイテム名 → key の逆引き
+// 結晶アイテム名 → key の逆引き（legacy=旧名もそのkeyへ引けるようにする）
 export const EMBLEM_CRYSTAL_BY_NAME = Object.fromEntries(
-  EMBLEM_CRYSTAL_KEYS.map(k => [EMBLEM_CRYSTALS[k].name, k])
+  EMBLEM_CRYSTAL_KEYS.flatMap(k => {
+    const c = EMBLEM_CRYSTALS[k]
+    return c.legacy ? [[c.name, k], [c.legacy, k]] : [[c.name, k]]
+  })
 )
+// 所持数（name→数量のmap）から結晶の所持数を取る。旧名の在庫も合算する
+export const emblemCrystalOwned = (itemMap, key) => {
+  const c = EMBLEM_CRYSTALS[key]
+  if (!c) return 0
+  return (itemMap?.[c.name] || 0) + (c.legacy ? (itemMap?.[c.legacy] || 0) : 0)
+}
 
 // alloc(jsonb: key→振り数) の合計
 export const emblemAllocTotal = (alloc) =>
