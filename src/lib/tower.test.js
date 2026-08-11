@@ -516,3 +516,40 @@ test('長期戦の回復阻害（20ターン超から1ターンごとに5%・40�
       `healOutMult を通っていない回復がある: ${l.trim().slice(0, 90)}`)
   }
 })
+
+test('倍率を持つバフを消すときは undefined にする（NaN即死の再発防止）', async () => {
+  // 2026-08-07: 魔剣開放とオールインの重ね掛けが `atkUp = { turns:0 }` と書いていた。
+  // rate を持たないバフが残り、読み手の `playerBuffs.atkUp ? playerBuffs.atkUp.rate : 1` が
+  // undefined を掛けてダメージが NaN になる。NaN は `hp > 0` が偽になるので敵が即死し、
+  // 10層のエリアボスまで一撃で消せた。書き手・読み手の両方を固めてある。
+  const fs = await import('node:fs')
+  const FILES = ['src/pages/Game.jsx', 'src/lib/towerBattle.js', 'src/pages/Abyss.jsx',
+    'src/pages/Hachigoku.jsx', 'src/pages/Tenkyuu.jsx', 'src/pages/RaidBoss.jsx']
+  const RATE_BUFFS = ['atkUp', 'matkUp', 'defUp', 'mdefUp', 'spdUp']
+  for (const f of FILES) {
+    const src = fs.readFileSync(f, 'utf8')
+    for (const k of RATE_BUFFS) {
+      // 書き手: rate を持たないオブジェクトを代入していないか
+      const bad = new RegExp(`${k}\s*=\s*\{(?![^}]*rate)[^}]*\}`)
+      const m = src.match(bad)
+      assert.ok(!m, `${f}: ${k} に rate の無いバフを代入している（${m?.[0]}）。消すなら undefined にすること`)
+      // 読み手: オブジェクトの真偽ではなく turns > 0 で見ているか
+      assert.ok(!src.includes(`playerBuffs.${k} ? playerBuffs.${k}.rate`),
+        `${f}: ${k} をオブジェクトの真偽で読んでいる。rate の無いバフが入ると NaN になる`)
+    }
+  }
+})
+
+test('ポーションは回復量が0なら消費しない', async () => {
+  // 長期戦の回復阻害でHP回復が0になったとき、使わせると無限ポーションの残り回数と
+  // アイテムの在庫だけが減ってHPは1も戻らない。
+  const fs = await import('node:fs')
+  const battle = fs.readFileSync('src/lib/towerBattle.js', 'utf8')
+  const i = battle.indexOf("effect === 'hp_pct'")
+  assert.ok(i > 0, 'ポーションのHP回復の分岐が見つからない')
+  const block = battle.slice(i, i + 700)
+  assert.ok(/if \(healAmt > 0\) \{/.test(block), 'ポーションに「回復量が0なら使わない」の判定が無い')
+  const use = block.indexOf('usedInfinite()')
+  const guard = block.indexOf('if (healAmt > 0) {')
+  assert.ok(guard > 0 && guard < use, '消費(usedInfinite)が判定の外にある')
+})

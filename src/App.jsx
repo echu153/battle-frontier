@@ -51,6 +51,7 @@ const Tenkyuu = lazyReload(() => import('./pages/Tenkyuu'))
 const Hachigoku = lazyReload(() => import('./pages/Hachigoku')) // 八獄(開発限定・紋章育成コンテンツ)
 const Emblem = lazyReload(() => import('./pages/Emblem')) // 紋章(開発限定・第5の装備枠)
 const Alchemy = lazyReload(() => import('./pages/Alchemy'))
+const Basecamp = lazyReload(() => import('./pages/Basecamp')) // 拠点(開発限定・仲間を配置する放置コンテンツ)
 const Idle = lazyReload(() => import('./pages/Idle'))
 const Territory = lazyReload(() => import('./pages/Territory'))
 const War = lazyReload(() => import('./pages/War'))
@@ -279,6 +280,7 @@ function App() {
         <Route path="/hachigoku" element={session ? <Hachigoku /> : <Navigate to="/login" />} />
         <Route path="/emblem" element={session ? <Emblem /> : <Navigate to="/login" />} />
         <Route path="/alchemy" element={session ? <Alchemy /> : <Navigate to="/login" />} />
+        <Route path="/basecamp" element={session ? <Basecamp /> : <Navigate to="/login" />} />
         <Route path="/idle" element={session ? <Idle /> : <Navigate to="/login" />} />
         <Route path="/territory" element={session ? <Territory /> : <Navigate to="/login" />} />
         <Route path="/war" element={session ? <War /> : <Navigate to="/login" />} />

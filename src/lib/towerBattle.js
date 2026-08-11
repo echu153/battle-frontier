@@ -257,8 +257,8 @@ export function simulateTowerBattle({
     const kabeDef = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
     const defDown = playerBuffs.defDown?.turns > 0 ? playerBuffs.defDown.rate : 1.0
     const mdefDown = playerBuffs.mdefDown?.turns > 0 ? playerBuffs.mdefDown.rate : 1.0
-    const pDef = eff.def * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * defDown * holyFieldDef * holyKnightMult * kabeDef * ryu
-    const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * mdefDown * holyFieldDef * holyKnightMult * kabeDef * ryu
+    const pDef = eff.def * (playerBuffs.defUp?.turns > 0 ? playerBuffs.defUp.rate : 1) * defDown * holyFieldDef * holyKnightMult * kabeDef * ryu
+    const pMdef = eff.mdef * (playerBuffs.mdefUp?.turns > 0 ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp?.turns > 0 ? playerBuffs.defUp.rate : 1) * mdefDown * holyFieldDef * holyKnightMult * kabeDef * ryu
     return { pDef, pMdef }
   }
 
@@ -267,7 +267,7 @@ export function simulateTowerBattle({
     const paralysisSpdP = playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1.0
     const spdDownP = playerBuffs.spdDown?.turns > 0 ? playerBuffs.spdDown.rate : 1.0
     const quakeSpd = 1 - Math.min(0.5, quakeStacks * quakeStep)
-    return eff.spd * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * spdDownP * paralysisSpdP * quakeSpd
+    return eff.spd * (playerBuffs.spdUp?.turns > 0 ? playerBuffs.spdUp.rate : 1) * spdDownP * paralysisSpdP * quakeSpd
   }
 
   const doPlayerAttack = (isExtra = false) => {
@@ -281,8 +281,8 @@ export function simulateTowerBattle({
     const burnDebuffP = playerBuffs.burn?.turns > 0 ? 0.9 : 1.0
     const curseP = playerBuffs.curse?.turns > 0 ? (playerBuffs.curse.rate ?? 0.9) : 1.0  // 戦闘エリア6の呪い：与ダメ-10%
     const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * (pe('魔法剣士') ? 0.6 : 0.3)) : 0
-    const pMatk = (eff.matk - madokenBonus) * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * (playerBuffs.matkDown?.turns > 0 ? playerBuffs.matkDown.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP * evoMatkMult(eff, allSkillsSet)
-    const pAtk = (eff.atk + madokenBonus + takaAtkBonus) * madokenAtkMult * (playerBuffs.atkUp ? playerBuffs.atkUp.rate : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP * evoAtkMult(eff, allSkillsSet)
+    const pMatk = (eff.matk - madokenBonus) * (playerBuffs.matkUp?.turns > 0 ? playerBuffs.matkUp.rate : 1) * (playerBuffs.matkDown?.turns > 0 ? playerBuffs.matkDown.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP * evoMatkMult(eff, allSkillsSet)
+    const pAtk = (eff.atk + madokenBonus + takaAtkBonus) * madokenAtkMult * (playerBuffs.atkUp?.turns > 0 ? playerBuffs.atkUp.rate : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP * evoAtkMult(eff, allSkillsSet)
     const pSpd = playerSpdNow(target)
     const effBuff = { ...eff, atk: pAtk, def: pDef, mdef: pMdef, matk: pMatk, spd: pSpd }
 
@@ -429,7 +429,7 @@ export function simulateTowerBattle({
         if (target.mods?.adapt && finalDmg > 0) target.lastPlayerSkill = cs.skills.name
 
         // 吸収の出所（紋章）は書かない。ただしHPは実際に動くので回復した事象だけ残す
-        { const emDrain = emblemDrainAmount(eff, finalDmg, isPhysSkill); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + Math.floor(emDrain * healOutMult())); logs.push({ text: `💚 HPが${emDrain}回復した！`, color: '#44ff88' }) } }
+        { const emDrain = emblemDrainAmount(eff, finalDmg, isPhysSkill); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { const emHeal = Math.floor(emDrain * healOutMult()); playerHp = Math.min(eff.hp_max, playerHp + emHeal); logs.push({ text: `💚 HPが${emHeal}回復した！`, color: '#44ff88' }) } }
         if (hasRokkan && pe('サイキッカー') && finalDmg > 0 && cs.skills?.type === '魔法攻撃') rokkanStacks = Math.min(6, rokkanStacks + 1)
         if (finalDmg > 0 && equippedWeaponItem?.bonus_effect === 'hit_heal_down_10_2t' && !(enemyBuffs.healDown?.turns > 0)) {
           enemyBuffs.healDown = { turns: 2, rate: 0.7 }
@@ -448,6 +448,13 @@ export function simulateTowerBattle({
         }
         const healAmt = playerBuffs.healSeal?.turns > 0 ? 0 : Math.floor(res.heal * passiveHealMult * (playerBuffs.healUp?.turns > 0 ? playerBuffs.healUp.rate : 1) * healOutMult())
         playerHp = Math.min(eff.hp_max, playerHp + healAmt)
+        // ログの回復量も実際に足した数へ合わせる。executeSkill は回復力低下(3層)も
+        // 長期戦の回復阻害も知らないので、素の数字のままだと表示だけ嘘になる。
+        // ダメージ側（425行）と同じやり方。浄化の輝きのようにダメージと回復が同じ文にある技があるので、
+        // 数字の単純置換ではなく「回復」の直前の数字だけを差し替える。
+        if (res.heal > 0 && healAmt !== res.heal) {
+          resLog = resLog.replace(new RegExp(String(res.heal) + '(?=\\D*回復)'), String(healAmt))
+        }
         if (passiveHealReflect && healAmt > 0) { target.hp -= healAmt; logs.push({ text: `✨ 神聖加護の反射！ ${target.name}に${healAmt}ダメージ！`, color: '#ffdd44' }) }
 
         if (playerBuffs.spellBladeSealed?.turns > 0) {
@@ -531,7 +538,7 @@ export function simulateTowerBattle({
       const finalDmg = Math.floor(baseDmg * 0.7 * critMult * (isArtifact ? 1.3 : 1.0) * passiveDmgMult * iaiNormalMult * rokkanMultN * enemyDmgReduceMult2 * emblemDmgMult(eff, !isMagical) * towerMult * (0.9 + Math.random() * 0.2))
       target.hp -= finalDmg
       // 吸収の出所（紋章）は書かない。ただしHPは実際に動くので回復した事象だけ残す
-      { const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { playerHp = Math.min(eff.hp_max, playerHp + Math.floor(emDrain * healOutMult())); logs.push({ text: `💚 HPが${emDrain}回復した！`, color: '#44ff88' }) } }
+      { const emDrain = emblemDrainAmount(eff, finalDmg, !isMagical); if (emDrain > 0 && !(playerBuffs.healSeal?.turns > 0)) { const emHeal = Math.floor(emDrain * healOutMult()); playerHp = Math.min(eff.hp_max, playerHp + emHeal); logs.push({ text: `💚 HPが${emHeal}回復した！`, color: '#44ff88' }) } }
       evoOnHit(eff, finalDmg, enemyBuffs, target.name, logs, isCrit)
       // 蒼雷の短刃: 追加行動の攻撃ヒット時、eff.extraParaChance%で相手を麻痺
       // 麻痺の付与は残すが、どの装備のおかげかは書かないので発動ログは出さない
@@ -830,7 +837,9 @@ const basicAttack = (en) => ({ name: '攻撃', type: en.type === 'magical' ? 'ma
     if (en.summonMid && floorData && !en.used.summonMid && rate <= en.summonMid.hpBelow) {
       en.used.summonMid = true
       const sr = en.summonMid.statRate || 0.5
-      spawn(floorData.midBoss, { statRate: sr, hpRate: sr }, `${en.name}が呼び寄せた！`, en.summonMid.count || 1)
+      // 呼ばれるのは強敵の定義なので isBoss を渡す。渡さないと雑魚の被ダメージ倍率
+      // （5層以降はボスより緩い）を引いてしまい、援軍だけ柔らかくなる
+      spawn(floorData.midBoss, { statRate: sr, hpRate: sr, isBoss: true }, `${en.name}が呼び寄せた！`, en.summonMid.count || 1)
     }
     // 定期召喚（戦闘エリア4）
     if (en.summonLoop && floorData) {
@@ -1030,12 +1039,16 @@ const basicAttack = (en) => ({ name: '攻撃', type: en.type === 'magical' ? 'ma
       }
       if (canUse) {
         if ((effect === 'hp_pct' || effect === 'hp_pct_infinite') && playerHp / eff.hp_max * 100 <= threshold) {
-          // ポーションも長期戦の回復阻害を通す。ここを素通りさせると持久型がここだけで粘れる
+          // ポーションも長期戦の回復阻害を通す。ここを素通りさせると持久型がここだけで粘れる。
+          // ⚠回復量が0になったら使わせない。使わせると無限ポーションの残り回数と
+          //   アイテムの在庫だけが減って、HPは1も戻らない
           const healAmt = Math.floor(eff.hp_max * currentItem.items.value / 100 * healOutMult())
-          playerHp = Math.min(eff.hp_max, playerHp + healAmt)
-          logs.push({ text: `🧪 ${currentItem.items.name}を使用！ HPが${healAmt}回復した！`, color: '#44ff88' })
-          if (isInfinite) usedInfinite()
-          else { itemUsed = true; currentItem = null }
+          if (healAmt > 0) {
+            playerHp = Math.min(eff.hp_max, playerHp + healAmt)
+            logs.push({ text: `🧪 ${currentItem.items.name}を使用！ HPが${healAmt}回復した！`, color: '#44ff88' })
+            if (isInfinite) usedInfinite()
+            else { itemUsed = true; currentItem = null }
+          }
         } else if ((effect === 'mp_pct' || effect === 'mp_pct_infinite') && playerMp / eff.mp_max * 100 <= threshold) {
           const healAmt = Math.floor(eff.mp_max * currentItem.items.value / 100)
           playerMp = Math.min(eff.mp_max, playerMp + healAmt)

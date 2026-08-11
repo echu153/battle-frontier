@@ -452,7 +452,7 @@ export const TOWER_FLOORS = [
       { name: '稜光乱舞',   type: 'physical_multi', mult: 1.05, hits: 2, effect: 'spdDown', rate: 0.85, turns: 3, chance: 0.3 },
       { name: '光輪の加護', type: 'buff', effect: 'defMdefUp', defRate: 1.3, mdefRate: 1.3, turns: 3 },
     ], {
-      // 屈折: 与ダメージの20%を反射。1発あたりの上限はプレイヤー最大HPの2%
+      // 屈折: 与ダメージの60%を反射。1発あたりの上限はプレイヤー最大HPの6%（2026-08-07に3倍化）
       mods: { reflect: 0.60, reflectCap: 0.06 },
       summonMid: { hpBelow: 0.5, statRate: 0.5, count: 1, once: true },
       cleanse: { hpBelow: 0.5, once: true },

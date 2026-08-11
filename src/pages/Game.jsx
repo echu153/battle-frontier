@@ -1197,10 +1197,13 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       // （バフをかけ直して反動を回避＝デメリット無しで永続化する悪用を防ぐ。全戦闘共通=executeSkillで一元処理）
       if (playerBuffs.allinActive?.turns > 0) {
         const reactT = playerBuffs.allinActive.reactTurns || 4
-        result.newPlayerBuffs.atkUp = { turns:0 }
-        result.newPlayerBuffs.matkUp = { turns:0 }
-        result.newPlayerBuffs.spdUp = { turns:0 }
-        result.newPlayerBuffs.dmgReduce = { turns:0 }
+        // ⚠バフを消すときは undefined にすること。{turns:0} にすると rate を持たない
+        //   バフが残り、読み手（pAtk = ... * (playerBuffs.atkUp?.turns > 0 ? playerBuffs.atkUp.rate : 1)）が
+        //   undefined を掛けてダメージがNaNになる。NaNは hp>0 が偽になるので敵が即死する。
+        result.newPlayerBuffs.atkUp = undefined
+        result.newPlayerBuffs.matkUp = undefined
+        result.newPlayerBuffs.spdUp = undefined
+        result.newPlayerBuffs.dmgReduce = undefined
         result.newPlayerBuffs.allinActive = undefined  // =undefinedにして各戦闘の「turns===0で反動移行」ハンドラの二重発火を防ぐ
         result.newPlayerBuffs.allinDebuff = { turns:reactT, rate:0.7 }
         result.log = `💸 オールインを重ね掛け！ 賭けが崩れて即座に反動！ ${reactT}ターンの間 全ステータス低下＆バフ不可！`; break
@@ -1250,8 +1253,9 @@ export const executeSkill = (skill, eff, profile, enemy, enemyBuffs, playerBuffs
       // （かけ直しで反動を回避＝2倍バフを永続化する悪用を防ぐ。全戦闘共通=executeSkillで一元処理）
       if (playerBuffs.spellBladeExhaust?.turns > 0) {
         const sealNow = playerBuffs.spellBladeExhaust.sealTurns || 4
-        result.newPlayerBuffs.atkUp = { turns:0 }
-        result.newPlayerBuffs.matkUp = { turns:0 }
+        // ⚠オールイン側と同じ理由で undefined にすること（{turns:0} だとダメージがNaNになる）
+        result.newPlayerBuffs.atkUp = undefined
+        result.newPlayerBuffs.matkUp = undefined
         result.newPlayerBuffs.spellBladeExhaust = undefined  // =undefinedにして各戦闘の反動移行ハンドラの二重発火を防ぐ
         result.newPlayerBuffs.spellBladeSealed = { turns:sealNow }
         result.log = `⚔ 魔剣開放を重ね掛け！ 魔力が暴走し即座に反動！ ${sealNow}ターンの間バフ不可状態！`; break
@@ -1572,7 +1576,7 @@ export const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, p
   const enemyDmgDown = enemyBuffs.dmgDown?.turns > 0 ? enemyBuffs.dmgDown.rate : 1.0
   switch (skill.type) {
     case 'physical': {
-      const pDef = Math.max(1, (eff?.def || 0) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * playerDefMult)
+      const pDef = Math.max(1, (eff?.def || 0) * (playerBuffs.defUp?.turns > 0 ? playerBuffs.defUp.rate : 1) * playerDefMult)
       const base = Math.floor(enemy.atk * enemy.atk / Math.max(1, enemy.atk + pDef))
       const rawDmg = Math.max(1, Math.floor(base * skill.mult))
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
@@ -1602,7 +1606,7 @@ export const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, p
       break
     }
     case 'magical': {
-      const pMdef = Math.max(1, (eff?.mdef || 0) * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * playerDefMult)
+      const pMdef = Math.max(1, (eff?.mdef || 0) * (playerBuffs.mdefUp?.turns > 0 ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp?.turns > 0 ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * playerDefMult)
       const eMatk = enemy.matk || enemy.atk
       const base = Math.floor(eMatk * eMatk / Math.max(1, eMatk + pMdef))
       const rawDmg = Math.max(1, Math.floor(base * skill.mult))
@@ -1625,7 +1629,7 @@ export const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, p
       break
     }
     case 'magical_multi': {
-      const pMdef2 = Math.max(1, (eff?.mdef || 0) * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * playerDefMult)
+      const pMdef2 = Math.max(1, (eff?.mdef || 0) * (playerBuffs.mdefUp?.turns > 0 ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp?.turns > 0 ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * playerDefMult)
       const eMatk2 = enemy.matk || enemy.atk
       const base2 = Math.floor(eMatk2 * eMatk2 / Math.max(1, eMatk2 + pMdef2))
       const perHit2 = Math.max(1, Math.floor(base2 * skill.mult))
@@ -1636,7 +1640,7 @@ export const executeEnemySkill = (skill, enemy, enemyHp, enemyMaxHp, playerHp, p
       break
     }
     case 'physical_multi': {
-      const pDef = Math.max(1, (eff?.def || 0) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * playerDefMult)
+      const pDef = Math.max(1, (eff?.def || 0) * (playerBuffs.defUp?.turns > 0 ? playerBuffs.defUp.rate : 1) * playerDefMult)
       const base = Math.floor(enemy.atk * enemy.atk / Math.max(1, enemy.atk + pDef))
       const perHit = Math.max(1, Math.floor(base * skill.mult))
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
@@ -3263,16 +3267,16 @@ export default function Game() {
       const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
       const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
       const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDef * holyKnightMult * ryurinMult * kabeDefP
-      const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDef * holyKnightMult * ryurinMult * kabeDefP
+      const pMdef  = eff.mdef * (playerBuffs.mdefUp?.turns > 0 ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp?.turns > 0 ? playerBuffs.defUp.rate : 1) * holyFieldDef * holyKnightMult * ryurinMult * kabeDefP
       const burnDebuffP = playerBuffs.burn?.turns > 0 ? 0.9 : 1.0
       const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * (pe('魔法剣士')?0.6:0.3)) : 0
       // ボス装備 真化: 全スキルセット時の攻撃/特攻+10%（深紅の牙輪/魔眼石）
       const evoAllAtkMult  = (allSkillsSet && (eff.evoAllskillAtk||0)  > 0) ? 1 + eff.evoAllskillAtk/100  : 1
       const evoAllMatkMult = (allSkillsSet && (eff.evoAllskillMatk||0) > 0) ? 1 + eff.evoAllskillMatk/100 : 1
-      const pMatk  = (eff.matk - madokenBonus) * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP * evoAllMatkMult
+      const pMatk  = (eff.matk - madokenBonus) * (playerBuffs.matkUp?.turns > 0 ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP * evoAllMatkMult
       const pAtk   = (eff.atk + madokenBonus + takaAtkBonus) * madokenAtkMult * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP * evoAllAtkMult
       const paralysisSpdP = playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1.0
-      const pSpd   = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * paralysisSpdP
+      const pSpd   = effectiveSpdForCalc * (playerBuffs.spdUp?.turns > 0 ? playerBuffs.spdUp.rate : 1) * paralysisSpdP
       const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
       // 宝石の防御貫通/魔法防御貫通（敵DEF/MDEFを%無視）を倍率に折り込む
       const eDefRate  = (enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1) * (enemyBuffs.defUp  ? enemyBuffs.defUp.rate  : 1) * (1 - (eff.defPen || 0))
@@ -3607,7 +3611,7 @@ export default function Game() {
       const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
       const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
       const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDefE * holyKnightMultE * ryurinMult * kabeDefE
-      const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE * ryurinMult * kabeDefE
+      const pMdef = eff.mdef * (playerBuffs.mdefUp?.turns > 0 ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp?.turns > 0 ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE * ryurinMult * kabeDefE
       const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
       const berserkDmgRate = hasBerserk ? (pe('狂戦士')?1.20:1.15) : 1.0  // バーサク：被ダメ+15%（再修練3で+20%）
       const isEM = enemy.type === 'magical'
@@ -3623,7 +3627,7 @@ export default function Game() {
       const playerSpdDebuff = playerBuffs.spdDown ? playerBuffs.spdDown.rate : 1
 
       // プレイヤーの回避判定（素早さバフ/デバフ考慮）
-      const effectivePlayerSpd = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * playerSpdDebuff
+      const effectivePlayerSpd = effectiveSpdForCalc * (playerBuffs.spdUp?.turns > 0 ? playerBuffs.spdUp.rate : 1) * playerSpdDebuff
       const enemySpdDebuff = enemyBuffs.spdDown?.turns > 0 ? enemyBuffs.spdDown.rate : 1  // 濡羽杖アマザネ/スライムの指輪等
       const effectiveEnemySpd = enemySpd * enemySpdBuff * enemySpdDebuff
       const evasionRate = calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0) + (hasOnmi ? 5 : 0)
@@ -6356,6 +6360,7 @@ export default function Game() {
                         {lockOr('fishing', <button key="fishing" onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場</button>)}
                         {lockOr('scarecrow', <button key="scarecrow" onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場{scAbyssEventActive && <span style={{ color:'#dd88ff', fontSize:'10px', marginLeft:'4px' }}>🎉イベント中</span>}</button>)}
                         {lockOr('alchemy', <button key="alchemy" onClick={()=>nav('/alchemy')} style={{ padding:'10px', background:'#001020', border:'1px solid #1a8a6a', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🧪 錬金部屋</button>)}
+                        {profile?.is_admin && <button key="basecamp" onClick={()=>nav('/basecamp')} style={{ padding:'10px', background:'#001020', border:'1px solid #6a9a3a', color:'#8fcf6f', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏕 拠点 <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
                       </div>
                       </MenuCat>
                       </>) })()}
@@ -6916,6 +6921,7 @@ export default function Game() {
                           {lockOr('fishing', <button key="fishing" onClick={()=>nav('/fishing')} style={{ padding:'10px', background:'#001020', border:'1px solid #44aaff', color:'#44aaff', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🎣 釣り場へ</button>)}
                           {lockOr('scarecrow', <button key="scarecrow" onClick={()=>nav('/scarecrow')} style={{ padding:'10px', background:'#001020', border:'1px solid #886600', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🌾 かかし修練場へ{scAbyssEventActive && <span style={{ color:'#dd88ff', fontSize:'10px', marginLeft:'4px' }}>🎉イベント中</span>}</button>)}
                           {lockOr('alchemy', <button key="alchemy" onClick={()=>nav('/alchemy')} style={{ padding:'10px', background:'#001020', border:'1px solid #1a8a6a', color:'#44ddaa', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🧪 錬金部屋へ</button>)}
+                          {profile?.is_admin && <button key="basecamp" onClick={()=>nav('/basecamp')} style={{ padding:'10px', background:'#001020', border:'1px solid #6a9a3a', color:'#8fcf6f', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }}>🏕 拠点へ <span style={{ fontSize:'9px', color:'#8877aa' }}>[開発]</span></button>}
                         </div>
                         </MenuCat>
                         </>) })()}

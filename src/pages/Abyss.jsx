@@ -168,13 +168,13 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     const holyKnightMult = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
     const kabeDefP = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
     const pDef   = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDef * holyKnightMult * kabeDefP
-    const pMdef  = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * holyFieldDef * holyKnightMult * kabeDefP
+    const pMdef  = eff.mdef * (playerBuffs.mdefUp?.turns > 0 ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp?.turns > 0 ? playerBuffs.defUp.rate : 1) * holyFieldDef * holyKnightMult * kabeDefP
     const burnDebuffP = playerBuffs.burn?.turns > 0 ? 0.9 : 1.0
     const madokenBonus = hasMadokenJutsu ? Math.floor(eff.matk * (pe('魔法剣士')?0.6:0.3)) : 0
-    const pMatk  = (eff.matk - madokenBonus) * (playerBuffs.matkUp ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP * evoMatkMult(eff, allSkillsSet)
+    const pMatk  = (eff.matk - madokenBonus) * (playerBuffs.matkUp?.turns > 0 ? playerBuffs.matkUp.rate : 1) * passiveMatkMult * passiveMatkMultTenki * burnDebuffP * evoMatkMult(eff, allSkillsSet)
     const pAtk   = (eff.atk + madokenBonus + takaAtkBonus) * madokenAtkMult * (playerBuffs.atkUp  ? playerBuffs.atkUp.rate  : 1) * (playerBuffs.atkDown ? playerBuffs.atkDown.rate : 1) * burnDebuffP * evoAtkMult(eff, allSkillsSet)
     const paralysisSpdP = playerBuffs.paralysis?.turns > 0 ? (playerBuffs.paralysis.spdRate || 0.8) : 1.0
-    const pSpd   = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * paralysisSpdP
+    const pSpd   = effectiveSpdForCalc * (playerBuffs.spdUp?.turns > 0 ? playerBuffs.spdUp.rate : 1) * paralysisSpdP
     const effBuff = { ...eff, atk:pAtk, def:pDef, mdef:pMdef, matk:pMatk, spd:pSpd }
     const eDefRate  = (enemyBuffs.defDown  ? enemyBuffs.defDown.rate  : 1) * (enemyBuffs.defUp  ? enemyBuffs.defUp.rate  : 1) * (1 - (eff.defPen || 0))
     const eMdefRate = (enemyBuffs.mdefDown ? enemyBuffs.mdefDown.rate : 1) * (enemyBuffs.mdefUp ? enemyBuffs.mdefUp.rate : 1) * (1 - (eff.mdefPen || 0))
@@ -449,7 +449,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     const holyKnightMultE = hasHolyKnightPassive ? (pe('聖騎士')?2.0:1.5) : 1.0
     const kabeDefE = (playerBuffs.dmgReduce?.isGainoKabe && pe('死霊使い')) ? 2.0 : 1.0
     const pDef  = eff.def  * (playerBuffs.defUp  ? playerBuffs.defUp.rate  : 1) * holyFieldDefE * holyKnightMultE * kabeDefE * ryurinMult
-    const pMdef = eff.mdef * (playerBuffs.mdefUp ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE * kabeDefE * ryurinMult
+    const pMdef = eff.mdef * (playerBuffs.mdefUp?.turns > 0 ? playerBuffs.mdefUp.rate : 1) * (playerBuffs.defUp?.turns > 0 ? playerBuffs.defUp.rate : 1) * (playerBuffs.mdefDown ? playerBuffs.mdefDown.rate : 1) * holyFieldDefE * holyKnightMultE * kabeDefE * ryurinMult
     const dmgReduceRate = playerBuffs.dmgReduce?.turns > 0 ? playerBuffs.dmgReduce.rate : 1.0
     const berserkDmgRate = hasBerserk ? (pe('狂戦士')?1.20:1.15) : 1.0
     const isEM = enemy.type === 'magical'
@@ -463,7 +463,7 @@ function simulateAbyssBattle(eff, equipment, skillSets, profile, enemy, playerIt
     const enemySpdBuff = enemyBuffs.spdUp ? enemyBuffs.spdUp.rate : 1
     const enemySpdDebuff = enemyBuffs.spdDown?.turns > 0 ? enemyBuffs.spdDown.rate : 1  // 濡羽杖アマザネ/スライムの指輪等
     const playerSpdDebuff = playerBuffs.spdDown ? playerBuffs.spdDown.rate : 1
-    const effectivePlayerSpd = effectiveSpdForCalc * (playerBuffs.spdUp ? playerBuffs.spdUp.rate : 1) * playerSpdDebuff
+    const effectivePlayerSpd = effectiveSpdForCalc * (playerBuffs.spdUp?.turns > 0 ? playerBuffs.spdUp.rate : 1) * playerSpdDebuff
     const effectiveEnemySpd = enemySpd * enemySpdBuff * enemySpdDebuff
     const evasionRate = calcEvasionRate(effectivePlayerSpd, effectiveEnemySpd) + (eff.evasionBonus || 0) + (playerBuffs.evasion?.turns > 0 ? playerBuffs.evasion.rate * 100 : 0) + (hasOnmi ? 5 : 0)
     if (evasionRate > 0 && Math.random()*100 < evasionRate) {
