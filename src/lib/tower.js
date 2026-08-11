@@ -586,11 +586,11 @@ export const TOWER_FLOORS = [
 
 export const MAX_IMPLEMENTED_FLOOR = TOWER_FLOORS.length
 
-// いま挑戦できる最大の層（2026-08-04）。データは10層ぶんあるが、
-// 5層以降はボスが想定より弱く調整中なので一時的に閉じている。
+// いま挑戦できる最大の層。
+//  2026-08-04 に5層以降を一時停止（ボスが想定より弱かったため）→ 2026-08-07 再公開。
 // ⚠SQL の tower_max_floor() と必ず同じ値にすること（権威はサーバー側）。
-//   調整が終わったら両方を 10 に戻す。
-export const OPEN_MAX_FLOOR = 4
+//   片方だけ変えると「選べるのに出撃が弾かれる」状態になる。tower.test.js がズレを検出する。
+export const OPEN_MAX_FLOOR = 10
 
 // エンドレスタワーの解放条件（2026-08-04 一般公開）。
 // ⚠ここを変えたら SQL の tower_can_enter() も必ず合わせること（権威はサーバー側）。

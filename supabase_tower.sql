@@ -168,11 +168,11 @@ END; $$;
 -- ============================================================
 -- 2. 定数（クライアントの src/lib/tower.js と必ず一致させること）
 -- ============================================================
--- いま挑戦できる最大の層。データは10層ぶんあるが、5層以降はボスが想定より弱く
--- 調整中のため一時的に閉じている（2026-08-04）。調整が終わったら 10 に戻す。
+-- いま挑戦できる最大の層。
+--  2026-08-04 に5層以降を一時停止（ボスが想定より弱かったため）→ 2026-08-07 再公開。
 -- ⚠クライアントの OPEN_MAX_FLOOR と必ず同じ値にすること。
 CREATE OR REPLACE FUNCTION tower_max_floor() RETURNS int
-LANGUAGE sql IMMUTABLE AS $$ SELECT 4 $$;
+LANGUAGE sql IMMUTABLE AS $$ SELECT 10 $$;
 
 CREATE OR REPLACE FUNCTION tower_sorties_to_mid(p_floor int) RETURNS int
 LANGUAGE sql IMMUTABLE AS $$ SELECT 30 + p_floor * 10 $$;
