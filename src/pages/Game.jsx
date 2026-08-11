@@ -5918,6 +5918,9 @@ export default function Game() {
             {profile?.is_admin && (
               <button onClick={()=>{ setAutoSortie(v=>!v); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color: autoSortie?'#ff6644':'#ffaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔁 自動出撃[開発] {autoSortie?'ON（タップで停止）':'OFF'}</button>
             )}
+            {profile?.is_admin && (
+              <button onClick={()=>{ nav('/v2'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🧪 リメイク版に切替[開発]</button>
+            )}
             <div style={{ padding:'8px 16px 3px', color:'#667788', fontSize:'10px', letterSpacing:'2px', borderBottom:'1px solid #002244' }}>🎲 娯楽</div>
             {profile?.is_admin && (
               <button onClick={()=>{ nav('/card-battle'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ffcc44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🎴 幻札バトル[開発]</button>
@@ -6477,6 +6480,9 @@ export default function Game() {
             )}
             {profile?.is_admin && (
               <button onClick={()=>{ setAutoSortie(v=>!v); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color: autoSortie?'#ff6644':'#ffaa44', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🔁 自動出撃[開発] {autoSortie?'ON（タップで停止）':'OFF'}</button>
+            )}
+            {profile?.is_admin && (
+              <button onClick={()=>{ nav('/v2'); setShowMenu(false) }} style={{ display:'block', width:'100%', padding:'10px 16px', background:'none', border:'none', borderBottom:'1px solid #002244', color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>🧪 リメイク版に切替[開発]</button>
             )}
             <div style={{ padding:'8px 16px 3px', color:'#667788', fontSize:'10px', letterSpacing:'2px', borderBottom:'1px solid #002244' }}>🎲 娯楽</div>
             {profile?.is_admin && (
