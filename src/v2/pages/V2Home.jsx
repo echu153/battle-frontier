@@ -7,6 +7,7 @@ import {
   STAT_KEYS, STAT_DEFS, MAX_LV, ROLLS_PER_LV, JOB_CHANGE_POWER,
   calcPower, expToNext, expPerLv, canJobChange,
 } from '../lib/stats.js'
+import { TIER_LABEL, TIER_ORDER, TIER_COLOR, missingReqs, canBecome, reqText } from '../lib/classes.js'
 
 // ============================================================
 // バトルフロンティアⅡ（リメイク版）ホーム — 開発限定
@@ -29,7 +30,9 @@ export default function V2Home() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [log, setLog] = useState([])
-  const [confirmJob, setConfirmJob] = useState(false)  // 転職はステが初期値に戻るので1段確認する
+  const [classes, setClasses] = useState([])           // 職業マスタ（正はDBの v2_classes）
+  const [confirmJob, setConfirmJob] = useState(null)   // 転職はステが初期値に戻るので1段確認する（選んだ職業を保持）
+  const [showJobList, setShowJobList] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -42,10 +45,14 @@ export default function V2Home() {
         if (!p?.is_admin) { reportDevAccess('v2_remake', 'リメイク版[開発]'); nav('/game'); return }
         if (!alive) return
         setName(p.username || '')
-        const { data: v2, error: e2 } = await supabase.from('v2_profiles').select('*').eq('id', user.id).maybeSingle()
+        const [{ data: v2, error: e2 }, { data: cls, error: e3 }] = await Promise.all([
+          supabase.from('v2_profiles').select('*').eq('id', user.id).maybeSingle(),
+          supabase.from('v2_classes').select('*').order('sort'),
+        ])
         if (!alive) return
-        if (e2) { setSqlError(e2.message || String(e2)); setLoading(false); return }
+        if (e2 || e3) { setSqlError((e2 || e3).message || String(e2 || e3)); setLoading(false); return }
         setProf(v2 || null)
+        setClasses(cls || [])
       } catch (err) {
         setSqlError(err.message || String(err))
       }
@@ -84,21 +91,35 @@ export default function V2Home() {
     }, ...l].slice(0, 12))
   }
 
-  const changeJob = async () => {
+  const changeJob = async (classId) => {
     setBusy(true); setError('')
-    const { data, error: rpcErr } = await supabase.rpc('v2_change_job')
-    setBusy(false); setConfirmJob(false)
+    const { data, error: rpcErr } = await supabase.rpc('v2_change_job', { p_class: classId })
+    setBusy(false); setConfirmJob(null)
     if (rpcErr) { setError(rpcErr.message); return }
     if (!data?.ok) { setError(data?.error || '転職に失敗しました'); return }
     setProf(data.profile)
+    setShowJobList(false)
     const alloc = data.alloc || {}
     setLog(l => [{
       id: `${Date.now()}-${Math.random()}`,
       job: data.job_changes,
+      className: data.class,
       points: data.points,
       gains: STAT_KEYS.filter(k => alloc[k] > 0).map(k => `${STAT_DEFS[k].label}+${alloc[k]}`).join(' / ') || 'なし',
     }, ...l].slice(0, 12))
   }
+
+  const grantProofs = async () => {
+    setBusy(true); setError('')
+    const { data, error: rpcErr } = await supabase.rpc('v2_debug_grant_proofs')
+    setBusy(false)
+    if (rpcErr) { setError(rpcErr.message); return }
+    if (!data?.ok) { setError(data?.error || '証の付与に失敗しました'); return }
+    setProf(data.profile)
+  }
+
+  // 転職条件の判定に使う状態（サーバー側 v2_change_job と同じ条件を画面にも出す）
+  const jobState = { jobCounts: prof?.job_counts || {}, proofs: prof?.proofs || [] }
 
   if (loading) {
     return <div style={{ minHeight:'100vh', background:'#000820', color:'#0088ff', fontFamily:'monospace', padding:'40px', textAlign:'center' }}>読み込み中...</div>
@@ -150,7 +171,8 @@ export default function V2Home() {
               <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', marginBottom:'10px' }}>
                 <div>
                   <span style={{ color:'#88ccff', fontSize:'14px' }}>{prof.username}</span>
-                  {prof.job_changes > 0 && <span style={{ color:'#ff88cc', fontSize:'11px', marginLeft:'8px' }}>転職{prof.job_changes}回</span>}
+                  <span style={{ color:TIER_COLOR[classes.find(c => c.id === prof.class)?.tier] || '#88aaff', fontSize:'11px', marginLeft:'8px' }}>{prof.class}</span>
+                  {prof.job_changes > 0 && <span style={{ color:'#ff88cc', fontSize:'10px', marginLeft:'6px' }}>転職{prof.job_changes}回</span>}
                 </div>
                 <div style={{ color:'#ffcc00', fontSize:'13px' }}>LV {prof.lv}{prof.lv >= MAX_LV && <span style={{ color:'#ff8844', fontSize:'10px', marginLeft:'4px' }}>MAX</span>}</div>
               </div>
@@ -200,21 +222,61 @@ export default function V2Home() {
                 振り分けは毎回引き直しです。転職を重ねるほどLVアップに必要なEXPも重くなります。
               </div>
               {!canJobChange(prof.lv) && (
-                <div style={{ color:'#446688', fontSize:'11px' }}>LV{MAX_LV}まであと{MAX_LV - prof.lv}</div>
+                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'8px' }}>LV{MAX_LV}まであと{MAX_LV - prof.lv}</div>
               )}
-              {canJobChange(prof.lv) && !confirmJob && (
-                <button onClick={() => setConfirmJob(true)} disabled={busy} style={btn('#ff88cc')}>
-                  ▶ 転職する（{prof.job_changes + 1}回目・戦闘力{(prof.job_changes + 1) * JOB_CHANGE_POWER}分）
-                </button>
-              )}
-              {canJobChange(prof.lv) && confirmJob && (
-                <div>
-                  <div style={{ color:'#ffaa66', fontSize:'11px', marginBottom:'8px' }}>
-                    いま育てたステータスは失われます。転職しますか？
-                  </div>
-                  <div style={{ display:'flex', gap:'6px' }}>
-                    <button onClick={changeJob} disabled={busy} style={btn('#ff88cc')}>{busy ? '転職中...' : 'はい'}</button>
-                    <button onClick={() => setConfirmJob(false)} disabled={busy} style={btn('#446688')}>やめる</button>
+
+              {/* 転職先の一覧。LV100未満でも条件の確認用に開ける */}
+              <button onClick={() => { setShowJobList(v => !v); setConfirmJob(null) }} style={btn(canJobChange(prof.lv) ? '#ff88cc' : '#446688')}>
+                {showJobList ? '▼ 職業一覧を閉じる' : `▶ 職業一覧（${classes.filter(c => canBecome(c, jobState)).length}職が選択可）`}
+              </button>
+
+              {showJobList && (
+                <div style={{ marginTop:'10px' }}>
+                  {TIER_ORDER.map(tier => {
+                    const list = classes.filter(c => c.tier === tier)
+                    if (list.length === 0) return null
+                    return (
+                      <div key={tier} style={{ marginBottom:'10px' }}>
+                        <div style={{ color:TIER_COLOR[tier], fontSize:'10px', letterSpacing:'2px', marginBottom:'4px' }}>{TIER_LABEL[tier]}</div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:'4px' }}>
+                          {list.map(c => {
+                            const ok = canBecome(c, jobState)
+                            const miss = missingReqs(c, jobState)
+                            const selectable = ok && canJobChange(prof.lv)
+                            return (
+                              <div key={c.id} style={{ background:'#000818', border:`1px solid ${ok ? TIER_COLOR[tier] : '#002244'}`, padding:'7px 9px' }}>
+                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px' }}>
+                                  <span style={{ color: ok ? TIER_COLOR[tier] : '#446688', fontSize:'12px' }}>
+                                    {c.id}{prof.job_counts?.[c.id] > 0 && <span style={{ color:'#556677', fontSize:'9px', marginLeft:'5px' }}>×{prof.job_counts[c.id]}</span>}
+                                  </span>
+                                  {selectable && confirmJob !== c.id && (
+                                    <button onClick={() => setConfirmJob(c.id)} disabled={busy} style={{ ...btn(TIER_COLOR[tier]), padding:'4px 8px', fontSize:'11px' }}>転職</button>
+                                  )}
+                                </div>
+                                <div style={{ color: ok ? '#556677' : '#775544', fontSize:'9px', marginTop:'3px' }}>
+                                  {ok ? reqText(c) : `未達：${miss.join(' ／ ')}`}
+                                </div>
+                                {confirmJob === c.id && (
+                                  <div style={{ marginTop:'6px' }}>
+                                    <div style={{ color:'#ffaa66', fontSize:'10px', marginBottom:'6px' }}>
+                                      いま育てたステータスは失われます。{c.id}に転職しますか？（{prof.job_changes + 1}回目・戦闘力{(prof.job_changes + 1) * JOB_CHANGE_POWER}分）
+                                    </div>
+                                    <div style={{ display:'flex', gap:'6px' }}>
+                                      <button onClick={() => changeJob(c.id)} disabled={busy} style={{ ...btn('#ff88cc'), padding:'4px 10px', fontSize:'11px' }}>{busy ? '転職中...' : 'はい'}</button>
+                                      <button onClick={() => setConfirmJob(null)} disabled={busy} style={{ ...btn('#446688'), padding:'4px 10px', fontSize:'11px' }}>やめる</button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <div style={{ color:'#446688', fontSize:'9px', lineHeight:'1.8' }}>
+                    ×N＝その職業で転職した回数。上位職の条件はこの回数を見ます。
+                    職業による能力差はまだありません（スキルを実装するときに付けます）。
                   </div>
                 </div>
               )}
@@ -229,6 +291,8 @@ export default function V2Home() {
                     EXP +{a}
                   </button>
                 ))}
+                {/* 証の入手手段がまだ無いので、条件確認用にまとめて配る */}
+                <button onClick={grantProofs} disabled={busy} style={btn('#ffaa44')}>証をすべて入手</button>
               </div>
               {error && <div style={{ color:'#ff4444', fontSize:'11px', marginTop:'8px' }}>⚠ {error}</div>}
               {prof.lv >= MAX_LV && <div style={{ color:'#ff8844', fontSize:'10px', marginTop:'8px' }}>LV{MAX_LV}に到達しています。EXPは入りません（転職してください）。</div>}
@@ -242,7 +306,7 @@ export default function V2Home() {
                   <div key={l.id} style={{ borderBottom:'1px solid #002244', padding:'6px 0', fontSize:'11px', lineHeight:'1.7' }}>
                     {l.job ? (
                       <>
-                        <span style={{ color:'#ff88cc' }}>🔄 転職{l.job}回目</span>
+                        <span style={{ color:'#ff88cc' }}>🔄 転職{l.job}回目 → {l.className}</span>
                         <span style={{ color:'#446688', marginLeft:'8px', fontSize:'10px' }}>戦闘力{l.points}分を振り分け</span>
                       </>
                     ) : (

@@ -62,18 +62,18 @@ test('抽選は8種すべてに当たりうる（均等・手相なし）', () =
 })
 
 // ===== 必要EXP（転職回数で段階的に重くなる） =====
-test('必要EXPは転職10回ごとに+10、100で打ち止め', () => {
+test('必要EXPは転職100回ごとに+10、100で打ち止め', () => {
   assert.equal(expPerLv(0), EXP_PER_LV_BASE)
-  assert.equal(expPerLv(9), 60)
-  assert.equal(expPerLv(10), 70)
-  assert.equal(expPerLv(19), 70)
-  assert.equal(expPerLv(20), 80)
-  assert.equal(expPerLv(30), 90)
-  assert.equal(expPerLv(40), EXP_PER_LV_MAX)
-  assert.equal(expPerLv(999), EXP_PER_LV_MAX)  // 打ち止め
+  assert.equal(expPerLv(99), 60)
+  assert.equal(expPerLv(100), 70)
+  assert.equal(expPerLv(199), 70)
+  assert.equal(expPerLv(200), 80)
+  assert.equal(expPerLv(300), 90)
+  assert.equal(expPerLv(400), EXP_PER_LV_MAX)
+  assert.equal(expPerLv(9999), EXP_PER_LV_MAX) // 打ち止め
   assert.equal(expPerLv(EXP_STEP_PER_JOBS), 70)
   assert.equal(expToNext(MAX_LV, 0), 0)        // 上限に達したら溜まらない
-  assert.equal(expToNext(1, 20), 80)
+  assert.equal(expToNext(1, 200), 80)
 })
 
 // ===== LVアップ =====
@@ -87,8 +87,8 @@ test('必要EXPで1LV上がり、余りは持ち越す', () => {
 
 test('転職済みは必要EXPが重い（同じEXP量でも上がるLVが少ない）', () => {
   const amount = 700
-  const fresh = applyExp({ lv:1, exp:0, job_changes:0,  ...INITIAL_STATS }, amount, makeRng(7))
-  const aged  = applyExp({ lv:1, exp:0, job_changes:40, ...INITIAL_STATS }, amount, makeRng(7))
+  const fresh = applyExp({ lv:1, exp:0, job_changes:0,   ...INITIAL_STATS }, amount, makeRng(7))
+  const aged  = applyExp({ lv:1, exp:0, job_changes:400, ...INITIAL_STATS }, amount, makeRng(7))
   assert.equal(fresh.lv, 1 + Math.floor(amount / 60))   // 60×11=660
   assert.equal(aged.lv,  1 + Math.floor(amount / 100))  // 100×7=700
   assert.ok(aged.lv < fresh.lv)

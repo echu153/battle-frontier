@@ -41,6 +41,10 @@ create table if not exists public.v2_profiles (
 
 -- 転職回数（あるけみすとの転生回数に相当）
 alter table public.v2_profiles add column if not exists job_changes int not null default 0;
+-- 職業。開始時はノーブル。job_counts は職業ごとの転職回数 {"戦士":3}、proofs は所持している証 ["侍の証"]
+alter table public.v2_profiles add column if not exists class      text  not null default 'ノーブル';
+alter table public.v2_profiles add column if not exists job_counts jsonb not null default '{}'::jsonb;
+alter table public.v2_profiles add column if not exists proofs     jsonb not null default '[]'::jsonb;
 
 -- 名前は大文字小文字を無視して一意
 create unique index if not exists v2_profiles_username_lower_idx
@@ -48,6 +52,60 @@ create unique index if not exists v2_profiles_username_lower_idx
 
 -- ※戦闘力（HP/8＋MP/3＋他6ステ）はクライアントの calcPower で算出する。
 --   ランキングを作るときに生成列かビューをここへ足す。
+
+-- ===== 1-2. 職業マスタ =====
+-- ★職業の正はこの表。クライアントはここを読んで表示するだけ（JS側にマスタを持たない）。
+--   req_jobs = 必要な「その初期職での転職回数」 {"戦士":3}
+--   req_proof = 必要な証（証の名前は必ず「職業名＋の証」）
+create table if not exists public.v2_classes (
+  id        text primary key,
+  tier      text not null,                          -- start / basic / advanced / hybrid / special
+  sort      int  not null default 0,
+  req_jobs  jsonb not null default '{}'::jsonb,
+  req_proof text
+);
+
+alter table public.v2_classes enable row level security;
+drop policy if exists v2_classes_select on public.v2_classes;
+create policy v2_classes_select on public.v2_classes for select to authenticated using (true);
+grant select on table public.v2_classes to authenticated;
+
+insert into public.v2_classes (id, tier, sort, req_jobs, req_proof) values
+  ('ノーブル',           'start',     0, '{}', null),
+  -- 初期職：条件なし
+  ('戦士',               'basic',    10, '{}', null),
+  ('弓使い',             'basic',    11, '{}', null),
+  ('魔法使い',           'basic',    12, '{}', null),
+  ('僧侶',               'basic',    13, '{}', null),
+  ('格闘家',             'basic',    14, '{}', null),
+  ('サモナー',           'basic',    15, '{}', null),
+  -- 上位職：初期職1つで転職3回＋証
+  ('侍',                 'advanced', 20, '{"戦士":3}',       '侍の証'),
+  ('狂戦士',             'advanced', 21, '{"戦士":3}',       '狂戦士の証'),
+  ('狩人',               'advanced', 22, '{"弓使い":3}',     '狩人の証'),
+  ('暗殺者',             'advanced', 23, '{"弓使い":3}',     '暗殺者の証'),
+  ('元素使い',           'advanced', 24, '{"魔法使い":3}',   '元素使いの証'),
+  ('死霊使い',           'advanced', 25, '{"魔法使い":3}',   '死霊使いの証'),
+  ('聖職者',             'advanced', 26, '{"僧侶":3}',       '聖職者の証'),
+  ('異端審問官',         'advanced', 27, '{"僧侶":3}',       '異端審問官の証'),
+  ('サイキッカー',       'advanced', 28, '{"格闘家":3}',     'サイキッカーの証'),
+  ('体術師',             'advanced', 29, '{"格闘家":3}',     '体術師の証'),
+  ('精霊召喚士',         'advanced', 30, '{"サモナー":3}',   '精霊召喚士の証'),
+  ('式神使い',           'advanced', 31, '{"サモナー":3}',   '式神使いの証'),
+  -- 複合上位職：初期職2つで各転職3回＋証
+  ('魔法剣士',           'hybrid',   40, '{"戦士":3,"魔法使い":3}',     '魔法剣士の証'),
+  ('魔銃士',             'hybrid',   41, '{"弓使い":3,"魔法使い":3}',   '魔銃士の証'),
+  ('聖騎士',             'hybrid',   42, '{"僧侶":3,"戦士":3}',         '聖騎士の証'),
+  ('賢者',               'hybrid',   43, '{"魔法使い":3,"僧侶":3}',     '賢者の証'),
+  ('武僧',               'hybrid',   44, '{"格闘家":3,"僧侶":3}',       '武僧の証'),
+  ('ビーストレンジャー', 'hybrid',   45, '{"サモナー":3,"弓使い":3}',   'ビーストレンジャーの証'),
+  -- 特殊職：証のみ
+  ('ギャンブラー',       'special',  50, '{}', 'ギャンブラーの証'),
+  ('竜騎士',             'special',  51, '{}', '竜騎士の証'),
+  ('ブリーダー',         'special',  52, '{}', 'ブリーダーの証')
+on conflict (id) do update set
+  tier = excluded.tier, sort = excluded.sort,
+  req_jobs = excluded.req_jobs, req_proof = excluded.req_proof;
 
 -- ===== 2. RLS =====
 -- 参照は認証済み全員（将来のランキング用）。書き込みポリシーは作らない
@@ -74,7 +132,7 @@ declare
   c_exp_base      constant int := 60;   -- 必要EXPの基準
   c_exp_max       constant int := 100;  -- 必要EXPの打ち止め
   c_exp_step      constant int := 10;   -- 1段階で増える量
-  c_exp_step_jobs constant int := 10;   -- 何回の転職ごとに1段階上げるか
+  c_exp_step_jobs constant int := 100;  -- 何回の転職ごとに1段階上げるか
   c_rolls         constant int := 5;
   -- 抽選の並び: 1=hp 2=mp 3=str 4=dex 5=agi 6=int_stat 7=vit 8=luk
   -- ★ src/v2/lib/stats.js の STAT_KEYS と同じ順序であること
@@ -177,9 +235,11 @@ revoke all on function public.v2_create_character(text) from anon;
 grant execute on function public.v2_create_character(text) to authenticated;
 
 -- ===== 5. 転職（あるけみすとの転生に相当） =====
--- LV上限でのみ実行できる。LV1・初期ステータスへ戻し、
+-- LV上限でのみ実行できる。転職先の職業を選び、LV1・初期ステータスへ戻したうえで
 -- 「転職回数×100」戦闘力分を8種へランダムに配り直す（前回の配分は引き継がず毎回引き直し）。
-create or replace function public.v2_change_job()
+-- 転職条件（その初期職での転職回数・証）の判定はここで行う＝クライアントを信用しない。
+drop function if exists public.v2_change_job();  -- 引数なしの旧版を破棄（職業選択の追加で署名が変わった）
+create or replace function public.v2_change_job(p_class text)
 returns jsonb
 language plpgsql
 security definer
@@ -191,14 +251,17 @@ declare
   -- 並びは 1=hp 2=mp 3=str 4=dex 5=agi 6=int_stat 7=vit 8=luk
   c_unit constant int[] := array[8, 3, 1, 1, 1, 1, 1, 1];
   c_init constant int[] := array[40, 12, 5, 5, 5, 5, 5, 5];  -- stats.js の INITIAL_STATS と一致させる
-  v_uid    uuid := auth.uid();
-  v_row    public.v2_profiles;
-  v_jobs   int;
-  v_stat   int[] := c_init;
-  v_alloc  int[] := array[0, 0, 0, 0, 0, 0, 0, 0];
-  v_points int;
-  v_i      int;
-  v_k      int;
+  v_uid     uuid := auth.uid();
+  v_row     public.v2_profiles;
+  v_cls     public.v2_classes;
+  v_jobs    int;
+  v_counts  jsonb;
+  v_stat    int[] := c_init;
+  v_alloc   int[] := array[0, 0, 0, 0, 0, 0, 0, 0];
+  v_points  int;
+  v_missing int;
+  v_i       int;
+  v_k       int;
 begin
   if v_uid is null then
     return jsonb_build_object('ok', false, 'error', 'ログインが必要です');
@@ -211,6 +274,26 @@ begin
     return jsonb_build_object('ok', false, 'error', format('LV%sで転職できます', c_max_lv));
   end if;
 
+  select * into v_cls from public.v2_classes where id = btrim(coalesce(p_class, ''));
+  if not found then
+    return jsonb_build_object('ok', false, 'error', 'その職業はありません');
+  end if;
+  if v_cls.tier = 'start' then
+    return jsonb_build_object('ok', false, 'error', 'その職業には転職できません');
+  end if;
+
+  -- 条件①：初期職ごとの転職回数
+  select count(*) into v_missing
+  from jsonb_each_text(v_cls.req_jobs) as r(k, v)
+  where coalesce((v_row.job_counts ->> r.k)::int, 0) < r.v::int;
+  if v_missing > 0 then
+    return jsonb_build_object('ok', false, 'error', '転職回数が足りません');
+  end if;
+  -- 条件②：証
+  if v_cls.req_proof is not null and not (v_row.proofs ? v_cls.req_proof) then
+    return jsonb_build_object('ok', false, 'error', format('%sがありません', v_cls.req_proof));
+  end if;
+
   v_jobs   := v_row.job_changes + 1;
   v_points := v_jobs * c_power_per;
   for v_i in 1..v_points loop
@@ -219,8 +302,13 @@ begin
     v_stat[v_k]  := v_stat[v_k]  + c_unit[v_k];
   end loop;
 
+  -- 職業ごとの転職回数を1つ増やす（上位職の条件はこれを見る）
+  v_counts := coalesce(v_row.job_counts, '{}'::jsonb);
+  v_counts := jsonb_set(v_counts, array[v_cls.id],
+                        to_jsonb(coalesce((v_counts ->> v_cls.id)::int, 0) + 1), true);
+
   update public.v2_profiles set
-    lv = 1, exp = 0, job_changes = v_jobs,
+    lv = 1, exp = 0, job_changes = v_jobs, class = v_cls.id, job_counts = v_counts,
     hp = v_stat[1], mp = v_stat[2], str = v_stat[3], dex = v_stat[4],
     agi = v_stat[5], int_stat = v_stat[6], vit = v_stat[7], luk = v_stat[8],
     updated_at = now()
@@ -230,6 +318,7 @@ begin
   return jsonb_build_object(
     'ok', true,
     'job_changes', v_jobs,
+    'class', v_cls.id,
     'points', v_points,
     'alloc', jsonb_build_object(
       'hp', v_alloc[1], 'mp', v_alloc[2], 'str', v_alloc[3], 'dex', v_alloc[4],
@@ -238,9 +327,9 @@ begin
 end;
 $$;
 
-revoke all on function public.v2_change_job() from public;
-revoke all on function public.v2_change_job() from anon;
-grant execute on function public.v2_change_job() to authenticated;
+revoke all on function public.v2_change_job(text) from public;
+revoke all on function public.v2_change_job(text) from anon;
+grant execute on function public.v2_change_job(text) to authenticated;
 
 -- ===== 6. 動作確認用のEXP付与（開発限定） =====
 -- まだ戦闘コンテンツが無いため、成長の確認用に is_admin だけEXPを自分に入れられる。
@@ -269,6 +358,43 @@ $$;
 revoke all on function public.v2_debug_gain_exp(int) from public;
 revoke all on function public.v2_debug_gain_exp(int) from anon;
 grant execute on function public.v2_debug_gain_exp(int) to authenticated;
+
+-- 証の入手手段（ドロップ等）はまだ無いので、確認用に is_admin だけ全種類を自分に配れる。
+-- 入手コンテンツを作ったら、そちらから proofs に追加する（このRPCは残さない/公開しない）。
+create or replace function public.v2_debug_grant_proofs()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_admin boolean;
+  v_row   public.v2_profiles;
+begin
+  if v_uid is null then
+    return jsonb_build_object('ok', false, 'error', 'ログインが必要です');
+  end if;
+  select coalesce(is_admin, false) into v_admin from public.profiles where id = v_uid;
+  if not coalesce(v_admin, false) then
+    return jsonb_build_object('ok', false, 'error', '開発限定の機能です');
+  end if;
+  update public.v2_profiles set
+    proofs = (select coalesce(jsonb_agg(distinct p), '[]'::jsonb)
+              from (select req_proof as p from public.v2_classes where req_proof is not null) s),
+    updated_at = now()
+  where id = v_uid
+  returning * into v_row;
+  if not found then
+    return jsonb_build_object('ok', false, 'error', 'キャラクターがありません');
+  end if;
+  return jsonb_build_object('ok', true, 'profile', to_jsonb(v_row));
+end;
+$$;
+
+revoke all on function public.v2_debug_grant_proofs() from public;
+revoke all on function public.v2_debug_grant_proofs() from anon;
+grant execute on function public.v2_debug_grant_proofs() to authenticated;
 
 -- ===== 7. 適用後の確認（任意・1文ずつ実行）=====
 -- select column_name, data_type from information_schema.columns where table_name = 'v2_profiles' order by ordinal_position;

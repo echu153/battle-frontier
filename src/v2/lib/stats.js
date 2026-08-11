@@ -38,7 +38,7 @@ export const ROLLS_PER_LV = 5    // LVアップ1回あたりの抽選回数
 // 区切りはBF独自：転職 EXP_STEP_PER_JOBS 回ごとに +EXP_STEP、EXP_PER_LV_MAX で打ち止め
 export const EXP_PER_LV_BASE = 60
 export const EXP_PER_LV_MAX  = 100
-export const EXP_STEP_PER_JOBS = 10
+export const EXP_STEP_PER_JOBS = 100
 export const EXP_STEP = 10
 export const expPerLv = (jobChanges = 0) =>
   Math.min(EXP_PER_LV_MAX, EXP_PER_LV_BASE + Math.floor(Math.max(0, jobChanges) / EXP_STEP_PER_JOBS) * EXP_STEP)
