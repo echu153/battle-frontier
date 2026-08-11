@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../supabase'
 import { validateName } from '../../lib/nameFilter'
 import { reportDevAccess } from '../../lib/devAccess'
-import { STAT_KEYS, STAT_DEFS, MAX_LV, EXP_PER_LV, ROLLS_PER_LV, calcPower, expToNext } from '../lib/stats.js'
+import {
+  STAT_KEYS, STAT_DEFS, MAX_LV, ROLLS_PER_LV, JOB_CHANGE_POWER,
+  calcPower, expToNext, expPerLv, canJobChange,
+} from '../lib/stats.js'
 
 // ============================================================
 // バトルフロンティアⅡ（リメイク版）ホーム — 開発限定
@@ -26,6 +29,7 @@ export default function V2Home() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [log, setLog] = useState([])
+  const [confirmJob, setConfirmJob] = useState(false)  // 転職はステが初期値に戻るので1段確認する
 
   useEffect(() => {
     let alive = true
@@ -80,6 +84,22 @@ export default function V2Home() {
     }, ...l].slice(0, 12))
   }
 
+  const changeJob = async () => {
+    setBusy(true); setError('')
+    const { data, error: rpcErr } = await supabase.rpc('v2_change_job')
+    setBusy(false); setConfirmJob(false)
+    if (rpcErr) { setError(rpcErr.message); return }
+    if (!data?.ok) { setError(data?.error || '転職に失敗しました'); return }
+    setProf(data.profile)
+    const alloc = data.alloc || {}
+    setLog(l => [{
+      id: `${Date.now()}-${Math.random()}`,
+      job: data.job_changes,
+      points: data.points,
+      gains: STAT_KEYS.filter(k => alloc[k] > 0).map(k => `${STAT_DEFS[k].label}+${alloc[k]}`).join(' / ') || 'なし',
+    }, ...l].slice(0, 12))
+  }
+
   if (loading) {
     return <div style={{ minHeight:'100vh', background:'#000820', color:'#0088ff', fontFamily:'monospace', padding:'40px', textAlign:'center' }}>読み込み中...</div>
   }
@@ -128,16 +148,19 @@ export default function V2Home() {
           <>
             <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
               <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', marginBottom:'10px' }}>
-                <div style={{ color:'#88ccff', fontSize:'14px' }}>{prof.username}</div>
+                <div>
+                  <span style={{ color:'#88ccff', fontSize:'14px' }}>{prof.username}</span>
+                  {prof.job_changes > 0 && <span style={{ color:'#ff88cc', fontSize:'11px', marginLeft:'8px' }}>転職{prof.job_changes}回</span>}
+                </div>
                 <div style={{ color:'#ffcc00', fontSize:'13px' }}>LV {prof.lv}{prof.lv >= MAX_LV && <span style={{ color:'#ff8844', fontSize:'10px', marginLeft:'4px' }}>MAX</span>}</div>
               </div>
 
-              {/* EXPバー */}
+              {/* EXPバー。必要EXPは転職回数で重くなる */}
               <div style={{ color:'#446688', fontSize:'10px', marginBottom:'3px' }}>
-                EXP {prof.exp} / {expToNext(prof.lv) || '—'}
+                EXP {prof.exp} / {expToNext(prof.lv, prof.job_changes) || '—'}
               </div>
               <div style={{ height:'6px', background:'#001028', border:'1px solid #002244', marginBottom:'12px' }}>
-                <div style={{ height:'100%', width:`${Math.min(100, (prof.exp / EXP_PER_LV) * 100)}%`, background:'#44aaff' }} />
+                <div style={{ height:'100%', width:`${Math.min(100, (prof.exp / expPerLv(prof.job_changes)) * 100)}%`, background:'#44aaff' }} />
               </div>
 
               {/* 戦闘力 */}
@@ -168,6 +191,35 @@ export default function V2Home() {
               </div>
             </div>
 
+            {/* 転職（LV上限で周回する） */}
+            <div style={{ ...box, padding:'14px', marginBottom:'12px', borderColor: canJobChange(prof.lv) ? '#aa4488' : '#0044aa' }}>
+              <div style={{ color:'#ff88cc', fontSize:'12px', marginBottom:'8px' }}>🔄 転職</div>
+              <div style={{ color:'#446688', fontSize:'10px', lineHeight:'1.9', marginBottom:'10px' }}>
+                LV{MAX_LV}で転職できます。LV1に戻り、ステータスは初期値へリセットされたうえで
+                <span style={{ color:'#ff88cc' }}> 転職回数×{JOB_CHANGE_POWER}</span>（＝{JOB_CHANGE_POWER / ROLLS_PER_LV}LV分）の戦闘力がランダムに振り分けられます。
+                振り分けは毎回引き直しです。転職を重ねるほどLVアップに必要なEXPも重くなります。
+              </div>
+              {!canJobChange(prof.lv) && (
+                <div style={{ color:'#446688', fontSize:'11px' }}>LV{MAX_LV}まであと{MAX_LV - prof.lv}</div>
+              )}
+              {canJobChange(prof.lv) && !confirmJob && (
+                <button onClick={() => setConfirmJob(true)} disabled={busy} style={btn('#ff88cc')}>
+                  ▶ 転職する（{prof.job_changes + 1}回目・戦闘力{(prof.job_changes + 1) * JOB_CHANGE_POWER}分）
+                </button>
+              )}
+              {canJobChange(prof.lv) && confirmJob && (
+                <div>
+                  <div style={{ color:'#ffaa66', fontSize:'11px', marginBottom:'8px' }}>
+                    いま育てたステータスは失われます。転職しますか？
+                  </div>
+                  <div style={{ display:'flex', gap:'6px' }}>
+                    <button onClick={changeJob} disabled={busy} style={btn('#ff88cc')}>{busy ? '転職中...' : 'はい'}</button>
+                    <button onClick={() => setConfirmJob(false)} disabled={busy} style={btn('#446688')}>やめる</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* 動作確認用のEXP付与 */}
             <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
               <div style={{ color:'#ffaa44', fontSize:'11px', marginBottom:'8px' }}>🧪 EXP付与 <span style={{ color:'#8877aa', fontSize:'9px' }}>[開発]</span></div>
@@ -179,7 +231,7 @@ export default function V2Home() {
                 ))}
               </div>
               {error && <div style={{ color:'#ff4444', fontSize:'11px', marginTop:'8px' }}>⚠ {error}</div>}
-              {prof.lv >= MAX_LV && <div style={{ color:'#ff8844', fontSize:'10px', marginTop:'8px' }}>LV{MAX_LV}に到達しています（転生は未実装）。</div>}
+              {prof.lv >= MAX_LV && <div style={{ color:'#ff8844', fontSize:'10px', marginTop:'8px' }}>LV{MAX_LV}に到達しています。EXPは入りません（転職してください）。</div>}
             </div>
 
             {/* 上昇ログ */}
@@ -188,9 +240,18 @@ export default function V2Home() {
                 <div style={{ color:'#88ccff', fontSize:'11px', marginBottom:'8px' }}>成長ログ</div>
                 {log.map(l => (
                   <div key={l.id} style={{ borderBottom:'1px solid #002244', padding:'6px 0', fontSize:'11px', lineHeight:'1.7' }}>
-                    <span style={{ color:'#446688' }}>EXP+{l.amount}</span>
-                    <span style={{ color:'#ffcc00', marginLeft:'8px' }}>LV {l.lvFrom} → {l.lvTo}</span>
-                    <span style={{ color:'#446688', marginLeft:'6px', fontSize:'10px' }}>（{l.ups}回）</span>
+                    {l.job ? (
+                      <>
+                        <span style={{ color:'#ff88cc' }}>🔄 転職{l.job}回目</span>
+                        <span style={{ color:'#446688', marginLeft:'8px', fontSize:'10px' }}>戦闘力{l.points}分を振り分け</span>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ color:'#446688' }}>EXP+{l.amount}</span>
+                        <span style={{ color:'#ffcc00', marginLeft:'8px' }}>LV {l.lvFrom} → {l.lvTo}</span>
+                        <span style={{ color:'#446688', marginLeft:'6px', fontSize:'10px' }}>（{l.ups}回）</span>
+                      </>
+                    )}
                     <div style={{ color:'#88ddaa', fontSize:'10px' }}>{l.gains}</div>
                   </div>
                 ))}
