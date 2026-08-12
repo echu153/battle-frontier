@@ -37,6 +37,8 @@ const miniBtn = (color) => ({
   background:'#000818', border:`1px solid ${color}`, color, padding:'3px 6px',
   cursor:'pointer', fontFamily:'monospace', fontSize:'10px', lineHeight:1,
 })
+// スキル一覧の2行目以降を、1行目のスキル名と同じ位置から始めるための字下げ（★ボタンのぶん）
+const ROW_INDENT = '28px'
 
 export default function V2Home() {
   const nav = useNavigate()
@@ -210,8 +212,9 @@ export default function V2Home() {
     return <div style={{ minHeight:'100vh', background:'#000820', color:'#0088ff', fontFamily:'monospace', padding:'40px', textAlign:'center' }}>読み込み中...</div>
   }
 
+  // index.css の #root が text-align:center なので、v2の中は左揃えに戻す（旧版には触らない）
   return (
-    <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace' }}>
+    <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace', textAlign:'left' }}>
       <div style={{ maxWidth:'560px', margin:'0 auto' }}>
 
         {/* ヘッダ */}
@@ -402,13 +405,13 @@ export default function V2Home() {
                           {isPassive(s) ? '常時' : `MP${s.mp} ／ ${s.proc}%`}
                         </span>
                       </div>
-                      <div style={{ color:'#7fa6c0', fontSize:'10px', margin:'3px 0', lineHeight:'1.6' }}>
+                      <div style={{ color:'#7fa6c0', fontSize:'10px', margin:'3px 0', lineHeight:'1.6', paddingLeft:ROW_INDENT }}>
                         {s.priority > 0 && <span style={{ color:'#a888e0', marginRight:'5px' }}>先制</span>}
                         {s.noCrit && <span style={{ color:'#c09060', marginRight:'5px' }}>クリ無</span>}
                         {s.sureHit && <span style={{ color:'#66bb99', marginRight:'5px' }}>必中</span>}
                         {powerText(s)}
                       </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'4px', paddingLeft:ROW_INDENT }}>
                         {/* 説明。powerText と同じ文言になる補助スキルは重ねて出さない */}
                         <span style={{ color:'#8fa8bb', fontSize:'10px', flex:1, minWidth:0, lineHeight:'1.6' }}>
                           {powerText(s) === s.desc ? '' : s.desc}
