@@ -221,3 +221,22 @@ test('必中と防御無視のスキルはちゃんと効く', () => {
   assert.equal(SKILL_BY_NAME['狙撃'].sureHit, true)
   assert.equal(SKILL_BY_NAME['狙い撃ち'].sureHit, true)
 })
+
+test('LUKは威力の参照に使わない（クリティカル率と回避だけに効かせる）', () => {
+  // ★LUKはクリティカル率(LUK差)と回避に効く。そこへ威力の参照まで足すと二重取りになる
+  for (const s of SKILLS) {
+    for (const a of s.add || []) {
+      assert.notEqual(a.stat, 'luk', `${s.name} が威力にLUKを参照している`)
+    }
+  }
+  // バフ・パッシブでLUKを上げるのは可（クリティカル率が上がる＝ギャンブラーらしさ）
+  assert.equal(SKILL_BY_NAME['ギャンブルボディ'].buff.self.luk, 12)
+})
+
+test('割合消費のスキルは想定利用MPに数えない', () => {
+  // マナボルトは「そのときの残りMPの20%」を払うので、事前に総額を出せない。
+  // 撃つほど1回の消費が減るので撃ち切れず、編成の枠としては消費0として扱う
+  const s = SKILL_BY_NAME['マナボルト']
+  assert.equal(s.mpPct, 0.2)
+  assert.equal(s.mp, 0)
+})

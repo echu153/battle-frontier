@@ -34,6 +34,9 @@ export const isPassive = (s) => s?.kind === 'passive'
 // add    : 副ステータス参照 [{ stat, rate }]
 // hits   : 多段の回数（命中・クリは1発ずつ判定する）
 // proc   : 発動率(%)。毎ターン抽選する
+// mp     : 消費MP（固定）
+// mpPct  : 消費MPを「そのときの残りMPの割合」にする（マナボルト＝0.2）。
+//          撃つほど1回の消費が減るので撃ち切れない。想定利用MPには数えない
 // defPen : 防御無視(0〜1)
 // sureHit: 必中
 // noCrit : クリティカルしないスキル。あるけみすとにも「クリティカルするスキルとしないスキル」があり、
@@ -133,10 +136,10 @@ export const SKILLS = [
   { name:'絶影狙撃', cls:'狩人', kind:'phys', mult:2.6, sureHit:true, proc:80, mp:20, desc:'必中の大威力' },
 
   // ===== 暗殺者（STR＋LUK・クリティカル） =====
-  { name:'瞬歩瞬殺', cls:'暗殺者', kind:'phys', mult:1.9, add:[{ stat:'luk', rate:0.4 }], proc:90, mp:12, desc:'LUKも威力になる' },
+  { name:'瞬歩瞬殺', cls:'暗殺者', kind:'phys', mult:1.9, add:[{ stat:'agi', rate:0.4 }], proc:90, mp:12, desc:'AGIも威力になる' },
   { name:'鬼影閃',   cls:'暗殺者', kind:'phys', mult:0.8, hits:3, proc:85, mp:15, noCrit:true, desc:'3連撃。クリティカルしない' },
-  { name:'隠身',     cls:'暗殺者', kind:'passive', mp:0, buff:{ self:{ luk:10 } }, desc:'LUK+10%' },
-  { name:'影歩き',   cls:'暗殺者', kind:'buff', proc:100, mp:12, buff:{ self:{ agi:40, luk:20 } }, priority:1, desc:'AGI+40%・LUK+20%（重ねがけ可）' },
+  { name:'隠身',     cls:'暗殺者', kind:'passive', mp:0, buff:{ self:{ agi:10 } }, desc:'AGI+10%' },
+  { name:'影歩き',   cls:'暗殺者', kind:'buff', proc:100, mp:12, buff:{ self:{ agi:40, dex:20 } }, priority:1, desc:'AGI+40%・DEX+20%（重ねがけ可）' },
   { name:'急所突き', cls:'暗殺者', kind:'phys', mult:1.8, sureCrit:true, proc:80, mp:20, desc:'必ずクリティカルになる' },
 
   // ===== 元素使い（INT純火力） =====
@@ -169,7 +172,7 @@ export const SKILLS = [
 
   // ===== 賢者（INT・高コスト） =====
   { name:'サンダーストライク', cls:'賢者', kind:'mag', mult:2.2, proc:90, mp:14, desc:'雷撃' },
-  { name:'マナボルト',       cls:'賢者', kind:'mag', mult:3.2, proc:85, mp:40, desc:'消費MPが極端に重い大魔法' },
+  { name:'マナボルト',       cls:'賢者', kind:'mag', mult:3.2, proc:85, mp:0, mpPct:0.2, desc:'そのときの残りMPの20%を消費する大魔法' },
   { name:'天啓',             cls:'賢者', kind:'passive', mp:0, buff:{ self:{ int_stat:10 } }, desc:'INT+10%' },
   { name:'氷の障壁',         cls:'賢者', kind:'buff', proc:100, mp:15, buff:{ self:{ vit:40, int_stat:20 } }, priority:1, desc:'VIT+40%・INT+20%（重ねがけ可）' },
   { name:'メテオストライク', cls:'賢者', kind:'mag', mult:0.95, hits:4, proc:75, mp:26, noCrit:true, desc:'4連撃。クリティカルしない' },
@@ -211,10 +214,10 @@ export const SKILLS = [
 
   // ===== ギャンブラー（LUK一点） =====
   { name:'ジャグリング',     cls:'ギャンブラー', kind:'phys', mult:0.7, hits:4, proc:85, mp:15, noCrit:true, desc:'4連撃。クリティカルしない' },
-  { name:'ラッキーダイス',   cls:'ギャンブラー', kind:'phys', mult:1.2, add:[{ stat:'luk', rate:1.2 }], proc:85, mp:13, desc:'LUKが大きく威力になる' },
+  { name:'ラッキーダイス',   cls:'ギャンブラー', kind:'phys', mult:2.2, proc:85, mp:13, desc:'出たとこ勝負の一撃' },
   { name:'ギャンブルボディ', cls:'ギャンブラー', kind:'passive', mp:0, buff:{ self:{ luk:12 } }, desc:'LUK+12%' },
   { name:'オールイン',       cls:'ギャンブラー', kind:'buff', proc:100, mp:18, buff:{ self:{ str:50, vit:-30 } }, priority:1, desc:'STR+50%・VIT-30%（重ねがけ可）' },
-  { name:'ジャックポット',   cls:'ギャンブラー', kind:'phys', mult:2.0, add:[{ stat:'luk', rate:1.5 }], proc:75, mp:24, desc:'LUK次第の切り札' },
+  { name:'ジャックポット',   cls:'ギャンブラー', kind:'phys', mult:3.0, proc:75, mp:24, desc:'ギャンブラーの切り札' },
 
   // ===== 竜騎士（STR＋VIT・貫通） =====
   { name:'ドラゴンスラスト', cls:'竜騎士', kind:'phys', mult:1.9, defPen:0.3, proc:90, mp:13, desc:'相手の防御を30%無視' },
@@ -256,7 +259,7 @@ export const SKILLS = [
   { name:'群狼の牙',   cls:'ビーストレンジャー', kind:'mag', mult:0.75, hits:3, proc:85, mp:16, noCrit:true, desc:'3連撃。クリティカルしない' },
   { name:'野性の勘',   cls:'ビーストレンジャー', kind:'passive', mp:0, buff:{ self:{ agi:10 } }, desc:'AGI+10%' },
   { name:'共鳴の咆哮', cls:'ビーストレンジャー', kind:'buff', proc:100, mp:14, buff:{ self:{ str:25, agi:25 } }, priority:1, desc:'STR・AGI+25%（重ねがけ可）' },
-  { name:'貫狼撃',     cls:'ビーストレンジャー', kind:'phys', mult:2.4, defPen:0.3, proc:82, mp:20, desc:'相手の防御を30%無視' },
+  { name:'貫狼撃',     cls:'ビーストレンジャー', kind:'phys', mult:2.5, defPen:0.3, proc:82, mp:20, desc:'相手の防御を30%無視' },
 ]
 
 export const SKILL_BY_NAME = Object.fromEntries(SKILLS.map(s => [s.name, s]))
@@ -318,7 +321,7 @@ export const keepableSkillNames = (cls, learning = [], learned = []) => {
 export const setMpCost = (set) => (set || [])
   .reduce((t, e) => {
     const s = SKILL_BY_NAME[e?.name]
-    return t + (!s || isPassive(s) ? 0 : (s.mp || 0) * (e?.uses || 0))
+    return t + (!s || isPassive(s) || s.mpPct ? 0 : (s.mp || 0) * (e?.uses || 0))
   }, 0)
 
 // 編成の検証。問題があれば日本語のエラー文、無ければ null（サーバーの v2_set_skills と同じ規則）

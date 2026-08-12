@@ -1,7 +1,7 @@
 // バトルフロンティアⅡ 戦闘ループの回帰テスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runBattle, createSide, peekSkill, attackKindOf, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
+import { runBattle, createSide, peekSkill, attackKindOf, mpCostOf, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
 import { skillsOf } from './skills.js'
 
@@ -174,4 +174,19 @@ test('peekSkill は次に撃つ枠を返す（行動順の判定に使う）', (
   assert.equal(peekSkill(side).name, 'B')
   side.slots[1].uses = 0
   assert.equal(peekSkill(side), null)  // 撃てる枠が無い＝通常攻撃
+})
+
+test('割合消費のスキルは残りMPの割合を払い、撃ち切れない', () => {
+  const mana = sk('マナ撃ち', { kind:'mag', mult:1, proc:100, mp:0, mpPct:0.2 })
+  const stats = { ...evenStats(534), mp: 1000, hp: 10 ** 7 }
+  const r = runBattle(
+    { name:'me', cls:'魔法使い', kind:'mag', stats, slots:[{ skill:mana, uses:99 }] },
+    { name:'foe', cls:'戦士', kind:'phys', stats:{ ...evenStats(534), hp: 10 ** 7 }, slots: [] },
+    { rng: makeRng(21), maxTurns: 10 })
+  // 1000 → 800 → 640 … と減り、0にはならない
+  assert.ok(r.a.mp > 0, `MPが尽きている: ${r.a.mp}`)
+  assert.ok(r.a.mp < 1000 * 0.5, `ちゃんと減っていない: ${r.a.mp}`)
+  assert.equal(r.log.filter(l => l.side === 'me' && l.type === 'skill').length, 10, '毎ターン撃てている')
+  assert.equal(mpCostOf({ mp: 500 }, mana), 100)
+  assert.equal(mpCostOf({ mp: 500 }, sk('固定', { mp: 30 })), 30)
 })

@@ -38,6 +38,8 @@ const miniBtn = (color) => ({
   cursor:'pointer', fontFamily:'monospace', fontSize:'10px', lineHeight:1,
 })
 // スキル一覧の2行目以降を、1行目のスキル名と同じ位置から始めるための字下げ（★ボタンのぶん）
+// 消費MPの表示。割合消費（マナボルト）は「残りMPの20%」
+const mpLabel = (s) => (s.mpPct ? `MP 残りの${Math.round(s.mpPct * 100)}%` : `MP${s.mp}`)
 const ROW_INDENT = '28px'
 
 export default function V2Home() {
@@ -319,8 +321,8 @@ export default function V2Home() {
                       <span style={{ flex:1, color: s ? KIND_COLOR[s.kind] : '#334455', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                         {s ? s.name : '（空き）'}
                       </span>
-                      <span style={{ color: cost > prof.mp ? '#ff4444' : '#446688', width:'56px', textAlign:'right' }}>
-                        {s ? `MP${s.mp}×${row.uses}` : ''}
+                      <span style={{ color: cost > prof.mp ? '#ff4444' : '#446688', width:'62px', textAlign:'right' }}>
+                        {s ? (s.mpPct ? `MP残${Math.round(s.mpPct * 100)}%` : `MP${s.mp}×${row.uses}`) : ''}
                       </span>
                       <span style={{ color:'#446688', width:'34px', textAlign:'right' }}>{s ? `${s.proc}%` : ''}</span>
                       <input type="number" min={1} max={SKILL_USE_MAX} value={row.uses} disabled={!row.name}
@@ -402,7 +404,7 @@ export default function V2Home() {
                           {s.cls !== prof.class && <span style={{ color:'#ff88cc', fontSize:'9px', marginLeft:'5px' }}>{s.cls}</span>}
                         </span>
                         <span style={{ color:'#446688', fontSize:'10px' }}>
-                          {isPassive(s) ? '常時' : `MP${s.mp} ／ ${s.proc}%`}
+                          {isPassive(s) ? '常時' : `${mpLabel(s)} ／ ${s.proc}%`}
                         </span>
                       </div>
                       <div style={{ color:'#7fa6c0', fontSize:'10px', margin:'3px 0', lineHeight:'1.6', paddingLeft:ROW_INDENT }}>

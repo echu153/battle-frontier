@@ -76,6 +76,11 @@ export const createSide = (fighter) => {
   }
 }
 
+// このスキルを撃つのに要るMP。mpPct を持つスキルは「そのときの残りMPの割合」を払う
+// （マナボルト＝現在MPの20%。撃つほど1回の消費が減るので、実質的に撃ち切れない）
+export const mpCostOf = (side, skill) =>
+  skill?.mpPct ? Math.floor((side?.mp || 0) * skill.mpPct) : (skill?.mp || 0)
+
 // いま撃てる枠を ptr から探す。見つからなければ null（＝通常攻撃）
 const findSlot = (side) => {
   const n = side.slots.length
@@ -84,7 +89,9 @@ const findSlot = (side) => {
     const s = side.slots[idx]
     if (!s || !s.skill) continue
     if (s.uses <= 0) continue
-    if (s.skill.mp > side.mp) continue   // MP不足の枠は飛ばす（使用回数は減らない）
+    // MP不足の枠は飛ばす（使用回数は減らない）。割合消費はMPが1でも残っていれば撃てる
+    if (s.skill.mpPct) { if (side.mp <= 0) continue }
+    else if (s.skill.mp > side.mp) continue
     return idx
   }
   return null
@@ -110,7 +117,7 @@ const takeAction = (me, foe, rng, log) => {
   }
   if (!skill) { normalAttack(me, foe, rng, log); return }
 
-  me.mp -= skill.mp
+  me.mp -= mpCostOf(me, skill)
   slot.uses -= 1
   me.ptr = (idx + 1) % me.slots.length
 

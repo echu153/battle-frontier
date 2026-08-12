@@ -133,10 +133,13 @@ export const damageOf = ({ attacker, defender, mult = 1, kind = 'phys', crit = f
   let base = atk * mult
   if (add) for (const a of add) base += (attacker?.[a.stat] || 0) * a.rate
   let def = phys ? physDefOf(defender) : magDefOf(defender)
-  if (defPen > 0) def *= Math.max(0, 1 - Math.min(1, defPen))
   if (crit) def /= CRIT_DEF_DIV
   const cap = phys ? PHYS_REDUCTION_CAP : MAG_REDUCTION_CAP
-  const red = reductionRate(def, atk, cap)
+  // ★防御無視は「防御力」ではなく「軽減率」に掛ける。
+  //   防御力を割る形だと、相手が防御を積むほど軽減率が上限に張り付いて
+  //   貫通の効果が消える（＝硬い相手に効かない）という逆の挙動になっていた。
+  //   軽減率に掛ければ「50%無視＝軽減が半分」で、硬い相手にほどよく効く。
+  const red = reductionRate(def, atk, cap) * (1 - Math.max(0, Math.min(1, defPen)))
   // クリティカルは倍率そのものを持ち上げる（係数×1.5＋1.5）。副参照ぶんは倍率と同じ比率で伸ばす
   if (crit) base *= (mult * CRIT_MULT + CRIT_MULT_ADD) / Math.max(0.01, mult)
   return Math.max(1, Math.floor(base * (1 - red)))
