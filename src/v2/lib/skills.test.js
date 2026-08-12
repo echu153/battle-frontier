@@ -75,6 +75,9 @@ test('多段スキルの合計倍率が単発の主力を超えない', () => {
   }
 })
 
+// ※この実質倍率にはクリティカルが入っていない。クリは「倍率×1.5＋1.5」なので
+//   倍率が低いほど伸び率が大きく（0.47倍→約4.7倍・1.9倍→約2.4倍）、多段ほど有利になる。
+//   多段の最終的な値決めは必ずシミュレーション（勝率）で行うこと。
 test('職業ごとの主力の実質倍率が2割以上開かない', () => {
   const tops = {}
   for (const s of SKILLS.filter(s => s.kind === 'phys' || s.kind === 'mag')) {
@@ -104,7 +107,7 @@ test('どの職業も補助か回復を1つ以上持つ', () => {
 test('威力テキストが威力の出どころを示す', () => {
   assert.equal(powerText(SKILL_BY_NAME['体当たり']), 'STR×1.4')
   assert.equal(powerText(SKILL_BY_NAME['狙撃']), 'STR×1 ＋ AGI×0.6')
-  assert.equal(powerText(SKILL_BY_NAME['連打']), 'STR×0.55 ×3回')
+  assert.equal(powerText(SKILL_BY_NAME['連打']), 'STR×0.47 ×3回')
   assert.equal(powerText(SKILL_BY_NAME['ヒール']), 'INT×1.4')
   assert.equal(powerText(SKILL_BY_NAME['祈祷']), '毎ターン INT×0.5×4T')
   assert.equal(powerText(SKILL_BY_NAME['魔力供給']), '毎ターン MP INT×0.3×4T')

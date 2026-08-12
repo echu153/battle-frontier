@@ -38,8 +38,18 @@ export const reductionRate = (def, atk, cap) => {
 }
 
 // ===== クリティカル =====
-export const CRIT_MULT   = 1.5   // クリ時にスキル倍率へ掛ける
-export const CRIT_DEF_DIV = 1.5  // クリ時に相手の防御力を割る（≒防御の1/3を無視）
+// あるけみすとの公表分（いずれも先方はマスクデータ扱い・要検証と注記あり）：
+//   ・威力  ：係数を1.5倍し、さらに1.5を足す ／ 相手の防御力を1.5で割る
+//   ・命中  ：クリティカルの命中判定では DEX×1.5 ＋ LUK÷3 をDEXとして扱う
+//   ・発生率：非公表（「まれに発生する」とだけ）→ LUK差で決めるのはBF独自
+// ★判定の順番もあるけみすとに合わせる：先にクリティカルを決め、その後で
+//   （クリなら補正したDEXで）命中判定する。＝クリティカルは通常より当たりやすい
+export const CRIT_MULT     = 1.5 // クリ時にスキル倍率へ掛ける
+export const CRIT_MULT_ADD = 1.5 // クリ時にスキル倍率へ足す
+export const CRIT_DEF_DIV  = 1.5 // クリ時に相手の防御力を割る（≒防御の1/3を無視）
+export const CRIT_ACC_DEX  = 1.5    // クリ時の命中判定で DEX に掛ける
+export const CRIT_ACC_LUK  = 1 / 3  // クリ時の命中判定で LUK から足す
+export const critAccuracyStats = (s) => ({ ...s, dex: (s?.dex || 0) * CRIT_ACC_DEX + (s?.luk || 0) * CRIT_ACC_LUK })
 export const CRIT_BASE_PCT = 5   // 基礎クリティカル率(%)
 export const CRIT_PER_LUK  = 100 // LUK差がこの値のときクリ率+10%（下のCRIT_DIFF_PCTと組）
 export const CRIT_DIFF_PCT = 10
@@ -92,7 +102,9 @@ export const damageOf = ({ attacker, defender, mult = 1, kind = 'phys', crit = f
   if (crit) def /= CRIT_DEF_DIV
   const cap = phys ? PHYS_REDUCTION_CAP : MAG_REDUCTION_CAP
   const red = reductionRate(def, atk, cap)
-  return Math.max(1, Math.floor(base * (crit ? CRIT_MULT : 1) * (1 - red)))
+  // クリティカルは倍率そのものを持ち上げる（係数×1.5＋1.5）。副参照ぶんは倍率と同じ比率で伸ばす
+  if (crit) base *= (mult * CRIT_MULT + CRIT_MULT_ADD) / Math.max(0.01, mult)
+  return Math.max(1, Math.floor(base * (1 - red)))
 }
 
 // ===== 回復 =====
@@ -102,9 +114,11 @@ export const damageOf = ({ attacker, defender, mult = 1, kind = 'phys', crit = f
 export const healOf = (actor, rate) => Math.max(1, Math.floor((actor?.int_stat || 0) * rate))
 
 // 1回の攻撃を解決する。外れ／クリティカルもここで決める（戦闘ループから使う想定）
+// ★順番はあるけみすと準拠：クリティカルを先に決め、クリならDEXを補正して命中判定する
 export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', defPen = 0, add = null, sureHit = false, sureCrit = false }, rng = Math.random) => {
-  const hit = sureHit || roll(hitRate(attacker, defender), rng)
-  if (!hit) return { hit:false, crit:false, damage:0 }
   const crit = sureCrit || roll(critRate(attacker, defender), rng)
+  const acc = crit ? critAccuracyStats(attacker) : attacker
+  const hit = sureHit || roll(hitRate(acc, defender), rng)
+  if (!hit) return { hit:false, crit, damage:0 }
   return { hit:true, crit, damage: damageOf({ attacker, defender, mult, kind, crit, defPen, add }) }
 }

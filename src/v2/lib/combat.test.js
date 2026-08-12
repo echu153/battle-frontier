@@ -2,8 +2,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  PHYS_REDUCTION_CAP, MAG_REDUCTION_CAP, CRIT_MULT, HIT_MAX_PCT, HIT_MIN_PCT,
-  CRIT_MIN_PCT, CRIT_MAX_PCT, CRIT_BASE_PCT,
+  PHYS_REDUCTION_CAP, MAG_REDUCTION_CAP, CRIT_MULT, CRIT_MULT_ADD, HIT_MAX_PCT, HIT_MIN_PCT,
+  CRIT_MIN_PCT, CRIT_MAX_PCT, CRIT_BASE_PCT, CRIT_ACC_DEX, CRIT_ACC_LUK, critAccuracyStats,
   physDefOf, magDefOf, reductionRate, critRate, hitRate, roll, damageOf, resolveAttack,
 } from './combat.js'
 import { INITIAL_STATS, applyExp, calcPower } from './stats.js'
@@ -56,6 +56,44 @@ test('クリティカルは倍率が上がり、防御も割り引かれる', ()
   const normal = damageOf({ attacker:atk, defender:def, mult:2, kind:'phys' })
   const crit   = damageOf({ attacker:atk, defender:def, mult:2, kind:'phys', crit:true })
   assert.ok(crit > normal * CRIT_MULT, `crit=${crit} normal=${normal}（防御の割引ぶんだけ上乗せされる）`)
+})
+
+test('クリティカルの倍率は「倍率×1.5＋1.5」（あるけみすと準拠）', () => {
+  const atk = { str:100 }
+  const naked = { vit:0 }
+  for (const m of [0.47, 1.0, 1.9, 2.0]) {
+    const n = damageOf({ attacker:atk, defender:naked, mult:m })
+    const c = damageOf({ attacker:atk, defender:naked, mult:m, crit:true })
+    assert.equal(c, Math.floor(100 * (m * CRIT_MULT + CRIT_MULT_ADD)), `倍率${m}`)
+    // 倍率が低いほどクリの伸び率が大きい＝多段スキルはクリに強く依存する
+    assert.ok(c / n > CRIT_MULT, `倍率${m}: ×${(c / n).toFixed(2)}`)
+  }
+  // 低倍率ほど倍率比が大きいことを明示的に固定（多段の調整を誤らないため）
+  const ratio = (m) => damageOf({ attacker:atk, defender:naked, mult:m, crit:true }) / damageOf({ attacker:atk, defender:naked, mult:m })
+  assert.ok(ratio(0.47) > ratio(1.9))
+})
+
+test('クリティカルの命中判定はDEX×1.5＋LUK/3で行う（あるけみすと準拠）', () => {
+  const s = { dex:100, luk:30 }
+  assert.equal(critAccuracyStats(s).dex, 100 * CRIT_ACC_DEX + 30 * CRIT_ACC_LUK)
+  // 補正ぶんクリティカルのほうが当たりやすい
+  const def = { agi:200 }
+  assert.ok(hitRate(critAccuracyStats(s), def) > hitRate(s, def))
+})
+
+test('判定の順番はクリティカルが先（クリなら命中補正がかかる）', () => {
+  // 通常命中は絶対に外れる状況を作り、クリティカルなら当たることを見る
+  const atk = { str:100, dex:1, luk:10 ** 7 }   // LUKが極端＝クリ率は上限
+  const def = { vit:0, agi:10 ** 6, luk:0 }
+  let critHit = 0, plainHit = 0
+  const rng = makeRng(1234)
+  for (let i = 0; i < 20000; i++) {
+    const r = resolveAttack({ attacker:atk, defender:def, mult:1 }, rng)
+    if (r.crit && r.hit) critHit++
+    if (!r.crit && r.hit) plainHit++
+  }
+  assert.ok(critHit > 0, 'クリティカルが命中している')
+  assert.ok(critHit / plainHit > 0.05, `クリ命中${critHit} / 通常命中${plainHit}`)
 })
 
 test('防御無視はダメージを増やし、無視100%で無防備と同じになる', () => {

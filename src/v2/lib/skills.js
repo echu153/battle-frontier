@@ -70,8 +70,8 @@ export const SKILLS = [
   // ===== 格闘家（手数） =====
   { name:'打撃',   cls:'格闘家', kind:'phys', mult:1.3, proc:95, mp:4,  desc:'軽い打撃' },
   { name:'鉄拳',   cls:'格闘家', kind:'phys', mult:1.9, proc:85, mp:12, desc:'渾身の一撃' },
-  { name:'連打',   cls:'格闘家', kind:'phys', mult:0.55, hits:3, proc:90, mp:10, desc:'3連撃。1発ずつ命中判定' },
-  { name:'爆裂拳', cls:'格闘家', kind:'phys', mult:0.55, hits:4, proc:75, mp:16, desc:'4連撃。出にくいが手数で押す' },
+  { name:'連打',   cls:'格闘家', kind:'phys', mult:0.47, hits:3, proc:90, mp:10, desc:'3連撃。1発ずつ命中判定' },
+  { name:'爆裂拳', cls:'格闘家', kind:'phys', mult:0.47, hits:4, proc:75, mp:16, desc:'4連撃。出にくいが手数で押す' },
   { name:'残心',   cls:'格闘家', kind:'buff', proc:100, mp:8, buff:{ self:{ dex:20, agi:20 }, turns:3 }, desc:'3ターンDEX・AGI+20%' },
 
   // ===== サモナー（魔法・補助） =====
