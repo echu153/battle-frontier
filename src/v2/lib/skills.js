@@ -100,13 +100,13 @@ export const SKILL_BY_NAME = Object.fromEntries(SKILLS.map(s => [s.name, s]))
 export const skillsOf = (cls) => SKILLS.filter(s => s.cls === cls)
 export const SKILL_CLASSES = [...new Set(SKILLS.map(s => s.cls))]
 
-// ===== 習得とマスター（あるけみすと準拠） =====
+// ===== 習得中と習得済み =====
 // あるけみすとのスキルは2段構え：
-//   ・習得   … LVアップ時に、いまの職業のスキルを確率で覚える。**転職すると失われる**
-//   ・マスター… 転職のとき、いまの職業の「習得しているスキル」から1つを永久に残せる。
-//              全部マスター済み／新規習得なしのときはマスターされない
-// 使えるスキル ＝ 習得（その周回だけ）∪ マスター（ずっと）
-//   → 周回するほどマスターが増え、どの職業でもいろんなスキルを使えるようになる
+//   ・習得中   … LVアップ時に、いまの職業のスキルを確率で覚える。**転職すると失われる**
+//   ・習得済み … 転職のとき、いまの職業の「習得中のスキル」から1つを永久に残せる。
+//               全部習得済み／習得中が無いときは何も残らない
+// 使えるスキル ＝ 習得中（その周回だけ）∪ 習得済み（ずっと）
+//   → 周回するほど習得済みが増え、どの職業でもいろんなスキルを使えるようになる
 export const SKILL_SET_SLOTS = 5   // 編成できる枠数
 export const SKILL_USE_MAX   = 99  // 1枠あたりの使用回数の上限
 
@@ -126,20 +126,20 @@ export const rollLearnCount = (lv, unlearned, rng = Math.random) => {
   return Math.min(unlearned, must + extra)
 }
 
-export const usableSkillNames = (learned = [], mastered = []) => [...new Set([...learned, ...mastered])]
-export const usableSkills = (learned = [], mastered = []) => {
-  const set = new Set(usableSkillNames(learned, mastered))
+export const usableSkillNames = (learning = [], learned = []) => [...new Set([...learning, ...learned])]
+export const usableSkills = (learning = [], learned = []) => {
+  const set = new Set(usableSkillNames(learning, learned))
   return SKILLS.filter(s => set.has(s.name))
 }
 // まだ覚えていない、いまの職業のスキル（一覧にグレーで出す用）
-export const unlearnedSkills = (cls, learned = [], mastered = []) => {
-  const set = new Set(usableSkillNames(learned, mastered))
+export const unlearnedSkills = (cls, learning = [], learned = []) => {
+  const set = new Set(usableSkillNames(learning, learned))
   return skillsOf(cls).filter(s => !set.has(s.name))
 }
-// 転職でマスターできる候補＝いまの職業の「習得しているがマスターしていない」スキル
-export const masterableSkillNames = (cls, learned = [], mastered = []) => {
-  const has = new Set(learned)
-  const done = new Set(mastered)
+// 転職で「習得済み」にできる候補＝いまの職業の「習得中だがまだ習得済みでない」スキル
+export const keepableSkillNames = (cls, learning = [], learned = []) => {
+  const has = new Set(learning)
+  const done = new Set(learned)
   return skillsOf(cls).filter(s => has.has(s.name) && !done.has(s.name)).map(s => s.name)
 }
 

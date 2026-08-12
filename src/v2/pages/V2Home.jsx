@@ -130,7 +130,7 @@ export default function V2Home() {
       className: data.class,
       points: data.points,
       usedProof: data.used_proof,
-      mastered: data.mastered,
+      kept: data.kept,
       gains: STAT_KEYS.filter(k => alloc[k] > 0).map(k => `${STAT_DEFS[k].label}+${alloc[k]}`).join(' / ') || 'なし',
     }, ...l].slice(0, 12))
   }
@@ -148,12 +148,12 @@ export default function V2Home() {
   const jobState = { jobCounts: prof?.job_counts || {}, proofs: prof?.proofs || {} }
 
   // ===== スキル編成 =====
-  // 使えるスキル ＝ 習得（この周回だけ）∪ マスター（ずっと残る）
-  const learned = prof?.skills || []      // 習得（この周回だけ。転職で失う）
-  const mastered = prof?.mastered || []   // マスター（ずっと残る）
-  const usable = usableSkills(learned, mastered)
-  const usableNames = usableSkillNames(learned, mastered)
-  const stillLocked = prof ? unlearnedSkills(prof.class, learned, mastered) : []  // いまの職業のまだ覚えていない技
+  // 使えるスキル ＝ 習得中（この周回だけ）∪ 習得済み（ずっと残る）
+  const learning = prof?.skills || []    // 習得中（この周回だけ。転職で失う）
+  const learned  = prof?.learned || []   // 習得済み（ずっと残る）
+  const usable = usableSkills(learning, learned)
+  const usableNames = usableSkillNames(learning, learned)
+  const stillLocked = prof ? unlearnedSkills(prof.class, learning, learned) : []  // いまの職業のまだ覚えていない技
   const favorites = prof?.favorites || []
   const compact = draft.filter(d => d.name).map(d => ({ name: d.name, uses: d.uses }))
   const mpCost = setMpCost(compact)                    // 想定利用MP（Σ 消費MP×回数）
@@ -343,7 +343,7 @@ export default function V2Home() {
             {/* 習得スキル（検索・絞り込み・お気に入り） */}
             <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
               <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'8px' }}>
-                📖 スキル <span style={{ color:'#446688', fontSize:'10px' }}>習得{learned.length}個 ／ <span style={{ color:'#ffcc00' }}>マスター{mastered.length}個</span></span>
+                📖 スキル <span style={{ color:'#446688', fontSize:'10px' }}>習得中{learning.length}個 ／ <span style={{ color:'#ffcc00' }}>習得済み{learned.length}個</span></span>
               </div>
 
               {/* 検索 */}
@@ -382,8 +382,8 @@ export default function V2Home() {
                   const heal = expectedHeal(s, prof, healOf)
                   const fav = favorites.includes(s.name)
                   const inSet = draft.findIndex(d => d?.name === s.name)
-                  const has = usableNames.includes(s.name)   // 習得 or マスター済み
-                  const isMaster = mastered.includes(s.name)
+                  const has = usableNames.includes(s.name)   // 習得中 or 習得済み
+                  const isKept = learned.includes(s.name)
                   return (
                     <div key={s.name} style={{ background:'#000818', border:`1px solid ${inSet >= 0 ? '#0055aa' : '#002244'}`, padding:'6px 8px', opacity: has ? 1 : 0.45 }}>
                       <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
@@ -392,7 +392,7 @@ export default function V2Home() {
                         <span style={{ flex:1, color: has ? KIND_COLOR[s.kind] : '#556677', fontSize:'12px', minWidth:0 }}>
                           {s.name}
                           <span style={{ color:'#556677', fontSize:'9px', marginLeft:'5px' }}>{KIND_LABEL[s.kind]}</span>
-                          {isMaster && <span style={{ color:'#ffcc00', fontSize:'9px', marginLeft:'5px' }}>MASTER</span>}
+                          {isKept && <span style={{ color:'#ffcc00', fontSize:'9px', marginLeft:'5px' }}>習得済み</span>}
                           {!has && <span style={{ color:'#886644', fontSize:'9px', marginLeft:'5px' }}>未習得</span>}
                           {s.cls !== prof.class && <span style={{ color:'#ff88cc', fontSize:'9px', marginLeft:'5px' }}>{s.cls}</span>}
                         </span>
@@ -424,8 +424,8 @@ export default function V2Home() {
               <div style={{ color:'#446688', fontSize:'9px', marginTop:'8px', lineHeight:'1.8' }}>
                 右の1〜5のボタンでその枠に入れます。
                 スキルは<span style={{ color:'#44aaff' }}>LVアップでいまの職業のものを確率で習得</span>し、
-                LV{LEARN_BY_LV}までに全部そろいます。<span style={{ color:'#ffcc00' }}>習得したスキルは転職で失われます</span>が、
-                転職のとき1つだけ<span style={{ color:'#ffcc00' }}>マスター</span>でき、マスターしたものは以降ずっと使えます。
+                LV{LEARN_BY_LV}までに全部そろいます。<span style={{ color:'#ffaa66' }}>習得中のスキルは転職で失われます</span>が、
+                転職のとき1つだけ<span style={{ color:'#ffcc00' }}>習得済み</span>になり、それ以降ずっと使えます。
               </div>
             </div>
 
@@ -527,8 +527,8 @@ export default function V2Home() {
                         <span style={{ color:'#ff88cc' }}>🔄 転職{l.job}回目 → {l.className}</span>
                         <span style={{ color:'#446688', marginLeft:'8px', fontSize:'10px' }}>戦闘力{l.points}分を振り分け</span>
                         {l.usedProof && <span style={{ color:'#ffaa44', marginLeft:'6px', fontSize:'9px' }}>{l.usedProof}を1個消費</span>}
-                        {l.mastered && <div style={{ color:'#ffcc00', fontSize:'10px' }}>★ {l.mastered}をマスターした！（以降ずっと使える）</div>}
-                        {l.mastered === null && <div style={{ color:'#886644', fontSize:'10px' }}>マスターできるスキルがなかった</div>}
+                        {l.kept && <div style={{ color:'#ffcc00', fontSize:'10px' }}>★ {l.kept}が習得済みになった！（以降ずっと使える）</div>}
+                        {l.kept === null && <div style={{ color:'#886644', fontSize:'10px' }}>習得済みにできるスキルがなかった</div>}
                       </>
                     ) : (
                       <>

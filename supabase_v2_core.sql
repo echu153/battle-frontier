@@ -53,12 +53,20 @@ update public.v2_profiles p set proofs = (
 ) where jsonb_typeof(p.proofs) = 'array';
 
 -- スキルは2段構え（あるけみすと準拠）
---   skills   = 習得しているスキル名。LVアップで増え、**転職すると失われる**
---   mastered = マスターしたスキル名。転職のとき習得済みから1つ選ばれ、以降ずっと残る
+--   skills  = 習得中のスキル名。LVアップで増え、**転職すると失われる**
+--   learned = 習得済みのスキル名。転職のとき習得中から1つ選ばれ、以降ずっと残る
 --   skill_set = 編成 [{"name":"体当たり","uses":3}]
--- 使えるスキル ＝ skills ∪ mastered
+-- 使えるスキル ＝ skills ∪ learned
 alter table public.v2_profiles add column if not exists skills    jsonb not null default '[]'::jsonb;
-alter table public.v2_profiles add column if not exists mastered  jsonb not null default '[]'::jsonb;
+alter table public.v2_profiles add column if not exists learned   jsonb not null default '[]'::jsonb;
+-- 旧名(mastered)で作っていた場合は中身を移して列を落とす
+do $mig$ begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'v2_profiles' and column_name = 'mastered') then
+    execute 'update public.v2_profiles set learned = mastered where jsonb_array_length(coalesce(mastered, ''[]''::jsonb)) > 0';
+    execute 'alter table public.v2_profiles drop column mastered';
+  end if;
+end $mig$;
 alter table public.v2_profiles add column if not exists skill_set jsonb not null default '[]'::jsonb;
 -- favorites = お気に入り登録したスキル名 ["強撃"]（一覧を絞り込むための印）
 alter table public.v2_profiles add column if not exists favorites jsonb not null default '[]'::jsonb;
@@ -338,7 +346,7 @@ declare
   v_proofs  jsonb;
   v_learned  text;
   v_skills   jsonb;
-  v_mastered jsonb;
+  v_kept     jsonb;
   v_set      jsonb;
   v_stat    int[] := c_init;
   v_alloc   int[] := array[0, 0, 0, 0, 0, 0, 0, 0];
@@ -402,33 +410,33 @@ begin
     end if;
   end if;
 
-  -- スキルのマスター（あるけみすと準拠）：
-  --   いまの職業のスキルのうち「習得しているがマスターしていない」ものから1つを永久に残す。
-  --   全部マスター済み／そもそも習得していない場合はマスターされない。
-  --   マスターしていない習得スキルは転職で失われる。
-  v_mastered := coalesce(v_row.mastered, '[]'::jsonb);
+  -- スキルを「習得済み」にする：
+  --   いまの職業のスキルのうち「習得中だがまだ習得済みでない」ものから1つを永久に残す。
+  --   全部習得済み／そもそも習得中が無い場合は何も残らない。
+  --   習得済みにならなかったスキルは転職で失われる。
+  v_kept := coalesce(v_row.learned, '[]'::jsonb);
   select s.name into v_learned
   from public.v2_skills s
   where s.cls = v_row.class
     and (coalesce(v_row.skills, '[]'::jsonb) ? s.name)
-    and not (v_mastered ? s.name)
+    and not (v_kept ? s.name)
   order by random()
   limit 1;
   if v_learned is not null then
-    v_mastered := v_mastered || to_jsonb(v_learned);
+    v_kept := v_kept || to_jsonb(v_learned);
   end if;
-  v_skills := '[]'::jsonb;   -- 習得はここで失われる（マスターしたものだけ残る）
+  v_skills := '[]'::jsonb;   -- 習得中はここで失われる（習得済みだけ残る）
 
-  -- 編成から、使えなくなったスキル（マスターしていないもの）を外す
+  -- 編成から、使えなくなったスキル（習得済みでないもの）を外す
   v_set := (
     select coalesce(jsonb_agg(e), '[]'::jsonb)
     from jsonb_array_elements(coalesce(v_row.skill_set, '[]'::jsonb)) e
-    where v_mastered ? (e ->> 'name')
+    where v_kept ? (e ->> 'name')
   );
 
   update public.v2_profiles set
     lv = 1, exp = 0, job_changes = v_jobs, class = v_cls.id, job_counts = v_counts, proofs = v_proofs,
-    skills = v_skills, mastered = v_mastered, skill_set = v_set,
+    skills = v_skills, learned = v_kept, skill_set = v_set,
     hp = v_stat[1], mp = v_stat[2], str = v_stat[3], dex = v_stat[4],
     agi = v_stat[5], int_stat = v_stat[6], vit = v_stat[7], luk = v_stat[8],
     updated_at = now()
@@ -441,7 +449,7 @@ begin
     'class', v_cls.id,
     'points', v_points,
     'used_proof', v_cls.req_proof,
-    'mastered', v_learned,
+    'kept', v_learned,
     'alloc', jsonb_build_object(
       'hp', v_alloc[1], 'mp', v_alloc[2], 'str', v_alloc[3], 'dex', v_alloc[4],
       'agi', v_alloc[5], 'int_stat', v_alloc[6], 'vit', v_alloc[7], 'luk', v_alloc[8]),
@@ -455,7 +463,7 @@ grant execute on function public.v2_change_job(text) to authenticated;
 
 -- ===== 5-2. スキル編成 =====
 -- 5枠に「並び順と使用回数」を設定する。並び順＝発動順（ABCDE→ABCDE…）。
--- 使えるのは「習得している ∪ マスターしている」スキルだけ。
+-- 使えるのは「習得中 ∪ 習得済み」のスキルだけ。
 -- ★使用回数の上限は「想定利用MP（Σ 消費MP×回数）が最大MPを超えないこと」で決まる
 --   （あるけみすとの「あなたの最大MPは◯MPです／想定利用MPは◯MPです」と同じ考え方）。
 --   MPを伸ばすほど強い技を多く積める＝MPがステータスとして効く。
@@ -503,9 +511,9 @@ begin
     if v_mp is null then
       return jsonb_build_object('ok', false, 'error', format('%sというスキルはありません', v_name));
     end if;
-    -- 使えるスキル ＝ 習得している ∪ マスターしている
+    -- 使えるスキル ＝ 習得中 ∪ 習得済み
     if not (coalesce(v_row.skills, '[]'::jsonb) ? v_name)
-       and not (coalesce(v_row.mastered, '[]'::jsonb) ? v_name) then
+       and not (coalesce(v_row.learned, '[]'::jsonb) ? v_name) then
       return jsonb_build_object('ok', false, 'error', format('%sはまだ使えません', v_name));
     end if;
     if v_name = any(v_names) then

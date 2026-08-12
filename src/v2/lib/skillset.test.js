@@ -1,10 +1,10 @@
-// バトルフロンティアⅡ スキルの習得・マスター・編成のテスト（node --test）
+// バトルフロンティアⅡ スキルの習得中・習得済み・編成のテスト（node --test）
 // ※サーバー側の規則は supabase_v2_core.sql の v2_apply_exp / v2_change_job / v2_set_skills。
 //   ここで固定しているのは同じ規則のクライアント側実装。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  SKILLS, skillsOf, usableSkills, usableSkillNames, unlearnedSkills, masterableSkillNames,
+  SKILLS, skillsOf, usableSkills, usableSkillNames, unlearnedSkills, keepableSkillNames,
   validateSkillSet, buildSlots, setMpCost, forcedLearnCount, rollLearnCount,
   KIND_TABS, filterSkills, sortSkills, SKILL_BY_NAME,
   SKILL_SET_SLOTS, SKILL_USE_MAX, LEARN_BY_LV, LEARN_PCT,
@@ -17,9 +17,9 @@ const evenStats = (power) => {
   return { hp:u * 8, mp:u * 3, str:u, dex:u, agi:u, int_stat:u, vit:u, luk:u }
 }
 
-// ===== 習得とマスター =====
-test('使えるスキル＝習得 ∪ マスター（職業に就いただけでは使えない）', () => {
-  // ★あるけみすと準拠。習得はLVアップで増え、転職で失われる。マスターはずっと残る
+// ===== 習得中と習得済み =====
+test('使えるスキル＝習得中 ∪ 習得済み（職業に就いただけでは使えない）', () => {
+  // 習得中はLVアップで増え、転職で失われる。習得済みはずっと残る
   assert.deepEqual(usableSkillNames([], []), [])
   const names = usableSkillNames(['体当たり', '強撃'], ['ヒール'])
   assert.deepEqual(names.sort(), ['ヒール', '体当たり', '強撃'].sort())
@@ -42,14 +42,14 @@ test('まだ覚えていない、いまの職業のスキルが分かる', () =>
   assert.equal(unlearnedSkills('戦士', skillsOf('戦士').map(s => s.name), []).length, 0)
 })
 
-test('マスターできるのは「いまの職業の習得済みでマスターしていない」スキルだけ', () => {
-  // ★転職時にここから1つ選ばれる。全部マスター済み／習得していないならマスターされない
-  assert.deepEqual(masterableSkillNames('戦士', [], []), [])
-  assert.deepEqual(masterableSkillNames('戦士', ['体当たり', '強撃'], []), ['体当たり', '強撃'])
-  assert.deepEqual(masterableSkillNames('戦士', ['体当たり', '強撃'], ['体当たり']), ['強撃'])
-  assert.deepEqual(masterableSkillNames('戦士', ['体当たり'], ['体当たり']), [])
-  // 他職のスキルを習得していても、いまの職業のものしかマスターできない
-  assert.deepEqual(masterableSkillNames('戦士', ['サンダー'], []), [])
+test('習得済みにできるのは「いまの職業の習得中でまだ習得済みでない」スキルだけ', () => {
+  // ★転職時にここから1つ選ばれる。全部習得済み／習得中が無いなら何も残らない
+  assert.deepEqual(keepableSkillNames('戦士', [], []), [])
+  assert.deepEqual(keepableSkillNames('戦士', ['体当たり', '強撃'], []), ['体当たり', '強撃'])
+  assert.deepEqual(keepableSkillNames('戦士', ['体当たり', '強撃'], ['体当たり']), ['強撃'])
+  assert.deepEqual(keepableSkillNames('戦士', ['体当たり'], ['体当たり']), [])
+  // 他職のスキルを習得中でも、いまの職業のものしか習得済みにできない
+  assert.deepEqual(keepableSkillNames('戦士', ['サンダー'], []), [])
 })
 
 // ===== LVアップでの習得 =====
