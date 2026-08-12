@@ -79,22 +79,26 @@ export const roll = (pct, rng = Math.random) => rng() * 100 < pct
 // kind: 'phys'（STR基準）/ 'mag'（INT基準）
 // mult: スキルの倍率。crit: クリティカルかどうか
 // defPen: 防御無視(0〜1)。スキル側で「防御を30%無視」のように指定する
-export const damageOf = ({ attacker, defender, mult = 1, kind = 'phys', crit = false, defPen = 0 }) => {
+// add: 副ステータス参照 [{ stat:'agi', rate:0.5 }]。あるけみすとの「STR×1.4＋LUK×0.8」に相当
+//      ※軽減率の計算には主ステータス（STR/INT）だけを使う＝副ステで防御の効きが変わらない
+export const attackStatOf = (s, kind) => (kind === 'mag' ? (s?.int_stat || 0) : (s?.str || 0))
+export const damageOf = ({ attacker, defender, mult = 1, kind = 'phys', crit = false, defPen = 0, add = null }) => {
   const phys = kind !== 'mag'
-  const atk = phys ? (attacker?.str || 0) : (attacker?.int_stat || 0)
+  const atk = attackStatOf(attacker, kind)
+  let base = atk * mult
+  if (add) for (const a of add) base += (attacker?.[a.stat] || 0) * a.rate
   let def = phys ? physDefOf(defender) : magDefOf(defender)
   if (defPen > 0) def *= Math.max(0, 1 - Math.min(1, defPen))
   if (crit) def /= CRIT_DEF_DIV
   const cap = phys ? PHYS_REDUCTION_CAP : MAG_REDUCTION_CAP
   const red = reductionRate(def, atk, cap)
-  const m = crit ? mult * CRIT_MULT : mult
-  return Math.max(1, Math.floor(atk * m * (1 - red)))
+  return Math.max(1, Math.floor(base * (crit ? CRIT_MULT : 1) * (1 - red)))
 }
 
 // 1回の攻撃を解決する。外れ／クリティカルもここで決める（戦闘ループから使う想定）
-export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', defPen = 0, sureHit = false, sureCrit = false }, rng = Math.random) => {
+export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', defPen = 0, add = null, sureHit = false, sureCrit = false }, rng = Math.random) => {
   const hit = sureHit || roll(hitRate(attacker, defender), rng)
   if (!hit) return { hit:false, crit:false, damage:0 }
   const crit = sureCrit || roll(critRate(attacker, defender), rng)
-  return { hit:true, crit, damage: damageOf({ attacker, defender, mult, kind, crit, defPen }) }
+  return { hit:true, crit, damage: damageOf({ attacker, defender, mult, kind, crit, defPen, add }) }
 }

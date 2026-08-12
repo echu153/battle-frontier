@@ -1,0 +1,103 @@
+// バトルフロンティアⅡ スキルデータの回帰テスト（node --test）
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { SKILLS, SKILL_BY_NAME, skillsOf, SKILL_CLASSES, powerText, expectedDamage } from './skills.js'
+import { damageOf } from './combat.js'
+import { STAT_KEYS } from './stats.js'
+
+// いま実装済みの職業（開始時＋初期職6）。上位職を足したらここも増やす
+const IMPLEMENTED = ['ノーブル', '戦士', '弓使い', '魔法使い', '僧侶', '格闘家', 'サモナー']
+const evenStats = (power) => {
+  const u = power / 8
+  return { hp:u * 8, mp:u * 3, str:u, dex:u, agi:u, int_stat:u, vit:u, luk:u }
+}
+
+test('実装済みの職業はそれぞれ5個ずつスキルを持つ', () => {
+  assert.deepEqual(SKILL_CLASSES, IMPLEMENTED)
+  for (const c of IMPLEMENTED) assert.equal(skillsOf(c).length, 5, `${c}のスキル数`)
+  assert.equal(SKILLS.length, IMPLEMENTED.length * 5)
+})
+
+test('スキル名は重複しない', () => {
+  assert.equal(Object.keys(SKILL_BY_NAME).length, SKILLS.length)
+})
+
+test('ノーブルは指定された5つ', () => {
+  assert.deepEqual(skillsOf('ノーブル').map(s => s.name),
+    ['はたく', '狙い撃ち', '応急手当', '身構える', '気合い'])
+})
+
+test('全スキルの数値がレンジに収まっている', () => {
+  for (const s of SKILLS) {
+    assert.ok(['phys', 'mag', 'heal', 'buff'].includes(s.kind), `${s.name} の種別`)
+    assert.ok(s.proc >= 60 && s.proc <= 100, `${s.name} の発動率 ${s.proc}`)
+    assert.ok(s.mp >= 0 && s.mp <= 30, `${s.name} の消費MP ${s.mp}`)
+    assert.ok(s.desc && s.desc.length > 0, `${s.name} の説明`)
+    if (s.kind === 'phys' || s.kind === 'mag') {
+      // 初期職は少し低めに置く＝2.0倍を超えない
+      assert.ok(s.mult > 0 && s.mult <= 2.0, `${s.name} の倍率 ${s.mult}`)
+      assert.ok((s.hits || 1) >= 1 && (s.hits || 1) <= 5, `${s.name} の多段数`)
+    } else {
+      assert.equal(s.mult, undefined, `${s.name} は倍率を持たない`)
+    }
+    for (const a of s.add || []) assert.ok(STAT_KEYS.includes(a.stat), `${s.name} の副参照 ${a.stat}`)
+    for (const side of ['self', 'enemy']) {
+      for (const k of Object.keys(s.buff?.[side] || {})) assert.ok(STAT_KEYS.includes(k), `${s.name} のバフ対象 ${k}`)
+    }
+  }
+})
+
+test('強い技ほど発動しにくい（倍率と発動率が逆相関）', () => {
+  const atk = SKILLS.filter(s => s.kind === 'phys' || s.kind === 'mag')
+  // 倍率1.8以上の技は発動率90%未満に抑える
+  for (const s of atk) {
+    if (s.mult >= 1.8) assert.ok(s.proc < 90, `${s.name}: 倍率${s.mult}なのに発動率${s.proc}%`)
+  }
+  // 倍率1.2以下の軽い技は90%以上出る
+  for (const s of atk) {
+    if (s.mult <= 1.2 && !s.hits) assert.ok(s.proc >= 90, `${s.name}: 倍率${s.mult}なのに発動率${s.proc}%`)
+  }
+})
+
+test('職業ごとに攻撃の型が揃っている', () => {
+  const kindsOf = (c) => new Set(skillsOf(c).filter(s => s.kind === 'phys' || s.kind === 'mag').map(s => s.kind))
+  for (const c of ['戦士', '弓使い', '格闘家', 'ノーブル']) assert.deepEqual([...kindsOf(c)], ['phys'], `${c}は物理型`)
+  for (const c of ['魔法使い', '僧侶', 'サモナー'])         assert.deepEqual([...kindsOf(c)], ['mag'],  `${c}は魔法型`)
+})
+
+test('どの職業も補助か回復を1つ以上持つ', () => {
+  for (const c of SKILL_CLASSES) {
+    const sup = skillsOf(c).filter(s => s.kind === 'buff' || s.kind === 'heal')
+    assert.ok(sup.length >= 1, `${c}に補助/回復がない`)
+  }
+})
+
+test('威力テキストが威力の出どころを示す', () => {
+  assert.equal(powerText(SKILL_BY_NAME['体当たり']), 'STR×1.4')
+  assert.equal(powerText(SKILL_BY_NAME['狙撃']), 'STR×1 ＋ AGI×0.6')
+  assert.equal(powerText(SKILL_BY_NAME['連打']), 'STR×0.6 ×3回')
+  assert.equal(powerText(SKILL_BY_NAME['ヒール']), '最大HP20% ＋ INT×0.3')
+  assert.equal(powerText(SKILL_BY_NAME['祈祷']), '毎ターン 最大HP10%×4T')
+})
+
+test('初期職の期待ダメージが同格相手に対して常識的な範囲に収まる', () => {
+  // 戦闘力534（LV100・0転職）どうし。HP534を数ターンで削り切れる程度
+  const s = evenStats(534)
+  const atk = SKILLS.filter(k => k.kind === 'phys' || k.kind === 'mag')
+  for (const sk of atk) {
+    const exp = expectedDamage(sk, s, s, damageOf)
+    assert.ok(exp > 0, `${sk.name} のダメージが0`)
+    // 1ターンで相手のHPの30%を超えない＝即殺されない
+    assert.ok(exp < s.hp * 0.3, `${sk.name} の期待ダメージ ${exp} が高すぎる（HP${s.hp}）`)
+  }
+})
+
+test('必中と防御無視のスキルはちゃんと効く', () => {
+  const s = evenStats(534)
+  const wall = { ...s, vit: s.vit * 10 }
+  const plain = damageOf({ attacker:s, defender:wall, mult:1.5 })
+  const pen = damageOf({ attacker:s, defender:wall, mult:1.5, defPen:SKILL_BY_NAME['貫通射撃'].defPen })
+  assert.ok(pen > plain, '貫通射撃は硬い相手に強い')
+  assert.equal(SKILL_BY_NAME['狙撃'].sureHit, true)
+  assert.equal(SKILL_BY_NAME['狙い撃ち'].sureHit, true)
+})

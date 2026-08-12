@@ -8,6 +8,8 @@ import {
   calcPower, expToNext, expPerLv, canJobChange,
 } from '../lib/stats.js'
 import { TIER_LABEL, TIER_ORDER, TIER_COLOR, missingReqs, canBecome, reqText, proofCount } from '../lib/classes.js'
+import { skillsOf, powerText, expectedDamage, KIND_LABEL, KIND_COLOR } from '../lib/skills.js'
+import { damageOf } from '../lib/combat.js'
 
 // ============================================================
 // バトルフロンティアⅡ（リメイク版）ホーム — 開発限定
@@ -213,6 +215,36 @@ export default function V2Home() {
                 どのステに当たっても戦闘力の上がり幅は同じです。
               </div>
             </div>
+
+            {/* いまの職業のスキル */}
+            {skillsOf(prof.class).length > 0 && (
+              <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
+                <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'8px' }}>⚔ {prof.class}のスキル</div>
+                <div style={{ display:'grid', gap:'4px' }}>
+                  {skillsOf(prof.class).map(s => {
+                    const dmg = expectedDamage(s, prof, prof, damageOf)
+                    return (
+                      <div key={s.name} style={{ background:'#000818', border:'1px solid #002244', padding:'7px 9px' }}>
+                        <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:'8px' }}>
+                          <span style={{ color:KIND_COLOR[s.kind], fontSize:'12px' }}>
+                            {s.name}
+                            <span style={{ color:'#556677', fontSize:'9px', marginLeft:'5px' }}>{KIND_LABEL[s.kind]}</span>
+                          </span>
+                          <span style={{ color:'#446688', fontSize:'10px' }}>発動{s.proc}% ／ MP{s.mp}</span>
+                        </div>
+                        <div style={{ color:'#556677', fontSize:'9px', marginTop:'3px' }}>
+                          {powerText(s)}
+                          {dmg > 0 && <span style={{ color:'#88ddaa', marginLeft:'6px' }}>同格相手に期待{dmg}</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div style={{ color:'#446688', fontSize:'9px', marginTop:'8px', lineHeight:'1.8' }}>
+                  スキルは毎ターン発動率で抽選します。「期待」は自分と同じステータスの相手に対する1ターンの概算（命中・クリティカルは含めません）。
+                </div>
+              </div>
+            )}
 
             {/* 転職（LV上限で周回する） */}
             <div style={{ ...box, padding:'14px', marginBottom:'12px', borderColor: canJobChange(prof.lv) ? '#aa4488' : '#0044aa' }}>
