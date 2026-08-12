@@ -132,7 +132,13 @@ const takeAction = (me, foe, rng, log) => {
       if (r.crit && r.hit) crit = true
     }
     foe.hp -= dmg
-    log.push({ side: me.name, type: 'skill', skill: skill.name, damage: dmg, crit, hits, of: skill.hits || 1 })
+    // 吸収：与えたダメージの一定割合を自分のHPへ（ソウルドレイン・ブラッティロアなど）
+    let drained = 0
+    if (skill.drain > 0 && dmg > 0) {
+      drained = Math.max(1, Math.floor(dmg * skill.drain))
+      me.hp = Math.min(me.base.hp, me.hp + drained)
+    }
+    log.push({ side: me.name, type: 'skill', skill: skill.name, damage: dmg, crit, hits, of: skill.hits || 1, drain: drained })
   } else if (skill.kind === 'heal') {
     if (skill.heal) {
       const amt = healOf(eMe, skill.heal.rate)

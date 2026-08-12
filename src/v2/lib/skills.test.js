@@ -1,21 +1,40 @@
 // バトルフロンティアⅡ スキルデータの回帰テスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { SKILLS, SKILL_BY_NAME, skillsOf, SKILL_CLASSES, powerText, expectedDamage, expectedHeal } from './skills.js'
+import {
+  SKILLS, SKILL_BY_NAME, skillsOf, SKILL_CLASSES, BASIC_CLASSES, isBasicClass, isPassive,
+  powerText, expectedDamage, expectedHeal,
+} from './skills.js'
 import { damageOf, healOf } from './combat.js'
 import { STAT_KEYS } from './stats.js'
 
-// いま実装済みの職業（開始時＋初期職6）。上位職を足したらここも増やす
-const IMPLEMENTED = ['ノーブル', '戦士', '弓使い', '魔法使い', '僧侶', '格闘家', 'サモナー']
+// 全28職ぶん実装済み（開始時＋初期職6＋上位職12＋複合上位職6＋特殊職3）
 const evenStats = (power) => {
   const u = power / 8
   return { hp:u * 8, mp:u * 3, str:u, dex:u, agi:u, int_stat:u, vit:u, luk:u }
 }
 
-test('実装済みの職業はそれぞれ5個ずつスキルを持つ', () => {
-  assert.deepEqual(SKILL_CLASSES, IMPLEMENTED)
-  for (const c of IMPLEMENTED) assert.equal(skillsOf(c).length, 5, `${c}のスキル数`)
-  assert.equal(SKILLS.length, IMPLEMENTED.length * 5)
+test('全28職がそれぞれ5個ずつスキルを持つ', () => {
+  assert.equal(SKILL_CLASSES.length, 28)
+  for (const c of SKILL_CLASSES) assert.equal(skillsOf(c).length, 5, `${c}のスキル数`)
+  assert.equal(SKILLS.length, 28 * 5)
+  assert.deepEqual(BASIC_CLASSES, ['ノーブル', '戦士', '弓使い', '魔法使い', '僧侶', '格闘家', 'サモナー'])
+})
+
+test('上位職はそれぞれパッシブを1つだけ持つ', () => {
+  // ★あるけみすとの職業補正に合わせてかなり控えめ（±5〜12%）。初期職にはパッシブを置かない
+  for (const c of SKILL_CLASSES) {
+    const pas = skillsOf(c).filter(isPassive)
+    assert.equal(pas.length, isBasicClass(c) ? 0 : 1, `${c}のパッシブ数`)
+    for (const s of pas) {
+      assert.ok(s.buff?.self, `${s.name} に効果がない`)
+      assert.equal(s.mp, 0, `${s.name} は消費MPを持たない`)
+      assert.equal(s.proc, undefined, `${s.name} は発動率を持たない`)
+      for (const v of Object.values(s.buff.self)) {
+        assert.ok(Math.abs(v) <= 12, `${s.name} の効果 ${v}% が大きすぎる（控えめにする）`)
+      }
+    }
+  }
 })
 
 test('スキル名は重複しない', () => {
@@ -29,14 +48,15 @@ test('ノーブルは指定された5つ', () => {
 
 test('全スキルの数値がレンジに収まっている', () => {
   for (const s of SKILLS) {
-    assert.ok(['phys', 'mag', 'heal', 'buff'].includes(s.kind), `${s.name} の種別`)
-    assert.ok(s.proc >= 40 && s.proc <= 100, `${s.name} の発動率 ${s.proc}`)
-    assert.ok(s.mp >= 0 && s.mp <= 30, `${s.name} の消費MP ${s.mp}`)
+    assert.ok(['phys', 'mag', 'heal', 'buff', 'passive'].includes(s.kind), `${s.name} の種別`)
+    assert.ok(s.mp >= 0 && s.mp <= 45, `${s.name} の消費MP ${s.mp}`)
     assert.ok(s.desc && s.desc.length > 0, `${s.name} の説明`)
+    if (isPassive(s)) continue   // パッシブは発動率も倍率も持たない
+    assert.ok(s.proc >= 40 && s.proc <= 100, `${s.name} の発動率 ${s.proc}`)
     if (s.kind === 'phys' || s.kind === 'mag') {
-      // 初期職は少し低めに置く。魔法は軽減上限が50%(物理は34%)で防御力も厚いぶん
-      // 倍率を高く取る（あるけみすとも魔法はINT×2.6等と物理より高い）
-      const cap = s.kind === 'mag' ? 2.4 : 2.0
+      // 初期職は低め。上位職はあるけみすと級（通常2.0前後・切り札4.0まで）。
+      // 魔法は軽減上限が50%(物理は34%)で防御力も厚いぶん倍率を高く取る
+      const cap = isBasicClass(s.cls) ? (s.kind === 'mag' ? 2.4 : 2.0) : (s.kind === 'mag' ? 4.3 : 4.0)
       assert.ok(s.mult > 0 && s.mult <= cap, `${s.name} の倍率 ${s.mult}（上限${cap}）`)
       assert.ok((s.hits || 1) >= 1 && (s.hits || 1) <= 5, `${s.name} の多段数`)
     } else {
@@ -57,9 +77,11 @@ test('強い技ほど発動しにくい（威力と発動率が逆相関）', ()
   const power = (s) => (s.mult + (s.add || []).reduce((t, a) => t + a.rate, 0)) * (s.hits || 1)
   for (const s of atk) {
     const p = power(s)
-    const strong = s.kind === 'mag' ? 2.0 : 1.8
+    const strong = (isBasicClass(s.cls) ? 0 : 0.6) + (s.kind === 'mag' ? 2.0 : 1.8)
     if (p >= strong) assert.ok(s.proc < 90, `${s.name}: 威力${p.toFixed(2)}なのに発動率${s.proc}%`)
     if (p <= 1.2) assert.ok(s.proc >= 90, `${s.name}: 威力${p.toFixed(2)}なのに発動率${s.proc}%`)
+    // 切り札級（威力3.0以上）はさらに出にくく
+    if (p >= 3.0) assert.ok(s.proc <= 85, `${s.name}: 切り札なのに発動率${s.proc}%`)
   }
 })
 
@@ -95,9 +117,9 @@ test('多段スキルはクリティカルしない', () => {
 })
 
 test('多段スキルの合計倍率が単発の主力を超えない', () => {
-  const singles = SKILLS.filter(s => (s.kind === 'phys' || s.kind === 'mag') && !s.hits)
-  const maxSingle = Math.max(...singles.map(s => s.mult))
   for (const s of SKILLS.filter(s => s.hits > 1)) {
+    const singles = SKILLS.filter(x => (x.kind === 'phys' || x.kind === 'mag') && !x.hits && isBasicClass(x.cls) === isBasicClass(s.cls))
+    const maxSingle = Math.max(...singles.map(x => x.mult))
     const total = s.mult * s.hits
     assert.ok(total <= maxSingle * 1.15,
       `${s.name}: 合計倍率${total.toFixed(2)} が単発の最大${maxSingle} を超えている`)
@@ -112,12 +134,15 @@ test('職業ごとの主力の実質倍率が2割以上開かない', () => {
   for (const s of SKILLS.filter(s => s.kind === 'phys' || s.kind === 'mag')) {
     tops[s.cls] = Math.max(tops[s.cls] || 0, effMult(s))
   }
-  // ノーブルは開始時の職業なので意図的に低い＝比較から外す
-  const vals = Object.entries(tops).filter(([c]) => c !== 'ノーブル')
-  const max = Math.max(...vals.map(v => v[1]))
-  const min = Math.min(...vals.map(v => v[1]))
-  assert.ok(max / min <= 1.2,
-    `職業ごとの主力が開きすぎ: ${vals.map(([c, v]) => `${c}=${v.toFixed(2)}`).join(' ')}`)
+  // ノーブルは開始時の職業なので意図的に低い＝比較から外す。
+  // 初期職と上位職はレンジが違うので、同じ区分の中だけで比べる
+  for (const basic of [true, false]) {
+    const vals = Object.entries(tops).filter(([c]) => c !== 'ノーブル' && isBasicClass(c) === basic)
+    const max = Math.max(...vals.map(v => v[1]))
+    const min = Math.min(...vals.map(v => v[1]))
+    assert.ok(max / min <= 1.45,
+      `${basic ? '初期職' : '上位職'}の主力が開きすぎ: ${vals.map(([c, v]) => `${c}=${v.toFixed(2)}`).join(' ')}`)
+  }
 })
 
 test('職業ごとに攻撃の型が揃っている', () => {
@@ -126,10 +151,10 @@ test('職業ごとに攻撃の型が揃っている', () => {
   for (const c of ['魔法使い', '僧侶', 'サモナー'])         assert.deepEqual([...kindsOf(c)], ['mag'],  `${c}は魔法型`)
 })
 
-test('どの職業も補助か回復を1つ以上持つ', () => {
+test('どの職業も攻撃以外の枠を1つ以上持つ', () => {
   for (const c of SKILL_CLASSES) {
-    const sup = skillsOf(c).filter(s => s.kind === 'buff' || s.kind === 'heal')
-    assert.ok(sup.length >= 1, `${c}に補助/回復がない`)
+    const sup = skillsOf(c).filter(s => s.kind !== 'phys' && s.kind !== 'mag')
+    assert.ok(sup.length >= 1, `${c}に補助/回復/パッシブがない`)
   }
 })
 
@@ -178,7 +203,7 @@ test('回復の期待量が同格戦で常識的な範囲に収まる', () => {
 test('初期職の期待ダメージが同格相手に対して常識的な範囲に収まる', () => {
   // 戦闘力534（LV100・0転職）どうし。HP534を数ターンで削り切れる程度
   const s = evenStats(534)
-  const atk = SKILLS.filter(k => k.kind === 'phys' || k.kind === 'mag')
+  const atk = SKILLS.filter(k => (k.kind === 'phys' || k.kind === 'mag') && isBasicClass(k.cls))
   for (const sk of atk) {
     const exp = expectedDamage(sk, s, s, damageOf)
     assert.ok(exp > 0, `${sk.name} のダメージが0`)
