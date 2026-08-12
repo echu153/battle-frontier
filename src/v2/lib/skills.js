@@ -105,8 +105,7 @@ export const SKILL_CLASSES = [...new Set(SKILLS.map(s => s.cls))]
 // 習得は転職のときに「転職前の職業のスキル」から未習得のものを1つランダムに得る
 // （あるけみすとの「転生でスキルを1つ受け継ぐ」に相当）。職業が変わっても習得分は残る。
 export const SKILL_SET_SLOTS = 5   // 編成できる枠数
-export const SKILL_USE_TOTAL = 10  // 全枠あわせて設定できる使用回数の上限
-export const SKILL_USE_MAX   = 10  // 1枠あたりの上限
+export const SKILL_USE_MAX   = 99  // 1枠あたりの使用回数の上限
 
 export const usableSkillNames = (cls, learned = []) =>
   [...new Set([...skillsOf(cls).map(s => s.name), ...learned])]
@@ -115,13 +114,18 @@ export const usableSkills = (cls, learned = []) => {
   return SKILLS.filter(s => set.has(s.name))
 }
 
+// 想定利用MP＝編成を全部撃ち切ったときの消費MP合計（あるけみすとの表示と同じ考え方）。
+// ★使用回数の上限はこれで決まる。最大MPを超える編成は保存できない
+//   ＝MPを伸ばすほど強い技を多く積める＝MPがちゃんとステータスとして効く
+export const setMpCost = (set) => (set || [])
+  .reduce((t, e) => t + (SKILL_BY_NAME[e?.name]?.mp || 0) * (e?.uses || 0), 0)
+
 // 編成の検証。問題があれば日本語のエラー文、無ければ null（サーバーの v2_set_skills と同じ規則）
-export const validateSkillSet = (set, usableNames) => {
+export const validateSkillSet = (set, usableNames, maxMp = Infinity) => {
   if (!Array.isArray(set)) return '編成の形式が不正です'
   if (set.length > SKILL_SET_SLOTS) return `枠は${SKILL_SET_SLOTS}個までです`
   const usable = new Set(usableNames)
   const seen = new Set()
-  let total = 0
   for (const e of set) {
     if (!e?.name) return '枠にスキルが入っていません'
     if (!usable.has(e.name)) return `${e.name}はまだ使えません`
@@ -129,10 +133,39 @@ export const validateSkillSet = (set, usableNames) => {
     seen.add(e.name)
     const uses = Number(e.uses)
     if (!Number.isInteger(uses) || uses < 1 || uses > SKILL_USE_MAX) return `${e.name}の使用回数は1〜${SKILL_USE_MAX}です`
-    total += uses
   }
-  if (total > SKILL_USE_TOTAL) return `使用回数の合計は${SKILL_USE_TOTAL}回までです（いま${total}回）`
+  const cost = setMpCost(set)
+  if (cost > maxMp) return `想定利用MPが最大MPを超えています（${cost} / ${maxMp}）`
   return null
+}
+
+// ===== 一覧の絞り込み・並べ替え（スキルが増えても探せるように） =====
+export const KIND_TABS = [
+  { key:'all',  label:'すべて' },
+  { key:'phys', label:'物理' },
+  { key:'mag',  label:'魔法' },
+  { key:'buff', label:'補助' },
+  { key:'heal', label:'回復' },
+  { key:'fav',  label:'お気に入り' },
+]
+export const SORT_KEYS = ['name', 'mp', 'proc', 'cls']
+export const filterSkills = (list, { tab = 'all', query = '', favorites = [] } = {}) => {
+  const q = (query || '').trim()
+  const fav = new Set(favorites)
+  return list.filter(s => {
+    if (tab === 'fav') { if (!fav.has(s.name)) return false }
+    else if (tab !== 'all' && s.kind !== tab) return false
+    if (q && !s.name.includes(q) && !s.cls.includes(q) && !(s.desc || '').includes(q)) return false
+    return true
+  })
+}
+export const sortSkills = (list, key = 'name', asc = true) => {
+  const dir = asc ? 1 : -1
+  return [...list].sort((a, b) => {
+    if (key === 'mp' || key === 'proc') return (a[key] - b[key]) * dir || a.name.localeCompare(b.name, 'ja')
+    if (key === 'cls') return a.cls.localeCompare(b.cls, 'ja') * dir || a.name.localeCompare(b.name, 'ja')
+    return a.name.localeCompare(b.name, 'ja') * dir
+  })
 }
 
 // 保存された編成（[{name, uses}]）を戦闘用の slots に変換する。知らない名前は捨てる

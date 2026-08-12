@@ -4,8 +4,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  SKILLS, skillsOf, usableSkills, usableSkillNames, validateSkillSet, buildSlots,
-  SKILL_SET_SLOTS, SKILL_USE_TOTAL, SKILL_USE_MAX,
+  SKILLS, skillsOf, usableSkills, usableSkillNames, validateSkillSet, buildSlots, setMpCost,
+  KIND_TABS, filterSkills, sortSkills, SKILL_BY_NAME,
+  SKILL_SET_SLOTS, SKILL_USE_MAX,
 } from './skills.js'
 import { runBattle } from './battle.js'
 
@@ -38,30 +39,74 @@ test('usableSkills はスキルの実体を返す', () => {
 test('編成は枠数・重複・使用回数・使えるスキルかを検証する', () => {
   const usable = usableSkillNames('戦士', [])
   const ok = [{ name:'体当たり', uses:5 }, { name:'強撃', uses:5 }]
-  assert.equal(validateSkillSet(ok, usable), null)
-  assert.equal(validateSkillSet([], usable), null)  // 空でもよい
+  assert.equal(validateSkillSet(ok, usable, 9999), null)
+  assert.equal(validateSkillSet([], usable, 9999), null)  // 空でもよい
 
   // 使えないスキル
-  assert.match(validateSkillSet([{ name:'爆裂拳', uses:1 }], usable), /まだ使えません/)
+  assert.match(validateSkillSet([{ name:'爆裂拳', uses:1 }], usable, 9999), /まだ使えません/)
   // 重複
-  assert.match(validateSkillSet([{ name:'強撃', uses:1 }, { name:'強撃', uses:1 }], usable), /重複/)
+  assert.match(validateSkillSet([{ name:'強撃', uses:1 }, { name:'強撃', uses:1 }], usable, 9999), /重複/)
   // 枠数オーバー
   const many = skillsOf('戦士').map(s => ({ name:s.name, uses:1 }))
-  assert.equal(validateSkillSet(many, usable), null)
-  assert.match(validateSkillSet([...many, { name:'体当たり', uses:1 }], usable), /枠は/)
+  assert.equal(validateSkillSet(many, usable, 9999), null)
+  assert.match(validateSkillSet([...many, { name:'体当たり', uses:1 }], usable, 9999), /枠は/)
   // 使用回数の範囲
-  assert.match(validateSkillSet([{ name:'強撃', uses:0 }], usable), /使用回数は/)
-  assert.match(validateSkillSet([{ name:'強撃', uses:SKILL_USE_MAX + 1 }], usable), /使用回数は/)
-  assert.match(validateSkillSet([{ name:'強撃', uses:1.5 }], usable), /使用回数は/)
-  // 合計の上限
-  assert.match(validateSkillSet(
-    [{ name:'強撃', uses:SKILL_USE_MAX }, { name:'体当たり', uses:1 }], usable), /合計/)
+  assert.match(validateSkillSet([{ name:'強撃', uses:0 }], usable, 9999), /使用回数は/)
+  assert.match(validateSkillSet([{ name:'強撃', uses:SKILL_USE_MAX + 1 }], usable, 9999), /使用回数は/)
+  assert.match(validateSkillSet([{ name:'強撃', uses:1.5 }], usable, 9999), /使用回数は/)
+})
+
+test('使用回数の上限は「想定利用MPが最大MPを超えないこと」で決まる', () => {
+  // ★あるけみすとの「あなたの最大MPは◯MPです／想定利用MPは◯MPです」と同じ考え方。
+  //   MPを伸ばすほど強い技を多く積める＝MPがステータスとして効く
+  const usable = usableSkillNames('戦士', [])
+  const mp = SKILL_BY_NAME['強撃'].mp   // 12
+  assert.equal(setMpCost([{ name:'強撃', uses:5 }]), mp * 5)
+  assert.equal(setMpCost([{ name:'強撃', uses:2 }, { name:'体当たり', uses:3 }]), mp * 2 + 5 * 3)
+  assert.equal(setMpCost([]), 0)
+  assert.equal(setMpCost([{ name:'知らない技', uses:3 }]), 0)
+
+  // 最大MPちょうどは通る／1超えると通らない
+  assert.equal(validateSkillSet([{ name:'強撃', uses:5 }], usable, mp * 5), null)
+  assert.match(validateSkillSet([{ name:'強撃', uses:5 }], usable, mp * 5 - 1), /想定利用MP/)
+  // 消費MP0の技はいくら積んでも通る
+  assert.equal(validateSkillSet([{ name:'はたく', uses:99 }], usableSkillNames('ノーブル', []), 0), null)
 })
 
 test('編成の上限が定数と一致している（サーバー側の v2_set_skills と揃える）', () => {
   assert.equal(SKILL_SET_SLOTS, 5)
-  assert.equal(SKILL_USE_TOTAL, 10)
-  assert.equal(SKILL_USE_MAX, 10)
+  assert.equal(SKILL_USE_MAX, 99)
+})
+
+test('一覧を検索・種別・お気に入りで絞り込める', () => {
+  const list = usableSkills('戦士', ['ヒール', 'サンダー'])
+  assert.equal(filterSkills(list, { tab:'all' }).length, list.length)
+  // 種別
+  assert.ok(filterSkills(list, { tab:'heal' }).every(s => s.kind === 'heal'))
+  assert.deepEqual(filterSkills(list, { tab:'mag' }).map(s => s.name), ['サンダー'])
+  // 検索（名前・職業・説明のどれかに当たる）
+  assert.deepEqual(filterSkills(list, { query:'強撃' }).map(s => s.name), ['強撃'])
+  assert.ok(filterSkills(list, { query:'僧侶' }).some(s => s.name === 'ヒール'))
+  assert.equal(filterSkills(list, { query:'存在しない語' }).length, 0)
+  // お気に入り
+  assert.deepEqual(filterSkills(list, { tab:'fav', favorites:['強撃'] }).map(s => s.name), ['強撃'])
+  assert.equal(filterSkills(list, { tab:'fav', favorites:[] }).length, 0)
+  // タブは全部そろっている
+  assert.deepEqual(KIND_TABS.map(t => t.key), ['all', 'phys', 'mag', 'buff', 'heal', 'fav'])
+})
+
+test('一覧をMP・発動率・名前で並べ替えられる', () => {
+  const list = usableSkills('戦士', [])
+  const byMp = sortSkills(list, 'mp', true).map(s => s.mp)
+  assert.deepEqual(byMp, [...byMp].sort((a, b) => a - b))
+  const byMpDesc = sortSkills(list, 'mp', false).map(s => s.mp)
+  assert.deepEqual(byMpDesc, [...byMpDesc].sort((a, b) => b - a))
+  const byProc = sortSkills(list, 'proc', true).map(s => s.proc)
+  assert.deepEqual(byProc, [...byProc].sort((a, b) => a - b))
+  // 元の配列は壊さない
+  const before = list.map(s => s.name)
+  sortSkills(list, 'mp', true)
+  assert.deepEqual(list.map(s => s.name), before)
 })
 
 test('保存された編成を戦闘用の枠に変換できる（知らない名前は捨てる）', () => {
