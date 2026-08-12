@@ -86,6 +86,36 @@ export const hitRate = (attacker, defender) => {
 
 const clampPct = (v, min, max) => Math.min(max, Math.max(min, Math.round(v * 10) / 10))
 
+// ===== 行動順・行動回数（AGI）=====
+// あるけみすと側は「AGIは行動順・行動回数・回避に影響」としか公表していないので、
+// ここは旧版（無印バトルフロンティア）の考え方を踏襲しつつ、上限だけ付け直している。
+//   旧版：追加行動率 =(自SPD−敵SPD)/敵SPD×50。上限なしで、2倍差で50%・3倍差で75%…と伸び続ける
+//        → 転生（転職）で差がつくほど一方的になる＝インフレの温床だった
+//   v2  ：AGI比 1倍→0%、EXTRA_ACTION_MAX_RATIO 倍で EXTRA_ACTION_MAX_PCT に到達して打ち止め
+//        → 転職で大差がついても追加行動だけで壊れない
+export const EXTRA_ACTION_MAX_PCT   = 50 // 追加行動の上限(%)
+export const EXTRA_ACTION_MAX_RATIO = 10 // この倍率で上限に到達する
+// 相手よりAGIが高いときだけ発生する
+export const extraActionRate = (myAgi, foeAgi) => {
+  const mine = Math.max(0, myAgi || 0)
+  const foe  = Math.max(1, foeAgi || 0)
+  if (mine <= foe) return 0
+  const t = Math.min(1, (mine / foe - 1) / (EXTRA_ACTION_MAX_RATIO - 1))
+  return Math.round(EXTRA_ACTION_MAX_PCT * t * 10) / 10
+}
+export const rollExtraAction = (me, foe, rng = Math.random) =>
+  roll(extraActionRate(me?.agi, foe?.agi), rng)
+
+// 行動順。スキルの優先度が最優先、次にAGI、同値ならランダム。
+// priority はスキル側の値（0=通常・1以上=先制）。防御や回復を先に置けるようにするための枠。
+export const goesFirst = (me, foe, myPriority = 0, foePriority = 0, rng = Math.random) => {
+  if (myPriority !== foePriority) return myPriority > foePriority
+  const a = me?.agi || 0
+  const b = foe?.agi || 0
+  if (a !== b) return a > b
+  return rng() < 0.5
+}
+
 // ===== 抽選 =====
 // 発動率・命中率・クリティカル率（%）の判定。rng は 0〜1
 export const roll = (pct, rng = Math.random) => rng() * 100 < pct

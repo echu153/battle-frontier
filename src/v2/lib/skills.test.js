@@ -69,6 +69,20 @@ test('強い技ほど発動しにくい（倍率と発動率が逆相関）', ()
 //   実質倍率＝(倍率＋副参照の合計)×多段数×発動率。これが職業間で開かないことを固定する。
 const effMult = (s) => (s.mult + (s.add || []).reduce((t, a) => t + a.rate, 0)) * (s.hits || 1) * (s.proc / 100)
 
+test('先制(priority)が付くのは回復と防御バフだけ', () => {
+  // v2の規則：自分を守る・立て直す技は先制。攻撃バフやMP回復は通常のAGI順
+  const pri = SKILLS.filter(s => s.priority > 0).map(s => s.name)
+  assert.deepEqual(pri, ['応急手当', '身構える', '防御態勢', 'ヒール', '祈祷', 'プロテク'])
+  for (const s of SKILLS.filter(s => s.priority > 0)) {
+    assert.ok(s.kind === 'heal' || s.kind === 'buff', `${s.name} は攻撃スキルなのに先制`)
+    if (s.kind === 'buff') {
+      const self = s.buff?.self || {}
+      assert.ok(self.vit || self.int_stat, `${s.name} は防御バフではないのに先制`)
+    }
+    assert.equal(s.mpRegen, undefined, `${s.name} はMP回復なのに先制`)
+  }
+})
+
 test('多段スキルはクリティカルしない', () => {
   // クリの固定加算(＋1.5)は元の係数によらないため、多段ほど恩恵が大きい。
   // あるけみすとにも「クリティカルするスキルとしないスキル」があるので、

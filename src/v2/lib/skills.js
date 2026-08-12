@@ -31,6 +31,9 @@ export const KIND_COLOR = { phys:'#ffcc00', mag:'#cc44ff', heal:'#44ff88', buff:
 //          ゲーム内には表記されない。クリの固定加算(＋1.5)は元の係数によらないため
 //          多段スキルほど恩恵が大きい＝v2では多段を noCrit にして素の倍率で調整する
 // sureCrit: 確定クリティカル（あるけみすとの「破魔の一撃」「刺閃」に相当）。初期職では未使用
+// priority: 行動順の優先度。0=通常（AGI順）／1以上=先制。
+//           v2の割り当ての規則は「自分を守る・立て直す技（回復と防御バフ）は先制」。
+//           攻撃バフ（気合い・精神統一・残心・駆け足）とMP回復は通常のAGI順のまま
 // buff   : { self:{ステ:%}, enemy:{ステ:%}, turns }
 // heal   : { rate }                  …即時HP回復（INT×rate）
 // regen  : { rate, turns }           …毎ターンHP回復（INT×rate）
@@ -41,15 +44,15 @@ export const SKILLS = [
   // ===== ノーブル（開始時の職業。一段低い） =====
   { name:'はたく',     cls:'ノーブル', kind:'phys', mult:1.1, proc:95, mp:0,  desc:'素手で殴る。消費MPなし' },
   { name:'狙い撃ち',   cls:'ノーブル', kind:'phys', mult:1.0, proc:90, mp:5,  sureHit:true, desc:'必ず当たる一撃' },
-  { name:'応急手当',   cls:'ノーブル', kind:'heal', proc:80, mp:8,  heal:{ rate:1.0 }, desc:'INT×1.0を回復' },
-  { name:'身構える',   cls:'ノーブル', kind:'buff', proc:100, mp:6, buff:{ self:{ vit:20 }, turns:3 }, desc:'3ターンVIT+20%' },
+  { name:'応急手当',   cls:'ノーブル', kind:'heal', proc:80, mp:8,  heal:{ rate:1.0 }, priority:1, desc:'INT×1.0を回復' },
+  { name:'身構える',   cls:'ノーブル', kind:'buff', proc:100, mp:6, buff:{ self:{ vit:20 }, turns:3 }, priority:1, desc:'3ターンVIT+20%' },
   { name:'気合い',     cls:'ノーブル', kind:'buff', proc:90, mp:8,  buff:{ self:{ str:15 }, turns:3 }, desc:'3ターンSTR+15%' },
 
   // ===== 戦士（物理・耐久） =====
   { name:'体当たり',       cls:'戦士', kind:'phys', mult:1.4, proc:95, mp:5,  desc:'素直な体当たり' },
   { name:'強撃',           cls:'戦士', kind:'phys', mult:1.9, proc:85, mp:12, desc:'力を込めた一撃' },
   { name:'防御崩し',       cls:'戦士', kind:'phys', mult:1.2, proc:90, mp:10, buff:{ enemy:{ vit:-15 }, turns:3 }, desc:'3ターン相手のVIT-15%' },
-  { name:'防御態勢',       cls:'戦士', kind:'buff', proc:100, mp:8, buff:{ self:{ vit:30 }, turns:3 }, desc:'3ターンVIT+30%' },
+  { name:'防御態勢',       cls:'戦士', kind:'buff', proc:100, mp:8, buff:{ self:{ vit:30 }, turns:3 }, priority:1, desc:'3ターンVIT+30%' },
   { name:'シールドアタック', cls:'戦士', kind:'phys', mult:1.0, add:[{ stat:'vit', rate:0.5 }], proc:90, mp:10, desc:'盾で殴る。VITも威力になる' },
 
   // ===== 弓使い（命中・素早さ） =====
@@ -69,9 +72,9 @@ export const SKILLS = [
   // ===== 僧侶（回復・支援） =====
   { name:'ライト',       cls:'僧侶', kind:'mag', mult:1.5, proc:95, mp:6,  desc:'光の魔法' },
   { name:'ライトニング', cls:'僧侶', kind:'mag', mult:2.05, proc:85, mp:13, desc:'僧侶の攻撃手段の要' },
-  { name:'ヒール',       cls:'僧侶', kind:'heal', proc:80, mp:12, heal:{ rate:1.4 }, desc:'INT×1.4を回復' },
-  { name:'祈祷',         cls:'僧侶', kind:'heal', proc:80, mp:15, regen:{ rate:0.5, turns:4 }, desc:'4ターン毎ターンINT×0.5を回復' },
-  { name:'プロテク',     cls:'僧侶', kind:'buff', proc:100, mp:10, buff:{ self:{ vit:20, int_stat:20 }, turns:3 }, desc:'3ターンVIT・INT+20%' },
+  { name:'ヒール',       cls:'僧侶', kind:'heal', proc:80, mp:12, heal:{ rate:1.4 }, priority:1, desc:'INT×1.4を回復' },
+  { name:'祈祷',         cls:'僧侶', kind:'heal', proc:80, mp:15, regen:{ rate:0.5, turns:4 }, priority:1, desc:'4ターン毎ターンINT×0.5を回復' },
+  { name:'プロテク',     cls:'僧侶', kind:'buff', proc:100, mp:10, buff:{ self:{ vit:20, int_stat:20 }, turns:3 }, priority:1, desc:'3ターンVIT・INT+20%' },
 
   // ===== 格闘家（手数） =====
   { name:'打撃',   cls:'格闘家', kind:'phys', mult:1.3, proc:95, mp:4,  desc:'軽い打撃' },

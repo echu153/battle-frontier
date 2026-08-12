@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   PHYS_REDUCTION_CAP, MAG_REDUCTION_CAP, CRIT_MULT, CRIT_MULT_ADD, HIT_MAX_PCT, HIT_MIN_PCT,
   CRIT_MIN_PCT, CRIT_MAX_PCT, CRIT_BASE_PCT, CRIT_ACC_DEX, CRIT_ACC_LUK, critAccuracyStats,
+  EXTRA_ACTION_MAX_PCT, EXTRA_ACTION_MAX_RATIO, extraActionRate, rollExtraAction, goesFirst,
   physDefOf, magDefOf, reductionRate, critRate, hitRate, roll, damageOf, resolveAttack,
 } from './combat.js'
 import { INITIAL_STATS, applyExp, calcPower } from './stats.js'
@@ -147,6 +148,52 @@ test('クリティカル率はLUK差で動き、上限と下限の中に収ま�
   assert.ok(critRate({ luk:0 }, { luk:1000 }) < CRIT_BASE_PCT)
   assert.equal(critRate({ luk:10 ** 6 }, { luk:0 }), CRIT_MAX_PCT)
   assert.equal(critRate({ luk:0 }, { luk:10 ** 6 }), CRIT_MIN_PCT)
+})
+
+// ===== AGI（行動順・行動回数）=====
+test('追加行動は相手よりAGIが高いときだけ出る', () => {
+  assert.equal(extraActionRate(100, 100), 0)
+  assert.equal(extraActionRate(50, 100), 0)
+  assert.ok(extraActionRate(101, 100) > 0)
+})
+
+test('追加行動は10倍で50%に達し、そこで打ち止め', () => {
+  assert.equal(extraActionRate(100 * EXTRA_ACTION_MAX_RATIO, 100), EXTRA_ACTION_MAX_PCT)
+  assert.equal(extraActionRate(100 * 100, 100), EXTRA_ACTION_MAX_PCT)  // 100倍でも上限のまま
+  // ★旧版は上限が無く 2倍差で50%・3倍差で75%…と伸び続けた（転職差で一方的になる元）。
+  //   v2は 2倍差でも約5.6%に抑える。ここを緩めるとインフレ対策が崩れる。
+  assert.ok(extraActionRate(200, 100) < 10, `2倍差=${extraActionRate(200, 100)}%`)
+  // 単調増加
+  let prev = -1
+  for (const r of [1, 1.5, 2, 3, 5, 8, 10]) {
+    const v = extraActionRate(100 * r, 100)
+    assert.ok(v >= prev, `${r}倍で減っている`)
+    prev = v
+  }
+})
+
+test('追加行動の抽選が確率どおりに出る', () => {
+  const rng = makeRng(31)
+  const me = { agi:1000 }, foe = { agi:100 }   // 10倍＝50%
+  let n = 0
+  for (let i = 0; i < 20000; i++) if (rollExtraAction(me, foe, rng)) n++
+  assert.ok(Math.abs(n / 20000 - 0.5) < 0.02, `実測=${n / 20000}`)
+  // 遅いほうは絶対に出ない
+  for (let i = 0; i < 1000; i++) assert.equal(rollExtraAction(foe, me, rng), false)
+})
+
+test('行動順は 優先度 → AGI → ランダム の順で決まる', () => {
+  const fast = { agi:200 }, slow = { agi:100 }
+  assert.equal(goesFirst(fast, slow), true)
+  assert.equal(goesFirst(slow, fast), false)
+  // 優先度はAGIより強い（遅くても先制スキルなら先）
+  assert.equal(goesFirst(slow, fast, 1, 0), true)
+  assert.equal(goesFirst(fast, slow, 0, 1), false)
+  // 優先度もAGIも同じならランダム（五分に割れる）
+  const rng = makeRng(5)
+  let first = 0
+  for (let i = 0; i < 10000; i++) if (goesFirst(slow, { agi:100 }, 0, 0, rng)) first++
+  assert.ok(Math.abs(first / 10000 - 0.5) < 0.03, `実測=${first / 10000}`)
 })
 
 test('抽選は確率どおりに振れる', () => {
