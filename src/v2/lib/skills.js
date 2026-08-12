@@ -100,6 +100,46 @@ export const SKILL_BY_NAME = Object.fromEntries(SKILLS.map(s => [s.name, s]))
 export const skillsOf = (cls) => SKILLS.filter(s => s.cls === cls)
 export const SKILL_CLASSES = [...new Set(SKILLS.map(s => s.cls))]
 
+// ===== 習得と編成 =====
+// 使えるスキル ＝ いまの職業のスキル ∪ これまでに習得したスキル。
+// 習得は転職のときに「転職前の職業のスキル」から未習得のものを1つランダムに得る
+// （あるけみすとの「転生でスキルを1つ受け継ぐ」に相当）。職業が変わっても習得分は残る。
+export const SKILL_SET_SLOTS = 5   // 編成できる枠数
+export const SKILL_USE_TOTAL = 10  // 全枠あわせて設定できる使用回数の上限
+export const SKILL_USE_MAX   = 10  // 1枠あたりの上限
+
+export const usableSkillNames = (cls, learned = []) =>
+  [...new Set([...skillsOf(cls).map(s => s.name), ...learned])]
+export const usableSkills = (cls, learned = []) => {
+  const set = new Set(usableSkillNames(cls, learned))
+  return SKILLS.filter(s => set.has(s.name))
+}
+
+// 編成の検証。問題があれば日本語のエラー文、無ければ null（サーバーの v2_set_skills と同じ規則）
+export const validateSkillSet = (set, usableNames) => {
+  if (!Array.isArray(set)) return '編成の形式が不正です'
+  if (set.length > SKILL_SET_SLOTS) return `枠は${SKILL_SET_SLOTS}個までです`
+  const usable = new Set(usableNames)
+  const seen = new Set()
+  let total = 0
+  for (const e of set) {
+    if (!e?.name) return '枠にスキルが入っていません'
+    if (!usable.has(e.name)) return `${e.name}はまだ使えません`
+    if (seen.has(e.name)) return `${e.name}が重複しています`
+    seen.add(e.name)
+    const uses = Number(e.uses)
+    if (!Number.isInteger(uses) || uses < 1 || uses > SKILL_USE_MAX) return `${e.name}の使用回数は1〜${SKILL_USE_MAX}です`
+    total += uses
+  }
+  if (total > SKILL_USE_TOTAL) return `使用回数の合計は${SKILL_USE_TOTAL}回までです（いま${total}回）`
+  return null
+}
+
+// 保存された編成（[{name, uses}]）を戦闘用の slots に変換する。知らない名前は捨てる
+export const buildSlots = (set) => (set || [])
+  .map(e => ({ skill: SKILL_BY_NAME[e.name], uses: e.uses }))
+  .filter(s => s.skill)
+
 // 表示用の効果テキスト（威力の出どころが一目で分かるように）
 export const powerText = (s) => {
   if (s.kind === 'heal') {

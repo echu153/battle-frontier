@@ -8,8 +8,19 @@ import {
   calcPower, expToNext, expPerLv, canJobChange,
 } from '../lib/stats.js'
 import { TIER_LABEL, TIER_ORDER, TIER_COLOR, missingReqs, canBecome, reqText, proofCount } from '../lib/classes.js'
-import { skillsOf, powerText, expectedDamage, expectedHeal, KIND_LABEL, KIND_COLOR } from '../lib/skills.js'
+import {
+  powerText, expectedDamage, expectedHeal, KIND_LABEL, KIND_COLOR, SKILL_BY_NAME,
+  usableSkills, usableSkillNames, validateSkillSet,
+  SKILL_SET_SLOTS, SKILL_USE_TOTAL, SKILL_USE_MAX,
+} from '../lib/skills.js'
 import { damageOf, healOf } from '../lib/combat.js'
+
+// 編成の下書きを「5枠ぶんの配列」に揃える（空き枠も持つ）
+const normalizeSet = (set) => {
+  const out = Array.from({ length: SKILL_SET_SLOTS }, () => ({ name:'', uses:1 }))
+  ;(set || []).slice(0, SKILL_SET_SLOTS).forEach((e, i) => { out[i] = { name: e?.name || '', uses: e?.uses || 1 } })
+  return out
+}
 
 // ============================================================
 // バトルフロンティアⅡ（リメイク版）ホーム — 開発限定
@@ -35,6 +46,7 @@ export default function V2Home() {
   const [classes, setClasses] = useState([])           // 職業マスタ（正はDBの v2_classes）
   const [confirmJob, setConfirmJob] = useState(null)   // 転職はステが初期値に戻るので1段確認する（選んだ職業を保持）
   const [showJobList, setShowJobList] = useState(false)
+  const [draft, setDraft] = useState(() => normalizeSet([]))  // スキル編成の下書き
 
   useEffect(() => {
     let alive = true
@@ -108,6 +120,7 @@ export default function V2Home() {
       className: data.class,
       points: data.points,
       usedProof: data.used_proof,
+      learned: data.learned,
       gains: STAT_KEYS.filter(k => alloc[k] > 0).map(k => `${STAT_DEFS[k].label}+${alloc[k]}`).join(' / ') || 'なし',
     }, ...l].slice(0, 12))
   }
@@ -123,6 +136,37 @@ export default function V2Home() {
 
   // 転職条件の判定に使う状態（サーバー側 v2_change_job と同じ条件を画面にも出す）
   const jobState = { jobCounts: prof?.job_counts || {}, proofs: prof?.proofs || {} }
+
+  // ===== スキル編成 =====
+  // 使えるスキル ＝ いまの職業のスキル ∪ 習得済み（転職のたびに1つ増える）
+  const learned = prof?.skills || []
+  const usable = prof ? usableSkills(prof.class, learned) : []
+  const usableNames = prof ? usableSkillNames(prof.class, learned) : []
+  const compact = draft.filter(d => d.name).map(d => ({ name: d.name, uses: d.uses }))
+  const usedTotal = compact.reduce((t, d) => t + d.uses, 0)
+  const setErr = prof ? validateSkillSet(compact, usableNames) : null
+
+  // 保存済みの編成が変わったときだけ下書きへ反映する（EXP付与などで下書きを消さない）
+  const savedSetKey = JSON.stringify(prof?.skill_set || [])
+  useEffect(() => { setDraft(normalizeSet(JSON.parse(savedSetKey))) }, [savedSetKey])
+
+  const setSlot = (i, patch) => setDraft(d => {
+    const next = normalizeSet(d)
+    next[i] = { ...next[i], ...patch }
+    if (patch.name === '') next[i].uses = 1
+    return next
+  })
+
+  const saveSkills = async () => {
+    if (setErr) return
+    setBusy(true); setError('')
+    const { data, error: rpcErr } = await supabase.rpc('v2_set_skills', { p_set: compact })
+    setBusy(false)
+    if (rpcErr) { setError(rpcErr.message); return }
+    if (!data?.ok) { setError(data?.error || '保存に失敗しました'); return }
+    setProf(data.profile)
+    setDraft(normalizeSet(data.profile.skill_set))
+  }
 
   if (loading) {
     return <div style={{ minHeight:'100vh', background:'#000820', color:'#0088ff', fontFamily:'monospace', padding:'40px', textAlign:'center' }}>読み込み中...</div>
@@ -216,12 +260,60 @@ export default function V2Home() {
               </div>
             </div>
 
-            {/* いまの職業のスキル */}
-            {skillsOf(prof.class).length > 0 && (
+            {/* スキル編成（並び順＝発動順・使用回数を配る） */}
+            <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
+              <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', marginBottom:'8px' }}>
+                <span style={{ color:'#88ccff', fontSize:'12px' }}>🎯 スキル編成</span>
+                <span style={{ color: usedTotal > SKILL_USE_TOTAL ? '#ff4444' : '#446688', fontSize:'10px' }}>
+                  使用回数 {usedTotal} / {SKILL_USE_TOTAL}
+                </span>
+              </div>
+              <div style={{ display:'grid', gap:'4px' }}>
+                {Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => {
+                  const row = draft[i] || { name:'', uses:1 }
+                  const s = SKILL_BY_NAME[row.name]
+                  return (
+                    <div key={i} style={{ background:'#000818', border:'1px solid #002244', padding:'6px 8px', display:'flex', alignItems:'center', gap:'6px' }}>
+                      <span style={{ color:'#556677', fontSize:'10px', width:'14px' }}>{i + 1}</span>
+                      <select value={row.name} onChange={e => setSlot(i, { name: e.target.value })}
+                        style={{ flex:1, background:'#001028', border:'1px solid #0044aa', color: s ? KIND_COLOR[s.kind] : '#446688', fontFamily:'monospace', fontSize:'11px', padding:'4px' }}>
+                        <option value="">（空き）</option>
+                        {usable.map(u => (
+                          <option key={u.name} value={u.name} disabled={draft.some((d, j) => j !== i && d?.name === u.name)}>
+                            {u.name}（{KIND_LABEL[u.kind]}・{u.proc}%・MP{u.mp}）
+                          </option>
+                        ))}
+                      </select>
+                      <input type="number" min={1} max={SKILL_USE_MAX} value={row.uses} disabled={!row.name}
+                        onChange={e => setSlot(i, { uses: Math.max(1, Math.min(SKILL_USE_MAX, Number(e.target.value) || 1)) })}
+                        style={{ width:'46px', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'11px', padding:'4px', textAlign:'center' }} />
+                      <span style={{ color:'#446688', fontSize:'9px' }}>回</span>
+                    </div>
+                  )
+                })}
+              </div>
+              {setErr && <div style={{ color:'#ff4444', fontSize:'11px', marginTop:'8px' }}>⚠ {setErr}</div>}
+              <div style={{ display:'flex', gap:'6px', marginTop:'8px' }}>
+                <button onClick={saveSkills} disabled={busy || !!setErr} style={{ ...btn('#44aaff'), opacity: (busy || setErr) ? 0.4 : 1 }}>
+                  {busy ? '保存中...' : '保存'}
+                </button>
+                <button onClick={() => setDraft(normalizeSet(prof.skill_set || []))} disabled={busy} style={btn('#446688')}>戻す</button>
+              </div>
+              <div style={{ color:'#446688', fontSize:'9px', marginTop:'8px', lineHeight:'1.8' }}>
+                上から順に発動し、使い切ったら次の枠へ回ります（1→2→3→4→5→1…）。
+                <span style={{ color:'#ffaa66' }}>不発のターンは通常攻撃になり、その枠に留まります</span>（使用回数もMPも減りません）。
+                空き枠・使用回数切れ・MP不足の枠は飛ばします。
+              </div>
+            </div>
+
+            {/* 使えるスキル */}
+            {usable.length > 0 && (
               <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
-                <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'8px' }}>⚔ {prof.class}のスキル</div>
+                <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'8px' }}>
+                  ⚔ 使えるスキル <span style={{ color:'#446688', fontSize:'10px' }}>{prof.class}のスキル{learned.length > 0 ? ` ＋ 習得${learned.length}個` : ''}</span>
+                </div>
                 <div style={{ display:'grid', gap:'4px' }}>
-                  {skillsOf(prof.class).map(s => {
+                  {usable.map(s => {
                     const dmg = expectedDamage(s, prof, prof, damageOf)
                     const heal = expectedHeal(s, prof, healOf)
                     return (
@@ -230,6 +322,7 @@ export default function V2Home() {
                           <span style={{ color:KIND_COLOR[s.kind], fontSize:'12px' }}>
                             {s.name}
                             <span style={{ color:'#556677', fontSize:'9px', marginLeft:'5px' }}>{KIND_LABEL[s.kind]}</span>
+                            {s.cls !== prof.class && <span style={{ color:'#ff88cc', fontSize:'9px', marginLeft:'5px' }}>習得（{s.cls}）</span>}
                           </span>
                           <span style={{ color:'#446688', fontSize:'10px' }}>
                             {s.priority > 0 && <span style={{ color:'#8866cc', marginRight:'5px' }}>先制</span>}
@@ -351,6 +444,7 @@ export default function V2Home() {
                         <span style={{ color:'#ff88cc' }}>🔄 転職{l.job}回目 → {l.className}</span>
                         <span style={{ color:'#446688', marginLeft:'8px', fontSize:'10px' }}>戦闘力{l.points}分を振り分け</span>
                         {l.usedProof && <span style={{ color:'#ffaa44', marginLeft:'6px', fontSize:'9px' }}>{l.usedProof}を1個消費</span>}
+                        {l.learned && <div style={{ color:'#44aaff', fontSize:'10px' }}>📖 {l.learned}を習得した！</div>}
                       </>
                     ) : (
                       <>

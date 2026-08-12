@@ -52,6 +52,11 @@ update public.v2_profiles p set proofs = (
   select coalesce(jsonb_object_agg(e.value, 1), '{}'::jsonb) from jsonb_array_elements_text(p.proofs) e
 ) where jsonb_typeof(p.proofs) = 'array';
 
+-- skills = 習得済みスキル名 ["体当たり"]／skill_set = 編成 [{"name":"体当たり","uses":3}]
+-- 使えるスキル ＝ いまの職業のスキル ∪ 習得済み。習得は転職のときに1つ増える
+alter table public.v2_profiles add column if not exists skills    jsonb not null default '[]'::jsonb;
+alter table public.v2_profiles add column if not exists skill_set jsonb not null default '[]'::jsonb;
+
 -- 名前は大文字小文字を無視して一意
 create unique index if not exists v2_profiles_username_lower_idx
   on public.v2_profiles (lower(username));
@@ -112,6 +117,32 @@ insert into public.v2_classes (id, tier, sort, req_jobs, req_proof) values
 on conflict (id) do update set
   tier = excluded.tier, sort = excluded.sort,
   req_jobs = excluded.req_jobs, req_proof = excluded.req_proof;
+
+-- ===== 1-3. スキルの名簿 =====
+-- ★ここが持つのは「スキル名 → どの職業のものか」だけ。倍率・発動率などの数値は
+--   src/v2/lib/skills.js にある（調整の速さを優先しているため）。
+--   サーバーが必要とするのは「転職時にどれを習得させるか」「その編成は使ってよいか」の
+--   判定だけなので、名簿があれば足りる。
+-- ⚠スキルを増やす／職業を変えるときは skills.js と この INSERT の両方を直すこと。
+create table if not exists public.v2_skills (
+  name text primary key,
+  cls  text not null references public.v2_classes(id),
+  sort int not null default 0
+);
+alter table public.v2_skills enable row level security;
+drop policy if exists v2_skills_select on public.v2_skills;
+create policy v2_skills_select on public.v2_skills for select to authenticated using (true);
+grant select on table public.v2_skills to authenticated;
+
+insert into public.v2_skills (name, cls, sort) values
+  ('はたく','ノーブル',1), ('狙い撃ち','ノーブル',2), ('応急手当','ノーブル',3), ('身構える','ノーブル',4), ('気合い','ノーブル',5),
+  ('体当たり','戦士',1), ('強撃','戦士',2), ('防御崩し','戦士',3), ('防御態勢','戦士',4), ('シールドアタック','戦士',5),
+  ('狙撃','弓使い',1), ('剛射','弓使い',2), ('貫通射撃','弓使い',3), ('疾風矢','弓使い',4), ('駆け足','弓使い',5),
+  ('マジックアロー','魔法使い',1), ('ファイア','魔法使い',2), ('サンダー','魔法使い',3), ('アイスランス','魔法使い',4), ('精神統一','魔法使い',5),
+  ('ライト','僧侶',1), ('ライトニング','僧侶',2), ('ヒール','僧侶',3), ('祈祷','僧侶',4), ('プロテク','僧侶',5),
+  ('打撃','格闘家',1), ('鉄拳','格闘家',2), ('連打','格闘家',3), ('爆裂拳','格闘家',4), ('残心','格闘家',5),
+  ('オオカミ召喚','サモナー',1), ('小悪魔召喚','サモナー',2), ('グリフォン召喚','サモナー',3), ('群れの号令','サモナー',4), ('魔力供給','サモナー',5)
+on conflict (name) do update set cls = excluded.cls, sort = excluded.sort;
 
 -- ===== 2. RLS =====
 -- 参照は認証済み全員（将来のランキング用）。書き込みポリシーは作らない
@@ -263,6 +294,9 @@ declare
   v_jobs    int;
   v_counts  jsonb;
   v_proofs  jsonb;
+  v_learned text;
+  v_skills  jsonb;
+  v_set     jsonb;
   v_stat    int[] := c_init;
   v_alloc   int[] := array[0, 0, 0, 0, 0, 0, 0, 0];
   v_points  int;
@@ -325,8 +359,30 @@ begin
     end if;
   end if;
 
+  -- 転職前の職業のスキルから、まだ覚えていないものを1つランダムに習得する
+  -- （あるけみすとの「転生でスキルを1つ受け継ぐ」に相当。職業が変わっても習得分は残る）
+  v_skills := coalesce(v_row.skills, '[]'::jsonb);
+  select s.name into v_learned
+  from public.v2_skills s
+  where s.cls = v_row.class
+    and not (v_skills ? s.name)
+  order by random()
+  limit 1;
+  if v_learned is not null then
+    v_skills := v_skills || to_jsonb(v_learned);
+  end if;
+
+  -- 編成から、新しい職業では使えなくなったスキルを外す（不正な状態を残さない）
+  v_set := (
+    select coalesce(jsonb_agg(e), '[]'::jsonb)
+    from jsonb_array_elements(coalesce(v_row.skill_set, '[]'::jsonb)) e
+    where (e ->> 'name') in (select name from public.v2_skills where cls = v_cls.id)
+       or v_skills ? (e ->> 'name')
+  );
+
   update public.v2_profiles set
     lv = 1, exp = 0, job_changes = v_jobs, class = v_cls.id, job_counts = v_counts, proofs = v_proofs,
+    skills = v_skills, skill_set = v_set,
     hp = v_stat[1], mp = v_stat[2], str = v_stat[3], dex = v_stat[4],
     agi = v_stat[5], int_stat = v_stat[6], vit = v_stat[7], luk = v_stat[8],
     updated_at = now()
@@ -339,6 +395,7 @@ begin
     'class', v_cls.id,
     'points', v_points,
     'used_proof', v_cls.req_proof,
+    'learned', v_learned,
     'alloc', jsonb_build_object(
       'hp', v_alloc[1], 'mp', v_alloc[2], 'str', v_alloc[3], 'dex', v_alloc[4],
       'agi', v_alloc[5], 'int_stat', v_alloc[6], 'vit', v_alloc[7], 'luk', v_alloc[8]),
@@ -349,6 +406,82 @@ $$;
 revoke all on function public.v2_change_job(text) from public;
 revoke all on function public.v2_change_job(text) from anon;
 grant execute on function public.v2_change_job(text) to authenticated;
+
+-- ===== 5-2. スキル編成 =====
+-- 5枠に「並び順と使用回数」を設定する。並び順＝発動順（ABCDE→ABCDE…）。
+-- 使えるのは「いまの職業のスキル ∪ 習得済み」だけ。使用回数は全枠あわせて10回まで。
+-- ★規則は src/v2/lib/skills.js の validateSkillSet と同じ。片方だけ直さないこと。
+create or replace function public.v2_set_skills(p_set jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  c_slots     constant int := 5;   -- SKILL_SET_SLOTS
+  c_use_total constant int := 10;  -- SKILL_USE_TOTAL
+  c_use_max   constant int := 10;  -- SKILL_USE_MAX
+  v_uid   uuid := auth.uid();
+  v_row   public.v2_profiles;
+  v_set   jsonb := coalesce(p_set, '[]'::jsonb);
+  v_total int := 0;
+  v_names text[] := '{}';
+  e       jsonb;
+  v_name  text;
+  v_uses  int;
+begin
+  if v_uid is null then
+    return jsonb_build_object('ok', false, 'error', 'ログインが必要です');
+  end if;
+  select * into v_row from public.v2_profiles where id = v_uid for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'error', 'キャラクターがありません');
+  end if;
+  if jsonb_typeof(v_set) <> 'array' then
+    return jsonb_build_object('ok', false, 'error', '編成の形式が不正です');
+  end if;
+  if jsonb_array_length(v_set) > c_slots then
+    return jsonb_build_object('ok', false, 'error', format('枠は%s個までです', c_slots));
+  end if;
+
+  for e in select value from jsonb_array_elements(v_set) loop
+    v_name := e ->> 'name';
+    if v_name is null then
+      return jsonb_build_object('ok', false, 'error', '枠にスキルが入っていません');
+    end if;
+    -- 使えるスキルか（いまの職業のスキル ∪ 習得済み）
+    if not exists (select 1 from public.v2_skills s where s.name = v_name and s.cls = v_row.class)
+       and not (coalesce(v_row.skills, '[]'::jsonb) ? v_name) then
+      return jsonb_build_object('ok', false, 'error', format('%sはまだ使えません', v_name));
+    end if;
+    if v_name = any(v_names) then
+      return jsonb_build_object('ok', false, 'error', format('%sが重複しています', v_name));
+    end if;
+    v_names := array_append(v_names, v_name);
+    if jsonb_typeof(e -> 'uses') <> 'number' then
+      return jsonb_build_object('ok', false, 'error', format('%sの使用回数が不正です', v_name));
+    end if;
+    v_uses := (e ->> 'uses')::int;
+    if v_uses < 1 or v_uses > c_use_max then
+      return jsonb_build_object('ok', false, 'error', format('%sの使用回数は1〜%sです', v_name, c_use_max));
+    end if;
+    v_total := v_total + v_uses;
+  end loop;
+
+  if v_total > c_use_total then
+    return jsonb_build_object('ok', false, 'error', format('使用回数の合計は%s回までです（いま%s回）', c_use_total, v_total));
+  end if;
+
+  update public.v2_profiles set skill_set = v_set, updated_at = now()
+  where id = v_uid
+  returning * into v_row;
+  return jsonb_build_object('ok', true, 'profile', to_jsonb(v_row));
+end;
+$$;
+
+revoke all on function public.v2_set_skills(jsonb) from public;
+revoke all on function public.v2_set_skills(jsonb) from anon;
+grant execute on function public.v2_set_skills(jsonb) to authenticated;
 
 -- ===== 6. 動作確認用のEXP付与（開発限定） =====
 -- まだ戦闘コンテンツが無いため、成長の確認用に is_admin だけEXPを自分に入れられる。
