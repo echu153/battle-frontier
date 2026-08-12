@@ -406,7 +406,7 @@ export default function V2Home() {
                         </span>
                       </div>
                       <div style={{ color:'#7fa6c0', fontSize:'10px', margin:'3px 0', lineHeight:'1.6', paddingLeft:ROW_INDENT }}>
-                        {s.priority > 0 && <span style={{ color:'#a888e0', marginRight:'5px' }}>先制</span>}
+                        {s.priority > 0 && <span style={{ color:'#a888e0', marginRight:'5px' }}>先制{s.priority >= 2 ? `+${s.priority}` : ''}</span>}
                         {s.noCrit && <span style={{ color:'#c09060', marginRight:'5px' }}>クリ無</span>}
                         {s.sureHit && <span style={{ color:'#66bb99', marginRight:'5px' }}>必中</span>}
                         {powerText(s)}

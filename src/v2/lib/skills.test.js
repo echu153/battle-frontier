@@ -69,18 +69,16 @@ test('強い技ほど発動しにくい（威力と発動率が逆相関）', ()
 //   実質倍率＝(倍率＋副参照の合計)×多段数×発動率。これが職業間で開かないことを固定する。
 const effMult = (s) => (s.mult + (s.add || []).reduce((t, a) => t + a.rate, 0)) * (s.hits || 1) * (s.proc / 100)
 
-test('先制(priority)が付くのは回復と防御バフだけ', () => {
-  // v2の規則：自分を守る・立て直す技は先制。攻撃バフやMP回復は通常のAGI順
-  const pri = SKILLS.filter(s => s.priority > 0).map(s => s.name)
-  assert.deepEqual(pri, ['応急手当', '身構える', '防御態勢', 'ヒール', '祈祷', 'プロテク'])
-  for (const s of SKILLS.filter(s => s.priority > 0)) {
-    assert.ok(s.kind === 'heal' || s.kind === 'buff', `${s.name} は攻撃スキルなのに先制`)
-    if (s.kind === 'buff') {
-      const self = s.buff?.self || {}
-      assert.ok(self.vit || self.int_stat, `${s.name} は防御バフではないのに先制`)
-    }
-    assert.equal(s.mpRegen, undefined, `${s.name} はMP回復なのに先制`)
+test('補助・回復は優先度1、攻撃スキルは優先度なし', () => {
+  // v2の規則：補助と回復は既定で優先度1（攻撃より先に動くが、2以上には後攻になる）。
+  // ★優先度は順番だけを変える。行動回数は増えない（増えるのはAGIの追加行動だけ）
+  for (const s of SKILLS) {
+    const support = s.kind === 'buff' || s.kind === 'heal'
+    if (support) assert.equal(s.priority, 1, `${s.name}（${s.kind}）は優先度1にすること`)
+    else assert.ok(!s.priority, `${s.name}（${s.kind}）は攻撃スキルなので優先度なし`)
   }
+  // 2以上はまだ未使用（上位職の切り札用に空けてある）
+  assert.equal(SKILLS.filter(s => s.priority >= 2).length, 0)
 })
 
 test('多段スキルはクリティカルしない', () => {

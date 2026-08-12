@@ -222,3 +222,16 @@ test('LV100・0転職の同格対戦がだいたい数発の殴り合いにな�
   const turns = Math.ceil(s.hp / dmg)
   assert.ok(turns >= 3 && turns <= 12, `倍率2.0で${turns}発（HP${s.hp} / ダメージ${dmg}）`)
 })
+
+test('優先度は数値で比べる（+2は+1より先・順番だけで行動回数は増えない）', () => {
+  const same = { agi: 100 }
+  // 数字が大きいほうが先
+  assert.equal(goesFirst(same, same, 2, 1), true)
+  assert.equal(goesFirst(same, same, 1, 2), false)
+  assert.equal(goesFirst(same, same, 1, 0), true)
+  // 同値ならAGI勝負に落ちる
+  assert.equal(goesFirst({ agi:200 }, { agi:100 }, 1, 1), true)
+  assert.equal(goesFirst({ agi:100 }, { agi:200 }, 1, 1), false)
+  // 優先度はAGIより強い（遅くても先）
+  assert.equal(goesFirst({ agi:1 }, { agi:10 ** 6 }, 1, 0), true)
+})

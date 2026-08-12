@@ -40,9 +40,11 @@ export const isPassive = (s) => s?.kind === 'passive'
 //          ゲーム内には表記されない。クリの固定加算(＋1.5)は元の係数によらないため
 //          多段スキルほど恩恵が大きい＝v2では多段を noCrit にして素の倍率で調整する
 // sureCrit: 確定クリティカル（あるけみすとの「破魔の一撃」「刺閃」に相当）。初期職では未使用
-// priority: 行動順の優先度。0=通常（AGI順）／1以上=先制。
-//           v2の割り当ての規則は「自分を守る・立て直す技（回復と防御バフ）は先制」。
-//           攻撃バフ（気合い・精神統一・残心・駆け足）とMP回復は通常のAGI順のまま
+// priority: 行動順の優先度。数字が大きいほど先に動く（同値ならAGI→ランダム）。
+//           ★あくまで順番だけ。行動回数は増えない（増えるのはAGIの追加行動だけ）
+//             0 = 攻撃スキルと通常攻撃
+//             1 = 補助・回復（既定。攻撃より先に動けるが、2以上には後攻になる）
+//             2以上 = さらに先に動く枠。上位職の切り札などに使う（いまは未使用）
 // buff   : { self:{ステ:%}, enemy:{ステ:%} }
 //          ステータスの増減は**戦闘中ずっと続き、重ねがけで加算される**（あるけみすと準拠。
 //          向こうも「重ね掛け可能」「回避成功毎に+3%」と累積前提で、ターン数の記載が無い）
@@ -57,7 +59,7 @@ export const SKILLS = [
   { name:'狙い撃ち',   cls:'ノーブル', kind:'phys', mult:1.35, proc:90, mp:5,  sureHit:true, desc:'必ず当たる一撃' },
   { name:'応急手当',   cls:'ノーブル', kind:'heal', proc:85, mp:8,  heal:{ rate:1.0 }, priority:1, desc:'INT×1.0を回復' },
   { name:'身構える',   cls:'ノーブル', kind:'buff', proc:100, mp:6, buff:{ self:{ vit:35 } }, priority:1, desc:'VIT+35%（重ねがけ可）' },
-  { name:'気合い',     cls:'ノーブル', kind:'buff', proc:90, mp:8,  buff:{ self:{ str:15 } }, desc:'STR+15%（重ねがけ可）' },
+  { name:'気合い',     cls:'ノーブル', kind:'buff', proc:90, mp:8,  buff:{ self:{ str:15 } }, priority:1, desc:'STR+15%（重ねがけ可）' },
 
   // ===== 戦士（物理・耐久） =====
   { name:'体当たり',       cls:'戦士', kind:'phys', mult:1.4, proc:95, mp:5,  desc:'素直な体当たり' },
@@ -71,14 +73,14 @@ export const SKILLS = [
   { name:'剛射',     cls:'弓使い', kind:'phys', mult:1.65, proc:85, mp:11, desc:'強く引き絞って射る' },
   { name:'貫通射撃', cls:'弓使い', kind:'phys', mult:1.4, defPen:0.3, proc:85, mp:12, desc:'相手の防御を30%無視' },
   { name:'疾風矢',   cls:'弓使い', kind:'phys', mult:1, add:[{ stat:'agi', rate:0.5 }], proc:90, mp:8, desc:'速射。AGIも威力になる' },
-  { name:'駆け足',   cls:'弓使い', kind:'buff', proc:100, mp:6, buff:{ self:{ agi:30 } }, desc:'AGI+30%（重ねがけ可）' },
+  { name:'駆け足',   cls:'弓使い', kind:'buff', proc:100, mp:6, buff:{ self:{ agi:30 } }, priority:1, desc:'AGI+30%（重ねがけ可）' },
 
   // ===== 魔法使い（火力特化） =====
   { name:'マジックアロー', cls:'魔法使い', kind:'mag', mult:1.5, proc:95, mp:5,  desc:'消費が軽い基本の魔法' },
   { name:'ファイア',       cls:'魔法使い', kind:'mag', mult:1.8, proc:85, mp:11, desc:'火の魔法' },
   { name:'サンダー',       cls:'魔法使い', kind:'mag', mult:1.85, proc:85, mp:15, desc:'初期職では最大級の威力。出にくい' },
   { name:'アイスランス',   cls:'魔法使い', kind:'mag', mult:1.3, proc:85, mp:12, buff:{ enemy:{ agi:-20 } }, desc:'相手のAGI-20%（重ねがけ可）' },
-  { name:'精神統一',       cls:'魔法使い', kind:'buff', proc:100, mp:8, buff:{ self:{ int_stat:30 } }, desc:'INT+30%（重ねがけ可）' },
+  { name:'精神統一',       cls:'魔法使い', kind:'buff', proc:100, mp:8, buff:{ self:{ int_stat:30 } }, priority:1, desc:'INT+30%（重ねがけ可）' },
 
   // ===== 僧侶（回復・支援） =====
   { name:'ライト',       cls:'僧侶', kind:'mag', mult:1.5, proc:95, mp:6,  desc:'光の魔法' },
@@ -92,14 +94,14 @@ export const SKILLS = [
   { name:'鉄拳',   cls:'格闘家', kind:'phys', mult:1.65, proc:85, mp:12, desc:'渾身の一撃' },
   { name:'連打',   cls:'格闘家', kind:'phys', mult:0.54, hits:3, proc:85, mp:10, noCrit:true, desc:'3連撃。1発ずつ命中判定。クリティカルしない' },
   { name:'爆裂拳', cls:'格闘家', kind:'phys', mult:0.42, hits:4, proc:85, mp:16, noCrit:true, desc:'4連撃。出にくいが手数で押す。クリティカルしない' },
-  { name:'残心',   cls:'格闘家', kind:'buff', proc:100, mp:8, buff:{ self:{ dex:20, agi:20 } }, desc:'DEX・AGI+20%（重ねがけ可）' },
+  { name:'残心',   cls:'格闘家', kind:'buff', proc:100, mp:8, buff:{ self:{ dex:20, agi:20 } }, priority:1, desc:'DEX・AGI+20%（重ねがけ可）' },
 
   // ===== サモナー（魔法・補助） =====
   { name:'オオカミ召喚',   cls:'サモナー', kind:'mag', mult:1.5, proc:90, mp:8,  desc:'狼を呼んで噛みつかせる' },
   { name:'小悪魔召喚',     cls:'サモナー', kind:'mag', mult:1.8, proc:85, mp:11, desc:'小悪魔を呼ぶ' },
   { name:'グリフォン召喚', cls:'サモナー', kind:'mag', mult:1.4, proc:85, mp:13, buff:{ self:{ agi:20 } }, desc:'AGI+20%（重ねがけ可）' },
   { name:'群れの号令',     cls:'サモナー', kind:'mag', mult:0.63, hits:3, proc:85, mp:14, noCrit:true, desc:'3連撃。クリティカルしない' },
-  { name:'魔力供給',       cls:'サモナー', kind:'heal', proc:85, mp:0, mpRegen:{ rate:0.3, turns:4 }, desc:'4ターン毎ターンINT×0.3のMPを回復。消費MPなし' },
+  { name:'魔力供給',       cls:'サモナー', kind:'heal', proc:85, mp:0, mpRegen:{ rate:0.3, turns:4 }, priority:1, desc:'4ターン毎ターンINT×0.3のMPを回復。消費MPなし' },
 ]
 
 export const SKILL_BY_NAME = Object.fromEntries(SKILLS.map(s => [s.name, s]))
