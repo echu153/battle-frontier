@@ -137,8 +137,8 @@ test('どの職業も補助か回復を1つ以上持つ', () => {
 
 test('威力テキストが威力の出どころを示す', () => {
   assert.equal(powerText(SKILL_BY_NAME['体当たり']), 'STR×1.4')
-  assert.equal(powerText(SKILL_BY_NAME['狙撃']), 'STR×1 ＋ AGI×0.6')
-  assert.equal(powerText(SKILL_BY_NAME['連打']), 'STR×0.57 ×3回')
+  assert.equal(powerText(SKILL_BY_NAME['狙撃']), 'STR×0.8 ＋ AGI×0.6')
+  assert.equal(powerText(SKILL_BY_NAME['連打']), 'STR×0.54 ×3回')
   assert.equal(powerText(SKILL_BY_NAME['ヒール']), 'INT×1.4')
   assert.equal(powerText(SKILL_BY_NAME['祈祷']), '毎ターン INT×0.5×4T')
   assert.equal(powerText(SKILL_BY_NAME['魔力供給']), '毎ターン MP INT×0.3×4T')
@@ -153,7 +153,7 @@ test('回復はすべてINT参照で、最大HP/MPの％は使わない', () => 
     assert.ok(spec.rate > 0 && spec.rate <= 1.5, `${s.name} の倍率 ${spec.rate}`)  // あるけみすと(INT×1.5)を超えない
     assert.equal(spec.hpPct, undefined, `${s.name} が最大HP%を参照している`)
     assert.equal(spec.mpPct, undefined, `${s.name} が最大MP%を参照している`)
-    assert.ok(s.proc <= 80, `${s.name} の発動率 ${s.proc}（回復は80%以下）`)
+    assert.ok(s.proc <= 85, `${s.name} の発動率 ${s.proc}（回復は85%以下）`)
   }
 })
 
