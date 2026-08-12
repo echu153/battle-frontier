@@ -100,18 +100,47 @@ export const SKILL_BY_NAME = Object.fromEntries(SKILLS.map(s => [s.name, s]))
 export const skillsOf = (cls) => SKILLS.filter(s => s.cls === cls)
 export const SKILL_CLASSES = [...new Set(SKILLS.map(s => s.cls))]
 
-// ===== 習得と編成 =====
-// 使えるスキル ＝ いまの職業のスキル ∪ これまでに習得したスキル。
-// 習得は転職のときに「転職前の職業のスキル」から未習得のものを1つランダムに得る
-// （あるけみすとの「転生でスキルを1つ受け継ぐ」に相当）。職業が変わっても習得分は残る。
+// ===== 習得とマスター（あるけみすと準拠） =====
+// あるけみすとのスキルは2段構え：
+//   ・習得   … LVアップ時に、いまの職業のスキルを確率で覚える。**転職すると失われる**
+//   ・マスター… 転職のとき、いまの職業の「習得しているスキル」から1つを永久に残せる。
+//              全部マスター済み／新規習得なしのときはマスターされない
+// 使えるスキル ＝ 習得（その周回だけ）∪ マスター（ずっと）
+//   → 周回するほどマスターが増え、どの職業でもいろんなスキルを使えるようになる
 export const SKILL_SET_SLOTS = 5   // 編成できる枠数
 export const SKILL_USE_MAX   = 99  // 1枠あたりの使用回数の上限
 
-export const usableSkillNames = (cls, learned = []) =>
-  [...new Set([...skillsOf(cls).map(s => s.name), ...learned])]
-export const usableSkills = (cls, learned = []) => {
-  const set = new Set(usableSkillNames(cls, learned))
+// LVアップでの習得。基礎確率で抽選しつつ、LEARN_BY_LV までに全部そろうよう保証する
+export const LEARN_BY_LV  = 50  // このLVまでに、その職業のスキルを全部習得できる
+export const LEARN_PCT    = 15  // 1LVアップあたりの基礎習得率(%)
+
+// そのLVで「確定で覚えなければならない数」。残りLV数が足りなくなったぶんだけ増える
+export const forcedLearnCount = (lv, unlearned) =>
+  Math.max(0, unlearned - Math.max(0, LEARN_BY_LV - lv))
+
+// LVアップ1回で覚える数（確定ぶん＋基礎確率の抽選1回）。lv は上がったあとのLV
+export const rollLearnCount = (lv, unlearned, rng = Math.random) => {
+  if (unlearned <= 0) return 0
+  const must = Math.min(unlearned, forcedLearnCount(lv, unlearned))
+  const extra = (unlearned - must > 0 && rng() * 100 < LEARN_PCT) ? 1 : 0
+  return Math.min(unlearned, must + extra)
+}
+
+export const usableSkillNames = (learned = [], mastered = []) => [...new Set([...learned, ...mastered])]
+export const usableSkills = (learned = [], mastered = []) => {
+  const set = new Set(usableSkillNames(learned, mastered))
   return SKILLS.filter(s => set.has(s.name))
+}
+// まだ覚えていない、いまの職業のスキル（一覧にグレーで出す用）
+export const unlearnedSkills = (cls, learned = [], mastered = []) => {
+  const set = new Set(usableSkillNames(learned, mastered))
+  return skillsOf(cls).filter(s => !set.has(s.name))
+}
+// 転職でマスターできる候補＝いまの職業の「習得しているがマスターしていない」スキル
+export const masterableSkillNames = (cls, learned = [], mastered = []) => {
+  const has = new Set(learned)
+  const done = new Set(mastered)
+  return skillsOf(cls).filter(s => has.has(s.name) && !done.has(s.name)).map(s => s.name)
 }
 
 // 想定利用MP＝編成を全部撃ち切ったときの消費MP合計（あるけみすとの表示と同じ考え方）。

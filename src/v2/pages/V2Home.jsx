@@ -10,8 +10,8 @@ import {
 import { TIER_LABEL, TIER_ORDER, TIER_COLOR, missingReqs, canBecome, reqText, proofCount } from '../lib/classes.js'
 import {
   powerText, expectedDamage, expectedHeal, KIND_LABEL, KIND_COLOR, SKILL_BY_NAME,
-  usableSkills, usableSkillNames, validateSkillSet, setMpCost,
-  KIND_TABS, filterSkills, sortSkills,
+  usableSkills, usableSkillNames, unlearnedSkills, validateSkillSet, setMpCost,
+  KIND_TABS, filterSkills, sortSkills, LEARN_BY_LV,
   SKILL_SET_SLOTS, SKILL_USE_MAX,
 } from '../lib/skills.js'
 import { damageOf, healOf } from '../lib/combat.js'
@@ -111,6 +111,7 @@ export default function V2Home() {
       ups: data.level_ups,
       lvFrom: before?.lv, lvTo: data.profile.lv,
       gains: STAT_KEYS.filter(k => gains[k] > 0).map(k => `${STAT_DEFS[k].label}+${gains[k]}`).join(' / ') || 'なし',
+      learnedSkills: data.learned || [],
     }, ...l].slice(0, 12))
   }
 
@@ -129,7 +130,7 @@ export default function V2Home() {
       className: data.class,
       points: data.points,
       usedProof: data.used_proof,
-      learned: data.learned,
+      mastered: data.mastered,
       gains: STAT_KEYS.filter(k => alloc[k] > 0).map(k => `${STAT_DEFS[k].label}+${alloc[k]}`).join(' / ') || 'なし',
     }, ...l].slice(0, 12))
   }
@@ -147,15 +148,18 @@ export default function V2Home() {
   const jobState = { jobCounts: prof?.job_counts || {}, proofs: prof?.proofs || {} }
 
   // ===== スキル編成 =====
-  // 使えるスキル ＝ いまの職業のスキル ∪ 習得済み（転職のたびに1つ増える）
-  const learned = prof?.skills || []
-  const usable = prof ? usableSkills(prof.class, learned) : []
-  const usableNames = prof ? usableSkillNames(prof.class, learned) : []
+  // 使えるスキル ＝ 習得（この周回だけ）∪ マスター（ずっと残る）
+  const learned = prof?.skills || []      // 習得（この周回だけ。転職で失う）
+  const mastered = prof?.mastered || []   // マスター（ずっと残る）
+  const usable = usableSkills(learned, mastered)
+  const usableNames = usableSkillNames(learned, mastered)
+  const stillLocked = prof ? unlearnedSkills(prof.class, learned, mastered) : []  // いまの職業のまだ覚えていない技
   const favorites = prof?.favorites || []
   const compact = draft.filter(d => d.name).map(d => ({ name: d.name, uses: d.uses }))
   const mpCost = setMpCost(compact)                    // 想定利用MP（Σ 消費MP×回数）
   const setErr = prof ? validateSkillSet(compact, usableNames, prof.mp) : null
-  const shownSkills = sortSkills(filterSkills(usable, { tab, query, favorites }), sortKey, sortAsc)
+  // 一覧には、まだ覚えていない「いまの職業のスキル」もグレーで出す（何を狙えるか分かるように）
+  const shownSkills = sortSkills(filterSkills([...usable, ...stillLocked], { tab, query, favorites }), sortKey, sortAsc)
 
   // 保存済みの編成が変わったときだけ下書きへ反映する（EXP付与などで下書きを消さない）
   const savedSetKey = JSON.stringify(prof?.skill_set || [])
@@ -339,7 +343,7 @@ export default function V2Home() {
             {/* 習得スキル（検索・絞り込み・お気に入り） */}
             <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
               <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'8px' }}>
-                📖 習得スキル <span style={{ color:'#446688', fontSize:'10px' }}>{prof.class}のスキル{learned.length > 0 ? ` ＋ 習得${learned.length}個` : ''}</span>
+                📖 スキル <span style={{ color:'#446688', fontSize:'10px' }}>習得{learned.length}個 ／ <span style={{ color:'#ffcc00' }}>マスター{mastered.length}個</span></span>
               </div>
 
               {/* 検索 */}
@@ -378,14 +382,18 @@ export default function V2Home() {
                   const heal = expectedHeal(s, prof, healOf)
                   const fav = favorites.includes(s.name)
                   const inSet = draft.findIndex(d => d?.name === s.name)
+                  const has = usableNames.includes(s.name)   // 習得 or マスター済み
+                  const isMaster = mastered.includes(s.name)
                   return (
-                    <div key={s.name} style={{ background:'#000818', border:`1px solid ${inSet >= 0 ? '#0055aa' : '#002244'}`, padding:'6px 8px' }}>
+                    <div key={s.name} style={{ background:'#000818', border:`1px solid ${inSet >= 0 ? '#0055aa' : '#002244'}`, padding:'6px 8px', opacity: has ? 1 : 0.45 }}>
                       <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
                         <button onClick={() => toggleFavorite(s.name)} title="お気に入り"
                           style={{ ...miniBtn(fav ? '#ffcc00' : '#334455'), color: fav ? '#ffcc00' : '#445566', padding:'2px 5px' }}>★</button>
-                        <span style={{ flex:1, color:KIND_COLOR[s.kind], fontSize:'12px', minWidth:0 }}>
+                        <span style={{ flex:1, color: has ? KIND_COLOR[s.kind] : '#556677', fontSize:'12px', minWidth:0 }}>
                           {s.name}
                           <span style={{ color:'#556677', fontSize:'9px', marginLeft:'5px' }}>{KIND_LABEL[s.kind]}</span>
+                          {isMaster && <span style={{ color:'#ffcc00', fontSize:'9px', marginLeft:'5px' }}>MASTER</span>}
+                          {!has && <span style={{ color:'#886644', fontSize:'9px', marginLeft:'5px' }}>未習得</span>}
                           {s.cls !== prof.class && <span style={{ color:'#ff88cc', fontSize:'9px', marginLeft:'5px' }}>{s.cls}</span>}
                         </span>
                         <span style={{ color:'#446688', fontSize:'10px' }}>MP{s.mp} ／ {s.proc}%</span>
@@ -400,20 +408,24 @@ export default function V2Home() {
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
                         <span style={{ color:'#334455', fontSize:'9px', flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.desc}</span>
-                        {Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => (
+                        {has && Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => (
                           <button key={i} onClick={() => setSlot(i, { name: s.name, uses: draft[i]?.name === s.name ? draft[i].uses : 1 })}
                             disabled={inSet >= 0 && inSet !== i}
                             style={{ ...miniBtn(inSet === i ? '#44aaff' : '#334455'), color: inSet === i ? '#88ccff' : '#556677', opacity: (inSet >= 0 && inSet !== i) ? 0.3 : 1 }}>
                             {i + 1}
                           </button>
                         ))}
+                        {!has && <span style={{ color:'#886644', fontSize:'9px' }}>LVアップで習得</span>}
                       </div>
                     </div>
                   )
                 })}
               </div>
               <div style={{ color:'#446688', fontSize:'9px', marginTop:'8px', lineHeight:'1.8' }}>
-                右の1〜5のボタンでその枠に入れます。「期待」は自分と同じステータスの相手に対する1ターンの概算です。
+                右の1〜5のボタンでその枠に入れます。
+                スキルは<span style={{ color:'#44aaff' }}>LVアップでいまの職業のものを確率で習得</span>し、
+                LV{LEARN_BY_LV}までに全部そろいます。<span style={{ color:'#ffcc00' }}>習得したスキルは転職で失われます</span>が、
+                転職のとき1つだけ<span style={{ color:'#ffcc00' }}>マスター</span>でき、マスターしたものは以降ずっと使えます。
               </div>
             </div>
 
@@ -515,7 +527,8 @@ export default function V2Home() {
                         <span style={{ color:'#ff88cc' }}>🔄 転職{l.job}回目 → {l.className}</span>
                         <span style={{ color:'#446688', marginLeft:'8px', fontSize:'10px' }}>戦闘力{l.points}分を振り分け</span>
                         {l.usedProof && <span style={{ color:'#ffaa44', marginLeft:'6px', fontSize:'9px' }}>{l.usedProof}を1個消費</span>}
-                        {l.learned && <div style={{ color:'#44aaff', fontSize:'10px' }}>📖 {l.learned}を習得した！</div>}
+                        {l.mastered && <div style={{ color:'#ffcc00', fontSize:'10px' }}>★ {l.mastered}をマスターした！（以降ずっと使える）</div>}
+                        {l.mastered === null && <div style={{ color:'#886644', fontSize:'10px' }}>マスターできるスキルがなかった</div>}
                       </>
                     ) : (
                       <>
@@ -525,6 +538,9 @@ export default function V2Home() {
                       </>
                     )}
                     <div style={{ color:'#88ddaa', fontSize:'10px' }}>{l.gains}</div>
+                    {l.learnedSkills?.length > 0 && (
+                      <div style={{ color:'#44aaff', fontSize:'10px' }}>📖 {l.learnedSkills.join('・')}を習得した！</div>
+                    )}
                   </div>
                 ))}
               </div>

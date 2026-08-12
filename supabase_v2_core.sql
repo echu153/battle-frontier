@@ -52,9 +52,13 @@ update public.v2_profiles p set proofs = (
   select coalesce(jsonb_object_agg(e.value, 1), '{}'::jsonb) from jsonb_array_elements_text(p.proofs) e
 ) where jsonb_typeof(p.proofs) = 'array';
 
--- skills = 習得済みスキル名 ["体当たり"]／skill_set = 編成 [{"name":"体当たり","uses":3}]
--- 使えるスキル ＝ いまの職業のスキル ∪ 習得済み。習得は転職のときに1つ増える
+-- スキルは2段構え（あるけみすと準拠）
+--   skills   = 習得しているスキル名。LVアップで増え、**転職すると失われる**
+--   mastered = マスターしたスキル名。転職のとき習得済みから1つ選ばれ、以降ずっと残る
+--   skill_set = 編成 [{"name":"体当たり","uses":3}]
+-- 使えるスキル ＝ skills ∪ mastered
 alter table public.v2_profiles add column if not exists skills    jsonb not null default '[]'::jsonb;
+alter table public.v2_profiles add column if not exists mastered  jsonb not null default '[]'::jsonb;
 alter table public.v2_profiles add column if not exists skill_set jsonb not null default '[]'::jsonb;
 -- favorites = お気に入り登録したスキル名 ["強撃"]（一覧を絞り込むための印）
 alter table public.v2_profiles add column if not exists favorites jsonb not null default '[]'::jsonb;
@@ -175,6 +179,10 @@ declare
   c_exp_step      constant int := 10;   -- 1段階で増える量
   c_exp_step_jobs constant int := 100;  -- 何回の転職ごとに1段階上げるか
   c_rolls         constant int := 5;
+  -- LVアップでのスキル習得。基礎確率で抽選しつつ c_learn_by_lv までに必ず全部そろう
+  -- （skills.js の LEARN_BY_LV / LEARN_PCT / forcedLearnCount と同じ規則）
+  c_learn_by_lv   constant int := 50;
+  c_learn_pct     constant int := 15;
   -- 抽選の並び: 1=hp 2=mp 3=str 4=dex 5=agi 6=int_stat 7=vit 8=luk
   -- ★ src/v2/lib/stats.js の STAT_KEYS と同じ順序であること
   c_unit constant int[] := array[8, 3, 1, 1, 1, 1, 1, 1];
@@ -186,14 +194,21 @@ declare
   v_ups   int := 0;
   v_r     int;
   v_k     int;
+  v_skills    jsonb;
+  v_learned   text[] := '{}';
+  v_unlearned int;
+  v_must      int;
+  v_pick      text;
+  v_i         int;
 begin
   select * into v_row from public.v2_profiles where id = p_player for update;
   if not found then
     return jsonb_build_object('ok', false, 'error', 'キャラクターがありません');
   end if;
 
-  v_lv   := v_row.lv;
-  v_exp  := v_row.exp;
+  v_lv     := v_row.lv;
+  v_exp    := v_row.exp;
+  v_skills := coalesce(v_row.skills, '[]'::jsonb);
   -- 必要EXP＝転職回数で段階的に重くなる（stats.js の expPerLv と同じ式）
   v_need := least(c_exp_max, c_exp_base + (greatest(v_row.job_changes, 0) / c_exp_step_jobs) * c_exp_step);
 
@@ -207,6 +222,27 @@ begin
         v_k := 1 + floor(random() * array_length(c_unit, 1))::int;
         v_gain[v_k] := v_gain[v_k] + c_unit[v_k];
       end loop;
+
+      -- スキル習得：いまの職業の未習得スキルを確率で覚える。
+      -- 残りLV数が足りなくなったぶんは確定で覚えるので、c_learn_by_lv までに必ず全部そろう
+      select count(*) into v_unlearned
+      from public.v2_skills s
+      where s.cls = v_row.class and not (v_skills ? s.name);
+      if v_unlearned > 0 then
+        v_must := greatest(0, v_unlearned - greatest(0, c_learn_by_lv - v_lv));
+        if v_unlearned - v_must > 0 and random() * 100 < c_learn_pct then
+          v_must := v_must + 1;
+        end if;
+        for v_i in 1..v_must loop
+          select s.name into v_pick
+          from public.v2_skills s
+          where s.cls = v_row.class and not (v_skills ? s.name)
+          order by random() limit 1;
+          exit when v_pick is null;
+          v_skills  := v_skills || to_jsonb(v_pick);
+          v_learned := array_append(v_learned, v_pick);
+        end loop;
+      end if;
     end loop;
     -- 上限到達＝あふれたEXPは捨てる（転職待ち）
     if v_lv >= c_max_lv then v_exp := 0; end if;
@@ -218,6 +254,7 @@ begin
     total_exp = total_exp + greatest(coalesce(p_amount, 0), 0),
     hp = hp + v_gain[1], mp = mp + v_gain[2], str = str + v_gain[3], dex = dex + v_gain[4],
     agi = agi + v_gain[5], int_stat = int_stat + v_gain[6], vit = vit + v_gain[7], luk = luk + v_gain[8],
+    skills = v_skills,
     updated_at = now()
   where id = p_player
   returning * into v_row;
@@ -226,6 +263,7 @@ begin
     'ok', true,
     'level_ups', v_ups,
     'exp_need', v_need,
+    'learned', to_jsonb(v_learned),
     'gains', jsonb_build_object(
       'hp', v_gain[1], 'mp', v_gain[2], 'str', v_gain[3], 'dex', v_gain[4],
       'agi', v_gain[5], 'int_stat', v_gain[6], 'vit', v_gain[7], 'luk', v_gain[8]),
@@ -298,9 +336,10 @@ declare
   v_jobs    int;
   v_counts  jsonb;
   v_proofs  jsonb;
-  v_learned text;
-  v_skills  jsonb;
-  v_set     jsonb;
+  v_learned  text;
+  v_skills   jsonb;
+  v_mastered jsonb;
+  v_set      jsonb;
   v_stat    int[] := c_init;
   v_alloc   int[] := array[0, 0, 0, 0, 0, 0, 0, 0];
   v_points  int;
@@ -363,30 +402,33 @@ begin
     end if;
   end if;
 
-  -- 転職前の職業のスキルから、まだ覚えていないものを1つランダムに習得する
-  -- （あるけみすとの「転生でスキルを1つ受け継ぐ」に相当。職業が変わっても習得分は残る）
-  v_skills := coalesce(v_row.skills, '[]'::jsonb);
+  -- スキルのマスター（あるけみすと準拠）：
+  --   いまの職業のスキルのうち「習得しているがマスターしていない」ものから1つを永久に残す。
+  --   全部マスター済み／そもそも習得していない場合はマスターされない。
+  --   マスターしていない習得スキルは転職で失われる。
+  v_mastered := coalesce(v_row.mastered, '[]'::jsonb);
   select s.name into v_learned
   from public.v2_skills s
   where s.cls = v_row.class
-    and not (v_skills ? s.name)
+    and (coalesce(v_row.skills, '[]'::jsonb) ? s.name)
+    and not (v_mastered ? s.name)
   order by random()
   limit 1;
   if v_learned is not null then
-    v_skills := v_skills || to_jsonb(v_learned);
+    v_mastered := v_mastered || to_jsonb(v_learned);
   end if;
+  v_skills := '[]'::jsonb;   -- 習得はここで失われる（マスターしたものだけ残る）
 
-  -- 編成から、新しい職業では使えなくなったスキルを外す（不正な状態を残さない）
+  -- 編成から、使えなくなったスキル（マスターしていないもの）を外す
   v_set := (
     select coalesce(jsonb_agg(e), '[]'::jsonb)
     from jsonb_array_elements(coalesce(v_row.skill_set, '[]'::jsonb)) e
-    where (e ->> 'name') in (select name from public.v2_skills where cls = v_cls.id)
-       or v_skills ? (e ->> 'name')
+    where v_mastered ? (e ->> 'name')
   );
 
   update public.v2_profiles set
     lv = 1, exp = 0, job_changes = v_jobs, class = v_cls.id, job_counts = v_counts, proofs = v_proofs,
-    skills = v_skills, skill_set = v_set,
+    skills = v_skills, mastered = v_mastered, skill_set = v_set,
     hp = v_stat[1], mp = v_stat[2], str = v_stat[3], dex = v_stat[4],
     agi = v_stat[5], int_stat = v_stat[6], vit = v_stat[7], luk = v_stat[8],
     updated_at = now()
@@ -399,7 +441,7 @@ begin
     'class', v_cls.id,
     'points', v_points,
     'used_proof', v_cls.req_proof,
-    'learned', v_learned,
+    'mastered', v_learned,
     'alloc', jsonb_build_object(
       'hp', v_alloc[1], 'mp', v_alloc[2], 'str', v_alloc[3], 'dex', v_alloc[4],
       'agi', v_alloc[5], 'int_stat', v_alloc[6], 'vit', v_alloc[7], 'luk', v_alloc[8]),
@@ -413,7 +455,7 @@ grant execute on function public.v2_change_job(text) to authenticated;
 
 -- ===== 5-2. スキル編成 =====
 -- 5枠に「並び順と使用回数」を設定する。並び順＝発動順（ABCDE→ABCDE…）。
--- 使えるのは「いまの職業のスキル ∪ 習得済み」だけ。
+-- 使えるのは「習得している ∪ マスターしている」スキルだけ。
 -- ★使用回数の上限は「想定利用MP（Σ 消費MP×回数）が最大MPを超えないこと」で決まる
 --   （あるけみすとの「あなたの最大MPは◯MPです／想定利用MPは◯MPです」と同じ考え方）。
 --   MPを伸ばすほど強い技を多く積める＝MPがステータスとして効く。
@@ -461,8 +503,9 @@ begin
     if v_mp is null then
       return jsonb_build_object('ok', false, 'error', format('%sというスキルはありません', v_name));
     end if;
-    if not exists (select 1 from public.v2_skills s where s.name = v_name and s.cls = v_row.class)
-       and not (coalesce(v_row.skills, '[]'::jsonb) ? v_name) then
+    -- 使えるスキル ＝ 習得している ∪ マスターしている
+    if not (coalesce(v_row.skills, '[]'::jsonb) ? v_name)
+       and not (coalesce(v_row.mastered, '[]'::jsonb) ? v_name) then
       return jsonb_build_object('ok', false, 'error', format('%sはまだ使えません', v_name));
     end if;
     if v_name = any(v_names) then
