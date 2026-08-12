@@ -9,12 +9,11 @@ import {
 } from '../lib/stats.js'
 import { TIER_LABEL, TIER_ORDER, TIER_COLOR, missingReqs, canBecome, reqText, proofCount } from '../lib/classes.js'
 import {
-  powerText, expectedDamage, expectedHeal, KIND_LABEL, KIND_COLOR, SKILL_BY_NAME,
+  powerText, isPassive, KIND_LABEL, KIND_COLOR, SKILL_BY_NAME,
   usableSkills, usableSkillNames, unlearnedSkills, validateSkillSet, setMpCost,
-  KIND_TABS, filterSkills, sortSkills, LEARN_BY_LV,
+  KIND_TABS, filterSkills, sortSkills,
   SKILL_SET_SLOTS, SKILL_USE_MAX,
 } from '../lib/skills.js'
-import { damageOf, healOf } from '../lib/combat.js'
 
 // 編成の下書きを「5枠ぶんの配列」に揃える（空き枠も持つ）
 const normalizeSet = (set) => {
@@ -161,9 +160,14 @@ export default function V2Home() {
   // 一覧には、まだ覚えていない「いまの職業のスキル」もグレーで出す（何を狙えるか分かるように）
   const shownSkills = sortSkills(filterSkills([...usable, ...stillLocked], { tab, query, favorites }), sortKey, sortAsc)
 
-  // 保存済みの編成が変わったときだけ下書きへ反映する（EXP付与などで下書きを消さない）
+  // 保存済みの編成が変わったときだけ下書きへ反映する（EXP付与などで下書きを消さない）。
+  // 転職で使えなくなったスキルはサーバー側でも外れるが、画面側でも念のため落とす。
   const savedSetKey = JSON.stringify(prof?.skill_set || [])
-  useEffect(() => { setDraft(normalizeSet(JSON.parse(savedSetKey))) }, [savedSetKey])
+  const usableKey = usableNames.join('|')
+  useEffect(() => {
+    const ok = new Set(usableKey ? usableKey.split('|') : [])
+    setDraft(normalizeSet(JSON.parse(savedSetKey).filter(e => ok.has(e?.name))))
+  }, [savedSetKey, usableKey])
 
   const setSlot = (i, patch) => setDraft(d => {
     const next = normalizeSet(d)
@@ -343,7 +347,7 @@ export default function V2Home() {
             {/* 習得スキル（検索・絞り込み・お気に入り） */}
             <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
               <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'8px' }}>
-                📖 スキル <span style={{ color:'#446688', fontSize:'10px' }}>習得中{learning.length}個 ／ <span style={{ color:'#ffcc00' }}>習得済み{learned.length}個</span></span>
+                📖 スキル
               </div>
 
               {/* 検索 */}
@@ -378,8 +382,6 @@ export default function V2Home() {
               <div style={{ display:'grid', gap:'4px', maxHeight:'420px', overflowY:'auto' }}>
                 {shownSkills.length === 0 && <div style={{ color:'#446688', fontSize:'11px', padding:'8px' }}>該当するスキルがありません</div>}
                 {shownSkills.map(s => {
-                  const dmg = expectedDamage(s, prof, prof, damageOf)
-                  const heal = expectedHeal(s, prof, healOf)
                   const fav = favorites.includes(s.name)
                   const inSet = draft.findIndex(d => d?.name === s.name)
                   const has = usableNames.includes(s.name)   // 習得中 or 習得済み
@@ -396,18 +398,21 @@ export default function V2Home() {
                           {!has && <span style={{ color:'#886644', fontSize:'9px', marginLeft:'5px' }}>未習得</span>}
                           {s.cls !== prof.class && <span style={{ color:'#ff88cc', fontSize:'9px', marginLeft:'5px' }}>{s.cls}</span>}
                         </span>
-                        <span style={{ color:'#446688', fontSize:'10px' }}>MP{s.mp} ／ {s.proc}%</span>
+                        <span style={{ color:'#446688', fontSize:'10px' }}>
+                          {isPassive(s) ? '常時' : `MP${s.mp} ／ ${s.proc}%`}
+                        </span>
                       </div>
-                      <div style={{ color:'#556677', fontSize:'9px', margin:'3px 0' }}>
-                        {s.priority > 0 && <span style={{ color:'#8866cc', marginRight:'5px' }}>先制</span>}
-                        {s.noCrit && <span style={{ color:'#886644', marginRight:'5px' }}>クリ無</span>}
-                        {s.sureHit && <span style={{ color:'#448866', marginRight:'5px' }}>必中</span>}
+                      <div style={{ color:'#7fa6c0', fontSize:'10px', margin:'3px 0', lineHeight:'1.6' }}>
+                        {s.priority > 0 && <span style={{ color:'#a888e0', marginRight:'5px' }}>先制</span>}
+                        {s.noCrit && <span style={{ color:'#c09060', marginRight:'5px' }}>クリ無</span>}
+                        {s.sureHit && <span style={{ color:'#66bb99', marginRight:'5px' }}>必中</span>}
                         {powerText(s)}
-                        {dmg > 0 && <span style={{ color:'#88ddaa', marginLeft:'6px' }}>期待{dmg}</span>}
-                        {heal > 0 && <span style={{ color:'#44ff88', marginLeft:'6px' }}>期待{heal}{s.mpRegen ? 'MP' : '回復'}</span>}
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
-                        <span style={{ color:'#334455', fontSize:'9px', flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.desc}</span>
+                        {/* 説明。powerText と同じ文言になる補助スキルは重ねて出さない */}
+                        <span style={{ color:'#8fa8bb', fontSize:'10px', flex:1, minWidth:0, lineHeight:'1.6' }}>
+                          {powerText(s) === s.desc ? '' : s.desc}
+                        </span>
                         {has && Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => (
                           <button key={i} onClick={() => setSlot(i, { name: s.name, uses: draft[i]?.name === s.name ? draft[i].uses : 1 })}
                             disabled={inSet >= 0 && inSet !== i}
@@ -420,12 +425,6 @@ export default function V2Home() {
                     </div>
                   )
                 })}
-              </div>
-              <div style={{ color:'#446688', fontSize:'9px', marginTop:'8px', lineHeight:'1.8' }}>
-                右の1〜5のボタンでその枠に入れます。
-                スキルは<span style={{ color:'#44aaff' }}>LVアップでいまの職業のものを確率で習得</span>し、
-                LV{LEARN_BY_LV}までに全部そろいます。<span style={{ color:'#ffaa66' }}>習得中のスキルは転職で失われます</span>が、
-                転職のとき1つだけ<span style={{ color:'#ffcc00' }}>習得済み</span>になり、それ以降ずっと使えます。
               </div>
             </div>
 

@@ -20,9 +20,15 @@
 //   入れるときは effect を足し、combat.js ではなく戦闘ループ側で消費する。
 // ============================================================
 
-// kind: phys=STR基準の物理 / mag=INT基準の魔法 / heal=回復 / buff=補助
-export const KIND_LABEL = { phys:'物理', mag:'魔法', heal:'回復', buff:'補助' }
-export const KIND_COLOR = { phys:'#ffcc00', mag:'#cc44ff', heal:'#44ff88', buff:'#44aaff' }
+// kind: phys=STR基準の物理 / mag=INT基準の魔法 / heal=回復 / buff=補助 / passive=パッシブ
+// ★passive（常時発動）は未実装。足すときの決まりごとだけ先に置いてある：
+//   ・発動率も使用回数も持たない（枠に入れておくだけで常時効く）
+//   ・消費MPも持たない＝想定利用MPに数えない
+//   ・発動順のローテーションには入らない（battle.js が枠から分けて戦闘開始時に適用する）
+//   ・効果は buff と同じ形（{ self:{ステ:%} }）で書けば、そのまま常時補正になる
+export const KIND_LABEL = { phys:'物理', mag:'魔法', heal:'回復', buff:'補助', passive:'パッシブ' }
+export const KIND_COLOR = { phys:'#ffcc00', mag:'#cc44ff', heal:'#44ff88', buff:'#44aaff', passive:'#88aacc' }
+export const isPassive = (s) => s?.kind === 'passive'
 
 // mult   : 主ステータス（STR/INT）に掛ける倍率
 // add    : 副ステータス参照 [{ stat, rate }]
@@ -146,8 +152,12 @@ export const keepableSkillNames = (cls, learning = [], learned = []) => {
 // 想定利用MP＝編成を全部撃ち切ったときの消費MP合計（あるけみすとの表示と同じ考え方）。
 // ★使用回数の上限はこれで決まる。最大MPを超える編成は保存できない
 //   ＝MPを伸ばすほど強い技を多く積める＝MPがちゃんとステータスとして効く
+// ※パッシブは常時発動＝消費しないので数えない
 export const setMpCost = (set) => (set || [])
-  .reduce((t, e) => t + (SKILL_BY_NAME[e?.name]?.mp || 0) * (e?.uses || 0), 0)
+  .reduce((t, e) => {
+    const s = SKILL_BY_NAME[e?.name]
+    return t + (!s || isPassive(s) ? 0 : (s.mp || 0) * (e?.uses || 0))
+  }, 0)
 
 // 編成の検証。問題があれば日本語のエラー文、無ければ null（サーバーの v2_set_skills と同じ規則）
 export const validateSkillSet = (set, usableNames, maxMp = Infinity) => {
@@ -175,6 +185,7 @@ export const KIND_TABS = [
   { key:'mag',  label:'魔法' },
   { key:'buff', label:'補助' },
   { key:'heal', label:'回復' },
+  { key:'passive', label:'パッシブ' },
   { key:'fav',  label:'お気に入り' },
 ]
 export const SORT_KEYS = ['name', 'mp', 'proc', 'cls']
@@ -204,6 +215,7 @@ export const buildSlots = (set) => (set || [])
 
 // 表示用の効果テキスト（威力の出どころが一目で分かるように）
 export const powerText = (s) => {
+  if (isPassive(s)) return s.desc
   if (s.kind === 'heal') {
     if (s.mpRegen) return `毎ターン MP INT×${s.mpRegen.rate}×${s.mpRegen.turns}T`
     if (s.regen)   return `毎ターン INT×${s.regen.rate}×${s.regen.turns}T`

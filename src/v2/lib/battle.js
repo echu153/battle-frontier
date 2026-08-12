@@ -18,7 +18,7 @@ import {
   resolveAttack, healOf, roll, goesFirst, rollExtraAction,
 } from './combat.js'
 import { STAT_KEYS } from './stats.js'
-import { skillsOf } from './skills.js'
+import { skillsOf, isPassive } from './skills.js'
 
 export const NORMAL_ATTACK_MULT = 1.0 // 通常攻撃の倍率（消費MP0）
 export const MAX_TURNS = 100          // これを超えたら引き分け
@@ -50,11 +50,16 @@ const applyBuff = (buffs, table) => {
 }
 
 // 戦闘用の1サイドを作る。slots = [{ skill, uses }]（順番が発動順）
+// ★パッシブは発動順のローテーションから外し、戦闘開始時に常時補正として掛ける
 export const createSide = (fighter) => {
   const stats = {}
   for (const k of STAT_KEYS) stats[k] = fighter.stats?.[k] ?? fighter[k] ?? 0
-  const slots = (fighter.slots || skillsOf(fighter.cls).map(s => ({ skill: s, uses: 3 })))
+  const all = (fighter.slots || skillsOf(fighter.cls).map(s => ({ skill: s, uses: 3 })))
+    .filter(s => s?.skill)
     .map(s => ({ skill: s.skill, uses: s.uses ?? 3 }))
+  const passives = all.filter(s => isPassive(s.skill)).map(s => s.skill)
+  const buffs = {}
+  for (const p of passives) if (p.buff?.self) applyBuff(buffs, p.buff.self)
   return {
     name: fighter.name || fighter.cls || '?',
     cls: fighter.cls,
@@ -62,9 +67,10 @@ export const createSide = (fighter) => {
     base: stats,
     hp: stats.hp,
     mp: stats.mp,
-    slots,
+    slots: all.filter(s => !isPassive(s.skill)),  // 発動順に回るのはパッシブ以外だけ
+    passives,
     ptr: 0,
-    buffs: {},      // 自分にかかっているバフ
+    buffs,          // 自分にかかっているバフ（パッシブぶんを最初から乗せておく）
     regen: null,    // { rate, turns }
     mpRegen: null,  // { rate, turns }
   }

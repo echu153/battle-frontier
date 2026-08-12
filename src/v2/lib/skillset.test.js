@@ -135,7 +135,9 @@ test('一覧を検索・種別・お気に入りで絞り込める', () => {
   assert.equal(filterSkills(list, { query:'存在しない語' }).length, 0)
   assert.deepEqual(filterSkills(list, { tab:'fav', favorites:['強撃'] }).map(s => s.name), ['強撃'])
   assert.equal(filterSkills(list, { tab:'fav', favorites:[] }).length, 0)
-  assert.deepEqual(KIND_TABS.map(t => t.key), ['all', 'phys', 'mag', 'buff', 'heal', 'fav'])
+  // パッシブのタブも用意してある（スキルはまだ無いが、足したらそのまま出る）
+  assert.deepEqual(KIND_TABS.map(t => t.key), ['all', 'phys', 'mag', 'buff', 'heal', 'passive', 'fav'])
+  assert.equal(filterSkills(list, { tab:'passive' }).length, 0)
 })
 
 test('一覧をMP・発動率・名前で並べ替えられる', () => {
@@ -171,4 +173,30 @@ test('編成どおりの順番と回数で戦闘が回る', () => {
   //   体当たり2回・強撃1回なら 体当たり→強撃→体当たり で打ち止め、あとは通常攻撃
   assert.deepEqual(used, ['体当たり', '強撃', '体当たり'])
   assert.ok(r.log.filter(l => l.side === 'me' && l.type === 'normal').length > 0)
+})
+
+// ===== パッシブ（未実装。足したときに壊れないための土台） =====
+test('パッシブは発動順のローテーションに入らず、常時の補正として掛かる', () => {
+  const passive = { name:'テスト鍛錬', cls:'戦士', kind:'passive', mp:0, proc:100,
+    buff:{ self:{ str:50 } }, desc:'STR+50%' }
+  const atk = { name:'殴る', cls:'戦士', kind:'phys', mult:1, proc:100, mp:0, sureHit:true, noCrit:true, desc:'' }
+  const stats = { ...evenStats(534), hp: 10 ** 7 }
+  const withP = runBattle(
+    { name:'me', cls:'戦士', stats, slots:[{ skill:passive, uses:1 }, { skill:atk, uses:99 }] },
+    { name:'foe', cls:'戦士', stats, slots: [] }, { rng: mkRng(3), maxTurns: 4 })
+  const without = runBattle(
+    { name:'me', cls:'戦士', stats, slots:[{ skill:atk, uses:99 }] },
+    { name:'foe', cls:'戦士', stats, slots: [] }, { rng: mkRng(3), maxTurns: 4 })
+  // 1ターン目からパッシブぶんが乗る（発動に1ターン使わない）
+  const a = withP.log.find(l => l.side === 'me' && l.type === 'skill')
+  const b = without.log.find(l => l.side === 'me' && l.type === 'skill')
+  assert.equal(a.skill, '殴る', 'パッシブが発動順に割り込んでいる')
+  assert.ok(a.damage > b.damage, `パッシブが効いていない: ${a.damage} vs ${b.damage}`)
+  assert.equal(withP.a.buffs.str, 50)
+})
+
+test('パッシブは想定利用MPに数えない', () => {
+  assert.equal(setMpCost([{ name:'強撃', uses:1 }]), SKILL_BY_NAME['強撃'].mp)
+  // パッシブは SKILL_BY_NAME に無い（まだ実装していない）ので0のまま
+  assert.equal(setMpCost([{ name:'テスト鍛錬', uses:99 }]), 0)
 })
