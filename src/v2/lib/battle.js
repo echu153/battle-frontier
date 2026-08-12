@@ -9,6 +9,7 @@
 //   ・不発のターンと、撃てる枠が無いときは通常攻撃（消費MP0）
 //
 // 行動順・追加行動・命中・クリティカル・ダメージは combat.js の関数をそのまま使う。
+// ステータスの増減バフは**戦闘中ずっと続き、重ねがけで加算**される（あるけみすと準拠）。
 // 状態異常（毒・麻痺など）はまだ入れていない。入れるときはここにフェーズを足す。
 //
 // ★純関数。rng を渡せば結果が再現する（テストとバランス検証のため）。
@@ -28,25 +29,23 @@ export const attackKindOf = (cls) => {
   return atk.some(s => s.kind === 'mag') && !atk.some(s => s.kind === 'phys') ? 'mag' : 'phys'
 }
 
-// バフ（%）を乗せた実効ステータス。重ねがけは上書き（ターン数もリセット）
+// ステータスの増減バフは**戦闘中ずっと続き、重ねがけで加算**される（あるけみすと準拠）。
+//   あるけみすとのバフにはターン数の記載が無く、「重ね掛け可能」「回避成功毎に+3%」と
+//   累積前提で書かれている（ターン数が明記されているのは麻痺1T・沈黙2Tなどのデバフ側）。
+// 下限は -90%（デバフを重ねてもステータスが0以下にならないように）
+export const BUFF_MIN_PCT = -90
 const effectiveStats = (base, buffs) => {
   const out = {}
   for (const k of STAT_KEYS) {
-    const pct = buffs[k]?.pct || 0
+    const pct = buffs[k] || 0
     out[k] = pct ? Math.max(0, Math.round((base[k] || 0) * (1 + pct / 100))) : (base[k] || 0)
   }
   return out
 }
 
-const applyBuff = (buffs, table, turns) => {
-  for (const [k, pct] of Object.entries(table || {})) buffs[k] = { pct, turns }
-}
-
-// ターン終了時にバフの残りターンを減らす
-const tickBuffs = (buffs) => {
-  for (const k of Object.keys(buffs)) {
-    buffs[k].turns -= 1
-    if (buffs[k].turns <= 0) delete buffs[k]
+const applyBuff = (buffs, table) => {
+  for (const [k, pct] of Object.entries(table || {})) {
+    buffs[k] = Math.max(BUFF_MIN_PCT, (buffs[k] || 0) + pct)
   }
 }
 
@@ -140,8 +139,8 @@ const takeAction = (me, foe, rng, log) => {
 
   // バフ・デバフ（攻撃スキルに付いていることもある）
   if (skill.buff) {
-    if (skill.buff.self)  applyBuff(me.buffs,  skill.buff.self,  skill.buff.turns)
-    if (skill.buff.enemy) applyBuff(foe.buffs, skill.buff.enemy, skill.buff.turns)
+    if (skill.buff.self)  applyBuff(me.buffs,  skill.buff.self)
+    if (skill.buff.enemy) applyBuff(foe.buffs, skill.buff.enemy)
     log.push({ side: me.name, type: 'buff', skill: skill.name })
   }
 }
@@ -202,8 +201,6 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
     if (a.hp <= 0 || b.hp <= 0) break
     tickRegen(a, log)
     tickRegen(b, log)
-    tickBuffs(a.buffs)
-    tickBuffs(b.buffs)
     if (a.hp <= 0 || b.hp <= 0) break
   }
 

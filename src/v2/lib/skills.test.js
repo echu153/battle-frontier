@@ -30,7 +30,7 @@ test('ノーブルは指定された5つ', () => {
 test('全スキルの数値がレンジに収まっている', () => {
   for (const s of SKILLS) {
     assert.ok(['phys', 'mag', 'heal', 'buff'].includes(s.kind), `${s.name} の種別`)
-    assert.ok(s.proc >= 60 && s.proc <= 100, `${s.name} の発動率 ${s.proc}`)
+    assert.ok(s.proc >= 40 && s.proc <= 100, `${s.name} の発動率 ${s.proc}`)
     assert.ok(s.mp >= 0 && s.mp <= 30, `${s.name} の消費MP ${s.mp}`)
     assert.ok(s.desc && s.desc.length > 0, `${s.name} の説明`)
     if (s.kind === 'phys' || s.kind === 'mag') {
@@ -49,17 +49,17 @@ test('全スキルの数値がレンジに収まっている', () => {
   }
 })
 
-test('強い技ほど発動しにくい（倍率と発動率が逆相関）', () => {
+test('強い技ほど発動しにくい（威力と発動率が逆相関）', () => {
+  // ★あるけみすと準拠の考え方。向こうもメテオストライク60%・フルハウス20%と、
+  //   強い技ほど出にくい。倍率だけ上げて発動率を据え置くと「強い技を連打」一択になる。
+  // 比較は「倍率＋副ステ参照」の合計で行う（狙撃はSTR×1.0＋AGI×0.6＝実質1.6）
   const atk = SKILLS.filter(s => s.kind === 'phys' || s.kind === 'mag')
-  // 主力級の技は発動率90%未満に抑える。しきい値は魔法のほうが高い
-  // （魔法は軽減上限50%＋防御も厚いので、同じ倍率でも実際の威力は物理より低い）
+  const power = (s) => (s.mult + (s.add || []).reduce((t, a) => t + a.rate, 0)) * (s.hits || 1)
   for (const s of atk) {
+    const p = power(s)
     const strong = s.kind === 'mag' ? 2.0 : 1.8
-    if (s.mult >= strong) assert.ok(s.proc < 90, `${s.name}: 倍率${s.mult}なのに発動率${s.proc}%`)
-  }
-  // 倍率1.2以下の軽い技は90%以上出る
-  for (const s of atk) {
-    if (s.mult <= 1.2 && !s.hits) assert.ok(s.proc >= 90, `${s.name}: 倍率${s.mult}なのに発動率${s.proc}%`)
+    if (p >= strong) assert.ok(s.proc < 90, `${s.name}: 威力${p.toFixed(2)}なのに発動率${s.proc}%`)
+    if (p <= 1.2) assert.ok(s.proc >= 90, `${s.name}: 威力${p.toFixed(2)}なのに発動率${s.proc}%`)
   }
 })
 

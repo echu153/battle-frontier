@@ -1,7 +1,7 @@
 // バトルフロンティアⅡ 戦闘ループの回帰テスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runBattle, createSide, peekSkill, attackKindOf, NORMAL_ATTACK_MULT, MAX_TURNS } from './battle.js'
+import { runBattle, createSide, peekSkill, attackKindOf, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
 import { skillsOf } from './skills.js'
 
@@ -122,21 +122,35 @@ test('回復は最大HPを超えない', () => {
   assert.ok(r.a.hp <= r.a.base.hp, `HP${r.a.hp} / 最大${r.a.base.hp}`)
 })
 
-test('バフはステータスに乗り、ターンが切れると消える', () => {
+test('バフは戦闘中ずっと続き、重ねがけで加算される', () => {
+  // ★あるけみすと準拠。ターンで切れない＝バフを積む戦い方が成立する
   const buff = [
-    { skill: sk('強化', { kind:'buff', proc:100, buff:{ self:{ str:100 }, turns:2 } }), uses: 1 },
-    // クリと回避のブレを消して、バフの有無だけを比べる
+    { skill: sk('強化', { kind:'buff', proc:100, buff:{ self:{ str:50 } } }), uses: 3 },
+    // クリと回避のブレを消して、バフの効きだけを比べる
     { skill: sk('殴る', { proc:100, sureHit:true, noCrit:true }), uses: 99 },
   ]
   const r = runBattle(
     fighter('me', buff), fighter('foe', [], { ...evenStats(534), hp: 10 ** 7 }),
-    { rng: makeRng(10), maxTurns: 8 })
+    { rng: makeRng(10), maxTurns: 12 })
+  // 3回重ねて +150%
+  assert.equal(r.a.buffs.str, 150)
+  // 枠は順に回るので 強化→殴る→強化→殴る… となり、バフが積まれるほど一撃が伸びる
   const hits = r.log.filter(l => l.side === 'me' && l.type === 'skill' && l.skill === '殴る')
   assert.ok(hits.length >= 4)
-  // バフ中の一撃はバフ切れ後より大きい
-  assert.ok(hits[0].damage > hits[hits.length - 1].damage,
-    `バフ中${hits[0].damage} / 切れた後${hits[hits.length - 1].damage}`)
-  assert.deepEqual(r.a.buffs, {}, 'バフが残っている')
+  assert.ok(hits[hits.length - 1].damage > hits[0].damage,
+    `積み上がっていない: 最初${hits[0].damage} / 最後${hits[hits.length - 1].damage}`)
+  // 積み終わったあとは切れずに一定
+  const last = hits.slice(-2)
+  assert.equal(last[0].damage, last[1].damage, 'バフが途中で切れている')
+})
+
+test('デバフを重ねてもステータスは0未満にならない', () => {
+  const debuff = [{ skill: sk('弱体', { kind:'buff', proc:100, buff:{ enemy:{ vit:-50 } } }), uses: 99 }]
+  const r = runBattle(
+    fighter('me', debuff), fighter('foe', [], { ...evenStats(534), hp: 10 ** 7 }),
+    { rng: makeRng(11), maxTurns: 10 })
+  assert.ok(r.b.buffs.vit >= BUFF_MIN_PCT, `${r.b.buffs.vit}`)
+  assert.equal(r.b.buffs.vit, BUFF_MIN_PCT)
 })
 
 test('実際の職業どうしで決着する', () => {
