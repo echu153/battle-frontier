@@ -70,13 +70,13 @@ export const SKILLS = [
   // ===== 格闘家（手数） =====
   { name:'打撃',   cls:'格闘家', kind:'phys', mult:1.3, proc:95, mp:4,  desc:'軽い打撃' },
   { name:'鉄拳',   cls:'格闘家', kind:'phys', mult:1.9, proc:85, mp:12, desc:'渾身の一撃' },
-  { name:'連打',   cls:'格闘家', kind:'phys', mult:0.6, hits:3, proc:90, mp:10, desc:'3連撃。1発ずつ命中判定' },
-  { name:'爆裂拳', cls:'格闘家', kind:'phys', mult:0.7, hits:4, proc:75, mp:16, desc:'4連撃。出にくいが手数で押す' },
+  { name:'連打',   cls:'格闘家', kind:'phys', mult:0.55, hits:3, proc:90, mp:10, desc:'3連撃。1発ずつ命中判定' },
+  { name:'爆裂拳', cls:'格闘家', kind:'phys', mult:0.55, hits:4, proc:75, mp:16, desc:'4連撃。出にくいが手数で押す' },
   { name:'残心',   cls:'格闘家', kind:'buff', proc:100, mp:8, buff:{ self:{ dex:20, agi:20 }, turns:3 }, desc:'3ターンDEX・AGI+20%' },
 
   // ===== サモナー（魔法・補助） =====
   { name:'オオカミ召喚',   cls:'サモナー', kind:'mag', mult:1.3, proc:90, mp:8,  desc:'狼を呼んで噛みつかせる' },
-  { name:'小悪魔召喚',     cls:'サモナー', kind:'mag', mult:1.6, proc:90, mp:11, desc:'小悪魔を呼ぶ' },
+  { name:'小悪魔召喚',     cls:'サモナー', kind:'mag', mult:1.7, proc:90, mp:11, desc:'小悪魔を呼ぶ' },
   { name:'グリフォン召喚', cls:'サモナー', kind:'mag', mult:1.4, proc:85, mp:13, buff:{ self:{ agi:20 }, turns:2 }, desc:'2ターンAGI+20%' },
   { name:'群れの号令',     cls:'サモナー', kind:'mag', mult:0.5, hits:3, proc:85, mp:14, desc:'3連撃' },
   { name:'魔力供給',       cls:'サモナー', kind:'heal', proc:80, mp:0, mpRegen:{ rate:0.3, turns:4 }, desc:'4ターン毎ターンINT×0.3のMPを回復。消費MPなし' },

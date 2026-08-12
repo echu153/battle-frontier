@@ -59,6 +59,35 @@ test('強い技ほど発動しにくい（倍率と発動率が逆相関）', ()
   }
 })
 
+// ★2026-08-12の事故：多段の倍率を単発と同じ感覚で置いた結果、爆裂拳(0.7×4=合計2.8)だけ
+//   実質倍率が2.10と突出し、格闘家が全職に76〜98%で勝つ状態になっていた。
+//   多段は「発動判定が1回・命中判定だけ分散」なので合計倍率がそのまま効く。
+//   実質倍率＝(倍率＋副参照の合計)×多段数×発動率。これが職業間で開かないことを固定する。
+const effMult = (s) => (s.mult + (s.add || []).reduce((t, a) => t + a.rate, 0)) * (s.hits || 1) * (s.proc / 100)
+
+test('多段スキルの合計倍率が単発の主力を超えない', () => {
+  const singles = SKILLS.filter(s => (s.kind === 'phys' || s.kind === 'mag') && !s.hits)
+  const maxSingle = Math.max(...singles.map(s => s.mult))
+  for (const s of SKILLS.filter(s => s.hits > 1)) {
+    const total = s.mult * s.hits
+    assert.ok(total <= maxSingle * 1.15,
+      `${s.name}: 合計倍率${total.toFixed(2)} が単発の最大${maxSingle} を超えている`)
+  }
+})
+
+test('職業ごとの主力の実質倍率が2割以上開かない', () => {
+  const tops = {}
+  for (const s of SKILLS.filter(s => s.kind === 'phys' || s.kind === 'mag')) {
+    tops[s.cls] = Math.max(tops[s.cls] || 0, effMult(s))
+  }
+  // ノーブルは開始時の職業なので意図的に低い＝比較から外す
+  const vals = Object.entries(tops).filter(([c]) => c !== 'ノーブル')
+  const max = Math.max(...vals.map(v => v[1]))
+  const min = Math.min(...vals.map(v => v[1]))
+  assert.ok(max / min <= 1.2,
+    `職業ごとの主力が開きすぎ: ${vals.map(([c, v]) => `${c}=${v.toFixed(2)}`).join(' ')}`)
+})
+
 test('職業ごとに攻撃の型が揃っている', () => {
   const kindsOf = (c) => new Set(skillsOf(c).filter(s => s.kind === 'phys' || s.kind === 'mag').map(s => s.kind))
   for (const c of ['戦士', '弓使い', '格闘家', 'ノーブル']) assert.deepEqual([...kindsOf(c)], ['phys'], `${c}は物理型`)
@@ -75,7 +104,7 @@ test('どの職業も補助か回復を1つ以上持つ', () => {
 test('威力テキストが威力の出どころを示す', () => {
   assert.equal(powerText(SKILL_BY_NAME['体当たり']), 'STR×1.4')
   assert.equal(powerText(SKILL_BY_NAME['狙撃']), 'STR×1 ＋ AGI×0.6')
-  assert.equal(powerText(SKILL_BY_NAME['連打']), 'STR×0.6 ×3回')
+  assert.equal(powerText(SKILL_BY_NAME['連打']), 'STR×0.55 ×3回')
   assert.equal(powerText(SKILL_BY_NAME['ヒール']), 'INT×1.4')
   assert.equal(powerText(SKILL_BY_NAME['祈祷']), '毎ターン INT×0.5×4T')
   assert.equal(powerText(SKILL_BY_NAME['魔力供給']), '毎ターン MP INT×0.3×4T')
