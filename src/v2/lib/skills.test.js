@@ -69,6 +69,19 @@ test('強い技ほど発動しにくい（倍率と発動率が逆相関）', ()
 //   実質倍率＝(倍率＋副参照の合計)×多段数×発動率。これが職業間で開かないことを固定する。
 const effMult = (s) => (s.mult + (s.add || []).reduce((t, a) => t + a.rate, 0)) * (s.hits || 1) * (s.proc / 100)
 
+test('多段スキルはクリティカルしない', () => {
+  // クリの固定加算(＋1.5)は元の係数によらないため、多段ほど恩恵が大きい。
+  // あるけみすとにも「クリティカルするスキルとしないスキル」があるので、
+  // v2では多段を noCrit にして素の倍率で調整する（そうしないと多段が壊れる）。
+  for (const s of SKILLS.filter(s => s.hits > 1)) {
+    assert.equal(s.noCrit, true, `${s.name} は多段なので noCrit にすること`)
+  }
+  // 逆に単発をむやみに noCrit にしない（いまは多段だけ）
+  for (const s of SKILLS.filter(s => s.noCrit)) {
+    assert.ok(s.hits > 1, `${s.name} は多段ではないのに noCrit`)
+  }
+})
+
 test('多段スキルの合計倍率が単発の主力を超えない', () => {
   const singles = SKILLS.filter(s => (s.kind === 'phys' || s.kind === 'mag') && !s.hits)
   const maxSingle = Math.max(...singles.map(s => s.mult))
@@ -111,7 +124,7 @@ test('どの職業も補助か回復を1つ以上持つ', () => {
 test('威力テキストが威力の出どころを示す', () => {
   assert.equal(powerText(SKILL_BY_NAME['体当たり']), 'STR×1.4')
   assert.equal(powerText(SKILL_BY_NAME['狙撃']), 'STR×1 ＋ AGI×0.6')
-  assert.equal(powerText(SKILL_BY_NAME['連打']), 'STR×0.47 ×3回')
+  assert.equal(powerText(SKILL_BY_NAME['連打']), 'STR×0.57 ×3回')
   assert.equal(powerText(SKILL_BY_NAME['ヒール']), 'INT×1.4')
   assert.equal(powerText(SKILL_BY_NAME['祈祷']), '毎ターン INT×0.5×4T')
   assert.equal(powerText(SKILL_BY_NAME['魔力供給']), '毎ターン MP INT×0.3×4T')

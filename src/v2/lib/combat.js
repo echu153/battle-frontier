@@ -120,8 +120,11 @@ export const healOf = (actor, rate) => Math.max(1, Math.floor((actor?.int_stat |
 
 // 1回の攻撃を解決する。外れ／クリティカルもここで決める（戦闘ループから使う想定）
 // ★順番はあるけみすと準拠：クリティカルを先に決め、クリならDEXを補正して命中判定する
-export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', defPen = 0, add = null, sureHit = false, sureCrit = false }, rng = Math.random) => {
-  const crit = sureCrit || roll(critRate(attacker, defender), rng)
+// noCrit: クリティカルしないスキル。あるけみすとにも「クリティカルするスキルとしないスキル」がある。
+//   クリの固定加算(＋1.5)は元の係数によらないため、多段スキルほど恩恵が大きい。
+//   多段を noCrit にして、そのぶん素の倍率を上げるのがv2の方針（バランスが安定する）。
+export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', defPen = 0, add = null, sureHit = false, sureCrit = false, noCrit = false }, rng = Math.random) => {
+  const crit = !noCrit && (sureCrit || roll(critRate(attacker, defender), rng))
   const acc = crit ? critAccuracyStats(attacker) : attacker
   const hit = sureHit || roll(hitRate(acc, defender), rng)
   if (!hit) return { hit:false, crit, damage:0 }

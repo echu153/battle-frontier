@@ -6,8 +6,10 @@
 // ・スキルは毎ターン「発動率」で抽選する（あるけみすと式。強い技ほど出にくい）
 // ・倍率はあるけみすとを基準にしつつ、初期職は少し低めに置いた
 //     あるけみすと：通常 2.0〜2.6倍 ／ 大技 4.0倍前後 ／ 発動率 60〜95%
-//     v2の初期職  ：通常 1.0〜1.4倍 ／ 主力 1.6〜2.0倍 ／ 発動率 75〜100%
+//     v2の初期職  ：物理は通常1.0〜1.4・主力1.9 ／ 魔法は通常1.4〜1.6・主力2.3まで
 //   → 上位職に伸びしろを残すため。ノーブルはさらに一段低い
+// ・魔法の倍率が物理より高いのは、魔法のほうが軽減上限が高く(50% vs 34%)防御力も厚いから
+//   （あるけみすとも魔法はINT×2.6〜3.55と物理STR×2.2〜2.4より高い）
 //
 // ★いまはこのファイルがスキルの正。戦闘をサーバー権威にするときに
 //   v2_classes と同じくDBの表へ移す（それまでは調整の速さを優先してJSに置く）。
@@ -25,6 +27,10 @@ export const KIND_COLOR = { phys:'#ffcc00', mag:'#cc44ff', heal:'#44ff88', buff:
 // proc   : 発動率(%)。毎ターン抽選する
 // defPen : 防御無視(0〜1)
 // sureHit: 必中
+// noCrit : クリティカルしないスキル。あるけみすとにも「クリティカルするスキルとしないスキル」があり、
+//          ゲーム内には表記されない。クリの固定加算(＋1.5)は元の係数によらないため
+//          多段スキルほど恩恵が大きい＝v2では多段を noCrit にして素の倍率で調整する
+// sureCrit: 確定クリティカル（あるけみすとの「破魔の一撃」「刺閃」に相当）。初期職では未使用
 // buff   : { self:{ステ:%}, enemy:{ステ:%}, turns }
 // heal   : { rate }                  …即時HP回復（INT×rate）
 // regen  : { rate, turns }           …毎ターンHP回復（INT×rate）
@@ -70,15 +76,15 @@ export const SKILLS = [
   // ===== 格闘家（手数） =====
   { name:'打撃',   cls:'格闘家', kind:'phys', mult:1.3, proc:95, mp:4,  desc:'軽い打撃' },
   { name:'鉄拳',   cls:'格闘家', kind:'phys', mult:1.9, proc:85, mp:12, desc:'渾身の一撃' },
-  { name:'連打',   cls:'格闘家', kind:'phys', mult:0.47, hits:3, proc:90, mp:10, desc:'3連撃。1発ずつ命中判定' },
-  { name:'爆裂拳', cls:'格闘家', kind:'phys', mult:0.47, hits:4, proc:75, mp:16, desc:'4連撃。出にくいが手数で押す' },
+  { name:'連打',   cls:'格闘家', kind:'phys', mult:0.57, hits:3, proc:90, mp:10, noCrit:true, desc:'3連撃。1発ずつ命中判定。クリティカルしない' },
+  { name:'爆裂拳', cls:'格闘家', kind:'phys', mult:0.57, hits:4, proc:75, mp:16, noCrit:true, desc:'4連撃。出にくいが手数で押す。クリティカルしない' },
   { name:'残心',   cls:'格闘家', kind:'buff', proc:100, mp:8, buff:{ self:{ dex:20, agi:20 }, turns:3 }, desc:'3ターンDEX・AGI+20%' },
 
   // ===== サモナー（魔法・補助） =====
   { name:'オオカミ召喚',   cls:'サモナー', kind:'mag', mult:1.5, proc:90, mp:8,  desc:'狼を呼んで噛みつかせる' },
   { name:'小悪魔召喚',     cls:'サモナー', kind:'mag', mult:1.95, proc:90, mp:11, desc:'小悪魔を呼ぶ' },
   { name:'グリフォン召喚', cls:'サモナー', kind:'mag', mult:1.6, proc:85, mp:13, buff:{ self:{ agi:20 }, turns:2 }, desc:'2ターンAGI+20%' },
-  { name:'群れの号令',     cls:'サモナー', kind:'mag', mult:0.55, hits:3, proc:85, mp:14, desc:'3連撃' },
+  { name:'群れの号令',     cls:'サモナー', kind:'mag', mult:0.75, hits:3, proc:85, mp:14, noCrit:true, desc:'3連撃。クリティカルしない' },
   { name:'魔力供給',       cls:'サモナー', kind:'heal', proc:80, mp:0, mpRegen:{ rate:0.3, turns:4 }, desc:'4ターン毎ターンINT×0.3のMPを回復。消費MPなし' },
 ]
 

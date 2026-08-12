@@ -87,6 +87,19 @@ test('クリティカルの命中判定はDEX×1.5＋LUK/3で行う（あるけ�
   assert.ok(hitRate(critAccuracyStats(s), def) > hitRate(s, def))
 })
 
+test('noCrit のスキルは絶対にクリティカルしない', () => {
+  const atk = { str:100, dex:10 ** 6, luk:10 ** 7 }  // クリ率が上限に張り付く相手
+  const def = { vit:0, agi:0, luk:0 }
+  const rng = makeRng(99)
+  for (let i = 0; i < 5000; i++) {
+    assert.equal(resolveAttack({ attacker:atk, defender:def, mult:1, noCrit:true }, rng).crit, false)
+  }
+  // noCrit を外せばクリティカルは出る（テストが機能していることの確認）
+  let any = false
+  for (let i = 0; i < 5000; i++) if (resolveAttack({ attacker:atk, defender:def, mult:1 }, rng).crit) { any = true; break }
+  assert.ok(any)
+})
+
 test('判定の順番はクリティカルが先（クリなら命中補正がかかる）', () => {
   // 通常命中は絶対に外れる状況を作り、クリティカルなら当たることを見る
   const atk = { str:100, dex:1, luk:10 ** 7 }   // LUKが極端＝クリ率は上限

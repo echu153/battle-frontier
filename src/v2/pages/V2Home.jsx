@@ -231,7 +231,11 @@ export default function V2Home() {
                             {s.name}
                             <span style={{ color:'#556677', fontSize:'9px', marginLeft:'5px' }}>{KIND_LABEL[s.kind]}</span>
                           </span>
-                          <span style={{ color:'#446688', fontSize:'10px' }}>発動{s.proc}% ／ MP{s.mp}</span>
+                          <span style={{ color:'#446688', fontSize:'10px' }}>
+                            {s.noCrit && <span style={{ color:'#886644', marginRight:'5px' }}>クリ無</span>}
+                            {s.sureHit && <span style={{ color:'#448866', marginRight:'5px' }}>必中</span>}
+                            発動{s.proc}% ／ MP{s.mp}
+                          </span>
                         </div>
                         <div style={{ color:'#556677', fontSize:'9px', marginTop:'3px' }}>
                           {powerText(s)}
