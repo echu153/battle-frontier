@@ -8,9 +8,10 @@
 //     あるけみすと：通常 2.0〜2.6倍 ／ 大技 4.0倍前後 ／ 発動率 60〜95%
 //     v2の初期職  ：物理は0.8〜1.65倍 ／ 魔法は1.3〜1.85倍 ／ 発動率85〜100%
 //   → 上位職に伸びしろを残すため。ノーブルはさらに一段低い
-// ・発動率はあるけみすとに合わせて85%以上に置く（向こうも75〜100%が大半で、
-//   60%以下はメテオストライク60%・フルハウス20%くらい。旅人も95/85/80%）。
-//   強さの調整は発動率を削るのではなく倍率で行う
+// ・発動率はあるけみすとに合わせる（向こうも75〜100%が大半で、60%以下は
+//   メテオストライク60%・フルハウス20%くらい。旅人＝初期職も95/85/80%）。
+//     初期職 … 85%以上。強さの調整は発動率ではなく倍率で行う
+//     上位職 … 威力の高い技（3.0級）は75%前後まで下げてよい。切り札は70%まで
 // ・魔法の倍率が物理より高いのは、魔法のほうが軽減上限が高く(50% vs 34%)防御力も厚いから
 //   （あるけみすとも魔法はINT×2.6〜3.55と物理STR×2.2〜2.4より高い）
 //
@@ -123,7 +124,7 @@ export const SKILLS = [
 
   // ===== 狂戦士（STR一点・自分を削る） =====
   { name:'マッドラッシュ', cls:'狂戦士', kind:'phys', mult:0.85, hits:3, proc:85, mp:16, noCrit:true, desc:'3連撃。クリティカルしない' },
-  { name:'すてみ',       cls:'狂戦士', kind:'phys', mult:3, proc:85, mp:18, buff:{ self:{ vit:-20 } }, desc:'大威力だが自分のVIT-20%（重ねがけ可）' },
+  { name:'すてみ',       cls:'狂戦士', kind:'phys', mult:3, proc:78, mp:18, buff:{ self:{ vit:-20 } }, desc:'大威力だが自分のVIT-20%（重ねがけ可）' },
   { name:'バーサク',     cls:'狂戦士', kind:'passive', mp:0, buff:{ self:{ str:12, vit:-5 } }, desc:'STR+12%・VIT-5%' },
   { name:'ブラッティロア', cls:'狂戦士', kind:'buff', proc:100, mp:14, buff:{ self:{ str:40 } }, priority:1, desc:'STR+40%（重ねがけ可）' },
   { name:'フルブレイカー', cls:'狂戦士', kind:'phys', mult:2.4, defPen:0.5, proc:85, mp:18, desc:'相手の防御を50%無視' },
@@ -172,7 +173,7 @@ export const SKILLS = [
 
   // ===== 賢者（INT・高コスト） =====
   { name:'サンダーストライク', cls:'賢者', kind:'mag', mult:2.2, proc:90, mp:14, desc:'雷撃' },
-  { name:'マナボルト',       cls:'賢者', kind:'mag', mult:3.2, proc:85, mp:0, mpPct:0.2, desc:'そのときの残りMPの20%を消費する大魔法' },
+  { name:'マナボルト',       cls:'賢者', kind:'mag', mult:3.2, proc:78, mp:0, mpPct:0.2, desc:'そのときの残りMPの20%を消費する大魔法' },
   { name:'天啓',             cls:'賢者', kind:'passive', mp:0, buff:{ self:{ int_stat:10 } }, desc:'INT+10%' },
   { name:'氷の障壁',         cls:'賢者', kind:'buff', proc:100, mp:15, buff:{ self:{ vit:40, int_stat:20 } }, priority:1, desc:'VIT+40%・INT+20%（重ねがけ可）' },
   { name:'メテオストライク', cls:'賢者', kind:'mag', mult:0.95, hits:4, proc:75, mp:26, noCrit:true, desc:'4連撃。クリティカルしない' },
@@ -210,7 +211,7 @@ export const SKILLS = [
   { name:'五連殺',       cls:'体術師', kind:'phys', mult:0.55, hits:5, proc:80, mp:20, noCrit:true, desc:'5連撃。クリティカルしない' },
   { name:'闘争本能',     cls:'体術師', kind:'passive', mp:0, buff:{ self:{ str:10 } }, desc:'STR+10%' },
   { name:'破衝掌',       cls:'体術師', kind:'phys', mult:2.0, defPen:0.5, proc:85, mp:16, desc:'相手の防御を50%無視' },
-  { name:'飛天三角蹴り', cls:'体術師', kind:'phys', mult:0.8, add:[{ stat:'agi', rate:0.25 }], hits:3, proc:85, mp:17, noCrit:true, desc:'3連撃。AGIも威力になる' },
+  { name:'飛天三角蹴り', cls:'体術師', kind:'phys', mult:0.8, add:[{ stat:'agi', rate:0.25 }], hits:3, proc:78, mp:17, noCrit:true, desc:'3連撃。AGIも威力になる' },
 
   // ===== ギャンブラー（LUK一点） =====
   { name:'ジャグリング',     cls:'ギャンブラー', kind:'phys', mult:0.7, hits:4, proc:85, mp:15, noCrit:true, desc:'4連撃。クリティカルしない' },
