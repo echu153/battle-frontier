@@ -1,8 +1,8 @@
 // バトルフロンティアⅡ スキルデータの回帰テスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { SKILLS, SKILL_BY_NAME, skillsOf, SKILL_CLASSES, powerText, expectedDamage } from './skills.js'
-import { damageOf } from './combat.js'
+import { SKILLS, SKILL_BY_NAME, skillsOf, SKILL_CLASSES, powerText, expectedDamage, expectedHeal } from './skills.js'
+import { damageOf, healOf } from './combat.js'
 import { STAT_KEYS } from './stats.js'
 
 // いま実装済みの職業（開始時＋初期職6）。上位職を足したらここも増やす
@@ -76,8 +76,42 @@ test('威力テキストが威力の出どころを示す', () => {
   assert.equal(powerText(SKILL_BY_NAME['体当たり']), 'STR×1.4')
   assert.equal(powerText(SKILL_BY_NAME['狙撃']), 'STR×1 ＋ AGI×0.6')
   assert.equal(powerText(SKILL_BY_NAME['連打']), 'STR×0.6 ×3回')
-  assert.equal(powerText(SKILL_BY_NAME['ヒール']), '最大HP20% ＋ INT×0.3')
-  assert.equal(powerText(SKILL_BY_NAME['祈祷']), '毎ターン 最大HP10%×4T')
+  assert.equal(powerText(SKILL_BY_NAME['ヒール']), 'INT×1.4')
+  assert.equal(powerText(SKILL_BY_NAME['祈祷']), '毎ターン INT×0.5×4T')
+  assert.equal(powerText(SKILL_BY_NAME['魔力供給']), '毎ターン MP INT×0.3×4T')
+})
+
+test('回復はすべてINT参照で、最大HP/MPの％は使わない', () => {
+  const heals = SKILLS.filter(s => s.kind === 'heal')
+  assert.ok(heals.length >= 4)
+  for (const s of heals) {
+    const spec = s.heal || s.regen || s.mpRegen
+    assert.ok(spec, `${s.name} に回復量の定義がない`)
+    assert.ok(spec.rate > 0 && spec.rate <= 1.5, `${s.name} の倍率 ${spec.rate}`)  // あるけみすと(INT×1.5)を超えない
+    assert.equal(spec.hpPct, undefined, `${s.name} が最大HP%を参照している`)
+    assert.equal(spec.mpPct, undefined, `${s.name} が最大MP%を参照している`)
+    assert.ok(s.proc <= 80, `${s.name} の発動率 ${s.proc}（回復は80%以下）`)
+  }
+})
+
+test('回復量はINTだけで決まり、HPを積んでも増えない', () => {
+  const lowInt  = { int_stat:10,  hp:10000 }
+  const highInt = { int_stat:100, hp:100 }
+  assert.ok(healOf(highInt, 1.4) > healOf(lowInt, 1.4))
+  assert.equal(healOf({ int_stat:100, hp:1 }, 1.4), healOf({ int_stat:100, hp:99999 }, 1.4))
+  assert.equal(healOf({ int_stat:0 }, 1.4), 1)  // 最低1
+})
+
+test('回復の期待量が同格戦で常識的な範囲に収まる', () => {
+  const s = evenStats(534)   // INT67 / HP534
+  const heal = expectedHeal(SKILL_BY_NAME['ヒール'], s, healOf)
+  const kito = expectedHeal(SKILL_BY_NAME['祈祷'], s, healOf)
+  // 1回の回復が最大HPの半分を超えない＝回復だけで膠着しない
+  assert.ok(heal > 0 && heal < s.hp * 0.5, `ヒール=${heal}（HP${s.hp}）`)
+  assert.ok(kito > 0 && kito < s.hp * 0.5, `祈祷=${kito}`)
+  // MP回復は最大MPを超えて配らない
+  const mp = expectedHeal(SKILL_BY_NAME['魔力供給'], s, healOf)
+  assert.ok(mp > 0 && mp < s.mp, `魔力供給=${mp}（MP${s.mp}）`)
 })
 
 test('初期職の期待ダメージが同格相手に対して常識的な範囲に収まる', () => {

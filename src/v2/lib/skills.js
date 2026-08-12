@@ -26,14 +26,16 @@ export const KIND_COLOR = { phys:'#ffcc00', mag:'#cc44ff', heal:'#44ff88', buff:
 // defPen : 防御無視(0〜1)
 // sureHit: 必中
 // buff   : { self:{ステ:%}, enemy:{ステ:%}, turns }
-// heal   : { hpPct, intRate }        …即時回復（最大HPの% ＋ INT×倍率）
-// regen  : { hpPct, turns }          …毎ターンHP回復
-// mpRegen: { mpPct, turns }          …毎ターンMP回復
+// heal   : { rate }                  …即時HP回復（INT×rate）
+// regen  : { rate, turns }           …毎ターンHP回復（INT×rate）
+// mpRegen: { rate, turns }           …毎ターンMP回復（INT×rate）
+// ※回復は最大HP/MPの％ではなく INT を参照する（あるけみすと準拠。神聖なる手＝INT×1.5）。
+//   最大HPを積むほど回復量まで伸びる歪みを作らないため。初期職はあるけみすとより低め
 export const SKILLS = [
   // ===== ノーブル（開始時の職業。一段低い） =====
   { name:'はたく',     cls:'ノーブル', kind:'phys', mult:1.1, proc:95, mp:0,  desc:'素手で殴る。消費MPなし' },
   { name:'狙い撃ち',   cls:'ノーブル', kind:'phys', mult:1.0, proc:90, mp:5,  sureHit:true, desc:'必ず当たる一撃' },
-  { name:'応急手当',   cls:'ノーブル', kind:'heal', proc:90, mp:8,  heal:{ hpPct:15 }, desc:'最大HPの15%を回復' },
+  { name:'応急手当',   cls:'ノーブル', kind:'heal', proc:80, mp:8,  heal:{ rate:1.0 }, desc:'INT×1.0を回復' },
   { name:'身構える',   cls:'ノーブル', kind:'buff', proc:100, mp:6, buff:{ self:{ vit:20 }, turns:3 }, desc:'3ターンVIT+20%' },
   { name:'気合い',     cls:'ノーブル', kind:'buff', proc:90, mp:8,  buff:{ self:{ str:15 }, turns:3 }, desc:'3ターンSTR+15%' },
 
@@ -61,8 +63,8 @@ export const SKILLS = [
   // ===== 僧侶（回復・支援） =====
   { name:'ライト',       cls:'僧侶', kind:'mag', mult:1.3, proc:95, mp:6,  desc:'光の魔法' },
   { name:'ライトニング', cls:'僧侶', kind:'mag', mult:1.8, proc:85, mp:13, desc:'僧侶の攻撃手段の要' },
-  { name:'ヒール',       cls:'僧侶', kind:'heal', proc:95, mp:12, heal:{ hpPct:20, intRate:0.3 }, desc:'最大HPの20%＋INT×0.3を回復' },
-  { name:'祈祷',         cls:'僧侶', kind:'heal', proc:90, mp:15, regen:{ hpPct:10, turns:4 }, desc:'4ターン毎ターン最大HPの10%回復' },
+  { name:'ヒール',       cls:'僧侶', kind:'heal', proc:80, mp:12, heal:{ rate:1.4 }, desc:'INT×1.4を回復' },
+  { name:'祈祷',         cls:'僧侶', kind:'heal', proc:80, mp:15, regen:{ rate:0.5, turns:4 }, desc:'4ターン毎ターンINT×0.5を回復' },
   { name:'プロテク',     cls:'僧侶', kind:'buff', proc:100, mp:10, buff:{ self:{ vit:20, int_stat:20 }, turns:3 }, desc:'3ターンVIT・INT+20%' },
 
   // ===== 格闘家（手数） =====
@@ -77,7 +79,7 @@ export const SKILLS = [
   { name:'小悪魔召喚',     cls:'サモナー', kind:'mag', mult:1.6, proc:90, mp:11, desc:'小悪魔を呼ぶ' },
   { name:'グリフォン召喚', cls:'サモナー', kind:'mag', mult:1.4, proc:85, mp:13, buff:{ self:{ agi:20 }, turns:2 }, desc:'2ターンAGI+20%' },
   { name:'群れの号令',     cls:'サモナー', kind:'mag', mult:0.5, hits:3, proc:85, mp:14, desc:'3連撃' },
-  { name:'魔力供給',       cls:'サモナー', kind:'buff', proc:100, mp:0, mpRegen:{ mpPct:20, turns:4 }, desc:'4ターン毎ターン最大MPの20%回復。消費MPなし' },
+  { name:'魔力供給',       cls:'サモナー', kind:'heal', proc:80, mp:0, mpRegen:{ rate:0.3, turns:4 }, desc:'4ターン毎ターンINT×0.3のMPを回復。消費MPなし' },
 ]
 
 export const SKILL_BY_NAME = Object.fromEntries(SKILLS.map(s => [s.name, s]))
@@ -87,8 +89,9 @@ export const SKILL_CLASSES = [...new Set(SKILLS.map(s => s.cls))]
 // 表示用の効果テキスト（威力の出どころが一目で分かるように）
 export const powerText = (s) => {
   if (s.kind === 'heal') {
-    if (s.regen) return `毎ターン 最大HP${s.regen.hpPct}%×${s.regen.turns}T`
-    return `最大HP${s.heal?.hpPct || 0}%${s.heal?.intRate ? ` ＋ INT×${s.heal.intRate}` : ''}`
+    if (s.mpRegen) return `毎ターン MP INT×${s.mpRegen.rate}×${s.mpRegen.turns}T`
+    if (s.regen)   return `毎ターン INT×${s.regen.rate}×${s.regen.turns}T`
+    return `INT×${s.heal?.rate || 0}`
   }
   if (s.kind === 'buff') return s.desc
   const main = `${s.kind === 'mag' ? 'INT' : 'STR'}×${s.mult}`
@@ -106,4 +109,13 @@ export const expectedDamage = (skill, attacker, defender, damageOf) => {
     defPen: skill.defPen || 0, add: skill.add || null,
   })
   return Math.round(per * (skill.hits || 1) * (skill.proc / 100))
+}
+
+// 1回使ったときの期待回復量（持続系は全ターンの合計）。healOf は combat.js のもの
+export const expectedHeal = (skill, actor, healOf) => {
+  if (!skill || skill.kind !== 'heal') return 0
+  const p = skill.proc / 100
+  if (skill.mpRegen) return Math.round(healOf(actor, skill.mpRegen.rate) * skill.mpRegen.turns * p)
+  if (skill.regen)   return Math.round(healOf(actor, skill.regen.rate) * skill.regen.turns * p)
+  return Math.round(healOf(actor, skill.heal?.rate || 0) * p)
 }

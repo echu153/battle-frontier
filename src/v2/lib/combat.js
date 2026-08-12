@@ -95,6 +95,12 @@ export const damageOf = ({ attacker, defender, mult = 1, kind = 'phys', crit = f
   return Math.max(1, Math.floor(base * (crit ? CRIT_MULT : 1) * (1 - red)))
 }
 
+// ===== 回復 =====
+// HP回復もMP回復も INT を参照する（あるけみすとの「神聖なる手 INT×1.5」と同じ考え方）。
+// 最大HP/MPの％では参照しない＝HPを積んだだけ回復量まで伸びる、という歪みを作らないため。
+// ※あるけみすとの回復表記にある ×(1.0〜0.5) の揺れは入れていない（回復量は毎回同じ）
+export const healOf = (actor, rate) => Math.max(1, Math.floor((actor?.int_stat || 0) * rate))
+
 // 1回の攻撃を解決する。外れ／クリティカルもここで決める（戦闘ループから使う想定）
 export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', defPen = 0, add = null, sureHit = false, sureCrit = false }, rng = Math.random) => {
   const hit = sureHit || roll(hitRate(attacker, defender), rng)

@@ -8,8 +8,8 @@ import {
   calcPower, expToNext, expPerLv, canJobChange,
 } from '../lib/stats.js'
 import { TIER_LABEL, TIER_ORDER, TIER_COLOR, missingReqs, canBecome, reqText, proofCount } from '../lib/classes.js'
-import { skillsOf, powerText, expectedDamage, KIND_LABEL, KIND_COLOR } from '../lib/skills.js'
-import { damageOf } from '../lib/combat.js'
+import { skillsOf, powerText, expectedDamage, expectedHeal, KIND_LABEL, KIND_COLOR } from '../lib/skills.js'
+import { damageOf, healOf } from '../lib/combat.js'
 
 // ============================================================
 // バトルフロンティアⅡ（リメイク版）ホーム — 開発限定
@@ -223,6 +223,7 @@ export default function V2Home() {
                 <div style={{ display:'grid', gap:'4px' }}>
                   {skillsOf(prof.class).map(s => {
                     const dmg = expectedDamage(s, prof, prof, damageOf)
+                    const heal = expectedHeal(s, prof, healOf)
                     return (
                       <div key={s.name} style={{ background:'#000818', border:'1px solid #002244', padding:'7px 9px' }}>
                         <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:'8px' }}>
@@ -235,6 +236,7 @@ export default function V2Home() {
                         <div style={{ color:'#556677', fontSize:'9px', marginTop:'3px' }}>
                           {powerText(s)}
                           {dmg > 0 && <span style={{ color:'#88ddaa', marginLeft:'6px' }}>同格相手に期待{dmg}</span>}
+                          {heal > 0 && <span style={{ color:'#44ff88', marginLeft:'6px' }}>期待{heal}{s.mpRegen ? 'MP' : '回復'}</span>}
                         </div>
                       </div>
                     )
