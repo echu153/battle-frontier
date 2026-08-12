@@ -48,21 +48,21 @@ export const SKILLS = [
 
   // ===== 弓使い（命中・素早さ） =====
   { name:'狙撃',     cls:'弓使い', kind:'phys', mult:1.0, add:[{ stat:'agi', rate:0.6 }], proc:90, mp:8, sureHit:true, desc:'必中。AGIも威力になる' },
-  { name:'剛射',     cls:'弓使い', kind:'phys', mult:1.8, proc:85, mp:11, desc:'強く引き絞って射る' },
+  { name:'剛射',     cls:'弓使い', kind:'phys', mult:1.9, proc:85, mp:11, desc:'強く引き絞って射る' },
   { name:'貫通射撃', cls:'弓使い', kind:'phys', mult:1.5, defPen:0.3, proc:85, mp:12, desc:'相手の防御を30%無視' },
   { name:'疾風矢',   cls:'弓使い', kind:'phys', mult:1.1, add:[{ stat:'agi', rate:0.5 }], proc:90, mp:8, desc:'速射。AGIも威力になる' },
   { name:'駆け足',   cls:'弓使い', kind:'buff', proc:100, mp:6, buff:{ self:{ agi:30 }, turns:3 }, desc:'3ターンAGI+30%' },
 
   // ===== 魔法使い（火力特化） =====
-  { name:'マジックアロー', cls:'魔法使い', kind:'mag', mult:1.2, proc:95, mp:5,  desc:'消費が軽い基本の魔法' },
-  { name:'ファイア',       cls:'魔法使い', kind:'mag', mult:1.7, proc:90, mp:11, desc:'火の魔法' },
-  { name:'サンダー',       cls:'魔法使い', kind:'mag', mult:2.0, proc:80, mp:15, desc:'初期職では最大級の威力。出にくい' },
-  { name:'アイスランス',   cls:'魔法使い', kind:'mag', mult:1.4, proc:85, mp:12, buff:{ enemy:{ agi:-20 }, turns:3 }, desc:'3ターン相手のAGI-20%' },
+  { name:'マジックアロー', cls:'魔法使い', kind:'mag', mult:1.4, proc:95, mp:5,  desc:'消費が軽い基本の魔法' },
+  { name:'ファイア',       cls:'魔法使い', kind:'mag', mult:1.95, proc:90, mp:11, desc:'火の魔法' },
+  { name:'サンダー',       cls:'魔法使い', kind:'mag', mult:2.3, proc:80, mp:15, desc:'初期職では最大級の威力。出にくい' },
+  { name:'アイスランス',   cls:'魔法使い', kind:'mag', mult:1.6, proc:85, mp:12, buff:{ enemy:{ agi:-20 }, turns:3 }, desc:'3ターン相手のAGI-20%' },
   { name:'精神統一',       cls:'魔法使い', kind:'buff', proc:100, mp:8, buff:{ self:{ int_stat:30 }, turns:3 }, desc:'3ターンINT+30%' },
 
   // ===== 僧侶（回復・支援） =====
-  { name:'ライト',       cls:'僧侶', kind:'mag', mult:1.3, proc:95, mp:6,  desc:'光の魔法' },
-  { name:'ライトニング', cls:'僧侶', kind:'mag', mult:1.8, proc:85, mp:13, desc:'僧侶の攻撃手段の要' },
+  { name:'ライト',       cls:'僧侶', kind:'mag', mult:1.5, proc:95, mp:6,  desc:'光の魔法' },
+  { name:'ライトニング', cls:'僧侶', kind:'mag', mult:2.05, proc:85, mp:13, desc:'僧侶の攻撃手段の要' },
   { name:'ヒール',       cls:'僧侶', kind:'heal', proc:80, mp:12, heal:{ rate:1.4 }, desc:'INT×1.4を回復' },
   { name:'祈祷',         cls:'僧侶', kind:'heal', proc:80, mp:15, regen:{ rate:0.5, turns:4 }, desc:'4ターン毎ターンINT×0.5を回復' },
   { name:'プロテク',     cls:'僧侶', kind:'buff', proc:100, mp:10, buff:{ self:{ vit:20, int_stat:20 }, turns:3 }, desc:'3ターンVIT・INT+20%' },
@@ -75,10 +75,10 @@ export const SKILLS = [
   { name:'残心',   cls:'格闘家', kind:'buff', proc:100, mp:8, buff:{ self:{ dex:20, agi:20 }, turns:3 }, desc:'3ターンDEX・AGI+20%' },
 
   // ===== サモナー（魔法・補助） =====
-  { name:'オオカミ召喚',   cls:'サモナー', kind:'mag', mult:1.3, proc:90, mp:8,  desc:'狼を呼んで噛みつかせる' },
-  { name:'小悪魔召喚',     cls:'サモナー', kind:'mag', mult:1.7, proc:90, mp:11, desc:'小悪魔を呼ぶ' },
-  { name:'グリフォン召喚', cls:'サモナー', kind:'mag', mult:1.4, proc:85, mp:13, buff:{ self:{ agi:20 }, turns:2 }, desc:'2ターンAGI+20%' },
-  { name:'群れの号令',     cls:'サモナー', kind:'mag', mult:0.5, hits:3, proc:85, mp:14, desc:'3連撃' },
+  { name:'オオカミ召喚',   cls:'サモナー', kind:'mag', mult:1.5, proc:90, mp:8,  desc:'狼を呼んで噛みつかせる' },
+  { name:'小悪魔召喚',     cls:'サモナー', kind:'mag', mult:1.95, proc:90, mp:11, desc:'小悪魔を呼ぶ' },
+  { name:'グリフォン召喚', cls:'サモナー', kind:'mag', mult:1.6, proc:85, mp:13, buff:{ self:{ agi:20 }, turns:2 }, desc:'2ターンAGI+20%' },
+  { name:'群れの号令',     cls:'サモナー', kind:'mag', mult:0.55, hits:3, proc:85, mp:14, desc:'3連撃' },
   { name:'魔力供給',       cls:'サモナー', kind:'heal', proc:80, mp:0, mpRegen:{ rate:0.3, turns:4 }, desc:'4ターン毎ターンINT×0.3のMPを回復。消費MPなし' },
 ]
 

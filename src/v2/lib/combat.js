@@ -19,10 +19,15 @@
 // ============================================================
 
 // ===== 防御 =====
-// 防御力そのもの。v2は防御専用ステータスを持たず VIT / INT から算出する
-export const MAG_DEF_INT = 0.5   // 魔法防御に乗る INT の係数
-export const MAG_DEF_VIT = 0.15  // 魔法防御に乗る VIT の係数
-export const physDefOf = (s) => (s?.vit || 0)
+// 防御力そのもの。v2は防御専用ステータスを持たず VIT / INT から算出する。
+//   あるけみすと：物理防御力 = VIT×1.0〜0.5 ／ 魔法防御力 = INT×1.0〜0.5 ＋ VIT×0.15
+// 「1.0〜0.5」は主ステの係数が伸びるほど減る（逓減）ことを表していると解釈し、
+// 係数の起点をどちらも 1.0 に揃えたうえで、逓減そのものは下の reductionRate が担う。
+//   ※2026-08-12まで物理だけ1.0・魔法だけ0.5と取り違えていて、魔法防御が半分になっていた
+export const PHYS_DEF_VIT = 1.0  // 物理防御に乗る VIT の係数
+export const MAG_DEF_INT  = 1.0  // 魔法防御に乗る INT の係数
+export const MAG_DEF_VIT  = 0.15 // 魔法防御に乗る VIT の係数（こちらはレンジなし）
+export const physDefOf = (s) => (s?.vit || 0) * PHYS_DEF_VIT
 export const magDefOf  = (s) => (s?.int_stat || 0) * MAG_DEF_INT + (s?.vit || 0) * MAG_DEF_VIT
 
 // 軽減率の上限。物理は34%・魔法は50%までしか減らない（あるけみすとの 1.0〜0.66 / 1.0〜0.5 と対応）

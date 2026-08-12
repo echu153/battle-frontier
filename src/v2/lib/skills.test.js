@@ -34,8 +34,10 @@ test('全スキルの数値がレンジに収まっている', () => {
     assert.ok(s.mp >= 0 && s.mp <= 30, `${s.name} の消費MP ${s.mp}`)
     assert.ok(s.desc && s.desc.length > 0, `${s.name} の説明`)
     if (s.kind === 'phys' || s.kind === 'mag') {
-      // 初期職は少し低めに置く＝2.0倍を超えない
-      assert.ok(s.mult > 0 && s.mult <= 2.0, `${s.name} の倍率 ${s.mult}`)
+      // 初期職は少し低めに置く。魔法は軽減上限が50%(物理は34%)で防御力も厚いぶん
+      // 倍率を高く取る（あるけみすとも魔法はINT×2.6等と物理より高い）
+      const cap = s.kind === 'mag' ? 2.4 : 2.0
+      assert.ok(s.mult > 0 && s.mult <= cap, `${s.name} の倍率 ${s.mult}（上限${cap}）`)
       assert.ok((s.hits || 1) >= 1 && (s.hits || 1) <= 5, `${s.name} の多段数`)
     } else {
       assert.equal(s.mult, undefined, `${s.name} は倍率を持たない`)
@@ -49,9 +51,11 @@ test('全スキルの数値がレンジに収まっている', () => {
 
 test('強い技ほど発動しにくい（倍率と発動率が逆相関）', () => {
   const atk = SKILLS.filter(s => s.kind === 'phys' || s.kind === 'mag')
-  // 倍率1.8以上の技は発動率90%未満に抑える
+  // 主力級の技は発動率90%未満に抑える。しきい値は魔法のほうが高い
+  // （魔法は軽減上限50%＋防御も厚いので、同じ倍率でも実際の威力は物理より低い）
   for (const s of atk) {
-    if (s.mult >= 1.8) assert.ok(s.proc < 90, `${s.name}: 倍率${s.mult}なのに発動率${s.proc}%`)
+    const strong = s.kind === 'mag' ? 2.0 : 1.8
+    if (s.mult >= strong) assert.ok(s.proc < 90, `${s.name}: 倍率${s.mult}なのに発動率${s.proc}%`)
   }
   // 倍率1.2以下の軽い技は90%以上出る
   for (const s of atk) {

@@ -19,9 +19,15 @@ const evenStats = (power) => {
 }
 
 test('防御力は VIT / INT+VIT から出す（防御専用ステは持たない）', () => {
+  // あるけみすと：物理=VIT×1.0〜0.5 / 魔法=INT×1.0〜0.5＋VIT×0.15
+  // ★主ステの係数は物理も魔法も同じ「1.0〜0.5」。起点の1.0で揃えること。
+  //   2026-08-12まで物理1.0・魔法0.5と取り違えていて魔法防御が半分になっていた
   const s = { vit:100, int_stat:200 }
   assert.equal(physDefOf(s), 100)
-  assert.equal(magDefOf(s), 200 * 0.5 + 100 * 0.15)  // 115
+  assert.equal(magDefOf(s), 200 * 1.0 + 100 * 0.15)  // 215
+  // 同じ値のステなら魔法防御のほうが厚い（VIT×0.15ぶん）＝魔法は倍率で補う
+  const even = { vit:100, int_stat:100 }
+  assert.ok(magDefOf(even) > physDefOf(even))
 })
 
 test('軽減率は上限を超えず、防御0なら0', () => {
