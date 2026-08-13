@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  PHYS_REDUCTION_CAP, MAG_REDUCTION_CAP, CRIT_MULT, CRIT_MULT_ADD, HIT_MAX_PCT, HIT_MIN_PCT,
+  PHYS_REDUCTION_CAP, MAG_REDUCTION_CAP, CRIT_MULT, CRIT_MULT_ADD, EVA_RATE_CAP, EVA_RATE_MAX, evasionRate,
   CRIT_MIN_PCT, CRIT_MAX_PCT, CRIT_BASE_PCT, CRIT_ACC_DEX, CRIT_ACC_LUK, critAccuracyStats,
   EXTRA_ACTION_MAX_PCT, EXTRA_ACTION_MAX_RATIO, extraActionRate, rollExtraAction, goesFirst,
   physDefOf, magDefOf, reductionRate, critRate, hitRate, roll, damageOf, resolveAttack,
@@ -130,16 +130,44 @@ test('ダメージは最低1', () => {
   assert.equal(damageOf({ attacker:{ str:0 }, defender:{ vit:10 ** 6 }, mult:0.1 }), 1)
 })
 
-test('命中率は上限と下限の中に収まる', () => {
+test('命中率は「100% − 回避率」で出す', () => {
+  // ★あるけみすとの語彙に合わせた形（向こうも「回避率+3%」「10%の確率で外れる」と%で書く）
   const a = { dex:100 }
-  assert.equal(hitRate(a, { agi:0, vit:0, luk:0 }), HIT_MAX_PCT)        // 回避0なら上限
-  assert.ok(hitRate({ dex:1 }, { agi:10 ** 6 }) >= HIT_MIN_PCT)          // どんなに素早くても下限は保つ
+  assert.equal(hitRate(a, { agi:0, vit:0, luk:0 }), 100)   // 回避スコア0なら必ず当たる
   for (const agi of [10, 50, 100, 500, 5000]) {
     const r = hitRate(a, { agi })
-    assert.ok(r >= HIT_MIN_PCT && r <= HIT_MAX_PCT, `agi=${agi} r=${r}`)
+    assert.equal(Math.round((r + evasionRate(a, { agi })) * 10) / 10, 100, `agi=${agi}`)
+    assert.ok(r >= 100 - EVA_RATE_MAX && r <= 100)
   }
   // 素早い相手ほど当たりにくい
   assert.ok(hitRate(a, { agi:50 }) > hitRate(a, { agi:500 }))
+  // 回避率はステータスだけでは上限を超えない
+  assert.ok(evasionRate({ dex:1 }, { agi:10 ** 9 }) <= EVA_RATE_CAP)
+})
+
+test('DEXを伸ばすほど命中は上がり続ける（頭打ちがない）', () => {
+  // ★旧実装はDEXが相手の回避スコアの1.2倍で95%に張り付き、そこから先が死にステだった
+  const foe = { agi:100, vit:100, luk:100 }
+  let prev = 0
+  for (const dex of [25, 50, 100, 200, 500, 2000]) {
+    const r = hitRate({ dex }, foe)
+    assert.ok(r > prev, `DEX${dex} で伸びていない（${prev}% → ${r}%）`)
+    prev = r
+  }
+  assert.ok(prev > 99, `DEXを極端に伸ばしても ${prev}% 止まり`)
+})
+
+test('命中補正・回避補正は回避率へ素直に足し引きする', () => {
+  // パッシブの「最終命中率+5%」「回避率+5%」がそのまま効く形
+  const a = { dex:100 }, d = { agi:100, vit:100, luk:100 }
+  const base = evasionRate(a, d)
+  assert.equal(evasionRate(a, d, 5, 0), Math.round((base - 5) * 10) / 10)
+  assert.equal(evasionRate(a, d, 0, 5), Math.round((base + 5) * 10) / 10)
+  // 回避率は0未満にならない＝命中100%が上限
+  assert.equal(evasionRate(a, d, 999, 0), 0)
+  assert.equal(hitRate(a, d, 999, 0), 100)
+  // 回避率にも上限がある
+  assert.equal(evasionRate(a, d, 0, 999), EVA_RATE_MAX)
 })
 
 test('クリティカル率はLUK差で動き、上限と下限の中に収まる', () => {

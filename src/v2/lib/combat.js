@@ -68,21 +68,32 @@ export const critRate = (attacker, defender) => {
 }
 
 // ===== 命中・回避 =====
-export const HIT_MAX_PCT = 95    // 命中率の上限（必中スキルを除く）
-export const HIT_MIN_PCT = 40    // 命中率の下限
+// ★あるけみすとは命中・回避の式を公表していない（マスクデータ）。ただし
+//   忍者「影縫い：回避成功毎に回避率+3%」／デバフ「閃光：10%の確率で攻撃が外れる」
+//   という書き方から、向こうは**「回避率」を独立した%で持っている**と読める。
+//   そこでv2も「命中率 = 100% − 回避率」という形にする（式そのものはBF独自）。
+//   ・回避率はステータスから出し、EVA_RATE_CAP に漸近する（防御の軽減率と同じ考え方）
+//   ・パッシブの「最終命中率+5%」「回避率+5%」は、この回避率へ素直に足し引きする
+//   ・DEXを伸ばすほど回避率が0へ近づく＝**命中に頭打ちが無い**
+//     （旧実装はDEXが相手の回避スコアの1.2倍で95%に張り付き、それ以上DEXが死にステだった）
 export const EVA_AGI = 1.0       // 回避に乗る AGI の係数
 export const EVA_VIT = 0.1       // VIT はわずかに回避へ影響する
 export const EVA_LUK = 0.1       // LUK もわずかに回避へ影響する
+export const EVA_RATE_CAP = 35   // ステータス由来の回避率の上限(%)
+export const EVA_RATE_MAX = 60   // 補正込みでの回避率の上限(%)
+export const EVA_CURVE = 2       // 大きいほど「同格では避けにくく、AGI差で伸びる」
 export const evasionScoreOf = (s) =>
   (s?.agi || 0) * EVA_AGI + (s?.vit || 0) * EVA_VIT + (s?.luk || 0) * EVA_LUK
-// DEX と 回避スコアの綱引き。同値なら上限の中間あたりに落ち着く
-export const hitRate = (attacker, defender) => {
-  const dex = Math.max(0, attacker?.dex || 0)
+
+// 回避率(%)。hitBonus は攻撃側の命中補正、evaBonus は防御側の回避補正（どちらもポイント）
+export const evasionRate = (attacker, defender, hitBonus = 0, evaBonus = 0) => {
   const eva = Math.max(0, evasionScoreOf(defender))
-  if (dex + eva <= 0) return HIT_MAX_PCT
-  const ratio = dex / (dex + eva)               // 0〜1
-  return clampPct(HIT_MIN_PCT + (HIT_MAX_PCT - HIT_MIN_PCT) * (ratio * 2), HIT_MIN_PCT, HIT_MAX_PCT)
+  const dex = Math.max(1, attacker?.dex || 0)
+  const base = EVA_RATE_CAP * Math.pow(eva / (eva + dex), EVA_CURVE)
+  return clampPct(base + evaBonus - hitBonus, 0, EVA_RATE_MAX)
 }
+export const hitRate = (attacker, defender, hitBonus = 0, evaBonus = 0) =>
+  clampPct(100 - evasionRate(attacker, defender, hitBonus, evaBonus), 100 - EVA_RATE_MAX, 100)
 
 const clampPct = (v, min, max) => Math.min(max, Math.max(min, Math.round(v * 10) / 10))
 
