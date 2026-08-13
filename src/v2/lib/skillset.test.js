@@ -178,7 +178,7 @@ test('編成どおりの順番と回数で戦闘が回る', () => {
 // ===== パッシブ（未実装。足したときに壊れないための土台） =====
 test('パッシブは発動順のローテーションに入らず、常時の補正として掛かる', () => {
   const passive = { name:'テスト鍛錬', cls:'戦士', kind:'passive', mp:0, proc:100,
-    buff:{ self:{ str:50 } }, desc:'STR+50%' }
+    passive:{ statPct:{ str:50 } }, desc:'STR+50%' }
   const atk = { name:'殴る', cls:'戦士', kind:'phys', mult:1, proc:100, mp:0, sureHit:true, noCrit:true, desc:'' }
   const stats = { ...evenStats(534), hp: 10 ** 7 }
   const withP = runBattle(

@@ -3,8 +3,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   SKILLS, SKILL_BY_NAME, skillsOf, SKILL_CLASSES, BASIC_CLASSES, isBasicClass, isPassive,
-  powerText, expectedDamage, expectedHeal,
+  powerText, expectedDamage, expectedHeal, PASSIVE_EFFECT_KEYS,
 } from './skills.js'
+import { CLASS_BONUS } from './classBonus.js'
 import { damageOf, healOf } from './combat.js'
 import { STAT_KEYS } from './stats.js'
 
@@ -22,16 +23,22 @@ test('全28職がそれぞれ5個ずつスキルを持つ', () => {
 })
 
 test('上位職はそれぞれパッシブを1つだけ持つ', () => {
-  // ★あるけみすとの職業補正に合わせてかなり控えめ（±5〜12%）。初期職にはパッシブを置かない
+  // ★パッシブは複数セットできるので、1つ1つは控えめにする。初期職にはパッシブを置かない
   for (const c of SKILL_CLASSES) {
     const pas = skillsOf(c).filter(isPassive)
     assert.equal(pas.length, isBasicClass(c) ? 0 : 1, `${c}のパッシブ数`)
     for (const s of pas) {
-      assert.ok(s.buff?.self, `${s.name} に効果がない`)
+      assert.ok(s.passive, `${s.name} に効果がない`)
+      assert.equal(s.buff, undefined, `${s.name} は buff ではなく passive に書く`)
       assert.equal(s.mp, 0, `${s.name} は消費MPを持たない`)
       assert.equal(s.proc, undefined, `${s.name} は発動率を持たない`)
-      for (const v of Object.values(s.buff.self)) {
-        assert.ok(Math.abs(v) <= 12, `${s.name} の効果 ${v}% が大きすぎる（控えめにする）`)
+      for (const k of Object.keys(s.passive)) {
+        if (k === 'todo') continue
+        assert.ok(PASSIVE_EFFECT_KEYS.includes(k), `${s.name} の ${k} は battle.js が解釈できない`)
+      }
+      // 単なるステータス+%は職業補正の担当。パッシブ側で書く場合も控えめ（±5%まで）
+      for (const v of Object.values(s.passive.statPct || {})) {
+        assert.ok(Math.abs(v) <= 5, `${s.name} の効果 ${v}% が大きすぎる（複数セットできるので控えめに）`)
       }
     }
   }
@@ -229,8 +236,8 @@ test('LUKは威力の参照に使わない（クリティカル率と回避だ�
       assert.notEqual(a.stat, 'luk', `${s.name} が威力にLUKを参照している`)
     }
   }
-  // バフ・パッシブでLUKを上げるのは可（クリティカル率が上がる＝ギャンブラーらしさ）
-  assert.equal(SKILL_BY_NAME['ギャンブルボディ'].buff.self.luk, 12)
+  // 職業補正やバフでLUKを上げるのは可（クリティカル率が上がる＝ギャンブラーらしさ）
+  assert.equal(CLASS_BONUS['ギャンブラー'].stats.luk, 10)
 })
 
 test('割合消費のスキルは想定利用MPに数えない', () => {

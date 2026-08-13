@@ -61,9 +61,10 @@ export const CRIT_DIFF_PCT = 10
 export const CRIT_MIN_PCT = 1
 export const CRIT_MAX_PCT = 50
 // 自分のLUKが相手より高いほど当たりやすい
-export const critRate = (attacker, defender) => {
+// critBonus はパッシブの「最終クリティカル率+5%」ぶん（上限 CRIT_MAX_PCT には従う）
+export const critRate = (attacker, defender, critBonus = 0) => {
   const diff = (attacker?.luk || 0) - (defender?.luk || 0)
-  const pct = CRIT_BASE_PCT + (diff / CRIT_PER_LUK) * CRIT_DIFF_PCT
+  const pct = CRIT_BASE_PCT + (diff / CRIT_PER_LUK) * CRIT_DIFF_PCT + critBonus
   return clampPct(pct, CRIT_MIN_PCT, CRIT_MAX_PCT)
 }
 
@@ -167,10 +168,13 @@ export const healOf = (actor, rate) => Math.max(1, Math.floor((actor?.int_stat |
 // noCrit: クリティカルしないスキル。あるけみすとにも「クリティカルするスキルとしないスキル」がある。
 //   クリの固定加算(＋1.5)は元の係数によらないため、多段スキルほど恩恵が大きい。
 //   多段を noCrit にして、そのぶん素の倍率を上げるのがv2の方針（バランスが安定する）。
-export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', defPen = 0, add = null, sureHit = false, sureCrit = false, noCrit = false }, rng = Math.random) => {
-  const crit = !noCrit && (sureCrit || roll(critRate(attacker, defender), rng))
+// hitBonus/evaBonus/critBonus はパッシブぶんの補正（ポイント）。
+//   hitBonus … 攻撃側の「最終命中率+n%」 ／ evaBonus … 防御側の「回避率+n%」
+//   critBonus … 攻撃側の「最終クリティカル率+n%」
+export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', defPen = 0, add = null, sureHit = false, sureCrit = false, noCrit = false, hitBonus = 0, evaBonus = 0, critBonus = 0 }, rng = Math.random) => {
+  const crit = !noCrit && (sureCrit || roll(critRate(attacker, defender, critBonus), rng))
   const acc = crit ? critAccuracyStats(attacker) : attacker
-  const hit = sureHit || roll(hitRate(acc, defender), rng)
+  const hit = sureHit || roll(hitRate(acc, defender, hitBonus, evaBonus), rng)
   if (!hit) return { hit:false, crit, damage:0 }
   return { hit:true, crit, damage: damageOf({ attacker, defender, mult, kind, crit, defPen, add }) }
 }

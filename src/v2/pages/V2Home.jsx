@@ -8,6 +8,7 @@ import {
   calcPower, expToNext, expPerLv, canJobChange,
 } from '../lib/stats.js'
 import { TIER_LABEL, TIER_ORDER, TIER_COLOR, missingReqs, canBecome, reqText, proofCount } from '../lib/classes.js'
+import { classBonusText } from '../lib/classBonus.js'
 import {
   powerText, isPassive, KIND_LABEL, KIND_COLOR, SKILL_BY_NAME,
   usableSkills, usableSkillNames, unlearnedSkills, validateSkillSet, setMpCost,
@@ -281,6 +282,14 @@ export default function V2Home() {
                 <span style={{ color:'#ffcc00', fontSize:'14px' }}>{calcPower(prof)}</span>
               </div>
 
+              {/* 職業補正：いまの職業に就いている間だけ常時かかる。枠を使わない */}
+              {classBonusText(prof.class) && (
+                <div style={{ background:'#000818', border:'1px solid #223355', padding:'8px 10px', marginBottom:'12px' }}>
+                  <div style={{ color:'#446688', fontSize:'10px', marginBottom:'3px' }}>職業補正（{prof.class}でいる間ずっと・枠を使いません）</div>
+                  <div style={{ color:'#88ddaa', fontSize:'12px' }}>{classBonusText(prof.class)}</div>
+                </div>
+              )}
+
               {/* ステータス8種 */}
               <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'6px' }}>
                 {STAT_KEYS.map(k => {
@@ -477,6 +486,9 @@ export default function V2Home() {
                                 <div style={{ color: ok ? '#556677' : '#775544', fontSize:'9px', marginTop:'3px' }}>
                                   {ok ? reqText(c) : `未達：${miss.join(' ／ ')}`}
                                 </div>
+                                {classBonusText(c.id) && (
+                                  <div style={{ color:'#88ddaa', fontSize:'9px', marginTop:'2px' }}>職業補正 {classBonusText(c.id)}</div>
+                                )}
                                 {confirmJob === c.id && (
                                   <div style={{ marginTop:'6px' }}>
                                     <div style={{ color:'#ffaa66', fontSize:'10px', marginBottom:'6px' }}>
@@ -498,7 +510,7 @@ export default function V2Home() {
                   <div style={{ color:'#446688', fontSize:'9px', lineHeight:'1.8' }}>
                     ×N＝その職業で転職した回数。上位職の条件はこの回数を見ます。
                     証は転職のときに1個消費します（同じ職業に戻るにはもう1個要ります）。
-                    職業による能力差はまだありません（スキルを実装するときに付けます）。
+                    上位職には「職業補正」（その職業でいる間だけ常時かかる能力）が付きます。スキル枠は使いません。
                   </div>
                 </div>
               )}
