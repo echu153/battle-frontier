@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  PHYS_REDUCTION_CAP, MAG_REDUCTION_CAP, CRIT_MULT, CRIT_MULT_ADD, EVA_RATE_CAP, EVA_RATE_MAX, evasionRate,
+  PHYS_REDUCTION_CAP, MAG_REDUCTION_CAP, CRIT_MULT, CRIT_MULT_ADD, EVA_RATE_MAX, evasionRate, damageFloor, DMG_SPREAD,
   CRIT_MIN_PCT, CRIT_MAX_PCT, CRIT_BASE_PCT, CRIT_ACC_DEX, CRIT_ACC_LUK, critAccuracyStats,
   EXTRA_ACTION_MAX_PCT, EXTRA_ACTION_MAX_RATIO, extraActionRate, rollExtraAction, goesFirst,
   physDefOf, magDefOf, reductionRate, critRate, hitRate, roll, damageOf, resolveAttack,
@@ -141,20 +141,65 @@ test('命中率は「100% − 回避率」で出す', () => {
   }
   // 素早い相手ほど当たりにくい
   assert.ok(hitRate(a, { agi:50 }) > hitRate(a, { agi:500 }))
-  // 回避率はステータスだけでは上限を超えない
-  assert.ok(evasionRate({ dex:1 }, { agi:10 ** 9 }) <= EVA_RATE_CAP)
+  // 回避率はどこまでいっても上限を超えない
+  assert.ok(evasionRate({ dex:1 }, { agi:10 ** 9 }) <= EVA_RATE_MAX)
 })
 
-test('DEXを伸ばすほど命中は上がり続ける（頭打ちがない）', () => {
-  // ★旧実装はDEXが相手の回避スコアの1.2倍で95%に張り付き、そこから先が死にステだった
+test('DEXを伸ばすほど命中は100%へ近づく（人為的な頭打ちがない）', () => {
+  // ★旧実装はDEXが相手の回避スコアの1.2倍で95%に張り付いていた（そこから先が死にステ）。
+  //   いまは本当に100%へ到達するまで伸びる。到達したあとのDEXは
+  //   ダメージの下限（damageFloor）のほうで働く
   const foe = { agi:100, vit:100, luk:100 }
   let prev = 0
   for (const dex of [25, 50, 100, 200, 500, 2000]) {
     const r = hitRate({ dex }, foe)
-    assert.ok(r > prev, `DEX${dex} で伸びていない（${prev}% → ${r}%）`)
+    assert.ok(r >= prev, `DEX${dex} で下がっている（${prev}% → ${r}%）`)
+    if (prev < 100) assert.ok(r > prev || r === 100, `DEX${dex} で伸びていない（${prev}%）`)
     prev = r
   }
-  assert.ok(prev > 99, `DEXを極端に伸ばしても ${prev}% 止まり`)
+  assert.equal(prev, 100)
+  // 速い相手には100%に届かず、DEXの伸びしろが残る
+  const fast = { agi:2000, vit:100, luk:100 }
+  assert.ok(hitRate({ dex:200 }, fast) < hitRate({ dex:2000 }, fast))
+})
+
+test('DEXはダメージの下限も持ち上げる（振れ幅が縮む）', () => {
+  // ★DEXの2つ目の仕事。命中には100%の天井があるので、命中だけだとDEXは
+  //   伸ばしても+11%の保険にしかならず、相手が鈍いと文字通り無価値だった。
+  //   安定度は **DEXと自分の主ステータス** で測る（相手基準にすると、AGI型が相手のとき
+  //   下限が上がらず一番必要な場面で効かない）。
+  const even = { str:100, int_stat:100, dex:100 }
+  assert.equal(damageFloor(even, 'phys'), 1 - DMG_SPREAD / 2)          // 同値なら安定度0.5
+  assert.ok(damageFloor({ ...even, dex:300 }, 'phys') > damageFloor(even, 'phys'))
+  // DEXを伸ばすほど1.00へ近づく＝振れ幅が縮む。ただし1.00は超えない
+  let prev = 0
+  for (const dex of [50, 100, 300, 1000, 10 ** 5]) {
+    const f = damageFloor({ ...even, dex }, 'phys')
+    assert.ok(f > prev && f < 1, `DEX${dex} の下限 ${f}`)
+    prev = f
+  }
+  // 主ステが違えば下限も違う（魔法職はINTと比べる）
+  assert.ok(damageFloor({ str:100, int_stat:400, dex:100 }, 'mag') < damageFloor({ str:100, int_stat:400, dex:100 }, 'phys'))
+  // 相手の強さでは変わらない＝誰が相手でも効く
+  assert.equal(damageFloor(even, 'phys'), damageFloor(even, 'phys'))
+})
+
+test('攻撃のダメージは下限〜1.00倍の間に収まる', () => {
+  const a = { str:100, int_stat:100, dex:100, luk:0 }
+  const d = { vit:100, int_stat:100, agi:0, luk:0 }
+  const max = damageOf({ attacker:a, defender:d, mult:2 })
+  const lo = damageFloor(a, 'phys')
+  const seen = []
+  const rng = makeRng(2468)
+  for (let i = 0; i < 4000; i++) {
+    seen.push(resolveAttack({ attacker:a, defender:d, mult:2, sureHit:true, noCrit:true }, rng).damage)
+  }
+  const comp = 1 / (1 - DMG_SPREAD / 4)   // 幅を入れたぶんの補正
+  assert.ok(Math.min(...seen) >= Math.floor(max * lo * comp) - 1, `下限を割っている ${Math.min(...seen)}`)
+  assert.ok(Math.max(...seen) <= Math.ceil(max * comp), `上限を超えている ${Math.max(...seen)}`)
+  // 平均は補正のおかげで素のダメージとほぼ同じ
+  const avg = seen.reduce((t, x) => t + x, 0) / seen.length
+  assert.ok(Math.abs(avg / max - 1) < 0.06, `平均がずれている ${(avg / max).toFixed(3)}`)
 })
 
 test('命中補正・回避補正は回避率へ素直に足し引きする', () => {

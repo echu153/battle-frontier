@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { runBattle, createSide, peekSkill, attackKindOf, mpCostOf, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
 import { skillsOf } from './skills.js'
+import { damageFloor } from './combat.js'
 
 const makeRng = (seed) => {
   let s = seed >>> 0
@@ -139,9 +140,12 @@ test('バフは戦闘中ずっと続き、重ねがけで加算される', () =>
   assert.ok(hits.length >= 4)
   assert.ok(hits[hits.length - 1].damage > hits[0].damage,
     `積み上がっていない: 最初${hits[0].damage} / 最後${hits[hits.length - 1].damage}`)
-  // 積み終わったあとは切れずに一定
-  const last = hits.slice(-2)
-  assert.equal(last[0].damage, last[1].damage, 'バフが途中で切れている')
+  // 積み終わったあとは切れずに一定。★ダメージには振れ幅があるので、
+  //   2発が「下限〜1.00倍」の帯に収まっていることで確かめる（切れたら6割落ちる）
+  const last = hits.slice(-2).map(h => h.damage)
+  const floor = damageFloor(evenStats(534), 'phys')
+  assert.ok(Math.min(...last) >= Math.max(...last) * floor * 0.99,
+    `バフが途中で切れている: ${last.join(' / ')}`)
 })
 
 test('デバフを重ねてもステータスは0未満にならない', () => {

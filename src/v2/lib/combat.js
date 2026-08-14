@@ -77,12 +77,20 @@ export const critRate = (attacker, defender, critBonus = 0) => {
 //   ・パッシブの「最終命中率+5%」「回避率+5%」は、この回避率へ素直に足し引きする
 //   ・DEXを伸ばすほど回避率が0へ近づく＝**命中に頭打ちが無い**
 //     （旧実装はDEXが相手の回避スコアの1.2倍で95%に張り付き、それ以上DEXが死にステだった）
+// ★曲線の狙い（2026-08-14 再較正）：
+//   **同格ではほぼ当たる（95%）が、DEXとAGIに差がつくと一気に当たらなくなる**。
+//   装備でステータスを狙って伸ばせるので、AGI型・DEX型を作った意味が出るようにする。
+//   ・EVA_COEF は「上限」ではなく係数。実際の上限は EVA_RATE_MAX
+//   ・EVA_CURVE=5 で急峻。相手AGI3倍で命中73.4%・10倍で35.1%（旧式は79.7%・71.0%）
+//   ・DEXを3倍積めば相手AGI10倍でも71.5%まで戻せる（取り返し幅は最大+36ポイント）
+//   ・CURVE=6まで立てると、AGI20倍あたりで下限に張り付いてDEXを積んでも取り返せない
+//     区間ができるので5で止めている
 export const EVA_AGI = 1.0       // 回避に乗る AGI の係数
 export const EVA_VIT = 0.1       // VIT はわずかに回避へ影響する
 export const EVA_LUK = 0.1       // LUK もわずかに回避へ影響する
-export const EVA_RATE_CAP = 35   // ステータス由来の回避率の上限(%)
-export const EVA_RATE_MAX = 60   // 補正込みでの回避率の上限(%)
-export const EVA_CURVE = 2       // 大きいほど「同格では避けにくく、AGI差で伸びる」
+export const EVA_COEF = 104      // 回避率の係数（同格の回避率が5%＝命中95%になる値）
+export const EVA_RATE_MAX = 75   // 補正込みでの回避率の上限(%)＝命中は最低25%
+export const EVA_CURVE = 5       // 大きいほど「同格では避けにくく、AGI差で急に伸びる」
 export const evasionScoreOf = (s) =>
   (s?.agi || 0) * EVA_AGI + (s?.vit || 0) * EVA_VIT + (s?.luk || 0) * EVA_LUK
 
@@ -90,7 +98,7 @@ export const evasionScoreOf = (s) =>
 export const evasionRate = (attacker, defender, hitBonus = 0, evaBonus = 0) => {
   const eva = Math.max(0, evasionScoreOf(defender))
   const dex = Math.max(1, attacker?.dex || 0)
-  const base = EVA_RATE_CAP * Math.pow(eva / (eva + dex), EVA_CURVE)
+  const base = EVA_COEF * Math.pow(eva / (eva + dex), EVA_CURVE)
   return clampPct(base + evaBonus - hitBonus, 0, EVA_RATE_MAX)
 }
 export const hitRate = (attacker, defender, hitBonus = 0, evaBonus = 0) =>
@@ -168,6 +176,27 @@ export const healOf = (actor, rate) => Math.max(1, Math.floor((actor?.int_stat |
 // noCrit: クリティカルしないスキル。あるけみすとにも「クリティカルするスキルとしないスキル」がある。
 //   クリの固定加算(＋1.5)は元の係数によらないため、多段スキルほど恩恵が大きい。
 //   多段を noCrit にして、そのぶん素の倍率を上げるのがv2の方針（バランスが安定する）。
+// ===== ダメージの振れ幅（DEXの担当）=====
+// ★DEXに「命中」以外の仕事をもう1つ持たせるための仕組み（2026-08-14）。
+//   命中には100%という天井があるので、DEXは命中だけでは伸びしろが+11%しかなく、
+//   しかも相手が鈍いと文字通り無価値だった（実測で戦闘力+150をDEXに全振りしても勝率62.9%。
+//   同じ戦闘力をSTRに振れば75.4%）。
+//   そこで **ダメージを「下限〜1.00倍」の幅にして、DEXが下限を持ち上げる** ことにした。
+//   ラグナロクオンラインの「DEXが最小攻撃力を底上げする」と同じ発想。
+//   あるけみすとの表記 `STR×倍率×(1.0〜0.66)` も幅を持っているので、そちらにも寄る。
+//
+// ★安定度は **DEX と「自分の主ステータス(STR/INT)」** で測る。相手と比べる形にすると、
+//   AGI型が相手のときに下限が上がらず、一番必要な場面で効かなくなる（実測済み）。
+//   自分基準なら**相手が誰でも効く無条件の仕事**になり、かつスケール不変も保てる。
+export const DMG_SPREAD = 0.65             // 安定度0のときにここまで下がる（同格は0.68〜1.00倍）
+export const DMG_COMP = 1 / (1 - DMG_SPREAD / 4)  // 幅を入れたぶん平均が下がるので戻す係数
+// 下限(0〜1)。DEXが主ステより大きいほど1.00へ近づく＝振れ幅が縮む
+export const damageFloor = (attacker, kind = 'phys') => {
+  const dex = Math.max(1, attacker?.dex || 0)
+  const main = Math.max(1, attackStatOf(attacker, kind))
+  return 1 - DMG_SPREAD * (1 - dex / (dex + main))
+}
+
 // hitBonus/evaBonus/critBonus はパッシブぶんの補正（ポイント）。
 //   hitBonus … 攻撃側の「最終命中率+n%」 ／ evaBonus … 防御側の「回避率+n%」
 //   critBonus … 攻撃側の「最終クリティカル率+n%」
@@ -176,5 +205,9 @@ export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', def
   const acc = crit ? critAccuracyStats(attacker) : attacker
   const hit = sureHit || roll(hitRate(acc, defender, hitBonus, evaBonus), rng)
   if (!hit) return { hit:false, crit, damage:0 }
-  return { hit:true, crit, damage: damageOf({ attacker, defender, mult, kind, crit, defPen, add }) }
+  // ダメージの振れ幅。DEXが高いほど下限が1.00へ寄って安定する
+  const lo = damageFloor(attacker, kind)
+  const scale = (lo + (1 - lo) * rng()) * DMG_COMP
+  const dmg = Math.max(1, Math.floor(damageOf({ attacker, defender, mult, kind, crit, defPen, add }) * scale))
+  return { hit:true, crit, damage: dmg }
 }
