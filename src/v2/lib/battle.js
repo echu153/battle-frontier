@@ -169,11 +169,12 @@ export const peekSkill = (side) => {
   return idx === null ? null : side.slots[idx].skill
 }
 
-// 受けるとき側の軽減。骸の壁（常時）と竜鱗の加護（確率）はここでまとめて掛ける
+// 受けるとき側の軽減。骸の壁（1回きり）と竜鱗の加護（確率）はここでまとめて掛ける
 const applyIncoming = (foe, dmg, rng, log) => {
   if (dmg <= 0) return 0
   let d = dmg
-  if (foe.wallPct) d *= (1 - foe.wallPct / 100)
+  // 骸の壁：**1回ダメージを受けると消える**。取り直すまで効かない
+  if (foe.wallPct) { d *= (1 - foe.wallPct / 100); foe.wallPct = 0; log.push({ side: foe.name, type: 'wall' }) }
   const dc = foe.pa.dodgeCut
   if (dc && roll(dc.pct, rng)) {
     d *= (1 - dc.cut / 100)

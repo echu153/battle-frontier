@@ -178,10 +178,22 @@ test('天啓：発動率+5%（100%は超えない）', () => {
   assert.ok(fires([{ skill: passiveOf('賢者'), uses:1 }, { skill:flaky, uses:99 }]) >= fires([{ skill:flaky, uses:99 }]))
 })
 
-test('骸の壁：被ダメージ10%減（重複しない＝何度取り直しても10%のまま）', () => {
+test('骸の壁：次に受けるダメージを10%減らし、1回受けると消える', () => {
   assert.deepEqual(SKILL_BY_NAME['骸の壁'].passive, { wall:{ pct:10, every:5 } })
   const s = sideWith('死霊使い', evenStats(534))
   assert.equal(s.wallPct, 10, '戦闘開始時から乗っていない')
+  const stats = { ...evenStats(534), hp: 10 ** 7 }
+  const atk = { name:'素撃ち', cls:'戦士', kind:'phys', mult:2, proc:100, mp:0, sureHit:true, noCrit:true, desc:'' }
+  const r = runBattle(
+    { name:'foe', cls:'戦士', stats, slots:[{ skill:atk, uses:99 }] },
+    { name:'me', cls:'死霊使い', stats, slots:[{ skill: passiveOf('死霊使い'), uses:1 }] },
+    { rng: mkRng(21), maxTurns: 3 })
+  const wall = r.log.filter(l => l.type === 'wall')
+  assert.equal(wall.length, 1, '1回受けたら消えるはず')
+  assert.equal(r.b.wallPct, 0)
+  // 2発目以降は素通し（1発目だけ軽い）
+  const hits = r.log.filter(l => l.side === 'foe' && l.type === 'skill').map(l => l.damage)
+  assert.ok(hits.length >= 2 && hits[0] < hits[1], `1発目が軽くなっていない: ${hits.join(',')}`)
 })
 
 test('心身一如：デバフを1回だけ打ち消す', () => {
@@ -216,11 +228,11 @@ test('竜鱗の加護：被ダメージ時10%で25%カット', () => {
   assert.ok(taken([{ skill: passiveOf('竜騎士'), uses:1 }]) < taken([]), 'カットが効いていない')
 })
 
-test('ギャンブルボディ：当たったとき20%で1.2倍・10%で0.9倍（期待値は+3%）', () => {
+test('ギャンブルボディ：当たったとき30%で1.2倍・20%で0.9倍（期待値は+4%）', () => {
   const g = SKILL_BY_NAME['ギャンブルボディ'].passive.gamble
-  assert.deepEqual(g, { up:20, upMult:1.2, down:10, downMult:0.9 })
+  assert.deepEqual(g, { up:30, upMult:1.2, down:20, downMult:0.9 })
   const ev = (g.up / 100) * g.upMult + (g.down / 100) * g.downMult + (1 - (g.up + g.down) / 100)
-  assert.ok(Math.abs(ev - 1.03) < 1e-9, `期待値 ${ev}`)
+  assert.ok(Math.abs(ev - 1.04) < 1e-9, `期待値 ${ev}`)
 })
 
 test('パッシブは複数セットできて、効果が合算される', () => {

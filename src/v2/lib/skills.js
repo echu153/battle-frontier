@@ -49,7 +49,8 @@ export const isPassive = (s) => s?.kind === 'passive'
 //                 **不発・通常攻撃・自分の攻撃が全部外れたときにリセット**（補助スキルではリセットしない）
 //   switchStat  : { stat, pct } 直前に使ったスキルと違うスキルを使うとき、その行動だけ stat +pct%（重複しない）
 //   lowHp       : { stat, max, at } HPが減るほど stat が上がる。HP割合が at% まで下がると max% で頭打ち
-//   wall        : { pct, every } 戦闘開始時と自分の行動 every 回ごとに「被ダメ pct% 減」を得る（重複しない）
+//   wall        : { pct, every } 戦闘開始時と自分の行動 every 回ごとに「次に受けるダメージを pct% 減らす」を得る。
+//                 **重複せず、1回ダメージを受けると消える**（取り直すまで効かない）
 //   gamble      : { up, upMult, down, downMult } スキルが当たったとき、up% で upMult 倍・down% で downMult 倍
 //   dodgeCut    : { pct, cut } ダメージを受けるとき pct% の確率で cut% カット
 //   debuffGuard : 戦闘中この回数だけ、相手から受けるデバフを打ち消す
@@ -181,7 +182,7 @@ export const SKILLS = [
   // ===== 死霊使い（INT＋VIT・吸収） =====
   { name:'骸骨召喚',   cls:'死霊使い', kind:'mag', mult:2.1, proc:90, mp:11, desc:'骸骨を呼ぶ' },
   { name:'ソウルドレイン', cls:'死霊使い', kind:'mag', mult:2.2, drain:0.4, proc:85, mp:15, desc:'与えたダメージの40%を吸収' },
-  { name:'骸の壁',     cls:'死霊使い', kind:'passive', mp:0, passive:{ wall:{ pct:10, every:5 } }, desc:'戦闘開始時と自分の行動5回ごとに被ダメージ10%減（重複しない）' },
+  { name:'骸の壁',     cls:'死霊使い', kind:'passive', mp:0, passive:{ wall:{ pct:10, every:5 } }, desc:'戦闘開始時と自分の行動5回ごとに「次に受けるダメージ10%減」を得る（重複しない・1回受けると消える）' },
   { name:'腐敗霧',     cls:'死霊使い', kind:'mag', mult:2, proc:85, mp:16, buff:{ enemy:{ vit:-25, int_stat:-25 } }, desc:'相手のVIT・INT-25%（重ねがけ可）' },
   { name:'幽世ノ門',   cls:'死霊使い', kind:'mag', mult:2.7, drain:0.3, proc:80, mp:20, desc:'与えたダメージの30%を吸収' },
 
@@ -244,7 +245,7 @@ export const SKILLS = [
   // ===== ギャンブラー（LUK一点） =====
   { name:'ジャグリング',     cls:'ギャンブラー', kind:'phys', mult:0.7, hits:4, proc:85, mp:15, noCrit:true, desc:'4連撃。クリティカルしない' },
   { name:'ラッキーダイス',   cls:'ギャンブラー', kind:'phys', mult:2.2, proc:85, mp:13, desc:'出たとこ勝負の一撃' },
-  { name:'ギャンブルボディ', cls:'ギャンブラー', kind:'passive', mp:0, passive:{ gamble:{ up:20, upMult:1.2, down:10, downMult:0.9 } }, desc:'スキルが当たったとき、20%で威力1.2倍・10%で威力0.9倍' },
+  { name:'ギャンブルボディ', cls:'ギャンブラー', kind:'passive', mp:0, passive:{ gamble:{ up:30, upMult:1.2, down:20, downMult:0.9 } }, desc:'スキルが当たったとき、30%で威力1.2倍・20%で威力0.9倍' },
   { name:'オールイン',       cls:'ギャンブラー', kind:'buff', proc:100, mp:18, buff:{ self:{ str:50, vit:-30 } }, priority:1, desc:'STR+50%・VIT-30%（重ねがけ可）' },
   { name:'ジャックポット',   cls:'ギャンブラー', kind:'phys', mult:3.0, proc:75, mp:24, desc:'ギャンブラーの切り札' },
 
