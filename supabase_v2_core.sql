@@ -1190,3 +1190,23 @@ $$;
 revoke all on function public.v2_debug_grant_equip(text, int) from public;
 revoke all on function public.v2_debug_grant_equip(text, int) from anon;
 grant execute on function public.v2_debug_grant_equip(text, int) to authenticated;
+
+-- ===== 8. プロフィール（アイコン） =====
+-- 旧版と同じ avatars バケットの画像をそのまま使う（v2で画像を増やす必要はない）
+alter table public.v2_profiles add column if not exists avatar_url text;
+
+create or replace function public.v2_set_avatar(p_url text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid();
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if p_url is not null and length(p_url) > 500 then
+    return jsonb_build_object('ok', false, 'error', 'URLが長すぎます');
+  end if;
+  update public.v2_profiles set avatar_url = p_url, updated_at = now() where id = v_uid;
+  return jsonb_build_object('ok', true, 'avatar_url', p_url);
+end;
+$$;
+revoke all on function public.v2_set_avatar(text) from public;
+revoke all on function public.v2_set_avatar(text) from anon;
+grant execute on function public.v2_set_avatar(text) to authenticated;

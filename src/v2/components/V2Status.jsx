@@ -26,7 +26,7 @@ export default function V2Status({ prof, inventory, classes, open, onToggle }) {
     const add = (total[k] || 0) - (prof[k] || 0)
     return (
       <div key={k} title={d.desc} style={{ ...cell, padding:'6px 8px' }}>
-        <span style={{ color:'#7f95c4', fontSize:'11px' }}>{d.label}</span>
+        <span style={{ color:d.color, fontSize:'11px' }}>{d.label}</span>
         <span style={{ color:d.color, fontSize:'13px' }}>
           {(total[k] || 0).toLocaleString()}
           {add > 0 && <span style={{ color:'#44ff88', fontSize:'9px' }}> +{add.toLocaleString()}</span>}
@@ -86,11 +86,11 @@ export default function V2Status({ prof, inventory, classes, open, onToggle }) {
 
       {open && (
         <>
-          {/* ステータス。旧版と同じで HP/MP は2列・残りは3列に並べる */}
+          {/* ステータス。ぜんぶ2列。項目名も値と同じ色にする */}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'4px', marginBottom:'4px' }}>
             {['hp', 'mp'].map(statCell)}
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'4px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'4px' }}>
             {['str', 'dex', 'agi', 'int_stat', 'vit', 'luk'].map(statCell)}
           </div>
 

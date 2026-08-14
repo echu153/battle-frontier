@@ -13,6 +13,7 @@ import V2Sortie from '../components/V2Sortie.jsx'
 import V2Storage from '../components/V2Storage.jsx'
 import V2Smith from '../components/V2Smith.jsx'
 import V2Status, { V2Menu } from '../components/V2Status.jsx'
+import V2Profile from '../components/V2Profile.jsx'
 import {
   powerText, isPassive, KIND_LABEL, KIND_COLOR, SKILL_BY_NAME,
   usableSkills, usableSkillNames, unlearnedSkills, validateSkillSet, setMpCost,
@@ -49,6 +50,7 @@ const ROW_INDENT = '28px'
 
 // ホームから行ける先。旧版の街と同じ並びの考え方（出撃が主役、あとは施設）
 const MENU = [
+  { key:'profile', label:'プロフィール', icon:'👤', color:'#88aaff', action:'確認する' },
   { key:'temple',  label:'神殿',        icon:'🏛', color:'#ff88cc', action:'転職する' },
   { key:'smith',   label:'鍛冶屋',      icon:'🔨', color:'#ffcc00', action:'合成する' },
   { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
@@ -304,6 +306,7 @@ export default function V2Home() {
               <V2Menu items={MENU} open={openMenu} onToggle={() => setOpenMenu(v => !v)} onPick={setScreen} />
             )}
 
+            {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
 
