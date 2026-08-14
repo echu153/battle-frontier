@@ -14,7 +14,8 @@
 //   そのエリアのボスを倒すと次のエリアが解放される。①は最初から解放。
 //   旧版は⑦のボス撃破で⑧が開くところまで（⑧の先が無い）。v2も同じ。
 // ============================================================
-import { AREAS, areaOf } from './enemies.js'
+import { AREAS, areaOf, rollDropRank } from './enemies.js'
+import { PARTS, itemsOf, typesOf, CATALOG } from './equipment.js'
 
 // ===== ボスの出やすさ =====
 export const BOSS_RATE_STEP = 0.3   // 通常敵と戦うたびに遭遇率へ足す(%)
@@ -61,12 +62,61 @@ export const pickEncounter = (areaId, bossRate, rng = Math.random) => {
   return { area, enemy, isBoss: wasBoss }
 }
 
-// 勝ったあとの取り分をまとめる
+// 勝ったあとの取り分。装備のドロップは別（rollDrop を呼ぶ。落ちる確率はまだ決めていない）
 export const rewardsOf = ({ area, enemy, isBoss, win }, rng = Math.random) => ({
   exp: win ? expOf(isBoss, rng) : 0,
   gold: win ? goldOf(enemy) : 0,
-  dropRank: win ? null : null,   // ドロップの抽選は rollDropRank（enemies.js）を呼び出し側で使う
   unlockArea: win && isBoss && area.id < LAST_AREA ? area.id + 1 : null,
 })
 
 export const AREA_LIST = AREAS.map(a => ({ id: a.id, name: a.name }))
+
+// ===== 出撃のクールタイム =====
+// 10秒と20秒から選べる。⚠**もらえるEXPとGoldはどちらも同じ**（2026-08-14 ユーザー決定）。
+//   旧版は10秒モードだけEXPとGoldを半分にしていたが、v2は揃える。
+//   ＝10秒を選ぶほうが時間あたりの効率は2倍になる。「速く回したい人が回せる」だけの選択肢
+export const COOLDOWNS = [10, 20]
+export const DEFAULT_COOLDOWN = 20
+export const isValidCooldown = (sec) => COOLDOWNS.includes(sec)
+export const cooldownOf = (sec) => (isValidCooldown(sec) ? sec : DEFAULT_COOLDOWN)
+
+// ===== 装備ドロップの部位 =====
+// **部位は完全ランダム**。ただし**1時間ごとに「落ちやすい部位」が入れ替わる**。
+//   その時間の部位だけ重みが FEATURED_WEIGHT 倍（＝2倍出やすい）。
+//   時刻から決まるので全員に共通で、先の予定も計算できる（画面に出せる）。
+export const FEATURED_WEIGHT = 2
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000
+// 1970年からのJSTでの通算時間。これを部位の数で割った余りが「いまの部位」
+export const jstHourIndex = (at = new Date()) => Math.floor((at.getTime() + JST_OFFSET_MS) / 3600000)
+export const featuredPartAt = (at = new Date()) => PARTS[jstHourIndex(at) % PARTS.length]
+// 次に切り替わる時刻（ちょうど毎時0分）
+export const nextSwitchAt = (at = new Date()) => new Date((jstHourIndex(at) + 1) * 3600000 - JST_OFFSET_MS)
+// これから n 時間ぶんの予定
+export const featuredSchedule = (at = new Date(), n = 6) =>
+  Array.from({ length: n }, (_, i) => {
+    const t = new Date(at.getTime() + i * 3600000)
+    return { at: new Date(jstHourIndex(t) * 3600000 - JST_OFFSET_MS), part: featuredPartAt(t) }
+  })
+
+export const partWeightsAt = (at = new Date()) => {
+  const hot = featuredPartAt(at)
+  return Object.fromEntries(PARTS.map(p => [p, p === hot ? FEATURED_WEIGHT : 1]))
+}
+export const rollDropPart = (at = new Date(), rng = Math.random) => {
+  const w = partWeightsAt(at)
+  let r = rng() * Object.values(w).reduce((a, b) => a + b, 0)
+  for (const p of PARTS) { r -= w[p]; if (r <= 0) return p }
+  return PARTS[PARTS.length - 1]
+}
+
+// 装備を1つ抽選する。部位＝時間帯つきランダム／種類＝完全ランダム／ランク＝エリアの分布
+export const rollDrop = (areaId, at = new Date(), rng = Math.random) => {
+  const area = areaOf(areaId)
+  if (!area) return null
+  const part = rollDropPart(at, rng)
+  const types = typesOf(part)
+  const type = types[Math.floor(rng() * types.length)]
+  const rank = rollDropRank(area, rng)
+  return CATALOG.find(i => i.part === part && i.type === type && i.rank === rank) || null
+}
+export const dropPoolOf = (part) => itemsOf(part)
