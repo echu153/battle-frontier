@@ -7,7 +7,8 @@
 //   ここが崩れたら実装を疑うこと。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { hitRate, damageFloor, DMG_SPREAD, DMG_COMP, extraActionRate, evasionRate } from './combat.js'
+import { hitRate, skillHitRate, damageFloor, DMG_SPREAD, DMG_COMP, extraActionRate, evasionRate } from './combat.js'
+import { SKILLS } from './skills.js'
 
 // 8種へ均等に配った戦闘力534（LV100・0転職の平均像）
 const even = () => { const u = 534 / 8; return { hp:u * 8, mp:u * 3, str:u, dex:u, agi:u, int_stat:u, vit:u, luk:u } }
@@ -80,4 +81,28 @@ test('ダメージの振れ幅は設計値のまま', () => {
   assert.equal(DMG_SPREAD, 0.65)
   assert.ok(Math.abs(damageFloor(even(), 'phys') - 0.675) < 1e-9)
   assert.ok(Math.abs(((damageFloor(even(), 'phys') + 1) / 2) * DMG_COMP - 1) < 1e-9, '平均が1.00からずれている')
+})
+
+test('スキル命中率(acc)はDEXが100%へ向けて埋める形（引き算ではない）', () => {
+  // ★いまは全スキル acc=100（＝命中率を持たない技と同じ挙動）。枠だけ先に用意してある。
+  //   accを下げた技を出すときのために、DEXの伸びしろが増える形であることを固定する。
+  const foe = even()
+  const dexAt = (m) => ({ ...even(), dex: even().dex * m })
+  // acc=100 は「100% − 回避率」と完全に一致する＝既存の挙動を壊さない
+  for (const m of [0.5, 1, 3]) {
+    assert.equal(skillHitRate(dexAt(m), foe, { acc: 100 }), hitRate(dexAt(m), foe))
+  }
+  // accが低いほどDEXの伸びしろが大きい（引き算ならここが横並びになる）
+  const gain = (acc) => skillHitRate(dexAt(5), foe, { acc }) / skillHitRate(even(), foe, { acc })
+  assert.ok(gain(70) > gain(90), `acc70の伸び×${gain(70).toFixed(3)} が acc90の×${gain(90).toFixed(3)} を超えていない`)
+  assert.ok(gain(90) > gain(100))
+  assert.ok(gain(70) > 1.15, `acc70でDEXの伸びしろが足りない: ×${gain(70).toFixed(3)}`)
+  // 同格・acc70 なら80%（= 70 + 30×0.5 − 回避5%）
+  assert.ok(Math.abs(skillHitRate(even(), foe, { acc: 70 }) - 80) < 0.5)
+})
+
+test('いまは全スキルの命中率が100（accを振った技はまだ無い）', () => {
+  for (const s of SKILLS) {
+    assert.ok(s.acc === undefined || s.acc === 100, `${s.name} に acc=${s.acc} が入っている`)
+  }
 })

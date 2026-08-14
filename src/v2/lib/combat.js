@@ -101,8 +101,22 @@ export const evasionRate = (attacker, defender, hitBonus = 0, evaBonus = 0) => {
   const base = EVA_COEF * Math.pow(eva / (eva + dex), EVA_CURVE)
   return clampPct(base + evaBonus - hitBonus, 0, EVA_RATE_MAX)
 }
+// スキルごとの命中率(acc)を織り込んだ最終命中率(%)。
+//   最終命中率 = acc +(100 − acc)× 安定度 − 回避率
+// ★acc は「DEXが0のときの当たりやすさ」で、足りないぶんを **DEXが100%へ向けて埋める**。
+//   引き算（acc − 回避率）にすると天井が下へ移動するだけでDEXの伸びしろが増えないので、
+//   この形にしてある。命中率の低い技ほどDEXが効く＝DEX型は「当てにくい大技を実用にする型」になる。
+//   ・acc=100（既定）なら 100 − 回避率 になり、命中率を持たない技と完全に同じ挙動
+//   ・acc=70 なら 同格で80% → DEX2倍で89.2% → DEX5倍で95%（伸びしろ+18.8%）
+// ⚠ 発動率とは別の確率なので掛け算になる（発動75%×命中80%＝実際に当たるのは63.8%）。
+//   accを下げるのは一部の技だけにすること。多段は1発ずつ判定するのでさらに荒れる。
+export const skillHitRate = (attacker, defender, { acc = 100, kind = 'phys', hitBonus = 0, evaBonus = 0 } = {}) => {
+  const a = Math.max(0, Math.min(100, acc))
+  const base = a + (100 - a) * stabilityOf(attacker, kind)
+  return clampPct(base - evasionRate(attacker, defender, hitBonus, evaBonus), 0, 100)
+}
 export const hitRate = (attacker, defender, hitBonus = 0, evaBonus = 0) =>
-  clampPct(100 - evasionRate(attacker, defender, hitBonus, evaBonus), 100 - EVA_RATE_MAX, 100)
+  skillHitRate(attacker, defender, { hitBonus, evaBonus })
 
 const clampPct = (v, min, max) => Math.min(max, Math.max(min, Math.round(v * 10) / 10))
 
@@ -190,20 +204,24 @@ export const healOf = (actor, rate) => Math.max(1, Math.floor((actor?.int_stat |
 //   自分基準なら**相手が誰でも効く無条件の仕事**になり、かつスケール不変も保てる。
 export const DMG_SPREAD = 0.65             // 安定度0のときにここまで下がる（同格は0.68〜1.00倍）
 export const DMG_COMP = 1 / (1 - DMG_SPREAD / 4)  // 幅を入れたぶん平均が下がるので戻す係数
-// 下限(0〜1)。DEXが主ステより大きいほど1.00へ近づく＝振れ幅が縮む
-export const damageFloor = (attacker, kind = 'phys') => {
+// 安定度(0〜1)。DEXが主ステより大きいほど1へ近づく。同じ値なら 0.5
+// ★ダメージの振れ幅とスキル命中率の底上げ、両方がこの1つの指標を使う
+//   ＝「DEXは技の安定性を司る」で一本化されている
+export const stabilityOf = (attacker, kind = 'phys') => {
   const dex = Math.max(1, attacker?.dex || 0)
   const main = Math.max(1, attackStatOf(attacker, kind))
-  return 1 - DMG_SPREAD * (1 - dex / (dex + main))
+  return dex / (dex + main)
 }
+// 下限(0〜1)。DEXが主ステより大きいほど1.00へ近づく＝振れ幅が縮む
+export const damageFloor = (attacker, kind = 'phys') => 1 - DMG_SPREAD * (1 - stabilityOf(attacker, kind))
 
 // hitBonus/evaBonus/critBonus はパッシブぶんの補正（ポイント）。
 //   hitBonus … 攻撃側の「最終命中率+n%」 ／ evaBonus … 防御側の「回避率+n%」
 //   critBonus … 攻撃側の「最終クリティカル率+n%」
-export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', defPen = 0, add = null, sureHit = false, sureCrit = false, noCrit = false, hitBonus = 0, evaBonus = 0, critBonus = 0 }, rng = Math.random) => {
+export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', defPen = 0, add = null, sureHit = false, sureCrit = false, noCrit = false, hitBonus = 0, evaBonus = 0, critBonus = 0, acc = 100 }, rng = Math.random) => {
   const crit = !noCrit && (sureCrit || roll(critRate(attacker, defender, critBonus), rng))
-  const acc = crit ? critAccuracyStats(attacker) : attacker
-  const hit = sureHit || roll(hitRate(acc, defender, hitBonus, evaBonus), rng)
+  const accStats = crit ? critAccuracyStats(attacker) : attacker
+  const hit = sureHit || roll(skillHitRate(accStats, defender, { acc, kind, hitBonus, evaBonus }), rng)
   if (!hit) return { hit:false, crit, damage:0 }
   // ダメージの振れ幅。DEXが高いほど下限が1.00へ寄って安定する
   const lo = damageFloor(attacker, kind)

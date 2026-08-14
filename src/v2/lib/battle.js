@@ -239,6 +239,7 @@ const takeAction = (me, foe, rng, log) => {
         attacker: eMe, defender: eFoe, mult: skill.mult, kind: skill.kind,
         defPen, add: skill.add || null,
         sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit, noCrit: !!skill.noCrit,
+        acc: skill.acc ?? 100,
         hitBonus: me.pa.hitBonus, evaBonus: foe.pa.evaBonus, critBonus: me.pa.critBonus,
       }, rng)
       raw += r.damage
