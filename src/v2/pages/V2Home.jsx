@@ -9,6 +9,10 @@ import {
 } from '../lib/stats.js'
 import { TIER_LABEL, TIER_ORDER, TIER_COLOR, missingReqs, canBecome, reqText, proofCount } from '../lib/classes.js'
 import { classBonusText } from '../lib/classBonus.js'
+import { gearPower } from '../lib/loadout.js'
+import V2Sortie from '../components/V2Sortie.jsx'
+import V2Storage from '../components/V2Storage.jsx'
+import V2Smith from '../components/V2Smith.jsx'
 import {
   powerText, isPassive, KIND_LABEL, KIND_COLOR, SKILL_BY_NAME,
   usableSkills, usableSkillNames, unlearnedSkills, validateSkillSet, setMpCost,
@@ -43,6 +47,15 @@ const miniBtn = (color) => ({
 const mpLabel = (s) => (s.mpPct ? `MP 残りの${Math.round(s.mpPct * 100)}%` : `MP${s.mp}`)
 const ROW_INDENT = '28px'
 
+// ホームから行ける先。旧版の街と同じ並びの考え方（出撃が主役、あとは施設）
+const MENU = [
+  { key:'sortie',  label:'出撃',        icon:'⚔', color:'#00aaff', desc:'エリア①〜⑧で戦って、EXP・Gold・装備を集める' },
+  { key:'temple',  label:'神殿',        icon:'🏛', color:'#ff88cc', desc:'転職する。LV100でのみ実行できる' },
+  { key:'smith',   label:'鍛冶屋',      icon:'🔨', color:'#ffcc00', desc:'同じ装備3個を合成して強化する' },
+  { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', desc:'覚えたスキルを5枠に並べる（並び順＝発動順）' },
+  { key:'storage', label:'倉庫',        icon:'🎒', color:'#88ccff', desc:'持っている装備を着け外しする' },
+]
+
 export default function V2Home() {
   const nav = useNavigate()
   const [loading, setLoading] = useState(true)
@@ -60,6 +73,8 @@ export default function V2Home() {
   const [tab, setTab] = useState('all')        // 種別タブ
   const [sortKey, setSortKey] = useState('name')
   const [sortAsc, setSortAsc] = useState(true)
+  const [screen, setScreen] = useState('home')     // home / sortie / temple / smith / skills / storage
+  const [inventory, setInventory] = useState([])   // 所持している装備（v2_inventory）
 
   useEffect(() => {
     let alive = true
@@ -80,6 +95,8 @@ export default function V2Home() {
         if (e2 || e3) { setSqlError((e2 || e3).message || String(e2 || e3)); setLoading(false); return }
         setProf(v2 || null)
         setClasses(cls || [])
+        const { data: inv } = await supabase.from('v2_inventory').select('*').order('id', { ascending:false })
+        setInventory(inv || [])
       } catch (err) {
         setSqlError(err.message || String(err))
       }
@@ -87,6 +104,19 @@ export default function V2Home() {
     })()
     return () => { alive = false }
   }, [nav])
+
+  // 子の画面から呼ぶ。null を渡すとサーバーから取り直す（装備の着脱・合成・清算のあと）
+  const refresh = async (updater) => {
+    if (typeof updater === 'function') { setProf(updater); return }
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const [{ data: v2 }, { data: inv }] = await Promise.all([
+      supabase.from('v2_profiles').select('*').eq('id', user.id).maybeSingle(),
+      supabase.from('v2_inventory').select('*').order('id', { ascending:false }),
+    ])
+    if (v2) setProf(v2)
+    setInventory(inv || [])
+  }
 
   const create = async (e) => {
     e.preventDefault()
@@ -306,12 +336,43 @@ export default function V2Home() {
                 })}
               </div>
 
+              {/* 装備ぶんの戦闘力（倉庫で着けたぶん） */}
+              {gearPower(prof, inventory) > 0 && (
+                <div style={{ color:'#446688', fontSize:'10px', marginTop:'6px' }}>
+                  うち装備 <span style={{ color:'#ffcc00' }}>+{gearPower(prof, inventory).toLocaleString()}</span>
+                  　Gold <span style={{ color:'#ffcc00' }}>{(prof.gold || 0).toLocaleString()}</span>
+                </div>
+              )}
               <div style={{ color:'#446688', fontSize:'10px', marginTop:'10px', lineHeight:'1.8' }}>
                 LVアップごとに{ROLLS_PER_LV}回抽選し、当たったステータスが上がります（HPは+8・MPは+3・その他は+1）。
                 どのステに当たっても戦闘力の上がり幅は同じです。
               </div>
             </div>
 
+            {/* ===== ホーム：どこへ行くかを選ぶ ===== */}
+            {screen === 'home' && (
+              <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
+                <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px' }}>どこへ行きますか</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(230px,1fr))', gap:'6px' }}>
+                  {MENU.map(m => (
+                    <button key={m.key} onClick={() => setScreen(m.key)}
+                      style={{ ...btn(m.color), textAlign:'left', padding:'10px 12px' }}>
+                      <div style={{ fontSize:'13px' }}>{m.icon} {m.label}</div>
+                      <div style={{ color:'#556677', fontSize:'9px', marginTop:'3px' }}>{m.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {screen === 'sortie'  && <V2Sortie  prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
+
+            {(screen === 'skills' || screen === 'temple') && (
+              <button onClick={() => setScreen('home')} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>
+            )}
+            <div style={{ display: screen === 'skills' ? 'block' : 'none' }}>
             {/* スキル編成（並び順＝発動順・使用回数を配る） */}
             <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
               <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>🎯 スキルセット</div>
@@ -442,6 +503,9 @@ export default function V2Home() {
               </div>
             </div>
 
+            </div>
+
+            <div style={{ display: screen === 'temple' ? 'block' : 'none' }}>
             {/* 転職（LV上限で周回する） */}
             <div style={{ ...box, padding:'14px', marginBottom:'12px', borderColor: canJobChange(prof.lv) ? '#aa4488' : '#0044aa' }}>
               <div style={{ color:'#ff88cc', fontSize:'12px', marginBottom:'8px' }}>🔄 転職</div>
@@ -509,11 +573,13 @@ export default function V2Home() {
                   })}
                   <div style={{ color:'#446688', fontSize:'9px', lineHeight:'1.8' }}>
                     ×N＝その職業で転職した回数。上位職の条件はこの回数を見ます。
-                    証は転職のときに1個消費します（同じ職業に戻るにはもう1個要ります）。
+                    ★証が要るのは特殊職（ギャンブラー・竜騎士・ブリーダー）の3職だけです。転職のときに1個消費します。
                     上位職には「職業補正」（その職業でいる間だけ常時かかる能力）が付きます。スキル枠は使いません。
                   </div>
                 </div>
               )}
+            </div>
+
             </div>
 
             {/* 動作確認用のEXP付与 */}

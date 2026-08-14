@@ -104,27 +104,27 @@ insert into public.v2_classes (id, tier, sort, req_jobs, req_proof) values
   ('僧侶',               'basic',    13, '{}', null),
   ('格闘家',             'basic',    14, '{}', null),
   ('サモナー',           'basic',    15, '{}', null),
-  -- 上位職：初期職1つで転職3回＋証
-  ('侍',                 'advanced', 20, '{"戦士":3}',       '侍の証'),
-  ('狂戦士',             'advanced', 21, '{"戦士":3}',       '狂戦士の証'),
-  ('狩人',               'advanced', 22, '{"弓使い":3}',     '狩人の証'),
-  ('暗殺者',             'advanced', 23, '{"弓使い":3}',     '暗殺者の証'),
-  ('元素使い',           'advanced', 24, '{"魔法使い":3}',   '元素使いの証'),
-  ('死霊使い',           'advanced', 25, '{"魔法使い":3}',   '死霊使いの証'),
-  ('聖職者',             'advanced', 26, '{"僧侶":3}',       '聖職者の証'),
-  ('異端審問官',         'advanced', 27, '{"僧侶":3}',       '異端審問官の証'),
-  ('サイキッカー',       'advanced', 28, '{"格闘家":3}',     'サイキッカーの証'),
-  ('体術師',             'advanced', 29, '{"格闘家":3}',     '体術師の証'),
-  ('精霊召喚士',         'advanced', 30, '{"サモナー":3}',   '精霊召喚士の証'),
-  ('式神使い',           'advanced', 31, '{"サモナー":3}',   '式神使いの証'),
-  -- 複合上位職：初期職2つで各転職3回＋証
-  ('魔法剣士',           'hybrid',   40, '{"戦士":3,"魔法使い":3}',     '魔法剣士の証'),
-  ('魔銃士',             'hybrid',   41, '{"弓使い":3,"魔法使い":3}',   '魔銃士の証'),
-  ('聖騎士',             'hybrid',   42, '{"僧侶":3,"戦士":3}',         '聖騎士の証'),
-  ('賢者',               'hybrid',   43, '{"魔法使い":3,"僧侶":3}',     '賢者の証'),
-  ('武僧',               'hybrid',   44, '{"格闘家":3,"僧侶":3}',       '武僧の証'),
-  ('ビーストレンジャー', 'hybrid',   45, '{"サモナー":3,"弓使い":3}',   'ビーストレンジャーの証'),
-  -- 特殊職：証のみ
+  -- 上位職：初期職1つで転職3回（★2026-08-15 証は不要になった）
+  ('侍',                 'advanced', 20, '{"戦士":3}',       null),
+  ('狂戦士',             'advanced', 21, '{"戦士":3}',       null),
+  ('狩人',               'advanced', 22, '{"弓使い":3}',     null),
+  ('暗殺者',             'advanced', 23, '{"弓使い":3}',     null),
+  ('元素使い',           'advanced', 24, '{"魔法使い":3}',   null),
+  ('死霊使い',           'advanced', 25, '{"魔法使い":3}',   null),
+  ('聖職者',             'advanced', 26, '{"僧侶":3}',       null),
+  ('異端審問官',         'advanced', 27, '{"僧侶":3}',       null),
+  ('サイキッカー',       'advanced', 28, '{"格闘家":3}',     null),
+  ('体術師',             'advanced', 29, '{"格闘家":3}',     null),
+  ('精霊召喚士',         'advanced', 30, '{"サモナー":3}',   null),
+  ('式神使い',           'advanced', 31, '{"サモナー":3}',   null),
+  -- 複合上位職：初期職2つで各転職3回（★2026-08-15 証は不要になった）
+  ('魔法剣士',           'hybrid',   40, '{"戦士":3,"魔法使い":3}',     null),
+  ('魔銃士',             'hybrid',   41, '{"弓使い":3,"魔法使い":3}',   null),
+  ('聖騎士',             'hybrid',   42, '{"僧侶":3,"戦士":3}',         null),
+  ('賢者',               'hybrid',   43, '{"魔法使い":3,"僧侶":3}',     null),
+  ('武僧',               'hybrid',   44, '{"格闘家":3,"僧侶":3}',       null),
+  ('ビーストレンジャー', 'hybrid',   45, '{"サモナー":3,"弓使い":3}',   null),
+  -- 特殊職：証のみ（★証が要るのはこの3職だけ）
   ('ギャンブラー',       'special',  50, '{}', 'ギャンブラーの証'),
   ('竜騎士',             'special',  51, '{}', '竜騎士の証'),
   ('ブリーダー',         'special',  52, '{}', 'ブリーダーの証')
@@ -677,3 +677,516 @@ grant execute on function public.v2_debug_grant_proofs() to authenticated;
 -- ===== 7. 適用後の確認（任意・1文ずつ実行）=====
 -- select column_name, data_type from information_schema.columns where table_name = 'v2_profiles' order by ordinal_position;
 -- select proname, pg_get_function_identity_arguments(oid) from pg_proc where proname like 'v2\_%';
+-- ===== 7. 出撃・装備 =====
+-- 2026-08-15 追加。出撃（エリア①〜⑧）と装備の所持・装着・合成。
+-- 設計は docs/v2-sortie-design.md / docs/v2-equipment-design.md。
+--   ・装備マスタ v2_equipment は src/v2/lib/equipment.js から生成した同じ内容
+--     （v2_skills と同じ方針＝サーバー側の検証に要るのでDBにも持つ）
+--   ・⚠ 装備を増やすときは equipment.js と このシードの両方を直すこと
+
+-- ---- 列の追加 ----
+alter table public.v2_profiles add column if not exists gold           bigint      not null default 0;
+alter table public.v2_profiles add column if not exists unlocked_areas int[]       not null default array[1];
+alter table public.v2_profiles add column if not exists boss_rate      numeric     not null default 0;   -- ボス遭遇率(%)。戦うたび+0.3、当たると0へ
+alter table public.v2_profiles add column if not exists sortie_cd      int         not null default 20;  -- 出撃のクールタイム（10 or 20）
+alter table public.v2_profiles add column if not exists equipped       jsonb       not null default '{}'::jsonb; -- {"right": 12, ...} v2_inventory.id
+alter table public.v2_profiles add column if not exists last_sortie_at timestamptz;
+
+-- ---- 装備マスタ ----
+create table if not exists public.v2_equipment (
+  id         text primary key,     -- 'w:剣:A' / 'a:重装:鎧:A' / 'c:リング:A'
+  name       text not null,
+  part       text not null,        -- 武器 / 頭 / 鎧 / 腕 / 足 / アクセ
+  type       text not null,        -- 剣・短剣… / 重装・軽装・魔装 / イヤリング…
+  rank       text not null,        -- F E D C B A S
+  hands      text not null,        -- '1'=片手 '2'=両手 'L'=左手専用
+  base_power int  not null
+);
+alter table public.v2_equipment enable row level security;
+drop policy if exists "v2_equipment_read" on public.v2_equipment;
+create policy "v2_equipment_read" on public.v2_equipment for select to authenticated using (true);
+revoke all on table public.v2_equipment from anon;
+grant select on table public.v2_equipment to authenticated;
+
+insert into public.v2_equipment (id, name, part, type, rank, hands, base_power) values
+  ('w:剣:F', 'ソード', '武器', '剣', 'F', '1', 10),
+  ('w:剣:E', 'ショートソード', '武器', '剣', 'E', '1', 20),
+  ('w:剣:D', '鉄剣', '武器', '剣', 'D', '1', 30),
+  ('w:剣:C', 'ロングソード', '武器', '剣', 'C', '1', 40),
+  ('w:剣:B', 'セイバー', '武器', '剣', 'B', '1', 50),
+  ('w:剣:A', 'ミスリルソード', '武器', '剣', 'A', '1', 60),
+  ('w:剣:S', '蒼氷剣', '武器', '剣', 'S', '1', 70),
+  ('w:短剣:F', 'ナイフ', '武器', '短剣', 'F', '1', 10),
+  ('w:短剣:E', 'ダガー', '武器', '短剣', 'E', '1', 20),
+  ('w:短剣:D', 'スティレット', '武器', '短剣', 'D', '1', 30),
+  ('w:短剣:C', '三日月のダガー', '武器', '短剣', 'C', '1', 40),
+  ('w:短剣:B', '月影の短剣', '武器', '短剣', 'B', '1', 50),
+  ('w:短剣:A', '霧隠れのダガー', '武器', '短剣', 'A', '1', 60),
+  ('w:短剣:S', '宵闇の短剣', '武器', '短剣', 'S', '1', 70),
+  ('w:槍:F', '竹槍', '武器', '槍', 'F', '1', 10),
+  ('w:槍:E', 'ロングスピア', '武器', '槍', 'E', '1', 20),
+  ('w:槍:D', 'パルチザン', '武器', '槍', 'D', '1', 30),
+  ('w:槍:C', 'ランス', '武器', '槍', 'C', '1', 40),
+  ('w:槍:B', '翡翠のランス', '武器', '槍', 'B', '1', 50),
+  ('w:槍:A', '穿光のランス', '武器', '槍', 'A', '1', 60),
+  ('w:槍:S', '烈風槍', '武器', '槍', 'S', '1', 70),
+  ('w:斧:F', '石斧', '武器', '斧', 'F', '1', 10),
+  ('w:斧:E', 'ウォーアクス', '武器', '斧', 'E', '1', 20),
+  ('w:斧:D', 'バトルアックス', '武器', '斧', 'D', '1', 30),
+  ('w:斧:C', 'バルディッシュ', '武器', '斧', 'C', '1', 40),
+  ('w:斧:B', 'グレートアックス', '武器', '斧', 'B', '1', 50),
+  ('w:斧:A', '業火の戦斧', '武器', '斧', 'A', '1', 60),
+  ('w:斧:S', '処刑斧ギロチナ', '武器', '斧', 'S', '1', 70),
+  ('w:籠手:F', 'グローブ', '武器', '籠手', 'F', '1', 10),
+  ('w:籠手:E', 'レザーガントレット', '武器', '籠手', 'E', '1', 20),
+  ('w:籠手:D', 'アイアンナックル', '武器', '籠手', 'D', '1', 30),
+  ('w:籠手:C', 'スチールクロー', '武器', '籠手', 'C', '1', 40),
+  ('w:籠手:B', 'ウォーガントレット', '武器', '籠手', 'B', '1', 50),
+  ('w:籠手:A', 'ミスリルガントレット', '武器', '籠手', 'A', '1', 60),
+  ('w:籠手:S', '金剛籠手', '武器', '籠手', 'S', '1', 70),
+  ('w:魔道書:F', '手記', '武器', '魔道書', 'F', '1', 10),
+  ('w:魔道書:E', '初歩の魔道書', '武器', '魔道書', 'E', '1', 20),
+  ('w:魔道書:D', '鉄綴じの魔道書', '武器', '魔道書', 'D', '1', 30),
+  ('w:魔道書:C', 'コーデックス', '武器', '魔道書', 'C', '1', 40),
+  ('w:魔道書:B', 'トーム', '武器', '魔道書', 'B', '1', 50),
+  ('w:魔道書:A', '星辰書', '武器', '魔道書', 'A', '1', 60),
+  ('w:魔道書:S', '禁書「灰の頁」', '武器', '魔道書', 'S', '1', 70),
+  ('w:大剣:F', 'グレートソード', '武器', '大剣', 'F', '2', 22),
+  ('w:大剣:E', 'バスタードソード', '武器', '大剣', 'E', '2', 44),
+  ('w:大剣:D', 'クレイモア', '武器', '大剣', 'D', '2', 66),
+  ('w:大剣:C', 'ツヴァイハンダー', '武器', '大剣', 'C', '2', 88),
+  ('w:大剣:B', 'フランベルジュ', '武器', '大剣', 'B', '2', 110),
+  ('w:大剣:A', 'ハイランダー', '武器', '大剣', 'A', '2', 132),
+  ('w:大剣:S', '王家の大剣', '武器', '大剣', 'S', '2', 154),
+  ('w:弓:F', 'ショートボウ', '武器', '弓', 'F', '2', 22),
+  ('w:弓:E', 'ロングボウ', '武器', '弓', 'E', '2', 44),
+  ('w:弓:D', '猟弓', '武器', '弓', 'D', '2', 66),
+  ('w:弓:C', 'アルバレスト', '武器', '弓', 'C', '2', 88),
+  ('w:弓:B', '精霊樹の弓', '武器', '弓', 'B', '2', 110),
+  ('w:弓:A', 'エルフボウ', '武器', '弓', 'A', '2', 132),
+  ('w:弓:S', '天翔弓', '武器', '弓', 'S', '2', 154),
+  ('w:杖:F', 'ワンド', '武器', '杖', 'F', '2', 22),
+  ('w:杖:E', '樫のロッド', '武器', '杖', 'E', '2', 44),
+  ('w:杖:D', '節くれのスタッフ', '武器', '杖', 'D', '2', 66),
+  ('w:杖:C', 'オーク材のスタッフ', '武器', '杖', 'C', '2', 88),
+  ('w:杖:B', 'セプター', '武器', '杖', 'B', '2', 110),
+  ('w:杖:A', '星詠みの宝杖', '武器', '杖', 'A', '2', 132),
+  ('w:杖:S', '叡智錫杖', '武器', '杖', 'S', '2', 154),
+  ('w:盾:F', 'バックラー', '武器', '盾', 'F', 'L', 10),
+  ('w:盾:E', 'ラウンドシールド', '武器', '盾', 'E', 'L', 20),
+  ('w:盾:D', 'カイトシールド', '武器', '盾', 'D', 'L', 30),
+  ('w:盾:C', 'ヒーターシールド', '武器', '盾', 'C', 'L', 40),
+  ('w:盾:B', 'タワーシールド', '武器', '盾', 'B', 'L', 50),
+  ('w:盾:A', 'ミスリルシールド', '武器', '盾', 'A', 'L', 60),
+  ('w:盾:S', '城塞盾', '武器', '盾', 'S', 'L', 70),
+  ('a:重装:頭:F', 'ヘッドギア', '頭', '重装', 'F', '1', 10),
+  ('a:重装:頭:E', 'アイアンヘルム', '頭', '重装', 'E', '1', 20),
+  ('a:重装:頭:D', 'スチールヘルム', '頭', '重装', 'D', '1', 30),
+  ('a:重装:頭:C', 'グレートヘルム', '頭', '重装', 'C', '1', 40),
+  ('a:重装:頭:B', '鉄面の兜', '頭', '重装', 'B', '1', 50),
+  ('a:重装:頭:A', 'ミスリルヘルム', '頭', '重装', 'A', '1', 60),
+  ('a:重装:頭:S', '金剛兜', '頭', '重装', 'S', '1', 70),
+  ('a:重装:鎧:F', 'チェインメイル', '鎧', '重装', 'F', '1', 13),
+  ('a:重装:鎧:E', 'スケイルメイル', '鎧', '重装', 'E', '1', 26),
+  ('a:重装:鎧:D', 'プレートメイル', '鎧', '重装', 'D', '1', 39),
+  ('a:重装:鎧:C', 'フルプレート', '鎧', '重装', 'C', '1', 52),
+  ('a:重装:鎧:B', '銀装の鎧', '鎧', '重装', 'B', '1', 65),
+  ('a:重装:鎧:A', 'ミスリルアーマー', '鎧', '重装', 'A', '1', 78),
+  ('a:重装:鎧:S', '城塞鎧', '鎧', '重装', 'S', '1', 91),
+  ('a:重装:腕:F', 'アームガード', '腕', '重装', 'F', '1', 10),
+  ('a:重装:腕:E', 'アイアンブレーサー', '腕', '重装', 'E', '1', 20),
+  ('a:重装:腕:D', 'スチールブレーサー', '腕', '重装', 'D', '1', 30),
+  ('a:重装:腕:C', 'ヘヴィブレーサー', '腕', '重装', 'C', '1', 40),
+  ('a:重装:腕:B', '鋼板のブレーサー', '腕', '重装', 'B', '1', 50),
+  ('a:重装:腕:A', '白銀の腕甲', '腕', '重装', 'A', '1', 60),
+  ('a:重装:腕:S', '鉄壁腕甲', '腕', '重装', 'S', '1', 70),
+  ('a:重装:足:F', 'アイアンシューズ', '足', '重装', 'F', '1', 10),
+  ('a:重装:足:E', 'アイアングリーヴ', '足', '重装', 'E', '1', 20),
+  ('a:重装:足:D', 'スチールグリーヴ', '足', '重装', 'D', '1', 30),
+  ('a:重装:足:C', 'ヘヴィグリーヴ', '足', '重装', 'C', '1', 40),
+  ('a:重装:足:B', '鋼鉄のグリーヴ', '足', '重装', 'B', '1', 50),
+  ('a:重装:足:A', '星鉄のグリーヴ', '足', '重装', 'A', '1', 60),
+  ('a:重装:足:S', '不動具足', '足', '重装', 'S', '1', 70),
+  ('a:軽装:頭:F', 'バンダナ', '頭', '軽装', 'F', '1', 10),
+  ('a:軽装:頭:E', 'レザーキャップ', '頭', '軽装', 'E', '1', 20),
+  ('a:軽装:頭:D', 'フード', '頭', '軽装', 'D', '1', 30),
+  ('a:軽装:頭:C', 'シャドウフード', '頭', '軽装', 'C', '1', 40),
+  ('a:軽装:頭:B', '忍びのフード', '頭', '軽装', 'B', '1', 50),
+  ('a:軽装:頭:A', '隠者のフード', '頭', '軽装', 'A', '1', 60),
+  ('a:軽装:頭:S', '幻影頭巾', '頭', '軽装', 'S', '1', 70),
+  ('a:軽装:鎧:F', 'クロースベスト', '鎧', '軽装', 'F', '1', 13),
+  ('a:軽装:鎧:E', 'レザーアーマー', '鎧', '軽装', 'E', '1', 26),
+  ('a:軽装:鎧:D', 'スタッデドレザー', '鎧', '軽装', 'D', '1', 39),
+  ('a:軽装:鎧:C', 'チェインベスト', '鎧', '軽装', 'C', '1', 52),
+  ('a:軽装:鎧:B', '影織の胴衣', '鎧', '軽装', 'B', '1', 65),
+  ('a:軽装:鎧:A', '霧纏いの胴衣', '鎧', '軽装', 'A', '1', 78),
+  ('a:軽装:鎧:S', '影纏衣', '鎧', '軽装', 'S', '1', 91),
+  ('a:軽装:腕:F', 'リストバンド', '腕', '軽装', 'F', '1', 10),
+  ('a:軽装:腕:E', 'レザーブレーサー', '腕', '軽装', 'E', '1', 20),
+  ('a:軽装:腕:D', 'スタッデドガード', '腕', '軽装', 'D', '1', 30),
+  ('a:軽装:腕:C', 'ライトブレーサー', '腕', '軽装', 'C', '1', 40),
+  ('a:軽装:腕:B', '疾風の腕輪', '腕', '軽装', 'B', '1', 50),
+  ('a:軽装:腕:A', 'ミスリルバングル', '腕', '軽装', 'A', '1', 60),
+  ('a:軽装:腕:S', '迅雷腕輪', '腕', '軽装', 'S', '1', 70),
+  ('a:軽装:足:F', 'サンダル', '足', '軽装', 'F', '1', 10),
+  ('a:軽装:足:E', 'レザーブーツ', '足', '軽装', 'E', '1', 20),
+  ('a:軽装:足:D', 'トラベルブーツ', '足', '軽装', 'D', '1', 30),
+  ('a:軽装:足:C', 'ハイブーツ', '足', '軽装', 'C', '1', 40),
+  ('a:軽装:足:B', '月影のブーツ', '足', '軽装', 'B', '1', 50),
+  ('a:軽装:足:A', '韋駄天のブーツ', '足', '軽装', 'A', '1', 60),
+  ('a:軽装:足:S', '縮地靴', '足', '軽装', 'S', '1', 70),
+  ('a:魔装:頭:F', 'サークレット', '頭', '魔装', 'F', '1', 10),
+  ('a:魔装:頭:E', '見習いのサークレット', '頭', '魔装', 'E', '1', 20),
+  ('a:魔装:頭:D', 'マジックハット', '頭', '魔装', 'D', '1', 30),
+  ('a:魔装:頭:C', 'ポインテッドハット', '頭', '魔装', 'C', '1', 40),
+  ('a:魔装:頭:B', '星読みの帽子', '頭', '魔装', 'B', '1', 50),
+  ('a:魔装:頭:A', '賢者のハット', '頭', '魔装', 'A', '1', 60),
+  ('a:魔装:頭:S', '叡智の冠', '頭', '魔装', 'S', '1', 70),
+  ('a:魔装:鎧:F', 'ローブ', '鎧', '魔装', 'F', '1', 13),
+  ('a:魔装:鎧:E', 'ウィザードローブ', '鎧', '魔装', 'E', '1', 26),
+  ('a:魔装:鎧:D', 'メイジローブ', '鎧', '魔装', 'D', '1', 39),
+  ('a:魔装:鎧:C', 'セージローブ', '鎧', '魔装', 'C', '1', 52),
+  ('a:魔装:鎧:B', '銀糸のローブ', '鎧', '魔装', 'B', '1', 65),
+  ('a:魔装:鎧:A', 'ミスリルローブ', '鎧', '魔装', 'A', '1', 78),
+  ('a:魔装:鎧:S', '秘奥の法衣', '鎧', '魔装', 'S', '1', 91),
+  ('a:魔装:腕:F', 'クロースバンド', '腕', '魔装', 'F', '1', 10),
+  ('a:魔装:腕:E', '銅の腕輪', '腕', '魔装', 'E', '1', 20),
+  ('a:魔装:腕:D', '銀の腕輪', '腕', '魔装', 'D', '1', 30),
+  ('a:魔装:腕:C', 'ルーンバングル', '腕', '魔装', 'C', '1', 40),
+  ('a:魔装:腕:B', '翡翠のバングル', '腕', '魔装', 'B', '1', 50),
+  ('a:魔装:腕:A', '星辰のバングル', '腕', '魔装', 'A', '1', 60),
+  ('a:魔装:腕:S', '魔導腕輪', '腕', '魔装', 'S', '1', 70),
+  ('a:魔装:足:F', 'クロースシューズ', '足', '魔装', 'F', '1', 10),
+  ('a:魔装:足:E', 'ソフトシューズ', '足', '魔装', 'E', '1', 20),
+  ('a:魔装:足:D', 'メイジシューズ', '足', '魔装', 'D', '1', 30),
+  ('a:魔装:足:C', 'ルーンシューズ', '足', '魔装', 'C', '1', 40),
+  ('a:魔装:足:B', '精霊靴', '足', '魔装', 'B', '1', 50),
+  ('a:魔装:足:A', '妖精靴', '足', '魔装', 'A', '1', 60),
+  ('a:魔装:足:S', '浮遊靴', '足', '魔装', 'S', '1', 70),
+  ('c:イヤリング:F', '石のピアス', 'アクセ', 'イヤリング', 'F', '1', 8),
+  ('c:イヤリング:E', '銅のピアス', 'アクセ', 'イヤリング', 'E', '1', 16),
+  ('c:イヤリング:D', '獣牙のイヤリング', 'アクセ', 'イヤリング', 'D', '1', 24),
+  ('c:イヤリング:C', 'ガーネットピアス', 'アクセ', 'イヤリング', 'C', '1', 32),
+  ('c:イヤリング:B', '闘気のイヤリング', 'アクセ', 'イヤリング', 'B', '1', 40),
+  ('c:イヤリング:A', '猛虎のピアス', 'アクセ', 'イヤリング', 'A', '1', 48),
+  ('c:イヤリング:S', '覇気の耳飾り', 'アクセ', 'イヤリング', 'S', '1', 56),
+  ('c:ネックレス:F', '麻紐の首飾り', 'アクセ', 'ネックレス', 'F', '1', 8),
+  ('c:ネックレス:E', '貝殻のネックレス', 'アクセ', 'ネックレス', 'E', '1', 16),
+  ('c:ネックレス:D', '銀のネックレス', 'アクセ', 'ネックレス', 'D', '1', 24),
+  ('c:ネックレス:C', 'アメジストの首飾り', 'アクセ', 'ネックレス', 'C', '1', 32),
+  ('c:ネックレス:B', '五色の首飾り', 'アクセ', 'ネックレス', 'B', '1', 40),
+  ('c:ネックレス:A', '賢者のネックレス', 'アクセ', 'ネックレス', 'A', '1', 48),
+  ('c:ネックレス:S', '調和の首飾り', 'アクセ', 'ネックレス', 'S', '1', 56),
+  ('c:リング:F', '木の指輪', 'アクセ', 'リング', 'F', '1', 8),
+  ('c:リング:E', '銅の指輪', 'アクセ', 'リング', 'E', '1', 16),
+  ('c:リング:D', 'ルーンリング', 'アクセ', 'リング', 'D', '1', 24),
+  ('c:リング:C', 'サファイアリング', 'アクセ', 'リング', 'C', '1', 32),
+  ('c:リング:B', '魔導の指輪', 'アクセ', 'リング', 'B', '1', 40),
+  ('c:リング:A', '大賢者の指輪', 'アクセ', 'リング', 'A', '1', 48),
+  ('c:リング:S', '秘奥の指輪', 'アクセ', 'リング', 'S', '1', 56),
+  ('c:ベルト:F', '粗革のベルト', 'アクセ', 'ベルト', 'F', '1', 8),
+  ('c:ベルト:E', 'レザーベルト', 'アクセ', 'ベルト', 'E', '1', 16),
+  ('c:ベルト:D', '鋼のベルト', 'アクセ', 'ベルト', 'D', '1', 24),
+  ('c:ベルト:C', 'ヘヴィベルト', 'アクセ', 'ベルト', 'C', '1', 32),
+  ('c:ベルト:B', '巨人のベルト', 'アクセ', 'ベルト', 'B', '1', 40),
+  ('c:ベルト:A', 'ミスリルベルト', 'アクセ', 'ベルト', 'A', '1', 48),
+  ('c:ベルト:S', '不動の帯', 'アクセ', 'ベルト', 'S', '1', 56)
+on conflict (id) do update set
+  name = excluded.name, part = excluded.part, type = excluded.type,
+  rank = excluded.rank, hands = excluded.hands, base_power = excluded.base_power;
+
+-- ---- エリアのマスタ（ドロップ範囲とGoldの上限＝サーバー側の検証に使う）----
+create table if not exists public.v2_areas (
+  id            int primary key,
+  name          text not null,
+  drop_ranks    jsonb not null,
+  boss_gold     int not null,
+  max_zako_gold int not null
+);
+alter table public.v2_areas enable row level security;
+drop policy if exists "v2_areas_read" on public.v2_areas;
+create policy "v2_areas_read" on public.v2_areas for select to authenticated using (true);
+revoke all on table public.v2_areas from anon;
+grant select on table public.v2_areas to authenticated;
+
+insert into public.v2_areas (id, name, drop_ranks, boss_gold, max_zako_gold) values
+  (1, '始まりの森', '{"F":40,"E":40,"D":20}'::jsonb, 100, 60),
+  (2, '荒廃した草原', '{"F":35,"E":30,"D":22,"C":13}'::jsonb, 500, 120),
+  (3, '古代の洞窟', '{"F":30,"E":28,"D":24,"C":13,"B":5}'::jsonb, 2000, 240),
+  (4, '蒼海の入り江', '{"F":26,"E":26,"D":23,"C":15,"B":10}'::jsonb, 5000, 400),
+  (5, '巨峰山脈', '{"E":38,"D":30,"C":20,"B":9,"A":3}'::jsonb, 9000, 600),
+  (6, '白銀の霊峰', '{"E":33,"D":29,"C":21,"B":11,"A":6}'::jsonb, 18750, 900),
+  (7, '煉獄火山', '{"D":40,"C":30,"B":20,"A":10}'::jsonb, 37500, 1200),
+  (8, '蒼天の浮遊城', '{"D":35,"C":29,"B":22,"A":14}'::jsonb, 60000, 1600)
+on conflict (id) do update set
+  name = excluded.name, drop_ranks = excluded.drop_ranks,
+  boss_gold = excluded.boss_gold, max_zako_gold = excluded.max_zako_gold;
+
+-- ---- 所持している装備 ----
+-- 強化値は個体ごとなのでここに持つ（同じ装備でも+0と+3が別物になる）
+create table if not exists public.v2_inventory (
+  id         bigserial primary key,
+  player_id  uuid not null references auth.users(id) on delete cascade,
+  equip_id   text not null references public.v2_equipment(id),
+  plus       int  not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists v2_inventory_player_idx on public.v2_inventory(player_id);
+alter table public.v2_inventory enable row level security;
+drop policy if exists "v2_inventory_own" on public.v2_inventory;
+create policy "v2_inventory_own" on public.v2_inventory for select to authenticated using (player_id = auth.uid());
+revoke all on table public.v2_inventory from anon;
+grant select on table public.v2_inventory to authenticated;
+
+-- ===== 出撃の清算 =====
+-- 旧版と同じで、戦闘そのものはクライアントが回し、まとめてここへ送る。
+-- ⚠サーバーは「その回数で取り得る上限」を超えていないかだけ検証する（完全な権威ではない）。
+--   戦闘をサーバーで回すようにしたら、このRPCの中で回すよう差し替える。
+create or replace function public.v2_sortie_settle(
+  p_area int, p_normals int, p_boss_wins int, p_boss_seen int,
+  p_exp int, p_gold bigint, p_drops jsonb
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_row   public.v2_profiles;
+  v_area  public.v2_areas;
+  v_n     int := greatest(coalesce(p_normals, 0), 0);
+  v_bw    int := greatest(coalesce(p_boss_wins, 0), 0);
+  v_bs    int := greatest(coalesce(p_boss_seen, 0), 0);
+  v_exp_cap  int;
+  v_gold_cap bigint;
+  v_exp   int;
+  v_gold  bigint;
+  v_drop  jsonb;
+  v_ok    int := 0;
+  v_res   jsonb;
+  v_unlocked int[];
+  v_rate  numeric;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  select * into v_row from public.v2_profiles where id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  select * into v_area from public.v2_areas where id = p_area;
+  if not found then return jsonb_build_object('ok', false, 'error', 'そのエリアはありません'); end if;
+  if not (v_row.unlocked_areas @> array[p_area]) then
+    return jsonb_build_object('ok', false, 'error', 'このエリアはまだ解放されていません');
+  end if;
+  if v_n + v_bs = 0 then return jsonb_build_object('ok', false, 'error', '清算するものがありません'); end if;
+  if v_n + v_bs > 500 then return jsonb_build_object('ok', false, 'error', '一度に清算できる回数を超えています'); end if;
+
+  -- 取り得る上限。通常敵はEXP11・ボスは13が最大（sortie.js と同じ）
+  v_exp_cap  := v_n * 11 + v_bw * 13;
+  v_gold_cap := v_n::bigint * v_area.max_zako_gold + v_bw::bigint * v_area.boss_gold;
+  v_exp  := least(greatest(coalesce(p_exp, 0), 0), v_exp_cap);
+  v_gold := least(greatest(coalesce(p_gold, 0), 0), v_gold_cap);
+
+  -- ドロップ。そのエリアで落ちるランクかどうかだけ見る
+  if p_drops is not null and jsonb_typeof(p_drops) = 'array' then
+    if jsonb_array_length(p_drops) > v_n + v_bs then
+      return jsonb_build_object('ok', false, 'error', 'ドロップの数が戦闘回数を超えています');
+    end if;
+    for v_drop in select * from jsonb_array_elements(p_drops) loop
+      insert into public.v2_inventory (player_id, equip_id)
+      select v_uid, e.id from public.v2_equipment e
+      where e.id = (v_drop #>> '{}') and v_area.drop_ranks ? e.rank;
+      if found then v_ok := v_ok + 1; end if;
+    end loop;
+  end if;
+
+  -- ボス撃破で次のエリアが解放される（旧版と同じ）
+  v_unlocked := v_row.unlocked_areas;
+  if v_bw > 0 and p_area < 8 and not (v_unlocked @> array[p_area + 1]) then
+    v_unlocked := array_append(v_unlocked, p_area + 1);
+  end if;
+  -- ボス遭遇率。通常敵と戦うたび+0.3、ボスに当たった回があれば0へ戻す
+  v_rate := case when v_bs > 0 then 0 else least(100, v_row.boss_rate + 0.3 * v_n) end;
+
+  update public.v2_profiles
+     set gold = gold + v_gold, unlocked_areas = v_unlocked, boss_rate = v_rate,
+         last_sortie_at = now(), updated_at = now()
+   where id = v_uid;
+
+  v_res := public.v2_apply_exp(v_uid, v_exp);
+  return jsonb_build_object('ok', true, 'exp', v_exp, 'gold', v_gold, 'drops', v_ok,
+    'unlocked', to_jsonb(v_unlocked), 'boss_rate', v_rate, 'level', v_res);
+end;
+$$;
+revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb) from public;
+revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb) from anon;
+grant execute on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb) to authenticated;
+
+-- ===== 出撃のクールタイムの設定（10 or 20）=====
+create or replace function public.v2_set_cooldown(p_sec int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid();
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if p_sec not in (10, 20) then return jsonb_build_object('ok', false, 'error', '10秒か20秒を選んでください'); end if;
+  update public.v2_profiles set sortie_cd = p_sec, updated_at = now() where id = v_uid;
+  return jsonb_build_object('ok', true, 'sortie_cd', p_sec);
+end;
+$$;
+revoke all on function public.v2_set_cooldown(int) from public;
+revoke all on function public.v2_set_cooldown(int) from anon;
+grant execute on function public.v2_set_cooldown(int) to authenticated;
+
+-- ===== 装備の着脱 =====
+-- ★枠の種類チェックはサーバーで行う（両手武器は左手を塞ぐ・盾は左手専用・アクセは2枠）
+create or replace function public.v2_equip(p_slot text, p_inventory_id bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_row public.v2_profiles;
+  v_inv public.v2_inventory;
+  v_eq  public.v2_equipment;
+  v_new jsonb;
+  v_slot text := p_slot;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  select * into v_row from public.v2_profiles where id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  if v_slot not in ('right','left','head','body','arm','foot','acc1','acc2') then
+    return jsonb_build_object('ok', false, 'error', 'そんな枠はありません');
+  end if;
+  select * into v_inv from public.v2_inventory where id = p_inventory_id and player_id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その装備を持っていません'); end if;
+  select * into v_eq from public.v2_equipment where id = v_inv.equip_id;
+
+  -- 部位と枠が合っているか
+  if v_eq.part = '武器' then
+    if v_eq.hands = 'L' and v_slot <> 'left' then return jsonb_build_object('ok', false, 'error', '盾は左手にしか着けられません'); end if;
+    if v_eq.hands = '2' and v_slot <> 'right' then return jsonb_build_object('ok', false, 'error', '両手武器は右手に着けます'); end if;
+    if v_slot not in ('right','left') then return jsonb_build_object('ok', false, 'error', '武器は手の枠に着けます'); end if;
+  elsif v_eq.part = 'アクセ' then
+    if v_slot not in ('acc1','acc2') then return jsonb_build_object('ok', false, 'error', 'アクセはアクセ枠に着けます'); end if;
+  else
+    if v_slot <> (case v_eq.part when '頭' then 'head' when '鎧' then 'body' when '腕' then 'arm' when '足' then 'foot' end) then
+      return jsonb_build_object('ok', false, 'error', format('%sは%sの枠に着けます', v_eq.name, v_eq.part));
+    end if;
+  end if;
+
+  v_new := v_row.equipped;
+  -- 同じ装備が別の枠に着いていたら外す
+  for v_slot in select key from jsonb_each_text(v_new) where value::bigint = p_inventory_id loop
+    v_new := v_new - v_slot;
+  end loop;
+  v_slot := p_slot;
+  v_new := jsonb_set(v_new, array[v_slot], to_jsonb(p_inventory_id));
+  -- 両手武器を右手に着けたら左手を空ける／左手に何か着けるとき右手が両手武器なら外す
+  if v_eq.part = '武器' and v_eq.hands = '2' then
+    v_new := v_new - 'left';
+  elsif v_slot = 'left' and (v_new ? 'right') then
+    if exists (select 1 from public.v2_inventory i join public.v2_equipment e on e.id = i.equip_id
+               where i.id = (v_new ->> 'right')::bigint and e.hands = '2') then
+      v_new := v_new - 'right';
+    end if;
+  end if;
+
+  update public.v2_profiles set equipped = v_new, updated_at = now() where id = v_uid;
+  return jsonb_build_object('ok', true, 'equipped', v_new);
+end;
+$$;
+revoke all on function public.v2_equip(text, bigint) from public;
+revoke all on function public.v2_equip(text, bigint) from anon;
+grant execute on function public.v2_equip(text, bigint) to authenticated;
+
+create or replace function public.v2_unequip(p_slot text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid(); v_new jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  select equipped - p_slot into v_new from public.v2_profiles where id = v_uid;
+  if v_new is null then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  update public.v2_profiles set equipped = v_new, updated_at = now() where id = v_uid;
+  return jsonb_build_object('ok', true, 'equipped', v_new);
+end;
+$$;
+revoke all on function public.v2_unequip(text) from public;
+revoke all on function public.v2_unequip(text) from anon;
+grant execute on function public.v2_unequip(text) to authenticated;
+
+-- ===== 鍛冶屋：同じ強化値の装備3個を合成 =====
+-- あるけみすと式。失敗＝消失／成功+1／大成功+2／超大成功+3。ランクが高いほど失敗しやすい。
+-- ⚠3個消して1個返す。必ず1つのトランザクションで行う（旧版で補填SQLを書く羽目になった事故がある）
+create or replace function public.v2_fuse(p_a bigint, p_b bigint, p_c bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_ids bigint[] := array[p_a, p_b, p_c];
+  v_cnt int;
+  v_plus int;
+  v_equip text;
+  v_rank text;
+  v_r numeric;
+  v_fail numeric; v_great numeric; v_super numeric;
+  v_up int;
+  v_new bigint;
+  v_equipped jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if p_a = p_b or p_b = p_c or p_a = p_c then return jsonb_build_object('ok', false, 'error', '同じ装備を重ねて指定しています'); end if;
+
+  select count(*), min(plus), min(equip_id) into v_cnt, v_plus, v_equip
+    from public.v2_inventory where id = any(v_ids) and player_id = v_uid;
+  if v_cnt <> 3 then return jsonb_build_object('ok', false, 'error', 'その装備を持っていません'); end if;
+  if exists (select 1 from public.v2_inventory where id = any(v_ids) and player_id = v_uid and plus <> v_plus) then
+    return jsonb_build_object('ok', false, 'error', '強化値が同じ装備を3つ選んでください');
+  end if;
+  if exists (select 1 from public.v2_inventory where id = any(v_ids) and player_id = v_uid and equip_id <> v_equip) then
+    return jsonb_build_object('ok', false, 'error', '同じ装備を3つ選んでください');
+  end if;
+  if v_plus >= 12 then return jsonb_build_object('ok', false, 'error', '強化値は+12が上限です'); end if;
+  -- 装備中のものは合成に使えない
+  select equipped into v_equipped from public.v2_profiles where id = v_uid;
+  if exists (select 1 from jsonb_each_text(v_equipped) where value::bigint = any(v_ids)) then
+    return jsonb_build_object('ok', false, 'error', '装備中のものは合成に使えません');
+  end if;
+
+  select rank into v_rank from public.v2_equipment where id = v_equip;
+  -- ランク別の確率（docs/v2-equipment-design.md）
+  select f, g, s into v_fail, v_great, v_super from (values
+    ('F', 0.00, 0.12, 0.03), ('E', 0.02, 0.13, 0.03), ('D', 0.04, 0.14, 0.04),
+    ('C', 0.06, 0.15, 0.05), ('B', 0.09, 0.16, 0.06), ('A', 0.12, 0.17, 0.07),
+    ('S', 0.15, 0.18, 0.09)
+  ) t(r, f, g, s) where t.r = v_rank;
+
+  delete from public.v2_inventory where id = any(v_ids) and player_id = v_uid;
+
+  v_r := random();
+  if v_r < v_fail then
+    return jsonb_build_object('ok', true, 'result', 'fail', 'plus', null);
+  elsif v_r < v_fail + v_super then v_up := 3;
+  elsif v_r < v_fail + v_super + v_great then v_up := 2;
+  else v_up := 1;
+  end if;
+
+  insert into public.v2_inventory (player_id, equip_id, plus)
+  values (v_uid, v_equip, least(12, v_plus + v_up)) returning id into v_new;
+  return jsonb_build_object('ok', true, 'result',
+    case v_up when 3 then 'super' when 2 then 'great' else 'ok' end,
+    'plus', least(12, v_plus + v_up), 'id', v_new);
+end;
+$$;
+revoke all on function public.v2_fuse(bigint, bigint, bigint) from public;
+revoke all on function public.v2_fuse(bigint, bigint, bigint) from anon;
+grant execute on function public.v2_fuse(bigint, bigint, bigint) to authenticated;
+
+-- ===== 動作確認用（開発限定）：装備を配る =====
+create or replace function public.v2_debug_grant_equip(p_rank text, p_count int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid(); v_admin boolean; v_n int := least(greatest(coalesce(p_count,1),1), 60);
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  select coalesce(is_admin, false) into v_admin from public.profiles where id = v_uid;
+  if not coalesce(v_admin, false) then return jsonb_build_object('ok', false, 'error', '開発限定の機能です'); end if;
+  insert into public.v2_inventory (player_id, equip_id)
+  select v_uid, e.id from (
+    select id from public.v2_equipment where rank = coalesce(p_rank, 'F') order by random() limit v_n
+  ) e;
+  return jsonb_build_object('ok', true, 'granted', v_n);
+end;
+$$;
+revoke all on function public.v2_debug_grant_equip(text, int) from public;
+revoke all on function public.v2_debug_grant_equip(text, int) from anon;
+grant execute on function public.v2_debug_grant_equip(text, int) to authenticated;
