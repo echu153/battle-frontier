@@ -1,4 +1,4 @@
-import { STAT_KEYS, STAT_DEFS, MAX_LV, ROLLS_PER_LV, calcPower, expToNext, expPerLv } from '../lib/stats.js'
+import { STAT_DEFS, MAX_LV, ROLLS_PER_LV, calcPower, expToNext, expPerLv } from '../lib/stats.js'
 import { classBonusText } from '../lib/classBonus.js'
 import { TIER_COLOR } from '../lib/classes.js'
 import { equippedItems, gearPower, totalStats } from '../lib/loadout.js'
@@ -20,6 +20,21 @@ export default function V2Status({ prof, inventory, classes, open, onToggle }) {
   const gear = gearPower(prof, inventory)
   const tierColor = TIER_COLOR[classes?.find(c => c.id === prof.class)?.tier] || '#88aaff'
 
+  // ステータス1枠。旧版と同じで「名前（左・グレー）｜値（右・ステの色）」
+  const statCell = (k) => {
+    const d = STAT_DEFS[k]
+    const add = (total[k] || 0) - (prof[k] || 0)
+    return (
+      <div key={k} title={d.desc} style={{ ...cell, padding:'6px 8px' }}>
+        <span style={{ color:'#7f95c4', fontSize:'11px' }}>{d.label}</span>
+        <span style={{ color:d.color, fontSize:'13px' }}>
+          {(total[k] || 0).toLocaleString()}
+          {add > 0 && <span style={{ color:'#44ff88', fontSize:'9px' }}> +{add.toLocaleString()}</span>}
+        </span>
+      </div>
+    )
+  }
+
   const eq = (slot, label) => {
     const w = worn[slot]
     return (
@@ -38,30 +53,25 @@ export default function V2Status({ prof, inventory, classes, open, onToggle }) {
 
   return (
     <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
-      {/* 名前・職業・LV */}
-      <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', marginBottom:'10px' }}>
+      {/* 名前・職業・LV・総合力・Gold（旧版と同じで、枠を使わず行で積む） */}
+      <div style={{ marginBottom:'12px', lineHeight:'1.7' }}>
+        <div style={{ color:'#ffffff', fontSize:'15px' }}>{prof.username}</div>
         <div>
-          <span style={{ color:'#88ccff', fontSize:'14px' }}>{prof.username}</span>
-          <span style={{ color:tierColor, fontSize:'11px', marginLeft:'8px' }}>{prof.class}</span>
-          {prof.job_changes > 0 && <span style={{ color:'#ff88cc', fontSize:'10px', marginLeft:'6px' }}>転職{prof.job_changes}回</span>}
-        </div>
-        <div style={{ color:'#ffcc00', fontSize:'13px' }}>
-          LV {prof.lv}{prof.lv >= MAX_LV && <span style={{ color:'#ff8844', fontSize:'10px', marginLeft:'4px' }}>MAX</span>}
-        </div>
-      </div>
-
-      {/* 総合力・Gold */}
-      <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
-        <div style={{ ...cell, flex:1 }}>
-          <span style={{ color:'#446688', fontSize:'11px' }}>総合力</span>
-          <span style={{ color:'#ffcc00', fontSize:'14px' }}>
-            {(calcPower(prof) + gear).toLocaleString()}
-            {gear > 0 && <span style={{ color:'#44ff88', fontSize:'10px' }}> (+{gear.toLocaleString()})</span>}
+          <span style={{ color:tierColor, fontSize:'12px' }}>{prof.class}</span>
+          <span style={{ color:'#cfe2ff', fontSize:'12px', marginLeft:'8px' }}>
+            LV{prof.lv}／{MAX_LV}
           </span>
+          {prof.lv >= MAX_LV && <span style={{ color:'#ff8844', fontSize:'10px', marginLeft:'4px' }}>MAX</span>}
         </div>
-        <div style={{ ...cell, flex:1 }}>
-          <span style={{ color:'#446688', fontSize:'11px' }}>Gold</span>
-          <span style={{ color:'#ffcc00', fontSize:'14px' }}>{(prof.gold || 0).toLocaleString()}</span>
+        <div style={{ color:'#7f95c4', fontSize:'12px' }}>
+          転職回数: <span style={{ color:'#66ddff' }}>{prof.job_changes}回</span>
+        </div>
+        <div style={{ color:'#7f95c4', fontSize:'12px' }}>
+          総合力: <span style={{ color:'#ffcc00' }}>{(calcPower(prof) + gear).toLocaleString()}</span>
+          {gear > 0 && <span style={{ color:'#44ff88', fontSize:'10px' }}>（装備 +{gear.toLocaleString()}）</span>}
+        </div>
+        <div style={{ color:'#7f95c4', fontSize:'12px' }}>
+          Gold: <span style={{ color:'#ffcc00' }}>{(prof.gold || 0).toLocaleString()}</span>
         </div>
       </div>
 
@@ -76,24 +86,12 @@ export default function V2Status({ prof, inventory, classes, open, onToggle }) {
 
       {open && (
         <>
-          {/* ステータス8種。装備で増えたぶんは緑で併記する */}
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'6px' }}>
-            {STAT_KEYS.map(k => {
-              const d = STAT_DEFS[k]
-              const add = (total[k] || 0) - (prof[k] || 0)
-              return (
-                <div key={k} title={d.desc} style={cell}>
-                  <span style={{ color:'#446688', fontSize:'11px' }}>
-                    <span style={{ color:d.color }}>{d.label}</span>
-                    <span style={{ fontSize:'9px', marginLeft:'4px' }}>{d.jp}</span>
-                  </span>
-                  <span style={{ color:d.color, fontSize:'13px' }}>
-                    {(total[k] || 0).toLocaleString()}
-                    {add > 0 && <span style={{ color:'#44ff88', fontSize:'10px' }}> +{add.toLocaleString()}</span>}
-                  </span>
-                </div>
-              )
-            })}
+          {/* ステータス。旧版と同じで HP/MP は2列・残りは3列に並べる */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'4px', marginBottom:'4px' }}>
+            {['hp', 'mp'].map(statCell)}
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'4px' }}>
+            {['str', 'dex', 'agi', 'int_stat', 'vit', 'luk'].map(statCell)}
           </div>
 
           {/* 職業補正 */}
