@@ -67,6 +67,8 @@ const S = {
   まるのみ: { name:'まるのみ', kind:'phys', mult:2.2, proc:70, mp:14, drain:0.25 },
 }
 
+// timed は**朝・昼・晩の時間帯限定の敵**（各エリア1体ずつ・計24体・v2の新規キャラ）。
+// その時間帯だけ通常敵の抽選に加わる。強さは通常敵の最上位の約1.2倍・Goldは約2倍。
 // gold は**旧版の値をそのまま流用**（2026-08-14 ユーザー決定「ゴールドも一旦同じ」）
 // gold は**旧版の値をそのまま流用**（2026-08-14 ユーザー決定「ゴールドも一旦同じ」）
 // dist は「戦闘力に対する割合(%)」。合計100
@@ -83,6 +85,14 @@ export const AREAS = [
       A({ name:'毒キノコ', power:360, gold:30, kind:'mag', dist:{ hp:34, mp:8, str:3, dex:10, agi:3, int_stat:28, vit:9, luk:5 },
         skills:[S.どくのほうし] }),
     ],
+    timed: [
+      A({ band:'朝', name:'朝露のフェアリー', power:430, gold:60, kind:'mag', dist:{ hp:26, mp:10, str:4, dex:14, agi:22, int_stat:18, vit:3, luk:3 },
+        skills:[S.どくのほうし, S.すばやくなる] }),
+      A({ band:'昼', name:'ひなたトカゲ', power:430, gold:60, kind:'phys', dist:{ hp:34, mp:4, str:20, dex:10, agi:14, int_stat:3, vit:12, luk:3 },
+        skills:[S.かみつく, S.かたくなる] }),
+      A({ band:'晩', name:'月夜のフクロウ', power:430, gold:60, kind:'phys', dist:{ hp:24, mp:6, str:18, dex:18, agi:26, int_stat:4, vit:2, luk:2 },
+        skills:[S.ひっかく, S.すばやくなる] }),
+    ],
     boss: A({ name:'ビッグスライム', power:857, gold:100, kind:'phys', dist:{ hp:45, mp:6, str:14, dex:8, agi:5, int_stat:3, vit:16, luk:3 },
       skills:[S.たいあたり, S.かたくなる, S.まるのみ, S.じこさいせい] }),
   },
@@ -94,6 +104,14 @@ export const AREAS = [
       A({ name:'野良犬', power:540, gold:50, kind:'phys', dist:{ hp:26, mp:4, str:20, dex:12, agi:26, int_stat:2, vit:6, luk:4 },
         skills:[S.かみつく, S.すばやくなる] }),
       A({ name:'盗賊', power:600, gold:60, kind:'phys', dist:{ hp:26, mp:6, str:20, dex:20, agi:18, int_stat:3, vit:5, luk:2 },
+        skills:[S.だましうち, S.すばやくなる] }),
+    ],
+    timed: [
+      A({ band:'朝', name:'朝霧のワーム', power:720, gold:120, kind:'phys', dist:{ hp:36, mp:5, str:22, dex:8, agi:8, int_stat:3, vit:15, luk:3 },
+        skills:[S.かみつく, S.かたくなる] }),
+      A({ band:'昼', name:'陽炎リザード', power:720, gold:120, kind:'phys', dist:{ hp:28, mp:6, str:22, dex:14, agi:20, int_stat:4, vit:4, luk:2 },
+        skills:[S.ひっかく, S.すばやくなる] }),
+      A({ band:'晩', name:'夜盗の斥候', power:720, gold:120, kind:'phys', dist:{ hp:26, mp:7, str:20, dex:22, agi:18, int_stat:3, vit:2, luk:2 },
         skills:[S.だましうち, S.すばやくなる] }),
     ],
     boss: A({ name:'盗賊団のリーダー', power:1175, gold:500, kind:'phys', dist:{ hp:42, mp:7, str:18, dex:12, agi:9, int_stat:3, vit:6, luk:3 },
@@ -109,6 +127,14 @@ export const AREAS = [
       A({ name:'ゴーレム', power:960, gold:120, kind:'phys', dist:{ hp:34, mp:4, str:22, dex:6, agi:4, int_stat:2, vit:24, luk:4 },
         skills:[S.いわなげ, S.かたくなる] }),
     ],
+    timed: [
+      A({ band:'朝', name:'曙のガーゴイル', power:1150, gold:240, kind:'phys', dist:{ hp:32, mp:5, str:24, dex:10, agi:8, int_stat:3, vit:15, luk:3 },
+        skills:[S.いわなげ, S.かたくなる] }),
+      A({ band:'昼', name:'石化トカゲ', power:1150, gold:240, kind:'phys', dist:{ hp:34, mp:4, str:20, dex:8, agi:6, int_stat:2, vit:23, luk:3 },
+        skills:[S.ほねきり, S.かたくなる] }),
+      A({ band:'晩', name:'夜這うレイス', power:1150, gold:240, kind:'mag', dist:{ hp:28, mp:10, str:3, dex:12, agi:16, int_stat:26, vit:3, luk:2 },
+        skills:[S.でんげき, S.まりょくため] }),
+    ],
     boss: A({ name:'古代の番人', power:2046, gold:2000, kind:'mag', dist:{ hp:42, mp:7, str:4, dex:9, agi:7, int_stat:18, vit:10, luk:3 },
       skills:[S.古代の裁き, S.まりょくため, S.でんげき, S.かたくなる, S.じこさいせい] }),
   },
@@ -122,6 +148,14 @@ export const AREAS = [
       A({ name:'毒クラゲ', power:1300, gold:175, kind:'mag', dist:{ hp:34, mp:9, str:3, dex:9, agi:8, int_stat:24, vit:10, luk:3 },
         skills:[S.どくのほうし, S.まりょくため] }),
     ],
+    timed: [
+      A({ band:'朝', name:'朝凪のセイレーン', power:1740, gold:400, kind:'mag', dist:{ hp:28, mp:10, str:3, dex:12, agi:16, int_stat:26, vit:3, luk:2 },
+        skills:[S.どくのほうし, S.まりょくため] }),
+      A({ band:'昼', name:'潮騒のカニ', power:1740, gold:400, kind:'phys', dist:{ hp:34, mp:4, str:22, dex:8, agi:6, int_stat:2, vit:21, luk:3 },
+        skills:[S.しおのやり, S.かたくなる] }),
+      A({ band:'晩', name:'夜光アンコウ', power:1740, gold:400, kind:'phys', dist:{ hp:30, mp:8, str:18, dex:12, agi:12, int_stat:14, vit:4, luk:2 },
+        skills:[S.かみつく, S.でんげき] }),
+    ],
     boss: A({ name:'シーサーペント', power:4137, gold:5000, kind:'phys', dist:{ hp:45, mp:6, str:15, dex:9, agi:7, int_stat:4, vit:11, luk:3 },
       skills:[S.海嵐の一撃, S.深海波動, S.ちからため, S.かたくなる, S.じこさいせい] }),
   },
@@ -133,6 +167,14 @@ export const AREAS = [
       A({ name:'岩石ゴーレム', power:2500, gold:300, kind:'phys', dist:{ hp:34, mp:4, str:23, dex:6, agi:4, int_stat:2, vit:24, luk:3 },
         skills:[S.いわなげ, S.かたくなる] }),
       A({ name:'グリフォン', power:2350, gold:270, kind:'phys', dist:{ hp:26, mp:5, str:22, dex:14, agi:25, int_stat:3, vit:3, luk:2 },
+        skills:[S.ひっかく, S.すばやくなる] }),
+    ],
+    timed: [
+      A({ band:'朝', name:'払暁のワイバーン', power:3000, gold:600, kind:'phys', dist:{ hp:28, mp:7, str:25, dex:12, agi:20, int_stat:5, vit:1, luk:2 },
+        skills:[S.れっぷうそう, S.ちからため] }),
+      A({ band:'昼', name:'陽射しの大猿', power:3000, gold:600, kind:'phys', dist:{ hp:33, mp:5, str:27, dex:10, agi:11, int_stat:2, vit:9, luk:3 },
+        skills:[S.こんぼう, S.ちからため] }),
+      A({ band:'晩', name:'宵闇の山猫', power:3000, gold:600, kind:'phys', dist:{ hp:25, mp:6, str:23, dex:16, agi:26, int_stat:2, vit:1, luk:1 },
         skills:[S.ひっかく, S.すばやくなる] }),
     ],
     boss: A({ name:'雷鷲サンダーロック', power:6744, gold:9000, kind:'phys', dist:{ hp:40, mp:7, str:16, dex:10, agi:12, int_stat:3, vit:9, luk:3 },
@@ -148,6 +190,14 @@ export const AREAS = [
       A({ name:'霜の精霊', power:3900, gold:400, kind:'mag', dist:{ hp:30, mp:10, str:3, dex:10, agi:10, int_stat:28, vit:6, luk:3 },
         skills:[S.つらら, S.まりょくため] }),
     ],
+    timed: [
+      A({ band:'朝', name:'朝焼けの氷狼', power:5280, gold:900, kind:'phys', dist:{ hp:28, mp:6, str:26, dex:13, agi:21, int_stat:3, vit:1, luk:2 },
+        skills:[S.かみつく, S.すばやくなる] }),
+      A({ band:'昼', name:'白光の樹氷精', power:5280, gold:900, kind:'mag', dist:{ hp:29, mp:10, str:2, dex:10, agi:10, int_stat:28, vit:9, luk:2 },
+        skills:[S.つらら, S.まりょくため] }),
+      A({ band:'晩', name:'極夜のワイト', power:5280, gold:900, kind:'phys', dist:{ hp:33, mp:8, str:20, dex:10, agi:9, int_stat:12, vit:6, luk:2 },
+        skills:[S.ほねきり, S.つらら, S.かたくなる] }),
+    ],
     boss: A({ name:'氷霊フロストバーン', power:9893, gold:18750, kind:'mag', dist:{ hp:42, mp:8, str:3, dex:9, agi:7, int_stat:19, vit:9, luk:3 },
       skills:[S.氷棺葬送, S.つらら, S.まりょくため, S.かたくなる, S.じこさいせい] }),
   },
@@ -161,6 +211,14 @@ export const AREAS = [
       A({ name:'ファイアドレイク', power:7400, gold:550, kind:'phys', dist:{ hp:28, mp:8, str:24, dex:13, agi:15, int_stat:7, vit:3, luk:2 },
         skills:[S.れっぷうそう, S.かえんだん, S.ちからため] }),
     ],
+    timed: [
+      A({ band:'朝', name:'暁のフレイムバット', power:9360, gold:1200, kind:'phys', dist:{ hp:26, mp:8, str:22, dex:14, agi:24, int_stat:3, vit:1, luk:2 },
+        skills:[S.れっぷうそう, S.すばやくなる] }),
+      A({ band:'昼', name:'陽炎のイフリート', power:9360, gold:1200, kind:'mag', dist:{ hp:30, mp:11, str:3, dex:11, agi:12, int_stat:28, vit:3, luk:2 },
+        skills:[S.かえんだん, S.まりょくため] }),
+      A({ band:'晩', name:'熾火のデーモン', power:9360, gold:1200, kind:'phys', dist:{ hp:32, mp:7, str:26, dex:11, agi:10, int_stat:5, vit:7, luk:2 },
+        skills:[S.ようがんけん, S.ちからため] }),
+    ],
     boss: A({ name:'深紅のサラマンダー', power:19450, gold:37500, kind:'phys', dist:{ hp:43, mp:7, str:16, dex:9, agi:8, int_stat:4, vit:10, luk:3 },
       skills:[S.炎獄の審判, S.ようがんけん, S.かえんだん, S.ちからため, S.じこさいせい] }),
   },
@@ -173,6 +231,14 @@ export const AREAS = [
         skills:[S.でんげき, S.まりょくため] }),
       A({ name:'天空騎士グリフィオン', power:12500, gold:800, kind:'phys', dist:{ hp:31, mp:6, str:25, dex:13, agi:11, int_stat:3, vit:9, luk:2 },
         skills:[S.そうてんとつげき, S.ちからため, S.かたくなる] }),
+    ],
+    timed: [
+      A({ band:'朝', name:'曙光のセラフ', power:15000, gold:1600, kind:'mag', dist:{ hp:30, mp:11, str:3, dex:12, agi:13, int_stat:28, vit:1, luk:2 },
+        skills:[S.でんげき, S.まりょくため] }),
+      A({ band:'昼', name:'白昼のペガサス', power:15000, gold:1600, kind:'phys', dist:{ hp:28, mp:7, str:24, dex:14, agi:24, int_stat:2, vit:0, luk:1 },
+        skills:[S.れっぷうそう, S.すばやくなる] }),
+      A({ band:'晩', name:'星降りのヴァルキリー', power:15000, gold:1600, kind:'phys', dist:{ hp:29, mp:8, str:26, dex:14, agi:13, int_stat:4, vit:4, luk:2 },
+        skills:[S.そうてんとつげき, S.ちからため] }),
     ],
     boss: A({ name:'天空覇龍ウラノス', power:28202, gold:60000, kind:'phys', dist:{ hp:44, mp:7, str:16, dex:9, agi:8, int_stat:4, vit:9, luk:3 },
       skills:[S.天墜滅撃, S.そうてんとつげき, S.でんげき, S.ちからため, S.じこさいせい] }),
@@ -200,7 +266,8 @@ export const toFighter = (enemy, uses = 4) => ({
 })
 
 export const areaOf = (id) => AREAS.find(a => a.id === id) || null
-export const allEnemies = () => AREAS.flatMap(a => [...a.enemies, a.boss])
+export const allEnemies = () => AREAS.flatMap(a => [...a.enemies, ...(a.timed || []), a.boss])
+export const timedEnemyOf = (area, band) => (area?.timed || []).find(e => e.band === band) || null
 
 // ドロップするランクを1つ抽選する
 export const rollDropRank = (area, rng = Math.random) => {

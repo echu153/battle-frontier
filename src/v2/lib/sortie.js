@@ -14,7 +14,7 @@
 //   そのエリアのボスを倒すと次のエリアが解放される。①は最初から解放。
 //   旧版は⑦のボス撃破で⑧が開くところまで（⑧の先が無い）。v2も同じ。
 // ============================================================
-import { AREAS, areaOf, rollDropRank } from './enemies.js'
+import { AREAS, areaOf, rollDropRank, timedEnemyOf } from './enemies.js'
 import { PARTS, itemsOf, typesOf, CATALOG } from './equipment.js'
 
 // ===== ボスの出やすさ =====
@@ -54,12 +54,18 @@ export const goldOf = (enemy) => enemy?.gold || 0
 
 // ===== 1回の出撃 =====
 // 戦闘そのものは runBattle が担当する。ここは「誰と当たるか・何がもらえるか」だけ
-export const pickEncounter = (areaId, bossRate, rng = Math.random) => {
+// 通常敵の抽選には**その時間帯の限定敵も加わる**（朝なら朝の敵が4体目として並ぶ）
+export const enemyPoolAt = (area, at = new Date()) => {
+  const timed = timedEnemyOf(area, bandAt(at))
+  return timed ? [...area.enemies, timed] : [...area.enemies]
+}
+export const pickEncounter = (areaId, bossRate, at = new Date(), rng = Math.random) => {
   const area = areaOf(areaId)
   if (!area) return null
   const wasBoss = rollBoss(bossRate, rng)
-  const enemy = wasBoss ? area.boss : area.enemies[Math.floor(rng() * area.enemies.length)]
-  return { area, enemy, isBoss: wasBoss }
+  const pool = enemyPoolAt(area, at)
+  const enemy = wasBoss ? area.boss : pool[Math.floor(rng() * pool.length)]
+  return { area, enemy, isBoss: wasBoss, band: bandAt(at) }
 }
 
 // 勝ったあとの取り分。装備のドロップは別（rollDrop を呼ぶ。落ちる確率はまだ決めていない）
@@ -76,16 +82,33 @@ export const AREA_LIST = AREAS.map(a => ({ id: a.id, name: a.name }))
 //   旧版は10秒モードだけEXPとGoldを半分にしていたが、v2は揃える。
 //   ＝10秒を選ぶほうが時間あたりの効率は2倍になる。「速く回したい人が回せる」だけの選択肢
 export const COOLDOWNS = [10, 20]
+// 装備が落ちる確率(%)。**20秒のほうが1回あたりは高い**（10秒の効率2倍をいくらか相殺する）
+//   時間あたりで見ると 10秒=0.30%/秒・20秒=0.20%/秒 で、まだ10秒が1.5倍有利
+export const DROP_RATE = { 10: 3, 20: 4 }
+export const dropRateOf = (sec) => DROP_RATE[cooldownOf(sec)]
+export const rollHasDrop = (sec, rng = Math.random) => rng() * 100 < dropRateOf(sec)
 export const DEFAULT_COOLDOWN = 20
 export const isValidCooldown = (sec) => COOLDOWNS.includes(sec)
 export const cooldownOf = (sec) => (isValidCooldown(sec) ? sec : DEFAULT_COOLDOWN)
+
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000
+
+// ===== 時間帯（朝・昼・晩）=====
+// **その時間帯だけ出る敵**が各エリアに1体ずついる（enemies.js の timed）。
+//   朝 5:00〜12:59 ／ 昼 13:00〜20:59 ／ 晩 21:00〜4:59（JST・各8時間）
+export const BANDS = ['朝', '昼', '晩']
+export const bandAt = (at = new Date()) => {
+  const h = Math.floor(((at.getTime() + JST_OFFSET_MS) / 3600000) % 24)
+  if (h >= 5 && h < 13) return '朝'
+  if (h >= 13 && h < 21) return '昼'
+  return '晩'
+}
 
 // ===== 装備ドロップの部位 =====
 // **部位は完全ランダム**。ただし**1時間ごとに「落ちやすい部位」が入れ替わる**。
 //   その時間の部位だけ重みが FEATURED_WEIGHT 倍（＝2倍出やすい）。
 //   時刻から決まるので全員に共通で、先の予定も計算できる（画面に出せる）。
 export const FEATURED_WEIGHT = 2
-const JST_OFFSET_MS = 9 * 60 * 60 * 1000
 // 1970年からのJSTでの通算時間。これを部位の数で割った余りが「いまの部位」
 export const jstHourIndex = (at = new Date()) => Math.floor((at.getTime() + JST_OFFSET_MS) / 3600000)
 export const featuredPartAt = (at = new Date()) => PARTS[jstHourIndex(at) % PARTS.length]

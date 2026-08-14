@@ -17,7 +17,8 @@ test('エリアは①〜⑧、名前と敵は旧版から流用', () => {
     'ビッグスライム', '盗賊団のリーダー', '古代の番人', 'シーサーペント',
     '雷鷲サンダーロック', '氷霊フロストバーン', '深紅のサラマンダー', '天空覇龍ウラノス'])
   for (const a of AREAS) assert.equal(a.enemies.length, 3, `エリア${a.id}の通常敵`)
-  assert.equal(allEnemies().length, 32)
+  // 通常3体＋時間帯限定3体＋ボス1体 × 8エリア
+  assert.equal(allEnemies().length, 8 * 7)
   assert.equal(areaOf(3).name, '古代の洞窟')
   assert.equal(areaOf(99), null)
 })

@@ -6,6 +6,7 @@ import {
   expOf, goldOf, pickEncounter, EXP_BOSS, EXP_ZAKO_MIN, EXP_ZAKO_MAX, LAST_AREA,
   COOLDOWNS, DEFAULT_COOLDOWN, cooldownOf,
   featuredPartAt, nextSwitchAt, featuredSchedule, rollDropPart, rollDrop,
+  BANDS, bandAt, enemyPoolAt, DROP_RATE, dropRateOf, rollHasDrop,
 } from './sortie.js'
 import { PARTS, ITEM_BY_ID } from './equipment.js'
 import { allEnemies, areaOf } from './enemies.js'
@@ -84,14 +85,15 @@ test('遭遇はそのエリアの敵から選ばれる', () => {
   const area = areaOf(3)
   const names = new Set()
   for (let i = 0; i < 300; i++) {
-    const enc = pickEncounter(3, 0, rng)   // 遭遇率0なので必ず通常敵
+    const enc = pickEncounter(3, 0, new Date(), rng)   // 遭遇率0なので必ず通常敵
     assert.equal(enc.isBoss, false)
     names.add(enc.enemy.name)
   }
-  assert.deepEqual([...names].sort(), area.enemies.map(e => e.name).sort())
+  // ★その時間帯の限定敵も4体目として並ぶ
+  assert.deepEqual([...names].sort(), enemyPoolAt(area, new Date()).map(e => e.name).sort())
   // 遭遇率100なら必ずボス
-  assert.equal(pickEncounter(3, 100, rng).enemy.name, area.boss.name)
-  assert.equal(pickEncounter(99, 0, rng), null, '無いエリア')
+  assert.equal(pickEncounter(3, 100, new Date(), rng).enemy.name, area.boss.name)
+  assert.equal(pickEncounter(99, 0, new Date(), rng), null, '無いエリア')
 })
 
 test('出撃のクールタイムは10秒と20秒から選べる', () => {
@@ -150,4 +152,56 @@ test('ドロップはそのエリアのランク範囲に収まり、実在す�
     }
   }
   assert.equal(rollDrop(99, new Date(), rng), null)
+})
+
+test('時間帯は朝5〜12・昼13〜20・晩21〜4（JST・各8時間）', () => {
+  const at = (h) => new Date(`2026-08-15T${String(h).padStart(2, '0')}:30:00+09:00`)
+  assert.deepEqual(BANDS, ['朝', '昼', '晩'])
+  for (const h of [5, 8, 12]) assert.equal(bandAt(at(h)), '朝', `${h}時`)
+  for (const h of [13, 17, 20]) assert.equal(bandAt(at(h)), '昼', `${h}時`)
+  for (const h of [21, 23, 0, 4]) assert.equal(bandAt(at(h)), '晩', `${h}時`)
+})
+
+test('時間帯限定の敵が各エリアに1体ずつ、その時間だけ抽選に加わる', () => {
+  for (const id of [1, 4, 8]) {
+    const area = areaOf(id)
+    assert.equal(area.timed.length, 3, `エリア${id}の限定敵`)
+    assert.deepEqual(area.timed.map(e => e.band), BANDS)
+    for (const band of BANDS) {
+      const at = new Date(band === '朝' ? '2026-08-15T06:00:00+09:00'
+        : band === '昼' ? '2026-08-15T15:00:00+09:00' : '2026-08-15T23:00:00+09:00')
+      const pool = enemyPoolAt(area, at)
+      assert.equal(pool.length, 4, '通常3体＋限定1体')
+      const timed = pool[3]
+      assert.equal(timed.band, band)
+      // 限定敵は通常敵の最上位より強く、Goldも多い
+      const maxNormal = Math.max(...area.enemies.map(e => e.power))
+      const maxGold = Math.max(...area.enemies.map(e => e.gold))
+      assert.ok(timed.power > maxNormal, `${timed.name} の戦闘力`)
+      assert.ok(timed.gold > maxGold, `${timed.name} のGold`)
+      // ボスより弱い
+      assert.ok(timed.power < area.boss.power, `${timed.name} がボスより強い`)
+    }
+  }
+  // 24体の名前が全部ちがう
+  const names = [1, 2, 3, 4, 5, 6, 7, 8].flatMap(id => areaOf(id).timed.map(e => e.name))
+  assert.equal(names.length, 24)
+  assert.equal(new Set(names).size, 24)
+})
+
+test('装備が落ちる確率は10秒3%・20秒4%', () => {
+  // ★20秒のほうが1回あたりは高い（10秒の効率2倍をいくらか相殺する）。
+  //   時間あたりでは 10秒=0.30%/秒・20秒=0.20%/秒 でまだ10秒が1.5倍有利
+  assert.deepEqual(DROP_RATE, { 10:3, 20:4 })
+  assert.equal(dropRateOf(10), 3)
+  assert.equal(dropRateOf(20), 4)
+  assert.equal(dropRateOf(999), 4, '知らない値は既定(20秒)へ')
+  const rng = mkRng(55)
+  let n10 = 0, n20 = 0
+  const N = 40000
+  for (let i = 0; i < N; i++) if (rollHasDrop(10, rng)) n10++
+  for (let i = 0; i < N; i++) if (rollHasDrop(20, rng)) n20++
+  assert.ok(Math.abs(n10 / N - 0.03) < 0.004, `10秒 ${(n10 / N * 100).toFixed(2)}%`)
+  assert.ok(Math.abs(n20 / N - 0.04) < 0.004, `20秒 ${(n20 / N * 100).toFixed(2)}%`)
+  assert.ok(n20 > n10)
 })
