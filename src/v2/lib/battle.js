@@ -346,6 +346,8 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
     tickRegen(a, log)
     tickRegen(b, log)
     if (a.hp <= 0 || b.hp <= 0) break
+    // 画面でHPバーを出すための、ターン終わりのスナップショット（戦闘の結果には影響しない）
+    log.push({ type:'hp', turn, a: Math.max(0, a.hp), aMax: a.base.hp, b: Math.max(0, b.hp), bMax: b.base.hp })
   }
 
   const winner = a.hp <= 0 && b.hp <= 0 ? 'draw' : a.hp <= 0 ? 'b' : b.hp <= 0 ? 'a' : 'draw'

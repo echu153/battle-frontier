@@ -49,7 +49,6 @@ const ROW_INDENT = '28px'
 
 // ホームから行ける先。旧版の街と同じ並びの考え方（出撃が主役、あとは施設）
 const MENU = [
-  { key:'sortie',  label:'出撃',        icon:'⚔', color:'#00aaff', desc:'エリア①〜⑧で戦って、EXP・Gold・装備を集める' },
   { key:'temple',  label:'神殿',        icon:'🏛', color:'#ff88cc', desc:'転職する。LV100でのみ実行できる' },
   { key:'smith',   label:'鍛冶屋',      icon:'🔨', color:'#ffcc00', desc:'同じ装備3個を合成して強化する' },
   { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', desc:'覚えたスキルを5枠に並べる（並び順＝発動順）' },
@@ -75,6 +74,7 @@ export default function V2Home() {
   const [sortAsc, setSortAsc] = useState(true)
   const [screen, setScreen] = useState('home')     // home / sortie / temple / smith / skills / storage
   const [inventory, setInventory] = useState([])   // 所持している装備（v2_inventory）
+  const [inBattle, setInBattle] = useState(false)  // 戦闘中はメニューを隠す（旧版と同じ）
 
   useEffect(() => {
     let alive = true
@@ -349,23 +349,26 @@ export default function V2Home() {
               </div>
             </div>
 
-            {/* ===== ホーム：どこへ行くかを選ぶ ===== */}
+            {/* ===== 出撃（旧版と同じで、街のブロックがそのままホームに載る） ===== */}
             {screen === 'home' && (
-              <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
-                <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px' }}>どこへ行きますか</div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(230px,1fr))', gap:'6px' }}>
-                  {MENU.map(m => (
-                    <button key={m.key} onClick={() => setScreen(m.key)}
-                      style={{ ...btn(m.color), textAlign:'left', padding:'10px 12px' }}>
-                      <div style={{ fontSize:'13px' }}>{m.icon} {m.label}</div>
-                      <div style={{ color:'#556677', fontSize:'9px', marginTop:'3px' }}>{m.desc}</div>
-                    </button>
-                  ))}
-                </div>
+              <div style={{ marginBottom:'12px' }}>
+                <V2Sortie prof={prof} inventory={inventory} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />
               </div>
             )}
 
-            {screen === 'sortie'  && <V2Sortie  prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {/* ===== 施設（旧版の☰メニューに相当）===== */}
+            {screen === 'home' && !inBattle && (
+              <div style={{ ...box, padding:'12px', marginBottom:'12px' }}>
+                {MENU.map(m => (
+                  <button key={m.key} onClick={() => setScreen(m.key)}
+                    style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${m.color}`, color:m.color,
+                      cursor:'pointer', fontFamily:'monospace', fontSize:'13px', marginBottom:'8px', textAlign:'left' }}>
+                    {m.icon} {m.label}
+                    <span style={{ color:'#446688', fontSize:'9px', marginLeft:'8px' }}>{m.desc}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
 
