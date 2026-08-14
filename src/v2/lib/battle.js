@@ -350,6 +350,8 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
     log.push({ type:'hp', turn, a: Math.max(0, a.hp), aMax: a.base.hp, b: Math.max(0, b.hp), bMax: b.base.hp })
   }
 
+  // 決着した時点のHPも1件出す（倒したときに 0 のバーが出るように。旧版と同じ）
+  log.push({ type:'hp', turn: Math.min(turn, maxTurns), a: Math.max(0, a.hp), aMax: a.base.hp, b: Math.max(0, b.hp), bMax: b.base.hp })
   const winner = a.hp <= 0 && b.hp <= 0 ? 'draw' : a.hp <= 0 ? 'b' : b.hp <= 0 ? 'a' : 'draw'
   return { winner, turns: Math.min(turn, maxTurns), log, a, b }
 }

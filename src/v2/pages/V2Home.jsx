@@ -5,14 +5,14 @@ import { validateName } from '../../lib/nameFilter'
 import { reportDevAccess } from '../../lib/devAccess'
 import {
   STAT_KEYS, STAT_DEFS, MAX_LV, ROLLS_PER_LV, JOB_CHANGE_POWER,
-  calcPower, expToNext, expPerLv, canJobChange,
+  canJobChange,
 } from '../lib/stats.js'
 import { TIER_LABEL, TIER_ORDER, TIER_COLOR, missingReqs, canBecome, reqText, proofCount } from '../lib/classes.js'
 import { classBonusText } from '../lib/classBonus.js'
-import { gearPower } from '../lib/loadout.js'
 import V2Sortie from '../components/V2Sortie.jsx'
 import V2Storage from '../components/V2Storage.jsx'
 import V2Smith from '../components/V2Smith.jsx'
+import V2Status, { V2Menu } from '../components/V2Status.jsx'
 import {
   powerText, isPassive, KIND_LABEL, KIND_COLOR, SKILL_BY_NAME,
   usableSkills, usableSkillNames, unlearnedSkills, validateSkillSet, setMpCost,
@@ -49,10 +49,10 @@ const ROW_INDENT = '28px'
 
 // ホームから行ける先。旧版の街と同じ並びの考え方（出撃が主役、あとは施設）
 const MENU = [
-  { key:'temple',  label:'神殿',        icon:'🏛', color:'#ff88cc', desc:'転職する。LV100でのみ実行できる' },
-  { key:'smith',   label:'鍛冶屋',      icon:'🔨', color:'#ffcc00', desc:'同じ装備3個を合成して強化する' },
-  { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', desc:'覚えたスキルを5枠に並べる（並び順＝発動順）' },
-  { key:'storage', label:'倉庫',        icon:'🎒', color:'#88ccff', desc:'持っている装備を着け外しする' },
+  { key:'temple',  label:'神殿',        icon:'🏛', color:'#ff88cc', action:'転職する' },
+  { key:'smith',   label:'鍛冶屋',      icon:'🔨', color:'#ffcc00', action:'合成する' },
+  { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
+  { key:'storage', label:'倉庫',        icon:'🎒', color:'#88ccff', action:'倉庫に行く' },
 ]
 
 export default function V2Home() {
@@ -75,6 +75,8 @@ export default function V2Home() {
   const [screen, setScreen] = useState('home')     // home / sortie / temple / smith / skills / storage
   const [inventory, setInventory] = useState([])   // 所持している装備（v2_inventory）
   const [inBattle, setInBattle] = useState(false)  // 戦闘中はメニューを隠す（旧版と同じ）
+  const [openStatus, setOpenStatus] = useState(true)  // ステータスの折りたたみ
+  const [openMenu, setOpenMenu] = useState(true)      // 行動メニューの折りたたみ
 
   useEffect(() => {
     let alive = true
@@ -288,66 +290,7 @@ export default function V2Home() {
         {/* ステータス */}
         {prof && (
           <>
-            <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
-              <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', marginBottom:'10px' }}>
-                <div>
-                  <span style={{ color:'#88ccff', fontSize:'14px' }}>{prof.username}</span>
-                  <span style={{ color:TIER_COLOR[classes.find(c => c.id === prof.class)?.tier] || '#88aaff', fontSize:'11px', marginLeft:'8px' }}>{prof.class}</span>
-                  {prof.job_changes > 0 && <span style={{ color:'#ff88cc', fontSize:'10px', marginLeft:'6px' }}>転職{prof.job_changes}回</span>}
-                </div>
-                <div style={{ color:'#ffcc00', fontSize:'13px' }}>LV {prof.lv}{prof.lv >= MAX_LV && <span style={{ color:'#ff8844', fontSize:'10px', marginLeft:'4px' }}>MAX</span>}</div>
-              </div>
-
-              {/* EXPバー。必要EXPは転職回数で重くなる */}
-              <div style={{ color:'#446688', fontSize:'10px', marginBottom:'3px' }}>
-                EXP {prof.exp} / {expToNext(prof.lv, prof.job_changes) || '—'}
-              </div>
-              <div style={{ height:'6px', background:'#001028', border:'1px solid #002244', marginBottom:'12px' }}>
-                <div style={{ height:'100%', width:`${Math.min(100, (prof.exp / expPerLv(prof.job_changes)) * 100)}%`, background:'#44aaff' }} />
-              </div>
-
-              {/* 戦闘力 */}
-              <div style={{ background:'#000818', border:'1px solid #002244', padding:'8px 10px', marginBottom:'12px', display:'flex', justifyContent:'space-between' }}>
-                <span style={{ color:'#446688', fontSize:'11px' }}>戦闘力</span>
-                <span style={{ color:'#ffcc00', fontSize:'14px' }}>{calcPower(prof)}</span>
-              </div>
-
-              {/* 職業補正：いまの職業に就いている間だけ常時かかる。枠を使わない */}
-              {classBonusText(prof.class) && (
-                <div style={{ background:'#000818', border:'1px solid #223355', padding:'8px 10px', marginBottom:'12px' }}>
-                  <div style={{ color:'#446688', fontSize:'10px', marginBottom:'3px' }}>職業補正（{prof.class}でいる間ずっと・枠を使いません）</div>
-                  <div style={{ color:'#88ddaa', fontSize:'12px' }}>{classBonusText(prof.class)}</div>
-                </div>
-              )}
-
-              {/* ステータス8種 */}
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'6px' }}>
-                {STAT_KEYS.map(k => {
-                  const d = STAT_DEFS[k]
-                  return (
-                    <div key={k} title={d.desc} style={{ background:'#000818', border:'1px solid #002244', padding:'7px 9px', display:'flex', alignItems:'baseline', justifyContent:'space-between' }}>
-                      <span style={{ color:'#446688', fontSize:'11px' }}>
-                        <span style={{ color:d.color }}>{d.label}</span>
-                        <span style={{ fontSize:'9px', marginLeft:'4px' }}>{d.jp}</span>
-                      </span>
-                      <span style={{ color:d.color, fontSize:'13px' }}>{prof[k]}</span>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* 装備ぶんの戦闘力（倉庫で着けたぶん） */}
-              {gearPower(prof, inventory) > 0 && (
-                <div style={{ color:'#446688', fontSize:'10px', marginTop:'6px' }}>
-                  うち装備 <span style={{ color:'#ffcc00' }}>+{gearPower(prof, inventory).toLocaleString()}</span>
-                  　Gold <span style={{ color:'#ffcc00' }}>{(prof.gold || 0).toLocaleString()}</span>
-                </div>
-              )}
-              <div style={{ color:'#446688', fontSize:'10px', marginTop:'10px', lineHeight:'1.8' }}>
-                LVアップごとに{ROLLS_PER_LV}回抽選し、当たったステータスが上がります（HPは+8・MPは+3・その他は+1）。
-                どのステに当たっても戦闘力の上がり幅は同じです。
-              </div>
-            </div>
+            <V2Status prof={prof} inventory={inventory} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
 
             {/* ===== 出撃（旧版と同じで、街のブロックがそのままホームに載る） ===== */}
             {screen === 'home' && (
@@ -356,19 +299,11 @@ export default function V2Home() {
               </div>
             )}
 
-            {/* ===== 施設（旧版の☰メニューに相当）===== */}
+            {/* ===== 行動メニュー（あるけみすと式の「施設名｜ボタン」）===== */}
             {screen === 'home' && !inBattle && (
-              <div style={{ ...box, padding:'12px', marginBottom:'12px' }}>
-                {MENU.map(m => (
-                  <button key={m.key} onClick={() => setScreen(m.key)}
-                    style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${m.color}`, color:m.color,
-                      cursor:'pointer', fontFamily:'monospace', fontSize:'13px', marginBottom:'8px', textAlign:'left' }}>
-                    {m.icon} {m.label}
-                    <span style={{ color:'#446688', fontSize:'9px', marginLeft:'8px' }}>{m.desc}</span>
-                  </button>
-                ))}
-              </div>
+              <V2Menu items={MENU} open={openMenu} onToggle={() => setOpenMenu(v => !v)} onPick={setScreen} />
             )}
+
             {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
 

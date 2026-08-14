@@ -95,7 +95,7 @@ export default function V2Sortie({ prof, inventory, onProfile, onScene }) {
       }
     }
     out.push(win
-      ? { text:`🎉 ${foe}を倒した！（${r.turns}ターン）`, color:'#ffcc00' }
+      ? { text:`${foe}を倒した！（${r.turns}ターン）`, color:'#ffcc00' }
       : { text:`敗北…（${r.turns}ターン）`, color:'#ff4444' })
     if (win) {
       out.push({ text:`EXP +${exp}　Gold +${gold.toLocaleString()}`, color:'#ffcc00' })
