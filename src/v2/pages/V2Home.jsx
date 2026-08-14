@@ -248,7 +248,7 @@ export default function V2Home() {
   // index.css の #root が text-align:center なので、v2の中は左揃えに戻す（旧版には触らない）
   return (
     <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace', textAlign:'left' }}>
-      <div style={{ maxWidth:'560px', margin:'0 auto' }}>
+      <div style={{ maxWidth:'600px', margin:'0 auto' }}>
 
         {/* ヘッダ */}
         <div style={{ ...box, padding:'12px 14px', marginBottom:'12px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px' }}>
