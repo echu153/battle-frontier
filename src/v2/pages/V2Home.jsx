@@ -290,7 +290,7 @@ export default function V2Home() {
         {/* ステータス */}
         {prof && (
           <>
-            <V2Status prof={prof} inventory={inventory} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
+            <V2Status prof={prof} inventory={inventory} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
 
             {/* ===== 出撃（旧版と同じで、街のブロックがそのままホームに載る） ===== */}
             {screen === 'home' && (

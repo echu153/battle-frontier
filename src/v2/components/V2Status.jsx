@@ -1,103 +1,155 @@
-import { STAT_DEFS, MAX_LV, calcPower, expToNext } from '../lib/stats.js'
+import { STAT_KEYS, STAT_DEFS, MAX_LV, ROLLS_PER_LV, calcPower, expToNext, expPerLv } from '../lib/stats.js'
 import { classBonusText } from '../lib/classBonus.js'
+import { TIER_COLOR } from '../lib/classes.js'
 import { equippedItems, gearPower, totalStats } from '../lib/loadout.js'
 import { RANK_COLOR } from './v2ui.js'
 
-// ★あるけみすとのステータス画面と同じ作り：
-//   見出しの帯 → 「項目名（色つき）｜値」を2列で並べる表。
-//   ステータスも装備もスキルも1枚に収まっているので、ここを見れば全部わかる。
-//   見出しを押すと折りたためる。
-const HEAD = { background:'#1d2a52', color:'#aabbdd', fontSize:'11px', padding:'5px 8px', letterSpacing:'1px', textAlign:'center', cursor:'pointer', userSelect:'none' }
-const KEY = { background:'#101c3c', color:'#7f95c4', fontSize:'11px', padding:'5px 8px', borderTop:'1px solid #0a1430' }
-const VAL = { background:'#0a1330', color:'#cfe2ff', fontSize:'11px', padding:'5px 8px', borderTop:'1px solid #0a1430', wordBreak:'break-all' }
+// ★見え方は旧版（無印）の街のステータスに合わせてある。
+//   名前／職業／LV → 総合力・Gold → EXPバー（オレンジ）→ ステータスの升目 →
+//   「▲ ステータスを閉じる」で折りたためる。
+const box = { border:'1px solid #0044aa', background:'#001040', fontFamily:'monospace' }
+const cell = { background:'#000818', border:'1px solid #002244', padding:'7px 9px', display:'flex', alignItems:'baseline', justifyContent:'space-between' }
+const foldBtn = {
+  width:'100%', padding:'8px', background:'#000818', border:'1px solid #223a5e',
+  color:'#7f95c4', cursor:'pointer', fontFamily:'monospace', fontSize:'11px',
+}
 
-export default function V2Status({ prof, inventory, open, onToggle }) {
+export default function V2Status({ prof, inventory, classes, open, onToggle }) {
   const worn = equippedItems(prof, inventory)
   const total = totalStats(prof, inventory)
   const gear = gearPower(prof, inventory)
-  const skills = prof?.skill_set || []
+  const tierColor = TIER_COLOR[classes?.find(c => c.id === prof.class)?.tier] || '#88aaff'
 
-  // 「項目｜値」を2組ずつ並べる
-  const Row = ({ k1, v1, k2, v2 }) => (
-    <>
-      <div style={KEY}>{k1}</div><div style={VAL}>{v1}</div>
-      <div style={KEY}>{k2 ?? ''}</div><div style={VAL}>{k2 == null ? '' : v2}</div>
-    </>
-  )
-  const eq = (slot) => {
+  const eq = (slot, label) => {
     const w = worn[slot]
-    if (!w) return <span style={{ color:'#44567e' }}>—</span>
     return (
-      <span>
-        <span style={{ color: RANK_COLOR[w.item.rank] }}>[{w.item.rank}]</span>{' '}
-        {w.item.name}{w.inv.plus ? <span style={{ color:'#ffcc00' }}>+{w.inv.plus}</span> : ''}
-      </span>
+      <div style={{ ...cell, padding:'5px 8px' }}>
+        <span style={{ color:'#446688', fontSize:'10px' }}>{label}</span>
+        <span style={{ fontSize:'11px', textAlign:'right' }}>
+          {w ? (<>
+            <span style={{ color: RANK_COLOR[w.item.rank] }}>[{w.item.rank}]</span>{' '}
+            <span style={{ color:'#88ccff' }}>{w.item.name}</span>
+            {w.inv.plus ? <span style={{ color:'#ffcc00' }}>+{w.inv.plus}</span> : ''}
+          </>) : <span style={{ color:'#334455' }}>—</span>}
+        </span>
+      </div>
     )
-  }
-  const statCell = (k) => {
-    const base = prof[k] || 0
-    const add = (total[k] || 0) - base
-    return <>{total[k].toLocaleString()}{add > 0 && <span style={{ color:'#44ff88', fontSize:'10px' }}> (+{add.toLocaleString()})</span>}</>
   }
 
   return (
-    <div style={{ border:'1px solid #0044aa', marginBottom:'12px', fontFamily:'monospace' }}>
-      <div style={HEAD} onClick={onToggle}>{open ? '▼' : '▶'} ステータス</div>
+    <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
+      {/* 名前・職業・LV */}
+      <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', marginBottom:'10px' }}>
+        <div>
+          <span style={{ color:'#88ccff', fontSize:'14px' }}>{prof.username}</span>
+          <span style={{ color:tierColor, fontSize:'11px', marginLeft:'8px' }}>{prof.class}</span>
+          {prof.job_changes > 0 && <span style={{ color:'#ff88cc', fontSize:'10px', marginLeft:'6px' }}>転職{prof.job_changes}回</span>}
+        </div>
+        <div style={{ color:'#ffcc00', fontSize:'13px' }}>
+          LV {prof.lv}{prof.lv >= MAX_LV && <span style={{ color:'#ff8844', fontSize:'10px', marginLeft:'4px' }}>MAX</span>}
+        </div>
+      </div>
+
+      {/* 総合力・Gold */}
+      <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
+        <div style={{ ...cell, flex:1 }}>
+          <span style={{ color:'#446688', fontSize:'11px' }}>総合力</span>
+          <span style={{ color:'#ffcc00', fontSize:'14px' }}>
+            {(calcPower(prof) + gear).toLocaleString()}
+            {gear > 0 && <span style={{ color:'#44ff88', fontSize:'10px' }}> (+{gear.toLocaleString()})</span>}
+          </span>
+        </div>
+        <div style={{ ...cell, flex:1 }}>
+          <span style={{ color:'#446688', fontSize:'11px' }}>Gold</span>
+          <span style={{ color:'#ffcc00', fontSize:'14px' }}>{(prof.gold || 0).toLocaleString()}</span>
+        </div>
+      </div>
+
+      {/* EXPバー（旧版と同じオレンジ） */}
+      <div style={{ display:'flex', justifyContent:'space-between', color:'#446688', fontSize:'10px', marginBottom:'3px' }}>
+        <span>EXP</span>
+        <span style={{ color:'#ffcc00' }}>{prof.exp} / {expToNext(prof.lv, prof.job_changes) || '—'}</span>
+      </div>
+      <div style={{ height:'6px', background:'#001028', border:'1px solid #002244', marginBottom:'12px' }}>
+        <div style={{ height:'100%', width:`${Math.min(100, (prof.exp / expPerLv(prof.job_changes)) * 100)}%`, background:'linear-gradient(90deg,#ff8800,#ffcc00)' }} />
+      </div>
+
       {open && (
         <>
-          <div style={{ ...HEAD, cursor:'default', background:'#16224a' }}>
-            戦闘力: {(calcPower(prof) + gear).toLocaleString()}
-            <span style={{ color:'#7f95c4', fontSize:'10px' }}>
-              （本体{calcPower(prof).toLocaleString()}{gear ? ` ＋装備${gear.toLocaleString()}` : ''}）
+          {/* ステータス8種。装備で増えたぶんは緑で併記する */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'6px' }}>
+            {STAT_KEYS.map(k => {
+              const d = STAT_DEFS[k]
+              const add = (total[k] || 0) - (prof[k] || 0)
+              return (
+                <div key={k} title={d.desc} style={cell}>
+                  <span style={{ color:'#446688', fontSize:'11px' }}>
+                    <span style={{ color:d.color }}>{d.label}</span>
+                    <span style={{ fontSize:'9px', marginLeft:'4px' }}>{d.jp}</span>
+                  </span>
+                  <span style={{ color:d.color, fontSize:'13px' }}>
+                    {(total[k] || 0).toLocaleString()}
+                    {add > 0 && <span style={{ color:'#44ff88', fontSize:'10px' }}> +{add.toLocaleString()}</span>}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* 職業補正 */}
+          {classBonusText(prof.class) && (
+            <div style={{ ...cell, marginTop:'6px' }}>
+              <span style={{ color:'#446688', fontSize:'10px' }}>職業補正</span>
+              <span style={{ color:'#88ddaa', fontSize:'11px' }}>{classBonusText(prof.class)}</span>
+            </div>
+          )}
+
+          {/* 装備 */}
+          <div style={{ color:'#446688', fontSize:'10px', margin:'10px 0 4px' }}>装備</div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'4px' }}>
+            {eq('right', '武器（右手）')}{eq('head', '頭')}
+            {eq('left', '武器（左手）')}{eq('body', '鎧')}
+            {eq('arm', '腕')}{eq('foot', '足')}
+            {eq('acc1', 'アクセ①')}{eq('acc2', 'アクセ②')}
+          </div>
+
+          {/* スキル編成 */}
+          <div style={{ color:'#446688', fontSize:'10px', margin:'10px 0 0' }}>
+            スキル編成{' '}
+            <span style={{ color:'#556677' }}>
+              {(prof.skill_set || []).length ? (prof.skill_set || []).map(e => e.name).join(' → ') : '未設定'}
             </span>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'auto 1fr auto 1fr' }}>
-            <Row k1="LV" v1={`${prof.lv}${prof.lv >= MAX_LV ? ' (MAX)' : ''}`}
-              k2="EXP" v2={`${prof.exp} / ${expToNext(prof.lv, prof.job_changes) || '—'}`} />
-            {[['hp', 'mp'], ['str', 'dex'], ['agi', 'int_stat'], ['vit', 'luk']].map(([a, b]) => (
-              <Row key={a} k1={STAT_DEFS[a].label} v1={statCell(a)} k2={STAT_DEFS[b].label} v2={statCell(b)} />
-            ))}
-            <Row k1="武器（右手）" v1={eq('right')} k2="頭具" v2={eq('head')} />
-            <Row k1="武器（左手）" v1={eq('left')} k2="防具" v2={eq('body')} />
-            <Row k1="腕具" v1={eq('arm')} k2="足具" v2={eq('foot')} />
-            <Row k1="アクセサリー" v1={eq('acc1')} k2="アクセサリー" v2={eq('acc2')} />
-            {[0, 2, 4].map(i => (
-              <Row key={i} k1={`スキル${i + 1}`} v1={skills[i]?.name || <span style={{ color:'#44567e' }}>—</span>}
-                k2={i + 1 < 5 ? `スキル${i + 2}` : '職業'}
-                v2={i + 1 < 5 ? (skills[i + 1]?.name || <span style={{ color:'#44567e' }}>—</span>) : prof.class} />
-            ))}
-            <Row k1="職業補正" v1={classBonusText(prof.class) || <span style={{ color:'#44567e' }}>なし</span>}
-              k2="転職回数" v2={`${prof.job_changes}回`} />
-            <Row k1="所持金" v1={`${(prof.gold || 0).toLocaleString()} Gold`}
-              k2="解放エリア" v2={`${(prof.unlocked_areas || [1]).length} / 8`} />
+
+          <div style={{ color:'#446688', fontSize:'10px', marginTop:'10px', lineHeight:'1.8' }}>
+            LVアップごとに{ROLLS_PER_LV}回抽選し、当たったステータスが上がります（HPは+8・MPは+3・その他は+1）。
+            どのステに当たっても戦闘力の上がり幅は同じです。
           </div>
         </>
       )}
+
+      <button onClick={onToggle} style={{ ...foldBtn, marginTop:'10px' }}>
+        {open ? '▲ ステータスを閉じる' : '▼ ステータスを開く'}
+      </button>
     </div>
   )
 }
 
-// 行動メニュー。あるけみすとと同じ「施設名｜ボタン」の2列
+// 行動メニュー。旧版の街のボタン並びと同じ見た目で、こちらも折りたためる
 export function V2Menu({ items, open, onToggle, onPick }) {
   return (
-    <div style={{ border:'1px solid #0044aa', marginBottom:'12px', fontFamily:'monospace' }}>
-      <div style={HEAD} onClick={onToggle}>{open ? '▼' : '▶'} 行動メニュー</div>
-      {open && (
-        <div style={{ display:'grid', gridTemplateColumns:'auto 1fr auto 1fr' }}>
-          {items.map(m => (
-            <div key={m.key} style={{ display:'contents' }}>
-              <div style={KEY}>{m.icon} {m.label}</div>
-              <div style={{ ...VAL, padding:'4px 8px' }}>
-                <button onClick={() => onPick(m.key)}
-                  style={{ width:'100%', background:'#001840', border:`1px solid ${m.color}`, color:m.color,
-                    padding:'5px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
-                  {m.action}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+    <div style={{ ...box, padding:'12px', marginBottom:'12px' }}>
+      {open && items.map(m => (
+        <button key={m.key} onClick={() => onPick(m.key)}
+          style={{ width:'100%', padding:'12px', background:'#001840', border:`1px solid ${m.color}`, color:m.color,
+            cursor:'pointer', fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
+          {m.icon} {m.label}
+          <span style={{ color:'#446688', fontSize:'10px', marginLeft:'8px' }}>{m.action}</span>
+        </button>
+      ))}
+      <button onClick={onToggle} style={foldBtn}>
+        {open ? '▲ メニューを閉じる' : '▼ メニューを開く'}
+      </button>
     </div>
   )
 }
