@@ -27,7 +27,7 @@ export const STAT_DEFS = {
     desc:'体力',
     detail:'0になると戦闘不能。' },
   mp: { label:'MP', jp:'魔力', unit:3, color:'#4488ff',
-    desc:'スキルの燃料',
+    desc:'魔力',
     detail:'スキルを使うと減る。残りが足りないスキルは不発になる。' },
   str: { label:'STR', jp:'腕力', unit:1, color:'#ffcc00',
     desc:'物理の威力',
