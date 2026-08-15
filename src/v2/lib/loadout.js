@@ -22,6 +22,29 @@ export const equippedItems = (profile, inventory) => {
   return out
 }
 
+// 装着中の装備の所持品ID。倉庫や鍛冶屋で「これは着けているぶん」を外すのに使う
+export const wornIdsOf = (profile, inventory) =>
+  new Set(Object.values(equippedItems(profile, inventory)).map(w => String(w.inv.id)))
+
+// ★同じ装備・同じ強化値をひとまとめにする。**＋が違えば別のまとまり**。
+//   倉庫の一覧と鍛冶屋の合成で「同じもの」の定義がズレないよう、ここ1か所で決める。
+//   worn … そのまとまりのうち装着中のぶん ／ free … 外れているぶん（合成や装着に使えるぶん）
+//   並びは戦闘力の高い順。
+export const stackInventory = (inventory, wornIds = new Set()) => {
+  const map = new Map()
+  for (const inv of inventory || []) {
+    const item = ITEM_BY_ID[inv.equip_id]
+    if (!item) continue
+    const plus = inv.plus || 0
+    const key = `${inv.equip_id}#${plus}`
+    let g = map.get(key)
+    if (!g) { g = { key, item, plus, list:[], worn:[], free:[] }; map.set(key, g) }
+    g.list.push(inv)
+    ;(wornIds.has(String(inv.id)) ? g.worn : g.free).push(inv)
+  }
+  return [...map.values()].sort((a, b) => equipPower(b.item, b.plus) - equipPower(a.item, a.plus))
+}
+
 // 装備ぶんのステータス合計
 export const gearStats = (profile, inventory) => {
   const total = Object.fromEntries(STAT_KEYS.map(k => [k, 0]))

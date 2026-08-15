@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../../supabase'
-import { ITEM_BY_ID, SLOTS, SLOT_LABEL, PARTS, powerOf, statsOf, slotsFor } from '../lib/equipment.js'
-import { equippedItems, gearPower } from '../lib/loadout.js'
+import { SLOTS, SLOT_LABEL, PARTS, powerOf, statsOf, slotsFor } from '../lib/equipment.js'
+import { equippedItems, gearPower, wornIdsOf, stackInventory } from '../lib/loadout.js'
 import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
 import { box, miniBtn, RANK_COLOR, PART_ICON } from './v2ui.js'
 
@@ -13,11 +13,10 @@ export default function V2Storage({ prof, inventory, onProfile, onBack }) {
   const [msg, setMsg] = useState('')
 
   const worn = equippedItems(prof, inventory)
-  const wornIds = new Set(Object.values(worn).map(w => String(w.inv.id)))
-  const rows = (inventory || [])
-    .map(inv => ({ inv, item: ITEM_BY_ID[inv.equip_id] }))
-    .filter(r => r.item && (part === 'すべて' || r.item.part === part))
-    .sort((a, b) => powerOf(b.item, b.inv.plus) - powerOf(a.item, a.inv.plus))
+  // ★同じ装備・同じ強化値はひとまとめ。＋が違うものは別々に並ぶ（まとめ方は loadout.js が正）
+  const rows = stackInventory(inventory, wornIdsOf(prof, inventory))
+    .filter(g => part === 'すべて' || g.item.part === part)
+  const shownCount = rows.reduce((t, g) => t + g.list.length, 0)
 
   const call = async (fn, args) => {
     setBusy(true); setMsg('')
@@ -71,26 +70,33 @@ export default function V2Storage({ prof, inventory, onProfile, onBack }) {
             </button>
           ))}
           <span style={{ color:'#446688', fontSize:'10px', marginLeft:'auto', alignSelf:'center' }}>
-            {rows.length}個 / 全{(inventory || []).length}個
+            {shownCount}個 / 全{(inventory || []).length}個
           </span>
         </div>
 
         {rows.length === 0 && <div style={{ color:'#446688', fontSize:'11px' }}>まだ持っていません（出撃で手に入ります）</div>}
-        {rows.map(({ inv, item }) => {
-          const isWorn = wornIds.has(String(inv.id))
-          const st = statsOf(item, inv.plus)
+        {rows.map(g => {
+          const { item, plus } = g
+          const st = statsOf(item, plus)
+          const spare = g.free[0]   // 装着に使うのは、まだ着けていないぶんの1個
           return (
-            <div key={inv.id} style={{ borderTop:'1px solid #002244', padding:'6px 0' }}>
+            <div key={g.key} style={{ borderTop:'1px solid #002244', padding:'6px 0' }}>
               <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
                 <span style={{ color: RANK_COLOR[item.rank], fontSize:'10px', minWidth:'22px' }}>{item.rank}</span>
                 <span style={{ color:'#88ccff', fontSize:'12px' }}>
-                  {PART_ICON[item.part]}{item.name}{inv.plus ? <span style={{ color:'#ffcc00' }}>+{inv.plus}</span> : ''}
+                  {PART_ICON[item.part]}{item.name}{plus ? <span style={{ color:'#ffcc00' }}>+{plus}</span> : ''}
                 </span>
-                <span style={{ color:'#446688', fontSize:'10px' }}>{item.type} / 戦闘力{powerOf(item, inv.plus)}</span>
-                {isWorn && <span style={{ color:'#44ff88', fontSize:'9px' }}>装着中</span>}
+                {/* ★同じ装備・同じ強化値はここでまとめて個数にする */}
+                {g.list.length > 1 && <span style={{ color:'#ffffff', fontSize:'11px' }}>×{g.list.length}</span>}
+                <span style={{ color:'#446688', fontSize:'10px' }}>{item.type} / 戦闘力{powerOf(item, plus)}</span>
+                {g.worn.length > 0 && (
+                  <span style={{ color:'#44ff88', fontSize:'9px' }}>
+                    装着中{g.worn.length > 1 ? `×${g.worn.length}` : ''}
+                  </span>
+                )}
                 <span style={{ marginLeft:'auto', display:'flex', gap:'4px' }}>
-                  {!isWorn && slotsFor(item).map(slot => (
-                    <button key={slot} onClick={() => equip(slot, inv.id)} disabled={busy} style={miniBtn('#00aaff')}>
+                  {spare && slotsFor(item).map(slot => (
+                    <button key={slot} onClick={() => equip(slot, spare.id)} disabled={busy} style={miniBtn('#00aaff')}>
                       {SLOT_LABEL[slot]}へ
                     </button>
                   ))}

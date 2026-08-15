@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../../supabase'
-import { ITEM_BY_ID, powerOf, PLUS_MAX } from '../lib/equipment.js'
-import { equippedItems } from '../lib/loadout.js'
+import { powerOf, PLUS_MAX } from '../lib/equipment.js'
+import { wornIdsOf, stackInventory } from '../lib/loadout.js'
 import { box, btn, miniBtn, RANK_COLOR, PART_ICON } from './v2ui.js'
 
 // 鍛冶屋：**同じ装備・同じ強化値を3個**合成して強化する（あるけみすと式）。
@@ -21,24 +21,15 @@ export default function V2Smith({ prof, inventory, onProfile, onBack }) {
   const [msg, setMsg] = useState(null)
   const [confirm, setConfirm] = useState(false)
 
-  const worn = new Set(Object.values(equippedItems(prof, inventory)).map(w => String(w.inv.id)))
-  const rows = (inventory || [])
-    .map(inv => ({ inv, item: ITEM_BY_ID[inv.equip_id] }))
-    .filter(r => r.item && !worn.has(String(r.inv.id)))
+  // 「同じ装備・同じ強化値」のまとめ方は倉庫と共通（loadout.js が正）。
+  // 合成に使えるのは free＝装着していないぶんだけ。3個以上そろっていれば合成できる
+  const groups = stackInventory(inventory, wornIdsOf(prof, inventory))
+  const ready = groups.filter(g => g.free.length >= 3 && g.plus < PLUS_MAX)
 
-  // 「同じ装備・同じ強化値」でまとめる。3個以上あるものだけ合成できる
-  const groups = {}
-  for (const r of rows) {
-    const key = `${r.inv.equip_id}#${r.inv.plus}`
-    ;(groups[key] ||= { item:r.item, plus:r.inv.plus, list:[] }).list.push(r.inv)
-  }
-  const ready = Object.values(groups).filter(g => g.list.length >= 3 && g.plus < PLUS_MAX)
-    .sort((a, b) => powerOf(b.item, b.plus) - powerOf(a.item, a.plus))
-
-  const selectedGroup = pick.length ? Object.values(groups).find(g => g.list.some(i => i.id === pick[0])) : null
+  const selectedGroup = pick.length ? groups.find(g => g.free.some(i => i.id === pick[0])) : null
   const rate = selectedGroup ? RATES[selectedGroup.item.rank] : null
 
-  const chooseGroup = (g) => { setPick(g.list.slice(0, 3).map(i => i.id)); setMsg(null); setConfirm(false) }
+  const chooseGroup = (g) => { setPick(g.free.slice(0, 3).map(i => i.id)); setMsg(null); setConfirm(false) }
 
   const fuse = async () => {
     if (pick.length !== 3 || busy) return
@@ -81,7 +72,7 @@ export default function V2Smith({ prof, inventory, onProfile, onBack }) {
               <span style={{ color: RANK_COLOR[g.item.rank] }}>{g.item.rank}</span>
               {' '}{PART_ICON[g.item.part]}{g.item.name}
               {g.plus ? <span style={{ color:'#ffcc00' }}>+{g.plus}</span> : ''}
-              <span style={{ color:'#446688' }}>　×{g.list.length}個　戦闘力{powerOf(g.item, g.plus)} → {powerOf(g.item, g.plus + 1)}</span>
+              <span style={{ color:'#446688' }}>　×{g.free.length}個　戦闘力{powerOf(g.item, g.plus)} → {powerOf(g.item, g.plus + 1)}</span>
             </button>
           )
         })}
