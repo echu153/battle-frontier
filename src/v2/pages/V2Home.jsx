@@ -251,17 +251,21 @@ export default function V2Home() {
 
   // index.css の #root が text-align:center なので、v2の中は左揃えに戻す（旧版には触らない）
   return (
-    <div style={{ minHeight:'100vh', background:'#000820', padding:'16px', fontFamily:'monospace', textAlign:'left' }}>
-      <div style={{ maxWidth:'600px', margin:'0 auto' }}>
-
-        {/* ヘッダ */}
-        <div style={{ ...box, padding:'12px 14px', marginBottom:'12px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px' }}>
-          <div>
-            <div style={{ color:'#ffcc00', fontSize:'15px', letterSpacing:'2px' }}>BATTLE FRONTIER Ⅱ</div>
-            <div style={{ color:'#446688', fontSize:'10px', marginTop:'2px' }}>リメイク版 <span style={{ color:'#8877aa' }}>[開発]</span></div>
-          </div>
-          <button onClick={() => nav('/game')} style={btn('#446688')}>← 旧版へ戻る</button>
+    <div style={{ minHeight:'100vh', background:'#000820', fontFamily:'monospace', textAlign:'left' }}>
+      {/* ヘッダ。旧版の街と同じで、上に貼り付く細いバー（枠では囲まない） */}
+      <div style={{ background:'#000820', borderBottom:'1px solid #003366', padding:'6px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:100 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+          <div style={{ color:'#ffcc00', fontSize:'13px', letterSpacing:'2px' }}>BATTLE FRONTIER Ⅱ</div>
+          <span style={{ color:'#8877aa', fontSize:'10px' }}>[開発]</span>
         </div>
+        <button onClick={() => nav('/game')}
+          style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+          ← 旧版へ戻る
+        </button>
+      </div>
+
+      {/* 中身の余白も旧版と同じ（幅は決め打ちせず画面いっぱい） */}
+      <div style={{ padding:'8px 12px' }}>
 
         {/* SQL未適用の案内 */}
         {sqlError && (
@@ -296,7 +300,7 @@ export default function V2Home() {
 
             {/* ===== 出撃（旧版と同じで、街のブロックがそのままホームに載る） ===== */}
             {screen === 'home' && (
-              <div style={{ marginBottom:'12px' }}>
+              <div style={{ marginBottom:'8px' }}>
                 <V2Sortie prof={prof} inventory={inventory} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />
               </div>
             )}
