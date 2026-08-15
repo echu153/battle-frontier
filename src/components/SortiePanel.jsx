@@ -221,13 +221,20 @@ export default function SortiePanel({ quickSlotId, collapsible = false, activity
       }
     }
 
+    // 不思議な素材箱（討伐1回につき3%・サーバー側RNG。装備ドロップとは独立枠）
+    let boxGot = 0
+    try {
+      const { data: box } = await supabase.rpc('grant_mystery_box', { p_count: pend.count })
+      if (box?.ok) boxGot = box.got || 0
+    } catch { /* RPC未適用時は無視 */ }
+
     setSortiePending({ count:0, exp:0, gold:0, drops:[] })
     savePending({ count:0 })
     setShowSettle(false)
 
     await fetchProfile()
     setLoading(false)
-    showMessage(`清算完了！ EXP+${pend.exp} Gold+${pend.gold}${pend.drops.length?` ドロップ${pend.drops.length}個`:''}${learnedSkillNames.length?` スキル習得:${learnedSkillNames.join('・')}`:''}`, '#44ff88')
+    showMessage(`清算完了！ EXP+${pend.exp} Gold+${pend.gold}${pend.drops.length?` ドロップ${pend.drops.length}個`:''}${boxGot?` 不思議な素材箱×${boxGot}`:''}${learnedSkillNames.length?` スキル習得:${learnedSkillNames.join('・')}`:''}`, '#44ff88')
   }
 
   if (!profile) return null

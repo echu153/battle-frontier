@@ -807,6 +807,8 @@ export default function Equipment() {
                         ) : pi.items.effect === 'boss_blood_box' ? (
                           <button onClick={() => { setBoxPopup(true); setBoxMsg('') }} disabled={loading}
                             style={{ padding:'2px 8px', background:'#1a1400', border:'1px solid #ff88aa', color:'#ff88aa', cursor:'pointer', fontFamily:'monospace', fontSize:'10px' }}>使用する</button>
+                        ) : pi.items.effect === 'mystery_box_v2' ? (
+                          <span style={{ color:'#886699', fontSize:'10px' }}>？</span>
                         ) : pi.items.effect === 'material' ? (
                           <span style={{ color:'#aa8800', fontSize:'10px' }}>素材</span>
                         ) : pi.equipped ? (
