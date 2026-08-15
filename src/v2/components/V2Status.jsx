@@ -53,8 +53,14 @@ export default function V2Status({ prof, inventory, classes, open, onToggle }) {
 
   return (
     <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
-      {/* 名前・職業・LV・総合力・Gold（旧版と同じで、枠を使わず行で積む） */}
-      <div style={{ marginBottom:'12px', lineHeight:'1.7' }}>
+      {/* アイコン＋名前・職業・LV・総合力・Gold（旧版と同じで、画像が左・文字が右） */}
+      <div style={{ display:'flex', gap:'12px', alignItems:'flex-start', marginBottom:'12px', lineHeight:'1.7' }}>
+        {prof.avatar_url && (
+          <img src={prof.avatar_url} alt=""
+            style={{ width:'76px', height:'76px', objectFit:'cover', flexShrink:0, border:'1px solid #0044aa' }}
+            onError={e => { e.target.style.display = 'none' }} />
+        )}
+        <div style={{ minWidth:0 }}>
         <div style={{ color:'#ffffff', fontSize:'15px' }}>{prof.username}</div>
         <div>
           <span style={{ color:tierColor, fontSize:'12px' }}>{prof.class}</span>
@@ -72,6 +78,7 @@ export default function V2Status({ prof, inventory, classes, open, onToggle }) {
         </div>
         <div style={{ color:'#7f95c4', fontSize:'12px' }}>
           Gold: <span style={{ color:'#ffcc00' }}>{(prof.gold || 0).toLocaleString()}</span>
+        </div>
         </div>
       </div>
 
