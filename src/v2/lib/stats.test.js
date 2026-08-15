@@ -27,6 +27,17 @@ test('ステータスは8種で、抽選の並びがSQLと一致する', () => {
   assert.equal(Object.keys(STAT_DEFS).length, STAT_KEYS.length)
 })
 
+test('全ステに短い説明と詳しい説明がある（升目とカーソル表示で使う）', () => {
+  for (const k of STAT_KEYS) {
+    const d = STAT_DEFS[k]
+    assert.ok(d.desc && d.desc.length > 0, `${k} の短い説明`)
+    // 升目の名前と値のあいだに入るので、長いと値が押し出される
+    assert.ok(d.desc.length <= 10, `${k} の短い説明が長すぎる（${d.desc.length}文字）`)
+    assert.ok(d.detail && d.detail.length > 0, `${k} の詳しい説明`)
+    assert.ok(d.jp && d.jp.length > 0, `${k} の和名`)
+  }
+})
+
 test('unitはHP=8・MP=3・他=1（戦闘力換算の分母）', () => {
   assert.equal(STAT_DEFS.hp.unit, 8)
   assert.equal(STAT_DEFS.mp.unit, 3)

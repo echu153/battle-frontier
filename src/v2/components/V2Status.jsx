@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { STAT_DEFS, MAX_LV, ROLLS_PER_LV, calcPower, expToNext, expPerLv } from '../lib/stats.js'
 import { classBonusText } from '../lib/classBonus.js'
 import { TIER_COLOR } from '../lib/classes.js'
@@ -23,15 +24,35 @@ function MiniBar({ label, val, pct, color }) {
   )
 }
 
-// 旧版の StatMini と同じ升目（v2にステータスランクは無いので、そこだけ持たない）
-function StatMini({ label, val, add, color, title }) {
+// 旧版の StatMini と同じ升目（v2にステータスランクは無いので、そこだけ持たない）。
+// 名前と値のあいだが空くので、そこに短い説明（STAT_DEFS.desc）を入れてある。
+// カーソルを合わせる／タップすると詳しい説明（STAT_DEFS.detail）が下に出る。
+function StatMini({ label, jp, val, add, color, short, detail }) {
+  const [show, setShow] = useState(false)
   return (
-    <div title={title} style={{ background:'#000818', border:'1px solid #002244', padding:'3px 6px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-      <span style={{ color, fontSize:'9px' }}>{label}</span>
-      <span>
+    <div
+      onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}
+      onClick={() => setShow(v => !v)}   // スマホはカーソルが無いのでタップでも出す
+      style={{ position:'relative', background:'#000818', border:'1px solid #002244', padding:'3px 6px',
+        display:'flex', alignItems:'center', gap:'6px', cursor:'help' }}>
+      <span style={{ color, fontSize:'9px', flexShrink:0 }}>{label}</span>
+      <span style={{ color:'#3d5a7a', fontSize:'9px', flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+        {short}
+      </span>
+      <span style={{ flexShrink:0 }}>
         <span style={{ color, fontSize:'10px' }}>{val}</span>
         {add > 0 && <span style={{ color:'#44ff88', fontSize:'9px', marginLeft:'2px' }}>+{add.toLocaleString()}</span>}
       </span>
+      {show && (
+        <div style={{ position:'absolute', left:'-1px', top:'100%', marginTop:'2px', zIndex:120,
+          width:'max(100%, 220px)', background:'#000c1c', border:`1px solid ${color}`, padding:'6px 8px',
+          fontSize:'10px', lineHeight:'1.7', color:'#88aabb', textAlign:'left', pointerEvents:'none',
+          boxShadow:'0 4px 12px rgba(0,0,0,0.7)' }}>
+          <span style={{ color }}>{label}</span>
+          <span style={{ color:'#446688' }}>（{jp}）</span>
+          <div style={{ marginTop:'2px' }}>{detail}</div>
+        </div>
+      )}
     </div>
   )
 }
@@ -47,7 +68,7 @@ export default function V2Status({ prof, inventory, classes, open, onToggle }) {
   const statCell = (k) => {
     const d = STAT_DEFS[k]
     return (
-      <StatMini key={k} label={d.label} title={d.desc} color={d.color}
+      <StatMini key={k} label={d.label} jp={d.jp} short={d.desc} detail={d.detail} color={d.color}
         val={(total[k] || 0).toLocaleString()} add={(total[k] || 0) - (prof[k] || 0)} />
     )
   }

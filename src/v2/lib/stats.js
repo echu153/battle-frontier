@@ -19,15 +19,34 @@
 export const STAT_KEYS = ['hp', 'mp', 'str', 'dex', 'agi', 'int_stat', 'vit', 'luk']
 
 // unit = 抽選1回で上がる量。戦闘力1あたりの必要量でもある（HP8＝戦闘力1）
+// desc   = 一覧に並べる短い説明（升目の空きに入る長さ＝10文字前後まで）
+// detail = カーソルを合わせたときに出す説明。効果の正は combat.js なので、
+//          あちらの式を変えたらこの文章も直すこと（数字を書いてあるのは意図的）
 export const STAT_DEFS = {
-  hp:       { label:'HP',  jp:'生命', unit:8, color:'#44ff88', desc:'0になると戦闘不能' },
-  mp:       { label:'MP',  jp:'魔力', unit:3, color:'#4488ff', desc:'スキル使用で消費する' },
-  str:      { label:'STR', jp:'腕力', unit:1, color:'#ffcc00', desc:'通常攻撃と物理スキルの威力' },
-  dex:      { label:'DEX', jp:'器用', unit:1, color:'#88ddaa', desc:'命中率' },
-  agi:      { label:'AGI', jp:'敏捷', unit:1, color:'#ff8844', desc:'行動順・行動回数・回避' },
-  int_stat: { label:'INT', jp:'知性', unit:1, color:'#cc44ff', desc:'魔法攻撃の威力と魔法防御' },
-  vit:      { label:'VIT', jp:'耐久', unit:1, color:'#88aaff', desc:'被ダメージ（回避・魔法防御にも軽微に影響）' },
-  luk:      { label:'LUK', jp:'幸運', unit:1, color:'#ffdd66', desc:'クリティカル率・回避率' },
+  hp: { label:'HP', jp:'生命', unit:8, color:'#44ff88',
+    desc:'体力',
+    detail:'0になると戦闘不能。1回の抽選で+8上がる（戦闘力への換算は8で1）。' },
+  mp: { label:'MP', jp:'魔力', unit:3, color:'#4488ff',
+    desc:'スキルの燃料',
+    detail:'スキルを使うと減る。残りが足りないスキルは不発になる。1回の抽選で+3上がる。' },
+  str: { label:'STR', jp:'腕力', unit:1, color:'#ffcc00',
+    desc:'物理の威力',
+    detail:'通常攻撃と物理スキルのダメージ。相手のVITで最大34%まで軽減される。' },
+  dex: { label:'DEX', jp:'器用', unit:1, color:'#88ddaa',
+    desc:'命中と安定',
+    detail:'相手の回避率を押し下げて攻撃を当てる。さらにダメージの下振れを減らす（自分のSTR/INTより高いほど安定）。当たりにくいスキルほど効く。' },
+  agi: { label:'AGI', jp:'敏捷', unit:1, color:'#ff8844',
+    desc:'回避と速さ',
+    detail:'相手の攻撃を避ける。行動順を決め、相手より速いと追加行動が出る（最大50%）。' },
+  int_stat: { label:'INT', jp:'知性', unit:1, color:'#cc44ff',
+    desc:'魔法と回復',
+    detail:'魔法スキルのダメージと、HP・MPの回復量。魔法防御にもなる（魔法は最大50%軽減）。' },
+  vit: { label:'VIT', jp:'耐久', unit:1, color:'#88aaff',
+    desc:'物理を受け流す',
+    detail:'物理ダメージを最大34%まで軽減する。魔法防御と回避にもわずかに乗る。' },
+  luk: { label:'LUK', jp:'幸運', unit:1, color:'#ffdd66',
+    desc:'クリティカル',
+    detail:'相手より高いほどクリティカルが出る（1〜50%）。クリティカルは威力が上がり、相手の防御の約1/3を無視する。回避にもわずかに乗る。' },
 }
 
 // ===== 成長の定数（調整するときはSQL側の同名定数も直す） =====
