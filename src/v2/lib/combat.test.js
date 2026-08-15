@@ -6,6 +6,7 @@ import {
   CRIT_MIN_PCT, CRIT_MAX_PCT, CRIT_BASE_PCT, CRIT_ACC_DEX, CRIT_ACC_LUK, critAccuracyStats,
   EXTRA_ACTION_MAX_PCT, EXTRA_ACTION_MAX_RATIO, extraActionRate, rollExtraAction, goesFirst,
   physDefOf, magDefOf, reductionRate, critRate, hitRate, roll, damageOf, resolveAttack,
+  evasionScoreOf, EVA_AGI, EVA_VIT, EVA_LUK,
 } from './combat.js'
 import { INITIAL_STATS, applyExp, calcPower } from './stats.js'
 
@@ -143,6 +144,20 @@ test('命中率は「100% − 回避率」で出す', () => {
   assert.ok(hitRate(a, { agi:50 }) > hitRate(a, { agi:500 }))
   // 回避率はどこまでいっても上限を超えない
   assert.ok(evasionRate({ dex:1 }, { agi:10 ** 9 }) <= EVA_RATE_MAX)
+})
+
+test('回避にはAGIだけでなくVITとLUKもわずかに乗る', () => {
+  // ★あるけみすと側も VIT「回避率にもわずかに影響」／LUK「回避率にもわずかに影響」と書いている。
+  //   係数を0にしても他のテストは通ってしまう（回避の主役はAGIなので）ため、
+  //   ここで「効いていること」と「AGIより弱いこと」の両方を固定しておく。
+  assert.equal(evasionScoreOf({ agi:100, vit:100, luk:100 }), 100 * EVA_AGI + 100 * EVA_VIT + 100 * EVA_LUK)
+  const a = { dex:200 }
+  const agiOnly = { agi:200, vit:0, luk:0 }
+  assert.ok(evasionRate(a, { ...agiOnly, vit:200 }) > evasionRate(a, agiOnly), 'VITで回避が上がる')
+  assert.ok(evasionRate(a, { ...agiOnly, luk:200 }) > evasionRate(a, agiOnly), 'LUKで回避が上がる')
+  // 「わずかに」＝同じだけ積んでもAGIには遠く及ばない
+  assert.ok(evasionRate(a, { ...agiOnly, vit:200 }) < evasionRate(a, { agi:400, vit:0, luk:0 }))
+  assert.ok(EVA_VIT < EVA_AGI && EVA_LUK < EVA_AGI)
 })
 
 test('DEXを伸ばすほど命中は100%へ近づく（人為的な頭打ちがない）', () => {

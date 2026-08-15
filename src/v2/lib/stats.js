@@ -42,7 +42,7 @@ export const STAT_DEFS = {
     desc:'魔法と魔法防御',
     detail:'魔法スキルのダメージ。魔法防御にもなる。HP・MPの回復量も決める。' },
   vit: { label:'VIT', jp:'耐久', unit:1, color:'#88aaff',
-    desc:'受ける物理ダメージ',
+    desc:'耐久力',
     detail:'物理ダメージを軽減する。魔法防御と回避にもわずかに影響。' },
   luk: { label:'LUK', jp:'幸運', unit:1, color:'#ffdd66',
     desc:'クリティカル',
