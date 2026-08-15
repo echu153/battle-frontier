@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import { STAT_KEYS, STAT_DEFS, MAX_LV, calcPower, expToNext } from '../lib/stats.js'
 import { classBonusText } from '../lib/classBonus.js'
@@ -20,6 +20,7 @@ const PRESET_AVATARS = [
   { id:'priest',   label:'僧侶',       url:`${SUPABASE_URL}/storage/v1/object/public/avatars/priest.png` },
 ]
 
+const UPLOAD_COST = 100   // 旧版の美容整形と同じ
 const HEAD = { background:'#1d2a52', color:'#cfe2ff', fontSize:'12px', padding:'6px 8px', textAlign:'center', letterSpacing:'1px' }
 const KEY = { background:'#101c3c', fontSize:'11px', padding:'6px 8px', borderTop:'1px solid #07102a' }
 const VAL = { background:'#0a1330', color:'#cfe2ff', fontSize:'11px', padding:'6px 8px', borderTop:'1px solid #07102a', wordBreak:'break-all' }
@@ -29,18 +30,72 @@ export default function V2Profile({ prof, inventory, onProfile, onBack }) {
   const [detail, setDetail] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
+  const [msgColor, setMsgColor] = useState('#ff8844')
+  const [uploaded, setUploaded] = useState([])   // 自分がアップロード済みの画像
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState(null)
+  const uploading = useRef(false)                // 連打での二重アップロード対策
+  const fileRef = useRef(null)
   const worn = equippedItems(prof, inventory)
   const total = totalStats(prof, inventory)
   const gear = gearPower(prof, inventory)
   const skills = prof.skill_set || []
   const kind = attackKindOf(prof.class) === 'mag' ? '魔法型' : '物理型'
 
+  const say = (text, color = '#ff8844') => { setMsg(text); setMsgColor(color) }
+
+  // 自分がアップロード済みの画像を読む（旧版と同じ avatars/{uid}/ の下）
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.storage.from('avatars').list(user.id, { limit: 60, sortBy:{ column:'created_at', order:'desc' } })
+      if (!alive || !data) return
+      setUploaded(data.filter(f => f.name).map(f => ({
+        name: f.name, url:`${SUPABASE_URL}/storage/v1/object/public/avatars/${user.id}/${f.name}`,
+      })))
+    })()
+    return () => { alive = false }
+  }, [prof.avatar_url])
+
   const pickAvatar = async (url) => {
     setBusy(true); setMsg('')
     const { data, error } = await supabase.rpc('v2_set_avatar', { p_url: url })
     setBusy(false)
-    if (error || !data?.ok) { setMsg(error?.message || data?.error || '変更に失敗しました'); return }
+    if (error || !data?.ok) { say(error?.message || data?.error || '変更に失敗しました'); return }
     onProfile(p => ({ ...p, avatar_url: url }))
+    say('アイコンを変更しました', '#44ff88')
+  }
+
+  const chooseFile = (e) => {
+    const f = e.target.files?.[0]
+    if (!f) return
+    if (!f.type.startsWith('image/')) { say('画像ファイルを選んでください'); return }
+    if (f.size > 2 * 1024 * 1024) { say('2MBまでの画像にしてください'); return }
+    setFile(f); setPreview(URL.createObjectURL(f)); setMsg('')
+  }
+
+  const doUpload = async () => {
+    if (!file || uploading.current) return
+    if ((prof.gold || 0) < UPLOAD_COST) { say(`Goldが足りません（${UPLOAD_COST}G必要）`); return }
+    uploading.current = true; setBusy(true); setMsg('')
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase()
+      const path = `${user.id}/${Date.now()}.${ext}`
+      const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert:true })
+      if (upErr) { say(`アップロードに失敗しました（${upErr.message}）`); return }
+      const url = `${SUPABASE_URL}/storage/v1/object/public/avatars/${path}`
+      // ★Goldの引き落としとアイコンの差し替えはサーバー側で1回のUPDATEにまとめてある
+      const { data, error } = await supabase.rpc('v2_upload_avatar', { p_url: url })
+      if (error || !data?.ok) { say(error?.message || data?.error || '変更に失敗しました'); return }
+      setFile(null); setPreview(null)
+      if (fileRef.current) fileRef.current.value = ''
+      onProfile(null)
+      say(`アップロードしてアイコンにしました（-${UPLOAD_COST}G）`, '#44ff88')
+    } finally { setBusy(false); uploading.current = false }
   }
 
   const Row = ({ k1, v1, c1, k2, v2, c2 }) => (
@@ -119,9 +174,52 @@ export default function V2Profile({ prof, inventory, onProfile, onBack }) {
         </div>
         <button onClick={() => pickAvatar(null)} disabled={busy || !prof.avatar_url}
           style={{ ...miniBtn('#446688'), marginTop:'8px' }}>画像なしに戻す</button>
-        {msg && <div style={{ color:'#ff8844', fontSize:'11px', marginTop:'8px' }}>{msg}</div>}
+
+        {/* アップロード済みの画像 */}
+        {uploaded.length > 0 && (
+          <>
+            <div style={{ color:'#446688', fontSize:'11px', margin:'12px 0 6px' }}>アップロード済み</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'6px' }}>
+              {uploaded.map(u => (
+                <div key={u.name} onClick={() => !busy && pickAvatar(u.url)}
+                  style={{ cursor:'pointer', border:`2px solid ${prof.avatar_url === u.url ? '#ffcc00' : '#003366'}`,
+                    background: prof.avatar_url === u.url ? '#1a1000' : '#000818', padding:'4px' }}>
+                  <img src={u.url} alt="" style={{ width:'100%', aspectRatio:'1', objectFit:'cover' }}
+                    onError={e => { e.target.style.display = 'none' }} />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* 画像をアップロードする（旧版の美容整形と同じで100G） */}
+        <div style={{ borderTop:'1px solid #002244', marginTop:'12px', paddingTop:'10px' }}>
+          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'6px' }}>
+            画像をアップロードする
+            <span style={{ color:'#446688', fontSize:'10px', marginLeft:'6px' }}>{UPLOAD_COST}G</span>
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" onChange={chooseFile} disabled={busy}
+            style={{ color:'#88ccff', fontFamily:'monospace', fontSize:'11px', width:'100%', marginBottom:'8px' }} />
+          {preview && (
+            <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
+              <img src={preview} alt="" style={{ width:'64px', height:'64px', objectFit:'cover', border:'1px solid #0044aa' }} />
+              <button onClick={doUpload} disabled={busy || (prof.gold || 0) < UPLOAD_COST}
+                style={{ flex:1, padding:'8px', background:'#1a1000', border:'1px solid #ffcc00', color:'#ffcc00',
+                  cursor: busy ? 'default' : 'pointer', fontFamily:'monospace', fontSize:'12px',
+                  opacity: (prof.gold || 0) < UPLOAD_COST ? 0.4 : 1 }}>
+                {busy ? 'アップロード中...' : `この画像にする（-${UPLOAD_COST}G）`}
+              </button>
+            </div>
+          )}
+          <div style={{ color:'#446688', fontSize:'9px' }}>
+            2MBまでの画像。Goldの引き落としとアイコンの差し替えはサーバー側でまとめて行うので、
+            連打しても二重に取られません。
+          </div>
+        </div>
+
+        {msg && <div style={{ color: msgColor, fontSize:'11px', marginTop:'8px' }}>{msg}</div>}
         <div style={{ color:'#446688', fontSize:'9px', marginTop:'8px' }}>
-          旧版（無印）の美容整形と同じ画像を使っています。
+          プリセットは旧版（無印）の美容整形と同じ画像です。アップロードした画像も共通で使えます。
         </div>
       </div>
 

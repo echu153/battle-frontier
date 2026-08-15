@@ -1210,3 +1210,28 @@ $$;
 revoke all on function public.v2_set_avatar(text) from public;
 revoke all on function public.v2_set_avatar(text) from anon;
 grant execute on function public.v2_set_avatar(text) to authenticated;
+
+-- アップロードした画像をアイコンにする（100 Gold）。
+-- ★Goldの引き落としとアイコンの差し替えを1つのUPDATEでやる＝二重課金にならない
+--   （旧版はクライアントから引いていて、連打ガードを手で書く必要があった）
+create or replace function public.v2_upload_avatar(p_url text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_cost constant bigint := 100;
+  v_uid  uuid := auth.uid();
+  v_gold bigint;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if p_url is null or length(p_url) > 500 then return jsonb_build_object('ok', false, 'error', 'URLが不正です'); end if;
+  update public.v2_profiles set gold = gold - c_cost, avatar_url = p_url, updated_at = now()
+   where id = v_uid and gold >= c_cost
+   returning gold into v_gold;
+  if not found then
+    return jsonb_build_object('ok', false, 'error', format('Goldが足りません（%s必要）', c_cost));
+  end if;
+  return jsonb_build_object('ok', true, 'avatar_url', p_url, 'gold', v_gold, 'cost', c_cost);
+end;
+$$;
+revoke all on function public.v2_upload_avatar(text) from public;
+revoke all on function public.v2_upload_avatar(text) from anon;
+grant execute on function public.v2_upload_avatar(text) to authenticated;
