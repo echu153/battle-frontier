@@ -1235,3 +1235,65 @@ $$;
 revoke all on function public.v2_upload_avatar(text) from public;
 revoke all on function public.v2_upload_avatar(text) from anon;
 grant execute on function public.v2_upload_avatar(text) to authenticated;
+
+-- ============================================================
+-- ===== 9. 施設「ユグレシアの宝樹」（1日1回の祈り） =====
+-- ------------------------------------------------------------
+-- 1日1回だけ祈れて、大凶〜大吉が引かれる。日付が変わるのは**日本時間の5時**
+-- （旧版の日課と同じ区切り）。
+--
+-- ★抽選も回数の管理もサーバーで行う。クライアント（src/v2/components/V2Tree.jsx）は
+--   結果を表示するだけで、自分では引かない。
+-- ★報酬は未定（2026-08-16）。決まったら下の「報酬をここに入れる」に処理を足す。
+--   いまは結果だけ返して何も配っていない。
+-- ============================================================
+alter table public.v2_profiles add column if not exists last_pray_at timestamptz;
+alter table public.v2_profiles add column if not exists last_fortune text;
+alter table public.v2_profiles add column if not exists pray_count   int not null default 0;
+
+create or replace function public.v2_pray()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  -- ★ src/v2/lib/tree.js の FORTUNES と「並び」も「重み」も同じにすること（合計100）。
+  --   片方だけ直すと、画面に出ている確率と実際に引かれる確率がズレる。
+  c_names  constant text[] := array['大吉','中吉','小吉','吉','末吉','凶','大凶'];
+  c_weight constant int[]  := array[5, 10, 15, 25, 20, 15, 10];
+  v_uid   uuid := auth.uid();
+  v_roll  int;
+  v_acc   int := 0;
+  v_name  text := c_names[array_length(c_names, 1)];
+  v_count int;
+  i       int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+
+  -- 先に引く。祈れなかったときは下のUPDATEが空振りして、この結果は捨てられる
+  v_roll := floor(random() * 100)::int;   -- 0〜99
+  for i in 1 .. array_length(c_names, 1) loop
+    v_acc := v_acc + c_weight[i];
+    if v_roll < v_acc then v_name := c_names[i]; exit; end if;
+  end loop;
+
+  -- ★「まだ祈っていないこと」の確認と記録を**1文でやる**＝連打しても2回引けない。
+  --   先に select して確かめる書き方だと、同時に2回叩かれたときに両方通る。
+  update public.v2_profiles
+     set last_pray_at = now(), last_fortune = v_name,
+         pray_count = pray_count + 1, updated_at = now()
+   where id = v_uid
+     and (last_pray_at is null
+          or ((last_pray_at at time zone 'Asia/Tokyo') - interval '5 hours')::date
+           < ((now()         at time zone 'Asia/Tokyo') - interval '5 hours')::date)
+   returning pray_count into v_count;
+
+  if not found then
+    return jsonb_build_object('ok', false, 'error', '今日はもう祈りました（日本時間の5時に変わります）');
+  end if;
+
+  -- ★報酬をここに入れる（未定）。v_name（大吉〜大凶）で分けて Gold や装備を配り、
+  --   配ったものを 'reward' に文字列で入れて返すと、そのまま画面に出る。
+  return jsonb_build_object('ok', true, 'fortune', v_name, 'pray_count', v_count, 'reward', null);
+end;
+$$;
+revoke all on function public.v2_pray() from public;
+revoke all on function public.v2_pray() from anon;
+grant execute on function public.v2_pray() to authenticated;
