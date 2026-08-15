@@ -25,7 +25,7 @@ import {
   isSelfTargetSkill,
 } from './Game'
 import { HACHIGOKU_HELLS, HACHIGOKU_DIFFICULTIES, HACHIGOKU_DAILY_WINS, HACHIGOKU_DMG_COMPRESS, makeHachigokuEnemy, isHachigokuUnlocked } from '../lib/hachigoku'
-import { EMBLEM_CRYSTALS } from '../lib/emblem'
+import { EMBLEM_CRYSTALS, fixEmblemItemName } from '../lib/emblem'
 
 const fmt = (n) => Number(n).toLocaleString()
 const HACHIGOKU_CD = 5  // 挑戦クールダウン(秒・共有CD)
@@ -1147,8 +1147,9 @@ export default function Hachigoku() {
               <div style={{ border:'1px solid #ffcc44', background:'#1a1400', padding:'12px', marginBottom:'10px' }}>
                 <div style={{ color:'#ffcc44', fontSize:'13px', marginBottom:'6px' }}>🎉 勝利！ 報酬獲得（残り{reward.wins_left}回）</div>
                 <div style={{ fontSize:'11px', color:'#ffcc66', lineHeight:'1.9' }}>
+                  {/* 表示名はサーバー返却をそのまま出さず旧名(改心の結晶)を正式名へ寄せる＝改名SQL未適用でも誤字を出さない */}
                   {Object.entries(reward.drops || {}).map(([name, n]) => (
-                    <div key={name}>{name.includes('魂') ? '👹' : name.includes('記憶') ? '📿' : name.includes('成長石') ? '🧩' : '💠'} {name} ×{n}</div>
+                    <div key={name}>{name.includes('魂') ? '👹' : name.includes('記憶') ? '📿' : name.includes('成長石') ? '🧩' : '💠'} {fixEmblemItemName(name)} ×{n}</div>
                   ))}
                   {Object.keys(reward.drops || {}).length === 0 && <div>（今回はドロップなし…）</div>}
                 </div>

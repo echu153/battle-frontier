@@ -11,6 +11,7 @@ import {
   calcEmblemBonus,
   EMBLEM_CRYSTAL_BY_NAME,
   emblemCrystalOwned,
+  fixEmblemItemName,
 } from '../src/lib/emblem.js'
 import { HACHIGOKU_HELLS, HACHIGOKU_DIFFICULTIES, HACHIGOKU_HP_MULT, makeHachigokuEnemy } from '../src/lib/hachigoku.js'
 import { emblemDmgMult, emblemDrainAmount, emblemDotMult } from '../src/lib/emblemCombat.js'
@@ -58,6 +59,16 @@ test('結晶名にクリティカルの誤字「改心」が混入していな�
   assert.equal(EMBLEM_CRYSTAL_BY_NAME['改心の結晶'], 'kaishin')
   assert.equal(emblemCrystalOwned({ '改心の結晶': 3, '会心の結晶': 2 }, 'kaishin'), 5)
   assert.equal(emblemCrystalOwned({ '力の結晶': 7 }, 'chikara'), 7)
+})
+
+test('サーバー由来のアイテム名は表示前に旧名→正式名へ正す（八獄のドロップ表示など）', () => {
+  // DBの改名SQL未適用でも、画面に誤字「改心の結晶」を出さない
+  assert.equal(fixEmblemItemName('改心の結晶'), '会心の結晶')
+  assert.equal(fixEmblemItemName('会心の結晶'), '会心の結晶')
+  // 関係ないアイテム名はそのまま（八獄の魂・記憶・成長石を壊さない）
+  assert.equal(fixEmblemItemName('紋章の成長石'), '紋章の成長石')
+  assert.equal(fixEmblemItemName('カーラスートラの魂'), 'カーラスートラの魂')
+  assert.equal(fixEmblemItemName(undefined), undefined)
 })
 
 test('MAX50振りの合計値が仕様書のMAX値と一致する', () => {

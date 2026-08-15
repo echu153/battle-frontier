@@ -4,7 +4,7 @@ import { supabase } from '../supabase'
 import { GEM_DATA, GEM_RANKS, GEM_TYPES, gemEffectValue } from './Game'
 import { gemAllowedSlots, gemSlotCategory, GEM_SLOT_LABEL, calcProfBonus } from '../lib/stats'
 import { evoMultiplier, displayRarity, isShinka, BOSS_LINES } from '../constants/bossEvolution'
-import { getEmblemRank, EMBLEM_RANK_COLOR, emblemAllocTotal, calcEmblemBonus } from '../lib/emblem'
+import { getEmblemRank, EMBLEM_RANK_COLOR, emblemAllocTotal, calcEmblemBonus, fixEmblemItemName } from '../lib/emblem'
 import { isHachigokuUnlocked } from '../lib/hachigoku'
 import { effectLabel } from '../constants/effectLabels'
 
@@ -779,7 +779,7 @@ export default function Equipment() {
                 {allItems.filter(i => i.items?.effect !== 'hp_pct_infinite' && i.items?.effect !== 'mp_pct_infinite').map(pi => (
                   <div key={pi.id} style={{ border:`1px solid ${pi.equipped ? '#0044aa' : '#002244'}`, background: pi.equipped ? '#001028' : '#000818', padding:'10px', marginBottom:'6px' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
-                      <span style={{ color:'#44ff88', fontSize:'12px' }}>{pi.items.name}</span>
+                      <span style={{ color:'#44ff88', fontSize:'12px' }}>{fixEmblemItemName(pi.items.name)}</span>
                       <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
                         <span style={{ color:'#446688', fontSize:'10px' }}>×{pi.quantity}</span>
                         {(pi.items.effect === 'enhance_stone' || pi.items.name?.includes('依頼書')) ? (

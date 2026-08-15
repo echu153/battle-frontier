@@ -89,6 +89,14 @@ export const EMBLEM_CRYSTAL_BY_NAME = Object.fromEntries(
     return c.legacy ? [[c.name, k], [c.legacy, k]] : [[c.name, k]]
   })
 )
+// 旧名（誤字）→ 正式名。DB側の改名SQLを流すまでの表示ズレを吸収する
+export const EMBLEM_LEGACY_NAME_FIX = Object.fromEntries(
+  EMBLEM_CRYSTAL_KEYS.filter(k => EMBLEM_CRYSTALS[k].legacy)
+    .map(k => [EMBLEM_CRYSTALS[k].legacy, EMBLEM_CRYSTALS[k].name])
+)
+// DBから返ってきたアイテム名を表示用に正す（旧名なら正式名へ・それ以外はそのまま）
+export const fixEmblemItemName = (name) => EMBLEM_LEGACY_NAME_FIX[name] || name
+
 // 所持数（name→数量のmap）から結晶の所持数を取る。旧名の在庫も合算する
 export const emblemCrystalOwned = (itemMap, key) => {
   const c = EMBLEM_CRYSTALS[key]
