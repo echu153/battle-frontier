@@ -1,7 +1,8 @@
 -- ============================================================
 -- 「不思議な箱」「奇妙な箱」ドロップ (2026-08-16)
---   ・エリア①〜⑧の出撃で敵を討伐したとき … 3%
---   ・レイドボスへの攻撃1回ごと           … 5%
+--   ・エリア①〜⑧の出撃で敵を討伐したとき … 9%（クールダウン20秒）
+--   ・レイドボスへの攻撃1回ごと           … 7%（クールダウン10秒）
+--     ※回せる回数が多いレイド側を低めにして、時間あたりの入手量を揃えている。
 --     （どちらも装備ドロップ／レイド報酬とは完全に独立した別枠）
 --   ・箱が落ちたら中身を抽選: 不思議な箱 90% / 奇妙な箱 10%
 --   ・現時点では使い道なし＝アイテム欄に溜まるだけ。
@@ -33,8 +34,10 @@ WHERE NOT EXISTS (SELECT 1 FROM public.items WHERE name = '奇妙な箱');
 
 -- 2) ドロップ付与RPC（サーバー側RNG）
 --    p_count : まとめて判定する回数（簡易出撃の清算用）。1〜100にクランプする。
---    p_source: 'raid' なら5%、それ以外（出撃）は3%。確率はサーバーが決める＝
+--    p_source: 'raid' なら7%、それ以外（出撃）は9%。確率はサーバーが決める＝
 --              クライアントから確率を渡させない。
+--    ※ファイル全体を何度実行しても安全（アイテム追加はNOT EXISTS判定・関数はCREATE OR REPLACE）。
+--      確率を変えるときはこのファイルの v_rate を直して、全文を流し直す。
 CREATE OR REPLACE FUNCTION public.grant_mystery_box(
   p_count  integer DEFAULT 1,
   p_source text    DEFAULT 'sortie'
@@ -48,7 +51,7 @@ DECLARE
   v_uid      uuid := auth.uid();
   v_id       items.id%TYPE;
   v_n        integer := LEAST(GREATEST(COALESCE(p_count, 1), 1), 100);
-  v_rate     numeric := CASE WHEN p_source = 'raid' THEN 0.05 ELSE 0.03 END;
+  v_rate     numeric := CASE WHEN p_source = 'raid' THEN 0.07 ELSE 0.09 END;
   v_strange  numeric := 0.10;  -- 箱が落ちたときに「奇妙な箱」になる確率
   v_mystery_n integer := 0;
   v_strange_n integer := 0;

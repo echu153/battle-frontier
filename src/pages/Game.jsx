@@ -4336,7 +4336,7 @@ export default function Game() {
       } catch { /* RPC未適用時は無視 */ }
     }
 
-    // 箱ドロップ（全エリア・ザコ／ボス問わず討伐時・サーバー側RNG＝3%。装備ドロップとは独立枠）
+    // 箱ドロップ（全エリア・ザコ／ボス問わず討伐時・サーバー側RNG＝9%。装備ドロップとは独立枠）
     if (applied && win && !isPapiaEncounter) {
       try {
         const { data: box } = await supabase.rpc('grant_mystery_box', { p_count: 1, p_source: 'sortie' })

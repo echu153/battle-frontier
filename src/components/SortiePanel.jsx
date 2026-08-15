@@ -221,7 +221,7 @@ export default function SortiePanel({ quickSlotId, collapsible = false, activity
       }
     }
 
-    // 箱ドロップ（討伐1回につき3%・サーバー側RNG。装備ドロップとは独立枠）
+    // 箱ドロップ（討伐1回につき9%・サーバー側RNG。装備ドロップとは独立枠）
     let boxText = ''
     try {
       const { data: box } = await supabase.rpc('grant_mystery_box', { p_count: pend.count, p_source: 'sortie' })

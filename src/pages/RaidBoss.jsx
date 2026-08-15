@@ -902,7 +902,7 @@ export default function RaidBoss() {
             color: '#44ff88',
           }])
         }
-        // 箱ドロップ（攻撃1回につき5%・サーバー側RNG。レイド報酬とは独立枠）
+        // 箱ドロップ（攻撃1回につき7%・サーバー側RNG。レイド報酬とは独立枠）
         try {
           const { data: box } = await supabase.rpc('grant_mystery_box', { p_count: 1, p_source: 'raid' })
           if (box?.ok) {
