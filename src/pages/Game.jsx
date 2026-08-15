@@ -4336,12 +4336,13 @@ export default function Game() {
       } catch { /* RPC未適用時は無視 */ }
     }
 
-    // 不思議な素材箱（全エリア・ザコ／ボス問わず討伐時・サーバー側RNG＝3%。装備ドロップとは独立枠）
+    // 箱ドロップ（全エリア・ザコ／ボス問わず討伐時・サーバー側RNG＝3%。装備ドロップとは独立枠）
     if (applied && win && !isPapiaEncounter) {
       try {
-        const { data: box } = await supabase.rpc('grant_mystery_box', { p_count: 1 })
-        if (box?.ok && box.got > 0) {
-          logs.push({ text: `🎁 不思議な素材箱 を見つけた！`, color: '#ffcc44' })
+        const { data: box } = await supabase.rpc('grant_mystery_box', { p_count: 1, p_source: 'sortie' })
+        if (box?.ok && (box.mystery > 0 || box.strange > 0)) {
+          if (box.mystery > 0) logs.push({ text: `🎁 不思議な箱 を見つけた！`, color: '#ffcc44' })
+          if (box.strange > 0) logs.push({ text: `🎁 奇妙な箱 を見つけた！`, color: '#cc88ff' })
           setBattleLogs([...logs])
         }
       } catch { /* RPC未適用時は無視 */ }

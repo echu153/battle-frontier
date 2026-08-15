@@ -902,6 +902,14 @@ export default function RaidBoss() {
             color: '#44ff88',
           }])
         }
+        // 箱ドロップ（攻撃1回につき5%・サーバー側RNG。レイド報酬とは独立枠）
+        try {
+          const { data: box } = await supabase.rpc('grant_mystery_box', { p_count: 1, p_source: 'raid' })
+          if (box?.ok) {
+            if (box.mystery > 0) setBattleLogs(prev => [...prev, { text: `🎁 不思議な箱 を見つけた！`, color: '#ffcc44' }])
+            if (box.strange > 0) setBattleLogs(prev => [...prev, { text: `🎁 奇妙な箱 を見つけた！`, color: '#cc88ff' }])
+          }
+        } catch { /* RPC未適用時は無視 */ }
         await fetchBoss(profile.id)
       }
     } finally {
