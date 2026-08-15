@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { STAT_DEFS, MAX_LV, ROLLS_PER_LV, calcPower, expToNext, expPerLv } from '../lib/stats.js'
 import { classBonusText } from '../lib/classBonus.js'
 import { TIER_COLOR } from '../lib/classes.js'
@@ -27,12 +27,13 @@ function MiniBar({ label, val, pct, color }) {
 // 旧版の StatMini と同じ升目（v2にステータスランクは無いので、そこだけ持たない）。
 // 名前と値のあいだが空くので、そこに短い説明（STAT_DEFS.desc）を入れてある。
 // カーソルを合わせる／タップすると詳しい説明（STAT_DEFS.detail）が下に出る。
-function StatMini({ label, jp, val, add, color, short, detail }) {
-  const [show, setShow] = useState(false)
+// ★右の列は「右端をそろえて左へ伸ばす」。左端そろえだと枠の外へはみ出して読めなくなる。
+// ★開いているかどうかは親が1つだけ持つ＝同時に2つ出ない（スマホでタップして回ったとき用）。
+function StatMini({ label, jp, val, add, color, short, detail, show, alignRight, onShow, onHide, onToggle }) {
   return (
     <div
-      onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}
-      onClick={() => setShow(v => !v)}   // スマホはカーソルが無いのでタップでも出す
+      onMouseEnter={onShow} onMouseLeave={onHide}
+      onClick={e => { e.stopPropagation(); onToggle() }}  // スマホはカーソルが無いのでタップで出す
       style={{ position:'relative', background:'#000818', border:'1px solid #002244', padding:'3px 6px',
         display:'flex', alignItems:'center', gap:'6px', cursor:'help' }}>
       <span style={{ color, fontSize:'9px', flexShrink:0 }}>{label}</span>
@@ -44,8 +45,10 @@ function StatMini({ label, jp, val, add, color, short, detail }) {
         {add > 0 && <span style={{ color:'#44ff88', fontSize:'9px', marginLeft:'2px' }}>+{add.toLocaleString()}</span>}
       </span>
       {show && (
-        <div style={{ position:'absolute', left:'-1px', top:'100%', marginTop:'2px', zIndex:120,
-          width:'max(100%, 220px)', background:'#000c1c', border:`1px solid ${color}`, padding:'6px 8px',
+        <div style={{ position:'absolute', top:'100%', marginTop:'2px', zIndex:120,
+          [alignRight ? 'right' : 'left']: '-1px',
+          width:'max(100%, 230px)', maxWidth:'80vw',
+          background:'#000c1c', border:`1px solid ${color}`, padding:'6px 8px',
           fontSize:'10px', lineHeight:'1.7', color:'#88aabb', textAlign:'left', pointerEvents:'none',
           boxShadow:'0 4px 12px rgba(0,0,0,0.7)' }}>
           <span style={{ color }}>{label}</span>
@@ -64,12 +67,28 @@ export default function V2Status({ prof, inventory, classes, open, onToggle }) {
   const tierColor = TIER_COLOR[classes?.find(c => c.id === prof.class)?.tier] || '#88ccff'
   const next = expToNext(prof.lv, prof.job_changes)
   const expPct = Math.min(100, (prof.exp / expPerLv(prof.job_changes)) * 100)
+  const [openStat, setOpenStat] = useState('')  // 説明を出しているステータス（同時に1つだけ）
 
-  const statCell = (k) => {
+  // スマホはタップで出すので、どこか別の場所をタップしたら閉じる
+  // （升目側は stopPropagation しているので、升目のタップでは閉じない）
+  useEffect(() => {
+    if (!openStat) return
+    const close = () => setOpenStat('')
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [openStat])
+
+  // 説明を出しているステータスは1つだけ。map の (値, 添字) をそのまま受けるので、
+  // 添字が奇数＝右の列（そちらは右端をそろえて左へ伸ばす）
+  const statCell = (k, i) => {
     const d = STAT_DEFS[k]
     return (
       <StatMini key={k} label={d.label} jp={d.jp} short={d.desc} detail={d.detail} color={d.color}
-        val={(total[k] || 0).toLocaleString()} add={(total[k] || 0) - (prof[k] || 0)} />
+        val={(total[k] || 0).toLocaleString()} add={(total[k] || 0) - (prof[k] || 0)}
+        alignRight={i % 2 === 1} show={openStat === k}
+        onShow={() => setOpenStat(k)}
+        onHide={() => setOpenStat(s => (s === k ? '' : s))}
+        onToggle={() => setOpenStat(s => (s === k ? '' : k))} />
     )
   }
 
