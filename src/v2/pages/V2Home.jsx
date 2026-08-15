@@ -81,6 +81,7 @@ export default function V2Home() {
   const [inBattle, setInBattle] = useState(false)  // 戦闘中はメニューを隠す（旧版と同じ）
   const [openStatus, setOpenStatus] = useState(true)  // ステータスの折りたたみ
   const [openMenu, setOpenMenu] = useState(true)      // 行動メニューの折りたたみ
+  const [isAdmin, setIsAdmin] = useState(false)       // 開発限定の緩和（宝樹の回数制限なしなど）
 
   useEffect(() => {
     let alive = true
@@ -93,6 +94,7 @@ export default function V2Home() {
         if (!p?.is_admin) { reportDevAccess('v2_remake', 'リメイク版[開発]'); nav('/game'); return }
         if (!alive) return
         setName(p.username || '')
+        setIsAdmin(!!p.is_admin)
         const [{ data: v2, error: e2 }, { data: cls, error: e3 }] = await Promise.all([
           supabase.from('v2_profiles').select('*').eq('id', user.id).maybeSingle(),
           supabase.from('v2_classes').select('*').order('sort'),
@@ -315,7 +317,7 @@ export default function V2Home() {
             {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
-            {screen === 'tree'    && <V2Tree    prof={prof} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'tree'    && <V2Tree    prof={prof} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
 
             {(screen === 'skills' || screen === 'temple') && (
               <button onClick={() => setScreen('home')} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>
@@ -557,7 +559,7 @@ export default function V2Home() {
                         <span style={{ color:'#ff88cc' }}>🔄 転職{l.job}回目 → {l.className}</span>
                         <span style={{ color:'#446688', marginLeft:'8px', fontSize:'10px' }}>戦闘力{l.points}分を振り分け</span>
                         {l.usedProof && <span style={{ color:'#ffaa44', marginLeft:'6px', fontSize:'9px' }}>{l.usedProof}を1個消費</span>}
-                        {l.kept && <div style={{ color:'#ffcc00', fontSize:'10px' }}>★ {l.kept}が習得済みになった！（以降ずっと使える）</div>}
+                        {l.kept && <div style={{ color:'#ffcc00', fontSize:'10px' }}>★ {l.kept}が習得済みになった！</div>}
                         {l.kept === null && <div style={{ color:'#886644', fontSize:'10px' }}>習得済みにできるスキルがなかった</div>}
                       </>
                     ) : (
