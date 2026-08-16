@@ -3,6 +3,7 @@ import { supabase } from '../../supabase'
 import { powerOf, PLUS_MAX } from '../lib/equipment.js'
 import { wornIdsOf, stackInventory } from '../lib/loadout.js'
 import { box, btn, miniBtn, RANK_COLOR, PART_ICON } from './v2ui.js'
+import V2Modal from './V2Modal.jsx'
 
 // 鍛冶屋：**同じ装備・同じ強化値を3個**合成して強化する（あるけみすと式）。
 // 失敗＝消失／成功+1／大成功+2／超大成功+3。ランクが高いほど失敗しやすい。
@@ -19,7 +20,8 @@ export default function V2Smith({ prof, inventory, onProfile, onBack }) {
   const [pick, setPick] = useState([])     // 選んだ所持品ID（3つまで）
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
-  const [confirm, setConfirm] = useState(false)
+  const [confirm, setConfirm] = useState(false)   // 合成前の確認ポップアップ
+  const [result, setResult] = useState(null)      // 合成後の結果ポップアップ
 
   // 「同じ装備・同じ強化値」のまとめ方は倉庫と共通（loadout.js が正）。
   // 合成に使えるのは free＝装着していないぶんだけ。3個以上そろっていれば合成できる
@@ -31,17 +33,17 @@ export default function V2Smith({ prof, inventory, onProfile, onBack }) {
 
   const chooseGroup = (g) => { setPick(g.free.slice(0, 3).map(i => i.id)); setMsg(null); setConfirm(false) }
 
+  // ★合成は3個とも消えることがあるので、**必ず確認を1段挟む**（旧版で連打して溶かす事故があった）
   const fuse = async () => {
     if (pick.length !== 3 || busy) return
-    // ★+4以上で保護なしのときは確認を1段挟む（旧版で連打して溶かす事故があった）
-    if (selectedGroup.plus >= 4 && !confirm) { setConfirm(true); return }
-    setBusy(true); setMsg(null); setConfirm(false)
+    setBusy(true); setMsg(null)
     const { data, error } = await supabase.rpc('v2_fuse', { p_a: pick[0], p_b: pick[1], p_c: pick[2] })
-    setBusy(false)
+    setBusy(false); setConfirm(false)
     if (error) { setMsg({ text:error.message, color:'#ff6666' }); return }
     if (!data?.ok) { setMsg({ text:data?.error || '合成に失敗しました', color:'#ff6666' }); return }
     const [text, color] = RESULT_TEXT[data.result]
-    setMsg({ text: data.result === 'fail' ? text : `${text}　→ ${selectedGroup.item.name}+${data.plus}`, color })
+    // 結果はポップアップで出す（成否がログに埋もれないように）
+    setResult({ ...data, text, color, name: selectedGroup.item.name })
     setPick([])
     onProfile(null)
   }
@@ -89,18 +91,54 @@ export default function V2Smith({ prof, inventory, onProfile, onBack }) {
             <span style={{ color:'#ffcc00' }}>超大成功 {rate.super}%（+3）</span>
             <span style={{ color: rate.fail ? '#ff6666' : '#446688' }}>失敗 {rate.fail}%{rate.fail ? '（消失）' : ''}</span>
           </div>
-          {confirm && (
-            <div style={{ color:'#ffaa66', fontSize:'11px', marginBottom:'8px' }}>
-              ⚠ +{selectedGroup.plus} の装備です。失敗すると3個とも消えます。本当に合成しますか？
-            </div>
-          )}
-          <button onClick={fuse} disabled={busy} style={{ ...btn(confirm ? '#ff8844' : '#ffcc00'), width:'100%' }}>
-            {busy ? '合成中...' : confirm ? '本当に合成する' : '🔨 合成する'}
+          <button onClick={() => setConfirm(true)} disabled={busy} style={{ ...btn('#ffcc00'), width:'100%' }}>
+            🔨 合成する
           </button>
           {msg && <div style={{ marginTop:'8px', fontSize:'12px', color: msg.color }}>{msg.text}</div>}
         </div>
       )}
       {!selectedGroup && msg && <div style={{ ...box, padding:'12px', fontSize:'12px', color: msg.color }}>{msg.text}</div>}
+
+      {/* 合成前の確認 */}
+      {confirm && selectedGroup && (
+        <V2Modal title="🔨 合成の確認" color="#ffcc00" danger busy={busy}
+          confirmLabel="合成する" onConfirm={fuse} onClose={() => !busy && setConfirm(false)}>
+          <div style={{ color:'#88ccff' }}>
+            <span style={{ color: RANK_COLOR[selectedGroup.item.rank] }}>{selectedGroup.item.rank}</span>
+            {' '}{PART_ICON[selectedGroup.item.part]}{selectedGroup.item.name}
+            {selectedGroup.plus ? <span style={{ color:'#ffcc00' }}>+{selectedGroup.plus}</span> : ''}
+            {' '}を<b style={{ color:'#ffffff' }}>3個</b>使います
+          </div>
+          <div style={{ color:'#556677', fontSize:'11px' }}>
+            戦闘力 {powerOf(selectedGroup.item, selectedGroup.plus)} → {powerOf(selectedGroup.item, selectedGroup.plus + 1)}
+            （残り{selectedGroup.free.length - 3}個）
+          </div>
+          <div style={{ marginTop:'6px', fontSize:'11px' }}>
+            <div style={{ color:'#88ccff' }}>成功 {rate.ok}%（+1）／大成功 {rate.great}%（+2）／超大成功 {rate.super}%（+3）</div>
+            <div style={{ color: rate.fail ? '#ff6666' : '#446688' }}>
+              失敗 {rate.fail}%{rate.fail ? '　→ 3個とも消えます' : '　→ このランクは失敗しません'}
+            </div>
+          </div>
+          {selectedGroup.plus >= 4 && (
+            <div style={{ color:'#ffaa66', fontSize:'11px', marginTop:'6px' }}>
+              ⚠ +{selectedGroup.plus} の装備です。溶かすと戻せません。
+            </div>
+          )}
+        </V2Modal>
+      )}
+
+      {/* 合成後の結果 */}
+      {result && (
+        <V2Modal title={result.result === 'fail' ? '💥 合成失敗' : '✨ 合成成功'} color={result.color}
+          onClose={() => setResult(null)}>
+          <div style={{ color: result.color, fontSize:'14px' }}>{result.text}</div>
+          {result.result !== 'fail' && (
+            <div style={{ color:'#88ccff', marginTop:'4px' }}>
+              {result.name}<span style={{ color:'#ffcc00' }}>+{result.plus}</span> を手に入れた！
+            </div>
+          )}
+        </V2Modal>
+      )}
     </div>
   )
 }

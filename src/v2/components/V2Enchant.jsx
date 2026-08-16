@@ -9,6 +9,7 @@ import {
 import { enchantOf } from '../lib/enchant.js'
 import { STAT_DEFS } from '../lib/stats.js'
 import { box, miniBtn } from './v2ui.js'
+import V2Modal from './V2Modal.jsx'
 
 // エンチャント：素材を見る → 5個選んで抽出 → できたエッセンスを武器のソケットへ。
 // ★抽選の権威はサーバー（v2_extract_essence）。ここは選んで送るだけ。
@@ -38,7 +39,9 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
   const [tab, setTab] = useState('mats')
   const [area, setArea] = useState(1)
   const [picked, setPicked] = useState([])      // 抽出に使う素材ID（同じIDを重ねてよい）
-  const [result, setResult] = useState(null)    // 直前の抽出結果
+  const [confirm, setConfirm] = useState(false) // 抽出前の確認ポップアップ
+  const [result, setResult] = useState(null)    // 抽出後の結果ポップアップ
+  const [overwrite, setOverwrite] = useState(null) // 上書き前の確認 { essence, target }
   const [target, setTarget] = useState(null)    // ソケットにはめる対象 { invId, slot, color }
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
@@ -63,11 +66,19 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
 
   const doExtract = async () => {
     const err = canExtract(picked)
-    if (err) { setMsg(err); return }
+    if (err) { setMsg(err); setConfirm(false); return }
     const data = await call('v2_extract_essence', { p_materials: picked })
+    setConfirm(false)
     if (!data) return
     setPicked([])
-    setResult(data.essence)
+    setResult(data.essence)   // 結果はポップアップで出す
+  }
+
+  // ソケットへ入れる。ふさがっている枠は**上書き＝元のエッセンスが消える**ので確認を1段挟む
+  const doSocket = async (essenceId, t) => {
+    const ok = await call('v2_socket_essence', { p_essence_id: essenceId, p_inventory_id: t.invId, p_slot: t.slot })
+    setOverwrite(null)
+    if (ok) setTarget(null)
   }
 
   const pick = (id) => {
@@ -157,7 +168,7 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
             })}
           </div>
           <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
-            <button onClick={doExtract} disabled={busy || picked.length !== EXTRACT_COST}
+            <button onClick={() => setConfirm(true)} disabled={busy || picked.length !== EXTRACT_COST}
               style={{ ...miniBtn(picked.length === EXTRACT_COST ? '#ffcc00' : '#334455'), padding:'8px 16px', fontSize:'12px' }}>
               ⚗ 抽出する
             </button>
@@ -165,31 +176,6 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
               <button onClick={() => setPicked([])} style={miniBtn('#ff8888')}>選び直す</button>
             )}
           </div>
-
-          {result && (
-            <div style={{ border:'1px solid #0066cc', background:'#001028', padding:'8px', marginBottom:'10px' }}>
-              <div style={{ color:'#44ff88', fontSize:'11px', marginBottom:'4px' }}>
-                ⚗ エッセンスができた！（合計 {essencePower(result.stats)}%）
-              </div>
-              <EssenceTag e={result} />
-              {/* 特殊能力が当たっていたら、候補から1つ選ぶ */}
-              {!result.ability && (result.ability_choices || []).length > 0 && (
-                <div style={{ marginTop:'6px' }}>
-                  <div style={{ color:'#ffcc44', fontSize:'10px', marginBottom:'4px' }}>★特殊能力が付いた！ 1つ選ぶ</div>
-                  {result.ability_choices.map(name => (
-                    <button key={name} disabled={busy}
-                      onClick={async () => {
-                        const d = await call('v2_choose_ability', { p_essence_id: result.id, p_ability: name })
-                        if (d) setResult(d.essence)
-                      }}
-                      style={{ ...miniBtn('#ffcc44'), display:'block', width:'100%', textAlign:'left', marginBottom:'3px' }}>
-                      {name}：{enchantOf(name)?.text}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* 選べる素材 */}
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'8px' }}>
@@ -293,10 +279,7 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
               )}
               {spare.filter(e => e.color === target.color).map(e => (
                 <button key={e.id} disabled={busy}
-                  onClick={async () => {
-                    const ok = await call('v2_socket_essence', { p_essence_id: e.id, p_inventory_id: target.invId, p_slot: target.slot })
-                    if (ok) setTarget(null)
-                  }}
+                  onClick={() => (target.over ? setOverwrite({ essence: e, target }) : doSocket(e.id, target))}
                   style={{ display:'block', width:'100%', textAlign:'left', background:'#000818',
                     border:'1px solid #002244', padding:'5px 8px', marginBottom:'2px',
                     fontFamily:'monospace', cursor:'pointer' }}>
@@ -314,7 +297,9 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
                 <div key={e.id} style={{ padding:'3px 0' }}>
                   <EssenceTag e={e} />
                   {(e.ability_choices || []).length > 0 && !e.ability && (
-                    <span style={{ color:'#ffcc44', fontSize:'10px' }}>　★特殊能力を選べます（抽出タブ）</span>
+                    <button onClick={() => setResult(e)} style={{ ...miniBtn('#ffcc44'), marginLeft:'6px' }}>
+                      ★特殊能力を選ぶ
+                    </button>
                   )}
                 </div>
               ))}
@@ -324,6 +309,71 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
       )}
 
       {msg && <div style={{ marginTop:'8px', fontSize:'11px', color:'#ffcc66' }}>{msg}</div>}
+
+      {/* ===== 抽出前の確認 ===== */}
+      {confirm && (
+        <V2Modal title="⚗ 抽出の確認" color="#ffcc00" danger busy={busy}
+          confirmLabel="抽出する" onConfirm={doExtract} onClose={() => !busy && setConfirm(false)}>
+          <div style={{ color:'#88ccff' }}>次の{EXTRACT_COST}個を使います（<b style={{ color:'#ff8844' }}>素材は戻りません</b>）</div>
+          <div style={{ margin:'6px 0' }}>
+            {picked.map((id, i) => {
+              const m = MATERIAL_BY_ID[id]
+              return (
+                <div key={i} style={{ fontSize:'11px' }}>
+                  <span style={{ color: RARITY_COLOR[m.rarity] }}>{RARITY_LABEL[m.rarity]}</span>
+                  {' '}<span style={{ color:'#88ccff' }}>{m.name}</span>
+                  <span style={{ color:'#556677' }}>　{m.stats.map(k => STAT_DEFS[k].label).join('・')} {m.lo}〜{m.hi}%</span>
+                </div>
+              )
+            })}
+          </div>
+          <div style={{ color:'#556677', fontSize:'11px' }}>
+            ステータスの型も値も、いま抽選されます。色は5個の合計で決まります。
+          </div>
+        </V2Modal>
+      )}
+
+      {/* ===== 抽出の結果 ===== */}
+      {result && (
+        <V2Modal title="⚗ エッセンスができた！" color="#44ff88"
+          onClose={() => setResult(null)}
+          closeLabel={!result.ability && (result.ability_choices || []).length > 0 ? 'あとで選ぶ' : '受け取る'}>
+          <div style={{ color:'#44ff88', fontSize:'13px' }}>合計 {essencePower(result.stats)}%</div>
+          <div style={{ marginTop:'4px' }}><EssenceTag e={result} /></div>
+          {/* 特殊能力が当たっていたら、候補から1つ選ぶ */}
+          {!result.ability && (result.ability_choices || []).length > 0 && (
+            <div style={{ marginTop:'10px' }}>
+              <div style={{ color:'#ffcc44', fontSize:'11px', marginBottom:'4px' }}>★特殊能力が付いた！ 1つ選ぶ</div>
+              {result.ability_choices.map(name => (
+                <button key={name} disabled={busy}
+                  onClick={async () => {
+                    const d = await call('v2_choose_ability', { p_essence_id: result.id, p_ability: name })
+                    if (d) setResult(d.essence)
+                  }}
+                  style={{ ...miniBtn('#ffcc44'), display:'block', width:'100%', textAlign:'left', marginBottom:'3px', padding:'6px' }}>
+                  {name}：{enchantOf(name)?.text}
+                </button>
+              ))}
+            </div>
+          )}
+        </V2Modal>
+      )}
+
+      {/* ===== 上書きの確認（元のエッセンスが消える）===== */}
+      {overwrite && (
+        <V2Modal title="⚠ 上書きの確認" color="#ff8844" danger busy={busy}
+          confirmLabel="上書きする" onConfirm={() => doSocket(overwrite.essence.id, overwrite.target)}
+          onClose={() => !busy && setOverwrite(null)}>
+          <div style={{ color:'#ff8844' }}>いま入っているエッセンスは<b>消えます</b>。</div>
+          <div style={{ marginTop:'6px', fontSize:'11px', color:'#556677' }}>消えるもの</div>
+          <EssenceTag e={overwrite.target.over} />
+          <div style={{ marginTop:'6px', fontSize:'11px', color:'#556677' }}>入れるもの</div>
+          <EssenceTag e={overwrite.essence} />
+          <div style={{ color:'#556677', fontSize:'11px', marginTop:'8px' }}>
+            残したいなら「やめる」→「外す」で取り出してください（専用アイテムが1個要ります）。
+          </div>
+        </V2Modal>
+      )}
     </div>
   )
 }
