@@ -5,6 +5,7 @@ import { TIER_COLOR } from '../lib/classes.js'
 import { KIND_COLOR, SKILL_BY_NAME, SKILL_SET_SLOTS } from '../lib/skills.js'
 import { equippedItems, totalStats } from '../lib/loadout.js'
 import { RANK_COLOR } from './v2ui.js'
+import V2ItemTip, { SealTags } from './V2ItemTip.jsx'
 
 // ★見た目は旧版（無印）の街のステータスと同じ値にそろえてある。
 //   枠 border:#0044aa／背景 #001040／padding:10px／marginBottom:8px、
@@ -86,10 +87,10 @@ function StatMini({ label, jp, val, add, color, short, detail, show, alignRight,
   )
 }
 
-export default function V2Status({ prof, inventory, essences, classes, open, onToggle }) {
+export default function V2Status({ prof, inventory, runes, classes, open, onToggle }) {
   const worn = equippedItems(prof, inventory)
   // ★エンチャントは**割合**なので装備の固定値とは別枠。totalStats に渡すと合計へ乗る
-  const total = totalStats(prof, inventory, essences)
+  const total = totalStats(prof, inventory, runes)
   const power = calcPower(total)
   const tierColor = TIER_COLOR[classes?.find(c => c.id === prof.class)?.tier] || '#88ccff'
   const next = expToNext(prof.lv, prof.job_changes)
@@ -122,18 +123,26 @@ export default function V2Status({ prof, inventory, essences, classes, open, onT
     )
   }
 
-  const eq = (slot, label) => {
+  // ★装備の升目はカーソルを合わせる（スマホはタップ）と、能力値と刻印が出る。
+  //   右の列は右端をそろえて左へ伸ばす（左端そろえだと枠からはみ出す）
+  const eq = (slot, label, i = 0) => {
     const w = worn[slot]
+    const rn = w ? (runes || []).filter(e => String(e.inv_id) === String(w.inv.id)) : []
     return (
       <div style={cell}>
         <span style={{ color:'#7fa6d0', fontSize:'9px', flexShrink:0 }}>{label}</span>
-        <span style={valueCell}>
-          {w ? (<>
-            <span style={{ color: RANK_COLOR[w.item.rank] }}>[{w.item.rank}]</span>{' '}
-            <span style={{ color:'#88ccff' }}>{w.item.name}</span>
-            {w.inv.plus ? <span style={{ color:'#ffcc00' }}>+{w.inv.plus}</span> : ''}
-          </>) : <span style={{ color:'#62789a' }}>—</span>}
-        </span>
+        {/* ⚠切り詰め（overflow:hidden）は**内側**に置く。外側に置くと出した説明まで切れる */}
+        {w ? (
+          <V2ItemTip item={w.item} inv={w.inv} runes={rn} alignRight={i % 2 === 1}
+            style={{ display:'block', flex:1, minWidth:0 }}>
+            <span style={{ ...valueCell, display:'block' }}>
+              <span style={{ color: RANK_COLOR[w.item.rank] }}>[{w.item.rank}]</span>{' '}
+              <span style={{ color:'#88ccff' }}>{w.item.name}</span>
+              {w.inv.plus ? <span style={{ color:'#ffcc00' }}>+{w.inv.plus}</span> : ''}
+              <SealTags list={rn} size="9px" />
+            </span>
+          </V2ItemTip>
+        ) : <span style={{ ...valueCell, color:'#62789a' }}>—</span>}
       </div>
     )
   }
@@ -213,10 +222,10 @@ export default function V2Status({ prof, inventory, essences, classes, open, onT
 
         <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'2px' }}>装備</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px', marginBottom:'6px' }}>
-          {eq('right', '武器（右手）')}{eq('head', '頭')}
-          {eq('left', '武器（左手）')}{eq('body', '鎧')}
-          {eq('arm', '腕')}{eq('foot', '足')}
-          {eq('acc1', 'アクセ①')}{eq('acc2', 'アクセ②')}
+          {eq('right', '武器（右手）', 0)}{eq('head', '頭', 1)}
+          {eq('left', '武器（左手）', 0)}{eq('body', '鎧', 1)}
+          {eq('arm', '腕', 0)}{eq('foot', '足', 1)}
+          {eq('acc1', 'アクセ①', 0)}{eq('acc2', 'アクセ②', 1)}
         </div>
 
         <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'2px' }}>スキル編成</div>

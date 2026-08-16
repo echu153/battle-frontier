@@ -79,7 +79,7 @@ export default function V2Home() {
   const [screen, setScreen] = useState('home')     // home / sortie / temple / smith / skills / storage
   const [inventory, setInventory] = useState([])   // 所持している装備（v2_inventory）
   const [materials, setMaterials] = useState([])   // 持っている素材（v2_player_materials）
-  const [essences, setEssences] = useState([])     // 持っているエッセンス（v2_essences）
+  const [runes, setRunes] = useState([])     // 持っているルーン（v2_essences）
   const [inBattle, setInBattle] = useState(false)  // 戦闘中はメニューを隠す（旧版と同じ）
   const [openStatus, setOpenStatus] = useState(true)  // ステータスの折りたたみ
   const [openMenu, setOpenMenu] = useState(true)      // 行動メニューの折りたたみ
@@ -112,7 +112,7 @@ export default function V2Home() {
         ])
         setInventory(inv || [])
         setMaterials(mats || [])
-        setEssences(ess || [])
+        setRunes(ess || [])
       } catch (err) {
         setSqlError(err.message || String(err))
       }
@@ -135,7 +135,7 @@ export default function V2Home() {
     if (v2) setProf(v2)
     setInventory(inv || [])
     setMaterials(mats || [])
-    setEssences(ess || [])
+    setRunes(ess || [])
   }
 
   const create = async (e) => {
@@ -315,13 +315,13 @@ export default function V2Home() {
             {/* ★ステータスはホームだけに出す。施設は別の画面として開く
                 （施設の一覧を見るのに、毎回ステータスぶんスクロールさせられていた） */}
             {screen === 'home' && (
-              <V2Status prof={prof} inventory={inventory} essences={essences} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
+              <V2Status prof={prof} inventory={inventory} runes={runes} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
             )}
 
             {/* ===== 出撃（旧版と同じで、街のブロックがそのままホームに載る） ===== */}
             {screen === 'home' && (
               <div style={{ marginBottom:'8px' }}>
-                <V2Sortie prof={prof} inventory={inventory} essences={essences} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />
+                <V2Sortie prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />
               </div>
             )}
 
@@ -330,9 +330,9 @@ export default function V2Home() {
               <V2Menu items={MENU} open={openMenu} onToggle={() => setOpenMenu(v => !v)} onPick={setScreen} />
             )}
 
-            {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} essences={essences} onProfile={refresh} onBack={() => setScreen('home')} />}
-            {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
-            {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} materials={materials} essences={essences} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} materials={materials} runes={runes} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'tree'    && <V2Tree    prof={prof} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
 
             {(screen === 'skills' || screen === 'temple') && (

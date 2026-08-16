@@ -1,4 +1,4 @@
-// 素材とエッセンス抽出のテスト。数値の正は docs/v2-enchant-design.md。
+// 素材とルーン抽出のテスト。数値の正は docs/v2-enchant-design.md。
 // ⚠**同じ計算が supabase_v2_core.sql の v2_extract_essence にもある**。
 //   ここが通っても向こうが直っていなければ、表示と実値がズレる。
 import test from 'node:test'
@@ -6,8 +6,8 @@ import assert from 'node:assert/strict'
 import {
   MATERIALS, MATERIAL_BY_ID, materialOf, materialsOfEnemy, RARITIES,
   rangeOf, ratioOf, valueTable, meanOf, rollValue, rollStats, colorOf,
-  canExtract, extract, EXTRACT_COST, AREA_MAX, TOP_WEIGHT, essencePower,
-  gradeOf, essenceName, essenceFullName, ESSENCE_NAMES, GRADE_MIN, COLOR_LABEL,
+  canExtract, extract, EXTRACT_COST, AREA_MAX, TOP_WEIGHT, runePower,
+  gradeOf, runeName, runeFullName, RUNE_NAMES, GRADE_MIN, COLOR_LABEL,
 } from './material.js'
 import { allEnemies } from './enemies.js'
 import { ENCHANTS } from './enchant.js'
@@ -153,10 +153,10 @@ test('特殊能力は 通常0% / レア1% / 激レア3%', () => {
   assert.ok(Math.abs(hit / 4000 - 0.141) < 0.025, `付いた率 ${hit / 4000}`)
 })
 
-test('エッセンスの合計は帯4の激レアで6%前後になる', () => {
+test('ルーンの合計は帯4の激レアで6%前後になる', () => {
   let total = 0
   const n = 3000
-  for (let i = 0; i < n; i++) total += essencePower(extract(five('m:8:0:u'), Math.random).stats)
+  for (let i = 0; i < n; i++) total += runePower(extract(five('m:8:0:u'), Math.random).stats)
   assert.ok(Math.abs(total / n - 6.35) < 0.3, `平均 ${total / n}`)
 })
 
@@ -200,11 +200,11 @@ test('素材IDはSQLに入れている形（m:エリア:並び:レア度）', ()
   assert.equal(MATERIAL_BY_ID['m:8:6:u'].name, '天空覇龍の龍核')
 })
 
-// ===== エッセンスがステータスに乗るか =====
+// ===== ルーンがステータスに乗るか =====
 // ★2026-08-16 の実機確認で「戦闘には乗るがステータス画面に出ない」バグが出た箇所。
-//   totalStats に essences を渡し忘れると再発する
-test('装着中の武器に刺さったエッセンスだけがステータスに乗る', async () => {
-  const { totalStats, essenceAbilities, equippedEssences } = await import('./loadout.js')
+//   totalStats に runes を渡し忘れると再発する
+test('装着中の武器に刺さったルーンだけがステータスに乗る', async () => {
+  const { totalStats, runeAbilities, equippedRunes } = await import('./loadout.js')
   const prof = { agi: 100, str: 100, equipped: { right: 5 } }
   const inv = [{ id: 5, equip_id: 'w:弓:S', plus: 0 }, { id: 6, equip_id: 'w:槍:S', plus: 0 }]
   const ess = [
@@ -214,32 +214,32 @@ test('装着中の武器に刺さったエッセンスだけがステータス�
   ]
   const base = totalStats(prof, inv, [])
   const withEss = totalStats(prof, inv, ess)
-  assert.equal(withEss.agi, Math.round(base.agi * 1.1), '装着中のエッセンスが乗っていない')
-  assert.equal(withEss.str, base.str, '装着していない武器・未使用のエッセンスが乗ってしまっている')
+  assert.equal(withEss.agi, Math.round(base.agi * 1.1), '装着中のルーンが乗っていない')
+  assert.equal(withEss.str, base.str, '装着していない武器・未使用のルーンが乗ってしまっている')
   // 特殊能力も装着中のぶんだけ
-  assert.deepEqual(essenceAbilities(equippedEssences(prof, inv, ess)), ['コウモリ'])
+  assert.deepEqual(runeAbilities(equippedRunes(prof, inv, ess)), ['コウモリ'])
 })
 
-// ===== エッセンスの名前 =====
-test('エッセンスの名前は色×合計値の6段で決まる', () => {
+// ===== ルーンの名前 =====
+test('ルーンの名前は色×合計値の6段で決まる', () => {
   // 段の境目は 2 / 4 / 6 / 8 / 10
   assert.deepEqual([0, 1.9, 2, 3.9, 4, 5.9, 6, 7.9, 8, 9.9, 10, 30].map(gradeOf),
     [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5])
-  assert.equal(essenceName('red',   { str: 1.0 }), '鋭牙')
-  assert.equal(essenceName('red',   { str: 12 }),  '修羅')
-  assert.equal(essenceName('blue',  { vit: 5 }),   '鉄壁')
-  assert.equal(essenceName('green', { agi: 8.5 }), '神速')
-  assert.equal(essenceFullName('green', { agi: 8.5 }), '神速エッセンス')
+  assert.equal(runeName('red',   { str: 1.0 }), '鋭牙')
+  assert.equal(runeName('red',   { str: 12 }),  '修羅')
+  assert.equal(runeName('blue',  { vit: 5 }),   '鉄壁')
+  assert.equal(runeName('green', { agi: 8.5 }), '神速')
+  assert.equal(runeFullName('green', { agi: 8.5 }), '神速ルーン')
 })
 
 test('名前はどの色も6段ぶんあり、すべて漢字2文字', () => {
-  for (const [color, names] of Object.entries(ESSENCE_NAMES)) {
+  for (const [color, names] of Object.entries(RUNE_NAMES)) {
     assert.equal(names.length, GRADE_MIN.length, color)
     for (const n of names) assert.equal([...n].length, 2, `${color} の ${n}`)
     assert.equal(new Set(names).size, names.length, `${color} に重複がある`)
   }
   // 色をまたいでも重複しない
-  const all = Object.values(ESSENCE_NAMES).flat()
+  const all = Object.values(RUNE_NAMES).flat()
   assert.equal(new Set(all).size, all.length)
 })
 

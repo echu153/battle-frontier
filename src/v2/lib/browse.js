@@ -6,7 +6,7 @@
 //   目当ての装備を探すのも、押し間違えずに選ぶのも無理になるため。
 // ============================================================
 import { CATALOG, RANKS, PLUS_MAX } from './equipment.js'
-import { COLORS, essencePower, essenceName } from './material.js'
+import { COLORS, runePower, runeName } from './material.js'
 
 export const PAGE_SIZE = 15
 
@@ -65,33 +65,33 @@ export const clampPage = (page, total, size = PAGE_SIZE) =>
   Math.min(Math.max(0, page), pageCount(total, size) - 1)
 
 // ============================================================
-// エッセンスの絞り込み・並べ替え（エンチャントの「刻印」タブ）
+// ルーンの絞り込み・並べ替え（エンチャントの「刻印」タブ）
 // ------------------------------------------------------------
 // 装備とは持っている項目が違う（ランクも強化値も無く、色と合計値と特殊能力がある）ので別に用意する。
 // ページ送りは上の pageOf / clampPage / V2Pager をそのまま使う。
 // ============================================================
-export const defaultEssenceFilter = { color:ALL, ability:ALL, sort:'power', asc:false }
-export const ESSENCE_COLOR_OPTIONS = [ALL, ...COLORS]
-export const ESSENCE_ABILITY_OPTIONS = [ALL, 'あり', 'なし']
-export const ESSENCE_SORTS = [
+export const defaultRuneFilter = { color:ALL, ability:ALL, sort:'power', asc:false }
+export const RUNE_COLOR_OPTIONS = [ALL, ...COLORS]
+export const RUNE_ABILITY_OPTIONS = [ALL, 'あり', 'なし']
+export const RUNE_SORTS = [
   { key:'power', label:'合計値' },
   { key:'name',  label:'名前' },
   { key:'color', label:'色' },
 ]
 
-export const filterEssences = (rows, { color = ALL, ability = ALL } = {}) =>
+export const filterRunes = (rows, { color = ALL, ability = ALL } = {}) =>
   (rows || []).filter(e =>
     (color === ALL || e.color === color) &&
     (ability === ALL || (ability === 'あり' ? !!e.ability : !e.ability)))
 
-export const sortEssences = (rows, key = 'power', asc = false) => {
+export const sortRunes = (rows, key = 'power', asc = false) => {
   const dir = asc ? 1 : -1
   const cmp = {
-    power: (a, b) => essencePower(a.stats) - essencePower(b.stats),
-    name:  (a, b) => essenceName(a.color, a.stats).localeCompare(essenceName(b.color, b.stats), 'ja'),
+    power: (a, b) => runePower(a.stats) - runePower(b.stats),
+    name:  (a, b) => runeName(a.color, a.stats).localeCompare(runeName(b.color, b.stats), 'ja'),
     color: (a, b) => COLORS.indexOf(a.color) - COLORS.indexOf(b.color),
   }[key] || (() => 0)
   // 同じ値のときは合計値の大きい順 → id 順でそろえる（並びがちらつかないように）
   return [...(rows || [])].sort((a, b) =>
-    cmp(a, b) * dir || essencePower(b.stats) - essencePower(a.stats) || (a.id || 0) - (b.id || 0))
+    cmp(a, b) * dir || runePower(b.stats) - runePower(a.stats) || (a.id || 0) - (b.id || 0))
 }

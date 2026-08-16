@@ -7,7 +7,7 @@ import {
   cooldownOf, rollHasDrop, rollDrop, rollMaterial, COOLDOWNS,
 } from '../lib/sortie.js'
 import { runBattle } from '../lib/battle.js'
-import { toFighter as playerFighter, equippedEssences, essenceAbilities } from '../lib/loadout.js'
+import { toFighter as playerFighter, equippedRunes, runeAbilities } from '../lib/loadout.js'
 import { dropRateMultOf } from '../lib/enchant.js'
 import { RARITY_LABEL, RARITY_COLOR } from '../lib/material.js'
 import { RANK_COLOR } from './v2ui.js'
@@ -17,7 +17,7 @@ import { RANK_COLOR } from './v2ui.js'
 //   「次の行動まで」バー → エリアのプルダウン（解放済みだけ）→「◯◯へ出撃！」
 //   出撃すると戦闘ログの画面に切り替わり、「🏰 街に戻る」で戻る。
 //   戦闘ログの表示は旧版の BattleLogLine をそのまま使っている（ArenaPanel などと同じ）。
-export default function V2Sortie({ prof, inventory, essences, onProfile, onScene }) {
+export default function V2Sortie({ prof, inventory, runes, onProfile, onScene }) {
   const [scene, setScene] = useState('town')
   const [selectedArea, setSelectedArea] = useState(() => Number(localStorage.getItem('v2SelectedArea')) || 1)
   const [logs, setLogs] = useState([])
@@ -50,9 +50,9 @@ export default function V2Sortie({ prof, inventory, essences, onProfile, onScene
     lastAt.current = Date.now()
     setLoading(true); setScene('battle'); setLogs([])
 
-    const me = playerFighter(prof, inventory, essences)
+    const me = playerFighter(prof, inventory, runes)
     // 「素材ドロップ率up」の特殊能力ぶん。★重複せず、一番高いものだけが効く
-    const matMult = dropRateMultOf(essenceAbilities(equippedEssences(prof, inventory, essences)))
+    const matMult = dropRateMultOf(runeAbilities(equippedRunes(prof, inventory, runes)))
     const enc = pickEncounter(area.id, bossRate, new Date())
     const r = runBattle(me, enemyFighter(enc.enemy, 8))
     const win = r.winner === 'a'

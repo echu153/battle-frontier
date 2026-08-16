@@ -4,7 +4,7 @@
 // runBattle に渡せる形（{ name, cls, stats, slots }）を組み立てるだけの純関数。
 // 装備の数値は equipment.js が正なので、ここでは足し合わせるだけ。
 // ============================================================
-import { STAT_KEYS } from './stats.js'
+import { STAT_KEYS, STAT_DEFS } from './stats.js'
 import { ITEM_BY_ID, statsOf as equipStats, powerOf as equipPower, SLOTS } from './equipment.js'
 import { SKILL_BY_NAME } from './skills.js'
 
@@ -59,27 +59,35 @@ export const gearPower = (profile, inventory) =>
   Object.values(equippedItems(profile, inventory)).reduce((t, { inv, item }) => t + equipPower(item, inv.plus || 0), 0)
 
 // ===== エンチャント =====
-// エッセンス（v2_essences）は装備の個体（v2_inventory.id）に刺さっている。
+// ルーン（v2_essences）は装備の個体（v2_inventory.id）に刺さっている。
 // **効いているのは「装着中の装備に刺さっているぶん」だけ**（倉庫で寝ている武器のぶんは効かない）
-export const equippedEssences = (profile, inventory, essences) => {
+export const equippedRunes = (profile, inventory, runes) => {
   const wornInv = new Set(Object.values(equippedItems(profile, inventory)).map(w => String(w.inv.id)))
-  return (essences || []).filter(e => e.inv_id != null && wornInv.has(String(e.inv_id)))
+  return (runes || []).filter(e => e.inv_id != null && wornInv.has(String(e.inv_id)))
 }
-// エッセンスぶんのステータス補正(%)。**固定値ではなく割合**なのでここだけ別枠
-export const essenceStatPct = (list) => {
+// ルーンぶんのステータス補正(%)。**固定値ではなく割合**なのでここだけ別枠
+export const runeStatPct = (list) => {
   const out = {}
   for (const e of list || []) {
     for (const [k, v] of Object.entries(e.stats || {})) out[k] = (out[k] || 0) + Number(v || 0)
   }
   return out
 }
-// 付いている特殊能力の名前（＝敵の名前。enchant.js のキー）。**同じものが複数あればそのぶん並ぶ**
-export const essenceAbilities = (list) => (list || []).map(e => e.ability).filter(Boolean)
+// 刻印ぶんの効果を「STR+3.0% / VIT+1.2%」の1行にする（倉庫・ツールチップで使う）
+export const runePctText = (list) => {
+  const pct = runeStatPct(list)
+  return STAT_KEYS.filter(k => pct[k])
+    .map(k => `${STAT_DEFS[k].label}+${Math.round(pct[k] * 10) / 10}%`)
+    .join(' / ')
+}
 
-// 本体＋装備の合計ステータス。エッセンスの%はこの合計に対して掛かる
-export const totalStats = (profile, inventory, essences) => {
+// 付いている特殊能力の名前（＝敵の名前。enchant.js のキー）。**同じものが複数あればそのぶん並ぶ**
+export const runeAbilities = (list) => (list || []).map(e => e.ability).filter(Boolean)
+
+// 本体＋装備の合計ステータス。ルーンの%はこの合計に対して掛かる
+export const totalStats = (profile, inventory, runes) => {
   const gear = gearStats(profile, inventory)
-  const pct = essenceStatPct(equippedEssences(profile, inventory, essences))
+  const pct = runeStatPct(equippedRunes(profile, inventory, runes))
   return Object.fromEntries(STAT_KEYS.map(k => {
     const base = (profile?.[k] || 0) + gear[k]
     return [k, pct[k] ? Math.round(base * (1 + pct[k] / 100)) : base]
@@ -87,11 +95,11 @@ export const totalStats = (profile, inventory, essences) => {
 }
 
 // runBattle に渡す形。スキル編成が空なら通常攻撃だけで戦う
-export const toFighter = (profile, inventory, essences) => ({
+export const toFighter = (profile, inventory, runes) => ({
   name: profile?.username || 'あなた',
   cls: profile?.class,
-  stats: totalStats(profile, inventory, essences),
-  enchants: essenceAbilities(equippedEssences(profile, inventory, essences)),
+  stats: totalStats(profile, inventory, runes),
+  enchants: runeAbilities(equippedRunes(profile, inventory, runes)),
   slots: (profile?.skill_set || [])
     .map(e => ({ skill: SKILL_BY_NAME[e?.name], uses: e?.uses || 1 }))
     .filter(e => e.skill),

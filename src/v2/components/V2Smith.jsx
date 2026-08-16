@@ -21,9 +21,9 @@ import V2Enchant from './V2Enchant.jsx'
 //   ③ 同じ強化値の個体から強化素材を2個選ぶ
 // ★強化元は成功しても失敗しても残る。消えるのは強化素材2個だけ。
 //   前は3個まとめて溶けて新しい1個ができる方式だったが、それだと
-//   エッセンス入り・ソケット厳選の装備がどれか分からないまま消えていた。
-// ★エッセンスが入っている個体には印を付けて、素材に選ぶと警告を出す。
-export default function V2Smith({ prof, inventory, materials, essences, isAdmin, onProfile, onBack }) {
+//   ルーン入り・ソケット厳選の装備がどれか分からないまま消えていた。
+// ★ルーンが入っている個体には印を付けて、素材に選ぶと警告を出す。
+export default function V2Smith({ prof, inventory, materials, runes, isAdmin, onProfile, onBack }) {
   const [menu, setMenu] = useState('fuse')   // fuse=強化 / enchant=エンチャント
   const [openEquip, setOpenEquip] = useState('')  // 個体一覧を開いている装備ID
   const [filter, setFilter] = useState(defaultFilter)  // 絞り込みと並べ替え
@@ -39,8 +39,8 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
   const wornIds = wornIdsOf(prof, inventory)
   const protectHave = prof?.protect_count || 0
 
-  // その個体に入っているエッセンス
-  const essOf = (invId) => (essences || []).filter(e => String(e.inv_id) === String(invId))
+  // その個体に入っているルーン
+  const essOf = (invId) => (runes || []).filter(e => String(e.inv_id) === String(invId))
 
   // 種類ごとにまとめた一覧（同じ装備なら＋違いも1つの見出しに入る）
   const all = []
@@ -73,7 +73,7 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
   const candidates = base
     ? (opened?.list || []).filter(i => i.id !== base.id && (i.plus || 0) === (base.plus || 0) && !wornIds.has(String(i.id)))
     : []
-  const matHasEssence = mats.some(m => essOf(m.id).length > 0)
+  const matHasRune = mats.some(m => essOf(m.id).length > 0)
 
   const reset = () => { setBaseId(null); setMatIds([]); setProtect(false); setMsg(null) }
   const openKind = (equipId) => {
@@ -168,7 +168,7 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
       </div>
 
       {menu === 'enchant' && (
-        <V2Enchant prof={prof} inventory={inventory} materials={materials} essences={essences}
+        <V2Enchant prof={prof} inventory={inventory} materials={materials} runes={runes}
           isAdmin={isAdmin} onRefresh={onProfile} onBack={onBack} embedded />
       )}
 
@@ -245,9 +245,9 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
                     </label>
                     <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>{PROTECT_DESC}</div>
 
-                    {matHasEssence && (
+                    {matHasRune && (
                       <div style={{ color:'#ff8844', fontSize:'11px', marginBottom:'8px' }}>
-                        ⚠ 強化素材にエッセンスの入った装備が含まれています（消えるとエッセンスは外れます）
+                        ⚠ 強化素材にルーンの入った装備が含まれています（消えるとルーンは外れます）
                       </div>
                     )}
                     {pickError && <div style={{ color:'#7f95c4', fontSize:'11px', marginBottom:'8px' }}>{pickError}</div>}
@@ -299,9 +299,9 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
               🛡 {PROTECT_NAME}を1個使います（残り{protectHave - 1}個）。大成功・超大成功は出ません。
             </div>
           )}
-          {matHasEssence && (
+          {matHasRune && (
             <div style={{ color:'#ff8844', fontSize:'11px', marginTop:'6px' }}>
-              ⚠ 強化素材にエッセンスの入った装備があります。消えるとエッセンスは外れます。
+              ⚠ 強化素材にルーンの入った装備があります。消えるとルーンは外れます。
             </div>
           )}
         </V2Modal>

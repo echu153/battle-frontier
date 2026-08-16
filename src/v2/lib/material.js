@@ -1,11 +1,11 @@
 // ============================================================
-// バトルフロンティアⅡ（リメイク版）— エンチャントの素材とエッセンス抽出
+// バトルフロンティアⅡ（リメイク版）— エンチャントの素材とルーン抽出
 // ------------------------------------------------------------
 // 設計は docs/v2-enchant-design.md。
 //
 //   敵を倒す → 素材が落ちる（通常 / レア / 激レア）
-//           → 素材5個を消費して「抽出」→ エッセンス
-//           → エッセンスを武器のソケットにはめる
+//           → 素材5個を消費して「抽出」→ ルーン
+//           → ルーンを武器のソケットにはめる
 //
 // ★素材は**敵ごと固有で168種**（56体 × 3レア度）。
 // ★**値もステータスの型も「抽出するとき」に抽選する。ドロップ時ではない。**
@@ -85,7 +85,7 @@ export const COLOR_OF_STAT = {
   hp:'blue', mp:'blue', vit:'blue',
   dex:'green', agi:'green', luk:'green',
 }
-// 合計値を3グループで合算して、一番大きいグループがエッセンスの色
+// 合計値を3グループで合算して、一番大きいグループがルーンの色
 export const colorOf = (stats) => {
   const sum = { red:0, blue:0, green:0 }
   for (const [k, v] of Object.entries(stats || {})) sum[COLOR_OF_STAT[k]] += v
@@ -229,18 +229,18 @@ export const extract = (ids, rng = Math.random) => {
   return { stats, color: colorOf(stats), abilityChoices }
 }
 
-// エッセンスの「強さ」を1つの数字で言うときの目安（合計%）
-export const essencePower = (stats) => round1(Object.values(stats || {}).reduce((a, b) => a + Number(b || 0), 0))
+// ルーンの「強さ」を1つの数字で言うときの目安（合計%）
+export const runePower = (stats) => round1(Object.values(stats || {}).reduce((a, b) => a + Number(b || 0), 0))
 
-// ===== エッセンスの名前 =====
+// ===== ルーンの名前 =====
 // **色 × 合計値の6段**で決まる漢字2文字（2026-08-16 ユーザー決定）。
-// 合計値が高いほど強そうな字にしてある。画面には「〇〇エッセンス」の形で出す
+// 合計値が高いほど強そうな字にしてある。画面には「〇〇ルーン」の形で出す
 export const GRADE_MIN = [0, 2, 4, 6, 8, 10]   // この値以上で1段上がる（最後は10%以上）
 // ⚠**緋を炎の語で埋めない**（2026-08-16 ユーザー指摘）。色の名前が緋なだけで、
 //   中身は「攻撃寄り」なので、刃・打撃・殺気の語で組む。
 // ⚠**一番下の段も弱そうな名前にしない**（微風・薄氷・火種は却下された）。
 //   下の段は「小さいが鋭い」語にして、上の段で規模を大きくする。
-export const ESSENCE_NAMES = {
+export const RUNE_NAMES = {
   red:   ['鋭牙', '剛撃', '破砕', '凶刃', '撃滅', '修羅'],   // 緋＝攻撃寄り
   blue:  ['鋼殻', '堅牢', '鉄壁', '磐石', '金剛', '不動'],   // 蒼＝守り寄り
   green: ['隼影', '疾風', '旋風', '迅雷', '神速', '天翔'],   // 翠＝器用・素早さ寄り
@@ -252,7 +252,7 @@ export const gradeOf = (total) => {
   return g
 }
 // 「烈火」のような2文字。色と合計値から決まる
-export const essenceName = (color, stats) =>
-  ESSENCE_NAMES[color]?.[gradeOf(essencePower(stats))] || ''
-// 「烈火エッセンス」まで含めた表示名
-export const essenceFullName = (color, stats) => `${essenceName(color, stats)}エッセンス`
+export const runeName = (color, stats) =>
+  RUNE_NAMES[color]?.[gradeOf(runePower(stats))] || ''
+// 「烈火ルーン」まで含めた表示名
+export const runeFullName = (color, stats) => `${runeName(color, stats)}ルーン`

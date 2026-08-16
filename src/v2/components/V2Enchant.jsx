@@ -4,23 +4,23 @@ import { AREAS } from '../lib/enemies.js'
 import { equippedItems } from '../lib/loadout.js'
 import {
   MATERIAL_BY_ID, RARITY_LABEL, RARITY_COLOR, COLOR_LABEL, COLOR_HEX,
-  EXTRACT_COST, BOSS_LIMIT, canExtract, essencePower, essenceName, essenceFullName, materialsOfArea,
+  EXTRACT_COST, BOSS_LIMIT, canExtract, runePower, runeName, runeFullName, materialsOfArea,
 } from '../lib/material.js'
 import { enchantOf } from '../lib/enchant.js'
 import { STAT_DEFS } from '../lib/stats.js'
 import { box, miniBtn } from './v2ui.js'
 import V2Modal from './V2Modal.jsx'
-import { V2EssenceFilter, V2Pager } from './V2Browse.jsx'
+import { V2RuneFilter, V2Pager } from './V2Browse.jsx'
 import {
-  defaultEssenceFilter, filterEssences, sortEssences, pageOf, clampPage,
+  defaultRuneFilter, filterRunes, sortRunes, pageOf, clampPage,
 } from '../lib/browse.js'
 
-// エンチャント：素材を見る → 5個選んで抽出 → できたエッセンスを武器のソケットへ。
+// エンチャント：素材を見る → 5個選んで抽出 → できたルーンを武器のソケットへ。
 // ★抽選の権威はサーバー（v2_extract_essence）。ここは選んで送るだけ。
 // 「注入」だと素っ気ないので**刻印**にした（2026-08-16 ユーザー指示「もっとかっこよく」）
 const TABS = [
-  { key:'extract', label:'⚗ エッセンスの抽出' },
-  { key:'socket',  label:'◈ エッセンスの刻印' },
+  { key:'extract', label:'⚗ ルーン作成' },
+  { key:'socket',  label:'◈ ルーン刻印' },
 ]
 
 const statLine = (stats) =>
@@ -29,12 +29,12 @@ const statLine = (stats) =>
     .map(([k, v]) => `${STAT_DEFS[k]?.label || k}+${v}%`)
     .join(' / ')
 
-// エッセンス1個の見出し
-function EssenceTag({ e }) {
+// ルーン1個の見出し
+function RuneTag({ e }) {
   return (
     <span style={{ color: COLOR_HEX[e.color], fontSize:'11px' }}>
       ●{COLOR_LABEL[e.color]}
-      {' '}<b>{essenceName(e.color, e.stats)}</b>
+      {' '}<b>{runeName(e.color, e.stats)}</b>
       {' '}<span style={{ color:'#88ccff' }}>{statLine(e.stats)}</span>
       {e.ability && <span style={{ color:'#ffcc44' }}>　★{e.ability}</span>}
     </span>
@@ -42,16 +42,16 @@ function EssenceTag({ e }) {
 }
 
 // embedded … 鍛冶屋の中に置くとき。自前の「← ホームへ」は出さない（外側が持っている）
-export default function V2Enchant({ prof, inventory, materials, essences, onRefresh, onBack, embedded = false }) {
+export default function V2Enchant({ prof, inventory, materials, runes, onRefresh, onBack, embedded = false }) {
   const [tab, setTab] = useState('extract')
   const [area, setArea] = useState(1)
   const [picked, setPicked] = useState([])      // 抽出に使う素材ID（同じIDを重ねてよい）
   const [confirm, setConfirm] = useState(false) // 抽出前の確認ポップアップ
   const [result, setResult] = useState(null)    // 抽出後の結果ポップアップ
-  const [overwrite, setOverwrite] = useState(null) // 上書き前の確認 { essence, target }
+  const [overwrite, setOverwrite] = useState(null) // 上書き前の確認 { rune, target }
   const [target, setTarget] = useState(null)    // ソケットにはめる対象 { invId, slot, color }
-  const [essFilter, setEssFilter] = useState(defaultEssenceFilter)  // エッセンス一覧の絞り込み
-  const [rawEssPage, setRawEssPage] = useState(0)
+  const [runeFilter, setEssFilter] = useState(defaultRuneFilter)  // ルーン一覧の絞り込み
+  const [rawRunePage, setRawEssPage] = useState(0)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
 
@@ -83,9 +83,9 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
     setResult(data.essence)   // 結果はポップアップで出す
   }
 
-  // ソケットへ入れる。ふさがっている枠は**上書き＝元のエッセンスが消える**ので確認を1段挟む
-  const doSocket = async (essenceId, t) => {
-    const ok = await call('v2_socket_essence', { p_essence_id: essenceId, p_inventory_id: t.invId, p_slot: t.slot })
+  // ソケットへ入れる。ふさがっている枠は**上書き＝元のルーンが消える**ので確認を1段挟む
+  const doSocket = async (runeId, t) => {
+    const ok = await call('v2_socket_essence', { p_essence_id: runeId, p_inventory_id: t.invId, p_slot: t.slot })
     setOverwrite(null)
     if (ok) setTarget(null)
   }
@@ -110,17 +110,17 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
     .map(([slot, w]) => ({ slot, inv: w.inv, item: w.item, sockets: w.inv.sockets || [] }))
   const socketed = useMemo(() => {
     const m = {}
-    for (const e of essences || []) if (e.inv_id != null) m[`${e.inv_id}:${e.socket_idx}`] = e
+    for (const e of runes || []) if (e.inv_id != null) m[`${e.inv_id}:${e.socket_idx}`] = e
     return m
-  }, [essences])
-  const spare = (essences || []).filter(e => e.inv_id == null)
+  }, [runes])
+  const spare = (runes || []).filter(e => e.inv_id == null)
   // ★一覧が長くなるので、倉庫・鍛冶屋と同じ絞り込みとページ送りを付ける（browse.js が共通）
   //   枠を選んでいるあいだは、その枠の色だけに固定する
-  const essRows = sortEssences(
-    filterEssences(spare, { ...essFilter, color: target ? target.color : essFilter.color }),
-    essFilter.sort, essFilter.asc)
-  const essPage = clampPage(rawEssPage, essRows.length)
-  const essShown = pageOf(essRows, essPage)
+  const runeRows = sortRunes(
+    filterRunes(spare, { ...runeFilter, color: target ? target.color : runeFilter.color }),
+    runeFilter.sort, runeFilter.asc)
+  const runePage = clampPage(rawRunePage, runeRows.length)
+  const runeShown = pageOf(runeRows, runePage)
 
   return (
     <div>
@@ -135,7 +135,7 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
           </button>
         ))}
         <span style={{ marginLeft:'auto', alignSelf:'center', color:'#7fa6d0', fontSize:'10px' }}>
-          エッセンス {spare.length}個（未使用）
+          ルーン {spare.length}個（未使用）
         </span>
       </div>
 
@@ -198,11 +198,11 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
       {tab === 'socket' && (
         <div style={{ ...box, padding:'12px' }}>
           <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'8px' }}>
-            エッセンスを刻めるのは武器だけ（片手2枠・両手3枠）。枠の色はドロップしたときに決まっていて、
-            <span style={{ color:'#88ccff' }}>色の合うエッセンスしか刻めない</span>。
+            ルーンを刻めるのは武器だけ（片手2枠・両手3枠）。枠の色はドロップしたときに決まっていて、
+            <span style={{ color:'#88ccff' }}>色の合うルーンしか刻めない</span>。
             <span style={{ color:'#88ccff' }}>外す</span>には専用アイテムが要る（残り{prof?.unsocket_tickets || 0}個）。
             アイテムが無くても<span style={{ color:'#cc88ff' }}>上書き</span>はできるが、
-            そのとき<span style={{ color:'#ff8844' }}>元のエッセンスは消える</span>
+            そのとき<span style={{ color:'#ff8844' }}>元のルーンは消える</span>
           </div>
 
           {weapons.length === 0 && <div style={{ color:'#7fa6d0', fontSize:'11px' }}>武器を装着してください</div>}
@@ -228,17 +228,17 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
                   return (
                     <div key={i} style={{ flex:'1 1 200px', border:`1px solid ${isTarget ? '#ffcc00' : COLOR_HEX[c]}`,
                       background:'#000818', padding:'6px' }}>
-                      {/* ★枠の色は「まだ空いているとき」だけ出す。刻んだあとはエッセンスが主役 */}
+                      {/* ★枠の色は「まだ空いているとき」だけ出す。刻んだあとはルーンが主役 */}
                       {!e && <div style={{ color: COLOR_HEX[c], fontSize:'10px' }}>●{COLOR_LABEL[c]}の枠</div>}
                       {e ? (
                         <>
-                          <EssenceTag e={e} />
+                          <RuneTag e={e} />
                           <div style={{ display:'flex', gap:'4px', marginTop:'3px' }}>
-                            {/* 外す＝エッセンスが無傷で戻る。専用アイテムが要る */}
+                            {/* 外す＝ルーンが無傷で戻る。専用アイテムが要る */}
                             <button disabled={busy || !(prof?.unsocket_tickets > 0)}
                               onClick={() => call('v2_unsocket_essence', { p_essence_id: e.id })}
                               style={miniBtn(prof?.unsocket_tickets > 0 ? '#ff8888' : '#62789a')}>外す</button>
-                            {/* 上書き＝アイテムは要らないが、**いま入っているエッセンスは消える** */}
+                            {/* 上書き＝アイテムは要らないが、**いま入っているルーンは消える** */}
                             <button onClick={() => setTarget(isTarget ? null : { invId: w.inv.id, slot: i, color: c, over: e })}
                               style={miniBtn(isTarget ? '#ffcc00' : '#cc88ff')}>
                               {isTarget ? 'やめる' : '上書き'}
@@ -258,12 +258,12 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
             </div>
           ))}
 
-          {/* エッセンスの一覧。枠を選んでいるときは「その色だけ」に固定して、押すと刻める */}
+          {/* ルーンの一覧。枠を選んでいるときは「その色だけ」に固定して、押すと刻める */}
           <div style={{ borderTop:`1px solid ${target ? '#0066cc' : '#002244'}`, marginTop:'8px', paddingTop:'8px' }}>
             <div style={{ color: target ? COLOR_HEX[target.color] : '#7fa6d0', fontSize:'11px', marginBottom:'4px' }}>
               {target
-                ? `●${COLOR_LABEL[target.color]}の枠に刻むエッセンスを選ぶ`
-                : '未使用のエッセンス'}
+                ? `●${COLOR_LABEL[target.color]}の枠に刻むルーンを選ぶ`
+                : '未使用のルーン'}
             </div>
             {target?.over && (
               <div style={{ color:'#ff8844', fontSize:'10px', marginBottom:'4px' }}>
@@ -271,28 +271,28 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
                 （残したいなら「外す」で取り出してください）
               </div>
             )}
-            <V2EssenceFilter value={essFilter} lockColor={target?.color || null}
+            <V2RuneFilter value={runeFilter} lockColor={target?.color || null}
               onChange={f => { setEssFilter(f); setRawEssPage(0) }} />
-            {essRows.length === 0 && (
+            {runeRows.length === 0 && (
               <div style={{ color:'#7fa6d0', fontSize:'11px' }}>
-                {spare.length === 0 ? 'まだエッセンスがありません（抽出でできます）' : '絞り込みに合うエッセンスがありません'}
+                {spare.length === 0 ? 'まだルーンがありません（抽出でできます）' : '絞り込みに合うルーンがありません'}
               </div>
             )}
-            {essShown.map(e => (
+            {runeShown.map(e => (
               <button key={e.id} disabled={busy || !target}
-                onClick={() => target && (target.over ? setOverwrite({ essence: e, target }) : doSocket(e.id, target))}
+                onClick={() => target && (target.over ? setOverwrite({ rune: e, target }) : doSocket(e.id, target))}
                 style={{ display:'flex', alignItems:'center', gap:'6px', width:'100%', textAlign:'left',
                   background:'#000818', border:`1px solid ${target ? '#004488' : '#002244'}`,
                   padding:'5px 8px', marginBottom:'2px',
                   fontFamily:'monospace', cursor: target ? 'pointer' : 'default' }}>
-                <EssenceTag e={e} />
+                <RuneTag e={e} />
                 {(e.ability_choices || []).length > 0 && !e.ability && (
                   <span onClick={ev => { ev.stopPropagation(); setResult(e) }}
                     style={{ ...miniBtn('#ffcc44'), marginLeft:'auto' }}>★特殊能力を選ぶ</span>
                 )}
               </button>
             ))}
-            <V2Pager page={essPage} total={essRows.length} onPage={setRawEssPage} unit="個" />
+            <V2Pager page={runePage} total={runeRows.length} onPage={setRawEssPage} unit="個" />
           </div>
         </div>
       )}
@@ -324,11 +324,11 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
 
       {/* ===== 抽出の結果 ===== */}
       {result && (
-        <V2Modal title={`⚗ ${essenceFullName(result.color, result.stats)}ができた！`} color={COLOR_HEX[result.color]}
+        <V2Modal title={`⚗ ${runeFullName(result.color, result.stats)}ができた！`} color={COLOR_HEX[result.color]}
           onClose={() => setResult(null)}
           closeLabel={!result.ability && (result.ability_choices || []).length > 0 ? 'あとで選ぶ' : '受け取る'}>
-          <div style={{ color:'#44ff88', fontSize:'13px' }}>合計 {essencePower(result.stats)}%</div>
-          <div style={{ marginTop:'4px' }}><EssenceTag e={result} /></div>
+          <div style={{ color:'#44ff88', fontSize:'13px' }}>合計 {runePower(result.stats)}%</div>
+          <div style={{ marginTop:'4px' }}><RuneTag e={result} /></div>
           {/* 特殊能力が当たっていたら、候補から1つ選ぶ */}
           {!result.ability && (result.ability_choices || []).length > 0 && (
             <div style={{ marginTop:'10px' }}>
@@ -348,16 +348,16 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
         </V2Modal>
       )}
 
-      {/* ===== 上書きの確認（元のエッセンスが消える）===== */}
+      {/* ===== 上書きの確認（元のルーンが消える）===== */}
       {overwrite && (
         <V2Modal title="⚠ 上書きの確認" color="#ff8844" danger busy={busy}
-          confirmLabel="上書きする" onConfirm={() => doSocket(overwrite.essence.id, overwrite.target)}
+          confirmLabel="上書きする" onConfirm={() => doSocket(overwrite.rune.id, overwrite.target)}
           onClose={() => !busy && setOverwrite(null)}>
-          <div style={{ color:'#ff8844' }}>いま入っているエッセンスは<b>消えます</b>。</div>
+          <div style={{ color:'#ff8844' }}>いま入っているルーンは<b>消えます</b>。</div>
           <div style={{ marginTop:'6px', fontSize:'11px', color:'#93a9be' }}>消えるもの</div>
-          <EssenceTag e={overwrite.target.over} />
+          <RuneTag e={overwrite.target.over} />
           <div style={{ marginTop:'6px', fontSize:'11px', color:'#93a9be' }}>入れるもの</div>
-          <EssenceTag e={overwrite.essence} />
+          <RuneTag e={overwrite.rune} />
           <div style={{ color:'#93a9be', fontSize:'11px', marginTop:'8px' }}>
             残したいなら「やめる」→「外す」で取り出してください（専用アイテムが1個要ります）。
           </div>
