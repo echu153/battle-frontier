@@ -75,6 +75,15 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
       : cur.length >= MAT_COUNT ? cur : [...cur, inv.id])
   }
 
+  // ★開発限定。護符の入手方法が決まるまでの仮の配り口（サーバー側でも is_admin を見ている）
+  const grantProtect = async () => {
+    setBusy(true); setMsg(null)
+    const { data, error } = await supabase.rpc('v2_debug_grant_protect', { p_count: 5 })
+    setBusy(false)
+    if (error || !data?.ok) { setMsg({ text: error?.message || data?.error || '失敗しました', color:'#ff6666' }); return }
+    onProfile(null)
+  }
+
   const fuse = async () => {
     if (pickError || busy) return
     setBusy(true); setMsg(null)
@@ -160,6 +169,13 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
           <b style={{ color:'#44ff88' }}>強化元は失敗しても残ります</b>。消えるのは強化素材{MAT_COUNT}個だけです。<br />
           強化値が1つ上がるごとに装備の戦闘力は<b style={{ color:'#ffcc00' }}>1.5倍</b>。ランクが高いほど上がりにくくなります。
         </div>
+        {/* ★開発限定。護符の入手方法が決まるまでの仮の配り口 */}
+        {isAdmin && (
+          <button onClick={grantProtect} disabled={busy}
+            style={{ ...miniBtn('#88ddaa'), marginTop:'8px' }}>
+            [開発] 🛡 {PROTECT_NAME}を5個もらう（所持 {protectHave}個）
+          </button>
+        )}
       </div>
 
       {/* ① 持っている装備 */}

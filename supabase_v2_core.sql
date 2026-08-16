@@ -1381,71 +1381,131 @@ revoke all on function public.v2_unequip(text) from public;
 revoke all on function public.v2_unequip(text) from anon;
 grant execute on function public.v2_unequip(text) to authenticated;
 
--- ===== 鍛冶屋：同じ強化値の装備3個を合成 =====
--- あるけみすと式。失敗＝消失／成功+1／大成功+2／超大成功+3。ランクが高いほど失敗しやすい。
--- ⚠3個消して1個返す。必ず1つのトランザクションで行う（旧版で補填SQLを書く羽目になった事故がある）
-create or replace function public.v2_fuse(p_a bigint, p_b bigint, p_c bigint)
+-- ===== 鍛冶屋：強化（強化元1個＋強化素材2個） =====
+-- ★2026-08-16 に「3個まとめて溶けて新しい1個ができる」方式から作り直した。
+--   前の方式は強化元を選べず、エッセンス入り・ソケット厳選の装備が
+--   どれか分からないまま消えていた。いまは：
+--     ・強化元（p_base）  … **成功しても失敗しても残る**。行そのものを更新するので
+--                            ソケットに入っているエッセンス（v2_essences.inv_id）もそのまま
+--     ・強化素材（2個）    … 成功なら消える。失敗でも消える
+--                            （守りの護符を使ったときだけ、失敗で消えない）
+-- ★守りの護符（p_protect）… 失敗しても強化素材が消えない。そのかわり
+--   上がるときは必ず+1（大成功・超大成功は出ない）。護符は使うと1個減る。
+-- ★確率は src/v2/lib/smith.js の RATES と同じ数字にすること（片方だけ直すとズレる）。
+--   あるけみすとは強化の仕様を公表していないのでBF独自。
+--   守っているのは「ランクが高いほど上がりにくい」だけ。
+alter table public.v2_profiles add column if not exists protect_count int not null default 0;
+
+-- 古い3個指定の関数は残しておくと画面から呼べてしまうので落とす
+drop function if exists public.v2_fuse(bigint, bigint, bigint);
+
+create or replace function public.v2_fuse(p_base bigint, p_mat_a bigint, p_mat_b bigint, p_protect boolean default false)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  v_uid uuid := auth.uid();
-  v_ids bigint[] := array[p_a, p_b, p_c];
-  v_cnt int;
-  v_plus int;
+  c_plus_max constant int := 12;
+  v_uid   uuid := auth.uid();
+  v_mats  bigint[] := array[p_mat_a, p_mat_b];
   v_equip text;
-  v_rank text;
-  v_r numeric;
+  v_plus  int;
+  v_rank  text;
+  v_cnt   int;
+  v_r     numeric;
   v_fail numeric; v_great numeric; v_super numeric;
-  v_up int;
-  v_new bigint;
+  v_up    int;
+  v_new   int;
+  v_res   text;
+  v_protect boolean := coalesce(p_protect, false);
   v_equipped jsonb;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
-  if p_a = p_b or p_b = p_c or p_a = p_c then return jsonb_build_object('ok', false, 'error', '同じ装備を重ねて指定しています'); end if;
+  if p_base = p_mat_a or p_base = p_mat_b or p_mat_a = p_mat_b then
+    return jsonb_build_object('ok', false, 'error', '同じものを重ねて選んでいます');
+  end if;
 
-  select count(*), min(plus), min(equip_id) into v_cnt, v_plus, v_equip
-    from public.v2_inventory where id = any(v_ids) and player_id = v_uid;
-  if v_cnt <> 3 then return jsonb_build_object('ok', false, 'error', 'その装備を持っていません'); end if;
-  if exists (select 1 from public.v2_inventory where id = any(v_ids) and player_id = v_uid and plus <> v_plus) then
-    return jsonb_build_object('ok', false, 'error', '強化値が同じ装備を3つ選んでください');
+  -- 強化元。装備中でも使える（消えないため）
+  select equip_id, plus into v_equip, v_plus
+    from public.v2_inventory where id = p_base and player_id = v_uid;
+  if v_equip is null then return jsonb_build_object('ok', false, 'error', 'その装備を持っていません'); end if;
+  if v_plus >= c_plus_max then
+    return jsonb_build_object('ok', false, 'error', format('強化値は+%sが上限です', c_plus_max));
   end if;
-  if exists (select 1 from public.v2_inventory where id = any(v_ids) and player_id = v_uid and equip_id <> v_equip) then
-    return jsonb_build_object('ok', false, 'error', '同じ装備を3つ選んでください');
+
+  -- 強化素材。同じ装備・同じ強化値でなければならない
+  select count(*) into v_cnt
+    from public.v2_inventory
+   where id = any(v_mats) and player_id = v_uid and equip_id = v_equip and plus = v_plus;
+  if v_cnt <> 2 then
+    return jsonb_build_object('ok', false, 'error', '同じ装備・同じ強化値のものを2個選んでください');
   end if;
-  if v_plus >= 12 then return jsonb_build_object('ok', false, 'error', '強化値は+12が上限です'); end if;
-  -- 装備中のものは合成に使えない
+
+  -- ★装備中のものは強化素材にできない（消えてしまうため）
   select equipped into v_equipped from public.v2_profiles where id = v_uid;
-  if exists (select 1 from jsonb_each_text(v_equipped) where value::bigint = any(v_ids)) then
-    return jsonb_build_object('ok', false, 'error', '装備中のものは合成に使えません');
+  if exists (select 1 from jsonb_each_text(v_equipped) where value::bigint = any(v_mats)) then
+    return jsonb_build_object('ok', false, 'error', '装備中のものは強化素材に使えません');
+  end if;
+
+  -- 護符を使うなら、ここで1個減らす。減らせなければ持っていない
+  if v_protect then
+    update public.v2_profiles set protect_count = protect_count - 1, updated_at = now()
+     where id = v_uid and protect_count > 0;
+    if not found then return jsonb_build_object('ok', false, 'error', '守りの護符を持っていません'); end if;
   end if;
 
   select rank into v_rank from public.v2_equipment where id = v_equip;
-  -- ランク別の確率（docs/v2-equipment-design.md）
+  -- ★src/v2/lib/smith.js の RATES と同じ数字
   select f, g, s into v_fail, v_great, v_super from (values
-    ('F', 0.00, 0.12, 0.03), ('E', 0.02, 0.13, 0.03), ('D', 0.04, 0.14, 0.04),
-    ('C', 0.06, 0.15, 0.05), ('B', 0.09, 0.16, 0.06), ('A', 0.12, 0.17, 0.07),
-    ('S', 0.15, 0.18, 0.09)
+    ('F', 0.00, 0.14, 0.04), ('E', 0.03, 0.12, 0.03), ('D', 0.07, 0.10, 0.03),
+    ('C', 0.12, 0.09, 0.02), ('B', 0.18, 0.07, 0.02), ('A', 0.25, 0.06, 0.01),
+    ('S', 0.33, 0.05, 0.01)
   ) t(r, f, g, s) where t.r = v_rank;
-
-  delete from public.v2_inventory where id = any(v_ids) and player_id = v_uid;
+  -- 護符を使うと大成功・超大成功のぶんが成功に寄る（失敗率は変わらない）
+  if v_protect then v_great := 0; v_super := 0; end if;
 
   v_r := random();
   if v_r < v_fail then
-    return jsonb_build_object('ok', true, 'result', 'fail', 'plus', null);
-  elsif v_r < v_fail + v_super then v_up := 3;
-  elsif v_r < v_fail + v_super + v_great then v_up := 2;
-  else v_up := 1;
+    v_up := 0; v_res := 'fail';
+  elsif v_r < v_fail + v_super then v_up := 3; v_res := 'super';
+  elsif v_r < v_fail + v_super + v_great then v_up := 2; v_res := 'great';
+  else v_up := 1; v_res := 'ok';
   end if;
 
-  insert into public.v2_inventory (player_id, equip_id, plus)
-  values (v_uid, v_equip, least(12, v_plus + v_up)) returning id into v_new;
-  return jsonb_build_object('ok', true, 'result',
-    case v_up when 3 then 'super' when 2 then 'great' else 'ok' end,
-    'plus', least(12, v_plus + v_up), 'id', v_new);
+  -- ★強化素材を消すのは「成功したとき」か「失敗＋護符なし」のとき。
+  --   護符ありで失敗したときだけ、何も消えない
+  if v_up > 0 or not v_protect then
+    delete from public.v2_inventory where id = any(v_mats) and player_id = v_uid;
+  end if;
+
+  -- ★強化元は行を作り直さず**そのまま更新する**＝ソケットのエッセンスが外れない
+  v_new := least(c_plus_max, v_plus + v_up);
+  if v_up > 0 then
+    update public.v2_inventory set plus = v_new where id = p_base and player_id = v_uid;
+  end if;
+
+  return jsonb_build_object('ok', true, 'result', v_res, 'plus', v_new,
+                            'id', p_base, 'protected', v_protect and v_up = 0);
 end;
 $$;
-revoke all on function public.v2_fuse(bigint, bigint, bigint) from public;
-revoke all on function public.v2_fuse(bigint, bigint, bigint) from anon;
-grant execute on function public.v2_fuse(bigint, bigint, bigint) to authenticated;
+revoke all on function public.v2_fuse(bigint, bigint, bigint, boolean) from public;
+revoke all on function public.v2_fuse(bigint, bigint, bigint, boolean) from anon;
+grant execute on function public.v2_fuse(bigint, bigint, bigint, boolean) to authenticated;
+
+-- ===== 動作確認用（開発限定）：守りの護符を配る =====
+-- ★入手方法は未定（2026-08-16）。決まるまでは開発だけがここで増やせる
+create or replace function public.v2_debug_grant_protect(p_count int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid(); v_admin boolean; v_n int := least(greatest(coalesce(p_count, 1), 1), 99); v_have int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  select coalesce(is_admin, false) into v_admin from public.profiles where id = v_uid;
+  if not v_admin then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  update public.v2_profiles set protect_count = protect_count + v_n, updated_at = now()
+   where id = v_uid returning protect_count into v_have;
+  return jsonb_build_object('ok', true, 'protect_count', v_have);
+end;
+$$;
+revoke all on function public.v2_debug_grant_protect(int) from public;
+revoke all on function public.v2_debug_grant_protect(int) from anon;
+grant execute on function public.v2_debug_grant_protect(int) to authenticated;
 
 -- ===== 動作確認用（開発限定）：装備を配る =====
 create or replace function public.v2_debug_grant_equip(p_rank text, p_count int)
