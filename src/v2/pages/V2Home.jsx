@@ -12,7 +12,6 @@ import { classBonusText } from '../lib/classBonus.js'
 import V2Sortie from '../components/V2Sortie.jsx'
 import V2Storage from '../components/V2Storage.jsx'
 import V2Smith from '../components/V2Smith.jsx'
-import V2Enchant from '../components/V2Enchant.jsx'
 import V2Status, { V2Menu } from '../components/V2Status.jsx'
 import V2Profile from '../components/V2Profile.jsx'
 import V2Tree from '../components/V2Tree.jsx'
@@ -54,10 +53,9 @@ const ROW_INDENT = '28px'
 const MENU = [
   { key:'profile', label:'プロフィール', icon:'👤', color:'#88aaff', action:'確認する' },
   { key:'temple',  label:'神殿',        icon:'🏛', color:'#ff88cc', action:'転職する' },
-  { key:'smith',   label:'鍛冶屋',      icon:'🔨', color:'#ffcc00', action:'合成する' },
+  { key:'smith',   label:'鍛冶屋',      icon:'🔨', color:'#ffcc00', action:'強化・エンチャント' },
   { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
   { key:'storage', label:'倉庫',        icon:'🎒', color:'#88ccff', action:'倉庫に行く' },
-  { key:'enchant', label:'エンチャント', icon:'⚗', color:'#cc88ff', action:'抽出する' },
   { key:'tree',    label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
 ]
 
@@ -330,9 +328,8 @@ export default function V2Home() {
 
             {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} essences={essences} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
-            {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} materials={materials} essences={essences} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'tree'    && <V2Tree    prof={prof} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
-            {screen === 'enchant' && <V2Enchant prof={prof} inventory={inventory} materials={materials} essences={essences} isAdmin={isAdmin} onRefresh={refresh} onBack={() => setScreen('home')} />}
 
             {(screen === 'skills' || screen === 'temple') && (
               <button onClick={() => setScreen('home')} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>

@@ -35,7 +35,8 @@ function EssenceTag({ e }) {
   )
 }
 
-export default function V2Enchant({ prof, inventory, materials, essences, onRefresh, onBack }) {
+// embedded … 鍛冶屋の中に置くとき。自前の「← ホームへ」は出さない（外側が持っている）
+export default function V2Enchant({ prof, inventory, materials, essences, onRefresh, onBack, embedded = false }) {
   const [tab, setTab] = useState('mats')
   const [area, setArea] = useState(1)
   const [picked, setPicked] = useState([])      // 抽出に使う素材ID（同じIDを重ねてよい）
@@ -102,7 +103,7 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
 
   return (
     <div>
-      <button onClick={onBack} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>
+      {!embedded && <button onClick={onBack} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>}
 
       <div style={{ display:'flex', gap:'4px', marginBottom:'10px' }}>
         {TABS.map(t => (

@@ -3,7 +3,7 @@ import { STAT_DEFS, MAX_LV, ROLLS_PER_LV, calcPower, expToNext, expPerLv } from 
 import { classBonusText } from '../lib/classBonus.js'
 import { TIER_COLOR } from '../lib/classes.js'
 import { KIND_COLOR, SKILL_BY_NAME, SKILL_SET_SLOTS } from '../lib/skills.js'
-import { equippedItems, gearPower, totalStats } from '../lib/loadout.js'
+import { equippedItems, totalStats } from '../lib/loadout.js'
 import { RANK_COLOR } from './v2ui.js'
 
 // ★見た目は旧版（無印）の街のステータスと同じ値にそろえてある。
@@ -90,9 +90,7 @@ export default function V2Status({ prof, inventory, essences, classes, open, onT
   const worn = equippedItems(prof, inventory)
   // ★エンチャントは**割合**なので装備の固定値とは別枠。totalStats に渡すと合計へ乗る
   const total = totalStats(prof, inventory, essences)
-  const gear = gearPower(prof, inventory)
   const power = calcPower(total)
-  const ench = power - calcPower(prof) - gear
   const tierColor = TIER_COLOR[classes?.find(c => c.id === prof.class)?.tier] || '#88ccff'
   const next = expToNext(prof.lv, prof.job_changes)
   const expPct = Math.min(100, (prof.exp / expPerLv(prof.job_changes)) * 100)
@@ -182,12 +180,6 @@ export default function V2Status({ prof, inventory, essences, classes, open, onT
           </div>
           <div style={{ fontSize:'11px', color:'#6688aa' }}>
             総合力: <span style={{ color:'#44ff88' }}>{power.toLocaleString()}</span>
-            {(gear > 0 || ench !== 0) && (
-              <span style={{ color:'#446688' }}>
-                （装備 +{gear.toLocaleString()}
-                {ench !== 0 && <>{' / エンチャント +'}{ench.toLocaleString()}</>}）
-              </span>
-            )}
           </div>
           <div style={{ fontSize:'11px', color:'#6688aa' }}>
             Gold: <span style={{ color:'#ffcc00' }}>{(prof.gold || 0).toLocaleString()}</span>

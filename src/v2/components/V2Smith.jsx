@@ -4,8 +4,12 @@ import { powerOf, PLUS_MAX } from '../lib/equipment.js'
 import { wornIdsOf, stackInventory } from '../lib/loadout.js'
 import { box, btn, miniBtn, RANK_COLOR, PART_ICON } from './v2ui.js'
 import V2Modal from './V2Modal.jsx'
+import V2Enchant from './V2Enchant.jsx'
 
-// 鍛冶屋：**同じ装備・同じ強化値を3個**合成して強化する（あるけみすと式）。
+// 鍛冶屋。「強化」と「エンチャント」の2枚看板で、タブで切り替える。
+//  強化   … **同じ装備・同じ強化値を3個**合成する（あるけみすと式）
+//  エンチャント … 素材の抽出とソケット付け（中身は V2Enchant がそのまま入る）
+// 強化について：
 // 失敗＝消失／成功+1／大成功+2／超大成功+3。ランクが高いほど失敗しやすい。
 // 抽選も3個の消費もサーバー（v2_fuse）が1つのトランザクションで行う。
 const RATES = {
@@ -16,7 +20,8 @@ const RATES = {
 }
 const RESULT_TEXT = { fail:['失敗… 装備は消えた', '#ff6666'], ok:['成功！ +1', '#88ccff'], great:['大成功！ +2', '#44ff88'], super:['超大成功！ +3', '#ffcc00'] }
 
-export default function V2Smith({ prof, inventory, onProfile, onBack }) {
+export default function V2Smith({ prof, inventory, materials, essences, isAdmin, onProfile, onBack }) {
+  const [menu, setMenu] = useState('fuse')   // fuse=強化 / enchant=エンチャント
   const [pick, setPick] = useState([])     // 選んだ所持品ID（3つまで）
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -52,8 +57,25 @@ export default function V2Smith({ prof, inventory, onProfile, onBack }) {
     <div>
       <button onClick={onBack} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>
 
+      {/* 鍛冶屋でできること。強化とエンチャントをここで切り替える */}
+      <div style={{ display:'flex', gap:'4px', marginBottom:'10px' }}>
+        {[{ key:'fuse', label:'🔨 強化', color:'#ffcc00' }, { key:'enchant', label:'⚗ エンチャント', color:'#cc88ff' }].map(t => (
+          <button key={t.key} onClick={() => { setMenu(t.key); setMsg(null) }}
+            style={{ ...miniBtn(menu === t.key ? t.color : '#446688'), padding:'7px 14px', fontSize:'12px',
+              background: menu === t.key ? '#002850' : '#000818' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {menu === 'enchant' && (
+        <V2Enchant prof={prof} inventory={inventory} materials={materials} essences={essences}
+          isAdmin={isAdmin} onRefresh={onProfile} onBack={onBack} embedded />
+      )}
+
+      {menu === 'fuse' && (<>
       <div style={{ ...box, padding:'12px', marginBottom:'10px', fontSize:'11px', color:'#88aaff' }}>
-        <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'6px' }}>🔨 鍛冶屋</div>
+        <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'6px' }}>🔨 強化</div>
         <div style={{ color:'#556677', fontSize:'10px', lineHeight:1.8 }}>
           同じ装備・同じ強化値を<b style={{ color:'#88ccff' }}>3個</b>合成すると強化値が上がります（上限+{PLUS_MAX}）。<br />
           失敗すると<b style={{ color:'#ff6666' }}>3個とも消えます</b>。ランクが高いほど失敗しやすくなります。<br />
@@ -139,6 +161,7 @@ export default function V2Smith({ prof, inventory, onProfile, onBack }) {
           )}
         </V2Modal>
       )}
+      </>)}
     </div>
   )
 }
