@@ -10,7 +10,7 @@
 //
 // 行動順・追加行動・命中・クリティカル・ダメージは combat.js の関数をそのまま使う。
 // ステータスの増減バフは**戦闘中ずっと続き、重ねがけで加算**される（あるけみすと準拠）。
-// 状態異常（毒・麻痺など）はまだ入れていない。入れるときはここにフェーズを足す。
+// 状態異常は ailments.js、装備エンチャントの特殊能力は enchant.js が定義を持つ。
 //
 // ★純関数。rng を渡せば結果が再現する（テストとバランス検証のため）。
 // ============================================================
@@ -20,6 +20,10 @@ import {
 import { STAT_KEYS } from './stats.js'
 import { skillsOf, isPassive } from './skills.js'
 import { classBonusOf } from './classBonus.js'
+import {
+  createAilments, inflict, tickAilments, ailStatPct, healMultOf, consumeParalyze, AIL_LABEL,
+} from './ailments.js'
+import { collectEnchants, inflictChance } from './enchant.js'
 
 export const NORMAL_ATTACK_MULT = 1.0 // 通常攻撃の倍率（消費MP0）
 export const MAX_TURNS = 100          // これを超えたら引き分け
@@ -84,6 +88,11 @@ const collectPassives = (passives) => {
 export const liveStats = (side, acting = false) => {
   const b = { ...side.buffs }
   const add = (k, pct) => { b[k] = Math.max(BUFF_MIN_PCT, (b[k] || 0) + pct) }
+  // 状態異常「鈍足」＝AGI-20%
+  const ap = ailStatPct(side.ail)
+  if (ap) for (const [k, pct] of Object.entries(ap)) add(k, pct)
+  // エンチャント：当てるたびに積むスタック（極夜のワイト・熾火のデーモン）
+  for (const [k, pct] of Object.entries(side.enStacks || {})) add(k, pct)
   // バーサク・執行本能：ダメージを与えるたびに乗るスタック
   if (side.rage > 0) for (const r of side.pa.rages) add(r.stat, Math.min(r.max, r.per * side.rage))
   // 闘争本能：HPが減るほど上がる（at% まで下がると max% で頭打ち）
@@ -101,12 +110,17 @@ export const liveStats = (side, acting = false) => {
     eff[c.from] = Math.max(0, (eff[c.from] || 0) - moved)
     eff[c.to] = (eff[c.to] || 0) + moved
   }
+  // 雷鷲サンダーロック：AGIの5%をSTRへ「加算」する。★変換と違って元は減らない
+  for (const c of side.en.convertAdds) {
+    eff[c.to] = (eff[c.to] || 0) + Math.round((eff[c.from] || 0) * (c.pct / 100))
+  }
   return eff
 }
 
 // 戦闘用の1サイドを作る。slots = [{ skill, uses }]（順番が発動順）
 // ★パッシブは発動順のローテーションから外す。職業補正はスキルとは別枠で常時かかる
-export const createSide = (fighter) => {
+// fighter.enchants = 装備しているエンチャント（敵の名前の配列）。band は時間帯条件の判定に使う
+export const createSide = (fighter, band = null) => {
   const stats = {}
   for (const k of STAT_KEYS) stats[k] = fighter.stats?.[k] ?? fighter[k] ?? 0
   const all = (fighter.slots || skillsOf(fighter.cls).map(s => ({ skill: s, uses: 3 })))
@@ -115,9 +129,11 @@ export const createSide = (fighter) => {
   const passives = all.filter(s => isPassive(s.skill)).map(s => s.skill)
   const pa = collectPassives(passives)
   const bonus = classBonusOf(fighter.cls)
+  const en = collectEnchants(fighter.enchants, band)
   const buffs = {}
   if (bonus?.stats) applyBuff(buffs, bonus.stats)   // 職業補正（就いている職業だけ）
   applyBuff(buffs, pa.statPct)                      // パッシブの常時ステータス補正
+  applyBuff(buffs, en.statPct)                      // エンチャントの常時ステータス補正（時間帯ぶんを含む）
   return {
     name: fighter.name || fighter.cls || '?',
     cls: fighter.cls,
@@ -139,6 +155,12 @@ export const createSide = (fighter) => {
     guards: pa.debuffGuard,              // 心身一如：デバフを打ち消せる残り回数
     lastSkill: null,                     // 元素共鳴が見る「直前に使ったスキル」
     switchOn: false,
+    // ===== エンチャント・状態異常 =====
+    en,
+    ail: createAilments(),
+    enStacks: {},                        // 当てるたびに積むスタック（ステ名→合計%）
+    enCut: en.startCut,                  // スケルトン：次に受けるダメージを軽減（受けるまで消えない）
+    reflected: false,                    // ウラノス：跳ね返しは最初の1回だけ
   }
 }
 
@@ -170,9 +192,15 @@ export const peekSkill = (side) => {
 }
 
 // 受けるとき側の軽減。骸の壁（1回きり）と竜鱗の加護（確率）はここでまとめて掛ける
-const applyIncoming = (foe, dmg, rng, log) => {
+// me は攻撃した側（跳ね返しの戻り先）。kind は 'phys' | 'mag'
+const applyIncoming = (me, foe, dmg, kind, rng, log) => {
   if (dmg <= 0) return 0
   let d = dmg
+  // エンチャントの軽減（物理／魔法で別枠）
+  const cut = kind === 'mag' ? foe.en.magCutPct : foe.en.physCutPct
+  if (cut) d *= Math.max(0, 1 - cut / 100)
+  // スケルトン：**1回ダメージを受けると消える**軽減バフ
+  if (foe.enCut) { d *= (1 - foe.enCut / 100); foe.enCut = 0; log.push({ side: foe.name, type: 'enCut' }) }
   // 骸の壁：**1回ダメージを受けると消える**。取り直すまで効かない
   if (foe.wallPct) { d *= (1 - foe.wallPct / 100); foe.wallPct = 0; log.push({ side: foe.name, type: 'wall' }) }
   const dc = foe.pa.dodgeCut
@@ -182,12 +210,24 @@ const applyIncoming = (foe, dmg, rng, log) => {
   }
   const out = Math.max(1, Math.floor(d))
   foe.hp -= out
+  // ウラノス：最初に受けたそのダメージを跳ね返す（跳ね返し自体は再度跳ね返らない）
+  const rf = foe.en.reflectFirst
+  if (me && rf && !foe.reflected && rf.kind === kind) {
+    foe.reflected = true
+    const back = Math.max(1, Math.floor(out * rf.pct / 100))
+    me.hp -= back
+    log.push({ side: foe.name, type: 'reflect', damage: back })
+  }
   return out
 }
 
 // 回復量。聖職者の「回復量+20%」と、異端審問官の「自身の回復量0.8倍」がここで効く
+// エンチャントの回復量+%と、状態異常「回復阻害」もここで掛かる
 const healAmount = (side, eff, rate) =>
-  Math.max(1, Math.floor(healOf(eff, rate) * (1 + side.pa.healBonus / 100) * side.healMult))
+  Math.max(1, Math.floor(
+    healOf(eff, rate) * (1 + side.pa.healBonus / 100) * side.healMult
+    * (1 + side.en.healPct / 100) * healMultOf(side.ail)
+  ))
 
 // デバフを相手へ入れる。心身一如を持っていると1回だけ打ち消される
 const applyDebuff = (foe, table, log) => {
@@ -200,15 +240,43 @@ const applyDebuff = (foe, table, log) => {
   applyBuff(foe.buffs, table)
 }
 
+// 攻撃が当たったときのエンチャント。状態異常の付与と、積み上がるステータス補正
+const onHit = (me, foe, kind, rng, log) => {
+  for (const a of me.en.onHitAils) {
+    if (a.kind !== 'any' && a.kind !== kind) continue
+    const pct = inflictChance(a.chance, foe.en, a.key)
+    if (!roll(pct, rng)) continue
+    if (inflict(foe.ail, a.key, a)) log.push({ side: foe.name, type: 'ailment', ail: AIL_LABEL[a.key] })
+  }
+  // 雪男・氷河ドラゴン・フロストバーン：当てるたびに相手のステータスを下げる（重複上限つき）
+  for (const f of me.en.onHitFoeStats) {
+    for (const st of f.stats) {
+      const cap = f.pct * f.max
+      const next = (foe.enStacks[st] || 0) + f.pct
+      foe.enStacks[st] = f.pct < 0 ? Math.max(cap, next) : Math.min(cap, next)
+    }
+  }
+  // 極夜のワイト・熾火のデーモン：当てるたびに自分のステータスを上げる（重複上限つき）
+  for (const s of me.en.onHitSelfStats) {
+    if (s.kind !== 'any' && s.kind !== kind) continue
+    me.enStacks[s.stat] = Math.min(s.pct * s.max, (me.enStacks[s.stat] || 0) + s.pct)
+  }
+}
+
 // 1回の行動を解決する。戻り値はログ用の1件
 const takeAction = (me, foe, rng, log) => {
+  // 麻痺：このターンは動けない（見た時点で1ターンぶん消える）
+  if (consumeParalyze(me.ail)) {
+    log.push({ side: me.name, type: 'paralyzed' })
+    return
+  }
   const idx = findSlot(me)
   const slot = idx === null ? null : me.slots[idx]
   const skill = slot?.skill || null
 
   // 発動判定。不発ならMPも使用回数も減らず、ポインタも進めない
   //   ★不発はバーサク・執行本能のスタックをリセットする
-  if (skill && !roll(skill.proc + me.pa.procBonus, rng)) {
+  if (skill && !roll(skill.proc + me.pa.procBonus + me.en.procBonus, rng)) {
     log.push({ side: me.name, type: 'misfire', skill: skill.name })
     me.rage = 0
     normalAttack(me, foe, rng, log, me.pa.misfireAtkMult)  // 居合の構えはここで威力2倍
@@ -240,7 +308,9 @@ const takeAction = (me, foe, rng, log) => {
         defPen, add: skill.add || null,
         sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit, noCrit: !!skill.noCrit,
         acc: skill.acc ?? 100,
-        hitBonus: me.pa.hitBonus, evaBonus: foe.pa.evaBonus, critBonus: me.pa.critBonus,
+        hitBonus: me.pa.hitBonus + me.en.hitBonus,
+        evaBonus: foe.pa.evaBonus + foe.en.evaBonus,
+        critBonus: me.pa.critBonus,
       }, rng)
       raw += r.damage
       if (r.hit) hits++
@@ -253,7 +323,10 @@ const takeAction = (me, foe, rng, log) => {
       if (v < g.up) raw = Math.floor(raw * g.upMult)
       else if (v < g.up + g.down) raw = Math.floor(raw * g.downMult)
     }
-    const dmg = applyIncoming(foe, raw, rng, log)
+    // エンチャントの与ダメージ+%（物理／魔法で別枠。時間帯ぶんも畳み込み済み）
+    raw = Math.floor(raw * (1 + (skill.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100))
+    const dmg = applyIncoming(me, foe, raw, skill.kind, rng, log)
+    if (hits > 0) onHit(me, foe, skill.kind, rng, log)
     // バーサク・執行本能：ダメージを与えたら+1スタック、全部外れたらリセット
     if (me.pa.rages.length) me.rage = hits > 0 ? me.rage + 1 : 0
     // 吸収：与えたダメージの一定割合を自分のHPへ（ソウルドレイン・ブラッティロアなど）
@@ -261,6 +334,12 @@ const takeAction = (me, foe, rng, log) => {
     if (skill.drain > 0 && dmg > 0) {
       drained = Math.max(1, Math.floor(dmg * skill.drain))
       me.hp = Math.min(me.base.hp, me.hp + drained)
+    }
+    // コウモリ・暁のフレイムバット：物理で与えたダメージの一部を回復
+    if (skill.kind === 'phys' && me.en.drainPhysPct > 0 && dmg > 0) {
+      const back = Math.max(1, Math.floor(dmg * me.en.drainPhysPct / 100))
+      me.hp = Math.min(me.base.hp, me.hp + back)
+      drained += back
     }
     log.push({ side: me.name, type: 'skill', skill: skill.name, damage: dmg, crit, hits, of: skill.hits || 1, drain: drained })
   } else if (skill.kind === 'heal') {
@@ -291,10 +370,28 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   const r = resolveAttack({
     attacker: eMe, defender: eFoe, mult: NORMAL_ATTACK_MULT * multScale, kind: me.kind,
     defPen: me.pa.defPenBonus / 100,
-    hitBonus: me.pa.hitBonus, evaBonus: foe.pa.evaBonus, critBonus: me.pa.critBonus,
+    hitBonus: me.pa.hitBonus + me.en.hitBonus,
+    evaBonus: foe.pa.evaBonus + foe.en.evaBonus,
+    critBonus: me.pa.critBonus,
   }, rng)
-  const dmg = applyIncoming(foe, r.damage, rng, log)
+  // 通常攻撃も「物理攻撃」なのでエンチャントの与ダメージ+%とヒット時効果が乗る
+  const raw = Math.floor(r.damage * (1 + (me.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100))
+  const dmg = applyIncoming(me, foe, raw, me.kind, rng, log)
+  if (r.hit) onHit(me, foe, me.kind, rng, log)
+  if (me.kind === 'phys' && me.en.drainPhysPct > 0 && dmg > 0) {
+    me.hp = Math.min(me.base.hp, me.hp + Math.max(1, Math.floor(dmg * me.en.drainPhysPct / 100)))
+  }
   log.push({ side: me.name, type: 'normal', damage: dmg, crit: r.crit, hit: r.hit, mult: multScale })
+}
+
+// ターン終了時の持続ダメージ（出血・毒）と、ターン数の減り
+// ★出血・毒は割合ダメージなのでVITでは軽減されない（旧版と同じ）
+const tickAil = (side, log) => {
+  for (const t of tickAilments(side.ail, { hp: side.hp, maxHp: side.base.hp })) {
+    side.hp -= t.damage
+    log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL[t.key], damage: t.damage, stacks: t.stacks })
+    if (side.hp <= 0) return
+  }
 }
 
 // ターン終了時の持続効果（回復）
@@ -315,9 +412,10 @@ const tickRegen = (side, log) => {
 }
 
 // 戦闘を最後まで回す。fighters は createSide に渡せる形
-export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MAX_TURNS } = {}) => {
-  const a = createSide(fighterA)
-  const b = createSide(fighterB)
+// band は '朝' | '昼' | '晩'。時間帯条件つきのエンチャントがここで有効／無効になる
+export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MAX_TURNS, band = null } = {}) => {
+  const a = createSide(fighterA, band)
+  const b = createSide(fighterB, band)
   const log = []
   let turn = 1
 
@@ -342,6 +440,9 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
       }
     }
 
+    if (a.hp <= 0 || b.hp <= 0) break
+    tickAil(a, log)
+    tickAil(b, log)
     if (a.hp <= 0 || b.hp <= 0) break
     tickRegen(a, log)
     tickRegen(b, log)
