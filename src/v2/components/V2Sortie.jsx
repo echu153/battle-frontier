@@ -98,7 +98,8 @@ export default function V2Sortie({ prof, inventory, runes, onProfile, onScene })
       } else if (l.type === 'debuffGuard') {
         out.push({ text:`🛡 心身一如！ 弱体化を打ち消した！`, color:'#44ffaa' })
       } else if (l.type === 'ailment') {
-        // エンチャントの特殊能力で入った状態異常。side は「かかった側」
+        // 状態異常が入ったとき。side は「かかった側」
+        // 出どころはエンチャントの特殊能力と、スキル自身が持つぶん（どくのほうし＝毒 など）の2つ
         out.push({ text:`☠ ${mine ? 'あなた' : foe}は${l.ail}になった！`, color:'#cc66ff' })
       } else if (l.type === 'ailTick') {
         out.push({ text:`☠ ${l.ail}！ ${mine ? 'あなた' : foe}に${l.damage.toLocaleString()}ダメージ！${l.stacks > 1 ? `（${l.stacks}スタック）` : ''}`, color:'#cc66ff' })
