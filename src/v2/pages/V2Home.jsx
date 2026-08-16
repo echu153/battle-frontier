@@ -12,6 +12,7 @@ import { classBonusText } from '../lib/classBonus.js'
 import V2Sortie from '../components/V2Sortie.jsx'
 import V2Storage from '../components/V2Storage.jsx'
 import V2Smith from '../components/V2Smith.jsx'
+import V2Enchant from '../components/V2Enchant.jsx'
 import V2Status, { V2Menu } from '../components/V2Status.jsx'
 import V2Profile from '../components/V2Profile.jsx'
 import V2Tree from '../components/V2Tree.jsx'
@@ -56,6 +57,7 @@ const MENU = [
   { key:'smith',   label:'鍛冶屋',      icon:'🔨', color:'#ffcc00', action:'合成する' },
   { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
   { key:'storage', label:'倉庫',        icon:'🎒', color:'#88ccff', action:'倉庫に行く' },
+  { key:'enchant', label:'エンチャント', icon:'⚗', color:'#cc88ff', action:'抽出する' },
   { key:'tree',    label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
 ]
 
@@ -78,6 +80,8 @@ export default function V2Home() {
   const [sortAsc, setSortAsc] = useState(true)
   const [screen, setScreen] = useState('home')     // home / sortie / temple / smith / skills / storage
   const [inventory, setInventory] = useState([])   // 所持している装備（v2_inventory）
+  const [materials, setMaterials] = useState([])   // 持っている素材（v2_player_materials）
+  const [essences, setEssences] = useState([])     // 持っているエッセンス（v2_essences）
   const [inBattle, setInBattle] = useState(false)  // 戦闘中はメニューを隠す（旧版と同じ）
   const [openStatus, setOpenStatus] = useState(true)  // ステータスの折りたたみ
   const [openMenu, setOpenMenu] = useState(true)      // 行動メニューの折りたたみ
@@ -103,8 +107,14 @@ export default function V2Home() {
         if (e2 || e3) { setSqlError((e2 || e3).message || String(e2 || e3)); setLoading(false); return }
         setProf(v2 || null)
         setClasses(cls || [])
-        const { data: inv } = await supabase.from('v2_inventory').select('*').order('id', { ascending:false })
+        const [{ data: inv }, { data: mats }, { data: ess }] = await Promise.all([
+          supabase.from('v2_inventory').select('*').order('id', { ascending:false }),
+          supabase.from('v2_player_materials').select('*'),
+          supabase.from('v2_essences').select('*').order('id', { ascending:false }),
+        ])
         setInventory(inv || [])
+        setMaterials(mats || [])
+        setEssences(ess || [])
       } catch (err) {
         setSqlError(err.message || String(err))
       }
@@ -118,12 +128,16 @@ export default function V2Home() {
     if (typeof updater === 'function') { setProf(updater); return }
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const [{ data: v2 }, { data: inv }] = await Promise.all([
+    const [{ data: v2 }, { data: inv }, { data: mats }, { data: ess }] = await Promise.all([
       supabase.from('v2_profiles').select('*').eq('id', user.id).maybeSingle(),
       supabase.from('v2_inventory').select('*').order('id', { ascending:false }),
+      supabase.from('v2_player_materials').select('*'),
+      supabase.from('v2_essences').select('*').order('id', { ascending:false }),
     ])
     if (v2) setProf(v2)
     setInventory(inv || [])
+    setMaterials(mats || [])
+    setEssences(ess || [])
   }
 
   const create = async (e) => {
@@ -305,7 +319,7 @@ export default function V2Home() {
             {/* ===== 出撃（旧版と同じで、街のブロックがそのままホームに載る） ===== */}
             {screen === 'home' && (
               <div style={{ marginBottom:'8px' }}>
-                <V2Sortie prof={prof} inventory={inventory} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />
+                <V2Sortie prof={prof} inventory={inventory} essences={essences} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />
               </div>
             )}
 
@@ -318,6 +332,7 @@ export default function V2Home() {
             {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'tree'    && <V2Tree    prof={prof} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'enchant' && <V2Enchant prof={prof} inventory={inventory} materials={materials} essences={essences} isAdmin={isAdmin} onRefresh={refresh} onBack={() => setScreen('home')} />}
 
             {(screen === 'skills' || screen === 'temple') && (
               <button onClick={() => setScreen('home')} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>

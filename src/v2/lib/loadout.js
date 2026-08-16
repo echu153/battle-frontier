@@ -58,17 +58,40 @@ export const gearStats = (profile, inventory) => {
 export const gearPower = (profile, inventory) =>
   Object.values(equippedItems(profile, inventory)).reduce((t, { inv, item }) => t + equipPower(item, inv.plus || 0), 0)
 
-// 本体＋装備の合計ステータス
-export const totalStats = (profile, inventory) => {
+// ===== エンチャント =====
+// エッセンス（v2_essences）は装備の個体（v2_inventory.id）に刺さっている。
+// **効いているのは「装着中の装備に刺さっているぶん」だけ**（倉庫で寝ている武器のぶんは効かない）
+export const equippedEssences = (profile, inventory, essences) => {
+  const wornInv = new Set(Object.values(equippedItems(profile, inventory)).map(w => String(w.inv.id)))
+  return (essences || []).filter(e => e.inv_id != null && wornInv.has(String(e.inv_id)))
+}
+// エッセンスぶんのステータス補正(%)。**固定値ではなく割合**なのでここだけ別枠
+export const essenceStatPct = (list) => {
+  const out = {}
+  for (const e of list || []) {
+    for (const [k, v] of Object.entries(e.stats || {})) out[k] = (out[k] || 0) + Number(v || 0)
+  }
+  return out
+}
+// 付いている特殊能力の名前（＝敵の名前。enchant.js のキー）。**同じものが複数あればそのぶん並ぶ**
+export const essenceAbilities = (list) => (list || []).map(e => e.ability).filter(Boolean)
+
+// 本体＋装備の合計ステータス。エッセンスの%はこの合計に対して掛かる
+export const totalStats = (profile, inventory, essences) => {
   const gear = gearStats(profile, inventory)
-  return Object.fromEntries(STAT_KEYS.map(k => [k, (profile?.[k] || 0) + gear[k]]))
+  const pct = essenceStatPct(equippedEssences(profile, inventory, essences))
+  return Object.fromEntries(STAT_KEYS.map(k => {
+    const base = (profile?.[k] || 0) + gear[k]
+    return [k, pct[k] ? Math.round(base * (1 + pct[k] / 100)) : base]
+  }))
 }
 
 // runBattle に渡す形。スキル編成が空なら通常攻撃だけで戦う
-export const toFighter = (profile, inventory) => ({
+export const toFighter = (profile, inventory, essences) => ({
   name: profile?.username || 'あなた',
   cls: profile?.class,
-  stats: totalStats(profile, inventory),
+  stats: totalStats(profile, inventory, essences),
+  enchants: essenceAbilities(equippedEssences(profile, inventory, essences)),
   slots: (profile?.skill_set || [])
     .map(e => ({ skill: SKILL_BY_NAME[e?.name], uses: e?.uses || 1 }))
     .filter(e => e.skill),

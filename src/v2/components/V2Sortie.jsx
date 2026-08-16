@@ -4,10 +4,12 @@ import { BattleLogLine } from '../../pages/Game'
 import { AREAS, toFighter as enemyFighter } from '../lib/enemies.js'
 import {
   pickEncounter, expOf, goldOf, isAreaUnlocked, nextBossRate,
-  cooldownOf, rollHasDrop, rollDrop, COOLDOWNS,
+  cooldownOf, rollHasDrop, rollDrop, rollMaterial, COOLDOWNS,
 } from '../lib/sortie.js'
 import { runBattle } from '../lib/battle.js'
-import { toFighter as playerFighter } from '../lib/loadout.js'
+import { toFighter as playerFighter, equippedEssences, essenceAbilities } from '../lib/loadout.js'
+import { dropRateMultOf } from '../lib/enchant.js'
+import { RARITY_LABEL, RARITY_COLOR } from '../lib/material.js'
 import { RANK_COLOR } from './v2ui.js'
 
 // ★旧版（無印）の街とまったく同じ作り。
@@ -15,7 +17,7 @@ import { RANK_COLOR } from './v2ui.js'
 //   「次の行動まで」バー → エリアのプルダウン（解放済みだけ）→「◯◯へ出撃！」
 //   出撃すると戦闘ログの画面に切り替わり、「🏰 街に戻る」で戻る。
 //   戦闘ログの表示は旧版の BattleLogLine をそのまま使っている（ArenaPanel などと同じ）。
-export default function V2Sortie({ prof, inventory, onProfile, onScene }) {
+export default function V2Sortie({ prof, inventory, essences, onProfile, onScene }) {
   const [scene, setScene] = useState('town')
   const [selectedArea, setSelectedArea] = useState(() => Number(localStorage.getItem('v2SelectedArea')) || 1)
   const [logs, setLogs] = useState([])
@@ -48,13 +50,16 @@ export default function V2Sortie({ prof, inventory, onProfile, onScene }) {
     lastAt.current = Date.now()
     setLoading(true); setScene('battle'); setLogs([])
 
-    const me = playerFighter(prof, inventory)
+    const me = playerFighter(prof, inventory, essences)
+    // 「素材ドロップ率up」の特殊能力ぶん。★重複せず、一番高いものだけが効く
+    const matMult = dropRateMultOf(essenceAbilities(equippedEssences(prof, inventory, essences)))
     const enc = pickEncounter(area.id, bossRate, new Date())
     const r = runBattle(me, enemyFighter(enc.enemy, 8))
     const win = r.winner === 'a'
     const exp = win ? expOf(enc.isBoss) : 0
     const gold = win ? goldOf(enc.enemy) : 0
     const drop = win && rollHasDrop(cd) ? rollDrop(area.id, new Date()) : null
+    const mat = win ? rollMaterial(enc.enemy.name, matMult) : null
     setBossRate(nextBossRate(bossRate, enc.isBoss))
 
     // 旧版の文体に合わせる（BattleLogLine が スキル名・ダメージ・回復 を拾って色を付ける）
@@ -92,6 +97,17 @@ export default function V2Sortie({ prof, inventory, onProfile, onScene }) {
         out.push({ text:`💀 骸の壁が攻撃を和らげた！`, color:'#cc44ff' })
       } else if (l.type === 'debuffGuard') {
         out.push({ text:`🛡 心身一如！ 弱体化を打ち消した！`, color:'#44ffaa' })
+      } else if (l.type === 'ailment') {
+        // エンチャントの特殊能力で入った状態異常。side は「かかった側」
+        out.push({ text:`☠ ${mine ? 'あなた' : foe}は${l.ail}になった！`, color:'#cc66ff' })
+      } else if (l.type === 'ailTick') {
+        out.push({ text:`☠ ${l.ail}！ ${mine ? 'あなた' : foe}に${l.damage.toLocaleString()}ダメージ！${l.stacks > 1 ? `（${l.stacks}スタック）` : ''}`, color:'#cc66ff' })
+      } else if (l.type === 'paralyzed') {
+        out.push({ text:`⚡ ${mine ? 'あなた' : foe}は麻痺して動けない！`, color:'#ffdd44' })
+      } else if (l.type === 'reflect') {
+        out.push({ text:`🔮 ${mine ? 'あなた' : foe}はダメージを${l.damage.toLocaleString()}跳ね返した！`, color:'#88ddff' })
+      } else if (l.type === 'enCut') {
+        out.push({ text:`🛡 ${mine ? 'あなた' : foe}のエンチャントが攻撃を和らげた！`, color:'#66ccff' })
       }
     }
     out.push(win
@@ -100,6 +116,7 @@ export default function V2Sortie({ prof, inventory, onProfile, onScene }) {
     if (win) {
       out.push({ text:`EXP +${exp}　Gold +${gold.toLocaleString()}`, color:'#ffcc00' })
       if (drop) out.push({ text:`🎁 ${drop.rank}級「${drop.name}」を入手！`, color: RANK_COLOR[drop.rank] })
+      if (mat) out.push({ text:`⚗ ${RARITY_LABEL[mat.rarity]}素材「${mat.name}」を入手！`, color: RARITY_COLOR[mat.rarity] })
       if (enc.isBoss && area.id < 8) out.push({ text:`🔓 エリア${area.id + 1}が解放された！`, color:'#44ff88' })
     }
     setLogs(out)
@@ -109,6 +126,7 @@ export default function V2Sortie({ prof, inventory, onProfile, onScene }) {
       p_area: area.id, p_normals: enc.isBoss ? 0 : 1,
       p_boss_wins: enc.isBoss && win ? 1 : 0, p_boss_seen: enc.isBoss ? 1 : 0,
       p_exp: exp, p_gold: gold, p_drops: drop ? [drop.id] : [],
+      p_materials: mat ? [mat.id] : [],
     })
     setLoading(false)
     if (error || !data?.ok) {

@@ -121,6 +121,14 @@ export const statsOf = (item, plus = 0) => {
   out[top] += p - Object.values(out).reduce((a, b) => a + b, 0)
   return out
 }
+// ===== エンチャントのソケット =====
+// **いまは武器だけ**。片手2枠・両手3枠で、**色はドロップした瞬間に1枠ずつ1/3で決まる**
+//   （設計は docs/v2-enchant-design.md。防具・アクセへ広げるときはここを直せば済む）
+export const SOCKET_COLORS = ['red', 'blue', 'green']
+export const socketCountOf = (item) => (item?.part === '武器' ? (item.hands === 2 ? 3 : 2) : 0)
+export const rollSockets = (item, rng = Math.random) =>
+  Array.from({ length: socketCountOf(item) }, () => SOCKET_COLORS[Math.min(2, Math.floor(rng() * 3))])
+
 // この装備をどの枠に着けられるか
 export const slotsFor = (item) => {
   if (item.part === '武器') return item.hands === 'L' ? ['left'] : item.hands === 2 ? ['right'] : ['right', 'left']

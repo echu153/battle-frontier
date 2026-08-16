@@ -3,6 +3,7 @@ import { supabase } from '../../supabase'
 import { SLOTS, SLOT_LABEL, PARTS, powerOf, statsOf, slotsFor } from '../lib/equipment.js'
 import { equippedItems, gearPower, wornIdsOf, stackInventory } from '../lib/loadout.js'
 import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
+import { COLOR_HEX } from '../lib/material.js'
 import { box, miniBtn, RANK_COLOR, PART_ICON } from './v2ui.js'
 
 // 倉庫：持っている装備を見て、着け外しする。
@@ -89,6 +90,12 @@ export default function V2Storage({ prof, inventory, onProfile, onBack }) {
                 {/* ★同じ装備・同じ強化値はここでまとめて個数にする */}
                 {g.list.length > 1 && <span style={{ color:'#ffffff', fontSize:'11px' }}>×{g.list.length}</span>}
                 <span style={{ color:'#446688', fontSize:'10px' }}>{item.type} / 戦闘力{powerOf(item, plus)}</span>
+                {/* エンチャントのソケット。**個体ごとに色が違う**ので、まとめた中の1個ずつ出す */}
+                {item.part === '武器' && g.list.map(inv => (inv.sockets || []).length ? (
+                  <span key={inv.id} style={{ fontSize:'10px', letterSpacing:'1px' }}>
+                    {inv.sockets.map((c, i) => <span key={i} style={{ color: COLOR_HEX[c] }}>●</span>)}
+                  </span>
+                ) : null)}
                 {g.worn.length > 0 && (
                   <span style={{ color:'#44ff88', fontSize:'9px' }}>
                     装着中{g.worn.length > 1 ? `×${g.worn.length}` : ''}

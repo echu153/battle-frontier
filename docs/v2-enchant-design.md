@@ -431,14 +431,36 @@ SQL側にも置く必要がある）。
 ### B. 残り
 
 1. **エッセンスを外すアイテムの名前と入手手段**（後で考える）
+   - いまは `v2_profiles.unsocket_tickets` に枚数だけ持たせてあり、**入手手段が無い**。
+     動作確認用に `v2_debug_grant_material`（is_admin限定）が5個いっしょに配る
+2. **実戦でのバランス確認**。とくに**HPのエンチャント**（HPは全ステ中もっとも強い）と、
+   **両手武器の3ソケット**（既存の戦闘力2.2倍と重なる）
+3. ⚠**素材ドロップ率upはサーバーから検証できない**。ドロップ率upの倍率はクライアント側の
+   確率で、サーバーは「1戦闘につき1個まで」しか見ていない（装備ドロップと同じ強さの検証）
 
-### D. 作る必要があるもの（実装フェーズ）
+### D. 実装（2026-08-16 完了）
 
-- **画面**：素材倉庫／抽出（5個選ぶ→結果表示）／ソケット（はめる・外す）
-- **データ**：素材168種・エッセンス・ソケット付き装備インスタンス
-- **サーバー**：抽出RPC（抽選の権威はサーバー）・素材ドロップ判定・ドロップ率upの反映
-  - ⚠v2のSQLは`supabase_v2_core.sql`**1ファイルにまとめる運用**（分割しない・全体が冪等）
-- **テスト**：抽選分布・色判定・ソケット色の分布・状態異常の挙動
+| | 置き場所 |
+|---|---|
+| 素材168種・レンジ・抽出の計算 | `src/v2/lib/material.js` |
+| 素材のドロップ抽選 | `src/v2/lib/sortie.js` の `rollMaterial` |
+| ソケットの数と色 | `src/v2/lib/equipment.js` の `socketCountOf` / `rollSockets` |
+| 装備中のエッセンスを戦闘へ渡す | `src/v2/lib/loadout.js` |
+| 画面（素材／抽出／ソケット） | `src/v2/components/V2Enchant.jsx` |
+| テーブルとRPC | `supabase_v2_core.sql` の 7-2 と 10 |
+
+**要SQL：`supabase_v2_core.sql` を全文流し直す**（v2のSQLは1ファイルにまとめて全体が冪等）。
+足したもの＝`v2_materials`（168行）／`v2_player_materials`／`v2_essences`／
+`v2_inventory.sockets`／`v2_profiles.unsocket_tickets`と、
+`v2_extract_essence`／`v2_choose_ability`／`v2_socket_essence`／`v2_unsocket_essence`／
+`v2_backfill_sockets`／`v2_debug_grant_material`。
+`v2_sortie_settle` は引数が1つ増えた（`p_materials`）ので、**古い7引数版を落としてから作り直す**。
+
+★**抽選の権威はサーバー**（`v2_extract_essence`）。`material.js` は画面とテスト用の写しなので、
+**数式を変えるときは必ず両方を直すこと**。
+
+★この機能より前に拾った武器は `sockets` が空。エンチャント画面の
+「ソケットを開ける」（`v2_backfill_sockets`）で開く。
 
 素材図鑑は作らない（2026-08-16 ユーザー決定）。
 

@@ -938,19 +938,270 @@ create policy "v2_inventory_own" on public.v2_inventory for select to authentica
 revoke all on table public.v2_inventory from anon;
 grant select on table public.v2_inventory to authenticated;
 
+-- ============================================================
+-- ===== 7-2. エンチャント（素材 → 抽出 → エッセンス → ソケット） =====
+-- 設計は docs/v2-enchant-design.md。
+--   素材は**敵ごと固有で168種**（56体 × 通常/レア/激レア）。
+--   ★**値もステータスの型も「抽出するとき」に抽選する**ので、素材はスタックで持てる。
+--   ★**抽選の権威はこちら（サーバー）**。src/v2/lib/material.js は画面とテスト用の写し。
+--     **数式を変えるときは必ず両方を直すこと**（片方だけだと表示と実値がズレる）。
+-- ============================================================
+
+-- ---- 素材マスタ（168種）----
+-- ★このINSERTは src/v2/lib/material.js の MATERIALS から生成している。
+--   素材を足す・名前を変えるときは向こうを直してから生成し直すこと。
+create table if not exists public.v2_materials (
+  id       text primary key,      -- 'm:<エリア>:<敵の並び>:<n|r|u>'
+  name     text    not null,
+  enemy    text    not null,      -- 特殊能力のキーでもある（src/v2/lib/enchant.js）
+  area     int     not null,
+  rarity   text    not null,      -- normal / rare / ultra
+  is_boss  boolean not null,
+  stats    text[]  not null,      -- 割り当てステータス（ボスは2つ）
+  lo       numeric not null,      -- 値のレンジ(%)。刻みは0.1
+  hi       numeric not null
+);
+alter table public.v2_materials enable row level security;
+drop policy if exists "v2_materials_read" on public.v2_materials;
+create policy "v2_materials_read" on public.v2_materials for select to authenticated using (true);
+revoke all on table public.v2_materials from anon;
+grant select on table public.v2_materials to authenticated;
+
+insert into public.v2_materials (id, name, enemy, area, rarity, is_boss, stats, lo, hi) values
+  ('m:1:0:n', 'スライムのゼリー', 'スライム', 1, 'normal', false, array['vit'], 0.1, 1.0),
+  ('m:1:0:r', '透きとおったゼリー', 'スライム', 1, 'rare', false, array['vit'], 0.3, 1.0),
+  ('m:1:0:u', '粘性の芯核', 'スライム', 1, 'ultra', false, array['vit'], 0.5, 1.0),
+  ('m:1:1:n', 'コウモリの翼膜', 'コウモリ', 1, 'normal', false, array['agi'], 0.1, 1.0),
+  ('m:1:1:r', '鋭い犬歯', 'コウモリ', 1, 'rare', false, array['agi'], 0.3, 1.0),
+  ('m:1:1:u', '音無しの耳', 'コウモリ', 1, 'ultra', false, array['agi'], 0.5, 1.0),
+  ('m:1:2:n', '毒キノコの傘', '毒キノコ', 1, 'normal', false, array['int_stat'], 0.1, 1.0),
+  ('m:1:2:r', '痺れ胞子', '毒キノコ', 1, 'rare', false, array['int_stat'], 0.3, 1.0),
+  ('m:1:2:u', '猛毒の菌糸', '毒キノコ', 1, 'ultra', false, array['int_stat'], 0.5, 1.0),
+  ('m:1:3:n', '朝露のしずく', '朝露のフェアリー', 1, 'normal', false, array['mp'], 0.1, 1.0),
+  ('m:1:3:r', '妖精の鱗粉', '朝露のフェアリー', 1, 'rare', false, array['mp'], 0.3, 1.0),
+  ('m:1:3:u', 'フェアリーの羽根', '朝露のフェアリー', 1, 'ultra', false, array['mp'], 0.5, 1.0),
+  ('m:1:4:n', 'トカゲの尻尾', 'ひなたトカゲ', 1, 'normal', false, array['str'], 0.1, 1.0),
+  ('m:1:4:r', '陽だまりの鱗', 'ひなたトカゲ', 1, 'rare', false, array['str'], 0.3, 1.0),
+  ('m:1:4:u', '日輪の心鱗', 'ひなたトカゲ', 1, 'ultra', false, array['str'], 0.5, 1.0),
+  ('m:1:5:n', 'フクロウの羽根', '月夜のフクロウ', 1, 'normal', false, array['dex'], 0.1, 1.0),
+  ('m:1:5:r', '静寂の風切羽', '月夜のフクロウ', 1, 'rare', false, array['dex'], 0.3, 1.0),
+  ('m:1:5:u', '月光の瞳', '月夜のフクロウ', 1, 'ultra', false, array['dex'], 0.5, 1.0),
+  ('m:1:6:n', '大粘塊のゼリー', 'ビッグスライム', 1, 'normal', true, array['hp','vit'], 0.1, 0.8),
+  ('m:1:6:r', '王核の粘膜', 'ビッグスライム', 1, 'rare', true, array['hp','vit'], 0.2, 0.8),
+  ('m:1:6:u', 'ビッグスライムの芯核', 'ビッグスライム', 1, 'ultra', true, array['hp','vit'], 0.4, 0.8),
+  ('m:2:0:n', 'ゴブリンの牙', 'ゴブリン', 2, 'normal', false, array['str'], 0.1, 1.0),
+  ('m:2:0:r', 'ゴブリンの棍棒片', 'ゴブリン', 2, 'rare', false, array['str'], 0.3, 1.0),
+  ('m:2:0:u', '族長の証', 'ゴブリン', 2, 'ultra', false, array['str'], 0.5, 1.0),
+  ('m:2:1:n', '野良犬の毛皮', '野良犬', 2, 'normal', false, array['agi'], 0.1, 1.0),
+  ('m:2:1:r', '研ぎ澄まされた爪', '野良犬', 2, 'rare', false, array['agi'], 0.3, 1.0),
+  ('m:2:1:u', '野犬の心臓', '野良犬', 2, 'ultra', false, array['agi'], 0.5, 1.0),
+  ('m:2:2:n', '盗賊の革帯', '盗賊', 2, 'normal', false, array['luk'], 0.1, 1.0),
+  ('m:2:2:r', '隠しナイフ', '盗賊', 2, 'rare', false, array['luk'], 0.3, 1.0),
+  ('m:2:2:u', '盗賊の秘符', '盗賊', 2, 'ultra', false, array['luk'], 0.5, 1.0),
+  ('m:2:3:n', 'ワームの粘液', '朝霧のワーム', 2, 'normal', false, array['hp'], 0.1, 1.0),
+  ('m:2:3:r', '朝霧の環節', '朝霧のワーム', 2, 'rare', false, array['hp'], 0.3, 1.0),
+  ('m:2:3:u', '大地喰らいの顎', '朝霧のワーム', 2, 'ultra', false, array['hp'], 0.5, 1.0),
+  ('m:2:4:n', 'リザードの鱗', '陽炎リザード', 2, 'normal', false, array['str'], 0.1, 1.0),
+  ('m:2:4:r', '陽炎の鱗', '陽炎リザード', 2, 'rare', false, array['str'], 0.3, 1.0),
+  ('m:2:4:u', '灼熱の尾芯', '陽炎リザード', 2, 'ultra', false, array['str'], 0.5, 1.0),
+  ('m:2:5:n', '斥候の外套片', '夜盗の斥候', 2, 'normal', false, array['dex'], 0.1, 1.0),
+  ('m:2:5:r', '暗視の眼帯', '夜盗の斥候', 2, 'rare', false, array['dex'], 0.3, 1.0),
+  ('m:2:5:u', '影渡りの短刀', '夜盗の斥候', 2, 'ultra', false, array['dex'], 0.5, 1.0),
+  ('m:2:6:n', '奪われた小袋', '盗賊団のリーダー', 2, 'normal', true, array['str','luk'], 0.1, 0.8),
+  ('m:2:6:r', 'リーダーの手甲', '盗賊団のリーダー', 2, 'rare', true, array['str','luk'], 0.2, 0.8),
+  ('m:2:6:u', '略奪王の徽章', '盗賊団のリーダー', 2, 'ultra', true, array['str','luk'], 0.4, 0.8),
+  ('m:3:0:n', 'コボルトの毛皮', 'コボルト', 3, 'normal', false, array['str'], 0.1, 1.3),
+  ('m:3:0:r', 'コボルトの牙', 'コボルト', 3, 'rare', false, array['str'], 0.4, 1.3),
+  ('m:3:0:u', '洞窟王の角', 'コボルト', 3, 'ultra', false, array['str'], 0.7, 1.3),
+  ('m:3:1:n', 'もろい骨片', 'スケルトン', 3, 'normal', false, array['hp'], 0.1, 1.3),
+  ('m:3:1:r', '硬化した肋骨', 'スケルトン', 3, 'rare', false, array['hp'], 0.4, 1.3),
+  ('m:3:1:u', '不朽の頭蓋', 'スケルトン', 3, 'ultra', false, array['hp'], 0.7, 1.3),
+  ('m:3:2:n', 'ゴーレムの土塊', 'ゴーレム', 3, 'normal', false, array['vit'], 0.1, 1.3),
+  ('m:3:2:r', '魔力を帯びた岩片', 'ゴーレム', 3, 'rare', false, array['vit'], 0.4, 1.3),
+  ('m:3:2:u', 'ゴーレムの動力核', 'ゴーレム', 3, 'ultra', false, array['vit'], 0.7, 1.3),
+  ('m:3:3:n', 'ガーゴイルの石片', '曙のガーゴイル', 3, 'normal', false, array['vit'], 0.1, 1.3),
+  ('m:3:3:r', '曙光の翼石', '曙のガーゴイル', 3, 'rare', false, array['vit'], 0.4, 1.3),
+  ('m:3:3:u', '石像の魔眼', '曙のガーゴイル', 3, 'ultra', false, array['vit'], 0.7, 1.3),
+  ('m:3:4:n', '石化した鱗', '石化トカゲ', 3, 'normal', false, array['vit'], 0.1, 1.3),
+  ('m:3:4:r', '岩肌の甲殻', '石化トカゲ', 3, 'rare', false, array['vit'], 0.4, 1.3),
+  ('m:3:4:u', '不動の石心', '石化トカゲ', 3, 'ultra', false, array['vit'], 0.7, 1.3),
+  ('m:3:5:n', '霊気の残滓', '夜這うレイス', 3, 'normal', false, array['int_stat'], 0.1, 1.3),
+  ('m:3:5:r', '怨嗟の衣片', '夜這うレイス', 3, 'rare', false, array['int_stat'], 0.4, 1.3),
+  ('m:3:5:u', 'レイスの魂核', '夜這うレイス', 3, 'ultra', false, array['int_stat'], 0.7, 1.3),
+  ('m:3:6:n', '古代の石片', '古代の番人', 3, 'normal', true, array['int_stat','mp'], 0.1, 1.0),
+  ('m:3:6:r', '番人の魔導回路', '古代の番人', 3, 'rare', true, array['int_stat','mp'], 0.3, 1.0),
+  ('m:3:6:u', '古代文明の心臓', '古代の番人', 3, 'ultra', true, array['int_stat','mp'], 0.5, 1.0),
+  ('m:4:0:n', '魚人の鱗', '深海魚人', 4, 'normal', false, array['dex'], 0.1, 1.3),
+  ('m:4:0:r', '深海の鰭', '深海魚人', 4, 'rare', false, array['dex'], 0.4, 1.3),
+  ('m:4:0:u', '深海の心鱗', '深海魚人', 4, 'ultra', false, array['dex'], 0.7, 1.3),
+  ('m:4:1:n', '海賊の頭巾', '海賊', 4, 'normal', false, array['luk'], 0.1, 1.3),
+  ('m:4:1:r', '錆びた鉤爪', '海賊', 4, 'rare', false, array['luk'], 0.4, 1.3),
+  ('m:4:1:u', '海賊旗の切れ端', '海賊', 4, 'ultra', false, array['luk'], 0.7, 1.3),
+  ('m:4:2:n', 'クラゲの触手', '毒クラゲ', 4, 'normal', false, array['int_stat'], 0.1, 1.3),
+  ('m:4:2:r', '痺れ毒袋', '毒クラゲ', 4, 'rare', false, array['int_stat'], 0.4, 1.3),
+  ('m:4:2:u', '深海毒の結晶', '毒クラゲ', 4, 'ultra', false, array['int_stat'], 0.7, 1.3),
+  ('m:4:3:n', 'セイレーンの鱗', '朝凪のセイレーン', 4, 'normal', false, array['mp'], 0.1, 1.3),
+  ('m:4:3:r', '歌声の貝殻', '朝凪のセイレーン', 4, 'rare', false, array['mp'], 0.4, 1.3),
+  ('m:4:3:u', '魅了の喉笛', '朝凪のセイレーン', 4, 'ultra', false, array['mp'], 0.7, 1.3),
+  ('m:4:4:n', 'カニの殻片', '潮騒のカニ', 4, 'normal', false, array['vit'], 0.1, 1.3),
+  ('m:4:4:r', '頑丈な鋏', '潮騒のカニ', 4, 'rare', false, array['vit'], 0.4, 1.3),
+  ('m:4:4:u', '潮騒の甲核', '潮騒のカニ', 4, 'ultra', false, array['vit'], 0.7, 1.3),
+  ('m:4:5:n', 'アンコウの提灯', '夜光アンコウ', 4, 'normal', false, array['agi'], 0.1, 1.3),
+  ('m:4:5:r', '夜光の粘液', '夜光アンコウ', 4, 'rare', false, array['agi'], 0.4, 1.3),
+  ('m:4:5:u', '深淵の発光器', '夜光アンコウ', 4, 'ultra', false, array['agi'], 0.7, 1.3),
+  ('m:4:6:n', '海竜の鱗', 'シーサーペント', 4, 'normal', true, array['hp','str'], 0.1, 1.0),
+  ('m:4:6:r', '海竜の逆鱗', 'シーサーペント', 4, 'rare', true, array['hp','str'], 0.3, 1.0),
+  ('m:4:6:u', 'シーサーペントの海心', 'シーサーペント', 4, 'ultra', true, array['hp','str'], 0.5, 1.0),
+  ('m:5:0:n', '山ゴブリンの毛皮', '山岳ゴブリン', 5, 'normal', false, array['str'], 0.1, 1.6),
+  ('m:5:0:r', '岩砕きの棍棒片', '山岳ゴブリン', 5, 'rare', false, array['str'], 0.5, 1.6),
+  ('m:5:0:u', '山賊頭の兜', '山岳ゴブリン', 5, 'ultra', false, array['str'], 0.8, 1.6),
+  ('m:5:1:n', '巨岩の破片', '岩石ゴーレム', 5, 'normal', false, array['vit'], 0.1, 1.6),
+  ('m:5:1:r', '鉱脈の結晶', '岩石ゴーレム', 5, 'rare', false, array['vit'], 0.5, 1.6),
+  ('m:5:1:u', '岩石ゴーレムの心核', '岩石ゴーレム', 5, 'ultra', false, array['vit'], 0.8, 1.6),
+  ('m:5:2:n', 'グリフォンの羽根', 'グリフォン', 5, 'normal', false, array['agi'], 0.1, 1.6),
+  ('m:5:2:r', '猛禽の鉤爪', 'グリフォン', 5, 'rare', false, array['agi'], 0.5, 1.6),
+  ('m:5:2:u', 'グリフォンの風心', 'グリフォン', 5, 'ultra', false, array['agi'], 0.8, 1.6),
+  ('m:5:3:n', 'ワイバーンの鱗', '払暁のワイバーン', 5, 'normal', false, array['dex'], 0.1, 1.6),
+  ('m:5:3:r', '飛膜の切れ端', '払暁のワイバーン', 5, 'rare', false, array['dex'], 0.5, 1.6),
+  ('m:5:3:u', '払暁の翼骨', '払暁のワイバーン', 5, 'ultra', false, array['dex'], 0.8, 1.6),
+  ('m:5:4:n', '大猿の毛皮', '陽射しの大猿', 5, 'normal', false, array['hp'], 0.1, 1.6),
+  ('m:5:4:r', '岩砕きの拳骨', '陽射しの大猿', 5, 'rare', false, array['hp'], 0.5, 1.6),
+  ('m:5:4:u', '猛猿の闘魂', '陽射しの大猿', 5, 'ultra', false, array['hp'], 0.8, 1.6),
+  ('m:5:5:n', '山猫の毛皮', '宵闇の山猫', 5, 'normal', false, array['luk'], 0.1, 1.6),
+  ('m:5:5:r', '宵闇の爪', '宵闇の山猫', 5, 'rare', false, array['luk'], 0.5, 1.6),
+  ('m:5:5:u', '疾影の後肢', '宵闇の山猫', 5, 'ultra', false, array['luk'], 0.8, 1.6),
+  ('m:5:6:n', '帯電した羽根', '雷鷲サンダーロック', 5, 'normal', true, array['agi','str'], 0.1, 1.2),
+  ('m:5:6:r', '雷鷲の風切羽', '雷鷲サンダーロック', 5, 'rare', true, array['agi','str'], 0.4, 1.2),
+  ('m:5:6:u', '雷鷲の雷嚢', '雷鷲サンダーロック', 5, 'ultra', true, array['agi','str'], 0.6, 1.2),
+  ('m:6:0:n', '雪男の白毛', '雪男', 6, 'normal', false, array['hp'], 0.1, 1.6),
+  ('m:6:0:r', '凍てつく拳', '雪男', 6, 'rare', false, array['hp'], 0.5, 1.6),
+  ('m:6:0:u', '雪山王の心臓', '雪男', 6, 'ultra', false, array['hp'], 0.8, 1.6),
+  ('m:6:1:n', '氷結の鱗', '氷河ドラゴン', 6, 'normal', false, array['str'], 0.1, 1.6),
+  ('m:6:1:r', '氷河竜の牙', '氷河ドラゴン', 6, 'rare', false, array['str'], 0.5, 1.6),
+  ('m:6:1:u', '氷河竜の逆鱗', '氷河ドラゴン', 6, 'ultra', false, array['str'], 0.8, 1.6),
+  ('m:6:2:n', '霜のかけら', '霜の精霊', 6, 'normal', false, array['int_stat'], 0.1, 1.6),
+  ('m:6:2:r', '凍気の結晶', '霜の精霊', 6, 'rare', false, array['int_stat'], 0.5, 1.6),
+  ('m:6:2:u', '霜精の魔核', '霜の精霊', 6, 'ultra', false, array['int_stat'], 0.8, 1.6),
+  ('m:6:3:n', '氷狼の毛皮', '朝焼けの氷狼', 6, 'normal', false, array['agi'], 0.1, 1.6),
+  ('m:6:3:r', '凍牙', '朝焼けの氷狼', 6, 'rare', false, array['agi'], 0.5, 1.6),
+  ('m:6:3:u', '朝焼けの氷心', '朝焼けの氷狼', 6, 'ultra', false, array['agi'], 0.8, 1.6),
+  ('m:6:4:n', '樹氷の枝', '白光の樹氷精', 6, 'normal', false, array['mp'], 0.1, 1.6),
+  ('m:6:4:r', '白光の氷片', '白光の樹氷精', 6, 'rare', false, array['mp'], 0.5, 1.6),
+  ('m:6:4:u', '樹氷の魔晶', '白光の樹氷精', 6, 'ultra', false, array['mp'], 0.8, 1.6),
+  ('m:6:5:n', '凍りついた骨', '極夜のワイト', 6, 'normal', false, array['vit'], 0.1, 1.6),
+  ('m:6:5:r', '極夜の屍衣', '極夜のワイト', 6, 'rare', false, array['vit'], 0.5, 1.6),
+  ('m:6:5:u', 'ワイトの呪核', '極夜のワイト', 6, 'ultra', false, array['vit'], 0.8, 1.6),
+  ('m:6:6:n', '凍える霊気', '氷霊フロストバーン', 6, 'normal', true, array['int_stat','mp'], 0.1, 1.2),
+  ('m:6:6:r', 'フロストバーンの氷刃', '氷霊フロストバーン', 6, 'rare', true, array['int_stat','mp'], 0.4, 1.2),
+  ('m:6:6:u', '永久凍土の氷芯', '氷霊フロストバーン', 6, 'ultra', true, array['int_stat','mp'], 0.6, 1.2),
+  ('m:7:0:n', 'くすぶる残り火', '炎の精霊', 7, 'normal', false, array['int_stat'], 0.1, 2.0),
+  ('m:7:0:r', '揺らめく炎心', '炎の精霊', 7, 'rare', false, array['int_stat'], 0.6, 2.0),
+  ('m:7:0:u', '炎精の魔核', '炎の精霊', 7, 'ultra', false, array['int_stat'], 1.0, 2.0),
+  ('m:7:1:n', '冷えた溶岩塊', '溶岩ゴーレム', 7, 'normal', false, array['vit'], 0.1, 2.0),
+  ('m:7:1:r', '灼熱の鉱石', '溶岩ゴーレム', 7, 'rare', false, array['vit'], 0.6, 2.0),
+  ('m:7:1:u', '溶岩ゴーレムの熔核', '溶岩ゴーレム', 7, 'ultra', false, array['vit'], 1.0, 2.0),
+  ('m:7:2:n', 'ドレイクの鱗', 'ファイアドレイク', 7, 'normal', false, array['agi'], 0.1, 2.0),
+  ('m:7:2:r', '燃える飛膜', 'ファイアドレイク', 7, 'rare', false, array['agi'], 0.6, 2.0),
+  ('m:7:2:u', '火竜の焔袋', 'ファイアドレイク', 7, 'ultra', false, array['agi'], 1.0, 2.0),
+  ('m:7:3:n', '焦げた翼膜', '暁のフレイムバット', 7, 'normal', false, array['dex'], 0.1, 2.0),
+  ('m:7:3:r', '暁の火翼', '暁のフレイムバット', 7, 'rare', false, array['dex'], 0.6, 2.0),
+  ('m:7:3:u', '業火の牙', '暁のフレイムバット', 7, 'ultra', false, array['dex'], 1.0, 2.0),
+  ('m:7:4:n', '陽炎の残滓', '陽炎のイフリート', 7, 'normal', false, array['mp'], 0.1, 2.0),
+  ('m:7:4:r', 'イフリートの炎環', '陽炎のイフリート', 7, 'rare', false, array['mp'], 0.6, 2.0),
+  ('m:7:4:u', '魔炎の心核', '陽炎のイフリート', 7, 'ultra', false, array['mp'], 1.0, 2.0),
+  ('m:7:5:n', 'デーモンの角', '熾火のデーモン', 7, 'normal', false, array['str'], 0.1, 2.0),
+  ('m:7:5:r', '熾火の皮膜', '熾火のデーモン', 7, 'rare', false, array['str'], 0.6, 2.0),
+  ('m:7:5:u', '悪魔の焔心', '熾火のデーモン', 7, 'ultra', false, array['str'], 1.0, 2.0),
+  ('m:7:6:n', '深紅の鱗', '深紅のサラマンダー', 7, 'normal', true, array['str','hp'], 0.1, 1.5),
+  ('m:7:6:r', 'サラマンダーの焔牙', '深紅のサラマンダー', 7, 'rare', true, array['str','hp'], 0.5, 1.5),
+  ('m:7:6:u', '焔龍の心臓', '深紅のサラマンダー', 7, 'ultra', true, array['str','hp'], 0.8, 1.5),
+  ('m:8:0:n', 'ハーピーの羽根', '天翼のハーピー', 8, 'normal', false, array['agi'], 0.1, 2.0),
+  ('m:8:0:r', '天翼の風切羽', '天翼のハーピー', 8, 'rare', false, array['agi'], 0.6, 2.0),
+  ('m:8:0:u', '蒼天の羽衣', '天翼のハーピー', 8, 'ultra', false, array['agi'], 1.0, 2.0),
+  ('m:8:1:n', '帯電した霧片', '雷雲の精霊', 8, 'normal', false, array['int_stat'], 0.1, 2.0),
+  ('m:8:1:r', '雷雲の結晶', '雷雲の精霊', 8, 'rare', false, array['int_stat'], 0.6, 2.0),
+  ('m:8:1:u', '雷精の魔核', '雷雲の精霊', 8, 'ultra', false, array['int_stat'], 1.0, 2.0),
+  ('m:8:2:n', '騎士の甲片', '天空騎士グリフィオン', 8, 'normal', false, array['str'], 0.1, 2.0),
+  ('m:8:2:r', '蒼天の紋章盾', '天空騎士グリフィオン', 8, 'rare', false, array['str'], 0.6, 2.0),
+  ('m:8:2:u', '天空騎士の魂鎧', '天空騎士グリフィオン', 8, 'ultra', false, array['str'], 1.0, 2.0),
+  ('m:8:3:n', '聖なる羽根', '曙光のセラフ', 8, 'normal', false, array['mp'], 0.1, 2.0),
+  ('m:8:3:r', '曙光の光輪', '曙光のセラフ', 8, 'rare', false, array['mp'], 0.6, 2.0),
+  ('m:8:3:u', 'セラフの神核', '曙光のセラフ', 8, 'ultra', false, array['mp'], 1.0, 2.0),
+  ('m:8:4:n', 'ペガサスのたてがみ', '白昼のペガサス', 8, 'normal', false, array['hp'], 0.1, 2.0),
+  ('m:8:4:r', '白昼の蹄鉄', '白昼のペガサス', 8, 'rare', false, array['hp'], 0.6, 2.0),
+  ('m:8:4:u', '天馬の翼心', '白昼のペガサス', 8, 'ultra', false, array['hp'], 1.0, 2.0),
+  ('m:8:5:n', '戦乙女の羽根', '星降りのヴァルキリー', 8, 'normal', false, array['luk'], 0.1, 2.0),
+  ('m:8:5:r', '星屑の槍先', '星降りのヴァルキリー', 8, 'rare', false, array['luk'], 0.6, 2.0),
+  ('m:8:5:u', 'ヴァルキリーの誓約印', '星降りのヴァルキリー', 8, 'ultra', false, array['luk'], 1.0, 2.0),
+  ('m:8:6:n', '覇龍の鱗', '天空覇龍ウラノス', 8, 'normal', true, array['hp','vit'], 0.1, 1.5),
+  ('m:8:6:r', 'ウラノスの天鱗', '天空覇龍ウラノス', 8, 'rare', true, array['hp','vit'], 0.5, 1.5),
+  ('m:8:6:u', '天空覇龍の龍核', '天空覇龍ウラノス', 8, 'ultra', true, array['hp','vit'], 0.8, 1.5)
+on conflict (id) do update set
+  name = excluded.name, enemy = excluded.enemy, area = excluded.area, rarity = excluded.rarity,
+  is_boss = excluded.is_boss, stats = excluded.stats, lo = excluded.lo, hi = excluded.hi;
+
+-- ---- 持っている素材（スタック）----
+create table if not exists public.v2_player_materials (
+  player_id   uuid not null references auth.users(id) on delete cascade,
+  material_id text not null references public.v2_materials(id),
+  qty         int  not null default 0 check (qty >= 0),
+  primary key (player_id, material_id)
+);
+alter table public.v2_player_materials enable row level security;
+drop policy if exists "v2_player_materials_own" on public.v2_player_materials;
+create policy "v2_player_materials_own" on public.v2_player_materials for select to authenticated using (player_id = auth.uid());
+revoke all on table public.v2_player_materials from anon;
+grant select on table public.v2_player_materials to authenticated;
+
+-- ---- ソケット ----
+-- **いまは武器だけ**。片手2枠・両手3枠で、**色はドロップした瞬間に1枠ずつ1/3で決まる**
+alter table public.v2_inventory add column if not exists sockets text[] not null default '{}'::text[];
+
+-- ---- エッセンス ----
+-- inv_id が入っていれば、その装備の socket_idx 番の枠に刺さっている
+create table if not exists public.v2_essences (
+  id          bigserial primary key,
+  player_id   uuid    not null references auth.users(id) on delete cascade,
+  color       text    not null,                      -- red / blue / green
+  stats       jsonb   not null default '{}'::jsonb,  -- {"vit": 0.6, "agi": 1.0} ＝ %
+  -- ability は敵の名前（＝特殊能力のキー）。v2_materials.enemy は一意ではないので外部キーは張れない
+  ability     text,
+  ability_choices text[] not null default '{}'::text[],  -- 抽出で当たった候補。ここから1つ選ぶ
+  inv_id      bigint  references public.v2_inventory(id) on delete set null,
+  socket_idx  int,
+  created_at  timestamptz not null default now()
+);
+create index if not exists v2_essences_player_idx on public.v2_essences(player_id);
+create unique index if not exists v2_essences_socket_uniq on public.v2_essences(inv_id, socket_idx) where inv_id is not null;
+alter table public.v2_essences enable row level security;
+drop policy if exists "v2_essences_own" on public.v2_essences;
+create policy "v2_essences_own" on public.v2_essences for select to authenticated using (player_id = auth.uid());
+revoke all on table public.v2_essences from anon;
+grant select on table public.v2_essences to authenticated;
+
+-- ---- エッセンスを外すためのアイテム ----
+-- ⚠**名前も入手手段もまだ決まっていない**（docs/v2-enchant-design.md の「残り」）。
+--   いまは枚数だけ持たせて、is_admin が動作確認用に配れるようにしてある。
+alter table public.v2_profiles add column if not exists unsocket_tickets int not null default 0;
+
 -- ===== 出撃の清算 =====
 -- 旧版と同じで、戦闘そのものはクライアントが回し、まとめてここへ送る。
 -- ⚠サーバーは「その回数で取り得る上限」を超えていないかだけ検証する（完全な権威ではない）。
 --   戦闘をサーバーで回すようにしたら、このRPCの中で回すよう差し替える。
+-- ⚠引数が増えたので、古い7引数版は落としてから作り直す（同じ名前で残ると呼び分けが曖昧になる）
+drop function if exists public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb);
 create or replace function public.v2_sortie_settle(
   p_area int, p_normals int, p_boss_wins int, p_boss_seen int,
-  p_exp int, p_gold bigint, p_drops jsonb
+  p_exp int, p_gold bigint, p_drops jsonb, p_materials jsonb default '[]'::jsonb
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
   v_uid   uuid := auth.uid();
   v_row   public.v2_profiles;
   v_area  public.v2_areas;
+  v_equip public.v2_equipment;
+  v_sock  text[];
+  v_mid   text;
   v_n     int := greatest(coalesce(p_normals, 0), 0);
   v_bw    int := greatest(coalesce(p_boss_wins, 0), 0);
   v_bs    int := greatest(coalesce(p_boss_seen, 0), 0);
@@ -987,10 +1238,34 @@ begin
       return jsonb_build_object('ok', false, 'error', 'ドロップの数が戦闘回数を超えています');
     end if;
     for v_drop in select * from jsonb_array_elements(p_drops) loop
-      insert into public.v2_inventory (player_id, equip_id)
-      select v_uid, e.id from public.v2_equipment e
+      select * into v_equip from public.v2_equipment e
       where e.id = (v_drop #>> '{}') and v_area.drop_ranks ? e.rank;
-      if found then v_ok := v_ok + 1; end if;
+      if found then
+        -- ★ソケットの色はここで決める（サーバー権威）。**いまは武器だけ・1枠ずつ1/3**
+        --   片手2枠・両手3枠。防具・アクセへ広げるときはこの条件を直す
+        v_sock := '{}'::text[];
+        if v_equip.part = '武器' then
+          for i in 1 .. (case when v_equip.hands = '2' then 3 else 2 end) loop
+            v_sock := array_append(v_sock, (array['red','blue','green'])[1 + floor(random() * 3)::int]);
+          end loop;
+        end if;
+        insert into public.v2_inventory (player_id, equip_id, sockets) values (v_uid, v_equip.id, v_sock);
+        v_ok := v_ok + 1;
+      end if;
+    end loop;
+  end if;
+
+  -- エンチャントの素材。**1戦闘につき1個まで**しか落ちないので、そこだけ検証する
+  --   ⚠「素材ドロップ率up」の特殊能力はクライアント側の確率なので、サーバーからは検証できない
+  if p_materials is not null and jsonb_typeof(p_materials) = 'array' then
+    if jsonb_array_length(p_materials) > v_n + v_bs then
+      return jsonb_build_object('ok', false, 'error', '素材の数が戦闘回数を超えています');
+    end if;
+    for v_drop in select * from jsonb_array_elements(p_materials) loop
+      v_mid := v_drop #>> '{}';
+      insert into public.v2_player_materials (player_id, material_id, qty)
+      select v_uid, m.id, 1 from public.v2_materials m where m.id = v_mid and m.area = p_area
+      on conflict (player_id, material_id) do update set qty = public.v2_player_materials.qty + 1;
     end loop;
   end if;
 
@@ -1012,9 +1287,9 @@ begin
     'unlocked', to_jsonb(v_unlocked), 'boss_rate', v_rate, 'level', v_res);
 end;
 $$;
-revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb) from public;
-revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb) from anon;
-grant execute on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb) to authenticated;
+revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb) from public;
+revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb) from anon;
+grant execute on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb) to authenticated;
 
 -- ===== 出撃のクールタイムの設定（10 or 20）=====
 create or replace function public.v2_set_cooldown(p_sec int)
@@ -1328,3 +1603,247 @@ $$;
 revoke all on function public.v2_pray() from public;
 revoke all on function public.v2_pray() from anon;
 grant execute on function public.v2_pray() to authenticated;
+
+-- ============================================================
+-- ===== 10. エンチャント（抽出・ソケット） =====
+-- 設計は docs/v2-enchant-design.md。
+-- ★**抽選の権威はここ**。src/v2/lib/material.js に同じ計算の写しがあるので、
+--   数式を変えるときは必ず両方を直すこと。
+-- ============================================================
+
+-- 値を1つ引く。**高い値ほど出にくい**。
+--   刻みは0.1で、重みは0.1上がるごとに一定倍率で減る。
+--   ⚠**倍率を全レンジ共通にしてはいけない**（段数の多いレンジで最大値が引けなくなり、
+--     エリアを進む意味が消える）。「最大値の出やすさ」がどのレンジでも先頭の7.5%に
+--     なるよう、レンジごとに 0.075^(1/(段数-1)) を使う。
+create or replace function public.v2_roll_material_value(p_lo numeric, p_hi numeric)
+returns numeric language plpgsql as $$
+declare
+  v_n int := round((p_hi - p_lo) / 0.1)::int + 1;
+  v_ratio numeric; v_sum numeric := 0; v_r numeric; v_acc numeric := 0; i int;
+begin
+  if v_n <= 1 then return p_lo; end if;
+  v_ratio := power(0.075, 1.0 / (v_n - 1));
+  for i in 0 .. v_n - 1 loop v_sum := v_sum + power(v_ratio, i); end loop;
+  v_r := random() * v_sum;
+  for i in 0 .. v_n - 1 loop
+    v_acc := v_acc + power(v_ratio, i);
+    if v_r <= v_acc then return round(p_lo + i * 0.1, 1); end if;
+  end loop;
+  return p_hi;
+end;
+$$;
+revoke all on function public.v2_roll_material_value(numeric, numeric) from public;
+revoke all on function public.v2_roll_material_value(numeric, numeric) from anon;
+
+-- 抽出。素材5個を消費してエッセンスを1つ作る
+--   p_materials = 素材IDの配列（5個ちょうど。同じIDを重ねてよい）
+--   ★ボス素材は1個までしか入れられない（ユニーク素材）
+create or replace function public.v2_extract_essence(p_materials jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_ids   text[];
+  v_id    text;
+  v_mat   public.v2_materials;
+  v_stats jsonb := '{}'::jsonb;
+  v_keys  text[] := array['hp','mp','str','dex','agi','int_stat','vit','luk'];
+  v_others text[];
+  v_pick  text[];
+  v_k     text;
+  v_val   numeric;
+  v_choices text[] := '{}'::text[];
+  v_chance numeric;
+  v_red numeric; v_blue numeric; v_green numeric;
+  v_color text;
+  v_ess   public.v2_essences;
+  v_need  int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if p_materials is null or jsonb_typeof(p_materials) <> 'array' then
+    return jsonb_build_object('ok', false, 'error', '素材を5個選んでください');
+  end if;
+  select array_agg(x #>> '{}') into v_ids from jsonb_array_elements(p_materials) x;
+  if coalesce(array_length(v_ids, 1), 0) <> 5 then
+    return jsonb_build_object('ok', false, 'error', '素材を5個選んでください');
+  end if;
+  -- ボス素材は1個まで
+  if (select count(*) from unnest(v_ids) u join public.v2_materials m on m.id = u where m.is_boss) > 1 then
+    return jsonb_build_object('ok', false, 'error', 'ボス素材は1個までしか入れられません');
+  end if;
+  -- 持っているか（同じIDを重ねて選んだぶんも数える）
+  for v_id, v_need in select u, count(*)::int from unnest(v_ids) u group by u loop
+    if coalesce((select qty from public.v2_player_materials
+                  where player_id = v_uid and material_id = v_id), 0) < v_need then
+      return jsonb_build_object('ok', false, 'error', '素材が足りません');
+    end if;
+  end loop;
+  -- 消費
+  for v_id, v_need in select u, count(*)::int from unnest(v_ids) u group by u loop
+    update public.v2_player_materials set qty = qty - v_need
+     where player_id = v_uid and material_id = v_id;
+  end loop;
+  delete from public.v2_player_materials where player_id = v_uid and qty <= 0;
+
+  -- 1個ずつ「型を決める → 値を引く」
+  foreach v_id in array v_ids loop
+    select * into v_mat from public.v2_materials where id = v_id;
+    if not found then continue; end if;
+    -- 型：激レアとボスは固定。雑魚の通常・レアは 70% で割り当てステ、30% でそれ以外の7種
+    if v_mat.is_boss or v_mat.rarity = 'ultra' or random() * 100 < 70 then
+      v_pick := v_mat.stats;
+    else
+      select array_agg(k) into v_others from unnest(v_keys) k where not (k = any (v_mat.stats));
+      v_pick := array[v_others[1 + floor(random() * array_length(v_others, 1))::int]];
+    end if;
+    foreach v_k in array v_pick loop
+      v_val := public.v2_roll_material_value(v_mat.lo, v_mat.hi);
+      v_stats := jsonb_set(v_stats, array[v_k],
+                   to_jsonb(round(coalesce((v_stats ->> v_k)::numeric, 0) + v_val, 1)));
+    end loop;
+    -- 特殊能力：通常0% / レア1% / 激レア3%
+    v_chance := case v_mat.rarity when 'ultra' then 3 when 'rare' then 1 else 0 end;
+    if v_chance > 0 and random() * 100 < v_chance and not (v_mat.enemy = any (v_choices)) then
+      v_choices := array_append(v_choices, v_mat.enemy);
+    end if;
+  end loop;
+
+  -- 色：合計値を3グループで合算して、一番大きいグループ
+  select coalesce(sum(case when k in ('str','int_stat')  then v::numeric else 0 end), 0),
+         coalesce(sum(case when k in ('hp','mp','vit')   then v::numeric else 0 end), 0),
+         coalesce(sum(case when k in ('dex','agi','luk') then v::numeric else 0 end), 0)
+    into v_red, v_blue, v_green
+    from jsonb_each_text(v_stats) as t(k, v);
+  v_color := case when v_red >= v_blue and v_red >= v_green then 'red'
+                  when v_blue >= v_green then 'blue' else 'green' end;
+
+  insert into public.v2_essences (player_id, color, stats, ability_choices)
+  values (v_uid, v_color, v_stats, v_choices)
+  returning * into v_ess;
+
+  return jsonb_build_object('ok', true, 'essence', to_jsonb(v_ess));
+end;
+$$;
+revoke all on function public.v2_extract_essence(jsonb) from public;
+revoke all on function public.v2_extract_essence(jsonb) from anon;
+grant execute on function public.v2_extract_essence(jsonb) to authenticated;
+
+-- 抽出で複数の特殊能力が当たったとき、1つを選ぶ。選び直しはできない
+create or replace function public.v2_choose_ability(p_essence_id bigint, p_ability text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid(); v_ess public.v2_essences;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  select * into v_ess from public.v2_essences where id = p_essence_id and player_id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'そのエッセンスはありません'); end if;
+  if v_ess.ability is not null then return jsonb_build_object('ok', false, 'error', 'もう選んでいます'); end if;
+  if not (p_ability = any (v_ess.ability_choices)) then
+    return jsonb_build_object('ok', false, 'error', 'その特殊能力は候補にありません');
+  end if;
+  update public.v2_essences set ability = p_ability where id = p_essence_id
+  returning * into v_ess;
+  return jsonb_build_object('ok', true, 'essence', to_jsonb(v_ess));
+end;
+$$;
+revoke all on function public.v2_choose_ability(bigint, text) from public;
+revoke all on function public.v2_choose_ability(bigint, text) from anon;
+grant execute on function public.v2_choose_ability(bigint, text) to authenticated;
+
+-- エッセンスを武器のソケットにはめる。**色が合う枠にしか入らない**・**上書きはできない**
+create or replace function public.v2_socket_essence(p_essence_id bigint, p_inventory_id bigint, p_slot int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid(); v_ess public.v2_essences; v_inv public.v2_inventory;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  select * into v_ess from public.v2_essences where id = p_essence_id and player_id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'そのエッセンスはありません'); end if;
+  if v_ess.inv_id is not null then return jsonb_build_object('ok', false, 'error', 'もうはめてあります'); end if;
+  select * into v_inv from public.v2_inventory where id = p_inventory_id and player_id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その装備はありません'); end if;
+  if p_slot is null or p_slot < 0 or p_slot >= coalesce(array_length(v_inv.sockets, 1), 0) then
+    return jsonb_build_object('ok', false, 'error', 'その枠はありません');
+  end if;
+  if v_inv.sockets[p_slot + 1] <> v_ess.color then
+    return jsonb_build_object('ok', false, 'error', '枠の色が合いません');
+  end if;
+  if exists (select 1 from public.v2_essences where inv_id = p_inventory_id and socket_idx = p_slot) then
+    return jsonb_build_object('ok', false, 'error', 'その枠はふさがっています（外してから入れてください）');
+  end if;
+  update public.v2_essences set inv_id = p_inventory_id, socket_idx = p_slot where id = p_essence_id;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+revoke all on function public.v2_socket_essence(bigint, bigint, int) from public;
+revoke all on function public.v2_socket_essence(bigint, bigint, int) from anon;
+grant execute on function public.v2_socket_essence(bigint, bigint, int) to authenticated;
+
+-- エッセンスを外す。**専用アイテムを1個消費する**（エッセンスは無傷で戻る）
+-- ⚠アイテムの名前と入手手段はまだ決まっていない（docs/v2-enchant-design.md の「残り」）
+create or replace function public.v2_unsocket_essence(p_essence_id bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid(); v_ess public.v2_essences; v_left int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  select * into v_ess from public.v2_essences where id = p_essence_id and player_id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'そのエッセンスはありません'); end if;
+  if v_ess.inv_id is null then return jsonb_build_object('ok', false, 'error', 'はめていません'); end if;
+  update public.v2_profiles set unsocket_tickets = unsocket_tickets - 1
+   where id = v_uid and unsocket_tickets > 0
+  returning unsocket_tickets into v_left;
+  if not found then return jsonb_build_object('ok', false, 'error', '外すためのアイテムが足りません'); end if;
+  update public.v2_essences set inv_id = null, socket_idx = null where id = p_essence_id;
+  return jsonb_build_object('ok', true, 'tickets', v_left);
+end;
+$$;
+revoke all on function public.v2_unsocket_essence(bigint) from public;
+revoke all on function public.v2_unsocket_essence(bigint) from anon;
+grant execute on function public.v2_unsocket_essence(bigint) to authenticated;
+
+-- 既に持っている武器にソケットを開ける
+-- （この機能より前に拾った武器は sockets が空なので、1回だけ通しておく）
+create or replace function public.v2_backfill_sockets()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid(); v_inv record; v_sock text[]; v_n int := 0; i int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  for v_inv in
+    select i2.id as inv_id, e.hands from public.v2_inventory i2
+      join public.v2_equipment e on e.id = i2.equip_id
+     where i2.player_id = v_uid and e.part = '武器'
+       and coalesce(array_length(i2.sockets, 1), 0) = 0
+  loop
+    v_sock := '{}'::text[];
+    for i in 1 .. (case when v_inv.hands = '2' then 3 else 2 end) loop
+      v_sock := array_append(v_sock, (array['red','blue','green'])[1 + floor(random() * 3)::int]);
+    end loop;
+    update public.v2_inventory set sockets = v_sock where id = v_inv.inv_id;
+    v_n := v_n + 1;
+  end loop;
+  return jsonb_build_object('ok', true, 'filled', v_n);
+end;
+$$;
+revoke all on function public.v2_backfill_sockets() from public;
+revoke all on function public.v2_backfill_sockets() from anon;
+grant execute on function public.v2_backfill_sockets() to authenticated;
+
+-- ===== 動作確認用（開発限定）=====
+-- 素材の入手手段は出撃のドロップだけなので、確認用に is_admin だけまとめて配れるようにする
+-- （外すためのアイテムも一緒に5個入れる）
+create or replace function public.v2_debug_grant_material(p_area int, p_qty int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid(); v_admin boolean; v_q int := least(greatest(coalesce(p_qty,10),1), 99);
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  select coalesce(is_admin, false) into v_admin from public.profiles where id = v_uid;
+  if not coalesce(v_admin, false) then return jsonb_build_object('ok', false, 'error', '開発限定の機能です'); end if;
+  insert into public.v2_player_materials (player_id, material_id, qty)
+  select v_uid, m.id, v_q from public.v2_materials m where m.area = coalesce(p_area, 1)
+  on conflict (player_id, material_id) do update set qty = public.v2_player_materials.qty + v_q;
+  update public.v2_profiles set unsocket_tickets = unsocket_tickets + 5 where id = v_uid;
+  return jsonb_build_object('ok', true, 'area', coalesce(p_area, 1), 'qty', v_q);
+end;
+$$;
+revoke all on function public.v2_debug_grant_material(int, int) from public;
+revoke all on function public.v2_debug_grant_material(int, int) from anon;
+grant execute on function public.v2_debug_grant_material(int, int) to authenticated;

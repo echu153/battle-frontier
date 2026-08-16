@@ -16,6 +16,7 @@
 // ============================================================
 import { AREAS, areaOf, rollDropRank, timedEnemyOf } from './enemies.js'
 import { PARTS, itemsOf, typesOf, CATALOG } from './equipment.js'
+import { materialOf } from './material.js'
 
 // ===== ボスの出やすさ =====
 export const BOSS_RATE_STEP = 0.3   // 通常敵と戦うたびに遭遇率へ足す(%)
@@ -143,3 +144,19 @@ export const rollDrop = (areaId, at = new Date(), rng = Math.random) => {
   return CATALOG.find(i => i.part === part && i.type === type && i.rank === rank) || null
 }
 export const dropPoolOf = (part) => itemsOf(part)
+
+// ===== エンチャントの素材ドロップ =====
+// 1戦闘につき**1回だけ**抽選する。激レア → レア → 通常 の順に判定し、
+// どれにも当たらなければ何も落ちない（**重複しない＝1戦闘で最大1個**）。
+// 雑魚・時間帯限定敵・ボスとも同じ率。mult は「素材ドロップ率up」の特殊能力ぶん
+//   ⚠サーバー側は「1戦闘あたり1個まで」しか検証できない（mult はクライアント側の確率）
+export const MATERIAL_RATE = { ultra:1, rare:5, normal:20 }
+export const rollMaterial = (enemyName, mult = 1, rng = Math.random) => {
+  const r = rng() * 100
+  let acc = 0
+  for (const rarity of ['ultra', 'rare', 'normal']) {
+    acc += MATERIAL_RATE[rarity] * mult
+    if (r < acc) return materialOf(enemyName, rarity)
+  }
+  return null
+}
