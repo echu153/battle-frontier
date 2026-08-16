@@ -17,7 +17,7 @@ const cell = {
 }
 const foldBtn = {
   width:'100%', padding:'4px', background:'#000e1a', border:'1px solid #003366',
-  color:'#446688', cursor:'pointer', fontFamily:'monospace', fontSize:'10px',
+  color:'#7fa6d0', cursor:'pointer', fontFamily:'monospace', fontSize:'10px',
 }
 // 升目の右側（値や装備名）。長いときは切って、枠を広げない
 const valueCell = { fontSize:'10px', textAlign:'right', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }
@@ -25,7 +25,7 @@ const valueCell = { fontSize:'10px', textAlign:'right', overflow:'hidden', textO
 const tipBox = (color) => ({
   position:'absolute', top:'100%', marginTop:'2px', zIndex:120,
   background:'#000c1c', border:`1px solid ${color}`, padding:'6px 8px',
-  fontSize:'10px', lineHeight:'1.7', color:'#88aabb', textAlign:'left',
+  fontSize:'10px', lineHeight:'1.7', color:'#a8c4d6', textAlign:'left',
   pointerEvents:'none', boxShadow:'0 4px 12px rgba(0,0,0,0.7)', whiteSpace:'normal',
 })
 
@@ -33,7 +33,7 @@ const tipBox = (color) => ({
 function MiniBar({ label, val, pct, color }) {
   return (
     <>
-      <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#446688', marginBottom:'1px' }}>
+      <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#7fa6d0', marginBottom:'1px' }}>
         <span>{label}</span><span style={{ color }}>{val}</span>
       </div>
       <div style={{ background:'#001028', height:'4px', border:'1px solid #002244', marginBottom:'4px' }}>
@@ -68,7 +68,7 @@ function StatMini({ label, jp, val, add, color, short, detail, show, alignRight,
       onClick={e => { e.stopPropagation(); onToggle() }}  // スマホはカーソルが無いのでタップで出す
       style={{ ...cell, position:'relative', justifyContent:'flex-start', cursor:'help' }}>
       <span style={{ color, fontSize:'9px', flexShrink:0 }}>{label}</span>
-      <span style={{ color:'#3d5a7a', fontSize:'9px', flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+      <span style={{ color:'#82a2c2', fontSize:'9px', flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
         {short}
       </span>
       <span style={{ flexShrink:0 }}>
@@ -78,7 +78,7 @@ function StatMini({ label, jp, val, add, color, short, detail, show, alignRight,
       {show && (
         <div style={{ ...tipBox(color), [alignRight ? 'right' : 'left']: '-1px', width:'max(100%, 230px)', maxWidth:'80vw' }}>
           <span style={{ color }}>{label}</span>
-          <span style={{ color:'#446688' }}>（{jp}）</span>
+          <span style={{ color:'#7fa6d0' }}>（{jp}）</span>
           <div style={{ marginTop:'2px' }}>{detail}</div>
         </div>
       )}
@@ -126,13 +126,13 @@ export default function V2Status({ prof, inventory, essences, classes, open, onT
     const w = worn[slot]
     return (
       <div style={cell}>
-        <span style={{ color:'#446688', fontSize:'9px', flexShrink:0 }}>{label}</span>
+        <span style={{ color:'#7fa6d0', fontSize:'9px', flexShrink:0 }}>{label}</span>
         <span style={valueCell}>
           {w ? (<>
             <span style={{ color: RANK_COLOR[w.item.rank] }}>[{w.item.rank}]</span>{' '}
             <span style={{ color:'#88ccff' }}>{w.item.name}</span>
             {w.inv.plus ? <span style={{ color:'#ffcc00' }}>+{w.inv.plus}</span> : ''}
-          </>) : <span style={{ color:'#334455' }}>—</span>}
+          </>) : <span style={{ color:'#62789a' }}>—</span>}
         </span>
       </div>
     )
@@ -144,12 +144,12 @@ export default function V2Status({ prof, inventory, essences, classes, open, onT
     const s = e && SKILL_BY_NAME[e.name]
     return (
       <div key={i} style={cell}>
-        <span style={{ color:'#446688', fontSize:'9px', flexShrink:0 }}>スキル{i + 1}</span>
+        <span style={{ color:'#7fa6d0', fontSize:'9px', flexShrink:0 }}>スキル{i + 1}</span>
         <span style={valueCell}>
           {s ? (<>
             <span style={{ color: KIND_COLOR[s.kind] }}>{s.name}</span>
-            <span style={{ color:'#446688' }}>×{e.uses || 1}</span>
-          </>) : <span style={{ color:'#334455' }}>—</span>}
+            <span style={{ color:'#7fa6d0' }}>×{e.uses || 1}</span>
+          </>) : <span style={{ color:'#62789a' }}>—</span>}
         </span>
       </div>
     )
@@ -166,7 +166,7 @@ export default function V2Status({ prof, inventory, essences, classes, open, onT
         )}
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ color:'#ffcc00', fontSize:'13px' }}>{prof.username}</div>
-          <div style={{ fontSize:'11px', color:'#6688aa' }}>
+          <div style={{ fontSize:'11px', color:'#9ec2e6' }}>
             <span style={{ color:tierColor }}>{prof.class}</span>{' '}
             {/* 上がり方の説明は画面に書くと長いので、LVに合わせたときだけ出す */}
             <Tip text={`LVアップごとに${ROLLS_PER_LV}回抽選し、当たったステータスが上がります（HPは+8・MPは+3・その他は+1）。どのステに当たっても戦闘力の上がり幅は同じです。`}
@@ -175,13 +175,13 @@ export default function V2Status({ prof, inventory, essences, classes, open, onT
             </Tip>
             {prof.lv >= MAX_LV && <span style={{ color:'#ff8844' }}> MAX</span>}
           </div>
-          <div style={{ fontSize:'11px', color:'#6688aa' }}>
+          <div style={{ fontSize:'11px', color:'#9ec2e6' }}>
             転職回数: <span style={{ color:'#66ddff' }}>{prof.job_changes}</span>回
           </div>
-          <div style={{ fontSize:'11px', color:'#6688aa' }}>
+          <div style={{ fontSize:'11px', color:'#9ec2e6' }}>
             総合力: <span style={{ color:'#44ff88' }}>{power.toLocaleString()}</span>
           </div>
-          <div style={{ fontSize:'11px', color:'#6688aa' }}>
+          <div style={{ fontSize:'11px', color:'#9ec2e6' }}>
             Gold: <span style={{ color:'#ffcc00' }}>{(prof.gold || 0).toLocaleString()}</span>
           </div>
         </div>
@@ -206,12 +206,12 @@ export default function V2Status({ prof, inventory, essences, classes, open, onT
 
         {classBonusText(prof.class) && (
           <div style={{ ...cell, marginBottom:'6px' }}>
-            <span style={{ color:'#446688', fontSize:'9px' }}>職業補正</span>
+            <span style={{ color:'#7fa6d0', fontSize:'9px' }}>職業補正</span>
             <span style={{ color:'#88ddaa', fontSize:'10px' }}>{classBonusText(prof.class)}</span>
           </div>
         )}
 
-        <div style={{ color:'#446688', fontSize:'10px', marginBottom:'2px' }}>装備</div>
+        <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'2px' }}>装備</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px', marginBottom:'6px' }}>
           {eq('right', '武器（右手）')}{eq('head', '頭')}
           {eq('left', '武器（左手）')}{eq('body', '鎧')}
@@ -219,7 +219,7 @@ export default function V2Status({ prof, inventory, essences, classes, open, onT
           {eq('acc1', 'アクセ①')}{eq('acc2', 'アクセ②')}
         </div>
 
-        <div style={{ color:'#446688', fontSize:'10px', marginBottom:'2px' }}>スキル編成</div>
+        <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'2px' }}>スキル編成</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px' }}>
           {Array.from({ length: SKILL_SET_SLOTS }, (_, i) => skillCell(i))}
         </div>
@@ -241,7 +241,7 @@ export function V2Menu({ items, open, onToggle, onPick }) {
           style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#001840', border:`1px solid ${m.color}`, color:m.color,
             cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>
           {m.icon} {m.label}
-          <span style={{ color:'#446688', fontSize:'10px', marginLeft:'8px' }}>{m.action}</span>
+          <span style={{ color:'#7fa6d0', fontSize:'10px', marginLeft:'8px' }}>{m.action}</span>
         </button>
       ))}
     </div>

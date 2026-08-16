@@ -20,7 +20,7 @@ import { STAT_KEYS } from './stats.js'
 export const RARITIES = ['normal', 'rare', 'ultra']
 export const RARITY_LABEL = { normal:'通常', rare:'レア', ultra:'激レア' }
 export const RARITY_SHORT = { normal:'n', rare:'r', ultra:'u' }
-export const RARITY_COLOR = { normal:'#88aabb', rare:'#66ccff', ultra:'#ffcc44' }
+export const RARITY_COLOR = { normal:'#a8c4d6', rare:'#66ccff', ultra:'#ffcc44' }
 
 // ===== レンジ =====
 // 上限はエリアで決まり、下限だけレア度で上がる。刻みは0.1%。**全体の最大は2.0%**

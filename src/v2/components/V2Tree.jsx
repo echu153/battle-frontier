@@ -41,7 +41,7 @@ export default function V2Tree({ prof, isAdmin, onProfile, onBack }) {
         <span style={{ color:'#44dd99', fontSize:'13px' }}>🌳 ユグレシアの宝樹</span>
         <button onClick={onBack} style={miniBtn('#88aaff')}>← ホームへ</button>
       </div>
-      <div style={{ color:'#446688', fontSize:'10px', lineHeight:'1.8', marginBottom:'10px' }}>
+      <div style={{ color:'#7fa6d0', fontSize:'10px', lineHeight:'1.8', marginBottom:'10px' }}>
         1日1回だけ祈れます。宝樹の返す言葉（大凶〜大吉）で、もらえるものが変わります。
         <br />日付が変わるのは日本時間の5時です。
       </div>
@@ -50,9 +50,9 @@ export default function V2Tree({ prof, isAdmin, onProfile, onBack }) {
       {shown && (
         <div style={{ border:`1px solid ${shown.color}`, background:'#000c1c', padding:'14px', marginBottom:'10px', textAlign:'center' }}>
           <div style={{ color:shown.color, fontSize:'24px', letterSpacing:'6px', marginBottom:'6px' }}>{shown.name}</div>
-          <div style={{ color:'#88aabb', fontSize:'11px', lineHeight:'1.8' }}>{shown.text}</div>
+          <div style={{ color:'#a8c4d6', fontSize:'11px', lineHeight:'1.8' }}>{shown.text}</div>
           {/* ★報酬が決まったらここに出す */}
-          <div style={{ color:'#446688', fontSize:'10px', marginTop:'8px' }}>
+          <div style={{ color:'#7fa6d0', fontSize:'10px', marginTop:'8px' }}>
             {result?.reward ? result.reward : '（報酬は準備中です）'}
           </div>
         </div>
@@ -62,7 +62,7 @@ export default function V2Tree({ prof, isAdmin, onProfile, onBack }) {
 
       <button onClick={pray} disabled={!ready || busy}
         style={{ width:'100%', padding:'14px', background: ready ? '#03201a' : '#000e1a',
-          border:`1px solid ${ready ? '#44dd99' : '#003366'}`, color: ready ? '#44dd99' : '#446688',
+          border:`1px solid ${ready ? '#44dd99' : '#003366'}`, color: ready ? '#44dd99' : '#7fa6d0',
           cursor: ready ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>
         {busy ? '祈っています...'
           : !ready ? `次に祈れるまで ${String(remain.h).padStart(2, '0')}:${String(remain.m).padStart(2, '0')}:${String(remain.s).padStart(2, '0')}`
@@ -73,7 +73,7 @@ export default function V2Tree({ prof, isAdmin, onProfile, onBack }) {
       {/* 過去10回 */}
       {log.length > 0 && (<>
         <button onClick={() => setShowLog(v => !v)}
-          style={{ ...btn('#446688'), width:'100%', padding:'4px', marginTop:'8px', fontSize:'10px' }}>
+          style={{ ...btn('#7fa6d0'), width:'100%', padding:'4px', marginTop:'8px', fontSize:'10px' }}>
           {showLog ? '▲ これまでの結果を閉じる' : `▼ これまでの結果を見る（${log.length}件）`}
         </button>
         {showLog && (
@@ -83,7 +83,7 @@ export default function V2Tree({ prof, isAdmin, onProfile, onBack }) {
               return (
                 <div key={i} style={{ background:'#000818', border:'1px solid #002244', padding:'3px 6px',
                   display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                  <span style={{ color:'#446688', fontSize:'9px' }}>{e.at}</span>
+                  <span style={{ color:'#7fa6d0', fontSize:'9px' }}>{e.at}</span>
                   <span style={{ color: f?.color || '#7f95c4', fontSize:'10px' }}>{e.fortune}</span>
                 </div>
               )

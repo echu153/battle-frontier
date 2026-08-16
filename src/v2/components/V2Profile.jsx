@@ -107,7 +107,7 @@ export default function V2Profile({ prof, inventory, essences, onProfile, onBack
   )
   const eq = (slot) => {
     const w = worn[slot]
-    if (!w) return <span style={{ color:'#44567e' }}>—</span>
+    if (!w) return <span style={{ color:'#7b8fb8' }}>—</span>
     return (<>
       <span style={{ color: RANK_COLOR[w.item.rank] }}>[{w.item.rank}]</span>{' '}
       {w.item.name}{w.inv.plus ? <span style={{ color:'#ffcc00' }}>+{w.inv.plus}</span> : ''}
@@ -124,7 +124,7 @@ export default function V2Profile({ prof, inventory, essences, onProfile, onBack
         <div style={{ background:'#0a1330', padding:'10px', textAlign:'center' }}>
           {prof.avatar_url
             ? <img src={prof.avatar_url} alt="" style={{ width:'72px', height:'72px', objectFit:'cover' }} onError={e => { e.target.style.display = 'none' }} />
-            : <div style={{ width:'72px', height:'72px', margin:'0 auto', border:'1px dashed #223a5e', color:'#44567e', fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center' }}>画像なし</div>}
+            : <div style={{ width:'72px', height:'72px', margin:'0 auto', border:'1px dashed #223a5e', color:'#7b8fb8', fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center' }}>画像なし</div>}
           <div style={{ color:'#cfe2ff', fontSize:'13px', marginTop:'4px' }}>{prof.username}</div>
         </div>
         <div style={HEAD}>戦闘力: {power.toLocaleString()}　（{kind}）</div>
@@ -141,12 +141,12 @@ export default function V2Profile({ prof, inventory, essences, onProfile, onBack
           <Row k1="腕具" v1={eq('arm')} k2="足具" v2={eq('foot')} />
           <Row k1="アクセサリー" v1={eq('acc1')} k2="アクセサリー" v2={eq('acc2')} />
           {[0, 2].map(i => (
-            <Row key={i} k1={`スキル${i + 1}`} v1={skills[i]?.name || <span style={{ color:'#44567e' }}>—</span>}
-              k2={`スキル${i + 2}`} v2={skills[i + 1]?.name || <span style={{ color:'#44567e' }}>—</span>} />
+            <Row key={i} k1={`スキル${i + 1}`} v1={skills[i]?.name || <span style={{ color:'#7b8fb8' }}>—</span>}
+              k2={`スキル${i + 2}`} v2={skills[i + 1]?.name || <span style={{ color:'#7b8fb8' }}>—</span>} />
           ))}
-          <Row k1="スキル5" v1={skills[4]?.name || <span style={{ color:'#44567e' }}>—</span>} k2="職業" v2={prof.class} />
+          <Row k1="スキル5" v1={skills[4]?.name || <span style={{ color:'#7b8fb8' }}>—</span>} k2="職業" v2={prof.class} />
           <Row k1="所持金" v1={`${(prof.gold || 0).toLocaleString()} Gold`} k2="転職回数" v2={`${prof.job_changes}回`} />
-          <Row k1="職業補正" v1={classBonusText(prof.class) || <span style={{ color:'#44567e' }}>なし</span>}
+          <Row k1="職業補正" v1={classBonusText(prof.class) || <span style={{ color:'#7b8fb8' }}>なし</span>}
             k2="解放エリア" v2={`${(prof.unlocked_areas || [1]).length} / 8`} />
         </div>
 
@@ -169,17 +169,17 @@ export default function V2Profile({ prof, inventory, essences, onProfile, onBack
                 background: prof.avatar_url === a.url ? '#1a1000' : '#000818', padding:'4px', textAlign:'center' }}>
               <img src={a.url} alt={a.label} style={{ width:'100%', aspectRatio:'1', objectFit:'cover' }}
                 onError={e => { e.target.style.display = 'none' }} />
-              <div style={{ color: prof.avatar_url === a.url ? '#ffcc00' : '#446688', fontSize:'9px', marginTop:'2px' }}>{a.label}</div>
+              <div style={{ color: prof.avatar_url === a.url ? '#ffcc00' : '#7fa6d0', fontSize:'9px', marginTop:'2px' }}>{a.label}</div>
             </div>
           ))}
         </div>
         <button onClick={() => pickAvatar(null)} disabled={busy || !prof.avatar_url}
-          style={{ ...miniBtn('#446688'), marginTop:'8px' }}>画像なしに戻す</button>
+          style={{ ...miniBtn('#7fa6d0'), marginTop:'8px' }}>画像なしに戻す</button>
 
         {/* アップロード済みの画像 */}
         {uploaded.length > 0 && (
           <>
-            <div style={{ color:'#446688', fontSize:'11px', margin:'12px 0 6px' }}>アップロード済み</div>
+            <div style={{ color:'#7fa6d0', fontSize:'11px', margin:'12px 0 6px' }}>アップロード済み</div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'6px' }}>
               {uploaded.map(u => (
                 <div key={u.name} onClick={() => !busy && pickAvatar(u.url)}
@@ -197,7 +197,7 @@ export default function V2Profile({ prof, inventory, essences, onProfile, onBack
         <div style={{ borderTop:'1px solid #002244', marginTop:'12px', paddingTop:'10px' }}>
           <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'6px' }}>
             画像をアップロードする
-            <span style={{ color:'#446688', fontSize:'10px', marginLeft:'6px' }}>{UPLOAD_COST}G</span>
+            <span style={{ color:'#7fa6d0', fontSize:'10px', marginLeft:'6px' }}>{UPLOAD_COST}G</span>
           </div>
           <input ref={fileRef} type="file" accept="image/*" onChange={chooseFile} disabled={busy}
             style={{ color:'#88ccff', fontFamily:'monospace', fontSize:'11px', width:'100%', marginBottom:'8px' }} />
@@ -212,14 +212,14 @@ export default function V2Profile({ prof, inventory, essences, onProfile, onBack
               </button>
             </div>
           )}
-          <div style={{ color:'#446688', fontSize:'9px' }}>
+          <div style={{ color:'#7fa6d0', fontSize:'9px' }}>
             2MBまでの画像。Goldの引き落としとアイコンの差し替えはサーバー側でまとめて行うので、
             連打しても二重に取られません。
           </div>
         </div>
 
         {msg && <div style={{ color: msgColor, fontSize:'11px', marginTop:'8px' }}>{msg}</div>}
-        <div style={{ color:'#446688', fontSize:'9px', marginTop:'8px' }}>
+        <div style={{ color:'#7fa6d0', fontSize:'9px', marginTop:'8px' }}>
           プリセットは旧版（無印）の美容整形と同じ画像です。アップロードした画像も共通で使えます。
         </div>
       </div>
@@ -308,7 +308,7 @@ function StatusDetail({ prof, total, power, onClose }) {
                     <span style={{ color: KIND_COLOR[s.kind], fontSize:'9px', marginLeft:'6px' }}>{KIND_LABEL[s.kind]}</span>
                     {e.uses > 1 && <span style={{ color:'#7f95c4', fontSize:'9px', marginLeft:'6px' }}>×{e.uses}回</span>}
                   </span>
-                ) : <span style={{ color:'#44567e', fontSize:'11px' }}>—</span>}
+                ) : <span style={{ color:'#7b8fb8', fontSize:'11px' }}>—</span>}
               </div>
             )
           })}

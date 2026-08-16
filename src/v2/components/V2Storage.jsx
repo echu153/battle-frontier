@@ -47,7 +47,7 @@ export default function V2Storage({ prof, inventory, onProfile, onBack }) {
       {/* 装着中 */}
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'8px' }}>
-          <span style={{ color:'#446688', fontSize:'10px' }}>装着中（8枠）</span>
+          <span style={{ color:'#7fa6d0', fontSize:'10px' }}>装着中（8枠）</span>
           <span style={{ color:'#ffcc00', fontSize:'11px' }}>装備の戦闘力 +{gearPower(prof, inventory).toLocaleString()}</span>
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(170px,1fr))', gap:'4px' }}>
@@ -55,7 +55,7 @@ export default function V2Storage({ prof, inventory, onProfile, onBack }) {
             const w = worn[slot]
             return (
               <div key={slot} style={{ background:'#000818', border:'1px solid #002244', padding:'6px 8px', fontSize:'11px' }}>
-                <div style={{ color:'#446688', fontSize:'9px' }}>{SLOT_LABEL[slot]}</div>
+                <div style={{ color:'#7fa6d0', fontSize:'9px' }}>{SLOT_LABEL[slot]}</div>
                 {w ? (
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'4px' }}>
                     <span style={{ color: RANK_COLOR[w.item.rank] }}>
@@ -63,7 +63,7 @@ export default function V2Storage({ prof, inventory, onProfile, onBack }) {
                     </span>
                     <button onClick={() => unequip(slot)} disabled={busy} style={miniBtn('#ff8888')}>外す</button>
                   </div>
-                ) : <span style={{ color:'#334455' }}>—</span>}
+                ) : <span style={{ color:'#62789a' }}>—</span>}
               </div>
             )
           })}
@@ -75,19 +75,19 @@ export default function V2Storage({ prof, inventory, onProfile, onBack }) {
         <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'8px' }}>
           {['すべて', ...PARTS].map(p => (
             <button key={p} onClick={() => setPart(p)}
-              style={{ ...miniBtn(part === p ? '#00aaff' : '#446688'), background: part === p ? '#002850' : '#000818' }}>
+              style={{ ...miniBtn(part === p ? '#00aaff' : '#7fa6d0'), background: part === p ? '#002850' : '#000818' }}>
               {PART_ICON[p] || ''}{p}
             </button>
           ))}
-          <span style={{ color:'#446688', fontSize:'10px', marginLeft:'auto', alignSelf:'center' }}>
+          <span style={{ color:'#7fa6d0', fontSize:'10px', marginLeft:'auto', alignSelf:'center' }}>
             {shownCount}個 / 全{(inventory || []).length}個
           </span>
         </div>
         <V2Filter value={filter} rows={stacks} onChange={f => { setFilter(f); setRawPage(0) }} />
 
-        {(inventory || []).length === 0 && <div style={{ color:'#446688', fontSize:'11px' }}>まだ持っていません（出撃で手に入ります）</div>}
+        {(inventory || []).length === 0 && <div style={{ color:'#7fa6d0', fontSize:'11px' }}>まだ持っていません（出撃で手に入ります）</div>}
         {(inventory || []).length > 0 && rows.length === 0 && (
-          <div style={{ color:'#446688', fontSize:'11px' }}>絞り込みに合う装備がありません</div>
+          <div style={{ color:'#7fa6d0', fontSize:'11px' }}>絞り込みに合う装備がありません</div>
         )}
         {rows.map(g => {
           const { item, plus } = g
@@ -102,7 +102,7 @@ export default function V2Storage({ prof, inventory, onProfile, onBack }) {
                 </span>
                 {/* ★同じ装備・同じ強化値はここでまとめて個数にする */}
                 {g.list.length > 1 && <span style={{ color:'#ffffff', fontSize:'11px' }}>×{g.list.length}</span>}
-                <span style={{ color:'#446688', fontSize:'10px' }}>{item.type} / 戦闘力{powerOf(item, plus)}</span>
+                <span style={{ color:'#7fa6d0', fontSize:'10px' }}>{item.type} / 戦闘力{powerOf(item, plus)}</span>
                 {/* エンチャントのソケット。**個体ごとに色が違う**ので、まとめた中の1個ずつ出す */}
                 {item.part === '武器' && g.list.map(inv => (inv.sockets || []).length ? (
                   <span key={inv.id} style={{ fontSize:'10px', letterSpacing:'1px' }}>
@@ -122,7 +122,7 @@ export default function V2Storage({ prof, inventory, onProfile, onBack }) {
                   ))}
                 </span>
               </div>
-              <div style={{ color:'#556677', fontSize:'10px', paddingLeft:'28px' }}>
+              <div style={{ color:'#93a9be', fontSize:'10px', paddingLeft:'28px' }}>
                 {STAT_KEYS.filter(k => st[k]).map(k => `${STAT_DEFS[k].label}+${st[k]}`).join(' / ')}
               </div>
             </div>

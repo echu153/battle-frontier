@@ -10,7 +10,7 @@ const sel = {
   background:'#001028', border:'1px solid #0044aa', color:'#88ccff',
   padding:'3px 6px', fontFamily:'monospace', fontSize:'10px',
 }
-const label = { color:'#446688', fontSize:'9px', marginRight:'2px' }
+const label = { color:'#7fa6d0', fontSize:'9px', marginRight:'2px' }
 
 export function V2Filter({ value, onChange, rows, showPlus = true, right = null }) {
   const set = (patch) => onChange({ ...value, ...patch })
@@ -43,14 +43,14 @@ export function V2Filter({ value, onChange, rows, showPlus = true, right = null 
         <select value={value.sort} onChange={e => set({ sort: e.target.value })} style={sel}>
           {SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
         </select>
-        <button onClick={() => set({ asc: !value.asc })} style={{ ...miniBtn('#446688'), marginLeft:'2px' }}>
+        <button onClick={() => set({ asc: !value.asc })} style={{ ...miniBtn('#7fa6d0'), marginLeft:'2px' }}>
           {value.asc ? '▲昇順' : '▼降順'}
         </button>
       </span>
       {(value.rank !== ALL || value.type !== ALL || value.plus !== ALL) && (
         <button onClick={() => set({ rank: ALL, type: ALL, plus: ALL })} style={miniBtn('#ff8888')}>絞り込み解除</button>
       )}
-      {right && <span style={{ marginLeft:'auto', color:'#446688', fontSize:'10px' }}>{right}</span>}
+      {right && <span style={{ marginLeft:'auto', color:'#7fa6d0', fontSize:'10px' }}>{right}</span>}
     </div>
   )
 }
@@ -59,7 +59,7 @@ export function V2Filter({ value, onChange, rows, showPlus = true, right = null 
 export function V2Pager({ page, total, onPage, unit = '件' }) {
   const last = pageCount(total)
   if (total <= PAGE_SIZE) {
-    return <div style={{ color:'#446688', fontSize:'10px', marginTop:'6px' }}>{total}{unit}</div>
+    return <div style={{ color:'#7fa6d0', fontSize:'10px', marginTop:'6px' }}>{total}{unit}</div>
   }
   // ページ番号は0始まりだが、表示は1始まり
   const nums = Array.from({ length: last }, (_, i) => i)
@@ -69,13 +69,13 @@ export function V2Pager({ page, total, onPage, unit = '件' }) {
         style={{ ...miniBtn(page <= 0 ? '#223a5e' : '#88aaff'), cursor: page <= 0 ? 'not-allowed' : 'pointer' }}>◀</button>
       {nums.map(n => (
         <button key={n} onClick={() => onPage(n)}
-          style={{ ...miniBtn(n === page ? '#00aaff' : '#446688'), background: n === page ? '#002850' : '#000818', minWidth:'22px' }}>
+          style={{ ...miniBtn(n === page ? '#00aaff' : '#7fa6d0'), background: n === page ? '#002850' : '#000818', minWidth:'22px' }}>
           {n + 1}
         </button>
       ))}
       <button onClick={() => onPage(page + 1)} disabled={page >= last - 1}
         style={{ ...miniBtn(page >= last - 1 ? '#223a5e' : '#88aaff'), cursor: page >= last - 1 ? 'not-allowed' : 'pointer' }}>▶</button>
-      <span style={{ color:'#446688', fontSize:'10px', marginLeft:'4px' }}>
+      <span style={{ color:'#7fa6d0', fontSize:'10px', marginLeft:'4px' }}>
         {total}{unit}中 {page * PAGE_SIZE + 1}〜{Math.min(total, (page + 1) * PAGE_SIZE)}
       </span>
     </div>

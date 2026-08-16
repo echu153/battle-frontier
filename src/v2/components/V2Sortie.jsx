@@ -74,17 +74,17 @@ export default function V2Sortie({ prof, inventory, essences, onProfile, onScene
         out.push({ type:'hp', turn:l.turn, playerHp:l.a, playerMax:l.aMax, playerName:me.name,
           enemyHp:l.b, enemyMax:l.bMax, enemyName:foe })
       } else if (l.type === 'skill') {
-        if (l.hits === 0) out.push({ text: mine ? `⚔ ${l.skill}！ しかし${foe}にかわされた` : `⚔ ${foe}の「${l.skill}」！ しかしかわした`, color:'#667788' })
+        if (l.hits === 0) out.push({ text: mine ? `⚔ ${l.skill}！ しかし${foe}にかわされた` : `⚔ ${foe}の「${l.skill}」！ しかしかわした`, color:'#94a7bb' })
         else out.push(mine
           ? { text:`⚔ ${l.skill}！ ${foe}に${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}${l.drain ? ` HPが${l.drain.toLocaleString()}回復した！` : ''}`, color:'#ffcc00' }
           : { text:`⚔ ${foe}の「${l.skill}」！ あなたに${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`, color:'#ff4444' })
       } else if (l.type === 'normal') {
-        if (!l.hit) out.push({ text: mine ? `攻撃！ しかし${foe}にかわされた` : `${foe}の攻撃！ しかしかわした`, color:'#667788' })
+        if (!l.hit) out.push({ text: mine ? `攻撃！ しかし${foe}にかわされた` : `${foe}の攻撃！ しかしかわした`, color:'#94a7bb' })
         else out.push(mine
           ? { text:`攻撃！ ${foe}に${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`, color:'#ffcc00' }
           : { text:`${foe}の攻撃！ あなたに${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`, color:'#ff4444' })
       } else if (l.type === 'misfire') {
-        out.push({ text: mine ? `${l.skill}を出そうとしたが不発！` : `${foe}は${l.skill}を出そうとしたが不発！`, color:'#667788' })
+        out.push({ text: mine ? `${l.skill}を出そうとしたが不発！` : `${foe}は${l.skill}を出そうとしたが不発！`, color:'#94a7bb' })
       } else if (l.type === 'heal') {
         out.push({ text:`💚 ${mine ? '' : `${foe}の`}${l.skill}！ HPが${l.heal.toLocaleString()}回復した！`, color:'#44ff88' })
       } else if (l.type === 'regenTick') {
@@ -141,7 +141,7 @@ export default function V2Sortie({ prof, inventory, essences, onProfile, onScene
     return (
       <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
         <div style={{ color:'#ff6644', fontSize:'13px', marginBottom:'10px' }}>⚔ バトル！</div>
-        {loading && <div style={{ color:'#446688', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
+        {loading && <div style={{ color:'#7fa6d0', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
         <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
           {logs.map((l, i) => <BattleLogLine key={i} l={l} />)}
         </div>
@@ -159,7 +159,7 @@ export default function V2Sortie({ prof, inventory, essences, onProfile, onScene
   return (
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
-        <span style={{ color:'#446688' }}>次の行動まで</span>
+        <span style={{ color:'#7fa6d0' }}>次の行動まで</span>
         <span style={{ color: canAct ? '#44ff88' : '#ffcc00' }}>{canAct ? '▶ 出撃可能！' : `${remaining.toFixed(1)}秒`}</span>
       </div>
       <div style={{ background:'#001028', height:'6px', border:'1px solid #002244', marginBottom:'10px' }}>
@@ -172,16 +172,16 @@ export default function V2Sortie({ prof, inventory, essences, onProfile, onScene
       </select>
       <button onClick={doBattle} disabled={!canAct}
         style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct ? '#ffcc00' : '#003366'}`,
-          color: canAct ? '#ffcc00' : '#446688', cursor: canAct ? 'pointer' : 'not-allowed',
+          color: canAct ? '#ffcc00' : '#7fa6d0', cursor: canAct ? 'pointer' : 'not-allowed',
           fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
         {canAct ? `⚔ ${area?.name}へ出撃！` : '⏳ 待機中...'}
       </button>
       <div style={{ display:'flex', justifyContent:'flex-end', gap:'4px' }}>
-        <span style={{ color:'#446688', fontSize:'10px', alignSelf:'center' }}>出撃間隔</span>
+        <span style={{ color:'#7fa6d0', fontSize:'10px', alignSelf:'center' }}>出撃間隔</span>
         {COOLDOWNS.map(sec => (
           <button key={sec} onClick={() => setCooldown(sec)}
-            style={{ background: cd === sec ? '#002850' : '#000818', border:`1px solid ${cd === sec ? '#00aaff' : '#446688'}`,
-              color: cd === sec ? '#00aaff' : '#446688', padding:'3px 8px', cursor:'pointer',
+            style={{ background: cd === sec ? '#002850' : '#000818', border:`1px solid ${cd === sec ? '#00aaff' : '#7fa6d0'}`,
+              color: cd === sec ? '#00aaff' : '#7fa6d0', padding:'3px 8px', cursor:'pointer',
               fontFamily:'monospace', fontSize:'10px' }}>
             {sec}秒
           </button>

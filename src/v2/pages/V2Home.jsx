@@ -272,10 +272,10 @@ export default function V2Home() {
       <div style={{ background:'#000820', borderBottom:'1px solid #003366', padding:'6px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:100 }}>
         <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
           <div style={{ color:'#ffcc00', fontSize:'13px', letterSpacing:'2px' }}>BATTLE FRONTIER Ⅱ</div>
-          <span style={{ color:'#8877aa', fontSize:'10px' }}>[開発]</span>
+          <span style={{ color:'#a89ccc', fontSize:'10px' }}>[開発]</span>
         </div>
         <button onClick={() => nav('/game')}
-          style={{ background:'none', border:'1px solid #446688', color:'#446688', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
+          style={{ background:'none', border:'1px solid #7fa6d0', color:'#7fa6d0', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px' }}>
           ← 旧版へ戻る
         </button>
       </div>
@@ -288,7 +288,7 @@ export default function V2Home() {
           <div style={{ ...box, borderColor:'#aa4400', background:'#1a0a00', padding:'14px', color:'#ffaa66', fontSize:'12px', lineHeight:'1.9' }}>
             <div style={{ color:'#ff8844', marginBottom:'6px' }}>⚠ v2のテーブルが見つかりません</div>
             <div><code style={{ color:'#ffcc88' }}>supabase_v2_core.sql</code> をSupabaseで実行してください。</div>
-            <div style={{ color:'#886644', fontSize:'10px', marginTop:'8px', wordBreak:'break-all' }}>{sqlError}</div>
+            <div style={{ color:'#c69a5c', fontSize:'10px', marginTop:'8px', wordBreak:'break-all' }}>{sqlError}</div>
           </div>
         )}
 
@@ -296,14 +296,14 @@ export default function V2Home() {
         {!sqlError && !prof && (
           <form onSubmit={create} style={{ ...box, padding:'16px' }}>
             <div style={{ color:'#88ccff', fontSize:'13px', marginBottom:'10px' }}>キャラクターを作成</div>
-            <div style={{ color:'#446688', fontSize:'11px', marginBottom:'4px' }}>冒険者名</div>
+            <div style={{ color:'#7fa6d0', fontSize:'11px', marginBottom:'4px' }}>冒険者名</div>
             <input value={name} onChange={e => setName(e.target.value)} maxLength={16} required
               style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', boxSizing:'border-box', marginBottom:'10px' }} />
             {error && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'8px' }}>⚠ {error}</div>}
             <button type="submit" disabled={busy} style={{ ...btn('#ffcc00'), width:'100%', padding:'10px' }}>
               {busy ? '作成中...' : '▶ はじめる'}
             </button>
-            <div style={{ color:'#446688', fontSize:'10px', marginTop:'10px', lineHeight:'1.8' }}>
+            <div style={{ color:'#7fa6d0', fontSize:'10px', marginTop:'10px', lineHeight:'1.8' }}>
               旧版のキャラクターとは完全に別のデータです（同じアカウントで両方遊べます）。
             </div>
           </form>
@@ -342,7 +342,7 @@ export default function V2Home() {
             {/* スキル編成（並び順＝発動順・使用回数を配る） */}
             <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
               <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>🎯 スキルセット</div>
-              <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px', lineHeight:'1.8' }}>
+              <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'8px', lineHeight:'1.8' }}>
                 あなたの最大MPは<span style={{ color:'#4488ff' }}>{prof.mp}MP</span>です。
                 いまの編成の想定利用MPは<span style={{ color: mpCost > prof.mp ? '#ff4444' : '#44ffaa' }}>{mpCost}MP</span>です。
               </div>
@@ -354,18 +354,18 @@ export default function V2Home() {
                   return (
                     <div key={i} style={{ background:'#000818', border:'1px solid #002244', padding:'5px 7px', display:'flex', alignItems:'center', gap:'5px', fontSize:'11px' }}>
                       <span style={{ color:'#8866cc', width:'42px' }}>スキル{i + 1}</span>
-                      <span style={{ flex:1, color: s ? KIND_COLOR[s.kind] : '#334455', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      <span style={{ flex:1, color: s ? KIND_COLOR[s.kind] : '#62789a', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                         {s ? s.name : '（空き）'}
                       </span>
-                      <span style={{ color: cost > prof.mp ? '#ff4444' : '#446688', width:'62px', textAlign:'right' }}>
+                      <span style={{ color: cost > prof.mp ? '#ff4444' : '#7fa6d0', width:'62px', textAlign:'right' }}>
                         {s ? (s.mpPct ? `MP残${Math.round(s.mpPct * 100)}%` : `MP${s.mp}×${row.uses}`) : ''}
                       </span>
-                      <span style={{ color:'#446688', width:'34px', textAlign:'right' }}>{s ? `${s.proc}%` : ''}</span>
+                      <span style={{ color:'#7fa6d0', width:'34px', textAlign:'right' }}>{s ? `${s.proc}%` : ''}</span>
                       <input type="number" min={1} max={SKILL_USE_MAX} value={row.uses} disabled={!row.name}
                         onChange={e => setSlot(i, { uses: Math.max(1, Math.min(SKILL_USE_MAX, Number(e.target.value) || 1)) })}
                         style={{ width:'42px', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'11px', padding:'3px', textAlign:'center' }} />
-                      <button onClick={() => moveSlot(i, -1)} disabled={i === 0 || !row.name} style={miniBtn('#446688')}>↑</button>
-                      <button onClick={() => moveSlot(i, 1)} disabled={i === SKILL_SET_SLOTS - 1 || !row.name} style={miniBtn('#446688')}>↓</button>
+                      <button onClick={() => moveSlot(i, -1)} disabled={i === 0 || !row.name} style={miniBtn('#7fa6d0')}>↑</button>
+                      <button onClick={() => moveSlot(i, 1)} disabled={i === SKILL_SET_SLOTS - 1 || !row.name} style={miniBtn('#7fa6d0')}>↓</button>
                       <button onClick={() => setSlot(i, { name:'', uses:1 })} disabled={!row.name} style={miniBtn('#aa5566')}>外す</button>
                     </div>
                   )
@@ -376,9 +376,9 @@ export default function V2Home() {
                 <button onClick={saveSkills} disabled={busy || !!setErr} style={{ ...btn('#44aaff'), opacity: (busy || setErr) ? 0.4 : 1 }}>
                   {busy ? '保存中...' : '保存'}
                 </button>
-                <button onClick={() => setDraft(normalizeSet(prof.skill_set || []))} disabled={busy} style={btn('#446688')}>戻す</button>
+                <button onClick={() => setDraft(normalizeSet(prof.skill_set || []))} disabled={busy} style={btn('#7fa6d0')}>戻す</button>
               </div>
-              <div style={{ color:'#446688', fontSize:'9px', marginTop:'8px', lineHeight:'1.8' }}>
+              <div style={{ color:'#7fa6d0', fontSize:'9px', marginTop:'8px', lineHeight:'1.8' }}>
                 上から順に発動し、1周ごとに次の枠へ回ります（1→2→3→4→5→1…）。回数はその枠を使える総回数です。
                 <span style={{ color:'#ffaa66' }}>不発のターンは通常攻撃になり、その枠に留まります</span>（使用回数もMPも減りません）。
                 空き枠・使用回数切れ・MP不足の枠は飛ばします。
@@ -395,25 +395,25 @@ export default function V2Home() {
               <div style={{ display:'flex', gap:'5px', marginBottom:'6px' }}>
                 <input value={query} onChange={e => setQuery(e.target.value)} placeholder="スキル名・職業・説明で検索"
                   style={{ flex:1, background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'5px 7px', fontFamily:'monospace', fontSize:'11px', boxSizing:'border-box' }} />
-                <button onClick={() => setQuery('')} style={miniBtn('#446688')}>クリア</button>
+                <button onClick={() => setQuery('')} style={miniBtn('#7fa6d0')}>クリア</button>
               </div>
 
               {/* 種別タブ */}
               <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'6px' }}>
                 {KIND_TABS.map(t => (
                   <button key={t.key} onClick={() => setTab(t.key)}
-                    style={{ ...miniBtn(tab === t.key ? '#44aaff' : '#334455'), color: tab === t.key ? '#88ccff' : '#556677', background: tab === t.key ? '#001840' : '#000818' }}>
+                    style={{ ...miniBtn(tab === t.key ? '#44aaff' : '#62789a'), color: tab === t.key ? '#88ccff' : '#93a9be', background: tab === t.key ? '#001840' : '#000818' }}>
                     {t.label}{t.key === 'fav' && favorites.length > 0 ? `(${favorites.length})` : ''}
                   </button>
                 ))}
               </div>
 
               {/* 並べ替え */}
-              <div style={{ display:'flex', alignItems:'center', gap:'4px', marginBottom:'6px', fontSize:'10px', color:'#446688' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'4px', marginBottom:'6px', fontSize:'10px', color:'#7fa6d0' }}>
                 <span>並べ替え</span>
                 {[['name', 'スキル名'], ['mp', 'MP'], ['proc', '発動'], ['cls', '職業']].map(([k, label]) => (
                   <button key={k} onClick={() => { if (sortKey === k) setSortAsc(a => !a); else { setSortKey(k); setSortAsc(true) } }}
-                    style={{ ...miniBtn(sortKey === k ? '#44aaff' : '#334455'), color: sortKey === k ? '#88ccff' : '#556677' }}>
+                    style={{ ...miniBtn(sortKey === k ? '#44aaff' : '#62789a'), color: sortKey === k ? '#88ccff' : '#93a9be' }}>
                     {label}{sortKey === k ? (sortAsc ? ' ▲' : ' ▼') : ''}
                   </button>
                 ))}
@@ -421,7 +421,7 @@ export default function V2Home() {
 
               {/* 一覧 */}
               <div style={{ display:'grid', gap:'4px', maxHeight:'420px', overflowY:'auto' }}>
-                {shownSkills.length === 0 && <div style={{ color:'#446688', fontSize:'11px', padding:'8px' }}>該当するスキルがありません</div>}
+                {shownSkills.length === 0 && <div style={{ color:'#7fa6d0', fontSize:'11px', padding:'8px' }}>該当するスキルがありません</div>}
                 {shownSkills.map(s => {
                   const fav = favorites.includes(s.name)
                   const inSet = draft.findIndex(d => d?.name === s.name)
@@ -431,15 +431,15 @@ export default function V2Home() {
                     <div key={s.name} style={{ background:'#000818', border:`1px solid ${inSet >= 0 ? '#0055aa' : '#002244'}`, padding:'6px 8px', opacity: has ? 1 : 0.45 }}>
                       <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
                         <button onClick={() => toggleFavorite(s.name)} title="お気に入り"
-                          style={{ ...miniBtn(fav ? '#ffcc00' : '#334455'), color: fav ? '#ffcc00' : '#445566', padding:'2px 5px' }}>★</button>
-                        <span style={{ flex:1, color: has ? KIND_COLOR[s.kind] : '#556677', fontSize:'12px', minWidth:0 }}>
+                          style={{ ...miniBtn(fav ? '#ffcc00' : '#62789a'), color: fav ? '#ffcc00' : '#445566', padding:'2px 5px' }}>★</button>
+                        <span style={{ flex:1, color: has ? KIND_COLOR[s.kind] : '#93a9be', fontSize:'12px', minWidth:0 }}>
                           {s.name}
-                          <span style={{ color:'#556677', fontSize:'9px', marginLeft:'5px' }}>{KIND_LABEL[s.kind]}</span>
+                          <span style={{ color:'#93a9be', fontSize:'9px', marginLeft:'5px' }}>{KIND_LABEL[s.kind]}</span>
                           {isKept && <span style={{ color:'#ffcc00', fontSize:'9px', marginLeft:'5px' }}>習得済み</span>}
-                          {!has && <span style={{ color:'#886644', fontSize:'9px', marginLeft:'5px' }}>未習得</span>}
+                          {!has && <span style={{ color:'#c69a5c', fontSize:'9px', marginLeft:'5px' }}>未習得</span>}
                           {s.cls !== prof.class && <span style={{ color:'#ff88cc', fontSize:'9px', marginLeft:'5px' }}>{s.cls}</span>}
                         </span>
-                        <span style={{ color:'#446688', fontSize:'10px' }}>
+                        <span style={{ color:'#7fa6d0', fontSize:'10px' }}>
                           {isPassive(s) ? '常時' : `${mpLabel(s)} ／ ${s.proc}%`}
                         </span>
                       </div>
@@ -457,11 +457,11 @@ export default function V2Home() {
                         {has && Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => (
                           <button key={i} onClick={() => setSlot(i, { name: s.name, uses: draft[i]?.name === s.name ? draft[i].uses : 1 })}
                             disabled={inSet >= 0 && inSet !== i}
-                            style={{ ...miniBtn(inSet === i ? '#44aaff' : '#334455'), color: inSet === i ? '#88ccff' : '#556677', opacity: (inSet >= 0 && inSet !== i) ? 0.3 : 1 }}>
+                            style={{ ...miniBtn(inSet === i ? '#44aaff' : '#62789a'), color: inSet === i ? '#88ccff' : '#93a9be', opacity: (inSet >= 0 && inSet !== i) ? 0.3 : 1 }}>
                             {i + 1}
                           </button>
                         ))}
-                        {!has && <span style={{ color:'#886644', fontSize:'9px' }}>LVアップで習得</span>}
+                        {!has && <span style={{ color:'#c69a5c', fontSize:'9px' }}>LVアップで習得</span>}
                       </div>
                     </div>
                   )
@@ -475,17 +475,17 @@ export default function V2Home() {
             {/* 転職（LV上限で周回する） */}
             <div style={{ ...box, padding:'14px', marginBottom:'12px', borderColor: canJobChange(prof.lv) ? '#aa4488' : '#0044aa' }}>
               <div style={{ color:'#ff88cc', fontSize:'12px', marginBottom:'8px' }}>🔄 転職</div>
-              <div style={{ color:'#446688', fontSize:'10px', lineHeight:'1.9', marginBottom:'10px' }}>
+              <div style={{ color:'#7fa6d0', fontSize:'10px', lineHeight:'1.9', marginBottom:'10px' }}>
                 LV{MAX_LV}で転職できます。LV1に戻り、ステータスは初期値へリセットされたうえで
                 <span style={{ color:'#ff88cc' }}> 転職回数×{JOB_CHANGE_POWER}</span>（＝{JOB_CHANGE_POWER / ROLLS_PER_LV}LV分）の戦闘力がランダムに振り分けられます。
                 振り分けは毎回引き直しです。転職を重ねるほどLVアップに必要なEXPも重くなります。
               </div>
               {!canJobChange(prof.lv) && (
-                <div style={{ color:'#446688', fontSize:'11px', marginBottom:'8px' }}>LV{MAX_LV}まであと{MAX_LV - prof.lv}</div>
+                <div style={{ color:'#7fa6d0', fontSize:'11px', marginBottom:'8px' }}>LV{MAX_LV}まであと{MAX_LV - prof.lv}</div>
               )}
 
               {/* 転職先の一覧。LV100未満でも条件の確認用に開ける */}
-              <button onClick={() => { setShowJobList(v => !v); setConfirmJob(null) }} style={btn(canJobChange(prof.lv) ? '#ff88cc' : '#446688')}>
+              <button onClick={() => { setShowJobList(v => !v); setConfirmJob(null) }} style={btn(canJobChange(prof.lv) ? '#ff88cc' : '#7fa6d0')}>
                 {showJobList ? '▼ 職業一覧を閉じる' : `▶ 職業一覧（${classes.filter(c => canBecome(c, jobState)).length}職が選択可）`}
               </button>
 
@@ -505,15 +505,15 @@ export default function V2Home() {
                             return (
                               <div key={c.id} style={{ background:'#000818', border:`1px solid ${ok ? TIER_COLOR[tier] : '#002244'}`, padding:'7px 9px' }}>
                                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px' }}>
-                                  <span style={{ color: ok ? TIER_COLOR[tier] : '#446688', fontSize:'12px' }}>
-                                    {c.id}{prof.job_counts?.[c.id] > 0 && <span style={{ color:'#556677', fontSize:'9px', marginLeft:'5px' }}>×{prof.job_counts[c.id]}</span>}
+                                  <span style={{ color: ok ? TIER_COLOR[tier] : '#7fa6d0', fontSize:'12px' }}>
+                                    {c.id}{prof.job_counts?.[c.id] > 0 && <span style={{ color:'#93a9be', fontSize:'9px', marginLeft:'5px' }}>×{prof.job_counts[c.id]}</span>}
                                     {c.req_proof && <span style={{ color: proofCount(jobState.proofs, c.req_proof) > 0 ? '#ffaa44' : '#664433', fontSize:'9px', marginLeft:'6px' }}>証{proofCount(jobState.proofs, c.req_proof)}個</span>}
                                   </span>
                                   {selectable && confirmJob !== c.id && (
                                     <button onClick={() => setConfirmJob(c.id)} disabled={busy} style={{ ...btn(TIER_COLOR[tier]), padding:'4px 8px', fontSize:'11px' }}>転職</button>
                                   )}
                                 </div>
-                                <div style={{ color: ok ? '#556677' : '#775544', fontSize:'9px', marginTop:'3px' }}>
+                                <div style={{ color: ok ? '#93a9be' : '#775544', fontSize:'9px', marginTop:'3px' }}>
                                   {ok ? reqText(c) : `未達：${miss.join(' ／ ')}`}
                                 </div>
                                 {classBonusText(c.id) && (
@@ -526,7 +526,7 @@ export default function V2Home() {
                                     </div>
                                     <div style={{ display:'flex', gap:'6px' }}>
                                       <button onClick={() => changeJob(c.id)} disabled={busy} style={{ ...btn('#ff88cc'), padding:'4px 10px', fontSize:'11px' }}>{busy ? '転職中...' : 'はい'}</button>
-                                      <button onClick={() => setConfirmJob(null)} disabled={busy} style={{ ...btn('#446688'), padding:'4px 10px', fontSize:'11px' }}>やめる</button>
+                                      <button onClick={() => setConfirmJob(null)} disabled={busy} style={{ ...btn('#7fa6d0'), padding:'4px 10px', fontSize:'11px' }}>やめる</button>
                                     </div>
                                   </div>
                                 )}
@@ -537,7 +537,7 @@ export default function V2Home() {
                       </div>
                     )
                   })}
-                  <div style={{ color:'#446688', fontSize:'9px', lineHeight:'1.8' }}>
+                  <div style={{ color:'#7fa6d0', fontSize:'9px', lineHeight:'1.8' }}>
                     ×N＝その職業で転職した回数。上位職の条件はこの回数を見ます。
                     ★証が要るのは特殊職（ギャンブラー・竜騎士・ブリーダー）の3職だけです。転職のときに1個消費します。
                     上位職には「職業補正」（その職業でいる間だけ常時かかる能力）が付きます。スキル枠は使いません。
@@ -550,7 +550,7 @@ export default function V2Home() {
 
             {/* 動作確認用のEXP付与 */}
             <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
-              <div style={{ color:'#ffaa44', fontSize:'11px', marginBottom:'8px' }}>🧪 EXP付与 <span style={{ color:'#8877aa', fontSize:'9px' }}>[開発]</span></div>
+              <div style={{ color:'#ffaa44', fontSize:'11px', marginBottom:'8px' }}>🧪 EXP付与 <span style={{ color:'#a89ccc', fontSize:'9px' }}>[開発]</span></div>
               <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
                 {[60, 600, 6000].map(a => (
                   <button key={a} onClick={() => gainExp(a)} disabled={busy || prof.lv >= MAX_LV} style={{ ...btn('#44ffaa'), opacity: (busy || prof.lv >= MAX_LV) ? 0.4 : 1 }}>
@@ -573,16 +573,16 @@ export default function V2Home() {
                     {l.job ? (
                       <>
                         <span style={{ color:'#ff88cc' }}>🔄 転職{l.job}回目 → {l.className}</span>
-                        <span style={{ color:'#446688', marginLeft:'8px', fontSize:'10px' }}>戦闘力{l.points}分を振り分け</span>
+                        <span style={{ color:'#7fa6d0', marginLeft:'8px', fontSize:'10px' }}>戦闘力{l.points}分を振り分け</span>
                         {l.usedProof && <span style={{ color:'#ffaa44', marginLeft:'6px', fontSize:'9px' }}>{l.usedProof}を1個消費</span>}
                         {l.kept && <div style={{ color:'#ffcc00', fontSize:'10px' }}>★ {l.kept}が習得済みになった！</div>}
-                        {l.kept === null && <div style={{ color:'#886644', fontSize:'10px' }}>習得済みにできるスキルがなかった</div>}
+                        {l.kept === null && <div style={{ color:'#c69a5c', fontSize:'10px' }}>習得済みにできるスキルがなかった</div>}
                       </>
                     ) : (
                       <>
-                        <span style={{ color:'#446688' }}>EXP+{l.amount}</span>
+                        <span style={{ color:'#7fa6d0' }}>EXP+{l.amount}</span>
                         <span style={{ color:'#ffcc00', marginLeft:'8px' }}>LV {l.lvFrom} → {l.lvTo}</span>
-                        <span style={{ color:'#446688', marginLeft:'6px', fontSize:'10px' }}>（{l.ups}回）</span>
+                        <span style={{ color:'#7fa6d0', marginLeft:'6px', fontSize:'10px' }}>（{l.ups}回）</span>
                       </>
                     )}
                     <div style={{ color:'#88ddaa', fontSize:'10px' }}>{l.gains}</div>

@@ -13,9 +13,10 @@ import V2Modal from './V2Modal.jsx'
 
 // エンチャント：素材を見る → 5個選んで抽出 → できたエッセンスを武器のソケットへ。
 // ★抽選の権威はサーバー（v2_extract_essence）。ここは選んで送るだけ。
+// 「注入」だと素っ気ないので**刻印**にした（2026-08-16 ユーザー指示「もっとかっこよく」）
 const TABS = [
-  { key:'extract', label:'抽出' },
-  { key:'socket',  label:'ソケット' },
+  { key:'extract', label:'⚗ エッセンスの抽出' },
+  { key:'socket',  label:'◈ エッセンスの刻印' },
 ]
 
 const statLine = (stats) =>
@@ -115,12 +116,12 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
       <div style={{ display:'flex', gap:'4px', marginBottom:'10px' }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => { setTab(t.key); setMsg('') }}
-            style={{ ...miniBtn(tab === t.key ? '#00aaff' : '#446688'), padding:'6px 12px', fontSize:'11px',
+            style={{ ...miniBtn(tab === t.key ? '#00aaff' : '#7fa6d0'), padding:'6px 12px', fontSize:'11px',
               background: tab === t.key ? '#002850' : '#000818' }}>
             {t.label}
           </button>
         ))}
-        <span style={{ marginLeft:'auto', alignSelf:'center', color:'#446688', fontSize:'10px' }}>
+        <span style={{ marginLeft:'auto', alignSelf:'center', color:'#7fa6d0', fontSize:'10px' }}>
           エッセンス {spare.length}個（未使用）
         </span>
       </div>
@@ -128,7 +129,7 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
       {/* ===== 抽出 ===== */}
       {tab === 'extract' && (
         <div style={{ ...box, padding:'12px' }}>
-          <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>
+          <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'6px' }}>
             素材を{EXTRACT_COST}個選んで抽出する。ステータスの型も値も抽出したときに決まる（ボス素材は1個まで）
           </div>
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'8px' }}>
@@ -137,7 +138,7 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
               return (
                 <button key={i} onClick={() => m && unpick(i)} disabled={!m}
                   style={{ flex:'1 1 110px', background:'#000818', border:`1px solid ${m ? RARITY_COLOR[m.rarity] : '#223344'}`,
-                    color: m ? '#88ccff' : '#334455', padding:'8px 4px', fontFamily:'monospace', fontSize:'10px',
+                    color: m ? '#88ccff' : '#62789a', padding:'8px 4px', fontFamily:'monospace', fontSize:'10px',
                     cursor: m ? 'pointer' : 'default' }}>
                   {m ? m.name : '—'}
                 </button>
@@ -146,7 +147,7 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
           </div>
           <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
             <button onClick={() => setConfirm(true)} disabled={busy || picked.length !== EXTRACT_COST}
-              style={{ ...miniBtn(picked.length === EXTRACT_COST ? '#ffcc00' : '#334455'), padding:'8px 16px', fontSize:'12px' }}>
+              style={{ ...miniBtn(picked.length === EXTRACT_COST ? '#ffcc00' : '#62789a'), padding:'8px 16px', fontSize:'12px' }}>
               ⚗ 抽出する
             </button>
             {picked.length > 0 && (
@@ -158,7 +159,7 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'8px' }}>
             {AREAS.map(a => (
               <button key={a.id} onClick={() => setArea(a.id)}
-                style={{ ...miniBtn(area === a.id ? '#00aaff' : '#446688'), background: area === a.id ? '#002850' : '#000818' }}>
+                style={{ ...miniBtn(area === a.id ? '#00aaff' : '#7fa6d0'), background: area === a.id ? '#002850' : '#000818' }}>
                 {a.id}
               </button>
             ))}
@@ -167,11 +168,11 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
             <button key={m.id} onClick={() => pick(m.id)} disabled={!canPick(m)}
               style={{ display:'block', width:'100%', textAlign:'left', background:'#000818',
                 border:'1px solid #002244', borderLeft:`3px solid ${RARITY_COLOR[m.rarity]}`,
-                color: canPick(m) ? '#88ccff' : '#334455', opacity: canPick(m) ? 1 : 0.45,
+                color: canPick(m) ? '#88ccff' : '#62789a', opacity: canPick(m) ? 1 : 0.45,
                 padding:'5px 8px', marginBottom:'2px',
                 fontFamily:'monospace', fontSize:'11px', cursor: canPick(m) ? 'pointer' : 'default' }}>
               {m.name} <span style={{ color:'#ffffff' }}>×{left(m.id)}</span>
-              <span style={{ color:'#556677' }}>
+              <span style={{ color:'#93a9be' }}>
                 　{m.enemy}　{m.stats.map(k => STAT_DEFS[k].label).join('・')} {m.lo}〜{m.hi}%
               </span>
               {m.isBoss && <span style={{ color:'#ffcc44' }}>　ボス素材</span>}
@@ -183,15 +184,15 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
       {/* ===== ソケット ===== */}
       {tab === 'socket' && (
         <div style={{ ...box, padding:'12px' }}>
-          <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px' }}>
-            ソケットがあるのは武器だけ（片手2枠・両手3枠）。色はドロップしたときに決まっていて、
-            <span style={{ color:'#88ccff' }}>色の合うエッセンスしか入らない</span>。
+          <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'8px' }}>
+            エッセンスを刻めるのは武器だけ（片手2枠・両手3枠）。枠の色はドロップしたときに決まっていて、
+            <span style={{ color:'#88ccff' }}>色の合うエッセンスしか刻めない</span>。
             <span style={{ color:'#88ccff' }}>外す</span>には専用アイテムが要る（残り{prof?.unsocket_tickets || 0}個）。
             アイテムが無くても<span style={{ color:'#cc88ff' }}>上書き</span>はできるが、
             そのとき<span style={{ color:'#ff8844' }}>元のエッセンスは消える</span>
           </div>
 
-          {weapons.length === 0 && <div style={{ color:'#446688', fontSize:'11px' }}>武器を装着してください</div>}
+          {weapons.length === 0 && <div style={{ color:'#7fa6d0', fontSize:'11px' }}>武器を装着してください</div>}
           {weapons.map(w => (
             <div key={w.slot} style={{ borderTop:'1px solid #002244', padding:'8px 0' }}>
               <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'4px' }}>
@@ -199,7 +200,7 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
               </div>
               {w.sockets.length === 0 && (
                 <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-                  <span style={{ color:'#886644', fontSize:'10px' }}>
+                  <span style={{ color:'#c69a5c', fontSize:'10px' }}>
                     ソケットがありません（この機能より前に拾った武器）
                   </span>
                   <button disabled={busy} onClick={() => call('v2_backfill_sockets', {})} style={miniBtn('#cc88ff')}>
@@ -214,7 +215,8 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
                   return (
                     <div key={i} style={{ flex:'1 1 200px', border:`1px solid ${isTarget ? '#ffcc00' : COLOR_HEX[c]}`,
                       background:'#000818', padding:'6px' }}>
-                      <div style={{ color: COLOR_HEX[c], fontSize:'10px' }}>●{COLOR_LABEL[c]}の枠</div>
+                      {/* ★枠の色は「まだ空いているとき」だけ出す。刻んだあとはエッセンスが主役 */}
+                      {!e && <div style={{ color: COLOR_HEX[c], fontSize:'10px' }}>●{COLOR_LABEL[c]}の枠</div>}
                       {e ? (
                         <>
                           <EssenceTag e={e} />
@@ -222,7 +224,7 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
                             {/* 外す＝エッセンスが無傷で戻る。専用アイテムが要る */}
                             <button disabled={busy || !(prof?.unsocket_tickets > 0)}
                               onClick={() => call('v2_unsocket_essence', { p_essence_id: e.id })}
-                              style={miniBtn(prof?.unsocket_tickets > 0 ? '#ff8888' : '#334455')}>外す</button>
+                              style={miniBtn(prof?.unsocket_tickets > 0 ? '#ff8888' : '#62789a')}>外す</button>
                             {/* 上書き＝アイテムは要らないが、**いま入っているエッセンスは消える** */}
                             <button onClick={() => setTarget(isTarget ? null : { invId: w.inv.id, slot: i, color: c, over: e })}
                               style={miniBtn(isTarget ? '#ffcc00' : '#cc88ff')}>
@@ -247,7 +249,7 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
           {target && (
             <div style={{ borderTop:'1px solid #0066cc', marginTop:'8px', paddingTop:'8px' }}>
               <div style={{ color: COLOR_HEX[target.color], fontSize:'11px', marginBottom:'4px' }}>
-                ●{COLOR_LABEL[target.color]}の枠に入れるエッセンスを選ぶ
+                ●{COLOR_LABEL[target.color]}の枠に刻むエッセンスを選ぶ
               </div>
               {target.over && (
                 <div style={{ color:'#ff8844', fontSize:'10px', marginBottom:'4px' }}>
@@ -256,7 +258,7 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
                 </div>
               )}
               {spare.filter(e => e.color === target.color).length === 0 && (
-                <div style={{ color:'#446688', fontSize:'11px' }}>この色の未使用エッセンスがありません</div>
+                <div style={{ color:'#7fa6d0', fontSize:'11px' }}>この色の未使用エッセンスがありません</div>
               )}
               {spare.filter(e => e.color === target.color).map(e => (
                 <button key={e.id} disabled={busy}
@@ -273,7 +275,7 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
           {/* まだどこにも入れていないエッセンス */}
           {!target && spare.length > 0 && (
             <div style={{ borderTop:'1px solid #002244', marginTop:'8px', paddingTop:'8px' }}>
-              <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>未使用のエッセンス</div>
+              <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'4px' }}>未使用のエッセンス</div>
               {spare.map(e => (
                 <div key={e.id} style={{ padding:'3px 0' }}>
                   <EssenceTag e={e} />
@@ -303,12 +305,12 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
                 <div key={i} style={{ fontSize:'11px' }}>
                   <span style={{ color: RARITY_COLOR[m.rarity] }}>{RARITY_LABEL[m.rarity]}</span>
                   {' '}<span style={{ color:'#88ccff' }}>{m.name}</span>
-                  <span style={{ color:'#556677' }}>　{m.stats.map(k => STAT_DEFS[k].label).join('・')} {m.lo}〜{m.hi}%</span>
+                  <span style={{ color:'#93a9be' }}>　{m.stats.map(k => STAT_DEFS[k].label).join('・')} {m.lo}〜{m.hi}%</span>
                 </div>
               )
             })}
           </div>
-          <div style={{ color:'#556677', fontSize:'11px' }}>
+          <div style={{ color:'#93a9be', fontSize:'11px' }}>
             ステータスの型も値も、いま抽選されます。色は5個の合計で決まります。
           </div>
         </V2Modal>
@@ -346,11 +348,11 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
           confirmLabel="上書きする" onConfirm={() => doSocket(overwrite.essence.id, overwrite.target)}
           onClose={() => !busy && setOverwrite(null)}>
           <div style={{ color:'#ff8844' }}>いま入っているエッセンスは<b>消えます</b>。</div>
-          <div style={{ marginTop:'6px', fontSize:'11px', color:'#556677' }}>消えるもの</div>
+          <div style={{ marginTop:'6px', fontSize:'11px', color:'#93a9be' }}>消えるもの</div>
           <EssenceTag e={overwrite.target.over} />
-          <div style={{ marginTop:'6px', fontSize:'11px', color:'#556677' }}>入れるもの</div>
+          <div style={{ marginTop:'6px', fontSize:'11px', color:'#93a9be' }}>入れるもの</div>
           <EssenceTag e={overwrite.essence} />
-          <div style={{ color:'#556677', fontSize:'11px', marginTop:'8px' }}>
+          <div style={{ color:'#93a9be', fontSize:'11px', marginTop:'8px' }}>
             残したいなら「やめる」→「外す」で取り出してください（専用アイテムが1個要ります）。
           </div>
         </V2Modal>

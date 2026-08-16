@@ -129,9 +129,9 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
           color:'#88ccff', fontFamily:'monospace', fontSize:'11px',
           opacity: (base && !isBase && !selectable) ? 0.35 : 1,
           cursor: (base && !isBase && !selectable) ? 'not-allowed' : 'pointer' }}>
-        <span style={{ color:'#446688', fontSize:'9px' }}>#{inv.id}</span>{' '}
+        <span style={{ color:'#7fa6d0', fontSize:'9px' }}>#{inv.id}</span>{' '}
         {item.name}{inv.plus ? <span style={{ color:'#ffcc00' }}>+{inv.plus}</span> : ''}
-        <span style={{ color:'#446688' }}>　戦闘力{powerOf(item, inv.plus || 0)}</span>
+        <span style={{ color:'#7fa6d0' }}>　戦闘力{powerOf(item, inv.plus || 0)}</span>
         {isWorn && <span style={{ color:'#44ff88', fontSize:'9px' }}>　装備中</span>}
         {es.length > 0 && (
           <span style={{ fontSize:'9px' }}>
@@ -144,7 +144,7 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
           </span>
         )}
         {socketCountOf(item) > 0 && es.length === 0 && (
-          <span style={{ color:'#334455', fontSize:'9px' }}>　ソケット{socketCountOf(item)}（空）</span>
+          <span style={{ color:'#62789a', fontSize:'9px' }}>　ソケット{socketCountOf(item)}（空）</span>
         )}
         {isBase && <span style={{ color:'#44ff88', fontSize:'9px' }}>　← 強化元</span>}
         {isMat && <span style={{ color:'#ffcc00', fontSize:'9px' }}>　← 強化素材</span>}
@@ -160,7 +160,7 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
       <div style={{ display:'flex', gap:'4px', marginBottom:'10px' }}>
         {[{ key:'fuse', label:'🔨 強化', color:'#ffcc00' }, { key:'enchant', label:'⚗ エンチャント', color:'#cc88ff' }].map(t => (
           <button key={t.key} onClick={() => { setMenu(t.key); setMsg(null) }}
-            style={{ ...miniBtn(menu === t.key ? t.color : '#446688'), padding:'7px 14px', fontSize:'12px',
+            style={{ ...miniBtn(menu === t.key ? t.color : '#7fa6d0'), padding:'7px 14px', fontSize:'12px',
               background: menu === t.key ? '#002850' : '#000818' }}>
             {t.label}
           </button>
@@ -175,7 +175,7 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
       {menu === 'fuse' && (<>
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
         <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'6px' }}>🔨 強化</div>
-        <div style={{ color:'#556677', fontSize:'10px', lineHeight:1.8 }}>
+        <div style={{ color:'#93a9be', fontSize:'10px', lineHeight:1.8 }}>
           <b style={{ color:'#44ff88' }}>強化元1個</b>に、同じ装備・同じ強化値の
           <b style={{ color:'#ffcc00' }}>強化素材{MAT_COUNT}個</b>を使って強化値を上げます（上限+{PLUS_MAX}）。<br />
           <b style={{ color:'#44ff88' }}>強化元は失敗しても残ります</b>。消えるのは強化素材{MAT_COUNT}個だけです。<br />
@@ -194,9 +194,9 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
           （前は強化ボタンが一覧の下にあり、選ぶたびに画面の端まで動く必要があった） */}
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
         <V2Filter value={filter} rows={all} onChange={f => { setFilter(f); setRawPage(0) }} />
-        {all.length === 0 && <div style={{ color:'#446688', fontSize:'11px' }}>まだ持っていません（出撃で手に入ります）</div>}
+        {all.length === 0 && <div style={{ color:'#7fa6d0', fontSize:'11px' }}>まだ持っていません（出撃で手に入ります）</div>}
         {all.length > 0 && filtered.length === 0 && (
-          <div style={{ color:'#446688', fontSize:'11px' }}>絞り込みに合う装備がありません</div>
+          <div style={{ color:'#7fa6d0', fontSize:'11px' }}>絞り込みに合う装備がありません</div>
         )}
         {kinds.map(k => (
           <div key={k.equipId}>
@@ -207,14 +207,14 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
                 color:'#88ccff', fontFamily:'monospace', fontSize:'11px', cursor:'pointer' }}>
               <span style={{ color: RANK_COLOR[k.item.rank] }}>{k.item.rank}</span>
               {' '}{PART_ICON[k.item.part]}{k.item.name}
-              <span style={{ color:'#446688' }}>　×{k.count}個　{k.item.type}</span>
-              <span style={{ color:'#446688', float:'right' }}>{openEquip === k.equipId ? '▲' : '▼'}</span>
+              <span style={{ color:'#7fa6d0' }}>　×{k.count}個　{k.item.type}</span>
+              <span style={{ color:'#7fa6d0', float:'right' }}>{openEquip === k.equipId ? '▲' : '▼'}</span>
             </button>
 
             {/* ② その装備の個体一覧 → ③ そのまま下で強化まで終わらせる */}
             {openEquip === k.equipId && (
               <div style={{ padding:'4px 0 8px 12px' }}>
-                <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>
+                <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'4px' }}>
                   {base
                     ? `強化素材を${MAT_COUNT}個選んでください（あと${MAT_COUNT - mats.length}個）／強化元をもう一度押すと選び直し`
                     : '強化元にする1個を選んでください'}
@@ -230,20 +230,20 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
                   <div style={{ border:'1px solid #0044aa', background:'#000c1c', padding:'10px', marginTop:'6px' }}>
                     <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', fontSize:'11px', marginBottom:'8px' }}>
                       <span style={{ color: RESULT_COLOR.ok }}>成功 {rate.ok}%（+1）</span>
-                      <span style={{ color: rate.great ? RESULT_COLOR.great : '#334455' }}>大成功 {rate.great}%（+2）</span>
-                      <span style={{ color: rate.super ? RESULT_COLOR.super : '#334455' }}>超大成功 {rate.super}%（+3）</span>
-                      <span style={{ color: rate.fail ? RESULT_COLOR.fail : '#446688' }}>失敗 {rate.fail}%</span>
+                      <span style={{ color: rate.great ? RESULT_COLOR.great : '#62789a' }}>大成功 {rate.great}%（+2）</span>
+                      <span style={{ color: rate.super ? RESULT_COLOR.super : '#62789a' }}>超大成功 {rate.super}%（+3）</span>
+                      <span style={{ color: rate.fail ? RESULT_COLOR.fail : '#7fa6d0' }}>失敗 {rate.fail}%</span>
                     </div>
 
                     {/* 守りの護符 */}
                     <label style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px',
-                      color: protectHave > 0 ? '#88ddaa' : '#334455', fontSize:'11px',
+                      color: protectHave > 0 ? '#88ddaa' : '#62789a', fontSize:'11px',
                       cursor: protectHave > 0 ? 'pointer' : 'not-allowed' }}>
                       <input type="checkbox" checked={protect} disabled={protectHave <= 0}
                         onChange={e => setProtect(e.target.checked)} />
-                      🛡 {PROTECT_NAME}を使う<span style={{ color:'#446688' }}>（所持 {protectHave}個）</span>
+                      🛡 {PROTECT_NAME}を使う<span style={{ color:'#7fa6d0' }}>（所持 {protectHave}個）</span>
                     </label>
-                    <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>{PROTECT_DESC}</div>
+                    <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>{PROTECT_DESC}</div>
 
                     {matHasEssence && (
                       <div style={{ color:'#ff8844', fontSize:'11px', marginBottom:'8px' }}>
@@ -253,7 +253,7 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
                     {pickError && <div style={{ color:'#7f95c4', fontSize:'11px', marginBottom:'8px' }}>{pickError}</div>}
 
                     <button onClick={() => setConfirm(true)} disabled={!!pickError || busy}
-                      style={{ ...btn(pickError ? '#334455' : '#ffcc00'), width:'100%',
+                      style={{ ...btn(pickError ? '#62789a' : '#ffcc00'), width:'100%',
                         color: pickError ? '#445566' : '#ffcc00', cursor: pickError ? 'not-allowed' : 'pointer' }}>
                       🔨 {baseItem.name}{base.plus ? `+${base.plus}` : ''}（#{base.id}）を強化する
                     </button>
@@ -274,20 +274,20 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
           confirmLabel="強化する" onConfirm={fuse} onClose={() => !busy && setConfirm(false)}>
           <div style={{ color:'#44ff88' }}>
             強化元　{baseItem.name}{base.plus ? `+${base.plus}` : ''}
-            <span style={{ color:'#446688' }}>（#{base.id}）</span>
+            <span style={{ color:'#7fa6d0' }}>（#{base.id}）</span>
           </div>
           <div style={{ color:'#ffcc00' }}>
             強化素材　{mats.map(m => `#${m.id}`).join('・')}
-            <span style={{ color:'#446688' }}>　→ {protect ? '失敗しても残ります' : '失敗すると消えます'}</span>
+            <span style={{ color:'#7fa6d0' }}>　→ {protect ? '失敗しても残ります' : '失敗すると消えます'}</span>
           </div>
-          <div style={{ color:'#556677', fontSize:'11px', marginTop:'6px' }}>
+          <div style={{ color:'#93a9be', fontSize:'11px', marginTop:'6px' }}>
             戦闘力 {powerOf(baseItem, base.plus || 0)} → {powerOf(baseItem, (base.plus || 0) + 1)}（成功時）
           </div>
           <div style={{ marginTop:'6px', fontSize:'11px' }}>
             <div style={{ color:'#88ccff' }}>
               成功 {rate.ok}%（+1）{rate.great ? `／大成功 ${rate.great}%（+2）` : ''}{rate.super ? `／超大成功 ${rate.super}%（+3）` : ''}
             </div>
-            <div style={{ color: rate.fail ? '#ff6666' : '#446688' }}>
+            <div style={{ color: rate.fail ? '#ff6666' : '#7fa6d0' }}>
               失敗 {rate.fail}%
               {rate.fail
                 ? protect ? '　→ 何も消えません' : `　→ 強化素材${MAT_COUNT}個が消えます`
@@ -318,7 +318,7 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
           {result.result === 'fail' ? (
             <div style={{ color:'#88ccff', marginTop:'4px' }}>
               {result.name}<span style={{ color:'#ffcc00' }}>+{result.plus}</span> は無事だった
-              <div style={{ color:'#446688', fontSize:'11px' }}>
+              <div style={{ color:'#7fa6d0', fontSize:'11px' }}>
                 {result.protected ? `🛡 ${PROTECT_NAME}が強化素材を守った` : `強化素材${MAT_COUNT}個が消えた`}
               </div>
             </div>

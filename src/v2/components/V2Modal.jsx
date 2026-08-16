@@ -54,7 +54,7 @@ export default function V2Modal({
 }
 
 const modalBtn = (color, busy) => ({
-  flex:1, background:'#001840', border:`1px solid ${busy ? '#334455' : color}`,
+  flex:1, background:'#001840', border:`1px solid ${busy ? '#62789a' : color}`,
   color: busy ? '#445566' : color, padding:'10px', cursor: busy ? 'not-allowed' : 'pointer',
   fontFamily:'monospace', fontSize:'12px',
 })
