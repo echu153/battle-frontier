@@ -5,7 +5,7 @@ import { TIER_COLOR } from '../lib/classes.js'
 import { KIND_COLOR, SKILL_BY_NAME, SKILL_SET_SLOTS } from '../lib/skills.js'
 import { equippedItems, totalStats } from '../lib/loadout.js'
 import { RANK_COLOR } from './v2ui.js'
-import V2ItemTip, { SealTags } from './V2ItemTip.jsx'
+import V2ItemTip from './V2ItemTip.jsx'
 
 // ★見た目は旧版（無印）の街のステータスと同じ値にそろえてある。
 //   枠 border:#0044aa／背景 #001040／padding:10px／marginBottom:8px、
@@ -135,11 +135,12 @@ export default function V2Status({ prof, inventory, runes, classes, open, onTogg
         {w ? (
           <V2ItemTip item={w.item} inv={w.inv} runes={rn} alignRight={i % 2 === 1}
             style={{ display:'block', flex:1, minWidth:0 }}>
+            {/* ★ここはランクと名前だけ。刻印は幅が足りず切れるので、
+                カーソルを合わせたとき（V2ItemTip の中）に出す */}
             <span style={{ ...valueCell, display:'block' }}>
               <span style={{ color: RANK_COLOR[w.item.rank] }}>[{w.item.rank}]</span>{' '}
               <span style={{ color:'#88ccff' }}>{w.item.name}</span>
               {w.inv.plus ? <span style={{ color:'#ffcc00' }}>+{w.inv.plus}</span> : ''}
-              <SealTags list={rn} size="9px" />
             </span>
           </V2ItemTip>
         ) : <span style={{ ...valueCell, color:'#62789a' }}>—</span>}
