@@ -1,6 +1,8 @@
 import {
   ALL, RANK_OPTIONS, TYPE_OPTIONS, plusOptions, SORTS, PAGE_SIZE, pageCount,
+  ESSENCE_COLOR_OPTIONS, ESSENCE_ABILITY_OPTIONS, ESSENCE_SORTS,
 } from '../lib/browse.js'
+import { COLOR_LABEL, COLOR_HEX } from '../lib/material.js'
 import { miniBtn } from './v2ui.js'
 
 // 装備一覧の「絞り込み・並べ替え」バーと「ページ送り」。倉庫と鍛冶屋で共通。
@@ -78,6 +80,49 @@ export function V2Pager({ page, total, onPage, unit = '件' }) {
       <span style={{ color:'#7fa6d0', fontSize:'10px', marginLeft:'4px' }}>
         {total}{unit}中 {page * PAGE_SIZE + 1}〜{Math.min(total, (page + 1) * PAGE_SIZE)}
       </span>
+    </div>
+  )
+}
+
+// エッセンス用の絞り込みバー。装備とは項目が違う（色・特殊能力の有無・合計値）
+// lockColor を渡すと色の選択を固定して出す（刻む先の枠を選んでいるとき）
+export function V2EssenceFilter({ value, onChange, lockColor = null, right = null }) {
+  const set = (patch) => onChange({ ...value, ...patch })
+  return (
+    <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', marginBottom:'8px' }}>
+      <span>
+        <span style={label}>色</span>
+        {lockColor ? (
+          <span style={{ ...sel, display:'inline-block', color: COLOR_HEX[lockColor], borderColor: COLOR_HEX[lockColor] }}>
+            ●{COLOR_LABEL[lockColor]}のみ
+          </span>
+        ) : (
+          <select value={value.color} onChange={e => set({ color: e.target.value })} style={sel}>
+            {ESSENCE_COLOR_OPTIONS.map(c => (
+              <option key={c} value={c}>{c === ALL ? c : COLOR_LABEL[c]}</option>
+            ))}
+          </select>
+        )}
+      </span>
+      <span>
+        <span style={label}>特殊能力</span>
+        <select value={value.ability} onChange={e => set({ ability: e.target.value })} style={sel}>
+          {ESSENCE_ABILITY_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+      </span>
+      <span>
+        <span style={label}>並べ替え</span>
+        <select value={value.sort} onChange={e => set({ sort: e.target.value })} style={sel}>
+          {ESSENCE_SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+        </select>
+        <button onClick={() => set({ asc: !value.asc })} style={{ ...miniBtn('#7fa6d0'), marginLeft:'2px' }}>
+          {value.asc ? '▲昇順' : '▼降順'}
+        </button>
+      </span>
+      {(!lockColor && value.color !== ALL) || value.ability !== ALL ? (
+        <button onClick={() => set({ color: ALL, ability: ALL })} style={miniBtn('#ff8888')}>絞り込み解除</button>
+      ) : null}
+      {right && <span style={{ marginLeft:'auto', color:'#7fa6d0', fontSize:'10px' }}>{right}</span>}
     </div>
   )
 }

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   PAGE_SIZE, ALL, TYPES, RANK_OPTIONS, TYPE_OPTIONS, plusOptions,
   SORTS, filterRows, sortRows, pageOf, pageCount, clampPage,
+  defaultEssenceFilter, filterEssences, sortEssences,
 } from './browse.js'
 import { CATALOG, RANKS, powerOf } from './equipment.js'
 
@@ -75,4 +76,40 @@ test('並べ替えは元の配列を書き換えない', () => {
   const before = src.map(r => r.item.id)
   sortRows(src, 'name', true)
   assert.deepEqual(src.map(r => r.item.id), before)
+})
+
+// ===== エッセンスの絞り込み（エンチャントの「刻印」タブ）=====
+const ess = (id, color, stats, ability = null) => ({ id, color, stats, ability })
+const ESS = [
+  ess(1, 'red',   { str: 3.0 }, 'ゴブリン'),
+  ess(2, 'blue',  { vit: 1.0 }),
+  ess(3, 'green', { agi: 8.0 }),
+  ess(4, 'blue',  { vit: 5.0 }, 'スライム'),
+]
+
+test('エッセンスは色と特殊能力の有無で絞り込める', () => {
+  assert.deepEqual(filterEssences(ESS, defaultEssenceFilter).map(e => e.id), [1, 2, 3, 4])
+  assert.deepEqual(filterEssences(ESS, { color:'blue' }).map(e => e.id), [2, 4])
+  assert.deepEqual(filterEssences(ESS, { ability:'あり' }).map(e => e.id), [1, 4])
+  assert.deepEqual(filterEssences(ESS, { ability:'なし' }).map(e => e.id), [2, 3])
+  assert.deepEqual(filterEssences(ESS, { color:'blue', ability:'あり' }).map(e => e.id), [4])
+})
+
+test('エッセンスは合計値・名前・色で並べ替えられる', () => {
+  assert.deepEqual(sortEssences(ESS, 'power', false).map(e => e.id), [3, 4, 1, 2])
+  assert.deepEqual(sortEssences(ESS, 'power', true).map(e => e.id), [2, 1, 4, 3])
+  // 色は緋→蒼→翠の順（COLORS の並び）
+  assert.deepEqual(sortEssences(ESS, 'color', true).map(e => e.color), ['red', 'blue', 'blue', 'green'])
+})
+
+test('同じ値のときは合計値の大きい順→id順でそろう（並びがちらつかない）', () => {
+  const same = [ess(9, 'blue', { vit: 1.0 }), ess(2, 'blue', { vit: 1.0 }), ess(5, 'blue', { vit: 4.0 })]
+  assert.deepEqual(sortEssences(same, 'color', false).map(e => e.id), [5, 2, 9])
+})
+
+test('ページ送りはエッセンスでも装備と同じ関数を使う', () => {
+  const many = Array.from({ length: 40 }, (_, i) => ess(i + 1, 'blue', { vit: i / 10 }))
+  assert.equal(pageOf(many, 0).length, PAGE_SIZE)
+  assert.equal(pageOf(many, 2).length, 40 - PAGE_SIZE * 2)
+  assert.equal(clampPage(99, many.length), pageCount(many.length) - 1)
 })

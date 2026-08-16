@@ -10,6 +10,10 @@ import { enchantOf } from '../lib/enchant.js'
 import { STAT_DEFS } from '../lib/stats.js'
 import { box, miniBtn } from './v2ui.js'
 import V2Modal from './V2Modal.jsx'
+import { V2EssenceFilter, V2Pager } from './V2Browse.jsx'
+import {
+  defaultEssenceFilter, filterEssences, sortEssences, pageOf, clampPage,
+} from '../lib/browse.js'
 
 // エンチャント：素材を見る → 5個選んで抽出 → できたエッセンスを武器のソケットへ。
 // ★抽選の権威はサーバー（v2_extract_essence）。ここは選んで送るだけ。
@@ -46,6 +50,8 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
   const [result, setResult] = useState(null)    // 抽出後の結果ポップアップ
   const [overwrite, setOverwrite] = useState(null) // 上書き前の確認 { essence, target }
   const [target, setTarget] = useState(null)    // ソケットにはめる対象 { invId, slot, color }
+  const [essFilter, setEssFilter] = useState(defaultEssenceFilter)  // エッセンス一覧の絞り込み
+  const [rawEssPage, setRawEssPage] = useState(0)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
 
@@ -108,6 +114,13 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
     return m
   }, [essences])
   const spare = (essences || []).filter(e => e.inv_id == null)
+  // ★一覧が長くなるので、倉庫・鍛冶屋と同じ絞り込みとページ送りを付ける（browse.js が共通）
+  //   枠を選んでいるあいだは、その枠の色だけに固定する
+  const essRows = sortEssences(
+    filterEssences(spare, { ...essFilter, color: target ? target.color : essFilter.color }),
+    essFilter.sort, essFilter.asc)
+  const essPage = clampPage(rawEssPage, essRows.length)
+  const essShown = pageOf(essRows, essPage)
 
   return (
     <div>
@@ -245,49 +258,42 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
             </div>
           ))}
 
-          {/* はめる先を選んだら、色の合うエッセンスを並べる */}
-          {target && (
-            <div style={{ borderTop:'1px solid #0066cc', marginTop:'8px', paddingTop:'8px' }}>
-              <div style={{ color: COLOR_HEX[target.color], fontSize:'11px', marginBottom:'4px' }}>
-                ●{COLOR_LABEL[target.color]}の枠に刻むエッセンスを選ぶ
+          {/* エッセンスの一覧。枠を選んでいるときは「その色だけ」に固定して、押すと刻める */}
+          <div style={{ borderTop:`1px solid ${target ? '#0066cc' : '#002244'}`, marginTop:'8px', paddingTop:'8px' }}>
+            <div style={{ color: target ? COLOR_HEX[target.color] : '#7fa6d0', fontSize:'11px', marginBottom:'4px' }}>
+              {target
+                ? `●${COLOR_LABEL[target.color]}の枠に刻むエッセンスを選ぶ`
+                : '未使用のエッセンス'}
+            </div>
+            {target?.over && (
+              <div style={{ color:'#ff8844', fontSize:'10px', marginBottom:'4px' }}>
+                ⚠上書きすると、いま入っている「{statLine(target.over.stats)}」は消えます
+                （残したいなら「外す」で取り出してください）
               </div>
-              {target.over && (
-                <div style={{ color:'#ff8844', fontSize:'10px', marginBottom:'4px' }}>
-                  ⚠上書きすると、いま入っている「{statLine(target.over.stats)}」は消えます
-                  （残したいなら「外す」で取り出してください）
-                </div>
-              )}
-              {spare.filter(e => e.color === target.color).length === 0 && (
-                <div style={{ color:'#7fa6d0', fontSize:'11px' }}>この色の未使用エッセンスがありません</div>
-              )}
-              {spare.filter(e => e.color === target.color).map(e => (
-                <button key={e.id} disabled={busy}
-                  onClick={() => (target.over ? setOverwrite({ essence: e, target }) : doSocket(e.id, target))}
-                  style={{ display:'block', width:'100%', textAlign:'left', background:'#000818',
-                    border:'1px solid #002244', padding:'5px 8px', marginBottom:'2px',
-                    fontFamily:'monospace', cursor:'pointer' }}>
-                  <EssenceTag e={e} />
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* まだどこにも入れていないエッセンス */}
-          {!target && spare.length > 0 && (
-            <div style={{ borderTop:'1px solid #002244', marginTop:'8px', paddingTop:'8px' }}>
-              <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'4px' }}>未使用のエッセンス</div>
-              {spare.map(e => (
-                <div key={e.id} style={{ padding:'3px 0' }}>
-                  <EssenceTag e={e} />
-                  {(e.ability_choices || []).length > 0 && !e.ability && (
-                    <button onClick={() => setResult(e)} style={{ ...miniBtn('#ffcc44'), marginLeft:'6px' }}>
-                      ★特殊能力を選ぶ
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+            )}
+            <V2EssenceFilter value={essFilter} lockColor={target?.color || null}
+              onChange={f => { setEssFilter(f); setRawEssPage(0) }} />
+            {essRows.length === 0 && (
+              <div style={{ color:'#7fa6d0', fontSize:'11px' }}>
+                {spare.length === 0 ? 'まだエッセンスがありません（抽出でできます）' : '絞り込みに合うエッセンスがありません'}
+              </div>
+            )}
+            {essShown.map(e => (
+              <button key={e.id} disabled={busy || !target}
+                onClick={() => target && (target.over ? setOverwrite({ essence: e, target }) : doSocket(e.id, target))}
+                style={{ display:'flex', alignItems:'center', gap:'6px', width:'100%', textAlign:'left',
+                  background:'#000818', border:`1px solid ${target ? '#004488' : '#002244'}`,
+                  padding:'5px 8px', marginBottom:'2px',
+                  fontFamily:'monospace', cursor: target ? 'pointer' : 'default' }}>
+                <EssenceTag e={e} />
+                {(e.ability_choices || []).length > 0 && !e.ability && (
+                  <span onClick={ev => { ev.stopPropagation(); setResult(e) }}
+                    style={{ ...miniBtn('#ffcc44'), marginLeft:'auto' }}>★特殊能力を選ぶ</span>
+                )}
+              </button>
+            ))}
+            <V2Pager page={essPage} total={essRows.length} onPage={setRawEssPage} unit="個" />
+          </div>
         </div>
       )}
 
