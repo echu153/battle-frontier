@@ -219,7 +219,9 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
           <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px' }}>
             ソケットがあるのは武器だけ（片手2枠・両手3枠）。色はドロップしたときに決まっていて、
             <span style={{ color:'#88ccff' }}>色の合うエッセンスしか入らない</span>。
-            外すには専用アイテムが要る（残り{prof?.unsocket_tickets || 0}個）
+            <span style={{ color:'#88ccff' }}>外す</span>には専用アイテムが要る（残り{prof?.unsocket_tickets || 0}個）。
+            アイテムが無くても<span style={{ color:'#cc88ff' }}>上書き</span>はできるが、
+            そのとき<span style={{ color:'#ff8844' }}>元のエッセンスは消える</span>
           </div>
 
           {weapons.length === 0 && <div style={{ color:'#446688', fontSize:'11px' }}>武器を装着してください</div>}
@@ -247,12 +249,20 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
                       background:'#000818', padding:'6px' }}>
                       <div style={{ color: COLOR_HEX[c], fontSize:'10px' }}>●{COLOR_LABEL[c]}の枠</div>
                       {e ? (
-                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'4px' }}>
+                        <>
                           <EssenceTag e={e} />
-                          <button disabled={busy || !(prof?.unsocket_tickets > 0)}
-                            onClick={() => call('v2_unsocket_essence', { p_essence_id: e.id })}
-                            style={miniBtn(prof?.unsocket_tickets > 0 ? '#ff8888' : '#334455')}>外す</button>
-                        </div>
+                          <div style={{ display:'flex', gap:'4px', marginTop:'3px' }}>
+                            {/* 外す＝エッセンスが無傷で戻る。専用アイテムが要る */}
+                            <button disabled={busy || !(prof?.unsocket_tickets > 0)}
+                              onClick={() => call('v2_unsocket_essence', { p_essence_id: e.id })}
+                              style={miniBtn(prof?.unsocket_tickets > 0 ? '#ff8888' : '#334455')}>外す</button>
+                            {/* 上書き＝アイテムは要らないが、**いま入っているエッセンスは消える** */}
+                            <button onClick={() => setTarget(isTarget ? null : { invId: w.inv.id, slot: i, color: c, over: e })}
+                              style={miniBtn(isTarget ? '#ffcc00' : '#cc88ff')}>
+                              {isTarget ? 'やめる' : '上書き'}
+                            </button>
+                          </div>
+                        </>
                       ) : (
                         <button onClick={() => setTarget(isTarget ? null : { invId: w.inv.id, slot: i, color: c })}
                           style={{ ...miniBtn(isTarget ? '#ffcc00' : '#00aaff'), marginTop:'3px' }}>
@@ -272,6 +282,12 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
               <div style={{ color: COLOR_HEX[target.color], fontSize:'11px', marginBottom:'4px' }}>
                 ●{COLOR_LABEL[target.color]}の枠に入れるエッセンスを選ぶ
               </div>
+              {target.over && (
+                <div style={{ color:'#ff8844', fontSize:'10px', marginBottom:'4px' }}>
+                  ⚠上書きすると、いま入っている「{statLine(target.over.stats)}」は消えます
+                  （残したいなら「外す」で取り出してください）
+                </div>
+              )}
               {spare.filter(e => e.color === target.color).length === 0 && (
                 <div style={{ color:'#446688', fontSize:'11px' }}>この色の未使用エッセンスがありません</div>
               )}

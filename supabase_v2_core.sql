@@ -1749,11 +1749,14 @@ revoke all on function public.v2_choose_ability(bigint, text) from public;
 revoke all on function public.v2_choose_ability(bigint, text) from anon;
 grant execute on function public.v2_choose_ability(bigint, text) to authenticated;
 
--- エッセンスを武器のソケットにはめる。**色が合う枠にしか入らない**・**上書きはできない**
+-- エッセンスを武器のソケットにはめる。**色が合う枠にしか入らない**
+-- ★ふさがっている枠には**上書きできる。ただし元のエッセンスは消える**
+--   （無傷で取り出したいときだけ「外す」＝専用アイテムを使う。2026-08-16 ユーザー決定）
 create or replace function public.v2_socket_essence(p_essence_id bigint, p_inventory_id bigint, p_slot int)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_uid uuid := auth.uid(); v_ess public.v2_essences; v_inv public.v2_inventory;
+  v_over int := 0;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   select * into v_ess from public.v2_essences where id = p_essence_id and player_id = v_uid;
@@ -1767,11 +1770,12 @@ begin
   if v_inv.sockets[p_slot + 1] <> v_ess.color then
     return jsonb_build_object('ok', false, 'error', '枠の色が合いません');
   end if;
-  if exists (select 1 from public.v2_essences where inv_id = p_inventory_id and socket_idx = p_slot) then
-    return jsonb_build_object('ok', false, 'error', 'その枠はふさがっています（外してから入れてください）');
-  end if;
+  -- ふさがっていたら上書き。**元のエッセンスは消える**
+  delete from public.v2_essences
+   where player_id = v_uid and inv_id = p_inventory_id and socket_idx = p_slot;
+  get diagnostics v_over = row_count;
   update public.v2_essences set inv_id = p_inventory_id, socket_idx = p_slot where id = p_essence_id;
-  return jsonb_build_object('ok', true);
+  return jsonb_build_object('ok', true, 'overwrote', v_over > 0);
 end;
 $$;
 revoke all on function public.v2_socket_essence(bigint, bigint, int) from public;
