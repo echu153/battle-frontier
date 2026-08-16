@@ -1,56 +1,134 @@
 import { useState } from 'react'
 import { supabase } from '../../supabase'
-import { powerOf, PLUS_MAX } from '../lib/equipment.js'
-import { wornIdsOf, stackInventory } from '../lib/loadout.js'
+import { ITEM_BY_ID, powerOf, PLUS_MAX, socketCountOf } from '../lib/equipment.js'
+import { wornIdsOf } from '../lib/loadout.js'
+import { COLOR_HEX, COLOR_LABEL } from '../lib/material.js'
+import {
+  ratesFor, checkPick, MAT_COUNT, RESULT_LABEL, RESULT_COLOR, RESULT_UP,
+  PROTECT_NAME, PROTECT_DESC,
+} from '../lib/smith.js'
 import { box, btn, miniBtn, RANK_COLOR, PART_ICON } from './v2ui.js'
 import V2Modal from './V2Modal.jsx'
 import V2Enchant from './V2Enchant.jsx'
 
 // 鍛冶屋。「強化」と「エンチャント」の2枚看板で、タブで切り替える。
-//  強化   … **同じ装備・同じ強化値を3個**合成する（あるけみすと式）
-//  エンチャント … 素材の抽出とソケット付け（中身は V2Enchant がそのまま入る）
-// 強化について：
-// 失敗＝消失／成功+1／大成功+2／超大成功+3。ランクが高いほど失敗しやすい。
-// 抽選も3個の消費もサーバー（v2_fuse）が1つのトランザクションで行う。
-const RATES = {
-  F:{ fail:0, ok:85, great:12, super:3 }, E:{ fail:2, ok:82, great:13, super:3 },
-  D:{ fail:4, ok:78, great:14, super:4 }, C:{ fail:6, ok:74, great:15, super:5 },
-  B:{ fail:9, ok:69, great:16, super:6 }, A:{ fail:12, ok:64, great:17, super:7 },
-  S:{ fail:15, ok:58, great:18, super:9 },
-}
-const RESULT_TEXT = { fail:['失敗… 装備は消えた', '#ff6666'], ok:['成功！ +1', '#88ccff'], great:['大成功！ +2', '#44ff88'], super:['超大成功！ +3', '#ffcc00'] }
-
+//
+// 強化の流れ（2026-08-16 に作り直し）：
+//   ① 持っている装備の一覧（種類ごと）から1つ選ぶ
+//   ② その装備の**持っている個体**が並ぶので、強化元を1個選ぶ
+//   ③ 同じ強化値の個体から強化素材を2個選ぶ
+// ★強化元は成功しても失敗しても残る。消えるのは強化素材2個だけ。
+//   前は3個まとめて溶けて新しい1個ができる方式だったが、それだと
+//   エッセンス入り・ソケット厳選の装備がどれか分からないまま消えていた。
+// ★エッセンスが入っている個体には印を付けて、素材に選ぶと警告を出す。
 export default function V2Smith({ prof, inventory, materials, essences, isAdmin, onProfile, onBack }) {
   const [menu, setMenu] = useState('fuse')   // fuse=強化 / enchant=エンチャント
-  const [pick, setPick] = useState([])     // 選んだ所持品ID（3つまで）
+  const [openEquip, setOpenEquip] = useState('')  // 個体一覧を開いている装備ID
+  const [baseId, setBaseId] = useState(null)      // 強化元
+  const [matIds, setMatIds] = useState([])        // 強化素材（2個）
+  const [protect, setProtect] = useState(false)   // 守りの護符を使う
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
-  const [confirm, setConfirm] = useState(false)   // 合成前の確認ポップアップ
-  const [result, setResult] = useState(null)      // 合成後の結果ポップアップ
+  const [confirm, setConfirm] = useState(false)
+  const [result, setResult] = useState(null)
 
-  // 「同じ装備・同じ強化値」のまとめ方は倉庫と共通（loadout.js が正）。
-  // 合成に使えるのは free＝装着していないぶんだけ。3個以上そろっていれば合成できる
-  const groups = stackInventory(inventory, wornIdsOf(prof, inventory))
-  const ready = groups.filter(g => g.free.length >= 3 && g.plus < PLUS_MAX)
+  const wornIds = wornIdsOf(prof, inventory)
+  const protectHave = prof?.protect_count || 0
 
-  const selectedGroup = pick.length ? groups.find(g => g.free.some(i => i.id === pick[0])) : null
-  const rate = selectedGroup ? RATES[selectedGroup.item.rank] : null
+  // その個体に入っているエッセンス
+  const essOf = (invId) => (essences || []).filter(e => String(e.inv_id) === String(invId))
 
-  const chooseGroup = (g) => { setPick(g.free.slice(0, 3).map(i => i.id)); setMsg(null); setConfirm(false) }
+  // 種類ごとにまとめた一覧（同じ装備なら＋違いも1つの見出しに入る）
+  const kinds = []
+  const byEquip = new Map()
+  for (const inv of inventory || []) {
+    const item = ITEM_BY_ID[inv.equip_id]
+    if (!item) continue
+    let k = byEquip.get(inv.equip_id)
+    if (!k) { k = { equipId: inv.equip_id, item, list: [] }; byEquip.set(inv.equip_id, k); kinds.push(k) }
+    k.list.push(inv)
+  }
+  for (const k of kinds) k.list.sort((a, b) => (b.plus || 0) - (a.plus || 0) || a.id - b.id)
+  kinds.sort((a, b) => powerOf(b.item, b.list[0].plus || 0) - powerOf(a.item, a.list[0].plus || 0))
 
-  // ★合成は3個とも消えることがあるので、**必ず確認を1段挟む**（旧版で連打して溶かす事故があった）
+  const opened = byEquip.get(openEquip) || null
+  const base = (inventory || []).find(i => i.id === baseId) || null
+  const baseItem = base ? ITEM_BY_ID[base.equip_id] : null
+  const mats = matIds.map(id => (inventory || []).find(i => i.id === id)).filter(Boolean)
+  const rate = baseItem ? ratesFor(baseItem.rank, protect) : null
+  const pickError = base ? checkPick({ base, mats, plusMax: PLUS_MAX, wornIds }) : ''
+  // 素材に選べる個体＝強化元と同じ強化値・装備中でない・強化元そのものでない
+  const candidates = base
+    ? (opened?.list || []).filter(i => i.id !== base.id && (i.plus || 0) === (base.plus || 0) && !wornIds.has(String(i.id)))
+    : []
+  const matHasEssence = mats.some(m => essOf(m.id).length > 0)
+
+  const reset = () => { setBaseId(null); setMatIds([]); setProtect(false); setMsg(null) }
+  const openKind = (equipId) => {
+    setOpenEquip(cur => (cur === equipId ? '' : equipId))
+    reset()
+  }
+  const chooseBase = (inv) => { setBaseId(inv.id); setMatIds([]); setMsg(null) }
+  const toggleMat = (inv) => {
+    setMsg(null)
+    setMatIds(cur => cur.includes(inv.id) ? cur.filter(x => x !== inv.id)
+      : cur.length >= MAT_COUNT ? cur : [...cur, inv.id])
+  }
+
   const fuse = async () => {
-    if (pick.length !== 3 || busy) return
+    if (pickError || busy) return
     setBusy(true); setMsg(null)
-    const { data, error } = await supabase.rpc('v2_fuse', { p_a: pick[0], p_b: pick[1], p_c: pick[2] })
+    const { data, error } = await supabase.rpc('v2_fuse', {
+      p_base: base.id, p_mat_a: mats[0].id, p_mat_b: mats[1].id, p_protect: protect,
+    })
     setBusy(false); setConfirm(false)
-    if (error) { setMsg({ text:error.message, color:'#ff6666' }); return }
-    if (!data?.ok) { setMsg({ text:data?.error || '合成に失敗しました', color:'#ff6666' }); return }
-    const [text, color] = RESULT_TEXT[data.result]
-    // 結果はポップアップで出す（成否がログに埋もれないように）
-    setResult({ ...data, text, color, name: selectedGroup.item.name })
-    setPick([])
+    if (error) { setMsg({ text: error.message, color:'#ff6666' }); return }
+    if (!data?.ok) { setMsg({ text: data?.error || '強化に失敗しました', color:'#ff6666' }); return }
+    setResult({ ...data, name: baseItem.name })
+    setMatIds([])
     onProfile(null)
+  }
+
+  // 個体1行
+  const invRow = (inv) => {
+    const item = ITEM_BY_ID[inv.equip_id]
+    const es = essOf(inv.id)
+    const isBase = base?.id === inv.id
+    const isMat = matIds.includes(inv.id)
+    const isWorn = wornIds.has(String(inv.id))
+    const selectable = !base ? true : candidates.some(c => c.id === inv.id)
+    const on = isBase || isMat
+    return (
+      <button key={inv.id}
+        onClick={() => (base ? (isBase ? reset() : selectable && toggleMat(inv)) : chooseBase(inv))}
+        disabled={base && !isBase && !selectable}
+        style={{ display:'block', width:'100%', textAlign:'left', marginBottom:'3px', padding:'6px 8px',
+          background: on ? '#002850' : '#000818',
+          border:`1px solid ${isBase ? '#44ff88' : isMat ? '#ffcc00' : '#002244'}`,
+          color:'#88ccff', fontFamily:'monospace', fontSize:'11px',
+          opacity: (base && !isBase && !selectable) ? 0.35 : 1,
+          cursor: (base && !isBase && !selectable) ? 'not-allowed' : 'pointer' }}>
+        <span style={{ color:'#446688', fontSize:'9px' }}>#{inv.id}</span>{' '}
+        {item.name}{inv.plus ? <span style={{ color:'#ffcc00' }}>+{inv.plus}</span> : ''}
+        <span style={{ color:'#446688' }}>　戦闘力{powerOf(item, inv.plus || 0)}</span>
+        {isWorn && <span style={{ color:'#44ff88', fontSize:'9px' }}>　装備中</span>}
+        {es.length > 0 && (
+          <span style={{ fontSize:'9px' }}>
+            {'　'}
+            {es.map(e => (
+              <span key={e.id} style={{ color: COLOR_HEX[e.color], marginRight:'3px' }}>
+                ●{COLOR_LABEL[e.color]}{e.ability ? `★${e.ability}` : ''}
+              </span>
+            ))}
+          </span>
+        )}
+        {socketCountOf(item) > 0 && es.length === 0 && (
+          <span style={{ color:'#334455', fontSize:'9px' }}>　ソケット{socketCountOf(item)}（空）</span>
+        )}
+        {isBase && <span style={{ color:'#44ff88', fontSize:'9px' }}>　← 強化元</span>}
+        {isMat && <span style={{ color:'#ffcc00', fontSize:'9px' }}>　← 強化素材</span>}
+      </button>
+    )
   }
 
   return (
@@ -74,89 +152,152 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
       )}
 
       {menu === 'fuse' && (<>
-      <div style={{ ...box, padding:'12px', marginBottom:'10px', fontSize:'11px', color:'#88aaff' }}>
+      <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
         <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'6px' }}>🔨 強化</div>
         <div style={{ color:'#556677', fontSize:'10px', lineHeight:1.8 }}>
-          同じ装備・同じ強化値を<b style={{ color:'#88ccff' }}>3個</b>合成すると強化値が上がります（上限+{PLUS_MAX}）。<br />
-          失敗すると<b style={{ color:'#ff6666' }}>3個とも消えます</b>。ランクが高いほど失敗しやすくなります。<br />
-          強化値が1つ上がるごとに装備の戦闘力は<b style={{ color:'#ffcc00' }}>1.5倍</b>になります。
+          <b style={{ color:'#44ff88' }}>強化元1個</b>に、同じ装備・同じ強化値の
+          <b style={{ color:'#ffcc00' }}>強化素材{MAT_COUNT}個</b>を使って強化値を上げます（上限+{PLUS_MAX}）。<br />
+          <b style={{ color:'#44ff88' }}>強化元は失敗しても残ります</b>。消えるのは強化素材{MAT_COUNT}個だけです。<br />
+          強化値が1つ上がるごとに装備の戦闘力は<b style={{ color:'#ffcc00' }}>1.5倍</b>。ランクが高いほど上がりにくくなります。
         </div>
       </div>
 
+      {/* ① 持っている装備 */}
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
-        <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>合成できるもの（3個以上あるもの）</div>
-        {ready.length === 0 && <div style={{ color:'#446688', fontSize:'11px' }}>同じ装備が3個そろっていません（装着中のものは使えません）</div>}
-        {ready.map(g => {
-          const on = selectedGroup && selectedGroup.item.id === g.item.id && selectedGroup.plus === g.plus
-          return (
-            <button key={`${g.item.id}#${g.plus}`} onClick={() => chooseGroup(g)}
+        <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>
+          持っている装備{openEquip ? '（タップで閉じる）' : '（タップで中身を見る）'}
+        </div>
+        {kinds.length === 0 && <div style={{ color:'#446688', fontSize:'11px' }}>まだ持っていません（出撃で手に入ります）</div>}
+        {kinds.map(k => (
+          <div key={k.equipId}>
+            <button onClick={() => openKind(k.equipId)}
               style={{ display:'block', width:'100%', textAlign:'left', marginBottom:'3px', padding:'6px 8px',
-                background: on ? '#002850' : '#000818', border:`1px solid ${on ? '#00aaff' : '#002244'}`,
+                background: openEquip === k.equipId ? '#002850' : '#000818',
+                border:`1px solid ${openEquip === k.equipId ? '#00aaff' : '#002244'}`,
                 color:'#88ccff', fontFamily:'monospace', fontSize:'11px', cursor:'pointer' }}>
-              <span style={{ color: RANK_COLOR[g.item.rank] }}>{g.item.rank}</span>
-              {' '}{PART_ICON[g.item.part]}{g.item.name}
-              {g.plus ? <span style={{ color:'#ffcc00' }}>+{g.plus}</span> : ''}
-              <span style={{ color:'#446688' }}>　×{g.free.length}個　戦闘力{powerOf(g.item, g.plus)} → {powerOf(g.item, g.plus + 1)}</span>
+              <span style={{ color: RANK_COLOR[k.item.rank] }}>{k.item.rank}</span>
+              {' '}{PART_ICON[k.item.part]}{k.item.name}
+              <span style={{ color:'#446688' }}>　×{k.list.length}個　{k.item.type}</span>
             </button>
-          )
-        })}
+            {/* ② その装備の個体一覧 */}
+            {openEquip === k.equipId && (
+              <div style={{ padding:'4px 0 8px 12px' }}>
+                <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>
+                  {base
+                    ? `強化素材を${MAT_COUNT}個選んでください（あと${MAT_COUNT - mats.length}個）／強化元をもう一度押すと選び直し`
+                    : '強化元にする1個を選んでください'}
+                </div>
+                {k.list.map(invRow)}
+                {base && candidates.length === 0 && (
+                  <div style={{ color:'#ff8844', fontSize:'10px' }}>
+                    同じ強化値（+{base.plus || 0}）の予備がありません
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
-      {selectedGroup && (
+      {/* ③ 確認して強化する */}
+      {base && baseItem && (
         <div style={{ ...box, padding:'12px' }}>
           <div style={{ fontSize:'12px', color:'#88ccff', marginBottom:'8px' }}>
-            {selectedGroup.item.name}{selectedGroup.plus ? `+${selectedGroup.plus}` : ''} を3個合成する
+            <span style={{ color: RANK_COLOR[baseItem.rank] }}>{baseItem.rank}</span>{' '}
+            {baseItem.name}{base.plus ? <span style={{ color:'#ffcc00' }}>+{base.plus}</span> : ''}
+            <span style={{ color:'#446688' }}>（#{base.id}）を強化する</span>
           </div>
-          <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', fontSize:'11px', marginBottom:'10px' }}>
-            <span style={{ color:'#88ccff' }}>成功 {rate.ok}%（+1）</span>
-            <span style={{ color:'#44ff88' }}>大成功 {rate.great}%（+2）</span>
-            <span style={{ color:'#ffcc00' }}>超大成功 {rate.super}%（+3）</span>
-            <span style={{ color: rate.fail ? '#ff6666' : '#446688' }}>失敗 {rate.fail}%{rate.fail ? '（消失）' : ''}</span>
+          <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', fontSize:'11px', marginBottom:'8px' }}>
+            <span style={{ color: RESULT_COLOR.ok }}>成功 {rate.ok}%（+1）</span>
+            <span style={{ color: rate.great ? RESULT_COLOR.great : '#334455' }}>大成功 {rate.great}%（+2）</span>
+            <span style={{ color: rate.super ? RESULT_COLOR.super : '#334455' }}>超大成功 {rate.super}%（+3）</span>
+            <span style={{ color: rate.fail ? RESULT_COLOR.fail : '#446688' }}>失敗 {rate.fail}%</span>
           </div>
-          <button onClick={() => setConfirm(true)} disabled={busy} style={{ ...btn('#ffcc00'), width:'100%' }}>
-            🔨 合成する
+
+          {/* 守りの護符 */}
+          <label style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'8px',
+            color: protectHave > 0 ? '#88ddaa' : '#334455', fontSize:'11px',
+            cursor: protectHave > 0 ? 'pointer' : 'not-allowed' }}>
+            <input type="checkbox" checked={protect} disabled={protectHave <= 0}
+              onChange={e => setProtect(e.target.checked)} />
+            🛡 {PROTECT_NAME}を使う<span style={{ color:'#446688' }}>（所持 {protectHave}個）</span>
+          </label>
+          <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>{PROTECT_DESC}</div>
+
+          {matHasEssence && (
+            <div style={{ color:'#ff8844', fontSize:'11px', marginBottom:'8px' }}>
+              ⚠ 強化素材にエッセンスの入った装備が含まれています（消えるとエッセンスは外れます）
+            </div>
+          )}
+          {pickError && <div style={{ color:'#7f95c4', fontSize:'11px', marginBottom:'8px' }}>{pickError}</div>}
+
+          <button onClick={() => setConfirm(true)} disabled={!!pickError || busy}
+            style={{ ...btn(pickError ? '#334455' : '#ffcc00'), width:'100%',
+              color: pickError ? '#445566' : '#ffcc00', cursor: pickError ? 'not-allowed' : 'pointer' }}>
+            🔨 強化する
           </button>
           {msg && <div style={{ marginTop:'8px', fontSize:'12px', color: msg.color }}>{msg.text}</div>}
         </div>
       )}
-      {!selectedGroup && msg && <div style={{ ...box, padding:'12px', fontSize:'12px', color: msg.color }}>{msg.text}</div>}
+      {!base && msg && <div style={{ ...box, padding:'12px', fontSize:'12px', color: msg.color }}>{msg.text}</div>}
 
-      {/* 合成前の確認 */}
-      {confirm && selectedGroup && (
-        <V2Modal title="🔨 合成の確認" color="#ffcc00" danger busy={busy}
-          confirmLabel="合成する" onConfirm={fuse} onClose={() => !busy && setConfirm(false)}>
-          <div style={{ color:'#88ccff' }}>
-            <span style={{ color: RANK_COLOR[selectedGroup.item.rank] }}>{selectedGroup.item.rank}</span>
-            {' '}{PART_ICON[selectedGroup.item.part]}{selectedGroup.item.name}
-            {selectedGroup.plus ? <span style={{ color:'#ffcc00' }}>+{selectedGroup.plus}</span> : ''}
-            {' '}を<b style={{ color:'#ffffff' }}>3個</b>使います
+      {/* 強化前の確認 */}
+      {confirm && base && baseItem && (
+        <V2Modal title="🔨 強化の確認" color="#ffcc00" danger busy={busy}
+          confirmLabel="強化する" onConfirm={fuse} onClose={() => !busy && setConfirm(false)}>
+          <div style={{ color:'#44ff88' }}>
+            強化元　{baseItem.name}{base.plus ? `+${base.plus}` : ''}
+            <span style={{ color:'#446688' }}>（#{base.id}）</span>
           </div>
-          <div style={{ color:'#556677', fontSize:'11px' }}>
-            戦闘力 {powerOf(selectedGroup.item, selectedGroup.plus)} → {powerOf(selectedGroup.item, selectedGroup.plus + 1)}
-            （残り{selectedGroup.free.length - 3}個）
+          <div style={{ color:'#ffcc00' }}>
+            強化素材　{mats.map(m => `#${m.id}`).join('・')}
+            <span style={{ color:'#446688' }}>　→ {protect ? '失敗しても残ります' : '失敗すると消えます'}</span>
+          </div>
+          <div style={{ color:'#556677', fontSize:'11px', marginTop:'6px' }}>
+            戦闘力 {powerOf(baseItem, base.plus || 0)} → {powerOf(baseItem, (base.plus || 0) + 1)}（成功時）
           </div>
           <div style={{ marginTop:'6px', fontSize:'11px' }}>
-            <div style={{ color:'#88ccff' }}>成功 {rate.ok}%（+1）／大成功 {rate.great}%（+2）／超大成功 {rate.super}%（+3）</div>
+            <div style={{ color:'#88ccff' }}>
+              成功 {rate.ok}%（+1）{rate.great ? `／大成功 ${rate.great}%（+2）` : ''}{rate.super ? `／超大成功 ${rate.super}%（+3）` : ''}
+            </div>
             <div style={{ color: rate.fail ? '#ff6666' : '#446688' }}>
-              失敗 {rate.fail}%{rate.fail ? '　→ 3個とも消えます' : '　→ このランクは失敗しません'}
+              失敗 {rate.fail}%
+              {rate.fail
+                ? protect ? '　→ 何も消えません' : `　→ 強化素材${MAT_COUNT}個が消えます`
+                : '　→ このランクは失敗しません'}
             </div>
           </div>
-          {selectedGroup.plus >= 4 && (
-            <div style={{ color:'#ffaa66', fontSize:'11px', marginTop:'6px' }}>
-              ⚠ +{selectedGroup.plus} の装備です。溶かすと戻せません。
+          {protect && (
+            <div style={{ color:'#88ddaa', fontSize:'11px', marginTop:'6px' }}>
+              🛡 {PROTECT_NAME}を1個使います（残り{protectHave - 1}個）。大成功・超大成功は出ません。
+            </div>
+          )}
+          {matHasEssence && (
+            <div style={{ color:'#ff8844', fontSize:'11px', marginTop:'6px' }}>
+              ⚠ 強化素材にエッセンスの入った装備があります。消えるとエッセンスは外れます。
             </div>
           )}
         </V2Modal>
       )}
 
-      {/* 合成後の結果 */}
+      {/* 強化後の結果 */}
       {result && (
-        <V2Modal title={result.result === 'fail' ? '💥 合成失敗' : '✨ 合成成功'} color={result.color}
-          onClose={() => setResult(null)}>
-          <div style={{ color: result.color, fontSize:'14px' }}>{result.text}</div>
-          {result.result !== 'fail' && (
+        <V2Modal title={result.result === 'fail' ? '💥 強化失敗' : '✨ 強化成功'}
+          color={RESULT_COLOR[result.result]} onClose={() => setResult(null)}>
+          <div style={{ color: RESULT_COLOR[result.result], fontSize:'14px' }}>
+            {RESULT_LABEL[result.result]}
+            {result.result !== 'fail' && `！ +${RESULT_UP[result.result]}`}
+          </div>
+          {result.result === 'fail' ? (
             <div style={{ color:'#88ccff', marginTop:'4px' }}>
-              {result.name}<span style={{ color:'#ffcc00' }}>+{result.plus}</span> を手に入れた！
+              {result.name}<span style={{ color:'#ffcc00' }}>+{result.plus}</span> は無事だった
+              <div style={{ color:'#446688', fontSize:'11px' }}>
+                {result.protected ? `🛡 ${PROTECT_NAME}が強化素材を守った` : `強化素材${MAT_COUNT}個が消えた`}
+              </div>
+            </div>
+          ) : (
+            <div style={{ color:'#88ccff', marginTop:'4px' }}>
+              {result.name}<span style={{ color:'#ffcc00' }}>+{result.plus}</span> になった！
             </div>
           )}
         </V2Modal>

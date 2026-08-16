@@ -225,8 +225,8 @@ test('エッセンスの名前は色×合計値の6段で決まる', () => {
   // 段の境目は 2 / 4 / 6 / 8 / 10
   assert.deepEqual([0, 1.9, 2, 3.9, 4, 5.9, 6, 7.9, 8, 9.9, 10, 30].map(gradeOf),
     [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5])
-  assert.equal(essenceName('red',   { str: 1.0 }), '火種')
-  assert.equal(essenceName('red',   { str: 12 }),  '劫火')
+  assert.equal(essenceName('red',   { str: 1.0 }), '鋭牙')
+  assert.equal(essenceName('red',   { str: 12 }),  '修羅')
   assert.equal(essenceName('blue',  { vit: 5 }),   '鉄壁')
   assert.equal(essenceName('green', { agi: 8.5 }), '神速')
   assert.equal(essenceFullName('green', { agi: 8.5 }), '神速エッセンス')
