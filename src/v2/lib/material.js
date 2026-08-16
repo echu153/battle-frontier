@@ -27,12 +27,14 @@ export const RARITY_COLOR = { normal:'#88aabb', rare:'#66ccff', ultra:'#ffcc44' 
 export const STEP = 0.1
 export const AREA_MAX = { 1:1.0, 2:1.0, 3:1.3, 4:1.3, 5:1.6, 6:1.6, 7:2.0, 8:2.0 }
 export const RARITY_FLOOR_RATE = { normal:0, rare:0.3, ultra:0.5 }  // 0 は「最低の0.1から」
-export const BOSS_CAP_RATE = 0.75   // ボス素材は2ステ持ちなので1ステあたりの上限を下げる
 const round1 = (v) => Math.round(v * 10) / 10
 
-export const capOf = (area, isBoss) => round1(AREA_MAX[area] * (isBoss ? BOSS_CAP_RATE : 1))
-export const rangeOf = (area, rarity, isBoss) => {
-  const hi = capOf(area, isBoss)
+// ★ボス素材もレンジは雑魚と同じ（2026-08-16 ユーザー決定「ボスだけ下げないで」）。
+//   2ステータス持ちなので、合計では雑魚素材のちょうど2倍になる。
+//   ⚠isBoss は呼び出し側の都合で残してあるだけで、レンジには効かない
+export const capOf = (area) => AREA_MAX[area]
+export const rangeOf = (area, rarity) => {
+  const hi = capOf(area)
   const rate = RARITY_FLOOR_RATE[rarity] || 0
   return { lo: rate ? Math.max(STEP, round1(hi * rate)) : STEP, hi }
 }
@@ -74,9 +76,10 @@ export const rollStats = (mat, rng = Math.random) => {
 }
 
 // ===== 色 =====
+// 表記は**緋・蒼・翠**（2026-08-16 ユーザー決定）。DBに入る値は red/blue/green のまま
 export const COLORS = ['red', 'blue', 'green']
-export const COLOR_LABEL = { red:'赤', blue:'青', green:'緑' }
-export const COLOR_HEX = { red:'#ff5566', blue:'#5599ff', green:'#44dd88' }
+export const COLOR_LABEL = { red:'緋', blue:'蒼', green:'翠' }
+export const COLOR_HEX = { red:'#ff4d5e', blue:'#4d94ff', green:'#3fd98a' }
 export const COLOR_OF_STAT = {
   str:'red', int_stat:'red',
   hp:'blue', mp:'blue', vit:'blue',
@@ -178,7 +181,7 @@ const build = () => {
     list.forEach(([enemy, stats, names, band], idx) => {
       const isBoss = idx === list.length - 1
       RARITIES.forEach((rarity, ri) => {
-        const { lo, hi } = rangeOf(area, rarity, isBoss)
+        const { lo, hi } = rangeOf(area, rarity)
         out.push({
           id: `m:${area}:${idx}:${RARITY_SHORT[rarity]}`,
           name: names[ri], enemy, area, idx, band, isBoss, rarity, stats, lo, hi,
@@ -227,4 +230,25 @@ export const extract = (ids, rng = Math.random) => {
 }
 
 // エッセンスの「強さ」を1つの数字で言うときの目安（合計%）
-export const essencePower = (stats) => round1(Object.values(stats || {}).reduce((a, b) => a + b, 0))
+export const essencePower = (stats) => round1(Object.values(stats || {}).reduce((a, b) => a + Number(b || 0), 0))
+
+// ===== エッセンスの名前 =====
+// **色 × 合計値の6段**で決まる漢字2文字（2026-08-16 ユーザー決定）。
+// 合計値が高いほど強そうな字にしてある。画面には「〇〇エッセンス」の形で出す
+export const GRADE_MIN = [0, 2, 4, 6, 8, 10]   // この値以上で1段上がる（最後は10%以上）
+export const ESSENCE_NAMES = {
+  red:   ['火種', '熾火', '猛炎', '烈火', '焦熱', '劫火'],   // 緋＝攻撃寄り
+  blue:  ['薄氷', '堅氷', '鉄壁', '磐石', '金剛', '不動'],   // 蒼＝守り寄り
+  green: ['微風', '疾風', '旋風', '迅雷', '神速', '天翔'],   // 翠＝器用・素早さ寄り
+}
+// 合計値が何段目か（0〜5）
+export const gradeOf = (total) => {
+  let g = 0
+  for (let i = 0; i < GRADE_MIN.length; i++) if (total >= GRADE_MIN[i]) g = i
+  return g
+}
+// 「烈火」のような2文字。色と合計値から決まる
+export const essenceName = (color, stats) =>
+  ESSENCE_NAMES[color]?.[gradeOf(essencePower(stats))] || ''
+// 「烈火エッセンス」まで含めた表示名
+export const essenceFullName = (color, stats) => `${essenceName(color, stats)}エッセンス`

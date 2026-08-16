@@ -4,7 +4,7 @@ import { AREAS } from '../lib/enemies.js'
 import { equippedItems } from '../lib/loadout.js'
 import {
   MATERIAL_BY_ID, RARITY_LABEL, RARITY_COLOR, COLOR_LABEL, COLOR_HEX,
-  EXTRACT_COST, canExtract, essencePower, materialsOfArea,
+  EXTRACT_COST, BOSS_LIMIT, canExtract, essencePower, essenceName, essenceFullName, materialsOfArea,
 } from '../lib/material.js'
 import { enchantOf } from '../lib/enchant.js'
 import { STAT_DEFS } from '../lib/stats.js'
@@ -14,7 +14,6 @@ import V2Modal from './V2Modal.jsx'
 // エンチャント：素材を見る → 5個選んで抽出 → できたエッセンスを武器のソケットへ。
 // ★抽選の権威はサーバー（v2_extract_essence）。ここは選んで送るだけ。
 const TABS = [
-  { key:'mats',    label:'素材' },
   { key:'extract', label:'抽出' },
   { key:'socket',  label:'ソケット' },
 ]
@@ -29,7 +28,9 @@ const statLine = (stats) =>
 function EssenceTag({ e }) {
   return (
     <span style={{ color: COLOR_HEX[e.color], fontSize:'11px' }}>
-      ●{COLOR_LABEL[e.color]} <span style={{ color:'#88ccff' }}>{statLine(e.stats)}</span>
+      ●{COLOR_LABEL[e.color]}
+      {' '}<b>{essenceName(e.color, e.stats)}</b>
+      {' '}<span style={{ color:'#88ccff' }}>{statLine(e.stats)}</span>
       {e.ability && <span style={{ color:'#ffcc44' }}>　★{e.ability}</span>}
     </span>
   )
@@ -37,7 +38,7 @@ function EssenceTag({ e }) {
 
 // embedded … 鍛冶屋の中に置くとき。自前の「← ホームへ」は出さない（外側が持っている）
 export default function V2Enchant({ prof, inventory, materials, essences, onRefresh, onBack, embedded = false }) {
-  const [tab, setTab] = useState('mats')
+  const [tab, setTab] = useState('extract')
   const [area, setArea] = useState(1)
   const [picked, setPicked] = useState([])      // 抽出に使う素材ID（同じIDを重ねてよい）
   const [confirm, setConfirm] = useState(false) // 抽出前の確認ポップアップ
@@ -82,8 +83,14 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
     if (ok) setTarget(null)
   }
 
+  // ★ボス素材は5枠に1個まで。1個選んだ時点で**他のボス素材は選べなくする**
+  //   （選べてしまってから抽出で弾かれるのは分かりにくい）
+  const bossPicked = picked.filter(id => MATERIAL_BY_ID[id]?.isBoss).length >= BOSS_LIMIT
+  const canPick = (m) => left(m.id) > 0 && picked.length < EXTRACT_COST && !(m.isBoss && bossPicked)
+
   const pick = (id) => {
-    if (picked.length >= EXTRACT_COST || left(id) <= 0) return
+    const m = MATERIAL_BY_ID[id]
+    if (!m || !canPick(m)) return
     setPicked(p => [...p, id])
     setMsg('')
   }
@@ -117,37 +124,6 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
           エッセンス {spare.length}個（未使用）
         </span>
       </div>
-
-      {/* ===== 素材 ===== */}
-      {tab === 'mats' && (
-        <div style={{ ...box, padding:'12px' }}>
-          <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'8px' }}>
-            {AREAS.map(a => (
-              <button key={a.id} onClick={() => setArea(a.id)}
-                style={{ ...miniBtn(area === a.id ? '#00aaff' : '#446688'), background: area === a.id ? '#002850' : '#000818' }}>
-                {a.id}
-              </button>
-            ))}
-            <span style={{ color:'#88ccff', fontSize:'11px', alignSelf:'center', marginLeft:'6px' }}>
-              {AREAS.find(a => a.id === area)?.name}
-            </span>
-          </div>
-          {materialsOfArea(area).filter(m => held[m.id]).length === 0 && (
-            <div style={{ color:'#446688', fontSize:'11px' }}>このエリアの素材はまだ持っていません（出撃で手に入ります）</div>
-          )}
-          {materialsOfArea(area).map(m => held[m.id] ? (
-            <div key={m.id} style={{ borderTop:'1px solid #002244', padding:'5px 0', display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
-              <span style={{ color: RARITY_COLOR[m.rarity], fontSize:'10px', minWidth:'34px' }}>{RARITY_LABEL[m.rarity]}</span>
-              <span style={{ color:'#88ccff', fontSize:'12px' }}>{m.name}</span>
-              <span style={{ color:'#ffffff', fontSize:'11px' }}>×{held[m.id]}</span>
-              <span style={{ color:'#556677', fontSize:'10px' }}>
-                {m.enemy}　{m.stats.map(k => STAT_DEFS[k].label).join('・')} {m.lo}〜{m.hi}%
-                {m.isBoss && <span style={{ color:'#ffcc44' }}>　ボス素材</span>}
-              </span>
-            </div>
-          ) : null)}
-        </div>
-      )}
 
       {/* ===== 抽出 ===== */}
       {tab === 'extract' && (
@@ -188,13 +164,17 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
             ))}
           </div>
           {materialsOfArea(area).map(m => held[m.id] ? (
-            <button key={m.id} onClick={() => pick(m.id)} disabled={left(m.id) <= 0 || picked.length >= EXTRACT_COST}
+            <button key={m.id} onClick={() => pick(m.id)} disabled={!canPick(m)}
               style={{ display:'block', width:'100%', textAlign:'left', background:'#000818',
                 border:'1px solid #002244', borderLeft:`3px solid ${RARITY_COLOR[m.rarity]}`,
-                color: left(m.id) > 0 ? '#88ccff' : '#334455', padding:'5px 8px', marginBottom:'2px',
-                fontFamily:'monospace', fontSize:'11px', cursor: left(m.id) > 0 ? 'pointer' : 'default' }}>
+                color: canPick(m) ? '#88ccff' : '#334455', opacity: canPick(m) ? 1 : 0.45,
+                padding:'5px 8px', marginBottom:'2px',
+                fontFamily:'monospace', fontSize:'11px', cursor: canPick(m) ? 'pointer' : 'default' }}>
               {m.name} <span style={{ color:'#ffffff' }}>×{left(m.id)}</span>
-              <span style={{ color:'#556677' }}>　{m.stats.map(k => STAT_DEFS[k].label).join('・')} {m.lo}〜{m.hi}%</span>
+              <span style={{ color:'#556677' }}>
+                　{m.enemy}　{m.stats.map(k => STAT_DEFS[k].label).join('・')} {m.lo}〜{m.hi}%
+              </span>
+              {m.isBoss && <span style={{ color:'#ffcc44' }}>　ボス素材</span>}
             </button>
           ) : null)}
         </div>
@@ -336,7 +316,7 @@ export default function V2Enchant({ prof, inventory, materials, essences, onRefr
 
       {/* ===== 抽出の結果 ===== */}
       {result && (
-        <V2Modal title="⚗ エッセンスができた！" color="#44ff88"
+        <V2Modal title={`⚗ ${essenceFullName(result.color, result.stats)}ができた！`} color={COLOR_HEX[result.color]}
           onClose={() => setResult(null)}
           closeLabel={!result.ability && (result.ability_choices || []).length > 0 ? 'あとで選ぶ' : '受け取る'}>
           <div style={{ color:'#44ff88', fontSize:'13px' }}>合計 {essencePower(result.stats)}%</div>

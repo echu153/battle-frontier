@@ -7,6 +7,7 @@ import {
   MATERIALS, MATERIAL_BY_ID, materialOf, materialsOfEnemy, RARITIES,
   rangeOf, ratioOf, valueTable, meanOf, rollValue, rollStats, colorOf,
   canExtract, extract, EXTRACT_COST, AREA_MAX, TOP_WEIGHT, essencePower,
+  gradeOf, essenceName, essenceFullName, ESSENCE_NAMES, GRADE_MIN, COLOR_LABEL,
 } from './material.js'
 import { allEnemies } from './enemies.js'
 import { ENCHANTS } from './enchant.js'
@@ -60,9 +61,11 @@ test('レンジの最大は2.0%。上限はエリア帯・下限はレア度で�
   assert.deepEqual(rangeOf(1, 'ultra', false),  { lo:0.5, hi:1.0 })
   assert.deepEqual(rangeOf(8, 'normal', false), { lo:0.1, hi:2.0 })
   assert.deepEqual(rangeOf(8, 'ultra', false),  { lo:1.0, hi:2.0 })
-  // ボスは各ステの上限が帯MAX×0.75
-  assert.deepEqual(rangeOf(1, 'normal', true), { lo:0.1, hi:0.8 })
-  assert.deepEqual(rangeOf(8, 'ultra', true),  { lo:0.8, hi:1.5 })
+  // ★ボス素材もレンジは雑魚と同じ（2ステ持ちなので合計はちょうど2倍になる）
+  assert.deepEqual(rangeOf(1, 'normal', true), rangeOf(1, 'normal', false))
+  assert.deepEqual(rangeOf(8, 'ultra', true),  rangeOf(8, 'ultra', false))
+  const boss = materialOf('ビッグスライム', 'normal')
+  assert.deepEqual([boss.lo, boss.hi], [0.1, 1.0])
 })
 
 test('重みはレンジごとに変わり、最大値の出やすさが先頭の7.5%に揃う', () => {
@@ -215,4 +218,31 @@ test('装着中の武器に刺さったエッセンスだけがステータス�
   assert.equal(withEss.str, base.str, '装着していない武器・未使用のエッセンスが乗ってしまっている')
   // 特殊能力も装着中のぶんだけ
   assert.deepEqual(essenceAbilities(equippedEssences(prof, inv, ess)), ['コウモリ'])
+})
+
+// ===== エッセンスの名前 =====
+test('エッセンスの名前は色×合計値の6段で決まる', () => {
+  // 段の境目は 2 / 4 / 6 / 8 / 10
+  assert.deepEqual([0, 1.9, 2, 3.9, 4, 5.9, 6, 7.9, 8, 9.9, 10, 30].map(gradeOf),
+    [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5])
+  assert.equal(essenceName('red',   { str: 1.0 }), '火種')
+  assert.equal(essenceName('red',   { str: 12 }),  '劫火')
+  assert.equal(essenceName('blue',  { vit: 5 }),   '鉄壁')
+  assert.equal(essenceName('green', { agi: 8.5 }), '神速')
+  assert.equal(essenceFullName('green', { agi: 8.5 }), '神速エッセンス')
+})
+
+test('名前はどの色も6段ぶんあり、すべて漢字2文字', () => {
+  for (const [color, names] of Object.entries(ESSENCE_NAMES)) {
+    assert.equal(names.length, GRADE_MIN.length, color)
+    for (const n of names) assert.equal([...n].length, 2, `${color} の ${n}`)
+    assert.equal(new Set(names).size, names.length, `${color} に重複がある`)
+  }
+  // 色をまたいでも重複しない
+  const all = Object.values(ESSENCE_NAMES).flat()
+  assert.equal(new Set(all).size, all.length)
+})
+
+test('色の表記は緋・蒼・翠', () => {
+  assert.deepEqual(COLOR_LABEL, { red:'緋', blue:'蒼', green:'翠' })
 })
