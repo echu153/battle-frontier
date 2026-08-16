@@ -7,7 +7,9 @@ import {
   ratesFor, checkPick, MAT_COUNT, RESULT_LABEL, RESULT_COLOR, RESULT_UP,
   PROTECT_NAME, PROTECT_DESC,
 } from '../lib/smith.js'
+import { filterRows, sortRows, pageOf, clampPage, defaultFilter } from '../lib/browse.js'
 import { box, btn, miniBtn, RANK_COLOR, PART_ICON } from './v2ui.js'
+import { V2Filter, V2Pager } from './V2Browse.jsx'
 import V2Modal from './V2Modal.jsx'
 import V2Enchant from './V2Enchant.jsx'
 
@@ -24,6 +26,8 @@ import V2Enchant from './V2Enchant.jsx'
 export default function V2Smith({ prof, inventory, materials, essences, isAdmin, onProfile, onBack }) {
   const [menu, setMenu] = useState('fuse')   // fuse=強化 / enchant=エンチャント
   const [openEquip, setOpenEquip] = useState('')  // 個体一覧を開いている装備ID
+  const [filter, setFilter] = useState(defaultFilter)  // 絞り込みと並べ替え
+  const [rawPage, setRawPage] = useState(0)            // ページ（0始まり）
   const [baseId, setBaseId] = useState(null)      // 強化元
   const [matIds, setMatIds] = useState([])        // 強化素材（2個）
   const [protect, setProtect] = useState(false)   // 守りの護符を使う
@@ -39,17 +43,25 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
   const essOf = (invId) => (essences || []).filter(e => String(e.inv_id) === String(invId))
 
   // 種類ごとにまとめた一覧（同じ装備なら＋違いも1つの見出しに入る）
-  const kinds = []
+  const all = []
   const byEquip = new Map()
   for (const inv of inventory || []) {
     const item = ITEM_BY_ID[inv.equip_id]
     if (!item) continue
     let k = byEquip.get(inv.equip_id)
-    if (!k) { k = { equipId: inv.equip_id, item, list: [] }; byEquip.set(inv.equip_id, k); kinds.push(k) }
+    if (!k) { k = { equipId: inv.equip_id, item, list: [], plus: 0, count: 0, power: 0 }; byEquip.set(inv.equip_id, k); all.push(k) }
     k.list.push(inv)
   }
-  for (const k of kinds) k.list.sort((a, b) => (b.plus || 0) - (a.plus || 0) || a.id - b.id)
-  kinds.sort((a, b) => powerOf(b.item, b.list[0].plus || 0) - powerOf(a.item, a.list[0].plus || 0))
+  for (const k of all) {
+    k.list.sort((a, b) => (b.plus || 0) - (a.plus || 0) || a.id - b.id)
+    k.plus  = k.list[0].plus || 0      // いちばん強化されている個体の値（並べ替え・絞り込み用）
+    k.count = k.list.length
+    k.power = powerOf(k.item, k.plus)
+  }
+  // ★絞り込みと並べ替えは倉庫と同じ（browse.js）。強化値は個体の最大で見る
+  const filtered = sortRows(filterRows(all, filter), filter.sort, filter.asc)
+  const page = clampPage(rawPage, filtered.length)
+  const kinds = pageOf(filtered, page)
 
   const opened = byEquip.get(openEquip) || null
   const base = (inventory || []).find(i => i.id === baseId) || null
@@ -178,12 +190,14 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
         )}
       </div>
 
-      {/* ① 持っている装備 */}
+      {/* ① 持っている装備。②③は開いた装備のすぐ下に出す
+          （前は強化ボタンが一覧の下にあり、選ぶたびに画面の端まで動く必要があった） */}
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
-        <div style={{ color:'#446688', fontSize:'10px', marginBottom:'6px' }}>
-          持っている装備{openEquip ? '（タップで閉じる）' : '（タップで中身を見る）'}
-        </div>
-        {kinds.length === 0 && <div style={{ color:'#446688', fontSize:'11px' }}>まだ持っていません（出撃で手に入ります）</div>}
+        <V2Filter value={filter} rows={all} onChange={f => { setFilter(f); setRawPage(0) }} />
+        {all.length === 0 && <div style={{ color:'#446688', fontSize:'11px' }}>まだ持っていません（出撃で手に入ります）</div>}
+        {all.length > 0 && filtered.length === 0 && (
+          <div style={{ color:'#446688', fontSize:'11px' }}>絞り込みに合う装備がありません</div>
+        )}
         {kinds.map(k => (
           <div key={k.equipId}>
             <button onClick={() => openKind(k.equipId)}
@@ -193,9 +207,11 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
                 color:'#88ccff', fontFamily:'monospace', fontSize:'11px', cursor:'pointer' }}>
               <span style={{ color: RANK_COLOR[k.item.rank] }}>{k.item.rank}</span>
               {' '}{PART_ICON[k.item.part]}{k.item.name}
-              <span style={{ color:'#446688' }}>　×{k.list.length}個　{k.item.type}</span>
+              <span style={{ color:'#446688' }}>　×{k.count}個　{k.item.type}</span>
+              <span style={{ color:'#446688', float:'right' }}>{openEquip === k.equipId ? '▲' : '▼'}</span>
             </button>
-            {/* ② その装備の個体一覧 */}
+
+            {/* ② その装備の個体一覧 → ③ そのまま下で強化まで終わらせる */}
             {openEquip === k.equipId && (
               <div style={{ padding:'4px 0 8px 12px' }}>
                 <div style={{ color:'#446688', fontSize:'10px', marginBottom:'4px' }}>
@@ -209,52 +225,47 @@ export default function V2Smith({ prof, inventory, materials, essences, isAdmin,
                     同じ強化値（+{base.plus || 0}）の予備がありません
                   </div>
                 )}
+
+                {base && baseItem && (
+                  <div style={{ border:'1px solid #0044aa', background:'#000c1c', padding:'10px', marginTop:'6px' }}>
+                    <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', fontSize:'11px', marginBottom:'8px' }}>
+                      <span style={{ color: RESULT_COLOR.ok }}>成功 {rate.ok}%（+1）</span>
+                      <span style={{ color: rate.great ? RESULT_COLOR.great : '#334455' }}>大成功 {rate.great}%（+2）</span>
+                      <span style={{ color: rate.super ? RESULT_COLOR.super : '#334455' }}>超大成功 {rate.super}%（+3）</span>
+                      <span style={{ color: rate.fail ? RESULT_COLOR.fail : '#446688' }}>失敗 {rate.fail}%</span>
+                    </div>
+
+                    {/* 守りの護符 */}
+                    <label style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px',
+                      color: protectHave > 0 ? '#88ddaa' : '#334455', fontSize:'11px',
+                      cursor: protectHave > 0 ? 'pointer' : 'not-allowed' }}>
+                      <input type="checkbox" checked={protect} disabled={protectHave <= 0}
+                        onChange={e => setProtect(e.target.checked)} />
+                      🛡 {PROTECT_NAME}を使う<span style={{ color:'#446688' }}>（所持 {protectHave}個）</span>
+                    </label>
+                    <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>{PROTECT_DESC}</div>
+
+                    {matHasEssence && (
+                      <div style={{ color:'#ff8844', fontSize:'11px', marginBottom:'8px' }}>
+                        ⚠ 強化素材にエッセンスの入った装備が含まれています（消えるとエッセンスは外れます）
+                      </div>
+                    )}
+                    {pickError && <div style={{ color:'#7f95c4', fontSize:'11px', marginBottom:'8px' }}>{pickError}</div>}
+
+                    <button onClick={() => setConfirm(true)} disabled={!!pickError || busy}
+                      style={{ ...btn(pickError ? '#334455' : '#ffcc00'), width:'100%',
+                        color: pickError ? '#445566' : '#ffcc00', cursor: pickError ? 'not-allowed' : 'pointer' }}>
+                      🔨 {baseItem.name}{base.plus ? `+${base.plus}` : ''}（#{base.id}）を強化する
+                    </button>
+                    {msg && <div style={{ marginTop:'8px', fontSize:'12px', color: msg.color }}>{msg.text}</div>}
+                  </div>
+                )}
               </div>
             )}
           </div>
         ))}
+        <V2Pager page={page} total={filtered.length} onPage={setRawPage} unit="種" />
       </div>
-
-      {/* ③ 確認して強化する */}
-      {base && baseItem && (
-        <div style={{ ...box, padding:'12px' }}>
-          <div style={{ fontSize:'12px', color:'#88ccff', marginBottom:'8px' }}>
-            <span style={{ color: RANK_COLOR[baseItem.rank] }}>{baseItem.rank}</span>{' '}
-            {baseItem.name}{base.plus ? <span style={{ color:'#ffcc00' }}>+{base.plus}</span> : ''}
-            <span style={{ color:'#446688' }}>（#{base.id}）を強化する</span>
-          </div>
-          <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', fontSize:'11px', marginBottom:'8px' }}>
-            <span style={{ color: RESULT_COLOR.ok }}>成功 {rate.ok}%（+1）</span>
-            <span style={{ color: rate.great ? RESULT_COLOR.great : '#334455' }}>大成功 {rate.great}%（+2）</span>
-            <span style={{ color: rate.super ? RESULT_COLOR.super : '#334455' }}>超大成功 {rate.super}%（+3）</span>
-            <span style={{ color: rate.fail ? RESULT_COLOR.fail : '#446688' }}>失敗 {rate.fail}%</span>
-          </div>
-
-          {/* 守りの護符 */}
-          <label style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'8px',
-            color: protectHave > 0 ? '#88ddaa' : '#334455', fontSize:'11px',
-            cursor: protectHave > 0 ? 'pointer' : 'not-allowed' }}>
-            <input type="checkbox" checked={protect} disabled={protectHave <= 0}
-              onChange={e => setProtect(e.target.checked)} />
-            🛡 {PROTECT_NAME}を使う<span style={{ color:'#446688' }}>（所持 {protectHave}個）</span>
-          </label>
-          <div style={{ color:'#446688', fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>{PROTECT_DESC}</div>
-
-          {matHasEssence && (
-            <div style={{ color:'#ff8844', fontSize:'11px', marginBottom:'8px' }}>
-              ⚠ 強化素材にエッセンスの入った装備が含まれています（消えるとエッセンスは外れます）
-            </div>
-          )}
-          {pickError && <div style={{ color:'#7f95c4', fontSize:'11px', marginBottom:'8px' }}>{pickError}</div>}
-
-          <button onClick={() => setConfirm(true)} disabled={!!pickError || busy}
-            style={{ ...btn(pickError ? '#334455' : '#ffcc00'), width:'100%',
-              color: pickError ? '#445566' : '#ffcc00', cursor: pickError ? 'not-allowed' : 'pointer' }}>
-            🔨 強化する
-          </button>
-          {msg && <div style={{ marginTop:'8px', fontSize:'12px', color: msg.color }}>{msg.text}</div>}
-        </div>
-      )}
       {!base && msg && <div style={{ ...box, padding:'12px', fontSize:'12px', color: msg.color }}>{msg.text}</div>}
 
       {/* 強化前の確認 */}

@@ -4,20 +4,29 @@ import { SLOTS, SLOT_LABEL, PARTS, powerOf, statsOf, slotsFor } from '../lib/equ
 import { equippedItems, gearPower, wornIdsOf, stackInventory } from '../lib/loadout.js'
 import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
 import { COLOR_HEX } from '../lib/material.js'
+import { filterRows, sortRows, pageOf, clampPage, defaultFilter } from '../lib/browse.js'
 import { box, miniBtn, RANK_COLOR, PART_ICON } from './v2ui.js'
+import { V2Filter, V2Pager } from './V2Browse.jsx'
 
 // 倉庫：持っている装備を見て、着け外しする。
 // 枠の種類チェックはサーバー（v2_equip）が行う。ここは押せる枠だけ出す。
 export default function V2Storage({ prof, inventory, onProfile, onBack }) {
   const [part, setPart] = useState('すべて')
+  const [filter, setFilter] = useState(defaultFilter)  // 絞り込みと並べ替え（鍛冶屋と共通）
+  const [rawPage, setRawPage] = useState(0)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
 
   const worn = equippedItems(prof, inventory)
   // ★同じ装備・同じ強化値はひとまとめ。＋が違うものは別々に並ぶ（まとめ方は loadout.js が正）
-  const rows = stackInventory(inventory, wornIdsOf(prof, inventory))
+  const stacks = stackInventory(inventory, wornIdsOf(prof, inventory))
+    .map(g => ({ ...g, count: g.list.length, power: powerOf(g.item, g.plus) }))
     .filter(g => part === 'すべて' || g.item.part === part)
-  const shownCount = rows.reduce((t, g) => t + g.list.length, 0)
+  // ★絞り込み・並べ替え・ページ送りは鍛冶屋と共通（browse.js）
+  const filtered = sortRows(filterRows(stacks, filter), filter.sort, filter.asc)
+  const page = clampPage(rawPage, filtered.length)
+  const rows = pageOf(filtered, page)
+  const shownCount = filtered.reduce((t, g) => t + g.list.length, 0)
 
   const call = async (fn, args) => {
     setBusy(true); setMsg('')
@@ -74,8 +83,12 @@ export default function V2Storage({ prof, inventory, onProfile, onBack }) {
             {shownCount}個 / 全{(inventory || []).length}個
           </span>
         </div>
+        <V2Filter value={filter} rows={stacks} onChange={f => { setFilter(f); setRawPage(0) }} />
 
-        {rows.length === 0 && <div style={{ color:'#446688', fontSize:'11px' }}>まだ持っていません（出撃で手に入ります）</div>}
+        {(inventory || []).length === 0 && <div style={{ color:'#446688', fontSize:'11px' }}>まだ持っていません（出撃で手に入ります）</div>}
+        {(inventory || []).length > 0 && rows.length === 0 && (
+          <div style={{ color:'#446688', fontSize:'11px' }}>絞り込みに合う装備がありません</div>
+        )}
         {rows.map(g => {
           const { item, plus } = g
           const st = statsOf(item, plus)
@@ -115,6 +128,7 @@ export default function V2Storage({ prof, inventory, onProfile, onBack }) {
             </div>
           )
         })}
+        <V2Pager page={page} total={filtered.length} onPage={setRawPage} unit="種" />
         {msg && <div style={{ marginTop:'8px', fontSize:'11px', color:'#ffcc66' }}>{msg}</div>}
       </div>
     </div>

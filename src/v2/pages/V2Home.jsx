@@ -312,7 +312,11 @@ export default function V2Home() {
         {/* ステータス */}
         {prof && (
           <>
-            <V2Status prof={prof} inventory={inventory} essences={essences} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
+            {/* ★ステータスはホームだけに出す。施設は別の画面として開く
+                （施設の一覧を見るのに、毎回ステータスぶんスクロールさせられていた） */}
+            {screen === 'home' && (
+              <V2Status prof={prof} inventory={inventory} essences={essences} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
+            )}
 
             {/* ===== 出撃（旧版と同じで、街のブロックがそのままホームに載る） ===== */}
             {screen === 'home' && (
