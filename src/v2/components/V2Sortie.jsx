@@ -68,6 +68,7 @@ export default function V2Sortie({ prof, inventory, runes, onProfile, onScene })
       ? { text:`⚠ ボス出現！ ${enc.enemy.name}が現れた！`, color:'#ff4444' }
       : { text:`${enc.enemy.name}が現れた！`, color:'#88ccff' })
     const foe = enc.enemy.name
+    const you = me.name   // ★ログはプレイヤー名で出す（「あなた」とは書かない）
     for (const l of r.log) {
       const mine = l.side === me.name
       if (l.type === 'hp') {
@@ -77,22 +78,22 @@ export default function V2Sortie({ prof, inventory, runes, onProfile, onScene })
         if (l.hits === 0) out.push({ text: mine ? `⚔ ${l.skill}！ しかし${foe}にかわされた` : `⚔ ${foe}の「${l.skill}」！ しかしかわした`, color:'#94a7bb' })
         else out.push(mine
           ? { text:`⚔ ${l.skill}！ ${foe}に${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}${l.drain ? ` HPが${l.drain.toLocaleString()}回復した！` : ''}`, color:'#ffcc00' }
-          : { text:`⚔ ${foe}の「${l.skill}」！ あなたに${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`, color:'#ff4444' })
+          : { text:`⚔ ${foe}の「${l.skill}」！ ${you}に${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`, color:'#ff4444' })
       } else if (l.type === 'normal') {
         if (!l.hit) out.push({ text: mine ? `攻撃！ しかし${foe}にかわされた` : `${foe}の攻撃！ しかしかわした`, color:'#94a7bb' })
         else out.push(mine
           ? { text:`攻撃！ ${foe}に${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`, color:'#ffcc00' }
-          : { text:`${foe}の攻撃！ あなたに${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`, color:'#ff4444' })
+          : { text:`${foe}の攻撃！ ${you}に${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`, color:'#ff4444' })
       } else if (l.type === 'misfire') {
         out.push({ text: mine ? `${l.skill}を出そうとしたが不発！` : `${foe}は${l.skill}を出そうとしたが不発！`, color:'#94a7bb' })
       } else if (l.type === 'heal') {
         out.push({ text:`💚 ${mine ? '' : `${foe}の`}${l.skill}！ HPが${l.heal.toLocaleString()}回復した！`, color:'#44ff88' })
       } else if (l.type === 'regenTick') {
-        out.push({ text:`💚 ${mine ? 'あなた' : foe}のHPが${l.heal.toLocaleString()}回復した！`, color:'#44ff88' })
+        out.push({ text:`💚 ${mine ? you : foe}のHPが${l.heal.toLocaleString()}回復した！`, color:'#44ff88' })
       } else if (l.type === 'buff') {
         out.push({ text:`✨ ${mine ? '' : `${foe}の`}${l.skill}！`, color:'#44aaff' })
       } else if (l.type === 'extra') {
-        out.push({ text:`⚡ ${mine ? 'あなた' : foe}は素早く動いた！`, color:'#ffcc44' })
+        out.push({ text:`⚡ ${mine ? you : foe}は素早く動いた！`, color:'#ffcc44' })
       } else if (l.type === 'wall') {
         out.push({ text:`💀 骸の壁が攻撃を和らげた！`, color:'#cc44ff' })
       } else if (l.type === 'debuffGuard') {
@@ -100,15 +101,15 @@ export default function V2Sortie({ prof, inventory, runes, onProfile, onScene })
       } else if (l.type === 'ailment') {
         // 状態異常が入ったとき。side は「かかった側」
         // 出どころはエンチャントの特殊能力と、スキル自身が持つぶん（どくのほうし＝毒 など）の2つ
-        out.push({ text:`☠ ${mine ? 'あなた' : foe}は${l.ail}になった！`, color:'#cc66ff' })
+        out.push({ text:`☠ ${mine ? you : foe}は${l.ail}になった！`, color:'#cc66ff' })
       } else if (l.type === 'ailTick') {
-        out.push({ text:`☠ ${l.ail}！ ${mine ? 'あなた' : foe}に${l.damage.toLocaleString()}ダメージ！${l.stacks > 1 ? `（${l.stacks}スタック）` : ''}`, color:'#cc66ff' })
+        out.push({ text:`☠ ${l.ail}！ ${mine ? you : foe}に${l.damage.toLocaleString()}ダメージ！${l.stacks > 1 ? `（${l.stacks}スタック）` : ''}`, color:'#cc66ff' })
       } else if (l.type === 'paralyzed') {
-        out.push({ text:`⚡ ${mine ? 'あなた' : foe}は麻痺して動けない！`, color:'#ffdd44' })
+        out.push({ text:`⚡ ${mine ? you : foe}は麻痺して動けない！`, color:'#ffdd44' })
       } else if (l.type === 'reflect') {
-        out.push({ text:`🔮 ${mine ? 'あなた' : foe}はダメージを${l.damage.toLocaleString()}跳ね返した！`, color:'#88ddff' })
+        out.push({ text:`🔮 ${mine ? you : foe}はダメージを${l.damage.toLocaleString()}跳ね返した！`, color:'#88ddff' })
       } else if (l.type === 'enCut') {
-        out.push({ text:`🛡 ${mine ? 'あなた' : foe}のエンチャントが攻撃を和らげた！`, color:'#66ccff' })
+        out.push({ text:`🛡 ${mine ? you : foe}のエンチャントが攻撃を和らげた！`, color:'#66ccff' })
       }
     }
     out.push(win
