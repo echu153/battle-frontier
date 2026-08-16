@@ -110,3 +110,58 @@ test('敵のスキルはプレイヤーと同じ形（runBattleが解釈でき�
   }
   for (const a of AREAS) assert.ok(a.boss.skills.length >= 4, `${a.boss.name} のスキル数`)
 })
+
+// ============================================================
+// 状態異常（2026-08-17）
+// ★ここが空に戻ると、敵は状態異常を一切撒かなくなり、エンチャントの抵抗系
+//   （毒キノコ「毒10%軽減」・払暁のワイバーン「全状態異常抵抗+5%」）が
+//   打ち消すものを失って**完全に無意味**になる。
+// ============================================================
+
+test('敵のスキルは名前どおりの状態異常を持つ', () => {
+  const byName = {}
+  for (const e of allEnemies()) for (const s of e.skills) byName[s.name] = s
+  assert.equal(byName['どくのほうし']?.ail?.key, 'poison', 'どくのほうし＝毒')
+  assert.equal(byName['電撃']?.ail?.key,         'paralyze', '電撃＝麻痺')
+  assert.equal(byName['つらら']?.ail?.key,       'slow',   'つらら＝鈍足')
+  assert.equal(byName['かみつく']?.ail?.key,     'bleed',  'かみつく＝出血')
+  assert.equal(byName['ほねきり']?.ail?.key,     'bleed',  'ほねきり＝出血')
+  // 麻痺は「1ターン行動できない」＝一番重いので確率を低く保つ
+  assert.ok(byName['電撃'].ail.chance <= 15, '麻痺の確率は低いまま')
+  // 状態異常を撒く敵が消えていないこと（0になったら抵抗エンチャントが死ぬ）
+  const spreaders = allEnemies().filter(e => e.skills.some(s => s.ail))
+  assert.ok(spreaders.length >= 10, `状態異常を撒く敵が居る（${spreaders.length}体）`)
+})
+
+test('敵の状態異常が実戦でこちらに入る（敵→プレイヤー方向が通っている）', () => {
+  const kinoko = allEnemies().find(e => e.name === '毒キノコ')
+  let poisoned = 0
+  for (let seed = 1; seed <= 40; seed++) {
+    // こちらは硬く・攻撃力を低くして、毒キノコが何度も撃てるようにする
+    const me = { name:'me', cls:'戦士', stats:{ hp:60000, mp:400, str:1, dex:150, agi:1, int_stat:1, vit:150, luk:1 } }
+    const r = runBattle(me, toFighter(kinoko, 30), { rng: mkRng(seed), maxTurns: 30 })
+    if (r.log.some(l => l.type === 'ailment' && l.side === 'me' && l.ail === '毒')) poisoned++
+  }
+  assert.ok(poisoned > 0, `毒が入った戦闘がある（${poisoned}/40）`)
+})
+
+test('抵抗のエンチャントを着けると状態異常が入りにくくなる', () => {
+  const kinoko = allEnemies().find(e => e.name === '毒キノコ')
+  const count = (enchants) => {
+    let n = 0
+    for (let seed = 1; seed <= 120; seed++) {
+      const me = {
+        name:'me', cls:'戦士', enchants,
+        stats:{ hp:60000, mp:400, str:1, dex:150, agi:1, int_stat:1, vit:150, luk:1 },
+      }
+      const r = runBattle(me, toFighter(kinoko, 30), { rng: mkRng(seed), maxTurns: 30 })
+      n += r.log.filter(l => l.type === 'ailment' && l.side === 'me' && l.ail === '毒').length
+    }
+    return n
+  }
+  const bare = count([])
+  // 毒キノコ＝毒10%軽減 ／ 払暁のワイバーン＝全状態異常抵抗+5%（合わせて-15%）
+  const guarded = count(['毒キノコ', '払暁のワイバーン'])
+  assert.ok(bare > 0, '素だと毒が入る')
+  assert.ok(guarded < bare, `抵抗ありのほうが少ない（素${bare} → 抵抗${guarded}）`)
+})

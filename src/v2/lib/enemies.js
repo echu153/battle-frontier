@@ -31,19 +31,25 @@
 import { STAT_KEYS } from './stats.js'
 
 // 敵のスキル。プレイヤーのスキル（skills.js）と同じ形なので runBattle がそのまま解釈する
+// ★状態異常（ail）は**名前どおりの技にだけ**付ける（2026-08-17 ユーザー決定）。
+//   ここが空だと敵は状態異常を一切撒かないので、エンチャントの抵抗系
+//   （毒キノコ「毒10%軽減」・払暁のワイバーン「全状態異常抵抗+5%」）が
+//   何も打ち消すものが無く**完全に無意味**になる。
+//   ail = { key, chance }。chance は相手の抵抗を引いてから判定される（battle.js の tryInflict）。
+//   ⚠麻痺は「1ターン行動できない」＝一番重いので確率を低く置く。
 const S = {
   // --- 攻撃 ---
   たいあたり:   { name:'たいあたり',   kind:'phys', mult:1.3, proc:90, mp:0 },
-  かみつく:     { name:'かみつく',     kind:'phys', mult:1.5, proc:85, mp:4 },
-  ひっかく:     { name:'ひっかく',     kind:'phys', mult:1.4, proc:90, mp:3 },
-  どくのほうし: { name:'どくのほうし', kind:'mag',  mult:1.6, proc:85, mp:6 },
+  かみつく:     { name:'かみつく',     kind:'phys', mult:1.5, proc:85, mp:4,  ail:{ key:'bleed', chance:25 } },
+  ひっかく:     { name:'ひっかく',     kind:'phys', mult:1.4, proc:90, mp:3,  ail:{ key:'bleed', chance:20 } },
+  どくのほうし: { name:'どくのほうし', kind:'mag',  mult:1.6, proc:85, mp:6,  ail:{ key:'poison', chance:60 } },
   こんぼう:     { name:'こんぼう',     kind:'phys', mult:1.6, proc:85, mp:5 },
   だましうち:   { name:'だましうち',   kind:'phys', mult:1.8, proc:80, mp:8, buff:{ enemy:{ dex:-10 } } },
-  ほねきり:     { name:'ほねきり',     kind:'phys', mult:1.7, proc:85, mp:7 },
+  ほねきり:     { name:'ほねきり',     kind:'phys', mult:1.7, proc:85, mp:7,  ail:{ key:'bleed', chance:35 } },
   いわなげ:     { name:'いわなげ',     kind:'phys', mult:2.0, proc:75, mp:10 },
   しおのやり:   { name:'潮の槍',       kind:'phys', mult:1.9, proc:80, mp:9 },
-  でんげき:     { name:'電撃',         kind:'mag',  mult:2.0, proc:80, mp:10 },
-  つらら:       { name:'つらら',       kind:'mag',  mult:1.9, proc:85, mp:9 },
+  でんげき:     { name:'電撃',         kind:'mag',  mult:2.0, proc:80, mp:10, ail:{ key:'paralyze', chance:12 } },
+  つらら:       { name:'つらら',       kind:'mag',  mult:1.9, proc:85, mp:9,  ail:{ key:'slow', chance:30 } },
   かえんだん:   { name:'火炎弾',       kind:'mag',  mult:2.1, proc:80, mp:11 },
   ようがんけん: { name:'溶岩拳',       kind:'phys', mult:2.2, proc:78, mp:12 },
   れっぷうそう: { name:'烈風爪',       kind:'phys', mult:1.5, hits:2, proc:80, mp:11, noCrit:true },
@@ -56,8 +62,8 @@ const S = {
   さけび:       { name:'威嚇の叫び',   kind:'buff', proc:90,  mp:7,  buff:{ enemy:{ str:-15, int_stat:-15 } }, priority:1 },
   じこさいせい: { name:'自己再生',     kind:'heal', proc:80,  mp:14, heal:{ rate:1.6 }, priority:1 },
   // --- ボスの大技（旧版の specialMove から名前を流用）---
-  天穿雷撃: { name:'天穿雷撃', kind:'phys', mult:3.2, proc:60, mp:24, buff:{ enemy:{ vit:-25 } } },
-  氷棺葬送: { name:'氷棺葬送', kind:'mag',  mult:3.4, proc:60, mp:26, buff:{ enemy:{ agi:-30 } } },
+  天穿雷撃: { name:'天穿雷撃', kind:'phys', mult:3.2, proc:60, mp:24, buff:{ enemy:{ vit:-25 } }, ail:{ key:'paralyze', chance:20 } },
+  氷棺葬送: { name:'氷棺葬送', kind:'mag',  mult:3.4, proc:60, mp:26, buff:{ enemy:{ agi:-30 } }, ail:{ key:'slow', chance:50 } },
   炎獄の審判:{ name:'炎獄の審判', kind:'phys', mult:3.6, proc:58, mp:28, buff:{ enemy:{ vit:-25 } } },
   天墜滅撃: { name:'天墜滅撃', kind:'phys', mult:3.8, proc:55, mp:30, buff:{ enemy:{ vit:-30 } } },
   海嵐の一撃:{ name:'海嵐の一撃', kind:'phys', mult:2.8, proc:65, mp:20 },

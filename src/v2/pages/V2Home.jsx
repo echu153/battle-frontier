@@ -9,6 +9,7 @@ import {
 } from '../lib/stats.js'
 import { TIER_LABEL, TIER_ORDER, TIER_COLOR, missingReqs, canBecome, reqText, proofCount } from '../lib/classes.js'
 import { classBonusText } from '../lib/classBonus.js'
+import { totalStats } from '../lib/loadout.js'
 import V2Sortie from '../components/V2Sortie.jsx'
 import V2Storage from '../components/V2Storage.jsx'
 import V2Smith from '../components/V2Smith.jsx'
@@ -211,7 +212,11 @@ export default function V2Home() {
   const favorites = prof?.favorites || []
   const compact = draft.filter(d => d.name).map(d => ({ name: d.name, uses: d.uses }))
   const mpCost = setMpCost(compact)                    // 想定利用MP（Σ 消費MP×回数）
-  const setErr = prof ? validateSkillSet(compact, usableNames, prof.mp) : null
+  // ★最大MPは**ルーンのMP+%を乗せたぶん**で見る（サーバー v2_set_skills と同じ計算）。
+  //   素の prof.mp のままだと蒼ルーンのMPがどこにも効かない
+  //   （戦闘はHP/MP満タン開始で5〜13ターン＝MPが枯れないため）。
+  const maxMp = prof ? totalStats(prof, inventory, runes).mp : 0
+  const setErr = prof ? validateSkillSet(compact, usableNames, maxMp) : null
   // 一覧には、まだ覚えていない「いまの職業のスキル」もグレーで出す（何を狙えるか分かるように）
   const shownSkills = sortSkills(filterSkills([...usable, ...stillLocked], { tab, query, favorites }), sortKey, sortAsc)
 
@@ -343,8 +348,8 @@ export default function V2Home() {
             <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
               <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>🎯 スキルセット</div>
               <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'8px', lineHeight:'1.8' }}>
-                あなたの最大MPは<span style={{ color:'#4488ff' }}>{prof.mp}MP</span>です。
-                いまの編成の想定利用MPは<span style={{ color: mpCost > prof.mp ? '#ff4444' : '#44ffaa' }}>{mpCost}MP</span>です。
+                あなたの最大MPは<span style={{ color:'#4488ff' }}>{maxMp}MP</span>です。
+                いまの編成の想定利用MPは<span style={{ color: mpCost > maxMp ? '#ff4444' : '#44ffaa' }}>{mpCost}MP</span>です。
               </div>
               <div style={{ display:'grid', gap:'3px' }}>
                 {Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => {
@@ -357,7 +362,7 @@ export default function V2Home() {
                       <span style={{ flex:1, color: s ? KIND_COLOR[s.kind] : '#62789a', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                         {s ? s.name : '（空き）'}
                       </span>
-                      <span style={{ color: cost > prof.mp ? '#ff4444' : '#7fa6d0', width:'62px', textAlign:'right' }}>
+                      <span style={{ color: cost > maxMp ? '#ff4444' : '#7fa6d0', width:'62px', textAlign:'right' }}>
                         {s ? (s.mpPct ? `MP残${Math.round(s.mpPct * 100)}%` : `MP${s.mp}×${row.uses}`) : ''}
                       </span>
                       <span style={{ color:'#7fa6d0', width:'34px', textAlign:'right' }}>{s ? `${s.proc}%` : ''}</span>

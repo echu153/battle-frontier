@@ -240,13 +240,19 @@ const applyDebuff = (foe, table, log) => {
   applyBuff(foe.buffs, table)
 }
 
+// 状態異常を1つ試す。**相手のエンチャント抵抗（ailResist）を引いてから**判定する。
+// エンチャント由来（onHitAils）とスキル由来（skill.ail）で同じ道を通す＝抵抗の効き方がズレない
+const tryInflict = (foe, a, rng, log) => {
+  const pct = inflictChance(a.chance, foe.en, a.key)
+  if (!roll(pct, rng)) return
+  if (inflict(foe.ail, a.key, a)) log.push({ side: foe.name, type: 'ailment', ail: AIL_LABEL[a.key] })
+}
+
 // 攻撃が当たったときのエンチャント。状態異常の付与と、積み上がるステータス補正
 const onHit = (me, foe, kind, rng, log) => {
   for (const a of me.en.onHitAils) {
     if (a.kind !== 'any' && a.kind !== kind) continue
-    const pct = inflictChance(a.chance, foe.en, a.key)
-    if (!roll(pct, rng)) continue
-    if (inflict(foe.ail, a.key, a)) log.push({ side: foe.name, type: 'ailment', ail: AIL_LABEL[a.key] })
+    tryInflict(foe, a, rng, log)
   }
   // 雪男・氷河ドラゴン・フロストバーン：当てるたびに相手のステータスを下げる（重複上限つき）
   for (const f of me.en.onHitFoeStats) {
@@ -326,7 +332,13 @@ const takeAction = (me, foe, rng, log) => {
     // エンチャントの与ダメージ+%（物理／魔法で別枠。時間帯ぶんも畳み込み済み）
     raw = Math.floor(raw * (1 + (skill.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100))
     const dmg = applyIncoming(me, foe, raw, skill.kind, rng, log)
-    if (hits > 0) onHit(me, foe, skill.kind, rng, log)
+    if (hits > 0) {
+      onHit(me, foe, skill.kind, rng, log)
+      // ★スキル自身が持つ状態異常（どくのほうし＝毒、電撃＝麻痺 など）。**当たったときだけ**。
+      //   敵もプレイヤーと同じ takeAction を通るので、これで**敵→こちら**にも状態異常が飛ぶ
+      //   ＝エンチャントの抵抗（毒キノコ・払暁のワイバーン）が意味を持つ
+      if (skill.ail) tryInflict(foe, skill.ail, rng, log)
+    }
     // バーサク・執行本能：ダメージを与えたら+1スタック、全部外れたらリセット
     if (me.pa.rages.length) me.rage = hits > 0 ? me.rage + 1 : 0
     // 吸収：与えたダメージの一定割合を自分のHPへ（ソウルドレイン・ブラッティロアなど）

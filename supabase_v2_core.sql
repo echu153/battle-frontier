@@ -192,6 +192,22 @@ create policy v2_profiles_select on public.v2_profiles
 revoke all on table public.v2_profiles from anon;
 grant select on table public.v2_profiles to authenticated;
 
+-- ===== 2-2. 開発限定ゲート =====
+-- ★v2（リメイク版）は開発限定コンテンツ。画面は V2Home.jsx が is_admin を見て弾いているが、
+--   RPC は authenticated 全員に grant されているので、**画面を通さず直接呼べば誰でも遊べてしまう**。
+--   旧版の arena/pvp と同じ穴なので、v2 の公開RPCは全部この関数を最初に通す。
+--   一般公開するときは、この関数の中身を `select true` にすれば一斉に開けられる。
+-- ⚠自分の is_admin を読むだけなので REVOKE は不要（他人の情報は返らない）。
+create or replace function public.v2_is_dev()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select p.is_admin from public.profiles p where p.id = auth.uid()), false)
+$$;
+
 -- ===== 3. 内部ヘルパ: EXP付与とLVアップ抽選（サーバー権威） =====
 -- ⚠ SECURITY DEFINER の内部ヘルパは既定で PUBLIC 実行可＝任意のEXPを自分に配れる穴になる。
 --    必ず下の REVOKE をセットで流すこと（公開RPCからのみ呼ばせる）。
@@ -319,6 +335,8 @@ begin
   if v_uid is null then
     return jsonb_build_object('ok', false, 'error', 'ログインが必要です');
   end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   if char_length(v_name) < 1 or char_length(v_name) > 16 then
     return jsonb_build_object('ok', false, 'error', '名前は1〜16文字で入力してください');
   end if;
@@ -379,6 +397,8 @@ begin
   if v_uid is null then
     return jsonb_build_object('ok', false, 'error', 'ログインが必要です');
   end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   select * into v_row from public.v2_profiles where id = v_uid for update;
   if not found then
     return jsonb_build_object('ok', false, 'error', 'キャラクターがありません');
@@ -507,10 +527,14 @@ declare
   v_name  text;
   v_uses  int;
   v_mp    int;
+  v_mp_pct numeric := 0;   -- 装着中の武器に刺さったルーンのMP+%の合計
+  v_max_mp int;            -- ルーンぶんを乗せた最大MP（＝想定利用MPの上限）
 begin
   if v_uid is null then
     return jsonb_build_object('ok', false, 'error', 'ログインが必要です');
   end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   select * into v_row from public.v2_profiles where id = v_uid for update;
   if not found then
     return jsonb_build_object('ok', false, 'error', 'キャラクターがありません');
@@ -551,10 +575,25 @@ begin
     v_cost := v_cost + v_mp * v_uses;
   end loop;
 
+  -- ★ルーン（エッセンス）のMP+%を最大MPへ乗せる。
+  --   ここを素の v2_profiles.mp のままにすると、蒼ルーンのMPが**どこにも効かない**
+  --   （戦闘はHP/MP満タン開始で5〜13ターン＝MPが枯れないため）。
+  --   装備そのものは HP/MP/LUK を持たない（equipment.js）ので、素のMPに%を掛けるだけで
+  --   画面の totalStats(profile, inventory, runes).mp と同じ値になる。
+  select coalesce(sum((e.stats ->> 'mp')::numeric), 0) into v_mp_pct
+    from public.v2_essences e
+   where e.player_id = v_uid
+     and e.inv_id is not null
+     and e.stats ? 'mp'
+     and exists (
+       select 1 from jsonb_each_text(coalesce(v_row.equipped, '{}'::jsonb)) q
+        where q.value ~ '^[0-9]+$' and q.value::bigint = e.inv_id);
+  v_max_mp := round(v_row.mp * (1 + v_mp_pct / 100));
+
   -- 想定利用MPが最大MPを超える編成は保存させない（これが使用回数の実質的な上限）
-  if v_cost > v_row.mp then
+  if v_cost > v_max_mp then
     return jsonb_build_object('ok', false, 'error',
-      format('想定利用MPが最大MPを超えています（%s / %s）', v_cost, v_row.mp));
+      format('想定利用MPが最大MPを超えています（%s / %s）', v_cost, v_max_mp));
   end if;
 
   update public.v2_profiles set skill_set = v_set, updated_at = now()
@@ -583,6 +622,8 @@ begin
   if v_uid is null then
     return jsonb_build_object('ok', false, 'error', 'ログインが必要です');
   end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   if jsonb_typeof(coalesce(p_names, '[]'::jsonb)) <> 'array' then
     return jsonb_build_object('ok', false, 'error', '形式が不正です');
   end if;
@@ -1216,6 +1257,8 @@ declare
   v_rate  numeric;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   select * into v_row from public.v2_profiles where id = v_uid;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
   select * into v_area from public.v2_areas where id = p_area;
@@ -1225,6 +1268,10 @@ begin
   end if;
   if v_n + v_bs = 0 then return jsonb_build_object('ok', false, 'error', '清算するものがありません'); end if;
   if v_n + v_bs > 500 then return jsonb_build_object('ok', false, 'error', '一度に清算できる回数を超えています'); end if;
+  -- ★ボス勝利数は「ボスに遭遇した回数」を超えられない。
+  --   ここを見ていないと、遭遇1回のまま勝利数だけ大きく送れて下の上限計算が青天井になる
+  --   （回数の頭打ちは v_n + v_bs にしか掛かっていないため）。
+  v_bw := least(v_bw, v_bs);
 
   -- 取り得る上限。通常敵はEXP11・ボスは13が最大（sortie.js と同じ）
   v_exp_cap  := v_n * 11 + v_bw * 13;
@@ -1297,6 +1344,8 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_uid uuid := auth.uid();
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   if p_sec not in (10, 20) then return jsonb_build_object('ok', false, 'error', '10秒か20秒を選んでください'); end if;
   update public.v2_profiles set sortie_cd = p_sec, updated_at = now() where id = v_uid;
   return jsonb_build_object('ok', true, 'sortie_cd', p_sec);
@@ -1319,6 +1368,8 @@ declare
   v_slot text := p_slot;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   select * into v_row from public.v2_profiles where id = v_uid;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
   if v_slot not in ('right','left','head','body','arm','foot','acc1','acc2') then
@@ -1371,6 +1422,8 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_uid uuid := auth.uid(); v_new jsonb;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   select equipped - p_slot into v_new from public.v2_profiles where id = v_uid;
   if v_new is null then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
   update public.v2_profiles set equipped = v_new, updated_at = now() where id = v_uid;
@@ -1418,6 +1471,8 @@ declare
   v_equipped jsonb;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   if p_base = p_mat_a or p_base = p_mat_b or p_mat_a = p_mat_b then
     return jsonb_build_object('ok', false, 'error', '同じものを重ねて選んでいます');
   end if;
@@ -1535,6 +1590,8 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_uid uuid := auth.uid();
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   if p_url is not null and length(p_url) > 500 then
     return jsonb_build_object('ok', false, 'error', 'URLが長すぎます');
   end if;
@@ -1557,6 +1614,8 @@ declare
   v_gold bigint;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   if p_url is null or length(p_url) > 500 then return jsonb_build_object('ok', false, 'error', 'URLが不正です'); end if;
   update public.v2_profiles set gold = gold - c_cost, avatar_url = p_url, updated_at = now()
    where id = v_uid and gold >= c_cost
@@ -1610,6 +1669,8 @@ declare
   i       int;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
 
   -- 開発だけ回数制限を外す（旧版の profiles を見る）
   select coalesce(p.is_admin, false) into v_admin from public.profiles p where p.id = v_uid;
@@ -1720,6 +1781,8 @@ declare
   v_need  int;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   if p_materials is null or jsonb_typeof(p_materials) <> 'array' then
     return jsonb_build_object('ok', false, 'error', '素材を5個選んでください');
   end if;
@@ -1794,6 +1857,8 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_uid uuid := auth.uid(); v_ess public.v2_essences;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   select * into v_ess from public.v2_essences where id = p_essence_id and player_id = v_uid;
   if not found then return jsonb_build_object('ok', false, 'error', 'そのエッセンスはありません'); end if;
   if v_ess.ability is not null then return jsonb_build_object('ok', false, 'error', 'もう選んでいます'); end if;
@@ -1819,6 +1884,8 @@ declare
   v_over int := 0;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   select * into v_ess from public.v2_essences where id = p_essence_id and player_id = v_uid;
   if not found then return jsonb_build_object('ok', false, 'error', 'そのエッセンスはありません'); end if;
   if v_ess.inv_id is not null then return jsonb_build_object('ok', false, 'error', 'もうはめてあります'); end if;
@@ -1849,6 +1916,8 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_uid uuid := auth.uid(); v_ess public.v2_essences; v_left int;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   select * into v_ess from public.v2_essences where id = p_essence_id and player_id = v_uid;
   if not found then return jsonb_build_object('ok', false, 'error', 'そのエッセンスはありません'); end if;
   if v_ess.inv_id is null then return jsonb_build_object('ok', false, 'error', 'はめていません'); end if;
@@ -1871,6 +1940,8 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_uid uuid := auth.uid(); v_inv record; v_sock text[]; v_n int := 0; i int;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   for v_inv in
     select i2.id as inv_id, e.hands from public.v2_inventory i2
       join public.v2_equipment e on e.id = i2.equip_id
