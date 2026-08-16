@@ -3,7 +3,7 @@ import { supabase } from '../../supabase'
 import { STAT_KEYS, STAT_DEFS, MAX_LV, calcPower, expToNext } from '../lib/stats.js'
 import { classBonusText } from '../lib/classBonus.js'
 import { attackKindOf } from '../lib/battle.js'
-import { equippedItems, gearPower, totalStats } from '../lib/loadout.js'
+import { equippedItems, totalStats } from '../lib/loadout.js'
 import { SKILL_BY_NAME, KIND_LABEL, KIND_COLOR } from '../lib/skills.js'
 import { RANK_COLOR, miniBtn } from './v2ui.js'
 
@@ -26,7 +26,7 @@ const KEY = { background:'#101c3c', fontSize:'11px', padding:'6px 8px', borderTo
 const VAL = { background:'#0a1330', color:'#cfe2ff', fontSize:'11px', padding:'6px 8px', borderTop:'1px solid #07102a', wordBreak:'break-all' }
 
 // ステータスの並び。あるけみすとのプロフィールと同じ「項目｜値」を2組ずつ
-export default function V2Profile({ prof, inventory, onProfile, onBack }) {
+export default function V2Profile({ prof, inventory, essences, onProfile, onBack }) {
   const [detail, setDetail] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
@@ -37,8 +37,9 @@ export default function V2Profile({ prof, inventory, onProfile, onBack }) {
   const uploading = useRef(false)                // 連打での二重アップロード対策
   const fileRef = useRef(null)
   const worn = equippedItems(prof, inventory)
-  const total = totalStats(prof, inventory)
-  const gear = gearPower(prof, inventory)
+  // ★エンチャントは割合なので totalStats に渡して合計へ乗せる
+  const total = totalStats(prof, inventory, essences)
+  const power = calcPower(total)
   const skills = prof.skill_set || []
   const kind = attackKindOf(prof.class) === 'mag' ? '魔法型' : '物理型'
 
@@ -126,7 +127,7 @@ export default function V2Profile({ prof, inventory, onProfile, onBack }) {
             : <div style={{ width:'72px', height:'72px', margin:'0 auto', border:'1px dashed #223a5e', color:'#44567e', fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center' }}>画像なし</div>}
           <div style={{ color:'#cfe2ff', fontSize:'13px', marginTop:'4px' }}>{prof.username}</div>
         </div>
-        <div style={HEAD}>戦闘力: {(calcPower(prof) + gear).toLocaleString()}　（{kind}）</div>
+        <div style={HEAD}>戦闘力: {power.toLocaleString()}　（{kind}）</div>
 
         <div style={{ display:'grid', gridTemplateColumns:'auto 1fr auto 1fr' }}>
           <Row k1="LV" v1={`${prof.lv}${prof.lv >= MAX_LV ? '（MAX）' : ''}`}
@@ -223,13 +224,13 @@ export default function V2Profile({ prof, inventory, onProfile, onBack }) {
         </div>
       </div>
 
-      {detail && <StatusDetail prof={prof} total={total} gear={gear} onClose={() => setDetail(false)} />}
+      {detail && <StatusDetail prof={prof} total={total} power={power} onClose={() => setDetail(false)} />}
     </div>
   )
 }
 
 // ===== ステータス詳細（レーダーチャート＋升目＋スキル）=====
-function StatusDetail({ prof, total, gear, onClose }) {
+function StatusDetail({ prof, total, power, onClose }) {
   const R = 78, CX = 110, CY = 110
   // 戦闘力に直した値で比べる（HPは8で1、MPは3で1）。一番大きいものを外周にする
   const unit = { hp:8, mp:3 }
@@ -251,7 +252,7 @@ function StatusDetail({ prof, total, gear, onClose }) {
 
         <div style={{ padding:'12px' }}>
           <div style={{ textAlign:'center', color:'#cfe2ff', fontSize:'13px', marginBottom:'8px' }}>
-            戦闘力: {(calcPower(prof) + gear).toLocaleString()}
+            戦闘力: {power.toLocaleString()}
           </div>
 
           <div style={{ display:'flex', flexWrap:'wrap', gap:'10px', alignItems:'center', justifyContent:'center' }}>

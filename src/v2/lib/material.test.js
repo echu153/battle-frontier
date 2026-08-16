@@ -196,3 +196,23 @@ test('素材IDはSQLに入れている形（m:エリア:並び:レア度）', ()
   assert.equal(MATERIAL_BY_ID['m:1:0:n'].name, 'スライムのゼリー')
   assert.equal(MATERIAL_BY_ID['m:8:6:u'].name, '天空覇龍の龍核')
 })
+
+// ===== エッセンスがステータスに乗るか =====
+// ★2026-08-16 の実機確認で「戦闘には乗るがステータス画面に出ない」バグが出た箇所。
+//   totalStats に essences を渡し忘れると再発する
+test('装着中の武器に刺さったエッセンスだけがステータスに乗る', async () => {
+  const { totalStats, essenceAbilities, equippedEssences } = await import('./loadout.js')
+  const prof = { agi: 100, str: 100, equipped: { right: 5 } }
+  const inv = [{ id: 5, equip_id: 'w:弓:S', plus: 0 }, { id: 6, equip_id: 'w:槍:S', plus: 0 }]
+  const ess = [
+    { id: 1, color:'green', stats:{ agi: 10 }, ability:'コウモリ', inv_id: 5, socket_idx: 0 },
+    { id: 2, color:'red',   stats:{ str: 50 }, ability:'ゴブリン', inv_id: 6, socket_idx: 0 }, // 倉庫の槍＝効かない
+    { id: 3, color:'blue',  stats:{ str: 50 }, ability:null, inv_id: null },                    // 未使用＝効かない
+  ]
+  const base = totalStats(prof, inv, [])
+  const withEss = totalStats(prof, inv, ess)
+  assert.equal(withEss.agi, Math.round(base.agi * 1.1), '装着中のエッセンスが乗っていない')
+  assert.equal(withEss.str, base.str, '装着していない武器・未使用のエッセンスが乗ってしまっている')
+  // 特殊能力も装着中のぶんだけ
+  assert.deepEqual(essenceAbilities(equippedEssences(prof, inv, ess)), ['コウモリ'])
+})

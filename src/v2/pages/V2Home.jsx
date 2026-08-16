@@ -314,7 +314,7 @@ export default function V2Home() {
         {/* ステータス */}
         {prof && (
           <>
-            <V2Status prof={prof} inventory={inventory} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
+            <V2Status prof={prof} inventory={inventory} essences={essences} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
 
             {/* ===== 出撃（旧版と同じで、街のブロックがそのままホームに載る） ===== */}
             {screen === 'home' && (
@@ -328,7 +328,7 @@ export default function V2Home() {
               <V2Menu items={MENU} open={openMenu} onToggle={() => setOpenMenu(v => !v)} onPick={setScreen} />
             )}
 
-            {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} essences={essences} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'tree'    && <V2Tree    prof={prof} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}

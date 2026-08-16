@@ -86,10 +86,13 @@ function StatMini({ label, jp, val, add, color, short, detail, show, alignRight,
   )
 }
 
-export default function V2Status({ prof, inventory, classes, open, onToggle }) {
+export default function V2Status({ prof, inventory, essences, classes, open, onToggle }) {
   const worn = equippedItems(prof, inventory)
-  const total = totalStats(prof, inventory)
+  // ★エンチャントは**割合**なので装備の固定値とは別枠。totalStats に渡すと合計へ乗る
+  const total = totalStats(prof, inventory, essences)
   const gear = gearPower(prof, inventory)
+  const power = calcPower(total)
+  const ench = power - calcPower(prof) - gear
   const tierColor = TIER_COLOR[classes?.find(c => c.id === prof.class)?.tier] || '#88ccff'
   const next = expToNext(prof.lv, prof.job_changes)
   const expPct = Math.min(100, (prof.exp / expPerLv(prof.job_changes)) * 100)
@@ -178,8 +181,13 @@ export default function V2Status({ prof, inventory, classes, open, onToggle }) {
             転職回数: <span style={{ color:'#66ddff' }}>{prof.job_changes}</span>回
           </div>
           <div style={{ fontSize:'11px', color:'#6688aa' }}>
-            総合力: <span style={{ color:'#44ff88' }}>{(calcPower(prof) + gear).toLocaleString()}</span>
-            {gear > 0 && <span style={{ color:'#446688' }}>（装備 +{gear.toLocaleString()}）</span>}
+            総合力: <span style={{ color:'#44ff88' }}>{power.toLocaleString()}</span>
+            {(gear > 0 || ench !== 0) && (
+              <span style={{ color:'#446688' }}>
+                （装備 +{gear.toLocaleString()}
+                {ench !== 0 && <>{' / エンチャント +'}{ench.toLocaleString()}</>}）
+              </span>
+            )}
           </div>
           <div style={{ fontSize:'11px', color:'#6688aa' }}>
             Gold: <span style={{ color:'#ffcc00' }}>{(prof.gold || 0).toLocaleString()}</span>
