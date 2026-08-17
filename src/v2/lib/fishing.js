@@ -45,14 +45,19 @@ export const SPOTS = SPOT_DEF.map(([name], i) => ({ spot: i + 1, name }))
 export const spotName = (spot) => SPOTS[spot - 1]?.name || ''
 
 // ===== 魚54種 =====
-// ★ステータスは**通し番号を STAT_KEYS で順に回して**割り当てる。
-//   54 ÷ 8 なので hp〜INT が7種ずつ・VIT と LUK が6種ずつになり、
-//   全部そろえたときの合計は 7.0%×6 ＋ 6.0%×2 ＝ **54.0%**（設計どおり）。
+// ★図鑑ボーナスが乗るのは **HPとMPを除いた6種**（2026-08-17 ユーザー決定）。
+//   54 ÷ 6 ＝ 9 なので**どのステータスもちょうど9種**ずつになり、
+//   全部そろえると **1ステータスあたり +9.0%・合計 +54.0%** で完全に均等になる。
+export const DEX_STATS = STAT_KEYS.filter(k => k !== 'hp' && k !== 'mp')
+
+// ★通し番号を DEX_STATS で順に回して割り当てる。
+//   いまは各エリア6種なので、結果として**どのエリアも同じ並び**（1番目がSTR…）になる。
+//   1エリアの種類数を変えても均等さが保たれるよう、式は通し番号のままにしてある
 const buildFish = () => {
   const out = []
   SPOT_DEF.forEach(([, names], si) => {
     names.forEach((name, idx) => {
-      out.push({ spot: si + 1, idx, name, stat: STAT_KEYS[out.length % STAT_KEYS.length] })
+      out.push({ spot: si + 1, idx, name, stat: DEX_STATS[out.length % DEX_STATS.length] })
     })
   })
   return out

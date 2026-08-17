@@ -96,6 +96,10 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
   const fishQty = useMemo(() => Object.fromEntries(fishRows.map(r => [r.id, r.qty])), [fishRows])
   const dexPct = useMemo(() => fishDexPct(fishRows), [fishRows])
 
+  // ★解放している釣り場だけを見せる。未解放のエリア名も魚の名前も出さない
+  const openSpots = SPOTS.slice(0, Math.max(1, fishing?.grade || 1))
+  const shownSpot = Math.min(openSpot, openSpots.length)
+
   const call = async (fn, args, label) => {
     if (busy) return null
     setBusy(label); setError(''); setMsg(null)
@@ -409,7 +413,8 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
                         エリア{AREA_MARK[need - 1]}の解放
                       </span>
                     )}
-                    {def.key === 'fishing' && <span style={{ marginLeft:'6px' }}>→「{spotName(f.grade + 1)}」が解放</span>}
+                    {/* ★次の釣り場の名前は出さない（拡張して初めて分かる） */}
+                    {def.key === 'fishing' && <span style={{ marginLeft:'6px' }}>→ 新しい釣り場が解放</span>}
                   </div>
                 )}
               </div>
@@ -523,23 +528,23 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
           </div>
         </div>
 
+        {/* ★解放していない釣り場は名前も中身も出さない（2026-08-17 ユーザー指示） */}
         <div style={{ display:'flex', gap:'3px', flexWrap:'wrap', marginBottom:'6px' }}>
-          {SPOTS.map(s => {
+          {openSpots.map(s => {
             const got = fishOfSpot(s.spot).reduce((t, f) =>
               t + TIERS.filter(tr => dexSet.has(entryId(f.spot, f.idx, tr))).length, 0)
-            const locked = !fishing || s.spot > fishing.grade
             return (
               <button key={s.spot} onClick={() => setOpenSpot(s.spot)}
-                style={{ ...miniBtn(openSpot === s.spot ? '#66ccff' : locked ? '#62789a' : '#7fa6d0'),
+                style={{ ...miniBtn(openSpot === s.spot ? '#66ccff' : '#7fa6d0'),
                   background: openSpot === s.spot ? '#001840' : '#000818' }}>
-                {s.name} {got}/{fishOfSpot(s.spot).length * TIERS.length}{locked ? '（未解放）' : ''}
+                {s.name} {got}/{fishOfSpot(s.spot).length * TIERS.length}
               </button>
             )
           })}
         </div>
 
         <div style={{ display:'grid', gap:'2px' }}>
-          {fishOfSpot(openSpot).map(f => (
+          {fishOfSpot(shownSpot).map(f => (
             <div key={`${f.spot}:${f.idx}`} style={{ background:'#000818', border:'1px solid #002244', padding:'5px 6px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', fontSize:'11px' }}>
                 <span style={{ color:TEXT.body }}>{f.name}</span>

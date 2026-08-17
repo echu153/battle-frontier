@@ -2306,14 +2306,15 @@ create table if not exists public.v2_fish (
   medal  int  not null            -- 釣りメダルの枚数（釣り場エリア番号 × グレード倍率）
 );
 
--- ★ステータスは「通し番号を hp,mp,str,dex,agi,int_stat,vit,luk の順で回す」割り当て。
---   54 ÷ 8 なので hp〜INT が7種・VIT と LUK が6種になり、全部そろえた合計は 54.0%。
---   src/v2/lib/fishing.js の buildFish と同じ並びであること
+-- ★ステータスは「通し番号を str,dex,agi,int_stat,vit,luk の順で回す」割り当て。
+--   **HPとMPには乗らない**（2026-08-17 ユーザー決定）。54 ÷ 6 ＝ 9 なので
+--   どのステータスもちょうど9種ずつ＝全部そろえると 1ステータス +9.0%・合計 +54.0%。
+--   src/v2/lib/fishing.js の DEX_STATS / buildFish と同じ並びであること
 insert into public.v2_fish (id, name, spot, idx, tier, stat, pct, medal)
 select 'f:' || f.spot || ':' || f.idx || ':' || t.short,
        f.name, f.spot, f.idx, t.tier,
-       (array['hp','mp','str','dex','agi','int_stat','vit','luk'])
-         [((f.spot - 1) * 6 + f.idx) % 8 + 1],
+       (array['str','dex','agi','int_stat','vit','luk'])
+         [((f.spot - 1) * 6 + f.idx) % 6 + 1],
        t.pct, f.spot * t.mult
 from (values
   (1,0,'ヤマメ'), (1,1,'イワナ'), (1,2,'カジカ'), (1,3,'ハヤ'), (1,4,'モロコ'), (1,5,'ニジマス'),

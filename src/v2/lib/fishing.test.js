@@ -5,9 +5,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
-import { STAT_KEYS } from './stats.js'
 import { totalStats } from './loadout.js'
 import {
+  DEX_STATS,
   TIERS, TIER_SHORT, TIER_LABEL, TIER_RATE, TIER_PCT, TIER_MEDAL, medalOf,
   SPOT_MAX, FISH_PER_SPOT, SPOTS, spotName, FISH, fishOfSpot,
   ENTRIES, ENTRY_BY_ID, DEX_SLOTS, entryId,
@@ -60,15 +60,17 @@ test('図鑑ボーナスは 0.1/0.2/0.3/0.4%（ユーザー決定）。全部埋
   assert.equal(Math.round(one.reduce((t, e) => t + e.pct, 0) * 10) / 10, 1)
 })
 
-test('ステータスは8種に散っている（54÷8＝7種ずつ・VITとLUKだけ6種）', () => {
+test('図鑑ボーナスはHPとMP以外の6種に均等（54÷6＝9種ずつ・1ステ +9.0%）', () => {
+  // ★ユーザー決定：HPとMPには乗せない
+  assert.deepEqual(DEX_STATS, ['str', 'dex', 'agi', 'int_stat', 'vit', 'luk'])
+  assert.ok(!DEX_STATS.includes('hp') && !DEX_STATS.includes('mp'))
   const count = {}
   for (const f of FISH) count[f.stat] = (count[f.stat] || 0) + 1
-  assert.equal(Object.keys(count).length, 8, '8種すべてに魚が割り当たっていない')
-  assert.deepEqual(count, { hp: 7, mp: 7, str: 7, dex: 7, agi: 7, int_stat: 7, vit: 6, luk: 6 })
+  assert.deepEqual(count, { str: 9, dex: 9, agi: 9, int_stat: 9, vit: 9, luk: 9 })
   // 全部そろえたときの1ステータスあたり
   const full = fishDexPct(ENTRIES.map(e => e.id))
-  assert.equal(full.hp, 7)
-  assert.equal(full.vit, 6)
+  assert.equal(Object.keys(full).length, 6, 'HPかMPに乗ってしまっている')
+  for (const k of DEX_STATS) assert.equal(full[k], 9, `${k} が+9.0%になっていない`)
   assert.equal(Object.values(full).reduce((a, b) => a + b, 0), DEX_FULL_TOTAL)
 })
 
@@ -141,9 +143,11 @@ test('魚54種の名前と並びがSQLと fishing.js で一致している', () 
     assert.ok(block.includes(`('${t}','${TIER_SHORT[t]}',${TIER_PCT[t]},${TIER_MEDAL[t]})`),
       `${TIER_LABEL[t]} の行がSQLと違う`)
   }
-  // ステータスの割り当ては「通し番号 % 8」
-  assert.ok(block.includes(`array['${STAT_KEYS.join("','")}']`), 'ステータスの並びがSQLと違う')
-  assert.match(block, /\(\(f\.spot - 1\) \* 6 \+ f\.idx\) % 8 \+ 1/, '割り当ての式がSQLと違う')
+  // ステータスの割り当ては「通し番号 % 6」。HPとMPはSQL側の配列にも入っていないこと
+  assert.ok(block.includes(`array['${DEX_STATS.join("','")}']`), 'ステータスの並びがSQLと違う')
+  assert.doesNotMatch(block, /'hp'|'mp'/, 'HPかMPがSQL側の割り当てに残っている')
+  assert.match(block, new RegExp(`\\(\\(f\\.spot - 1\\) \\* 6 \\+ f\\.idx\\) % ${DEX_STATS.length} \\+ 1`),
+    '割り当ての式がSQLと違う')
 })
 
 test('釣りの数字がSQLと fishing.js で一致している', () => {
@@ -237,6 +241,15 @@ test('totalStats / toFighter の呼び出しは必ず fishDex まで渡してい
   const bad = calls.filter(c => c.args !== 4)
   assert.deepEqual(bad.map(c => c.where), [],
     `fishDex を渡していない呼び出しがある:\n${bad.map(c => '  ' + c.where).join('\n')}`)
+})
+
+test('図鑑は解放していない釣り場を見せない', () => {
+  // ★ユーザー指示：未解放のエリア名も、そこの魚の名前も出さない
+  const src = readFileSync(new URL('../components/V2Base.jsx', import.meta.url), 'utf8')
+  assert.match(src, /SPOTS\.slice\(0, Math\.max\(1, fishing\?\.grade \|\| 1\)\)/,
+    '図鑑の釣り場を解放ぶんで切っていない')
+  assert.doesNotMatch(src, /spotName\(f\.grade \+ 1\)/, '次の釣り場の名前を先に出している')
+  assert.match(src, /SPOTS\.slice\(0, f\.grade\)/, '釣り場の選択ボタンを解放ぶんで切っていない')
 })
 
 test('loadout.js の totalStats / toFighter は fishDex を受け取る', () => {
