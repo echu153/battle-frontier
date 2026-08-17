@@ -7,9 +7,11 @@ import {
   streakBonusPct, applyStreakBonus,
   npcClassOf, npcNameOf, npcStatsOf, npcSlotsOf, npcChampOf, champOf,
   snapshotOf, fromSnapshot, expOf, canChallenge,
-  GUARD_DROP_MULT, guardDropMultOf,
+  GUARD_DROP_MULT, guardDropMultOf, DROP_RANKS,
 } from './arena.js'
 import { dropRateOf, rollHasDrop, DROP_RATE as SORTIE_DROP_RATE } from './sortie.js'
+import { RANKS } from './equipment.js'
+import { rollDropRank } from './enemies.js'
 import { STAT_KEYS, calcPower } from './stats.js'
 import { SKILL_BY_NAME, isPassive } from './skills.js'
 
@@ -191,4 +193,47 @@ test('守護者ぶんの倍率は出撃の装備ドロップ率に乗る', () =>
   // 4%と4.4%のあいだ（rng=0.042）では、守護中だけ落ちる
   assert.equal(rollHasDrop(20, () => 0.042), false)
   assert.equal(rollHasDrop(20, () => 0.042, GUARD_DROP_MULT), true)
+})
+
+// ===== 落ちるランク（2026-08-17 ユーザー決定）=====
+test('★ランクの表はどの階でも同じで、F〜Sまで全部出る', () => {
+  // 出撃はエリアごとに表が違う（エリア①はF〜Dだけ）。アリーナは階で変えない
+  assert.deepEqual(Object.keys(DROP_RANKS).sort(), [...RANKS].sort())
+  for (const r of RANKS) assert.ok(DROP_RANKS[r] > 0, `${r} が出ない`)
+  // 合計100＝そのまま「落ちたうちの何%か」として読める
+  assert.equal(Object.values(DROP_RANKS).reduce((a, b) => a + b, 0), 100)
+})
+
+test('★ランクが高いほど出にくい', () => {
+  // RANKS は F→S の順（弱い順）。重みは単調に減っていく
+  for (let i = 1; i < RANKS.length; i++) {
+    assert.ok(DROP_RANKS[RANKS[i]] < DROP_RANKS[RANKS[i - 1]],
+      `${RANKS[i]} が ${RANKS[i - 1]} 以上の重みを持っている`)
+  }
+  assert.equal(DROP_RANKS.F, 40)
+  assert.equal(DROP_RANKS.S, 1)
+})
+
+test('抽選はその表どおりに出る', () => {
+  const pick = (n) => rollDropRank({ dropRanks: DROP_RANKS }, () => n)
+  assert.equal(pick(0), 'F')          // 0〜40
+  assert.equal(pick(0.39), 'F')
+  assert.equal(pick(0.41), 'E')       // 40〜65
+  assert.equal(pick(0.999), 'S')      // 99〜100
+  // 一様乱数で回したときの実測が表に近いこと
+  // ★ここは mulberry32。単純なLCGだと掛け算が2^53を超えて精度が落ち、偏る
+  let a = 987654321
+  const rng = () => {
+    a = (a + 0x6D2B79F5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+  const count = {}
+  const n = 200_000
+  for (let i = 0; i < n; i++) { const r = pick(rng()); count[r] = (count[r] || 0) + 1 }
+  for (const r of RANKS) {
+    const pct = ((count[r] || 0) / n) * 100
+    assert.ok(Math.abs(pct - DROP_RANKS[r]) < 0.5, `${r} は約${DROP_RANKS[r]}% だが ${pct.toFixed(2)}%`)
+  }
 })

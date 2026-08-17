@@ -10,7 +10,7 @@ import { rollDropRank } from '../lib/enemies.js'
 import { cooldownOf, dropRateOf, rollHasDrop } from '../lib/sortie.js'
 import {
   FLOORS, champOf, snapshotOf, streakBonusPct, applyStreakBonus,
-  floorAfterLose, expOf, canChallenge, STREAK_PCT, GUARD_DROP_MULT,
+  floorAfterLose, expOf, canChallenge, STREAK_PCT, GUARD_DROP_MULT, DROP_RANKS,
 } from '../lib/arena.js'
 import { box, btn, miniBtn, RANK_COLOR, dropLine } from './v2ui.js'
 
@@ -72,12 +72,12 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
     const r = runBattle(mine, foe)
     const win = r.winner === 'a'
     const exp = expOf()
-    // ★装備のドロップ率は出撃とまったく同じ（クールタイムを共有するので揃える）
-    const drop = win && rollHasDrop(prof.sortie_cd)
+    // ★装備のドロップ率は出撃とまったく同じ（クールタイムを共有するので揃える）。
+    //   アリーナは**勝敗によらず**同じ確率で落ちる（出撃は勝ったときだけ）
+    const drop = rollHasDrop(prof.sortie_cd)
       ? (() => {
-          // 階が上がるほど良いものが出る。エリアのドロップ表を階に対応させて使う
-          const area = { dropRanks: dropRanksOfFloor(floor) }
-          const rank = rollDropRank(area)
+          // ★ランクの表はどの階でも同じ。F〜Sまで出るが高いほど出にくい
+          const rank = rollDropRank({ dropRanks: DROP_RANKS })
           const pool = Object.values(ITEM_BY_ID).filter(i => i.rank === rank)
           return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null
         })()
@@ -147,7 +147,7 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
           挑戦して負けると<b style={{ color:'#ff8844' }}>1つ下の階</b>へ（戦闘力に関係なく必ず落ちます）。<br />
           <b style={{ color:'#ffcc00' }}>階層守護者のHP/MPは回復しません</b>。挑戦する側は毎回満タンです。<br />
           連勝中の階層守護者に挑むと、こちらのステータスが連勝数×{STREAK_PCT}%上がります（HP/MPを除く）。<br />
-          EXPは勝敗によらずもらえ、勝つと{dropRateOf(prof.sortie_cd)}%で装備が落ちます（出撃と同じ確率）。出撃とクールタイムを共有します。<br />
+          EXPも装備も<b style={{ color:'#ffcc00' }}>勝敗によらず</b>もらえます（装備は{dropRateOf(prof.sortie_cd)}%＝出撃と同じ確率）。落ちるランクはどの階でも同じで、F〜Sまで出ます。出撃とクールタイムを共有します。<br />
           <b style={{ color:'#44ff88' }}>守っているあいだは、出撃のルーン素材と装備のドロップ率が×{GUARD_DROP_MULT}</b>になります。
         </div>
       </div>
@@ -261,16 +261,6 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
       </div>
     </div>
   )
-}
-
-// 階が上がるほど良いランクが出るドロップ表
-function dropRanksOfFloor(floor) {
-  if (floor <= 8)  return { F:60, E:40 }
-  if (floor <= 16) return { E:55, D:45 }
-  if (floor <= 24) return { D:55, C:45 }
-  if (floor <= 32) return { C:55, B:45 }
-  if (floor <= 42) return { B:60, A:40 }
-  return { A:75, S:25 }
 }
 
 // 戦闘ログを旧版の BattleLogLine が読める形にする（出撃と同じ文体）

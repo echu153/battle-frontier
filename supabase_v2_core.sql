@@ -2071,7 +2071,7 @@ grant execute on function public.v2_sell_materials(jsonb) to authenticated;
 --   ・自分の階層守護者が破られると解放され、1つ上の階へ挑戦できるようになる
 --   ・負けると1つ下の階へ。ただし戦闘力が足りていれば落ちない
 --   ・**階層守護者のHP/MPは回復しない**。挑戦者は毎回満タン
---   ・EXPは勝敗によらず9〜13。勝つと装備が落ちる
+--   ・EXPは勝敗によらず9〜13。**装備も勝敗によらず**落ちる（確率は出撃と同じ）
 --   ・出撃とクールタイムを共有する（last_sortie_at を同じように更新する）
 --
 -- ★階層数50と、空き階に置くNPC階層守護者は wiki に無く、こちらで決めたもの
@@ -2183,8 +2183,9 @@ begin
   -- EXPは勝敗によらず入る（保護トリガー対応で、付与は必ず v2_apply_exp を通す）
   if v_exp > 0 then v_lv := public.v2_apply_exp(v_uid, v_exp); end if;
 
-  -- 勝ったときのドロップ
-  if p_win and p_drop is not null then
+  -- ★装備は**勝敗によらず**落ちる（2026-08-17 ユーザー決定）。確率は出撃と同じで、
+  --   落ちるランクはどの階でも同じ表（src/v2/lib/arena.js の DROP_RANKS）
+  if p_drop is not null then
     insert into public.v2_inventory (player_id, equip_id, plus)
     values (v_uid, p_drop, 0) returning id into v_inv;
   end if;
