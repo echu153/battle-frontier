@@ -139,7 +139,9 @@ export const previewOf = (f, at = new Date()) => {
   const workH = Math.min(elapsedH, roomH)
   return {
     pending: Math.min(cap, pending + rate * workH),
-    full: roomH <= 0 || workH >= roomH - 1e-9,
+    // ⚠**動いていない施設を「満杯」にしない。** 労働者がいないと rate も cap も0で
+    //   「残り0時間」になるため、素直に書くと労働者0の伐採所が「満杯です」と出る
+    full: rate > 0 && (roomH <= 0 || workH >= roomH - 1e-9),
   }
 }
 

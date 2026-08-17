@@ -180,10 +180,13 @@ test('見込みは 経過時間と満杯までの時間 の小さいほうで止
   assert.equal(previewOf(facOf(), AT(2)).pending, 60)
 })
 
-test('労働者がいない施設は時間が経っても増えない', () => {
+test('労働者がいない施設は時間が経っても増えない／「満杯」にもならない', () => {
   const f = facOf({ rate: 0, cap: 0 })
   assert.equal(previewOf(f, AT(8)).pending, 0)
   assert.equal(fullInOf(f, AT(8)), null)
+  // ★動いていないだけなのに full を立てると、画面に「満杯です」と出てしまう
+  assert.equal(previewOf(f, AT(8)).full, false, '労働者0の施設が満杯扱いになっている')
+  assert.equal(previewOf(facOf(), AT(12)).full, true, '本当に満杯のときは立つこと')
 })
 
 test('かかしも同じ式で貯まる', () => {
