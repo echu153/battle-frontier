@@ -237,6 +237,23 @@ test('v2_base_settle は 経過時間と満杯で頭打ちにする', () => {
   assert.match(body, /p_uid is distinct from auth\.uid\(\)/, '本人以外を弾いていない')
 })
 
+test('上限が下がったときは、切り捨てる前に資材へ回収する', () => {
+  // ★実機で踏んだ穴：労働者を外すと cap が0になり、先に least(cap, …) を掛けていたため
+  //   pending が0へ潰れてから超過を判定していた＝**未回収の資材が黙って消えた**
+  const body = bodyOf('v2_base_settle')
+  assert.match(body, /v_new\s*:=\s*v_f\.pending \+ v_rate \* v_work/,
+    'pending をいったん素のまま組み立てていない')
+  const overAt = body.search(/v_over := floor\(v_new - v_cap\)/)
+  const updAt  = body.search(/set pending = v_new/)
+  assert.notEqual(overAt, -1, '超過ぶんの回収がない')
+  assert.notEqual(updAt, -1)
+  assert.ok(overAt < updAt, '書き戻しより後で超過を判定している')
+  assert.doesNotMatch(body, /set pending = least\(v_cap/,
+    '上限で切り捨ててから超過を判定する書き方が残っている')
+  // 労働者を外すと rate も cap も0になり、pending がまるごと超過になる
+  assert.match(body, /v_new := v_new - v_over/, '回収したぶんを pending から引いていない')
+})
+
 test('内部ヘルパは authenticated から REVOKE してある', () => {
   for (const name of ['v2_base_settle', 'v2_base_rate', 'v2_base_material_sell',
                       'v2_base_hire_cost', 'v2_base_upgrade_cost', 'v2_base_kind_of']) {

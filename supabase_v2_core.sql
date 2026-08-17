@@ -2479,7 +2479,7 @@ declare
   v_elapsed numeric;
   v_room    numeric;
   v_work    numeric;
-  v_pend    numeric;
+  v_new     numeric;
   v_kind    text;
   v_over    int := 0;
 begin
@@ -2500,26 +2500,31 @@ begin
   --   生産が止まるのは**満杯になったときだけ**になった
   v_work    := least(v_elapsed, v_room);
 
-  update public.v2_base_facilities
-     set pending = least(v_cap, v_f.pending + v_rate * v_work),
-         accrued_from = now()
-   where player_id = p_uid and key = p_key
-   returning pending into v_pend;
+  v_new := v_f.pending + v_rate * v_work;
 
   -- ★capが下がったとき（労働者を外した等）。切り捨てても凍結させてもいけないので、
-  --   超過ぶんをその場で資材へ回収する。回収した量は呼び出し側が必ず画面に出すこと
+  --   超過ぶんをその場で資材へ回収する。回収した量は呼び出し側が必ず画面に出すこと。
+  -- ⚠**ここで先に least(v_cap, …) を掛けてはいけない。**
+  --   掛けると、労働者を外して cap が0になったときに pending が0へ潰れてから
+  --   超過を判定することになり、**未回収の資材が黙って消える**（実機で踏んだ）。
   v_kind := public.v2_base_kind_of(p_key);
-  if v_kind is not null and v_pend > v_cap then
-    v_over := floor(v_pend - v_cap)::int;
+  if v_kind is not null and v_new > v_cap then
+    v_over := floor(v_new - v_cap)::int;
     if v_over > 0 then
       insert into public.v2_base_materials (player_id, kind, grade, qty)
       values (p_uid, v_kind, v_f.grade, v_over)
       on conflict (player_id, kind, grade)
         do update set qty = public.v2_base_materials.qty + v_over;
-      update public.v2_base_facilities set pending = pending - v_over
-       where player_id = p_uid and key = p_key;
+      v_new := v_new - v_over;
     end if;
+  else
+    -- かかし・釣り場は資材へ回収できないので、上限で頭打ちにするだけ
+    v_new := least(v_cap, v_new);
   end if;
+
+  update public.v2_base_facilities
+     set pending = v_new, accrued_from = now()
+   where player_id = p_uid and key = p_key;
 
   return jsonb_build_object('ok', true, 'hours', v_work, 'auto_collected', v_over);
 end;
