@@ -254,6 +254,16 @@ test('上限が下がったときは、切り捨てる前に資材へ回収す�
   assert.match(body, /v_new := v_new - v_over/, '回収したぶんを pending から引いていない')
 })
 
+test('配置替えは自動回収した量を返し、画面もそれを出す', () => {
+  // ★黙って資材が増えると「なぜ増えたのか」が分からない（設計メモの約束）
+  const body = bodyOf('v2_base_move_worker')
+  assert.match(body, /v_auto := v_auto \+ coalesce\(\(v_st ->> 'auto_collected'\)::int, 0\)/,
+    '自動回収した量を集めていない')
+  assert.match(body, /'auto', jsonb_build_object/, '自動回収した量を返していない')
+  const src = readFileSync(new URL('../components/V2Base.jsx', import.meta.url), 'utf8')
+  assert.match(src, /d\.auto\?\.qty > 0/, '画面が自動回収した量を出していない')
+})
+
 test('内部ヘルパは authenticated から REVOKE してある', () => {
   for (const name of ['v2_base_settle', 'v2_base_rate', 'v2_base_material_sell',
                       'v2_base_hire_cost', 'v2_base_upgrade_cost', 'v2_base_kind_of']) {

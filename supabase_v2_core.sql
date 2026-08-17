@@ -2936,9 +2936,11 @@ grant execute on function public.v2_base_hire(text) to authenticated;
 create or replace function public.v2_base_move_worker(p_from text, p_to text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  v_uid uuid := auth.uid();
-  v_a   public.v2_base_facilities;
-  v_b   public.v2_base_facilities;
+  v_uid  uuid := auth.uid();
+  v_a    public.v2_base_facilities;
+  v_b    public.v2_base_facilities;
+  v_st   jsonb;
+  v_auto int := 0;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
@@ -2962,11 +2964,19 @@ begin
   update public.v2_base_facilities set workers = workers - 1 where player_id = v_uid and key = p_from;
   update public.v2_base_facilities set workers = workers + 1 where player_id = v_uid and key = p_to;
 
-  -- 減らした側の cap が下がるので、超過ぶんをここで資材へ回収する
-  perform public.v2_base_settle(v_uid, p_from);
-  perform public.v2_base_settle(v_uid, p_to);
+  -- 減らした側の cap が下がるので、超過ぶんをここで資材へ回収する。
+  -- ⚠**回収した量は必ず返して画面に出す**（黙って資材が増えると不審なため）
+  v_st   := public.v2_base_settle(v_uid, p_from);
+  v_auto := v_auto + coalesce((v_st ->> 'auto_collected')::int, 0);
+  v_st   := public.v2_base_settle(v_uid, p_to);
+  v_auto := v_auto + coalesce((v_st ->> 'auto_collected')::int, 0);
 
-  return jsonb_build_object('ok', true, 'from', p_from, 'to', p_to, 'base', public.v2_base_get());
+  return jsonb_build_object('ok', true, 'from', p_from, 'to', p_to,
+                            'auto', jsonb_build_object(
+                              'kind',  public.v2_base_kind_of(p_from),
+                              'grade', v_a.grade,
+                              'qty',   v_auto),
+                            'base', public.v2_base_get());
 end;
 $$;
 revoke all on function public.v2_base_move_worker(text, text) from public;

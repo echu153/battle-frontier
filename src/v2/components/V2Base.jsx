@@ -159,12 +159,18 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
     setMsg({ lines: [`🧑 ${FACILITY_BY_KEY[key]?.name} に労働者を雇いました（-${gold(d.cost)}）`], warn: [] })
   }
 
+  // ★移した側は上限が下がるので、貯まっていたぶんがその場で資材になる。
+  //   **黙って資材が増えると不審**なので必ず出す（設計メモの約束）
   const move = async (to) => {
     const from = moveFrom
     setMoveFrom('')
     const d = await call('v2_base_move_worker', { p_from: from, p_to: to }, `move:${to}`)
     if (!d) return
-    setMsg({ lines: [`🧑 ${FACILITY_BY_KEY[from]?.name} → ${FACILITY_BY_KEY[to]?.name} へ労働者を移しました`], warn: [] })
+    const lines = [`🧑 ${FACILITY_BY_KEY[from]?.name} → ${FACILITY_BY_KEY[to]?.name} へ労働者を移しました`]
+    if (d.auto?.qty > 0) {
+      lines.push(`📦 上限が下がったぶんを回収: ${materialName(d.auto.kind, d.auto.grade)} +${n(d.auto.qty)}`)
+    }
+    setMsg({ lines, warn: [] })
   }
 
   // ★切り替えの前にサーバーが必ず釣り上げる。その結果もそのまま出す
