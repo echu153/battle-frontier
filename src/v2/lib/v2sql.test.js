@@ -10,6 +10,7 @@ import { RATES } from './smith.js'
 import { RANKS } from './equipment.js'
 import { SELL_BASE, SELL_RARITY_MULT } from './material.js'
 import { LOSE_DROP, floorAfterLose } from './arena.js'
+import { SKILLS } from './skills.js'
 
 const SQL = readFileSync(new URL('../../../supabase_v2_core.sql', import.meta.url), 'utf8')
 
@@ -21,6 +22,21 @@ const bodyOf = (name) => {
   assert.notEqual(end, -1, `${name} の終わりが見つからない`)
   return SQL.slice(i, end)
 }
+
+// ★消費MPは skills.js と v2_skills の2か所にある（サーバーが編成の想定利用MPを検証するため）。
+//   倍率を下げたときにMPだけ据え置くと編成の重さが合わなくなるので、片方だけ直したら落とす。
+test('v2_skills の名前・職業・消費MPが skills.js と一致している（片方だけ直すと気付く）', () => {
+  const seed = SQL.slice(SQL.indexOf('insert into public.v2_skills'))
+  const rows = [...seed.slice(0, seed.indexOf('on conflict')).matchAll(/\('([^']+)','([^']+)',(\d+),(\d+)\)/g)]
+  assert.equal(rows.length, SKILLS.length, 'v2_skills の行数がJS側と違う')
+  const bySql = new Map(rows.map(m => [m[1], { cls: m[2], mp: Number(m[3]) }]))
+  for (const s of SKILLS) {
+    const row = bySql.get(s.name)
+    assert.ok(row, `${s.name} が v2_skills に無い`)
+    assert.equal(row.cls, s.cls, `${s.name} の職業`)
+    assert.equal(row.mp, s.mp || 0, `${s.name} の消費MP`)
+  }
+})
 
 test('v2_fuse の確率表が smith.js の RATES と一致している（片方だけ直すと気付く）', () => {
   const body = bodyOf('v2_fuse')

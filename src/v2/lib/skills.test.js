@@ -61,9 +61,9 @@ test('全スキルの数値がレンジに収まっている', () => {
     if (isPassive(s)) continue   // パッシブは発動率も倍率も持たない
     assert.ok(s.proc >= 40 && s.proc <= 100, `${s.name} の発動率 ${s.proc}`)
     if (s.kind === 'phys' || s.kind === 'mag') {
-      // 初期職は低め。上位職はあるけみすと級（通常2.0前後・切り札4.0まで）。
+      // 初期職は低め。上位職はあるけみすと級（あるけみすとの物理レンジ STR×2.2〜2.4 が基準）。
       // 魔法は軽減上限が50%(物理は34%)で防御力も厚いぶん倍率を高く取る
-      const cap = isBasicClass(s.cls) ? (s.kind === 'mag' ? 2.4 : 2.0) : (s.kind === 'mag' ? 4.3 : 4.0)
+      const cap = isBasicClass(s.cls) ? (s.kind === 'mag' ? 2.4 : 2.0) : (s.kind === 'mag' ? 2.7 : 2.4)
       assert.ok(s.mult > 0 && s.mult <= cap, `${s.name} の倍率 ${s.mult}（上限${cap}）`)
       assert.ok((s.hits || 1) >= 1 && (s.hits || 1) <= 5, `${s.name} の多段数`)
     } else {
@@ -73,6 +73,19 @@ test('全スキルの数値がレンジに収まっている', () => {
     for (const side of ['self', 'enemy']) {
       for (const k of Object.keys(s.buff?.[side] || {})) assert.ok(STAT_KEYS.includes(k), `${s.name} のバフ対象 ${k}`)
     }
+  }
+})
+
+// ★2026-08-18：上位職の切り札を3.0〜4.0まで伸ばしていて、あるけみすと（物理 STR×2.2〜2.4）の
+//   倍近くになっていた。**上限は「主参照＋副参照の合計 ×多段数」で見る**（単体の mult だけ見ると
+//   エレメンタルエッジ 2.2＋INT×1.0＝3.2 のような技がすり抜ける）。
+//   魔法の上限が物理の1.13倍なのは、v2の式では同じ倍率だと魔法のほうが通らないため
+//   （軽減上限50%対34%・魔防は INT＋VIT×0.15）。この比で同格の期待ダメージが揃う。
+test('上位職の合計倍率があるけみすとの水準を超えない（物理2.4・魔法2.7）', () => {
+  const total = (s) => (s.mult + (s.add || []).reduce((t, a) => t + a.rate, 0)) * (s.hits || 1)
+  for (const s of SKILLS.filter(s => (s.kind === 'phys' || s.kind === 'mag') && !isBasicClass(s.cls))) {
+    const cap = s.kind === 'mag' ? 2.7 : 2.4
+    assert.ok(total(s) <= cap + 1e-9, `${s.name}: 合計倍率${total(s).toFixed(2)}（上限${cap}）`)
   }
 })
 
