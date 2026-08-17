@@ -197,6 +197,27 @@ export const materialsOfEnemy = (enemy) => MATERIALS.filter(m => m.enemy === ene
 export const materialOf = (enemy, rarity) => MATERIALS.find(m => m.enemy === enemy && m.rarity === rarity) || null
 export const materialsOfArea = (area) => MATERIALS.filter(m => m.area === area)
 
+// ===== NPCへの売却 =====
+// ★**v2で唯一Goldが湧く場所**（2026-08-17 ユーザー決定「敵からGoldは落とさない」）。
+//   設計は docs/v2-gold-design.md。取引所の手数料だけがGoldを消すので、
+//   **ここの値がそのままv2のインフレの蛇口**になる。
+//
+// 値の引き方：素材は1戦闘に最大1個・通常20% / レア5% / 激レア1%＝合計26%しか落ちない。
+//   売値を 通常B / レア4B / 激レア20B と置くと1戦闘あたりの期待Goldは
+//   0.20B + 0.05×4B + 0.01×20B = 0.6B。そこへ**旧仕様の雑魚Goldの平均**を当ててBを決めた。
+//   ＝「落ちた素材を全部売ると、敵がGoldを落としていた頃とだいたい同じ」。
+//   実際はルーン作成にも素材を使う（売るか使うかの二択）ので、収入はこれより下がる。
+//
+// ⚠**サーバーにも同じ表がある**（supabase_v2_core.sql の v2_materials.sell）。
+//   売却の権威はサーバー側。**片方だけ直すと v2sql.test.js が落ちる**
+export const SELL_BASE = { 1:40, 2:80, 3:170, 4:290, 5:500, 6:750, 7:1170, 8:2330 }
+export const SELL_RARITY_MULT = { normal:1, rare:4, ultra:20 }
+export const sellPriceOf = (m) =>
+  m ? (SELL_BASE[m.area] || 0) * (SELL_RARITY_MULT[m.rarity] || 0) : 0
+// [{ id, qty }] の合計。持っている数を超えていないかは呼び出し側とサーバーが見る
+export const sellTotalOf = (items) =>
+  (items || []).reduce((t, it) => t + sellPriceOf(MATERIAL_BY_ID[it.id]) * Math.max(0, it.qty || 0), 0)
+
 // ===== 抽出 =====
 export const EXTRACT_COST = 5     // 消費する素材の数
 export const BOSS_LIMIT = 1       // ボス素材は5枠に1個まで（ユニーク素材）

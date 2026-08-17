@@ -50,8 +50,9 @@ export const expOf = (wasBoss, rng = Math.random) =>
   wasBoss ? EXP_BOSS : EXP_ZAKO_MIN + Math.floor(rng() * (EXP_ZAKO_MAX - EXP_ZAKO_MIN + 1))
 
 // ===== Gold =====
-// 敵ごとの設定値（enemies.js の gold）。旧版の値をそのまま使っている
-export const goldOf = (enemy) => enemy?.gold || 0
+// ★**敵はGoldを落とさない**（2026-08-17 ユーザー決定・docs/v2-gold-design.md）。
+//   Goldはルーン素材をNPCへ売って稼ぐ（material.js の sellPriceOf）。
+//   ⚠ goldOf は消した。サーバー側（v2_sortie_settle）もGoldを足さない
 
 // ===== 1回の出撃 =====
 // 戦闘そのものは runBattle が担当する。ここは「誰と当たるか・何がもらえるか」だけ
@@ -70,9 +71,8 @@ export const pickEncounter = (areaId, bossRate, at = new Date(), rng = Math.rand
 }
 
 // 勝ったあとの取り分。装備のドロップは別（rollDrop を呼ぶ。落ちる確率はまだ決めていない）
-export const rewardsOf = ({ area, enemy, isBoss, win }, rng = Math.random) => ({
+export const rewardsOf = ({ area, isBoss, win }, rng = Math.random) => ({
   exp: win ? expOf(isBoss, rng) : 0,
-  gold: win ? goldOf(enemy) : 0,
   unlockArea: win && isBoss && area.id < LAST_AREA ? area.id + 1 : null,
 })
 

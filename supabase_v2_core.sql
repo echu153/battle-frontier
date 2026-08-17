@@ -1181,6 +1181,18 @@ on conflict (id) do update set
   name = excluded.name, enemy = excluded.enemy, area = excluded.area, rarity = excluded.rarity,
   is_boss = excluded.is_boss, stats = excluded.stats, lo = excluded.lo, hi = excluded.hi;
 
+-- ---- 素材の売値（v2で唯一Goldが湧く場所）----
+-- ★**敵はGoldを落とさない**（2026-08-17 ユーザー決定・docs/v2-gold-design.md）。
+--   売値＝ エリアの基準額 × レア度の倍率（通常1 / レア4 / 激レア20）。
+--   基準額は「落ちた素材を全部売ると、敵がGoldを落としていた頃と同じ」から引いた。
+-- ⚠**同じ表が src/v2/lib/material.js の SELL_BASE / SELL_RARITY_MULT にもある。
+--   片方だけ直すと v2sql.test.js が落ちる**（売却の権威はこちら）
+alter table public.v2_materials add column if not exists sell int not null default 0;
+update public.v2_materials set sell =
+  (case area when 1 then 40 when 2 then 80 when 3 then 170 when 4 then 290
+             when 5 then 500 when 6 then 750 when 7 then 1170 when 8 then 2330 else 0 end)
+  * (case rarity when 'normal' then 1 when 'rare' then 4 when 'ultra' then 20 else 0 end);
+
 -- ---- 持っている素材（スタック）----
 create table if not exists public.v2_player_materials (
   player_id   uuid not null references auth.users(id) on delete cascade,
@@ -1229,6 +1241,9 @@ alter table public.v2_profiles add column if not exists unsocket_tickets int not
 -- 旧版と同じで、戦闘そのものはクライアントが回し、まとめてここへ送る。
 -- ⚠サーバーは「その回数で取り得る上限」を超えていないかだけ検証する（完全な権威ではない）。
 --   戦闘をサーバーで回すようにしたら、このRPCの中で回すよう差し替える。
+-- ★**敵はGoldを落とさない**（2026-08-17 ユーザー決定・docs/v2-gold-design.md）。
+--   p_gold は**受け取るが完全に無視する**（クライアントを先に配っても壊れないよう引数だけ残した）。
+--   Goldはルーン素材をNPCへ売って稼ぐ＝ v2_sell_materials が唯一の湧き口
 -- ⚠引数が増えたので、古い7引数版は落としてから作り直す（同じ名前で残ると呼び分けが曖昧になる）
 drop function if exists public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb);
 create or replace function public.v2_sortie_settle(
@@ -1247,9 +1262,7 @@ declare
   v_bw    int := greatest(coalesce(p_boss_wins, 0), 0);
   v_bs    int := greatest(coalesce(p_boss_seen, 0), 0);
   v_exp_cap  int;
-  v_gold_cap bigint;
   v_exp   int;
-  v_gold  bigint;
   v_drop  jsonb;
   v_ok    int := 0;
   v_res   jsonb;
@@ -1275,9 +1288,8 @@ begin
 
   -- 取り得る上限。通常敵はEXP11・ボスは13が最大（sortie.js と同じ）
   v_exp_cap  := v_n * 11 + v_bw * 13;
-  v_gold_cap := v_n::bigint * v_area.max_zako_gold + v_bw::bigint * v_area.boss_gold;
   v_exp  := least(greatest(coalesce(p_exp, 0), 0), v_exp_cap);
-  v_gold := least(greatest(coalesce(p_gold, 0), 0), v_gold_cap);
+  -- ★Goldはここで一切足さない（p_gold は無視）
 
   -- ドロップ。そのエリアで落ちるランクかどうかだけ見る
   if p_drops is not null and jsonb_typeof(p_drops) = 'array' then
@@ -1325,12 +1337,12 @@ begin
   v_rate := case when v_bs > 0 then 0 else least(100, v_row.boss_rate + 0.3 * v_n) end;
 
   update public.v2_profiles
-     set gold = gold + v_gold, unlocked_areas = v_unlocked, boss_rate = v_rate,
+     set unlocked_areas = v_unlocked, boss_rate = v_rate,
          last_sortie_at = now(), updated_at = now()
    where id = v_uid;
 
   v_res := public.v2_apply_exp(v_uid, v_exp);
-  return jsonb_build_object('ok', true, 'exp', v_exp, 'gold', v_gold, 'drops', v_ok,
+  return jsonb_build_object('ok', true, 'exp', v_exp, 'gold', 0, 'drops', v_ok,
     'unlocked', to_jsonb(v_unlocked), 'boss_rate', v_rate, 'level', v_res);
 end;
 $$;
@@ -1982,6 +1994,73 @@ $$;
 revoke all on function public.v2_debug_grant_material(int, int) from public;
 revoke all on function public.v2_debug_grant_material(int, int) from anon;
 grant execute on function public.v2_debug_grant_material(int, int) to authenticated;
+
+-- ===== 素材を売る（v2で唯一Goldが湧く場所）=====
+-- ★売値の権威はサーバー（v2_materials.sell）。クライアントの申告額は一切使わない。
+-- ★**所持数の検証を全部済ませてから引く**。途中でエラーを返す作りにすると、
+--   plpgsql は例外を投げない限りロールバックしないので**引かれた素材だけ残る**事故になる。
+-- p_items … [{ "id": "m:1:0:n", "qty": 3 }, ...]（同じIDが重複していても合算して扱う）
+create or replace function public.v2_sell_materials(p_items jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_max_kinds constant int := 300;   -- 一度に売れる種類
+  c_max_qty   constant int := 99999; -- 1種類あたりの個数
+  v_uid   uuid := auth.uid();
+  v_req   int;      -- 送られてきた種類（qty>0 のもの）
+  v_ok    int;      -- そのうち「実在して・足りている」種類
+  v_total bigint;
+  v_gold  bigint;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
+    return jsonb_build_object('ok', false, 'error', '売るものがありません');
+  end if;
+  if jsonb_array_length(p_items) > c_max_kinds then
+    return jsonb_build_object('ok', false, 'error', '一度に売れる数を超えています');
+  end if;
+
+  -- 検証：qty が正しいか・実在するか・足りているか
+  select count(*) into v_req
+    from (select r.id, sum(r.qty)::bigint as qty
+            from jsonb_to_recordset(p_items) as r(id text, qty int)
+           where r.id is not null and coalesce(r.qty, 0) > 0
+           group by r.id) q
+   where q.qty <= c_max_qty;
+  if v_req = 0 then return jsonb_build_object('ok', false, 'error', '個数が不正です'); end if;
+
+  select count(*), coalesce(sum(q.qty * m.sell), 0) into v_ok, v_total
+    from (select r.id, sum(r.qty)::int as qty
+            from jsonb_to_recordset(p_items) as r(id text, qty int)
+           where r.id is not null and coalesce(r.qty, 0) > 0
+           group by r.id) q
+    join public.v2_materials m on m.id = q.id
+    join public.v2_player_materials pm
+      on pm.player_id = v_uid and pm.material_id = q.id and pm.qty >= q.qty
+   where q.qty <= c_max_qty;
+  if v_ok <> v_req then
+    return jsonb_build_object('ok', false, 'error', '素材が足りません');
+  end if;
+
+  -- ここから先は失敗しない（検証が通っている）
+  update public.v2_player_materials pm
+     set qty = pm.qty - q.qty
+    from (select r.id, sum(r.qty)::int as qty
+            from jsonb_to_recordset(p_items) as r(id text, qty int)
+           where r.id is not null and coalesce(r.qty, 0) > 0
+           group by r.id) q
+   where pm.player_id = v_uid and pm.material_id = q.id;
+
+  update public.v2_profiles set gold = gold + v_total, updated_at = now()
+   where id = v_uid returning gold into v_gold;
+
+  return jsonb_build_object('ok', true, 'gained', v_total, 'gold', v_gold, 'kinds', v_ok);
+end;
+$$;
+revoke all on function public.v2_sell_materials(jsonb) from public;
+revoke all on function public.v2_sell_materials(jsonb) from anon;
+grant execute on function public.v2_sell_materials(jsonb) to authenticated;
 
 -- ============================================================
 -- ===== 10. アリーナ（対人）=====

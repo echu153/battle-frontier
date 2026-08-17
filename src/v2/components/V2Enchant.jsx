@@ -5,6 +5,7 @@ import { equippedItems } from '../lib/loadout.js'
 import {
   MATERIAL_BY_ID, RARITY_LABEL, RARITY_COLOR, COLOR_LABEL, COLOR_HEX,
   EXTRACT_COST, BOSS_LIMIT, canExtract, runePower, runeName, runeFullName, materialsOfArea,
+  RARITIES, sellPriceOf, sellTotalOf,
 } from '../lib/material.js'
 import { enchantOf } from '../lib/enchant.js'
 import { STAT_DEFS } from '../lib/stats.js'
@@ -22,6 +23,8 @@ import {
 const TABS = [
   { key:'extract', label:'⚗ ルーン作成' },
   { key:'socket',  label:'◈ ルーン刻印' },
+  // ★素材の売却＝**v2で唯一Goldが湧く場所**（docs/v2-gold-design.md）。敵はGoldを落とさない
+  { key:'sell',    label:'💰 素材売却' },
 ]
 
 const statLine = (stats) =>
@@ -56,6 +59,9 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
   const [target, setTarget] = useState(null)    // ソケットにはめる対象 { invId, slot, color }
   const [runeFilter, setEssFilter] = useStored('runeFilter', defaultRuneFilter, true)  // ルーン一覧の絞り込み
   const [rawRunePage, setRawEssPage] = useState(0)
+  const [sell, setSell] = useState({})          // 売却タブで選んだ数 { 素材ID: 個数 }
+  const [sellConfirm, setSellConfirm] = useState(false)
+  const [sold, setSold] = useState(null)        // 売却の結果 { gained, gold }
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
 
@@ -94,6 +100,37 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
     if (!ok) return
     setTarget(null)
     setSealed({ rune, target: t, overwrote: !!t.over })   // 結果はポップアップで出す
+  }
+
+  // ===== 素材の売却 =====
+  // ★売値の権威はサーバー（v2_materials.sell）。ここは選んで送るだけで、金額は表示のためだけ
+  const sellItems = Object.entries(sell)
+    .map(([id, qty]) => ({ id, qty: Math.min(qty, held[id] || 0) }))
+    .filter(it => it.qty > 0)
+  const sellTotal = sellTotalOf(sellItems)
+  const setSellQty = (id, qty) =>
+    setSell(s => {
+      const n = Math.max(0, Math.min(qty, held[id] || 0))
+      const next = { ...s }
+      if (n === 0) delete next[id]; else next[id] = n
+      return next
+    })
+  // 表示中のエリアの、そのレア度を持っているぶん全部
+  const sellAllOf = (rarity) =>
+    setSell(s => {
+      const next = { ...s }
+      for (const m of materialsOfArea(area)) {
+        if (m.rarity !== rarity) continue
+        if (held[m.id] > 0) next[m.id] = held[m.id]
+      }
+      return next
+    })
+  const doSell = async () => {
+    const data = await call('v2_sell_materials', { p_items: sellItems })
+    setSellConfirm(false)
+    if (!data) return
+    setSell({})
+    setSold(data)   // 結果はポップアップで出す
   }
 
   // ★ボス素材は5枠に1個まで。1個選んだ時点で**他のボス素材は選べなくする**
@@ -196,6 +233,75 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
               {m.isBoss && <span style={{ color:'#ffcc44' }}>　ボス素材</span>}
             </button>
           ) : null)}
+        </div>
+      )}
+
+      {/* ===== 素材売却 ===== */}
+      {tab === 'sell' && (
+        <div style={{ ...box, padding:'12px' }}>
+          <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'8px' }}>
+            素材を売ってGoldにする。<span style={{ color:'#ffcc44' }}>敵はGoldを落とさない</span>ので、
+            ここがGoldの入口。<span style={{ color:'#ff8844' }}>売った素材は戻らない</span>
+            （同じ素材はルーン作成にも使う）
+          </div>
+
+          {/* エリア */}
+          <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'6px' }}>
+            {AREAS.map(a => (
+              <button key={a.id} onClick={() => setArea(a.id)}
+                style={{ ...miniBtn(area === a.id ? '#00aaff' : '#7fa6d0'), background: area === a.id ? '#002850' : '#000818' }}>
+                {a.id}
+              </button>
+            ))}
+          </div>
+          {/* まとめて選ぶ（表示中のエリアぶん） */}
+          <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'8px' }}>
+            {RARITIES.map(r => (
+              <button key={r} onClick={() => sellAllOf(r)} style={miniBtn(RARITY_COLOR[r])}>
+                {RARITY_LABEL[r]}を全部
+              </button>
+            ))}
+            {sellItems.length > 0 && (
+              <button onClick={() => setSell({})} style={miniBtn('#ff8888')}>選び直す</button>
+            )}
+          </div>
+
+          {materialsOfArea(area).map(m => held[m.id] ? (
+            <div key={m.id}
+              style={{ display:'flex', alignItems:'center', gap:'4px', background:'#000818',
+                border:'1px solid #002244', borderLeft:`3px solid ${RARITY_COLOR[m.rarity]}`,
+                padding:'4px 6px', marginBottom:'2px', fontFamily:'monospace', fontSize:'11px' }}>
+              <span style={{ color: RARITY_COLOR[m.rarity], flex:'1 1 auto', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                {m.name}
+                <span style={{ color:'#ffffff' }}>{' '}×{held[m.id]}</span>
+                <span style={{ color:'#93a9be' }}>{'　'}1個 {sellPriceOf(m).toLocaleString()} G</span>
+              </span>
+              <button onClick={() => setSellQty(m.id, (sell[m.id] || 0) - 1)} disabled={!sell[m.id]}
+                style={{ ...miniBtn(sell[m.id] ? '#88aaff' : '#3a4a60'), padding:'2px 7px' }}>−</button>
+              <span style={{ color: sell[m.id] ? '#ffcc00' : '#62789a', minWidth:'26px', textAlign:'center' }}>
+                {sell[m.id] || 0}
+              </span>
+              <button onClick={() => setSellQty(m.id, (sell[m.id] || 0) + 1)} disabled={(sell[m.id] || 0) >= held[m.id]}
+                style={{ ...miniBtn((sell[m.id] || 0) < held[m.id] ? '#88aaff' : '#3a4a60'), padding:'2px 7px' }}>＋</button>
+              <button onClick={() => setSellQty(m.id, held[m.id])} style={{ ...miniBtn('#7fa6d0'), padding:'2px 6px' }}>全部</button>
+            </div>
+          ) : null)}
+          {materialsOfArea(area).every(m => !held[m.id]) && (
+            <div style={{ color:'#62789a', fontSize:'11px', padding:'6px 0' }}>このエリアの素材は持っていない</div>
+          )}
+
+          {/* 合計 */}
+          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginTop:'10px',
+            borderTop:'1px solid #002244', paddingTop:'10px' }}>
+            <span style={{ color:'#7fa6d0', fontSize:'11px' }}>
+              {sellItems.reduce((t, it) => t + it.qty, 0)}個
+            </span>
+            <span style={{ color:'#ffcc00', fontSize:'13px' }}>{sellTotal.toLocaleString()} G</span>
+            <button onClick={() => setSellConfirm(true)} disabled={busy || sellItems.length === 0}
+              style={{ ...miniBtn(sellItems.length ? '#ffcc00' : '#62789a'), marginLeft:'auto', padding:'8px 16px', fontSize:'12px' }}>
+              💰 売る
+            </button>
+          </div>
         </div>
       )}
 
@@ -323,6 +429,43 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
           </div>
           <div style={{ color:'#93a9be', fontSize:'11px' }}>
             ステータスの型も値も、いま抽選されます。色は5個の合計で決まります。
+          </div>
+        </V2Modal>
+      )}
+
+      {/* ===== 売却前の確認 ===== */}
+      {sellConfirm && (
+        <V2Modal title="💰 売却の確認" color="#ffcc00" danger busy={busy}
+          confirmLabel="売る" onConfirm={doSell} onClose={() => !busy && setSellConfirm(false)}>
+          <div style={{ color:'#88ccff' }}>
+            次の素材を売ります（<b style={{ color:'#ff8844' }}>素材は戻りません</b>）
+          </div>
+          <div style={{ margin:'6px 0', maxHeight:'40vh', overflowY:'auto' }}>
+            {sellItems.map(it => {
+              const m = MATERIAL_BY_ID[it.id]
+              return (
+                <div key={it.id} style={{ fontSize:'11px', display:'flex', gap:'6px' }}>
+                  <span style={{ color: RARITY_COLOR[m.rarity] }}>{m.name}</span>
+                  <span style={{ color:'#ffffff' }}>×{it.qty}</span>
+                  <span style={{ marginLeft:'auto', color:'#93a9be' }}>
+                    {(sellPriceOf(m) * it.qty).toLocaleString()} G
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          <div style={{ color:'#ffcc00', fontSize:'13px', borderTop:'1px solid #002a55', paddingTop:'6px' }}>
+            合計 {sellTotal.toLocaleString()} G
+          </div>
+        </V2Modal>
+      )}
+
+      {/* ===== 売却の結果 ===== */}
+      {sold && (
+        <V2Modal title="💰 売った！" color="#ffcc00" onClose={() => setSold(null)}>
+          <div style={{ color:'#ffcc00', fontSize:'15px' }}>+{(sold.gained || 0).toLocaleString()} G</div>
+          <div style={{ color:'#93a9be', fontSize:'11px', marginTop:'4px' }}>
+            所持金：{(sold.gold || 0).toLocaleString()} G
           </div>
         </V2Modal>
       )}

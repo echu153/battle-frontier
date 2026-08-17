@@ -8,6 +8,7 @@ import {
   rangeOf, ratioOf, valueTable, meanOf, rollValue, rollStats, colorOf,
   canExtract, extract, EXTRACT_COST, AREA_MAX, TOP_WEIGHT, runePower,
   gradeOf, runeName, runeFullName, RUNE_NAMES, GRADE_MIN, COLOR_LABEL,
+  SELL_BASE, SELL_RARITY_MULT, sellPriceOf, sellTotalOf,
 } from './material.js'
 import { allEnemies } from './enemies.js'
 import { ENCHANTS } from './enchant.js'
@@ -265,4 +266,42 @@ test('ボス素材は2つのステータスが両方とも、それぞれ別に�
   }
   assert.equal(both, n, '片方しか付いていない回がある')
   assert.ok(differ > n * 0.4, `2つが常に同じ値になっている（別々に引けていない）: ${differ}/${n}`)
+})
+
+// ===== 売却（v2で唯一Goldが湧く場所）=====
+// ★数値の正は docs/v2-gold-design.md。**同じ表が supabase_v2_core.sql にもある**（v2sql.test.js が突き合わせる）
+test('素材の売値は全種類に付いていて、レア度で 1 / 4 / 20 倍', () => {
+  for (const m of MATERIALS) {
+    assert.ok(sellPriceOf(m) > 0, `${m.name} の売値`)
+    assert.equal(sellPriceOf(m), SELL_BASE[m.area] * SELL_RARITY_MULT[m.rarity], m.name)
+  }
+  assert.deepEqual(SELL_RARITY_MULT, { normal:1, rare:4, ultra:20 })
+  // エリアが進むほど高い
+  let prev = 0
+  for (let a = 1; a <= 8; a++) {
+    assert.ok(SELL_BASE[a] > prev, `エリア${a}の基準額`)
+    prev = SELL_BASE[a]
+  }
+})
+
+test('1戦闘あたりの期待Goldは、素材のドロップ率ぶんだけ薄まる', () => {
+  // ドロップは 通常20% / レア5% / 激レア1%。B / 4B / 20B なので期待値は 0.6B になる
+  for (let a = 1; a <= 8; a++) {
+    const m = (rarity) => ({ area:a, rarity })
+    const exp = (MATERIAL_RATE.normal * sellPriceOf(m('normal'))
+      + MATERIAL_RATE.rare * sellPriceOf(m('rare'))
+      + MATERIAL_RATE.ultra * sellPriceOf(m('ultra'))) / 100
+    assert.equal(Math.round(exp), Math.round(SELL_BASE[a] * 0.6), `エリア${a}の期待Gold`)
+  }
+})
+
+test('売却の合計は個数ぶん足される（持っていない素材は0円）', () => {
+  const n = materialOf('スライム', 'normal')
+  const u = materialOf('スライム', 'ultra')
+  assert.equal(sellTotalOf([{ id:n.id, qty:3 }]), sellPriceOf(n) * 3)
+  assert.equal(sellTotalOf([{ id:n.id, qty:3 }, { id:u.id, qty:1 }]),
+    sellPriceOf(n) * 3 + sellPriceOf(u))
+  assert.equal(sellTotalOf([{ id:'m:9:9:n', qty:5 }]), 0, '存在しないIDは0')
+  assert.equal(sellTotalOf([{ id:n.id, qty:-5 }]), 0, 'マイナスは0扱い')
+  assert.equal(sellTotalOf([]), 0)
 })

@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   BOSS_RATE_STEP, rollBoss, nextBossRate, isAreaUnlocked, unlockNext,
-  expOf, goldOf, pickEncounter, EXP_BOSS, EXP_ZAKO_MIN, EXP_ZAKO_MAX, LAST_AREA,
+  expOf, rewardsOf, pickEncounter, EXP_BOSS, EXP_ZAKO_MIN, EXP_ZAKO_MAX, LAST_AREA,
   COOLDOWNS, DEFAULT_COOLDOWN, cooldownOf,
   featuredPartAt, nextSwitchAt, featuredSchedule, rollDropPart, rollDrop,
   BANDS, bandAt, enemyPoolAt, DROP_RATE, dropRateOf, rollHasDrop,
@@ -66,18 +66,15 @@ test('EXPは旧版と同じ（通常8〜11・ボス13）', () => {
   assert.equal(seen.size, EXP_ZAKO_MAX - EXP_ZAKO_MIN + 1, '8〜11が全部出る')
 })
 
-test('Goldは旧版の値をそのまま持っている', () => {
-  for (const e of allEnemies()) assert.ok(goldOf(e) > 0, `${e.name} のGold`)
-  assert.equal(goldOf(areaOf(1).enemies[0]), 20)      // スライム
-  assert.equal(goldOf(areaOf(1).boss), 100)           // ビッグスライム
-  assert.equal(goldOf(areaOf(8).boss), 60000)         // 天空覇龍ウラノス
-  // エリアが進むほど増える
-  let prev = 0
-  for (let id = 1; id <= 8; id++) {
-    const g = goldOf(areaOf(id).boss)
-    assert.ok(g > prev, `エリア${id}のボスGold`)
-    prev = g
+test('敵はGoldを落とさない（Goldは素材の売却で稼ぐ）', () => {
+  // ★2026-08-17 ユーザー決定（docs/v2-gold-design.md）。
+  //   ここが緩むと「敵からもGold・素材売却でもGold」の二重の湧き口になる
+  for (const e of allEnemies()) {
+    assert.equal(e.gold, undefined, `${e.name} にGoldが残っている`)
   }
+  const r = rewardsOf({ area: areaOf(1), enemy: areaOf(1).boss, isBoss: true, win: true }, mkRng(1))
+  assert.equal(r.gold, undefined, '報酬にGoldが入っている')
+  assert.ok(r.exp > 0, 'EXPは入る')
 })
 
 test('遭遇はそのエリアの敵から選ばれる', () => {
@@ -174,11 +171,9 @@ test('時間帯限定の敵が各エリアに1体ずつ、その時間だけ抽�
       assert.equal(pool.length, 4, '通常3体＋限定1体')
       const timed = pool[3]
       assert.equal(timed.band, band)
-      // 限定敵は通常敵の最上位より強く、Goldも多い
+      // 限定敵は通常敵の最上位より強い
       const maxNormal = Math.max(...area.enemies.map(e => e.power))
-      const maxGold = Math.max(...area.enemies.map(e => e.gold))
       assert.ok(timed.power > maxNormal, `${timed.name} の戦闘力`)
-      assert.ok(timed.gold > maxGold, `${timed.name} のGold`)
       // ボスより弱い
       assert.ok(timed.power < area.boss.power, `${timed.name} がボスより強い`)
     }

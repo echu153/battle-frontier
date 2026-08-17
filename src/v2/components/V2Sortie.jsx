@@ -3,7 +3,7 @@ import { supabase } from '../../supabase'
 import { BattleLogLine } from '../../pages/Game'
 import { AREAS, toFighter as enemyFighter } from '../lib/enemies.js'
 import {
-  pickEncounter, expOf, goldOf, isAreaUnlocked, nextBossRate,
+  pickEncounter, expOf, isAreaUnlocked, nextBossRate,
   cooldownOf, rollHasDrop, rollDrop, rollMaterial, COOLDOWNS,
 } from '../lib/sortie.js'
 import { runBattle } from '../lib/battle.js'
@@ -57,7 +57,6 @@ export default function V2Sortie({ prof, inventory, runes, onProfile, onScene })
     const r = runBattle(me, enemyFighter(enc.enemy, 8))
     const win = r.winner === 'a'
     const exp = win ? expOf(enc.isBoss) : 0
-    const gold = win ? goldOf(enc.enemy) : 0
     const drop = win && rollHasDrop(cd) ? rollDrop(area.id, new Date()) : null
     const mat = win ? rollMaterial(enc.enemy.name, matMult) : null
     setBossRate(nextBossRate(bossRate, enc.isBoss))
@@ -116,7 +115,8 @@ export default function V2Sortie({ prof, inventory, runes, onProfile, onScene })
       ? { text:`${foe}を倒した！（${r.turns}ターン）`, color:'#ffcc00' }
       : { text:`敗北…（${r.turns}ターン）`, color:'#ff4444' })
     if (win) {
-      out.push({ text:`EXP +${exp}　Gold +${gold.toLocaleString()}`, color:'#ffcc00' })
+      // ★敵はGoldを落とさない（docs/v2-gold-design.md）。Goldは素材を売って稼ぐ
+      out.push({ text:`EXP +${exp}`, color:'#ffcc00' })
       if (drop) out.push({ text:`🎁 ${drop.rank}級「${drop.name}」を入手！`, color: RANK_COLOR[drop.rank] })
       if (mat) out.push({ text:`⚗ ルーン素材「${mat.name}」を入手！`, color: RARITY_COLOR[mat.rarity] })
       if (enc.isBoss && area.id < 8) out.push({ text:`🔓 エリア${area.id + 1}が解放された！`, color:'#44ff88' })
@@ -127,7 +127,8 @@ export default function V2Sortie({ prof, inventory, runes, onProfile, onScene })
     const { data, error } = await supabase.rpc('v2_sortie_settle', {
       p_area: area.id, p_normals: enc.isBoss ? 0 : 1,
       p_boss_wins: enc.isBoss && win ? 1 : 0, p_boss_seen: enc.isBoss ? 1 : 0,
-      p_exp: exp, p_gold: gold, p_drops: drop ? [drop.id] : [],
+      // p_gold は**サーバー側が無視する**（敵はGoldを落とさない）。引数だけ互換で残している
+      p_exp: exp, p_gold: 0, p_drops: drop ? [drop.id] : [],
       p_materials: mat ? [mat.id] : [],
     })
     setLoading(false)
