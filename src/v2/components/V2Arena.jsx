@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../supabase'
-import { BattleLogLine } from '../../pages/Game'
+import V2LogLine from './V2LogLine.jsx'
 import { runBattle } from '../lib/battle.js'
 import { toFighter } from '../lib/loadout.js'
 import { calcPower } from '../lib/stats.js'
@@ -12,7 +12,7 @@ import {
   FLOORS, champOf, snapshotOf, streakBonusPct, applyStreakBonus,
   floorAfterLose, expOf, rollDrop, canChallenge, DROP_RATE, STREAK_PCT, GUARD_DROP_MULT,
 } from '../lib/arena.js'
-import { box, btn, miniBtn, RANK_COLOR } from './v2ui.js'
+import { box, btn, miniBtn, RANK_COLOR, dropLine } from './v2ui.js'
 
 // アリーナ（あるけみすとの天空闘技場と同じ仕組み）。
 // ★戦闘はここで回して、結果を v2_arena_fight へ申告する（出撃と同じ形）。
@@ -90,7 +90,8 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
       ? { text:`${champ.name}を倒した！ ${floor}階の階層守護者になった`, color:'#ffcc00' }
       : { text:`敗北…（${r.turns}ターン）`, color:'#ff4444' })
     out.push({ text:`EXP +${exp}`, color:'#ffcc00' })
-    if (drop) out.push({ text:`🎁 ${drop.rank}級「${drop.name}」を入手！`, color: RANK_COLOR[drop.rank] })
+    // ★色を付けるのは**ランクと装備名だけ**。行全体は塗らない（V2LogLine）
+    if (drop) out.push(dropLine(drop, RANK_COLOR[drop.rank]))
     if (!win) out.push({ text:`次は${floorAfterLose(floor)}階から`, color:'#7fa6d0' })
     setLogs(out)
 
@@ -123,7 +124,7 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
         <div style={{ color:'#ff88cc', fontSize:'13px', marginBottom:'10px' }}>⚔ アリーナ {floor}階</div>
         {busy && <div style={{ color:'#7fa6d0', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
         <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
-          {logs.map((l, i) => <BattleLogLine key={i} l={l} />)}
+          {logs.map((l, i) => <V2LogLine key={i} l={l} />)}
         </div>
         <button onClick={() => setScene('lobby')} disabled={busy} style={{ ...btn('#0088ff'), width:'100%', padding:'10px' }}>
           🏛 アリーナに戻る

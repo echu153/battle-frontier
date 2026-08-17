@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
-import { BattleLogLine } from '../../pages/Game'
+import V2LogLine from './V2LogLine.jsx'
 import { AREAS, toFighter as enemyFighter } from '../lib/enemies.js'
 import {
   pickEncounter, expOf, isAreaUnlocked, nextBossRate,
@@ -11,7 +11,7 @@ import { toFighter as playerFighter, equippedRunes, runeAbilities } from '../lib
 import { dropRateMultOf } from '../lib/enchant.js'
 import { guardDropMultOf, GUARD_DROP_MULT } from '../lib/arena.js'
 import { RARITY_COLOR } from '../lib/material.js'
-import { RANK_COLOR } from './v2ui.js'
+import { RANK_COLOR, dropLine, LOG_PLAIN } from './v2ui.js'
 
 // ★旧版（無印）の街とまったく同じ作り。
 //   街のブロックが**ホームにそのまま載っている**（別画面へ移動しない）。
@@ -121,8 +121,13 @@ export default function V2Sortie({ prof, inventory, runes, guard, onProfile, onS
     if (win) {
       // ★敵はGoldを落とさない（docs/v2-gold-design.md）。Goldは素材を売って稼ぐ
       out.push({ text:`EXP +${exp}`, color:'#ffcc00' })
-      if (drop) out.push({ text:`🎁 ${drop.rank}級「${drop.name}」を入手！`, color: RANK_COLOR[drop.rank] })
-      if (mat) out.push({ text:`⚗ ルーン素材「${mat.name}」を入手！`, color: RARITY_COLOR[mat.rarity] })
+      // ★色を付けるのは**ランクと装備名だけ**。行全体は塗らない（V2LogLine）
+      if (drop) out.push(dropLine(drop, RANK_COLOR[drop.rank]))
+      if (mat) out.push({ color: LOG_PLAIN, parts:[
+        { text:'⚗ ルーン素材「' },
+        { text: mat.name, color: RARITY_COLOR[mat.rarity] },
+        { text:'」を入手！' },
+      ] })
       if (enc.isBoss && area.id < 8) out.push({ text:`🔓 エリア${area.id + 1}が解放された！`, color:'#44ff88' })
     }
     setLogs(out)
@@ -150,7 +155,7 @@ export default function V2Sortie({ prof, inventory, runes, guard, onProfile, onS
         <div style={{ color:'#ff6644', fontSize:'13px', marginBottom:'10px' }}>⚔ バトル！</div>
         {loading && <div style={{ color:'#7fa6d0', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
         <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
-          {logs.map((l, i) => <BattleLogLine key={i} l={l} />)}
+          {logs.map((l, i) => <V2LogLine key={i} l={l} />)}
         </div>
         <button onClick={() => setScene('town')} disabled={loading}
           style={{ width:'100%', padding:'10px', background: loading ? '#000a18' : '#001840',

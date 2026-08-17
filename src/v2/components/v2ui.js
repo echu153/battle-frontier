@@ -20,6 +20,24 @@ export const TEXT = {
   empty: '#62789a',   // 「—」や押せないボタン
 }
 
-export const RANK_COLOR = { F:'#94a7bb', E:'#88aa99', D:'#88bbdd', C:'#66ddaa', B:'#88ddff', A:'#ffcc00', S:'#ff88cc' }
+// ★ランクの色は**旧版（無印）と同じ**（2026-08-17 ユーザー指示）。
+//   出どころは src/pages/Equipment.jsx の RARITY_COLORS（f〜sss）。v2はF〜Sまで
+export const RANK_COLOR = { F:'#888888', E:'#6699cc', D:'#ff8844', C:'#44bb44', B:'#4488ff', A:'#ff4444', S:'#ffcc00' }
 // ⚠**部位のアイコンは使わない**（2026-08-16 ユーザー指示）。環境によっては豆腐（□）になって
 //   装備名の頭に読めない字が並ぶ。部位は文字（武器・頭・鎧…）でそのまま出すこと
+
+// ===== 戦闘ログの「入手！」の1行 =====
+// ★色を付けるのは**ランクと装備名だけ**（2026-08-17 ユーザー指示）。
+//   行全体を塗ると読みにくいので、🎁・かぎかっこ・「を入手！」は地の色のままにする。
+//   parts を描くのは V2LogLine.jsx。出撃とアリーナで同じ見た目にするためここに置いている
+export const LOG_PLAIN = '#7fa6d0'
+export const dropLine = (item, color) => ({
+  color: LOG_PLAIN,
+  parts: [
+    { text:'🎁 ' },
+    { text:`${item.rank}級`, color },
+    { text:'「' },
+    { text: item.name, color },
+    { text:'」を入手！' },
+  ],
+})
