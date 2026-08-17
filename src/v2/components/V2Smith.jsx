@@ -8,7 +8,7 @@ import {
   PROTECT_NAME, PROTECT_DESC,
 } from '../lib/smith.js'
 import { filterRows, sortRows, pageOf, clampPage, defaultFilter } from '../lib/browse.js'
-import { box, btn, miniBtn, RANK_COLOR, PART_ICON } from './v2ui.js'
+import { box, btn, miniBtn, RANK_COLOR } from './v2ui.js'
 import { V2Filter, V2Pager } from './V2Browse.jsx'
 import V2Modal from './V2Modal.jsx'
 import V2Enchant from './V2Enchant.jsx'
@@ -206,7 +206,7 @@ export default function V2Smith({ prof, inventory, materials, runes, isAdmin, on
                 border:`1px solid ${openEquip === k.equipId ? '#00aaff' : '#002244'}`,
                 color:'#88ccff', fontFamily:'monospace', fontSize:'11px', cursor:'pointer' }}>
               <span style={{ color: RANK_COLOR[k.item.rank] }}>{k.item.rank}</span>
-              {' '}{PART_ICON[k.item.part]}{k.item.name}
+              {' '}{k.item.name}
               <span style={{ color:'#7fa6d0' }}>　×{k.count}個　{k.item.type}</span>
               <span style={{ color:'#7fa6d0', float:'right' }}>{openEquip === k.equipId ? '▲' : '▼'}</span>
             </button>

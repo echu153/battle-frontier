@@ -5,7 +5,7 @@ import { equippedItems, gearPower, wornIdsOf, stackInventory, runePctText } from
 import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
 import { COLOR_HEX } from '../lib/material.js'
 import { filterRows, sortRows, pageOf, clampPage, defaultFilter } from '../lib/browse.js'
-import { box, miniBtn, RANK_COLOR, PART_ICON } from './v2ui.js'
+import { box, miniBtn, RANK_COLOR } from './v2ui.js'
 import { V2Filter, V2Pager } from './V2Browse.jsx'
 import V2ItemTip, { SealTags } from './V2ItemTip.jsx'
 
@@ -84,7 +84,7 @@ export default function V2Storage({ prof, inventory, runes, onProfile, onBack })
           {['すべて', ...PARTS].map(p => (
             <button key={p} onClick={() => setPart(p)}
               style={{ ...miniBtn(part === p ? '#00aaff' : '#7fa6d0'), background: part === p ? '#002850' : '#000818' }}>
-              {PART_ICON[p] || ''}{p}
+              {p}
             </button>
           ))}
           <span style={{ color:'#7fa6d0', fontSize:'10px', marginLeft:'auto', alignSelf:'center' }}>
@@ -106,7 +106,7 @@ export default function V2Storage({ prof, inventory, runes, onProfile, onBack })
               <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
                 <span style={{ color: RANK_COLOR[item.rank], fontSize:'10px', minWidth:'22px' }}>{item.rank}</span>
                 <span style={{ color:'#88ccff', fontSize:'12px' }}>
-                  {PART_ICON[item.part]}{item.name}{plus ? <span style={{ color:'#ffcc00' }}>+{plus}</span> : ''}
+                  {item.name}{plus ? <span style={{ color:'#ffcc00' }}>+{plus}</span> : ''}
                 </span>
                 {/* ★同じ装備・同じ強化値はここでまとめて個数にする */}
                 {g.list.length > 1 && <span style={{ color:'#ffffff', fontSize:'11px' }}>×{g.list.length}</span>}
