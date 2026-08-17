@@ -71,6 +71,14 @@ export const progressOf = (prof, levelKey, taskKey, at = new Date()) => {
   return { now: Math.min(now, goal || now), goal, done: goal > 0 && now >= goal }
 }
 
+// 終わった項目の数。畳んでいるときの「2/4」に使う
+export const doneCountOf = (prof, levelKey, at = new Date()) => {
+  const lv = levelOf(levelKey)
+  if (!lv) return 0
+  const c = countsOf(prof, at)
+  return TASK_KEYS.filter(k => (c[k] || 0) >= (lv.goals[k] || 0)).length
+}
+
 // 全部そろったか
 export const isComplete = (prof, levelKey, at = new Date()) => {
   const lv = levelOf(levelKey)

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../../supabase'
 import {
-  TASKS, LEVELS, levelOf, pickedLevelOf, progressOf,
+  TASKS, LEVELS, levelOf, pickedLevelOf, progressOf, doneCountOf,
   isComplete, isClaimed, canClaim,
 } from '../lib/daily.js'
 import { box, btn, miniBtn } from './v2ui.js'
@@ -71,10 +71,15 @@ export default function V2Daily({ prof, onProfile, embedded = false }) {
     )
   }
 
+  // ★畳んでいても進み具合が分かるように「2/4」を出す（開かないと分からないのを避ける）
+  const doneCount = doneCountOf(prof, picked)
   const head = (
     <span>
       📋 今日のミッション
       <span style={{ color:lv.color, fontSize:'10px', marginLeft:'6px' }}>{lv.label}</span>
+      <span style={{ color: done ? '#44ff88' : '#ffcc00', fontSize:'11px', marginLeft:'6px' }}>
+        {doneCount}/{TASKS.length}
+      </span>
       {claimed
         ? <span style={{ color:'#44ff88', fontSize:'10px', marginLeft:'6px' }}>受け取り済み</span>
         : done && <span style={{ color:'#ffcc00', fontSize:'10px', marginLeft:'6px' }}>達成！受け取れます</span>}

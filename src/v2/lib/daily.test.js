@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import {
   TASKS, TASK_KEYS, LEVELS, LEVEL_KEYS, levelOf,
   DAY_RESET_HOUR, dayOf, isToday, countsOf, progressOf,
-  isComplete, isClaimed, pickedLevelOf, canClaim, nextResetAt,
+  isComplete, isClaimed, pickedLevelOf, canClaim, nextResetAt, doneCountOf,
 } from './daily.js'
 import { DAY_RESET_HOUR as TREE_RESET } from './tree.js'
 
@@ -82,4 +82,24 @@ test('難易度を選ぶ前でも数える（進捗を捨てない）', () => {
   const p = prof({ daily_level:null, daily_counts:{ sortie: 30 } })
   assert.equal(countsOf(p, AT).sortie, 30)
   assert.deepEqual(progressOf(p, 'easy', 'sortie', AT), { now:20, goal:20, done:true })
+})
+
+test('畳んでいるとき用の「終わった項目の数」', () => {
+  // ★開かなくても進み具合が分かるようにするための数字（2/4 の左側）
+  assert.equal(doneCountOf(prof({ daily_counts:{} }), 'easy', AT), 0)
+  assert.equal(doneCountOf(prof({ daily_counts:{ pray: 1 } }), 'easy', AT), 1)
+  assert.equal(doneCountOf(prof({ daily_counts:{ pray: 1, arena: 1 } }), 'easy', AT), 2)
+  assert.equal(doneCountOf(prof({ daily_counts:{ sortie: 20, arena: 1, rune: 1, pray: 1 } }), 'easy', AT), 4)
+  // 目標を超えても数は増えない（項目の数が上限）
+  assert.equal(doneCountOf(prof({ daily_counts:{ sortie: 999, arena: 9, rune: 9, pray: 9 } }), 'easy', AT), TASK_KEYS.length)
+  // かんたんを満たしていても、ふつうの目標では「祈る」しか終わっていない
+  //（ふつうは 出撃100／挑戦5／ルーン3／祈る1。同じ回数で足りるのは祈るだけ）
+  assert.equal(doneCountOf(prof({ daily_counts:{ sortie: 20, arena: 1, rune: 1, pray: 1 } }), 'normal', AT), 1)
+  // 全部終わったときは isComplete と一致する
+  const full = prof({ daily_counts:{ sortie: 100, arena: 5, rune: 3, pray: 1 } })
+  assert.equal(doneCountOf(full, 'normal', AT), TASK_KEYS.length)
+  assert.equal(isComplete(full, 'normal', AT), true)
+  // 日付が変わっていれば0
+  assert.equal(doneCountOf({ daily_day:'2026-08-16', daily_counts:{ sortie: 100, arena: 5, rune: 3, pray: 1 } }, 'normal', AT), 0)
+  assert.equal(doneCountOf(prof({}), '存在しない', AT), 0)
 })
