@@ -2217,3 +2217,620 @@ $$;
 revoke all on function public.v2_arena_retire() from public;
 revoke all on function public.v2_arena_retire() from anon;
 grant execute on function public.v2_arena_retire() to authenticated;
+
+-- ============================================================
+-- ===== 11. 拠点 =====
+-- ------------------------------------------------------------
+-- 設計は docs/v2-kyoten-design.md。
+--
+--   ルーン素材を資材に交換 → 労働者をGoldで雇う → 放置で資材が貯まる
+--                          → 施設を拡張（グレード1〜9）→ かかしのEXPが増える
+--
+-- ★**権威はここ**。src/v2/lib/basecamp.js に同じ式の写しがあるので、
+--   数式を変えるときは必ず両方を直すこと。
+--
+-- ★蓄積は「settle方式」＝**時刻だけで決まる**（錬金部屋と同じ）。ハートビートは使わない。
+--   settle を呼ぶのは **回収・拡張（上げる前）・労働者の増減（前と後）**。
+--   v2_base_get は**書き込まない**ので、画面のカウンタは同じ式でクライアントが進める。
+--
+-- ★維持費は**回収のときにまとめて精算する**。放置中にGoldを引く手段が無いため、
+--     生産していた時間 = LEAST(経過時間, 満杯までの時間, Goldで払える時間)
+--   とすることで「Goldが尽きた時点で止まっていた」を後から再現する。
+--
+-- ★釣り場（fishing）は第2段階。ここには入っていない。
+--   足すときは v2_base_init の配列に 'fishing' を足すだけでよい（既存プレイヤーも
+--   次に v2_base_init が呼ばれた時点で足りない行だけ作られる）。
+-- ============================================================
+
+create table if not exists public.v2_base (
+  player_id  uuid primary key references public.v2_profiles(id) on delete cascade,
+  hired      int not null default 0,          -- これまでに雇った通し人数（雇用費の計算用）
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.v2_base_facilities (
+  player_id    uuid not null references public.v2_profiles(id) on delete cascade,
+  key          text not null,                 -- lumber / quarry / manaforge / scarecrow
+  grade        int  not null default 1,
+  workers      int  not null default 0,
+  pending      numeric not null default 0,    -- 未回収（資材の個数 / EXP）。小数で持ち回収時に floor
+  accrued_from timestamptz not null default now(),
+  primary key (player_id, key)
+);
+
+-- ★資材は player_items にも v2_inventory にも入れない（取引所・倉庫UIに波及させない）
+create table if not exists public.v2_base_materials (
+  player_id uuid not null references public.v2_profiles(id) on delete cascade,
+  kind      text not null,                    -- wood / stone / mana
+  grade     int  not null,                    -- 1〜9
+  qty       int  not null default 0,
+  primary key (player_id, kind, grade)
+);
+
+alter table public.v2_base            enable row level security;
+alter table public.v2_base_facilities enable row level security;
+alter table public.v2_base_materials  enable row level security;
+
+-- 読むのは本人だけ。書込ポリシーは作らない＝ SECURITY DEFINER のRPC経由でしか変わらない
+drop policy if exists v2_base_own on public.v2_base;
+create policy v2_base_own on public.v2_base for select using (player_id = auth.uid());
+drop policy if exists v2_base_fac_own on public.v2_base_facilities;
+create policy v2_base_fac_own on public.v2_base_facilities for select using (player_id = auth.uid());
+drop policy if exists v2_base_mat_own on public.v2_base_materials;
+create policy v2_base_mat_own on public.v2_base_materials for select using (player_id = auth.uid());
+
+grant select on public.v2_base, public.v2_base_facilities, public.v2_base_materials to authenticated;
+
+-- ===== 11-1. 内部ヘルパ =====
+-- ⚠ SECURITY DEFINER の内部ヘルパは既定で PUBLIC が実行できてしまう（エンドレスタワーで
+--   塞いだ穴と同じ形）。**必ず REVOKE し、さらに p_uid <> auth.uid() で例外を投げる**
+
+-- 1時間あたりの産出。**生産施設はグレードで増えない**（上がるのは出る資材のグレードだけ）
+create or replace function public.v2_base_rate(p_key text, p_grade int, p_workers int)
+returns numeric language sql immutable as $$
+  select case
+    when p_key = 'scarecrow'
+      then (array[37.5, 50, 62.5, 75, 87.5, 100, 112.5, 125, 150]::numeric[])
+             [greatest(1, least(9, coalesce(p_grade, 1)))]
+    when p_key in ('lumber', 'quarry', 'manaforge')
+      then 30::numeric * greatest(0, coalesce(p_workers, 0))
+    else 0::numeric
+  end;
+$$;
+
+-- 1時間あたりの維持費(Gold)。労働者を置かない施設は0
+create or replace function public.v2_base_upkeep(p_key text, p_grade int, p_workers int)
+returns numeric language sql immutable as $$
+  select case when p_key in ('lumber', 'quarry', 'manaforge')
+    then 100::numeric * greatest(1, coalesce(p_grade, 1)) * greatest(0, coalesce(p_workers, 0))
+    else 0::numeric end;
+$$;
+
+create or replace function public.v2_base_worker_limit(p_grade int)
+returns int language sql immutable as $$
+  select case when coalesce(p_grade, 1) <= 3 then 1
+              when coalesce(p_grade, 1) <= 6 then 2
+              else 3 end;
+$$;
+
+-- 何人目かで上がる雇用費。9人を超えたら null
+create or replace function public.v2_base_hire_cost(p_hired int)
+returns bigint language sql immutable as $$
+  select case when coalesce(p_hired, 0) between 0 and 8
+    then (array[10000, 30000, 80000, 200000, 500000, 1200000, 3000000, 7000000, 15000000]::bigint[])
+           [coalesce(p_hired, 0) + 1]
+    else null end;
+$$;
+
+-- 拡張コスト。グレード p_to へ上げるのに要る「グレード(p_to-1)の資材」3種の各個数とGold
+create or replace function public.v2_base_upgrade_cost(p_to int)
+returns jsonb language sql immutable as $$
+  select case when coalesce(p_to, 0) between 2 and 9 then jsonb_build_object(
+    'qty',  (array[50, 80, 130, 200, 320, 500, 800, 1300]::int[])[p_to - 1],
+    'gold', (array[5000, 20000, 60000, 150000, 400000, 1000000, 2500000, 6000000]::bigint[])[p_to - 1]
+  ) else null end;
+$$;
+
+-- 生産施設 → 出る資材の種類。null なら生産施設ではない
+create or replace function public.v2_base_kind_of(p_key text)
+returns text language sql immutable as $$
+  select case p_key when 'lumber' then 'wood' when 'quarry' then 'stone'
+                    when 'manaforge' then 'mana' else null end;
+$$;
+
+-- 1施設を settle する。**経過時間・満杯・Goldの3つで頭打ち**にして pending を進め、
+-- そのぶんの維持費をGoldから引く。cap が下がっているときは超過ぶんをその場で資材へ回収する
+create or replace function public.v2_base_settle(p_uid uuid, p_key text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_cap_hours constant numeric := 8;
+  v_f       public.v2_base_facilities;
+  v_rate    numeric;
+  v_cap     numeric;
+  v_upkeep  numeric;
+  v_elapsed numeric;
+  v_room    numeric;
+  v_limit   numeric;
+  v_work    numeric;
+  v_pend    numeric;
+  v_gold    bigint;
+  v_cost    bigint := 0;
+  v_kind    text;
+  v_over    int := 0;
+  v_short   boolean := false;
+begin
+  -- ★本人以外は絶対に通さない（REVOKE と二重の守り）
+  if p_uid is null or p_uid is distinct from auth.uid() then
+    raise exception '不正な呼び出しです';
+  end if;
+
+  select * into v_f from public.v2_base_facilities
+   where player_id = p_uid and key = p_key for update;
+  if not found then return jsonb_build_object('ok', false); end if;
+
+  v_rate    := public.v2_base_rate(v_f.key, v_f.grade, v_f.workers);
+  v_cap     := v_rate * c_cap_hours;
+  v_upkeep  := public.v2_base_upkeep(v_f.key, v_f.grade, v_f.workers);
+  v_elapsed := greatest(0, extract(epoch from (now() - v_f.accrued_from)) / 3600.0);
+  v_room    := case when v_rate > 0 then greatest(0, (v_cap - v_f.pending) / v_rate) else 0 end;
+  v_limit   := least(v_elapsed, v_room);
+  v_work    := v_limit;
+
+  -- 維持費。払える時間ぶんしか生産していなかったことにする（＝未払いなら生産停止）
+  if v_upkeep > 0 then
+    select gold into v_gold from public.v2_profiles where id = p_uid for update;
+    v_work  := least(v_work, greatest(0, coalesce(v_gold, 0)) / v_upkeep);
+    v_cost  := floor(v_upkeep * v_work)::bigint;
+    v_short := v_work < v_limit - 0.000001;
+    if v_cost > 0 then
+      update public.v2_profiles set gold = greatest(0, gold - v_cost), updated_at = now()
+       where id = p_uid;
+    end if;
+  end if;
+
+  update public.v2_base_facilities
+     set pending = least(v_cap, v_f.pending + v_rate * v_work),
+         accrued_from = now()
+   where player_id = p_uid and key = p_key
+   returning pending into v_pend;
+
+  -- ★capが下がったとき（労働者を外した等）。切り捨てても凍結させてもいけないので、
+  --   超過ぶんをその場で資材へ回収する。回収した量は呼び出し側が必ず画面に出すこと
+  v_kind := public.v2_base_kind_of(p_key);
+  if v_kind is not null and v_pend > v_cap then
+    v_over := floor(v_pend - v_cap)::int;
+    if v_over > 0 then
+      insert into public.v2_base_materials (player_id, kind, grade, qty)
+      values (p_uid, v_kind, v_f.grade, v_over)
+      on conflict (player_id, kind, grade)
+        do update set qty = public.v2_base_materials.qty + v_over;
+      update public.v2_base_facilities set pending = pending - v_over
+       where player_id = p_uid and key = p_key;
+    end if;
+  end if;
+
+  return jsonb_build_object('ok', true, 'hours', v_work, 'cost', v_cost,
+                            'gold_short', v_short, 'auto_collected', v_over);
+end;
+$$;
+
+revoke all on function public.v2_base_rate(text, int, int)   from public, anon, authenticated;
+revoke all on function public.v2_base_upkeep(text, int, int) from public, anon, authenticated;
+revoke all on function public.v2_base_worker_limit(int)      from public, anon, authenticated;
+revoke all on function public.v2_base_hire_cost(int)         from public, anon, authenticated;
+revoke all on function public.v2_base_upgrade_cost(int)      from public, anon, authenticated;
+revoke all on function public.v2_base_kind_of(text)          from public, anon, authenticated;
+revoke all on function public.v2_base_settle(uuid, text)     from public, anon, authenticated;
+
+-- ===== 11-2. 状態の取得（書き込まない）=====
+-- ⚠**STABLE を付けてはいけない。** STABLE の関数は呼び出し元の問い合わせの
+--   スナップショットで動くため、v2_base_collect などが「更新したあとの状態」を
+--   返そうとしても**更新前の値**が返ってしまう。書き込まないのは中身の話で、
+--   volatility の指定とは別物。
+create or replace function public.v2_base_get()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_p   public.v2_profiles;
+  v_has boolean;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_p from public.v2_profiles where id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+
+  select exists(select 1 from public.v2_base b where b.player_id = v_uid) into v_has;
+
+  return jsonb_build_object(
+    'ok', true,
+    'initialized', v_has,
+    'server_now', now(),
+    'gold', v_p.gold,
+    'lv', v_p.lv,
+    'unlocked_areas', to_jsonb(v_p.unlocked_areas),
+    'hired', coalesce((select b.hired from public.v2_base b where b.player_id = v_uid), 0),
+    'facilities', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'key', f.key, 'grade', f.grade, 'workers', f.workers,
+               'pending', f.pending, 'accrued_from', f.accrued_from,
+               'rate',   public.v2_base_rate(f.key, f.grade, f.workers),
+               'cap',    public.v2_base_rate(f.key, f.grade, f.workers) * 8,
+               'upkeep', public.v2_base_upkeep(f.key, f.grade, f.workers),
+               'worker_limit', public.v2_base_worker_limit(f.grade),
+               'next_cost', public.v2_base_upgrade_cost(f.grade + 1)
+             ) order by f.key)
+        from public.v2_base_facilities f where f.player_id = v_uid), '[]'::jsonb),
+    'materials', coalesce((
+      select jsonb_agg(jsonb_build_object('kind', m.kind, 'grade', m.grade, 'qty', m.qty)
+                       order by m.kind, m.grade)
+        from public.v2_base_materials m where m.player_id = v_uid and m.qty > 0), '[]'::jsonb),
+    'hire_cost', public.v2_base_hire_cost(
+                   coalesce((select b.hired from public.v2_base b where b.player_id = v_uid), 0))
+  );
+end;
+$$;
+revoke all on function public.v2_base_get() from public;
+revoke all on function public.v2_base_get() from anon;
+grant execute on function public.v2_base_get() to authenticated;
+
+-- ===== 11-3. 開設（冪等）=====
+-- ★足りない施設だけ作るので、施設を増やしたあとに呼び直しても安全
+create or replace function public.v2_base_init()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid();
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if not exists(select 1 from public.v2_profiles where id = v_uid) then
+    return jsonb_build_object('ok', false, 'error', 'キャラクターがいません');
+  end if;
+
+  insert into public.v2_base (player_id) values (v_uid) on conflict (player_id) do nothing;
+  insert into public.v2_base_facilities (player_id, key)
+  select v_uid, k from unnest(array['lumber', 'quarry', 'manaforge', 'scarecrow']) k
+  on conflict (player_id, key) do nothing;
+
+  return public.v2_base_get();
+end;
+$$;
+revoke all on function public.v2_base_init() from public;
+revoke all on function public.v2_base_init() from anon;
+grant execute on function public.v2_base_init() to authenticated;
+
+-- ===== 11-4. 回収 =====
+-- p_key が null なら全施設。かかしは v2_apply_exp を通す（LVアップ・スキル習得が走る）
+-- ★LVが上限のときは**かかしを回収しない**（回収するとEXPが捨てられるため、貯めたまま残す）
+create or replace function public.v2_base_collect(p_key text default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_max_lv constant int := 100;
+  v_uid   uuid := auth.uid();
+  v_lv    int;
+  v_f     record;
+  v_st    jsonb;
+  v_take  int;
+  v_kind  text;
+  v_cost  bigint := 0;
+  v_auto  int := 0;
+  v_short boolean := false;
+  v_exp   int := 0;
+  v_skip  boolean := false;
+  v_gains jsonb := '[]'::jsonb;
+  v_lvres jsonb := null;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select lv into v_lv from public.v2_profiles where id = v_uid;
+  if v_lv is null then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+
+  for v_f in select * from public.v2_base_facilities
+              where player_id = v_uid and (p_key is null or key = p_key) order by key loop
+    v_st   := public.v2_base_settle(v_uid, v_f.key);
+    v_cost := v_cost + coalesce((v_st ->> 'cost')::bigint, 0);
+    v_auto := v_auto + coalesce((v_st ->> 'auto_collected')::int, 0);
+    if coalesce((v_st ->> 'gold_short')::boolean, false) then v_short := true; end if;
+
+    if v_f.key = 'scarecrow' then
+      if v_lv >= c_max_lv then
+        v_skip := true;      -- 貯めたまま残す（回収すると捨てられるため）
+      else
+        select floor(pending)::int into v_take from public.v2_base_facilities
+         where player_id = v_uid and key = v_f.key;
+        if coalesce(v_take, 0) > 0 then
+          update public.v2_base_facilities set pending = pending - v_take
+           where player_id = v_uid and key = v_f.key;
+          v_exp := v_exp + v_take;
+        end if;
+      end if;
+    else
+      v_kind := public.v2_base_kind_of(v_f.key);
+      if v_kind is not null then
+        select floor(pending)::int into v_take from public.v2_base_facilities
+         where player_id = v_uid and key = v_f.key;
+        if coalesce(v_take, 0) > 0 then
+          update public.v2_base_facilities set pending = pending - v_take
+           where player_id = v_uid and key = v_f.key;
+          insert into public.v2_base_materials (player_id, kind, grade, qty)
+          values (v_uid, v_kind, v_f.grade, v_take)
+          on conflict (player_id, kind, grade)
+            do update set qty = public.v2_base_materials.qty + v_take;
+          v_gains := v_gains || jsonb_build_object('key', v_f.key, 'kind', v_kind,
+                                                   'grade', v_f.grade, 'qty', v_take);
+        end if;
+      end if;
+    end if;
+  end loop;
+
+  if v_exp > 0 then v_lvres := public.v2_apply_exp(v_uid, v_exp); end if;
+
+  return jsonb_build_object('ok', true, 'gains', v_gains, 'exp', v_exp,
+                            'cost', v_cost, 'gold_short', v_short,
+                            'auto_collected', v_auto, 'lv_capped', v_skip,
+                            'level', v_lvres, 'base', public.v2_base_get());
+end;
+$$;
+revoke all on function public.v2_base_collect(text) from public;
+revoke all on function public.v2_base_collect(text) from anon;
+grant execute on function public.v2_base_collect(text) to authenticated;
+
+-- ===== 11-5. 拡張 =====
+create or replace function public.v2_base_upgrade(p_key text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_areas int[];
+  v_f     public.v2_base_facilities;
+  v_to    int;
+  v_cost  jsonb;
+  v_qty   int;
+  v_need_gold bigint;
+  v_gold  bigint;
+  v_need  int;
+  v_have  int;
+  v_k     text;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select unlocked_areas into v_areas from public.v2_profiles where id = v_uid;
+  if v_areas is null then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+
+  -- ★先に settle する（上げるとレートが変わるため、過去ぶんは古いレートで確定させる）
+  perform public.v2_base_settle(v_uid, p_key);
+
+  select * into v_f from public.v2_base_facilities
+   where player_id = v_uid and key = p_key for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その施設はありません'); end if;
+  v_to := v_f.grade + 1;
+  if v_to > 9 then return jsonb_build_object('ok', false, 'error', 'すでに最大グレードです'); end if;
+
+  -- グレード③以降はエリアの解放（＝その手前のエリアのボス撃破）が条件
+  v_need := case when v_to >= 3 then v_to - 1 else 0 end;
+  if v_need > 0 and not (v_areas @> array[v_need]) then
+    return jsonb_build_object('ok', false, 'error',
+      'エリア' || substr('①②③④⑤⑥⑦⑧', v_need, 1) || 'の解放が必要です');
+  end if;
+
+  v_cost      := public.v2_base_upgrade_cost(v_to);
+  v_qty       := (v_cost ->> 'qty')::int;
+  v_need_gold := (v_cost ->> 'gold')::bigint;
+
+  -- ⚠Goldは settle で維持費を引いたあとの値を見る
+  select gold into v_gold from public.v2_profiles where id = v_uid for update;
+  if coalesce(v_gold, 0) < v_need_gold then
+    return jsonb_build_object('ok', false, 'error', 'Goldが足りません');
+  end if;
+
+  -- 3種すべてのグレード(v_to - 1)の資材が要る
+  foreach v_k in array array['wood', 'stone', 'mana'] loop
+    select coalesce(qty, 0) into v_have from public.v2_base_materials
+     where player_id = v_uid and kind = v_k and grade = v_to - 1;
+    if coalesce(v_have, 0) < v_qty then
+      return jsonb_build_object('ok', false, 'error', '資材が足りません');
+    end if;
+  end loop;
+
+  update public.v2_base_materials set qty = qty - v_qty
+   where player_id = v_uid and grade = v_to - 1 and kind in ('wood', 'stone', 'mana');
+  update public.v2_profiles set gold = gold - v_need_gold, updated_at = now() where id = v_uid;
+  update public.v2_base_facilities set grade = v_to where player_id = v_uid and key = p_key;
+
+  return jsonb_build_object('ok', true, 'key', p_key, 'grade', v_to,
+                            'cost', v_cost, 'base', public.v2_base_get());
+end;
+$$;
+revoke all on function public.v2_base_upgrade(text) from public;
+revoke all on function public.v2_base_upgrade(text) from anon;
+grant execute on function public.v2_base_upgrade(text) to authenticated;
+
+-- ===== 11-6. 労働者を雇う =====
+create or replace function public.v2_base_hire(p_key text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_hired int;
+  v_f     public.v2_base_facilities;
+  v_cost  bigint;
+  v_gold  bigint;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if public.v2_base_kind_of(p_key) is null then
+    return jsonb_build_object('ok', false, 'error', 'その施設には労働者を置けません');
+  end if;
+
+  -- ★先に settle（人数が変わるとレートも維持費も変わるため）
+  perform public.v2_base_settle(v_uid, p_key);
+
+  select hired into v_hired from public.v2_base where player_id = v_uid for update;
+  if v_hired is null then return jsonb_build_object('ok', false, 'error', '拠点がありません'); end if;
+  v_cost := public.v2_base_hire_cost(v_hired);
+  if v_cost is null then return jsonb_build_object('ok', false, 'error', 'これ以上は雇えません'); end if;
+
+  select * into v_f from public.v2_base_facilities
+   where player_id = v_uid and key = p_key for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その施設はありません'); end if;
+  if v_f.workers >= public.v2_base_worker_limit(v_f.grade) then
+    return jsonb_build_object('ok', false, 'error', 'この施設の受け入れ人数が上限です');
+  end if;
+
+  select gold into v_gold from public.v2_profiles where id = v_uid for update;
+  if coalesce(v_gold, 0) < v_cost then
+    return jsonb_build_object('ok', false, 'error', 'Goldが足りません');
+  end if;
+
+  update public.v2_profiles set gold = gold - v_cost, updated_at = now() where id = v_uid;
+  update public.v2_base set hired = hired + 1 where player_id = v_uid;
+  update public.v2_base_facilities set workers = workers + 1 where player_id = v_uid and key = p_key;
+
+  return jsonb_build_object('ok', true, 'key', p_key, 'cost', v_cost, 'base', public.v2_base_get());
+end;
+$$;
+revoke all on function public.v2_base_hire(text) from public;
+revoke all on function public.v2_base_hire(text) from anon;
+grant execute on function public.v2_base_hire(text) to authenticated;
+
+-- ===== 11-7. 労働者の配置替え =====
+-- ★前と後の両方で settle する。後にも回すのは、capが下がったぶんの自動回収を即座に走らせるため
+create or replace function public.v2_base_move_worker(p_from text, p_to text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_a   public.v2_base_facilities;
+  v_b   public.v2_base_facilities;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_from = p_to then return jsonb_build_object('ok', false, 'error', '同じ施設です'); end if;
+  if public.v2_base_kind_of(p_from) is null or public.v2_base_kind_of(p_to) is null then
+    return jsonb_build_object('ok', false, 'error', 'その施設には労働者を置けません');
+  end if;
+
+  perform public.v2_base_settle(v_uid, p_from);
+  perform public.v2_base_settle(v_uid, p_to);
+
+  select * into v_a from public.v2_base_facilities where player_id = v_uid and key = p_from for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その施設はありません'); end if;
+  select * into v_b from public.v2_base_facilities where player_id = v_uid and key = p_to for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その施設はありません'); end if;
+  if v_a.workers <= 0 then return jsonb_build_object('ok', false, 'error', 'その施設に労働者がいません'); end if;
+  if v_b.workers >= public.v2_base_worker_limit(v_b.grade) then
+    return jsonb_build_object('ok', false, 'error', '移動先の受け入れ人数が上限です');
+  end if;
+
+  update public.v2_base_facilities set workers = workers - 1 where player_id = v_uid and key = p_from;
+  update public.v2_base_facilities set workers = workers + 1 where player_id = v_uid and key = p_to;
+
+  -- 減らした側の cap が下がるので、超過ぶんをここで資材へ回収する
+  perform public.v2_base_settle(v_uid, p_from);
+  perform public.v2_base_settle(v_uid, p_to);
+
+  return jsonb_build_object('ok', true, 'from', p_from, 'to', p_to, 'base', public.v2_base_get());
+end;
+$$;
+revoke all on function public.v2_base_move_worker(text, text) from public;
+revoke all on function public.v2_base_move_worker(text, text) from anon;
+grant execute on function public.v2_base_move_worker(text, text) to authenticated;
+
+-- ===== 11-8. ルーン素材 → 資材 =====
+-- エリアNの素材がグレードNの資材になる。通常3 / レア12 / 激レア60（売却と同じ 1:4:20 の比）
+create or replace function public.v2_base_exchange(p_items jsonb, p_kind text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_max_kinds constant int := 300;
+  c_max_qty   constant int := 99999;
+  v_uid   uuid := auth.uid();
+  v_req   int;
+  v_ok    int;
+  v_total int := 0;
+  v_gain  jsonb := '[]'::jsonb;
+  v_row   record;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_kind not in ('wood', 'stone', 'mana') then
+    return jsonb_build_object('ok', false, 'error', '資材の種類が不正です');
+  end if;
+  if not exists(select 1 from public.v2_base where player_id = v_uid) then
+    return jsonb_build_object('ok', false, 'error', '拠点がありません');
+  end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
+    return jsonb_build_object('ok', false, 'error', '交換するものがありません');
+  end if;
+  if jsonb_array_length(p_items) > c_max_kinds then
+    return jsonb_build_object('ok', false, 'error', '一度に交換できる数を超えています');
+  end if;
+
+  -- 検証：個数が正しいか・実在するか・足りているか（v2_sell_materials と同じ形）
+  select count(*) into v_req
+    from (select r.id, sum(r.qty)::bigint as qty
+            from jsonb_to_recordset(p_items) as r(id text, qty int)
+           where r.id is not null and coalesce(r.qty, 0) > 0
+           group by r.id) q
+   where q.qty <= c_max_qty;
+  if v_req = 0 then return jsonb_build_object('ok', false, 'error', '個数が不正です'); end if;
+
+  select count(*) into v_ok
+    from (select r.id, sum(r.qty)::int as qty
+            from jsonb_to_recordset(p_items) as r(id text, qty int)
+           where r.id is not null and coalesce(r.qty, 0) > 0
+           group by r.id) q
+    join public.v2_materials m on m.id = q.id
+    join public.v2_player_materials pm
+      on pm.player_id = v_uid and pm.material_id = q.id and pm.qty >= q.qty
+   where q.qty <= c_max_qty;
+  if v_ok <> v_req then return jsonb_build_object('ok', false, 'error', '素材が足りません'); end if;
+
+  -- ここから先は失敗しない（検証が通っている）
+  update public.v2_player_materials pm
+     set qty = pm.qty - q.qty
+    from (select r.id, sum(r.qty)::int as qty
+            from jsonb_to_recordset(p_items) as r(id text, qty int)
+           where r.id is not null and coalesce(r.qty, 0) > 0
+           group by r.id) q
+   where pm.player_id = v_uid and pm.material_id = q.id;
+
+  for v_row in
+    select m.area as grade,
+           sum(q.qty * case m.rarity when 'normal' then 3 when 'rare' then 12 else 60 end)::int as qty
+      from (select r.id, sum(r.qty)::int as qty
+              from jsonb_to_recordset(p_items) as r(id text, qty int)
+             where r.id is not null and coalesce(r.qty, 0) > 0
+             group by r.id) q
+      join public.v2_materials m on m.id = q.id
+     group by m.area order by m.area
+  loop
+    insert into public.v2_base_materials (player_id, kind, grade, qty)
+    values (v_uid, p_kind, v_row.grade, v_row.qty)
+    on conflict (player_id, kind, grade)
+      do update set qty = public.v2_base_materials.qty + v_row.qty;
+    v_gain  := v_gain || jsonb_build_object('grade', v_row.grade, 'qty', v_row.qty);
+    v_total := v_total + v_row.qty;
+  end loop;
+
+  return jsonb_build_object('ok', true, 'kind', p_kind, 'gained', v_gain, 'total', v_total,
+                            'base', public.v2_base_get());
+end;
+$$;
+revoke all on function public.v2_base_exchange(jsonb, text) from public;
+revoke all on function public.v2_base_exchange(jsonb, text) from anon;
+grant execute on function public.v2_base_exchange(jsonb, text) to authenticated;
+
+-- ===== 11-9. 開発用のリセット =====
+-- ⚠ is_admin 限定。**一般公開したあともこの判定は外さない**
+create or replace function public.v2_base_dev_reset()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid();
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not coalesce((select p.is_admin from public.profiles p where p.id = v_uid), false) then
+    return jsonb_build_object('ok', false, 'error', '開発限定です');
+  end if;
+  delete from public.v2_base_materials  where player_id = v_uid;
+  delete from public.v2_base_facilities where player_id = v_uid;
+  delete from public.v2_base            where player_id = v_uid;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+revoke all on function public.v2_base_dev_reset() from public;
+revoke all on function public.v2_base_dev_reset() from anon;
+grant execute on function public.v2_base_dev_reset() to authenticated;
