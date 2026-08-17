@@ -153,3 +153,13 @@ test('デイリーの数える処理が4か所すべてに入っている', () =
   assert.match(bodyOf('v2_extract_essence'), /v2_daily_bump\(v_uid, 'rune'/, 'ルーン作成')
   assert.match(bodyOf('v2_pray'),          /v2_daily_bump\(v_uid, 'pray'/,   '祈る')
 })
+
+test('出撃のデイリー加算がクールタイム別になっている（20秒は2カウント）', async () => {
+  // ★片方だけ直すと「画面には20秒は2カウントと書いてあるのに1しか増えない」になる
+  const { SORTIE_COUNT } = await import('./daily.js')
+  assert.equal(SORTIE_COUNT[20], 2)
+  const body = bodyOf('v2_sortie_settle')
+  assert.match(body, /v2_daily_bump\(v_uid, 'sortie'/, '出撃のデイリー加算がある')
+  assert.match(body, /case when v_row\.sortie_cd = 20 then 2 else 1 end/,
+    '20秒を2倍にする分岐がSQLに無い')
+})

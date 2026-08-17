@@ -19,12 +19,19 @@
 
 // 数える項目。key は v2_profiles.daily_counts のキー
 export const TASKS = [
-  { key:'sortie', label:'出撃',       unit:'回' },
+  { key:'sortie', label:'出撃',       unit:'回', note:'20秒は2カウント' },
   { key:'arena',  label:'アリーナに挑戦', unit:'回' },
   { key:'rune',   label:'ルーンを作成', unit:'回' },
   { key:'pray',   label:'宝樹に祈る',   unit:'回' },
 ]
 export const TASK_KEYS = TASKS.map(t => t.key)
+
+// ★出撃は**クールタイムぶんで数え方を変える**（2026-08-17 ユーザー決定）。
+//   20秒設定は1回で2カウント。かかる時間あたりの進み具合が10秒設定とそろう
+//   （20秒×50回＝1000秒で100カウント／10秒×100回＝1000秒で100カウント）。
+//   ★数える権威はサーバー（v2_sortie_settle）。ここはその写しで、必ず同じ値にすること。
+export const SORTIE_COUNT = { 10: 1, 20: 2 }
+export const sortieCountOf = (cd) => SORTIE_COUNT[Number(cd)] ?? 1
 
 // 難易度。goals は TASKS と同じキー
 export const LEVELS = [

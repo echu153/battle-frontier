@@ -1342,8 +1342,11 @@ begin
    where id = v_uid;
 
   v_res := public.v2_apply_exp(v_uid, v_exp);
-  -- デイリーミッション：この清算で戦った回数ぶん数える（通常敵＋ボス）
-  perform public.v2_daily_bump(v_uid, 'sortie', v_n + v_bs);
+  -- デイリーミッション：この清算で戦った回数ぶん数える（通常敵＋ボス）。
+  -- ★20秒設定は1回で2カウント（src/v2/lib/daily.js の SORTIE_COUNT と同じ）。
+  --   20秒×50回も10秒×100回も同じ1000秒＝かかる時間あたりの進み具合をそろえる
+  perform public.v2_daily_bump(v_uid, 'sortie',
+    (v_n + v_bs) * (case when v_row.sortie_cd = 20 then 2 else 1 end));
   return jsonb_build_object('ok', true, 'exp', v_exp, 'gold', 0, 'drops', v_ok,
     'unlocked', to_jsonb(v_unlocked), 'boss_rate', v_rate, 'level', v_res);
 end;

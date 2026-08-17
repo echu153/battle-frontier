@@ -64,7 +64,7 @@ export default function V2Daily({ prof, onProfile, embedded = false, showPanel =
                 EXP+{l.reward.exp}・{l.reward.gold}G
               </span>
               <div style={{ color:'#7fa6d0', fontSize:'10px', marginTop:'3px', lineHeight:1.7 }}>
-                {TASKS.map(t => `${t.label}${l.goals[t.key]}${t.unit}`).join('／')}
+                {TASKS.map(t => `${t.label}${l.goals[t.key]}${t.unit}${t.note ? `（${t.note}）` : ''}`).join('／')}
               </div>
             </button>
           ))}
@@ -111,7 +111,11 @@ export default function V2Daily({ prof, onProfile, embedded = false, showPanel =
               <div key={t.key} style={{ background:'#000818', border:'1px solid #002244', padding:'4px 7px',
                 display:'flex', alignItems:'center', gap:'6px', fontSize:'11px' }}>
                 <span style={{ color: p.done ? '#44ff88' : '#62789a', flexShrink:0 }}>{p.done ? '✔' : '□'}</span>
-                <span style={{ color: p.done ? '#44ff88' : '#a8c4d6', flex:1 }}>{t.label}</span>
+                <span style={{ color: p.done ? '#44ff88' : '#a8c4d6', flex:1 }}>
+                  {t.label}
+                  {/* ★出撃はクールタイムで数え方が変わるので、その旨をここに出す */}
+                  {t.note && <span style={{ color:'#7fa6d0', fontSize:'9px' }}>（{t.note}）</span>}
+                </span>
                 <span style={{ color: p.done ? '#44ff88' : '#ffcc00' }}>{p.now}</span>
                 <span style={{ color:'#62789a' }}>/ {p.goal}{t.unit}</span>
               </div>
