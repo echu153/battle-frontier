@@ -4,7 +4,7 @@ import { AREAS } from '../lib/enemies.js'
 import { equippedItems } from '../lib/loadout.js'
 import {
   MATERIAL_BY_ID, RARITY_LABEL, RARITY_COLOR, COLOR_LABEL, COLOR_HEX,
-  EXTRACT_COST, BOSS_LIMIT, canExtract, runeName, runeFullName, materialsOfArea,
+  EXTRACT_COST, BOSS_LIMIT, canExtract, runePower, runeName, runeFullName, materialsOfArea,
 } from '../lib/material.js'
 import { enchantOf } from '../lib/enchant.js'
 import { STAT_DEFS } from '../lib/stats.js'
@@ -328,7 +328,13 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
         <V2Modal title={`⚗ ${runeFullName(result.color, result.stats)}ができた！`} color={COLOR_HEX[result.color]}
           onClose={() => setResult(null)}
           closeLabel={!result.ability && (result.ability_choices || []).length > 0 ? 'あとで選ぶ' : '受け取る'}>
-          <div><RuneTag e={result} size="15px" /></div>
+          {/* ルーン本体は左、合計値は右端。長いと折り返すので flexWrap を付けておく */}
+          <div style={{ display:'flex', alignItems:'baseline', gap:'8px', flexWrap:'wrap' }}>
+            <RuneTag e={result} size="15px" />
+            <span style={{ marginLeft:'auto', color:'#44ff88', fontSize:'12px', whiteSpace:'nowrap' }}>
+              （合計値：{runePower(result.stats)}%）
+            </span>
+          </div>
           {/* 特殊能力が当たっていたら、候補から1つ選ぶ */}
           {!result.ability && (result.ability_choices || []).length > 0 && (
             <div style={{ marginTop:'10px' }}>
