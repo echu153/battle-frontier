@@ -1990,7 +1990,7 @@ grant execute on function public.v2_debug_grant_material(int, int) to authentica
 --   ・各階に**チャンプ**（守る側）が1人。挑戦者は自分がいる階のチャンプと戦う
 --   ・勝つとその階のチャンプになる。守っているあいだは挑戦できない
 --   ・自分のチャンプが破られると解放され、1つ上の階へ挑戦できるようになる
---   ・負けると2つ下の階へ。ただし戦闘力が足りていれば落ちない
+--   ・負けると1つ下の階へ。ただし戦闘力が足りていれば落ちない
 --   ・**チャンプのHP/MPは回復しない**。挑戦者は毎回満タン
 --   ・EXPは勝敗によらず9〜13。勝つと装備が落ちる
 --   ・出撃とクールタイムを共有する（last_sortie_at を同じように更新する）
@@ -2035,7 +2035,7 @@ create or replace function public.v2_arena_fight(
 ) returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c_floors constant int := 50;
-  c_drop   constant int := 2;    -- 負けたときに落ちる階数
+  c_drop   constant int := 1;    -- 負けたときに落ちる階数（arena.js の LOSE_DROP と同じ）
   v_uid   uuid := auth.uid();
   v_row   public.v2_profiles%rowtype;
   v_floor int;
@@ -2119,8 +2119,8 @@ revoke all on function public.v2_arena_fight(boolean, int, int, int, int, jsonb,
 grant execute on function public.v2_arena_fight(boolean, int, int, int, int, jsonb, int, text) to authenticated;
 
 -- ===== 席を降りる（守るのをやめる）=====
--- ずっと守っていると自分が動けなくなるので、自分から降りられるようにする。
--- 降りた階はそのまま次の挑戦先になる（上がるわけではない）
+-- ★あるけみすとに「降りる」は無い（破られるまで上へ行けない）。人が少ないと詰むので足した。
+-- 降りると**破られたときと同じ扱い**で、次は1つ上の階へ挑戦できる（2026-08-17 ユーザー決定）
 create or replace function public.v2_arena_retire()
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_uid uuid := auth.uid(); v_floor int;
@@ -2129,8 +2129,8 @@ begin
   if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   delete from public.v2_arena_floors where player_id = v_uid returning floor into v_floor;
   if not found then return jsonb_build_object('ok', false, 'error', 'どの階も守っていません'); end if;
-  update public.v2_profiles set arena_floor = v_floor, updated_at = now() where id = v_uid;
-  return jsonb_build_object('ok', true, 'floor', v_floor);
+  update public.v2_profiles set arena_floor = least(50, v_floor + 1), updated_at = now() where id = v_uid;
+  return jsonb_build_object('ok', true, 'floor', v_floor, 'next_floor', least(50, v_floor + 1));
 end;
 $$;
 revoke all on function public.v2_arena_retire() from public;

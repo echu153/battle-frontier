@@ -10,7 +10,7 @@ import { rollDropRank } from '../lib/enemies.js'
 import { cooldownOf } from '../lib/sortie.js'
 import {
   FLOORS, champOf, snapshotOf, streakBonusPct, applyStreakBonus,
-  powerOfFloor, floorAfterLose, expOf, rollDrop, canChallenge, DROP_RATE, STREAK_PCT,
+  floorAfterLose, expOf, rollDrop, canChallenge, DROP_RATE, STREAK_PCT,
 } from '../lib/arena.js'
 import { box, btn, miniBtn, RANK_COLOR } from './v2ui.js'
 
@@ -52,6 +52,12 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
   const cd = cooldownOf(prof.sortie_cd)
   const last = prof.last_sortie_at ? new Date(prof.last_sortie_at).getTime() : 0
   const remain = Math.max(0, cd - (now - last) / 1000)
+  // 自分の階を中心に前後3階ずつ。端では寄せる（いつも同じ枚数出す）
+  const nearFloors = (() => {
+    const span = 7
+    const start = Math.max(1, Math.min(FLOORS - span + 1, (defending?.floor || floor) - 3))
+    return Array.from({ length: Math.min(span, FLOORS) }, (_, i) => start + i)
+  })()
   const blocked = canChallenge({ defending })
   const canAct = !blocked && remain <= 0 && !busy && !!champ
 
@@ -136,7 +142,7 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
           各階に<b style={{ color:'#ff88cc' }}>チャンプ</b>がいます。勝つとその階のチャンプになり、
           守っているあいだは挑戦できません。<br />
           自分のチャンプが破られると<b style={{ color:'#44ff88' }}>1つ上の階</b>へ、
-          挑戦して負けると<b style={{ color:'#ff8844' }}>2つ下の階</b>へ（戦闘力が足りていれば落ちません）。<br />
+          挑戦して負けると<b style={{ color:'#ff8844' }}>1つ下の階</b>へ（戦闘力が足りていれば落ちません）。<br />
           <b style={{ color:'#ffcc00' }}>チャンプのHP/MPは回復しません</b>。挑戦する側は毎回満タンです。<br />
           連勝中のチャンプに挑むと、こちらのステータスが連勝数×{STREAK_PCT}%上がります（HP/MPを除く）。<br />
           EXPは勝敗によらずもらえ、勝つと{DROP_RATE}%で装備が落ちます。出撃とクールタイムを共有します。
@@ -151,11 +157,43 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
           </div>
           <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'8px', lineHeight:1.8 }}>
             HP {defending.hp} / MP {defending.mp}　※守るたびに減り、回復しません<br />
-            破られると1つ上の階へ挑戦できるようになります。自分から降りることもできます。
+            破られると1つ上の階へ挑戦できるようになります。<b style={{ color:'#44ff88' }}>自分から降りても1つ上へ進めます</b>。
           </div>
           <button onClick={retire} disabled={busy} style={{ ...btn('#ff8888'), width:'100%' }}>席を降りる</button>
         </div>
       )}
+
+      {/* ★自分のいる階を上に出す。あるけみすともホームの一番上に前後の階を横に並べ、
+          いまの階だけ枠を変えて分かるようにしている（下まで送らないと分からない、を避ける） */}
+      <div style={{ ...box, padding:'10px', marginBottom:'10px' }}>
+        <div style={{ display:'flex', gap:'4px', overflowX:'auto', paddingBottom:'2px' }}>
+          {nearFloors.map(f => {
+            const c = champOf(f, byFloor[f], SKILL_BY_NAME)
+            const here = f === floor
+            const mine = String(byFloor[f]?.player_id || '') === String(prof.id)
+            const pct = c ? Math.max(0, Math.min(100, (c.hp / Math.max(1, c.stats.hp)) * 100)) : 0
+            return (
+              <div key={f} style={{ flex:'0 0 96px', background: here ? '#001a2e' : '#000818',
+                border:`1px solid ${here ? '#00ccff' : mine ? '#ffcc00' : '#002244'}`, padding:'5px 6px' }}>
+                <div style={{ color: here ? '#00ccff' : '#62789a', fontSize:'9px', textAlign:'center' }}>
+                  {f}階{here ? '（いまここ）' : ''}
+                </div>
+                <div style={{ color: mine ? '#ffcc00' : c?.npc ? '#7fa6d0' : '#88ccff', fontSize:'10px',
+                  overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textAlign:'center' }}>
+                  {c ? c.name : '空席'}
+                </div>
+                {/* チャンプは回復しないので、残りHPがいちばん大事な情報 */}
+                <div style={{ background:'#001028', height:'4px', border:'1px solid #002244', margin:'2px 0' }}>
+                  <div style={{ height:'100%', width:`${pct}%`, background: pct > 50 ? '#44ff88' : pct > 20 ? '#ffcc00' : '#ff4444' }} />
+                </div>
+                <div style={{ color:'#62789a', fontSize:'9px', textAlign:'center' }}>
+                  {c?.streak > 0 ? <span style={{ color:'#ff8844' }}>{c.streak}連勝中</span> : '　'}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
 
       {/* いまの挑戦先 */}
       {!defending && champ && (
@@ -167,7 +205,7 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
               <span style={{ color:'#62789a', fontSize:'10px' }}>　{champ.cls}{champ.npc ? '（NPC）' : ''}</span>
             </div>
             <div style={{ color:'#93a9be', fontSize:'10px' }}>
-              戦闘力 {foePower.toLocaleString()}　HP {champ.hp}／MP {champ.mp}
+              戦闘力 {foePower.toLocaleString()}　HP {champ.hp}／{champ.stats.hp}　MP {champ.mp}
               {champ.streak > 0 && <span style={{ color:'#ff8844' }}>　{champ.streak}連勝中</span>}
             </div>
           </div>
@@ -180,7 +218,7 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
             style={{ width:'100%', padding:'14px', background: canAct ? '#1a0018' : '#000e1a',
               border:`1px solid ${canAct ? '#ff88cc' : '#003366'}`, color: canAct ? '#ff88cc' : '#7fa6d0',
               cursor: canAct ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>
-            {busy ? '戦闘中...' : remain > 0 ? `⏳ ${remain.toFixed(1)}秒` : `⚔ ${floor}階に挑戦する`}
+            {busy ? '戦闘中...' : remain > 0 ? `⏳ ${remain.toFixed(1)}秒` : `⚔ ${floor}階のチャンプに挑戦する`}
           </button>
           {blocked && <div style={{ color:'#ff8844', fontSize:'11px', marginTop:'8px' }}>{blocked}</div>}
         </div>
@@ -210,7 +248,7 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
                   {c ? c.name : '空席'}{mine ? '（あなた）' : ''}
                 </span>
                 {c?.streak > 0 && <span style={{ color:'#ff8844', flexShrink:0 }}>{c.streak}連勝</span>}
-                <span style={{ color:'#62789a', flexShrink:0 }}>目安 {powerOfFloor(f).toLocaleString()}</span>
+                {c && <span style={{ color:'#62789a', flexShrink:0 }}>HP {c.hp}／{c.stats.hp}</span>}
               </div>
             )
           })}

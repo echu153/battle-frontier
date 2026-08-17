@@ -25,10 +25,10 @@ test('階が上がるほど戦闘力の目安が上がる', () => {
   assert.equal(powerOfFloor(999), powerOfFloor(FLOORS))
 })
 
-test('負けると2つ下。ただし戦闘力が足りていれば落ちない', () => {
-  assert.equal(LOSE_DROP, 2)
-  // 戦闘力が低ければ素直に2つ落ちる
-  assert.equal(floorAfterLose(10, 0), 8)
+test('負けると1つ下。ただし戦闘力が足りていれば落ちない', () => {
+  // ★ユーザー決定（wikiの記載は2つ下）。「上がった次で失敗したら元の階に戻る」形
+  assert.equal(LOSE_DROP, 1)
+  assert.equal(floorAfterLose(10, 0), 9)
   assert.equal(floorAfterLose(2, 0), 1)
   assert.equal(floorAfterLose(1, 0), 1)   // 1階より下は無い
   // ★その階に見合う戦闘力があるなら落ちない
@@ -37,6 +37,8 @@ test('負けると2つ下。ただし戦闘力が足りていれば落ちない'
   assert.equal(floorAfterLose(10, p10), 10)
   // 中途半端なとき＝落ちる先が「見合う階」で止まる
   assert.equal(floorAfterLose(10, powerOfFloor(9)), 9)
+  // 上がった次で失敗すると、上がる前の階に戻る
+  assert.equal(floorAfterLose(11, 0), 10)
   // 上の階に見合う戦闘力でも、いまいる階より上には行かない
   assert.equal(floorAfterLose(10, powerOfFloor(40)), 10)
 })
