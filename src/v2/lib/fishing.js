@@ -88,9 +88,12 @@ export const DEX_SLOTS = ENTRIES.length   // 216
 // ===== 図鑑ボーナス =====
 // 初めて釣った枠だけが対象。**同じ%の枠を何匹釣っても増えない**
 const round1 = (v) => Math.round(v * 10) / 10
-// 受け取る形は [{ fish_id, first_at }]（v2_player_fish の行）でも ['f:1:0:c'] でもよい
+// ⚠受け取る形が2つある。**どちらでも動くこと**
+//   ・`v2_player_fish` を直接読んだ行 … { fish_id, qty, first_at }（V2Home が戦闘用に持つ）
+//   ・`v2_base_get()` の返り値       … { id, qty, first_at }（拠点の画面が持つ）
+//   片方しか見ていないと、その画面だけ図鑑が空に見える
 export const dexIdsOf = (rows) => (rows || [])
-  .map(r => (typeof r === 'string' ? r : (r?.first_at ? r.fish_id : null)))
+  .map(r => (typeof r === 'string' ? r : (r?.first_at ? (r.fish_id ?? r.id) : null)))
   .filter(id => id && ENTRY_BY_ID[id])
 export const fishDexPct = (rows) => {
   const out = {}

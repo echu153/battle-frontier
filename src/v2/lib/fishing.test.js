@@ -87,6 +87,16 @@ test('図鑑ボーナスは「初めて釣った枠」だけ数える（所持�
   assert.match(fishDexText([id]), /\+0\.1%/)
 })
 
+test('図鑑の行は2つの形のどちらでも読める（v2_player_fish の fish_id / base_get の id）', () => {
+  // ★ v2_player_fish を直接読むと fish_id、v2_base_get() の返り値だと id。
+  //   片方しか見ていないと、その画面だけ図鑑が空に見える（実際に拠点の画面で起きた）
+  const id = entryId(1, 0, 'legend')
+  const stat = ENTRY_BY_ID[id].stat
+  assert.equal(fishDexPct([{ fish_id: id, qty: 1, first_at: '2026-08-17T00:00:00Z' }])[stat], 0.4)
+  assert.equal(fishDexPct([{ id, qty: 1, first_at: '2026-08-17T00:00:00Z' }])[stat], 0.4)
+  assert.deepEqual(dexIdsOf([{ id, qty: 1, first_at: null }]), [], 'first_at が無い行は対象外')
+})
+
 test('図鑑ボーナスは totalStats に乗る（ルーンと同じ%の枠）', () => {
   const prof = { str: 100, hp: 100, mp: 100, dex: 100, agi: 100, int_stat: 100, vit: 100, luk: 100 }
   const base = totalStats(prof, [], [], [])
@@ -175,6 +185,19 @@ test('釣りの数字がSQLと fishing.js で一致している', () => {
   }
   assert.ok(shop.includes(`'protect', '{}'::jsonb`) || shop.includes(`${PROTECT_COST}, 'protect'`),
     `保護札 ${PROTECT_COST}枚 がSQLに無い`)
+})
+
+test('副産物の装備ランクは「そのエリアの重み」で引く（出撃と同じ分布）', () => {
+  // ★drop_ranks は {"F":40,"E":40,"D":20} の重み表。`?` でキーの有無だけを見て
+  //   装備から一様に選ぶと、上位ランクが本来よりずっと出やすくなる
+  const haul = bodyOf('v2_base_fish_haul')
+  assert.match(haul, /jsonb_each_text\(a\.drop_ranks\)/, '重みを読んでいない')
+  assert.match(haul, /if v_pick < v_acc then v_rank := v_rec\.rank/, '重みで引いていない')
+  assert.match(haul, /where e\.rank = v_rank order by random\(\) limit 1/, '引いたランクで絞っていない')
+  assert.doesNotMatch(haul, /drop_ranks \? e\.rank/, 'キーの有無だけで選ぶ書き方が残っている')
+  // JS側（出撃）も重みで引いていること
+  const enemies = readFileSync(new URL('./enemies.js', import.meta.url), 'utf8')
+  assert.match(enemies, /export const rollDropRank[\s\S]{0,240}r -= w/, 'rollDropRank が重みを使っていない')
 })
 
 test('釣り場エリアの切り替えは、切り替える前に必ず釣り上げる', () => {

@@ -251,13 +251,17 @@ test('回収は検証を済ませてから引く／LV上限のときはかかし
   assert.match(body, /public\.v2_apply_exp\(v_uid, v_exp\)/, 'EXPは v2_apply_exp を通す')
 })
 
-test('拡張は settle してからコストを引く（レートが変わる前の蓄積を取りこぼさない）', () => {
+test('拡張はグレードを上げる前に「回収」する（貯めた資材が上のグレードに化けない）', () => {
+  // ★settle だけでは足りない。pending は個数しか持っていないので、
+  //   低いグレードで8時間ぶん貯めてから拡張すると、回収時に上のグレードで入ってしまう
+  //   （釣り場のエリア切り替えと同じ形の穴）
   const body = bodyOf('v2_base_upgrade')
-  const settleAt = body.search(/perform public\.v2_base_settle/)
+  const collectAt = body.search(/v_col := public\.v2_base_collect\(p_key\)/)
+  const gradeAt = body.search(/update public\.v2_base_facilities set grade = v_to/)
   const payAt = body.search(/update public\.v2_base_materials set qty = qty - v_qty/)
-  assert.notEqual(settleAt, -1, 'settle していない')
-  assert.notEqual(payAt, -1)
-  assert.ok(settleAt < payAt, 'settle より先に資材を引いている')
+  assert.notEqual(collectAt, -1, '拡張の前に回収していない')
+  assert.ok(collectAt < gradeAt, '回収より先にグレードを上げている')
+  assert.ok(collectAt < payAt, '回収より先に資材を引いている')
   // 資材の検証を全部済ませてから引くこと（plpgsql は return でロールバックしない）
   const checkAt = body.search(/if coalesce\(v_have, 0\) < v_qty then/)
   assert.ok(checkAt < payAt, '検証より先に資材を引いている')

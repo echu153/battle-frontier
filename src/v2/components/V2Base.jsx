@@ -10,7 +10,7 @@ import {
 import {
   TIERS, TIER_LABEL, TIER_COLOR, TIER_RATE, TIER_PCT,
   SPOTS, spotName, FISH, fishOfSpot, entryId, ENTRY_BY_ID, DEX_SLOTS,
-  fishDexPct, fishDexText, dexIdsOf, DEX_FULL_TOTAL,
+  fishDexText, dexIdsOf, DEX_FULL_TOTAL,
   MATERIAL_PCT, EQUIP_PCT, dropAreaMax,
   SHOP_MATERIAL_COST, materialShopCost, PROTECT_COST,
 } from '../lib/fishing.js'
@@ -94,7 +94,20 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
   // 図鑑（登録済みのID）と所持数
   const dexSet = useMemo(() => new Set(dexIdsOf(fishRows)), [fishRows])
   const fishQty = useMemo(() => Object.fromEntries(fishRows.map(r => [r.id, r.qty])), [fishRows])
-  const dexPct = useMemo(() => fishDexPct(fishRows), [fishRows])
+  // ★Goldは施設ごとに独立していない。サーバーは key の順に settle して、そのつど
+  //   維持費を引いていく。画面も同じ順に「残りGold」を回さないと、Goldが足りないのに
+  //   全部の施設が動いているように見える（アリーナで踏んだ「表示とサーバーのズレ」と同じ形）
+  const previews = useMemo(() => {
+    const out = {}
+    let left = heldGold
+    for (const f of [...facilities].sort((a, b) => String(a.key).localeCompare(String(b.key)))) {
+      const p = previewOf(f, left, at)
+      out[f.key] = { ...p, goldFor: left }
+      left = Math.max(0, left - p.cost)
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facilities, heldGold, now])
 
   // ★解放している釣り場だけを見せる。未解放のエリア名も魚の名前も出さない
   const openSpots = SPOTS.slice(0, Math.max(1, fishing?.grade || 1))
@@ -146,10 +159,14 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
     setMsg({ lines: lines.length ? lines : ['回収できるものがありませんでした'], warn: haulWarn(d) })
   }
 
+  // ★サーバーは拡張の前に必ず回収する（低いグレードで貯めたぶんが上に化けないように）。
+  //   黙って回収されると不審なので、その結果もここに出す
   const upgrade = async (key) => {
     const d = await call('v2_base_upgrade', { p_key: key }, `upgrade:${key}`)
     if (!d) return
-    setMsg({ lines: [`🔧 ${FACILITY_BY_KEY[key]?.name} をグレード${gradeLabel(d.grade)}にしました`], warn: [] })
+    const lines = [`🔧 ${FACILITY_BY_KEY[key]?.name} をグレード${gradeLabel(d.grade)}にしました`]
+    if (d.collected?.ok) lines.push(...haulLines(d.collected))
+    setMsg({ lines, warn: d.collected ? haulWarn(d.collected) : [] })
   }
 
   const hire = async (key) => {
@@ -296,10 +313,10 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
           {FACILITIES.map(def => {
             const f = facOf(def.key)
             if (!f) return null
-            const p = previewOf(f, heldGold, at)
+            const p = previews[f.key] || previewOf(f, heldGold, at)
             const cap = Number(f.cap || 0)
             const pct = cap > 0 ? Math.min(100, (p.pending / cap) * 100) : 0
-            const mins = fullInOf(f, heldGold, at)
+            const mins = fullInOf(f, p.goldFor ?? heldGold, at)
             const cost = f.next_cost
             const block = upgradeBlockOf(f.grade, unlocked)
             const need = reqAreaOf(f.grade + 1)

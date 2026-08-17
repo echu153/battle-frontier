@@ -2544,6 +2544,11 @@ declare
   v_eq      public.v2_equipment;
   v_sock    text[];
   v_j       int;
+  v_rank    text;
+  v_tot     numeric;
+  v_pick    numeric;
+  v_acc     numeric;
+  v_rec     record;
   v_fish    jsonb := '{}'::jsonb;      -- { 魚ID: 匹数 }
   v_newdex  jsonb := '[]'::jsonb;
   v_mats    int := 0;
@@ -2591,10 +2596,25 @@ begin
     -- 副産物：装備。落ちるランクは出撃と同じ「そのエリアの drop_ranks」
     if random() * 100 < v_eq_pct then
       v_area := 1 + floor(random() * v_area_hi)::int;
-      select e.* into v_eq from public.v2_equipment e
-       join public.v2_areas a on a.id = v_area and a.drop_ranks ? e.rank
-       order by random() limit 1;
-      if found then
+      -- ★ランクは**重みで引く**（src/v2/lib/enemies.js の rollDropRank と同じ）。
+      --   drop_ranks は {"F":40,"E":40,"D":20} の重み表なので、? でキーの有無だけを
+      --   見て装備から一様に選ぶと、上位ランクが本来よりずっと出やすくなる
+      select sum(e.value::numeric) into v_tot
+        from public.v2_areas a, jsonb_each_text(a.drop_ranks) e where a.id = v_area;
+      v_pick := random() * coalesce(v_tot, 0);
+      v_acc  := 0;
+      v_rank := null;
+      for v_rec in select e.key as rank, e.value::numeric as w
+                     from public.v2_areas a, jsonb_each_text(a.drop_ranks) e
+                    where a.id = v_area order by e.key loop
+        v_acc := v_acc + v_rec.w;
+        if v_pick < v_acc then v_rank := v_rec.rank; exit; end if;
+      end loop;
+      if v_rank is not null then
+        select e.* into v_eq from public.v2_equipment e
+         where e.rank = v_rank order by random() limit 1;
+      end if;
+      if v_rank is not null and found then
         -- ソケットの色は出撃と同じ決め方（武器だけ・片手2枠／両手3枠・1枠ずつ 1/3）
         v_sock := '{}'::text[];
         if v_eq.part = '武器' then
@@ -2806,14 +2826,17 @@ declare
   v_need  int;
   v_have  int;
   v_k     text;
+  v_col   jsonb;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   select unlocked_areas into v_areas from public.v2_profiles where id = v_uid;
   if v_areas is null then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
 
-  -- ★先に settle する（上げるとレートが変わるため、過去ぶんは古いレートで確定させる）
-  perform public.v2_base_settle(v_uid, p_key);
+  -- ★**先に回収する。settle だけでは足りない。**
+  --   pending は「個数」しか持っていないので、グレードを上げてから回収すると
+  --   低いグレードで貯めた資材が丸ごと上のグレードに化ける（釣り場のエリア切り替えと同じ穴）。
+  v_col := public.v2_base_collect(p_key);
 
   select * into v_f from public.v2_base_facilities
    where player_id = v_uid and key = p_key for update;
@@ -2853,7 +2876,7 @@ begin
   update public.v2_base_facilities set grade = v_to where player_id = v_uid and key = p_key;
 
   return jsonb_build_object('ok', true, 'key', p_key, 'grade', v_to,
-                            'cost', v_cost, 'base', public.v2_base_get());
+                            'cost', v_cost, 'collected', v_col, 'base', public.v2_base_get());
 end;
 $$;
 revoke all on function public.v2_base_upgrade(text) from public;
