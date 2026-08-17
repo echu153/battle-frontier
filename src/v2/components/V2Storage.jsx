@@ -6,14 +6,16 @@ import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
 import { COLOR_HEX } from '../lib/material.js'
 import { filterRows, sortRows, pageOf, clampPage, defaultFilter } from '../lib/browse.js'
 import { box, miniBtn, RANK_COLOR } from './v2ui.js'
+import { useStored } from '../lib/prefs.js'
 import { V2Filter, V2Pager } from './V2Browse.jsx'
 import V2ItemTip, { SealTags } from './V2ItemTip.jsx'
 
 // 倉庫：持っている装備を見て、着け外しする。
 // 枠の種類チェックはサーバー（v2_equip）が行う。ここは押せる枠だけ出す。
 export default function V2Storage({ prof, inventory, runes, onProfile, onBack }) {
-  const [part, setPart] = useState('すべて')
-  const [filter, setFilter] = useState(defaultFilter)  // 絞り込みと並べ替え（鍛冶屋と共通）
+  // ★部位タブと絞り込みは覚えておく（画面を移っても再読み込みしても戻さない）
+  const [part, setPart] = useStored('storagePart', 'すべて')
+  const [filter, setFilter] = useStored('storageFilter', defaultFilter, true)
   const [rawPage, setRawPage] = useState(0)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')

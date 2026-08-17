@@ -9,6 +9,7 @@ import {
 } from '../lib/smith.js'
 import { filterRows, sortRows, pageOf, clampPage, defaultFilter } from '../lib/browse.js'
 import { box, btn, miniBtn, RANK_COLOR } from './v2ui.js'
+import { useStored } from '../lib/prefs.js'
 import { V2Filter, V2Pager } from './V2Browse.jsx'
 import V2Modal from './V2Modal.jsx'
 import V2Enchant from './V2Enchant.jsx'
@@ -24,9 +25,10 @@ import V2Enchant from './V2Enchant.jsx'
 //   ルーン入り・ソケット厳選の装備がどれか分からないまま消えていた。
 // ★ルーンが入っている個体には印を付けて、素材に選ぶと警告を出す。
 export default function V2Smith({ prof, inventory, materials, runes, isAdmin, onProfile, onBack }) {
-  const [menu, setMenu] = useState('fuse')   // fuse=強化 / enchant=エンチャント
+  // ★どちらのタブを見ていたか・絞り込みは覚えておく
+  const [menu, setMenu] = useStored('smithTab', 'fuse')   // fuse=強化 / enchant=エンチャント
   const [openEquip, setOpenEquip] = useState('')  // 個体一覧を開いている装備ID
-  const [filter, setFilter] = useState(defaultFilter)  // 絞り込みと並べ替え
+  const [filter, setFilter] = useStored('smithFilter', defaultFilter, true)
   const [rawPage, setRawPage] = useState(0)            // ページ（0始まり）
   const [baseId, setBaseId] = useState(null)      // 強化元
   const [matIds, setMatIds] = useState([])        // 強化素材（2個）

@@ -9,6 +9,7 @@ import {
 } from '../lib/stats.js'
 import { TIER_LABEL, TIER_ORDER, TIER_COLOR, missingReqs, canBecome, reqText, proofCount } from '../lib/classes.js'
 import { classBonusText, jobCountOf } from '../lib/classBonus.js'
+import { useStored } from '../lib/prefs.js'
 import { totalStats } from '../lib/loadout.js'
 import V2Sortie from '../components/V2Sortie.jsx'
 import V2Storage from '../components/V2Storage.jsx'
@@ -82,8 +83,9 @@ export default function V2Home() {
   const [materials, setMaterials] = useState([])   // 持っている素材（v2_player_materials）
   const [runes, setRunes] = useState([])     // 持っているルーン（v2_essences）
   const [inBattle, setInBattle] = useState(false)  // 戦闘中はメニューを隠す（旧版と同じ）
-  const [openStatus, setOpenStatus] = useState(true)  // ステータスの折りたたみ
-  const [openMenu, setOpenMenu] = useState(true)      // 行動メニューの折りたたみ
+  // ★開閉は覚えておく（毎回閉じ直さなくてよいように）
+  const [openStatus, setOpenStatus] = useStored('openStatus', true)
+  const [openMenu, setOpenMenu] = useStored('openMenu', true)
   const [isAdmin, setIsAdmin] = useState(false)       // 開発限定の緩和（宝樹の回数制限なしなど）
 
   useEffect(() => {

@@ -8,6 +8,7 @@ import {
 } from '../lib/material.js'
 import { enchantOf } from '../lib/enchant.js'
 import { STAT_DEFS } from '../lib/stats.js'
+import { useStored } from '../lib/prefs.js'
 import { box, miniBtn } from './v2ui.js'
 import V2Modal from './V2Modal.jsx'
 import { V2RuneFilter, V2Pager } from './V2Browse.jsx'
@@ -43,14 +44,15 @@ function RuneTag({ e }) {
 
 // embedded … 鍛冶屋の中に置くとき。自前の「← ホームへ」は出さない（外側が持っている）
 export default function V2Enchant({ prof, inventory, materials, runes, onRefresh, onBack, embedded = false }) {
-  const [tab, setTab] = useState('extract')
+  // ★見ていたタブと絞り込みは覚えておく（倉庫・鍛冶屋と同じ）
+  const [tab, setTab] = useStored('enchantTab', 'extract')
   const [area, setArea] = useState(1)
   const [picked, setPicked] = useState([])      // 抽出に使う素材ID（同じIDを重ねてよい）
   const [confirm, setConfirm] = useState(false) // 抽出前の確認ポップアップ
   const [result, setResult] = useState(null)    // 抽出後の結果ポップアップ
   const [overwrite, setOverwrite] = useState(null) // 上書き前の確認 { rune, target }
   const [target, setTarget] = useState(null)    // ソケットにはめる対象 { invId, slot, color }
-  const [runeFilter, setEssFilter] = useState(defaultRuneFilter)  // ルーン一覧の絞り込み
+  const [runeFilter, setEssFilter] = useStored('runeFilter', defaultRuneFilter, true)  // ルーン一覧の絞り込み
   const [rawRunePage, setRawEssPage] = useState(0)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
