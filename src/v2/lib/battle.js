@@ -128,7 +128,7 @@ export const createSide = (fighter, band = null) => {
     .map(s => ({ skill: s.skill, uses: s.uses ?? 3 }))
   const passives = all.filter(s => isPassive(s.skill)).map(s => s.skill)
   const pa = collectPassives(passives)
-  const bonus = classBonusOf(fighter.cls)
+  const bonus = classBonusOf(fighter.cls, fighter.jobCount)
   const en = collectEnchants(fighter.enchants, band)
   const buffs = {}
   if (bonus?.stats) applyBuff(buffs, bonus.stats)   // 職業補正（就いている職業だけ）

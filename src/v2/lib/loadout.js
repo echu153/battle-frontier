@@ -7,6 +7,7 @@
 import { STAT_KEYS, STAT_DEFS } from './stats.js'
 import { ITEM_BY_ID, statsOf as equipStats, powerOf as equipPower, SLOTS } from './equipment.js'
 import { SKILL_BY_NAME } from './skills.js'
+import { jobCountOf } from './classBonus.js'
 
 // 装着中の装備を { slot: { inv, item } } の形で引く
 export const equippedItems = (profile, inventory) => {
@@ -98,6 +99,8 @@ export const totalStats = (profile, inventory, runes) => {
 export const toFighter = (profile, inventory, runes) => ({
   name: profile?.username || 'あなた',
   cls: profile?.class,
+  // ★職業補正は「その職業に何回転職したか」で伸びる（classBonus.js）
+  jobCount: jobCountOf(profile),
   stats: totalStats(profile, inventory, runes),
   enchants: runeAbilities(equippedRunes(profile, inventory, runes)),
   slots: (profile?.skill_set || [])

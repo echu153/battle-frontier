@@ -8,7 +8,7 @@ import {
   canJobChange,
 } from '../lib/stats.js'
 import { TIER_LABEL, TIER_ORDER, TIER_COLOR, missingReqs, canBecome, reqText, proofCount } from '../lib/classes.js'
-import { classBonusText } from '../lib/classBonus.js'
+import { classBonusText, jobCountOf } from '../lib/classBonus.js'
 import { totalStats } from '../lib/loadout.js'
 import V2Sortie from '../components/V2Sortie.jsx'
 import V2Storage from '../components/V2Storage.jsx'
@@ -521,8 +521,8 @@ export default function V2Home() {
                                 <div style={{ color: ok ? '#93a9be' : '#775544', fontSize:'9px', marginTop:'3px' }}>
                                   {ok ? reqText(c) : `未達：${miss.join(' ／ ')}`}
                                 </div>
-                                {classBonusText(c.id) && (
-                                  <div style={{ color:'#88ddaa', fontSize:'9px', marginTop:'2px' }}>職業補正 {classBonusText(c.id)}</div>
+                                {classBonusText(c.id, jobCountOf(prof, c.id)) && (
+                                  <div style={{ color:'#88ddaa', fontSize:'9px', marginTop:'2px' }}>職業補正 {classBonusText(c.id, jobCountOf(prof, c.id))}</div>
                                 )}
                                 {confirmJob === c.id && (
                                   <div style={{ marginTop:'6px' }}>

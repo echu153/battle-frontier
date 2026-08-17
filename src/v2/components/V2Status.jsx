@@ -1,6 +1,6 @@
 
 import { STAT_DEFS, MAX_LV, ROLLS_PER_LV, calcPower, expToNext, expPerLv } from '../lib/stats.js'
-import { classBonusText } from '../lib/classBonus.js'
+import { classBonusText, jobCountOf } from '../lib/classBonus.js'
 import { TIER_COLOR } from '../lib/classes.js'
 import { KIND_COLOR, SKILL_BY_NAME, SKILL_SET_SLOTS } from '../lib/skills.js'
 import { equippedItems, totalStats } from '../lib/loadout.js'
@@ -178,10 +178,10 @@ export default function V2Status({ prof, inventory, runes, classes, open, onTogg
           {['str', 'dex', 'agi', 'int_stat', 'vit', 'luk'].map(statCell)}
         </div>
 
-        {classBonusText(prof.class) && (
+        {classBonusText(prof.class, jobCountOf(prof)) && (
           <div style={{ ...cell, marginBottom:'6px' }}>
             <span style={{ color:'#7fa6d0', fontSize:'9px' }}>職業補正</span>
-            <span style={{ color:'#88ddaa', fontSize:'10px' }}>{classBonusText(prof.class)}</span>
+            <span style={{ color:'#88ddaa', fontSize:'10px' }}>{classBonusText(prof.class, jobCountOf(prof))}</span>
           </div>
         )}
 
