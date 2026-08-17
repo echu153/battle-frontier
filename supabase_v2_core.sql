@@ -2066,15 +2066,15 @@ grant execute on function public.v2_sell_materials(jsonb) to authenticated;
 -- ===== 10. アリーナ（対人）=====
 -- ------------------------------------------------------------
 -- あるけみすとの「天空闘技場」と同じ仕組み（出典 wikiwiki alchemist-p /天空闘技場）。
---   ・各階に**チャンプ**（守る側）が1人。挑戦者は自分がいる階のチャンプと戦う
---   ・勝つとその階のチャンプになる。守っているあいだは挑戦できない
---   ・自分のチャンプが破られると解放され、1つ上の階へ挑戦できるようになる
+--   ・各階に**階層守護者**（守る側）が1人。挑戦者は自分がいる階の階層守護者と戦う
+--   ・勝つとその階の階層守護者になる。守っているあいだは挑戦できない
+--   ・自分の階層守護者が破られると解放され、1つ上の階へ挑戦できるようになる
 --   ・負けると1つ下の階へ。ただし戦闘力が足りていれば落ちない
---   ・**チャンプのHP/MPは回復しない**。挑戦者は毎回満タン
+--   ・**階層守護者のHP/MPは回復しない**。挑戦者は毎回満タン
 --   ・EXPは勝敗によらず9〜13。勝つと装備が落ちる
 --   ・出撃とクールタイムを共有する（last_sortie_at を同じように更新する）
 --
--- ★階層数50と、空き階に置くNPCチャンプは wiki に無く、こちらで決めたもの
+-- ★階層数50と、空き階に置くNPC階層守護者は wiki に無く、こちらで決めたもの
 --   （NPCの中身は src/v2/lib/arena.js が持つ。サーバーは「空席」として扱うだけ）。
 -- ★戦闘そのものはクライアントの runBattle が回し、ここへ結果を申告する。
 --   v2の戦闘は全部この形（出撃も同じ）。**対人なので申告を信じる穴が残る**＝
@@ -2084,7 +2084,7 @@ alter table public.v2_profiles add column if not exists arena_floor  int not nul
 alter table public.v2_profiles add column if not exists arena_wins   int not null default 0;
 alter table public.v2_profiles add column if not exists arena_losses int not null default 0;
 
--- 各階のチャンプ。行が無い階＝空席（クライアントがNPCを置く）
+-- 各階の階層守護者。行が無い階＝空席（クライアントがNPCを置く）
 create table if not exists public.v2_arena_floors (
   floor      int primary key,
   player_id  uuid references auth.users(id) on delete set null,
@@ -2104,9 +2104,9 @@ create policy v2_arena_read on public.v2_arena_floors for select to authenticate
 
 -- ===== 挑戦の結果を反映する =====
 -- p_win        … 勝ったか
--- p_my_hp/mp   … 戦い終わったときの自分のHP/MP（勝ったらチャンプとして座る値）
--- p_foe_hp/mp  … 戦い終わったときのチャンプのHP/MP（負けたらその値で座り直す）
--- p_snapshot   … 自分の姿（勝ってチャンプになるとき用）
+-- p_my_hp/mp   … 戦い終わったときの自分のHP/MP（勝ったら階層守護者として座る値）
+-- p_foe_hp/mp  … 戦い終わったときの階層守護者のHP/MP（負けたらその値で座り直す）
+-- p_snapshot   … 自分の姿（勝って階層守護者になるとき用）
 -- p_exp / p_drop … クライアントが引いたEXPとドロップ（出撃と同じ形）
 create or replace function public.v2_arena_fight(
   p_win boolean, p_my_hp int, p_my_mp int, p_foe_hp int, p_foe_mp int,
@@ -2145,7 +2145,7 @@ begin
              arena_losses = arena_losses + 1, updated_at = now()
        where id = v_champ.player_id;
     end if;
-    -- 自分がその階のチャンプになる。**HP/MPは戦い終わった値のまま座る**
+    -- 自分がその階の階層守護者になる。**HP/MPは戦い終わった値のまま座る**
     insert into public.v2_arena_floors (floor, player_id, snapshot, hp, mp, streak, since)
     values (v_floor, v_uid, coalesce(p_snapshot, '{}'::jsonb),
             greatest(1, coalesce(p_my_hp, 1)), greatest(0, coalesce(p_my_mp, 0)), 0, now())
@@ -2157,7 +2157,7 @@ begin
        set arena_wins = arena_wins + 1, last_sortie_at = now(), updated_at = now()
      where id = v_uid;
   else
-    -- 負け。チャンプは**HP/MPが減ったまま**居座り、連勝数が1つ増える
+    -- 負け。階層守護者は**HP/MPが減ったまま**居座り、連勝数が1つ増える
     if v_champ.floor is not null then
       update public.v2_arena_floors
          set hp = greatest(1, coalesce(p_foe_hp, hp)), mp = greatest(0, coalesce(p_foe_mp, mp)),

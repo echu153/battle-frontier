@@ -9,6 +9,7 @@ import {
 import { runBattle } from '../lib/battle.js'
 import { toFighter as playerFighter, equippedRunes, runeAbilities } from '../lib/loadout.js'
 import { dropRateMultOf } from '../lib/enchant.js'
+import { guardDropMultOf, GUARD_DROP_MULT } from '../lib/arena.js'
 import { RARITY_COLOR } from '../lib/material.js'
 import { RANK_COLOR } from './v2ui.js'
 
@@ -17,7 +18,7 @@ import { RANK_COLOR } from './v2ui.js'
 //   「次の行動まで」バー → エリアのプルダウン（解放済みだけ）→「◯◯へ出撃！」
 //   出撃すると戦闘ログの画面に切り替わり、「🏰 街に戻る」で戻る。
 //   戦闘ログの表示は旧版の BattleLogLine をそのまま使っている（ArenaPanel などと同じ）。
-export default function V2Sortie({ prof, inventory, runes, onProfile, onScene }) {
+export default function V2Sortie({ prof, inventory, runes, guard, onProfile, onScene }) {
   const [scene, setScene] = useState('town')
   const [selectedArea, setSelectedArea] = useState(() => Number(localStorage.getItem('v2SelectedArea')) || 1)
   const [logs, setLogs] = useState([])
@@ -34,6 +35,8 @@ export default function V2Sortie({ prof, inventory, runes, onProfile, onScene })
   // ★解放されていないエリアはプルダウンに出さない（旧版と同じ）
   const availableAreas = AREAS.filter(a => isAreaUnlocked(unlocked, a.id))
   const area = availableAreas.find(a => a.id === selectedArea) || availableAreas[0]
+  // アリーナで階層守護者でいるあいだのドロップ率ボーナス（arena.js）
+  const guardMult = guardDropMultOf(guard)
   const elapsed = (now - lastAt.current) / 1000
   const remaining = Math.max(0, cd - elapsed)
   const canAct = remaining <= 0 && !loading
@@ -52,12 +55,13 @@ export default function V2Sortie({ prof, inventory, runes, onProfile, onScene })
 
     const me = playerFighter(prof, inventory, runes)
     // 「素材ドロップ率up」の特殊能力ぶん。★重複せず、一番高いものだけが効く
-    const matMult = dropRateMultOf(runeAbilities(equippedRunes(prof, inventory, runes)))
+    // ★アリーナで階層守護者でいるあいだは、素材も装備も落ちやすくなる（×1.1・掛け算で乗る）
+    const matMult = dropRateMultOf(runeAbilities(equippedRunes(prof, inventory, runes))) * guardMult
     const enc = pickEncounter(area.id, bossRate, new Date())
     const r = runBattle(me, enemyFighter(enc.enemy, 8))
     const win = r.winner === 'a'
     const exp = win ? expOf(enc.isBoss) : 0
-    const drop = win && rollHasDrop(cd) ? rollDrop(area.id, new Date()) : null
+    const drop = win && rollHasDrop(cd, Math.random, guardMult) ? rollDrop(area.id, new Date()) : null
     const mat = win ? rollMaterial(enc.enemy.name, matMult) : null
     setBossRate(nextBossRate(bossRate, enc.isBoss))
 
@@ -168,6 +172,16 @@ export default function V2Sortie({ prof, inventory, runes, onProfile, onScene })
       <div style={{ background:'#001028', height:'6px', border:'1px solid #002244', marginBottom:'10px' }}>
         <div style={{ height:'100%', width:`${timerPct}%`, background: canAct ? '#44ff88' : 'linear-gradient(90deg,#003366,#0088ff)', transition:'width 0.2s' }} />
       </div>
+      {/* ★守っているあいだは出撃のドロップ率が上がる（アリーナには挑戦できない代わり） */}
+      {guard && (
+        <div style={{ border:'1px solid #ff88cc', background:'#1a0a20', padding:'5px 8px',
+          marginBottom:'8px', fontSize:'11px', color:'#ff88cc' }}>
+          👑 {guard.floor}階の階層守護者
+          <span style={{ color:'#44ff88' }}>
+            {'　'}ルーン素材と装備のドロップ率 ×{GUARD_DROP_MULT}
+          </span>
+        </div>
+      )}
       <select value={area?.id || 1}
         onChange={e => { const v = Number(e.target.value); setSelectedArea(v); localStorage.setItem('v2SelectedArea', v) }}
         style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>

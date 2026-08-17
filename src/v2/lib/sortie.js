@@ -86,8 +86,10 @@ export const COOLDOWNS = [10, 20]
 // 装備が落ちる確率(%)。**20秒のほうが1回あたりは高い**（10秒の効率2倍をいくらか相殺する）
 //   時間あたりで見ると 10秒=0.30%/秒・20秒=0.20%/秒 で、まだ10秒が1.5倍有利
 export const DROP_RATE = { 10: 3, 20: 4 }
-export const dropRateOf = (sec) => DROP_RATE[cooldownOf(sec)]
-export const rollHasDrop = (sec, rng = Math.random) => rng() * 100 < dropRateOf(sec)
+// mult は**アリーナの階層守護者ぶんの倍率**（arena.js の guardDropMultOf）。
+//   素材側（rollMaterial）と同じ形にそろえてある
+export const dropRateOf = (sec, mult = 1) => DROP_RATE[cooldownOf(sec)] * mult
+export const rollHasDrop = (sec, rng = Math.random, mult = 1) => rng() * 100 < dropRateOf(sec, mult)
 export const DEFAULT_COOLDOWN = 20
 export const isValidCooldown = (sec) => COOLDOWNS.includes(sec)
 export const cooldownOf = (sec) => (isValidCooldown(sec) ? sec : DEFAULT_COOLDOWN)

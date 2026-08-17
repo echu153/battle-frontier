@@ -83,6 +83,9 @@ export default function V2Home() {
   const [inventory, setInventory] = useState([])   // 所持している装備（v2_inventory）
   const [materials, setMaterials] = useState([])   // 持っている素材（v2_player_materials）
   const [runes, setRunes] = useState([])     // 持っているルーン（v2_essences）
+  // ★アリーナで守っている階（v2_arena_floors の自分の行。守っていなければ null）。
+  //   守護中は出撃のドロップ率が上がるので、出撃の画面でも要る
+  const [guard, setGuard] = useState(null)
   const [inBattle, setInBattle] = useState(false)  // 戦闘中はメニューを隠す（旧版と同じ）
   // ★開閉は覚えておく（毎回閉じ直さなくてよいように）
   const [openStatus, setOpenStatus] = useStored('openStatus', true)
@@ -110,14 +113,16 @@ export default function V2Home() {
         if (e2 || e3) { setSqlError((e2 || e3).message || String(e2 || e3)); setLoading(false); return }
         setProf(v2 || null)
         setClasses(cls || [])
-        const [{ data: inv }, { data: mats }, { data: ess }] = await Promise.all([
+        const [{ data: inv }, { data: mats }, { data: ess }, { data: grd }] = await Promise.all([
           supabase.from('v2_inventory').select('*').order('id', { ascending:false }),
           supabase.from('v2_player_materials').select('*'),
           supabase.from('v2_essences').select('*').order('id', { ascending:false }),
+          supabase.from('v2_arena_floors').select('*').eq('player_id', user.id).maybeSingle(),
         ])
         setInventory(inv || [])
         setMaterials(mats || [])
         setRunes(ess || [])
+        setGuard(grd || null)
       } catch (err) {
         setSqlError(err.message || String(err))
       }
@@ -131,16 +136,19 @@ export default function V2Home() {
     if (typeof updater === 'function') { setProf(updater); return }
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const [{ data: v2 }, { data: inv }, { data: mats }, { data: ess }] = await Promise.all([
+    const [{ data: v2 }, { data: inv }, { data: mats }, { data: ess }, { data: grd }] = await Promise.all([
       supabase.from('v2_profiles').select('*').eq('id', user.id).maybeSingle(),
       supabase.from('v2_inventory').select('*').order('id', { ascending:false }),
       supabase.from('v2_player_materials').select('*'),
       supabase.from('v2_essences').select('*').order('id', { ascending:false }),
+      // ★守っている階は他人に破られて消えることがある＝毎回取り直す（ドロップ率に効くため）
+      supabase.from('v2_arena_floors').select('*').eq('player_id', user.id).maybeSingle(),
     ])
     if (v2) setProf(v2)
     setInventory(inv || [])
     setMaterials(mats || [])
     setRunes(ess || [])
+    setGuard(grd || null)
   }
 
   const create = async (e) => {
@@ -344,7 +352,7 @@ export default function V2Home() {
                   </div>
                 )}
                 {act === 'sortie'
-                  ? <V2Sortie prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />
+                  ? <V2Sortie prof={prof} inventory={inventory} runes={runes} guard={guard} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />
                   : <V2Arena prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onBack={() => setAct('sortie')} embedded />}
               </div>
             )}

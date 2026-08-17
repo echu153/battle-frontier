@@ -7,7 +7,9 @@ import {
   streakBonusPct, applyStreakBonus,
   npcClassOf, npcNameOf, npcStatsOf, npcSlotsOf, npcChampOf, champOf,
   snapshotOf, fromSnapshot, expOf, rollDrop, canChallenge,
+  GUARD_DROP_MULT, guardDropMultOf,
 } from './arena.js'
+import { dropRateOf, rollHasDrop } from './sortie.js'
 import { STAT_KEYS, calcPower } from './stats.js'
 import { SKILL_BY_NAME, isPassive } from './skills.js'
 
@@ -43,7 +45,7 @@ test('負けると1つ下。ただし戦闘力が足りていれば落ちない'
   assert.equal(floorAfterLose(10, powerOfFloor(40)), 10)
 })
 
-test('チャンプを破られたら1つ上へ（最上階なら据え置き）', () => {
+test('階層守護者を破られたら1つ上へ（最上階なら据え置き）', () => {
   assert.equal(floorAfterDefended(10), 11)
   assert.equal(floorAfterDefended(FLOORS), FLOORS)
 })
@@ -79,7 +81,7 @@ test('30階以下で相手のほうが強いときだけ連勝補正が強くな
   assert.equal(streakBonusPct(3, 31, 1000, 2000), 15)
 })
 
-test('NPCチャンプは階ごとに決まっていて、見るたびに変わらない', () => {
+test('NPC階層守護者は階ごとに決まっていて、見るたびに変わらない', () => {
   for (const f of [1, 7, 23, 50]) {
     assert.deepEqual(npcChampOf(f), npcChampOf(f), `${f}階が呼ぶたびに変わる`)
     assert.equal(npcClassOf(f), npcClassOf(f))
@@ -134,7 +136,7 @@ test('champOf は空き階ならNPC、埋まっていればその人を返す', 
   assert.equal(npc.hp, npc.stats.hp, 'NPCは満タンで座っている')
   assert.equal(npc.streak, 0)
 
-  // ★チャンプはHP/MPが回復しない＝保存された値がそのまま出る
+  // ★階層守護者はHP/MPが回復しない＝保存された値がそのまま出る
   const row = { snapshot: snapshotOf({ name:'誰か', cls:'侍', stats:{ hp:1000, mp:100 }, slots:[] }), hp: 120, mp: 8, streak: 4 }
   const p = champOf(5, row, SKILL_BY_NAME)
   assert.equal(p.npc, false)
@@ -154,4 +156,25 @@ test('EXPは勝敗によらず9〜13、ドロップは確率', () => {
   }
   assert.equal(rollDrop(() => 0), true)
   assert.equal(rollDrop(() => 0.99), false)
+})
+
+// ===== 階層守護者でいるあいだの恩恵（2026-08-17 ユーザー決定）=====
+test('階層守護者の間だけ、出撃のドロップ率が×1.1になる', () => {
+  // ★ルーンの特殊能力（素材ドロップ率×1.2〜1.5）より控えめ＝「わずかに」
+  assert.equal(GUARD_DROP_MULT, 1.1)
+  assert.equal(guardDropMultOf(null), 1, '守っていなければ倍率なし')
+  assert.equal(guardDropMultOf(undefined), 1)
+  // 何階を守っていても同じ（階では変えない）
+  assert.equal(guardDropMultOf({ floor: 1 }), GUARD_DROP_MULT)
+  assert.equal(guardDropMultOf({ floor: FLOORS }), GUARD_DROP_MULT)
+})
+
+test('守護者ぶんの倍率は出撃の装備ドロップ率に乗る', () => {
+  // 20秒＝4% → 守護中は4.4%
+  assert.equal(dropRateOf(20), 4)
+  assert.equal(Math.round(dropRateOf(20, GUARD_DROP_MULT) * 100) / 100, 4.4)
+  assert.equal(Math.round(dropRateOf(10, GUARD_DROP_MULT) * 100) / 100, 3.3)
+  // 4%と4.4%のあいだ（rng=0.042）では、守護中だけ落ちる
+  assert.equal(rollHasDrop(20, () => 0.042), false)
+  assert.equal(rollHasDrop(20, () => 0.042, GUARD_DROP_MULT), true)
 })

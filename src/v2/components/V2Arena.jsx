@@ -10,7 +10,7 @@ import { rollDropRank } from '../lib/enemies.js'
 import { cooldownOf } from '../lib/sortie.js'
 import {
   FLOORS, champOf, snapshotOf, streakBonusPct, applyStreakBonus,
-  floorAfterLose, expOf, rollDrop, canChallenge, DROP_RATE, STREAK_PCT,
+  floorAfterLose, expOf, rollDrop, canChallenge, DROP_RATE, STREAK_PCT, GUARD_DROP_MULT,
 } from '../lib/arena.js'
 import { box, btn, miniBtn, RANK_COLOR } from './v2ui.js'
 
@@ -18,7 +18,7 @@ import { box, btn, miniBtn, RANK_COLOR } from './v2ui.js'
 // ★戦闘はここで回して、結果を v2_arena_fight へ申告する（出撃と同じ形）。
 //   仕組みの説明と定数は src/v2/lib/arena.js が正。
 //
-// 表示は「いまいる階のチャンプ」と「一覧」の2つだけ。挑戦できるのは自分の階のチャンプ。
+// 表示は「いまいる階の階層守護者」と「一覧」の2つだけ。挑戦できるのは自分の階の階層守護者。
 // embedded … ホームの出撃タブの中に置くとき。自前の「← ホームへ」は出さず、階の一覧は畳んでおく
 export default function V2Arena({ prof, inventory, runes, onProfile, onBack, embedded = false }) {
   const [rows, setRows] = useState([])       // v2_arena_floors（埋まっている階だけ）
@@ -65,9 +65,9 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
     if (!canAct) return
     setBusy(true); setMsg(''); setScene('battle'); setLogs([])
 
-    // ★挑戦者は毎回満タン。チャンプは前の戦いで減ったHP/MPのまま
+    // ★挑戦者は毎回満タン。階層守護者は前の戦いで減ったHP/MPのまま
     const mine = { ...me, stats: applyStreakBonus(me.stats, bonus) }
-    // ★チャンプは前の防衛で減ったHP/MPのまま始まる（挑戦者は満タン）
+    // ★階層守護者は前の防衛で減ったHP/MPのまま始まる（挑戦者は満タン）
     const foe = { ...champ, startHp: champ.hp, startMp: champ.mp }
     const r = runBattle(mine, foe)
     const win = r.winner === 'a'
@@ -83,11 +83,11 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
       : null
 
     const out = []
-    out.push({ text:`${floor}階のチャンプ ${champ.name} が立ちはだかる！`, color:'#ff88cc' })
+    out.push({ text:`${floor}階の階層守護者 ${champ.name} が立ちはだかる！`, color:'#ff88cc' })
     if (bonus) out.push({ text:`✊ ${champ.streak}連勝中！ あなたのステータスが+${bonus}%（HP/MPを除く）`, color:'#44ff88' })
     out.push(...battleLines(r, mine.name, champ.name))
     out.push(win
-      ? { text:`${champ.name}を倒した！ ${floor}階のチャンプになった`, color:'#ffcc00' }
+      ? { text:`${champ.name}を倒した！ ${floor}階の階層守護者になった`, color:'#ffcc00' }
       : { text:`敗北…（${r.turns}ターン）`, color:'#ff4444' })
     out.push({ text:`EXP +${exp}`, color:'#ffcc00' })
     if (drop) out.push({ text:`🎁 ${drop.rank}級「${drop.name}」を入手！`, color: RANK_COLOR[drop.rank] })
@@ -139,13 +139,14 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
         <div style={{ color:'#ff88cc', fontSize:'13px', marginBottom:'6px' }}>⚔ アリーナ</div>
         <div style={{ color:'#7fa6d0', fontSize:'10px', lineHeight:1.8 }}>
-          各階に<b style={{ color:'#ff88cc' }}>チャンプ</b>がいます。勝つとその階のチャンプになり、
+          各階に<b style={{ color:'#ff88cc' }}>階層守護者</b>がいます。勝つとその階の階層守護者になり、
           守っているあいだは挑戦できません。<br />
-          自分のチャンプが破られると<b style={{ color:'#44ff88' }}>1つ上の階</b>へ、
+          自分の階層守護者が破られると<b style={{ color:'#44ff88' }}>1つ上の階</b>へ、
           挑戦して負けると<b style={{ color:'#ff8844' }}>1つ下の階</b>へ（戦闘力が足りていれば落ちません）。<br />
-          <b style={{ color:'#ffcc00' }}>チャンプのHP/MPは回復しません</b>。挑戦する側は毎回満タンです。<br />
-          連勝中のチャンプに挑むと、こちらのステータスが連勝数×{STREAK_PCT}%上がります（HP/MPを除く）。<br />
-          EXPは勝敗によらずもらえ、勝つと{DROP_RATE}%で装備が落ちます。出撃とクールタイムを共有します。
+          <b style={{ color:'#ffcc00' }}>階層守護者のHP/MPは回復しません</b>。挑戦する側は毎回満タンです。<br />
+          連勝中の階層守護者に挑むと、こちらのステータスが連勝数×{STREAK_PCT}%上がります（HP/MPを除く）。<br />
+          EXPは勝敗によらずもらえ、勝つと{DROP_RATE}%で装備が落ちます。出撃とクールタイムを共有します。<br />
+          <b style={{ color:'#44ff88' }}>守っているあいだは、出撃のルーン素材と装備のドロップ率が×{GUARD_DROP_MULT}</b>になります。
         </div>
       </div>
 
@@ -157,7 +158,8 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
           </div>
           <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'8px', lineHeight:1.8 }}>
             HP {defending.hp} / MP {defending.mp}　※守るたびに減り、回復しません<br />
-            破られると1つ上の階へ挑戦できるようになります。<b style={{ color:'#44ff88' }}>自分から降りても1つ上へ進めます</b>。
+            破られると1つ上の階へ挑戦できるようになります。<b style={{ color:'#44ff88' }}>自分から降りても1つ上へ進めます</b>。<br />
+            <b style={{ color:'#44ff88' }}>出撃のルーン素材と装備のドロップ率が×{GUARD_DROP_MULT}</b>（守っているあいだだけ）
           </div>
           <button onClick={retire} disabled={busy} style={{ ...btn('#ff8888'), width:'100%' }}>席を降りる</button>
         </div>
@@ -182,7 +184,7 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
                   overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textAlign:'center' }}>
                   {c ? c.name : '空席'}
                 </div>
-                {/* チャンプは回復しないので、残りHPがいちばん大事な情報 */}
+                {/* 階層守護者は回復しないので、残りHPがいちばん大事な情報 */}
                 <div style={{ background:'#001028', height:'4px', border:'1px solid #002244', margin:'2px 0' }}>
                   <div style={{ height:'100%', width:`${pct}%`, background: pct > 50 ? '#44ff88' : pct > 20 ? '#ffcc00' : '#ff4444' }} />
                 </div>
@@ -198,7 +200,7 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
       {/* いまの挑戦先 */}
       {!defending && champ && (
         <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
-          <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>{floor}階のチャンプ</div>
+          <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>{floor}階の階層守護者</div>
           <div style={{ background:'#000818', border:'1px solid #002244', padding:'8px', marginBottom:'8px' }}>
             <div style={{ color: champ.npc ? '#7fa6d0' : '#ffcc00', fontSize:'12px' }}>
               {champ.name}
@@ -218,7 +220,7 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
             style={{ width:'100%', padding:'14px', background: canAct ? '#1a0018' : '#000e1a',
               border:`1px solid ${canAct ? '#ff88cc' : '#003366'}`, color: canAct ? '#ff88cc' : '#7fa6d0',
               cursor: canAct ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>
-            {busy ? '戦闘中...' : remain > 0 ? `⏳ ${remain.toFixed(1)}秒` : `⚔ ${floor}階のチャンプに挑戦する`}
+            {busy ? '戦闘中...' : remain > 0 ? `⏳ ${remain.toFixed(1)}秒` : `⚔ ${floor}階の階層守護者に挑戦する`}
           </button>
           {blocked && <div style={{ color:'#ff8844', fontSize:'11px', marginTop:'8px' }}>{blocked}</div>}
         </div>
