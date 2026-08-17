@@ -18,7 +18,7 @@ import { RANK_COLOR, dropLine, LOG_PLAIN } from './v2ui.js'
 //   「次の行動まで」バー → エリアのプルダウン（解放済みだけ）→「◯◯へ出撃！」
 //   出撃すると戦闘ログの画面に切り替わり、「🏰 街に戻る」で戻る。
 //   戦闘ログの表示は旧版の BattleLogLine をそのまま使っている（ArenaPanel などと同じ）。
-export default function V2Sortie({ prof, inventory, runes, guard, onProfile, onScene }) {
+export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onProfile, onScene }) {
   const [scene, setScene] = useState('town')
   const [selectedArea, setSelectedArea] = useState(() => Number(localStorage.getItem('v2SelectedArea')) || 1)
   const [logs, setLogs] = useState([])
@@ -53,7 +53,7 @@ export default function V2Sortie({ prof, inventory, runes, guard, onProfile, onS
     lastAt.current = Date.now()
     setLoading(true); setScene('battle'); setLogs([])
 
-    const me = playerFighter(prof, inventory, runes)
+    const me = playerFighter(prof, inventory, runes, fishDex)
     // 「素材ドロップ率up」の特殊能力ぶん。★重複せず、一番高いものだけが効く
     // ★アリーナで階層守護者でいるあいだは、素材も装備も落ちやすくなる（×1.1・掛け算で乗る）
     const matMult = dropRateMultOf(runeAbilities(equippedRunes(prof, inventory, runes))) * guardMult

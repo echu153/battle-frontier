@@ -85,6 +85,9 @@ export default function V2Home() {
   const [inventory, setInventory] = useState([])   // 所持している装備（v2_inventory）
   const [materials, setMaterials] = useState([])   // 持っている素材（v2_player_materials）
   const [runes, setRunes] = useState([])     // 持っているルーン（v2_essences）
+  // ★釣り図鑑（v2_player_fish）。first_at が入っている行が恒久ステータスの対象。
+  //   **戦闘のステータス計算に効く**ので、装備やルーンと同じようにここで持って配る
+  const [fishDex, setFishDex] = useState([])
   // ★アリーナで守っている階（v2_arena_floors の自分の行。守っていなければ null）。
   //   守護中は出撃のドロップ率が上がるので、出撃の画面でも要る
   const [guard, setGuard] = useState(null)
@@ -115,16 +118,18 @@ export default function V2Home() {
         if (e2 || e3) { setSqlError((e2 || e3).message || String(e2 || e3)); setLoading(false); return }
         setProf(v2 || null)
         setClasses(cls || [])
-        const [{ data: inv }, { data: mats }, { data: ess }, { data: grd }] = await Promise.all([
+        const [{ data: inv }, { data: mats }, { data: ess }, { data: grd }, { data: fish }] = await Promise.all([
           supabase.from('v2_inventory').select('*').order('id', { ascending:false }),
           supabase.from('v2_player_materials').select('*'),
           supabase.from('v2_essences').select('*').order('id', { ascending:false }),
           supabase.from('v2_arena_floors').select('*').eq('player_id', user.id).maybeSingle(),
+          supabase.from('v2_player_fish').select('*'),
         ])
         setInventory(inv || [])
         setMaterials(mats || [])
         setRunes(ess || [])
         setGuard(grd || null)
+        setFishDex(fish || [])
       } catch (err) {
         setSqlError(err.message || String(err))
       }
@@ -138,19 +143,21 @@ export default function V2Home() {
     if (typeof updater === 'function') { setProf(updater); return }
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const [{ data: v2 }, { data: inv }, { data: mats }, { data: ess }, { data: grd }] = await Promise.all([
+    const [{ data: v2 }, { data: inv }, { data: mats }, { data: ess }, { data: grd }, { data: fish }] = await Promise.all([
       supabase.from('v2_profiles').select('*').eq('id', user.id).maybeSingle(),
       supabase.from('v2_inventory').select('*').order('id', { ascending:false }),
       supabase.from('v2_player_materials').select('*'),
       supabase.from('v2_essences').select('*').order('id', { ascending:false }),
       // ★守っている階は他人に破られて消えることがある＝毎回取り直す（ドロップ率に効くため）
       supabase.from('v2_arena_floors').select('*').eq('player_id', user.id).maybeSingle(),
+      supabase.from('v2_player_fish').select('*'),
     ])
     if (v2) setProf(v2)
     setInventory(inv || [])
     setMaterials(mats || [])
     setRunes(ess || [])
     setGuard(grd || null)
+    setFishDex(fish || [])
   }
 
   const create = async (e) => {
@@ -229,7 +236,7 @@ export default function V2Home() {
   // ★最大MPは**ルーンのMP+%を乗せたぶん**で見る（サーバー v2_set_skills と同じ計算）。
   //   素の prof.mp のままだと蒼ルーンのMPがどこにも効かない
   //   （戦闘はHP/MP満タン開始で5〜13ターン＝MPが枯れないため）。
-  const maxMp = prof ? totalStats(prof, inventory, runes).mp : 0
+  const maxMp = prof ? totalStats(prof, inventory, runes, fishDex).mp : 0
   const setErr = prof ? validateSkillSet(compact, usableNames, maxMp) : null
   // 一覧には、まだ覚えていない「いまの職業のスキル」もグレーで出す（何を狙えるか分かるように）
   const shownSkills = sortSkills(filterSkills([...usable, ...stillLocked], { tab, query, favorites }), sortKey, sortAsc)
@@ -334,7 +341,7 @@ export default function V2Home() {
             {/* ★ステータスはホームだけに出す。施設は別の画面として開く
                 （施設の一覧を見るのに、毎回ステータスぶんスクロールさせられていた） */}
             {screen === 'home' && (
-              <V2Status prof={prof} inventory={inventory} runes={runes} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
+              <V2Status prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
             )}
 
             {/* ===== 出撃とアリーナ（旧版と同じで、街のブロックがそのままホームに載る） =====
@@ -354,8 +361,8 @@ export default function V2Home() {
                   </div>
                 )}
                 {act === 'sortie'
-                  ? <V2Sortie prof={prof} inventory={inventory} runes={runes} guard={guard} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />
-                  : <V2Arena prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onBack={() => setAct('sortie')} embedded />}
+                  ? <V2Sortie prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} guard={guard} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />
+                  : <V2Arena prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} onProfile={refresh} onBack={() => setAct('sortie')} embedded />}
               </div>
             )}
 
@@ -364,11 +371,11 @@ export default function V2Home() {
               <V2Menu items={MENU} open={openMenu} onToggle={() => setOpenMenu(v => !v)} onPick={setScreen} />
             )}
 
-            {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} materials={materials} runes={runes} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'tree'    && <V2Tree    prof={prof} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
-            {screen === 'base'    && <V2Base    prof={prof} materials={materials} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'base'    && <V2Base    prof={prof} materials={materials} fishDex={fishDex} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
 
             {(screen === 'skills' || screen === 'temple') && (
               <button onClick={() => setScreen('home')} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>

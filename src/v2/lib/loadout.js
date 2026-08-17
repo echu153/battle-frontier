@@ -8,6 +8,7 @@ import { STAT_KEYS, STAT_DEFS } from './stats.js'
 import { ITEM_BY_ID, statsOf as equipStats, powerOf as equipPower, SLOTS } from './equipment.js'
 import { SKILL_BY_NAME } from './skills.js'
 import { jobCountOf } from './classBonus.js'
+import { fishDexPct } from './fishing.js'
 
 // 装着中の装備を { slot: { inv, item } } の形で引く
 export const equippedItems = (profile, inventory) => {
@@ -85,10 +86,21 @@ export const runePctText = (list) => {
 // 付いている特殊能力の名前（＝敵の名前。enchant.js のキー）。**同じものが複数あればそのぶん並ぶ**
 export const runeAbilities = (list) => (list || []).map(e => e.ability).filter(Boolean)
 
-// 本体＋装備の合計ステータス。ルーンの%はこの合計に対して掛かる
-export const totalStats = (profile, inventory, runes) => {
+// ルーン＋釣り図鑑の補正(%)をひとまとめにする。
+// ★どちらも「%」なので同じ枠で合算する。**図鑑ぶんだけ別の計算経路を作らない**
+//   （別経路にすると、戦闘のどこか1つに入れ忘れたときに気付けない）
+export const statPct = (profile, inventory, runes, fishDex) => {
+  const out = { ...runeStatPct(equippedRunes(profile, inventory, runes)) }
+  for (const [k, v] of Object.entries(fishDexPct(fishDex))) out[k] = (out[k] || 0) + v
+  return out
+}
+
+// 本体＋装備の合計ステータス。ルーンと図鑑の%はこの合計に対して掛かる
+// ⚠ fishDex（v2_player_fish の行）を渡し忘れると図鑑ボーナスが黙って消える。
+//   渡し忘れを検出するテストが fishing.test.js にある
+export const totalStats = (profile, inventory, runes, fishDex) => {
   const gear = gearStats(profile, inventory)
-  const pct = runeStatPct(equippedRunes(profile, inventory, runes))
+  const pct = statPct(profile, inventory, runes, fishDex)
   return Object.fromEntries(STAT_KEYS.map(k => {
     const base = (profile?.[k] || 0) + gear[k]
     return [k, pct[k] ? Math.round(base * (1 + pct[k] / 100)) : base]
@@ -96,12 +108,12 @@ export const totalStats = (profile, inventory, runes) => {
 }
 
 // runBattle に渡す形。スキル編成が空なら通常攻撃だけで戦う
-export const toFighter = (profile, inventory, runes) => ({
+export const toFighter = (profile, inventory, runes, fishDex) => ({
   name: profile?.username || 'あなた',
   cls: profile?.class,
   // ★職業補正は「その職業に何回転職したか」で伸びる（classBonus.js）
   jobCount: jobCountOf(profile),
-  stats: totalStats(profile, inventory, runes),
+  stats: totalStats(profile, inventory, runes, fishDex),
   enchants: runeAbilities(equippedRunes(profile, inventory, runes)),
   slots: (profile?.skill_set || [])
     .map(e => ({ skill: SKILL_BY_NAME[e?.name], uses: e?.uses || 1 }))

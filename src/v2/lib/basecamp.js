@@ -13,6 +13,7 @@
 // ★釣り場は第2段階。ここには施設の枠だけ用意してあり、レートはまだ入れていない。
 // ============================================================
 import { MATERIAL_BY_ID } from './material.js'
+import { fishPerHour } from './fishing.js'
 
 // ===== 資材 =====
 // ⚠ゲーム内の「素材」はルーン素材（material.js）を指す。拠点のものは必ず「資材」と呼ぶ
@@ -37,6 +38,7 @@ export const FACILITIES = [
   { key: 'quarry',    name: '採掘場', icon: '⛏', color: '#a8c4d6', produces: 'stone', hasWorkers: true },
   { key: 'manaforge', name: '魔石炉', icon: '🔮', color: '#b988ff', produces: 'mana',  hasWorkers: true },
   { key: 'scarecrow', name: 'かかし', icon: '🎯', color: '#44ff88', produces: null,    hasWorkers: false },
+  { key: 'fishing',   name: '釣り場', icon: '🎣', color: '#66ccff', produces: null,    hasWorkers: false },
 ]
 export const FACILITY_BY_KEY = Object.fromEntries(FACILITIES.map(f => [f.key, f]))
 export const PRODUCERS = FACILITIES.filter(f => f.hasWorkers)
@@ -66,6 +68,7 @@ export const upkeepOf = (key, grade, workers) =>
 // ===== レートと上限 =====
 export const rateOf = (key, grade, workers) => {
   if (key === 'scarecrow') return scarecrowPerHour(grade)
+  if (key === 'fishing') return fishPerHour(grade)
   return FACILITY_BY_KEY[key]?.hasWorkers ? PRODUCE_PER_HOUR * Math.max(0, workers) : 0
 }
 export const capOf = (key, grade, workers) => rateOf(key, grade, workers) * CAP_HOURS

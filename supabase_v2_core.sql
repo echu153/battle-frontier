@@ -2225,39 +2225,51 @@ grant execute on function public.v2_arena_retire() to authenticated;
 -- 設計は docs/v2-kyoten-design.md。
 --
 --   ルーン素材を資材に交換 → 労働者をGoldで雇う → 放置で資材が貯まる
---                          → 施設を拡張（グレード1〜9）→ かかしのEXPが増える
+--                          → 施設を拡張（グレード1〜9）
+--                             → かかしのEXPが増える
+--                             → 釣り場が広がり、魚と副産物が豪華になる
 --
--- ★**権威はここ**。src/v2/lib/basecamp.js に同じ式の写しがあるので、
---   数式を変えるときは必ず両方を直すこと。
+-- ★**権威はここ**。src/v2/lib/basecamp.js と fishing.js に同じ式・同じ表の写しが
+--   あるので、数字を変えるときは必ず両方を直すこと
+--   （basecamp.test.js / fishing.test.js が突き合わせている）。
+--
+-- ★**同じ関数を2回 create しない。**「あとの節で置き換える」書き方にすると、
+--   前の節を直しても何も変わらない状態ができる（LVキャップで一度踏んだ形）。
+--   施設を足すときは、この節の中の関数を**その場で直す**こと。
 --
 -- ★蓄積は「settle方式」＝**時刻だけで決まる**（錬金部屋と同じ）。ハートビートは使わない。
 --   settle を呼ぶのは **回収・拡張（上げる前）・労働者の増減（前と後）**。
---   v2_base_get は**書き込まない**ので、画面のカウンタは同じ式でクライアントが進める。
+--   v2_base_get は書き込まないので、画面のカウンタは同じ式でクライアントが進める。
 --
 -- ★維持費は**回収のときにまとめて精算する**。放置中にGoldを引く手段が無いため、
 --     生産していた時間 = LEAST(経過時間, 満杯までの時間, Goldで払える時間)
 --   とすることで「Goldが尽きた時点で止まっていた」を後から再現する。
 --
--- ★釣り場（fishing）は第2段階。ここには入っていない。
---   足すときは v2_base_init の配列に 'fishing' を足すだけでよい（既存プレイヤーも
---   次に v2_base_init が呼ばれた時点で足りない行だけ作られる）。
+-- ★釣り図鑑のボーナスは **v2_profiles の列に足し込まない**。図鑑
+--   （v2_player_fish.first_at）から毎回算出する。足し込むと、リセットや仕様変更の
+--   たびにステが壊れる（無印で「釣りボーナス消失」を起こした形と同じ根）。
 -- ============================================================
 
+-- ===== 11-1. テーブル =====
 create table if not exists public.v2_base (
-  player_id  uuid primary key references public.v2_profiles(id) on delete cascade,
-  hired      int not null default 0,          -- これまでに雇った通し人数（雇用費の計算用）
-  created_at timestamptz not null default now()
+  player_id   uuid primary key references public.v2_profiles(id) on delete cascade,
+  hired       int    not null default 0,      -- これまでに雇った通し人数（雇用費の計算用）
+  fish_medals bigint not null default 0,
+  created_at  timestamptz not null default now()
 );
+alter table public.v2_base add column if not exists fish_medals bigint not null default 0;
 
 create table if not exists public.v2_base_facilities (
   player_id    uuid not null references public.v2_profiles(id) on delete cascade,
-  key          text not null,                 -- lumber / quarry / manaforge / scarecrow
+  key          text not null,                 -- lumber / quarry / manaforge / scarecrow / fishing
   grade        int  not null default 1,
   workers      int  not null default 0,
-  pending      numeric not null default 0,    -- 未回収（資材の個数 / EXP）。小数で持ち回収時に floor
+  spot         int  not null default 1,       -- 釣り場だけ使う。いま釣っている釣り場エリア
+  pending      numeric not null default 0,    -- 未回収（資材の個数 / EXP / 匹）。回収時に floor
   accrued_from timestamptz not null default now(),
   primary key (player_id, key)
 );
+alter table public.v2_base_facilities add column if not exists spot int not null default 1;
 
 -- ★資材は player_items にも v2_inventory にも入れない（取引所・倉庫UIに波及させない）
 create table if not exists public.v2_base_materials (
@@ -2282,7 +2294,100 @@ create policy v2_base_mat_own on public.v2_base_materials for select using (play
 
 grant select on public.v2_base, public.v2_base_facilities, public.v2_base_materials to authenticated;
 
--- ===== 11-1. 内部ヘルパ =====
+-- ===== 11-2. 魚のマスタ（54種 × 4グレード ＝ 216枠）=====
+create table if not exists public.v2_fish (
+  id     text primary key,        -- f:<釣り場エリア>:<番号>:<グレードの頭文字>
+  name   text not null,
+  spot   int  not null,           -- 釣り場エリア 1〜9
+  idx    int  not null,           -- そのエリアの中の番号 0〜5
+  tier   text not null,           -- common / rare / epic / legend
+  stat   text not null,           -- 図鑑ボーナスのステータス
+  pct    numeric not null,        -- 図鑑ボーナス(%)
+  medal  int  not null            -- 釣りメダルの枚数（釣り場エリア番号 × グレード倍率）
+);
+
+-- ★ステータスは「通し番号を hp,mp,str,dex,agi,int_stat,vit,luk の順で回す」割り当て。
+--   54 ÷ 8 なので hp〜INT が7種・VIT と LUK が6種になり、全部そろえた合計は 54.0%。
+--   src/v2/lib/fishing.js の buildFish と同じ並びであること
+insert into public.v2_fish (id, name, spot, idx, tier, stat, pct, medal)
+select 'f:' || f.spot || ':' || f.idx || ':' || t.short,
+       f.name, f.spot, f.idx, t.tier,
+       (array['hp','mp','str','dex','agi','int_stat','vit','luk'])
+         [((f.spot - 1) * 6 + f.idx) % 8 + 1],
+       t.pct, f.spot * t.mult
+from (values
+  (1,0,'ヤマメ'), (1,1,'イワナ'), (1,2,'カジカ'), (1,3,'ハヤ'), (1,4,'モロコ'), (1,5,'ニジマス'),
+  (2,0,'フナ'), (2,1,'コイ'), (2,2,'ワカサギ'), (2,3,'ライギョ'), (2,4,'ナマズ'), (2,5,'テナガエビ'),
+  (3,0,'アユ'), (3,1,'ウナギ'), (3,2,'ソウギョ'), (3,3,'チョウザメ'), (3,4,'カワカマス'), (3,5,'スッポン'),
+  (4,0,'アジ'), (4,1,'キス'), (4,2,'メバル'), (4,3,'カサゴ'), (4,4,'ハゼ'), (4,5,'イサキ'),
+  (5,0,'イシダイ'), (5,1,'クエ'), (5,2,'ウツボ'), (5,3,'イセエビ'), (5,4,'タコ'), (5,5,'アワビ'),
+  (6,0,'タラ'), (6,1,'ホッケ'), (6,2,'ニシン'), (6,3,'シシャモ'), (6,4,'オヒョウ'), (6,5,'タラバガニ'),
+  (7,0,'溶岩ナマズ'), (7,1,'熱鱗ドジョウ'), (7,2,'焔ビレウオ'), (7,3,'硫黄イワナ'), (7,4,'マグマウナギ'), (7,5,'火喰いザリガニ'),
+  (8,0,'ラブカ'), (8,1,'チョウチンアンコウ'), (8,2,'ダイオウイカ'), (8,3,'リュウグウノツカイ'), (8,4,'オオグチボヤ'), (8,5,'シーラカンス'),
+  (9,0,'雲喰いイワナ'), (9,1,'星屑メダカ'), (9,2,'天泳ぐマンタ'), (9,3,'虹鱗のドラゴンフィッシュ'), (9,4,'蒼天ウナギ'), (9,5,'神代のヌシ')
+) as f(spot, idx, name)
+cross join (values
+  ('common','c',0.1,1), ('rare','r',0.2,3), ('epic','e',0.3,10), ('legend','l',0.4,40)
+) as t(tier, short, pct, mult)
+on conflict (id) do update set
+  name = excluded.name, spot = excluded.spot, idx = excluded.idx, tier = excluded.tier,
+  stat = excluded.stat, pct = excluded.pct, medal = excluded.medal;
+
+alter table public.v2_fish enable row level security;
+drop policy if exists v2_fish_read on public.v2_fish;
+create policy v2_fish_read on public.v2_fish for select using (true);
+grant select on public.v2_fish to authenticated;
+
+-- 所持と図鑑。first_at が入っていれば図鑑に登録済み＝恒久ステータスの対象
+create table if not exists public.v2_player_fish (
+  player_id uuid not null references public.v2_profiles(id) on delete cascade,
+  fish_id   text not null references public.v2_fish(id),
+  qty       int  not null default 0,
+  first_at  timestamptz,
+  primary key (player_id, fish_id)
+);
+alter table public.v2_player_fish enable row level security;
+drop policy if exists v2_player_fish_own on public.v2_player_fish;
+create policy v2_player_fish_own on public.v2_player_fish for select using (player_id = auth.uid());
+grant select on public.v2_player_fish to authenticated;
+
+-- ===== 11-3. 釣りメダルの交換所 =====
+-- ⚠並べるのは「ルーン素材」と「保護札」の2つだけ（2026-08-17 ユーザー決定）
+create table if not exists public.v2_fish_shop (
+  id      text primary key,
+  label   text not null,
+  cost    int  not null,        -- 釣りメダル
+  kind    text not null,        -- material / protect
+  payload jsonb not null default '{}'::jsonb,
+  sort    int  not null default 0
+);
+
+-- ルーン素材：エリアとレア度を指定して買う。**そのエリアのその レア度からランダムで1個**
+--   （敵まで指名できると激レアで色を完全に狙えてしまうため、そこは絞らない）
+insert into public.v2_fish_shop (id, label, cost, kind, payload, sort)
+select 'mat:' || a.area || ':' || r.rarity,
+       'エリア' || substr('①②③④⑤⑥⑦⑧', a.area, 1) || 'の' || r.label || '素材',
+       a.area * r.cost, 'material',
+       jsonb_build_object('area', a.area, 'rarity', r.rarity),
+       a.area * 10 + r.sort
+from generate_series(1, 8) as a(area)
+cross join (values ('normal','通常',10,1), ('rare','レア',40,2), ('ultra','激レア',200,3))
+  as r(rarity, label, cost, sort)
+on conflict (id) do update set
+  label = excluded.label, cost = excluded.cost, kind = excluded.kind,
+  payload = excluded.payload, sort = excluded.sort;
+
+insert into public.v2_fish_shop (id, label, cost, kind, payload, sort)
+values ('protect', '保護札（強化の失敗を防ぐ）', 150, 'protect', '{}'::jsonb, 1)
+on conflict (id) do update set label = excluded.label, cost = excluded.cost,
+  kind = excluded.kind, payload = excluded.payload, sort = excluded.sort;
+
+alter table public.v2_fish_shop enable row level security;
+drop policy if exists v2_fish_shop_read on public.v2_fish_shop;
+create policy v2_fish_shop_read on public.v2_fish_shop for select using (true);
+grant select on public.v2_fish_shop to authenticated;
+
+-- ===== 11-4. 内部ヘルパ =====
 -- ⚠ SECURITY DEFINER の内部ヘルパは既定で PUBLIC が実行できてしまう（エンドレスタワーで
 --   塞いだ穴と同じ形）。**必ず REVOKE し、さらに p_uid <> auth.uid() で例外を投げる**
 
@@ -2293,6 +2398,8 @@ returns numeric language sql immutable as $$
     when p_key = 'scarecrow'
       then (array[37.5, 50, 62.5, 75, 87.5, 100, 112.5, 125, 150]::numeric[])
              [greatest(1, least(9, coalesce(p_grade, 1)))]
+    when p_key = 'fishing'
+      then 2::numeric + 0.5 * (greatest(1, least(9, coalesce(p_grade, 1))) - 1)
     when p_key in ('lumber', 'quarry', 'manaforge')
       then 30::numeric * greatest(0, coalesce(p_workers, 0))
     else 0::numeric
@@ -2332,7 +2439,7 @@ returns jsonb language sql immutable as $$
   ) else null end;
 $$;
 
--- 生産施設 → 出る資材の種類。null なら生産施設ではない
+-- 生産施設 → 出る資材の種類。null なら生産施設ではない（かかし・釣り場）
 create or replace function public.v2_base_kind_of(p_key text)
 returns text language sql immutable as $$
   select case p_key when 'lumber' then 'wood' when 'quarry' then 'stone'
@@ -2415,6 +2522,96 @@ begin
 end;
 $$;
 
+-- 釣り上げる（回収の中から呼ぶ）。p_count 匹ぶんを抽選し、副産物もここで抽選する
+create or replace function public.v2_base_fish_haul(p_uid uuid, p_grade int, p_spot int, p_count int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_n       int := least(greatest(coalesce(p_count, 0), 0), 100);
+  v_g       int := greatest(1, least(9, coalesce(p_grade, 1)));
+  v_spot    int := greatest(1, least(v_g, coalesce(p_spot, 1)));
+  v_mat_pct numeric := 1 + v_g;        -- 2〜10%
+  v_eq_pct  numeric := 0.5 * v_g;      -- 0.5〜4.5%
+  v_area_hi int := greatest(1, least(8, v_g));
+  v_i       int;
+  v_r       numeric;
+  v_tier    text;
+  v_idx     int;
+  v_id      text;
+  v_new     boolean;
+  v_area    int;
+  v_mid     text;
+  v_eq      public.v2_equipment;
+  v_sock    text[];
+  v_j       int;
+  v_fish    jsonb := '{}'::jsonb;      -- { 魚ID: 匹数 }
+  v_newdex  jsonb := '[]'::jsonb;
+  v_mats    int := 0;
+  v_eqs     int := 0;
+begin
+  if p_uid is null or p_uid is distinct from auth.uid() then
+    raise exception '不正な呼び出しです';
+  end if;
+
+  for v_i in 1 .. v_n loop
+    -- グレード（レア度）。コモン70 / レア22 / エピック7 / レジェンド1
+    v_r := random() * 100;
+    v_tier := case when v_r < 70 then 'c' when v_r < 92 then 'r' when v_r < 99 then 'e' else 'l' end;
+    v_idx  := floor(random() * 6)::int;
+    v_id   := 'f:' || v_spot || ':' || v_idx || ':' || v_tier;
+
+    -- ★図鑑に初めて載るかどうかは**先に見る**（あとから xmax を読む書き方は分かりにくい）
+    v_new := not exists(select 1 from public.v2_player_fish
+                         where player_id = p_uid and fish_id = v_id);
+    insert into public.v2_player_fish (player_id, fish_id, qty, first_at)
+    values (p_uid, v_id, 1, now())
+    on conflict (player_id, fish_id) do update
+      set qty = public.v2_player_fish.qty + 1,
+          first_at = coalesce(public.v2_player_fish.first_at, now());
+    if v_new then
+      v_newdex := v_newdex || (select to_jsonb(f) from public.v2_fish f where f.id = v_id);
+    end if;
+    v_fish := jsonb_set(v_fish, array[v_id],
+                        to_jsonb(coalesce((v_fish ->> v_id)::int, 0) + 1), true);
+
+    -- 副産物：ルーン素材。エリアは**釣り場グレードと同じ番号まで**（解放状況では縛らない）
+    if random() * 100 < v_mat_pct then
+      v_area := 1 + floor(random() * v_area_hi)::int;
+      select m.id into v_mid from public.v2_materials m
+       where m.area = v_area order by random() limit 1;
+      if v_mid is not null then
+        insert into public.v2_player_materials (player_id, material_id, qty)
+        values (p_uid, v_mid, 1)
+        on conflict (player_id, material_id)
+          do update set qty = public.v2_player_materials.qty + 1;
+        v_mats := v_mats + 1;
+      end if;
+    end if;
+
+    -- 副産物：装備。落ちるランクは出撃と同じ「そのエリアの drop_ranks」
+    if random() * 100 < v_eq_pct then
+      v_area := 1 + floor(random() * v_area_hi)::int;
+      select e.* into v_eq from public.v2_equipment e
+       join public.v2_areas a on a.id = v_area and a.drop_ranks ? e.rank
+       order by random() limit 1;
+      if found then
+        -- ソケットの色は出撃と同じ決め方（武器だけ・片手2枠／両手3枠・1枠ずつ 1/3）
+        v_sock := '{}'::text[];
+        if v_eq.part = '武器' then
+          for v_j in 1 .. (case when v_eq.hands = '2' then 3 else 2 end) loop
+            v_sock := array_append(v_sock, (array['red','blue','green'])[1 + floor(random() * 3)::int]);
+          end loop;
+        end if;
+        insert into public.v2_inventory (player_id, equip_id, sockets) values (p_uid, v_eq.id, v_sock);
+        v_eqs := v_eqs + 1;
+      end if;
+    end if;
+  end loop;
+
+  return jsonb_build_object('caught', v_fish, 'new_dex', v_newdex,
+                            'materials', v_mats, 'equips', v_eqs, 'count', v_n);
+end;
+$$;
+
 revoke all on function public.v2_base_rate(text, int, int)   from public, anon, authenticated;
 revoke all on function public.v2_base_upkeep(text, int, int) from public, anon, authenticated;
 revoke all on function public.v2_base_worker_limit(int)      from public, anon, authenticated;
@@ -2422,8 +2619,9 @@ revoke all on function public.v2_base_hire_cost(int)         from public, anon, 
 revoke all on function public.v2_base_upgrade_cost(int)      from public, anon, authenticated;
 revoke all on function public.v2_base_kind_of(text)          from public, anon, authenticated;
 revoke all on function public.v2_base_settle(uuid, text)     from public, anon, authenticated;
+revoke all on function public.v2_base_fish_haul(uuid, int, int, int) from public, anon, authenticated;
 
--- ===== 11-2. 状態の取得（書き込まない）=====
+-- ===== 11-5. 状態の取得（書き込まない）=====
 -- ⚠**STABLE を付けてはいけない。** STABLE の関数は呼び出し元の問い合わせの
 --   スナップショットで動くため、v2_base_collect などが「更新したあとの状態」を
 --   返そうとしても**更新前の値**が返ってしまう。書き込まないのは中身の話で、
@@ -2448,11 +2646,13 @@ begin
     'server_now', now(),
     'gold', v_p.gold,
     'lv', v_p.lv,
+    'protect_count', v_p.protect_count,
     'unlocked_areas', to_jsonb(v_p.unlocked_areas),
     'hired', coalesce((select b.hired from public.v2_base b where b.player_id = v_uid), 0),
+    'medals', coalesce((select b.fish_medals from public.v2_base b where b.player_id = v_uid), 0),
     'facilities', coalesce((
       select jsonb_agg(jsonb_build_object(
-               'key', f.key, 'grade', f.grade, 'workers', f.workers,
+               'key', f.key, 'grade', f.grade, 'workers', f.workers, 'spot', f.spot,
                'pending', f.pending, 'accrued_from', f.accrued_from,
                'rate',   public.v2_base_rate(f.key, f.grade, f.workers),
                'cap',    public.v2_base_rate(f.key, f.grade, f.workers) * 8,
@@ -2465,6 +2665,10 @@ begin
       select jsonb_agg(jsonb_build_object('kind', m.kind, 'grade', m.grade, 'qty', m.qty)
                        order by m.kind, m.grade)
         from public.v2_base_materials m where m.player_id = v_uid and m.qty > 0), '[]'::jsonb),
+    'fish', coalesce((
+      select jsonb_agg(jsonb_build_object('id', pf.fish_id, 'qty', pf.qty, 'first_at', pf.first_at)
+                       order by pf.fish_id)
+        from public.v2_player_fish pf where pf.player_id = v_uid), '[]'::jsonb),
     'hire_cost', public.v2_base_hire_cost(
                    coalesce((select b.hired from public.v2_base b where b.player_id = v_uid), 0))
   );
@@ -2474,8 +2678,9 @@ revoke all on function public.v2_base_get() from public;
 revoke all on function public.v2_base_get() from anon;
 grant execute on function public.v2_base_get() to authenticated;
 
--- ===== 11-3. 開設（冪等）=====
+-- ===== 11-6. 開設（冪等）=====
 -- ★足りない施設だけ作るので、施設を増やしたあとに呼び直しても安全
+--   （既に拠点を持っている人も、次に開いたときに新しい施設が生える）
 create or replace function public.v2_base_init()
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_uid uuid := auth.uid();
@@ -2488,7 +2693,7 @@ begin
 
   insert into public.v2_base (player_id) values (v_uid) on conflict (player_id) do nothing;
   insert into public.v2_base_facilities (player_id, key)
-  select v_uid, k from unnest(array['lumber', 'quarry', 'manaforge', 'scarecrow']) k
+  select v_uid, k from unnest(array['lumber', 'quarry', 'manaforge', 'scarecrow', 'fishing']) k
   on conflict (player_id, key) do nothing;
 
   return public.v2_base_get();
@@ -2498,7 +2703,7 @@ revoke all on function public.v2_base_init() from public;
 revoke all on function public.v2_base_init() from anon;
 grant execute on function public.v2_base_init() to authenticated;
 
--- ===== 11-4. 回収 =====
+-- ===== 11-7. 回収 =====
 -- p_key が null なら全施設。かかしは v2_apply_exp を通す（LVアップ・スキル習得が走る）
 -- ★LVが上限のときは**かかしを回収しない**（回収するとEXPが捨てられるため、貯めたまま残す）
 create or replace function public.v2_base_collect(p_key text default null)
@@ -2517,6 +2722,7 @@ declare
   v_exp   int := 0;
   v_skip  boolean := false;
   v_gains jsonb := '[]'::jsonb;
+  v_haul  jsonb := null;
   v_lvres jsonb := null;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
@@ -2543,6 +2749,16 @@ begin
           v_exp := v_exp + v_take;
         end if;
       end if;
+
+    elsif v_f.key = 'fishing' then
+      select floor(pending)::int into v_take from public.v2_base_facilities
+       where player_id = v_uid and key = v_f.key;
+      if coalesce(v_take, 0) > 0 then
+        update public.v2_base_facilities set pending = pending - v_take
+         where player_id = v_uid and key = v_f.key;
+        v_haul := public.v2_base_fish_haul(v_uid, v_f.grade, v_f.spot, v_take);
+      end if;
+
     else
       v_kind := public.v2_base_kind_of(v_f.key);
       if v_kind is not null then
@@ -2567,14 +2783,14 @@ begin
   return jsonb_build_object('ok', true, 'gains', v_gains, 'exp', v_exp,
                             'cost', v_cost, 'gold_short', v_short,
                             'auto_collected', v_auto, 'lv_capped', v_skip,
-                            'level', v_lvres, 'base', public.v2_base_get());
+                            'haul', v_haul, 'level', v_lvres, 'base', public.v2_base_get());
 end;
 $$;
 revoke all on function public.v2_base_collect(text) from public;
 revoke all on function public.v2_base_collect(text) from anon;
 grant execute on function public.v2_base_collect(text) to authenticated;
 
--- ===== 11-5. 拡張 =====
+-- ===== 11-8. 拡張 =====
 create or replace function public.v2_base_upgrade(p_key text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -2643,7 +2859,7 @@ revoke all on function public.v2_base_upgrade(text) from public;
 revoke all on function public.v2_base_upgrade(text) from anon;
 grant execute on function public.v2_base_upgrade(text) to authenticated;
 
--- ===== 11-6. 労働者を雇う =====
+-- ===== 11-9. 労働者を雇う =====
 create or replace function public.v2_base_hire(p_key text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -2690,7 +2906,7 @@ revoke all on function public.v2_base_hire(text) from public;
 revoke all on function public.v2_base_hire(text) from anon;
 grant execute on function public.v2_base_hire(text) to authenticated;
 
--- ===== 11-7. 労働者の配置替え =====
+-- ===== 11-10. 労働者の配置替え =====
 -- ★前と後の両方で settle する。後にも回すのは、capが下がったぶんの自動回収を即座に走らせるため
 create or replace function public.v2_base_move_worker(p_from text, p_to text)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -2732,7 +2948,7 @@ revoke all on function public.v2_base_move_worker(text, text) from public;
 revoke all on function public.v2_base_move_worker(text, text) from anon;
 grant execute on function public.v2_base_move_worker(text, text) to authenticated;
 
--- ===== 11-8. ルーン素材 → 資材 =====
+-- ===== 11-11. ルーン素材 → 資材 =====
 -- エリアNの素材がグレードNの資材になる。通常3 / レア12 / 激レア60（売却と同じ 1:4:20 の比）
 create or replace function public.v2_base_exchange(p_items jsonb, p_kind text)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -2816,7 +3032,163 @@ revoke all on function public.v2_base_exchange(jsonb, text) from public;
 revoke all on function public.v2_base_exchange(jsonb, text) from anon;
 grant execute on function public.v2_base_exchange(jsonb, text) to authenticated;
 
--- ===== 11-9. 開発用のリセット =====
+-- ===== 11-12. 釣り場エリアを選ぶ =====
+-- ⚠**切り替える前に必ず釣り上げる。** pending は「匹数」しか持っていないので、
+--   settle するだけでは足りない（第1エリアで8時間ぶん貯めてから第9エリアへ替えると、
+--   全部が第9エリアの魚として釣れてしまう＝メダルが最大40倍まで化ける穴）。
+create or replace function public.v2_base_set_spot(p_spot int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid(); v_grade int; v_col jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+
+  select grade into v_grade from public.v2_base_facilities
+   where player_id = v_uid and key = 'fishing';
+  if v_grade is null then return jsonb_build_object('ok', false, 'error', '釣り場がありません'); end if;
+  if coalesce(p_spot, 0) < 1 or p_spot > v_grade then
+    return jsonb_build_object('ok', false, 'error', 'その釣り場はまだ解放されていません');
+  end if;
+
+  -- いまのエリアぶんを先に釣り上げてから切り替える
+  v_col := public.v2_base_collect('fishing');
+
+  update public.v2_base_facilities set spot = p_spot where player_id = v_uid and key = 'fishing';
+  return jsonb_build_object('ok', true, 'spot', p_spot, 'collected', v_col,
+                            'base', public.v2_base_get());
+end;
+$$;
+revoke all on function public.v2_base_set_spot(int) from public;
+revoke all on function public.v2_base_set_spot(int) from anon;
+grant execute on function public.v2_base_set_spot(int) to authenticated;
+
+-- ===== 11-13. 魚 → 釣りメダル =====
+-- ★図鑑への登録は「初めて釣った瞬間」に済んでいるので、**全部メダルにしてよい**
+create or replace function public.v2_fish_to_medal(p_items jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_max_kinds constant int := 300;
+  c_max_qty   constant int := 999999;
+  v_uid   uuid := auth.uid();
+  v_req   int;
+  v_ok    int;
+  v_total bigint;
+  v_have  bigint;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if not exists(select 1 from public.v2_base where player_id = v_uid) then
+    return jsonb_build_object('ok', false, 'error', '拠点がありません');
+  end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
+    return jsonb_build_object('ok', false, 'error', '交換するものがありません');
+  end if;
+  if jsonb_array_length(p_items) > c_max_kinds then
+    return jsonb_build_object('ok', false, 'error', '一度に交換できる数を超えています');
+  end if;
+
+  -- 検証を全部済ませてから引く（plpgsql は return でロールバックしない）
+  select count(*) into v_req
+    from (select r.id, sum(r.qty)::bigint as qty
+            from jsonb_to_recordset(p_items) as r(id text, qty int)
+           where r.id is not null and coalesce(r.qty, 0) > 0
+           group by r.id) q
+   where q.qty <= c_max_qty;
+  if v_req = 0 then return jsonb_build_object('ok', false, 'error', '個数が不正です'); end if;
+
+  select count(*), coalesce(sum(q.qty * f.medal), 0) into v_ok, v_total
+    from (select r.id, sum(r.qty)::int as qty
+            from jsonb_to_recordset(p_items) as r(id text, qty int)
+           where r.id is not null and coalesce(r.qty, 0) > 0
+           group by r.id) q
+    join public.v2_fish f on f.id = q.id
+    join public.v2_player_fish pf
+      on pf.player_id = v_uid and pf.fish_id = q.id and pf.qty >= q.qty
+   where q.qty <= c_max_qty;
+  if v_ok <> v_req then return jsonb_build_object('ok', false, 'error', '魚が足りません'); end if;
+
+  update public.v2_player_fish pf
+     set qty = pf.qty - q.qty
+    from (select r.id, sum(r.qty)::int as qty
+            from jsonb_to_recordset(p_items) as r(id text, qty int)
+           where r.id is not null and coalesce(r.qty, 0) > 0
+           group by r.id) q
+   where pf.player_id = v_uid and pf.fish_id = q.id;
+
+  update public.v2_base set fish_medals = fish_medals + v_total
+   where player_id = v_uid returning fish_medals into v_have;
+
+  return jsonb_build_object('ok', true, 'gained', v_total, 'medals', v_have,
+                            'base', public.v2_base_get());
+end;
+$$;
+revoke all on function public.v2_fish_to_medal(jsonb) from public;
+revoke all on function public.v2_fish_to_medal(jsonb) from anon;
+grant execute on function public.v2_fish_to_medal(jsonb) to authenticated;
+
+-- ===== 11-14. メダルで交換する =====
+create or replace function public.v2_fish_shop_buy(p_id text, p_qty int default 1)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_n     int := least(greatest(coalesce(p_qty, 1), 1), 99);
+  v_row   public.v2_fish_shop;
+  v_cost  bigint;
+  v_have  bigint;
+  v_area  int;
+  v_rar   text;
+  v_mid   text;
+  v_i     int;
+  v_got   jsonb := '[]'::jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_row from public.v2_fish_shop where id = p_id;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その品はありません'); end if;
+  if v_row.kind not in ('material', 'protect') then
+    return jsonb_build_object('ok', false, 'error', 'その品はまだ配れません');
+  end if;
+
+  v_cost := v_row.cost::bigint * v_n;
+  select fish_medals into v_have from public.v2_base where player_id = v_uid for update;
+  if v_have is null then return jsonb_build_object('ok', false, 'error', '拠点がありません'); end if;
+  if v_have < v_cost then return jsonb_build_object('ok', false, 'error', '釣りメダルが足りません'); end if;
+
+  -- 検証が済んでいるのでここから先は必ず配れる
+  update public.v2_base set fish_medals = fish_medals - v_cost
+   where player_id = v_uid returning fish_medals into v_have;
+
+  if v_row.kind = 'protect' then
+    update public.v2_profiles set protect_count = protect_count + v_n, updated_at = now()
+     where id = v_uid;
+    v_got := jsonb_build_array(jsonb_build_object('label', v_row.label, 'qty', v_n));
+
+  else
+    v_area := (v_row.payload ->> 'area')::int;
+    v_rar  := v_row.payload ->> 'rarity';
+    for v_i in 1 .. v_n loop
+      -- ★そのエリアのその レア度から**ランダムで1個**（敵までは指名させない）
+      select m.id into v_mid from public.v2_materials m
+       where m.area = v_area and m.rarity = v_rar order by random() limit 1;
+      exit when v_mid is null;
+      insert into public.v2_player_materials (player_id, material_id, qty)
+      values (v_uid, v_mid, 1)
+      on conflict (player_id, material_id)
+        do update set qty = public.v2_player_materials.qty + 1;
+      v_got := v_got || jsonb_build_object('id', v_mid,
+                 'name', (select name from public.v2_materials where id = v_mid));
+    end loop;
+  end if;
+
+  return jsonb_build_object('ok', true, 'spent', v_cost, 'medals', v_have,
+                            'got', v_got, 'base', public.v2_base_get());
+end;
+$$;
+revoke all on function public.v2_fish_shop_buy(text, int) from public;
+revoke all on function public.v2_fish_shop_buy(text, int) from anon;
+grant execute on function public.v2_fish_shop_buy(text, int) to authenticated;
+
+-- ===== 11-15. 開発用のリセット =====
 -- ⚠ is_admin 限定。**一般公開したあともこの判定は外さない**
 create or replace function public.v2_base_dev_reset()
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -2826,6 +3198,7 @@ begin
   if not coalesce((select p.is_admin from public.profiles p where p.id = v_uid), false) then
     return jsonb_build_object('ok', false, 'error', '開発限定です');
   end if;
+  delete from public.v2_player_fish     where player_id = v_uid;
   delete from public.v2_base_materials  where player_id = v_uid;
   delete from public.v2_base_facilities where player_id = v_uid;
   delete from public.v2_base            where player_id = v_uid;
