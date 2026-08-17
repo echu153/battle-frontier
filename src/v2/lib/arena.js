@@ -1,0 +1,165 @@
+// ============================================================
+// バトルフロンティアⅡ（リメイク版）— アリーナ（対人）
+// ------------------------------------------------------------
+// あるけみすとの「天空闘技場」と同じ仕組み（2026-08-16 ユーザー指示）。
+// 出典：https://wikiwiki.jp/alchemist-p/天空闘技場
+//
+//   ・各階に**チャンプ**（守る側）がいて、挑戦者は自分がいる階のチャンプと戦う
+//   ・勝つとその階のチャンプになる。**守っているあいだは挑戦できない**
+//   ・自分のチャンプが破られると解放され、**1つ上の階**へ挑戦できるようになる
+//   ・挑戦して負けると**2つ下**の階へ。ただし戦闘力が足りていれば落ちない
+//   ・**挑戦者はHP/MPが毎回全回復、チャンプは回復しない**（連続で守ると削れる）
+//   ・n連勝中のチャンプに挑むと、挑戦者の**HP/MP以外の全ステが +5n%**
+//   ・EXPは勝敗によらず 9〜13。勝つと装備が落ちる
+//   ・出撃（あるけみすとの「探索」）と**クールタイムを共有**する
+//
+// ★wikiに記載が無くこちらで決めたもの（2026-08-16）：
+//   ・階層数＝50（ユーザー決定）
+//   ・階ごとの戦闘力の目安と、空き階に置くNPCチャンプ（ユーザー決定）
+//     あるけみすとには無い仕組み。向こうは人が多いので空き階が出ない。
+//
+// ★戦闘そのものはクライアントの runBattle が回し、結果をサーバーへ申告する。
+//   v2の戦闘は全部この形（出撃も同じ）。対人なので申告を信じる穴は残る＝
+//   一般公開の前にサーバー権威化の判断が要る。
+// ============================================================
+import { STAT_KEYS } from './stats.js'
+import { skillsOf, SKILLS } from './skills.js'
+import { CLASS_BONUS } from './classBonus.js'
+
+export const FLOORS = 50          // 最上階
+export const EXP_MIN = 9          // 勝敗によらずもらえるEXP
+export const EXP_MAX = 13
+export const DROP_RATE = 25       // 勝ったときに装備が落ちる確率(%)
+export const STREAK_PCT = 5       // n連勝中の相手に挑むと 5n%（HP/MPを除く）
+export const LOSE_DROP = 2        // 負けたときに落ちる階数
+export const LOW_FLOOR = 30       // ここ以下は連勝補正が強化される（wikiの「30階以下」）
+export const LOW_FLOOR_MULT = 2   // 強化の倍率（wikiに数字が無いのでこちらで決めた）
+
+// ===== 階ごとの戦闘力の目安 =====
+// 1階＝はじめたて、50階＝エリア⑧のボス級（28,000前後）になるよう指数で並べる
+export const FLOOR_BASE = 150
+export const FLOOR_GROWTH = 1.114
+export const powerOfFloor = (floor) =>
+  Math.round(FLOOR_BASE * Math.pow(FLOOR_GROWTH, Math.max(1, Math.min(FLOORS, floor)) - 1))
+
+// ★負けても「その戦闘力なら居ていい階」までしか落ちない（wikiの戦力値の上限）。
+//   目安を超えている階のうち、いちばん上の階が下限になる。
+export const floorLimitOf = (power) => {
+  let lo = 1
+  for (let f = 1; f <= FLOORS; f++) if (power >= powerOfFloor(f)) lo = f
+  return lo
+}
+
+// 負けたときに次に挑戦する階
+export const floorAfterLose = (floor, power) =>
+  Math.max(1, Math.max(floor - LOSE_DROP, Math.min(floor, floorLimitOf(power))))
+// チャンプを破られたときに次に挑戦する階（1つ上。最上階なら据え置き）
+export const floorAfterDefended = (floor) => Math.min(FLOORS, floor + 1)
+
+// ===== 連勝補正 =====
+// n連勝中のチャンプに挑む側が強くなる（居座り続けられないようにするための仕組み）。
+// 30階以下は戦闘力の差が開いているときだけ補正が強くなる＝下の階で詰まらせない
+export const streakBonusPct = (streak, floor = FLOORS + 1, myPower = 0, foePower = 0) => {
+  const n = Math.max(0, Math.floor(streak || 0))
+  if (!n) return 0
+  const low = floor <= LOW_FLOOR && foePower > myPower
+  return n * STREAK_PCT * (low ? LOW_FLOOR_MULT : 1)
+}
+
+// 補正を乗せたステータス。★HPとMPには乗せない（居座り対策であって耐久勝負にしない）
+export const applyStreakBonus = (stats, pct) => {
+  if (!pct) return { ...stats }
+  const out = {}
+  for (const k of STAT_KEYS) {
+    const v = stats?.[k] || 0
+    out[k] = (k === 'hp' || k === 'mp') ? v : Math.round(v * (1 + pct / 100))
+  }
+  return out
+}
+
+// ===== NPCチャンプ =====
+// 空いている階に置く。人が少ないうちに中身が空にならないようにするための仕組みで、
+// **本人が勝てば入れ替わる**（NPCは席が空いたときだけ戻ってくる）。
+// ★一般公開のときに外すなら NPC_ENABLED を false にする
+export const NPC_ENABLED = true
+
+// 階ごとに就いている職業。上位職を順に回す（同じ階なら必ず同じ職業になる）
+export const NPC_CLASSES = Object.keys(CLASS_BONUS)
+export const npcClassOf = (floor) => NPC_CLASSES[(floor - 1) % NPC_CLASSES.length]
+
+// 名前。階と職業で決まるので、見るたびに変わらない
+export const NPC_TITLES = ['流浪の', '無名の', '古参の', '歴戦の', '不倒の', '天鳴の']
+export const npcNameOf = (floor) =>
+  `${NPC_TITLES[(floor - 1) % NPC_TITLES.length]}${npcClassOf(floor)}`
+
+// 戦闘力の配り方。職業のメイン／サブへ厚くする（プレイヤーらしい形にする）
+// HPは8・MPは3で戦闘力1ぶんなので、そのぶん量を増やす
+const UNIT = { hp: 8, mp: 3 }
+export const npcStatsOf = (floor) => {
+  const cls = npcClassOf(floor)
+  const b = CLASS_BONUS[cls] || {}
+  const power = powerOfFloor(floor)
+  // 8種へ配る割合(%)。HPを厚めにして、殴り合いが1発で終わらないようにする
+  const dist = { hp: 26, mp: 8, str: 8, dex: 8, agi: 8, int_stat: 8, vit: 8, luk: 8 }
+  if (b.main) dist[b.main] += 12
+  if (b.sub)  dist[b.sub]  += 6
+  const total = Object.values(dist).reduce((a, c) => a + c, 0)
+  const out = {}
+  for (const k of STAT_KEYS) out[k] = Math.max(1, Math.round(power * (dist[k] / total) * (UNIT[k] || 1)))
+  return out
+}
+
+// 使うスキル。その職業のスキルから、パッシブでないものを上から4つ
+export const npcSlotsOf = (floor) => {
+  const cls = npcClassOf(floor)
+  const list = skillsOf(cls).filter(s => s.kind !== 'passive')
+  const use = (list.length ? list : SKILLS.filter(s => s.cls === 'ノーブル')).slice(0, 4)
+  return use.map(s => ({ skill: s, uses: 3 }))
+}
+
+// runBattle に渡せる形。プレイヤーのスナップショットと同じ形にそろえてある
+export const npcChampOf = (floor) => ({
+  npc: true,
+  name: npcNameOf(floor),
+  cls: npcClassOf(floor),
+  jobCount: 0,
+  stats: npcStatsOf(floor),
+  enchants: [],
+  slots: npcSlotsOf(floor),
+})
+
+// ===== スナップショット =====
+// チャンプは**その階に就いたときの姿**で戦う。あとで装備を外しても弱くならないし、
+// 相手の今のデータを読みに行かなくて済む（他人の行を見ないで完結する）。
+export const snapshotOf = (fighter) => ({
+  npc: false,
+  name: fighter.name,
+  cls: fighter.cls,
+  jobCount: fighter.jobCount || 0,
+  stats: { ...fighter.stats },
+  enchants: [...(fighter.enchants || [])],
+  // スキルは名前と回数だけ持つ（実体は SKILL_BY_NAME で引き直す）
+  slots: (fighter.slots || []).map(s => ({ name: s.skill?.name, uses: s.uses })),
+})
+
+// スナップショットを runBattle に渡せる形へ戻す
+export const fromSnapshot = (snap, skillByName) => ({
+  ...snap,
+  slots: (snap.slots || [])
+    .map(s => ({ skill: s.skill || skillByName?.[s.name], uses: s.uses || 1 }))
+    .filter(s => s.skill),
+})
+
+// その階のチャンプ（空いていればNPC）
+export const champOf = (floor, row, skillByName) => {
+  if (row?.snapshot) return { ...fromSnapshot(row.snapshot, skillByName), hp: row.hp, mp: row.mp, streak: row.streak || 0 }
+  if (!NPC_ENABLED) return null
+  const npc = npcChampOf(floor)
+  return { ...npc, hp: npc.stats.hp, mp: npc.stats.mp, streak: 0 }
+}
+
+// 挑戦できるか。守っているあいだは挑戦できない（wikiと同じ）
+export const canChallenge = ({ defending = null } = {}) => (defending ? '守っているあいだは挑戦できません' : '')
+
+export const expOf = (rng = Math.random) => EXP_MIN + Math.floor(rng() * (EXP_MAX - EXP_MIN + 1))
+export const rollDrop = (rng = Math.random) => rng() * 100 < DROP_RATE

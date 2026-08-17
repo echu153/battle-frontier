@@ -17,6 +17,7 @@ import V2Smith from '../components/V2Smith.jsx'
 import V2Status, { V2Menu } from '../components/V2Status.jsx'
 import V2Profile from '../components/V2Profile.jsx'
 import V2Tree from '../components/V2Tree.jsx'
+import V2Arena from '../components/V2Arena.jsx'
 import {
   powerText, isPassive, KIND_LABEL, KIND_COLOR, SKILL_BY_NAME,
   usableSkills, usableSkillNames, unlearnedSkills, validateSkillSet, setMpCost,
@@ -58,6 +59,7 @@ const MENU = [
   { key:'smith',   label:'鍛冶屋',      icon:'🔨', color:'#ffcc00', action:'強化・エンチャント' },
   { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
   { key:'storage', label:'倉庫',        icon:'🎒', color:'#88ccff', action:'倉庫に行く' },
+  { key:'arena',   label:'アリーナ',     icon:'⚔', color:'#ff88cc', action:'対人戦' },
   { key:'tree',    label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
 ]
 
@@ -341,6 +343,7 @@ export default function V2Home() {
             {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} materials={materials} runes={runes} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'tree'    && <V2Tree    prof={prof} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'arena'   && <V2Arena   prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onBack={() => setScreen('home')} />}
 
             {(screen === 'skills' || screen === 'temple') && (
               <button onClick={() => setScreen('home')} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>

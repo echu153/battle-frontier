@@ -139,8 +139,10 @@ export const createSide = (fighter, band = null) => {
     cls: fighter.cls,
     kind: fighter.kind || attackKindOf(fighter.cls),
     base: stats,
-    hp: stats.hp,
-    mp: stats.mp,
+    // ★startHp/startMp を渡すと、そこから始める（アリーナのチャンプは回復しないので使う）。
+    //   最大値は base のままなので、回復もHPバーも正しく動く
+    hp: Math.max(0, Math.min(stats.hp, fighter.startHp ?? stats.hp)),
+    mp: Math.max(0, Math.min(stats.mp, fighter.startMp ?? stats.mp)),
     slots: all.filter(s => !isPassive(s.skill)),  // 発動順に回るのはパッシブ以外だけ
     passives,
     pa,

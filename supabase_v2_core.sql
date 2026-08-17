@@ -1982,3 +1982,157 @@ $$;
 revoke all on function public.v2_debug_grant_material(int, int) from public;
 revoke all on function public.v2_debug_grant_material(int, int) from anon;
 grant execute on function public.v2_debug_grant_material(int, int) to authenticated;
+
+-- ============================================================
+-- ===== 10. アリーナ（対人）=====
+-- ------------------------------------------------------------
+-- あるけみすとの「天空闘技場」と同じ仕組み（出典 wikiwiki alchemist-p /天空闘技場）。
+--   ・各階に**チャンプ**（守る側）が1人。挑戦者は自分がいる階のチャンプと戦う
+--   ・勝つとその階のチャンプになる。守っているあいだは挑戦できない
+--   ・自分のチャンプが破られると解放され、1つ上の階へ挑戦できるようになる
+--   ・負けると2つ下の階へ。ただし戦闘力が足りていれば落ちない
+--   ・**チャンプのHP/MPは回復しない**。挑戦者は毎回満タン
+--   ・EXPは勝敗によらず9〜13。勝つと装備が落ちる
+--   ・出撃とクールタイムを共有する（last_sortie_at を同じように更新する）
+--
+-- ★階層数50と、空き階に置くNPCチャンプは wiki に無く、こちらで決めたもの
+--   （NPCの中身は src/v2/lib/arena.js が持つ。サーバーは「空席」として扱うだけ）。
+-- ★戦闘そのものはクライアントの runBattle が回し、ここへ結果を申告する。
+--   v2の戦闘は全部この形（出撃も同じ）。**対人なので申告を信じる穴が残る**＝
+--   一般公開の前にサーバー権威化の判断が要る。
+-- ============================================================
+alter table public.v2_profiles add column if not exists arena_floor  int not null default 1;  -- 次に挑戦する階
+alter table public.v2_profiles add column if not exists arena_wins   int not null default 0;
+alter table public.v2_profiles add column if not exists arena_losses int not null default 0;
+
+-- 各階のチャンプ。行が無い階＝空席（クライアントがNPCを置く）
+create table if not exists public.v2_arena_floors (
+  floor      int primary key,
+  player_id  uuid references auth.users(id) on delete set null,
+  snapshot   jsonb not null,          -- 就いたときの姿（arena.js の snapshotOf）
+  hp         int not null,            -- ★回復しない。守るたびに減っていく
+  mp         int not null,
+  streak     int not null default 0,  -- 連勝数（挑戦者への +5n% の元）
+  since      timestamptz not null default now()
+);
+create index if not exists v2_arena_floors_player_idx on public.v2_arena_floors(player_id);
+alter table public.v2_arena_floors enable row level security;
+
+-- 一覧は誰でも読める（誰が何階を守っているかは公開情報）
+drop policy if exists v2_arena_read on public.v2_arena_floors;
+create policy v2_arena_read on public.v2_arena_floors for select to authenticated using (public.v2_is_dev());
+-- 書き込みはRPCだけ（直接いじれないようにポリシーを足さない）
+
+-- ===== 挑戦の結果を反映する =====
+-- p_win        … 勝ったか
+-- p_my_hp/mp   … 戦い終わったときの自分のHP/MP（勝ったらチャンプとして座る値）
+-- p_foe_hp/mp  … 戦い終わったときのチャンプのHP/MP（負けたらその値で座り直す）
+-- p_snapshot   … 自分の姿（勝ってチャンプになるとき用）
+-- p_exp / p_drop … クライアントが引いたEXPとドロップ（出撃と同じ形）
+create or replace function public.v2_arena_fight(
+  p_win boolean, p_my_hp int, p_my_mp int, p_foe_hp int, p_foe_mp int,
+  p_snapshot jsonb, p_exp int, p_drop text default null
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_floors constant int := 50;
+  c_drop   constant int := 2;    -- 負けたときに落ちる階数
+  v_uid   uuid := auth.uid();
+  v_row   public.v2_profiles%rowtype;
+  v_floor int;
+  v_champ public.v2_arena_floors%rowtype;
+  v_next  int;
+  v_exp   int := least(greatest(coalesce(p_exp, 0), 0), 13);
+  v_lv    jsonb;
+  v_inv   bigint;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_row from public.v2_profiles where id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+
+  -- ★守っているあいだは挑戦できない（wikiと同じ）
+  if exists (select 1 from public.v2_arena_floors where player_id = v_uid) then
+    return jsonb_build_object('ok', false, 'error', '守っているあいだは挑戦できません');
+  end if;
+
+  v_floor := least(greatest(coalesce(v_row.arena_floor, 1), 1), c_floors);
+  select * into v_champ from public.v2_arena_floors where floor = v_floor;
+
+  if p_win then
+    -- 破られた本人は「1つ上へ挑戦できる」状態に戻す（席は空ける）
+    if v_champ.player_id is not null then
+      update public.v2_profiles
+         set arena_floor = least(c_floors, v_floor + 1),
+             arena_losses = arena_losses + 1, updated_at = now()
+       where id = v_champ.player_id;
+    end if;
+    -- 自分がその階のチャンプになる。**HP/MPは戦い終わった値のまま座る**
+    insert into public.v2_arena_floors (floor, player_id, snapshot, hp, mp, streak, since)
+    values (v_floor, v_uid, coalesce(p_snapshot, '{}'::jsonb),
+            greatest(1, coalesce(p_my_hp, 1)), greatest(0, coalesce(p_my_mp, 0)), 0, now())
+    on conflict (floor) do update
+      set player_id = excluded.player_id, snapshot = excluded.snapshot,
+          hp = excluded.hp, mp = excluded.mp, streak = 0, since = now();
+    v_next := v_floor;   -- 守っているので、次に挑戦する階は据え置き
+    update public.v2_profiles
+       set arena_wins = arena_wins + 1, last_sortie_at = now(), updated_at = now()
+     where id = v_uid;
+  else
+    -- 負け。チャンプは**HP/MPが減ったまま**居座り、連勝数が1つ増える
+    if v_champ.floor is not null then
+      update public.v2_arena_floors
+         set hp = greatest(1, coalesce(p_foe_hp, hp)), mp = greatest(0, coalesce(p_foe_mp, mp)),
+             streak = streak + 1
+       where floor = v_floor;
+      if v_champ.player_id is not null then
+        update public.v2_profiles set arena_wins = arena_wins + 1, updated_at = now()
+         where id = v_champ.player_id;
+      end if;
+    end if;
+    -- 2つ下へ。ただし「その戦闘力なら居ていい階」より下には落ちない
+    -- （目安の計算はクライアント側と同じ式。ここでは階だけ動かす）
+    v_next := greatest(1, v_floor - c_drop);
+    update public.v2_profiles
+       set arena_losses = arena_losses + 1, last_sortie_at = now(), updated_at = now()
+     where id = v_uid;
+  end if;
+
+  update public.v2_profiles set arena_floor = v_next, updated_at = now() where id = v_uid;
+
+  -- EXPは勝敗によらず入る（保護トリガー対応で、付与は必ず v2_apply_exp を通す）
+  if v_exp > 0 then v_lv := public.v2_apply_exp(v_uid, v_exp); end if;
+
+  -- 勝ったときのドロップ
+  if p_win and p_drop is not null then
+    insert into public.v2_inventory (player_id, equip_id, plus)
+    values (v_uid, p_drop, 0) returning id into v_inv;
+  end if;
+
+  return jsonb_build_object('ok', true, 'win', p_win, 'floor', v_floor, 'next_floor', v_next,
+                            'defending', p_win, 'exp', v_exp, 'drop', p_drop,
+                            'level', v_lv,
+                            'profile', (select to_jsonb(p) from public.v2_profiles p where p.id = v_uid));
+end;
+$$;
+revoke all on function public.v2_arena_fight(boolean, int, int, int, int, jsonb, int, text) from public;
+revoke all on function public.v2_arena_fight(boolean, int, int, int, int, jsonb, int, text) from anon;
+grant execute on function public.v2_arena_fight(boolean, int, int, int, int, jsonb, int, text) to authenticated;
+
+-- ===== 席を降りる（守るのをやめる）=====
+-- ずっと守っていると自分が動けなくなるので、自分から降りられるようにする。
+-- 降りた階はそのまま次の挑戦先になる（上がるわけではない）
+create or replace function public.v2_arena_retire()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid(); v_floor int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  delete from public.v2_arena_floors where player_id = v_uid returning floor into v_floor;
+  if not found then return jsonb_build_object('ok', false, 'error', 'どの階も守っていません'); end if;
+  update public.v2_profiles set arena_floor = v_floor, updated_at = now() where id = v_uid;
+  return jsonb_build_object('ok', true, 'floor', v_floor);
+end;
+$$;
+revoke all on function public.v2_arena_retire() from public;
+revoke all on function public.v2_arena_retire() from anon;
+grant execute on function public.v2_arena_retire() to authenticated;
