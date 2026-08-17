@@ -59,7 +59,6 @@ const MENU = [
   { key:'smith',   label:'鍛冶屋',      icon:'🔨', color:'#ffcc00', action:'強化・エンチャント' },
   { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
   { key:'storage', label:'倉庫',        icon:'🎒', color:'#88ccff', action:'倉庫に行く' },
-  { key:'arena',   label:'アリーナ',     icon:'⚔', color:'#ff88cc', action:'対人戦' },
   { key:'tree',    label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
 ]
 
@@ -88,6 +87,7 @@ export default function V2Home() {
   // ★開閉は覚えておく（毎回閉じ直さなくてよいように）
   const [openStatus, setOpenStatus] = useStored('openStatus', true)
   const [openMenu, setOpenMenu] = useStored('openMenu', true)
+  const [act, setAct] = useStored('homeAct', 'sortie')   // ホームの行動タブ（出撃／アリーナ）
   const [isAdmin, setIsAdmin] = useState(false)       // 開発限定の緩和（宝樹の回数制限なしなど）
 
   useEffect(() => {
@@ -327,10 +327,25 @@ export default function V2Home() {
               <V2Status prof={prof} inventory={inventory} runes={runes} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
             )}
 
-            {/* ===== 出撃（旧版と同じで、街のブロックがそのままホームに載る） ===== */}
+            {/* ===== 出撃とアリーナ（旧版と同じで、街のブロックがそのままホームに載る） =====
+                ★あるけみすとも「探索する」の下にタブで闘技場がぶら下がっている。
+                  クールタイムも共有なので、同じ場所にまとめて置く */}
             {screen === 'home' && (
               <div style={{ marginBottom:'8px' }}>
-                <V2Sortie prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />
+                {!inBattle && (
+                  <div style={{ display:'flex', gap:'4px', marginBottom:'6px' }}>
+                    {[{ key:'sortie', label:'⚔ 出撃', color:'#ffcc00' }, { key:'arena', label:'🏛 アリーナ', color:'#ff88cc' }].map(t => (
+                      <button key={t.key} onClick={() => setAct(t.key)}
+                        style={{ ...miniBtn(act === t.key ? t.color : '#7fa6d0'), padding:'7px 14px', fontSize:'12px',
+                          background: act === t.key ? '#002850' : '#000818' }}>
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {act === 'sortie'
+                  ? <V2Sortie prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />
+                  : <V2Arena prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onBack={() => setAct('sortie')} embedded />}
               </div>
             )}
 
@@ -343,7 +358,6 @@ export default function V2Home() {
             {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} materials={materials} runes={runes} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'tree'    && <V2Tree    prof={prof} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
-            {screen === 'arena'   && <V2Arena   prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onBack={() => setScreen('home')} />}
 
             {(screen === 'skills' || screen === 'temple') && (
               <button onClick={() => setScreen('home')} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>

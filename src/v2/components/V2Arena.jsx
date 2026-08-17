@@ -19,13 +19,15 @@ import { box, btn, miniBtn, RANK_COLOR } from './v2ui.js'
 //   仕組みの説明と定数は src/v2/lib/arena.js が正。
 //
 // 表示は「いまいる階のチャンプ」と「一覧」の2つだけ。挑戦できるのは自分の階のチャンプ。
-export default function V2Arena({ prof, inventory, runes, onProfile, onBack }) {
+// embedded … ホームの出撃タブの中に置くとき。自前の「← ホームへ」は出さず、階の一覧は畳んでおく
+export default function V2Arena({ prof, inventory, runes, onProfile, onBack, embedded = false }) {
   const [rows, setRows] = useState([])       // v2_arena_floors（埋まっている階だけ）
   const [logs, setLogs] = useState([])
   const [scene, setScene] = useState('lobby')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [now, setNow] = useState(Date.now())
+  const [showList, setShowList] = useState(!embedded)   // 階の一覧（ホームでは畳んでおく）
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 200); return () => clearInterval(t) }, [])
 
@@ -126,7 +128,7 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack }) {
 
   return (
     <div>
-      <button onClick={onBack} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>
+      {!embedded && <button onClick={onBack} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>}
 
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
         <div style={{ color:'#ff88cc', fontSize:'13px', marginBottom:'6px' }}>⚔ アリーナ</div>
@@ -188,7 +190,11 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack }) {
 
       {/* 一覧 */}
       <div style={{ ...box, padding:'12px' }}>
-        <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'6px' }}>階の様子（{FLOORS}階まで）</div>
+        <button onClick={() => setShowList(v => !v)}
+          style={{ ...miniBtn('#7fa6d0'), width:'100%', padding:'4px', marginBottom:'6px' }}>
+          {showList ? '▲ 階の様子を閉じる' : `▼ 階の様子を見る（${FLOORS}階まで）`}
+        </button>
+        {showList && (
         <div style={{ display:'grid', gap:'2px' }}>
           {Array.from({ length: FLOORS }, (_, i) => FLOORS - i).map(f => {
             const c = champOf(f, byFloor[f], SKILL_BY_NAME)
@@ -209,6 +215,7 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack }) {
             )
           })}
         </div>
+        )}
       </div>
     </div>
   )
