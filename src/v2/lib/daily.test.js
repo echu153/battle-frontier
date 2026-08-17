@@ -21,7 +21,7 @@ test('項目は4つ、難易度は2つ', () => {
 test('目標と報酬は指示どおり', () => {
   assert.deepEqual(levelOf('easy').goals,   { sortie: 20,  arena: 1, rune: 1, pray: 1 })
   assert.deepEqual(levelOf('easy').reward,  { exp: 60,  gold: 100 })
-  assert.deepEqual(levelOf('normal').goals, { sortie: 100, arena: 5, rune: 3, pray: 1 })
+  assert.deepEqual(levelOf('normal').goals, { sortie: 50, arena: 5, rune: 3, pray: 1 })
   assert.deepEqual(levelOf('normal').reward,{ exp: 180, gold: 300 })
   // どの難易度も全項目に目標がある（増やしたときの取りこぼし検出）
   for (const lv of LEVELS) for (const k of TASK_KEYS) assert.ok(lv.goals[k] > 0, `${lv.key} の ${k}`)
@@ -49,9 +49,9 @@ test('★日付が変わったら、前の日の進み具合も難易度も受�
 })
 
 test('進み具合は目標で頭打ちにする（20/20 より上を出さない）', () => {
-  const p = prof({ daily_counts:{ sortie: 55 } })
+  const p = prof({ daily_counts:{ sortie: 30 } })
   assert.deepEqual(progressOf(p, 'easy', 'sortie', AT), { now:20, goal:20, done:true })
-  assert.deepEqual(progressOf(p, 'normal', 'sortie', AT), { now:55, goal:100, done:false })
+  assert.deepEqual(progressOf(p, 'normal', 'sortie', AT), { now:30, goal:50, done:false })
   assert.deepEqual(progressOf(p, 'easy', 'pray', AT), { now:0, goal:1, done:false })
 })
 
@@ -97,11 +97,11 @@ test('畳んでいるとき用の「終わった項目の数」', () => {
   //（ふつうは 出撃100／挑戦5／ルーン3／祈る1。同じ回数で足りるのは祈るだけ）
   assert.equal(doneCountOf(prof({ daily_counts:{ sortie: 20, arena: 1, rune: 1, pray: 1 } }), 'normal', AT), 1)
   // 全部終わったときは isComplete と一致する
-  const full = prof({ daily_counts:{ sortie: 100, arena: 5, rune: 3, pray: 1 } })
+  const full = prof({ daily_counts:{ sortie: 50, arena: 5, rune: 3, pray: 1 } })
   assert.equal(doneCountOf(full, 'normal', AT), TASK_KEYS.length)
   assert.equal(isComplete(full, 'normal', AT), true)
   // 日付が変わっていれば0
-  assert.equal(doneCountOf({ daily_day:'2026-08-16', daily_counts:{ sortie: 100, arena: 5, rune: 3, pray: 1 } }, 'normal', AT), 0)
+  assert.equal(doneCountOf({ daily_day:'2026-08-16', daily_counts:{ sortie: 50, arena: 5, rune: 3, pray: 1 } }, 'normal', AT), 0)
   assert.equal(doneCountOf(prof({}), '存在しない', AT), 0)
 })
 
@@ -114,9 +114,9 @@ test('★出撃は20秒設定だと1回で2カウント', () => {
   assert.equal(sortieCountOf(null), 1)     // 知らない値は1（数えないより数えたほうが安全）
   assert.equal(sortieCountOf(15), 1)
   // どちらの設定でも、同じ時間をかければ同じカウントになる
-  const seconds = 1000
+  const seconds = 500
   for (const cd of [10, 20]) {
-    assert.equal((seconds / cd) * sortieCountOf(cd), 100, `${cd}秒`)
+    assert.equal((seconds / cd) * sortieCountOf(cd), 50, `${cd}秒`)
   }
 })
 

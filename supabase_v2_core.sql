@@ -3317,7 +3317,7 @@ grant execute on function public.v2_base_dev_reset() to authenticated;
 -- 1日1組。**難易度を2つから選ぶ**（毎日の最初のログインで選ぶ）。
 -- 4つ（出撃／アリーナ挑戦／ルーン作成／祈る）を全部こなすとEXPとGoldをもらえる。
 --   easy   … 20 / 1 / 1 / 1 → EXP+60・100G
---   normal … 100 / 5 / 3 / 1 → EXP+180・300G
+--   normal … 50 / 5 / 3 / 1 → EXP+180・300G
 --
 -- ★日付が変わるのは**日本時間の5時**（宝樹と同じ）。
 -- ★数える権威はサーバー。出撃・アリーナ・抽出・祈るの各RPCが v2_daily_bump を呼ぶ。
@@ -3420,7 +3420,7 @@ begin
         and coalesce((v_c ->> 'pray')::int, 0)   >= 1;
     v_exp := 60;  v_gold := 100;
   else
-    v_ok := coalesce((v_c ->> 'sortie')::int, 0) >= 100
+    v_ok := coalesce((v_c ->> 'sortie')::int, 0) >= 50
         and coalesce((v_c ->> 'arena')::int, 0)  >= 5
         and coalesce((v_c ->> 'rune')::int, 0)   >= 3
         and coalesce((v_c ->> 'pray')::int, 0)   >= 1;
