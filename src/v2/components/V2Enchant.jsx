@@ -4,7 +4,7 @@ import { AREAS } from '../lib/enemies.js'
 import { equippedItems } from '../lib/loadout.js'
 import {
   MATERIAL_BY_ID, RARITY_LABEL, RARITY_COLOR, COLOR_LABEL, COLOR_HEX,
-  EXTRACT_COST, BOSS_LIMIT, canExtract, runePower, runeName, runeFullName, materialsOfArea,
+  EXTRACT_COST, BOSS_LIMIT, canExtract, runeName, runeFullName, materialsOfArea,
 } from '../lib/material.js'
 import { enchantOf } from '../lib/enchant.js'
 import { STAT_DEFS } from '../lib/stats.js'
@@ -31,9 +31,9 @@ const statLine = (stats) =>
     .join(' / ')
 
 // ルーン1個の見出し
-function RuneTag({ e }) {
+function RuneTag({ e, size = '11px' }) {
   return (
-    <span style={{ color: COLOR_HEX[e.color], fontSize:'11px' }}>
+    <span style={{ color: COLOR_HEX[e.color], fontSize: size }}>
       ●{COLOR_LABEL[e.color]}
       {' '}<b>{runeName(e.color, e.stats)}</b>
       {' '}<span style={{ color:'#88ccff' }}>{statLine(e.stats)}</span>
@@ -145,7 +145,7 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
       {tab === 'extract' && (
         <div style={{ ...box, padding:'12px' }}>
           <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'6px' }}>
-            素材を{EXTRACT_COST}個選んで抽出する。ステータスの型も値も抽出したときに決まる（ボス素材は1個まで）
+            素材を{EXTRACT_COST}個選んでルーンを作る。ステータスの型も値も、作った瞬間に決まる（ボス素材は1個まで）
           </div>
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'8px' }}>
             {Array.from({ length: EXTRACT_COST }, (_, i) => {
@@ -163,7 +163,7 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
           <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
             <button onClick={() => setConfirm(true)} disabled={busy || picked.length !== EXTRACT_COST}
               style={{ ...miniBtn(picked.length === EXTRACT_COST ? '#ffcc00' : '#62789a'), padding:'8px 16px', fontSize:'12px' }}>
-              ⚗ 抽出する
+              ⚗ ルーン作成
             </button>
             {picked.length > 0 && (
               <button onClick={() => setPicked([])} style={miniBtn('#ff8888')}>選び直す</button>
@@ -186,9 +186,10 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
                 color: canPick(m) ? '#88ccff' : '#62789a', opacity: canPick(m) ? 1 : 0.45,
                 padding:'5px 8px', marginBottom:'2px',
                 fontFamily:'monospace', fontSize:'11px', cursor: canPick(m) ? 'pointer' : 'default' }}>
-              {m.name} <span style={{ color:'#ffffff' }}>×{left(m.id)}</span>
+              <span style={{ color: RARITY_COLOR[m.rarity] }}>{m.name}</span>
+              {' '}<span style={{ color:'#ffffff' }}>×{left(m.id)}</span>
               <span style={{ color:'#93a9be' }}>
-                　{m.enemy}　{m.stats.map(k => STAT_DEFS[k].label).join('・')} {m.lo}〜{m.hi}%
+                　{m.enemy}　{m.stats.map(k => STAT_DEFS[k].label).join('・')}
               </span>
               {m.isBoss && <span style={{ color:'#ffcc44' }}>　ボス素材</span>}
             </button>
@@ -303,8 +304,8 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
 
       {/* ===== 抽出前の確認 ===== */}
       {confirm && (
-        <V2Modal title="⚗ 抽出の確認" color="#ffcc00" danger busy={busy}
-          confirmLabel="抽出する" onConfirm={doExtract} onClose={() => !busy && setConfirm(false)}>
+        <V2Modal title="⚗ ルーン作成の確認" color="#ffcc00" danger busy={busy}
+          confirmLabel="作成する" onConfirm={doExtract} onClose={() => !busy && setConfirm(false)}>
           <div style={{ color:'#88ccff' }}>次の{EXTRACT_COST}個を使います（<b style={{ color:'#ff8844' }}>素材は戻りません</b>）</div>
           <div style={{ margin:'6px 0' }}>
             {picked.map((id, i) => {
@@ -313,7 +314,7 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
                 <div key={i} style={{ fontSize:'11px' }}>
                   <span style={{ color: RARITY_COLOR[m.rarity] }}>{RARITY_LABEL[m.rarity]}</span>
                   {' '}<span style={{ color:'#88ccff' }}>{m.name}</span>
-                  <span style={{ color:'#93a9be' }}>　{m.stats.map(k => STAT_DEFS[k].label).join('・')} {m.lo}〜{m.hi}%</span>
+                  <span style={{ color:'#93a9be' }}>　{m.stats.map(k => STAT_DEFS[k].label).join('・')}</span>
                 </div>
               )
             })}
@@ -329,8 +330,7 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
         <V2Modal title={`⚗ ${runeFullName(result.color, result.stats)}ができた！`} color={COLOR_HEX[result.color]}
           onClose={() => setResult(null)}
           closeLabel={!result.ability && (result.ability_choices || []).length > 0 ? 'あとで選ぶ' : '受け取る'}>
-          <div style={{ color:'#44ff88', fontSize:'13px' }}>合計 {runePower(result.stats)}%</div>
-          <div style={{ marginTop:'4px' }}><RuneTag e={result} /></div>
+          <div><RuneTag e={result} size="15px" /></div>
           {/* 特殊能力が当たっていたら、候補から1つ選ぶ */}
           {!result.ability && (result.ability_choices || []).length > 0 && (
             <div style={{ marginTop:'10px' }}>

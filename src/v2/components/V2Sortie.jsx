@@ -9,7 +9,7 @@ import {
 import { runBattle } from '../lib/battle.js'
 import { toFighter as playerFighter, equippedRunes, runeAbilities } from '../lib/loadout.js'
 import { dropRateMultOf } from '../lib/enchant.js'
-import { RARITY_LABEL, RARITY_COLOR } from '../lib/material.js'
+import { RARITY_COLOR } from '../lib/material.js'
 import { RANK_COLOR } from './v2ui.js'
 
 // ★旧版（無印）の街とまったく同じ作り。
@@ -118,7 +118,7 @@ export default function V2Sortie({ prof, inventory, runes, onProfile, onScene })
     if (win) {
       out.push({ text:`EXP +${exp}　Gold +${gold.toLocaleString()}`, color:'#ffcc00' })
       if (drop) out.push({ text:`🎁 ${drop.rank}級「${drop.name}」を入手！`, color: RANK_COLOR[drop.rank] })
-      if (mat) out.push({ text:`⚗ ${RARITY_LABEL[mat.rarity]}素材「${mat.name}」を入手！`, color: RARITY_COLOR[mat.rarity] })
+      if (mat) out.push({ text:`⚗ ルーン素材「${mat.name}」を入手！`, color: RARITY_COLOR[mat.rarity] })
       if (enc.isBoss && area.id < 8) out.push({ text:`🔓 エリア${area.id + 1}が解放された！`, color:'#44ff88' })
     }
     setLogs(out)
