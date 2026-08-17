@@ -51,6 +51,7 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
   const [confirm, setConfirm] = useState(false) // 抽出前の確認ポップアップ
   const [result, setResult] = useState(null)    // 抽出後の結果ポップアップ
   const [overwrite, setOverwrite] = useState(null) // 上書き前の確認 { rune, target }
+  const [seal, setSeal] = useState(null)           // 刻印前の確認 { rune, target }
   const [target, setTarget] = useState(null)    // ソケットにはめる対象 { invId, slot, color }
   const [runeFilter, setEssFilter] = useStored('runeFilter', defaultRuneFilter, true)  // ルーン一覧の絞り込み
   const [rawRunePage, setRawEssPage] = useState(0)
@@ -88,7 +89,7 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
   // ソケットへ入れる。ふさがっている枠は**上書き＝元のルーンが消える**ので確認を1段挟む
   const doSocket = async (runeId, t) => {
     const ok = await call('v2_socket_essence', { p_essence_id: runeId, p_inventory_id: t.invId, p_slot: t.slot })
-    setOverwrite(null)
+    setOverwrite(null); setSeal(null)
     if (ok) setTarget(null)
   }
 
@@ -240,14 +241,14 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
                               onClick={() => call('v2_unsocket_essence', { p_essence_id: e.id })}
                               style={miniBtn(prof?.unsocket_tickets > 0 ? '#ff8888' : '#62789a')}>外す</button>
                             {/* 上書き＝アイテムは要らないが、**いま入っているルーンは消える** */}
-                            <button onClick={() => setTarget(isTarget ? null : { invId: w.inv.id, slot: i, color: c, over: e })}
+                            <button onClick={() => setTarget(isTarget ? null : { invId: w.inv.id, slot: i, color: c, over: e, name: w.item.name + (w.inv.plus ? '+' + w.inv.plus : '') })}
                               style={miniBtn(isTarget ? '#ffcc00' : '#cc88ff')}>
                               {isTarget ? 'やめる' : '上書き'}
                             </button>
                           </div>
                         </>
                       ) : (
-                        <button onClick={() => setTarget(isTarget ? null : { invId: w.inv.id, slot: i, color: c })}
+                        <button onClick={() => setTarget(isTarget ? null : { invId: w.inv.id, slot: i, color: c, name: w.item.name + (w.inv.plus ? '+' + w.inv.plus : '') })}
                           style={{ ...miniBtn(isTarget ? '#ffcc00' : '#00aaff'), marginTop:'3px' }}>
                           {isTarget ? 'やめる' : 'ここに入れる'}
                         </button>
@@ -281,7 +282,7 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
             )}
             {runeShown.map(e => (
               <button key={e.id} disabled={busy || !target}
-                onClick={() => target && (target.over ? setOverwrite({ rune: e, target }) : doSocket(e.id, target))}
+                onClick={() => target && (target.over ? setOverwrite({ rune: e, target }) : setSeal({ rune: e, target }))}
                 style={{ display:'flex', alignItems:'center', gap:'6px', width:'100%', textAlign:'left',
                   background:'#000818', border:`1px solid ${target ? '#004488' : '#002244'}`,
                   padding:'5px 8px', marginBottom:'2px',
@@ -351,6 +352,23 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
               ))}
             </div>
           )}
+        </V2Modal>
+      )}
+
+      {/* ===== 刻印の確認（外すのが難しいので1段挟む）===== */}
+      {seal && (
+        <V2Modal title="◈ 刻印の確認" color={COLOR_HEX[seal.target.color]} busy={busy}
+          confirmLabel="刻印する" onConfirm={() => doSocket(seal.rune.id, seal.target)}
+          onClose={() => !busy && setSeal(null)}>
+          <div style={{ color:'#88ccff' }}>
+            <b>{seal.target.name}</b> の ●{COLOR_LABEL[seal.target.color]}の枠 に刻みます
+          </div>
+          <div style={{ marginTop:'6px' }}><RuneTag e={seal.rune} size="13px" /></div>
+          <div style={{ color:'#ff8844', fontSize:'11px', marginTop:'10px', lineHeight:1.8 }}>
+            ⚠ 一度刻むと<b>外すのが大変です</b>。<br />
+            外して手元に戻すには専用アイテムが1個要ります（残り{prof?.unsocket_tickets || 0}個）。<br />
+            アイテムが無いときは<b>上書きするしかなく、いま刻むルーンは消えます</b>。
+          </div>
         </V2Modal>
       )}
 
