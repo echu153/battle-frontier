@@ -1,0 +1,87 @@
+// ============================================================
+// バトルフロンティアⅡ（リメイク版）— 戦闘ログの文面
+// ------------------------------------------------------------
+// runBattle が返す log を、画面（V2LogLine）が読める行に組み立てる。
+//
+// ★出撃とアリーナで**同じ関数を使う**。2か所に書いていたころ、アリーナ側だけ
+//   状態異常・不発・追加行動などの行が抜けていた（後から足した行が片方に入らない）。
+//
+// ★**どちらの行動かが必ず分かるように、行の頭に必ず名前を出す**（2026-08-17 ユーザー指摘）。
+//   それまで自分の行だけ名前が無く、「ライト！ 盗賊に756ダメージ！」が誰の攻撃か
+//   分からなかった。敵側は最初から「盗賊の〜」と出ていたので、そちらへ揃える。
+// ============================================================
+
+export const LOG_COLOR = {
+  mine:  '#ffcc00',   // 自分が与えた
+  foe:   '#ff4444',   // 自分が受けた
+  miss:  '#94a7bb',
+  heal:  '#44ff88',
+  buff:  '#44aaff',
+  extra: '#ffcc44',
+  ail:   '#cc66ff',
+  guard: '#66ccff',
+}
+
+// r … runBattle の返り値 ／ you … 自分の名前 ／ foe … 相手の名前
+export const buildBattleLog = (r, you, foe) => {
+  const out = []
+  for (const l of r?.log || []) {
+    // side は行動した側（または効果を受けた側）の名前
+    const mine = l.side === you
+    const actor = mine ? you : foe          // その行の主語
+    const target = mine ? foe : you         // その行の相手
+
+    if (l.type === 'hp') {
+      out.push({ type:'hp', turn:l.turn, playerHp:l.a, playerMax:l.aMax, playerName:you,
+        enemyHp:l.b, enemyMax:l.bMax, enemyName:foe })
+    } else if (l.type === 'skill') {
+      if (l.hits === 0) {
+        out.push({ text:`⚔ ${actor}の「${l.skill}」！ しかし${target}にかわされた`, color: LOG_COLOR.miss })
+      } else {
+        out.push({
+          text: `⚔ ${actor}の「${l.skill}」！ ${target}に${l.damage.toLocaleString()}ダメージ！`
+            + (l.crit ? ' 💥クリティカル！' : '')
+            + (mine && l.drain ? ` HPが${l.drain.toLocaleString()}回復した！` : ''),
+          color: mine ? LOG_COLOR.mine : LOG_COLOR.foe,
+        })
+      }
+    } else if (l.type === 'normal') {
+      if (!l.hit) {
+        out.push({ text:`${actor}の攻撃！ しかし${target}にかわされた`, color: LOG_COLOR.miss })
+      } else {
+        out.push({
+          text: `${actor}の攻撃！ ${target}に${l.damage.toLocaleString()}ダメージ！`
+            + (l.crit ? ' 💥クリティカル！' : ''),
+          color: mine ? LOG_COLOR.mine : LOG_COLOR.foe,
+        })
+      }
+    } else if (l.type === 'misfire') {
+      out.push({ text:`${actor}は${l.skill}を出そうとしたが不発！`, color: LOG_COLOR.miss })
+    } else if (l.type === 'heal') {
+      out.push({ text:`💚 ${actor}の${l.skill}！ HPが${l.heal.toLocaleString()}回復した！`, color: LOG_COLOR.heal })
+    } else if (l.type === 'regenTick') {
+      out.push({ text:`💚 ${actor}のHPが${l.heal.toLocaleString()}回復した！`, color: LOG_COLOR.heal })
+    } else if (l.type === 'buff') {
+      out.push({ text:`✨ ${actor}の${l.skill}！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'extra') {
+      out.push({ text:`⚡ ${actor}は素早く動いた！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'wall') {
+      out.push({ text:`💀 ${actor}の骸の壁が攻撃を和らげた！`, color:'#cc44ff' })
+    } else if (l.type === 'debuffGuard') {
+      out.push({ text:`🛡 ${actor}の心身一如！ 弱体化を打ち消した！`, color:'#44ffaa' })
+    } else if (l.type === 'ailment') {
+      // 状態異常が入ったとき。side は「かかった側」
+      out.push({ text:`☠ ${actor}は${l.ail}になった！`, color: LOG_COLOR.ail })
+    } else if (l.type === 'ailTick') {
+      out.push({ text:`☠ ${l.ail}！ ${actor}に${l.damage.toLocaleString()}ダメージ！`
+        + (l.stacks > 1 ? `（${l.stacks}スタック）` : ''), color: LOG_COLOR.ail })
+    } else if (l.type === 'paralyzed') {
+      out.push({ text:`⚡ ${actor}は麻痺して動けない！`, color:'#ffdd44' })
+    } else if (l.type === 'reflect') {
+      out.push({ text:`🔮 ${actor}はダメージを${l.damage.toLocaleString()}跳ね返した！`, color:'#88ddff' })
+    } else if (l.type === 'enCut') {
+      out.push({ text:`🛡 ${actor}のエンチャントが攻撃を和らげた！`, color: LOG_COLOR.guard })
+    }
+  }
+  return out
+}

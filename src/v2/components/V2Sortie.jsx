@@ -7,6 +7,7 @@ import {
   cooldownOf, rollHasDrop, rollDrop, rollMaterial, COOLDOWNS,
 } from '../lib/sortie.js'
 import { runBattle } from '../lib/battle.js'
+import { buildBattleLog } from '../lib/battleLog.js'
 import { toFighter as playerFighter, equippedRunes, runeAbilities } from '../lib/loadout.js'
 import { dropRateMultOf } from '../lib/enchant.js'
 import { guardDropMultOf, GUARD_DROP_MULT } from '../lib/arena.js'
@@ -72,49 +73,9 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
       : { text:`${enc.enemy.name}が現れた！`, color:'#88ccff' })
     const foe = enc.enemy.name
     const you = me.name   // ★ログはプレイヤー名で出す（「あなた」とは書かない）
-    for (const l of r.log) {
-      const mine = l.side === me.name
-      if (l.type === 'hp') {
-        out.push({ type:'hp', turn:l.turn, playerHp:l.a, playerMax:l.aMax, playerName:me.name,
-          enemyHp:l.b, enemyMax:l.bMax, enemyName:foe })
-      } else if (l.type === 'skill') {
-        if (l.hits === 0) out.push({ text: mine ? `⚔ ${l.skill}！ しかし${foe}にかわされた` : `⚔ ${foe}の「${l.skill}」！ しかしかわした`, color:'#94a7bb' })
-        else out.push(mine
-          ? { text:`⚔ ${l.skill}！ ${foe}に${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}${l.drain ? ` HPが${l.drain.toLocaleString()}回復した！` : ''}`, color:'#ffcc00' }
-          : { text:`⚔ ${foe}の「${l.skill}」！ ${you}に${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`, color:'#ff4444' })
-      } else if (l.type === 'normal') {
-        if (!l.hit) out.push({ text: mine ? `攻撃！ しかし${foe}にかわされた` : `${foe}の攻撃！ しかしかわした`, color:'#94a7bb' })
-        else out.push(mine
-          ? { text:`攻撃！ ${foe}に${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`, color:'#ffcc00' }
-          : { text:`${foe}の攻撃！ ${you}に${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`, color:'#ff4444' })
-      } else if (l.type === 'misfire') {
-        out.push({ text: mine ? `${l.skill}を出そうとしたが不発！` : `${foe}は${l.skill}を出そうとしたが不発！`, color:'#94a7bb' })
-      } else if (l.type === 'heal') {
-        out.push({ text:`💚 ${mine ? '' : `${foe}の`}${l.skill}！ HPが${l.heal.toLocaleString()}回復した！`, color:'#44ff88' })
-      } else if (l.type === 'regenTick') {
-        out.push({ text:`💚 ${mine ? you : foe}のHPが${l.heal.toLocaleString()}回復した！`, color:'#44ff88' })
-      } else if (l.type === 'buff') {
-        out.push({ text:`✨ ${mine ? '' : `${foe}の`}${l.skill}！`, color:'#44aaff' })
-      } else if (l.type === 'extra') {
-        out.push({ text:`⚡ ${mine ? you : foe}は素早く動いた！`, color:'#ffcc44' })
-      } else if (l.type === 'wall') {
-        out.push({ text:`💀 骸の壁が攻撃を和らげた！`, color:'#cc44ff' })
-      } else if (l.type === 'debuffGuard') {
-        out.push({ text:`🛡 心身一如！ 弱体化を打ち消した！`, color:'#44ffaa' })
-      } else if (l.type === 'ailment') {
-        // 状態異常が入ったとき。side は「かかった側」
-        // 出どころはエンチャントの特殊能力と、スキル自身が持つぶん（どくのほうし＝毒 など）の2つ
-        out.push({ text:`☠ ${mine ? you : foe}は${l.ail}になった！`, color:'#cc66ff' })
-      } else if (l.type === 'ailTick') {
-        out.push({ text:`☠ ${l.ail}！ ${mine ? you : foe}に${l.damage.toLocaleString()}ダメージ！${l.stacks > 1 ? `（${l.stacks}スタック）` : ''}`, color:'#cc66ff' })
-      } else if (l.type === 'paralyzed') {
-        out.push({ text:`⚡ ${mine ? you : foe}は麻痺して動けない！`, color:'#ffdd44' })
-      } else if (l.type === 'reflect') {
-        out.push({ text:`🔮 ${mine ? you : foe}はダメージを${l.damage.toLocaleString()}跳ね返した！`, color:'#88ddff' })
-      } else if (l.type === 'enCut') {
-        out.push({ text:`🛡 ${mine ? you : foe}のエンチャントが攻撃を和らげた！`, color:'#66ccff' })
-      }
-    }
+    // ★文面は battleLog.js が正（出撃とアリーナで同じものを使う）
+    out.push(...buildBattleLog(r, you, foe))
+
     out.push(win
       ? { text:`${foe}を倒した！（${r.turns}ターン）`, color:'#ffcc00' }
       : { text:`敗北…（${r.turns}ターン）`, color:'#ff4444' })

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2LogLine from './V2LogLine.jsx'
 import { runBattle } from '../lib/battle.js'
+import { buildBattleLog } from '../lib/battleLog.js'
 import { toFighter } from '../lib/loadout.js'
 import { calcPower } from '../lib/stats.js'
 import { SKILL_BY_NAME } from '../lib/skills.js'
@@ -86,7 +87,7 @@ export default function V2Arena({ prof, inventory, runes, fishDex, onProfile, on
     const out = []
     out.push({ text:`${floor}階の階層守護者 ${champ.name} が立ちはだかる！`, color:'#ff88cc' })
     if (bonus) out.push({ text:`✊ ${champ.streak}連勝中！ あなたのステータスが+${bonus}%（HP/MPを除く）`, color:'#44ff88' })
-    out.push(...battleLines(r, mine.name, champ.name))
+    out.push(...buildBattleLog(r, mine.name, champ.name))
     out.push(win
       ? { text:`${champ.name}を倒した！ ${floor}階の階層守護者になった`, color:'#ffcc00' }
       : { text:`敗北…（${r.turns}ターン）`, color:'#ff4444' })
@@ -261,31 +262,4 @@ export default function V2Arena({ prof, inventory, runes, fishDex, onProfile, on
       </div>
     </div>
   )
-}
-
-// 戦闘ログを旧版の BattleLogLine が読める形にする（出撃と同じ文体）
-function battleLines(r, myName, foeName) {
-  const out = []
-  for (const l of r.log) {
-    const mine = l.side === myName
-    if (l.type === 'hp') {
-      out.push({ type:'hp', turn:l.turn, playerHp:l.a, playerMax:l.aMax, playerName:myName,
-        enemyHp:l.b, enemyMax:l.bMax, enemyName:foeName })
-    } else if (l.type === 'skill') {
-      if (l.hits === 0) out.push({ text: mine ? `⚔ ${l.skill}！ しかし${foeName}にかわされた` : `⚔ ${foeName}の「${l.skill}」！ しかしかわした`, color:'#667788' })
-      else out.push(mine
-        ? { text:`⚔ ${l.skill}！ ${foeName}に${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`, color:'#ffcc00' }
-        : { text:`⚔ ${foeName}の「${l.skill}」！ あなたに${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`, color:'#ff4444' })
-    } else if (l.type === 'normal') {
-      if (!l.hit) out.push({ text: mine ? `攻撃！ しかし${foeName}にかわされた` : `${foeName}の攻撃！ しかしかわした`, color:'#667788' })
-      else out.push(mine
-        ? { text:`攻撃！ ${foeName}に${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`, color:'#ffcc00' }
-        : { text:`${foeName}の攻撃！ あなたに${l.damage.toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`, color:'#ff4444' })
-    } else if (l.type === 'heal') {
-      out.push({ text:`💚 ${mine ? '' : `${foeName}の`}${l.skill}！ HPが${l.heal.toLocaleString()}回復した！`, color:'#44ff88' })
-    } else if (l.type === 'buff') {
-      out.push({ text:`✨ ${mine ? '' : `${foeName}の`}${l.skill}！`, color:'#44aaff' })
-    }
-  }
-  return out
 }
