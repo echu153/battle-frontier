@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+
 import { STAT_DEFS, MAX_LV, ROLLS_PER_LV, calcPower, expToNext, expPerLv } from '../lib/stats.js'
 import { classBonusText } from '../lib/classBonus.js'
 import { TIER_COLOR } from '../lib/classes.js'
 import { KIND_COLOR, SKILL_BY_NAME, SKILL_SET_SLOTS } from '../lib/skills.js'
 import { equippedItems, totalStats } from '../lib/loadout.js'
 import { RANK_COLOR } from './v2ui.js'
-import V2ItemTip from './V2ItemTip.jsx'
+import V2ItemTip, { V2SkillTip, V2Tip } from './V2ItemTip.jsx'
 
 // ★見た目は旧版（無印）の街のステータスと同じ値にそろえてある。
 //   枠 border:#0044aa／背景 #001040／padding:10px／marginBottom:8px、
@@ -22,14 +22,6 @@ const foldBtn = {
 }
 // 升目の右側（値や装備名）。長いときは切って、枠を広げない
 const valueCell = { fontSize:'10px', textAlign:'right', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }
-// カーソルを合わせたとき／タップしたときに出す説明の枠
-const tipBox = (color) => ({
-  position:'absolute', top:'100%', marginTop:'2px', zIndex:120,
-  background:'#000c1c', border:`1px solid ${color}`, padding:'6px 8px',
-  fontSize:'10px', lineHeight:'1.7', color:'#a8c4d6', textAlign:'left',
-  pointerEvents:'none', boxShadow:'0 4px 12px rgba(0,0,0,0.7)', whiteSpace:'normal',
-})
-
 // 旧版の MiniBar と同じ
 function MiniBar({ label, val, pct, color }) {
   return (
@@ -44,30 +36,22 @@ function MiniBar({ label, val, pct, color }) {
   )
 }
 
-// 文章に添える小さな説明。画面に書くと邪魔なものはこちらへ逃がす
-function Tip({ children, text, color, show, onShow, onHide, onToggle }) {
-  return (
-    <span
-      onMouseEnter={onShow} onMouseLeave={onHide}
-      onClick={e => { e.stopPropagation(); onToggle() }}
-      style={{ position:'relative', cursor:'help', borderBottom:`1px dotted ${color}` }}>
-      {children}
-      {show && <span style={{ ...tipBox(color), left:0, display:'block', width:'240px', maxWidth:'80vw' }}>{text}</span>}
-    </span>
-  )
-}
-
 // 旧版の StatMini と同じ升目（v2にステータスランクは無いので、そこだけ持たない）。
 // 名前と値のあいだが空くので、そこに短い説明（STAT_DEFS.desc）を入れてある。
 // カーソルを合わせる／タップすると詳しい説明（STAT_DEFS.detail）が下に出る。
 // ★右の列は「右端をそろえて左へ伸ばす」。左端そろえだと枠の外へはみ出して読めなくなる。
-// ★開いているかどうかは親が1つだけ持つ＝同時に2つ出ない（スマホでタップして回ったとき用）。
-function StatMini({ label, jp, val, add, color, short, detail, show, alignRight, onShow, onHide, onToggle }) {
+// ★開閉のふるまいは V2Tip に一本化してある（装備・スキルの説明と同じ仕組み）。
+//   別々に持っていると、スマホでステの説明を出したまま装備の説明も出せてしまい、
+//   画面が説明だらけになる。
+function StatMini({ label, jp, val, add, color, short, detail, alignRight }) {
   return (
-    <div
-      onMouseEnter={onShow} onMouseLeave={onHide}
-      onClick={e => { e.stopPropagation(); onToggle() }}  // スマホはカーソルが無いのでタップで出す
-      style={{ ...cell, position:'relative', justifyContent:'flex-start', cursor:'help' }}>
+    <V2Tip alignRight={alignRight} color={color} width="max(100%, 230px)"
+      style={{ ...cell, justifyContent:'flex-start' }}
+      body={<>
+        <span style={{ color }}>{label}</span>
+        <span style={{ color:'#7fa6d0' }}>（{jp}）</span>
+        <div style={{ marginTop:'2px' }}>{detail}</div>
+      </>}>
       <span style={{ color, fontSize:'9px', flexShrink:0 }}>{label}</span>
       <span style={{ color:'#82a2c2', fontSize:'9px', flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
         {short}
@@ -76,14 +60,7 @@ function StatMini({ label, jp, val, add, color, short, detail, show, alignRight,
         <span style={{ color, fontSize:'10px' }}>{val}</span>
         {add > 0 && <span style={{ color:'#44ff88', fontSize:'9px', marginLeft:'2px' }}>+{add.toLocaleString()}</span>}
       </span>
-      {show && (
-        <div style={{ ...tipBox(color), [alignRight ? 'right' : 'left']: '-1px', width:'max(100%, 230px)', maxWidth:'80vw' }}>
-          <span style={{ color }}>{label}</span>
-          <span style={{ color:'#7fa6d0' }}>（{jp}）</span>
-          <div style={{ marginTop:'2px' }}>{detail}</div>
-        </div>
-      )}
-    </div>
+    </V2Tip>
   )
 }
 
@@ -95,31 +72,13 @@ export default function V2Status({ prof, inventory, runes, classes, open, onTogg
   const tierColor = TIER_COLOR[classes?.find(c => c.id === prof.class)?.tier] || '#88ccff'
   const next = expToNext(prof.lv, prof.job_changes)
   const expPct = Math.min(100, (prof.exp / expPerLv(prof.job_changes)) * 100)
-  const [openTip, setOpenTip] = useState('')  // 説明を出している場所（同時に1つだけ）
-
-  // スマホはタップで出すので、どこか別の場所をタップしたら閉じる
-  // （升目側は stopPropagation しているので、升目のタップでは閉じない）
-  useEffect(() => {
-    if (!openTip) return
-    const close = () => setOpenTip('')
-    document.addEventListener('click', close)
-    return () => document.removeEventListener('click', close)
-  }, [openTip])
-
-  const tipProps = (key) => ({
-    show: openTip === key,
-    onShow: () => setOpenTip(key),
-    onHide: () => setOpenTip(s => (s === key ? '' : s)),
-    onToggle: () => setOpenTip(s => (s === key ? '' : key)),
-  })
-
   // map の (値, 添字) をそのまま受ける。添字が奇数＝右の列（そちらは右端をそろえて左へ伸ばす）
   const statCell = (k, i) => {
     const d = STAT_DEFS[k]
     return (
       <StatMini key={k} label={d.label} jp={d.jp} short={d.desc} detail={d.detail} color={d.color}
         val={(total[k] || 0).toLocaleString()} add={(total[k] || 0) - (prof[k] || 0)}
-        alignRight={i % 2 === 1} {...tipProps(k)} />
+        alignRight={i % 2 === 1} />
     )
   }
 
@@ -148,19 +107,23 @@ export default function V2Status({ prof, inventory, runes, classes, open, onTogg
     )
   }
 
-  // スキル編成。1行にまとめると読めないので、装備と同じ升目にして種別の色を付ける
+  // スキル編成。1行にまとめると読めないので、装備と同じ升目にして種別の色を付ける。
+  // ★装備と同じで、カーソルを合わせる（スマホはタップ）と効果が出る
   const skillCell = (i) => {
     const e = (prof.skill_set || [])[i]
     const s = e && SKILL_BY_NAME[e.name]
     return (
       <div key={i} style={cell}>
         <span style={{ color:'#7fa6d0', fontSize:'9px', flexShrink:0 }}>スキル{i + 1}</span>
-        <span style={valueCell}>
-          {s ? (<>
-            <span style={{ color: KIND_COLOR[s.kind] }}>{s.name}</span>
-            <span style={{ color:'#7fa6d0' }}>×{e.uses || 1}</span>
-          </>) : <span style={{ color:'#62789a' }}>—</span>}
-        </span>
+        {s ? (
+          <V2SkillTip skill={s} uses={e.uses || 1} alignRight={i % 2 === 1}
+            style={{ display:'block', flex:1, minWidth:0 }}>
+            <span style={{ ...valueCell, display:'block' }}>
+              <span style={{ color: KIND_COLOR[s.kind] }}>{s.name}</span>
+              <span style={{ color:'#7fa6d0' }}>×{e.uses || 1}</span>
+            </span>
+          </V2SkillTip>
+        ) : <span style={{ ...valueCell, color:'#62789a' }}>—</span>}
       </div>
     )
   }
@@ -179,10 +142,11 @@ export default function V2Status({ prof, inventory, runes, classes, open, onTogg
           <div style={{ fontSize:'11px', color:'#9ec2e6' }}>
             <span style={{ color:tierColor }}>{prof.class}</span>{' '}
             {/* 上がり方の説明は画面に書くと長いので、LVに合わせたときだけ出す */}
-            <Tip text={`LVアップごとに${ROLLS_PER_LV}回抽選し、当たったステータスが上がります（HPは+8・MPは+3・その他は+1）。どのステに当たっても戦闘力の上がり幅は同じです。`}
-              color="#ffcc00" {...tipProps('lv')}>
+            <V2Tip color="#ffcc00" width="240px"
+              style={{ borderBottom:'1px dotted #ffcc00' }}
+              body={`LVアップごとに${ROLLS_PER_LV}回抽選し、当たったステータスが上がります（HPは+8・MPは+3・その他は+1）。どのステに当たっても戦闘力の上がり幅は同じです。`}>
               <span style={{ color:'#ffcc00' }}>LV{prof.lv}</span>／{MAX_LV}
-            </Tip>
+            </V2Tip>
             {prof.lv >= MAX_LV && <span style={{ color:'#ff8844' }}> MAX</span>}
           </div>
           <div style={{ fontSize:'11px', color:'#9ec2e6' }}>
