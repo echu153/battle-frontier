@@ -5,7 +5,7 @@ import {
   FACILITIES, FACILITY_BY_KEY, MATERIAL_KINDS, KIND_BY_KEY,
   GRADE_MAX, CAP_HOURS, materialName, gradeLabel,
   previewOf, fullInOf, exchangeGainOf, exchangeTotalOf, EXCHANGE_RATE,
-  upgradeBlockOf, reqAreaOf,
+  upgradeBlockOf, reqAreaOf, sellPriceOf, sellTotalOf,
 } from '../lib/basecamp.js'
 import {
   TIERS, TIER_LABEL, TIER_COLOR, TIER_RATE, TIER_PCT,
@@ -22,7 +22,7 @@ import { box, btn, miniBtn, TEXT } from './v2ui.js'
 //   放置で資材・EXP・魚が貯まり、施設を拡張すると中身が良くなる。
 //   設計は docs/v2-kyoten-design.md。
 //
-// ★数字の権威はサーバー（v2_base_get が rate / cap / upkeep をそのまま返す）。
+// ★数字の権威はサーバー（v2_base_get が rate / cap をそのまま返す）。
 //   この画面はレートを組み立て直さない。1秒ごとのカウンタだけ basecamp.js の
 //   previewOf で進めていて、これは v2_base_settle と同じ式にしてある。
 // ============================================================
@@ -42,6 +42,7 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
   const [moveFrom, setMoveFrom] = useState('')
   const [exKind, setExKind] = useState('wood')
   const [picked, setPicked] = useState({})      // 交換に出す素材 { 素材ID: 個数 }
+  const [sellPick, setSellPick] = useState({})  // 売る資材 { '種類:グレード': 個数 }
   const [openSpot, setOpenSpot] = useState(1)   // 図鑑で開いている釣り場エリア
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t) }, [])
@@ -94,21 +95,6 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
   // 図鑑（登録済みのID）と所持数
   const dexSet = useMemo(() => new Set(dexIdsOf(fishRows)), [fishRows])
   const fishQty = useMemo(() => Object.fromEntries(fishRows.map(r => [r.id, r.qty])), [fishRows])
-  // ★Goldは施設ごとに独立していない。サーバーは key の順に settle して、そのつど
-  //   維持費を引いていく。画面も同じ順に「残りGold」を回さないと、Goldが足りないのに
-  //   全部の施設が動いているように見える（アリーナで踏んだ「表示とサーバーのズレ」と同じ形）
-  const previews = useMemo(() => {
-    const out = {}
-    let left = heldGold
-    for (const f of [...facilities].sort((a, b) => String(a.key).localeCompare(String(b.key)))) {
-      const p = previewOf(f, left, at)
-      out[f.key] = { ...p, goldFor: left }
-      left = Math.max(0, left - p.cost)
-    }
-    return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facilities, heldGold, now])
-
   // ★解放している釣り場だけを見せる。未解放のエリア名も魚の名前も出さない
   const openSpots = SPOTS.slice(0, Math.max(1, fishing?.grade || 1))
   const shownSpot = Math.min(openSpot, openSpots.length)
@@ -143,12 +129,10 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
         out.push(`📖 図鑑に「${e.name}（${TIER_LABEL[e.tier]}）」を登録！ ${STAT_DEFS[e.stat]?.label}+${e.pct}%`)
       }
     }
-    if (d.cost > 0) out.push(`💰 労働者の維持費 -${gold(d.cost)}`)
     if (d.auto_collected > 0) out.push(`📦 上限が下がったぶんを回収: +${n(d.auto_collected)}`)
     return out
   }
   const haulWarn = (d) => [
-    d.gold_short ? '⚠ Goldが尽きたため、途中で生産が止まっていました' : null,
     d.lv_capped ? '⚠ LVが上限のため、かかしは回収していません（貯めたまま残しています）' : null,
   ].filter(Boolean)
 
@@ -219,6 +203,30 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
     setMsg({ lines: [`🔁 ${(d.gained || []).map(g => `${materialName(d.kind, g.grade)} +${n(g.qty)}`).join(' / ')}`], warn: [] })
   }
 
+  // ===== 資材 → Gold =====
+  // ★グレードに関係なく売れる。最終グレードの施設が出す資材の使い道はここ
+  const sellRows = useMemo(() => {
+    const out = []
+    for (const k of MATERIAL_KINDS) {
+      for (let g = 1; g <= GRADE_MAX; g++) {
+        const qty = stock[k.key]?.[g] || 0
+        if (qty > 0) out.push({ kind: k.key, grade: g, qty })
+      }
+    }
+    return out
+  }, [stock])
+  const sellItems = sellRows
+    .map(r => ({ kind: r.kind, grade: r.grade, qty: Math.min(sellPick[`${r.kind}:${r.grade}`] || 0, r.qty) }))
+    .filter(it => it.qty > 0)
+  const sellTotal = sellTotalOf(sellItems)
+  const sell = async () => {
+    if (!sellItems.length) return
+    const d = await call('v2_base_sell_materials', { p_items: sellItems }, 'sell')
+    if (!d) return
+    setSellPick({})
+    setMsg({ lines: [`💰 資材を売って ${gold(d.gained)} を得ました（所持 ${gold(d.gold)}）`], warn: [] })
+  }
+
   // ===== 魚 → メダル =====
   const heldFish = fishRows.filter(r => r.qty > 0)
   const medalGain = heldFish.reduce((t, r) => t + (ENTRY_BY_ID[r.id]?.medal || 0) * r.qty, 0)
@@ -255,7 +263,7 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
       </div>
       <div style={{ color:TEXT.sub, fontSize:'10px', lineHeight:'1.8', marginBottom:'10px' }}>
         画面を閉じていても資材・EXP・魚が貯まります（{CAP_HOURS}時間で満杯）。
-        <br />労働者はGoldで雇い、<span style={{ color:'#ffaa66' }}>維持費が払えなくなったところで生産が止まります</span>。
+        <br />労働者はGoldで雇う<span style={{ color:'#9be7a8' }}>買いきり</span>です（維持費はかかりません）。
       </div>
 
       {/* 所持 */}
@@ -313,10 +321,10 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
           {FACILITIES.map(def => {
             const f = facOf(def.key)
             if (!f) return null
-            const p = previews[f.key] || previewOf(f, heldGold, at)
+            const p = previewOf(f, at)
             const cap = Number(f.cap || 0)
             const pct = cap > 0 ? Math.min(100, (p.pending / cap) * 100) : 0
-            const mins = fullInOf(f, p.goldFor ?? heldGold, at)
+            const mins = fullInOf(f, at)
             const cost = f.next_cost
             const block = upgradeBlockOf(f.grade, unlocked)
             const need = reqAreaOf(f.grade + 1)
@@ -344,9 +352,8 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
                 </div>
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', marginBottom:'6px' }}>
                   <span style={{ color: p.full ? '#ffaa44' : TEXT.body }}>{n(p.pending)} / {n(cap)}{unit}</span>
-                  <span style={{ color: p.goldShort ? '#ff6666' : TEXT.label }}>
-                    {p.goldShort ? 'Goldが尽きて停止中'
-                      : p.full ? '満杯です'
+                  <span style={{ color:TEXT.label }}>
+                    {p.full ? '満杯です'
                       : mins != null ? `満杯まで約${Math.max(1, Math.round(mins))}分`
                       : isProducer ? '労働者がいません' : ''}
                   </span>
@@ -380,7 +387,7 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
                 {isProducer && (
                   <div style={{ display:'flex', alignItems:'center', gap:'5px', flexWrap:'wrap', fontSize:'10px', marginBottom:'6px' }}>
                     <span style={{ color:TEXT.label }}>労働者 {f.workers}/{f.worker_limit}</span>
-                    <span style={{ color: f.upkeep > 0 ? '#ffaa66' : TEXT.empty }}>維持費 {gold(f.upkeep)}/h</span>
+                    <span style={{ color:TEXT.sub }}>買いきり（維持費なし）</span>
                     <button onClick={() => hire(def.key)}
                       disabled={!!busy || full || base.hire_cost == null || heldGold < Number(base.hire_cost || 0)}
                       style={{ ...miniBtn(full || base.hire_cost == null ? '#62789a' : '#ffcc00'),
@@ -527,6 +534,48 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
           style={{ ...btn('#8fcf6f'), width:'100%', padding:'10px', opacity: (busy || gainTotal === 0) ? 0.4 : 1 }}>
           {busy === 'exchange' ? '交換しています...' : `🔁 交換する（${n(gainTotal)}個）`}
         </button>
+
+        {/* ===== 資材 → Gold ===== */}
+        <div style={{ borderTop:'1px solid #002244', marginTop:'14px', paddingTop:'10px' }}>
+          <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'4px' }}>💰 資材を売る</div>
+          <div style={{ color:TEXT.sub, fontSize:'10px', lineHeight:'1.8', marginBottom:'8px' }}>
+            グレードに関係なく売れます。<span style={{ color:'#9be7a8' }}>最終グレードの施設が出す資材の使い道はここです。</span>
+          </div>
+          {sellRows.length === 0 && (
+            <div style={{ color:TEXT.empty, fontSize:'11px', padding:'6px 0' }}>売れる資材を持っていません。</div>
+          )}
+          <div style={{ display:'grid', gap:'2px', marginBottom:'8px' }}>
+            {sellRows.map(r => {
+              const v = Math.min(sellPick[`${r.kind}:${r.grade}`] || 0, r.qty)
+              return (
+                <div key={`${r.kind}:${r.grade}`} style={{ background:'#000818', border:'1px solid #002244',
+                  padding:'4px 6px', display:'flex', alignItems:'center', gap:'5px', fontSize:'10px' }}>
+                  <span style={{ color:KIND_BY_KEY[r.kind].color, flex:1 }}>{materialName(r.kind, r.grade)}</span>
+                  <span style={{ color:TEXT.label, width:'70px', textAlign:'right' }}>{gold(sellPriceOf(r.grade))}/個</span>
+                  <span style={{ color:TEXT.label, width:'56px', textAlign:'right' }}>所持{n(r.qty)}</span>
+                  <input type="number" min={0} max={r.qty} value={v}
+                    onChange={e => setSellPick(p => ({ ...p, [`${r.kind}:${r.grade}`]:
+                      Math.max(0, Math.min(r.qty, Number(e.target.value) || 0)) }))}
+                    style={{ width:'62px', background:'#001028', border:'1px solid #0044aa', color:'#88ccff',
+                      fontFamily:'monospace', fontSize:'10px', padding:'2px', textAlign:'center' }} />
+                  <button onClick={() => setSellPick(p => ({ ...p, [`${r.kind}:${r.grade}`]: r.qty }))}
+                    style={miniBtn('#7fa6d0')}>全</button>
+                </div>
+              )
+            })}
+          </div>
+          {sellRows.length > 0 && (
+            <div style={{ display:'flex', gap:'4px', marginBottom:'6px', flexWrap:'wrap' }}>
+              <button onClick={() => setSellPick(Object.fromEntries(sellRows.map(r => [`${r.kind}:${r.grade}`, r.qty])))}
+                style={miniBtn('#88ccff')}>全部選ぶ</button>
+              <button onClick={() => setSellPick({})} style={miniBtn('#aa5566')}>解除</button>
+            </div>
+          )}
+          <button onClick={sell} disabled={!!busy || sellTotal === 0}
+            style={{ ...btn('#ffcc00'), width:'100%', padding:'10px', opacity: (busy || sellTotal === 0) ? 0.4 : 1 }}>
+            {busy === 'sell' ? '売っています...' : `💰 売る（${gold(sellTotal)}）`}
+          </button>
+        </div>
       </>)}
 
       {/* ===== 釣り図鑑 ===== */}

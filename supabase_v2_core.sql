@@ -2407,12 +2407,19 @@ returns numeric language sql immutable as $$
   end;
 $$;
 
--- 1時間あたりの維持費(Gold)。労働者を置かない施設は0
-create or replace function public.v2_base_upkeep(p_key text, p_grade int, p_workers int)
-returns numeric language sql immutable as $$
-  select case when p_key in ('lumber', 'quarry', 'manaforge')
-    then 100::numeric * greatest(1, coalesce(p_grade, 1)) * greatest(0, coalesce(p_workers, 0))
-    else 0::numeric end;
+-- ★維持費は廃止（2026-08-17 ユーザー決定「労働者は買いきり」）。
+--   一度でも流したことがある環境から関数を消しておく
+drop function if exists public.v2_base_upkeep(text, int, int);
+
+-- 資材1個あたりの売値(Gold)。**グレードに関係なく全部売れる**（同じ決定）。
+-- ⚠ここが**Goldの2本目の湧き口**になる（1本目はルーン素材のNPC売却）。
+--   目安：グレードNの資材3個 ≒ エリアNの通常素材1個。その売値のおよそ1/4に置いてある。
+--   src/v2/lib/basecamp.js の MATERIAL_SELL と同じ値であること
+create or replace function public.v2_base_material_sell(p_grade int)
+returns int language sql immutable as $$
+  select case when coalesce(p_grade, 0) between 1 and 9
+    then (array[3, 7, 15, 25, 40, 60, 100, 200, 320]::int[])[p_grade]
+    else 0 end;
 $$;
 
 create or replace function public.v2_base_worker_limit(p_grade int)
@@ -2456,17 +2463,12 @@ declare
   v_f       public.v2_base_facilities;
   v_rate    numeric;
   v_cap     numeric;
-  v_upkeep  numeric;
   v_elapsed numeric;
   v_room    numeric;
-  v_limit   numeric;
   v_work    numeric;
   v_pend    numeric;
-  v_gold    bigint;
-  v_cost    bigint := 0;
   v_kind    text;
   v_over    int := 0;
-  v_short   boolean := false;
 begin
   -- ★本人以外は絶対に通さない（REVOKE と二重の守り）
   if p_uid is null or p_uid is distinct from auth.uid() then
@@ -2479,23 +2481,11 @@ begin
 
   v_rate    := public.v2_base_rate(v_f.key, v_f.grade, v_f.workers);
   v_cap     := v_rate * c_cap_hours;
-  v_upkeep  := public.v2_base_upkeep(v_f.key, v_f.grade, v_f.workers);
   v_elapsed := greatest(0, extract(epoch from (now() - v_f.accrued_from)) / 3600.0);
   v_room    := case when v_rate > 0 then greatest(0, (v_cap - v_f.pending) / v_rate) else 0 end;
-  v_limit   := least(v_elapsed, v_room);
-  v_work    := v_limit;
-
-  -- 維持費。払える時間ぶんしか生産していなかったことにする（＝未払いなら生産停止）
-  if v_upkeep > 0 then
-    select gold into v_gold from public.v2_profiles where id = p_uid for update;
-    v_work  := least(v_work, greatest(0, coalesce(v_gold, 0)) / v_upkeep);
-    v_cost  := floor(v_upkeep * v_work)::bigint;
-    v_short := v_work < v_limit - 0.000001;
-    if v_cost > 0 then
-      update public.v2_profiles set gold = greatest(0, gold - v_cost), updated_at = now()
-       where id = p_uid;
-    end if;
-  end if;
+  -- ★維持費は廃止（2026-08-17 ユーザー決定「労働者は買いきり」）。
+  --   生産が止まるのは**満杯になったときだけ**になった
+  v_work    := least(v_elapsed, v_room);
 
   update public.v2_base_facilities
      set pending = least(v_cap, v_f.pending + v_rate * v_work),
@@ -2518,8 +2508,7 @@ begin
     end if;
   end if;
 
-  return jsonb_build_object('ok', true, 'hours', v_work, 'cost', v_cost,
-                            'gold_short', v_short, 'auto_collected', v_over);
+  return jsonb_build_object('ok', true, 'hours', v_work, 'auto_collected', v_over);
 end;
 $$;
 
@@ -2634,7 +2623,7 @@ end;
 $$;
 
 revoke all on function public.v2_base_rate(text, int, int)   from public, anon, authenticated;
-revoke all on function public.v2_base_upkeep(text, int, int) from public, anon, authenticated;
+revoke all on function public.v2_base_material_sell(int)     from public, anon, authenticated;
 revoke all on function public.v2_base_worker_limit(int)      from public, anon, authenticated;
 revoke all on function public.v2_base_hire_cost(int)         from public, anon, authenticated;
 revoke all on function public.v2_base_upgrade_cost(int)      from public, anon, authenticated;
@@ -2677,7 +2666,7 @@ begin
                'pending', f.pending, 'accrued_from', f.accrued_from,
                'rate',   public.v2_base_rate(f.key, f.grade, f.workers),
                'cap',    public.v2_base_rate(f.key, f.grade, f.workers) * 8,
-               'upkeep', public.v2_base_upkeep(f.key, f.grade, f.workers),
+
                'worker_limit', public.v2_base_worker_limit(f.grade),
                'next_cost', public.v2_base_upgrade_cost(f.grade + 1)
              ) order by f.key)
@@ -2737,9 +2726,7 @@ declare
   v_st    jsonb;
   v_take  int;
   v_kind  text;
-  v_cost  bigint := 0;
   v_auto  int := 0;
-  v_short boolean := false;
   v_exp   int := 0;
   v_skip  boolean := false;
   v_gains jsonb := '[]'::jsonb;
@@ -2754,9 +2741,7 @@ begin
   for v_f in select * from public.v2_base_facilities
               where player_id = v_uid and (p_key is null or key = p_key) order by key loop
     v_st   := public.v2_base_settle(v_uid, v_f.key);
-    v_cost := v_cost + coalesce((v_st ->> 'cost')::bigint, 0);
     v_auto := v_auto + coalesce((v_st ->> 'auto_collected')::int, 0);
-    if coalesce((v_st ->> 'gold_short')::boolean, false) then v_short := true; end if;
 
     if v_f.key = 'scarecrow' then
       if v_lv >= c_max_lv then
@@ -2802,7 +2787,6 @@ begin
   if v_exp > 0 then v_lvres := public.v2_apply_exp(v_uid, v_exp); end if;
 
   return jsonb_build_object('ok', true, 'gains', v_gains, 'exp', v_exp,
-                            'cost', v_cost, 'gold_short', v_short,
                             'auto_collected', v_auto, 'lv_capped', v_skip,
                             'haul', v_haul, 'level', v_lvres, 'base', public.v2_base_get());
 end;
@@ -2855,7 +2839,6 @@ begin
   v_qty       := (v_cost ->> 'qty')::int;
   v_need_gold := (v_cost ->> 'gold')::bigint;
 
-  -- ⚠Goldは settle で維持費を引いたあとの値を見る
   select gold into v_gold from public.v2_profiles where id = v_uid for update;
   if coalesce(v_gold, 0) < v_need_gold then
     return jsonb_build_object('ok', false, 'error', 'Goldが足りません');
@@ -3055,6 +3038,73 @@ $$;
 revoke all on function public.v2_base_exchange(jsonb, text) from public;
 revoke all on function public.v2_base_exchange(jsonb, text) from anon;
 grant execute on function public.v2_base_exchange(jsonb, text) to authenticated;
+
+-- ===== 11-11b. 資材 → Gold =====
+-- ★**グレードに関係なく全部売れる**（2026-08-17 ユーザー決定）。
+--   これがないと、最終グレードの施設が出す資材（木材Ⅸなど）に使い道が無くなる。
+-- ⚠これは**Goldの2本目の湧き口**。1本目のルーン素材の売却と合わせて、
+--   v2のインフレはこの2つの蛇口で決まる（docs/v2-gold-design.md）。値は調整前提。
+create or replace function public.v2_base_sell_materials(p_items jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_max_kinds constant int := 60;      -- 3種 × 9グレード ＝ 27 なので十分
+  c_max_qty   constant int := 9999999;
+  v_uid   uuid := auth.uid();
+  v_req   int;
+  v_ok    int;
+  v_total bigint;
+  v_gold  bigint;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
+    return jsonb_build_object('ok', false, 'error', '売るものがありません');
+  end if;
+  if jsonb_array_length(p_items) > c_max_kinds then
+    return jsonb_build_object('ok', false, 'error', '一度に売れる数を超えています');
+  end if;
+
+  -- 検証を全部済ませてから引く（plpgsql は return でロールバックしない）
+  select count(*) into v_req
+    from (select r.kind, r.grade, sum(r.qty)::bigint as qty
+            from jsonb_to_recordset(p_items) as r(kind text, grade int, qty int)
+           where r.kind in ('wood', 'stone', 'mana')
+             and r.grade between 1 and 9 and coalesce(r.qty, 0) > 0
+           group by r.kind, r.grade) q
+   where q.qty <= c_max_qty;
+  if v_req = 0 then return jsonb_build_object('ok', false, 'error', '個数が不正です'); end if;
+
+  select count(*), coalesce(sum(q.qty::bigint * public.v2_base_material_sell(q.grade)), 0)
+    into v_ok, v_total
+    from (select r.kind, r.grade, sum(r.qty)::int as qty
+            from jsonb_to_recordset(p_items) as r(kind text, grade int, qty int)
+           where r.kind in ('wood', 'stone', 'mana')
+             and r.grade between 1 and 9 and coalesce(r.qty, 0) > 0
+           group by r.kind, r.grade) q
+    join public.v2_base_materials bm
+      on bm.player_id = v_uid and bm.kind = q.kind and bm.grade = q.grade and bm.qty >= q.qty
+   where q.qty <= c_max_qty;
+  if v_ok <> v_req then return jsonb_build_object('ok', false, 'error', '資材が足りません'); end if;
+
+  update public.v2_base_materials bm
+     set qty = bm.qty - q.qty
+    from (select r.kind, r.grade, sum(r.qty)::int as qty
+            from jsonb_to_recordset(p_items) as r(kind text, grade int, qty int)
+           where r.kind in ('wood', 'stone', 'mana')
+             and r.grade between 1 and 9 and coalesce(r.qty, 0) > 0
+           group by r.kind, r.grade) q
+   where bm.player_id = v_uid and bm.kind = q.kind and bm.grade = q.grade;
+
+  update public.v2_profiles set gold = gold + v_total, updated_at = now()
+   where id = v_uid returning gold into v_gold;
+
+  return jsonb_build_object('ok', true, 'gained', v_total, 'gold', v_gold,
+                            'base', public.v2_base_get());
+end;
+$$;
+revoke all on function public.v2_base_sell_materials(jsonb) from public;
+revoke all on function public.v2_base_sell_materials(jsonb) from anon;
+grant execute on function public.v2_base_sell_materials(jsonb) to authenticated;
 
 -- ===== 11-12. 釣り場エリアを選ぶ =====
 -- ⚠**切り替える前に必ず釣り上げる。** pending は「匹数」しか持っていないので、

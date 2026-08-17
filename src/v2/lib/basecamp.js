@@ -60,10 +60,8 @@ export const workerLimitOf = (grade) => (grade <= 3 ? 1 : grade <= 6 ? 2 : 3)
 // 何人目かで上がる（拠点全体の通し）。9人ぜんぶ雇うと合計およそ2,700万G
 export const HIRE_COST = [10000, 30000, 80000, 200000, 500000, 1200000, 3000000, 7000000, 15000000]
 export const hireCostOf = (hired) => (hired >= 0 && hired < HIRE_COST.length ? HIRE_COST[hired] : null)
-// 維持費。**未払いのあいだは生産が止まる**（回収のときにまとめて精算する）
-export const UPKEEP_PER_HOUR = 100
-export const upkeepOf = (key, grade, workers) =>
-  FACILITY_BY_KEY[key]?.hasWorkers ? UPKEEP_PER_HOUR * grade * Math.max(0, workers) : 0
+// ★労働者は**買いきり**（2026-08-17 ユーザー決定）。維持費は無い。
+//   ＝生産が止まるのは「満杯になったとき」だけになった
 
 // ===== レートと上限 =====
 export const rateOf = (key, grade, workers) => {
@@ -115,34 +113,41 @@ export const exchangeGainOf = (items) => {
 export const exchangeTotalOf = (items) =>
   Object.values(exchangeGainOf(items)).reduce((a, b) => a + b, 0)
 
+// ===== 資材 → Gold =====
+// ★**グレードに関係なく全部売れる**（2026-08-17 ユーザー決定）。
+//   これがないと、最終グレードの施設が出す資材（木材Ⅸなど）に使い道が無くなる。
+// ⚠**Goldの2本目の湧き口**。目安は「グレードNの資材3個 ≒ エリアNの通常素材1個」の
+//   売値のおよそ1/4。**サーバーにも同じ表がある**（v2_base_material_sell）
+export const MATERIAL_SELL = [3, 7, 15, 25, 40, 60, 100, 200, 320]
+export const sellPriceOf = (grade) => MATERIAL_SELL[grade - 1] || 0
+// [{ kind, grade, qty }] の合計。持っている数を超えていないかは呼び出し側とサーバーが見る
+export const sellTotalOf = (items) =>
+  (items || []).reduce((t, it) => t + sellPriceOf(it?.grade) * Math.max(0, Math.floor(it?.qty || 0)), 0)
+
 // ===== 表示用の見込み =====
 // ⚠**確定させるのはサーバー**（v2_base_settle）。ここは画面のカウンタを進めるためだけに使う。
 //   SQL側と同じ式にしてあるので、片方を直したらもう片方も直すこと。
 //
-//   生産していた時間 = LEAST(経過時間, 満杯までの時間, Goldで払える時間)
-export const previewOf = (f, gold, at = new Date()) => {
+//   生産していた時間 = LEAST(経過時間, 満杯までの時間)
+//   ★維持費が無くなったので、Goldは見込みに関係しなくなった
+export const previewOf = (f, at = new Date()) => {
   const rate = Number(f?.rate || 0)
   const cap = Number(f?.cap || 0)
-  const upkeep = Number(f?.upkeep || 0)
   const pending = Number(f?.pending || 0)
   const elapsedH = Math.max(0, (at.getTime() - new Date(f?.accrued_from || at).getTime()) / 3600000)
   const roomH = rate > 0 ? Math.max(0, (cap - pending) / rate) : 0
-  const affordH = upkeep > 0 ? Math.max(0, Number(gold || 0)) / upkeep : Infinity
-  const workH = Math.min(elapsedH, roomH, affordH)
+  const workH = Math.min(elapsedH, roomH)
   return {
     pending: Math.min(cap, pending + rate * workH),
-    cost: Math.floor(upkeep * workH),
     full: roomH <= 0 || workH >= roomH - 1e-9,
-    // Goldが尽きて止まっている（満杯で止まっているのとは別に伝える）
-    goldShort: upkeep > 0 && affordH < Math.min(elapsedH, roomH) - 1e-9,
   }
 }
 
 // 「あと何分で満杯か」。満杯・生産していないときは null
-export const fullInOf = (f, gold, at = new Date()) => {
+export const fullInOf = (f, at = new Date()) => {
   const rate = Number(f?.rate || 0)
   if (rate <= 0) return null
-  const p = previewOf(f, gold, at)
+  const p = previewOf(f, at)
   if (p.full) return null
   return ((Number(f.cap) - p.pending) / rate) * 60
 }

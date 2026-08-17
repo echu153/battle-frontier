@@ -9,9 +9,10 @@ import {
   MATERIAL_KINDS, KIND_KEYS, GRADE_MAX, materialName, gradeLabel,
   FACILITIES, FACILITY_BY_KEY, PRODUCERS,
   CAP_HOURS, PRODUCE_PER_HOUR, SCARECROW_8H, scarecrowPerHour,
-  WORKER_MAX, workerLimitOf, HIRE_COST, hireCostOf, UPKEEP_PER_HOUR, upkeepOf,
+  WORKER_MAX, workerLimitOf, HIRE_COST, hireCostOf,
   rateOf, capOf, UPGRADE_COST, upgradeCostOf, reqAreaOf, upgradeBlockOf,
   EXCHANGE_RATE, exchangeGainOf, exchangeTotalOf, previewOf, fullInOf,
+  MATERIAL_SELL, sellPriceOf, sellTotalOf,
 } from './basecamp.js'
 
 const SQL = readFileSync(new URL('../../../supabase_v2_core.sql', import.meta.url), 'utf8')
@@ -58,7 +59,6 @@ test('かかしはグレード1で8時間300EXP、グレード9で8時間1200EXP
 
 test('かかしのレートは労働者に左右されない', () => {
   assert.equal(rateOf('scarecrow', 5, 0), rateOf('scarecrow', 5, 3))
-  assert.equal(upkeepOf('scarecrow', 9, 3), 0, 'かかしに維持費はかからない')
 })
 
 // ===== 生産 =====
@@ -84,11 +84,39 @@ test('労働者は施設グレードで1〜3人・拠点全体で9人まで', ()
   assert.equal(hireCostOf(9), null, '10人目は雇えない')
 })
 
-test('維持費は 100G/h × グレード × 人数', () => {
-  assert.equal(UPKEEP_PER_HOUR, 100)
-  assert.equal(upkeepOf('lumber', 1, 1), 100)
-  assert.equal(upkeepOf('lumber', 9, 3), 2700)
-  assert.equal(upkeepOf('lumber', 5, 0), 0, '労働者がいなければ0')
+test('労働者は買いきり＝維持費という仕組みがどこにも残っていない', () => {
+  // ★2026-08-17 ユーザー決定で廃止。残っていると「Goldが尽きて生産停止」が復活する
+  assert.doesNotMatch(SQL, /v2_base_upkeep\(p_key/, '維持費の関数がSQLに残っている')
+  assert.match(SQL, /drop function if exists public\.v2_base_upkeep/, '古い関数を落としていない')
+  const settle = bodyOf('v2_base_settle')
+  assert.doesNotMatch(settle, /upkeep|gold_short/, 'settle に維持費が残っている')
+  assert.match(settle, /v_work\s*:=\s*least\(v_elapsed, v_room\)/, '止まるのは満杯のときだけ')
+})
+
+test('資材はグレードに関係なくGoldに売れる', () => {
+  assert.equal(MATERIAL_SELL.length, GRADE_MAX, '9グレードぶんの売値がある')
+  assert.equal(sellPriceOf(1), 3)
+  assert.equal(sellPriceOf(GRADE_MAX), 320, '最終グレードの資材が売れないと使い道が無くなる')
+  assert.equal(sellPriceOf(0), 0)
+  assert.equal(sellPriceOf(10), 0)
+  for (let g = 2; g <= GRADE_MAX; g++) {
+    assert.ok(MATERIAL_SELL[g - 1] > MATERIAL_SELL[g - 2], `グレード${g}の売値が上がっていない`)
+  }
+  assert.equal(sellTotalOf([{ kind: 'wood', grade: 9, qty: 3 }, { kind: 'mana', grade: 1, qty: 10 }]),
+    320 * 3 + 3 * 10)
+  // ★サーバーにも同じ表がある
+  const sell = bodyOf('v2_base_material_sell')
+  assert.match(sell, new RegExp(`array\\[${MATERIAL_SELL.join(', ')}\\]`), '売値がSQLと違う')
+})
+
+test('資材の売却は検証を全部済ませてから引く（部分的に消えない）', () => {
+  const body = bodyOf('v2_base_sell_materials')
+  const checkAt = body.search(/if v_ok <> v_req then/)
+  const updateAt = body.search(/update public\.v2_base_materials bm/)
+  assert.ok(checkAt !== -1 && updateAt !== -1)
+  assert.ok(checkAt < updateAt, '検証より前に資材を引いている')
+  // 値段はサーバーの関数から計算する（クライアントの申告を使わない）
+  assert.match(body, /public\.v2_base_material_sell\(q\.grade\)/, '売値をサーバーで計算していない')
 })
 
 // ===== 拡張 =====
@@ -133,51 +161,39 @@ test('存在しない素材・0個は無視する', () => {
 
 // ===== 蓄積の見込み =====
 const facOf = (over) => ({
-  key: 'lumber', pending: 0, rate: 30, cap: 240, upkeep: 100,
+  key: 'lumber', pending: 0, rate: 30, cap: 240,
   accrued_from: new Date('2026-08-17T00:00:00Z').toISOString(), ...over,
 })
 const AT = (h) => new Date(new Date('2026-08-17T00:00:00Z').getTime() + h * 3600000)
 
-test('見込みは 経過時間・満杯・Goldで払える時間 の一番小さいもので止まる', () => {
-  // 2時間ぶん・Goldは潤沢
-  const a = previewOf(facOf(), 10 ** 9, AT(2))
+test('見込みは 経過時間と満杯までの時間 の小さいほうで止まる', () => {
+  const a = previewOf(facOf(), AT(2))
   assert.equal(a.pending, 60)
-  assert.equal(a.cost, 200)
   assert.equal(a.full, false)
-  assert.equal(a.goldShort, false)
 
-  // 12時間放置しても8時間ぶんで満杯（＝それ以上の維持費も取られない）
-  const b = previewOf(facOf(), 10 ** 9, AT(12))
+  // 12時間放置しても8時間ぶんで満杯
+  const b = previewOf(facOf(), AT(12))
   assert.equal(b.pending, 240)
-  assert.equal(b.cost, 800, '満杯のあとも維持費を取っている')
   assert.equal(b.full, true)
 
-  // Goldが300しかない＝3時間ぶんで止まる
-  const c = previewOf(facOf(), 300, AT(8))
-  assert.equal(c.pending, 90)
-  assert.equal(c.cost, 300)
-  assert.equal(c.goldShort, true, 'Goldで止まったことを伝えていない')
+  // ★Goldは関係しない（労働者は買いきり）
+  assert.equal(previewOf(facOf(), AT(2)).pending, 60)
 })
 
 test('労働者がいない施設は時間が経っても増えない', () => {
-  const f = facOf({ rate: 0, cap: 0, upkeep: 0 })
-  const p = previewOf(f, 10 ** 9, AT(8))
-  assert.equal(p.pending, 0)
-  assert.equal(p.cost, 0)
-  assert.equal(fullInOf(f, 10 ** 9, AT(8)), null)
+  const f = facOf({ rate: 0, cap: 0 })
+  assert.equal(previewOf(f, AT(8)).pending, 0)
+  assert.equal(fullInOf(f, AT(8)), null)
 })
 
-test('かかしは維持費がかからないのでGoldに左右されない', () => {
-  const f = facOf({ key: 'scarecrow', rate: scarecrowPerHour(1), cap: 300, upkeep: 0 })
-  const p = previewOf(f, 0, AT(8))
-  assert.equal(p.pending, 300)
-  assert.equal(p.cost, 0)
-  assert.equal(p.goldShort, false)
+test('かかしも同じ式で貯まる', () => {
+  const f = facOf({ key: 'scarecrow', rate: scarecrowPerHour(1), cap: 300 })
+  assert.equal(previewOf(f, AT(8)).pending, 300)
 })
 
 test('満杯までの残り時間（分）', () => {
-  assert.equal(Math.round(fullInOf(facOf(), 10 ** 9, AT(2))), 6 * 60)
-  assert.equal(fullInOf(facOf(), 10 ** 9, AT(8)), null, '満杯なら null')
+  assert.equal(Math.round(fullInOf(facOf(), AT(2))), 6 * 60)
+  assert.equal(fullInOf(facOf(), AT(8)), null, '満杯なら null')
 })
 
 // ===== SQLとの突き合わせ =====
@@ -190,9 +206,6 @@ test('拠点の数字がSQLと basecamp.js で一致している', () => {
   assert.match(rate, new RegExp(`array\\[${scare.join(', ')}\\]`),
     `かかしのレート [${scare.join(', ')}] がSQLにある`)
   assert.match(rate, new RegExp(`${PRODUCE_PER_HOUR}::numeric \\* greatest`), '生産施設のレート')
-
-  const upkeep = bodyOf('v2_base_upkeep')
-  assert.match(upkeep, new RegExp(`${UPKEEP_PER_HOUR}::numeric \\* greatest`), '維持費')
 
   const limit = bodyOf('v2_base_worker_limit')
   assert.match(limit, /<= 3 then 1/)
@@ -213,18 +226,16 @@ test('拠点の数字がSQLと basecamp.js で一致している', () => {
   assert.match(ex, new RegExp(`else ${EXCHANGE_RATE.ultra} end`), '激レアの交換レート')
 })
 
-test('v2_base_settle は 経過時間・満杯・Gold の3つで頭打ちにする', () => {
+test('v2_base_settle は 経過時間と満杯で頭打ちにする', () => {
   const body = bodyOf('v2_base_settle')
-  // ★どれか1つでも抜けると、放置しただけで無限に貯まる／維持費を払わずに生産できる
-  assert.match(body, /v_limit\s*:=\s*least\(v_elapsed, v_room\)/, '経過時間と満杯の頭打ち')
-  assert.match(body, /v_work\s*:=\s*least\(v_work,\s*greatest\(0, coalesce\(v_gold, 0\)\) \/ v_upkeep\)/,
-    'Goldで払える時間の頭打ち')
+  // ★これが抜けると、放置しただけで無限に貯まる
+  assert.match(body, /v_work\s*:=\s*least\(v_elapsed, v_room\)/, '経過時間と満杯の頭打ち')
   // 本人以外を弾いている（SECURITY DEFINER の内部ヘルパは既定でPUBLICが叩ける）
   assert.match(body, /p_uid is distinct from auth\.uid\(\)/, '本人以外を弾いていない')
 })
 
 test('内部ヘルパは authenticated から REVOKE してある', () => {
-  for (const name of ['v2_base_settle', 'v2_base_rate', 'v2_base_upkeep',
+  for (const name of ['v2_base_settle', 'v2_base_rate', 'v2_base_material_sell',
                       'v2_base_hire_cost', 'v2_base_upgrade_cost', 'v2_base_kind_of']) {
     const re = new RegExp(`revoke all on function public\\.${name}\\([^)]*\\)\\s+from public, anon, authenticated;`)
     assert.match(SQL, re, `${name} が authenticated から revoke されていない`)
