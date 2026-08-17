@@ -11,8 +11,10 @@ import V2Modal from './V2Modal.jsx'
 // ★数えるのも達成の判定も報酬もサーバー（v2_daily_pick / v2_daily_claim）。
 //   ここは進み具合を出して、選ぶ・受け取るを送るだけ。仕組みの正は src/v2/lib/daily.js。
 //
-// embedded … ホームに載せるとき。畳んだ見出しだけ出す
-export default function V2Daily({ prof, onProfile, embedded = false }) {
+// embedded  … ホームに載せるとき。畳んだ見出しだけ出す
+// showPanel … 選び終えたあとの枠を出すか（ホーム以外では出さない）。
+//             ★難易度を選ぶポップアップは showPanel に関係なく出る＝どの画面でも通さない
+export default function V2Daily({ prof, onProfile, embedded = false, showPanel = true }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [got, setGot] = useState(null)     // 受け取った結果のポップアップ
@@ -41,35 +43,40 @@ export default function V2Daily({ prof, onProfile, embedded = false }) {
     onProfile(null)
   }
 
-  // ★難易度を選ぶ前。毎日の最初のログインでここが出る
+  // ★難易度を選ぶ前。毎日の最初のログインで**閉じられないポップアップ**として出る。
+  //   選ぶまで先へ進めない（閉じるボタンなし・Escも効かない・背景も反応しない）。
+  //   画面を移っても出したいので、V2Home 側では screen に関係なくこの部品を置いてある。
   if (!picked) {
     return (
-      <div style={{ ...box, padding:'12px', marginBottom:'8px', borderColor:'#ffcc00' }}>
-        <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'4px' }}>📋 今日のミッション</div>
-        <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'8px', lineHeight:1.8 }}>
+      <V2Modal title="📋 今日のミッション" color="#ffcc00" noClose>
+        <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'10px', lineHeight:1.8 }}>
           難易度を選んでください。<b style={{ color:'#ff8844' }}>選んだあとは今日のうちは変えられません</b>。<br />
           日付が変わるのは日本時間の5時です。
         </div>
         <div style={{ display:'grid', gap:'6px' }}>
           {LEVELS.map(l => (
             <button key={l.key} onClick={() => pick(l.key)} disabled={busy}
-              style={{ textAlign:'left', padding:'8px 10px', background:'#000818',
+              style={{ textAlign:'left', padding:'10px 12px', background:'#000818',
                 border:`1px solid ${l.color}`, color:l.color, cursor: busy ? 'not-allowed' : 'pointer',
-                fontFamily:'monospace', fontSize:'12px' }}>
+                fontFamily:'monospace', fontSize:'13px' }}>
               {l.label}
               <span style={{ color:'#ffcc00', fontSize:'10px', marginLeft:'8px' }}>
                 EXP+{l.reward.exp}・{l.reward.gold}G
               </span>
-              <div style={{ color:'#7fa6d0', fontSize:'10px', marginTop:'2px' }}>
+              <div style={{ color:'#7fa6d0', fontSize:'10px', marginTop:'3px', lineHeight:1.7 }}>
                 {TASKS.map(t => `${t.label}${l.goals[t.key]}${t.unit}`).join('／')}
               </div>
             </button>
           ))}
         </div>
+        {busy && <div style={{ color:'#7fa6d0', fontSize:'11px', marginTop:'8px' }}>選んでいます...</div>}
         {msg && <div style={{ color:'#ff6666', fontSize:'11px', marginTop:'8px' }}>⚠ {msg}</div>}
-      </div>
+      </V2Modal>
     )
   }
+
+  // 難易度を選び終えたあとは、ホームのときだけ折りたたみの枠を出す
+  if (!showPanel) return null
 
   // ★畳んでいても進み具合が分かるように「2/4」を出す（開かないと分からないのを避ける）
   const doneCount = doneCountOf(prof, picked)

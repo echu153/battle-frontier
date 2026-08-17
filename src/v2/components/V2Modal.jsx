@@ -11,14 +11,18 @@ import { useEffect } from 'react'
 export default function V2Modal({
   title, color = '#88ccff', children,
   confirmLabel = '実行する', cancelLabel = 'やめる', closeLabel = '閉じる',
-  danger = false, busy = false, onConfirm, onClose,
+  danger = false, busy = false, onConfirm, onClose, noClose = false,
 }) {
+  // ★noClose … **閉じられないポップアップ**。閉じるボタンを出さず、Escも効かない。
+  //   中で操作を1つ選ばせるまで通さない用（デイリーミッションの難易度選択）。
+  //   背景は元々クリックしても閉じないので、これで抜け道が無くなる。
   // Escで閉じる（確認のときは「やめる」と同じ扱い）
   useEffect(() => {
+    if (noClose) return
     const onKey = (e) => { if (e.key === 'Escape' && !busy) onClose?.() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [busy, onClose])
+  }, [busy, onClose, noClose])
 
   return (
     <div style={{
@@ -36,6 +40,7 @@ export default function V2Modal({
         <div style={{ padding:'12px', fontSize:'12px', color:'#88ccff', lineHeight:1.8 }}>
           {children}
         </div>
+        {!noClose && (
         <div style={{ padding:'10px 12px', borderTop:'1px solid #002a55', display:'flex', gap:'8px' }}>
           {onConfirm ? (
             <>
@@ -48,6 +53,7 @@ export default function V2Modal({
             <button onClick={onClose} style={{ ...modalBtn('#00aaff', false), flex:1 }}>{closeLabel}</button>
           )}
         </div>
+        )}
       </div>
     </div>
   )

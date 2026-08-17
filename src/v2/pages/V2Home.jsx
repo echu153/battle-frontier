@@ -346,10 +346,11 @@ export default function V2Home() {
             )}
 
             {/* ===== デイリーミッション（ステータスのすぐ下）=====
-                ★難易度を選んでいない日は畳まずに出す＝その日の最初に選ばせる */}
-            {screen === 'home' && !inBattle && (
-              <V2Daily prof={prof} onProfile={refresh} embedded />
-            )}
+                ★難易度を選んでいない日は**閉じられないポップアップ**で選ばせる。
+                  そのため画面に関係なく置いてある（施設へ逃げても出る）。
+                  選び終えたあとの折りたたみ枠は、ホームのときだけ出す */}
+            <V2Daily prof={prof} onProfile={refresh} embedded
+              showPanel={screen === 'home' && !inBattle} />
 
             {/* ===== 出撃とアリーナ（旧版と同じで、街のブロックがそのままホームに載る） =====
                 ★あるけみすとも「探索する」の下にタブで闘技場がぶら下がっている。
