@@ -52,6 +52,7 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
   const [result, setResult] = useState(null)    // 抽出後の結果ポップアップ
   const [overwrite, setOverwrite] = useState(null) // 上書き前の確認 { rune, target }
   const [seal, setSeal] = useState(null)           // 刻印前の確認 { rune, target }
+  const [sealed, setSealed] = useState(null)       // 刻印後の結果 { rune, target, overwrote }
   const [target, setTarget] = useState(null)    // ソケットにはめる対象 { invId, slot, color }
   const [runeFilter, setEssFilter] = useStored('runeFilter', defaultRuneFilter, true)  // ルーン一覧の絞り込み
   const [rawRunePage, setRawEssPage] = useState(0)
@@ -87,10 +88,12 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
   }
 
   // ソケットへ入れる。ふさがっている枠は**上書き＝元のルーンが消える**ので確認を1段挟む
-  const doSocket = async (runeId, t) => {
-    const ok = await call('v2_socket_essence', { p_essence_id: runeId, p_inventory_id: t.invId, p_slot: t.slot })
+  const doSocket = async (rune, t) => {
+    const ok = await call('v2_socket_essence', { p_essence_id: rune.id, p_inventory_id: t.invId, p_slot: t.slot })
     setOverwrite(null); setSeal(null)
-    if (ok) setTarget(null)
+    if (!ok) return
+    setTarget(null)
+    setSealed({ rune, target: t, overwrote: !!t.over })   // 結果はポップアップで出す
   }
 
   // ★ボス素材は5枠に1個まで。1個選んだ時点で**他のボス素材は選べなくする**
@@ -355,10 +358,30 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
         </V2Modal>
       )}
 
+      {/* ===== 刻印の結果 ===== */}
+      {sealed && (
+        <V2Modal title="◈ 刻印した！" color={COLOR_HEX[sealed.rune.color]} onClose={() => setSealed(null)}>
+          <div style={{ display:'flex', alignItems:'baseline', gap:'8px', flexWrap:'wrap' }}>
+            <RuneTag e={sealed.rune} size="15px" />
+            <span style={{ marginLeft:'auto', color:'#44ff88', fontSize:'12px', whiteSpace:'nowrap' }}>
+              （合計値：{runePower(sealed.rune.stats)}%）
+            </span>
+          </div>
+          <div style={{ color:'#88ccff', marginTop:'6px' }}>
+            <b>{sealed.target.name}</b> の ●{COLOR_LABEL[sealed.target.color]}の枠 に刻印した！
+          </div>
+          {sealed.overwrote && (
+            <div style={{ color:'#ff8844', fontSize:'11px', marginTop:'4px' }}>
+              上書きしたので、前に刻んでいたルーンは消えた
+            </div>
+          )}
+        </V2Modal>
+      )}
+
       {/* ===== 刻印の確認（外すのが難しいので1段挟む）===== */}
       {seal && (
         <V2Modal title="◈ 刻印の確認" color={COLOR_HEX[seal.target.color]} busy={busy}
-          confirmLabel="刻印する" onConfirm={() => doSocket(seal.rune.id, seal.target)}
+          confirmLabel="刻印する" onConfirm={() => doSocket(seal.rune, seal.target)}
           onClose={() => !busy && setSeal(null)}>
           <div style={{ color:'#88ccff' }}>
             <b>{seal.target.name}</b> の ●{COLOR_LABEL[seal.target.color]}の枠 に刻みます
@@ -375,7 +398,7 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
       {/* ===== 上書きの確認（元のルーンが消える）===== */}
       {overwrite && (
         <V2Modal title="⚠ 上書きの確認" color="#ff8844" danger busy={busy}
-          confirmLabel="上書きする" onConfirm={() => doSocket(overwrite.rune.id, overwrite.target)}
+          confirmLabel="上書きする" onConfirm={() => doSocket(overwrite.rune, overwrite.target)}
           onClose={() => !busy && setOverwrite(null)}>
           <div style={{ color:'#ff8844' }}>いま入っているルーンは<b>消えます</b>。</div>
           <div style={{ marginTop:'6px', fontSize:'11px', color:'#93a9be' }}>消えるもの</div>

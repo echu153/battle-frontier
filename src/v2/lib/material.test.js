@@ -246,3 +246,23 @@ test('名前はどの色も6段ぶんあり、すべて漢字2文字', () => {
 test('色の表記は緋・蒼・翠', () => {
   assert.deepEqual(COLOR_LABEL, { red:'緋', blue:'蒼', green:'翠' })
 })
+
+// ★ボス素材は2ステ持ち。**どちらも独立に抽選される**ことを固定しておく
+//   （片方だけになっていないか・値が同じ乱数を使い回していないかの検出）
+test('ボス素材は2つのステータスが両方とも、それぞれ別に抽選される', () => {
+  const boss = materialOf('ビッグスライム', 'ultra')       // HP＋VIT
+  const filler = materialOf('毒キノコ', 'ultra')           // INT固定（混ざっても見分けられる）
+  const set = [boss.id, ...Array(EXTRACT_COST - 1).fill(filler.id)]
+  let both = 0, differ = 0
+  const n = 500
+  for (let i = 0; i < n; i++) {
+    const r = extract(set, Math.random)
+    if (r.stats.hp > 0 && r.stats.vit > 0) both++
+    if (r.stats.hp !== r.stats.vit) differ++
+    // それぞれがボス素材のレンジに収まっている
+    assert.ok(r.stats.hp >= boss.lo && r.stats.hp <= boss.hi, `hp ${r.stats.hp}`)
+    assert.ok(r.stats.vit >= boss.lo && r.stats.vit <= boss.hi, `vit ${r.stats.vit}`)
+  }
+  assert.equal(both, n, '片方しか付いていない回がある')
+  assert.ok(differ > n * 0.4, `2つが常に同じ値になっている（別々に引けていない）: ${differ}/${n}`)
+})

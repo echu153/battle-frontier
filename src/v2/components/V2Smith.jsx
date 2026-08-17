@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../../supabase'
-import { ITEM_BY_ID, powerOf, PLUS_MAX, socketCountOf } from '../lib/equipment.js'
+import { ITEM_BY_ID, powerOf, statsOf, PLUS_MAX, socketCountOf } from '../lib/equipment.js'
+import { STAT_KEYS, STAT_DEFS } from '../lib/stats.js'
 import { wornIdsOf } from '../lib/loadout.js'
 import { COLOR_HEX, COLOR_LABEL } from '../lib/material.js'
 import {
@@ -107,7 +108,8 @@ export default function V2Smith({ prof, inventory, materials, runes, isAdmin, on
     setBusy(false); setConfirm(false)
     if (error) { setMsg({ text: error.message, color:'#ff6666' }); return }
     if (!data?.ok) { setMsg({ text: data?.error || '強化に失敗しました', color:'#ff6666' }); return }
-    setResult({ ...data, name: baseItem.name })
+    // ★どれだけ伸びたかを出すため、強化前の値もいっしょに残しておく
+    setResult({ ...data, name: baseItem.name, item: baseItem, fromPlus: base.plus || 0 })
     setMatIds([])
     onProfile(null)
   }
@@ -327,6 +329,26 @@ export default function V2Smith({ prof, inventory, materials, runes, isAdmin, on
           ) : (
             <div style={{ color:'#88ccff', marginTop:'4px' }}>
               {result.name}<span style={{ color:'#ffcc00' }}>+{result.plus}</span> になった！
+              {/* ★どのステータスがどれだけ伸びたか。装備の数値は equipment.js が正 */}
+              <div style={{ marginTop:'6px', fontSize:'11px' }}>
+                <div style={{ color:'#7fa6d0' }}>
+                  戦闘力 {powerOf(result.item, result.fromPlus)} →{' '}
+                  <span style={{ color:'#ffcc00' }}>{powerOf(result.item, result.plus)}</span>
+                  <span style={{ color:'#44ff88' }}>
+                    {' '}(+{powerOf(result.item, result.plus) - powerOf(result.item, result.fromPlus)})
+                  </span>
+                </div>
+                {(() => {
+                  const before = statsOf(result.item, result.fromPlus)
+                  const after = statsOf(result.item, result.plus)
+                  return STAT_KEYS.filter(k => after[k] || before[k]).map(k => (
+                    <div key={k} style={{ color:'#93a9be' }}>
+                      {STAT_DEFS[k].label} {before[k]} → <span style={{ color:'#88ccff' }}>{after[k]}</span>
+                      <span style={{ color:'#44ff88' }}> (+{after[k] - before[k]})</span>
+                    </div>
+                  ))
+                })()}
+              </div>
             </div>
           )}
         </V2Modal>
