@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs'
 import { RATES } from './smith.js'
 import { RANKS } from './equipment.js'
 import { SELL_BASE, SELL_RARITY_MULT } from './material.js'
+import { LOSE_DROP, floorAfterLose } from './arena.js'
 
 const SQL = readFileSync(new URL('../../../supabase_v2_core.sql', import.meta.url), 'utf8')
 
@@ -91,6 +92,20 @@ test('素材の売値がSQLと material.js で一致している（片方だけ�
   for (const [rarity, mult] of Object.entries(SELL_RARITY_MULT)) {
     assert.match(sql, new RegExp(`when '${rarity}' then ${mult}[^0-9]`), `${rarity} の倍率 ${mult}`)
   }
+})
+
+// ===== アリーナ =====
+test('負けたときに落ちる階が、SQLと arena.js で一致している', () => {
+  // ★2026-08-17の事故：SQLは戦闘力を見ずに必ず1つ落としていたのに、
+  //   クライアントの floorAfterLose だけ「戦闘力が足りていれば落ちない」を計算していた。
+  //   画面の「次は◯階から」とサーバーの結果がズレる（権威はサーバー）。
+  const body = bodyOf('v2_arena_fight')
+  assert.match(body, /c_drop\s+constant int := 1;/, '落ちる階数がSQLにある')
+  assert.equal(LOSE_DROP, 1, 'JS側の落ちる階数')
+  assert.match(body, /v_next := greatest\(1, v_floor - c_drop\)/, '必ず1つ落とす')
+  // JS側も戦闘力で結果が変わらないこと（下限が復活したらここで落ちる）
+  assert.equal(floorAfterLose(10), 10 - LOSE_DROP)
+  assert.equal(floorAfterLose(10, 10 ** 9), 10 - LOSE_DROP, '戦闘力で結果が変わっている')
 })
 
 test('v2_sell_materials は検証を全部済ませてから素材を引く（部分的に消えない）', () => {

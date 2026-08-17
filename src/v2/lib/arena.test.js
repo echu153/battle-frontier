@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   FLOORS, EXP_MIN, EXP_MAX, STREAK_PCT, LOSE_DROP, LOW_FLOOR, LOW_FLOOR_MULT,
-  powerOfFloor, floorLimitOf, floorAfterLose, floorAfterDefended,
+  powerOfFloor, floorAfterLose, floorAfterDefended,
   streakBonusPct, applyStreakBonus,
   npcClassOf, npcNameOf, npcStatsOf, npcSlotsOf, npcChampOf, champOf,
   snapshotOf, fromSnapshot, expOf, rollDrop, canChallenge,
@@ -27,22 +27,20 @@ test('階が上がるほど戦闘力の目安が上がる', () => {
   assert.equal(powerOfFloor(999), powerOfFloor(FLOORS))
 })
 
-test('負けると1つ下。ただし戦闘力が足りていれば落ちない', () => {
+test('負けたら戦闘力に関係なく必ず1つ下へ', () => {
   // ★ユーザー決定（wikiの記載は2つ下）。「上がった次で失敗したら元の階に戻る」形
+  // ★2026-08-17：「戦闘力が足りていれば落ちない」下限は廃止した。
+  //   サーバー（v2_arena_fight）は最初からその下限を持っておらず、
+  //   画面の「次は◯階から」だけが落ちない予告を出していた＝表示と実際がズレていた
   assert.equal(LOSE_DROP, 1)
-  assert.equal(floorAfterLose(10, 0), 9)
-  assert.equal(floorAfterLose(2, 0), 1)
-  assert.equal(floorAfterLose(1, 0), 1)   // 1階より下は無い
-  // ★その階に見合う戦闘力があるなら落ちない
-  const p10 = powerOfFloor(10)
-  assert.equal(floorLimitOf(p10), 10)
-  assert.equal(floorAfterLose(10, p10), 10)
-  // 中途半端なとき＝落ちる先が「見合う階」で止まる
-  assert.equal(floorAfterLose(10, powerOfFloor(9)), 9)
+  assert.equal(floorAfterLose(10), 9)
+  assert.equal(floorAfterLose(2), 1)
+  assert.equal(floorAfterLose(1), 1)   // 1階より下は無い
   // 上がった次で失敗すると、上がる前の階に戻る
-  assert.equal(floorAfterLose(11, 0), 10)
-  // 上の階に見合う戦闘力でも、いまいる階より上には行かない
-  assert.equal(floorAfterLose(10, powerOfFloor(40)), 10)
+  assert.equal(floorAfterLose(11), 10)
+  // ★戦闘力を渡しても結果は変わらない（下限が復活していないことの検出）
+  assert.equal(floorAfterLose(10, powerOfFloor(50)), 9)
+  assert.equal(floorAfterLose(FLOORS, powerOfFloor(FLOORS) * 100), FLOORS - 1)
 })
 
 test('階層守護者を破られたら1つ上へ（最上階なら据え置き）', () => {

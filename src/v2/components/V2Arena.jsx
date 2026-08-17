@@ -91,7 +91,7 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
       : { text:`敗北…（${r.turns}ターン）`, color:'#ff4444' })
     out.push({ text:`EXP +${exp}`, color:'#ffcc00' })
     if (drop) out.push({ text:`🎁 ${drop.rank}級「${drop.name}」を入手！`, color: RANK_COLOR[drop.rank] })
-    if (!win) out.push({ text:`次は${floorAfterLose(floor, myPower)}階から`, color:'#7fa6d0' })
+    if (!win) out.push({ text:`次は${floorAfterLose(floor)}階から`, color:'#7fa6d0' })
     setLogs(out)
 
     const { data, error } = await supabase.rpc('v2_arena_fight', {
@@ -142,7 +142,7 @@ export default function V2Arena({ prof, inventory, runes, onProfile, onBack, emb
           各階に<b style={{ color:'#ff88cc' }}>階層守護者</b>がいます。勝つとその階の階層守護者になり、
           守っているあいだは挑戦できません。<br />
           自分の階層守護者が破られると<b style={{ color:'#44ff88' }}>1つ上の階</b>へ、
-          挑戦して負けると<b style={{ color:'#ff8844' }}>1つ下の階</b>へ（戦闘力が足りていれば落ちません）。<br />
+          挑戦して負けると<b style={{ color:'#ff8844' }}>1つ下の階</b>へ（戦闘力に関係なく必ず落ちます）。<br />
           <b style={{ color:'#ffcc00' }}>階層守護者のHP/MPは回復しません</b>。挑戦する側は毎回満タンです。<br />
           連勝中の階層守護者に挑むと、こちらのステータスが連勝数×{STREAK_PCT}%上がります（HP/MPを除く）。<br />
           EXPは勝敗によらずもらえ、勝つと{DROP_RATE}%で装備が落ちます。出撃とクールタイムを共有します。<br />

@@ -2168,8 +2168,10 @@ begin
          where id = v_champ.player_id;
       end if;
     end if;
-    -- 2つ下へ。ただし「その戦闘力なら居ていい階」より下には落ちない
-    -- （目安の計算はクライアント側と同じ式。ここでは階だけ動かす）
+    -- 1つ下へ。**戦闘力に関係なく必ず落ちる**（2026-08-17 ユーザー決定）
+    -- ⚠以前は「その戦闘力なら居ていい階より下には落ちない」とコメントしていたが、
+    --   その下限はここに実装されていなかった（画面の予告表示だけが下限を計算していて
+    --   ズレていた）。下限は廃止し、クライアント側の floorAfterLose も1つ下で固定した
     v_next := greatest(1, v_floor - c_drop);
     update public.v2_profiles
        set arena_losses = arena_losses + 1, last_sortie_at = now(), updated_at = now()

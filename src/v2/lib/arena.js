@@ -7,7 +7,7 @@
 //   ・各階に**階層守護者**（守る側）がいて、挑戦者は自分がいる階の階層守護者と戦う
 //   ・勝つとその階の階層守護者になる。**守っているあいだは挑戦できない**
 //   ・自分の階層守護者が破られると解放され、**1つ上の階**へ挑戦できるようになる
-//   ・挑戦して負けると**1つ下**の階へ。ただし戦闘力が足りていれば落ちない
+//   ・挑戦して負けると**1つ下**の階へ（**戦闘力に関係なく必ず落ちる**）
 //   ・**挑戦者はHP/MPが毎回全回復、階層守護者は回復しない**（連続で守ると削れる）
 //   ・n連勝中の階層守護者に挑むと、挑戦者の**HP/MP以外の全ステが +5n%**
 //   ・EXPは勝敗によらず 9〜13。勝つと装備が落ちる
@@ -57,17 +57,12 @@ export const FLOOR_GROWTH = 1.114
 export const powerOfFloor = (floor) =>
   Math.round(FLOOR_BASE * Math.pow(FLOOR_GROWTH, Math.max(1, Math.min(FLOORS, floor)) - 1))
 
-// ★負けても「その戦闘力なら居ていい階」までしか落ちない（wikiの戦力値の上限）。
-//   目安を超えている階のうち、いちばん上の階が下限になる。
-export const floorLimitOf = (power) => {
-  let lo = 1
-  for (let f = 1; f <= FLOORS; f++) if (power >= powerOfFloor(f)) lo = f
-  return lo
-}
-
-// 負けたときに次に挑戦する階
-export const floorAfterLose = (floor, power) =>
-  Math.max(1, Math.max(floor - LOSE_DROP, Math.min(floor, floorLimitOf(power))))
+// 負けたときに次に挑戦する階。**戦闘力に関係なく、負けたら必ず1つ落ちる**
+// ⚠**「戦闘力が足りていれば落ちない」という下限は廃止した**（2026-08-17 ユーザー決定）。
+//   もともと wiki の「戦力値」を真似て入れていたが、**サーバー（v2_arena_fight）は
+//   その下限を実装しておらず必ず1つ落としていた**＝画面の「次は◯階から」だけがズレていた。
+//   権威はサーバーなので、そちらの挙動（必ず落ちる）へ合わせる。
+export const floorAfterLose = (floor) => Math.max(1, floor - LOSE_DROP)
 // 階層守護者を破られたときに次に挑戦する階（1つ上。最上階なら据え置き）
 export const floorAfterDefended = (floor) => Math.min(FLOORS, floor + 1)
 
