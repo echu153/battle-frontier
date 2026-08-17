@@ -6,10 +6,10 @@ import {
   powerOfFloor, floorAfterLose, floorAfterDefended,
   streakBonusPct, applyStreakBonus,
   npcClassOf, npcNameOf, npcStatsOf, npcSlotsOf, npcChampOf, champOf,
-  snapshotOf, fromSnapshot, expOf, rollDrop, canChallenge,
+  snapshotOf, fromSnapshot, expOf, canChallenge,
   GUARD_DROP_MULT, guardDropMultOf,
 } from './arena.js'
-import { dropRateOf, rollHasDrop } from './sortie.js'
+import { dropRateOf, rollHasDrop, DROP_RATE as SORTIE_DROP_RATE } from './sortie.js'
 import { STAT_KEYS, calcPower } from './stats.js'
 import { SKILL_BY_NAME, isPassive } from './skills.js'
 
@@ -143,7 +143,7 @@ test('champOf は空き階ならNPC、埋まっていればその人を返す', 
   assert.equal(p.streak, 4)
 })
 
-test('EXPは勝敗によらず9〜13、ドロップは確率', () => {
+test('EXPは勝敗によらず9〜13', () => {
   assert.equal(EXP_MIN, 9)
   assert.equal(EXP_MAX, 13)
   assert.equal(expOf(() => 0), 9)
@@ -152,8 +152,24 @@ test('EXPは勝敗によらず9〜13、ドロップは確率', () => {
     const e = expOf()
     assert.ok(e >= EXP_MIN && e <= EXP_MAX, `EXP ${e}`)
   }
-  assert.equal(rollDrop(() => 0), true)
-  assert.equal(rollDrop(() => 0.99), false)
+})
+
+test('★装備のドロップ率は出撃とまったく同じ（アリーナ独自の数字を持たない）', async () => {
+  // 2026-08-17まで arena.js が独自に25%を持っていて、出撃(3〜4%)の6〜8倍こぼれていた。
+  // クールタイムを共有する以上、1行動あたりの旨みは揃っていないといけない。
+  const arena = await import('./arena.js')
+  assert.equal(arena.DROP_RATE, undefined, 'arena.js に独自のドロップ率が戻っている')
+  assert.equal(arena.rollDrop, undefined, 'arena.js に独自の抽選が戻っている')
+  // 出撃側が唯一の正
+  assert.deepEqual(SORTIE_DROP_RATE, { 10: 3, 20: 4 })
+  assert.equal(dropRateOf(10), 3)
+  assert.equal(dropRateOf(20), 4)
+  // 同じ乱数なら出撃とアリーナで結果が一致する
+  for (const sec of [10, 20]) {
+    for (const n of [0.001, 0.029, 0.031, 0.039, 0.041, 0.5]) {
+      assert.equal(rollHasDrop(sec, () => n), n * 100 < dropRateOf(sec), `${sec}秒 rng=${n}`)
+    }
+  }
 })
 
 // ===== 階層守護者でいるあいだの恩恵（2026-08-17 ユーザー決定）=====

@@ -11,6 +11,10 @@
 //   ・**挑戦者はHP/MPが毎回全回復、階層守護者は回復しない**（連続で守ると削れる）
 //   ・n連勝中の階層守護者に挑むと、挑戦者の**HP/MP以外の全ステが +5n%**
 //   ・EXPは勝敗によらず 9〜13。勝つと装備が落ちる
+//     ★ドロップ率は**出撃とまったく同じ**（sortie.js の DROP_RATE ＝ 10秒3%／20秒4%）。
+//       2026-08-17まで独自の25%を持っていて、出撃の6〜8倍こぼれていた。
+//       クールタイムを共有する以上、1行動あたりの旨みは揃っていないといけない。
+//       ここに独自の数字を戻さないこと（arena.js からは定数ごと消してある）
 //   ・出撃（あるけみすとの「探索」）と**クールタイムを共有**する
 //
 // ★wikiに記載が無くこちらで決めたもの（2026-08-16）：
@@ -33,7 +37,6 @@ import { CLASS_BONUS } from './classBonus.js'
 export const FLOORS = 50          // 最上階
 export const EXP_MIN = 9          // 勝敗によらずもらえるEXP
 export const EXP_MAX = 13
-export const DROP_RATE = 25       // 勝ったときに装備が落ちる確率(%)
 export const STREAK_PCT = 5       // n連勝中の相手に挑むと 5n%（HP/MPを除く）
 export const LOSE_DROP = 1        // 負けたときに落ちる階数
 export const LOW_FLOOR = 30       // ここ以下は連勝補正が強化される（wikiの「30階以下」）
@@ -172,4 +175,4 @@ export const champOf = (floor, row, skillByName) => {
 export const canChallenge = ({ defending = null } = {}) => (defending ? '守っているあいだは挑戦できません' : '')
 
 export const expOf = (rng = Math.random) => EXP_MIN + Math.floor(rng() * (EXP_MAX - EXP_MIN + 1))
-export const rollDrop = (rng = Math.random) => rng() * 100 < DROP_RATE
+// ★装備が落ちるかどうかは出撃の rollHasDrop を使う（sortie.js）。ここには持たない
