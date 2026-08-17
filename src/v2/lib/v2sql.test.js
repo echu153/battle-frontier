@@ -120,3 +120,36 @@ test('v2_sell_materials は検証を全部済ませてから素材を引く（�
   // 金額はサーバーが持つ列から計算する（クライアントの申告を使わない）
   assert.match(body, /sum\(q\.qty \* m\.sell\)/, '売値は v2_materials.sell から計算する')
 })
+
+test('v2_daily_claim の目標と報酬が daily.js の LEVELS と一致している', async () => {
+  // ★受け取りの判定はサーバーが正。画面の表示（daily.js）とズレると
+  //   「達成に見えるのに受け取れない」が起きる
+  const { LEVELS } = await import('./daily.js')
+  const body = bodyOf('v2_daily_claim')
+  for (const lv of LEVELS) {
+    for (const [k, n] of Object.entries(lv.goals)) {
+      const re = new RegExp(`\\(v_c ->> '${k}'\\)::int, 0\\)\\s*>=\\s*${n}\\b`)
+      assert.match(body, re, `${lv.key} の ${k}=${n} がSQLに無い`)
+    }
+    const re = new RegExp(`v_exp := ${lv.reward.exp};\\s*v_gold := ${lv.reward.gold};`)
+    assert.match(body, re, `${lv.key} の報酬 EXP${lv.reward.exp}/${lv.reward.gold}G がSQLに無い`)
+  }
+})
+
+test('デイリーの内部ヘルパは authenticated から直接叩けない', () => {
+  // ⚠SECURITY DEFINER は既定で PUBLIC 実行可。数を好きに増やせてしまうので必ず REVOKE する
+  for (const fn of ['v2_daily_roll(uuid)', 'v2_daily_bump(uuid, text, int)']) {
+    assert.ok(SQL.includes(`revoke all on function public.${fn} from authenticated;`),
+      `${fn} が authenticated から REVOKE されていない`)
+    assert.ok(!SQL.includes(`grant execute on function public.${fn} to authenticated;`),
+      `${fn} が grant されている`)
+  }
+})
+
+test('デイリーの数える処理が4か所すべてに入っている', () => {
+  // 1つでも抜けるとその項目が永久に達成できない
+  assert.match(bodyOf('v2_sortie_settle'), /v2_daily_bump\(v_uid, 'sortie'/, '出撃')
+  assert.match(bodyOf('v2_arena_fight'),   /v2_daily_bump\(v_uid, 'arena'/,  'アリーナ')
+  assert.match(bodyOf('v2_extract_essence'), /v2_daily_bump\(v_uid, 'rune'/, 'ルーン作成')
+  assert.match(bodyOf('v2_pray'),          /v2_daily_bump\(v_uid, 'pray'/,   '祈る')
+})

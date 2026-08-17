@@ -1342,6 +1342,8 @@ begin
    where id = v_uid;
 
   v_res := public.v2_apply_exp(v_uid, v_exp);
+  -- デイリーミッション：この清算で戦った回数ぶん数える（通常敵＋ボス）
+  perform public.v2_daily_bump(v_uid, 'sortie', v_n + v_bs);
   return jsonb_build_object('ok', true, 'exp', v_exp, 'gold', 0, 'drops', v_ok,
     'unlocked', to_jsonb(v_unlocked), 'boss_rate', v_rate, 'level', v_res);
 end;
@@ -1727,6 +1729,9 @@ begin
     return jsonb_build_object('ok', false, 'error', '今日はもう祈りました（日本時間の5時に変わります）');
   end if;
 
+  -- デイリーミッション：実際に祈れた回だけ数える
+  perform public.v2_daily_bump(v_uid, 'pray', 1);
+
   -- ★報酬をここに入れる（未定）。v_name（大吉〜大凶）で分けて Gold や装備を配り、
   --   配ったものを 'reward' に文字列で入れて返すと、そのまま画面に出る。
   return jsonb_build_object('ok', true, 'fortune', v_name,
@@ -1855,6 +1860,9 @@ begin
   insert into public.v2_essences (player_id, color, stats, ability_choices)
   values (v_uid, v_color, v_stats, v_choices)
   returning * into v_ess;
+
+  -- デイリーミッション：ルーンを1個作った
+  perform public.v2_daily_bump(v_uid, 'rune', 1);
 
   return jsonb_build_object('ok', true, 'essence', to_jsonb(v_ess));
 end;
@@ -2182,6 +2190,8 @@ begin
 
   -- EXPは勝敗によらず入る（保護トリガー対応で、付与は必ず v2_apply_exp を通す）
   if v_exp > 0 then v_lv := public.v2_apply_exp(v_uid, v_exp); end if;
+  -- デイリーミッション：勝敗によらず「挑戦1回」として数える
+  perform public.v2_daily_bump(v_uid, 'arena', 1);
 
   -- ★装備は**勝敗によらず**落ちる（2026-08-17 ユーザー決定）。確率は出撃と同じで、
   --   落ちるランクはどの階でも同じ表（src/v2/lib/arena.js の DROP_RANKS）
@@ -3282,3 +3292,138 @@ $$;
 revoke all on function public.v2_base_dev_reset() from public;
 revoke all on function public.v2_base_dev_reset() from anon;
 grant execute on function public.v2_base_dev_reset() to authenticated;
+
+-- ============================================================
+-- ===== 11. デイリーミッション =====
+-- ------------------------------------------------------------
+-- 1日1組。**難易度を2つから選ぶ**（毎日の最初のログインで選ぶ）。
+-- 4つ（出撃／アリーナ挑戦／ルーン作成／祈る）を全部こなすとEXPとGoldをもらえる。
+--   easy   … 20 / 1 / 1 / 1 → EXP+60・100G
+--   normal … 100 / 5 / 3 / 1 → EXP+180・300G
+--
+-- ★日付が変わるのは**日本時間の5時**（宝樹と同じ）。
+-- ★数える権威はサーバー。出撃・アリーナ・抽出・祈るの各RPCが v2_daily_bump を呼ぶ。
+--   数字の正は src/v2/lib/daily.js（LEVELS）。片方だけ直すとズレる。
+-- ★**難易度を選ぶ前でも数える**（あとから選んでも進捗を捨てない）。
+-- ============================================================
+alter table public.v2_profiles add column if not exists daily_day     date;
+alter table public.v2_profiles add column if not exists daily_level   text;
+alter table public.v2_profiles add column if not exists daily_counts  jsonb   not null default '{}'::jsonb;
+alter table public.v2_profiles add column if not exists daily_claimed boolean not null default false;
+
+-- ===== 内部ヘルパ：日付が変わっていたら今日ぶんに切り替える =====
+-- ⚠SECURITY DEFINER の内部ヘルパは既定で PUBLIC 実行可なので、必ず REVOKE する
+--   （旧版で protect_stats を迂回できた穴と同じ）。RPCからだけ呼ぶ。
+create or replace function public.v2_daily_roll(p_player uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_today date := ((now() at time zone 'Asia/Tokyo') - interval '5 hours')::date;
+begin
+  update public.v2_profiles
+     set daily_day = v_today, daily_level = null,
+         daily_counts = '{}'::jsonb, daily_claimed = false, updated_at = now()
+   where id = p_player and daily_day is distinct from v_today;
+end;
+$$;
+revoke all on function public.v2_daily_roll(uuid) from public;
+revoke all on function public.v2_daily_roll(uuid) from anon;
+revoke all on function public.v2_daily_roll(uuid) from authenticated;
+
+-- ===== 内部ヘルパ：進み具合を数える =====
+-- p_key は 'sortie' / 'arena' / 'rune' / 'pray'（daily.js の TASK_KEYS）
+create or replace function public.v2_daily_bump(p_player uuid, p_key text, p_n int default 1)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if p_player is null or p_key is null or coalesce(p_n, 0) <= 0 then return; end if;
+  if p_key not in ('sortie', 'arena', 'rune', 'pray') then return; end if;
+  perform public.v2_daily_roll(p_player);
+  update public.v2_profiles
+     set daily_counts = jsonb_set(coalesce(daily_counts, '{}'::jsonb), array[p_key],
+           to_jsonb(coalesce((daily_counts ->> p_key)::int, 0) + p_n), true),
+         updated_at = now()
+   where id = p_player;
+end;
+$$;
+revoke all on function public.v2_daily_bump(uuid, text, int) from public;
+revoke all on function public.v2_daily_bump(uuid, text, int) from anon;
+revoke all on function public.v2_daily_bump(uuid, text, int) from authenticated;
+
+-- ===== 難易度を選ぶ =====
+-- ★一度選んだら、その日は変えられない（かんたんで受け取ってからふつうへ、を防ぐ）
+create or replace function public.v2_daily_pick(p_level text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid(); v_cur text;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_level not in ('easy', 'normal') then return jsonb_build_object('ok', false, 'error', '難易度が不正です'); end if;
+
+  perform public.v2_daily_roll(v_uid);
+  select daily_level into v_cur from public.v2_profiles where id = v_uid;
+  if v_cur is not null then
+    return jsonb_build_object('ok', false, 'error', '今日の難易度はもう選びました', 'level', v_cur);
+  end if;
+
+  update public.v2_profiles set daily_level = p_level, updated_at = now() where id = v_uid;
+  return jsonb_build_object('ok', true, 'level', p_level,
+                            'profile', (select to_jsonb(p) from public.v2_profiles p where p.id = v_uid));
+end;
+$$;
+revoke all on function public.v2_daily_pick(text) from public;
+revoke all on function public.v2_daily_pick(text) from anon;
+grant execute on function public.v2_daily_pick(text) to authenticated;
+
+-- ===== 報酬を受け取る =====
+-- ★達成の判定も報酬もサーバーが決める（クライアントは金額を送らない）。
+--   数字は src/v2/lib/daily.js の LEVELS と同じにすること。
+create or replace function public.v2_daily_claim()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_lv    text;
+  v_c     jsonb;
+  v_exp   int;
+  v_gold  bigint;
+  v_ok    boolean;
+  v_res   jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  perform public.v2_daily_roll(v_uid);
+
+  select daily_level, coalesce(daily_counts, '{}'::jsonb) into v_lv, v_c
+    from public.v2_profiles where id = v_uid;
+  if v_lv is null then return jsonb_build_object('ok', false, 'error', '難易度を選んでください'); end if;
+
+  -- ★ src/v2/lib/daily.js の LEVELS と同じ数字
+  if v_lv = 'easy' then
+    v_ok := coalesce((v_c ->> 'sortie')::int, 0) >= 20
+        and coalesce((v_c ->> 'arena')::int, 0)  >= 1
+        and coalesce((v_c ->> 'rune')::int, 0)   >= 1
+        and coalesce((v_c ->> 'pray')::int, 0)   >= 1;
+    v_exp := 60;  v_gold := 100;
+  else
+    v_ok := coalesce((v_c ->> 'sortie')::int, 0) >= 100
+        and coalesce((v_c ->> 'arena')::int, 0)  >= 5
+        and coalesce((v_c ->> 'rune')::int, 0)   >= 3
+        and coalesce((v_c ->> 'pray')::int, 0)   >= 1;
+    v_exp := 180; v_gold := 300;
+  end if;
+  if not v_ok then return jsonb_build_object('ok', false, 'error', 'まだ達成していない項目があります'); end if;
+
+  -- ★受け取り済みにするのと同じ1文で弾く＝連打しても二重に受け取れない
+  update public.v2_profiles
+     set daily_claimed = true, gold = gold + v_gold, updated_at = now()
+   where id = v_uid and daily_claimed = false;
+  if not found then return jsonb_build_object('ok', false, 'error', '今日はもう受け取りました'); end if;
+
+  -- EXPの付与は必ず v2_apply_exp を通す（保護トリガー対応）
+  v_res := public.v2_apply_exp(v_uid, v_exp);
+
+  return jsonb_build_object('ok', true, 'level', v_lv, 'exp', v_exp, 'gold', v_gold,
+                            'level_up', v_res,
+                            'profile', (select to_jsonb(p) from public.v2_profiles p where p.id = v_uid));
+end;
+$$;
+revoke all on function public.v2_daily_claim() from public;
+revoke all on function public.v2_daily_claim() from anon;
+grant execute on function public.v2_daily_claim() to authenticated;

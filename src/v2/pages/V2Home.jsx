@@ -18,6 +18,7 @@ import V2Status, { V2Menu } from '../components/V2Status.jsx'
 import V2Profile from '../components/V2Profile.jsx'
 import V2Tree from '../components/V2Tree.jsx'
 import V2Arena from '../components/V2Arena.jsx'
+import V2Daily from '../components/V2Daily.jsx'
 import V2Base from '../components/V2Base.jsx'
 import {
   powerText, isPassive, KIND_LABEL, KIND_COLOR, SKILL_BY_NAME,
@@ -342,6 +343,12 @@ export default function V2Home() {
                 （施設の一覧を見るのに、毎回ステータスぶんスクロールさせられていた） */}
             {screen === 'home' && (
               <V2Status prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
+            )}
+
+            {/* ===== デイリーミッション（ステータスのすぐ下）=====
+                ★難易度を選んでいない日は畳まずに出す＝その日の最初に選ばせる */}
+            {screen === 'home' && !inBattle && (
+              <V2Daily prof={prof} onProfile={refresh} embedded />
             )}
 
             {/* ===== 出撃とアリーナ（旧版と同じで、街のブロックがそのままホームに載る） =====
