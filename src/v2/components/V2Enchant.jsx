@@ -188,9 +188,7 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
                 fontFamily:'monospace', fontSize:'11px', cursor: canPick(m) ? 'pointer' : 'default' }}>
               <span style={{ color: RARITY_COLOR[m.rarity] }}>{m.name}</span>
               {' '}<span style={{ color:'#ffffff' }}>×{left(m.id)}</span>
-              <span style={{ color:'#93a9be' }}>
-                　{m.enemy}　{m.stats.map(k => STAT_DEFS[k].label).join('・')}
-              </span>
+              <span style={{ color:'#93a9be' }}>{'　'}{m.enemy}{'　'}{m.stats.map(k => STAT_DEFS[k].label).join('・')}</span>
               {m.isBoss && <span style={{ color:'#ffcc44' }}>　ボス素材</span>}
             </button>
           ) : null)}
