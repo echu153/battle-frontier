@@ -254,6 +254,22 @@ test('上限が下がったときは、切り捨てる前に資材へ回収す�
   assert.match(body, /v_new := v_new - v_over/, '回収したぶんを pending から引いていない')
 })
 
+test('まとめて回収と釣りメダルの交換はポップアップで出す', () => {
+  // ★中身が長いので、その場に出すと上へスクロールしないと読めない（ユーザー指示）
+  const src = readFileSync(new URL('../components/V2Base.jsx', import.meta.url), 'utf8')
+  const has = (a, b, span) => {
+    const i = src.indexOf(a)
+    return i >= 0 && src.slice(i, i + span).includes(b)
+  }
+  assert.ok(src.includes("import V2Modal from './V2Modal.jsx'"), 'ポップアップを読み込んでいない')
+  assert.ok(src.includes('<V2Modal'), 'ポップアップを描いていない')
+  // まとめて回収（key が null）だけポップアップ、1施設ならその場
+  assert.ok(has('const collect = async', 'else setPopup(', 600),
+    'まとめて回収をポップアップにしていない')
+  assert.ok(has('v2_fish_to_medal', 'setPopup(', 400), '魚→メダルをポップアップにしていない')
+  assert.ok(has('v2_fish_shop_buy', 'setPopup(', 400), 'メダルの交換をポップアップにしていない')
+})
+
 test('配置替えは自動回収した量を返し、画面もそれを出す', () => {
   // ★黙って資材が増えると「なぜ増えたのか」が分からない（設計メモの約束）
   const body = bodyOf('v2_base_move_worker')

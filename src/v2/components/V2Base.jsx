@@ -16,6 +16,7 @@ import {
 } from '../lib/fishing.js'
 import { STAT_DEFS } from '../lib/stats.js'
 import { box, btn, miniBtn, TEXT } from './v2ui.js'
+import V2Modal from './V2Modal.jsx'
 
 // ============================================================
 // 施設「拠点」— 開発限定
@@ -36,7 +37,10 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
-  const [msg, setMsg] = useState(null)          // 回収・拡張などの結果
+  const [msg, setMsg] = useState(null)          // その場に出す結果（拡張・雇用・売却など）
+  // ★まとめて回収と釣りメダルの交換は**中身が長くなる**ので、画面の中央に出す。
+  //   その場に出すと、上へスクロールしないと何を手に入れたのか読めない
+  const [popup, setPopup] = useState(null)      // { title, color, lines, warn }
   const [tab, setTab] = useState('facilities')  // facilities / exchange / dex / medal
   const [now, setNow] = useState(Date.now())
   const [moveFrom, setMoveFrom] = useState('')
@@ -101,7 +105,7 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
 
   const call = async (fn, args, label) => {
     if (busy) return null
-    setBusy(label); setError(''); setMsg(null)
+    setBusy(label); setError(''); setMsg(null); setPopup(null)
     const { data, error: err } = await supabase.rpc(fn, args)
     setBusy('')
     if (err || !data?.ok) { setError(err?.message || data?.error || 'うまくいきませんでした'); return null }
@@ -140,7 +144,10 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
     const d = await call('v2_base_collect', { p_key: key || null }, `collect:${key || 'all'}`)
     if (!d) return
     const lines = haulLines(d)
-    setMsg({ lines: lines.length ? lines : ['回収できるものがありませんでした'], warn: haulWarn(d) })
+    const body = { lines: lines.length ? lines : ['回収できるものがありませんでした'], warn: haulWarn(d) }
+    // まとめて回収は中身が長いのでポップアップ。1施設だけならその場に出す
+    if (key) setMsg(body)
+    else setPopup({ title:'📦 回収しました', color:'#8fcf6f', ...body })
   }
 
   // ★サーバーは拡張の前に必ず回収する（低いグレードで貯めたぶんが上に化けないように）。
@@ -240,14 +247,16 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
     if (!heldFish.length) return
     const d = await call('v2_fish_to_medal', { p_items: heldFish.map(r => ({ id: r.id, qty: r.qty })) }, 'medal')
     if (!d) return
-    setMsg({ lines: [`🪙 釣りメダル +${n(d.gained)}（所持 ${n(d.medals)}枚）`], warn: [] })
+    setPopup({ title:'🪙 釣りメダルに交換しました', color:'#66ccff', warn: [],
+      lines: [`釣りメダル +${n(d.gained)}枚`, `所持 ${n(d.medals)}枚`] })
   }
 
   const buy = async (id, label) => {
     const d = await call('v2_fish_shop_buy', { p_id: id, p_qty: 1 }, `buy:${id}`)
     if (!d) return
     const got = (d.got || []).map(g => g.name || g.label).join(' / ')
-    setMsg({ lines: [`🪙 ${label} と交換しました：${got}（残り ${n(d.medals)}枚）`], warn: [] })
+    setPopup({ title:'🪙 交換しました', color:'#66ccff', warn: [],
+      lines: [`${label}`, `→ ${got}`, `残り ${n(d.medals)}枚`] })
   }
 
   if (loading) {
@@ -717,6 +726,18 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
           値段の目安：エリア番号 × 通常{SHOP_MATERIAL_COST.normal} / レア{SHOP_MATERIAL_COST.rare} / 激レア{SHOP_MATERIAL_COST.ultra}枚
         </div>
       </>)}
+
+      {/* ★中身が長くなるもの（まとめて回収・釣りメダルの交換）は画面の中央に出す */}
+      {popup && (
+        <V2Modal title={popup.title} color={popup.color} onClose={() => setPopup(null)}>
+          {popup.lines.map((l, i) => (
+            <div key={i} style={{ color:'#9be7a8', whiteSpace:'pre-wrap' }}>{l}</div>
+          ))}
+          {popup.warn.map((l, i) => (
+            <div key={`w${i}`} style={{ color:'#ffaa66', marginTop:'4px' }}>{l}</div>
+          ))}
+        </V2Modal>
+      )}
     </div>
   )
 }
