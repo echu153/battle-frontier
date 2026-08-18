@@ -12,6 +12,11 @@
 import { writeFileSync } from 'node:fs'
 import { SKILLS, isPassive, isBasicClass, powerText } from '../src/v2/lib/skills.js'
 
+// ★ブリーダーは突き合わせから外す（2026-08-18 ユーザー決定）。
+//   旧版はペット共闘の職業で、v2にペットが無いぶん効果をまるごと作り直す前提＝
+//   いまの数字は仮置き。仮の数字を基準に他職を動かすと二度手間になる。
+const EXCLUDE_CLASSES = ['ブリーダー']
+
 const STATS = ['str','int_stat','agi','dex','vit','luk']
 const LABEL = { str:'STR', int_stat:'INT', agi:'AGI', dex:'DEX', vit:'VIT', luk:'LUK' }
 const num = (x) => (x === undefined || x === null ? 0 : x)
@@ -84,7 +89,7 @@ const dominates = (A, B) => {
   return strict
 }
 
-const list = SKILLS.filter(s => !isPassive(s))
+const list = SKILLS.filter(s => !isPassive(s) && !EXCLUDE_CLASSES.includes(s.cls))
 const pairs = []
 for (const B of list) for (const A of list) if (dominates(A, B)) pairs.push([A, B])
 
@@ -128,6 +133,7 @@ const md = `# バトルフロンティアⅡ スキル効果の突き合わせ�
 - **実質** … 合計係数 × 発動率。物理と魔法は防御の効きが違うので**種別をまたいで比べない**
   （同格で物理×0.83／魔法×0.733＝**魔法は物理の1.13倍でようやく並ぶ**）
 - パッシブは軸が違うので表から外してある（[v2-skills.md](v2-skills.md) を参照）
+- ⚠**${EXCLUDE_CLASSES.join("・")}は表から外してある**（効果をまるごと作り直す前提＝いまの数字は仮置きのため）
 
 ## 完全下位互換
 
