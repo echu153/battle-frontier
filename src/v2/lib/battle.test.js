@@ -194,3 +194,26 @@ test('割合消費のスキルは残りMPの割合を払い、撃ち切れない
   assert.equal(mpCostOf({ mp: 500 }, mana), 100)
   assert.equal(mpCostOf({ mp: 500 }, sk('固定', { mp: 30 })), 30)
 })
+
+// ★2026-08-18：侍の居合斬・月影で**プレイヤー側のスキルにも状態異常を解禁**した。
+//   それまで ail を持っていたのは敵の技とエンチャントのルーンだけで、
+//   プレイヤーのスキルは一度も tryInflict を通っていなかった＝経路が生きているかの確認。
+test('プレイヤーのスキルの状態異常が相手に入る（侍の出血）', () => {
+  const iai = sk('出血テスト', { proc:100, ail:{ key:'bleed', chance:100 } })
+  const r = runBattle(
+    fighter('me', [{ skill: iai, uses: 99 }]),
+    fighter('foe', [], { ...evenStats(534), hp: 10 ** 7 }),
+    { rng: makeRng(7), maxTurns: 6 })
+  assert.ok(r.log.some(l => l.type === 'ailment' && l.ail === '出血'), '出血が付いていない')
+  assert.ok(r.log.some(l => l.type === 'ailTick' && l.ail === '出血' && l.damage > 0), '出血が刻んでいない')
+})
+
+test('侍は出血役（居合斬20%・月影40%）', () => {
+  // 無印の侍が出血を撒く職業だったのを踏襲している。数字を消したら気付けるように固定する
+  const by = Object.fromEntries(skillsOf('侍').map(s => [s.name, s]))
+  assert.deepEqual(by['居合斬'].ail, { key:'bleed', chance:20 })
+  assert.deepEqual(by['月影'].ail, { key:'bleed', chance:40 })
+  // 出血は割合ダメージ＝倍率の帯とは別枠の価値なので、素の倍率は帯の上限を超えていない
+  assert.ok(by['居合斬'].mult + by['居合斬'].add[0].rate <= 1.9)
+  assert.equal(by['月影'].mult, 2.4)
+})

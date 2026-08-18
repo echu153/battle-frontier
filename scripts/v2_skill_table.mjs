@@ -11,6 +11,7 @@
 // ============================================================
 import { writeFileSync } from 'node:fs'
 import { SKILLS, isPassive, isBasicClass, powerText } from '../src/v2/lib/skills.js'
+import { AIL_LABEL } from '../src/v2/lib/ailments.js'
 
 // ★ブリーダーは突き合わせから外す（2026-08-18 ユーザー決定）。
 //   旧版はペット共闘の職業で、v2にペットが無いぶん効果をまるごと作り直す前提＝
@@ -51,6 +52,7 @@ const extras = (s) => {
   for (const k of STATS) {
     const v = num(s.buff?.enemy?.[k]); if (v) out.push(`敵${LABEL[k]}${v > 0 ? '+' : ''}${v}%`)
   }
+  if (s.ail) out.push(`${AIL_LABEL[s.ail.key] || s.ail.key}${s.ail.chance}%`)
   if (s.heal)    out.push(`即時回復 INT×${s.heal.rate}`)
   if (s.regen)   out.push(`継続回復 INT×${s.regen.rate}×${s.regen.turns}T`)
   if (s.mpRegen) out.push(`MP回復 INT×${s.mpRegen.rate}×${s.mpRegen.turns}T`)
@@ -86,6 +88,12 @@ const dominates = (A, B) => {
     if (!ge(tot(A), tot(B))) return false
   }
   if (!ge(num(A.priority), num(B.priority))) return false
+  // 状態異常。**種類が違ったら比較不能**（出血と麻痺のどちらが上とは言えない）。
+  // 同じ種類なら確率が高いほうが上。片方だけ持っているならそちらが上
+  if (A.ail && B.ail && A.ail.key !== B.ail.key) return false
+  if (!A.ail && B.ail) return false
+  if (A.ail && !B.ail) strict = true
+  if (A.ail && B.ail && !ge(num(A.ail.chance), num(B.ail.chance))) return false
   return strict
 }
 
