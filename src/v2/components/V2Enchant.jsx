@@ -33,14 +33,27 @@ const statLine = (stats) =>
     .map(([k, v]) => `${STAT_DEFS[k]?.label || k}+${v}%`)
     .join(' / ')
 
-// ルーン1個の見出し
-function RuneTag({ e, size = '11px' }) {
+// 付与された特殊能力の1行。★敵の名前ではなく**実際の効果**を出す
+//   （名前だけだと何が起きるのか分からない。出どころは後ろに小さく添える）
+function AbilityLine({ ability }) {
+  if (!ability) return null
+  return (
+    <div style={{ color:'#ffcc44', fontSize:'12px', marginTop:'4px' }}>
+      【特殊能力】{enchantOf(ability)?.text || ability}
+      <span style={{ color:'#7fa6d0', fontSize:'10px', marginLeft:'6px' }}>（{ability}）</span>
+    </div>
+  )
+}
+
+// ルーン1個の見出し。showAbility=false にすると★の部分を出さない
+//（結果のポップアップは AbilityLine で別行に出すので、二重にならないようにする）
+function RuneTag({ e, size = '11px', showAbility = true }) {
   return (
     <span style={{ color: COLOR_HEX[e.color], fontSize: size }}>
       ●{COLOR_LABEL[e.color]}
       {' '}<b>{runeName(e.color, e.stats)}</b>
       {' '}<span style={{ color:'#88ccff' }}>{statLine(e.stats)}</span>
-      {e.ability && <span style={{ color:'#ffcc44' }}>　★{e.ability}</span>}
+      {showAbility && e.ability && <span style={{ color:'#ffcc44' }}>　★{e.ability}</span>}
     </span>
   )
 }
@@ -477,15 +490,16 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
           closeLabel={!result.ability && (result.ability_choices || []).length > 0 ? 'あとで選ぶ' : '受け取る'}>
           {/* ルーン本体は左、合計値は右端。長いと折り返すので flexWrap を付けておく */}
           <div style={{ display:'flex', alignItems:'baseline', gap:'8px', flexWrap:'wrap' }}>
-            <RuneTag e={result} size="15px" />
+            <RuneTag e={result} size="15px" showAbility={false} />
             <span style={{ marginLeft:'auto', color:'#44ff88', fontSize:'12px', whiteSpace:'nowrap' }}>
               （合計値：{runePower(result.stats)}%）
             </span>
           </div>
+          <AbilityLine ability={result.ability} />
           {/* 特殊能力が当たっていたら、候補から1つ選ぶ */}
           {!result.ability && (result.ability_choices || []).length > 0 && (
             <div style={{ marginTop:'10px' }}>
-              <div style={{ color:'#ffcc44', fontSize:'11px', marginBottom:'4px' }}>★特殊能力が付いた！ 1つ選ぶ</div>
+              <div style={{ color:'#ffcc44', fontSize:'11px', marginBottom:'4px' }}>ルーンに付与する特殊能力を1つ選んでください</div>
               {result.ability_choices.map(name => (
                 <button key={name} disabled={busy}
                   onClick={async () => {
@@ -505,11 +519,12 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
       {sealed && (
         <V2Modal title="◈ 刻印した！" color={COLOR_HEX[sealed.rune.color]} onClose={() => setSealed(null)}>
           <div style={{ display:'flex', alignItems:'baseline', gap:'8px', flexWrap:'wrap' }}>
-            <RuneTag e={sealed.rune} size="15px" />
+            <RuneTag e={sealed.rune} size="15px" showAbility={false} />
             <span style={{ marginLeft:'auto', color:'#44ff88', fontSize:'12px', whiteSpace:'nowrap' }}>
               （合計値：{runePower(sealed.rune.stats)}%）
             </span>
           </div>
+          <AbilityLine ability={sealed.rune.ability} />
           <div style={{ color:'#88ccff', marginTop:'6px' }}>
             <b>{sealed.target.name}</b> の ●{COLOR_LABEL[sealed.target.color]}の枠 に刻印した！
           </div>
