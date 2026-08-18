@@ -7,6 +7,7 @@ import {
 } from './classBonus.js'
 import { STAT_KEYS } from './stats.js'
 import { createSide } from './battle.js'
+import { skillsOf } from './skills.js'
 
 test('全職にメインとサブが割り振ってある（マスクデータ）', () => {
   for (const [cls, b] of Object.entries(CLASS_BONUS)) {
@@ -88,4 +89,50 @@ test('戦闘にも効く（fighter.jobCount ぶん強くなる）', () => {
   assert.ok((b.buffs.str || 0) > (a.buffs.str || 0), '転職回数でSTRのバフが増えていない')
   assert.equal(a.buffs.str, 5)
   assert.equal(b.buffs.str, 10)   // 5 + 50回ぶん(5.0)
+})
+
+// ============================================================
+// ★2026-08-18 ユーザー指摘：**職業のスキルは、その職業の main / sub を両方使うこと**。
+//   侍は明鏡止水でDEX+20%を配るのに、どのスキルもDEXを見ていなかった＝バフが噛み合っていなかった。
+//   「使う」＝威力の参照（主参照・副参照）／自己バフ／パッシブの対象、のどれかに出てくること。
+//   ⚠main/sub はマスクデータなので画面には出さない。ここはコードの整合だけを見る。
+//
+//   TODO_REBUILD に載っている職業は**まだ無印ベースの作り直しをしていない**ので免除。
+//   1職ずつ作り直すたびにこの配列から消すこと（空になったら免除ごと消す）。
+// ============================================================
+const TODO_REBUILD = [
+  '狂戦士', '元素使い', '死霊使い', '異端審問官', 'サイキッカー', '式神使い',
+  '賢者', '魔銃士', 'ビーストレンジャー', 'ギャンブラー', '竜騎士',
+]
+
+const statsUsedBy = (s) => {
+  const out = new Set()
+  if (s.kind === 'phys') out.add('str')
+  if (s.kind === 'mag' || s.kind === 'heal') out.add('int_stat')
+  for (const a of s.add || []) out.add(a.stat)
+  for (const k of Object.keys(s.buff?.self || {})) out.add(k)
+  const p = s.passive || {}
+  for (const k of Object.keys(p.statPct || {})) out.add(k)
+  if (p.convert) { out.add(p.convert.from); out.add(p.convert.to) }
+  if (p.rage) out.add(p.rage.stat)
+  if (p.lowHp) out.add(p.lowHp.stat)
+  if (p.switchStat) out.add(p.switchStat.stat)
+  return out
+}
+
+test('作り直し済みの職業は、スキルが職業補正のメイン・サブを両方使う', () => {
+  for (const [cls, b] of Object.entries(CLASS_BONUS)) {
+    if (TODO_REBUILD.includes(cls)) continue
+    const all = new Set()
+    for (const s of skillsOf(cls)) for (const k of statsUsedBy(s)) all.add(k)
+    for (const key of [b.main, b.sub]) {
+      assert.ok(all.has(key), `${cls}: 職業補正が伸ばす ${key} をどのスキルも使っていない（使うステ: ${[...all].join(',')}）`)
+    }
+  }
+})
+
+test('作り直しの残りが分かるようになっている', () => {
+  // ★消し忘れ防止。ここに残っている職業＝まだ無印ベースで作り直していない
+  for (const cls of TODO_REBUILD) assert.ok(CLASS_BONUS[cls], `${cls} は職業として存在しない`)
+  assert.ok(!TODO_REBUILD.includes('侍'), '侍は作り直し済み（2026-08-18）')
 })

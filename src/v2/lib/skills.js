@@ -161,8 +161,10 @@ export const SKILLS = [
   //  ・職業ごとに参照するステータスを変えて、役割が被らないようにしてある
   // ============================================================
 
-  // ===== 侍（STR＋AGI・防御無視） =====
-  { name:'居合斬',   cls:'侍', kind:'phys', mult:1.5, add:[{ stat:'agi', rate:0.4 }], proc:90, mp:12, ail:{ key:'bleed', chance:20 }, desc:'抜き打ち。AGIも威力になる。20%で出血' },
+  // ===== 侍（STR＋DEX・出血・防御無視） =====
+  // ★参照するステは職業補正の main/sub に合わせる（侍は main=STR / sub=DEX）。
+  //   バフでDEXを上げるのに威力がDEXを見ていない、のような噛み合わない状態を作らない
+  { name:'居合斬',   cls:'侍', kind:'phys', mult:1.5, add:[{ stat:'dex', rate:0.4 }], proc:90, mp:12, ail:{ key:'bleed', chance:20 }, desc:'抜き打ち。DEXも威力になる。20%で出血' },
   { name:'断空',     cls:'侍', kind:'phys', mult:2, defPen:0.5, proc:85, mp:16, desc:'相手の防御を50%無視' },
   { name:'居合の構え', cls:'侍', kind:'passive', mp:0, passive:{ misfireAtkMult:2 }, desc:'スキルが不発したとき、代わりに出る通常攻撃の威力が2倍になる' },
   { name:'明鏡止水', cls:'侍', kind:'buff', proc:100, mp:12, buff:{ self:{ str:30, dex:20 } }, priority:1, desc:'STR+30%・DEX+20%（重ねがけ可）' },
