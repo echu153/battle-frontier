@@ -106,6 +106,11 @@ test('★戦い方の偏りがそのまま能力になる', () => {
 
 test('偏りが強いほど大きい値が付く。段階ごとの上限は超えない', () => {
   assert.deepEqual(STAGE_CAP, [6, 10, 15])
+  // 偏りの強さは0〜1に丸められる（振り切っても1を超えない）
+  const crit = TRAIT_BY_KEY.crit
+  assert.equal(strengthOf(rec({ hits:100, crit:100 }), crit), 1)
+  assert.equal(strengthOf(rec({ hits:100, crit:0 }), crit), 0)
+  assert.ok(strengthOf(rec({ hits:100, crit:10 }), crit) > 0)
   const base = { battles:600, hits:2000, taken:2000, wins:500, turns:6600 }
   const strong = rec({ ...base, crit: 2000 })   // クリ率100%＝振り切り
   const weak   = rec({ ...base, crit: 100 })    // クリ率5%＝素のまま

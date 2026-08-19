@@ -14,6 +14,8 @@ import {
   floorAfterLose, expOf, canChallenge, STREAK_PCT, GUARD_DROP_MULT, DROP_RANKS,
 } from '../lib/arena.js'
 import { box, btn, miniBtn, RANK_COLOR, dropLine } from './v2ui.js'
+import V2Evolve from './V2Evolve.jsx'
+import { pushWeaponRecord } from './weaponRecord.js'
 
 // アリーナ（あるけみすとの天空闘技場と同じ仕組み）。
 // ★戦闘はここで回して、結果を v2_arena_fight へ申告する（出撃と同じ形）。
@@ -29,6 +31,8 @@ export default function V2Arena({ prof, inventory, runes, fishDex, onProfile, on
   const [msg, setMsg] = useState('')
   const [now, setNow] = useState(Date.now())
   const [showList, setShowList] = useState(!embedded)   // 階の一覧（ホームでは畳んでおく）
+  // 武器の進化：節目に達した武器（ポップアップで受け取る）
+  const [evolving, setEvolving] = useState(null)
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 200); return () => clearInterval(t) }, [])
 
@@ -108,6 +112,9 @@ export default function V2Arena({ prof, inventory, runes, fishDex, onProfile, on
       return
     }
     if (data.level?.ups > 0) setLogs(l => [...l, { text:`🆙 レベルアップ！ LV${data.level.lv}`, color:'#44ff88' }])
+    // ★武器の進化（戦闘記憶）。出撃とまったく同じ関数を通す（片方だけ入れ忘れない）
+    const ready = await pushWeaponRecord(prof, inventory, r, mine.name, champ.name)
+    if (ready.length) setEvolving(ready[0])
     await load()
     onProfile(null)
   }
@@ -120,9 +127,15 @@ export default function V2Arena({ prof, inventory, runes, fishDex, onProfile, on
     await load(); onProfile(null)
   }
 
+  // 節目に達した武器のポップアップ（出撃・アリーナで同じものを使う）
+  const evolveModal = evolving
+    ? <V2Evolve pending={evolving} inventory={inventory} onDone={() => { setEvolving(null); onProfile(null) }} />
+    : null
+
   if (scene === 'battle') {
     return (
       <div style={{ ...box, padding:'12px' }}>
+        {evolveModal}
         <div style={{ color:'#ff88cc', fontSize:'13px', marginBottom:'10px' }}>⚔ アリーナ {floor}階</div>
         {busy && <div style={{ color:'#7fa6d0', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
         <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
@@ -137,6 +150,7 @@ export default function V2Arena({ prof, inventory, runes, fishDex, onProfile, on
 
   return (
     <div>
+      {evolveModal}
       {!embedded && <button onClick={onBack} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>}
 
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>

@@ -5,7 +5,7 @@
 // 旧版の「SQL の定数がテストの写しと一致している」テストと同じ考え方。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { RATES } from './smith.js'
 import { RANKS } from './equipment.js'
 import { SELL_BASE, SELL_RARITY_MULT } from './material.js'
@@ -190,4 +190,65 @@ test('出撃のデイリー加算がクールタイム別になっている（20
   assert.match(body, /v2_daily_bump\(v_uid, 'sortie'/, '出撃のデイリー加算がある')
   assert.match(body, /case when v_row\.sortie_cd = 20 then 2 else 1 end/,
     '20秒を2倍にする分岐がSQLに無い')
+})
+
+// ===== 武器の進化（戦闘記憶）=====
+// ★節目と上限は evolve.js と v2_weapon_evolve の2か所にある。片方だけ直すと
+//   「画面には進化できると出るのにサーバーに弾かれる」または「上限を超えた値が通る」になる
+test('武器の進化の節目・上限・能力のキーが evolve.js とSQLで一致している', async () => {
+  const { STAGES, STAGE_CAP, TRAITS, FOES_KEEP } = await import('./evolve.js')
+  const body = bodyOf('v2_weapon_evolve')
+  assert.ok(body.includes(`array[${STAGES.join(', ')}]`), `節目 ${STAGES} がSQLと違う`)
+  assert.ok(body.includes(`array[${STAGE_CAP.join(', ')}]`), `上限 ${STAGE_CAP} がSQLと違う`)
+  const keys = TRAITS.map(t => `'${t.key}'`).join(',')
+  assert.ok(body.includes(`array[${keys}]`), `能力のキーがSQLと違う（${keys}）`)
+  // 戦績を積む側の上限も合わせる
+  const rec = bodyOf('v2_weapon_record')
+  assert.ok(rec.includes(`c_foes_keep constant int := ${FOES_KEEP};`), '敵の記録の上限がSQLと違う')
+  assert.ok(rec.includes(`array[${STAGES.join(', ')}];`), '節目がSQLと違う')
+})
+
+test('v2_weapon_record は1戦ぶんの申告を頭打ちにする（言い値で積ませない）', () => {
+  const body = bodyOf('v2_weapon_record')
+  // 戦闘はクライアントが回すので、素直に足すと熟練度も戦績もいくらでも盛れる
+  const has = (t, msg) => assert.ok(body.includes(t), msg)
+  has("'battles', 1", '1戦は必ず1と数える')
+  // クリはヒット数、回避は被弾数…と、上限になる値まで含めて固定する
+  for (const [k, cap] of [['crit', 'v_hits'], ['dodged', 'v_taken'], ['ail', 'v_hits'],
+                          ['lowWin', 'v_wins'], ['bigWin', 'v_wins']]) {
+    has(`'${k}'`, `${k} を積んでいない`)
+    has(`::int, 0), 0), ${cap})`, `${k} を ${cap} で頭打ちにしていない`)
+  }
+  has("'wins')::int, 0), 0), 1)", '勝ちは1戦につき1まで')
+  has("'turns')::int, 0), 0), c_max_turns)", 'ターン数に上限が無い')
+  // 部位が武器のものだけに積む（防具に熟練度が乗らない）
+  has("e.part = '武器'", '武器以外にも積んでいる')
+})
+
+test('v2_weapon_evolve は段階・熟練度・重複・相手を検証する', () => {
+  const body = bodyOf('v2_weapon_evolve')
+  const has = (t, msg) => assert.ok(body.includes(t), msg)
+  has('v_stage := jsonb_array_length(v_evos) + 1', '段階は付いている数から決める')
+  has('if v_bat < c_stages[v_stage]', '熟練度が足りているか見ていない')
+  has("e ->> 'key' = p_key", '同じ能力の重複を見ていない')
+  has("-> 'foes' ? p_foe", '宿敵狩りの相手を戦績で確かめていない')
+  has('least(greatest(coalesce(p_value, 0), 1), c_caps[v_stage])', '値を上限で切っていない')
+  has("e.part = '武器'", '武器以外にも進化が付けられる')
+})
+
+// ★スキル・職業補正・装備の特殊能力と同じで、**戦闘のある画面すべて**に入っていないと
+//   その画面だけ熟練度が貯まらない（どちらで戦ったかで差が出る）
+test('runBattle を呼ぶ画面は必ず戦績も積んでいる', () => {
+  const dir = new URL('../components/', import.meta.url)
+  const seen = []
+  const bad = []
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith('.jsx')) continue
+    const src = readFileSync(new URL(name, dir), 'utf8')
+    if (!src.includes('runBattle(')) continue
+    seen.push(name)
+    if (!src.includes('pushWeaponRecord(')) bad.push(name)
+  }
+  assert.ok(seen.length >= 2, `戦闘のある画面を拾えている（${seen.join(', ')}）`)
+  assert.deepEqual(bad, [], `戦績を積んでいない戦闘画面: ${bad.join(', ')}`)
 })

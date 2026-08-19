@@ -13,6 +13,8 @@ import { dropRateMultOf } from '../lib/enchant.js'
 import { guardDropMultOf, GUARD_DROP_MULT } from '../lib/arena.js'
 import { RARITY_COLOR } from '../lib/material.js'
 import { RANK_COLOR, dropLine, LOG_PLAIN } from './v2ui.js'
+import V2Evolve from './V2Evolve.jsx'
+import { pushWeaponRecord } from './weaponRecord.js'
 
 // ★旧版（無印）の街とまったく同じ作り。
 //   街のブロックが**ホームにそのまま載っている**（別画面へ移動しない）。
@@ -27,6 +29,8 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
   const [now, setNow] = useState(Date.now())
   const [loading, setLoading] = useState(false)
   const [cd, setCd] = useState(cooldownOf(prof?.sortie_cd))
+  // 武器の進化：節目に達した武器（ポップアップで受け取る）
+  const [evolving, setEvolving] = useState(null)
   const lastAt = useRef(0)
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(t) }, [])
@@ -107,12 +111,21 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
       return
     }
     if (data.level?.ups > 0) setLogs(l => [...l, { text:`🆙 レベルアップ！ LV${data.level.lv}`, color:'#44ff88' }])
+    // ★武器の進化（戦闘記憶）。装備している武器へ1戦ぶんの戦績を積む
+    const ready = await pushWeaponRecord(prof, inventory, r, you, foe)
+    if (ready.length) setEvolving(ready[0])
     onProfile(null)
   }
+
+  // 節目に達した武器のポップアップ（出撃・アリーナで同じものを使う）
+  const evolveModal = evolving
+    ? <V2Evolve pending={evolving} inventory={inventory} onDone={() => { setEvolving(null); onProfile(null) }} />
+    : null
 
   if (scene === 'battle') {
     return (
       <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
+        {evolveModal}
         <div style={{ color:'#ff6644', fontSize:'13px', marginBottom:'10px' }}>⚔ バトル！</div>
         {loading && <div style={{ color:'#7fa6d0', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
         <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
@@ -131,6 +144,7 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
   // ===== 街（ホームにそのまま載る） =====
   return (
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
+      {evolveModal}
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
         <span style={{ color:'#7fa6d0' }}>次の行動まで</span>
         <span style={{ color: canAct ? '#44ff88' : '#ffcc00' }}>{canAct ? '▶ 出撃可能！' : `${remaining.toFixed(1)}秒`}</span>

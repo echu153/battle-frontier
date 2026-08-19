@@ -3584,7 +3584,7 @@ begin
     from public.v2_inventory i
     join public.v2_equipment e on e.id = i.equip_id
    where i.id = p_id and i.player_id = v_uid and e.part = '武器'
-   for update;
+   for update of i;
   if not found then return jsonb_build_object('ok', false, 'error', '武器が見つかりません'); end if;
 
   v_evos  := coalesce(v_row.evolutions, '[]'::jsonb);

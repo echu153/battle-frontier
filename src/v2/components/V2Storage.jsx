@@ -8,7 +8,7 @@ import { filterRows, sortRows, pageOf, clampPage, defaultFilter } from '../lib/b
 import { box, miniBtn, RANK_COLOR } from './v2ui.js'
 import { useStored } from '../lib/prefs.js'
 import { V2Filter, V2Pager } from './V2Browse.jsx'
-import V2ItemTip, { SealTags } from './V2ItemTip.jsx'
+import V2ItemTip, { SealTags, EvoTags } from './V2ItemTip.jsx'
 
 // 倉庫：持っている装備を見て、着け外しする。
 // 枠の種類チェックはサーバー（v2_equip）が行う。ここは押せる枠だけ出す。
@@ -70,6 +70,7 @@ export default function V2Storage({ prof, inventory, runes, onProfile, onBack })
                         {w.item.name}{w.inv.plus ? `+${w.inv.plus}` : ''}
                       </span>
                       <SealTags list={essOf(w.inv.id)} size="9px" />
+                      <EvoTags inv={w.inv} size="9px" />
                     </V2ItemTip>
                     <button onClick={() => unequip(slot)} disabled={busy} style={miniBtn('#ff8888')}>外す</button>
                   </div>
@@ -142,6 +143,7 @@ export default function V2Storage({ prof, inventory, runes, onProfile, onBack })
                         {(inv.sockets || []).map((c, i) => <span key={i} style={{ color: COLOR_HEX[c] }}>●</span>)}
                       </span>{' '}
                       {es.length ? <SealTags list={es} /> : <span style={{ color:'#62789a' }}>刻印なし</span>}
+                      <EvoTags inv={inv} />
                     </V2ItemTip>
                     {pct && <span style={{ color:'#88ddaa' }}>刻印効果：{pct}</span>}
                     {es.filter(e => e.ability).map(e => (
