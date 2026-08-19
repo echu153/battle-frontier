@@ -199,16 +199,18 @@ export const SKILLS = [
   { name:'鷹爪連射', cls:'狩人', kind:'phys', mult:0.45, add:[{ stat:'agi', rate:0.15 }], hits:4, proc:80, mp:20, noCrit:true, desc:'4連射。AGIも威力になる。クリティカルしない' },
   { name:'罠設置',   cls:'狩人', kind:'buff', proc:95, mp:13, buff:{ enemy:{ agi:-25 } }, priority:1, desc:'相手のAGI-25%（重ねがけ可）' },
 
-  // ===== 暗殺者（STR＋LUK・クリティカル） =====
-  { name:'瞬歩瞬殺', cls:'暗殺者', kind:'phys', mult:1.6, add:[{ stat:'agi', rate:0.4 }], proc:90, mp:12, desc:'AGIも威力になる' },
-  { name:'鬼影閃',   cls:'暗殺者', kind:'phys', mult:0.7, hits:3, proc:85, mp:15, noCrit:true, desc:'3連撃。クリティカルしない' },
+  // ===== 暗殺者（STR＋AGI・出血を積んで刈り取る） =====
+  // ★役割：出血スタック（最大5）を撒き、急所突きで**全部消費して爆発させる**。
+  //   撒く技（瞬歩瞬殺・鬼影閃・千刃乱舞）と刈る技（急所突き）が噛み合う職。
+  { name:'瞬歩瞬殺', cls:'暗殺者', kind:'phys', mult:1.0, add:[{ stat:'agi', rate:0.4 }], proc:90, mp:12, ail:{ key:'bleed', chance:50 }, desc:'AGIも威力になる。50%で出血' },
+  { name:'鬼影閃',   cls:'暗殺者', kind:'phys', mult:0.7, hits:3, proc:85, mp:15, noCrit:true, ail:{ key:'bleed', chance:30 }, desc:'3連撃。30%で出血。クリティカルしない' },
   { name:'隠身',     cls:'暗殺者', kind:'passive', mp:0, passive:{ evaBonus:5 }, desc:'回避率+5%' },
   { name:'影歩き',   cls:'暗殺者', kind:'buff', proc:100, mp:12, buff:{ self:{ agi:40, dex:20 } }, priority:1, desc:'AGI+40%・DEX+20%（重ねがけ可）' },
-  { name:'急所突き', cls:'暗殺者', kind:'phys', mult:1.5, sureCrit:true, proc:80, mp:20, desc:'必ずクリティカルになる' },
-  { name:'背後刺し', cls:'暗殺者', kind:'phys', mult:1.3, add:[{ stat:'agi', rate:0.35 }], sureHit:true, proc:88, mp:13, desc:'死角から刺す。必中。AGIも威力になる' },
+  { name:'急所突き', cls:'暗殺者', kind:'phys', mult:1.5, proc:80, mp:20, consumeAil:{ key:'bleed', perStack:0.2 }, desc:'相手の出血を全部消費し、消費したスタック1つにつき威力+20%（最大5スタックで2倍）' },
+  { name:'背後刺し', cls:'暗殺者', kind:'phys', mult:1.3, add:[{ stat:'agi', rate:0.35 }], hitBonus:10, proc:88, mp:13, desc:'死角から刺す。命中+10%。AGIも威力になる' },
   { name:'毒刃',     cls:'暗殺者', kind:'phys', mult:1.2, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:14, ail:{ key:'poison', chance:40 }, desc:'DEXも威力になる。40%で毒' },
-  { name:'喉笛狩り', cls:'暗殺者', kind:'phys', mult:1.7, add:[{ stat:'agi', rate:0.4 }], defPen:0.4, proc:82, mp:19, desc:'相手の防御を40%無視。AGIも威力になる' },
-  { name:'千刃乱舞', cls:'暗殺者', kind:'phys', mult:0.45, add:[{ stat:'agi', rate:0.15 }], hits:4, proc:80, mp:20, noCrit:true, desc:'4連撃。AGIも威力になる。クリティカルしない' },
+  { name:'足首断ち', cls:'暗殺者', kind:'phys', mult:1.3, add:[{ stat:'agi', rate:0.4 }], proc:82, mp:19, ail:{ key:'slow', chance:30 }, desc:'AGIも威力になる。30%で鈍足' },
+  { name:'千刃乱舞', cls:'暗殺者', kind:'phys', mult:0.45, add:[{ stat:'agi', rate:0.15 }], hits:4, proc:80, mp:20, noCrit:true, ail:{ key:'bleed', chance:30 }, desc:'4連撃。30%で出血。AGIも威力になる。クリティカルしない' },
   { name:'影分身',   cls:'暗殺者', kind:'buff', proc:100, mp:13, buff:{ self:{ agi:30, luk:20 } }, priority:1, desc:'AGI+30%・LUK+20%（重ねがけ可）' },
 
   // ===== 元素使い（INT純火力） =====

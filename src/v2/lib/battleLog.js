@@ -75,9 +75,14 @@ export const buildBattleLog = (r, you, foe) => {
     } else if (l.type === 'ailTick') {
       out.push({ text:`☠ ${l.ail}！ ${actor}に${l.damage.toLocaleString()}ダメージ！`
         + (l.stacks > 1 ? `（${l.stacks}スタック）` : ''), color: LOG_COLOR.ail })
+    } else if (l.type === 'consumeAil') {
+      out.push({ text:`🩸 ${actor}の${l.ail}が弾けた！（${l.stacks}スタック消費・威力${l.mult.toFixed(1)}倍）`, color: LOG_COLOR.ail })
     } else if (l.type === 'guard') {
       // ATB専用（オート戦闘は出さない）
       out.push({ text:`🛡 ${actor}は身を守っている！（${l.sec}秒・被ダメージ-${l.cut}%）`, color: LOG_COLOR.guard })
+    } else if (l.type === 'guts') {
+      // 武器の進化「不屈」。1戦に1回だけ致命傷をHP1で耐える
+      out.push({ text:`💢 ${actor}は倒れずに踏み止まった！`, color:'#ffcc44' })
     } else if (l.type === 'paralyzed') {
       out.push({ text:`⚡ ${actor}は麻痺して動けない！`, color:'#ffdd44' })
     } else if (l.type === 'reflect') {

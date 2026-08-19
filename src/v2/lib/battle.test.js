@@ -1,7 +1,8 @@
 // バトルフロンティアⅡ 戦闘ループの回帰テスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runBattle, createSide, peekSkill, attackKindOf, mpCostOf, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
+import { runBattle, createSide, takeAction, peekSkill, attackKindOf, mpCostOf, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
+import { inflict } from './ailments.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
 import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT, OFF_CLASS_MP_MULT, setMpCost } from './skills.js'
 import { damageFloor } from './combat.js'
@@ -300,4 +301,39 @@ test('発動率と通常攻撃には他職ペナルティが掛からない', ()
   const dud = { name:'不発だけ', cls:'別職', kind:'phys', mult:1, proc:0, mp:0, desc:'' }
   const na = soloRun('侍', dud).log.find(l => l.side === 'me' && l.type === 'normal')
   assert.ok(na && na.damage > 0, '通常攻撃が出ている')
+})
+
+// ★2026-08-19：暗殺者の「出血を撒いて急所突きで刈る」ために足した2つの仕組み
+test('スキル自身の命中補正（hitBonus）が効く', () => {
+  // 回避が高い相手に、命中補正つきの技だけが当たる状況を作る
+  const dodgy = fighter('よけ', [], { ...evenStats(534), agi: 4000, dex: 4000 })
+  const mine = fighter('自分', [{ skill: sk('ふつう', { mult:1 }), uses:9 }, { skill: sk('当てる', { mult:1, hitBonus:100 }), uses:9 }])
+  const a = createSide(mine)
+  const b = createSide(dodgy)
+  const log = []
+  takeAction(a, b, () => 0.99, log, { idx: 1, noProc: true })   // 命中+100%＝必ず当たる
+  assert.equal(log.find(l => l.type === 'skill').hits, 1)
+  const log2 = []
+  takeAction(a, b, () => 0.99, log2, { idx: 0, noProc: true })  // 補正なしは外れる
+  assert.equal(log2.find(l => l.type === 'skill').hits, 0)
+})
+
+test('出血の起爆（consumeAil）はスタックを全部消費して威力を上げる', () => {
+  const base = sk('起爆', { mult:1, consumeAil:{ key:'bleed', perStack:0.2 } })
+  const run = (stacks) => {
+    const a = createSide(fighter('自分', [{ skill: base, uses:9 }]))
+    const b = createSide(fighter('相手'))
+    for (let i = 0; i < stacks; i++) inflict(b.ail, 'bleed')
+    const log = []
+    takeAction(a, b, () => 0.5, log, { idx: 0, noProc: true })
+    return { damage: log.find(l => l.type === 'skill').damage, ail: b.ail.bleed, log }
+  }
+  const r0 = run(0)
+  const r5 = run(5)
+  assert.equal(r0.ail, undefined)
+  assert.equal(r5.ail, undefined, '出血は全部消費されて消える')
+  // 5スタック＝威力2倍
+  assert.ok(Math.abs(r5.damage / r0.damage - 2) < 0.05, `${r0.damage} → ${r5.damage}`)
+  assert.equal(r5.log.find(l => l.type === 'consumeAil').stacks, 5)
+  assert.equal(r0.log.some(l => l.type === 'consumeAil'), false, '出血が無いときは何も起きない')
 })

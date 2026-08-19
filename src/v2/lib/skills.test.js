@@ -214,7 +214,11 @@ const dominates = (A, B) => {
   for (const [k, v] of Object.entries(ra)) if (v > (rb[k] || 0)) better.push('add:' + k)
   if (!cmp(A.proc, B.proc, 'proc')) return false
   if (!cmp(A.mp || 0, B.mp || 0, 'mp', true)) return false
-  for (const k of ['defPen', 'drain']) if (!cmp(A[k] || 0, B[k] || 0, k)) return false
+  for (const k of ['defPen', 'drain', 'hitBonus']) if (!cmp(A[k] || 0, B[k] || 0, k)) return false
+  // 起爆（急所突きの「出血を全部消費して威力+」）も軸に入れる
+  const burst = (x) => (x.consumeAil ? x.consumeAil.perStack : 0)
+  if (!cmp(burst(A), burst(B), 'consumeAil')) return false
+  if (A.consumeAil && B.consumeAil && A.consumeAil.key !== B.consumeAil.key) return false
   for (const k of ['sureHit', 'sureCrit']) {
     if (!A[k] && B[k]) return false
     if (A[k] && !B[k]) better.push(k)

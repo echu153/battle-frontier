@@ -21,10 +21,12 @@ import { STAT_KEYS, calcPower } from './stats.js'
 import { skillsOf, isPassive, offClassMult, scaleTable, mpOf, mpPctOf } from './skills.js'
 import { classBonusOf } from './classBonus.js'
 import {
-  createAilments, inflict, tickAilments, ailStatPct, healMultOf, consumeParalyze, AIL_LABEL,
+  createAilments, inflict, tickAilments, ailStatPct, healMultOf, consumeParalyze, hasAilment, AIL_LABEL,
 } from './ailments.js'
 import { collectEnchants, inflictChance } from './enchant.js'
-import { collectEvolutions, evoDmgPct } from './evolve.js'
+import {
+  collectEvolutions, evoDmgPct, evoCutPct, EVO_STACK_MAX, LOW_HP_PCT as EVO_LOW_HP,
+} from './evolve.js'
 
 export const NORMAL_ATTACK_MULT = 1.0 // 通常攻撃の倍率（消費MP0）
 export const MAX_TURNS = 100          // これを超えたら引き分け
@@ -104,6 +106,11 @@ export const liveStats = (side, acting = false) => {
   }
   // 元素共鳴：直前と違うスキルを使うときだけ（重複しない＝毎回同じ+10%）
   if (acting && side.switchOn) for (const s of side.pa.switches) add(s.stat, s.pct)
+  // 武器の進化：かわすたびAGI＋／被弾するたびSTR＋（どちらも EVO_STACK_MAX 回まで）
+  if (side.evo?.onDodge.agi && side.evoStacks?.dodge)
+    add('agi', side.evo.onDodge.agi * Math.min(EVO_STACK_MAX, side.evoStacks.dodge))
+  if (side.evo?.onHurt.str && side.evoStacks?.hurt)
+    add('str', side.evo.onHurt.str * Math.min(EVO_STACK_MAX, side.evoStacks.hurt))
   const eff = effectiveStats(side.base, b)
   // 魔導剣術：INTの20%をSTRへ「変換」する。移した元は減る
   for (const c of side.pa.converts) {
@@ -133,6 +140,10 @@ export const createSide = (fighter, band = null) => {
   const en = collectEnchants(fighter.enchants, band)
   // 武器の進化（戦闘記憶）。刻印とは別枠で、装備している武器に付いているぶんが乗る
   const evo = collectEvolutions(fighter.evolutions)
+  // ★ステータス%は**素の値**へ掛ける（バフ枠に入れると最大HP/MPが増えないため）
+  for (const [k, p] of Object.entries(evo.stat)) {
+    if (stats[k] !== undefined && p) stats[k] = Math.max(0, Math.round(stats[k] * (1 + p / 100)))
+  }
   const buffs = {}
   if (bonus?.stats) applyBuff(buffs, bonus.stats)   // 職業補正（就いている職業だけ）
   applyBuff(buffs, pa.statPct)                      // パッシブの常時ステータス補正
@@ -170,7 +181,13 @@ export const createSide = (fighter, band = null) => {
     reflected: false,                    // ウラノス：跳ね返しは最初の1回だけ
     // ===== 武器の進化（戦闘記憶）=====
     evo,
-    moves: 0,                            // 自分が行動した回数（疾き刃が最初の3回を見る）
+    moves: 0,                            // 自分が行動した回数（疾き刃・遅咲き・積み重ねが見る）
+    evoStacks: { dodge: 0, hurt: 0 },    // かわした回数・被弾した回数（liveStats が使う）
+    justDodged: false,                   // 直前の相手の攻撃をかわした
+    justHurt: false,                     // 直前の相手の攻撃を受けた
+    ctx: { dodged: false, hurt: false }, // ★自分の行動を解決するあいだ固定する（1回だけ乗る）
+    gutsUsed: false,                     // 不屈は1戦に1回だけ
+    boss: !!fighter.boss,                // ボスか（「大敵斬り」が見る）
   }
 }
 
@@ -180,7 +197,10 @@ export const createSide = (fighter, band = null) => {
 //   編成の想定利用MP（setMpCost）と同じ関数を通しているので、画面と戦闘でズレない
 export const mpCostOf = (side, skill) => {
   const pct = mpPctOf(side?.cls, skill)
-  return pct ? Math.floor((side?.mp || 0) * pct) : mpOf(side?.cls, skill)
+  const raw = pct ? Math.floor((side?.mp || 0) * pct) : mpOf(side?.cls, skill)
+  // 武器の進化：消費MP−%（代償で付いた「消費MP+%」はマイナスの値で入っている）
+  const cut = side?.evo?.mpCost || 0
+  return cut ? Math.max(0, Math.round(raw * Math.max(0.1, 1 - cut / 100))) : raw
 }
 
 // いま撃てる枠を ptr から探す。見つからなければ null（＝通常攻撃）
@@ -210,6 +230,9 @@ export const peekSkill = (side) => {
 const applyIncoming = (me, foe, dmg, kind, rng, log) => {
   if (dmg <= 0) return 0
   let d = dmg
+  // 武器の進化：被ダメージ−%（代償で付いた「被ダメージ+%」はここでマイナスに効く）
+  const evoCut = evoCutPct(foe.evo, { hpPct: (foe.hp / Math.max(1, foe.base.hp)) * 100, kind })
+  if (evoCut) d *= Math.max(0.1, 1 - evoCut / 100)
   // エンチャントの軽減（物理／魔法で別枠）
   const cut = kind === 'mag' ? foe.en.magCutPct : foe.en.physCutPct
   if (cut) d *= Math.max(0, 1 - cut / 100)
@@ -226,6 +249,15 @@ const applyIncoming = (me, foe, dmg, kind, rng, log) => {
   }
   const out = Math.max(1, Math.floor(d))
   foe.hp -= out
+  // 不屈：致命傷をHP1で耐える（1戦に1回・確率）
+  if (foe.hp <= 0 && foe.evo.guts && !foe.gutsUsed && roll(foe.evo.guts, rng)) {
+    foe.gutsUsed = true
+    foe.hp = 1
+    log.push({ side: foe.name, type: 'guts' })
+  }
+  // 被弾したとき：STRが積み上がる／MPが回復する
+  foe.evoStacks.hurt += 1
+  if (foe.evo.onHurt.mpHeal) foe.mp = Math.min(foe.base.mp, foe.mp + pctHp(foe.base.mp, foe.evo.onHurt.mpHeal))
   // ウラノス：最初に受けたそのダメージを跳ね返す（跳ね返し自体は再度跳ね返らない）
   const rf = foe.en.reflectFirst
   if (me && rf && !foe.reflected && rf.kind === kind) {
@@ -243,7 +275,33 @@ const healAmount = (side, eff, rate) =>
   Math.max(1, Math.floor(
     healOf(eff, rate) * (1 + side.pa.healBonus / 100) * side.healMult
     * (1 + side.en.healPct / 100) * healMultOf(side.ail)
+    * Math.max(0, 1 + side.evo.heal / 100)   // 武器の進化：受ける回復量±%
   ))
+
+// 「最大HPの◯%」のような割合の回復・消耗。最低1（0にすると付いていないのと同じになる）
+const pctHp = (max, pct) => (pct > 0 ? Math.max(1, Math.floor(max * pct / 100)) : 0)
+
+// 攻撃を当てたとき・かわしたときに走る、武器の進化のフック
+const evoOnHit = (me) => {
+  if (me.evo.onHit.hpHeal) me.hp = Math.min(me.base.hp, me.hp + pctHp(me.base.hp, me.evo.onHit.hpHeal))
+  if (me.evo.onHit.mpHeal) me.mp = Math.min(me.base.mp, me.mp + pctHp(me.base.mp, me.evo.onHit.mpHeal))
+}
+const evoOnDodge = (foe, times = 1) => {
+  if (times <= 0) return
+  foe.evoStacks.dodge += 1
+  if (foe.evo.onDodge.hpHeal) {
+    foe.hp = Math.min(foe.base.hp, foe.hp + pctHp(foe.base.hp, foe.evo.onDodge.hpHeal) * Math.min(times, EVO_STACK_MAX))
+  }
+}
+// クリティカルしたとき。★多段でも**1回の行動につき1回**だけ走る（得も代償も同じ扱い）
+const evoOnCrit = (me, foe, rng, log) => {
+  const e = me.evo.onCrit
+  if (e.hpHeal) me.hp = Math.min(me.base.hp, me.hp + pctHp(me.base.hp, e.hpHeal))
+  if (e.mpHeal) me.mp = Math.min(me.base.mp, me.mp + pctHp(me.base.mp, e.mpHeal))
+  if (e.hpCost) me.hp = Math.max(1, me.hp - pctHp(me.base.hp, e.hpCost))
+  if (e.mpCost) me.mp = Math.max(0, me.mp - pctHp(me.base.mp, e.mpCost))
+  if (e.ail) tryInflict(me, foe, { key:'bleed', chance: e.ail }, rng, log)
+}
 
 // デバフを相手へ入れる。心身一如を持っていると1回だけ打ち消される
 const applyDebuff = (foe, table, log) => {
@@ -258,9 +316,11 @@ const applyDebuff = (foe, table, log) => {
 
 // 状態異常を1つ試す。**相手のエンチャント抵抗（ailResist）を引いてから**判定する。
 // エンチャント由来（onHitAils）とスキル由来（skill.ail）で同じ道を通す＝抵抗の効き方がズレない
-// me は入れる側（武器の進化「蝕みの刃」ぶんをここで足す）
+// me は入れる側。武器の進化は**入れる側の付与率＋**と**受ける側の抵抗**の両方が効く
 const tryInflict = (me, foe, a, rng, log) => {
-  const pct = inflictChance(a.chance + (me?.evo?.ail || 0), foe.en, a.key)
+  const base = a.chance + (me?.evo?.ail?.rate || 0)
+  const pct = inflictChance(base, foe.en, a.key)
+    - (foe?.evo?.ail?.resist || 0) + (foe?.evo?.ail?.weak || 0)
   if (!roll(pct, rng)) return
   if (inflict(foe.ail, a.key, a)) log.push({ side: foe.name, type: 'ailment', ail: AIL_LABEL[a.key] })
 }
@@ -287,14 +347,23 @@ const onHit = (me, foe, kind, rng, log) => {
 }
 
 // 武器の進化ぶんの与ダメージ倍率。乗る条件を満たしていないものは1のまま
-const evoMult = (me, foe) => {
+// ★条件はここで**全部**そろえて渡す。片方の呼び出しだけ条件が抜けると、
+//   通常攻撃とスキルで挙動が変わってしまう
+const evoMult = (me, foe, { kind = 'phys', skill = false, multi = false } = {}) => {
   const pct = evoDmgPct(me.evo, {
+    kind, skill, multi,
     hpPct: (me.hp / Math.max(1, me.base.hp)) * 100,
-    foeBigger: (foe.power || 0) > (me.power || 0),
+    foeBigger:  (foe.power || 0) > (me.power || 0),
+    foeSmaller: (foe.power || 0) < (me.power || 0),
+    foeBoss: !!foe.boss,
+    foeAiled: Object.keys(foe.ail || {}).length > 0,
     moves: me.moves,
+    combo: Math.max(0, me.moves - 1),
+    justDodged: me.ctx.dodged,
+    justHurt: me.ctx.hurt,
     foeName: foe.name,
   })
-  return pct ? 1 + pct / 100 : 1
+  return pct ? Math.max(0.1, 1 + pct / 100) : 1
 }
 
 // 1回の行動を解決する。戻り値はログ用の1件
@@ -303,7 +372,12 @@ const evoMult = (me, foe) => {
 //     noProc     … 発動率の抽選をしない（ATBは不発の代わりに「必要ゲージ」で重さを表す）
 //     noParalyze … 麻痺の判定をしない（ATBは麻痺＝ゲージが止まる、で表現する）
 export const takeAction = (me, foe, rng, log, opt = {}) => {
-  me.moves += 1   // 疾き刃が「最初の3回の行動」を見る。麻痺で動けなくても1回と数える
+  me.moves += 1   // 疾き刃・遅咲き・積み重ねが見る。麻痺で動けなくても1回と数える
+  // ★「かわした次の攻撃」「被弾した次の攻撃」は**1回の行動にだけ**乗る。
+  //   ここで読み取って消しておかないと、一度かわしただけで最後まで乗り続ける
+  me.ctx = { dodged: me.justDodged, hurt: me.justHurt }
+  me.justDodged = false
+  me.justHurt = false
   // 麻痺：このターンは動けない（見た時点で1ターンぶん消える）
   if (!opt.noParalyze && consumeParalyze(me.ail)) {
     log.push({ side: me.name, type: 'paralyzed' })
@@ -315,10 +389,11 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
 
   // 発動判定。不発ならMPも使用回数も減らず、ポインタも進めない
   //   ★不発はバーサク・執行本能のスタックをリセットする
-  if (skill && !opt.noProc && !roll(skill.proc + me.pa.procBonus + me.en.procBonus, rng)) {
+  if (skill && !opt.noProc && !roll(skill.proc + me.pa.procBonus + me.en.procBonus + me.evo.proc, rng)) {
     log.push({ side: me.name, type: 'misfire', skill: skill.name })
     me.rage = 0
-    normalAttack(me, foe, rng, log, me.pa.misfireAtkMult)  // 居合の構えはここで威力2倍
+    // 居合の構えはここで威力2倍。武器の進化「居合の心得」も同じ枠で乗る
+    normalAttack(me, foe, rng, log, me.pa.misfireAtkMult * (1 + me.evo.misfireDmg / 100))
     return
   }
   if (!skill) { me.rage = 0; normalAttack(me, foe, rng, log); return }
@@ -342,22 +417,44 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     let raw = 0
     let crit = false
     let hits = 0
-    // 第六感の「貫通+10%」はスキルの防御貫通に足す
-    const defPen = Math.min(1, (skill.defPen || 0) + me.pa.defPenBonus / 100)
+    let missed = 0
+    // 第六感の「貫通+10%」はスキルの防御貫通に足す。武器の進化ぶんも同じ枠
+    const defPen = Math.min(1, (skill.defPen || 0) + me.pa.defPenBonus / 100 + me.evo.defPen / 100)
+    // ★出血スタックの起爆（暗殺者の急所突き）。**相手に積んだ出血を全部消費して威力を上げる**
+    //   ＝「出血を撒く技」と「刈り取る技」で1つの流れになる（消費するので撒き直しが要る）
+    let burst = 1
+    if (skill.consumeAil) {
+      const c = skill.consumeAil
+      const st = c.key === 'bleed' ? (foe.ail.bleed?.stacks || 0) : (hasAilment(foe.ail, c.key) ? 1 : 0)
+      if (st > 0) {
+        burst = 1 + c.perStack * st
+        delete foe.ail[c.key]
+        log.push({ side: foe.name, type: 'consumeAil', ail: AIL_LABEL[c.key], stacks: st, mult: burst })
+      }
+    }
     for (let h = 0; h < (skill.hits || 1); h++) {
       const r = resolveAttack({
-        attacker: eMe, defender: eFoe, mult: skill.mult, kind: skill.kind,
+        attacker: eMe, defender: eFoe, mult: skill.mult * burst, kind: skill.kind,
         defPen, add: skill.add || null,
         sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit, noCrit: !!skill.noCrit,
         acc: skill.acc ?? 100,
-        hitBonus: me.pa.hitBonus + me.en.hitBonus,
-        evaBonus: foe.pa.evaBonus + foe.en.evaBonus + foe.evo.eva,
-        critBonus: me.pa.critBonus + me.evo.crit,
+        // ★スキル自身の命中補正（skill.hitBonus）もここで足す＝「必中ではないが当てやすい技」を作れる
+        hitBonus: me.pa.hitBonus + me.en.hitBonus + me.evo.hit + (skill.hitBonus || 0),
+        evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe),
+        critBonus: me.pa.critBonus + me.evo.critRate,
       }, rng)
-      raw += r.damage
-      if (r.hit) hits++
+      // ★クリティカルの与ダメージ+%は**1発ずつ**掛ける（多段でクリした発だけ伸びる）
+      raw += r.hit && r.crit && me.evo.critDmg
+        ? Math.floor(r.damage * (1 + me.evo.critDmg / 100))
+        : r.damage
+      if (r.hit) hits++; else missed++
       if (r.crit && r.hit) crit = true
     }
+    // かわされたぶん／当てたぶんは、相手側の「かわすたび」フックと次の行動の条件になる
+    evoOnDodge(foe, missed)
+    foe.justDodged = hits === 0
+    foe.justHurt = hits > 0
+    if (crit) evoOnCrit(me, foe, rng, log)
     // ギャンブルボディ：当たったとき、確率で威力が振れる
     const g = me.pa.gamble
     if (g && hits > 0) {
@@ -368,11 +465,12 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     // エンチャントの与ダメージ+%（物理／魔法で別枠。時間帯ぶんも畳み込み済み）
     raw = Math.floor(raw * (1 + (skill.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100))
     if (off !== 1) raw = Math.floor(raw * off)
-    // 武器の進化（薄氷の勝者・巨人殺し・疾き刃・宿敵狩り）
-    raw = Math.floor(raw * evoMult(me, foe))
+    // 武器の進化（条件つきの与ダメージ+%をまとめて）
+    raw = Math.floor(raw * evoMult(me, foe, { kind: skill.kind, skill: true, multi: (skill.hits || 1) > 1 }))
     const dmg = applyIncoming(me, foe, raw, skill.kind, rng, log)
     if (hits > 0) {
       onHit(me, foe, skill.kind, rng, log)
+      evoOnHit(me)   // 武器の進化：当てるたびHP/MPが戻る
       // ★スキル自身が持つ状態異常（どくのほうし＝毒、電撃＝麻痺 など）。**当たったときだけ**。
       //   敵もプレイヤーと同じ takeAction を通るので、これで**敵→こちら**にも状態異常が飛ぶ
       //   ＝エンチャントの抵抗（毒キノコ・払暁のワイバーン）が意味を持つ
@@ -382,8 +480,10 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     if (me.pa.rages.length) me.rage = hits > 0 ? me.rage + 1 : 0
     // 吸収：与えたダメージの一定割合を自分のHPへ（ソウルドレイン・ブラッティロアなど）
     let drained = 0
-    if (skill.drain > 0 && dmg > 0) {
-      drained = Math.max(1, Math.floor(dmg * skill.drain))
+    // 武器の進化の吸収(%)はスキル自身の吸収と同じ枠で足す
+    const drainRate = (skill.drain || 0) + me.evo.drain / 100
+    if (drainRate > 0 && dmg > 0) {
+      drained = Math.max(1, Math.floor(dmg * drainRate))
       me.hp = Math.min(me.base.hp, me.hp + drained)
     }
     // コウモリ・暁のフレイムバット：物理で与えたダメージの一部を回復
@@ -392,7 +492,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       me.hp = Math.min(me.base.hp, me.hp + back)
       drained += back
     }
-    log.push({ side: me.name, type: 'skill', skill: skill.name, damage: dmg, crit, hits, of: skill.hits || 1, drain: drained })
+    log.push({ side: me.name, type: 'skill', skill: skill.name, kind: skill.kind, damage: dmg, crit, hits, of: skill.hits || 1, drain: drained })
   } else if (skill.kind === 'heal') {
     if (skill.heal) {
       const amt = healAmount(me, eMe, skill.heal.rate * off)
@@ -420,25 +520,40 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   const eFoe = liveStats(foe)
   const r = resolveAttack({
     attacker: eMe, defender: eFoe, mult: NORMAL_ATTACK_MULT * multScale, kind: me.kind,
-    defPen: me.pa.defPenBonus / 100,
-    hitBonus: me.pa.hitBonus + me.en.hitBonus,
-    evaBonus: foe.pa.evaBonus + foe.en.evaBonus + foe.evo.eva,
-    critBonus: me.pa.critBonus + me.evo.crit,
+    defPen: me.pa.defPenBonus / 100 + me.evo.defPen / 100,
+    hitBonus: me.pa.hitBonus + me.en.hitBonus + me.evo.hit,
+    evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe),
+    critBonus: me.pa.critBonus + me.evo.critRate,
   }, rng)
+  evoOnDodge(foe, r.hit ? 0 : 1)
+  foe.justDodged = !r.hit
+  foe.justHurt = !!r.hit
+  if (r.hit && r.crit) evoOnCrit(me, foe, rng, log)
   // 通常攻撃も「物理攻撃」なのでエンチャントの与ダメージ+%とヒット時効果が乗る
-  const raw = Math.floor(r.damage * (1 + (me.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100) * evoMult(me, foe))
+  const critMult = r.hit && r.crit && me.evo.critDmg ? 1 + me.evo.critDmg / 100 : 1
+  const raw = Math.floor(r.damage * (1 + (me.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100)
+    * critMult * evoMult(me, foe, { kind: me.kind, skill: false }))
   const dmg = applyIncoming(me, foe, raw, me.kind, rng, log)
-  if (r.hit) onHit(me, foe, me.kind, rng, log)
+  if (r.hit) { onHit(me, foe, me.kind, rng, log); evoOnHit(me) }
+  const drainRate = me.evo.drain / 100
+  if (drainRate > 0 && dmg > 0) me.hp = Math.min(me.base.hp, me.hp + Math.max(1, Math.floor(dmg * drainRate)))
   if (me.kind === 'phys' && me.en.drainPhysPct > 0 && dmg > 0) {
     me.hp = Math.min(me.base.hp, me.hp + Math.max(1, Math.floor(dmg * me.en.drainPhysPct / 100)))
   }
-  log.push({ side: me.name, type: 'normal', damage: dmg, crit: r.crit, hit: r.hit, mult: multScale })
+  log.push({ side: me.name, type: 'normal', kind: me.kind, damage: dmg, crit: r.crit, hit: r.hit, mult: multScale })
 }
+
+// 回避率。HPが減っているときだけ乗る「際の見切り」をここで足す
+const evoEva = (side) => side.evo.eva
+  + ((side.hp / Math.max(1, side.base.hp)) * 100 <= EVO_LOW_HP ? side.evo.evaLow : 0)
 
 // ターン終了時の持続ダメージ（出血・毒）と、ターン数の減り
 // ★出血・毒は割合ダメージなのでVITでは軽減されない（旧版と同じ）
-export const tickAil = (side, log) => {
+export const tickAil = (side, log, foe = null) => {
+  // ★倍率は**入れた側**の武器の進化を見る（受けた側ではない）
+  const boost = 1 + (foe?.evo?.ail?.dmg || 0) / 100
   for (const t of tickAilments(side.ail, { hp: side.hp, maxHp: side.base.hp })) {
+    t.damage = Math.max(1, Math.floor(t.damage * boost))
     side.hp -= t.damage
     log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL[t.key], damage: t.damage, stacks: t.stacks })
     if (side.hp <= 0) return
@@ -446,8 +561,23 @@ export const tickAil = (side, log) => {
 }
 
 // ターン終了時の持続効果（回復）
-export const tickRegen = (side, log) => {
+export const tickRegen = (side, log, foe = null) => {
   const eff = liveStats(side)
+  // 武器の進化：毎ターンの自動回復（スキルの継続回復とは別枠）
+  if (side.evo?.regen) {
+    const amt = Math.max(1, Math.floor(side.base.hp * side.evo.regen / 100))
+    side.hp = Math.min(side.base.hp, side.hp + amt)
+    log.push({ side: side.name, type: 'regenTick', heal: amt })
+  }
+  if (side.evo?.mpRegen) {
+    side.mp = Math.min(side.base.mp, side.mp + Math.max(1, Math.floor(side.base.mp * side.evo.mpRegen / 100)))
+  }
+  // 相手が状態異常のときだけ効く回復
+  if (side.evo?.ail.drain && foe && Object.keys(foe.ail || {}).length > 0) {
+    const amt = Math.max(1, Math.floor(side.base.hp * side.evo.ail.drain / 100))
+    side.hp = Math.min(side.base.hp, side.hp + amt)
+    log.push({ side: side.name, type: 'regenTick', heal: amt })
+  }
   if (side.regen?.turns > 0) {
     const amt = healAmount(side, eff, side.regen.rate)
     side.hp = Math.min(side.base.hp, side.hp + amt)
@@ -476,7 +606,11 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
     const eB = liveStats(b)
     const pA = peekSkill(a)?.priority || 0
     const pB = peekSkill(b)?.priority || 0
-    const order = goesFirst(eA, eB, pA, pB, rng) ? [[a, b], [b, a]] : [[b, a], [a, b]]
+    // 武器の進化「先手必勝」：確率でそのターンの先攻を取る（両方が引いたら通常どおり）
+    const fA = a.evo.first > 0 && roll(a.evo.first, rng)
+    const fB = b.evo.first > 0 && roll(b.evo.first, rng)
+    const aFirst = fA !== fB ? fA : goesFirst(eA, eB, pA, pB, rng)
+    const order = aFirst ? [[a, b], [b, a]] : [[b, a], [a, b]]
 
     for (const [me, foe] of order) {
       if (a.hp <= 0 || b.hp <= 0) break
@@ -485,18 +619,19 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
       // 追加行動（相手よりAGIが高いときだけ・上限50%）
       const em = liveStats(me)
       const ef = liveStats(foe)
-      if (rollExtraAction(em, ef, rng)) {
+      // 武器の進化「疾風の足」ぶんは追加行動率へ素直に足す
+      if (rollExtraAction(em, ef, rng) || (me.evo.extra > 0 && roll(me.evo.extra, rng))) {
         log.push({ side: me.name, type: 'extra' })
         takeAction(me, foe, rng, log)
       }
     }
 
     if (a.hp <= 0 || b.hp <= 0) break
-    tickAil(a, log)
-    tickAil(b, log)
+    tickAil(a, log, b)
+    tickAil(b, log, a)
     if (a.hp <= 0 || b.hp <= 0) break
-    tickRegen(a, log)
-    tickRegen(b, log)
+    tickRegen(a, log, b)
+    tickRegen(b, log, a)
     if (a.hp <= 0 || b.hp <= 0) break
     // 画面でHPバーを出すための、ターン終わりのスナップショット（戦闘の結果には影響しない）
     log.push({ type:'hp', turn, a: Math.max(0, a.hp), aMax: a.base.hp, b: Math.max(0, b.hp), bMax: b.base.hp })

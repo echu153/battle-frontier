@@ -160,7 +160,7 @@ insert into public.v2_skills (name, cls, mp, sort) values
   ('居合斬','侍',12,1), ('断空','侍',16,2), ('居合の構え','侍',0,3), ('明鏡止水','侍',12,4), ('月影','侍',22,5), ('抜刀','侍',8,6), ('二段斬り','侍',15,7), ('峰打ち','侍',13,8), ('桜花一閃','侍',20,9), ('残身の構え','侍',11,10),
   ('マッドラッシュ','狂戦士',16,1), ('すてみ','狂戦士',18,2), ('バーサク','狂戦士',0,3), ('ブラッティロア','狂戦士',14,4), ('フルブレイカー','狂戦士',18,5), ('猛り斬り','狂戦士',13,6), ('血の代償','狂戦士',16,7), ('裂傷撃','狂戦士',14,8), ('狂乱連斬','狂戦士',19,9), ('威嚇咆哮','狂戦士',12,10),
   ('毒矢','狩人',12,1), ('三連射','狩人',14,2), ('鷹ノ目','狩人',0,3), ('狩猟本能','狩人',14,4), ('絶影狙撃','狩人',20,5), ('貫き矢','狩人',14,6), ('追い討ち','狩人',13,7), ('毒煙玉','狩人',14,8), ('鷹爪連射','狩人',20,9), ('罠設置','狩人',13,10),
-  ('瞬歩瞬殺','暗殺者',12,1), ('鬼影閃','暗殺者',15,2), ('隠身','暗殺者',0,3), ('影歩き','暗殺者',12,4), ('急所突き','暗殺者',20,5), ('背後刺し','暗殺者',13,6), ('毒刃','暗殺者',14,7), ('喉笛狩り','暗殺者',19,8), ('千刃乱舞','暗殺者',20,9), ('影分身','暗殺者',13,10),
+  ('瞬歩瞬殺','暗殺者',12,1), ('鬼影閃','暗殺者',15,2), ('隠身','暗殺者',0,3), ('影歩き','暗殺者',12,4), ('急所突き','暗殺者',20,5), ('背後刺し','暗殺者',13,6), ('毒刃','暗殺者',14,7), ('足首断ち','暗殺者',19,8), ('千刃乱舞','暗殺者',20,9), ('影分身','暗殺者',13,10),
   ('アクアショット','元素使い',12,1), ('アースクエイク','元素使い',15,2), ('元素共鳴','元素使い',0,3), ('ライトニングボルト','元素使い',17,4), ('フレイムバースト','元素使い',20,5), ('スパークショット','元素使い',12,6), ('アイスプリズン','元素使い',15,7), ('マグマフィスト','元素使い',17,8), ('エレメンタルレイン','元素使い',21,9), ('元素装填','元素使い',14,10),
   ('骸骨召喚','死霊使い',11,1), ('ソウルドレイン','死霊使い',15,2), ('骸の壁','死霊使い',0,3), ('腐敗霧','死霊使い',16,4), ('幽世ノ門','死霊使い',20,5), ('呪詛の手','死霊使い',12,6), ('屍毒','死霊使い',15,7), ('亡者の呻き','死霊使い',15,8), ('冥府の鎖','死霊使い',20,9), ('生命転換','死霊使い',16,10),
   ('ホーリーライト','聖職者',12,1), ('奇跡','聖職者',18,2), ('神聖加護','聖職者',0,3), ('祈りの結界','聖職者',14,4), ('神罰執行','聖職者',20,5), ('セイントレイ','聖職者',12,6), ('浄化','聖職者',14,7), ('断罪の光','聖職者',18,8), ('大治癒','聖職者',20,9), ('加護の風','聖職者',12,10),
@@ -3454,18 +3454,197 @@ grant execute on function public.v2_daily_claim() to authenticated;
 -- ===== 12. 武器の進化（戦闘記憶）=====
 -- ------------------------------------------------------------
 -- シャングリラ・フロンティア風。**その武器で戦い続けると熟練度が貯まり、節目で
--- 「どう戦ってきたか」に応じた能力が1つ付く。**設計とスコアの正は src/v2/lib/evolve.js。
+-- 「どう戦ってきたか」に応じた能力が1つ付く。**
+-- 設計とスコアの正は src/v2/lib/evolve.js ／ 能力の名簿は src/v2/lib/evolveTraits.js。
 --   ・熟練度が貯まるのは**装備している武器だけ**（右手・左手それぞれ独立）
 --   ・ルーンの刻印とは別枠（ソケットを食わない）
---   ・節目は 100 / 500 / 2000 戦、乗る値の上限は 6% / 10% / 15%
+--   ・節目は 100 / 500 / 2000 戦、値の予算は 6 / 10 / 15%
+--   ・能力は159種。得1〜2個＋代償0〜1個の組み合わせでできている
 --
 -- ⚠戦闘そのものはクライアントが回すので、戦績もクライアントから送られてくる。
 --   **1戦あたりの増分をサーバー側で頭打ちにする**ことで、でたらめな値を積めなくする。
---   進化の中身（どの能力が何%か）も、段階・上限・重複・敵の名前をここで検証する。
+--   さらに**能力の値はサーバーが計算し直す**（クライアントが送るのは
+--   「どの能力か」と「偏りの強さ(0〜1)」だけ）＝値そのものは盛れない。
 --   戦闘をサーバー権威化するときは、この検証ごと本物の計算へ差し替えること。
 -- ============================================================
 alter table public.v2_inventory add column if not exists record     jsonb not null default '{}'::jsonb;
 alter table public.v2_inventory add column if not exists evolutions jsonb not null default '[]'::jsonb;
+
+-- ---- 能力の名簿（src/v2/lib/evolveTraits.js から生成。手で書き換えないこと）----
+-- atoms … [{"a":部品, "w":倍率, "c":代償か}]。値 = 段階の予算 × 偏りの強さ × w
+create table if not exists public.v2_evolve_traits (
+  key   text primary key,
+  axis  text not null,
+  name  text not null,
+  atoms jsonb not null
+);
+alter table public.v2_evolve_traits enable row level security;
+drop policy if exists "v2_evolve_traits_read" on public.v2_evolve_traits;
+create policy "v2_evolve_traits_read" on public.v2_evolve_traits for select to authenticated using (true);
+revoke all on table public.v2_evolve_traits from anon;
+grant select on table public.v2_evolve_traits to authenticated;
+
+delete from public.v2_evolve_traits;
+insert into public.v2_evolve_traits (key, axis, name, atoms) values
+  ('crit_eye','crit','見切りの冴え','[{"a":"critRate","w":0.9,"c":false}]'),
+  ('crit_blood','crit','紅蓮の一閃','[{"a":"critDmg","w":3,"c":false},{"a":"critHpCost","w":0.18,"c":true}]'),
+  ('crit_fang','crit','吸血の牙','[{"a":"critHpHeal","w":0.22,"c":false},{"a":"critDmg","w":1.2,"c":false}]'),
+  ('crit_mana','crit','魔喰らいの刃','[{"a":"critMpHeal","w":0.45,"c":false},{"a":"critRate","w":0.4,"c":false},{"a":"mpCost","w":0.7,"c":true}]'),
+  ('crit_gash','crit','裂傷の太刀','[{"a":"critAil","w":2.6,"c":false},{"a":"ailDmg","w":1.2,"c":false}]'),
+  ('crit_focus','crit','一点集中','[{"a":"critRate","w":1.6,"c":false},{"a":"hit","w":0.9,"c":true}]'),
+  ('crit_reckless','crit','捨て身の閃き','[{"a":"critDmg","w":2.6,"c":false},{"a":"taken","w":0.9,"c":true}]'),
+  ('eva_thin','eva','紙一重','[{"a":"eva","w":0.8,"c":false}]'),
+  ('eva_wind','eva','風纏い','[{"a":"eva","w":0.5,"c":false},{"a":"st_agi","w":0.6,"c":false}]'),
+  ('eva_counter','eva','見切り返し','[{"a":"dmgDodge","w":2.6,"c":false}]'),
+  ('eva_breath','eva','呼吸の間','[{"a":"onDodgeHeal","w":0.1,"c":false},{"a":"eva","w":0.4,"c":false}]'),
+  ('eva_accel','eva','加速の舞','[{"a":"onDodgeAgi","w":0.5,"c":false}]'),
+  ('eva_paper','eva','薄紙の構え','[{"a":"eva","w":1.3,"c":false},{"a":"st_vit","w":0.8,"c":true}]'),
+  ('eva_last','eva','際の見切り','[{"a":"evaLow","w":2.2,"c":false}]'),
+  ('tank_iron','tank','鉄壁の体','[{"a":"cut","w":0.7,"c":false}]'),
+  ('tank_scale','tank','逆鱗','[{"a":"dmgHurt","w":2.4,"c":false}]'),
+  ('tank_rage','tank','痛みの糧','[{"a":"onHurtStr","w":0.5,"c":false}]'),
+  ('tank_mana','tank','痛撃転化','[{"a":"onHurtMp","w":0.5,"c":false}]'),
+  ('tank_guts','tank','不屈','[{"a":"guts","w":2.2,"c":false}]'),
+  ('tank_wall','tank','重甲','[{"a":"cut","w":1.1,"c":false},{"a":"st_agi","w":0.9,"c":true}]'),
+  ('tank_endure','tank','耐えの構え','[{"a":"cutLow","w":2.4,"c":false}]'),
+  ('ail_venom','ail','蝕みの刃','[{"a":"ailRate","w":1,"c":false}]'),
+  ('ail_rot','ail','腐蝕','[{"a":"ailDmg","w":1.8,"c":false}]'),
+  ('ail_hunt','ail','病み狩り','[{"a":"dmgAil","w":2.2,"c":false}]'),
+  ('ail_leech','ail','疫の恵み','[{"a":"ailDrain","w":0.22,"c":false}]'),
+  ('ail_plague','ail','疫禍','[{"a":"ailRate","w":1.6,"c":false},{"a":"heal","w":0.9,"c":true}]'),
+  ('ail_curse','ail','呪詛返し','[{"a":"ailRate","w":0.7,"c":false},{"a":"ailDmg","w":0.9,"c":false}]'),
+  ('ailed_ward','ailed','慣れた痛み','[{"a":"ailResist","w":1.2,"c":false}]'),
+  ('ailed_will','ailed','毒に慣れた体','[{"a":"ailResist","w":0.7,"c":false},{"a":"regen","w":0.18,"c":false}]'),
+  ('ailed_pain','ailed','痛みを喰う','[{"a":"dmgLow","w":1.8,"c":false},{"a":"ailWeak","w":0.8,"c":true}]'),
+  ('ailed_sacr','ailed','供物の刃','[{"a":"dmg","w":1.1,"c":false},{"a":"ailWeak","w":1,"c":true}]'),
+  ('ailed_purge','ailed','浄化の呼吸','[{"a":"heal","w":1.4,"c":false},{"a":"ailResist","w":0.5,"c":false}]'),
+  ('ailed_blood','ailed','毒血の巡り','[{"a":"regen","w":0.3,"c":false},{"a":"taken","w":0.7,"c":true}]'),
+  ('heal_grace','heal','癒しの手','[{"a":"heal","w":1.2,"c":false}]'),
+  ('heal_light','heal','治癒の光','[{"a":"heal","w":0.8,"c":false},{"a":"regen","w":0.15,"c":false}]'),
+  ('heal_pray','heal','祈りの刃','[{"a":"heal","w":1.6,"c":false},{"a":"dmg","w":0.5,"c":true}]'),
+  ('heal_flow','heal','生命の巡り','[{"a":"regen","w":0.3,"c":false}]'),
+  ('heal_mend','heal','手当ての心得','[{"a":"heal","w":0.7,"c":false},{"a":"mpCost","w":0.6,"c":false}]'),
+  ('heal_zeal','heal','献身','[{"a":"heal","w":1,"c":false},{"a":"st_int_stat","w":0.5,"c":false},{"a":"st_str","w":0.8,"c":true}]'),
+  ('buff_rite','buff','高揚の儀','[{"a":"proc","w":0.7,"c":false}]'),
+  ('buff_echo','buff','重ねがけ','[{"a":"dmgCombo","w":0.35,"c":false}]'),
+  ('buff_focus','buff','集中の型','[{"a":"st_str","w":0.5,"c":false},{"a":"st_int_stat","w":0.5,"c":false},{"a":"st_vit","w":0.8,"c":true}]'),
+  ('buff_swift','buff','疾走の型','[{"a":"extra","w":0.7,"c":false}]'),
+  ('buff_rise','buff','高まる刃','[{"a":"dmgLate","w":2,"c":false}]'),
+  ('buff_ready','buff','支度の妙','[{"a":"mpCost","w":0.8,"c":false}]'),
+  ('mp_font','mpBurn','魔力の泉','[{"a":"mpRegen","w":0.5,"c":false}]'),
+  ('mp_thrift','mpBurn','節制','[{"a":"mpCost","w":1,"c":false}]'),
+  ('mp_burst','mpBurn','燃焼','[{"a":"dmgSkill","w":1.7,"c":false},{"a":"mpCost","w":0.8,"c":true}]'),
+  ('mp_drain','mpBurn','魔喰い','[{"a":"onHitMp","w":0.12,"c":false}]'),
+  ('mp_last','mpBurn','最後の一滴','[{"a":"dmgLate","w":2.2,"c":false},{"a":"mpRegen","w":0.25,"c":false}]'),
+  ('mp_over','mpBurn','過負荷','[{"a":"dmg","w":1.2,"c":false},{"a":"st_mp","w":1.2,"c":true}]'),
+  ('th_basic','thrift','素振りの積み','[{"a":"dmgNormal","w":1.8,"c":false}]'),
+  ('th_flow','thrift','淀みなき手','[{"a":"dmgNormal","w":1.2,"c":false},{"a":"hit","w":0.5,"c":false}]'),
+  ('th_sharp','thrift','研ぎ澄まし','[{"a":"dmgNormal","w":2.4,"c":false},{"a":"dmgSkill","w":0.8,"c":true}]'),
+  ('th_quick','thrift','手数の妙','[{"a":"extra","w":0.6,"c":false},{"a":"dmgNormal","w":0.8,"c":false}]'),
+  ('th_read','thrift','見切りの手','[{"a":"critRate","w":0.6,"c":false},{"a":"dmgNormal","w":1,"c":false}]'),
+  ('th_stance','thrift','自然体','[{"a":"cut","w":0.5,"c":false},{"a":"dmgNormal","w":1,"c":false}]'),
+  ('ph_edge','phys','鋭刃','[{"a":"dmgPhys","w":1.4,"c":false}]'),
+  ('ph_might','phys','剛力','[{"a":"st_str","w":0.8,"c":false}]'),
+  ('ph_pierce','phys','貫き手','[{"a":"defPen","w":1.2,"c":false}]'),
+  ('ph_heavy','phys','重い一撃','[{"a":"dmgPhys","w":2,"c":false},{"a":"dmgMag","w":1.2,"c":true}]'),
+  ('ph_grind','phys','削りの型','[{"a":"dmgPhys","w":0.8,"c":false},{"a":"cutPhys","w":1,"c":false}]'),
+  ('ph_blood','phys','血振り','[{"a":"drain","w":0.45,"c":false}]'),
+  ('mg_flow','mag','魔導の理','[{"a":"dmgMag","w":1.4,"c":false}]'),
+  ('mg_mind','mag','深智','[{"a":"st_int_stat","w":0.8,"c":false}]'),
+  ('mg_break','mag','術式貫通','[{"a":"defPen","w":1.2,"c":false}]'),
+  ('mg_burst','mag','増幅術式','[{"a":"dmgMag","w":2,"c":false},{"a":"dmgPhys","w":1.2,"c":true}]'),
+  ('mg_ward','mag','魔よけ','[{"a":"dmgMag","w":0.8,"c":false},{"a":"cutMag","w":1,"c":false}]'),
+  ('mg_font','mag','詠唱の巡り','[{"a":"mpRegen","w":0.4,"c":false},{"a":"dmgMag","w":0.6,"c":false}]'),
+  ('mu_storm','multi','乱れ撃ち','[{"a":"dmgMulti","w":1.8,"c":false}]'),
+  ('mu_rhythm','multi','刻みの型','[{"a":"dmgMulti","w":1.1,"c":false},{"a":"hit","w":0.5,"c":false}]'),
+  ('mu_bleed','multi','千の裂傷','[{"a":"critAil","w":2,"c":false},{"a":"dmgMulti","w":0.9,"c":false}]'),
+  ('mu_leech','multi','削り取り','[{"a":"onHitHeal","w":0.09,"c":false}]'),
+  ('mu_mana','multi','連撃の余韻','[{"a":"onHitMp","w":0.1,"c":false}]'),
+  ('mu_press','multi','手数の圧','[{"a":"dmgMulti","w":2.4,"c":false},{"a":"hit","w":0.8,"c":true}]'),
+  ('sw_blitz','swift','疾き刃','[{"a":"dmgFirst","w":2.4,"c":false}]'),
+  ('sw_first','swift','先の先','[{"a":"first","w":1.6,"c":false}]'),
+  ('sw_rush','swift','突撃','[{"a":"dmgFirst","w":3.2,"c":false},{"a":"taken","w":1,"c":true}]'),
+  ('sw_edge','swift','出足','[{"a":"st_agi","w":0.7,"c":false}]'),
+  ('sw_open','swift','初手の型','[{"a":"dmgFull","w":2,"c":false}]'),
+  ('sw_finish','swift','一気呵成','[{"a":"dmgSmall","w":2,"c":false},{"a":"extra","w":0.5,"c":false}]'),
+  ('lg_grind','long','持久の型','[{"a":"dmgLate","w":2.2,"c":false}]'),
+  ('lg_stack','long','積み重ね','[{"a":"dmgCombo","w":0.4,"c":false}]'),
+  ('lg_root','long','根を張る','[{"a":"regen","w":0.28,"c":false}]'),
+  ('lg_calm','long','静かな刃','[{"a":"cut","w":0.6,"c":false},{"a":"mpRegen","w":0.3,"c":false}]'),
+  ('lg_late','long','遅咲き','[{"a":"dmgLate","w":3,"c":false},{"a":"dmg","w":0.5,"c":true}]'),
+  ('lg_wear','long','摩耗誘い','[{"a":"ailDmg","w":1.4,"c":false},{"a":"ailRate","w":0.6,"c":false}]'),
+  ('lw_ice','lowHp','薄氷の勝者','[{"a":"dmgLow","w":2.4,"c":false}]'),
+  ('lw_guts','lowHp','死中に活','[{"a":"guts","w":2.4,"c":false}]'),
+  ('lw_last','lowHp','背水','[{"a":"dmgLow","w":3.4,"c":false},{"a":"taken","w":1,"c":true}]'),
+  ('lw_veil','lowHp','窮鼠の見切り','[{"a":"evaLow","w":2,"c":false}]'),
+  ('lw_hard','lowHp','火事場の硬さ','[{"a":"cutLow","w":2.2,"c":false}]'),
+  ('lw_leech','lowHp','命の削り合い','[{"a":"drain","w":0.4,"c":false},{"a":"dmgLow","w":1.2,"c":false}]'),
+  ('gi_slay','giant','巨人殺し','[{"a":"dmgBig","w":2.6,"c":false}]'),
+  ('gi_pierce','giant','大物貫き','[{"a":"defPen","w":1,"c":false},{"a":"dmgBig","w":1,"c":false}]'),
+  ('gi_brave','giant','蛮勇','[{"a":"dmgBig","w":3.6,"c":false},{"a":"taken","w":1.1,"c":true}]'),
+  ('gi_read','giant','力量差の見切り','[{"a":"evaLow","w":1.4,"c":false},{"a":"dmgBig","w":1.2,"c":false}]'),
+  ('gi_grit','giant','挑む者','[{"a":"st_vit","w":0.6,"c":false},{"a":"dmgBig","w":1.4,"c":false}]'),
+  ('gi_fell','giant','討ち取り','[{"a":"critRate","w":0.6,"c":false},{"a":"dmgBig","w":1.4,"c":false}]'),
+  ('sl_hunt','slayer','宿敵狩り','[{"a":"dmgFoe","w":2.8,"c":false}]'),
+  ('sl_know','slayer','手の内','[{"a":"dmgFoe","w":1.6,"c":false},{"a":"hit","w":0.5,"c":false}]'),
+  ('sl_grudge','slayer','執念','[{"a":"dmgFoe","w":3.8,"c":false},{"a":"heal","w":1,"c":true}]'),
+  ('sl_habit','slayer','型の記憶','[{"a":"dmgFoe","w":1.4,"c":false},{"a":"critRate","w":0.5,"c":false}]'),
+  ('sl_ward','slayer','弱点看破','[{"a":"dmgFoe","w":1.6,"c":false},{"a":"defPen","w":0.7,"c":false}]'),
+  ('sl_scar','slayer','積年の傷','[{"a":"dmgFoe","w":1.8,"c":false},{"a":"drain","w":0.25,"c":false}]'),
+  ('bo_slay','boss','大敵斬り','[{"a":"dmgBoss","w":2.6,"c":false}]'),
+  ('bo_long','boss','長期戦の心得','[{"a":"dmgBoss","w":1.4,"c":false},{"a":"regen","w":0.18,"c":false}]'),
+  ('bo_pierce','boss','巨躯貫き','[{"a":"dmgBoss","w":1.4,"c":false},{"a":"defPen","w":0.8,"c":false}]'),
+  ('bo_defy','boss','王殺し','[{"a":"dmgBoss","w":3.6,"c":false},{"a":"taken","w":1,"c":true}]'),
+  ('bo_focus','boss','討伐の集中','[{"a":"dmgBoss","w":1.2,"c":false},{"a":"critRate","w":0.5,"c":false}]'),
+  ('bo_stand','boss','踏み止まり','[{"a":"dmgBoss","w":1.2,"c":false},{"a":"cut","w":0.5,"c":false}]'),
+  ('dr_leech','drain','血の恵み','[{"a":"drain","w":0.55,"c":false}]'),
+  ('dr_hit','drain','一撃ごとの糧','[{"a":"onHitHeal","w":0.11,"c":false}]'),
+  ('dr_greed','drain','貪食','[{"a":"drain","w":0.85,"c":false},{"a":"heal","w":1,"c":true}]'),
+  ('dr_crit','drain','牙の悦び','[{"a":"critHpHeal","w":0.25,"c":false}]'),
+  ('dr_mana','drain','生命転換','[{"a":"onHitMp","w":0.11,"c":false},{"a":"drain","w":0.2,"c":false}]'),
+  ('dr_cycle','drain','循環','[{"a":"regen","w":0.2,"c":false},{"a":"drain","w":0.25,"c":false}]'),
+  ('mi_kata','misfire','居合の心得','[{"a":"misfireDmg","w":3,"c":false}]'),
+  ('mi_proc','misfire','呼吸を合わせる','[{"a":"proc","w":0.8,"c":false}]'),
+  ('mi_wait','misfire','溜めの型','[{"a":"dmgSkill","w":1.6,"c":false},{"a":"proc","w":0.6,"c":true}]'),
+  ('mi_ready','misfire','二の太刀','[{"a":"misfireDmg","w":2,"c":false},{"a":"dmgNormal","w":1,"c":false}]'),
+  ('mi_calm','misfire','平常心','[{"a":"proc","w":0.5,"c":false},{"a":"mpCost","w":0.5,"c":false}]'),
+  ('mi_burst','misfire','大振り','[{"a":"dmgSkill","w":2.4,"c":false},{"a":"hit","w":0.9,"c":true}]'),
+  ('ex_swift','extra','疾風の足','[{"a":"extra","w":0.8,"c":false}]'),
+  ('ex_agi','extra','軽身','[{"a":"st_agi","w":0.8,"c":false}]'),
+  ('ex_combo','extra','連なる手','[{"a":"dmgCombo","w":0.4,"c":false}]'),
+  ('ex_press','extra','畳みかけ','[{"a":"extra","w":0.5,"c":false},{"a":"dmgNormal","w":1,"c":false}]'),
+  ('ex_reck','extra','前のめり','[{"a":"extra","w":1.2,"c":false},{"a":"eva","w":0.8,"c":true}]'),
+  ('ex_flow','extra','途切れぬ手','[{"a":"extra","w":0.5,"c":false},{"a":"mpCost","w":0.6,"c":false}]'),
+  ('fs_edge','first','先手必勝','[{"a":"first","w":1.8,"c":false}]'),
+  ('fs_open','first','出会い頭','[{"a":"dmgFirst","w":2.2,"c":false}]'),
+  ('fs_full','first','満を持して','[{"a":"dmgFull","w":2.2,"c":false}]'),
+  ('fs_agi','first','疾さの証','[{"a":"st_agi","w":0.7,"c":false},{"a":"first","w":0.8,"c":false}]'),
+  ('fs_press','first','先制の圧','[{"a":"first","w":1,"c":false},{"a":"dmgFirst","w":1.2,"c":false}]'),
+  ('fs_bold','first','抜き打ち','[{"a":"dmgFirst","w":3,"c":false},{"a":"taken","w":0.9,"c":true}]'),
+  ('ov_might','overkill','有り余る力','[{"a":"dmg","w":0.8,"c":false}]'),
+  ('ov_crush','overkill','打ち砕き','[{"a":"dmgSmall","w":2.4,"c":false}]'),
+  ('ov_pierce','overkill','力任せ','[{"a":"defPen","w":1.3,"c":false}]'),
+  ('ov_burst','overkill','出し惜しみなし','[{"a":"dmgSkill","w":1.8,"c":false},{"a":"mpCost","w":0.9,"c":true}]'),
+  ('ov_wild','overkill','大暴れ','[{"a":"dmg","w":1.5,"c":false},{"a":"taken","w":1,"c":true}]'),
+  ('ov_finish','overkill','止めの一撃','[{"a":"critDmg","w":1.6,"c":false},{"a":"dmgSmall","w":1.2,"c":false}]'),
+  ('pf_grace','perfect','無傷の型','[{"a":"dmgFull","w":2.4,"c":false}]'),
+  ('pf_calm','perfect','静謐','[{"a":"cut","w":0.8,"c":false}]'),
+  ('pf_eye','perfect','完璧な見切り','[{"a":"eva","w":0.7,"c":false},{"a":"hit","w":0.5,"c":false}]'),
+  ('pf_high','perfect','余裕','[{"a":"dmgHigh","w":1.8,"c":false}]'),
+  ('pf_pure','perfect','一分の隙もなく','[{"a":"dmgFull","w":3.2,"c":false},{"a":"taken","w":0.8,"c":true}]'),
+  ('pf_keep','perfect','崩さぬ構え','[{"a":"cut","w":0.5,"c":false},{"a":"regen","w":0.18,"c":false}]'),
+  ('cb_rise','comeback','巻き返し','[{"a":"dmgLow","w":2.2,"c":false},{"a":"regen","w":0.15,"c":false}]'),
+  ('cb_guts','comeback','諦めの悪さ','[{"a":"guts","w":2.6,"c":false}]'),
+  ('cb_turn','comeback','形勢逆転','[{"a":"dmgHurt","w":2.6,"c":false}]'),
+  ('cb_bear','comeback','耐え忍び','[{"a":"cutLow","w":2,"c":false},{"a":"heal","w":0.6,"c":false}]'),
+  ('cb_heart','comeback','折れぬ心','[{"a":"st_vit","w":0.7,"c":false},{"a":"dmgLow","w":1.2,"c":false}]'),
+  ('cb_spite','comeback','意地','[{"a":"dmgLow","w":3.2,"c":false},{"a":"eva","w":0.9,"c":true}]'),
+  ('tk_rot','tick','蝕みを深く','[{"a":"ailDmg","w":2,"c":false}]'),
+  ('tk_spread','tick','病巣拡大','[{"a":"ailRate","w":0.8,"c":false},{"a":"ailDmg","w":0.9,"c":false}]'),
+  ('tk_feed','tick','病の恵み','[{"a":"ailDrain","w":0.25,"c":false}]'),
+  ('tk_hunt','tick','弱りを突く','[{"a":"dmgAil","w":2,"c":false}]'),
+  ('tk_gash','tick','傷口を開く','[{"a":"critAil","w":2.4,"c":false}]'),
+  ('tk_patient','tick','待ちの構え','[{"a":"cut","w":0.5,"c":false},{"a":"ailDmg","w":1.2,"c":false}]');
 
 -- ===== 1戦ぶんの戦績を積む =====
 -- p_ids … いま装備している武器の所持品ID（右手・左手）／ p_rec … evolve.js の recordOfBattle の結果
@@ -3473,19 +3652,20 @@ create or replace function public.v2_weapon_record(p_ids bigint[], p_rec jsonb)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_uid   uuid := auth.uid();
-  -- 1戦あたりの上限。★ここを超える申告は切り捨てる（evolve.js の emptyRecord と同じキー）
+  -- 1戦あたりの上限。★ここを超える申告は切り捨てる
   c_max_turns constant int := 100;   -- battle.js の MAX_TURNS
   c_max_hits  constant int := 200;   -- 多段＋追加行動を見込んだ上限
+  c_max_acts  constant int := 200;   -- 回復・バフ・不発などの回数の上限
   c_foes_keep constant int := 12;    -- evolve.js の FOES_KEEP
   c_stages    constant int[] := array[100, 500, 2000];
-  v_hits   int;  v_taken int;  v_wins int;
-  v_add    jsonb;
-  v_foe    text;
-  v_row    record;
-  v_old    jsonb;
-  v_foes   jsonb;
-  v_n      int;
-  v_out    jsonb := '[]'::jsonb;
+  v_hits  int;  v_taken int;  v_wins int;
+  v_add   jsonb;
+  v_foe   text;
+  v_row   record;
+  v_old   jsonb;
+  v_foes  jsonb;
+  v_n     int;
+  v_out   jsonb := '[]'::jsonb;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
@@ -3503,16 +3683,37 @@ begin
     select key into v_foe from jsonb_each_text(coalesce(p_rec -> 'foes', '{}'::jsonb)) limit 1;
   end if;
   v_add := jsonb_build_object(
-    'battles', 1,
-    'hits',    v_hits,
-    'crit',    least(greatest(coalesce((p_rec ->> 'crit')::int, 0), 0), v_hits),
-    'taken',   v_taken,
-    'dodged',  least(greatest(coalesce((p_rec ->> 'dodged')::int, 0), 0), v_taken),
-    'ail',     least(greatest(coalesce((p_rec ->> 'ail')::int, 0), 0), v_hits),
-    'wins',    v_wins,
-    'lowWin',  least(greatest(coalesce((p_rec ->> 'lowWin')::int, 0), 0), v_wins),
-    'bigWin',  least(greatest(coalesce((p_rec ->> 'bigWin')::int, 0), 0), v_wins),
-    'turns',   least(greatest(coalesce((p_rec ->> 'turns')::int, 0), 0), c_max_turns)
+    'battles',    1,
+    'turns',      least(greatest(coalesce((p_rec ->> 'turns')::int, 0), 0), c_max_turns),
+    'hits',       v_hits,
+    'crit',       least(greatest(coalesce((p_rec ->> 'crit')::int, 0), 0), v_hits),
+    'physHits',   least(greatest(coalesce((p_rec ->> 'physHits')::int, 0), 0), v_hits),
+    'magHits',    least(greatest(coalesce((p_rec ->> 'magHits')::int, 0), 0), v_hits),
+    'skillHits',  least(greatest(coalesce((p_rec ->> 'skillHits')::int, 0), 0), v_hits),
+    'normalHits', least(greatest(coalesce((p_rec ->> 'normalHits')::int, 0), 0), v_hits),
+    'multiHits',  least(greatest(coalesce((p_rec ->> 'multiHits')::int, 0), 0), v_hits),
+    'drains',     least(greatest(coalesce((p_rec ->> 'drains')::int, 0), 0), v_hits),
+    'ail',        least(greatest(coalesce((p_rec ->> 'ail')::int, 0), 0), v_hits),
+    'taken',      v_taken,
+    'dodged',     least(greatest(coalesce((p_rec ->> 'dodged')::int, 0), 0), v_taken),
+    'hurtPct',    round(least(greatest(coalesce((p_rec ->> 'hurtPct')::numeric, 0), 0), 1), 3),
+    'ailed',      least(greatest(coalesce((p_rec ->> 'ailed')::int, 0), 0), c_max_acts),
+    'ailTicks',   least(greatest(coalesce((p_rec ->> 'ailTicks')::int, 0), 0), c_max_acts),
+    'heals',      least(greatest(coalesce((p_rec ->> 'heals')::int, 0), 0), c_max_acts),
+    'buffs',      least(greatest(coalesce((p_rec ->> 'buffs')::int, 0), 0), c_max_acts),
+    'misfires',   least(greatest(coalesce((p_rec ->> 'misfires')::int, 0), 0), c_max_acts),
+    'extras',     least(greatest(coalesce((p_rec ->> 'extras')::int, 0), 0), c_max_acts),
+    'firsts',     least(greatest(coalesce((p_rec ->> 'firsts')::int, 0), 0), 1),
+    'mpEmpty',    least(greatest(coalesce((p_rec ->> 'mpEmpty')::int, 0), 0), 1),
+    'wins',       v_wins,
+    'lowWin',     least(greatest(coalesce((p_rec ->> 'lowWin')::int, 0), 0), v_wins),
+    'bigWin',     least(greatest(coalesce((p_rec ->> 'bigWin')::int, 0), 0), v_wins),
+    'bossWin',    least(greatest(coalesce((p_rec ->> 'bossWin')::int, 0), 0), v_wins),
+    'fastWin',    least(greatest(coalesce((p_rec ->> 'fastWin')::int, 0), 0), v_wins),
+    'longWin',    least(greatest(coalesce((p_rec ->> 'longWin')::int, 0), 0), v_wins),
+    'perfect',    least(greatest(coalesce((p_rec ->> 'perfect')::int, 0), 0), v_wins),
+    'comeback',   least(greatest(coalesce((p_rec ->> 'comeback')::int, 0), 0), v_wins),
+    'overkill',   least(greatest(coalesce((p_rec ->> 'overkill')::int, 0), 0), v_wins)
   );
 
   -- ---- 装備している武器へ積む（自分のもので、部位が武器のものだけ）----
@@ -3537,7 +3738,7 @@ begin
     -- 数のキーは足し算、foes だけ別枠
     v_old := (
       select coalesce(jsonb_object_agg(k, to_jsonb(
-               coalesce((v_old ->> k)::int, 0) + coalesce((v_add ->> k)::int, 0))), '{}'::jsonb)
+               coalesce((v_old ->> k)::numeric, 0) + coalesce((v_add ->> k)::numeric, 0))), '{}'::jsonb)
         from jsonb_object_keys(v_add) k
     ) || jsonb_build_object('foes', v_foes);
     update public.v2_inventory set record = v_old where id = v_row.id;
@@ -3560,25 +3761,29 @@ revoke all on function public.v2_weapon_record(bigint[], jsonb) from anon;
 grant execute on function public.v2_weapon_record(bigint[], jsonb) to authenticated;
 
 -- ===== 進化を1つ付ける =====
--- 中身（どの能力か）はクライアントが戦績から決める（evolve.js の makeEvolution）。
--- ★サーバーは**段階・熟練度・重複・上限・敵の名前**を検証する＝好きな能力を好きなだけは付けられない
-create or replace function public.v2_weapon_evolve(p_id bigint, p_key text, p_value numeric, p_foe text default null)
+-- クライアントが送るのは「どの能力か(p_key)」と「偏りの強さ(p_s・0〜1)」と「相手(p_foe)」だけ。
+-- ★**効果の値はサーバーが名簿の倍率から計算する**＝値そのものは水増しできない。
+create or replace function public.v2_weapon_evolve(p_id bigint, p_key text, p_s numeric, p_foe text default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_uid    uuid := auth.uid();
   c_stages constant int[]     := array[100, 500, 2000];      -- evolve.js の STAGES
-  c_caps   constant numeric[] := array[6, 10, 15];           -- evolve.js の STAGE_CAP
-  c_keys   constant text[]    := array['crit','eva','ail','endure','giant','swift','slayer'];
+  c_caps   constant numeric[] := array[6, 10, 15];   -- evolve.js の STAGE_CAP
   v_row    record;
+  v_tr     record;
   v_evos   jsonb;
   v_stage  int;
   v_bat    int;
-  v_val    numeric;
+  v_s      numeric;
+  v_cap    numeric;
+  v_eff    jsonb;
   v_ev     jsonb;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
-  if not (p_key = any(c_keys)) then return jsonb_build_object('ok', false, 'error', '知らない能力です'); end if;
+
+  select t.key, t.atoms into v_tr from public.v2_evolve_traits t where t.key = p_key;
+  if not found then return jsonb_build_object('ok', false, 'error', '知らない能力です'); end if;
 
   select i.id, i.record, i.evolutions into v_row
     from public.v2_inventory i
@@ -3601,12 +3806,17 @@ begin
     return jsonb_build_object('ok', false, 'error', 'その能力はもう付いています');
   end if;
 
-  -- 値は段階ごとの上限まで（0.1刻み）
-  v_val := round(least(greatest(coalesce(p_value, 0), 1), c_caps[v_stage]), 1);
+  -- ★効果の値はここで作る（クライアントの言い値は使わない）
+  v_s   := least(greatest(coalesce(p_s, 0), 0), 1);
+  v_cap := c_caps[v_stage];
+  select coalesce(jsonb_object_agg(e ->> 'a',
+           greatest(0.1, round(v_cap * v_s * (e ->> 'w')::numeric, 1))), '{}'::jsonb)
+    into v_eff
+    from jsonb_array_elements(v_tr.atoms) e;
 
-  v_ev := jsonb_build_object('stage', v_stage, 'key', p_key, 'value', v_val);
-  if p_key = 'slayer' then
-    -- 宿敵狩りは**実際に倒した相手**でなければ付かない
+  v_ev := jsonb_build_object('stage', v_stage, 'key', p_key, 's', round(v_s, 3), 'eff', v_eff);
+  if v_tr.atoms @> '[{"a":"dmgFoe"}]'::jsonb then
+    -- 宿敵狩りの系統は**実際に倒した相手**でなければ付かない
     if p_foe is null or not (coalesce(v_row.record, '{}'::jsonb) -> 'foes' ? p_foe) then
       return jsonb_build_object('ok', false, 'error', 'その相手を倒した記録がありません');
     end if;
