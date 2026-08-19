@@ -24,7 +24,7 @@ import {
   powerText, isPassive, KIND_LABEL, KIND_COLOR, SKILL_BY_NAME,
   usableSkills, usableSkillNames, unlearnedSkills, validateSkillSet, setMpCost,
   KIND_TABS, filterSkills, sortSkills,
-  SKILL_SET_SLOTS, SKILL_USE_MAX,
+  SKILL_SET_SLOTS, SKILL_USE_MAX, OFF_CLASS_MULT,
 } from '../lib/skills.js'
 
 // 編成の下書きを「5枠ぶんの配列」に揃える（空き枠も持つ）
@@ -396,6 +396,9 @@ export default function V2Home() {
                 あなたの最大MPは<span style={{ color:'#4488ff' }}>{maxMp}MP</span>です。
                 いまの編成の想定利用MPは<span style={{ color: mpCost > maxMp ? '#ff4444' : '#44ffaa' }}>{mpCost}MP</span>です。
               </div>
+              <div style={{ color:'#ff88cc', fontSize:'10px', marginBottom:'5px', lineHeight:'1.6' }}>
+                いまの職業（{prof.class}）以外のスキルは、ダメージ・回復・バフ・状態異常の効果が{OFF_CLASS_MULT}倍になります。
+              </div>
               <div style={{ display:'grid', gap:'3px' }}>
                 {Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => {
                   const row = draft[i] || { name:'', uses:1 }
@@ -406,6 +409,8 @@ export default function V2Home() {
                       <span style={{ color:'#8866cc', width:'42px' }}>スキル{i + 1}</span>
                       <span style={{ flex:1, color: s ? KIND_COLOR[s.kind] : '#62789a', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                         {s ? s.name : '（空き）'}
+                        {s && s.cls !== prof.class && !isPassive(s) &&
+                          <span style={{ color:'#ff88cc', fontSize:'9px', marginLeft:'4px' }}>×{OFF_CLASS_MULT}</span>}
                       </span>
                       <span style={{ color: cost > maxMp ? '#ff4444' : '#7fa6d0', width:'62px', textAlign:'right' }}>
                         {s ? (s.mpPct ? `MP残${Math.round(s.mpPct * 100)}%` : `MP${s.mp}×${row.uses}`) : ''}
@@ -487,7 +492,9 @@ export default function V2Home() {
                           <span style={{ color:'#93a9be', fontSize:'9px', marginLeft:'5px' }}>{KIND_LABEL[s.kind]}</span>
                           {isKept && <span style={{ color:'#ffcc00', fontSize:'9px', marginLeft:'5px' }}>習得済み</span>}
                           {!has && <span style={{ color:'#c69a5c', fontSize:'9px', marginLeft:'5px' }}>未習得</span>}
-                          {s.cls !== prof.class && <span style={{ color:'#ff88cc', fontSize:'9px', marginLeft:'5px' }}>{s.cls}</span>}
+                          {s.cls !== prof.class && <span style={{ color:'#ff88cc', fontSize:'9px', marginLeft:'5px' }}>
+                            {s.cls}{isPassive(s) ? '' : `・効果${OFF_CLASS_MULT}倍`}
+                          </span>}
                         </span>
                         <span style={{ color:'#7fa6d0', fontSize:'10px' }}>
                           {isPassive(s) ? '常時' : `${mpLabel(s)} ／ ${s.proc}%`}

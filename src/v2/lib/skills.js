@@ -311,6 +311,23 @@ export const SKILLS = [
   { name:'貫狼撃',     cls:'ビーストレンジャー', kind:'phys', mult:2.2, defPen:0.3, proc:82, mp:20, desc:'相手の防御を30%無視' },
 ]
 
+// ===== 他職のスキルは効果が落ちる（2026-08-18 ユーザー決定）=====
+// v2は「習得済み」で転職後もスキルが残る＝**職業をまたいで自由に組み合わせられる**。
+// そのままだと、周回するほど全員が同じ最適5枠に寄って**職業を選ぶ意味が消える**。
+// そこで「いまの職業のスキルでないものは効果を OFF_CLASS_MULT 倍にする」。
+//   ・掛かるもの … ダメージ／回復量（即時・継続・MP）／バフとデバフの増減幅／状態異常の付与確率
+//   ・掛からないもの … 通常攻撃（スキルではない）・パッシブ（扱いは別途決める）・
+//                     防御無視・必中・確定クリ・多段数・発動率・消費MP
+// ★枠の強制（「3枠は自職」など）は**採らない**。0.8倍だけで自職のスキルが上位に来ることを
+//   実測で確認したうえで、枠まで縛ると二重の税金になり周回して集める動機が消えるため。
+export const OFF_CLASS_MULT = 0.8
+// 敵の技やテスト用のダミーは cls を持たない＝素の性能のまま（罰則の対象は職業スキルだけ）
+export const isOwnClassSkill = (cls, skill) => !skill?.cls || skill.cls === cls
+export const offClassMult = (cls, skill) => (isOwnClassSkill(cls, skill) ? 1 : OFF_CLASS_MULT)
+// 増減幅を丸ごと弱める（バフ・デバフ用。デバフは負の値なので0へ寄る＝弱くなる）
+export const scaleTable = (table, mult) =>
+  (mult === 1 || !table) ? table : Object.fromEntries(Object.entries(table).map(([k, v]) => [k, v * mult]))
+
 export const SKILL_BY_NAME = Object.fromEntries(SKILLS.map(s => [s.name, s]))
 export const skillsOf = (cls) => SKILLS.filter(s => s.cls === cls)
 export const SKILL_CLASSES = [...new Set(SKILLS.map(s => s.cls))]

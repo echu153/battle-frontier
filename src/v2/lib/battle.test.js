@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { runBattle, createSide, peekSkill, attackKindOf, mpCostOf, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
-import { skillsOf } from './skills.js'
+import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT } from './skills.js'
 import { damageFloor } from './combat.js'
 
 const makeRng = (seed) => {
@@ -15,7 +15,8 @@ const evenStats = (power) => {
   return { hp:u * 8, mp:u * 3, str:u, dex:u, agi:u, int_stat:u, vit:u, luk:u }
 }
 // 検証しやすいように、当たる・当たらないが確定するダミースキルを作る
-const sk = (name, over = {}) => ({ name, cls:'テスト', kind:'phys', mult:1, proc:100, mp:0, desc:'', ...over })
+// ★clsを持たせない＝他職ペナルティ(OFF_CLASS_MULT)の対象外。素の挙動だけを見たいので
+const sk = (name, over = {}) => ({ name, kind:'phys', mult:1, proc:100, mp:0, desc:'', ...over })
 const fighter = (name, slots, stats = evenStats(534)) => ({ name, cls:'戦士', kind:'phys', stats, slots })
 
 test('職業の通常攻撃はSTR参照かINT参照かが決まる', () => {
@@ -216,4 +217,73 @@ test('侍は出血役（居合斬20%・月影40%）', () => {
   // 出血は割合ダメージ＝倍率の帯とは別枠の価値なので、素の倍率は帯の上限を超えていない
   assert.ok(by['居合斬'].mult + by['居合斬'].add[0].rate <= 1.9)
   assert.equal(by['月影'].mult, 2.4)
+})
+
+// ============================================================
+// ★2026-08-18：**他職のスキルは効果が落ちる**（skills.js の OFF_CLASS_MULT）。
+//   v2は習得済みで転職後もスキルが残る＝職業をまたいで組めるので、そのままだと
+//   全員が同じ最適5枠に寄って職業を選ぶ意味が消える。
+//   ⚠掛かるのは「ダメージ・回復・バフ幅・状態異常の付与確率」だけ。
+//     発動率・消費MP・防御無視・必中・多段数・パッシブには掛からない。
+//     ここが崩れると「他職からはバフとパッシブを借りるのが最適」に戻ってしまう
+// ============================================================
+// ★比較は「同じ職業で、ラベルだけ他職にしたスキル」で行う。
+//   別の職業で走らせると職業補正（侍STR+5% / 狂戦士STR+10%）まで変わって比べ物にならない
+const soloRun = (cls, skill, seed = 5, maxTurns = 1) => runBattle(
+  { name:'me', cls, kind:'phys', stats: evenStats(534), slots:[{ skill, uses: 9 }] },
+  { name:'foe', cls:'戦士', kind:'phys', stats:{ ...evenStats(534), hp: 10 ** 7 }, slots: [] },
+  { rng: makeRng(seed), maxTurns })
+const asOtherClass = (skill) => ({ ...skill, cls: '別職' })
+
+test('他職のスキルはダメージが0.8倍になる', () => {
+  const blade = SKILL_BY_NAME['月影']
+  const mine = soloRun('侍', blade).log.find(l => l.side === 'me' && l.type === 'skill')
+  const off  = soloRun('侍', asOtherClass(blade)).log.find(l => l.side === 'me' && l.type === 'skill')
+  assert.ok(mine.damage > 0 && off.damage > 0)
+  assert.ok(Math.abs(off.damage - mine.damage * OFF_CLASS_MULT) <= 1,
+    `自職${mine.damage} → 他職${off.damage}（期待 ${(mine.damage * OFF_CLASS_MULT).toFixed(1)}）`)
+})
+
+test('他職のスキルはバフの増減幅も0.8倍になる', () => {
+  const buff = SKILL_BY_NAME['明鏡止水']   // 侍：STR+30%・DEX+20%
+  const mine = soloRun('侍', buff).a
+  const off  = soloRun('侍', asOtherClass(buff)).a
+  // どちらも侍なので職業補正(STR+5%)は同じ。差はバフの幅だけ
+  assert.equal(mine.buffs.str - 5, 30)
+  assert.equal(mine.buffs.dex, 20)
+  assert.equal(off.buffs.str - 5, 30 * OFF_CLASS_MULT)
+  assert.equal(off.buffs.dex, 20 * OFF_CLASS_MULT)
+})
+
+test('他職のスキルはデバフの幅も0.8倍になる（弱いデバフになる）', () => {
+  const debuff = SKILL_BY_NAME['防御崩し']   // 戦士：相手のVIT-15%
+  const mine = soloRun('戦士', debuff).b
+  const off  = soloRun('戦士', asOtherClass(debuff)).b
+  assert.equal(mine.buffs.vit, -15)
+  assert.equal(off.buffs.vit, -15 * OFF_CLASS_MULT)   // 0へ寄る＝弱い
+})
+
+test('他職のスキルは状態異常の付与確率も0.8倍になる', () => {
+  const bleed = { ...SKILL_BY_NAME['月影'], ail:{ key:'bleed', chance:100 } }
+  const count = (skill) => {
+    let n = 0
+    for (let i = 0; i < 300; i++) if (soloRun('侍', skill, i + 1).log.some(l => l.type === 'ailment')) n++
+    return n
+  }
+  const mine = count(bleed)
+  const off = count(asOtherClass(bleed))
+  // 発動78%×命中ぶんがあるので300回全部ではない。ここで見たいのは自職と他職の差
+  assert.ok(mine > 150, `自職で入った回数が少なすぎる: `)
+  assert.ok(off < mine, `他職でも減っていない: 自職${mine} / 他職${off}`)
+})
+
+test('発動率・消費MP・通常攻撃には0.8倍が掛からない', () => {
+  // ★ここが崩れると「他職からはバフとパッシブを借りるのが得」に戻る
+  const blade = asOtherClass(SKILL_BY_NAME['月影'])
+  assert.equal(mpCostOf({ mp: 500 }, blade), SKILL_BY_NAME['月影'].mp, '消費MPは据え置き')
+  assert.equal(blade.proc, 78, '発動率は据え置き')
+  // 通常攻撃はスキルではないので対象外（不発しかしない技を積んで通常攻撃を出させる）
+  const dud = { name:'不発だけ', cls:'別職', kind:'phys', mult:1, proc:0, mp:0, desc:'' }
+  const na = soloRun('侍', dud).log.find(l => l.side === 'me' && l.type === 'normal')
+  assert.ok(na && na.damage > 0, '通常攻撃が出ている')
 })

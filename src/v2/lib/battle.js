@@ -18,7 +18,7 @@ import {
   resolveAttack, healOf, roll, goesFirst, rollExtraAction,
 } from './combat.js'
 import { STAT_KEYS } from './stats.js'
-import { skillsOf, isPassive } from './skills.js'
+import { skillsOf, isPassive, offClassMult, scaleTable } from './skills.js'
 import { classBonusOf } from './classBonus.js'
 import {
   createAilments, inflict, tickAilments, ailStatPct, healMultOf, consumeParalyze, AIL_LABEL,
@@ -303,6 +303,9 @@ const takeAction = (me, foe, rng, log) => {
 
   const eMe = liveStats(me, true)
   const eFoe = liveStats(foe)
+  // ★他職のスキルは効果が落ちる（skills.js の OFF_CLASS_MULT）。ダメージ・回復・バフ幅・
+  //   状態異常の付与確率に掛かる。発動率・消費MP・防御無視・必中などには掛からない
+  const off = offClassMult(me.cls, skill)
 
   if (skill.kind === 'phys' || skill.kind === 'mag') {
     let raw = 0
@@ -333,13 +336,14 @@ const takeAction = (me, foe, rng, log) => {
     }
     // エンチャントの与ダメージ+%（物理／魔法で別枠。時間帯ぶんも畳み込み済み）
     raw = Math.floor(raw * (1 + (skill.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100))
+    if (off !== 1) raw = Math.floor(raw * off)
     const dmg = applyIncoming(me, foe, raw, skill.kind, rng, log)
     if (hits > 0) {
       onHit(me, foe, skill.kind, rng, log)
       // ★スキル自身が持つ状態異常（どくのほうし＝毒、電撃＝麻痺 など）。**当たったときだけ**。
       //   敵もプレイヤーと同じ takeAction を通るので、これで**敵→こちら**にも状態異常が飛ぶ
       //   ＝エンチャントの抵抗（毒キノコ・払暁のワイバーン）が意味を持つ
-      if (skill.ail) tryInflict(foe, skill.ail, rng, log)
+      if (skill.ail) tryInflict(foe, { ...skill.ail, chance: skill.ail.chance * off }, rng, log)
     }
     // バーサク・執行本能：ダメージを与えたら+1スタック、全部外れたらリセット
     if (me.pa.rages.length) me.rage = hits > 0 ? me.rage + 1 : 0
@@ -358,12 +362,12 @@ const takeAction = (me, foe, rng, log) => {
     log.push({ side: me.name, type: 'skill', skill: skill.name, damage: dmg, crit, hits, of: skill.hits || 1, drain: drained })
   } else if (skill.kind === 'heal') {
     if (skill.heal) {
-      const amt = healAmount(me, eMe, skill.heal.rate)
+      const amt = healAmount(me, eMe, skill.heal.rate * off)
       me.hp = Math.min(me.base.hp, me.hp + amt)
       log.push({ side: me.name, type: 'heal', skill: skill.name, heal: amt })
     }
-    if (skill.regen)   { me.regen   = { ...skill.regen };   log.push({ side: me.name, type: 'regen', skill: skill.name }) }
-    if (skill.mpRegen) { me.mpRegen = { ...skill.mpRegen }; log.push({ side: me.name, type: 'mpRegen', skill: skill.name }) }
+    if (skill.regen)   { me.regen   = { ...skill.regen,   rate: skill.regen.rate * off };   log.push({ side: me.name, type: 'regen', skill: skill.name }) }
+    if (skill.mpRegen) { me.mpRegen = { ...skill.mpRegen, rate: skill.mpRegen.rate * off }; log.push({ side: me.name, type: 'mpRegen', skill: skill.name }) }
   }
 
   // 骸の壁：戦闘開始時と自分の行動5回ごとに得る（重複しないので、掛け直すだけ）
@@ -371,8 +375,8 @@ const takeAction = (me, foe, rng, log) => {
 
   // バフ・デバフ（攻撃スキルに付いていることもある）
   if (skill.buff) {
-    if (skill.buff.self)  applyBuff(me.buffs, skill.buff.self)
-    if (skill.buff.enemy) applyDebuff(foe, skill.buff.enemy, log)
+    if (skill.buff.self)  applyBuff(me.buffs, scaleTable(skill.buff.self, off))
+    if (skill.buff.enemy) applyDebuff(foe, scaleTable(skill.buff.enemy, off), log)
     log.push({ side: me.name, type: 'buff', skill: skill.name })
   }
 }
