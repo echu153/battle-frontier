@@ -4,7 +4,7 @@ import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
 import { COLOR_HEX, COLOR_LABEL, runeName } from '../lib/material.js'
 import { runePctText } from '../lib/loadout.js'
 import { enchantOf } from '../lib/enchant.js'
-import { evolutionText, nextStageAt, TRAIT_BY_KEY } from '../lib/evolve.js'
+import { evolutionLines, nextStageAt, TRAIT_BY_KEY } from '../lib/evolve.js'
 import { KIND_LABEL, KIND_COLOR, isPassive, powerText } from '../lib/skills.js'
 import { RANK_COLOR } from './v2ui.js'
 
@@ -117,7 +117,15 @@ export function EvoDetail({ item, inv }) {
         : <span style={{ color:'#62789a' }}>　進化しきった</span>}
       {list.length
         ? list.map((e, i) => (
-            <div key={i} style={{ color:'#ffcc44' }}>⚡{evolutionText(e)}</div>
+            <div key={i} style={{ marginTop:'3px' }}>
+              <div style={{ color:'#ffcc44' }}>⚡{TRAIT_BY_KEY[e.key]?.name || e.key}</div>
+              {/* ★得と代償を色で分ける（代償つきの能力が多いので、ひと目で分かるように） */}
+              {evolutionLines(e).map((l, j) => (
+                <div key={j} style={{ color: l.cost ? '#ff8866' : '#93a9be', paddingLeft:'12px' }}>
+                  {l.cost ? '▼ ' : '▲ '}{l.text}
+                </div>
+              ))}
+            </div>
           ))
         : <div style={{ color:'#62789a' }}>進化なし</div>}
     </div>

@@ -193,46 +193,80 @@ test('出撃のデイリー加算がクールタイム別になっている（20
 })
 
 // ===== 武器の進化（戦闘記憶）=====
-// ★節目と上限は evolve.js と v2_weapon_evolve の2か所にある。片方だけ直すと
-//   「画面には進化できると出るのにサーバーに弾かれる」または「上限を超えた値が通る」になる
-test('武器の進化の節目・上限・能力のキーが evolve.js とSQLで一致している', async () => {
-  const { STAGES, STAGE_CAP, TRAITS, FOES_KEEP } = await import('./evolve.js')
-  const body = bodyOf('v2_weapon_evolve')
-  assert.ok(body.includes(`array[${STAGES.join(', ')}]`), `節目 ${STAGES} がSQLと違う`)
-  assert.ok(body.includes(`array[${STAGE_CAP.join(', ')}]`), `上限 ${STAGE_CAP} がSQLと違う`)
-  const keys = TRAITS.map(t => `'${t.key}'`).join(',')
-  assert.ok(body.includes(`array[${keys}]`), `能力のキーがSQLと違う（${keys}）`)
-  // 戦績を積む側の上限も合わせる
+// ★能力の名簿は evolveTraits.js と v2_evolve_traits の2か所にある。値はサーバーが
+//   名簿の倍率から計算し直すので、ズレると**画面と実際の効果が食い違う**。
+test('能力の名簿がSQLと evolveTraits.js で完全に一致している', async () => {
+  const { TRAITS } = await import('./evolveTraits.js')
+  const seed = SQL.slice(SQL.indexOf('insert into public.v2_evolve_traits'))
+  const rows = [...seed.slice(0, seed.indexOf(';')).matchAll(/\n\s*\('([^']+)','([^']+)','([^']+)','(\[.*?\])'\)/g)]
+  assert.equal(rows.length, TRAITS.length, `名簿の行数が違う（SQL ${rows.length} / JS ${TRAITS.length}）`)
+  const bySql = new Map(rows.map(m => [m[1], { axis: m[2], name: m[3], atoms: JSON.parse(m[4]) }]))
+  for (const t of TRAITS) {
+    const row = bySql.get(t.key)
+    assert.ok(row, `${t.key} がSQLに無い`)
+    assert.equal(row.axis, t.axis, `${t.key} の軸`)
+    assert.equal(row.name, t.name, `${t.key} の名前`)
+    const want = [
+      ...t.gain.map(([a, w]) => ({ a, w, c: false })),
+      ...t.cost.map(([a, w]) => ({ a, w, c: true })),
+    ]
+    assert.deepEqual(row.atoms, want, `${t.key} の部品`)
+  }
+})
+
+test('武器の進化の節目・予算が evolve.js とSQLで一致している', async () => {
+  const { STAGES, STAGE_CAP, FOES_KEEP } = await import('./evolve.js')
+  const ev = bodyOf('v2_weapon_evolve')
+  assert.ok(ev.includes(`array[${STAGES.join(', ')}]`), `節目 ${STAGES} がSQLと違う`)
+  assert.ok(ev.includes(`array[${STAGE_CAP.join(', ')}]`), `予算 ${STAGE_CAP} がSQLと違う`)
   const rec = bodyOf('v2_weapon_record')
   assert.ok(rec.includes(`c_foes_keep constant int := ${FOES_KEEP};`), '敵の記録の上限がSQLと違う')
-  assert.ok(rec.includes(`array[${STAGES.join(', ')}];`), '節目がSQLと違う')
+  assert.ok(rec.includes(`array[${STAGES.join(', ')}]`), '節目がSQLと違う')
+})
+
+// ★戦績のキーを増やしたのにSQLの上限表へ入れ忘れると、その項目だけ永遠に0のままになる
+test('戦績のキーがSQLの上限表にぜんぶ入っている（数え忘れを検出）', async () => {
+  const { emptyRecord } = await import('./evolve.js')
+  const body = bodyOf('v2_weapon_record')
+  const missing = Object.keys(emptyRecord())
+    .filter(k => k !== 'foes')
+    .filter(k => !body.includes(`'${k}',`))
+  assert.deepEqual(missing, [], `v2_weapon_record が積んでいない項目: ${missing.join(', ')}`)
 })
 
 test('v2_weapon_record は1戦ぶんの申告を頭打ちにする（言い値で積ませない）', () => {
   const body = bodyOf('v2_weapon_record')
-  // 戦闘はクライアントが回すので、素直に足すと熟練度も戦績もいくらでも盛れる
   const has = (t, msg) => assert.ok(body.includes(t), msg)
-  has("'battles', 1", '1戦は必ず1と数える')
-  // クリはヒット数、回避は被弾数…と、上限になる値まで含めて固定する
-  for (const [k, cap] of [['crit', 'v_hits'], ['dodged', 'v_taken'], ['ail', 'v_hits'],
-                          ['lowWin', 'v_wins'], ['bigWin', 'v_wins']]) {
-    has(`'${k}'`, `${k} を積んでいない`)
-    has(`::int, 0), 0), ${cap})`, `${k} を ${cap} で頭打ちにしていない`)
+  has("'battles',    1", '1戦は必ず1と数える')
+  // クリはヒット数まで、回避は被弾数まで…と、上限になる値まで含めて固定する
+  for (const [k, cap] of [['crit', 'v_hits'], ['physHits', 'v_hits'], ['magHits', 'v_hits'],
+                          ['skillHits', 'v_hits'], ['normalHits', 'v_hits'], ['multiHits', 'v_hits'],
+                          ['drains', 'v_hits'], ['ail', 'v_hits'], ['dodged', 'v_taken'],
+                          ['lowWin', 'v_wins'], ['bigWin', 'v_wins'], ['bossWin', 'v_wins'],
+                          ['fastWin', 'v_wins'], ['longWin', 'v_wins'], ['perfect', 'v_wins'],
+                          ['comeback', 'v_wins'], ['overkill', 'v_wins']]) {
+    has(`(p_rec ->> '${k}')::int, 0), 0), ${cap})`, `${k} を ${cap} で頭打ちにしていない`)
   }
   has("'wins')::int, 0), 0), 1)", '勝ちは1戦につき1まで')
+  has("'firsts')::int, 0), 0), 1)", '先攻は1戦につき1まで')
   has("'turns')::int, 0), 0), c_max_turns)", 'ターン数に上限が無い')
+  has("'hurtPct')::numeric, 0), 0), 1)", '失ったHPの割合が0〜1に収まっていない')
   // 部位が武器のものだけに積む（防具に熟練度が乗らない）
   has("e.part = '武器'", '武器以外にも積んでいる')
 })
 
-test('v2_weapon_evolve は段階・熟練度・重複・相手を検証する', () => {
+// ★ここがこの機能のいちばん大事な守り。値をクライアントから受け取ると好きなだけ盛れる
+test('v2_weapon_evolve は効果の値をサーバーで作り直す（言い値を使わない）', () => {
   const body = bodyOf('v2_weapon_evolve')
   const has = (t, msg) => assert.ok(body.includes(t), msg)
+  assert.doesNotMatch(body, /p_eff|p_value/, '効果の値を引数で受け取っている')
+  has('from public.v2_evolve_traits t where t.key = p_key', '名簿を引いていない')
+  has("v_cap * v_s * (e ->> 'w')::numeric", '名簿の倍率から値を作っていない')
+  has('least(greatest(coalesce(p_s, 0), 0), 1)', '偏りの強さを0〜1に収めていない')
   has('v_stage := jsonb_array_length(v_evos) + 1', '段階は付いている数から決める')
   has('if v_bat < c_stages[v_stage]', '熟練度が足りているか見ていない')
   has("e ->> 'key' = p_key", '同じ能力の重複を見ていない')
   has("-> 'foes' ? p_foe", '宿敵狩りの相手を戦績で確かめていない')
-  has('least(greatest(coalesce(p_value, 0), 1), c_caps[v_stage])', '値を上限で切っていない')
   has("e.part = '武器'", '武器以外にも進化が付けられる')
 })
 

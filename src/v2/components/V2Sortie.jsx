@@ -63,7 +63,8 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
     // ★アリーナで階層守護者でいるあいだは、素材も装備も落ちやすくなる（×1.1・掛け算で乗る）
     const matMult = dropRateMultOf(runeAbilities(equippedRunes(prof, inventory, runes))) * guardMult
     const enc = pickEncounter(area.id, bossRate, new Date())
-    const r = runBattle(me, enemyFighter(enc.enemy, 8))
+    // ★ボスかどうかは戦闘（「大敵斬り」）と戦績（ボス討伐数）の両方が見る
+    const r = runBattle(me, { ...enemyFighter(enc.enemy, 8), boss: enc.isBoss })
     const win = r.winner === 'a'
     const exp = win ? expOf(enc.isBoss) : 0
     const drop = win && rollHasDrop(cd, Math.random, guardMult) ? rollDrop(area.id, new Date()) : null
@@ -112,7 +113,7 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
     }
     if (data.level?.ups > 0) setLogs(l => [...l, { text:`🆙 レベルアップ！ LV${data.level.lv}`, color:'#44ff88' }])
     // ★武器の進化（戦闘記憶）。装備している武器へ1戦ぶんの戦績を積む
-    const ready = await pushWeaponRecord(prof, inventory, r, you, foe)
+    const ready = await pushWeaponRecord(prof, inventory, r, you, foe, { isBoss: enc.isBoss })
     if (ready.length) setEvolving(ready[0])
     onProfile(null)
   }

@@ -163,7 +163,7 @@ const expire = (side, now) => {
 }
 
 // 出血・毒・継続回復（TICK_SEC ごと）。★割合ダメージなのでVITでは軽減されない（オートと同じ）
-const tickDot = (side, log) => {
+const tickDot = (side, log, foe = null) => {
   const a = side.ail
   if (a.poison) {
     const d = Math.max(1, Math.floor(side.base.hp * (a.poison.rate ?? POISON_RATE)))
@@ -175,7 +175,7 @@ const tickDot = (side, log) => {
     side.hp -= d
     log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL.bleed, damage: d, stacks: a.bleed.stacks })
   }
-  if (side.hp > 0) tickRegen(side, log)
+  if (side.hp > 0) tickRegen(side, log, foe)
 }
 
 // ===== 行動の選び方 =====
@@ -258,7 +258,8 @@ export const step = (st, dtSec) => {
     if (!hasAilment(me.ail, 'paralyze')) {
       me.gauge = Math.min(GAUGE_MAX, me.gauge + FILL_PER_SEC * fillRatio(eMe.agi, eFoe.agi) * dt)
     }
-    while (me.tickAt <= st.t) { tickDot(me, st.log); me.tickAt += TICK_SEC }
+    const other = me === st.a ? st.b : st.a
+    while (me.tickAt <= st.t) { tickDot(me, st.log, other); me.tickAt += TICK_SEC }
   }
   if (finish(st)) return st
 
