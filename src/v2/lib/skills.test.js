@@ -17,10 +17,11 @@ const evenStats = (power) => {
 
 // ★2026-08-19に各職+5（5→10）。ATBで「選ぶ」戦闘を入れたら、5枠しか選べないのに
 //   候補も5個しかなく**編成の選択が発生しなかった**ため（docs/v2-atb-design.md）
-test('全28職がそれぞれ10個ずつスキルを持つ', () => {
+test('初期職は5個・上位職は10個ずつスキルを持つ', () => {
   assert.equal(SKILL_CLASSES.length, 28)
-  for (const c of SKILL_CLASSES) assert.equal(skillsOf(c).length, 10, `${c}のスキル数`)
-  assert.equal(SKILLS.length, 28 * 10)
+  // ★2026-08-19：足すのは上位職だけ（初期職は通過点なので5個のまま）
+  for (const c of SKILL_CLASSES) assert.equal(skillsOf(c).length, isBasicClass(c) ? 5 : 10, `${c}のスキル数`)
+  assert.equal(SKILLS.length, 7 * 5 + 21 * 10)
   assert.deepEqual(BASIC_CLASSES, ['ノーブル', '戦士', '弓使い', '魔法使い', '僧侶', '格闘家', 'サモナー'])
 })
 
@@ -50,15 +51,27 @@ test('スキル名は重複しない', () => {
   assert.equal(Object.keys(SKILL_BY_NAME).length, SKILLS.length)
 })
 
-test('ノーブルは指定された10個', () => {
+test('ノーブルは指定された5つ', () => {
   assert.deepEqual(skillsOf('ノーブル').map(s => s.name),
-    ['はたく', '狙い撃ち', '応急手当', '身構える', '気合い',
-     '石つぶて', '見切り', '渾身の一撃', '応援', '手当ての心得'])
+    ['はたく', '狙い撃ち', '応急手当', '身構える', '気合い'])
 })
 
 // ★5枠しか組めないので、候補が枠より多いこと自体が「編成の選択」になる
-test('候補（10個）がスキル枠（5枠）より多い', () => {
-  for (const c of SKILL_CLASSES) assert.ok(skillsOf(c).length > 5, c)
+test('上位職は候補（10個）がスキル枠（5枠）より多い', () => {
+  for (const c of SKILL_CLASSES) {
+    if (isBasicClass(c)) continue
+    assert.ok(skillsOf(c).length > 5, c)
+  }
+})
+
+// ★2026-08-19：主参照（物理STR／魔法INT）だけの技ばかりだと、どの職も同じステを積むだけになる。
+//   上位職は**職業補正の main/sub に合った別のステも威力に乗る**技を持たせる
+test('上位職は主参照以外のステータスも威力に使う技を持つ', () => {
+  for (const c of SKILL_CLASSES) {
+    if (isBasicClass(c)) continue
+    const withAdd = skillsOf(c).filter(s => (s.kind === 'phys' || s.kind === 'mag') && (s.add || []).length)
+    assert.ok(withAdd.length >= 3, `${c}: 副参照のある攻撃スキルが${withAdd.length}個`)
+  }
 })
 
 test('全スキルの数値がレンジに収まっている', () => {
