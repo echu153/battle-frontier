@@ -379,18 +379,6 @@ export const SKILLS = [
   { name:'封印符',     cls:'式神使い', kind:'mag', mult:1.2, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:14, ail:{ key:'paralyze', chance:10 }, desc:'DEXも威力になる。10%で麻痺' },
   { name:'大祓',       cls:'式神使い', kind:'heal', proc:85, mp:16, heal:{ rate:1.4 }, priority:1, desc:'INT×1.4を回復' },
 
-  // ===== ブリーダー（STR＋INT。旧版はペット共闘だが、v2にペットが無いので効果は作り直し） =====
-  { name:'ペット召喚',       cls:'ブリーダー', kind:'passive', mp:0, passive:{ statPct:{ str:3, int_stat:3 }, todo:true }, desc:'【暫定】STR・INT+3%' },
-  { name:'攻撃して！',       cls:'ブリーダー', kind:'phys', mult:1.65, add:[{ stat:'int_stat', rate:0.35 }], proc:90, mp:14, desc:'相棒に攻撃させる。INTも威力になる' },
-  { name:'一緒に頑張ろう！', cls:'ブリーダー', kind:'buff', proc:100, mp:14, buff:{ self:{ str:25, int_stat:25 } }, priority:1, desc:'STR・INT+25%（重ねがけ可）' },
-  { name:'休憩しよう！',     cls:'ブリーダー', kind:'heal', proc:85, mp:16, heal:{ rate:1.5 }, buff:{ self:{ vit:20 } }, priority:1, desc:'INT×1.5を回復・VIT+20%（重ねがけ可）' },
-  { name:'やっちゃえ！',     cls:'ブリーダー', kind:'phys', mult:2.4, proc:78, mp:22, desc:'ブリーダーの切り札' },
-  { name:'かみつけ！',         cls:'ブリーダー', kind:'phys', mult:1.45, add:[{ stat:'int_stat', rate:0.35 }], proc:90, mp:13, ail:{ key:'bleed', chance:25 }, desc:'INTも威力になる。25%で出血' },
-  { name:'とびかかれ！',       cls:'ブリーダー', kind:'phys', mult:0.6, add:[{ stat:'int_stat', rate:0.15 }], hits:3, proc:82, mp:18, noCrit:true, desc:'3連撃。INTも威力になる。クリティカルしない' },
-  { name:'なでなで',           cls:'ブリーダー', kind:'heal', proc:85, mp:13, heal:{ rate:1.2 }, priority:1, desc:'INT×1.2を回復' },
-  { name:'まもって！',         cls:'ブリーダー', kind:'buff', proc:100, mp:13, buff:{ self:{ vit:40 } }, priority:1, desc:'VIT+40%（重ねがけ可）' },
-  { name:'いっしょに走ろう！', cls:'ブリーダー', kind:'buff', proc:100, mp:13, buff:{ self:{ str:20, agi:20 } }, priority:1, desc:'STR・AGI+20%（重ねがけ可）' },
-
   // ===== 武僧（格闘家×僧侶。旧版に無い職なのでスキル名は新規） =====
   { name:'練気掌',   cls:'武僧', kind:'phys', mult:1.5, add:[{ stat:'int_stat', rate:0.5 }], proc:85, mp:12, desc:'INTも威力になる' },
   { name:'活殺自在', cls:'武僧', kind:'phys', mult:1.9, drain:0.5, proc:85, mp:14, desc:'与えたダメージの50%を吸収' },

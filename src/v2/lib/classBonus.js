@@ -54,7 +54,6 @@ export const CLASS_BONUS = {
   // ---- 特殊職 ----
   ギャンブラー: { stats: { luk: 10 },      main:'luk', sub:'agi' },
   竜騎士:       { stats: { vit: 5 },       main:'vit', sub:'str' },
-  ブリーダー:   { stats: { str: 3, int_stat: 3 }, main:'str', sub:'int_stat' },
 }
 
 // ===== 伸び方の定数（ここだけ触れば調整できる）=====

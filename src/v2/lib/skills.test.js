@@ -9,7 +9,8 @@ import { CLASS_BONUS } from './classBonus.js'
 import { damageOf, healOf } from './combat.js'
 import { STAT_KEYS } from './stats.js'
 
-// 全28職ぶん実装済み（開始時＋初期職6＋上位職12＋複合上位職6＋特殊職3）
+// 全27職ぶん実装済み（開始時＋初期職6＋上位職12＋複合上位職6＋特殊職2）
+// ★2026-08-19にブリーダーを職ごと廃止（v2にペットが無く、効果を作り直す当てが無かった）
 const evenStats = (power) => {
   const u = power / 8
   return { hp:u * 8, mp:u * 3, str:u, dex:u, agi:u, int_stat:u, vit:u, luk:u }
@@ -17,11 +18,11 @@ const evenStats = (power) => {
 
 // ★2026-08-19に各職+5（5→10）。ATBで「選ぶ」戦闘を入れたら、5枠しか選べないのに
 //   候補も5個しかなく**編成の選択が発生しなかった**ため（docs/v2-atb-design.md）
-test('初期職は5個・上位職は10個ずつスキルを持つ', () => {
-  assert.equal(SKILL_CLASSES.length, 28)
+test('初期職は5個・上位職は10個ずつスキルを持つ（全27職）', () => {
+  assert.equal(SKILL_CLASSES.length, 27)
   // ★2026-08-19：足すのは上位職だけ（初期職は通過点なので5個のまま）
   for (const c of SKILL_CLASSES) assert.equal(skillsOf(c).length, isBasicClass(c) ? 5 : 10, `${c}のスキル数`)
-  assert.equal(SKILLS.length, 7 * 5 + 21 * 10)
+  assert.equal(SKILLS.length, 7 * 5 + 20 * 10)
   assert.deepEqual(BASIC_CLASSES, ['ノーブル', '戦士', '弓使い', '魔法使い', '僧侶', '格闘家', 'サモナー'])
 })
 
