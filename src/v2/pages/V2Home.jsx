@@ -24,7 +24,7 @@ import {
   powerText, isPassive, KIND_LABEL, KIND_COLOR, SKILL_BY_NAME,
   usableSkills, usableSkillNames, unlearnedSkills, validateSkillSet, setMpCost,
   KIND_TABS, filterSkills, sortSkills,
-  SKILL_SET_SLOTS, SKILL_USE_MAX, OFF_CLASS_MULT,
+  SKILL_SET_SLOTS, SKILL_USE_MAX, OFF_CLASS_MULT, OFF_CLASS_MP_MULT, mpOf,
 } from '../lib/skills.js'
 
 // 編成の下書きを「5枠ぶんの配列」に揃える（空き枠も持つ）
@@ -51,7 +51,10 @@ const miniBtn = (color) => ({
 })
 // スキル一覧の2行目以降を、1行目のスキル名と同じ位置から始めるための字下げ（★ボタンのぶん）
 // 消費MPの表示。割合消費（マナボルト）は「残りMPの20%」
-const mpLabel = (s) => (s.mpPct ? `MP 残りの${Math.round(s.mpPct * 100)}%` : `MP${s.mp}`)
+// ★他職のスキルは消費MPが2倍。cls を渡さないと素の値が出てしまうので必ず渡す
+const mpLabel = (s, cls) => (s.mpPct
+  ? `MP 残りの${Math.round(Math.min(1, s.mpPct * (s.cls === cls ? 1 : OFF_CLASS_MP_MULT)) * 100)}%`
+  : `MP${mpOf(cls, s)}`)
 const ROW_INDENT = '28px'
 
 // ホームから行ける先。旧版の街と同じ並びの考え方（出撃が主役、あとは施設）
@@ -233,12 +236,12 @@ export default function V2Home() {
   const stillLocked = prof ? unlearnedSkills(prof.class, learning, learned) : []  // いまの職業のまだ覚えていない技
   const favorites = prof?.favorites || []
   const compact = draft.filter(d => d.name).map(d => ({ name: d.name, uses: d.uses }))
-  const mpCost = setMpCost(compact)                    // 想定利用MP（Σ 消費MP×回数）
+  const mpCost = setMpCost(compact, prof?.class)       // 想定利用MP（Σ 消費MP×回数・他職は2倍）
   // ★最大MPは**ルーンのMP+%を乗せたぶん**で見る（サーバー v2_set_skills と同じ計算）。
   //   素の prof.mp のままだと蒼ルーンのMPがどこにも効かない
   //   （戦闘はHP/MP満タン開始で5〜13ターン＝MPが枯れないため）。
   const maxMp = prof ? totalStats(prof, inventory, runes, fishDex).mp : 0
-  const setErr = prof ? validateSkillSet(compact, usableNames, maxMp) : null
+  const setErr = prof ? validateSkillSet(compact, usableNames, maxMp, prof.class) : null
   // 一覧には、まだ覚えていない「いまの職業のスキル」もグレーで出す（何を狙えるか分かるように）
   const shownSkills = sortSkills(filterSkills([...usable, ...stillLocked], { tab, query, favorites }), sortKey, sortAsc)
 
@@ -397,7 +400,7 @@ export default function V2Home() {
                 いまの編成の想定利用MPは<span style={{ color: mpCost > maxMp ? '#ff4444' : '#44ffaa' }}>{mpCost}MP</span>です。
               </div>
               <div style={{ color:'#ff88cc', fontSize:'10px', marginBottom:'5px', lineHeight:'1.6' }}>
-                いまの職業（{prof.class}）以外のスキルは、ダメージ・回復・バフ・状態異常の効果が{OFF_CLASS_MULT}倍になります。
+                いまの職業（{prof.class}）以外のスキルは、ダメージ・回復・バフ・状態異常の効果が{OFF_CLASS_MULT}倍・消費MPが{OFF_CLASS_MP_MULT}倍になります。
               </div>
               <div style={{ display:'grid', gap:'3px' }}>
                 {Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => {
@@ -413,7 +416,7 @@ export default function V2Home() {
                           <span style={{ color:'#ff88cc', fontSize:'9px', marginLeft:'4px' }}>×{OFF_CLASS_MULT}</span>}
                       </span>
                       <span style={{ color: cost > maxMp ? '#ff4444' : '#7fa6d0', width:'62px', textAlign:'right' }}>
-                        {s ? (s.mpPct ? `MP残${Math.round(s.mpPct * 100)}%` : `MP${s.mp}×${row.uses}`) : ''}
+                        {s ? (s.mpPct ? `MP残${Math.round(Math.min(1, s.mpPct * (s.cls === prof.class ? 1 : OFF_CLASS_MP_MULT)) * 100)}%` : `MP${mpOf(prof.class, s)}×${row.uses}`) : ''}
                       </span>
                       <span style={{ color:'#7fa6d0', width:'34px', textAlign:'right' }}>{s ? `${s.proc}%` : ''}</span>
                       <input type="number" min={1} max={SKILL_USE_MAX} value={row.uses} disabled={!row.name}
@@ -493,11 +496,11 @@ export default function V2Home() {
                           {isKept && <span style={{ color:'#ffcc00', fontSize:'9px', marginLeft:'5px' }}>習得済み</span>}
                           {!has && <span style={{ color:'#c69a5c', fontSize:'9px', marginLeft:'5px' }}>未習得</span>}
                           {s.cls !== prof.class && <span style={{ color:'#ff88cc', fontSize:'9px', marginLeft:'5px' }}>
-                            {s.cls}{isPassive(s) ? '' : `・効果${OFF_CLASS_MULT}倍`}
+                            {s.cls}{isPassive(s) ? '' : `・効果${OFF_CLASS_MULT}倍/MP${OFF_CLASS_MP_MULT}倍`}
                           </span>}
                         </span>
                         <span style={{ color:'#7fa6d0', fontSize:'10px' }}>
-                          {isPassive(s) ? '常時' : `${mpLabel(s)} ／ ${s.proc}%`}
+                          {isPassive(s) ? '常時' : `${mpLabel(s, prof.class)} ／ ${s.proc}%`}
                         </span>
                       </div>
                       <div style={{ color:'#7fa6c0', fontSize:'10px', margin:'3px 0', lineHeight:'1.6', paddingLeft:ROW_INDENT }}>

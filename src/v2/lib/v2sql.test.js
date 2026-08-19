@@ -10,7 +10,7 @@ import { RATES } from './smith.js'
 import { RANKS } from './equipment.js'
 import { SELL_BASE, SELL_RARITY_MULT } from './material.js'
 import { LOSE_DROP, floorAfterLose } from './arena.js'
-import { SKILLS } from './skills.js'
+import { SKILLS, OFF_CLASS_MP_MULT } from './skills.js'
 
 const SQL = readFileSync(new URL('../../../supabase_v2_core.sql', import.meta.url), 'utf8')
 
@@ -36,6 +36,18 @@ test('v2_skills の名前・職業・消費MPが skills.js と一致している
     assert.equal(row.cls, s.cls, `${s.name} の職業`)
     assert.equal(row.mp, s.mp || 0, `${s.name} の消費MP`)
   }
+})
+
+// ★編成の想定利用MPは画面（setMpCost）とサーバー（v2_set_skills）の2か所で数える。
+//   他職のスキルを2倍で数える規則がズレると「画面では保存できるのにサーバーに弾かれる」になる
+test('v2_set_skills の他職スキルの消費MP倍率が skills.js と一致している', () => {
+  const body = bodyOf('v2_set_skills')
+  const line = body.split('\n').find(l => l.includes('c_off_mp') && l.includes('constant'))
+  assert.ok(line, 'v2_set_skills に c_off_mp の宣言が無い')
+  assert.equal(Number(line.split(':=')[1].replace(';', '').trim()), OFF_CLASS_MP_MULT)
+  // 数えるときに実際に使っていること（定数を置いただけで使っていないと意味がない）
+  assert.ok(body.includes('case when v_scls = v_row.class then v_mp else v_mp * c_off_mp end'),
+    '想定利用MPの合計で c_off_mp を使っていない')
 })
 
 test('v2_fuse の確率表が smith.js の RATES と一致している（片方だけ直すと気付く）', () => {

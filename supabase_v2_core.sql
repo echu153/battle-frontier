@@ -518,6 +518,10 @@ as $$
 declare
   c_slots   constant int := 5;   -- SKILL_SET_SLOTS
   c_use_max constant int := 99;  -- SKILL_USE_MAX（実際の上限は下の想定利用MPで決まる）
+  -- ★いまの職業以外のスキルは消費MPが2倍（skills.js の OFF_CLASS_MP_MULT と同じ値）。
+  --   画面の想定利用MP（setMpCost）とここがズレると「画面では保存できるのに弾かれる」になる。
+  --   ⚠片方だけ直さないこと。v2sql.test.js が突き合わせている
+  c_off_mp  constant int := 2;
   v_uid   uuid := auth.uid();
   v_row   public.v2_profiles;
   v_set   jsonb := coalesce(p_set, '[]'::jsonb);
@@ -527,6 +531,7 @@ declare
   v_name  text;
   v_uses  int;
   v_mp    int;
+  v_scls  text;            -- そのスキルの職業（他職なら消費MPが c_off_mp 倍）
   v_mp_pct numeric := 0;   -- 装着中の武器に刺さったルーンのMP+%の合計
   v_max_mp int;            -- ルーンぶんを乗せた最大MP（＝想定利用MPの上限）
 begin
@@ -551,8 +556,8 @@ begin
     if v_name is null then
       return jsonb_build_object('ok', false, 'error', '枠にスキルが入っていません');
     end if;
-    -- 使えるスキルか（いまの職業のスキル ∪ 習得済み）。ついでに消費MPを取る
-    select s.mp into v_mp from public.v2_skills s where s.name = v_name;
+    -- 使えるスキルか（いまの職業のスキル ∪ 習得済み）。ついでに消費MPと職業を取る
+    select s.mp, s.cls into v_mp, v_scls from public.v2_skills s where s.name = v_name;
     if v_mp is null then
       return jsonb_build_object('ok', false, 'error', format('%sというスキルはありません', v_name));
     end if;
@@ -572,7 +577,8 @@ begin
     if v_uses < 1 or v_uses > c_use_max then
       return jsonb_build_object('ok', false, 'error', format('%sの使用回数は1〜%sです', v_name, c_use_max));
     end if;
-    v_cost := v_cost + v_mp * v_uses;
+    -- 他職のスキルは消費MPが c_off_mp 倍で数えられる＝そのぶん使用回数を積めない
+    v_cost := v_cost + (case when v_scls = v_row.class then v_mp else v_mp * c_off_mp end) * v_uses;
   end loop;
 
   -- ★ルーン（エッセンス）のMP+%を最大MPへ乗せる。

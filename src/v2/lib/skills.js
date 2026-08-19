@@ -321,9 +321,19 @@ export const SKILLS = [
 // ★枠の強制（「3枠は自職」など）は**採らない**。0.8倍だけで自職のスキルが上位に来ることを
 //   実測で確認したうえで、枠まで縛ると二重の税金になり周回して集める動機が消えるため。
 export const OFF_CLASS_MULT = 0.8
-// 敵の技やテスト用のダミーは cls を持たない＝素の性能のまま（罰則の対象は職業スキルだけ）
-export const isOwnClassSkill = (cls, skill) => !skill?.cls || skill.cls === cls
+// 消費MPは逆に増える（2026-08-18 追加）。効果が落ちるだけだと「弱いが安い枠」として
+// 積めてしまうので、**想定利用MPの枠も食う**ようにして使用回数のほうからも縛る
+export const OFF_CLASS_MP_MULT = 2
+// 敵の技やテスト用のダミーは cls を持たない＝素の性能のまま（罰則の対象は職業スキルだけ）。
+// 職業の分からない側（テストのダミーなど）も罰しない
+export const isOwnClassSkill = (cls, skill) => !skill?.cls || !cls || skill.cls === cls
 export const offClassMult = (cls, skill) => (isOwnClassSkill(cls, skill) ? 1 : OFF_CLASS_MULT)
+// 実際に払う消費MP。★編成の検証（想定利用MP）と戦闘の消費で必ず同じ関数を通すこと
+export const mpOf = (cls, skill) =>
+  (skill?.mp || 0) * (isOwnClassSkill(cls, skill) ? 1 : OFF_CLASS_MP_MULT)
+// 割合消費（マナボルト）も同じだけ重くする。100%は超えない
+export const mpPctOf = (cls, skill) =>
+  Math.min(1, (skill?.mpPct || 0) * (isOwnClassSkill(cls, skill) ? 1 : OFF_CLASS_MP_MULT))
 // 増減幅を丸ごと弱める（バフ・デバフ用。デバフは負の値なので0へ寄る＝弱くなる）
 export const scaleTable = (table, mult) =>
   (mult === 1 || !table) ? table : Object.fromEntries(Object.entries(table).map(([k, v]) => [k, v * mult]))
@@ -384,14 +394,16 @@ export const keepableSkillNames = (cls, learning = [], learned = []) => {
 // ★使用回数の上限はこれで決まる。最大MPを超える編成は保存できない
 //   ＝MPを伸ばすほど強い技を多く積める＝MPがちゃんとステータスとして効く
 // ※パッシブは常時発動＝消費しないので数えない
-export const setMpCost = (set) => (set || [])
+// ★cls を渡すと、他職のスキルは消費MPが OFF_CLASS_MP_MULT 倍で数えられる。
+//   サーバーの v2_set_skills も同じ規則で数えるので、片方だけ直さないこと
+export const setMpCost = (set, cls) => (set || [])
   .reduce((t, e) => {
     const s = SKILL_BY_NAME[e?.name]
-    return t + (!s || isPassive(s) || s.mpPct ? 0 : (s.mp || 0) * (e?.uses || 0))
+    return t + (!s || isPassive(s) || s.mpPct ? 0 : mpOf(cls, s) * (e?.uses || 0))
   }, 0)
 
 // 編成の検証。問題があれば日本語のエラー文、無ければ null（サーバーの v2_set_skills と同じ規則）
-export const validateSkillSet = (set, usableNames, maxMp = Infinity) => {
+export const validateSkillSet = (set, usableNames, maxMp = Infinity, cls = undefined) => {
   if (!Array.isArray(set)) return '編成の形式が不正です'
   if (set.length > SKILL_SET_SLOTS) return `枠は${SKILL_SET_SLOTS}個までです`
   const usable = new Set(usableNames)
@@ -404,7 +416,7 @@ export const validateSkillSet = (set, usableNames, maxMp = Infinity) => {
     const uses = Number(e.uses)
     if (!Number.isInteger(uses) || uses < 1 || uses > SKILL_USE_MAX) return `${e.name}の使用回数は1〜${SKILL_USE_MAX}です`
   }
-  const cost = setMpCost(set)
+  const cost = setMpCost(set, cls)
   if (cost > maxMp) return `想定利用MPが最大MPを超えています（${cost} / ${maxMp}）`
   return null
 }

@@ -18,7 +18,7 @@ import {
   resolveAttack, healOf, roll, goesFirst, rollExtraAction,
 } from './combat.js'
 import { STAT_KEYS } from './stats.js'
-import { skillsOf, isPassive, offClassMult, scaleTable } from './skills.js'
+import { skillsOf, isPassive, offClassMult, scaleTable, mpOf, mpPctOf } from './skills.js'
 import { classBonusOf } from './classBonus.js'
 import {
   createAilments, inflict, tickAilments, ailStatPct, healMultOf, consumeParalyze, AIL_LABEL,
@@ -168,8 +168,12 @@ export const createSide = (fighter, band = null) => {
 
 // このスキルを撃つのに要るMP。mpPct を持つスキルは「そのときの残りMPの割合」を払う
 // （マナボルト＝現在MPの20%。撃つほど1回の消費が減るので、実質的に撃ち切れない）
-export const mpCostOf = (side, skill) =>
-  skill?.mpPct ? Math.floor((side?.mp || 0) * skill.mpPct) : (skill?.mp || 0)
+// ★他職のスキルは消費MPが2倍（skills.js の OFF_CLASS_MP_MULT）。
+//   編成の想定利用MP（setMpCost）と同じ関数を通しているので、画面と戦闘でズレない
+export const mpCostOf = (side, skill) => {
+  const pct = mpPctOf(side?.cls, skill)
+  return pct ? Math.floor((side?.mp || 0) * pct) : mpOf(side?.cls, skill)
+}
 
 // いま撃てる枠を ptr から探す。見つからなければ null（＝通常攻撃）
 const findSlot = (side) => {

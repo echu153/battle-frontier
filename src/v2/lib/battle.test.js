@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { runBattle, createSide, peekSkill, attackKindOf, mpCostOf, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
-import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT } from './skills.js'
+import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT, OFF_CLASS_MP_MULT, setMpCost } from './skills.js'
 import { damageFloor } from './combat.js'
 
 const makeRng = (seed) => {
@@ -277,10 +277,24 @@ test('他職のスキルは状態異常の付与確率も0.8倍になる', () =>
   assert.ok(off < mine, `他職でも減っていない: 自職${mine} / 他職${off}`)
 })
 
-test('発動率・消費MP・通常攻撃には0.8倍が掛からない', () => {
+test('他職のスキルは消費MPが2倍になる', () => {
+  // ★効果が落ちるだけだと「弱いが安い枠」として積めてしまうので、MPのほうからも縛る
+  const blade = SKILL_BY_NAME['月影']   // 侍・MP22
+  assert.equal(mpCostOf({ cls:'侍', mp: 500 }, blade), blade.mp)
+  assert.equal(mpCostOf({ cls:'狂戦士', mp: 500 }, blade), blade.mp * OFF_CLASS_MP_MULT)
+  // 割合消費（マナボルト＝残りMPの20%）も同じだけ重くなる
+  const mana = SKILL_BY_NAME['マナボルト']
+  assert.equal(mpCostOf({ cls:'賢者', mp: 500 }, mana), 100)
+  assert.equal(mpCostOf({ cls:'侍', mp: 500 }, mana), 200)
+  // 編成の想定利用MPも同じ関数を通る（画面とサーバーと戦闘でズレない）
+  const set = [{ name:'月影', uses: 3 }]
+  assert.equal(setMpCost(set, '侍'), blade.mp * 3)
+  assert.equal(setMpCost(set, '狂戦士'), blade.mp * 3 * OFF_CLASS_MP_MULT)
+})
+
+test('発動率と通常攻撃には他職ペナルティが掛からない', () => {
   // ★ここが崩れると「他職からはバフとパッシブを借りるのが得」に戻る
   const blade = asOtherClass(SKILL_BY_NAME['月影'])
-  assert.equal(mpCostOf({ mp: 500 }, blade), SKILL_BY_NAME['月影'].mp, '消費MPは据え置き')
   assert.equal(blade.proc, 78, '発動率は据え置き')
   // 通常攻撃はスキルではないので対象外（不発しかしない技を積んで通常攻撃を出させる）
   const dud = { name:'不発だけ', cls:'別職', kind:'phys', mult:1, proc:0, mp:0, desc:'' }
