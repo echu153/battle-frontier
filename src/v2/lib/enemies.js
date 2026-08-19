@@ -37,7 +37,8 @@ import { STAT_KEYS } from './stats.js'
 //   何も打ち消すものが無く**完全に無意味**になる。
 //   ail = { key, chance }。chance は相手の抵抗を引いてから判定される（battle.js の tryInflict）。
 //   ⚠麻痺は「1ターン行動できない」＝一番重いので確率を低く置く。
-const S = {
+// ★ATBの仮想敵（atbDummy.js）も同じ表から技を借りる。外へ出しているだけで中身は変えていない
+export const ENEMY_SKILLS = {
   // --- 攻撃 ---
   たいあたり:   { name:'たいあたり',   kind:'phys', mult:1.3, proc:90, mp:0 },
   かみつく:     { name:'かみつく',     kind:'phys', mult:1.5, proc:85, mp:4,  ail:{ key:'bleed', chance:25 } },
@@ -72,6 +73,8 @@ const S = {
   略奪:     { name:'略奪',     kind:'phys', mult:2.4, proc:70, mp:16, drain:0.3 },
   まるのみ: { name:'まるのみ', kind:'phys', mult:2.2, proc:70, mp:14, drain:0.25 },
 }
+
+const S = ENEMY_SKILLS
 
 // timed は**朝・昼・晩の時間帯限定の敵**（各エリア1体ずつ・計24体・v2の新規キャラ）。
 // その時間帯だけ通常敵の抽選に加わる。強さは通常敵の最上位の約1.2倍。

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import V2LogLine from './V2LogLine.jsx'
 import { AREAS, toFighter as enemyFighter } from '../lib/enemies.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
+import { dummyFoes } from '../lib/atbDummy.js'
 import { buildBattleLog } from '../lib/battleLog.js'
 import {
   createAtb, step, needOf, needNow, chosenOf, canUse, buffChips, ailChips,
@@ -17,6 +18,9 @@ import { miniBtn } from './v2ui.js'
 // ★ここは**手触りを見るための試し撃ち場**。報酬もサーバーへの反映も無い。
 //   ユニークボスに載せるときに、この画面をベースに作る。
 // ============================================================
+
+// 仮想敵と戦うときの1挑戦の長さ（秒）。ユニークボスの「1挑戦＝10ターン前後」に相当させる
+const DUMMY_SEC = 90
 
 const BAR = (pct, color, h = 10) => (
   <div style={{ height:`${h}px`, background:'#000818', border:'1px solid #13405f', position:'relative' }}>
@@ -53,8 +57,10 @@ const Chips = ({ side, now }) => {
 }
 
 export default function V2Atb({ prof, inventory, runes, fishDex }) {
+  const [mode, setMode] = useState('dummy')     // dummy=仮想敵（強い）／area=エリアの敵
   const [areaId, setAreaId] = useState(1)
   const [foeName, setFoeName] = useState('')
+  const [dummyKey, setDummyKey] = useState('even')
   const [phase, setPhase] = useState('setup')   // setup | fight
   const [, setFrame] = useState(0)
   const [logs, setLogs] = useState([])
@@ -66,6 +72,10 @@ export default function V2Atb({ prof, inventory, runes, fishDex }) {
   const area = AREAS.find(a => a.id === areaId) || AREAS[0]
   const foes = [...area.enemies, ...(area.timed || []), area.boss]
   const foe = foes.find(e => e.name === foeName) || foes[0]
+  // 仮想敵は**自分のステータスから**組み立てる（戦闘力とAGIに比例）
+  const myFighter = useMemo(() => playerFighter(prof, inventory, runes, fishDex), [prof, inventory, runes, fishDex])
+  const dummies = useMemo(() => dummyFoes(myFighter), [myFighter])
+  const dummy = dummies.find(d => d.key === dummyKey) || dummies[0]
 
   // ===== 時間を進める =====
   // ★経過は**実時間の差分**で測る（setInterval の刻みを信用しない）。裏タブへ回すと
@@ -97,10 +107,14 @@ export default function V2Atb({ prof, inventory, runes, fishDex }) {
   }, [phase])
 
   const start = () => {
-    const me = playerFighter(prof, inventory, runes, fishDex)
-    st.current = createAtb(me, enemyFighter(foe, 8), { maxSec: MAX_SEC })
+    // ★仮想ボスのHPは**1時間ぶん**（ユニークボスの式）なので1回では削り切れない。
+    //   ユニークボスと同じ「1挑戦で何%削れたか」を見る形にして、90秒で区切る
+    const [enemy, name, sec] = mode === 'dummy'
+      ? [dummy.make(), dummy.name, DUMMY_SEC]
+      : [enemyFighter(foe, 8), foe.name, MAX_SEC]
+    st.current = createAtb(myFighter, enemy, { maxSec: sec })
     seen.current = 0
-    setLogs([{ text:`${foe.name}が現れた！`, color:'#88ccff' }])
+    setLogs([{ text:`${name}が現れた！`, color:'#88ccff' }])
     setPhase('fight')
   }
 
@@ -113,16 +127,47 @@ export default function V2Atb({ prof, inventory, runes, fishDex }) {
           時間で溜まるゲージでコマンドを選ぶ戦闘の試し撃ち場。<br />
           <b style={{ color:'#88ccff' }}>報酬もEXPも入らない・サーバーへ何も送らない。</b>手触りを見るためだけの画面。
         </div>
-        <div style={{ display:'flex', gap:'6px', marginBottom:'10px', flexWrap:'wrap' }}>
-          <select value={areaId} onChange={e => { setAreaId(Number(e.target.value)); setFoeName('') }}
-            style={{ background:'#000818', color:'#88ccff', border:'1px solid #0044aa', fontFamily:'monospace', fontSize:'12px', padding:'6px' }}>
-            {AREAS.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-          <select value={foe?.name || ''} onChange={e => setFoeName(e.target.value)}
-            style={{ background:'#000818', color:'#88ccff', border:'1px solid #0044aa', fontFamily:'monospace', fontSize:'12px', padding:'6px' }}>
-            {foes.map(e => <option key={e.name} value={e.name}>{e.name}（戦闘力{e.power}）</option>)}
-          </select>
+        {/* 相手の種類 */}
+        <div style={{ display:'flex', gap:'4px', marginBottom:'8px' }}>
+          {[{ key:'dummy', label:'🎯 仮想敵（強い）' }, { key:'area', label:'🌲 エリアの敵' }].map(t => (
+            <button key={t.key} onClick={() => setMode(t.key)}
+              style={{ ...miniBtn(mode === t.key ? '#44ddff' : '#7fa6d0'), fontSize:'11px', padding:'6px 10px',
+                background: mode === t.key ? '#002850' : '#000818' }}>
+              {t.label}
+            </button>
+          ))}
         </div>
+
+        {mode === 'dummy' ? (
+          <div style={{ marginBottom:'10px' }}>
+            <div style={{ color:'#5a7a96', fontSize:'10px', marginBottom:'6px' }}>
+              自分の戦闘力とAGIから組み立てる（HPはユニークボスの式）。この相手はゲームには出てこない
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+              {dummies.map(d => (
+                <button key={d.key} onClick={() => setDummyKey(d.key)}
+                  style={{ ...miniBtn(dummyKey === d.key ? '#44ddff' : '#7fa6d0'), textAlign:'left', padding:'7px 9px',
+                    background: dummyKey === d.key ? '#002850' : '#000818', fontSize:'11px' }}>
+                  <div style={{ color: dummyKey === d.key ? '#88ddff' : '#88ccff' }}>
+                    {d.name}<span style={{ color:'#5a7a96' }}>　戦闘力{d.power.toLocaleString()}／HP{d.hp.toLocaleString()}</span>
+                  </div>
+                  <div style={{ color:'#5a7a96', fontSize:'10px', marginTop:'2px' }}>{d.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div style={{ display:'flex', gap:'6px', marginBottom:'10px', flexWrap:'wrap' }}>
+            <select value={areaId} onChange={e => { setAreaId(Number(e.target.value)); setFoeName('') }}
+              style={{ background:'#000818', color:'#88ccff', border:'1px solid #0044aa', fontFamily:'monospace', fontSize:'12px', padding:'6px' }}>
+              {AREAS.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+            <select value={foe?.name || ''} onChange={e => setFoeName(e.target.value)}
+              style={{ background:'#000818', color:'#88ccff', border:'1px solid #0044aa', fontFamily:'monospace', fontSize:'12px', padding:'6px' }}>
+              {foes.map(e => <option key={e.name} value={e.name}>{e.name}（戦闘力{e.power}）</option>)}
+            </select>
+          </div>
+        )}
         <button onClick={start} style={{ ...miniBtn('#44ddff'), width:'100%', padding:'10px', fontSize:'13px' }}>
           ⏱ ATBで戦う
         </button>
@@ -138,6 +183,9 @@ export default function V2Atb({ prof, inventory, runes, fishDex }) {
   const enNeed = needNow(en)
   const chosen = chosenOf(me)
   const defLabel = me.def.idx === null ? '通常攻撃' : (me.slots[me.def.idx]?.skill?.name || '通常攻撃')
+  const dealt = en.base.hp - Math.max(0, en.hp)
+  const dealtPct = (dealt / en.base.hp) * 100
+  const dps = dealt / Math.max(0.1, s.t)
 
   return (
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
@@ -149,6 +197,12 @@ export default function V2Atb({ prof, inventory, runes, fishDex }) {
         </div>
         {BAR((Math.max(0, en.hp) / en.base.hp) * 100, '#cc3344', 12)}
         <div style={{ marginTop:'3px' }}>{BAR((en.gauge / enNeed) * 100, '#ff9944', 6)}</div>
+        {/* 仮想敵は「削った割合」と「1秒あたりの与ダメージ」を出す＝ボスHPの式を測るため */}
+        {mode === 'dummy' && (
+          <div style={{ fontSize:'10px', color:'#7fa6d0', marginTop:'3px' }}>
+            削り {dealtPct.toFixed(1)}%　／　{Math.round(dps).toLocaleString()}ダメージ/秒
+          </div>
+        )}
         <Chips side={en} now={s.t} />
       </div>
 
@@ -216,8 +270,8 @@ export default function V2Atb({ prof, inventory, runes, fishDex }) {
         <div style={{ marginBottom:'8px', fontSize:'13px',
           color: s.winner === 'a' ? '#ffcc00' : s.winner === 'b' ? '#ff4444' : '#7fa6d0' }}>
           {s.winner === 'a' ? `⚔ ${en.name}を倒した！（${s.t.toFixed(1)}秒）`
-            : s.winner === 'b' ? `敗北…（${s.t.toFixed(1)}秒）`
-            : `時間切れ（${s.maxSec}秒）`}
+            : s.winner === 'b' ? `敗北…（${s.t.toFixed(1)}秒・${dealtPct.toFixed(1)}%削った）`
+            : `⏱ ${s.maxSec}秒で${dealtPct.toFixed(1)}%削った（${Math.round(dps).toLocaleString()}ダメージ/秒）`}
         </div>
       )}
       <div style={{ display:'flex', gap:'6px' }}>
