@@ -187,6 +187,71 @@ test('職業ごとの主力の実質倍率が2割以上開かない', () => {
   }
 })
 
+// ★2026-08-19：職業の中に「完全下位互換」を作らない（ユーザー指摘）。
+//   例）抜刀 STR×1.5＋DEX×0.3・発動90%・MP12 は、居合斬 STR×1.5＋DEX×0.4・発動90%・MP12・出血つき
+//       に全部の軸で負けていて、持っていく理由が無かった。
+//   ★判定は「同じ土俵（種別・多段数・クリ有無）で、威力・副参照・発動率・消費MP・
+//     防御無視・吸収・必中・確定クリ・状態異常・バフ・回復のすべてで A ≥ B、かつどこかで A > B」。
+//     ＝Bを選ぶ理由が1つも無い状態。逆に**どこか1つでも勝っていれば通る**（役割が違えばよい）
+const addRates = (s) => Object.fromEntries((s.add || []).map(a => [a.stat, a.rate]))
+// バフ・デバフは「大きいほど得」に揃えて比べる（相手に掛けるものは符号を反転）
+const buffVal = (side, v) => (side === 'self' ? v : -v)
+const dominates = (A, B) => {
+  if (A === B || A.kind !== B.kind) return false
+  if ((A.hits || 1) !== (B.hits || 1)) return false        // 多段と単発は別の土俵
+  if (!!A.noCrit !== !!B.noCrit) return false
+  if (!!A.mpPct !== !!B.mpPct) return false                // 割合消費も別の土俵
+  const better = []
+  const cmp = (a, b, label, lowerIsBetter = false) => {
+    const [x, y] = lowerIsBetter ? [b, a] : [a, b]
+    if (x < y) return false
+    if (x > y) better.push(label)
+    return true
+  }
+  if (!cmp(A.mult || 0, B.mult || 0, 'mult')) return false
+  const ra = addRates(A), rb = addRates(B)
+  for (const [k, v] of Object.entries(rb)) if ((ra[k] || 0) < v) return false
+  for (const [k, v] of Object.entries(ra)) if (v > (rb[k] || 0)) better.push('add:' + k)
+  if (!cmp(A.proc, B.proc, 'proc')) return false
+  if (!cmp(A.mp || 0, B.mp || 0, 'mp', true)) return false
+  for (const k of ['defPen', 'drain']) if (!cmp(A[k] || 0, B[k] || 0, k)) return false
+  for (const k of ['sureHit', 'sureCrit']) {
+    if (!A[k] && B[k]) return false
+    if (A[k] && !B[k]) better.push(k)
+  }
+  if (B.ail) {
+    if (!A.ail || A.ail.key !== B.ail.key || A.ail.chance < B.ail.chance) return false
+    if (A.ail.chance > B.ail.chance) better.push('ail')
+  } else if (A.ail) better.push('ail')
+  for (const side of ['self', 'enemy']) {
+    const ba = A.buff?.[side] || {}
+    const bb = B.buff?.[side] || {}
+    for (const k of new Set([...Object.keys(ba), ...Object.keys(bb)])) {
+      const av = buffVal(side, ba[k] || 0)
+      const bv = buffVal(side, bb[k] || 0)
+      if (av < bv) return false                              // Bの効果に届いていない／Aだけが不利を背負う
+      if (av > bv) better.push(`buff:${side}:${k}`)
+    }
+  }
+  for (const k of ['heal', 'regen', 'mpRegen']) {
+    const va = (A[k]?.rate || 0) * (A[k]?.turns || 1)
+    const vb = (B[k]?.rate || 0) * (B[k]?.turns || 1)
+    if (!cmp(va, vb, k)) return false
+  }
+  return better.length > 0
+}
+
+test('職業の中に完全下位互換のスキルが無い', () => {
+  const bad = []
+  for (const c of SKILL_CLASSES) {
+    const list = skillsOf(c).filter(s => !isPassive(s))
+    for (const A of list) for (const B of list) {
+      if (dominates(A, B)) bad.push(`${c}: 「${B.name}」は「${A.name}」の完全下位互換`)
+    }
+  }
+  assert.deepEqual(bad, [], bad.join(' / '))
+})
+
 test('職業ごとに攻撃の型が揃っている', () => {
   const kindsOf = (c) => new Set(skillsOf(c).filter(s => s.kind === 'phys' || s.kind === 'mag').map(s => s.kind))
   for (const c of ['戦士', '弓使い', '格闘家', 'ノーブル']) assert.deepEqual([...kindsOf(c)], ['phys'], `${c}は物理型`)

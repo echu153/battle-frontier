@@ -9,6 +9,7 @@ import { ITEM_BY_ID, statsOf as equipStats, powerOf as equipPower, SLOTS } from 
 import { SKILL_BY_NAME } from './skills.js'
 import { jobCountOf } from './classBonus.js'
 import { fishDexPct } from './fishing.js'
+import { pendingStage } from './evolve.js'
 
 // 装着中の装備を { slot: { inv, item } } の形で引く
 export const equippedItems = (profile, inventory) => {
@@ -59,6 +60,30 @@ export const gearStats = (profile, inventory) => {
 // 装備ぶんの戦闘力合計
 export const gearPower = (profile, inventory) =>
   Object.values(equippedItems(profile, inventory)).reduce((t, { inv, item }) => t + equipPower(item, inv.plus || 0), 0)
+
+// ===== 武器の進化（戦闘記憶）=====
+// 熟練度が貯まるのは**武器だけ**（右手・左手にそれぞれ独立して貯まる）。
+// ★防具に貯めない理由：「この1本を使い込む」という話なので、対象を増やすと薄まる。
+export const equippedWeapons = (profile, inventory) =>
+  Object.values(equippedItems(profile, inventory)).filter(w => w.item.part === '武器')
+
+// 装備している武器に付いている進化を全部並べる（右手と左手のぶんが足し算になる）
+export const equippedEvolutions = (profile, inventory) =>
+  equippedWeapons(profile, inventory).flatMap(w => w.inv.evolutions || [])
+
+// いま戦績が貯まる武器の所持品ID。戦闘後にサーバーへ渡す
+export const recordingWeaponIds = (profile, inventory) =>
+  equippedWeapons(profile, inventory).map(w => Number(w.inv.id))
+
+// その装備の戦績。★熟練度（battles）も record の中に入っている（列を分けると必ずズレる）
+export const recordOf = (inv) => inv?.record || {}
+export const battlesOf = (inv) => Number(recordOf(inv).battles || 0)
+
+// 進化を付けられる武器（節目に達したのに、まだ受け取っていないもの）
+export const evolvableWeapons = (profile, inventory) =>
+  equippedWeapons(profile, inventory)
+    .map(w => ({ ...w, stage: pendingStage(recordOf(w.inv), w.inv.evolutions) }))
+    .filter(w => w.stage > 0)
 
 // ===== エンチャント =====
 // ルーン（v2_essences）は装備の個体（v2_inventory.id）に刺さっている。
@@ -115,6 +140,8 @@ export const toFighter = (profile, inventory, runes, fishDex) => ({
   jobCount: jobCountOf(profile),
   stats: totalStats(profile, inventory, runes, fishDex),
   enchants: runeAbilities(equippedRunes(profile, inventory, runes)),
+  // ★武器の進化（戦闘記憶）。刻印とは別枠で、装備している武器のぶんが乗る
+  evolutions: equippedEvolutions(profile, inventory),
   slots: (profile?.skill_set || [])
     .map(e => ({ skill: SKILL_BY_NAME[e?.name], uses: e?.uses || 1 }))
     .filter(e => e.skill),

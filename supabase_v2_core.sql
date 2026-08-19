@@ -157,7 +157,7 @@ insert into public.v2_skills (name, cls, mp, sort) values
   ('ライト','僧侶',6,1), ('ライトニング','僧侶',13,2), ('ヒール','僧侶',12,3), ('祈祷','僧侶',15,4), ('プロテク','僧侶',10,5),
   ('打撃','格闘家',4,1), ('鉄拳','格闘家',12,2), ('連打','格闘家',10,3), ('爆裂拳','格闘家',16,4), ('残心','格闘家',8,5),
   ('オオカミ召喚','サモナー',8,1), ('小悪魔召喚','サモナー',11,2), ('グリフォン召喚','サモナー',13,3), ('群れの号令','サモナー',14,4), ('魔力供給','サモナー',0,5),
-  ('居合斬','侍',12,1), ('断空','侍',16,2), ('居合の構え','侍',0,3), ('明鏡止水','侍',12,4), ('月影','侍',22,5), ('抜刀','侍',12,6), ('二段斬り','侍',15,7), ('峰打ち','侍',13,8), ('桜花一閃','侍',20,9), ('残身の構え','侍',11,10),
+  ('居合斬','侍',12,1), ('断空','侍',16,2), ('居合の構え','侍',0,3), ('明鏡止水','侍',12,4), ('月影','侍',22,5), ('抜刀','侍',8,6), ('二段斬り','侍',15,7), ('峰打ち','侍',13,8), ('桜花一閃','侍',20,9), ('残身の構え','侍',11,10),
   ('マッドラッシュ','狂戦士',16,1), ('すてみ','狂戦士',18,2), ('バーサク','狂戦士',0,3), ('ブラッティロア','狂戦士',14,4), ('フルブレイカー','狂戦士',18,5), ('猛り斬り','狂戦士',13,6), ('血の代償','狂戦士',16,7), ('裂傷撃','狂戦士',14,8), ('狂乱連斬','狂戦士',19,9), ('威嚇咆哮','狂戦士',12,10),
   ('毒矢','狩人',12,1), ('三連射','狩人',14,2), ('鷹ノ目','狩人',0,3), ('狩猟本能','狩人',14,4), ('絶影狙撃','狩人',20,5), ('貫き矢','狩人',14,6), ('追い討ち','狩人',13,7), ('毒煙玉','狩人',14,8), ('鷹爪連射','狩人',20,9), ('罠設置','狩人',13,10),
   ('瞬歩瞬殺','暗殺者',12,1), ('鬼影閃','暗殺者',15,2), ('隠身','暗殺者',0,3), ('影歩き','暗殺者',12,4), ('急所突き','暗殺者',20,5), ('背後刺し','暗殺者',13,6), ('毒刃','暗殺者',14,7), ('喉笛狩り','暗殺者',19,8), ('千刃乱舞','暗殺者',20,9), ('影分身','暗殺者',13,10),
@@ -3449,3 +3449,175 @@ $$;
 revoke all on function public.v2_daily_claim() from public;
 revoke all on function public.v2_daily_claim() from anon;
 grant execute on function public.v2_daily_claim() to authenticated;
+
+-- ============================================================
+-- ===== 12. 武器の進化（戦闘記憶）=====
+-- ------------------------------------------------------------
+-- シャングリラ・フロンティア風。**その武器で戦い続けると熟練度が貯まり、節目で
+-- 「どう戦ってきたか」に応じた能力が1つ付く。**設計とスコアの正は src/v2/lib/evolve.js。
+--   ・熟練度が貯まるのは**装備している武器だけ**（右手・左手それぞれ独立）
+--   ・ルーンの刻印とは別枠（ソケットを食わない）
+--   ・節目は 100 / 500 / 2000 戦、乗る値の上限は 6% / 10% / 15%
+--
+-- ⚠戦闘そのものはクライアントが回すので、戦績もクライアントから送られてくる。
+--   **1戦あたりの増分をサーバー側で頭打ちにする**ことで、でたらめな値を積めなくする。
+--   進化の中身（どの能力が何%か）も、段階・上限・重複・敵の名前をここで検証する。
+--   戦闘をサーバー権威化するときは、この検証ごと本物の計算へ差し替えること。
+-- ============================================================
+alter table public.v2_inventory add column if not exists record     jsonb not null default '{}'::jsonb;
+alter table public.v2_inventory add column if not exists evolutions jsonb not null default '[]'::jsonb;
+
+-- ===== 1戦ぶんの戦績を積む =====
+-- p_ids … いま装備している武器の所持品ID（右手・左手）／ p_rec … evolve.js の recordOfBattle の結果
+create or replace function public.v2_weapon_record(p_ids bigint[], p_rec jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid   uuid := auth.uid();
+  -- 1戦あたりの上限。★ここを超える申告は切り捨てる（evolve.js の emptyRecord と同じキー）
+  c_max_turns constant int := 100;   -- battle.js の MAX_TURNS
+  c_max_hits  constant int := 200;   -- 多段＋追加行動を見込んだ上限
+  c_foes_keep constant int := 12;    -- evolve.js の FOES_KEEP
+  c_stages    constant int[] := array[100, 500, 2000];
+  v_hits   int;  v_taken int;  v_wins int;
+  v_add    jsonb;
+  v_foe    text;
+  v_row    record;
+  v_old    jsonb;
+  v_foes   jsonb;
+  v_n      int;
+  v_out    jsonb := '[]'::jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_ids is null or array_length(p_ids, 1) is null then return jsonb_build_object('ok', true, 'weapons', v_out); end if;
+  -- 一度に積めるのは2本まで（右手・左手）
+  if array_length(p_ids, 1) > 2 then return jsonb_build_object('ok', false, 'error', '武器が多すぎます'); end if;
+
+  -- ---- 申告を頭打ちにする ----
+  v_hits  := least(greatest(coalesce((p_rec ->> 'hits')::int, 0), 0), c_max_hits);
+  v_taken := least(greatest(coalesce((p_rec ->> 'taken')::int, 0), 0), c_max_hits);
+  v_wins  := least(greatest(coalesce((p_rec ->> 'wins')::int, 0), 0), 1);
+  -- 倒した敵は1戦に1体だけ。勝っていなければ数えない
+  v_foe := null;
+  if v_wins = 1 then
+    select key into v_foe from jsonb_each_text(coalesce(p_rec -> 'foes', '{}'::jsonb)) limit 1;
+  end if;
+  v_add := jsonb_build_object(
+    'battles', 1,
+    'hits',    v_hits,
+    'crit',    least(greatest(coalesce((p_rec ->> 'crit')::int, 0), 0), v_hits),
+    'taken',   v_taken,
+    'dodged',  least(greatest(coalesce((p_rec ->> 'dodged')::int, 0), 0), v_taken),
+    'ail',     least(greatest(coalesce((p_rec ->> 'ail')::int, 0), 0), v_hits),
+    'wins',    v_wins,
+    'lowWin',  least(greatest(coalesce((p_rec ->> 'lowWin')::int, 0), 0), v_wins),
+    'bigWin',  least(greatest(coalesce((p_rec ->> 'bigWin')::int, 0), 0), v_wins),
+    'turns',   least(greatest(coalesce((p_rec ->> 'turns')::int, 0), 0), c_max_turns)
+  );
+
+  -- ---- 装備している武器へ積む（自分のもので、部位が武器のものだけ）----
+  for v_row in
+    select i.id, i.record
+      from public.v2_inventory i
+      join public.v2_equipment e on e.id = i.equip_id
+     where i.id = any(p_ids) and i.player_id = v_uid and e.part = '武器'
+  loop
+    v_old := coalesce(v_row.record, '{}'::jsonb);
+    v_foes := coalesce(v_old -> 'foes', '{}'::jsonb);
+    if v_foe is not null then
+      v_foes := jsonb_set(v_foes, array[v_foe],
+                          to_jsonb(coalesce((v_foes ->> v_foe)::int, 0) + 1), true);
+      -- 際限なく増やさない。多い順に c_foes_keep 件だけ残す
+      if (select count(*) from jsonb_object_keys(v_foes)) > c_foes_keep then
+        select coalesce(jsonb_object_agg(t.key, t.value), '{}'::jsonb) into v_foes
+          from (select key, value from jsonb_each(v_foes)
+                 order by (value #>> '{}')::int desc, key limit c_foes_keep) t;
+      end if;
+    end if;
+    -- 数のキーは足し算、foes だけ別枠
+    v_old := (
+      select coalesce(jsonb_object_agg(k, to_jsonb(
+               coalesce((v_old ->> k)::int, 0) + coalesce((v_add ->> k)::int, 0))), '{}'::jsonb)
+        from jsonb_object_keys(v_add) k
+    ) || jsonb_build_object('foes', v_foes);
+    update public.v2_inventory set record = v_old where id = v_row.id;
+    v_n := coalesce((v_old ->> 'battles')::int, 0);
+    v_out := v_out || jsonb_build_array(jsonb_build_object(
+      'id', v_row.id,
+      'battles', v_n,
+      -- まだ受け取っていない段階の数（0＝無し）。画面はこれを見てポップアップを出す
+      'pending', (select count(*) from unnest(c_stages) s where v_n >= s)
+                 - (select jsonb_array_length(coalesce(i2.evolutions, '[]'::jsonb))
+                      from public.v2_inventory i2 where i2.id = v_row.id),
+      'record', v_old));
+  end loop;
+
+  return jsonb_build_object('ok', true, 'weapons', v_out);
+end;
+$$;
+revoke all on function public.v2_weapon_record(bigint[], jsonb) from public;
+revoke all on function public.v2_weapon_record(bigint[], jsonb) from anon;
+grant execute on function public.v2_weapon_record(bigint[], jsonb) to authenticated;
+
+-- ===== 進化を1つ付ける =====
+-- 中身（どの能力か）はクライアントが戦績から決める（evolve.js の makeEvolution）。
+-- ★サーバーは**段階・熟練度・重複・上限・敵の名前**を検証する＝好きな能力を好きなだけは付けられない
+create or replace function public.v2_weapon_evolve(p_id bigint, p_key text, p_value numeric, p_foe text default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid    uuid := auth.uid();
+  c_stages constant int[]     := array[100, 500, 2000];      -- evolve.js の STAGES
+  c_caps   constant numeric[] := array[6, 10, 15];           -- evolve.js の STAGE_CAP
+  c_keys   constant text[]    := array['crit','eva','ail','endure','giant','swift','slayer'];
+  v_row    record;
+  v_evos   jsonb;
+  v_stage  int;
+  v_bat    int;
+  v_val    numeric;
+  v_ev     jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if not (p_key = any(c_keys)) then return jsonb_build_object('ok', false, 'error', '知らない能力です'); end if;
+
+  select i.id, i.record, i.evolutions into v_row
+    from public.v2_inventory i
+    join public.v2_equipment e on e.id = i.equip_id
+   where i.id = p_id and i.player_id = v_uid and e.part = '武器'
+   for update;
+  if not found then return jsonb_build_object('ok', false, 'error', '武器が見つかりません'); end if;
+
+  v_evos  := coalesce(v_row.evolutions, '[]'::jsonb);
+  v_stage := jsonb_array_length(v_evos) + 1;
+  if v_stage > array_length(c_stages, 1) then return jsonb_build_object('ok', false, 'error', 'これ以上は進化しません'); end if;
+
+  v_bat := coalesce((coalesce(v_row.record, '{}'::jsonb) ->> 'battles')::int, 0);
+  if v_bat < c_stages[v_stage] then
+    return jsonb_build_object('ok', false, 'error', format('あと%s戦です', c_stages[v_stage] - v_bat));
+  end if;
+
+  -- 同じ能力は2回付かない
+  if exists (select 1 from jsonb_array_elements(v_evos) e where e ->> 'key' = p_key) then
+    return jsonb_build_object('ok', false, 'error', 'その能力はもう付いています');
+  end if;
+
+  -- 値は段階ごとの上限まで（0.1刻み）
+  v_val := round(least(greatest(coalesce(p_value, 0), 1), c_caps[v_stage]), 1);
+
+  v_ev := jsonb_build_object('stage', v_stage, 'key', p_key, 'value', v_val);
+  if p_key = 'slayer' then
+    -- 宿敵狩りは**実際に倒した相手**でなければ付かない
+    if p_foe is null or not (coalesce(v_row.record, '{}'::jsonb) -> 'foes' ? p_foe) then
+      return jsonb_build_object('ok', false, 'error', 'その相手を倒した記録がありません');
+    end if;
+    v_ev := v_ev || jsonb_build_object('foe', p_foe);
+  end if;
+
+  update public.v2_inventory set evolutions = v_evos || jsonb_build_array(v_ev) where id = p_id;
+  return jsonb_build_object('ok', true, 'evolution', v_ev,
+                            'inventory', (select to_jsonb(i) from public.v2_inventory i where i.id = p_id));
+end;
+$$;
+revoke all on function public.v2_weapon_evolve(bigint, text, numeric, text) from public;
+revoke all on function public.v2_weapon_evolve(bigint, text, numeric, text) from anon;
+grant execute on function public.v2_weapon_evolve(bigint, text, numeric, text) to authenticated;

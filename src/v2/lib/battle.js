@@ -17,13 +17,14 @@
 import {
   resolveAttack, healOf, roll, goesFirst, rollExtraAction,
 } from './combat.js'
-import { STAT_KEYS } from './stats.js'
+import { STAT_KEYS, calcPower } from './stats.js'
 import { skillsOf, isPassive, offClassMult, scaleTable, mpOf, mpPctOf } from './skills.js'
 import { classBonusOf } from './classBonus.js'
 import {
   createAilments, inflict, tickAilments, ailStatPct, healMultOf, consumeParalyze, AIL_LABEL,
 } from './ailments.js'
 import { collectEnchants, inflictChance } from './enchant.js'
+import { collectEvolutions, evoDmgPct } from './evolve.js'
 
 export const NORMAL_ATTACK_MULT = 1.0 // 通常攻撃の倍率（消費MP0）
 export const MAX_TURNS = 100          // これを超えたら引き分け
@@ -130,6 +131,8 @@ export const createSide = (fighter, band = null) => {
   const pa = collectPassives(passives)
   const bonus = classBonusOf(fighter.cls, fighter.jobCount)
   const en = collectEnchants(fighter.enchants, band)
+  // 武器の進化（戦闘記憶）。刻印とは別枠で、装備している武器に付いているぶんが乗る
+  const evo = collectEvolutions(fighter.evolutions)
   const buffs = {}
   if (bonus?.stats) applyBuff(buffs, bonus.stats)   // 職業補正（就いている職業だけ）
   applyBuff(buffs, pa.statPct)                      // パッシブの常時ステータス補正
@@ -139,6 +142,8 @@ export const createSide = (fighter, band = null) => {
     cls: fighter.cls,
     kind: fighter.kind || attackKindOf(fighter.cls),
     base: stats,
+    // 戦闘力。「巨人殺し」が相手と比べるのに使う（ステータスから出すので敵にも要る）
+    power: calcPower(stats),
     // ★startHp/startMp を渡すと、そこから始める（アリーナのチャンプは回復しないので使う）。
     //   最大値は base のままなので、回復もHPバーも正しく動く
     hp: Math.max(0, Math.min(stats.hp, fighter.startHp ?? stats.hp)),
@@ -163,6 +168,9 @@ export const createSide = (fighter, band = null) => {
     enStacks: {},                        // 当てるたびに積むスタック（ステ名→合計%）
     enCut: en.startCut,                  // スケルトン：次に受けるダメージを軽減（受けるまで消えない）
     reflected: false,                    // ウラノス：跳ね返しは最初の1回だけ
+    // ===== 武器の進化（戦闘記憶）=====
+    evo,
+    moves: 0,                            // 自分が行動した回数（疾き刃が最初の3回を見る）
   }
 }
 
@@ -250,8 +258,9 @@ const applyDebuff = (foe, table, log) => {
 
 // 状態異常を1つ試す。**相手のエンチャント抵抗（ailResist）を引いてから**判定する。
 // エンチャント由来（onHitAils）とスキル由来（skill.ail）で同じ道を通す＝抵抗の効き方がズレない
-const tryInflict = (foe, a, rng, log) => {
-  const pct = inflictChance(a.chance, foe.en, a.key)
+// me は入れる側（武器の進化「蝕みの刃」ぶんをここで足す）
+const tryInflict = (me, foe, a, rng, log) => {
+  const pct = inflictChance(a.chance + (me?.evo?.ail || 0), foe.en, a.key)
   if (!roll(pct, rng)) return
   if (inflict(foe.ail, a.key, a)) log.push({ side: foe.name, type: 'ailment', ail: AIL_LABEL[a.key] })
 }
@@ -260,7 +269,7 @@ const tryInflict = (foe, a, rng, log) => {
 const onHit = (me, foe, kind, rng, log) => {
   for (const a of me.en.onHitAils) {
     if (a.kind !== 'any' && a.kind !== kind) continue
-    tryInflict(foe, a, rng, log)
+    tryInflict(me, foe, a, rng, log)
   }
   // 雪男・氷河ドラゴン・フロストバーン：当てるたびに相手のステータスを下げる（重複上限つき）
   for (const f of me.en.onHitFoeStats) {
@@ -277,12 +286,24 @@ const onHit = (me, foe, kind, rng, log) => {
   }
 }
 
+// 武器の進化ぶんの与ダメージ倍率。乗る条件を満たしていないものは1のまま
+const evoMult = (me, foe) => {
+  const pct = evoDmgPct(me.evo, {
+    hpPct: (me.hp / Math.max(1, me.base.hp)) * 100,
+    foeBigger: (foe.power || 0) > (me.power || 0),
+    moves: me.moves,
+    foeName: foe.name,
+  })
+  return pct ? 1 + pct / 100 : 1
+}
+
 // 1回の行動を解決する。戻り値はログ用の1件
 // ★opt はATB戦闘（atb.js）のためのもの。オート戦闘（runBattle）は opt を渡さないので挙動は変わらない
 //     idx        … 撃つ枠を指定する（null＝通常攻撃・省略＝いままで通り findSlot が自動で選ぶ）
 //     noProc     … 発動率の抽選をしない（ATBは不発の代わりに「必要ゲージ」で重さを表す）
 //     noParalyze … 麻痺の判定をしない（ATBは麻痺＝ゲージが止まる、で表現する）
 export const takeAction = (me, foe, rng, log, opt = {}) => {
+  me.moves += 1   // 疾き刃が「最初の3回の行動」を見る。麻痺で動けなくても1回と数える
   // 麻痺：このターンは動けない（見た時点で1ターンぶん消える）
   if (!opt.noParalyze && consumeParalyze(me.ail)) {
     log.push({ side: me.name, type: 'paralyzed' })
@@ -330,8 +351,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
         sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit, noCrit: !!skill.noCrit,
         acc: skill.acc ?? 100,
         hitBonus: me.pa.hitBonus + me.en.hitBonus,
-        evaBonus: foe.pa.evaBonus + foe.en.evaBonus,
-        critBonus: me.pa.critBonus,
+        evaBonus: foe.pa.evaBonus + foe.en.evaBonus + foe.evo.eva,
+        critBonus: me.pa.critBonus + me.evo.crit,
       }, rng)
       raw += r.damage
       if (r.hit) hits++
@@ -347,13 +368,15 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     // エンチャントの与ダメージ+%（物理／魔法で別枠。時間帯ぶんも畳み込み済み）
     raw = Math.floor(raw * (1 + (skill.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100))
     if (off !== 1) raw = Math.floor(raw * off)
+    // 武器の進化（薄氷の勝者・巨人殺し・疾き刃・宿敵狩り）
+    raw = Math.floor(raw * evoMult(me, foe))
     const dmg = applyIncoming(me, foe, raw, skill.kind, rng, log)
     if (hits > 0) {
       onHit(me, foe, skill.kind, rng, log)
       // ★スキル自身が持つ状態異常（どくのほうし＝毒、電撃＝麻痺 など）。**当たったときだけ**。
       //   敵もプレイヤーと同じ takeAction を通るので、これで**敵→こちら**にも状態異常が飛ぶ
       //   ＝エンチャントの抵抗（毒キノコ・払暁のワイバーン）が意味を持つ
-      if (skill.ail) tryInflict(foe, { ...skill.ail, chance: skill.ail.chance * off }, rng, log)
+      if (skill.ail) tryInflict(me, foe, { ...skill.ail, chance: skill.ail.chance * off }, rng, log)
     }
     // バーサク・執行本能：ダメージを与えたら+1スタック、全部外れたらリセット
     if (me.pa.rages.length) me.rage = hits > 0 ? me.rage + 1 : 0
@@ -399,11 +422,11 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
     attacker: eMe, defender: eFoe, mult: NORMAL_ATTACK_MULT * multScale, kind: me.kind,
     defPen: me.pa.defPenBonus / 100,
     hitBonus: me.pa.hitBonus + me.en.hitBonus,
-    evaBonus: foe.pa.evaBonus + foe.en.evaBonus,
-    critBonus: me.pa.critBonus,
+    evaBonus: foe.pa.evaBonus + foe.en.evaBonus + foe.evo.eva,
+    critBonus: me.pa.critBonus + me.evo.crit,
   }, rng)
   // 通常攻撃も「物理攻撃」なのでエンチャントの与ダメージ+%とヒット時効果が乗る
-  const raw = Math.floor(r.damage * (1 + (me.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100))
+  const raw = Math.floor(r.damage * (1 + (me.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100) * evoMult(me, foe))
   const dmg = applyIncoming(me, foe, raw, me.kind, rng, log)
   if (r.hit) onHit(me, foe, me.kind, rng, log)
   if (me.kind === 'phys' && me.en.drainPhysPct > 0 && dmg > 0) {
