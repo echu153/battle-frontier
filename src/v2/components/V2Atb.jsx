@@ -5,8 +5,8 @@ import { toFighter as playerFighter } from '../lib/loadout.js'
 import { dummyFoes } from '../lib/atbDummy.js'
 import { buildBattleLog } from '../lib/battleLog.js'
 import {
-  createAtb, step, needOf, needNow, chosenOf, canUse, buffChips, ailChips,
-  GAUGE_BASE, MAX_SEC,
+  createAtb, step, needOf, needNow, chosenOf, canUse, buffChips, ailChips, guardLeft,
+  GAUGE_BASE, MAX_SEC, GUARD_NEED, GUARD_CUT, GUARD_SEC,
 } from '../lib/atb.js'
 import { STAT_DEFS } from '../lib/stats.js'
 import { miniBtn } from './v2ui.js'
@@ -35,9 +35,15 @@ const buffText = (table) => Object.entries(table)
 const Chips = ({ side, now }) => {
   const buffs = buffChips(side, now)
   const ails = ailChips(side, now)
-  if (!buffs.length && !ails.length) return null
+  const guard = guardLeft(side, now)
+  if (!buffs.length && !ails.length && !guard) return null
   return (
     <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginTop:'4px' }}>
+      {guard > 0 && (
+        <span style={{ fontSize:'10px', padding:'1px 5px', border:'1px solid #66ccff', color:'#aaddff', background:'#001830' }}>
+          🛡 防御 被ダメージ-{GUARD_CUT}% {guard}s
+        </span>
+      )}
       {buffs.map((c, i) => {
         const down = Object.values(c.table).every(v => v < 0)
         return (
@@ -182,7 +188,8 @@ export default function V2Atb({ prof, inventory, runes, fishDex }) {
   const myNeed = needNow(me)
   const enNeed = needNow(en)
   const chosen = chosenOf(me)
-  const defLabel = me.def.idx === null ? '通常攻撃' : (me.slots[me.def.idx]?.skill?.name || '通常攻撃')
+  const defLabel = me.def.guard ? '防御'
+    : me.def.idx === null ? '通常攻撃' : (me.slots[me.def.idx]?.skill?.name || '通常攻撃')
   const dealt = en.base.hp - Math.max(0, en.hp)
   const dealtPct = (dealt / en.base.hp) * 100
   const dps = dealt / Math.max(0.1, s.t)
@@ -220,7 +227,7 @@ export default function V2Atb({ prof, inventory, runes, fishDex }) {
         {BAR((Math.max(0, me.hp) / me.base.hp) * 100, '#44cc66', 12)}
         <div style={{ marginTop:'3px' }}>{BAR((me.gauge / myNeed) * 100, me.gauge >= myNeed ? '#ffee44' : '#44aaff', 8)}</div>
         <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#7fa6d0', marginTop:'2px' }}>
-          <span>ATB {Math.floor(me.gauge)} / {myNeed}{me.pending !== undefined ? `　予約：${chosen.skill?.name || '通常攻撃'}` : ''}</span>
+          <span>ATB {Math.floor(me.gauge)} / {myNeed}{me.pending !== undefined ? `　予約：${chosen.guard ? '防御' : chosen.skill?.name || '通常攻撃'}` : ''}</span>
           <span>{s.t.toFixed(1)}秒 / {s.maxSec}秒</span>
         </div>
         <Chips side={me} now={s.t} />
@@ -246,15 +253,25 @@ export default function V2Atb({ prof, inventory, runes, fishDex }) {
             background: me.pending?.idx === null ? '#003060' : '#000818' }}>
           通常攻撃<span style={{ color:'#7fa6d0' }}> {GAUGE_BASE}</span>
         </button>
+        {/* 防御は全職共通の基本コマンド（スキル枠を使わない） */}
+        <button disabled={me.auto} onClick={() => { me.pending = { guard: true } }}
+          style={{ ...miniBtn(me.pending?.guard ? '#ffee44' : '#66ccff'), fontSize:'11px', padding:'6px 8px',
+            background: me.pending?.guard ? '#003060' : '#000818' }}>
+          🛡 防御<span style={{ color:'#7fa6d0' }}> {GUARD_NEED}／{GUARD_SEC}秒 -{GUARD_CUT}%</span>
+        </button>
       </div>
 
       {/* デフォルト行動とオート */}
       <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', marginBottom:'8px' }}>
         <span style={{ fontSize:'10px', color:'#7fa6d0' }}>予約が無いときに出る行動</span>
-        <select value={me.def.idx === null ? '' : me.def.idx}
-          onChange={e => { me.def = { idx: e.target.value === '' ? null : Number(e.target.value) } }}
+        <select value={me.def.guard ? 'guard' : me.def.idx === null ? '' : me.def.idx}
+          onChange={e => {
+            const v = e.target.value
+            me.def = v === 'guard' ? { guard: true } : { idx: v === '' ? null : Number(v) }
+          }}
           style={{ background:'#000818', color:'#88ccff', border:'1px solid #0044aa', fontFamily:'monospace', fontSize:'11px', padding:'4px' }}>
           <option value="">通常攻撃</option>
+          <option value="guard">🛡 防御</option>
           {me.slots.map((sl, i) => <option key={i} value={i}>{sl.skill.name}</option>)}
         </select>
         <button onClick={() => { me.auto = !me.auto }}

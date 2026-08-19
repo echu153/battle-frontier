@@ -205,6 +205,8 @@ const applyIncoming = (me, foe, dmg, kind, rng, log) => {
   // エンチャントの軽減（物理／魔法で別枠）
   const cut = kind === 'mag' ? foe.en.magCutPct : foe.en.physCutPct
   if (cut) d *= Math.max(0, 1 - cut / 100)
+  // ATBの「防御」（atb.js が guardCut を立てる。オート戦闘では常に未設定＝素通り）
+  if (foe.guardCut) d *= Math.max(0, 1 - foe.guardCut / 100)
   // スケルトン：**1回ダメージを受けると消える**軽減バフ
   if (foe.enCut) { d *= (1 - foe.enCut / 100); foe.enCut = 0; log.push({ side: foe.name, type: 'enCut' }) }
   // 骸の壁：**1回ダメージを受けると消える**。取り直すまで効かない

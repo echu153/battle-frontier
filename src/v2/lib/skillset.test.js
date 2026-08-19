@@ -36,7 +36,7 @@ test('usableSkills はスキルの実体を返す', () => {
 })
 
 test('まだ覚えていない、いまの職業のスキルが分かる', () => {
-  assert.equal(unlearnedSkills('戦士', [], []).length, 5)
+  assert.equal(unlearnedSkills('戦士', [], []).length, 10)   // 2026-08-19に各職5→10
   assert.deepEqual(unlearnedSkills('戦士', ['体当たり'], []).map(s => s.name).includes('体当たり'), false)
   assert.deepEqual(unlearnedSkills('戦士', [], ['強撃']).map(s => s.name).includes('強撃'), false)
   assert.equal(unlearnedSkills('戦士', skillsOf('戦士').map(s => s.name), []).length, 0)
@@ -94,10 +94,10 @@ test('編成は枠数・重複・使用回数・使えるスキルかを検証�
 
   assert.match(validateSkillSet([{ name:'爆裂拳', uses:1 }], usable, 9999), /まだ使えません/)
   assert.match(validateSkillSet([{ name:'強撃', uses:1 }, { name:'強撃', uses:1 }], usable, 9999), /重複/)
-  const many = skillsOf('戦士').map(s => ({ name:s.name, uses:1 }))
+  const many = skillsOf('戦士').slice(0, 5).map(s => ({ name:s.name, uses:1 }))   // 枠は5つまで
   const all = skillsOf('戦士').map(s => s.name)
   assert.equal(validateSkillSet(many, all, 9999), null)
-  assert.match(validateSkillSet([...many, { name:'体当たり', uses:1 }], all, 9999), /枠は/)
+  assert.match(validateSkillSet([...many, { name:skillsOf('戦士')[5].name, uses:1 }], all, 9999), /枠は/)
   assert.match(validateSkillSet([{ name:'強撃', uses:0 }], usable, 9999), /使用回数は/)
   assert.match(validateSkillSet([{ name:'強撃', uses:SKILL_USE_MAX + 1 }], usable, 9999), /使用回数は/)
   assert.match(validateSkillSet([{ name:'強撃', uses:1.5 }], usable, 9999), /使用回数は/)

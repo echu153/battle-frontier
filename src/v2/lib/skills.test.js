@@ -15,10 +15,12 @@ const evenStats = (power) => {
   return { hp:u * 8, mp:u * 3, str:u, dex:u, agi:u, int_stat:u, vit:u, luk:u }
 }
 
-test('全28職がそれぞれ5個ずつスキルを持つ', () => {
+// ★2026-08-19に各職+5（5→10）。ATBで「選ぶ」戦闘を入れたら、5枠しか選べないのに
+//   候補も5個しかなく**編成の選択が発生しなかった**ため（docs/v2-atb-design.md）
+test('全28職がそれぞれ10個ずつスキルを持つ', () => {
   assert.equal(SKILL_CLASSES.length, 28)
-  for (const c of SKILL_CLASSES) assert.equal(skillsOf(c).length, 5, `${c}のスキル数`)
-  assert.equal(SKILLS.length, 28 * 5)
+  for (const c of SKILL_CLASSES) assert.equal(skillsOf(c).length, 10, `${c}のスキル数`)
+  assert.equal(SKILLS.length, 28 * 10)
   assert.deepEqual(BASIC_CLASSES, ['ノーブル', '戦士', '弓使い', '魔法使い', '僧侶', '格闘家', 'サモナー'])
 })
 
@@ -48,9 +50,15 @@ test('スキル名は重複しない', () => {
   assert.equal(Object.keys(SKILL_BY_NAME).length, SKILLS.length)
 })
 
-test('ノーブルは指定された5つ', () => {
+test('ノーブルは指定された10個', () => {
   assert.deepEqual(skillsOf('ノーブル').map(s => s.name),
-    ['はたく', '狙い撃ち', '応急手当', '身構える', '気合い'])
+    ['はたく', '狙い撃ち', '応急手当', '身構える', '気合い',
+     '石つぶて', '見切り', '渾身の一撃', '応援', '手当ての心得'])
+})
+
+// ★5枠しか組めないので、候補が枠より多いこと自体が「編成の選択」になる
+test('候補（10個）がスキル枠（5枠）より多い', () => {
+  for (const c of SKILL_CLASSES) assert.ok(skillsOf(c).length > 5, c)
 })
 
 test('全スキルの数値がレンジに収まっている', () => {

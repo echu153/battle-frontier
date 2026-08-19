@@ -5,8 +5,9 @@ import assert from 'node:assert/strict'
 import {
   createAtb, step, needOf, fillRatio, buffSecOf, chosenOf, needNow, buffChips, ailChips,
   GAUGE_BASE, FILL_PER_SEC, TICK_SEC, AIL_SEC, MAX_DT, AGI_EFFECT,
+  GUARD_NEED, GUARD_CUT, GUARD_SEC, guardLeft,
 } from './atb.js'
-import { runBattle } from './battle.js'
+import { runBattle, createSide, takeAction } from './battle.js'
 import { inflict, POISON_RATE } from './ailments.js'
 
 const makeRng = (seed) => {
@@ -187,6 +188,40 @@ test('制限時間を超えると引き分け', () => {
   run(st, 25)
   assert.equal(st.over, true)
   assert.equal(st.winner, 'draw')
+})
+
+test('防御は通常攻撃より軽く、被ダメージを減らして時間で切れる', () => {
+  const st = createAtb(fighter('自分'), fighter('敵'), { rng: makeRng(20), maxSec: 300 })
+  st.a.pending = { guard: true }
+  assert.equal(needNow(st.a), GUARD_NEED, '防御は通常攻撃より軽い')
+  assert.ok(GUARD_NEED < GAUGE_BASE)
+  run(st, 4)
+  assert.equal(st.a.guardCut, GUARD_CUT, '防御が乗る')
+  assert.equal(guardLeft(st.a, st.t), GUARD_SEC - 1)
+  assert.ok(st.log.some(l => l.type === 'guard'), 'ログに防御の行が出る')
+  run(st, GUARD_SEC + 1)
+  assert.equal(st.a.guardCut, 0, '時間で切れる')
+  assert.equal(guardLeft(st.a, st.t), 0)
+})
+
+test('防御中はダメージが半分になる（オート戦闘には影響しない）', () => {
+  const skill = sk('殴る', { mult:2, proc:100 })
+  const make = () => ({
+    me: createSide({ name:'A', cls:'戦士', kind:'phys', stats: stats(), slots:[{ skill, uses:9 }] }),
+    foe: createSide({ name:'B', cls:'戦士', kind:'phys', stats: stats(), slots:[] }),
+  })
+  const plain = make()
+  const guarded = make()
+  guarded.foe.guardCut = GUARD_CUT
+  const log1 = [], log2 = []
+  takeAction(plain.me, plain.foe, () => 0.5, log1, { idx: 0, noProc: true, noParalyze: true })
+  takeAction(guarded.me, guarded.foe, () => 0.5, log2, { idx: 0, noProc: true, noParalyze: true })
+  const d1 = log1.find(l => l.type === 'skill').damage
+  const d2 = log2.find(l => l.type === 'skill').damage
+  assert.ok(d1 > 0)
+  assert.ok(Math.abs(d2 / d1 - (1 - GUARD_CUT / 100)) < 0.02, `${d1} → ${d2}`)
+  // ★オート戦闘は guardCut を立てないので素通り（既定値が無い＝undefined）
+  assert.equal(createSide({ name:'C', cls:'戦士', stats: stats(), slots:[] }).guardCut, undefined)
 })
 
 test('オート戦闘（runBattle）は takeAction の引数追加で変わっていない', () => {

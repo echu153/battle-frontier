@@ -32,6 +32,7 @@ const EPS = 1e-6
 //   FILL_PER_SEC … 戦闘全体の速さ
 //   AGI_EFFECT   … AGI差がどれだけ速さに響くか  ←「AGIが効きすぎる」はここを下げる
 //   RATIO_MIN / RATIO_MAX … 開いてよい速さの幅（保険のフタ）
+//   GUARD_*      … 防御（全職共通のコマンド）の重さ・軽減率・持続
 //   NEED_PROC_K  … 強い技をどれだけ重くするか
 //   BUFF_SEC_*   … バフの持続
 //   AIL_SEC      … 状態異常の持続
@@ -64,6 +65,14 @@ export const NEED_PROC_K = 2
 export const needOf = (skill) =>
   skill ? GAUGE_BASE + Math.max(0, 100 - (skill.proc ?? 100)) * NEED_PROC_K : GAUGE_BASE
 
+// ===== 防御（全職共通・スキルではない）=====
+// ★ATBだけの基本コマンド（2026-08-19 ユーザー決定）。スキル枠を1つも使わずに誰でも使える。
+//   ゲージが軽い（通常攻撃より安い）ので「大技が来る前に挟む」動きができる＝
+//   相手のゲージを見る意味がここで生まれる
+export const GUARD_NEED = 60   // 必要ゲージ（通常攻撃100より軽い）
+export const GUARD_CUT  = 50   // 被ダメージを何%減らすか
+export const GUARD_SEC  = 6    // 効いている秒数
+
 // ===== バフ・デバフの持続（秒） =====
 // 強いバフほど短い。効果の合計%（絶対値の和）で決まる
 export const BUFF_SEC_CONST = 3000
@@ -90,6 +99,8 @@ export const createAtbSide = (fighter, band = null) => {
   side.tickAt = TICK_SEC              // 次に出血・毒・継続回復を刻む時刻
   side.pending = undefined            // 予約（{ idx } ／ idx=null は通常攻撃）
   side.def = { idx: null }            // デフォルト行動（予約が無いときに出る）
+  side.guardCut = 0                   // 防御中の軽減率（battle.js の applyIncoming が見る）
+  side.guardUntil = 0                 // 防御が切れる時刻
   side.auto = false                   // オート（枠の順に自動で撃つ＝オート戦闘と同じ選び方）
   return side
 }
@@ -148,6 +159,7 @@ const expire = (side, now) => {
   for (const k of AIL_KEYS) {
     if (side.ail[k] && (side.ailUntil[k] ?? 0) + EPS < now) { delete side.ail[k]; delete side.ailUntil[k] }
   }
+  if (side.guardCut && side.guardUntil + EPS < now) { side.guardCut = 0; side.guardUntil = 0 }
 }
 
 // 出血・毒・継続回復（TICK_SEC ごと）。★割合ダメージなのでVITでは軽減されない（オートと同じ）
@@ -179,6 +191,7 @@ export const canUse = (side, idx) => {
 export const chosenOf = (side) => {
   if (side.auto) return { auto: true, skill: peekSkill(side) }
   const pick = side.pending !== undefined ? side.pending : side.def
+  if (pick?.guard) return { guard: true, skill: null }
   const idx = pick?.idx
   if (idx === null || idx === undefined) return { idx: null, skill: null }
   if (!canUse(side, idx)) return { idx: null, skill: null }
@@ -186,7 +199,10 @@ export const chosenOf = (side) => {
 }
 
 // いま必要なゲージ量
-export const needNow = (side) => needOf(chosenOf(side).skill)
+export const needNow = (side) => {
+  const ch = chosenOf(side)
+  return ch.guard ? GUARD_NEED : needOf(ch.skill)
+}
 // 溜まりぶんの余り（0以上なら撃てる）
 const excess = (side) => side.gauge - needNow(side)
 
@@ -200,6 +216,15 @@ const finish = (st) => {
 // 1回の行動を解決する
 const act = (st, me, foe) => {
   const ch = chosenOf(me)
+  // 防御：スキルではないので takeAction を通さない。掛け直すと時間が延びる（重ならない）
+  if (ch.guard) {
+    me.guardCut = GUARD_CUT
+    me.guardUntil = st.t + GUARD_SEC
+    me.gauge = Math.max(0, me.gauge - GUARD_NEED)
+    me.pending = undefined
+    st.log.push({ side: me.name, type: 'guard', sec: GUARD_SEC, cut: GUARD_CUT })
+    return
+  }
   const need = needOf(ch.skill)
   const beforeMe = { ...me.buffs }
   const beforeFoe = { ...foe.buffs }
@@ -256,6 +281,8 @@ export const step = (st, dtSec) => {
 export const buffChips = (side, now) => side.timed
   .map(e => ({ table: e.table, sec: Math.max(0, Math.ceil(e.until - now)), pct: (e.until - now) / e.sec }))
   .filter(c => c.sec > 0)
+// 防御の残り秒（0＝防御していない）
+export const guardLeft = (side, now) => (side.guardCut ? Math.max(0, Math.ceil(side.guardUntil - now)) : 0)
 // 状態異常の表示（残り秒つき）
 export const ailChips = (side, now) => AIL_KEYS
   .filter(k => side.ail[k])
