@@ -30,9 +30,12 @@ const EPS = 1e-6
 // ===== ゲージ =====
 export const GAUGE_BASE   = 100  // 通常攻撃＝100（1行動ぶん）
 export const GAUGE_MAX    = 260  // 溜めの上限（一番重い技より上にしておく）
-export const FILL_PER_SEC = 20   // 等速なら5秒で1行動
-export const RATIO_MIN    = 0.5
-export const RATIO_MAX    = 2.0
+export const FILL_PER_SEC = 25   // 等速なら4秒で1行動
+// ★AGI比の効き幅（2026-08-19 調整）。0.5〜2.0＝最大4倍差にしていたら**相手が遅すぎた**。
+//   0.75〜1.5＝最大2倍差に詰めた。AGIを伸ばす価値は残しつつ、
+//   相手が「殴られるだけの置物」にならない速さを保つ
+export const RATIO_MIN    = 0.75
+export const RATIO_MAX    = 1.5
 // 溜まる速さはAGI比。平方根とクランプで頭打ちにする（素の比のままだとAGI一強になる）
 export const fillRatio = (myAgi, foeAgi) =>
   clamp(Math.sqrt(Math.max(0, myAgi) / Math.max(1, foeAgi)), RATIO_MIN, RATIO_MAX)

@@ -30,12 +30,12 @@ test('必要ゲージは発動率から出る（不発の代わりに溜めが�
   assert.equal(needOf({ proc:60 }), 180)
 })
 
-test('ゲージの溜まる速さはAGI比・0.5〜2.0で頭打ち', () => {
+test('ゲージの溜まる速さはAGI比・0.75〜1.5で頭打ち（速い側と遅い側で最大2倍差）', () => {
   assert.equal(fillRatio(100, 100), 1)
-  assert.equal(fillRatio(400, 100), 2)      // 4倍で上限
-  assert.equal(fillRatio(1600, 100), 2)     // それ以上は伸びない
-  assert.equal(fillRatio(25, 100), 0.5)     // 遅い側も下限で止まる
-  assert.equal(fillRatio(0, 100), 0.5)
+  assert.equal(fillRatio(225, 100), 1.5)    // 2.25倍で上限
+  assert.equal(fillRatio(1600, 100), 1.5)   // それ以上は伸びない
+  assert.equal(fillRatio(56.25, 100), 0.75) // 遅い側も下限で止まる
+  assert.equal(fillRatio(0, 100), 0.75)
 })
 
 test('バフの持続は強さで決まる（強いほど短い・30〜120秒）', () => {
@@ -50,22 +50,23 @@ test('バフの持続は強さで決まる（強いほど短い・30〜120秒）
   assert.equal(buffSecOf(70, true), 43)
 })
 
-test('等速なら5秒で1行動（ゲージ100）', () => {
+test('等速なら4秒で1行動（ゲージ100）', () => {
   const st = createAtb(fighter('自分'), fighter('敵'), { rng: makeRng(1) })
-  run(st, 4.5)
-  assert.equal(st.log.length, 0, '4.5秒ではまだ動かない')
+  run(st, 3.5)
+  assert.equal(st.log.length, 0, '3.5秒ではまだ動かない')
   run(st, 1.0)
   const acted = st.log.filter(l => l.type === 'normal')
-  assert.equal(acted.length, 2, '5秒で両者1回ずつ通常攻撃する')
+  assert.equal(acted.length, 2, '4秒で両者1回ずつ通常攻撃する')
 })
 
-test('AGIが倍なら行動回数も増える（頭打ちの範囲で）', () => {
+test('AGIが高いほど行動が増えるが、開く差は最大2倍まで', () => {
   const fast = fighter('速い', [], { stats: stats({ agi:400 }) })
   const st = createAtb(fast, fighter('敵'), { rng: makeRng(2) })
-  run(st, 20)
+  run(st, 60)
   const mine = st.log.filter(l => l.side === '速い' && l.type === 'normal').length
   const foe  = st.log.filter(l => l.side === '敵'   && l.type === 'normal').length
-  assert.equal(mine / foe, 4, 'AGI4倍＝上限の2.0倍速…に対し相手は0.5倍速なので4倍')
+  const ratio = mine / foe
+  assert.ok(ratio > 1.9 && ratio < 2.1, `上限1.5倍速 vs 下限0.75倍速＝約2倍で頭打ち（実測 ${ratio.toFixed(2)}）`)
 })
 
 test('デフォルト行動が出る／予約が優先され、1回で消える', () => {
@@ -103,7 +104,8 @@ test('バフは時間で消える（残り秒つきで持つ）', () => {
   st.a.def = { idx: 0 }
   run(st, 5.5)
   assert.equal(st.a.buffs.vit, 50, 'バフが乗る')
-  assert.equal(buffChips(st.a, st.t)[0].sec, 60, 'VIT+50% は60秒')
+  assert.equal(st.a.timed[0].sec, 60, 'VIT+50% は60秒もつ')
+  assert.ok(buffChips(st.a, st.t)[0].sec >= 58, '残り秒が減っていく')
   run(st, 30)
   assert.ok(st.a.buffs.vit > 50, '撃ち続けるぶんは積み上がる')
   const stacked = st.a.timed.length
