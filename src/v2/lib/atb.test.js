@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   createAtb, step, needOf, fillRatio, buffSecOf, chosenOf, needNow, buffChips, ailChips,
-  GAUGE_BASE, FILL_PER_SEC, TICK_SEC, AIL_SEC, MAX_DT,
+  GAUGE_BASE, FILL_PER_SEC, TICK_SEC, AIL_SEC, MAX_DT, AGI_EFFECT,
 } from './atb.js'
 import { runBattle } from './battle.js'
 import { inflict, POISON_RATE } from './ailments.js'
@@ -30,12 +30,19 @@ test('必要ゲージは発動率から出る（不発の代わりに溜めが�
   assert.equal(needOf({ proc:60 }), 180)
 })
 
-test('ゲージの溜まる速さはAGI比・0.75〜1.5で頭打ち（速い側と遅い側で最大2倍差）', () => {
-  assert.equal(fillRatio(100, 100), 1)
-  assert.equal(fillRatio(225, 100), 1.5)    // 2.25倍で上限
-  assert.equal(fillRatio(1600, 100), 1.5)   // それ以上は伸びない
-  assert.equal(fillRatio(56.25, 100), 0.75) // 遅い側も下限で止まる
-  assert.equal(fillRatio(0, 100), 0.75)
+test('AGI差の効きは AGI_EFFECT 乗＋クランプ（つまみ1つで弱められる）', () => {
+  const r = (a, b) => Number(fillRatio(a, b).toFixed(3))
+  assert.equal(AGI_EFFECT, 0.35)
+  assert.equal(r(100, 100), 1)
+  assert.equal(r(200, 100), 1.275)          // AGI2倍でも+27%しか速くならない
+  assert.equal(r(300, 100), 1.469)
+  assert.equal(r(1000, 100), 1.5)           // 3.2倍あたりで上限に当たる
+  assert.equal(r(100000, 100), 1.5, 'インフレしても上限は超えない')
+  assert.equal(r(50, 100), 0.785)
+  assert.equal(r(10, 100), 0.75)            // 遅い側も下限で止まる
+  assert.equal(r(0, 100), 0.75)
+  // ★比で見ているので、両者が同じだけインフレしても効き方は変わらない
+  assert.equal(r(200, 100), r(200000, 100000))
 })
 
 test('バフの持続は強さで決まる（強いほど短い・30〜120秒）', () => {
@@ -60,7 +67,7 @@ test('等速なら4秒で1行動（ゲージ100）', () => {
 })
 
 test('AGIが高いほど行動が増えるが、開く差は最大2倍まで', () => {
-  const fast = fighter('速い', [], { stats: stats({ agi:400 }) })
+  const fast = fighter('速い', [], { stats: stats({ agi:100000 }) })   // 極端に速くても
   const st = createAtb(fast, fighter('敵'), { rng: makeRng(2) })
   run(st, 60)
   const mine = st.log.filter(l => l.side === '速い' && l.type === 'normal').length

@@ -27,18 +27,37 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 // 「ちょうど期限の瞬間の刻み」が消えてしまわないようにする（毒30秒＝6回、を守る）
 const EPS = 1e-6
 
+// ============================================================
+// ★調整するつまみはこの節に全部ある（他は触らなくていい）
+//   FILL_PER_SEC … 戦闘全体の速さ
+//   AGI_EFFECT   … AGI差がどれだけ速さに響くか  ←「AGIが効きすぎる」はここを下げる
+//   RATIO_MIN / RATIO_MAX … 開いてよい速さの幅（保険のフタ）
+//   NEED_PROC_K  … 強い技をどれだけ重くするか
+//   BUFF_SEC_*   … バフの持続
+//   AIL_SEC      … 状態異常の持続
+// ============================================================
+
 // ===== ゲージ =====
 export const GAUGE_BASE   = 100  // 通常攻撃＝100（1行動ぶん）
 export const GAUGE_MAX    = 260  // 溜めの上限（一番重い技より上にしておく）
 export const FILL_PER_SEC = 25   // 等速なら4秒で1行動
-// ★AGI比の効き幅（2026-08-19 調整）。0.5〜2.0＝最大4倍差にしていたら**相手が遅すぎた**。
-//   0.75〜1.5＝最大2倍差に詰めた。AGIを伸ばす価値は残しつつ、
-//   相手が「殴られるだけの置物」にならない速さを保つ
-export const RATIO_MIN    = 0.75
-export const RATIO_MAX    = 1.5
-// 溜まる速さはAGI比。平方根とクランプで頭打ちにする（素の比のままだとAGI一強になる）
+
+// ★AGI差の効き（2026-08-19 追加）。**AGI比を何乗するか**で決める
+//     1.0 … 比がそのまま出る（AGIが2倍なら2倍速）＝効きすぎ
+//     0.5 … 平方根（2倍で1.41倍速）＝2026-08-19の昼まではこれ
+//     0.35… いまの値（2倍で1.27倍速・3倍で1.47倍速）
+//     0   … AGIは速さにまったく関係しなくなる
+//   ★**比**で見ているので、インフレでAGIの絶対値が10倍になっても効き方は変わらない。
+//     変わるのは「相手との差」だけ。将来ここだけ下げれば効きを弱められる
+export const AGI_EFFECT = 0.35
+// 開いてよい速さの幅。AGI_EFFECT を上げすぎた／極端な相手が出たときのフタ。
+// AGI_EFFECT=0.35 なら、AGIが相手の約3.2倍で上限・約0.44倍で下限に当たる
+export const RATIO_MIN = 0.75
+export const RATIO_MAX = 1.5
+
+// 溜まる速さはAGI比。AGI_EFFECT 乗してからクランプする（素の比のままだとAGI一強になる）
 export const fillRatio = (myAgi, foeAgi) =>
-  clamp(Math.sqrt(Math.max(0, myAgi) / Math.max(1, foeAgi)), RATIO_MIN, RATIO_MAX)
+  clamp(Math.pow(Math.max(0, myAgi) / Math.max(1, foeAgi), AGI_EFFECT), RATIO_MIN, RATIO_MAX)
 
 // 必要ゲージ。発動率が低い技ほど重い＝**不発の代わりに待ち時間で表す**
 export const NEED_PROC_K = 2
