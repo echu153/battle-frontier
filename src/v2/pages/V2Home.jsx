@@ -12,6 +12,7 @@ import { classBonusText, jobCountOf } from '../lib/classBonus.js'
 import { useStored } from '../lib/prefs.js'
 import { totalStats } from '../lib/loadout.js'
 import V2Sortie from '../components/V2Sortie.jsx'
+import V2Atb from '../components/V2Atb.jsx'
 import V2Storage from '../components/V2Storage.jsx'
 import V2Smith from '../components/V2Smith.jsx'
 import V2Status, { V2Menu } from '../components/V2Status.jsx'
@@ -362,7 +363,9 @@ export default function V2Home() {
               <div style={{ marginBottom:'8px' }}>
                 {!inBattle && (
                   <div style={{ display:'flex', gap:'4px', marginBottom:'6px' }}>
-                    {[{ key:'sortie', label:'⚔ 出撃', color:'#ffcc00' }, { key:'arena', label:'🏛 アリーナ', color:'#ff88cc' }].map(t => (
+                    {[{ key:'sortie', label:'⚔ 出撃', color:'#ffcc00' }, { key:'arena', label:'🏛 アリーナ', color:'#ff88cc' },
+                      // ★ATBは開発中の試し撃ち場（報酬なし・サーバーへ送らない）。docs/v2-atb-design.md
+                      { key:'atb', label:'⏱ ATB[開発]', color:'#44ddff' }].map(t => (
                       <button key={t.key} onClick={() => setAct(t.key)}
                         style={{ ...miniBtn(act === t.key ? t.color : '#7fa6d0'), padding:'7px 14px', fontSize:'12px',
                           background: act === t.key ? '#002850' : '#000818' }}>
@@ -371,9 +374,9 @@ export default function V2Home() {
                     ))}
                   </div>
                 )}
-                {act === 'sortie'
-                  ? <V2Sortie prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} guard={guard} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />
-                  : <V2Arena prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} onProfile={refresh} onBack={() => setAct('sortie')} embedded />}
+                {act === 'sortie' && <V2Sortie prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} guard={guard} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />}
+                {act === 'arena'  && <V2Arena  prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} onProfile={refresh} onBack={() => setAct('sortie')} embedded />}
+                {act === 'atb'    && <V2Atb    prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} />}
               </div>
             )}
 

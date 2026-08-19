@@ -276,19 +276,23 @@ const onHit = (me, foe, kind, rng, log) => {
 }
 
 // 1回の行動を解決する。戻り値はログ用の1件
-const takeAction = (me, foe, rng, log) => {
+// ★opt はATB戦闘（atb.js）のためのもの。オート戦闘（runBattle）は opt を渡さないので挙動は変わらない
+//     idx        … 撃つ枠を指定する（null＝通常攻撃・省略＝いままで通り findSlot が自動で選ぶ）
+//     noProc     … 発動率の抽選をしない（ATBは不発の代わりに「必要ゲージ」で重さを表す）
+//     noParalyze … 麻痺の判定をしない（ATBは麻痺＝ゲージが止まる、で表現する）
+export const takeAction = (me, foe, rng, log, opt = {}) => {
   // 麻痺：このターンは動けない（見た時点で1ターンぶん消える）
-  if (consumeParalyze(me.ail)) {
+  if (!opt.noParalyze && consumeParalyze(me.ail)) {
     log.push({ side: me.name, type: 'paralyzed' })
     return
   }
-  const idx = findSlot(me)
+  const idx = opt.idx !== undefined ? opt.idx : findSlot(me)
   const slot = idx === null ? null : me.slots[idx]
   const skill = slot?.skill || null
 
   // 発動判定。不発ならMPも使用回数も減らず、ポインタも進めない
   //   ★不発はバーサク・執行本能のスタックをリセットする
-  if (skill && !roll(skill.proc + me.pa.procBonus + me.en.procBonus, rng)) {
+  if (skill && !opt.noProc && !roll(skill.proc + me.pa.procBonus + me.en.procBonus, rng)) {
     log.push({ side: me.name, type: 'misfire', skill: skill.name })
     me.rage = 0
     normalAttack(me, foe, rng, log, me.pa.misfireAtkMult)  // 居合の構えはここで威力2倍
@@ -408,7 +412,7 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
 
 // ターン終了時の持続ダメージ（出血・毒）と、ターン数の減り
 // ★出血・毒は割合ダメージなのでVITでは軽減されない（旧版と同じ）
-const tickAil = (side, log) => {
+export const tickAil = (side, log) => {
   for (const t of tickAilments(side.ail, { hp: side.hp, maxHp: side.base.hp })) {
     side.hp -= t.damage
     log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL[t.key], damage: t.damage, stacks: t.stacks })
@@ -417,7 +421,7 @@ const tickAil = (side, log) => {
 }
 
 // ターン終了時の持続効果（回復）
-const tickRegen = (side, log) => {
+export const tickRegen = (side, log) => {
   const eff = liveStats(side)
   if (side.regen?.turns > 0) {
     const amt = healAmount(side, eff, side.regen.rate)
