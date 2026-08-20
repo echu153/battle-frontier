@@ -5,7 +5,7 @@ import { toFighter as playerFighter } from '../lib/loadout.js'
 import { dummyFoes } from '../lib/atbDummy.js'
 import { buildBattleLog } from '../lib/battleLog.js'
 import {
-  createAtb, step, needOf, needNow, chosenOf, canUse, buffChips, ailChips, guardLeft,
+  createAtb, step, needOf, needNow, procBonusOf, chosenOf, canUse, buffChips, ailChips, guardLeft,
   GAUGE_BASE, MAX_SEC, GUARD_NEED, GUARD_CUT, GUARD_SEC,
 } from '../lib/atb.js'
 import { STAT_DEFS } from '../lib/stats.js'
@@ -237,7 +237,9 @@ export default function V2Atb({ prof, inventory, runes, fishDex }) {
       <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'6px' }}>
         {me.slots.map((sl, i) => {
           const ok = canUse(me, i)
-          const need = needOf(sl.skill)
+          // ★発動率+%（パッシブ・エンチャント・武器の進化）は必要ゲージを軽くする。
+          //   画面の数字も engine と同じ関数を通す（表示だけズレるのを防ぐ）
+          const need = needOf(sl.skill, procBonusOf(me))
           const reserved = me.pending?.idx === i
           return (
             <button key={i} disabled={!ok || me.auto} onClick={() => { me.pending = { idx: i } }}

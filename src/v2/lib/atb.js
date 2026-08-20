@@ -10,6 +10,14 @@
 // 進め方（オートとの違い）
 //   ・ターンが無い。時間でゲージが溜まり、必要量に届いた側から行動する
 //   ・スキルの発動率（proc）は使わない。代わりに**強い技ほど必要ゲージが大きい**
+//
+// ★ターンが無いせいで、そのままでは効かない効果がある。**読み替えてここで効かせる**
+//   （2026-08-21 に総当たりで洗い出した。オートだけ効いて ATB で死ぬのを防ぐ）
+//     発動率+%   → 必要ゲージが軽くなる（不発が無いので「撃ちやすさ」に読み替える）
+//     追加行動+% → ゲージの溜まりが速くなる（「回数が増える」の言い換え）
+//     先手+%     → 開始ゲージを持って始める（「先に動く」の言い換え）
+//   ⚠**不発したときの通常攻撃の威力**（居合の構え／居合の心得）だけは読み替え先が無い。
+//     ATBには不発そのものが存在しないので、対象外のまま（テストで明示している）。
 //   ・バフ／デバフ／状態異常は**残り秒**で消える（オートは戦闘中ずっと or ターン数）
 //   ・麻痺＝ゲージが止まる／鈍足＝AGIが下がる＝溜まりが遅くなる
 //
@@ -62,8 +70,12 @@ export const fillRatio = (myAgi, foeAgi) =>
 
 // 必要ゲージ。発動率が低い技ほど重い＝**不発の代わりに待ち時間で表す**
 export const NEED_PROC_K = 2
-export const needOf = (skill) =>
-  skill ? GAUGE_BASE + Math.max(0, 100 - (skill.proc ?? 100)) * NEED_PROC_K : GAUGE_BASE
+// procBonus … パッシブ・エンチャント・武器の進化の「発動率+%」。撃ちやすさ＝軽さに読み替える
+export const needOf = (skill, procBonus = 0) =>
+  skill ? GAUGE_BASE + Math.max(0, 100 - (skill.proc ?? 100) - procBonus) * NEED_PROC_K : GAUGE_BASE
+// そのサイドが持っている発動率+%の合計（オート戦闘の takeAction と同じ足し方）
+export const procBonusOf = (side) =>
+  (side?.pa?.procBonus || 0) + (side?.en?.procBonus || 0) + (side?.evo?.proc || 0)
 
 // ===== 防御（全職共通・スキルではない）=====
 // ★ATBだけの基本コマンド（2026-08-19 ユーザー決定）。スキル枠を1つも使わずに誰でも使える。
@@ -92,7 +104,9 @@ export const MAX_SEC  = 180    // これを超えたら引き分け
 // ===== 1サイド =====
 export const createAtbSide = (fighter, band = null) => {
   const side = createSide(fighter, band)
-  side.gauge = 0
+  // 武器の進化「◯%で先手を取る」は、ATBでは**開始ゲージの貯金**に読み替える
+  //   （ターンが無いので「先に動く」を確率ではなく出だしの速さで表す）
+  side.gauge = Math.min(GAUGE_MAX, GAUGE_BASE * (side.evo?.first || 0) / 100)
   side.baseBuffs = { ...side.buffs }  // 職業補正・パッシブ・エンチャントぶん（**消えない**）
   side.timed = []                     // [{ table, sec, until }] 時間で消えるバフ・デバフ
   side.ailUntil = {}                  // 状態異常の期限（秒）
@@ -165,13 +179,15 @@ const expire = (side, now) => {
 // 出血・毒・継続回復（TICK_SEC ごと）。★割合ダメージなのでVITでは軽減されない（オートと同じ）
 const tickDot = (side, log, foe = null) => {
   const a = side.ail
+  // ★倍率は**入れた側**の武器の進化を見る（オート戦闘の tickAil と同じ）
+  const boost = 1 + (foe?.evo?.ail?.dmg || 0) / 100
   if (a.poison) {
-    const d = Math.max(1, Math.floor(side.base.hp * (a.poison.rate ?? POISON_RATE)))
+    const d = Math.max(1, Math.floor(side.base.hp * (a.poison.rate ?? POISON_RATE) * boost))
     side.hp -= d
     log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL.poison, damage: d })
   }
   if (side.hp > 0 && a.bleed?.stacks > 0) {
-    const d = Math.max(1, Math.floor(side.hp * BLEED_HP_RATE * a.bleed.stacks))
+    const d = Math.max(1, Math.floor(side.hp * BLEED_HP_RATE * a.bleed.stacks * boost))
     side.hp -= d
     log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL.bleed, damage: d, stacks: a.bleed.stacks })
   }
@@ -201,7 +217,7 @@ export const chosenOf = (side) => {
 // いま必要なゲージ量
 export const needNow = (side) => {
   const ch = chosenOf(side)
-  return ch.guard ? GUARD_NEED : needOf(ch.skill)
+  return ch.guard ? GUARD_NEED : needOf(ch.skill, procBonusOf(side))
 }
 // 溜まりぶんの余り（0以上なら撃てる）
 const excess = (side) => side.gauge - needNow(side)
@@ -225,7 +241,7 @@ const act = (st, me, foe) => {
     st.log.push({ side: me.name, type: 'guard', sec: GUARD_SEC, cut: GUARD_CUT })
     return
   }
-  const need = needOf(ch.skill)
+  const need = needOf(ch.skill, procBonusOf(me))
   const beforeMe = { ...me.buffs }
   const beforeFoe = { ...foe.buffs }
   const ailMe = { ...me.ail }
@@ -256,7 +272,9 @@ export const step = (st, dtSec) => {
   for (const [me, eMe, eFoe] of [[st.a, eA, eB], [st.b, eB, eA]]) {
     // 麻痺のあいだはゲージが止まる
     if (!hasAilment(me.ail, 'paralyze')) {
-      me.gauge = Math.min(GAUGE_MAX, me.gauge + FILL_PER_SEC * fillRatio(eMe.agi, eFoe.agi) * dt)
+      // 武器の進化「追加行動率+%」は、ATBでは**溜まりの速さ**に読み替える
+      const fill = FILL_PER_SEC * fillRatio(eMe.agi, eFoe.agi) * (1 + (me.evo?.extra || 0) / 100)
+      me.gauge = Math.min(GAUGE_MAX, me.gauge + fill * dt)
     }
     const other = me === st.a ? st.b : st.a
     while (me.tickAt <= st.t) { tickDot(me, st.log, other); me.tickAt += TICK_SEC }

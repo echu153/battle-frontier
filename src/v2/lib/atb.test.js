@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import {
   createAtb, step, needOf, fillRatio, buffSecOf, chosenOf, needNow, buffChips, ailChips,
   GAUGE_BASE, FILL_PER_SEC, TICK_SEC, AIL_SEC, MAX_DT, AGI_EFFECT,
-  GUARD_NEED, GUARD_CUT, GUARD_SEC, guardLeft,
+  GUARD_NEED, GUARD_CUT, GUARD_SEC, guardLeft, procBonusOf,
 } from './atb.js'
 import { runBattle, createSide, takeAction } from './battle.js'
 import { inflict, POISON_RATE } from './ailments.js'
@@ -235,4 +235,95 @@ test('オート戦闘（runBattle）は takeAction の引数追加で変わっ�
   assert.deepEqual(r1.log, r2.log)
   // 不発（proc85%）がちゃんと起きている＝オート側は発動率を使い続けている
   assert.ok(runBattle(a, b, { rng: makeRng(13) }).log.some(l => l.type === 'misfire'))
+})
+
+// ============================================================
+// ★武器の進化（戦闘記憶）がATBでも効いているかの総当たり
+// ------------------------------------------------------------
+// ATBは runBattle を通らないので、**オートだけ効いてATBでは死ぬ**部品が出やすい。
+// 実際 2026-08-21 の総当たりで、出血・毒のダメージ+／発動率+／追加行動率+／先手 の
+// 4つがATBで無効になっていた（ターンが無い・不発が無いため）。
+// atb.js 側で読み替えて効かせている。ここはその再発検出。
+// ============================================================
+import { TRAITS } from './evolveTraits.js'
+import { ATOM_KEYS } from './evolveAtoms.js'
+
+// ATBには「不発」そのものが無いので、読み替え先がない部品
+const NOT_IN_ATB = ['misfireDmg']
+
+const atbSk = (name, over = {}) => ({ name, kind:'phys', mult:1, proc:100, mp:0, desc:'', ...over })
+const atbStats = (power, over = {}) => {
+  const u = power / 8
+  return { hp:u * 8, mp:u * 3, str:u, dex:u, agi:u, int_stat:u, vit:u, luk:u, ...over }
+}
+const atbKit = () => [
+  { skill: atbSk('突き',   { mult:0.8, mp:5 }), uses: 99 },
+  { skill: atbSk('術',     { kind:'mag', mult:0.8, mp:5, proc:70 }), uses: 99 },
+  { skill: atbSk('連撃',   { mult:0.3, hits:3, mp:5 }), uses: 99 },
+  { skill: atbSk('毒牙',   { mult:0.5, mp:5, ail:{ key:'poison', chance:60, turns:3 } }), uses: 99 },
+  { skill: atbSk('手当て', { kind:'heal', mp:5, heal:{ rate:0.5 } }), uses: 99 },
+]
+const atbMe = (evolutions, over = {}) => ({
+  name:'私', cls:'戦士', kind:'phys', stats: atbStats(534), slots: atbKit(), evolutions, ...over })
+const atbFoe = (over = {}) => ({
+  name:'盗賊', cls:'戦士', kind:'phys', stats: atbStats(534), boss:true, slots: atbKit(), ...over })
+
+const atbPrint = (st) => {
+  const c = {}
+  let mine = 0, theirs = 0
+  for (const l of st.log) {
+    c[l.type] = (c[l.type] || 0) + 1
+    if (l.damage) { if (l.side === '私') mine += l.damage; else theirs += l.damage }
+  }
+  return [st.over, Math.round(st.t * 10), Math.round(st.a.hp), Math.round(st.a.mp), Math.round(st.b.hp),
+    mine, theirs, ...Object.entries(c).sort().map(([k, v]) => `${k}:${v}`)].join('|')
+}
+// 相手の当たり方を変えた5つの状況。最後の1つはMP切れ＝通常攻撃しか出ない状況
+const ATB_SCENES = [
+  { mine:{}, foe:{} },
+  { mine:{ stats: atbStats(1600) }, foe:{} },
+  { mine:{}, foe:{ stats: atbStats(1600) } },
+  { mine:{ stats: atbStats(534, { agi: 900 }) },
+    foe:{ slots:[{ skill: atbSk('大振り', { mult:0.4, acc:1 }), uses:99 }] } },
+  { mine:{ stats: atbStats(534, { mp: 0 }), slots:[{ skill: atbSk('突き', { mp: 99 }), uses:99 }] }, foe:{} },
+]
+const atbRun = (evolutions) => ATB_SCENES.map(sc => {
+  const out = []
+  for (let seed = 1; seed <= 5; seed++) {
+    let st = createAtb(atbMe(evolutions, sc.mine), atbFoe(sc.foe), { maxSec: 120, rng: makeRng(seed) })
+    st.a.auto = true
+    for (let i = 0; i < 1200 && !st.over; i++) st = step(st, 0.1)
+    out.push(atbPrint(st))
+  }
+  return out.join('#')
+})
+
+test('★武器の進化の部品が、ATB戦闘でも全部効いている（不発まわりを除く）', () => {
+  const base = atbRun(undefined)
+  const dead = []
+  for (const atom of ATOM_KEYS) {
+    if (NOT_IN_ATB.includes(atom)) continue
+    const t = TRAITS.find(tr => [...tr.gain, ...tr.cost].some(([a]) => a === atom))
+    assert.ok(t, `${atom} を含む能力が無い`)
+    const eff = {}
+    for (const [a] of [...t.gain, ...t.cost]) eff[a] = a === atom ? 60 : 0
+    if (atbRun([{ key: t.key, eff }]).join('@') === base.join('@')) dead.push(atom)
+  }
+  assert.deepEqual(dead, [], `ATBで効いていない部品: ${dead.join(', ')}`)
+})
+
+test('ターンが無くて効かない効果は、ATBのつまみへ読み替えている', () => {
+  const one = (evo) => createAtb(atbMe(evo), atbFoe(), { rng: makeRng(1) })
+  // 先手 → 開始ゲージ
+  assert.equal(one(undefined).a.gauge, 0)
+  assert.ok(one([{ key:'sw_first', eff:{ first: 50 } }]).a.gauge > 0, '先手が開始ゲージになっていない')
+  // 発動率+ → 必要ゲージが軽くなる（パッシブ・エンチャントぶんも同じ枠）
+  const heavy = atbSk('大技', { proc: 60 })
+  assert.ok(needOf(heavy, 20) < needOf(heavy, 0), '発動率+が必要ゲージを軽くしていない')
+  assert.equal(needOf(heavy, 60), needOf(atbSk('軽技', { proc: 100 })), '発動率100%ぶんで通常攻撃と同じ重さ')
+  assert.equal(procBonusOf({ pa:{ procBonus:3 }, en:{ procBonus:4 }, evo:{ proc:5 } }), 12,
+    'パッシブ・エンチャント・進化の発動率を足していない')
+  // 追加行動+ → ゲージの溜まりが速くなる
+  const fill = (evo) => { let st = createAtb(atbMe(evo), atbFoe(), { rng: makeRng(1) }); st.a.auto = true; return step(st, 0.2).a.gauge }
+  assert.ok(fill([{ key:'buff_swift', eff:{ extra: 50 } }]) > fill(undefined), '追加行動率が溜まりの速さになっていない')
 })
