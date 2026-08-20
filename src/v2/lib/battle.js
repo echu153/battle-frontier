@@ -25,7 +25,8 @@ import {
 } from './ailments.js'
 import { collectEnchants, inflictChance } from './enchant.js'
 import {
-  collectEvolutions, evoDmgPct, evoCutPct, EVO_STACK_MAX, LOW_HP_PCT as EVO_LOW_HP,
+  collectEvolutions, evoDmgPct, evoCutPct, EVO_STACK_MAX,
+  LOW_HP_PCT as EVO_LOW_HP, FOE_LOW_PCT,
 } from './evolve.js'
 
 export const NORMAL_ATTACK_MULT = 1.0 // 通常攻撃の倍率（消費MP0）
@@ -353,6 +354,8 @@ const evoMult = (me, foe, { kind = 'phys', skill = false, multi = false } = {}) 
   const pct = evoDmgPct(me.evo, {
     kind, skill, multi,
     hpPct: (me.hp / Math.max(1, me.base.hp)) * 100,
+    // ★仕留め際は**相手の**HPを見る。倒しきる一撃にも乗るよう、攻撃を解決する前の値で判定する
+    foeHpPct: (foe.hp / Math.max(1, foe.base.hp)) * 100,
     foeBigger:  (foe.power || 0) > (me.power || 0),
     foeSmaller: (foe.power || 0) < (me.power || 0),
     foeBoss: !!foe.boss,
@@ -361,7 +364,6 @@ const evoMult = (me, foe, { kind = 'phys', skill = false, multi = false } = {}) 
     combo: Math.max(0, me.moves - 1),
     justDodged: me.ctx.dodged,
     justHurt: me.ctx.hurt,
-    foeName: foe.name,
   })
   return pct ? Math.max(0.1, 1 + pct / 100) : 1
 }
@@ -439,9 +441,9 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
         sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit, noCrit: !!skill.noCrit,
         acc: skill.acc ?? 100,
         // ★スキル自身の命中補正（skill.hitBonus）もここで足す＝「必中ではないが当てやすい技」を作れる
-        hitBonus: me.pa.hitBonus + me.en.hitBonus + me.evo.hit + (skill.hitBonus || 0),
+        hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + (skill.hitBonus || 0),
         evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe),
-        critBonus: me.pa.critBonus + me.evo.critRate,
+        critBonus: me.pa.critBonus + evoCrit(me, foe),
       }, rng)
       // ★クリティカルの与ダメージ+%は**1発ずつ**掛ける（多段でクリした発だけ伸びる）
       raw += r.hit && r.crit && me.evo.critDmg
@@ -521,9 +523,9 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   const r = resolveAttack({
     attacker: eMe, defender: eFoe, mult: NORMAL_ATTACK_MULT * multScale, kind: me.kind,
     defPen: me.pa.defPenBonus / 100 + me.evo.defPen / 100,
-    hitBonus: me.pa.hitBonus + me.en.hitBonus + me.evo.hit,
+    hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe),
     evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe),
-    critBonus: me.pa.critBonus + me.evo.critRate,
+    critBonus: me.pa.critBonus + evoCrit(me, foe),
   }, rng)
   evoOnDodge(foe, r.hit ? 0 : 1)
   foe.justDodged = !r.hit
@@ -546,6 +548,10 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
 // 回避率。HPが減っているときだけ乗る「際の見切り」をここで足す
 const evoEva = (side) => side.evo.eva
   + ((side.hp / Math.max(1, side.base.hp)) * 100 <= EVO_LOW_HP ? side.evo.evaLow : 0)
+// 相手が瀕死のとき、命中率とクリティカル率に乗る「仕留め際」ぶん
+const foeIsLow = (foe) => (foe.hp / Math.max(1, foe.base.hp)) * 100 <= FOE_LOW_PCT
+const evoHit  = (me, foe) => me.evo.hit      + (foeIsLow(foe) ? me.evo.hitFinish : 0)
+const evoCrit = (me, foe) => me.evo.critRate + (foeIsLow(foe) ? me.evo.critFinish : 0)
 
 // ターン終了時の持続ダメージ（出血・毒）と、ターン数の減り
 // ★出血・毒は割合ダメージなのでVITでは軽減されない（旧版と同じ）

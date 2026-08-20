@@ -56,7 +56,7 @@ export default function V2Evolve({ pending, inventory, onDone }) {
     setBusy(true); setErr('')
     // ★値は送らない（サーバーが名簿の倍率から作る）
     const { data, error } = await supabase.rpc('v2_weapon_evolve', {
-      p_id: Number(pending.id), p_key: ev.key, p_s: ev.s, p_foe: ev.foe || null,
+      p_id: Number(pending.id), p_key: ev.key, p_s: ev.s,
     })
     setBusy(false)
     if (error || !data?.ok) { setErr(error?.message || data?.error || '進化できませんでした'); return }

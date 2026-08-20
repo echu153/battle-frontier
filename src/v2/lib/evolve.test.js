@@ -9,9 +9,9 @@ import {
   atomValue, buildEffect, evolutionText, evolutionLines, evolutionName,
   collectEvolutions, emptyEffects, evoDmgPct, evoCutPct,
   EVO_FIRST_MOVES, EVO_LATE_MOVES, EVO_COMBO_MAX, EVO_HIGH_HP_PCT, EVO_STACK_MAX,
-  ATOM_AXIS,
+  ATOM_AXIS, FOE_LOW_PCT, FINISH_CAP,
 } from './evolve.js'
-import { AXES, AXIS_BY_KEY, TRAITS, TRAIT_BY_KEY, needsFoe } from './evolveTraits.js'
+import { AXES, AXIS_BY_KEY, TRAITS, TRAIT_BY_KEY } from './evolveTraits.js'
 import { ATOMS, ATOM_KEYS, atomText, atomWeight } from './evolveAtoms.js'
 import { runBattle } from './battle.js'
 
@@ -133,6 +133,23 @@ test('★攻撃のしかたを1発ずつ数えている（物理／魔法・ス�
   assert.equal(out.firsts, 1, '先に動いたのは自分')
 })
 
+test('★相手を瀕死にしてから決着までのターン数を数えている（詰めの速さ）', () => {
+  assert.equal(FOE_LOW_PCT, 30)
+  const turns = (bs) => recordOfBattle(
+    logBattle(bs.map((b, i) => ({ type:'hp', turn:i + 1, a:900, aMax:1000, b, bMax:1000 }))), YOU, FOE).finishTurns
+  // 相手が30%以下で「まだ生きている」ターンだけ数える
+  assert.equal(turns([900, 500, 300, 200, 0]), 2, '300と200の2ターン')
+  assert.equal(turns([900, 500, 301, 0]), 0, '31%では数えない')
+  assert.equal(turns([900, 300, 0]), 1)
+  assert.equal(turns([900, 500, 100]), 1, '倒しきれず終わったターンも数える')
+  // 詰めが速いほど軸の点数が高い（ほかの軸と違って「少ないほど強い」）
+  assert.equal(FINISH_CAP, 4)
+  const score = (t) => axisScore(rec({ wins: 100, finishTurns: t * 100 }), AXIS_BY_KEY.finish)
+  assert.ok(score(0.5) > score(2) && score(2) > score(3), '詰めが速いほど高くなっていない')
+  assert.equal(score(4), 0, '4ターンかかったら0点')
+  assert.equal(score(9), 0)
+})
+
 test('★支援と状態異常も数えている（回復・バフ・不発・追加行動・継続ダメージ）', () => {
   const r = logBattle([
     { side: YOU, type:'heal' }, { side: YOU, type:'regen' },
@@ -223,16 +240,37 @@ test('戦った数が少ないうちは軸が立たない（まぐれで決ま�
 const critRec = () => rec({
   battles:300, turns:2400, wins:250, hits:1200, crit:1000,
   physHits:1200, skillHits:1000, normalHits:200, taken:1000, dodged:100,
+  finishTurns:800,   // ふつうの詰め（1勝あたり3.2ターン）
 })
 
 test('★偏りがそのまま能力の系統になる', () => {
-  assert.equal(pickTrait(critRec()).trait.axis, 'crit')
-  const evaRec = rec({ battles:300, wins:250, hits:600, taken:1200, dodged:900 })
+  // ★finishTurns は「ふつうの詰め（1勝3.2ターン）」を入れておく。
+  //   書かないと 0ターン＝詰めが完璧 になって、どの戦績でも仕留め際が勝ってしまう
+  const usual = { finishTurns: 800 }
+  assert.equal(pickTrait({ ...critRec(), ...usual }).trait.axis, 'crit')
+  const evaRec = rec({ battles:300, wins:250, hits:600, taken:1200, dodged:900, ...usual })
   assert.equal(pickTrait(evaRec).trait.axis, 'eva')
-  const ailRec = rec({ battles:300, wins:250, hits:1000, ail:600, taken:600 })
+  const ailRec = rec({ battles:300, wins:250, hits:1000, ail:600, taken:600, ...usual })
   assert.equal(pickTrait(ailRec).trait.axis, 'ail')
-  const bossRec = rec({ battles:300, wins:250, bossWin:200, hits:600, taken:600 })
+  const bossRec = rec({ battles:300, wins:250, bossWin:200, hits:600, taken:600, ...usual })
   assert.equal(pickTrait(bossRec).trait.axis, 'boss')
+  // 瀕死にしてからすぐ終わらせてきた人
+  const finRec = rec({ battles:300, wins:250, hits:600, taken:600, finishTurns: 100 })
+  assert.equal(pickTrait(finRec).trait.axis, 'finish')
+})
+
+// ★物理／魔法は職業でほぼ決まる＝誰でも常に振り切る。重みを付けないと、
+//   物理職は何度進化させても物理系ばかりになる（2026-08-21 の実測で判明）
+test('職業でほぼ決まる軸は、同じ振り切りでも点数が低い', () => {
+  const full = rec({ battles:300, wins:250, hits:600, physHits:600, taken:600, dodged:600, finishTurns:800 })
+  const phys = axisScore(full, AXIS_BY_KEY.phys)
+  const eva  = axisScore(full, AXIS_BY_KEY.eva)
+  assert.equal(eva, 1, '回避は振り切れば1.0')
+  assert.ok(phys < eva, `物理が下がっていない（${phys}）`)
+  assert.equal(AXIS_BY_KEY.phys.w, 0.7)
+  assert.equal(AXIS_BY_KEY.mag.w, 0.7)
+  // 物理100%でも、回避まで振り切っている人には回避系が付く
+  assert.notEqual(pickTrait(full).trait.axis, 'phys')
 })
 
 test('★同じ系統でも、2つめの偏りで別の能力が付く', () => {
@@ -256,7 +294,7 @@ test('★同じ能力は2回付かない。2つめ以降は系統も散る', () 
 
 test('★偏りが強いほど大きい値が付く。段階ごとの予算は超えない', () => {
   const strong = critRec()
-  const weak = rec({ battles:300, turns:2400, wins:250, hits:1200, crit:70, taken:1000, physHits:1200 })
+  const weak = rec({ battles:300, turns:2400, wins:250, hits:1200, crit:70, taken:1000, physHits:1200, finishTurns:800 })
   // 同じ能力で比べる（別々の能力どうしでは倍率が違って比べられない）
   const t = TRAIT_BY_KEY.crit_eye
   const sS = traitScore(strong, t)
@@ -275,24 +313,24 @@ test('★偏りが強いほど大きい値が付く。段階ごとの予算は�
   assert.equal(atomValue(6, 0, 0.9), 0.1, '偏りが0でも最低0.1%は乗る')
 })
 
-test('宿敵狩りの系統は、実際に倒した相手がいないと付かない', () => {
-  // 物理でずっと戦ってきたが、特定の相手を狩ってはいない人
-  const noFoe = rec({ battles:300, wins:250, hits:600, physHits:600, taken:600 })
-  for (const t of TRAITS.filter(needsFoe)) {
-    assert.equal(traitScore(noFoe, t), 0, `${t.key}：倒した相手がいないのに軸が立っている`)
+// ★「同じ相手を狩り続けてきた（宿敵狩り）」は廃止した（2026-08-21 ユーザー判断）。
+//   レベル上げは雑魚周回になるので、記憶が「たまたま周回した雑魚」に固定されて意味が無かった。
+test('倒した相手の名前で決まる能力はもう無い（宿敵狩りは廃止）', () => {
+  for (const t of TRAITS) {
+    for (const [a] of [...t.gain, ...t.cost]) {
+      assert.notEqual(a, 'dmgFoe', `${t.key} に宿敵狩りの部品が残っている`)
+    }
   }
-  assert.ok(!needsFoe(pickTrait(noFoe).trait), '相手がいないのに宿敵狩りが選ばれた')
-  // 相手がいれば付き、名前も決まる
-  const withFoe = rec({ battles:300, wins:250, hits:600, physHits:300, taken:600, foes:{ 盗賊: 240 } })
-  const ev = makeEvolution(withFoe, 1, [])
-  assert.equal(TRAIT_BY_KEY[ev.key].axis, 'slayer')
-  assert.equal(ev.foe, '盗賊')
-  assert.match(evolutionText(ev), /盗賊/)
+  assert.equal(ATOMS.dmgFoe, undefined, '部品が残っている')
+  assert.equal(AXIS_BY_KEY.slayer, undefined, '軸が残っている')
+  // 進化に相手の名前は入らない
+  const r = rec({ battles:300, wins:250, hits:600, physHits:600, taken:600, finishTurns:800, foes:{ 盗賊: 240 } })
+  assert.equal(makeEvolution(r, 1, []).foe, undefined)
 })
 
 test('表示用の文が全部の能力で作れる', () => {
   for (const t of TRAITS) {
-    const ev = { stage:1, key:t.key, s:0.5, eff: buildEffect(t, 6, 0.5), foe:'盗賊' }
+    const ev = { stage:1, key:t.key, s:0.5, eff: buildEffect(t, 6, 0.5) }
     const lines = evolutionLines(ev)
     assert.equal(lines.length, t.gain.length + t.cost.length, `${t.key} の行数`)
     assert.equal(lines.filter(l => l.cost).length, t.cost.length, `${t.key} の代償の数`)
@@ -312,14 +350,12 @@ test('複数の武器に付いた進化は足し算になる', () => {
   const evo = collectEvolutions([
     { key:'crit_eye', eff:{ critRate: 3 } },
     { key:'crit_eye', eff:{ critRate: 4 } },
-    { key:'sl_hunt',  eff:{ dmgFoe: 5 }, foe:'盗賊' },
-    { key:'sl_hunt',  eff:{ dmgFoe: 6 }, foe:'盗賊' },
-    { key:'sl_hunt',  eff:{ dmgFoe: 7 }, foe:'スライム' },
-    { key:'sl_hunt',  eff:{ dmgFoe: 9 } },        // 相手が決まっていない＝数えない
+    { key:'fn_reap',  eff:{ dmgFinish: 5 } },
+    { key:'fn_reap',  eff:{ dmgFinish: 6 } },
     { key:'知らないキー', eff:{ critRate: 99 } },  // 名簿に無いものは無視する
   ])
   assert.equal(evo.critRate, 7)
-  assert.deepEqual(evo.dmgFoe, { 盗賊: 11, スライム: 7 })
+  assert.equal(evo.dmg.finish, 11)
   assert.equal(collectEvolutions(null).critRate, 0)
   assert.deepEqual(collectEvolutions([]), emptyEffects())
 })
@@ -343,8 +379,8 @@ test('★代償として付いた部品はマイナスで畳まれる', () => {
 test('条件つきの与ダメージは、条件を満たしたときだけ乗る', () => {
   const evo = emptyEffects()
   Object.assign(evo.dmg, { low:20, high:5, full:7, first:10, late:11, big:12, small:13,
-    boss:14, phys:1, mag:2, skill:3, normal:4, multi:6, ail:8, afterDodge:9, afterHurt:15, combo:2 })
-  evo.dmgFoe['盗賊'] = 30
+    boss:14, phys:1, mag:2, skill:3, normal:4, multi:6, ail:8, afterDodge:9, afterHurt:15,
+    combo:2, finish:16 })
   const at = (ctx) => evoDmgPct(evo, ctx)
   assert.equal(EVO_FIRST_MOVES, 3)
   assert.equal(EVO_LATE_MOVES, 6)
@@ -362,7 +398,8 @@ test('条件つきの与ダメージは、条件を満たしたときだけ乗�
   assert.equal(at({ hpPct:50, moves:4, foeAiled:true }), 8 + 1 + 4)
   assert.equal(at({ hpPct:50, moves:4, justDodged:true }), 9 + 1 + 4)
   assert.equal(at({ hpPct:50, moves:4, justHurt:true }), 15 + 1 + 4)
-  assert.equal(at({ hpPct:50, moves:4, foeName:'盗賊' }), 30 + 1 + 4)
+  assert.equal(at({ hpPct:50, moves:4, foeHpPct:30 }), 16 + 1 + 4, '相手が瀕死のとき')
+  assert.equal(at({ hpPct:50, moves:4, foeHpPct:31 }), 1 + 4, '相手が31%では乗らない')
   // 積み重ねは上限で止まる
   assert.equal(EVO_COMBO_MAX, 10)
   assert.equal(at({ hpPct:50, moves:4, combo:3 }), 2 * 3 + 1 + 4)
@@ -436,7 +473,7 @@ const runScenes = (evolutions) => SCENES.map(sc => {
   return out.join('#')
 })
 
-test('★50個の部品がすべて戦闘に効いている（配線の忘れを総当たりで検出）', () => {
+test('★全部の部品が戦闘に効いている（配線の忘れを総当たりで検出）', () => {
   const base = runScenes(undefined)
   const dead = []
   for (const atom of ATOM_KEYS) {
@@ -445,7 +482,7 @@ test('★50個の部品がすべて戦闘に効いている（配線の忘れを
     assert.ok(t, `${atom} を含む能力が無い`)
     const eff = {}
     for (const [a] of [...t.gain, ...t.cost]) eff[a] = a === atom ? 60 : 0
-    const ev = [{ key: t.key, eff, foe: atom === 'dmgFoe' ? '盗賊' : undefined }]
+    const ev = [{ key: t.key, eff }]
     if (runScenes(ev).join('@') === base.join('@')) dead.push(atom)
   }
   assert.deepEqual(dead, [], `戦闘に効いていない部品: ${dead.join(', ')}`)

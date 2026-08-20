@@ -3589,12 +3589,12 @@ insert into public.v2_evolve_traits (key, axis, name, atoms) values
   ('gi_read','giant','力量差の見切り','[{"a":"evaLow","w":1.4,"c":false},{"a":"dmgBig","w":1.2,"c":false}]'),
   ('gi_grit','giant','挑む者','[{"a":"st_vit","w":0.6,"c":false},{"a":"dmgBig","w":1.4,"c":false}]'),
   ('gi_fell','giant','討ち取り','[{"a":"critRate","w":0.6,"c":false},{"a":"dmgBig","w":1.4,"c":false}]'),
-  ('sl_hunt','slayer','宿敵狩り','[{"a":"dmgFoe","w":2.8,"c":false}]'),
-  ('sl_know','slayer','手の内','[{"a":"dmgFoe","w":1.6,"c":false},{"a":"hit","w":0.5,"c":false}]'),
-  ('sl_grudge','slayer','執念','[{"a":"dmgFoe","w":3.8,"c":false},{"a":"heal","w":1,"c":true}]'),
-  ('sl_habit','slayer','型の記憶','[{"a":"dmgFoe","w":1.4,"c":false},{"a":"critRate","w":0.5,"c":false}]'),
-  ('sl_ward','slayer','弱点看破','[{"a":"dmgFoe","w":1.6,"c":false},{"a":"defPen","w":0.7,"c":false}]'),
-  ('sl_scar','slayer','積年の傷','[{"a":"dmgFoe","w":1.8,"c":false},{"a":"drain","w":0.25,"c":false}]'),
+  ('fn_reap','finish','刈り取り','[{"a":"dmgFinish","w":2.4,"c":false}]'),
+  ('fn_chase','finish','逃さぬ手','[{"a":"hitFinish","w":1.2,"c":false},{"a":"dmgFinish","w":1.4,"c":false}]'),
+  ('fn_eye','finish','首筋を見る','[{"a":"critFinish","w":1.6,"c":false},{"a":"dmgFinish","w":1,"c":false}]'),
+  ('fn_deep','finish','深追い','[{"a":"dmgFinish","w":3.4,"c":false},{"a":"taken","w":1,"c":true}]'),
+  ('fn_feast','finish','止めの一口','[{"a":"dmgFinish","w":1.2,"c":false},{"a":"drain","w":0.3,"c":false}]'),
+  ('fn_press','finish','詰め','[{"a":"dmgFinish","w":1,"c":false},{"a":"extra","w":0.5,"c":false}]'),
   ('bo_slay','boss','大敵斬り','[{"a":"dmgBoss","w":2.6,"c":false}]'),
   ('bo_long','boss','長期戦の心得','[{"a":"dmgBoss","w":1.4,"c":false},{"a":"regen","w":0.18,"c":false}]'),
   ('bo_pierce','boss','巨躯貫き','[{"a":"dmgBoss","w":1.4,"c":false},{"a":"defPen","w":0.8,"c":false}]'),
@@ -3696,6 +3696,7 @@ begin
     'skillHits',  least(greatest(coalesce((p_rec ->> 'skillHits')::int, 0), 0), v_hits),
     'normalHits', least(greatest(coalesce((p_rec ->> 'normalHits')::int, 0), 0), v_hits),
     'multiHits',  least(greatest(coalesce((p_rec ->> 'multiHits')::int, 0), 0), v_hits),
+    'finishTurns',least(greatest(coalesce((p_rec ->> 'finishTurns')::int, 0), 0), c_max_turns),
     'drains',     least(greatest(coalesce((p_rec ->> 'drains')::int, 0), 0), v_hits),
     'ail',        least(greatest(coalesce((p_rec ->> 'ail')::int, 0), 0), v_hits),
     'taken',      v_taken,
@@ -3769,11 +3770,12 @@ revoke all on function public.v2_weapon_record(bigint[], jsonb) from anon;
 grant execute on function public.v2_weapon_record(bigint[], jsonb) to authenticated;
 
 -- ===== 進化を1つ付ける =====
--- クライアントが送るのは「どの能力か(p_key)」と「偏りの強さ(p_s・0〜1)」と「相手(p_foe)」だけ。
+-- クライアントが送るのは「どの能力か(p_key)」と「偏りの強さ(p_s・0〜1)」だけ。
 -- ★**効果の値はサーバーが名簿の倍率から計算する**＝値そのものは水増しできない。
--- ⚠引数名を変えたので作り直す（create or replace では引数名を変えられない）
+-- ⚠引数を変えたので作り直す（create or replace では引数を変えられない）
 drop function if exists public.v2_weapon_evolve(bigint, text, numeric, text);
-create or replace function public.v2_weapon_evolve(p_id bigint, p_key text, p_s numeric, p_foe text default null)
+drop function if exists public.v2_weapon_evolve(bigint, text, numeric);
+create or replace function public.v2_weapon_evolve(p_id bigint, p_key text, p_s numeric)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_uid    uuid := auth.uid();
@@ -3825,19 +3827,12 @@ begin
     from jsonb_array_elements(v_tr.atoms) e;
 
   v_ev := jsonb_build_object('stage', v_stage, 'key', p_key, 's', round(v_s, 3), 'eff', v_eff);
-  if v_tr.atoms @> '[{"a":"dmgFoe"}]'::jsonb then
-    -- 宿敵狩りの系統は**実際に倒した相手**でなければ付かない
-    if p_foe is null or not (coalesce(v_row.record, '{}'::jsonb) -> 'foes' ? p_foe) then
-      return jsonb_build_object('ok', false, 'error', 'その相手を倒した記録がありません');
-    end if;
-    v_ev := v_ev || jsonb_build_object('foe', p_foe);
-  end if;
 
   update public.v2_inventory set evolutions = v_evos || jsonb_build_array(v_ev) where id = p_id;
   return jsonb_build_object('ok', true, 'evolution', v_ev,
                             'inventory', (select to_jsonb(i) from public.v2_inventory i where i.id = p_id));
 end;
 $$;
-revoke all on function public.v2_weapon_evolve(bigint, text, numeric, text) from public;
-revoke all on function public.v2_weapon_evolve(bigint, text, numeric, text) from anon;
-grant execute on function public.v2_weapon_evolve(bigint, text, numeric, text) to authenticated;
+revoke all on function public.v2_weapon_evolve(bigint, text, numeric) from public;
+revoke all on function public.v2_weapon_evolve(bigint, text, numeric) from anon;
+grant execute on function public.v2_weapon_evolve(bigint, text, numeric) to authenticated;

@@ -23,9 +23,9 @@
 // ============================================================
 import { calcPower } from './stats.js'
 import { ATOMS, atomText } from './evolveAtoms.js'
-import { AXES, AXIS_BY_KEY, TRAITS, TRAIT_BY_KEY, axisScore, topFoe, needsFoe } from './evolveTraits.js'
+import { AXES, AXIS_BY_KEY, TRAITS, TRAIT_BY_KEY, axisScore, FINISH_CAP } from './evolveTraits.js'
 
-export { ATOMS, AXES, TRAITS, TRAIT_BY_KEY, axisScore, topFoe, needsFoe }
+export { ATOMS, AXES, TRAITS, TRAIT_BY_KEY, axisScore, FINISH_CAP }
 
 // 熟練度の節目。ここに達すると能力が1つ増える
 // ★出撃のクールタイムは10〜20秒なので、100戦で17〜33分ぶん。
@@ -52,6 +52,7 @@ export const emptyRecord = () => ({
   skillHits: 0,    // スキルで当てた
   normalHits: 0,   // 通常攻撃で当てた
   multiHits: 0,    // 多段スキルで当てた
+  finishTurns: 0,  // ★相手を瀕死にしてから決着までにかかったターン数（少ないほど詰めが速い）
   drains: 0,       // 吸収した回数
   // 防御
   taken: 0,        // 受けた攻撃の回数（外れ含む）
@@ -81,6 +82,7 @@ export const emptyRecord = () => ({
 })
 
 export const LOW_HP_PCT   = 30   // 「薄氷の勝ち」と数える残HPの割合
+export const FOE_LOW_PCT  = 30   // 相手が「瀕死」と数える残HPの割合（仕留め際）
 export const PINCH_PCT    = 25   // 「逆転」と数える、途中で落ちたHPの割合
 export const OVERKILL_PCT = 25   // 「過剰火力」と数える超過ダメージの割合
 export const FAST_TURNS   = 5    // これ以内で勝てば速攻
@@ -108,7 +110,12 @@ export const recordOfBattle = (r, you, foe, opt = {}) => {
   let firstSide = null
   let lowest = 100
   for (const l of r.log || []) {
-    if (l.type === 'hp') { lowest = Math.min(lowest, pctOf(l.a, l.aMax || maxHp)); continue }
+    if (l.type === 'hp') {
+      lowest = Math.min(lowest, pctOf(l.a, l.aMax || maxHp))
+      // ★相手を瀕死にしてから、まだ倒しきれていないターンを数える（詰めの速さ）
+      if (l.b > 0 && pctOf(l.b, l.bMax || 1) <= FOE_LOW_PCT) rec.finishTurns++
+      continue
+    }
     const mine = l.side === you
     if (firstSide === null && l.side) firstSide = l.side
 
@@ -196,7 +203,8 @@ export const ATOM_AXIS = {
   dmgMulti:'multi', onHitHeal:'multi',
   dmgFirst:'swift', dmgFull:'swift',
   dmgLate:'long', regen:'long',
-  dmgLow:'lowHp', dmgBig:'giant', dmgFoe:'slayer', dmgBoss:'boss',
+  dmgLow:'lowHp', dmgBig:'giant', dmgBoss:'boss',
+  dmgFinish:'finish', hitFinish:'finish', critFinish:'finish',
   drain:'drain', misfireDmg:'misfire',
   extra:'extra', st_agi:'extra', first:'first',
   dmg:'overkill', dmgSmall:'overkill', defPen:'overkill',
@@ -228,11 +236,9 @@ export const traitScore = (rec, trait, usedAxes = []) => {
 // ★同点なら名簿の並び順で決める（毎回同じ結果になる＝運ではない）
 export const pickTrait = (rec, already = []) => {
   const used = (already || []).map(k => TRAIT_BY_KEY[k]?.axis).filter(Boolean)
-  const hasFoe = topFoe(rec) > 0
   let best = null
   for (const t of TRAITS) {
     if ((already || []).includes(t.key)) continue
-    if (needsFoe(t) && !hasFoe) continue
     const s = traitScore(rec, t, used)
     if (s > 0 && (!best || s > best.s)) best = { trait: t, s }
   }
@@ -258,13 +264,7 @@ export const makeEvolution = (rec, stage, already = []) => {
   const st = Math.min(STAGE_CAP.length, Math.max(1, stage))
   const cap = STAGE_CAP[st - 1]
   const s = Math.max(0, Math.min(1, picked.s))
-  const out = { stage: st, key: picked.trait.key, s: Math.round(s * 1000) / 1000, eff: buildEffect(picked.trait, cap, s) }
-  if (needsFoe(picked.trait)) {
-    const top = Object.entries(rec.foes || {}).sort((a, b) => b[1] - a[1])[0]
-    if (!top) return null
-    out.foe = top[0]
-  }
-  return out
+  return { stage: st, key: picked.trait.key, s: Math.round(s * 1000) / 1000, eff: buildEffect(picked.trait, cap, s) }
 }
 
 // いま付けられる進化があるか。evolutions は既に付いている配列
@@ -284,8 +284,7 @@ export const evolutionLines = (ev) => {
     for (const [atom] of list || []) {
       const v = ev.eff?.[atom]
       if (v === undefined) continue
-      let text = atomText(atom, v, cost)
-      if (atom === 'dmgFoe' && ev.foe) text = text.replace('特定の相手', ev.foe)
+      const text = atomText(atom, v, cost)
       if (text) out.push({ text, cost })
     }
   }
@@ -313,9 +312,10 @@ export const evolutionName = (ev) => TRAIT_BY_KEY[ev?.key]?.name || ''
 export const emptyEffects = () => ({
   stat: {},                       // ステータス%（職業補正と同じ土俵で足される）
   critRate: 0, critDmg: 0, eva: 0, hit: 0, evaLow: 0, guts: 0, defPen: 0,
+  hitFinish: 0, critFinish: 0,
   dmg: { always:0, low:0, high:0, full:0, first:0, late:0, big:0, small:0, boss:0,
-         phys:0, mag:0, skill:0, normal:0, multi:0, ail:0, afterDodge:0, afterHurt:0, combo:0 },
-  dmgFoe: {},
+         phys:0, mag:0, skill:0, normal:0, multi:0, ail:0, afterDodge:0, afterHurt:0,
+         combo:0, finish:0 },
   cut: { always:0, low:0, phys:0, mag:0 }, taken: 0,
   onCrit: { hpCost:0, hpHeal:0, mpHeal:0, mpCost:0, ail:0 },
   onHit:  { hpHeal:0, mpHeal:0 },
@@ -348,8 +348,6 @@ export const collectEvolutions = (list) => {
       if (def.slot === 'stat') {
         const sign = costs.has(atom) ? -1 : 1
         out.stat[def.stat] = (out.stat[def.stat] || 0) + v * sign
-      } else if (atom === 'dmgFoe') {
-        if (ev.foe) out.dmgFoe[ev.foe] = (out.dmgFoe[ev.foe] || 0) + v
       } else if (costs.has(atom) && (atom === 'dmg' || atom === 'dmgPhys' || atom === 'dmgMag'
                  || atom === 'dmgSkill' || atom === 'eva' || atom === 'hit'
                  || atom === 'heal' || atom === 'mpCost' || atom === 'proc' || atom === 'critRate')) {
@@ -376,7 +374,7 @@ export const evoDmgPct = (evo, ctx = {}) => {
   if (!evo) return 0
   const {
     hpPct = 100, foeBigger = false, foeSmaller = false, foeBoss = false, moves = 999,
-    foeName = null, kind = 'phys', skill = false, multi = false, foeAiled = false,
+    foeHpPct = 100, kind = 'phys', skill = false, multi = false, foeAiled = false,
     justDodged = false, justHurt = false, combo = 0,
   } = ctx
   const d = evo.dmg
@@ -389,6 +387,7 @@ export const evoDmgPct = (evo, ctx = {}) => {
   if (foeBigger) pct += d.big
   if (foeSmaller) pct += d.small
   if (foeBoss) pct += d.boss
+  if (foeHpPct <= FOE_LOW_PCT) pct += d.finish
   pct += kind === 'mag' ? d.mag : d.phys
   pct += skill ? d.skill : d.normal
   if (multi) pct += d.multi
@@ -396,7 +395,6 @@ export const evoDmgPct = (evo, ctx = {}) => {
   if (justDodged) pct += d.afterDodge
   if (justHurt) pct += d.afterHurt
   if (d.combo) pct += d.combo * Math.min(EVO_COMBO_MAX, Math.max(0, combo))
-  if (foeName && evo.dmgFoe[foeName]) pct += evo.dmgFoe[foeName]
   return pct
 }
 

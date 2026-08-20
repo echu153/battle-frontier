@@ -2,7 +2,7 @@
 // バトルフロンティアⅡ（リメイク版）— 武器の進化：戦い方の軸と能力の名簿
 // ------------------------------------------------------------
 // ★**戦闘ログを細かく数え、そこから出た「戦い方の偏り」で能力が決まる**（2026-08-20 ユーザー指示）。
-//   軸は26本、能力は159個。同じ「クリティカルが多い人」でも、そこから何が付くかは
+//   軸は26本、能力は163個。同じ「クリティカルが多い人」でも、そこから何が付くかは
 //   もう1つの偏り（瀕死で勝ちがち／物理主体／被弾が多い…）で変わる。
 //
 // ★能力は「得1〜2個＋代償0〜1個」でできている（部品は evolveAtoms.js）。
@@ -27,7 +27,14 @@
 // ===== 戦い方の軸 =====
 // score … 戦績から出す生の比率 ／ norm … この値で1.0（振り切り）になる
 // min   … この数だけ戦っていないと軸そのものが立たない（まぐれで決めない）
-const A = (key, label, min, norm, score) => ({ key, label, min, norm, score })
+// w     … 軸の重み（既定1）。**その偏りがどれだけ「戦い方」を語るか**。
+//   ⚠物理／魔法は職業でほぼ決まる＝誰でも常に振り切る。重みを付けずに並べると、
+//     物理職は何度進化させても物理系ばかりになる（2026-08-21 のシミュレーションで実測）。
+//     「選んだ結果」ではなく「就いた職業の結果」でしかない軸は、ここで下げる。
+const A = (key, label, min, norm, score, w = 1) => ({ key, label, min, norm, score, w })
+
+// 「仕留め際」だけは**少ないほど強い**指標なので、上限を決めて引き算で0〜1にする
+export const FINISH_CAP = 4
 
 export const AXES = [
   A('crit',     'クリティカルを取り続けてきた', (r) => r.hits >= 50,   0.25, (r) => r.crit / r.hits),
@@ -39,19 +46,21 @@ export const AXES = [
   A('buff',     '構えを整えてから戦ってきた',   (r) => r.battles >= 30, 2.00, (r) => r.buffs / r.battles),
   A('mpBurn',   '魔力を絞り切ってきた',         (r) => r.battles >= 30, 0.50, (r) => r.mpEmpty / r.battles),
   A('thrift',   '素の一撃で戦ってきた',         (r) => r.hits >= 50,   0.50, (r) => r.normalHits / r.hits),
-  A('phys',     '物理で押してきた',             (r) => r.hits >= 50,   0.90, (r) => r.physHits / r.hits),
-  A('mag',      '魔法で押してきた',             (r) => r.hits >= 50,   0.90, (r) => r.magHits / r.hits),
+  A('phys',     '物理で押してきた',             (r) => r.hits >= 50,   0.90, (r) => r.physHits / r.hits, 0.70),
+  A('mag',      '魔法で押してきた',             (r) => r.hits >= 50,   0.90, (r) => r.magHits / r.hits,  0.70),
   A('multi',    '手数で押してきた',             (r) => r.hits >= 50,   0.50, (r) => r.multiHits / r.hits),
   A('swift',    '短期決着で勝ってきた',         (r) => r.wins >= 20,   0.60, (r) => r.fastWin / r.wins),
   A('long',     '長い戦いを制してきた',         (r) => r.wins >= 20,   0.40, (r) => r.longWin / r.wins),
   A('lowHp',    'ぎりぎりで勝ってきた',         (r) => r.wins >= 20,   0.30, (r) => r.lowWin / r.wins),
   A('giant',    '格上に挑み続けてきた',         (r) => r.wins >= 20,   0.40, (r) => r.bigWin / r.wins),
-  A('slayer',   '同じ相手を狩り続けてきた',     (r) => r.wins >= 20,   0.50, (r) => topFoe(r) / r.wins),
+  // ★瀕死にしてから決着までが短いほど高い（5ターンかかると0点）。他の軸と違って「少ないほど強い」
+  A('finish',   '仕留め際に詰めてきた',         (r) => r.wins >= 20,   1.00,
+    (r) => Math.max(0, (FINISH_CAP - r.finishTurns / r.wins) / FINISH_CAP)),
   A('boss',     'ボスを討ち続けてきた',         (r) => r.wins >= 20,   0.25, (r) => r.bossWin / r.wins),
   A('drain',    '奪いながら戦ってきた',         (r) => r.hits >= 50,   0.35, (r) => r.drains / r.hits),
   A('misfire',  '重い技を握り続けてきた',       (r) => r.battles >= 30, 2.00, (r) => r.misfires / r.battles),
   A('extra',    '相手より多く動いてきた',       (r) => r.battles >= 30, 2.00, (r) => r.extras / r.battles),
-  A('first',    '先手を取り続けてきた',         (r) => r.battles >= 30, 0.75, (r) => r.firsts / r.battles),
+  A('first',    '先手を取り続けてきた',         (r) => r.battles >= 30, 0.75, (r) => r.firsts / r.battles, 0.85),
   A('overkill', '過剰な力で叩き潰してきた',     (r) => r.wins >= 20,   0.35, (r) => r.overkill / r.wins),
   A('perfect',  '傷ひとつ負わず勝ってきた',     (r) => r.wins >= 20,   0.25, (r) => r.perfect / r.wins),
   A('comeback', '崖っぷちから巻き返してきた',   (r) => r.wins >= 20,   0.25, (r) => r.comeback / r.wins),
@@ -59,17 +68,12 @@ export const AXES = [
 ]
 export const AXIS_BY_KEY = Object.fromEntries(AXES.map(a => [a.key, a]))
 
-export const topFoe = (r) => {
-  const vals = Object.values(r?.foes || {})
-  return vals.length ? Math.max(...vals) : 0
-}
-
 // 軸の強さ（0〜1）。最低戦闘数に届いていなければ0
 export const axisScore = (rec, axis) => {
   if (!rec || !axis?.min(rec)) return 0
   const raw = axis.score(rec)
   if (!Number.isFinite(raw) || raw <= 0) return 0
-  return Math.max(0, Math.min(1, raw / axis.norm))
+  return Math.max(0, Math.min(1, raw / axis.norm)) * (axis.w ?? 1)
 }
 
 // ===== 能力の名簿 =====
@@ -212,13 +216,14 @@ export const TRAITS = [
   T('gi_grit',   'giant', '挑む者',         [['st_vit', 0.6], ['dmgBig', 1.4]]),
   T('gi_fell',   'giant', '討ち取り',       [['critRate', 0.6], ['dmgBig', 1.4]]),
 
-  // ---- 同じ相手を狩り続けてきた ----
-  T('sl_hunt',  'slayer', '宿敵狩り',   [['dmgFoe', 2.8]]),
-  T('sl_know',  'slayer', '手の内',     [['dmgFoe', 1.6], ['hit', 0.5]]),
-  T('sl_grudge','slayer', '執念',       [['dmgFoe', 3.8]], [['heal', 1.0]]),
-  T('sl_habit', 'slayer', '型の記憶',   [['dmgFoe', 1.4], ['critRate', 0.5]]),
-  T('sl_ward',  'slayer', '弱点看破',   [['dmgFoe', 1.6], ['defPen', 0.7]]),
-  T('sl_scar',  'slayer', '積年の傷',   [['dmgFoe', 1.8], ['drain', 0.25]]),
+  // ---- 仕留め際に詰めてきた ----
+  // ★「誰を倒したか」ではなく「どう終わらせたか」。相手のHPを見る唯一の系統
+  T('fn_reap',  'finish', '刈り取り',     [['dmgFinish', 2.4]]),
+  T('fn_chase', 'finish', '逃さぬ手',     [['hitFinish', 1.2], ['dmgFinish', 1.4]]),
+  T('fn_eye',   'finish', '首筋を見る',   [['critFinish', 1.6], ['dmgFinish', 1.0]]),
+  T('fn_deep',  'finish', '深追い',       [['dmgFinish', 3.4]], [['taken', 1.0]]),
+  T('fn_feast', 'finish', '止めの一口',   [['dmgFinish', 1.2], ['drain', 0.30]]),
+  T('fn_press', 'finish', '詰め',         [['dmgFinish', 1.0], ['extra', 0.5]]),
 
   // ---- ボスを討ち続けてきた ----
   T('bo_slay',   'boss', '大敵斬り',       [['dmgBoss', 2.6]]),
@@ -296,6 +301,3 @@ export const TRAITS = [
 export const TRAIT_BY_KEY = Object.fromEntries(TRAITS.map(t => [t.key, t]))
 export const TRAITS_OF_AXIS = (axis) => TRAITS.filter(t => t.axis === axis)
 
-// 「特定の相手」を必要とする能力（宿敵狩りの系統）。相手の名前が決まらないと付けられない
-export const needsFoe = (trait) =>
-  [...(trait?.gain || []), ...(trait?.cost || [])].some(([a]) => a === 'dmgFoe')
