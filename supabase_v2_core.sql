@@ -3721,11 +3721,15 @@ begin
   );
 
   -- ---- 装備している武器へ積む（自分のもので、部位が武器のものだけ）----
+  -- ⚠**行をロックしてから読む**。読んで足して書くので、同じ武器へ同時に呼ばれると
+  --   片方の増分が消える（2026-08-21 実機テストで実測：100回呼んで37回しか積まれなかった）。
+  --   タブを2つ開いている・連打した、で普通に起きる。
   for v_row in
     select i.id, i.record
       from public.v2_inventory i
       join public.v2_equipment e on e.id = i.equip_id
      where i.id = any(p_ids) and i.player_id = v_uid and e.part = '武器'
+     for update of i
   loop
     v_old := coalesce(v_row.record, '{}'::jsonb);
     v_foes := coalesce(v_old -> 'foes', '{}'::jsonb);
