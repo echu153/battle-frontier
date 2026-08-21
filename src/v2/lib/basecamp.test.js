@@ -79,8 +79,8 @@ test('労働者は施設グレードで1〜3人・拠点全体で9人まで', ()
   assert.equal(workerLimitOf(9), 3)
   assert.equal(PRODUCERS.length * workerLimitOf(GRADE_MAX), WORKER_MAX)
   assert.equal(HIRE_COST.length, WORKER_MAX)
-  assert.equal(hireCostOf(0), 10000)
-  assert.equal(hireCostOf(8), 15000000)
+  assert.equal(hireCostOf(0), 1000)
+  assert.equal(hireCostOf(8), 1500000)
   assert.equal(hireCostOf(9), null, '10人目は雇えない')
 })
 
@@ -95,15 +95,15 @@ test('労働者は買いきり＝維持費という仕組みがどこにも残�
 
 test('資材はグレードに関係なくGoldに売れる', () => {
   assert.equal(MATERIAL_SELL.length, GRADE_MAX, '9グレードぶんの売値がある')
-  assert.equal(sellPriceOf(1), 3)
-  assert.equal(sellPriceOf(GRADE_MAX), 320, '最終グレードの資材が売れないと使い道が無くなる')
+  assert.equal(sellPriceOf(1), 1)
+  assert.equal(sellPriceOf(GRADE_MAX), 27, '最終グレードの資材が売れないと使い道が無くなる')
   assert.equal(sellPriceOf(0), 0)
   assert.equal(sellPriceOf(10), 0)
   for (let g = 2; g <= GRADE_MAX; g++) {
     assert.ok(MATERIAL_SELL[g - 1] > MATERIAL_SELL[g - 2], `グレード${g}の売値が上がっていない`)
   }
   assert.equal(sellTotalOf([{ kind: 'wood', grade: 9, qty: 3 }, { kind: 'mana', grade: 1, qty: 10 }]),
-    320 * 3 + 3 * 10)
+    27 * 3 + 1 * 10)
   // ★サーバーにも同じ表がある
   const sell = bodyOf('v2_base_material_sell')
   assert.match(sell, new RegExp(`array\\[${MATERIAL_SELL.join(', ')}\\]`), '売値がSQLと違う')

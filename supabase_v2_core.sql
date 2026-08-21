@@ -1394,8 +1394,8 @@ on conflict (id) do update set
 --   片方だけ直すと v2sql.test.js が落ちる**（売却の権威はこちら）
 alter table public.v2_materials add column if not exists sell int not null default 0;
 update public.v2_materials set sell =
-  (case tier when 1 then 3 when 2 then 5 when 3 then 7 when 4 then 11
-             when 5 then 16 when 6 then 24 when 7 then 36 when 8 then 54 else 0 end)
+  (case tier when 1 then 3 when 2 then 6 when 3 then 9 when 4 then 12
+             when 5 then 18 when 6 then 24 when 7 then 36 when 8 then 54 else 0 end)
   * (case rarity when 'normal' then 1 when 'rare' then 8 when 'ultra' then 40 else 0 end);
 
 -- ---- 持っている素材（スタック）----
@@ -2743,7 +2743,7 @@ drop function if exists public.v2_base_upkeep(text, int, int);
 create or replace function public.v2_base_material_sell(p_grade int)
 returns int language sql immutable as $$
   select case when coalesce(p_grade, 0) between 1 and 9
-    then (array[3, 7, 15, 25, 40, 60, 100, 200, 320]::int[])[p_grade]
+    then (array[1, 2, 3, 4, 6, 8, 12, 18, 27]::int[])[p_grade]
     else 0 end;
 $$;
 
@@ -2758,7 +2758,7 @@ $$;
 create or replace function public.v2_base_hire_cost(p_hired int)
 returns bigint language sql immutable as $$
   select case when coalesce(p_hired, 0) between 0 and 8
-    then (array[10000, 30000, 80000, 200000, 500000, 1200000, 3000000, 7000000, 15000000]::bigint[])
+    then (array[1000, 3000, 8000, 20000, 50000, 120000, 300000, 700000, 1500000]::bigint[])
            [coalesce(p_hired, 0) + 1]
     else null end;
 $$;
@@ -2768,7 +2768,7 @@ create or replace function public.v2_base_upgrade_cost(p_to int)
 returns jsonb language sql immutable as $$
   select case when coalesce(p_to, 0) between 2 and 9 then jsonb_build_object(
     'qty',  (array[50, 80, 130, 200, 320, 500, 800, 1300]::int[])[p_to - 1],
-    'gold', (array[5000, 20000, 60000, 150000, 400000, 1000000, 2500000, 6000000]::bigint[])[p_to - 1]
+    'gold', (array[500, 2000, 6000, 15000, 40000, 100000, 250000, 600000]::bigint[])[p_to - 1]
   ) else null end;
 $$;
 

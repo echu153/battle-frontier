@@ -58,7 +58,9 @@ export const scarecrowPerHour = (grade) => (SCARECROW_8H[grade - 1] || 0) / CAP_
 export const WORKER_MAX = 9                                   // 拠点全体
 export const workerLimitOf = (grade) => (grade <= 3 ? 1 : grade <= 6 ? 2 : 3)
 // 何人目かで上がる（拠点全体の通し）。9人ぜんぶ雇うと合計およそ2,700万G
-export const HIRE_COST = [10000, 30000, 80000, 200000, 500000, 1200000, 3000000, 7000000, 15000000]
+// ★2026-08-22 ユーザー決定：素材の値下げに合わせて**Goldまわりを一律1/10**にした
+//   （資材の売値も同じだけ下がっているので、拠点を育てる重さは今までと変わらない）
+export const HIRE_COST = [1000, 3000, 8000, 20000, 50000, 120000, 300000, 700000, 1500000]
 export const hireCostOf = (hired) => (hired >= 0 && hired < HIRE_COST.length ? HIRE_COST[hired] : null)
 // ★労働者は**買いきり**（2026-08-17 ユーザー決定）。維持費は無い。
 //   ＝生産が止まるのは「満杯になったとき」だけになった
@@ -73,15 +75,16 @@ export const capOf = (key, grade, workers) => rateOf(key, grade, workers) * CAP_
 
 // ===== 拡張 =====
 // グレードNへ上げるのに必要な「グレード(N-1)の資材」3種の各個数とGold
+// ★資材の個数はそのまま。**Goldだけ一律1/10**（2026-08-22 ユーザー決定）
 export const UPGRADE_COST = {
-  2: { qty:   50, gold:       5000 },
-  3: { qty:   80, gold:      20000 },
-  4: { qty:  130, gold:      60000 },
-  5: { qty:  200, gold:     150000 },
-  6: { qty:  320, gold:     400000 },
-  7: { qty:  500, gold:    1000000 },
-  8: { qty:  800, gold:    2500000 },
-  9: { qty: 1300, gold:    6000000 },
+  2: { qty:   50, gold:       500 },
+  3: { qty:   80, gold:      2000 },
+  4: { qty:  130, gold:      6000 },
+  5: { qty:  200, gold:     15000 },
+  6: { qty:  320, gold:     40000 },
+  7: { qty:  500, gold:    100000 },
+  8: { qty:  800, gold:    250000 },
+  9: { qty: 1300, gold:    600000 },
 }
 export const upgradeCostOf = (grade) => UPGRADE_COST[grade + 1] || null
 // グレード③以降は**エリアボスの討伐**が条件（ユーザー決定）。
@@ -98,7 +101,8 @@ export const upgradeBlockOf = (grade, unlockedAreas) => {
 
 // ===== ルーン素材 → 資材 =====
 // **難易度帯**Nの素材がグレードNの資材になる（④の帯ならどのエリアの素材でもグレード4）。
-// 比率（1:4:20）は売却と同じにしてあるので、「売る」と「資材にする」がきれいに天秤に乗る。
+// 通常素材は「売る」と「資材にする」がGoldでちょうど等価（資材3個＝通常素材1個）。
+// レア以上は売ったほうが得（レアの売値は通常の8倍だが、資材は4倍しかもらえない）。
 // ⚠グレードは m.area（エリアID）ではなく **m.tier**。サーバー（v2_base_exchange）も同じ
 export const EXCHANGE_RATE = { normal: 3, rare: 12, ultra: 60 }
 // [{ id, qty }] → { グレード: 個数 }。持っている数を超えていないかは呼び出し側とサーバーが見る
@@ -118,9 +122,11 @@ export const exchangeTotalOf = (items) =>
 // ===== 資材 → Gold =====
 // ★**グレードに関係なく全部売れる**（2026-08-17 ユーザー決定）。
 //   これがないと、最終グレードの施設が出す資材（木材Ⅸなど）に使い道が無くなる。
-// ⚠**Goldの2本目の湧き口**。目安は「グレードNの資材3個 ≒ エリアNの通常素材1個」の
-//   売値のおよそ1/4。**サーバーにも同じ表がある**（v2_base_material_sell）
-export const MATERIAL_SELL = [3, 7, 15, 25, 40, 60, 100, 200, 320]
+// ⚠**Goldの2本目の湧き口**。**グレードNの資材3個 ＝ 難易度帯Nの通常素材1個**とぴったり同じ値段
+//   （＝「売る」と「資材にする」がGoldでは等価。資材にする意味は拠点を建てるときだけ）。
+//   ⚠2026-08-22 ユーザー決定で素材と一緒に大幅に引き下げた（旧値は3〜320G）。
+//   **サーバーにも同じ表がある**（v2_base_material_sell）
+export const MATERIAL_SELL = [1, 2, 3, 4, 6, 8, 12, 18, 27]
 export const sellPriceOf = (grade) => MATERIAL_SELL[grade - 1] || 0
 // [{ kind, grade, qty }] の合計。持っている数を超えていないかは呼び出し側とサーバーが見る
 export const sellTotalOf = (items) =>

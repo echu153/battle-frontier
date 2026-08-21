@@ -272,7 +272,8 @@ export const materialsOfTier = (tier) => MATERIALS.filter(m => m.tier === tier)
 // 値の引き方（2026-08-22 ユーザー決定で**大幅に引き下げ**）：
 //   基準は**デイリーミッション「かんたん」の100G**（daily.js の LEVELS）。
 //   ・①帯の激レア1個 ＝ 120G ＝ **デイリー1回ぶん**（通常素材は3G＝数を集めてやっと）
-//   ・帯が1つ上がるごとに約1.5倍（①3G → ⑧54G）
+//   ・帯が1つ上がるごとに約1.5倍（①3G → ⑧54G）。**基準額は3の倍数**にしてある
+//     ＝拠点の「資材3個＝通常素材1個」がGoldでもきっちり釣り合う（basecamp.js の MATERIAL_SELL）
 //   ・レア度の倍率は**出にくさの2倍**（レアは4倍出にくいので×8／激レアは20倍なので×40）
 //     ＝レアを引いた価値がちゃんと出る。
 //   素材は1戦闘に最大1個・通常20% / レア5% / 激レア1%＝合計26%しか落ちないので、
@@ -283,7 +284,7 @@ export const materialsOfTier = (tier) => MATERIALS.filter(m => m.tier === tier)
 // ⚠**サーバーにも同じ表がある**（supabase_v2_core.sql の v2_materials.sell）。
 //   売却の権威はサーバー側。**片方だけ直すと v2sql.test.js が落ちる**
 // ⚠キーは**難易度帯**（同じ帯のエリアはどのエリアの素材でも同じ値段）
-export const SELL_BASE_TIER = { 1:3, 2:5, 3:7, 4:11, 5:16, 6:24, 7:36, 8:54 }
+export const SELL_BASE_TIER = { 1:3, 2:6, 3:9, 4:12, 5:18, 6:24, 7:36, 8:54 }
 export const SELL_RARITY_MULT = { normal:1, rare:8, ultra:40 }
 export const sellPriceOf = (m) =>
   m ? (SELL_BASE_TIER[m.tier] || 0) * (SELL_RARITY_MULT[m.rarity] || 0) : 0
