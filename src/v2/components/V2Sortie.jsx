@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2LogLine from './V2LogLine.jsx'
-import { AREAS, toFighter as enemyFighter } from '../lib/enemies.js'
+import { AREAS_SORTED, markOf, areaFullName, toFighter as enemyFighter } from '../lib/enemies.js'
 import {
   pickEncounter, expOf, isAreaUnlocked, nextBossRate, clearedAreasOf, isAreaCleared,
+  clearNext, unlockNext, restToOpenNext, clearedInTier, reqOfTier, LAST_TIER,
   cooldownOf, rollHasDrop, rollDrop, rollMaterial, COOLDOWNS,
 } from '../lib/sortie.js'
 import { runBattle } from '../lib/battle.js'
@@ -38,10 +39,18 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
 
   const unlocked = prof?.unlocked_areas || [1]
   // ★解放されていないエリアはプルダウンに出さない（旧版と同じ）
-  const availableAreas = AREAS.filter(a => isAreaUnlocked(unlocked, a.id))
+  // ★並べる順は**難易度帯の順**（id は9〜15が後ろに付いているだけで難易度順ではない）
+  const availableAreas = AREAS_SORTED.filter(a => isAreaUnlocked(unlocked, a.id))
   const area = availableAreas.find(a => a.id === selectedArea) || availableAreas[0]
   // ★エリアボスを倒したエリアはプルダウンで「踏破済み」と分かるようにする
   const cleared = clearedAreasOf(prof)
+  // 見出しに使う帯（解放済みのエリアが属する帯だけ）
+  const tiers = [...new Set(availableAreas.map(a => a.tier))]
+  // 今いる帯の進み具合。**帯を全部踏破すると次の帯が開く**（sortie.js の TIER_REQ）
+  const tier = area?.tier || 1
+  const tierDone = clearedInTier(cleared, tier)
+  const tierNeed = reqOfTier(tier)
+  const tierRest = restToOpenNext(cleared, tier)
   // アリーナで階層守護者でいるあいだのドロップ率ボーナス（arena.js）
   const guardMult = guardDropMultOf(guard)
   const elapsed = (now - lastAt.current) / 1000
@@ -96,7 +105,20 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
         { text: mat.name, color: RARITY_COLOR[mat.rarity] },
         { text:'」を入手！' },
       ] })
-      if (enc.isBoss && area.id < 8) out.push({ text:`🔓 エリア${area.id + 1}が解放された！`, color:'#44ff88' })
+      // ★解放は「その帯を全部踏破したか」で決まる（1本道ではない）。
+      //   開いたエリアが出たらその名前を、まだなら残りいくつかを出す
+      if (enc.isBoss) {
+        const nextCleared = clearNext(cleared, area.id, true, true)
+        const opened = unlockNext(unlocked, nextCleared).filter(id => !unlocked.includes(id))
+        if (opened.length) {
+          out.push({ text:`🔓 ${opened.map(id => areaFullName(id)).join('・')}が解放された！`, color:'#44ff88' })
+        } else {
+          const rest = restToOpenNext(nextCleared, area.tier)
+          if (rest > 0 && area.tier < LAST_TIER) {
+            out.push({ text:`あと${rest}エリア踏破で難易度${markOf(area.tier + 1)}が解放される`, color:'#7fa6d0' })
+          }
+        }
+      }
     }
     setLogs(out)
 
@@ -168,12 +190,25 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
       <select value={area?.id || 1}
         onChange={e => { const v = Number(e.target.value); setSelectedArea(v); localStorage.setItem('v2SelectedArea', v) }}
         style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
-        {availableAreas.map(a => (
-          <option key={a.id} value={a.id}>
-            {a.name}{isAreaCleared(cleared, a.id) ? '　✔踏破済み' : ''}
-          </option>
+        {tiers.map(t => (
+          <optgroup key={t} label={`エリア${markOf(t)}`}>
+            {availableAreas.filter(a => a.tier === t).map(a => (
+              <option key={a.id} value={a.id}>
+                {a.name}{isAreaCleared(cleared, a.id) ? '　✔踏破済み' : ''}
+              </option>
+            ))}
+          </optgroup>
         ))}
       </select>
+      {/* ★その帯を全部踏破すると次の帯が開く。あといくつかをここに出す */}
+      <div style={{ fontSize:'10px', color:'#7fa6d0', marginBottom:'8px', textAlign:'right' }}>
+        難易度{markOf(tier)}　踏破 {tierDone}/{tierNeed}
+        {tier < LAST_TIER && (
+          <span style={{ color: tierRest > 0 ? '#ffcc00' : '#44ff88' }}>
+            {'　'}{tierRest > 0 ? `あと${tierRest}エリアで難易度${markOf(tier + 1)}が解放` : `難易度${markOf(tier + 1)}まで解放済み`}
+          </span>
+        )}
+      </div>
       <button onClick={doBattle} disabled={!canAct}
         style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct ? '#ffcc00' : '#003366'}`,
           color: canAct ? '#ffcc00' : '#7fa6d0', cursor: canAct ? 'pointer' : 'not-allowed',

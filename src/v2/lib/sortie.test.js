@@ -4,7 +4,8 @@ import assert from 'node:assert/strict'
 import {
   BOSS_RATE_STEP, rollBoss, nextBossRate, isAreaUnlocked, unlockNext,
   clearNext, clearedAreasOf, isAreaCleared,
-  expOf, rewardsOf, pickEncounter, EXP_BOSS, EXP_ZAKO_MIN, EXP_ZAKO_MAX, LAST_AREA,
+  TIER_REQ, reqOfTier, clearedInTier, restToOpenNext, openTiersOf, LAST_TIER,
+  expOf, rewardsOf, pickEncounter, EXP_BOSS, EXP_ZAKO_MIN, EXP_ZAKO_MAX,
   COOLDOWNS, DEFAULT_COOLDOWN, cooldownOf,
   featuredPartAt, nextSwitchAt, featuredSchedule, rollDropPart, rollDrop,
   BANDS, bandAt, enemyPoolAt, DROP_RATE, dropRateOf, rollHasDrop,
@@ -39,20 +40,58 @@ test('ボスは旧版より出にくい（平均23回前後）', () => {
   assert.ok(avg > 20 && avg < 28, `平均${avg.toFixed(1)}回`)
 })
 
-test('エリアはボス撃破で次が開く（旧版と同じ）', () => {
+// ★2026-08-22 ユーザー決定：**その難易度帯を全部踏破すると次の帯が開く**
+test('①〜③は1エリア踏破で次が開く', () => {
   assert.ok(isAreaUnlocked([], 1), '①は最初から')
   assert.ok(!isAreaUnlocked([1], 2))
+  assert.deepEqual(TIER_REQ, { 1:1, 2:1, 3:1, 4:2, 5:2, 6:2, 7:3, 8:3 })
+  assert.equal(reqOfTier(4), 2)
   // ①のボスに勝つと②が開く
-  assert.deepEqual(unlockNext([1], 1, true, true), [1, 2])
+  assert.deepEqual(unlockNext([1], clearNext([], 1, true, true)), [1, 2])
   // 通常敵に勝っても開かない／ボスに負けても開かない
-  assert.deepEqual(unlockNext([1], 1, true, false), [1])
-  assert.deepEqual(unlockNext([1], 1, false, true), [1])
+  assert.deepEqual(unlockNext([1], clearNext([], 1, true, false)), [1])
+  assert.deepEqual(unlockNext([1], clearNext([], 1, false, true)), [1])
   // 二重に足さない
-  assert.deepEqual(unlockNext([1, 2], 1, true, true), [1, 2])
-  // ⑧の先は無い（旧版と同じ）
-  assert.deepEqual(unlockNext([1, 2, 3, 4, 5, 6, 7, 8], LAST_AREA, true, true), [1, 2, 3, 4, 5, 6, 7, 8])
-  // ⑦を倒すと⑧が開く
-  assert.ok(unlockNext([1, 2, 3, 4, 5, 6, 7], 7, true, true).includes(8))
+  assert.deepEqual(unlockNext([1, 2], clearNext([1], 1, true, true)), [1, 2])
+})
+
+test('④以降は帯を全部踏破しないと次の帯へ行けない（④⑤⑥は2・⑦⑧は3）', () => {
+  // ③を倒すと④の帯が**まとめて**開く（4と9の2エリア）
+  const afterThird = unlockNext([1, 2, 3], [1, 2, 3])
+  assert.deepEqual(afterThird, [1, 2, 3, 4, 9])
+  // ④のエリアを1つ倒しただけでは⑤は開かない
+  const one = unlockNext(afterThird, [1, 2, 3, 4])
+  assert.deepEqual(one, [1, 2, 3, 4, 9], '1つだけで次の帯が開いてしまっている')
+  assert.equal(restToOpenNext([1, 2, 3, 4], 4), 1)
+  // 両方倒すと⑤の帯（5と10）が開く
+  const both = unlockNext(one, [1, 2, 3, 4, 9])
+  assert.deepEqual(both, [1, 2, 3, 4, 9, 5, 10].sort((a, b) => a - b))
+  assert.equal(restToOpenNext([1, 2, 3, 4, 9], 4), 0)
+  assert.equal(clearedInTier([1, 2, 3, 4, 9], 4), 2)
+
+  // ⑦の帯は3つ必要（7・12・13）。2つでは⑧が開かない
+  const t7 = [1, 2, 3, 4, 9, 5, 10, 6, 11]
+  const cleared2 = [...t7, 7, 12]
+  assert.ok(!unlockNext(unlockNext(t7, t7), cleared2).includes(8), '2つで⑧が開いている')
+  assert.equal(restToOpenNext(cleared2, 7), 1)
+  const cleared3 = [...cleared2, 13]
+  const opened = unlockNext(unlockNext(t7, t7), cleared3)
+  for (const id of [8, 14, 15]) assert.ok(opened.includes(id), `⑧の帯の${id}が開いていない`)
+  // ⑧の先は無い
+  assert.equal(LAST_TIER, 8)
+  assert.deepEqual(unlockNext(opened, [...cleared3, 8, 14, 15]), opened)
+})
+
+test('一度開いた帯は閉じない（新ルールより前の解放をそのまま残す）', () => {
+  // 旧仕様で⑤まで開けていた人（④は1つしか踏破していない扱いになる）
+  const old = [1, 2, 3, 4, 5]
+  const now = unlockNext(old, [1, 2, 3, 4])
+  for (const id of old) assert.ok(now.includes(id), `${id}が閉じた`)
+  // 開いていた帯のエリアは新しいぶんも一緒に開く（⑤の帯なら10も）
+  assert.ok(now.includes(9) && now.includes(10), '開いている帯の新エリアが出てこない')
+  // ⑥はまだ（⑤の帯を2つ踏破していない）
+  assert.ok(!now.includes(6), '踏破していないのに次の帯が開いている')
+  assert.deepEqual([...openTiersOf([1, 2, 3, 4], old)].sort((a, b) => a - b), [1, 2, 3, 4, 5])
 })
 
 test('EXPは旧版と同じ（通常8〜11・ボス13）', () => {
@@ -73,7 +112,7 @@ test('敵はGoldを落とさない（Goldは素材の売却で稼ぐ）', () => 
   for (const e of allEnemies()) {
     assert.equal(e.gold, undefined, `${e.name} にGoldが残っている`)
   }
-  const r = rewardsOf({ area: areaOf(1), enemy: areaOf(1).boss, isBoss: true, win: true }, mkRng(1))
+  const r = rewardsOf({ isBoss: true, win: true }, mkRng(1))
   assert.equal(r.gold, undefined, '報酬にGoldが入っている')
   assert.ok(r.exp > 0, 'EXPは入る')
 })
@@ -209,7 +248,7 @@ test('ボスを倒したエリアは踏破済みになる（⑧も残る）', ()
   assert.deepEqual(clearNext([], 1, false, true), [])
   assert.deepEqual(clearNext([1], 1, true, true), [1], "二重に足さない")
   // ⑧はその先が無いので unlocked では残らない＝ここでしか残らない
-  assert.deepEqual(clearNext([1, 2, 3, 4, 5, 6, 7], LAST_AREA, true, true), [1, 2, 3, 4, 5, 6, 7, 8])
+  assert.deepEqual(clearNext([1, 2, 3, 4, 5, 6, 7], 8, true, true), [1, 2, 3, 4, 5, 6, 7, 8])
 
   // 表示用：列がまだ無い（古い）プロフィールは解放状況から読み替える
   assert.deepEqual(clearedAreasOf({ unlocked_areas: [1, 2, 3] }), [1, 2])

@@ -12,6 +12,7 @@
 //   このファイルは画面の表示とテスト用。**片方だけ直すと fishing.test.js が落ちる**。
 // ============================================================
 import { STAT_KEYS, STAT_DEFS } from './stats.js'
+import { TIER_MAX } from './enemies.js'
 
 // ===== グレード（レア度）=====
 export const TIERS = ['common', 'rare', 'epic', 'legend']
@@ -117,11 +118,12 @@ export const fishPerHour = (grade) => 2 + 0.5 * (Math.max(1, Math.min(SPOT_MAX, 
 // 副産物は**1匹釣るごとに別枠で抽選**する（魚の代わりではなく、追加でもらう）
 export const MATERIAL_PCT = (grade) => 1 + Math.max(1, Math.min(SPOT_MAX, grade))        // 2〜10%
 export const EQUIP_PCT = (grade) => 0.5 * Math.max(1, Math.min(SPOT_MAX, grade))         // 0.5〜4.5%
-// 副産物のエリアは**釣り場グレードと同じ番号のエリアまで**（エリアの解放状況では縛らない）
-export const dropAreaMax = (grade) => Math.max(1, Math.min(8, grade))
+// 副産物は**釣り場グレードと同じ番号の難易度帯まで**（エリアの解放状況では縛らない）。
+// ⚠④以降は1つの帯に複数エリアあるので、**エリアIDではなく帯の番号**で数える（enemies.js の tier）
+export const dropTierMax = (grade) => Math.max(1, Math.min(TIER_MAX, grade))
 
 // ===== 釣りメダルの交換所 =====
 // ⚠並べるのは「ルーン素材」と「保護札」の2つだけ（2026-08-17 ユーザー決定）
-export const SHOP_MATERIAL_COST = { normal: 10, rare: 40, ultra: 200 }   // × エリア番号
-export const materialShopCost = (area, rarity) => area * (SHOP_MATERIAL_COST[rarity] || 0)
+export const SHOP_MATERIAL_COST = { normal: 10, rare: 40, ultra: 200 }   // × 難易度帯の番号
+export const materialShopCost = (tier, rarity) => tier * (SHOP_MATERIAL_COST[rarity] || 0)
 export const PROTECT_COST = 150

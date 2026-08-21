@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { supabase } from '../../supabase'
-import { AREAS } from '../lib/enemies.js'
+import { AREAS_SORTED, areaLabel } from '../lib/enemies.js'
 import { equippedItems } from '../lib/loadout.js'
 import {
   MATERIAL_BY_ID, RARITY_LABEL, RARITY_COLOR, COLOR_LABEL, COLOR_HEX,
@@ -226,10 +226,10 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
 
           {/* 選べる素材 */}
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'8px' }}>
-            {AREAS.map(a => (
-              <button key={a.id} onClick={() => setArea(a.id)}
+            {AREAS_SORTED.map(a => (
+              <button key={a.id} onClick={() => setArea(a.id)} title={a.name}
                 style={{ ...miniBtn(area === a.id ? '#00aaff' : '#7fa6d0'), background: area === a.id ? '#002850' : '#000818' }}>
-                {a.id}
+                {areaLabel(a)}
               </button>
             ))}
           </div>
@@ -260,10 +260,10 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
 
           {/* エリア */}
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'6px' }}>
-            {AREAS.map(a => (
-              <button key={a.id} onClick={() => setArea(a.id)}
+            {AREAS_SORTED.map(a => (
+              <button key={a.id} onClick={() => setArea(a.id)} title={a.name}
                 style={{ ...miniBtn(area === a.id ? '#00aaff' : '#7fa6d0'), background: area === a.id ? '#002850' : '#000818' }}>
-                {a.id}
+                {areaLabel(a)}
               </button>
             ))}
           </div>

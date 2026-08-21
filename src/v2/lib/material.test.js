@@ -6,9 +6,9 @@ import assert from 'node:assert/strict'
 import {
   MATERIALS, MATERIAL_BY_ID, materialOf, materialsOfEnemy, RARITIES,
   rangeOf, ratioOf, valueTable, meanOf, rollValue, rollStats, colorOf,
-  canExtract, extract, EXTRACT_COST, AREA_MAX, TOP_WEIGHT, runePower,
+  canExtract, extract, EXTRACT_COST, TIER_RATE_MAX, TOP_WEIGHT, runePower,
   gradeOf, runeName, runeFullName, RUNE_NAMES, GRADE_MIN, COLOR_LABEL,
-  SELL_BASE, SELL_RARITY_MULT, sellPriceOf, sellTotalOf,
+  SELL_BASE_TIER, SELL_RARITY_MULT, sellPriceOf, sellTotalOf,
 } from './material.js'
 import { allEnemies } from './enemies.js'
 import { ENCHANTS } from './enchant.js'
@@ -17,10 +17,12 @@ import { CATALOG, socketCountOf, rollSockets } from './equipment.js'
 import { STAT_KEYS } from './stats.js'
 
 // ===== 網羅 =====
-test('素材は敵56体 × 3レア度 ＝ 168種', () => {
-  assert.equal(MATERIALS.length, 168)
-  assert.equal(new Set(MATERIALS.map(m => m.id)).size, 168, 'IDが重複している')
-  assert.equal(new Set(MATERIALS.map(m => m.name)).size, 168, '名前が重複している')
+test('素材は敵105体 × 3レア度 ＝ 315種', () => {
+  assert.equal(MATERIALS.length, 315)
+  assert.equal(new Set(MATERIALS.map(m => m.id)).size, 315, 'IDが重複している')
+  assert.equal(new Set(MATERIALS.map(m => m.name)).size, 315, '名前が重複している')
+  // ★素材は自分の**難易度帯**を持つ（レンジも売値も帯で決まる）
+  for (const m of MATERIALS) assert.ok(m.tier >= 1 && m.tier <= 8, `${m.name} の帯`)
 })
 
 // ★再発検出テスト：敵を足したら素材も足す、を強制する
@@ -56,7 +58,7 @@ test('どのエリア帯でも8ステータスすべてが揃う', () => {
 
 // ===== レンジ =====
 test('レンジの最大は2.0%。上限はエリア帯・下限はレア度で決まる', () => {
-  assert.equal(Math.max(...Object.values(AREA_MAX)), 2.0)
+  assert.equal(Math.max(...Object.values(TIER_RATE_MAX)), 2.0)
   assert.deepEqual(rangeOf(1, 'normal', false), { lo:0.1, hi:1.0 })
   assert.deepEqual(rangeOf(1, 'rare', false),   { lo:0.3, hi:1.0 })
   assert.deepEqual(rangeOf(1, 'ultra', false),  { lo:0.5, hi:1.0 })
@@ -65,6 +67,9 @@ test('レンジの最大は2.0%。上限はエリア帯・下限はレア度で�
   // ★ボス素材もレンジは雑魚と同じ（2ステ持ちなので合計はちょうど2倍になる）
   assert.deepEqual(rangeOf(1, 'normal', true), rangeOf(1, 'normal', false))
   assert.deepEqual(rangeOf(8, 'ultra', true),  rangeOf(8, 'ultra', false))
+  // ★同じ帯のエリアはレンジも同じ（⑧の帯＝エリア8・14・15）
+  assert.deepEqual(rangeOf(14, 'normal', false), rangeOf(8, 'normal', false))
+  assert.deepEqual(rangeOf(15, 'ultra', false),  rangeOf(8, 'ultra', false))
   const boss = materialOf('ビッグスライム', 'normal')
   assert.deepEqual([boss.lo, boss.hi], [0.1, 1.0])
 })
@@ -273,25 +278,25 @@ test('ボス素材は2つのステータスが両方とも、それぞれ別に�
 test('素材の売値は全種類に付いていて、レア度で 1 / 4 / 20 倍', () => {
   for (const m of MATERIALS) {
     assert.ok(sellPriceOf(m) > 0, `${m.name} の売値`)
-    assert.equal(sellPriceOf(m), SELL_BASE[m.area] * SELL_RARITY_MULT[m.rarity], m.name)
+    assert.equal(sellPriceOf(m), SELL_BASE_TIER[m.tier] * SELL_RARITY_MULT[m.rarity], m.name)
   }
   assert.deepEqual(SELL_RARITY_MULT, { normal:1, rare:4, ultra:20 })
   // エリアが進むほど高い
   let prev = 0
   for (let a = 1; a <= 8; a++) {
-    assert.ok(SELL_BASE[a] > prev, `エリア${a}の基準額`)
-    prev = SELL_BASE[a]
+    assert.ok(SELL_BASE_TIER[a] > prev, `難易度${a}の基準額`)
+    prev = SELL_BASE_TIER[a]
   }
 })
 
 test('1戦闘あたりの期待Goldは、素材のドロップ率ぶんだけ薄まる', () => {
   // ドロップは 通常20% / レア5% / 激レア1%。B / 4B / 20B なので期待値は 0.6B になる
   for (let a = 1; a <= 8; a++) {
-    const m = (rarity) => ({ area:a, rarity })
+    const m = (rarity) => ({ tier:a, rarity })
     const exp = (MATERIAL_RATE.normal * sellPriceOf(m('normal'))
       + MATERIAL_RATE.rare * sellPriceOf(m('rare'))
       + MATERIAL_RATE.ultra * sellPriceOf(m('ultra'))) / 100
-    assert.equal(Math.round(exp), Math.round(SELL_BASE[a] * 0.6), `エリア${a}の期待Gold`)
+    assert.equal(Math.round(exp), Math.round(SELL_BASE_TIER[a] * 0.6), `難易度${a}の期待Gold`)
   }
 })
 

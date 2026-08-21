@@ -10,11 +10,12 @@
 //   ・v2   +0.3%/回 → 平均23.6回でボス（「もう少し出にくく」）
 //   確率がじわじわ上がるので「何十回引いても出ない」事故が起きない＝ピティとして機能する。
 //
-// ★エリアの解放（旧版と同じ）
-//   そのエリアのボスを倒すと次のエリアが解放される。①は最初から解放。
-//   旧版は⑦のボス撃破で⑧が開くところまで（⑧の先が無い）。v2も同じ。
+// ★エリアの解放（v2は「難易度帯」で進む・2026-08-22 ユーザー決定）
+//   ①②③は1エリアずつだが、**④⑤⑥は2エリア・⑦⑧は3エリア**あり、
+//   **その帯を全部踏破すると次の帯がまとめて開く**。①は最初から解放。
+//   （旧版は「倒したエリアの次が開く」の1本道だった）
 // ============================================================
-import { AREAS, areaOf, rollDropRank, timedEnemyOf } from './enemies.js'
+import { AREAS, areaOf, rollDropRank, timedEnemyOf, tierOf, TIER_MAX } from './enemies.js'
 import { PARTS, itemsOf, typesOf, CATALOG } from './equipment.js'
 import { materialOf } from './material.js'
 
@@ -28,20 +29,35 @@ export const rollBoss = (bossRate, rng = Math.random) => rng() * 100 < Math.min(
 export const nextBossRate = (bossRate, wasBoss) =>
   wasBoss ? 0 : Math.min(BOSS_RATE_MAX, (bossRate || 0) + BOSS_RATE_STEP)
 
-// ===== エリアの解放 =====
+// ===== エリアの解放（難易度帯ごと）=====
+// ★2026-08-22 ユーザー決定：**同じ難易度帯を全部踏破すると、次の帯が開く**。
+//   ①②③は1エリアずつ／④⑤⑥は2エリア／⑦⑧は3エリア（enemies.js の tier）。
+//   ＝④に来たら2エリアのボスを両方倒さないと⑤へ行けない。
 export const FIRST_AREA = 1
-export const LAST_AREA = 8
-export const isAreaUnlocked = (unlocked, id) => id === FIRST_AREA || (unlocked || []).includes(id)
-// ボスを倒したときに解放されるエリアを足して返す（旧版と同じ：撃破したエリアの次が開く）
-export const unlockNext = (unlocked, areaId, win, wasBoss) => {
-  const list = [...(unlocked || [FIRST_AREA])]
-  if (!list.includes(FIRST_AREA)) list.unshift(FIRST_AREA)
-  if (win && wasBoss && areaId < LAST_AREA && !list.includes(areaId + 1)) list.push(areaId + 1)
-  return list.sort((a, b) => a - b)
+export const LAST_TIER = TIER_MAX
+// その帯を**いくつ踏破したら次の帯が開くか**。用意してあるエリア数と同じ（＝全部倒す）
+export const TIER_REQ = { 1:1, 2:1, 3:1, 4:2, 5:2, 6:2, 7:3, 8:3 }
+export const reqOfTier = (tier) => TIER_REQ[tier] || 0
+export const isAreaUnlocked = (unlocked, id) => tierOf(id) === 1 || (unlocked || []).includes(id)
+// その帯をいくつ踏破したか／次の帯まであといくつか
+export const clearedInTier = (cleared, tier) => (cleared || []).filter(id => tierOf(id) === tier).length
+export const restToOpenNext = (cleared, tier) => Math.max(0, reqOfTier(tier) - clearedInTier(cleared, tier))
+// 開いている帯。★**一度開いた帯は閉じない**（2026-08-22 ユーザー決定）＝
+//   新ルールの前から開いていたエリアはそのまま遊べる（その帯のエリアは全部開く）
+export const openTiersOf = (cleared, unlocked) => {
+  const set = new Set([1])
+  for (const id of (unlocked || [])) { const t = tierOf(id); if (t) set.add(t) }
+  for (let t = 1; t < TIER_MAX; t++) if (restToOpenNext(cleared, t) === 0) set.add(t + 1)
+  return set
+}
+// 踏破と今の解放から、解放しておくエリアを作り直す（サーバーの v2_sortie_settle と同じ規則）
+export const unlockNext = (unlocked, cleared) => {
+  const open = openTiersOf(cleared, unlocked)
+  return AREAS.filter(a => open.has(a.tier)).map(a => a.id).sort((a, b) => a - b)
 }
 
 // ===== エリアの踏破（ボスを倒したか） =====
-// ボスを倒したエリアは cleared_areas に積む。⑧はその先が無い＝ unlocked_areas では分からないので専用の列を持つ
+// ボスを倒したエリアは cleared_areas に積む。**帯が開いたかどうかはここから数える**
 export const clearNext = (cleared, areaId, win, wasBoss) => {
   const list = [...(cleared || [])]
   if (win && wasBoss && !list.includes(areaId)) list.push(areaId)
@@ -51,7 +67,8 @@ export const clearNext = (cleared, areaId, win, wasBoss) => {
 // 「次のエリアが開いている＝そのエリアのボスは倒している」と読み替えて出す
 export const clearedAreasOf = (prof) => {
   const set = new Set(prof?.cleared_areas || [])
-  for (const id of (prof?.unlocked_areas || [FIRST_AREA])) if (id > FIRST_AREA) set.add(id - 1)
+  // 列を足す前のプロフィール救済。1本道だった頃は「次のエリアが開いている＝そのエリアのボスを倒した」
+  for (const id of (prof?.unlocked_areas || [FIRST_AREA])) if (id > FIRST_AREA && id <= TIER_MAX) set.add(id - 1)
   return [...set].sort((a, b) => a - b)
 }
 export const isAreaCleared = (cleared, id) => (cleared || []).includes(id)
@@ -86,13 +103,13 @@ export const pickEncounter = (areaId, bossRate, at = new Date(), rng = Math.rand
   return { area, enemy, isBoss: wasBoss, band: bandAt(at) }
 }
 
-// 勝ったあとの取り分。装備のドロップは別（rollDrop を呼ぶ。落ちる確率はまだ決めていない）
-export const rewardsOf = ({ area, isBoss, win }, rng = Math.random) => ({
+// 勝ったあとの取り分。装備のドロップは別（rollDrop を呼ぶ）。
+// ★解放は「帯を全部踏破したか」で決まるので、ここでは返さない（unlockNext を使うこと）
+export const rewardsOf = ({ isBoss, win }, rng = Math.random) => ({
   exp: win ? expOf(isBoss, rng) : 0,
-  unlockArea: win && isBoss && area.id < LAST_AREA ? area.id + 1 : null,
 })
 
-export const AREA_LIST = AREAS.map(a => ({ id: a.id, name: a.name }))
+export const AREA_LIST = AREAS.map(a => ({ id: a.id, tier: a.tier, name: a.name }))
 
 // ===== 出撃のクールタイム =====
 // 10秒と20秒から選べる。⚠**もらえるEXPとGoldはどちらも同じ**（2026-08-14 ユーザー決定）。

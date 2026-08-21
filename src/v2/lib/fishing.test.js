@@ -12,7 +12,7 @@ import {
   SPOT_MAX, FISH_PER_SPOT, SPOTS, spotName, FISH, fishOfSpot,
   ENTRIES, ENTRY_BY_ID, DEX_SLOTS, entryId,
   fishDexPct, fishDexText, dexIdsOf, DEX_FULL_TOTAL,
-  fishPerHour, MATERIAL_PCT, EQUIP_PCT, dropAreaMax,
+  fishPerHour, MATERIAL_PCT, EQUIP_PCT, dropTierMax,
   SHOP_MATERIAL_COST, materialShopCost, PROTECT_COST,
 } from './fishing.js'
 
@@ -120,9 +120,9 @@ test('釣り場のレートと副産物はグレードで上がる', () => {
   assert.equal(EQUIP_PCT(1), 0.5)
   assert.equal(EQUIP_PCT(9), 4.5)
   // 副産物のエリアは**釣り場グレードと同じ番号まで**（エリアは⑧までなので頭打ち）
-  assert.equal(dropAreaMax(1), 1)
-  assert.equal(dropAreaMax(8), 8)
-  assert.equal(dropAreaMax(9), 8)
+  assert.equal(dropTierMax(1), 1)
+  assert.equal(dropTierMax(8), 8)
+  assert.equal(dropTierMax(9), 8)
 })
 
 test('メダルの枚数 ＝ 釣り場エリア番号 × グレード倍率', () => {

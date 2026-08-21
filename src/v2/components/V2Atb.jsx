@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import V2LogLine from './V2LogLine.jsx'
-import { AREAS, toFighter as enemyFighter } from '../lib/enemies.js'
+import { AREAS, AREAS_SORTED, areaFullName, toFighter as enemyFighter } from '../lib/enemies.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
 import { dummyFoes } from '../lib/atbDummy.js'
 import { buildBattleLog } from '../lib/battleLog.js'
@@ -166,7 +166,7 @@ export default function V2Atb({ prof, inventory, runes, fishDex }) {
           <div style={{ display:'flex', gap:'6px', marginBottom:'10px', flexWrap:'wrap' }}>
             <select value={areaId} onChange={e => { setAreaId(Number(e.target.value)); setFoeName('') }}
               style={{ background:'#000818', color:'#88ccff', border:'1px solid #0044aa', fontFamily:'monospace', fontSize:'12px', padding:'6px' }}>
-              {AREAS.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              {AREAS_SORTED.map(a => <option key={a.id} value={a.id}>{areaFullName(a)}</option>)}
             </select>
             <select value={foe?.name || ''} onChange={e => setFoeName(e.target.value)}
               style={{ background:'#000818', color:'#88ccff', border:'1px solid #0044aa', fontFamily:'monospace', fontSize:'12px', padding:'6px' }}>

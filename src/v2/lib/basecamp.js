@@ -85,8 +85,9 @@ export const UPGRADE_COST = {
 }
 export const upgradeCostOf = (grade) => UPGRADE_COST[grade + 1] || null
 // グレード③以降は**エリアボスの討伐**が条件（ユーザー決定）。
-// 「エリアNが解放されている」＝「エリア(N-1)のボスを倒した」なので、
-// unlocked_areas だけで判定できる＝ v2_sortie_settle に手を入れずに済む
+// 判定は「難易度帯Nのエリアが解放されている」で、代表としてエリアIDのNを見る
+// （id 1〜8 は各帯の最初のエリア＝その帯が開けば必ず入っている・enemies.js の tier）。
+// ⚠④以降は帯を全部踏破しないと次が開かないので、条件は前より重い
 export const reqAreaOf = (grade) => (grade >= 3 ? grade - 1 : 0)
 export const upgradeBlockOf = (grade, unlockedAreas) => {
   if (grade >= GRADE_MAX) return '最大グレードです'
@@ -96,8 +97,9 @@ export const upgradeBlockOf = (grade, unlockedAreas) => {
 }
 
 // ===== ルーン素材 → 資材 =====
-// エリアNの素材がグレードNの資材になる。比率（1:4:20）は売却と同じにしてあるので、
-// 「売る」と「資材にする」がきれいに天秤に乗る
+// **難易度帯**Nの素材がグレードNの資材になる（④の帯ならどのエリアの素材でもグレード4）。
+// 比率（1:4:20）は売却と同じにしてあるので、「売る」と「資材にする」がきれいに天秤に乗る。
+// ⚠グレードは m.area（エリアID）ではなく **m.tier**。サーバー（v2_base_exchange）も同じ
 export const EXCHANGE_RATE = { normal: 3, rare: 12, ultra: 60 }
 // [{ id, qty }] → { グレード: 個数 }。持っている数を超えていないかは呼び出し側とサーバーが見る
 export const exchangeGainOf = (items) => {
@@ -106,7 +108,7 @@ export const exchangeGainOf = (items) => {
     const m = MATERIAL_BY_ID[it?.id]
     const qty = Math.max(0, Math.floor(it?.qty || 0))
     if (!m || !qty) continue
-    out[m.area] = (out[m.area] || 0) + EXCHANGE_RATE[m.rarity] * qty
+    out[m.tier] = (out[m.tier] || 0) + EXCHANGE_RATE[m.rarity] * qty
   }
   return out
 }

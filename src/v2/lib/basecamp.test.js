@@ -151,6 +151,8 @@ test('エリアNの素材がグレードNの資材になる。比率は売却と
   const gain = exchangeGainOf([{ id: 'm:1:0:n', qty: 2 }, { id: 'm:1:0:r', qty: 1 }, { id: 'm:8:6:u', qty: 1 }])
   assert.equal(gain[1], 2 * 3 + 12)
   assert.equal(gain[8], 60)
+  // ★グレードは**難易度帯**。エリア15（⑧の帯）の素材もグレード8の資材になる
+  assert.equal(exchangeGainOf([{ id: 'm:15:0:n', qty: 1 }])[8], 3)
   assert.equal(exchangeTotalOf([{ id: 'm:1:0:n', qty: 2 }]), 6)
 })
 

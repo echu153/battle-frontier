@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { RATES } from './smith.js'
 import { RANKS } from './equipment.js'
-import { SELL_BASE, SELL_RARITY_MULT } from './material.js'
+import { SELL_BASE_TIER, SELL_RARITY_MULT } from './material.js'
 import { LOSE_DROP, floorAfterLose } from './arena.js'
 import { SKILLS, OFF_CLASS_MP_MULT } from './skills.js'
 
@@ -114,8 +114,10 @@ test('素材の売値がSQLと material.js で一致している（片方だけ�
   const m = SQL.match(/update public\.v2_materials set sell =[\s\S]*?;/)
   assert.ok(m, 'v2_materials.sell を埋めるUPDATEがSQLにある')
   const sql = m[0]
-  for (const [area, base] of Object.entries(SELL_BASE)) {
-    assert.match(sql, new RegExp(`when ${area} then ${base}[^0-9]`), `エリア${area}の基準額 ${base}`)
+  // ★売値は**難易度帯**で決まる（同じ帯のエリアはどこの素材でも同じ値段）
+  assert.match(sql, /case tier when 1 then/, '売値がエリアIDで引かれている（帯で引くこと）')
+  for (const [tier, base] of Object.entries(SELL_BASE_TIER)) {
+    assert.match(sql, new RegExp(`when ${tier} then ${base}[^0-9]`), `難易度${tier}の基準額 ${base}`)
   }
   for (const [rarity, mult] of Object.entries(SELL_RARITY_MULT)) {
     assert.match(sql, new RegExp(`when '${rarity}' then ${mult}[^0-9]`), `${rarity} の倍率 ${mult}`)
@@ -293,4 +295,73 @@ test('runBattle を呼ぶ画面は必ず戦績も積んでいる', () => {
   }
   assert.ok(seen.length >= 2, `戦闘のある画面を拾えている（${seen.join(', ')}）`)
   assert.deepEqual(bad, [], `戦績を積んでいない戦闘画面: ${bad.join(', ')}`)
+})
+
+// ===== エリアと難易度帯 =====
+// ★2026-08-22 ユーザー決定：帯を全部踏破すると次の帯が開く。
+//   エリア・素材の名簿はJSとSQLの2か所にあるので、**片方だけ足したらここで落とす**
+test('v2_areas が enemies.js のエリアと完全に一致している（id・帯・名前・ドロップ表）', async () => {
+  const { AREAS } = await import('./enemies.js')
+  const seed = SQL.slice(SQL.indexOf('insert into public.v2_areas ('))
+  const rows = [...seed.slice(0, seed.indexOf('on conflict')).matchAll(
+    /\((\d+), (\d+), '([^']+)', '(\{[^']+\})'::jsonb/g)]
+  assert.equal(rows.length, AREAS.length, 'v2_areas の行数がJS側と違う')
+  const bySql = new Map(rows.map(m => [Number(m[1]), { tier: Number(m[2]), name: m[3], ranks: JSON.parse(m[4]) }]))
+  for (const a of AREAS) {
+    const row = bySql.get(a.id)
+    assert.ok(row, `エリア${a.id} が v2_areas に無い`)
+    assert.equal(row.tier, a.tier, `エリア${a.id}の帯`)
+    assert.equal(row.name, a.name, `エリア${a.id}の名前`)
+    assert.deepEqual(row.ranks, a.dropRanks, `エリア${a.id}のドロップ表`)
+  }
+})
+
+test('v2_tiers の必要踏破数が sortie.js の TIER_REQ と一致している', async () => {
+  const { TIER_REQ } = await import('./sortie.js')
+  const seed = SQL.slice(SQL.indexOf('insert into public.v2_tiers (tier, req) values'))
+  const rows = [...seed.slice(0, seed.indexOf('on conflict')).matchAll(/\((\d+),(\d+)\)/g)]
+  assert.equal(rows.length, Object.keys(TIER_REQ).length, 'v2_tiers の行数がJS側と違う')
+  for (const [, tier, req] of rows) assert.equal(Number(req), TIER_REQ[Number(tier)], `難易度${tier}の必要数`)
+})
+
+test('v2_materials が material.js の素材と完全に一致している（帯とレンジも）', async () => {
+  const { MATERIALS } = await import('./material.js')
+  const seed = SQL.slice(SQL.indexOf('insert into public.v2_materials ('))
+  const rows = [...seed.slice(0, seed.indexOf('on conflict')).matchAll(
+    /\('([^']+)', '([^']+)', '([^']+)', (\d+), (\d+), '(\w+)', (true|false), array\[([^\]]+)\], ([\d.]+), ([\d.]+)\)/g)]
+  assert.equal(rows.length, MATERIALS.length, 'v2_materials の行数がJS側と違う')
+  const bySql = new Map(rows.map(m => [m[1], {
+    name: m[2], enemy: m[3], area: Number(m[4]), tier: Number(m[5]), rarity: m[6],
+    isBoss: m[7] === 'true', stats: m[8].split(',').map(x => x.replace(/'/g, '')),
+    lo: Number(m[9]), hi: Number(m[10]),
+  }]))
+  for (const m of MATERIALS) {
+    const row = bySql.get(m.id)
+    assert.ok(row, `${m.id} が v2_materials に無い`)
+    assert.equal(row.name, m.name, `${m.id}の名前`)
+    assert.equal(row.enemy, m.enemy, `${m.id}の敵`)
+    assert.equal(row.area, m.area, `${m.id}のエリア`)
+    assert.equal(row.tier, m.tier, `${m.id}の帯`)
+    assert.equal(row.isBoss, m.isBoss, `${m.id}のボス判定`)
+    assert.deepEqual(row.stats, m.stats, `${m.id}のステータス`)
+    assert.deepEqual([row.lo, row.hi], [m.lo, m.hi], `${m.id}のレンジ`)
+  }
+})
+
+test('v2_sortie_settle の解放は「帯を全部踏破したら次」になっている', () => {
+  const body = bodyOf('v2_sortie_settle')
+  // ★1本道だった頃の「倒したエリア+1を開ける」が残っていると、④で1つ倒しただけで⑤へ行けてしまう
+  assert.doesNotMatch(body, /array_append\(v_unlocked, p_area \+ 1\)/, '1本道の解放が残っている')
+  assert.match(body, /v2_unlocked_from_cleared\(v_cleared, v_row\.unlocked_areas\)/,
+    '帯の規則で解放し直していない')
+  // 踏破は積んでいること（帯の判定はこれを数える）
+  assert.match(body, /array_append\(v_cleared, p_area\)/, '踏破を積んでいない')
+})
+
+test('解放を作り直す内部ヘルパは authenticated から直接叩けない', () => {
+  // ⚠v2sql の「grant したRPCは is_admin を見ること」の裏返し。内部ヘルパは grant しない
+  assert.ok(!SQL.includes('grant execute on function public.v2_unlocked_from_cleared'),
+    'v2_unlocked_from_cleared が grant されている')
+  assert.ok(SQL.includes('revoke all on function public.v2_unlocked_from_cleared(int[], int[]) from authenticated;'),
+    'v2_unlocked_from_cleared が REVOKE されていない')
 })

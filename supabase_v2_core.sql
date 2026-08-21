@@ -954,7 +954,26 @@ on conflict (id) do update set
   name = excluded.name, part = excluded.part, type = excluded.type,
   rank = excluded.rank, hands = excluded.hands, base_power = excluded.base_power;
 
+-- ---- 難易度帯（tier）----
+-- ★2026-08-22 ユーザー決定：エリアは「帯」に属し、**その帯を全部踏破すると次の帯が開く**。
+--   ①②③は1エリアずつ／④⑤⑥は2エリア／⑦⑧は3エリア。
+--   req＝その帯をいくつ踏破したら次が開くか（＝用意してあるエリア数）。
+--   ⚠ src/v2/lib/sortie.js の TIER_REQ と同じ表。**片方だけ直すと v2sql.test.js が落ちる**
+create table if not exists public.v2_tiers (
+  tier int primary key,
+  req  int not null
+);
+alter table public.v2_tiers enable row level security;
+drop policy if exists "v2_tiers_read" on public.v2_tiers;
+create policy "v2_tiers_read" on public.v2_tiers for select to authenticated using (true);
+revoke all on table public.v2_tiers from anon;
+grant select on table public.v2_tiers to authenticated;
+insert into public.v2_tiers (tier, req) values
+  (1,1), (2,1), (3,1), (4,2), (5,2), (6,2), (7,3), (8,3)
+on conflict (tier) do update set req = excluded.req;
+
 -- ---- エリアのマスタ（ドロップ範囲とGoldの上限＝サーバー側の検証に使う）----
+-- ⚠ boss_gold / max_zako_gold は**敵がGoldを落としていた頃の名残**（今はどちらも使っていない）
 create table if not exists public.v2_areas (
   id            int primary key,
   name          text not null,
@@ -962,23 +981,32 @@ create table if not exists public.v2_areas (
   boss_gold     int not null,
   max_zako_gold int not null
 );
+-- ★エリアは難易度帯に属する（同じ帯のエリアは同格）。id は続き番号で難易度順ではない
+alter table public.v2_areas add column if not exists tier int not null default 1;
 alter table public.v2_areas enable row level security;
 drop policy if exists "v2_areas_read" on public.v2_areas;
 create policy "v2_areas_read" on public.v2_areas for select to authenticated using (true);
 revoke all on table public.v2_areas from anon;
 grant select on table public.v2_areas to authenticated;
 
-insert into public.v2_areas (id, name, drop_ranks, boss_gold, max_zako_gold) values
-  (1, '始まりの森', '{"F":40,"E":40,"D":20}'::jsonb, 100, 60),
-  (2, '荒廃した草原', '{"F":35,"E":30,"D":22,"C":13}'::jsonb, 500, 120),
-  (3, '古代の洞窟', '{"F":30,"E":28,"D":24,"C":13,"B":5}'::jsonb, 2000, 240),
-  (4, '蒼海の入り江', '{"F":26,"E":26,"D":23,"C":15,"B":10}'::jsonb, 5000, 400),
-  (5, '巨峰山脈', '{"E":38,"D":30,"C":20,"B":9,"A":3}'::jsonb, 9000, 600),
-  (6, '白銀の霊峰', '{"E":33,"D":29,"C":21,"B":11,"A":6}'::jsonb, 18750, 900),
-  (7, '煉獄火山', '{"D":40,"C":30,"B":20,"A":10}'::jsonb, 37500, 1200),
-  (8, '蒼天の浮遊城', '{"D":35,"C":29,"B":22,"A":14}'::jsonb, 60000, 1600)
+insert into public.v2_areas (id, tier, name, drop_ranks, boss_gold, max_zako_gold) values
+  (1, 1, '始まりの森', '{"F":40,"E":40,"D":20}'::jsonb, 100, 60),
+  (2, 2, '荒廃した草原', '{"F":35,"E":30,"D":22,"C":13}'::jsonb, 500, 120),
+  (3, 3, '古代の洞窟', '{"F":30,"E":28,"D":24,"C":13,"B":5}'::jsonb, 2000, 240),
+  (4, 4, '蒼海の入り江', '{"F":26,"E":26,"D":23,"C":15,"B":10}'::jsonb, 5000, 400),
+  (9, 4, '灼砂の遺丘', '{"F":26,"E":26,"D":23,"C":15,"B":10}'::jsonb, 5000, 400),
+  (5, 5, '巨峰山脈', '{"E":38,"D":30,"C":20,"B":9,"A":3}'::jsonb, 9000, 600),
+  (10, 5, '常闇の樹海', '{"E":38,"D":30,"C":20,"B":9,"A":3}'::jsonb, 9000, 600),
+  (6, 6, '白銀の霊峰', '{"E":33,"D":29,"C":21,"B":11,"A":6}'::jsonb, 18750, 900),
+  (11, 6, '雷鳴の断崖', '{"E":33,"D":29,"C":21,"B":11,"A":6}'::jsonb, 18750, 900),
+  (7, 7, '煉獄火山', '{"D":40,"C":30,"B":20,"A":10}'::jsonb, 37500, 1200),
+  (12, 7, '腐海の沼獄', '{"D":40,"C":30,"B":20,"A":10}'::jsonb, 37500, 1200),
+  (13, 7, '奈落の坑道', '{"D":40,"C":30,"B":20,"A":10}'::jsonb, 37500, 1200),
+  (8, 8, '蒼天の浮遊城', '{"D":35,"C":29,"B":22,"A":14}'::jsonb, 60000, 1600),
+  (14, 8, '星霜の遺跡', '{"D":35,"C":29,"B":22,"A":14}'::jsonb, 60000, 1600),
+  (15, 8, '深淵の海溝', '{"D":35,"C":29,"B":22,"A":14}'::jsonb, 60000, 1600)
 on conflict (id) do update set
-  name = excluded.name, drop_ranks = excluded.drop_ranks,
+  tier = excluded.tier, name = excluded.name, drop_ranks = excluded.drop_ranks,
   boss_gold = excluded.boss_gold, max_zako_gold = excluded.max_zako_gold;
 
 -- ---- 所持している装備 ----
@@ -1006,7 +1034,7 @@ grant select on table public.v2_inventory to authenticated;
 --     **数式を変えるときは必ず両方を直すこと**（片方だけだと表示と実値がズレる）。
 -- ============================================================
 
--- ---- 素材マスタ（168種）----
+-- ---- 素材マスタ（315種）----
 -- ★このINSERTは src/v2/lib/material.js の MATERIALS から生成している。
 --   素材を足す・名前を変えるときは向こうを直してから生成し直すこと。
 create table if not exists public.v2_materials (
@@ -1014,200 +1042,350 @@ create table if not exists public.v2_materials (
   name     text    not null,
   enemy    text    not null,      -- 特殊能力のキーでもある（src/v2/lib/enchant.js）
   area     int     not null,
+  tier     int     not null default 1,  -- そのエリアの難易度帯。**レンジも売値もこちらで決まる**
   rarity   text    not null,      -- normal / rare / ultra
   is_boss  boolean not null,
   stats    text[]  not null,      -- 割り当てステータス（ボスは2つ）
   lo       numeric not null,      -- 値のレンジ(%)。刻みは0.1
   hi       numeric not null
 );
+alter table public.v2_materials add column if not exists tier int not null default 1;
 alter table public.v2_materials enable row level security;
 drop policy if exists "v2_materials_read" on public.v2_materials;
 create policy "v2_materials_read" on public.v2_materials for select to authenticated using (true);
 revoke all on table public.v2_materials from anon;
 grant select on table public.v2_materials to authenticated;
 
-insert into public.v2_materials (id, name, enemy, area, rarity, is_boss, stats, lo, hi) values
-  ('m:1:0:n', 'スライムのゼリー', 'スライム', 1, 'normal', false, array['vit'], 0.1, 1.0),
-  ('m:1:0:r', '透きとおったゼリー', 'スライム', 1, 'rare', false, array['vit'], 0.3, 1.0),
-  ('m:1:0:u', '粘性の芯核', 'スライム', 1, 'ultra', false, array['vit'], 0.5, 1.0),
-  ('m:1:1:n', 'コウモリの翼膜', 'コウモリ', 1, 'normal', false, array['agi'], 0.1, 1.0),
-  ('m:1:1:r', '鋭い犬歯', 'コウモリ', 1, 'rare', false, array['agi'], 0.3, 1.0),
-  ('m:1:1:u', '音無しの耳', 'コウモリ', 1, 'ultra', false, array['agi'], 0.5, 1.0),
-  ('m:1:2:n', '毒キノコの傘', '毒キノコ', 1, 'normal', false, array['int_stat'], 0.1, 1.0),
-  ('m:1:2:r', '痺れ胞子', '毒キノコ', 1, 'rare', false, array['int_stat'], 0.3, 1.0),
-  ('m:1:2:u', '猛毒の菌糸', '毒キノコ', 1, 'ultra', false, array['int_stat'], 0.5, 1.0),
-  ('m:1:3:n', '朝露のしずく', '朝露のフェアリー', 1, 'normal', false, array['mp'], 0.1, 1.0),
-  ('m:1:3:r', '妖精の鱗粉', '朝露のフェアリー', 1, 'rare', false, array['mp'], 0.3, 1.0),
-  ('m:1:3:u', 'フェアリーの羽根', '朝露のフェアリー', 1, 'ultra', false, array['mp'], 0.5, 1.0),
-  ('m:1:4:n', 'トカゲの尻尾', 'ひなたトカゲ', 1, 'normal', false, array['str'], 0.1, 1.0),
-  ('m:1:4:r', '陽だまりの鱗', 'ひなたトカゲ', 1, 'rare', false, array['str'], 0.3, 1.0),
-  ('m:1:4:u', '日輪の心鱗', 'ひなたトカゲ', 1, 'ultra', false, array['str'], 0.5, 1.0),
-  ('m:1:5:n', 'フクロウの羽根', '月夜のフクロウ', 1, 'normal', false, array['dex'], 0.1, 1.0),
-  ('m:1:5:r', '静寂の風切羽', '月夜のフクロウ', 1, 'rare', false, array['dex'], 0.3, 1.0),
-  ('m:1:5:u', '月光の瞳', '月夜のフクロウ', 1, 'ultra', false, array['dex'], 0.5, 1.0),
-  ('m:1:6:n', '大粘塊のゼリー', 'ビッグスライム', 1, 'normal', true, array['hp','vit'], 0.1, 1.0),
-  ('m:1:6:r', '王核の粘膜', 'ビッグスライム', 1, 'rare', true, array['hp','vit'], 0.3, 1.0),
-  ('m:1:6:u', 'ビッグスライムの芯核', 'ビッグスライム', 1, 'ultra', true, array['hp','vit'], 0.5, 1.0),
-  ('m:2:0:n', 'ゴブリンの牙', 'ゴブリン', 2, 'normal', false, array['str'], 0.1, 1.0),
-  ('m:2:0:r', 'ゴブリンの棍棒片', 'ゴブリン', 2, 'rare', false, array['str'], 0.3, 1.0),
-  ('m:2:0:u', '族長の証', 'ゴブリン', 2, 'ultra', false, array['str'], 0.5, 1.0),
-  ('m:2:1:n', '野良犬の毛皮', '野良犬', 2, 'normal', false, array['agi'], 0.1, 1.0),
-  ('m:2:1:r', '研ぎ澄まされた爪', '野良犬', 2, 'rare', false, array['agi'], 0.3, 1.0),
-  ('m:2:1:u', '野犬の心臓', '野良犬', 2, 'ultra', false, array['agi'], 0.5, 1.0),
-  ('m:2:2:n', '盗賊の革帯', '盗賊', 2, 'normal', false, array['luk'], 0.1, 1.0),
-  ('m:2:2:r', '隠しナイフ', '盗賊', 2, 'rare', false, array['luk'], 0.3, 1.0),
-  ('m:2:2:u', '盗賊の秘符', '盗賊', 2, 'ultra', false, array['luk'], 0.5, 1.0),
-  ('m:2:3:n', 'ワームの粘液', '朝霧のワーム', 2, 'normal', false, array['hp'], 0.1, 1.0),
-  ('m:2:3:r', '朝霧の環節', '朝霧のワーム', 2, 'rare', false, array['hp'], 0.3, 1.0),
-  ('m:2:3:u', '大地喰らいの顎', '朝霧のワーム', 2, 'ultra', false, array['hp'], 0.5, 1.0),
-  ('m:2:4:n', 'リザードの鱗', '陽炎リザード', 2, 'normal', false, array['str'], 0.1, 1.0),
-  ('m:2:4:r', '陽炎の鱗', '陽炎リザード', 2, 'rare', false, array['str'], 0.3, 1.0),
-  ('m:2:4:u', '灼熱の尾芯', '陽炎リザード', 2, 'ultra', false, array['str'], 0.5, 1.0),
-  ('m:2:5:n', '斥候の外套片', '夜盗の斥候', 2, 'normal', false, array['dex'], 0.1, 1.0),
-  ('m:2:5:r', '暗視の眼帯', '夜盗の斥候', 2, 'rare', false, array['dex'], 0.3, 1.0),
-  ('m:2:5:u', '影渡りの短刀', '夜盗の斥候', 2, 'ultra', false, array['dex'], 0.5, 1.0),
-  ('m:2:6:n', '奪われた小袋', '盗賊団のリーダー', 2, 'normal', true, array['str','luk'], 0.1, 1.0),
-  ('m:2:6:r', 'リーダーの手甲', '盗賊団のリーダー', 2, 'rare', true, array['str','luk'], 0.3, 1.0),
-  ('m:2:6:u', '略奪王の徽章', '盗賊団のリーダー', 2, 'ultra', true, array['str','luk'], 0.5, 1.0),
-  ('m:3:0:n', 'コボルトの毛皮', 'コボルト', 3, 'normal', false, array['str'], 0.1, 1.3),
-  ('m:3:0:r', 'コボルトの牙', 'コボルト', 3, 'rare', false, array['str'], 0.4, 1.3),
-  ('m:3:0:u', '洞窟王の角', 'コボルト', 3, 'ultra', false, array['str'], 0.7, 1.3),
-  ('m:3:1:n', 'もろい骨片', 'スケルトン', 3, 'normal', false, array['hp'], 0.1, 1.3),
-  ('m:3:1:r', '硬化した肋骨', 'スケルトン', 3, 'rare', false, array['hp'], 0.4, 1.3),
-  ('m:3:1:u', '不朽の頭蓋', 'スケルトン', 3, 'ultra', false, array['hp'], 0.7, 1.3),
-  ('m:3:2:n', 'ゴーレムの土塊', 'ゴーレム', 3, 'normal', false, array['vit'], 0.1, 1.3),
-  ('m:3:2:r', '魔力を帯びた岩片', 'ゴーレム', 3, 'rare', false, array['vit'], 0.4, 1.3),
-  ('m:3:2:u', 'ゴーレムの動力核', 'ゴーレム', 3, 'ultra', false, array['vit'], 0.7, 1.3),
-  ('m:3:3:n', 'ガーゴイルの石片', '曙のガーゴイル', 3, 'normal', false, array['vit'], 0.1, 1.3),
-  ('m:3:3:r', '曙光の翼石', '曙のガーゴイル', 3, 'rare', false, array['vit'], 0.4, 1.3),
-  ('m:3:3:u', '石像の魔眼', '曙のガーゴイル', 3, 'ultra', false, array['vit'], 0.7, 1.3),
-  ('m:3:4:n', '石化した鱗', '石化トカゲ', 3, 'normal', false, array['vit'], 0.1, 1.3),
-  ('m:3:4:r', '岩肌の甲殻', '石化トカゲ', 3, 'rare', false, array['vit'], 0.4, 1.3),
-  ('m:3:4:u', '不動の石心', '石化トカゲ', 3, 'ultra', false, array['vit'], 0.7, 1.3),
-  ('m:3:5:n', '霊気の残滓', '夜這うレイス', 3, 'normal', false, array['int_stat'], 0.1, 1.3),
-  ('m:3:5:r', '怨嗟の衣片', '夜這うレイス', 3, 'rare', false, array['int_stat'], 0.4, 1.3),
-  ('m:3:5:u', 'レイスの魂核', '夜這うレイス', 3, 'ultra', false, array['int_stat'], 0.7, 1.3),
-  ('m:3:6:n', '古代の石片', '古代の番人', 3, 'normal', true, array['int_stat','mp'], 0.1, 1.3),
-  ('m:3:6:r', '番人の魔導回路', '古代の番人', 3, 'rare', true, array['int_stat','mp'], 0.4, 1.3),
-  ('m:3:6:u', '古代文明の心臓', '古代の番人', 3, 'ultra', true, array['int_stat','mp'], 0.7, 1.3),
-  ('m:4:0:n', '魚人の鱗', '深海魚人', 4, 'normal', false, array['dex'], 0.1, 1.3),
-  ('m:4:0:r', '深海の鰭', '深海魚人', 4, 'rare', false, array['dex'], 0.4, 1.3),
-  ('m:4:0:u', '深海の心鱗', '深海魚人', 4, 'ultra', false, array['dex'], 0.7, 1.3),
-  ('m:4:1:n', '海賊の頭巾', '海賊', 4, 'normal', false, array['luk'], 0.1, 1.3),
-  ('m:4:1:r', '錆びた鉤爪', '海賊', 4, 'rare', false, array['luk'], 0.4, 1.3),
-  ('m:4:1:u', '海賊旗の切れ端', '海賊', 4, 'ultra', false, array['luk'], 0.7, 1.3),
-  ('m:4:2:n', 'クラゲの触手', '毒クラゲ', 4, 'normal', false, array['int_stat'], 0.1, 1.3),
-  ('m:4:2:r', '痺れ毒袋', '毒クラゲ', 4, 'rare', false, array['int_stat'], 0.4, 1.3),
-  ('m:4:2:u', '深海毒の結晶', '毒クラゲ', 4, 'ultra', false, array['int_stat'], 0.7, 1.3),
-  ('m:4:3:n', 'セイレーンの鱗', '朝凪のセイレーン', 4, 'normal', false, array['mp'], 0.1, 1.3),
-  ('m:4:3:r', '歌声の貝殻', '朝凪のセイレーン', 4, 'rare', false, array['mp'], 0.4, 1.3),
-  ('m:4:3:u', '魅了の喉笛', '朝凪のセイレーン', 4, 'ultra', false, array['mp'], 0.7, 1.3),
-  ('m:4:4:n', 'カニの殻片', '潮騒のカニ', 4, 'normal', false, array['vit'], 0.1, 1.3),
-  ('m:4:4:r', '頑丈な鋏', '潮騒のカニ', 4, 'rare', false, array['vit'], 0.4, 1.3),
-  ('m:4:4:u', '潮騒の甲核', '潮騒のカニ', 4, 'ultra', false, array['vit'], 0.7, 1.3),
-  ('m:4:5:n', 'アンコウの提灯', '夜光アンコウ', 4, 'normal', false, array['agi'], 0.1, 1.3),
-  ('m:4:5:r', '夜光の粘液', '夜光アンコウ', 4, 'rare', false, array['agi'], 0.4, 1.3),
-  ('m:4:5:u', '深淵の発光器', '夜光アンコウ', 4, 'ultra', false, array['agi'], 0.7, 1.3),
-  ('m:4:6:n', '海竜の鱗', 'シーサーペント', 4, 'normal', true, array['hp','str'], 0.1, 1.3),
-  ('m:4:6:r', '海竜の逆鱗', 'シーサーペント', 4, 'rare', true, array['hp','str'], 0.4, 1.3),
-  ('m:4:6:u', 'シーサーペントの海心', 'シーサーペント', 4, 'ultra', true, array['hp','str'], 0.7, 1.3),
-  ('m:5:0:n', '山ゴブリンの毛皮', '山岳ゴブリン', 5, 'normal', false, array['str'], 0.1, 1.6),
-  ('m:5:0:r', '岩砕きの棍棒片', '山岳ゴブリン', 5, 'rare', false, array['str'], 0.5, 1.6),
-  ('m:5:0:u', '山賊頭の兜', '山岳ゴブリン', 5, 'ultra', false, array['str'], 0.8, 1.6),
-  ('m:5:1:n', '巨岩の破片', '岩石ゴーレム', 5, 'normal', false, array['vit'], 0.1, 1.6),
-  ('m:5:1:r', '鉱脈の結晶', '岩石ゴーレム', 5, 'rare', false, array['vit'], 0.5, 1.6),
-  ('m:5:1:u', '岩石ゴーレムの心核', '岩石ゴーレム', 5, 'ultra', false, array['vit'], 0.8, 1.6),
-  ('m:5:2:n', 'グリフォンの羽根', 'グリフォン', 5, 'normal', false, array['agi'], 0.1, 1.6),
-  ('m:5:2:r', '猛禽の鉤爪', 'グリフォン', 5, 'rare', false, array['agi'], 0.5, 1.6),
-  ('m:5:2:u', 'グリフォンの風心', 'グリフォン', 5, 'ultra', false, array['agi'], 0.8, 1.6),
-  ('m:5:3:n', 'ワイバーンの鱗', '払暁のワイバーン', 5, 'normal', false, array['dex'], 0.1, 1.6),
-  ('m:5:3:r', '飛膜の切れ端', '払暁のワイバーン', 5, 'rare', false, array['dex'], 0.5, 1.6),
-  ('m:5:3:u', '払暁の翼骨', '払暁のワイバーン', 5, 'ultra', false, array['dex'], 0.8, 1.6),
-  ('m:5:4:n', '大猿の毛皮', '陽射しの大猿', 5, 'normal', false, array['hp'], 0.1, 1.6),
-  ('m:5:4:r', '岩砕きの拳骨', '陽射しの大猿', 5, 'rare', false, array['hp'], 0.5, 1.6),
-  ('m:5:4:u', '猛猿の闘魂', '陽射しの大猿', 5, 'ultra', false, array['hp'], 0.8, 1.6),
-  ('m:5:5:n', '山猫の毛皮', '宵闇の山猫', 5, 'normal', false, array['luk'], 0.1, 1.6),
-  ('m:5:5:r', '宵闇の爪', '宵闇の山猫', 5, 'rare', false, array['luk'], 0.5, 1.6),
-  ('m:5:5:u', '疾影の後肢', '宵闇の山猫', 5, 'ultra', false, array['luk'], 0.8, 1.6),
-  ('m:5:6:n', '帯電した羽根', '雷鷲サンダーロック', 5, 'normal', true, array['agi','str'], 0.1, 1.6),
-  ('m:5:6:r', '雷鷲の風切羽', '雷鷲サンダーロック', 5, 'rare', true, array['agi','str'], 0.5, 1.6),
-  ('m:5:6:u', '雷鷲の雷嚢', '雷鷲サンダーロック', 5, 'ultra', true, array['agi','str'], 0.8, 1.6),
-  ('m:6:0:n', '雪男の白毛', '雪男', 6, 'normal', false, array['hp'], 0.1, 1.6),
-  ('m:6:0:r', '凍てつく拳', '雪男', 6, 'rare', false, array['hp'], 0.5, 1.6),
-  ('m:6:0:u', '雪山王の心臓', '雪男', 6, 'ultra', false, array['hp'], 0.8, 1.6),
-  ('m:6:1:n', '氷結の鱗', '氷河ドラゴン', 6, 'normal', false, array['str'], 0.1, 1.6),
-  ('m:6:1:r', '氷河竜の牙', '氷河ドラゴン', 6, 'rare', false, array['str'], 0.5, 1.6),
-  ('m:6:1:u', '氷河竜の逆鱗', '氷河ドラゴン', 6, 'ultra', false, array['str'], 0.8, 1.6),
-  ('m:6:2:n', '霜のかけら', '霜の精霊', 6, 'normal', false, array['int_stat'], 0.1, 1.6),
-  ('m:6:2:r', '凍気の結晶', '霜の精霊', 6, 'rare', false, array['int_stat'], 0.5, 1.6),
-  ('m:6:2:u', '霜精の魔核', '霜の精霊', 6, 'ultra', false, array['int_stat'], 0.8, 1.6),
-  ('m:6:3:n', '氷狼の毛皮', '朝焼けの氷狼', 6, 'normal', false, array['agi'], 0.1, 1.6),
-  ('m:6:3:r', '凍牙', '朝焼けの氷狼', 6, 'rare', false, array['agi'], 0.5, 1.6),
-  ('m:6:3:u', '朝焼けの氷心', '朝焼けの氷狼', 6, 'ultra', false, array['agi'], 0.8, 1.6),
-  ('m:6:4:n', '樹氷の枝', '白光の樹氷精', 6, 'normal', false, array['mp'], 0.1, 1.6),
-  ('m:6:4:r', '白光の氷片', '白光の樹氷精', 6, 'rare', false, array['mp'], 0.5, 1.6),
-  ('m:6:4:u', '樹氷の魔晶', '白光の樹氷精', 6, 'ultra', false, array['mp'], 0.8, 1.6),
-  ('m:6:5:n', '凍りついた骨', '極夜のワイト', 6, 'normal', false, array['vit'], 0.1, 1.6),
-  ('m:6:5:r', '極夜の屍衣', '極夜のワイト', 6, 'rare', false, array['vit'], 0.5, 1.6),
-  ('m:6:5:u', 'ワイトの呪核', '極夜のワイト', 6, 'ultra', false, array['vit'], 0.8, 1.6),
-  ('m:6:6:n', '凍える霊気', '氷霊フロストバーン', 6, 'normal', true, array['int_stat','mp'], 0.1, 1.6),
-  ('m:6:6:r', 'フロストバーンの氷刃', '氷霊フロストバーン', 6, 'rare', true, array['int_stat','mp'], 0.5, 1.6),
-  ('m:6:6:u', '永久凍土の氷芯', '氷霊フロストバーン', 6, 'ultra', true, array['int_stat','mp'], 0.8, 1.6),
-  ('m:7:0:n', 'くすぶる残り火', '炎の精霊', 7, 'normal', false, array['int_stat'], 0.1, 2.0),
-  ('m:7:0:r', '揺らめく炎心', '炎の精霊', 7, 'rare', false, array['int_stat'], 0.6, 2.0),
-  ('m:7:0:u', '炎精の魔核', '炎の精霊', 7, 'ultra', false, array['int_stat'], 1.0, 2.0),
-  ('m:7:1:n', '冷えた溶岩塊', '溶岩ゴーレム', 7, 'normal', false, array['vit'], 0.1, 2.0),
-  ('m:7:1:r', '灼熱の鉱石', '溶岩ゴーレム', 7, 'rare', false, array['vit'], 0.6, 2.0),
-  ('m:7:1:u', '溶岩ゴーレムの熔核', '溶岩ゴーレム', 7, 'ultra', false, array['vit'], 1.0, 2.0),
-  ('m:7:2:n', 'ドレイクの鱗', 'ファイアドレイク', 7, 'normal', false, array['agi'], 0.1, 2.0),
-  ('m:7:2:r', '燃える飛膜', 'ファイアドレイク', 7, 'rare', false, array['agi'], 0.6, 2.0),
-  ('m:7:2:u', '火竜の焔袋', 'ファイアドレイク', 7, 'ultra', false, array['agi'], 1.0, 2.0),
-  ('m:7:3:n', '焦げた翼膜', '暁のフレイムバット', 7, 'normal', false, array['dex'], 0.1, 2.0),
-  ('m:7:3:r', '暁の火翼', '暁のフレイムバット', 7, 'rare', false, array['dex'], 0.6, 2.0),
-  ('m:7:3:u', '業火の牙', '暁のフレイムバット', 7, 'ultra', false, array['dex'], 1.0, 2.0),
-  ('m:7:4:n', '陽炎の残滓', '陽炎のイフリート', 7, 'normal', false, array['mp'], 0.1, 2.0),
-  ('m:7:4:r', 'イフリートの炎環', '陽炎のイフリート', 7, 'rare', false, array['mp'], 0.6, 2.0),
-  ('m:7:4:u', '魔炎の心核', '陽炎のイフリート', 7, 'ultra', false, array['mp'], 1.0, 2.0),
-  ('m:7:5:n', 'デーモンの角', '熾火のデーモン', 7, 'normal', false, array['str'], 0.1, 2.0),
-  ('m:7:5:r', '熾火の皮膜', '熾火のデーモン', 7, 'rare', false, array['str'], 0.6, 2.0),
-  ('m:7:5:u', '悪魔の焔心', '熾火のデーモン', 7, 'ultra', false, array['str'], 1.0, 2.0),
-  ('m:7:6:n', '深紅の鱗', '深紅のサラマンダー', 7, 'normal', true, array['str','hp'], 0.1, 2.0),
-  ('m:7:6:r', 'サラマンダーの焔牙', '深紅のサラマンダー', 7, 'rare', true, array['str','hp'], 0.6, 2.0),
-  ('m:7:6:u', '焔龍の心臓', '深紅のサラマンダー', 7, 'ultra', true, array['str','hp'], 1.0, 2.0),
-  ('m:8:0:n', 'ハーピーの羽根', '天翼のハーピー', 8, 'normal', false, array['agi'], 0.1, 2.0),
-  ('m:8:0:r', '天翼の風切羽', '天翼のハーピー', 8, 'rare', false, array['agi'], 0.6, 2.0),
-  ('m:8:0:u', '蒼天の羽衣', '天翼のハーピー', 8, 'ultra', false, array['agi'], 1.0, 2.0),
-  ('m:8:1:n', '帯電した霧片', '雷雲の精霊', 8, 'normal', false, array['int_stat'], 0.1, 2.0),
-  ('m:8:1:r', '雷雲の結晶', '雷雲の精霊', 8, 'rare', false, array['int_stat'], 0.6, 2.0),
-  ('m:8:1:u', '雷精の魔核', '雷雲の精霊', 8, 'ultra', false, array['int_stat'], 1.0, 2.0),
-  ('m:8:2:n', '騎士の甲片', '天空騎士グリフィオン', 8, 'normal', false, array['str'], 0.1, 2.0),
-  ('m:8:2:r', '蒼天の紋章盾', '天空騎士グリフィオン', 8, 'rare', false, array['str'], 0.6, 2.0),
-  ('m:8:2:u', '天空騎士の魂鎧', '天空騎士グリフィオン', 8, 'ultra', false, array['str'], 1.0, 2.0),
-  ('m:8:3:n', '聖なる羽根', '曙光のセラフ', 8, 'normal', false, array['mp'], 0.1, 2.0),
-  ('m:8:3:r', '曙光の光輪', '曙光のセラフ', 8, 'rare', false, array['mp'], 0.6, 2.0),
-  ('m:8:3:u', 'セラフの神核', '曙光のセラフ', 8, 'ultra', false, array['mp'], 1.0, 2.0),
-  ('m:8:4:n', 'ペガサスのたてがみ', '白昼のペガサス', 8, 'normal', false, array['hp'], 0.1, 2.0),
-  ('m:8:4:r', '白昼の蹄鉄', '白昼のペガサス', 8, 'rare', false, array['hp'], 0.6, 2.0),
-  ('m:8:4:u', '天馬の翼心', '白昼のペガサス', 8, 'ultra', false, array['hp'], 1.0, 2.0),
-  ('m:8:5:n', '戦乙女の羽根', '星降りのヴァルキリー', 8, 'normal', false, array['luk'], 0.1, 2.0),
-  ('m:8:5:r', '星屑の槍先', '星降りのヴァルキリー', 8, 'rare', false, array['luk'], 0.6, 2.0),
-  ('m:8:5:u', 'ヴァルキリーの誓約印', '星降りのヴァルキリー', 8, 'ultra', false, array['luk'], 1.0, 2.0),
-  ('m:8:6:n', '覇龍の鱗', '天空覇龍ウラノス', 8, 'normal', true, array['hp','vit'], 0.1, 2.0),
-  ('m:8:6:r', 'ウラノスの天鱗', '天空覇龍ウラノス', 8, 'rare', true, array['hp','vit'], 0.6, 2.0),
-  ('m:8:6:u', '天空覇龍の龍核', '天空覇龍ウラノス', 8, 'ultra', true, array['hp','vit'], 1.0, 2.0)
+insert into public.v2_materials (id, name, enemy, area, tier, rarity, is_boss, stats, lo, hi) values
+  ('m:1:0:n', 'スライムのゼリー', 'スライム', 1, 1, 'normal', false, array['vit'], 0.1, 1.0),
+  ('m:1:0:r', '透きとおったゼリー', 'スライム', 1, 1, 'rare', false, array['vit'], 0.3, 1.0),
+  ('m:1:0:u', '粘性の芯核', 'スライム', 1, 1, 'ultra', false, array['vit'], 0.5, 1.0),
+  ('m:1:1:n', 'コウモリの翼膜', 'コウモリ', 1, 1, 'normal', false, array['agi'], 0.1, 1.0),
+  ('m:1:1:r', '鋭い犬歯', 'コウモリ', 1, 1, 'rare', false, array['agi'], 0.3, 1.0),
+  ('m:1:1:u', '音無しの耳', 'コウモリ', 1, 1, 'ultra', false, array['agi'], 0.5, 1.0),
+  ('m:1:2:n', '毒キノコの傘', '毒キノコ', 1, 1, 'normal', false, array['int_stat'], 0.1, 1.0),
+  ('m:1:2:r', '痺れ胞子', '毒キノコ', 1, 1, 'rare', false, array['int_stat'], 0.3, 1.0),
+  ('m:1:2:u', '猛毒の菌糸', '毒キノコ', 1, 1, 'ultra', false, array['int_stat'], 0.5, 1.0),
+  ('m:1:3:n', '朝露のしずく', '朝露のフェアリー', 1, 1, 'normal', false, array['mp'], 0.1, 1.0),
+  ('m:1:3:r', '妖精の鱗粉', '朝露のフェアリー', 1, 1, 'rare', false, array['mp'], 0.3, 1.0),
+  ('m:1:3:u', 'フェアリーの羽根', '朝露のフェアリー', 1, 1, 'ultra', false, array['mp'], 0.5, 1.0),
+  ('m:1:4:n', 'トカゲの尻尾', 'ひなたトカゲ', 1, 1, 'normal', false, array['str'], 0.1, 1.0),
+  ('m:1:4:r', '陽だまりの鱗', 'ひなたトカゲ', 1, 1, 'rare', false, array['str'], 0.3, 1.0),
+  ('m:1:4:u', '日輪の心鱗', 'ひなたトカゲ', 1, 1, 'ultra', false, array['str'], 0.5, 1.0),
+  ('m:1:5:n', 'フクロウの羽根', '月夜のフクロウ', 1, 1, 'normal', false, array['dex'], 0.1, 1.0),
+  ('m:1:5:r', '静寂の風切羽', '月夜のフクロウ', 1, 1, 'rare', false, array['dex'], 0.3, 1.0),
+  ('m:1:5:u', '月光の瞳', '月夜のフクロウ', 1, 1, 'ultra', false, array['dex'], 0.5, 1.0),
+  ('m:1:6:n', '大粘塊のゼリー', 'ビッグスライム', 1, 1, 'normal', true, array['hp','vit'], 0.1, 1.0),
+  ('m:1:6:r', '王核の粘膜', 'ビッグスライム', 1, 1, 'rare', true, array['hp','vit'], 0.3, 1.0),
+  ('m:1:6:u', 'ビッグスライムの芯核', 'ビッグスライム', 1, 1, 'ultra', true, array['hp','vit'], 0.5, 1.0),
+  ('m:2:0:n', 'ゴブリンの牙', 'ゴブリン', 2, 2, 'normal', false, array['str'], 0.1, 1.0),
+  ('m:2:0:r', 'ゴブリンの棍棒片', 'ゴブリン', 2, 2, 'rare', false, array['str'], 0.3, 1.0),
+  ('m:2:0:u', '族長の証', 'ゴブリン', 2, 2, 'ultra', false, array['str'], 0.5, 1.0),
+  ('m:2:1:n', '野良犬の毛皮', '野良犬', 2, 2, 'normal', false, array['agi'], 0.1, 1.0),
+  ('m:2:1:r', '研ぎ澄まされた爪', '野良犬', 2, 2, 'rare', false, array['agi'], 0.3, 1.0),
+  ('m:2:1:u', '野犬の心臓', '野良犬', 2, 2, 'ultra', false, array['agi'], 0.5, 1.0),
+  ('m:2:2:n', '盗賊の革帯', '盗賊', 2, 2, 'normal', false, array['luk'], 0.1, 1.0),
+  ('m:2:2:r', '隠しナイフ', '盗賊', 2, 2, 'rare', false, array['luk'], 0.3, 1.0),
+  ('m:2:2:u', '盗賊の秘符', '盗賊', 2, 2, 'ultra', false, array['luk'], 0.5, 1.0),
+  ('m:2:3:n', 'ワームの粘液', '朝霧のワーム', 2, 2, 'normal', false, array['hp'], 0.1, 1.0),
+  ('m:2:3:r', '朝霧の環節', '朝霧のワーム', 2, 2, 'rare', false, array['hp'], 0.3, 1.0),
+  ('m:2:3:u', '大地喰らいの顎', '朝霧のワーム', 2, 2, 'ultra', false, array['hp'], 0.5, 1.0),
+  ('m:2:4:n', 'リザードの鱗', '陽炎リザード', 2, 2, 'normal', false, array['str'], 0.1, 1.0),
+  ('m:2:4:r', '陽炎の鱗', '陽炎リザード', 2, 2, 'rare', false, array['str'], 0.3, 1.0),
+  ('m:2:4:u', '灼熱の尾芯', '陽炎リザード', 2, 2, 'ultra', false, array['str'], 0.5, 1.0),
+  ('m:2:5:n', '斥候の外套片', '夜盗の斥候', 2, 2, 'normal', false, array['dex'], 0.1, 1.0),
+  ('m:2:5:r', '暗視の眼帯', '夜盗の斥候', 2, 2, 'rare', false, array['dex'], 0.3, 1.0),
+  ('m:2:5:u', '影渡りの短刀', '夜盗の斥候', 2, 2, 'ultra', false, array['dex'], 0.5, 1.0),
+  ('m:2:6:n', '奪われた小袋', '盗賊団のリーダー', 2, 2, 'normal', true, array['str','luk'], 0.1, 1.0),
+  ('m:2:6:r', 'リーダーの手甲', '盗賊団のリーダー', 2, 2, 'rare', true, array['str','luk'], 0.3, 1.0),
+  ('m:2:6:u', '略奪王の徽章', '盗賊団のリーダー', 2, 2, 'ultra', true, array['str','luk'], 0.5, 1.0),
+  ('m:3:0:n', 'コボルトの毛皮', 'コボルト', 3, 3, 'normal', false, array['str'], 0.1, 1.3),
+  ('m:3:0:r', 'コボルトの牙', 'コボルト', 3, 3, 'rare', false, array['str'], 0.4, 1.3),
+  ('m:3:0:u', '洞窟王の角', 'コボルト', 3, 3, 'ultra', false, array['str'], 0.7, 1.3),
+  ('m:3:1:n', 'もろい骨片', 'スケルトン', 3, 3, 'normal', false, array['hp'], 0.1, 1.3),
+  ('m:3:1:r', '硬化した肋骨', 'スケルトン', 3, 3, 'rare', false, array['hp'], 0.4, 1.3),
+  ('m:3:1:u', '不朽の頭蓋', 'スケルトン', 3, 3, 'ultra', false, array['hp'], 0.7, 1.3),
+  ('m:3:2:n', 'ゴーレムの土塊', 'ゴーレム', 3, 3, 'normal', false, array['vit'], 0.1, 1.3),
+  ('m:3:2:r', '魔力を帯びた岩片', 'ゴーレム', 3, 3, 'rare', false, array['vit'], 0.4, 1.3),
+  ('m:3:2:u', 'ゴーレムの動力核', 'ゴーレム', 3, 3, 'ultra', false, array['vit'], 0.7, 1.3),
+  ('m:3:3:n', 'ガーゴイルの石片', '曙のガーゴイル', 3, 3, 'normal', false, array['vit'], 0.1, 1.3),
+  ('m:3:3:r', '曙光の翼石', '曙のガーゴイル', 3, 3, 'rare', false, array['vit'], 0.4, 1.3),
+  ('m:3:3:u', '石像の魔眼', '曙のガーゴイル', 3, 3, 'ultra', false, array['vit'], 0.7, 1.3),
+  ('m:3:4:n', '石化した鱗', '石化トカゲ', 3, 3, 'normal', false, array['vit'], 0.1, 1.3),
+  ('m:3:4:r', '岩肌の甲殻', '石化トカゲ', 3, 3, 'rare', false, array['vit'], 0.4, 1.3),
+  ('m:3:4:u', '不動の石心', '石化トカゲ', 3, 3, 'ultra', false, array['vit'], 0.7, 1.3),
+  ('m:3:5:n', '霊気の残滓', '夜這うレイス', 3, 3, 'normal', false, array['int_stat'], 0.1, 1.3),
+  ('m:3:5:r', '怨嗟の衣片', '夜這うレイス', 3, 3, 'rare', false, array['int_stat'], 0.4, 1.3),
+  ('m:3:5:u', 'レイスの魂核', '夜這うレイス', 3, 3, 'ultra', false, array['int_stat'], 0.7, 1.3),
+  ('m:3:6:n', '古代の石片', '古代の番人', 3, 3, 'normal', true, array['int_stat','mp'], 0.1, 1.3),
+  ('m:3:6:r', '番人の魔導回路', '古代の番人', 3, 3, 'rare', true, array['int_stat','mp'], 0.4, 1.3),
+  ('m:3:6:u', '古代文明の心臓', '古代の番人', 3, 3, 'ultra', true, array['int_stat','mp'], 0.7, 1.3),
+  ('m:4:0:n', '魚人の鱗', '深海魚人', 4, 4, 'normal', false, array['dex'], 0.1, 1.3),
+  ('m:4:0:r', '深海の鰭', '深海魚人', 4, 4, 'rare', false, array['dex'], 0.4, 1.3),
+  ('m:4:0:u', '深海の心鱗', '深海魚人', 4, 4, 'ultra', false, array['dex'], 0.7, 1.3),
+  ('m:4:1:n', '海賊の頭巾', '海賊', 4, 4, 'normal', false, array['luk'], 0.1, 1.3),
+  ('m:4:1:r', '錆びた鉤爪', '海賊', 4, 4, 'rare', false, array['luk'], 0.4, 1.3),
+  ('m:4:1:u', '海賊旗の切れ端', '海賊', 4, 4, 'ultra', false, array['luk'], 0.7, 1.3),
+  ('m:4:2:n', 'クラゲの触手', '毒クラゲ', 4, 4, 'normal', false, array['int_stat'], 0.1, 1.3),
+  ('m:4:2:r', '痺れ毒袋', '毒クラゲ', 4, 4, 'rare', false, array['int_stat'], 0.4, 1.3),
+  ('m:4:2:u', '深海毒の結晶', '毒クラゲ', 4, 4, 'ultra', false, array['int_stat'], 0.7, 1.3),
+  ('m:4:3:n', 'セイレーンの鱗', '朝凪のセイレーン', 4, 4, 'normal', false, array['mp'], 0.1, 1.3),
+  ('m:4:3:r', '歌声の貝殻', '朝凪のセイレーン', 4, 4, 'rare', false, array['mp'], 0.4, 1.3),
+  ('m:4:3:u', '魅了の喉笛', '朝凪のセイレーン', 4, 4, 'ultra', false, array['mp'], 0.7, 1.3),
+  ('m:4:4:n', 'カニの殻片', '潮騒のカニ', 4, 4, 'normal', false, array['vit'], 0.1, 1.3),
+  ('m:4:4:r', '頑丈な鋏', '潮騒のカニ', 4, 4, 'rare', false, array['vit'], 0.4, 1.3),
+  ('m:4:4:u', '潮騒の甲核', '潮騒のカニ', 4, 4, 'ultra', false, array['vit'], 0.7, 1.3),
+  ('m:4:5:n', 'アンコウの提灯', '夜光アンコウ', 4, 4, 'normal', false, array['agi'], 0.1, 1.3),
+  ('m:4:5:r', '夜光の粘液', '夜光アンコウ', 4, 4, 'rare', false, array['agi'], 0.4, 1.3),
+  ('m:4:5:u', '深淵の発光器', '夜光アンコウ', 4, 4, 'ultra', false, array['agi'], 0.7, 1.3),
+  ('m:4:6:n', '海竜の鱗', 'シーサーペント', 4, 4, 'normal', true, array['hp','str'], 0.1, 1.3),
+  ('m:4:6:r', '海竜の逆鱗', 'シーサーペント', 4, 4, 'rare', true, array['hp','str'], 0.4, 1.3),
+  ('m:4:6:u', 'シーサーペントの海心', 'シーサーペント', 4, 4, 'ultra', true, array['hp','str'], 0.7, 1.3),
+  ('m:5:0:n', '山ゴブリンの毛皮', '山岳ゴブリン', 5, 5, 'normal', false, array['str'], 0.1, 1.6),
+  ('m:5:0:r', '岩砕きの棍棒片', '山岳ゴブリン', 5, 5, 'rare', false, array['str'], 0.5, 1.6),
+  ('m:5:0:u', '山賊頭の兜', '山岳ゴブリン', 5, 5, 'ultra', false, array['str'], 0.8, 1.6),
+  ('m:5:1:n', '巨岩の破片', '岩石ゴーレム', 5, 5, 'normal', false, array['vit'], 0.1, 1.6),
+  ('m:5:1:r', '鉱脈の結晶', '岩石ゴーレム', 5, 5, 'rare', false, array['vit'], 0.5, 1.6),
+  ('m:5:1:u', '岩石ゴーレムの心核', '岩石ゴーレム', 5, 5, 'ultra', false, array['vit'], 0.8, 1.6),
+  ('m:5:2:n', 'グリフォンの羽根', 'グリフォン', 5, 5, 'normal', false, array['agi'], 0.1, 1.6),
+  ('m:5:2:r', '猛禽の鉤爪', 'グリフォン', 5, 5, 'rare', false, array['agi'], 0.5, 1.6),
+  ('m:5:2:u', 'グリフォンの風心', 'グリフォン', 5, 5, 'ultra', false, array['agi'], 0.8, 1.6),
+  ('m:5:3:n', 'ワイバーンの鱗', '払暁のワイバーン', 5, 5, 'normal', false, array['dex'], 0.1, 1.6),
+  ('m:5:3:r', '飛膜の切れ端', '払暁のワイバーン', 5, 5, 'rare', false, array['dex'], 0.5, 1.6),
+  ('m:5:3:u', '払暁の翼骨', '払暁のワイバーン', 5, 5, 'ultra', false, array['dex'], 0.8, 1.6),
+  ('m:5:4:n', '大猿の毛皮', '陽射しの大猿', 5, 5, 'normal', false, array['hp'], 0.1, 1.6),
+  ('m:5:4:r', '岩砕きの拳骨', '陽射しの大猿', 5, 5, 'rare', false, array['hp'], 0.5, 1.6),
+  ('m:5:4:u', '猛猿の闘魂', '陽射しの大猿', 5, 5, 'ultra', false, array['hp'], 0.8, 1.6),
+  ('m:5:5:n', '山猫の毛皮', '宵闇の山猫', 5, 5, 'normal', false, array['luk'], 0.1, 1.6),
+  ('m:5:5:r', '宵闇の爪', '宵闇の山猫', 5, 5, 'rare', false, array['luk'], 0.5, 1.6),
+  ('m:5:5:u', '疾影の後肢', '宵闇の山猫', 5, 5, 'ultra', false, array['luk'], 0.8, 1.6),
+  ('m:5:6:n', '帯電した羽根', '雷鷲サンダーロック', 5, 5, 'normal', true, array['agi','str'], 0.1, 1.6),
+  ('m:5:6:r', '雷鷲の風切羽', '雷鷲サンダーロック', 5, 5, 'rare', true, array['agi','str'], 0.5, 1.6),
+  ('m:5:6:u', '雷鷲の雷嚢', '雷鷲サンダーロック', 5, 5, 'ultra', true, array['agi','str'], 0.8, 1.6),
+  ('m:6:0:n', '雪男の白毛', '雪男', 6, 6, 'normal', false, array['hp'], 0.1, 1.6),
+  ('m:6:0:r', '凍てつく拳', '雪男', 6, 6, 'rare', false, array['hp'], 0.5, 1.6),
+  ('m:6:0:u', '雪山王の心臓', '雪男', 6, 6, 'ultra', false, array['hp'], 0.8, 1.6),
+  ('m:6:1:n', '氷結の鱗', '氷河ドラゴン', 6, 6, 'normal', false, array['str'], 0.1, 1.6),
+  ('m:6:1:r', '氷河竜の牙', '氷河ドラゴン', 6, 6, 'rare', false, array['str'], 0.5, 1.6),
+  ('m:6:1:u', '氷河竜の逆鱗', '氷河ドラゴン', 6, 6, 'ultra', false, array['str'], 0.8, 1.6),
+  ('m:6:2:n', '霜のかけら', '霜の精霊', 6, 6, 'normal', false, array['int_stat'], 0.1, 1.6),
+  ('m:6:2:r', '凍気の結晶', '霜の精霊', 6, 6, 'rare', false, array['int_stat'], 0.5, 1.6),
+  ('m:6:2:u', '霜精の魔核', '霜の精霊', 6, 6, 'ultra', false, array['int_stat'], 0.8, 1.6),
+  ('m:6:3:n', '氷狼の毛皮', '朝焼けの氷狼', 6, 6, 'normal', false, array['agi'], 0.1, 1.6),
+  ('m:6:3:r', '凍牙', '朝焼けの氷狼', 6, 6, 'rare', false, array['agi'], 0.5, 1.6),
+  ('m:6:3:u', '朝焼けの氷心', '朝焼けの氷狼', 6, 6, 'ultra', false, array['agi'], 0.8, 1.6),
+  ('m:6:4:n', '樹氷の枝', '白光の樹氷精', 6, 6, 'normal', false, array['mp'], 0.1, 1.6),
+  ('m:6:4:r', '白光の氷片', '白光の樹氷精', 6, 6, 'rare', false, array['mp'], 0.5, 1.6),
+  ('m:6:4:u', '樹氷の魔晶', '白光の樹氷精', 6, 6, 'ultra', false, array['mp'], 0.8, 1.6),
+  ('m:6:5:n', '凍りついた骨', '極夜のワイト', 6, 6, 'normal', false, array['vit'], 0.1, 1.6),
+  ('m:6:5:r', '極夜の屍衣', '極夜のワイト', 6, 6, 'rare', false, array['vit'], 0.5, 1.6),
+  ('m:6:5:u', 'ワイトの呪核', '極夜のワイト', 6, 6, 'ultra', false, array['vit'], 0.8, 1.6),
+  ('m:6:6:n', '凍える霊気', '氷霊フロストバーン', 6, 6, 'normal', true, array['int_stat','mp'], 0.1, 1.6),
+  ('m:6:6:r', 'フロストバーンの氷刃', '氷霊フロストバーン', 6, 6, 'rare', true, array['int_stat','mp'], 0.5, 1.6),
+  ('m:6:6:u', '永久凍土の氷芯', '氷霊フロストバーン', 6, 6, 'ultra', true, array['int_stat','mp'], 0.8, 1.6),
+  ('m:7:0:n', 'くすぶる残り火', '炎の精霊', 7, 7, 'normal', false, array['int_stat'], 0.1, 2.0),
+  ('m:7:0:r', '揺らめく炎心', '炎の精霊', 7, 7, 'rare', false, array['int_stat'], 0.6, 2.0),
+  ('m:7:0:u', '炎精の魔核', '炎の精霊', 7, 7, 'ultra', false, array['int_stat'], 1.0, 2.0),
+  ('m:7:1:n', '冷えた溶岩塊', '溶岩ゴーレム', 7, 7, 'normal', false, array['vit'], 0.1, 2.0),
+  ('m:7:1:r', '灼熱の鉱石', '溶岩ゴーレム', 7, 7, 'rare', false, array['vit'], 0.6, 2.0),
+  ('m:7:1:u', '溶岩ゴーレムの熔核', '溶岩ゴーレム', 7, 7, 'ultra', false, array['vit'], 1.0, 2.0),
+  ('m:7:2:n', 'ドレイクの鱗', 'ファイアドレイク', 7, 7, 'normal', false, array['agi'], 0.1, 2.0),
+  ('m:7:2:r', '燃える飛膜', 'ファイアドレイク', 7, 7, 'rare', false, array['agi'], 0.6, 2.0),
+  ('m:7:2:u', '火竜の焔袋', 'ファイアドレイク', 7, 7, 'ultra', false, array['agi'], 1.0, 2.0),
+  ('m:7:3:n', '焦げた翼膜', '暁のフレイムバット', 7, 7, 'normal', false, array['dex'], 0.1, 2.0),
+  ('m:7:3:r', '暁の火翼', '暁のフレイムバット', 7, 7, 'rare', false, array['dex'], 0.6, 2.0),
+  ('m:7:3:u', '業火の牙', '暁のフレイムバット', 7, 7, 'ultra', false, array['dex'], 1.0, 2.0),
+  ('m:7:4:n', '陽炎の残滓', '陽炎のイフリート', 7, 7, 'normal', false, array['mp'], 0.1, 2.0),
+  ('m:7:4:r', 'イフリートの炎環', '陽炎のイフリート', 7, 7, 'rare', false, array['mp'], 0.6, 2.0),
+  ('m:7:4:u', '魔炎の心核', '陽炎のイフリート', 7, 7, 'ultra', false, array['mp'], 1.0, 2.0),
+  ('m:7:5:n', 'デーモンの角', '熾火のデーモン', 7, 7, 'normal', false, array['str'], 0.1, 2.0),
+  ('m:7:5:r', '熾火の皮膜', '熾火のデーモン', 7, 7, 'rare', false, array['str'], 0.6, 2.0),
+  ('m:7:5:u', '悪魔の焔心', '熾火のデーモン', 7, 7, 'ultra', false, array['str'], 1.0, 2.0),
+  ('m:7:6:n', '深紅の鱗', '深紅のサラマンダー', 7, 7, 'normal', true, array['str','hp'], 0.1, 2.0),
+  ('m:7:6:r', 'サラマンダーの焔牙', '深紅のサラマンダー', 7, 7, 'rare', true, array['str','hp'], 0.6, 2.0),
+  ('m:7:6:u', '焔龍の心臓', '深紅のサラマンダー', 7, 7, 'ultra', true, array['str','hp'], 1.0, 2.0),
+  ('m:8:0:n', 'ハーピーの羽根', '天翼のハーピー', 8, 8, 'normal', false, array['agi'], 0.1, 2.0),
+  ('m:8:0:r', '天翼の風切羽', '天翼のハーピー', 8, 8, 'rare', false, array['agi'], 0.6, 2.0),
+  ('m:8:0:u', '蒼天の羽衣', '天翼のハーピー', 8, 8, 'ultra', false, array['agi'], 1.0, 2.0),
+  ('m:8:1:n', '帯電した霧片', '雷雲の精霊', 8, 8, 'normal', false, array['int_stat'], 0.1, 2.0),
+  ('m:8:1:r', '雷雲の結晶', '雷雲の精霊', 8, 8, 'rare', false, array['int_stat'], 0.6, 2.0),
+  ('m:8:1:u', '雷精の魔核', '雷雲の精霊', 8, 8, 'ultra', false, array['int_stat'], 1.0, 2.0),
+  ('m:8:2:n', '騎士の甲片', '天空騎士グリフィオン', 8, 8, 'normal', false, array['str'], 0.1, 2.0),
+  ('m:8:2:r', '蒼天の紋章盾', '天空騎士グリフィオン', 8, 8, 'rare', false, array['str'], 0.6, 2.0),
+  ('m:8:2:u', '天空騎士の魂鎧', '天空騎士グリフィオン', 8, 8, 'ultra', false, array['str'], 1.0, 2.0),
+  ('m:8:3:n', '聖なる羽根', '曙光のセラフ', 8, 8, 'normal', false, array['mp'], 0.1, 2.0),
+  ('m:8:3:r', '曙光の光輪', '曙光のセラフ', 8, 8, 'rare', false, array['mp'], 0.6, 2.0),
+  ('m:8:3:u', 'セラフの神核', '曙光のセラフ', 8, 8, 'ultra', false, array['mp'], 1.0, 2.0),
+  ('m:8:4:n', 'ペガサスのたてがみ', '白昼のペガサス', 8, 8, 'normal', false, array['hp'], 0.1, 2.0),
+  ('m:8:4:r', '白昼の蹄鉄', '白昼のペガサス', 8, 8, 'rare', false, array['hp'], 0.6, 2.0),
+  ('m:8:4:u', '天馬の翼心', '白昼のペガサス', 8, 8, 'ultra', false, array['hp'], 1.0, 2.0),
+  ('m:8:5:n', '戦乙女の羽根', '星降りのヴァルキリー', 8, 8, 'normal', false, array['luk'], 0.1, 2.0),
+  ('m:8:5:r', '星屑の槍先', '星降りのヴァルキリー', 8, 8, 'rare', false, array['luk'], 0.6, 2.0),
+  ('m:8:5:u', 'ヴァルキリーの誓約印', '星降りのヴァルキリー', 8, 8, 'ultra', false, array['luk'], 1.0, 2.0),
+  ('m:8:6:n', '覇龍の鱗', '天空覇龍ウラノス', 8, 8, 'normal', true, array['hp','vit'], 0.1, 2.0),
+  ('m:8:6:r', 'ウラノスの天鱗', '天空覇龍ウラノス', 8, 8, 'rare', true, array['hp','vit'], 0.6, 2.0),
+  ('m:8:6:u', '天空覇龍の龍核', '天空覇龍ウラノス', 8, 8, 'ultra', true, array['hp','vit'], 1.0, 2.0),
+  ('m:9:0:n', '砂まみれの外皮', '砂喰いワーム', 9, 4, 'normal', false, array['vit'], 0.1, 1.3),
+  ('m:9:0:r', '砂喰いの顎', '砂喰いワーム', 9, 4, 'rare', false, array['vit'], 0.4, 1.3),
+  ('m:9:0:u', '灼砂の胃石', '砂喰いワーム', 9, 4, 'ultra', false, array['vit'], 0.7, 1.3),
+  ('m:9:1:n', '朽ちた包帯', '墓守のミイラ', 9, 4, 'normal', false, array['hp'], 0.1, 1.3),
+  ('m:9:1:r', '墓守の護符', '墓守のミイラ', 9, 4, 'rare', false, array['hp'], 0.4, 1.3),
+  ('m:9:1:u', '不朽の心臓', '墓守のミイラ', 9, 4, 'ultra', false, array['hp'], 0.7, 1.3),
+  ('m:9:2:n', '蠍の甲殻', '砂蠍サンドスコーピオン', 9, 4, 'normal', false, array['dex'], 0.1, 1.3),
+  ('m:9:2:r', '毒針の欠片', '砂蠍サンドスコーピオン', 9, 4, 'rare', false, array['dex'], 0.4, 1.3),
+  ('m:9:2:u', '砂蠍の猛毒嚢', '砂蠍サンドスコーピオン', 9, 4, 'ultra', false, array['dex'], 0.7, 1.3),
+  ('m:9:3:n', '揺らめく陽炎', '陽炎のミラージュ', 9, 4, 'normal', false, array['int_stat'], 0.1, 1.3),
+  ('m:9:3:r', '幻影の砂片', '陽炎のミラージュ', 9, 4, 'rare', false, array['int_stat'], 0.4, 1.3),
+  ('m:9:3:u', '蜃気楼の核', '陽炎のミラージュ', 9, 4, 'ultra', false, array['int_stat'], 0.7, 1.3),
+  ('m:9:4:n', '聖獣の耳飾り', '灼熱のアヌビス', 9, 4, 'normal', false, array['str'], 0.1, 1.3),
+  ('m:9:4:r', '灼熱の錫杖', '灼熱のアヌビス', 9, 4, 'rare', false, array['str'], 0.4, 1.3),
+  ('m:9:4:u', '冥導者の首飾り', '灼熱のアヌビス', 9, 4, 'ultra', false, array['str'], 0.7, 1.3),
+  ('m:9:5:n', 'ジャッカルの毛皮', '月砂のジャッカル', 9, 4, 'normal', false, array['agi'], 0.1, 1.3),
+  ('m:9:5:r', '月砂の牙', '月砂のジャッカル', 9, 4, 'rare', false, array['agi'], 0.4, 1.3),
+  ('m:9:5:u', '疾走の後肢', '月砂のジャッカル', 9, 4, 'ultra', false, array['agi'], 0.7, 1.3),
+  ('m:9:6:n', '黄金の鞘翅', '砂皇スカラベウス', 9, 4, 'normal', true, array['vit','hp'], 0.1, 1.3),
+  ('m:9:6:r', 'スカラベウスの角', '砂皇スカラベウス', 9, 4, 'rare', true, array['vit','hp'], 0.4, 1.3),
+  ('m:9:6:u', '砂皇の黄金核', '砂皇スカラベウス', 9, 4, 'ultra', true, array['vit','hp'], 0.7, 1.3),
+  ('m:10:0:n', '絡みつく蔓', '食人樹', 10, 5, 'normal', false, array['str'], 0.1, 1.6),
+  ('m:10:0:r', '食人樹の牙葉', '食人樹', 10, 5, 'rare', false, array['str'], 0.5, 1.6),
+  ('m:10:0:u', '樹魔の芯木', '食人樹', 10, 5, 'ultra', false, array['str'], 0.8, 1.6),
+  ('m:10:1:n', 'マンドラゴラの根', '毒霧のマンドラゴラ', 10, 5, 'normal', false, array['int_stat'], 0.1, 1.6),
+  ('m:10:1:r', '毒霧の胞子', '毒霧のマンドラゴラ', 10, 5, 'rare', false, array['int_stat'], 0.5, 1.6),
+  ('m:10:1:u', '絶叫の球根', '毒霧のマンドラゴラ', 10, 5, 'ultra', false, array['int_stat'], 0.8, 1.6),
+  ('m:10:2:n', '影狼の毛皮', '影狼シャドウウルフ', 10, 5, 'normal', false, array['agi'], 0.1, 1.6),
+  ('m:10:2:r', '闇夜の爪', '影狼シャドウウルフ', 10, 5, 'rare', false, array['agi'], 0.5, 1.6),
+  ('m:10:2:u', '影渡りの後肢', '影狼シャドウウルフ', 10, 5, 'ultra', false, array['agi'], 0.8, 1.6),
+  ('m:10:3:n', '苔むした樹皮', '朝靄のトレント', 10, 5, 'normal', false, array['vit'], 0.1, 1.6),
+  ('m:10:3:r', '朝靄の若枝', '朝靄のトレント', 10, 5, 'rare', false, array['vit'], 0.5, 1.6),
+  ('m:10:3:u', '古木の年輪核', '朝靄のトレント', 10, 5, 'ultra', false, array['vit'], 0.8, 1.6),
+  ('m:10:4:n', 'ピクシーの羽根', '木漏れ日のピクシー', 10, 5, 'normal', false, array['mp'], 0.1, 1.6),
+  ('m:10:4:r', '木漏れ日の粉', '木漏れ日のピクシー', 10, 5, 'rare', false, array['mp'], 0.5, 1.6),
+  ('m:10:4:u', '妖精王の雫', '木漏れ日のピクシー', 10, 5, 'ultra', false, array['mp'], 0.8, 1.6),
+  ('m:10:5:n', '破れた喪服', '常闇のバンシー', 10, 5, 'normal', false, array['luk'], 0.1, 1.6),
+  ('m:10:5:r', '嘆きの涙石', '常闇のバンシー', 10, 5, 'rare', false, array['luk'], 0.5, 1.6),
+  ('m:10:5:u', '常闇の呪印', '常闇のバンシー', 10, 5, 'ultra', false, array['luk'], 0.8, 1.6),
+  ('m:10:6:n', '大樹の樹皮', '森王エルダートレント', 10, 5, 'normal', true, array['hp','vit'], 0.1, 1.6),
+  ('m:10:6:r', 'エルダートレントの根', '森王エルダートレント', 10, 5, 'rare', true, array['hp','vit'], 0.5, 1.6),
+  ('m:10:6:u', '森王の生命核', '森王エルダートレント', 10, 5, 'ultra', true, array['hp','vit'], 0.8, 1.6),
+  ('m:11:0:n', '嵐鳥の風切羽', '嵐鳥ストームバード', 11, 6, 'normal', false, array['agi'], 0.1, 1.6),
+  ('m:11:0:r', '雷雲の羽毛', '嵐鳥ストームバード', 11, 6, 'rare', false, array['agi'], 0.5, 1.6),
+  ('m:11:0:u', '疾風の翼骨', '嵐鳥ストームバード', 11, 6, 'ultra', false, array['agi'], 0.8, 1.6),
+  ('m:11:1:n', '帯電した石片', '雷刃のガーゴイル', 11, 6, 'normal', false, array['dex'], 0.1, 1.6),
+  ('m:11:1:r', '雷刃の爪', '雷刃のガーゴイル', 11, 6, 'rare', false, array['dex'], 0.5, 1.6),
+  ('m:11:1:u', 'ガーゴイルの雷核', '雷刃のガーゴイル', 11, 6, 'ultra', false, array['dex'], 0.8, 1.6),
+  ('m:11:2:n', 'トロールの厚皮', '断崖のトロール', 11, 6, 'normal', false, array['vit'], 0.1, 1.6),
+  ('m:11:2:r', '断崖の岩拳', '断崖のトロール', 11, 6, 'rare', false, array['vit'], 0.5, 1.6),
+  ('m:11:2:u', '巨人の頑健骨', '断崖のトロール', 11, 6, 'ultra', false, array['vit'], 0.8, 1.6),
+  ('m:11:3:n', '鷹の雷羽', '暁雲のサンダーホーク', 11, 6, 'normal', false, array['str'], 0.1, 1.6),
+  ('m:11:3:r', '暁雲の鉤爪', '暁雲のサンダーホーク', 11, 6, 'rare', false, array['str'], 0.5, 1.6),
+  ('m:11:3:u', '雷鷹の心羽', '暁雲のサンダーホーク', 11, 6, 'ultra', false, array['str'], 0.8, 1.6),
+  ('m:11:4:n', '雷光の残滓', '雷光のエレメンタル', 11, 6, 'normal', false, array['int_stat'], 0.1, 1.6),
+  ('m:11:4:r', '放電する結晶', '雷光のエレメンタル', 11, 6, 'rare', false, array['int_stat'], 0.5, 1.6),
+  ('m:11:4:u', '雷精の閃核', '雷光のエレメンタル', 11, 6, 'ultra', false, array['int_stat'], 0.8, 1.6),
+  ('m:11:5:n', '雷鳴の鱗', '雷鳴のワイバーン', 11, 6, 'normal', false, array['hp'], 0.1, 1.6),
+  ('m:11:5:r', '裂けた飛膜', '雷鳴のワイバーン', 11, 6, 'rare', false, array['hp'], 0.5, 1.6),
+  ('m:11:5:u', '轟雷の逆鱗', '雷鳴のワイバーン', 11, 6, 'ultra', false, array['hp'], 0.8, 1.6),
+  ('m:11:6:n', '帝竜の雷鱗', '雷帝ケラウノス', 11, 6, 'normal', true, array['int_stat','agi'], 0.1, 1.6),
+  ('m:11:6:r', 'ケラウノスの雷角', '雷帝ケラウノス', 11, 6, 'rare', true, array['int_stat','agi'], 0.5, 1.6),
+  ('m:11:6:u', '天雷の帝核', '雷帝ケラウノス', 11, 6, 'ultra', true, array['int_stat','agi'], 0.8, 1.6),
+  ('m:12:0:n', 'ヒュドラの鱗', '沼のヒュドラ', 12, 7, 'normal', false, array['str'], 0.1, 2.0),
+  ('m:12:0:r', '沼毒の牙', '沼のヒュドラ', 12, 7, 'rare', false, array['str'], 0.6, 2.0),
+  ('m:12:0:u', '再生する首', '沼のヒュドラ', 12, 7, 'ultra', false, array['str'], 1.0, 2.0),
+  ('m:12:1:n', '腐食した粘液', '腐食スライム', 12, 7, 'normal', false, array['int_stat'], 0.1, 2.0),
+  ('m:12:1:r', '溶解の核', '腐食スライム', 12, 7, 'rare', false, array['int_stat'], 0.6, 2.0),
+  ('m:12:1:u', '腐海の原液', '腐食スライム', 12, 7, 'ultra', false, array['int_stat'], 1.0, 2.0),
+  ('m:12:2:n', '沼底の鱗', '沼底のリザードマン', 12, 7, 'normal', false, array['dex'], 0.1, 2.0),
+  ('m:12:2:r', '沼底の骨槍', '沼底のリザードマン', 12, 7, 'rare', false, array['dex'], 0.6, 2.0),
+  ('m:12:2:u', '毒沼の心鱗', '沼底のリザードマン', 12, 7, 'ultra', false, array['dex'], 1.0, 2.0),
+  ('m:12:3:n', 'ゆらめく鬼火', '朝霞のウィルオウィスプ', 12, 7, 'normal', false, array['mp'], 0.1, 2.0),
+  ('m:12:3:r', '朝霞の灯芯', '朝霞のウィルオウィスプ', 12, 7, 'rare', false, array['mp'], 0.6, 2.0),
+  ('m:12:3:u', '惑わしの魂火', '朝霞のウィルオウィスプ', 12, 7, 'ultra', false, array['mp'], 1.0, 2.0),
+  ('m:12:4:n', '大蛙の粘皮', '陽だまりの大蛙', 12, 7, 'normal', false, array['hp'], 0.1, 2.0),
+  ('m:12:4:r', '伸縮する舌', '陽だまりの大蛙', 12, 7, 'rare', false, array['hp'], 0.6, 2.0),
+  ('m:12:4:u', '飽食の胃袋', '陽だまりの大蛙', 12, 7, 'ultra', false, array['hp'], 1.0, 2.0),
+  ('m:12:5:n', '腐った腕', '夜霧のゾンビ', 12, 7, 'normal', false, array['vit'], 0.1, 2.0),
+  ('m:12:5:r', '夜霧の屍布', '夜霧のゾンビ', 12, 7, 'rare', false, array['vit'], 0.6, 2.0),
+  ('m:12:5:u', '不死の腐核', '夜霧のゾンビ', 12, 7, 'ultra', false, array['vit'], 1.0, 2.0),
+  ('m:12:6:n', '毒龍の鱗', '毒龍ヴェノムヒュドラ', 12, 7, 'normal', true, array['str','int_stat'], 0.1, 2.0),
+  ('m:12:6:r', 'ヴェノムヒュドラの猛毒牙', '毒龍ヴェノムヒュドラ', 12, 7, 'rare', true, array['str','int_stat'], 0.6, 2.0),
+  ('m:12:6:u', '腐海の毒心核', '毒龍ヴェノムヒュドラ', 12, 7, 'ultra', true, array['str','int_stat'], 1.0, 2.0),
+  ('m:13:0:n', 'グールの爪', '坑道のグール', 13, 7, 'normal', false, array['dex'], 0.1, 2.0),
+  ('m:13:0:r', '錆びたつるはし', '坑道のグール', 13, 7, 'rare', false, array['dex'], 0.6, 2.0),
+  ('m:13:0:u', '屍喰いの顎', '坑道のグール', 13, 7, 'ultra', false, array['dex'], 1.0, 2.0),
+  ('m:13:1:n', '砕けた鉱石', '鉱石ゴーレム', 13, 7, 'normal', false, array['vit'], 0.1, 2.0),
+  ('m:13:1:r', '純度の高い鉱脈', '鉱石ゴーレム', 13, 7, 'rare', false, array['vit'], 0.6, 2.0),
+  ('m:13:1:u', '鉱石ゴーレムの動力核', '鉱石ゴーレム', 13, 7, 'ultra', false, array['vit'], 1.0, 2.0),
+  ('m:13:2:n', '闇喰いの翼膜', '闇喰いコウモリ', 13, 7, 'normal', false, array['agi'], 0.1, 2.0),
+  ('m:13:2:r', '反響する耳', '闇喰いコウモリ', 13, 7, 'rare', false, array['agi'], 0.6, 2.0),
+  ('m:13:2:u', '無音の飛膜', '闇喰いコウモリ', 13, 7, 'ultra', false, array['agi'], 1.0, 2.0),
+  ('m:13:3:n', '水晶の欠片', '曙光のクリスタルワーム', 13, 7, 'normal', false, array['int_stat'], 0.1, 2.0),
+  ('m:13:3:r', '曙光の結晶', '曙光のクリスタルワーム', 13, 7, 'rare', false, array['int_stat'], 0.6, 2.0),
+  ('m:13:3:u', '虹映の魔晶', '曙光のクリスタルワーム', 13, 7, 'ultra', false, array['int_stat'], 1.0, 2.0),
+  ('m:13:4:n', '亡霊の鉄槌', '灯火のドワーフ亡霊', 13, 7, 'normal', false, array['str'], 0.1, 2.0),
+  ('m:13:4:r', '消えぬ灯火', '灯火のドワーフ亡霊', 13, 7, 'rare', false, array['str'], 0.6, 2.0),
+  ('m:13:4:u', '坑夫王の遺志', '灯火のドワーフ亡霊', 13, 7, 'ultra', false, array['str'], 1.0, 2.0),
+  ('m:13:5:n', 'よどんだ影', '深穴のシャドウ', 13, 7, 'normal', false, array['mp'], 0.1, 2.0),
+  ('m:13:5:r', '深穴の闇片', '深穴のシャドウ', 13, 7, 'rare', false, array['mp'], 0.6, 2.0),
+  ('m:13:5:u', '虚無の魔核', '深穴のシャドウ', 13, 7, 'ultra', false, array['mp'], 1.0, 2.0),
+  ('m:13:6:n', '巨大な鉤爪', '巌喰いガイアモール', 13, 7, 'normal', true, array['hp','str'], 0.1, 2.0),
+  ('m:13:6:r', 'ガイアモールの牙', '巌喰いガイアモール', 13, 7, 'rare', true, array['hp','str'], 0.6, 2.0),
+  ('m:13:6:u', '大地喰らいの熱核', '巌喰いガイアモール', 13, 7, 'ultra', true, array['hp','str'], 1.0, 2.0),
+  ('m:14:0:n', '星読みの石片', '星読みの石像', 14, 8, 'normal', false, array['int_stat'], 0.1, 2.0),
+  ('m:14:0:r', '刻まれた星図', '星読みの石像', 14, 8, 'rare', false, array['int_stat'], 0.6, 2.0),
+  ('m:14:0:u', '天測儀の核', '星読みの石像', 14, 8, 'ultra', false, array['int_stat'], 1.0, 2.0),
+  ('m:14:1:n', '守護機構の装甲', '遺跡守護機構', 14, 8, 'normal', false, array['vit'], 0.1, 2.0),
+  ('m:14:1:r', '古代の歯車', '遺跡守護機構', 14, 8, 'rare', false, array['vit'], 0.6, 2.0),
+  ('m:14:1:u', '不朽の駆動核', '遺跡守護機構', 14, 8, 'ultra', false, array['vit'], 1.0, 2.0),
+  ('m:14:2:n', '時喰いの外殻', '時喰いのクロノワーム', 14, 8, 'normal', false, array['agi'], 0.1, 2.0),
+  ('m:14:2:r', '砂時計の砂', '時喰いのクロノワーム', 14, 8, 'rare', false, array['agi'], 0.6, 2.0),
+  ('m:14:2:u', '刻を喰う顎', '時喰いのクロノワーム', 14, 8, 'ultra', false, array['agi'], 1.0, 2.0),
+  ('m:14:3:n', '星鋼の兜', '暁星のアストラルナイト', 14, 8, 'normal', false, array['str'], 0.1, 2.0),
+  ('m:14:3:r', '暁星の剣先', '暁星のアストラルナイト', 14, 8, 'rare', false, array['str'], 0.6, 2.0),
+  ('m:14:3:u', '星霊騎士の魂片', '暁星のアストラルナイト', 14, 8, 'ultra', false, array['str'], 1.0, 2.0),
+  ('m:14:4:n', '獅子の鬣', '白日のスフィンクス', 14, 8, 'normal', false, array['mp'], 0.1, 2.0),
+  ('m:14:4:r', '謎かけの石板', '白日のスフィンクス', 14, 8, 'rare', false, array['mp'], 0.6, 2.0),
+  ('m:14:4:u', '白日の叡智核', '白日のスフィンクス', 14, 8, 'ultra', false, array['mp'], 1.0, 2.0),
+  ('m:14:5:n', '月光の裾布', '星宿のルナリス', 14, 8, 'normal', false, array['luk'], 0.1, 2.0),
+  ('m:14:5:r', '星宿の耳飾り', '星宿のルナリス', 14, 8, 'rare', false, array['luk'], 0.6, 2.0),
+  ('m:14:5:u', 'ルナリスの月華石', '星宿のルナリス', 14, 8, 'ultra', false, array['luk'], 1.0, 2.0),
+  ('m:14:6:n', '星霜の龍鱗', '時星龍アイオーン', 14, 8, 'normal', true, array['int_stat','mp'], 0.1, 2.0),
+  ('m:14:6:r', 'アイオーンの時角', '時星龍アイオーン', 14, 8, 'rare', true, array['int_stat','mp'], 0.6, 2.0),
+  ('m:14:6:u', '悠久の星核', '時星龍アイオーン', 14, 8, 'ultra', true, array['int_stat','mp'], 1.0, 2.0),
+  ('m:15:0:n', 'クラーケンの吸盤', '深淵のクラーケン', 15, 8, 'normal', false, array['str'], 0.1, 2.0),
+  ('m:15:0:r', '断ち切れた触腕', '深淵のクラーケン', 15, 8, 'rare', false, array['str'], 0.6, 2.0),
+  ('m:15:0:u', '深淵の墨袋', '深淵のクラーケン', 15, 8, 'ultra', false, array['str'], 1.0, 2.0),
+  ('m:15:1:n', '幼体の鱗', '海淵のリヴァイアサン幼体', 15, 8, 'normal', false, array['hp'], 0.1, 2.0),
+  ('m:15:1:r', '未熟な逆鱗', '海淵のリヴァイアサン幼体', 15, 8, 'rare', false, array['hp'], 0.6, 2.0),
+  ('m:15:1:u', '海淵の胎動核', '海淵のリヴァイアサン幼体', 15, 8, 'ultra', false, array['hp'], 1.0, 2.0),
+  ('m:15:2:n', '海妖の髪', '冥暗のシーウィッチ', 15, 8, 'normal', false, array['int_stat'], 0.1, 2.0),
+  ('m:15:2:r', '呪詛の巻貝', '冥暗のシーウィッチ', 15, 8, 'rare', false, array['int_stat'], 0.6, 2.0),
+  ('m:15:2:u', '冥暗の魔核', '冥暗のシーウィッチ', 15, 8, 'ultra', false, array['int_stat'], 1.0, 2.0),
+  ('m:15:3:n', '海竜の背鰭', '朝凪の海竜', 15, 8, 'normal', false, array['dex'], 0.1, 2.0),
+  ('m:15:3:r', '朝凪の鱗', '朝凪の海竜', 15, 8, 'rare', false, array['dex'], 0.6, 2.0),
+  ('m:15:3:u', '静海の心鱗', '朝凪の海竜', 15, 8, 'ultra', false, array['dex'], 1.0, 2.0),
+  ('m:15:4:n', '巨鯨の皮脂', '陽射しの巨鯨', 15, 8, 'normal', false, array['vit'], 0.1, 2.0),
+  ('m:15:4:r', '潮吹きの噴気孔', '陽射しの巨鯨', 15, 8, 'rare', false, array['vit'], 0.6, 2.0),
+  ('m:15:4:u', '海獣の巨心', '陽射しの巨鯨', 15, 8, 'ultra', false, array['vit'], 1.0, 2.0),
+  ('m:15:5:n', '女王の鱗衣', '深海のセイレーン女王', 15, 8, 'normal', false, array['mp'], 0.1, 2.0),
+  ('m:15:5:r', '蒼海の宝冠', '深海のセイレーン女王', 15, 8, 'rare', false, array['mp'], 0.6, 2.0),
+  ('m:15:5:u', '魅惑の歌声', '深海のセイレーン女王', 15, 8, 'ultra', false, array['mp'], 1.0, 2.0),
+  ('m:15:6:n', '覇王の巨鱗', '深海覇王リヴァイアサン', 15, 8, 'normal', true, array['hp','vit'], 0.1, 2.0),
+  ('m:15:6:r', 'リヴァイアサンの逆鱗', '深海覇王リヴァイアサン', 15, 8, 'rare', true, array['hp','vit'], 0.6, 2.0),
+  ('m:15:6:u', '深淵覇王の海心', '深海覇王リヴァイアサン', 15, 8, 'ultra', true, array['hp','vit'], 1.0, 2.0)
 on conflict (id) do update set
-  name = excluded.name, enemy = excluded.enemy, area = excluded.area, rarity = excluded.rarity,
+  name = excluded.name, enemy = excluded.enemy, area = excluded.area, tier = excluded.tier,
+  rarity = excluded.rarity,
   is_boss = excluded.is_boss, stats = excluded.stats, lo = excluded.lo, hi = excluded.hi;
 
 -- ---- 素材の売値（v2で唯一Goldが湧く場所）----
 -- ★**敵はGoldを落とさない**（2026-08-17 ユーザー決定・docs/v2-gold-design.md）。
---   売値＝ エリアの基準額 × レア度の倍率（通常1 / レア4 / 激レア20）。
+--   売値＝ **難易度帯**の基準額 × レア度の倍率（通常1 / レア4 / 激レア20）。
 --   基準額は「落ちた素材を全部売ると、敵がGoldを落としていた頃と同じ」から引いた。
--- ⚠**同じ表が src/v2/lib/material.js の SELL_BASE / SELL_RARITY_MULT にもある。
+-- ⚠**同じ表が src/v2/lib/material.js の SELL_BASE_TIER / SELL_RARITY_MULT にもある。
 --   片方だけ直すと v2sql.test.js が落ちる**（売却の権威はこちら）
 alter table public.v2_materials add column if not exists sell int not null default 0;
 update public.v2_materials set sell =
-  (case area when 1 then 40 when 2 then 80 when 3 then 170 when 4 then 290
+  (case tier when 1 then 40 when 2 then 80 when 3 then 170 when 4 then 290
              when 5 then 500 when 6 then 750 when 7 then 1170 when 8 then 2330 else 0 end)
   * (case rarity when 'normal' then 1 when 'rare' then 4 when 'ultra' then 20 else 0 end);
 
@@ -1262,6 +1440,37 @@ alter table public.v2_profiles add column if not exists unsocket_tickets int not
 -- ★**敵はGoldを落とさない**（2026-08-17 ユーザー決定・docs/v2-gold-design.md）。
 --   p_gold は**受け取るが完全に無視する**（クライアントを先に配っても壊れないよう引数だけ残した）。
 --   Goldはルーン素材をNPCへ売って稼ぐ＝ v2_sell_materials が唯一の湧き口
+-- ---- 解放しておくエリアを作り直す（難易度帯の規則）----
+-- ★2026-08-22 ユーザー決定：**その帯を全部踏破すると次の帯がまとめて開く**。
+--   req は v2_tiers（④⑤⑥は2・⑦⑧は3）。⚠ src/v2/lib/sortie.js の unlockNext と同じ規則。
+--   p_unlocked を渡すのは「**一度開いた帯は閉じない**」ため（新ルールの前に開いていたぶんを残す）
+create or replace function public.v2_unlocked_from_cleared(p_cleared int[], p_unlocked int[] default '{}')
+returns int[] language sql stable set search_path = public as $$
+  with open_tier as (
+    -- ①は最初から／すでに開いているエリアが属する帯／前の帯を req ぶん踏破した帯
+    select 1 as tier
+    union
+    select a.tier from public.v2_areas a where a.id = any(coalesce(p_unlocked, '{}'))
+    union
+    select t.tier + 1 from public.v2_tiers t
+     where (select count(*) from public.v2_areas a
+             where a.tier = t.tier and a.id = any(coalesce(p_cleared, '{}'))) >= t.req
+  )
+  select coalesce(array_agg(a.id order by a.id), '{}')
+    from public.v2_areas a where a.tier in (select tier from open_tier);
+$$;
+-- ⚠これは v2_sortie_settle の中だけで使う内部ヘルパ。**外から叩かせない**
+--   （SECURITY DEFINER の settle から呼ぶので、authenticated への grant は要らない）
+revoke all on function public.v2_unlocked_from_cleared(int[], int[]) from public;
+revoke all on function public.v2_unlocked_from_cleared(int[], int[]) from anon;
+revoke all on function public.v2_unlocked_from_cleared(int[], int[]) from authenticated;
+
+-- 既存プレイヤーの解放を新しい規則へそろえる（**閉じない**＝開いている帯の新エリアが増えるだけ）
+update public.v2_profiles p
+   set unlocked_areas = public.v2_unlocked_from_cleared(p.cleared_areas, p.unlocked_areas)
+ where p.unlocked_areas is distinct from
+       public.v2_unlocked_from_cleared(p.cleared_areas, p.unlocked_areas);
+
 -- ⚠引数が増えたので、古い7引数版は落としてから作り直す（同じ名前で残ると呼び分けが曖昧になる）
 drop function if exists public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb);
 create or replace function public.v2_sortie_settle(
@@ -1347,16 +1556,14 @@ begin
     end loop;
   end if;
 
-  -- ボス撃破で次のエリアが解放される（旧版と同じ）
-  v_unlocked := v_row.unlocked_areas;
-  if v_bw > 0 and p_area < 8 and not (v_unlocked @> array[p_area + 1]) then
-    v_unlocked := array_append(v_unlocked, p_area + 1);
-  end if;
-  -- 踏破済み（そのエリアのボスを倒した）。⑧は解放される先が無いのでここでしか残らない
+  -- 踏破済み（そのエリアのボスを倒した）。**帯が開いたかどうかはここから数える**
   v_cleared := coalesce(v_row.cleared_areas, '{}');
   if v_bw > 0 and not (v_cleared @> array[p_area]) then
     v_cleared := array_append(v_cleared, p_area);
   end if;
+  -- ★解放は「その難易度帯を全部踏破したか」で決まる（1本道ではない・2026-08-22 ユーザー決定）。
+  --   今の解放も渡す＝**一度開いた帯は閉じない**
+  v_unlocked := public.v2_unlocked_from_cleared(v_cleared, v_row.unlocked_areas);
   -- ボス遭遇率。通常敵と戦うたび+0.3、ボスに当たった回があれば0へ戻す
   v_rate := case when v_bs > 0 then 0 else least(100, v_row.boss_rate + 0.3 * v_n) end;
 
@@ -2401,15 +2608,15 @@ create table if not exists public.v2_fish_shop (
   sort    int  not null default 0
 );
 
--- ルーン素材：エリアとレア度を指定して買う。**そのエリアのその レア度からランダムで1個**
---   （敵まで指名できると激レアで色を完全に狙えてしまうため、そこは絞らない）
+-- ルーン素材：**難易度帯**とレア度を指定して買う。その帯のそのレア度からランダムで1個
+--   （エリアも敵も指名できると激レアで色を完全に狙えてしまうため、そこは絞らない）
 insert into public.v2_fish_shop (id, label, cost, kind, payload, sort)
-select 'mat:' || a.area || ':' || r.rarity,
-       'エリア' || substr('①②③④⑤⑥⑦⑧', a.area, 1) || 'の' || r.label || '素材',
-       a.area * r.cost, 'material',
-       jsonb_build_object('area', a.area, 'rarity', r.rarity),
-       a.area * 10 + r.sort
-from generate_series(1, 8) as a(area)
+select 'mat:' || a.tier || ':' || r.rarity,
+       'エリア' || substr('①②③④⑤⑥⑦⑧', a.tier, 1) || 'の' || r.label || '素材',
+       a.tier * r.cost, 'material',
+       jsonb_build_object('tier', a.tier, 'rarity', r.rarity),
+       a.tier * 10 + r.sort
+from generate_series(1, 8) as a(tier)
 cross join (values ('normal','通常',10,1), ('rare','レア',40,2), ('ultra','激レア',200,3))
   as r(rarity, label, cost, sort)
 on conflict (id) do update set
@@ -2564,7 +2771,8 @@ declare
   v_spot    int := greatest(1, least(v_g, coalesce(p_spot, 1)));
   v_mat_pct numeric := 1 + v_g;        -- 2〜10%
   v_eq_pct  numeric := 0.5 * v_g;      -- 0.5〜4.5%
-  v_area_hi int := greatest(1, least(8, v_g));
+  v_area_hi int := greatest(1, least(8, v_g));   -- ★ここは**難易度帯**の上限（エリアIDではない）
+  v_atier   int;
   v_i       int;
   v_r       numeric;
   v_tier    text;
@@ -2611,11 +2819,12 @@ begin
     v_fish := jsonb_set(v_fish, array[v_id],
                         to_jsonb(coalesce((v_fish ->> v_id)::int, 0) + 1), true);
 
-    -- 副産物：ルーン素材。エリアは**釣り場グレードと同じ番号まで**（解放状況では縛らない）
+    -- 副産物：ルーン素材。**釣り場グレードと同じ番号の難易度帯まで**（解放状況では縛らない）。
+    --   ⚠④以降は1つの帯に複数エリアあるので「帯を引いてから、その帯の素材を1個」
     if random() * 100 < v_mat_pct then
-      v_area := 1 + floor(random() * v_area_hi)::int;
+      v_atier := 1 + floor(random() * v_area_hi)::int;
       select m.id into v_mid from public.v2_materials m
-       where m.area = v_area order by random() limit 1;
+       where m.tier = v_atier order by random() limit 1;
       if v_mid is not null then
         insert into public.v2_player_materials (player_id, material_id, qty)
         values (p_uid, v_mid, 1)
@@ -2626,8 +2835,10 @@ begin
     end if;
 
     -- 副産物：装備。落ちるランクは出撃と同じ「そのエリアの drop_ranks」
+    --   （同じ帯のエリアは drop_ranks も同じなので、帯の中はどのエリアを引いても同じ）
     if random() * 100 < v_eq_pct then
-      v_area := 1 + floor(random() * v_area_hi)::int;
+      v_atier := 1 + floor(random() * v_area_hi)::int;
+      select a.id into v_area from public.v2_areas a where a.tier = v_atier order by random() limit 1;
       -- ★ランクは**重みで引く**（src/v2/lib/enemies.js の rollDropRank と同じ）。
       --   drop_ranks は {"F":40,"E":40,"D":20} の重み表なので、? でキーの有無だけを
       --   見て装備から一様に選ぶと、上位ランクが本来よりずっと出やすくなる
@@ -3067,14 +3278,15 @@ begin
    where pm.player_id = v_uid and pm.material_id = q.id;
 
   for v_row in
-    select m.area as grade,
+    -- ★グレードは**難易度帯**の番号（④の帯の素材はどのエリアでもグレード4の資材になる）
+    select m.tier as grade,
            sum(q.qty * case m.rarity when 'normal' then 3 when 'rare' then 12 else 60 end)::int as qty
       from (select r.id, sum(r.qty)::int as qty
               from jsonb_to_recordset(p_items) as r(id text, qty int)
              where r.id is not null and coalesce(r.qty, 0) > 0
              group by r.id) q
       join public.v2_materials m on m.id = q.id
-     group by m.area order by m.area
+     group by m.tier order by m.tier
   loop
     insert into public.v2_base_materials (player_id, kind, grade, qty)
     values (v_uid, p_kind, v_row.grade, v_row.qty)
@@ -3291,12 +3503,13 @@ begin
     v_got := jsonb_build_array(jsonb_build_object('label', v_row.label, 'qty', v_n));
 
   else
-    v_area := (v_row.payload ->> 'area')::int;
+    -- ★payload は難易度帯（'tier'）。'area' は帯を分ける前の古い行のための読み替え
+    v_area := coalesce((v_row.payload ->> 'tier')::int, (v_row.payload ->> 'area')::int);
     v_rar  := v_row.payload ->> 'rarity';
     for v_i in 1 .. v_n loop
-      -- ★そのエリアのその レア度から**ランダムで1個**（敵までは指名させない）
+      -- ★その帯のそのレア度から**ランダムで1個**（エリアも敵も指名させない）
       select m.id into v_mid from public.v2_materials m
-       where m.area = v_area and m.rarity = v_rar order by random() limit 1;
+       where m.tier = v_area and m.rarity = v_rar order by random() limit 1;
       exit when v_mid is null;
       insert into public.v2_player_materials (player_id, material_id, qty)
       values (v_uid, v_mid, 1)

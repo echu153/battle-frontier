@@ -16,6 +16,7 @@
 //   SQLの v2_materials へのINSERTは、このファイルの MATERIALS から生成している。
 // ============================================================
 import { STAT_KEYS } from './stats.js'
+import { tierOf } from './enemies.js'
 
 export const RARITIES = ['normal', 'rare', 'ultra']
 export const RARITY_LABEL = { normal:'通常', rare:'レア', ultra:'激レア' }
@@ -23,16 +24,17 @@ export const RARITY_SHORT = { normal:'n', rare:'r', ultra:'u' }
 export const RARITY_COLOR = { normal:'#a8c4d6', rare:'#66ccff', ultra:'#ffcc44' }
 
 // ===== レンジ =====
-// 上限はエリアで決まり、下限だけレア度で上がる。刻みは0.1%。**全体の最大は2.0%**
+// 上限は**難易度帯**で決まり、下限だけレア度で上がる。刻みは0.1%。**全体の最大は2.0%**
+// ⚠キーはエリアIDではなく tier（同じ帯のエリアはどれも同じレンジ・enemies.js）
 export const STEP = 0.1
-export const AREA_MAX = { 1:1.0, 2:1.0, 3:1.3, 4:1.3, 5:1.6, 6:1.6, 7:2.0, 8:2.0 }
+export const TIER_RATE_MAX = { 1:1.0, 2:1.0, 3:1.3, 4:1.3, 5:1.6, 6:1.6, 7:2.0, 8:2.0 }
 export const RARITY_FLOOR_RATE = { normal:0, rare:0.3, ultra:0.5 }  // 0 は「最低の0.1から」
 const round1 = (v) => Math.round(v * 10) / 10
 
 // ★ボス素材もレンジは雑魚と同じ（2026-08-16 ユーザー決定「ボスだけ下げないで」）。
 //   2ステータス持ちなので、合計では雑魚素材のちょうど2倍になる。
 //   ⚠isBoss は呼び出し側の都合で残してあるだけで、レンジには効かない
-export const capOf = (area) => AREA_MAX[area]
+export const capOf = (area) => TIER_RATE_MAX[tierOf(area)]
 export const rangeOf = (area, rarity) => {
   const hi = capOf(area)
   const rate = RARITY_FLOOR_RATE[rarity] || 0
@@ -172,6 +174,69 @@ const DEF = {
     ['星降りのヴァルキリー', ['luk'], ['戦乙女の羽根', '星屑の槍先', 'ヴァルキリーの誓約印'], '晩'],
     ['天空覇龍ウラノス', ['hp', 'vit'], ['覇龍の鱗', 'ウラノスの天鱗', '天空覇龍の龍核'], null],
   ],
+  9: [
+    ['砂喰いワーム', ['vit'], ['砂まみれの外皮', '砂喰いの顎', '灼砂の胃石'], null],
+    ['墓守のミイラ', ['hp'], ['朽ちた包帯', '墓守の護符', '不朽の心臓'], null],
+    ['砂蠍サンドスコーピオン', ['dex'], ['蠍の甲殻', '毒針の欠片', '砂蠍の猛毒嚢'], null],
+    ['陽炎のミラージュ', ['int_stat'], ['揺らめく陽炎', '幻影の砂片', '蜃気楼の核'], '朝'],
+    ['灼熱のアヌビス', ['str'], ['聖獣の耳飾り', '灼熱の錫杖', '冥導者の首飾り'], '昼'],
+    ['月砂のジャッカル', ['agi'], ['ジャッカルの毛皮', '月砂の牙', '疾走の後肢'], '晩'],
+    ['砂皇スカラベウス', ['vit', 'hp'], ['黄金の鞘翅', 'スカラベウスの角', '砂皇の黄金核'], null],
+  ],
+  10: [
+    ['食人樹', ['str'], ['絡みつく蔓', '食人樹の牙葉', '樹魔の芯木'], null],
+    ['毒霧のマンドラゴラ', ['int_stat'], ['マンドラゴラの根', '毒霧の胞子', '絶叫の球根'], null],
+    ['影狼シャドウウルフ', ['agi'], ['影狼の毛皮', '闇夜の爪', '影渡りの後肢'], null],
+    ['朝靄のトレント', ['vit'], ['苔むした樹皮', '朝靄の若枝', '古木の年輪核'], '朝'],
+    ['木漏れ日のピクシー', ['mp'], ['ピクシーの羽根', '木漏れ日の粉', '妖精王の雫'], '昼'],
+    ['常闇のバンシー', ['luk'], ['破れた喪服', '嘆きの涙石', '常闇の呪印'], '晩'],
+    ['森王エルダートレント', ['hp', 'vit'], ['大樹の樹皮', 'エルダートレントの根', '森王の生命核'], null],
+  ],
+  11: [
+    ['嵐鳥ストームバード', ['agi'], ['嵐鳥の風切羽', '雷雲の羽毛', '疾風の翼骨'], null],
+    ['雷刃のガーゴイル', ['dex'], ['帯電した石片', '雷刃の爪', 'ガーゴイルの雷核'], null],
+    ['断崖のトロール', ['vit'], ['トロールの厚皮', '断崖の岩拳', '巨人の頑健骨'], null],
+    ['暁雲のサンダーホーク', ['str'], ['鷹の雷羽', '暁雲の鉤爪', '雷鷹の心羽'], '朝'],
+    ['雷光のエレメンタル', ['int_stat'], ['雷光の残滓', '放電する結晶', '雷精の閃核'], '昼'],
+    ['雷鳴のワイバーン', ['hp'], ['雷鳴の鱗', '裂けた飛膜', '轟雷の逆鱗'], '晩'],
+    ['雷帝ケラウノス', ['int_stat', 'agi'], ['帝竜の雷鱗', 'ケラウノスの雷角', '天雷の帝核'], null],
+  ],
+  12: [
+    ['沼のヒュドラ', ['str'], ['ヒュドラの鱗', '沼毒の牙', '再生する首'], null],
+    ['腐食スライム', ['int_stat'], ['腐食した粘液', '溶解の核', '腐海の原液'], null],
+    ['沼底のリザードマン', ['dex'], ['沼底の鱗', '沼底の骨槍', '毒沼の心鱗'], null],
+    ['朝霞のウィルオウィスプ', ['mp'], ['ゆらめく鬼火', '朝霞の灯芯', '惑わしの魂火'], '朝'],
+    ['陽だまりの大蛙', ['hp'], ['大蛙の粘皮', '伸縮する舌', '飽食の胃袋'], '昼'],
+    ['夜霧のゾンビ', ['vit'], ['腐った腕', '夜霧の屍布', '不死の腐核'], '晩'],
+    ['毒龍ヴェノムヒュドラ', ['str', 'int_stat'], ['毒龍の鱗', 'ヴェノムヒュドラの猛毒牙', '腐海の毒心核'], null],
+  ],
+  13: [
+    ['坑道のグール', ['dex'], ['グールの爪', '錆びたつるはし', '屍喰いの顎'], null],
+    ['鉱石ゴーレム', ['vit'], ['砕けた鉱石', '純度の高い鉱脈', '鉱石ゴーレムの動力核'], null],
+    ['闇喰いコウモリ', ['agi'], ['闇喰いの翼膜', '反響する耳', '無音の飛膜'], null],
+    ['曙光のクリスタルワーム', ['int_stat'], ['水晶の欠片', '曙光の結晶', '虹映の魔晶'], '朝'],
+    ['灯火のドワーフ亡霊', ['str'], ['亡霊の鉄槌', '消えぬ灯火', '坑夫王の遺志'], '昼'],
+    ['深穴のシャドウ', ['mp'], ['よどんだ影', '深穴の闇片', '虚無の魔核'], '晩'],
+    ['巌喰いガイアモール', ['hp', 'str'], ['巨大な鉤爪', 'ガイアモールの牙', '大地喰らいの熱核'], null],
+  ],
+  14: [
+    ['星読みの石像', ['int_stat'], ['星読みの石片', '刻まれた星図', '天測儀の核'], null],
+    ['遺跡守護機構', ['vit'], ['守護機構の装甲', '古代の歯車', '不朽の駆動核'], null],
+    ['時喰いのクロノワーム', ['agi'], ['時喰いの外殻', '砂時計の砂', '刻を喰う顎'], null],
+    ['暁星のアストラルナイト', ['str'], ['星鋼の兜', '暁星の剣先', '星霊騎士の魂片'], '朝'],
+    ['白日のスフィンクス', ['mp'], ['獅子の鬣', '謎かけの石板', '白日の叡智核'], '昼'],
+    ['星宿のルナリス', ['luk'], ['月光の裾布', '星宿の耳飾り', 'ルナリスの月華石'], '晩'],
+    ['時星龍アイオーン', ['int_stat', 'mp'], ['星霜の龍鱗', 'アイオーンの時角', '悠久の星核'], null],
+  ],
+  15: [
+    ['深淵のクラーケン', ['str'], ['クラーケンの吸盤', '断ち切れた触腕', '深淵の墨袋'], null],
+    ['海淵のリヴァイアサン幼体', ['hp'], ['幼体の鱗', '未熟な逆鱗', '海淵の胎動核'], null],
+    ['冥暗のシーウィッチ', ['int_stat'], ['海妖の髪', '呪詛の巻貝', '冥暗の魔核'], null],
+    ['朝凪の海竜', ['dex'], ['海竜の背鰭', '朝凪の鱗', '静海の心鱗'], '朝'],
+    ['陽射しの巨鯨', ['vit'], ['巨鯨の皮脂', '潮吹きの噴気孔', '海獣の巨心'], '昼'],
+    ['深海のセイレーン女王', ['mp'], ['女王の鱗衣', '蒼海の宝冠', '魅惑の歌声'], '晩'],
+    ['深海覇王リヴァイアサン', ['hp', 'vit'], ['覇王の巨鱗', 'リヴァイアサンの逆鱗', '深淵覇王の海心'], null],
+  ],
 }
 
 const build = () => {
@@ -184,7 +249,7 @@ const build = () => {
         const { lo, hi } = rangeOf(area, rarity)
         out.push({
           id: `m:${area}:${idx}:${RARITY_SHORT[rarity]}`,
-          name: names[ri], enemy, area, idx, band, isBoss, rarity, stats, lo, hi,
+          name: names[ri], enemy, area, tier: tierOf(area), idx, band, isBoss, rarity, stats, lo, hi,
         })
       })
     })
@@ -196,6 +261,8 @@ export const MATERIAL_BY_ID = Object.fromEntries(MATERIALS.map(m => [m.id, m]))
 export const materialsOfEnemy = (enemy) => MATERIALS.filter(m => m.enemy === enemy)
 export const materialOf = (enemy, rarity) => MATERIALS.find(m => m.enemy === enemy && m.rarity === rarity) || null
 export const materialsOfArea = (area) => MATERIALS.filter(m => m.area === area)
+// 同じ難易度帯の素材ぜんぶ（釣りの副産物・メダル交換所は「帯」でまとめて扱う）
+export const materialsOfTier = (tier) => MATERIALS.filter(m => m.tier === tier)
 
 // ===== NPCへの売却 =====
 // ★**v2で唯一Goldが湧く場所**（2026-08-17 ユーザー決定「敵からGoldは落とさない」）。
@@ -210,10 +277,11 @@ export const materialsOfArea = (area) => MATERIALS.filter(m => m.area === area)
 //
 // ⚠**サーバーにも同じ表がある**（supabase_v2_core.sql の v2_materials.sell）。
 //   売却の権威はサーバー側。**片方だけ直すと v2sql.test.js が落ちる**
-export const SELL_BASE = { 1:40, 2:80, 3:170, 4:290, 5:500, 6:750, 7:1170, 8:2330 }
+// ⚠キーは**難易度帯**（同じ帯のエリアはどのエリアの素材でも同じ値段）
+export const SELL_BASE_TIER = { 1:40, 2:80, 3:170, 4:290, 5:500, 6:750, 7:1170, 8:2330 }
 export const SELL_RARITY_MULT = { normal:1, rare:4, ultra:20 }
 export const sellPriceOf = (m) =>
-  m ? (SELL_BASE[m.area] || 0) * (SELL_RARITY_MULT[m.rarity] || 0) : 0
+  m ? (SELL_BASE_TIER[m.tier] || 0) * (SELL_RARITY_MULT[m.rarity] || 0) : 0
 // [{ id, qty }] の合計。持っている数を超えていないかは呼び出し側とサーバーが見る
 export const sellTotalOf = (items) =>
   (items || []).reduce((t, it) => t + sellPriceOf(MATERIAL_BY_ID[it.id]) * Math.max(0, it.qty || 0), 0)

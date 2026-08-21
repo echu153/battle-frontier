@@ -1,26 +1,51 @@
 // バトルフロンティアⅡ 出撃の敵のテスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { AREAS, statsOf, toFighter, areaOf, allEnemies, rollDropRank } from './enemies.js'
+import {
+  AREAS, AREAS_SORTED, statsOf, toFighter, areaOf, allEnemies, rollDropRank,
+  TIER_MAX, tierOf, areasOfTier, areaLabel, areaFullName,
+} from './enemies.js'
 import { calcPower } from './stats.js'
 import { runBattle } from './battle.js'
 import { STAT_KEYS } from './stats.js'
 
 const mkRng = (s0) => { let s = s0 >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
 
-test('エリアは①〜⑧、名前と敵は旧版から流用', () => {
-  assert.equal(AREAS.length, 8)
-  assert.deepEqual(AREAS.map(a => a.name), [
-    '始まりの森', '荒廃した草原', '古代の洞窟', '蒼海の入り江',
-    '巨峰山脈', '白銀の霊峰', '煉獄火山', '蒼天の浮遊城'])
-  assert.deepEqual(AREAS.map(a => a.boss.name), [
-    'ビッグスライム', '盗賊団のリーダー', '古代の番人', 'シーサーペント',
-    '雷鷲サンダーロック', '氷霊フロストバーン', '深紅のサラマンダー', '天空覇龍ウラノス'])
+test('エリアは15。①〜③の名前と敵は旧版から流用、④以降は帯に複数ある', () => {
+  assert.equal(AREAS.length, 15)
+  assert.deepEqual(AREAS_SORTED.map(a => a.name), [
+    '始まりの森', '荒廃した草原', '古代の洞窟',
+    '蒼海の入り江', '灼砂の遺丘',
+    '巨峰山脈', '常闇の樹海',
+    '白銀の霊峰', '雷鳴の断崖',
+    '煉獄火山', '腐海の沼獄', '奈落の坑道',
+    '蒼天の浮遊城', '星霜の遺跡', '深淵の海溝'])
+  assert.deepEqual(AREAS_SORTED.map(a => a.boss.name), [
+    'ビッグスライム', '盗賊団のリーダー', '古代の番人',
+    'シーサーペント', '砂皇スカラベウス',
+    '雷鷲サンダーロック', '森王エルダートレント',
+    '氷霊フロストバーン', '雷帝ケラウノス',
+    '深紅のサラマンダー', '毒龍ヴェノムヒュドラ', '巌喰いガイアモール',
+    '天空覇龍ウラノス', '時星龍アイオーン', '深海覇王リヴァイアサン'])
   for (const a of AREAS) assert.equal(a.enemies.length, 3, `エリア${a.id}の通常敵`)
-  // 通常3体＋時間帯限定3体＋ボス1体 × 8エリア
-  assert.equal(allEnemies().length, 8 * 7)
+  // 通常3体＋時間帯限定3体＋ボス1体 × 15エリア
+  assert.equal(allEnemies().length, 15 * 7)
   assert.equal(areaOf(3).name, '古代の洞窟')
   assert.equal(areaOf(99), null)
+})
+
+// ★2026-08-22 ユーザー決定：④⑤⑥は2エリア・⑦⑧は3エリア。帯を全部踏破すると次が開く
+test('難易度帯ごとのエリア数は ①②③=1 / ④⑤⑥=2 / ⑦⑧=3', () => {
+  assert.deepEqual(
+    Array.from({ length: TIER_MAX }, (_, i) => areasOfTier(i + 1).length),
+    [1, 1, 1, 2, 2, 2, 3, 3])
+  // 同じ帯に居ないエリアが紛れていないこと（idは続き番号なので tier でしか分からない）
+  for (const a of AREAS) assert.equal(tierOf(a.id), a.tier, `エリア${a.id}の帯`)
+  // 表示用のラベル。帯に1つしか無ければ枝番を付けない
+  assert.equal(areaLabel(1), '①')
+  assert.equal(areaLabel(4), '④-1')
+  assert.equal(areaLabel(9), '④-2')
+  assert.equal(areaFullName(13), '⑦-3 奈落の坑道')
 })
 
 test('敵の配分は合計100%で、戦闘力どおりのステータスになる', () => {
@@ -44,11 +69,16 @@ test('ボスはHPへ寄せてある（同じ戦闘力でも長期戦になる）
   }
 })
 
-test('エリアが進むほど敵が強くなる', () => {
+test('帯が上がるほど敵が強くなり、同じ帯のエリアは同格', () => {
   let prev = 0
+  for (let t = 1; t <= TIER_MAX; t++) {
+    const list = areasOfTier(t)
+    // ★同じ帯は**同格**（どちらから挑んでもいい・2026-08-22 ユーザー決定）
+    for (const a of list) assert.equal(a.boss.power, list[0].boss.power, `エリア${a.id}のボスが帯の中でズレている`)
+    assert.ok(list[0].boss.power > prev, `難易度${t}のボスが前の帯より弱い`)
+    prev = list[0].boss.power
+  }
   for (const a of AREAS) {
-    assert.ok(a.boss.power > prev, `エリア${a.id}のボスが前より弱い`)
-    prev = a.boss.power
     for (const e of a.enemies) {
       assert.ok(e.power < a.boss.power, `${e.name} がボスより強い`)
       assert.ok(e.power > a.boss.power * 0.2, `${e.name} が弱すぎる`)
@@ -57,6 +87,7 @@ test('エリアが進むほど敵が強くなる', () => {
 })
 
 test('ドロップするランクの合計は100%で、エリアごとの範囲どおり', () => {
+  // ★キーは**難易度帯**。同じ帯のエリアはドロップ範囲もそろえる
   const EXPECT = {
     1:['F', 'D'], 2:['F', 'C'], 3:['F', 'B'], 4:['F', 'B'],
     5:['E', 'A'], 6:['E', 'A'], 7:['D', 'A'], 8:['D', 'A'],
@@ -64,7 +95,8 @@ test('ドロップするランクの合計は100%で、エリアごとの範囲�
   for (const a of AREAS) {
     const ks = Object.keys(a.dropRanks)
     assert.equal(Object.values(a.dropRanks).reduce((x, y) => x + y, 0), 100, `エリア${a.id}のドロップ率`)
-    assert.deepEqual([ks[0], ks[ks.length - 1]], EXPECT[a.id], `エリア${a.id}の範囲`)
+    assert.deepEqual([ks[0], ks[ks.length - 1]], EXPECT[a.tier], `エリア${a.id}の範囲`)
+    assert.deepEqual(a.dropRanks, areasOfTier(a.tier)[0].dropRanks, `エリア${a.id}のドロップ表が帯の中でズレている`)
     // ランクが高いほど落ちにくい（同率は可）
     const vs = Object.values(a.dropRanks)
     for (let i = 1; i < vs.length; i++) assert.ok(vs[i] <= vs[i - 1], `エリア${a.id}: 上位ランクのほうが出やすい`)

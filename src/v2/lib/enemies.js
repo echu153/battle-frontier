@@ -55,6 +55,18 @@ export const ENEMY_SKILLS = {
   ようがんけん: { name:'溶岩拳',       kind:'phys', mult:2.2, proc:78, mp:12 },
   れっぷうそう: { name:'烈風爪',       kind:'phys', mult:1.5, hits:2, proc:80, mp:11, noCrit:true },
   そうてんとつげき:{ name:'蒼天突撃',  kind:'phys', mult:2.4, proc:75, mp:14 },
+  どくばり:     { name:'毒針',         kind:'phys', mult:1.6, proc:85, mp:7,  ail:{ key:'poison', chance:45 } },
+  すなあらし:   { name:'砂嵐',         kind:'mag',  mult:1.8, proc:82, mp:8,  ail:{ key:'slow', chance:25 } },
+  ほうたい:     { name:'呪縛の包帯',   kind:'phys', mult:1.6, proc:85, mp:7,  ail:{ key:'paralyze', chance:10 } },
+  どくのきり:   { name:'毒の霧',       kind:'mag',  mult:1.7, proc:85, mp:8,  ail:{ key:'poison', chance:50 } },
+  つるのむち:   { name:'蔓の鞭',       kind:'phys', mult:1.6, proc:85, mp:6,  ail:{ key:'slow', chance:20 } },
+  きょうきのぜっきょう:{ name:'狂気の絶叫', kind:'mag', mult:2.1, proc:78, mp:12, buff:{ enemy:{ int_stat:-20 } } },
+  らくらい:     { name:'落雷',         kind:'mag',  mult:2.2, proc:78, mp:12, ail:{ key:'paralyze', chance:15 } },
+  かぜのやいば: { name:'風の刃',       kind:'phys', mult:1.5, hits:2, proc:82, mp:10, noCrit:true },
+  じわれ:       { name:'地割れ',       kind:'phys', mult:2.1, proc:75, mp:11 },
+  しょくしゅ:   { name:'触手',         kind:'phys', mult:1.8, proc:82, mp:9,  drain:0.2 },
+  ほしくず:     { name:'星屑の雨',     kind:'mag',  mult:2.0, proc:80, mp:11 },
+  しんえんのめ: { name:'深淵の眼',     kind:'mag',  mult:2.3, proc:75, mp:13, ail:{ key:'slow', chance:30 } },
   // --- 補助・回復 ---
   かたくなる:   { name:'かたくなる',   kind:'buff', proc:100, mp:5,  buff:{ self:{ vit:30 } }, priority:1 },
   すばやくなる: { name:'すばやくなる', kind:'buff', proc:100, mp:5,  buff:{ self:{ agi:30 } }, priority:1 },
@@ -70,6 +82,13 @@ export const ENEMY_SKILLS = {
   海嵐の一撃:{ name:'海嵐の一撃', kind:'phys', mult:2.8, proc:65, mp:20 },
   深海波動: { name:'深海波動', kind:'mag',  mult:2.6, proc:70, mp:18 },
   古代の裁き:{ name:'古代の裁き', kind:'mag', mult:2.8, proc:65, mp:20 },
+  砂塵葬送: { name:'砂塵葬送', kind:'phys', mult:3.0, proc:62, mp:22, buff:{ enemy:{ agi:-25 } }, ail:{ key:'slow', chance:40 } },
+  樹海縛鎖: { name:'樹海縛鎖', kind:'phys', mult:3.1, proc:60, mp:24, buff:{ enemy:{ agi:-30 } }, ail:{ key:'paralyze', chance:15 } },
+  天雷万鈞: { name:'天雷万鈞', kind:'mag',  mult:3.3, proc:60, mp:26, buff:{ enemy:{ agi:-20 } }, ail:{ key:'paralyze', chance:25 } },
+  腐蝕溶解: { name:'腐蝕溶解', kind:'mag',  mult:3.4, proc:58, mp:28, buff:{ enemy:{ vit:-25 } }, ail:{ key:'poison', chance:70 } },
+  崩落震撼: { name:'崩落震撼', kind:'phys', mult:3.5, proc:58, mp:28, buff:{ enemy:{ agi:-25, vit:-15 } } },
+  星辰崩落: { name:'星辰崩落', kind:'mag',  mult:3.7, proc:55, mp:30, buff:{ enemy:{ int_stat:-25 } }, ail:{ key:'slow', chance:45 } },
+  深淵咆哮: { name:'深淵咆哮', kind:'phys', mult:3.6, proc:56, mp:29, buff:{ enemy:{ vit:-25 } }, drain:0.25 },
   略奪:     { name:'略奪',     kind:'phys', mult:2.4, proc:70, mp:16, drain:0.3 },
   まるのみ: { name:'まるのみ', kind:'phys', mult:2.2, proc:70, mp:14, drain:0.25 },
 }
@@ -89,7 +108,7 @@ const S = ENEMY_SKILLS
 const A = (o) => o   // 見た目をそろえるためだけのヘルパ
 export const AREAS = [
   {
-    id: 1, name: '始まりの森', dropRanks: { F:40, E:40, D:20 },
+    id: 1, tier: 1, name: '始まりの森', dropRanks: { F:40, E:40, D:20 },
     enemies: [
       A({ name:'スライム', power:300, kind:'phys', dist:{ hp:38, mp:4, str:16, dex:8, agi:6, int_stat:3, vit:20, luk:5 },
         skills:[S.たいあたり, S.かたくなる] }),
@@ -110,7 +129,7 @@ export const AREAS = [
       skills:[S.たいあたり, S.かたくなる, S.まるのみ, S.じこさいせい] }),
   },
   {
-    id: 2, name: '荒廃した草原', dropRanks: { F:35, E:30, D:22, C:13 },
+    id: 2, tier: 2, name: '荒廃した草原', dropRanks: { F:35, E:30, D:22, C:13 },
     enemies: [
       A({ name:'ゴブリン', power:500, kind:'phys', dist:{ hp:30, mp:5, str:22, dex:12, agi:14, int_stat:3, vit:9, luk:5 },
         skills:[S.こんぼう, S.ちからため] }),
@@ -131,7 +150,7 @@ export const AREAS = [
       skills:[S.だましうち, S.ちからため, S.略奪, S.さけび, S.じこさいせい] }),
   },
   {
-    id: 3, name: '古代の洞窟', dropRanks: { F:30, E:28, D:24, C:13, B:5 },
+    id: 3, tier: 3, name: '古代の洞窟', dropRanks: { F:30, E:28, D:24, C:13, B:5 },
     enemies: [
       A({ name:'コボルト', power:820, kind:'phys', dist:{ hp:28, mp:5, str:24, dex:14, agi:14, int_stat:3, vit:8, luk:4 },
         skills:[S.こんぼう, S.ちからため] }),
@@ -152,7 +171,7 @@ export const AREAS = [
       skills:[S.古代の裁き, S.まりょくため, S.でんげき, S.かたくなる, S.じこさいせい] }),
   },
   {
-    id: 4, name: '蒼海の入り江', dropRanks: { F:26, E:26, D:23, C:15, B:10 },
+    id: 4, tier: 4, name: '蒼海の入り江', dropRanks: { F:26, E:26, D:23, C:15, B:10 },
     enemies: [
       A({ name:'深海魚人', power:1350, kind:'phys', dist:{ hp:32, mp:5, str:21, dex:11, agi:11, int_stat:4, vit:12, luk:4 },
         skills:[S.しおのやり, S.かたくなる] }),
@@ -173,7 +192,7 @@ export const AREAS = [
       skills:[S.海嵐の一撃, S.深海波動, S.ちからため, S.かたくなる, S.じこさいせい] }),
   },
   {
-    id: 5, name: '巨峰山脈', dropRanks: { E:38, D:30, C:20, B:9, A:3 },
+    id: 5, tier: 5, name: '巨峰山脈', dropRanks: { E:38, D:30, C:20, B:9, A:3 },
     enemies: [
       A({ name:'山岳ゴブリン', power:2200, kind:'phys', dist:{ hp:30, mp:5, str:26, dex:12, agi:13, int_stat:3, vit:8, luk:3 },
         skills:[S.こんぼう, S.ちからため] }),
@@ -194,7 +213,7 @@ export const AREAS = [
       skills:[S.天穿雷撃, S.でんげき, S.すばやくなる, S.ちからため, S.じこさいせい] }),
   },
   {
-    id: 6, name: '白銀の霊峰', dropRanks: { E:33, D:29, C:21, B:11, A:6 },
+    id: 6, tier: 6, name: '白銀の霊峰', dropRanks: { E:33, D:29, C:21, B:11, A:6 },
     enemies: [
       A({ name:'雪男', power:4000, kind:'phys', dist:{ hp:32, mp:5, str:26, dex:10, agi:10, int_stat:3, vit:11, luk:3 },
         skills:[S.こんぼう, S.ちからため] }),
@@ -215,7 +234,7 @@ export const AREAS = [
       skills:[S.氷棺葬送, S.つらら, S.まりょくため, S.かたくなる, S.じこさいせい] }),
   },
   {
-    id: 7, name: '煉獄火山', dropRanks: { D:40, C:30, B:20, A:10 },
+    id: 7, tier: 7, name: '煉獄火山', dropRanks: { D:40, C:30, B:20, A:10 },
     enemies: [
       A({ name:'炎の精霊', power:7000, kind:'mag', dist:{ hp:30, mp:10, str:3, dex:11, agi:11, int_stat:27, vit:5, luk:3 },
         skills:[S.かえんだん, S.まりょくため] }),
@@ -236,7 +255,7 @@ export const AREAS = [
       skills:[S.炎獄の審判, S.ようがんけん, S.かえんだん, S.ちからため, S.じこさいせい] }),
   },
   {
-    id: 8, name: '蒼天の浮遊城', dropRanks: { D:35, C:29, B:22, A:14 },
+    id: 8, tier: 8, name: '蒼天の浮遊城', dropRanks: { D:35, C:29, B:22, A:14 },
     enemies: [
       A({ name:'天翼のハーピー', power:11000, kind:'phys', dist:{ hp:25, mp:6, str:22, dex:15, agi:27, int_stat:2, vit:1, luk:2 },
         skills:[S.れっぷうそう, S.すばやくなる] }),
@@ -255,6 +274,159 @@ export const AREAS = [
     ],
     boss: A({ name:'天空覇龍ウラノス', power:28202, kind:'phys', dist:{ hp:44, mp:7, str:16, dex:9, agi:8, int_stat:4, vit:9, luk:3 },
       skills:[S.天墜滅撃, S.そうてんとつげき, S.でんげき, S.ちからため, S.じこさいせい] }),
+  },
+  // ============================================================
+  // ★ここから下は**同じ難易度帯のもう1つのエリア**（2026-08-22 ユーザー決定）。
+  //   ④⑤⑥は2エリア・⑦⑧は3エリアあり、**その帯を全部踏破すると次の帯が開く**。
+  //   強さ・ドロップ範囲は同じ帯の既存エリアと**同格**にしてある（テーマと敵だけ違う）。
+  //   ⚠ id は続き番号（9〜15）。難易度は id ではなく **tier** で決まる
+  // ============================================================
+  {
+    id: 9, tier: 4, name: '灼砂の遺丘', dropRanks: { F:26, E:26, D:23, C:15, B:10 },
+    enemies: [
+      A({ name:'砂喰いワーム', power:1400, kind:'phys', dist:{ hp:34, mp:4, str:22, dex:8, agi:8, int_stat:3, vit:17, luk:4 },
+        skills:[S.かみつく, S.かたくなる] }),
+      A({ name:'墓守のミイラ', power:1320, kind:'phys', dist:{ hp:33, mp:5, str:21, dex:12, agi:6, int_stat:4, vit:15, luk:4 },
+        skills:[S.ほうたい, S.かたくなる] }),
+      A({ name:'砂蠍サンドスコーピオン', power:1380, kind:'phys', dist:{ hp:28, mp:5, str:23, dex:16, agi:18, int_stat:3, vit:5, luk:2 },
+        skills:[S.どくばり, S.すばやくなる] }),
+    ],
+    timed: [
+      A({ band:'朝', name:'陽炎のミラージュ', power:1740, kind:'mag', dist:{ hp:26, mp:10, str:3, dex:12, agi:20, int_stat:26, vit:1, luk:2 },
+        skills:[S.すなあらし, S.まりょくため] }),
+      A({ band:'昼', name:'灼熱のアヌビス', power:1740, kind:'phys', dist:{ hp:30, mp:6, str:24, dex:12, agi:12, int_stat:4, vit:10, luk:2 },
+        skills:[S.ほうたい, S.ちからため] }),
+      A({ band:'晩', name:'月砂のジャッカル', power:1740, kind:'phys', dist:{ hp:26, mp:6, str:22, dex:14, agi:26, int_stat:2, vit:2, luk:2 },
+        skills:[S.かみつく, S.すばやくなる] }),
+    ],
+    boss: A({ name:'砂皇スカラベウス', power:4137, kind:'phys', dist:{ hp:45, mp:6, str:15, dex:9, agi:6, int_stat:4, vit:12, luk:3 },
+      skills:[S.砂塵葬送, S.すなあらし, S.ちからため, S.かたくなる, S.じこさいせい] }),
+  },
+  {
+    id: 10, tier: 5, name: '常闇の樹海', dropRanks: { E:38, D:30, C:20, B:9, A:3 },
+    enemies: [
+      A({ name:'食人樹', power:2400, kind:'phys', dist:{ hp:36, mp:5, str:24, dex:8, agi:4, int_stat:3, vit:16, luk:4 },
+        skills:[S.つるのむち, S.かたくなる] }),
+      A({ name:'毒霧のマンドラゴラ', power:2250, kind:'mag', dist:{ hp:32, mp:9, str:3, dex:10, agi:6, int_stat:27, vit:9, luk:4 },
+        skills:[S.どくのきり, S.まりょくため] }),
+      A({ name:'影狼シャドウウルフ', power:2350, kind:'phys', dist:{ hp:26, mp:5, str:24, dex:14, agi:25, int_stat:2, vit:2, luk:2 },
+        skills:[S.かみつく, S.すばやくなる] }),
+    ],
+    timed: [
+      A({ band:'朝', name:'朝靄のトレント', power:3000, kind:'phys', dist:{ hp:35, mp:5, str:23, dex:9, agi:5, int_stat:4, vit:16, luk:3 },
+        skills:[S.つるのむち, S.かたくなる] }),
+      A({ band:'昼', name:'木漏れ日のピクシー', power:3000, kind:'mag', dist:{ hp:27, mp:11, str:3, dex:13, agi:20, int_stat:23, vit:1, luk:2 },
+        skills:[S.どくのきり, S.すばやくなる] }),
+      A({ band:'晩', name:'常闇のバンシー', power:3000, kind:'mag', dist:{ hp:29, mp:10, str:2, dex:11, agi:14, int_stat:28, vit:4, luk:2 },
+        skills:[S.きょうきのぜっきょう, S.まりょくため] }),
+    ],
+    boss: A({ name:'森王エルダートレント', power:6744, kind:'phys', dist:{ hp:44, mp:6, str:15, dex:8, agi:5, int_stat:5, vit:14, luk:3 },
+      skills:[S.樹海縛鎖, S.つるのむち, S.どくのきり, S.かたくなる, S.じこさいせい] }),
+  },
+  {
+    id: 11, tier: 6, name: '雷鳴の断崖', dropRanks: { E:33, D:29, C:21, B:11, A:6 },
+    enemies: [
+      A({ name:'嵐鳥ストームバード', power:4100, kind:'phys', dist:{ hp:26, mp:6, str:24, dex:14, agi:26, int_stat:2, vit:1, luk:1 },
+        skills:[S.かぜのやいば, S.すばやくなる] }),
+      A({ name:'雷刃のガーゴイル', power:4300, kind:'phys', dist:{ hp:32, mp:6, str:23, dex:11, agi:9, int_stat:6, vit:10, luk:3 },
+        skills:[S.らくらい, S.かたくなる] }),
+      A({ name:'断崖のトロール', power:4000, kind:'phys', dist:{ hp:35, mp:4, str:25, dex:7, agi:5, int_stat:2, vit:19, luk:3 },
+        skills:[S.じわれ, S.かたくなる] }),
+    ],
+    timed: [
+      A({ band:'朝', name:'暁雲のサンダーホーク', power:5280, kind:'phys', dist:{ hp:27, mp:7, str:25, dex:13, agi:24, int_stat:2, vit:1, luk:1 },
+        skills:[S.かぜのやいば, S.ちからため] }),
+      A({ band:'昼', name:'雷光のエレメンタル', power:5280, kind:'mag', dist:{ hp:29, mp:11, str:2, dex:10, agi:12, int_stat:29, vit:5, luk:2 },
+        skills:[S.らくらい, S.まりょくため] }),
+      A({ band:'晩', name:'雷鳴のワイバーン', power:5280, kind:'phys', dist:{ hp:30, mp:8, str:26, dex:12, agi:14, int_stat:5, vit:3, luk:2 },
+        skills:[S.れっぷうそう, S.らくらい] }),
+    ],
+    boss: A({ name:'雷帝ケラウノス', power:9893, kind:'mag', dist:{ hp:42, mp:8, str:4, dex:9, agi:9, int_stat:18, vit:7, luk:3 },
+      skills:[S.天雷万鈞, S.らくらい, S.まりょくため, S.かたくなる, S.じこさいせい] }),
+  },
+  {
+    id: 12, tier: 7, name: '腐海の沼獄', dropRanks: { D:40, C:30, B:20, A:10 },
+    enemies: [
+      A({ name:'沼のヒュドラ', power:7600, kind:'phys', dist:{ hp:33, mp:6, str:24, dex:10, agi:9, int_stat:5, vit:10, luk:3 },
+        skills:[S.かみつく, S.どくのきり, S.かたくなる] }),
+      A({ name:'腐食スライム', power:7000, kind:'mag', dist:{ hp:36, mp:8, str:3, dex:8, agi:5, int_stat:26, vit:10, luk:4 },
+        skills:[S.どくのきり, S.かたくなる] }),
+      A({ name:'沼底のリザードマン', power:7400, kind:'phys', dist:{ hp:29, mp:6, str:26, dex:14, agi:14, int_stat:3, vit:6, luk:2 },
+        skills:[S.どくばり, S.ちからため] }),
+    ],
+    timed: [
+      A({ band:'朝', name:'朝霞のウィルオウィスプ', power:9360, kind:'mag', dist:{ hp:27, mp:11, str:2, dex:12, agi:18, int_stat:27, vit:1, luk:2 },
+        skills:[S.どくのきり, S.まりょくため] }),
+      A({ band:'昼', name:'陽だまりの大蛙', power:9360, kind:'phys', dist:{ hp:35, mp:5, str:25, dex:9, agi:8, int_stat:3, vit:12, luk:3 },
+        skills:[S.まるのみ, S.かたくなる] }),
+      A({ band:'晩', name:'夜霧のゾンビ', power:9360, kind:'phys', dist:{ hp:34, mp:6, str:24, dex:10, agi:8, int_stat:5, vit:11, luk:2 },
+        skills:[S.ほうたい, S.どくばり] }),
+    ],
+    boss: A({ name:'毒龍ヴェノムヒュドラ', power:19450, kind:'phys', dist:{ hp:43, mp:7, str:16, dex:9, agi:7, int_stat:4, vit:11, luk:3 },
+      skills:[S.腐蝕溶解, S.どくのきり, S.どくばり, S.ちからため, S.じこさいせい] }),
+  },
+  {
+    id: 13, tier: 7, name: '奈落の坑道', dropRanks: { D:40, C:30, B:20, A:10 },
+    enemies: [
+      A({ name:'坑道のグール', power:7200, kind:'phys', dist:{ hp:32, mp:5, str:25, dex:12, agi:11, int_stat:3, vit:9, luk:3 },
+        skills:[S.ひっかく, S.ちからため] }),
+      A({ name:'鉱石ゴーレム', power:7800, kind:'phys', dist:{ hp:34, mp:4, str:24, dex:6, agi:4, int_stat:2, vit:23, luk:3 },
+        skills:[S.じわれ, S.かたくなる] }),
+      A({ name:'闇喰いコウモリ', power:7000, kind:'phys', dist:{ hp:26, mp:7, str:23, dex:15, agi:26, int_stat:2, vit:1, luk:0 },
+        skills:[S.かみつく, S.すばやくなる] }),
+    ],
+    timed: [
+      A({ band:'朝', name:'曙光のクリスタルワーム', power:9360, kind:'mag', dist:{ hp:31, mp:10, str:3, dex:10, agi:8, int_stat:27, vit:9, luk:2 },
+        skills:[S.でんげき, S.まりょくため] }),
+      A({ band:'昼', name:'灯火のドワーフ亡霊', power:9360, kind:'phys', dist:{ hp:31, mp:7, str:26, dex:13, agi:10, int_stat:5, vit:6, luk:2 },
+        skills:[S.ほねきり, S.ちからため] }),
+      A({ band:'晩', name:'深穴のシャドウ', power:9360, kind:'mag', dist:{ hp:28, mp:10, str:3, dex:12, agi:17, int_stat:27, vit:1, luk:2 },
+        skills:[S.きょうきのぜっきょう, S.まりょくため] }),
+    ],
+    boss: A({ name:'巌喰いガイアモール', power:19450, kind:'phys', dist:{ hp:44, mp:6, str:16, dex:8, agi:6, int_stat:3, vit:14, luk:3 },
+      skills:[S.崩落震撼, S.じわれ, S.いわなげ, S.かたくなる, S.じこさいせい] }),
+  },
+  {
+    id: 14, tier: 8, name: '星霜の遺跡', dropRanks: { D:35, C:29, B:22, A:14 },
+    enemies: [
+      A({ name:'星読みの石像', power:12000, kind:'mag', dist:{ hp:33, mp:9, str:3, dex:9, agi:5, int_stat:26, vit:12, luk:3 },
+        skills:[S.ほしくず, S.かたくなる] }),
+      A({ name:'遺跡守護機構', power:12500, kind:'phys', dist:{ hp:32, mp:5, str:25, dex:12, agi:8, int_stat:3, vit:12, luk:3 },
+        skills:[S.そうてんとつげき, S.かたくなる] }),
+      A({ name:'時喰いのクロノワーム', power:11000, kind:'phys', dist:{ hp:30, mp:7, str:22, dex:13, agi:20, int_stat:4, vit:2, luk:2 },
+        skills:[S.かぜのやいば, S.すばやくなる] }),
+    ],
+    timed: [
+      A({ band:'朝', name:'暁星のアストラルナイト', power:15000, kind:'phys', dist:{ hp:30, mp:7, str:26, dex:13, agi:12, int_stat:4, vit:6, luk:2 },
+        skills:[S.そうてんとつげき, S.ちからため] }),
+      A({ band:'昼', name:'白日のスフィンクス', power:15000, kind:'mag', dist:{ hp:31, mp:10, str:3, dex:11, agi:9, int_stat:28, vit:6, luk:2 },
+        skills:[S.ほしくず, S.まりょくため] }),
+      A({ band:'晩', name:'星宿のルナリス', power:15000, kind:'mag', dist:{ hp:28, mp:11, str:2, dex:12, agi:16, int_stat:28, vit:1, luk:2 },
+        skills:[S.ほしくず, S.きょうきのぜっきょう] }),
+    ],
+    boss: A({ name:'時星龍アイオーン', power:28202, kind:'mag', dist:{ hp:44, mp:7, str:3, dex:9, agi:8, int_stat:17, vit:9, luk:3 },
+      skills:[S.星辰崩落, S.ほしくず, S.らくらい, S.まりょくため, S.じこさいせい] }),
+  },
+  {
+    id: 15, tier: 8, name: '深淵の海溝', dropRanks: { D:35, C:29, B:22, A:14 },
+    enemies: [
+      A({ name:'深淵のクラーケン', power:12500, kind:'phys', dist:{ hp:34, mp:6, str:25, dex:10, agi:9, int_stat:4, vit:9, luk:3 },
+        skills:[S.しょくしゅ, S.かたくなる] }),
+      A({ name:'海淵のリヴァイアサン幼体', power:11800, kind:'phys', dist:{ hp:31, mp:7, str:24, dex:11, agi:13, int_stat:6, vit:6, luk:2 },
+        skills:[S.しおのやり, S.かみつく] }),
+      A({ name:'冥暗のシーウィッチ', power:11000, kind:'mag', dist:{ hp:29, mp:11, str:2, dex:10, agi:10, int_stat:29, vit:7, luk:2 },
+        skills:[S.しんえんのめ, S.まりょくため] }),
+    ],
+    timed: [
+      A({ band:'朝', name:'朝凪の海竜', power:15000, kind:'phys', dist:{ hp:32, mp:7, str:25, dex:12, agi:14, int_stat:4, vit:4, luk:2 },
+        skills:[S.しおのやり, S.ちからため] }),
+      A({ band:'昼', name:'陽射しの巨鯨', power:15000, kind:'phys', dist:{ hp:38, mp:6, str:24, dex:8, agi:6, int_stat:3, vit:12, luk:3 },
+        skills:[S.まるのみ, S.かたくなる] }),
+      A({ band:'晩', name:'深海のセイレーン女王', power:15000, kind:'mag', dist:{ hp:29, mp:11, str:2, dex:11, agi:13, int_stat:29, vit:3, luk:2 },
+        skills:[S.しんえんのめ, S.きょうきのぜっきょう] }),
+    ],
+    boss: A({ name:'深海覇王リヴァイアサン', power:28202, kind:'phys', dist:{ hp:45, mp:6, str:16, dex:9, agi:7, int_stat:4, vit:10, luk:3 },
+      skills:[S.深淵咆哮, S.しょくしゅ, S.深海波動, S.ちからため, S.じこさいせい] }),
   },
 ]
 
@@ -279,6 +451,30 @@ export const toFighter = (enemy, uses = 4) => ({
 })
 
 export const areaOf = (id) => AREAS.find(a => a.id === id) || null
+// ===== 難易度帯（tier）=====
+// ★エリアは「帯」に属する（2026-08-22 ユーザー決定）。同じ帯のエリアは**同じ強さ・
+//   同じドロップ範囲**で、④⑤⑥の帯は2エリア・⑦⑧の帯は3エリアある。
+//   **画面に出す番号は id ではなく tier**（④の帯にいるエリアはどれも「④」）。
+//   進み方は sortie.js（その帯を全部踏破すると次の帯が開く）
+export const TIER_MAX = 8
+export const TIER_MARK = '①②③④⑤⑥⑦⑧'
+export const markOf = (tier) => TIER_MARK[tier - 1] || String(tier)
+export const tierOf = (areaId) => areaOf(areaId)?.tier || 0
+export const areasOfTier = (tier) => AREAS.filter(a => a.tier === tier)
+// 並べるときは**帯の順**（id は9〜15が後ろに付いているだけで難易度順ではない）
+export const AREAS_SORTED = [...AREAS].sort((a, b) => a.tier - b.tier || a.id - b.id)
+// 帯に2つ以上あるときだけ「④-2」と枝番を付ける
+export const areaLabel = (areaOrId) => {
+  const a = typeof areaOrId === 'object' ? areaOrId : areaOf(areaOrId)
+  if (!a) return ''
+  const list = areasOfTier(a.tier)
+  return list.length > 1 ? `${markOf(a.tier)}-${list.findIndex(x => x.id === a.id) + 1}` : markOf(a.tier)
+}
+export const areaFullName = (areaOrId) => {
+  const a = typeof areaOrId === 'object' ? areaOrId : areaOf(areaOrId)
+  return a ? `${areaLabel(a)} ${a.name}` : ''
+}
+
 export const allEnemies = () => AREAS.flatMap(a => [...a.enemies, ...(a.timed || []), a.boss])
 export const timedEnemyOf = (area, band) => (area?.timed || []).find(e => e.band === band) || null
 

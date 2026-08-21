@@ -11,7 +11,7 @@ import {
   TIERS, TIER_LABEL, TIER_COLOR, TIER_RATE, TIER_PCT,
   SPOTS, spotName, FISH, fishOfSpot, entryId, ENTRY_BY_ID, DEX_SLOTS,
   fishDexText, dexIdsOf, DEX_FULL_TOTAL,
-  MATERIAL_PCT, EQUIP_PCT, dropAreaMax,
+  MATERIAL_PCT, EQUIP_PCT, dropTierMax,
   SHOP_MATERIAL_COST, materialShopCost, PROTECT_COST,
 } from '../lib/fishing.js'
 import { STAT_DEFS } from '../lib/stats.js'
@@ -28,7 +28,7 @@ import V2Modal from './V2Modal.jsx'
 //   previewOf で進めていて、これは v2_base_settle と同じ式にしてある。
 // ============================================================
 
-const AREA_MARK = '①②③④⑤⑥⑦⑧'
+const AREA_MARK = '①②③④⑤⑥⑦⑧'   // ★番号は**難易度帯**（④の帯にいるエリアはどれも「④」）
 const n = (v) => Math.floor(Number(v) || 0).toLocaleString()
 const gold = (v) => `${n(v)}G`
 
@@ -193,7 +193,7 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
   const owned = useMemo(() => (materials || [])
     .filter(m => m.qty > 0 && MATERIAL_BY_ID[m.material_id])
     .map(m => ({ ...MATERIAL_BY_ID[m.material_id], qty: m.qty }))
-    .sort((a, b) => a.area - b.area || a.idx - b.idx || RARITIES.indexOf(a.rarity) - RARITIES.indexOf(b.rarity)),
+    .sort((a, b) => a.tier - b.tier || a.area - b.area || a.idx - b.idx || RARITIES.indexOf(a.rarity) - RARITIES.indexOf(b.rarity)),
     [materials])
 
   const items = Object.entries(picked)
@@ -380,7 +380,7 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
                     <div style={{ color:TEXT.label, fontSize:'10px', marginBottom:'3px' }}>
                       いま釣っている場所：<span style={{ color:'#66ccff' }}>{spotName(f.spot)}</span>
                       <span style={{ marginLeft:'6px' }}>
-                        副産物 ルーン素材{MATERIAL_PCT(f.grade)}% / 装備{EQUIP_PCT(f.grade)}%（エリア{AREA_MARK[dropAreaMax(f.grade) - 1]}まで）
+                        副産物 ルーン素材{MATERIAL_PCT(f.grade)}% / 装備{EQUIP_PCT(f.grade)}%（エリア{AREA_MARK[dropTierMax(f.grade) - 1]}まで）
                       </span>
                     </div>
                     <div style={{ display:'flex', gap:'3px', flexWrap:'wrap' }}>
@@ -519,7 +519,7 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
             return (
               <div key={o.id} style={{ background:'#000818', border:'1px solid #002244', padding:'4px 6px',
                 display:'flex', alignItems:'center', gap:'5px', fontSize:'10px' }}>
-                <span style={{ color:TEXT.label, width:'18px', flexShrink:0 }}>{AREA_MARK[o.area - 1]}</span>
+                <span style={{ color:TEXT.label, width:'18px', flexShrink:0 }}>{AREA_MARK[o.tier - 1]}</span>
                 <span style={{ color:RARITY_COLOR[o.rarity], flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                   {o.name}
                 </span>
@@ -701,17 +701,17 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
 
         <div style={{ color:TEXT.label, fontSize:'11px', marginBottom:'4px' }}>
           ルーン素材
-          <span style={{ color:TEXT.sub, fontSize:'9px', marginLeft:'6px' }}>そのエリアのそのレア度から1個（敵は選べません）</span>
+          <span style={{ color:TEXT.sub, fontSize:'9px', marginLeft:'6px' }}>その難易度帯のそのレア度から1個（エリアと敵は選べません）</span>
         </div>
         <div style={{ display:'grid', gap:'2px' }}>
-          {Array.from({ length: 8 }, (_, i) => i + 1).map(area => (
-            <div key={area} style={{ background:'#000818', border:'1px solid #002244', padding:'5px 7px',
+          {Array.from({ length: 8 }, (_, i) => i + 1).map(tier => (
+            <div key={tier} style={{ background:'#000818', border:'1px solid #002244', padding:'5px 7px',
               display:'flex', alignItems:'center', gap:'5px', fontSize:'11px' }}>
-              <span style={{ color:TEXT.label, width:'44px' }}>エリア{AREA_MARK[area - 1]}</span>
+              <span style={{ color:TEXT.label, width:'44px' }}>エリア{AREA_MARK[tier - 1]}</span>
               {RARITIES.map(r => {
-                const cost = materialShopCost(area, r)
+                const cost = materialShopCost(tier, r)
                 return (
-                  <button key={r} onClick={() => buy(`mat:${area}:${r}`, `エリア${AREA_MARK[area - 1]}の${RARITY_LABEL[r]}素材`)}
+                  <button key={r} onClick={() => buy(`mat:${tier}:${r}`, `エリア${AREA_MARK[tier - 1]}の${RARITY_LABEL[r]}素材`)}
                     disabled={!!busy || medals < cost}
                     style={{ ...miniBtn(medals < cost ? '#62789a' : RARITY_COLOR[r]), flex:1,
                       opacity: (busy || medals < cost) ? 0.4 : 1 }}>

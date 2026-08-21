@@ -5,6 +5,7 @@ import { classBonusText, jobCountOf } from '../lib/classBonus.js'
 import { attackKindOf } from '../lib/battle.js'
 import { equippedItems, totalStats } from '../lib/loadout.js'
 import { SKILL_BY_NAME, KIND_LABEL, KIND_COLOR } from '../lib/skills.js'
+import { AREAS } from '../lib/enemies.js'
 import { RANK_COLOR, miniBtn } from './v2ui.js'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -147,7 +148,7 @@ export default function V2Profile({ prof, inventory, runes, fishDex, onProfile, 
           <Row k1="スキル5" v1={skills[4]?.name || <span style={{ color:'#7b8fb8' }}>—</span>} k2="職業" v2={prof.class} />
           <Row k1="所持金" v1={`${(prof.gold || 0).toLocaleString()} Gold`} k2="転職回数" v2={`${prof.job_changes}回`} />
           <Row k1="職業補正" v1={classBonusText(prof.class, jobCountOf(prof)) || <span style={{ color:'#7b8fb8' }}>なし</span>}
-            k2="解放エリア" v2={`${(prof.unlocked_areas || [1]).length} / 8`} />
+            k2="解放エリア" v2={`${(prof.unlocked_areas || [1]).length} / ${AREAS.length}`} />
         </div>
 
         <div style={{ background:'#0a1330', padding:'8px' }}>

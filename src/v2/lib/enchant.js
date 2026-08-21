@@ -103,6 +103,74 @@ export const ENCHANTS = {
   '白昼のペガサス':  { text:'スキル発動率+5%', effect:{ procBonus:5 } },
   '星降りのヴァルキリー': { text:'素材ドロップ率×1.5', effect:{ dropRateMult:1.5 } },
   '天空覇龍ウラノス': { text:'最初に受けた魔法ダメージを100%で跳ね返す', effect:{ reflectFirst:{ kind:'mag', pct:100 } } },
+
+  // ============================================================
+  // ★ここから下は**同じ難易度帯のもう1つのエリア**の敵（2026-08-22）。
+  //   強さは同じ帯の既存エリアと同格なので、能力も**同じくらいの強さ**にしてある
+  // ============================================================
+
+  // ===== ④-2 灼砂の遺丘 =====
+  '砂喰いワーム':    { text:'VIT+4%', effect:{ statPct:{ vit:4 } } },
+  '墓守のミイラ':    { text:'物理ダメージ軽減+4%', effect:{ physCutPct:4 } },
+  '砂蠍サンドスコーピオン': { text:'物理攻撃ヒット時、10%で毒付与', effect:{ onHitAil:{ key:'poison', chance:10, kind:'phys' } } },
+  '陽炎のミラージュ': { text:'朝の間、INT+8%', effect:{ bandStatPct:{ bands:['朝'], stat:'int_stat', pct:8 } } },
+  '灼熱のアヌビス':  { text:'昼の間、物理ダメージ+6%', effect:{ bandDmgPct:{ bands:['昼'], kind:'phys', pct:6 } } },
+  '月砂のジャッカル': { text:'晩の間、AGI+8%', effect:{ bandStatPct:{ bands:['晩'], stat:'agi', pct:8 } } },
+  '砂皇スカラベウス': { text:'物理ダメージ軽減+12%', effect:{ physCutPct:12 } },
+
+  // ===== ⑤-2 常闇の樹海 =====
+  '食人樹':          { text:'攻撃ヒット時、敵のAGI-2%（重複8）', effect:{ onHitFoeStat:{ stats:['agi'], pct:-2, max:8 } } },
+  '毒霧のマンドラゴラ': { text:'攻撃ヒット時、15%で毒付与', effect:{ onHitAil:{ key:'poison', chance:15, kind:'any' } } },
+  '影狼シャドウウルフ': { text:'回避率+2%', effect:{ evaBonus:2 } },
+  '朝靄のトレント':  { text:'朝の間、VIT+10%', effect:{ bandStatPct:{ bands:['朝'], stat:'vit', pct:10 } } },
+  '木漏れ日のピクシー': { text:'回復量+25%', effect:{ healPct:25 } },
+  '常闇のバンシー':  { text:'魔法ダメージ+6%', effect:{ magDmgPct:6 } },
+  '森王エルダートレント': { text:'最大HP+10%', effect:{ statPct:{ hp:10 } } },
+
+  // ===== ⑥-2 雷鳴の断崖 =====
+  '嵐鳥ストームバード': { text:'AGI+6%', effect:{ statPct:{ agi:6 } } },
+  '雷刃のガーゴイル': { text:'物理攻撃ヒット時、4%で麻痺付与', effect:{ onHitAil:{ key:'paralyze', chance:4, kind:'phys' } } },
+  '断崖のトロール':  { text:'物理ダメージ軽減+5%', effect:{ physCutPct:5 } },
+  '暁雲のサンダーホーク': { text:'朝の間、物理ダメージ+10%', effect:{ bandDmgPct:{ bands:['朝'], kind:'phys', pct:10 } } },
+  '雷光のエレメンタル': { text:'昼の間、魔法ダメージ+10%', effect:{ bandDmgPct:{ bands:['昼'], kind:'mag', pct:10 } } },
+  '雷鳴のワイバーン': { text:'命中率+4%', effect:{ hitBonus:4 } },
+  '雷帝ケラウノス':  { text:'攻撃ヒット時、8%で麻痺付与', effect:{ onHitAil:{ key:'paralyze', chance:8, kind:'any' } } },
+
+  // ===== ⑦-2 腐海の沼獄 =====
+  '沼のヒュドラ':    { text:'STR+6%', effect:{ statPct:{ str:6 } } },
+  '腐食スライム':    { text:'攻撃ヒット時、敵のVIT-2%（重複10）', effect:{ onHitFoeStat:{ stats:['vit'], pct:-2, max:10 } } },
+  '沼底のリザードマン': { text:'物理攻撃ヒット時、20%で毒付与', effect:{ onHitAil:{ key:'poison', chance:20, kind:'phys' } } },
+  '朝霞のウィルオウィスプ': { text:'MP+10%', effect:{ statPct:{ mp:10 } } },
+  '陽だまりの大蛙':  { text:'物理ダメージを与えたとき、与えたダメージの6%を回復', effect:{ drainPhysPct:6 } },
+  '夜霧のゾンビ':    { text:'毒状態になる確率を30%軽減', effect:{ ailResist:{ key:'poison', pct:30 } } },
+  '毒龍ヴェノムヒュドラ': { text:'攻撃ヒット時、35%で毒付与', effect:{ onHitAil:{ key:'poison', chance:35, kind:'any' } } },
+
+  // ===== ⑦-3 奈落の坑道 =====
+  '坑道のグール':    { text:'DEX+6%', effect:{ statPct:{ dex:6 } } },
+  '鉱石ゴーレム':    { text:'物理ダメージ軽減+6%', effect:{ physCutPct:6 } },
+  '闇喰いコウモリ':  { text:'素材ドロップ率×1.45', effect:{ dropRateMult:1.45 } },
+  '曙光のクリスタルワーム': { text:'朝の間、INT+12%', effect:{ bandStatPct:{ bands:['朝'], stat:'int_stat', pct:12 } } },
+  '灯火のドワーフ亡霊': { text:'昼の間、STR+12%', effect:{ bandStatPct:{ bands:['昼'], stat:'str', pct:12 } } },
+  '深穴のシャドウ':  { text:'晩の間、魔法ダメージ+12%', effect:{ bandDmgPct:{ bands:['晩'], kind:'mag', pct:12 } } },
+  '巌喰いガイアモール': { text:'攻撃ヒット時、STR+2%（重複10）', effect:{ onHitSelfStat:{ stat:'str', pct:2, max:10, kind:'any' } } },
+
+  // ===== ⑧-2 星霜の遺跡 =====
+  '星読みの石像':    { text:'INT+7%', effect:{ statPct:{ int_stat:7 } } },
+  '遺跡守護機構':    { text:'戦闘開始時、次に受けるダメージを35%軽減するバフを得る', effect:{ startBuff:{ cut:35 } } },
+  '時喰いのクロノワーム': { text:'攻撃ヒット時、敵のAGI-3%（重複15）', effect:{ onHitFoeStat:{ stats:['agi'], pct:-3, max:15 } } },
+  '暁星のアストラルナイト': { text:'STR+6%・DEX+4%', effect:{ statPct:{ str:6, dex:4 } } },
+  '白日のスフィンクス': { text:'スキル発動率+4%', effect:{ procBonus:4 } },
+  '星宿のルナリス':  { text:'晩の間、INT+15%', effect:{ bandStatPct:{ bands:['晩'], stat:'int_stat', pct:15 } } },
+  '時星龍アイオーン': { text:'最初に受けた物理ダメージを100%で跳ね返す', effect:{ reflectFirst:{ kind:'phys', pct:100 } } },
+
+  // ===== ⑧-3 深淵の海溝 =====
+  '深淵のクラーケン': { text:'物理ダメージ+8%', effect:{ physDmgPct:8 } },
+  '海淵のリヴァイアサン幼体': { text:'最大HP+12%', effect:{ statPct:{ hp:12 } } },
+  '冥暗のシーウィッチ': { text:'魔法攻撃ヒット時、10%で鈍足付与', effect:{ onHitAil:{ key:'slow', chance:10, kind:'mag' } } },
+  '朝凪の海竜':      { text:'朝の間、DEX+15%', effect:{ bandStatPct:{ bands:['朝'], stat:'dex', pct:15 } } },
+  '陽射しの巨鯨':    { text:'昼の間、VIT+15%', effect:{ bandStatPct:{ bands:['昼'], stat:'vit', pct:15 } } },
+  '深海のセイレーン女王': { text:'晩の間、回復量+40%', effect:{ bandHealPct:{ bands:['晩'], pct:40 } } },
+  '深海覇王リヴァイアサン': { text:'物理ダメージを与えたとき、与えたダメージの10%を回復', effect:{ drainPhysPct:10 } },
 }
 
 export const enchantOf = (enemyName) => ENCHANTS[enemyName] || null
