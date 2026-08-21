@@ -214,14 +214,16 @@ test('能力の名簿がSQLと evolveTraits.js で完全に一致している', 
   }
 })
 
-test('武器の進化の節目・予算が evolve.js とSQLで一致している', async () => {
-  const { STAGES, STAGE_CAP, FOES_KEEP } = await import('./evolve.js')
+test('覚醒するレベル・予算・1レベルの経験値が evolve.js とSQLで一致している', async () => {
+  const { LEVELS, STAGE_CAP, FOES_KEEP, EXP_PER_LEVEL } = await import('./evolve.js')
   const ev = bodyOf('v2_weapon_evolve')
-  assert.ok(ev.includes(`array[${STAGES.join(', ')}]`), `節目 ${STAGES} がSQLと違う`)
+  assert.ok(ev.includes(`array[${LEVELS.join(', ')}]`), `覚醒レベル ${LEVELS} がSQLと違う`)
   assert.ok(ev.includes(`array[${STAGE_CAP.join(', ')}]`), `予算 ${STAGE_CAP} がSQLと違う`)
+  assert.ok(ev.includes(`c_per_lv constant int       := ${EXP_PER_LEVEL};`), '1レベルの経験値がSQLと違う')
   const rec = bodyOf('v2_weapon_record')
   assert.ok(rec.includes(`c_foes_keep constant int := ${FOES_KEEP};`), '敵の記録の上限がSQLと違う')
-  assert.ok(rec.includes(`array[${STAGES.join(', ')}]`), '節目がSQLと違う')
+  assert.ok(rec.includes(`array[${LEVELS.join(', ')}]`), '覚醒レベルがSQLと違う')
+  assert.ok(rec.includes(`c_per_lv    constant int := ${EXP_PER_LEVEL};`), '1レベルの経験値がSQLと違う')
 })
 
 // ★戦績のキーを増やしたのにSQLの上限表へ入れ忘れると、その項目だけ永遠に0のままになる
@@ -238,6 +240,7 @@ test('v2_weapon_record は1戦ぶんの申告を頭打ちにする（言い値�
   const body = bodyOf('v2_weapon_record')
   const has = (t, msg) => assert.ok(body.includes(t), msg)
   has("'battles',    1", '1戦は必ず1と数える')
+  has("(p_rec ->> 'exp')::int, 0), 0), c_max_exp)", '経験値に上限が無い')
   // クリはヒット数まで、回避は被弾数まで…と、上限になる値まで含めて固定する
   for (const [k, cap] of [['crit', 'v_hits'], ['physHits', 'v_hits'], ['magHits', 'v_hits'],
                           ['skillHits', 'v_hits'], ['normalHits', 'v_hits'], ['multiHits', 'v_hits'],
@@ -267,7 +270,8 @@ test('v2_weapon_evolve は効果の値をサーバーで作り直す（言い値
   has("v_cap * v_s * (e ->> 'w')::numeric", '名簿の倍率から値を作っていない')
   has('least(greatest(coalesce(p_s, 0), 0), 1)', '偏りの強さを0〜1に収めていない')
   has('v_stage := jsonb_array_length(v_evos) + 1', '段階は付いている数から決める')
-  has('if v_bat < c_stages[v_stage]', '熟練度が足りているか見ていない')
+  has('v_lv < c_levels[v_stage]', '熟練度のレベルが足りているか見ていない')
+  has("(v_row.record, '{}'::jsonb) ->> 'exp')::int, 0) / c_per_lv", 'レベルを経験値から出していない')
   has("e ->> 'key' = p_key", '同じ能力の重複を見ていない')
   has("e.part = '武器'", '武器以外にも進化が付けられる')
   // ★宿敵狩り（倒した相手の名前で決まる能力）は廃止した。引数ごと残っていないか見る

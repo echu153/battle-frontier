@@ -75,9 +75,8 @@ export const equippedEvolutions = (profile, inventory) =>
 export const recordingWeaponIds = (profile, inventory) =>
   equippedWeapons(profile, inventory).map(w => Number(w.inv.id))
 
-// その装備の戦績。★熟練度（battles）も record の中に入っている（列を分けると必ずズレる）
+// その装備の戦績。★熟練度（exp）も record の中に入っている（列を分けると必ずズレる）
 export const recordOf = (inv) => inv?.record || {}
-export const battlesOf = (inv) => Number(recordOf(inv).battles || 0)
 
 // 進化を付けられる武器（節目に達したのに、まだ受け取っていないもの）
 export const evolvableWeapons = (profile, inventory) =>

@@ -7,7 +7,7 @@
 //
 // ★ユーザー決定
 //   ・ルーンの刻印とは**別枠**。ソケットは食わない（運で集める／使い込んで得る）
-//   ・**段階的に複数回**進化する（STAGES の節目ごとに1つ増える）
+//   ・**段階的に複数回**覚醒する（LEVELS の節目ごとに1つ増える）
 //   ・付く能力は**戦績から自動で決まる**（候補から選ばせない）
 //   ・（2026-08-20）**バトルログをもっと細かく数えて、能力を100〜200種に細分化する**。
 //     「クリティカル時、HPが1%減るが与ダメージ+20%」のような**代償つき**の形にする
@@ -27,21 +27,28 @@ import { AXES, AXIS_BY_KEY, TRAITS, TRAIT_BY_KEY, axisScore, FINISH_CAP } from '
 
 export { ATOMS, AXES, TRAITS, TRAIT_BY_KEY, axisScore, FINISH_CAP }
 
-// 熟練度の節目。ここに達すると能力が1つ増える
-// ★出撃のクールタイムは10〜20秒なので、100戦で17〜33分ぶん。
-//   「1本を使い込む」感を出すために、上の段はかなり遠くに置いてある。
-export const STAGES = [100, 500, 2000]
-export const MAX_STAGE = STAGES.length
+// ===== 熟練度 =====
+// ★武器は**レベル**で育つ（2026-08-21 ユーザー決定。それまでは「戦った回数」だった）。
+//   攻撃が当たるたび経験値が1、100貯まると1レベル。
+//   ＝**振った回数**が育ちになるので、1戦の長さや勝ち負けに引きずられない。
+export const EXP_PER_LEVEL = 100
+// 覚醒できるレベル。ここに達すると能力が1つ増える
+// ★実測で 平均7.8経験値/戦 なので、LV300で約3,900戦・LV1000で約12,900戦・LV2000で約25,800戦。
+//   出撃のクールタイム10秒で回し続けて 11時間 / 36時間 / 72時間 ぶん。
+export const LEVELS = [300, 1000, 2000]
+export const MAX_STAGE = LEVELS.length
 // 段階ごとの「値の予算」。実際の値は これ × 偏りの強さ × 部品ごとの倍率
 export const STAGE_CAP = [6, 10, 15]
 
-export const stageOf = (battles = 0) => STAGES.filter(n => (battles || 0) >= n).length
-export const nextStageAt = (battles = 0) => STAGES.find(n => (battles || 0) < n) ?? null
+export const levelOf = (exp = 0) => Math.floor(Math.max(0, Number(exp) || 0) / EXP_PER_LEVEL)
+// いくつ覚醒できるところまで来たか（0＝まだ1つも）
+export const stageOf = (exp = 0) => LEVELS.filter(n => levelOf(exp) >= n).length
 
 // ===== 戦績 =====
 // ★1戦ごとにこの形で積む。キーを増やすときは SQL の v2_weapon_record の上限表も一緒に直すこと
 export const emptyRecord = () => ({
-  battles: 0,      // 戦った回数（＝熟練度）
+  exp: 0,          // ★熟練度の経験値。**攻撃が当たるたび1**（100で1レベル）
+  battles: 0,      // 戦った回数（軸の最低本数と平均に使う。熟練度ではない）
   turns: 0,        // 決着までのターンの合計
   wins: 0,
   // 攻撃
@@ -123,6 +130,8 @@ export const recordOfBattle = (r, you, foe, opt = {}) => {
       const hit = l.type === 'skill' ? l.hits > 0 : !!l.hit
       if (mine) {
         if (!hit) continue
+        // ★経験値は**当たった数**。多段スキルは当たった発だけ入る
+        rec.exp += l.type === 'skill' ? (l.hits || 0) : 1
         rec.hits++
         if (l.crit) rec.crit++
         if (l.kind === 'mag') rec.magHits++; else rec.physHits++
@@ -270,7 +279,7 @@ export const makeEvolution = (rec, stage, already = []) => {
 // いま付けられる進化があるか。evolutions は既に付いている配列
 export const pendingStage = (rec, evolutions = []) => {
   const have = (evolutions || []).length
-  const can = stageOf(rec?.battles || 0)
+  const can = stageOf(rec?.exp || 0)
   return can > have ? have + 1 : 0
 }
 

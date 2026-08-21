@@ -2,9 +2,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  STAGES, MAX_STAGE, STAGE_CAP, FOES_KEEP,
+  LEVELS, EXP_PER_LEVEL, levelOf, MAX_STAGE, STAGE_CAP, FOES_KEEP,
   LOW_HP_PCT, PINCH_PCT, OVERKILL_PCT, FAST_TURNS, LONG_TURNS, MP_EMPTY_PCT,
-  stageOf, nextStageAt, emptyRecord, recordOfBattle, mergeRecord,
+  stageOf, emptyRecord, recordOfBattle, mergeRecord,
   axisScore, traitScore, pickTrait, makeEvolution, pendingStage,
   atomValue, buildEffect, evolutionText, evolutionLines, evolutionName,
   collectEvolutions, emptyEffects, evoDmgPct, evoCutPct,
@@ -77,25 +77,37 @@ test('全部の部品が、どこかの能力で使われている（死に部�
 // ============================================================
 // 熟練度と段階
 // ============================================================
-test('段階は3つ。節目を越えるたびに1つ増える', () => {
-  assert.deepEqual(STAGES, [100, 500, 2000])
-  assert.equal(MAX_STAGE, 3)
-  assert.deepEqual(STAGE_CAP, [6, 10, 15])
-  assert.equal(stageOf(99), 0)
-  assert.equal(stageOf(100), 1)
-  assert.equal(stageOf(500), 2)
-  assert.equal(stageOf(2000), 3)
-  assert.equal(stageOf(99999), 3, '最後まで行ったら増えない')
-  assert.equal(nextStageAt(100), 500)
-  assert.equal(nextStageAt(2000), null)
+// ★武器は**レベル**で育つ（2026-08-21 ユーザー決定）。攻撃が当たるたび経験値1・100で1レベル
+test('熟練度はレベル。経験値100で1レベル上がる', () => {
+  assert.equal(EXP_PER_LEVEL, 100)
+  assert.equal(levelOf(0), 0)
+  assert.equal(levelOf(99), 0)
+  assert.equal(levelOf(100), 1)
+  assert.equal(levelOf(12345), 123)
+  assert.equal(levelOf(undefined), 0)
+  assert.equal(levelOf(-50), 0, 'マイナスでも落ちない')
 })
 
-test('付けられる段階が分かる', () => {
-  assert.equal(pendingStage(rec({ battles: 99 }), []), 0)
-  assert.equal(pendingStage(rec({ battles: 100 }), []), 1)
-  assert.equal(pendingStage(rec({ battles: 100 }), [{ stage:1 }]), 0)
-  assert.equal(pendingStage(rec({ battles: 500 }), [{ stage:1 }]), 2)
-  assert.equal(pendingStage(rec({ battles: 99999 }), [{}, {}, {}]), 0, '3つで打ち止め')
+test('覚醒は3回。LV300 / 1000 / 2000 が節目', () => {
+  assert.deepEqual(LEVELS, [300, 1000, 2000])
+  assert.equal(MAX_STAGE, 3)
+  assert.deepEqual(STAGE_CAP, [6, 10, 15])
+  const at = (lv) => stageOf(lv * EXP_PER_LEVEL)
+  assert.equal(at(299), 0)
+  assert.equal(at(300), 1)
+  assert.equal(at(999), 1)
+  assert.equal(at(1000), 2)
+  assert.equal(at(2000), 3)
+  assert.equal(at(99999), 3, '最後まで行ったら増えない')
+})
+
+test('受け取れる覚醒が分かる', () => {
+  const exp = (lv) => ({ exp: lv * EXP_PER_LEVEL })
+  assert.equal(pendingStage(rec(exp(299)), []), 0)
+  assert.equal(pendingStage(rec(exp(300)), []), 1)
+  assert.equal(pendingStage(rec(exp(300)), [{ stage:1 }]), 0)
+  assert.equal(pendingStage(rec(exp(1000)), [{ stage:1 }]), 2)
+  assert.equal(pendingStage(rec(exp(99999)), [{}, {}, {}]), 0, '3つで打ち止め')
 })
 
 // ============================================================
@@ -127,6 +139,8 @@ test('★攻撃のしかたを1発ずつ数えている（物理／魔法・ス�
   assert.equal(out.skillHits, 2)
   assert.equal(out.normalHits, 1)
   assert.equal(out.multiHits, 1, '多段（of>1）で当てたのは1回')
+  // ★経験値は**当たった数**。多段は当たった発だけ入る（1発＋2発＋通常1発＝4）
+  assert.equal(out.exp, 4)
   assert.equal(out.drains, 1)
   assert.equal(out.taken, 2)
   assert.equal(out.dodged, 1)

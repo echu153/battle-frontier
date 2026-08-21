@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../../supabase'
 import V2Modal from './V2Modal.jsx'
-import { makeEvolution, evolutionLines, STAGES, TRAIT_BY_KEY } from '../lib/evolve.js'
+import { makeEvolution, evolutionLines, LEVELS, TRAIT_BY_KEY } from '../lib/evolve.js'
 import { AXIS_BY_KEY } from '../lib/evolveTraits.js'
 import { recordOf } from '../lib/loadout.js'
 import { ITEM_BY_ID } from '../lib/equipment.js'
@@ -10,7 +10,7 @@ import { RANK_COLOR, TEXT } from './v2ui.js'
 // バトルフロンティアⅡ（リメイク版）— 武器の進化（戦闘記憶）
 // ------------------------------------------------------------
 // 戦闘が終わるたびに、装備している武器へ1戦ぶんの戦績を積む。
-// 節目（100 / 500 / 2000戦）に達したら、その武器の**戦い方の偏り**から能力が1つ決まる。
+// 熟練度がLV300 / 1000 / 2000に達したら、その武器の**戦い方の偏り**から能力が1つ決まる。
 //
 // ★何が付くかを決める規則は src/v2/lib/evolve.js が正。
 //   戦績を積むのは weaponRecord.js（出撃とアリーナで同じ関数を通す）。
@@ -69,7 +69,7 @@ export default function V2Evolve({ pending, inventory, onDone }) {
   // ---- 受け取ったあと ----
   if (got) {
     return (
-      <V2Modal title="⚡ 武器が進化した！" color="#ffcc00" onClose={() => onDone?.()}>
+      <V2Modal title="⚡ 武器が覚醒した！" color="#ffcc00" onClose={() => onDone?.()}>
         <div style={{ color, marginBottom:'4px' }}>{name}</div>
         <EvoCard ev={got} />
         <div style={{ color: TEXT.sub, fontSize:'11px', marginTop:'10px' }}>
@@ -82,7 +82,7 @@ export default function V2Evolve({ pending, inventory, onDone }) {
   // ---- まだ受け取っていない ----
   return (
     <V2Modal
-      title="⚡ 武器が節目に達した"
+      title="⚡ 武器が覚醒できる"
       color="#ffcc00"
       confirmLabel="受け取る"
       cancelLabel="あとで"
@@ -92,7 +92,7 @@ export default function V2Evolve({ pending, inventory, onDone }) {
     >
       <div style={{ color, marginBottom:'4px' }}>{name}</div>
       <div style={{ color:'#cfe2ff' }}>
-        {STAGES[stage - 1]}戦を共にした。これまでの戦い方が刃に刻まれる。
+        熟練度がLV{LEVELS[stage - 1]}に達した。これまでの戦い方が刃に刻まれる。
       </div>
       {ev ? <EvoCard ev={ev} /> : (
         <div style={{ color:'#ff8844', marginTop:'10px' }}>

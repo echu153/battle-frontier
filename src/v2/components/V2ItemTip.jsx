@@ -4,7 +4,7 @@ import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
 import { COLOR_HEX, COLOR_LABEL, runeName } from '../lib/material.js'
 import { runePctText } from '../lib/loadout.js'
 import { enchantOf } from '../lib/enchant.js'
-import { evolutionLines, nextStageAt, TRAIT_BY_KEY } from '../lib/evolve.js'
+import { evolutionLines, levelOf, TRAIT_BY_KEY } from '../lib/evolve.js'
 import { KIND_LABEL, KIND_COLOR, isPassive, powerText } from '../lib/skills.js'
 import { RANK_COLOR } from './v2ui.js'
 
@@ -102,19 +102,16 @@ export function EvoTags({ inv, size = '10px' }) {
 }
 
 // 武器の進化（戦闘記憶）。★ルーンの刻印とは別枠なので、行を分けて出す
+// ★出すのは**レベルだけ**（2026-08-21 ユーザー指示）。
+//   「あと何レベルで覚醒」は出さない＝節目を数えさせない
 export function EvoDetail({ item, inv }) {
   if (item?.part !== '武器') return null
-  const rec = inv?.record || {}
-  const battles = Number(rec.battles || 0)
+  const lv = levelOf(inv?.record?.exp)
   const list = inv?.evolutions || []
-  const next = nextStageAt(battles)
   return (
     <div style={{ marginTop:'4px', borderTop:'1px solid #002a55', paddingTop:'4px' }}>
       <span style={{ color:'#7fa6d0' }}>熟練度</span>{' '}
-      <span style={{ color:'#cfe2ff' }}>{battles.toLocaleString()}戦</span>
-      {next !== null
-        ? <span style={{ color:'#62789a' }}>　次の進化まであと{(next - battles).toLocaleString()}戦</span>
-        : <span style={{ color:'#62789a' }}>　進化しきった</span>}
+      <span style={{ color:'#cfe2ff' }}>LV{lv.toLocaleString()}</span>
       {list.length
         ? list.map((e, i) => (
             <div key={i} style={{ marginTop:'3px' }}>

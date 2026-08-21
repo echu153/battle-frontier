@@ -3458,7 +3458,8 @@ grant execute on function public.v2_daily_claim() to authenticated;
 -- 設計とスコアの正は src/v2/lib/evolve.js ／ 能力の名簿は src/v2/lib/evolveTraits.js。
 --   ・熟練度が貯まるのは**装備している武器だけ**（右手・左手それぞれ独立）
 --   ・ルーンの刻印とは別枠（ソケットを食わない）
---   ・節目は 100 / 500 / 2000 戦、値の予算は 6 / 10 / 15%
+--   ・★武器は**レベル**で育つ。攻撃が当たるたび経験値+1、100で1レベル
+--   ・覚醒できるのは LV300 / LV1000 / LV2000、値の予算は 6 / 10 / 15%
 --   ・能力は163種。得1〜2個＋代償0〜1個の組み合わせでできている
 --
 -- ⚠戦闘そのものはクライアントが回すので、戦績もクライアントから送られてくる。
@@ -3660,8 +3661,10 @@ declare
   c_max_turns constant int := 100;   -- battle.js の MAX_TURNS
   c_max_hits  constant int := 200;   -- 多段＋追加行動を見込んだ上限
   c_max_acts  constant int := 200;   -- 回復・バフ・不発などの回数の上限
+  c_max_exp   constant int := 900;   -- 1戦で入る経験値の上限（多段を見込んで当てた回数の上限×可能な段数）
+  c_per_lv    constant int := 100;
   c_foes_keep constant int := 12;    -- evolve.js の FOES_KEEP
-  c_stages    constant int[] := array[100, 500, 2000];
+  c_levels    constant int[] := array[300, 1000, 2000];   -- 覚醒できるレベル
   v_hits  int;  v_taken int;  v_wins int;
   v_add   jsonb;
   v_foe   text;
@@ -3688,6 +3691,7 @@ begin
   end if;
   v_add := jsonb_build_object(
     'battles',    1,
+    'exp',        least(greatest(coalesce((p_rec ->> 'exp')::int, 0), 0), c_max_exp),
     'turns',      least(greatest(coalesce((p_rec ->> 'turns')::int, 0), 0), c_max_turns),
     'hits',       v_hits,
     'crit',       least(greatest(coalesce((p_rec ->> 'crit')::int, 0), 0), v_hits),
@@ -3751,12 +3755,13 @@ begin
         from jsonb_object_keys(v_add) k
     ) || jsonb_build_object('foes', v_foes);
     update public.v2_inventory set record = v_old where id = v_row.id;
-    v_n := coalesce((v_old ->> 'battles')::int, 0);
+    -- 熟練度のレベル（経験値 ÷ 100）
+    v_n := coalesce((v_old ->> 'exp')::int, 0) / c_per_lv;
     v_out := v_out || jsonb_build_array(jsonb_build_object(
       'id', v_row.id,
-      'battles', v_n,
-      -- まだ受け取っていない段階の数（0＝無し）。画面はこれを見てポップアップを出す
-      'pending', (select count(*) from unnest(c_stages) s where v_n >= s)
+      'level', v_n,
+      -- まだ受け取っていない覚醒の数（0＝無し）。画面はこれを見てポップアップを出す
+      'pending', (select count(*) from unnest(c_levels) s where v_n >= s)
                  - (select jsonb_array_length(coalesce(i2.evolutions, '[]'::jsonb))
                       from public.v2_inventory i2 where i2.id = v_row.id),
       'record', v_old));
@@ -3779,13 +3784,14 @@ create or replace function public.v2_weapon_evolve(p_id bigint, p_key text, p_s 
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_uid    uuid := auth.uid();
-  c_stages constant int[]     := array[100, 500, 2000];      -- evolve.js の STAGES
+  c_levels constant int[]     := array[300, 1000, 2000];      -- evolve.js の LEVELS
   c_caps   constant numeric[] := array[6, 10, 15];   -- evolve.js の STAGE_CAP
+  c_per_lv constant int       := 100;
   v_row    record;
   v_tr     record;
   v_evos   jsonb;
   v_stage  int;
-  v_bat    int;
+  v_lv     int;
   v_s      numeric;
   v_cap    numeric;
   v_eff    jsonb;
@@ -3806,11 +3812,11 @@ begin
 
   v_evos  := coalesce(v_row.evolutions, '[]'::jsonb);
   v_stage := jsonb_array_length(v_evos) + 1;
-  if v_stage > array_length(c_stages, 1) then return jsonb_build_object('ok', false, 'error', 'これ以上は進化しません'); end if;
+  if v_stage > array_length(c_levels, 1) then return jsonb_build_object('ok', false, 'error', 'これ以上は覚醒しません'); end if;
 
-  v_bat := coalesce((coalesce(v_row.record, '{}'::jsonb) ->> 'battles')::int, 0);
-  if v_bat < c_stages[v_stage] then
-    return jsonb_build_object('ok', false, 'error', format('あと%s戦です', c_stages[v_stage] - v_bat));
+  v_lv := coalesce((coalesce(v_row.record, '{}'::jsonb) ->> 'exp')::int, 0) / c_per_lv;
+  if v_lv < c_levels[v_stage] then
+    return jsonb_build_object('ok', false, 'error', format('熟練度がLV%sに届いていません', c_levels[v_stage]));
   end if;
 
   -- 同じ能力は2回付かない
