@@ -194,7 +194,8 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
           <optgroup key={t} label={`エリア${markOf(t)}`}>
             {availableAreas.filter(a => a.tier === t).map(a => (
               <option key={a.id} value={a.id}>
-                {a.name}{isAreaCleared(cleared, a.id) ? '　✔踏破済み' : ''}
+                {/* ★プルダウンの中はCSSが効かないので、空きは全角スペースで作る */}
+                {a.name}{isAreaCleared(cleared, a.id) ? '　　　✔踏破済み' : ''}
               </option>
             ))}
           </optgroup>
