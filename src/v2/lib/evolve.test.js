@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  LEVELS, EXP_PER_LEVEL, levelOf, MAX_STAGE, STAGE_CAP, FOES_KEEP,
+  LEVELS, EXP_PER_LEVEL, levelOf, expToNext, MAX_STAGE, STAGE_CAP, FOES_KEEP,
   LOW_HP_PCT, PINCH_PCT, OVERKILL_PCT, FAST_TURNS, LONG_TURNS, MP_EMPTY_PCT,
   stageOf, emptyRecord, recordOfBattle, mergeRecord,
   axisScore, traitScore, pickTrait, makeEvolution, pendingStage,
@@ -86,6 +86,38 @@ test('熟練度はレベル。経験値100で1レベル上がる', () => {
   assert.equal(levelOf(12345), 123)
   assert.equal(levelOf(undefined), 0)
   assert.equal(levelOf(-50), 0, 'マイナスでも落ちない')
+  // 次のレベルまであといくつか（画面に出す）
+  assert.equal(expToNext(0), 100)
+  assert.equal(expToNext(1), 99)
+  assert.equal(expToNext(99), 1)
+  assert.equal(expToNext(100), 100, 'ちょうど上がった直後はまた100')
+  assert.equal(expToNext(12345), 55)
+  assert.equal(expToNext(undefined), 100)
+})
+
+// ★経験値は「当たった回数」ではなく「行動した回数」（2026-08-22 ユーザー指示）。
+//   当たった数だと、1行動で複数回当たる多段スキルの職だけ倍の速さで育っていた
+test('★経験値は行動した回数（外した行動・回復・バフも1回は1回）', () => {
+  const battle = (moves, log) => recordOfBattle({
+    winner:'a', turns: 5, log,
+    a: { hp: 500, mp: 100, moves, base: { hp: 1000, mp: 100 } },
+    b: { hp: -50, base: { hp: 1000 } },
+  }, YOU, FOE)
+  // 多段で6発当てても、行動が3回なら経験値は3
+  assert.equal(battle(3, [
+    { side: YOU, type:'skill', kind:'phys', hits:3, of:3 },
+    { side: YOU, type:'skill', kind:'phys', hits:3, of:3 },
+    { side: YOU, type:'normal', kind:'phys', hit:true },
+  ]).exp, 3)
+  // 外しても・回復しても1回は1回
+  assert.equal(battle(4, [
+    { side: YOU, type:'skill', kind:'phys', hits:0, of:1 },
+    { side: YOU, type:'heal' },
+    { side: YOU, type:'buff' },
+    { side: YOU, type:'normal', kind:'phys', hit:true },
+  ]).exp, 4)
+  assert.equal(battle(0, []).exp, 0)
+  assert.equal(recordOfBattle(logBattle([]), YOU, FOE).exp, 0, 'moves が無くても落ちない')
 })
 
 test('覚醒は3回。LV300 / 1000 / 2000 が節目', () => {
@@ -139,8 +171,6 @@ test('★攻撃のしかたを1発ずつ数えている（物理／魔法・ス�
   assert.equal(out.skillHits, 2)
   assert.equal(out.normalHits, 1)
   assert.equal(out.multiHits, 1, '多段（of>1）で当てたのは1回')
-  // ★経験値は**当たった数**。多段は当たった発だけ入る（1発＋2発＋通常1発＝4）
-  assert.equal(out.exp, 4)
   assert.equal(out.drains, 1)
   assert.equal(out.taken, 2)
   assert.equal(out.dodged, 1)

@@ -29,9 +29,15 @@ export { ATOMS, AXES, TRAITS, TRAIT_BY_KEY, axisScore, FINISH_CAP }
 
 // ===== 熟練度 =====
 // ★武器は**レベル**で育つ（2026-08-21 ユーザー決定。それまでは「戦った回数」だった）。
-//   攻撃が当たるたび経験値が1、100貯まると1レベル。
-//   ＝**振った回数**が育ちになるので、1戦の長さや勝ち負けに引きずられない。
+//   **行動するたび**経験値が1、100貯まると1レベル。
+//   ＝振った回数がそのまま育ちになるので、1戦の長さや勝ち負けに引きずられない。
+// ⚠「当たった回数」ではなく「行動した回数」（2026-08-22 ユーザー指示）。
+//   当たった数で数えると、1行動で複数回当たる多段スキルの職だけ倍の速さで育っていた
+//   （実測：格闘家13.3 ／ 僧侶5.8 経験値/戦）。行動で数えれば職業差がほぼ消える。
 export const EXP_PER_LEVEL = 100
+// 次のレベルまであといくつ（1〜EXP_PER_LEVEL）。★画面はこれを出す
+export const expToNext = (exp = 0) =>
+  EXP_PER_LEVEL - (Math.max(0, Math.floor(Number(exp) || 0)) % EXP_PER_LEVEL)
 // 覚醒できるレベル。ここに達すると能力が1つ増える
 // ★実測で 平均7.8経験値/戦 なので、LV300で約3,900戦・LV1000で約12,900戦・LV2000で約25,800戦。
 //   出撃のクールタイム10秒で回し続けて 11時間 / 36時間 / 72時間 ぶん。
@@ -130,8 +136,6 @@ export const recordOfBattle = (r, you, foe, opt = {}) => {
       const hit = l.type === 'skill' ? l.hits > 0 : !!l.hit
       if (mine) {
         if (!hit) continue
-        // ★経験値は**当たった数**。多段スキルは当たった発だけ入る
-        rec.exp += l.type === 'skill' ? (l.hits || 0) : 1
         rec.hits++
         if (l.crit) rec.crit++
         if (l.kind === 'mag') rec.magHits++; else rec.physHits++
@@ -159,6 +163,9 @@ export const recordOfBattle = (r, you, foe, opt = {}) => {
     }
   }
 
+  // ★経験値は**行動した回数**。外した行動・回復・バフも1回は1回として数える
+  //   （runBattle が数えている moves がそのまま「行動した回数」）
+  rec.exp = Math.max(0, Math.floor(r.a?.moves || 0))
   if (firstSide === you) rec.firsts = 1
   const endHp = Math.max(0, r.a?.hp ?? 0)
   rec.hurtPct = Math.max(0, Math.min(1, 1 - endHp / maxHp))

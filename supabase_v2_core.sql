@@ -3661,7 +3661,7 @@ declare
   c_max_turns constant int := 100;   -- battle.js の MAX_TURNS
   c_max_hits  constant int := 200;   -- 多段＋追加行動を見込んだ上限
   c_max_acts  constant int := 200;   -- 回復・バフ・不発などの回数の上限
-  c_max_exp   constant int := 900;   -- 1戦で入る経験値の上限（多段を見込んで当てた回数の上限×可能な段数）
+  c_max_exp   constant int := 200;   -- 1戦で入る経験値の上限（＝行動できる回数の上限。追加行動を見込む）
   c_per_lv    constant int := 100;
   c_foes_keep constant int := 12;    -- evolve.js の FOES_KEEP
   c_levels    constant int[] := array[300, 1000, 2000];   -- 覚醒できるレベル
