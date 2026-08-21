@@ -108,7 +108,7 @@ const S = ENEMY_SKILLS
 const A = (o) => o   // 見た目をそろえるためだけのヘルパ
 export const AREAS = [
   {
-    id: 1, tier: 1, name: '始まりの森', dropRanks: { F:40, E:40, D:20 },
+    id: 1, tier: 1, bias: null, name: '始まりの森', dropRanks: { F:40, E:40, D:20 },
     enemies: [
       A({ name:'スライム', power:300, kind:'phys', dist:{ hp:38, mp:4, str:16, dex:8, agi:6, int_stat:3, vit:20, luk:5 },
         skills:[S.たいあたり, S.かたくなる] }),
@@ -129,7 +129,7 @@ export const AREAS = [
       skills:[S.たいあたり, S.かたくなる, S.まるのみ, S.じこさいせい] }),
   },
   {
-    id: 2, tier: 2, name: '荒廃した草原', dropRanks: { F:35, E:30, D:22, C:13 },
+    id: 2, tier: 2, bias: null, name: '荒廃した草原', dropRanks: { F:35, E:30, D:22, C:13 },
     enemies: [
       A({ name:'ゴブリン', power:500, kind:'phys', dist:{ hp:30, mp:5, str:22, dex:12, agi:14, int_stat:3, vit:9, luk:5 },
         skills:[S.こんぼう, S.ちからため] }),
@@ -150,7 +150,7 @@ export const AREAS = [
       skills:[S.だましうち, S.ちからため, S.略奪, S.さけび, S.じこさいせい] }),
   },
   {
-    id: 3, tier: 3, name: '古代の洞窟', dropRanks: { F:30, E:28, D:24, C:13, B:5 },
+    id: 3, tier: 3, bias: null, name: '古代の洞窟', dropRanks: { F:30, E:28, D:24, C:13, B:5 },
     enemies: [
       A({ name:'コボルト', power:820, kind:'phys', dist:{ hp:28, mp:5, str:24, dex:14, agi:14, int_stat:3, vit:8, luk:4 },
         skills:[S.こんぼう, S.ちからため] }),
@@ -171,7 +171,7 @@ export const AREAS = [
       skills:[S.古代の裁き, S.まりょくため, S.でんげき, S.かたくなる, S.じこさいせい] }),
   },
   {
-    id: 4, tier: 4, name: '蒼海の入り江', dropRanks: { F:26, E:26, D:23, C:15, B:10 },
+    id: 4, tier: 4, bias: 'phys', name: '蒼海の入り江', dropRanks: { F:26, E:26, D:23, C:15, B:10 },
     enemies: [
       A({ name:'深海魚人', power:1350, kind:'phys', dist:{ hp:32, mp:5, str:21, dex:11, agi:11, int_stat:4, vit:12, luk:4 },
         skills:[S.しおのやり, S.かたくなる] }),
@@ -192,7 +192,7 @@ export const AREAS = [
       skills:[S.海嵐の一撃, S.深海波動, S.ちからため, S.かたくなる, S.じこさいせい] }),
   },
   {
-    id: 5, tier: 5, name: '巨峰山脈', dropRanks: { E:38, D:30, C:20, B:9, A:3 },
+    id: 5, tier: 5, bias: 'phys', name: '巨峰山脈', dropRanks: { E:38, D:30, C:20, B:9, A:3 },
     enemies: [
       A({ name:'山岳ゴブリン', power:2200, kind:'phys', dist:{ hp:30, mp:5, str:26, dex:12, agi:13, int_stat:3, vit:8, luk:3 },
         skills:[S.こんぼう, S.ちからため] }),
@@ -213,7 +213,7 @@ export const AREAS = [
       skills:[S.天穿雷撃, S.でんげき, S.すばやくなる, S.ちからため, S.じこさいせい] }),
   },
   {
-    id: 6, tier: 6, name: '白銀の霊峰', dropRanks: { E:33, D:29, C:21, B:11, A:6 },
+    id: 6, tier: 6, bias: 'phys', name: '白銀の霊峰', dropRanks: { E:33, D:29, C:21, B:11, A:6 },
     enemies: [
       A({ name:'雪男', power:4000, kind:'phys', dist:{ hp:32, mp:5, str:26, dex:10, agi:10, int_stat:3, vit:11, luk:3 },
         skills:[S.こんぼう, S.ちからため] }),
@@ -234,7 +234,7 @@ export const AREAS = [
       skills:[S.氷棺葬送, S.つらら, S.まりょくため, S.かたくなる, S.じこさいせい] }),
   },
   {
-    id: 7, tier: 7, name: '煉獄火山', dropRanks: { D:40, C:30, B:20, A:10 },
+    id: 7, tier: 7, bias: 'phys', name: '煉獄火山', dropRanks: { D:40, C:30, B:20, A:10 },
     enemies: [
       A({ name:'炎の精霊', power:7000, kind:'mag', dist:{ hp:30, mp:10, str:3, dex:11, agi:11, int_stat:27, vit:5, luk:3 },
         skills:[S.かえんだん, S.まりょくため] }),
@@ -255,7 +255,7 @@ export const AREAS = [
       skills:[S.炎獄の審判, S.ようがんけん, S.かえんだん, S.ちからため, S.じこさいせい] }),
   },
   {
-    id: 8, tier: 8, name: '蒼天の浮遊城', dropRanks: { D:35, C:29, B:22, A:14 },
+    id: 8, tier: 8, bias: 'phys', name: '蒼天の浮遊城', dropRanks: { D:35, C:29, B:22, A:14 },
     enemies: [
       A({ name:'天翼のハーピー', power:11000, kind:'phys', dist:{ hp:25, mp:6, str:22, dex:15, agi:27, int_stat:2, vit:1, luk:2 },
         skills:[S.れっぷうそう, S.すばやくなる] }),
@@ -282,7 +282,7 @@ export const AREAS = [
   //   ⚠ id は続き番号（9〜15）。難易度は id ではなく **tier** で決まる
   // ============================================================
   {
-    id: 9, tier: 4, name: '灼砂の遺丘', dropRanks: { F:26, E:26, D:23, C:15, B:10 },
+    id: 9, tier: 4, bias: 'mag', name: '灼砂の遺丘', dropRanks: { F:26, E:26, D:23, C:15, B:10 },
     enemies: [
       A({ name:'砂喰いワーム', power:1400, kind:'phys', dist:{ hp:34, mp:4, str:22, dex:8, agi:8, int_stat:3, vit:17, luk:4 },
         skills:[S.かみつく, S.かたくなる] }),
@@ -303,7 +303,7 @@ export const AREAS = [
       skills:[S.砂塵葬送, S.すなあらし, S.ちからため, S.かたくなる, S.じこさいせい] }),
   },
   {
-    id: 10, tier: 5, name: '常闇の樹海', dropRanks: { E:38, D:30, C:20, B:9, A:3 },
+    id: 10, tier: 5, bias: 'mag', name: '常闇の樹海', dropRanks: { E:38, D:30, C:20, B:9, A:3 },
     enemies: [
       A({ name:'食人樹', power:2400, kind:'phys', dist:{ hp:36, mp:5, str:24, dex:8, agi:4, int_stat:3, vit:16, luk:4 },
         skills:[S.つるのむち, S.かたくなる] }),
@@ -324,7 +324,7 @@ export const AREAS = [
       skills:[S.樹海縛鎖, S.つるのむち, S.どくのきり, S.かたくなる, S.じこさいせい] }),
   },
   {
-    id: 11, tier: 6, name: '雷鳴の断崖', dropRanks: { E:33, D:29, C:21, B:11, A:6 },
+    id: 11, tier: 6, bias: 'mag', name: '雷鳴の断崖', dropRanks: { E:33, D:29, C:21, B:11, A:6 },
     enemies: [
       A({ name:'嵐鳥ストームバード', power:4100, kind:'phys', dist:{ hp:26, mp:6, str:24, dex:14, agi:26, int_stat:2, vit:1, luk:1 },
         skills:[S.かぜのやいば, S.すばやくなる] }),
@@ -345,7 +345,7 @@ export const AREAS = [
       skills:[S.天雷万鈞, S.らくらい, S.まりょくため, S.かたくなる, S.じこさいせい] }),
   },
   {
-    id: 12, tier: 7, name: '腐海の沼獄', dropRanks: { D:40, C:30, B:20, A:10 },
+    id: 12, tier: 7, bias: 'mag', name: '腐海の沼獄', dropRanks: { D:40, C:30, B:20, A:10 },
     enemies: [
       A({ name:'沼のヒュドラ', power:7600, kind:'phys', dist:{ hp:33, mp:6, str:24, dex:10, agi:9, int_stat:5, vit:10, luk:3 },
         skills:[S.かみつく, S.どくのきり, S.かたくなる] }),
@@ -366,7 +366,7 @@ export const AREAS = [
       skills:[S.腐蝕溶解, S.どくのきり, S.どくばり, S.ちからため, S.じこさいせい] }),
   },
   {
-    id: 13, tier: 7, name: '奈落の坑道', dropRanks: { D:40, C:30, B:20, A:10 },
+    id: 13, tier: 7, bias: null, name: '奈落の坑道', dropRanks: { D:40, C:30, B:20, A:10 },
     enemies: [
       A({ name:'坑道のグール', power:7200, kind:'phys', dist:{ hp:32, mp:5, str:25, dex:12, agi:11, int_stat:3, vit:9, luk:3 },
         skills:[S.ひっかく, S.ちからため] }),
@@ -387,7 +387,7 @@ export const AREAS = [
       skills:[S.崩落震撼, S.じわれ, S.いわなげ, S.かたくなる, S.じこさいせい] }),
   },
   {
-    id: 14, tier: 8, name: '星霜の遺跡', dropRanks: { D:35, C:29, B:22, A:14 },
+    id: 14, tier: 8, bias: 'mag', name: '星霜の遺跡', dropRanks: { D:35, C:29, B:22, A:14 },
     enemies: [
       A({ name:'星読みの石像', power:12000, kind:'mag', dist:{ hp:33, mp:9, str:3, dex:9, agi:5, int_stat:26, vit:12, luk:3 },
         skills:[S.ほしくず, S.かたくなる] }),
@@ -408,7 +408,7 @@ export const AREAS = [
       skills:[S.星辰崩落, S.ほしくず, S.らくらい, S.まりょくため, S.じこさいせい] }),
   },
   {
-    id: 15, tier: 8, name: '深淵の海溝', dropRanks: { D:35, C:29, B:22, A:14 },
+    id: 15, tier: 8, bias: null, name: '深淵の海溝', dropRanks: { D:35, C:29, B:22, A:14 },
     enemies: [
       A({ name:'深淵のクラーケン', power:12500, kind:'phys', dist:{ hp:34, mp:6, str:25, dex:10, agi:9, int_stat:4, vit:9, luk:3 },
         skills:[S.しょくしゅ, S.かたくなる] }),
@@ -443,14 +443,28 @@ export const statsOf = (enemy) => {
 }
 
 // runBattle にそのまま渡せる形にする。uses は「1回の戦闘で何回使えるか」
+// ★taken は**そのエリアの相性**（物理/特殊のどちらが通りやすいか）。敵は自分のエリアを
+//   持っていないので、名前から引く（敵の名前は全エリアで一意＝enemies.test.js で固定）
 export const toFighter = (enemy, uses = 4) => ({
   name: enemy.name,
   kind: enemy.kind,
   stats: statsOf(enemy),
   slots: enemy.skills.map(s => ({ skill: s, uses })),
+  taken: takenMultOf(areaOfEnemy(enemy.name)),
 })
 
 export const areaOf = (id) => AREAS.find(a => a.id === id) || null
+// ===== 属性の通りやすさ（同じ帯の中の役割分担）=====
+// ★2026-08-22 ユーザー決定：帯にエリアが複数あるとき、**片方は物理・片方は特殊が少し通る**。
+//   3つある帯の残り1つは**バランス型**（どちらも等倍）。帯が1エリアだけの①②③もバランス型。
+//   ＝同じ難易度でも「自分の型が通るほう」を選べる。倍率はそのエリアの敵**全員**に掛かる
+//   （敵が受けるダメージだけ。敵の攻撃は変わらない）。解釈は battle.js の applyIncoming
+export const BIAS_MULT = 1.1
+export const biasLabelOf = (bias) =>
+  bias === 'phys' ? '物理が通りやすい' : bias === 'mag' ? '特殊が通りやすい' : 'バランス型'
+export const takenMultOf = (area) =>
+  area?.bias === 'phys' ? { phys: BIAS_MULT } : area?.bias === 'mag' ? { mag: BIAS_MULT } : null
+
 // ===== 難易度帯（tier）=====
 // ★エリアは「帯」に属する（2026-08-22 ユーザー決定）。同じ帯のエリアは**同じ強さ・
 //   同じドロップ範囲**で、④⑤⑥の帯は2エリア・⑦⑧の帯は3エリアある。
@@ -476,6 +490,11 @@ export const areaFullName = (areaOrId) => {
 }
 
 export const allEnemies = () => AREAS.flatMap(a => [...a.enemies, ...(a.timed || []), a.boss])
+// 敵の名前 → いるエリア（相性を引くのに使う）
+const AREA_OF_ENEMY = new Map(
+  AREAS.flatMap(a => [...a.enemies, ...(a.timed || []), a.boss].map(e => [e.name, a])))
+export const areaOfEnemy = (name) => AREA_OF_ENEMY.get(name) || null
+
 export const timedEnemyOf = (area, band) => (area?.timed || []).find(e => e.band === band) || null
 
 // ドロップするランクを1つ抽選する

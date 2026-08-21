@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   AREAS, AREAS_SORTED, statsOf, toFighter, areaOf, allEnemies, rollDropRank,
   TIER_MAX, tierOf, areasOfTier, areaLabel, areaFullName,
+  BIAS_MULT, biasLabelOf, takenMultOf, areaOfEnemy,
 } from './enemies.js'
 import { calcPower } from './stats.js'
 import { runBattle } from './battle.js'
@@ -196,4 +197,33 @@ test('抵抗のエンチャントを着けると状態異常が入りにくく�
   const guarded = count(['毒キノコ', '払暁のワイバーン'])
   assert.ok(bare > 0, '素だと毒が入る')
   assert.ok(guarded < bare, `抵抗ありのほうが少ない（素${bare} → 抵抗${guarded}）`)
+})
+
+// ★2026-08-22 ユーザー決定：同じ帯の中で片方は物理・片方は特殊が通りやすい／3つ目はバランス
+test('帯に複数エリアあるとき、物理型と特殊型が1つずつ（3つ目はバランス型）', () => {
+  for (let t = 1; t <= TIER_MAX; t++) {
+    const list = areasOfTier(t)
+    const kinds = list.map(a => a.bias)
+    if (list.length === 1) {
+      assert.deepEqual(kinds, [null], `難易度${t}は1エリアなのでバランス型`)
+      continue
+    }
+    assert.equal(kinds.filter(b => b === 'phys').length, 1, `難易度${t}の物理型`)
+    assert.equal(kinds.filter(b => b === 'mag').length, 1, `難易度${t}の特殊型`)
+    assert.equal(kinds.filter(b => b === null).length, list.length - 2, `難易度${t}のバランス型`)
+  }
+  assert.equal(biasLabelOf('phys'), '物理が通りやすい')
+  assert.equal(biasLabelOf(null), 'バランス型')
+  assert.deepEqual(takenMultOf(areaOf(4)), { phys: BIAS_MULT })
+  assert.deepEqual(takenMultOf(areaOf(9)), { mag: BIAS_MULT })
+  assert.equal(takenMultOf(areaOf(13)), null)
+})
+
+// ★ここが抜けると、エリアの相性が**戦闘に届かない**（データだけあって効かない）
+test('敵をrunBattle用にすると、そのエリアの相性が付いてくる', () => {
+  assert.equal(areaOfEnemy('砂喰いワーム').id, 9)
+  assert.equal(areaOfEnemy('居ない敵'), null)
+  assert.deepEqual(toFighter(areaOf(4).boss).taken, { phys: BIAS_MULT })
+  assert.deepEqual(toFighter(areaOf(9).enemies[0]).taken, { mag: BIAS_MULT })
+  assert.equal(toFighter(areaOf(1).boss).taken, null)
 })

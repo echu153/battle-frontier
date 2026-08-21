@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2LogLine from './V2LogLine.jsx'
-import { AREAS_SORTED, areaOf, markOf, toFighter as enemyFighter } from '../lib/enemies.js'
+import { AREAS_SORTED, areaOf, markOf, biasLabelOf, BIAS_MULT, toFighter as enemyFighter } from '../lib/enemies.js'
 import {
   pickEncounter, expOf, isAreaUnlocked, nextBossRate, clearedAreasOf, isAreaCleared,
-  clearNext, unlockNext, restToOpenNext, clearedInTier, reqOfTier, LAST_TIER,
+  clearNext, unlockNext, restToOpenNext, LAST_TIER,
   cooldownOf, rollHasDrop, rollDrop, rollMaterial, COOLDOWNS,
 } from '../lib/sortie.js'
 import { runBattle } from '../lib/battle.js'
@@ -44,11 +44,6 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
   const area = availableAreas.find(a => a.id === selectedArea) || availableAreas[0]
   // ★エリアボスを倒したエリアはプルダウンで「踏破済み」と分かるようにする
   const cleared = clearedAreasOf(prof)
-  // 今いる帯の進み具合。**帯を全部踏破すると次の帯が開く**（sortie.js の TIER_REQ）
-  const tier = area?.tier || 1
-  const tierDone = clearedInTier(cleared, tier)
-  const tierNeed = reqOfTier(tier)
-  const tierRest = restToOpenNext(cleared, tier)
   // アリーナで階層守護者でいるあいだのドロップ率ボーナス（arena.js）
   const guardMult = guardDropMultOf(guard)
   const elapsed = (now - lastAt.current) / 1000
@@ -196,14 +191,12 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
           </option>
         ))}
       </select>
-      {/* ★その帯を全部踏破すると次の帯が開く。あといくつかをここに出す */}
+      {/* ★同じ難易度でも、エリアごとに通りやすい型が違う（enemies.js の bias） */}
       <div style={{ fontSize:'10px', color:'#7fa6d0', marginBottom:'8px', textAlign:'right' }}>
-        難易度{markOf(tier)}　踏破 {tierDone}/{tierNeed}
-        {tier < LAST_TIER && (
-          <span style={{ color: tierRest > 0 ? '#ffcc00' : '#44ff88' }}>
-            {'　'}{tierRest > 0 ? `あと${tierRest}エリアで難易度${markOf(tier + 1)}が解放` : `難易度${markOf(tier + 1)}まで解放済み`}
-          </span>
-        )}
+        <span style={{ color: area?.bias ? '#88ccff' : '#7fa6d0' }}>
+          {biasLabelOf(area?.bias)}
+          {area?.bias ? `（与ダメージ+${Math.round((BIAS_MULT - 1) * 100)}%）` : ''}
+        </span>
       </div>
       <button onClick={doBattle} disabled={!canAct}
         style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct ? '#ffcc00' : '#003366'}`,

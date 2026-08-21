@@ -188,6 +188,8 @@ export const createSide = (fighter, band = null) => {
     justHurt: false,                     // 直前の相手の攻撃を受けた
     ctx: { dodged: false, hurt: false }, // ★自分の行動を解決するあいだ固定する（1回だけ乗る）
     gutsUsed: false,                     // 不屈は1戦に1回だけ
+    // ★エリアの相性（enemies.js の bias）。{ phys:1.1 } のように**受けるダメージへ掛ける**
+    taken: fighter.taken || null,
     boss: !!fighter.boss,                // ボスか（「大敵斬り」が見る）
   }
 }
@@ -231,6 +233,8 @@ export const peekSkill = (side) => {
 const applyIncoming = (me, foe, dmg, kind, rng, log) => {
   if (dmg <= 0) return 0
   let d = dmg
+  // エリアの相性：そのエリアの敵は片方の型が少し通りやすい（enemies.js の bias）
+  if (foe.taken?.[kind]) d *= foe.taken[kind]
   // 武器の進化：被ダメージ−%（代償で付いた「被ダメージ+%」はここでマイナスに効く）
   const evoCut = evoCutPct(foe.evo, { hpPct: (foe.hp / Math.max(1, foe.base.hp)) * 100, kind })
   if (evoCut) d *= Math.max(0.1, 1 - evoCut / 100)

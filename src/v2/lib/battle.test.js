@@ -337,3 +337,21 @@ test('出血の起爆（consumeAil）はスタックを全部消費して威力�
   assert.equal(r5.log.find(l => l.type === 'consumeAil').stacks, 5)
   assert.equal(r0.log.some(l => l.type === 'consumeAil'), false, '出血が無いときは何も起きない')
 })
+
+// ===== エリアの相性（enemies.js の bias）=====
+// ★2026-08-22 ユーザー決定：帯にエリアが複数あるとき、片方は物理・片方は特殊が少し通る。
+//   ここが効いていないと、エリアを選び分ける意味が消える
+test('taken を持つ相手は、その型のダメージだけ通りやすくなる', () => {
+  const slots = [{ skill: sk('A', { proc:100, mult:2 }), uses: 9 }]
+  const hpOf = (taken, kind) => {
+    const foe = { ...fighter('foe', [], { ...evenStats(534), hp: 10 ** 7 }), taken }
+    const r = runBattle({ ...fighter('me', slots), kind }, foe, { rng: makeRng(7), maxTurns: 4 })
+    return r.log.filter(l => l.side === 'me' && l.type === 'skill').reduce((t, l) => t + (l.damage || 0), 0)
+  }
+  const base = hpOf(null, 'phys')
+  const up   = hpOf({ phys: 1.1 }, 'phys')
+  assert.ok(up > base, `物理が通りやすくなっていない（${base} → ${up}）`)
+  assert.ok(Math.abs(up / base - 1.1) < 0.02, `+10%になっていない（×${(up / base).toFixed(3)}）`)
+  // 型が違えば効かない
+  assert.equal(hpOf({ mag: 1.1 }, 'phys'), base, '物理なのに特殊の相性が乗っている')
+})
