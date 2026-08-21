@@ -7,7 +7,7 @@ import {
   clearNext, unlockNext, restToOpenNext, LAST_TIER,
   SORTIE_CD, rollHasDrop, rollDrop, rollMaterial,
 } from '../lib/sortie.js'
-import { staminaMax, rollStamina, msToNextStamina, mmss } from '../lib/stamina.js'
+import { staminaMax, rollStamina } from '../lib/stamina.js'
 import { runBattle } from '../lib/battle.js'
 import { buildBattleLog } from '../lib/battleLog.js'
 import { toFighter as playerFighter, equippedRunes, runeAbilities } from '../lib/loadout.js'
@@ -64,10 +64,11 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
   const remaining = Math.max(0, SORTIE_CD - elapsed)
   const canAct = remaining <= 0 && !loading
   const timerPct = Math.min(100, (elapsed / SORTIE_CD) * 100)
-  // ★スタミナの最大値は転職回数で伸びる。**増え方は画面に出さない**（マスク・stamina.js）
+  // ★スタミナの残り。**表示（何／何・次まで何分）はステータスの枠が持つ**（V2Status）。
+  //   戦闘中は出撃のパネルが隠れてしまうので、常に見えるあちらへ寄せてある。
+  //   ここで要るのは「オートを回せるか」の判定と、ボタンに出す残り回数だけ
   const stamMax = staminaMax(prof?.job_changes)
   const stamNow = rollStamina(stam.n, stam.at, stamMax, now).n
-  const stamNext = msToNextStamina(stam.n, stam.at, stamMax, now)
 
   const doBattle = async (isAuto = false) => {
     // ★判定は ref で行う（state の canAct は1フレーム古いことがある）
@@ -188,19 +189,6 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
     </>
   )
 
-  // スタミナの行（街のパネルに出す。戦闘ログ側は見出しに「⚡残り」だけ出す）
-  const stamRow = (
-    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', fontSize:'11px', marginBottom:'6px' }}>
-      <span style={{ color:'#7fa6d0' }}>⚡ スタミナ</span>
-      <span>
-        <span style={{ color: stamNow > 0 ? '#ffdd44' : '#ff8844' }}>{stamNow}</span>
-        <span style={{ color:'#7fa6d0' }}> / {stamMax}</span>
-        {stamNext > 0 && (
-          <span style={{ color:'#4d6f92', marginLeft:'8px', fontSize:'10px' }}>次まで {mmss(stamNext)}</span>
-        )}
-      </span>
-    </div>
-  )
 
   if (scene === 'battle') {
     return (
@@ -249,8 +237,6 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
       {evolveModal}
       {timerRow}
-      {/* ★オート出撃の燃料。**増え方（転職回数）は出さない**（マスク・2026-08-22 ユーザー指示） */}
-      {stamRow}
       {/* ★守っているあいだは出撃のドロップ率が上がる（アリーナには挑戦できない代わり） */}
       {guard && (
         <div style={{ border:'1px solid #ff88cc', background:'#1a0a20', padding:'5px 8px',

@@ -1,5 +1,7 @@
 
+import { useEffect, useState } from 'react'
 import { STAT_DEFS, MAX_LV, ROLLS_PER_LV, calcPower, expToNext, expPerLv } from '../lib/stats.js'
+import { staminaMax, rollStamina, msToNextStamina, mmss } from '../lib/stamina.js'
 import { classBonusText, jobCountOf } from '../lib/classBonus.js'
 import { TIER_COLOR } from '../lib/classes.js'
 import { KIND_COLOR, SKILL_BY_NAME, SKILL_SET_SLOTS } from '../lib/skills.js'
@@ -72,6 +74,13 @@ export default function V2Status({ prof, inventory, runes, fishDex, classes, ope
   const tierColor = TIER_COLOR[classes?.find(c => c.id === prof.class)?.tier] || '#88ccff'
   const next = expToNext(prof.lv, prof.job_changes)
   const expPct = Math.min(100, (prof.exp / expPerLv(prof.job_changes)) * 100)
+  // ★スタミナ（オート出撃の燃料）はここに出す。出撃の画面は戦闘中に隠れてしまうため。
+  //   時間で戻る（5分に1）ので1秒ごとに数え直す。**増え方（転職回数）は出さない**（マスク）
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t) }, [])
+  const stamMax = staminaMax(prof.job_changes)
+  const stamNow = rollStamina(prof.stamina, prof.stamina_at, stamMax, now).n
+  const stamNext = msToNextStamina(prof.stamina, prof.stamina_at, stamMax, now)
   // map の (値, 添字) をそのまま受ける。添字が奇数＝右の列（そちらは右端をそろえて左へ伸ばす）
   const statCell = (k, i) => {
     const d = STAT_DEFS[k]
@@ -157,6 +166,14 @@ export default function V2Status({ prof, inventory, runes, fishDex, classes, ope
           </div>
           <div style={{ fontSize:'11px', color:'#9ec2e6' }}>
             Gold: <span style={{ color:'#ffcc00' }}>{(prof.gold || 0).toLocaleString()}</span>
+          </div>
+          {/* ★オート出撃の燃料。**増え方は書かない**（マスク・stamina.js） */}
+          <div style={{ fontSize:'11px', color:'#9ec2e6' }}>
+            ⚡スタミナ: <span style={{ color: stamNow > 0 ? '#ffdd44' : '#ff8844' }}>{stamNow}</span>
+            <span style={{ color:'#7fa6d0' }}>／{stamMax}</span>
+            {stamNext > 0 && (
+              <span style={{ color:'#4d6f92', fontSize:'10px' }}>{'　'}次まで {mmss(stamNext)}</span>
+            )}
           </div>
         </div>
       </div>
