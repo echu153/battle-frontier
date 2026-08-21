@@ -175,6 +175,19 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
     ? <V2Evolve pending={evolving} inventory={inventory} onDone={() => { setEvolving(null); onProfile(null) }} />
     : null
 
+  // 次の行動までのバー（★街と戦闘ログの両方に出す。戦闘ログ側でも待ち時間が分かるように）
+  const timerRow = (
+    <>
+      <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
+        <span style={{ color:'#7fa6d0' }}>次の行動まで</span>
+        <span style={{ color: canAct ? '#44ff88' : '#ffcc00' }}>{canAct ? '▶ 出撃可能！' : `${remaining.toFixed(1)}秒`}</span>
+      </div>
+      <div style={{ background:'#001028', height:'6px', border:'1px solid #002244', marginBottom:'10px' }}>
+        <div style={{ height:'100%', width:`${timerPct}%`, background: canAct ? '#44ff88' : 'linear-gradient(90deg,#003366,#0088ff)', transition:'width 0.2s' }} />
+      </div>
+    </>
+  )
+
   // スタミナの行（街のパネルに出す。戦闘ログ側は見出しに「⚡残り」だけ出す）
   const stamRow = (
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', fontSize:'11px', marginBottom:'6px' }}>
@@ -201,11 +214,24 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
         <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
           {logs.map((l, i) => <V2LogLine key={i} l={l} />)}
         </div>
+        {/* ★戦闘ログの画面でも次の行動までが分かるようにする（街と同じバー） */}
+        {timerRow}
         {auto && (
           <button onClick={() => setAuto(false)}
             style={{ width:'100%', padding:'10px', background:'#1a0a20', border:'1px solid #ff88cc',
               color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
             ■ オートを止める
+          </button>
+        )}
+        {/* ★街に戻らずに同じエリアへもう一度出撃する。溜まっていなければグレーアウト。
+            オート中は出さない（勝手に出撃してくれるので要らない） */}
+        {!auto && (
+          <button onClick={() => doBattle(false)} disabled={!canAct}
+            style={{ width:'100%', padding:'10px', background:'#001840',
+              border:`1px solid ${canAct ? '#ffcc00' : '#003366'}`,
+              color: canAct ? '#ffcc00' : '#7fa6d0', cursor: canAct ? 'pointer' : 'not-allowed',
+              fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
+            {canAct ? `⚔ ${area?.name}へ再出撃！` : '⏳ 待機中...'}
           </button>
         )}
         <button onClick={() => { setAuto(false); setScene('town') }} disabled={loading}
@@ -222,13 +248,7 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
   return (
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
       {evolveModal}
-      <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
-        <span style={{ color:'#7fa6d0' }}>次の行動まで</span>
-        <span style={{ color: canAct ? '#44ff88' : '#ffcc00' }}>{canAct ? '▶ 出撃可能！' : `${remaining.toFixed(1)}秒`}</span>
-      </div>
-      <div style={{ background:'#001028', height:'6px', border:'1px solid #002244', marginBottom:'10px' }}>
-        <div style={{ height:'100%', width:`${timerPct}%`, background: canAct ? '#44ff88' : 'linear-gradient(90deg,#003366,#0088ff)', transition:'width 0.2s' }} />
-      </div>
+      {timerRow}
       {/* ★オート出撃の燃料。**増え方（転職回数）は出さない**（マスク・2026-08-22 ユーザー指示） */}
       {stamRow}
       {/* ★守っているあいだは出撃のドロップ率が上がる（アリーナには挑戦できない代わり） */}
