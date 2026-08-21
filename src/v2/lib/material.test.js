@@ -280,7 +280,12 @@ test('素材の売値は全種類に付いていて、レア度で 1 / 4 / 20 �
     assert.ok(sellPriceOf(m) > 0, `${m.name} の売値`)
     assert.equal(sellPriceOf(m), SELL_BASE_TIER[m.tier] * SELL_RARITY_MULT[m.rarity], m.name)
   }
-  assert.deepEqual(SELL_RARITY_MULT, { normal:1, rare:4, ultra:20 })
+  assert.deepEqual(SELL_RARITY_MULT, { normal:1, rare:8, ultra:40 })
+  // ★基準はデイリー「かんたん」の100G（2026-08-22 ユーザー決定）。
+  //   ①の激レア1個がちょうどデイリー1回ぶん＝ここが動いたら気付けるように固定する
+  assert.equal(sellPriceOf({ tier:1, rarity:'ultra' }), 120)
+  assert.equal(sellPriceOf({ tier:1, rarity:'normal' }), 3)
+  assert.equal(sellPriceOf({ tier:8, rarity:'ultra' }), 2160)
   // エリアが進むほど高い
   let prev = 0
   for (let a = 1; a <= 8; a++) {
@@ -290,13 +295,13 @@ test('素材の売値は全種類に付いていて、レア度で 1 / 4 / 20 �
 })
 
 test('1戦闘あたりの期待Goldは、素材のドロップ率ぶんだけ薄まる', () => {
-  // ドロップは 通常20% / レア5% / 激レア1%。B / 4B / 20B なので期待値は 0.6B になる
+  // ドロップは 通常20% / レア5% / 激レア1%。B / 8B / 40B なので期待値は**B そのもの**
   for (let a = 1; a <= 8; a++) {
     const m = (rarity) => ({ tier:a, rarity })
     const exp = (MATERIAL_RATE.normal * sellPriceOf(m('normal'))
       + MATERIAL_RATE.rare * sellPriceOf(m('rare'))
       + MATERIAL_RATE.ultra * sellPriceOf(m('ultra'))) / 100
-    assert.equal(Math.round(exp), Math.round(SELL_BASE_TIER[a] * 0.6), `難易度${a}の期待Gold`)
+    assert.equal(Math.round(exp), SELL_BASE_TIER[a], `難易度${a}の期待Gold`)
   }
 })
 

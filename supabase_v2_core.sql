@@ -1387,15 +1387,16 @@ on conflict (id) do update set
 
 -- ---- 素材の売値（v2で唯一Goldが湧く場所）----
 -- ★**敵はGoldを落とさない**（2026-08-17 ユーザー決定・docs/v2-gold-design.md）。
---   売値＝ **難易度帯**の基準額 × レア度の倍率（通常1 / レア4 / 激レア20）。
---   基準額は「落ちた素材を全部売ると、敵がGoldを落としていた頃と同じ」から引いた。
+--   売値＝ **難易度帯**の基準額 × レア度の倍率（通常1 / レア8 / 激レア40）。
+--   基準額は**デイリーミッション「かんたん」の100G**から引いた（2026-08-22 ユーザー決定で
+--   大幅に引き下げ。旧値は①40〜⑧2330）。①帯の激レア1個＝120G＝デイリー1回ぶん。
 -- ⚠**同じ表が src/v2/lib/material.js の SELL_BASE_TIER / SELL_RARITY_MULT にもある。
 --   片方だけ直すと v2sql.test.js が落ちる**（売却の権威はこちら）
 alter table public.v2_materials add column if not exists sell int not null default 0;
 update public.v2_materials set sell =
-  (case tier when 1 then 40 when 2 then 80 when 3 then 170 when 4 then 290
-             when 5 then 500 when 6 then 750 when 7 then 1170 when 8 then 2330 else 0 end)
-  * (case rarity when 'normal' then 1 when 'rare' then 4 when 'ultra' then 20 else 0 end);
+  (case tier when 1 then 3 when 2 then 5 when 3 then 7 when 4 then 11
+             when 5 then 16 when 6 then 24 when 7 then 36 when 8 then 54 else 0 end)
+  * (case rarity when 'normal' then 1 when 'rare' then 8 when 'ultra' then 40 else 0 end);
 
 -- ---- 持っている素材（スタック）----
 create table if not exists public.v2_player_materials (
