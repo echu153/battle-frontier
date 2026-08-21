@@ -164,16 +164,17 @@ export default function V2Status({ prof, inventory, runes, fishDex, classes, ope
           <div style={{ fontSize:'11px', color:'#9ec2e6' }}>
             総合力: <span style={{ color:'#44ff88' }}>{power.toLocaleString()}</span>
           </div>
-          <div style={{ fontSize:'11px', color:'#9ec2e6' }}>
-            Gold: <span style={{ color:'#ffcc00' }}>{(prof.gold || 0).toLocaleString()}</span>
-          </div>
-          {/* ★オート出撃の燃料。**増え方は書かない**（マスク・stamina.js） */}
-          <div style={{ fontSize:'11px', color:'#9ec2e6' }}>
-            ⚡スタミナ: <span style={{ color: stamNow > 0 ? '#ffdd44' : '#ff8844' }}>{stamNow}</span>
-            <span style={{ color:'#7fa6d0' }}>／{stamMax}</span>
-            {stamNext > 0 && (
-              <span style={{ color:'#4d6f92', fontSize:'10px' }}>{'　'}次まで {mmss(stamNext)}</span>
-            )}
+          {/* ★スタミナ（オート出撃の燃料）はGoldの右へ並べる。
+              入りきらない幅では下へ折り返す。**増え方は書かない**（マスク・stamina.js） */}
+          <div style={{ fontSize:'11px', color:'#9ec2e6', display:'flex', flexWrap:'wrap', gap:'2px 14px' }}>
+            <span>Gold: <span style={{ color:'#ffcc00' }}>{(prof.gold || 0).toLocaleString()}</span></span>
+            <span>
+              ⚡スタミナ: <span style={{ color: stamNow > 0 ? '#ffdd44' : '#ff8844' }}>{stamNow}</span>
+              <span style={{ color:'#7fa6d0' }}>／{stamMax}</span>
+              {stamNext > 0 && (
+                <span style={{ color:'#4d6f92', fontSize:'10px' }}>{'　'}次まで {mmss(stamNext)}</span>
+              )}
+            </span>
           </div>
         </div>
       </div>
