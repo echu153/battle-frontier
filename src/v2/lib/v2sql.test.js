@@ -184,14 +184,81 @@ test('デイリーの数える処理が4か所すべてに入っている', () =
   assert.match(bodyOf('v2_pray'),          /v2_daily_bump\(v_uid, 'pray'/,   '祈る')
 })
 
-test('出撃のデイリー加算がクールタイム別になっている（20秒は2カウント）', async () => {
-  // ★片方だけ直すと「画面には20秒は2カウントと書いてあるのに1しか増えない」になる
-  const { SORTIE_COUNT } = await import('./daily.js')
-  assert.equal(SORTIE_COUNT[20], 2)
+test('出撃のデイリー加算は1回＝1カウント（10秒固定になったので倍率は無い）', () => {
   const body = bodyOf('v2_sortie_settle')
-  assert.match(body, /v2_daily_bump\(v_uid, 'sortie'/, '出撃のデイリー加算がある')
-  assert.match(body, /case when v_row\.sortie_cd = 20 then 2 else 1 end/,
-    '20秒を2倍にする分岐がSQLに無い')
+  assert.match(body, /v2_daily_bump\(v_uid, 'sortie', v_n \+ v_bs\)/, '出撃のデイリー加算がある')
+  // ★出撃間隔の選択（sortie_cd）ごと廃止したので、列を読む処理が残っていないこと
+  assert.doesNotMatch(SQL, /v_row\.sortie_cd/, 'sortie_cd を読む処理が残っている')
+  assert.match(SQL, /alter table public\.v2_profiles drop column if exists sortie_cd;/,
+    'sortie_cd 列を落とすSQLが無い')
+  assert.match(SQL, /drop function if exists public\.v2_set_cooldown\(int\);/,
+    'v2_set_cooldown を落とすSQLが無い')
+  assert.doesNotMatch(SQL, /create or replace function public\.v2_set_cooldown/,
+    'v2_set_cooldown の定義が残っている')
+})
+
+// ===== スタミナ（オート出撃の燃料・2026-08-22 ユーザー決定）=====
+// ★最大値の伸び方と回復ペースが stamina.js と v2_stamina_max / v2_stamina_roll の
+//   2か所にある。ズレると「画面ではオートできるのにサーバーに弾かれる」になる。
+test('最大スタミナの計算がSQLと stamina.js で一致している', async () => {
+  const { staminaMax, STAMINA_BASE, STAMINA_STEPS } = await import('./stamina.js')
+  const body = bodyOf('v2_stamina_max')
+  assert.equal(STAMINA_BASE, 10)
+  // SQLは段ごとに least(greatest(p_jobs - 開始, 0), 幅) / per を足す形で書いてある。
+  // 桁をそろえるスペースは無視して突き合わせる
+  const flat = body.replace(/\s+/g, ' ')
+  assert.ok(flat.includes('select 10 + least(greatest(coalesce(p_jobs, 0), 0), 29)'),
+    '初期値10と「1〜29回は1回ごとに1」がSQLに無い')
+  let from = STAMINA_STEPS[0].upto
+  for (const s of STAMINA_STEPS.slice(1)) {
+    const frag = s.upto === Infinity
+      ? `+ greatest(coalesce(p_jobs, 0) - ${from}, 0) / ${s.per}`
+      : `+ least(greatest(coalesce(p_jobs, 0) - ${from}, 0), ${s.upto - from}) / ${s.per}`
+    assert.ok(flat.includes(frag), `${from + 1}回〜（${s.per}回ごとに1）がSQLに無い： ${frag}`)
+    from = s.upto
+  }
+  // JS側の節目。片方だけ直したらここで気付く
+  assert.equal(staminaMax(0), 10)
+  assert.equal(staminaMax(29), 39)
+  assert.equal(staminaMax(49), 45)
+  assert.equal(staminaMax(99), 55)
+  assert.equal(staminaMax(299), 75)
+})
+
+test('スタミナの回復ペースがSQLと stamina.js で一致している（5分に1）', async () => {
+  const { STAMINA_RECOVER_MS } = await import('./stamina.js')
+  assert.equal(STAMINA_RECOVER_MS, 5 * 60 * 1000)
+  const body = bodyOf('v2_stamina_roll')
+  assert.match(body, /c_span constant interval := interval '5 minutes'/, '回復間隔がSQLに無い')
+  // ★端数を捨てない（消化したぶんだけ進める）こと。now() で潰すと4分59秒が毎回消える
+  assert.match(body, /v_at \+ \(v_gain \* c_span\)/, '端数の繰り越しがSQLに無い')
+})
+
+test('オート出撃だけがスタミナを消費する（手動は消費しない）', () => {
+  const body = bodyOf('v2_sortie_settle')
+  assert.match(body, /p_auto boolean default false/, 'p_auto を受け取っていない')
+  assert.match(body, /if coalesce\(p_auto, false\) then/, 'オートのときだけ消費する分岐が無い')
+  assert.match(body, /v_stam := public\.v2_stamina_roll\(v_uid\)/, '数え直してから判定していない')
+  assert.match(body, /if v_stam < v_cost then/, '足りるかの判定が無い')
+  assert.match(body, /stamina = greatest\(0, stamina - v_cost\)/, '消費のUPDATEが無い')
+  // ★足りるかの判定は、報酬を書き込むより前で行う
+  //   （plpgsql は例外を投げない限りロールバックしない＝配ってから return すると渡したままになる）
+  const checkAt = body.search(/if v_stam < v_cost then/)
+  const insertAt = body.search(/insert into public\.v2_inventory/)
+  assert.notEqual(checkAt, -1, 'スタミナ切れの判定がある')
+  assert.notEqual(insertAt, -1, '装備を配るINSERTがある')
+  assert.ok(checkAt < insertAt, 'スタミナ切れの判定より前に報酬を配っている')
+})
+
+test('スタミナの内部ヘルパは authenticated から直接叩けない', () => {
+  // ⚠SECURITY DEFINER は既定で PUBLIC 実行可。好きなだけ回復させられてしまう
+  //   （v2_stamina_max は「増え方がマスク」なので、そもそも読ませない）
+  for (const fn of ['v2_stamina_max(int)', 'v2_stamina_roll(uuid)']) {
+    assert.ok(SQL.includes(`revoke all on function public.${fn} from authenticated;`),
+      `${fn} が authenticated から REVOKE されていない`)
+    assert.ok(!SQL.includes(`grant execute on function public.${fn} to authenticated;`),
+      `${fn} が grant されている`)
+  }
 })
 
 // ===== 武器の進化（戦闘記憶）=====

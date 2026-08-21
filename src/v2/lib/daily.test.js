@@ -5,7 +5,6 @@ import {
   TASKS, TASK_KEYS, LEVELS, LEVEL_KEYS, levelOf,
   DAY_RESET_HOUR, dayOf, isToday, countsOf, progressOf,
   isComplete, isClaimed, pickedLevelOf, canClaim, nextResetAt, doneCountOf,
-  SORTIE_COUNT, sortieCountOf,
 } from './daily.js'
 import { DAY_RESET_HOUR as TREE_RESET } from './tree.js'
 
@@ -105,23 +104,11 @@ test('畳んでいるとき用の「終わった項目の数」', () => {
   assert.equal(doneCountOf(prof({}), '存在しない', AT), 0)
 })
 
-test('★出撃は20秒設定だと1回で2カウント', () => {
-  // かかる時間あたりの進み具合をそろえるため（20秒×50回＝10秒×100回＝1000秒）
-  assert.deepEqual(SORTIE_COUNT, { 10: 1, 20: 2 })
-  assert.equal(sortieCountOf(10), 1)
-  assert.equal(sortieCountOf(20), 2)
-  assert.equal(sortieCountOf('20'), 2)     // 文字で来ても同じ
-  assert.equal(sortieCountOf(null), 1)     // 知らない値は1（数えないより数えたほうが安全）
-  assert.equal(sortieCountOf(15), 1)
-  // どちらの設定でも、同じ時間をかければ同じカウントになる
-  const seconds = 500
-  for (const cd of [10, 20]) {
-    assert.equal((seconds / cd) * sortieCountOf(cd), 50, `${cd}秒`)
-  }
-})
-
-test('その旨が画面に出せるよう、出撃にだけ注記がある', () => {
-  const sortie = TASKS.find(t => t.key === 'sortie')
-  assert.equal(sortie.note, '20秒は2カウント')
-  for (const t of TASKS) if (t.key !== 'sortie') assert.equal(t.note, undefined, `${t.key} に余計な注記`)
+test('★出撃は1回＝1カウント（20秒設定を廃止したので倍率も無い）', async () => {
+  // 出撃間隔が10秒固定になった（sortie.js の SORTIE_CD）ため、数え方の分岐ごと消した。
+  // 片方だけ残ると「画面に注記があるのに倍率は無い」になる
+  const daily = await import('./daily.js')
+  assert.equal(daily.SORTIE_COUNT, undefined, 'SORTIE_COUNT が残っている')
+  assert.equal(daily.sortieCountOf, undefined, 'sortieCountOf が残っている')
+  for (const t of TASKS) assert.equal(t.note, undefined, `${t.key} に余計な注記`)
 })

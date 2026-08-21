@@ -5,8 +5,9 @@ import { AREAS_SORTED, areaOf, markOf, biasLabelOf, BIAS_MULT, toFighter as enem
 import {
   pickEncounter, expOf, isAreaUnlocked, nextBossRate, clearedAreasOf, isAreaCleared,
   clearNext, unlockNext, restToOpenNext, LAST_TIER,
-  cooldownOf, rollHasDrop, rollDrop, rollMaterial, COOLDOWNS,
+  SORTIE_CD, rollHasDrop, rollDrop, rollMaterial,
 } from '../lib/sortie.js'
+import { staminaMax, rollStamina, msToNextStamina, mmss } from '../lib/stamina.js'
 import { runBattle } from '../lib/battle.js'
 import { buildBattleLog } from '../lib/battleLog.js'
 import { toFighter as playerFighter, equippedRunes, runeAbilities } from '../lib/loadout.js'
@@ -22,6 +23,11 @@ import { pushWeaponRecord } from './weaponRecord.js'
 //   「次の行動まで」バー → エリアのプルダウン（解放済みだけ）→「◯◯へ出撃！」
 //   出撃すると戦闘ログの画面に切り替わり、「🏰 街に戻る」で戻る。
 //   戦闘ログの表示は旧版の BattleLogLine をそのまま使っている（ArenaPanel などと同じ）。
+//
+// ★オート出撃（2026-08-22 追加）
+//   スタミナが1以上あるあいだは、10秒ごとに勝手に出撃する（1回につき1消費）。
+//   切れたら止まり、**これまで通り自分でクリックして出撃**する（手動は消費しない）。
+//   ⚠消費と回復の権威はサーバー（v2_sortie_settle / v2_stamina_roll）。ここは表示と読み替え。
 export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onProfile, onScene }) {
   const [scene, setScene] = useState('town')
   const [selectedArea, setSelectedArea] = useState(() => Number(localStorage.getItem('v2SelectedArea')) || 1)
@@ -29,13 +35,21 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
   const [bossRate, setBossRate] = useState(prof?.boss_rate || 0)
   const [now, setNow] = useState(Date.now())
   const [loading, setLoading] = useState(false)
-  const [cd, setCd] = useState(cooldownOf(prof?.sortie_cd))
+  // ★オートは覚えておかない（リロードで勝手に走り出してスタミナを溶かさないように）
+  const [auto, setAuto] = useState(false)
+  // スタミナ。サーバーが返した「値と数え直した時刻」を持ち、経過ぶんは画面側で足して出す
+  const [stam, setStam] = useState(() => ({ n: prof?.stamina ?? 0, at: prof?.stamina_at || null }))
   // 武器の進化：節目に達した武器（ポップアップで受け取る）
   const [evolving, setEvolving] = useState(null)
   const lastAt = useRef(0)
+  // ★2重発火よけ。オートは100msごとに条件を見るので、setLoading(true) が画面へ反映される前に
+  //   もう一度呼ばれる余地がある。ref なら**その場で**閉じられる（stateだと間に合わない）
+  const busy = useRef(false)
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(t) }, [])
   useEffect(() => { onScene?.(scene) }, [scene, onScene])
+  // プロフィールを取り直したら、そちらの値へ合わせる
+  useEffect(() => { setStam({ n: prof?.stamina ?? 0, at: prof?.stamina_at || null }) }, [prof?.stamina, prof?.stamina_at])
 
   const unlocked = prof?.unlocked_areas || [1]
   // ★解放されていないエリアはプルダウンに出さない（旧版と同じ）
@@ -47,109 +61,154 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
   // アリーナで階層守護者でいるあいだのドロップ率ボーナス（arena.js）
   const guardMult = guardDropMultOf(guard)
   const elapsed = (now - lastAt.current) / 1000
-  const remaining = Math.max(0, cd - elapsed)
+  const remaining = Math.max(0, SORTIE_CD - elapsed)
   const canAct = remaining <= 0 && !loading
-  const timerPct = Math.min(100, (elapsed / cd) * 100)
+  const timerPct = Math.min(100, (elapsed / SORTIE_CD) * 100)
+  // ★スタミナの最大値は転職回数で伸びる。**増え方は画面に出さない**（マスク・stamina.js）
+  const stamMax = staminaMax(prof?.job_changes)
+  const stamNow = rollStamina(stam.n, stam.at, stamMax, now).n
+  const stamNext = msToNextStamina(stam.n, stam.at, stamMax, now)
 
-  const setCooldown = async (sec) => {
-    setCd(sec)
-    const { data } = await supabase.rpc('v2_set_cooldown', { p_sec: sec })
-    if (data?.ok) onProfile(p => ({ ...p, sortie_cd: sec }))
-  }
-
-  const doBattle = async () => {
-    if (!canAct || !area) return
+  const doBattle = async (isAuto = false) => {
+    // ★判定は ref で行う（state の canAct は1フレーム古いことがある）
+    if (busy.current || !area) return
+    if (Date.now() - lastAt.current < SORTIE_CD * 1000) return
+    busy.current = true
     lastAt.current = Date.now()
     setLoading(true); setScene('battle'); setLogs([])
+    try {
+      const me = playerFighter(prof, inventory, runes, fishDex)
+      // 「素材ドロップ率up」の特殊能力ぶん。★重複せず、一番高いものだけが効く
+      // ★アリーナで階層守護者でいるあいだは、素材も装備も落ちやすくなる（×1.1・掛け算で乗る）
+      const matMult = dropRateMultOf(runeAbilities(equippedRunes(prof, inventory, runes))) * guardMult
+      const enc = pickEncounter(area.id, bossRate, new Date())
+      // ★ボスかどうかは戦闘（「大敵斬り」）と戦績（ボス討伐数）の両方が見る
+      const r = runBattle(me, { ...enemyFighter(enc.enemy, 8), boss: enc.isBoss })
+      const win = r.winner === 'a'
+      const exp = win ? expOf(enc.isBoss) : 0
+      const drop = win && rollHasDrop(Math.random, guardMult) ? rollDrop(area.id, new Date()) : null
+      const mat = win ? rollMaterial(enc.enemy.name, matMult) : null
+      setBossRate(nextBossRate(bossRate, enc.isBoss))
 
-    const me = playerFighter(prof, inventory, runes, fishDex)
-    // 「素材ドロップ率up」の特殊能力ぶん。★重複せず、一番高いものだけが効く
-    // ★アリーナで階層守護者でいるあいだは、素材も装備も落ちやすくなる（×1.1・掛け算で乗る）
-    const matMult = dropRateMultOf(runeAbilities(equippedRunes(prof, inventory, runes))) * guardMult
-    const enc = pickEncounter(area.id, bossRate, new Date())
-    // ★ボスかどうかは戦闘（「大敵斬り」）と戦績（ボス討伐数）の両方が見る
-    const r = runBattle(me, { ...enemyFighter(enc.enemy, 8), boss: enc.isBoss })
-    const win = r.winner === 'a'
-    const exp = win ? expOf(enc.isBoss) : 0
-    const drop = win && rollHasDrop(cd, Math.random, guardMult) ? rollDrop(area.id, new Date()) : null
-    const mat = win ? rollMaterial(enc.enemy.name, matMult) : null
-    setBossRate(nextBossRate(bossRate, enc.isBoss))
+      // 旧版の文体に合わせる（BattleLogLine が スキル名・ダメージ・回復 を拾って色を付ける）
+      const out = []
+      out.push(enc.isBoss
+        ? { text:`⚠ ボス出現！ ${enc.enemy.name}が現れた！`, color:'#ff4444' }
+        : { text:`${enc.enemy.name}が現れた！`, color:'#88ccff' })
+      const foe = enc.enemy.name
+      const you = me.name   // ★ログはプレイヤー名で出す（「あなた」とは書かない）
+      // ★文面は battleLog.js が正（出撃とアリーナで同じものを使う）
+      out.push(...buildBattleLog(r, you, foe))
 
-    // 旧版の文体に合わせる（BattleLogLine が スキル名・ダメージ・回復 を拾って色を付ける）
-    const out = []
-    out.push(enc.isBoss
-      ? { text:`⚠ ボス出現！ ${enc.enemy.name}が現れた！`, color:'#ff4444' }
-      : { text:`${enc.enemy.name}が現れた！`, color:'#88ccff' })
-    const foe = enc.enemy.name
-    const you = me.name   // ★ログはプレイヤー名で出す（「あなた」とは書かない）
-    // ★文面は battleLog.js が正（出撃とアリーナで同じものを使う）
-    out.push(...buildBattleLog(r, you, foe))
-
-    out.push(win
-      ? { text:`${foe}を倒した！（${r.turns}ターン）`, color:'#ffcc00' }
-      : { text:`敗北…（${r.turns}ターン）`, color:'#ff4444' })
-    if (win) {
-      // ★敵はGoldを落とさない（docs/v2-gold-design.md）。Goldは素材を売って稼ぐ
-      out.push({ text:`EXP +${exp}`, color:'#ffcc00' })
-      // ★色を付けるのは**ランクと装備名だけ**。行全体は塗らない（V2LogLine）
-      if (drop) out.push(dropLine(drop, RANK_COLOR[drop.rank]))
-      if (mat) out.push({ color: LOG_PLAIN, parts:[
-        { text:'⚗ ルーン素材「' },
-        { text: mat.name, color: RARITY_COLOR[mat.rarity] },
-        { text:'」を入手！' },
-      ] })
-      // ★解放は「その帯を全部踏破したか」で決まる（1本道ではない）。
-      //   開いたエリアが出たらその名前を、まだなら残りいくつかを出す
-      if (enc.isBoss) {
-        const nextCleared = clearNext(cleared, area.id, true, true)
-        const opened = unlockNext(unlocked, nextCleared).filter(id => !unlocked.includes(id))
-        if (opened.length) {
-          out.push({ text:`🔓 ${opened.map(id => areaOf(id)?.name).join('・')}が解放された！`, color:'#44ff88' })
-        } else {
-          const rest = restToOpenNext(nextCleared, area.tier)
-          if (rest > 0 && area.tier < LAST_TIER) {
-            out.push({ text:`あと${rest}エリア踏破で難易度${markOf(area.tier + 1)}が解放される`, color:'#7fa6d0' })
+      out.push(win
+        ? { text:`${foe}を倒した！（${r.turns}ターン）`, color:'#ffcc00' }
+        : { text:`敗北…（${r.turns}ターン）`, color:'#ff4444' })
+      if (win) {
+        // ★敵はGoldを落とさない（docs/v2-gold-design.md）。Goldは素材を売って稼ぐ
+        out.push({ text:`EXP +${exp}`, color:'#ffcc00' })
+        // ★色を付けるのは**ランクと装備名だけ**。行全体は塗らない（V2LogLine）
+        if (drop) out.push(dropLine(drop, RANK_COLOR[drop.rank]))
+        if (mat) out.push({ color: LOG_PLAIN, parts:[
+          { text:'⚗ ルーン素材「' },
+          { text: mat.name, color: RARITY_COLOR[mat.rarity] },
+          { text:'」を入手！' },
+        ] })
+        // ★解放は「その帯を全部踏破したか」で決まる（1本道ではない）。
+        //   開いたエリアが出たらその名前を、まだなら残りいくつかを出す
+        if (enc.isBoss) {
+          const nextCleared = clearNext(cleared, area.id, true, true)
+          const opened = unlockNext(unlocked, nextCleared).filter(id => !unlocked.includes(id))
+          if (opened.length) {
+            out.push({ text:`🔓 ${opened.map(id => areaOf(id)?.name).join('・')}が解放された！`, color:'#44ff88' })
+          } else {
+            const rest = restToOpenNext(nextCleared, area.tier)
+            if (rest > 0 && area.tier < LAST_TIER) {
+              out.push({ text:`あと${rest}エリア踏破で難易度${markOf(area.tier + 1)}が解放される`, color:'#7fa6d0' })
+            }
           }
         }
       }
-    }
-    setLogs(out)
+      setLogs(out)
 
-    // ★1戦ごとにその場で反映する（旧版と同じ。まとめて清算はしない）
-    const { data, error } = await supabase.rpc('v2_sortie_settle', {
-      p_area: area.id, p_normals: enc.isBoss ? 0 : 1,
-      p_boss_wins: enc.isBoss && win ? 1 : 0, p_boss_seen: enc.isBoss ? 1 : 0,
-      // p_gold は**サーバー側が無視する**（敵はGoldを落とさない）。引数だけ互換で残している
-      p_exp: exp, p_gold: 0, p_drops: drop ? [drop.id] : [],
-      p_materials: mat ? [mat.id] : [],
-    })
-    setLoading(false)
-    if (error || !data?.ok) {
-      setLogs(l => [...l, { text:`⚠ 反映に失敗しました（${error?.message || data?.error}）`, color:'#ff8844' }])
+      // ★1戦ごとにその場で反映する（旧版と同じ。まとめて清算はしない）
+      const { data, error } = await supabase.rpc('v2_sortie_settle', {
+        p_area: area.id, p_normals: enc.isBoss ? 0 : 1,
+        p_boss_wins: enc.isBoss && win ? 1 : 0, p_boss_seen: enc.isBoss ? 1 : 0,
+        // p_gold は**サーバー側が無視する**（敵はGoldを落とさない）。引数だけ互換で残している
+        p_exp: exp, p_gold: 0, p_drops: drop ? [drop.id] : [],
+        p_materials: mat ? [mat.id] : [],
+        // ★オートで戦ったときだけスタミナを1使う（手動は消費しない）
+        p_auto: !!isAuto,
+      })
+      // サーバーが返したスタミナへ合わせる（足りずに弾かれたときも returns に入っている）
+      if (data && data.stamina != null) setStam({ n: data.stamina, at: data.stamina_at || new Date().toISOString() })
+      if (error || !data?.ok) {
+        setAuto(false)   // ★弾かれたまま回し続けない
+        setLogs(l => [...l, { text:`⚠ 反映に失敗しました（${error?.message || data?.error}）`, color:'#ff8844' }])
+        return
+      }
+      if (data.level?.ups > 0) setLogs(l => [...l, { text:`🆙 レベルアップ！ LV${data.level.lv}`, color:'#44ff88' }])
+      // ★武器の進化（戦闘記憶）。装備している武器へ1戦ぶんの戦績を積む
+      const ready = await pushWeaponRecord(prof, inventory, r, you, foe, { isBoss: enc.isBoss })
+      if (ready.length) setEvolving(ready[0])
+      onProfile(null)
+    } finally {
+      busy.current = false
+      setLoading(false)
+    }
+  }
+
+  // ★オート出撃。クールタイム（10秒）が明けるたびに、スタミナを1使って勝手に出撃する。
+  //   進化のポップアップが出ているあいだは止める（選ばせてから続ける）
+  useEffect(() => {
+    if (!auto || loading || evolving || !area || remaining > 0) return
+    if (stamNow < 1) {
+      setAuto(false)
+      setLogs(l => [...l, { text:'⚡ スタミナ切れ。ここからは自分で出撃する', color:'#ffcc00' }])
       return
     }
-    if (data.level?.ups > 0) setLogs(l => [...l, { text:`🆙 レベルアップ！ LV${data.level.lv}`, color:'#44ff88' }])
-    // ★武器の進化（戦闘記憶）。装備している武器へ1戦ぶんの戦績を積む
-    const ready = await pushWeaponRecord(prof, inventory, r, you, foe, { isBoss: enc.isBoss })
-    if (ready.length) setEvolving(ready[0])
-    onProfile(null)
-  }
+    doBattle(true)
+  }, [auto, now, loading, evolving, area, remaining, stamNow])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // 節目に達した武器のポップアップ（出撃・アリーナで同じものを使う）
   const evolveModal = evolving
     ? <V2Evolve pending={evolving} inventory={inventory} onDone={() => { setEvolving(null); onProfile(null) }} />
     : null
 
+  // スタミナの行（街のパネルに出す。戦闘ログ側は見出しに「⚡残り」だけ出す）
+  const stamRow = (
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', fontSize:'11px', marginBottom:'6px' }}>
+      <span style={{ color:'#7fa6d0' }}>⚡ スタミナ</span>
+      <span>
+        <span style={{ color: stamNow > 0 ? '#ffdd44' : '#ff8844' }}>{stamNow}</span>
+        <span style={{ color:'#7fa6d0' }}> / {stamMax}</span>
+        {stamNext > 0 && (
+          <span style={{ color:'#4d6f92', marginLeft:'8px', fontSize:'10px' }}>次まで {mmss(stamNext)}</span>
+        )}
+      </span>
+    </div>
+  )
+
   if (scene === 'battle') {
     return (
       <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
         {evolveModal}
-        <div style={{ color:'#ff6644', fontSize:'13px', marginBottom:'10px' }}>⚔ バトル！</div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'10px' }}>
+          <span style={{ color:'#ff6644', fontSize:'13px' }}>⚔ バトル！</span>
+          {auto && <span style={{ color:'#44ff88', fontSize:'11px' }}>▶ オート出撃中（⚡{stamNow}）</span>}
+        </div>
         {loading && <div style={{ color:'#7fa6d0', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
         <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
           {logs.map((l, i) => <V2LogLine key={i} l={l} />)}
         </div>
-        <button onClick={() => setScene('town')} disabled={loading}
+        {auto && (
+          <button onClick={() => setAuto(false)}
+            style={{ width:'100%', padding:'10px', background:'#1a0a20', border:'1px solid #ff88cc',
+              color:'#ff88cc', cursor:'pointer', fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
+            ■ オートを止める
+          </button>
+        )}
+        <button onClick={() => { setAuto(false); setScene('town') }} disabled={loading}
           style={{ width:'100%', padding:'10px', background: loading ? '#000a18' : '#001840',
             border:`1px solid ${loading ? '#13405f' : '#0088ff'}`, color: loading ? '#2a4a66' : '#0088ff',
             cursor: loading ? 'not-allowed' : 'pointer', fontFamily:'monospace', fontSize:'13px' }}>
@@ -170,6 +229,8 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
       <div style={{ background:'#001028', height:'6px', border:'1px solid #002244', marginBottom:'10px' }}>
         <div style={{ height:'100%', width:`${timerPct}%`, background: canAct ? '#44ff88' : 'linear-gradient(90deg,#003366,#0088ff)', transition:'width 0.2s' }} />
       </div>
+      {/* ★オート出撃の燃料。**増え方（転職回数）は出さない**（マスク・2026-08-22 ユーザー指示） */}
+      {stamRow}
       {/* ★守っているあいだは出撃のドロップ率が上がる（アリーナには挑戦できない代わり） */}
       {guard && (
         <div style={{ border:'1px solid #ff88cc', background:'#1a0a20', padding:'5px 8px',
@@ -198,22 +259,23 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
           {area?.bias ? `（与ダメージ+${Math.round((BIAS_MULT - 1) * 100)}%）` : ''}
         </span>
       </div>
-      <button onClick={doBattle} disabled={!canAct}
+      <button onClick={() => doBattle(false)} disabled={!canAct}
         style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct ? '#ffcc00' : '#003366'}`,
           color: canAct ? '#ffcc00' : '#7fa6d0', cursor: canAct ? 'pointer' : 'not-allowed',
-          fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'10px' }}>
+          fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
         {canAct ? `⚔ ${area?.name}へ出撃！` : '⏳ 待機中...'}
       </button>
-      <div style={{ display:'flex', justifyContent:'flex-end', gap:'4px' }}>
-        <span style={{ color:'#7fa6d0', fontSize:'10px', alignSelf:'center' }}>出撃間隔</span>
-        {COOLDOWNS.map(sec => (
-          <button key={sec} onClick={() => setCooldown(sec)}
-            style={{ background: cd === sec ? '#002850' : '#000818', border:`1px solid ${cd === sec ? '#00aaff' : '#7fa6d0'}`,
-              color: cd === sec ? '#00aaff' : '#7fa6d0', padding:'3px 8px', cursor:'pointer',
-              fontFamily:'monospace', fontSize:'10px' }}>
-            {sec}秒
-          </button>
-        ))}
+      {/* ★オート出撃。スタミナがあるあいだ、10秒ごとに勝手に出撃する（1回につき1消費） */}
+      <button onClick={() => setAuto(true)} disabled={stamNow < 1}
+        style={{ width:'100%', padding:'8px', background: stamNow > 0 ? '#00281a' : '#000818',
+          border:`1px solid ${stamNow > 0 ? '#44ff88' : '#2a4a66'}`, color: stamNow > 0 ? '#44ff88' : '#2a4a66',
+          cursor: stamNow > 0 ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'12px' }}>
+        {stamNow > 0 ? `▶ オート出撃（あと${stamNow}回）` : '⚡ スタミナ切れ'}
+      </button>
+      <div style={{ color:'#4d6f92', fontSize:'10px', marginTop:'5px', textAlign:'center' }}>
+        {stamNow > 0
+          ? 'スタミナ1につき1回、10秒ごとに自動で出撃します'
+          : '自分でクリックする出撃はスタミナを使いません'}
       </div>
     </div>
   )

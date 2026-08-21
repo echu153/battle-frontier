@@ -6,7 +6,7 @@ import {
   clearNext, clearedAreasOf, isAreaCleared,
   TIER_REQ, reqOfTier, clearedInTier, restToOpenNext, openTiersOf, LAST_TIER,
   expOf, rewardsOf, pickEncounter, EXP_BOSS, EXP_ZAKO_MIN, EXP_ZAKO_MAX,
-  COOLDOWNS, DEFAULT_COOLDOWN, cooldownOf,
+  SORTIE_CD,
   featuredPartAt, nextSwitchAt, featuredSchedule, rollDropPart, rollDrop,
   BANDS, bandAt, enemyPoolAt, DROP_RATE, dropRateOf, rollHasDrop,
 } from './sortie.js'
@@ -133,13 +133,14 @@ test('遭遇はそのエリアの敵から選ばれる', () => {
   assert.equal(pickEncounter(99, 0, new Date(), rng), null, '無いエリア')
 })
 
-test('出撃のクールタイムは10秒と20秒から選べる', () => {
-  assert.deepEqual(COOLDOWNS, [10, 20])
-  assert.equal(cooldownOf(10), 10)
-  assert.equal(cooldownOf(20), 20)
-  assert.equal(cooldownOf(1), DEFAULT_COOLDOWN, '知らない値は既定へ落とす')
-  assert.equal(cooldownOf(undefined), DEFAULT_COOLDOWN)
-  // ⚠EXPとGoldはどちらのモードでも同じ（旧版は10秒だけ半分だった）
+test('出撃のクールタイムは10秒固定（10／20の選択は廃止・2026-08-22）', async () => {
+  assert.equal(SORTIE_CD, 10)
+  // ★選ぶ仕組みごと消したこと。片方だけ残ると「画面には無いのに値だけ生きている」になる
+  const sortie = await import('./sortie.js')
+  for (const gone of ['COOLDOWNS', 'DEFAULT_COOLDOWN', 'cooldownOf', 'isValidCooldown']) {
+    assert.equal(sortie[gone], undefined, `${gone} が残っている`)
+  }
+  // ⚠EXPは前から間隔で変わらない（旧版は10秒だけ半分だった）
   const rng = mkRng(4)
   assert.equal(expOf(true, rng), EXP_BOSS, 'CDによってEXPは変わらない')
 })
@@ -224,21 +225,14 @@ test('時間帯限定の敵が各エリアに1体ずつ、その時間だけ抽�
   assert.equal(new Set(names).size, 24)
 })
 
-test('装備が落ちる確率は10秒3%・20秒4%', () => {
-  // ★20秒のほうが1回あたりは高い（10秒の効率2倍をいくらか相殺する）。
-  //   時間あたりでは 10秒=0.30%/秒・20秒=0.20%/秒 でまだ10秒が1.5倍有利
-  assert.deepEqual(DROP_RATE, { 10:3, 20:4 })
-  assert.equal(dropRateOf(10), 3)
-  assert.equal(dropRateOf(20), 4)
-  assert.equal(dropRateOf(999), 4, '知らない値は既定(20秒)へ')
+test('装備が落ちる確率は3%（10秒固定になったので1本）', () => {
+  assert.equal(DROP_RATE, 3)
+  assert.equal(dropRateOf(), 3)
   const rng = mkRng(55)
-  let n10 = 0, n20 = 0
+  let hit = 0
   const N = 40000
-  for (let i = 0; i < N; i++) if (rollHasDrop(10, rng)) n10++
-  for (let i = 0; i < N; i++) if (rollHasDrop(20, rng)) n20++
-  assert.ok(Math.abs(n10 / N - 0.03) < 0.004, `10秒 ${(n10 / N * 100).toFixed(2)}%`)
-  assert.ok(Math.abs(n20 / N - 0.04) < 0.004, `20秒 ${(n20 / N * 100).toFixed(2)}%`)
-  assert.ok(n20 > n10)
+  for (let i = 0; i < N; i++) if (rollHasDrop(rng)) hit++
+  assert.ok(Math.abs(hit / N - 0.03) < 0.004, `${(hit / N * 100).toFixed(2)}%`)
 })
 
 test('ボスを倒したエリアは踏破済みになる（⑧も残る）', () => {

@@ -734,7 +734,15 @@ alter table public.v2_profiles add column if not exists gold           bigint   
 alter table public.v2_profiles add column if not exists unlocked_areas int[]       not null default array[1];
 alter table public.v2_profiles add column if not exists cleared_areas  int[]       not null default '{}'; -- エリアボスを倒したエリア（⑧は次が無いので unlocked では分からない）
 alter table public.v2_profiles add column if not exists boss_rate      numeric     not null default 0;   -- ボス遭遇率(%)。戦うたび+0.3、当たると0へ
-alter table public.v2_profiles add column if not exists sortie_cd      int         not null default 20;  -- 出撃のクールタイム（10 or 20）
+-- ★出撃のクールタイムは**10秒固定**になった（2026-08-22 ユーザー決定）ので sortie_cd は廃止。
+--   10／20を選ぶ仕組みごと消した（src/v2/lib/sortie.js の SORTIE_CD が正）
+alter table public.v2_profiles drop column if exists sortie_cd;
+-- スタミナ（オート出撃の燃料）。src/v2/lib/stamina.js と同じ計算にすること
+--   ・stamina    … いま持っているぶん。オート出撃1回につき1減る（手動は減らない）
+--   ・stamina_at … 最後に数え直した時刻。ここからの経過時間で5分に1ずつ戻す
+--   ・上限は v2_stamina_max(job_changes)。★増え方はマスク（画面に出さない）
+alter table public.v2_profiles add column if not exists stamina        int         not null default 10;
+alter table public.v2_profiles add column if not exists stamina_at     timestamptz not null default now();
 alter table public.v2_profiles add column if not exists equipped       jsonb       not null default '{}'::jsonb; -- {"right": 12, ...} v2_inventory.id
 alter table public.v2_profiles add column if not exists last_sortie_at timestamptz;
 
@@ -1433,6 +1441,71 @@ grant select on table public.v2_essences to authenticated;
 --   いまは枚数だけ持たせて、is_admin が動作確認用に配れるようにしてある。
 alter table public.v2_profiles add column if not exists unsocket_tickets int not null default 0;
 
+-- ============================================================
+-- ===== スタミナ（オート出撃の燃料）=====
+-- ------------------------------------------------------------
+-- ★2026-08-22 ユーザー決定。
+--   ・スタミナが1以上あるあいだは、画面が**10秒ごとに自動で出撃**する
+--   ・オート出撃1回につき1消費（**手動の出撃は消費しない**）
+--   ・切れたらこれまで通り自分でクリックして出撃する
+--   ・回復は**5分に1**・上限は最大値まで（画面を閉じているあいだも溜まる）
+--   ・最大値は**転職回数**で伸びる。★伸びる条件はマスク＝画面には出さない
+-- ⚠数える権威はここ。src/v2/lib/stamina.js はその写しで、v2sql.test.js が突き合わせる。
+-- ============================================================
+
+-- 最大スタミナ。転職回数の段ごとに「その段に入った回数 ÷ per」を切り捨てて足す
+--   1〜29回=1回ごと／30〜49回=3回ごと／50〜99回=5回ごと／100〜299回=10回ごと／300回〜=30回ごと
+create or replace function public.v2_stamina_max(p_jobs int)
+returns int language sql immutable set search_path = public as $$
+  select 10
+       + least(greatest(coalesce(p_jobs, 0), 0), 29)
+       + least(greatest(coalesce(p_jobs, 0) -  29, 0),  20) /  3
+       + least(greatest(coalesce(p_jobs, 0) -  49, 0),  50) /  5
+       + least(greatest(coalesce(p_jobs, 0) -  99, 0), 200) / 10
+       +       greatest(coalesce(p_jobs, 0) - 299, 0)       / 30;
+$$;
+-- ★増え方はマスクなので、クライアントからは叩かせない（表示用の写しはJS側に持つ）
+revoke all on function public.v2_stamina_max(int) from public;
+revoke all on function public.v2_stamina_max(int) from anon;
+revoke all on function public.v2_stamina_max(int) from authenticated;
+
+-- 経過時間ぶんを足して数え直し、いまのスタミナを返す。
+--   ・端数は捨てない＝消化したぶんだけ stamina_at を進める（4分59秒が毎回消えないように）
+--   ・満タンのあいだは stamina_at を now() にしておく（止まっているあいだに溜め込まない）
+-- ⚠SECURITY DEFINER の内部ヘルパは既定で PUBLIC 実行可なので必ず REVOKE する
+--   （旧版で protect_stats を迂回できた穴と同じ）。RPCからだけ呼ぶ。
+create or replace function public.v2_stamina_roll(p_player uuid)
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  c_span constant interval := interval '5 minutes';   -- 回復の間隔（stamina.js の STAMINA_RECOVER_MS）
+  v_row  public.v2_profiles;
+  v_max  int;
+  v_gain int;
+  v_n    int;
+  v_at   timestamptz;
+begin
+  if p_player is null then return 0; end if;
+  select * into v_row from public.v2_profiles where id = p_player for update;
+  if not found then return 0; end if;
+  v_max := public.v2_stamina_max(v_row.job_changes);
+  v_n   := greatest(least(coalesce(v_row.stamina, 0), v_max), 0);
+  v_at  := coalesce(v_row.stamina_at, now());
+  if v_n >= v_max then
+    v_n := v_max; v_at := now();
+  else
+    v_gain := greatest(floor(extract(epoch from (now() - v_at)) / extract(epoch from c_span))::int, 0);
+    v_n  := least(v_max, v_n + v_gain);
+    v_at := case when v_n >= v_max then now() else v_at + (v_gain * c_span) end;
+  end if;
+  update public.v2_profiles set stamina = v_n, stamina_at = v_at, updated_at = now()
+   where id = p_player;
+  return v_n;
+end;
+$$;
+revoke all on function public.v2_stamina_roll(uuid) from public;
+revoke all on function public.v2_stamina_roll(uuid) from anon;
+revoke all on function public.v2_stamina_roll(uuid) from authenticated;
+
 -- ===== 出撃の清算 =====
 -- 旧版と同じで、戦闘そのものはクライアントが回し、まとめてここへ送る。
 -- ⚠サーバーは「その回数で取り得る上限」を超えていないかだけ検証する（完全な権威ではない）。
@@ -1471,11 +1544,15 @@ update public.v2_profiles p
  where p.unlocked_areas is distinct from
        public.v2_unlocked_from_cleared(p.cleared_areas, p.unlocked_areas);
 
--- ⚠引数が増えたので、古い7引数版は落としてから作り直す（同じ名前で残ると呼び分けが曖昧になる）
+-- ⚠引数が増えたので、古い版は落としてから作り直す（同じ名前で残ると呼び分けが曖昧になる）
 drop function if exists public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb);
+drop function if exists public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb);
+-- p_auto ＝ **オート出撃で戦ったか**（2026-08-22 追加）。true なら戦った回数ぶんスタミナを消費する。
+--   手動（自分でクリック）は消費しない＝スタミナが切れてもこれまで通り遊べる
 create or replace function public.v2_sortie_settle(
   p_area int, p_normals int, p_boss_wins int, p_boss_seen int,
-  p_exp int, p_gold bigint, p_drops jsonb, p_materials jsonb default '[]'::jsonb
+  p_exp int, p_gold bigint, p_drops jsonb, p_materials jsonb default '[]'::jsonb,
+  p_auto boolean default false
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -1496,6 +1573,9 @@ declare
   v_unlocked int[];
   v_cleared  int[];
   v_rate  numeric;
+  v_cost  int := 0;   -- この清算で使うスタミナ（オートのときだけ）
+  v_stam  int := 0;
+  v_stam_at timestamptz;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
@@ -1513,6 +1593,16 @@ begin
   --   ここを見ていないと、遭遇1回のまま勝利数だけ大きく送れて下の上限計算が青天井になる
   --   （回数の頭打ちは v_n + v_bs にしか掛かっていないため）。
   v_bw := least(v_bw, v_bs);
+
+  -- ★オート出撃はスタミナを戦った回数ぶん消費する。足りなければ**1戦も通さない**
+  --   （手動は消費しない＝切れても自分でクリックすれば遊べる）
+  if coalesce(p_auto, false) then
+    v_cost := v_n + v_bs;
+    v_stam := public.v2_stamina_roll(v_uid);
+    if v_stam < v_cost then
+      return jsonb_build_object('ok', false, 'error', 'スタミナが足りません', 'stamina', v_stam);
+    end if;
+  end if;
 
   -- 取り得る上限。通常敵はEXP11・ボスは13が最大（sortie.js と同じ）
   v_exp_cap  := v_n * 11 + v_bw * 13;
@@ -1569,40 +1659,29 @@ begin
 
   update public.v2_profiles
      set unlocked_areas = v_unlocked, cleared_areas = v_cleared, boss_rate = v_rate,
+         -- ★スタミナは減らすだけ（stamina_at は v2_stamina_roll が置いた値のまま）。
+         --   満タンから使ったときは roll が now() にしているので、そこから5分で1戻る
+         stamina = greatest(0, stamina - v_cost),
          last_sortie_at = now(), updated_at = now()
-   where id = v_uid;
+   where id = v_uid
+   returning stamina, stamina_at into v_stam, v_stam_at;
 
   v_res := public.v2_apply_exp(v_uid, v_exp);
   -- デイリーミッション：この清算で戦った回数ぶん数える（通常敵＋ボス）。
-  -- ★20秒設定は1回で2カウント（src/v2/lib/daily.js の SORTIE_COUNT と同じ）。
-  --   20秒×50回も10秒×100回も同じ1000秒＝かかる時間あたりの進み具合をそろえる
-  perform public.v2_daily_bump(v_uid, 'sortie',
-    (v_n + v_bs) * (case when v_row.sortie_cd = 20 then 2 else 1 end));
+  -- ★**1回＝1カウント**。出撃間隔が10秒固定になったので倍率は無い（daily.js と同じ）
+  perform public.v2_daily_bump(v_uid, 'sortie', v_n + v_bs);
   return jsonb_build_object('ok', true, 'exp', v_exp, 'gold', 0, 'drops', v_ok,
     'unlocked', to_jsonb(v_unlocked), 'cleared', to_jsonb(v_cleared),
-    'boss_rate', v_rate, 'level', v_res);
+    'boss_rate', v_rate, 'level', v_res,
+    'stamina', v_stam, 'stamina_at', v_stam_at, 'stamina_max', public.v2_stamina_max(v_row.job_changes));
 end;
 $$;
-revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb) from public;
-revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb) from anon;
-grant execute on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb) to authenticated;
+revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean) from public;
+revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean) from anon;
+grant execute on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean) to authenticated;
 
--- ===== 出撃のクールタイムの設定（10 or 20）=====
-create or replace function public.v2_set_cooldown(p_sec int)
-returns jsonb language plpgsql security definer set search_path = public as $$
-declare v_uid uuid := auth.uid();
-begin
-  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
-  -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
-  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
-  if p_sec not in (10, 20) then return jsonb_build_object('ok', false, 'error', '10秒か20秒を選んでください'); end if;
-  update public.v2_profiles set sortie_cd = p_sec, updated_at = now() where id = v_uid;
-  return jsonb_build_object('ok', true, 'sortie_cd', p_sec);
-end;
-$$;
-revoke all on function public.v2_set_cooldown(int) from public;
-revoke all on function public.v2_set_cooldown(int) from anon;
-grant execute on function public.v2_set_cooldown(int) to authenticated;
+-- ===== 出撃のクールタイムの設定は廃止（10秒固定・2026-08-22 ユーザー決定）=====
+drop function if exists public.v2_set_cooldown(int);
 
 -- ===== 装備の着脱 =====
 -- ★枠の種類チェックはサーバーで行う（両手武器は左手を塞ぐ・盾は左手専用・アクセは2枠）

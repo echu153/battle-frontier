@@ -112,20 +112,17 @@ export const rewardsOf = ({ isBoss, win }, rng = Math.random) => ({
 export const AREA_LIST = AREAS.map(a => ({ id: a.id, tier: a.tier, name: a.name }))
 
 // ===== 出撃のクールタイム =====
-// 10秒と20秒から選べる。⚠**もらえるEXPとGoldはどちらも同じ**（2026-08-14 ユーザー決定）。
-//   旧版は10秒モードだけEXPとGoldを半分にしていたが、v2は揃える。
-//   ＝10秒を選ぶほうが時間あたりの効率は2倍になる。「速く回したい人が回せる」だけの選択肢
-export const COOLDOWNS = [10, 20]
-// 装備が落ちる確率(%)。**20秒のほうが1回あたりは高い**（10秒の効率2倍をいくらか相殺する）
-//   時間あたりで見ると 10秒=0.30%/秒・20秒=0.20%/秒 で、まだ10秒が1.5倍有利
-export const DROP_RATE = { 10: 3, 20: 4 }
+// ★**10秒固定**（2026-08-22 ユーザー決定）。10秒／20秒から選ぶ仕組みは廃止した。
+//   もともと「20秒は1回あたりのドロップ率が高い代わりに遅い」という選択肢だったが、
+//   スタミナ（オート出撃）を入れるにあたって**間隔は全員そろえる**ことにした。
+//   ＝オートも手動も10秒。アリーナもこのクールタイムを共有する。
+export const SORTIE_CD = 10
+// 装備が落ちる確率(%)。旧・10秒モードの値をそのまま使う
+export const DROP_RATE = 3
 // mult は**アリーナの階層守護者ぶんの倍率**（arena.js の guardDropMultOf）。
 //   素材側（rollMaterial）と同じ形にそろえてある
-export const dropRateOf = (sec, mult = 1) => DROP_RATE[cooldownOf(sec)] * mult
-export const rollHasDrop = (sec, rng = Math.random, mult = 1) => rng() * 100 < dropRateOf(sec, mult)
-export const DEFAULT_COOLDOWN = 20
-export const isValidCooldown = (sec) => COOLDOWNS.includes(sec)
-export const cooldownOf = (sec) => (isValidCooldown(sec) ? sec : DEFAULT_COOLDOWN)
+export const dropRateOf = (mult = 1) => DROP_RATE * mult
+export const rollHasDrop = (rng = Math.random, mult = 1) => rng() * 100 < dropRateOf(mult)
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000
 

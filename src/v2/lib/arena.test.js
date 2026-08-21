@@ -163,14 +163,11 @@ test('★装備のドロップ率は出撃とまったく同じ（アリーナ�
   assert.equal(arena.DROP_RATE, undefined, 'arena.js に独自のドロップ率が戻っている')
   assert.equal(arena.rollDrop, undefined, 'arena.js に独自の抽選が戻っている')
   // 出撃側が唯一の正
-  assert.deepEqual(SORTIE_DROP_RATE, { 10: 3, 20: 4 })
-  assert.equal(dropRateOf(10), 3)
-  assert.equal(dropRateOf(20), 4)
+  assert.equal(SORTIE_DROP_RATE, 3)
+  assert.equal(dropRateOf(), 3)
   // 同じ乱数なら出撃とアリーナで結果が一致する
-  for (const sec of [10, 20]) {
-    for (const n of [0.001, 0.029, 0.031, 0.039, 0.041, 0.5]) {
-      assert.equal(rollHasDrop(sec, () => n), n * 100 < dropRateOf(sec), `${sec}秒 rng=${n}`)
-    }
+  for (const n of [0.001, 0.029, 0.031, 0.039, 0.041, 0.5]) {
+    assert.equal(rollHasDrop(() => n), n * 100 < dropRateOf(), `rng=${n}`)
   }
 })
 
@@ -186,13 +183,12 @@ test('階層守護者の間だけ、出撃のドロップ率が×1.1になる', 
 })
 
 test('守護者ぶんの倍率は出撃の装備ドロップ率に乗る', () => {
-  // 20秒＝4% → 守護中は4.4%
-  assert.equal(dropRateOf(20), 4)
-  assert.equal(Math.round(dropRateOf(20, GUARD_DROP_MULT) * 100) / 100, 4.4)
-  assert.equal(Math.round(dropRateOf(10, GUARD_DROP_MULT) * 100) / 100, 3.3)
-  // 4%と4.4%のあいだ（rng=0.042）では、守護中だけ落ちる
-  assert.equal(rollHasDrop(20, () => 0.042), false)
-  assert.equal(rollHasDrop(20, () => 0.042, GUARD_DROP_MULT), true)
+  // 3% → 守護中は3.3%
+  assert.equal(dropRateOf(), 3)
+  assert.equal(Math.round(dropRateOf(GUARD_DROP_MULT) * 100) / 100, 3.3)
+  // 3%と3.3%のあいだ（rng=0.032）では、守護中だけ落ちる
+  assert.equal(rollHasDrop(() => 0.032), false)
+  assert.equal(rollHasDrop(() => 0.032, GUARD_DROP_MULT), true)
 })
 
 // ===== 落ちるランク（2026-08-17 ユーザー決定）=====
