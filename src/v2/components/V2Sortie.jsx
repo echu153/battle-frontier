@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2LogLine from './V2LogLine.jsx'
-import { AREAS_SORTED, markOf, areaFullName, toFighter as enemyFighter } from '../lib/enemies.js'
+import { AREAS_SORTED, areaOf, markOf, toFighter as enemyFighter } from '../lib/enemies.js'
 import {
   pickEncounter, expOf, isAreaUnlocked, nextBossRate, clearedAreasOf, isAreaCleared,
   clearNext, unlockNext, restToOpenNext, clearedInTier, reqOfTier, LAST_TIER,
@@ -44,8 +44,6 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
   const area = availableAreas.find(a => a.id === selectedArea) || availableAreas[0]
   // ★エリアボスを倒したエリアはプルダウンで「踏破済み」と分かるようにする
   const cleared = clearedAreasOf(prof)
-  // 見出しに使う帯（解放済みのエリアが属する帯だけ）
-  const tiers = [...new Set(availableAreas.map(a => a.tier))]
   // 今いる帯の進み具合。**帯を全部踏破すると次の帯が開く**（sortie.js の TIER_REQ）
   const tier = area?.tier || 1
   const tierDone = clearedInTier(cleared, tier)
@@ -111,7 +109,7 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
         const nextCleared = clearNext(cleared, area.id, true, true)
         const opened = unlockNext(unlocked, nextCleared).filter(id => !unlocked.includes(id))
         if (opened.length) {
-          out.push({ text:`🔓 ${opened.map(id => areaFullName(id)).join('・')}が解放された！`, color:'#44ff88' })
+          out.push({ text:`🔓 ${opened.map(id => areaOf(id)?.name).join('・')}が解放された！`, color:'#44ff88' })
         } else {
           const rest = restToOpenNext(nextCleared, area.tier)
           if (rest > 0 && area.tier < LAST_TIER) {
@@ -190,15 +188,12 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
       <select value={area?.id || 1}
         onChange={e => { const v = Number(e.target.value); setSelectedArea(v); localStorage.setItem('v2SelectedArea', v) }}
         style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
-        {tiers.map(t => (
-          <optgroup key={t} label={`エリア${markOf(t)}`}>
-            {availableAreas.filter(a => a.tier === t).map(a => (
-              <option key={a.id} value={a.id}>
-                {/* ★プルダウンの中はCSSが効かないので、空きは全角スペースで作る */}
-                {a.name}{isAreaCleared(cleared, a.id) ? '　　　✔踏破済み' : ''}
-              </option>
-            ))}
-          </optgroup>
+        {/* ★出すのは**エリア名だけ**（難易度の番号は出さない・2026-08-22 ユーザー指示）。
+            並びは難易度帯の順。踏破済みの空きはCSSが効かないので全角スペースで作る */}
+        {availableAreas.map(a => (
+          <option key={a.id} value={a.id}>
+            {a.name}{isAreaCleared(cleared, a.id) ? '　　　✔踏破済み' : ''}
+          </option>
         ))}
       </select>
       {/* ★その帯を全部踏破すると次の帯が開く。あといくつかをここに出す */}
