@@ -40,6 +40,22 @@ export const unlockNext = (unlocked, areaId, win, wasBoss) => {
   return list.sort((a, b) => a - b)
 }
 
+// ===== エリアの踏破（ボスを倒したか） =====
+// ボスを倒したエリアは cleared_areas に積む。⑧はその先が無い＝ unlocked_areas では分からないので専用の列を持つ
+export const clearNext = (cleared, areaId, win, wasBoss) => {
+  const list = [...(cleared || [])]
+  if (win && wasBoss && !list.includes(areaId)) list.push(areaId)
+  return list.sort((a, b) => a - b)
+}
+// 表示用。cleared_areas がまだ無い（列を足す前の）プロフィールでも、
+// 「次のエリアが開いている＝そのエリアのボスは倒している」と読み替えて出す
+export const clearedAreasOf = (prof) => {
+  const set = new Set(prof?.cleared_areas || [])
+  for (const id of (prof?.unlocked_areas || [FIRST_AREA])) if (id > FIRST_AREA) set.add(id - 1)
+  return [...set].sort((a, b) => a - b)
+}
+export const isAreaCleared = (cleared, id) => (cleared || []).includes(id)
+
 // ===== EXP =====
 // 旧版と同じ。通常敵は8〜11のランダム、ボスは13
 // ⚠旧版にあった「キャラクターLV100まで1.5倍」はv2に char_lv が無いので入れていない

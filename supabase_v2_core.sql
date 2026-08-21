@@ -732,10 +732,24 @@ grant execute on function public.v2_debug_grant_proofs() to authenticated;
 -- ---- 列の追加 ----
 alter table public.v2_profiles add column if not exists gold           bigint      not null default 0;
 alter table public.v2_profiles add column if not exists unlocked_areas int[]       not null default array[1];
+alter table public.v2_profiles add column if not exists cleared_areas  int[]       not null default '{}'; -- エリアボスを倒したエリア（⑧は次が無いので unlocked では分からない）
 alter table public.v2_profiles add column if not exists boss_rate      numeric     not null default 0;   -- ボス遭遇率(%)。戦うたび+0.3、当たると0へ
 alter table public.v2_profiles add column if not exists sortie_cd      int         not null default 20;  -- 出撃のクールタイム（10 or 20）
 alter table public.v2_profiles add column if not exists equipped       jsonb       not null default '{}'::jsonb; -- {"right": 12, ...} v2_inventory.id
 alter table public.v2_profiles add column if not exists last_sortie_at timestamptz;
+
+-- ---- 踏破済みの埋め戻し（列を足した直後の1回だけ効く） ----
+-- 「エリアNが解放されている＝エリアN-1のボスを倒した」で過去ぶんを復元する。
+-- ⑧の踏破だけは記録が残っていないので復元できない（次に⑧のボスを倒したときに付く）
+update public.v2_profiles p
+   set cleared_areas = sub.arr
+  from (
+    select pr.id,
+           coalesce(array_agg(distinct a - 1) filter (where a > 1), '{}') as arr
+      from public.v2_profiles pr, unnest(pr.unlocked_areas) as a
+     group by pr.id
+  ) sub
+ where p.id = sub.id and coalesce(array_length(p.cleared_areas, 1), 0) = 0;
 
 -- ---- 装備マスタ ----
 create table if not exists public.v2_equipment (
@@ -1271,6 +1285,7 @@ declare
   v_ok    int := 0;
   v_res   jsonb;
   v_unlocked int[];
+  v_cleared  int[];
   v_rate  numeric;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
@@ -1337,11 +1352,16 @@ begin
   if v_bw > 0 and p_area < 8 and not (v_unlocked @> array[p_area + 1]) then
     v_unlocked := array_append(v_unlocked, p_area + 1);
   end if;
+  -- 踏破済み（そのエリアのボスを倒した）。⑧は解放される先が無いのでここでしか残らない
+  v_cleared := coalesce(v_row.cleared_areas, '{}');
+  if v_bw > 0 and not (v_cleared @> array[p_area]) then
+    v_cleared := array_append(v_cleared, p_area);
+  end if;
   -- ボス遭遇率。通常敵と戦うたび+0.3、ボスに当たった回があれば0へ戻す
   v_rate := case when v_bs > 0 then 0 else least(100, v_row.boss_rate + 0.3 * v_n) end;
 
   update public.v2_profiles
-     set unlocked_areas = v_unlocked, boss_rate = v_rate,
+     set unlocked_areas = v_unlocked, cleared_areas = v_cleared, boss_rate = v_rate,
          last_sortie_at = now(), updated_at = now()
    where id = v_uid;
 
@@ -1352,7 +1372,8 @@ begin
   perform public.v2_daily_bump(v_uid, 'sortie',
     (v_n + v_bs) * (case when v_row.sortie_cd = 20 then 2 else 1 end));
   return jsonb_build_object('ok', true, 'exp', v_exp, 'gold', 0, 'drops', v_ok,
-    'unlocked', to_jsonb(v_unlocked), 'boss_rate', v_rate, 'level', v_res);
+    'unlocked', to_jsonb(v_unlocked), 'cleared', to_jsonb(v_cleared),
+    'boss_rate', v_rate, 'level', v_res);
 end;
 $$;
 revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb) from public;

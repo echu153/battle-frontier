@@ -3,7 +3,7 @@ import { supabase } from '../../supabase'
 import V2LogLine from './V2LogLine.jsx'
 import { AREAS, toFighter as enemyFighter } from '../lib/enemies.js'
 import {
-  pickEncounter, expOf, isAreaUnlocked, nextBossRate,
+  pickEncounter, expOf, isAreaUnlocked, nextBossRate, clearedAreasOf, isAreaCleared,
   cooldownOf, rollHasDrop, rollDrop, rollMaterial, COOLDOWNS,
 } from '../lib/sortie.js'
 import { runBattle } from '../lib/battle.js'
@@ -40,6 +40,8 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
   // ★解放されていないエリアはプルダウンに出さない（旧版と同じ）
   const availableAreas = AREAS.filter(a => isAreaUnlocked(unlocked, a.id))
   const area = availableAreas.find(a => a.id === selectedArea) || availableAreas[0]
+  // ★エリアボスを倒したエリアはプルダウンで「踏破済み」と分かるようにする
+  const cleared = clearedAreasOf(prof)
   // アリーナで階層守護者でいるあいだのドロップ率ボーナス（arena.js）
   const guardMult = guardDropMultOf(guard)
   const elapsed = (now - lastAt.current) / 1000
@@ -166,7 +168,11 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
       <select value={area?.id || 1}
         onChange={e => { const v = Number(e.target.value); setSelectedArea(v); localStorage.setItem('v2SelectedArea', v) }}
         style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
-        {availableAreas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        {availableAreas.map(a => (
+          <option key={a.id} value={a.id}>
+            {a.name}{isAreaCleared(cleared, a.id) ? '　✔踏破済み' : ''}
+          </option>
+        ))}
       </select>
       <button onClick={doBattle} disabled={!canAct}
         style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct ? '#ffcc00' : '#003366'}`,

@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   BOSS_RATE_STEP, rollBoss, nextBossRate, isAreaUnlocked, unlockNext,
+  clearNext, clearedAreasOf, isAreaCleared,
   expOf, rewardsOf, pickEncounter, EXP_BOSS, EXP_ZAKO_MIN, EXP_ZAKO_MAX, LAST_AREA,
   COOLDOWNS, DEFAULT_COOLDOWN, cooldownOf,
   featuredPartAt, nextSwitchAt, featuredSchedule, rollDropPart, rollDrop,
@@ -199,4 +200,22 @@ test('装備が落ちる確率は10秒3%・20秒4%', () => {
   assert.ok(Math.abs(n10 / N - 0.03) < 0.004, `10秒 ${(n10 / N * 100).toFixed(2)}%`)
   assert.ok(Math.abs(n20 / N - 0.04) < 0.004, `20秒 ${(n20 / N * 100).toFixed(2)}%`)
   assert.ok(n20 > n10)
+})
+
+test('ボスを倒したエリアは踏破済みになる（⑧も残る）', () => {
+  // ボスに勝ったときだけ積む
+  assert.deepEqual(clearNext([], 1, true, true), [1])
+  assert.deepEqual(clearNext([], 1, true, false), [])
+  assert.deepEqual(clearNext([], 1, false, true), [])
+  assert.deepEqual(clearNext([1], 1, true, true), [1], "二重に足さない")
+  // ⑧はその先が無いので unlocked では残らない＝ここでしか残らない
+  assert.deepEqual(clearNext([1, 2, 3, 4, 5, 6, 7], LAST_AREA, true, true), [1, 2, 3, 4, 5, 6, 7, 8])
+
+  // 表示用：列がまだ無い（古い）プロフィールは解放状況から読み替える
+  assert.deepEqual(clearedAreasOf({ unlocked_areas: [1, 2, 3] }), [1, 2])
+  assert.deepEqual(clearedAreasOf({ unlocked_areas: [1] }), [])
+  // 列があるなら両方を合わせる（⑧の踏破は列にしか無い）
+  assert.deepEqual(clearedAreasOf({ unlocked_areas: [1, 2], cleared_areas: [1, 8] }), [1, 8])
+  assert.ok(isAreaCleared(clearedAreasOf({ unlocked_areas: [1, 2] }), 1))
+  assert.ok(!isAreaCleared(clearedAreasOf({ unlocked_areas: [1, 2] }), 2))
 })
