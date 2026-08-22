@@ -21,13 +21,15 @@ update public.v2_profiles
 set class = 'ノーブル', skills = '[]'::jsonb, skill_set = '[]'::jsonb, updated_at = now()
 where class = 'ブリーダー';
 
--- 1-2. 職業マスタから消す
-delete from public.v2_classes where id = 'ブリーダー';
-
--- 1-3. ブリーダーのスキルと、作り直しで消えたスキルを消す
+-- 1-2. ブリーダーのスキルと、作り直しで消えたスキルを先に消す
+-- ⚠**職業マスタより先に消すこと**。v2_skills.cls が v2_classes.id を参照しているので、
+--   職業を先に消すと外部キー制約（v2_skills_cls_fkey）で弾かれる
 delete from public.v2_skills where name in (
   'ペット召喚', '攻撃して！', '一緒に頑張ろう！', '休憩しよう！', 'やっちゃえ！', 'かみつけ！', 'とびかかれ！', 'なでなで', 'まもって！', 'いっしょに走ろう！', '喉笛狩り', '毒煙玉'
 );
+
+-- 1-3. 職業マスタから消す（参照が無くなったので通る）
+delete from public.v2_classes where id = 'ブリーダー';
 
 -- ===== 2. 初期職に足しかけたぶんを取り消す =====
 -- ⚠**第1版のSQL（初期職ぶんも入っていた）をすでに流していた場合だけ意味がある**。
