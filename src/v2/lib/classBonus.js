@@ -47,7 +47,10 @@ export const CLASS_BONUS = {
   精霊召喚士:   { stats: { int_stat: 5 },       main:'int_stat', sub:'agi' },
   式神使い:     { stats: { int_stat: 5 },       main:'int_stat', sub:'dex' },
   // ---- 複合上位職 ----
-  賢者:               { stats: { int_stat: 5 },      main:'int_stat', sub:'luk' },
+  // ★オールラウンダー（2026-08-23 ユーザー指定のコンセプト）。
+  //   v2は覚えたスキルが転職後も残るので、「どの職の技でも使いこなす」を職業の個性にする
+  //   ＝他職スキルの威力低下（0.8倍）と追加MP（2倍）が半分になる
+  賢者:               { stats: { int_stat: 5 },      main:'int_stat', sub:'luk', offClassCut: 50 },
   聖騎士:             { stats: { vit: 5 },           main:'vit',      sub:'str' },
   魔法剣士:           { stats: { str: 3, int_stat: 3 }, main:'str',   sub:'int_stat' },
   魔銃士:             { stats: { dex: 5 },           main:'dex',      sub:'int_stat' },

@@ -198,6 +198,7 @@ export const createSide = (fighter, band = null) => {
     passives,
     pa,
     healMult: bonus?.healMult ?? 1,   // 異端審問官は自身の回復量0.8倍
+    offClassCut: bonus?.offClassCut ?? 0, // 賢者は他職スキルのペナルティが半分
     ptr: 0,
     buffs,          // 自分にかかっているバフ（職業補正とパッシブぶんを最初から乗せておく）
     regen: null,    // { rate, turns }
@@ -244,8 +245,8 @@ export const createSide = (fighter, band = null) => {
 // ★他職のスキルは消費MPが2倍（skills.js の OFF_CLASS_MP_MULT）。
 //   編成の想定利用MP（setMpCost）と同じ関数を通しているので、画面と戦闘でズレない
 export const mpCostOf = (side, skill) => {
-  const pct = mpPctOf(side?.cls, skill)
-  const raw = pct ? Math.floor((side?.mp || 0) * pct) : mpOf(side?.cls, skill)
+  const pct = mpPctOf(side?.cls, skill, side?.offClassCut)
+  const raw = pct ? Math.floor((side?.mp || 0) * pct) : mpOf(side?.cls, skill, side?.offClassCut)
   // 武器の進化：消費MP−%（代償で付いた「消費MP+%」はマイナスの値で入っている）
   // ★天啓（賢者）の「消費MP-10%」も同じ枠で引く
   const cut = (side?.evo?.mpCost || 0) + (side?.pa?.mpCut || 0)
@@ -604,7 +605,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   const eFoe = liveStats(foe)
   // ★他職のスキルは効果が落ちる（skills.js の OFF_CLASS_MULT）。ダメージ・回復・バフ幅・
   //   状態異常の付与確率に掛かる。発動率・消費MP・防御無視・必中などには掛からない
-  const off = offClassMult(me.cls, skill)
+  const off = offClassMult(me.cls, skill, me.offClassCut)
 
   if (skill.kind === 'phys' || skill.kind === 'mag') {
     let raw = 0

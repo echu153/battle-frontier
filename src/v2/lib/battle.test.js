@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { runBattle, createSide, takeAction, liveStats, lowHpMultOf, highHpMultOf, vsBuffMultOf, buffCountOf, repeatMultOf, switchKindMultOf, varianceMultOf, comboMultOf, airMultOf, stackMultOf, chargeGuardOf, AIR_EVA, STACK_MAX, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
 import { inflict } from './ailments.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
-import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT, OFF_CLASS_MP_MULT, setMpCost } from './skills.js'
+import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT, OFF_CLASS_MP_MULT, setMpCost, offClassMult, mpOf } from './skills.js'
 import { damageFloor } from './combat.js'
 
 const makeRng = (seed) => {
@@ -735,4 +735,35 @@ test('サイキッカー：相手の特防で受けるが、威力はSTR参照',
   assert.ok(hit(base, { ...base, int_stat: base.int_stat * 3 }) < hit(base, base), '特防で減る')
   assert.ok(hit(base, { ...base, vit: base.vit * 3 }) > hit(base, { ...base, int_stat: base.int_stat * 3 }),
     'VITを積むより特防を積んだほうが減らせる')
+})
+
+test('賢者：他職スキルのペナルティが半分（オールラウンダー）', () => {
+  const kata = SKILL_BY_NAME['居合斬']            // 侍のスキル
+  assert.equal(offClassMult('侍', kata), 1, '本職はそのまま')
+  assert.equal(offClassMult('狩人', kata), OFF_CLASS_MULT)
+  assert.equal(Number(offClassMult('賢者', kata, 50).toFixed(3)), 0.9, '0.8のペナルティが半分')
+  assert.equal(mpOf('狩人', kata), kata.mp * OFF_CLASS_MP_MULT)
+  assert.equal(mpOf('賢者', kata, 50), kata.mp * 1.5, '追加MPも半分')
+  // 実戦：同じステ・同じ技でも、賢者のほうが他職スキルをうまく振れる
+  const dmg = (cls) => {
+    const me = createSide({ name: cls, cls, kind:'phys', stats: evenStats(534), slots:[{ skill: kata, uses:9 }] })
+    const foe = createSide(fighter('的', [], { ...evenStats(534), hp: 10 ** 7 }))
+    const log = []
+    takeAction(me, foe, () => 0.5, log, { idx: 0, noProc: true })
+    return log.find(l => l.type === 'skill').damage
+  }
+  assert.ok(dmg('賢者') > dmg('狩人'), '賢者のほうが他職スキルで強い')
+  assert.ok(dmg('賢者') < dmg('侍'), 'それでも本職には及ばない')
+})
+
+test('賢者：ディスペルウェーブは名前どおりバフを剥がす', () => {
+  const wave = SKILL_BY_NAME['ディスペルウェーブ']
+  assert.equal(wave.dispel.chance, 25)
+  const me = createSide({ name:'賢', cls:'賢者', kind:'mag', stats: evenStats(534), slots:[{ skill: wave, uses:9 }] })
+  const foe = createSide(fighter('的', [], { ...evenStats(534), hp: 10 ** 7 }))
+  foe.buffs.agi = 30   // この技自身のデバフ（STR/INT-20%）と混ざらないステで見る
+  const log = []
+  takeAction(me, foe, () => 0, log, { idx: 0, noProc: true })
+  assert.ok(log.some(l => l.type === 'dispel'), 'バフ消去が出ていない')
+  assert.equal(foe.buffs.agi, undefined)
 })

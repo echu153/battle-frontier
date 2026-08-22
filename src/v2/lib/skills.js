@@ -309,7 +309,7 @@ export const SKILLS = [
   { name:'氷の障壁',         cls:'賢者', kind:'buff', proc:100, mp:15, buff:{ self:{ vit:35, int_stat:20 } }, priority:1, desc:'VIT+35%・INT+20%（重ねがけ可）' },
   { name:'メテオストライク', cls:'賢者', kind:'mag', mult:0.67, hits:4, proc:78, mp:23, noCrit:true, desc:'4連撃。クリティカルしない' },
   { name:'アルカナボルト',     cls:'賢者', kind:'mag', mult:1.9, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:13, desc:'魔力の弾。DEXも威力になる' },
-  { name:'ディスペルウェーブ', cls:'賢者', kind:'mag', mult:1.91, add:[{ stat:'dex', rate:0.3 }], proc:85, mp:17, buff:{ enemy:{ str:-20, int_stat:-20 } }, desc:'DEXも威力になる。相手のSTR・INT-20%（重ねがけ可）' },
+  { name:'ディスペルウェーブ', cls:'賢者', kind:'mag', mult:1.81, add:[{ stat:'dex', rate:0.3 }], proc:85, mp:17, buff:{ enemy:{ str:-20, int_stat:-20 } }, dispel:{ chance:25 }, desc:'DEXも威力になる。相手のSTR-20%・INT-20%（重ねがけ可）。25%で相手のバフを1つ消す' },
   { name:'インフェルノ',       cls:'賢者', kind:'mag', mult:2.1, add:[{ stat:'dex', rate:0.35 }], proc:85, mp:17, desc:'業火の渦。DEXも威力になる' },
   { name:'アストラルレイ',     cls:'賢者', kind:'mag', mult:2.3, add:[{ stat:'dex', rate:0.4 }], proc:78, mp:23, desc:'星の光を撃ち出す。DEXも威力になる' },
   { name:'マナリカバリ',       cls:'賢者', kind:'heal', proc:85, mp:14, mpRegen:{ rate:0.45, turns:4 }, priority:1, desc:'4ターン毎ターンINT×0.6のMPを回復' },
@@ -613,13 +613,15 @@ export const OFF_CLASS_MP_MULT = 2
 // 敵の技やテスト用のダミーは cls を持たない＝素の性能のまま（罰則の対象は職業スキルだけ）。
 // 職業の分からない側（テストのダミーなど）も罰しない
 export const isOwnClassSkill = (cls, skill) => !skill?.cls || !cls || skill.cls === cls
-export const offClassMult = (cls, skill) => (isOwnClassSkill(cls, skill) ? 1 : OFF_CLASS_MULT)
+// cut … 他職ペナルティの軽減率%（賢者は50＝ペナルティが半分）。classBonus の offClassCut から来る
+export const offClassMult = (cls, skill, cut = 0) =>
+  (isOwnClassSkill(cls, skill) ? 1 : 1 - (1 - OFF_CLASS_MULT) * (1 - Math.min(100, cut) / 100))
 // 実際に払う消費MP。★編成の検証（想定利用MP）と戦闘の消費で必ず同じ関数を通すこと
-export const mpOf = (cls, skill) =>
-  (skill?.mp || 0) * (isOwnClassSkill(cls, skill) ? 1 : OFF_CLASS_MP_MULT)
+export const mpOf = (cls, skill, cut = 0) =>
+  (skill?.mp || 0) * (isOwnClassSkill(cls, skill) ? 1 : 1 + (OFF_CLASS_MP_MULT - 1) * (1 - Math.min(100, cut) / 100))
 // 割合消費（マナボルト）も同じだけ重くする。100%は超えない
-export const mpPctOf = (cls, skill) =>
-  Math.min(1, (skill?.mpPct || 0) * (isOwnClassSkill(cls, skill) ? 1 : OFF_CLASS_MP_MULT))
+export const mpPctOf = (cls, skill, cut = 0) =>
+  Math.min(1, (skill?.mpPct || 0) * (isOwnClassSkill(cls, skill) ? 1 : 1 + (OFF_CLASS_MP_MULT - 1) * (1 - Math.min(100, cut) / 100)))
 // 増減幅を丸ごと弱める（バフ・デバフ用。デバフは負の値なので0へ寄る＝弱くなる）
 export const scaleTable = (table, mult) =>
   (mult === 1 || !table) ? table : Object.fromEntries(Object.entries(table).map(([k, v]) => [k, v * mult]))
