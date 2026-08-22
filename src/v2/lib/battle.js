@@ -73,6 +73,7 @@ const collectPassives = (passives) => {
     hpSteps: [],       // [{ at, statPct }] HPが at% 以下で効く段（新しいバーサク）
     ailResist: 0,      // 受ける状態異常の付与率-%（武僧）
     ritualStart: 0,    // 戦闘を始めるときに持っている呪力（式神使い）
+    formBoost: 0,      // 獣の型のステータス補正+%（ビーストレンジャーの野性の勘）
     repeat: null,      // { per, max } 同じ技を続けて撃つほど威力+%（精霊召喚士）
     hitMult: null,     // { mult, lowMult, at } 命中率に掛ける（鷹ノ目）
     hitStack: null,    // { critRate, critDmg, max } 当てるたびに積む（精密照準）
@@ -84,7 +85,7 @@ const collectPassives = (passives) => {
     const p = s?.passive
     if (!p) continue
     for (const k of ['hitBonus', 'evaBonus', 'critBonus', 'procBonus', 'defPenBonus', 'healBonus', 'debuffGuard',
-      'critDmg', 'mpCut', 'defRed', 'ailResist', 'ritualStart']) {
+      'critDmg', 'mpCut', 'defRed', 'ailResist', 'ritualStart', 'formBoost']) {
       if (p[k]) pa[k] += p[k]
     }
     if (p.bleedMax) pa.bleedMax = Math.max(pa.bleedMax, p.bleedMax)
@@ -108,6 +109,20 @@ const collectPassives = (passives) => {
 
 // いまのステータス。土台のバフに、状況で変わるパッシブぶんを足してから計算する。
 //   acting=true … 自分の行動を解決している最中（元素共鳴のような「その行動だけ」の補正を含める）
+// ★ビーストレンジャー（2026-08-23 ユーザー選択のコンセプト）
+//   いま呼んでいる獣で「型」が変わり、型のあいだステータス補正が乗る。
+//   獣を呼ぶ技を使うとその型になり、**同じ獣を続けて呼ぶと威力が上がる**（型を合わせて撃つ）。
+//   ＝型を張り替えるほど補正を失うので、「回すか・固めるか」を選ぶことになる
+export const BEAST_FORMS = {
+  hawk:  { label:'鷹', stats:{ agi:20, dex:15 } },
+  bear:  { label:'熊', stats:{ str:20, vit:20 } },
+  snake: { label:'蛇', stats:{ dex:15, luk:15 } },
+}
+// 型が合っているとき（同じ獣を続けて呼ぶ）の威力+%
+export const BEAST_BONUS = 25
+export const beastMultOf = (skill, prevForm) =>
+  (skill?.form && prevForm === skill.form ? 1 + BEAST_BONUS / 100 : 1)
+
 export const liveStats = (side, acting = false) => {
   const b = { ...side.buffs }
   const add = (k, pct) => { b[k] = Math.max(BUFF_MIN_PCT, (b[k] || 0) + pct) }
@@ -126,6 +141,11 @@ export const liveStats = (side, acting = false) => {
   for (const t of side.pa.perAct || []) {
     const up = Math.min(t.max, t.per * (side.acts || 0))
     if (up > 0) for (const st of t.stats) add(st, up)
+  }
+  // ビーストレンジャー：いま呼んでいる獣の型（野性の勘があるとさらに効く）
+  if (side.form && BEAST_FORMS[side.form]) {
+    const k = 1 + (side.pa?.formBoost || 0) / 100
+    for (const [st, pct] of Object.entries(BEAST_FORMS[side.form].stats)) add(st, pct * k)
   }
   // 新しいバーサク：HPの段階でステータスが上がる（重ならず、いちばん深い段だけが効く）
   if (side.pa.hpSteps?.length) {
@@ -210,6 +230,7 @@ export const createSide = (fighter, band = null) => {
     air: false,     // 空中にいるか（体術師）
     ritual: pa.ritualStart || 0,  // 呪力（式神使い）。溜めて切り札で全部使う
     charge: 0,      // 竜気（竜騎士）。溜めるほど硬く、切り札で全部使う
+    form: null,     // いま呼んでいる獣の型（ビーストレンジャー）
     lastKind: null, // 直前に使った技の種別（魔法剣士の両刀ボーナスが見る）
     // ★侍（2026-08-19）
     stance: null,   // 納刀：{ proc, mult } 次に撃つスキルへ乗り、撃ったら消える
@@ -591,6 +612,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   // 元素共鳴：直前に使ったスキルと違えば、この行動だけ補正が乗る
   const prevSkill = me.lastSkill        // 元素使いのコンボが見る「直前に使った技」
   const wasAir = !!me.air               // 体術師：この行動を始めた時点で空中だったか
+  const prevForm = me.form              // ビーストレンジャー：撃つ前に呼んでいた獣
   const ritualUsed = skill.useRitual ? (me.ritual || 0) : 0
   const chargeUsed = skill.useCharge ? (me.charge || 0) : 0
   // 同じ技を続けて撃った回数（魔銃士・精霊召喚士）。違う技を挟むと0へ戻る
@@ -636,7 +658,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
           * highHpMultOf(skill, me) * vsBuffMultOf(skill, foe) * repeatMultOf(skill, me)
           * switchKindMultOf(skill, prevKind) * varMult
           * comboMultOf(skill, prevSkill) * airMultOf(skill, wasAir)
-          * stackMultOf(skill.useRitual, ritualUsed) * stackMultOf(skill.useCharge, chargeUsed),
+          * stackMultOf(skill.useRitual, ritualUsed) * stackMultOf(skill.useCharge, chargeUsed)
+          * beastMultOf(skill, prevForm),
         kind: skill.kind, atkKind: skill.srcKind || null,
         defPen, add: skill.add || null,
         sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit, noCrit: !!skill.noCrit,
@@ -747,6 +770,11 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   } else if (skill.kind === 'phys' || skill.kind === 'mag') {
     me.air = false
   }
+  // ★ビーストレンジャー：獣を呼ぶ技を使うと、その獣の型になる
+  if (skill.form && me.form !== skill.form) {
+    me.form = skill.form
+    log.push({ side: me.name, type: 'form', skill: skill.name, form: BEAST_FORMS[skill.form]?.label || skill.form })
+  }
   // ★式神使い：儀式で呪力を練る／竜騎士：竜気を溜める（溜めるほど硬い）
   if (skill.ritual) {
     me.ritual = Math.min(STACK_MAX, (me.ritual || 0) + skill.ritual)
@@ -776,13 +804,16 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   }
   // バフ・デバフ（攻撃スキルに付いていることもある）
   // ★buffTurns を持つ技は「期限つき」＝そのターン数で切れる（狂心）
-  if (skill.buff && skill.buffTurns) {
-    if (skill.buff.self) me.timedBuffs.push({ table: scaleTable(skill.buff.self, off), turns: skill.buffTurns })
-    if (skill.buff.enemy) foe.timedBuffs.push({ table: scaleTable(skill.buff.enemy, off), turns: skill.buffTurns })
+  // ★ビーストレンジャー：いま呼んでいる獣に合わせて中身が変わるバフ
+  const formBuff = skill.formBuff ? { self: skill.formBuff[me.form || 'none'] } : null
+  const spec = formBuff || skill.buff
+  if (spec && skill.buffTurns) {
+    if (spec.self) me.timedBuffs.push({ table: scaleTable(spec.self, off), turns: skill.buffTurns })
+    if (spec.enemy) foe.timedBuffs.push({ table: scaleTable(spec.enemy, off), turns: skill.buffTurns })
     log.push({ side: me.name, type: 'buff', skill: skill.name })
-  } else if (skill.buff) {
-    if (skill.buff.self)  applyBuff(me.buffs, scaleTable(skill.buff.self, off))
-    if (skill.buff.enemy) applyDebuff(foe, scaleTable(skill.buff.enemy, off), log)
+  } else if (spec) {
+    if (spec.self)  applyBuff(me.buffs, scaleTable(spec.self, off))
+    if (spec.enemy) applyDebuff(foe, scaleTable(spec.enemy, off), log)
     log.push({ side: me.name, type: 'buff', skill: skill.name })
   }
 }

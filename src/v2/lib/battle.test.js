@@ -1,7 +1,7 @@
 // バトルフロンティアⅡ 戦闘ループの回帰テスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runBattle, createSide, takeAction, liveStats, lowHpMultOf, highHpMultOf, vsBuffMultOf, buffCountOf, repeatMultOf, switchKindMultOf, varianceMultOf, comboMultOf, airMultOf, stackMultOf, chargeGuardOf, AIR_EVA, STACK_MAX, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
+import { runBattle, createSide, takeAction, liveStats, lowHpMultOf, highHpMultOf, vsBuffMultOf, buffCountOf, repeatMultOf, switchKindMultOf, varianceMultOf, comboMultOf, airMultOf, stackMultOf, chargeGuardOf, AIR_EVA, STACK_MAX, beastMultOf, BEAST_FORMS, BEAST_BONUS, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
 import { inflict } from './ailments.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
 import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT, OFF_CLASS_MP_MULT, setMpCost, offClassMult, mpOf } from './skills.js'
@@ -766,4 +766,75 @@ test('賢者：ディスペルウェーブは名前どおりバフを剥がす',
   takeAction(me, foe, () => 0, log, { idx: 0, noProc: true })
   assert.ok(log.some(l => l.type === 'dispel'), 'バフ消去が出ていない')
   assert.equal(foe.buffs.agi, undefined)
+})
+
+// ★2026-08-23：ビーストレンジャー＝呼んでいる獣で「型」が変わる
+test('ビーストレンジャー：獣を呼ぶと型が変わり、型のあいだステータスが上がる', () => {
+  const hawk = SKILL_BY_NAME['ホークダイブ']
+  const bear = SKILL_BY_NAME['ベアクロー']
+  assert.equal(hawk.form, 'hawk')
+  assert.equal(bear.form, 'bear')
+  assert.deepEqual(BEAST_FORMS.hawk.stats, { agi:20, dex:15 })
+  const me = createSide({ name:'獣', cls:'ビーストレンジャー', kind:'phys', stats: evenStats(534),
+    slots:[{ skill: hawk, uses:9 }, { skill: bear, uses:9 }] })
+  const foe = createSide(fighter('的', [], { ...evenStats(534), hp: 10 ** 7 }))
+  const agi0 = liveStats(me).agi
+  takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
+  assert.equal(me.form, 'hawk', '鷹を呼んだ')
+  const agi1 = liveStats(me).agi
+  assert.ok(agi1 > agi0, '鷹の型でAGIが上がる')
+  // 張り替えると前の型の補正は消える
+  takeAction(me, foe, () => 0.5, [], { idx: 1, noProc: true })
+  assert.equal(me.form, 'bear', '熊へ張り替えた')
+  assert.equal(liveStats(me).agi, agi0, '鷹のぶんは消えている')
+  assert.ok(liveStats(me).str > liveStats(createSide({ name:'素', cls:'ビーストレンジャー', kind:'phys', stats: evenStats(534), slots:[] })).str)
+})
+
+test('ビーストレンジャー：同じ獣を続けて呼ぶと威力+25%', () => {
+  const hawk = SKILL_BY_NAME['ホークダイブ']
+  assert.equal(BEAST_BONUS, 25)
+  assert.equal(beastMultOf(hawk, null), 1, '呼んでいなければ素')
+  assert.equal(beastMultOf(hawk, 'bear'), 1, '別の獣からの張り替えは素')
+  assert.equal(beastMultOf(hawk, 'hawk'), 1.25, '型が合っていれば乗る')
+  assert.equal(beastMultOf(sk('ふつう'), 'hawk'), 1)
+})
+
+test('ビーストレンジャー：野性の勘は型の補正を1.5倍にする', () => {
+  const kan = SKILL_BY_NAME['野性の勘']
+  assert.equal(kan.passive.formBoost, 50)
+  const make = (withPassive) => createSide({ name:'獣', cls:'ビーストレンジャー', kind:'phys', stats: evenStats(534),
+    slots: withPassive ? [{ skill: kan, uses:1 }, { skill: SKILL_BY_NAME['ホークダイブ'], uses:9 }]
+      : [{ skill: SKILL_BY_NAME['ホークダイブ'], uses:9 }] })
+  const foe = createSide(fighter('的', [], { ...evenStats(534), hp: 10 ** 7 }))
+  const agiAfterCall = (withPassive) => {
+    const me = make(withPassive)
+    const before = liveStats(me).agi
+    takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
+    return liveStats(me).agi - before
+  }
+  const plain = agiAfterCall(false)
+  const boosted = agiAfterCall(true)
+  assert.ok(boosted > plain, '野性の勘のぶん伸びる')
+  assert.equal(Math.round((boosted / plain) * 10) / 10, 1.5)
+})
+
+test('ビーストレンジャー：ビーストコールは呼んでいる獣で中身が変わる', () => {
+  const call = SKILL_BY_NAME['ビーストコール']
+  const hawk = SKILL_BY_NAME['ホークダイブ']
+  assert.deepEqual(call.formBuff.bear, { str:35, vit:20 })
+  const foe = createSide(fighter('的', [], { ...evenStats(534), hp: 10 ** 7 }))
+  // 獣を呼んでいなければ素のSTRバフ
+  const me = createSide({ name:'獣', cls:'ビーストレンジャー', kind:'phys', stats: evenStats(534),
+    slots:[{ skill: call, uses:9 }, { skill: hawk, uses:9 }] })
+  const str0 = me.buffs.str || 0, agi0 = me.buffs.agi || 0   // 職業補正のぶんが最初から乗っている
+  takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
+  assert.ok(me.buffs.str > str0, '呼んでいなければSTR')
+  assert.equal(me.buffs.agi || 0, agi0, 'AGIには乗らない')
+  // 鷹を呼んでから使うとAGI側になる
+  const me2 = createSide({ name:'獣', cls:'ビーストレンジャー', kind:'phys', stats: evenStats(534),
+    slots:[{ skill: call, uses:9 }, { skill: hawk, uses:9 }] })
+  takeAction(me2, foe, () => 0.5, [], { idx: 1, noProc: true })
+  const agiBefore = me2.buffs.agi || 0
+  takeAction(me2, foe, () => 0.5, [], { idx: 0, noProc: true })
+  assert.ok((me2.buffs.agi || 0) > agiBefore, '鷹ならAGIが乗る')
 })

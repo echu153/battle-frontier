@@ -82,6 +82,8 @@ export const buildBattleLog = (r, you, foe) => {
       out.push({ text:`🛡 ${actor}は身を守っている！（${l.sec}秒・被ダメージ-${l.cut}%）`, color: LOG_COLOR.guard })
     } else if (l.type === 'air') {
       out.push({ text:`🕊 ${actor}は跳び上がった！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'form') {
+      out.push({ text:`🐾 ${actor}の${l.skill}！ ${l.form}を呼んだ！`, color: LOG_COLOR.buff })
     } else if (l.type === 'ritual') {
       out.push({ text:`🔯 ${actor}の${l.skill}！ 呪力が${l.stacks}になった！`, color: LOG_COLOR.buff })
     } else if (l.type === 'charge') {

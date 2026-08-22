@@ -75,6 +75,7 @@ export const PASSIVE_EFFECT_KEYS = [
   'hpSteps',   // [{ at, statPct }] HPが at% 以下で効く段（バーサク）。いちばん深い段だけが効く
   'ailResist', // 受ける状態異常の付与率-%（武僧）
   'ritualStart', // 戦闘開始時に持っている呪力（式神使い）
+  'formBoost',   // 獣の型のステータス補正+%（ビーストレンジャー）
   'repeat',    // { per, max } 同じスキルを続けて使うほど威力+%（精霊召喚士）
   'perAct',    // { stats, per, max } 自分が行動するたびに積む（第六感）
 ]
@@ -100,6 +101,8 @@ export const PASSIVE_EFFECT_KEYS = [
 // useRitual   : { per } 呪力を全部使って威力+per%×個数（式神使い）
 // chargeUp    : true 竜気を1つ積む。溜めているあいだ硬い（竜騎士。最大3）
 // useCharge   : { per } 竜気を全部使って威力+per%×個数（竜騎士）
+// form        : 'hawk'|'bear'|'snake' その獣を呼ぶ＝型が変わる。同じ型なら威力+BEAST_BONUS%
+// formBuff    : { none, hawk, bear, snake } いま呼んでいる獣で中身が変わるバフ
 // drainIfAil  : { key, pct } **相手がその状態異常のときだけ**吸収する（血啜り）。
 //               撃つ前から掛かっている必要がある＝自分で撒いてから吸う流れになる
 // hpCostPct   : 現在HPの n% を払って撃つ（すてみ）。払っても死なない
@@ -437,14 +440,14 @@ export const SKILLS = [
   // ===== ビーストレンジャー（サモナー×弓使い。旧版に無い職なのでスキル名は新規） =====
   { name:'獣呼びの矢', cls:'ビーストレンジャー', kind:'phys', mult:1.45, add:[{ stat:'agi', rate:0.5 }], proc:90, mp:12, desc:'AGIも威力になる' },
   { name:'群狼の牙',   cls:'ビーストレンジャー', kind:'mag', mult:0.81, hits:3, proc:85, mp:17, noCrit:true, desc:'3連撃。クリティカルしない' },
-  { name:'野性の勘',   cls:'ビーストレンジャー', kind:'passive', mp:0, passive:{ statPct:{ agi:5 }, todo:true }, desc:'【暫定】AGI+5%' },
+  { name:'野性の勘',   cls:'ビーストレンジャー', kind:'passive', mp:0, passive:{ formBoost:50 }, desc:'獣の扱いに長けている。獣の型によるステータス補正が1.5倍になる' },
   { name:'共鳴の咆哮', cls:'ビーストレンジャー', kind:'buff', proc:100, mp:14, buff:{ self:{ str:30, agi:20 } }, priority:1, desc:'STR+30%・AGI+20%（重ねがけ可）' },
   { name:'貫狼撃',     cls:'ビーストレンジャー', kind:'phys', mult:2.11, defPen:0.3, proc:82, mp:18, desc:'相手の防御を30%無視' },
-  { name:'ホークダイブ',   cls:'ビーストレンジャー', kind:'phys', mult:1.65, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:12, desc:'鷹が急降下する。DEXも威力になる' },
-  { name:'ベアクロー',   cls:'ビーストレンジャー', kind:'phys', mult:1.74, add:[{ stat:'vit', rate:0.3 }], proc:88, mp:14, desc:'VITも威力になる' },
-  { name:'バイパーアロー',   cls:'ビーストレンジャー', kind:'phys', mult:1.67, add:[{ stat:'dex', rate:0.3 }], proc:85, mp:16, ail:{ key:'poison', chance:45 }, desc:'DEXも威力になる。45%で毒' },
+  { name:'ホークダイブ',   cls:'ビーストレンジャー', kind:'phys', mult:1.34, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:12, form:'hawk', desc:'鷹が急降下する。DEXも威力になる。鷹を呼ぶ（AGI+20%・DEX+15%）。すでに鷹なら威力+25%' },
+  { name:'ベアクロー',   cls:'ビーストレンジャー', kind:'phys', mult:1.43, add:[{ stat:'vit', rate:0.3 }], proc:88, mp:14, form:'bear', desc:'VITも威力になる。熊を呼ぶ（STR+20%・VIT+20%）。すでに熊なら威力+25%' },
+  { name:'バイパーアロー',   cls:'ビーストレンジャー', kind:'phys', mult:1.36, add:[{ stat:'dex', rate:0.3 }], proc:85, mp:16, ail:{ key:'poison', chance:45 }, form:'snake', desc:'DEXも威力になる。45%で毒。蛇を呼ぶ（DEX+15%・LUK+15%）。すでに蛇なら威力+25%' },
   { name:'ワイルドラッシュ',   cls:'ビーストレンジャー', kind:'phys', mult:0.63, add:[{ stat:'agi', rate:0.15 }], hits:3, proc:80, mp:20, noCrit:true, desc:'3連撃。AGIも威力になる。クリティカルしない' },
-  { name:'ビーストコール', cls:'ビーストレンジャー', kind:'buff', proc:100, mp:14, buff:{ self:{ str:30, vit:25 } }, priority:1, desc:'STR+30%・VIT+25%（重ねがけ可）' },
+  { name:'ビーストコール', cls:'ビーストレンジャー', kind:'buff', proc:100, mp:14, priority:1, formBuff:{ none:{ str:55 }, hawk:{ agi:35, dex:20 }, bear:{ str:35, vit:20 }, snake:{ dex:35, luk:20 } }, desc:'いま呼んでいる獣を昂らせる。鷹＝AGI+35%・DEX+20%／熊＝STR+35%・VIT+20%／蛇＝DEX+35%・LUK+20%（呼んでいなければSTR+55%）' },
 ]
 
 
@@ -474,6 +477,7 @@ export const PRICE = {
   buffPct: 0.006,    // バフ・デバフ1%につき（自分にプラス／相手にマイナスが有料。逆は割引）
   hpCost: 0.015,     // 現在HPを1%払うごとに割引（すてみ）
   airUp: 0.10,       // 空中へ跳ぶ（体術師）。回避+10%と、叩きつけの前提になる
+  form: 0.10,        // 獣を呼ぶ（ビーストレンジャー）。型のステータス補正が付く
   stackUp: 0.15,     // 溜めを1つ積む（式神使いの呪力・竜騎士の竜気）
   chargeGuard: 0.10, // 竜気は溜めているあいだ硬くなる（そのぶんの値段）
 }
@@ -490,6 +494,7 @@ export const effectPrice = (s) => {
   if (s.mpPct)    v += PRICE.mpPct
   if (s.dispel)   v += s.dispel.chance * 0.004   // バフ剥がし（異端審問官）
   if (s.airUp)    v += PRICE.airUp                 // 跳び上がる（体術師）
+  if (s.form)     v += PRICE.form                  // 獣を呼ぶ＝型を張り替える（ビーストレンジャー）
   if (s.ritual)   v += PRICE.stackUp * s.ritual    // 呪力を練る（式神使い）
   if (s.chargeUp) v += PRICE.stackUp + PRICE.chargeGuard   // 竜気を溜める（竜騎士。硬くなるぶん高い）
   // 状態異常。ヒットごとに試す技（マッドラッシュ）は2発ぶんまで数える
@@ -515,6 +520,8 @@ export const multTotal = (s) => Math.round(((s.mult || 0) + (s.add || []).reduce
 export const EXPECTED_STACKS = 2.5
 // 溜め（呪力・竜気）：最大3つだが、溜める手番も要るので平均2つ・そのぶん7掛けで見る
 export const EXPECTED_CHARGE = 2 * 0.7
+// 型が合っているときの威力+%（battle.js の BEAST_BONUS と同じ値。値段づけで参照する）
+export const BEAST_BONUS = 25
 export const relBonus = (s) => {
   let v = s.consumeAil ? s.consumeAil.perStack * EXPECTED_STACKS : 0
   // 追い討ち：相手のHPが減るほど伸びる。**削り切るまでの平均**でならすと最大値の約6割
@@ -536,6 +543,8 @@ export const relBonus = (s) => {
   // 式神使い・竜騎士：溜めてから撃つ。**溜める手番のぶん**を差し引いて平均2つで見る
   if (s.useRitual) v += (s.useRitual.per / 100) * EXPECTED_CHARGE
   if (s.useCharge) v += (s.useCharge.per / 100) * EXPECTED_CHARGE
+  // ビーストレンジャー：型を合わせて撃てば乗る。張り替えながら戦うので半分で見る
+  if (s.form) v += (BEAST_BONUS / 100) * 0.5
   return v
 }
 
