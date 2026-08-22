@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import {
   createAtb, step, needOf, fillRatio, buffSecOf, chosenOf, needNow, buffChips, ailChips,
   GAUGE_BASE, FILL_PER_SEC, TICK_SEC, AIL_SEC, MAX_DT, AGI_EFFECT,
-  GUARD_NEED, GUARD_CUT, GUARD_SEC, guardLeft, procBonusOf,
+  GUARD_NEED, GUARD_CUT, GUARD_SEC, guardLeft, needFor, PRIORITY_CUT, procBonusOf,
 } from './atb.js'
 import { runBattle, createSide, takeAction } from './battle.js'
 import { inflict, POISON_RATE } from './ailments.js'
@@ -326,4 +326,15 @@ test('ターンが無くて効かない効果は、ATBのつまみへ読み替�
   // 追加行動+ → ゲージの溜まりが速くなる
   const fill = (evo) => { let st = createAtb(atbMe(evo), atbFoe(), { rng: makeRng(1) }); st.a.auto = true; return step(st, 0.2).a.gauge }
   assert.ok(fill([{ key:'buff_swift', eff:{ extra: 50 } }]) > fill(undefined), '追加行動率が溜まりの速さになっていない')
+})
+
+test('先制はATBでは「必要ゲージが軽くなる」に読み替える', () => {
+  const plain = sk('ふつう', { proc:100 })
+  const fast = { ...sk('先制技', { proc:100 }), priority:1 }
+  const st = createAtb(fighter('自分'), fighter('敵'), { rng: makeRng(30) })
+  assert.equal(needFor(st.a, plain), 100)
+  assert.equal(needFor(st.a, fast), Math.round(100 * (1 - PRIORITY_CUT / 100)), '先制ぶん軽い')
+  // 納刀（構え）ぶんの先制も同じように効く
+  st.a.stance = { proc:20, mult:1.5, priority:1 }
+  assert.equal(needFor(st.a, plain), 80)
 })

@@ -1,7 +1,7 @@
 // バトルフロンティアⅡ 戦闘ループの回帰テスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runBattle, createSide, takeAction, peekSkill, attackKindOf, mpCostOf, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
+import { runBattle, createSide, takeAction, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
 import { inflict } from './ailments.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
 import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT, OFF_CLASS_MP_MULT, setMpCost } from './skills.js'
@@ -355,4 +355,65 @@ test('taken を持つ相手は、その型のダメージだけ通りやすく�
   assert.ok(Math.abs(up / base - 1.1) < 0.02, `+10%になっていない（×${(up / base).toFixed(3)}）`)
   // 型が違えば効かない
   assert.equal(hpOf({ mag: 1.1 }, 'phys'), base, '物理なのに特殊の相性が乗っている')
+})
+
+// ============================================================
+// ★2026-08-19：侍「納刀して斬る」
+// ============================================================
+test('納刀：次のスキルだけ発動率+20%・威力1.5倍・先制になり、撃つと消える', () => {
+  const nou = SKILL_BY_NAME['納刀']
+  assert.deepEqual(nou.stance, { proc:20, mult:1.5, priority:1 })
+  const atk = sk('斬る', { mult:1, proc:100 })
+  const me = createSide(fighter('侍', [{ skill: nou, uses:9 }, { skill: atk, uses:9 }]))
+  const foe = createSide(fighter('的'))
+  const log = []
+  // 納刀 → 構えに入る
+  takeAction(me, foe, () => 0.5, log, { idx: 0, noProc: true })
+  assert.deepEqual(me.stance, { proc:20, mult:1.5, priority:1 })
+  assert.equal(priorityOf(me, atk), 1, '納刀中はどの技も先制')
+  // 斬る → 威力1.5倍で、構えは消える
+  const plain = createSide(fighter('侍', [{ skill: nou, uses:9 }, { skill: atk, uses:9 }]))
+  const log2 = [], log3 = []
+  takeAction(plain, createSide(fighter('的')), () => 0.5, log2, { idx: 1, noProc: true })
+  takeAction(me, foe, () => 0.5, log3, { idx: 1, noProc: true })
+  const d0 = log2.find(l => l.type === 'skill').damage
+  const d1 = log3.find(l => l.type === 'skill').damage
+  assert.ok(Math.abs(d1 / d0 - 1.5) < 0.05, `${d0} → ${d1}`)
+  assert.equal(me.stance, null, '撃ったら消える')
+  assert.equal(priorityOf(me, atk), 0)
+})
+
+test('納刀中だけの追加効果（断空＝防御無視+20%・月影＝出血が確定）', () => {
+  // データの確認
+  assert.deepEqual(SKILL_BY_NAME['断空'].whileStance, { defPen:0.2 })
+  assert.deepEqual(SKILL_BY_NAME['月影'].whileStance, { ailChance:100 })
+  // 仕組みの確認（必中の試し技で、納刀の有無だけを見る）
+  const nou = SKILL_BY_NAME['納刀']
+  const test斬 = sk('試し斬り', { mult:1, proc:100, ail:{ key:'bleed', chance:0 }, whileStance:{ ailChance:100 } })
+  const run = (stance) => {
+    const me = createSide(fighter('侍', [{ skill: nou, uses:9 }, { skill: test斬, uses:9 }]))
+    const foe = createSide(fighter('的'))
+    if (stance) takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
+    takeAction(me, foe, () => 0.5, [], { idx: 1, noProc: true })
+    return foe.ail.bleed?.stacks || 0
+  }
+  assert.equal(run(false), 0, '納刀なしでは付与率0%')
+  assert.equal(run(true), 1, '納刀中は確定で付く')
+})
+
+test('見切り：受けた技ほど避けやすくなり、20%で頭打ち・切れると消える', () => {
+  const mikiri = SKILL_BY_NAME['見切り']
+  assert.deepEqual(mikiri.foresight, { turns:5, pct:3, perHit:3, max:20 })
+  const me = createSide(fighter('侍', [{ skill: mikiri, uses:9 }]))
+  const foe = createSide(fighter('的', [{ skill: sk('突き', { mult:1, proc:100 }), uses:99 }]))
+  takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
+  assert.equal(foresightEva(me, null), 3)
+  for (let i = 0; i < 10; i++) takeAction(foe, me, () => 0.5, [], { idx: 0, noProc: true })
+  assert.equal(me.foresight.byName['突き'], 20, '同じ技につき20%で頭打ち')
+  assert.equal(foresightEva(me, '突き'), 23)
+  assert.equal(foresightEva(me, '別の技'), 3, '別の技には積み上がらない')
+  // 5ターンで切れて、積み上げも消える
+  for (let i = 0; i < 5; i++) tickForesight(me)
+  assert.equal(me.foresight, null)
+  assert.equal(foresightEva(me, '突き'), 0)
 })

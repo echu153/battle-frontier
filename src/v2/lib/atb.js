@@ -25,7 +25,7 @@
 //   ＝出撃・アリーナ・ダンジョンのバランスには影響しない。
 // ============================================================
 import {
-  createSide, liveStats, peekSkill, mpCostOf, takeAction, tickRegen, BUFF_MIN_PCT,
+  createSide, liveStats, peekSkill, mpCostOf, priorityOf, takeAction, tickRegen, BUFF_MIN_PCT,
 } from './battle.js'
 import { STAT_KEYS } from './stats.js'
 import { AIL_KEYS, AIL_LABEL, BLEED_HP_RATE, POISON_RATE, hasAilment } from './ailments.js'
@@ -76,6 +76,15 @@ export const needOf = (skill, procBonus = 0) =>
 // そのサイドが持っている発動率+%の合計（オート戦闘の takeAction と同じ足し方）
 export const procBonusOf = (side) =>
   (side?.pa?.procBonus || 0) + (side?.en?.procBonus || 0) + (side?.evo?.proc || 0)
+
+// ★「先制」はATBだと行動順が無いので意味を持たない（2026-08-19 ユーザー決定）。
+//   代わりに**必要ゲージが軽くなる**＝早く撃てる、へ読み替える。
+//   priority 1 につき PRIORITY_CUT%（納刀ぶんの先制もここに乗る）
+export const PRIORITY_CUT = 20
+export const needFor = (side, skill) => {
+  const cut = Math.min(60, PRIORITY_CUT * Math.max(0, priorityOf(side, skill)))
+  return Math.max(20, Math.round(needOf(skill, procBonusOf(side)) * (1 - cut / 100)))
+}
 
 // ===== 防御（全職共通・スキルではない）=====
 // ★ATBだけの基本コマンド（2026-08-19 ユーザー決定）。スキル枠を1つも使わずに誰でも使える。
@@ -217,7 +226,7 @@ export const chosenOf = (side) => {
 // いま必要なゲージ量
 export const needNow = (side) => {
   const ch = chosenOf(side)
-  return ch.guard ? GUARD_NEED : needOf(ch.skill, procBonusOf(side))
+  return ch.guard ? GUARD_NEED : needFor(side, ch.skill)
 }
 // 溜まりぶんの余り（0以上なら撃てる）
 const excess = (side) => side.gauge - needNow(side)
@@ -241,7 +250,8 @@ const act = (st, me, foe) => {
     st.log.push({ side: me.name, type: 'guard', sec: GUARD_SEC, cut: GUARD_CUT })
     return
   }
-  const need = needOf(ch.skill, procBonusOf(me))
+  // ★納刀は撃った瞬間に消えるので、消費するゲージは「撃つ前」の値で決める
+  const need = needFor(me, ch.skill)
   const beforeMe = { ...me.buffs }
   const beforeFoe = { ...foe.buffs }
   const ailMe = { ...me.ail }

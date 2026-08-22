@@ -247,7 +247,7 @@ const findSlot = (side) => {
 
 // このターンの行動順の優先度。★納刀中だけ先制になる技がある（侍の居合斬）
 export const priorityOf = (side, skill) =>
-  (skill?.priority || 0) + (side?.stance && skill?.whileStance?.priority ? skill.whileStance.priority : 0)
+  (skill?.priority || 0) + (skill ? (side?.stance?.priority || 0) : 0)
 
 // このターン使うスキル（発動判定の前）。行動順の優先度を知るために先に覗く
 export const peekSkill = (side) => {
@@ -265,7 +265,8 @@ export const foresightEva = (side, skillName) => {
 const rememberSkill = (side, skillName) => {
   const f = side?.foresight
   if (!f || f.turns <= 0 || !skillName) return
-  f.byName[skillName] = (f.byName[skillName] || 0) + f.perHit
+  // ★同じ技につき max% まで（2026-08-19 ユーザー指定）。効果が切れると byName ごと消える
+  f.byName[skillName] = Math.min(f.max ?? 20, (f.byName[skillName] || 0) + f.perHit)
 }
 
 // 受けるとき側の軽減。骸の壁（1回きり）と竜鱗の加護（確率）はここでまとめて掛ける
