@@ -82,6 +82,8 @@ export const PASSIVE_EFFECT_KEYS = [
 // foresight   : { turns, pct, perHit, max } 一定ターン回避率+。受けた技ごとにさらに積む（見切り・技ごとに max% まで）
 // reqJobs     : この技を覚えるのに要る転職回数（侍・狂戦士の後半5個＝5回以上）
 // ailPerHit   : 多段のとき「1発ごとに」状態異常を試す（マッドラッシュ・狂乱連斬）
+// drainIfAil  : { key, pct } **相手がその状態異常のときだけ**吸収する（血啜り）。
+//               撃つ前から掛かっている必要がある＝自分で撒いてから吸う流れになる
 // hpCostPct   : 現在HPの n% を払って撃つ（すてみ）。払っても死なない
 // frenzy      : { turns } 狂乱＝**出る技がランダムな攻撃スキルになる**だけの状態（狂心）
 // buffTurns   : そのバフが何ターンで切れるか（既定は切れない）。狂心のSTR+70%＝4ターン
@@ -204,7 +206,7 @@ export const SKILLS = [
   { name:'フルブレイカー', cls:'狂戦士', kind:'phys', mult:1.9, defPen:0.5, proc:85, mp:16, desc:'相手の防御を50%無視' },
   { name:'猛り斬り', cls:'狂戦士', kind:'phys', mult:1.45, add:[{ stat:'agi', rate:0.3 }], proc:90, mp:12, reqJobs:5, ail:{ key:'bleed', chance:50 }, desc:'AGIも威力になる。50%で出血' },
   { name:'狂心',     cls:'狂戦士', kind:'buff', proc:95, mp:16, priority:1, reqJobs:5, buff:{ self:{ str:70 } }, buffTurns:4, frenzy:{ turns:4 }, desc:'4ターンのあいだSTR+70%。そのあいだは狂乱状態になり、出る技がランダムな攻撃スキルになる' },
-  { name:'裂傷撃',   cls:'狂戦士', kind:'phys', mult:1.6, add:[{ stat:'agi', rate:0.3 }], proc:88, mp:14, reqJobs:5, ail:{ key:'bleed', chance:35 }, desc:'AGIも威力になる。35%で出血' },
+  { name:'血啜り',   cls:'狂戦士', kind:'phys', mult:1.45, add:[{ stat:'agi', rate:0.3 }], proc:88, mp:14, reqJobs:5, drainIfAil:{ key:'bleed', pct:60 }, desc:'AGIも威力になる。相手が出血していれば、与えたダメージの60%を吸収する（火力は控えめ）' },
   { name:'狂乱連斬', cls:'狂戦士', kind:'phys', mult:0.57, add:[{ stat:'agi', rate:0.15 }], hits:3, proc:80, mp:20, noCrit:true, reqJobs:5, ail:{ key:'bleed', chance:20 }, ailPerHit:true, desc:'3連撃。1発ごとに20%で出血。AGIも威力になる。クリティカルしない' },
   { name:'威嚇咆哮', cls:'狂戦士', kind:'buff', proc:95, mp:12, priority:1, reqJobs:5, buff:{ enemy:{ str:-30 } }, desc:'相手のSTR-30%（重ねがけ可）' },
 
@@ -248,7 +250,7 @@ export const SKILLS = [
 
   // ===== 死霊使い（INT＋VIT・吸収） =====
   { name:'骸骨召喚',   cls:'死霊使い', kind:'mag', mult:2.2, proc:90, mp:13, desc:'骸骨を呼ぶ' },
-  { name:'ソウルドレイン', cls:'死霊使い', kind:'mag', mult:2.25, drain:0.4, proc:85, mp:17, desc:'与えたダメージの40%を吸収' },
+  { name:'ソウルドレイン', cls:'死霊使い', kind:'mag', mult:2.1, drain:0.4, proc:85, mp:17, desc:'与えたダメージの40%を吸収' },
   { name:'骸の壁',     cls:'死霊使い', kind:'passive', mp:0, passive:{ wall:{ pct:10, every:5 } }, desc:'戦闘開始時と自分の行動5回ごとに「次に受けるダメージ10%減」を得る（重複しない・1回受けると消える）' },
   { name:'腐敗霧',     cls:'死霊使い', kind:'mag', mult:2.15, proc:85, mp:17, buff:{ enemy:{ vit:-25, int_stat:-25 } }, desc:'相手のVIT・INT-25%（重ねがけ可）' },
   { name:'幽世ノ門',   cls:'死霊使い', kind:'mag', mult:1.95, add:[{ stat:'vit', rate:0.4 }], proc:80, mp:21, buff:{ enemy:{ vit:-20, agi:-20 } }, desc:'冥府へ引きずり込む。相手のVIT・AGI-20%（重ねがけ可）' },
@@ -398,13 +400,13 @@ export const SKILLS = [
   { name:'禁術・神降ろし', cls:'式神使い', kind:'mag', mult:2.7, proc:78, mp:23, desc:'式神使いの切り札' },
   { name:'呪符・鬼火', cls:'式神使い', kind:'mag', mult:1.9, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:13, desc:'鬼火を飛ばす。DEXも威力になる' },
   { name:'式符・鎌鼬', cls:'式神使い', kind:'mag', mult:0.66, add:[{ stat:'dex', rate:0.15 }], hits:3, proc:85, mp:17, noCrit:true, desc:'3連撃。DEXも威力になる。クリティカルしない' },
-  { name:'呪詛返し',   cls:'式神使い', kind:'mag', mult:2, add:[{ stat:'dex', rate:0.3 }], drain:0.3, proc:85, mp:17, desc:'DEXも威力になる。与えたダメージの30%を吸収' },
+  { name:'呪詛返し',   cls:'式神使い', kind:'mag', mult:1.9, add:[{ stat:'dex', rate:0.3 }], drain:0.3, proc:85, mp:17, desc:'DEXも威力になる。与えたダメージの30%を吸収' },
   { name:'封印符',     cls:'式神使い', kind:'mag', mult:1.75, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:15, ail:{ key:'paralyze', chance:10 }, desc:'DEXも威力になる。10%で麻痺' },
   { name:'大祓',       cls:'式神使い', kind:'heal', proc:85, mp:16, heal:{ rate:1.35 }, priority:1, desc:'INT×1.4を回復' },
 
   // ===== 武僧（格闘家×僧侶。旧版に無い職なのでスキル名は新規） =====
   { name:'練気掌',   cls:'武僧', kind:'phys', mult:1.7, add:[{ stat:'int_stat', rate:0.5 }], proc:85, mp:16, desc:'INTも威力になる' },
-  { name:'活殺自在', cls:'武僧', kind:'phys', mult:1.95, drain:0.5, proc:85, mp:16, desc:'与えたダメージの50%を吸収' },
+  { name:'活殺自在', cls:'武僧', kind:'phys', mult:1.8, drain:0.5, proc:85, mp:16, desc:'与えたダメージの50%を吸収' },
   { name:'心身一如', cls:'武僧', kind:'passive', mp:0, passive:{ debuffGuard:1 }, desc:'戦闘中1回だけ、相手から受けるデバフを打ち消す' },
   { name:'金剛身',   cls:'武僧', kind:'buff', proc:100, mp:15, buff:{ self:{ vit:55 } }, priority:1, desc:'VIT+45%・INT+15%（重ねがけ可）' },
   { name:'崩拳',     cls:'武僧', kind:'phys', mult:2.1, defPen:0.3, proc:82, mp:18, desc:'相手の防御を30%無視' },
@@ -443,7 +445,8 @@ export const SKILLS = [
 // ============================================================
 export const AIL_PRICE = { bleed:0.004, poison:0.005, slow:0.004, paralyze:0.02, healCut:0.003 }
 export const PRICE = {
-  drain: 0.5,        // 吸収1.0（=100%）につき
+  drain: 0.8,        // 吸収1.0（=100%）につき。★2026-08-19に0.5→0.8（吸収系は火力を控えめにする）
+  drainIfAil: 0.6,   // 条件つき吸収（相手が状態異常のときだけ）は素の吸収の0.6掛け
   defPen: 0.6,       // 防御無視1.0（=100%）につき
   sureHit: 0.15,     // 必中
   sureCrit: 0.50,    // 確定クリティカル
@@ -457,6 +460,7 @@ export const PRICE = {
 export const effectPrice = (s) => {
   let v = 0
   if (s.drain)    v += s.drain * PRICE.drain
+  if (s.drainIfAil) v += (s.drainIfAil.pct / 100) * PRICE.drain * PRICE.drainIfAil
   if (s.defPen)   v += s.defPen * PRICE.defPen
   if (s.sureHit)  v += PRICE.sureHit
   if (s.sureCrit) v += PRICE.sureCrit

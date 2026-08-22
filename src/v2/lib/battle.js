@@ -526,6 +526,9 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     let missed = 0
     // 第六感の「貫通+10%」はスキルの防御貫通に足す。武器の進化ぶんも同じ枠
     const defPen = Math.min(1, (skill.defPen || 0) + (ws?.defPen || 0) + me.pa.defPenBonus / 100 + me.evo.defPen / 100)
+    // ★条件つき吸収（狂戦士の血啜り）：**撃つ前から**相手がその状態異常なら吸える
+    //   （この技自身が付けた出血では吸えない＝先に撒いてから吸う流れになる）
+    const drainIf = skill.drainIfAil && hasAilment(foe.ail, skill.drainIfAil.key)
     // ★出血スタックの起爆（暗殺者の急所突き）。**相手に積んだ出血を全部消費して威力を上げる**
     //   ＝「出血を撒く技」と「刈り取る技」で1つの流れになる（消費するので撒き直しが要る）
     let burst = 1
@@ -599,6 +602,12 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     if (me.pa.rages.length) me.rage = hits > 0 ? me.rage + 1 : 0
     // 吸収：与えたダメージの一定割合を自分のHPへ（ソウルドレイン・ブラッティロアなど）
     let drained = 0
+    // 条件つき吸収（血啜り）：相手が出血しているときだけ吸う
+    if (drainIf && dmg > 0) {
+      const back = Math.max(1, Math.floor(dmg * skill.drainIfAil.pct / 100))
+      me.hp = Math.min(me.base.hp, me.hp + back)
+      drained += back
+    }
     // 武器の進化の吸収(%)はスキル自身の吸収と同じ枠で足す
     const drainRate = (skill.drain || 0) + me.evo.drain / 100
     if (drainRate > 0 && dmg > 0) {

@@ -483,3 +483,24 @@ test('狂心：4ターンSTR+70%、そのあいだ出る技がランダムにな
   assert.equal(me.timedBuffs.length, 0, 'STR+70%も4ターンで切れる')
   assert.equal(liveStats(me).str, before)
 })
+
+test('血啜り：相手が出血しているときだけ吸収する（自分で撒いた出血では吸えない）', () => {
+  const chi = SKILL_BY_NAME['血啜り']
+  assert.deepEqual(chi.drainIfAil, { key:'bleed', pct:60 })
+  const suck = sk('血啜り', { mult:1, proc:100, drainIfAil:{ key:'bleed', pct:60 } })
+  const run = (bleeding) => {
+    const me = createSide({ name:'狂', cls:'狂戦士', kind:'phys', stats: evenStats(534), slots:[{ skill: suck, uses:9 }] })
+    const foe = createSide(fighter('的'))
+    me.hp = Math.floor(me.base.hp / 2)
+    if (bleeding) inflict(foe.ail, 'bleed')
+    const before = me.hp
+    const log = []
+    takeAction(me, foe, () => 0.5, log, { idx: 0, noProc: true })
+    return { healed: me.hp - before, drain: log.find(l => l.type === 'skill').drain }
+  }
+  const off = run(false)
+  const on = run(true)
+  assert.equal(off.healed, 0, '出血していなければ吸えない')
+  assert.ok(on.healed > 0, '出血していれば吸える')
+  assert.equal(on.drain, on.healed)
+})
