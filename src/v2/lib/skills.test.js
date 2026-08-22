@@ -231,7 +231,7 @@ const buffVal = (side, v) => (side === 'self' ? v : -v)
 const dominates = (A, B) => {
   if (A === B || A.kind !== B.kind) return false
   // ★特別な仕組みを持つ技（納刀・見切り・納刀中だけの効果）は、持っていない技とは比べない
-  for (const k of ['stance', 'foresight', 'whileStance', 'frenzy', 'hpCostPct', 'ailPerHit', 'drainIfAil']) if (!!A[k] !== !!B[k]) return false
+  for (const k of ['stance', 'foresight', 'whileStance', 'frenzy', 'hpCostPct', 'ailPerHit', 'drainIfAil', 'lowHpBonus']) if (!!A[k] !== !!B[k]) return false
   if ((A.hits || 1) !== (B.hits || 1)) return false        // 多段と単発は別の土俵
   if (!!A.noCrit !== !!B.noCrit) return false
   if (!!A.mpPct !== !!B.mpPct) return false                // 割合消費も別の土俵

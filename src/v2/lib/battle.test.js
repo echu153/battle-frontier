@@ -1,7 +1,7 @@
 // バトルフロンティアⅡ 戦闘ループの回帰テスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runBattle, createSide, takeAction, liveStats, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
+import { runBattle, createSide, takeAction, liveStats, lowHpMultOf, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
 import { inflict } from './ailments.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
 import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT, OFF_CLASS_MP_MULT, setMpCost } from './skills.js'
@@ -503,4 +503,17 @@ test('血啜り：相手が出血しているときだけ吸収する（自分�
   assert.equal(off.healed, 0, '出血していなければ吸えない')
   assert.ok(on.healed > 0, '出血していれば吸える')
   assert.equal(on.drain, on.healed)
+})
+
+test('追い討ち：相手のHPが低いほど威力が上がる（20%以下で最大+50%）', () => {
+  const oi = SKILL_BY_NAME['追い討ち']
+  assert.deepEqual(oi.lowHpBonus, { max:50, at:20 })
+  const foe = createSide(fighter('的'))
+  const at = (hpPct) => { foe.hp = foe.base.hp * hpPct / 100; return lowHpMultOf(oi, foe) }
+  assert.equal(at(100), 1)
+  assert.equal(Number(at(60).toFixed(3)), 1.25, 'HP60%で+25%')
+  assert.equal(at(20), 1.5, 'HP20%で最大')
+  assert.equal(at(5), 1.5, 'それ以下は伸びない')
+  // 効果の無い技には掛からない
+  assert.equal(lowHpMultOf(sk('ふつう'), foe), 1)
 })

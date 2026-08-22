@@ -429,6 +429,16 @@ const evoMult = (me, foe, { kind = 'phys', skill = false, multi = false } = {}) 
   return pct ? Math.max(0.1, 1 + pct / 100) : 1
 }
 
+// 追い討ち：相手のHPが低いほど威力が上がる。at% 以下で最大（狩人）
+//   HP100%で+0%、at%以下で+max%。あいだは直線で伸びる
+export const lowHpMultOf = (skill, foe) => {
+  const l = skill?.lowHpBonus
+  if (!l) return 1
+  const pct = (Math.max(0, foe.hp) / Math.max(1, foe.base.hp)) * 100
+  const t = Math.min(1, Math.max(0, (100 - pct) / Math.max(1, 100 - (l.at ?? 20))))
+  return 1 + (l.max / 100) * t
+}
+
 // 鷹ノ目：最終命中率に掛ける倍率。相手が瀕死（HPが at% 以下）ならさらに伸びる
 export const hitMultOf = (me, foe) => {
   const h = me.pa.hitMult
@@ -543,7 +553,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     }
     for (let h = 0; h < (skill.hits || 1); h++) {
       const r = resolveAttack({
-        attacker: eMe, defender: eFoe, mult: skill.mult * burst * (stance?.mult || 1), kind: skill.kind,
+        attacker: eMe, defender: eFoe, mult: skill.mult * burst * (stance?.mult || 1) * lowHpMultOf(skill, foe), kind: skill.kind,
         defPen, add: skill.add || null,
         sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit, noCrit: !!skill.noCrit,
         acc: skill.acc ?? 100,
