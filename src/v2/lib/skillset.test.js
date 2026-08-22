@@ -106,9 +106,9 @@ test('編成は枠数・重複・使用回数・使えるスキルかを検証�
 test('使用回数の上限は「想定利用MPが最大MPを超えないこと」で決まる', () => {
   // ★あるけみすとの「あなたの最大MPは◯MPです／想定利用MPは◯MPです」と同じ考え方。
   //   MPを伸ばすほど強い技を多く積める＝MPがステータスとして効く
-  const mp = SKILL_BY_NAME['強撃'].mp   // 12
+  const mp = SKILL_BY_NAME['強撃'].mp
   assert.equal(setMpCost([{ name:'強撃', uses:5 }]), mp * 5)
-  assert.equal(setMpCost([{ name:'強撃', uses:2 }, { name:'体当たり', uses:3 }]), mp * 2 + 5 * 3)
+  assert.equal(setMpCost([{ name:'強撃', uses:2 }, { name:'体当たり', uses:3 }]), mp * 2 + SKILL_BY_NAME['体当たり'].mp * 3)
   assert.equal(setMpCost([]), 0)
   assert.equal(setMpCost([{ name:'知らない技', uses:3 }]), 0)
 

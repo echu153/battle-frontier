@@ -217,7 +217,7 @@ test('侍は出血役（居合斬20%・月影40%）', () => {
   assert.deepEqual(by['月影'].ail, { key:'bleed', chance:40 })
   // 出血は割合ダメージ＝倍率の帯とは別枠の価値なので、素の倍率は帯の上限を超えていない
   assert.ok(by['居合斬'].mult + by['居合斬'].add[0].rate <= 1.9)
-  assert.equal(by['月影'].mult, 2.4)
+  assert.ok(by['月影'].mult >= 2.0, '切り札の帯にいる')   // 実際の値は帯の表から決まる（skills.js の VALUE_TABLE）
 })
 
 // ============================================================
@@ -246,14 +246,15 @@ test('他職のスキルはダメージが0.8倍になる', () => {
 })
 
 test('他職のスキルはバフの増減幅も0.8倍になる', () => {
-  const buff = SKILL_BY_NAME['明鏡止水']   // 侍：STR+30%・DEX+20%
+  const buff = SKILL_BY_NAME['明鏡止水']   // 侍：STR・DEXが上がる（幅は帯の表から決まる）
   const mine = soloRun('侍', buff).a
   const off  = soloRun('侍', asOtherClass(buff)).a
   // どちらも侍なので職業補正(STR+5%)は同じ。差はバフの幅だけ
-  assert.equal(mine.buffs.str - 5, 30)
-  assert.equal(mine.buffs.dex, 20)
-  assert.equal(off.buffs.str - 5, 30 * OFF_CLASS_MULT)
-  assert.equal(off.buffs.dex, 20 * OFF_CLASS_MULT)
+  const S = buff.buff.self.str, D = buff.buff.self.dex
+  assert.equal(mine.buffs.str - 5, S)
+  assert.equal(mine.buffs.dex, D)
+  assert.equal(off.buffs.str - 5, S * OFF_CLASS_MULT)
+  assert.equal(off.buffs.dex, D * OFF_CLASS_MULT)
 })
 
 test('他職のスキルはデバフの幅も0.8倍になる（弱いデバフになる）', () => {

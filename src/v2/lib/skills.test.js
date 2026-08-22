@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   SKILLS, SKILL_BY_NAME, skillsOf, SKILL_CLASSES, BASIC_CLASSES, isBasicClass, isPassive,
   powerText, expectedDamage, expectedHeal, PASSIVE_EFFECT_KEYS,
+  skillValue, multTotal, effectPrice, targetValue,
 } from './skills.js'
 import { CLASS_BONUS } from './classBonus.js'
 import { damageOf, healOf } from './combat.js'
@@ -85,8 +86,10 @@ test('全スキルの数値がレンジに収まっている', () => {
     if (s.kind === 'phys' || s.kind === 'mag') {
       // 初期職は低め。上位職はあるけみすと級（あるけみすとの物理レンジ STR×2.2〜2.4 が基準）。
       // 魔法は軽減上限が50%(物理は34%)で防御力も厚いぶん倍率を高く取る
+      // ★上限は「倍率」ではなく**実質価値**（倍率＋効果）で見る（2026-08-19）。
+      //   自分に不利を背負う技（すてみのVIT-20）はそのぶん倍率を上げてよい
       const cap = isBasicClass(s.cls) ? (s.kind === 'mag' ? 2.4 : 2.0) : (s.kind === 'mag' ? 2.7 : 2.4)
-      assert.ok(s.mult > 0 && s.mult <= cap, `${s.name} の倍率 ${s.mult}（上限${cap}）`)
+      assert.ok(s.mult > 0 && skillValue(s) <= cap + 1e-9, `${s.name} の実質価値 ${skillValue(s)}（上限${cap}）`)
       assert.ok((s.hits || 1) >= 1 && (s.hits || 1) <= 5, `${s.name} の多段数`)
     } else {
       assert.equal(s.mult, undefined, `${s.name} は倍率を持たない`)
@@ -103,11 +106,38 @@ test('全スキルの数値がレンジに収まっている', () => {
 //   エレメンタルエッジ 2.2＋INT×1.0＝3.2 のような技がすり抜ける）。
 //   魔法の上限が物理の1.13倍なのは、v2の式では同じ倍率だと魔法のほうが通らないため
 //   （軽減上限50%対34%・魔防は INT＋VIT×0.15）。この比で同格の期待ダメージが揃う。
-test('上位職の合計倍率があるけみすとの水準を超えない（物理2.4・魔法2.7）', () => {
-  const total = (s) => (s.mult + (s.add || []).reduce((t, a) => t + a.rate, 0)) * (s.hits || 1)
+test('上位職の実質価値があるけみすとの水準を超えない（物理2.4・魔法2.7）', () => {
   for (const s of SKILLS.filter(s => (s.kind === 'phys' || s.kind === 'mag') && !isBasicClass(s.cls))) {
     const cap = s.kind === 'mag' ? 2.7 : 2.4
-    assert.ok(total(s) <= cap + 1e-9, `${s.name}: 合計倍率${total(s).toFixed(2)}（上限${cap}）`)
+    assert.ok(skillValue(s) <= cap + 1e-9, `${s.name}: 実質価値${skillValue(s).toFixed(2)}（上限${cap}）`)
+  }
+})
+
+// ★2026-08-19：**効果はタダではない**（ユーザー指摘）。
+//   「フレイムバースト INT×2.7」と「幽世ノ門 INT×2.7＋吸収30%」が同じ発動率で並んでいて、
+//   効果つきのほうが一方的に得だった。効果を倍率へ換算し（effectPrice）、
+//   **同じ発動率の帯なら、どの職のどの技も実質価値が同じ**になるように揃える。
+test('同じ発動率の帯なら、どの職でも実質価値が揃っている', () => {
+  const bad = []
+  for (const s of SKILLS.filter(s => s.kind === 'phys' || s.kind === 'mag')) {
+    const t = targetValue(s.cls, s.kind, s.proc)
+    if (Math.abs(skillValue(s) - t) > 0.06) {
+      bad.push(`${s.cls} ${s.name}: 価値${skillValue(s).toFixed(2)}（帯の目標${t}／倍率${multTotal(s)}＋効果${effectPrice(s).toFixed(2)}）`)
+    }
+  }
+  assert.deepEqual(bad, [], bad.join(' / '))
+})
+
+test('発動率が低い技ほど実質価値が高い（同じ職・同じ種別で）', () => {
+  for (const c of SKILL_CLASSES) {
+    for (const kind of ['phys', 'mag']) {
+      const list = skillsOf(c).filter(s => s.kind === kind).sort((a, b) => b.proc - a.proc)
+      for (let i = 1; i < list.length; i++) {
+        if (list[i].proc === list[i - 1].proc) continue
+        assert.ok(skillValue(list[i]) >= skillValue(list[i - 1]) - 1e-9,
+          `${c}: ${list[i].name}(${list[i].proc}%)の価値が ${list[i - 1].name}(${list[i - 1].proc}%)より低い`)
+      }
+    }
   }
 })
 
@@ -256,6 +286,20 @@ test('職業の中に完全下位互換のスキルが無い', () => {
   assert.deepEqual(bad, [], bad.join(' / '))
 })
 
+// ★2026-08-19：**職業をまたいでも**完全下位互換を作らない（ユーザー指摘）。
+//   v2は習得済みスキルが転職後も残る＝他職の技も編成できるので、
+//   「同じ発動率・同じMPで、片方だけ効果つき」があると職業を選ぶ意味が消える
+test('職業をまたいでも完全下位互換のスキルが無い', () => {
+  const bad = []
+  const all = SKILLS.filter(s => !isPassive(s))
+  for (const A of all) for (const B of all) {
+    if (A.cls === B.cls) continue
+    if (isBasicClass(A.cls) !== isBasicClass(B.cls)) continue   // 初期職と上位職は帯が違う
+    if (dominates(A, B)) bad.push(`「${B.cls}/${B.name}」は「${A.cls}/${A.name}」の完全下位互換`)
+  }
+  assert.deepEqual(bad.slice(0, 12), [], `${bad.length}件: ` + bad.slice(0, 12).join(' / '))
+})
+
 test('職業ごとに攻撃の型が揃っている', () => {
   const kindsOf = (c) => new Set(skillsOf(c).filter(s => s.kind === 'phys' || s.kind === 'mag').map(s => s.kind))
   for (const c of ['戦士', '弓使い', '格闘家', 'ノーブル']) assert.deepEqual([...kindsOf(c)], ['phys'], `${c}は物理型`)
@@ -270,12 +314,12 @@ test('どの職業も攻撃以外の枠を1つ以上持つ', () => {
 })
 
 test('威力テキストが威力の出どころを示す', () => {
-  assert.equal(powerText(SKILL_BY_NAME['体当たり']), 'STR×1.4')
-  assert.equal(powerText(SKILL_BY_NAME['狙撃']), 'STR×0.8 ＋ AGI×0.6')
-  assert.equal(powerText(SKILL_BY_NAME['連打']), 'STR×0.54 ×3回')
-  assert.equal(powerText(SKILL_BY_NAME['ヒール']), 'INT×1.4')
-  assert.equal(powerText(SKILL_BY_NAME['祈祷']), '毎ターン INT×0.5×4T')
-  assert.equal(powerText(SKILL_BY_NAME['魔力供給']), '毎ターン MP INT×0.3×4T')
+  assert.equal(powerText(SKILL_BY_NAME['体当たり']), `STR×${SKILL_BY_NAME['体当たり'].mult}`)
+  assert.equal(powerText(SKILL_BY_NAME['狙撃']), `STR×${SKILL_BY_NAME['狙撃'].mult} ＋ AGI×0.6`)
+  assert.equal(powerText(SKILL_BY_NAME['連打']), `STR×${SKILL_BY_NAME['連打'].mult} ×3回`)
+  assert.equal(powerText(SKILL_BY_NAME['ヒール']), `INT×${SKILL_BY_NAME['ヒール'].heal.rate}`)
+  assert.equal(powerText(SKILL_BY_NAME['祈祷']), `毎ターン INT×${SKILL_BY_NAME['祈祷'].regen.rate}×4T`)
+  assert.equal(powerText(SKILL_BY_NAME['魔力供給']), `毎ターン MP INT×${SKILL_BY_NAME['魔力供給'].mpRegen.rate}×4T`)
 })
 
 test('回復はすべてINT参照で、最大HP/MPの％は使わない', () => {
