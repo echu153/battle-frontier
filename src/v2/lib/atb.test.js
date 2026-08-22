@@ -338,3 +338,15 @@ test('先制はATBでは「必要ゲージが軽くなる」に読み替える',
   st.a.stance = { proc:20, mult:1.5, priority:1 }
   assert.equal(needFor(st.a, plain), 80)
 })
+
+test('ターンで数える状態（見切り・狂乱）はATBでは秒に読み替えて切れる', () => {
+  const mikiri = { name:'見切り', kind:'buff', proc:100, mp:0, priority:1, foresight:{ turns:5, pct:3, perHit:3, max:20 }, desc:'' }
+  const st = createAtb(fighter('自分', [{ skill: mikiri, uses:99 }]), fighter('敵'), { rng: makeRng(40), maxSec: 300 })
+  st.a.def = { idx: 0 }
+  run(st, 5)
+  assert.ok(st.a.foresight, '見切りが乗る')
+  assert.ok(st.a.stateUntil.foresight > st.t, '秒の期限が付く')
+  st.a.def = { idx: null }
+  run(st, 30)               // 5ターン＝25秒より長く進める
+  assert.equal(st.a.foresight, null, 'ATBでも切れる')
+})

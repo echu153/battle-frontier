@@ -72,6 +72,7 @@ export const PASSIVE_EFFECT_KEYS = [
   'mpCut',     // 消費MP-%（天啓）
   'defRed',    // 受けるときの軽減率+%（聖騎士の心得）
   'hitStack',  // { critRate, critDmg, max } 当てるたびに積む（精密照準）
+  'hpSteps',   // [{ at, statPct }] HPが at% 以下で効く段（バーサク）。いちばん深い段だけが効く
   'perAct',    // { stats, per, max } 自分が行動するたびに積む（第六感）
 ]
 
@@ -82,7 +83,8 @@ export const PASSIVE_EFFECT_KEYS = [
 // reqJobs     : この技を覚えるのに要る転職回数（侍・狂戦士の後半5個＝5回以上）
 // ailPerHit   : 多段のとき「1発ごとに」状態異常を試す（マッドラッシュ・狂乱連斬）
 // hpCostPct   : 現在HPの n% を払って撃つ（すてみ）。払っても死なない
-// frenzy      : { turns, statPct } 狂乱。ステは上がるが**出る技がランダム**になる（狂心）
+// frenzy      : { turns } 狂乱＝**出る技がランダムな攻撃スキルになる**だけの状態（狂心）
+// buffTurns   : そのバフが何ターンで切れるか（既定は切れない）。狂心のSTR+70%＝4ターン
 // mult   : 主ステータス（STR/INT）に掛ける倍率
 // add    : 副ステータス参照 [{ stat, rate }]
 // hits   : 多段の回数（命中・クリは1発ずつ判定する）
@@ -197,11 +199,11 @@ export const SKILLS = [
   // ★軸＝HPを燃やして出血を撒く。狂心で「選べないが強い」時間を作る
   { name:'マッドラッシュ', cls:'狂戦士', kind:'phys', mult:0.7, hits:3, proc:85, mp:16, noCrit:true, ail:{ key:'bleed', chance:10 }, ailPerHit:true, desc:'3連撃。1発ごとに10%で出血。クリティカルしない' },
   { name:'すてみ',       cls:'狂戦士', kind:'phys', mult:2.6, proc:78, mp:22, hpCostPct:10, buff:{ self:{ vit:-10 } }, desc:'大威力。現在HPの10%を払い、自分のVIT-10%（重ねがけ可）' },
-  { name:'バーサク',     cls:'狂戦士', kind:'passive', mp:0, passive:{ rage:{ stat:'str', per:3, max:15 } }, desc:'ダメージを与えるたびSTR+3%（最大15%）。不発・通常攻撃・攻撃が外れたときにリセット' },
+  { name:'バーサク',     cls:'狂戦士', kind:'passive', mp:0, passive:{ statPct:{ vit:5 }, hpSteps:[{ at:90, statPct:{ str:5 } }, { at:50, statPct:{ str:10 } }, { at:30, statPct:{ str:15 } }] }, desc:'VIT+5%。HPが90%以下でSTR+5%、50%以下で+10%、30%以下で+15%' },
   { name:'ブラッティロア', cls:'狂戦士', kind:'buff', proc:100, mp:14, buff:{ self:{ str:40 } }, priority:1, desc:'STR+40%（重ねがけ可）' },
   { name:'フルブレイカー', cls:'狂戦士', kind:'phys', mult:1.9, defPen:0.5, proc:85, mp:16, desc:'相手の防御を50%無視' },
   { name:'猛り斬り', cls:'狂戦士', kind:'phys', mult:1.45, add:[{ stat:'agi', rate:0.3 }], proc:90, mp:12, reqJobs:5, ail:{ key:'bleed', chance:50 }, desc:'AGIも威力になる。50%で出血' },
-  { name:'狂心',     cls:'狂戦士', kind:'buff', proc:95, mp:16, priority:1, reqJobs:5, frenzy:{ turns:4, statPct:{ str:70 } }, desc:'4ターンのあいだSTR+70%。ただし狂乱状態になり、出る技がランダムな攻撃スキルになる' },
+  { name:'狂心',     cls:'狂戦士', kind:'buff', proc:95, mp:16, priority:1, reqJobs:5, buff:{ self:{ str:70 } }, buffTurns:4, frenzy:{ turns:4 }, desc:'4ターンのあいだSTR+70%。そのあいだは狂乱状態になり、出る技がランダムな攻撃スキルになる' },
   { name:'裂傷撃',   cls:'狂戦士', kind:'phys', mult:1.6, add:[{ stat:'agi', rate:0.3 }], proc:88, mp:14, reqJobs:5, ail:{ key:'bleed', chance:35 }, desc:'AGIも威力になる。35%で出血' },
   { name:'狂乱連斬', cls:'狂戦士', kind:'phys', mult:0.57, add:[{ stat:'agi', rate:0.15 }], hits:3, proc:80, mp:20, noCrit:true, reqJobs:5, ail:{ key:'bleed', chance:20 }, ailPerHit:true, desc:'3連撃。1発ごとに20%で出血。AGIも威力になる。クリティカルしない' },
   { name:'威嚇咆哮', cls:'狂戦士', kind:'buff', proc:95, mp:12, priority:1, reqJobs:5, buff:{ enemy:{ str:-30 } }, desc:'相手のSTR-30%（重ねがけ可）' },

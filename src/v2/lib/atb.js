@@ -110,6 +110,11 @@ export const TICK_SEC = 5      // 出血・毒・継続回復が刻む間隔
 export const MAX_DT   = 0.25   // タブを裏に回したときに一気に進まないための上限（秒）
 export const MAX_SEC  = 180    // これを超えたら引き分け
 
+// ★ターン数で管理する状態（見切り・狂乱・期限つきバフ）をATBでは秒へ読み替える。
+//   §2の決めごとどおり **1ターン＝TICK_SEC（5秒）**。
+//   これが無いとATBでは一生切れない（オート戦闘の turn ループが無いため）
+export const turnsToSec = (turns) => turns * TICK_SEC
+
 // ===== 1サイド =====
 export const createAtbSide = (fighter, band = null) => {
   const side = createSide(fighter, band)
@@ -124,6 +129,7 @@ export const createAtbSide = (fighter, band = null) => {
   side.def = { idx: null }            // デフォルト行動（予約が無いときに出る）
   side.guardCut = 0                   // 防御中の軽減率（battle.js の applyIncoming が見る）
   side.guardUntil = 0                 // 防御が切れる時刻
+  side.stateUntil = {}                // 見切り・狂乱・期限つきバフが切れる時刻（秒）
   side.auto = false                   // オート（枠の順に自動で撃つ＝オート戦闘と同じ選び方）
   return side
 }
@@ -172,6 +178,15 @@ const commitAil = (side, before, now) => {
   }
 }
 
+// ターンで数える状態に、秒の期限を持たせる（始まった／掛け直した瞬間に決める）
+const commitStates = (side, now) => {
+  if (side.foresight && !side.stateUntil.foresight) side.stateUntil.foresight = now + turnsToSec(side.foresight.turns)
+  if (side.frenzy && !side.stateUntil.frenzy) side.stateUntil.frenzy = now + turnsToSec(side.frenzy.turns)
+  for (const t of side.timedBuffs || []) {
+    if (!t.until) t.until = now + turnsToSec(t.turns)
+  }
+}
+
 // 期限切れを落とす
 const expire = (side, now) => {
   if (side.timed.length) {
@@ -183,6 +198,13 @@ const expire = (side, now) => {
     if (side.ail[k] && (side.ailUntil[k] ?? 0) + EPS < now) { delete side.ail[k]; delete side.ailUntil[k] }
   }
   if (side.guardCut && side.guardUntil + EPS < now) { side.guardCut = 0; side.guardUntil = 0 }
+  // 見切り・狂乱・期限つきバフ（オート戦闘のターン数を秒に読み替えたもの）
+  for (const k of ['foresight', 'frenzy']) {
+    if (side[k] && (side.stateUntil[k] ?? 0) + EPS < now) { side[k] = null; delete side.stateUntil[k] }
+  }
+  if (side.timedBuffs?.length) {
+    side.timedBuffs = side.timedBuffs.filter(t => !t.until || t.until + EPS >= now)
+  }
 }
 
 // 出血・毒・継続回復（TICK_SEC ごと）。★割合ダメージなのでVITでは軽減されない（オートと同じ）
@@ -263,6 +285,8 @@ const act = (st, me, foe) => {
   commitBuff(foe, beforeFoe, true, st.t)
   commitAil(me, ailMe, st.t)
   commitAil(foe, ailFoe, st.t)
+  commitStates(me, st.t)
+  commitStates(foe, st.t)
   me.gauge = Math.max(0, me.gauge - need)
   me.pending = undefined   // 予約は1回で消える（次はデフォルト行動が出る）
 }

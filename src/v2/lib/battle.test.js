@@ -456,15 +456,17 @@ test('すてみ：現在HPの10%を払って撃つ（払っても死なない）
 
 test('狂心：4ターンSTR+70%、そのあいだ出る技がランダムになる', () => {
   const kyo = SKILL_BY_NAME['狂心']
-  assert.deepEqual(kyo.frenzy, { turns:4, statPct:{ str:70 } })
+  assert.deepEqual(kyo.frenzy, { turns:4 })
+  assert.deepEqual(kyo.buff, { self:{ str:70 } })
+  assert.equal(kyo.buffTurns, 4)
   const atkA = sk('技A', { mult:1, proc:100 })
   const atkB = sk('技B', { mult:1, proc:100 })
-  const me = createSide(fighter('狂戦士', [{ skill: kyo, uses:9 }, { skill: atkA, uses:99 }, { skill: atkB, uses:99 }]))
+  const me = createSide({ name:'狂', cls:'狂戦士', kind:'phys', stats: evenStats(534), slots: [{ skill: kyo, uses:9 }, { skill: atkA, uses:99 }, { skill: atkB, uses:99 }] })
   const foe = createSide(fighter('的'))
   const before = liveStats(me).str
   takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
   assert.equal(me.frenzy.turns, 4)
-  assert.equal(liveStats(me).str, Math.round(before * 1.7), 'STR+70%')
+  assert.equal(liveStats(me).str - before, Math.round(me.base.str * 0.7), 'STR+70%（素のSTRに対して足す）')
   // 狙った枠（技A）を指定しても、狂乱中はランダムに選ばれる
   const names = new Set()
   for (let i = 0; i < 12; i++) {
@@ -477,6 +479,7 @@ test('狂心：4ターンSTR+70%、そのあいだ出る技がランダムにな
   assert.ok(names.size >= 2, `狂乱中なのに固定されている（${[...names].join(',')}）`)
   // 4ターンで切れる
   for (let i = 0; i < 4; i++) tickForesight(me)
-  assert.equal(me.frenzy, null)
+  assert.equal(me.frenzy, null, '4ターンで狂乱が切れる')
+  assert.equal(me.timedBuffs.length, 0, 'STR+70%も4ターンで切れる')
   assert.equal(liveStats(me).str, before)
 })

@@ -70,6 +70,7 @@ const collectPassives = (passives) => {
     mpCut: 0,          // 消費MP-%（天啓）
     defRed: 0,         // 受けるときの軽減率+%（聖騎士の心得）
     bleedMax: 0,       // 自分が付ける出血の上限スタック（隠身）
+    hpSteps: [],       // [{ at, statPct }] HPが at% 以下で効く段（新しいバーサク）
     hitMult: null,     // { mult, lowMult, at } 命中率に掛ける（鷹ノ目）
     hitStack: null,    // { critRate, critDmg, max } 当てるたびに積む（精密照準）
     perAct: [],        // [{ stats, per, max }] 行動するたびに積む（第六感）
@@ -87,6 +88,7 @@ const collectPassives = (passives) => {
     if (p.hitMult)  pa.hitMult = p.hitMult
     if (p.hitStack) pa.hitStack = p.hitStack
     if (p.perAct)   pa.perAct.push(p.perAct)
+    if (p.hpSteps)  pa.hpSteps.push(...p.hpSteps)
     if (p.misfireAtkMult) pa.misfireAtkMult = Math.max(pa.misfireAtkMult, p.misfireAtkMult)
     if (p.statPct) for (const [k, v] of Object.entries(p.statPct)) pa.statPct[k] = (pa.statPct[k] || 0) + v
     if (p.convert)    pa.converts.push(p.convert)
@@ -112,12 +114,20 @@ export const liveStats = (side, acting = false) => {
   for (const [k, pct] of Object.entries(side.enStacks || {})) add(k, pct)
   // バーサク・執行本能：ダメージを与えるたびに乗るスタック
   if (side.rage > 0) for (const r of side.pa.rages) add(r.stat, Math.min(r.max, r.per * side.rage))
-  // 狂心：狂乱のあいだステータスが上がる（そのぶん技が選べない）
-  if (side.frenzy?.turns > 0) for (const [k, v] of Object.entries(side.frenzy.statPct || {})) add(k, v)
+  // 期限つきバフ（狂心のSTR+70%＝4ターンで切れる）
+  for (const t of side.timedBuffs || []) {
+    if (t.turns > 0) for (const [k, v] of Object.entries(t.table || {})) add(k, v)
+  }
   // 第六感：行動するたびにステータスが上がる（上限つき）
   for (const t of side.pa.perAct || []) {
     const up = Math.min(t.max, t.per * (side.acts || 0))
     if (up > 0) for (const st of t.stats) add(st, up)
+  }
+  // 新しいバーサク：HPの段階でステータスが上がる（重ならず、いちばん深い段だけが効く）
+  if (side.pa.hpSteps?.length) {
+    const hpPct = (side.hp / Math.max(1, side.base.hp)) * 100
+    const hit = side.pa.hpSteps.filter(t => hpPct <= t.at).sort((x, y) => x.at - y.at)[0]
+    if (hit) for (const [k, v] of Object.entries(hit.statPct || {})) add(k, v)
   }
   // 闘争本能：HPが減るほど上がる（at% まで下がると max% で頭打ち）
   for (const l of side.pa.lowHps) {
@@ -194,7 +204,8 @@ export const createSide = (fighter, band = null) => {
     // ★侍（2026-08-19）
     stance: null,   // 納刀：{ proc, mult } 次に撃つスキルへ乗り、撃ったら消える
     foresight: null, // 見切り：{ turns, pct, perHit, byName } 受けた技ほど避けやすくなる
-    frenzy: null,    // 狂乱：{ turns, statPct } 効果中はステが上がるが、出る技がランダムになる
+    frenzy: null,    // 狂乱：{ turns } 効果中は**出る技がランダムになる**（ステ補正は別枠のバフ）
+    timedBuffs: [],  // 期限つきバフ：[{ table, turns }] ターンで切れる（狂心のSTR+70%など）
     wallPct: pa.wall ? pa.wall.pct : 0,  // 骸の壁は戦闘開始時から乗る（重複しない）
     guards: pa.debuffGuard,              // 心身一如：デバフを打ち消せる残り回数
     lastSkill: null,                     // 元素共鳴が見る「直前に使ったスキル」
@@ -619,7 +630,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     me.stance = { ...skill.stance }
     log.push({ side: me.name, type: 'stance', skill: skill.name })
   }
-  // ★狂心：一定ターンのあいだステータスが上がるが、出る技がランダムになる
+  // ★狂乱（狂心）：出る技がランダムになる状態
   if (skill.frenzy) {
     me.frenzy = { ...skill.frenzy }
     log.push({ side: me.name, type: 'frenzy', skill: skill.name, turns: skill.frenzy.turns })
@@ -630,7 +641,12 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     log.push({ side: me.name, type: 'foresight', skill: skill.name, turns: skill.foresight.turns })
   }
   // バフ・デバフ（攻撃スキルに付いていることもある）
-  if (skill.buff) {
+  // ★buffTurns を持つ技は「期限つき」＝そのターン数で切れる（狂心）
+  if (skill.buff && skill.buffTurns) {
+    if (skill.buff.self) me.timedBuffs.push({ table: scaleTable(skill.buff.self, off), turns: skill.buffTurns })
+    if (skill.buff.enemy) foe.timedBuffs.push({ table: scaleTable(skill.buff.enemy, off), turns: skill.buffTurns })
+    log.push({ side: me.name, type: 'buff', skill: skill.name })
+  } else if (skill.buff) {
     if (skill.buff.self)  applyBuff(me.buffs, scaleTable(skill.buff.self, off))
     if (skill.buff.enemy) applyDebuff(foe, scaleTable(skill.buff.enemy, off), log)
     log.push({ side: me.name, type: 'buff', skill: skill.name })
@@ -699,6 +715,10 @@ export const tickForesight = (side) => {
   if (side.frenzy?.turns > 0) {
     side.frenzy.turns -= 1
     if (side.frenzy.turns <= 0) side.frenzy = null
+  }
+  if (side.timedBuffs?.length) {
+    for (const t of side.timedBuffs) t.turns -= 1
+    side.timedBuffs = side.timedBuffs.filter(t => t.turns > 0)
   }
 }
 

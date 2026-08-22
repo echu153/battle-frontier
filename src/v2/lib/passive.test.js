@@ -71,29 +71,26 @@ test('居合の構え：不発したときの通常攻撃だけ威力が2倍', (
   assert.ok(dmg(withP) > dmg(without) * 1.5, `不発時の通常攻撃が伸びていない: ${dmg(withP)} vs ${dmg(without)}`)
 })
 
-test('バーサク：ダメージを与えるたびSTR+3%（上限15%＝5回）', () => {
-  const s = sideWith('狂戦士', evenStats(534))
-  assert.deepEqual(s.pa.rages, [{ stat:'str', per:3, max:15 }])
-  // 上限を超えて積み上がらない
-  const cap = s.pa.rages[0]
-  assert.equal(Math.min(cap.max, cap.per * 5), 15)
-  assert.equal(Math.min(cap.max, cap.per * 99), 15)
-})
-
-test('バーサク：不発・通常攻撃・攻撃が全部外れたときにリセット（補助では消えない）', () => {
-  const stats = { ...evenStats(534), hp: 10 ** 7 }
-  const hit  = { name:'必中打', cls:'狂戦士', kind:'phys', mult:1, proc:100, mp:0, sureHit:true, noCrit:true, desc:'' }
-  const sup  = { name:'構え',   cls:'狂戦士', kind:'buff', mult:undefined, proc:100, mp:0, buff:{ self:{ vit:1 } }, priority:1, desc:'' }
-  const dud  = { name:'絶対不発', cls:'狂戦士', kind:'phys', mult:1, proc:0, mp:0, desc:'' }
-  const stackAfter = (slots) => runBattle(
-    { name:'me', cls:'狂戦士', stats, slots },
-    { name:'foe', cls:'狂戦士', stats, slots: [] }, { rng: mkRng(7), maxTurns: 3 }).a.rage
-  const P = { skill: passiveOf('狂戦士'), uses:1 }
-  assert.equal(stackAfter([P, { skill:hit, uses:99 }]), 3, '当てるたびに積まれていない')
-  // 補助スキルを挟んでもリセットされない（攻撃2回＋補助1回で 2）
-  assert.equal(stackAfter([P, { skill:hit, uses:1 }, { skill:sup, uses:1 }, { skill:hit, uses:1 }]), 2)
-  // 不発を挟むと0に戻る
-  assert.equal(stackAfter([P, { skill:hit, uses:1 }, { skill:dud, uses:99 }]), 0)
+test('バーサク：VIT+5%。HPが減るほどSTRが段で上がる（90/50/30%）', () => {
+  assert.deepEqual(SKILL_BY_NAME['バーサク'].passive, {
+    statPct:{ vit:5 },
+    hpSteps:[{ at:90, statPct:{ str:5 } }, { at:50, statPct:{ str:10 } }, { at:30, statPct:{ str:15 } }],
+  })
+  const stats = evenStats(534)
+  const s = sideWith('狂戦士', stats)
+  const strAt = (hpPct) => { s.hp = s.base.hp * hpPct / 100; return liveStats(s).str }
+  const base = strAt(100)
+  // 期待値は liveStats と同じ出し方（職業補正と同じ土俵で足す）
+  const expect = (add) => Math.round(s.base.str * (1 + (s.buffs.str + add) / 100))
+  // ★段は重ならない。いちばん深い段だけが効く
+  assert.equal(strAt(95), base, '90%より上では乗らない')
+  assert.equal(strAt(90), expect(5), '90%以下で+5%')
+  assert.equal(strAt(60), expect(5))
+  assert.equal(strAt(50), expect(10), '50%以下で+10%')
+  assert.equal(strAt(30), expect(15), '30%以下で+15%')
+  assert.equal(strAt(5),  expect(15), 'それ以上は伸びない')
+  // VIT+5% は常時（職業補正のVIT-5%と相殺して0になる）
+  assert.equal(s.pa.statPct.vit, 5)
 })
 
 test('鷹ノ目：命中率1.1倍・相手が瀕死(HP30%以下)なら1.3倍', () => {
