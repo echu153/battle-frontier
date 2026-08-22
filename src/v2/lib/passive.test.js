@@ -133,16 +133,18 @@ test('精密照準：最終クリティカル率+5%', () => {
   assert.equal(critRate(s, s, 5), critRate(s, s) + 5)
 })
 
-test('第六感：防御貫通+10%（相手が硬いほど効く）', () => {
+// ★積み上がったAGI・DEXが**ダメージまで届いている**か（ステの表示だけ動いても意味がない）
+test('第六感：積み上がったぶんがダメージに乗る', () => {
   const stats = { ...evenStats(534), hp: 10 ** 7 }
   const atk = { name:'素撃ち', cls:'サイキッカー', kind:'phys', mult:2, proc:100, mp:0, sureHit:true, noCrit:true, desc:'' }
-  const dmg = (slots) => runBattle(
+  // 乱数の引き方は同じになるので、パッシブのぶんだけ素直に差が出る
+  const total = (slots) => runBattle(
     { name:'me', cls:'サイキッカー', stats, slots },
-    { name:'foe', cls:'サイキッカー', stats, slots: [] }, { rng: mkRng(5), maxTurns: 2 })
-    .log.find(l => l.side === 'me' && l.type === 'skill').damage
-  const a = dmg([{ skill: passiveOf('サイキッカー'), uses:1 }, { skill:atk, uses:99 }])
-  const b = dmg([{ skill: atk, uses:99 }])
-  assert.ok(a > b, `貫通が効いていない: ${a} vs ${b}`)
+    { name:'foe', cls:'サイキッカー', stats, slots: [] }, { rng: mkRng(5), maxTurns: 20 })
+    .log.filter(l => l.side === 'me' && l.type === 'skill').reduce((t, l) => t + l.damage, 0)
+  const a = total([{ skill: passiveOf('サイキッカー'), uses:1 }, { skill:atk, uses:99 }])
+  const b = total([{ skill: atk, uses:99 }])
+  assert.ok(a > b, `第六感のぶんが乗っていない: ${a} vs ${b}`)
 })
 
 test('神聖加護：回復量+20% ／ 異端審問官の職業補正：自身の回復量0.8倍', () => {

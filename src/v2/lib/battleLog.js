@@ -80,6 +80,20 @@ export const buildBattleLog = (r, you, foe) => {
     } else if (l.type === 'guard') {
       // ATB専用（オート戦闘は出さない）
       out.push({ text:`🛡 ${actor}は身を守っている！（${l.sec}秒・被ダメージ-${l.cut}%）`, color: LOG_COLOR.guard })
+    } else if (l.type === 'air') {
+      out.push({ text:`🕊 ${actor}は跳び上がった！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'ritual') {
+      out.push({ text:`🔯 ${actor}の${l.skill}！ 呪力が${l.stacks}になった！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'charge') {
+      out.push({ text:`🐉 ${actor}の${l.skill}！ 竜気が${l.stacks}になった！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'stance') {
+      out.push({ text:`🗡 ${actor}の${l.skill}！ 構えた！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'frenzy') {
+      out.push({ text:`💢 ${actor}の${l.skill}！ 我を忘れた！`, color:'#ff8844' })
+    } else if (l.type === 'foresight') {
+      out.push({ text:`👁 ${actor}の${l.skill}！ 相手の動きを見切っている！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'dispel') {
+      out.push({ text:`✂ ${actor}の強化が1つ消えた！`, color: LOG_COLOR.ail })
     } else if (l.type === 'guts') {
       // 武器の進化「不屈」。1戦に1回だけ致命傷をHP1で耐える
       out.push({ text:`💢 ${actor}は倒れずに踏み止まった！`, color:'#ffcc44' })

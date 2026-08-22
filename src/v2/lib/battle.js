@@ -72,6 +72,7 @@ const collectPassives = (passives) => {
     bleedMax: 0,       // 自分が付ける出血の上限スタック（隠身）
     hpSteps: [],       // [{ at, statPct }] HPが at% 以下で効く段（新しいバーサク）
     ailResist: 0,      // 受ける状態異常の付与率-%（武僧）
+    ritualStart: 0,    // 戦闘を始めるときに持っている呪力（式神使い）
     repeat: null,      // { per, max } 同じ技を続けて撃つほど威力+%（精霊召喚士）
     hitMult: null,     // { mult, lowMult, at } 命中率に掛ける（鷹ノ目）
     hitStack: null,    // { critRate, critDmg, max } 当てるたびに積む（精密照準）
@@ -83,7 +84,7 @@ const collectPassives = (passives) => {
     const p = s?.passive
     if (!p) continue
     for (const k of ['hitBonus', 'evaBonus', 'critBonus', 'procBonus', 'defPenBonus', 'healBonus', 'debuffGuard',
-      'critDmg', 'mpCut', 'defRed', 'ailResist']) {
+      'critDmg', 'mpCut', 'defRed', 'ailResist', 'ritualStart']) {
       if (p[k]) pa[k] += p[k]
     }
     if (p.bleedMax) pa.bleedMax = Math.max(pa.bleedMax, p.bleedMax)
@@ -205,6 +206,9 @@ export const createSide = (fighter, band = null) => {
     acts: 0,        // 自分が行動した回数（骸の壁が5回ごとに見る・第六感が積み上げに使う）
     hitStacks: 0,   // 精密照準：当てるたびに積む（上限は passive.hitStack.max）
     repeatCount: 0, // 同じ技を続けて撃った回数（魔銃士・精霊召喚士）
+    air: false,     // 空中にいるか（体術師）
+    ritual: pa.ritualStart || 0,  // 呪力（式神使い）。溜めて切り札で全部使う
+    charge: 0,      // 竜気（竜騎士）。溜めるほど硬く、切り札で全部使う
     lastKind: null, // 直前に使った技の種別（魔法剣士の両刀ボーナスが見る）
     // ★侍（2026-08-19）
     stance: null,   // 納刀：{ proc, mult } 次に撃つスキルへ乗り、撃ったら消える
@@ -451,6 +455,30 @@ export const vsBuffMultOf = (skill, foe) => {
   if (!v) return 1
   return 1 + (v.per / 100) * Math.min(v.max ?? 3, buffCountOf(foe))
 }
+// ★2026-08-23：職業ごとのコンセプト（バッチ2）
+// 溜め（式神使いの呪力・竜騎士の竜気）は最大3つまで
+export const STACK_MAX = 3
+// 竜気1つにつき、受けるダメージの軽減率がこれだけ上がる
+export const CHARGE_GUARD = 12
+// 空中にいるあいだの回避+%
+export const AIR_EVA = 10
+// 元素使い：直前に使った技との組み合わせで威力が上がる
+export const comboMultOf = (skill, prevSkill) => {
+  const c = skill?.combo
+  if (!c || !prevSkill) return 1
+  return c.after.includes(prevSkill) ? 1 + c.mult / 100 : 1
+}
+// 体術師：空中にいるときだけ乗る（叩きつけて着地する技）
+export const airMultOf = (skill, wasAir) => {
+  const a = skill?.whileAir
+  if (!a || !wasAir) return 1
+  return 1 + a.mult / 100
+}
+// 式神使い・竜騎士：溜めた数だけ乗る（撃つと全部使う）
+export const stackMultOf = (use, stacks) => (use && stacks > 0 ? 1 + (use.per / 100) * stacks : 1)
+// 竜気を溜めているあいだは硬い（軽減率が上がる）
+export const chargeGuardOf = (side) => 1 + ((side?.charge || 0) * CHARGE_GUARD) / 100
+
 // 魔法剣士：直前に使った技と種別（物理／魔法）が違えば威力+%
 export const switchKindMultOf = (skill, prevKind) => {
   if (!skill?.switchKind || !prevKind) return 1
@@ -560,6 +588,10 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   me.ptr = (idx + 1) % me.slots.length
 
   // 元素共鳴：直前に使ったスキルと違えば、この行動だけ補正が乗る
+  const prevSkill = me.lastSkill        // 元素使いのコンボが見る「直前に使った技」
+  const wasAir = !!me.air               // 体術師：この行動を始めた時点で空中だったか
+  const ritualUsed = skill.useRitual ? (me.ritual || 0) : 0
+  const chargeUsed = skill.useCharge ? (me.charge || 0) : 0
   // 同じ技を続けて撃った回数（魔銃士・精霊召喚士）。違う技を挟むと0へ戻る
   me.repeatCount = me.lastSkill === skill.name ? (me.repeatCount || 0) + 1 : 0
   me.switchOn = me.lastSkill !== null && me.lastSkill !== skill.name
@@ -601,17 +633,21 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       const r = resolveAttack({
         attacker: eMe, defender: eFoe, mult: skill.mult * burst * (stance?.mult || 1) * lowHpMultOf(skill, foe)
           * highHpMultOf(skill, me) * vsBuffMultOf(skill, foe) * repeatMultOf(skill, me)
-          * switchKindMultOf(skill, prevKind) * varMult, kind: skill.kind,
+          * switchKindMultOf(skill, prevKind) * varMult
+          * comboMultOf(skill, prevSkill) * airMultOf(skill, wasAir)
+          * stackMultOf(skill.useRitual, ritualUsed) * stackMultOf(skill.useCharge, chargeUsed),
+        kind: skill.kind, atkKind: skill.srcKind || null,
         defPen, add: skill.add || null,
         sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit, noCrit: !!skill.noCrit,
         acc: skill.acc ?? 100,
         // ★スキル自身の命中補正（skill.hitBonus）もここで足す＝「必中ではないが当てやすい技」を作れる
         hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + (skill.hitBonus || 0),
-        evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, skill.name),
+        evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, skill.name)
+          + (foe.air ? AIR_EVA : 0),
         critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me),
         hitMult: hitMultOf(me, foe),
         critDmg: critDmgOf(me),
-        redMult: 1 + (foe.pa.defRed || 0) / 100,
+        redMult: (1 + (foe.pa.defRed || 0) / 100) * chargeGuardOf(foe),
       }, rng)
       // ★クリティカルの与ダメージ+%は**1発ずつ**掛ける（多段でクリした発だけ伸びる）
       // ★ヒットごとに状態異常を試す技（連撃で少しずつ積む）
@@ -703,6 +739,25 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       log.push({ side: foe.name, type: 'dispel', skill: skill.name, stat: k })
     }
   }
+  // ★体術師：跳び上がる技で空中へ。叩きつける技や、ふつうに殴る技を出すと着地する
+  if (skill.airUp) {
+    me.air = true
+    log.push({ side: me.name, type: 'air', skill: skill.name })
+  } else if (skill.kind === 'phys' || skill.kind === 'mag') {
+    me.air = false
+  }
+  // ★式神使い：儀式で呪力を練る／竜騎士：竜気を溜める（溜めるほど硬い）
+  if (skill.ritual) {
+    me.ritual = Math.min(STACK_MAX, (me.ritual || 0) + skill.ritual)
+    log.push({ side: me.name, type: 'ritual', skill: skill.name, stacks: me.ritual })
+  }
+  if (skill.chargeUp) {
+    me.charge = Math.min(STACK_MAX, (me.charge || 0) + 1)
+    log.push({ side: me.name, type: 'charge', skill: skill.name, stacks: me.charge })
+  }
+  // 切り札は溜めを全部使う（当たっても外れても消える＝撃ち直しが要る）
+  if (skill.useRitual) me.ritual = 0
+  if (skill.useCharge) me.charge = 0
   // ★納刀：構えるだけの技（次のスキルへ乗る）
   if (skill.stance) {
     me.stance = { ...skill.stance }

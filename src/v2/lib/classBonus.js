@@ -40,7 +40,9 @@ export const CLASS_BONUS = {
   死霊使い:     { stats: { vit: 5 },            main:'vit',      sub:'int_stat' },
   聖職者:       { stats: { int_stat: 5 },       main:'int_stat', sub:'vit' },
   異端審問官:   { stats: { int_stat: 10 }, healMult: 0.8, main:'int_stat', sub:'luk' },
-  サイキッカー: { stats: { dex: 5 },            main:'dex',      sub:'int_stat' },
+  // ★STRで殴るのに相手の特防で受ける「特殊アタッカー」（2026-08-23 ユーザー指定のコンセプト）
+  //   ＝威力の参照がSTRなので、伸ばすのもSTR。魔法剣士（両刀）とは別物にする
+  サイキッカー: { stats: { str: 5 },            main:'str',      sub:'int_stat' },
   体術師:       { stats: { str: 5 },            main:'str',      sub:'agi' },
   精霊召喚士:   { stats: { int_stat: 5 },       main:'int_stat', sub:'agi' },
   式神使い:     { stats: { int_stat: 5 },       main:'int_stat', sub:'dex' },

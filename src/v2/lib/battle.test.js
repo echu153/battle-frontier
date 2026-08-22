@@ -1,7 +1,7 @@
 // バトルフロンティアⅡ 戦闘ループの回帰テスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runBattle, createSide, takeAction, liveStats, lowHpMultOf, highHpMultOf, vsBuffMultOf, buffCountOf, repeatMultOf, switchKindMultOf, varianceMultOf, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
+import { runBattle, createSide, takeAction, liveStats, lowHpMultOf, highHpMultOf, vsBuffMultOf, buffCountOf, repeatMultOf, switchKindMultOf, varianceMultOf, comboMultOf, airMultOf, stackMultOf, chargeGuardOf, AIR_EVA, STACK_MAX, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
 import { inflict } from './ailments.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
 import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT, OFF_CLASS_MP_MULT, setMpCost } from './skills.js'
@@ -632,4 +632,107 @@ test('武僧：受ける状態異常が効きづらい', () => {
   }
   assert.equal(hit(plain), true, 'ふつうは入る')
   assert.equal(hit(monk), false, '武僧は弾く')
+})
+
+// ★2026-08-23：職業ごとのコンセプト（バッチ2）
+test('元素使い：直前に使った技との組み合わせで威力が上がる', () => {
+  const bolt = SKILL_BY_NAME['ライトニングボルト']
+  assert.deepEqual(bolt.combo.after, ['アクアショット', 'アイスプリズン'])
+  assert.equal(comboMultOf(bolt, null), 1, '1手目は素')
+  assert.equal(comboMultOf(bolt, 'アクアショット'), 1.35, '水のあとなら乗る')
+  assert.equal(comboMultOf(bolt, 'アースクエイク'), 1, '噛み合わなければ乗らない')
+  assert.equal(comboMultOf(sk('ふつう'), 'アクアショット'), 1)
+  // 実戦：アクアショット→ライトニングボルト の順で撃つと伸びる
+  const dmg = (slots, idxs) => {
+    const me = createSide({ name:'元', cls:'元素使い', kind:'mag', stats: evenStats(534), slots })
+    const foe = createSide(fighter('的', [], { ...evenStats(534), hp: 10 ** 7 }))
+    let last = 0
+    for (const idx of idxs) {
+      const log = []
+      takeAction(me, foe, () => 0.5, log, { idx, noProc: true })
+      last = log.find(l => l.type === 'skill').damage
+    }
+    return last
+  }
+  const slots = [{ skill: SKILL_BY_NAME['アクアショット'], uses:9 }, { skill: bolt, uses:9 }]
+  assert.ok(dmg(slots, [0, 1]) > dmg(slots, [1, 1]), '水のあとの雷のほうが強い')
+})
+
+test('体術師：跳び上がると空中・空中から叩きつけると伸びて着地する', () => {
+  const jump = SKILL_BY_NAME['飛天三角蹴り']
+  const drop = SKILL_BY_NAME['崩落蹴']
+  assert.equal(jump.airUp, true)
+  assert.equal(drop.whileAir.mult, 45)
+  assert.equal(airMultOf(drop, false), 1, '地上では乗らない')
+  assert.equal(airMultOf(drop, true), 1.45, '空中なら乗る')
+  assert.equal(airMultOf(sk('ふつう'), true), 1)
+  const me = createSide({ name:'体', cls:'体術師', kind:'phys', stats: evenStats(534),
+    slots:[{ skill: jump, uses:9 }, { skill: drop, uses:9 }, { skill: SKILL_BY_NAME['半月蹴り'], uses:9 }] })
+  const foe = createSide(fighter('的', [], { ...evenStats(534), hp: 10 ** 7 }))
+  assert.equal(me.air, false)
+  takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
+  assert.equal(me.air, true, '跳び上がった')
+  takeAction(me, foe, () => 0.5, [], { idx: 1, noProc: true })
+  assert.equal(me.air, false, '叩きつけて着地した')
+  takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
+  takeAction(me, foe, () => 0.5, [], { idx: 2, noProc: true })
+  assert.equal(me.air, false, 'ふつうに殴っても着地する')
+  assert.equal(AIR_EVA, 10)
+})
+
+test('式神使い：儀式で呪力を練り、切り札で全部使う', () => {
+  const kekkai = SKILL_BY_NAME['陰陽結界']
+  const kami = SKILL_BY_NAME['禁術・神降ろし']
+  assert.equal(kekkai.ritual, 1)
+  assert.equal(kami.useRitual.per, 40)
+  assert.equal(stackMultOf(kami.useRitual, 0), 1, '呪力が無ければ素')
+  assert.equal(Number(stackMultOf(kami.useRitual, 2).toFixed(3)), 1.8, '2つで+80%')
+  const me = createSide({ name:'式', cls:'式神使い', kind:'mag', stats: evenStats(534),
+    slots:[{ skill: kekkai, uses:9 }, { skill: kami, uses:9 }, { skill: SKILL_BY_NAME['式神召喚'], uses:1 }] })
+  const foe = createSide(fighter('的', [], { ...evenStats(534), hp: 10 ** 7 }))
+  assert.equal(me.ritual, 1, '式神召喚：始めから1つ持っている')
+  for (let i = 0; i < 5; i++) takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
+  assert.equal(me.ritual, STACK_MAX, '上限で止まる')
+  const log = []
+  takeAction(me, foe, () => 0.5, log, { idx: 1, noProc: true })
+  assert.equal(me.ritual, 0, '切り札で全部使う')
+  assert.ok(log.find(l => l.type === 'skill').damage > 0)
+})
+
+test('竜騎士：竜気を溜めると硬くなり、切り札で全部使う', () => {
+  const roar = SKILL_BY_NAME['ドラゴンロア']
+  const finish = SKILL_BY_NAME['天墜竜閃']
+  assert.equal(roar.chargeUp, true)
+  assert.equal(finish.useCharge.per, 35)
+  const me = createSide({ name:'竜', cls:'竜騎士', kind:'phys', stats: evenStats(534),
+    slots:[{ skill: roar, uses:9 }, { skill: finish, uses:9 }] })
+  const foe = createSide(fighter('的', [], { ...evenStats(534), hp: 10 ** 7 }))
+  assert.equal(chargeGuardOf(me), 1)
+  takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
+  assert.equal(me.charge, 1)
+  assert.equal(Number(chargeGuardOf(me).toFixed(3)), 1.12, '溜めているあいだは軽減率が上がる')
+  takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
+  const log = []
+  takeAction(me, foe, () => 0.5, log, { idx: 1, noProc: true })
+  assert.equal(me.charge, 0, '切り札で全部使う')
+  assert.ok(log.find(l => l.type === 'skill').damage > 0)
+})
+
+test('サイキッカー：相手の特防で受けるが、威力はSTR参照', () => {
+  const shot = SKILL_BY_NAME['サイコショット']
+  assert.equal(shot.kind, 'mag')
+  assert.equal(shot.srcKind, 'phys')
+  const hit = (myStats, foeStats) => {
+    const me = createSide({ name:'念', cls:'サイキッカー', kind:'mag', stats: myStats, slots:[{ skill: shot, uses:9 }] })
+    const foe = createSide({ name:'的', cls:'戦士', kind:'phys', stats: { ...foeStats, hp: 10 ** 7 }, slots: [] })
+    const log = []
+    takeAction(me, foe, () => 0.5, log, { idx: 0, noProc: true })
+    return log.find(l => l.type === 'skill').damage
+  }
+  const base = evenStats(534)
+  assert.ok(hit({ ...base, str: base.str * 2 }, base) > hit(base, base), 'STRを積むと伸びる')
+  // 受ける側：特殊として受けるので、VITよりINT（特防）のほうがよく効く
+  assert.ok(hit(base, { ...base, int_stat: base.int_stat * 3 }) < hit(base, base), '特防で減る')
+  assert.ok(hit(base, { ...base, vit: base.vit * 3 }) > hit(base, { ...base, int_stat: base.int_stat * 3 }),
+    'VITを積むより特防を積んだほうが減らせる')
 })

@@ -161,9 +161,11 @@ export const roll = (pct, rng = Math.random) => rng() * 100 < pct
 // add: 副ステータス参照 [{ stat:'agi', rate:0.5 }]。あるけみすとの「STR×1.4＋LUK×0.8」に相当
 //      ※軽減率の計算には主ステータス（STR/INT）だけを使う＝副ステで防御の効きが変わらない
 export const attackStatOf = (s, kind) => (kind === 'mag' ? (s?.int_stat || 0) : (s?.str || 0))
-export const damageOf = ({ attacker, defender, mult = 1, kind = 'phys', crit = false, defPen = 0, add = null, critDmg = 0, redMult = 1 }) => {
+// atkKind … **威力の参照だけ**を別の型にする（サイキッカー＝特殊攻撃だが威力はSTR参照）。
+//   受ける側の防御は kind のまま＝「相手の特防で受けるのに、こちらはSTRで殴る」
+export const damageOf = ({ attacker, defender, mult = 1, kind = 'phys', crit = false, defPen = 0, add = null, critDmg = 0, redMult = 1, atkKind = null }) => {
   const phys = kind !== 'mag'
-  const atk = attackStatOf(attacker, kind)
+  const atk = attackStatOf(attacker, atkKind || kind)
   let base = atk * mult
   if (add) for (const a of add) base += (attacker?.[a.stat] || 0) * a.rate
   let def = phys ? physDefOf(defender) : magDefOf(defender)
@@ -222,15 +224,15 @@ export const damageFloor = (attacker, kind = 'phys') => 1 - DMG_SPREAD * (1 - st
 // hitMult    … 最終命中率に掛ける（鷹ノ目：1.1倍／相手が瀕死なら1.3倍）
 // critDmg    … クリティカルのダメージ+%（隠身・精密照準）
 // redMult    … 受ける側の軽減率に掛ける（聖騎士の心得）
-export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', defPen = 0, add = null, sureHit = false, sureCrit = false, noCrit = false, hitBonus = 0, evaBonus = 0, critBonus = 0, acc = 100, hitMult = 1, critDmg = 0, redMult = 1 }, rng = Math.random) => {
+export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', atkKind = null, defPen = 0, add = null, sureHit = false, sureCrit = false, noCrit = false, hitBonus = 0, evaBonus = 0, critBonus = 0, acc = 100, hitMult = 1, critDmg = 0, redMult = 1 }, rng = Math.random) => {
   const crit = !noCrit && (sureCrit || roll(critRate(attacker, defender, critBonus), rng))
   const accStats = crit ? critAccuracyStats(attacker) : attacker
   const rate = clampPct(skillHitRate(accStats, defender, { acc, kind, hitBonus, evaBonus }) * hitMult, 0, 100)
   const hit = sureHit || roll(rate, rng)
   if (!hit) return { hit:false, crit, damage:0 }
   // ダメージの振れ幅。DEXが高いほど下限が1.00へ寄って安定する
-  const lo = damageFloor(attacker, kind)
+  const lo = damageFloor(attacker, atkKind || kind)
   const scale = (lo + (1 - lo) * rng()) * DMG_COMP
-  const dmg = Math.max(1, Math.floor(damageOf({ attacker, defender, mult, kind, crit, defPen, add, critDmg, redMult }) * scale))
+  const dmg = Math.max(1, Math.floor(damageOf({ attacker, defender, mult, kind, crit, defPen, add, critDmg, redMult, atkKind }) * scale))
   return { hit:true, crit, damage: dmg }
 }
