@@ -517,13 +517,16 @@ export default function V2Home() {
                         <span style={{ color:'#8fa8bb', fontSize:'10px', flex:1, minWidth:0, lineHeight:'1.6' }}>
                           {powerText(s) === s.desc ? '' : s.desc}
                         </span>
-                        {has && Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => (
-                          <button key={i} onClick={() => setSlot(i, { name: s.name, uses: draft[i]?.name === s.name ? draft[i].uses : 1 })}
-                            disabled={inSet >= 0 && inSet !== i}
-                            style={{ ...miniBtn(inSet === i ? '#44aaff' : '#62789a'), color: inSet === i ? '#88ccff' : '#93a9be', opacity: (inSet >= 0 && inSet !== i) ? 0.3 : 1 }}>
+                        {/* ★同じスキルを複数の枠に置ける（納刀→居合斬→納刀→月影 のような編成） */}
+                        {has && Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => {
+                          const here = draft[i]?.name === s.name
+                          return (
+                          <button key={i} onClick={() => setSlot(i, { name: s.name, uses: here ? draft[i].uses : 1 })}
+                            style={{ ...miniBtn(here ? '#44aaff' : '#62789a'), color: here ? '#88ccff' : '#93a9be' }}>
                             {i + 1}
                           </button>
-                        ))}
+                          )
+                        })}
                         {!has && <span style={{ color:'#c69a5c', fontSize:'9px' }}>LVアップで習得</span>}
                       </div>
                     </div>

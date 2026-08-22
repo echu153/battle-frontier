@@ -27,14 +27,16 @@ const bodyOf = (name) => {
 //   倍率を下げたときにMPだけ据え置くと編成の重さが合わなくなるので、片方だけ直したら落とす。
 test('v2_skills の名前・職業・消費MPが skills.js と一致している（片方だけ直すと気付く）', () => {
   const seed = SQL.slice(SQL.indexOf('insert into public.v2_skills'))
-  const rows = [...seed.slice(0, seed.indexOf('on conflict')).matchAll(/\('([^']+)','([^']+)',(\d+),(\d+)\)/g)]
+  const rows = [...seed.slice(0, seed.indexOf('on conflict')).matchAll(/\('([^']+)','([^']+)',(\d+),(\d+),(\d+)\)/g)]
   assert.equal(rows.length, SKILLS.length, 'v2_skills の行数がJS側と違う')
-  const bySql = new Map(rows.map(m => [m[1], { cls: m[2], mp: Number(m[3]) }]))
+  const bySql = new Map(rows.map(m => [m[1], { cls: m[2], mp: Number(m[3]), reqJobs: Number(m[5]) }]))
   for (const s of SKILLS) {
     const row = bySql.get(s.name)
     assert.ok(row, `${s.name} が v2_skills に無い`)
     assert.equal(row.cls, s.cls, `${s.name} の職業`)
     assert.equal(row.mp, s.mp || 0, `${s.name} の消費MP`)
+    // ★転職回数の条件（侍の納刀・見切り＝5回以上）もSQLと揃える
+    assert.equal(row.reqJobs, s.reqJobs || 0, `${s.name} の必要転職回数`)
   }
 })
 

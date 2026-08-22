@@ -189,6 +189,9 @@ export const createSide = (fighter, band = null) => {
     rage: 0,        // バーサク・執行本能のスタック数
     acts: 0,        // 自分が行動した回数（骸の壁が5回ごとに見る・第六感が積み上げに使う）
     hitStacks: 0,   // 精密照準：当てるたびに積む（上限は passive.hitStack.max）
+    // ★侍（2026-08-19）
+    stance: null,   // 納刀：{ proc, mult } 次に撃つスキルへ乗り、撃ったら消える
+    foresight: null, // 見切り：{ turns, pct, perHit, byName } 受けた技ほど避けやすくなる
     wallPct: pa.wall ? pa.wall.pct : 0,  // 骸の壁は戦闘開始時から乗る（重複しない）
     guards: pa.debuffGuard,              // 心身一如：デバフを打ち消せる残り回数
     lastSkill: null,                     // 元素共鳴が見る「直前に使ったスキル」
@@ -242,10 +245,27 @@ const findSlot = (side) => {
   return null
 }
 
+// このターンの行動順の優先度。★納刀中だけ先制になる技がある（侍の居合斬）
+export const priorityOf = (side, skill) =>
+  (skill?.priority || 0) + (side?.stance && skill?.whileStance?.priority ? skill.whileStance.priority : 0)
+
 // このターン使うスキル（発動判定の前）。行動順の優先度を知るために先に覗く
 export const peekSkill = (side) => {
   const idx = findSlot(side)
   return idx === null ? null : side.slots[idx].skill
+}
+
+// 見切り：効果中の回避率＋、その技を受けたぶんだけ上乗せ（同じ技ほど見切れる）
+export const foresightEva = (side, skillName) => {
+  const f = side?.foresight
+  if (!f || f.turns <= 0) return 0
+  return f.pct + (skillName ? (f.byName[skillName] || 0) : 0)
+}
+// 見切り：受けた技を覚える
+const rememberSkill = (side, skillName) => {
+  const f = side?.foresight
+  if (!f || f.turns <= 0 || !skillName) return
+  f.byName[skillName] = (f.byName[skillName] || 0) + f.perHit
 }
 
 // 受けるとき側の軽減。骸の壁（1回きり）と竜鱗の加護（確率）はここでまとめて掛ける
@@ -439,7 +459,9 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
 
   // 発動判定。不発ならMPも使用回数も減らず、ポインタも進めない
   //   ★不発はバーサク・執行本能のスタックをリセットする
-  if (skill && !opt.noProc && !roll(skill.proc + me.pa.procBonus + me.en.procBonus + me.evo.proc, rng)) {
+  // ★納刀（侍）：次に撃つスキルの発動率+・威力×。不発では消えない（撃てるまで構えたまま）
+  const stance = skill ? me.stance : null
+  if (skill && !opt.noProc && !roll(skill.proc + me.pa.procBonus + me.en.procBonus + me.evo.proc + (stance?.proc || 0), rng)) {
     log.push({ side: me.name, type: 'misfire', skill: skill.name })
     me.rage = 0
     // 居合の構えはここで威力2倍。武器の進化「居合の心得」も同じ枠で乗る
@@ -448,6 +470,9 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   }
   if (!skill) { me.rage = 0; normalAttack(me, foe, rng, log); return }
 
+  // 納刀を使う：この行動だけ威力×mult。条件つきの効果（whileStance）もここで開く
+  const ws = stance ? (skill.whileStance || null) : null
+  if (stance) me.stance = null
   me.mp -= mpCostOf(me, skill)
   slot.uses -= 1
   me.ptr = (idx + 1) % me.slots.length
@@ -469,7 +494,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     let hits = 0
     let missed = 0
     // 第六感の「貫通+10%」はスキルの防御貫通に足す。武器の進化ぶんも同じ枠
-    const defPen = Math.min(1, (skill.defPen || 0) + me.pa.defPenBonus / 100 + me.evo.defPen / 100)
+    const defPen = Math.min(1, (skill.defPen || 0) + (ws?.defPen || 0) + me.pa.defPenBonus / 100 + me.evo.defPen / 100)
     // ★出血スタックの起爆（暗殺者の急所突き）。**相手に積んだ出血を全部消費して威力を上げる**
     //   ＝「出血を撒く技」と「刈り取る技」で1つの流れになる（消費するので撒き直しが要る）
     let burst = 1
@@ -484,13 +509,13 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     }
     for (let h = 0; h < (skill.hits || 1); h++) {
       const r = resolveAttack({
-        attacker: eMe, defender: eFoe, mult: skill.mult * burst, kind: skill.kind,
+        attacker: eMe, defender: eFoe, mult: skill.mult * burst * (stance?.mult || 1), kind: skill.kind,
         defPen, add: skill.add || null,
         sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit, noCrit: !!skill.noCrit,
         acc: skill.acc ?? 100,
         // ★スキル自身の命中補正（skill.hitBonus）もここで足す＝「必中ではないが当てやすい技」を作れる
         hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + (skill.hitBonus || 0),
-        evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe),
+        evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, skill.name),
         critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me),
         hitMult: hitMultOf(me, foe),
         critDmg: critDmgOf(me),
@@ -520,6 +545,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     if (off !== 1) raw = Math.floor(raw * off)
     // 武器の進化（条件つきの与ダメージ+%をまとめて）
     raw = Math.floor(raw * evoMult(me, foe, { kind: skill.kind, skill: true, multi: (skill.hits || 1) > 1 }))
+    rememberSkill(foe, skill.name)
     const dmg = applyIncoming(me, foe, raw, skill.kind, rng, log)
     if (hits > 0) {
       bumpHitStack(me, hits)
@@ -528,7 +554,11 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       // ★スキル自身が持つ状態異常（どくのほうし＝毒、電撃＝麻痺 など）。**当たったときだけ**。
       //   敵もプレイヤーと同じ takeAction を通るので、これで**敵→こちら**にも状態異常が飛ぶ
       //   ＝エンチャントの抵抗（毒キノコ・払暁のワイバーン）が意味を持つ
-      if (skill.ail) tryInflict(me, foe, { ...skill.ail, chance: skill.ail.chance * off }, rng, log)
+      if (skill.ail) {
+        // 納刀ぶんで確率が上がる技がある（月影＝納刀中は出血100%）
+        const chance = ws?.ailChance ?? (skill.ail.chance * off)
+        tryInflict(me, foe, { ...skill.ail, chance }, rng, log)
+      }
     }
     // バーサク・執行本能：ダメージを与えたら+1スタック、全部外れたらリセット
     if (me.pa.rages.length) me.rage = hits > 0 ? me.rage + 1 : 0
@@ -560,6 +590,16 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   // 骸の壁：戦闘開始時と自分の行動5回ごとに得る（重複しないので、掛け直すだけ）
   if (me.pa.wall && me.acts % me.pa.wall.every === 0) me.wallPct = me.pa.wall.pct
 
+  // ★納刀：構えるだけの技（次のスキルへ乗る）
+  if (skill.stance) {
+    me.stance = { ...skill.stance }
+    log.push({ side: me.name, type: 'stance', skill: skill.name })
+  }
+  // ★見切り：一定ターンのあいだ回避が上がり、受けた技ほど見切れる
+  if (skill.foresight) {
+    me.foresight = { ...skill.foresight, byName: me.foresight?.byName || {} }
+    log.push({ side: me.name, type: 'foresight', skill: skill.name, turns: skill.foresight.turns })
+  }
   // バフ・デバフ（攻撃スキルに付いていることもある）
   if (skill.buff) {
     if (skill.buff.self)  applyBuff(me.buffs, scaleTable(skill.buff.self, off))
@@ -576,7 +616,7 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
     attacker: eMe, defender: eFoe, mult: NORMAL_ATTACK_MULT * multScale, kind: me.kind,
     defPen: me.pa.defPenBonus / 100 + me.evo.defPen / 100,
     hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe),
-    evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe),
+    evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, null),
     critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me),
     hitMult: hitMultOf(me, foe),
     critDmg: critDmgOf(me),
@@ -618,6 +658,14 @@ export const tickAil = (side, log, foe = null) => {
     side.hp -= t.damage
     log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL[t.key], damage: t.damage, stacks: t.stacks })
     if (side.hp <= 0) return
+  }
+}
+
+// 見切りの残りターン（ターン終わりに1つ減る）
+export const tickForesight = (side) => {
+  if (side.foresight?.turns > 0) {
+    side.foresight.turns -= 1
+    if (side.foresight.turns <= 0) side.foresight = null
   }
 }
 
@@ -665,8 +713,8 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
     // 行動順：このターン撃つ予定のスキルの優先度 → AGI → ランダム
     const eA = liveStats(a)
     const eB = liveStats(b)
-    const pA = peekSkill(a)?.priority || 0
-    const pB = peekSkill(b)?.priority || 0
+    const pA = priorityOf(a, peekSkill(a))
+    const pB = priorityOf(b, peekSkill(b))
     // 武器の進化「先手必勝」：確率でそのターンの先攻を取る（両方が引いたら通常どおり）
     const fA = a.evo.first > 0 && roll(a.evo.first, rng)
     const fB = b.evo.first > 0 && roll(b.evo.first, rng)
@@ -693,6 +741,8 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
     if (a.hp <= 0 || b.hp <= 0) break
     tickRegen(a, log, b)
     tickRegen(b, log, a)
+    tickForesight(a)
+    tickForesight(b)
     if (a.hp <= 0 || b.hp <= 0) break
     // 画面でHPバーを出すための、ターン終わりのスナップショット（戦闘の結果には影響しない）
     log.push({ type:'hp', turn, a: Math.max(0, a.hp), aMax: a.base.hp, b: Math.max(0, b.hp), bMax: b.base.hp })

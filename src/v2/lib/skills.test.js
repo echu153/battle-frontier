@@ -119,7 +119,9 @@ test('上位職の実質価値があるけみすとの水準を超えない（�
 //   **同じ発動率の帯なら、どの職のどの技も実質価値が同じ**になるように揃える。
 test('同じ発動率の帯なら、どの職でも実質価値が揃っている', () => {
   const bad = []
-  for (const s of SKILLS.filter(s => s.kind === 'phys' || s.kind === 'mag')) {
+  // ★whileStance（納刀中だけ効く追加効果）を持つ技は対象外。
+  //   その効果は「納刀に1行動を払う」ことで買っているので、素の価値は帯より少し低くてよい
+  for (const s of SKILLS.filter(s => (s.kind === 'phys' || s.kind === 'mag') && !s.whileStance)) {
     const t = targetValue(s.cls, s.kind, s.proc)
     if (Math.abs(skillValue(s) - t) > 0.06) {
       bad.push(`${s.cls} ${s.name}: 価値${skillValue(s).toFixed(2)}（帯の目標${t}／倍率${multTotal(s)}＋効果${effectPrice(s).toFixed(2)}）`)
@@ -228,6 +230,8 @@ const addRates = (s) => Object.fromEntries((s.add || []).map(a => [a.stat, a.rat
 const buffVal = (side, v) => (side === 'self' ? v : -v)
 const dominates = (A, B) => {
   if (A === B || A.kind !== B.kind) return false
+  // ★特別な仕組みを持つ技（納刀・見切り・納刀中だけの効果）は、持っていない技とは比べない
+  for (const k of ['stance', 'foresight', 'whileStance']) if (!!A[k] !== !!B[k]) return false
   if ((A.hits || 1) !== (B.hits || 1)) return false        // 多段と単発は別の土俵
   if (!!A.noCrit !== !!B.noCrit) return false
   if (!!A.mpPct !== !!B.mpPct) return false                // 割合消費も別の土俵

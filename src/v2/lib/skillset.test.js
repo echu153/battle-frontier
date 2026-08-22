@@ -93,7 +93,8 @@ test('編成は枠数・重複・使用回数・使えるスキルかを検証�
   assert.equal(validateSkillSet([], usable, 9999), null)  // 空でもよい
 
   assert.match(validateSkillSet([{ name:'爆裂拳', uses:1 }], usable, 9999), /まだ使えません/)
-  assert.match(validateSkillSet([{ name:'強撃', uses:1 }, { name:'強撃', uses:1 }], usable, 9999), /重複/)
+  // ★2026-08-19：同じスキルを複数の枠に置けるようにした（納刀→居合斬→納刀→月影 のような編成）
+  assert.equal(validateSkillSet([{ name:'強撃', uses:1 }, { name:'強撃', uses:1 }], usable, 9999), null)
   const many = skillsOf('戦士').map(s => ({ name:s.name, uses:1 }))
   const all = skillsOf('戦士').map(s => s.name)
   assert.equal(validateSkillSet(many, all, 9999), null)

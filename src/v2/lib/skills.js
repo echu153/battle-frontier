@@ -75,6 +75,11 @@ export const PASSIVE_EFFECT_KEYS = [
   'perAct',    // { stats, per, max } 自分が行動するたびに積む（第六感）
 ]
 
+// ★2026-08-19に足したキー（侍）
+// stance      : { proc, mult } この技を撃つと「構え」に入る。次に撃つスキルへ乗って消える（納刀）
+// whileStance : 構え中だけ効く追加効果 { priority, defPen, ailChance }
+// foresight   : { turns, pct, perHit } 一定ターン回避率+。受けた技ごとにさらに積む（見切り）
+// reqJobs     : この技を覚えるのに要る転職回数（侍の後半5個＝5回以上）
 // mult   : 主ステータス（STR/INT）に掛ける倍率
 // add    : 副ステータス参照 [{ stat, rate }]
 // hits   : 多段の回数（命中・クリは1発ずつ判定する）
@@ -169,19 +174,21 @@ export const SKILLS = [
   //  ・職業ごとに参照するステータスを変えて、役割が被らないようにしてある
   // ============================================================
 
-  // ===== 侍（STR＋DEX・出血・防御無視） =====
-  // ★参照するステは職業補正の main/sub に合わせる（侍は main=STR / sub=DEX）。
   //   バフでDEXを上げるのに威力がDEXを見ていない、のような噛み合わない状態を作らない
-  { name:'居合斬',   cls:'侍', kind:'phys', mult:1.45, add:[{ stat:'dex', rate:0.4 }], proc:90, mp:12, ail:{ key:'bleed', chance:20 }, desc:'抜き打ち。DEXも威力になる。20%で出血' },
-  { name:'断空',     cls:'侍', kind:'phys', mult:1.9, defPen:0.5, proc:85, mp:16, desc:'相手の防御を50%無視' },
+  // ===== 侍（STR＋DEX・納刀して斬る） =====
+  // ★参照するステは職業補正の main/sub に合わせる（侍は main=STR / sub=DEX）。
+  // ★納刀（stance）＝次に撃つスキルの発動率+20%・威力1.5倍。撃つと消える。
+  //   さらに技ごとに「納刀中だけの効果」（whileStance）が付く＝どの技へ繋ぐかが選択になる
+  { name:'居合斬',   cls:'侍', kind:'phys', mult:1.45, add:[{ stat:'dex', rate:0.4 }], proc:90, mp:12, ail:{ key:'bleed', chance:20 }, whileStance:{ priority:1 }, desc:'抜き打ち。DEXも威力になる。20%で出血。納刀中は先制' },
+  { name:'断空',     cls:'侍', kind:'phys', mult:1.9, defPen:0.3, proc:85, mp:16, whileStance:{ defPen:0.2 }, desc:'相手の防御を30%無視。納刀中はさらに20%無視（計50%）' },
   { name:'居合の構え', cls:'侍', kind:'passive', mp:0, passive:{ misfireAtkMult:2 }, desc:'スキルが不発したとき、代わりに出る通常攻撃の威力が2倍になる' },
-  { name:'明鏡止水', cls:'侍', kind:'buff', proc:100, mp:12, buff:{ self:{ str:25, dex:20 } }, priority:1, desc:'STR+30%・DEX+20%（重ねがけ可）' },
-  { name:'月影',     cls:'侍', kind:'phys', mult:2.2, proc:78, mp:22, ail:{ key:'bleed', chance:40 }, desc:'侍の切り札。40%で出血' },
-  { name:'抜刀',       cls:'侍', kind:'phys', mult:1.45, add:[{ stat:'dex', rate:0.3 }], proc:95, mp:10, desc:'鞘走りの一閃。軽くて出やすい。DEXも威力になる' },
-  { name:'二段斬り',   cls:'侍', kind:'phys', mult:0.95, add:[{ stat:'dex', rate:0.15 }], hits:2, proc:85, mp:16, noCrit:true, desc:'2連撃。DEXも威力になる。クリティカルしない' },
-  { name:'峰打ち',     cls:'侍', kind:'phys', mult:1.65, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:14, buff:{ enemy:{ str:-15 } }, desc:'DEXも威力になる。相手のSTR-15%（重ねがけ可）' },
-  { name:'桜花一閃',   cls:'侍', kind:'phys', mult:1.95, add:[{ stat:'dex', rate:0.2 }], proc:82, mp:18, ail:{ key:'bleed', chance:30 }, desc:'DEXも威力になる。30%で出血' },
-  { name:'残身の構え', cls:'侍', kind:'buff', proc:100, mp:11, buff:{ self:{ dex:40 } }, priority:1, desc:'DEX+35%（重ねがけ可）' },
+  { name:'明鏡止水', cls:'侍', kind:'buff', proc:100, mp:12, buff:{ self:{ str:30, dex:20 } }, priority:1, desc:'STR+30%・DEX+20%（重ねがけ可）' },
+  { name:'月影',     cls:'侍', kind:'phys', mult:2.2, proc:78, mp:22, ail:{ key:'bleed', chance:40 }, whileStance:{ ailChance:100 }, desc:'侍の切り札。40%で出血。納刀中は出血が確定' },
+  { name:'納刀',     cls:'侍', kind:'buff', proc:100, mp:6, priority:1, reqJobs:5, stance:{ proc:20, mult:1.5 }, desc:'納刀状態になる。次に撃つスキルが発動率+20%・威力1.5倍（撃つと消える）' },
+  { name:'峰打ち',   cls:'侍', kind:'phys', mult:1.65, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:14, reqJobs:5, buff:{ enemy:{ str:-15 } }, desc:'DEXも威力になる。相手のSTR-15%（重ねがけ可）' },
+  { name:'二段斬り', cls:'侍', kind:'phys', mult:0.95, add:[{ stat:'dex', rate:0.15 }], hits:2, proc:85, mp:16, noCrit:true, reqJobs:5, desc:'2連撃。DEXも威力になる。クリティカルしない' },
+  { name:'桜花一閃', cls:'侍', kind:'phys', mult:1.95, add:[{ stat:'dex', rate:0.2 }], proc:82, mp:18, reqJobs:5, ail:{ key:'bleed', chance:30 }, desc:'DEXも威力になる。30%で出血' },
+  { name:'見切り',   cls:'侍', kind:'buff', proc:100, mp:10, priority:1, reqJobs:5, foresight:{ turns:5, pct:3, perHit:3 }, desc:'5ターンのあいだ回避率+3%。スキルを受けるたび、その技への回避率がさらに+3%' },
 
   // ===== 狂戦士（STR一点・自分を削る） =====
   { name:'マッドラッシュ', cls:'狂戦士', kind:'phys', mult:0.73, hits:3, proc:85, mp:16, noCrit:true, desc:'3連撃。クリティカルしない' },
@@ -623,7 +630,7 @@ export const validateSkillSet = (set, usableNames, maxMp = Infinity, cls = undef
   for (const e of set) {
     if (!e?.name) return '枠にスキルが入っていません'
     if (!usable.has(e.name)) return `${e.name}はまだ使えません`
-    if (seen.has(e.name)) return `${e.name}が重複しています`
+    // ★同じスキルを何枠に置いてもよい（納刀→居合斬→納刀→月影 のように組める）
     seen.add(e.name)
     const uses = Number(e.uses)
     if (!Number.isInteger(uses) || uses < 1 || uses > SKILL_USE_MAX) return `${e.name}の使用回数は1〜${SKILL_USE_MAX}です`
