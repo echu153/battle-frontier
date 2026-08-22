@@ -55,16 +55,20 @@ export const CRIT_DEF_DIV  = 1.5 // クリ時に相手の防御力を割る（�
 export const CRIT_ACC_DEX  = 1.5    // クリ時の命中判定で DEX に掛ける
 export const CRIT_ACC_LUK  = 1 / 3  // クリ時の命中判定で LUK から足す
 export const critAccuracyStats = (s) => ({ ...s, dex: (s?.dex || 0) * CRIT_ACC_DEX + (s?.luk || 0) * CRIT_ACC_LUK })
-export const CRIT_BASE_PCT = 5   // 基礎クリティカル率(%)
-export const CRIT_PER_LUK  = 100 // LUK差がこの値のときクリ率+10%（下のCRIT_DIFF_PCTと組）
-export const CRIT_DIFF_PCT = 10
+export const CRIT_BASE_PCT = 5   // LUKが相手と同じときのクリティカル率(%)
+// ★2026-08-23：**LUKの「差」ではなく「比」**で決める。
+//   差で決めていたころは CRIT_PER_LUK=100（＝LUK差100で+10%）という**絶対値**だったので、
+//   戦闘力が上がってLUKが数千になると差も数千になり、**クリ率が1%か50%かの二択**になっていた。
+//   （実測：LUK1,600→クリ1.1%／LUK3,200→クリ48.1%。同じ技・同じSTRで平均ダメージ+74%）
+//   比なら戦闘力がいくら伸びても効き方が変わらない＝「LUKをどれだけ厚く積んだか」で決まる。
+export const CRIT_RATIO_PCT = 30 // LUKが相手の2倍のときクリ率+30%
 export const CRIT_MIN_PCT = 1
 export const CRIT_MAX_PCT = 50
 // 自分のLUKが相手より高いほど当たりやすい
 // critBonus はパッシブの「最終クリティカル率+5%」ぶん（上限 CRIT_MAX_PCT には従う）
 export const critRate = (attacker, defender, critBonus = 0) => {
-  const diff = (attacker?.luk || 0) - (defender?.luk || 0)
-  const pct = CRIT_BASE_PCT + (diff / CRIT_PER_LUK) * CRIT_DIFF_PCT + critBonus
+  const ratio = (attacker?.luk || 0) / Math.max(1, defender?.luk || 0)
+  const pct = CRIT_BASE_PCT + (ratio - 1) * CRIT_RATIO_PCT + critBonus
   return clampPct(pct, CRIT_MIN_PCT, CRIT_MAX_PCT)
 }
 

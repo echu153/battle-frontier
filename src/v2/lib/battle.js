@@ -22,6 +22,7 @@ import { skillsOf, isPassive, offClassMult, scaleTable, mpOf, mpPctOf } from './
 import { classBonusOf } from './classBonus.js'
 import {
   createAilments, inflict, tickAilments, ailStatPct, healMultOf, consumeParalyze, hasAilment, AIL_LABEL,
+  POISON_CAP_RATE, BLEED_CAP_RATE,
 } from './ailments.js'
 import { collectEnchants, inflictChance } from './enchant.js'
 import {
@@ -415,7 +416,12 @@ const tryInflict = (me, foe, a, rng, log) => {
     - (foe?.pa?.ailResist || 0)   // ★武僧：状態異常が効きづらい
   if (!roll(pct, rng)) return
   // ★隠身（暗殺者）：自分が付ける出血はスタック上限が伸びる
-  const opt = me?.pa?.bleedMax ? { ...a, max: me.pa.bleedMax } : a
+  // ★ドットの1刻み上限は**付けた側の攻撃力**から決める（HPが桁違いの相手で壊れないように）
+  const eAtk = liveStats(me, true)
+  const atk = Math.max(eAtk.str || 0, eAtk.int_stat || 0)
+  const cap = a.key === 'poison' ? atk * POISON_CAP_RATE
+    : a.key === 'bleed' ? atk * BLEED_CAP_RATE : undefined
+  const opt = { ...a, cap, ...(me?.pa?.bleedMax ? { max: me.pa.bleedMax } : {}) }
   if (inflict(foe.ail, a.key, opt)) log.push({ side: foe.name, type: 'ailment', ail: AIL_LABEL[a.key] })
 }
 

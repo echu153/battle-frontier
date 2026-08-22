@@ -29,6 +29,23 @@ export const BLEED_MAX_STACKS = 5
 export const BLEED_HP_RATE    = 0.01  // 現在HPに対する割合 × スタック数
 export const BLEED_TURNS      = 3     // 最後に付与されてからの持続
 // 毒（旧版準拠）
+// ★2026-08-23：**1刻みのダメージに上限**を付ける（付けた側の攻撃力から決まる）。
+//   出血・毒は「最大HP／現在HPの割合」なので、HPが桁違いに大きいユニークボスやレイドでは
+//   直接攻撃の10〜15倍になっていた（実測：戦闘力2万のボスで毒1刻み95,592・直接攻撃は7,000〜13,000）。
+//   上限は**同格の敵には届かない**大きさにしてあるので、ふつうの出撃の出目は変わらない。
+export const POISON_CAP_RATE = 0.6   // 毒の1刻み上限＝付けた側の攻撃力 × これ（4刻みで攻撃力×2.4）
+export const BLEED_CAP_RATE  = 0.25  // 出血の1スタックあたりの上限（5スタック3刻みで攻撃力×3.75）
+// 1刻みのダメージ。cap は付与時に控えた「付けた側の攻撃力ぶんの上限」（無ければ従来どおり）
+export const poisonTickOf = (poison, maxHp) => {
+  const raw = maxHp * (poison?.rate ?? POISON_RATE)
+  return Math.max(1, Math.floor(Math.min(raw, poison?.cap || Infinity)))
+}
+export const bleedTickOf = (bleed, hp) => {
+  const st = bleed?.stacks || 0
+  const raw = hp * BLEED_HP_RATE * st
+  return Math.max(1, Math.floor(Math.min(raw, (bleed?.cap || Infinity) * st)))
+}
+
 export const POISON_TURNS = 4
 export const POISON_RATE  = 0.03      // 最大HPに対する割合
 // 鈍足
@@ -56,13 +73,13 @@ export const inflict = (ail, key, opt = {}) => {
       // ★opt.max … 付与する側が上限を伸ばせる（暗殺者の隠身＝10スタックまで）
       const cur = ail.bleed
       const max = opt.max || BLEED_MAX_STACKS
-      ail.bleed = { stacks: Math.min(max, (cur?.stacks || 0) + (opt.stacks || 1)), age: 0 }
+      ail.bleed = { stacks: Math.min(max, (cur?.stacks || 0) + (opt.stacks || 1)), age: 0, cap: opt.cap || cur?.cap }
       return true
     }
     case 'poison': {
       // 旧版と同じ：すでに毒なら入らない
       if (ail.poison?.turns > 0) return false
-      ail.poison = { turns: POISON_TURNS, rate: POISON_RATE }
+      ail.poison = { turns: POISON_TURNS, rate: POISON_RATE, cap: opt.cap }
       return true
     }
     case 'slow':
@@ -102,13 +119,13 @@ export const consumeParalyze = (ail) => {
 export const tickAilments = (ail, { hp, maxHp }) => {
   const out = []
   if (ail.poison?.turns > 0) {
-    out.push({ key: 'poison', damage: Math.max(1, Math.floor(maxHp * ail.poison.rate)) })
+    out.push({ key: 'poison', damage: poisonTickOf(ail.poison, maxHp) })
     ail.poison.turns -= 1
     if (ail.poison.turns <= 0) delete ail.poison
   }
   if (ail.bleed?.stacks > 0) {
     // 旧版と同じく**現在HP**基準。刻むほど減衰する
-    out.push({ key: 'bleed', damage: Math.max(1, Math.floor(hp * BLEED_HP_RATE * ail.bleed.stacks)), stacks: ail.bleed.stacks })
+    out.push({ key: 'bleed', damage: bleedTickOf(ail.bleed, hp), stacks: ail.bleed.stacks })
     ail.bleed.age += 1
     if (ail.bleed.age >= BLEED_TURNS) delete ail.bleed
   }

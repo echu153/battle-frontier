@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   PHYS_REDUCTION_CAP, MAG_REDUCTION_CAP, CRIT_MULT, CRIT_MULT_ADD, EVA_RATE_MAX, evasionRate, damageFloor, DMG_SPREAD,
-  CRIT_MIN_PCT, CRIT_MAX_PCT, CRIT_BASE_PCT, CRIT_ACC_DEX, CRIT_ACC_LUK, critAccuracyStats,
+  CRIT_MIN_PCT, CRIT_MAX_PCT, CRIT_BASE_PCT, CRIT_RATIO_PCT, CRIT_ACC_DEX, CRIT_ACC_LUK, critAccuracyStats,
   EXTRA_ACTION_MAX_PCT, EXTRA_ACTION_MAX_RATIO, extraActionRate, rollExtraAction, goesFirst,
   physDefOf, magDefOf, reductionRate, critRate, hitRate, roll, damageOf, resolveAttack,
   evasionScoreOf, EVA_AGI, EVA_VIT, EVA_LUK,
@@ -322,4 +322,21 @@ test('優先度は数値で比べる（+2は+1より先・順番だけで行動�
   assert.equal(goesFirst({ agi:100 }, { agi:200 }, 1, 1), false)
   // 優先度はAGIより強い（遅くても先）
   assert.equal(goesFirst({ agi:1 }, { agi:10 ** 6 }, 1, 0), true)
+})
+
+// ★2026-08-23：クリ率は**LUKの差ではなく比**（戦闘力が伸びても効き方が変わらない）
+test('クリティカル率はLUKの比で決まる（戦闘力が上がっても効き方が変わらない）', () => {
+  const at = (mine, theirs) => critRate({ luk: mine }, { luk: theirs })
+  // 同じ比なら、桁がいくつ違っても同じ
+  assert.equal(at(100, 50), at(10000, 5000))
+  assert.equal(at(150, 100), at(15000, 10000))
+  // 同じLUKなら基礎値
+  assert.equal(at(3000, 3000), CRIT_BASE_PCT)
+  // 比が上がるほど伸びる（上限50%）
+  assert.equal(at(6000, 3000), CRIT_BASE_PCT + CRIT_RATIO_PCT)
+  assert.equal(at(30000, 3000), CRIT_MAX_PCT)
+  assert.equal(at(300, 3000), CRIT_MIN_PCT)
+  // ★差で決めていたころの穴：LUK1,600と3,200で1%と50%に割れていた（戦闘力2万・相手LUK2,400）
+  assert.ok(at(3200, 2400) < 25, `高戦闘力でいきなり上限に張り付いてはいけない: ${at(3200, 2400)}`)
+  assert.ok(at(3200, 2400) > at(1600, 2400), 'LUKを積んだぶんは効く')
 })

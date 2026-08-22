@@ -28,7 +28,7 @@ import {
   createSide, liveStats, peekSkill, mpCostOf, priorityOf, takeAction, tickRegen, BUFF_MIN_PCT,
 } from './battle.js'
 import { STAT_KEYS } from './stats.js'
-import { AIL_KEYS, AIL_LABEL, BLEED_HP_RATE, POISON_RATE, hasAilment } from './ailments.js'
+import { AIL_KEYS, AIL_LABEL, poisonTickOf, bleedTickOf, hasAilment } from './ailments.js'
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 // 秒の比較に使うごく小さい余裕。実時間を足し込むと 30 が 30.000000000000004 になるため、
@@ -213,12 +213,12 @@ const tickDot = (side, log, foe = null) => {
   // ★倍率は**入れた側**の武器の進化を見る（オート戦闘の tickAil と同じ）
   const boost = 1 + (foe?.evo?.ail?.dmg || 0) / 100
   if (a.poison) {
-    const d = Math.max(1, Math.floor(side.base.hp * (a.poison.rate ?? POISON_RATE) * boost))
+    const d = Math.max(1, Math.floor(poisonTickOf(a.poison, side.base.hp) * boost))
     side.hp -= d
     log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL.poison, damage: d })
   }
   if (side.hp > 0 && a.bleed?.stacks > 0) {
-    const d = Math.max(1, Math.floor(side.hp * BLEED_HP_RATE * a.bleed.stacks * boost))
+    const d = Math.max(1, Math.floor(bleedTickOf(a.bleed, side.hp) * boost))
     side.hp -= d
     log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL.bleed, damage: d, stacks: a.bleed.stacks })
   }

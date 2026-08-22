@@ -1,8 +1,8 @@
 // バトルフロンティアⅡ 戦闘ループの回帰テスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runBattle, createSide, takeAction, liveStats, lowHpMultOf, highHpMultOf, vsBuffMultOf, buffCountOf, repeatMultOf, switchKindMultOf, varianceMultOf, comboMultOf, airMultOf, stackMultOf, chargeGuardOf, AIR_EVA, STACK_MAX, beastMultOf, BEAST_FORMS, BEAST_BONUS, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
-import { inflict } from './ailments.js'
+import { tickAil, runBattle, createSide, takeAction, liveStats, lowHpMultOf, highHpMultOf, vsBuffMultOf, buffCountOf, repeatMultOf, switchKindMultOf, varianceMultOf, comboMultOf, airMultOf, stackMultOf, chargeGuardOf, AIR_EVA, STACK_MAX, beastMultOf, BEAST_FORMS, BEAST_BONUS, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
+import { inflict, POISON_CAP_RATE, BLEED_CAP_RATE } from './ailments.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
 import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT, OFF_CLASS_MP_MULT, setMpCost, offClassMult, mpOf } from './skills.js'
 import { damageFloor } from './combat.js'
@@ -611,8 +611,9 @@ test('ギャンブラー：威力が振れる（1行動につき1回だけ振る
     }
     return Math.max(...d) / Math.min(...d)
   }
-  assert.ok(spread(jack) > 3, '大当たりは大外れの3倍以上に開く')
-  assert.ok(spread({ ...jack, variance: undefined }) < 2, '振れない技はここまで開かない')
+  // クリティカルでも多少は開くので、**振れ幅ぶんだけ余計に開くこと**を見る
+  const flat = spread({ ...jack, variance: undefined })
+  assert.ok(spread(jack) > flat * 1.8, `振れ幅のぶん開いていない: ${spread(jack).toFixed(2)} vs ${flat.toFixed(2)}`)
 })
 
 test('武僧：受ける状態異常が効きづらい', () => {
@@ -837,4 +838,34 @@ test('ビーストレンジャー：ビーストコールは呼んでいる獣�
   const agiBefore = me2.buffs.agi || 0
   takeAction(me2, foe, () => 0.5, [], { idx: 0, noProc: true })
   assert.ok((me2.buffs.agi || 0) > agiBefore, '鷹ならAGIが乗る')
+})
+
+// ★2026-08-23：出血・毒は割合ダメージなので、HPが桁違いの相手（ユニークボス・レイド）では
+//   直接攻撃の10倍以上になっていた。1刻みに「付けた側の攻撃力から決まる上限」を入れた
+test('出血・毒の1刻みは、付けた側の攻撃力を超えて伸びない', () => {
+  const stats = evenStats(534)
+  const poisonSkill = sk('毒針', { ail:{ key:'poison', chance:100 }, mult:0.01 })
+  const bleedSkill  = sk('切り裂き', { ail:{ key:'bleed', chance:100 }, mult:0.01 })
+  const tickOn = (skill, foeHp, times = 1) => {
+    const me = createSide(fighter('攻', [{ skill, uses:99 }]))
+    const foe = createSide(fighter('的', [], { ...stats, hp: foeHp }))
+    for (let i = 0; i < times; i++) takeAction(me, foe, () => 0.01, [], { idx: 0, noProc: true })
+    const log = []
+    tickAil(foe, log, me)
+    return log.filter(l => l.type === 'ailTick').reduce((t, l) => t + l.damage, 0)
+  }
+  const atk = liveStats(createSide(fighter('攻', []))).str
+  // ふつうの相手（同格）なら割合のまま＝出目は変わらない
+  const normal = tickOn(poisonSkill, stats.hp)
+  assert.ok(normal < atk * POISON_CAP_RATE, `同格相手では上限に当たらないはず: ${normal}`)
+  assert.ok(Math.abs(normal - stats.hp * 0.03) <= 2, '同格相手は最大HPの3%のまま')
+  // HPが桁違いの相手でも、上限で止まる
+  const boss = tickOn(poisonSkill, 10 ** 7)
+  assert.ok(boss <= Math.floor(atk * POISON_CAP_RATE), `毒の上限が効いていない: ${boss}`)
+  // 出血もスタックぶんだけ伸びるが、1スタックあたりの上限がある
+  const b1 = tickOn(bleedSkill, 10 ** 7, 1)
+  const b3 = tickOn(bleedSkill, 10 ** 7, 3)
+  assert.ok(b1 <= Math.floor(atk * BLEED_CAP_RATE) + 1, `出血1スタックの上限が効いていない: ${b1}`)
+  assert.ok(b3 > b1 * 2, 'スタックを積んだぶんは伸びる')
+  assert.ok(b3 <= Math.floor(atk * BLEED_CAP_RATE * 3) + 1, `出血3スタックの上限が効いていない: ${b3}`)
 })
