@@ -1,7 +1,7 @@
 // バトルフロンティアⅡ 戦闘ループの回帰テスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runBattle, createSide, takeAction, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
+import { runBattle, createSide, takeAction, liveStats, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
 import { inflict } from './ailments.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
 import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT, OFF_CLASS_MP_MULT, setMpCost } from './skills.js'
@@ -416,4 +416,67 @@ test('見切り：受けた技ほど避けやすくなり、20%で頭打ち・�
   for (let i = 0; i < 5; i++) tickForesight(me)
   assert.equal(me.foresight, null)
   assert.equal(foresightEva(me, '突き'), 0)
+})
+
+// ============================================================
+// ★2026-08-19：狂戦士「HPを燃やして出血を撒く」
+// ============================================================
+test('ヒットごとの状態異常：3連撃なら3回とも出血を試す', () => {
+  const mad = SKILL_BY_NAME['マッドラッシュ']
+  assert.equal(mad.ailPerHit, true)
+  assert.equal(mad.hits, 3)
+  const always = sk('連撃', { mult:0.5, hits:3, proc:100, noCrit:true, ail:{ key:'bleed', chance:100 }, ailPerHit:true })
+  const me = createSide(fighter('狂戦士', [{ skill: always, uses:9 }]))
+  const foe = createSide(fighter('的'))
+  takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
+  assert.equal(foe.ail.bleed.stacks, 3, '1回の行動で3スタック積む')
+  // ヒットごとでない技は1回だけ
+  const once = sk('単発', { mult:1, proc:100, ail:{ key:'bleed', chance:100 } })
+  const me2 = createSide(fighter('狂戦士', [{ skill: once, uses:9 }]))
+  const foe2 = createSide(fighter('的'))
+  takeAction(me2, foe2, () => 0.5, [], { idx: 0, noProc: true })
+  assert.equal(foe2.ail.bleed.stacks, 1)
+})
+
+test('すてみ：現在HPの10%を払って撃つ（払っても死なない）', () => {
+  assert.equal(SKILL_BY_NAME['すてみ'].hpCostPct, 10)
+  const heavy = sk('捨て身', { mult:1, proc:100, hpCostPct:10 })
+  const me = createSide(fighter('狂戦士', [{ skill: heavy, uses:9 }]))
+  const foe = createSide(fighter('的'))
+  const hp0 = me.hp
+  const log = []
+  takeAction(me, foe, () => 0.5, log, { idx: 0, noProc: true })
+  assert.equal(me.hp, hp0 - Math.floor(hp0 * 0.1))
+  assert.equal(log.find(l => l.type === 'hpCost').damage, Math.floor(hp0 * 0.1))
+  // HPが1のときは払わない（自滅しない）
+  me.hp = 1
+  takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
+  assert.equal(me.hp, 1)
+})
+
+test('狂心：4ターンSTR+70%、そのあいだ出る技がランダムになる', () => {
+  const kyo = SKILL_BY_NAME['狂心']
+  assert.deepEqual(kyo.frenzy, { turns:4, statPct:{ str:70 } })
+  const atkA = sk('技A', { mult:1, proc:100 })
+  const atkB = sk('技B', { mult:1, proc:100 })
+  const me = createSide(fighter('狂戦士', [{ skill: kyo, uses:9 }, { skill: atkA, uses:99 }, { skill: atkB, uses:99 }]))
+  const foe = createSide(fighter('的'))
+  const before = liveStats(me).str
+  takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
+  assert.equal(me.frenzy.turns, 4)
+  assert.equal(liveStats(me).str, Math.round(before * 1.7), 'STR+70%')
+  // 狙った枠（技A）を指定しても、狂乱中はランダムに選ばれる
+  const names = new Set()
+  for (let i = 0; i < 12; i++) {
+    const log = []
+    const rng = ((n) => () => (n = (n * 1103515245 + 12345) % 2147483648) / 2147483648)(i + 1)
+    takeAction(me, foe, rng, log, { idx: 1, noProc: true })
+    const l = log.find(x => x.type === 'skill')
+    if (l) names.add(l.skill)
+  }
+  assert.ok(names.size >= 2, `狂乱中なのに固定されている（${[...names].join(',')}）`)
+  // 4ターンで切れる
+  for (let i = 0; i < 4; i++) tickForesight(me)
+  assert.equal(me.frenzy, null)
+  assert.equal(liveStats(me).str, before)
 })

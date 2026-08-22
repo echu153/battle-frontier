@@ -79,7 +79,10 @@ export const PASSIVE_EFFECT_KEYS = [
 // stance      : { proc, mult, priority } この技を撃つと「構え」に入る。次に撃つスキルへ乗って消える（納刀）
 // whileStance : 構え中だけ効く追加効果 { priority, defPen, ailChance }
 // foresight   : { turns, pct, perHit, max } 一定ターン回避率+。受けた技ごとにさらに積む（見切り・技ごとに max% まで）
-// reqJobs     : この技を覚えるのに要る転職回数（侍の後半5個＝5回以上）
+// reqJobs     : この技を覚えるのに要る転職回数（侍・狂戦士の後半5個＝5回以上）
+// ailPerHit   : 多段のとき「1発ごとに」状態異常を試す（マッドラッシュ・狂乱連斬）
+// hpCostPct   : 現在HPの n% を払って撃つ（すてみ）。払っても死なない
+// frenzy      : { turns, statPct } 狂乱。ステは上がるが**出る技がランダム**になる（狂心）
 // mult   : 主ステータス（STR/INT）に掛ける倍率
 // add    : 副ステータス参照 [{ stat, rate }]
 // hits   : 多段の回数（命中・クリは1発ずつ判定する）
@@ -190,17 +193,18 @@ export const SKILLS = [
   { name:'桜花一閃', cls:'侍', kind:'phys', mult:1.95, add:[{ stat:'dex', rate:0.2 }], proc:82, mp:18, reqJobs:5, ail:{ key:'bleed', chance:30 }, desc:'DEXも威力になる。30%で出血' },
   { name:'見切り',   cls:'侍', kind:'buff', proc:100, mp:10, priority:1, reqJobs:5, foresight:{ turns:5, pct:3, perHit:3, max:20 }, desc:'5ターンのあいだ回避率+3%。スキルを受けるたび、その技への回避率がさらに+3%（同じ技につき20%まで）。効果が切れると積み上げも消える' },
 
-  // ===== 狂戦士（STR一点・自分を削る） =====
-  { name:'マッドラッシュ', cls:'狂戦士', kind:'phys', mult:0.73, hits:3, proc:85, mp:16, noCrit:true, desc:'3連撃。クリティカルしない' },
-  { name:'すてみ',       cls:'狂戦士', kind:'phys', mult:2.5, proc:78, mp:22, buff:{ self:{ vit:-20 } }, desc:'大威力だが自分のVIT-20%（重ねがけ可）' },
+  // ===== 狂戦士（STR一点・自分を削って殴る） =====
+  // ★軸＝HPを燃やして出血を撒く。狂心で「選べないが強い」時間を作る
+  { name:'マッドラッシュ', cls:'狂戦士', kind:'phys', mult:0.7, hits:3, proc:85, mp:16, noCrit:true, ail:{ key:'bleed', chance:10 }, ailPerHit:true, desc:'3連撃。1発ごとに10%で出血。クリティカルしない' },
+  { name:'すてみ',       cls:'狂戦士', kind:'phys', mult:2.6, proc:78, mp:22, hpCostPct:10, buff:{ self:{ vit:-10 } }, desc:'大威力。現在HPの10%を払い、自分のVIT-10%（重ねがけ可）' },
   { name:'バーサク',     cls:'狂戦士', kind:'passive', mp:0, passive:{ rage:{ stat:'str', per:3, max:15 } }, desc:'ダメージを与えるたびSTR+3%（最大15%）。不発・通常攻撃・攻撃が外れたときにリセット' },
-  { name:'ブラッティロア', cls:'狂戦士', kind:'buff', proc:100, mp:14, buff:{ self:{ str:55 } }, priority:1, desc:'STR+40%（重ねがけ可）' },
+  { name:'ブラッティロア', cls:'狂戦士', kind:'buff', proc:100, mp:14, buff:{ self:{ str:40 } }, priority:1, desc:'STR+40%（重ねがけ可）' },
   { name:'フルブレイカー', cls:'狂戦士', kind:'phys', mult:1.9, defPen:0.5, proc:85, mp:16, desc:'相手の防御を50%無視' },
-  { name:'猛り斬り', cls:'狂戦士', kind:'phys', mult:1.65, add:[{ stat:'agi', rate:0.3 }], proc:90, mp:12, desc:'AGIも威力になる' },
-  { name:'血の代償', cls:'狂戦士', kind:'phys', mult:2.25, proc:85, mp:16, buff:{ self:{ vit:-15 } }, desc:'自分のVIT-15%（重ねがけ可）' },
-  { name:'裂傷撃',   cls:'狂戦士', kind:'phys', mult:1.6, add:[{ stat:'agi', rate:0.3 }], proc:88, mp:14, ail:{ key:'bleed', chance:35 }, desc:'AGIも威力になる。35%で出血' },
-  { name:'狂乱連斬', cls:'狂戦士', kind:'phys', mult:0.63, add:[{ stat:'agi', rate:0.15 }], hits:3, proc:80, mp:20, noCrit:true, desc:'3連撃。AGIも威力になる。クリティカルしない' },
-  { name:'威嚇咆哮', cls:'狂戦士', kind:'buff', proc:95, mp:12, buff:{ enemy:{ str:-35 } }, priority:1, desc:'相手のSTR-20%（重ねがけ可）' },
+  { name:'猛り斬り', cls:'狂戦士', kind:'phys', mult:1.45, add:[{ stat:'agi', rate:0.3 }], proc:90, mp:12, reqJobs:5, ail:{ key:'bleed', chance:50 }, desc:'AGIも威力になる。50%で出血' },
+  { name:'狂心',     cls:'狂戦士', kind:'buff', proc:95, mp:16, priority:1, reqJobs:5, frenzy:{ turns:4, statPct:{ str:70 } }, desc:'4ターンのあいだSTR+70%。ただし狂乱状態になり、出る技がランダムな攻撃スキルになる' },
+  { name:'裂傷撃',   cls:'狂戦士', kind:'phys', mult:1.6, add:[{ stat:'agi', rate:0.3 }], proc:88, mp:14, reqJobs:5, ail:{ key:'bleed', chance:35 }, desc:'AGIも威力になる。35%で出血' },
+  { name:'狂乱連斬', cls:'狂戦士', kind:'phys', mult:0.57, add:[{ stat:'agi', rate:0.15 }], hits:3, proc:80, mp:20, noCrit:true, reqJobs:5, ail:{ key:'bleed', chance:20 }, ailPerHit:true, desc:'3連撃。1発ごとに20%で出血。AGIも威力になる。クリティカルしない' },
+  { name:'威嚇咆哮', cls:'狂戦士', kind:'buff', proc:95, mp:12, priority:1, reqJobs:5, buff:{ enemy:{ str:-30 } }, desc:'相手のSTR-30%（重ねがけ可）' },
 
   // ===== 狩人（STR＋DEX・搦め手） =====
   { name:'毒矢',     cls:'狩人', kind:'phys', mult:1.25, add:[{ stat:'dex', rate:0.5 }], proc:90, mp:12, ail:{ key:'poison', chance:35 }, desc:'DEXも威力になる。35%で毒' },
@@ -445,6 +449,7 @@ export const PRICE = {
   consumeAil: 0.30,  // 状態異常の起爆
   mpPct: 0.20,       // 割合消費（撃ち切れない）
   buffPct: 0.006,    // バフ・デバフ1%につき（自分にプラス／相手にマイナスが有料。逆は割引）
+  hpCost: 0.015,     // 現在HPを1%払うごとに割引（すてみ）
 }
 // スキルが持つ「倍率以外の価値」
 export const effectPrice = (s) => {
@@ -456,7 +461,14 @@ export const effectPrice = (s) => {
   if (s.hitBonus) v += s.hitBonus * PRICE.hitBonus
   // ★倍率に掛かる効果（起爆など）は relBonus 側で数える＝定額で付けると安すぎる
   if (s.mpPct)    v += PRICE.mpPct
-  if (s.ail)      v += (AIL_PRICE[s.ail.key] || 0.004) * s.ail.chance
+  // 状態異常。ヒットごとに試す技（マッドラッシュ）は2発ぶんまで数える
+  //   （同じ出血を重ねても1スタックずつしか増えないので、単純な掛け算にはしない）
+  if (s.ail) {
+    const times = s.ailPerHit ? Math.min(2, s.hits || 1) : 1
+    v += (AIL_PRICE[s.ail.key] || 0.004) * s.ail.chance * times
+  }
+  // 自分のHPを払って撃つ技（すてみ）は、そのぶん割引
+  if (s.hpCostPct) v -= s.hpCostPct * PRICE.hpCost
   for (const [side, tbl] of Object.entries(s.buff || {})) {
     for (const pct of Object.values(tbl)) {
       const good = side === 'self' ? pct > 0 : pct < 0

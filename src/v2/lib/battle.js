@@ -112,6 +112,8 @@ export const liveStats = (side, acting = false) => {
   for (const [k, pct] of Object.entries(side.enStacks || {})) add(k, pct)
   // バーサク・執行本能：ダメージを与えるたびに乗るスタック
   if (side.rage > 0) for (const r of side.pa.rages) add(r.stat, Math.min(r.max, r.per * side.rage))
+  // 狂心：狂乱のあいだステータスが上がる（そのぶん技が選べない）
+  if (side.frenzy?.turns > 0) for (const [k, v] of Object.entries(side.frenzy.statPct || {})) add(k, v)
   // 第六感：行動するたびにステータスが上がる（上限つき）
   for (const t of side.pa.perAct || []) {
     const up = Math.min(t.max, t.per * (side.acts || 0))
@@ -192,6 +194,7 @@ export const createSide = (fighter, band = null) => {
     // ★侍（2026-08-19）
     stance: null,   // 納刀：{ proc, mult } 次に撃つスキルへ乗り、撃ったら消える
     foresight: null, // 見切り：{ turns, pct, perHit, byName } 受けた技ほど避けやすくなる
+    frenzy: null,    // 狂乱：{ turns, statPct } 効果中はステが上がるが、出る技がランダムになる
     wallPct: pa.wall ? pa.wall.pct : 0,  // 骸の壁は戦闘開始時から乗る（重複しない）
     guards: pa.debuffGuard,              // 心身一如：デバフを打ち消せる残り回数
     lastSkill: null,                     // 元素共鳴が見る「直前に使ったスキル」
@@ -454,7 +457,15 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     log.push({ side: me.name, type: 'paralyzed' })
     return
   }
-  const idx = opt.idx !== undefined ? opt.idx : findSlot(me)
+  let idx = opt.idx !== undefined ? opt.idx : findSlot(me)
+  // ★狂乱（狂戦士の狂心）：自分では技を選べない。撃てる攻撃スキルからランダムに出る
+  if (me.frenzy?.turns > 0) {
+    const wild = me.slots
+      .map((sl, i) => ({ sl, i }))
+      .filter(({ sl }) => sl?.skill && sl.uses > 0 && (sl.skill.kind === 'phys' || sl.skill.kind === 'mag')
+        && (sl.skill.mpPct ? me.mp > 0 : mpCostOf(me, sl.skill) <= me.mp))
+    if (wild.length) idx = wild[Math.floor(rng() * wild.length)].i
+  }
   const slot = idx === null ? null : me.slots[idx]
   const skill = slot?.skill || null
 
@@ -475,6 +486,14 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   const ws = stance ? (skill.whileStance || null) : null
   if (stance) me.stance = null
   me.mp -= mpCostOf(me, skill)
+  // ★すてみ（狂戦士）：現在HPの n% を払って撃つ。払っても死なない（1は残る）
+  if (skill.hpCostPct) {
+    const pay = Math.min(Math.max(0, me.hp - 1), Math.floor(me.hp * skill.hpCostPct / 100))
+    if (pay > 0) {
+      me.hp -= pay
+      log.push({ side: me.name, type: 'hpCost', skill: skill.name, damage: pay })
+    }
+  }
   slot.uses -= 1
   me.ptr = (idx + 1) % me.slots.length
 
@@ -523,6 +542,10 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
         redMult: 1 + (foe.pa.defRed || 0) / 100,
       }, rng)
       // ★クリティカルの与ダメージ+%は**1発ずつ**掛ける（多段でクリした発だけ伸びる）
+      // ★ヒットごとに状態異常を試す技（連撃で少しずつ積む）
+      if (r.hit && skill.ailPerHit && skill.ail) {
+        tryInflict(me, foe, { ...skill.ail, chance: skill.ail.chance * off }, rng, log)
+      }
       raw += r.hit && r.crit && me.evo.critDmg
         ? Math.floor(r.damage * (1 + me.evo.critDmg / 100))
         : r.damage
@@ -555,7 +578,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       // ★スキル自身が持つ状態異常（どくのほうし＝毒、電撃＝麻痺 など）。**当たったときだけ**。
       //   敵もプレイヤーと同じ takeAction を通るので、これで**敵→こちら**にも状態異常が飛ぶ
       //   ＝エンチャントの抵抗（毒キノコ・払暁のワイバーン）が意味を持つ
-      if (skill.ail) {
+      if (skill.ail && !skill.ailPerHit) {
         // 納刀ぶんで確率が上がる技がある（月影＝納刀中は出血100%）
         const chance = ws?.ailChance ?? (skill.ail.chance * off)
         tryInflict(me, foe, { ...skill.ail, chance }, rng, log)
@@ -595,6 +618,11 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   if (skill.stance) {
     me.stance = { ...skill.stance }
     log.push({ side: me.name, type: 'stance', skill: skill.name })
+  }
+  // ★狂心：一定ターンのあいだステータスが上がるが、出る技がランダムになる
+  if (skill.frenzy) {
+    me.frenzy = { ...skill.frenzy }
+    log.push({ side: me.name, type: 'frenzy', skill: skill.name, turns: skill.frenzy.turns })
   }
   // ★見切り：一定ターンのあいだ回避が上がり、受けた技ほど見切れる
   if (skill.foresight) {
@@ -667,6 +695,10 @@ export const tickForesight = (side) => {
   if (side.foresight?.turns > 0) {
     side.foresight.turns -= 1
     if (side.foresight.turns <= 0) side.foresight = null
+  }
+  if (side.frenzy?.turns > 0) {
+    side.frenzy.turns -= 1
+    if (side.frenzy.turns <= 0) side.frenzy = null
   }
 }
 
