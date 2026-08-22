@@ -231,7 +231,7 @@ const buffVal = (side, v) => (side === 'self' ? v : -v)
 const dominates = (A, B) => {
   if (A === B || A.kind !== B.kind) return false
   // ★特別な仕組みを持つ技（納刀・見切り・納刀中だけの効果）は、持っていない技とは比べない
-  for (const k of ['stance', 'foresight', 'whileStance', 'frenzy', 'hpCostPct', 'ailPerHit', 'drainIfAil', 'lowHpBonus']) if (!!A[k] !== !!B[k]) return false
+  for (const k of ['stance', 'foresight', 'whileStance', 'frenzy', 'hpCostPct', 'ailPerHit', 'drainIfAil', 'lowHpBonus', 'highHpBonus', 'vsBuff', 'dispel', 'repeat', 'switchKind', 'variance']) if (!!A[k] !== !!B[k]) return false
   if ((A.hits || 1) !== (B.hits || 1)) return false        // 多段と単発は別の土俵
   if (!!A.noCrit !== !!B.noCrit) return false
   if (!!A.mpPct !== !!B.mpPct) return false                // 割合消費も別の土俵
@@ -249,6 +249,11 @@ const dominates = (A, B) => {
   if (!cmp(A.proc, B.proc, 'proc')) return false
   if (!cmp(A.mp || 0, B.mp || 0, 'mp', true)) return false
   for (const k of ['defPen', 'drain', 'hitBonus']) if (!cmp(A[k] || 0, B[k] || 0, k)) return false
+  // 新しい軸（片方だけ持っていれば上で弾かれている＝ここは両方持っているときの大小）
+  const NUM = [['lowHpBonus', 'max'], ['highHpBonus', 'max'], ['vsBuff', 'per'], ['dispel', 'chance'],
+    ['repeat', 'per'], ['variance', 'lo'], ['variance', 'hi']]
+  for (const [k, f] of NUM) if (!cmp(A[k]?.[f] || 0, B[k]?.[f] || 0, k + '.' + f)) return false
+  if (!cmp(A.switchKind || 0, B.switchKind || 0, 'switchKind')) return false
   // 起爆（急所突きの「出血を全部消費して威力+」）も軸に入れる
   const burst = (x) => (x.consumeAil ? x.consumeAil.perStack : 0)
   if (!cmp(burst(A), burst(B), 'consumeAil')) return false

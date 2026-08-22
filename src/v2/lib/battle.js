@@ -71,6 +71,8 @@ const collectPassives = (passives) => {
     defRed: 0,         // 受けるときの軽減率+%（聖騎士の心得）
     bleedMax: 0,       // 自分が付ける出血の上限スタック（隠身）
     hpSteps: [],       // [{ at, statPct }] HPが at% 以下で効く段（新しいバーサク）
+    ailResist: 0,      // 受ける状態異常の付与率-%（武僧）
+    repeat: null,      // { per, max } 同じ技を続けて撃つほど威力+%（精霊召喚士）
     hitMult: null,     // { mult, lowMult, at } 命中率に掛ける（鷹ノ目）
     hitStack: null,    // { critRate, critDmg, max } 当てるたびに積む（精密照準）
     perAct: [],        // [{ stats, per, max }] 行動するたびに積む（第六感）
@@ -81,7 +83,7 @@ const collectPassives = (passives) => {
     const p = s?.passive
     if (!p) continue
     for (const k of ['hitBonus', 'evaBonus', 'critBonus', 'procBonus', 'defPenBonus', 'healBonus', 'debuffGuard',
-      'critDmg', 'mpCut', 'defRed']) {
+      'critDmg', 'mpCut', 'defRed', 'ailResist']) {
       if (p[k]) pa[k] += p[k]
     }
     if (p.bleedMax) pa.bleedMax = Math.max(pa.bleedMax, p.bleedMax)
@@ -89,6 +91,7 @@ const collectPassives = (passives) => {
     if (p.hitStack) pa.hitStack = p.hitStack
     if (p.perAct)   pa.perAct.push(p.perAct)
     if (p.hpSteps)  pa.hpSteps.push(...p.hpSteps)
+    if (p.repeat)   pa.repeat = p.repeat
     if (p.misfireAtkMult) pa.misfireAtkMult = Math.max(pa.misfireAtkMult, p.misfireAtkMult)
     if (p.statPct) for (const [k, v] of Object.entries(p.statPct)) pa.statPct[k] = (pa.statPct[k] || 0) + v
     if (p.convert)    pa.converts.push(p.convert)
@@ -201,6 +204,8 @@ export const createSide = (fighter, band = null) => {
     rage: 0,        // バーサク・執行本能のスタック数
     acts: 0,        // 自分が行動した回数（骸の壁が5回ごとに見る・第六感が積み上げに使う）
     hitStacks: 0,   // 精密照準：当てるたびに積む（上限は passive.hitStack.max）
+    repeatCount: 0, // 同じ技を続けて撃った回数（魔銃士・精霊召喚士）
+    lastKind: null, // 直前に使った技の種別（魔法剣士の両刀ボーナスが見る）
     // ★侍（2026-08-19）
     stance: null,   // 納刀：{ proc, mult } 次に撃つスキルへ乗り、撃ったら消える
     foresight: null, // 見切り：{ turns, pct, perHit, byName } 受けた技ほど避けやすくなる
@@ -381,6 +386,7 @@ const tryInflict = (me, foe, a, rng, log) => {
   const base = a.chance + (me?.evo?.ail?.rate || 0)
   const pct = inflictChance(base, foe.en, a.key)
     - (foe?.evo?.ail?.resist || 0) + (foe?.evo?.ail?.weak || 0)
+    - (foe?.pa?.ailResist || 0)   // ★武僧：状態異常が効きづらい
   if (!roll(pct, rng)) return
   // ★隠身（暗殺者）：自分が付ける出血はスタック上限が伸びる
   const opt = me?.pa?.bleedMax ? { ...a, max: me.pa.bleedMax } : a
@@ -427,6 +433,41 @@ const evoMult = (me, foe, { kind = 'phys', skill = false, multi = false } = {}) 
     justHurt: me.ctx.hurt,
   })
   return pct ? Math.max(0.1, 1 + pct / 100) : 1
+}
+
+// 聖職者：自分のHPが高いほど威力が上がる（満タンで最大）
+export const highHpMultOf = (skill, me) => {
+  const h = skill?.highHpBonus
+  if (!h) return 1
+  const pct = (Math.max(0, me.hp) / Math.max(1, me.base.hp)) * 100
+  const t = Math.min(1, Math.max(0, (pct - (h.at ?? 50)) / Math.max(1, 100 - (h.at ?? 50))))
+  return 1 + (h.max / 100) * t
+}
+// 異端審問官：相手に乗っているバフ（プラスのステータス補正）の数で威力が上がる
+export const buffCountOf = (side) =>
+  Object.values(side?.buffs || {}).filter(v => v > 0).length
+export const vsBuffMultOf = (skill, foe) => {
+  const v = skill?.vsBuff
+  if (!v) return 1
+  return 1 + (v.per / 100) * Math.min(v.max ?? 3, buffCountOf(foe))
+}
+// 魔法剣士：直前に使った技と種別（物理／魔法）が違えば威力+%
+export const switchKindMultOf = (skill, prevKind) => {
+  if (!skill?.switchKind || !prevKind) return 1
+  return prevKind !== skill.kind ? 1 + skill.switchKind / 100 : 1
+}
+// ギャンブラー：威力が lo%〜hi% のあいだで振れる
+export const varianceMultOf = (skill, rng) => {
+  const v = skill?.variance
+  if (!v) return 1
+  return (v.lo + (v.hi - v.lo) * rng()) / 100
+}
+
+// 魔銃士・精霊召喚士：同じ技を続けて撃つほど威力が上がる（別の技を挟むと戻る）
+export const repeatMultOf = (skill, me) => {
+  const r = skill?.repeat || me?.pa?.repeat
+  if (!r || !skill) return 1
+  return 1 + (r.per / 100) * Math.min(r.max, me.repeatCount || 0)
 }
 
 // 追い討ち：相手のHPが低いほど威力が上がる。at% 以下で最大（狩人）
@@ -519,8 +560,12 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   me.ptr = (idx + 1) % me.slots.length
 
   // 元素共鳴：直前に使ったスキルと違えば、この行動だけ補正が乗る
+  // 同じ技を続けて撃った回数（魔銃士・精霊召喚士）。違う技を挟むと0へ戻る
+  me.repeatCount = me.lastSkill === skill.name ? (me.repeatCount || 0) + 1 : 0
   me.switchOn = me.lastSkill !== null && me.lastSkill !== skill.name
   me.lastSkill = skill.name
+  const prevKind = me.lastKind
+  me.lastKind = (skill.kind === 'phys' || skill.kind === 'mag') ? skill.kind : me.lastKind
   me.acts += 1
 
   const eMe = liveStats(me, true)
@@ -551,9 +596,12 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
         log.push({ side: foe.name, type: 'consumeAil', ail: AIL_LABEL[c.key], stacks: st, mult: burst })
       }
     }
+    const varMult = varianceMultOf(skill, rng)   // ギャンブラー：1行動につき1回だけ振る
     for (let h = 0; h < (skill.hits || 1); h++) {
       const r = resolveAttack({
-        attacker: eMe, defender: eFoe, mult: skill.mult * burst * (stance?.mult || 1) * lowHpMultOf(skill, foe), kind: skill.kind,
+        attacker: eMe, defender: eFoe, mult: skill.mult * burst * (stance?.mult || 1) * lowHpMultOf(skill, foe)
+          * highHpMultOf(skill, me) * vsBuffMultOf(skill, foe) * repeatMultOf(skill, me)
+          * switchKindMultOf(skill, prevKind) * varMult, kind: skill.kind,
         defPen, add: skill.add || null,
         sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit, noCrit: !!skill.noCrit,
         acc: skill.acc ?? 100,
@@ -644,6 +692,17 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   // 骸の壁：戦闘開始時と自分の行動5回ごとに得る（重複しないので、掛け直すだけ）
   if (me.pa.wall && me.acts % me.pa.wall.every === 0) me.wallPct = me.pa.wall.pct
 
+  // ★バフ消去（異端審問官）：相手に乗っているプラス補正を確率で1つ消す
+  if (skill.dispel && roll(skill.dispel.chance, rng)) {
+    const ups = Object.entries(foe.buffs).filter(([, v]) => v > 0)
+    if (ups.length) {
+      const [k] = ups[Math.floor(rng() * ups.length)]
+      delete foe.buffs[k]
+      // 期限つきバフ側にも同じステが乗っていたら一緒に落とす
+      foe.timedBuffs = (foe.timedBuffs || []).filter(t => !(k in (t.table || {})))
+      log.push({ side: foe.name, type: 'dispel', skill: skill.name, stat: k })
+    }
+  }
   // ★納刀：構えるだけの技（次のスキルへ乗る）
   if (skill.stance) {
     me.stance = { ...skill.stance }

@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { CLASS_BONUS, classBonusOf, classBonusText } from './classBonus.js'
 import { SKILL_BY_NAME, skillsOf, SKILL_CLASSES, isBasicClass, isPassive } from './skills.js'
-import { createSide, runBattle, liveStats, mpCostOf, hitMultOf, critDmgOf, critRateStackOf } from './battle.js'
+import { createSide, runBattle, liveStats, mpCostOf, hitMultOf, critDmgOf, critRateStackOf, repeatMultOf } from './battle.js'
 import { hitRate, critRate } from './combat.js'
 import { STAT_KEYS } from './stats.js'
 
@@ -317,4 +317,18 @@ test('聖騎士の心得：VIT+5%・受けるときの軽減率+10%', () => {
     return r.log.filter(l => l.side === 'foe' && l.type === 'skill').reduce((t, l) => t + l.damage, 0)
   }
   assert.ok(taken([{ skill: passiveOf('聖騎士'), uses:1 }]) < taken([]), '軽減が効いていない')
+})
+
+test('精霊召喚士：同じ精霊を呼び続けるほど威力が上がる（パッシブ側）', () => {
+  const kyo = SKILL_BY_NAME['精霊共鳴']
+  assert.deepEqual(kyo.passive.repeat, { per:8, max:3 })
+  const me = createSide({ name:'召', cls:'精霊召喚士', kind:'mag', stats: evenStats(534),
+    slots:[{ skill: kyo, uses:9 }, { skill: SKILL_BY_NAME['サラマンド'], uses:9 }] })
+  assert.deepEqual(me.pa.repeat, { per:8, max:3 })
+  me.repeatCount = 0
+  assert.equal(repeatMultOf({ name:'X' }, me), 1)
+  me.repeatCount = 2
+  assert.equal(Number(repeatMultOf({ name:'X' }, me).toFixed(3)), 1.16)
+  me.repeatCount = 9
+  assert.equal(Number(repeatMultOf({ name:'X' }, me).toFixed(3)), 1.24, '3回で頭打ち')
 })

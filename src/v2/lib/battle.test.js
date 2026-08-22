@@ -1,7 +1,7 @@
 // バトルフロンティアⅡ 戦闘ループの回帰テスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runBattle, createSide, takeAction, liveStats, lowHpMultOf, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
+import { runBattle, createSide, takeAction, liveStats, lowHpMultOf, highHpMultOf, vsBuffMultOf, buffCountOf, repeatMultOf, switchKindMultOf, varianceMultOf, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
 import { inflict } from './ailments.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
 import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT, OFF_CLASS_MP_MULT, setMpCost } from './skills.js'
@@ -516,4 +516,120 @@ test('追い討ち：相手のHPが低いほど威力が上がる（20%以下で
   assert.equal(at(5), 1.5, 'それ以下は伸びない')
   // 効果の無い技には掛からない
   assert.equal(lowHpMultOf(sk('ふつう'), foe), 1)
+})
+
+// ★2026-08-23：17職のコンセプト（バッチ1）。仕組みごとに1本ずつ回帰テストを置く
+test('聖職者：自分のHPが高いほど威力が上がる（満タンで最大+40%）', () => {
+  const j = SKILL_BY_NAME['ジャッジライト']
+  assert.deepEqual(j.highHpBonus, { max:40, at:50 })
+  const me = createSide(fighter('聖'))
+  const at = (hpPct) => { me.hp = me.base.hp * hpPct / 100; return highHpMultOf(j, me) }
+  assert.equal(at(100), 1.4, '満タンで最大')
+  assert.equal(Number(at(75).toFixed(3)), 1.2, '中間は半分')
+  assert.equal(at(50), 1, '半分より下は伸びない')
+  assert.equal(at(10), 1)
+  assert.equal(highHpMultOf(sk('ふつう'), me), 1)
+})
+
+test('異端審問官：相手のバフの数だけ威力が上がる／確率でバフを1つ消す', () => {
+  const h = SKILL_BY_NAME['ヘレティックハント']
+  const foe = createSide(fighter('的'))
+  assert.equal(vsBuffMultOf(h, foe), 1, 'バフが無ければ素')
+  foe.buffs.str = 30; foe.buffs.agi = 20
+  assert.equal(buffCountOf(foe), 2)
+  assert.equal(Number(vsBuffMultOf(h, foe).toFixed(3)), 1.3, '2つで+30%')
+  foe.buffs.dex = 20; foe.buffs.vit = 20
+  assert.equal(Number(vsBuffMultOf(h, foe).toFixed(3)), 1.45, '上限は3つぶん')
+  foe.buffs.int_stat = -30
+  assert.equal(buffCountOf(foe), 4, 'デバフ（マイナス）は数えない')
+  // バフ消去：必ず当たる乱数で1つ消える
+  const me = createSide({ name:'審', cls:'異端審問官', kind:'mag', stats: evenStats(534),
+    slots:[{ skill: SKILL_BY_NAME['サイレンスチェイン'], uses:9 }] })
+  const before = buffCountOf(foe)
+  const log = []
+  takeAction(me, foe, () => 0, log, { idx: 0, noProc: true })
+  assert.equal(buffCountOf(foe), before - 1)
+  assert.ok(log.some(l => l.type === 'dispel'))
+})
+
+test('魔銃士・精霊召喚士：同じ技を続けて撃つほど威力が上がる（別の技を挟むと戻る）', () => {
+  const rapid = SKILL_BY_NAME['ラピッドショット']
+  const me = createSide({ name:'銃', cls:'魔銃士', kind:'phys', stats: evenStats(534),
+    slots:[{ skill: rapid, uses:9 }, { skill: sk('よそ見'), uses:9 }] })
+  const foe = createSide(fighter('的', [], { ...evenStats(534), hp: 10 ** 7 }))
+  const mult = []
+  for (let i = 0; i < 4; i++) {
+    takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
+    mult.push(Number(repeatMultOf(rapid, me).toFixed(3)))
+  }
+  assert.deepEqual(mult, [1, 1.1, 1.2, 1.3], '1回目は素・3回目以降は頭打ち')
+  takeAction(me, foe, () => 0.5, [], { idx: 1, noProc: true })   // 別の技を挟む
+  takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
+  assert.equal(repeatMultOf(rapid, me), 1, '挟んだら戻る')
+})
+
+test('魔法剣士：物理と魔法を交互に振ると威力が上がる', () => {
+  const ten = SKILL_BY_NAME['天魔閃']      // phys
+  const mana = SKILL_BY_NAME['マナバースト']  // mag
+  assert.equal(ten.switchKind, 30)
+  assert.equal(switchKindMultOf(ten, null), 1, '1手目は素')
+  assert.equal(switchKindMultOf(ten, 'mag'), 1.3, '直前が魔法なら乗る')
+  assert.equal(switchKindMultOf(ten, 'phys'), 1, '同じ種別なら乗らない')
+  assert.equal(switchKindMultOf(mana, 'phys'), 1.3)
+  assert.equal(switchKindMultOf(sk('ふつう'), 'mag'), 1)
+  // 実戦：交互に振ると2手目から伸びる
+  const me = createSide({ name:'魔剣', cls:'魔法剣士', kind:'phys', stats: evenStats(534),
+    slots:[{ skill: mana, uses:9 }, { skill: ten, uses:9 }] })
+  const foe = createSide(fighter('的', [], { ...evenStats(534), hp: 10 ** 7 }))
+  const dmg = []
+  for (const idx of [1, 0, 1]) {
+    const log = []
+    takeAction(me, foe, () => 0.5, log, { idx, noProc: true })
+    dmg.push(log.find(l => l.type === 'skill').damage)
+  }
+  assert.ok(dmg[2] > dmg[0], '魔法を挟んだあとの天魔閃のほうが強い')
+})
+
+test('ギャンブラー：威力が振れる（1行動につき1回だけ振る）', () => {
+  const jack = SKILL_BY_NAME['ジャックポット']
+  assert.deepEqual(jack.variance, { lo:30, hi:200 })
+  assert.equal(Number(varianceMultOf(jack, () => 0).toFixed(3)), 0.3, '最低')
+  assert.equal(Number(varianceMultOf(jack, () => 0.999999).toFixed(2)), 2, '最高')
+  assert.equal(varianceMultOf(sk('ふつう'), () => 0), 1)
+  // 実戦：振れ幅がちゃんとダメージまで届いている（振れない技と比べる）
+  const spread = (skill) => {
+    const me = createSide({ name:'博', cls:'ギャンブラー', kind:'phys', stats: evenStats(534),
+      slots:[{ skill, uses:999 }] })
+    const foe = createSide(fighter('的', [], { ...evenStats(534), hp: 10 ** 9 }))
+    const rng = makeRng(7)
+    const d = []
+    for (let i = 0; i < 60; i++) {
+      const log = []
+      takeAction(me, foe, rng, log, { idx: 0, noProc: true, noParalyze: true })
+      const hit = log.find(l => l.type === 'skill')
+      if (hit?.damage) d.push(hit.damage)
+    }
+    return Math.max(...d) / Math.min(...d)
+  }
+  assert.ok(spread(jack) > 3, '大当たりは大外れの3倍以上に開く')
+  assert.ok(spread({ ...jack, variance: undefined }) < 2, '振れない技はここまで開かない')
+})
+
+test('武僧：受ける状態異常が効きづらい', () => {
+  const shin = SKILL_BY_NAME['心身一如']
+  assert.equal(shin.passive.ailResist, 20)
+  const monk = createSide({ name:'僧', cls:'武僧', kind:'phys', stats: evenStats(534),
+    slots:[{ skill: shin, uses:9 }] })
+  assert.equal(monk.pa.ailResist, 20)
+  const plain = createSide(fighter('的'))
+  assert.equal(plain.pa.ailResist, 0)
+  // 付与率のすぐ内側（20%ぶん）でだけ差が出る乱数を選ぶ
+  const poison = sk('毒針', { ail:{ key:'poison', chance:30 } })
+  const hit = (target) => {
+    const me = createSide(fighter('攻', [{ skill: poison, uses:9 }]))
+    takeAction(me, target, () => 0.2, [], { idx: 0, noProc: true })
+    return !!target.ail.poison
+  }
+  assert.equal(hit(plain), true, 'ふつうは入る')
+  assert.equal(hit(monk), false, '武僧は弾く')
 })
