@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { CLASS_BONUS, classBonusOf, classBonusText } from './classBonus.js'
 import { SKILL_BY_NAME, skillsOf, SKILL_CLASSES, isBasicClass, isPassive } from './skills.js'
-import { createSide, runBattle, liveStats } from './battle.js'
+import { createSide, runBattle, liveStats, mpCostOf, hitMultOf, critDmgOf, critRateStackOf } from './battle.js'
 import { hitRate, critRate } from './combat.js'
 import { STAT_KEYS } from './stats.js'
 
@@ -96,12 +96,39 @@ test('バーサク：不発・通常攻撃・攻撃が全部外れたときに�
   assert.equal(stackAfter([P, { skill:hit, uses:1 }, { skill:dud, uses:99 }]), 0)
 })
 
-test('鷹ノ目：最終命中率+5%・隠身：回避率+5%', () => {
-  assert.deepEqual(SKILL_BY_NAME['鷹ノ目'].passive, { hitBonus:5 })
-  assert.deepEqual(SKILL_BY_NAME['隠身'].passive, { evaBonus:5 })
-  const s = evenStats(534)
-  assert.equal(hitRate(s, s, 5, 0), Math.round((hitRate(s, s) + 5) * 10) / 10)
-  assert.equal(hitRate(s, s, 0, 5), Math.round((hitRate(s, s) - 5) * 10) / 10)
+test('鷹ノ目：命中率1.1倍・相手が瀕死(HP30%以下)なら1.3倍', () => {
+  assert.deepEqual(SKILL_BY_NAME['鷹ノ目'].passive, { hitMult:{ mult:1.1, lowMult:1.3, at:30 } })
+  const stats = evenStats(534)
+  const me = sideWith('狩人', stats)
+  const foe = createSide({ cls:'狩人', stats, slots: [] })
+  assert.equal(hitMultOf(me, foe), 1.1)
+  foe.hp = foe.base.hp * 0.3
+  assert.equal(hitMultOf(me, foe), 1.3, 'HP30%以下で伸びる')
+  foe.hp = foe.base.hp * 0.31
+  assert.equal(hitMultOf(me, foe), 1.1)
+  // 命中率そのものにも掛かる（回避の高い相手ほど差が出る）
+  const dodgy = { ...stats, agi: stats.agi * 4, dex: stats.dex * 4 }
+  const base = hitRate(stats, dodgy)
+  assert.ok(base * 1.1 > base)
+})
+
+test('隠身：自分が付ける出血が10スタックまで貯まる・クリダメ+10%', () => {
+  assert.deepEqual(SKILL_BY_NAME['隠身'].passive, { bleedMax:10, critDmg:10 })
+  const stats = { ...evenStats(534), hp: 10 ** 7 }
+  const bleeder = { name:'血', cls:'暗殺者', kind:'phys', mult:1, proc:100, mp:0, sureHit:true, noCrit:true, ail:{ key:'bleed', chance:100 }, desc:'' }
+  const stacksOf = (slots) => {
+    const r = runBattle({ name:'me', cls:'暗殺者', stats, slots },
+      { name:'foe', cls:'暗殺者', stats, slots: [] }, { rng: mkRng(3), maxTurns: 12 })
+    return r.b.ail.bleed?.stacks || 0
+  }
+  const withPassive = stacksOf([{ skill: passiveOf('暗殺者'), uses:1 }, { skill: bleeder, uses:99 }])
+  const without = stacksOf([{ skill: bleeder, uses:99 }])
+  assert.equal(without, 5, '素の上限は5')
+  assert.ok(withPassive > 5, `隠身で伸びていない（${withPassive}）`)
+  assert.ok(withPassive <= 10)
+  // クリティカルのダメージ+10%
+  const me = sideWith('暗殺者', stats)
+  assert.equal(critDmgOf(me), 10)
 })
 
 test('精密照準：最終クリティカル率+5%', () => {
@@ -134,12 +161,12 @@ test('神聖加護：回復量+20% ／ 異端審問官の職業補正：自身�
   assert.ok(amount('異端審問官', []) < plain * 1.1 * 0.85)
 })
 
-test('魔導剣術：INTの20%をSTRへ「変換」する（INTは減る）', () => {
-  assert.deepEqual(SKILL_BY_NAME['魔導剣術'].passive, { convert:{ from:'int_stat', to:'str', pct:20 } })
+test('魔導剣術：INTの30%をSTRへ「変換」する（INTは減る）', () => {
+  assert.deepEqual(SKILL_BY_NAME['魔導剣術'].passive, { convert:{ from:'int_stat', to:'str', pct:30 } })
   const stats = evenStats(534)      // 各1のとき STR=INT=66.75 → 職業補正+3%で69
   const plain = liveStats(createSide({ cls:'魔法剣士', stats, slots: [] }))
   const s = liveStats(sideWith('魔法剣士', stats))
-  const moved = Math.round(plain.int_stat * 0.2)
+  const moved = Math.round(plain.int_stat * 0.3)
   assert.equal(s.str, plain.str + moved)
   assert.equal(s.int_stat, plain.int_stat - moved, 'INTが減っていない（「変換」なので元は減る）')
 })
@@ -162,9 +189,15 @@ test('闘争本能：HPが減るほどSTRが上がる（HP25%で最大15%）', (
   assert.equal(strAt(0.25), Math.round(base * 1.20))
 })
 
-test('天啓：発動率+5%（100%は超えない）', () => {
-  assert.deepEqual(SKILL_BY_NAME['天啓'].passive, { procBonus:5 })
+test('天啓：発動率+5%・消費MP-10%', () => {
+  assert.deepEqual(SKILL_BY_NAME['天啓'].passive, { procBonus:5, mpCut:10 })
+  // 消費MPが1割引きになる
+  const heavy = SKILL_BY_NAME['アストラルレイ']
   const stats = { ...evenStats(534), hp: 10 ** 7 }
+  const plain = createSide({ cls:'賢者', stats, slots: [] })
+  const wise = sideWith('賢者', stats)
+  assert.equal(mpCostOf(plain, heavy), heavy.mp)
+  assert.equal(mpCostOf(wise, heavy), Math.max(0, Math.round(heavy.mp * 0.9)))
   const flaky = { name:'半々', cls:'賢者', kind:'phys', mult:1, proc:50, mp:0, sureHit:true, noCrit:true, desc:'' }
   const fires = (slots) => {
     let n = 0
@@ -212,8 +245,8 @@ test('心身一如：デバフを1回だけ打ち消す', () => {
   assert.ok(applied >= 2, 'デバフが1回しか飛んでいない')
 })
 
-test('竜鱗の加護：被ダメージ時10%で25%カット', () => {
-  assert.deepEqual(SKILL_BY_NAME['竜鱗の加護'].passive, { dodgeCut:{ pct:10, cut:25 } })
+test('竜鱗の加護：被ダメージ時20%で20%カット', () => {
+  assert.deepEqual(SKILL_BY_NAME['竜鱗の加護'].passive, { dodgeCut:{ pct:20, cut:20 } })
   const stats = { ...evenStats(534), hp: 10 ** 7 }
   const atk = { name:'素撃ち', cls:'戦士', kind:'phys', mult:2, proc:100, mp:0, sureHit:true, noCrit:true, desc:'' }
   const taken = (slots) => {
@@ -238,12 +271,13 @@ test('ギャンブルボディ：当たったとき30%で1.2倍・20%で0.9倍�
 test('パッシブは複数セットできて、効果が合算される', () => {
   // ★複数入れられる前提なので、1つ1つが控えめでないと積み重ねで壊れる
   const s = createSide({ cls:'狩人', stats: evenStats(534), slots: [
-    { skill: passiveOf('狩人'), uses:1 },      // 最終命中率+5%
-    { skill: passiveOf('魔銃士'), uses:1 },    // 最終クリ率+5%
-    { skill: passiveOf('聖騎士'), uses:1 },    // VIT+5%
+    { skill: passiveOf('狩人'), uses:1 },      // 命中率1.1倍
+    { skill: passiveOf('魔銃士'), uses:1 },    // 当てるたびにクリ率+1%
+    { skill: passiveOf('聖騎士'), uses:1 },    // VIT+5%・軽減率+10%
   ] })
-  assert.equal(s.pa.hitBonus, 5)
-  assert.equal(s.pa.critBonus, 5)
+  assert.deepEqual(s.pa.hitMult, { mult:1.1, lowMult:1.3, at:30 })
+  assert.deepEqual(s.pa.hitStack, { critRate:1, critDmg:2, max:5 })
+  assert.equal(s.pa.defRed, 10)
   assert.equal(s.buffs.vit, 5)
   assert.equal(s.slots.length, 0, 'パッシブが発動順のローテーションに入っている')
 })
@@ -252,4 +286,38 @@ test('職業補正とパッシブは同じ土俵で加算される（掛け算�
   // 聖騎士＝職業補正VIT+5% ＋ パッシブ「聖騎士の心得」VIT+5% → 合計+10%（1.05×1.05ではない）
   const s = sideWith('聖騎士', evenStats(534))
   assert.equal(s.buffs.vit, 10)
+})
+
+test('精密照準：当てるたびクリ率+1%・クリダメ+2%（5回まで）', () => {
+  assert.deepEqual(SKILL_BY_NAME['精密照準'].passive, { hitStack:{ critRate:1, critDmg:2, max:5 } })
+  const stats = { ...evenStats(534), hp: 10 ** 7 }
+  const atk = { name:'素撃ち', cls:'魔銃士', kind:'phys', mult:1, proc:100, mp:0, sureHit:true, noCrit:true, desc:'' }
+  const r = runBattle({ name:'me', cls:'魔銃士', stats, slots:[{ skill: passiveOf('魔銃士'), uses:1 }, { skill:atk, uses:99 }] },
+    { name:'foe', cls:'魔銃士', stats, slots: [] }, { rng: mkRng(7), maxTurns: 10 })
+  assert.equal(r.a.hitStacks, 5, '5回で頭打ち')
+  assert.equal(critRateStackOf(r.a), 5)
+  assert.equal(critDmgOf(r.a), 10)
+})
+
+test('第六感：行動するたびAGI・DEX+1%（最大10%）', () => {
+  assert.deepEqual(SKILL_BY_NAME['第六感'].passive, { perAct:{ stats:['agi', 'dex'], per:1, max:10 } })
+  const stats = evenStats(534)
+  const s = sideWith('サイキッカー', stats)
+  const at = (acts) => { s.acts = acts; return liveStats(s) }
+  const base = at(0)
+  assert.equal(at(3).agi, Math.round(base.agi * 1.03))
+  assert.equal(at(3).dex, Math.round(base.dex * 1.03))
+  assert.equal(at(20).agi, Math.round(base.agi * 1.10), '10%で頭打ち')
+})
+
+test('聖騎士の心得：VIT+5%・受けるときの軽減率+10%', () => {
+  assert.deepEqual(SKILL_BY_NAME['聖騎士の心得'].passive, { statPct:{ vit:5 }, defRed:10 })
+  const stats = { ...evenStats(534), hp: 10 ** 7 }
+  const atk = { name:'素撃ち', cls:'戦士', kind:'phys', mult:2, proc:100, mp:0, sureHit:true, noCrit:true, desc:'' }
+  const taken = (slots) => {
+    const r = runBattle({ name:'foe', cls:'戦士', stats, slots:[{ skill:atk, uses:99 }] },
+      { name:'me', cls:'聖騎士', stats, slots }, { rng: mkRng(11), maxTurns: 6 })
+    return r.log.filter(l => l.side === 'foe' && l.type === 'skill').reduce((t, l) => t + l.damage, 0)
+  }
+  assert.ok(taken([{ skill: passiveOf('聖騎士'), uses:1 }]) < taken([]), '軽減が効いていない')
 })

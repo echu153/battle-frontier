@@ -65,15 +65,28 @@ const collectPassives = (passives) => {
   const pa = {
     hitBonus: 0, evaBonus: 0, critBonus: 0, procBonus: 0, defPenBonus: 0, healBonus: 0,
     misfireAtkMult: 1, debuffGuard: 0,
+    // ★2026-08-19 追加ぶん
+    critDmg: 0,        // クリティカルのダメージ+%（隠身）
+    mpCut: 0,          // 消費MP-%（天啓）
+    defRed: 0,         // 受けるときの軽減率+%（聖騎士の心得）
+    bleedMax: 0,       // 自分が付ける出血の上限スタック（隠身）
+    hitMult: null,     // { mult, lowMult, at } 命中率に掛ける（鷹ノ目）
+    hitStack: null,    // { critRate, critDmg, max } 当てるたびに積む（精密照準）
+    perAct: [],        // [{ stats, per, max }] 行動するたびに積む（第六感）
     statPct: {}, converts: [], rages: [], switches: [], lowHps: [],
     wall: null, gamble: null, dodgeCut: null,
   }
   for (const s of passives) {
     const p = s?.passive
     if (!p) continue
-    for (const k of ['hitBonus', 'evaBonus', 'critBonus', 'procBonus', 'defPenBonus', 'healBonus', 'debuffGuard']) {
+    for (const k of ['hitBonus', 'evaBonus', 'critBonus', 'procBonus', 'defPenBonus', 'healBonus', 'debuffGuard',
+      'critDmg', 'mpCut', 'defRed']) {
       if (p[k]) pa[k] += p[k]
     }
+    if (p.bleedMax) pa.bleedMax = Math.max(pa.bleedMax, p.bleedMax)
+    if (p.hitMult)  pa.hitMult = p.hitMult
+    if (p.hitStack) pa.hitStack = p.hitStack
+    if (p.perAct)   pa.perAct.push(p.perAct)
     if (p.misfireAtkMult) pa.misfireAtkMult = Math.max(pa.misfireAtkMult, p.misfireAtkMult)
     if (p.statPct) for (const [k, v] of Object.entries(p.statPct)) pa.statPct[k] = (pa.statPct[k] || 0) + v
     if (p.convert)    pa.converts.push(p.convert)
@@ -99,6 +112,11 @@ export const liveStats = (side, acting = false) => {
   for (const [k, pct] of Object.entries(side.enStacks || {})) add(k, pct)
   // バーサク・執行本能：ダメージを与えるたびに乗るスタック
   if (side.rage > 0) for (const r of side.pa.rages) add(r.stat, Math.min(r.max, r.per * side.rage))
+  // 第六感：行動するたびにステータスが上がる（上限つき）
+  for (const t of side.pa.perAct || []) {
+    const up = Math.min(t.max, t.per * (side.acts || 0))
+    if (up > 0) for (const st of t.stats) add(st, up)
+  }
   // 闘争本能：HPが減るほど上がる（at% まで下がると max% で頭打ち）
   for (const l of side.pa.lowHps) {
     const hpPct = (side.hp / Math.max(1, side.base.hp)) * 100
@@ -169,7 +187,8 @@ export const createSide = (fighter, band = null) => {
     regen: null,    // { rate, turns }
     mpRegen: null,  // { rate, turns }
     rage: 0,        // バーサク・執行本能のスタック数
-    acts: 0,        // 自分が行動した回数（骸の壁が5回ごとに見る）
+    acts: 0,        // 自分が行動した回数（骸の壁が5回ごとに見る・第六感が積み上げに使う）
+    hitStacks: 0,   // 精密照準：当てるたびに積む（上限は passive.hitStack.max）
     wallPct: pa.wall ? pa.wall.pct : 0,  // 骸の壁は戦闘開始時から乗る（重複しない）
     guards: pa.debuffGuard,              // 心身一如：デバフを打ち消せる残り回数
     lastSkill: null,                     // 元素共鳴が見る「直前に使ったスキル」
@@ -202,7 +221,8 @@ export const mpCostOf = (side, skill) => {
   const pct = mpPctOf(side?.cls, skill)
   const raw = pct ? Math.floor((side?.mp || 0) * pct) : mpOf(side?.cls, skill)
   // 武器の進化：消費MP−%（代償で付いた「消費MP+%」はマイナスの値で入っている）
-  const cut = side?.evo?.mpCost || 0
+  // ★天啓（賢者）の「消費MP-10%」も同じ枠で引く
+  const cut = (side?.evo?.mpCost || 0) + (side?.pa?.mpCut || 0)
   return cut ? Math.max(0, Math.round(raw * Math.max(0.1, 1 - cut / 100))) : raw
 }
 
@@ -327,7 +347,9 @@ const tryInflict = (me, foe, a, rng, log) => {
   const pct = inflictChance(base, foe.en, a.key)
     - (foe?.evo?.ail?.resist || 0) + (foe?.evo?.ail?.weak || 0)
   if (!roll(pct, rng)) return
-  if (inflict(foe.ail, a.key, a)) log.push({ side: foe.name, type: 'ailment', ail: AIL_LABEL[a.key] })
+  // ★隠身（暗殺者）：自分が付ける出血はスタック上限が伸びる
+  const opt = me?.pa?.bleedMax ? { ...a, max: me.pa.bleedMax } : a
+  if (inflict(foe.ail, a.key, opt)) log.push({ side: foe.name, type: 'ailment', ail: AIL_LABEL[a.key] })
 }
 
 // 攻撃が当たったときのエンチャント。状態異常の付与と、積み上がるステータス補正
@@ -370,6 +392,28 @@ const evoMult = (me, foe, { kind = 'phys', skill = false, multi = false } = {}) 
     justHurt: me.ctx.hurt,
   })
   return pct ? Math.max(0.1, 1 + pct / 100) : 1
+}
+
+// 鷹ノ目：最終命中率に掛ける倍率。相手が瀕死（HPが at% 以下）ならさらに伸びる
+export const hitMultOf = (me, foe) => {
+  const h = me.pa.hitMult
+  if (!h) return 1
+  const pct = (Math.max(0, foe.hp) / Math.max(1, foe.base.hp)) * 100
+  return pct <= (h.at ?? 30) ? (h.lowMult ?? h.mult) : h.mult
+}
+// 隠身のクリダメ+% ＋ 精密照準の積み上げぶん
+export const critDmgOf = (me) => {
+  const st = me.pa.hitStack
+  return me.pa.critDmg + (st ? Math.min(st.max, me.hitStacks) * (st.critDmg || 0) : 0)
+}
+// 精密照準の積み上げぶん（クリティカル率）
+export const critRateStackOf = (me) => {
+  const st = me.pa.hitStack
+  return st ? Math.min(st.max, me.hitStacks) * (st.critRate || 0) : 0
+}
+// 当てたら積む（精密照準）
+const bumpHitStack = (me, hits) => {
+  if (me.pa.hitStack && hits > 0) me.hitStacks = Math.min(me.pa.hitStack.max, me.hitStacks + 1)
 }
 
 // 1回の行動を解決する。戻り値はログ用の1件
@@ -447,7 +491,10 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
         // ★スキル自身の命中補正（skill.hitBonus）もここで足す＝「必中ではないが当てやすい技」を作れる
         hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + (skill.hitBonus || 0),
         evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe),
-        critBonus: me.pa.critBonus + evoCrit(me, foe),
+        critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me),
+        hitMult: hitMultOf(me, foe),
+        critDmg: critDmgOf(me),
+        redMult: 1 + (foe.pa.defRed || 0) / 100,
       }, rng)
       // ★クリティカルの与ダメージ+%は**1発ずつ**掛ける（多段でクリした発だけ伸びる）
       raw += r.hit && r.crit && me.evo.critDmg
@@ -475,6 +522,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     raw = Math.floor(raw * evoMult(me, foe, { kind: skill.kind, skill: true, multi: (skill.hits || 1) > 1 }))
     const dmg = applyIncoming(me, foe, raw, skill.kind, rng, log)
     if (hits > 0) {
+      bumpHitStack(me, hits)
       onHit(me, foe, skill.kind, rng, log)
       evoOnHit(me)   // 武器の進化：当てるたびHP/MPが戻る
       // ★スキル自身が持つ状態異常（どくのほうし＝毒、電撃＝麻痺 など）。**当たったときだけ**。
@@ -529,7 +577,10 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
     defPen: me.pa.defPenBonus / 100 + me.evo.defPen / 100,
     hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe),
     evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe),
-    critBonus: me.pa.critBonus + evoCrit(me, foe),
+    critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me),
+    hitMult: hitMultOf(me, foe),
+    critDmg: critDmgOf(me),
+    redMult: 1 + (foe.pa.defRed || 0) / 100,
   }, rng)
   evoOnDodge(foe, r.hit ? 0 : 1)
   foe.justDodged = !r.hit
@@ -540,7 +591,7 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   const raw = Math.floor(r.damage * (1 + (me.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100)
     * critMult * evoMult(me, foe, { kind: me.kind, skill: false }))
   const dmg = applyIncoming(me, foe, raw, me.kind, rng, log)
-  if (r.hit) { onHit(me, foe, me.kind, rng, log); evoOnHit(me) }
+  if (r.hit) { bumpHitStack(me, 1); onHit(me, foe, me.kind, rng, log); evoOnHit(me) }
   const drainRate = me.evo.drain / 100
   if (drainRate > 0 && dmg > 0) me.hp = Math.min(me.base.hp, me.hp + Math.max(1, Math.floor(dmg * drainRate)))
   if (me.kind === 'phys' && me.en.drainPhysPct > 0 && dmg > 0) {

@@ -161,7 +161,7 @@ export const roll = (pct, rng = Math.random) => rng() * 100 < pct
 // add: 副ステータス参照 [{ stat:'agi', rate:0.5 }]。あるけみすとの「STR×1.4＋LUK×0.8」に相当
 //      ※軽減率の計算には主ステータス（STR/INT）だけを使う＝副ステで防御の効きが変わらない
 export const attackStatOf = (s, kind) => (kind === 'mag' ? (s?.int_stat || 0) : (s?.str || 0))
-export const damageOf = ({ attacker, defender, mult = 1, kind = 'phys', crit = false, defPen = 0, add = null }) => {
+export const damageOf = ({ attacker, defender, mult = 1, kind = 'phys', crit = false, defPen = 0, add = null, critDmg = 0, redMult = 1 }) => {
   const phys = kind !== 'mag'
   const atk = attackStatOf(attacker, kind)
   let base = atk * mult
@@ -173,9 +173,10 @@ export const damageOf = ({ attacker, defender, mult = 1, kind = 'phys', crit = f
   //   防御力を割る形だと、相手が防御を積むほど軽減率が上限に張り付いて
   //   貫通の効果が消える（＝硬い相手に効かない）という逆の挙動になっていた。
   //   軽減率に掛ければ「50%無視＝軽減が半分」で、硬い相手にほどよく効く。
-  const red = reductionRate(def, atk, cap) * (1 - Math.max(0, Math.min(1, defPen)))
+  // redMult は受ける側の「軽減率+%」（聖騎士の心得）。防御無視はそのあとに掛かる
+  const red = Math.min(0.9, reductionRate(def, atk, cap) * Math.max(0, redMult)) * (1 - Math.max(0, Math.min(1, defPen)))
   // クリティカルは倍率そのものを持ち上げる（係数×1.5＋1.5）。副参照ぶんは倍率と同じ比率で伸ばす
-  if (crit) base *= (mult * CRIT_MULT + CRIT_MULT_ADD) / Math.max(0.01, mult)
+  if (crit) base *= ((mult * CRIT_MULT + CRIT_MULT_ADD) / Math.max(0.01, mult)) * (1 + critDmg / 100)
   return Math.max(1, Math.floor(base * (1 - red)))
 }
 
@@ -218,14 +219,18 @@ export const damageFloor = (attacker, kind = 'phys') => 1 - DMG_SPREAD * (1 - st
 // hitBonus/evaBonus/critBonus はパッシブぶんの補正（ポイント）。
 //   hitBonus … 攻撃側の「最終命中率+n%」 ／ evaBonus … 防御側の「回避率+n%」
 //   critBonus … 攻撃側の「最終クリティカル率+n%」
-export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', defPen = 0, add = null, sureHit = false, sureCrit = false, noCrit = false, hitBonus = 0, evaBonus = 0, critBonus = 0, acc = 100 }, rng = Math.random) => {
+// hitMult    … 最終命中率に掛ける（鷹ノ目：1.1倍／相手が瀕死なら1.3倍）
+// critDmg    … クリティカルのダメージ+%（隠身・精密照準）
+// redMult    … 受ける側の軽減率に掛ける（聖騎士の心得）
+export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', defPen = 0, add = null, sureHit = false, sureCrit = false, noCrit = false, hitBonus = 0, evaBonus = 0, critBonus = 0, acc = 100, hitMult = 1, critDmg = 0, redMult = 1 }, rng = Math.random) => {
   const crit = !noCrit && (sureCrit || roll(critRate(attacker, defender, critBonus), rng))
   const accStats = crit ? critAccuracyStats(attacker) : attacker
-  const hit = sureHit || roll(skillHitRate(accStats, defender, { acc, kind, hitBonus, evaBonus }), rng)
+  const rate = clampPct(skillHitRate(accStats, defender, { acc, kind, hitBonus, evaBonus }) * hitMult, 0, 100)
+  const hit = sureHit || roll(rate, rng)
   if (!hit) return { hit:false, crit, damage:0 }
   // ダメージの振れ幅。DEXが高いほど下限が1.00へ寄って安定する
   const lo = damageFloor(attacker, kind)
   const scale = (lo + (1 - lo) * rng()) * DMG_COMP
-  const dmg = Math.max(1, Math.floor(damageOf({ attacker, defender, mult, kind, crit, defPen, add }) * scale))
+  const dmg = Math.max(1, Math.floor(damageOf({ attacker, defender, mult, kind, crit, defPen, add, critDmg, redMult }) * scale))
   return { hit:true, crit, damage: dmg }
 }

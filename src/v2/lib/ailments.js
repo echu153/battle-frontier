@@ -53,8 +53,10 @@ export const inflict = (ail, key, opt = {}) => {
   switch (key) {
     case 'bleed': {
       // 旧版と同じ：スタックを1つ足して、消えるまでの数え直し
+      // ★opt.max … 付与する側が上限を伸ばせる（暗殺者の隠身＝10スタックまで）
       const cur = ail.bleed
-      ail.bleed = { stacks: Math.min(BLEED_MAX_STACKS, (cur?.stacks || 0) + (opt.stacks || 1)), age: 0 }
+      const max = opt.max || BLEED_MAX_STACKS
+      ail.bleed = { stacks: Math.min(max, (cur?.stacks || 0) + (opt.stacks || 1)), age: 0 }
       return true
     }
     case 'poison': {

@@ -65,6 +65,14 @@ export const PASSIVE_EFFECT_KEYS = [
   'hitBonus', 'evaBonus', 'critBonus', 'procBonus', 'defPenBonus', 'healBonus',
   'misfireAtkMult', 'statPct', 'convert', 'rage', 'switchStat', 'lowHp',
   'wall', 'gamble', 'dodgeCut', 'debuffGuard',
+  // ★2026-08-19 追加（ユーザー指定のパッシブ）
+  'hitMult',   // { mult, lowMult, at } 最終命中率に掛ける。相手のHPが at% 以下なら lowMult（鷹ノ目）
+  'bleedMax',  // 自分が付ける出血のスタック上限（隠身）
+  'critDmg',   // クリティカルのダメージ+%（隠身）
+  'mpCut',     // 消費MP-%（天啓）
+  'defRed',    // 受けるときの軽減率+%（聖騎士の心得）
+  'hitStack',  // { critRate, critDmg, max } 当てるたびに積む（精密照準）
+  'perAct',    // { stats, per, max } 自分が行動するたびに積む（第六感）
 ]
 
 // mult   : 主ステータス（STR/INT）に掛ける倍率
@@ -190,7 +198,7 @@ export const SKILLS = [
   // ===== 狩人（STR＋DEX・搦め手） =====
   { name:'毒矢',     cls:'狩人', kind:'phys', mult:1.25, add:[{ stat:'dex', rate:0.5 }], proc:90, mp:12, ail:{ key:'poison', chance:35 }, desc:'DEXも威力になる。35%で毒' },
   { name:'三連射',   cls:'狩人', kind:'phys', mult:0.73, hits:3, proc:85, mp:16, noCrit:true, desc:'3連撃。クリティカルしない' },
-  { name:'鷹ノ目',   cls:'狩人', kind:'passive', mp:0, passive:{ hitBonus:5 }, desc:'最終命中率+5%' },
+  { name:'鷹ノ目',   cls:'狩人', kind:'passive', mp:0, passive:{ hitMult:{ mult:1.1, lowMult:1.3, at:30 } }, desc:'命中率が1.1倍。相手のHPが30%以下なら1.3倍' },
   { name:'狩猟本能', cls:'狩人', kind:'buff', proc:100, mp:14, buff:{ self:{ dex:25, agi:25 } }, priority:1, desc:'STR・AGI+30%（重ねがけ可）' },
   { name:'絶影狙撃', cls:'狩人', kind:'phys', mult:2.2, sureHit:true, proc:80, mp:20, desc:'必中の大威力' },
   { name:'貫き矢',   cls:'狩人', kind:'phys', mult:1.5, add:[{ stat:'dex', rate:0.3 }], defPen:0.35, proc:88, mp:14, desc:'相手の防御を35%無視。DEXも威力になる' },
@@ -204,7 +212,7 @@ export const SKILLS = [
   //   撒く技（瞬歩瞬殺・鬼影閃・千刃乱舞）と刈る技（急所突き）が噛み合う職。
   { name:'瞬歩瞬殺', cls:'暗殺者', kind:'phys', mult:1.35, add:[{ stat:'agi', rate:0.4 }], proc:90, mp:12, ail:{ key:'bleed', chance:50 }, desc:'AGIも威力になる。50%で出血' },
   { name:'鬼影閃',   cls:'暗殺者', kind:'phys', mult:0.69, hits:3, proc:85, mp:16, noCrit:true, ail:{ key:'bleed', chance:30 }, desc:'3連撃。30%で出血。クリティカルしない' },
-  { name:'隠身',     cls:'暗殺者', kind:'passive', mp:0, passive:{ evaBonus:5 }, desc:'回避率+5%' },
+  { name:'隠身',     cls:'暗殺者', kind:'passive', mp:0, passive:{ bleedMax:10, critDmg:10 }, desc:'自分が付ける出血が10スタックまで貯まる。クリティカルダメージ+10%' },
   { name:'影歩き',   cls:'暗殺者', kind:'buff', proc:100, mp:12, buff:{ self:{ agi:30, dex:15 } }, priority:1, desc:'AGI+40%・DEX+20%（重ねがけ可）' },
   { name:'急所突き', cls:'暗殺者', kind:'phys', mult:1.55, proc:80, mp:20, consumeAil:{ key:'bleed', perStack:0.2 }, desc:'相手の出血を全部消費し、消費したスタック1つにつき威力+20%（最大5スタックで2倍）' },
   { name:'背後刺し', cls:'暗殺者', kind:'phys', mult:1.6, add:[{ stat:'agi', rate:0.35 }], hitBonus:10, proc:88, mp:14, desc:'死角から刺す。命中+10%。AGIも威力になる' },
@@ -264,7 +272,7 @@ export const SKILLS = [
   // ===== 賢者（INT・高コスト） =====
   { name:'サンダーストライク', cls:'賢者', kind:'mag', mult:2.2, proc:90, mp:13, desc:'雷撃' },
   { name:'マナボルト',       cls:'賢者', kind:'mag', mult:2.5, proc:78, mp:0, mpPct:0.2, desc:'そのときの残りMPの20%を消費する大魔法' },
-  { name:'天啓',             cls:'賢者', kind:'passive', mp:0, passive:{ procBonus:5 }, desc:'スキルの発動率+5%' },
+  { name:'天啓',             cls:'賢者', kind:'passive', mp:0, passive:{ procBonus:5, mpCut:10 }, desc:'スキルの発動率+5%・消費MP-10%' },
   { name:'氷の障壁',         cls:'賢者', kind:'buff', proc:100, mp:15, buff:{ self:{ vit:35, int_stat:20 } }, priority:1, desc:'VIT+40%・INT+20%（重ねがけ可）' },
   { name:'メテオストライク', cls:'賢者', kind:'mag', mult:0.67, hits:4, proc:78, mp:23, noCrit:true, desc:'4連撃。クリティカルしない' },
   { name:'アルカナボルト',     cls:'賢者', kind:'mag', mult:1.9, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:13, desc:'魔力の弾。DEXも威力になる' },
@@ -276,7 +284,7 @@ export const SKILLS = [
   // ===== 聖騎士（STR＋VIT・守って殴る） =====
   { name:'ホーリーエッジ',     cls:'聖騎士', kind:'phys', mult:1.45, add:[{ stat:'vit', rate:0.5 }], proc:90, mp:12, desc:'VITも威力になる' },
   { name:'ディバインスマイト', cls:'聖騎士', kind:'phys', mult:2.05, proc:85, mp:16, buff:{ enemy:{ str:-20 } }, desc:'相手のSTR-20%（重ねがけ可）' },
-  { name:'聖騎士の心得',       cls:'聖騎士', kind:'passive', mp:0, passive:{ statPct:{ vit:5 } }, desc:'VIT+5%' },
+  { name:'聖騎士の心得',       cls:'聖騎士', kind:'passive', mp:0, passive:{ statPct:{ vit:5 }, defRed:10 }, desc:'VIT+5%・受けるときの軽減率+10%' },
   { name:'聖域展開',           cls:'聖騎士', kind:'heal', proc:85, mp:18, regen:{ rate:0.9, turns:4 }, priority:1, desc:'4ターン毎ターンINT×0.7を回復' },
   { name:'神聖覚醒',           cls:'聖騎士', kind:'phys', mult:1.75, add:[{ stat:'vit', rate:0.6 }], proc:80, mp:20, desc:'VITも大きく威力になる' },
   { name:'シールドバッシュ',     cls:'聖騎士', kind:'phys', mult:1.35, add:[{ stat:'vit', rate:0.4 }], proc:90, mp:12, ail:{ key:'paralyze', chance:8 }, desc:'VITも威力になる。8%で麻痺' },
@@ -288,7 +296,7 @@ export const SKILLS = [
   // ===== 魔法剣士（STR＋INT両刀） =====
   { name:'雷光斬',           cls:'魔法剣士', kind:'phys', mult:1.35, add:[{ stat:'int_stat', rate:0.6 }], proc:90, mp:12, desc:'INTも威力になる' },
   { name:'閃光',             cls:'魔法剣士', kind:'phys', mult:1.8, proc:90, mp:12, buff:{ enemy:{ dex:-20 } }, desc:'目つぶしの一閃。相手のDEX-20%（重ねがけ可）' },
-  { name:'魔導剣術',         cls:'魔法剣士', kind:'passive', mp:0, passive:{ convert:{ from:'int_stat', to:'str', pct:20 } }, desc:'INTの20%をSTRへ変換する（そのぶんINTは下がる）' },
+  { name:'魔導剣術',         cls:'魔法剣士', kind:'passive', mp:0, passive:{ convert:{ from:'int_stat', to:'str', pct:30 } }, desc:'INTの30%をSTRへ変換する（そのぶんINTは下がる）' },
   { name:'魔剣開放',         cls:'魔法剣士', kind:'buff', proc:100, mp:18, buff:{ self:{ str:30, int_stat:30 } }, priority:1, desc:'STR・INT+35%（重ねがけ可）' },
   { name:'エレメンタルエッジ', cls:'魔法剣士', kind:'phys', mult:1.45, add:[{ stat:'int_stat', rate:0.9 }], proc:80, mp:20, desc:'両刀の切り札' },
   { name:'魔力刃',       cls:'魔法剣士', kind:'phys', mult:1.5, add:[{ stat:'int_stat', rate:0.4 }], proc:90, mp:12, desc:'魔力をまとわせて斬る。INTも威力になる' },
@@ -300,7 +308,7 @@ export const SKILLS = [
   // ===== 魔銃士（STR＋INT＋DEX） =====
   { name:'魔弾',                   cls:'魔銃士', kind:'phys', mult:1.6, add:[{ stat:'int_stat', rate:0.6 }], proc:85, mp:16, desc:'INTも威力になる' },
   { name:'連装銃撃',               cls:'魔銃士', kind:'phys', mult:0.73, hits:3, proc:85, mp:16, noCrit:true, desc:'3連撃。クリティカルしない' },
-  { name:'精密照準',               cls:'魔銃士', kind:'passive', mp:0, passive:{ critBonus:5 }, desc:'最終クリティカル率+5%' },
+  { name:'精密照準',               cls:'魔銃士', kind:'passive', mp:0, passive:{ hitStack:{ critRate:1, critDmg:2, max:5 } }, desc:'スキルを当てるたびにクリティカル率+1%・クリティカルダメージ+2%（5回まで）' },
   { name:'強化装填',               cls:'魔銃士', kind:'buff', proc:100, mp:16, buff:{ self:{ dex:35, int_stat:20 } }, priority:1, desc:'STR・INT+30%（重ねがけ可）' },
   { name:'キャノネスチュームビンド', cls:'魔銃士', kind:'phys', mult:1.65, add:[{ stat:'int_stat', rate:0.7 }], proc:80, mp:20, desc:'魔銃士の切り札' },
   { name:'速射弾',       cls:'魔銃士', kind:'phys', mult:1.55, add:[{ stat:'dex', rate:0.3 }], proc:92, mp:11, desc:'素早く撃つ。DEXも威力になる' },
@@ -312,7 +320,7 @@ export const SKILLS = [
   // ===== サイキッカー（STR＋INT・弱体） =====
   { name:'サイコショット',   cls:'サイキッカー', kind:'phys', mult:1.35, add:[{ stat:'int_stat', rate:0.6 }], proc:90, mp:12, desc:'INTも威力になる' },
   { name:'マインドブレイク', cls:'サイキッカー', kind:'mag', mult:2.3, proc:85, mp:17, buff:{ enemy:{ int_stat:-25 } }, desc:'精神を砕く。相手のINT-25%（重ねがけ可）' },
-  { name:'第六感',           cls:'サイキッカー', kind:'passive', mp:0, passive:{ defPenBonus:10 }, desc:'防御貫通+10%' },
+  { name:'第六感',           cls:'サイキッカー', kind:'passive', mp:0, passive:{ perAct:{ stats:['agi', 'dex'], per:1, max:10 } }, desc:'自分が行動するたびAGI・DEX+1%（最大10%）' },
   { name:'精神集中',         cls:'サイキッカー', kind:'buff', proc:100, mp:16, buff:{ self:{ int_stat:35, dex:20 } }, priority:1, desc:'STR・INT+30%（重ねがけ可）' },
   { name:'サイコブラスト',   cls:'サイキッカー', kind:'phys', mult:1.55, add:[{ stat:'int_stat', rate:0.8 }], proc:80, mp:20, desc:'サイキッカーの切り札' },
   { name:'テレキネシス',       cls:'サイキッカー', kind:'phys', mult:1.65, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:12, desc:'念力で叩きつける。DEXも威力になる' },
@@ -348,7 +356,7 @@ export const SKILLS = [
   // ===== 竜騎士（STR＋VIT・貫通） =====
   { name:'ドラゴンスラスト', cls:'竜騎士', kind:'phys', mult:1.75, defPen:0.3, proc:90, mp:12, desc:'相手の防御を30%無視' },
   { name:'ドラゴンファング', cls:'竜騎士', kind:'phys', mult:0.73, hits:3, proc:85, mp:16, noCrit:true, desc:'3連撃。クリティカルしない' },
-  { name:'竜鱗の加護',       cls:'竜騎士', kind:'passive', mp:0, passive:{ dodgeCut:{ pct:10, cut:25 } }, desc:'ダメージを受けるとき、10%の確率で25%カット' },
+  { name:'竜鱗の加護',       cls:'竜騎士', kind:'passive', mp:0, passive:{ dodgeCut:{ pct:20, cut:20 } }, desc:'ダメージを受けるとき、20%の確率で20%カット' },
   { name:'ドラゴンロア',     cls:'竜騎士', kind:'buff', proc:100, mp:14, buff:{ self:{ str:20, vit:30 } }, priority:1, desc:'STR+35%（重ねがけ可）' },
   { name:'天墜竜閃',         cls:'竜騎士', kind:'phys', mult:2.4, proc:78, mp:22, desc:'竜騎士の切り札' },
   { name:'ランスチャージ', cls:'竜騎士', kind:'phys', mult:1.6, add:[{ stat:'vit', rate:0.35 }], proc:90, mp:12, desc:'槍ごと突っ込む。VITも威力になる' },
