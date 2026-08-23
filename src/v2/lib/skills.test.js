@@ -7,8 +7,9 @@ import {
   skillValue, multTotal, effectPrice, targetValue, passiveOf,
 } from './skills.js'
 import { CLASS_BONUS } from './classBonus.js'
-import { damageOf, healOf } from './combat.js'
 import { STAT_KEYS } from './stats.js'
+import { AIL_KEYS } from './ailments.js'
+import { damageOf, healOf } from './combat.js'
 
 // 全27職ぶん実装済み（開始時＋初期職6＋上位職12＋複合上位職6＋特殊職2）
 // ★2026-08-19にブリーダーを職ごと廃止（v2にペットが無く、効果を作り直す当てが無かった）
@@ -415,4 +416,43 @@ test('割合消費のスキルは想定利用MPに数えない', () => {
   const s = SKILL_BY_NAME['マナボルト']
   assert.equal(s.mpPct, 0.2)
   assert.equal(s.mp, 0)
+})
+
+// ★2026-08-23：打ち間違いは実戦だと「静かに何も起きない」だけで気づけない。
+//   （例：add に stat:'int' と書くと liveStats が 0 を返し、副参照がまるごと消える）
+//   書いてよいキー・ステ名・状態異常名を突き合わせて、混入した時点で落とす。
+test('スキルに知らないキー・知らないステ名・知らない状態異常が混ざっていない', () => {
+  const SKILL_KEYS = new Set([
+    'name', 'cls', 'kind', 'mult', 'add', 'hits', 'proc', 'mp', 'mpPct', 'desc', 'acc',
+    'priority', 'reqJobs', 'src', 'noCrit', 'sureHit', 'sureCrit', 'hitBonus', 'defPen',
+    'drain', 'drainIfAil', 'ail', 'ailPerHit', 'consumeAil', 'buff', 'buffTurns', 'heal',
+    'regen', 'mpRegen', 'passive', 'stance', 'whileStance', 'foresight', 'frenzy', 'hpCostPct',
+    'lowHpBonus', 'highHpBonus', 'vsBuff', 'vsAil', 'dispel', 'repeat', 'switchKind', 'variance',
+    'combo', 'airUp', 'whileAir', 'whileGround', 'keepAir', 'rampHit', 'ritual', 'useRitual',
+    'chargeUp', 'useCharge', 'whileStack', 'whileForm', 'form', 'formBuff', 'cure', 'bigGuard',
+  ])
+  const FORMS = ['hawk', 'bear', 'snake']
+  const bad = []
+  for (const s of SKILLS) {
+    for (const k of Object.keys(s)) if (!SKILL_KEYS.has(k)) bad.push(`${s.name}: 知らないキー ${k}`)
+    for (const a of s.add || []) if (!STAT_KEYS.includes(a.stat)) bad.push(`${s.name}: 知らないステ ${a.stat}`)
+    if (s.src && !STAT_KEYS.includes(s.src)) bad.push(`${s.name}: src が ${s.src}`)
+    for (const side of ['self', 'enemy']) {
+      for (const k of Object.keys(s.buff?.[side] || {})) if (!STAT_KEYS.includes(k)) bad.push(`${s.name}: バフのステ ${k}`)
+    }
+    for (const k of ['ail', 'consumeAil', 'drainIfAil']) {
+      if (s[k] && !AIL_KEYS.includes(s[k].key)) bad.push(`${s.name}: 知らない状態異常 ${s[k].key}`)
+    }
+    if (s.whileStack && !['ritual', 'charge'].includes(s.whileStack.key)) bad.push(`${s.name}: whileStack.key が ${s.whileStack.key}`)
+    if (s.form && !FORMS.includes(s.form)) bad.push(`${s.name}: form が ${s.form}`)
+    for (const k of Object.keys(s.formBuff || {})) {
+      if (k !== 'none' && !FORMS.includes(k)) bad.push(`${s.name}: formBuff のキー ${k}`)
+      for (const st of Object.keys(s.formBuff[k])) if (!STAT_KEYS.includes(st)) bad.push(`${s.name}: formBuff のステ ${st}`)
+    }
+    for (const n of s.combo?.after || []) if (!SKILL_BY_NAME[n]) bad.push(`${s.name}: combo の相手「${n}」が無い`)
+    for (const k of Object.keys(s.passive || {})) if (!PASSIVE_EFFECT_KEYS.includes(k)) bad.push(`${s.name}: パッシブの知らないキー ${k}`)
+    if ((s.kind === 'phys' || s.kind === 'mag') && !(s.mult > 0)) bad.push(`${s.name}: 倍率が ${s.mult}`)
+    for (const k of ['heal', 'regen', 'mpRegen']) if (s[k] && !(s[k].rate > 0)) bad.push(`${s.name}: ${k} の量が0`)
+  }
+  assert.deepEqual(bad, [], bad.join(' / '))
 })
