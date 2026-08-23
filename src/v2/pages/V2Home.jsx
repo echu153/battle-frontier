@@ -303,7 +303,8 @@ export default function V2Home() {
 //   alignItems:'start' が無いと、短いほうの列が長いほうに引き伸ばされて枠がだぶつく。
 const TWO_COLUMN = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+  // ★min(380px,100%) にしないと、380pxより狭い画面で列がはみ出す（375pxのスマホで5px溢れた）
+  gridTemplateColumns: 'repeat(auto-fit, minmax(min(380px, 100%), 1fr))',
   gap: '8px',
   alignItems: 'start',
 }
