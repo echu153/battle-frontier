@@ -28,3 +28,4 @@ dist-ssr
 _sim_data.json
 # 調整用シミュレータの esbuild 出力（生成物なので追跡しない）
 _*_b.mjs
+tools/v2-skills.html

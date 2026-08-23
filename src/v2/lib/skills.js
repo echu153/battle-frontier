@@ -105,6 +105,11 @@ export const PASSIVE_EFFECT_KEYS = [
 // useCharge   : { per } 竜気を全部使って威力+per%×個数（竜騎士）
 // form        : 'hawk'|'bear'|'snake' その獣を呼ぶ＝型が変わる。同じ型なら威力+BEAST_BONUS%
 // formBuff    : { none, hawk, bear, snake } いま呼んでいる獣で中身が変わるバフ
+// ---- 軸に**つながる**ための仕組み（2026-08-23）----
+// whileStack  : { key:'ritual'|'charge', mult?, defPen?, ailChance? } 溜めが残っているあいだ効く（消費しない）
+// whileForm   : { mult?, ailChance? } 獣を呼んでいるあいだ効く（型は問わない）
+// vsAil       : { per, max } 相手にかかっている状態異常1つにつき威力+%（賢者）
+// cure        : n 自分にかかっている状態異常を n 個払う（武僧）
 // drainIfAil  : { key, pct } **相手がその状態異常のときだけ**吸収する（血啜り）。
 //               撃つ前から掛かっている必要がある＝自分で撒いてから吸う流れになる
 // hpCostPct   : 現在HPの n% を払って撃つ（すてみ）。払っても死なない
@@ -216,8 +221,8 @@ export const SKILLS = [
   { name:'月影',     cls:'侍', kind:'phys', mult:2.2, proc:78, mp:22, ail:{ key:'bleed', chance:40 }, whileStance:{ ailChance:100 }, desc:'侍の切り札。40%で出血。納刀中は出血が確定' },
   { name:'納刀',     cls:'侍', kind:'buff', proc:100, mp:6, priority:1, reqJobs:5, stance:{ proc:20, mult:1.5, priority:1 }, desc:'納刀状態になる。次に撃つスキルが発動率+20%・威力1.5倍・先制になる（撃つと消える）' },
   { name:'峰打ち',   cls:'侍', kind:'phys', mult:1.65, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:14, reqJobs:5, buff:{ enemy:{ str:-15 } }, desc:'DEXも威力になる。相手のSTR-15%（重ねがけ可）' },
-  { name:'二段斬り', cls:'侍', kind:'phys', mult:0.95, add:[{ stat:'dex', rate:0.15 }], hits:2, proc:85, mp:16, noCrit:true, reqJobs:5, desc:'2連撃。DEXも威力になる。クリティカルしない' },
-  { name:'桜花一閃', cls:'侍', kind:'phys', mult:1.97, add:[{ stat:'dex', rate:0.2 }], proc:82, mp:18, reqJobs:5, ail:{ key:'bleed', chance:30 }, desc:'DEXも威力になる。30%で出血' },
+  { name:'二段斬り', cls:'侍', kind:'phys', mult:0.95, add:[{ stat:'dex', rate:0.15 }], hits:2, proc:85, mp:16, noCrit:true, reqJobs:5, whileStance:{ defPen:0.35 }, desc:'2連撃。DEXも威力になる。クリティカルしない。納刀中は相手の防御を35%無視' },
+  { name:'桜花一閃', cls:'侍', kind:'phys', mult:1.97, add:[{ stat:'dex', rate:0.2 }], proc:82, mp:18, reqJobs:5, ail:{ key:'bleed', chance:30 }, whileStance:{ ailChance:100 }, desc:'DEXも威力になる。30%で出血。納刀中は必ず出血' },
   { name:'見切り',   cls:'侍', kind:'buff', proc:100, mp:10, priority:1, reqJobs:5, foresight:{ turns:5, pct:3, perHit:3, max:20 }, desc:'5ターンのあいだ回避率+3%。スキルを受けるたび、その技への回避率がさらに+3%（同じ技につき20%まで）。効果が切れると積み上げも消える' },
 
   // ===== 狂戦士（STR一点・自分を削って殴る） =====
@@ -225,8 +230,8 @@ export const SKILLS = [
   { name:'マッドラッシュ', cls:'狂戦士', kind:'phys', mult:0.7, hits:3, proc:85, mp:16, noCrit:true, ail:{ key:'bleed', chance:10 }, ailPerHit:true, desc:'3連撃。1発ごとに10%で出血。クリティカルしない' },
   { name:'すてみ',       cls:'狂戦士', kind:'phys', mult:2.61, proc:78, mp:22, hpCostPct:10, buff:{ self:{ vit:-10 } }, desc:'大威力。現在HPの10%を払い、自分のVIT-10%（重ねがけ可）' },
   { name:'バーサク',     cls:'狂戦士', kind:'passive', mp:0, passive:{ statPct:{ vit:5 }, hpSteps:[{ at:90, statPct:{ str:5 } }, { at:50, statPct:{ str:10 } }, { at:30, statPct:{ str:15 } }] }, desc:'VIT+5%。HPが90%以下でSTR+5%、50%以下で+10%、30%以下で+15%' },
-  { name:'ブラッティロア', cls:'狂戦士', kind:'buff', proc:100, mp:14, buff:{ self:{ str:40 } }, priority:1, desc:'STR+40%（重ねがけ可）' },
-  { name:'フルブレイカー', cls:'狂戦士', kind:'phys', mult:1.9, defPen:0.5, proc:85, mp:16, desc:'相手の防御を50%無視' },
+  { name:'ブラッティロア', cls:'狂戦士', kind:'buff', proc:100, mp:14, buff:{ self:{ str:40 } }, priority:1, hpCostPct:10, desc:'STR+40%（重ねがけ可）。現在HPの10%を払う' },
+  { name:'フルブレイカー', cls:'狂戦士', kind:'phys', mult:2.02, defPen:0.5, proc:85, mp:16, hpCostPct:8, desc:'相手の防御を50%無視。現在HPの8%を払う' },
   { name:'猛り斬り', cls:'狂戦士', kind:'phys', mult:1.45, add:[{ stat:'agi', rate:0.3 }], proc:90, mp:12, reqJobs:5, ail:{ key:'bleed', chance:50 }, desc:'AGIも威力になる。50%で出血' },
   { name:'狂心',     cls:'狂戦士', kind:'buff', proc:95, mp:16, priority:1, reqJobs:5, buff:{ self:{ str:70 } }, buffTurns:4, frenzy:{ turns:4 }, desc:'4ターンのあいだSTR+70%。そのあいだは狂乱状態になり、出る技がランダムな攻撃スキルになる' },
   { name:'血啜り',   cls:'狂戦士', kind:'phys', mult:1.46, add:[{ stat:'agi', rate:0.3 }], proc:88, mp:14, reqJobs:5, drainIfAil:{ key:'bleed', pct:60 }, desc:'AGIも威力になる。相手が出血していれば、与えたダメージの60%を吸収する（火力は控えめ）' },
@@ -235,15 +240,15 @@ export const SKILLS = [
 
   // ===== 狩人（STR＋DEX・搦め手） =====
   { name:'毒矢',     cls:'狩人', kind:'phys', src:'dex', mult:1.27, add:[{ stat:'agi', rate:0.5 }], proc:90, mp:12, ail:{ key:'poison', chance:35 }, desc:'AGIも威力になる。35%で毒' },
-  { name:'三連射',   cls:'狩人', kind:'phys', src:'dex', mult:0.73, hits:3, proc:85, mp:16, noCrit:true, desc:'3連撃。クリティカルしない' },
+  { name:'三連射',   cls:'狩人', kind:'phys', src:'dex', mult:0.63, hits:3, proc:85, mp:16, noCrit:true, lowHpBonus:{ max:25, at:20 }, desc:'3連撃。クリティカルしない。相手のHPが低いほど威力が上がる' },
   { name:'鷹ノ目',   cls:'狩人', kind:'passive', mp:0, passive:{ hitMult:{ mult:1.1, lowMult:1.3, at:30 } }, desc:'命中率が1.1倍。相手のHPが30%以下なら1.3倍' },
   { name:'狩猟本能', cls:'狩人', kind:'buff', proc:100, mp:14, buff:{ self:{ dex:25, agi:25 } }, priority:1, desc:'DEX+25%・AGI+25%（重ねがけ可）' },
   { name:'絶影狙撃', cls:'狩人', kind:'phys', src:'dex', mult:1.77, sureHit:true, proc:80, mp:20, lowHpBonus:{ max:40, at:20 }, desc:'必中。相手のHPが低いほど威力が上がる（HP20%以下で最大+40%）' },
-  { name:'貫き矢',   cls:'狩人', kind:'phys', src:'dex', mult:1.53, add:[{ stat:'agi', rate:0.3 }], defPen:0.35, proc:88, mp:14, desc:'相手の防御を35%無視。AGIも威力になる' },
-  { name:'追い討ち', cls:'狩人', kind:'phys', src:'dex', mult:1.27, add:[{ stat:'agi', rate:0.3 }], proc:88, mp:14, lowHpBonus:{ max:50, at:20 }, desc:'AGIも威力になる。相手のHPが低いほど威力が上がる（HP20%以下で最大＋50%）' },
-  { name:'スモークボム',     cls:'狩人', kind:'phys', src:'dex', mult:1.75, add:[{ stat:'agi', rate:0.3 }], proc:85, mp:16, buff:{ enemy:{ dex:-25 } }, desc:'目つぶし。相手のDEX-25%（重ねがけ可）' },
-  { name:'鷹爪連射', cls:'狩人', kind:'phys', src:'dex', mult:0.43, add:[{ stat:'agi', rate:0.15 }], hits:4, proc:80, mp:20, noCrit:true, desc:'4連射。AGIも威力になる。クリティカルしない' },
-  { name:'トラップセット',   cls:'狩人', kind:'buff', proc:95, mp:13, buff:{ enemy:{ agi:-35 } }, priority:1, desc:'相手のAGI-25%（重ねがけ可）' },
+  { name:'貫き矢',   cls:'狩人', kind:'phys', src:'dex', mult:1.53, add:[{ stat:'agi', rate:0.3 }], defPen:0.35, proc:88, mp:14, reqJobs:5, desc:'相手の防御を35%無視。AGIも威力になる' },
+  { name:'追い討ち', cls:'狩人', kind:'phys', src:'dex', mult:1.27, add:[{ stat:'agi', rate:0.3 }], proc:88, mp:14, lowHpBonus:{ max:50, at:20 }, reqJobs:5, desc:'AGIも威力になる。相手のHPが低いほど威力が上がる（HP20%以下で最大＋50%）' },
+  { name:'スモークボム',     cls:'狩人', kind:'phys', src:'dex', mult:1.75, add:[{ stat:'agi', rate:0.3 }], proc:85, mp:16, buff:{ enemy:{ dex:-25 } }, reqJobs:5, desc:'目つぶし。相手のDEX-25%（重ねがけ可）' },
+  { name:'鷹爪連射', cls:'狩人', kind:'phys', src:'dex', mult:0.34, add:[{ stat:'agi', rate:0.15 }], hits:4, proc:80, mp:20, noCrit:true, reqJobs:5, lowHpBonus:{ max:30, at:20 }, desc:'4連射。AGIも威力になる。クリティカルしない。相手のHPが低いほど威力が上がる' },
+  { name:'トラップセット',   cls:'狩人', kind:'buff', proc:95, mp:13, buff:{ enemy:{ agi:-35 } }, priority:1, reqJobs:5, desc:'相手のAGI-25%（重ねがけ可）' },
 
   // ===== 暗殺者（STR＋AGI・出血を積んで刈り取る） =====
   // ★役割：出血スタック（最大5）を撒き、急所突きで**全部消費して爆発させる**。
@@ -253,11 +258,11 @@ export const SKILLS = [
   { name:'隠身',     cls:'暗殺者', kind:'passive', mp:0, passive:{ bleedMax:10, critDmg:10 }, desc:'自分が付ける出血が10スタックまで貯まる。クリティカルダメージ+10%' },
   { name:'影歩き',   cls:'暗殺者', kind:'buff', proc:100, mp:12, buff:{ self:{ agi:30, dex:15 } }, priority:1, desc:'AGI+30%・DEX+15%（重ねがけ可）' },
   { name:'急所突き', cls:'暗殺者', kind:'phys', src:'agi', mult:1.56, proc:80, mp:20, consumeAil:{ key:'bleed', perStack:0.2 }, desc:'相手の出血を全部消費し、消費したスタック1つにつき威力+20%（最大5スタックで2倍）' },
-  { name:'背後刺し', cls:'暗殺者', kind:'phys', src:'agi', mult:1.61, add:[{ stat:'dex', rate:0.35 }], hitBonus:10, proc:88, mp:14, desc:'死角から刺す。命中+10%。DEXも威力になる' },
-  { name:'毒刃',     cls:'暗殺者', kind:'phys', src:'agi', mult:1.54, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:14, ail:{ key:'poison', chance:40 }, desc:'DEXも威力になる。40%で毒' },
-  { name:'足首断ち', cls:'暗殺者', kind:'phys', src:'agi', mult:1.77, add:[{ stat:'dex', rate:0.4 }], proc:82, mp:18, ail:{ key:'slow', chance:30 }, desc:'DEXも威力になる。30%で鈍足' },
-  { name:'千刃乱舞', cls:'暗殺者', kind:'phys', src:'agi', mult:0.4, add:[{ stat:'dex', rate:0.15 }], hits:4, proc:80, mp:20, noCrit:true, ail:{ key:'bleed', chance:30 }, desc:'4連撃。30%で出血。DEXも威力になる。クリティカルしない' },
-  { name:'影分身',   cls:'暗殺者', kind:'buff', proc:100, mp:13, buff:{ self:{ agi:30, luk:20 } }, priority:1, desc:'AGI+30%・LUK+20%（重ねがけ可）' },
+  { name:'背後刺し', cls:'暗殺者', kind:'phys', src:'agi', mult:1.16, add:[{ stat:'dex', rate:0.35 }], hitBonus:10, proc:88, mp:14, reqJobs:5, consumeAil:{ key:'bleed', perStack:0.12 }, desc:'死角から刺す。命中+10%。DEXも威力になる。相手の出血を全部消費して威力が上がる' },
+  { name:'毒刃',     cls:'暗殺者', kind:'phys', src:'agi', mult:1.54, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:14, ail:{ key:'poison', chance:40 }, reqJobs:5, desc:'DEXも威力になる。40%で毒' },
+  { name:'足首断ち', cls:'暗殺者', kind:'phys', src:'agi', mult:1.77, add:[{ stat:'dex', rate:0.4 }], proc:82, mp:18, ail:{ key:'slow', chance:30 }, reqJobs:5, desc:'DEXも威力になる。30%で鈍足' },
+  { name:'千刃乱舞', cls:'暗殺者', kind:'phys', src:'agi', mult:0.4, add:[{ stat:'dex', rate:0.15 }], hits:4, proc:80, mp:20, noCrit:true, ail:{ key:'bleed', chance:30 }, reqJobs:5, desc:'4連撃。30%で出血。DEXも威力になる。クリティカルしない' },
+  { name:'影分身',   cls:'暗殺者', kind:'buff', proc:100, mp:13, buff:{ self:{ agi:30, luk:20 } }, priority:1, reqJobs:5, desc:'AGI+30%・LUK+20%（重ねがけ可）' },
 
   // ===== 元素使い（INT純火力） =====
   { name:'アクアショット',   cls:'元素使い', kind:'mag', mult:2.08, proc:90, mp:13, buff:{ enemy:{ agi:-20 } }, desc:'相手のAGI-20%（重ねがけ可）' },
@@ -265,47 +270,47 @@ export const SKILLS = [
   { name:'元素共鳴',         cls:'元素使い', kind:'passive', mp:0, passive:{ switchStat:{ stat:'int_stat', pct:10 } }, desc:'直前と異なるスキルを使うとき、その行動だけINT+10%（重複しない）' },
   { name:'ライトニングボルト', cls:'元素使い', kind:'mag', mult:1.94, proc:85, mp:17, ail:{ key:'paralyze', chance:8 }, combo:{ after:['アクアショット', 'アイスプリズン'], mult:35 }, desc:'雷の魔法。8%で麻痺。直前が水・氷なら威力+35%（濡れた相手に走る）' },
   { name:'フレイムバースト', cls:'元素使い', kind:'mag', mult:2.27, proc:80, mp:21, combo:{ after:['スパークショット', 'ライトニングボルト'], mult:30 }, desc:'元素使いの切り札。直前が雷なら威力+30%（火花から一気に燃え上がる）' },
-  { name:'スパークショット',   cls:'元素使い', kind:'mag', mult:1.9, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:13, desc:'弾ける雷。DEXも威力になる' },
-  { name:'アイスプリズン',     cls:'元素使い', kind:'mag', mult:1.99, add:[{ stat:'dex', rate:0.3 }], proc:85, mp:17, ail:{ key:'slow', chance:40 }, desc:'DEXも威力になる。40%で鈍足' },
-  { name:'マグマフィスト',     cls:'元素使い', kind:'mag', mult:1.78, add:[{ stat:'dex', rate:0.35 }], proc:85, mp:17, combo:{ after:['アースクエイク'], mult:30 }, desc:'溶岩の拳。DEXも威力になる。直前がアースクエイクなら威力+30%（割れた地面から噴き出す）' },
-  { name:'エレメンタルレイン', cls:'元素使い', kind:'mag', mult:0.52, add:[{ stat:'dex', rate:0.15 }], hits:4, proc:78, mp:23, noCrit:true, desc:'4連撃。DEXも威力になる。クリティカルしない' },
-  { name:'エレメントチャージ',           cls:'元素使い', kind:'buff', proc:100, mp:14, buff:{ self:{ int_stat:55 } }, priority:1, desc:'INT+55%（重ねがけ可）' },
+  { name:'スパークショット',   cls:'元素使い', kind:'mag', mult:1.9, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:13, reqJobs:5, desc:'弾ける雷。DEXも威力になる' },
+  { name:'アイスプリズン',     cls:'元素使い', kind:'mag', mult:1.73, add:[{ stat:'dex', rate:0.3 }], proc:85, mp:17, ail:{ key:'slow', chance:40 }, reqJobs:5, combo:{ after:['アクアショット'], mult:25 }, desc:'DEXも威力になる。40%で鈍足。直前がアクアショットなら威力+25%' },
+  { name:'マグマフィスト',     cls:'元素使い', kind:'mag', mult:1.78, add:[{ stat:'dex', rate:0.35 }], proc:85, mp:17, combo:{ after:['アースクエイク'], mult:30 }, reqJobs:5, desc:'溶岩の拳。DEXも威力になる。直前がアースクエイクなら威力+30%（割れた地面から噴き出す）' },
+  { name:'エレメンタルレイン', cls:'元素使い', kind:'mag', mult:0.45, add:[{ stat:'dex', rate:0.15 }], hits:4, proc:78, mp:23, noCrit:true, reqJobs:5, combo:{ after:['ライトニングボルト', 'スパークショット'], mult:25 }, desc:'4連撃。DEXも威力になる。クリティカルしない。直前が雷なら威力+25%' },
+  { name:'エレメントチャージ',           cls:'元素使い', kind:'buff', proc:100, mp:14, buff:{ self:{ int_stat:55 } }, priority:1, reqJobs:5, desc:'INT+55%（重ねがけ可）' },
 
   // ===== 死霊使い（INT＋VIT・吸収） =====
   { name:'骸骨召喚',   cls:'死霊使い', kind:'mag', src:'vit', mult:2.2, proc:90, mp:13, desc:'骸骨を呼ぶ' },
   { name:'ソウルドレイン', cls:'死霊使い', kind:'mag', src:'vit', mult:2.25, drain:0.25, proc:85, mp:17, desc:'与えたダメージの25%を吸収' },
   { name:'骸の壁',     cls:'死霊使い', kind:'passive', mp:0, passive:{ wall:{ pct:10, every:5 } }, desc:'戦闘開始時と自分の行動5回ごとに「次に受けるダメージ10%減」を得る（重複しない・1回受けると消える）' },
-  { name:'腐敗霧',     cls:'死霊使い', kind:'mag', src:'vit', mult:2.15, proc:85, mp:17, buff:{ enemy:{ vit:-25, int_stat:-25 } }, desc:'相手のVIT・INT-25%（重ねがけ可）' },
-  { name:'幽世ノ門',   cls:'死霊使い', kind:'mag', src:'vit', mult:1.98, add:[{ stat:'int_stat', rate:0.4 }], proc:80, mp:21, buff:{ enemy:{ vit:-20, agi:-20 } }, desc:'冥府へ引きずり込む。相手のVIT・AGI-20%（重ねがけ可）' },
-  { name:'カースハンド',   cls:'死霊使い', kind:'mag', src:'vit', mult:1.78, add:[{ stat:'int_stat', rate:0.3 }], proc:90, mp:13, ail:{ key:'healCut', chance:40, pct:30 }, desc:'亡者の手が伸びる。40%で回復阻害（回復量-30%）' },
-  { name:'コープスポイズン',       cls:'死霊使い', kind:'mag', src:'vit', mult:1.9, add:[{ stat:'int_stat', rate:0.3 }], proc:85, mp:17, ail:{ key:'poison', chance:50 }, desc:'INTも威力になる。50%で毒' },
-  { name:'デスウェイル', cls:'死霊使い', kind:'mag', src:'vit', mult:1.91, add:[{ stat:'int_stat', rate:0.3 }], proc:85, mp:17, buff:{ enemy:{ str:-20, agi:-20 } }, desc:'怯ませる。相手のSTR・AGI-20%（重ねがけ可）' },
-  { name:'ヘルチェイン',   cls:'死霊使い', kind:'mag', src:'vit', mult:2.06, add:[{ stat:'int_stat', rate:0.4 }], proc:80, mp:21, ail:{ key:'slow', chance:40 }, desc:'鎖で縛りつける。40%で鈍足' },
-  { name:'ライフコンバート',   cls:'死霊使い', kind:'heal', proc:85, mp:16, heal:{ rate:1.35 }, priority:1, desc:'INT×1.3を回復' },
+  { name:'腐敗霧',     cls:'死霊使い', kind:'mag', src:'vit', mult:1.97, proc:85, mp:17, buff:{ enemy:{ vit:-25, int_stat:-25 } }, ail:{ key:'poison', chance:35 }, desc:'相手のVIT・INT-25%（重ねがけ可）。35%で毒' },
+  { name:'幽世ノ門',   cls:'死霊使い', kind:'mag', src:'vit', mult:1.86, add:[{ stat:'int_stat', rate:0.4 }], proc:80, mp:21, buff:{ enemy:{ vit:-20, agi:-20 } }, drain:0.15, desc:'冥府へ引きずり込む。相手のVIT・AGI-20%（重ねがけ可）。与えたダメージの15%を吸収' },
+  { name:'カースハンド',   cls:'死霊使い', kind:'mag', src:'vit', mult:1.78, add:[{ stat:'int_stat', rate:0.3 }], proc:90, mp:13, ail:{ key:'healCut', chance:40, pct:30 }, reqJobs:5, desc:'亡者の手が伸びる。40%で回復阻害（回復量-30%）' },
+  { name:'コープスポイズン',       cls:'死霊使い', kind:'mag', src:'vit', mult:1.9, add:[{ stat:'int_stat', rate:0.3 }], proc:85, mp:17, ail:{ key:'poison', chance:50 }, reqJobs:5, desc:'INTも威力になる。50%で毒' },
+  { name:'デスウェイル', cls:'死霊使い', kind:'mag', src:'vit', mult:1.8, add:[{ stat:'int_stat', rate:0.3 }], proc:85, mp:17, buff:{ enemy:{ str:-20, agi:-20 } }, reqJobs:5, ail:{ key:'healCut', chance:35 }, desc:'怯ませる。相手のSTR・AGI-20%（重ねがけ可）。35%で回復阻害' },
+  { name:'ヘルチェイン',   cls:'死霊使い', kind:'mag', src:'vit', mult:2.06, add:[{ stat:'int_stat', rate:0.4 }], proc:80, mp:21, ail:{ key:'slow', chance:40 }, reqJobs:5, desc:'鎖で縛りつける。40%で鈍足' },
+  { name:'ライフコンバート',   cls:'死霊使い', kind:'heal', proc:85, mp:16, heal:{ rate:1.35 }, priority:1, reqJobs:5, desc:'INT×1.3を回復' },
 
   // ===== 聖職者（INT・回復特化） =====
   { name:'ホーリーライト', cls:'聖職者', kind:'mag', mult:2.2, proc:90, mp:13, desc:'聖なる光' },
   { name:'奇跡',           cls:'聖職者', kind:'heal', proc:85, mp:18, regen:{ rate:0.9, turns:4 }, priority:1, desc:'4ターン毎ターンINT×1.0を回復' },
   { name:'神聖加護',       cls:'聖職者', kind:'passive', mp:0, passive:{ healBonus:20 }, desc:'自分が回復する量+20%' },
   { name:'祈りの結界',     cls:'聖職者', kind:'buff', proc:100, mp:14, buff:{ self:{ vit:25, int_stat:25 } }, priority:1, desc:'VIT+25%・INT+25%（重ねがけ可）' },
-  { name:'神罰執行',       cls:'聖職者', kind:'mag', mult:2.62, proc:80, mp:21, desc:'聖職者の切り札' },
-  { name:'セイントレイ', cls:'聖職者', kind:'mag', mult:1.9, add:[{ stat:'vit', rate:0.3 }], proc:90, mp:13, desc:'聖なる一条。VITも威力になる' },
-  { name:'ピュリファイ',         cls:'聖職者', kind:'mag', mult:2.03, add:[{ stat:'vit', rate:0.3 }], proc:85, mp:17, buff:{ enemy:{ int_stat:-20 } }, desc:'VITも威力になる。相手のINT-20%（重ねがけ可）' },
-  { name:'ジャッジライト',     cls:'聖職者', kind:'mag', mult:1.64, add:[{ stat:'vit', rate:0.4 }], proc:85, mp:17, highHpBonus:{ max:40, at:50 }, desc:'裁きの一撃。自分のHPが高いほど威力が上がる（満タンで最大+40%）' },
-  { name:'メガヒール',       cls:'聖職者', kind:'heal', proc:82, mp:20, heal:{ rate:1.5 }, priority:1, desc:'INT×1.5を回復' },
-  { name:'グレイスウィンド',     cls:'聖職者', kind:'heal', proc:85, mp:12, mpRegen:{ rate:0.4, turns:4 }, priority:1, desc:'4ターン毎ターンINT×0.5のMPを回復' },
+  { name:'神罰執行',       cls:'聖職者', kind:'mag', mult:2.22, proc:80, mp:21, highHpBonus:{ max:35, at:50 }, desc:'聖職者の切り札。自分のHPが高いほど威力が上がる' },
+  { name:'セイントレイ', cls:'聖職者', kind:'mag', mult:1.65, add:[{ stat:'vit', rate:0.3 }], proc:90, mp:13, reqJobs:5, highHpBonus:{ max:25, at:50 }, desc:'聖なる一条。VITも威力になる。自分のHPが高いほど威力が上がる' },
+  { name:'ピュリファイ',         cls:'聖職者', kind:'mag', mult:2.03, add:[{ stat:'vit', rate:0.3 }], proc:85, mp:17, buff:{ enemy:{ int_stat:-20 } }, reqJobs:5, desc:'VITも威力になる。相手のINT-20%（重ねがけ可）' },
+  { name:'ジャッジライト',     cls:'聖職者', kind:'mag', mult:1.64, add:[{ stat:'vit', rate:0.4 }], proc:85, mp:17, highHpBonus:{ max:40, at:50 }, reqJobs:5, desc:'裁きの一撃。自分のHPが高いほど威力が上がる（満タンで最大+40%）' },
+  { name:'メガヒール',       cls:'聖職者', kind:'heal', proc:82, mp:20, heal:{ rate:1.5 }, priority:1, reqJobs:5, desc:'INT×1.5を回復' },
+  { name:'グレイスウィンド',     cls:'聖職者', kind:'heal', proc:85, mp:12, mpRegen:{ rate:0.4, turns:4 }, priority:1, reqJobs:5, desc:'4ターン毎ターンINT×0.5のMPを回復' },
 
   // ===== 異端審問官（INT＋VIT・弱体） =====
-  { name:'粛清',       cls:'異端審問官', kind:'mag', mult:1.7, add:[{ stat:'vit', rate:0.5 }], proc:90, mp:13, desc:'VITも威力になる' },
+  { name:'粛清',       cls:'異端審問官', kind:'mag', mult:1.41, add:[{ stat:'vit', rate:0.5 }], proc:90, mp:13, vsBuff:{ per:10, max:3 }, desc:'VITも威力になる。相手のバフ1つにつき威力+10%' },
   { name:'狂信',       cls:'異端審問官', kind:'buff', proc:100, mp:12, buff:{ self:{ int_stat:45 } }, priority:1, desc:'INT+45%（重ねがけ可）' },
   { name:'執行本能',   cls:'異端審問官', kind:'passive', mp:0, passive:{ rage:{ stat:'int_stat', per:3, max:15 } }, desc:'ダメージを与えるたびINT+3%（最大15%）。不発・通常攻撃・攻撃が外れたときにリセット' },
   { name:'聖なる裁き', cls:'異端審問官', kind:'mag', mult:2.45, proc:85, mp:17, desc:'裁きの光' },
-  { name:'断罪',       cls:'異端審問官', kind:'mag', mult:2.5, proc:80, mp:21, buff:{ enemy:{ int_stat:-20 } }, desc:'相手のINT-20%（重ねがけ可）' },
-  { name:'インクイジション',     cls:'異端審問官', kind:'mag', mult:1.78, add:[{ stat:'vit', rate:0.3 }], proc:90, mp:13, buff:{ enemy:{ str:-20 } }, desc:'痛めつけて力を奪う。相手のSTR-20%（重ねがけ可）' },
-  { name:'アイアンメイデン',   cls:'異端審問官', kind:'mag', mult:2.01, add:[{ stat:'vit', rate:0.3 }], proc:85, mp:17, ail:{ key:'bleed', chance:35 }, desc:'VITも威力になる。35%で出血' },
-  { name:'ヘレティックハント', cls:'異端審問官', kind:'mag', mult:1.85, add:[{ stat:'vit', rate:0.15 }], proc:85, mp:17, vsBuff:{ per:15, max:3 }, desc:'VITも威力になる。相手に乗っているバフ1つにつき威力+15%（3つまで）' },
-  { name:'サイレンスチェイン', cls:'異端審問官', kind:'mag', mult:2.02, proc:88, mp:15, buff:{ enemy:{ int_stat:-25 } }, dispel:{ chance:30 }, desc:'相手のINT-25%（重ねがけ可）。30%で相手のバフを1つ消す' },
-  { name:'火刑',     cls:'異端審問官', kind:'mag', mult:2.22, add:[{ stat:'vit', rate:0.4 }], proc:80, mp:21, desc:'業火で焼く。VITも威力になる' },
+  { name:'断罪',       cls:'異端審問官', kind:'mag', mult:2.11, proc:80, mp:21, buff:{ enemy:{ int_stat:-20 } }, vsBuff:{ per:12, max:3 }, desc:'相手のINT-20%（重ねがけ可）。相手のバフ1つにつき威力+12%' },
+  { name:'インクイジション',     cls:'異端審問官', kind:'mag', mult:1.78, add:[{ stat:'vit', rate:0.3 }], proc:90, mp:13, buff:{ enemy:{ str:-20 } }, reqJobs:5, desc:'痛めつけて力を奪う。相手のSTR-20%（重ねがけ可）' },
+  { name:'アイアンメイデン',   cls:'異端審問官', kind:'mag', mult:2.01, add:[{ stat:'vit', rate:0.3 }], proc:85, mp:17, ail:{ key:'bleed', chance:35 }, reqJobs:5, desc:'VITも威力になる。35%で出血' },
+  { name:'ヘレティックハント', cls:'異端審問官', kind:'mag', mult:1.85, add:[{ stat:'vit', rate:0.15 }], proc:85, mp:17, vsBuff:{ per:15, max:3 }, reqJobs:5, desc:'VITも威力になる。相手に乗っているバフ1つにつき威力+15%（3つまで）' },
+  { name:'サイレンスチェイン', cls:'異端審問官', kind:'mag', mult:2.02, proc:88, mp:15, buff:{ enemy:{ int_stat:-25 } }, dispel:{ chance:30 }, reqJobs:5, desc:'相手のINT-25%（重ねがけ可）。30%で相手のバフを1つ消す' },
+  { name:'火刑',     cls:'異端審問官', kind:'mag', mult:2.14, add:[{ stat:'vit', rate:0.4 }], proc:80, mp:21, reqJobs:5, dispel:{ chance:20 }, desc:'業火で焼く。VITも威力になる。20%で相手のバフを1つ消す' },
 
   // ===== 賢者（INT・高コスト） =====
   { name:'サンダーストライク', cls:'賢者', kind:'mag', mult:2.05, defPen:0.25, proc:90, mp:13, desc:'雷撃。相手の防御を25%無視' },
@@ -313,47 +318,47 @@ export const SKILLS = [
   { name:'天啓',             cls:'賢者', kind:'passive', mp:0, passive:{ procBonus:5, mpCut:10 }, desc:'スキルの発動率+5%・消費MP-10%' },
   { name:'氷の障壁',         cls:'賢者', kind:'buff', proc:100, mp:15, buff:{ self:{ vit:35, int_stat:20 } }, priority:1, desc:'VIT+35%・INT+20%（重ねがけ可）' },
   { name:'メテオストライク', cls:'賢者', kind:'mag', mult:0.67, hits:4, proc:78, mp:23, noCrit:true, desc:'4連撃。クリティカルしない' },
-  { name:'アルカナボルト',     cls:'賢者', kind:'mag', mult:1.9, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:13, desc:'魔力の弾。DEXも威力になる' },
-  { name:'ディスペルウェーブ', cls:'賢者', kind:'mag', mult:1.81, add:[{ stat:'dex', rate:0.3 }], proc:85, mp:17, buff:{ enemy:{ str:-20, int_stat:-20 } }, dispel:{ chance:25 }, desc:'DEXも威力になる。相手のSTR-20%・INT-20%（重ねがけ可）。25%で相手のバフを1つ消す' },
-  { name:'インフェルノ',       cls:'賢者', kind:'mag', mult:2.1, add:[{ stat:'dex', rate:0.35 }], proc:85, mp:17, desc:'業火の渦。DEXも威力になる' },
-  { name:'アストラルレイ',     cls:'賢者', kind:'mag', mult:2.3, add:[{ stat:'dex', rate:0.4 }], proc:78, mp:23, desc:'星の光を撃ち出す。DEXも威力になる' },
-  { name:'マナリカバリ',       cls:'賢者', kind:'heal', proc:85, mp:14, mpRegen:{ rate:0.45, turns:4 }, priority:1, desc:'4ターン毎ターンINT×0.6のMPを回復' },
+  { name:'アルカナボルト',     cls:'賢者', kind:'mag', mult:1.9, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:13, reqJobs:5, desc:'魔力の弾。DEXも威力になる' },
+  { name:'ディスペルウェーブ', cls:'賢者', kind:'mag', mult:1.81, add:[{ stat:'dex', rate:0.3 }], proc:85, mp:17, buff:{ enemy:{ str:-20, int_stat:-20 } }, dispel:{ chance:25 }, reqJobs:5, desc:'DEXも威力になる。相手のSTR-20%・INT-20%（重ねがけ可）。25%で相手のバフを1つ消す' },
+  { name:'インフェルノ',       cls:'賢者', kind:'mag', mult:1.72, add:[{ stat:'dex', rate:0.35 }], proc:85, mp:17, reqJobs:5, vsAil:{ per:15, max:3 }, desc:'業火の渦。DEXも威力になる。相手の状態異常1つにつき威力+15%' },
+  { name:'アストラルレイ',     cls:'賢者', kind:'mag', mult:1.82, add:[{ stat:'dex', rate:0.4 }], proc:78, mp:23, reqJobs:5, vsAil:{ per:18, max:3 }, desc:'星の光を撃ち出す。DEXも威力になる。相手の状態異常1つにつき威力+18%' },
+  { name:'マナリカバリ',       cls:'賢者', kind:'heal', proc:85, mp:14, mpRegen:{ rate:0.45, turns:4 }, priority:1, reqJobs:5, desc:'4ターン毎ターンINT×0.6のMPを回復' },
 
   // ===== 聖騎士（STR＋VIT・守って殴る） =====
-  { name:'ホーリーエッジ',     cls:'聖騎士', kind:'phys', src:'vit', mult:1.45, add:[{ stat:'str', rate:0.5 }], proc:90, mp:12, desc:'STRも威力になる' },
+  { name:'ホーリーエッジ',     cls:'聖騎士', kind:'phys', src:'vit', mult:1.36, add:[{ stat:'str', rate:0.5 }], proc:90, mp:12, buff:{ self:{ vit:15 } }, desc:'STRも威力になる。自分のVIT+15%（重ねがけ可）' },
   { name:'ディバインスマイト', cls:'聖騎士', kind:'phys', src:'vit', mult:2.08, proc:85, mp:16, buff:{ enemy:{ str:-20 } }, desc:'相手のSTR-20%（重ねがけ可）' },
   { name:'聖騎士の心得',       cls:'聖騎士', kind:'passive', mp:0, passive:{ statPct:{ vit:5 }, defRed:10 }, desc:'VIT+5%・受けるときの軽減率+10%' },
   { name:'聖域展開',           cls:'聖騎士', kind:'heal', proc:85, mp:18, regen:{ rate:0.9, turns:4 }, priority:1, desc:'4ターン毎ターンINT×0.7を回復' },
   { name:'神聖覚醒',           cls:'聖騎士', kind:'phys', src:'vit', mult:1.75, add:[{ stat:'str', rate:0.6 }], proc:80, mp:20, desc:'VITも大きく威力になる' },
-  { name:'シールドバッシュ',     cls:'聖騎士', kind:'phys', src:'vit', mult:1.39, add:[{ stat:'str', rate:0.4 }], proc:90, mp:12, ail:{ key:'paralyze', chance:8 }, desc:'STRも威力になる。8%で麻痺' },
-  { name:'ジャッジメントブロウ', cls:'聖騎士', kind:'phys', src:'vit', mult:1.6, add:[{ stat:'str', rate:0.6 }], proc:85, mp:16, desc:'裁きの一撃。STRが大きく威力になる' },
-  { name:'ラストガード',         cls:'聖騎士', kind:'phys', src:'vit', mult:1.67, add:[{ stat:'str', rate:0.5 }], proc:82, mp:18, buff:{ self:{ vit:20 } }, desc:'守りを固めながら殴る。STRも威力になる・自分のVIT+20%（重ねがけ可）' },
-  { name:'オースシールド',             cls:'聖騎士', kind:'buff', proc:100, mp:13, buff:{ self:{ vit:50 } }, priority:1, desc:'VIT+50%（重ねがけ可）' },
-  { name:'ホーリーケア',           cls:'聖騎士', kind:'heal', proc:85, mp:16, heal:{ rate:1.35 }, priority:1, desc:'INT×1.2を回復' },
+  { name:'シールドバッシュ',     cls:'聖騎士', kind:'phys', src:'vit', mult:1.39, add:[{ stat:'str', rate:0.4 }], proc:90, mp:12, ail:{ key:'paralyze', chance:8 }, reqJobs:5, desc:'STRも威力になる。8%で麻痺' },
+  { name:'ジャッジメントブロウ', cls:'聖騎士', kind:'phys', src:'vit', mult:1.6, add:[{ stat:'str', rate:0.6 }], proc:85, mp:16, reqJobs:5, desc:'裁きの一撃。STRが大きく威力になる' },
+  { name:'ラストガード',         cls:'聖騎士', kind:'phys', src:'vit', mult:1.67, add:[{ stat:'str', rate:0.5 }], proc:82, mp:18, buff:{ self:{ vit:20 } }, reqJobs:5, desc:'守りを固めながら殴る。STRも威力になる・自分のVIT+20%（重ねがけ可）' },
+  { name:'オースシールド',             cls:'聖騎士', kind:'buff', proc:100, mp:13, buff:{ self:{ vit:50 } }, priority:1, reqJobs:5, desc:'VIT+50%（重ねがけ可）' },
+  { name:'ホーリーケア',           cls:'聖騎士', kind:'heal', proc:85, mp:16, heal:{ rate:1.35 }, priority:1, reqJobs:5, desc:'INT×1.2を回復' },
 
   // ===== 魔法剣士（STR＋INT両刀） =====
   { name:'雷光斬',           cls:'魔法剣士', kind:'phys', mult:1.23, add:[{ stat:'int_stat', rate:0.6 }], proc:90, mp:12, ail:{ key:'paralyze', chance:6 }, desc:'INTも威力になる。6%で麻痺' },
   { name:'閃光',             cls:'魔法剣士', kind:'phys', mult:1.83, proc:90, mp:12, buff:{ enemy:{ dex:-20 } }, desc:'目つぶしの一閃。相手のDEX-20%（重ねがけ可）' },
   { name:'魔導剣術',         cls:'魔法剣士', kind:'passive', mp:0, passive:{ convert:{ from:'int_stat', to:'str', pct:30 } }, desc:'INTの30%をSTRへ変換する（そのぶんINTは下がる）' },
   { name:'魔剣開放',         cls:'魔法剣士', kind:'buff', proc:100, mp:18, buff:{ self:{ str:30, int_stat:30 } }, priority:1, desc:'STR+30%・INT+30%（重ねがけ可）' },
-  { name:'エレメンタルエッジ', cls:'魔法剣士', kind:'phys', mult:1.45, add:[{ stat:'int_stat', rate:0.9 }], proc:80, mp:20, desc:'両刀の切り札' },
-  { name:'マナエッジ',       cls:'魔法剣士', kind:'phys', mult:1.54, add:[{ stat:'int_stat', rate:0.4 }], proc:90, mp:12, desc:'魔力をまとわせて斬る。INTも威力になる' },
-  { name:'フロストエッジ',       cls:'魔法剣士', kind:'phys', mult:1.5, add:[{ stat:'int_stat', rate:0.4 }], proc:88, mp:14, ail:{ key:'slow', chance:35 }, desc:'INTも威力になる。35%で鈍足' },
-  { name:'マナバースト', cls:'魔法剣士', kind:'mag', mult:1.67, add:[{ stat:'str', rate:0.4 }], proc:85, mp:17, switchKind:30, desc:'STRも威力になる。直前に物理を使っていれば威力+30%' },
-  { name:'天魔閃',       cls:'魔法剣士', kind:'phys', mult:1.19, add:[{ stat:'int_stat', rate:0.8 }], proc:80, mp:20, switchKind:30, desc:'INTも大きく威力になる。直前に魔法を使っていれば威力+30%' },
-  { name:'ソードオーラ',     cls:'魔法剣士', kind:'buff', proc:100, mp:15, buff:{ self:{ agi:30, str:30 } }, priority:1, desc:'AGI+30%・STR+30%（重ねがけ可）' },
+  { name:'エレメンタルエッジ', cls:'魔法剣士', kind:'phys', mult:1.14, add:[{ stat:'int_stat', rate:0.9 }], proc:80, mp:20, switchKind:25, desc:'両刀の切り札。直前に魔法を使っていれば威力+25%' },
+  { name:'マナエッジ',       cls:'魔法剣士', kind:'phys', mult:1.54, add:[{ stat:'int_stat', rate:0.4 }], proc:90, mp:12, reqJobs:5, desc:'魔力をまとわせて斬る。INTも威力になる' },
+  { name:'フロストエッジ',       cls:'魔法剣士', kind:'phys', mult:1.3, add:[{ stat:'int_stat', rate:0.4 }], proc:88, mp:14, ail:{ key:'slow', chance:35 }, reqJobs:5, switchKind:20, desc:'INTも威力になる。35%で鈍足。直前に魔法を使っていれば威力+20%' },
+  { name:'マナバースト', cls:'魔法剣士', kind:'mag', mult:1.67, add:[{ stat:'str', rate:0.4 }], proc:85, mp:17, switchKind:30, reqJobs:5, desc:'STRも威力になる。直前に物理を使っていれば威力+30%' },
+  { name:'天魔閃',       cls:'魔法剣士', kind:'phys', mult:1.19, add:[{ stat:'int_stat', rate:0.8 }], proc:80, mp:20, switchKind:30, reqJobs:5, desc:'INTも大きく威力になる。直前に魔法を使っていれば威力+30%' },
+  { name:'ソードオーラ',     cls:'魔法剣士', kind:'buff', proc:100, mp:15, buff:{ self:{ agi:30, str:30 } }, priority:1, reqJobs:5, desc:'AGI+30%・STR+30%（重ねがけ可）' },
 
   // ===== 魔銃士（STR＋INT＋DEX） =====
-  { name:'魔弾',                   cls:'魔銃士', kind:'phys', src:'dex', mult:1.6, add:[{ stat:'int_stat', rate:0.6 }], proc:85, mp:16, desc:'INTも威力になる' },
-  { name:'連装銃撃',               cls:'魔銃士', kind:'phys', src:'dex', mult:0.73, hits:3, proc:85, mp:16, noCrit:true, desc:'3連撃。クリティカルしない' },
+  { name:'魔弾',                   cls:'魔銃士', kind:'phys', src:'dex', mult:1.41, add:[{ stat:'int_stat', rate:0.6 }], proc:85, mp:16, repeat:{ per:6, max:3 }, desc:'INTも威力になる。同じ技を続けて撃つほど威力+6%（3回まで）' },
+  { name:'連装銃撃',               cls:'魔銃士', kind:'phys', src:'dex', mult:0.65, hits:3, proc:85, mp:16, noCrit:true, repeat:{ per:8, max:3 }, desc:'3連撃。クリティカルしない。同じ技を続けて撃つほど威力+8%（3回まで）' },
   { name:'精密照準',               cls:'魔銃士', kind:'passive', mp:0, passive:{ hitStack:{ critRate:1, critDmg:2, max:5 } }, desc:'スキルを当てるたびにクリティカル率+1%・クリティカルダメージ+2%（5回まで）' },
   { name:'強化装填',               cls:'魔銃士', kind:'buff', proc:100, mp:16, buff:{ self:{ dex:35, int_stat:20 } }, priority:1, desc:'DEX+35%・INT+20%（重ねがけ可）' },
   { name:'キャノネスチュームビンド', cls:'魔銃士', kind:'phys', src:'dex', mult:1.65, add:[{ stat:'int_stat', rate:0.7 }], proc:80, mp:20, desc:'魔銃士の切り札' },
-  { name:'ラピッドショット',       cls:'魔銃士', kind:'phys', src:'dex', mult:1.6, proc:92, mp:11, repeat:{ per:10, max:3 }, desc:'素早く撃つ。同じ技を続けて撃つほど威力+10%（3回まで）' },
-  { name:'ピアースバレット',       cls:'魔銃士', kind:'phys', src:'dex', mult:1.23, add:[{ stat:'int_stat', rate:0.3 }, { stat:'int_stat', rate:0.3 }], defPen:0.35, proc:88, mp:14, desc:'相手の防御を35%無視。INTも威力になる' },
-  { name:'バーストショット',       cls:'魔銃士', kind:'phys', src:'dex', mult:1.58, add:[{ stat:'int_stat', rate:0.5 }], proc:85, mp:16, buff:{ enemy:{ vit:-20 } }, desc:'INTも威力になる。相手のVIT-20%（重ねがけ可）' },
-  { name:'フルバースト', cls:'魔銃士', kind:'phys', src:'dex', mult:0.44, add:[{ stat:'int_stat', rate:0.15 }], hits:4, proc:78, mp:22, noCrit:true, desc:'4連射。INTも威力になる。クリティカルしない' },
-  { name:'トレーサーロード',     cls:'魔銃士', kind:'buff', proc:100, mp:14, buff:{ self:{ dex:55 } }, priority:1, desc:'DEX+55%（重ねがけ可）' },
+  { name:'ラピッドショット',       cls:'魔銃士', kind:'phys', src:'dex', mult:1.6, proc:92, mp:11, repeat:{ per:10, max:3 }, reqJobs:5, desc:'素早く撃つ。同じ技を続けて撃つほど威力+10%（3回まで）' },
+  { name:'ピアースバレット',       cls:'魔銃士', kind:'phys', src:'dex', mult:1.23, add:[{ stat:'int_stat', rate:0.3 }, { stat:'int_stat', rate:0.3 }], defPen:0.35, proc:88, mp:14, reqJobs:5, desc:'相手の防御を35%無視。INTも威力になる' },
+  { name:'バーストショット',       cls:'魔銃士', kind:'phys', src:'dex', mult:1.58, add:[{ stat:'int_stat', rate:0.5 }], proc:85, mp:16, buff:{ enemy:{ vit:-20 } }, reqJobs:5, desc:'INTも威力になる。相手のVIT-20%（重ねがけ可）' },
+  { name:'フルバースト', cls:'魔銃士', kind:'phys', src:'dex', mult:0.44, add:[{ stat:'int_stat', rate:0.15 }], hits:4, proc:78, mp:22, noCrit:true, reqJobs:5, desc:'4連射。INTも威力になる。クリティカルしない' },
+  { name:'トレーサーロード',     cls:'魔銃士', kind:'buff', proc:100, mp:14, buff:{ self:{ dex:55 } }, priority:1, reqJobs:5, desc:'DEX+55%（重ねがけ可）' },
 
   // ===== サイキッカー（STR＋INT・弱体） =====
   { name:'サイコショット',   cls:'サイキッカー', kind:'mag', src:'str', mult:1.6, add:[{ stat:'int_stat', rate:0.6 }], proc:90, mp:13, desc:'念で叩く。相手の特防で受けるが、威力はSTR参照。INTも威力になる' },
@@ -361,23 +366,23 @@ export const SKILLS = [
   { name:'第六感',           cls:'サイキッカー', kind:'passive', mp:0, passive:{ perAct:{ stats:['agi', 'dex'], per:1, max:10 } }, desc:'自分が行動するたびAGI・DEX+1%（最大10%）' },
   { name:'精神集中',         cls:'サイキッカー', kind:'buff', proc:100, mp:16, buff:{ self:{ str:35, int_stat:20 } }, priority:1, desc:'STR+35%・INT+20%（重ねがけ可）' },
   { name:'サイコブラスト',   cls:'サイキッカー', kind:'mag', src:'str', mult:1.82, add:[{ stat:'int_stat', rate:0.8 }], proc:80, mp:21, desc:'サイキッカーの切り札。相手の特防で受けるが、威力はSTR参照。INTも威力になる' },
-  { name:'テレキネシス',       cls:'サイキッカー', kind:'mag', src:'str', mult:1.9, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:13, desc:'念力で叩きつける。相手の特防で受けるが、威力はSTR参照。DEXも威力になる' },
-  { name:'サイコノイズ',       cls:'サイキッカー', kind:'mag', src:'str', mult:1.81, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:15, buff:{ enemy:{ dex:-20, agi:-10 } }, desc:'雑音で狙いを乱す。相手のDEX-20%・AGI-10%（重ねがけ可）' },
-  { name:'マインドスパイク',   cls:'サイキッカー', kind:'mag', src:'str', mult:2.1, add:[{ stat:'dex', rate:0.35 }], proc:85, mp:17, desc:'精神を直接刺す。DEXも威力になる' },
-  { name:'サイキックチェイン', cls:'サイキッカー', kind:'phys', src:'str', mult:0.48, add:[{ stat:'int_stat', rate:0.15 }, { stat:'dex', rate:0.15 }], hits:3, proc:80, mp:20, noCrit:true, desc:'3連撃。INT・DEXも威力になる。クリティカルしない' },
-  { name:'マインドアクセル',           cls:'サイキッカー', kind:'buff', proc:100, mp:15, buff:{ self:{ agi:35, int_stat:20 } }, priority:1, desc:'AGI+35%・INT+20%（重ねがけ可）' },
+  { name:'テレキネシス',       cls:'サイキッカー', kind:'mag', src:'str', mult:1.9, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:13, reqJobs:5, desc:'念力で叩きつける。相手の特防で受けるが、威力はSTR参照。DEXも威力になる' },
+  { name:'サイコノイズ',       cls:'サイキッカー', kind:'mag', src:'str', mult:1.81, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:15, buff:{ enemy:{ str:-15, int_stat:-15 } }, reqJobs:5, desc:'雑音で思考を乱す。相手のSTR-15%・INT-15%（重ねがけ可）' },
+  { name:'マインドスパイク',   cls:'サイキッカー', kind:'mag', src:'str', mult:2.1, add:[{ stat:'dex', rate:0.35 }], proc:85, mp:17, reqJobs:5, desc:'精神を直接刺す。DEXも威力になる' },
+  { name:'サイキックチェイン', cls:'サイキッカー', kind:'phys', src:'str', mult:0.48, add:[{ stat:'int_stat', rate:0.15 }, { stat:'dex', rate:0.15 }], hits:3, proc:80, mp:20, noCrit:true, reqJobs:5, desc:'3連撃。INT・DEXも威力になる。クリティカルしない' },
+  { name:'マインドアクセル',           cls:'サイキッカー', kind:'buff', proc:100, mp:15, buff:{ self:{ agi:35, int_stat:20 } }, priority:1, reqJobs:5, desc:'AGI+35%・INT+20%（重ねがけ可）' },
 
   // ===== 体術師（STR＋AGI・手数） =====
   { name:'半月蹴り',     cls:'体術師', kind:'phys', mult:1.95, proc:90, mp:12, desc:'回し蹴り' },
-  { name:'五連殺',       cls:'体術師', kind:'phys', mult:0.47, hits:5, proc:80, mp:20, noCrit:true, desc:'5連撃。クリティカルしない' },
+  { name:'五連殺',       cls:'体術師', kind:'phys', mult:0.45, hits:5, proc:80, mp:20, noCrit:true, airUp:true, desc:'5連撃。クリティカルしない。跳び上がって空中へ' },
   { name:'闘争本能',     cls:'体術師', kind:'passive', mp:0, passive:{ lowHp:{ stat:'str', max:15, at:25 } }, desc:'HPが減るほどSTRが上がる（最大15%・HP25%で最大）' },
   { name:'破衝掌',       cls:'体術師', kind:'phys', mult:1.9, defPen:0.5, proc:85, mp:16, desc:'相手の防御を50%無視' },
   { name:'飛天三角蹴り', cls:'体術師', kind:'phys', mult:0.51, add:[{ stat:'agi', rate:0.25 }], hits:3, proc:78, mp:22, noCrit:true, airUp:true, desc:'3連撃。AGIも威力になる。跳び上がって空中へ（空中のあいだ回避+10%）' },
-  { name:'旋風脚', cls:'体術師', kind:'phys', mult:1.55, add:[{ stat:'agi', rate:0.3 }], proc:92, mp:11, desc:'回転しながら蹴り抜く。AGIも威力になる' },
-  { name:'当身',   cls:'体術師', kind:'phys', mult:1.65, add:[{ stat:'agi', rate:0.3 }], proc:88, mp:14, buff:{ enemy:{ str:-15 } }, desc:'AGIも威力になる。相手のSTR-15%（重ねがけ可）' },
-  { name:'疾風連撃', cls:'体術師', kind:'phys', mult:0.53, add:[{ stat:'agi', rate:0.2 }], hits:3, proc:85, mp:16, noCrit:true, desc:'3連撃。AGIも威力になる。クリティカルしない' },
-  { name:'崩落蹴', cls:'体術師', kind:'phys', mult:1.41, add:[{ stat:'agi', rate:0.4 }], proc:82, mp:18, whileAir:{ mult:45 }, desc:'かかとを落とす。AGIも威力になる。空中なら威力+45%（叩きつけて着地する）' },
-  { name:'気孔術',   cls:'体術師', kind:'heal', proc:85, mp:14, heal:{ rate:1.2 }, priority:1, desc:'INT×1.0を回復' },
+  { name:'旋風脚', cls:'体術師', kind:'phys', mult:1.55, add:[{ stat:'agi', rate:0.3 }], proc:92, mp:11, reqJobs:5, desc:'回転しながら蹴り抜く。AGIも威力になる' },
+  { name:'当身',   cls:'体術師', kind:'phys', mult:1.65, add:[{ stat:'agi', rate:0.3 }], proc:88, mp:14, buff:{ enemy:{ str:-15 } }, reqJobs:5, desc:'AGIも威力になる。相手のSTR-15%（重ねがけ可）' },
+  { name:'疾風連撃', cls:'体術師', kind:'phys', mult:0.42, add:[{ stat:'agi', rate:0.2 }], hits:3, proc:85, mp:16, noCrit:true, reqJobs:5, whileAir:{ mult:30 }, desc:'3連撃。AGIも威力になる。クリティカルしない。空中なら威力+30%' },
+  { name:'崩落蹴', cls:'体術師', kind:'phys', mult:1.41, add:[{ stat:'agi', rate:0.4 }], proc:82, mp:18, whileAir:{ mult:45 }, reqJobs:5, desc:'かかとを落とす。AGIも威力になる。空中なら威力+45%（叩きつけて着地する）' },
+  { name:'気孔術',   cls:'体術師', kind:'heal', proc:85, mp:14, heal:{ rate:1.2 }, priority:1, reqJobs:5, desc:'INT×1.0を回復' },
 
   // ===== ギャンブラー（LUK一点） =====
   { name:'ジャグリング',     cls:'ギャンブラー', kind:'phys', src:'agi', mult:0.55, hits:4, proc:85, mp:16, noCrit:true, desc:'4連撃。クリティカルしない' },
@@ -385,47 +390,47 @@ export const SKILLS = [
   { name:'ギャンブルボディ', cls:'ギャンブラー', kind:'passive', mp:0, passive:{ gamble:{ up:30, upMult:1.2, down:20, downMult:0.9 } }, desc:'スキルが当たったとき、30%で威力1.2倍・20%で威力0.9倍' },
   { name:'オールイン',       cls:'ギャンブラー', kind:'buff', proc:100, mp:18, buff:{ self:{ str:70, vit:-20 } }, priority:1, desc:'STR+70%・VIT-20%（重ねがけ可）' },
   { name:'ジャックポット',   cls:'ギャンブラー', kind:'phys', src:'agi', mult:2.08, proc:78, mp:22, variance:{ lo:30, hi:200 }, desc:'ギャンブラーの切り札。威力が0.3〜2.0倍に振れる' },
-  { name:'コイントス',   cls:'ギャンブラー', kind:'phys', src:'agi', mult:1.65, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:12, desc:'投げつけたコインが当たる。DEXも威力になる' },
-  { name:'カードスロー', cls:'ギャンブラー', kind:'phys', src:'agi', mult:0.9, add:[{ stat:'dex', rate:0.2 }], hits:2, proc:85, mp:16, noCrit:true, desc:'2連撃。DEXも威力になる。クリティカルしない' },
-  { name:'ラストベット', cls:'ギャンブラー', kind:'phys', src:'agi', mult:2.04, add:[{ stat:'dex', rate:0.4 }], proc:80, mp:20, buff:{ self:{ vit:-15 } }, desc:'DEXも威力になる。自分のVIT-15%（重ねがけ可）' },
-  { name:'イカサマ',     cls:'ギャンブラー', kind:'buff', proc:95, mp:13, buff:{ enemy:{ luk:-20, dex:-15 } }, priority:1, desc:'相手のLUK-25%・DEX-15%（重ねがけ可）' },
-  { name:'レディラック',   cls:'ギャンブラー', kind:'buff', proc:100, mp:14, buff:{ self:{ luk:55 } }, priority:1, desc:'LUK+55%（重ねがけ可）' },
+  { name:'コイントス',   cls:'ギャンブラー', kind:'phys', src:'agi', mult:1.65, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:12, reqJobs:5, variance:{ lo:70, hi:130 }, desc:'投げつけたコインが当たる。DEXも威力になる。威力が0.7〜1.3倍に振れる' },
+  { name:'カードスロー', cls:'ギャンブラー', kind:'phys', src:'agi', mult:0.9, add:[{ stat:'dex', rate:0.2 }], hits:2, proc:85, mp:16, noCrit:true, reqJobs:5, variance:{ lo:60, hi:140 }, desc:'2連撃。DEXも威力になる。クリティカルしない。威力が0.6〜1.4倍に振れる' },
+  { name:'ラストベット', cls:'ギャンブラー', kind:'phys', src:'agi', mult:2.04, add:[{ stat:'dex', rate:0.4 }], proc:80, mp:20, buff:{ self:{ vit:-15 } }, reqJobs:5, desc:'DEXも威力になる。自分のVIT-15%（重ねがけ可）' },
+  { name:'イカサマ',     cls:'ギャンブラー', kind:'buff', proc:95, mp:13, buff:{ enemy:{ luk:-20, dex:-15 } }, priority:1, reqJobs:5, desc:'相手のLUK-25%・DEX-15%（重ねがけ可）' },
+  { name:'レディラック',   cls:'ギャンブラー', kind:'buff', proc:100, mp:14, buff:{ self:{ luk:55 } }, priority:1, reqJobs:5, desc:'LUK+55%（重ねがけ可）' },
 
   // ===== 竜騎士（STR＋VIT・貫通） =====
-  { name:'ドラゴンスラスト', cls:'竜騎士', kind:'phys', src:'vit', mult:1.77, defPen:0.3, proc:90, mp:12, desc:'相手の防御を30%無視' },
+  { name:'ドラゴンスラスト', cls:'竜騎士', kind:'phys', src:'vit', mult:1.68, defPen:0.3, proc:90, mp:12, whileStack:{ key:'charge', defPen:0.2 }, desc:'相手の防御を30%無視。竜気があるあいだ、さらに20%無視' },
   { name:'ドラゴンファング', cls:'竜騎士', kind:'phys', src:'vit', mult:0.73, hits:3, proc:85, mp:16, noCrit:true, desc:'3連撃。クリティカルしない' },
   { name:'竜鱗の加護',       cls:'竜騎士', kind:'passive', mp:0, passive:{ dodgeCut:{ pct:20, cut:20 } }, desc:'ダメージを受けるとき、20%の確率で20%カット' },
   { name:'ドラゴンロア',     cls:'竜騎士', kind:'buff', proc:100, mp:14, chargeUp:true, priority:1, desc:'吼えて竜気を溜める。竜気+1（最大3）。溜めているあいだ受けるダメージの軽減率+12%×個数' },
   { name:'天墜竜閃',         cls:'竜騎士', kind:'phys', src:'vit', mult:1.61, proc:78, mp:22, useCharge:{ per:35 }, desc:'竜騎士の切り札。竜気を全部使い、1つにつき威力+35%' },
-  { name:'ランスチャージ', cls:'竜騎士', kind:'phys', src:'vit', mult:1.6, add:[{ stat:'str', rate:0.35 }], proc:90, mp:12, desc:'槍ごと突っ込む。STRも威力になる' },
-  { name:'スケイルピアス',       cls:'竜騎士', kind:'phys', src:'vit', mult:1.65, add:[{ stat:'str', rate:0.4 }], proc:88, mp:14, desc:'STRも威力になる' },
-  { name:'ドラゴンダイブ',       cls:'竜騎士', kind:'phys', src:'vit', mult:1.9, add:[{ stat:'str', rate:0.4 }], proc:82, mp:18, desc:'跳び上がって落下の勢いで叩きつける。STRも威力になる' },
-  { name:'インティミデイト',     cls:'竜騎士', kind:'buff', proc:95, mp:14, buff:{ enemy:{ str:-20, agi:-15 } }, priority:1, desc:'相手のSTR-20%・AGI-15%（重ねがけ可）' },
-  { name:'ドラゴンブラッド',       cls:'竜騎士', kind:'buff', proc:100, mp:15, buff:{ self:{ str:35, vit:20 } }, priority:1, desc:'STR+35%・VIT+20%（重ねがけ可）' },
+  { name:'ランスチャージ', cls:'竜騎士', kind:'phys', src:'vit', mult:1.35, add:[{ stat:'str', rate:0.35 }], proc:90, mp:12, reqJobs:5, chargeUp:true, desc:'槍ごと突っ込む。STRも威力になる。突っ込みながら竜気+1' },
+  { name:'スケイルピアス',       cls:'竜騎士', kind:'phys', src:'vit', mult:1.65, add:[{ stat:'str', rate:0.4 }], proc:88, mp:14, reqJobs:5, desc:'STRも威力になる' },
+  { name:'ドラゴンダイブ',       cls:'竜騎士', kind:'phys', src:'vit', mult:1.35, add:[{ stat:'str', rate:0.4 }], proc:82, mp:18, reqJobs:5, useCharge:{ per:22 }, desc:'跳び上がって落下の勢いで叩きつける。STRも威力になる。竜気を全部使い、1つにつき威力+22%' },
+  { name:'インティミデイト',     cls:'竜騎士', kind:'buff', proc:95, mp:14, buff:{ enemy:{ str:-20, agi:-15 } }, priority:1, reqJobs:5, desc:'相手のSTR-20%・AGI-15%（重ねがけ可）' },
+  { name:'ドラゴンブラッド',       cls:'竜騎士', kind:'buff', proc:100, mp:15, buff:{ self:{ str:35, vit:20 } }, priority:1, reqJobs:5, desc:'STR+35%・VIT+20%（重ねがけ可）' },
 
   // ===== 精霊召喚士（INT・六属から4体） =====
-  { name:'サラマンド',   cls:'精霊召喚士', kind:'mag', mult:2.2, proc:90, mp:13, desc:'火の精霊' },
+  { name:'サラマンド',   cls:'精霊召喚士', kind:'mag', mult:1.96, proc:90, mp:13, repeat:{ per:8, max:3 }, desc:'火の精霊。同じ技を続けて使うほど威力+8%（3回まで）' },
   { name:'ウンディーネ', cls:'精霊召喚士', kind:'heal', proc:85, mp:16, regen:{ rate:0.8, turns:4 }, priority:1, desc:'水の精霊。4ターン毎ターンINT×0.6を回復' },
   { name:'精霊共鳴',     cls:'精霊召喚士', kind:'passive', mp:0, passive:{ repeat:{ per:8, max:3 } }, desc:'同じスキルを続けて使うほど威力+8%（3回まで）。別のスキルを挟むと戻る' },
   { name:'シルフ',       cls:'精霊召喚士', kind:'mag', mult:2.05, proc:90, mp:13, buff:{ self:{ agi:25 } }, desc:'風の精霊。AGI+25%（重ねがけ可）' },
   { name:'ノーム',       cls:'精霊召喚士', kind:'mag', mult:2.5, proc:80, mp:21, buff:{ self:{ vit:20 } }, desc:'地の精霊。自分のVIT+20%（重ねがけ可）' },
-  { name:'イフリート',   cls:'精霊召喚士', kind:'mag', mult:1.99, add:[{ stat:'agi', rate:0.3 }], proc:88, mp:15, desc:'火の精霊王。AGIも威力になる' },
-  { name:'マーメイド',   cls:'精霊召喚士', kind:'mag', mult:1.78, add:[{ stat:'agi', rate:0.3 }], proc:90, mp:13, buff:{ enemy:{ agi:-20 } }, desc:'水の精霊。AGIも威力になる。相手のAGI-20%（重ねがけ可）' },
-  { name:'精霊解放',     cls:'精霊召喚士', kind:'mag', mult:2.3, add:[{ stat:'agi', rate:0.4 }], proc:78, mp:23, desc:'精霊の力を一気に解き放つ。AGIも威力になる' },
-  { name:'ドリアード',   cls:'精霊召喚士', kind:'heal', proc:85, mp:16, mpRegen:{ rate:0.5, turns:4 }, priority:1, desc:'木の精霊。4ターン毎ターンINT×0.5のMPを回復' },
-  { name:'フェニックス', cls:'精霊召喚士', kind:'heal', proc:82, mp:20, heal:{ rate:1.5 }, priority:1, desc:'不死鳥。INT×1.5を回復' },
+  { name:'イフリート',   cls:'精霊召喚士', kind:'mag', mult:1.99, add:[{ stat:'agi', rate:0.3 }], proc:88, mp:15, reqJobs:5, desc:'火の精霊王。AGIも威力になる' },
+  { name:'マーメイド',   cls:'精霊召喚士', kind:'mag', mult:1.78, add:[{ stat:'agi', rate:0.3 }], proc:90, mp:13, buff:{ enemy:{ agi:-20 } }, reqJobs:5, desc:'水の精霊。AGIも威力になる。相手のAGI-20%（重ねがけ可）' },
+  { name:'精霊解放',     cls:'精霊召喚士', kind:'mag', mult:1.88, add:[{ stat:'agi', rate:0.4 }], proc:78, mp:23, reqJobs:5, repeat:{ per:12, max:3 }, desc:'精霊の力を一気に解き放つ。AGIも威力になる。同じ技を続けて使うほど威力+12%（3回まで）' },
+  { name:'ドリアード',   cls:'精霊召喚士', kind:'heal', proc:85, mp:16, mpRegen:{ rate:0.5, turns:4 }, priority:1, reqJobs:5, desc:'木の精霊。4ターン毎ターンINT×0.5のMPを回復' },
+  { name:'フェニックス', cls:'精霊召喚士', kind:'heal', proc:82, mp:20, heal:{ rate:1.5 }, priority:1, reqJobs:5, desc:'不死鳥。INT×1.5を回復' },
 
   // ===== 式神使い（INT・弱体と結界） =====
-  { name:'符術・式打ち',   cls:'式神使い', kind:'mag', mult:2.2, proc:90, mp:13, desc:'式神を飛ばす' },
+  { name:'符術・式打ち',   cls:'式神使い', kind:'mag', mult:2.05, proc:90, mp:13, ritual:1, desc:'式神を飛ばす。撃ちながら呪力+1' },
   { name:'呪符・魂削り',   cls:'式神使い', kind:'mag', mult:2.27, proc:85, mp:17, buff:{ enemy:{ int_stat:-30 } }, desc:'相手のINT-30%（重ねがけ可）' },
   { name:'式神召喚',       cls:'式神使い', kind:'passive', mp:0, passive:{ ritualStart:1 }, desc:'式を1体従えて戦う。戦闘を始めるとき呪力を1つ持っている' },
   { name:'陰陽結界',       cls:'式神使い', kind:'buff', proc:100, mp:15, ritual:1, priority:1, desc:'結界を張って呪力を練る。呪力+1（最大3）。この行動では攻撃しない' },
   { name:'禁術・神降ろし', cls:'式神使い', kind:'mag', mult:1.73, proc:78, mp:23, useRitual:{ per:40 }, desc:'式神使いの切り札。呪力を全部使い、1つにつき威力+40%' },
-  { name:'呪符・鬼火', cls:'式神使い', kind:'mag', mult:1.9, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:13, desc:'鬼火を飛ばす。DEXも威力になる' },
-  { name:'式符・鎌鼬', cls:'式神使い', kind:'mag', mult:0.66, add:[{ stat:'dex', rate:0.15 }], hits:3, proc:85, mp:17, noCrit:true, desc:'3連撃。DEXも威力になる。クリティカルしない' },
-  { name:'呪詛返し',   cls:'式神使い', kind:'mag', mult:1.91, add:[{ stat:'dex', rate:0.3 }], drain:0.3, proc:85, mp:17, desc:'DEXも威力になる。与えたダメージの30%を吸収' },
-  { name:'封印符',     cls:'式神使い', kind:'mag', mult:1.79, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:15, ail:{ key:'paralyze', chance:10 }, desc:'DEXも威力になる。10%で麻痺' },
-  { name:'大祓',       cls:'式神使い', kind:'heal', proc:85, mp:16, heal:{ rate:1.35 }, priority:1, desc:'INT×1.4を回復' },
+  { name:'呪符・鬼火', cls:'式神使い', kind:'mag', mult:1.9, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:13, reqJobs:5, desc:'鬼火を飛ばす。DEXも威力になる' },
+  { name:'式符・鎌鼬', cls:'式神使い', kind:'mag', mult:0.61, add:[{ stat:'dex', rate:0.15 }], hits:3, proc:85, mp:17, noCrit:true, reqJobs:5, ritual:1, desc:'3連撃。DEXも威力になる。クリティカルしない。撃ちながら呪力+1' },
+  { name:'呪詛返し',   cls:'式神使い', kind:'mag', mult:1.42, add:[{ stat:'dex', rate:0.3 }], drain:0.3, proc:85, mp:17, reqJobs:5, useRitual:{ per:20 }, desc:'DEXも威力になる。与えたダメージの30%を吸収。呪力を全部使い、1つにつき威力+20%' },
+  { name:'封印符',     cls:'式神使い', kind:'mag', mult:1.44, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:15, ail:{ key:'paralyze', chance:10 }, reqJobs:5, whileStack:{ key:'ritual', ailChance:25 }, desc:'DEXも威力になる。10%で麻痺。呪力があるあいだ麻痺率+25%' },
+  { name:'大祓',       cls:'式神使い', kind:'heal', proc:85, mp:16, heal:{ rate:1.35 }, priority:1, reqJobs:5, desc:'INT×1.4を回復' },
 
   // ===== 武僧（格闘家×僧侶。旧版に無い職なのでスキル名は新規） =====
   { name:'練気掌',   cls:'武僧', kind:'phys', src:'vit', mult:1.7, add:[{ stat:'int_stat', rate:0.5 }], proc:85, mp:16, desc:'INTも威力になる' },
@@ -433,23 +438,23 @@ export const SKILLS = [
   { name:'心身一如', cls:'武僧', kind:'passive', mp:0, passive:{ debuffGuard:1, ailResist:20 }, desc:'戦闘中1回だけ相手のデバフを打ち消す。受ける状態異常の付与率-20%' },
   { name:'金剛身',   cls:'武僧', kind:'buff', proc:100, mp:15, buff:{ self:{ vit:55 } }, priority:1, desc:'VIT+55%（重ねがけ可）' },
   { name:'崩拳',     cls:'武僧', kind:'phys', src:'vit', mult:2.11, defPen:0.3, proc:82, mp:18, desc:'相手の防御を30%無視' },
-  { name:'気功掌',     cls:'武僧', kind:'phys', src:'vit', mult:1.65, add:[{ stat:'str', rate:0.3 }], proc:90, mp:12, desc:'気を乗せた掌底。STRも威力になる' },
-  { name:'三連震脚',   cls:'武僧', kind:'phys', src:'vit', mult:0.58, add:[{ stat:'str', rate:0.15 }], hits:3, proc:85, mp:16, noCrit:true, desc:'3連撃。STRも威力になる。クリティカルしない' },
-  { name:'破戒撃',     cls:'武僧', kind:'phys', src:'vit', mult:1.68, add:[{ stat:'str', rate:0.4 }], proc:85, mp:16, buff:{ enemy:{ vit:-20 } }, desc:'STRも威力になる。相手のVIT-20%（重ねがけ可）' },
-  { name:'自癒功',     cls:'武僧', kind:'heal', proc:85, mp:15, heal:{ rate:1.3 }, priority:1, desc:'INT×1.3を回復' },
-  { name:'阿吽の呼吸', cls:'武僧', kind:'buff', proc:100, mp:15, buff:{ self:{ vit:30, str:30 } }, priority:1, desc:'VIT+30%・STR+30%（重ねがけ可）' },
+  { name:'気功掌',     cls:'武僧', kind:'phys', src:'vit', mult:1.53, add:[{ stat:'str', rate:0.3 }], proc:90, mp:12, reqJobs:5, cure:1, desc:'気を乗せた掌底。STRも威力になる。自分の状態異常を1つ払う' },
+  { name:'三連震脚',   cls:'武僧', kind:'phys', src:'vit', mult:0.58, add:[{ stat:'str', rate:0.15 }], hits:3, proc:85, mp:16, noCrit:true, reqJobs:5, desc:'3連撃。STRも威力になる。クリティカルしない' },
+  { name:'破戒撃',     cls:'武僧', kind:'phys', src:'vit', mult:1.68, add:[{ stat:'str', rate:0.4 }], proc:85, mp:16, buff:{ enemy:{ vit:-20 } }, reqJobs:5, desc:'STRも威力になる。相手のVIT-20%（重ねがけ可）' },
+  { name:'自癒功',     cls:'武僧', kind:'heal', proc:85, mp:15, heal:{ rate:1.3 }, priority:1, reqJobs:5, cure:2, desc:'INT×1.3を回復。自分の状態異常を2つ払う' },
+  { name:'阿吽の呼吸', cls:'武僧', kind:'buff', proc:100, mp:15, buff:{ self:{ vit:30, str:30 } }, priority:1, reqJobs:5, desc:'VIT+30%・STR+30%（重ねがけ可）' },
 
   // ===== ビーストレンジャー（サモナー×弓使い。旧版に無い職なのでスキル名は新規） =====
   { name:'獣呼びの矢', cls:'ビーストレンジャー', kind:'phys', src:'agi', mult:1.45, add:[{ stat:'dex', rate:0.5 }], proc:90, mp:12, desc:'DEXも威力になる' },
   { name:'群狼の牙',   cls:'ビーストレンジャー', kind:'mag', src:'agi', mult:0.81, hits:3, proc:85, mp:17, noCrit:true, desc:'3連撃。クリティカルしない' },
   { name:'野性の勘',   cls:'ビーストレンジャー', kind:'passive', mp:0, passive:{ formBoost:50 }, desc:'獣の扱いに長けている。獣の型によるステータス補正が1.5倍になる' },
   { name:'共鳴の咆哮', cls:'ビーストレンジャー', kind:'buff', proc:100, mp:14, buff:{ self:{ str:30, agi:20 } }, priority:1, desc:'STR+30%・AGI+20%（重ねがけ可）' },
-  { name:'貫狼撃',     cls:'ビーストレンジャー', kind:'phys', src:'agi', mult:2.11, defPen:0.3, proc:82, mp:18, desc:'相手の防御を30%無視' },
-  { name:'ホークダイブ',   cls:'ビーストレンジャー', kind:'phys', src:'agi', mult:1.34, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:12, form:'hawk', desc:'鷹が急降下する。DEXも威力になる。鷹を呼ぶ（AGI+20%・DEX+15%）。すでに鷹なら威力+25%' },
-  { name:'ベアクロー',   cls:'ビーストレンジャー', kind:'phys', src:'agi', mult:1.43, add:[{ stat:'vit', rate:0.3 }], proc:88, mp:14, form:'bear', desc:'VITも威力になる。熊を呼ぶ（STR+20%・VIT+20%）。すでに熊なら威力+25%' },
-  { name:'バイパーアロー',   cls:'ビーストレンジャー', kind:'phys', src:'agi', mult:1.36, add:[{ stat:'dex', rate:0.3 }], proc:85, mp:16, ail:{ key:'poison', chance:45 }, form:'snake', desc:'DEXも威力になる。45%で毒。蛇を呼ぶ（DEX+15%・LUK+15%）。すでに蛇なら威力+25%' },
-  { name:'ワイルドラッシュ',   cls:'ビーストレンジャー', kind:'phys', src:'agi', mult:0.63, add:[{ stat:'dex', rate:0.15 }], hits:3, proc:80, mp:20, noCrit:true, desc:'3連撃。DEXも威力になる。クリティカルしない' },
-  { name:'ビーストコール', cls:'ビーストレンジャー', kind:'buff', proc:100, mp:14, priority:1, formBuff:{ none:{ str:55 }, hawk:{ agi:35, dex:20 }, bear:{ str:35, vit:20 }, snake:{ dex:35, luk:20 } }, desc:'いま呼んでいる獣を昂らせる。鷹＝AGI+35%・DEX+20%／熊＝STR+35%・VIT+20%／蛇＝DEX+35%・LUK+20%（呼んでいなければSTR+55%）' },
+  { name:'貫狼撃',     cls:'ビーストレンジャー', kind:'phys', src:'agi', mult:1.83, defPen:0.3, proc:82, mp:18, whileForm:{ mult:22 }, desc:'相手の防御を30%無視。獣を連れていれば威力+22%' },
+  { name:'ホークダイブ',   cls:'ビーストレンジャー', kind:'phys', src:'agi', mult:1.34, add:[{ stat:'dex', rate:0.3 }], proc:90, mp:12, form:'hawk', reqJobs:5, desc:'鷹が急降下する。DEXも威力になる。鷹を呼ぶ（AGI+20%・DEX+15%）。すでに鷹なら威力+25%' },
+  { name:'ベアクロー',   cls:'ビーストレンジャー', kind:'phys', src:'agi', mult:1.43, add:[{ stat:'vit', rate:0.3 }], proc:88, mp:14, form:'bear', reqJobs:5, desc:'VITも威力になる。熊を呼ぶ（STR+20%・VIT+20%）。すでに熊なら威力+25%' },
+  { name:'バイパーアロー',   cls:'ビーストレンジャー', kind:'phys', src:'agi', mult:1.36, add:[{ stat:'dex', rate:0.3 }], proc:85, mp:16, ail:{ key:'poison', chance:45 }, form:'snake', reqJobs:5, desc:'DEXも威力になる。45%で毒。蛇を呼ぶ（DEX+15%・LUK+15%）。すでに蛇なら威力+25%' },
+  { name:'ワイルドラッシュ',   cls:'ビーストレンジャー', kind:'phys', src:'agi', mult:0.53, add:[{ stat:'dex', rate:0.15 }], hits:3, proc:80, mp:20, noCrit:true, reqJobs:5, whileForm:{ mult:20 }, desc:'3連撃。DEXも威力になる。クリティカルしない。獣を連れていれば威力+20%' },
+  { name:'ビーストコール', cls:'ビーストレンジャー', kind:'buff', proc:100, mp:14, priority:1, formBuff:{ none:{ str:55 }, hawk:{ agi:35, dex:20 }, bear:{ str:35, vit:20 }, snake:{ dex:35, luk:20 } }, reqJobs:5, desc:'いま呼んでいる獣を昂らせる。鷹＝AGI+35%・DEX+20%／熊＝STR+35%・VIT+20%／蛇＝DEX+35%・LUK+20%（呼んでいなければSTR+55%）' },
 ]
 
 
@@ -480,6 +485,7 @@ export const PRICE = {
   hpCost: 0.015,     // 現在HPを1%払うごとに割引（すてみ）
   airUp: 0.10,       // 空中へ跳ぶ（体術師）。回避+10%と、叩きつけの前提になる
   form: 0.10,        // 獣を呼ぶ（ビーストレンジャー）。型のステータス補正が付く
+  cure: 0.12,        // 自分の状態異常を1つ払う（武僧）
   stackUp: 0.15,     // 溜めを1つ積む（式神使いの呪力・竜騎士の竜気）
   chargeGuard: 0.10, // 竜気は溜めているあいだ硬くなる（そのぶんの値段）
 }
@@ -497,6 +503,11 @@ export const effectPrice = (s) => {
   if (s.dispel)   v += s.dispel.chance * 0.004   // バフ剥がし（異端審問官）
   if (s.airUp)    v += PRICE.airUp                 // 跳び上がる（体術師）
   if (s.form)     v += PRICE.form                  // 獣を呼ぶ＝型を張り替える（ビーストレンジャー）
+  if (s.cure)     v += PRICE.cure * s.cure         // 自分の状態異常を払う（武僧）
+  // 溜め・型が乗っているあいだの追加効果。軸を回していれば大体乗るので7掛けで見る
+  if (s.whileStack?.defPen) v += s.whileStack.defPen * PRICE.defPen * 0.7
+  if (s.whileStack?.ailChance) v += (AIL_PRICE[s.ail?.key] || 0.004) * s.whileStack.ailChance * 0.7
+  if (s.whileForm?.ailChance)  v += (AIL_PRICE[s.ail?.key] || 0.004) * s.whileForm.ailChance * 0.7
   if (s.ritual)   v += PRICE.stackUp * s.ritual    // 呪力を練る（式神使い）
   if (s.chargeUp) v += PRICE.stackUp + PRICE.chargeGuard   // 竜気を溜める（竜騎士。硬くなるぶん高い）
   // 状態異常。ヒットごとに試す技（マッドラッシュ）は2発ぶんまで数える
@@ -547,6 +558,11 @@ export const relBonus = (s) => {
   if (s.useCharge) v += (s.useCharge.per / 100) * EXPECTED_CHARGE
   // ビーストレンジャー：型を合わせて撃てば乗る。張り替えながら戦うので半分で見る
   if (s.form) v += (BEAST_BONUS / 100) * 0.5
+  // ★軸につながる技：溜め・型が乗っているあいだ効く（回していれば大体乗るので7掛け）
+  if (s.whileStack?.mult) v += (s.whileStack.mult / 100) * 0.7
+  if (s.whileForm?.mult)  v += (s.whileForm.mult / 100) * 0.7
+  // 賢者：相手にかかっている状態異常の数。実戦では1〜2個ついている想定
+  if (s.vsAil) v += (s.vsAil.per / 100) * 1.2
   return v
 }
 

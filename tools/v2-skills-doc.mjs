@@ -52,9 +52,14 @@ const noteOf = (s) => {
   if (s.combo) n.push(`**直前が「${s.combo.after.join('／')}」なら威力+${s.combo.mult}%**`)
   if (s.airUp) n.push('**跳び上がって空中へ**（空中は回避+10%）')
   if (s.whileAir) n.push(`**空中なら威力+${s.whileAir.mult}%**（叩きつけて着地）`)
-  if (s.ritual) n.push(`**呪力+${s.ritual}**（最大3・この行動では攻撃しない）`)
+  // 攻撃しながら練る技と、練るだけの技（陰陽結界）で書き分ける
+  if (s.ritual) n.push(s.kind === 'buff'
+    ? `**呪力+${s.ritual}**（最大3・この行動では攻撃しない）`
+    : `**撃ちながら呪力+${s.ritual}**（最大3）`)
   if (s.useRitual) n.push(`**呪力を全部使う**（1つにつき威力+${s.useRitual.per}%）`)
-  if (s.chargeUp) n.push('**竜気+1**（最大3・溜めているあいだ軽減率+12%×個数）')
+  if (s.chargeUp) n.push(s.kind === 'buff'
+    ? '**竜気+1**（最大3・溜めているあいだ軽減率+12%×個数）'
+    : '**撃ちながら竜気+1**（最大3・溜めているあいだ軽減率+12%×個数）')
   if (s.useCharge) n.push(`**竜気を全部使う**（1つにつき威力+${s.useCharge.per}%）`)
   if (s.form) n.push(`**${FORM[s.form]}を呼ぶ**（同じ型なら威力+25%）`)
   if (s.formBuff) {
@@ -64,6 +69,22 @@ const noteOf = (s) => {
     })
     n.push('**呼んでいる獣で中身が変わる**：' + parts.join(' ／ '))
   }
+  if (s.whileStack) {
+    const w = s.whileStack, key = w.key === 'charge' ? '竜気' : '呪力'
+    const t = []
+    if (w.mult) t.push(`威力+${w.mult}%`)
+    if (w.defPen) t.push(`防御を${Math.round(w.defPen * 100)}%さらに無視`)
+    if (w.ailChance) t.push(`状態異常+${w.ailChance}%`)
+    n.push(`**${key}があるあいだ${t.join('・')}**（消費はしない）`)
+  }
+  if (s.whileForm) {
+    const t = []
+    if (s.whileForm.mult) t.push(`威力+${s.whileForm.mult}%`)
+    if (s.whileForm.ailChance) t.push(`状態異常+${s.whileForm.ailChance}%`)
+    n.push(`**獣を連れていれば${t.join('・')}**`)
+  }
+  if (s.vsAil) n.push(`**相手の状態異常1つにつき威力+${s.vsAil.per}%**（${s.vsAil.max}つまで）`)
+  if (s.cure) n.push(`**自分の状態異常を${s.cure}つ払う**`)
   if (s.reqJobs) n.push(`**転職${s.reqJobs}回以上**`)
   return n.join('・')
 }
@@ -75,7 +96,8 @@ const rowOf = (s) => {
 }
 
 const out = ['## 職業別', '']
-out.push('★上の5つが元からあるもの、下の5つが**2026-08-19に足したぶん**（区切り線から下）。', '')
+out.push('★上の5つが元からあるもの、下の5つが**2026-08-19に足したぶん**（区切り線から下）。',
+  '**追加ぶんは全部「転職5回以上」で覚える**（2026-08-23）。', '')
 for (const cls of SKILL_CLASSES) {
   const list = skillsOf(cls)
   const bonus = classBonusText(cls)

@@ -233,7 +233,7 @@ const dominates = (A, B) => {
   // ★特別な仕組みを持つ技（納刀・見切り・納刀中だけの効果）は、持っていない技とは比べない
   for (const k of ['stance', 'foresight', 'whileStance', 'frenzy', 'hpCostPct', 'ailPerHit', 'drainIfAil', 'lowHpBonus', 'highHpBonus', 'vsBuff', 'dispel', 'repeat', 'switchKind', 'variance',
     'combo', 'airUp', 'whileAir', 'src', 'ritual', 'useRitual', 'chargeUp', 'useCharge',
-    'form', 'formBuff']) if (!!A[k] !== !!B[k]) return false
+    'form', 'formBuff', 'whileStack', 'whileForm', 'vsAil', 'cure']) if (!!A[k] !== !!B[k]) return false
   if ((A.hits || 1) !== (B.hits || 1)) return false        // 多段と単発は別の土俵
   if (!!A.noCrit !== !!B.noCrit) return false
   if (!!A.mpPct !== !!B.mpPct) return false                // 割合消費も別の土俵
@@ -254,7 +254,8 @@ const dominates = (A, B) => {
   // 新しい軸（片方だけ持っていれば上で弾かれている＝ここは両方持っているときの大小）
   const NUM = [['lowHpBonus', 'max'], ['highHpBonus', 'max'], ['vsBuff', 'per'], ['dispel', 'chance'],
     ['repeat', 'per'], ['variance', 'lo'], ['variance', 'hi'],
-    ['combo', 'mult'], ['whileAir', 'mult'], ['useRitual', 'per'], ['useCharge', 'per']]
+    ['combo', 'mult'], ['whileAir', 'mult'], ['useRitual', 'per'], ['useCharge', 'per'],
+    ['whileStack', 'mult'], ['whileForm', 'mult'], ['vsAil', 'per']]
   for (const [k, f] of NUM) if (!cmp(A[k]?.[f] || 0, B[k]?.[f] || 0, k + '.' + f)) return false
   if (!cmp(A.switchKind || 0, B.switchKind || 0, 'switchKind')) return false
   // 起爆（急所突きの「出血を全部消費して威力+」）も軸に入れる

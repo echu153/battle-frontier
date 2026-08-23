@@ -21,7 +21,7 @@ import { STAT_KEYS, calcPower } from './stats.js'
 import { skillsOf, isPassive, offClassMult, scaleTable, mpOf, mpPctOf } from './skills.js'
 import { classBonusOf } from './classBonus.js'
 import {
-  createAilments, inflict, tickAilments, ailStatPct, healMultOf, consumeParalyze, hasAilment, AIL_LABEL,
+  createAilments, inflict, tickAilments, ailStatPct, healMultOf, consumeParalyze, hasAilment, AIL_LABEL, AIL_KEYS,
   POISON_CAP_RATE, BLEED_CAP_RATE, tickBleed,
 } from './ailments.js'
 import { collectEnchants, inflictChance } from './enchant.js'
@@ -507,6 +507,33 @@ export const stackMultOf = (use, stacks) => (use && stacks > 0 ? 1 + (use.per / 
 // 竜気を溜めているあいだは硬い（軽減率が上がる）
 export const chargeGuardOf = (side) => 1 + ((side?.charge || 0) * CHARGE_GUARD) / 100
 
+// ★2026-08-23：**軸そのものの技**だけでなく、**軸につながる技**を書けるようにする（ユーザー指定）
+//   溜め（呪力・竜気）や獣の型は、それを作る技と使い切る技の2本だけだと流れが細い。
+//   「溜まっていると効く」「型が乗っていると効く」技を混ぜられるようにして、軸を太くする。
+
+// 式神使い・竜騎士：溜めが**残っているあいだ**効く（消費はしない）
+export const whileStackMultOf = (skill, me) => {
+  const w = skill?.whileStack
+  if (!w || !w.mult) return 1
+  const n = w.key === 'charge' ? (me?.charge || 0) : (me?.ritual || 0)
+  return n > 0 ? 1 + w.mult / 100 : 1
+}
+export const whileStackOn = (skill, me) => {
+  const w = skill?.whileStack
+  if (!w) return false
+  return (w.key === 'charge' ? (me?.charge || 0) : (me?.ritual || 0)) > 0
+}
+// ビーストレンジャー：獣を呼んでいるあいだ効く（どの型でもよい）
+export const whileFormMultOf = (skill, prevForm) =>
+  (skill?.whileForm && prevForm ? 1 + skill.whileForm.mult / 100 : 1)
+// 賢者：相手にかかっている状態異常の数だけ効く（自分で撒かなくても噛み合う＝何でも屋）
+export const ailCountOf = (side) => AIL_KEYS.filter(k => hasAilment(side?.ail || {}, k)).length
+export const vsAilMultOf = (skill, foe) => {
+  const v = skill?.vsAil
+  if (!v) return 1
+  return 1 + (v.per / 100) * Math.min(v.max ?? 3, ailCountOf(foe))
+}
+
 // 魔法剣士：直前に使った技と種別（物理／魔法）が違えば威力+%
 export const switchKindMultOf = (skill, prevKind) => {
   if (!skill?.switchKind || !prevKind) return 1
@@ -641,7 +668,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     let hits = 0
     let missed = 0
     // 第六感の「貫通+10%」はスキルの防御貫通に足す。武器の進化ぶんも同じ枠
-    const defPen = Math.min(1, (skill.defPen || 0) + (ws?.defPen || 0) + me.pa.defPenBonus / 100 + me.evo.defPen / 100)
+    const defPen = Math.min(1, (skill.defPen || 0) + (ws?.defPen || 0) + me.pa.defPenBonus / 100 + me.evo.defPen / 100
+      + (whileStackOn(skill, me) ? (skill.whileStack.defPen || 0) : 0))
     // ★条件つき吸収（狂戦士の血啜り）：**撃つ前から**相手がその状態異常なら吸える
     //   （この技自身が付けた出血では吸えない＝先に撒いてから吸う流れになる）
     const drainIf = skill.drainIfAil && hasAilment(foe.ail, skill.drainIfAil.key)
@@ -665,7 +693,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
           * switchKindMultOf(skill, prevKind) * varMult
           * comboMultOf(skill, prevSkill) * airMultOf(skill, wasAir)
           * stackMultOf(skill.useRitual, ritualUsed) * stackMultOf(skill.useCharge, chargeUsed)
-          * beastMultOf(skill, prevForm),
+          * beastMultOf(skill, prevForm) * whileStackMultOf(skill, me)
+          * whileFormMultOf(skill, prevForm) * vsAilMultOf(skill, foe),
         kind: skill.kind, atkStat: skill.src || null,
         defPen, add: skill.add || null,
         sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit, noCrit: !!skill.noCrit,
@@ -718,7 +747,10 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       //   ＝エンチャントの抵抗（毒キノコ・払暁のワイバーン）が意味を持つ
       if (skill.ail && !skill.ailPerHit) {
         // 納刀ぶんで確率が上がる技がある（月影＝納刀中は出血100%）
-        const chance = ws?.ailChance ?? (skill.ail.chance * off)
+        // ★溜め（呪力・竜気）や獣の型が乗っていれば、状態異常が入りやすくなる技がある
+        const bonus = (whileStackOn(skill, me) ? (skill.whileStack.ailChance || 0) : 0)
+          + (skill.whileForm && prevForm ? (skill.whileForm.ailChance || 0) : 0)
+        const chance = ws?.ailChance ?? (skill.ail.chance * off + bonus)
         tryInflict(me, foe, { ...skill.ail, chance }, rng, log)
       }
     }
@@ -767,6 +799,17 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       // 期限つきバフ側にも同じステが乗っていたら一緒に落とす
       foe.timedBuffs = (foe.timedBuffs || []).filter(t => !(k in (t.table || {})))
       log.push({ side: foe.name, type: 'dispel', skill: skill.name, stat: k })
+    }
+  }
+  // ★武僧：自分にかかっている状態異常を払う（効きづらいだけでなく、抜け出せる）
+  if (skill.cure) {
+    let left = skill.cure
+    for (const k of AIL_KEYS) {
+      if (left <= 0) break
+      if (!hasAilment(me.ail, k)) continue
+      delete me.ail[k]
+      left -= 1
+      log.push({ side: me.name, type: 'cure', skill: skill.name, ail: AIL_LABEL[k] })
     }
   }
   // ★体術師：跳び上がる技で空中へ。叩きつける技や、ふつうに殴る技を出すと着地する

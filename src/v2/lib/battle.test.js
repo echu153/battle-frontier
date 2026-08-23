@@ -1,7 +1,7 @@
 // バトルフロンティアⅡ 戦闘ループの回帰テスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { tickAil, tickBleedAfterAct, runBattle, createSide, takeAction, liveStats, lowHpMultOf, highHpMultOf, vsBuffMultOf, buffCountOf, repeatMultOf, switchKindMultOf, varianceMultOf, comboMultOf, airMultOf, stackMultOf, chargeGuardOf, AIR_EVA, STACK_MAX, beastMultOf, BEAST_FORMS, BEAST_BONUS, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
+import { tickAil, tickBleedAfterAct, runBattle, createSide, takeAction, liveStats, lowHpMultOf, highHpMultOf, vsBuffMultOf, buffCountOf, repeatMultOf, switchKindMultOf, varianceMultOf, comboMultOf, airMultOf, stackMultOf, chargeGuardOf, AIR_EVA, STACK_MAX, beastMultOf, BEAST_FORMS, BEAST_BONUS, whileStackMultOf, whileFormMultOf, vsAilMultOf, ailCountOf, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
 import { inflict, POISON_CAP_RATE, BLEED_CAP_RATE } from './ailments.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
 import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT, OFF_CLASS_MP_MULT, setMpCost, offClassMult, mpOf } from './skills.js'
@@ -893,4 +893,67 @@ test('出血は行動した直後に刻む（ターン終わりではない）',
   const log3 = []
   tickAil(foe, log3, me)
   assert.equal(log3.filter(l => l.type === 'ailTick' && l.ail === '出血').length, 0, 'ターン終わりに二重で刻んでいる')
+})
+
+// ★2026-08-23：軸「そのもの」の技だけでなく、軸に**つながる**技を書けるようにした
+test('溜めが残っているあいだ効く（消費しない）', () => {
+  const thrust = SKILL_BY_NAME['ドラゴンスラスト']
+  assert.deepEqual(thrust.whileStack, { key:'charge', defPen:0.2 })
+  const me = createSide({ name:'竜', cls:'竜騎士', kind:'phys', stats: evenStats(534),
+    slots:[{ skill: thrust, uses:9 }, { skill: SKILL_BY_NAME['ドラゴンロア'], uses:9 }] })
+  const foe = createSide(fighter('的', [], { ...evenStats(534), vit: evenStats(534).vit * 4, hp: 10 ** 7 }))
+  const hit = () => {
+    const log = []
+    takeAction(me, foe, () => 0.5, log, { idx: 0, noProc: true })
+    return log.find(l => l.type === 'skill').damage
+  }
+  const flat = hit()
+  takeAction(me, foe, () => 0.5, [], { idx: 1, noProc: true })   // 竜気を溜める
+  assert.equal(me.charge, 1)
+  const charged = hit()
+  assert.ok(charged > flat, `溜めが効いていない: ${charged} vs ${flat}`)
+  assert.equal(me.charge, 1, '消費はしない')
+  // 倍率のほうの whileStack（式神使いの麻痺率など）も溜めが0なら乗らない
+  assert.equal(whileStackMultOf({ whileStack:{ key:'ritual', mult:30 } }, { ritual: 0 }), 1)
+  assert.equal(whileStackMultOf({ whileStack:{ key:'ritual', mult:30 } }, { ritual: 2 }), 1.3)
+})
+
+test('獣を連れているあいだ効く（型は問わない）', () => {
+  const rush = SKILL_BY_NAME['ワイルドラッシュ']
+  assert.equal(rush.whileForm.mult, 20)
+  assert.equal(whileFormMultOf(rush, null), 1, '呼んでいなければ素')
+  assert.equal(whileFormMultOf(rush, 'hawk'), 1.2)
+  assert.equal(whileFormMultOf(rush, 'bear'), 1.2, 'どの型でもよい')
+  assert.equal(whileFormMultOf(sk('ふつう'), 'hawk'), 1)
+})
+
+test('賢者：相手にかかっている状態異常の数だけ効く', () => {
+  const inf = SKILL_BY_NAME['インフェルノ']
+  assert.equal(inf.vsAil.per, 15)
+  const foe = createSide(fighter('的'))
+  assert.equal(ailCountOf(foe), 0)
+  assert.equal(vsAilMultOf(inf, foe), 1)
+  inflict(foe.ail, 'poison')
+  inflict(foe.ail, 'slow')
+  assert.equal(ailCountOf(foe), 2)
+  assert.equal(Number(vsAilMultOf(inf, foe).toFixed(3)), 1.3)
+  inflict(foe.ail, 'bleed'); inflict(foe.ail, 'paralyze')
+  assert.equal(Number(vsAilMultOf(inf, foe).toFixed(3)), 1.45, '上限は3つぶん')
+  assert.equal(vsAilMultOf(sk('ふつう'), foe), 1)
+})
+
+test('武僧：自分にかかっている状態異常を払う', () => {
+  const cure = SKILL_BY_NAME['気功掌']
+  assert.equal(cure.cure, 1)
+  const me = createSide({ name:'僧', cls:'武僧', kind:'phys', stats: evenStats(534),
+    slots:[{ skill: cure, uses:9 }] })
+  const foe = createSide(fighter('的', [], { ...evenStats(534), hp: 10 ** 7 }))
+  inflict(me.ail, 'poison')
+  inflict(me.ail, 'slow')
+  const log = []
+  takeAction(me, foe, () => 0.5, log, { idx: 0, noProc: true })
+  assert.equal(Object.keys(me.ail).filter(k => me.ail[k]).length, 1, '1つだけ払う')
+  assert.ok(log.some(l => l.type === 'cure'))
+  // 2つ払う技もある
+  assert.equal(SKILL_BY_NAME['自癒功'].cure, 2)
 })
