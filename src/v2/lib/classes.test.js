@@ -7,7 +7,7 @@ import {
   missingReqs, canBecome, reqText, totalJobChanges,
 } from './classes.js'
 
-const noble   = { id:START_CLASS, tier:'start',    req_jobs:{}, req_proof:null }
+const noble   = { id:START_CLASS, tier:'basic',    req_jobs:{}, req_proof:null }
 const warrior = { id:'戦士',      tier:'basic',    req_jobs:{}, req_proof:null }
 const samurai = { id:'侍',        tier:'advanced', req_jobs:{ 戦士:3 }, req_proof:'侍の証' }
 const magicSword = { id:'魔法剣士', tier:'hybrid', req_jobs:{ 戦士:3, 魔法使い:3 }, req_proof:'魔法剣士の証' }
@@ -25,8 +25,10 @@ test('初期職は条件なしで転職できる', () => {
   assert.equal(reqText(warrior), '条件なし')
 })
 
-test('開始時の職業(ノーブル)には転職できない', () => {
-  assert.equal(canBecome(noble, { jobCounts:{}, proofs:{} }), false)
+// ★2026-08-23：ノーブルにも転職できるようにした。
+//   スキルはLVアップの抽選で覚えるので、開始時に取り逃すと二度と取れなかった
+test('ノーブルにも条件なしで転職できる（取り逃したスキルを取り直せる）', () => {
+  assert.equal(canBecome(noble, { jobCounts:{}, proofs:{} }), true)
 })
 
 test('証の所持は個数で持つ（転職で1個消費するため）', () => {

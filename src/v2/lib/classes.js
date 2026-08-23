@@ -46,9 +46,12 @@ export const missingReqs = (cls, { jobCounts = {}, proofs = {} } = {}) => {
   return out
 }
 
-// 転職先に選べるか。開始時の職業（ノーブル）は選べない
+// 転職先に選べるか。
+// ★2026-08-23：ノーブルにも転職できるようにした（tier を start → basic へ）。
+//   スキルはLVアップの抽選で覚えるので、開始時に取り逃すと二度と取れなかった。
+//   欲しければ転職して取り直せばよい、という扱いにする。
 export const canBecome = (cls, state) =>
-  !!cls && cls.tier !== 'start' && missingReqs(cls, state).length === 0
+  !!cls && missingReqs(cls, state).length === 0
 
 // 条件の表示文（達成状況に関係ない、その職業の条件そのもの）
 export const reqText = (cls) => {

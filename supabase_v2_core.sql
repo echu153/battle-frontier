@@ -96,7 +96,7 @@ create policy v2_classes_select on public.v2_classes for select to authenticated
 grant select on table public.v2_classes to authenticated;
 
 insert into public.v2_classes (id, tier, sort, req_jobs, req_proof) values
-  ('ノーブル',           'start',     0, '{}', null),
+  ('ノーブル',           'basic',     0, '{}', null),
   -- 初期職：条件なし
   ('戦士',               'basic',    10, '{}', null),
   ('弓使い',             'basic',    11, '{}', null),
