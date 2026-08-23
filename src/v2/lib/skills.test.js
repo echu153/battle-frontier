@@ -6,7 +6,7 @@ import {
   powerText, expectedDamage, expectedHeal, PASSIVE_EFFECT_KEYS,
   skillValue, multTotal, effectPrice, targetValue, passiveOf,
 } from './skills.js'
-import { CLASS_BONUS } from './classBonus.js'
+import { CLASS_BONUS, classBonusText } from './classBonus.js'
 import { STAT_KEYS, STAT_DEFS } from './stats.js'
 import { AIL_KEYS } from './ailments.js'
 import { damageOf, healOf } from './combat.js'
@@ -593,4 +593,27 @@ test('説明文の数字は実データと合っている（置き去り検出�
     }
   }
   assert.deepEqual(bad, [], '説明文と実データの食い違い:\n' + bad.join('\n'))
+})
+
+// ★職業補正に書いた効果は、全部プレイヤーの見えるところに出す（2026-08-23 賢者で発覚）
+test('職業補正の効果は、ひとつ残らず表示テキストに出る', () => {
+  const SHOWN = {
+    stats:       (b, t) => Object.entries(b.stats || {}).every(([k, v]) =>
+                   !v || t.includes(`${STAT_DEFS[k]?.label || k}${v >= 0 ? '+' : ''}${v}%`)),
+    healMult:    (b, t) => b.healMult === 1 || t.includes('回復量'),
+    offClassCut: (b, t) => t.includes('他職'),
+  }
+  // 表示に関係しない内部の項目（どのステを伸ばすかの設計メモ）
+  const INTERNAL = ['main', 'sub']
+  const bad = []
+  for (const [cls, b] of Object.entries(CLASS_BONUS)) {
+    const t = classBonusText(cls, 0)
+    for (const k of Object.keys(b)) {
+      if (INTERNAL.includes(k)) continue
+      const check = SHOWN[k]
+      if (!check) { bad.push(`${cls}: 知らない職業補正 \`${k}\`（表示の作り方を決めていない）`); continue }
+      if (!check(b, t)) bad.push(`${cls}: ${k} が表示に出ていない（「${t}」）`)
+    }
+  }
+  assert.deepEqual(bad, [], bad.join(' / '))
 })

@@ -109,6 +109,8 @@ export const classBonusText = (cls, count = 0) => {
     .filter(([, v]) => v !== 0)
     .map(([k, v]) => `${STAT_DEFS[k]?.label || k}${v >= 0 ? '+' : ''}${v}%`)
   if (b.healMult && b.healMult !== 1) parts.push(`自身の回復量${b.healMult}倍`)
+  // ★数字のステータス以外の効果も必ず出す（出さないと持っていることに気づけない）
+  if (b.offClassCut) parts.push(`他職スキルの不利が${b.offClassCut}%減る`)
   return parts.join('・')
 }
 
