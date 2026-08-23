@@ -298,7 +298,17 @@ export default function V2Home() {
     return <div style={{ minHeight:'100vh', background:'#000820', color:'#0088ff', fontFamily:'monospace', padding:'40px', textAlign:'center' }}>読み込み中...</div>
   }
 
-  // index.css の #root が text-align:center なので、v2の中は左揃えに戻す（旧版には触らない）
+  // ★PCは左右2列・狭い画面は1列（2026-08-23）。**メディアクエリを使わない**のがv2の方針で、
+//   auto-fit は列が入りきらなくなると勝手に1列へ落ちる。380pxはステータス枠が窮屈にならない下限。
+//   alignItems:'start' が無いと、短いほうの列が長いほうに引き伸ばされて枠がだぶつく。
+const TWO_COLUMN = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+  gap: '8px',
+  alignItems: 'start',
+}
+
+// index.css の #root が text-align:center なので、v2の中は左揃えに戻す（旧版には触らない）
   return (
     <div style={{ minHeight:'100vh', background:'#000820', fontFamily:'monospace', textAlign:'left' }}>
       {/* ヘッダ。旧版の街と同じで、上に貼り付く細いバー（枠では囲まない） */}
@@ -344,12 +354,18 @@ export default function V2Home() {
 
         {/* ステータス */}
         {prof && (
-          <>
-            {/* ★ステータスはホームだけに出す。施設は別の画面として開く
-                （施設の一覧を見るのに、毎回ステータスぶんスクロールさせられていた） */}
-            {screen === 'home' && (
-              <V2Status prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
-            )}
+          <div style={screen === 'home' ? TWO_COLUMN : undefined}>
+            {/* ===== 左：キャラクターの状態 =====
+                ★ステータスはホームだけに出す。施設は別の画面として開く
+                  （施設の一覧を見るのに、毎回ステータスぶんスクロールさせられていた） */}
+            <div>
+              {screen === 'home' && (
+                <V2Status prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
+              )}
+            </div>
+
+            {/* ===== 右：やること（出撃・施設・開発用） ===== */}
+            <div>
 
             {/* ===== デイリーミッション（ステータスのすぐ下）=====
                 ★難易度を選んでいない日は**閉じられないポップアップ**で選ばせる。
@@ -669,7 +685,8 @@ export default function V2Home() {
                 ))}
               </div>
             )}
-          </>
+            </div>
+          </div>
         )}
       </div>
     </div>
