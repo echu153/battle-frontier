@@ -154,6 +154,13 @@ drop policy if exists v2_skills_select on public.v2_skills;
 create policy v2_skills_select on public.v2_skills for select to authenticated using (true);
 grant select on table public.v2_skills to authenticated;
 
+-- ⚠**このファイルは全文を何度も流し直す運用**なので、種は必ず入れ直せる形にしておく。
+--   ここだけ on conflict も delete も無く、2回目に
+--   「duplicate key value violates unique constraint "v2_skills_pkey"」で止まっていた（2026-08-23 報告）。
+-- ★delete してから入れ直す＝**廃止したスキルの行も消える**（ブリーダー廃止のような入れ替えで
+--   古い行が残ると、編成の検証(v2_set_skills)が存在しないスキルを通してしまう）。
+--   v2_skills を参照している外部キーは無いので、消して入れ直して問題ない。
+delete from public.v2_skills;
 insert into public.v2_skills (name, cls, mp, sort, req_jobs, passive) values
   ('はたく','ノーブル',0,1,0,false), ('狙い撃ち','ノーブル',7,2,0,false), ('応急手当','ノーブル',8,3,0,false), ('身構える','ノーブル',6,4,0,false), ('気合い','ノーブル',8,5,0,false),
   ('体当たり','戦士',4,1,0,false), ('強撃','戦士',11,2,0,false), ('防御崩し','戦士',8,3,0,false), ('防御態勢','戦士',8,4,0,false), ('シールドアタック','戦士',8,5,0,false),

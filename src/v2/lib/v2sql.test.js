@@ -437,3 +437,36 @@ test('解放を作り直す内部ヘルパは authenticated から直接叩け�
   assert.ok(SQL.includes('revoke all on function public.v2_unlocked_from_cleared(int[], int[]) from authenticated;'),
     'v2_unlocked_from_cleared が REVOKE されていない')
 })
+
+// ★このファイルは「全文を何度も流し直す」運用（v2の鉄則）。
+//   種（マスタ）の insert が入れ直せない形になっていると、**2回目に流したときだけ**落ちる。
+//   実際 v2_skills が on conflict も delete も無い形になっていて、
+//   「duplicate key value violates unique constraint "v2_skills_pkey"」で止まった（2026-08-23）。
+//   目視では気づけないので、全部の種を機械的に洗う。
+test('★マスタの種は何度流しても入れ直せる（2回目に落ちる insert を作らない）', () => {
+  const lines = SQL.split('\n')
+  const stmts = []
+  let cur = null
+  lines.forEach((l, i) => {
+    if (/^\s*insert into public\.(v2_\w+)/.test(l)) {
+      if (cur) stmts.push(cur)
+      cur = { table: l.match(/insert into public\.(v2_\w+)/)[1], line: i + 1, text: l, inFunc: /^\s+insert/.test(l) }
+    } else if (cur) {
+      cur.text += '\n' + l
+      if (/;\s*$/.test(l)) { stmts.push(cur); cur = null }
+    }
+  })
+  if (cur) stmts.push(cur)
+  assert.ok(stmts.length >= 10, `insert を拾えている（${stmts.length}件）`)
+
+  const bad = stmts.filter(s => {
+    if (s.inFunc) return false                       // 関数の中は毎回走る前提なので対象外
+    if (/on conflict/.test(s.text)) return false     // 入れ直せる
+    // 直前に同じ表を空にしていれば入れ直せる
+    const before = SQL.slice(0, SQL.indexOf(s.text))
+    return !new RegExp(`delete from public\\.${s.table}\\s*;`).test(before.slice(-500))
+  }).map(s => `${s.table}（${s.line}行目）`)
+
+  assert.deepEqual(bad, [],
+    `2回目に流すと落ちる種がある。on conflict を付けるか、直前で delete すること: ${bad.join(' / ')}`)
+})
