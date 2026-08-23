@@ -60,9 +60,10 @@ const shuffle = (list) => {
 
 // 「軸ねらい」の編成：軸に関わる技（条件つきの技と、その条件を作る技）を先に入れる
 const AXIS_MAKERS = {
-  consumeAil:  (s) => !!s.ail || !!s.ailPerHit,
+  // ★同じ種類の状態異常を撒く技でないと意味がない（毒を撒いても出血の起爆は繋がらない）
+  consumeAil:  (s, sk) => s.ail?.key === sk.consumeAil.key,
   vsAil:       (s) => !!s.ail || !!s.ailPerHit,
-  drainIfAil:  (s) => !!s.ail || !!s.ailPerHit,
+  drainIfAil:  (s, sk) => s.ail?.key === sk.drainIfAil.key,
   whileStack:  (s) => !!s.ritual || !!s.chargeUp,
   useRitual:   (s) => !!s.ritual,
   useCharge:   (s) => !!s.chargeUp,
