@@ -9,15 +9,20 @@
 -- サーバー側（v2_change_job）は tier='start' の職業を弾いているので、
 -- ノーブルを初期職（basic）へ移すだけでよい。関数は触らない。
 --
--- ※このSQLは何度流しても同じ結果になる（冪等）。
+-- ⚠流すプロジェクトを間違えないこと。**jxbcuqwqtstxgmpiruuu**（バトルフロンティア）。
+--   2026-08-23、1回目は反映されていなかった（DBを直接読んだら tier は 'start' のままだった）。
+--
+-- このファイルは「①変更 → ②確認」の2文だけ。何度流しても同じ結果になる（冪等）。
 -- ============================================================
 
+-- ① 変更（id の前後に空白が混ざっていても当たるように btrim で見る）
 update public.v2_classes
    set tier = 'basic'
- where id = 'ノーブル';
+ where btrim(id) = 'ノーブル';
 
--- 確認用：ノーブルが初期職の並びに入っていること
-select id, tier, sort, req_jobs, req_proof
+-- ② 確認：この一覧に「ノーブル」が入っていれば成功。
+--    入っていなければ①が当たっていない（プロジェクト違い／実行エラー）。
+select id, tier, sort
   from public.v2_classes
  where tier = 'basic'
  order by sort, id;
