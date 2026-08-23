@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { tickAil, tickBleedAfterAct, runBattle, createSide, takeAction, liveStats, lowHpMultOf, highHpMultOf, vsBuffMultOf, buffCountOf, repeatMultOf, switchKindMultOf, varianceMultOf, comboMultOf, airMultOf, stackMultOf, chargeGuardOf, AIR_EVA, STACK_MAX, beastMultOf, BEAST_FORMS, BEAST_BONUS, whileStackMultOf, whileFormMultOf, vsAilMultOf, ailCountOf, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
-import { inflict, POISON_CAP_RATE, BLEED_CAP_RATE } from './ailments.js'
+import { inflict, hasAilment as hasAilmentAil, POISON_CAP_RATE, BLEED_CAP_RATE } from './ailments.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
 import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT, OFF_CLASS_MP_MULT, setMpCost, offClassMult, mpOf } from './skills.js'
 import { damageFloor } from './combat.js'
@@ -1043,4 +1043,97 @@ test('通常攻撃でも、攻撃の行が受け手の反応より先に出る',
   const iNormal = log.findIndex(l => l.type === 'normal')
   const iWall = log.findIndex(l => l.type === 'wall')
   if (iWall >= 0) assert.ok(iNormal < iWall, '攻撃の行のほうが先（' + iNormal + ' < ' + iWall + '）')
+})
+
+// ============================================================
+// ★2026-08-23 追加の状態異常4種（暗闇・呪い・狂乱・衰弱）
+//   「実装したが効いていない」を防ぐため、**戦闘の出目が変わること**まで見る
+// ============================================================
+const makeRngAil = (seed) => { let x = seed >>> 0; return () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296 } }
+const AIL_STATS = { hp:200000, mp:100000, str:400, dex:400, agi:400, int_stat:400, vit:400, luk:400 }
+const plainHit = (over = {}) => ({ name:'素振り', kind:'phys', mult:1, proc:100, mp:0, desc:'', ...over })
+const sideFor = (skill) => createSide({ name:'私', cls:'戦士', kind:'phys', stats: AIL_STATS,
+  slots: skill ? [{ skill, uses:999 }] : [] })
+
+test('暗闇：当たらなくなる（命中-25%）', () => {
+  const hit = (blind) => {
+    const me = sideFor(plainHit())
+    const foe = sideFor(null)
+    if (blind) inflict(me.ail, 'blind')
+    let n = 0
+    const log = []
+    const rng = makeRngAil(11)   // ★命中判定はサイコロを振らないと差が出ない（固定値だと必ず同じ側に倒れる）
+    for (let i = 0; i < 400; i++) {
+      const before = log.length
+      takeAction(me, foe, rng, log, { idx: 0, noProc: true })
+      if (log.slice(before).some(l => l.type === 'skill' && l.hits > 0)) n += 1
+      if (blind) inflict(me.ail, 'blind')   // 切らさない
+    }
+    return n
+  }
+  const off = hit(false)
+  const on = hit(true)
+  assert.ok(on < off, `暗闇のほうが当たらない（暗闇${on} < ふつう${off}）`)
+})
+
+test('呪い：受けるダメージが増える（+15%）', () => {
+  const dmg = (curse) => {
+    const me = sideFor(plainHit({ sureHit: true }))
+    const foe = sideFor(null)
+    if (curse) inflict(foe.ail, 'curse')
+    const log = []
+    takeAction(me, foe, () => 0.9, log, { idx: 0, noProc: true })
+    return log.find(l => l.type === 'skill').damage
+  }
+  const a = dmg(false)
+  const b = dmg(true)
+  assert.ok(b > a, `呪われているほうが痛い（${b} > ${a}）`)
+  assert.ok(Math.abs(b / a - 1.15) < 0.02, `+15%くらい（実際 ${(b / a).toFixed(3)}倍）`)
+})
+
+test('衰弱：与えるダメージが減る（-15%）', () => {
+  const dmg = (weak) => {
+    const me = sideFor(plainHit({ sureHit: true }))
+    const foe = sideFor(null)
+    if (weak) inflict(me.ail, 'weaken')
+    const log = []
+    takeAction(me, foe, () => 0.9, log, { idx: 0, noProc: true })
+    return log.find(l => l.type === 'skill').damage
+  }
+  const a = dmg(false)
+  const b = dmg(true)
+  assert.ok(b < a, `衰弱していると軽い（${b} < ${a}）`)
+  assert.ok(Math.abs(b / a - 0.85) < 0.02, `-15%くらい（実際 ${(b / a).toFixed(3)}倍）`)
+})
+
+test('狂乱：出る技がばらける（枠の順どおりに出ない）', () => {
+  const a = plainHit({ name:'技A' })
+  const b = plainHit({ name:'技B' })
+  const c = plainHit({ name:'技C' })
+  const me = createSide({ name:'私', cls:'戦士', kind:'phys', stats: AIL_STATS,
+    slots: [{ skill:a, uses:999 }, { skill:b, uses:999 }, { skill:c, uses:999 }] })
+  const foe = sideFor(null)
+  const log = []
+  const rng = makeRngAil(7)
+  for (let i = 0; i < 60; i++) {
+    inflict(me.ail, 'frenzy')            // 切らさない
+    takeAction(me, foe, rng, log, { noProc: true })
+  }
+  const names = log.filter(l => l.type === 'skill').map(l => l.skill)
+  const first = names.filter(n => n === '技A').length
+  assert.ok(names.length > 40, '撃てている')
+  // 狂乱していなければ枠は 1→2→3 と均等に回る。ばらけていることだけ見る
+  assert.ok(first > 0 && first < names.length, 'ひとつの技に偏りきってはいない')
+  const rotated = names.filter((n, i) => i > 0 && n === names[i - 1]).length
+  assert.ok(rotated > 0, '順番どおりでない（同じ技が続けて出ることがある）')
+})
+
+test('追加した4種も、時間が経てば消える', () => {
+  for (const k of ['blind', 'curse', 'frenzy', 'weaken']) {
+    const me = sideFor(null)
+    inflict(me.ail, k)
+    assert.equal(hasAilmentAil(me.ail, k), true, k + ' が入る')
+    for (let i = 0; i < 12; i++) tickAil(me, [], sideFor(null))
+    assert.equal(hasAilmentAil(me.ail, k), false, k + ' が消える')
+  }
 })

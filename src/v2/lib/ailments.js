@@ -22,7 +22,8 @@
 //   例外は出血だけで、こちらはスタックが積み上がる（旧版と同じ）。
 // ============================================================
 
-export const AIL_KEYS = ['bleed', 'poison', 'slow', 'paralyze', 'healCut', 'silence']
+export const AIL_KEYS = ['bleed', 'poison', 'slow', 'paralyze', 'healCut', 'silence',
+  'blind', 'curse', 'frenzy', 'weaken']
 
 // 出血（旧版準拠）
 export const BLEED_MAX_STACKS = 5
@@ -60,8 +61,22 @@ export const PARALYZE_TURNS = 1
 // 回復阻害
 export const HEAL_CUT_TURNS = 3
 
+// ★2026-08-23 追加の4種。どれも「重ならず上書き（ターン数の数え直し）」
+//   ・暗闇：当てにくくなる。**当たらなくする**役はこれまで無かった
+//   ・呪い：受けるダメージが増える。相手を柔らかくする
+//   ・狂乱：出る技がランダムになる。狂戦士の「狂心」と同じ状態を相手にかける形
+//   ・衰弱：与えるダメージが減る。STR-%のデバフと違い、物理も魔法もまとめて下がる
+export const BLIND_TURNS   = 4
+export const BLIND_ACC_PCT = -25    // 命中率に足す（%ポイント）
+export const CURSE_TURNS   = 4
+export const CURSE_TAKEN_PCT = 15   // 受けるダメージ+%
+export const FRENZY_AIL_TURNS = 3
+export const WEAKEN_TURNS  = 4
+export const WEAKEN_DMG_PCT = 15    // 与えるダメージ-%
+
 export const AIL_LABEL = {
   bleed: '出血', poison: '毒', slow: '鈍足', paralyze: '麻痺', healCut: '回復阻害', silence: 'サイレンス',
+  blind: '暗闇', curse: '呪い', frenzy: '狂乱', weaken: '衰弱',
 }
 
 // 状態異常の入れ物。side.ail に持たせる
@@ -94,6 +109,19 @@ export const inflict = (ail, key, opt = {}) => {
     case 'slow':
       ail.slow = { turns: SLOW_TURNS }
       return true
+    // 追加の4種。どれも数え直しの上書き（重ならない）
+    case 'blind':
+      ail.blind = { turns: opt.turns || BLIND_TURNS }
+      return true
+    case 'curse':
+      ail.curse = { turns: opt.turns || CURSE_TURNS }
+      return true
+    case 'frenzy':
+      ail.frenzy = { turns: opt.turns || FRENZY_AIL_TURNS }
+      return true
+    case 'weaken':
+      ail.weaken = { turns: opt.turns || WEAKEN_TURNS }
+      return true
     case 'paralyze':
       ail.paralyze = { turns: PARALYZE_TURNS }
       return true
@@ -112,6 +140,14 @@ export const hasAilment = (ail, key) =>
 // ===== 効果を読む =====
 // 鈍足ぶんのステータス補正（liveStats が足す）
 export const ailStatPct = (ail) => (hasAilment(ail, 'slow') ? { agi: SLOW_AGI_PCT } : null)
+// 暗闇：命中率に足す%ポイント（0＝暗闇でない）
+export const ailAccPct = (ail) => (hasAilment(ail, 'blind') ? BLIND_ACC_PCT : 0)
+// 呪い：**受ける**ダメージに掛ける倍率（1.0＝呪われていない）
+export const ailTakenMult = (ail) => (hasAilment(ail, 'curse') ? 1 + CURSE_TAKEN_PCT / 100 : 1)
+// 衰弱：**与える**ダメージに掛ける倍率（1.0＝衰弱していない）
+export const ailDealMult = (ail) => (hasAilment(ail, 'weaken') ? 1 - WEAKEN_DMG_PCT / 100 : 1)
+// 狂乱：出る技がランダムになるか
+export const isFrenzied = (ail) => hasAilment(ail, 'frenzy')
 // 回復阻害の倍率（1.0＝阻害なし）
 export const healMultOf = (ail) =>
   hasAilment(ail, 'healCut') ? Math.max(0, 1 - (ail.healCut.pct || 0) / 100) : 1
@@ -145,7 +181,7 @@ export const tickAilments = (ail, { maxHp }) => {
     if (ail.poison.turns <= 0) delete ail.poison
   }
   // ターン数だけ持つもの
-  for (const k of ['slow', 'healCut', 'silence']) {
+  for (const k of ['slow', 'healCut', 'silence', 'blind', 'curse', 'frenzy', 'weaken']) {
     if (ail[k]?.turns > 0) {
       ail[k].turns -= 1
       if (ail[k].turns <= 0) delete ail[k]

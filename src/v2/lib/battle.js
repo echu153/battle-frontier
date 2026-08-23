@@ -22,6 +22,7 @@ import { skillsOf, isPassive, passiveOf, offClassMult, scaleTable, mpOf, mpPctOf
 import { classBonusOf } from './classBonus.js'
 import {
   createAilments, inflict, tickAilments, ailStatPct, healMultOf, consumeParalyze, hasAilment, AIL_LABEL, AIL_KEYS,
+  ailAccPct, ailTakenMult, ailDealMult, isFrenzied,
   POISON_CAP_RATE, BLEED_CAP_RATE, tickBleed, SILENCE_PROC,
 } from './ailments.js'
 import { collectEnchants, inflictChance } from './enchant.js'
@@ -323,6 +324,10 @@ const rememberSkill = (side, skillName) => {
 const applyIncoming = (me, foe, dmg, kind, rng, log) => {
   if (dmg <= 0) return 0
   let d = dmg
+  // 衰弱：撃つ側が弱っていると、与えるダメージが減る（物理も魔法もまとめて）
+  d *= ailDealMult(me.ail)
+  // 呪い：受ける側が呪われていると、受けるダメージが増える
+  d *= ailTakenMult(foe.ail)
   // エリアの相性：そのエリアの敵は片方の型が少し通りやすい（enemies.js の bias）
   if (foe.taken?.[kind]) d *= foe.taken[kind]
   // 武器の進化：被ダメージ−%（代償で付いた「被ダメージ+%」はここでマイナスに効く）
@@ -614,8 +619,9 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     return
   }
   let idx = opt.idx !== undefined ? opt.idx : findSlot(me)
-  // ★狂乱（狂戦士の狂心）：自分では技を選べない。撃てる攻撃スキルからランダムに出る
-  if (me.frenzy?.turns > 0) {
+  // ★狂乱：自分では技を選べない。撃てる攻撃スキルからランダムに出る
+  //   狂戦士の「狂心」（自分でなる）と、相手にかけられる状態異常の「狂乱」は同じ状態
+  if (me.frenzy?.turns > 0 || isFrenzied(me.ail)) {
     const wild = me.slots
       .map((sl, i) => ({ sl, i }))
       .filter(({ sl }) => sl?.skill && sl.uses > 0 && (sl.skill.kind === 'phys' || sl.skill.kind === 'mag')
@@ -718,6 +724,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
         acc: skill.acc ?? 100,
         // ★スキル自身の命中補正（skill.hitBonus）もここで足す＝「必中ではないが当てやすい技」を作れる
         hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + (skill.hitBonus || 0)
+          + ailAccPct(me.ail)   // 暗闇：命中-25%
           + (wasAir ? (skill.whileAir?.hitBonus || 0) : 0),   // 空中からは狙いが通る（体術師）
         evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, skill.name)
           + (foe.air ? AIR_EVA : 0),
@@ -896,6 +903,11 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     if (spec.enemy) applyDebuff(foe, scaleTable(spec.enemy, off), log)
     log.push({ side: me.name, type: 'buff', skill: skill.name })
   }
+  // ★補助スキルの状態異常。攻撃スキルは「当たったとき」だけだが、
+  //   補助は当たり判定が無いので発動した時点で確率判定する（イカサマ・威圧など）
+  if (skill.kind === 'buff' && skill.ail) {
+    tryInflict(me, foe, { ...skill.ail, chance: skill.ail.chance * off }, rng, log)
+  }
 }
 
 // 通常攻撃。mult は居合の構え（不発時2倍）のための倍率
@@ -905,7 +917,7 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   const r = resolveAttack({
     attacker: eMe, defender: eFoe, mult: NORMAL_ATTACK_MULT * multScale, kind: me.kind,
     defPen: me.pa.defPenBonus / 100 + me.evo.defPen / 100,
-    hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe),
+    hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + ailAccPct(me.ail),
     evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, null),
     critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me),
     hitMult: hitMultOf(me, foe),

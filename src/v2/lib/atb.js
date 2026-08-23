@@ -112,7 +112,8 @@ export const buffSecOf = (totalPct, isDebuff = false) =>
     BUFF_SEC_MIN, isDebuff ? DEBUFF_SEC_MAX : BUFF_SEC_MAX))
 
 // ===== 状態異常（ATB用の別表）=====
-export const AIL_SEC  = { paralyze:5, healCut:15, bleed:20, poison:30, slow:30, silence:20 }
+export const AIL_SEC  = { paralyze:5, healCut:15, bleed:20, poison:30, slow:30, silence:20,
+  blind:20, curse:20, frenzy:15, weaken:20 }
 export const TICK_SEC = 5      // 出血・毒・継続回復が刻む間隔
 export const MAX_DT   = 0.25   // タブを裏に回したときに一気に進まないための上限（秒）
 export const MAX_SEC  = 180    // これを超えたら引き分け
